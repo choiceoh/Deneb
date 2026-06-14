@@ -401,7 +401,34 @@ func New(addr string, opts ...Option) (*Server, error) {
 	// SparkFleet control-plane discovery (opt-in via DENEB_SPARKFLEET_URL): surface
 	// which GPU backends are actually up instead of degrading silently. New returns
 	// nil when the env var is unset, so this stays a no-op unless configured.
-	s.fleet = sparkfleet.New(os.Getenv("DENEB_SPARKFLEET_URL"), s.logger)
+	fleetURL := os.Getenv("DENEB_SPARKFLEET_URL")
+	fleetLogger := s.logger
+	if fleetURL != "" {
+		fleetLogger = sparkFleetLogger(s.logger) // dedicated file, off the main gateway log
+	}
+	s.fleet = sparkfleet.New(fleetURL, fleetLogger)
 
 	return s, nil
+}
+
+// sparkFleetLogger returns a logger that writes SparkFleet control-plane chatter
+// (GPU backend up/down churn) to its own file — <stateDir>/logs/sparkfleet.log —
+// off the main gateway log. That backend status is SparkFleet's domain and
+// flooded journald (1000+ lines/day when a backend is persistently down); the
+// live status is still on /health. Falls back to a discard logger (never the
+// main one) if the file can't be opened, so the noise can never return to the
+// main stream. The handle lives for the process; the SparkFleet client only logs
+// on state transitions, so the file grows slowly.
+func sparkFleetLogger(main *slog.Logger) *slog.Logger {
+	dir := filepath.Join(config.ResolveStateDir(), "logs")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		main.Warn("sparkfleet: dedicated log dir unavailable; suppressing sparkfleet logs", "error", err)
+		return slog.New(slog.DiscardHandler)
+	}
+	f, err := os.OpenFile(filepath.Join(dir, "sparkfleet.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	if err != nil {
+		main.Warn("sparkfleet: dedicated log file unavailable; suppressing sparkfleet logs", "error", err)
+		return slog.New(slog.DiscardHandler)
+	}
+	return slog.New(slog.NewTextHandler(f, &slog.HandlerOptions{Level: slog.LevelInfo}))
 }

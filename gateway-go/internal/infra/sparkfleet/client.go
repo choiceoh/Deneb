@@ -13,6 +13,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -54,8 +55,9 @@ type Client struct {
 	http    *http.Client
 	logger  *slog.Logger
 
-	mu   sync.RWMutex
-	last Report
+	mu       sync.RWMutex
+	last     Report
+	lastDown map[string]struct{} // previous poll's down-set, for transition-only logging
 }
 
 // New returns a client for the SparkFleet base URL (e.g. http://127.0.0.1:18901),
@@ -143,15 +145,50 @@ func (c *Client) check(ctx context.Context) {
 		}
 		if len(rep.Down) > 0 {
 			rep.Status = "degraded"
-			c.logger.Warn("GPU backends reported down by SparkFleet",
-				"down", strings.Join(rep.Down, ","), "url", c.baseURL)
 		} else {
 			rep.Status = "ok"
 		}
+		c.logDownTransitions(rep.Down)
 	}
 	c.mu.Lock()
 	c.last = rep
 	c.mu.Unlock()
+}
+
+// logDownTransitions logs only state changes in the SparkFleet down-set — newly
+// down at Warn, recovered at Info — rather than the full set every poll. A
+// persistently-down backend (e.g. a decommissioned model still in the registry)
+// otherwise re-logs every interval and floods the log. Caller must not hold mu.
+func (c *Client) logDownTransitions(down []string) {
+	cur := make(map[string]struct{}, len(down))
+	for _, n := range down {
+		cur[n] = struct{}{}
+	}
+	c.mu.Lock()
+	prev := c.lastDown
+	c.lastDown = cur
+	c.mu.Unlock()
+
+	if newlyDown := keysMissingFrom(cur, prev); len(newlyDown) > 0 {
+		c.logger.Warn("GPU backends reported down by SparkFleet",
+			"down", strings.Join(newlyDown, ","), "url", c.baseURL)
+	}
+	if recovered := keysMissingFrom(prev, cur); len(recovered) > 0 {
+		c.logger.Info("GPU backends recovered (SparkFleet)",
+			"recovered", strings.Join(recovered, ","), "url", c.baseURL)
+	}
+}
+
+// keysMissingFrom returns the sorted keys present in a but not in b.
+func keysMissingFrom(a, b map[string]struct{}) []string {
+	var out []string
+	for k := range a {
+		if _, ok := b[k]; !ok {
+			out = append(out, k)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 func (c *Client) fetch(ctx context.Context) ([]Service, error) {
