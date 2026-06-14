@@ -140,6 +140,12 @@
                   "research/agent-papers-2026-survey",
                   "research/agent-papers-2026-deep-dive"
                 ]
+              },
+              {
+                "group": "Design Notes",
+                "pages": [
+                  "research/effort-judge-rfc"
+                ]
               }
             ]
           }
