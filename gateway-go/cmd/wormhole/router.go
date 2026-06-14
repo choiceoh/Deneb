@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net"
@@ -69,35 +70,45 @@ func (rt *router) authed(w http.ResponseWriter, r *http.Request) bool {
 	return true
 }
 
-// resolve runs the shared front-of-house for both protocol endpoints: auth, read
-// the body, look up the model, apply the egress guard, and rewrite the model id
-// for the upstream. On any failure it writes the error response and returns
-// ok=false. The OpenAI and Anthropic request bodies both carry a top-level
-// "model" field, so this is protocol-agnostic.
-func (rt *router) resolve(w http.ResponseWriter, r *http.Request) (modelEntry, []byte, bool) {
+// serve is the shared front-of-house for both protocol endpoints. It
+// authenticates, reads the body, and routes by the requested model: an explicit
+// model name goes straight to that backend (protocol-checked + egress-guarded),
+// while the reserved "auto" name (when configured) hands off to serveAuto. proto
+// is the endpoint's wire protocol and pathSuffix the upstream path. Both the
+// OpenAI and Anthropic request bodies carry a top-level "model", so the read is
+// protocol-agnostic.
+func (rt *router) serve(w http.ResponseWriter, r *http.Request, proto, pathSuffix string) {
 	if !rt.authed(w, r) {
-		return modelEntry{}, nil, false
+		return
 	}
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxBodyBytes))
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, "read request body")
-		return modelEntry{}, nil, false
+		return
 	}
 	model := extractModel(body)
 	if model == "" {
 		writeErr(w, http.StatusBadRequest, "missing 'model'")
-		return modelEntry{}, nil, false
+		return
+	}
+	// "auto" (when configured) lets the client delegate the choice.
+	if model == rt.autoName() && len(rt.cfg.Auto) > 0 {
+		rt.serveAuto(w, r, body, proto, pathSuffix)
+		return
 	}
 	entry, ok := rt.models[model]
 	if !ok {
 		writeErr(w, http.StatusNotFound, "unknown model: "+model)
-		return modelEntry{}, nil, false
+		return
 	}
-	// Local-first egress guard: a local-only request (instance mode or the
-	// X-Wormhole-Local-Only header) must not reach a cloud-backed model.
+	// Local-first egress guard: a local-only request must not reach a cloud backend.
 	if rt.localOnly(r) && !entry.isLocal() {
 		writeErr(w, http.StatusForbidden, "model '"+model+"' is cloud-backed and blocked by local-only policy")
-		return modelEntry{}, nil, false
+		return
+	}
+	if entry.protocol() != proto {
+		writeErr(w, http.StatusBadRequest, wrongEndpointMsg(entry))
+		return
 	}
 	out := body
 	if entry.UpstreamModel != model {
@@ -105,58 +116,120 @@ func (rt *router) resolve(w http.ResponseWriter, r *http.Request) (modelEntry, [
 			out = rewritten
 		}
 	}
-	return entry, out, true
+	rt.forward(w, r, entry, out, pathSuffix)
 }
 
-// chatCompletions serves OpenAI clients: POST /v1/chat/completions → an
-// OpenAI-protocol backend's /chat/completions.
+// chatCompletions serves OpenAI clients: POST /v1/chat/completions.
 func (rt *router) chatCompletions(w http.ResponseWriter, r *http.Request) {
-	entry, out, ok := rt.resolve(w, r)
-	if !ok {
-		return
-	}
-	if entry.protocol() != protocolOpenAI {
-		writeErr(w, http.StatusBadRequest, "model '"+entry.Name+"' speaks the anthropic protocol — use POST /v1/messages")
-		return
-	}
-	rt.forward(w, r, entry, out, "/chat/completions")
+	rt.serve(w, r, protocolOpenAI, "/chat/completions")
 }
 
-// messages serves Anthropic clients: POST /v1/messages → an Anthropic-protocol
-// backend's /messages. No translation — the client already speaks Anthropic, so
-// the request rides straight through (auth header swapped, model rewritten).
+// messages serves Anthropic clients: POST /v1/messages. No translation — the
+// client already speaks Anthropic, so the request rides straight through.
 func (rt *router) messages(w http.ResponseWriter, r *http.Request) {
-	entry, out, ok := rt.resolve(w, r)
-	if !ok {
-		return
-	}
-	if entry.protocol() != protocolAnthropic {
-		writeErr(w, http.StatusBadRequest, "model '"+entry.Name+"' speaks the openai protocol — use POST /v1/chat/completions")
-		return
-	}
-	rt.forward(w, r, entry, out, "/messages")
+	rt.serve(w, r, protocolAnthropic, "/messages")
 }
 
-// forward proxies the (possibly model-rewritten) request to the upstream at
-// pathSuffix and streams the response straight back — status, headers, and body
-// bytes — flushing as chunks arrive so SSE tokens reach the client immediately.
-// The upstream key is injected here (protocol-aware); the client never sees it.
-func (rt *router) forward(w http.ResponseWriter, r *http.Request, entry modelEntry, body []byte, pathSuffix string) {
+// serveAuto delegates the model choice to wormhole: it tries the configured auto
+// candidates — filtered to this endpoint's protocol and the egress guard — in
+// order (local first), committing to the first that connects with a non-5xx
+// status and falling through on an unreachable or 5xx backend. Fallback only
+// happens before any bytes are streamed; once a candidate starts responding we
+// ride it out.
+func (rt *router) serveAuto(w http.ResponseWriter, r *http.Request, body []byte, proto, pathSuffix string) {
+	cands := rt.autoCandidates(r, proto)
+	if len(cands) == 0 {
+		writeErr(w, http.StatusServiceUnavailable, "no eligible auto model for this protocol/policy")
+		return
+	}
+	var lastErr error
+	for _, entry := range cands {
+		out := body
+		if rewritten, rerr := rewriteModel(body, entry.UpstreamModel); rerr == nil {
+			out = rewritten
+		}
+		resp, err := rt.doUpstream(r, entry, out, pathSuffix)
+		if err != nil {
+			rt.log.Warn("auto: candidate unreachable, trying next", "model", entry.Name, "error", err)
+			lastErr = err
+			continue
+		}
+		if resp.StatusCode >= 500 {
+			rt.log.Warn("auto: candidate errored, trying next", "model", entry.Name, "status", resp.StatusCode)
+			_ = resp.Body.Close()
+			lastErr = fmt.Errorf("%s returned %d", entry.Name, resp.StatusCode)
+			continue
+		}
+		rt.log.Info("auto routed", "model", entry.Name)
+		streamResponse(w, resp)
+		return
+	}
+	rt.log.Warn("auto: all candidates failed", "error", lastErr)
+	writeErr(w, http.StatusBadGateway, "all auto candidates failed")
+}
+
+// autoCandidates returns the configured auto models eligible for this request, in
+// order: those matching the endpoint's protocol and passing the egress guard.
+func (rt *router) autoCandidates(r *http.Request, proto string) []modelEntry {
+	out := make([]modelEntry, 0, len(rt.cfg.Auto))
+	for _, name := range rt.cfg.Auto {
+		e, ok := rt.models[name]
+		if !ok || e.protocol() != proto {
+			continue
+		}
+		if rt.localOnly(r) && !e.isLocal() {
+			continue
+		}
+		out = append(out, e)
+	}
+	return out
+}
+
+// autoName is the reserved model name that triggers auto-routing (default "auto").
+func (rt *router) autoName() string {
+	if rt.cfg.AutoName != "" {
+		return rt.cfg.AutoName
+	}
+	return "auto"
+}
+
+// wrongEndpointMsg points a client that hit the wrong protocol endpoint at the right one.
+func wrongEndpointMsg(e modelEntry) string {
+	if e.protocol() == protocolAnthropic {
+		return "model '" + e.Name + "' speaks the anthropic protocol — use POST /v1/messages"
+	}
+	return "model '" + e.Name + "' speaks the openai protocol — use POST /v1/chat/completions"
+}
+
+// doUpstream builds and sends the upstream request, returning the response
+// WITHOUT reading the body — so an auto-routing caller can inspect the status and
+// fall back to the next candidate before committing to stream it. The upstream
+// key is injected here (protocol-aware); the client never sees it.
+func (rt *router) doUpstream(r *http.Request, entry modelEntry, body []byte, pathSuffix string) (*http.Response, error) {
 	url := strings.TrimRight(entry.URL, "/") + pathSuffix
 	upReq, err := http.NewRequestWithContext(r.Context(), http.MethodPost, url, strings.NewReader(string(body)))
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "build upstream request")
-		return
+		return nil, err
 	}
 	upReq.Header.Set("Content-Type", "application/json")
 	applyUpstreamAuth(upReq, entry, r)
+	return rt.client.Do(upReq)
+}
 
-	resp, err := rt.client.Do(upReq)
+// forward proxies a single model's request and streams the response back.
+func (rt *router) forward(w http.ResponseWriter, r *http.Request, entry modelEntry, body []byte, pathSuffix string) {
+	resp, err := rt.doUpstream(r, entry, body, pathSuffix)
 	if err != nil {
 		rt.log.Warn("upstream call failed", "model", entry.Name, "url", entry.URL, "error", err)
 		writeErr(w, http.StatusBadGateway, "upstream unreachable: "+entry.Name)
 		return
 	}
+	streamResponse(w, resp)
+}
+
+// streamResponse copies the upstream status, headers, and body straight back —
+// flushing as chunks arrive so SSE tokens reach the client immediately.
+func streamResponse(w http.ResponseWriter, resp *http.Response) {
 	defer resp.Body.Close()
 
 	// Copy upstream headers (Content-Type drives SSE vs JSON on the client side).
@@ -196,7 +269,11 @@ func (rt *router) listModels(w http.ResponseWriter, r *http.Request) {
 		Object  string `json:"object"`
 		OwnedBy string `json:"owned_by"`
 	}
-	rows := make([]modelRow, 0, len(rt.cfg.Models))
+	rows := make([]modelRow, 0, len(rt.cfg.Models)+1)
+	// Advertise the reserved auto name first so clients see they can delegate.
+	if len(rt.cfg.Auto) > 0 {
+		rows = append(rows, modelRow{ID: rt.autoName(), Object: "model", OwnedBy: "wormhole-auto"})
+	}
 	for _, e := range rt.cfg.Models {
 		owner := "wormhole-cloud"
 		if e.isLocal() {

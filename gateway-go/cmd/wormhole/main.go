@@ -55,6 +55,12 @@ type config struct {
 	// routing slip can't egress private data. Per-request, a sensitive caller can
 	// force the same with the X-Wormhole-Local-Only header.
 	LocalOnly bool `json:"localOnly,omitempty"`
+	// Auto is the ordered candidate list for the reserved "auto" model name —
+	// clients that send model:"auto" get the first candidate that connects (local
+	// first), with fallback down the list. Empty disables auto-routing.
+	Auto []string `json:"auto,omitempty"`
+	// AutoName overrides the reserved auto model name (default "auto").
+	AutoName string `json:"autoName,omitempty"`
 }
 
 func loadConfig(path string) (config, error) {
