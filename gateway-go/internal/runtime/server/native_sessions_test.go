@@ -7,6 +7,8 @@ import "testing"
 // #1963 and the pre-main client:<uuid> format — must NOT resurrect: they linger
 // on disk as transcript files but kept zombie-reviving the drawer on every
 // SIGUSR1 restart because the filter used to match bare isNativeClientSessionKey.
+// The chat: (챗봇) workspace is the inverse: it IS current and its conversations
+// must restore, or the chatbot drawer empties on every restart mid-conversation.
 func TestRestorableTranscriptSession(t *testing.T) {
 	cases := []struct {
 		key  string
@@ -14,7 +16,11 @@ func TestRestorableTranscriptSession(t *testing.T) {
 	}{
 		{"client:main", true}, // the single home session
 		{"client:main:0a17341a-d6e2-4686-aed5-b9ce9841cc68", true}, // explicit new conversation
-		{"client:topic:업무", false},                                 // retired topic session (#1963)
+		{"chat:9705506a-5735-411e-a53a-b7ad5a0a7140", true},        // 챗봇 conversation (chat:<uuid>)
+		{"chat:main", true},                    // 챗봇 home-style key
+		{"chat:main:e2e-title-fresh-01", true}, // 챗봇 sub-conversation
+		{"chat:", false},                       // degenerate: nothing after the prefix
+		{"client:topic:업무", false},             // retired topic session (#1963)
 		{"client:topic:업무:64c14b8b-c9e6-40ed-a807-60eb882fd8c2", false},
 		{"client:topic:잡담", false},
 		{"client:6ae56098-122c-40ff-a5bd-c9e6cad6faa8", false}, // pre-main legacy format
