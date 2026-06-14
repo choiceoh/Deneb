@@ -50,7 +50,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	authURL := dropbox.AuthorizeURL(key, challenge, dropbox.DefaultScopes)
+	// Host CLI uses the out-of-band (paste-code) flow → no redirect_uri.
+	authURL := dropbox.AuthorizeURL(key, challenge, dropbox.DefaultScopes, "")
 	fmt.Fprintln(os.Stderr, "1) 아래 URL을 브라우저에서 열고 Deneb 앱 접근을 승인하세요:")
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "   "+authURL)
@@ -63,7 +64,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	tr, err := dropbox.ExchangeCode(context.Background(), key, secret, code, verifier)
+	tr, err := dropbox.ExchangeCode(context.Background(), key, secret, code, verifier, "")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
