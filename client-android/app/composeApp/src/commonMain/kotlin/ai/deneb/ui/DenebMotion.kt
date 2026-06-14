@@ -94,9 +94,6 @@ fun <T> denebSnappySpring(): SpringSpec<T> = spring(dampingRatio = 0.9f, stiffne
 /** Playful overshoot — celebratory pops (scroll-to-bottom FAB, first appearance). Use sparingly. */
 fun <T> denebBouncySpring(): SpringSpec<T> = spring(dampingRatio = 0.55f, stiffness = 420f)
 
-/** Slow, heavy, no overshoot — large surfaces (sheets, full-screen) where bounce would feel cheap. */
-fun <T> denebGentleSpring(): SpringSpec<T> = spring(dampingRatio = 1f, stiffness = 220f)
-
 // ---- Enter / exit transition presets (AnimatedVisibility / AnimatedContent) ----
 
 /** A top banner dropping in: slides down from above on a spring, fading as it settles. */
