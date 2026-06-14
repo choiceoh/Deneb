@@ -18,6 +18,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	ares "github.com/choiceoh/deneb/gateway-go/internal/ai/router"
 )
 
@@ -91,27 +92,61 @@ func injectKwarg(body []byte, key string, val bool) []byte {
 }
 
 // effortRequest builds the classifier input from an OpenAI/Anthropic request
-// body: the last user message's text and whether it carries attachments. History
-// (multi-turn context-heavy detection) is intentionally left out of this first
-// cut — length, structure, hard signals, and attachments carry most of the call.
+// body in a single parse: the last user message's text, whether it carries
+// attachments, and the reconstructed History so the context-heavy check (Ares
+// decision #3) can fire. Without History a short follow-up ("계속해줘") steering a
+// thread already deep in tool work would wrongly route off — the current message
+// alone looks trivial; only h_t reveals the thread is mid-work.
 func effortRequest(body []byte) ares.Request {
 	var p struct {
 		Messages []struct {
-			Role    string          `json:"role"`
-			Content json.RawMessage `json:"content"`
+			Role      string          `json:"role"`
+			Content   json.RawMessage `json:"content"`
+			ToolCalls json.RawMessage `json:"tool_calls"` // OpenAI: assistant tool call(s)
 		} `json:"messages"`
 	}
 	_ = json.Unmarshal(body, &p)
 	var msg string
 	var hasAttach bool
+	history := make([]llm.Message, 0, len(p.Messages))
 	for _, m := range p.Messages {
-		if m.Role != "user" {
-			continue
+		if m.Role == "user" {
+			text, attach := contentText(m.Content)
+			msg, hasAttach = text, attach // last user message wins
 		}
-		text, attach := contentText(m.Content)
-		msg, hasAttach = text, attach // last user message wins
+		history = append(history, effortMessage(m.Role, m.Content, m.ToolCalls))
 	}
-	return ares.Request{Message: msg, HasAttachments: hasAttach}
+	return ares.Request{Message: msg, HasAttachments: hasAttach, History: history}
+}
+
+// effortMessage maps one wire message onto an llm.Message for recentContextHeavy,
+// which reads only block TYPE (tool_use/tool_result mark a working thread) and
+// assistant text length. Anthropic content is already a block array
+// (ContentToBlocks parses it natively) and a plain string becomes a text block —
+// both pass through verbatim. OpenAI keeps tool activity OUTSIDE content, so an
+// assistant `tool_calls` array and a `role:"tool"` result are appended as
+// payload-free activity markers (only their type is read).
+func effortMessage(role string, content, toolCalls json.RawMessage) llm.Message {
+	var extra []llm.ContentBlock
+	if hasJSONValue(toolCalls) {
+		extra = append(extra, llm.ContentBlock{Type: "tool_use"})
+	}
+	if role == "tool" {
+		extra = append(extra, llm.ContentBlock{Type: "tool_result"})
+	}
+	if len(extra) > 0 {
+		if enc, err := json.Marshal(append(llm.ContentToBlocks(content), extra...)); err == nil {
+			return llm.Message{Role: role, Content: enc}
+		}
+	}
+	return llm.Message{Role: role, Content: content}
+}
+
+// hasJSONValue reports whether raw is a present, non-null JSON value (an OpenAI
+// assistant message without tool calls carries `null` or omits the field).
+func hasJSONValue(raw json.RawMessage) bool {
+	t := bytes.TrimSpace(raw)
+	return len(t) > 0 && !bytes.Equal(t, []byte("null"))
 }
 
 // contentText extracts the text — and whether any non-text (attachment) part is
