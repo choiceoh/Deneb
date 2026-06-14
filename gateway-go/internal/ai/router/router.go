@@ -56,9 +56,15 @@ type Profile struct {
 	CumulativeRunes   int
 	HeavyHistoryRunes int
 
-	// HardSignals are substrings that keep thinking on regardless of length
+	// HardSignals are reasoning cues that keep thinking on regardless of length
 	// (analysis/planning/code/why…). Deliberately broad — a false-hard only
-	// wastes tokens, while a false-easy costs answer quality.
+	// wastes tokens, while a false-easy costs answer quality. Matching is
+	// script-aware (see hardSignalHit): a CJK signal matches as a substring
+	// (Korean is agglutinative — "분석해줘" must hit "분석"); a Latin signal/stem
+	// matches only at a word start ("fix"/"code"/"plan" fire on "fix this" /
+	// "code review" / "planning" but NOT inside "prefix" / "decode" / "anywhere"
+	// — the substring false-hards that were quietly keeping simple chatter in the
+	// thinking phase).
 	HardSignals []string
 
 	// PureAcks are messages (punctuation-stripped, exact match) that stay
@@ -158,8 +164,13 @@ func Decide(p Profile, req Request) Decision {
 		return Decision{Reason: "structured"}
 	}
 	lower := strings.ToLower(msg)
+	// latinTokens are the maximal lowercase-ASCII-letter runs (split on every
+	// non-[a-z] rune, so CJK, digits, spaces, and punctuation all break a token).
+	// A Latin hard signal matches one of these by word-start prefix; computed once
+	// here, not per signal.
+	latinTokens := strings.FieldsFunc(lower, func(r rune) bool { return r < 'a' || r > 'z' })
 	for _, sig := range p.HardSignals {
-		if strings.Contains(lower, sig) {
+		if hardSignalHit(lower, latinTokens, sig) {
 			return Decision{Reason: "hard-signal:" + sig}
 		}
 	}
@@ -170,6 +181,43 @@ func Decide(p Profile, req Request) Decision {
 		return Decision{Reason: "context-heavy"}
 	}
 	return Decision{ThinkingOff: true, Reason: "short-conversational"}
+}
+
+// hardSignalHit reports whether a hard signal fires for this message. The match
+// is script-aware to kill substring false-hards without weakening real cues:
+//
+//   - A Latin signal/stem ("fix", "plan", "analyz", "why") matches a token by
+//     word-start prefix — "fix this" / "planning" / "analyzing" hit, but "prefix"
+//     / "anywhere" / "decode" do NOT (the stem isn't where a word begins). This
+//     recovers obviously-simple turns that a raw substring kept thinking on.
+//   - A CJK signal ("분석", "왜") matches as a plain substring: Korean is
+//     agglutinative, so "분석해줘" must hit "분석" and word-splitting would break it.
+//
+// The error asymmetry is preserved: every case this newly routes is a genuine
+// non-reasoning turn (a stem buried mid-word is not a request to reason), so it
+// trims false-hards (wasted tokens) without risking a false-easy (lost quality).
+func hardSignalHit(lower string, latinTokens []string, sig string) bool {
+	if isLatinStem(sig) {
+		for _, t := range latinTokens {
+			if strings.HasPrefix(t, sig) {
+				return true
+			}
+		}
+		return false
+	}
+	return strings.Contains(lower, sig)
+}
+
+// isLatinStem reports whether sig is a non-empty all-ASCII-letter string (so it
+// should match by word start, not substring). A signal carrying any non-Latin
+// rune (Korean, a digit) stays on the substring path.
+func isLatinStem(sig string) bool {
+	for i := 0; i < len(sig); i++ {
+		if c := sig[i]; !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')) {
+			return false
+		}
+	}
+	return sig != ""
 }
 
 // recentContextHeavy reports whether the tail of the assembled history (h_t,
