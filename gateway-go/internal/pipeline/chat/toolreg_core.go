@@ -49,7 +49,10 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 		Description: tools.CodeActionDescription,
 		InputSchema: tools.CodeActionSchema(),
 		Deferred:    true,
-		Fn:          tools.ToolCodeAction(registry),
+		Fn: tools.ToolCodeAction(tools.CodeActionDeps{
+			Invoker:  registry,
+			Contacts: deps.Contacts.Store, // enables deneb.contacts(as_json=True); nil-safe
+		}),
 	})
 
 	RegisterDefaultPostProcessors(registry)
