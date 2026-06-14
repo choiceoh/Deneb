@@ -1,20 +1,24 @@
 // codeaction.go — the code_action tool (CodeAct paradigm).
 //
 // Instead of one JSON tool-call per turn, the model writes a short Python
-// program that orchestrates several read-only Deneb tools and processes the
-// data locally, returning only what it prints. This collapses multi-tool,
-// batch, and cross-source-join work (scan many emails, join calendar × deals ×
-// contacts, count/filter/aggregate) into a single turn — fewer turns, less
-// re-prefill (the dominant local-model latency cost).
+// program that orchestrates several Deneb tools and processes the data locally,
+// returning only what it prints. This collapses multi-tool, batch, and
+// cross-source-join work (scan many emails, join calendar × deals × contacts,
+// count/filter/aggregate, batch-add calendar events, update the wiki) into a
+// single turn — fewer turns, less re-prefill (the dominant local-model latency
+// cost).
 //
 // Security model (see also codeaction_runtime.py):
 //   - The model's Python runs in a throwaway subprocess with a MINIMAL env, so
 //     the gateway's secret env vars are never inherited.
 //   - A PEP 578 audit hook blocks network (except this bridge), subprocess,
 //     fs writes outside the scratch dir, secret-path reads, and ctypes.
-//   - Deneb data access goes through an ephemeral loopback HTTP bridge guarded
-//     by a one-time token; the bridge enforces a READ-ONLY tool/action
-//     allowlist server-side, so token possession grants nothing more.
+//   - Deneb tool access goes through an ephemeral loopback HTTP bridge guarded
+//     by a one-time token; the bridge enforces an action allowlist server-side:
+//     read tools plus recoverable INTERNAL writes (local calendar, git-versioned
+//     wiki, workspace-clamped files). Outbound/irreversible actions (email
+//     send/reply) are excluded — the model does those as visible top-level tool
+//     calls, where StreamHooks.OnBeforeToolCall can gate them.
 //   - Wall-clock timeout + output cap bound the run.
 package tools
 
@@ -70,33 +74,35 @@ type CodeActionDeps struct {
 
 // CodeActionDescription is the deferred-listing description. The first sentence
 // is the WHEN trigger (the deferred summary truncates to it).
-const CodeActionDescription = "Run Python in a single turn to orchestrate several read-only tools or batch/aggregate data — scan many emails, join calendar×contacts×wiki, count/filter/compute — instead of many separate tool calls. A preloaded `deneb` object exposes read-only gmail/calendar/contacts/wiki; only what you print() (and any traceback) is returned. The interpreter is sandboxed: no network except the tool bridge, no subprocess, no file writes outside a scratch dir, no secret reads."
+const CodeActionDescription = "Run Python in a single turn to orchestrate tools or batch/aggregate data — scan many emails, join calendar×contacts×wiki, count/filter/compute, batch-add calendar events, update the wiki — instead of many separate tool calls. A preloaded `deneb` object exposes read tools plus recoverable internal writes (calendar/wiki/workspace files); outbound actions (email send) are NOT available here — do those as a normal tool call. Only what you print() (and any traceback) is returned. The interpreter is sandboxed: no network except the tool bridge, no subprocess, no raw file writes outside a scratch dir, no secret reads."
 
-// codeActionReadOnly is the action-granular allowlist. Only these (tool,
-// action) pairs may be dialed from model-written code. Anything that mutates
-// state or sends outbound (gmail send/reply/label/attachment, calendar
-// create/update/delete, wiki write/log) is intentionally absent. Arbitrary
-// file read (the `read` tool) is also intentionally excluded in v1.
-var codeActionReadOnly = map[string]map[string]bool{
+// codeActionAllowed is the action-granular allowlist. It permits read actions
+// plus recoverable INTERNAL writes: calendar create/update/delete (the calendar
+// tool lands these in the local store and refuses Google edits) and wiki
+// write/log (the wiki dir is git-versioned). Outbound/irreversible actions —
+// gmail send/reply/label and attachment download — are intentionally absent; the
+// model does those as visible top-level tool calls. (fs read/write/edit have no
+// "action" and are gated in codeActionAllow.)
+var codeActionAllowed = map[string]map[string]bool{
 	"gmail":    {"inbox": true, "search": true, "read": true, "thread": true, "analyze": true},
-	"calendar": {"list": true, "get": true, "free_slots": true},
+	"calendar": {"list": true, "get": true, "free_slots": true, "create": true, "update": true, "delete": true},
 	"contacts": {"lookup": true, "search": true},
-	"wiki":     {"search": true, "read": true, "index": true, "daily": true, "status": true},
+	"wiki":     {"search": true, "read": true, "index": true, "daily": true, "status": true, "write": true, "log": true},
 }
 
-// codeActionAllow returns nil if (tool, args.action) is a permitted read-only
-// call, or a descriptive error the model can learn from.
+// codeActionAllow returns nil if (tool, args.action) is a permitted call, or a
+// descriptive error the model can learn from.
 func codeActionAllow(tool string, args map[string]any) error {
-	// read has no "action"; it is read-only and the read tool itself clamps
-	// file_path to the workspace + skills roots (ResolvePathWithRoots clamps
-	// out-of-root paths to the workspace, so secrets like ~/.deneb are never
-	// reachable), so it needs no extra gating here.
-	if tool == "read" {
+	// fs read/write/edit have no "action"; they are workspace-clamped
+	// (ResolvePath clamps out-of-workspace paths to the workspace, so neither
+	// secrets like ~/.deneb nor system files like ~/.bashrc are reachable), so
+	// they need no extra gating. write/edit are recoverable internal writes.
+	if tool == "read" || tool == "write" || tool == "edit" {
 		return nil
 	}
-	actions, ok := codeActionReadOnly[tool]
+	actions, ok := codeActionAllowed[tool]
 	if !ok {
-		return fmt.Errorf("tool %q is not available from code_action (read-only only: gmail, calendar, contacts, wiki)", tool)
+		return fmt.Errorf("tool %q is not available from code_action (allowed: gmail, calendar, contacts, wiki, read, write, edit)", tool)
 	}
 	action, _ := args["action"].(string)
 	action = strings.TrimSpace(action)
@@ -104,7 +110,7 @@ func codeActionAllow(tool string, args map[string]any) error {
 		return fmt.Errorf("%s via code_action requires an 'action' (allowed: %s)", tool, strings.Join(sortedActionKeys(actions), ", "))
 	}
 	if !actions[action] {
-		return fmt.Errorf("%s action %q is not allowed from code_action (read-only actions: %s)", tool, action, strings.Join(sortedActionKeys(actions), ", "))
+		return fmt.Errorf("%s action %q is not allowed from code_action (allowed: %s; outbound send is not — use a normal tool call)", tool, action, strings.Join(sortedActionKeys(actions), ", "))
 	}
 	return nil
 }
@@ -581,7 +587,7 @@ func CodeActionSchema() map[string]any {
 		"properties": map[string]any{
 			"code": map[string]any{
 				"type":        "string",
-				"description": "Python 3 source. A preloaded `deneb` object exposes read-only tools that each return the tool's text result: deneb.gmail(action, query=…, message_id=…, max=…) [inbox|search|read|thread|analyze], deneb.calendar(action, **kw) [list|get|free_slots], deneb.contacts(action, query) [lookup|search], deneb.wiki(action, query=…, **kw) [search|read|index|daily|status], deneb.read(file_path) [workspace files]. Pass as_json=True for parsed Python objects instead of text — deneb.contacts (list of {name,phones,emails,org}), deneb.calendar list/get (events {id,title,start,end,location,all_day,attendees}), deneb.wiki search/read/index ({path,snippet,score} / {path,title,summary,body} / list of page paths) — ideal for filtering, counting, and joining across sources. Use print() to return data to yourself — only stdout and any traceback come back. No network (except the bridge), no subprocess, no writes outside the scratch dir.",
+				"description": "Python 3 source. A preloaded `deneb` object exposes Deneb tools: deneb.gmail(action, query=…, message_id=…, max=…) [inbox|search|read|thread|analyze — read-only, NO send], deneb.calendar(action, **kw) [list|get|free_slots; create|update|delete on the local calendar], deneb.contacts(action, query) [lookup|search], deneb.wiki(action, query=…, **kw) [search|read|index|daily|status; write|log], and workspace files deneb.read(file_path) / deneb.write(file_path, content) / deneb.edit(file_path, old_string, new_string). Pass as_json=True for parsed objects instead of text — deneb.contacts (list of {name,phones,emails,org}), deneb.calendar list/get (events {id,title,start,end,location,all_day,attendees}), deneb.wiki search/read/index ({path,snippet,score} / {path,title,summary,body} / list of page paths) — ideal for filtering, counting, joining. Writes are internal and recoverable; outbound email send is NOT available here — do that as a normal tool call. Use print() to return data — only stdout and any traceback come back. Sandbox: no network except the bridge, no subprocess, no raw file writes outside the scratch dir (use deneb.write for workspace files).",
 			},
 			"timeout": map[string]any{
 				"type":        "number",

@@ -134,26 +134,29 @@ sys.addaudithook(_audit)
 
 
 class _Deneb:
-    """Read-only access to Deneb tools via the in-process bridge.
+    """Access to Deneb tools via the in-process bridge.
 
     Methods return the tool's text result (a str) by default. Allowed surface:
       deneb.gmail(action, query=..., message_id=..., max=...)
-          actions: inbox, search, read, thread, analyze
+          actions: inbox, search, read, thread, analyze (READ-ONLY — no send).
       deneb.calendar(action, as_json=False, **kw)
-          actions: list, get, free_slots. as_json=True (list/get) returns
-          event dicts ({id, title, start, end, location, all_day, attendees}).
+          read: list, get, free_slots. write: create, update, delete (local
+          calendar). as_json=True (list/get) returns event dicts
+          ({id, title, start, end, location, all_day, attendees}).
       deneb.contacts(action, query, as_json=False)
           actions: lookup, search. as_json=True returns a list of dicts
           ({name, phones, emails, org}) instead of text — ideal for
           filtering/counting in Python.
       deneb.wiki(action, query=..., as_json=False, **kw)
-          actions: search, read, index, daily, status. as_json=True returns
-          {path, snippet, score} hits (search), a {path, title, summary, body}
-          page (read), or a list of page paths (index, category=...).
-      deneb.read(file_path)
-          read a workspace file (path clamped to the workspace + skills roots).
-    Write/outbound actions (gmail send/reply, calendar create, wiki write, ...)
-    are rejected by the bridge."""
+          read: search, read, index, daily, status. write: write, log.
+          as_json=True returns {path, snippet, score} hits (search), a
+          {path, title, summary, body} page (read), or page paths (index).
+      deneb.read(file_path) / deneb.write(file_path, content)
+      deneb.edit(file_path, old_string, new_string)
+          workspace files (paths clamped to the workspace; system files and
+          secrets are unreachable).
+    Writes here are internal and recoverable. Outbound actions (gmail
+    send/reply) are rejected — do those as a normal top-level tool call."""
 
     def _call(self, tool, args, as_json=False):
         body = json.dumps({"tool": tool, "args": args, "json": as_json}).encode("utf-8")
@@ -190,6 +193,17 @@ class _Deneb:
     def read(self, file_path, **kw):
         kw["file_path"] = file_path
         return self._call("read", kw)
+
+    def write(self, file_path, content, **kw):
+        kw["file_path"] = file_path
+        kw["content"] = content
+        return self._call("write", kw)
+
+    def edit(self, file_path, old_string, new_string, **kw):
+        kw["file_path"] = file_path
+        kw["old_string"] = old_string
+        kw["new_string"] = new_string
+        return self._call("edit", kw)
 
 
 def _run():
