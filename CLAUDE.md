@@ -2,7 +2,7 @@
 
 **Chief-of-Staff–style single AI agent for NVIDIA DGX Spark (비서실장형 단일 에이전트).** One persona that performs **업무분석** (deep context — mail, projects, people, deals) and **업무비서** (proactive ops — calendar, meeting prep, capture) in lockstep — same head, two hands. Native client → Go gateway server. Single-user, single-machine deployment. Korean-first. General assistant capabilities are preserved.
 
-- **Go gateway** (`gateway-go/`): HTTP/WS server, RPC dispatch, session management, chat/LLM pipeline, 150+ tool integrations, native-client `miniapp.*` RPC surface.
+- **Go gateway** (`gateway-go/`): HTTP + SSE server, RPC dispatch, session management, chat/LLM pipeline, 150+ tool integrations, native-client `miniapp.*` RPC surface.
 
 ---
 
@@ -28,7 +28,7 @@
 
 | File | Scope | Globs |
 |---|---|---|
-| `architecture.md` | 프로젝트 구조/모듈맵 | `cmd/**`, `internal/**`, `pkg/**` |
+| `architecture.md` | 프로젝트 구조/모듈맵 | `gateway-go/cmd/**`, `gateway-go/internal/**`, `gateway-go/pkg/**` |
 | `go-gateway.md` | Go 게이트웨이 구조 | `gateway-go/**` |
 | `docs.md` | 문서 작성 표준 | `docs/**` |
 | `generated-code.md` | 생성 코드 수정 금지 | 생성 파일 직접 지정 |
