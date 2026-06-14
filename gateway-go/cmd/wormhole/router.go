@@ -456,31 +456,33 @@ func (rt *router) forward(client clientInfo, w http.ResponseWriter, r *http.Requ
 }
 
 // streamResponse copies the upstream status, headers, and body straight back —
-// flushing as chunks arrive so SSE tokens reach the client immediately.
+// flushing as chunks arrive so SSE tokens reach the client immediately. The
+// caller's response shaper (shaper.go, keyed off the identified client) gets to
+// adjust headers and wrap the body stream; every client gets the zero-overhead
+// identityShaper today, so this stays a faithful pass-through.
 func streamResponse(client clientInfo, w http.ResponseWriter, resp *http.Response) {
 	defer resp.Body.Close()
 
-	// ── per-client response shaping seam ───────────────────────────────────────
-	// `client` identifies the caller (clientInfo: deneb / claude-code / openai-sdk
-	// / …). This is the hook where a future per-client adaptation plugs in — e.g.
-	// wrap `resp.Body` in a transforming reader, or rewrite a header — when a
-	// specific client needs the output massaged. Today every client gets the same
-	// faithful pass-through, so the body is copied through untouched below.
-	_ = client
-	// ───────────────────────────────────────────────────────────────────────────
+	shaper := shaperFor(client)
 
-	// Copy upstream headers (Content-Type drives SSE vs JSON on the client side).
+	// Copy upstream headers (Content-Type drives SSE vs JSON on the client side),
+	// then let the shaper adjust them before they're committed by WriteHeader.
 	for k, vs := range resp.Header {
 		for _, v := range vs {
 			w.Header().Add(k, v)
 		}
 	}
+	shaper.header(w.Header())
 	w.WriteHeader(resp.StatusCode)
 
+	// The shaper wraps the upstream body (identity returns it unchanged). We still
+	// drive the read/flush loop here so streaming + flush-per-chunk behaviour is
+	// identical no matter which shaper is in play.
+	src := shaper.body(resp.Body)
 	flusher, _ := w.(http.Flusher)
 	buf := make([]byte, 16<<10)
 	for {
-		n, rerr := resp.Body.Read(buf)
+		n, rerr := src.Read(buf)
 		if n > 0 {
 			if _, werr := w.Write(buf[:n]); werr != nil {
 				return // client gone

@@ -108,11 +108,28 @@ wormhole identifies the **caller** of each request — from the `User-Agent`, or
 explicit `X-Wormhole-Client: <name>` header that a client (or the operator) can
 set to declare itself. The caller is classified (`deneb`, `claude-code`,
 `openai-sdk`, `anthropic-sdk`, `curl`, `unknown`), counted in `/metrics`, and
-included in the per-request debug log. It is also the **seam for per-client
-response shaping**: today every client gets the same faithful pass-through, but
-the identified client is carried down to where the response is produced
-(`streamResponse`), so a client that needs the output adapted can branch there
-without re-plumbing. This is foundation only — no client-specific shaping yet.
+included in the per-request debug log.
+
+### Per-client response shaping
+
+The identified client is carried into `streamResponse`, where a **response
+shaper** (`shaper.go`) gets to adapt the upstream reply for that caller — adjust
+headers and/or wrap the body stream — before it's sent on. Today every client
+gets `identityShaper`, a zero-overhead byte-exact pass-through, so this is
+**foundation only — no client-specific shaping yet**. The framework exists so
+adding one is a localized change, not a re-plumbing:
+
+- `shaperFor(client)` (a `switch` on `client.kind`) picks the shaper; add a
+  `case` returning your shaper to target a client.
+- A shaper implements `header(http.Header)` and `body(io.Reader) io.Reader`.
+  Return the reader unchanged for a pass-through, or wrap it to transform.
+- `newSSEDataShaper(fn)` is a reusable base for the common case — rewriting each
+  streamed SSE `data:` payload while leaving the framing (`event:`, comments,
+  blank separators) intact. It runs the transform on a goroutine writing into a
+  pipe, so it stays streaming (no whole-response buffering).
+
+`streamResponse`'s streaming/flush/header plumbing never changes when a shaper is
+added — only the one `shaperFor` case and the shaper type.
 
 ## Config validation
 
