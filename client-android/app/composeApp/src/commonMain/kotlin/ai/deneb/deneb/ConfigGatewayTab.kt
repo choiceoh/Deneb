@@ -4,30 +4,22 @@ import ai.deneb.contacts.ContactsReader
 import ai.deneb.data.AppSettings
 import ai.deneb.tools.ContactsPermissionController
 import ai.deneb.ui.DenebType
-import ai.deneb.ui.handCursor
 import ai.deneb.ui.settings.SettingsCard
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -37,8 +29,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalUriHandler
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
@@ -48,24 +38,18 @@ import org.koin.compose.koinInject
 
 /**
  * Settings hub "게이트웨이" tab: connection (URL + client token), live gateway
- * status, version / OTA update, patch notes, and address-book sync. Hosted by
- * [DenebConfigScreen]'s pager.
+ * status, and address-book sync. Version/OTA and fleet are their own settings
+ * sections now ([VersionTab], DenebFleetScreen). Hosted by [DenebConfigScreen].
  */
 @Composable
 internal fun GatewayTab(
     appSettings: AppSettings,
     onBack: () -> Unit,
     denebClient: DenebGatewayClient?,
-    onOpenFleet: () -> Unit = {},
 ) {
     var url by remember { mutableStateOf(appSettings.settings.getString(KEY_URL, "")) }
     var token by remember { mutableStateOf(appSettings.settings.getString(KEY_TOKEN, "")) }
     val scope = rememberCoroutineScope()
-    val uriHandler = LocalUriHandler.current
-    var checking by remember { mutableStateOf(false) }
-    var checked by remember { mutableStateOf(false) }
-    var update by remember { mutableStateOf<UpdateInfo?>(null) }
-    var showPatchNotes by remember { mutableStateOf(false) }
     var statusChecking by remember { mutableStateOf(false) }
     var tokenVisible by remember { mutableStateOf(false) }
     val gatewayStatus = if (denebClient != null) denebClient.clientStatus.collectAsState().value else null
@@ -143,94 +127,6 @@ internal fun GatewayTab(
                 }
             },
         )
-        // Fleet management lives on its own full screen (DenebFleetScreen) — the
-        // hub stays configuration-only. This entry is the mobile path to it; the
-        // desktop sidebar has its own "fleet" row.
-        SettingsCard {
-            Text(
-                "플릿",
-                style = DenebType.cardTitle,
-                color = MaterialTheme.colorScheme.onBackground,
-            )
-            Spacer(Modifier.height(8.dp))
-            Text(
-                "GPU 노드 상태, 모델(레시피) 기동/중지, 작업 로그를 관리합니다.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.height(12.dp))
-            OutlinedButton(onClick = onOpenFleet, modifier = Modifier.fillMaxWidth()) {
-                Text("플릿 관리 열기")
-            }
-        }
-        SettingsCard {
-            Text(
-                "버전",
-                style = DenebType.cardTitle,
-                color = MaterialTheme.colorScheme.onBackground,
-            )
-            Spacer(Modifier.height(8.dp))
-            Text(
-                "현재 빌드 $DENEB_VERSION_CODE",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            Spacer(Modifier.height(4.dp))
-            Text(
-                "패치노트 보기",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.handCursor().clickable { showPatchNotes = true },
-            )
-            val info = update
-            if (info != null) {
-                Spacer(Modifier.height(12.dp))
-                Text(
-                    "새 빌드 ${info.buildLabel} 사용 가능",
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-                if (info.notes.isNotBlank()) {
-                    Text(
-                        info.notes,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Spacer(Modifier.height(8.dp))
-                Button(
-                    // OTA: download the APK in-app and launch the installer. Falls back to
-                    // opening the URL in a browser if install can't proceed (no permission,
-                    // non-Android platform).
-                    onClick = { installAppUpdate(info.apkUrl) { uriHandler.openUri(info.apkUrl) } },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text("다운로드 후 설치")
-                }
-            } else if (checked && !checking) {
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    "최신 버전입니다.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Spacer(Modifier.height(12.dp))
-            OutlinedButton(
-                onClick = {
-                    val c = denebClient ?: return@OutlinedButton
-                    scope.launch {
-                        checking = true
-                        update = c.checkUpdate()
-                        checked = true
-                        checking = false
-                    }
-                },
-                enabled = !checking && denebClient != null,
-                modifier = Modifier.fillMaxWidth(),
-            ) { Text(if (checking) "확인 중…" else "업데이트 확인") }
-        }
         val contactsPermission = koinInject<ContactsPermissionController>()
         val contactsReader = koinInject<ContactsReader>()
         // Hidden on builds that don't declare READ_CONTACTS (everything but the
@@ -238,9 +134,6 @@ internal fun GatewayTab(
         if (contactsReader.isSupported()) {
             ContactsSyncCard(denebClient, contactsPermission, contactsReader)
         }
-    }
-    if (showPatchNotes) {
-        PatchNotesSheet(onDismiss = { showPatchNotes = false })
     }
 }
 
@@ -366,65 +259,6 @@ private fun ContactsSyncCard(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-        }
-    }
-}
-
-/**
- * Bottom sheet listing the compiled-in [DENEB_PATCH_NOTES], newest first, with the
- * running build flagged. Opened from the "버전" card — no auto-popup on update.
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun PatchNotesSheet(onDismiss: () -> Unit) {
-    ModalBottomSheet(
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        onDismissRequest = onDismiss,
-    ) {
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp)
-                .padding(bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp),
-        ) {
-            item {
-                Text(
-                    "패치노트",
-                    style = DenebType.subject,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    "현재 빌드 $DENEB_VERSION_CODE",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            // versionName was removed — the sheet is a flat reverse-chronological
-            // changelog. Each entry is one build's highlights, separated by spacing
-            // (no version label, no "현재 버전" badge).
-            items(DENEB_PATCH_NOTES) { note ->
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                    modifier = Modifier.padding(bottom = 8.dp),
-                ) {
-                    note.highlights.forEach { line ->
-                        Row {
-                            Text(
-                                "· ",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            Text(
-                                line,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurface,
-                            )
-                        }
-                    }
-                }
-            }
         }
     }
 }

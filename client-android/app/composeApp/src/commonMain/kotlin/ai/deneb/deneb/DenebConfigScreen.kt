@@ -47,11 +47,11 @@ import androidx.compose.ui.unit.dp
  * chat — the injected prompt block carries its source path (gateway
  * system_prompt.go).
  *
- * People browsing and fleet management are NOT sections here: fleet is an
- * operational surface with its own full screen (DenebFleetScreen, same frame as
- * this one); people is a content destination with its own drawer entry + full
- * screen (DenebPeopleScreen), like mail and calendar. The settings hub stays
- * configuration-only.
+ * People browsing is NOT a section here: it is a content destination with its
+ * own drawer entry + full screen (DenebPeopleScreen), like mail and calendar.
+ * Fleet HAS a section row, but its detail is the standalone DenebFleetScreen
+ * (its own pager + scaffold) — the row routes to onOpenFleet rather than
+ * pushing an in-place detail into this screen's shell.
  */
 @Composable
 fun DenebConfigScreen(
@@ -78,7 +78,11 @@ fun DenebConfigScreen(
             tabBar = navigationTabBar,
             showBack = currentPlatform !is Platform.Desktop,
         ) {
-            ConfigSectionList(onOpen = { selectedOrdinal = it.ordinal })
+            ConfigSectionList(onOpen = {
+                // Fleet opens its own full screen (its own pager + scaffold);
+                // every other section pushes into the in-place detail below.
+                if (it == ConfigTab.FLEET) onOpenFleet() else selectedOrdinal = it.ordinal
+            })
         }
         return
     }
@@ -92,13 +96,25 @@ fun DenebConfigScreen(
         showBack = true,
     ) {
         when (selected) {
-            ConfigTab.GATEWAY -> GatewayTab(appSettings, onBack, denebClient, onOpenFleet)
+            ConfigTab.GATEWAY -> GatewayTab(appSettings, onBack, denebClient)
+
             ConfigTab.APPEARANCE -> AppearanceTab(appSettings)
+
             ConfigTab.MODEL -> denebClient?.let { ModelTab(it) } ?: NotConnectedTab()
+
             ConfigTab.SKILLS -> denebClient?.let { SkillsTab(it, onOpenSkill) } ?: NotConnectedTab()
+
             ConfigTab.CRON -> denebClient?.let { CronTab(it, onOpenCron) } ?: NotConnectedTab()
+
             ConfigTab.OBSERVE -> denebClient?.let { ObserveTab(it) } ?: NotConnectedTab()
+
             ConfigTab.WORMHOLE -> denebClient?.let { WormholeTab(it) } ?: NotConnectedTab()
+
+            ConfigTab.VERSION -> VersionTab(denebClient)
+
+            // FLEET never becomes an in-place detail: its row opens the standalone
+            // DenebFleetScreen (onOpenFleet), so this branch is unreachable.
+            ConfigTab.FLEET -> Unit
         }
     }
 }
@@ -150,11 +166,16 @@ private fun NotConnectedTab() = EmptyTab("게이트웨이에 연결되지 않았
  *  the section list and switches detail content by enum, so a reorder/rename
  *  happens in one place. [desc] is the one-line summary under each list row. */
 private enum class ConfigTab(val label: String, val desc: String) {
-    GATEWAY("게이트웨이", "연결, 버전, 연락처 동기화"),
+    GATEWAY("게이트웨이", "연결, 상태, 연락처 동기화"),
     APPEARANCE("화면", "테마, UI 배율"),
     MODEL("모델", "역할별 모델 지정, 엔드포인트"),
     SKILLS("스킬", "설치된 스킬, 수명 주기"),
     CRON("크론", "예약 작업"),
     OBSERVE("관찰", "게이트웨이 동작, 로그"),
     WORMHOLE("Wormhole", "모델 라우터 상태, 기능 토글"),
+
+    // Appended at the end so existing saved detail ordinals (rotation / process
+    // death) keep pointing at the same section across this change.
+    FLEET("플릿", "GPU 노드 상태, 모델 기동/중지, 작업 로그"),
+    VERSION("버전", "현재 빌드, 패치노트, 업데이트"),
 }
