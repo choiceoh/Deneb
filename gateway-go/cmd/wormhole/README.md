@@ -93,6 +93,27 @@ you can still pin a key, protocol, or upstream id). A transient SparkFleet outag
 keeps the last-known set (a stale entry just `502`s, and `auto` falls past it);
 removing the `sparkfleet` block drops the discovered models on the next reload.
 
+### Fleet-backed explicit entries (`"fleet": true`)
+
+Bare discovery gives a model a URL but no routing config — so a model that needs a
+`toggleKwarg` (effort routing) or a non-default `protocol`/`upstreamModel` has to
+be an **explicit** entry, which then pins a static `url` that won't follow the
+model when it moves nodes. A **fleet-backed entry** bridges the two: set
+`"fleet": true` (and omit `url`) and the entry keeps all its own routing config
+while resolving its backend URL **live from discovery** (keyed by `upstreamModel`,
+defaulting to `name`):
+
+```json
+{ "name": "qwen", "fleet": true, "upstreamModel": "qwen3.6-35b-a3b", "toggleKwarg": "enable_thinking" }
+```
+
+Now moving `qwen3.6-35b-a3b` to another node in SparkFleet needs **zero wormhole
+edits** — the next discovery poll repoints it, and `toggleKwarg` survives. A static
+`url` may still be set as a **fallback** used while no live backend serves the
+model; with neither a live backend nor a static `url` the entry is unroutable (a
+clean `404` / `auto` falls past it) rather than a stale pin to a dead node.
+Requires a `sparkfleet` source (validation warns if it's missing).
+
 ## Endpoints
 
 - `POST /v1/chat/completions` — OpenAI clients → OpenAI-protocol backends.
@@ -166,6 +187,7 @@ live in the environment, not the file. Each model entry:
 | `upstreamModel` | rewrite the model id when forwarding (default: `name`) |
 | `toggleKwarg` | vLLM kwarg that disables the model's thinking phase — enables thinking routing (see below) |
 | `local` | override the local/cloud auto-detection (see below); default auto |
+| `fleet` | `true` = resolve `url` live from SparkFleet discovery (keyed by `upstreamModel`) while keeping this entry's routing config; survives node moves (see above) |
 
 Top-level config: `listen` (default `:18800`); `token` gates every request
 (`Authorization: Bearer` or `x-api-key`) — empty means open; `localOnly: true`
