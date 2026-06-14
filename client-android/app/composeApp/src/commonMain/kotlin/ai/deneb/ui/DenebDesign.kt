@@ -32,8 +32,11 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-// The Mini App's component idiom in native Compose: typography on a flat surface,
-// separated by hairline rules — no Material cards, fills, shadows, or icons. These
+// Deneb's component idiom in native Compose (design refresh, 2026-06): a calm
+// monochrome AMOLED base structured with GROUPED INSET CARDS ([DenebGroup] +
+// [DenebListRow]) — the iOS/Toss-style successor to the old flat hairline rows —
+// plus functional mono icons on nav and rows, and two restrained accents (cool
+// `primary` = interactive, warm apricot `denebInsight` = AI-insight). These
 // primitives are what Deneb screens build from so every surface reads the same.
 //
 // ---------------------------------------------------------------------------
@@ -42,11 +45,13 @@ import androidx.compose.ui.unit.sp
 // color laws in Theme.kt, motion laws in DenebMotion.kt, touch vocabulary in
 // components/Haptics.kt):
 //
-//  SURFACE — hierarchy is drawn with type and hairlines, not boxes. Content
-//  sits directly on the background; a 1dp alpha-derived rule separates rows;
-//  elevation/shadow is absent by design. Cards exist only as CALLOUT blocks
-//  (an AI analysis, a sender context) and adapt per Theme.kt law 4: soft fill
-//  on light/dark, outline on OLED. Desktop never stretches: content is capped
+//  SURFACE — content is grouped into rounded inset cards ([DenebGroup]) with a
+//  faint monochrome wash; rows inside are separated by inset hairlines. Elevation
+//  and shadow stay absent — the wash + radius carry grouping, not Material
+//  elevation. The cool `primary` accent marks the selected/interactive row; the
+//  warm apricot insight accent ([denebInsight]) marks AI-analysis callouts. A bare
+//  [DenebRow] (single hairline, no card) is still used for content lists (mail,
+//  search) that aren't settings-like. Desktop never stretches: content is capped
 //  at [DenebMaxContentWidth] and centered.
 //
 //  SPACING — a 4dp grid with five working stops, each owning one job
@@ -62,7 +67,9 @@ import androidx.compose.ui.unit.sp
 //  fine-tune a specific pairing and never structure a layout.
 //
 //  COMPONENT KIT — a screen is assembled from: [DenebScreenScaffold] (frame),
-//  [DenebRow] (list row), [DenebSectionLabel] (grouping), the state triple
+//  [DenebGroup] + [DenebListRow] (grouped inset card + its icon/title/subtitle/
+//  chevron rows — the primary settings-style list idiom), [DenebRow] (a bare
+//  hairline row for content lists), [DenebSectionLabel] (grouping), the state triple
 //  DenebLoading / DenebError / DenebEmpty (every remote-data surface renders
 //  all three: skeleton while loading, error WITH retry, empty WITH guidance),
 //  and DenebChip for compact choices. Controls (switches, buttons, fields,

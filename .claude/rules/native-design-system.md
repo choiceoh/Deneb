@@ -38,9 +38,10 @@ globs: ["client-android/app/composeApp/src/**/*.kt"]
 
 idiom 문서엔 "no cards / no icons"라 써 있지만 **기능을 돕는 곳은 남긴다**:
 
-- **카드**: 리스트·행은 flat+하airline. 하지만 독립 *콜아웃 블록*(메일 상세의 AI 분석·발신자 컨텍스트)은 `ElevatedCard`가 그룹핑에 실익 → 유지(또는 하airline 박스, 화면 보고 판단). 모든 카드를 기계적으로 없애지 않는다.
+- **카드 ★재정의(2026-06, 디자인 리프레시)**: 설정류 리스트는 **그룹 인셋 카드**(`DenebGroup`+`DenebListRow`: 둥근 컨테이너+은은한 모노 wash+인셋 하airline+leading 아이콘/제목/부제/chevron, iOS·토스식)가 기본 idiom. 콘텐츠 리스트(메일·검색 등)는 bare `DenebRow`(단일 하airline) 유지. 즉 옛 평면 에디토리얼 "no cards"는 폐기되고 그룹 카드로 진화. 독립 콜아웃(AI 분석)은 `denebInsightContainer()` tint 박스.
 - **칩**: 첨부·관련항목 `AssistChip`은 상호작용·접근성 있는 Material 유지(외형만 정돈). `DenebChip`이 중간 지점.
-- **아이콘**: 기능 아이콘(보내기·중지·Meet·상태 점)은 유지, **장식** 아이콘만 배제. ★**내비게이션 아이콘 허용**(2026-06-14): 폰 하단 탭바·데스크톱 레일·세션 진입점은 **아이콘+라벨**(Material icons, `Outlined`=비활성/`Filled`=활성 Apple식, M3 `NavigationBar` substrate로 인셋·리플·`Role.Tab` a11y·햅틱). 단 **리스트 행·콘텐츠 제목(메일·세션·위키)은 계속 아이콘리스**, 컬러 탭 없음(모노크롬), 활성=ink+절제된 인디케이터. 한 줄 규칙: 아이콘은 **내비게이션에만**, 콘텐츠엔 안 붙인다.
+- **아이콘**: 기능 아이콘(보내기·중지·Meet·상태 점)은 유지, **장식** 아이콘만 배제. ★**내비게이션 아이콘 허용**(2026-06-14): 폰 하단 탭바·데스크톱 레일·세션 진입점은 **아이콘+라벨**(Material icons, `Outlined`=비활성/`Filled`=활성 Apple식, M3 `NavigationBar` substrate로 인셋·리플·`Role.Tab` a11y·햅틱). 단 **리스트 행·콘텐츠 제목(메일·세션·위키)은 계속 아이콘리스**, 컬러 탭 없음(모노크롬), 활성=ink+절제된 인디케이터. 한 줄 규칙: 아이콘은 **내비게이션 + 그룹 리스트 행**에. (디자인 리프레시로 `DenebListRow`가 행 leading 아이콘을 가짐 — 콘텐츠 *제목*엔 여전히 안 붙임.)
+- **색 ★2액센트(2026-06, 디자인 리프레시)**: 모노크롬 AMOLED 베이스 + 절제된 2색. **쿨 `MaterialTheme.colorScheme.primary`(다크 0xFF7FA8D0)=상호작용·선택·CTA** (여태 ink로 억눌렀던 것을 비로소 사용), **웜 애프리콧 `denebInsight()`=AI 분석·인사이트** (쿨↔웜 보색; Deneb 분석↔비서 이중 페르소나의 색 매핑). 둘 다 작은 마크·소프트 fill(`denebInsightContainer()`)에만 — 화면 전체엔 안 칠함. 토큰 정의=`Theme.kt` 액센트 doctrine.
 
 ## 행동 불변 (이미 들인 작업 보존)
 
