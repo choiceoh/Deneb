@@ -130,6 +130,18 @@
                 ]
               }
             ]
+          },
+          {
+            "tab": "Research",
+            "groups": [
+              {
+                "group": "Agent Papers",
+                "pages": [
+                  "research/agent-papers-2026-survey",
+                  "research/agent-papers-2026-deep-dive"
+                ]
+              }
+            ]
           }
         ]
       }
