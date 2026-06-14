@@ -69,6 +69,16 @@ actual fun onDragAndDropEventDropped(event: DragAndDropEvent): PlatformFile? {
 actual val BackIcon: ImageVector = Icons.AutoMirrored.Filled.ArrowBack
 
 actual val currentPlatform: Platform = run {
+    // Harness override: native-app.sh's phone profile sets -Ddeneb.platform=phone so
+    // the headless Compose Desktop app renders the MOBILE UI branch (bottom bar, modal
+    // drawers) instead of the desktop sidebar. This verifies the mobile composition and
+    // navigation on the server; real Android insets, the soft keyboard, and edge
+    // gestures still need a device. Production desktop launches never set this property.
+    when (System.getProperty("deneb.platform", "").lowercase()) {
+        "android", "phone", "mobile" -> return@run Platform.Mobile.Android
+        "ios" -> return@run Platform.Mobile.Ios
+        else -> {}
+    }
     val osName = System.getProperty("os.name", "").lowercase()
     when {
         "mac" in osName || "darwin" in osName -> Platform.Desktop.Mac

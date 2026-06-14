@@ -239,6 +239,16 @@ cmd_start() {
   # host (vm.overcommit_memory=2). The daemon keeps its own -Xmx4g (command-line
   # arg beats JAVA_TOOL_OPTIONS), so only the forked app JVM is capped here.
   local jvmopts="-Djava.awt.headless=false -Dskiko.renderApi=$SKIKO_RENDER -Xmx${NATIVE_APP_XMX:-1024m}"
+  # Phone profile drives the MOBILE UI branch (bottom bar, modal drawers) by forcing
+  # currentPlatform=Mobile.Android in the desktop runtime (Platform.jvm.kt honors
+  # -Ddeneb.platform). Desktop profile stays Platform.Desktop (persistent sidebar).
+  # Real Android insets/keyboard/edge-gestures still need a device — this verifies the
+  # mobile composition + navigation (e.g. the bottom bar docking, tab switching).
+  [[ "$profile" == "phone" ]] && jvmopts="$jvmopts -Ddeneb.platform=phone"
+  # Open the window at the profile size (dp == px at density 1) so Compose's WindowState
+  # matches the Xvfb screen instead of the 1280x800 default — otherwise a phone-width
+  # window is re-expanded by Compose and the mobile layout clips off-screen.
+  jvmopts="$jvmopts -Ddeneb.window.width=$dpw -Ddeneb.window.height=$dph"
   # setsid fully detaches gradle into its own session, so the live app survives
   # even if THIS start invocation is interrupted (e.g. a caller's timeout). The
   # gradle `run` task kills the forked app JVM when its client dies — without

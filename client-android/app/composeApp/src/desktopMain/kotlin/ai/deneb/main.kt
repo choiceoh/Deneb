@@ -43,7 +43,13 @@ fun main() {
         System.setProperty("sun.java2d.uiScale", "auto")
     }
     application {
-        val windowState = rememberWindowState(size = DpSize(1280.dp, 800.dp))
+        // Window size: the harness (native-app.sh) sets -Ddeneb.window.{width,height}
+        // to the profile size so the phone profile opens at a real phone width. Without
+        // it, Compose re-asserts this default over xdotool's resize and clips the narrow
+        // mobile layout. Production desktop launches omit it and keep 1280x800.
+        val winW = System.getProperty("deneb.window.width")?.toFloatOrNull() ?: 1280f
+        val winH = System.getProperty("deneb.window.height")?.toFloatOrNull() ?: 800f
+        val windowState = rememberWindowState(size = DpSize(winW.dp, winH.dp))
         // Hoisted above the Window so the window-level shortcut handler can navigate.
         val navController = rememberNavController()
         Window(
