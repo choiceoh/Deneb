@@ -53,10 +53,10 @@ func resolveModel(
 	// assigned one in Settings > 모델 (agents.chatbotModel → RoleChatbot). 업무
 	// (client:) keeps the main model via defaultModel below. RoleChatbot is
 	// opt-in, so FullModelID is "" until configured — this stays a no-op and
-	// 챗봇 turns fall through to the main model exactly as before. Sub-agents
-	// (handled above) are excluded; a chatbot session is never a sub-agent.
-	if model == "" && deps.registry != nil && (sess == nil || sess.SpawnedBy == "") &&
-		isChatbotSessionKey(params.SessionKey) {
+	// 챗봇 turns fall through to the main model exactly as before. 챗봇 is a pure
+	// conversational workspace (no sub-agents), so a chat: key is always a
+	// top-level user turn; the sub-agent block above never produces one.
+	if model == "" && deps.registry != nil && isChatbotSessionKey(params.SessionKey) {
 		if cb := deps.registry.FullModelID(modelrole.RoleChatbot); cb != "" {
 			model = cb
 			initialRole = modelrole.RoleChatbot
