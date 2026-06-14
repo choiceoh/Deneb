@@ -33,8 +33,8 @@ internal suspend fun DenebGatewayClient.fetchRecentSessions(): List<Conversation
     // sessions. recall on = 업무, off = 챗봇 (the top-bar pill).
     val chatMode = !appSettings.isRecallEnabled()
     val recent = payload.sessions
-        ?.filter { it.key.isNotBlank() && isChatWorkspaceKey(it.key) == chatMode }
-        ?.map { s ->
+        .filter { it.key.isNotBlank() && isChatWorkspaceKey(it.key) == chatMode }
+        .map { s ->
             Conversation(
                 id = s.key,
                 messages = emptyList(),
@@ -43,7 +43,6 @@ internal suspend fun DenebGatewayClient.fetchRecentSessions(): List<Conversation
                 title = conversationTitle(s),
             )
         }
-        .orEmpty()
     // 챗봇 has no home session — each chat is an independent chat:<uuid>, so just
     // list them (newest as the RPC returns). 업무 keeps its persistent client:main
     // home pinned to the top (synthesized when absent) since proactive reports
