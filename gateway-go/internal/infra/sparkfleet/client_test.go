@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 )
 
@@ -72,6 +73,64 @@ func TestCheckUnavailable(t *testing.T) {
 	c.check(context.Background())
 	if rep := c.HealthReport(); rep.Status != "unavailable" || rep.Error == "" {
 		t.Errorf("expected unavailable with an error, got %+v", rep)
+	}
+}
+
+// capHandler captures slog records for assertions.
+type capHandler struct {
+	mu      sync.Mutex
+	records []slog.Record
+}
+
+func (h *capHandler) Enabled(context.Context, slog.Level) bool { return true }
+func (h *capHandler) Handle(_ context.Context, r slog.Record) error {
+	h.mu.Lock()
+	h.records = append(h.records, r)
+	h.mu.Unlock()
+	return nil
+}
+func (h *capHandler) WithAttrs([]slog.Attr) slog.Handler { return h }
+func (h *capHandler) WithGroup(string) slog.Handler      { return h }
+func (h *capHandler) count(level slog.Level, msg string) int {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	n := 0
+	for _, r := range h.records {
+		if r.Level == level && r.Message == msg {
+			n++
+		}
+	}
+	return n
+}
+
+// TestCheckLogsDownOnlyOnTransition verifies a persistently-down backend logs
+// once (not every poll) and a recovery logs once — the fix for journald being
+// flooded with the same down-set 1000+ times/day.
+func TestCheckLogsDownOnlyOnTransition(t *testing.T) {
+	down := true
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		ok := "true"
+		if down {
+			ok = "false"
+		}
+		_, _ = w.Write([]byte(`{"services":[{"name":"embeddings","ok":` + ok + `}]}`))
+	}))
+	defer srv.Close()
+
+	cap := &capHandler{}
+	c := New(srv.URL, slog.New(cap))
+
+	c.check(context.Background()) // newly down → 1 Warn
+	c.check(context.Background()) // still down → no new log
+	c.check(context.Background()) // still down → no new log
+	if w := cap.count(slog.LevelWarn, "GPU backends reported down by SparkFleet"); w != 1 {
+		t.Fatalf("persistent down must log once, got %d Warn", w)
+	}
+
+	down = false
+	c.check(context.Background()) // recovered → 1 Info
+	if i := cap.count(slog.LevelInfo, "GPU backends recovered (SparkFleet)"); i != 1 {
+		t.Fatalf("recovery must log once, got %d Info", i)
 	}
 }
 
