@@ -11,11 +11,11 @@ import (
 
 func TestMetrics_RecordAndPrometheus(t *testing.T) {
 	m := newMetrics()
-	m.record("dsv4", 200, 100*time.Millisecond)
-	m.record("dsv4", 200, 300*time.Millisecond)
-	m.record("dsv4", 500, 50*time.Millisecond)   // error
-	m.record("claude", 401, 10*time.Millisecond) // error
-	m.record("", 200, 5*time.Millisecond)        // unnamed -> "(none)"
+	m.record("dsv4", "deneb", 200, 100*time.Millisecond)
+	m.record("dsv4", "deneb", 200, 300*time.Millisecond)
+	m.record("dsv4", "claude-code", 500, 50*time.Millisecond) // error
+	m.record("claude", "curl", 401, 10*time.Millisecond)      // error
+	m.record("", "", 200, 5*time.Millisecond)                 // unnamed -> "(none)" / "unknown"
 
 	var b strings.Builder
 	m.writePrometheus(&b)
@@ -30,6 +30,10 @@ func TestMetrics_RecordAndPrometheus(t *testing.T) {
 		`wormhole_model_requests_total{model="claude"} 1`,
 		`wormhole_model_errors_total{model="claude"} 1`,
 		`wormhole_model_requests_total{model="(none)"} 1`,
+		`wormhole_client_requests_total{client="deneb"} 2`,
+		`wormhole_client_requests_total{client="claude-code"} 1`,
+		`wormhole_client_requests_total{client="curl"} 1`,
+		`wormhole_client_requests_total{client="unknown"} 1`, // empty client -> unknown
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("metrics output missing %q\n--- got ---\n%s", want, out)

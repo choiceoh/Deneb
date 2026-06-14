@@ -95,11 +95,24 @@ removing the `sparkfleet` block drops the discovered models on the next reload.
 - `GET /status` — rich live operational readout (feature flags + per-model
   protocol/local/thinking/source); token-gated. Powers the native management tab.
 - `GET /metrics` — Prometheus text: request/error counts and cumulative latency,
-  total and per model. The always-on visibility for the hot path (wormhole
-  otherwise logs only errors); token-gated. Scrape it or `curl` it to see what is
-  flowing. Divide `wormhole_model_latency_ms_sum` by `wormhole_model_requests_total`
-  for the average latency per model.
+  total and per model, plus `wormhole_client_requests_total{client=…}` (who is
+  calling). The always-on visibility for the hot path (wormhole otherwise logs
+  only errors); token-gated. Scrape it or `curl` it to see what is flowing. Divide
+  `wormhole_model_latency_ms_sum` by `wormhole_model_requests_total` for the
+  average latency per model.
 - `GET /health` — liveness.
+
+## Client identification
+
+wormhole identifies the **caller** of each request — from the `User-Agent`, or an
+explicit `X-Wormhole-Client: <name>` header that a client (or the operator) can
+set to declare itself. The caller is classified (`deneb`, `claude-code`,
+`openai-sdk`, `anthropic-sdk`, `curl`, `unknown`), counted in `/metrics`, and
+included in the per-request debug log. It is also the **seam for per-client
+response shaping**: today every client gets the same faithful pass-through, but
+the identified client is carried down to where the response is produced
+(`streamResponse`), so a client that needs the output adapted can branch there
+without re-plumbing. This is foundation only — no client-specific shaping yet.
 
 ## Config validation
 
