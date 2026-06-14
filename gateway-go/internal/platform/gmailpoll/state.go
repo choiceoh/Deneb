@@ -1,6 +1,6 @@
 // Package gmailpoll implements periodic Gmail polling with LLM-based analysis.
 // New emails are detected, analyzed via a configurable prompt, and reported
-// to the user through Telegram.
+// to the user through the native client.
 package gmailpoll
 
 import (

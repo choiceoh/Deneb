@@ -228,7 +228,7 @@ func (s *Service) OnEvent(listener EventListener) {
 }
 
 // SetNotifier sets the optional notifier for delivering significant events
-// to the user (e.g., via Telegram).
+// to the user (e.g., to the native client).
 func (s *Service) SetNotifier(n Notifier) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -369,7 +369,7 @@ func (s *Service) runDreamingAsync() {
 	}()
 }
 
-// notifyDreaming sends a Telegram notification for dreaming cycle results.
+// notifyDreaming sends a notification for dreaming cycle results.
 func (s *Service) notifyDreaming(report *DreamReport, err error) {
 	s.mu.Lock()
 	notifier := s.notifier

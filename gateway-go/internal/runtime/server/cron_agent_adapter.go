@@ -126,7 +126,7 @@ func (a *cronChatAdapter) RunAgentTurn(ctx context.Context, params cron.AgentTur
 	// see agent.stripNarrationHead.
 	// Fall back to the final turn, then the raw accumulation, only when no
 	// deliverable survived (e.g. a run aborted after emitting only narration).
-	// NO_REPLY is stripped so the marker does not leak into Telegram.
+	// NO_REPLY is stripped so the marker does not leak into the reply.
 	text := strings.TrimSpace(result.Text)
 	deliverable := strings.TrimSpace(tokens.StripSilentToken(result.DeliverableText, tokens.SilentReplyToken))
 	allText := strings.TrimSpace(tokens.StripSilentToken(result.AllText, tokens.SilentReplyToken))
