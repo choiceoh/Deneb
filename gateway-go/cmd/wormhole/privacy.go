@@ -44,7 +44,7 @@ func (e modelEntry) isLocal() bool {
 // is in local-only mode, or the caller set the X-Wormhole-Local-Only header to
 // guarantee no cloud egress for a sensitive payload.
 func (rt *router) localOnly(r *http.Request) bool {
-	if rt.cfg.LocalOnly {
+	if rt.cur().cfg.LocalOnly {
 		return true
 	}
 	switch strings.ToLower(strings.TrimSpace(r.Header.Get("X-Wormhole-Local-Only"))) {

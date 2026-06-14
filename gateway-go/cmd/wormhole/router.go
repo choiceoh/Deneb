@@ -1,13 +1,16 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
 	"net"
 	"net/http"
+	"os"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -16,21 +19,35 @@ import (
 const maxBodyBytes = 32 << 20 // 32 MiB
 
 // router fans /v1 requests out to upstream backends by model name.
-type router struct {
+// snapshot is the live, swappable view of the config: the parsed config plus its
+// model lookup and the file mtime it was loaded from. The watcher re-reads the
+// config file when its mtime advances and atomically swaps a fresh snapshot in,
+// so a toggle written to the file (from the management RPC) takes effect within a
+// few seconds — no restart. Handlers read via cur() (a lock-free atomic load).
+type snapshot struct {
 	cfg    config
 	models map[string]modelEntry
-	client *http.Client
-	log    *slog.Logger
+	mtime  time.Time
 }
 
-func newRouter(cfg config, log *slog.Logger) *router {
+func buildSnapshot(cfg config, mtime time.Time) *snapshot {
 	m := make(map[string]modelEntry, len(cfg.Models))
 	for _, e := range cfg.Models {
 		m[e.Name] = e
 	}
-	return &router{
-		cfg:    cfg,
-		models: m,
+	return &snapshot{cfg: cfg, models: m, mtime: mtime}
+}
+
+type router struct {
+	path   string // config path to watch ("" disables hot-reload)
+	snap   atomic.Pointer[snapshot]
+	client *http.Client
+	log    *slog.Logger
+}
+
+func newRouter(cfg config, path string, log *slog.Logger) *router {
+	rt := &router{
+		path: path,
 		// Streaming client: NO overall timeout — SSE responses run long and the
 		// request context cancels on client disconnect. Only the dial, TLS
 		// handshake, and time-to-first-response-header are bounded.
@@ -43,6 +60,52 @@ func newRouter(cfg config, log *slog.Logger) *router {
 		}},
 		log: log,
 	}
+	rt.snap.Store(buildSnapshot(cfg, time.Time{}))
+	return rt
+}
+
+// cur returns the live config snapshot (lock-free).
+func (rt *router) cur() *snapshot { return rt.snap.Load() }
+
+// watch re-reads the config file when its mtime advances and swaps in a fresh
+// snapshot, so management toggles apply live. It exits when ctx is cancelled.
+func (rt *router) watch(ctx context.Context) {
+	if rt.path == "" {
+		return
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			rt.log.Error("config watcher panic", "panic", r)
+		}
+	}()
+	t := time.NewTicker(3 * time.Second)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			rt.reloadIfChanged()
+		}
+	}
+}
+
+// reloadIfChanged re-reads the config file and swaps in a fresh snapshot when the
+// file's mtime has advanced past the loaded one. Returns true if it reloaded. A
+// parse error keeps the current snapshot (a half-written file never wedges us).
+func (rt *router) reloadIfChanged() bool {
+	st, err := os.Stat(rt.path)
+	if err != nil || !st.ModTime().After(rt.cur().mtime) {
+		return false
+	}
+	nc, err := loadConfig(rt.path)
+	if err != nil {
+		rt.log.Warn("config reload failed, keeping current", "error", err)
+		return false
+	}
+	rt.snap.Store(buildSnapshot(nc, st.ModTime()))
+	rt.log.Info("config reloaded", "models", len(nc.Models))
+	return true
 }
 
 func (rt *router) handler() http.Handler {
@@ -60,10 +123,11 @@ func (rt *router) handler() http.Handler {
 // authed gates a request on the wormhole token. An empty configured token means
 // "open" (dev/loopback) — main() warns loudly about that at boot.
 func (rt *router) authed(w http.ResponseWriter, r *http.Request) bool {
-	if rt.cfg.Token == "" {
+	token := rt.cur().cfg.Token
+	if token == "" {
 		return true
 	}
-	if clientToken(r) != rt.cfg.Token {
+	if clientToken(r) != token {
 		writeErr(w, http.StatusUnauthorized, "invalid wormhole token")
 		return false
 	}
@@ -92,11 +156,12 @@ func (rt *router) serve(w http.ResponseWriter, r *http.Request, proto, pathSuffi
 		return
 	}
 	// "auto" (when configured) lets the client delegate the choice.
-	if model == rt.autoName() && len(rt.cfg.Auto) > 0 {
+	s := rt.cur()
+	if model == rt.autoName() && len(s.cfg.Auto) > 0 {
 		rt.serveAuto(w, r, body, proto, pathSuffix)
 		return
 	}
-	entry, ok := rt.models[model]
+	entry, ok := s.models[model]
 	if !ok {
 		writeErr(w, http.StatusNotFound, "unknown model: "+model)
 		return
@@ -116,7 +181,9 @@ func (rt *router) serve(w http.ResponseWriter, r *http.Request, proto, pathSuffi
 			out = rewritten
 		}
 	}
-	out = rt.applyThinking(entry, out)
+	if s.cfg.effortRoutingOn() {
+		out = rt.applyThinking(entry, out)
+	}
 	rt.forward(w, r, entry, out, pathSuffix)
 }
 
@@ -149,7 +216,9 @@ func (rt *router) serveAuto(w http.ResponseWriter, r *http.Request, body []byte,
 		if rewritten, rerr := rewriteModel(body, entry.UpstreamModel); rerr == nil {
 			out = rewritten
 		}
-		out = rt.applyThinking(entry, out)
+		if rt.cur().cfg.effortRoutingOn() {
+			out = rt.applyThinking(entry, out)
+		}
 		resp, err := rt.doUpstream(r, entry, out, pathSuffix)
 		if err != nil {
 			rt.log.Warn("auto: candidate unreachable, trying next", "model", entry.Name, "error", err)
@@ -173,9 +242,10 @@ func (rt *router) serveAuto(w http.ResponseWriter, r *http.Request, body []byte,
 // autoCandidates returns the configured auto models eligible for this request, in
 // order: those matching the endpoint's protocol and passing the egress guard.
 func (rt *router) autoCandidates(r *http.Request, proto string) []modelEntry {
-	out := make([]modelEntry, 0, len(rt.cfg.Auto))
-	for _, name := range rt.cfg.Auto {
-		e, ok := rt.models[name]
+	s := rt.cur()
+	out := make([]modelEntry, 0, len(s.cfg.Auto))
+	for _, name := range s.cfg.Auto {
+		e, ok := s.models[name]
 		if !ok || e.protocol() != proto {
 			continue
 		}
@@ -189,8 +259,8 @@ func (rt *router) autoCandidates(r *http.Request, proto string) []modelEntry {
 
 // autoName is the reserved model name that triggers auto-routing (default "auto").
 func (rt *router) autoName() string {
-	if rt.cfg.AutoName != "" {
-		return rt.cfg.AutoName
+	if n := rt.cur().cfg.AutoName; n != "" {
+		return n
 	}
 	return "auto"
 }
@@ -271,12 +341,13 @@ func (rt *router) listModels(w http.ResponseWriter, r *http.Request) {
 		Object  string `json:"object"`
 		OwnedBy string `json:"owned_by"`
 	}
-	rows := make([]modelRow, 0, len(rt.cfg.Models)+1)
+	s := rt.cur()
+	rows := make([]modelRow, 0, len(s.cfg.Models)+1)
 	// Advertise the reserved auto name first so clients see they can delegate.
-	if len(rt.cfg.Auto) > 0 {
+	if len(s.cfg.Auto) > 0 {
 		rows = append(rows, modelRow{ID: rt.autoName(), Object: "model", OwnedBy: "wormhole-auto"})
 	}
-	for _, e := range rt.cfg.Models {
+	for _, e := range s.cfg.Models {
 		owner := "wormhole-cloud"
 		if e.isLocal() {
 			owner = "wormhole-local"

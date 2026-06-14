@@ -11,7 +11,7 @@ import (
 )
 
 func quietRouter(cfg config) *router {
-	return newRouter(cfg, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	return newRouter(cfg, "", slog.New(slog.NewTextHandler(io.Discard, nil)))
 }
 
 func TestChatCompletions_ForwardsRewritesInjectsKeyAndStreams(t *testing.T) {

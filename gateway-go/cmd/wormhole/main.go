@@ -66,6 +66,16 @@ type config struct {
 	Auto []string `json:"auto,omitempty"`
 	// AutoName overrides the reserved auto model name (default "auto").
 	AutoName string `json:"autoName,omitempty"`
+	// EffortRouting gates the thinking/non-thinking routing globally. Nil (absent)
+	// means ON — a model with a toggleKwarg routes by effort. Set false to turn
+	// the whole feature off without editing every model. Pointer so absent ≠ off.
+	EffortRouting *bool `json:"effortRouting,omitempty"`
+}
+
+// effortRoutingOn reports whether thinking routing is active (default on; an
+// explicit "effortRouting": false turns it off globally).
+func (c config) effortRoutingOn() bool {
+	return c.EffortRouting == nil || *c.EffortRouting
 }
 
 func loadConfig(path string) (config, error) {
@@ -117,7 +127,7 @@ func main() {
 		log.Warn("no token configured — wormhole is OPEN to anyone who can reach it")
 	}
 
-	rt := newRouter(cfg, log)
+	rt := newRouter(cfg, configPath, log)
 
 	// Egress visibility: name every model whose data leaves the box, so the
 	// operator sees the cloud surface at a glance (local-first hygiene).
@@ -144,8 +154,10 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
+	go rt.watch(ctx) // hot-reload the config file so management toggles apply live
+
 	go func() {
-		log.Info("wormhole listening", "addr", cfg.Listen, "models", len(rt.models))
+		log.Info("wormhole listening", "addr", cfg.Listen, "models", len(rt.cur().models))
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Error("server error", "error", err)
 			stop()
