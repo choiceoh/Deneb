@@ -31,6 +31,12 @@ type prepResult struct {
 	RecallMemory string
 	Tier1Wiki    string
 	ContextErr   error
+	// ContextFiles and TopicKnowledge are the session-frozen system-prompt
+	// inputs captured from the sysprompt goroutine so they can be persisted
+	// alongside Tier1Wiki (prompt_snapshot_persist.go). Nil on explicit-System
+	// runs (subagents) that bypass prompt assembly.
+	ContextFiles   []prompt.ContextFile
+	TopicKnowledge *prompt.TopicKnowledge
 }
 
 // prepareContextAndPrompt runs wiki injection, context assembly, and system prompt
@@ -230,6 +236,7 @@ func prepareContextAndPrompt(
 		// edits invalidate. Unmapped/missing → empty (no injection, no cache
 		// key change → topic-less Static cache stays shared).
 		var topicKnowledge, topicCacheKey, topicKnowledgePath string
+		var frozenTopic *prompt.TopicKnowledge
 		if deps.topicResolver != nil && params.Delivery != nil {
 			if key := deps.topicResolver.TopicKey(params.Delivery.ThreadID); key != "" {
 				tk := prompt.LoadTopicKnowledge(workspaceDir, deps.topicResolver.Dir(), key, params.SessionKey)
@@ -237,6 +244,8 @@ func prepareContextAndPrompt(
 					topicKnowledge = tk.Content
 					topicCacheKey = tk.Key + ":" + tk.Hash
 					topicKnowledgePath = tk.Path
+					tkCopy := tk
+					frozenTopic = &tkCopy
 				}
 			}
 		}
@@ -249,12 +258,14 @@ func prepareContextAndPrompt(
 			calendarGlance = deps.calendarGlanceFn(ctx, params.SessionKey, tz)
 		}
 
+		ctxFiles := prompt.LoadContextFiles(workspaceDir, prompt.WithSessionSnapshot(params.SessionKey))
+
 		spp := prompt.SystemPromptParams{
 			WorkspaceDir:       workspaceDir,
 			ToolDefs:           toolDefs,
 			DeferredTools:      deferredToolInfos,
 			UserTimezone:       tz,
-			ContextFiles:       prompt.LoadContextFiles(workspaceDir, prompt.WithSessionSnapshot(params.SessionKey)),
+			ContextFiles:       ctxFiles,
 			RuntimeInfo:        prompt.BuildDefaultRuntimeInfo(params.Model, deps.callbacks.defaultModel),
 			Channel:            ch,
 			SkillsPrompt:       loadCachedSkillsPrompt(workspaceDir, availableToolNames(deps.tools)),
@@ -270,10 +281,22 @@ func prepareContextAndPrompt(
 		systemPrompt = llm.SystemBlocks(prompt.BuildSystemPromptBlocks(spp))
 		resultMu.Lock()
 		result.SystemPrompt = systemPrompt
+		result.ContextFiles = ctxFiles
+		result.TopicKnowledge = frozenTopic
 		resultMu.Unlock()
 	})
 
 	prepWg.Wait()
+
+	// Persist this session's frozen system-prompt inputs so the next gateway
+	// restart restores byte-identical bytes — preserving the vLLM APC prefix for
+	// this session's tool schemas + full history instead of forcing a re-prefill.
+	// First-write-wins and a no-op once a session's fields are present, so the
+	// common path costs only a lock + map lookup. Reads after Wait() are safe:
+	// the WaitGroup is a barrier, so the goroutines' writes are visible here.
+	// See prompt_snapshot_persist.go.
+	recordPromptSnapshot(params.SessionKey, result.Tier1Wiki, result.ContextFiles, result.TopicKnowledge)
+
 	return result
 }
 

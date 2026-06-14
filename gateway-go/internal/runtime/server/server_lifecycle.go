@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/logging"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 )
 
 // initAndListen creates the HTTP server, binds to the address, and starts
@@ -101,6 +102,14 @@ func (s *Server) initAndListen(ctx context.Context) (net.Listener, error) {
 	// reads the sessions that restoreAndWakeSessions just populated.
 	s.safeGo("session-restore", func() {
 		s.restoreAndWakeSessions(ctx)
+		// Restore the persisted per-session prompt snapshots into the live
+		// stores, now that the session manager knows which keys are alive. Done
+		// here (same goroutine, right after restore) so the prune-at-load drops
+		// snapshots whose session no longer exists, and the first post-restart
+		// turn of each live session reuses its frozen bytes (no APC re-prefill).
+		if n := chat.LoadPromptSnapshots(func(key string) bool { return s.sessions.Get(key) != nil }); n > 0 {
+			s.logger.Info("prompt snapshot restore: restored sessions", "count", n)
+		}
 		s.autoResumeInterruptedRuns(ctx)
 	})
 
