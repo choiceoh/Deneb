@@ -229,6 +229,15 @@ func isSystemSession(key string) bool {
 	return strings.HasPrefix(key, "system:")
 }
 
+// isChatbotSessionKey reports whether key is a 챗봇-workspace session. The
+// native client puts focused general chat under the "chat:" namespace and 업무
+// work chat under "client:" (mirrors the client's isChatWorkspaceKey). The
+// gateway uses this to route 챗봇 turns to RoleChatbot when an operator has
+// assigned a separate chatbot model (see resolveModel).
+func isChatbotSessionKey(key string) bool {
+	return strings.HasPrefix(key, "chat:")
+}
+
 // isMainSession reports whether key is a top-level direct session (e.g. "client:main").
 // Sub-sessions ("client:main:task:ts"), system ("system:*"), cron, hook, and
 // bare keys (no colon, e.g. "dev-chat-xxx") return false.
