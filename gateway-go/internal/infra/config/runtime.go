@@ -16,7 +16,6 @@ type GatewayRuntimeConfig struct {
 	ControlUIEnabled              bool
 	ControlUIBasePath             string
 	ControlUIRoot                 string
-	StrictTransportSecurityHeader string
 	ResolvedAuth                  ResolvedGatewayAuth
 	AuthMode                      string
 	TailscaleConfig               GatewayTailscaleConfig
@@ -26,7 +25,6 @@ type GatewayRuntimeConfig struct {
 	ChannelStaleEventThresholdMin int
 	ChannelMaxRestartsPerHour     int
 	ReloadConfig                  GatewayReloadConfig
-	RemoteConfig                  *GatewayRemoteConfig
 }
 
 // RuntimeConfigParams are the inputs for resolving the runtime config.
@@ -107,15 +105,6 @@ func ResolveGatewayRuntimeConfig(params RuntimeConfigParams) (*GatewayRuntimeCon
 	controlUIRoot := ""
 	if gw.ControlUI != nil && strings.TrimSpace(gw.ControlUI.Root) != "" {
 		controlUIRoot = strings.TrimSpace(gw.ControlUI.Root)
-	}
-
-	// Strict-Transport-Security header.
-	stsHeader := ""
-	if gw.HTTP != nil && gw.HTTP.SecurityHeaders != nil && gw.HTTP.SecurityHeaders.StrictTransportSecurity != nil {
-		v := strings.TrimSpace(*gw.HTTP.SecurityHeaders.StrictTransportSecurity)
-		if v != "" && v != "false" {
-			stsHeader = v
-		}
 	}
 
 	// Tailscale.
@@ -218,7 +207,6 @@ func ResolveGatewayRuntimeConfig(params RuntimeConfigParams) (*GatewayRuntimeCon
 		ControlUIEnabled:              controlUIEnabled,
 		ControlUIBasePath:             controlUIBasePath,
 		ControlUIRoot:                 controlUIRoot,
-		StrictTransportSecurityHeader: stsHeader,
 		ResolvedAuth:                  resolvedAuth,
 		AuthMode:                      authMode,
 		TailscaleConfig:               tailscaleCfg,
@@ -228,7 +216,6 @@ func ResolveGatewayRuntimeConfig(params RuntimeConfigParams) (*GatewayRuntimeCon
 		ChannelStaleEventThresholdMin: channelStale,
 		ChannelMaxRestartsPerHour:     channelMaxRestarts,
 		ReloadConfig:                  reloadCfg,
-		RemoteConfig:                  gw.Remote,
 	}, nil
 }
 

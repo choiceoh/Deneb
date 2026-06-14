@@ -37,7 +37,6 @@ internal/domain/skills/filter.go :: NormalizeSkillFilterForComparison
 internal/domain/skills/genesis/nudger.go :: NewNudgerFromEnv
 internal/domain/skills/genesis/nudger.go :: NewNudgerFromEnvWithTracker
 internal/domain/wiki/config.go :: ResetConfigForTest
-internal/infra/config/bootstrap.go :: ResolveMediaCleanupTTLMs
 internal/infra/config/bootstrap_models.go :: PersistDefaultModel
 internal/infra/metrics/metrics.go :: CacheHitTracker.HitRatio
 internal/infra/secretref/onepassword.go :: IsReference

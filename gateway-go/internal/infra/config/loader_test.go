@@ -228,9 +228,6 @@ func TestApplyDefaults(t *testing.T) {
 	if cfg.Gateway.Bind != "loopback" {
 		t.Errorf("bind should default to loopback, got %q", cfg.Gateway.Bind)
 	}
-	if cfg.Session == nil || cfg.Session.MainKey != "main" {
-		t.Error("session.mainKey should default to main")
-	}
 	if cfg.Agents == nil || cfg.Agents.MaxConcurrent == nil || *cfg.Agents.MaxConcurrent != 8 {
 		t.Error("agents.maxConcurrent should default to 8")
 	}

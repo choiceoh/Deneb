@@ -270,14 +270,6 @@ func applyDefaults(cfg *DenebConfig) {
 		cfg.Gateway.Reload.DeferralTimeoutMs = &v
 	}
 
-	// Session defaults.
-	if cfg.Session == nil {
-		cfg.Session = &SessionConfig{}
-	}
-	if cfg.Session.MainKey == "" {
-		cfg.Session.MainKey = DefaultSessionMainKey
-	}
-
 	// Agent defaults.
 	if cfg.Agents == nil {
 		cfg.Agents = &AgentsConfig{}
