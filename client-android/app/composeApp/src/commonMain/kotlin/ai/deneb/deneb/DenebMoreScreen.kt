@@ -1,8 +1,7 @@
 package ai.deneb.deneb
 
-import ai.deneb.DenebConfig
+import ai.deneb.DenebCategories
 import ai.deneb.DenebDiary
-import ai.deneb.DenebFleet
 import ai.deneb.DenebSearch
 import ai.deneb.DenebTodo
 import ai.deneb.ui.DenebScreenScaffold
@@ -19,9 +18,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.outlined.CheckCircle
-import androidx.compose.material.icons.outlined.Dns
+import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -37,8 +35,7 @@ private val moreEntries = listOf(
     MoreEntry("검색", DenebSearch, Icons.Outlined.Search),
     MoreEntry("할일", DenebTodo, Icons.Outlined.CheckCircle),
     MoreEntry("일기", DenebDiary, Icons.AutoMirrored.Outlined.MenuBook),
-    MoreEntry("플릿", DenebFleet, Icons.Outlined.Dns),
-    MoreEntry("설정", DenebConfig, Icons.Outlined.Settings),
+    MoreEntry("카테고리", DenebCategories, Icons.Outlined.GridView),
 )
 
 /**
