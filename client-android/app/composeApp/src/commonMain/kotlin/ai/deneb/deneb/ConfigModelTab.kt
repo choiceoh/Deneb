@@ -548,11 +548,12 @@ private enum class ModelHealth(val color: Color, val suffix: String) {
 /** Model-assignment roles. [wire] is the gateway's role key (sent on the RPC and
  *  used to look up the current model); [label] is the Korean segmented-button text;
  *  [desc] is the one-line role explanation shown in the "?" tooltip. Descriptions
- *  mirror the gateway's modelrole registry (main / chatbot / tiny / lightweight /
+ *  mirror the gateway's modelrole registry (main / chatbot / vision / tiny / lightweight /
  *  analysis / fallback). */
 private enum class ModelRole(val wire: String, val label: String, val desc: String) {
     MAIN("main", "메인", "업무 모드(기억 활성) 대화·분석·도구 호출을 담당하는 기본 모델"),
     CHATBOT("chatbot", "챗봇", "챗봇 모드(일반 대화) 전용 모델. 미설정이면 메인 모델을 그대로 사용"),
+    VISION("vision", "비전", "사진·스크린샷 등 이미지가 포함된 대화를 처리하는 멀티모달 모델. 미설정이면 메인 모델(이미지 무시)을 사용"),
     TINY("tiny", "초경량", "세션 제목·메일 1차 추출 같은 사소한 분류·추출"),
     LIGHTWEIGHT("lightweight", "경량", "위키 병합·파일럿·스킬 리뷰 같은 범위가 정해진 요약"),
     ANALYSIS("analysis", "분석", "메일 본문 분석·대화 압축·기록 요약 같은 추론 작업"),

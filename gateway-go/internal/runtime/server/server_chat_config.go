@@ -409,6 +409,13 @@ func resolveChatbotModel(logger *slog.Logger) string {
 	return resolveAgentRoleModel("chatbotModel", logger)
 }
 
+// resolveVisionModel reads the optional agents.visionModel override from
+// deneb.json. Empty leaves RoleVision absent, so image turns use the main
+// model — separating a multimodal vision model is fully opt-in.
+func resolveVisionModel(logger *slog.Logger) string {
+	return resolveAgentRoleModel("visionModel", logger)
+}
+
 // resolveAgentRoleModel reads a string field directly under "agents" in
 // deneb.json (e.g. "lightweightModel"). Returns "" when absent/unparseable.
 func resolveAgentRoleModel(field string, logger *slog.Logger) string {

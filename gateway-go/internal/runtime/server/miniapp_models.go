@@ -281,6 +281,11 @@ func (s *Server) roleMiniappModels() []handlerminiapp.RoleModel {
 	if cb := s.modelRegistry.FullModelID(modelrole.RoleChatbot); cb != "" {
 		out = append(out, handlerminiapp.RoleModel{Role: string(modelrole.RoleChatbot), Model: cb})
 	}
+	// Vision role, like chatbot, is opt-in: report it only when assigned so the
+	// picker shows "미설정" until an operator binds a multimodal model.
+	if v := s.modelRegistry.FullModelID(modelrole.RoleVision); v != "" {
+		out = append(out, handlerminiapp.RoleModel{Role: string(modelrole.RoleVision), Model: v})
+	}
 	return out
 }
 
@@ -393,6 +398,12 @@ func (s *Server) deleteMiniappCustomModel(_ context.Context, id string) (handler
 			// to the vLLM default like the always-on roles above.
 			if s.modelRegistry != nil {
 				s.modelRegistry.ClearRole(modelrole.RoleChatbot)
+			}
+		case "vision":
+			// Vision is opt-in like chatbot: clear the role so image turns revert
+			// to the main model when the bound multimodal model is deleted.
+			if s.modelRegistry != nil {
+				s.modelRegistry.ClearRole(modelrole.RoleVision)
 			}
 		}
 	}
