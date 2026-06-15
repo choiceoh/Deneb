@@ -259,6 +259,12 @@ class DenebGatewayClient(
     internal val clientToken: String
         get() = appSettings.settings.getString(KEY_TOKEN, "")
 
+    // Identity of the currently-configured gateway+account. Cache writes capture this
+    // before a network op and re-check it before persisting, so an old-credential RPC
+    // that finishes AFTER the user switched gateways (and clearCachedContent ran) can't
+    // repopulate the global cache keys with the prior account's content.
+    internal fun credentialFingerprint(): String = "$gatewayUrl $clientToken"
+
     override suspend fun ask(question: String?, files: List<PlatformFile>, uiSubmission: UiSubmission?) {
         val displayText = question?.trim().orEmpty()
         // A deneb-ui button press arrives as a UiSubmission. Show the friendly
@@ -630,6 +636,10 @@ class DenebGatewayClient(
      */
     private suspend fun loadTranscriptGuarded(key: String, replacing: Boolean = false) {
         val startEpoch = historyGate.withLock { historyEpoch }
+        // Pin the credential identity: if the user switches gateways while this fetch
+        // is in flight, the write-back below is skipped so an old-account transcript
+        // can't repopulate the (just-cleared) cache under the new credentials.
+        val cred = credentialFingerprint()
         // Cache-then-network: render the encrypted local copy instantly (no spinner).
         // [replacing] = an explicit switch to a different conversation (drawer pick,
         // proactive deep link): the view must reflect [key], so render its cache or
@@ -665,8 +675,9 @@ class DenebGatewayClient(
         // Reconcile the cache only for an authoritative fetch that won the epoch race,
         // so a stale (pre-send) transcript can never poison the cache. An authoritative
         // empty evicts any stale entry — e.g. a session deleted server-side — so it
-        // can't resurrect on the next reopen.
-        if (authoritative) {
+        // can't resurrect on the next reopen. Skip entirely if credentials changed
+        // mid-flight (this transcript belongs to the old account).
+        if (authoritative && cred == credentialFingerprint()) {
             if (transcript!!.isEmpty()) removeCachedTranscript(key) else storeCachedTranscript(key, transcript)
         }
     }

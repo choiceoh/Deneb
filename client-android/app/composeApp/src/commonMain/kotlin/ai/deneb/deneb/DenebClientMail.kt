@@ -59,6 +59,9 @@ internal fun recordReadId(into: LinkedHashSet<String>, id: String, max: Int = MA
  *  failure so the screen can show a retry instead of a misleading empty state. */
 suspend fun DenebGatewayClient.refreshMail(query: String? = null): Boolean {
     val q = query?.trim()?.ifBlank { null }
+    // Pin the credential identity so an old-account response that lands after the user
+    // switched gateways can't repopulate the (just-cleared) inbox cache.
+    val cred = credentialFingerprint()
     // Cache-then-network for the default inbox (no query): render the encrypted
     // local copy instantly so the mail tab has no spinner on open, then revalidate.
     // Query searches are not cached (query-specific, transient).
@@ -83,9 +86,14 @@ suspend fun DenebGatewayClient.refreshMail(query: String? = null): Boolean {
     val rows = payload.messages
         .filter { it.id.isNotBlank() }
         .map { MailMessage(it.id, it.from, it.subject, it.snippet, it.date, it.isUnread, it.priority, it.priorityHint) }
-    _denebMail.value = applyReadOverlay(rows, locallyReadMailIds)
+    val overlaid = applyReadOverlay(rows, locallyReadMailIds)
+    _denebMail.value = overlaid
     _denebMailNextToken.value = payload.nextPageToken.ifBlank { null }
-    if (q == null) storeCachedMail(rows)
+    // Cache the OVERLAID rows (not the raw server rows): the gateway caches list_recent
+    // for ~30s and won't reflect a just-read mail, so persisting raw rows would let a
+    // cold start resurrect a unread dot the user already cleared. Skip if credentials
+    // changed mid-flight (these rows belong to the old account).
+    if (q == null && cred == credentialFingerprint()) storeCachedMail(overlaid)
     return true
 }
 
