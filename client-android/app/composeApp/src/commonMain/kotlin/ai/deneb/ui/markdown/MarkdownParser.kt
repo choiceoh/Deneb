@@ -15,11 +15,14 @@ import kotlinx.collections.immutable.toImmutableList
  */
 fun parseMarkdown(text: String): MarkdownDocument {
     if (text.isEmpty()) return MarkdownDocument(persistentListOf())
-    // Rewrite the messy table forms LLMs slip into chat into real markdown tables
-    // before scanning: box-drawing (ASCII-art) tables → markdown, then bordered pipe
-    // tables that are missing their `| --- |` delimiter row get one inserted. Box runs
-    // first because its output already carries a delimiter (so the pipe pass skips it).
-    val normalized = normalizePipeTables(normalizeBoxTables(text))
+    // Pre-passes that rewrite messy LLM output into plain markdown before scanning:
+    //  1. footnotes — `[^1]` → superscript marker + a trailing notes section.
+    //  2. box-drawing (ASCII-art) tables → markdown tables.
+    //  3. bordered pipe tables missing their `| --- |` delimiter row get one inserted.
+    // Footnotes run first so its appended notes flow through the table passes (they
+    // carry no box/pipe chars, so the table passes leave them be); box runs before pipe
+    // because box output already carries a delimiter (so the pipe pass skips it).
+    val normalized = normalizePipeTables(normalizeBoxTables(normalizeFootnotes(text)))
     return try {
         MarkdownDocument(BlockScanner.scan(normalized).toImmutableList())
     } catch (_: Throwable) {
