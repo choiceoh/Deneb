@@ -388,6 +388,16 @@ func RegisterMediaTools(registry toolctx.ToolRegistrar, workspaceDir string) {
 		Deferred:    true,
 	})
 	registry.RegisterTool(toolctx.ToolDef{
+		Name: "chart",
+		Description: "숫자 데이터를 보기 좋은 차트 이미지(PNG)로 그린다 — 추이(line)·누적(area)·비교(bar)·구성비(doughnut). " +
+			"표로 나열하기보다 한눈에 들어오는 게 나을 때(월별 추이, 거래처별 비교, 단계별 비율 등) 사용하라. " +
+			"막대 위에 추세선을 얹는 콤보도 가능(한 시리즈에 type:line). " +
+			"렌더된 PNG 경로를 돌려주므로, 그 경로를 send_file(type:\"photo\")로 사용자에게 전송해야 실제로 보인다.",
+		InputSchema: chartToolSchema(),
+		Fn:          tools.ToolChart(),
+		Deferred:    true,
+	})
+	registry.RegisterTool(toolctx.ToolDef{
 		Name: "watch",
 		Description: "Watch a video: extract frames + subtitles from a YouTube URL or local video file, " +
 			"then analyze with the vision model so you can actually SEE and HEAR the content. " +
