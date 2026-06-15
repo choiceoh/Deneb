@@ -797,8 +797,6 @@ internal fun ChatModeScreen(
                                         cancel = uiState.actions.cancel,
                                         availableServices = uiState.availableServices,
                                         onSelectService = uiState.actions.selectService,
-                                        // Open the keyboard on a brand-new (empty) chat only.
-                                        autoFocus = uiState.history.isEmpty(),
                                     )
                                 }
                             }
