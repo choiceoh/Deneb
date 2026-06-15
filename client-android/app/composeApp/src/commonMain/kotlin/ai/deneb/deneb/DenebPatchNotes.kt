@@ -21,6 +21,11 @@ data class DenebPatchNote(
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
         highlights = listOf(
+            "각주(`[^1]`)가 본문에서 작은 위 첨자(¹)로 표시되고, 답변 맨 아래에 구분선과 함께 각주 내용이 정리됩니다 — `[^1]`·`[^1]: …`가 글자 그대로 노출되던 것 해소",
+        ),
+    ),
+    DenebPatchNote(
+        highlights = listOf(
             "`| 머리글 | …` 모양인데 `| --- |` 구분선이 빠진 표도 이제 제대로 표로 표시됩니다 — 파이프(|)만 노출되던 응답이 깔끔한 표로 렌더",
         ),
     ),
