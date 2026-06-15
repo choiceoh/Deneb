@@ -268,6 +268,13 @@ class InlineParsingTest {
     }
 
     @Test
+    fun `common symbol and smart-quote entities decode`() {
+        // Web/email-extracted prose and LLM output emit these literally otherwise.
+        assertEquals(listOf(Text("© ® ™ € £ ¥")), inlines("&copy; &reg; &trade; &euro; &pound; &yen;"))
+        assertEquals(listOf(Text("‘a’ “b” § ½")), inlines("&lsquo;a&rsquo; &ldquo;b&rdquo; &sect; &frac12;"))
+    }
+
+    @Test
     fun `unknown entity stays literal`() {
         assertEquals(listOf(Text("&notanentity; 그대로")), inlines("&notanentity; 그대로"))
     }
