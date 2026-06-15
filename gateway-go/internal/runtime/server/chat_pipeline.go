@@ -153,6 +153,10 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 		WorkFeed:     s.workFeedStore,
 		// Engine-level prefix-cache scrape targets for the observe tool.
 		VllmBaseURLs: reg.VllmBaseURLs,
+		// Fleet management: the agent's twin of the /api/v1/fleet passthrough —
+		// reaches the same SparkFleet control plane via s.fleet's accessors, so
+		// "is the fleet ok / restart qwen36" works from chat. "" base = off.
+		Fleet: chat.FleetDeps{BaseURL: s.fleet.BaseURL, Token: s.fleet.Token},
 	}
 
 	// Ambient calendar awareness: a frozen-per-day upcoming-events glance in the

@@ -169,6 +169,21 @@ func RegisterFSTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDeps)
 		Deferred:    true,
 	})
 
+	// Fleet: manage the SparkFleet GPU control plane (the machine's own model
+	// servers) — the chat twin of the native 플릿 tab / the /api/v1/fleet
+	// passthrough. Deferred like gateway/observe: niche but powerful, loaded via
+	// fetch_tools when the user actually asks about the fleet.
+	registry.RegisterTool(toolctx.ToolDef{
+		Name: "fleet",
+		Description: "SparkFleet GPU 컨트롤 플레인 관리 — 이 머신의 GPU 모델 서버를 띄우고 점검한다. " +
+			"action=status (노드 GPU/메모리·레시피 실행 상태·최근 실패 작업 한눈에) · recipes (모델 레시피 목록) · jobs (백그라운드 작업) · " +
+			"launch/stop/restart (recipe 이름으로 모델 기동·중지·재시작 — 실제 동작) · cancel (jobId로 작업 취소) · diagnose (실행 중 레시피 컨테이너 크래시 진단). " +
+			"\"플릿 괜찮아?\" · \"qwen36 재시작해줘\" · \"왜 죽었어?\" 같은 요청에 사용.",
+		InputSchema: fleetToolSchema(),
+		Fn:          tools.ToolFleet(&deps.Fleet),
+		Deferred:    true,
+	})
+
 	// Spillover: read full content of a previously spilled large tool result.
 	// Registered eagerly so the trim marker's embedded spill ID can be used
 	// in the same turn without a fetch_tools round-trip.

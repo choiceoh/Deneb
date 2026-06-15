@@ -49,6 +49,19 @@ type CoreToolDeps struct {
 	// SessionMemoryFn returns session memory content for a given session key.
 	// Nil means no session memory is available.
 	SessionMemoryFn func(sessionKey string) string
+
+	// Fleet wires the agent's fleet tool to the SparkFleet control plane (the
+	// same passthrough the native app uses). A nil BaseURL — or one returning ""
+	// — disables fleet management; the tool reports the integration is off.
+	Fleet FleetDeps
+}
+
+// FleetDeps gives the fleet tool the SparkFleet base URL + optional API token.
+// These mirror the gateway's sparkfleet.Client accessors so the chat tool and
+// the /api/v1/fleet passthrough reach the control plane the same way.
+type FleetDeps struct {
+	BaseURL func() string // SparkFleet base, e.g. http://127.0.0.1:18900; "" = off
+	Token   func() string // sent as X-Fleet-Token when non-empty
 }
 
 // ProcessDeps holds dependencies for exec and process management tools.
