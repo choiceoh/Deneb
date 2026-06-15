@@ -69,7 +69,14 @@ fun DenebWikiPageScreen(
     }
     LaunchedEffect(path) { loadPage() }
 
-    DenebScreenScaffold(title = "위키", onBack = onBack, tabBar = navigationTabBar) {
+    // Guard against losing in-progress wiki edits to a stray back: while editing,
+    // snapshot the drafts (captured when edit mode opens) and confirm before leaving
+    // if they changed. Viewing (not editing) leaves immediately.
+    val snapshot = listOf<Any?>(draftTitle, draftCategory, draftSummary, draftTags, draftBody)
+    val baseline = remember(editing, page) { if (editing) snapshot else null }
+    val requestBack = rememberDiscardGuard(editing && baseline != null && snapshot != baseline, onBack)
+
+    DenebScreenScaffold(title = "위키", onBack = requestBack, tabBar = navigationTabBar) {
         Column(
             // The scaffold's imePadding shrinks this weighted column above the soft
             // keyboard, so the edit fields (title/summary/tags/body) stay reachable

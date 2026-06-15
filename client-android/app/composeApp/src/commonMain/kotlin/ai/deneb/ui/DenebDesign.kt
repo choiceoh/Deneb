@@ -8,14 +8,13 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
@@ -28,6 +27,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -201,14 +201,31 @@ fun DenebScreenScaffold(
                 val widthMod = if (fillWidth) Modifier.fillMaxWidth() else denebContentWidthModifier(maxContentWidth)
                 Column(widthMod.fillMaxHeight()) {
                     Column(Modifier.padding(start = 24.dp, end = 24.dp, top = 14.dp, bottom = 6.dp)) {
-                        if (showBack) {
-                            Text(
-                                text = "←",
-                                style = DenebType.subject.copy(fontSize = 22.sp),
-                                color = denebHint(),
-                                modifier = Modifier.clickable(onClick = onBack).handCursor(),
-                            )
-                            Spacer(Modifier.height(2.dp))
+                        // Android has a system back button/gesture, so the in-app ← is
+                        // redundant there — hide it and let the OS drive back (every onBack
+                        // is navigateUp, which system back already does; dirty-form guards
+                        // intercept system back themselves). Desktop has no system back at
+                        // all (the ← is the only way back) and iOS convention shows it, so
+                        // both keep it.
+                        if (showBack && currentPlatform !is Platform.Mobile.Android) {
+                            // A 44dp box gives the back glyph a real touch target + a
+                            // TalkBack label/role (it frames every pushed screen, so a
+                            // bare clickable "←" was the app-wide weak spot). Left-aligned
+                            // so the arrow still sits at the content inset. Mirrors the
+                            // session-row × treatment.
+                            Box(
+                                modifier = Modifier
+                                    .size(44.dp)
+                                    .clickable(onClickLabel = "뒤로", role = Role.Button, onClick = onBack)
+                                    .handCursor(),
+                                contentAlignment = Alignment.CenterStart,
+                            ) {
+                                Text(
+                                    text = "←",
+                                    style = DenebType.subject.copy(fontSize = 22.sp),
+                                    color = denebHint(),
+                                )
+                            }
                         }
                         Text(
                             text = title,

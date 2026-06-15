@@ -28,7 +28,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material3.Badge
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -50,12 +49,14 @@ import androidx.compose.material.icons.filled.CalendarMonth as CalFilled
 import androidx.compose.material.icons.filled.Dns as DnsFilled
 import androidx.compose.material.icons.filled.Email as EmailFilled
 import androidx.compose.material.icons.filled.GridView as GridFilled
+import androidx.compose.material.icons.filled.Notifications as NotificationsFilled
 import androidx.compose.material.icons.filled.Search as SearchFilled
 import androidx.compose.material.icons.filled.Settings as SettingsFilled
 import androidx.compose.material.icons.outlined.CalendarMonth as CalOutlined
 import androidx.compose.material.icons.outlined.Dns as DnsOutlined
 import androidx.compose.material.icons.outlined.Email as EmailOutlined
 import androidx.compose.material.icons.outlined.GridView as GridOutlined
+import androidx.compose.material.icons.outlined.Notifications as NotificationsOutlined
 import androidx.compose.material.icons.outlined.Search as SearchOutlined
 import androidx.compose.material.icons.outlined.Settings as SettingsOutlined
 
@@ -87,7 +88,7 @@ private data class SidebarItem(
 // "people" is not a rail item: the merged people surface (recent contacts +
 // 인물 wiki) is reached through categories' pinned "사람" row.
 private val sidebarItems = listOf(
-    SidebarItem("feed", "deneb_feed", DenebFeed, Icons.Filled.Notifications, Icons.Filled.Notifications, workData = true),
+    SidebarItem("feed", "deneb_feed", DenebFeed, Icons.Outlined.NotificationsOutlined, Icons.Filled.NotificationsFilled, workData = true),
     SidebarItem("chat", "home", Home, Icons.AutoMirrored.Outlined.ChatOutlined, Icons.AutoMirrored.Filled.ChatFilled),
     SidebarItem("mail", "deneb_mail", DenebMail, Icons.Outlined.EmailOutlined, Icons.Filled.EmailFilled, workData = true),
     SidebarItem("calendar", "deneb_calendar", DenebCalendar, Icons.Outlined.CalOutlined, Icons.Filled.CalFilled, workData = true),

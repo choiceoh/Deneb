@@ -6,10 +6,16 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
@@ -58,6 +64,40 @@ fun DenebEmpty(text: String, actionLabel: String? = null, onAction: (() -> Unit)
             OutlinedButton(onClick = onAction) { Text(actionLabel) }
         }
     }
+}
+
+/**
+ * Guards an in-progress form against losing edits to a stray back press. Returns a
+ * "request back" lambda to use for the screen's back affordance (scaffold ← and any
+ * cancel button): while [dirty] it pops a discard-confirm dialog instead of leaving;
+ * when clean it leaves immediately. System back is intercepted the same way while
+ * dirty. Typical use:
+ *
+ *     val requestBack = rememberDiscardGuard(dirty, onBack)
+ *     DenebScreenScaffold(title = …, onBack = requestBack) { … }
+ */
+@Composable
+fun rememberDiscardGuard(dirty: Boolean, onLeave: () -> Unit): () -> Unit {
+    var confirming by remember { mutableStateOf(false) }
+    // System/gesture back: intercept only while there are unsaved edits.
+    ai.deneb.PlatformBackHandler(enabled = dirty) { confirming = true }
+    if (confirming) {
+        AlertDialog(
+            onDismissRequest = { confirming = false },
+            title = { Text("편집 취소") },
+            text = { Text("저장하지 않은 변경사항이 사라집니다.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirming = false
+                    onLeave()
+                }) { Text("나가기") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirming = false }) { Text("계속 편집") }
+            },
+        )
+    }
+    return { if (dirty) confirming = true else onLeave() }
 }
 
 /** Bytes -> short human size (integer units; KMP-safe). Shared by the mail and

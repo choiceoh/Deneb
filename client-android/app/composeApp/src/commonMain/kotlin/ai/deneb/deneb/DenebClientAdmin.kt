@@ -46,8 +46,11 @@ fun DenebGatewayClient.refreshModelsAsync() {
     scope.launch { refreshModels() }
 }
 
-suspend fun DenebGatewayClient.refreshModels() {
-    val payload = callRpc<ModelsPayload>("miniapp.models.list", buildJsonObject {}) ?: return
+/** Pull the model registry from the gateway. Returns false when the RPC fails so
+ *  a screen can render an error+retry instead of an indefinite skeleton (mirrors
+ *  [refreshSkills]). Callers that don't care about the outcome can ignore it. */
+suspend fun DenebGatewayClient.refreshModels(): Boolean {
+    val payload = callRpc<ModelsPayload>("miniapp.models.list", buildJsonObject {}) ?: return false
     _denebModels.value = payload.sections
         .flatMap { it.models }
         .distinctBy { it.id }
@@ -65,6 +68,7 @@ suspend fun DenebGatewayClient.refreshModels() {
         }
     _denebRoleModels.value = payload.roles.associate { it.role to it.model }
     _denebModelAdvisories.value = payload.advisories
+    return true
 }
 
 suspend fun DenebGatewayClient.setMainModel(id: String): Boolean = setRoleModel(id, "main")

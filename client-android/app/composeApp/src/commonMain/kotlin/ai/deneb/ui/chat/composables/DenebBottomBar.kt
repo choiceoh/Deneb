@@ -10,7 +10,6 @@ import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
@@ -29,10 +28,12 @@ import androidx.compose.material.icons.automirrored.filled.Chat as ChatFilled
 import androidx.compose.material.icons.automirrored.outlined.Chat as ChatOutlined
 import androidx.compose.material.icons.filled.CalendarMonth as CalFilled
 import androidx.compose.material.icons.filled.Email as EmailFilled
+import androidx.compose.material.icons.filled.Notifications as NotificationsFilled
 import androidx.compose.material.icons.filled.Settings as SettingsFilled
 import androidx.compose.material.icons.outlined.CalendarMonth as CalOutlined
 import androidx.compose.material.icons.outlined.Email as EmailOutlined
 import androidx.compose.material.icons.outlined.MoreHoriz as MoreOutlined
+import androidx.compose.material.icons.outlined.Notifications as NotificationsOutlined
 import androidx.compose.material.icons.outlined.Settings as SettingsOutlined
 
 /**
@@ -66,7 +67,7 @@ data class DenebTab(
 // inside settings). The whole bar is hidden in the 챗봇 workspace (App.kt), so there
 // is no per-tab filtering here.
 val denebBottomTabs: List<DenebTab> = listOf(
-    DenebTab("피드", "deneb_feed", DenebFeed, Icons.Filled.Notifications, Icons.Filled.Notifications),
+    DenebTab("피드", "deneb_feed", DenebFeed, Icons.Outlined.NotificationsOutlined, Icons.Filled.NotificationsFilled),
     DenebTab("채팅", "home", Home, Icons.AutoMirrored.Outlined.ChatOutlined, Icons.AutoMirrored.Filled.ChatFilled),
     DenebTab("메일", "deneb_mail", DenebMail, Icons.Outlined.EmailOutlined, Icons.Filled.EmailFilled),
     DenebTab("달력", "deneb_calendar", DenebCalendar, Icons.Outlined.CalOutlined, Icons.Filled.CalFilled),
