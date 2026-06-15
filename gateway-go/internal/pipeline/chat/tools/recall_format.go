@@ -14,18 +14,16 @@ import (
 // Ref namespaces:
 //
 //	w:<path>      wiki page (incl. 인물/* person pages)  (read: wiki read / knowledge read)
-//	h:<id>        hindsight memory                       (read: knowledge read)
 //	p:msg<index>  polaris session message                (locate: polaris describe → expand)
 //	c:<name>      address-book contact (인물)             (locate: contacts search; curated page at w:인물/<name>)
 const (
-	RefWiki      = "w:"
-	RefHindsight = "h:"
-	RefSession   = "p:"
-	RefContact   = "c:"
+	RefWiki    = "w:"
+	RefSession = "p:"
+	RefContact = "c:"
 )
 
 // recallHeader renders the shared "🔍 query (N건)" header. extra is an optional
-// note placed inside the parentheses (e.g. "wiki" or "layers=[wiki hindsight]").
+// note placed inside the parentheses (e.g. "wiki" or "layers=[wiki]").
 func recallHeader(query string, count int, extra string) string {
 	if extra != "" {
 		return fmt.Sprintf("## 🔍 %q (%d건, %s)\n\n", query, count, extra)

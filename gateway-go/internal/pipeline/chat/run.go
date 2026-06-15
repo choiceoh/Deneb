@@ -13,7 +13,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/provider"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/hindsight"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/streaming"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
@@ -70,7 +69,7 @@ type RunParams struct {
 	EphemeralUser bool
 
 	// SkipRecall, when true, skips the long-term-memory recall preflight
-	// (wiki/diary/transcript/hindsight) for this turn — the native client's
+	// (wiki/diary/transcript) for this turn — the native client's
 	// "memory off / focused chat" toggle. The persona is unchanged; only the
 	// work-context evidence injection is suppressed, so a general question
 	// answers fast without pulling unrelated work memories. Recall is
@@ -167,7 +166,6 @@ type runDeps struct {
 
 	embeddingClient      compact.Embedder          // optional; BGE-M3 for MMR compaction fallback
 	wikiStore            *wiki.Store               // optional; wiki knowledge base
-	hindsightClient      *hindsight.Client         // optional; self-hosted Hindsight memory bank
 	dreamTurnFn          func(ctx context.Context) // optional; increments dream turn via autonomous
 	agentLog             *agentlog.Writer          // optional; enables agent detail logging
 	registry             *modelrole.Registry       // centralized model role registry

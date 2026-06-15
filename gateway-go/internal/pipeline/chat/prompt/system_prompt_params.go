@@ -85,12 +85,6 @@ type SystemPromptParams struct {
 	// the system prompt stays byte-stable from that point onward (P4).
 	CompactionFired bool
 
-	// HindsightEnabled adds a short dynamic-block note telling the model it
-	// has a cross-session Hindsight memory bank: past turns are retained
-	// automatically and relevant memories arrive via <recall-context>.
-	// Dynamic (uncached) block — no prompt-cache impact.
-	HindsightEnabled bool
-
 	// CalendarGlance is a compact, pre-formatted summary of upcoming calendar
 	// events for ambient awareness (the 업무비서 persona's 일정 sense). Empty =
 	// no section. Dynamic (uncached) block, but frozen per day by the provider

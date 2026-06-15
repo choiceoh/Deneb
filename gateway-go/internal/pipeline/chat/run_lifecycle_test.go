@@ -201,7 +201,7 @@ func TestHandleRunSuccess_SubagentReplyFuncNil(t *testing.T) {
 
 	// run executes one completed turn through handleRunSuccess and returns every
 	// event name broadcast during it. replyFunc, transcript, tools, broadcaster,
-	// wikiStore, jobTracker, hindsightClient are all left nil — exactly the
+	// wikiStore, jobTracker are all left nil — exactly the
 	// native-only production shape where no channel replyFunc is registered.
 	run := func(t *testing.T, sessionKey, spawnedBy string) []string {
 		t.Helper()

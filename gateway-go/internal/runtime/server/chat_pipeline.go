@@ -8,12 +8,10 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/hindsight"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/knowledge"
 	domskills "github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
@@ -97,29 +95,6 @@ func (s *Server) initMemorySubsystem(chatCfg *chat.HandlerConfig, regPtr **model
 			}
 		}
 	}
-
-	// Hindsight memory provider (self-hosted memory bank on the DGX Spark).
-	// Dormant unless DENEB_HINDSIGHT_URL is configured.
-	if hsCfg := hindsight.ConfigFromEnv(); hsCfg.Enabled() {
-		client := hindsight.NewClient(hsCfg)
-		chatCfg.HindsightClient = client
-		s.logger.Info("hindsight memory provider enabled",
-			"url", hsCfg.BaseURL, "bank", hsCfg.BankID,
-			"retain", hsCfg.Retain, "budget", hsCfg.Budget)
-		// Startup reachability probe: recall/retain degrade silently when the
-		// bank is unreachable, so verify the configured URL up front and make
-		// a misconfiguration loud instead of invisible.
-		s.safeGo("hindsight-probe", func() {
-			ctx, cancel := context.WithTimeout(s.ShutdownCtx(), 5*time.Second)
-			defer cancel()
-			if version, err := client.Health(ctx); err != nil {
-				s.logger.Warn("hindsight memory provider unreachable; recall/retain will be skipped",
-					"url", hsCfg.BaseURL, "error", err)
-			} else {
-				s.logger.Info("hindsight memory provider connected", "version", version)
-			}
-		})
-	}
 }
 
 // initToolsAndDeps builds CoreToolDeps, registers core/plugin tools,
@@ -198,15 +173,12 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 	// Core tools (file I/O, exec, process, sessions, gateway, cron, image).
 	chat.RegisterCoreTools(chatCfg.Tools, s.toolDeps)
 
-	// Knowledge: unified surface federating wiki (curated, writable) and
-	// hindsight (auto-retained cross-session) under one agent tool. Polaris
-	// (session-bound) and graphify (graph-traversal) stay separate because
-	// they have different paradigms. Skipped entirely when neither backend
-	// is configured. HindsightClient was set earlier in this function when
-	// DENEB_HINDSIGHT_URL is configured; reuse it here.
+	// Knowledge: unified recall/read/record surface over the wiki knowledge
+	// base. Polaris (session-bound) and graphify (graph-traversal) stay
+	// separate because they have different paradigms. Skipped when the wiki
+	// store is unavailable (NewWikiAdapter returns nil → router has no layers).
 	knowledgeRouter := knowledge.New(
 		knowledge.NewWikiAdapter(s.wikiStore),
-		knowledge.NewHindsightAdapter(chatCfg.HindsightClient),
 	)
 	toolreg.RegisterKnowledgeTool(chatCfg.Tools, knowledgeRouter)
 

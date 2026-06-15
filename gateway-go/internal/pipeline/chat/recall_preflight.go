@@ -146,9 +146,9 @@ func buildRecallPreflight(ctx context.Context, params RunParams, deps runDeps, l
 
 	// All sources run concurrently under the shared preflight deadline. They
 	// used to run serially, so a slow wiki search ate the 1.5s budget and
-	// starved diary/polaris/hindsight — and every turn paid the SUM of source
-	// latencies instead of the slowest one. Results land in ordered slots to
-	// keep the historical evidence order (wiki, diary, session, hindsight).
+	// starved diary/polaris — and every turn paid the SUM of source latencies
+	// instead of the slowest one. Results land in ordered slots to keep the
+	// historical evidence order (wiki, diary, session).
 	type recallSource struct {
 		name string
 		run  func(context.Context) []recallEvidence
@@ -172,11 +172,6 @@ func buildRecallPreflight(ctx context.Context, params RunParams, deps runDeps, l
 	} else {
 		sources = append(sources, recallSource{"transcript", func(c context.Context) []recallEvidence {
 			return recallTranscriptEvidence(c, deps.transcript, params.SessionKey, message, queries)
-		}})
-	}
-	if deps.hindsightClient != nil {
-		sources = append(sources, recallSource{"hindsight", func(c context.Context) []recallEvidence {
-			return recallHindsightEvidence(c, deps.hindsightClient, message, logger)
 		}})
 	}
 

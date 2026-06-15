@@ -10,7 +10,7 @@ import (
 // Router federates multiple knowledge backends under one surface. Created
 // with the set of adapters available in the current deployment; missing
 // backends are skipped silently so the router degrades gracefully when, for
-// example, hindsight is not configured.
+// example, a backend is not configured.
 type Router struct {
 	adapters []Adapter
 	writer   Writer // first writable adapter wins (today: wiki)
@@ -43,7 +43,7 @@ func (r *Router) Layers() []Layer {
 
 // Recall queries every adapter in parallel and merges the results, sorted by
 // score descending. Per-adapter errors are swallowed so a single flaky backend
-// (e.g. hindsight unreachable) does not block the call; callers see the
+// (e.g. one unreachable) does not block the call; callers see the
 // successful subset.
 func (r *Router) Recall(ctx context.Context, query string, limit int) []Result {
 	if limit <= 0 {
@@ -86,9 +86,8 @@ func (r *Router) Read(ctx context.Context, ref Ref) (*Document, error) {
 	return nil, fmt.Errorf("no adapter for layer %q", ref.Layer)
 }
 
-// Record writes a new entry through the writable adapter. Today the only
-// writable adapter is wiki; hindsight memories are retained automatically
-// from completed turns, not by explicit agent action.
+// Record writes a new entry through the writable adapter — today the wiki
+// knowledge base.
 func (r *Router) Record(ctx context.Context, opts RecordOptions) (Ref, error) {
 	if r.writer == nil {
 		return Ref{}, fmt.Errorf("knowledge router has no writable adapter")

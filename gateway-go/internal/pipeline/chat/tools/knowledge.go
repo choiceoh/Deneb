@@ -12,12 +12,11 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
-// ToolKnowledge wraps the knowledge.Router as a single agent-facing tool that
-// unifies the wiki (curated, writable) and hindsight (auto-retained cross-
-// session) memory backends. Three ops:
+// ToolKnowledge wraps the knowledge.Router as a single agent-facing tool over
+// the wiki knowledge base. Three ops:
 //
 //	recall  — federated search across all read backends, merged by score
-//	read    — fetch one document by its layered ref ("w:..." or "h:...")
+//	read    — fetch one document by its layered ref ("w:...")
 //	record  — write a wiki page (the only writable backend)
 func ToolKnowledge(router *knowledge.Router) toolctx.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
@@ -81,7 +80,7 @@ func knowledgeRecall(ctx context.Context, router *knowledge.Router, query string
 
 	hits := router.Recall(ctx, query, limit)
 	if len(hits) == 0 {
-		return fmt.Sprintf("검색 결과 없음: %q (위키·hindsight 모두 빈손)", query), nil
+		return fmt.Sprintf("검색 결과 없음: %q (위키)", query), nil
 	}
 
 	var sb strings.Builder

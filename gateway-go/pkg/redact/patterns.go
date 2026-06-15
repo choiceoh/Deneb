@@ -71,7 +71,6 @@ var prefixPatterns = []string{
 	`gsk_[A-Za-z0-9]{10,}`,         // Groq Cloud API key
 	`syt_[A-Za-z0-9]{10,}`,         // Matrix access token
 	`retaindb_[A-Za-z0-9]{10,}`,    // RetainDB API key
-	`hsk-[A-Za-z0-9]{10,}`,         // Hindsight API key
 	`mem0_[A-Za-z0-9]{10,}`,        // Mem0 Platform API key
 	`brv_[A-Za-z0-9]{10,}`,         // ByteRover API key
 }
