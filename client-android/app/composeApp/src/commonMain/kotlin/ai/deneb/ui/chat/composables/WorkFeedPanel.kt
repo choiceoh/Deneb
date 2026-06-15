@@ -121,7 +121,9 @@ internal fun WorkFeedRow(
     onOpen: (String) -> Unit,
     onRunAction: (String, String) -> Unit,
 ) {
-    val title = if (item.title.isBlank()) stringResource(Res.string.work_feed_title) else item.title
+    // The row already leads with a source icon, so a "📬 …" title would show two
+    // icons side by side — strip the leading emoji/symbol run from the title.
+    val title = if (item.title.isBlank()) stringResource(Res.string.work_feed_title) else stripLeadingIcon(item.title)
     val haptics = rememberHaptics()
     val titleStyle = if (item.status == "unread") DenebType.rowTitleStrong else DenebType.rowTitle
     DenebRow(
@@ -195,6 +197,15 @@ internal fun WorkFeedRow(
             }
         }
     }
+}
+
+/** Drop a leading emoji/symbol run from a card title so it isn't shown twice next to
+ *  the row's source icon ("📬 메일 분석" → "메일 분석"). Stops at the first letter/digit
+ *  (Hangul/Latin/CJK/number); returns the original if stripping would empty it. */
+private fun stripLeadingIcon(s: String): String {
+    var i = 0
+    while (i < s.length && !s[i].isLetterOrDigit()) i++
+    return s.substring(i).trimStart().ifBlank { s }
 }
 
 /** Leading icon by card source: an envelope for mail reports, a generic report
