@@ -8,6 +8,8 @@ import io.ktor.client.plugins.timeout
 import io.ktor.client.request.get
 import io.ktor.http.encodeURLParameter
 import kotlinx.coroutines.flow.update
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -57,6 +59,12 @@ internal fun recordReadId(into: LinkedHashSet<String>, id: String, max: Int = MA
  *  failure so the screen can show a retry instead of a misleading empty state. */
 suspend fun DenebGatewayClient.refreshMail(query: String? = null): Boolean {
     val q = query?.trim()?.ifBlank { null }
+    // Cache-then-network for the default inbox (no query): render the encrypted
+    // local copy instantly so the mail tab has no spinner on open, then revalidate.
+    // Query searches are not cached (query-specific, transient).
+    if (q == null && _denebMail.value.isEmpty()) {
+        loadCachedMail()?.let { _denebMail.value = applyReadOverlay(it, locallyReadMailIds) }
+    }
     val payload = callRpc<MailListPayload>(
         "miniapp.gmail.list_recent",
         buildJsonObject {
@@ -65,14 +73,30 @@ suspend fun DenebGatewayClient.refreshMail(query: String? = null): Boolean {
         },
     ) ?: return false
     denebMailActiveQuery = q
-    _denebMail.value = applyReadOverlay(
-        payload.messages
-            .filter { it.id.isNotBlank() }
-            .map { MailMessage(it.id, it.from, it.subject, it.snippet, it.date, it.isUnread, it.priority, it.priorityHint) },
-        locallyReadMailIds,
-    )
+    val rows = payload.messages
+        .filter { it.id.isNotBlank() }
+        .map { MailMessage(it.id, it.from, it.subject, it.snippet, it.date, it.isUnread, it.priority, it.priorityHint) }
+    _denebMail.value = applyReadOverlay(rows, locallyReadMailIds)
     _denebMailNextToken.value = payload.nextPageToken.ifBlank { null }
+    if (q == null) storeCachedMail(rows)
     return true
+}
+
+// --- Default inbox cache (cache-then-network) -----------------------------
+// Only the no-query inbox list is cached, encrypted in settings, for an instant
+// mail-tab render. Mirrors the transcript cache; the network refresh above
+// overwrites with the authoritative list.
+private val mailCacheJson = Json { ignoreUnknownKeys = true }
+private val mailCacheSerializer = ListSerializer(MailMessage.serializer())
+
+internal fun DenebGatewayClient.loadCachedMail(): List<MailMessage>? {
+    val json = appSettings.getCachedMailList() ?: return null
+    return runCatching { mailCacheJson.decodeFromString(mailCacheSerializer, json) }
+        .getOrNull()?.takeIf { it.isNotEmpty() }
+}
+
+internal fun DenebGatewayClient.storeCachedMail(rows: List<MailMessage>) {
+    appSettings.putCachedMailList(mailCacheJson.encodeToString(mailCacheSerializer, rows))
 }
 
 /** Append the next page of the current view (inbox or active search) to the list. */

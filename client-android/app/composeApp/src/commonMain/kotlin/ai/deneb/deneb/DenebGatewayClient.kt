@@ -630,10 +630,26 @@ class DenebGatewayClient(
      */
     private suspend fun loadTranscriptGuarded(key: String) {
         val startEpoch = historyGate.withLock { historyEpoch }
+        // Cache-then-network: render the encrypted local copy instantly (no spinner
+        // on reopen), but only if nothing has loaded/sent yet so an optimistic send
+        // is never clobbered.
+        val cached = loadCachedTranscript(key)
+        if (cached != null) {
+            historyGate.withLock {
+                if (historyEpoch == startEpoch && _chatHistory.value.isEmpty()) _chatHistory.value = cached
+            }
+        }
         val transcript = fetchTranscript(key)
         historyGate.withLock {
-            if (historyEpoch == startEpoch) _chatHistory.value = transcript
+            // Don't clobber an optimistic send (epoch). Also don't flash a cached
+            // render to empty on a transient fetch failure: fetchTranscript returns
+            // [] for both an empty session AND an RPC error, so when a cache exists
+            // keep it unless the fetch actually returned messages.
+            if (historyEpoch == startEpoch && (transcript.isNotEmpty() || cached == null)) {
+                _chatHistory.value = transcript
+            }
         }
+        if (transcript.isNotEmpty()) storeCachedTranscript(key, transcript)
     }
 
     /**

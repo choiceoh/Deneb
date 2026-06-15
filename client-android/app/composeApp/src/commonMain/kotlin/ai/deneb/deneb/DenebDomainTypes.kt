@@ -1,5 +1,7 @@
 package ai.deneb.deneb
 
+import kotlinx.serialization.Serializable
+
 // Domain models surfaced to the native UI by DenebGatewayClient. These are the
 // shapes the screens consume — distinct from the on-the-wire RPC types (those
 // are generated in deneb/generated/ or kept private to the client). Split out of
@@ -30,7 +32,9 @@ data class ClientStatus(
     val timestampMs: Long,
 )
 
-/** A recent Gmail message shown in the native mail screen. */
+/** A recent Gmail message shown in the native mail screen. [Serializable] so the
+ *  default inbox list can be cached locally for instant render (DenebClientMail). */
+@Serializable
 data class MailMessage(
     val id: String,
     val from: String,
