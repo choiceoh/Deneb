@@ -2,6 +2,7 @@ package jsonutil
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -26,11 +27,27 @@ func Unmarshal[T any](context string, data []byte) (T, error) {
 //	if err := jsonutil.UnmarshalInto("user params", input, &p); err != nil {
 //	    return "", err
 //	}
+//
+// On a string↔scalar type mismatch (a quoted number/bool where the field is
+// numeric/bool — e.g. {"max":"5"}, {"download":"True"}) it coerces those fields
+// and retries once. LLMs (notably the local main model) routinely emit numeric and
+// boolean tool params as quoted strings; strict decoding would fail the whole tool
+// call over a benign quirk (observed in prod: gmail/sessions calls retried 3× and
+// gave up). Correctly-typed input takes the fast path; all other errors pass through.
 func UnmarshalInto(context string, data []byte, v any) error {
-	if err := json.Unmarshal(data, v); err != nil {
-		return fmt.Errorf("parse %s: %w", context, err)
+	err := json.Unmarshal(data, v)
+	if err == nil {
+		return nil
 	}
-	return nil
+	var typeErr *json.UnmarshalTypeError
+	if errors.As(err, &typeErr) {
+		if coerced, changed := coerceStringScalars(data, v); changed {
+			if err2 := json.Unmarshal(coerced, v); err2 == nil {
+				return nil
+			}
+		}
+	}
+	return fmt.Errorf("parse %s: %w", context, err)
 }
 
 // UnmarshalLLM extracts a JSON object from noisy LLM output and unmarshals
