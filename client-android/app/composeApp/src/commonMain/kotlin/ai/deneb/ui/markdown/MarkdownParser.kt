@@ -17,12 +17,13 @@ fun parseMarkdown(text: String): MarkdownDocument {
     if (text.isEmpty()) return MarkdownDocument(persistentListOf())
     // Pre-passes that rewrite messy LLM output into plain markdown before scanning:
     //  1. footnotes — `[^1]` → superscript marker + a trailing notes section.
-    //  2. box-drawing (ASCII-art) tables → markdown tables.
-    //  3. bordered pipe tables missing their `| --- |` delimiter row get one inserted.
-    // Footnotes run first so its appended notes flow through the table passes (they
-    // carry no box/pipe chars, so the table passes leave them be); box runs before pipe
-    // because box output already carries a delimiter (so the pipe pass skips it).
-    val normalized = normalizePipeTables(normalizeBoxTables(normalizeFootnotes(text)))
+    //  2. block HTML (<h1-6>, <hr>, <p>, <ul>/<ol>/<li>, <blockquote>) → markdown.
+    //  3. box-drawing (ASCII-art) tables → markdown tables.
+    //  4. bordered pipe tables missing their `| --- |` delimiter row get one inserted.
+    // Footnotes run first so its appended notes flow through the later passes; HTML runs
+    // before the table passes so any markdown it emits is then table-normalized; box runs
+    // before pipe because box output already carries a delimiter (so the pipe pass skips it).
+    val normalized = normalizePipeTables(normalizeBoxTables(normalizeHtmlBlocks(normalizeFootnotes(text))))
     return try {
         MarkdownDocument(BlockScanner.scan(normalized).toImmutableList())
     } catch (_: Throwable) {
