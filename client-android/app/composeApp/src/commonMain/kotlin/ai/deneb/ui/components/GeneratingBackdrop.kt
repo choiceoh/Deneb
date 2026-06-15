@@ -11,18 +11,29 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 
 // One full hue revolution while a reply is being generated. ~6s matches the
 // reference: blue -> cyan -> green -> yellow -> orange -> red -> magenta -> violet
 // -> blue. Because a full turn lands back on the same hue, the repeat is seamless.
 private const val BACKDROP_CYCLE_MS = 6000
 
-// A single saturated hue at a time (not a multi-hue gradient). Luminous but not
-// garish over the AMOLED black base.
+// Saturated but luminous-not-garish over the AMOLED black base.
 private const val BACKDROP_SATURATION = 0.72f
 private const val BACKDROP_VALUE = 0.95f
+
+// Hue varies across the WIDTH: the left edge sits at the base hue and the right edge
+// BACKDROP_HUE_SPREAD degrees further along the wheel, so several colors show at once
+// (more "다채로움") instead of one flat color. The whole spectrum still drifts over time.
+private const val BACKDROP_HUE_SPREAD = 110f
+
+// Column width for the horizontal hue sweep — smaller = smoother color transition at a
+// little more draw cost. The vertical fade softens any seam between columns.
+private const val BACKDROP_SLICE_DP = 10f
 
 // Peak opacity at the very top of the screen, easing to nothing before the bottom.
 // Bright enough to read clearly as the reference's "light from above" while the
@@ -42,9 +53,10 @@ private const val BACKDROP_START_HUE = 240f
 /**
  * The "generating" backdrop: while [active] (a reply is being thought up, before its
  * text starts rendering) a soft ambient glow rises from the top of the screen and
- * fades to black toward the bottom, its single hue slowly cycling the full color
- * wheel (~6s/turn). Modeled on the Gemini-style loading shimmer: one cycling color,
- * brightest up top, diffuse with no hard edge.
+ * fades to black toward the bottom. The hue varies across the width (a horizontal
+ * spread, [BACKDROP_HUE_SPREAD]) AND drifts over time (a full wheel ~6s/turn), so the
+ * top reads like a multi-color aurora curtain rather than one flat color. Modeled on
+ * the Gemini-style loading shimmer: brightest up top, diffuse with no hard edge.
  *
  * Drawn BEHIND the content (gradient first, then [drawContent]), so the top bar,
  * chat, and input bar sit over it. It eases in from black on send and out to black
@@ -76,18 +88,33 @@ fun Modifier.generatingBackdrop(active: Boolean): Modifier {
     }
     return this.drawWithContent {
         if (intensity > 0.01f) {
-            val hueDeg = ((BACKDROP_START_HUE - cycle.value * 360f) % 360f + 360f) % 360f
-            val hue = Color.hsv(hueDeg, BACKDROP_SATURATION, BACKDROP_VALUE)
+            val baseHue = BACKDROP_START_HUE - cycle.value * 360f
             val peak = BACKDROP_PEAK_ALPHA * intensity
-            drawRect(
-                brush = Brush.verticalGradient(
-                    0f to hue.copy(alpha = peak),
-                    0.4f to hue.copy(alpha = peak * 0.45f),
-                    0.9f to Color.Transparent,
-                    startY = 0f,
-                    endY = size.height * BACKDROP_HEIGHT_FRACTION,
-                ),
-            )
+            val w = size.width
+            val endY = size.height * BACKDROP_HEIGHT_FRACTION
+            val step = BACKDROP_SLICE_DP.dp.toPx()
+            // Paint the glow as thin vertical columns, each a top-bright vertical fade
+            // whose hue is offset by its horizontal position — so the top shows a band
+            // of colors at once. baseHue drifts over time, sweeping the whole band.
+            var x = 0f
+            while (x < w) {
+                val sliceW = minOf(step, w - x)
+                val x01 = if (w > 0f) (x + sliceW / 2f) / w else 0f
+                val hueDeg = ((baseHue + x01 * BACKDROP_HUE_SPREAD) % 360f + 360f) % 360f
+                val hue = Color.hsv(hueDeg, BACKDROP_SATURATION, BACKDROP_VALUE)
+                drawRect(
+                    brush = Brush.verticalGradient(
+                        0f to hue.copy(alpha = peak),
+                        0.4f to hue.copy(alpha = peak * 0.45f),
+                        0.9f to Color.Transparent,
+                        startY = 0f,
+                        endY = endY,
+                    ),
+                    topLeft = Offset(x, 0f),
+                    size = Size(sliceW, size.height),
+                )
+                x += sliceW
+            }
         }
         drawContent()
     }
