@@ -37,7 +37,7 @@ func TestFleetPathAllowed(t *testing.T) {
 		{http.MethodGet, "/api/recipes/x/raw"},
 		{http.MethodGet, "/api/recipes/a/b/drift"}, // nested name
 		{http.MethodPost, "/api/state"},            // wrong method
-		{http.MethodDelete, "/api/jobs"}, // unsupported method
+		{http.MethodDelete, "/api/jobs"},           // unsupported method
 		{http.MethodGet, "/healthz"},
 	}
 	for _, d := range denied {

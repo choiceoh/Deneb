@@ -841,7 +841,16 @@ private fun FleetBenchPage(client: DenebGatewayClient, recipes: List<FleetRecipe
     suspend fun load() {
         client.fleetEvals()?.let { evals = it }
     }
-    LaunchedEffect(Unit) { load() }
+    // Poll like the screen loop: a 측정 run returns a job id immediately and writes
+    // its result only when the background job finishes, so a one-shot load would
+    // leave the row stale. Re-fetching on the same cadence picks the new score up
+    // within a few seconds (and stops when the tab leaves composition).
+    LaunchedEffect(Unit) {
+        while (isActive) {
+            load()
+            delay(7_000)
+        }
+    }
     if (recipes.isEmpty()) {
         EmptyTab(if (loaded) "레시피가 없습니다." else "불러오는 중…")
         return
@@ -851,9 +860,10 @@ private fun FleetBenchPage(client: DenebGatewayClient, recipes: List<FleetRecipe
             FleetBenchRow(rc, evals?.runs?.get(rc.name)) {
                 scope.launch {
                     val err = client.fleetRunBench(rc.name, rc.status.node.ifBlank { rc.node }) { jobId ->
-                        onNotice("${rc.name} 벤치마크 시작 — 작업 $jobId (작업 탭)")
+                        onNotice("${rc.name} 벤치마크 시작 — 작업 $jobId (작업 탭). 결과는 끝나면 갱신됩니다")
                     }
-                    if (err != null) onNotice(err) else load()
+                    if (err != null) onNotice(err)
+                    // The poll loop above refreshes the score once the job writes its result.
                 }
             }
         }
