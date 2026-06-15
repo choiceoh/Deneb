@@ -26,119 +26,38 @@ import kotlin.math.sin
 private const val BACKDROP_CYCLE_S = 6.0f // seconds for one full hue revolution
 private const val BACKDROP_SATURATION = 0.72f
 private const val BACKDROP_VALUE = 0.95f
-private const val BACKDROP_HUE_SPREAD = 110f // degrees of hue across the width
+
+// Degrees of hue variation across the width. Kept subtle: a gentle gradient (e.g. blue
+// -> cyan) rather than a wide rainbow, so it reads as one cohesive light that shifts.
+private const val BACKDROP_HUE_SPREAD = 50f
+
 private const val BACKDROP_PEAK_ALPHA = 0.62f
 private const val BACKDROP_HEIGHT_FRACTION = 0.9f // deepest curtain reach
 private const val BACKDROP_HEIGHT_MIN = 0.6f // shallowest curtain reach
 private const val BACKDROP_START_HUE = 240f // blue
 private const val BACKDROP_BREATH_S = 3.5f // brightness breath period (seconds)
-private const val BACKDROP_SHAPE_S = 3.2f // curtain-ripple period (seconds), fallback
-private const val BACKDROP_SLICE_DP = 10f // fallback column width
+private const val BACKDROP_SHAPE_S = 3.2f // curtain-ripple period (seconds)
+private const val BACKDROP_SLICE_DP = 10f // column width
 
 // Keep the backdrop on this long AFTER generation ends, so a fast reply (챗봇 answers
 // quickly) still shows it instead of a flicker, and it lingers into the answer's first
 // moments before fading out.
 private const val BACKDROP_HOLD_MS = 600L
 
-// A long linear clock (seconds) that resets when generation starts, so uTime gives the
-// shader real elapsed seconds and the hue starts at blue. ~10 min is far longer than
-// any generating window, so the wrap is never seen.
+// A long linear clock (seconds) that resets when generation starts (so the hue starts
+// at blue). ~10 min is far longer than any generating window, so the wrap is never seen.
 private const val BACKDROP_CLOCK_MAX_S = 600f
-
-// Shared GPU shader source (AGSL on Android / SkSL on Skia desktop+iOS — same Skia
-// shading language, same entry point and uniforms). It draws the whole aurora:
-// top-down fade, a hue band across the width, an undulating curtain edge, upward ray
-// flow, and a brightness breath — all from uTime/uIntensity/uResolution. The platform
-// `auroraShaderBrush` factory feeds these uniforms; where unsupported it returns null
-// and [drawAuroraSlices] paints a (flatter, no-ray) Compose fallback.
-internal const val AURORA_SHADER_SRC = """
-uniform float2 uResolution;
-uniform float uTime;
-uniform float uIntensity;
-
-float hash(float2 p) { return fract(sin(dot(p, float2(127.1, 311.7))) * 43758.5453); }
-
-float noise(float2 p) {
-    float2 i = floor(p);
-    float2 f = fract(p);
-    float2 u = f * f * (3.0 - 2.0 * f);
-    float a = hash(i);
-    float b = hash(i + float2(1.0, 0.0));
-    float c = hash(i + float2(0.0, 1.0));
-    float d = hash(i + float2(1.0, 1.0));
-    return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
-}
-
-float fbm(float2 p) {
-    float v = 0.0;
-    float amp = 0.5;
-    for (int k = 0; k < 4; k++) {
-        v += amp * noise(p);
-        p *= 2.0;
-        amp *= 0.5;
-    }
-    return v;
-}
-
-half3 hsv2rgb(float h, float s, float v) {
-    float hp = fract(h / 360.0);
-    float3 p = abs(fract(float3(hp, hp, hp) + float3(0.0, 2.0 / 3.0, 1.0 / 3.0)) * 6.0 - 3.0);
-    float3 rgb = v * mix(float3(1.0, 1.0, 1.0), clamp(p - 1.0, 0.0, 1.0), s);
-    return half3(rgb);
-}
-
-half4 main(float2 fragCoord) {
-    float2 uv = fragCoord / uResolution; // uv.y: 0 top .. 1 bottom
-    float t = uTime;
-
-    float baseHue = 240.0 - (t / 6.0) * 360.0;
-    float hue = baseHue + uv.x * 110.0;
-
-    // Undulating curtain lower edge per column; bright at the top (uv.y=0), fading to
-    // 0 at the edge. (smoothstep needs edge0 < edge1, hence 1.0 - smoothstep(0, edge).)
-    float edge = mix(0.6, 0.9, fbm(float2(uv.x * 2.5, t * 0.25)));
-    float vert = 1.0 - smoothstep(0.0, edge, uv.y);
-
-    // Vertical rays streaming upward over time.
-    float rays = 0.6 + 0.4 * fbm(float2(uv.x * 6.0, uv.y * 3.0 - t * 0.8));
-
-    float breath = 0.85 + 0.15 * (0.5 + 0.5 * sin(t * 6.2831853 / 3.5));
-    float peak = 0.62 * uIntensity * breath;
-    float alpha = peak * vert * rays;
-
-    half3 rgb = hsv2rgb(hue, 0.72, 0.95);
-    return half4(rgb * alpha, alpha); // premultiplied
-}
-"""
-
-/**
- * Platform GPU-shader draw. Paints the full [width]x[height] aurora for
- * [timeSeconds]/[intensity] directly into the current [DrawScope] and returns true; or
- * returns false (drawing nothing) when GPU shaders are unavailable (Android < 13,
- * iOS/wasm here), in which case the caller falls back to [drawAuroraSlices].
- * Implementations cache the compiled shader and only update uniforms per frame.
- */
-expect fun DrawScope.drawAuroraShader(
-    width: Float,
-    height: Float,
-    timeSeconds: Float,
-    intensity: Float,
-): Boolean
 
 /**
  * The "generating" backdrop: while [active] (a reply is being thought up, before its
- * text starts rendering) a soft aurora glows from the top of the screen — a hue band
- * across the width, an undulating curtain edge, and (on GPU-shader platforms) vertical
- * rays streaming upward — fading to black toward the bottom. Drawn BEHIND the content
- * (then [drawContent]), so the top bar, chat, and input bar sit over it.
+ * text starts rendering) a soft aurora glows from the top of the screen — a gentle hue
+ * band across the width and an undulating curtain edge — fading to black toward the
+ * bottom. Drawn BEHIND the content (then [drawContent]), so the top bar, chat, and
+ * input bar sit over it.
  *
  * It holds for a short [BACKDROP_HOLD_MS] after generation ends (so a fast reply still
  * shows it instead of a flicker) then dissolves gently, lingering into the answer's
  * first moments. The hue cycles (~6s) and the whole thing breathes, so it reads alive.
- *
- * Rendering: a shared Skia shader ([AURORA_SHADER_SRC]) via [auroraShaderBrush] on
- * Android (AGSL, API 33+) and desktop (SkSL); elsewhere a Compose slice fallback
- * ([drawAuroraSlices]) — flatter and without rays but the same color/curtain feel.
  *
  * This is a deliberate, owner-requested exception to the monochrome-restraint doctrine,
  * bounded to the (brief) generating window.
@@ -180,20 +99,16 @@ fun Modifier.generatingBackdrop(active: Boolean): Modifier {
     return this.drawWithContent {
         val a = intensity
         if (a > 0.01f) {
-            val t = clock.value
-            if (!drawAuroraShader(size.width, size.height, t, a)) {
-                drawAuroraSlices(t, a)
-            }
+            drawAuroraSlices(clock.value, a)
         }
         drawContent()
     }
 }
 
 /**
- * Compose fallback used when no GPU shader is available: paints the aurora as thin
- * vertical columns — a hue band across the width and an undulating curtain edge — from
- * the same [timeSeconds] clock. Flatter than the shader (no per-pixel ray flow) but the
- * same palette, curtain, breath, and hue cycle.
+ * Paints the aurora as thin vertical columns — a gentle hue band across the width and an
+ * undulating curtain edge — from the [timeSeconds] clock. Top-bright, fading to
+ * transparent toward the bottom; hue cycles and the whole thing breathes.
  */
 internal fun DrawScope.drawAuroraSlices(timeSeconds: Float, intensity: Float) {
     val baseHue = BACKDROP_START_HUE - (timeSeconds / BACKDROP_CYCLE_S) * 360f
