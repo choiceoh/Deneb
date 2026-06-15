@@ -51,7 +51,7 @@ internal fun TopBar(
 ) {
     if (navigationTabBar != null) {
         Box(
-            modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 64.dp),
+            modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 52.dp),
         ) {
             Row(modifier = Modifier.align(Alignment.CenterStart)) {
                 DrawerButton(onOpenDrawer)
@@ -77,7 +77,7 @@ internal fun TopBar(
         // start and trailing icons at the end. A Box with three aligned slots —
         // not a weight Row — so the pill is centered on the bar itself, not just
         // pushed to the right of the leading group (the previous off-center bug).
-        Box(modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 64.dp)) {
+        Box(modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 52.dp)) {
             Row(
                 modifier = Modifier.align(Alignment.CenterStart),
                 verticalAlignment = Alignment.CenterVertically,
