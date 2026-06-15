@@ -45,11 +45,14 @@ type Deps struct {
 	// SaveContacts mirrors the synced address book into the contacts store (phone
 	// lookup, name search, ASR hotwords). Optional; nil disables the store write.
 	SaveContacts func(contactsJSON []byte) (int, error)
-	// WorkFeed records native-client inputs as actionable work-feed items.
-	// Optional; capture handlers ignore append failures because the chat turn is
-	// still the source of truth.
+	// WorkFeed records native-client inputs as actionable work-feed items, and
+	// (List) reads them back so a 업무 chat turn can inject today's feed as
+	// context — see handleMiniappChatSend. Optional; capture handlers ignore
+	// append failures because the chat turn is still the source of truth, and a
+	// nil store just means no feed context is injected.
 	WorkFeed interface {
 		Append(workfeed.Item) (workfeed.Item, error)
+		List(limit int, includeAcked bool) ([]workfeed.Item, int, error)
 	}
 }
 
