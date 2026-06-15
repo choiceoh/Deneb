@@ -127,4 +127,44 @@ class PipeTableNormalizerTest {
         assertTrue(md.startsWith("아래 표를 보세요:"), md)
         assertTrue(md.trimEnd().endsWith("끝."), md)
     }
+
+    @Test
+    fun `unwraps a markdown table the model wrapped in a bare fence`() {
+        // dsv4 sometimes fences a real markdown table — it then renders as monospace
+        // code (CJK misaligns). A bare fence whose body is ONLY a delimiter-bearing
+        // pipe table is unwrapped so the table parser draws it.
+        val src = "```\n| Track | Status |\n| --- | --- |\n| 자체조달 | 진행 |\n```"
+        val md = normalizePipeTables(src)
+        assertTrue(!md.contains("```"), md) // fence dropped
+        val table = parseMarkdown(md).blocks.filterIsInstance<Table>().single()
+        assertEquals(2, table.headers.size)
+        assertEquals(1, table.rows.size)
+    }
+
+    @Test
+    fun `unwraps a fenced table inside a blockquote, keeping the prefix`() {
+        val src = "> ```\n> | A | B |\n> | --- | --- |\n> | 1 | 2 |\n> ```"
+        val md = normalizePipeTables(src)
+        assertTrue(!md.contains("```"), md)
+        assertTrue(md.lines().all { it.startsWith(">") }, md) // quote prefix preserved
+    }
+
+    @Test
+    fun `leaves fenced code with pipes but no delimiter untouched`() {
+        // Shell/code containing `|` is NOT a table (no delimiter row) — stays code.
+        val src = "```\ncat a | grep b\n| also | pipes |\n```"
+        assertEquals(src, normalizePipeTables(src))
+    }
+
+    @Test
+    fun `leaves a language-fenced table untouched`() {
+        val src = "```text\n| A | B |\n| --- | --- |\n| 1 | 2 |\n```"
+        assertEquals(src, normalizePipeTables(src))
+    }
+
+    @Test
+    fun `does not unwrap a longer fence holding an inner fence and a table`() {
+        val src = "````\n```\n| A | B |\n| --- | --- |\n| 1 | 2 |\n```\n````"
+        assertEquals(src, normalizePipeTables(src))
+    }
 }
