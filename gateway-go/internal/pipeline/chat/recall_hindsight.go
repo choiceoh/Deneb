@@ -72,7 +72,12 @@ func recallHindsightEvidence(ctx context.Context, client *hindsight.Client, mess
 		if m.Context != "" {
 			note = "context: " + m.Context + " | " + note
 		}
-		at := parseRecallTimestamp(m.MentionedAt, m.OccurredAt)
+		// OccurredAt-first: age the fact by WHEN IT WAS TRUE, not when it was
+		// retained. MentionedAt is often a bulk-import timestamp (the prod bank
+		// has every fact mentioned_at the same re-embed date), which would make
+		// unrelated facts all look the same age and cross the staleness line at
+		// once. OccurredAt distinguishes them; fall back to MentionedAt when absent.
+		at := parseRecallTimestamp(m.OccurredAt, m.MentionedAt)
 		// Mirror recallWikiStalenessMarker: an old fact gets a "may have changed,
 		// verify" cue so the model won't cite an outdated bank value as current.
 		if marker := recallHindsightStalenessMarker(at); marker != "" {
