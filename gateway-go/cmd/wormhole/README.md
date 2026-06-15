@@ -118,9 +118,13 @@ Requires a `sparkfleet` source (validation warns if it's missing).
 
 - `POST /v1/chat/completions` — OpenAI clients → OpenAI-protocol backends.
 - `POST /v1/messages` — Anthropic clients → Anthropic-protocol backends.
-- `GET /v1/models` — lists the routable model names (configured + discovered).
+- `GET /v1/models` — lists the routable model names (configured + discovered),
+  each with its backend `max_model_len` (the vLLM context window) for local
+  models, so a discovering client gets the window from this front instead of
+  probing the backend directly. Omitted for cloud models.
 - `GET /status` — rich live operational readout (feature flags + per-model
-  protocol/local/thinking/source); token-gated. Powers the native management tab.
+  protocol/local/thinking/source/`max_model_len`); token-gated. Powers the native
+  management tab.
 - `GET /metrics` — Prometheus text: request/error counts and cumulative latency,
   total and per model, plus `wormhole_client_requests_total{client=…}` (who is
   calling). The always-on visibility for the hot path (wormhole otherwise logs

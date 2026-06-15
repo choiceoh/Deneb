@@ -10,11 +10,12 @@ import (
 // thinking toggle), and where it came from ("config" or "fleet"-discovered).
 // Names and classification only — never a key.
 type statusModelRow struct {
-	Name     string `json:"name"`
-	Protocol string `json:"protocol"`
-	Local    bool   `json:"local"`
-	Thinking bool   `json:"thinking"`
-	Source   string `json:"source"`
+	Name        string `json:"name"`
+	Protocol    string `json:"protocol"`
+	Local       bool   `json:"local"`
+	Thinking    bool   `json:"thinking"`
+	Source      string `json:"source"`
+	MaxModelLen int    `json:"max_model_len,omitempty"` // backend vLLM context length (local only)
 }
 
 // statusOut is wormhole's live operational readout (GET /status): the global
@@ -40,6 +41,7 @@ func (rt *router) status(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s := rt.cur()
+	windows := rt.windows.Load()
 	out := statusOut{
 		Listen:        s.cfg.Listen,
 		LocalOnly:     s.cfg.LocalOnly,
@@ -47,28 +49,36 @@ func (rt *router) status(w http.ResponseWriter, r *http.Request) {
 		Auto:          s.cfg.Auto,
 		Models:        make([]statusModelRow, 0, len(s.cfg.Models)),
 	}
+	window := func(name string) int {
+		if windows != nil {
+			return (*windows)[name]
+		}
+		return 0
+	}
 	for _, e := range s.cfg.Models {
-		out.Models = append(out.Models, statusRow(e, "config"))
+		out.Models = append(out.Models, statusRow(e, "config", window(e.Name)))
 	}
 	if f := rt.fleet.Load(); f != nil {
 		for name, e := range *f {
 			if _, shadowed := s.models[name]; shadowed {
 				continue // a configured model of the same name already covers it
 			}
-			out.Models = append(out.Models, statusRow(e, "fleet"))
+			out.Models = append(out.Models, statusRow(e, "fleet", window(name)))
 		}
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(out)
 }
 
-// statusRow projects a modelEntry into a (keyless) status row tagged with its source.
-func statusRow(e modelEntry, source string) statusModelRow {
+// statusRow projects a modelEntry into a (keyless) status row tagged with its
+// source and the backend's discovered context window (0 = unknown / cloud).
+func statusRow(e modelEntry, source string, maxModelLen int) statusModelRow {
 	return statusModelRow{
-		Name:     e.Name,
-		Protocol: e.protocol(),
-		Local:    e.isLocal(),
-		Thinking: e.ToggleKwarg != "",
-		Source:   source,
+		Name:        e.Name,
+		Protocol:    e.protocol(),
+		Local:       e.isLocal(),
+		Thinking:    e.ToggleKwarg != "",
+		Source:      source,
+		MaxModelLen: maxModelLen,
 	}
 }
