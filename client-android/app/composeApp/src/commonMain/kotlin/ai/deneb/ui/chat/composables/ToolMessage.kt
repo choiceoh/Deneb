@@ -5,9 +5,9 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.keyframes
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -55,9 +55,6 @@ import deneb.composeapp.generated.resources.waiting_working
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.stringResource
-import kotlin.math.PI
-import kotlin.math.cos
-import kotlin.math.sin
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeSource
 
@@ -205,23 +202,29 @@ internal fun PulsingStatusIndicator(
     }
 }
 
-// StarIndicator is the 답변-중 motion: Deneb's own mark — a rounded five-pointed
-// star (the same star as the app logo) — twinkling: it brightens then dims with a
-// faint swell, like a star catching the light. Deneb is a blue star, so the
-// waiting beat is literally a Deneb twinkling. Sky-blue tint from the caller;
-// pure animation, no state.
-private const val starTwinkleMs = 1100
+// StarIndicator is the 답변-중 motion: a four-point sparkle (✦) — a glint of
+// starlight, Deneb being a blue star — that BURSTS: it pops bright and swells,
+// then settles dim and small before the next wink. A sparkle's thin concave rays
+// carry the twinkle/burst far better than a chunky five-point star. Sky-blue tint
+// from the caller; pure animation, no state.
+private const val sparklePeriodMs = 1300
 
 @Composable
 private fun StarIndicator(color: Color, modifier: Modifier = Modifier) {
-    val transition = rememberInfiniteTransition(label = "star")
-    // 0 (dim) → 1 (bright) and back; the star swells a touch as it brightens.
+    val transition = rememberInfiniteTransition(label = "sparkle")
+    // 0 (dim, small) → quick bright swollen pop → settle dim → rest, repeat.
     val twinkle by transition.animateFloat(
         initialValue = 0f,
-        targetValue = 1f,
+        targetValue = 0f,
         animationSpec = infiniteRepeatable(
-            animation = tween(starTwinkleMs, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse,
+            animation = keyframes {
+                durationMillis = sparklePeriodMs
+                0f at 0
+                1f at 260 using FastOutSlowInEasing
+                0.12f at 760 using FastOutSlowInEasing
+                0f at 1100
+                0f at sparklePeriodMs
+            },
         ),
         label = "twinkle",
     )
@@ -229,40 +232,40 @@ private fun StarIndicator(color: Color, modifier: Modifier = Modifier) {
         modifier
             .size(16.dp)
             .graphicsLayer {
-                alpha = 0.4f + 0.6f * twinkle
-                val s = 0.86f + 0.14f * twinkle
+                // Stay clearly present at rest (≈0.5) so it never reads as "off";
+                // the pop flares it bright and a touch larger.
+                alpha = 0.5f + 0.5f * twinkle
+                val s = 0.85f + 0.25f * twinkle
                 scaleX = s
                 scaleY = s
             },
     ) {
-        val path = denebStarPath(size)
-        // Fill + a round-join/round-cap stroke gives the brand's rounded star
-        // vertices (the logo rounds its star the same way).
+        val path = denebSparklePath(size)
+        // Fill plus a thin round stroke softens the ray tips (the brand's rounded
+        // feel) without fattening the thin sparkle.
         drawPath(path, color, style = Fill)
         drawPath(
             path,
             color,
-            style = Stroke(width = size.minDimension * 0.16f, join = StrokeJoin.Round, cap = StrokeCap.Round),
+            style = Stroke(width = size.minDimension * 0.08f, join = StrokeJoin.Round, cap = StrokeCap.Round),
         )
     }
 }
 
-// denebStarPath builds a centred five-pointed star sized to [size]. The outer
-// radius leaves room for the rounded stroke; inner/outer ~0.40 matches the logo.
-private fun denebStarPath(size: Size): Path {
+// denebSparklePath builds a centred four-point sparkle (✦) sized to [size]: four
+// tips (N/E/S/W) joined by quadratic curves whose controls sit close to the
+// centre, so the rays read thin and concave like a glint of light.
+private fun denebSparklePath(size: Size): Path {
     val cx = size.width / 2f
     val cy = size.height / 2f
-    val outer = size.minDimension / 2f * 0.78f
-    val inner = outer * 0.40f
+    val outer = size.minDimension / 2f * 0.92f
+    val d = outer * 0.12f // side-curve control offset on the diagonals → thin rays
     val path = Path()
-    val points = 5
-    for (i in 0 until points * 2) {
-        val r = if (i % 2 == 0) outer else inner
-        val angle = (-PI / 2.0 + i * PI / points).toFloat() // first tip at the top
-        val x = cx + r * cos(angle)
-        val y = cy + r * sin(angle)
-        if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
-    }
+    path.moveTo(cx, cy - outer)
+    path.quadraticBezierTo(cx + d, cy - d, cx + outer, cy)
+    path.quadraticBezierTo(cx + d, cy + d, cx, cy + outer)
+    path.quadraticBezierTo(cx - d, cy + d, cx - outer, cy)
+    path.quadraticBezierTo(cx - d, cy - d, cx, cy - outer)
     path.close()
     return path
 }
