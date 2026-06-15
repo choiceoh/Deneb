@@ -89,6 +89,24 @@ func extractCardTitle(content string) (title, sourceLine string) {
 	return clipRunes(t, workFeedTitleMaxRunes), raw
 }
 
+// isWeakCardTitle reports whether the heuristic title is untrustworthy and should
+// be replaced by the lightweight-model titler. A title pulled from a real heading
+// or a bold-leading line is structured and kept; one pulled from a plain prose
+// line (a proactive body that opens with narration) is weak when it runs long or
+// reads like a sentence — that is the case where the heuristic grabbed a whole
+// narration line as the title. rawLine is the source line extractCardTitle used.
+func isWeakCardTitle(title, rawLine string) bool {
+	t := strings.TrimSpace(rawLine)
+	if wfHeaderRe.MatchString(t) || isBoldLeadingLine(t) {
+		return false
+	}
+	if len([]rune(title)) >= weakTitleMinRunes {
+		return true
+	}
+	return strings.ContainsAny(title, ".!?") ||
+		strings.HasSuffix(title, ":") || strings.HasSuffix(title, "：")
+}
+
 // isGenericMailReportTitle reports whether a stripped heading is a generic
 // single-mail report label ("메일 분석 리포트", "📬 새 메일 분석 보고") whose only
 // information is "this is a mail analysis".

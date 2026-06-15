@@ -456,7 +456,11 @@ class ChatViewModel(
 
     private fun runWorkFeedAction(itemId: String, actionId: String) {
         viewModelScope.launch(backgroundDispatcher) {
-            val prompt = (dataRepository as? DenebGatewayClient)?.runWorkFeedAction(itemId, actionId)
+            // The feed quick actions are terminal (보관=ack, 휴지통=trash): they just
+            // settle/remove the card, so don't adopt the item's session — a quick
+            // action from the feed shouldn't yank the chat over to client:main.
+            val prompt = (dataRepository as? DenebGatewayClient)
+                ?.runWorkFeedAction(itemId, actionId, adoptSession = false)
             if (!prompt.isNullOrBlank()) {
                 askInternal(prompt, null)
             }

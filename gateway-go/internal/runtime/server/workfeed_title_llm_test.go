@@ -60,6 +60,23 @@ func TestRelay_CardTitler(t *testing.T) {
 		}
 	})
 
+	t.Run("prose-opening proactive card is LLM-titled", func(t *testing.T) {
+		feed := &recordingWorkFeed{}
+		d := proactiveRelayDeps{
+			transcriptStore: newRecordingTranscriptStore(),
+			workFeed:        feed,
+			cardTitler:      func(string) string { return "LG 내부 결재 지연 정리" },
+		}
+		// Opens with a narration sentence (no heading): the heuristic would grab the
+		// whole sentence, so the lightweight titler names it instead.
+		if _, err := d.relayNative("이제 자료가 다 모였다. 놀랍게도 6/10에 지연됐던 LG 내부 결재가 통과됐다."); err != nil {
+			t.Fatalf("relayNative: %v", err)
+		}
+		if got := feedTitle(feed); got != "LG 내부 결재 지연 정리" {
+			t.Fatalf("prose title = %q, want the LLM title", got)
+		}
+	})
+
 	t.Run("non-mail card is not LLM-titled", func(t *testing.T) {
 		feed := &recordingWorkFeed{}
 		called := false
