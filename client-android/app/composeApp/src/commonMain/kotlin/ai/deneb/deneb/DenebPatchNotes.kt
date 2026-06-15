@@ -21,6 +21,11 @@ data class DenebPatchNote(
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
         highlights = listOf(
+            "플릿의 HuggingFace 모델 검색이 좋아졌습니다 — 입력하면 바로 검색되고, 정렬(트렌딩·다운로드·좋아요·최신)·작업 종류·수정일을 함께 보여주며, 다운로드 전에 노드의 디스크 여유를 알려줍니다",
+        ),
+    ),
+    DenebPatchNote(
+        highlights = listOf(
             "답변 속 접기 섹션(<details>)이 펼침/접힘 항목으로 표시됩니다 — 제목을 누르면 본문이 열리고 닫힘 (예전엔 <details>·<summary> 태그가 글자 그대로 노출)",
         ),
     ),
