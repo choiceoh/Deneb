@@ -9,9 +9,11 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.BaselineShift
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.em
 
 // Not @Composable: takes the resolved ColorScheme so callers can cache the result
 // with remember(inlines, colors). Building the AnnotatedString on every streaming
@@ -38,6 +40,26 @@ private fun AnnotatedString.Builder.appendInline(node: InlineNode, colors: Color
             // Struck text is "removed" — mute it so a correction's old value recedes.
             SpanStyle(textDecoration = TextDecoration.LineThrough, color = colors.onSurfaceVariant),
         ) {
+            appendInlines(node.children, colors)
+        }
+
+        is Underline -> withStyle(SpanStyle(textDecoration = TextDecoration.Underline)) {
+            appendInlines(node.children, colors)
+        }
+
+        is Highlight -> withStyle(
+            // A soft cool wash behind the glyphs (the doctrine's primary "소프트 fill"); body
+            // text color is left as-is so the highlight reads as emphasis, not a recolor.
+            SpanStyle(background = colors.primary.copy(alpha = 0.30f)),
+        ) {
+            appendInlines(node.children, colors)
+        }
+
+        is Superscript -> withStyle(SpanStyle(baselineShift = BaselineShift.Superscript, fontSize = 0.75.em)) {
+            appendInlines(node.children, colors)
+        }
+
+        is Subscript -> withStyle(SpanStyle(baselineShift = BaselineShift.Subscript, fontSize = 0.75.em)) {
             appendInlines(node.children, colors)
         }
 

@@ -92,6 +92,10 @@ private fun containsMath(nodes: List<InlineNode>): Boolean {
             is Emphasis -> if (containsMath(n.children)) return true
             is Strong -> if (containsMath(n.children)) return true
             is Strike -> if (containsMath(n.children)) return true
+            is Underline -> if (containsMath(n.children)) return true
+            is Highlight -> if (containsMath(n.children)) return true
+            is Superscript -> if (containsMath(n.children)) return true
+            is Subscript -> if (containsMath(n.children)) return true
             is Link -> if (containsMath(n.children)) return true
             else -> Unit
         }

@@ -21,6 +21,11 @@ data class DenebPatchNote(
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
         highlights = listOf(
+            "본문 속 HTML 표기가 서식으로 렌더됩니다 — `<u>` 밑줄, `<mark>` 형광 강조, `<sup>`/`<sub>` 첨자(5ᵗʰ·xᵢ 같은 문자 첨자 포함), `<a href>` 링크가 글자 그대로 노출되지 않음",
+        ),
+    ),
+    DenebPatchNote(
+        highlights = listOf(
             "답변·메일·위키 본문 속 이미지를 누르면 전체 화면으로 확대됩니다 — 핀치 줌·드래그 이동·더블탭 확대, 빈 곳을 누르면 닫힘(첨부 사진 뷰어와 동일)",
         ),
     ),
