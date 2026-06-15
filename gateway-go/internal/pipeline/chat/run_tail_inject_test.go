@@ -135,6 +135,25 @@ func TestBuildTailAdditions(t *testing.T) {
 	}
 }
 
+func TestBuildTailAdditions_ChatbotTone(t *testing.T) {
+	// 챗봇 workspace (chat: session): the tone directive is injected — between
+	// recall and the delivery directive — so the 챗봇 reads as light general chat.
+	adds := buildTailAdditions(RunParams{SessionKey: "chat:main", AutoDeliveredOutput: true}, "")
+	if len(adds) != 2 || adds[0] != chatbotToneDirective || !strings.Contains(adds[1], "전달 정책") {
+		t.Fatalf("expected [chatbot-tone, delivery] for chat: session, got %#v", adds)
+	}
+	// 업무 workspace (client:main): no tone directive — the system prompt's
+	// chief-of-staff persona stands.
+	for _, key := range []string{"client:main", "client:main:wf-x", "cron:mail:1", ""} {
+		adds := buildTailAdditions(RunParams{SessionKey: key, AutoDeliveredOutput: true}, "")
+		for _, a := range adds {
+			if a == chatbotToneDirective {
+				t.Fatalf("chatbot tone leaked into non-chat session %q", key)
+			}
+		}
+	}
+}
+
 func TestSessionFallbackChannel(t *testing.T) {
 	cases := map[string]string{
 		"client:main":           "client",
