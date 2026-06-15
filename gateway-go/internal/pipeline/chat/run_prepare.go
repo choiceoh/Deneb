@@ -421,7 +421,18 @@ func assembleMessages(
 			return messages
 		}
 
-		polarisCtx, polarisCancel := context.WithTimeout(ctx, 2*time.Minute)
+		// syncCompactionStall bounds the in-turn (STW) compaction — the backstop
+		// for cases that cannot defer to the background pass (first compaction,
+		// models with no window headroom, the hard ceiling). Raised 2m→3m so the
+		// parallel chunk summaries have room to finish when the analysis model is
+		// slow under GPU contention (the "polaris: chunk summarization failed …
+		// context deadline exceeded" warnings), rather than failing and re-running
+		// the same first compaction every turn. Stays well under the 5m turn
+		// deadline. Trade-off: a turn that triggers synchronous compaction can
+		// stall up to this long before replying; the deferred background path
+		// (5m, off the critical path) already absorbs the common case.
+		const syncCompactionStall = 3 * time.Minute
+		polarisCtx, polarisCancel := context.WithTimeout(ctx, syncCompactionStall)
 		var summarizer compact.Summarizer
 		if pilotHub := pilot.LocalAIHub(); pilotHub != nil {
 			summarizer = &localAISummarizer{}
