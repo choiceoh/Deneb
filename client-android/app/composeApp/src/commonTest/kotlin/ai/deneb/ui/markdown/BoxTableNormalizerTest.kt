@@ -52,6 +52,39 @@ class BoxTableNormalizerTest {
     }
 
     @Test
+    fun `merges multi-line cells in a real status board (reported case)`() {
+        // The exact table a chat answer drew: 3 columns, multi-line Note cells with
+        // blank Track/Status continuation rows, CJK + ◐◆→※ symbols, border rows
+        // between logical rows. Each logical row's wrapped Note must merge into one.
+        val box = """
+            |┌──────────────────────────────┬─────────┬──────────────────┐
+            |│ Track                         │ Status  │ Note             │
+            |├──────────────────────────────┼─────────┼──────────────────┤
+            |│ 물품 자체조달                   │ ◐ 진행  │ 규격서 송부完     │
+            |│                               │         │ → 공단 확인後    │
+            |│                               │         │   사전규격공고    │
+            |├──────────────────────────────┼─────────┼──────────────────┤
+            |│ 중앙조달 (전기공사)            │ ◐ 진행  │ 과업지시서+도면   │
+            |│                               │         │ revise 완료       │
+            |│                               │         │ → 조달청 의뢰待   │
+            |├──────────────────────────────┼─────────┼──────────────────┤
+            |│ 착수신고                       │ ◆ RISK  │ 6/2 "다음주까지"  │
+            |│                               │         │ → 현재 미확인     │
+            |│                               │         │ ※ 지연신청서 필요可能 │
+            |└──────────────────────────────┴─────────┴──────────────────┘
+        """.trimMargin().trim()
+        val md = normalizeBoxTables(box)
+        assertTrue(md.contains("| Track | Status | Note |"), md)
+        assertTrue(md.contains("| --- | --- | --- |"), md)
+        // Each logical row's wrapped Note cell merges into one.
+        assertTrue(md.contains("| 물품 자체조달 | ◐ 진행 | 규격서 송부完 → 공단 확인後 사전규격공고 |"), md)
+        assertTrue(md.contains("| 중앙조달 (전기공사) | ◐ 진행 | 과업지시서+도면 revise 완료 → 조달청 의뢰待 |"), md)
+        assertTrue(md.contains("| 착수신고 | ◆ RISK | 6/2 \"다음주까지\" → 현재 미확인 ※ 지연신청서 필요可能 |"), md)
+        // No box-drawing borders survive.
+        assertTrue(md.none { it in "─│┌┐└┘├┤┬┴┼" }, md)
+    }
+
+    @Test
     fun `leaves a genuine markdown table untouched`() {
         val md = "| a | b |\n| --- | --- |\n| 1 | 2 |"
         assertEquals(md, normalizeBoxTables(md))
@@ -64,14 +97,43 @@ class BoxTableNormalizerTest {
     }
 
     @Test
-    fun `leaves a box table inside a fenced code block untouched`() {
+    fun `converts a box table the model wrapped in a bare fence`() {
+        // dsv4 sometimes fences a "pretty" box table in bare ``` — it then renders as
+        // monospace art (CJK misaligns). A bare fence whose body is ONLY a box table is
+        // converted and the fence dropped.
         val src = """
             |```
+            |┌────┬────┐
+            |│ A  │ B  │
+            |├────┼────┤
+            |│ 1  │ 2  │
+            |└────┴────┘
+            |```
+        """.trimMargin().trim()
+        val md = normalizeBoxTables(src)
+        assertTrue(md.contains("| A | B |"), md)
+        assertTrue(md.contains("| 1 | 2 |"), md)
+        assertTrue(!md.contains("```"), md) // fence dropped
+        assertTrue(md.none { it in "─│┌┐└┘├┤┬┴┼" }, md)
+    }
+
+    @Test
+    fun `leaves a language-fenced block untouched even if it looks like a box table`() {
+        // A language info string (```text) means the author wants it verbatim.
+        val src = """
+            |```text
             |┌────┬────┐
             |│ A  │ B  │
             |└────┴────┘
             |```
         """.trimMargin().trim()
+        assertEquals(src, normalizeBoxTables(src))
+    }
+
+    @Test
+    fun `leaves a fenced tree diagram untouched`() {
+        // Box-drawing that is NOT a │-delimited multi-column table (a tree) stays code.
+        val src = "```\nsrc/\n│\n├── a.kt\n└── b.kt\n```"
         assertEquals(src, normalizeBoxTables(src))
     }
 
@@ -178,15 +240,20 @@ class BoxTableNormalizerTest {
     }
 
     @Test
-    fun `leaves a fenced box table inside a blockquote untouched`() {
+    fun `converts a fenced box table inside a blockquote, keeping the prefix`() {
         val src = """
             |> ```
             |> ┌────┬────┐
             |> │ A  │ B  │
+            |> ├────┼────┤
+            |> │ 1  │ 2  │
             |> └────┴────┘
             |> ```
         """.trimMargin().trim()
-        assertEquals(src, normalizeBoxTables(src))
+        val md = normalizeBoxTables(src)
+        assertTrue(md.contains("> | A | B |"), md)
+        assertTrue(md.contains("> | 1 | 2 |"), md)
+        assertTrue(!md.contains("```"), md) // fence dropped, prefix kept
     }
 
     @Test

@@ -78,6 +78,19 @@ fun normalizeBoxTables(text: String): String {
             continue
         }
         if (fence != null) {
+            // A box table the model "helpfully" wrapped in a bare ``` fence renders as
+            // monospace art (full-width CJK breaks the alignment) — the exact thing we
+            // normalize. If the fenced block has a blank info string and contains ONLY
+            // a box table, convert it and drop the fence. A fence with a language, or
+            // any real code/prose (or a nested fence), passes through untouched.
+            if (fence.groupValues[3].isBlank()) {
+                val converted = convertFencedBoxTable(lines, i, prefix, fence.groupValues[2])
+                if (converted != null) {
+                    for (md in converted.mdLines) result += prefix + md
+                    i = converted.nextIndex
+                    continue
+                }
+            }
             inFence = true
             fenceCh = fence.groupValues[2][0]
             fenceLen = fence.groupValues[2].length
@@ -123,6 +136,61 @@ fun normalizeBoxTables(text: String): String {
         i++
     }
     return result.joinToString("\n")
+}
+
+private class FencedBoxConvert(val mdLines: List<String>, val nextIndex: Int)
+
+/**
+ * If the bare fence opening at [openIdx] (run [openRun], container [prefix]) encloses
+ * ONLY a box-drawing table, return its markdown rows and the index just past the
+ * closing fence. Returns null — caller keeps it as a normal code fence — when the
+ * block has a different prefix, any non-table line, a NESTED fence, or no terminator.
+ */
+private fun convertFencedBoxTable(lines: List<String>, openIdx: Int, prefix: String, openRun: String): FencedBoxConvert? {
+    val ch = openRun[0]
+    val len = openRun.length
+    val body = mutableListOf<String>()
+    var closeIdx = -1
+    var j = openIdx + 1
+    while (j < lines.size) {
+        val l = lines[j]
+        if (blockPrefix(l) != prefix) return null // body must stay in the same container
+        val c = l.substring(prefix.length)
+        val f = FENCE_REGEX.matchEntire(c)
+        if (f != null) {
+            // The matching closing fence ends the block.
+            if (f.groupValues[2][0] == ch && f.groupValues[2].length >= len && f.groupValues[3].isBlank()) {
+                closeIdx = j
+                break
+            }
+            // Any other fence marker inside (e.g. an outer ```` wrapping markdown that
+            // itself contains a ``` fence) means this isn't a pure box table — leave it.
+            return null
+        }
+        body += c
+        j++
+    }
+    if (closeIdx < 0) return null // unterminated fence — leave it as written
+    var dataCount = 0
+    var borderCount = 0
+    var maxCols = 0
+    for (c in body) {
+        when {
+            isDataLine(c) -> {
+                dataCount++
+                maxCols = maxOf(maxCols, splitDataCells(c).size)
+            }
+
+            isBorderLine(c) -> borderCount++
+
+            c.isBlank() -> {}
+
+            // tolerate stray blank lines inside the fence
+            else -> return null // real code/prose → genuine code block, don't touch
+        }
+    }
+    if (dataCount < 1 || borderCount < 1 || maxCols < 2) return null
+    return FencedBoxConvert(convertBlock(body.filter { it.isNotBlank() }), closeIdx + 1)
 }
 
 /** Leading run of spaces, tabs, and blockquote `>` markers — the container
