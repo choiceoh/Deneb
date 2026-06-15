@@ -580,11 +580,11 @@ internal fun ChatModeScreen(
                                                 modifier = Modifier.fillMaxSize(),
                                                 state = listState,
                                                 horizontalAlignment = CenterHorizontally,
-                                                // A little breathing room at the top so the first message clears the
-                                                // top bar. At the bottom keep it tight (8dp) so the last message sits
-                                                // right above the input bar — like GPT/Claude/Gemini — rather than
-                                                // floating with a wide gap.
-                                                contentPadding = PaddingValues(top = 4.dp, bottom = 8.dp),
+                                                // Clear the top tab pill and the bottom input bar with real
+                                                // breathing room so a message never reads as tucked under (cut by)
+                                                // either bar as it scrolls past — the prior 4/8dp jammed the first
+                                                // line under the 챗봇/업무 pill and the last under the input.
+                                                contentPadding = PaddingValues(top = 16.dp, bottom = 16.dp),
                                             ) {
                                                 items(uiState.history, key = { it.id }, contentType = { it.role }) { history ->
                                                     // Readable measure on a wide desktop window: cap every row at the
