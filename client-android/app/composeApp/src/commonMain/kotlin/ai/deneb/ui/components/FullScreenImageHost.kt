@@ -14,20 +14,35 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
 
-val LocalShowFullScreenImage = staticCompositionLocalOf<(ImageBitmap) -> Unit> { { } }
+// (bitmap, pngBytes?) — the bitmap is what renders; the optional original encoded
+// bytes back the viewer's save/share actions. Callers that have the source bytes
+// (image attachments) pass them; those that don't pass null and the viewer hides
+// the export buttons.
+val LocalShowFullScreenImage = staticCompositionLocalOf<(ImageBitmap, ByteArray?) -> Unit> { { _, _ -> } }
 
 @Composable
 fun FullScreenImageHost(content: @Composable () -> Unit) {
     var image by remember { mutableStateOf<ImageBitmap?>(null) }
-    val show = remember { { bitmap: ImageBitmap -> image = bitmap } }
-    val dismiss = remember { { image = null } }
+    var bytes by remember { mutableStateOf<ByteArray?>(null) }
+    val show = remember {
+        { bitmap: ImageBitmap, png: ByteArray? ->
+            image = bitmap
+            bytes = png
+        }
+    }
+    val dismiss = remember {
+        {
+            image = null
+            bytes = null
+        }
+    }
 
     Box(Modifier.fillMaxSize()) {
         CompositionLocalProvider(LocalShowFullScreenImage provides show) {
             content()
         }
         image?.let { bmp ->
-            FullScreenImageViewerOverlay(bitmap = bmp, onDismiss = dismiss)
+            FullScreenImageViewerOverlay(bitmap = bmp, pngBytes = bytes, onDismiss = dismiss)
             PlatformBackHandler(enabled = true, onBack = dismiss)
         }
     }

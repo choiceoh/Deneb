@@ -93,7 +93,7 @@ internal fun UserMessage(
                                     .handCursor()
                                     .clickable(onClickLabel = "확대") {
                                         haptics.tap()
-                                        showFullScreen(imageBitmap)
+                                        showFullScreen(imageBitmap, decodeBase64BytesOrNull(att.data))
                                     },
                                 contentScale = ContentScale.FillWidth,
                             )

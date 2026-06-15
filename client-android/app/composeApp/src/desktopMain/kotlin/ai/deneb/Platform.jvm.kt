@@ -163,6 +163,9 @@ actual suspend fun saveFileToDevice(bytes: ByteArray, baseName: String, extensio
     file?.write(bytes)
 }
 
+// Desktop has no OS share sheet — export via the same save dialog.
+actual suspend fun shareImageToApps(bytes: ByteArray, baseName: String, extension: String) = saveFileToDevice(bytes, baseName, extension)
+
 /**
  * Posts a native OS notification. Each platform has its own surface:
  *   - macOS: `osascript` invokes the user-facing Notification Center.

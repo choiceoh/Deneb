@@ -76,6 +76,14 @@ expect fun decodeToImageBitmap(bytes: ByteArray): ImageBitmap?
 
 expect suspend fun saveFileToDevice(bytes: ByteArray, baseName: String, extension: String)
 
+// Hand bytes to the OS share surface so the user can send the image to another app
+// (messaging, mail, save-to-Photos via the sheet). Android = ACTION_SEND chooser,
+// iOS = UIActivityViewController; desktop/web have no share sheet and fall back to
+// the save dialog (saveFileToDevice). Best-effort — a no-op if the surface is
+// unavailable. Pairs with saveFileToDevice (direct save) for the image viewer's
+// two export actions.
+expect suspend fun shareImageToApps(bytes: ByteArray, baseName: String, extension: String)
+
 /**
  * Fires a background push notification for a heartbeat that produced a non-trivial
  * response. Android additionally wires a tap-to-open-heartbeat deep link via its

@@ -183,3 +183,26 @@ actual suspend fun saveFileToDevice(bytes: ByteArray, baseName: String, extensio
     val file = FileKit.openFileSaver(suggestedName = baseName, defaultExtension = extension)
     file?.write(bytes)
 }
+
+actual suspend fun shareImageToApps(bytes: ByteArray, baseName: String, extension: String) {
+    val context: Context by inject(Context::class.java)
+    // Stage the bytes in cacheDir/shared-images — file_paths.xml exposes the whole
+    // cache dir (cache-path "."), so FileProvider can hand a content:// uri to the
+    // chooser target. Reuses the existing ${packageName}.fileprovider authority.
+    val file = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        val dir = java.io.File(context.cacheDir, "shared-images").apply { mkdirs() }
+        java.io.File(dir, "$baseName.$extension").also { it.writeBytes(bytes) }
+    }
+    val uri = androidx.core.content.FileProvider.getUriForFile(
+        context,
+        "${context.packageName}.fileprovider",
+        file,
+    )
+    val send = Intent(Intent.ACTION_SEND).apply {
+        type = "image/$extension"
+        putExtra(Intent.EXTRA_STREAM, uri)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+    // Started from the application Context (no Activity), so the chooser needs NEW_TASK.
+    context.startActivity(Intent.createChooser(send, null).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+}

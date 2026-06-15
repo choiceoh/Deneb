@@ -28,3 +28,9 @@ fun decodeBase64ImageCached(data: String): ImageBitmap? {
     }
     return bitmap
 }
+
+// The original encoded bytes behind a base64 attachment, for save/share (the full-
+// screen viewer's export actions). Decoded on demand (at click, not per frame), so
+// no caching here. Returns null on malformed input.
+@OptIn(ExperimentalEncodingApi::class)
+fun decodeBase64BytesOrNull(data: String): ByteArray? = runCatching { Base64.decode(data) }.getOrNull()
