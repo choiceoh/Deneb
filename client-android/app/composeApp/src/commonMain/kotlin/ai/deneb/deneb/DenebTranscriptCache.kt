@@ -60,6 +60,17 @@ internal fun DenebGatewayClient.storeCachedTranscript(key: String, transcript: L
         return
     }
     val json = txCacheJson.encodeToString(txCacheSerializer, msgs)
-    if (json.length > TX_CACHE_MAX_CHARS) return
+    if (json.length > TX_CACHE_MAX_CHARS) {
+        // The authoritative transcript outgrew the cache budget. Drop any existing
+        // (now-smaller, stale) entry so reopen falls through to network instead of
+        // instantly rendering an outdated snapshot that never gets corrected.
+        appSettings.removeCachedTranscript(key)
+        return
+    }
     appSettings.putCachedTranscript(key, json)
+}
+
+/** Evict the cached transcript for [key] (session deleted, emptied, or too large). */
+internal fun DenebGatewayClient.removeCachedTranscript(key: String) {
+    appSettings.removeCachedTranscript(key)
 }
