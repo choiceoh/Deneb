@@ -584,14 +584,14 @@ internal fun ChatModeScreen(
 
                                         Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
                                             LazyColumn(
-                                                // Soft fade at the top/bottom edges so a message dissolves into
-                                                // the bars as it scrolls past, instead of reading as hard-cut /
-                                                // covered. The chat still fills the full height (small padding,
-                                                // not a wide gap) — it just flows under the bars, uncovered.
-                                                modifier = Modifier.fillMaxSize().verticalEdgeFade(top = 28.dp, bottom = 22.dp),
+                                                // Near-zero vertical padding so the chat runs edge to edge, and a
+                                                // soft fade at the top/bottom so a message gradually dissolves into
+                                                // the bars instead of reading as hard-cut / covered. No gap — the
+                                                // content flows right up to the bars and just fades out.
+                                                modifier = Modifier.fillMaxSize().verticalEdgeFade(top = 24.dp, bottom = 20.dp),
                                                 state = listState,
                                                 horizontalAlignment = CenterHorizontally,
-                                                contentPadding = PaddingValues(top = 6.dp, bottom = 8.dp),
+                                                contentPadding = PaddingValues(top = 0.dp, bottom = 0.dp),
                                             ) {
                                                 items(uiState.history, key = { it.id }, contentType = { it.role }) { history ->
                                                     // Readable measure on a wide desktop window: cap every row at the
