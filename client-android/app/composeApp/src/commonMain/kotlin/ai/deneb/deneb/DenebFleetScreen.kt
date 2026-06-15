@@ -213,7 +213,7 @@ fun DenebFleetScreen(
 
                         FleetTab.MODELS -> FleetModelsPage(client, state?.nodes.orEmpty()) { notice = it }
 
-                        FleetTab.BENCH -> FleetBenchPage(client, recipes.orEmpty(), loaded) { notice = it }
+                        FleetTab.BENCH -> FleetBenchPage(client, recipes.orEmpty(), jobs.orEmpty(), loaded) { notice = it }
 
                         FleetTab.JOBS -> FleetJobsPage(client, jobs.orEmpty(), loaded) { notice = it }
                     }
@@ -746,11 +746,15 @@ private fun FleetLogsDialog(client: DenebGatewayClient, rc: FleetRecipe, onDismi
                 val scroll = rememberScrollState()
                 // Pin to the newest line whenever the log (re)loads.
                 LaunchedEffect(logs) { scroll.scrollTo(scroll.maxValue) }
+                // null = fetch failed (vs "" = genuinely empty) — keep that signal so a
+                // failing gateway/SparkFleet path doesn't read as "container has no logs".
+                val text = logs
                 Text(
                     when {
-                        loading && logs == null -> "불러오는 중…"
-                        logs.isNullOrBlank() -> "로그가 없습니다."
-                        else -> logs!!.takeLast(8000)
+                        loading && text == null -> "불러오는 중…"
+                        text == null -> "로그를 불러오지 못했습니다 — 새로고침으로 재시도하세요."
+                        text.isBlank() -> "로그가 없습니다."
+                        else -> text.takeLast(8000)
                     },
                     style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
                     modifier = Modifier.verticalScroll(scroll).padding(8.dp),
@@ -788,36 +792,47 @@ private fun FleetDiagnoseDialog(client: DenebGatewayClient, rc: FleetRecipe, onD
                 Modifier.fillMaxWidth().heightIn(max = 420.dp).verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                if (loading && diag == null) {
-                    Text("진단 중… (로컬 LLM 분석은 몇 초 걸릴 수 있습니다)", style = MaterialTheme.typography.bodySmall, color = muted)
-                }
-                diag?.let { d ->
-                    if (d.state.isNotBlank()) {
-                        Text("상태: ${d.state}", style = MaterialTheme.typography.bodySmall, color = muted)
-                    }
-                    d.findings.forEach { f ->
-                        Column {
-                            Text("• ${f.cause}", style = MaterialTheme.typography.bodyMedium)
-                            if (f.fix.isNotBlank()) {
-                                Text("  → ${f.fix}", style = MaterialTheme.typography.bodySmall, color = muted)
+                val d = diag
+                val dr = drift
+                when {
+                    loading && d == null && dr == null ->
+                        Text("진단 중… (로컬 LLM 분석은 몇 초 걸릴 수 있습니다)", style = MaterialTheme.typography.bodySmall, color = muted)
+
+                    // Both calls failed (container vanished / non-2xx / timeout) — say so,
+                    // otherwise an empty dialog reads as "diagnosed, nothing found".
+                    d == null && dr == null ->
+                        Text("진단 정보를 불러오지 못했습니다 — '다시 진단'으로 재시도하세요.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+
+                    else -> {
+                        d?.let {
+                            if (it.state.isNotBlank()) {
+                                Text("상태: ${it.state}", style = MaterialTheme.typography.bodySmall, color = muted)
+                            }
+                            it.findings.forEach { f ->
+                                Column {
+                                    Text("• ${f.cause}", style = MaterialTheme.typography.bodyMedium)
+                                    if (f.fix.isNotBlank()) {
+                                        Text("  → ${f.fix}", style = MaterialTheme.typography.bodySmall, color = muted)
+                                    }
+                                }
+                            }
+                            if (it.llm.isNotBlank()) {
+                                Text("AI 분석", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, color = muted)
+                                Text(it.llm, style = MaterialTheme.typography.bodySmall)
+                            }
+                            if (it.findings.isEmpty() && it.llm.isBlank()) {
+                                Text("알려진 실패 패턴이 없습니다.", style = MaterialTheme.typography.bodySmall, color = muted)
                             }
                         }
-                    }
-                    if (d.llm.isNotBlank()) {
-                        Text("AI 분석", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, color = muted)
-                        Text(d.llm, style = MaterialTheme.typography.bodySmall)
-                    }
-                    if (!loading && d.findings.isEmpty() && d.llm.isBlank()) {
-                        Text("알려진 실패 패턴이 없습니다.", style = MaterialTheme.typography.bodySmall, color = muted)
-                    }
-                }
-                drift?.let { dr ->
-                    HorizontalDivider(color = denebHairline())
-                    if (!dr.inSync && dr.diffs.isNotEmpty()) {
-                        Text("⚠ 레시피 드리프트 — 컨테이너가 레시피와 다릅니다", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-                        dr.diffs.forEach { Text("• $it", style = MaterialTheme.typography.bodySmall, color = muted) }
-                    } else if (dr.inSync) {
-                        Text("레시피와 컨테이너 설정 일치 ✓", style = MaterialTheme.typography.bodySmall, color = muted)
+                        dr?.let {
+                            HorizontalDivider(color = denebHairline())
+                            if (!it.inSync && it.diffs.isNotEmpty()) {
+                                Text("⚠ 레시피 드리프트 — 컨테이너가 레시피와 다릅니다", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                                it.diffs.forEach { diff -> Text("• $diff", style = MaterialTheme.typography.bodySmall, color = muted) }
+                            } else if (it.inSync) {
+                                Text("레시피와 컨테이너 설정 일치 ✓", style = MaterialTheme.typography.bodySmall, color = muted)
+                            }
+                        }
                     }
                 }
             }
@@ -835,9 +850,18 @@ private fun FleetDiagnoseDialog(client: DenebGatewayClient, rc: FleetRecipe, onD
  * run (it streams into the 작업 tab). Mirrors SparkFleet's own benchmark surface.
  */
 @Composable
-private fun FleetBenchPage(client: DenebGatewayClient, recipes: List<FleetRecipe>, loaded: Boolean, onNotice: (String) -> Unit) {
+private fun FleetBenchPage(
+    client: DenebGatewayClient,
+    recipes: List<FleetRecipe>,
+    jobs: List<FleetJob>,
+    loaded: Boolean,
+    onNotice: (String) -> Unit,
+) {
     val scope = rememberCoroutineScope()
     var evals by remember { mutableStateOf<FleetEvals?>(null) }
+    // Recipes with a benchmark in flight (name -> job id; "" = POST not yet acked).
+    // Disables 측정 so a quick double-tap can't fire duplicate, expensive eval jobs.
+    var launching by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     suspend fun load() {
         client.fleetEvals()?.let { evals = it }
     }
@@ -851,19 +875,31 @@ private fun FleetBenchPage(client: DenebGatewayClient, recipes: List<FleetRecipe
             delay(7_000)
         }
     }
+    // Re-enable 측정 once its job reaches a terminal state in the polled job list.
+    LaunchedEffect(jobs) {
+        if (launching.isEmpty()) return@LaunchedEffect
+        val terminal = jobs.filter { it.state == "done" || it.state == "failed" }.map { it.id }.toSet()
+        val finished = launching.filterValues { it.isNotEmpty() && it in terminal }.keys
+        if (finished.isNotEmpty()) launching = launching - finished
+    }
     if (recipes.isEmpty()) {
         EmptyTab(if (loaded) "레시피가 없습니다." else "불러오는 중…")
         return
     }
     LazyColumn(Modifier.fillMaxSize()) {
         items(recipes, key = { it.name }) { rc ->
-            FleetBenchRow(rc, evals?.runs?.get(rc.name)) {
+            FleetBenchRow(rc, evals?.runs?.get(rc.name), launching = rc.name in launching) {
+                if (rc.name in launching) return@FleetBenchRow
+                launching = launching + (rc.name to "")
                 scope.launch {
                     val err = client.fleetRunBench(rc.name, rc.status.node.ifBlank { rc.node }) { jobId ->
+                        launching = launching + (rc.name to jobId)
                         onNotice("${rc.name} 벤치마크 시작 — 작업 $jobId (작업 탭). 결과는 끝나면 갱신됩니다")
                     }
-                    if (err != null) onNotice(err)
-                    // The poll loop above refreshes the score once the job writes its result.
+                    if (err != null) {
+                        onNotice(err)
+                        launching = launching - rc.name
+                    }
                 }
             }
         }
@@ -874,7 +910,7 @@ private fun FleetBenchPage(client: DenebGatewayClient, recipes: List<FleetRecipe
 private val benchCategoryLabels = listOf("tool" to "도구", "language" to "언어", "reasoning" to "논리", "stability" to "안정")
 
 @Composable
-private fun FleetBenchRow(rc: FleetRecipe, run: FleetEvalRun?, onRun: () -> Unit) {
+private fun FleetBenchRow(rc: FleetRecipe, run: FleetEvalRun?, launching: Boolean, onRun: () -> Unit) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -894,7 +930,9 @@ private fun FleetBenchRow(rc: FleetRecipe, run: FleetEvalRun?, onRun: () -> Unit
                     color = MaterialTheme.colorScheme.primary,
                 )
             }
-            OutlinedButton(onClick = onRun, enabled = rc.status.running) { Text("측정") }
+            OutlinedButton(onClick = onRun, enabled = rc.status.running && !launching) {
+                Text(if (launching) "측정 중…" else "측정")
+            }
         }
         run?.categories?.takeIf { it.isNotEmpty() }?.let { cats ->
             Text(
