@@ -159,16 +159,52 @@ func gmailSearch(ctx context.Context, client *gmail.Client, p GmailParams) (stri
 // --- read: structured email with metadata separation ---
 
 func gmailRead(ctx context.Context, client *gmail.Client, p GmailParams) (string, error) {
-	if p.MessageID == "" {
-		return "", fmt.Errorf("message_id는 read 액션에 필수입니다")
+	msgID := strings.TrimSpace(p.MessageID)
+	query := strings.TrimSpace(p.Query)
+
+	// Read by query when no ID is given. Opaque 16-hex message IDs are unreliable
+	// for the model to copy — in prod the autonomous mail-analysis loop kept
+	// constructing/mis-typing IDs and hitting 404 "not found" / 400 "Invalid id".
+	// Resolving the top search match lets it read a mail by description instead.
+	if msgID == "" {
+		if query == "" {
+			return "", fmt.Errorf("message_id 또는 query는 read 액션에 필수입니다 (message_id는 gmail search 결과의 'ID:'를 정확히 복사하거나, query로 설명해서 읽으세요)")
+		}
+		id, err := resolveTopMessageID(ctx, client, query)
+		if err != nil {
+			return "", err
+		}
+		msgID = id
 	}
 
-	msg, err := client.GetMessage(ctx, p.MessageID)
+	msg, err := client.GetMessage(ctx, msgID)
 	if err != nil {
-		return "", err
+		// The given ID didn't resolve (a mis-copied or invented ID). Fall back to
+		// the query's top match rather than failing the call outright.
+		if query != "" {
+			if id, rerr := resolveTopMessageID(ctx, client, query); rerr == nil {
+				if m2, e2 := client.GetMessage(ctx, id); e2 == nil {
+					return gmail.FormatMessage(m2), nil
+				}
+			}
+		}
+		return "", fmt.Errorf("%w — message_id는 추측하지 말고 gmail search 결과의 'ID:'를 정확히 복사하거나 query로 읽으세요", err)
 	}
 
 	return gmail.FormatMessage(msg), nil
+}
+
+// resolveTopMessageID returns the ID of the top search match for query, so read
+// can resolve a mail by description when an exact message ID isn't available.
+func resolveTopMessageID(ctx context.Context, client *gmail.Client, query string) (string, error) {
+	msgs, err := client.Search(ctx, query, 1)
+	if err != nil {
+		return "", err
+	}
+	if len(msgs) == 0 {
+		return "", fmt.Errorf("query에 해당하는 메일을 찾지 못했습니다: %q", query)
+	}
+	return msgs[0].ID, nil
 }
 
 // --- thread: full conversation thread for timeline reconstruction ---
