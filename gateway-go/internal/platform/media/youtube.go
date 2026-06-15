@@ -100,7 +100,7 @@ func ExtractYouTubeTranscript(ctx context.Context, videoURL string) (*YouTubeRes
 		// audio with the local ASR service when one is wired. This is what makes
 		// caption-less videos (and the intermittent 429 caption block) analyzable
 		// without a multimodal model.
-		if t, asrLang := transcriptViaASR(ctx, ytdlpPath, videoURL, tmpDir); t != "" {
+		if t, asrLang := transcriptViaASR(ctx, ytdlpPath, videoURL, tmpDir, 0, 0, meta.Duration); t != "" {
 			result.Transcript = t
 			result.Language = asrLang
 			return result, nil
@@ -132,16 +132,49 @@ func asrAudioCapSec() int {
 	return 600
 }
 
-// transcriptViaASR downloads the (capped) audio and runs it through the wired
-// AudioTranscriber. Returns ("", "") when ASR is unavailable or fails — callers
-// then degrade to a metadata-only result. The language label notes the cap so
-// the model knows the transcript may be partial.
-func transcriptViaASR(ctx context.Context, ytdlpPath, videoURL, tmpDir string) (text, lang string) {
+// ASR cost model used to keep the audio→ASR fallback inside the caller's deadline.
+const (
+	asrRealtimeFactor = 0.7 // VibeVoice transcription time ≈ audioSeconds * this
+	asrMinViableSec   = 20  // not worth transcribing a clip shorter than this
+)
+
+// asrOverheadBudget is download + request headroom subtracted from the remaining
+// deadline before deriving how much audio can be transcribed in time.
+const asrOverheadBudget = 20 * time.Second
+
+// transcriptViaASR downloads the requested audio span and runs it through the wired
+// AudioTranscriber. The span is an explicit [startSec,endSec] window (watch) or, when
+// endSec<=startSec, a from-startSec prefix capped at DENEB_YT_ASR_CAP_SEC. The span is
+// further shrunk to fit the caller's context deadline (the web fetch path is bounded to
+// 90s), and ASR is skipped entirely when too little time remains — so this never blocks
+// past the caller's budget only to return nothing. videoDurSec (0 = unknown) lets it
+// mark the transcript partial when the covered span is less than the whole video, so
+// downstream summaries don't imply full coverage. Returns ("","") on any failure.
+func transcriptViaASR(ctx context.Context, ytdlpPath, videoURL, tmpDir string, startSec, endSec, videoDurSec int) (text, lang string) {
 	if AudioTranscriber == nil {
 		return "", ""
 	}
-	capSec := asrAudioCapSec()
-	audioPath, err := DownloadYouTubeAudio(ctx, ytdlpPath, videoURL, tmpDir, capSec)
+
+	// Requested span length.
+	reqLen := asrAudioCapSec()
+	if endSec > startSec {
+		reqLen = endSec - startSec
+	}
+	segLen := reqLen
+
+	// Deadline-aware shrink: only transcribe what can finish before ctx expires.
+	if dl, ok := ctx.Deadline(); ok {
+		usable := time.Until(dl) - asrOverheadBudget
+		maxSeg := int(usable.Seconds() / asrRealtimeFactor)
+		if maxSeg < asrMinViableSec {
+			return "", "" // not enough remaining time for a useful transcription
+		}
+		if maxSeg < segLen {
+			segLen = maxSeg
+		}
+	}
+
+	audioPath, err := DownloadYouTubeAudio(ctx, ytdlpPath, videoURL, tmpDir, startSec, startSec+segLen)
 	if err != nil || audioPath == "" {
 		return "", ""
 	}
@@ -149,15 +182,24 @@ func transcriptViaASR(ctx context.Context, ytdlpPath, videoURL, tmpDir string) (
 	if err != nil || strings.TrimSpace(t) == "" {
 		return "", ""
 	}
-	return t, fmt.Sprintf("asr (≤%dm)", capSec/60)
+
+	// Mark partiality (covered span < whole video) so summaries are honest.
+	covEnd := startSec + segLen
+	partial := startSec > 0 || (videoDurSec > 0 && covEnd < videoDurSec)
+	if partial {
+		note := fmt.Sprintf("[참고: 아래 전사는 영상 전체가 아니라 %s–%s 구간만 다룹니다. 요약·결론이 영상 전체를 대표하지 않을 수 있습니다.]\n\n",
+			formatDuration(startSec), formatDuration(covEnd))
+		return note + t, fmt.Sprintf("asr (%s–%s)", formatDuration(startSec), formatDuration(covEnd))
+	}
+	return t, "asr"
 }
 
-// DownloadYouTubeAudio downloads the audio track (capped to the first maxSec
-// seconds when >0) and re-encodes it to 16 kHz mono WAV in tmpDir, returning the
-// path. WAV is used because the ASR sidecar decodes it natively — a trimmed
-// m4a/aac decoded to an empty waveform and crashed the server (HTTP 500).
+// DownloadYouTubeAudio downloads the [startSec,endSec] audio span (endSec<=startSec
+// means from startSec to end-of-video) and re-encodes it to 16 kHz mono WAV in tmpDir,
+// returning the path. WAV is used because the ASR sidecar decodes it natively — a
+// trimmed m4a/aac decoded to an empty waveform and crashed the server (HTTP 500).
 // Requires ffmpeg (extract-audio + section trim).
-func DownloadYouTubeAudio(ctx context.Context, ytdlpPath, videoURL, tmpDir string, maxSec int) (string, error) {
+func DownloadYouTubeAudio(ctx context.Context, ytdlpPath, videoURL, tmpDir string, startSec, endSec int) (string, error) {
 	cmdCtx, cancel := context.WithTimeout(ctx, 120*time.Second)
 	defer cancel()
 
@@ -170,8 +212,10 @@ func DownloadYouTubeAudio(ctx context.Context, ytdlpPath, videoURL, tmpDir strin
 		"-o", outTemplate,
 	}
 	args = append(args, ytPlayerClientArgs()...)
-	if maxSec > 0 {
-		args = append(args, "--download-sections", fmt.Sprintf("*0-%d", maxSec), "--force-keyframes-at-cuts")
+	if endSec > startSec {
+		args = append(args, "--download-sections", fmt.Sprintf("*%d-%d", startSec, endSec), "--force-keyframes-at-cuts")
+	} else if startSec > 0 {
+		args = append(args, "--download-sections", fmt.Sprintf("*%d-inf", startSec), "--force-keyframes-at-cuts")
 	}
 	args = append(args, videoURL)
 

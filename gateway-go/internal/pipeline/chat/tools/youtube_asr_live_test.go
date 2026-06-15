@@ -38,7 +38,7 @@ func TestYouTubeASR_Live(t *testing.T) {
 	defer cancel()
 
 	tmp := t.TempDir()
-	audioPath, err := media.DownloadYouTubeAudio(ctx, ytdlp, url, tmp, 60)
+	audioPath, err := media.DownloadYouTubeAudio(ctx, ytdlp, url, tmp, 0, 60)
 	if err != nil {
 		t.Fatalf("audio download failed: %v", err)
 	}

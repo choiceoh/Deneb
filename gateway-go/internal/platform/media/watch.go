@@ -121,7 +121,9 @@ func watchYouTube(ctx context.Context, url string, opts WatchOptions) (*WatchRes
 	if transcript, lang, subErr := downloadSubtitles(ctx, ytdlpPath, url, tmpDir); subErr == nil {
 		result.Transcript = transcript
 		result.Language = lang
-	} else if t, asrLang := transcriptViaASR(ctx, ytdlpPath, url, tmpDir); t != "" {
+	} else if t, asrLang := transcriptViaASR(ctx, ytdlpPath, url, tmpDir, int(opts.StartSec), int(opts.EndSec), meta.Duration); t != "" {
+		// Cover the same window the frames are sampled from, so a text-only
+		// fallback analysis describes the requested segment, not the intro.
 		result.Transcript = t
 		result.Language = asrLang
 	}

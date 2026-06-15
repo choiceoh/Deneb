@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestYtPlayerClientArgs(t *testing.T) {
@@ -43,8 +44,31 @@ func TestTranscriptViaASR_NoTranscriberIsNoop(t *testing.T) {
 	AudioTranscriber = nil
 	defer func() { AudioTranscriber = prev }()
 
-	text, lang := transcriptViaASR(context.Background(), "yt-dlp", "https://youtu.be/x", t.TempDir())
+	text, lang := transcriptViaASR(context.Background(), "yt-dlp", "https://youtu.be/x", t.TempDir(), 0, 0, 0)
 	if text != "" || lang != "" {
 		t.Errorf("expected empty no-op, got text=%q lang=%q", text, lang)
+	}
+}
+
+func TestTranscriptViaASR_SkipsWhenDeadlineTooClose(t *testing.T) {
+	// The web fetch path bounds ExtractYouTubeTranscript to a tight deadline. When
+	// too little time remains, ASR must skip up front — never download/transcribe
+	// only to blow the caller's budget and return nothing.
+	called := false
+	prev := AudioTranscriber
+	AudioTranscriber = func(_ context.Context, _ string) (string, error) {
+		called = true
+		return "should not be called", nil
+	}
+	defer func() { AudioTranscriber = prev }()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+	text, lang := transcriptViaASR(ctx, "yt-dlp", "https://youtu.be/x", t.TempDir(), 0, 0, 600)
+	if text != "" || lang != "" {
+		t.Errorf("expected skip, got text=%q lang=%q", text, lang)
+	}
+	if called {
+		t.Error("AudioTranscriber must not run when the deadline is too close")
 	}
 }
