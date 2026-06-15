@@ -44,6 +44,7 @@
 | `logging.md` | slog 레벨 가이드 (사용자 무응답 Error 원칙) | `gateway-go/**/*.go` |
 | `prompt-cache.md` | 프롬프트 캐시 불가침 원칙, 3계층 구조, cache-aware 슬래시 | `gateway-go/internal/pipeline/chat/prompt/**`, `gateway-go/internal/pipeline/chat/slash_commands.go` |
 | `sidecar-models.md` | GPU 부가 모델 운영 현황 (PaddleOCR-VL OCR·추출·임베딩) | `gateway-go/internal/pipeline/chat/tools/paddleocr.go`, `gateway-go/internal/ai/modelrole/**`, `gateway-go/internal/pipeline/pilot/**` |
+| `model-roles.md` | 역할(main/tiny/lightweight/analysis/…)별 임무 배치 단일 진실원 (analysis=클라우드 드리프트 주의) | `gateway-go/internal/ai/modelrole/**`, `gateway-go/internal/pipeline/pilot/**`, `gateway-go/internal/runtime/server/server_chat_config.go` |
 | `native-design-system.md` | 네이티브 클라 디자인 경계 (컨트롤=Material, 외형=Deneb 타이포) | `client-android/app/composeApp/src/**/*.kt` |
 | `native-live-app.md` | 서버에서 실제 네이티브 앱 라이브 검증 (Xvfb+matchbox+Compose Desktop, 프로덕션) | `client-android/**`, `scripts/dev/native-app.sh` |
 
