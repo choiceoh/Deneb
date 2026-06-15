@@ -63,22 +63,30 @@ internal fun IntegrationsTab(client: DenebGatewayClient) {
         error = null
         val ok = client.dropboxComplete(authCode.trim())
         busy = false
-        if (ok) {
+        // Re-read the host as the source of truth. An authorization code is
+        // one-time: if the deep link delivers it twice, the 1st exchange links
+        // the account and the 2nd fails (code already used / verifier cleared).
+        // Don't surface that false error when we're actually connected.
+        reload()
+        if (ok || status?.connected == true) {
             code = ""
             appKey = ""
             authOpened = false
-            reload()
         } else {
             error = "인증 코드 교환에 실패했습니다. 다시 시도해 주세요."
         }
     }
 
     // Auto-capture: the Android deep-link handler delivers the code here after the
-    // user approves in the browser. Consume it, then exchange for a token.
+    // user approves in the browser. Consume it, then exchange for a token. Guard
+    // against a duplicate delivery of the same one-time code re-running exchange.
+    var lastExchanged by remember { mutableStateOf<String?>(null) }
     val pendingCode by DropboxAuthBridge.code.collectAsState()
     LaunchedEffect(pendingCode) {
         val c = pendingCode ?: return@LaunchedEffect
         DropboxAuthBridge.code.value = null
+        if (c == lastExchanged) return@LaunchedEffect
+        lastExchanged = c
         exchange(c)
     }
 

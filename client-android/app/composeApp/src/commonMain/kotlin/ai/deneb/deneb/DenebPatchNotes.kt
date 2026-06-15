@@ -21,6 +21,11 @@ data class DenebPatchNote(
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
         highlights = listOf(
+            "Dropbox 연동 시 실제로는 연결됐는데 '인증 코드 교환에 실패했습니다'가 뜨던 문제 수정 — 승인 코드가 두 번 처리되며 생기던 거짓 오류를 제거",
+        ),
+    ),
+    DenebPatchNote(
+        highlights = listOf(
             "챗봇 모드에서는 대화 글자 크기와 줄간격을 키워 더 편하게 읽을 수 있습니다 — 업무 모드는 기존 크기 그대로",
         ),
     ),
