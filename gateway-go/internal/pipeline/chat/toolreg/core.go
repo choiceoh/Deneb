@@ -99,10 +99,9 @@ func RegisterPolarisTools(registry toolctx.ToolRegistrar, store *polaris.Store, 
 	})
 }
 
-// RegisterKnowledgeTool registers the unified knowledge tool that federates
-// wiki (curated, writable) and hindsight (auto-retained cross-session)
-// behind one agent surface. Called separately because the knowledge router
-// needs both the wiki Store and the hindsight Client at construction time.
+// RegisterKnowledgeTool registers the knowledge tool over the wiki knowledge
+// base behind one agent surface. Called separately because the knowledge
+// router needs the wiki Store at construction time.
 //
 // Pass-through behavior: if router is nil (no backends configured) the tool
 // is not registered so the agent does not see a dead surface.
@@ -112,11 +111,10 @@ func RegisterKnowledgeTool(registry toolctx.ToolRegistrar, router *knowledge.Rou
 	}
 	registry.RegisterTool(toolctx.ToolDef{
 		Name: "knowledge",
-		Description: "통합 지식·기억 도구. wiki(큐레이션 페이지)와 hindsight(자동 누적 cross-session 메모리)를 한 surface로. " +
-			"폰 안 들고 어디서 검색할지 결정할 부담 없이 항상 federated. " +
-			"op=recall(질의→두 백엔드 병렬 검색, ref와 함께 머지) → " +
+		Description: "지식·기억 도구. 위키 지식베이스를 의미+키워드로 검색·조회·기록. " +
+			"op=recall(질의→의미 기반 검색, ref와 함께 머지) → " +
 			"op=read(ref로 단건 fetch — `w:인물/박부장` 같이 prefix로 layer 자동 라우팅) → " +
-			"op=record(wiki에 큐레이션 페이지 작성·갱신. hindsight는 자동이라 명시 record 없음). " +
+			"op=record(wiki에 큐레이션 페이지 작성·갱신). " +
 			"polaris(현재 세션 회상)·graphify(개념 그래프)는 별개 도구로 분리됨 — paradigm이 다름.",
 		InputSchema: knowledgeToolSchema(),
 		Fn:          tools.ToolKnowledge(router),

@@ -70,15 +70,14 @@ func TestPromptAudit(t *testing.T) {
 
 	tz, _ := prompt.LoadCachedTimezone()
 	spp := prompt.SystemPromptParams{
-		WorkspaceDir:     ws,
-		ToolDefs:         toPromptToolDefs(reg.FilteredDefinitions(nil)),
-		DeferredTools:    deferredInfos,
-		UserTimezone:     tz,
-		ContextFiles:     prompt.LoadContextFiles(ws),
-		RuntimeInfo:      prompt.BuildDefaultRuntimeInfo("deepseek-v4-flash", "vllm/deepseek-v4-flash"),
-		Channel:          "client",
-		SkillsPrompt:     loadCachedSkillsPrompt(ws, availableToolNames(reg)),
-		HindsightEnabled: true,
+		WorkspaceDir:  ws,
+		ToolDefs:      toPromptToolDefs(reg.FilteredDefinitions(nil)),
+		DeferredTools: deferredInfos,
+		UserTimezone:  tz,
+		ContextFiles:  prompt.LoadContextFiles(ws),
+		RuntimeInfo:   prompt.BuildDefaultRuntimeInfo("deepseek-v4-flash", "vllm/deepseek-v4-flash"),
+		Channel:       "client",
+		SkillsPrompt:  loadCachedSkillsPrompt(ws, availableToolNames(reg)),
 	}
 	blocks := prompt.BuildSystemPromptBlocks(spp)
 

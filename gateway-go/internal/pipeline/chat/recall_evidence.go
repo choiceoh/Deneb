@@ -346,11 +346,6 @@ func recallConfidence(ev recallEvidence) string {
 			return "medium"
 		}
 		return "low"
-	case "hindsight":
-		if ev.Score >= 0.85 {
-			return "high"
-		}
-		return "medium"
 	default:
 		if ev.Score >= 0.90 {
 			return "medium"

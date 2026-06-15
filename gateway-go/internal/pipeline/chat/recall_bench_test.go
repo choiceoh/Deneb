@@ -189,7 +189,7 @@ func TestRecallQuality(t *testing.T) {
 
 // TestRecallSourceAttribution reports which backend produced the evidence per
 // case — the data the backend-consolidation decision needs. Informational
-// (no floor): the corpus has no embedder/polaris/hindsight, so it attributes
+// (no floor): the corpus has no embedder/polaris, so it attributes
 // the lexical sources; production attribution comes from the per-turn
 // "sources" field in the recall preflight Info logs.
 func TestRecallSourceAttribution(t *testing.T) {
@@ -201,7 +201,7 @@ func TestRecallSourceAttribution(t *testing.T) {
 			runDeps{wikiStore: store},
 			nil,
 		)
-		for _, src := range []string{"wiki", "diary", "polaris", "transcript", "hindsight"} {
+		for _, src := range []string{"wiki", "diary", "polaris", "transcript"} {
 			n := strings.Count(out, "source="+src+" ")
 			if n > 0 {
 				agg[src] += n
@@ -210,7 +210,7 @@ func TestRecallSourceAttribution(t *testing.T) {
 		}
 	}
 	parts := make([]string, 0, len(agg))
-	for _, src := range []string{"wiki", "diary", "polaris", "transcript", "hindsight"} {
+	for _, src := range []string{"wiki", "diary", "polaris", "transcript"} {
 		if n := agg[src]; n > 0 {
 			parts = append(parts, fmt.Sprintf("%s=%d", src, n))
 		}

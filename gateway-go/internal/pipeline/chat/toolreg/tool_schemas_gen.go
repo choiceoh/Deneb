@@ -992,7 +992,7 @@ func knowledgeToolSchema() map[string]any {
 			},
 			"op": map[string]any{
 				"type":        "string",
-				"description": "recall: wiki + hindsight 병렬 검색 (federated). read: ref로 단건 fetch — `w:인물/박부장` 같이 prefix가 layer 라우팅. record: wiki에 큐레이션 페이지 작성·갱신 (hindsight는 자동이라 명시 record 없음).",
+				"description": "recall: 위키 지식베이스 의미+키워드 검색. read: ref로 단건 fetch — `w:인물/박부장` 같이 prefix가 layer 라우팅. record: wiki에 큐레이션 페이지 작성·갱신.",
 				"enum":        []string{"recall", "read", "record"},
 			},
 			"page": map[string]any{

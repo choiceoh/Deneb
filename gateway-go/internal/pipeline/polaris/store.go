@@ -329,8 +329,8 @@ func (s *Store) SearchMessages(sessionKey, query string, maxResults int) ([]Sear
 // hermes-agent's cross-session session_search: today recall only sees the
 // current session, leaving anything said in a different session invisible to the
 // polaris path. Sessions that were never loaded (paged out on disk) are
-// intentionally skipped to keep recall within its latency budget; wiki/diary/
-// hindsight remain the durable cross-session memory for older material.
+// intentionally skipped to keep recall within its latency budget; wiki/diary
+// remain the durable cross-session memory for older material.
 func (s *Store) SearchResidentSessions(excludeKey, query string, maxResults int) ([]SearchHit, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

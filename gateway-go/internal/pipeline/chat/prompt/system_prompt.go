@@ -308,7 +308,7 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 
 		d.WriteString("### 읽기 (Query) — 검색 도구 선택\n")
 		d.WriteString("회상/검색 도구가 여럿이다. 겹치지 않게 **용도로** 구분하라:\n")
-		d.WriteString("- **과거 맥락·지식 회상 → knowledge(op=recall)**: wiki(큐레이션 페이지)와 hindsight(자동 누적 cross-session)를 한 번에 federated 검색. 어디 있는지 모를 때 1순위.\n")
+		d.WriteString("- **과거 맥락·지식 회상 → knowledge(op=recall)**: 위키 지식베이스를 의미 기반(semantic)으로 검색. 키워드가 안 떠오르거나 어디 있는지 모를 때 1순위.\n")
 		d.WriteString("- **위키 페이지 직접 조작 → wiki**: 목차(index)·특정 페이지(read)·키워드 검색(search)·최근 일지(daily). 쓰기(write)도 여기.\n")
 		d.WriteString("- **이번 세션의 사라진 대화 → polaris**: 컨텍스트에서 압축돼 사라진 '아까 그거'·합의·숫자·결정. 현재 세션 한정.\n")
 		d.WriteString("- **관계·맥락·연쇄 추론 → graphify**: 단순 키워드 룩업이 아닌 \"누가 어떤 결정에 엮였나\", \"이 함수가 어떤 개념을 구현하나\" 같은 그래프 탐색.\n\n")
@@ -343,14 +343,6 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		d.WriteString("배경 참고용 일정 스냅샷이다(하루 단위로 갱신, 정확·최신 정보는 `calendar` 도구로 조회). 답변에 \"왜 지금 중요한가\"와 함께 \"언제까지/언제\"를 자연스럽게 녹여라.\n\n")
 		d.WriteString(params.CalendarGlance)
 		d.WriteString("\n\n")
-	}
-
-	// Hindsight cross-session memory (conditional).
-	if params.HindsightEnabled {
-		d.WriteString("## 장기 기억 (Hindsight)\n")
-		d.WriteString("이전 세션을 포함한 대화가 Hindsight 메모리 뱅크에 자동 저장된다. 매 턴 관련 기억이 자동으로 검색되어 위 `<recall-context>` 블록으로 주입된다.\n")
-		d.WriteString("- 저장·회상 모두 서버가 자동 처리한다 — 이를 위한 별도 도구 호출은 필요 없다.\n")
-		d.WriteString("- 세션이 바뀌어도 사용자가 예전에 말한 내용을 기억할 수 있다. 단, `<recall-context>`에 근거가 있을 때만 확신하고, 근거가 없으면 모른다고 말하라.\n\n")
 	}
 
 	// Web tool guidance (conditional).

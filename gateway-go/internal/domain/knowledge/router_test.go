@@ -6,6 +6,10 @@ import (
 	"testing"
 )
 
+// layerTest is a synthetic second layer for exercising the router's
+// multi-backend merge/routing logic (wiki is the only production backend).
+const layerTest Layer = "t"
+
 // mockAdapter is a minimal Adapter for testing router behavior.
 type mockAdapter struct {
 	layer   Layer
@@ -43,7 +47,7 @@ func TestParseRef(t *testing.T) {
 		isErr bool
 	}{
 		{"w:인물/박부장", Ref{Layer: LayerWiki, ID: "인물/박부장"}, false},
-		{"h:mem-abc", Ref{Layer: LayerHindsight, ID: "mem-abc"}, false},
+		{"h:mem-abc", Ref{}, true}, // retired layer → unknown
 		{"  w:거래/ABC상사  ", Ref{Layer: LayerWiki, ID: "거래/ABC상사"}, false},
 		{"", Ref{}, true},
 		{":no-layer", Ref{}, true},
@@ -86,10 +90,10 @@ func TestRouter_Recall_Merges(t *testing.T) {
 		},
 	}
 	hsA := &mockAdapter{
-		layer: LayerHindsight,
+		layer: layerTest,
 		results: []Result{
-			{Ref: Ref{Layer: LayerHindsight, ID: "mem-1"}, Snippet: "h hit 1", Score: 0.8},
-			{Ref: Ref{Layer: LayerHindsight, ID: "mem-2"}, Snippet: "h hit 2", Score: 0.95},
+			{Ref: Ref{Layer: layerTest, ID: "mem-1"}, Snippet: "h hit 1", Score: 0.8},
+			{Ref: Ref{Layer: layerTest, ID: "mem-2"}, Snippet: "h hit 2", Score: 0.95},
 		},
 	}
 	r := New(wikiA, hsA)
@@ -112,7 +116,7 @@ func TestRouter_Recall_OneFails(t *testing.T) {
 		},
 	}
 	bad := &mockAdapter{
-		layer:  LayerHindsight,
+		layer:  layerTest,
 		recErr: errors.New("backend down"),
 	}
 	r := New(good, bad)
@@ -125,7 +129,7 @@ func TestRouter_Recall_OneFails(t *testing.T) {
 func TestRouter_Read_Routes(t *testing.T) {
 	wd := &Document{Ref: Ref{Layer: LayerWiki, ID: "p"}, Content: "wiki body"}
 	wikiA := &mockAdapter{layer: LayerWiki, doc: wd}
-	hsA := &mockAdapter{layer: LayerHindsight, readErr: errors.New("not supported")}
+	hsA := &mockAdapter{layer: layerTest, readErr: errors.New("not supported")}
 	r := New(wikiA, hsA)
 
 	got, err := r.Read(context.Background(), Ref{Layer: LayerWiki, ID: "p"})
@@ -133,14 +137,14 @@ func TestRouter_Read_Routes(t *testing.T) {
 		t.Errorf("wiki read = %+v, %v", got, err)
 	}
 
-	_, err = r.Read(context.Background(), Ref{Layer: LayerHindsight, ID: "x"})
+	_, err = r.Read(context.Background(), Ref{Layer: layerTest, ID: "x"})
 	if err == nil {
 		t.Error("hindsight read should error (mock returns error)")
 	}
 }
 
 func TestRouter_Record_RequiresWriter(t *testing.T) {
-	r := New(&mockAdapter{layer: LayerHindsight}) // no writer
+	r := New(&mockAdapter{layer: layerTest}) // no writer
 	_, err := r.Record(context.Background(), RecordOptions{Page: "x", Body: "y"})
 	if err == nil {
 		t.Error("expected error when no writable adapter is registered")
@@ -152,7 +156,7 @@ func TestRouter_Record_DispatchesToWriter(t *testing.T) {
 		mockAdapter: mockAdapter{layer: LayerWiki},
 		out:         Ref{Layer: LayerWiki, ID: "인물/박부장"},
 	}
-	r := New(w, &mockAdapter{layer: LayerHindsight})
+	r := New(w, &mockAdapter{layer: layerTest})
 	got, err := r.Record(context.Background(), RecordOptions{Page: "인물/박부장", Body: "..."})
 	if err != nil {
 		t.Fatalf("Record err: %v", err)

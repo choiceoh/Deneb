@@ -44,8 +44,8 @@ func (c Config) Enabled() bool {
 //	DENEB_FCM_CREDENTIALS_FILE  path to the service-account JSON (enables sending)
 //	DENEB_FCM_DISABLE           "1"/"true"/"yes"/"on" to force the integration off
 //
-// Mirrors the dormant-by-env pattern used by the Hindsight integration
-// (DENEB_HINDSIGHT_URL): unset means the whole send path stays asleep.
+// Dormant-by-env: with no credentials file set, the whole send path stays
+// asleep (like other optional integrations gated on a single env var).
 func ConfigFromEnv() Config {
 	return Config{
 		CredentialsFile: strings.TrimSpace(os.Getenv("DENEB_FCM_CREDENTIALS_FILE")),

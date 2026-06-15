@@ -42,6 +42,29 @@ func TestRecallSearchQueriesNormalizesKoreanEndings(t *testing.T) {
 	}
 }
 
+func TestRecallSearchQueriesDropsGenericVerbs(t *testing.T) {
+	// Generic request/action verbs must not become standalone query terms —
+	// they match unrelated entries by a common word (puppet measurement: "정리"
+	// from "정리해줘" surfaced "디스크 정리"/"키 정리" for a "탑솔라 조직" question).
+	queries := recallSearchQueries("탑솔라 조직 구성 정리해줘")
+	joined := strings.Join(queries, " ")
+	if !strings.Contains(joined, "탑솔라") || !strings.Contains(joined, "조직") {
+		t.Fatalf("expected subject terms in queries, got %v", queries)
+	}
+	if strings.Contains(joined, "정리") {
+		t.Fatalf("generic verb 정리 must be dropped, got %v", queries)
+	}
+	// The 줘-imperative form normalizes to the stem before the stopword check.
+	q2 := recallSearchQueries("현대차 견적 알려줘")
+	j2 := strings.Join(q2, " ")
+	if !strings.Contains(j2, "현대차") || !strings.Contains(j2, "견적") {
+		t.Fatalf("expected subject terms, got %v", q2)
+	}
+	if strings.Contains(j2, "알려") {
+		t.Fatalf("generic verb 알려 must be dropped, got %v", q2)
+	}
+}
+
 func TestBuildRecallPreflightInjectsWikiEvidence(t *testing.T) {
 	dir := t.TempDir()
 	store, err := wiki.NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))

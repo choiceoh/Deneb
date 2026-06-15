@@ -18,9 +18,9 @@
 //     including turns about unrelated topics.
 //
 //   - An empty fingerprint means the current turn has no recall cue, so the
-//     per-fingerprint cache is bypassed entirely. Hindsight auto-recall may
-//     still run for such turns, but uncached: every no-cue turn issues a
-//     fresh memory-bank query rather than reusing a stale snapshot.
+//     per-fingerprint cache is bypassed entirely. The preflight still runs for
+//     such turns, but uncached: every no-cue turn issues a fresh search rather
+//     than reusing a stale snapshot.
 //
 // First-write-wins is preserved per (session, fingerprint) so concurrent
 // turns racing to fill the same slot cannot clobber an earlier store.
@@ -118,7 +118,7 @@ func recallMemoryHasEvidence(s string) bool {
 // recall intent based on the message's cue + signal terms.
 //
 //   - Empty string when the message has no recall cue — caller skips the
-//     cue-gated cache for that turn (Hindsight auto-recall may still run).
+//     cue-gated cache for that turn (the preflight still runs, uncached).
 //   - "cue-only" when there is a cue phrase but no specific signal terms
 //     (e.g., "그거 뭐였지?"). All such turns share one slot because the
 //     recall search falls back to the same recent-diary entries.

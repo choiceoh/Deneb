@@ -138,7 +138,7 @@ func handleCmd(args []string) error {
 ### 현재 적용
 
 - **RecallMemory** — `gateway-go/internal/pipeline/chat/recall_cache.go`
-  - (session, cue-fingerprint) 별 cache; hindsight auto-recall 은 매 턴 fresh (no-cue 비캐시)
+  - (session, cue-fingerprint) 별 cache; recall preflight 는 매 턴 실행 (no-cue 비캐시)
   - `/reset` 핸들러 (`slash_dispatch.go`) 에서 clear
   - 가치: cache 가 아니라 **latency 절감** — wiki/diary/transcript/polaris 검색 (각 1.5s timeout) 을 같은 cue 반복 시 재사용
   - ★ **주입 위치는 system 이 아니라 마지막 user 메시지 wire-only suffix** (§1.5; `run_tail_inject.go`). per-turn 변동 콘텐츠를 system 에 두면 vLLM APC 에서 히스토리 전체가 죽는다.

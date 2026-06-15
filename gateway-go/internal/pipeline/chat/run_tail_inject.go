@@ -8,8 +8,8 @@
 // per-turn bytes in the system prompt therefore invalidate the KV cache of
 // the tool schemas AND the entire conversation history on every turn.
 // Measured on DSV4-Flash (2026-06-13): 80.7% token hit rate with a 20-40s
-// prefill tail on interactive turns, traced to the recall block (hindsight
-// auto-recall runs every turn) being appended to the system prompt. At the
+// prefill tail on interactive turns, traced to the recall block (the recall
+// preflight runs every turn) being appended to the system prompt. At the
 // message tail the same bytes cost only themselves: the stable
 // system+tools+history prefix stays cached.
 //

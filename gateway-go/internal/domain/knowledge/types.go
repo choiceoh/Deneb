@@ -27,8 +27,7 @@ type Adapter interface {
 }
 
 // Writer extends Adapter for backends that accept agent-initiated writes.
-// Only the wiki adapter implements this — hindsight retains automatically
-// from completed turns via hindsight_recorder.
+// Only the wiki adapter implements this today.
 type Writer interface {
 	Adapter
 	Record(ctx context.Context, opts RecordOptions) (Ref, error)

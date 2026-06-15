@@ -90,16 +90,13 @@ func prepareContextAndPrompt(
 
 	// Recall preflight (parallel): inject focused memory before the LLM call.
 	//
-	// Two modes feed one <recall-context> block:
-	//   - Cue-gated sources (wiki/diary/transcript/polaris) run only when the
-	//     user message implies past context. Their result is cached per
-	//     (session, cue-fingerprint) so repeat questions on the same topic
-	//     reuse the ~6s of parallel search timeouts.
-	//   - Hindsight auto-recall runs every turn when configured (the Hermes
-	//     auto_recall model): the memory bank is queried with the current
-	//     message regardless of cue. No-cue turns are not cached — each
-	//     turn's message is a distinct query the "" fingerprint cannot
-	//     disambiguate. /reset clears every slot. See chat/recall_cache.go.
+	// The search runs every turn over wiki/diary/transcript/polaris (Hermes
+	// auto_recall) and returns "" silently when nothing matches, so non-cue
+	// turns add latency but no noise. Cue turns (the message implies past
+	// context) additionally cache the result per (session, cue-fingerprint) so
+	// repeat questions on the same topic reuse the ~6s of parallel search
+	// timeouts, surface the 🧠 phase, and get an explicit "no evidence" notice.
+	// /reset clears every slot. See chat/recall_cache.go.
 	prepWg.Add(1)
 	safego.GoWithSlog(logger, "prep-recall", func() {
 		defer prepWg.Done()
@@ -111,7 +108,7 @@ func prepareContextAndPrompt(
 		//
 		// chatbot (chat: session) also skips recall unconditionally — the clean
 		// general-assistant prompt withholds all work context, and recall hits
-		// (wiki/diary/polaris/hindsight) are tail-injected into the last user
+		// (wiki/diary/polaris) are tail-injected into the last user
 		// message, so without this gate a chat: turn could still receive private
 		// work memory even when the per-turn SkipRecall flag is unset (session
 		// key vs flag divergence). The session key is the authoritative signal.
@@ -121,7 +118,7 @@ func prepareContextAndPrompt(
 		fingerprint := recallCueFingerprint(params.Message)
 		hasCue := fingerprint != ""
 		// Hermes-style auto_recall: run the preflight every turn, not just cue turns.
-		// buildRecallPreflight searches wiki/diary/polaris/transcript/hindsight and returns
+		// buildRecallPreflight searches wiki/diary/polaris/transcript and returns
 		// "" silently when there's no evidence, so non-cue turns add latency but no noise.
 		if hasCue {
 			if cached, ok := cachedRecallMemory(params.SessionKey, fingerprint); ok {
@@ -292,7 +289,6 @@ func prepareContextAndPrompt(
 			ToolPreset:         sessionToolPreset,
 			CompactionFired:    compactionFired,
 			Chatbot:            chatbot,
-			HindsightEnabled:   deps.hindsightClient != nil && !chatbot,
 			CalendarGlance:     calendarGlance,
 			TopicKnowledge:     topicKnowledge,
 			TopicCacheKey:      topicCacheKey,
