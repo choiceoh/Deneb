@@ -700,10 +700,16 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 		// render the formal form image to post to the 업무 chat alongside the text.
 		var weeklyDataFn func(ctx context.Context) (string, error)
 		var weeklyFormFn func(ctx context.Context) error
+		var weeklyTextFn func(ctx context.Context) (string, error)
 		if s.wikiStore != nil {
 			wikiDir := s.wikiStore.Dir()
 			weeklyDataFn = func(ctx context.Context) (string, error) {
 				return tools.CollectWeeklyReportData(ctx, tools.WeeklyReportOpts{WikiDir: wikiDir}, time.Now())
+			}
+			// Deterministic exact-양식 text — the cron prefers this over the LLM turn
+			// so the report format is identical every run.
+			weeklyTextFn = func(_ context.Context) (string, error) {
+				return tools.RenderWeeklyReportText(tools.WeeklyReportOpts{WikiDir: wikiDir}, time.Now()), nil
 			}
 			weeklyFormFn = func(ctx context.Context) error {
 				img, ok := tools.BuildWeeklyReportImage(ctx, tools.WeeklyReportOpts{WikiDir: wikiDir}, time.Now())
@@ -718,6 +724,7 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 			chat:              s.chatHandler,
 			logger:            s.logger,
 			weeklyReportData:  weeklyDataFn,
+			weeklyReportText:  weeklyTextFn,
 			weeklyFormDeliver: weeklyFormFn,
 		})
 		if s.acpDeps != nil {

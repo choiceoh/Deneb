@@ -23,6 +23,10 @@ type cronChatAdapter struct {
 	// data inside a fixed form, instead of freestyling. nil when wiki is
 	// unwired; the command then falls through to a normal agent turn.
 	weeklyReportData func(ctx context.Context) (string, error)
+	// weeklyReportText composes the deterministic 주간업무보고 text straight from wiki
+	// data (no LLM), so the cron report's 양식 is identical every run. Preferred over
+	// the LLM-template path below, which drifted run-to-run. nil falls back to the LLM.
+	weeklyReportText func(ctx context.Context) (string, error)
 	// weeklyFormDeliver renders the formal 주간업무보고 form image and posts it to
 	// the native 업무 chat, so a "/weekly" cron delivers both the text report and
 	// the document form. Best-effort and nil-tolerant — a render failure just
@@ -109,6 +113,19 @@ func (a *cronChatAdapter) RunAgentTurn(ctx context.Context, params cron.AgentTur
 	if a.weeklyFormDeliver != nil && isWeeklyReportCommand(params.Command) {
 		if err := a.weeklyFormDeliver(ctx); err != nil && a.logger != nil {
 			a.logger.Error("weekly form image delivery failed", "error", err)
+		}
+	}
+	// Deterministic weekly text: compose the exact 양식 straight from wiki data with
+	// no LLM turn, so the report format never drifts between runs (the LLM-synthesis
+	// path produced a slightly different shape each week). Falls through to the agent
+	// turn only when the deterministic builder is unwired or yields nothing.
+	if isWeeklyReportCommand(params.Command) && a.weeklyReportText != nil {
+		txt, terr := a.weeklyReportText(ctx)
+		if terr == nil && strings.TrimSpace(txt) != "" {
+			return txt, nil
+		}
+		if a.logger != nil {
+			a.logger.Warn("deterministic weekly text unavailable; falling back to agent turn", "error", terr)
 		}
 	}
 	result, err := a.chat.SendSync(ctx, params.SessionKey, command, "", opts)

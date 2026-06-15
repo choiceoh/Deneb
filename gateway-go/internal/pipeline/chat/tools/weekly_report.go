@@ -503,9 +503,20 @@ func weeklyClip(s string, maxLen int) string {
 }
 
 // composeWeeklyText renders a plain-text fallback (delivered when PDF render fails).
+// RenderWeeklyReportText composes the deterministic 주간업무보고 text directly from
+// wiki data — the exact 양식 with no LLM in the loop, so the cron report's format is
+// byte-identical every run (the LLM-synthesis path drifted run-to-run). Same
+// composition BuildWeeklyReportPDF uses for its text fallback, exposed for the cron.
+func RenderWeeklyReportText(opts WeeklyReportOpts, now time.Time) string {
+	return composeWeeklyText(collectWeekly(opts, now))
+}
+
 func composeWeeklyText(env weeklyEnvelope) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "📋 주간업무보고 — %s\n실시 %s / 예정 %s\n", env.Office, env.WeekDone, env.WeekPlanned)
+	if len(env.Groups) == 0 {
+		b.WriteString("\n이번 주 보고할 프로젝트 활동이 없습니다.\n")
+	}
 	for _, g := range env.Groups {
 		fmt.Fprintf(&b, "\n▢ %s\n", g.Label)
 		for _, p := range g.Projects {
