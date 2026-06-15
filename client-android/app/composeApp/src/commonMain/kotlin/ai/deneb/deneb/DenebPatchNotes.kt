@@ -21,6 +21,11 @@ data class DenebPatchNote(
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
         highlights = listOf(
+            "위키·일기·스킬·인물·크론 화면의 본문도 채팅과 똑같이 풀 마크다운으로 렌더됩니다 — 표·각주·수식·접기(<details>)·HTML이 이제 그 화면들에서도 제대로 표시(글씨 크기 등 기존 모양은 그대로)",
+        ),
+    ),
+    DenebPatchNote(
+        highlights = listOf(
             "플릿의 HuggingFace 모델 검색이 좋아졌습니다 — 입력하면 바로 검색되고, 정렬(트렌딩·다운로드·좋아요·최신)·작업 종류·수정일을 함께 보여주며, 다운로드 전에 노드의 디스크 여유를 알려줍니다",
         ),
     ),

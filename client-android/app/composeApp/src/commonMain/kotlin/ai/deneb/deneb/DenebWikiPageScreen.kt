@@ -5,6 +5,7 @@ import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
+import ai.deneb.ui.markdown.MarkdownContent
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -218,7 +219,7 @@ fun DenebWikiPageScreen(
                     Text(it, style = DenebType.meta, color = denebHint())
                 }
             } else if (pg != null) {
-                DenebMarkdown(pg.body.ifBlank { "(빈 페이지)" })
+                MarkdownContent(pg.body.ifBlank { "(빈 페이지)" }, baseStyle = MaterialTheme.typography.bodyMedium)
             }
             Spacer(Modifier.height(24.dp))
         }

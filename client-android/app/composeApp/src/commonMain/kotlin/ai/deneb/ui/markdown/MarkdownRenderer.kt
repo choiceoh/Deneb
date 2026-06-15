@@ -75,10 +75,12 @@ fun MarkdownContent(
     onUiCallback: (event: String, data: Map<String, String>) -> Unit = { _, _ -> },
     frozen: FrozenSubmission? = null,
     textScale: Float = 1f,
+    baseStyle: TextStyle? = null,
 ) {
     CompositionLocalProvider(
         LocalContentColor provides MaterialTheme.colorScheme.onSurface,
         LocalChatTextScale provides textScale,
+        LocalMarkdownBaseStyle provides baseStyle,
     ) {
         Column(modifier) {
             for (block in document.blocks) {
@@ -96,13 +98,14 @@ fun MarkdownContent(
     onUiCallback: (event: String, data: Map<String, String>) -> Unit = { _, _ -> },
     frozen: FrozenSubmission? = null,
     textScale: Float = 1f,
+    baseStyle: TextStyle? = null,
 ) {
     val doc = remember(content) {
         runCatching { parseMarkdown(content) }.getOrElse {
             MarkdownDocument(persistentListOf(Paragraph(persistentListOf(ai.deneb.ui.markdown.Text(content)))))
         }
     }
-    MarkdownContent(doc, modifier, isInteractive, onUiCallback, frozen, textScale)
+    MarkdownContent(doc, modifier, isInteractive, onUiCallback, frozen, textScale, baseStyle)
 }
 
 /**
@@ -122,6 +125,12 @@ val LocalChatTextScale = compositionLocalOf { 1f }
 // The 챗봇 workspace's enlarged chat text scale (업무 stays 1f).
 const val ChatbotTextScale = 1.15f
 
+// Optional base style for body / list / table / quote text. Null = the chat body
+// style below. Non-chat surfaces (wiki, diary, skill, person, cron) provide their own
+// (e.g. MaterialTheme.typography.bodyMedium) so MarkdownContent matches their existing
+// typography while still rendering the full feature set (tables, footnotes, math, …).
+val LocalMarkdownBaseStyle = compositionLocalOf<TextStyle?> { null }
+
 // Scale a style's font size and line height by [scale] (no-op at 1f; leaves
 // unspecified dimensions untouched).
 internal fun TextStyle.scaledBy(scale: Float): TextStyle = if (scale == 1f) {
@@ -140,10 +149,12 @@ internal fun TextStyle.scaledBy(scale: Float): TextStyle = if (scale == 1f) {
 // typography roles; only paragraphs, list items, and table cells share this.
 // Scaled by [LocalChatTextScale] so the 챗봇 workspace reads larger.
 private val markdownBodyStyle: TextStyle
-    @Composable get() = MaterialTheme.typography.bodyLarge.copy(
-        fontSize = 14.sp,
-        lineHeight = 18.sp,
-    ).scaledBy(LocalChatTextScale.current)
+    @Composable get() = (
+        LocalMarkdownBaseStyle.current ?: MaterialTheme.typography.bodyLarge.copy(
+            fontSize = 14.sp,
+            lineHeight = 18.sp,
+        )
+        ).scaledBy(LocalChatTextScale.current)
 
 @Composable
 private fun BlockRenderer(
@@ -248,7 +259,7 @@ private fun DenebUiPendingBlock(
 
 @Composable
 private fun HeadingBlock(block: Heading) {
-    // Heading ladder rides the DenebType scale, matching DenebMarkdown.kt:
+    // Heading ladder rides the DenebType scale:
     // # = subject (22), ## = cardTitle (18), ###+ = rowTitleStrong (15). Deeper
     // levels collapse onto the emphasis rung on purpose — hierarchy comes from
     // register jumps, not a continuous ladder (see DenebType.kt law 1).

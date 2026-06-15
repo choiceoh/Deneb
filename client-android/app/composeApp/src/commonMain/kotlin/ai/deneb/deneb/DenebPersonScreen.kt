@@ -7,6 +7,7 @@ import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHint
 import ai.deneb.ui.denebInsight
 import ai.deneb.ui.denebInsightContainer
+import ai.deneb.ui.markdown.MarkdownContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
@@ -130,7 +131,7 @@ fun DenebPersonScreen(
                         Text("AI 분석", style = DenebType.rowTitleStrong, color = denebInsight())
                     }
                     Spacer(Modifier.height(8.dp))
-                    DenebMarkdown(c.wikiFacts)
+                    MarkdownContent(c.wikiFacts, baseStyle = MaterialTheme.typography.bodyMedium)
                 }
             }
 

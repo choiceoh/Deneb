@@ -6,6 +6,7 @@ import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
+import ai.deneb.ui.markdown.MarkdownContent
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -129,7 +130,7 @@ internal fun SkillDetailContent(detail: SkillDetailResponse, events: List<SkillL
     Spacer(Modifier.height(8.dp))
     val body = stripFrontmatter(detail.body)
     if (body.isNotBlank()) {
-        DenebMarkdown(body)
+        MarkdownContent(body, baseStyle = MaterialTheme.typography.bodyMedium)
         if (detail.bodyTruncated) {
             Spacer(Modifier.height(4.dp))
             Text("(문서가 길어 일부만 표시합니다)", style = MaterialTheme.typography.bodySmall, color = denebHint())
