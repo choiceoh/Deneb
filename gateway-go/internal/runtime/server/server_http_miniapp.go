@@ -122,9 +122,10 @@ func (s *Server) handleMiniappRPC(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Server", "deneb-gateway")
-	if err := json.NewEncoder(w).Encode(resp); err != nil {
-		s.logger.Error("miniapp rpc encode response", "method", frame.Method, "error", err)
-	}
+	// Negotiated gzip (server_http_gzip.go): compresses large list/detail JSON for
+	// clients that advertise gzip (Android OkHttp does, transparently). SSE handlers
+	// are separate and intentionally never compressed.
+	writeRPCJSON(w, r, resp, s.logger, frame.Method)
 }
 
 // handleMiniappGmailAttachment streams a Gmail attachment over a normal
