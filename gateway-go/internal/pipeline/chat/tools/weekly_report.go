@@ -245,10 +245,11 @@ func BuildWeeklyReportImage(ctx context.Context, opts WeeklyReportOpts, now time
 	return trimmed, true
 }
 
-// weeklyImageWindow is the Chromium screenshot canvas: 1600px wide (the form's
-// design width) and tall enough for a busy weekly report; the surrounding
-// whitespace is trimmed afterwards. Content past this height is cropped — well
-// above any realistic active-project count.
+// weeklyImageWindow is the Chromium screenshot canvas in CSS pixels: 1600 wide
+// (the form's design width) and tall enough for a busy weekly report; the
+// surrounding whitespace is trimmed afterwards. Content past this height is
+// cropped — well above any realistic active-project count. Rendered at 2x device
+// scale (see weeklyRenderImage), so the actual PNG is 3200px wide for crispness.
 const weeklyImageWindow = "1600,3000"
 
 func weeklyRenderImage(ctx context.Context, htmlPath, pngPath string) error {
@@ -268,7 +269,12 @@ func weeklyRenderImage(ctx context.Context, htmlPath, pngPath string) error {
 	defer cancel()
 	cmd := exec.CommandContext(rctx, bin,
 		"--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage", "--hide-scrollbars",
-		"--virtual-time-budget=4000", "--force-device-scale-factor=1",
+		// 2x device scale = retina-density output: --window-size is CSS px, so the
+		// 1600-wide form renders to a 3200px PNG. Text and hairlines are crisp when
+		// the native client downscales it into the chat bubble (capped ~520dp) on a
+		// high-DPI phone, where a 1x 1600px render looked soft. ~3-4x the bytes, fine
+		// for an inline base64 attachment.
+		"--virtual-time-budget=4000", "--force-device-scale-factor=2",
 		"--window-size="+weeklyImageWindow,
 		"--user-data-dir="+udd, "--crash-dumps-dir="+udd,
 		"--screenshot="+pngPath, "file://"+htmlPath,
