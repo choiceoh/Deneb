@@ -260,13 +260,12 @@ class DenebGatewayClient(
     internal val clientToken: String
         get() = appSettings.settings.getString(KEY_TOKEN, "")
 
-    // Bumped by [onCredentialsChanged] whenever the gateway URL/token changes. The
-    // primary fence is in [callRpc]: it captures this before the request and returns
-    // null if it advanced, so EVERY account-data fetch (mail, transcript, sessions,
-    // work-feed, calendar, memories, …) aborts on a mid-flight gateway switch. Each
-    // per-account StateFlow assignment additionally re-checks it to close the narrow
-    // window between callRpc returning and the assignment. @Volatile so an in-flight
-    // load resuming on a background/Ktor thread sees the UI-thread increment.
+    // In-process guard for the window AFTER [callRpc] returns a (still-valid) result
+    // but BEFORE the caller assigns it to a StateFlow: a state-mutating caller captures
+    // credEpoch at its start and re-checks it before the assignment, so a gateway switch
+    // landing in that window is honored. (The transport itself is fenced separately, by
+    // credential-value comparison inside callRpc.) Bumped by [onCredentialsChanged].
+    // @Volatile so a caller resuming on a background/Ktor thread sees the UI-thread bump.
     @Volatile
     internal var credEpoch: Int = 0
         private set
@@ -280,14 +279,33 @@ class DenebGatewayClient(
     fun onCredentialsChanged() {
         credEpoch++
         appSettings.clearCachedContent()
+        // Every gateway-backed StateFlow holds the OLD account's data; wipe them all so
+        // nothing from account A is shown under account B until a fresh fetch succeeds.
+        // (An in-flight fetch that started under A is dropped by callRpc's value fence,
+        // and by the per-caller credEpoch re-check, so it can't repopulate these.)
         _chatHistory.value = emptyList()
+        _savedConversations.value = emptyList()
         _denebMail.value = emptyList()
         _denebMailNextToken.value = null
         denebMailActiveQuery = null
-        _savedConversations.value = emptyList()
         locallyReadMailIds.clear()
         _denebWorkFeed.value = emptyList()
         _hasUnreadWorkReport.value = false
+        _hasUnreadHeartbeat.value = false
+        _denebMemories.value = emptyList()
+        _denebScheduledTasks.value = emptyList()
+        _denebCalendar.value = emptyList()
+        _denebModels.value = emptyList()
+        _denebRoleModels.value = emptyMap()
+        _denebModelAdvisories.value = emptyList()
+        _denebSkills.value = emptyList()
+        _clientStatus.value = null
+        // Reset the native-sync cursor + baseline so the new account replays its own
+        // events from the start instead of inheriting account A's cursor (which could
+        // skip B's events, or fire immediate notifications for catch-up events).
+        nativeSyncCursor = 0L
+        appSettings.settings.putLong(KEY_SYNC_CURSOR, 0L)
+        nativeSyncBaselined = false
     }
 
     override suspend fun ask(question: String?, files: List<PlatformFile>, uiSubmission: UiSubmission?) {
@@ -873,6 +891,7 @@ class DenebGatewayClient(
     }
 
     suspend fun syncNativeState(): Boolean {
+        val epoch = credEpoch
         val reloadSessions = linkedSetOf<String>()
         var pulled = false
         var eventCount = 0
@@ -888,6 +907,10 @@ class DenebGatewayClient(
                         put("limit", 100)
                     },
                 ) ?: break
+                // Credentials switched after this page returned: stop before applying
+                // account A's events (work-feed/transcript mutations, notifications) or
+                // advancing the cursor under account B.
+                if (epoch != credEpoch) return false
                 pulled = true
                 eventCount += payload.events.size
                 payload.events.forEach { applyNativeSyncEvent(it, reloadSessions) }
@@ -1445,24 +1468,27 @@ class DenebGatewayClient(
      * chat [send] keeps its own throwing path so the UI can surface errors.
      * Internal (not private) so the per-domain extension files can reach it.
      *
-     * Credential fence: the [credEpoch] captured before the request is re-checked
-     * after it returns; if the user switched gateways mid-flight the result is
-     * dropped (null), so an old-account response can never be assigned to a
+     * Credential fence: the exact gateway URL + token the request is SENT with are
+     * captured and re-compared after it returns; if either changed mid-flight the
+     * result is dropped (null), so an old-account response can never be assigned to a
      * per-account StateFlow under the new credentials. This is the single chokepoint
      * that protects EVERY read (mail, transcript, sessions, work-feed, calendar,
      * memories, …) — callers already treat null as "no data", so they degrade safely.
+     * Comparing the actual values (not a counter) is ordering-immune: it can't be
+     * fooled by an epoch that advances before the new credentials are persisted.
      */
     internal suspend inline fun <reified T> callRpc(method: String, params: JsonObject): T? {
-        if (clientToken.isEmpty()) return null
-        val epoch = credEpoch
+        val url = gatewayUrl
+        val token = clientToken
+        if (token.isEmpty()) return null
         val payload = runCatching {
-            http.post("$gatewayUrl/api/v1/miniapp/rpc") {
-                header(CLIENT_TOKEN_HEADER, clientToken)
+            http.post("$url/api/v1/miniapp/rpc") {
+                header(CLIENT_TOKEN_HEADER, token)
                 contentType(ContentType.Application.Json)
                 setBody(RpcReq(id = Uuid.random().toString(), method = method, params = params))
             }.body<RpcEnv<T>>().payload
         }.getOrNull()
-        return if (epoch == credEpoch) payload else null
+        return if (url == gatewayUrl && token == clientToken) payload else null
     }
 
     // rpcWrite posts a write RPC and surfaces the gateway's error message (so the
