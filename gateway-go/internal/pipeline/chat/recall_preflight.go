@@ -105,6 +105,13 @@ var recallStopWords = map[string]struct{}{
 	"문맥": {}, "컨텍스트": {}, "뭐였": {}, "뭐더라": {}, "그거": {}, "그": {}, "이": {}, "저": {}, "것": {}, "거": {},
 	"좀": {}, "다시": {}, "관련": {}, "쪽": {}, "걸": {}, "를": {}, "을": {}, "은": {}, "는": {}, "이랑": {}, "하고": {},
 	"the": {}, "and": {}, "for": {}, "with": {}, "about": {}, "that": {}, "this": {}, "what": {}, "when": {},
+	// Generic request/action verbs (stems after suffix-strip). The recall
+	// subject is the nouns, never the imperative — left in, these fire as
+	// standalone single-term queries that match unrelated entries by a common
+	// word (puppet measurement: "정리" from "정리해줘" matched "디스크 정리"/
+	// "키 정리" for a "탑솔라 조직" question). Domain nouns like 분석/보고/견적
+	// are deliberately NOT here — they are real subjects.
+	"정리": {}, "확인": {}, "검토": {}, "요청": {}, "처리": {}, "진행": {}, "작성": {}, "준비": {}, "전달": {}, "알려": {}, "보여": {}, "부탁": {},
 }
 
 var recallFenceTagPattern = regexp.MustCompile(`(?i)</?\s*recall-context\b[^>]*>`)
@@ -326,7 +333,7 @@ func normalizeRecallToken(tok string) string {
 	}
 	suffixes := []string{
 		"해주세요", "해줘요", "해줘", "했어요", "했어", "했지", "했던", "하던",
-		"하는", "하면", "해서", "해야", "해요", "하고", "해",
+		"하는", "하면", "해서", "해야", "해요", "하고", "줘", "해",
 		"에서", "에게", "으로", "부터", "까지", "이랑",
 		"은", "는", "이", "가", "을", "를", "에", "로", "와", "과", "도", "만", "랑",
 	}
