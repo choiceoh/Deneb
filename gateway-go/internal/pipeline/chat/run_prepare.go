@@ -59,6 +59,13 @@ func prepareContextAndPrompt(
 	var resultMu sync.Mutex
 	var prepWg sync.WaitGroup
 
+	// 챗봇 workspace (chat: sessions) gets a clean general-assistant prompt: no
+	// Nev persona and none of the 업무 work context. Withhold the work-context
+	// inputs here (tier-1 wiki, context files, topic knowledge, calendar glance)
+	// so the prompt builder's empty-input guards skip them, and flag the builder
+	// (spp.Chatbot) to swap the identity + drop the work-loop sections.
+	chatbot := isChatbotSessionKey(params.SessionKey)
+
 	// Tier-1 wiki auto-injection (parallel). Frozen per session (tier1_cache.go):
 	// FormatTier1 reads the live store, and mid-session wiki writes would
 	// otherwise shift the system-prompt tail every few turns — invalidating
@@ -67,7 +74,7 @@ func prepareContextAndPrompt(
 	safego.GoWithSlog(logger, "prep-tier1-wiki", func() {
 		defer prepWg.Done()
 		var tier1 string
-		if deps.wikiStore != nil {
+		if deps.wikiStore != nil && !chatbot {
 			if cached, ok := cachedTier1Wiki(params.SessionKey); ok {
 				tier1 = cached
 			} else {
@@ -237,7 +244,7 @@ func prepareContextAndPrompt(
 		// key change → topic-less Static cache stays shared).
 		var topicKnowledge, topicCacheKey, topicKnowledgePath string
 		var frozenTopic *prompt.TopicKnowledge
-		if deps.topicResolver != nil && params.Delivery != nil {
+		if deps.topicResolver != nil && params.Delivery != nil && !chatbot {
 			if key := deps.topicResolver.TopicKey(params.Delivery.ThreadID); key != "" {
 				tk := prompt.LoadTopicKnowledge(workspaceDir, deps.topicResolver.Dir(), key, params.SessionKey)
 				if tk.Content != "" {
@@ -254,11 +261,17 @@ func prepareContextAndPrompt(
 		// it per day, so this is a cheap cache hit on all but the first turn of
 		// the day; "" when no calendar source or no upcoming events.
 		var calendarGlance string
-		if deps.calendarGlanceFn != nil {
+		if deps.calendarGlanceFn != nil && !chatbot {
 			calendarGlance = deps.calendarGlanceFn(ctx, params.SessionKey, tz)
 		}
 
-		ctxFiles := prompt.LoadContextFiles(workspaceDir, prompt.WithSessionSnapshot(params.SessionKey))
+		// 챗봇: withhold the workspace context files (SOUL.md/IDENTITY.md/USER.md/
+		// MEMORY.md/…) so the clean general-assistant prompt carries no Nev persona
+		// or private work context.
+		var ctxFiles []prompt.ContextFile
+		if !chatbot {
+			ctxFiles = prompt.LoadContextFiles(workspaceDir, prompt.WithSessionSnapshot(params.SessionKey))
+		}
 
 		spp := prompt.SystemPromptParams{
 			WorkspaceDir:       workspaceDir,
@@ -271,7 +284,8 @@ func prepareContextAndPrompt(
 			SkillsPrompt:       loadCachedSkillsPrompt(workspaceDir, availableToolNames(deps.tools)),
 			ToolPreset:         sessionToolPreset,
 			CompactionFired:    compactionFired,
-			HindsightEnabled:   deps.hindsightClient != nil,
+			Chatbot:            chatbot,
+			HindsightEnabled:   deps.hindsightClient != nil && !chatbot,
 			CalendarGlance:     calendarGlance,
 			TopicKnowledge:     topicKnowledge,
 			TopicCacheKey:      topicCacheKey,

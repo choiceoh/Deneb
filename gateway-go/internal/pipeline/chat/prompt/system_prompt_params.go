@@ -65,6 +65,18 @@ type SystemPromptParams struct {
 	DocsPath      string
 	ToolPreset    string // active tool preset ("conversation" etc.); empty = normal mode
 
+	// Chatbot selects the clean general-purpose assistant prompt for the 챗봇
+	// workspace (chat: sessions): a neutral identity instead of the Nev
+	// chief-of-staff persona, and the 업무 work-loop sections (비서실장 role,
+	// 분석→위키, Hindsight, 위키 외부메모리) are dropped — so 챗봇 reads like a
+	// vanilla general assistant. The tool surface is unchanged. The work context
+	// inputs (ContextFiles, TopicKnowledge, CalendarGlance, tier-1 wiki) are
+	// withheld upstream (run_prepare) for chat: sessions, so the existing
+	// empty-input guards skip them. It folds into the Static cache key so 챗봇 and
+	// 업무 never share a Static entry; false leaves the key byte-identical to
+	// before (업무 prompt unchanged).
+	Chatbot bool
+
 	// CompactionFired triggers a one-time-per-session reminder appended
 	// to the dynamic block: tells the model that prior turns have been
 	// compacted into summaries so summary messages should be treated as
