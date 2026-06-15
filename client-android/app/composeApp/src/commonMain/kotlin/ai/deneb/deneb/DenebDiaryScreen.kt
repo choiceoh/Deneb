@@ -3,6 +3,7 @@ package ai.deneb.deneb
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.denebHairline
+import ai.deneb.ui.markdown.MarkdownContent
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -86,7 +87,7 @@ fun DenebDiaryScreen(
                             )
                             Spacer(Modifier.height(4.dp))
                         }
-                        DenebMarkdown(entry.content.ifBlank { "(빈 항목)" })
+                        MarkdownContent(entry.content.ifBlank { "(빈 항목)" }, baseStyle = MaterialTheme.typography.bodyMedium)
                         Spacer(Modifier.height(12.dp))
                         HorizontalDivider(color = denebHairline())
                         Spacer(Modifier.height(12.dp))

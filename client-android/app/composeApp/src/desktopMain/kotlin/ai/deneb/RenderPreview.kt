@@ -11,7 +11,6 @@ import ai.deneb.deneb.CalendarEventContent
 import ai.deneb.deneb.CalendarEventDetail
 import ai.deneb.deneb.CalendarMonthGrid
 import ai.deneb.deneb.CronEditContent
-import ai.deneb.deneb.DenebMarkdown
 import ai.deneb.deneb.IntervalUnit
 import ai.deneb.deneb.MailMessage
 import ai.deneb.deneb.MailRow
@@ -614,7 +613,7 @@ private fun renderMarkdown(name: String, scheme: ColorScheme) {
     val scene = ImageComposeScene(width = 840, height = 700, density = Density(2f)) {
         MaterialTheme(colorScheme = scheme) {
             Surface(color = MaterialTheme.colorScheme.background) {
-                DenebMarkdown(markdownSample, Modifier.padding(20.dp))
+                MarkdownContent(markdownSample, Modifier.padding(20.dp), baseStyle = MaterialTheme.typography.bodyMedium)
             }
         }
     }

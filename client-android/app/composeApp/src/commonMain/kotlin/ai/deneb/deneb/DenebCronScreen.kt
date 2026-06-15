@@ -6,6 +6,7 @@ import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
+import ai.deneb.ui.markdown.MarkdownContent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -137,7 +138,7 @@ fun DenebCronScreen(
             )
             if (c.prompt.isNotBlank()) {
                 Spacer(Modifier.height(8.dp))
-                DenebMarkdown(c.prompt)
+                MarkdownContent(c.prompt, baseStyle = MaterialTheme.typography.bodyMedium)
             }
 
             if (c.deliveryChannel.isNotBlank() || c.deliveryTo.isNotBlank()) {
