@@ -259,11 +259,32 @@ class DenebGatewayClient(
     internal val clientToken: String
         get() = appSettings.settings.getString(KEY_TOKEN, "")
 
-    // Identity of the currently-configured gateway+account. Cache writes capture this
-    // before a network op and re-check it before persisting, so an old-credential RPC
-    // that finishes AFTER the user switched gateways (and clearCachedContent ran) can't
-    // repopulate the global cache keys with the prior account's content.
-    internal fun credentialFingerprint(): String = "$gatewayUrl $clientToken"
+    // Bumped by [onCredentialsChanged] whenever the gateway URL/token changes. An
+    // in-flight transcript/mail load captures this at its start and re-checks it
+    // before touching ANY state (the visible StateFlow AND the persisted cache), so a
+    // response arriving under the old account after a gateway switch can neither
+    // render nor cache the prior account's content. Plain Int (single-user; mutated
+    // only on the rare manual save) — best-effort fence atop the live-state clear +
+    // cache purge below.
+    internal var credEpoch: Int = 0
+        private set
+
+    /**
+     * The gateway URL or client token just changed. Drop everything tied to the old
+     * account so account A's content is never shown — or re-cached — under account
+     * B's credentials: purge the persisted content caches, wipe the in-memory view
+     * state, and bump [credEpoch] so any in-flight load bails before it writes.
+     */
+    fun onCredentialsChanged() {
+        credEpoch++
+        appSettings.clearCachedContent()
+        _chatHistory.value = emptyList()
+        _denebMail.value = emptyList()
+        _denebMailNextToken.value = null
+        denebMailActiveQuery = null
+        _savedConversations.value = emptyList()
+        locallyReadMailIds.clear()
+    }
 
     override suspend fun ask(question: String?, files: List<PlatformFile>, uiSubmission: UiSubmission?) {
         val displayText = question?.trim().orEmpty()
@@ -636,10 +657,11 @@ class DenebGatewayClient(
      */
     private suspend fun loadTranscriptGuarded(key: String, replacing: Boolean = false) {
         val startEpoch = historyGate.withLock { historyEpoch }
-        // Pin the credential identity: if the user switches gateways while this fetch
-        // is in flight, the write-back below is skipped so an old-account transcript
-        // can't repopulate the (just-cleared) cache under the new credentials.
-        val cred = credentialFingerprint()
+        // Pin the credential epoch: if the user switches gateways while this fetch is
+        // in flight, both the view install and the cache write below are skipped, so an
+        // old-account transcript can neither render under the new credentials nor
+        // repopulate the just-cleared cache.
+        val epoch = credEpoch
         // Cache-then-network: render the encrypted local copy instantly (no spinner).
         // [replacing] = an explicit switch to a different conversation (drawer pick,
         // proactive deep link): the view must reflect [key], so render its cache or
@@ -665,6 +687,7 @@ class DenebGatewayClient(
         val transcript = fetchTranscript(key) // null = RPC failure; [] = authoritative empty
         val authoritative = historyGate.withLock {
             if (historyEpoch != startEpoch) return // optimistic send won — don't touch view or cache
+            if (epoch != credEpoch) return // credentials switched mid-flight — old account, drop it
             if (transcript != null) {
                 _chatHistory.value = transcript
                 true
@@ -677,7 +700,7 @@ class DenebGatewayClient(
         // empty evicts any stale entry — e.g. a session deleted server-side — so it
         // can't resurrect on the next reopen. Skip entirely if credentials changed
         // mid-flight (this transcript belongs to the old account).
-        if (authoritative && cred == credentialFingerprint()) {
+        if (authoritative && epoch == credEpoch) {
             if (transcript!!.isEmpty()) removeCachedTranscript(key) else storeCachedTranscript(key, transcript)
         }
     }

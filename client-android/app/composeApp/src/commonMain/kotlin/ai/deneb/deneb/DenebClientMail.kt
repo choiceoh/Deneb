@@ -59,9 +59,10 @@ internal fun recordReadId(into: LinkedHashSet<String>, id: String, max: Int = MA
  *  failure so the screen can show a retry instead of a misleading empty state. */
 suspend fun DenebGatewayClient.refreshMail(query: String? = null): Boolean {
     val q = query?.trim()?.ifBlank { null }
-    // Pin the credential identity so an old-account response that lands after the user
-    // switched gateways can't repopulate the (just-cleared) inbox cache.
-    val cred = credentialFingerprint()
+    // Pin the credential epoch: if the user switches gateways while this fetch is in
+    // flight, the old-account inbox must neither become the visible list nor repopulate
+    // the (just-cleared) cache under the new credentials.
+    val epoch = credEpoch
     // Cache-then-network for the default inbox (no query): render the encrypted
     // local copy instantly so the mail tab has no spinner on open, then revalidate.
     // Query searches are not cached (query-specific, transient).
@@ -82,6 +83,9 @@ suspend fun DenebGatewayClient.refreshMail(query: String? = null): Boolean {
             q?.let { put("query", it) }
         },
     ) ?: return false
+    // Credentials switched mid-flight: this response is the old account — drop it so it
+    // can't surface under the new gateway (onCredentialsChanged already cleared the view).
+    if (epoch != credEpoch) return false
     denebMailActiveQuery = q
     val rows = payload.messages
         .filter { it.id.isNotBlank() }
@@ -91,9 +95,8 @@ suspend fun DenebGatewayClient.refreshMail(query: String? = null): Boolean {
     _denebMailNextToken.value = payload.nextPageToken.ifBlank { null }
     // Cache the OVERLAID rows (not the raw server rows): the gateway caches list_recent
     // for ~30s and won't reflect a just-read mail, so persisting raw rows would let a
-    // cold start resurrect a unread dot the user already cleared. Skip if credentials
-    // changed mid-flight (these rows belong to the old account).
-    if (q == null && cred == credentialFingerprint()) storeCachedMail(overlaid)
+    // cold start resurrect a unread dot the user already cleared.
+    if (q == null) storeCachedMail(overlaid)
     return true
 }
 
