@@ -367,6 +367,15 @@ private fun AppContent(
                     }
                 }
 
+                // Feed unread badge: the work feed is the 업무 home, so the unread count
+                // (items not yet opened in the 피드 screen) badges the 피드 tab/rail rather
+                // than a separate top-bar bell (removed). Hoisted here so the 피드 screen
+                // and the nav badge share one reactive seen-set: marking an item read in
+                // FeedScreen drops the badge live.
+                val feedState by chatViewModel.state.collectAsStateWithLifecycle()
+                var feedSeenIds by remember { mutableStateOf(appSettings.getFeedSeenIds()) }
+                val feedUnread = feedState.workFeed.count { it.id !in feedSeenIds }
+
                 // 업무 launches into the 피드 home (work feed as the main screen); 챗봇
                 // launches into the chat. Captured once — NavHost reads startDestination
                 // only at first composition. A runtime workspace toggle then navigates
@@ -388,14 +397,12 @@ private fun AppContent(
                             )
                         }
                         composable<DenebFeed> {
-                            val feedState by chatViewModel.state.collectAsStateWithLifecycle()
-                            var seenIds by remember { mutableStateOf(appSettings.getFeedSeenIds()) }
                             FeedScreen(
                                 items = feedState.workFeed,
-                                seenIds = seenIds,
+                                seenIds = feedSeenIds,
                                 onMarkSeen = { id ->
                                     appSettings.markFeedSeen(id)
-                                    seenIds = appSettings.getFeedSeenIds()
+                                    feedSeenIds = appSettings.getFeedSeenIds()
                                 },
                                 onRunAction = feedState.actions.runWorkFeedAction,
                             )
@@ -682,7 +689,7 @@ private fun AppContent(
                 // headless-harness over-measure trap.
                 if (currentPlatform is Platform.Desktop) {
                     Row(Modifier.fillMaxSize()) {
-                        DenebSidebar(navController, currentBackStackEntry?.destination?.route, chatMode = navChatMode)
+                        DenebSidebar(navController, currentBackStackEntry?.destination?.route, chatMode = navChatMode, feedUnread = feedUnread)
                         Box(Modifier.weight(1f).fillMaxHeight()) { navHost(Modifier.fillMaxSize()) }
                     }
                 } else {
@@ -718,6 +725,7 @@ private fun AppContent(
                                 moreActive = route in denebMoreRoutes,
                                 onNavigate = { dest -> navigateToDenebSection(navController, dest) },
                                 onMore = { navigateToDenebSection(navController, DenebMore) },
+                                feedUnread = feedUnread,
                             )
                         }
                     }

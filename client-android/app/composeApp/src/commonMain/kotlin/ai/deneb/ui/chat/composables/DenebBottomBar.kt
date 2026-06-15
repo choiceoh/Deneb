@@ -11,6 +11,8 @@ import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -70,11 +72,12 @@ val denebBottomTabs: List<DenebTab> = listOf(
     DenebTab("달력", "deneb_calendar", DenebCalendar, Icons.Outlined.CalOutlined, Icons.Filled.CalFilled),
 )
 
-// Routes that surface 업무 데이터 (mail/calendar/search/categories/fleet). Used by App.kt
-// to bounce a 챗봇-mode session back to home if it ever lands on one (defensive — the
-// 챗봇 workspace has no bottom bar and the desktop rail hides these rows) and by the
-// desktop rail's row filter.
+// Routes that surface 업무 데이터 (feed/mail/calendar/search/categories/fleet). Used by
+// App.kt to bounce a 챗봇-mode session back to home if it ever lands on one (defensive —
+// the 챗봇 workspace has no bottom bar and the desktop rail hides these rows) and by the
+// desktop rail's row filter. 피드 is 업무-only too (the work feed home), so it bounces.
 val denebWorkDataRoutes: Set<String> = setOf(
+    "deneb_feed",
     "deneb_mail",
     "deneb_calendar",
     "deneb_search",
@@ -109,6 +112,8 @@ fun DenebBottomBar(
     onNavigate: (Any) -> Unit,
     onMore: () -> Unit,
     modifier: Modifier = Modifier,
+    // Unread work-feed count badged on the 피드 tab (the old top-bar bell moved here).
+    feedUnread: Int = 0,
 ) {
     val haptics = rememberHaptics()
     val hairline = denebHairline()
@@ -140,10 +145,19 @@ fun DenebBottomBar(
                     onNavigate(tab.dest)
                 },
                 icon = {
-                    Icon(
-                        imageVector = if (selected) tab.filled else tab.outlined,
-                        contentDescription = tab.label,
-                    )
+                    val glyph = @Composable {
+                        Icon(
+                            imageVector = if (selected) tab.filled else tab.outlined,
+                            contentDescription = tab.label,
+                        )
+                    }
+                    if (tab.route == "deneb_feed" && feedUnread > 0) {
+                        BadgedBox(
+                            badge = { Badge { Text(if (feedUnread > 9) "9+" else feedUnread.toString()) } },
+                        ) { glyph() }
+                    } else {
+                        glyph()
+                    }
                 },
                 label = { Text(tab.label, style = DenebType.meta) },
                 alwaysShowLabel = true,

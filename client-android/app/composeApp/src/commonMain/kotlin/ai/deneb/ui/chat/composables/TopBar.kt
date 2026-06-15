@@ -14,9 +14,6 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material3.Badge
-import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -51,8 +48,6 @@ internal fun TopBar(
     onOpenDrawer: (() -> Unit)? = null,
     navigationTabBar: (@Composable () -> Unit)? = null,
     onOpenSessionDrawer: (() -> Unit)? = null,
-    onOpenWorkFeed: (() -> Unit)? = null,
-    workFeedCount: Int = 0,
 ) {
     if (navigationTabBar != null) {
         Box(
@@ -73,7 +68,6 @@ internal fun TopBar(
                 if (textToSpeech != null) {
                     SpeechToggleButton(textToSpeech, isSpeechOutputEnabled, isSpeaking, actions)
                 }
-                WorkFeedButton(onOpenWorkFeed, workFeedCount)
                 SessionButton(onOpenSessionDrawer)
             }
         }
@@ -101,38 +95,8 @@ internal fun TopBar(
                 if (textToSpeech != null) {
                     SpeechToggleButton(textToSpeech, isSpeechOutputEnabled, isSpeaking, actions)
                 }
-                WorkFeedButton(onOpenWorkFeed, workFeedCount)
                 SessionButton(onOpenSessionDrawer)
             }
-        }
-    }
-}
-
-// WorkFeedButton opens the work-feed (action inbox) bottom sheet. A badge shows
-// the pending item count. Null callback (e.g. previews) renders nothing.
-@Composable
-private fun WorkFeedButton(onOpenWorkFeed: (() -> Unit)?, count: Int) {
-    val haptics = rememberHaptics()
-    if (onOpenWorkFeed == null) return
-    IconButton(
-        modifier = Modifier.handCursor(),
-        onClick = {
-            haptics.tap()
-            onOpenWorkFeed()
-        },
-    ) {
-        BadgedBox(
-            badge = {
-                if (count > 0) {
-                    Badge { Text(if (count > 9) "9+" else count.toString()) }
-                }
-            },
-        ) {
-            Icon(
-                imageVector = Icons.Filled.Notifications,
-                contentDescription = "업무 알림",
-                tint = MaterialTheme.colorScheme.onBackground,
-            )
         }
     }
 }

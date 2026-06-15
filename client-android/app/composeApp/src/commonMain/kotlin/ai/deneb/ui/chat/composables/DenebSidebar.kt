@@ -3,6 +3,7 @@ package ai.deneb.ui.chat.composables
 import ai.deneb.DenebCalendar
 import ai.deneb.DenebCategories
 import ai.deneb.DenebConfig
+import ai.deneb.DenebFeed
 import ai.deneb.DenebFleet
 import ai.deneb.DenebMail
 import ai.deneb.DenebSearch
@@ -27,6 +28,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material3.Badge
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -84,6 +87,7 @@ private data class SidebarItem(
 // "people" is not a rail item: the merged people surface (recent contacts +
 // 인물 wiki) is reached through categories' pinned "사람" row.
 private val sidebarItems = listOf(
+    SidebarItem("feed", "deneb_feed", DenebFeed, Icons.Filled.Notifications, Icons.Filled.Notifications, workData = true),
     SidebarItem("chat", "home", Home, Icons.AutoMirrored.Outlined.ChatOutlined, Icons.AutoMirrored.Filled.ChatFilled),
     SidebarItem("mail", "deneb_mail", DenebMail, Icons.Outlined.EmailOutlined, Icons.Filled.EmailFilled, workData = true),
     SidebarItem("calendar", "deneb_calendar", DenebCalendar, Icons.Outlined.CalOutlined, Icons.Filled.CalFilled, workData = true),
@@ -120,8 +124,10 @@ fun DenebSidebar(
     modifier: Modifier = Modifier,
     // 챗봇 workspace: hide 업무 데이터 rows (mail/calendar/search/categories/fleet).
     chatMode: Boolean = false,
+    // Unread work-feed count badged on the 피드 row (the bell moved here).
+    feedUnread: Int = 0,
 ) {
-    SidebarContent(currentRoute = currentRoute, chatMode = chatMode, modifier = modifier) { dest ->
+    SidebarContent(currentRoute = currentRoute, chatMode = chatMode, feedUnread = feedUnread, modifier = modifier) { dest ->
         navigateToDenebSection(navController, dest)
     }
 }
@@ -130,6 +136,7 @@ fun DenebSidebar(
 private fun SidebarContent(
     currentRoute: String?,
     chatMode: Boolean = false,
+    feedUnread: Int = 0,
     modifier: Modifier = Modifier,
     onNavigate: (Any) -> Unit,
 ) {
@@ -153,6 +160,7 @@ private fun SidebarContent(
                     outlined = item.outlined,
                     filled = item.filled,
                     selected = currentRoute == item.route,
+                    badgeCount = if (item.route == "deneb_feed") feedUnread else 0,
                     onClick = { onNavigate(item.dest) },
                 )
             }
@@ -166,6 +174,7 @@ private fun SidebarRow(
     outlined: ImageVector,
     filled: ImageVector,
     selected: Boolean,
+    badgeCount: Int = 0,
     onClick: () -> Unit,
 ) {
     val haptics = rememberHaptics()
@@ -203,5 +212,9 @@ private fun SidebarRow(
         )
         Spacer(Modifier.width(14.dp))
         Text(text = label, style = DenebType.railItem, color = color)
+        if (badgeCount > 0) {
+            Spacer(Modifier.weight(1f))
+            Badge { Text(if (badgeCount > 9) "9+" else badgeCount.toString()) }
+        }
     }
 }

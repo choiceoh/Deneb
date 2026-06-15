@@ -19,7 +19,6 @@ import ai.deneb.ui.chat.composables.QuestionInput
 import ai.deneb.ui.chat.composables.TopBar
 import ai.deneb.ui.chat.composables.UserMessage
 import ai.deneb.ui.chat.composables.WaitingResponseRow
-import ai.deneb.ui.chat.composables.WorkFeedPanel
 import ai.deneb.ui.chat.composables.WorkReportBanner
 import ai.deneb.ui.chat.composables.uiErrorText
 import ai.deneb.ui.components.VerticalScrollbarForList
@@ -59,7 +58,6 @@ import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Snackbar
@@ -122,7 +120,6 @@ internal fun ChatModeScreen(
     textToSpeech: TextToSpeechInstance?,
     navigationTabBar: (@Composable () -> Unit)?,
 ) {
-    var showWorkFeed by rememberSaveable { mutableStateOf(false) }
     // Hoisted here so the draft survives recompositions that remove QuestionInput
     // from composition and would otherwise drop the text.
     var questionInputText by rememberSaveable(stateSaver = TextFieldValue.Saver) {
@@ -273,30 +270,7 @@ internal fun ChatModeScreen(
                                 } else {
                                     null
                                 },
-                                // 업무 알림 inbox belongs to the 업무 workspace only —
-                                // hide the bell entirely in 챗봇 mode so 업무 리포트
-                                // never surfaces there (separate notification histories).
-                                onOpenWorkFeed = if (uiState.recallEnabled) {
-                                    { showWorkFeed = true }
-                                } else {
-                                    null
-                                },
-                                workFeedCount = uiState.workFeed.size,
                             )
-
-                            if (showWorkFeed) {
-                                ModalBottomSheet(onDismissRequest = { showWorkFeed = false }) {
-                                    WorkFeedPanel(
-                                        items = uiState.workFeed,
-                                        onOpen = { id ->
-                                            showWorkFeed = false
-                                            uiState.actions.openWorkFeedItem(id)
-                                        },
-                                        onRunAction = uiState.actions.runWorkFeedAction,
-                                        onClose = { showWorkFeed = false },
-                                    )
-                                }
-                            }
 
                             HeartbeatBanner(
                                 visible = uiState.hasUnreadHeartbeat,
