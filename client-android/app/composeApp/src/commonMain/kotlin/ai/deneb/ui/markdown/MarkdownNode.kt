@@ -27,6 +27,16 @@ data class CodeFence(
 data class Blockquote(val children: ImmutableList<BlockNode>) : BlockNode
 
 @Immutable
+// HTML <details>: a collapsible section. [summary] is the <summary> label (or a
+// default when absent), [children] the parsed body blocks, [initiallyOpen] true when
+// the opener carried the `open` attribute. Rendered as a tappable header + body.
+data class Collapsible(
+    val summary: ImmutableList<InlineNode>,
+    val children: ImmutableList<BlockNode>,
+    val initiallyOpen: Boolean,
+) : BlockNode
+
+@Immutable
 data class BulletList(val items: ImmutableList<ListItem>, val tight: Boolean) : BlockNode
 
 @Immutable

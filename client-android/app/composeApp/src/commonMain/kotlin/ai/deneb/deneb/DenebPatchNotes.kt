@@ -21,6 +21,11 @@ data class DenebPatchNote(
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
         highlights = listOf(
+            "답변 속 접기 섹션(<details>)이 펼침/접힘 항목으로 표시됩니다 — 제목을 누르면 본문이 열리고 닫힘 (예전엔 <details>·<summary> 태그가 글자 그대로 노출)",
+        ),
+    ),
+    DenebPatchNote(
+        highlights = listOf(
             "답변을 기다리는 동안 뜨는 '답변 중' 표시가 새로워졌습니다 — 데네브의 푸른 별이 색이 흐르는 그라데이션과 은은한 빛무리로 반짝입니다",
         ),
     ),

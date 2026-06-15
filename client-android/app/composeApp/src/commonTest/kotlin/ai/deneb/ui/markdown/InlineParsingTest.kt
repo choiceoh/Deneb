@@ -268,6 +268,15 @@ class InlineParsingTest {
     }
 
     @Test
+    fun `span wrapper is stripped to its text`() {
+        // Styling wrappers we don't render: drop the tag (and its attributes), keep text.
+        val withAttr = inlines("<span style=\"color:red\">중요</span>")
+        assertEquals("중요", withAttr.filterIsInstance<Text>().joinToString("") { it.value })
+        assertTrue(withAttr.none { it is Text && it.value.contains("<span") }, withAttr.toString())
+        assertEquals(listOf(Text("그냥")), inlines("<span>그냥</span>"))
+    }
+
+    @Test
     fun `common symbol and smart-quote entities decode`() {
         // Web/email-extracted prose and LLM output emit these literally otherwise.
         assertEquals(listOf(Text("© ® ™ € £ ¥")), inlines("&copy; &reg; &trade; &euro; &pound; &yen;"))
