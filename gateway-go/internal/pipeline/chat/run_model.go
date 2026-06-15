@@ -49,6 +49,18 @@ func resolveModel(
 			model = deps.subagentDefaultModel
 		}
 	}
+	// Image turns route to the configured vision model (agents.visionModel →
+	// RoleVision) so a main model with no vision tower (e.g. DeepSeek-V4-Flash)
+	// never receives image blocks it would strip or reject. OPT-IN: FullModelID
+	// is "" until configured, so this is a no-op and image turns fall through to
+	// the main model exactly as before. Checked before the 챗봇 block so an image
+	// in a 챗봇 turn still gets a model that can see it.
+	if model == "" && deps.registry != nil && hasImageAttachment(params.Attachments) {
+		if v := deps.registry.FullModelID(modelrole.RoleVision); v != "" {
+			model = v
+			initialRole = modelrole.RoleVision
+		}
+	}
 	// 챗봇 workspace (chat: session key) uses its own model when the operator
 	// assigned one in Settings > 모델 (agents.chatbotModel → RoleChatbot). 업무
 	// (client:) keeps the main model via defaultModel below. RoleChatbot is
