@@ -63,6 +63,22 @@ func TestRecallSearchQueriesDropsGenericVerbs(t *testing.T) {
 	if strings.Contains(j2, "알려") {
 		t.Fatalf("generic verb 알려 must be dropped, got %v", q2)
 	}
+	// ㄴ-adnominal form (정리한) normalizes to the stopworded stem 정리.
+	q3 := recallSearchQueries("탑솔라 조직 정리한 거")
+	if strings.Contains(strings.Join(q3, " "), "정리") {
+		t.Fatalf("정리한 must normalize to dropped stem 정리, got %v", q3)
+	}
+}
+
+func TestRecallPrimaryQuery(t *testing.T) {
+	// Multi-term message → the combined (space-joined) query is primary.
+	if got := recallPrimaryQuery([]string{"탑솔라 조직 구성", "탑솔라", "조직"}); got != "탑솔라 조직 구성" {
+		t.Fatalf("expected combined query, got %q", got)
+	}
+	// Single-term message → no combined query (nothing to rank against).
+	if got := recallPrimaryQuery([]string{"탑솔라"}); got != "" {
+		t.Fatalf("expected empty for single-term, got %q", got)
+	}
 }
 
 func TestBuildRecallPreflightInjectsWikiEvidence(t *testing.T) {

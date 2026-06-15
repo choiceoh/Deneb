@@ -21,9 +21,14 @@ const (
 	// silent every-turn auto-recall gets the tighter recallAutoMaxEvidence.
 	recallMaxEvidence     = 8
 	recallAutoMaxEvidence = 4
-	recallMaxChars        = 6500
-	recallContextOpenTag  = `<recall-context source="server-preflight" trust="untrusted">`
-	recallContextCloseTag = `</recall-context>`
+	// recallBroadeningPenalty multiplies the score of a hit found only by an
+	// individual broadening term (not the combined multi-term query), demoting
+	// incidental single-common-term matches (e.g. "조직" → an unrelated "조직명"
+	// page) below on-topic combined-query hits.
+	recallBroadeningPenalty = 0.7
+	recallMaxChars          = 6500
+	recallContextOpenTag    = `<recall-context source="server-preflight" trust="untrusted">`
+	recallContextCloseTag   = `</recall-context>`
 )
 
 // recallEvidenceBudget returns how many evidence rows a turn may carry.
@@ -32,6 +37,19 @@ func recallEvidenceBudget(cue bool) int {
 		return recallMaxEvidence
 	}
 	return recallAutoMaxEvidence
+}
+
+// recallPrimaryQuery returns the combined multi-term query (expressing the full
+// user intent) that recallSearchQueries emits, or "" when the message had only
+// one signal term. The combined query is the sole space-joined entry; tokenized
+// single terms never contain spaces.
+func recallPrimaryQuery(queries []string) string {
+	for _, q := range queries {
+		if strings.Contains(q, " ") {
+			return q
+		}
+	}
+	return ""
 }
 
 // dedupRecallEvidence collapses rows describing the same content surfaced via
@@ -251,6 +269,21 @@ func buildRecallPreflight(ctx context.Context, params RunParams, deps runDeps, l
 		return "", truncated
 	}
 
+	// Broadening-query penalty: recallSearchQueries issues one combined
+	// multi-term query (the full intent) plus one query per individual term to
+	// broaden recall. A hit found ONLY by an individual term is lower precision
+	// (e.g. the bare term "조직" matching an unrelated "조직명" page), so it must
+	// rank below combined-query hits. Within-source dedup already recorded
+	// combined-query hits under the combined query string (it runs first), so
+	// this demotes only the term-only stragglers. No-op for single-term messages.
+	if primary := recallPrimaryQuery(queries); primary != "" {
+		for i := range evidence {
+			if evidence[i].Query != "" && evidence[i].Query != primary {
+				evidence[i].Score *= recallBroadeningPenalty
+			}
+		}
+	}
+
 	// The same fact often surfaces from several sources at once (wiki page +
 	// polaris summary + diary echo); duplicate rows waste the evidence budget.
 	evidence = dedupRecallEvidence(evidence)
@@ -333,7 +366,7 @@ func normalizeRecallToken(tok string) string {
 	}
 	suffixes := []string{
 		"해주세요", "해줘요", "해줘", "했어요", "했어", "했지", "했던", "하던",
-		"하는", "하면", "해서", "해야", "해요", "하고", "줘", "해",
+		"하는", "하면", "해서", "해야", "해요", "하고", "줘", "한", "해",
 		"에서", "에게", "으로", "부터", "까지", "이랑",
 		"은", "는", "이", "가", "을", "를", "에", "로", "와", "과", "도", "만", "랑",
 	}
