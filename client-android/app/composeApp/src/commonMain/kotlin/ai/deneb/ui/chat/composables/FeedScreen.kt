@@ -3,14 +3,13 @@ package ai.deneb.ui.chat.composables
 import ai.deneb.deneb.DenebEmpty
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebSectionLabel
-import ai.deneb.ui.DenebType
 import ai.deneb.ui.chat.WorkFeedItem
+import ai.deneb.ui.markdown.MarkdownContent
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -71,11 +70,13 @@ private fun FeedRowWithBody(
 ) {
     WorkFeedRow(item = item, onOpen = onOpen, onRunAction = onRunAction)
     if (expanded && item.body.isNotBlank()) {
-        val bodyStyle = DenebType.body
+        // Proactive reports are markdown (tables, headings, lists), so render with
+        // the full chat renderer — a plain Text leaked raw "| 항목 | 내용 |" pipes and
+        // "##" markers (broken tables). Read-only (isInteractive = false); wrapped in
+        // SelectionContainer so the report stays copyable.
         SelectionContainer {
-            Text(
-                text = item.body,
-                style = bodyStyle,
+            MarkdownContent(
+                content = item.body,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 12.dp),
