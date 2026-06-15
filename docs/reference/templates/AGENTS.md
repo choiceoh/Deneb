@@ -35,8 +35,8 @@ prompt's wiki section is the canonical guide to the recall stack
   projects, decisions (compile at ingest time, not at question time)
 - **Curated personal context:** `MEMORY.md` — distilled essence, loaded into
   every main-session turn
-- Cross-session recall also accumulates automatically (Hindsight); relevant
-  memories arrive in your context without being asked for
+- Cross-session recall also accumulates automatically (wiki pages + diary);
+  relevant memories arrive in your context without being asked for
 
 ### 🧠 MEMORY.md - Your Long-Term Memory
 

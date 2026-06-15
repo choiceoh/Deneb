@@ -1,11 +1,11 @@
 ---
-description: 로컬 GPU 사이드카 모델 운영 현황 (OCR/ASR/장기기억/추출/임베딩) — 엔드포인트·기동·배선·폴백
-globs: ["gateway-go/internal/pipeline/chat/tools/paddleocr.go", "gateway-go/internal/pipeline/chat/tools/asr.go", "gateway-go/internal/pipeline/chat/tools/gmail_attachment.go", "gateway-go/internal/pipeline/chat/web/web_html.go", "gateway-go/internal/ai/modelrole/**", "gateway-go/internal/pipeline/pilot/**", "gateway-go/internal/domain/hindsight/**", "gateway-go/internal/pipeline/chat/recall_hindsight.go", "gateway-go/internal/pipeline/chat/hindsight_recorder.go", "gateway-go/cmd/wormhole/**", "scripts/deploy/start-wormhole.sh", "scripts/deploy/wormhole.service"]
+description: 로컬 GPU 사이드카 모델 운영 현황 (OCR/ASR/추출/임베딩) — 엔드포인트·기동·배선·폴백
+globs: ["gateway-go/internal/pipeline/chat/tools/paddleocr.go", "gateway-go/internal/pipeline/chat/tools/asr.go", "gateway-go/internal/pipeline/chat/tools/gmail_attachment.go", "gateway-go/internal/pipeline/chat/web/web_html.go", "gateway-go/internal/ai/modelrole/**", "gateway-go/internal/pipeline/pilot/**", "gateway-go/cmd/wormhole/**", "scripts/deploy/start-wormhole.sh", "scripts/deploy/wormhole.service"]
 ---
 
 # Sidecar Models (GPU 부가 모델 운영 현황)
 
-> Deneb 는 메인 챗 LLM 외에도 **로컬 GPU(DGX Spark, gx10)에서 상주 서빙되는 전용 모델들**을 호출한다. 대부분 vLLM 의 OpenAI 호환 `/v1` 엔드포인트지만, 일부(VibeVoice-ASR, Hindsight)는 전용 서비스로 상주한다. 외부 API 호출을 피하고 단일 머신에서 자급한다는 프로젝트 원칙(로컬 추론 우선)을 따른다. 이 파일은 "어떤 모델이, 어디서, 어떻게" 돌아가는지의 단일 진실원이다.
+> Deneb 는 메인 챗 LLM 외에도 **로컬 GPU(DGX Spark, gx10)에서 상주 서빙되는 전용 모델들**을 호출한다. 대부분 vLLM 의 OpenAI 호환 `/v1` 엔드포인트지만, 일부(VibeVoice-ASR)는 전용 서비스로 상주한다. 외부 API 호출을 피하고 단일 머신에서 자급한다는 프로젝트 원칙(로컬 추론 우선)을 따른다. 이 파일은 "어떤 모델이, 어디서, 어떻게" 돌아가는지의 단일 진실원이다.
 
 ## 현황 표
 
@@ -13,7 +13,6 @@ globs: ["gateway-go/internal/pipeline/chat/tools/paddleocr.go", "gateway-go/inte
 |---|---|---|---|---|
 | **PaddleOCR-VL-1.6** (0.9B) | 문서 OCR (스캔 PDF·이미지 첨부) | `http://127.0.0.1:18011/v1` | `chat/tools/paddleocr.go` | 상주 서빙. tesseract 폴백 있음. ↓ 상세 |
 | **VibeVoice-ASR** (9B) | 음성 전사 + 화자분리 + 타임스탬프 (최대 60분·50+개 언어·한국어) | `http://127.0.0.1:18013` (`POST /v1/transcribe`, OpenAI 비호환) | `chat/tools/asr.go` | transformers+FastAPI 상주. 핫워드로 고유명사 교정. `miniapp.capture.audio` 캡처 배선(#1847). ↓ 상세 |
-| **Hindsight** (장기기억 서비스) | 대화 턴 retain(LLM 사실 추출→저장) + recall preflight 증거 주입 | `http://localhost:8888` (`/v1/default/banks/deneb/…`) | `domain/hindsight/client.go` | docker compose 상주(`~/hindsight/`). 임베딩=in-process BGE-M3·추출 LLM=로컬 qwen — 완전 로컬(2026-06-10). ↓ 상세 |
 | 메인 챗 LLM | 대화/분석/도구호출 | provider config (Anthropic/OpenRouter/vLLM 등) | `pipeline/chat/run_provider.go` | modelrole `main`. 로컬일 때 기본 `http://127.0.0.1:8000/v1` |
 | lightweight 서브 LLM | gmailpoll/genesis/pilot 등 잡일꾼 | modelrole `lightweight` | `pipeline/pilot/localai.go` | 메인보다 작은 모델, 백그라운드 작업용 |
 | NuExtract3-FP8 | 구조화 추출 (스키마 기반) | (config-driven, 코드 하드코딩 없음) | — | `~/models/NuExtract3-FP8`. 현재 게이트웨이 코드에서 직접 참조 없음 |
@@ -110,35 +109,12 @@ DENEB_ASR_LIVE=1 DENEB_ASR_AUDIO=/path/to.wav DENEB_ASR_URL=http://127.0.0.1:180
 
 ---
 
-## Hindsight (장기 기억 서비스)
+## Hindsight (장기 기억 서비스) — 은퇴 (2026-06-15)
 
-### 무엇 / 왜
-- Hermes 계열 장기기억 서비스 (`hermes-hindsight-service`, FastAPI + pgvector). 게이트웨이가 대화 턴을 **retain**(LLM 사실 추출→저장)하고, evidence 턴의 recall preflight 가 **recall**(벡터+텍스트+RRF 하이브리드 검색)로 과거 기억을 시스템 프롬프트에 주입한다.
-- **2026-06-10 완전 로컬 스택 전환**: OpenRouter 의존(임베딩 text-embedding-3-small + 추출 LLM)이 크레딧 소진(402)으로 recall/retain 전멸 → 임베딩=in-process **BAAI/bge-m3**(sentence-transformers, 1024차원·다국어·CPU), 추출 LLM=**로컬 vLLM qwen3.6-35b-a3b** 로 전환. 외부 의존·비용 0.
-- **한국어 주의**: hindsight 텍스트 검색은 english tsvector 라 한국어에 사실상 무력 → 벡터 경로가 한국어 recall 의 전부 = **임베딩 모델은 반드시 다국어**여야 한다.
-- 임베딩 폴백 서버(BGE-M3 GGUF, port 8001, `scripts/deploy/bge-m3-server.py`)와는 **별개 인스턴스** — hindsight 는 컨테이너 안에서 sentence-transformers 로 자체 로드한다.
+Hindsight(Hermes 계열 FastAPI+pgvector 장기기억 서비스)는 **2026-06-15 게이트웨이 회상에서 은퇴**했다. puppet 회상 측정 결과 순기여 ~0 — 합성 점수(0.60–0.92)가 wiki/diary 의 BM25 밴드(wiki ≥1.6, diary 3–9)보다 낮아 wiki·diary 가 히트하면 항상 랭킹 탈락했고, surface 될 때도 wiki 페이지 요약과 같은 사실을 중복 주입했다. recall 소스·retain recorder·`domain/hindsight` 클라이언트·knowledge hindsight 어댑터·`DENEB_HINDSIGHT_*` env·시스템 프롬프트 서비스 블록 모두 제거. 장기기억은 이제 **wiki(큐레이션·시맨틱)+diary(원문)+polaris(세션)** 가 담당한다.
 
-### 서버 (상주)
-- **docker compose** (`~/hindsight/docker-compose.yml`, **레포 밖**): `hindsight-api`(port 8888) + `hindsight-postgres`(pgvector). 둘 다 `restart: unless-stopped`.
-- 설정 = `~/hindsight/.env`: `HINDSIGHT_API_EMBEDDINGS_PROVIDER=local` + `HINDSIGHT_API_EMBEDDINGS_LOCAL_MODEL=BAAI/bge-m3` + ★`HF_HUB_DISABLE_XET=1` (hf-xet 이 다운로드 중 스톨하는 이 호스트 함정 — VibeVoice 가중치 때와 동일, **이 호스트에서 HF 다운로드하는 모든 컨테이너에 필요**). 추출 LLM 은 `http://host.docker.internal:8000/v1` (compose `extra_hosts: host-gateway`) 의 qwen3.6-35b-a3b.
-- **qwen 전제**: vLLM 이 `enable_thinking:false` + qwen3 reasoning parser 로 떠 있어야 한다 — hindsight 에는 `<think>` 제거 로직이 없어 content 에 새면 추출 파싱이 깨진다.
-- **임베딩 모델 교체(차원 변경) 절차**: hindsight 는 데이터 있는 테이블의 차원 ALTER 를 거부한다(공식 가이드=DELETE). 대신 `UPDATE memory_units SET embedding=NULL` 로 비우면(행·텍스트 보존) 기동 시 자동 ALTER+HNSW 재생성 통과 → `~/hindsight/reembed.py`(컨테이너 안 실행)로 재임베딩. **파리티 핵심**: retain 은 평문이 아니라 `"{text} (happened in {Month Year})" + " [엔티티들]"` 증강 텍스트를 임베딩한다 (`engine/retain/embedding_processing.py`). 2026-06-10 에 1607건 수행, 풀백업 `~/hindsight/hindsight-backup-20260610.sql.gz`.
-
-### 코드 통합
-- `gateway-go/internal/domain/hindsight/client.go` — recall/retain 두 연산만 노출하는 thin client.
-- `gateway-go/internal/pipeline/chat/recall_hindsight.go` — recall preflight 증거 주입.
-- `gateway-go/internal/pipeline/chat/hindsight_recorder.go` — 턴 완료 후 fire-and-forget **async retain**. 실패는 hindsight 내부 `async_operations` 테이블에만 남는다 (게이트웨이 로그에 안 보임 — 추출 LLM 이 죽으면 조용히 누적되니 의심되면 그 테이블을 확인).
-- **dormant 설계**: `DENEB_HINDSIGHT_URL` 미설정이면 통합이 통째로 잠든다. prod 는 systemd Environment 로 `http://localhost:8888`. 기타 env: `DENEB_HINDSIGHT_BANK_ID`(기본 `deneb`), `DENEB_HINDSIGHT_RETAIN`(기본 true), `DENEB_HINDSIGHT_BUDGET`, `DENEB_HINDSIGHT_RECALL_MAX_TOKENS`.
-
-### 운영 명령
-```bash
-cd ~/hindsight && docker compose up -d      # 기동/재기동 (.env 변경 반영)
-curl -s http://127.0.0.1:8888/health        # readiness
-docker logs --tail 50 hindsight-api
-# recall 스모크 (게이트웨이와 동일 엔드포인트)
-curl -s -X POST http://127.0.0.1:8888/v1/default/banks/deneb/memories/recall \
-  -H 'Content-Type: application/json' -d '{"query":"탑솔라 견적"}' | head -c 300
-```
+- **호스트 정리(운영자 작업)**: `cd ~/hindsight && docker compose down` 으로 컨테이너(8888/pgvector) 내림. systemd 의 `DENEB_HINDSIGHT_URL` Environment 도 제거(있어도 코드가 더는 안 읽음). 데이터는 `~/hindsight/hindsight-backup-20260610.sql.gz` 백업에 보존 — 되살리려면 백업 복원 + 코드 revert.
+- **self-memory 개념은 별개로 유지**: "Hindsight" 정체성(wiki·polaris·graphify 로 작업 연속성을 잇는 자기 기억)은 서비스가 아니라 페르소나다 — `skills/productivity/hindsight/SKILL.md` + 시스템 프롬프트 `## Hindsight (작업 전·작업 후)` 로 살아 있다.
 
 ---
 
