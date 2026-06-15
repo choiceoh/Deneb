@@ -32,6 +32,61 @@ func TestExtractCardTitle(t *testing.T) {
 	}
 }
 
+// TestExtractCardTitle_MailSubject covers the feed-card rule that a generic
+// "메일 분석 리포트/보고" heading (redundant with the 📬 card icon) is replaced by
+// the email's actual subject pulled from the body — a 제목 table row, a specific
+// sub-heading, or a bold subject line — while report scaffolding (메일 개요, 발신,
+// 중요도, …) and batch/daily summaries are left alone.
+func TestExtractCardTitle_MailSubject(t *testing.T) {
+	cases := []struct {
+		name      string
+		content   string
+		wantHas   string // the title must contain this subject fragment
+		wantNotEq string // …and must not be this generic heading
+	}{
+		{
+			"sub-heading subject",
+			"## 📬 메일 분석 리포트\n\n### 무림피앤피 울산공장 — 중앙조달(전기공사) 과업지시서+도면 송부\n**🟡 확인 필요**",
+			"무림피앤피 울산공장",
+			"📬 메일 분석 리포트",
+		},
+		{
+			"bold-line subject (table has no 제목 row)",
+			"## 📬 메일 분석 리포트\n\n**📧 무림P&P 울산공장 물품 제안요청서 및 규격서 송부 (revised)**\n\n| 항목 | 내용 |\n|---|---|\n| **발신** | 김대희 |",
+			"무림P&P 울산공장 물품 제안요청서",
+			"📬 메일 분석 리포트",
+		},
+		{
+			"제목 table row (newsletter, unescapes \\_)",
+			"📬 **새 메일 분석 리포트**\n\n## 메일 개요\n\n| 항목 | 내용 |\n|---|---|\n| **발신** | 성창석 |\n| **제목** | Korean Tax Update\\_Samil Commentary June 2026 |\n| **시간** | 13:39 |",
+			"Korean Tax Update_Samil",
+			"새 메일 분석 리포트",
+		},
+		{
+			"skips 메일 개요 / 발신 scaffolding to reach subject",
+			"## 📬 메일 분석 리포트\n\n### 수신 메일 개요\n\n**발신**: 김대희\n\n### 고흥 해밀 솔라케이블 발주 — 진영상사 (🟡 확인필요)",
+			"고흥 해밀 솔라케이블",
+			"📬 메일 분석 리포트",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, _ := extractCardTitle(tc.content)
+			if !strings.Contains(got, tc.wantHas) {
+				t.Errorf("title = %q, want it to contain %q", got, tc.wantHas)
+			}
+			if got == tc.wantNotEq {
+				t.Errorf("title stayed generic %q, want the subject", got)
+			}
+		})
+	}
+
+	// A batch/daily summary lacks 리포트/보고, so its own heading is kept.
+	if got, _ := extractCardTitle("# 📬 6/15(월) 당일 메일 종합 분석\n\n## 【수신】 1건\n### 무림피앤피 울산공장"); !strings.Contains(got, "당일 메일 종합 분석") {
+		t.Errorf("daily-summary title = %q, want it kept", got)
+	}
+}
+
 func TestExtractCardTitle_ClipsLong(t *testing.T) {
 	long := "## " + strings.Repeat("가", 60)
 	got, _ := extractCardTitle(long)
