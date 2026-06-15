@@ -21,6 +21,11 @@ data class DenebPatchNote(
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
         highlights = listOf(
+            "답변을 기다리는 동안 뜨는 '답변 중' 표시가 새로워졌습니다 — 데네브의 푸른 별이 색이 흐르는 그라데이션과 은은한 빛무리로 반짝입니다",
+        ),
+    ),
+    DenebPatchNote(
+        highlights = listOf(
             "업무 피드 카드의 빠른 동작이 보관·휴지통 두 개로 정리됐습니다 — 보관은 읽음으로 내리고, 휴지통은 카드를 영구 삭제",
             "피드 카드 제목이 더 정확해집니다 — 본문이 문장으로 시작하는 리포트도 한 줄 제목을 새로 뽑아, 첫 문장이 통째로 제목이 되던 문제 해소",
         ),

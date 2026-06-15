@@ -172,7 +172,9 @@ internal fun PulsingStatusIndicator(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         StarIndicator(color = dotColor)
-        Spacer(Modifier.width(8.dp))
+        // 6dp not 8: the glow box carries ~3dp of transparent ring on the text
+        // side, so a tighter spacer keeps the visual gap to the text the same.
+        Spacer(Modifier.width(6.dp))
         if (isStatusOnly && toolSummary != null) {
             Text(
                 text = toolSummary,
@@ -219,8 +221,9 @@ internal fun PulsingStatusIndicator(
 // (cyan-side and indigo-side of sky-blue) so the rays catch light like a faceted
 // gem. Two slow loops keep that colour alive in real time without ever leaving
 // the blue family: the gradient *axis rotates* continuously (the sheen flows
-// across the glyph) and the hue band *centre wanders* back and forth. Pure
-// animation, no state.
+// across the glyph) and the hue band *centre wanders* back and forth. Behind the
+// star sits a soft radial glow that swells and brightens on each burst, so the
+// blue star reads as luminous rather than a flat glyph. Pure animation, no state.
 private const val sparklePeriodMs = 1300
 private const val hueRotationPeriodMs = 6000 // gradient-axis sweep → flowing sheen
 private const val hueDriftPeriodMs = 5200 // band-centre breathing
@@ -231,6 +234,10 @@ private const val hueDriftPeriodMs = 5200 // band-centre breathing
 // colour keeps shifting in real time.
 private const val analogousSpreadDeg = 104f
 private const val hueDriftDeg = 30f
+
+// The star core fills this fraction of the box; the ring left over is breathing
+// room for the glow to bloom into.
+private const val starFillFraction = 0.72f
 
 @Composable
 private fun StarIndicator(color: Color, modifier: Modifier = Modifier) {
@@ -283,9 +290,10 @@ private fun StarIndicator(color: Color, modifier: Modifier = Modifier) {
 
     Canvas(
         modifier
-            // 18dp (not 16): a touch larger so the hue-flowing gradient has room
-            // to read, while still sitting inside the bodyMedium text line.
-            .size(18.dp)
+            // 22dp box, but the star core only fills ~0.72 of it (starFillFraction)
+            // — the ring around it is room for the glow to bloom into. The star
+            // itself stays ~16dp, roughly its previous size.
+            .size(22.dp)
             .graphicsLayer {
                 // Stay clearly present at rest (≈0.6) so the colour reads even
                 // between winks; the pop flares it bright and a touch larger.
@@ -295,11 +303,36 @@ private fun StarIndicator(color: Color, modifier: Modifier = Modifier) {
                 scaleY = s
             },
     ) {
-        val path = denebSparklePath(size)
-        // Hue band centred on the accent, slid slowly by the drift, fanned wide
-        // into its two analogous neighbours. All three animated values are read
-        // inside draw scope → redraws each frame, no recomposition.
+        val centerPt = Offset(size.width / 2f, size.height / 2f)
+        // Hue band centred on the accent, slid slowly by the drift; shared by the
+        // glow and the star so they stay the same colour. Read inside draw scope
+        // → redraws each frame, no recomposition.
         val center = baseHue + (hueDrift - 0.5f) * hueDriftDeg
+
+        // Glow first, behind the star: a soft radial bloom in the accent hue,
+        // desaturated + brightened toward "light", that swells and brightens with
+        // each burst → the blue star glows instead of reading as a flat glyph.
+        val glowRadius = size.minDimension / 2f * (0.80f + 0.28f * twinkle)
+        val glowColor = hueColor(center, sat * 0.45f, (value * 1.25f).coerceAtMost(1f))
+        val glowCoreAlpha = 0.42f + 0.40f * twinkle
+        // 3-stop eased falloff (hot core → quick mid → 0) instead of a linear
+        // 2-stop ramp: a softer, more natural bloom and finer bands, so the alpha
+        // gradient doesn't ring/banded on 8-bit OLED panels.
+        drawCircle(
+            brush = Brush.radialGradient(
+                0.0f to glowColor.copy(alpha = glowCoreAlpha),
+                0.45f to glowColor.copy(alpha = glowCoreAlpha * 0.40f),
+                1.0f to glowColor.copy(alpha = 0f),
+                center = centerPt,
+                radius = glowRadius,
+            ),
+            radius = glowRadius,
+            center = centerPt,
+        )
+
+        // Star core with the live hue-flowing gradient, fanned wide into its two
+        // analogous neighbours; axis rotates with `sweep`.
+        val path = denebSparklePath(size, starFillFraction)
         val brush = Brush.linearGradient(
             colors = listOf(
                 hueColor(center - analogousSpreadDeg / 2f, sat * 0.82f, (value * 1.1f).coerceAtMost(1f)),
@@ -315,7 +348,7 @@ private fun StarIndicator(color: Color, modifier: Modifier = Modifier) {
         drawPath(
             path,
             brush,
-            style = Stroke(width = size.minDimension * 0.08f, join = StrokeJoin.Round, cap = StrokeCap.Round),
+            style = Stroke(width = size.minDimension * 0.06f, join = StrokeJoin.Round, cap = StrokeCap.Round),
         )
     }
 }
@@ -359,13 +392,14 @@ private fun rgbToHsv(color: Color): FloatArray {
     return floatArrayOf(hue, sat, max)
 }
 
-// denebSparklePath builds a centred four-point sparkle (✦) sized to [size]: four
-// tips (N/E/S/W) joined by quadratic curves whose controls sit close to the
-// centre, so the rays read thin and concave like a glint of light.
-private fun denebSparklePath(size: Size): Path {
+// denebSparklePath builds a centred four-point sparkle (✦) whose tips reach
+// [fill] of the box half-extent (leaving a ring for the glow): four tips
+// (N/E/S/W) joined by quadratic curves whose controls sit close to the centre,
+// so the rays read thin and concave like a glint of light.
+private fun denebSparklePath(size: Size, fill: Float): Path {
     val cx = size.width / 2f
     val cy = size.height / 2f
-    val outer = size.minDimension / 2f * 0.92f
+    val outer = size.minDimension / 2f * fill
     val d = outer * 0.12f // side-curve control offset on the diagonals → thin rays
     val path = Path()
     path.moveTo(cx, cy - outer)
