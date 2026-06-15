@@ -85,11 +85,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draganddrop.DragAndDropEvent
 import androidx.compose.ui.draganddrop.DragAndDropTarget
 import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import deneb.composeapp.generated.resources.Res
@@ -577,14 +584,14 @@ internal fun ChatModeScreen(
 
                                         Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
                                             LazyColumn(
-                                                modifier = Modifier.fillMaxSize(),
+                                                // Soft fade at the top/bottom edges so a message dissolves into
+                                                // the bars as it scrolls past, instead of reading as hard-cut /
+                                                // covered. The chat still fills the full height (small padding,
+                                                // not a wide gap) — it just flows under the bars, uncovered.
+                                                modifier = Modifier.fillMaxSize().verticalEdgeFade(top = 28.dp, bottom = 22.dp),
                                                 state = listState,
                                                 horizontalAlignment = CenterHorizontally,
-                                                // A little breathing room at the top so the first message clears the
-                                                // top bar. At the bottom keep it tight (8dp) so the last message sits
-                                                // right above the input bar — like GPT/Claude/Gemini — rather than
-                                                // floating with a wide gap.
-                                                contentPadding = PaddingValues(top = 4.dp, bottom = 8.dp),
+                                                contentPadding = PaddingValues(top = 6.dp, bottom = 8.dp),
                                             ) {
                                                 items(uiState.history, key = { it.id }, contentType = { it.role }) { history ->
                                                     // Readable measure on a wide desktop window: cap every row at the
@@ -773,6 +780,34 @@ internal fun ChatModeScreen(
         } // ModalNavigationDrawer (right session drawer)
     } // CompositionLocalProvider Rtl
 }
+
+// verticalEdgeFade fades the composable's own content to transparent over [top]
+// at the top and [bottom] at the bottom, so a scrolling list dissolves into the
+// surrounding bars instead of cutting hard against them. Offscreen layer + a
+// DstIn alpha mask: only the gradient's alpha matters, not its colour.
+private fun Modifier.verticalEdgeFade(top: Dp, bottom: Dp): Modifier = this
+    .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+    .drawWithContent {
+        drawContent()
+        val topPx = top.toPx()
+        if (topPx > 0f) {
+            drawRect(
+                brush = Brush.verticalGradient(listOf(Color.Transparent, Color.Black), startY = 0f, endY = topPx),
+                blendMode = BlendMode.DstIn,
+            )
+        }
+        val bottomPx = bottom.toPx()
+        if (bottomPx > 0f) {
+            drawRect(
+                brush = Brush.verticalGradient(
+                    listOf(Color.Black, Color.Transparent),
+                    startY = this@drawWithContent.size.height - bottomPx,
+                    endY = this@drawWithContent.size.height,
+                ),
+                blendMode = BlendMode.DstIn,
+            )
+        }
+    }
 
 private data class ExecutingToolsState(
     val tools: ImmutableList<Pair<String, String>>,
