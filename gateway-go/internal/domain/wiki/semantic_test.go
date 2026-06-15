@@ -60,6 +60,46 @@ func TestWarmSemanticIndex(t *testing.T) {
 	}
 }
 
+func TestMergeSearchResultsDemotesBM25Only(t *testing.T) {
+	bm25 := []SearchResult{
+		{Path: "nosem.md", Score: 0.9},  // strong lexical, no semantic entry (cosine 0)
+		{Path: "weak.md", Score: 0.9},   // strong lexical, weak cosine (< threshold)
+		{Path: "strong.md", Score: 0.7}, // lexical confirmed by strong cosine
+	}
+	sem := []SearchResult{
+		{Path: "weak.md", Score: 0.30},   // below semSupportThreshold
+		{Path: "strong.md", Score: 0.60}, // above semSupportThreshold
+		{Path: "semonly.md", Score: 0.50},
+	}
+	out := mergeSearchResults(bm25, sem, 10)
+	score := func(p string) float64 {
+		for _, r := range out {
+			if r.Path == p {
+				return r.Score
+			}
+		}
+		return -1
+	}
+	// BM25 hits with no/weak semantic support are demoted below their raw 0.9 —
+	// the penalty keys on the cosine VALUE, not top-K membership.
+	if got := score("nosem.md"); got >= 0.9 {
+		t.Errorf("bm25 hit with no semantic support should be demoted, got %.3f", got)
+	}
+	if got := score("weak.md"); got >= 0.9 {
+		t.Errorf("bm25 hit with weak cosine should be demoted, got %.3f", got)
+	}
+	// The semantically-confirmed hit (cosine >= threshold) gets the bonus and
+	// outranks both lexical false positives despite its lower raw BM25.
+	if score("strong.md") <= score("nosem.md") || score("strong.md") <= score("weak.md") {
+		t.Errorf("semantically-confirmed hit (%.3f) must outrank lexical false positives (nosem %.3f, weak %.3f)",
+			score("strong.md"), score("nosem.md"), score("weak.md"))
+	}
+	// Semantic-only hits keep their cosine (no penalty, no bonus).
+	if got := score("semonly.md"); got != 0.5 {
+		t.Errorf("semantic-only hit should keep its score, got %.3f", got)
+	}
+}
+
 func TestSearchHybrid(t *testing.T) {
 	dir := t.TempDir()
 	store, err := NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))

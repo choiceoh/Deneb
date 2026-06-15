@@ -191,53 +191,95 @@ func (s *Store) Search(ctx context.Context, query string, limit int) ([]SearchRe
 	if err != nil {
 		return nil, err
 	}
-	sem := s.searchSemantic(ctx, query, limit)
+	sem := s.searchSemantic(ctx, query, max(limit, semanticBlendK))
 	if len(sem) == 0 {
 		return s.fts.applyValidity(bm25), nil
 	}
 	return s.fts.applyValidity(mergeSearchResults(bm25, sem, limit)), nil
 }
 
-// mergeSearchResults blends lexical (BM25) and semantic hits. Each list's score
-// is already 0-1; a page in both gets the higher single score plus a small
-// agreement bonus, so pages found by *both* signals rise to the top. BM25
-// snippets are preserved (semantic-only hits have no snippet). Order is by
-// blended score, descending; ties broken by path for determinism.
+const (
+	// semAgreementBonus rewards a BM25 hit confirmed by real semantic similarity
+	// (cosine >= semSupportThreshold) — the two signals agreeing is strong
+	// evidence of relevance.
+	semAgreementBonus = 0.1
+	// bm25OnlyPenalty demotes a BM25 hit whose semantic similarity to the query
+	// is weak/absent (cosine < semSupportThreshold) — a common query word that
+	// matched an otherwise-unrelated page. Without it, max(bm25,cosine) lets such
+	// a lexical false positive keep its full BM25 score even when it is
+	// semantically off-topic — e.g. "리눅스 파일 권한" matching a "트리나솔라 모듈
+	// 계약" page on the shared word "파일". No-op when semantic did not run.
+	bm25OnlyPenalty = 0.7
+	// semSupportThreshold is the cosine above which a page counts as genuinely
+	// related, so a BM25 hit is confirmed rather than a lexical accident.
+	// On-topic pages measure ~0.6-0.76; off-topic lexical matches ~0.2-0.3.
+	semSupportThreshold = 0.4
+	// semanticBlendK widens the semantic neighbor set used for the blend beyond
+	// the result limit, so a BM25 hit's cosine is known even when the page is not
+	// in the semantic top-N — otherwise a relevant page just outside the top-N
+	// would be wrongly demoted as having "no semantic support".
+	semanticBlendK = 30
+)
+
+// mergeSearchResults blends lexical (BM25) and semantic hits, scoring each page
+// by max(bm25, cosine). A BM25 hit confirmed by real semantic similarity
+// (cosine >= semSupportThreshold) gets an agreement bonus; a BM25 hit with
+// weak/absent semantic support is demoted (bm25OnlyPenalty) as a likely lexical
+// false positive. Semantic-only hits keep their cosine. BM25 snippets are
+// preserved. Order is by blended score, descending; ties broken by path.
 func mergeSearchResults(bm25, sem []SearchResult, limit int) []SearchResult {
 	type merged struct {
-		res   SearchResult
-		score float64
+		res       SearchResult
+		bm25Score float64
+		semCos    float64
+		final     float64
+		inBM25    bool
+		inSem     bool
 	}
 	byPath := make(map[string]*merged, len(bm25)+len(sem))
-	add := func(r SearchResult, bonus float64) {
-		m := byPath[r.Path]
-		if m == nil {
-			byPath[r.Path] = &merged{res: r, score: r.Score}
-			return
-		}
-		if r.Score > m.score {
-			m.score = r.Score
-		}
-		m.score += bonus // agreement: seen by both signals
-		if m.res.Content == "" && r.Content != "" {
-			m.res.Content = r.Content
-		}
-	}
 	for _, r := range bm25 {
-		add(r, 0)
+		if m := byPath[r.Path]; m != nil {
+			if r.Score > m.bm25Score {
+				m.bm25Score = r.Score
+			}
+			m.inBM25 = true
+			if m.res.Content == "" && r.Content != "" {
+				m.res.Content = r.Content
+			}
+			continue
+		}
+		byPath[r.Path] = &merged{res: r, bm25Score: r.Score, inBM25: true}
 	}
 	for _, r := range sem {
-		add(r, 0.1)
+		if m := byPath[r.Path]; m != nil {
+			if r.Score > m.semCos {
+				m.semCos = r.Score
+			}
+			m.inSem = true
+			continue
+		}
+		byPath[r.Path] = &merged{res: r, semCos: r.Score, inSem: true}
 	}
 
+	semAvailable := len(sem) > 0
 	out := make([]merged, 0, len(byPath))
 	for _, m := range byPath {
-		m.res.Score = m.score
+		m.final = m.bm25Score
+		if m.semCos > m.final {
+			m.final = m.semCos
+		}
+		switch {
+		case m.inBM25 && m.semCos >= semSupportThreshold:
+			m.final += semAgreementBonus // lexical hit confirmed by semantic similarity
+		case m.inBM25 && semAvailable:
+			m.final *= bm25OnlyPenalty // lexical hit with weak/no semantic support
+		}
+		m.res.Score = m.final
 		out = append(out, *m)
 	}
 	sort.Slice(out, func(a, b int) bool {
-		if out[a].score != out[b].score {
-			return out[a].score > out[b].score
+		if out[a].final != out[b].final {
+			return out[a].final > out[b].final
 		}
 		return out[a].res.Path < out[b].res.Path
 	})
