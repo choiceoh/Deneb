@@ -38,7 +38,6 @@ import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -58,7 +57,6 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
@@ -284,10 +282,6 @@ fun QuestionInput(
                 imeAction = if (currentPlatform is Platform.Mobile) ImeAction.Default else ImeAction.Send,
             ),
         )
-        val inInspection = LocalInspectionMode.current
-        LaunchedEffect(Unit) {
-            if (!inInspection) focusRequester.requestFocus()
-        }
     }
 }
 
