@@ -12,6 +12,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
+	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
 // VerifyFinding represents a single verification issue found.
@@ -268,13 +269,10 @@ JSON 배열만 반환. 다른 텍스트 없이.
 		return nil
 	}
 
-	text := strings.TrimSpace(resp)
-	text = stripCodeFences(text)
-
-	var results []misclassificationResult
-	if err := json.Unmarshal([]byte(text), &results); err != nil {
+	results, err := jsonutil.UnmarshalLLMArray[misclassificationResult](resp)
+	if err != nil {
 		wd.logger.Warn("wiki-verify: failed to parse LLM response",
-			"error", err, "raw", truncate(text, 200))
+			"error", err, "raw", truncate(strings.TrimSpace(resp), 200))
 		return nil
 	}
 
@@ -330,18 +328,6 @@ func levenshtein(a, b string) int {
 		prev = curr
 	}
 	return prev[lb]
-}
-
-// stripCodeFences removes markdown code block wrappers from LLM responses.
-func stripCodeFences(text string) string {
-	if !strings.HasPrefix(text, "```") {
-		return text
-	}
-	if idx := strings.Index(text[3:], "\n"); idx >= 0 {
-		text = text[3+idx+1:]
-	}
-	text = strings.TrimSuffix(text, "```")
-	return strings.TrimSpace(text)
 }
 
 func truncate(s string, n int) string {

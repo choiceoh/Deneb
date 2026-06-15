@@ -89,9 +89,20 @@ func UnmarshalLLM[T any](raw string) (T, error) {
 		if json.Unmarshal([]byte(sanitized), &result) == nil {
 			return result, nil
 		}
+		cleaned = sanitized
 	}
 
-	// Step 4: truncated JSON recovery.
+	// Step 4: escape raw control chars inside string literals. Models drop a
+	// multi-line value ("reason":"line1\nline2") with an unescaped newline,
+	// which json rejects as "invalid character '\n' in string literal".
+	if escaped := EscapeStringControls(cleaned); escaped != cleaned {
+		if json.Unmarshal([]byte(escaped), &result) == nil {
+			return result, nil
+		}
+		cleaned = escaped
+	}
+
+	// Step 5: truncated JSON recovery.
 	if recovered := RecoverTruncated(cleaned); recovered != "" {
 		if json.Unmarshal([]byte(recovered), &result) == nil {
 			return result, nil
@@ -99,6 +110,82 @@ func UnmarshalLLM[T any](raw string) (T, error) {
 	}
 
 	return zero, fmt.Errorf("unmarshal LLM output: invalid JSON: %s", Truncate(raw, 300))
+}
+
+// UnmarshalLLMArray is UnmarshalLLM for a top-level JSON array ([...]) — the
+// shape category/dedup verifiers and other "return a JSON array" prompts use.
+// Pipeline mirrors UnmarshalLLM: ExtractArray (strip noise, find [...]) →
+// escape raw control chars → strip trailing commas → recover truncation.
+func UnmarshalLLMArray[T any](raw string) ([]T, error) {
+	arr, ok := ExtractArray(raw)
+	if !ok {
+		// No complete array (often token-limit truncation) — fall through to
+		// recovery on the raw text, which closes the last complete element.
+		arr = raw
+	}
+	arr = EscapeStringControls(arr)
+
+	var result []T
+	for _, candidate := range []string{arr, StripTrailingCommas(arr), RecoverTruncated(arr)} {
+		if candidate == "" {
+			continue
+		}
+		if json.Unmarshal([]byte(candidate), &result) == nil {
+			return result, nil
+		}
+	}
+	return nil, fmt.Errorf("unmarshal LLM array: invalid JSON: %s", Truncate(raw, 300))
+}
+
+// EscapeStringControls escapes raw control characters (newline, tab, etc.) that
+// appear *inside* JSON string literals, which strict json.Unmarshal rejects.
+// Structure (brackets, commas, whitespace between tokens) is untouched — only
+// bytes within a "..." run are escaped — so valid JSON passes through unchanged.
+func EscapeStringControls(s string) string {
+	if !strings.ContainsFunc(s, func(r rune) bool { return r < 0x20 }) {
+		return s
+	}
+	var b strings.Builder
+	b.Grow(len(s) + 16)
+	inString := false
+	escaped := false
+	for i := range len(s) {
+		c := s[i]
+		if escaped {
+			escaped = false
+			b.WriteByte(c)
+			continue
+		}
+		if c == '\\' && inString {
+			escaped = true
+			b.WriteByte(c)
+			continue
+		}
+		if c == '"' {
+			inString = !inString
+			b.WriteByte(c)
+			continue
+		}
+		if inString && c < 0x20 {
+			switch c {
+			case '\n':
+				b.WriteString(`\n`)
+			case '\r':
+				b.WriteString(`\r`)
+			case '\t':
+				b.WriteString(`\t`)
+			case '\b':
+				b.WriteString(`\b`)
+			case '\f':
+				b.WriteString(`\f`)
+			default:
+				fmt.Fprintf(&b, `\u%04x`, c)
+			}
+			continue
+		}
+		b.WriteByte(c)
+	}
+	return b.String()
 }
 
 // StripTrailingCommas removes trailing commas before } and ] in JSON.

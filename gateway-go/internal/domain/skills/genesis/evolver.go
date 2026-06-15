@@ -237,21 +237,8 @@ func (e *Evolver) EvolveUnderperformers(ctx context.Context) ([]EvolveResult, er
 }
 
 func (e *Evolver) parseAndApply(ctx context.Context, text string, entry *skills.SkillEntry, originalContent string, stats *UsageStats) (*EvolveResult, error) {
-	extracted := jsonutil.ExtractObject(text)
-	if extracted == "" {
-		extracted = strings.TrimSpace(text)
-	}
-
-	var resp struct {
-		Skip    bool   `json:"skip"`
-		Reason  string `json:"reason,omitempty"`
-		Changes *struct {
-			Description string `json:"description"`
-			NewVersion  string `json:"new_version"`
-			Body        string `json:"body"`
-		} `json:"changes,omitempty"`
-	}
-	if err := json.Unmarshal([]byte(extracted), &resp); err != nil {
+	resp, err := jsonutil.UnmarshalLLM[evolveResp](text)
+	if err != nil {
 		return nil, fmt.Errorf("evolver: parse response: %w", err)
 	}
 
@@ -564,18 +551,32 @@ func (e *Evolver) judgeCandidate(ctx context.Context, client *llm.Client, model,
 	if events == nil {
 		return false, "", fmt.Errorf("judge: nil event channel")
 	}
-	extracted := jsonutil.ExtractObject(drainStreamText(events))
-	if extracted == "" {
+	raw := drainStreamText(events)
+	if strings.TrimSpace(raw) == "" {
 		return false, "", fmt.Errorf("judge: empty verdict")
 	}
-	var resp struct {
-		Pass   bool   `json:"pass"`
-		Reason string `json:"reason"`
-	}
-	if err := json.Unmarshal([]byte(extracted), &resp); err != nil {
+	resp, err := jsonutil.UnmarshalLLM[judgeVerdict](raw)
+	if err != nil {
 		return false, "", fmt.Errorf("judge: parse verdict: %w", err)
 	}
 	return resp.Pass, resp.Reason, nil
+}
+
+// judgeVerdict is the net-positive judge's pass/fail decision on a candidate skill.
+type judgeVerdict struct {
+	Pass   bool   `json:"pass"`
+	Reason string `json:"reason"`
+}
+
+// evolveResp is the evolver model's verdict: skip, or a changed skill body.
+type evolveResp struct {
+	Skip    bool   `json:"skip"`
+	Reason  string `json:"reason,omitempty"`
+	Changes *struct {
+		Description string `json:"description"`
+		NewVersion  string `json:"new_version"`
+		Body        string `json:"body"`
+	} `json:"changes,omitempty"`
 }
 
 // teacherRewrite asks the stronger model to produce a better body after the
@@ -615,23 +616,31 @@ func (e *Evolver) teacherRewrite(ctx context.Context, originalContent, failedCan
 	if events == nil {
 		return "", fmt.Errorf("teacher rewrite: nil event channel")
 	}
-	extracted := jsonutil.ExtractObject(drainStreamText(events))
-	if extracted == "" {
+	raw := drainStreamText(events)
+	if strings.TrimSpace(raw) == "" {
 		return "", nil
 	}
-	var resp struct {
-		Skip    bool `json:"skip"`
-		Changes *struct {
-			Body string `json:"body"`
-		} `json:"changes,omitempty"`
-	}
-	if err := json.Unmarshal([]byte(extracted), &resp); err != nil {
+	// Robust parse: a long skill body sometimes hits the token cap mid-string
+	// ("unexpected end of JSON input") or carries unescaped newlines —
+	// UnmarshalLLM recovers truncation + escapes control chars. A salvaged-but-
+	// broken body still fails the caller's self-test, so recovery is safe.
+	resp, err := jsonutil.UnmarshalLLM[teacherRewriteResp](raw)
+	if err != nil {
 		return "", fmt.Errorf("teacher rewrite: parse: %w", err)
 	}
 	if resp.Skip || resp.Changes == nil {
 		return "", nil
 	}
 	return stripEchoedFrontmatter(resp.Changes.Body), nil
+}
+
+// teacherRewriteResp is the teacher model's rewrite verdict: skip, or a changed
+// skill body.
+type teacherRewriteResp struct {
+	Skip    bool `json:"skip"`
+	Changes *struct {
+		Body string `json:"body"`
+	} `json:"changes,omitempty"`
 }
 
 // EvolutionTask implements autonomous.PeriodicTask for background skill evolution.
