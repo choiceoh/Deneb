@@ -35,7 +35,7 @@ func extractBodyRaw(p *apiPayload) string {
 		}
 		// text/plain (or other non-HTML): decode stray entities the sender left
 		// literal in the plain part, so "주소 :&nbsp;경기" doesn't reach the reader raw.
-		return decodeMailEntities(decoded)
+		return flattenPlainBody(decoded)
 	}
 
 	// Multipart: search for text/plain first, then text/html.
@@ -43,12 +43,49 @@ func extractBodyRaw(p *apiPayload) string {
 	findBody(p, &plainText, &htmlText)
 
 	if plainText != "" {
-		return decodeMailEntities(plainText)
+		return flattenPlainBody(plainText)
 	}
 	if htmlText != "" {
 		return htmlToText(htmlText)
 	}
 	return ""
+}
+
+// flattenPlainBody handles a text/plain part. Normally it just decodes leftover
+// entities. But some composers emit HTML into the plain alternative (Outlook's
+// <o:p>, Daum editor's <hr dze_…>, Angular-templated webmail signatures' <span
+// ng-if=…>), and since extraction prefers text/plain those tags would otherwise
+// reach the reader raw. When the "plain" part is actually HTML, flatten it like an
+// HTML body instead.
+func flattenPlainBody(s string) string {
+	if plainLooksLikeHTML(s) {
+		return htmlToText(s)
+	}
+	return decodeMailEntities(s)
+}
+
+// plainHTMLProbeRE matches HTML element tags that genuine plain text never carries.
+var plainHTMLProbeRE = regexp.MustCompile(
+	`(?i)</?(?:o:p|span|div|table|tbody|thead|tr|td|th|hr|br|meta|font|p|ul|ol|li|blockquote|h[1-6]|img)\b[^>]*>`,
+)
+
+// plainHTMLAttrTagRE matches an open tag carrying an attribute (e.g. <hr dze_content_sep=…>,
+// <meta http-equiv=…>, <span style=…>). Plain prose never writes "<word attr=value>", so a
+// single occurrence is an unambiguous sign the part is really HTML — enough on its own.
+var plainHTMLAttrTagRE = regexp.MustCompile(`(?i)<[a-z][a-z0-9:]*\s+[a-z][a-z0-9_-]*\s*=`)
+
+// plainHTMLOPRE matches Outlook's empty paragraph markers <o:p></o:p> (no attribute),
+// which are likewise never present in genuine plain text.
+var plainHTMLOPRE = regexp.MustCompile(`(?i)</?o:p\b`)
+
+// plainLooksLikeHTML reports whether a text/plain part actually carries HTML markup.
+// Triggers on a single unambiguous marker (an attribute-bearing tag or an Outlook
+// <o:p>), or on three or more bare element tags — high enough that prose mentioning a
+// single "<div>" stays untouched, low enough that any real HTML body trips it.
+func plainLooksLikeHTML(s string) bool {
+	return plainHTMLAttrTagRE.MatchString(s) ||
+		plainHTMLOPRE.MatchString(s) ||
+		len(plainHTMLProbeRE.FindAllStringIndex(s, 3)) >= 3
 }
 
 func findBody(p *apiPayload, plain, html *string) {
@@ -194,6 +231,9 @@ func htmlToText(s string) string {
 	// &nbsp; decodes to U+00A0 which renders as a space but trips up any
 	// downstream splitter that expects ASCII whitespace. Normalize.
 	s = strings.ReplaceAll(s, "\u00A0", " ")
+	// Zero-width spaces (U+200B) pad "blank" lines in webmail HTML; drop them so they
+	// don't survive as phantom non-empty lines after the blank-run collapse below.
+	s = strings.ReplaceAll(s, "\u200B", "")
 
 	// Trim trailing whitespace per line, then collapse runs of blank
 	// lines so newsletter templates don't render as a tall column of

@@ -192,6 +192,9 @@ func decodeMailEntities(s string) string {
 	s = html.UnescapeString(s)
 	s = strings.ReplaceAll(s, "&nbsp;", " ") // leftover from a double-encoded &amp;nbsp;
 	s = strings.ReplaceAll(s, "\u00A0", " ") // NBSP from a single &nbsp; → a regular space
+	// Webmail composers pad "blank" lines with a zero-width space (U+200B); it is not
+	// whitespace, so it survives as a non-empty line and renders as a phantom gap. Drop it.
+	s = strings.ReplaceAll(s, "\u200B", "")
 	return s
 }
 

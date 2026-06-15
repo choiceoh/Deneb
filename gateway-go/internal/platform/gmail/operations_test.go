@@ -578,6 +578,7 @@ func TestDecodeMailEntities(t *testing.T) {
 		{"single nbsp in body", "1. 주소 :&nbsp;경기 광명시", "1. 주소 : 경기 광명시"},
 		{"standard entities", "A &amp; B &lt;tag&gt;", "A & B <tag>"},
 		{"already plain", "plain text — no entities", "plain text — no entities"},
+		{"zero-width space dropped", "본문​\n다음 줄​", "본문\n다음 줄"},
 		{"empty", "", ""},
 	}
 	for _, tc := range cases {
@@ -597,5 +598,81 @@ func TestExtractBody_DecodesPlainEntities(t *testing.T) {
 	}
 	if body := extractBody(p); body != "주소 : 경기 광명시" {
 		t.Errorf("body = %q, want %q", body, "주소 : 경기 광명시")
+	}
+}
+
+// Some composers (Outlook, Daum editor, Angular-templated webmail signatures) emit
+// HTML into the text/plain alternative. Since extraction prefers text/plain, those
+// tags would otherwise reach the reader raw — flatten them like an HTML body.
+func TestExtractBody_PlainCarryingHTMLIsFlattened(t *testing.T) {
+	raw := "안녕하십니까.<o:p></o:p>\n" +
+		"<span ng-if=\"showField('title')\" style=\"font-size:11pt;\">기획조정실 대리</span>\n" +
+		"<hr dze_content_sep=\"\">\n" +
+		"<meta http-equiv=\"content-type\" content=\"text/html\">\n" +
+		"감사합니다."
+	p := &apiPayload{
+		MimeType: "text/plain",
+		Body:     &apiBody{Data: base64.RawURLEncoding.EncodeToString([]byte(raw))},
+	}
+	body := extractBody(p)
+	for _, tag := range []string{"<o:p>", "</o:p>", "<span", "ng-if", "<hr", "dze_content_sep", "<meta"} {
+		if strings.Contains(body, tag) {
+			t.Errorf("flattened body still contains %q:\n%s", tag, body)
+		}
+	}
+	for _, keep := range []string{"안녕하십니까", "기획조정실 대리", "감사합니다"} {
+		if !strings.Contains(body, keep) {
+			t.Errorf("flattened body dropped text %q:\n%s", keep, body)
+		}
+	}
+}
+
+func TestExtractBody_Multipart_PlainCarryingHTMLIsFlattened(t *testing.T) {
+	htmlInPlain := "본문<o:p></o:p> <span style=\"color:red\">강조</span> <div>끝</div>"
+	p := &apiPayload{
+		MimeType: "multipart/alternative",
+		Parts: []apiPayload{
+			{MimeType: "text/plain", Body: &apiBody{Data: base64.RawURLEncoding.EncodeToString([]byte(htmlInPlain))}},
+		},
+	}
+	body := extractBody(p)
+	if strings.Contains(body, "<") {
+		t.Errorf("flattened multipart plain still has a tag:\n%s", body)
+	}
+	if !strings.Contains(body, "본문") || !strings.Contains(body, "강조") || !strings.Contains(body, "끝") {
+		t.Errorf("flattened multipart plain dropped text:\n%s", body)
+	}
+}
+
+// A genuine plain-text body that merely mentions one or two angle-bracket tokens in
+// prose must NOT be mistaken for HTML and stripped.
+func TestExtractBody_PlainProseWithIncidentalAnglesUntouched(t *testing.T) {
+	raw := "회의 때 <자료> 폴더를 참고하세요. a < b 인 경우도 설명드립니다."
+	p := &apiPayload{
+		MimeType: "text/plain",
+		Body:     &apiBody{Data: base64.RawURLEncoding.EncodeToString([]byte(raw))},
+	}
+	if body := extractBody(p); body != raw {
+		t.Errorf("incidental-angle prose was altered:\ngot:  %q\nwant: %q", body, raw)
+	}
+}
+
+func TestPlainLooksLikeHTML(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want bool
+	}{
+		{"outlook o:p run", "a<o:p></o:p>b<o:p></o:p>", true},
+		{"webmail spans", "<span x><span y><span z>", true},
+		{"single div mention", "use a <div> here", false},
+		{"two tags only", "<p>hi</p>", false},
+		{"plain prose", "그냥 평범한 한국어 메일입니다.", false},
+		{"math-ish angles", "x < y and y > z and z < w", false},
+	}
+	for _, tc := range cases {
+		if got := plainLooksLikeHTML(tc.in); got != tc.want {
+			t.Errorf("%s: plainLooksLikeHTML(%q) = %v, want %v", tc.name, tc.in, got, tc.want)
+		}
 	}
 }
