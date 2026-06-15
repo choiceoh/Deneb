@@ -79,6 +79,9 @@ data class ChatUiState(
     val hasUnreadHeartbeat: Boolean = false,
     val hasUnreadWorkReport: Boolean = false,
     val workFeed: ImmutableList<WorkFeedItem> = persistentListOf(),
+    // False until the feed's first fetch finishes, so the 피드 home shows a loading
+    // skeleton instead of flashing "오늘 받은 피드가 없습니다" on cold launch.
+    val workFeedLoaded: Boolean = false,
     // One-shot scroll target: set when opening a proactive work-feed card jumps
     // into client:main, consumed by the chat list once the message is visible.
     val pendingScrollToMessageId: String? = null,
@@ -87,6 +90,12 @@ data class ChatUiState(
     val pendingConversationDeletion: String? = null,
     val fallbackStatus: FallbackStatus? = null,
     val isRestoring: Boolean = true,
+    // The user-typed message whose send failed, surfaced back into the input so a
+    // typo / long prompt can be fixed instead of retyped. Only the ask() path sets it.
+    val failedInput: String? = null,
+    // Id of the assistant message whose streaming the user stopped, so the UI marks
+    // it 중단됨 instead of leaving a half-answer that looks complete.
+    val stoppedMessageId: String? = null,
 ) {
     val heartbeatConversationId: String?
         get() = savedConversations.firstOrNull { it.isHeartbeat }?.id

@@ -1,6 +1,7 @@
 package ai.deneb.ui.chat.composables
 
 import ai.deneb.deneb.DenebEmpty
+import ai.deneb.deneb.DenebLoading
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebSectionLabel
 import ai.deneb.ui.chat.WorkFeedItem
@@ -29,13 +30,16 @@ import kotlinx.collections.immutable.ImmutableList
 @Composable
 internal fun FeedScreen(
     items: ImmutableList<WorkFeedItem>,
+    loaded: Boolean,
     seenIds: Set<String>,
     onMarkSeen: (String) -> Unit,
     onRunAction: (String, String) -> Unit,
 ) {
     DenebScreenScaffold(title = "피드", onBack = {}, showBack = false) {
         if (items.isEmpty()) {
-            DenebEmpty("오늘 받은 피드가 없습니다")
+            // Before the first fetch finishes, show the skeleton instead of "no feed"
+            // so a cold launch into the 업무 home doesn't flash an empty state.
+            if (loaded) DenebEmpty("오늘 받은 피드가 없습니다") else DenebLoading()
             return@DenebScreenScaffold
         }
         var expandedId by remember { mutableStateOf<String?>(null) }

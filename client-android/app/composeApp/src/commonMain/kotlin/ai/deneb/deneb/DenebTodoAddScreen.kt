@@ -130,7 +130,14 @@ fun DenebTodoAddScreen(
         }
     }
 
-    DenebScreenScaffold(title = if (isEdit) "할 일 편집" else "할 일 추가", onBack = onBack, tabBar = navigationTabBar) {
+    // Guard against losing an in-progress todo to a stray back: snapshot the fields
+    // once they're ready (after edit-prefill, or immediately for a new todo) and
+    // confirm before leaving if they've since changed.
+    val snapshot = listOf<Any?>(title, note, hasDue, allDay, dueDate, dueTime)
+    val baseline = remember(prefilling) { if (!prefilling) snapshot else null }
+    val requestBack = rememberDiscardGuard(baseline != null && snapshot != baseline, onBack)
+
+    DenebScreenScaffold(title = if (isEdit) "할 일 편집" else "할 일 추가", onBack = requestBack, tabBar = navigationTabBar) {
         Column(
             Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp),
         ) {

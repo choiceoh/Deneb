@@ -374,7 +374,11 @@ private fun AppContent(
                 // FeedScreen drops the badge live.
                 val feedState by chatViewModel.state.collectAsStateWithLifecycle()
                 var feedSeenIds by remember { mutableStateOf(appSettings.getFeedSeenIds()) }
-                val feedUnread = feedState.workFeed.count { it.id !in feedSeenIds }
+                // Server status is the source of truth (an item acked on any device is no
+                // longer "unread"); the local seen-set is an optimistic overlay for items
+                // opened on this device (FeedScreen marks seen client-side, not a server
+                // ack). Counting both keeps the badge from drifting.
+                val feedUnread = feedState.workFeed.count { it.status == "unread" && it.id !in feedSeenIds }
 
                 // 업무 launches into the 피드 home (work feed as the main screen); 챗봇
                 // launches into the chat. Captured once — NavHost reads startDestination
@@ -399,6 +403,7 @@ private fun AppContent(
                         composable<DenebFeed> {
                             FeedScreen(
                                 items = feedState.workFeed,
+                                loaded = feedState.workFeedLoaded,
                                 seenIds = feedSeenIds,
                                 onMarkSeen = { id ->
                                     appSettings.markFeedSeen(id)

@@ -102,6 +102,11 @@ class ChatViewModel(
                     _state.update { it.copy(workFeed = feed.toImmutableList()) }
                 }
             }
+            viewModelScope.launch {
+                dataRepository.workFeedLoaded.collect { loaded ->
+                    _state.update { it.copy(workFeedLoaded = loaded) }
+                }
+            }
         }
 
         // Keep restoreCurrentConversation off the main thread; see issue #197 (large persisted
@@ -213,10 +218,12 @@ class ChatViewModel(
     }
 
     private fun ask(question: String?) {
-        askInternal(question, null)
+        // The typed-send path: on failure restore the text so it can be edited and
+        // resent rather than retyped. retry() passes null, so it carries no restore.
+        askInternal(question, null, restoreText = question)
     }
 
-    private fun askInternal(question: String?, uiSubmission: UiSubmission?) {
+    private fun askInternal(question: String?, uiSubmission: UiSubmission?, restoreText: String? = null) {
         // Prevent concurrent requests
         if (_state.value.isLoading) return
 
@@ -228,6 +235,7 @@ class ChatViewModel(
                 it.copy(
                     isLoading = true,
                     error = null,
+                    failedInput = null,
                     files = persistentListOf(),
                 )
             }
@@ -245,6 +253,7 @@ class ChatViewModel(
                     it.copy(
                         error = exception.toUiError(),
                         isLoading = false,
+                        failedInput = restoreText,
                     )
                 }
             }
@@ -324,8 +333,12 @@ class ChatViewModel(
     private fun cancel() {
         currentJob?.cancel()
         currentJob = null
+        // The partial answer streamed so far stays in the transcript; tag its id so
+        // the UI can mark it 중단됨 (otherwise a half-answer looks complete). Cancelling
+        // mid-"thinking" leaves no rendered answer, so there's simply nothing to tag.
+        val stoppedId = dataRepository.chatHistory.value.lastRenderedAssistant()?.id
         _state.update {
-            it.copy(isLoading = false)
+            it.copy(isLoading = false, stoppedMessageId = stoppedId)
         }
     }
 
@@ -360,7 +373,9 @@ class ChatViewModel(
             ?.takeIf { it.isNotBlank() }
             ?: return
         dataRepository.popLastExchange()
-        ask(lastUser)
+        // Re-ask via askInternal (not ask) with no restore text: regenerate is a
+        // button, so a failure shouldn't dump the re-asked text into the input box.
+        askInternal(lastUser, null, restoreText = null)
     }
 
     private fun loadConversation(id: String) {
