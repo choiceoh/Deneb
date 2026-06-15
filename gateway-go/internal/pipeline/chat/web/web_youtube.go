@@ -49,7 +49,9 @@ const (
 const youtubeSummarySystemPrompt = "당신은 유튜브 영상 자막을 한국어로 요약하는 전문가입니다. " +
 	"핵심 주제, 주요 논점, 결론을 구조적으로 정리하세요. " +
 	"불필요한 서두 없이 요약 내용만 바로 출력하세요. " +
-	"중요한 수치·이름·인용은 보존하세요."
+	"중요한 수치·이름·인용은 보존하세요. " +
+	"전사 맨 앞에 '[참고: …구간만 다룹니다]' 같은 범위 안내가 있으면, " +
+	"요약이 영상 전체가 아님을 서두에 한 줄로 밝히세요."
 
 // summarizeYouTubeResult turns a raw YouTube extraction into a compact result
 // for the conversation transcript: metadata + a generated summary, with the

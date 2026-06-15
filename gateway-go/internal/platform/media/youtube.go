@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -92,10 +93,34 @@ func ExtractYouTubeTranscript(ctx context.Context, videoURL string) (*YouTubeRes
 		URL:         videoURL,
 	}
 
-	// Step 2: Download subtitles.
-	transcript, lang, err := downloadSubtitles(ctx, ytdlpPath, videoURL, tmpDir)
+	// Step 2: Download subtitles. When ASR is usable and the caller's deadline is
+	// tight (the web fetch path caps this at 90s), bound the caption probes so they
+	// can't consume the whole budget — leaving a reserve for the ASR fallback. The
+	// ASR call below still uses the original ctx, so it gets that reserved time.
+	// Gate the reserve on actual ASR readiness: if the sidecar is down there is no
+	// fallback to reserve for, so captions must get the whole deadline.
+	subCtx := ctx
+	if asrUsable(ctx) {
+		if dl, ok := ctx.Deadline(); ok {
+			subDeadline := dl.Add(-asrReserveBudget)
+			if time.Until(subDeadline) >= minSubtitleBudget {
+				var cancel context.CancelFunc
+				subCtx, cancel = context.WithDeadline(ctx, subDeadline)
+				defer cancel()
+			}
+		}
+	}
+	transcript, lang, err := downloadSubtitles(subCtx, ytdlpPath, videoURL, tmpDir)
 	if err != nil {
-		// Transcript extraction failed; return metadata-only result.
+		// No captions (or YouTube blocked them) — fall back to transcribing the
+		// audio with the local ASR service when one is wired. This is what makes
+		// caption-less videos (and the intermittent 429 caption block) analyzable
+		// without a multimodal model.
+		if t, asrLang := transcriptViaASR(ctx, ytdlpPath, videoURL, tmpDir, 0, 0, meta.Duration); t != "" {
+			result.Transcript = t
+			result.Language = asrLang
+			return result, nil
+		}
 		result.Transcript = noTranscriptMarker
 		return result, nil
 	}
@@ -103,6 +128,174 @@ func ExtractYouTubeTranscript(ctx context.Context, videoURL string) (*YouTubeRes
 	result.Transcript = transcript
 	result.Language = lang
 	return result, nil
+}
+
+// AudioTranscriber, when set, transcribes a local audio file to text. It is the
+// injection point for the chat layer's ASR service (VibeVoice-ASR) so this
+// platform package stays free of any chat/tools dependency. Wired once at
+// startup; nil disables the audio-ASR fallback (captions-only behavior).
+var AudioTranscriber func(ctx context.Context, audioPath string) (string, error)
+
+// AudioTranscriberReady, when set, reports whether the ASR sidecar is actually
+// reachable. transcriptViaASR consults it BEFORE downloading any audio so that a
+// deployment whose sidecar is down doesn't burn the web/watch budget downloading
+// audio only for the localhost ASR request to fail. nil means "assume ready"
+// (the wire sets a cached health probe).
+var AudioTranscriberReady func(ctx context.Context) bool
+
+// asrUsable reports whether the audio→ASR fallback can actually run: a transcriber
+// is wired and (when a readiness probe is wired) the sidecar is reachable. Used
+// both to gate the fallback itself and to decide whether to reserve caption-phase
+// time for it — if ASR can't run, captions must get the whole deadline.
+func asrUsable(ctx context.Context) bool {
+	return AudioTranscriber != nil && (AudioTranscriberReady == nil || AudioTranscriberReady(ctx))
+}
+
+// asrAudioCapSec bounds how much of a video's audio is transcribed via ASR, so a
+// long video can't blow the agent turn deadline (ASR runs ~0.5-0.7x real-time).
+// Overridable via DENEB_YT_ASR_CAP_SEC. Videos shorter than the cap transcribe whole.
+func asrAudioCapSec() int {
+	if v := strings.TrimSpace(os.Getenv("DENEB_YT_ASR_CAP_SEC")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return n
+		}
+	}
+	return 600
+}
+
+// ASR cost model used to keep the audio→ASR fallback inside the caller's deadline.
+const (
+	asrRealtimeFactor = 0.7 // VibeVoice transcription time ≈ audioSeconds * this
+	asrMinViableSec   = 20  // not worth transcribing a clip shorter than this
+)
+
+// asrOverheadBudget is download + request headroom subtracted from the remaining
+// deadline before deriving how much audio can be transcribed in time.
+const asrOverheadBudget = 20 * time.Second
+
+// asrReserveBudget is the slice of a tight caller deadline kept aside for the ASR
+// fallback so slow/blocked caption probes can't consume the whole budget first.
+// minSubtitleBudget is the floor the caption phase must still get for the reserve
+// to apply (a generous deadline leaves both phases ample time).
+const (
+	asrReserveBudget  = 60 * time.Second
+	minSubtitleBudget = 20 * time.Second
+)
+
+// transcriptViaASR downloads the requested audio span and runs it through the wired
+// AudioTranscriber. The span is an explicit [startSec,endSec] window (watch) or, when
+// endSec<=startSec, a from-startSec prefix capped at DENEB_YT_ASR_CAP_SEC. The span is
+// further shrunk to fit the caller's context deadline (the web fetch path is bounded to
+// 90s), and ASR is skipped entirely when too little time remains — so this never blocks
+// past the caller's budget only to return nothing. videoDurSec (0 = unknown) lets it
+// mark the transcript partial when the covered span is less than the whole video, so
+// downstream summaries don't imply full coverage. Returns ("","") on any failure.
+func transcriptViaASR(ctx context.Context, ytdlpPath, videoURL, tmpDir string, startSec, endSec, videoDurSec int) (text, lang string) {
+	// Skip before any download when ASR is unwired or the sidecar is unreachable —
+	// otherwise a no-ASR deployment wastes the deadline downloading audio for a
+	// doomed request.
+	if !asrUsable(ctx) {
+		return "", ""
+	}
+
+	// Requested span length.
+	reqLen := asrAudioCapSec()
+	if endSec > startSec {
+		reqLen = endSec - startSec
+	}
+	segLen := reqLen
+
+	// Deadline-aware shrink: only transcribe what can finish before ctx expires.
+	if dl, ok := ctx.Deadline(); ok {
+		usable := time.Until(dl) - asrOverheadBudget
+		maxSeg := int(usable.Seconds() / asrRealtimeFactor)
+		if maxSeg < asrMinViableSec {
+			return "", "" // not enough remaining time for a useful transcription
+		}
+		if maxSeg < segLen {
+			segLen = maxSeg
+		}
+	}
+
+	audioPath, err := DownloadYouTubeAudio(ctx, ytdlpPath, videoURL, tmpDir, startSec, startSec+segLen)
+	if err != nil || audioPath == "" {
+		return "", ""
+	}
+	t, err := AudioTranscriber(ctx, audioPath)
+	if err != nil || strings.TrimSpace(t) == "" {
+		return "", ""
+	}
+
+	// Mark partiality (covered span < whole video) so summaries are honest.
+	covEnd := startSec + segLen
+	partial := startSec > 0 || (videoDurSec > 0 && covEnd < videoDurSec)
+	if partial {
+		note := fmt.Sprintf("[참고: 아래 전사는 영상 전체가 아니라 %s–%s 구간만 다룹니다. 요약·결론이 영상 전체를 대표하지 않을 수 있습니다.]\n\n",
+			formatDuration(startSec), formatDuration(covEnd))
+		return note + t, fmt.Sprintf("asr (%s–%s)", formatDuration(startSec), formatDuration(covEnd))
+	}
+	return t, "asr"
+}
+
+// DownloadYouTubeAudio downloads the [startSec,endSec] audio span (endSec<=startSec
+// means from startSec to end-of-video) and re-encodes it to 16 kHz mono WAV in tmpDir,
+// returning the path. WAV is used because the ASR sidecar decodes it natively — a
+// trimmed m4a/aac decoded to an empty waveform and crashed the server (HTTP 500).
+// Requires ffmpeg (extract-audio + section trim).
+func DownloadYouTubeAudio(ctx context.Context, ytdlpPath, videoURL, tmpDir string, startSec, endSec int) (string, error) {
+	cmdCtx, cancel := context.WithTimeout(ctx, 120*time.Second)
+	defer cancel()
+
+	outTemplate := filepath.Join(tmpDir, "audio.%(ext)s")
+	args := []string{
+		"--no-warnings", "--no-playlist",
+		"-f", "bestaudio/best",
+		"--extract-audio", "--audio-format", "wav",
+		"--postprocessor-args", "ffmpeg:-ar 16000 -ac 1",
+		"-o", outTemplate,
+	}
+	args = append(args, ytPlayerClientArgs()...)
+	if endSec > startSec {
+		args = append(args, "--download-sections", fmt.Sprintf("*%d-%d", startSec, endSec), "--force-keyframes-at-cuts")
+	} else if startSec > 0 {
+		args = append(args, "--download-sections", fmt.Sprintf("*%d-inf", startSec), "--force-keyframes-at-cuts")
+	}
+	args = append(args, videoURL)
+
+	cmd := exec.CommandContext(cmdCtx, ytdlpPath, args...)
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("yt-dlp audio download failed: %w", err)
+	}
+	wavPath := filepath.Join(tmpDir, "audio.wav")
+	if _, err := os.Stat(wavPath); err == nil {
+		return wavPath, nil
+	}
+	// Fallback: whatever audio.* the postprocessor produced.
+	entries, err := os.ReadDir(tmpDir)
+	if err != nil {
+		return "", err
+	}
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), "audio.") {
+			return filepath.Join(tmpDir, e.Name()), nil
+		}
+	}
+	return "", fmt.Errorf("no audio file produced")
+}
+
+// ytPlayerClientArgs is an operator escape hatch: when DENEB_YTDLP_PLAYER_CLIENT
+// is set it forces specific YouTube player clients (e.g. if a future YouTube
+// change makes the default client fail). It is EMPTY by default on purpose —
+// forcing player_client=android was measured to break audio-format availability
+// ("Requested format is not available") while giving no caption-download benefit
+// over the default client. Robustness instead comes from the 429 retry and the
+// ASR fallback.
+func ytPlayerClientArgs() []string {
+	pc := strings.TrimSpace(os.Getenv("DENEB_YTDLP_PLAYER_CLIENT"))
+	if pc == "" {
+		return nil
+	}
+	return []string{"--extractor-args", "youtube:player_client=" + pc}
 }
 
 // noTranscriptMarker is the sentinel transcript value set when subtitle
@@ -181,13 +374,10 @@ func fetchYouTubeMetadata(ctx context.Context, ytdlpPath, videoURL string) (*ytM
 	cmdCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(cmdCtx, ytdlpPath,
-		"--dump-json",
-		"--no-download",
-		"--no-warnings",
-		"--no-playlist",
-		videoURL,
-	)
+	metaArgs := []string{"--dump-json", "--no-download", "--no-warnings", "--no-playlist"}
+	metaArgs = append(metaArgs, ytPlayerClientArgs()...)
+	metaArgs = append(metaArgs, videoURL)
+	cmd := exec.CommandContext(cmdCtx, ytdlpPath, metaArgs...)
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("yt-dlp --dump-json failed: %w", err)
@@ -229,11 +419,10 @@ func downloadSubtitles(ctx context.Context, ytdlpPath, videoURL, tmpDir string) 
 	return "", "", fmt.Errorf("no subtitles available")
 }
 
-// tryDownloadSubs attempts to download subtitles for a specific language.
+// tryDownloadSubs attempts to download subtitles for a specific language. YouTube
+// intermittently rate-limits caption downloads (HTTP 429); on that signal it
+// retries once after a short backoff, which clears most transient failures.
 func tryDownloadSubs(ctx context.Context, ytdlpPath, videoURL, tmpDir, lang string, auto bool) (string, error) {
-	cmdCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-
 	outTemplate := filepath.Join(tmpDir, "subs")
 	args := []string{
 		"--no-download",
@@ -242,47 +431,62 @@ func tryDownloadSubs(ctx context.Context, ytdlpPath, videoURL, tmpDir, lang stri
 		"--convert-subs", "vtt",
 		"-o", outTemplate,
 	}
-
+	args = append(args, ytPlayerClientArgs()...)
 	if auto {
 		args = append(args, "--write-auto-subs")
-		if lang != "" {
-			args = append(args, "--sub-langs", lang)
-		}
 	} else {
 		args = append(args, "--write-subs")
-		if lang != "" {
-			args = append(args, "--sub-langs", lang)
-		}
 	}
-
+	if lang != "" {
+		args = append(args, "--sub-langs", lang)
+	}
 	args = append(args, videoURL)
 
-	cmd := exec.CommandContext(cmdCtx, ytdlpPath, args...)
-	cmd.Stderr = nil
-	cmd.Stdout = nil
-	_ = cmd.Run() // yt-dlp may exit non-zero if no subs found; that's OK.
-
-	// Find the downloaded subtitle file.
-	entries, err := os.ReadDir(tmpDir)
-	if err != nil {
-		return "", err
+	for attempt := 0; attempt < 2; attempt++ {
+		text, rateLimited := runSubsAttempt(ctx, ytdlpPath, args, tmpDir)
+		if text != "" {
+			return text, nil
+		}
+		if !rateLimited {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		case <-time.After(2 * time.Second): // back off, then retry once
+		}
 	}
+	return "", fmt.Errorf("no subtitle file produced")
+}
 
-	for _, e := range entries {
-		name := e.Name()
-		if strings.HasSuffix(name, ".vtt") || strings.HasSuffix(name, ".srt") {
-			data, err := os.ReadFile(filepath.Join(tmpDir, name))
-			if err != nil {
-				continue
-			}
-			text := cleanSubtitleText(string(data))
-			if text != "" {
-				return text, nil
+// runSubsAttempt runs one yt-dlp subtitle pass and scans tmpDir for the result,
+// reporting whether the failure looked like a 429 rate-limit (worth a retry).
+func runSubsAttempt(ctx context.Context, ytdlpPath string, args []string, tmpDir string) (text string, rateLimited bool) {
+	cmdCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(cmdCtx, ytdlpPath, args...)
+	var stderr strings.Builder
+	cmd.Stderr = &stderr
+	_ = cmd.Run() // yt-dlp may exit non-zero when no subs exist; that's expected.
+
+	entries, err := os.ReadDir(tmpDir)
+	if err == nil {
+		for _, e := range entries {
+			name := e.Name()
+			if strings.HasSuffix(name, ".vtt") || strings.HasSuffix(name, ".srt") {
+				data, readErr := os.ReadFile(filepath.Join(tmpDir, name))
+				if readErr != nil {
+					continue
+				}
+				if t := cleanSubtitleText(string(data)); t != "" {
+					return t, false
+				}
 			}
 		}
 	}
-
-	return "", fmt.Errorf("no subtitle file produced")
+	errOut := stderr.String()
+	return "", strings.Contains(errOut, "429") || strings.Contains(errOut, "Too Many Requests")
 }
 
 // cleanSubtitleText strips VTT/SRT headers, timestamps, and formatting tags,
