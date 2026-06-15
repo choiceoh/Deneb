@@ -174,6 +174,22 @@ func (s *Server) registerSessionRPCMethods() {
 	// semantic neighbors. Degrades to pure BM25 whenever the server is down.
 	if s.wikiStore != nil {
 		s.wikiStore.SetEmbedder(s.embeddingClient)
+		// Warm the vector index off the request path so the first recall queries
+		// blend dense vectors instead of silently falling back to BM25. The lazy
+		// per-query refresh runs under the ~1.5s recall deadline, where a large
+		// uncached page can time out every turn and never persist to the cache;
+		// a generous background warm builds it once. Degrades to BM25 if the
+		// embedding server is down.
+		store := s.wikiStore
+		s.safeGo("wiki-semantic-warm", func() {
+			ctx, cancel := context.WithTimeout(s.ShutdownCtx(), 10*time.Minute)
+			defer cancel()
+			if err := store.WarmSemanticIndex(ctx); err != nil {
+				s.logger.Warn("wiki semantic warm incomplete", "error", err)
+			} else {
+				s.logger.Info("wiki semantic index warmed")
+			}
+		})
 	}
 
 	// Phase 2: Tool deps + registration (core, plugin).

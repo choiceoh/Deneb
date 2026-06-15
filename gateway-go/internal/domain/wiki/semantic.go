@@ -83,6 +83,19 @@ func (s *Store) SetEmbedder(e Embedder) {
 	s.sem = si
 }
 
+// WarmSemanticIndex eagerly (re)embeds any wiki pages missing from the on-disk
+// vector cache so semantic Search is ready before the first query — instead of
+// lazily refreshing under the caller's short recall deadline, where a large
+// uncached page can time out on every query and silently degrade search to
+// BM25-only. No-op without an embedder. Intended to run once in the background
+// at startup; subsequent boots are cheap when the cache is already complete.
+func (s *Store) WarmSemanticIndex(ctx context.Context) error {
+	if s.sem == nil {
+		return nil
+	}
+	return s.sem.refresh(ctx, s)
+}
+
 // cachedVecWire is the JSON shape of one cached embedding.
 type cachedVecWire struct {
 	Hash string    `json:"hash"`
