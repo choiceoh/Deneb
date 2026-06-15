@@ -3,20 +3,23 @@ package ai.deneb.ui.markdown
 // Box-drawing (ASCII-art) table → GitHub-markdown table normalizer.
 //
 // LLMs and pasted content sometimes draw tables with box-drawing characters
-// (┌─┐ │ ├┼┤ └─┘, also rounded ╭╮╰╯). The markdown renderer can't lay those
-// out, and with full-width CJK text the source columns are already misaligned,
-// so even a monospace fallback looks broken. We rewrite such blocks into real
-// markdown tables — cells taken from the │-delimited rows, border lines dropped,
-// continuation lines merged into the row above — so the existing table renderer
-// draws them cleanly. The model is also steered away from box tables in the
-// system prompt; this is the defense-in-depth for pasted/legacy/slip cases.
+// (light ┌─┐│├┼┤└┘, heavy ┏━┓┃┣╋┫┗┛, double ╔═╗║, rounded ╭╮╰╯, dashed …).
+// The markdown renderer can't lay those out, and with full-width CJK text the
+// source columns are already misaligned, so even a monospace fallback looks
+// broken. We rewrite such blocks into real markdown tables — cells from the
+// │-delimited rows, border lines dropped, continuation lines merged into the row
+// above — so the existing table renderer draws them cleanly. The model is also
+// steered away from box tables in the system prompt; this is the defense-in-depth
+// for pasted/legacy/slip cases.
 //
 // Markdown tables use the ASCII pipe `|` (0x7C); box tables use `│` (U+2502) and
 // friends, so this never touches a genuine markdown table.
 //
 // Safety constraints (so it never corrupts non-table content):
-//  - Fenced code blocks (``` / ~~~) are passed through untouched — a box table
-//    in pasted terminal output stays literal.
+//  - Fenced code blocks (``` / ~~~) pass through untouched — tracked with the
+//    same regex + length/info rules as BlockScanner, including inside
+//    blockquotes (the prefix is stripped before the fence check) and longer
+//    fences that contain shorter inner ones.
 //  - Only multi-column boxes (≥2 columns) with a border convert; a single-cell
 //    box (a callout/diagram) is left as written.
 //  - A consistent leading prefix (indentation and/or blockquote `>` markers) is
@@ -26,13 +29,16 @@ package ai.deneb.ui.markdown
 private const val VERTICALS = "│┃║" // cell delimiters in box tables
 private val VERTICAL_SPLIT = Regex("[│┃║]")
 
-// Border lines are made only of these horizontals/corners/junctions (+ verticals + spaces).
-private const val BORDER_CHARS =
-    "─━═┄┅┈┉╌╍" +
-        "┌┐└┘├┤┬┴┼" +
-        "╭╮╰╯" + // rounded corners
-        "╒╓╔╕╖╗╘╙╚╛╜╝╞╟╠╡╢╣╤╥╦╧╨╩╪╫╬" +
-        "╴╵╶╷"
+// Same fence grammar as BlockScanner.FENCE_REGEX: 0-3 indent, a run of ≥3
+// backticks or tildes, then an info string. Mirrored so this pre-pass agrees
+// with the parser on exactly which lines open/close a code fence.
+private val FENCE_REGEX = Regex("""^(\s{0,3})(`{3,}|~{3,})\s*(.*?)\s*$""")
+
+// A box-drawing border character: anything in the Unicode Box Drawing block
+// (U+2500–U+257F) except the verticals, which are cell delimiters. The range
+// covers light/heavy/double/rounded/dashed corners and junctions without
+// enumerating each one.
+private fun isBoxBorderChar(c: Char): Boolean = c in '─'..'╿' && c !in VERTICALS
 
 /**
  * Rewrite any box-drawing tables in [text] as markdown tables. Returns [text]
@@ -43,29 +49,43 @@ fun normalizeBoxTables(text: String): String {
     val lines = text.split("\n")
     val result = mutableListOf<String>()
     var i = 0
-    var fenceOpen: Char? = null
+    var fenceCh = ' '
+    var fenceLen = 0
+    var inFence = false
     while (i < lines.size) {
         val line = lines[i]
-        // Pass fenced code blocks through untouched (literal content).
-        val fence = fenceChar(line)
-        if (fenceOpen != null) {
+        // Strip the container prefix (indent / blockquote markers) first, so both
+        // fence and box-table detection see the actual content — matching how
+        // BlockScanner recognizes fences inside blockquotes after stripping `>`.
+        val prefix = blockPrefix(line)
+        val content = line.substring(prefix.length)
+        val fence = FENCE_REGEX.matchEntire(content)
+
+        // Pass fenced code blocks through untouched. Close only on a same-char run
+        // at least as long as the opener with a blank info string (CommonMark /
+        // BlockScanner rule) — a shorter inner fence does not close a longer one.
+        if (inFence) {
             result += line
-            if (fence == fenceOpen) fenceOpen = null
+            if (fence != null) {
+                val run = fence.groupValues[2]
+                if (run[0] == fenceCh && run.length >= fenceLen && fence.groupValues[3].isBlank()) {
+                    inFence = false
+                }
+            }
             i++
             continue
         }
         if (fence != null) {
-            fenceOpen = fence
+            inFence = true
+            fenceCh = fence.groupValues[2][0]
+            fenceLen = fence.groupValues[2].length
             result += line
             i++
             continue
         }
 
         // A box-table block: consecutive lines sharing the same leading prefix
-        // (indent / blockquote markers) that, after the prefix, are data or
-        // border lines.
-        val prefix = blockPrefix(line)
-        val content = line.substring(prefix.length)
+        // that, after the prefix, are data or border lines.
         val startsBlock = isDataLine(content) ||
             (isBorderLine(content) && i + 1 < lines.size && isDataAfter(lines[i + 1], prefix))
         if (startsBlock) {
@@ -103,16 +123,6 @@ fun normalizeBoxTables(text: String): String {
     return result.joinToString("\n")
 }
 
-/** The fence marker char (`` ` `` or `~`) if [line] opens/closes a code fence, else null. */
-private fun fenceChar(line: String): Char? {
-    val t = line.trimStart()
-    return when {
-        t.startsWith("```") -> '`'
-        t.startsWith("~~~") -> '~'
-        else -> null
-    }
-}
-
 /** Leading run of spaces, tabs, and blockquote `>` markers — the container
  *  prefix to strip before parsing and re-apply to emitted rows. */
 private fun blockPrefix(line: String): String {
@@ -128,7 +138,7 @@ private fun isBorderLine(line: String): Boolean {
     if (t.isEmpty()) return false
     var hasBorder = false
     for (c in t) {
-        if (c in BORDER_CHARS) {
+        if (isBoxBorderChar(c)) {
             hasBorder = true
         } else if (c !in VERTICALS && c != ' ') {
             return false // a real character → not a pure border line

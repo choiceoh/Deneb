@@ -146,4 +146,46 @@ class BoxTableNormalizerTest {
         assertEquals("    | A | B |", lines[0])
         assertEquals("    | 1 | 2 |", lines[2])
     }
+
+    @Test
+    fun `converts a heavy-style box table`() {
+        val box = """
+            |┏━━━━┳━━━━┓
+            |┃ A  ┃ B  ┃
+            |┣━━━━╋━━━━┫
+            |┃ 1  ┃ 2  ┃
+            |┗━━━━┻━━━━┛
+        """.trimMargin().trim()
+        val lines = normalizeBoxTables(box).lines()
+        assertEquals("| A | B |", lines[0])
+        assertEquals("| --- | --- |", lines[1])
+        assertEquals("| 1 | 2 |", lines[2])
+        assertEquals(3, lines.size) // heavy corners recognized → no stray borders
+    }
+
+    @Test
+    fun `does not close a longer fence on a shorter inner fence`() {
+        // Outer ```` (4) shows markdown that itself contains a ``` (3) + a box
+        // table; the inner triple must not end the fence, so the table stays literal.
+        val src = "````\n" +
+            "```\n" +
+            "┌────┬────┐\n" +
+            "│ A  │ B  │\n" +
+            "└────┴────┘\n" +
+            "```\n" +
+            "````"
+        assertEquals(src, normalizeBoxTables(src))
+    }
+
+    @Test
+    fun `leaves a fenced box table inside a blockquote untouched`() {
+        val src = """
+            |> ```
+            |> ┌────┬────┐
+            |> │ A  │ B  │
+            |> └────┴────┘
+            |> ```
+        """.trimMargin().trim()
+        assertEquals(src, normalizeBoxTables(src))
+    }
 }
