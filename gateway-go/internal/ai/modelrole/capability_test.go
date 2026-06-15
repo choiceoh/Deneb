@@ -47,9 +47,15 @@ func TestCapabilityForModel_Layering(t *testing.T) {
 		}
 	})
 
-	t.Run("discovered window applies to vllm provider only", func(t *testing.T) {
+	t.Run("discovered window applies to vLLM-backed fronts, not cloud", func(t *testing.T) {
+		// wormhole proxies the same vLLM serving, so a model fronted by it gets the
+		// discovered window by served id (the regression fix); a cloud front of a
+		// same-named model is a different serving and stays at 0.
+		if caps := reg.CapabilityForModel("wormhole", "gemma4"); caps.ContextWindow != 131072 {
+			t.Errorf("wormhole/gemma4 window = %d, want 131072 (vLLM-backed front)", caps.ContextWindow)
+		}
 		if caps := reg.CapabilityForModel("openrouter", "gemma4"); caps.ContextWindow != 0 {
-			t.Errorf("ContextWindow = %d, want 0 (discovery is vllm-scoped)", caps.ContextWindow)
+			t.Errorf("openrouter/gemma4 window = %d, want 0 (cloud front, different serving)", caps.ContextWindow)
 		}
 	})
 
@@ -70,6 +76,26 @@ func TestCapabilityForModel_Layering(t *testing.T) {
 			t.Errorf("zai caps = %+v, want permissive builtin", caps)
 		}
 	})
+}
+
+// TestCapabilityForModel_WormholeFrontedWindow covers the production regression:
+// the main model is routed via the wormhole proxy (whose /v1/models omits
+// max_model_len), yet the real window must still resolve — harvested from the
+// still-configured direct vllm provider that no role uses, applied by served id.
+func TestCapabilityForModel_WormholeFrontedWindow(t *testing.T) {
+	srv := newDiscoverySrv(t, `{"data":[{"id":"deepseek-v4-flash","max_model_len":1000000}]}`, 200)
+	reg := NewRegistryWithOptions(slog.Default(), RegistryOptions{
+		// Main is fronted by wormhole; no role uses the vllm provider directly.
+		MainModel: "wormhole/deepseek-v4-flash",
+		Providers: map[string]ProviderResolved{
+			"wormhole": {BaseURL: "http://127.0.0.1:18800/v1"}, // proxy: no /models window
+			"vllm":     {BaseURL: srv.URL + "/v1"},             // direct: reports the window
+		},
+	})
+
+	if caps := reg.CapabilityForModel("wormhole", "deepseek-v4-flash"); caps.ContextWindow != 1000000 {
+		t.Errorf("wormhole-fronted window = %d, want 1000000 harvested from the vllm provider", caps.ContextWindow)
+	}
 }
 
 func TestProfileForModel_Layering(t *testing.T) {

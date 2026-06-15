@@ -37,7 +37,13 @@ func (r *Registry) CapabilityForModel(providerID, model string) modelcaps.Capabi
 
 	r.mu.RLock()
 	var discoveredWindow int
-	if providerID == "vllm" {
+	// The window is keyed by served model id and applies to any vLLM-backed front
+	// (a direct vllm provider OR wormhole, which proxies the same model). Without
+	// the wormhole case, the main model routed via "wormhole/deepseek-v4-…"
+	// resolves to a 0 window — disabling deferred compaction. Cloud fronts
+	// (openrouter, zai) stay excluded: a same-named model there is a different
+	// serving with its own window.
+	if modelcaps.ServesVllmBacked(providerID) {
 		if w, ok := r.vllmWindows[model]; ok && w > 0 {
 			discoveredWindow = w
 		}
