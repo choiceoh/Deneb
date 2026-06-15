@@ -61,6 +61,21 @@ fun normalizePipeTables(text: String): String {
             continue
         }
         if (fence != null) {
+            // A real markdown table the model wrapped in a bare ``` fence renders as
+            // monospace code (CJK then misaligns) — the same slip [normalizeBoxTables]
+            // fixes for box tables. If the fenced block is ONLY a pipe table WITH a
+            // delimiter row, drop the fence so the table parser draws it. The delimiter
+            // requirement is the safe signal that it is a genuine table, not code that
+            // merely contains `|`. A language tag, missing delimiter, or nested fence
+            // passes through untouched.
+            if (fence.groupValues[3].isBlank()) {
+                val converted = convertFencedPipeTable(lines, i, prefix, fence.groupValues[2])
+                if (converted != null) {
+                    result += converted.rows
+                    i = converted.nextIndex
+                    continue
+                }
+            }
             inFence = true
             fenceCh = fence.groupValues[2][0]
             fenceLen = fence.groupValues[2].length
@@ -105,6 +120,55 @@ fun normalizePipeTables(text: String): String {
         i++
     }
     return result.joinToString("\n")
+}
+
+private class FencedPipeConvert(val rows: List<String>, val nextIndex: Int)
+
+/**
+ * If the bare fence at [openIdx] (run [openRun], container [prefix]) encloses ONLY a
+ * markdown pipe table that includes a delimiter row, return the unfenced rows (prefix
+ * kept) and the index past the closing fence. Returns null — caller keeps it as a
+ * normal code fence — when the block has a different prefix, a blank/non-pipe line, no
+ * delimiter row, a nested fence, or no terminator. The delimiter row is the strong,
+ * safe signal that distinguishes a real table from code that merely contains `|`.
+ */
+private fun convertFencedPipeTable(lines: List<String>, openIdx: Int, prefix: String, openRun: String): FencedPipeConvert? {
+    val ch = openRun[0]
+    val len = openRun.length
+    val rows = ArrayList<String>()
+    var closeIdx = -1
+    var j = openIdx + 1
+    while (j < lines.size) {
+        val l = lines[j]
+        if (pipePrefix(l) != prefix) return null // body must stay in the same container
+        val c = l.substring(prefix.length)
+        val f = PIPE_FENCE_REGEX.matchEntire(c)
+        if (f != null) {
+            if (f.groupValues[2][0] == ch && f.groupValues[2].length >= len && f.groupValues[3].isBlank()) {
+                closeIdx = j
+                break
+            }
+            return null // nested fence → not a pure table; leave as code
+        }
+        rows += l
+        j++
+    }
+    if (closeIdx < 0) return null // unterminated fence
+    var cols = -1
+    var hasSeparator = false
+    for (l in rows) {
+        val c = l.substring(prefix.length)
+        if (!isBorderedPipeRow(c)) return null // a blank or non-pipe line → not a pure table
+        if (PIPE_SEPARATOR_REGEX.matchEntire(c) != null) hasSeparator = true
+        val n = cellCount(c)
+        if (cols == -1) {
+            cols = n
+        } else if (n != cols) {
+            return null
+        }
+    }
+    if (rows.size < 2 || cols < 2 || !hasSeparator) return null
+    return FencedPipeConvert(rows, closeIdx + 1)
 }
 
 /** Leading run of spaces, tabs, and blockquote `>` markers to strip before detection
