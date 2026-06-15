@@ -308,6 +308,30 @@ class AppSettings(internal val settings: Settings) {
         settings.putInt("$KEY_MODEL_CONTEXT_PREFIX$modelId", contextTokens)
     }
 
+    // --- Transcript cache (cache-then-network) -----------------------------
+    // Per-session chat transcript JSON, persisted in the encrypted settings store
+    // so a reopened session renders instantly while the network fetch revalidates.
+    // Bounded by a small LRU so it never grows without limit (transcripts are
+    // private work content — kept encrypted, capped, and evicted, not archived).
+
+    fun getCachedTranscript(sessionKey: String): String? = settings.getStringOrNull(KEY_TX_CACHE_PREFIX + sessionKey)
+
+    fun putCachedTranscript(sessionKey: String, json: String) {
+        settings.putString(KEY_TX_CACHE_PREFIX + sessionKey, json)
+        // Most-recent-first LRU; evict overflow keys' payloads so the store is bounded.
+        val next = (listOf(sessionKey) + txCacheLru().filterNot { it == sessionKey }).take(TX_CACHE_MAX_SESSIONS)
+        txCacheLru().filterNot { it in next }.forEach { settings.remove(KEY_TX_CACHE_PREFIX + it) }
+        settings.putString(KEY_TX_CACHE_LRU, next.joinToString("\n"))
+    }
+
+    fun removeCachedTranscript(sessionKey: String) {
+        settings.remove(KEY_TX_CACHE_PREFIX + sessionKey)
+        settings.putString(KEY_TX_CACHE_LRU, txCacheLru().filterNot { it == sessionKey }.joinToString("\n"))
+    }
+
+    // sessionKeys never contain a newline, so "\n" is a safe list separator.
+    private fun txCacheLru(): List<String> = settings.getStringOrNull(KEY_TX_CACHE_LRU)?.split("\n")?.filter { it.isNotBlank() } ?: emptyList()
+
     companion object {
         const val KEY_APP_OPENS = "app_opens"
 
@@ -355,6 +379,10 @@ class AppSettings(internal val settings: Settings) {
         const val KEY_MODEL_CONTEXT_PREFIX = "model_context_"
 
         const val KEY_SANDBOX_ENABLED = "sandbox_enabled"
+
+        const val KEY_TX_CACHE_PREFIX = "tx_cache:"
+        const val KEY_TX_CACHE_LRU = "tx_cache_lru"
+        const val TX_CACHE_MAX_SESSIONS = 12
 
         // Basic memory guidance shared by every chat variant. The advanced `## Structured
         // Learning` block lives in `ChatSystemPromptBuilder.DEFAULT_STRUCTURED_LEARNING_SECTION`

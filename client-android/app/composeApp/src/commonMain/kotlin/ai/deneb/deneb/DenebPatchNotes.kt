@@ -21,6 +21,11 @@ data class DenebPatchNote(
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
         highlights = listOf(
+            "대화를 다시 열면 스피너 없이 즉시 표시됩니다 — 마지막으로 본 내용을 폰에 암호화 캐시해 바로 띄우고 백그라운드에서 최신으로 갱신(데이터·시간 절약)",
+        ),
+    ),
+    DenebPatchNote(
+        highlights = listOf(
             "본문 속 HTML 표기가 서식으로 렌더됩니다 — `<u>` 밑줄, `<mark>` 형광 강조, `<sup>`/`<sub>` 첨자(5ᵗʰ·xᵢ 같은 문자 첨자 포함), `<a href>` 링크가 글자 그대로 노출되지 않음",
         ),
     ),
