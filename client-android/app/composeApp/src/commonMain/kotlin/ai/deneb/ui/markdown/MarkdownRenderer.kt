@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -27,6 +28,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckBox
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.outlined.CheckBoxOutlineBlank
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
@@ -38,7 +41,10 @@ import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -162,6 +168,8 @@ private fun BlockRenderer(
         }
 
         is Blockquote -> BlockquoteBlock(block, isInteractive, onUiCallback, frozen)
+
+        is Collapsible -> CollapsibleBlock(block, isInteractive, onUiCallback, frozen)
 
         is BulletList -> BulletListBlock(block, isInteractive, onUiCallback, frozen)
 
@@ -338,6 +346,44 @@ private fun BlockquoteBlock(
         )
         Column(Modifier.padding(start = 12.dp, end = 10.dp, top = 4.dp, bottom = 4.dp)) {
             block.children.forEach { BlockRenderer(it, isInteractive, onUiCallback, frozen) }
+        }
+    }
+}
+
+// HTML <details>: a tappable summary header that expands/collapses the body blocks.
+@Composable
+private fun CollapsibleBlock(
+    block: Collapsible,
+    isInteractive: Boolean,
+    onUiCallback: (String, Map<String, String>) -> Unit,
+    frozen: FrozenSubmission?,
+) {
+    var open by remember(block) { mutableStateOf(block.initiallyOpen) }
+    Column(Modifier.padding(vertical = 4.dp)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(6.dp))
+                .clickable { open = !open }
+                .padding(vertical = 6.dp, horizontal = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = if (open) Icons.Filled.ExpandMore else Icons.Filled.ChevronRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(20.dp),
+            )
+            Spacer(Modifier.width(4.dp))
+            InlineContent(
+                inlines = block.summary,
+                style = markdownBodyStyle.copy(fontWeight = FontWeight.Bold),
+            )
+        }
+        if (open) {
+            Column(Modifier.padding(start = 24.dp, top = 2.dp)) {
+                block.children.forEach { BlockRenderer(it, isInteractive, onUiCallback, frozen) }
+            }
         }
     }
 }

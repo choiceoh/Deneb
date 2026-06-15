@@ -41,6 +41,13 @@ internal object BlockScanner {
     )
     private val BLOCKQUOTE_REGEX = Regex("""^\s{0,3}>\s?(.*)$""")
 
+    // HTML <details>/<summary> collapsible. The opener is anchored to the line start so
+    // prose like "see <details> below" stays prose; the `open` attribute means initially
+    // expanded. <summary> may sit on the opener line or its own line.
+    private val DETAILS_OPEN_REGEX = Regex("""^\s*<details(\s[^>]*)?>""", RegexOption.IGNORE_CASE)
+    private val DETAILS_CLOSE_REGEX = Regex("""</details\s*>""", RegexOption.IGNORE_CASE)
+    private val SUMMARY_REGEX = Regex("""<summary(?:\s[^>]*)?>([\s\S]*?)</summary\s*>""", RegexOption.IGNORE_CASE)
+
     // ASCII bullets plus the Unicode bullets LLMs emit directly (• ▸ ◦ ‣ — • alone is 1400+
     // in real logs); the renderer always draws "•", so they look the same but now get real
     // list structure (indent, spacing, nesting).
@@ -55,6 +62,9 @@ internal object BlockScanner {
     private val TABLE_SEPARATOR_REGEX = Regex("""^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)+\|?\s*$""")
 
     private const val MAX_BLOCK_DEPTH = 32
+
+    // Header shown for a <details> with no <summary> (HTML's default is "Details").
+    private const val DEFAULT_DETAILS_SUMMARY = "자세히"
     private const val MAX_LINE_REGEX_LEN = 10_000
 
     fun scan(text: String): ImmutableList<BlockNode> {
@@ -198,6 +208,13 @@ internal object BlockScanner {
             if (BLOCKQUOTE_REGEX.matchEntire(line) != null) {
                 val (bq, next) = parseBlockquote(lines, i, end, depth)
                 blocks += bq
+                i = next
+                continue
+            }
+
+            if (DETAILS_OPEN_REGEX.containsMatchIn(line)) {
+                val (details, next) = parseDetails(lines, i, end, depth)
+                blocks += details
                 i = next
                 continue
             }
@@ -365,6 +382,44 @@ internal object BlockScanner {
         }
         val children = scanLines(inner, 0, inner.size, depth + 1)
         return Blockquote(children) to i
+    }
+
+    // =========================================================================================
+    // Collapsible (<details>/<summary>)
+    // =========================================================================================
+
+    private fun parseDetails(lines: List<String>, start: Int, end: Int, depth: Int): Pair<BlockNode, Int> {
+        val open = DETAILS_OPEN_REGEX.find(lines[start]) ?: return parseParagraph(lines, start, end)
+        val initiallyOpen = open.groupValues[1].contains("open", ignoreCase = true)
+        // Collect inner text from after the <details ...> opener through the matching
+        // </details> (or EOF if unclosed mid-stream). The opener/closer may share a line
+        // with content (e.g. <details><summary>x</summary>body</details>).
+        val collected = mutableListOf<String>()
+        var i = start
+        while (i < end) {
+            var ln = lines[i]
+            if (i == start) ln = ln.substring(open.range.last + 1)
+            val close = DETAILS_CLOSE_REGEX.find(ln)
+            if (close != null) {
+                collected += ln.substring(0, close.range.first)
+                i++
+                break
+            }
+            collected += ln
+            i++
+        }
+        var body = collected.joinToString("\n")
+        // Pull the first <summary>…</summary> out as the header; default when absent.
+        val summaryMatch = SUMMARY_REGEX.find(body)
+        val summary = if (summaryMatch != null) {
+            body = body.substring(0, summaryMatch.range.first) + body.substring(summaryMatch.range.last + 1)
+            InlineTokenizer.tokenize(summaryMatch.groupValues[1].trim())
+        } else {
+            InlineTokenizer.tokenize(DEFAULT_DETAILS_SUMMARY)
+        }
+        val bodyLines = body.trim('\n').split("\n")
+        val children = scanLines(bodyLines, 0, bodyLines.size, depth + 1)
+        return Collapsible(summary, children, initiallyOpen) to i
     }
 
     private fun flattenToParagraph(lines: List<String>, start: Int, end: Int): ImmutableList<BlockNode> {

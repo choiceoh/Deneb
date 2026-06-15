@@ -25,6 +25,7 @@ private fun blockToSpeakable(block: BlockNode): String = when (block) {
     is Paragraph -> inlinesToText(block.inlines)
     is CodeFence -> ""
     is Blockquote -> block.children.joinToString(". ") { blockToSpeakable(it) }.trim()
+    is Collapsible -> (inlinesToText(block.summary) + ". " + block.children.joinToString(". ") { blockToSpeakable(it) }).trim()
     is BulletList -> block.items.joinToString("\n") { itemToSpeakable(it) }
     is OrderedList -> block.items.joinToString("\n") { itemToSpeakable(it) }
     is Table -> tableToSpeakable(block)
@@ -89,6 +90,8 @@ private fun blockToPlain(block: BlockNode): String = when (block) {
     is CodeFence -> block.code
 
     is Blockquote -> block.children.joinToString("\n") { blockToPlain(it) }
+
+    is Collapsible -> inlinesToText(block.summary) + "\n" + block.children.joinToString("\n") { blockToPlain(it) }
 
     is BulletList -> block.items.joinToString("\n") { item ->
         // Keep GFM task state in copies — the parser stripped "[x]" into ListItem.checked.

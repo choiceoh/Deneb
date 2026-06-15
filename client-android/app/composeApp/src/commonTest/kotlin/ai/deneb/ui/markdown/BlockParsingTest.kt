@@ -149,6 +149,28 @@ class BlockParsingTest {
     }
 
     @Test
+    fun `details with summary becomes a collapsible`() {
+        val doc = parseMarkdown("<details>\n<summary>요약 제목</summary>\n\n본문 내용\n</details>")
+        val c = doc.blocks.single() as Collapsible
+        assertEquals("요약 제목", (c.summary.single() as Text).value)
+        assertEquals(false, c.initiallyOpen)
+        assertEquals("본문 내용", ((c.children.single() as Paragraph).inlines.single() as Text).value)
+    }
+
+    @Test
+    fun `details open attribute starts expanded`() {
+        val doc = parseMarkdown("<details open>\n<summary>제목</summary>\n본문\n</details>")
+        assertTrue((doc.blocks.single() as Collapsible).initiallyOpen)
+    }
+
+    @Test
+    fun `details without summary uses a default header`() {
+        val c = parseMarkdown("<details>\n본문만\n</details>").blocks.single() as Collapsible
+        assertEquals("자세히", (c.summary.single() as Text).value)
+        assertEquals("본문만", ((c.children.single() as Paragraph).inlines.single() as Text).value)
+    }
+
+    @Test
     fun `multiple paragraphs separated by blank line`() {
         val doc = parseMarkdown("first\n\nsecond")
         assertEquals(2, doc.blocks.size)

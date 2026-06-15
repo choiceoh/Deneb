@@ -55,6 +55,11 @@ internal object InlineTokenizer {
         RegexOption.IGNORE_CASE,
     )
 
+    // Transparent inline wrapper LLMs emit for styling we don't render (usually with a
+    // style/class attribute): <span style="color:red">중요</span> → keep "중요", drop the
+    // tag. Attribute-tolerant, unlike HTML_INLINE_REGEX which is bare-tag only.
+    private val HTML_SPAN_REGEX = Regex("<span(?:\\s[^>]*)?>([\\s\\S]+?)</span>", RegexOption.IGNORE_CASE)
+
     // LLM-emitted HTML anchor: <a href="url">text</a> → a real Link (other attributes
     // ignored). The href quote can be " or '. Empty link text falls back to the href.
     private val HTML_ANCHOR_REGEX = Regex(
@@ -296,6 +301,9 @@ internal object InlineTokenizer {
                         else -> Text(inner) // unknown paired tags: keep content, drop tags
                     }
                     all += m.range to node
+                }
+                for (m in HTML_SPAN_REGEX.findAll(text)) {
+                    all += m.range to Text(m.groupValues[1]) // strip the wrapper, keep its text
                 }
             }
         }
