@@ -108,7 +108,14 @@ func prepareContextAndPrompt(
 		// is the user's "focused chat / memory off" toggle: skip the whole
 		// preflight so a general question pays no search latency and pulls no
 		// unrelated work memories.
-		if params.EphemeralUser || params.SkipRecall {
+		//
+		// chatbot (chat: session) also skips recall unconditionally — the clean
+		// general-assistant prompt withholds all work context, and recall hits
+		// (wiki/diary/polaris/hindsight) are tail-injected into the last user
+		// message, so without this gate a chat: turn could still receive private
+		// work memory even when the per-turn SkipRecall flag is unset (session
+		// key vs flag divergence). The session key is the authoritative signal.
+		if params.EphemeralUser || params.SkipRecall || chatbot {
 			return
 		}
 		fingerprint := recallCueFingerprint(params.Message)
