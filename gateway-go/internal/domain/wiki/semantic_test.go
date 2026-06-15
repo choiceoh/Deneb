@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // fakeEmbedder maps text to a 2-dim vector by concept markers, so a query can
@@ -82,6 +83,7 @@ func TestSearchHybrid(t *testing.T) {
 	// Hybrid (healthy embedder): now the semantic page surfaces too, and the
 	// unrelated GPU page stays out (cosine 0, no keyword).
 	store.SetEmbedder(fakeEmbedder{healthy: true})
+	store.sem.syncRefresh = true // deterministic: embed pages inline, not in a goroutine
 	hybrid, err := store.Search(ctx, query, 10)
 	if err != nil {
 		t.Fatalf("Search (hybrid): %v", err)
@@ -114,6 +116,7 @@ func TestSuggestRelatedAndEnrich(t *testing.T) {
 		t.Fatalf("NewStore: %v", err)
 	}
 	store.SetEmbedder(fakeEmbedder{healthy: true})
+	store.sem.syncRefresh = true // deterministic: embed pages inline, not in a goroutine
 
 	// Two risk-concept pages (no related links), one unrelated GPU page.
 	mustWrite(t, store, "프로젝트/risk1.md", &Page{
@@ -149,6 +152,55 @@ func TestSuggestRelatedAndEnrich(t *testing.T) {
 	}
 }
 
+// TestRefreshAsync_BackgroundAndSingleFlight exercises the real async path
+// (syncRefresh off): a request triggers a background re-embed that populates
+// vectors without blocking the caller, and a second trigger over unchanged
+// pages re-embeds nothing (single-flight + content-hash skip).
+func TestRefreshAsync_BackgroundAndSingleFlight(t *testing.T) {
+	dir := t.TempDir()
+	store, err := NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	mustWrite(t, store, "프로젝트/supply.md", &Page{
+		Meta: Frontmatter{ID: "supply", Title: "공급 현황", Category: "프로젝트", Summary: "납품 일정"},
+		Body: "원자재 차질 우려 있음.",
+	})
+	emb := &countingEmbedder{fakeEmbedder: fakeEmbedder{healthy: true}}
+	store.SetEmbedder(emb) // syncRefresh stays false → real background path
+
+	store.sem.refreshAsync(store)
+	waitRefresh(t, store.sem)
+
+	store.sem.mu.Lock()
+	n := len(store.sem.vecs)
+	store.sem.mu.Unlock()
+	if n == 0 {
+		t.Fatal("background refresh embedded no vectors")
+	}
+	embedded := emb.calls
+
+	// Re-trigger: nothing changed, so no further embedding happens.
+	store.sem.refreshAsync(store)
+	waitRefresh(t, store.sem)
+	if emb.calls != embedded {
+		t.Errorf("re-embedded unchanged pages: %d → %d Embed calls", embedded, emb.calls)
+	}
+}
+
+// waitRefresh polls the single-flight flag until the background refresh started
+// by refreshAsync finishes (it is set synchronously before the goroutine spawns).
+func waitRefresh(t *testing.T, si *semanticIndex) {
+	t.Helper()
+	for range 400 {
+		if !si.refreshing.Load() {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatal("background refresh did not complete in time")
+}
+
 // countingEmbedder wraps fakeEmbedder and counts Embed calls so tests can
 // assert the persisted cache prevents re-embedding after a restart.
 type countingEmbedder struct {
@@ -180,6 +232,7 @@ func TestSemanticCache_PersistsAcrossRestart(t *testing.T) {
 
 	emb1 := &countingEmbedder{fakeEmbedder: fakeEmbedder{healthy: true}}
 	store.SetEmbedder(emb1)
+	store.sem.syncRefresh = true // deterministic: count page embeds inline
 	if got := store.searchSemantic(context.Background(), "납기 지연 위험 우려", 5); len(got) == 0 {
 		t.Fatalf("semantic search returned no hits on first run")
 	}
@@ -194,6 +247,7 @@ func TestSemanticCache_PersistsAcrossRestart(t *testing.T) {
 	}
 	emb2 := &countingEmbedder{fakeEmbedder: fakeEmbedder{healthy: true}}
 	store2.SetEmbedder(emb2)
+	store2.sem.syncRefresh = true // deterministic: cache hydration should skip page embeds
 	if got := store2.searchSemantic(context.Background(), "납기 지연 위험 우려", 5); len(got) == 0 {
 		t.Fatalf("semantic search returned no hits after restart")
 	}

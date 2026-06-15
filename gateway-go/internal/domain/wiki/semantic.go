@@ -24,6 +24,10 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
+	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/pkg/safego"
 )
 
 // Embedder is the minimal embedding-server surface the wiki needs.
@@ -55,14 +59,48 @@ type cachedVec struct {
 // gateway restarts don't force a full re-embed of the wiki on the first
 // semantic query after every boot.
 type semanticIndex struct {
-	embedder  Embedder
-	cachePath string // "" → persistence disabled (tests)
-	mu        sync.Mutex
-	vecs      map[string]cachedVec // relPath -> embedding
+	embedder    Embedder
+	cachePath   string // "" → persistence disabled (tests)
+	mu          sync.Mutex
+	vecs        map[string]cachedVec // relPath -> embedding
+	refreshing  atomic.Bool          // single-flight guard for refreshAsync
+	syncRefresh bool                 // tests only: run refreshAsync inline for deterministic assertions
 }
 
 func newSemanticIndex(e Embedder) *semanticIndex {
 	return &semanticIndex{embedder: e, vecs: make(map[string]cachedVec)}
+}
+
+// semanticRefreshTimeout bounds a background re-embed. Generous because the CPU
+// embedding server (BGE-M3) is slow under host load — this runs off the request
+// path, so it can afford to wait rather than time out on a caller's recall budget.
+const semanticRefreshTimeout = 3 * time.Minute
+
+// refreshAsync re-embeds changed pages in the background, at most one at a time.
+// Request paths (search, related-link suggestion, graph rerank) call this and
+// then read whatever vectors exist now — eventually consistent — instead of
+// blocking on the embed under a caller's tight ctx. Re-embedding on the hot
+// recall path (a ~1.5s preflight budget) was the source of repeated
+// "context deadline exceeded" batch failures that dropped semantic search to
+// BM25; the embed now owns its own generous deadline. Best-effort: a failed
+// background refresh keeps prior vectors and is retried on the next trigger.
+func (si *semanticIndex) refreshAsync(store *Store) {
+	if si.syncRefresh {
+		ctx, cancel := context.WithTimeout(context.Background(), semanticRefreshTimeout)
+		defer cancel()
+		_ = si.refresh(ctx, store)
+		return
+	}
+	if !si.refreshing.CompareAndSwap(false, true) {
+		return // a refresh is already in flight
+	}
+	safego.GoWithSlog(slog.Default(), "wiki-semantic-refresh", func() {
+		defer si.refreshing.Store(false)
+		// Background work with no plumbed shutdown ctx; bounded so it cannot wedge.
+		ctx, cancel := context.WithTimeout(context.Background(), semanticRefreshTimeout)
+		defer cancel()
+		_ = si.refresh(ctx, store)
+	})
 }
 
 // semanticCacheFile is the embedding cache inside the wiki dir. Hidden and
@@ -175,9 +213,10 @@ func (s *Store) searchSemantic(ctx context.Context, query string, limit int) []S
 	if len(strings.TrimSpace(query)) < semanticMinChars {
 		return nil // too short to embed meaningfully
 	}
-	if err := s.sem.refresh(ctx, s); err != nil {
-		return nil
-	}
+	// Re-embed changed pages in the background; search the current vectors now so
+	// a stale page never stalls the recall budget. The query embed below (a single
+	// short text) still runs on the request ctx — fast and necessary.
+	s.sem.refreshAsync(s)
 
 	qvecs, err := s.sem.embedder.Embed(ctx, []string{query})
 	if err != nil || len(qvecs) == 0 {
@@ -303,9 +342,7 @@ func (s *Store) SuggestRelated(ctx context.Context, relPath string, limit int) [
 	if err != nil || page == nil {
 		return nil
 	}
-	if err := s.sem.refresh(ctx, s); err != nil {
-		return nil
-	}
+	s.sem.refreshAsync(s) // background re-embed; suggest from current vectors
 
 	already := make(map[string]bool, len(page.Meta.Related))
 	for _, r := range page.Meta.Related {
