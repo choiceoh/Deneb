@@ -692,11 +692,19 @@ func finalizePrompt(
 
 var _ compact.Summarizer = (*localAISummarizer)(nil)
 
-// localAISummarizer adapts pilot.CallLocalLLM to the compaction.Summarizer interface.
+// localAISummarizer adapts the LOCAL lightweight model to the
+// compaction.Summarizer interface. Compaction summarization had been routed to
+// the analysis role, which now resolves to a cloud model (glm-5.2) — making each
+// chunk summary a ~20s network round-trip that both burns subscription credits
+// and is the dominant cause of the "polaris: chunk summarization failed …
+// context deadline exceeded" timeouts (the sync 2m budget vs several chunks).
+// The lightweight role (local qwen3.6-35b) summarizes the same chunk in ~3s with
+// equal fact-fidelity and a more concise (better-compressed) result, so the
+// background path is free and the sync path no longer times out.
 type localAISummarizer struct{}
 
 func (s *localAISummarizer) Summarize(ctx context.Context, system, conversation string, maxOutputTokens int) (string, error) {
-	return pilot.CallAnalysisLLM(ctx, system, conversation, maxOutputTokens)
+	return pilot.CallLocalLLM(ctx, system, conversation, maxOutputTokens)
 }
 
 // formatToolHist renders a tool-count histogram as "name:count,name:count" in
