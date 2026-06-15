@@ -2,6 +2,7 @@ package ai.deneb.ui.chat.composables
 
 import ai.deneb.DenebCalendar
 import ai.deneb.DenebConfig
+import ai.deneb.DenebFeed
 import ai.deneb.DenebMail
 import ai.deneb.Home
 import ai.deneb.ui.DenebType
@@ -9,6 +10,7 @@ import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -57,14 +59,15 @@ data class DenebTab(
     val filled: ImageVector,
 )
 
-// The four primary sections. Search·todo·diary·categories live under 더보기 (and fleet
-// lives inside settings, so it is reached through the 설정 tab — not 더보기). The whole
-// bar is hidden in the 챗봇 workspace (App.kt), so there is no per-tab filtering here.
+// The four primary 업무 sections — 피드 leads (the work home) and 채팅 is now a tab,
+// not the default. Search·todo·diary·categories and 설정 live under 더보기 (and fleet
+// inside settings). The whole bar is hidden in the 챗봇 workspace (App.kt), so there
+// is no per-tab filtering here.
 val denebBottomTabs: List<DenebTab> = listOf(
+    DenebTab("피드", "deneb_feed", DenebFeed, Icons.Filled.Notifications, Icons.Filled.Notifications),
     DenebTab("채팅", "home", Home, Icons.AutoMirrored.Outlined.ChatOutlined, Icons.AutoMirrored.Filled.ChatFilled),
     DenebTab("메일", "deneb_mail", DenebMail, Icons.Outlined.EmailOutlined, Icons.Filled.EmailFilled),
     DenebTab("달력", "deneb_calendar", DenebCalendar, Icons.Outlined.CalOutlined, Icons.Filled.CalFilled),
-    DenebTab("설정", "deneb_config", DenebConfig, Icons.Outlined.SettingsOutlined, Icons.Filled.SettingsFilled),
 )
 
 // Routes that surface 업무 데이터 (mail/calendar/search/categories/fleet). Used by App.kt
@@ -84,14 +87,15 @@ val denebWorkDataRoutes: Set<String> = setOf(
 // they hide the bar and keep their own back nav. Fleet is now a settings sub-screen
 // (like skill/cron) — a pushed detail with its own back nav, so it is not listed here.
 val denebBottomBarRoutes: Set<String> = setOf(
-    "home", "deneb_mail", "deneb_calendar", "deneb_config",
+    "deneb_feed", "home", "deneb_mail", "deneb_calendar", "deneb_config",
     "deneb_more", "deneb_search", "deneb_todo", "deneb_diary", "deneb_categories",
 )
 
 // Routes where 더보기 is the active tab (the More screen itself, or a section opened
-// from it).
+// from it). 설정 now lives here too (moved out of the primary tabs).
 val denebMoreRoutes: Set<String> = setOf(
     "deneb_more",
+    "deneb_config",
     "deneb_search",
     "deneb_todo",
     "deneb_diary",

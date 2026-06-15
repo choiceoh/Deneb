@@ -45,6 +45,7 @@ import ai.deneb.ui.chat.ChatViewModel
 import ai.deneb.ui.chat.composables.CaptureActions
 import ai.deneb.ui.chat.composables.DenebBottomBar
 import ai.deneb.ui.chat.composables.DenebSidebar
+import ai.deneb.ui.chat.composables.FeedScreen
 import ai.deneb.ui.chat.composables.LocalCaptureActions
 import ai.deneb.ui.chat.composables.denebBottomBarRoutes
 import ai.deneb.ui.chat.composables.denebMoreRoutes
@@ -116,6 +117,10 @@ import org.koin.dsl.koinConfiguration
 @Serializable
 @SerialName("home")
 object Home
+
+@Serializable
+@SerialName("deneb_feed")
+object DenebFeed
 
 @Serializable
 @SerialName("deneb_config")
@@ -362,10 +367,15 @@ private fun AppContent(
                     }
                 }
 
+                // 업무 launches into the 피드 home (work feed as the main screen); 챗봇
+                // launches into the chat. Captured once — NavHost reads startDestination
+                // only at first composition. A runtime workspace toggle then navigates
+                // via the bottom bar (and the 챗봇 bounce LaunchedEffect above).
+                val workAtStart = remember { isWorkMode }
                 val navHost: @Composable (Modifier) -> Unit = { navHostModifier ->
                     NavHost(
                         navController,
-                        startDestination = Home,
+                        startDestination = if (workAtStart) DenebFeed else Home,
                         modifier = navHostModifier.background(MaterialTheme.colorScheme.background),
                     ) {
                         composable<Home> {
@@ -375,6 +385,19 @@ private fun AppContent(
                                 // still configures above is not wired into chat.
                                 textToSpeech = null,
                                 navigationTabBar = if (showTabBar) navigationTabBar else null,
+                            )
+                        }
+                        composable<DenebFeed> {
+                            val feedState by chatViewModel.state.collectAsStateWithLifecycle()
+                            var seenIds by remember { mutableStateOf(appSettings.getFeedSeenIds()) }
+                            FeedScreen(
+                                items = feedState.workFeed,
+                                seenIds = seenIds,
+                                onMarkSeen = { id ->
+                                    appSettings.markFeedSeen(id)
+                                    seenIds = appSettings.getFeedSeenIds()
+                                },
+                                onRunAction = feedState.actions.runWorkFeedAction,
                             )
                         }
                         composable<DenebConfig> {

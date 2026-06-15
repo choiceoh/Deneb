@@ -39,6 +39,23 @@ class AppSettings(internal val settings: Settings) {
         settings.putString(KEY_CONVERSATIONS, json)
     }
 
+    // Feed "읽음" (seen) state — the work-feed item ids the user has opened in the
+    // 피드 screen, persisted as a comma-joined string (ids never contain commas).
+    // Distinct from the server-side ack/done that the action buttons perform;
+    // "seen" only moves a row into the read section.
+    fun getFeedSeenIds(): Set<String> = settings.getStringOrNull(KEY_FEED_SEEN_IDS)
+        ?.split(',')
+        ?.filterTo(LinkedHashSet()) { it.isNotBlank() }
+        ?: emptySet()
+
+    fun markFeedSeen(id: String) {
+        if (id.isBlank()) return
+        val next = LinkedHashSet(getFeedSeenIds()).apply { add(id) }
+        // Bound the set so a long-running install can't grow it without limit.
+        val bounded = if (next.size > 500) next.toList().takeLast(500).toSet() else next
+        settings.putString(KEY_FEED_SEEN_IDS, bounded.joinToString(","))
+    }
+
     fun getCurrentConversationId(): String? = settings.getStringOrNull(KEY_CURRENT_CONVERSATION_ID)
 
     fun setCurrentConversationId(id: String?) {
@@ -294,6 +311,7 @@ class AppSettings(internal val settings: Settings) {
     companion object {
         const val KEY_APP_OPENS = "app_opens"
 
+        const val KEY_FEED_SEEN_IDS = "feed_seen_ids"
         const val KEY_CONVERSATIONS = "conversations_json"
         const val KEY_CURRENT_CONVERSATION_ID = "current_conversation_id"
         const val KEY_CURRENT_CONVERSATION_MIGRATED = "current_conversation_migrated"
