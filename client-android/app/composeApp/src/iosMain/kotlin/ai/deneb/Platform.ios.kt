@@ -143,6 +143,21 @@ actual suspend fun saveFileToDevice(bytes: ByteArray, baseName: String, extensio
 }
 
 @OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
+actual suspend fun shareImageToApps(bytes: ByteArray, baseName: String, extension: String) {
+    if (bytes.isEmpty()) return
+    val data = bytes.usePinned { pinned ->
+        NSData.dataWithBytes(pinned.addressOf(0), bytes.size.toULong())
+    }
+    val image = platform.UIKit.UIImage(data = data) ?: return
+    val activityVC = platform.UIKit.UIActivityViewController(
+        activityItems = listOf(image),
+        applicationActivities = null,
+    )
+    val root = platform.UIKit.UIApplication.sharedApplication.keyWindow?.rootViewController ?: return
+    root.presentViewController(activityVC, animated = true, completion = null)
+}
+
+@OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
 actual fun sendHeartbeatNotification(title: String, body: String) {
     // The authorization completion runs asynchronously on a system queue, so it's outside the
     // outer try/catch's scope and needs its own guard. Heartbeat delivery must never throw.

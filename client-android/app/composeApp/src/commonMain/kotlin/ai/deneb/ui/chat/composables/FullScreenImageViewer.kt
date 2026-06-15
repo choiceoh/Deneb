@@ -1,23 +1,30 @@
 package ai.deneb.ui.chat.composables
 
+import ai.deneb.saveFileToDevice
+import ai.deneb.shareImageToApps
 import ai.deneb.ui.handCursor
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -31,6 +38,9 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import deneb.composeapp.generated.resources.Res
 import deneb.composeapp.generated.resources.image_viewer_close
+import deneb.composeapp.generated.resources.image_viewer_save
+import deneb.composeapp.generated.resources.image_viewer_share
+import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -42,10 +52,12 @@ import org.jetbrains.compose.resources.stringResource
 @Composable
 internal fun FullScreenImageViewerOverlay(
     bitmap: ImageBitmap,
+    pngBytes: ByteArray?,
     onDismiss: () -> Unit,
 ) {
     var scale by remember { mutableStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
+    val scope = rememberCoroutineScope()
 
     Box(
         modifier = Modifier
@@ -102,6 +114,47 @@ internal fun FullScreenImageViewerOverlay(
                 contentDescription = stringResource(Res.string.image_viewer_close),
                 tint = Color.White,
             )
+        }
+
+        // Export actions, shown only when the original encoded bytes are available
+        // (image attachments pass them; a bitmap-only caller hides these): save to a
+        // file via the platform save dialog, or hand off to the OS share sheet.
+        val bytes = pngBytes
+        if (bytes != null) {
+            Row(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .statusBarsPadding()
+                    .padding(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                IconButton(
+                    onClick = { scope.launch { saveFileToDevice(bytes, "deneb-image", "png") } },
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(Color.Black.copy(alpha = 0.4f))
+                        .handCursor(),
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Download,
+                        contentDescription = stringResource(Res.string.image_viewer_save),
+                        tint = Color.White,
+                    )
+                }
+                IconButton(
+                    onClick = { scope.launch { shareImageToApps(bytes, "deneb-image", "png") } },
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(Color.Black.copy(alpha = 0.4f))
+                        .handCursor(),
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Share,
+                        contentDescription = stringResource(Res.string.image_viewer_share),
+                        tint = Color.White,
+                    )
+                }
+            }
         }
     }
 }

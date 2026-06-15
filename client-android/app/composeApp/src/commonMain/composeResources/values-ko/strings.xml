@@ -114,6 +114,8 @@
     <string name="deneb_ui_render_failed">UI 렌더링에 실패했습니다</string>
     <string name="deneb_ui_code_copy">복사</string>
     <string name="image_viewer_close">닫기</string>
+    <string name="image_viewer_save">이미지 저장</string>
+    <string name="image_viewer_share">이미지 공유</string>
     <string name="bot_message_thinking_label">생각 중</string>
     <string name="bot_message_thinking_expand_content_description">생각 펼치기 또는 접기</string>
 </resources>
