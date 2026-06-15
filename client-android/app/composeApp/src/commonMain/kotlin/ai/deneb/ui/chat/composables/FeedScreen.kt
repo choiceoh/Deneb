@@ -39,8 +39,14 @@ internal fun FeedScreen(
             return@DenebScreenScaffold
         }
         var expandedId by remember { mutableStateOf<String?>(null) }
-        val unread = items.filterNot { seenIds.contains(it.id) }
-        val read = items.filter { seenIds.contains(it.id) }
+        // Partition by a snapshot of seenIds taken when the feed's items load, not
+        // live: tapping a row marks it seen (onMarkSeen) and expands it inline, and a
+        // live re-partition would yank the tapped item from 안읽음 (top) down into the
+        // 읽음 section mid-tap, so it expanded out of view and couldn't be read. Read
+        // items re-sort into 읽음 the next time the feed's data reloads.
+        val seenSnapshot = remember(items) { seenIds }
+        val unread = items.filterNot { seenSnapshot.contains(it.id) }
+        val read = items.filter { seenSnapshot.contains(it.id) }
 
         val open: (String) -> Unit = { id ->
             expandedId = if (expandedId == id) null else id
