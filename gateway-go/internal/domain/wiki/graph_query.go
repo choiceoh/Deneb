@@ -343,9 +343,7 @@ func (s *Store) applyEmbeddingRerank(ctx context.Context, recs []graphRec, seed 
 	if s.sem == nil || s.sem.embedder == nil || !s.sem.embedder.IsHealthy() {
 		return
 	}
-	if err := s.sem.refresh(ctx, s); err != nil {
-		return
-	}
+	s.sem.refreshAsync(s) // background re-embed; rerank on current vectors
 	s.sem.mu.Lock()
 	seedCV, ok := s.sem.vecs[recs[seed].relPath]
 	if !ok {
