@@ -1,17 +1,20 @@
 package ai.deneb.ui.chat.composables
 
-import ai.deneb.ui.denebBreathing
 import ai.deneb.ui.denebSpatialSpring
-import ai.deneb.ui.isOledFlavor
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.StartOffset
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.keyframes
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -19,7 +22,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -32,12 +34,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import deneb.composeapp.generated.resources.Res
 import deneb.composeapp.generated.resources.tools_count_more
@@ -101,44 +104,32 @@ internal fun WaitingResponseRow(
         else -> stringResource(Res.string.waiting_elapsed_sec, elapsedSec)
     }
 
+    // No chip: a transparent, inline pulsing dot + status text — the way modern
+    // chat apps show "thinking". The old surfaceVariant fill read as a gray slab
+    // (and needed an OLED special-case); dropping it lets the status sit flush on
+    // the message-content margin (16.dp), animating its width as the text grows.
     Row(
         modifier = Modifier
-            .padding(horizontal = 16.dp, vertical = 8.dp)
-            .clipToBounds(),
+            .padding(horizontal = 16.dp, vertical = 10.dp)
+            .animateContentSize(animationSpec = denebSpatialSpring())
+            .clipToBounds()
+            .semantics { contentDescription = waitingCd },
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        // OLED: a filled surfaceVariant box floats as a gray slab on pure black, so
-        // the status chip goes transparent with a hairline ring instead (the same
-        // treatment as denebAdaptiveCardSurface). Non-OLED keeps the soft fill.
-        val chipShape = RoundedCornerShape(8.dp)
-        val chipSurface = if (MaterialTheme.colorScheme.isOledFlavor) {
-            Modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant, chipShape)
-        } else {
-            Modifier.background(MaterialTheme.colorScheme.surfaceVariant, chipShape)
-        }
-        Box(
-            modifier = chipSurface
-                .animateContentSize(animationSpec = denebSpatialSpring())
-                .padding(12.dp)
-                .semantics { contentDescription = waitingCd },
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                PulsingStatusIndicator(
-                    toolSummary = summary,
-                    isStatusOnly = effectiveStatusOnly,
-                    dotSize = 16.dp,
-                    dotColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textStyle = MaterialTheme.typography.bodyMedium,
-                )
-                if (elapsedLabel != null) {
-                    Text(
-                        text = " · $elapsedLabel",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.bodyMedium,
-                        maxLines = 1,
-                    )
-                }
-            }
+        PulsingStatusIndicator(
+            toolSummary = summary,
+            isStatusOnly = effectiveStatusOnly,
+            dotColor = MaterialTheme.colorScheme.primary, // sky-blue cool accent — a touch of life
+            textColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            textStyle = MaterialTheme.typography.bodyMedium,
+        )
+        if (elapsedLabel != null) {
+            Text(
+                text = " · $elapsedLabel",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 1,
+            )
         }
     }
 }
@@ -146,7 +137,6 @@ internal fun WaitingResponseRow(
 @Composable
 internal fun PulsingStatusIndicator(
     toolSummary: String?,
-    dotSize: Dp,
     dotColor: Color,
     textColor: Color,
     textStyle: TextStyle,
@@ -172,12 +162,7 @@ internal fun PulsingStatusIndicator(
         modifier = modifier,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(
-            modifier = Modifier
-                .size(dotSize)
-                .denebBreathing()
-                .background(dotColor, CircleShape),
-        )
+        TypingDots(color = dotColor)
         Spacer(Modifier.width(8.dp))
         if (isStatusOnly && toolSummary != null) {
             Text(
@@ -211,6 +196,50 @@ internal fun PulsingStatusIndicator(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
+        }
+    }
+}
+
+// TypingDots is the 답변-중 motion: three small dots bounce in a staggered wave
+// (the Gemini/Grok "typing" idiom), each brightening at the top of its hop —
+// livelier and more refined than one big pulsing dot. Pure animation, no state;
+// the color is the caller's (sky-blue cool accent for the waiting row).
+private const val typingDotCount = 3
+private const val typingDotStaggerMs = 140
+private const val typingDotPeriodMs = 760
+
+@Composable
+private fun TypingDots(color: Color, modifier: Modifier = Modifier) {
+    val transition = rememberInfiniteTransition(label = "typing-dots")
+    val bouncePx = with(LocalDensity.current) { 5.dp.toPx() }
+    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+        repeat(typingDotCount) { i ->
+            // t runs 0 → 1 (peak) → 0 each period; staggered so the dots ripple.
+            val t by transition.animateFloat(
+                initialValue = 0f,
+                targetValue = 0f,
+                animationSpec = infiniteRepeatable(
+                    animation = keyframes {
+                        durationMillis = typingDotPeriodMs
+                        0f at 0
+                        1f at 200 using FastOutSlowInEasing
+                        0f at 440 using FastOutSlowInEasing
+                        0f at typingDotPeriodMs
+                    },
+                    initialStartOffset = StartOffset(i * typingDotStaggerMs),
+                ),
+                label = "typing-dot-$i",
+            )
+            Box(
+                modifier = Modifier
+                    .padding(horizontal = 1.5.dp)
+                    .size(6.dp)
+                    .graphicsLayer {
+                        translationY = -t * bouncePx
+                        alpha = 0.45f + 0.55f * t
+                    }
+                    .background(color, CircleShape),
+            )
         }
     }
 }
