@@ -25,6 +25,9 @@ type ContactsDeps = toolctx.ContactsDeps
 // CalendarDeps holds dependencies for the calendar tool.
 type CalendarDeps = toolctx.CalendarDeps
 
+// FleetDeps holds the SparkFleet base URL + token for the fleet tool.
+type FleetDeps = toolctx.FleetDeps
+
 // CalendarReader is the read-only Google calendar slice the calendar tool uses.
 type CalendarReader = toolctx.CalendarReader
 

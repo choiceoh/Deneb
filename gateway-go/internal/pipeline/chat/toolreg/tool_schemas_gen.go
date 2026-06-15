@@ -1176,6 +1176,28 @@ func observeToolSchema() map[string]any {
 	}
 }
 
+func fleetToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"action": map[string]any{
+				"type":        "string",
+				"description": "What to do with the SparkFleet GPU control plane: status (nodes + recipes + recent failed jobs at a glance) | recipes (every model recipe with running/health) | jobs (recent background jobs) | launch | stop | restart (a recipe by name) | cancel (a background job by id) | diagnose (crash triage of a running recipe's container)",
+				"enum":        []string{"status", "recipes", "jobs", "launch", "stop", "restart", "cancel", "diagnose"},
+			},
+			"jobId": map[string]any{
+				"type":        "string",
+				"description": "Background job id — required for cancel",
+			},
+			"recipe": map[string]any{
+				"type":        "string",
+				"description": "Recipe name — required for launch / stop / restart / diagnose",
+			},
+		},
+		"required": []string{"action"},
+	}
+}
+
 func phoneReadToolSchema() map[string]any {
 	return map[string]any{
 		"type": "object",
