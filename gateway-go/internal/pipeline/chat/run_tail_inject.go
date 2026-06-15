@@ -52,13 +52,32 @@ const autoDeliveryDirective = `[전달 정책 — 이번 턴]
 - 결과(답/본문)부터 바로 시작하라 — "이제 ...를 정리할게요" 같은 사고·전환 문장을 앞에 붙이지 마라.
 - 내부 전송 도구가 실패하더라도 그것은 채널 장애가 아니다. "채널이 끊겼다 / 연결되지 않았다 / 복구되면 보내겠다 / 여기 직접 전달한다" 같은 안내를 절대 하지 마라 — 채널은 정상이고 너의 결과물은 그대로 전달된다.`
 
+// chatbotToneDirective is the per-turn behavioral framing for the 챗봇 workspace
+// (chat: sessions). The 챗봇/업무 split is otherwise only skin-deep — same single
+// persona, same system prompt (deliberately: a per-mode system prompt would split
+// the vLLM APC prefix into two families). This nudge differentiates the *tone*
+// without touching the system prompt: as a tail addition on the last user message
+// it is byte-for-byte APC-safe (see the file header), costing only its own tokens
+// on chat: turns. It steers toward light general conversation and, crucially, tells
+// the model not to volunteer 업무 (mail/deals/projects/calendar) context unless the
+// user asks — that work context still lives in the shared system prompt, so without
+// this the 챗봇 answers in full chief-of-staff register.
+const chatbotToneDirective = `[대화 모드 — 이번 턴]
+- 지금은 가벼운 일반 대화 공간(챗봇)이야. 업무 비서가 아니라 편한 대화 상대로 답해.
+- 사용자가 먼저 꺼내지 않으면 업무 맥락(메일·거래처·프로젝트·일정·회사 사정)을 끌어오지 마라. 일반 지식·잡담·코딩 등 질문 그 자체에만 충실하게.
+- 보고서식 구조(헤딩·번호 목록)는 요청 없으면 쓰지 말고, 길이는 질문에 맞춰 짧고 자연스럽게.`
+
 // buildTailAdditions collects the per-turn wire-only additions for this run
-// in injection order: recall evidence first (reference material), then the
-// delivery directive (current-turn policy). Empty strings are omitted.
+// in injection order: recall evidence first (reference material), then the 챗봇
+// tone framing (workspace register), then the delivery directive (current-turn
+// policy). Empty strings are omitted.
 func buildTailAdditions(params RunParams, recallMemory string) []string {
 	var adds []string
 	if recallMemory != "" {
 		adds = append(adds, recallMemory)
+	}
+	if isChatbotSessionKey(params.SessionKey) {
+		adds = append(adds, chatbotToneDirective)
 	}
 	if params.AutoDeliveredOutput {
 		adds = append(adds, autoDeliveryDirective)
