@@ -422,6 +422,20 @@ internal object InlineTokenizer {
         "nbsp" to "\u00A0", "mdash" to "—", "ndash" to "–", "hellip" to "…",
         "middot" to "·", "bull" to "•", "times" to "×", "deg" to "°", "plusmn" to "±",
         "larr" to "←", "rarr" to "→", "le" to "≤", "ge" to "≥", "ne" to "≠",
+        // Smart quotes + punctuation — very common in web/email-extracted text.
+        "lsquo" to "‘", "rsquo" to "’", "ldquo" to "“", "rdquo" to "”",
+        "sbquo" to "‚", "bdquo" to "„", "laquo" to "«", "raquo" to "»",
+        "lsaquo" to "‹", "rsaquo" to "›", "dagger" to "†", "Dagger" to "‡",
+        "permil" to "‰", "prime" to "′", "Prime" to "″",
+        // Legal / currency symbols.
+        "copy" to "©", "reg" to "®", "trade" to "™", "sect" to "§", "para" to "¶",
+        "cent" to "¢", "euro" to "€", "pound" to "£", "yen" to "¥", "curren" to "¤", "micro" to "µ",
+        // Math / fractions / superscripts / arrows.
+        "divide" to "÷", "minus" to "−", "frac12" to "½", "frac14" to "¼", "frac34" to "¾",
+        "sup1" to "¹", "sup2" to "²", "sup3" to "³", "infin" to "∞", "equiv" to "≡", "asymp" to "≈",
+        "uarr" to "↑", "darr" to "↓", "harr" to "↔",
+        // Wide spaces (collapse to a normal space for layout).
+        "ensp" to " ", "emsp" to " ", "thinsp" to " ",
     )
 
     private fun decodeEntities(text: String): String {
