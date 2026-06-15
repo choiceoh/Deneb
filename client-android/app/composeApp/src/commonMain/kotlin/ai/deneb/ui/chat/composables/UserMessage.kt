@@ -70,7 +70,10 @@ internal fun UserMessage(
                     modifier = Modifier
                         .widthIn(max = bubbleMax)
                         .background(bubbleColor, bubbleShape)
-                        .padding(16.dp),
+                        // Messenger-tight padding so the bubble hugs the text instead of
+                        // ballooning around it — horizontal a touch more than vertical
+                        // (was a roomy uniform 16dp, which read oversized for the font).
+                        .padding(horizontal = 14.dp, vertical = 9.dp),
                     horizontalAlignment = Alignment.End,
                 ) {
                     val images = attachments.filter { it.mimeType.startsWith("image/") }
