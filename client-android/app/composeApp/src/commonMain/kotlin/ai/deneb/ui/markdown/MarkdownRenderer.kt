@@ -1,11 +1,14 @@
 package ai.deneb.ui.markdown
 
 import ai.deneb.ui.DenebType
+import ai.deneb.ui.components.LocalShowFullScreenImageModel
 import ai.deneb.ui.dynamicui.DenebUiParser
 import ai.deneb.ui.dynamicui.DenebUiRenderer
 import ai.deneb.ui.dynamicui.FrozenSubmission
+import ai.deneb.ui.handCursor
 import ai.deneb.ui.markdown.math.MathFormula
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -265,17 +268,21 @@ private fun HeadingBlock(block: Heading) {
 private fun ParagraphBlock(block: Paragraph) {
     if (block.inlines.size == 1 && block.inlines[0] is Image) {
         val img = block.inlines[0] as Image
+        val showFullScreen = LocalShowFullScreenImageModel.current
         AsyncImage(
             model = img.src,
             contentDescription = img.alt,
             contentScale = ContentScale.FillWidth,
             // Rounded + capped to match attachment images, instead of a raw
             // edge-to-edge bitmap that can dwarf the message on a wide image.
+            // Tapping opens the fullscreen zoom/pan viewer (same overlay as attachments).
             modifier = Modifier
                 .padding(vertical = 4.dp)
                 .fillMaxWidth()
                 .widthIn(max = 520.dp)
-                .clip(RoundedCornerShape(8.dp)),
+                .clip(RoundedCornerShape(8.dp))
+                .handCursor()
+                .clickable { showFullScreen(img.src) },
         )
         return
     }
