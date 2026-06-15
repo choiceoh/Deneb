@@ -38,6 +38,7 @@ import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -57,6 +58,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
@@ -93,6 +95,7 @@ fun QuestionInput(
     cancel: () -> Unit = {},
     availableServices: ImmutableList<ServiceEntry> = persistentListOf(),
     onSelectService: (String) -> Unit = {},
+    autoFocus: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier) {
@@ -282,6 +285,12 @@ fun QuestionInput(
                 imeAction = if (currentPlatform is Platform.Mobile) ImeAction.Default else ImeAction.Send,
             ),
         )
+        // Auto-focus ONLY a brand-new (empty) chat so the keyboard is ready to
+        // type; entering an existing chat or switching 업무↔채팅 leaves it closed.
+        val inInspection = LocalInspectionMode.current
+        LaunchedEffect(autoFocus) {
+            if (autoFocus && !inInspection) focusRequester.requestFocus()
+        }
     }
 }
 
