@@ -28,7 +28,17 @@ var (
 	wfBoldRe    = regexp.MustCompile(`\*\*(.+?)\*\*`)
 	wfCodeRe    = regexp.MustCompile("`([^`]+)`")
 	wfSpaceRe   = regexp.MustCompile(`[ \t]+`)
+	wfEscapeRe  = regexp.MustCompile(`\\([\\_*~` + "`" + `])`) // markdown escape "\_" → "_"
 )
+
+// wfMailFieldLabels are the row/line labels a mail report uses for metadata
+// (not the subject). A heading/bold line whose label is one of these is report
+// scaffolding, skipped when hunting for the subject.
+var wfMailFieldLabels = map[string]bool{
+	"발신": true, "수신": true, "참조": true, "cc": true, "일시": true,
+	"시간": true, "중요도": true, "금액": true, "건명": true, "대상": true,
+	"상대방": true, "분석 대상": true, "발주처": true, "공급사": true,
+}
 
 // extractCardTitle returns the first meaningful line of content as a card title,
 // with markdown markers (#, **) stripped and emoji preserved, clipped to
@@ -63,7 +73,149 @@ func extractCardTitle(content string) (title, sourceLine string) {
 			}
 		}
 	}
+	// A generic "메일 분석 리포트/보고" heading is redundant with the 📬 work-feed
+	// icon — the card should carry the mail's actual subject. When the body has a
+	// more specific subject (an explicit 제목 row, or the first non-scaffolding
+	// sub-heading / bold line), use it instead. Batch/daily summaries ("당일 메일
+	// 종합 분석") lack 리포트/보고 so they keep their own heading.
+	if isGenericMailReportTitle(t) {
+		if subj := subjectFromMailReport(content, raw); subj != "" {
+			// Summary still starts after the H1 (raw), so the report's opening
+			// context stays in the summary even though the title now leads with
+			// the subject.
+			return clipRunes(subj, workFeedTitleMaxRunes), raw
+		}
+	}
 	return clipRunes(t, workFeedTitleMaxRunes), raw
+}
+
+// isGenericMailReportTitle reports whether a stripped heading is a generic
+// single-mail report label ("메일 분석 리포트", "📬 새 메일 분석 보고") whose only
+// information is "this is a mail analysis".
+func isGenericMailReportTitle(t string) bool {
+	return strings.Contains(t, "메일") && strings.Contains(t, "분석") &&
+		(strings.Contains(t, "리포트") || strings.Contains(t, "보고"))
+}
+
+// isMailReportBody reports whether a proactive body is a single-mail analysis
+// report — its first meaningful heading is a generic "메일 분석 리포트/보고" label.
+// Used to gate the lightweight-LLM card titler to mail reports only (calendar,
+// wiki, and morning-letter cards keep their own headings).
+func isMailReportBody(content string) bool {
+	lines := strings.Split(strings.TrimSpace(content), "\n")
+	if idx, raw := firstMeaningfulLine(lines, 0); idx >= 0 {
+		return isGenericMailReportTitle(stripMarkdownLine(raw))
+	}
+	return false
+}
+
+// subjectFromMailReport hunts a mail report body for the email's actual subject,
+// to replace a generic heading. Priority: (1) an explicit "| 제목 | … |" table
+// row; (2) the first sub-heading or bold line after headingLine that is not
+// report scaffolding (section label or metadata field). Returns "" when none is
+// found (the generic heading is then kept).
+func subjectFromMailReport(content, headingLine string) string {
+	if subj := mailSubjectFromTable(content); subj != "" {
+		return subj
+	}
+	lines := strings.Split(strings.TrimSpace(content), "\n")
+	start := 0
+	if target := strings.TrimSpace(headingLine); target != "" {
+		for i, l := range lines {
+			if strings.TrimSpace(l) == target {
+				start = i + 1
+				break
+			}
+		}
+	}
+	cursor := start
+	for cursor < len(lines) {
+		idx, raw := firstMeaningfulLine(lines, cursor)
+		if idx < 0 {
+			break
+		}
+		cursor = idx + 1
+		trimmed := strings.TrimSpace(raw)
+		if !wfHeaderRe.MatchString(trimmed) && !isBoldLeadingLine(trimmed) {
+			continue
+		}
+		s := stripMarkdownLine(raw)
+		if len([]rune(s)) < 4 || isReportScaffoldLine(s) {
+			continue
+		}
+		return s
+	}
+	return ""
+}
+
+// mailSubjectFromTable returns the value of a "| 제목 | … |" row (the email's
+// subject) from a markdown table, or "" when none is present.
+func mailSubjectFromTable(content string) string {
+	for _, raw := range strings.Split(content, "\n") {
+		t := strings.TrimSpace(raw)
+		if !strings.HasPrefix(t, "|") {
+			continue
+		}
+		cells := strings.Split(strings.Trim(t, "|"), "|")
+		if len(cells) < 2 {
+			continue
+		}
+		if label := stripMarkdownLine(cells[0]); label == "제목" || label == "메일 제목" {
+			if subj := stripMarkdownLine(cells[1]); subj != "" {
+				return subj
+			}
+		}
+	}
+	return ""
+}
+
+// isBoldLeadingLine reports whether a line (after a leading emoji/symbol run)
+// opens with a bold span — mail reports often put the subject on a bold line.
+func isBoldLeadingLine(trimmed string) bool {
+	r := []rune(trimmed)
+	i := 0
+	for i < len(r) && (unicode.IsSpace(r[i]) || isEmojiRune(r[i])) {
+		i++
+	}
+	return strings.HasPrefix(strings.TrimSpace(string(r[i:])), "**")
+}
+
+// isReportScaffoldLine reports whether a stripped heading/bold line is report
+// structure (a generic section label or a metadata field row) rather than the
+// mail's subject.
+func isReportScaffoldLine(t string) bool {
+	if isGenericMailReportTitle(t) {
+		return true
+	}
+	for _, g := range []string{"개요", "중요도", "타임라인", "이해관계자", "요약", "조직 맥락", "status board"} {
+		if strings.Contains(t, g) && len([]rune(t)) <= 14 {
+			return true
+		}
+	}
+	if label := mailLineLabel(t); label != "" && wfMailFieldLabels[label] {
+		return true
+	}
+	return false
+}
+
+// mailLineLabel returns the lowercased label before an early colon (within the
+// first 8 runes, after stripping a leading emoji/symbol run), or "" — used to
+// detect metadata-field lines like "발신: …" / "✉️ 일시: …".
+func mailLineLabel(t string) string {
+	r := []rune(t)
+	i := 0
+	for i < len(r) && (unicode.IsSpace(r[i]) || isEmojiRune(r[i])) {
+		i++
+	}
+	rest := strings.TrimSpace(string(r[i:]))
+	for _, sep := range []string{":", "："} {
+		if idx := strings.Index(rest, sep); idx >= 0 {
+			if label := strings.TrimSpace(rest[:idx]); len([]rune(label)) <= 8 {
+				return strings.ToLower(label)
+			}
+		}
+	}
+	return ""
 }
 
 // extractCardSummary joins the meaningful lines after sourceLine into a single
@@ -158,8 +310,9 @@ func stripMarkdownLine(line string) string {
 	}
 	s = wfBoldRe.ReplaceAllString(s, "$1")
 	s = wfCodeRe.ReplaceAllString(s, "$1")
-	s = strings.ReplaceAll(s, "**", "") // drop unmatched bold leftovers
-	s = strings.ReplaceAll(s, "|", " ") // collapse table-cell pipes to spaces
+	s = strings.ReplaceAll(s, "**", "")      // drop unmatched bold leftovers
+	s = strings.ReplaceAll(s, "|", " ")      // collapse table-cell pipes to spaces
+	s = wfEscapeRe.ReplaceAllString(s, "$1") // unescape "\_" → "_" etc.
 	s = wfSpaceRe.ReplaceAllString(s, " ")
 	return strings.TrimSpace(s)
 }
