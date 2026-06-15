@@ -9,9 +9,9 @@
 // prompt-cache.md §5). The heavy multimodal payload (base64 frames) never enters
 // the main transcript, so the prompt cache and context budget stay intact.
 //
-// The call targets RoleMain because that is the configured multimodal model;
-// the lightweight local model is typically text-only. We fall back through the
-// role chain if the main client is unavailable.
+// The call prefers RoleVision (the operator-assigned multimodal model, e.g. a
+// VLM); when that role is unset it falls through RoleMain → fallback → lightweight
+// so a deployment whose main model is itself multimodal still works.
 package pilot
 
 import (
@@ -96,13 +96,15 @@ func CallVisionLLM(ctx context.Context, system, userText string, frames []Vision
 	return text, nil
 }
 
-// visionClientAndModel returns the main (multimodal) model client and its model
-// name, falling back through the role chain when the main role has no client.
+// visionClientAndModel returns the configured vision model client and its model
+// name. Prefers RoleVision (the operator-assigned multimodal model); if that role
+// is unset it falls through to main/fallback/lightweight so deployments whose main
+// model is itself multimodal keep working.
 func visionClientAndModel() (client *llm.Client, model string) {
 	if pkgRegistry == nil {
 		return nil, ""
 	}
-	for _, role := range []modelrole.Role{modelrole.RoleMain, modelrole.RoleFallback, modelrole.RoleLightweight} {
+	for _, role := range []modelrole.Role{modelrole.RoleVision, modelrole.RoleMain, modelrole.RoleFallback, modelrole.RoleLightweight} {
 		if client := pkgRegistry.Client(role); client != nil {
 			return client, pkgRegistry.Model(role)
 		}
