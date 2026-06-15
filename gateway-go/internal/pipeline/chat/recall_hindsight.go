@@ -27,6 +27,12 @@ const (
 	// recallHindsightMaxResults caps how many bank hits enter the evidence
 	// pool, leaving room for wiki/diary/session sources under recallMaxEvidence.
 	recallHindsightMaxResults = 5
+	// recallHindsightStaleAfter: facts older than this carry a soft staleness
+	// hint. The bank has no supersession (unlike wiki SupersededBy/Archived) — a
+	// changed fact leaves the old one recallable with no "stale" cue — so age is
+	// the only proxy. Conservative + phrased as "verify" so an old-but-true fact
+	// costs only a harmless check, not a wrong "superseded" claim.
+	recallHindsightStaleAfter = 90 * 24 * time.Hour
 )
 
 // recallHindsightEvidence queries the Hindsight memory bank with the raw user
@@ -66,12 +72,18 @@ func recallHindsightEvidence(ctx context.Context, client *hindsight.Client, mess
 		if m.Context != "" {
 			note = "context: " + m.Context + " | " + note
 		}
+		at := parseRecallTimestamp(m.MentionedAt, m.OccurredAt)
+		// Mirror recallWikiStalenessMarker: an old fact gets a "may have changed,
+		// verify" cue so the model won't cite an outdated bank value as current.
+		if marker := recallHindsightStalenessMarker(at); marker != "" {
+			note = marker + " " + note
+		}
 		evidence = append(evidence, recallEvidence{
 			Kind:   "hindsight",
 			Source: hindsightEvidenceSource(m),
 			Note:   truncateRecallText(note, 420),
 			Score:  recallHindsightScore(i),
-			At:     parseRecallTimestamp(m.MentionedAt, m.OccurredAt),
+			At:     at,
 		})
 		if len(evidence) >= recallHindsightMaxResults {
 			break
@@ -81,6 +93,20 @@ func recallHindsightEvidence(ctx context.Context, client *hindsight.Client, mess
 		logger.Info("recall preflight: hindsight evidence injected", "count", len(evidence))
 	}
 	return evidence
+}
+
+// recallHindsightStalenessMarker returns an inline marker when a recalled
+// Hindsight fact is older than recallHindsightStaleAfter, mirroring
+// recallWikiStalenessMarker. at is a UnixMilli timestamp; 0 (unknown) yields no
+// marker since age can't be judged.
+func recallHindsightStalenessMarker(at int64) string {
+	if at <= 0 {
+		return ""
+	}
+	if time.Since(time.UnixMilli(at)) < recallHindsightStaleAfter {
+		return ""
+	}
+	return "⚠ 오래된 기억(변경됐을 수 있으니 현행으로 단정 말고 필요시 도구로 확인)"
 }
 
 // isHindsightQueryTooLong matches the bank's over-limit rejection.

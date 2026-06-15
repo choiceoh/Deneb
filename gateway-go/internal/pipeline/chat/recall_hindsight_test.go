@@ -8,9 +8,24 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/hindsight"
 )
+
+func TestRecallHindsightStalenessMarker(t *testing.T) {
+	now := time.Now()
+	if m := recallHindsightStalenessMarker(now.Add(-24 * time.Hour).UnixMilli()); m != "" {
+		t.Fatalf("recent fact must carry no staleness marker, got %q", m)
+	}
+	old := now.Add(-200 * 24 * time.Hour).UnixMilli()
+	if m := recallHindsightStalenessMarker(old); !strings.Contains(m, "오래된") {
+		t.Fatalf("a fact older than the threshold must carry a staleness marker, got %q", m)
+	}
+	if m := recallHindsightStalenessMarker(0); m != "" {
+		t.Fatalf("unknown timestamp (0) must carry no marker, got %q", m)
+	}
+}
 
 func TestRecallHindsightScoreDecays(t *testing.T) {
 	if recallHindsightScore(0) <= recallHindsightScore(1) {
