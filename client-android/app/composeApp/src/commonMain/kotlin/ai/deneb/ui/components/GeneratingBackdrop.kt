@@ -13,9 +13,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.unit.dp
 import kotlin.math.PI
@@ -37,7 +40,14 @@ private const val BACKDROP_HEIGHT_MIN = 0.6f // shallowest curtain reach
 private const val BACKDROP_START_HUE = 240f // blue
 private const val BACKDROP_BREATH_S = 3.5f // brightness breath period (seconds)
 private const val BACKDROP_SHAPE_S = 3.2f // curtain-ripple period (seconds)
-private const val BACKDROP_SLICE_DP = 10f // column width
+
+// Column width for the alpha mask only (the hue is one continuous gradient now),
+// so this governs just how smooth the undulating curtain edge is. Narrow = smooth.
+private const val BACKDROP_SLICE_DP = 4f
+
+// Stops sampled along the HSV hue arc for the continuous horizontal hue band. Many
+// stops keep it a smooth perceptual arc instead of a straight RGB shortcut.
+private const val BACKDROP_HUE_STOPS = 12
 
 // Keep the backdrop on this long AFTER generation ends, so a fast reply (챗봇 answers
 // quickly) still shows it instead of a flicker, and it lingers into the answer's first
@@ -106,40 +116,71 @@ fun Modifier.generatingBackdrop(active: Boolean): Modifier {
 }
 
 /**
- * Paints the aurora as thin vertical columns — a gentle hue band across the width and an
- * undulating curtain edge — from the [timeSeconds] clock. Top-bright, fading to
- * transparent toward the bottom; hue cycles and the whole thing breathes.
+ * Paints the aurora: a gentle hue band across the width with an undulating curtain edge,
+ * top-bright and fading to transparent toward the bottom; hue cycles and it breathes.
+ *
+ * Two passes inside one offscreen layer so the colour never steps:
+ *  1. the HUE is a single continuous horizontal gradient across the full width (sampled
+ *     along the HSV arc), so adjacent x positions share a smooth colour — no per-column
+ *     staircase;
+ *  2. the vertical fade and the per-x curtain reach are an alpha MASK (DstIn) painted as
+ *     thin columns, so column width only controls the curtain-edge smoothness, not colour.
  */
 internal fun DrawScope.drawAuroraSlices(timeSeconds: Float, intensity: Float) {
+    val w = size.width
+    val h = size.height
+    if (w <= 0f || h <= 0f) return
+
     val baseHue = BACKDROP_START_HUE - (timeSeconds / BACKDROP_CYCLE_S) * 360f
     val breathPhase = timeSeconds / BACKDROP_BREATH_S
     val breath = 0.85f + 0.15f * (0.5f + 0.5f * sin((2.0 * PI * breathPhase).toFloat()))
     val peak = BACKDROP_PEAK_ALPHA * intensity * breath
     val shapePhase = timeSeconds / BACKDROP_SHAPE_S
-    val w = size.width
-    val h = size.height
+
+    // Smooth horizontal hue arc — many evenly-spaced samples so the gradient follows the
+    // HSV path, not a straight RGB line between the endpoints (which would desaturate
+    // through the middle). Even spacing lets us use the List overload (no spread operator).
+    val hueColors = List(BACKDROP_HUE_STOPS + 1) { i ->
+        val t = i.toFloat() / BACKDROP_HUE_STOPS
+        val hueDeg = ((baseHue + t * BACKDROP_HUE_SPREAD) % 360f + 360f) % 360f
+        Color.hsv(hueDeg, BACKDROP_SATURATION, BACKDROP_VALUE).copy(alpha = peak)
+    }
+
+    // Isolate the hue + mask composite so the DstIn mask multiplies only the hue band's
+    // alpha, not whatever is on the screen behind the backdrop.
+    drawContext.canvas.saveLayer(Rect(0f, 0f, w, h), Paint())
+
+    drawRect(
+        brush = Brush.horizontalGradient(hueColors, startX = 0f, endX = w),
+        topLeft = Offset.Zero,
+        size = Size(w, h),
+    )
+
+    // Alpha mask: white (keep) at the top, fading to transparent (cut) at each column's
+    // curtain reach. Only the mask's alpha matters; thin columns smooth the lower edge.
     val step = BACKDROP_SLICE_DP.dp.toPx()
     var x = 0f
     while (x < w) {
         val sliceW = minOf(step, w - x)
-        val x01 = if (w > 0f) (x + sliceW / 2f) / w else 0f
-        val hueDeg = ((baseHue + x01 * BACKDROP_HUE_SPREAD) % 360f + 360f) % 360f
-        val hue = Color.hsv(hueDeg, BACKDROP_SATURATION, BACKDROP_VALUE)
+        val x01 = (x + sliceW / 2f) / w
         val reach = BACKDROP_HEIGHT_MIN +
             (BACKDROP_HEIGHT_FRACTION - BACKDROP_HEIGHT_MIN) * curtainReach(x01, shapePhase)
         drawRect(
             brush = Brush.verticalGradient(
-                0f to hue.copy(alpha = peak),
-                0.4f to hue.copy(alpha = peak * 0.45f),
+                0f to Color.White,
+                0.4f to Color.White.copy(alpha = 0.45f),
                 0.9f to Color.Transparent,
                 startY = 0f,
                 endY = h * reach,
             ),
             topLeft = Offset(x, 0f),
             size = Size(sliceW, h),
+            blendMode = BlendMode.DstIn,
         )
         x += sliceW
     }
+
+    drawContext.canvas.restore()
 }
 
 // Smooth 0..1 curtain-height profile across the width [x01], drifting with [phase].
