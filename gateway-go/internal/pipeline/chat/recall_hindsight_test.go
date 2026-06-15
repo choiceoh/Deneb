@@ -43,6 +43,12 @@ func TestParseRecallTimestamp(t *testing.T) {
 	if got := parseRecallTimestamp("", "not-a-date"); got != 0 {
 		t.Fatalf("expected 0 for unparseable input, got %d", got)
 	}
+	// First parseable value wins — the staleness/age path relies on this to
+	// prefer OccurredAt over MentionedAt.
+	occOnly := parseRecallTimestamp("2026-05-01T09:00:00Z", "")
+	if got := parseRecallTimestamp("2026-05-01T09:00:00Z", "2026-05-10T09:00:00Z"); got != occOnly {
+		t.Fatalf("first parseable value must win, got %d want %d", got, occOnly)
+	}
 }
 
 func TestRecallHindsightEvidenceNilClient(t *testing.T) {

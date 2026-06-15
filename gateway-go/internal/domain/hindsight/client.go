@@ -109,7 +109,7 @@ func (c *Client) Health(ctx context.Context) (string, error) {
 type Memory struct {
 	ID          string
 	Text        string
-	Type        string // "world" or "experience", may be empty
+	Type        string // bank classifier, e.g. "world" / "observation"; may be empty
 	Context     string // optional label, may be empty
 	OccurredAt  string // ISO 8601, may be empty
 	MentionedAt string // ISO 8601, may be empty
