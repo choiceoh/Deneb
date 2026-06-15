@@ -882,14 +882,22 @@ private fun FleetBenchPage(
         val finished = launching.filterValues { it.isNotEmpty() && it in terminal }.keys
         if (finished.isNotEmpty()) launching = launching - finished
     }
+    // Busy state is also DERIVED from the polled jobs, not just this composition's
+    // launches — so a benchmark started from the dashboard, before this page
+    // existed, or across an app recreate still disables 측정. SparkFleet titles eval
+    // jobs "benchmark <recipe> on <node>" (and rejects a concurrent eval server-side).
+    val runningBench = remember(jobs) {
+        jobs.filter { it.state == "running" }.mapNotNull { benchRecipeFromTitle(it.title) }.toSet()
+    }
     if (recipes.isEmpty()) {
         EmptyTab(if (loaded) "레시피가 없습니다." else "불러오는 중…")
         return
     }
     LazyColumn(Modifier.fillMaxSize()) {
         items(recipes, key = { it.name }) { rc ->
-            FleetBenchRow(rc, evals?.runs?.get(rc.name), launching = rc.name in launching) {
-                if (rc.name in launching) return@FleetBenchRow
+            val busy = rc.name in launching || rc.name in runningBench
+            FleetBenchRow(rc, evals?.runs?.get(rc.name), busy = busy) {
+                if (busy) return@FleetBenchRow
                 launching = launching + (rc.name to "")
                 scope.launch {
                     val err = client.fleetRunBench(rc.name, rc.status.node.ifBlank { rc.node }) { jobId ->
@@ -909,8 +917,18 @@ private fun FleetBenchPage(
 
 private val benchCategoryLabels = listOf("tool" to "도구", "language" to "언어", "reasoning" to "논리", "stability" to "안정")
 
+// SparkFleet titles a benchmark job "benchmark <recipe> on <node>" (RunEval).
+// Recover the recipe so a running eval job disables that recipe's 측정 button.
+private fun benchRecipeFromTitle(title: String): String? {
+    val rest = title.removePrefix("benchmark ")
+    if (rest == title) return null // not a benchmark job
+    val onIdx = rest.lastIndexOf(" on ")
+    val name = if (onIdx > 0) rest.substring(0, onIdx) else rest
+    return name.takeIf { it.isNotBlank() }
+}
+
 @Composable
-private fun FleetBenchRow(rc: FleetRecipe, run: FleetEvalRun?, launching: Boolean, onRun: () -> Unit) {
+private fun FleetBenchRow(rc: FleetRecipe, run: FleetEvalRun?, busy: Boolean, onRun: () -> Unit) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -930,8 +948,8 @@ private fun FleetBenchRow(rc: FleetRecipe, run: FleetEvalRun?, launching: Boolea
                     color = MaterialTheme.colorScheme.primary,
                 )
             }
-            OutlinedButton(onClick = onRun, enabled = rc.status.running && !launching) {
-                Text(if (launching) "측정 중…" else "측정")
+            OutlinedButton(onClick = onRun, enabled = rc.status.running && !busy) {
+                Text(if (busy) "측정 중…" else "측정")
             }
         }
         run?.categories?.takeIf { it.isNotEmpty() }?.let { cats ->
