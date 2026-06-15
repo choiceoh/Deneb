@@ -97,8 +97,10 @@ func ExtractYouTubeTranscript(ctx context.Context, videoURL string) (*YouTubeRes
 	// tight (the web fetch path caps this at 90s), bound the caption probes so they
 	// can't consume the whole budget — leaving a reserve for the ASR fallback. The
 	// ASR call below still uses the original ctx, so it gets that reserved time.
+	// Gate the reserve on actual ASR readiness: if the sidecar is down there is no
+	// fallback to reserve for, so captions must get the whole deadline.
 	subCtx := ctx
-	if AudioTranscriber != nil {
+	if asrUsable(ctx) {
 		if dl, ok := ctx.Deadline(); ok {
 			subDeadline := dl.Add(-asrReserveBudget)
 			if time.Until(subDeadline) >= minSubtitleBudget {
@@ -141,6 +143,14 @@ var AudioTranscriber func(ctx context.Context, audioPath string) (string, error)
 // (the wire sets a cached health probe).
 var AudioTranscriberReady func(ctx context.Context) bool
 
+// asrUsable reports whether the audio→ASR fallback can actually run: a transcriber
+// is wired and (when a readiness probe is wired) the sidecar is reachable. Used
+// both to gate the fallback itself and to decide whether to reserve caption-phase
+// time for it — if ASR can't run, captions must get the whole deadline.
+func asrUsable(ctx context.Context) bool {
+	return AudioTranscriber != nil && (AudioTranscriberReady == nil || AudioTranscriberReady(ctx))
+}
+
 // asrAudioCapSec bounds how much of a video's audio is transcribed via ASR, so a
 // long video can't blow the agent turn deadline (ASR runs ~0.5-0.7x real-time).
 // Overridable via DENEB_YT_ASR_CAP_SEC. Videos shorter than the cap transcribe whole.
@@ -181,12 +191,10 @@ const (
 // mark the transcript partial when the covered span is less than the whole video, so
 // downstream summaries don't imply full coverage. Returns ("","") on any failure.
 func transcriptViaASR(ctx context.Context, ytdlpPath, videoURL, tmpDir string, startSec, endSec, videoDurSec int) (text, lang string) {
-	if AudioTranscriber == nil {
-		return "", ""
-	}
-	// Skip before any download when the sidecar is known-unreachable — otherwise a
-	// no-ASR deployment wastes the deadline downloading audio for a doomed request.
-	if AudioTranscriberReady != nil && !AudioTranscriberReady(ctx) {
+	// Skip before any download when ASR is unwired or the sidecar is unreachable —
+	// otherwise a no-ASR deployment wastes the deadline downloading audio for a
+	// doomed request.
+	if !asrUsable(ctx) {
 		return "", ""
 	}
 

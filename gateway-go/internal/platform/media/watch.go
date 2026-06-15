@@ -122,8 +122,10 @@ func watchYouTube(ctx context.Context, url string, opts WatchOptions) (*WatchRes
 	// otherwise the (untimed) caption text would describe the whole video while
 	// the frames (and a text-only fallback analysis) are from the window. For a
 	// windowed request, transcribe just that window's audio so the transcript
-	// matches the frames the analysis actually sees.
-	windowed := opts.EndSec > opts.StartSec
+	// matches the frames the analysis actually sees. A positive StartSec is a
+	// window even without an explicit end (EndSec==0 means "to the end", and
+	// frames are sampled from StartSec onward in that case).
+	windowed := opts.StartSec > 0 || opts.EndSec > 0
 	if !windowed {
 		if transcript, lang, subErr := downloadSubtitles(ctx, ytdlpPath, url, tmpDir); subErr == nil {
 			result.Transcript = transcript
