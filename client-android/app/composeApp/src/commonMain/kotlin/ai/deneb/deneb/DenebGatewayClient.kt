@@ -271,18 +271,27 @@ class DenebGatewayClient(
         private set
 
     /**
-     * The gateway URL or client token just changed. Drop everything tied to the old
-     * account so account A's content is never shown — or re-cached — under account
-     * B's credentials: purge the persisted content caches, wipe the in-memory view
-     * state, and bump [credEpoch] so any in-flight load bails before it writes.
+     * Apply a gateway URL/token change atomically (all synchronous, no suspension) so
+     * there is no window where the fence state is inconsistent with the stored creds:
+     *
+     *   1. bump [credEpoch] FIRST — fences every already-in-flight RPC immediately,
+     *      regardless of when the new creds are written;
+     *   2. purge persisted caches BEFORE writing the new creds (crash-safe: a crash
+     *      here leaves OLD creds + empty cache, never new creds + old cache);
+     *   3. write the new creds in this same block, so the epoch is never bumped while
+     *      settings still hold the old URL/token;
+     *   4. wipe every gateway-backed StateFlow + reset native-sync, so nothing from
+     *      account A is shown under account B until a fresh fetch succeeds.
      */
-    fun onCredentialsChanged() {
+    fun onCredentialsChanged(newUrl: String, newToken: String) {
         credEpoch++
         appSettings.clearCachedContent()
+        appSettings.settings.putString(KEY_URL, newUrl)
+        appSettings.settings.putString(KEY_TOKEN, newToken)
         // Every gateway-backed StateFlow holds the OLD account's data; wipe them all so
         // nothing from account A is shown under account B until a fresh fetch succeeds.
-        // (An in-flight fetch that started under A is dropped by callRpc's value fence,
-        // and by the per-caller credEpoch re-check, so it can't repopulate these.)
+        // (An in-flight fetch that started under A is dropped by callRpc's epoch+value
+        // fence, so it can't repopulate these.)
         _chatHistory.value = emptyList()
         _savedConversations.value = emptyList()
         _denebMail.value = emptyList()
@@ -923,6 +932,16 @@ class DenebGatewayClient(
                 cursor = nextCursor
                 pages++
             }
+            // Credentials switched while this sync held the gate: onCredentialsChanged
+            // reset the cursor/baseline OUTSIDE the gate, so a cursor we advanced above
+            // could otherwise survive and make account B inherit account A's cursor.
+            // Re-assert the reset here (still under the gate) so B replays from the start.
+            if (epoch != credEpoch) {
+                nativeSyncCursor = 0L
+                appSettings.settings.putLong(KEY_SYNC_CURSOR, 0L)
+                nativeSyncBaselined = false
+                return false
+            }
             // First successful pull is the catch-up baseline: from here on a
             // newly-created item raises a notification (the catch-up batch just
             // applied did not). Set inside the gate so the flag and the
@@ -1468,18 +1487,21 @@ class DenebGatewayClient(
      * chat [send] keeps its own throwing path so the UI can surface errors.
      * Internal (not private) so the per-domain extension files can reach it.
      *
-     * Credential fence: the exact gateway URL + token the request is SENT with are
-     * captured and re-compared after it returns; if either changed mid-flight the
-     * result is dropped (null), so an old-account response can never be assigned to a
-     * per-account StateFlow under the new credentials. This is the single chokepoint
-     * that protects EVERY read (mail, transcript, sessions, work-feed, calendar,
-     * memories, …) — callers already treat null as "no data", so they degrade safely.
-     * Comparing the actual values (not a counter) is ordering-immune: it can't be
-     * fooled by an epoch that advances before the new credentials are persisted.
+     * Credential fence (two complementary checks; the result is dropped to null if
+     * either trips, so an old-account response can never be assigned under new
+     * credentials — callers already treat null as "no data"):
+     *   - credEpoch: bumped FIRST and atomically in [onCredentialsChanged], so every
+     *     already-in-flight request is fenced the instant a switch begins, even before
+     *     the new URL/token are written.
+     *   - URL+token value: the exact values the request was SENT with vs. current.
+     *     Ordering-immune for the post-write case (a counter alone could be fooled).
+     * This is the single chokepoint protecting EVERY read (mail, transcript, sessions,
+     * work-feed, calendar, memories, models, skills, …).
      */
     internal suspend inline fun <reified T> callRpc(method: String, params: JsonObject): T? {
         val url = gatewayUrl
         val token = clientToken
+        val epoch = credEpoch
         if (token.isEmpty()) return null
         val payload = runCatching {
             http.post("$url/api/v1/miniapp/rpc") {
@@ -1488,7 +1510,7 @@ class DenebGatewayClient(
                 setBody(RpcReq(id = Uuid.random().toString(), method = method, params = params))
             }.body<RpcEnv<T>>().payload
         }.getOrNull()
-        return if (url == gatewayUrl && token == clientToken) payload else null
+        return if (epoch == credEpoch && url == gatewayUrl && token == clientToken) payload else null
     }
 
     // rpcWrite posts a write RPC and surfaces the gateway's error message (so the
