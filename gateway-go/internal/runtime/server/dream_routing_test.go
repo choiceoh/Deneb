@@ -30,9 +30,12 @@ func TestDreamNotifierRoutesToSubSession(t *testing.T) {
 	}
 }
 
-// A notifier bound to the main session (the gmail/dropbox wiring) is unchanged by
-// the routing fix: it still delivers to client:main AND raises a work-feed card.
-func TestMainNotifierStillCardsClientMain(t *testing.T) {
+// A notifier bound to the main session (the gmail/dropbox wiring) delivers to the
+// 업무 FEED only — the work-feed card carries the full body and the chat transcript
+// is left untouched, so the 업무 chat stays a place to ask rather than a wall of
+// pushed reports (PR #2448 feed-first home). The dream sub-session above still
+// mirrors into its transcript because it has no feed surface.
+func TestMainNotifierCardsFeedOnly(t *testing.T) {
 	store := newRecordingTranscriptStore()
 	feed := &recordingWorkFeed{}
 	d := proactiveRelayDeps{transcriptStore: store, workFeed: feed}
@@ -41,13 +44,16 @@ func TestMainNotifierStillCardsClientMain(t *testing.T) {
 	if err := n.Notify(context.Background(), "📬 새 메일 3건 분석 완료"); err != nil {
 		t.Fatalf("notify: %v", err)
 	}
-	if got := len(store.appends[nativeWorkSessionKey]); got != 1 {
-		t.Fatalf("want 1 append to %q, got %d", nativeWorkSessionKey, got)
+	if got := len(store.appends[nativeWorkSessionKey]); got != 0 {
+		t.Errorf("feed-only main session must not mirror into the transcript, got %d appends", got)
 	}
 	if len(feed.items) != 1 {
 		t.Fatalf("want 1 work-feed card for the main session, got %d", len(feed.items))
 	}
 	if feed.items[0].SessionKey != nativeWorkSessionKey {
 		t.Errorf("card SessionKey = %q, want %q", feed.items[0].SessionKey, nativeWorkSessionKey)
+	}
+	if feed.items[0].Body != "📬 새 메일 3건 분석 완료" {
+		t.Errorf("feed card must carry the full body, got %q", feed.items[0].Body)
 	}
 }

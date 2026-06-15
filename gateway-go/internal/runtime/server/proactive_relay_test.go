@@ -276,9 +276,10 @@ func TestStripProactiveMetaPreamble(t *testing.T) {
 	}
 }
 
-// TestRelay_StripsMetaPreamble verifies the work-feed card body and transcript
-// delivered for a proactive report have the leading working-narration preamble
-// removed end-to-end (not just the standalone helper).
+// TestRelay_StripsMetaPreamble verifies the work-feed card body delivered for a
+// proactive report has the leading working-narration preamble removed end-to-end
+// (not just the standalone helper), and that the feed-backed main session leaves
+// the chat transcript untouched (PR #2448 feed-only delivery).
 func TestRelay_StripsMetaPreamble(t *testing.T) {
 	store := newRecordingTranscriptStore()
 	feed := &recordingWorkFeed{}
@@ -303,8 +304,8 @@ func TestRelay_StripsMetaPreamble(t *testing.T) {
 	if strings.Contains(got, "분석 결과 정리합니다") {
 		t.Errorf("work-feed body still carries the preamble: %.80q", got)
 	}
-	if msgs := store.appends[nativeWorkSessionKey]; len(msgs) != 1 || strings.Contains(string(msgs[0].Content), "맥락 파악됐습니다") {
-		t.Errorf("transcript append should carry the cleaned body, got: %+v", msgs)
+	if msgs := store.appends[nativeWorkSessionKey]; len(msgs) != 0 {
+		t.Errorf("feed-only main session must not mirror into the transcript, got: %+v", msgs)
 	}
 }
 
@@ -424,14 +425,16 @@ func TestRelay_EmptyTitleWhenUnextractable(t *testing.T) {
 	}
 }
 
-// TestRelayCollapsed verifies the collapsed mail-analysis delivery: the
-// client:main transcript carries a deneb-ui accordion (title-only card, body in
-// a markdown child) while the work-feed card and push preview keep reading the
-// raw prose. The suppression gates must also still apply to the raw body.
+// TestRelayCollapsed verifies the collapsed mail-analysis delivery. For the
+// feed-backed main session (client:main) the report lands in the 업무 feed only:
+// the work-feed card carries the raw prose body (read inline in the 피드 screen),
+// the chat transcript is left untouched (PR #2448), and the push preview keeps the
+// raw prose. The accordion-fence path remains exercised for feed-less sessions
+// (the subtests below that omit workFeed). Suppression gates still apply.
 func TestRelayCollapsed(t *testing.T) {
 	body := "## 📧 JOCA Cable 최신 메일 분석 보고\n\n**발신**: fred@jocacable.com\n\n- 회신 기한: 6/13"
 
-	t.Run("transcript holds accordion fence, feed and push keep prose", func(t *testing.T) {
+	t.Run("feed-backed main session: feed keeps prose, transcript untouched", func(t *testing.T) {
 		store := newRecordingTranscriptStore()
 		feed := &recordingWorkFeed{}
 		hub := newClientPushHub()
@@ -444,28 +447,8 @@ func TestRelayCollapsed(t *testing.T) {
 			t.Fatalf("relayCollapsed: delivered=%v err=%v", delivered, err)
 		}
 
-		got := store.appends[nativeWorkSessionKey]
-		if len(got) != 1 {
-			t.Fatalf("want 1 transcript append, got %d", len(got))
-		}
-		text := got[0].TextContent()
-		fences := denebui.ExtractFences(text)
-		if len(fences) != 1 {
-			t.Fatalf("transcript should hold exactly 1 deneb-ui fence, got %d:\n%s", len(fences), text)
-		}
-		if issues, err := denebui.Validate(fences[0]); err != nil || len(issues) > 0 {
-			t.Fatalf("fence should validate, err=%v issues=%v", err, issues)
-		}
-		if !strings.Contains(fences[0], `"type":"accordion"`) || !strings.Contains(fences[0], "📧 JOCA Cable 최신 메일 분석 보고") {
-			t.Errorf("fence missing accordion/title: %s", fences[0])
-		}
-		// The body's leading heading became the card title — it must not be
-		// repeated as the expanded card's first line.
-		if strings.Contains(fences[0], `"value":"## 📧`) {
-			t.Errorf("expanded body repeats its own title heading: %s", fences[0])
-		}
-		if !strings.Contains(fences[0], "회신 기한: 6/13") {
-			t.Errorf("body content missing from fence: %s", fences[0])
+		if got := len(store.appends[nativeWorkSessionKey]); got != 0 {
+			t.Errorf("feed-only main session must not mirror into the transcript, got %d appends", got)
 		}
 
 		if len(feed.items) != 1 {
