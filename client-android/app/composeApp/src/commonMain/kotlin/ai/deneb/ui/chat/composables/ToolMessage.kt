@@ -5,7 +5,6 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.StartOffset
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.keyframes
@@ -18,6 +17,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -34,6 +34,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
@@ -162,7 +163,7 @@ internal fun PulsingStatusIndicator(
         modifier = modifier,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        TypingDots(color = dotColor)
+        SlimeIndicator(color = dotColor)
         Spacer(Modifier.width(8.dp))
         if (isStatusOnly && toolSummary != null) {
             Text(
@@ -200,45 +201,69 @@ internal fun PulsingStatusIndicator(
     }
 }
 
-// TypingDots is the 답변-중 motion: three small dots bounce in a staggered wave
-// (the Gemini/Grok "typing" idiom), each brightening at the top of its hop —
-// livelier and more refined than one big pulsing dot. Pure animation, no state;
-// the color is the caller's (sky-blue cool accent for the waiting row).
-private const val typingDotCount = 3
-private const val typingDotStaggerMs = 140
-private const val typingDotPeriodMs = 760
+// SlimeIndicator is the 답변-중 motion: a cute sky-blue jelly that hops with a
+// squash-and-stretch — it crouches (squashes wide), springs up tall, then
+// squashes again on landing (Disney squash & stretch), with a glossy highlight so
+// it reads as a jelly, not a plain ball. transformOrigin sits at the base so it
+// deforms from where it "lands". Pure animation, no state.
+private const val slimePeriodMs = 1000
 
 @Composable
-private fun TypingDots(color: Color, modifier: Modifier = Modifier) {
-    val transition = rememberInfiniteTransition(label = "typing-dots")
-    val bouncePx = with(LocalDensity.current) { 5.dp.toPx() }
-    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
-        repeat(typingDotCount) { i ->
-            // t runs 0 → 1 (peak) → 0 each period; staggered so the dots ripple.
-            val t by transition.animateFloat(
-                initialValue = 0f,
-                targetValue = 0f,
-                animationSpec = infiniteRepeatable(
-                    animation = keyframes {
-                        durationMillis = typingDotPeriodMs
-                        0f at 0
-                        1f at 200 using FastOutSlowInEasing
-                        0f at 440 using FastOutSlowInEasing
-                        0f at typingDotPeriodMs
-                    },
-                    initialStartOffset = StartOffset(i * typingDotStaggerMs),
-                ),
-                label = "typing-dot-$i",
-            )
+private fun SlimeIndicator(color: Color, modifier: Modifier = Modifier) {
+    val transition = rememberInfiniteTransition(label = "slime")
+    val hopPx = with(LocalDensity.current) { 6.dp.toPx() }
+    // hop: 0 (ground) → 1 (apex) → 0 (land), with a brief crouch and a rest pause.
+    val hop by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 0f,
+        animationSpec = infiniteRepeatable(
+            animation = keyframes {
+                durationMillis = slimePeriodMs
+                0f at 0
+                0f at 160 using FastOutSlowInEasing
+                1f at 440 using FastOutSlowInEasing
+                0f at 700 using FastOutSlowInEasing
+                0f at slimePeriodMs
+            },
+        ),
+        label = "slime-hop",
+    )
+    // squash: + = wide & flat (crouch/land), − = tall & thin (launch).
+    val squash by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 0f,
+        animationSpec = infiniteRepeatable(
+            animation = keyframes {
+                durationMillis = slimePeriodMs
+                0f at 0
+                0.30f at 160 using FastOutSlowInEasing
+                -0.22f at 430 using FastOutSlowInEasing
+                0.30f at 700 using FastOutSlowInEasing
+                0f at 880 using FastOutSlowInEasing
+                0f at slimePeriodMs
+            },
+        ),
+        label = "slime-squash",
+    )
+    // Reserve hop headroom (22.dp) so the jelly never clips; it rests at the base.
+    Box(modifier.height(22.dp).width(16.dp), contentAlignment = Alignment.BottomCenter) {
+        Box(
+            modifier = Modifier
+                .size(16.dp)
+                .graphicsLayer {
+                    translationY = -hop * hopPx
+                    scaleX = 1f + squash * 0.5f
+                    scaleY = 1f - squash * 0.5f
+                    transformOrigin = TransformOrigin(0.5f, 1f)
+                }
+                .background(color, CircleShape),
+        ) {
+            // glossy highlight (top-left) → a cute jelly, not a flat dot.
             Box(
                 modifier = Modifier
-                    .padding(horizontal = 1.5.dp)
-                    .size(6.dp)
-                    .graphicsLayer {
-                        translationY = -t * bouncePx
-                        alpha = 0.45f + 0.55f * t
-                    }
-                    .background(color, CircleShape),
+                    .padding(start = 4.dp, top = 3.dp)
+                    .size(5.dp)
+                    .background(Color.White.copy(alpha = 0.5f), CircleShape),
             )
         }
     }
