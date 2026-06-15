@@ -5,23 +5,20 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.keyframes
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -33,10 +30,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Fill
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
@@ -54,6 +55,9 @@ import deneb.composeapp.generated.resources.waiting_working
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.stringResource
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.sin
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeSource
 
@@ -163,7 +167,7 @@ internal fun PulsingStatusIndicator(
         modifier = modifier,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        SlimeIndicator(color = dotColor)
+        StarIndicator(color = dotColor)
         Spacer(Modifier.width(8.dp))
         if (isStatusOnly && toolSummary != null) {
             Text(
@@ -201,70 +205,64 @@ internal fun PulsingStatusIndicator(
     }
 }
 
-// SlimeIndicator is the 답변-중 motion: a cute sky-blue jelly that hops with a
-// squash-and-stretch — it crouches (squashes wide), springs up tall, then
-// squashes again on landing (Disney squash & stretch), with a glossy highlight so
-// it reads as a jelly, not a plain ball. transformOrigin sits at the base so it
-// deforms from where it "lands". Pure animation, no state.
-private const val slimePeriodMs = 1000
+// StarIndicator is the 답변-중 motion: Deneb's own mark — a rounded five-pointed
+// star (the same star as the app logo) — twinkling: it brightens then dims with a
+// faint swell, like a star catching the light. Deneb is a blue star, so the
+// waiting beat is literally a Deneb twinkling. Sky-blue tint from the caller;
+// pure animation, no state.
+private const val starTwinkleMs = 1100
 
 @Composable
-private fun SlimeIndicator(color: Color, modifier: Modifier = Modifier) {
-    val transition = rememberInfiniteTransition(label = "slime")
-    val hopPx = with(LocalDensity.current) { 6.dp.toPx() }
-    // hop: 0 (ground) → 1 (apex) → 0 (land), with a brief crouch and a rest pause.
-    val hop by transition.animateFloat(
+private fun StarIndicator(color: Color, modifier: Modifier = Modifier) {
+    val transition = rememberInfiniteTransition(label = "star")
+    // 0 (dim) → 1 (bright) and back; the star swells a touch as it brightens.
+    val twinkle by transition.animateFloat(
         initialValue = 0f,
-        targetValue = 0f,
+        targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = keyframes {
-                durationMillis = slimePeriodMs
-                0f at 0
-                0f at 160 using FastOutSlowInEasing
-                1f at 440 using FastOutSlowInEasing
-                0f at 700 using FastOutSlowInEasing
-                0f at slimePeriodMs
-            },
+            animation = tween(starTwinkleMs, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse,
         ),
-        label = "slime-hop",
+        label = "twinkle",
     )
-    // squash: + = wide & flat (crouch/land), − = tall & thin (launch).
-    val squash by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 0f,
-        animationSpec = infiniteRepeatable(
-            animation = keyframes {
-                durationMillis = slimePeriodMs
-                0f at 0
-                0.30f at 160 using FastOutSlowInEasing
-                -0.22f at 430 using FastOutSlowInEasing
-                0.30f at 700 using FastOutSlowInEasing
-                0f at 880 using FastOutSlowInEasing
-                0f at slimePeriodMs
+    Canvas(
+        modifier
+            .size(16.dp)
+            .graphicsLayer {
+                alpha = 0.4f + 0.6f * twinkle
+                val s = 0.86f + 0.14f * twinkle
+                scaleX = s
+                scaleY = s
             },
-        ),
-        label = "slime-squash",
-    )
-    // Reserve hop headroom (22.dp) so the jelly never clips; it rests at the base.
-    Box(modifier.height(22.dp).width(16.dp), contentAlignment = Alignment.BottomCenter) {
-        Box(
-            modifier = Modifier
-                .size(16.dp)
-                .graphicsLayer {
-                    translationY = -hop * hopPx
-                    scaleX = 1f + squash * 0.5f
-                    scaleY = 1f - squash * 0.5f
-                    transformOrigin = TransformOrigin(0.5f, 1f)
-                }
-                .background(color, CircleShape),
-        ) {
-            // glossy highlight (top-left) → a cute jelly, not a flat dot.
-            Box(
-                modifier = Modifier
-                    .padding(start = 4.dp, top = 3.dp)
-                    .size(5.dp)
-                    .background(Color.White.copy(alpha = 0.5f), CircleShape),
-            )
-        }
+    ) {
+        val path = denebStarPath(size)
+        // Fill + a round-join/round-cap stroke gives the brand's rounded star
+        // vertices (the logo rounds its star the same way).
+        drawPath(path, color, style = Fill)
+        drawPath(
+            path,
+            color,
+            style = Stroke(width = size.minDimension * 0.16f, join = StrokeJoin.Round, cap = StrokeCap.Round),
+        )
     }
+}
+
+// denebStarPath builds a centred five-pointed star sized to [size]. The outer
+// radius leaves room for the rounded stroke; inner/outer ~0.40 matches the logo.
+private fun denebStarPath(size: Size): Path {
+    val cx = size.width / 2f
+    val cy = size.height / 2f
+    val outer = size.minDimension / 2f * 0.78f
+    val inner = outer * 0.40f
+    val path = Path()
+    val points = 5
+    for (i in 0 until points * 2) {
+        val r = if (i % 2 == 0) outer else inner
+        val angle = (-PI / 2.0 + i * PI / points).toFloat() // first tip at the top
+        val x = cx + r * cos(angle)
+        val y = cy + r * sin(angle)
+        if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+    }
+    path.close()
+    return path
 }
