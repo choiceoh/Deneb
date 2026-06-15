@@ -54,6 +54,16 @@ func TestBuildHindsightRetainItemSkipsFocusedChat(t *testing.T) {
 	if _, ok := buildHindsightRetainItem(RunParams{Message: "데코레이터가 뭐야"}, "데코레이터는 함수를 감싸는 함수입니다"); !ok {
 		t.Fatal("non-focused turn should produce a retain item")
 	}
+
+	// chat: session is gated on the session key, not just the flag: even with
+	// SkipRecall unset, a 챗봇 turn must not be written to the 업무 memory bank.
+	if _, ok := buildHindsightRetainItem(RunParams{SessionKey: "chat:main", Message: "데코레이터가 뭐야"}, "함수를 감싸는 함수"); ok {
+		t.Fatal("chat: session turn must not produce a retain item (session-key gate)")
+	}
+	// 업무 (client:) session with the flag unset IS storable.
+	if _, ok := buildHindsightRetainItem(RunParams{SessionKey: "client:main", Message: "탑솔라 견적"}, "정리했습니다"); !ok {
+		t.Fatal("client: session turn should produce a retain item")
+	}
 }
 
 func TestRetainTurnToHindsightNilClientNoPanic(t *testing.T) {

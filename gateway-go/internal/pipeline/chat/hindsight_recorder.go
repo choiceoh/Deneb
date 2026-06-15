@@ -55,7 +55,13 @@ func buildHindsightRetainItem(params RunParams, assistantText string) (hindsight
 	// recall against is also not stored. This keeps general chatter out of the
 	// work-memory bank, where it would otherwise resurface later as irrelevant
 	// recall — feeding the very pollution the toggle exists to avoid.
-	if params.SkipRecall {
+	//
+	// chatbot (chat: session) is gated on the session key too, not just the
+	// per-turn SkipRecall flag: the 챗봇 workspace is a clean general-assistant
+	// space, so its turns must never be written to the 업무 Hindsight bank even
+	// if the flag and session key diverge. The session key is the authoritative
+	// signal — symmetric with the recall preflight gate (run_prepare.go).
+	if params.SkipRecall || isChatbotSessionKey(params.SessionKey) {
 		return hindsight.RetainItem{}, false
 	}
 	userMsg := truncateRecallText(params.Message, hindsightMaxTurnChars)
