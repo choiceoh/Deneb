@@ -340,6 +340,18 @@ class AppSettings(internal val settings: Settings) {
         settings.putString(KEY_MAIL_CACHE, json)
     }
 
+    /**
+     * Purge ALL cached private content (every transcript + the inbox list). Called
+     * when the gateway URL or client token changes: those cache keys are global, so
+     * without this the prior gateway/account's chat and mail would render under the
+     * new credentials on the next cold start (before any authenticated RPC).
+     */
+    fun clearCachedContent() {
+        txCacheLru().forEach { settings.remove(KEY_TX_CACHE_PREFIX + it) }
+        settings.remove(KEY_TX_CACHE_LRU)
+        settings.remove(KEY_MAIL_CACHE)
+    }
+
     companion object {
         const val KEY_APP_OPENS = "app_opens"
 

@@ -103,8 +103,17 @@ internal fun GatewayTab(
             Spacer(Modifier.height(16.dp))
             Button(
                 onClick = {
-                    appSettings.settings.putString(KEY_URL, url.trim())
-                    appSettings.settings.putString(KEY_TOKEN, token.trim())
+                    val newUrl = url.trim()
+                    val newToken = token.trim()
+                    // The transcript/mail caches are keyed globally (no account scope),
+                    // so a gateway/account switch must purge them — otherwise the prior
+                    // account's private chat and mail would render under the new
+                    // credentials on the next cold start, before any authenticated RPC.
+                    val credsChanged = newUrl != appSettings.settings.getString(KEY_URL, "") ||
+                        newToken != appSettings.settings.getString(KEY_TOKEN, "")
+                    appSettings.settings.putString(KEY_URL, newUrl)
+                    appSettings.settings.putString(KEY_TOKEN, newToken)
+                    if (credsChanged) appSettings.clearCachedContent()
                     onBack()
                 },
                 modifier = Modifier.fillMaxWidth(),

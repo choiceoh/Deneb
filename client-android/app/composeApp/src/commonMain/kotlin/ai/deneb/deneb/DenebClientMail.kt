@@ -63,7 +63,14 @@ suspend fun DenebGatewayClient.refreshMail(query: String? = null): Boolean {
     // local copy instantly so the mail tab has no spinner on open, then revalidate.
     // Query searches are not cached (query-specific, transient).
     if (q == null && _denebMail.value.isEmpty()) {
-        loadCachedMail()?.let { _denebMail.value = applyReadOverlay(it, locallyReadMailIds) }
+        loadCachedMail()?.let {
+            _denebMail.value = applyReadOverlay(it, locallyReadMailIds)
+            // The cached rows ARE the default inbox, so drop any stale search
+            // cursor/query left over from a prior paged view — otherwise a "더 보기"
+            // tap before the network refresh below would append the wrong page.
+            denebMailActiveQuery = null
+            _denebMailNextToken.value = null
+        }
     }
     val payload = callRpc<MailListPayload>(
         "miniapp.gmail.list_recent",
@@ -97,6 +104,18 @@ internal fun DenebGatewayClient.loadCachedMail(): List<MailMessage>? {
 
 internal fun DenebGatewayClient.storeCachedMail(rows: List<MailMessage>) {
     appSettings.putCachedMailList(mailCacheJson.encodeToString(mailCacheSerializer, rows))
+}
+
+/**
+ * Apply an inbox mutation (read/archive/trash) to the cached default-inbox copy so
+ * that an app kill or unreachable gateway before the next successful refresh can't
+ * resurrect a cleared unread dot or a removed row from the cache. Reads the cache
+ * directly (not [_denebMail], which may currently hold a search view), so it's
+ * correct regardless of what the user is looking at. No-op when there's no cache.
+ */
+internal fun DenebGatewayClient.patchCachedMail(transform: (List<MailMessage>) -> List<MailMessage>) {
+    val cached = loadCachedMail() ?: return
+    storeCachedMail(transform(cached))
 }
 
 /** Append the next page of the current view (inbox or active search) to the list. */
@@ -154,6 +173,7 @@ suspend fun DenebGatewayClient.markMailRead(id: String): Boolean {
         // the gateway's 30s list cache, which still reports the mail unread.
         recordReadId(locallyReadMailIds, id)
         _denebMail.update { list -> list.map { if (it.id == id) it.copy(unread = false) else it } }
+        patchCachedMail { list -> list.map { if (it.id == id) it.copy(unread = false) else it } }
     }
     return ok
 }
@@ -161,14 +181,20 @@ suspend fun DenebGatewayClient.markMailRead(id: String): Boolean {
 /** Archive (drop from inbox); optimistically removes the row from the list. */
 suspend fun DenebGatewayClient.archiveMail(id: String): Boolean {
     val ok = callRpc<OkPayload>("miniapp.gmail.archive", buildJsonObject { put("id", id) })?.ok == true
-    if (ok) _denebMail.update { list -> list.filterNot { it.id == id } }
+    if (ok) {
+        _denebMail.update { list -> list.filterNot { it.id == id } }
+        patchCachedMail { list -> list.filterNot { it.id == id } }
+    }
     return ok
 }
 
 /** Move to Trash; optimistically removes the row from the list. */
 suspend fun DenebGatewayClient.trashMail(id: String): Boolean {
     val ok = callRpc<OkPayload>("miniapp.gmail.trash", buildJsonObject { put("id", id) })?.ok == true
-    if (ok) _denebMail.update { list -> list.filterNot { it.id == id } }
+    if (ok) {
+        _denebMail.update { list -> list.filterNot { it.id == id } }
+        patchCachedMail { list -> list.filterNot { it.id == id } }
+    }
     return ok
 }
 
