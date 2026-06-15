@@ -49,6 +49,9 @@ var (
 		"/api/images/delete":   true,
 		"/api/hf/token":        true,
 		"/api/eval":            true,
+		// Read-only crash triage: pattern match + a fleet-LLM root-cause analysis
+		// of a managed container's recent logs. Not editing — safe to expose.
+		"/api/assist/logs": true,
 	}
 )
 
@@ -63,6 +66,12 @@ func fleetPathAllowed(method, path string) bool {
 		}
 		if id, ok := strings.CutPrefix(path, "/api/jobs/"); ok {
 			return id != "" && !strings.Contains(id, "/")
+		}
+		// GET /api/recipes/{name}/drift — read-only recipe-vs-container drift
+		// check (name is a single segment; /api/recipes/{name}/raw stays out).
+		if rest, ok := strings.CutPrefix(path, "/api/recipes/"); ok {
+			name, found := strings.CutSuffix(rest, "/drift")
+			return found && name != "" && !strings.Contains(name, "/")
 		}
 	case http.MethodPost:
 		if fleetAllowPost[path] {
