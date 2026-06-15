@@ -45,10 +45,11 @@ private const val BACKDROP_PEAK_ALPHA = 0.62f
 // The glow lives in the top portion of the screen only, and its vertical reach is NOT
 // uniform: each column reaches somewhere between BACKDROP_HEIGHT_MIN and
 // BACKDROP_HEIGHT_FRACTION of the height (see [curtainReach]), so the lower edge
-// undulates across the width like an aurora curtain instead of a flat band.
-// BACKDROP_HEIGHT_FRACTION is the deepest reach (the tallest columns).
-private const val BACKDROP_HEIGHT_FRACTION = 0.75f
-private const val BACKDROP_HEIGHT_MIN = 0.42f
+// undulates across the width like an aurora curtain instead of a flat band. The range
+// is centered on ~0.75 (the original flat height) so the curtain undulates above AND
+// below it rather than only shortening — the overall reach stays as tall as before.
+private const val BACKDROP_HEIGHT_FRACTION = 0.9f
+private const val BACKDROP_HEIGHT_MIN = 0.6f
 
 // Hue starts at blue (240 deg) and decreases a full turn, matching the observed
 // order (blue -> cyan -> green -> ...). Reset to this each time generation starts.
