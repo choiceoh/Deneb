@@ -171,6 +171,18 @@ class BlockParsingTest {
     }
 
     @Test
+    fun `br in a table cell becomes a line break`() {
+        // Markdown tables can't hold a real newline (it ends the row), so the model
+        // uses <br> for an in-cell line break. The cell tokenizes it to a LineBreak so
+        // it renders on two lines instead of showing a literal "<br>".
+        val doc = parseMarkdown("| 항목 | 비고 |\n| --- | --- |\n| 착수신고 | 6/2 지연<br>미확인 |")
+        val table = doc.blocks.single() as Table
+        val noteCell = table.rows[0][1]
+        assertTrue(noteCell.any { it is LineBreak }, noteCell.toString())
+        assertTrue(noteCell.none { it is Text && it.value.contains("<br>") }, noteCell.toString())
+    }
+
+    @Test
     fun `multiple paragraphs separated by blank line`() {
         val doc = parseMarkdown("first\n\nsecond")
         assertEquals(2, doc.blocks.size)
