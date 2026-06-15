@@ -142,9 +142,17 @@ func recallDiaryEvidence(ctx context.Context, store *wiki.Store, queries []strin
 // arrive with Score == 0 so we substitute the legacy "no-terms" baseline
 // so the evidence still passes confidence ranking downstream.
 func diaryHitEvidence(h wiki.DiaryHit) recallEvidence {
-	score := h.Score
-	if score <= 0 {
-		score = 0.55
+	// Diary BM25 (recency-weighted) is raw and unbounded (often 3-9), unlike the
+	// wiki/polaris sources which are already 0-1. Left raw it dwarfs every other
+	// source on the merge sort and buries the curated wiki page — and on the
+	// budget-4 non-cue turns it crowds wiki out entirely. Normalize to 0-1 and
+	// add a source prior just under wiki's 0.80, so an equally-relevant curated
+	// page edges out a raw mail-analysis echo while a strongly-matching diary
+	// entry still beats a weak wiki hit. recencyWeightedScore stays inside the
+	// normalized term, preserving within-diary order.
+	score := 0.55 // recent-fallback baseline (Score==0: no query match, no terms)
+	if h.Score > 0 {
+		score = 0.70 + recallNormalizeBM25(h.Score)
 	}
 	return recallEvidence{
 		Kind:   "diary",
@@ -153,6 +161,15 @@ func diaryHitEvidence(h wiki.DiaryHit) recallEvidence {
 		Score:  score,
 		At:     h.At,
 	}
+}
+
+// recallNormalizeBM25 maps a raw BM25 score to (0,1) so the lexical sources are
+// comparable across the recall merge. Mirrors wiki.scoreToNormalized (sigmoid).
+func recallNormalizeBM25(score float64) float64 {
+	if score <= 0 {
+		return 0
+	}
+	return score / (score + 1)
 }
 
 func recallTranscriptEvidence(ctx context.Context, transcript TranscriptStore, sessionKey, currentMessage string, queries []string) []recallEvidence {

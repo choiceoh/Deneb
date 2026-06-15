@@ -81,6 +81,31 @@ func TestRecallPrimaryQuery(t *testing.T) {
 	}
 }
 
+func TestDiaryHitEvidenceNormalizesScore(t *testing.T) {
+	// Raw recency-weighted diary BM25 (3-9) must be normalized into the 0-1
+	// source-prior family, not left raw to dwarf wiki (0.80+0-1) and bury the
+	// curated page.
+	ev := diaryHitEvidence(wiki.DiaryHit{File: "d.md", Header: "h", Content: "c", Score: 5.0, At: 1})
+	if ev.Score > 1.8 {
+		t.Fatalf("diary score must be normalized into the source family, got %.2f", ev.Score)
+	}
+	if ev.Score <= 0.70 {
+		t.Fatalf("a matched diary hit should sit above the prior floor, got %.2f", ev.Score)
+	}
+	// Within-diary order preserved: a stronger BM25 match outranks a weaker one.
+	weak := diaryHitEvidence(wiki.DiaryHit{Score: 1.0, At: 1})
+	strong := diaryHitEvidence(wiki.DiaryHit{Score: 8.0, At: 1})
+	if strong.Score <= weak.Score {
+		t.Fatalf("within-diary order broken: strong %.2f <= weak %.2f", strong.Score, weak.Score)
+	}
+	// Recent-fallback (Score 0, no query match) gets the low baseline, below
+	// any matched hit.
+	fb := diaryHitEvidence(wiki.DiaryHit{Score: 0, At: 1})
+	if fb.Score >= weak.Score {
+		t.Fatalf("recent-fallback should rank below a matched hit, got fb %.2f weak %.2f", fb.Score, weak.Score)
+	}
+}
+
 func TestBuildRecallPreflightInjectsWikiEvidence(t *testing.T) {
 	dir := t.TempDir()
 	store, err := wiki.NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
