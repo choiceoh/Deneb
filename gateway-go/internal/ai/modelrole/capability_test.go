@@ -88,8 +88,10 @@ func TestCapabilityForModel_WormholeFrontedWindow(t *testing.T) {
 		// Main is fronted by wormhole; no role uses the vllm provider directly.
 		MainModel: "wormhole/deepseek-v4-flash",
 		Providers: map[string]ProviderResolved{
-			"wormhole": {BaseURL: "http://127.0.0.1:18800/v1"}, // proxy: no /models window
-			"vllm":     {BaseURL: srv.URL + "/v1"},             // direct: reports the window
+			// Proxy points at a closed port so the harvest probe deterministically
+			// contributes nothing here; the window must come from the vllm provider.
+			"wormhole": {BaseURL: "http://127.0.0.1:1/v1"},
+			"vllm":     {BaseURL: srv.URL + "/v1"}, // direct: reports the window
 		},
 	})
 

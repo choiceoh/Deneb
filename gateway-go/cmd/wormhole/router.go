@@ -53,6 +53,15 @@ func buildSnapshot(cfg config, mtime time.Time) *snapshot {
 // call and model lifecycle changes on the order of minutes, not seconds.
 const fleetRefreshInterval = 15 * time.Second
 
+// windowRefreshInterval is how often the watcher re-probes local backends for
+// their max_model_len. Slow: a model's context length changes only when it is
+// relaunched, so a frequent probe would be wasted cross-fabric GETs.
+// windowProbeTimeout bounds a single backend probe.
+const (
+	windowRefreshInterval = 60 * time.Second
+	windowProbeTimeout    = 5 * time.Second
+)
+
 type router struct {
 	path string // config path to watch ("" disables hot-reload)
 	snap atomic.Pointer[snapshot]
@@ -65,9 +74,16 @@ type router struct {
 	// by the watcher goroutine (the sole caller of refreshFleet), so it needs no
 	// lock; it exists to log discovery on transitions instead of every 15s poll.
 	fleetState string
-	metrics    *metrics // per-request counters, exposed at GET /metrics
-	client     *http.Client
-	log        *slog.Logger
+	// windows caches each LOCAL model's max_model_len, probed from its backend's
+	// /v1/models by refreshWindows on the watch loop. Lock-free read in
+	// listModels/status; never nil after newRouter. Empty for cloud/anthropic
+	// models — max_model_len is a vLLM serving fact, not theirs. Surfacing it lets
+	// a downstream client (the Deneb gateway, the native picker) discover a
+	// wormhole-fronted model's context window without probing the backend directly.
+	windows atomic.Pointer[map[string]int]
+	metrics *metrics // per-request counters, exposed at GET /metrics
+	client  *http.Client
+	log     *slog.Logger
 }
 
 func newRouter(cfg config, path string, log *slog.Logger) *router {
@@ -89,6 +105,8 @@ func newRouter(cfg config, path string, log *slog.Logger) *router {
 	rt.snap.Store(buildSnapshot(cfg, time.Time{}))
 	empty := map[string]modelEntry{}
 	rt.fleet.Store(&empty)
+	emptyWindows := map[string]int{}
+	rt.windows.Store(&emptyWindows)
 	return rt
 }
 
@@ -162,15 +180,20 @@ func (rt *router) watch(ctx context.Context) {
 			rt.log.Error("config watcher panic", "panic", r)
 		}
 	}()
-	// Discover once up front so fleet models are routable as soon as possible.
+	// Discover once up front so fleet models are routable, and their windows
+	// known, as soon as possible. The window probe runs even for a fully static
+	// config (it has local models whose max_model_len downstream wants).
 	rt.refreshFleet(ctx)
+	rt.refreshWindows(ctx)
 	if rt.path == "" && rt.cur().cfg.Sparkfleet == nil {
-		return // nothing to poll: static config, no discovery
+		return // nothing to poll: static config, no discovery (windows probed once above)
 	}
 	cfgTick := time.NewTicker(3 * time.Second)
 	defer cfgTick.Stop()
 	fleetTick := time.NewTicker(fleetRefreshInterval)
 	defer fleetTick.Stop()
+	windowTick := time.NewTicker(windowRefreshInterval)
+	defer windowTick.Stop()
 	for {
 		select {
 		case <-ctx.Done():
@@ -179,8 +202,72 @@ func (rt *router) watch(ctx context.Context) {
 			rt.reloadIfChanged()
 		case <-fleetTick.C:
 			rt.refreshFleet(ctx)
+		case <-windowTick.C:
+			rt.refreshWindows(ctx)
 		}
 	}
+}
+
+// refreshWindows probes every LOCAL routable model's backend /v1/models for its
+// max_model_len and swaps in a fresh map (keyed by client-facing model name).
+// Cloud and anthropic models are skipped — max_model_len is a vLLM serving fact.
+// Best-effort: a model whose probe fails just has no window this cycle (the map
+// is rebuilt each pass, so a recovered backend repopulates). Sole writer, so the
+// atomic swap is the only synchronization needed.
+func (rt *router) refreshWindows(parent context.Context) {
+	next := map[string]int{}
+	for _, m := range rt.mergedModels() {
+		e, ok := rt.lookup(m.Name) // resolve fleet-backed entries to a live URL
+		if !ok || e.URL == "" || !e.isLocal() || e.protocol() != protocolOpenAI {
+			continue
+		}
+		ctx, cancel := context.WithTimeout(parent, windowProbeTimeout)
+		if w := probeMaxModelLen(ctx, rt.client, e); w > 0 {
+			next[m.Name] = w
+		}
+		cancel()
+	}
+	rt.windows.Store(&next)
+}
+
+// probeMaxModelLen GETs a backend's /v1/models and returns the max_model_len for
+// the entry's served model id (UpstreamModel, or Name), or 0 if the backend is
+// unreachable, returns non-200, isn't JSON, or doesn't report the field.
+func probeMaxModelLen(ctx context.Context, client *http.Client, e modelEntry) int {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(e.URL, "/")+"/models", nil)
+	if err != nil {
+		return 0
+	}
+	if e.Key != "" {
+		req.Header.Set("Authorization", "Bearer "+e.Key)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return 0
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return 0
+	}
+	var out struct {
+		Data []struct {
+			ID          string `json:"id"`
+			MaxModelLen int    `json:"max_model_len"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return 0
+	}
+	want := e.UpstreamModel
+	if want == "" {
+		want = e.Name
+	}
+	for _, m := range out.Data {
+		if m.ID == want {
+			return m.MaxModelLen
+		}
+	}
+	return 0
 }
 
 // refreshFleet re-polls SparkFleet and swaps in the freshly discovered model set.
@@ -532,8 +619,13 @@ func (rt *router) listModels(w http.ResponseWriter, r *http.Request) {
 		ID      string `json:"id"`
 		Object  string `json:"object"`
 		OwnedBy string `json:"owned_by"`
+		// MaxModelLen mirrors the backend's vLLM context length so a discovering
+		// client (the Deneb gateway, the native picker) gets the window from this
+		// front instead of probing the backend directly. Omitted for cloud models.
+		MaxModelLen int `json:"max_model_len,omitempty"`
 	}
 	models := rt.mergedModels() // configured + SparkFleet-discovered
+	windows := rt.windows.Load()
 	rows := make([]modelRow, 0, len(models)+1)
 	// Advertise the reserved auto name first so clients see they can delegate.
 	if len(rt.cur().cfg.Auto) > 0 {
@@ -552,7 +644,11 @@ func (rt *router) listModels(w http.ResponseWriter, r *http.Request) {
 		if e.isLocal() {
 			owner = "wormhole-local"
 		}
-		rows = append(rows, modelRow{ID: e.Name, Object: "model", OwnedBy: owner})
+		row := modelRow{ID: e.Name, Object: "model", OwnedBy: owner}
+		if windows != nil {
+			row.MaxModelLen = (*windows)[e.Name]
+		}
+		rows = append(rows, row)
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{"object": "list", "data": rows})

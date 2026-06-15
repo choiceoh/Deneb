@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelcaps"
 )
 
 // vllmDiscoveryTimeout caps the auto-discovery probe so a slow or unreachable
@@ -110,26 +112,20 @@ func DiscoverServedVllmModelInfos(ctx context.Context, baseURL string, apiKey ..
 // The chat pipeline already retries through the fallback chain, so a
 // missing-model 404 isn't catastrophic; this just removes the most common
 // "I renamed the served model" footgun.
-// isDirectVllmProvider reports whether a configured provider id is a direct vLLM
-// endpoint (one that serves /v1/models with a real max_model_len). The wormhole
-// proxy is NOT direct — its /v1/models omits max_model_len — so it is not probed
-// for windows here even though it is vLLM-backed for routing.
-func isDirectVllmProvider(id string) bool {
-	return id == "vllm" || strings.HasPrefix(id, "vllm-") || strings.HasPrefix(id, "vllm_")
-}
-
-// harvestVllmWindows probes configured direct-vLLM providers for context windows
+// harvestVllmWindows probes configured vLLM-backed providers for context windows
 // even when no role routes through them, folding each served model's
 // max_model_len into `into` (keyed by served model id, never overwriting a window
-// a role probe already found). This is what lets a model fronted by wormhole —
-// whose role baseURL is the proxy, which does not report max_model_len — still
-// resolve its real window: the same model id is served by the still-configured
-// direct vllm provider. Best-effort: a down or non-reporting provider is skipped
-// with a WARN. `probed` carries the baseURLs the per-role reconcile already hit,
-// so a provider backing a vllm role is not probed twice.
+// a role probe already found). This is what lets a model fronted by wormhole
+// still resolve its real window: wormhole's /v1/models reports each local model's
+// max_model_len, and the still-configured direct vllm provider serves the same id
+// as a fallback. Probing both vllm AND wormhole (modelcaps.ServesVllmBacked) means
+// the window survives even if one source is removed. Best-effort: a down or
+// non-reporting provider (e.g. a cloud model fronted by wormhole, whose row omits
+// the field) contributes nothing. `probed` carries the baseURLs the per-role
+// reconcile already hit, so a provider backing a vLLM role is not probed twice.
 func harvestVllmWindows(logger *slog.Logger, providers map[string]ProviderResolved, into map[string]int, probed map[string]bool) {
 	for id, pr := range providers {
-		if pr.BaseURL == "" || !isDirectVllmProvider(id) || probed[pr.BaseURL] {
+		if pr.BaseURL == "" || !modelcaps.ServesVllmBacked(id) || probed[pr.BaseURL] {
 			continue
 		}
 		probed[pr.BaseURL] = true
