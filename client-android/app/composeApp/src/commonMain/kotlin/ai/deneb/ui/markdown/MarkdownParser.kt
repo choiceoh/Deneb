@@ -15,9 +15,12 @@ import kotlinx.collections.immutable.toImmutableList
  */
 fun parseMarkdown(text: String): MarkdownDocument {
     if (text.isEmpty()) return MarkdownDocument(persistentListOf())
+    // Rewrite box-drawing (ASCII-art) tables into markdown tables first, so the
+    // block scanner renders them as real tables instead of broken monospace.
+    val normalized = normalizeBoxTables(text)
     return try {
-        MarkdownDocument(BlockScanner.scan(text).toImmutableList())
+        MarkdownDocument(BlockScanner.scan(normalized).toImmutableList())
     } catch (_: Throwable) {
-        MarkdownDocument(persistentListOf(Paragraph(persistentListOf(Text(text)))))
+        MarkdownDocument(persistentListOf(Paragraph(persistentListOf(Text(normalized)))))
     }
 }

@@ -21,6 +21,11 @@ data class DenebPatchNote(
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
         highlights = listOf(
+            "아스키(박스 드로잉) 표가 와도 깨지지 않고 깔끔한 표로 표시됩니다 — 붙여넣은 표나 예전 기록의 `┌─┐│└┘` 표를 마크다운 표로 변환해 렌더",
+        ),
+    ),
+    DenebPatchNote(
+        highlights = listOf(
             "Dropbox 연동 시 실제로는 연결됐는데 '인증 코드 교환에 실패했습니다'가 뜨던 문제 수정 — 승인 코드가 두 번 처리되며 생기던 거짓 오류를 제거",
         ),
     ),
