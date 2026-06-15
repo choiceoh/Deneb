@@ -7,6 +7,7 @@ package ai.deneb.ui.chat
 
 import ai.deneb.Platform
 import ai.deneb.currentPlatform
+import ai.deneb.deneb.DenebLoading
 import ai.deneb.getBackgroundDispatcher
 import ai.deneb.onDragAndDropEventDropped
 import ai.deneb.ui.chat.composables.BotMessage
@@ -95,6 +96,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
@@ -174,6 +176,16 @@ internal fun ChatModeScreen(
         val resource = uiState.snackbarMessage ?: return@LaunchedEffect
         snackbarHostState.showSnackbar(getString(resource))
         uiState.actions.clearSnackbar()
+    }
+
+    // A failed send restores the user's text into the input so a typo or a long prompt
+    // can be fixed and resent instead of retyped. Only the typed-send path sets
+    // failedInput, and only when the box is empty so freshly typed text is never lost.
+    LaunchedEffect(uiState.failedInput) {
+        val failed = uiState.failedInput
+        if (!failed.isNullOrBlank() && questionInputText.text.isBlank()) {
+            questionInputText = TextFieldValue(failed, selection = TextRange(failed.length))
+        }
     }
 
     val filteredConversations = remember(uiState.savedConversations, uiState.pendingConversationDeletion) {
@@ -352,10 +364,20 @@ internal fun ChatModeScreen(
                                         ),
                                 ) {
                                     if (uiState.history.isEmpty()) {
-                                        EmptyState(
-                                            recallEnabled = uiState.recallEnabled,
-                                            modifier = Modifier.fillMaxWidth().weight(1f),
-                                        )
+                                        if (uiState.isRestoring) {
+                                            // Cold open: a long transcript is restored off the main
+                                            // thread (see ChatViewModel init). Show the loading
+                                            // skeleton instead of the greeting so a returning user
+                                            // doesn't see a false "empty chat" flash before it fills.
+                                            Column(Modifier.fillMaxWidth().weight(1f)) {
+                                                DenebLoading()
+                                            }
+                                        } else {
+                                            EmptyState(
+                                                recallEnabled = uiState.recallEnabled,
+                                                modifier = Modifier.fillMaxWidth().weight(1f),
+                                            )
+                                        }
                                     } else {
                                         // Prefetch ~half a viewport ahead so each expensive markdown item is
                                         // composed + measured before it scrolls into view (off the scroll frame).
@@ -641,6 +663,17 @@ internal fun ChatModeScreen(
                                                                         isStreaming = isLastAssistant && isResponseStreaming,
                                                                         textScale = chatTextScale,
                                                                     )
+                                                                    if (history.id == uiState.stoppedMessageId) {
+                                                                        // The user stopped this answer mid-stream;
+                                                                        // mark it so a half-reply doesn't read as
+                                                                        // complete (regenerate is on the last one).
+                                                                        androidx.compose.material3.Text(
+                                                                            text = "중단됨",
+                                                                            style = MaterialTheme.typography.labelSmall,
+                                                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                                            modifier = Modifier.padding(start = 16.dp, bottom = 8.dp),
+                                                                        )
+                                                                    }
                                                                     if (history.toolFootprint != null) {
                                                                         androidx.compose.material3.Text(
                                                                             text = stringResource(Res.string.tool_footprint, history.toolFootprint),

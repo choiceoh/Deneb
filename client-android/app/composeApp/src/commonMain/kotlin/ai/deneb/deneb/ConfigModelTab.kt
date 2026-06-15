@@ -92,9 +92,21 @@ internal fun ModelTab(client: DenebGatewayClient) {
     var pendingDelete by remember { mutableStateOf<ModelOption?>(null) }
     // Model id whose tuner detail is expanded (ⓘ tap); null = all collapsed.
     var expandedInfoId by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(Unit) { client.refreshModels() }
+    // null = not yet loaded; true/false = last refresh outcome. Lets a failed load
+    // show error+retry instead of an indefinite skeleton (matches ConfigSkillsTab).
+    var loadFailed by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { loadFailed = !client.refreshModels() }
     if (models.isEmpty()) {
-        DenebLoading()
+        if (loadFailed) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                DenebError(
+                    "모델 목록을 불러오지 못했습니다.",
+                    onRetry = { scope.launch { loadFailed = !client.refreshModels() } },
+                )
+            }
+        } else {
+            DenebLoading()
+        }
         return
     }
     val currentForRole = roleModels[role.wire]

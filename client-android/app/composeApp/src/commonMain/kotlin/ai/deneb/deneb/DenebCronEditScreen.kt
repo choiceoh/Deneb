@@ -165,7 +165,13 @@ fun DenebCronEditScreen(
         }
     }
 
-    DenebScreenScaffold(title = "크론 편집", onBack = onBack, tabBar = navigationTabBar) {
+    // Guard against losing in-progress edits to a stray back: snapshot the fields once
+    // the job has loaded (prefilling done) and confirm before leaving if they changed.
+    val snapshot = listOf<Any?>(name, draft, tz, prompt, model)
+    val baseline = remember(prefilling) { if (!prefilling) snapshot else null }
+    val requestBack = rememberDiscardGuard(baseline != null && snapshot != baseline, onBack)
+
+    DenebScreenScaffold(title = "크론 편집", onBack = requestBack, tabBar = navigationTabBar) {
         Column(
             Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp),
         ) {

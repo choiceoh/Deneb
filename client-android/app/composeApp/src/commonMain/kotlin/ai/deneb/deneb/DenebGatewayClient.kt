@@ -201,6 +201,16 @@ class DenebGatewayClient(
     // to the active workspace below.
     internal val _denebWorkFeed = MutableStateFlow<List<WorkFeedItem>>(emptyList())
 
+    // False until the first work-feed fetch attempt finishes, so the 피드 home can
+    // show a loading skeleton instead of flashing "오늘 받은 피드가 없습니다" before the
+    // first list arrives (the raw flow seeds empty, so the list alone can't tell
+    // "still loading" from "genuinely empty"). Reset on a credential switch.
+    internal val _workFeedLoaded = MutableStateFlow(false)
+
+    /** True once the work feed has been fetched at least once (success or a failed
+     *  attempt) — lets the 피드 screen distinguish first-load from empty. */
+    val workFeedLoaded: StateFlow<Boolean> = _workFeedLoaded
+
     // Reactive workspace mode (업무 true ↔ 챗봇 false), seeded from the persisted
     // recall setting and republished by [setWorkspace]. Drives the mode-scoped work
     // feed and gates proactive notifications. AppSettings is the source of truth on
@@ -299,6 +309,7 @@ class DenebGatewayClient(
         denebMailActiveQuery = null
         locallyReadMailIds.clear()
         _denebWorkFeed.value = emptyList()
+        _workFeedLoaded.value = false
         _hasUnreadWorkReport.value = false
         _hasUnreadHeartbeat.value = false
         _denebMemories.value = emptyList()
@@ -967,9 +978,16 @@ class DenebGatewayClient(
             buildJsonObject {
                 put("limit", 20)
             },
-        ) ?: return false
+        )
+        if (payload == null) {
+            // The attempt finished (failed); stop showing the first-load skeleton so
+            // an unreachable gateway falls back to the empty state rather than hanging.
+            _workFeedLoaded.value = true
+            return false
+        }
         if (epoch != credEpoch) return false // credentials switched — don't show the old account's work-feed
         _denebWorkFeed.value = payload.items.filter { it.id.isNotBlank() }
+        _workFeedLoaded.value = true
         return true
     }
 
