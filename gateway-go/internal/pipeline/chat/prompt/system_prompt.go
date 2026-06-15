@@ -28,7 +28,7 @@ var toolCategories = []struct {
 
 // buildStaticCacheKey returns a stable string key for the static prompt block
 // based on the sorted tool name list.
-func buildStaticCacheKey(toolDefs []ToolDef, deferredTools []DeferredToolInfo, topicCacheKey string) string {
+func buildStaticCacheKey(toolDefs []ToolDef, deferredTools []DeferredToolInfo, topicCacheKey string, chatbot bool) string {
 	names := make([]string, 0, len(toolDefs)+len(deferredTools))
 	for _, d := range toolDefs {
 		names = append(names, d.Name)
@@ -38,6 +38,12 @@ func buildStaticCacheKey(toolDefs []ToolDef, deferredTools []DeferredToolInfo, t
 	}
 	sort.Strings(names)
 	base := strings.Join(names, ",")
+	// 챗봇 builds a different (neutral) static block, so it must not share the 업무
+	// Static cache entry. Only append when true so the 업무 key stays byte-identical
+	// to before (its cache entry is preserved).
+	if chatbot {
+		base += "|chatbot"
+	}
 	if topicCacheKey == "" {
 		// No topic → identical key to the pre-topic implementation, so
 		// topic-less sessions keep sharing the existing Static cache entry.
@@ -68,18 +74,27 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 	// --- Static block (cached) ---
 	// The static block depends only on the tool set, which is fixed after server
 	// start. Cache it to avoid rebuilding ~2 KB of strings on every request.
-	cacheKey := buildStaticCacheKey(params.ToolDefs, params.DeferredTools, params.TopicCacheKey)
+	cacheKey := buildStaticCacheKey(params.ToolDefs, params.DeferredTools, params.TopicCacheKey, params.Chatbot)
 	if cached, ok := Cache.StaticPrompt(cacheKey); ok {
 		staticText = cached
 	} else {
 		var s strings.Builder
 
-		// Identity.
-		s.WriteString("You are Nev — a personal assistant running inside Deneb (https://github.com/choiceoh/deneb). Deneb is a single-user AI agent platform on DGX Spark.\n\n")
+		if params.Chatbot {
+			// 챗봇 workspace: a clean general-purpose assistant — no Nev
+			// chief-of-staff persona, no work framing. Reads like a vanilla
+			// general assistant (GPT/Claude/Gemini). The 업무 work-loop sections
+			// below are skipped and the work context (SOUL/USER/MEMORY, topic,
+			// tier-1 wiki, calendar) is withheld upstream; the tool surface stays.
+			s.WriteString("You are a helpful, knowledgeable AI assistant. 사용자의 질문에 한국어로 명확하고 자연스럽게 답한다. 대화·설명·브레인스토밍·글쓰기·코딩 등 무엇이든 돕는다. 군더더기 없이 직접적으로, 결과로 신뢰를 쌓아라.\n\n")
+		} else {
+			// Identity.
+			s.WriteString("You are Nev — a personal assistant running inside Deneb (https://github.com/choiceoh/deneb). Deneb is a single-user AI agent platform on DGX Spark.\n\n")
 
-		// Role (chief-of-staff persona — see CLAUDE.md "비서실장형 단일 에이전트").
-		s.WriteString("## 역할\n")
-		s.WriteString("당신은 비서실장형 단일 에이전트다 — 분석가와 비서를 분리하지 않는다. **업무분석**(메일·프로젝트·인물·거래의 맥락을 합성해 \"왜 지금 중요한가\"와 리스크·기한)과 **업무비서**(일정·미팅 준비·임박 알림으로 \"언제까지 무엇을\")를 한 머리로 수행한다. 좋은 답에는 분석의 '왜'와 비서의 '언제까지'가 한 응답에 함께 담긴다 — 둘을 분리된 응답이나 탭으로 가르지 마라.\n\n")
+			// Role (chief-of-staff persona — see CLAUDE.md "비서실장형 단일 에이전트").
+			s.WriteString("## 역할\n")
+			s.WriteString("당신은 비서실장형 단일 에이전트다 — 분석가와 비서를 분리하지 않는다. **업무분석**(메일·프로젝트·인물·거래의 맥락을 합성해 \"왜 지금 중요한가\"와 리스크·기한)과 **업무비서**(일정·미팅 준비·임박 알림으로 \"언제까지 무엇을\")를 한 머리로 수행한다. 좋은 답에는 분석의 '왜'와 비서의 '언제까지'가 한 응답에 함께 담긴다 — 둘을 분리된 응답이나 탭으로 가르지 마라.\n\n")
+		}
 
 		// Topic background knowledge (per-forum-topic; config-mapped). Lives in
 		// the Static block so it is cached; the cache key carries the topic key
@@ -161,17 +176,20 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		s.WriteString("- `polaris(action=\"expand\", summary_id=N)` — 특정 구간 원문 복원. `question`을 더하면 LLM이 원문 기반으로 답한다.\n")
 		s.WriteString("자동 `<recall-context>`는 cue 기반 preflight라 턴 시작에 한 번 주입될 뿐이다 — 대화 도중 새 회상이 필요해지면 이 도구를 직접 사용하라.\n\n")
 
-		// Analysis → wiki write-back loop (SOUL.md continuity contract).
-		s.WriteString("## 분석 → 위키 갱신\n")
-		s.WriteString("메일·거래·인물·프로젝트 분석에서 **새로 알게 된 사실**(역할 변경, 진행률, 거래 조건, 금액·기한, 결정 사항)은 같은 응답 안에서 즉시 `wiki(action=\"write\")` 또는 `wiki(action=\"log\")`로 기록한다. \"기록할까요?\" 같은 확인 금지 — 묻지 말고 실행하라. SOUL.md '연속성 확보' 원칙. 오늘 분석한 사실 위에 다음 분석이 쌓이려면 위키가 기억의 끝점이어야 한다.\n")
-		s.WriteString("기록은 **습관은 일관되게, 형식은 사안에 맞게**: 각 프로젝트·거래·인물 페이지는 그 사안에 중요한 축을 페이지가 스스로 정해 최신 상태로 유지하라 — 모든 건에 같은 양식·필드를 강요하지 마라(부동산은 잔금·등기, 개발은 마일스톤·검수처럼 무엇이 중요한지가 다르다). 변하지 않는 규율은 셋뿐이다: ① 근거(메일 문구·날짜·금액)를 사실과 함께 남긴다, ② 관련 인물·프로젝트는 `related`로 연결한다, ③ 빠뜨리지 않고 갱신한다.\n\n")
+		// 챗봇 skips the 업무 work-loop coaching (분석→위키, Hindsight) below.
+		if !params.Chatbot {
+			// Analysis → wiki write-back loop (SOUL.md continuity contract).
+			s.WriteString("## 분석 → 위키 갱신\n")
+			s.WriteString("메일·거래·인물·프로젝트 분석에서 **새로 알게 된 사실**(역할 변경, 진행률, 거래 조건, 금액·기한, 결정 사항)은 같은 응답 안에서 즉시 `wiki(action=\"write\")` 또는 `wiki(action=\"log\")`로 기록한다. \"기록할까요?\" 같은 확인 금지 — 묻지 말고 실행하라. SOUL.md '연속성 확보' 원칙. 오늘 분석한 사실 위에 다음 분석이 쌓이려면 위키가 기억의 끝점이어야 한다.\n")
+			s.WriteString("기록은 **습관은 일관되게, 형식은 사안에 맞게**: 각 프로젝트·거래·인물 페이지는 그 사안에 중요한 축을 페이지가 스스로 정해 최신 상태로 유지하라 — 모든 건에 같은 양식·필드를 강요하지 마라(부동산은 잔금·등기, 개발은 마일스톤·검수처럼 무엇이 중요한지가 다르다). 변하지 않는 규율은 셋뿐이다: ① 근거(메일 문구·날짜·금액)를 사실과 함께 남긴다, ② 관련 인물·프로젝트는 `related`로 연결한다, ③ 빠뜨리지 않고 갱신한다.\n\n")
 
-		// Hindsight reflex (SOUL.md "시간을 가로지르는 자기 기억" — self-work continuity).
-		s.WriteString("## Hindsight (작업 전·작업 후)\n")
-		s.WriteString("**Hindsight**는 SOUL.md에 정의된 정체성이다: wiki·polaris·graphify를 가로질러 어제의 나와 오늘의 나를 잇는 자기 기억 인프라. 외부 사건 분석(↑ 위 섹션)이 아니라 **내가 한 작업 자체**를 다룬다. 두 곳에서 발화한다:\n")
-		s.WriteString("- **작업 전**: 도구 호출 2회 이상이 필요한 새 작업(설치/설정/배포/누구에게 응답 작성 등)을 시작할 때 — **딱 한 번** `polaris(action=\"search\")` 또는 `wiki(action=\"search\")`로 \"전에 비슷한 거 한 적 있나\" 검색. 같은 작업 발견 → 거기서 시작. 검색은 빠르고 실수보다 싸다.\n")
-		s.WriteString("- **작업 후**: 시행착오·실패·회피법은 `wiki(action=\"log\")` 또는 `wiki(action=\"write\")`로 1~3줄: \"X 시도 → 결과 → 다음엔 Y\". 성공도 실패도 똑같이 기록할 가치가 있다 — 다음번 같은 작업이 빨라지는 만큼.\n")
-		s.WriteString("구체 절차(검색 쿼리 패턴, 기록 포맷, 예시)는 `skills(action=read, name=\"hindsight\")`에. 같은 실수를 두 번 하지 않기 위해.\n\n")
+			// Hindsight reflex (SOUL.md "시간을 가로지르는 자기 기억" — self-work continuity).
+			s.WriteString("## Hindsight (작업 전·작업 후)\n")
+			s.WriteString("**Hindsight**는 SOUL.md에 정의된 정체성이다: wiki·polaris·graphify를 가로질러 어제의 나와 오늘의 나를 잇는 자기 기억 인프라. 외부 사건 분석(↑ 위 섹션)이 아니라 **내가 한 작업 자체**를 다룬다. 두 곳에서 발화한다:\n")
+			s.WriteString("- **작업 전**: 도구 호출 2회 이상이 필요한 새 작업(설치/설정/배포/누구에게 응답 작성 등)을 시작할 때 — **딱 한 번** `polaris(action=\"search\")` 또는 `wiki(action=\"search\")`로 \"전에 비슷한 거 한 적 있나\" 검색. 같은 작업 발견 → 거기서 시작. 검색은 빠르고 실수보다 싸다.\n")
+			s.WriteString("- **작업 후**: 시행착오·실패·회피법은 `wiki(action=\"log\")` 또는 `wiki(action=\"write\")`로 1~3줄: \"X 시도 → 결과 → 다음엔 Y\". 성공도 실패도 똑같이 기록할 가치가 있다 — 다음번 같은 작업이 빨라지는 만큼.\n")
+			s.WriteString("구체 절차(검색 쿼리 패턴, 기록 포맷, 예시)는 `skills(action=read, name=\"hindsight\")`에. 같은 실수를 두 번 하지 않기 위해.\n\n")
+		}
 
 		// Tooling: compact categorized list (descriptions are in tool schemas).
 		s.WriteString("## Tooling\n")
@@ -265,8 +283,10 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 	// --- Dynamic block ---
 	var d strings.Builder
 
-	// Wiki knowledge base (takes priority when enabled).
-	if _, ok := toolSet["wiki"]; ok {
+	// Wiki knowledge base (takes priority when enabled). Skipped for 챗봇 — the
+	// wiki tool stays available, but this "위키 = 너의 외부 메모리" work-continuity
+	// coaching would re-frame the clean general assistant as a work secretary.
+	if _, ok := toolSet["wiki"]; ok && !params.Chatbot {
 		d.WriteString("## 위키 — 너의 외부 메모리\n")
 		d.WriteString("위키에 없으면 다음 대화에서 모른다. 위키가 너의 장기 기억이다.\n")
 		d.WriteString("**중요: wiki write/log에 쓰는 내용은 사용자에게 보이지 않는다.** 미래의 네 자신만 본다. 사용자에게 전달하려면 응답 텍스트에 써야 한다.\n\n")

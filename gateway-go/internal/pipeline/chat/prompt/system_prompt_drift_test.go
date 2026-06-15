@@ -49,12 +49,12 @@ func TestStaticCacheKeyIgnoresSkills(t *testing.T) {
 	tools := []ToolDef{{Name: "read"}, {Name: "exec"}, {Name: "wiki"}}
 	deferred := []DeferredToolInfo{{Name: "gmail", Description: "Gmail"}}
 
-	keyNoSkills := buildStaticCacheKey(tools, deferred, "")
+	keyNoSkills := buildStaticCacheKey(tools, deferred, "", false)
 
 	// Same tools + deferred list; the SkillsPrompt is NOT an input to this
 	// function. Calling again must return the identical key regardless of
 	// what skills are active.
-	keyAgain := buildStaticCacheKey(tools, deferred, "")
+	keyAgain := buildStaticCacheKey(tools, deferred, "", false)
 	if keyNoSkills != keyAgain {
 		t.Fatalf("buildStaticCacheKey not deterministic: %q vs %q", keyNoSkills, keyAgain)
 	}
@@ -134,10 +134,10 @@ func TestStaticCacheKeyVariesByTopic(t *testing.T) {
 	tools := []ToolDef{{Name: "read"}, {Name: "exec"}}
 	deferred := []DeferredToolInfo{{Name: "gmail", Description: "Gmail"}}
 
-	base := buildStaticCacheKey(tools, deferred, "")
-	coding := buildStaticCacheKey(tools, deferred, "coding:hashA")
-	codingEdited := buildStaticCacheKey(tools, deferred, "coding:hashB")
-	work := buildStaticCacheKey(tools, deferred, "work:hashA")
+	base := buildStaticCacheKey(tools, deferred, "", false)
+	coding := buildStaticCacheKey(tools, deferred, "coding:hashA", false)
+	codingEdited := buildStaticCacheKey(tools, deferred, "coding:hashB", false)
+	work := buildStaticCacheKey(tools, deferred, "work:hashA", false)
 
 	if coding == base {
 		t.Errorf("topic key must differ from the topic-less key")
@@ -157,7 +157,7 @@ func TestStaticCacheKeyTopicEmptyEqualsLegacy(t *testing.T) {
 	tools := []ToolDef{{Name: "read"}, {Name: "wiki"}}
 	deferred := []DeferredToolInfo{{Name: "gmail", Description: "Gmail"}}
 
-	withEmpty := buildStaticCacheKey(tools, deferred, "")
+	withEmpty := buildStaticCacheKey(tools, deferred, "", false)
 	if strings.Contains(withEmpty, "|topic=") {
 		t.Errorf("empty topic must not append a topic suffix: %q", withEmpty)
 	}

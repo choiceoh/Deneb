@@ -56,6 +56,49 @@ func TestBuildSystemPromptContainsSections(t *testing.T) {
 	}
 }
 
+func TestBuildSystemPromptChatbot(t *testing.T) {
+	tools := []ToolDef{{Name: "read"}, {Name: "wiki"}, {Name: "exec"}}
+
+	// 챗봇 workspace: clean general-purpose assistant — no Nev persona, no 업무
+	// work-loop coaching, but tools (## Tooling) and general sections stay.
+	chat := BuildSystemPrompt(SystemPromptParams{ToolDefs: tools, Chatbot: true})
+	for _, gone := range []string{
+		"You are Nev",
+		"비서실장",
+		"## 위키 — 너의 외부 메모리",
+		"## 분석 → 위키 갱신",
+		"## Hindsight (작업",
+	} {
+		if strings.Contains(chat, gone) {
+			t.Errorf("챗봇 prompt must not contain 업무 framing: %q", gone)
+		}
+	}
+	for _, want := range []string{"helpful, knowledgeable AI assistant", "## Tooling", "## 소통"} {
+		if !strings.Contains(chat, want) {
+			t.Errorf("챗봇 prompt missing %q", want)
+		}
+	}
+
+	// 업무 workspace unchanged: Nev persona + 비서실장 + 위키 외부메모리 all present.
+	work := BuildSystemPrompt(SystemPromptParams{ToolDefs: tools, Chatbot: false})
+	for _, want := range []string{"You are Nev", "비서실장", "## 위키 — 너의 외부 메모리"} {
+		if !strings.Contains(work, want) {
+			t.Errorf("업무 prompt regression — missing %q", want)
+		}
+	}
+
+	// Static cache key: 업무 (false) byte-identical to the pre-flag key (no
+	// "chatbot" marker), 챗봇 (true) distinct so the two never share a cache slot.
+	keyWork := buildStaticCacheKey(tools, nil, "", false)
+	keyChat := buildStaticCacheKey(tools, nil, "", true)
+	if strings.Contains(keyWork, "chatbot") {
+		t.Errorf("업무 static cache key must be unchanged, got %q", keyWork)
+	}
+	if !strings.Contains(keyChat, "|chatbot") || keyChat == keyWork {
+		t.Errorf("챗봇 static cache key must be distinct, got %q vs %q", keyChat, keyWork)
+	}
+}
+
 func TestBuildSystemPromptHindsightSection(t *testing.T) {
 	base := SystemPromptParams{
 		WorkspaceDir: "/tmp",
