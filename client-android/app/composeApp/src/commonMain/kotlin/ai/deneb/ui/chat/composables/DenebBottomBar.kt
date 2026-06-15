@@ -9,6 +9,10 @@ import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.material.icons.Icons
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
@@ -106,6 +110,11 @@ val denebMoreRoutes: Set<String> = setOf(
     "deneb_categories",
 )
 
+// Content height of the bar (excludes the system navigation-bar inset, which is added
+// on top). Trimmed below M3's default 80dp — the default read as a touch tall — while
+// still fitting the icon + small label comfortably.
+private val DenebBottomBarHeight = 64.dp
+
 @Composable
 fun DenebBottomBar(
     currentRoute: String?,
@@ -129,13 +138,19 @@ fun DenebBottomBar(
         unselectedTextColor = hint,
         indicatorColor = ink.copy(alpha = 0.10f),
     )
+    // Total bar height = content + system nav-bar inset. The NavigationBar still applies
+    // its own windowInsets (pushing the items above the gesture bar), so the items get
+    // exactly DenebBottomBarHeight regardless of device inset — no clipping.
+    val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     NavigationBar(
         containerColor = MaterialTheme.colorScheme.background,
         tonalElevation = 0.dp,
-        modifier = modifier.drawBehind {
-            // Deneb hairline top edge instead of an M3 elevation shadow.
-            drawLine(hairline, Offset(0f, 0f), Offset(size.width, 0f), strokeWidth = 1.dp.toPx())
-        },
+        modifier = modifier
+            .height(DenebBottomBarHeight + bottomInset)
+            .drawBehind {
+                // Deneb hairline top edge instead of an M3 elevation shadow.
+                drawLine(hairline, Offset(0f, 0f), Offset(size.width, 0f), strokeWidth = 1.dp.toPx())
+            },
     ) {
         denebBottomTabs.forEach { tab ->
             val selected = currentRoute == tab.route
