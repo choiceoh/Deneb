@@ -19,7 +19,6 @@ import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
@@ -37,7 +36,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.compose.rememberNavController
 import io.github.vinceglb.filekit.FileKit
+import io.github.vinceglb.filekit.PlatformFile
 import io.github.vinceglb.filekit.dialogs.init
+import io.github.vinceglb.filekit.name
+import io.github.vinceglb.filekit.readBytes
 import kotlinx.coroutines.launch
 import nl.marc_apps.tts.TextToSpeechEngine
 import nl.marc_apps.tts.rememberTextToSpeechOrNull
@@ -56,18 +58,6 @@ class MainActivity : ComponentActivity() {
             if (spoken.isNotEmpty()) {
                 lifecycleScope.launch { get<DataRepository>().ask("🎤 $spoken", emptyList(), null) }
             }
-        }
-
-    // In-app image picker -> gateway OCR (the drawer's 이미지 OCR action).
-    private val pickImageLauncher =
-        registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-            uri?.let { captureFromUri(it, "image/*", audio = false) }
-        }
-
-    // In-app audio-file picker -> gateway VibeVoice-ASR (the drawer's 녹음 전사 action).
-    private val pickAudioLauncher =
-        registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-            uri?.let { captureFromUri(it, "audio/*", audio = true) }
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -133,12 +123,11 @@ class MainActivity : ComponentActivity() {
                     }
                 },
                 captureActions = CaptureActions(
-                    onCaptureImage = {
-                        pickImageLauncher.launch(
-                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
-                        )
-                    },
-                    onCaptureAudio = { pickAudioLauncher.launch("audio/*") },
+                    // The chat input owns the single picker now and hands us the
+                    // already-picked file, classified by type — we just read its
+                    // bytes and run the matching gateway capture.
+                    onImageFile = { file -> captureFromPlatformFile(file, audio = false) },
+                    onAudioFile = { file -> captureFromPlatformFile(file, audio = true) },
                     onVoiceInput = { launchVoiceCapture() },
                 ),
             )
@@ -246,6 +235,40 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             if (audio) client.captureAudio(bytes, mime) else client.captureImage(bytes, mime)
         }
+    }
+
+    // captureFromPlatformFile is the attach-picker counterpart of captureFromUri:
+    // the chat input already picked the file (FileKit) and classified it by type,
+    // so we read its bytes and route image -> PaddleOCR / audio -> VibeVoice-ASR.
+    private fun captureFromPlatformFile(file: PlatformFile, audio: Boolean) {
+        val client = get<DataRepository>() as? DenebGatewayClient ?: return
+        val mime = mimeForFileName(file.name, audio)
+        lifecycleScope.launch {
+            val bytes = runCatching { file.readBytes() }.getOrNull()
+            if (bytes == null || bytes.isEmpty()) return@launch
+            if (audio) client.captureAudio(bytes, mime) else client.captureImage(bytes, mime)
+        }
+    }
+
+    // mimeForFileName derives a content type from a picked file's extension. The
+    // gateway capture sniffs the bytes too, so an "image/*"/"audio/*" fallback is
+    // fine for an unmapped extension.
+    private fun mimeForFileName(name: String, audio: Boolean): String = when (name.substringAfterLast('.', "").lowercase()) {
+        "jpg", "jpeg" -> "image/jpeg"
+        "png" -> "image/png"
+        "webp" -> "image/webp"
+        "gif" -> "image/gif"
+        "bmp" -> "image/bmp"
+        "heic", "heif" -> "image/heic"
+        "m4a" -> "audio/mp4"
+        "mp3" -> "audio/mpeg"
+        "wav" -> "audio/wav"
+        "ogg", "oga", "opus" -> "audio/ogg"
+        "aac" -> "audio/aac"
+        "flac" -> "audio/flac"
+        "amr" -> "audio/amr"
+        "3gp" -> "audio/3gpp"
+        else -> if (audio) "audio/*" else "image/*"
     }
 
     private fun handleDeepLinkIntent(intent: Intent?) {

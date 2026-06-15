@@ -2,8 +2,11 @@ package ai.deneb.ui.chat.composables
 
 import ai.deneb.Platform
 import ai.deneb.currentPlatform
+import ai.deneb.data.AttachmentRoute
 import ai.deneb.data.ServiceEntry
+import ai.deneb.data.audioExtensions
 import ai.deneb.data.imageExtensions
+import ai.deneb.data.routeAttachment
 import ai.deneb.ui.components.animatedGradientBorder
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebBreathing
@@ -29,8 +32,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.DisableSelection
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SuggestionChip
@@ -145,12 +146,30 @@ fun QuestionInput(
             }
         }
 
-        val allowFileAttachment = supportedFileExtensions.isNotEmpty()
+        // One attach picker, no "what to insert" menu: with platform captures
+        // present (Android), it also accepts images/audio and the result is routed
+        // by file type — an image to OCR, an audio file to transcription, anything
+        // else attached for the next message. Without captures (desktop/iOS) it is
+        // the plain document attach it always was.
+        val captures = LocalCaptureActions.current
+        val pickerExtensions = remember(supportedFileExtensions, captures) {
+            if (captures != null) {
+                (supportedFileExtensions + imageExtensions + audioExtensions).distinct()
+            } else {
+                supportedFileExtensions
+            }
+        }
+        val allowFileAttachment = pickerExtensions.isNotEmpty()
         val filePickerLauncher = if (allowFileAttachment) {
             rememberFilePickerLauncher(
-                type = FileKitType.File(extensions = supportedFileExtensions),
+                type = FileKitType.File(extensions = pickerExtensions),
             ) { file ->
-                if (file != null) addFile(file)
+                if (file == null) return@rememberFilePickerLauncher
+                when (routeAttachment(file.extension, captures != null)) {
+                    AttachmentRoute.IMAGE_CAPTURE -> captures?.onImageFile(file)
+                    AttachmentRoute.AUDIO_CAPTURE -> captures?.onAudioFile(file)
+                    AttachmentRoute.FILE_ATTACH -> addFile(file)
+                }
             }
         } else {
             null
@@ -244,68 +263,20 @@ fun QuestionInput(
                 KeyboardActions() // No keyboard send action on mobile
             },
             leadingIcon = run {
-                // The attach (+) button. With capture launchers present (Android), it
-                // opens a menu — file attach + the captures (image OCR / transcribe /
-                // voice) that used to live in the now-removed left nav drawer footer.
-                // Without captures (desktop) it stays a direct file picker.
-                val captures = LocalCaptureActions.current
-                if (filePickerLauncher == null && captures == null) {
+                // The attach (+) button opens the single picker directly — no
+                // "what to insert" menu. The picker (above) routes the result by
+                // file type. The live mic (voice input) moved to the 더보기 screen.
+                if (filePickerLauncher == null) {
                     null
                 } else {
                     {
-                        var attachMenuOpen by remember { mutableStateOf(false) }
-                        Box {
-                            CircleIconButton(
-                                icon = vectorResource(Res.drawable.ic_attach),
-                                onClick = {
-                                    if (captures == null && filePickerLauncher != null) {
-                                        filePickerLauncher.launch()
-                                    } else {
-                                        attachMenuOpen = true
-                                    }
-                                },
-                                modifier = Modifier.padding(start = 7.dp),
-                                tint = MaterialTheme.colorScheme.onBackground,
-                                contentDescription = "첨부",
-                            )
-                            DropdownMenu(
-                                expanded = attachMenuOpen,
-                                onDismissRequest = { attachMenuOpen = false },
-                            ) {
-                                if (filePickerLauncher != null) {
-                                    DropdownMenuItem(
-                                        text = { Text("파일 첨부") },
-                                        onClick = {
-                                            attachMenuOpen = false
-                                            filePickerLauncher.launch()
-                                        },
-                                    )
-                                }
-                                if (captures != null) {
-                                    DropdownMenuItem(
-                                        text = { Text("이미지 OCR") },
-                                        onClick = {
-                                            attachMenuOpen = false
-                                            captures.onCaptureImage()
-                                        },
-                                    )
-                                    DropdownMenuItem(
-                                        text = { Text("음성 전사") },
-                                        onClick = {
-                                            attachMenuOpen = false
-                                            captures.onCaptureAudio()
-                                        },
-                                    )
-                                    DropdownMenuItem(
-                                        text = { Text("음성 입력") },
-                                        onClick = {
-                                            attachMenuOpen = false
-                                            captures.onVoiceInput()
-                                        },
-                                    )
-                                }
-                            }
-                        }
+                        CircleIconButton(
+                            icon = vectorResource(Res.drawable.ic_attach),
+                            onClick = { filePickerLauncher.launch() },
+                            modifier = Modifier.padding(start = 7.dp),
+                            tint = MaterialTheme.colorScheme.onBackground,
+                            contentDescription = "첨부",
+                        )
                     }
                 }
             },
