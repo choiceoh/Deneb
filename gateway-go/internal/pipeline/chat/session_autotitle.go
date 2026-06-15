@@ -14,9 +14,10 @@ import (
 //
 // The native client's conversation drawer renders each session's Label (via the
 // miniapp.sessions.recent RPC). A fresh native chat — started by the app's "new
-// chat" with a session key like "client:main:<uuid>" (업무) or "chat:main:<uuid>"
-// (챗봇) — has no label, so the drawer fell back to a generic "내 대화 · a1b2c3d4"
-// / "챗봇 · a1b2c3d4". Here we derive a short Korean title from the first exchange
+// chat" with a session key like "client:main:<uuid>" (업무, a child of the
+// client:main home) or "chat:<uuid>" (챗봇, which has no home — each chat is flat)
+// — has no label, so the drawer fell back to a generic "내 대화 · a1b2c3d4" /
+// "챗봇 · a1b2c3d4". Here we derive a short Korean title from the first exchange
 // using the lightweight model role and patch it onto the session. The client
 // needs zero changes: every surface that reads Label benefits.
 
@@ -28,19 +29,22 @@ const (
 	sessionTitleTimeout   = 15 * time.Second
 )
 
-// nativeChatSessionPrefixes scopes auto-titling to per-conversation native
-// sub-sessions in BOTH workspaces: the 업무 home's children ("client:main:<uuid>")
-// and the 챗봇 home's children ("chat:main:<uuid>"). The bare home keys
-// "client:main"/"chat:main" (the 업무 proactive-report home and the fixed 챗봇
-// home) are intentionally NOT titled — the trailing ":" in each prefix excludes
-// them — so they keep their fixed workspace identity.
-var nativeChatSessionPrefixes = []string{"client:main:", "chat:main:"}
+// nativeChatSessionPrefixes scopes auto-titling to per-conversation native chats
+// in BOTH workspaces: the 업무 home's children ("client:main:<uuid>") and every
+// 챗봇 conversation ("chat:<uuid>"). 챗봇 has no home session (it was flattened
+// to independent chat:<uuid>), so the whole chat: namespace is titleable — the
+// old "chat:main" home is gone. The 업무 proactive-report home ("client:main",
+// no trailing ":") and an empty key are excluded by the non-empty-suffix check
+// in isAutoTitleSession.
+var nativeChatSessionPrefixes = []string{"client:main:", "chat:"}
 
 // isAutoTitleSession reports whether a session key is an eligible per-conversation
-// native chat (either workspace) that should receive an auto-derived title.
+// native chat (either workspace) that should receive an auto-derived title. The
+// suffix after the prefix must be non-empty, so the bare 업무 home "client:main"
+// and a bare "chat:" never match — only real conversations do.
 func isAutoTitleSession(sessionKey string) bool {
 	for _, p := range nativeChatSessionPrefixes {
-		if strings.HasPrefix(sessionKey, p) {
+		if strings.HasPrefix(sessionKey, p) && len(sessionKey) > len(p) {
 			return true
 		}
 	}
@@ -54,15 +58,13 @@ const sessionTitleSystemPrompt = "다음 대화를 보고 주제를 한국어 �
 // native chat session, in the background — titling must never delay the reply.
 // Set-once: a session that already has a label is skipped, so titles never churn
 // (keeps the drawer and any prefix caching stable). No-op for non-native sessions,
-// the bare client:main/chat:main homes, an empty message, or a missing session
-// manager.
+// the bare client:main home, an empty message, or a missing session manager.
 func (h *Handler) autoTitleSessionAsync(sessionKey, userMsg string, result *SyncResult) {
 	if h.sessions == nil || result == nil {
 		return
 	}
-	// Only per-conversation native sub-sessions in either workspace
-	// ("client:main:<uuid>" / "chat:main:<uuid>"). The bare home keys
-	// ("client:main"/"chat:main") and cron/system keys are all intentionally excluded.
+	// Only per-conversation native chats ("client:main:<uuid>" / "chat:<uuid>").
+	// The bare 업무 home ("client:main") and cron/system keys are excluded.
 	if !isAutoTitleSession(sessionKey) {
 		return
 	}

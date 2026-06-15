@@ -39,18 +39,19 @@ func TestCleanSessionTitle_CapsLength(t *testing.T) {
 
 func TestIsAutoTitleSession(t *testing.T) {
 	cases := map[string]bool{
-		// Per-conversation sub-sessions in either workspace are titled.
-		"client:main:9f1c2a":       true, // 업무 explicit new chat
+		// Per-conversation native chats are titled.
+		"client:main:9f1c2a":       true, // 업무 explicit new chat (child of the home)
 		"client:main:wf-mail-argo": true, // 업무 work-card side-conversation
-		"chat:main:9f1c2a":         true, // 챗봇 explicit new chat
-		// Bare workspace homes keep their fixed identity (trailing ":" excludes them).
+		"chat:9f1c2a":              true, // 챗봇 conversation (flat — 챗봇 has no home)
+		// The 업무 home keeps its fixed identity; 챗봇 has no home to exclude.
 		"client:main": false,
-		"chat:main":   false,
+		// Bare prefixes (empty suffix) are not conversations.
+		"chat:":   false,
+		"client:": false,
 		// Other namespaces are never auto-titled.
 		"cron:mail-analysis": false,
 		"system:boot":        false,
 		"":                   false,
-		"chat:":              false,
 	}
 	for key, want := range cases {
 		if got := isAutoTitleSession(key); got != want {
