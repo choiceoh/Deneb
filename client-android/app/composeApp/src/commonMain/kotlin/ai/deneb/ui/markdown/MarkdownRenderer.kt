@@ -12,6 +12,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
@@ -449,12 +450,18 @@ private fun ListItemRow(
 private fun TableBlock(block: Table) {
     val numCols = maxOf(block.headers.size, block.rows.maxOfOrNull { it.size } ?: 0)
     if (numCols == 0) return
-    if (numCols <= 4) {
-        FittedTable(block, numCols)
-    } else {
-        // 5+ columns can't share a phone width — the weight layout crushes every
-        // cell to a character per line. Scroll instead.
-        WideTable(block, numCols)
+    // Content-derived natural width per column (CJK-aware: a full-width Hangul/Han
+    // glyph is ~2 latin chars). The fit-vs-scroll choice is driven by whether that
+    // natural width fits the viewport, NOT a fixed column count — so a 3-column table
+    // with long Korean cells scrolls just like a 7-column one, instead of the weight
+    // layout crushing each cell to a glyph per line.
+    val colWidths = remember(block, numCols) { naturalColWidths(block, numCols) }
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        if (colWidths.sum() <= maxWidth.value) {
+            FittedTable(block, numCols)
+        } else {
+            WideTable(block, numCols, colWidths)
+        }
     }
 }
 
@@ -466,9 +473,9 @@ private fun FittedTable(block: Table, numCols: Int) {
     // crushing the narrow key column to nothing.
     val weights = remember(block) {
         FloatArray(numCols) { i ->
-            var maxLen = inlineTextLength(block.headers.getOrNull(i) ?: emptyList())
+            var maxLen = inlineDisplayUnits(block.headers.getOrNull(i) ?: emptyList())
             for (row in block.rows) {
-                maxLen = maxOf(maxLen, inlineTextLength(row.getOrNull(i) ?: emptyList()))
+                maxLen = maxOf(maxLen, inlineDisplayUnits(row.getOrNull(i) ?: emptyList()))
             }
             sqrt(maxLen.coerceAtLeast(1).toFloat()).coerceAtLeast(1f)
         }
@@ -509,19 +516,9 @@ private fun FittedTable(block: Table, numCols: Int) {
 // Wide table: fixed content-derived column widths under one horizontal scroll, so the
 // header and every row stay aligned and each cell remains readable. Long cells wrap
 // within their clamped column width instead of stretching the table indefinitely.
+// [colWidths] is the CJK-aware natural width per column computed by the caller.
 @Composable
-private fun WideTable(block: Table, numCols: Int) {
-    val colWidths = remember(block) {
-        IntArray(numCols) { i ->
-            var maxLen = inlineTextLength(block.headers.getOrNull(i) ?: emptyList())
-            for (row in block.rows) {
-                maxLen = maxOf(maxLen, inlineTextLength(row.getOrNull(i) ?: emptyList()))
-            }
-            // ~8dp/char at 14sp plus cell padding; clamped so one verbose cell
-            // doesn't explode its column.
-            (maxLen * 8 + 16).coerceIn(72, 220)
-        }
-    }
+private fun WideTable(block: Table, numCols: Int, colWidths: IntArray) {
     val totalWidth = colWidths.sum().dp
     val rowDivider = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
     val scroll = rememberScrollState()
@@ -564,24 +561,54 @@ private fun WideTable(block: Table, numCols: Int) {
     }
 }
 
-// inlineTextLength is the plain-text character count of a cell's inline nodes,
-// used to size table columns by content.
-private fun inlineTextLength(inlines: List<InlineNode>): Int = inlines.sumOf { node ->
+// Per-column natural width in dp, sized by the widest cell's CJK-aware display width
+// (~7dp per display unit at the body size; a full-width Hangul/Han glyph is 2 units ≈
+// 14dp, latin ≈ 7dp), plus cell padding. Clamped so a short key column stays legible
+// and one verbose cell doesn't explode its column. Shared by the fit-vs-scroll
+// decision and WideTable so both agree on the table's natural width.
+private fun naturalColWidths(block: Table, numCols: Int): IntArray = IntArray(numCols) { i ->
+    var units = inlineDisplayUnits(block.headers.getOrNull(i) ?: emptyList())
+    for (row in block.rows) {
+        units = maxOf(units, inlineDisplayUnits(row.getOrNull(i) ?: emptyList()))
+    }
+    (units * 7 + 16).coerceIn(72, 240)
+}
+
+// inlineDisplayUnits is the cell's rendered width in "display units": every char is 1
+// unit except East-Asian-wide ones (Hangul/Han/kana/full-width), which are 2 — so a
+// Korean column is sized for its real on-screen width, not its character count.
+private fun inlineDisplayUnits(inlines: List<InlineNode>): Int = inlines.sumOf { node ->
     when (node) {
-        is Text -> node.value.length
-        is InlineCode -> node.code.length
-        is InlineMath -> node.latex.length
-        is Emphasis -> inlineTextLength(node.children)
-        is Strong -> inlineTextLength(node.children)
-        is Strike -> inlineTextLength(node.children)
-        is Underline -> inlineTextLength(node.children)
-        is Highlight -> inlineTextLength(node.children)
-        is Superscript -> inlineTextLength(node.children)
-        is Subscript -> inlineTextLength(node.children)
-        is Link -> inlineTextLength(node.children)
-        is Image -> node.alt.length
+        is Text -> displayUnits(node.value)
+        is InlineCode -> displayUnits(node.code)
+        is InlineMath -> displayUnits(node.latex)
+        is Emphasis -> inlineDisplayUnits(node.children)
+        is Strong -> inlineDisplayUnits(node.children)
+        is Strike -> inlineDisplayUnits(node.children)
+        is Underline -> inlineDisplayUnits(node.children)
+        is Highlight -> inlineDisplayUnits(node.children)
+        is Superscript -> inlineDisplayUnits(node.children)
+        is Subscript -> inlineDisplayUnits(node.children)
+        is Link -> inlineDisplayUnits(node.children)
+        is Image -> displayUnits(node.alt)
         else -> 0
     }
+}
+
+private fun displayUnits(s: String): Int = s.sumOf { if (isEastAsianWide(it)) 2 else 1 }
+
+// East-Asian "wide" approximation: Hangul (jamo + syllables), CJK ideographs and
+// radicals through Yi (covers kana 3040–30FF and CJK symbols 3000–303F), CJK compat,
+// and full-width forms. Good enough to size columns; not a full Unicode width table.
+private fun isEastAsianWide(c: Char): Boolean {
+    val u = c.code
+    return u in 0x1100..0x115F ||
+        u in 0x2E80..0xA4CF ||
+        u in 0xAC00..0xD7A3 ||
+        u in 0xF900..0xFAFF ||
+        u in 0xFE30..0xFE4F ||
+        u in 0xFF00..0xFF60 ||
+        u in 0xFFE0..0xFFE6
 }
 
 private fun alignTextFor(align: ColumnAlign?): TextAlign = when (align) {
