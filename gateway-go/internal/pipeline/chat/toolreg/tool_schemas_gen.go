@@ -568,6 +568,65 @@ func sendFileToolSchema() map[string]any {
 	}
 }
 
+func chartToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"chart_type": map[string]any{
+				"type":        "string",
+				"description": "데이터 성격에 맞게 고른다 — 시간에 따른 추이=line, 점층 누적/면적 강조=area, 항목 간 비교=bar, 전체 대비 구성비(부분의 합=전체)=doughnut. 막대+추세선 콤보는 bar로 두고 한 시리즈에 type:line을 지정.",
+				"enum":        []string{"line", "area", "bar", "doughnut"},
+			},
+			"labels": map[string]any{
+				"type":        "array",
+				"description": "x축 항목(line/area/bar) 또는 도넛 조각 이름. 순서대로 series의 data와 1:1 대응.",
+				"items": map[string]any{
+					"type": "string",
+				},
+			},
+			"series": map[string]any{
+				"type":        "array",
+				"description": "데이터 시리즈 목록. line/area/bar는 여러 시리즈 가능(겹쳐 그림), doughnut은 첫 시리즈만 사용.",
+				"items": map[string]any{
+					"type":     "object",
+					"required": []string{"data"},
+					"properties": map[string]any{
+						"data": map[string]any{
+							"type":        "array",
+							"description": "labels와 같은 길이의 숫자 배열.",
+							"items": map[string]any{
+								"type": "number",
+							},
+						},
+						"name": map[string]any{
+							"type":        "string",
+							"description": "시리즈 이름 (범례에 표시). 시리즈가 1개면 생략 가능.",
+						},
+						"type": map[string]any{
+							"type":        "string",
+							"description": "이 시리즈만 다른 모양으로 그릴 때 (콤보 차트). bar 차트 위에 추세선을 얹으려면 line.",
+							"enum":        []string{"line", "bar"},
+						},
+					},
+				},
+			},
+			"subtitle": map[string]any{
+				"type":        "string",
+				"description": "제목 아래 보조 설명 한 줄 (선택, 예: '2026년 상반기 · 단위 건')",
+			},
+			"title": map[string]any{
+				"type":        "string",
+				"description": "차트 상단 제목 (예: '월별 발주 추이')",
+			},
+			"y_unit": map[string]any{
+				"type":        "string",
+				"description": "y축 값의 단위 (선택, 예: '건', '만원', '%'). line/area/bar에만 적용.",
+			},
+		},
+		"required": []string{"chart_type", "labels", "series"},
+	}
+}
+
 func gmailToolSchema() map[string]any {
 	return map[string]any{
 		"type": "object",
