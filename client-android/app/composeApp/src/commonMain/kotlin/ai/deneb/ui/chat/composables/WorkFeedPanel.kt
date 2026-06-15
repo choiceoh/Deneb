@@ -116,7 +116,7 @@ internal fun WorkFeedPanel(
 }
 
 @Composable
-private fun WorkFeedRow(
+internal fun WorkFeedRow(
     item: WorkFeedItem,
     onOpen: (String) -> Unit,
     onRunAction: (String, String) -> Unit,
