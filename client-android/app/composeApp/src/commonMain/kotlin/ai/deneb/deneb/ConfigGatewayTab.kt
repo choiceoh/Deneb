@@ -112,13 +112,20 @@ internal fun GatewayTab(
                     // StateFlows until each screen refreshes).
                     val credsChanged = newUrl != appSettings.settings.getString(KEY_URL, "") ||
                         newToken != appSettings.settings.getString(KEY_TOKEN, "")
-                    // Purge BEFORE persisting the new creds, so a crash mid-save can't
-                    // leave new credentials paired with the old account's caches.
-                    if (credsChanged) {
-                        if (denebClient != null) denebClient.onCredentialsChanged() else appSettings.clearCachedContent()
+                    val client = denebClient
+                    if (credsChanged && client != null) {
+                        // Atomic in the client (bump epoch, purge caches, persist creds,
+                        // reset all account state) so there is no window where the fence
+                        // is inconsistent with the stored credentials.
+                        client.onCredentialsChanged(newUrl, newToken)
+                    } else {
+                        // No live client to fence (or no change): persist directly, and
+                        // still purge caches first so a crash can't pair new creds with
+                        // the old account's caches.
+                        if (credsChanged) appSettings.clearCachedContent()
+                        appSettings.settings.putString(KEY_URL, newUrl)
+                        appSettings.settings.putString(KEY_TOKEN, newToken)
                     }
-                    appSettings.settings.putString(KEY_URL, newUrl)
-                    appSettings.settings.putString(KEY_TOKEN, newToken)
                     onBack()
                 },
                 modifier = Modifier.fillMaxWidth(),
