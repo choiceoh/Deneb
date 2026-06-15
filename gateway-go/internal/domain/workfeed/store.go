@@ -14,6 +14,7 @@ import (
 
 const (
 	SourceProactive       = "proactive"
+	SourceMailReport      = "mail_report" // proactive mail analysis — gets the envelope card icon
 	SourceCaptureImage    = "capture_image"
 	SourceCaptureAudio    = "capture_audio"
 	SourceCaptureContacts = "capture_contacts"
@@ -528,6 +529,8 @@ func defaultTitle(source string) string {
 	switch source {
 	case SourceProactive:
 		return "업무 리포트"
+	case SourceMailReport:
+		return "메일 리포트"
 	case SourceCaptureImage:
 		return "공유 이미지"
 	case SourceCaptureAudio:
