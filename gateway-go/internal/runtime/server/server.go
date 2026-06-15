@@ -121,6 +121,12 @@ type Server struct {
 	// in New so it's non-nil before any handler or relay touches it.
 	pushHub *clientPushHub
 
+	// fleetAlerts dedups SparkFleet webhook alerts so a standing condition (e.g.
+	// "low memory headroom: srv2" re-emitted every heartbeat) does not push the
+	// same notification to the operator's phone every few minutes. See
+	// server_http_fleet_hook.go.
+	fleetAlerts *fleetAlertGate
+
 	// pushTokenStore holds native-client FCM registration IDs (durable). The
 	// registration RPCs (miniapp.push.register/unregister) write here regardless
 	// of whether FCM sending is configured, so tokens accumulate and proactive
@@ -268,6 +274,7 @@ func New(addr string, opts ...Option) (*Server, error) {
 		version:             "0.1.0-go",
 		logger:              slog.Default(),
 		pushHub:             newClientPushHub(),
+		fleetAlerts:         newFleetAlertGate(),
 		SessionManager: &SessionManager{
 			sessions:       session.NewManager(),
 			abortMemory:    arSession.NewAbortMemory(2000),
