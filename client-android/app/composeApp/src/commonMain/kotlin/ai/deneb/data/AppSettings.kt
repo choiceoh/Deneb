@@ -1,6 +1,7 @@
 package ai.deneb.data
 
 import ai.deneb.defaultUiScale
+import com.russhwolf.settings.ExperimentalSettingsApi
 import com.russhwolf.settings.Settings
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -338,6 +339,25 @@ class AppSettings(internal val settings: Settings) {
 
     fun putCachedMailList(json: String) {
         settings.putString(KEY_MAIL_CACHE, json)
+    }
+
+    /**
+     * Purge ALL cached private content (every transcript + the inbox list). Called
+     * when the gateway URL or client token changes: those cache keys are global, so
+     * without this the prior gateway/account's chat and mail would render under the
+     * new credentials on the next cold start (before any authenticated RPC).
+     *
+     * Deletes by key PREFIX rather than walking the LRU index, because the payload
+     * and the LRU list are separate settings entries: a crash between
+     * putCachedTranscript and its LRU update can orphan a `tx_cache:<session>` key
+     * that the LRU never lists, and a stable session key (client:main) could then
+     * still load it after a credential switch. Prefix deletion catches those orphans.
+     */
+    @OptIn(ExperimentalSettingsApi::class)
+    fun clearCachedContent() {
+        settings.keys
+            .filter { it.startsWith(KEY_TX_CACHE_PREFIX) || it == KEY_TX_CACHE_LRU || it == KEY_MAIL_CACHE }
+            .forEach { settings.remove(it) }
     }
 
     companion object {

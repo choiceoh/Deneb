@@ -103,8 +103,22 @@ internal fun GatewayTab(
             Spacer(Modifier.height(16.dp))
             Button(
                 onClick = {
-                    appSettings.settings.putString(KEY_URL, url.trim())
-                    appSettings.settings.putString(KEY_TOKEN, token.trim())
+                    val newUrl = url.trim()
+                    val newToken = token.trim()
+                    // The transcript/mail caches and the live client state are keyed
+                    // globally (no account scope), so a gateway/account switch must drop
+                    // both — otherwise the prior account's private chat and mail surface
+                    // under the new credentials (cached copy on cold start, in-memory
+                    // StateFlows until each screen refreshes).
+                    val credsChanged = newUrl != appSettings.settings.getString(KEY_URL, "") ||
+                        newToken != appSettings.settings.getString(KEY_TOKEN, "")
+                    // Purge BEFORE persisting the new creds, so a crash mid-save can't
+                    // leave new credentials paired with the old account's caches.
+                    if (credsChanged) {
+                        if (denebClient != null) denebClient.onCredentialsChanged() else appSettings.clearCachedContent()
+                    }
+                    appSettings.settings.putString(KEY_URL, newUrl)
+                    appSettings.settings.putString(KEY_TOKEN, newToken)
                     onBack()
                 },
                 modifier = Modifier.fillMaxWidth(),

@@ -61,6 +61,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.put
+import kotlin.concurrent.Volatile
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.TimeSource
 import kotlin.uuid.ExperimentalUuidApi
@@ -258,6 +259,36 @@ class DenebGatewayClient(
 
     internal val clientToken: String
         get() = appSettings.settings.getString(KEY_TOKEN, "")
+
+    // Bumped by [onCredentialsChanged] whenever the gateway URL/token changes. The
+    // primary fence is in [callRpc]: it captures this before the request and returns
+    // null if it advanced, so EVERY account-data fetch (mail, transcript, sessions,
+    // work-feed, calendar, memories, …) aborts on a mid-flight gateway switch. Each
+    // per-account StateFlow assignment additionally re-checks it to close the narrow
+    // window between callRpc returning and the assignment. @Volatile so an in-flight
+    // load resuming on a background/Ktor thread sees the UI-thread increment.
+    @Volatile
+    internal var credEpoch: Int = 0
+        private set
+
+    /**
+     * The gateway URL or client token just changed. Drop everything tied to the old
+     * account so account A's content is never shown — or re-cached — under account
+     * B's credentials: purge the persisted content caches, wipe the in-memory view
+     * state, and bump [credEpoch] so any in-flight load bails before it writes.
+     */
+    fun onCredentialsChanged() {
+        credEpoch++
+        appSettings.clearCachedContent()
+        _chatHistory.value = emptyList()
+        _denebMail.value = emptyList()
+        _denebMailNextToken.value = null
+        denebMailActiveQuery = null
+        _savedConversations.value = emptyList()
+        locallyReadMailIds.clear()
+        _denebWorkFeed.value = emptyList()
+        _hasUnreadWorkReport.value = false
+    }
 
     override suspend fun ask(question: String?, files: List<PlatformFile>, uiSubmission: UiSubmission?) {
         val displayText = question?.trim().orEmpty()
@@ -630,6 +661,11 @@ class DenebGatewayClient(
      */
     private suspend fun loadTranscriptGuarded(key: String, replacing: Boolean = false) {
         val startEpoch = historyGate.withLock { historyEpoch }
+        // Pin the credential epoch: if the user switches gateways while this fetch is
+        // in flight, both the view install and the cache write below are skipped, so an
+        // old-account transcript can neither render under the new credentials nor
+        // repopulate the just-cleared cache.
+        val epoch = credEpoch
         // Cache-then-network: render the encrypted local copy instantly (no spinner).
         // [replacing] = an explicit switch to a different conversation (drawer pick,
         // proactive deep link): the view must reflect [key], so render its cache or
@@ -641,6 +677,7 @@ class DenebGatewayClient(
         val cached = loadCachedTranscript(key)
         historyGate.withLock {
             if (historyEpoch != startEpoch) return
+            if (epoch != credEpoch) return // credentials switched — don't render the old account's cache
             when {
                 // Switch: reflect the new key now — its cache, or clear the previous
                 // session's rows so nothing lingers under the new key on a failed fetch.
@@ -655,6 +692,7 @@ class DenebGatewayClient(
         val transcript = fetchTranscript(key) // null = RPC failure; [] = authoritative empty
         val authoritative = historyGate.withLock {
             if (historyEpoch != startEpoch) return // optimistic send won — don't touch view or cache
+            if (epoch != credEpoch) return // credentials switched mid-flight — old account, drop it
             if (transcript != null) {
                 _chatHistory.value = transcript
                 true
@@ -665,8 +703,9 @@ class DenebGatewayClient(
         // Reconcile the cache only for an authoritative fetch that won the epoch race,
         // so a stale (pre-send) transcript can never poison the cache. An authoritative
         // empty evicts any stale entry — e.g. a session deleted server-side — so it
-        // can't resurrect on the next reopen.
-        if (authoritative) {
+        // can't resurrect on the next reopen. Skip entirely if credentials changed
+        // mid-flight (this transcript belongs to the old account).
+        if (authoritative && epoch == credEpoch) {
             if (transcript!!.isEmpty()) removeCachedTranscript(key) else storeCachedTranscript(key, transcript)
         }
     }
@@ -761,6 +800,7 @@ class DenebGatewayClient(
         setWorkspace(true) // work-feed cards belong to the 업무 workspace
         switchSession("client:main")
         syncNativeStateAsync()
+        val epoch = credEpoch
         val startEpoch = historyGate.withLock { historyEpoch }
         val transcript = fetchTranscript("client:main") ?: emptyList()
         val idx = indexOfMirroredReport(transcript, item.createdAtMs)
@@ -773,6 +813,7 @@ class DenebGatewayClient(
         }
         historyGate.withLock {
             if (historyEpoch != startEpoch) return null
+            if (epoch != credEpoch) return null // credentials switched — don't install the old account's transcript
             _chatHistory.value = resolved
         }
         return if (idx >= 0) resolved[idx].id else null
@@ -878,12 +919,14 @@ class DenebGatewayClient(
     }
 
     suspend fun refreshWorkFeed(): Boolean {
+        val epoch = credEpoch
         val payload = callRpc<WorkFeedPayload>(
             "miniapp.workfeed.list",
             buildJsonObject {
                 put("limit", 20)
             },
         ) ?: return false
+        if (epoch != credEpoch) return false // credentials switched — don't show the old account's work-feed
         _denebWorkFeed.value = payload.items.filter { it.id.isNotBlank() }
         return true
     }
@@ -1039,10 +1082,14 @@ class DenebGatewayClient(
 
     override fun loadConversations() {
         scope.launch {
+            val epoch = credEpoch
             // Keep the current list when the fetch fails (null) so a transient
             // sessions.recent RPC error doesn't flap the drawer between the full
             // list and just the 업무 home row.
             val fresh = fetchRecentSessions() ?: return@launch
+            // Credentials switched mid-fetch — don't repopulate the drawer with the
+            // old account's private session titles under the new gateway.
+            if (epoch != credEpoch) return@launch
             _savedConversations.value = fresh
         }
     }
@@ -1397,16 +1444,25 @@ class DenebGatewayClient(
      * degrade to empty rather than crash. Use this for non-critical reads; the
      * chat [send] keeps its own throwing path so the UI can surface errors.
      * Internal (not private) so the per-domain extension files can reach it.
+     *
+     * Credential fence: the [credEpoch] captured before the request is re-checked
+     * after it returns; if the user switched gateways mid-flight the result is
+     * dropped (null), so an old-account response can never be assigned to a
+     * per-account StateFlow under the new credentials. This is the single chokepoint
+     * that protects EVERY read (mail, transcript, sessions, work-feed, calendar,
+     * memories, …) — callers already treat null as "no data", so they degrade safely.
      */
     internal suspend inline fun <reified T> callRpc(method: String, params: JsonObject): T? {
         if (clientToken.isEmpty()) return null
-        return runCatching {
+        val epoch = credEpoch
+        val payload = runCatching {
             http.post("$gatewayUrl/api/v1/miniapp/rpc") {
                 header(CLIENT_TOKEN_HEADER, clientToken)
                 contentType(ContentType.Application.Json)
                 setBody(RpcReq(id = Uuid.random().toString(), method = method, params = params))
             }.body<RpcEnv<T>>().payload
         }.getOrNull()
+        return if (epoch == credEpoch) payload else null
     }
 
     // rpcWrite posts a write RPC and surfaces the gateway's error message (so the
