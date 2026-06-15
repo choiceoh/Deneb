@@ -32,6 +32,7 @@ import ai.deneb.ui.dynamicui.FrozenSubmission
 import ai.deneb.ui.dynamicui.toSpeakableText
 import ai.deneb.ui.handCursor
 import ai.deneb.ui.markdown.ChatbotTextScale
+import ai.deneb.ui.markdown.precomputeMarkdownAsync
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.draganddrop.dragAndDropTarget
@@ -447,6 +448,21 @@ internal fun ChatModeScreen(
                                                 uiState.history.indexOfLast {
                                                     it.role == History.Role.ASSISTANT && !it.isThinking && it.content.isNotEmpty()
                                                 } > uiState.history.indexOfLast { it.role == History.Role.USER }
+                                        }
+                                        // Use the device's spare cores: parse every finished assistant body in the
+                                        // background (Dispatchers.Default, parallel) so scrolling rich history never
+                                        // parses markdown on the UI frame — the composition's parseMarkdownCached then
+                                        // hits a warm cache. The live streaming answer is skipped (it'd churn the LRU).
+                                        LaunchedEffect(uiState.history.size, isResponseStreaming) {
+                                            val bodies = uiState.history.asSequence()
+                                                .filter {
+                                                    it.role == History.Role.ASSISTANT &&
+                                                        it.content.isNotEmpty() && !it.isThinking
+                                                }
+                                                .filterNot { isResponseStreaming && it.id == lastAssistantId }
+                                                .map { it.content }
+                                                .toList()
+                                            precomputeMarkdownAsync(bodies)
                                         }
                                         // Pair every user submission with its originating assistant so the deneb-ui
                                         // renders once (on the assistant side) with a frozen snapshot — never as a
