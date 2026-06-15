@@ -54,6 +54,13 @@ internal object InlineTokenizer {
         "<(b|strong|i|em|s|del|strike|u|mark|code|kbd|sub|sup)>([\\s\\S]+?)</\\1>",
         RegexOption.IGNORE_CASE,
     )
+
+    // LLM-emitted HTML anchor: <a href="url">text</a> → a real Link (other attributes
+    // ignored). The href quote can be " or '. Empty link text falls back to the href.
+    private val HTML_ANCHOR_REGEX = Regex(
+        "<a\\s+[^>]*?href\\s*=\\s*[\"']([^\"']+)[\"'][^>]*>([\\s\\S]*?)</a>",
+        RegexOption.IGNORE_CASE,
+    )
     private val EMOJI_SHORTCODE_REGEX = Regex(":([a-zA-Z0-9_+-]+):")
 
     // Math delimiters. `$$…$$` and `\[…\]` are display-flavored but still accepted inline
@@ -270,16 +277,23 @@ internal object InlineTokenizer {
             // Cap the paired-tag scan: thousands of unclosed "<b>" would make the lazy
             // closer search quadratic. Real prose has a handful of tags per paragraph.
             if (text.count { it == '<' } <= 256) {
+                for (m in HTML_ANCHOR_REGEX.findAll(text)) {
+                    val href = cleanHref(m.groupValues[1])
+                    val inner = parse(m.groupValues[2], depth + 1)
+                    all += m.range to Link(href, if (inner.isEmpty()) persistentListOf(Text(href)) else inner)
+                }
                 for (m in HTML_INLINE_REGEX.findAll(text)) {
                     val inner = m.groupValues[2]
                     val node: InlineNode = when (m.groupValues[1].lowercase()) {
                         "b", "strong" -> Strong(parse(inner, depth + 1))
                         "i", "em" -> Emphasis(parse(inner, depth + 1))
                         "s", "del", "strike" -> Strike(parse(inner, depth + 1))
+                        "u" -> Underline(parse(inner, depth + 1))
+                        "mark" -> Highlight(parse(inner, depth + 1))
                         "code", "kbd" -> InlineCode(inner)
-                        "sub" -> Text(convertScript(inner, SUBSCRIPT_CHARS))
-                        "sup" -> Text(convertScript(inner, SUPERSCRIPT_CHARS))
-                        else -> Text(inner) // u, mark: keep the content, drop the tags
+                        "sub" -> scriptNode(inner, SUBSCRIPT_CHARS, depth) { Subscript(it) }
+                        "sup" -> scriptNode(inner, SUPERSCRIPT_CHARS, depth) { Superscript(it) }
+                        else -> Text(inner) // unknown paired tags: keep content, drop tags
                     }
                     all += m.range to node
                 }
@@ -334,14 +348,24 @@ internal object InlineTokenizer {
         '+' to '₊', '-' to '₋', '=' to '₌', '(' to '₍', ')' to '₎',
     )
 
-    // Convert only when every char has a Unicode script form ("m<sup>2</sup>" → "m²");
-    // otherwise keep the plain content ("5<sup>th</sup>" → "5th") rather than mixing
-    // baseline and script glyphs.
-    private fun convertScript(inner: String, map: Map<Char, Char>): String {
+    // `<sub>`/`<sup>`: prefer clean, selectable Unicode scripts when every char has one
+    // ("m<sup>2</sup>" → "m²"); otherwise fall back to a real baseline-shifted node
+    // ("5<sup>th</sup>" → raised "th") instead of dropping the script to plain text.
+    private fun scriptNode(
+        inner: String,
+        map: Map<Char, Char>,
+        depth: Int,
+        wrap: (ImmutableList<InlineNode>) -> InlineNode,
+    ): InlineNode {
+        val unicode = convertScriptOrNull(inner, map)
+        return if (unicode != null) Text(unicode) else wrap(parse(inner, depth + 1))
+    }
+
+    // Map every char to its Unicode script form, or null if any char has none.
+    private fun convertScriptOrNull(inner: String, map: Map<Char, Char>): String? {
         val sb = StringBuilder(inner.length)
         for (c in inner) {
-            val mapped = map[c] ?: return inner
-            sb.append(mapped)
+            sb.append(map[c] ?: return null)
         }
         return sb.toString()
     }

@@ -312,13 +312,58 @@ class InlineParsingTest {
     }
 
     @Test
-    fun `html sup with unmappable chars keeps plain content`() {
-        assertEquals(listOf(Text("5th")), inlines("5<sup>th</sup>"))
+    fun `html sup with unmappable chars becomes a Superscript node`() {
+        assertEquals(
+            listOf(Text("5"), Superscript(persistentListOf(Text("th")))),
+            inlines("5<sup>th</sup>"),
+        )
     }
 
     @Test
-    fun `html mark and u are stripped to their content`() {
-        assertEquals(listOf(Text("표시 밑줄")), inlines("<mark>표시</mark> <u>밑줄</u>"))
+    fun `html sub with unmappable chars becomes a Subscript node`() {
+        assertEquals(
+            listOf(Text("x"), Subscript(persistentListOf(Text("i")))),
+            inlines("x<sub>i</sub>"),
+        )
+    }
+
+    @Test
+    fun `html mark becomes a Highlight node and u an Underline node`() {
+        assertEquals(
+            listOf(
+                Highlight(persistentListOf(Text("표시"))),
+                Text(" "),
+                Underline(persistentListOf(Text("밑줄"))),
+            ),
+            inlines("<mark>표시</mark> <u>밑줄</u>"),
+        )
+    }
+
+    @Test
+    fun `html u parses nested markdown`() {
+        val underline = inlines("<u>a *i*</u>").single() as Underline
+        assertTrue(underline.children.any { it is Emphasis })
+    }
+
+    @Test
+    fun `html anchor becomes a Link`() {
+        val link = inlines("<a href=\"https://example.com\">클릭</a>").single() as Link
+        assertEquals("https://example.com", link.href)
+        assertEquals(persistentListOf(Text("클릭")), link.children)
+    }
+
+    @Test
+    fun `html anchor with single-quoted href and extra attrs becomes a Link`() {
+        val link = inlines("<a target='_blank' href='https://x.test/p'>여기</a>").single() as Link
+        assertEquals("https://x.test/p", link.href)
+        assertEquals(persistentListOf(Text("여기")), link.children)
+    }
+
+    @Test
+    fun `html anchor with empty text falls back to the href`() {
+        val link = inlines("<a href=\"https://x.test\"></a>").single() as Link
+        assertEquals("https://x.test", link.href)
+        assertEquals(persistentListOf(Text("https://x.test")), link.children)
     }
 
     @Test

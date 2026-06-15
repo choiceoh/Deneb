@@ -69,6 +69,10 @@ private fun appendInline(sb: StringBuilder, node: InlineNode) {
         is Emphasis -> node.children.forEach { appendInline(sb, it) }
         is Strong -> node.children.forEach { appendInline(sb, it) }
         is Strike -> node.children.forEach { appendInline(sb, it) }
+        is Underline -> node.children.forEach { appendInline(sb, it) }
+        is Highlight -> node.children.forEach { appendInline(sb, it) }
+        is Superscript -> node.children.forEach { appendInline(sb, it) }
+        is Subscript -> node.children.forEach { appendInline(sb, it) }
         is InlineCode -> sb.append(node.code)
         is Link -> node.children.forEach { appendInline(sb, it) }
         is Image -> sb.append(node.alt)

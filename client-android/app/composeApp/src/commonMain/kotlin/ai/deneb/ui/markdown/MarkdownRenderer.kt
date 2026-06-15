@@ -574,6 +574,10 @@ private fun inlineTextLength(inlines: List<InlineNode>): Int = inlines.sumOf { n
         is Emphasis -> inlineTextLength(node.children)
         is Strong -> inlineTextLength(node.children)
         is Strike -> inlineTextLength(node.children)
+        is Underline -> inlineTextLength(node.children)
+        is Highlight -> inlineTextLength(node.children)
+        is Superscript -> inlineTextLength(node.children)
+        is Subscript -> inlineTextLength(node.children)
         is Link -> inlineTextLength(node.children)
         is Image -> node.alt.length
         else -> 0

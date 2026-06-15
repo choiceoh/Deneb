@@ -88,6 +88,23 @@ data class Strong(val children: ImmutableList<InlineNode>) : InlineNode
 @Immutable
 data class Strike(val children: ImmutableList<InlineNode>) : InlineNode
 
+// HTML `<u>`: a real underline (distinct from a Link, which also underlines but is tappable).
+@Immutable
+data class Underline(val children: ImmutableList<InlineNode>) : InlineNode
+
+// HTML `<mark>`: highlighted text (tinted background behind the glyphs).
+@Immutable
+data class Highlight(val children: ImmutableList<InlineNode>) : InlineNode
+
+// HTML `<sup>` whose content has no Unicode script form (e.g. `5<sup>th</sup>`); rendered
+// with a raised baseline + smaller size. Pure-digit scripts (m²) stay literal Unicode text.
+@Immutable
+data class Superscript(val children: ImmutableList<InlineNode>) : InlineNode
+
+// HTML `<sub>` counterpart to [Superscript] (e.g. `x<sub>i</sub>`).
+@Immutable
+data class Subscript(val children: ImmutableList<InlineNode>) : InlineNode
+
 @Immutable
 data class InlineCode(val code: String) : InlineNode
 
