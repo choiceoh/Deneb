@@ -79,6 +79,14 @@ type proactiveRelayDeps struct {
 		Append(workfeed.Item) (workfeed.Item, error)
 	}
 
+	// cardTitler names a mail-report work-feed card from its body using the
+	// lightweight model — the 📬 icon already says "mail", so the card title
+	// should be the email's subject, not the generic "메일 분석 리포트" heading the
+	// analysis model writes. Best-effort: returns "" on any failure, and the
+	// deterministic extractCardTitle heuristic is the fallback. nil in older
+	// wiring/tests (then the heuristic is used directly).
+	cardTitler func(content string) string
+
 	// nativeSync is a durable cursor-based outbox for native clients. It makes
 	// proactive transcript changes recoverable even when the SSE push is missed.
 	nativeSync interface {
@@ -250,6 +258,14 @@ func (d proactiveRelayDeps) relayNativeToOpts(sessionKey, content string, collap
 		// "---") into every card. An empty title falls back to the store's
 		// defaultTitle ("업무 리포트"). See workfeed_extract.go.
 		title, titleLine := extractCardTitle(content)
+		// For mail reports the analysis model writes a generic "메일 분석 리포트"
+		// heading; prefer the email's real subject. The lightweight model names it
+		// (cardTitler); the deterministic extractCardTitle subject is the fallback.
+		if d.cardTitler != nil && isMailReportBody(content) {
+			if t := d.cardTitler(content); t != "" {
+				title = t
+			}
+		}
 		if _, err := d.workFeed.Append(workfeed.Item{
 			Source:     workfeed.SourceProactive,
 			Title:      title,

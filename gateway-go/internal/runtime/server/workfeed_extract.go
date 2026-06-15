@@ -97,6 +97,18 @@ func isGenericMailReportTitle(t string) bool {
 		(strings.Contains(t, "리포트") || strings.Contains(t, "보고"))
 }
 
+// isMailReportBody reports whether a proactive body is a single-mail analysis
+// report — its first meaningful heading is a generic "메일 분석 리포트/보고" label.
+// Used to gate the lightweight-LLM card titler to mail reports only (calendar,
+// wiki, and morning-letter cards keep their own headings).
+func isMailReportBody(content string) bool {
+	lines := strings.Split(strings.TrimSpace(content), "\n")
+	if idx, raw := firstMeaningfulLine(lines, 0); idx >= 0 {
+		return isGenericMailReportTitle(stripMarkdownLine(raw))
+	}
+	return false
+}
+
 // subjectFromMailReport hunts a mail report body for the email's actual subject,
 // to replace a generic heading. Priority: (1) an explicit "| 제목 | … |" table
 // row; (2) the first sub-heading or bold line after headingLine that is not
