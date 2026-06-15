@@ -37,6 +37,11 @@ const (
 	// next sub-heading ("분석 — 왜 지금 왔는가").
 	genericTitleMaxRunes = 6
 
+	// weakTitleMinRunes — a NON-heading title at or above this length is almost
+	// certainly a whole narration sentence the heuristic grabbed (a proactive body
+	// that opens with prose, not a heading), so the lightweight model names it.
+	weakTitleMinRunes = 22
+
 	// contentlessSubstanceMaxRunes bounds the multi-line contentless check: a
 	// body whose substantive text (markers/emoji/whitespace removed) exceeds
 	// this is treated as a real report regardless of any "없음" fragment.
@@ -258,18 +263,20 @@ func (d proactiveRelayDeps) relayNativeToOpts(sessionKey, content string, collap
 		// "---") into every card. An empty title falls back to the store's
 		// defaultTitle ("업무 리포트"). See workfeed_extract.go.
 		title, titleLine := extractCardTitle(content)
-		// Mail reports get the envelope card icon (SourceMailReport) and a better
-		// title: the analysis model writes a generic "메일 분석 리포트" heading, so the
-		// lightweight model names it from the email's real subject (cardTitler); the
-		// deterministic extractCardTitle subject is the fallback.
+		// Mail reports get the envelope card icon (SourceMailReport).
 		isMail := isMailReportBody(content)
 		source := workfeed.SourceProactive
 		if isMail {
 			source = workfeed.SourceMailReport
-			if d.cardTitler != nil {
-				if t := d.cardTitler(content); t != "" {
-					title = t
-				}
+		}
+		// Let the lightweight model name the card when the heuristic title is weak:
+		// a mail report (the analysis model writes a generic "메일 분석 리포트" heading, so
+		// name it from the email's real subject) OR any proactive body that opens with
+		// a prose sentence (the heuristic then grabbed a whole narration line). The
+		// deterministic extractCardTitle result stays as the fallback.
+		if d.cardTitler != nil && (isMail || isWeakCardTitle(title, titleLine)) {
+			if t := d.cardTitler(content); t != "" {
+				title = t
 			}
 		}
 		if _, err := d.workFeed.Append(workfeed.Item{

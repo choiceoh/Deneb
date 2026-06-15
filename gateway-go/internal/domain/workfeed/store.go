@@ -27,6 +27,11 @@ const (
 	ActionFollowUp = "followup"
 	ActionSnooze   = "snooze"
 	ActionAck      = "ack"
+	// ActionTrash permanently deletes a card. It is a UNIVERSAL action handled in
+	// RunAction before the per-item action lookup, so it works on every card —
+	// including legacy items and captures whose stored action list predates it —
+	// without a feed-wide migration. The native client renders it as 휴지통.
+	ActionTrash = "trash"
 
 	// Priority levels — higher surfaces first in the feed. Inferred from the
 	// item's urgency markers/keywords when the caller doesn't set one, so the
@@ -338,6 +343,28 @@ func (s *Store) RunAction(itemID, actionID string) (ActionResult, error) {
 	}
 	if first < 0 {
 		return ActionResult{}, ErrNotFound
+	}
+	// 휴지통 — universal hard delete. Handled before the per-item action lookup so it
+	// works on every card regardless of its stored action list: drop every item
+	// carrying itemID (legacy feeds can hold id twins) and persist.
+	if actionID == ActionTrash {
+		deleted := items[first]
+		kept := items[:0]
+		for _, it := range items {
+			if it.ID != itemID {
+				kept = append(kept, it)
+			}
+		}
+		if err := jsonlstore.Snapshot(s.path, kept); err != nil {
+			return ActionResult{}, err
+		}
+		return ActionResult{
+			Item:           deleted,
+			Action:         Action{ID: ActionTrash, Kind: ActionTrash, Label: "휴지통"},
+			SessionKey:     deleted.SessionKey,
+			Message:        "deleted",
+			RemoveFromFeed: true,
+		}, nil
 	}
 	action, ok := findAction(items[first], actionID)
 	if !ok {

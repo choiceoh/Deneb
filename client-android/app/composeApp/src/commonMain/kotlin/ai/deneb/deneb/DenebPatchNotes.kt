@@ -21,6 +21,12 @@ data class DenebPatchNote(
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
         highlights = listOf(
+            "업무 피드 카드의 빠른 동작이 보관·휴지통 두 개로 정리됐습니다 — 보관은 읽음으로 내리고, 휴지통은 카드를 영구 삭제",
+            "피드 카드 제목이 더 정확해집니다 — 본문이 문장으로 시작하는 리포트도 한 줄 제목을 새로 뽑아, 첫 문장이 통째로 제목이 되던 문제 해소",
+        ),
+    ),
+    DenebPatchNote(
+        highlights = listOf(
             "대화를 다시 열면 스피너 없이 즉시 표시됩니다 — 마지막으로 본 내용을 폰에 암호화 캐시해 바로 띄우고 백그라운드에서 최신으로 갱신(데이터·시간 절약)",
             "메일 탭도 마지막 받은 편지함을 캐시해 즉시 표시 — 열자마자 보이고 백그라운드에서 새 메일로 갱신",
         ),

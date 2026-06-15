@@ -198,6 +198,35 @@ func TestStoreRunActionAckSettlesDuplicateIDs(t *testing.T) {
 	}
 }
 
+func TestStoreRunActionTrashDeletes(t *testing.T) {
+	// 휴지통 permanently removes a card. It is a universal action (not in the item's
+	// action list), settles every id twin, and the item never re-surfaces — even
+	// with includeAcked=true, since it's deleted, not acked.
+	store := NewStore(filepath.Join(t.TempDir(), "workfeed.jsonl"))
+	if _, err := store.Append(Item{ID: "wf_keep", Source: SourceProactive, Body: "keep me", SessionKey: "client:main"}); err != nil {
+		t.Fatalf("append keep: %v", err)
+	}
+	for _, body := range []string{"twin a", "twin b"} {
+		if _, err := store.Append(Item{ID: "wf_trash", Source: SourceProactive, Body: body, SessionKey: "client:main"}); err != nil {
+			t.Fatalf("append %q: %v", body, err)
+		}
+	}
+	result, err := store.RunAction("wf_trash", ActionTrash)
+	if err != nil {
+		t.Fatalf("run trash: %v", err)
+	}
+	if !result.RemoveFromFeed || result.Message != "deleted" {
+		t.Fatalf("result = %+v, want deleted+remove", result)
+	}
+	items, total, err := store.List(10, true) // includeAcked: a deleted item must not reappear
+	if err != nil {
+		t.Fatalf("post-trash list: %v", err)
+	}
+	if total != 1 || len(items) != 1 || items[0].ID != "wf_keep" {
+		t.Fatalf("after trash, items = %+v (total %d), want only wf_keep", items, total)
+	}
+}
+
 func TestStoreRunActionSnoozeSettlesDuplicateIDs(t *testing.T) {
 	// Snooze, like ack, is id-scoped and must hide every twin sharing the id.
 	store := NewStore(filepath.Join(t.TempDir(), "workfeed.jsonl"))

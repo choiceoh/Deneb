@@ -19,12 +19,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowForward
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.outlined.Archive
+import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.MailOutline
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -125,9 +124,6 @@ internal fun WorkFeedRow(
     val title = if (item.title.isBlank()) stringResource(Res.string.work_feed_title) else item.title
     val haptics = rememberHaptics()
     val titleStyle = if (item.status == "unread") DenebType.rowTitleStrong else DenebType.rowTitle
-    val actions = item.actions
-        .filter { it.kind != "open" && it.id.isNotBlank() }
-        .take(3)
     DenebRow(
         onClick = {
             haptics.tap()
@@ -163,44 +159,37 @@ internal fun WorkFeedRow(
                         )
                     }
                 }
-                // Summary and quick actions share one row: the summary takes the
-                // width, the actions sit at the trailing edge. This drops the
-                // separate action line that was wasting row height.
-                if (item.summary.isNotBlank() || actions.isNotEmpty()) {
-                    Row(
-                        modifier = Modifier.padding(top = 2.dp),
-                        verticalAlignment = Alignment.Top,
-                    ) {
-                        if (item.summary.isNotBlank()) {
-                            Text(
-                                text = item.summary,
-                                style = DenebType.snippet,
-                                color = denebHint(),
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .padding(top = 4.dp, end = if (actions.isNotEmpty()) 4.dp else 0.dp),
-                            )
-                        } else {
-                            Spacer(Modifier.weight(1f))
-                        }
-                        actions.forEach { action ->
-                            IconButton(
-                                modifier = Modifier.handCursor().size(32.dp),
-                                onClick = {
-                                    haptics.confirm()
-                                    onRunAction(item.id, action.id)
-                                },
-                            ) {
-                                Icon(
-                                    imageVector = actionIcon(action.kind),
-                                    contentDescription = action.label.ifBlank { action.kind },
-                                    tint = denebHint(),
-                                    modifier = Modifier.size(16.dp),
-                                )
-                            }
-                        }
+                // Summary and the two fixed quick actions share one row: the summary
+                // takes the width, the actions sit at the trailing edge.
+                Row(
+                    modifier = Modifier.padding(top = 2.dp),
+                    verticalAlignment = Alignment.Top,
+                ) {
+                    if (item.summary.isNotBlank()) {
+                        Text(
+                            text = item.summary,
+                            style = DenebType.snippet,
+                            color = denebHint(),
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(top = 4.dp, end = 4.dp),
+                        )
+                    } else {
+                        Spacer(Modifier.weight(1f))
+                    }
+                    // Two-action model (matches the mail screen): 보관 = archive (ack →
+                    // moves the card to the 읽음 section) and 휴지통 = permanent delete.
+                    // Both ride the existing onRunAction(id, actionId) path; the gateway
+                    // handles "trash" as a universal delete.
+                    FeedActionButton(Icons.Outlined.Archive, "보관") {
+                        haptics.confirm()
+                        onRunAction(item.id, "ack")
+                    }
+                    FeedActionButton(Icons.Outlined.Delete, "휴지통") {
+                        haptics.confirm()
+                        onRunAction(item.id, "trash")
                     }
                 }
             }
@@ -220,11 +209,20 @@ private fun sourcePainter(source: String): Painter = when (source) {
     else -> painterResource(Res.drawable.ic_file)
 }
 
-private fun actionIcon(kind: String): ImageVector = when (kind) {
-    "ack" -> Icons.Filled.Check
-    "snooze" -> Icons.Filled.Schedule
-    "followup" -> Icons.Filled.ArrowForward
-    else -> Icons.Filled.Check
+/** A compact trailing quick-action icon button (보관 / 휴지통), muted to denebHint. */
+@Composable
+private fun FeedActionButton(icon: ImageVector, label: String, onClick: () -> Unit) {
+    IconButton(
+        modifier = Modifier.handCursor().size(32.dp),
+        onClick = onClick,
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = label,
+            tint = denebHint(),
+            modifier = Modifier.size(16.dp),
+        )
+    }
 }
 
 /** Short Korean relative time ("방금" / "N분 전" / "N시간 전" / "N일 전"). Blank for
