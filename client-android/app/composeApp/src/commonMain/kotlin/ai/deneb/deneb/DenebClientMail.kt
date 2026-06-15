@@ -68,6 +68,7 @@ suspend fun DenebGatewayClient.refreshMail(query: String? = null): Boolean {
     // Query searches are not cached (query-specific, transient).
     if (q == null && _denebMail.value.isEmpty()) {
         loadCachedMail()?.let {
+            if (epoch != credEpoch) return@let // credentials switched — don't show the old account's cache
             _denebMail.value = applyReadOverlay(it, locallyReadMailIds)
             // The cached rows ARE the default inbox, so drop any stale search
             // cursor/query left over from a prior paged view — otherwise a "더 보기"
@@ -131,6 +132,7 @@ internal fun DenebGatewayClient.patchCachedMail(transform: (List<MailMessage>) -
 
 /** Append the next page of the current view (inbox or active search) to the list. */
 suspend fun DenebGatewayClient.loadMoreMail() {
+    val epoch = credEpoch
     val token = _denebMailNextToken.value ?: return
     val payload = callRpc<MailListPayload>(
         "miniapp.gmail.list_recent",
@@ -140,6 +142,9 @@ suspend fun DenebGatewayClient.loadMoreMail() {
             denebMailActiveQuery?.let { put("query", it) }
         },
     ) ?: return
+    // Credentials switched while the page was in flight — don't append old-account
+    // rows under the new gateway (onCredentialsChanged already cleared the list).
+    if (epoch != credEpoch) return
     val seen = _denebMail.value.mapTo(HashSet()) { it.id }
     _denebMail.value = _denebMail.value + applyReadOverlay(
         payload.messages
