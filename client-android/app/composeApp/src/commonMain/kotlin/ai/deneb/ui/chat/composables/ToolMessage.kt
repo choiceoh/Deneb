@@ -13,15 +13,12 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -33,10 +30,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Fill
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
@@ -163,7 +164,7 @@ internal fun PulsingStatusIndicator(
         modifier = modifier,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        SlimeIndicator(color = dotColor)
+        StarIndicator(color = dotColor)
         Spacer(Modifier.width(8.dp))
         if (isStatusOnly && toolSummary != null) {
             Text(
@@ -201,70 +202,70 @@ internal fun PulsingStatusIndicator(
     }
 }
 
-// SlimeIndicator is the 답변-중 motion: a cute sky-blue jelly that hops with a
-// squash-and-stretch — it crouches (squashes wide), springs up tall, then
-// squashes again on landing (Disney squash & stretch), with a glossy highlight so
-// it reads as a jelly, not a plain ball. transformOrigin sits at the base so it
-// deforms from where it "lands". Pure animation, no state.
-private const val slimePeriodMs = 1000
+// StarIndicator is the 답변-중 motion: a four-point sparkle (✦) — a glint of
+// starlight, Deneb being a blue star — that BURSTS: it pops bright and swells,
+// then settles dim and small before the next wink. A sparkle's thin concave rays
+// carry the twinkle/burst far better than a chunky five-point star. Sky-blue tint
+// from the caller; pure animation, no state.
+private const val sparklePeriodMs = 1300
 
 @Composable
-private fun SlimeIndicator(color: Color, modifier: Modifier = Modifier) {
-    val transition = rememberInfiniteTransition(label = "slime")
-    val hopPx = with(LocalDensity.current) { 6.dp.toPx() }
-    // hop: 0 (ground) → 1 (apex) → 0 (land), with a brief crouch and a rest pause.
-    val hop by transition.animateFloat(
+private fun StarIndicator(color: Color, modifier: Modifier = Modifier) {
+    val transition = rememberInfiniteTransition(label = "sparkle")
+    // 0 (dim, small) → quick bright swollen pop → settle dim → rest, repeat.
+    val twinkle by transition.animateFloat(
         initialValue = 0f,
         targetValue = 0f,
         animationSpec = infiniteRepeatable(
             animation = keyframes {
-                durationMillis = slimePeriodMs
+                durationMillis = sparklePeriodMs
                 0f at 0
-                0f at 160 using FastOutSlowInEasing
-                1f at 440 using FastOutSlowInEasing
-                0f at 700 using FastOutSlowInEasing
-                0f at slimePeriodMs
+                1f at 260 using FastOutSlowInEasing
+                0.12f at 760 using FastOutSlowInEasing
+                0f at 1100
+                0f at sparklePeriodMs
             },
         ),
-        label = "slime-hop",
+        label = "twinkle",
     )
-    // squash: + = wide & flat (crouch/land), − = tall & thin (launch).
-    val squash by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 0f,
-        animationSpec = infiniteRepeatable(
-            animation = keyframes {
-                durationMillis = slimePeriodMs
-                0f at 0
-                0.30f at 160 using FastOutSlowInEasing
-                -0.22f at 430 using FastOutSlowInEasing
-                0.30f at 700 using FastOutSlowInEasing
-                0f at 880 using FastOutSlowInEasing
-                0f at slimePeriodMs
+    Canvas(
+        modifier
+            .size(16.dp)
+            .graphicsLayer {
+                // Stay clearly present at rest (≈0.5) so it never reads as "off";
+                // the pop flares it bright and a touch larger.
+                alpha = 0.5f + 0.5f * twinkle
+                val s = 0.85f + 0.25f * twinkle
+                scaleX = s
+                scaleY = s
             },
-        ),
-        label = "slime-squash",
-    )
-    // Reserve hop headroom (22.dp) so the jelly never clips; it rests at the base.
-    Box(modifier.height(22.dp).width(16.dp), contentAlignment = Alignment.BottomCenter) {
-        Box(
-            modifier = Modifier
-                .size(16.dp)
-                .graphicsLayer {
-                    translationY = -hop * hopPx
-                    scaleX = 1f + squash * 0.5f
-                    scaleY = 1f - squash * 0.5f
-                    transformOrigin = TransformOrigin(0.5f, 1f)
-                }
-                .background(color, CircleShape),
-        ) {
-            // glossy highlight (top-left) → a cute jelly, not a flat dot.
-            Box(
-                modifier = Modifier
-                    .padding(start = 4.dp, top = 3.dp)
-                    .size(5.dp)
-                    .background(Color.White.copy(alpha = 0.5f), CircleShape),
-            )
-        }
+    ) {
+        val path = denebSparklePath(size)
+        // Fill plus a thin round stroke softens the ray tips (the brand's rounded
+        // feel) without fattening the thin sparkle.
+        drawPath(path, color, style = Fill)
+        drawPath(
+            path,
+            color,
+            style = Stroke(width = size.minDimension * 0.08f, join = StrokeJoin.Round, cap = StrokeCap.Round),
+        )
     }
+}
+
+// denebSparklePath builds a centred four-point sparkle (✦) sized to [size]: four
+// tips (N/E/S/W) joined by quadratic curves whose controls sit close to the
+// centre, so the rays read thin and concave like a glint of light.
+private fun denebSparklePath(size: Size): Path {
+    val cx = size.width / 2f
+    val cy = size.height / 2f
+    val outer = size.minDimension / 2f * 0.92f
+    val d = outer * 0.12f // side-curve control offset on the diagonals → thin rays
+    val path = Path()
+    path.moveTo(cx, cy - outer)
+    path.quadraticBezierTo(cx + d, cy - d, cx + outer, cy)
+    path.quadraticBezierTo(cx + d, cy + d, cx, cy + outer)
+    path.quadraticBezierTo(cx - d, cy + d, cx - outer, cy)
+    path.quadraticBezierTo(cx - d, cy - d, cx, cy - outer)
+    path.close()
+    return path
 }
