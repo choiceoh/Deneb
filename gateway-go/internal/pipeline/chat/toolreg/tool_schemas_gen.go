@@ -620,11 +620,11 @@ func gmailToolSchema() map[string]any {
 			},
 			"message_id": map[string]any{
 				"type":        "string",
-				"description": "Email message ID (for read, reply, label, attachment actions; for thread action, resolves the containing thread)",
+				"description": "Email message ID (for read, reply, label, attachment actions; for thread action, resolves the containing thread). Copy it EXACTLY from a gmail search/inbox result's 'ID:' field — never construct or guess one. For read, you may omit it and pass query instead.",
 			},
 			"query": map[string]any{
 				"type":        "string",
-				"description": "Gmail search query (supports Gmail operators like from:, to:, subject:, newer_than:, is:unread, has:attachment, etc.)",
+				"description": "Gmail search query (supports Gmail operators like from:, to:, subject:, newer_than:, is:unread, has:attachment, etc.). For the read action, when message_id is absent or wrong, query reads the top matching mail — prefer this over guessing an ID.",
 			},
 			"subject": map[string]any{
 				"type":        "string",
