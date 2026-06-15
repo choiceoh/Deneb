@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -28,6 +29,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
@@ -86,6 +88,9 @@ fun DenebFleetScreen(
     var stale by remember { mutableStateOf(false) }
     var notice by remember { mutableStateOf<String?>(null) }
     var confirm by remember { mutableStateOf<Pair<FleetRecipe, String>?>(null) }
+    // Read-only diagnostics open directly (no confirm): container logs / crash triage.
+    var logsTarget by remember { mutableStateOf<FleetRecipe?>(null) }
+    var diagnoseTarget by remember { mutableStateOf<FleetRecipe?>(null) }
 
     suspend fun refresh() {
         val st = client.fleetState()
@@ -199,10 +204,16 @@ fun DenebFleetScreen(
 
                         FleetTab.RECIPES -> FleetRecipesPage(recipes.orEmpty(), loaded) { rc, action ->
                             haptics.tap()
-                            confirm = rc to action
+                            when (action) {
+                                "logs" -> logsTarget = rc
+                                "diagnose" -> diagnoseTarget = rc
+                                else -> confirm = rc to action
+                            }
                         }
 
                         FleetTab.MODELS -> FleetModelsPage(client, state?.nodes.orEmpty()) { notice = it }
+
+                        FleetTab.BENCH -> FleetBenchPage(client, recipes.orEmpty(), loaded) { notice = it }
 
                         FleetTab.JOBS -> FleetJobsPage(client, jobs.orEmpty(), loaded) { notice = it }
                     }
@@ -283,6 +294,9 @@ fun DenebFleetScreen(
             dismissButton = { TextButton(onClick = { confirm = null }) { Text("취소") } },
         )
     }
+
+    logsTarget?.let { rc -> FleetLogsDialog(client, rc) { logsTarget = null } }
+    diagnoseTarget?.let { rc -> FleetDiagnoseDialog(client, rc) { diagnoseTarget = null } }
 }
 
 /** The fleet screen's tabs, in display order (same contract as ConfigTab). */
@@ -290,6 +304,7 @@ private enum class FleetTab(val label: String) {
     NODES("노드"),
     RECIPES("레시피"),
     MODELS("모델"),
+    BENCH("벤치"),
     JOBS("작업"),
 }
 
@@ -445,6 +460,13 @@ private fun FleetRecipeRow(rc: FleetRecipe, onAction: (String) -> Unit) {
                 OutlinedButton(onClick = { onAction("stop") }) { Text("중지", color = MaterialTheme.colorScheme.error) }
             } else {
                 OutlinedButton(onClick = { onAction("launch") }) { Text("▶ 기동") }
+            }
+        }
+        // Read-only diagnostics for a live container: raw logs + crash triage.
+        if (rc.status.running && rc.container.isNotBlank()) {
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                TextButton(onClick = { onAction("logs") }) { Text("로그") }
+                TextButton(onClick = { onAction("diagnose") }) { Text("🩺 진단") }
             }
         }
     }
@@ -694,4 +716,190 @@ private fun FleetDownloadDialog(
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } },
     )
+}
+
+// --- 진단 (로그 / triage / drift) ------------------------------------------------
+
+/** Raw `docker logs --tail` for a running recipe's container, in a scrollable
+ *  monospace pane with a refresh. Read-only — opens without a confirm. */
+@Composable
+private fun FleetLogsDialog(client: DenebGatewayClient, rc: FleetRecipe, onDismiss: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    val node = rc.status.node.ifBlank { rc.node }
+    var logs by remember(rc.name) { mutableStateOf<String?>(null) }
+    var loading by remember(rc.name) { mutableStateOf(true) }
+    suspend fun load() {
+        loading = true
+        logs = client.fleetContainerLogs(node, rc.container)
+        loading = false
+    }
+    LaunchedEffect(rc.name) { load() }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("${rc.container} 로그") },
+        text = {
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier.fillMaxWidth().height(360.dp),
+            ) {
+                val scroll = rememberScrollState()
+                // Pin to the newest line whenever the log (re)loads.
+                LaunchedEffect(logs) { scroll.scrollTo(scroll.maxValue) }
+                Text(
+                    when {
+                        loading && logs == null -> "불러오는 중…"
+                        logs.isNullOrBlank() -> "로그가 없습니다."
+                        else -> logs!!.takeLast(8000)
+                    },
+                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                    modifier = Modifier.verticalScroll(scroll).padding(8.dp),
+                )
+            }
+        },
+        confirmButton = { TextButton(onClick = { scope.launch { load() } }) { Text("새로고침") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("닫기") } },
+    )
+}
+
+/** On-demand crash triage of a running container: docker state + matched failure
+ *  patterns (cause/fix) + a fleet-LLM root-cause note, plus recipe-vs-container
+ *  config drift. All read-only via the passthrough. */
+@Composable
+private fun FleetDiagnoseDialog(client: DenebGatewayClient, rc: FleetRecipe, onDismiss: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    val node = rc.status.node.ifBlank { rc.node }
+    var diag by remember(rc.name) { mutableStateOf<FleetDiagnosis?>(null) }
+    var drift by remember(rc.name) { mutableStateOf<FleetDrift?>(null) }
+    var loading by remember(rc.name) { mutableStateOf(true) }
+    suspend fun load() {
+        loading = true
+        diag = client.fleetDiagnose(node, rc.container)
+        drift = client.fleetDrift(rc.name, node)
+        loading = false
+    }
+    LaunchedEffect(rc.name) { load() }
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("${rc.name} 진단") },
+        text = {
+            Column(
+                Modifier.fillMaxWidth().heightIn(max = 420.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                if (loading && diag == null) {
+                    Text("진단 중… (로컬 LLM 분석은 몇 초 걸릴 수 있습니다)", style = MaterialTheme.typography.bodySmall, color = muted)
+                }
+                diag?.let { d ->
+                    if (d.state.isNotBlank()) {
+                        Text("상태: ${d.state}", style = MaterialTheme.typography.bodySmall, color = muted)
+                    }
+                    d.findings.forEach { f ->
+                        Column {
+                            Text("• ${f.cause}", style = MaterialTheme.typography.bodyMedium)
+                            if (f.fix.isNotBlank()) {
+                                Text("  → ${f.fix}", style = MaterialTheme.typography.bodySmall, color = muted)
+                            }
+                        }
+                    }
+                    if (d.llm.isNotBlank()) {
+                        Text("AI 분석", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, color = muted)
+                        Text(d.llm, style = MaterialTheme.typography.bodySmall)
+                    }
+                    if (!loading && d.findings.isEmpty() && d.llm.isBlank()) {
+                        Text("알려진 실패 패턴이 없습니다.", style = MaterialTheme.typography.bodySmall, color = muted)
+                    }
+                }
+                drift?.let { dr ->
+                    HorizontalDivider(color = denebHairline())
+                    if (!dr.inSync && dr.diffs.isNotEmpty()) {
+                        Text("⚠ 레시피 드리프트 — 컨테이너가 레시피와 다릅니다", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                        dr.diffs.forEach { Text("• $it", style = MaterialTheme.typography.bodySmall, color = muted) }
+                    } else if (dr.inSync) {
+                        Text("레시피와 컨테이너 설정 일치 ✓", style = MaterialTheme.typography.bodySmall, color = muted)
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = { scope.launch { load() } }) { Text("다시 진단") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("닫기") } },
+    )
+}
+
+// --- 벤치 tab -------------------------------------------------------------------
+
+/**
+ * 벤치 tab: each recipe's latest benchmark — overall score + the four headline
+ * metrics (도구·언어·논리·안정) + a speed probe — with a 측정 button that starts a
+ * run (it streams into the 작업 tab). Mirrors SparkFleet's own benchmark surface.
+ */
+@Composable
+private fun FleetBenchPage(client: DenebGatewayClient, recipes: List<FleetRecipe>, loaded: Boolean, onNotice: (String) -> Unit) {
+    val scope = rememberCoroutineScope()
+    var evals by remember { mutableStateOf<FleetEvals?>(null) }
+    suspend fun load() {
+        client.fleetEvals()?.let { evals = it }
+    }
+    LaunchedEffect(Unit) { load() }
+    if (recipes.isEmpty()) {
+        EmptyTab(if (loaded) "레시피가 없습니다." else "불러오는 중…")
+        return
+    }
+    LazyColumn(Modifier.fillMaxSize()) {
+        items(recipes, key = { it.name }) { rc ->
+            FleetBenchRow(rc, evals?.runs?.get(rc.name)) {
+                scope.launch {
+                    val err = client.fleetRunBench(rc.name, rc.status.node.ifBlank { rc.node }) { jobId ->
+                        onNotice("${rc.name} 벤치마크 시작 — 작업 $jobId (작업 탭)")
+                    }
+                    if (err != null) onNotice(err) else load()
+                }
+            }
+        }
+        item(key = "bench-pad") { Spacer(Modifier.height(24.dp)) }
+    }
+}
+
+private val benchCategoryLabels = listOf("tool" to "도구", "language" to "언어", "reasoning" to "논리", "stability" to "안정")
+
+@Composable
+private fun FleetBenchRow(rc: FleetRecipe, run: FleetEvalRun?, onRun: () -> Unit) {
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(Modifier.weight(1f)) {
+                Text(rc.name, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    if (run != null) "${run.pass}/${run.total} 통과" else "측정 안 됨",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = muted,
+                )
+            }
+            run?.let {
+                Text(
+                    "${it.score.toInt()}",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+            OutlinedButton(onClick = onRun, enabled = rc.status.running) { Text("측정") }
+        }
+        run?.categories?.takeIf { it.isNotEmpty() }?.let { cats ->
+            Text(
+                benchCategoryLabels.mapNotNull { (k, lab) -> cats[k]?.let { "$lab ${it.toInt()}" } }.joinToString("  ·  "),
+                style = MaterialTheme.typography.bodySmall,
+                color = muted,
+            )
+        }
+        run?.speed?.let { sp ->
+            Text(
+                "${sp.decodeTokPerSec.toInt()} tok/s · TTFT ${sp.ttftMs.toInt()}ms",
+                style = MaterialTheme.typography.bodySmall,
+                color = muted,
+            )
+        }
+    }
+    HorizontalDivider(Modifier.padding(start = 16.dp), color = denebHairline())
 }

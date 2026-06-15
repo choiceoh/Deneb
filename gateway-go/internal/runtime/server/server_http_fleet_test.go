@@ -21,6 +21,8 @@ func TestFleetPathAllowed(t *testing.T) {
 		{http.MethodPost, "/api/recipes/action"},
 		{http.MethodPost, "/api/control"},
 		{http.MethodPost, "/api/models/download"},
+		{http.MethodPost, "/api/assist/logs"},
+		{http.MethodGet, "/api/recipes/qwen36/drift"},
 	}
 	for _, a := range allowed {
 		if !fleetPathAllowed(a[0], a[1]) {
@@ -33,7 +35,8 @@ func TestFleetPathAllowed(t *testing.T) {
 		{http.MethodGet, "/api/jobs/"},           // empty id
 		{http.MethodGet, "/api/jobs/x/y"},        // nested path
 		{http.MethodGet, "/api/recipes/x/raw"},
-		{http.MethodPost, "/api/state"},  // wrong method
+		{http.MethodGet, "/api/recipes/a/b/drift"}, // nested name
+		{http.MethodPost, "/api/state"},            // wrong method
 		{http.MethodDelete, "/api/jobs"}, // unsupported method
 		{http.MethodGet, "/healthz"},
 	}
