@@ -23,6 +23,10 @@ func init() {
 		}
 		return transcribeAudioText(ctx, data, audioMimeFromPath(audioPath), "")
 	}
+	// Readiness gate: media checks this before downloading audio, so when the
+	// VibeVoice-ASR sidecar is down the fallback skips up front instead of
+	// burning the fetch budget on a download that can't be transcribed.
+	media.AudioTranscriberReady = asrReady
 }
 
 // audioMimeFromPath maps a downloaded audio file's extension to a MIME type for

@@ -49,6 +49,26 @@ func asrBaseURL() string {
 	return asrDefaultURL
 }
 
+// asrReady reports whether the VibeVoice-ASR sidecar is reachable (GET /health,
+// 200). It gates the YouTube audio→ASR fallback BEFORE any audio is downloaded,
+// so a deployment with the sidecar down doesn't waste the fetch budget on a
+// doomed transcription. A connection-refused probe returns fast, so this is cheap
+// relative to the download it guards.
+func asrReady(ctx context.Context) bool {
+	pctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(pctx, http.MethodGet, asrBaseURL()+"/health", nil)
+	if err != nil {
+		return false
+	}
+	resp, err := httputil.NewClient(3 * time.Second).Do(req)
+	if err != nil {
+		return false
+	}
+	defer func() { _ = resp.Body.Close() }()
+	return resp.StatusCode == http.StatusOK
+}
+
 // asrHotwords returns the optional proper-noun bias list. The operator can set
 // DENEB_ASR_HOTWORDS to a comma/space list of names (탑솔라, 데네브, contacts)
 // to correct Korean proper nouns; empty is fine.

@@ -93,8 +93,22 @@ func ExtractYouTubeTranscript(ctx context.Context, videoURL string) (*YouTubeRes
 		URL:         videoURL,
 	}
 
-	// Step 2: Download subtitles.
-	transcript, lang, err := downloadSubtitles(ctx, ytdlpPath, videoURL, tmpDir)
+	// Step 2: Download subtitles. When ASR is usable and the caller's deadline is
+	// tight (the web fetch path caps this at 90s), bound the caption probes so they
+	// can't consume the whole budget — leaving a reserve for the ASR fallback. The
+	// ASR call below still uses the original ctx, so it gets that reserved time.
+	subCtx := ctx
+	if AudioTranscriber != nil {
+		if dl, ok := ctx.Deadline(); ok {
+			subDeadline := dl.Add(-asrReserveBudget)
+			if time.Until(subDeadline) >= minSubtitleBudget {
+				var cancel context.CancelFunc
+				subCtx, cancel = context.WithDeadline(ctx, subDeadline)
+				defer cancel()
+			}
+		}
+	}
+	transcript, lang, err := downloadSubtitles(subCtx, ytdlpPath, videoURL, tmpDir)
 	if err != nil {
 		// No captions (or YouTube blocked them) — fall back to transcribing the
 		// audio with the local ASR service when one is wired. This is what makes
@@ -120,6 +134,13 @@ func ExtractYouTubeTranscript(ctx context.Context, videoURL string) (*YouTubeRes
 // startup; nil disables the audio-ASR fallback (captions-only behavior).
 var AudioTranscriber func(ctx context.Context, audioPath string) (string, error)
 
+// AudioTranscriberReady, when set, reports whether the ASR sidecar is actually
+// reachable. transcriptViaASR consults it BEFORE downloading any audio so that a
+// deployment whose sidecar is down doesn't burn the web/watch budget downloading
+// audio only for the localhost ASR request to fail. nil means "assume ready"
+// (the wire sets a cached health probe).
+var AudioTranscriberReady func(ctx context.Context) bool
+
 // asrAudioCapSec bounds how much of a video's audio is transcribed via ASR, so a
 // long video can't blow the agent turn deadline (ASR runs ~0.5-0.7x real-time).
 // Overridable via DENEB_YT_ASR_CAP_SEC. Videos shorter than the cap transcribe whole.
@@ -142,6 +163,15 @@ const (
 // deadline before deriving how much audio can be transcribed in time.
 const asrOverheadBudget = 20 * time.Second
 
+// asrReserveBudget is the slice of a tight caller deadline kept aside for the ASR
+// fallback so slow/blocked caption probes can't consume the whole budget first.
+// minSubtitleBudget is the floor the caption phase must still get for the reserve
+// to apply (a generous deadline leaves both phases ample time).
+const (
+	asrReserveBudget  = 60 * time.Second
+	minSubtitleBudget = 20 * time.Second
+)
+
 // transcriptViaASR downloads the requested audio span and runs it through the wired
 // AudioTranscriber. The span is an explicit [startSec,endSec] window (watch) or, when
 // endSec<=startSec, a from-startSec prefix capped at DENEB_YT_ASR_CAP_SEC. The span is
@@ -152,6 +182,11 @@ const asrOverheadBudget = 20 * time.Second
 // downstream summaries don't imply full coverage. Returns ("","") on any failure.
 func transcriptViaASR(ctx context.Context, ytdlpPath, videoURL, tmpDir string, startSec, endSec, videoDurSec int) (text, lang string) {
 	if AudioTranscriber == nil {
+		return "", ""
+	}
+	// Skip before any download when the sidecar is known-unreachable — otherwise a
+	// no-ASR deployment wastes the deadline downloading audio for a doomed request.
+	if AudioTranscriberReady != nil && !AudioTranscriberReady(ctx) {
 		return "", ""
 	}
 

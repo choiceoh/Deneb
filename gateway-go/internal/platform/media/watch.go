@@ -118,14 +118,23 @@ func watchYouTube(ctx context.Context, url string, opts WatchOptions) (*WatchRes
 	// (429/no-JS) or absent, fall back to transcribing the audio via the local
 	// ASR service so the analysis still has the spoken content — crucial when the
 	// main model is text-only and can't read the frames.
-	if transcript, lang, subErr := downloadSubtitles(ctx, ytdlpPath, url, tmpDir); subErr == nil {
-		result.Transcript = transcript
-		result.Language = lang
-	} else if t, asrLang := transcriptViaASR(ctx, ytdlpPath, url, tmpDir, int(opts.StartSec), int(opts.EndSec), meta.Duration); t != "" {
-		// Cover the same window the frames are sampled from, so a text-only
-		// fallback analysis describes the requested segment, not the intro.
-		result.Transcript = t
-		result.Language = asrLang
+	// Full-video captions only make sense when no time window was requested —
+	// otherwise the (untimed) caption text would describe the whole video while
+	// the frames (and a text-only fallback analysis) are from the window. For a
+	// windowed request, transcribe just that window's audio so the transcript
+	// matches the frames the analysis actually sees.
+	windowed := opts.EndSec > opts.StartSec
+	if !windowed {
+		if transcript, lang, subErr := downloadSubtitles(ctx, ytdlpPath, url, tmpDir); subErr == nil {
+			result.Transcript = transcript
+			result.Language = lang
+		}
+	}
+	if result.Transcript == "" {
+		if t, asrLang := transcriptViaASR(ctx, ytdlpPath, url, tmpDir, int(opts.StartSec), int(opts.EndSec), meta.Duration); t != "" {
+			result.Transcript = t
+			result.Language = asrLang
+		}
 	}
 
 	// Download a watchable copy. Prefer a compact MP4 (<=720p) to bound size and

@@ -50,6 +50,27 @@ func TestTranscriptViaASR_NoTranscriberIsNoop(t *testing.T) {
 	}
 }
 
+func TestTranscriptViaASR_SkipsWhenSidecarUnavailable(t *testing.T) {
+	// When the readiness probe reports the sidecar down, ASR must skip before any
+	// audio download (no wasted fetch budget) and never call the transcriber.
+	called := false
+	prevT, prevR := AudioTranscriber, AudioTranscriberReady
+	AudioTranscriber = func(_ context.Context, _ string) (string, error) {
+		called = true
+		return "should not be called", nil
+	}
+	AudioTranscriberReady = func(_ context.Context) bool { return false }
+	defer func() { AudioTranscriber, AudioTranscriberReady = prevT, prevR }()
+
+	text, lang := transcriptViaASR(context.Background(), "yt-dlp", "https://youtu.be/x", t.TempDir(), 0, 0, 600)
+	if text != "" || lang != "" {
+		t.Errorf("expected skip, got text=%q lang=%q", text, lang)
+	}
+	if called {
+		t.Error("AudioTranscriber must not run when the sidecar is unready")
+	}
+}
+
 func TestTranscriptViaASR_SkipsWhenDeadlineTooClose(t *testing.T) {
 	// The web fetch path bounds ExtractYouTubeTranscript to a tight deadline. When
 	// too little time remains, ASR must skip up front — never download/transcribe
