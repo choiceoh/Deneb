@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.outlined.MailOutline
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -207,10 +208,12 @@ internal fun WorkFeedRow(
     }
 }
 
-/** Leading icon by card source: a report for proactive briefings, and a concrete
- *  glyph for each capture kind (image / audio / contacts). */
+/** Leading icon by card source: an envelope for mail reports, a generic report
+ *  page for other proactive briefings, and a concrete glyph for each capture kind
+ *  (image / audio / contacts). */
 @Composable
 private fun sourcePainter(source: String): Painter = when (source) {
+    "mail_report" -> rememberVectorPainter(Icons.Outlined.MailOutline)
     "capture_image" -> painterResource(Res.drawable.ic_image)
     "capture_audio" -> rememberVectorPainter(Icons.Filled.Mic)
     "capture_contacts" -> rememberVectorPainter(Icons.Filled.Person)

@@ -258,16 +258,22 @@ func (d proactiveRelayDeps) relayNativeToOpts(sessionKey, content string, collap
 		// "---") into every card. An empty title falls back to the store's
 		// defaultTitle ("업무 리포트"). See workfeed_extract.go.
 		title, titleLine := extractCardTitle(content)
-		// For mail reports the analysis model writes a generic "메일 분석 리포트"
-		// heading; prefer the email's real subject. The lightweight model names it
-		// (cardTitler); the deterministic extractCardTitle subject is the fallback.
-		if d.cardTitler != nil && isMailReportBody(content) {
-			if t := d.cardTitler(content); t != "" {
-				title = t
+		// Mail reports get the envelope card icon (SourceMailReport) and a better
+		// title: the analysis model writes a generic "메일 분석 리포트" heading, so the
+		// lightweight model names it from the email's real subject (cardTitler); the
+		// deterministic extractCardTitle subject is the fallback.
+		isMail := isMailReportBody(content)
+		source := workfeed.SourceProactive
+		if isMail {
+			source = workfeed.SourceMailReport
+			if d.cardTitler != nil {
+				if t := d.cardTitler(content); t != "" {
+					title = t
+				}
 			}
 		}
 		if _, err := d.workFeed.Append(workfeed.Item{
-			Source:     workfeed.SourceProactive,
+			Source:     source,
 			Title:      title,
 			Summary:    extractCardSummary(content, titleLine),
 			Body:       content,
