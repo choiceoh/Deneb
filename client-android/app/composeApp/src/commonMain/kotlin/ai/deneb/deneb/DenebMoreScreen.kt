@@ -8,6 +8,7 @@ import ai.deneb.DenebTodo
 import ai.deneb.ui.DenebGroup
 import ai.deneb.ui.DenebListRow
 import ai.deneb.ui.DenebScreenScaffold
+import ai.deneb.ui.chat.composables.LocalCaptureActions
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -17,6 +18,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.GridView
+import androidx.compose.material.icons.outlined.KeyboardVoice
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.runtime.Composable
@@ -68,6 +70,23 @@ fun DenebMoreScreen(onBack: () -> Unit, onOpen: (Any) -> Unit, chatMode: Boolean
                         icon = entry.icon,
                         subtitle = entry.desc,
                         divider = i < entries.lastIndex,
+                    )
+                }
+            }
+            // Live voice dictation (system speech recognizer → chat). It is an
+            // input action, not a file, so it lives here rather than cluttering the
+            // attach (+) button — that opens a single picker and auto-routes by
+            // file type. Android-only (captures present); hidden on desktop/iOS.
+            val captures = LocalCaptureActions.current
+            if (captures != null) {
+                DenebGroup {
+                    DenebListRow(
+                        title = "음성 입력",
+                        onClick = captures.onVoiceInput,
+                        icon = Icons.Outlined.KeyboardVoice,
+                        subtitle = "말하면 받아써서 보냅니다",
+                        divider = false,
+                        chevron = false,
                     )
                 }
             }

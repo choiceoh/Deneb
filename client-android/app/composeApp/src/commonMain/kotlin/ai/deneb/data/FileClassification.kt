@@ -45,9 +45,49 @@ internal val imageExtensions = setOf(
     "webp",
     "bmp",
     "svg",
+    "heic",
+    "heif",
+)
+
+// Audio file extensions the attach picker auto-routes to transcription
+// (VibeVoice-ASR). Kept beside imageExtensions so the chat input can classify a
+// picked file by type without a per-type menu.
+internal val audioExtensions = setOf(
+    "m4a",
+    "mp3",
+    "wav",
+    "ogg",
+    "oga",
+    "opus",
+    "aac",
+    "flac",
+    "amr",
+    "3gp",
 )
 
 val supportedFileExtensions = (imageExtensions + textExtensions).toList()
+
+/** How the chat input routes a file picked from the single attach (+) picker. */
+enum class AttachmentRoute {
+    IMAGE_CAPTURE, // image -> gateway OCR
+    AUDIO_CAPTURE, // audio -> gateway transcription
+    FILE_ATTACH, // anything else -> attach for the next message
+}
+
+/**
+ * Classifies a picked file by extension so the attach (+) button needs no
+ * "what to insert" menu. Image/audio routes only apply when platform captures are
+ * available (Android); without them every file is attached. Pure + testable; the
+ * Compose wiring in QuestionInput just dispatches on the result.
+ */
+fun routeAttachment(extension: String, capturesAvailable: Boolean): AttachmentRoute {
+    if (!capturesAvailable) return AttachmentRoute.FILE_ATTACH
+    return when (extension.lowercase()) {
+        in imageExtensions -> AttachmentRoute.IMAGE_CAPTURE
+        in audioExtensions -> AttachmentRoute.AUDIO_CAPTURE
+        else -> AttachmentRoute.FILE_ATTACH
+    }
+}
 
 fun classifyFile(mimeType: String?, fileName: String?): FileCategory {
     if (mimeType != null) {
