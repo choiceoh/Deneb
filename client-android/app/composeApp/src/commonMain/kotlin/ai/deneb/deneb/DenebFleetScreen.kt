@@ -794,44 +794,47 @@ private fun FleetDiagnoseDialog(client: DenebGatewayClient, rc: FleetRecipe, onD
             ) {
                 val d = diag
                 val dr = drift
-                when {
-                    loading && d == null && dr == null ->
-                        Text("진단 중… (로컬 LLM 분석은 몇 초 걸릴 수 있습니다)", style = MaterialTheme.typography.bodySmall, color = muted)
-
-                    // Both calls failed (container vanished / non-2xx / timeout) — say so,
-                    // otherwise an empty dialog reads as "diagnosed, nothing found".
-                    d == null && dr == null ->
-                        Text("진단 정보를 불러오지 못했습니다 — '다시 진단'으로 재시도하세요.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-
-                    else -> {
-                        d?.let {
-                            if (it.state.isNotBlank()) {
-                                Text("상태: ${it.state}", style = MaterialTheme.typography.bodySmall, color = muted)
-                            }
-                            it.findings.forEach { f ->
-                                Column {
-                                    Text("• ${f.cause}", style = MaterialTheme.typography.bodyMedium)
-                                    if (f.fix.isNotBlank()) {
-                                        Text("  → ${f.fix}", style = MaterialTheme.typography.bodySmall, color = muted)
-                                    }
+                if (loading && d == null && dr == null) {
+                    Text("진단 중… (로컬 LLM 분석은 몇 초 걸릴 수 있습니다)", style = MaterialTheme.typography.bodySmall, color = muted)
+                } else {
+                    // Crash triage (assist/logs). null after loading = THIS fetch failed —
+                    // report it independently so a successful drift check below can't make
+                    // the triage section read as clean ("설정 일치 ✓" with no findings).
+                    if (!loading && d == null) {
+                        Text("크래시 진단을 불러오지 못했습니다 — '다시 진단'으로 재시도하세요.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                    }
+                    d?.let {
+                        if (it.state.isNotBlank()) {
+                            Text("상태: ${it.state}", style = MaterialTheme.typography.bodySmall, color = muted)
+                        }
+                        it.findings.forEach { f ->
+                            Column {
+                                Text("• ${f.cause}", style = MaterialTheme.typography.bodyMedium)
+                                if (f.fix.isNotBlank()) {
+                                    Text("  → ${f.fix}", style = MaterialTheme.typography.bodySmall, color = muted)
                                 }
                             }
-                            if (it.llm.isNotBlank()) {
-                                Text("AI 분석", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, color = muted)
-                                Text(it.llm, style = MaterialTheme.typography.bodySmall)
-                            }
-                            if (it.findings.isEmpty() && it.llm.isBlank()) {
-                                Text("알려진 실패 패턴이 없습니다.", style = MaterialTheme.typography.bodySmall, color = muted)
-                            }
                         }
-                        dr?.let {
-                            HorizontalDivider(color = denebHairline())
-                            if (!it.inSync && it.diffs.isNotEmpty()) {
-                                Text("⚠ 레시피 드리프트 — 컨테이너가 레시피와 다릅니다", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-                                it.diffs.forEach { diff -> Text("• $diff", style = MaterialTheme.typography.bodySmall, color = muted) }
-                            } else if (it.inSync) {
-                                Text("레시피와 컨테이너 설정 일치 ✓", style = MaterialTheme.typography.bodySmall, color = muted)
-                            }
+                        if (it.llm.isNotBlank()) {
+                            Text("AI 분석", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, color = muted)
+                            Text(it.llm, style = MaterialTheme.typography.bodySmall)
+                        }
+                        if (it.findings.isEmpty() && it.llm.isBlank()) {
+                            Text("알려진 실패 패턴이 없습니다.", style = MaterialTheme.typography.bodySmall, color = muted)
+                        }
+                    }
+                    // Config drift (supplementary).
+                    if (!loading && dr == null) {
+                        HorizontalDivider(color = denebHairline())
+                        Text("설정 드리프트 확인을 불러오지 못했습니다.", style = MaterialTheme.typography.bodySmall, color = muted)
+                    }
+                    dr?.let {
+                        HorizontalDivider(color = denebHairline())
+                        if (!it.inSync && it.diffs.isNotEmpty()) {
+                            Text("⚠ 레시피 드리프트 — 컨테이너가 레시피와 다릅니다", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                            it.diffs.forEach { diff -> Text("• $diff", style = MaterialTheme.typography.bodySmall, color = muted) }
+                        } else if (it.inSync) {
+                            Text("레시피와 컨테이너 설정 일치 ✓", style = MaterialTheme.typography.bodySmall, color = muted)
                         }
                     }
                 }
@@ -859,11 +862,17 @@ private fun FleetBenchPage(
 ) {
     val scope = rememberCoroutineScope()
     var evals by remember { mutableStateOf<FleetEvals?>(null) }
+    // True when the last /api/evals attempt failed with nothing cached — so the tab can
+    // say "data failed to load" instead of rendering every row as 측정 안 됨 (which would
+    // hide a gateway/SparkFleet regression behind a normal-looking empty state).
+    var evalsFailed by remember { mutableStateOf(false) }
     // Recipes with a benchmark in flight (name -> job id; "" = POST not yet acked).
     // Disables 측정 so a quick double-tap can't fire duplicate, expensive eval jobs.
     var launching by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     suspend fun load() {
-        client.fleetEvals()?.let { evals = it }
+        val r = client.fleetEvals()
+        if (r != null) evals = r // keep the last good data on a transient poll failure
+        evalsFailed = r == null
     }
     // Poll like the screen loop: a 측정 run returns a job id immediately and writes
     // its result only when the background job finishes, so a one-shot load would
@@ -894,6 +903,13 @@ private fun FleetBenchPage(
         return
     }
     LazyColumn(Modifier.fillMaxSize()) {
+        if (evals == null && evalsFailed) {
+            item(key = "evals-error") {
+                Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+                    DenebError("벤치마크 데이터를 불러오지 못했습니다.", onRetry = { scope.launch { load() } })
+                }
+            }
+        }
         items(recipes, key = { it.name }) { rc ->
             val busy = rc.name in launching || rc.name in runningBench
             FleetBenchRow(rc, evals?.runs?.get(rc.name), busy = busy) {
