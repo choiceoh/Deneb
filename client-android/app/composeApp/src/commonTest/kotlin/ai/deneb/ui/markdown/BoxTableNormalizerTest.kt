@@ -188,4 +188,19 @@ class BoxTableNormalizerTest {
         """.trimMargin().trim()
         assertEquals(src, normalizeBoxTables(src))
     }
+
+    @Test
+    fun `converts a dashed-vertical box table`() {
+        val box = """
+            |┌┄┄┄┄┬┄┄┄┄┐
+            |┆ A  ┆ B  ┆
+            |├┄┄┄┄┼┄┄┄┄┤
+            |┆ 1  ┆ 2  ┆
+            |└┄┄┄┄┴┄┄┄┄┘
+        """.trimMargin().trim()
+        val lines = normalizeBoxTables(box).lines()
+        assertEquals("| A | B |", lines[0])
+        assertEquals("| --- | --- |", lines[1])
+        assertEquals("| 1 | 2 |", lines[2])
+    }
 }

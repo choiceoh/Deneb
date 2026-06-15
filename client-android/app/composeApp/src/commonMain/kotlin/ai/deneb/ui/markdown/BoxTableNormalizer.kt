@@ -26,8 +26,10 @@ package ai.deneb.ui.markdown
 //    stripped before parsing and re-applied to the emitted rows, so an indented
 //    (in a list) or quoted box table renders inside its container.
 
-private const val VERTICALS = "│┃║" // cell delimiters in box tables
-private val VERTICAL_SPLIT = Regex("[│┃║]")
+// Cell delimiters: light │, heavy ┃, double ║, and the dashed verticals
+// ┆┇┊┋╎╏ (so dashed box tables split into cells instead of being read as borders).
+private const val VERTICALS = "│┃║┆┇┊┋╎╏"
+private val VERTICAL_SPLIT = Regex("[│┃║┆┇┊┋╎╏]")
 
 // Same fence grammar as BlockScanner.FENCE_REGEX: 0-3 indent, a run of ≥3
 // backticks or tildes, then an info string. Mirrored so this pre-pass agrees
