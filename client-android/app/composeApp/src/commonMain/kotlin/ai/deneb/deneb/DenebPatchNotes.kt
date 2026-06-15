@@ -22,6 +22,7 @@ val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
         highlights = listOf(
             "대화를 다시 열면 스피너 없이 즉시 표시됩니다 — 마지막으로 본 내용을 폰에 암호화 캐시해 바로 띄우고 백그라운드에서 최신으로 갱신(데이터·시간 절약)",
+            "메일 탭도 마지막 받은 편지함을 캐시해 즉시 표시 — 열자마자 보이고 백그라운드에서 새 메일로 갱신",
         ),
     ),
     DenebPatchNote(

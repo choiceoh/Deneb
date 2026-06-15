@@ -332,6 +332,14 @@ class AppSettings(internal val settings: Settings) {
     // sessionKeys never contain a newline, so "\n" is a safe list separator.
     private fun txCacheLru(): List<String> = settings.getStringOrNull(KEY_TX_CACHE_LRU)?.split("\n")?.filter { it.isNotBlank() } ?: emptyList()
 
+    // Default inbox mail-list cache (single key — only the no-query inbox view is
+    // cached, for instant mail-tab render). Encrypted at rest like the transcript cache.
+    fun getCachedMailList(): String? = settings.getStringOrNull(KEY_MAIL_CACHE)
+
+    fun putCachedMailList(json: String) {
+        settings.putString(KEY_MAIL_CACHE, json)
+    }
+
     companion object {
         const val KEY_APP_OPENS = "app_opens"
 
@@ -380,6 +388,7 @@ class AppSettings(internal val settings: Settings) {
 
         const val KEY_SANDBOX_ENABLED = "sandbox_enabled"
 
+        const val KEY_MAIL_CACHE = "mail_list_cache"
         const val KEY_TX_CACHE_PREFIX = "tx_cache:"
         const val KEY_TX_CACHE_LRU = "tx_cache_lru"
         const val TX_CACHE_MAX_SESSIONS = 12
