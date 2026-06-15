@@ -21,6 +21,11 @@ data class DenebPatchNote(
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
         highlights = listOf(
+            "답변·메일·위키 본문 속 이미지를 누르면 전체 화면으로 확대됩니다 — 핀치 줌·드래그 이동·더블탭 확대, 빈 곳을 누르면 닫힘(첨부 사진 뷰어와 동일)",
+        ),
+    ),
+    DenebPatchNote(
+        highlights = listOf(
             "각주(`[^1]`)가 본문에서 작은 위 첨자(¹)로 표시되고, 답변 맨 아래에 구분선과 함께 각주 내용이 정리됩니다 — `[^1]`·`[^1]: …`가 글자 그대로 노출되던 것 해소",
         ),
     ),

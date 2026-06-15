@@ -36,6 +36,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
+import coil3.compose.AsyncImage
 import deneb.composeapp.generated.resources.Res
 import deneb.composeapp.generated.resources.image_viewer_close
 import deneb.composeapp.generated.resources.image_viewer_save
@@ -155,6 +156,79 @@ internal fun FullScreenImageViewerOverlay(
                     )
                 }
             }
+        }
+    }
+}
+
+/**
+ * Fullscreen viewer for a model-backed image (markdown `![](url)`), loaded via Coil
+ * [AsyncImage] from a URL/model. Mirrors [FullScreenImageViewerOverlay]'s zoom / pan /
+ * double-tap / tap-to-dismiss, but has no save/share — we hold only a URL, not the
+ * decoded bytes. Use via [ai.deneb.ui.components.FullScreenImageHost] +
+ * [ai.deneb.ui.components.LocalShowFullScreenImageModel].
+ */
+@Composable
+internal fun FullScreenAsyncImageViewerOverlay(
+    model: Any?,
+    onDismiss: () -> Unit,
+) {
+    var scale by remember { mutableStateOf(1f) }
+    var offset by remember { mutableStateOf(Offset.Zero) }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.95f))
+            .pointerInput(Unit) {
+                detectTapGestures(onTap = { onDismiss() })
+            },
+    ) {
+        AsyncImage(
+            model = model,
+            contentDescription = null,
+            contentScale = ContentScale.Fit,
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer(
+                    scaleX = scale,
+                    scaleY = scale,
+                    translationX = offset.x,
+                    translationY = offset.y,
+                )
+                .pointerInput(Unit) {
+                    detectTransformGestures { _, pan, zoom, _ ->
+                        scale = (scale * zoom).coerceIn(1f, 5f)
+                        offset = if (scale > 1f) offset + pan else Offset.Zero
+                    }
+                }
+                .pointerInput(Unit) {
+                    detectTapGestures(
+                        onDoubleTap = {
+                            if (scale > 1f) {
+                                scale = 1f
+                                offset = Offset.Zero
+                            } else {
+                                scale = 2.5f
+                            }
+                        },
+                    )
+                },
+        )
+        IconButton(
+            onClick = onDismiss,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .statusBarsPadding()
+                .padding(8.dp)
+                .clip(CircleShape)
+                .background(Color.Black.copy(alpha = 0.4f))
+                .handCursor(),
+        ) {
+            Icon(
+                imageVector = Icons.Default.Close,
+                contentDescription = stringResource(Res.string.image_viewer_close),
+                tint = Color.White,
+            )
         }
     }
 }
