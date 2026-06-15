@@ -33,6 +33,33 @@ func (f fakeEmbedder) Embed(_ context.Context, texts []string) ([][]float32, err
 	return out, nil
 }
 
+func TestWarmSemanticIndex(t *testing.T) {
+	dir := t.TempDir()
+	store, err := NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	mustWrite(t, store, "프로젝트/a.md", &Page{Meta: Frontmatter{ID: "a", Title: "위험 평가", Category: "프로젝트"}, Body: "차질 우려 있음."})
+	mustWrite(t, store, "운영시스템/b.md", &Page{Meta: Frontmatter{ID: "b", Title: "GPU 서버", Category: "운영시스템"}, Body: "GPU 추론 운영."})
+
+	store.SetEmbedder(fakeEmbedder{healthy: true})
+	// SetEmbedder only loads the (absent) disk cache, so the index starts empty.
+	if n := len(store.sem.vecs); n != 0 {
+		t.Fatalf("expected empty index before warm, got %d", n)
+	}
+	if err := store.WarmSemanticIndex(context.Background()); err != nil {
+		t.Fatalf("WarmSemanticIndex: %v", err)
+	}
+	if n := len(store.sem.vecs); n != 2 {
+		t.Fatalf("warm should embed all 2 pages up front, got %d", n)
+	}
+	// No-op (not an error) when no embedder is attached.
+	store.SetEmbedder(nil)
+	if err := store.WarmSemanticIndex(context.Background()); err != nil {
+		t.Fatalf("warm without an embedder should be a no-op, got %v", err)
+	}
+}
+
 func TestSearchHybrid(t *testing.T) {
 	dir := t.TempDir()
 	store, err := NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
