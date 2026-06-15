@@ -29,6 +29,7 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -56,6 +57,8 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.datetime.Instant
+import kotlin.time.Clock
 
 /**
  * Fleet management as its own full screen (NOT a settings tab — the settings
@@ -530,6 +533,52 @@ private fun fmtBytes(b: Long): String {
     return if (v >= 100 || i <= 1) "${v.toInt()} ${units[i]}" else "${(v * 10).toInt() / 10.0} ${units[i]}"
 }
 
+// HF list sort keys SparkFleet whitelists, in the order the chips show them.
+private val hfSortOptions = listOf(
+    "" to "트렌딩",
+    "downloads" to "다운로드",
+    "likes" to "좋아요",
+    "lastModified" to "최신",
+)
+
+// hfMeta is the second line of a search result — counts, task, and freshness:
+// "↓ 1.2M · ♥ 340 · text-generation · 3일 전".
+private fun hfMeta(m: FleetHFModel): String {
+    val parts = mutableListOf("↓ ${fmtCount(m.downloads)}", "♥ ${fmtCount(m.likes)}")
+    if (m.pipelineTag.isNotBlank()) parts += m.pipelineTag
+    hfAge(m.lastModified).takeIf { it.isNotBlank() }?.let { parts += it }
+    return parts.joinToString(" · ")
+}
+
+// fmtCount renders large download/like counts compactly (1.2M, 12.3K, 999).
+private fun fmtCount(n: Long): String = when {
+    n >= 1_000_000 -> "${(n / 100_000) / 10.0}M"
+    n >= 1_000 -> "${(n / 100) / 10.0}K"
+    else -> n.toString()
+}
+
+// hfAge turns an RFC3339 lastModified into a coarse Korean relative age; "" when
+// the hub omitted it or the timestamp can't be parsed.
+private fun hfAge(iso: String): String {
+    if (iso.isBlank()) return ""
+    val inst = runCatching { Instant.parse(iso) }.getOrNull() ?: return ""
+    val days = (Clock.System.now() - inst).inWholeDays
+    return when {
+        days < 0 -> ""
+        days == 0L -> "오늘"
+        days < 30 -> "${days}일 전"
+        days < 365 -> "${days / 30}개월 전"
+        else -> "${days / 365}년 전"
+    }
+}
+
+// nodeFreeBytes is the free space on a node's roomiest disk (where new weights
+// most plausibly land), or -1 when the node/metrics are unknown.
+private fun nodeFreeBytes(node: FleetNode?): Long {
+    val disk = node?.metrics?.disks?.maxByOrNull { it.totalKB - it.usedKB } ?: return -1
+    return (disk.totalKB - disk.usedKB) * 1024
+}
+
 /**
  * 모델 tab: HuggingFace search → size preview → download to a node (all through
  * the fleet passthrough; the gateway's stored HF token covers gated repos), plus
@@ -538,11 +587,27 @@ private fun fmtBytes(b: Long): String {
  */
 @Composable
 private fun FleetModelsPage(client: DenebGatewayClient, nodes: List<FleetNode>, onNotice: (String) -> Unit) {
-    val scope = rememberCoroutineScope()
     var query by remember { mutableStateOf("") }
+    var sort by remember { mutableStateOf("") } // "" = trending (hub default)
     var searching by remember { mutableStateOf(false) }
     var results by remember { mutableStateOf<List<FleetHFModel>?>(null) }
     var dlTarget by remember { mutableStateOf<FleetHFModel?>(null) }
+
+    // Search as you type, debounced. Sort is a *server* param (the hub caps at 50
+    // results), so a sort change re-fetches rather than reordering one page.
+    // LaunchedEffect cancels the prior run on each keystroke, so delay() debounces.
+    LaunchedEffect(query, sort) {
+        val q = query.trim()
+        if (q.isBlank()) {
+            results = null
+            searching = false
+            return@LaunchedEffect
+        }
+        searching = true
+        delay(450)
+        results = client.fleetHFSearch(q, sort) ?: emptyList()
+        searching = false
+    }
 
     LazyColumn(Modifier.fillMaxSize()) {
         item(key = "hf-search") {
@@ -550,29 +615,44 @@ private fun FleetModelsPage(client: DenebGatewayClient, nodes: List<FleetNode>, 
                 Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(
-                        value = query,
-                        onValueChange = { query = it },
-                        label = { Text("HuggingFace 모델 검색") },
-                        singleLine = true,
-                        modifier = Modifier.weight(1f),
-                    )
-                    TextButton(
-                        enabled = !searching && query.isNotBlank(),
-                        onClick = {
-                            scope.launch {
-                                searching = true
-                                results = client.fleetHFSearch(query.trim()) ?: emptyList()
-                                searching = false
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    label = { Text("HuggingFace 모델 검색") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    trailingIcon = {
+                        when {
+                            searching -> CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                            query.isNotBlank() -> TextButton(onClick = { query = "" }) { Text("✕") }
+                        }
+                    },
+                )
+                // Server-side sort (trending / downloads / likes / recent) — only
+                // meaningful once there's a query to sort.
+                if (query.isNotBlank()) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        hfSortOptions.forEach { (key, label) ->
+                            val sel = sort == key
+                            Surface(
+                                shape = RoundedCornerShape(50),
+                                color = if (sel) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                                modifier = Modifier.clip(RoundedCornerShape(50)).clickable { sort = key },
+                            ) {
+                                Text(
+                                    label,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = if (sel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                )
                             }
-                        },
-                    ) { Text(if (searching) "검색 중…" else "검색") }
+                        }
+                    }
                 }
             }
         }
         results?.let { rs ->
-            if (rs.isEmpty()) {
+            if (rs.isEmpty() && !searching) {
                 item(key = "hf-none") { FleetMuted("결과 없음") }
             }
             items(rs, key = { "hf-" + it.id }) { m ->
@@ -589,9 +669,11 @@ private fun FleetModelsPage(client: DenebGatewayClient, nodes: List<FleetNode>, 
                             overflow = TextOverflow.Ellipsis,
                         )
                         Text(
-                            "↓ ${m.downloads} · ♥ ${m.likes}",
+                            hfMeta(m),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                         )
                     }
                     Surface(shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)) {
@@ -671,6 +753,20 @@ private fun FleetDownloadDialog(
                         }
                     }
                 }
+                // Disk-fit check: weights are big and the nodes are tight, so warn
+                // before a download that won't fit the target node's freest disk.
+                val free = nodeFreeBytes(nodes.firstOrNull { it.name == target })
+                val size = info?.sizeBytes ?: 0L
+                val fits = free < 0 || size <= 0 || size <= free
+                Text(
+                    buildString {
+                        append("노드 여유 ")
+                        append(if (free < 0) "조회 불가" else fmtBytes(free))
+                        if (!fits) append(" · ⚠ 공간 부족")
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (!fits) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 Text(
                     "진행 상황은 작업 탭에서 실시간으로 보입니다 · 재시작하면 이어받습니다",
                     style = MaterialTheme.typography.bodySmall,

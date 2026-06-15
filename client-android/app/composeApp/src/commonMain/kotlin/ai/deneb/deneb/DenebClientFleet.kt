@@ -105,6 +105,8 @@ internal data class FleetHFModel(
     val downloads: Long = 0,
     val likes: Long = 0,
     val params: Long = 0, // safetensors parameter count; 0 = unknown (GGUF)
+    val pipelineTag: String = "", // HF task, e.g. "text-generation" ("" when omitted)
+    val lastModified: String = "", // RFC3339; "" when the hub omits it
     val gated: Boolean = false,
 )
 
@@ -208,8 +210,14 @@ internal suspend fun DenebGatewayClient.fleetRecipeAction(
     return null
 }
 
-internal suspend fun DenebGatewayClient.fleetHFSearch(q: String): List<FleetHFModel>? = fleetGetText("/api/hf/search?q=${q.encodeURLParameter()}")?.let {
-    runCatching { fleetJson.decodeFromString<FleetHFSearchResponse>(it).models }.getOrNull()
+// sort: "" (trending — the hub default) | downloads | likes | lastModified |
+// createdAt — the keys SparkFleet whitelists. The hub caps the result at 50, so
+// sorting is server-side (re-fetch on sort change), not a reorder of one page.
+internal suspend fun DenebGatewayClient.fleetHFSearch(q: String, sort: String = ""): List<FleetHFModel>? {
+    val sortParam = if (sort.isNotBlank()) "&sort=${sort.encodeURLParameter()}" else ""
+    return fleetGetText("/api/hf/search?q=${q.encodeURLParameter()}$sortParam")?.let {
+        runCatching { fleetJson.decodeFromString<FleetHFSearchResponse>(it).models }.getOrNull()
+    }
 }
 
 internal suspend fun DenebGatewayClient.fleetHFInfo(repo: String): FleetHFInfo? = fleetGetText("/api/hf/info?repo=${repo.encodeURLParameter()}")?.let {
