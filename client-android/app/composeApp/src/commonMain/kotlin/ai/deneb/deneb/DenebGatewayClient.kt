@@ -628,28 +628,47 @@ class DenebGatewayClient(
      * appeared to get no response until the next message was sent. Epoch-checked
      * under historyGate, so it is safe whichever of load / send finishes first.
      */
-    private suspend fun loadTranscriptGuarded(key: String) {
+    private suspend fun loadTranscriptGuarded(key: String, replacing: Boolean = false) {
         val startEpoch = historyGate.withLock { historyEpoch }
-        // Cache-then-network: render the encrypted local copy instantly (no spinner
-        // on reopen), but only if nothing has loaded/sent yet so an optimistic send
-        // is never clobbered.
+        // Cache-then-network: render the encrypted local copy instantly (no spinner).
+        // [replacing] = an explicit switch to a different conversation (drawer pick,
+        // proactive deep link): the view must reflect [key], so render its cache or
+        // clear the previous session's rows even when there's no cache — otherwise a
+        // failed fetch below would leave the prior conversation lingering under the
+        // new sessionKey. When not replacing (cold-start restore / in-place reload)
+        // only fill an empty view, so a live transcript never flashes. Either way the
+        // epoch guard means an optimistic send (ask()) is never clobbered.
         val cached = loadCachedTranscript(key)
-        if (cached != null) {
-            historyGate.withLock {
-                if (historyEpoch == startEpoch && _chatHistory.value.isEmpty()) _chatHistory.value = cached
-            }
-        }
-        val transcript = fetchTranscript(key)
         historyGate.withLock {
-            // Don't clobber an optimistic send (epoch). Also don't flash a cached
-            // render to empty on a transient fetch failure: fetchTranscript returns
-            // [] for both an empty session AND an RPC error, so when a cache exists
-            // keep it unless the fetch actually returned messages.
-            if (historyEpoch == startEpoch && (transcript.isNotEmpty() || cached == null)) {
-                _chatHistory.value = transcript
+            if (historyEpoch != startEpoch) return
+            when {
+                // Switch: reflect the new key now — its cache, or clear the previous
+                // session's rows so nothing lingers under the new key on a failed fetch.
+                replacing -> _chatHistory.value = cached ?: emptyList()
+
+                // Restore/reload in place: only fill an empty view from cache, so a
+                // live transcript is never flashed over by a (possibly staler) snapshot.
+                cached != null && _chatHistory.value.isEmpty() -> _chatHistory.value = cached
+                // not replacing + (no cache or live view present): leave it for the network.
             }
         }
-        if (transcript.isNotEmpty()) storeCachedTranscript(key, transcript)
+        val transcript = fetchTranscript(key) // null = RPC failure; [] = authoritative empty
+        val authoritative = historyGate.withLock {
+            if (historyEpoch != startEpoch) return // optimistic send won — don't touch view or cache
+            if (transcript != null) {
+                _chatHistory.value = transcript
+                true
+            } else {
+                false // transient failure: keep the instant cache render (or cleared view)
+            }
+        }
+        // Reconcile the cache only for an authoritative fetch that won the epoch race,
+        // so a stale (pre-send) transcript can never poison the cache. An authoritative
+        // empty evicts any stale entry — e.g. a session deleted server-side — so it
+        // can't resurrect on the next reopen.
+        if (authoritative) {
+            if (transcript!!.isEmpty()) removeCachedTranscript(key) else storeCachedTranscript(key, transcript)
+        }
     }
 
     /**
@@ -664,7 +683,9 @@ class DenebGatewayClient(
         setWorkspace(true)
         switchSession("client:main")
         syncNativeStateAsync()
-        scope.launch { loadTranscriptGuarded("client:main") }
+        // Deep-link switch to the work home: replace whatever conversation was open
+        // (cold-start callers are already empty-guarded, so this is a no-op there).
+        scope.launch { loadTranscriptGuarded("client:main", replacing = true) }
         loadConversations()
     }
 
@@ -741,7 +762,7 @@ class DenebGatewayClient(
         switchSession("client:main")
         syncNativeStateAsync()
         val startEpoch = historyGate.withLock { historyEpoch }
-        val transcript = fetchTranscript("client:main")
+        val transcript = fetchTranscript("client:main") ?: emptyList()
         val idx = indexOfMirroredReport(transcript, item.createdAtMs)
         val resolved = if (idx >= 0) {
             transcript.mapIndexed { i, h ->
@@ -892,7 +913,7 @@ class DenebGatewayClient(
         val prompt = runWorkFeedAction(id, "open", adoptSession = false) ?: return null
         val target = workItemSessionKey(id)
         switchSession(target)
-        loadTranscriptGuarded(target)
+        loadTranscriptGuarded(target, replacing = true)
         return prompt
     }
 
@@ -931,7 +952,7 @@ class DenebGatewayClient(
         val target = payload.sessionKey.ifBlank { payload.item.sessionKey }
         if (adoptSession && target.isNotBlank()) {
             switchSession(target)
-            loadTranscriptGuarded(target)
+            loadTranscriptGuarded(target, replacing = true)
         }
         return payload.prompt.ifBlank { null }
     }
@@ -1028,7 +1049,9 @@ class DenebGatewayClient(
 
     override fun loadConversation(id: String) {
         switchSession(id)
-        scope.launch { loadTranscriptGuarded(id) }
+        // Explicit switch from the drawer: replace the previously-visible conversation
+        // so it can't linger under the new sessionKey if the fetch fails.
+        scope.launch { loadTranscriptGuarded(id, replacing = true) }
     }
 
     override suspend fun deleteConversation(id: String) {
@@ -1043,6 +1066,11 @@ class DenebGatewayClient(
             "miniapp.sessions.delete",
             buildJsonObject { put("sessionKey", id) },
         )
+        // Drop the local transcript cache too, so the deleted conversation can't be
+        // instantly re-rendered from cache on a later reopen. (A still-live session is
+        // refused server-side and reappears on the next sessions.recent fetch; its
+        // cache will be rebuilt then — eviction here is harmless in that case.)
+        removeCachedTranscript(id)
         _savedConversations.update { list -> list.filterNot { it.id == id } }
     }
 
@@ -1331,14 +1359,18 @@ class DenebGatewayClient(
         appSettings.setLastSession(work = !key.startsWith("chat:"), key)
     }
 
-    private suspend fun fetchTranscript(sessionKey: String): List<History> {
+    // Returns null on an RPC failure (so callers can keep a cache render instead of
+    // flashing to empty), or the messages — possibly an authoritative empty list —
+    // on success. The null-vs-[] distinction is what lets loadTranscriptGuarded
+    // evict a stale cache only when the server says the session is really empty.
+    private suspend fun fetchTranscript(sessionKey: String): List<History>? {
         val payload = callRpc<TranscriptPayload>(
             "miniapp.sessions.transcript",
             buildJsonObject {
                 put("sessionKey", sessionKey)
                 put("limit", 200)
             },
-        ) ?: return emptyList()
+        ) ?: return null
         return payload.messages.mapNotNull { m ->
             val role = when (m.role.lowercase()) {
                 "user" -> History.Role.USER
