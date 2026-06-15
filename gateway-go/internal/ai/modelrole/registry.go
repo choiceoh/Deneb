@@ -262,12 +262,16 @@ func NewRegistryWithOptions(logger *slog.Logger, opts RegistryOptions) *Registry
 	// Chatbot is included only when present so the loop never inserts a phantom
 	// (empty) entry that would make the opt-in role look configured.
 	vllmWindows := make(map[string]int)
+	probedVllmURLs := make(map[string]bool)
 	reconcileRoles := []Role{RoleMain, RoleTiny, RoleLightweight, RoleAnalysis, RoleFallback}
 	if _, ok := models[RoleChatbot]; ok {
 		reconcileRoles = append(reconcileRoles, RoleChatbot)
 	}
 	for _, role := range reconcileRoles {
 		cfg := models[role]
+		if cfg.ProviderID == "vllm" && cfg.BaseURL != "" {
+			probedVllmURLs[cfg.BaseURL] = true
+		}
 		for _, info := range reconcileVllmModel(logger, &cfg) {
 			if info.MaxModelLen > 0 {
 				vllmWindows[info.ID] = info.MaxModelLen
@@ -275,6 +279,11 @@ func NewRegistryWithOptions(logger *slog.Logger, opts RegistryOptions) *Registry
 		}
 		models[role] = cfg
 	}
+	// Also harvest windows from configured direct-vLLM providers no role routes
+	// through: when the main model is fronted by wormhole, the window lives on the
+	// still-configured vllm provider, not the proxy. CapabilityForModel applies it
+	// by served model id to vLLM-backed fronts (vllm + wormhole).
+	harvestVllmWindows(logger, opts.Providers, vllmWindows, probedVllmURLs)
 
 	r := &Registry{
 		models:         models,

@@ -110,6 +110,47 @@ func DiscoverServedVllmModelInfos(ctx context.Context, baseURL string, apiKey ..
 // The chat pipeline already retries through the fallback chain, so a
 // missing-model 404 isn't catastrophic; this just removes the most common
 // "I renamed the served model" footgun.
+// isDirectVllmProvider reports whether a configured provider id is a direct vLLM
+// endpoint (one that serves /v1/models with a real max_model_len). The wormhole
+// proxy is NOT direct — its /v1/models omits max_model_len — so it is not probed
+// for windows here even though it is vLLM-backed for routing.
+func isDirectVllmProvider(id string) bool {
+	return id == "vllm" || strings.HasPrefix(id, "vllm-") || strings.HasPrefix(id, "vllm_")
+}
+
+// harvestVllmWindows probes configured direct-vLLM providers for context windows
+// even when no role routes through them, folding each served model's
+// max_model_len into `into` (keyed by served model id, never overwriting a window
+// a role probe already found). This is what lets a model fronted by wormhole —
+// whose role baseURL is the proxy, which does not report max_model_len — still
+// resolve its real window: the same model id is served by the still-configured
+// direct vllm provider. Best-effort: a down or non-reporting provider is skipped
+// with a WARN. `probed` carries the baseURLs the per-role reconcile already hit,
+// so a provider backing a vllm role is not probed twice.
+func harvestVllmWindows(logger *slog.Logger, providers map[string]ProviderResolved, into map[string]int, probed map[string]bool) {
+	for id, pr := range providers {
+		if pr.BaseURL == "" || !isDirectVllmProvider(id) || probed[pr.BaseURL] {
+			continue
+		}
+		probed[pr.BaseURL] = true
+		ctx, cancel := context.WithTimeout(context.Background(), vllmDiscoveryTimeout)
+		infos, err := DiscoverServedVllmModelInfos(ctx, pr.BaseURL, pr.APIKey)
+		cancel()
+		if err != nil {
+			logger.Warn("modelrole: vllm window probe failed (unused provider)",
+				"provider", id, "baseUrl", pr.BaseURL, "error", err)
+			continue
+		}
+		for _, info := range infos {
+			if info.MaxModelLen > 0 {
+				if _, ok := into[info.ID]; !ok {
+					into[info.ID] = info.MaxModelLen
+				}
+			}
+		}
+	}
+}
+
 func reconcileVllmModel(logger *slog.Logger, cfg *ModelConfig) []ServedModelInfo {
 	if cfg == nil || cfg.ProviderID != "vllm" || cfg.BaseURL == "" {
 		return nil
