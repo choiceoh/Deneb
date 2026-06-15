@@ -2,7 +2,6 @@ package ai.deneb.ui.chat.composables
 
 import ai.deneb.ui.denebBreathing
 import ai.deneb.ui.denebSpatialSpring
-import ai.deneb.ui.isOledFlavor
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.animateContentSize
@@ -11,7 +10,6 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -19,7 +17,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -101,44 +98,33 @@ internal fun WaitingResponseRow(
         else -> stringResource(Res.string.waiting_elapsed_sec, elapsedSec)
     }
 
+    // No chip: a transparent, inline pulsing dot + status text — the way modern
+    // chat apps show "thinking". The old surfaceVariant fill read as a gray slab
+    // (and needed an OLED special-case); dropping it lets the status sit flush on
+    // the message-content margin (16.dp), animating its width as the text grows.
     Row(
         modifier = Modifier
-            .padding(horizontal = 16.dp, vertical = 8.dp)
-            .clipToBounds(),
+            .padding(horizontal = 16.dp, vertical = 10.dp)
+            .animateContentSize(animationSpec = denebSpatialSpring())
+            .clipToBounds()
+            .semantics { contentDescription = waitingCd },
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        // OLED: a filled surfaceVariant box floats as a gray slab on pure black, so
-        // the status chip goes transparent with a hairline ring instead (the same
-        // treatment as denebAdaptiveCardSurface). Non-OLED keeps the soft fill.
-        val chipShape = RoundedCornerShape(8.dp)
-        val chipSurface = if (MaterialTheme.colorScheme.isOledFlavor) {
-            Modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant, chipShape)
-        } else {
-            Modifier.background(MaterialTheme.colorScheme.surfaceVariant, chipShape)
-        }
-        Box(
-            modifier = chipSurface
-                .animateContentSize(animationSpec = denebSpatialSpring())
-                .padding(12.dp)
-                .semantics { contentDescription = waitingCd },
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                PulsingStatusIndicator(
-                    toolSummary = summary,
-                    isStatusOnly = effectiveStatusOnly,
-                    dotSize = 16.dp,
-                    dotColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textStyle = MaterialTheme.typography.bodyMedium,
-                )
-                if (elapsedLabel != null) {
-                    Text(
-                        text = " · $elapsedLabel",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.bodyMedium,
-                        maxLines = 1,
-                    )
-                }
-            }
+        PulsingStatusIndicator(
+            toolSummary = summary,
+            isStatusOnly = effectiveStatusOnly,
+            dotSize = 10.dp,
+            dotColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            textColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            textStyle = MaterialTheme.typography.bodyMedium,
+        )
+        if (elapsedLabel != null) {
+            Text(
+                text = " · $elapsedLabel",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 1,
+            )
         }
     }
 }
