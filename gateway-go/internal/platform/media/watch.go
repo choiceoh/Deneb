@@ -114,10 +114,16 @@ func watchYouTube(ctx context.Context, url string, opts WatchOptions) (*WatchRes
 	}
 
 	// Subtitles — reuse the youtube.go downloader (best-effort; frames still
-	// carry the visual content if no captions exist).
+	// carry the visual content if no captions exist). When captions are blocked
+	// (429/no-JS) or absent, fall back to transcribing the audio via the local
+	// ASR service so the analysis still has the spoken content — crucial when the
+	// main model is text-only and can't read the frames.
 	if transcript, lang, subErr := downloadSubtitles(ctx, ytdlpPath, url, tmpDir); subErr == nil {
 		result.Transcript = transcript
 		result.Language = lang
+	} else if t, asrLang := transcriptViaASR(ctx, ytdlpPath, url, tmpDir); t != "" {
+		result.Transcript = t
+		result.Language = asrLang
 	}
 
 	// Download a watchable copy. Prefer a compact MP4 (<=720p) to bound size and

@@ -87,13 +87,79 @@ func ToolWatch(workspaceDir string) toolctx.ToolFunc {
 
 		analysis, err := analyzeWatch(ctx, &p, result)
 		if err != nil {
-			// Frames extracted but vision call failed — return a useful
-			// metadata + transcript fallback rather than a bare error so the
-			// user still gets something actionable.
+			// Vision unavailable (e.g., the main model is text-only and rejects
+			// image blocks) — don't dead-end. Summarize the transcript (captions
+			// or ASR) with a text model so the user still gets a real analysis.
+			if textAnalysis := summarizeWatchTranscript(ctx, &p, result); textAnalysis != "" {
+				return formatWatchTextResult(result, textAnalysis), nil
+			}
+			// No transcript either — return metadata + whatever we have.
 			return formatWatchFallback(result, err), nil
 		}
 		return formatWatchResult(result, analysis), nil
 	}
+}
+
+const watchTextSystemPrompt = "당신은 영상의 자막/음성 전사를 바탕으로 영상을 분석하는 전문가입니다. " +
+	"화면을 직접 보지는 못했으니 자막/전사 내용만으로 핵심 주제, 주요 논점, 결론을 충실히 정리하세요. " +
+	"요청된 작업이 있으면 그에 집중하고, 불필요한 서두 없이 한국어로 분석 결과만 출력하세요."
+
+// summarizeWatchTranscript produces a text-only analysis from the extracted
+// transcript when the vision call is unavailable. Returns "" when there is no
+// transcript or the text model is unavailable, so the caller can degrade further.
+func summarizeWatchTranscript(ctx context.Context, p *WatchParams, result *media.WatchResult) string {
+	t := strings.TrimSpace(result.Transcript)
+	if t == "" {
+		return ""
+	}
+	if len(t) > watchMaxTranscriptChars {
+		t = t[:watchMaxTranscriptChars] + "\n[자막 일부 생략]"
+	}
+	task := strings.TrimSpace(p.Task)
+	if task == "" {
+		task = "이 영상의 핵심 내용과 구조를 분석해줘."
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "작업: %s\n\n", task)
+	if result.Title != "" {
+		fmt.Fprintf(&b, "영상: %s\n", result.Title)
+	}
+	if result.Channel != "" {
+		fmt.Fprintf(&b, "채널: %s\n", result.Channel)
+	}
+	fmt.Fprintf(&b, "\n자막/전사(%s):\n%s\n", result.Language, t)
+
+	out, err := pilot.CallLocalLLM(ctx, watchTextSystemPrompt, b.String(), watchAnalysisMaxTokens)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(out)
+}
+
+// formatWatchTextResult renders a transcript-based analysis (vision skipped),
+// noting that the screen wasn't analyzed so the reader knows the basis.
+func formatWatchTextResult(result *media.WatchResult, analysis string) string {
+	var b strings.Builder
+	b.WriteString("## 🎬 영상 분석 (자막/음성 기반)\n\n")
+	if result.Title != "" {
+		fmt.Fprintf(&b, "**%s**", result.Title)
+		if result.Channel != "" {
+			fmt.Fprintf(&b, " — %s", result.Channel)
+		}
+		b.WriteString("\n")
+	}
+	meta := []string{}
+	if result.DurationSec > 0 {
+		meta = append(meta, formatWatchDuration(result.DurationSec))
+	}
+	if strings.TrimSpace(result.Language) != "" {
+		meta = append(meta, result.Language)
+	}
+	meta = append(meta, "프레임 분석 미사용")
+	fmt.Fprintf(&b, "_%s_\n\n", strings.Join(meta, " · "))
+	b.WriteString(strings.TrimSpace(analysis))
+	b.WriteString("\n")
+	return b.String()
 }
 
 // analyzeWatch runs the isolated vision call over the extracted frames.
