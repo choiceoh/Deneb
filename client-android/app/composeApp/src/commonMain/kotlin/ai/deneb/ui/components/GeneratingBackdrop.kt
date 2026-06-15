@@ -2,13 +2,17 @@ package ai.deneb.ui.components
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
@@ -16,6 +20,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 import kotlin.math.PI
 import kotlin.math.sin
 
@@ -55,6 +60,17 @@ private const val BACKDROP_HEIGHT_MIN = 0.6f
 // order (blue -> cyan -> green -> ...). Reset to this each time generation starts.
 private const val BACKDROP_START_HUE = 240f
 
+// Keep the backdrop on this long AFTER generation ends, so a fast reply (챗봇 answers
+// quickly) still shows it instead of a flicker, and it lingers briefly into the
+// answer's first moments before fading out.
+private const val BACKDROP_HOLD_MS = 600L
+
+// Slow "breathing" of the overall brightness and an independent ripple of the curtain
+// shape, so the glow feels alive rather than statically lit. Different periods so they
+// never beat in lockstep.
+private const val BACKDROP_BREATH_MS = 3500
+private const val BACKDROP_SHAPE_MS = 3200
+
 /**
  * The "generating" backdrop: while [active] (a reply is being thought up, before its
  * text starts rendering) a soft ambient glow rises from the top of the screen and
@@ -64,26 +80,43 @@ private const val BACKDROP_START_HUE = 240f
  * the Gemini-style loading shimmer: brightest up top, diffuse with no hard edge.
  *
  * Drawn BEHIND the content (gradient first, then [drawContent]), so the top bar,
- * chat, and input bar sit over it. It eases in from black on send and out to black
- * the moment the answer begins, synced to the generating state by [active].
+ * chat, and input bar sit over it. It eases in from black on send; it holds for a
+ * short [BACKDROP_HOLD_MS] after generation ends (so a fast reply still shows it
+ * instead of a flicker) and then dissolves gently, lingering into the answer's first
+ * moments rather than cutting the instant the answer begins.
+ *
+ * It also breathes (slow brightness pulse) and its curtain shape ripples on its own
+ * faster cycle, so it reads as alive rather than statically lit.
  *
  * This is a deliberate, owner-requested exception to the monochrome-restraint
- * doctrine — but bounded: it only shows during the brief generating window and
- * dissolves to black before the answer (and any sustained reading) renders.
+ * doctrine — but bounded: it only shows during (and just after) the generating window.
  */
 @Composable
 fun Modifier.generatingBackdrop(active: Boolean): Modifier {
-    val intensity by animateFloatAsState(
-        targetValue = if (active) 1f else 0f,
-        // Rise a touch faster than it dissolves, so it feels like it "charges up".
-        animationSpec = tween(durationMillis = if (active) 500 else 650, easing = LinearEasing),
-        label = "generatingBackdropIntensity",
-    )
-    // Reset to blue each time generation starts, then cycle the wheel forever while
-    // active. snapTo(0) on (re)activation guarantees the "blue rising from black" start.
-    val cycle = remember { Animatable(0f) }
+    // Visibility latch: once generation starts, keep showing for at least
+    // BACKDROP_HOLD_MS after it ends, so an instant reply doesn't flicker the glow.
+    var holding by remember { mutableStateOf(false) }
     LaunchedEffect(active) {
         if (active) {
+            holding = true
+        } else if (holding) {
+            delay(BACKDROP_HOLD_MS)
+            holding = false
+        }
+    }
+    val show = active || holding
+
+    val intensity by animateFloatAsState(
+        targetValue = if (show) 1f else 0f,
+        // Charge up quickly, dissolve slowly so it overlaps the answer's first lines.
+        animationSpec = tween(durationMillis = if (show) 450 else 850, easing = LinearEasing),
+        label = "generatingBackdropIntensity",
+    )
+    // Reset to blue each time it (re)starts, then cycle the wheel forever while shown.
+    // Keyed on `show` so the hue keeps cycling through the post-generation hold.
+    val cycle = remember { Animatable(0f) }
+    LaunchedEffect(show) {
+        if (show) {
             cycle.snapTo(0f)
             cycle.animateTo(
                 targetValue = 1f,
@@ -91,17 +124,34 @@ fun Modifier.generatingBackdrop(active: Boolean): Modifier {
             )
         }
     }
+    // Independent free-running motion: a brightness "breath" and a faster curtain-shape
+    // ripple. Separate periods so the glow never looks like it pulses on a single beat.
+    val motion = rememberInfiniteTransition(label = "generatingBackdropMotion")
+    val breathPhase by motion.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(BACKDROP_BREATH_MS, easing = LinearEasing)),
+        label = "breath",
+    )
+    val shapePhase by motion.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(BACKDROP_SHAPE_MS, easing = LinearEasing)),
+        label = "shape",
+    )
     return this.drawWithContent {
         if (intensity > 0.01f) {
             val baseHue = BACKDROP_START_HUE - cycle.value * 360f
-            val peak = BACKDROP_PEAK_ALPHA * intensity
+            // Breathing: gentle ±~8% brightness pulse around the peak.
+            val breath = 0.85f + 0.15f * (0.5f + 0.5f * sin((2.0 * PI * breathPhase).toFloat()))
+            val peak = BACKDROP_PEAK_ALPHA * intensity * breath
             val w = size.width
             val h = size.height
             val step = BACKDROP_SLICE_DP.dp.toPx()
             // Paint the glow as thin vertical columns. Each column's hue is offset by its
             // horizontal position (a band of colors at once) AND its vertical reach
             // undulates across the width — so the top shows a multi-color curtain whose
-            // lower edge ripples. Both the hue band and the curtain shape drift over time.
+            // lower edge ripples on its own [shapePhase] cycle while the hue band drifts.
             var x = 0f
             while (x < w) {
                 val sliceW = minOf(step, w - x)
@@ -109,7 +159,7 @@ fun Modifier.generatingBackdrop(active: Boolean): Modifier {
                 val hueDeg = ((baseHue + x01 * BACKDROP_HUE_SPREAD) % 360f + 360f) % 360f
                 val hue = Color.hsv(hueDeg, BACKDROP_SATURATION, BACKDROP_VALUE)
                 val reach = BACKDROP_HEIGHT_MIN +
-                    (BACKDROP_HEIGHT_FRACTION - BACKDROP_HEIGHT_MIN) * curtainReach(x01, cycle.value)
+                    (BACKDROP_HEIGHT_FRACTION - BACKDROP_HEIGHT_MIN) * curtainReach(x01, shapePhase)
                 drawRect(
                     brush = Brush.verticalGradient(
                         0f to hue.copy(alpha = peak),
