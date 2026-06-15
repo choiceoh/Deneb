@@ -101,6 +101,10 @@ type SyncOptions struct {
 	// focused chat" toggle so general questions skip work-context injection.
 	SkipRecall bool
 
+	// FeedContext is the 업무 day's-feed digest to inject as wire-only context —
+	// see RunParams.FeedContext. Set by the native bridge for 업무 turns only.
+	FeedContext string
+
 	// EphemeralAssistant suppresses persistence of assistant/tool_result
 	// messages produced during the run — see RunParams.EphemeralAssistant.
 	// Heartbeat sets this true so autonomous ticks do not crowd out the
@@ -186,6 +190,7 @@ func (h *Handler) prepareSyncRun(sessionKey, message, model, runIDPrefix string,
 		}
 		params.EphemeralUser = opts.EphemeralUser
 		params.SkipRecall = opts.SkipRecall
+		params.FeedContext = opts.FeedContext
 		params.EphemeralAssistant = opts.EphemeralAssistant
 		params.AutoDeliveredOutput = opts.AutoDeliveredOutput
 		params.BeforeToolCall = opts.BeforeToolCall

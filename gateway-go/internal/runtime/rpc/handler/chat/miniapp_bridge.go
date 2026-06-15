@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
@@ -21,6 +22,61 @@ import (
 // (deneb-ui blocks still render on the native side; the gateway no longer
 // prompts the model to emit them — see PR removing the deneb-ui instructions.)
 const nativeClientChannel = "client"
+
+// Work-feed digest bounds: read at most maxFeedDigestItems rows, keep at most
+// feedDigestLineCap of today's, each trimmed to feedDigestRuneCap runes — so a
+// busy day can't bloat the per-turn 업무 context.
+const (
+	maxFeedDigestItems = 100
+	feedDigestLineCap  = 20
+	feedDigestRuneCap  = 200
+)
+
+// buildTodayFeedDigest renders the work-feed items created today (Asia/Seoul)
+// into a compact reference block injected on the 업무 chat tail. Returns "" when
+// nothing landed today (so a quiet day adds no context, and 챗봇 turns — which
+// never call this — stay context-free).
+func buildTodayFeedDigest(items []workfeed.Item, now time.Time) string {
+	loc, err := time.LoadLocation("Asia/Seoul")
+	if err != nil {
+		loc = time.Local
+	}
+	n := now.In(loc)
+	startOfDay := time.Date(n.Year(), n.Month(), n.Day(), 0, 0, 0, 0, loc).UnixMilli()
+
+	var b strings.Builder
+	count := 0
+	for _, it := range items {
+		if it.CreatedAtMs < startOfDay {
+			continue
+		}
+		line := strings.TrimSpace(it.Title)
+		if s := strings.TrimSpace(it.Summary); s != "" {
+			if line != "" {
+				line += ": "
+			}
+			line += s
+		}
+		line = strings.Join(strings.Fields(line), " ") // collapse newlines/runs
+		if line == "" {
+			continue
+		}
+		if r := []rune(line); len(r) > feedDigestRuneCap {
+			line = string(r[:feedDigestRuneCap]) + "…"
+		}
+		if count == 0 {
+			b.WriteString("[오늘의 업무 피드 — 참고용] 사용자가 오늘 받은 능동 리포트·캡처 요약입니다. 질문이 이와 관련되면 활용하세요.\n")
+		}
+		b.WriteString("- ")
+		b.WriteString(line)
+		b.WriteString("\n")
+		count++
+		if count >= feedDigestLineCap {
+			break
+		}
+	}
+	return strings.TrimRight(b.String(), "\n")
+}
 
 // MiniappMethods returns the miniapp-namespaced chat bridge. The standalone
 // native client authenticates via the X-Deneb-Client-Token header and reaches
@@ -396,11 +452,23 @@ func handleMiniappChatSend(deps Deps) rpcutil.HandlerFunc {
 		}
 		defer release()
 
+		// 업무 turns (recall on) carry today's work feed as wire-only context — this
+		// is what makes a 업무 chat aware of the day's proactive reports/captures,
+		// versus a context-less 챗봇 chat. Best-effort: a nil store or a read error
+		// just yields no context. 챗봇 turns (SkipRecall) get none, by design.
+		feedCtx := ""
+		if !p.SkipRecall && deps.WorkFeed != nil {
+			if items, _, lerr := deps.WorkFeed.List(maxFeedDigestItems, true); lerr == nil {
+				feedCtx = buildTodayFeedDigest(items, time.Now())
+			}
+		}
+
 		res, err := deps.Chat.SendSync(ctx, sessionKey, p.Message, strings.TrimSpace(p.Model), &chatpkg.SyncOptions{
 			Delivery: &chatpkg.DeliveryContext{Channel: nativeClientChannel, To: sessionKey},
 			// The reply text is returned here, not pushed via the message tool.
 			AutoDeliveredOutput: true,
 			SkipRecall:          p.SkipRecall,
+			FeedContext:         feedCtx,
 			// Block irreversible tools (exec, gmail send) if promptware enters the turn.
 			GateUntrustedTools: true,
 		})

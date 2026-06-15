@@ -68,13 +68,19 @@ const chatbotToneDirective = `[대화 모드 — 이번 턴]
 - 보고서식 구조(헤딩·번호 목록)는 요청 없으면 쓰지 말고, 길이는 질문에 맞춰 짧고 자연스럽게.`
 
 // buildTailAdditions collects the per-turn wire-only additions for this run
-// in injection order: recall evidence first (reference material), then the 챗봇
-// tone framing (workspace register), then the delivery directive (current-turn
-// policy). Empty strings are omitted.
+// in injection order: recall evidence and the 업무 feed digest first (reference
+// material), then the 챗봇 tone framing (workspace register), then the delivery
+// directive (current-turn policy). Empty strings are omitted.
 func buildTailAdditions(params RunParams, recallMemory string) []string {
 	var adds []string
 	if recallMemory != "" {
 		adds = append(adds, recallMemory)
+	}
+	// 업무 day's-feed digest: the bridge sets this only for 업무 turns, so its
+	// presence already gates it to that workspace (same reference-material slot
+	// as recall, wire-only on the last user message).
+	if params.FeedContext != "" {
+		adds = append(adds, params.FeedContext)
 	}
 	if isChatbotSessionKey(params.SessionKey) {
 		adds = append(adds, chatbotToneDirective)

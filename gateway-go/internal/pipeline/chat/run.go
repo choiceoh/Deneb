@@ -78,6 +78,15 @@ type RunParams struct {
 	// does not fragment the prompt cache.
 	SkipRecall bool
 
+	// FeedContext, when non-empty, is the 업무 (work) workspace's day's-feed
+	// digest, injected as wire-only context on this turn. It is what makes a 업무
+	// chat aware of today's proactive reports / captures, versus a context-less
+	// 챗봇 chat — the functional difference between the two modes beyond recall.
+	// Set by the native bridge only for 업무 turns (recall on). Tail-injected
+	// alongside recall (not in the cached system prefix), so it costs only its
+	// own tokens and does not fragment the prompt cache.
+	FeedContext string
+
 	// EphemeralAssistant, when true, suppresses persistence of the assistant
 	// and tool_result messages produced during the run. When false, the
 	// assistant's reply IS persisted — required for self-triggers that must
