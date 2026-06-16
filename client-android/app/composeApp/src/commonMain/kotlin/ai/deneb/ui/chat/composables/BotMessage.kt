@@ -39,7 +39,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -61,6 +63,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import deneb.composeapp.generated.resources.Res
@@ -234,11 +238,29 @@ internal fun BotMessage(
             }
         }
     }
-    // Body text is selectable (SelectionContainer above), so there is no copy
-    // button — long-press covers it. Without TTS or regenerate the meta row
-    // has nothing to offer; skip it entirely.
-    if (message.isEmpty() || (textToSpeech == null && onRegenerate == null)) return
+    // Meta row under every non-empty reply: copy (always), then TTS/regenerate when
+    // available. Copy puts the raw markdown SOURCE on the clipboard — not the rendered
+    // AnnotatedString that long-press/SelectionContainer yields (which loses table
+    // structure and leaks inline-code hair spaces) — so it round-trips into any
+    // markdown-aware destination (tables stay `| a | b |`, code stays verbatim).
+    if (message.isEmpty()) return
+    val clipboard = LocalClipboardManager.current
+    var copied by remember(message) { mutableStateOf(false) }
+    LaunchedEffect(copied) {
+        if (copied) {
+            delay(1500)
+            copied = false
+        }
+    }
     Row(Modifier.padding(horizontal = 8.dp)) {
+        SmallIconButton(
+            imageVector = if (copied) Icons.Filled.Check else Icons.Filled.ContentCopy,
+            contentDescription = if (copied) "복사됨" else "복사",
+            onClick = {
+                clipboard.setText(AnnotatedString(message))
+                copied = true
+            },
+        )
         if (textToSpeech != null) {
             val componentScope = rememberCoroutineScope()
             SmallIconButton(
