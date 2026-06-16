@@ -11,7 +11,10 @@
 #
 # Rule: if the PR title is a user-facing native feature —
 #   feat(native|miniapp|calendar|markdown|chat): ...
-# — and the PR touches client-android/, it must also touch DenebPatchNotes.kt.
+# — and the PR touches client-android/, it must also ship a 패치노트 entry: a new
+# changelog.d/YYYY-MM-DD-*.md fragment (preferred — one file per change, so PRs
+# never conflict; see client-android/app/changelog.d/README.md) OR an edit to the
+# frozen DenebPatchNotes.kt history.
 #
 # Escape hatch: add the "skip-patch-notes" label (e.g. a desktop-only or
 # internal feat the operator judges not worth a phone-facing note).
@@ -51,12 +54,20 @@ if [ -z "$changed" ]; then
   exit 0
 fi
 
-# 4. A native feat must touch client-android/ AND the compiled-in changelog.
+# 4. A native feat must touch client-android/ AND ship a 패치노트 entry — either a
+#    changelog.d fragment (preferred; one file per change, no merge conflicts) or
+#    a direct edit to the frozen DenebPatchNotes.kt history.
 touches_native="$(printf '%s\n' "$changed" | grep -c '^client-android/' || true)"
 touches_notes="$(printf '%s\n' "$changed" | grep -cxF "$NOTES_PATH" || true)"
+touches_fragment="$(printf '%s\n' "$changed" | grep -cE '^client-android/app/changelog\.d/[0-9]{4}-[0-9]{2}-[0-9]{2}-.+\.md$' || true)"
 
 if [ "$touches_native" -eq 0 ]; then
   echo "feat title but no client-android/ changes — gate not applicable."
+  exit 0
+fi
+
+if [ "$touches_fragment" -gt 0 ]; then
+  echo "✓ Patch note present: changelog.d fragment added."
   exit 0
 fi
 
@@ -67,10 +78,11 @@ fi
 
 cat <<EOF
 ::error::This PR is a user-facing native feature but adds no 패치노트 entry.
-Prepend one entry to the top of:
-  $NOTES_PATH
-with Korean highlight line(s) describing what the user actually sees. That list
-is the in-app "패치노트" changelog; skipping it leaves it stale (#2061/#2082).
+Add a changelog.d fragment (preferred):
+  client-android/app/changelog.d/$(date +%Y-%m-%d)-<slug>.md
+with the Korean highlight line(s) the user will read — one bullet per non-blank
+line (see client-android/app/changelog.d/README.md). It feeds the in-app
+"패치노트" changelog; skipping it leaves it stale (#2061/#2082).
 If this feat genuinely needs no phone-facing note (desktop-only or internal),
 add the "skip-patch-notes" label to the PR.
 EOF

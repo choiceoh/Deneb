@@ -117,6 +117,7 @@ import nl.marc_apps.tts.TextToSpeechInstance
 import nl.marc_apps.tts.errors.TextToSpeechSynthesisInterruptedError
 import org.jetbrains.compose.resources.getString
 import org.jetbrains.compose.resources.stringResource
+import kotlin.math.abs
 import kotlin.time.TimeSource
 
 /**
@@ -213,6 +214,13 @@ internal fun ChatModeScreen(
     // 챗봇 workspace reads larger (font + line spacing); 업무 stays at 1f.
     val chatTextScale = if (uiState.recallEnabled) 1f else ChatbotTextScale
 
+    // Swipe 챗봇 ↔ 업무 across the chat body (mirrors the top RecallModePill). The
+    // gesture is keyed on Unit, so read the current mode + actions through
+    // rememberUpdatedState rather than capturing a stale snapshot.
+    val swipeHaptics = rememberHaptics()
+    val recallNow = rememberUpdatedState(uiState.recallEnabled)
+    val swipeActions = rememberUpdatedState(uiState.actions)
+
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
         ModalNavigationDrawer(
             drawerState = sessionDrawerState,
@@ -257,6 +265,12 @@ internal fun ChatModeScreen(
                     Box(
                         Modifier
                             .fillMaxSize()
+                            .modeSwipeToggle { toWork ->
+                                if (toWork != recallNow.value) {
+                                    swipeHaptics.toggle(toWork)
+                                    swipeActions.value.toggleRecall()
+                                }
+                            }
                             .background(MaterialTheme.colorScheme.background)
                             // Gemini-style "generating" backdrop: a top-down hue-cycling glow
                             // behind everything while the reply is being thought up; fades to
@@ -828,6 +842,40 @@ internal fun ChatModeScreen(
             } // CompositionLocalProvider Ltr (content)
         } // ModalNavigationDrawer (right session drawer)
     } // CompositionLocalProvider Rtl
+}
+
+// A horizontal swipe across the chat body toggles 챗봇 ↔ 업무, mirroring the top
+// RecallModePill. The modes read left→right as [챗봇 | 업무], so a swipe left lands
+// on 업무 and a swipe right on 챗봇 (the caller no-ops when already there). Starts
+// inside the screen-edge zone are left to the session drawer's open-swipe, and a
+// gesture that turns vertical is released so the message list still scrolls — only
+// a clearly-horizontal drag past the commit distance fires [onSwitch].
+private fun Modifier.modeSwipeToggle(onSwitch: (toWork: Boolean) -> Unit): Modifier = pointerInput(Unit) {
+    val edge = 36.dp.toPx()
+    val commit = 72.dp.toPx()
+    val slop = viewConfiguration.touchSlop
+    awaitEachGesture {
+        val down = awaitFirstDown(requireUnconsumed = false)
+        if (down.position.x <= edge || down.position.x >= size.width - edge) {
+            return@awaitEachGesture // edge zone: leave it to the drawer open-swipe
+        }
+        var dx = 0f
+        var dy = 0f
+        var horizontal = false
+        while (true) {
+            val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
+            if (!change.pressed) break
+            val delta = change.positionChange()
+            dx += delta.x
+            dy += delta.y
+            if (!horizontal) {
+                if (abs(dy) > slop && abs(dy) >= abs(dx)) return@awaitEachGesture // vertical → scroll
+                if (abs(dx) > slop && abs(dx) > abs(dy)) horizontal = true
+            }
+            if (horizontal) change.consume()
+        }
+        if (horizontal && abs(dx) >= commit) onSwitch(dx < 0f)
+    }
 }
 
 // verticalEdgeFade fades the composable's own content to transparent over [top]
