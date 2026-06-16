@@ -65,6 +65,15 @@ func New(addr string, handler Handler, log *slog.Logger) *Server {
 // Serve listens and handles connections until ctx is cancelled (closing the
 // listener). Blocking; run it under a supervised goroutine.
 func (s *Server) Serve(ctx context.Context) error {
+	// Prefer a systemd socket-activated listener: systemd keeps the socket open
+	// across our SIGUSR1 hot-restarts, so mail arriving mid-restart queues in the
+	// kernel backlog instead of getting "connection refused". No-op (ok=false)
+	// when the socket unit isn't installed, in which case we bind below.
+	if ln, ok := systemdListener("lmtp"); ok {
+		s.log.Info("LMTP 서버 수신 대기 (systemd 소켓 활성화)", "name", "lmtp")
+		return s.serveListener(ctx, ln)
+	}
+
 	network, address := splitListenAddr(s.addr)
 	if network == "unix" {
 		_ = os.Remove(address) // clear a stale socket from an unclean shutdown

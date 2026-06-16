@@ -1,0 +1,26 @@
+# deneb-lmtp.socket — systemd owns the LMTP mail-ingest socket so it survives the
+# gateway's SIGUSR1 hot-restarts (every auto-deploy restarts the gateway). Mail
+# forwarded by the on-box Maddy server that arrives during a restart then queues
+# in the kernel backlog and is accepted when the gateway comes back, instead of
+# getting "connection refused" — which Maddy's delivery queue misclassifies as a
+# permanent error and drops (a real forwarded mail was lost this way 2026-06-16).
+#
+# The gateway picks this fd up via the sd_listen_fds protocol (matched by
+# FileDescriptorName=lmtp); see gateway-go/internal/platform/lmtpd/systemd_socket.go.
+# Without this unit the gateway binds 127.0.0.1:10024 itself (the code is a no-op
+# when LISTEN_* is unset), so this is purely opt-in.
+#
+# Install / cut over: scripts/systemd/setup-lmtp-socket.sh
+[Unit]
+Description=Deneb LMTP mail-ingest socket (survives gateway restarts)
+
+[Socket]
+# Must match deneb.json mailLmtp.listenAddr (loopback only — trusted local sender).
+ListenStream=127.0.0.1:10024
+FileDescriptorName=lmtp
+Service=deneb-gateway.service
+# Generous backlog so a delivery burst during a restart window isn't dropped.
+Backlog=128
+
+[Install]
+WantedBy=sockets.target
