@@ -14,6 +14,7 @@ import ai.deneb.deneb.DenebConfigScreen
 import ai.deneb.deneb.DenebCronEditScreen
 import ai.deneb.deneb.DenebCronScreen
 import ai.deneb.deneb.DenebDiaryScreen
+import ai.deneb.deneb.DenebDropboxScreen
 import ai.deneb.deneb.DenebFleetScreen
 import ai.deneb.deneb.DenebGatewayClient
 import ai.deneb.deneb.DenebMailDetailScreen
@@ -27,6 +28,7 @@ import ai.deneb.deneb.DenebTodoAddScreen
 import ai.deneb.deneb.DenebTodoScreen
 import ai.deneb.deneb.DenebWikiPageScreen
 import ai.deneb.deneb.EmptyMailPanel
+import ai.deneb.deneb.dropboxAnalyze
 import ai.deneb.tools.CalendarPermissionController
 import ai.deneb.tools.ContactsPermissionController
 import ai.deneb.tools.NotificationPermissionController
@@ -80,6 +82,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -104,6 +107,7 @@ import deneb.composeapp.generated.resources.Res
 import deneb.composeapp.generated.resources.tab_chat
 import deneb.composeapp.generated.resources.tab_settings
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import nl.marc_apps.tts.TextToSpeechInstance
@@ -210,6 +214,10 @@ data class DenebCron(val cronId: String)
 @SerialName("deneb_cron_edit")
 data class DenebCronEdit(val cronId: String)
 
+@Serializable
+@SerialName("deneb_dropbox")
+object DenebDropbox
+
 @Composable
 fun App(
     navController: NavHostController,
@@ -311,6 +319,10 @@ private fun AppContent(
         Theme(colorScheme = effectiveColorScheme) {
             FullScreenImageHost {
                 val chatViewModel: ChatViewModel = koinViewModel()
+                // Nav-durable scope for fire-and-navigate turns (e.g. Dropbox
+                // analyze): launching on a screen's own scope would cancel the
+                // turn the moment we navigate away to show the result in chat.
+                val dropboxScope = rememberCoroutineScope()
                 // Desktop gets a persistent sidebar (below), so hide the chat/settings tab bar
                 // there; keep it on Web. Mobile never had it.
                 val showTabBar = currentPlatform is Platform.Web
@@ -576,6 +588,22 @@ private fun AppContent(
                                 onOpen = { dest -> navController.navigate(dest) },
                                 chatMode = navChatMode,
                             )
+                        }
+                        composable<DenebDropbox> {
+                            denebClient?.let { client ->
+                                DenebDropboxScreen(
+                                    client = client,
+                                    onBack = { navController.navigateUp() },
+                                    // Run the analyze turn on a nav-durable scope (leaving for
+                                    // chat must not cancel it), then jump to chat to see it.
+                                    onAnalyze = { path ->
+                                        dropboxScope.launch { client.dropboxAnalyze(path) }
+                                        navController.navigate(Home)
+                                    },
+                                    onConnect = { navController.navigate(DenebConfig) },
+                                    navigationTabBar = if (showTabBar) navigationTabBar else null,
+                                )
+                            }
                         }
                         composable<DenebWiki> { entry ->
                             denebClient?.let { client ->

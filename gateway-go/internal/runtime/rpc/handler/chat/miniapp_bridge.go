@@ -95,6 +95,11 @@ func MiniappMethods(deps Deps) map[string]rpcutil.HandlerFunc {
 	m := map[string]rpcutil.HandlerFunc{
 		"miniapp.chat.send":    handleMiniappChatSend(deps),
 		"miniapp.chat.history": handleHistory(deps),
+		// Dropbox file analysis: a full agent turn (the agent's own dropbox tool
+		// extracts + reasons), so it lives here rather than handlerminiapp — no
+		// extraction plumbing crosses into this package. Unconditional (deps.Chat
+		// is the only need, already required above).
+		"miniapp.dropbox.analyze": handleMiniappDropboxAnalyze(deps),
 	}
 	// Image capture (share a photo/screenshot to Deneb) needs the OCR sidecar
 	// wired; skip the method cleanly when it isn't.
@@ -205,6 +210,59 @@ func handleMiniappCaptureImage(deps Deps) rpcutil.HandlerFunc {
 		return rpcutil.RespondOK(req.ID, map[string]any{
 			"text":       res.Text,
 			"ocr":        strings.TrimSpace(text),
+			"model":      res.Model,
+			"sessionKey": sessionKey,
+		})
+	}
+}
+
+// handleMiniappDropboxAnalyze runs one agent turn that analyzes a Dropbox file —
+// the native browser's "AI 분석" action. The agent's own dropbox tool downloads
+// and extracts the file (action=analyze), so no extraction happens here and this
+// package never imports pipeline/chat/tools. The result lands in the chat
+// transcript, exactly like capture image/audio.
+//
+// Params:
+//   - path       (string, required): Dropbox path (e.g. /folder/quote.pdf)
+//   - sessionKey (string, optional): defaults to "client:main"
+func handleMiniappDropboxAnalyze(deps Deps) rpcutil.HandlerFunc {
+	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		p, errResp := rpcutil.DecodeParams[struct {
+			Path       string `json:"path"`
+			SessionKey string `json:"sessionKey"`
+		}](req)
+		if errResp != nil {
+			return errResp
+		}
+		path := strings.TrimSpace(p.Path)
+		if path == "" {
+			return rpcerr.MissingParam("path").Response(req.ID)
+		}
+		sessionKey := strings.TrimSpace(p.SessionKey)
+		if sessionKey == "" {
+			sessionKey = nativeClientChannel + ":main"
+		}
+		// Drive the agent's dropbox tool (download → extract → reason). Extraction
+		// lives in the tool (pipeline/chat/tools), keeping this bridge layer-clean.
+		message := "📄 Dropbox 파일을 분석해줘. dropbox 도구의 analyze 액션(path=" + path + ")으로 " +
+			"내용을 추출한 뒤, 핵심 내용·요점·후속 액션을 한국어로 정리하라."
+		// Bound concurrent interactive turns (unified-memory OOM guard).
+		release, aerr := deps.Chat.AcquireInteractiveTurn(ctx)
+		if aerr != nil {
+			return rpcerr.Unavailable("gateway busy: too many concurrent turns").Response(req.ID)
+		}
+		defer release()
+		res, err := deps.Chat.SendSync(ctx, sessionKey, message, "", &chatpkg.SyncOptions{
+			Delivery:            &chatpkg.DeliveryContext{Channel: nativeClientChannel, To: sessionKey},
+			AutoDeliveredOutput: true,
+			// Dropbox file content is untrusted: block exec/gmail send if it carries promptware.
+			GateUntrustedTools: true,
+		})
+		if err != nil {
+			return rpcerr.WrapDependencyFailed("chat send failed", err).Response(req.ID)
+		}
+		return rpcutil.RespondOK(req.ID, map[string]any{
+			"text":       res.BestText(),
 			"model":      res.Model,
 			"sessionKey": sessionKey,
 		})
