@@ -729,7 +729,18 @@ private fun AppContent(
                                 currentRoute = route,
                                 moreActive = route in denebMoreRoutes,
                                 onNavigate = { dest -> navigateToDenebSection(navController, dest) },
-                                onMore = { navigateToDenebSection(navController, DenebMore) },
+                                // 더보기 always lands on the More list — not the last-opened
+                                // section. Sections are pushed onto DenebMore via a plain
+                                // navigate (onOpen below), so the shared navigateToDenebSection
+                                // (restoreState = true) restored that saved sub-stack and left
+                                // the user on the section. Pop to start and push a fresh DenebMore
+                                // (no restoreState) so the list always shows.
+                                onMore = {
+                                    navController.navigate(DenebMore) {
+                                        popUpTo(navController.graph.startDestinationId) { saveState = true }
+                                        launchSingleTop = true
+                                    }
+                                },
                                 feedUnread = feedUnread,
                             )
                         }
