@@ -203,6 +203,11 @@ func replaceAnchors(s string) string {
 	})
 }
 
+// HTMLToText flattens an HTML mail body to readable plain text, exported so the
+// LMTP ingest path (internal/platform/lmtpd) renders bodies the same way the
+// Gmail-fetched path does.
+func HTMLToText(s string) string { return htmlToText(s) }
+
 // htmlToText turns an HTML email body into a readable plain-text
 // approximation for the Mini App's <pre>-based body view. It is regex-
 // based on purpose: Gmail HTML is usually well-formed enough, and a

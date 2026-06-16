@@ -86,6 +86,7 @@ type DenebConfig struct {
 	Session     *SessionConfig     `json:"session,omitempty"`
 	Agents      *AgentsConfig      `json:"agents,omitempty"`
 	GmailPoll   *GmailPollConfig   `json:"gmailPoll,omitempty"`
+	MailLMTP    *MailLMTPConfig    `json:"mailLmtp,omitempty"`
 	DropboxPoll *DropboxPollConfig `json:"dropboxPoll,omitempty"`
 	Cron        *CronConfig        `json:"cron,omitempty"`
 	Topics      *TopicsConfig      `json:"topics,omitempty"`
@@ -269,6 +270,21 @@ type GmailPollConfig struct {
 	// kakao-watch email-single-analysis cron) already delivers the prose
 	// analysis to chat and gmailpoll would only duplicate it. Default false.
 	Silent *bool `json:"silent,omitempty"`
+}
+
+// MailLMTPConfig configures the LMTP (RFC 2033) mail-ingest server. When enabled,
+// an on-box mail server (e.g. a Docker mail service running Postfix) PUSHES new
+// mail to Deneb over LMTP instead of Deneb polling IMAP — each received message is
+// analyzed through the same pipeline as a polled one (cache + per-message wiki +
+// proactive 업무 chat). The listener trusts its peer (no SMTP AUTH), so bind it to
+// loopback or a unix socket reachable only by the local mail server.
+type MailLMTPConfig struct {
+	Enabled *bool `json:"enabled,omitempty"`
+	// ListenAddr is "host:port" / "tcp:host:port" / "unix:/path.sock".
+	// Default "127.0.0.1:10024". For a Docker mail server, bind the host's
+	// docker-bridge address (or share a unix socket via a volume) so the
+	// container can reach it; never expose it to the public internet.
+	ListenAddr string `json:"listenAddr,omitempty"`
 }
 
 // DropboxPollConfig configures the periodic Dropbox folder watcher. When

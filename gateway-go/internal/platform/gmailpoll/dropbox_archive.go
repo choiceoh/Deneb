@@ -59,6 +59,41 @@ func (s *Service) archiveAttachments(ctx context.Context, client *gmail.Client, 
 	return archived
 }
 
+// archiveInlineAttachments uploads the substantive attachments of an
+// LMTP-delivered message to Dropbox from their inline bytes (no Gmail fetch),
+// mirroring archiveAttachments' policy (isArchivable + dated, sender-tagged path).
+// Best-effort: a token-less host or any per-file failure is logged and skipped.
+func (s *Service) archiveInlineAttachments(ctx context.Context, msg *gmail.MessageDetail, bytesByID map[string][]byte) []string {
+	if len(bytesByID) == 0 || !dropbox.HasToken() {
+		return nil
+	}
+	dbx, err := s.ensureDropbox()
+	if err != nil {
+		s.log.Debug("첨부 아카이브 건너뜀 — Dropbox 미연동", "error", err)
+		return nil
+	}
+
+	day := time.Now().Format("2006-01-02")
+	var archived []string
+	for _, att := range msg.Attachments {
+		if !isArchivable(att) {
+			continue
+		}
+		data := bytesByID[att.AttachmentID]
+		if len(data) == 0 {
+			continue
+		}
+		dest := fmt.Sprintf("%s/%s/%s_%s", s.cfg.ArchiveFolder, day,
+			sanitizePathComponent(msg.From), sanitizePathComponent(att.Filename))
+		if _, err := dbx.Upload(ctx, dest, data, false); err != nil {
+			s.log.Warn("첨부 Dropbox 업로드 실패", "dest", dest, "error", err)
+			continue
+		}
+		archived = append(archived, dest)
+	}
+	return archived
+}
+
 // ensureDropbox lazily resolves the singleton Dropbox client (retries each call
 // if a previous init failed, e.g. token added after startup).
 func (s *Service) ensureDropbox() (*dropbox.Client, error) {

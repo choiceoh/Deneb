@@ -319,8 +319,8 @@ func (s *Service) poll(ctx context.Context, client *gmail.Client) error {
 // batchAnalyze analyzes a batch: per-email individual analyses + one
 // consolidated report. Returns the report plus the per-email items so the
 // caller can persist each (cache + wiki page).
-func (s *Service) batchAnalyze(ctx context.Context, gmailClient *gmail.Client, msgs []*gmail.MessageDetail) (string, []BatchItem, error) {
-	deps := PipelineDeps{
+func (s *Service) pipelineDeps(gmailClient *gmail.Client) PipelineDeps {
+	return PipelineDeps{
 		GmailClient:   gmailClient,
 		LLMClient:     s.llmClient,
 		LocalClient:   s.cfg.LocalClient,
@@ -330,9 +330,46 @@ func (s *Service) batchAnalyze(ctx context.Context, gmailClient *gmail.Client, m
 		ProjectsFn:    s.cfg.ProjectsFn,
 		SenderFactsFn: s.cfg.SenderFactsFn,
 	}
+}
 
+func (s *Service) batchAnalyze(ctx context.Context, gmailClient *gmail.Client, msgs []*gmail.MessageDetail) (string, []BatchItem, error) {
 	s.log.Debug("batch analysis 실행", "count", len(msgs))
-	return AnalyzeBatch(ctx, deps, msgs)
+	return AnalyzeBatch(ctx, s.pipelineDeps(gmailClient), msgs)
+}
+
+// IngestMessage analyzes one externally-delivered email — pushed via LMTP
+// (internal/platform/lmtpd), replacing the IMAP poll for that source — through the
+// SAME pipeline and delivery path as a polled message: AnalyzeEmailPipeline →
+// OnAnalyzed (Mini App cache + per-message wiki page) → Notifier (proactive 업무
+// chat). The Gmail client is optional: an LMTP message has no Gmail thread id, so
+// the thread-context stage simply no-ops (it is best-effort). Safe to call
+// concurrently with the poll loop.
+func (s *Service) IngestMessage(ctx context.Context, msg *gmail.MessageDetail, attBytes map[string][]byte) (AnalysisResult, error) {
+	res, err := AnalyzeEmailPipeline(ctx, s.pipelineDeps(s.gmailClient), msg)
+	if err != nil {
+		return AnalysisResult{}, err
+	}
+	if s.cfg.OnAnalyzed != nil {
+		s.cfg.OnAnalyzed(msg, res)
+	}
+
+	notify := strings.TrimSpace(res.Text)
+	// Archive substantive attachments to Dropbox from their inline bytes (the LMTP
+	// path has them in-message — no Gmail fetch), and note it on the report, exactly
+	// like the poll path's archiveAttachments does.
+	if archived := s.archiveInlineAttachments(ctx, msg, attBytes); len(archived) > 0 && notify != "" {
+		var b strings.Builder
+		b.WriteString(notify)
+		fmt.Fprintf(&b, "\n\n📎 첨부 %d개를 Dropbox에 보관했습니다:\n", len(archived))
+		for _, p := range archived {
+			fmt.Fprintf(&b, "- `%s`\n", p)
+		}
+		notify = b.String()
+	}
+	if notify != "" {
+		s.sendNotification(ctx, notify)
+	}
+	return res, nil
 }
 
 func (s *Service) saveState(state *PollState) {
