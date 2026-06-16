@@ -315,12 +315,16 @@ func synthesizeAnalysis(ctx context.Context, deps PipelineDeps, msg *gmail.Messa
 
 	// Deal-document extraction is gated on attachments: business documents
 	// (견적서/계약서/세금계산서) arrive as files, so this avoids an extra local
-	// call on every plain mail and keeps extraction precise. The analysis text
-	// now carries the relevant attachments' content (see gateAndExtractAttachments
-	// above), so the extractor reads the actual document, not just the body.
+	// call on every plain mail and keeps extraction precise. We feed the extractor
+	// the verbatim attachment text (attach.Injected) alongside the analysis: the
+	// synthesized prose reads well for a human but may have rounded or summarized
+	// away the document's exact 금액·품목·납기, which the structured deal record
+	// must keep faithfully. The analysis gives the who/why context; the raw
+	// attachment gives the precise figures.
 	var deal *DealInfo
 	if len(msg.Attachments) > 0 {
-		deal = extractDealInfo(ctx, deps, clean)
+		dealInput := clean + attach.Injected // attach.Injected is "" when nothing was selected
+		deal = extractDealInfo(ctx, deps, dealInput)
 	}
 
 	// Surface a deep-review hint for attachments the gate judged dense enough to
