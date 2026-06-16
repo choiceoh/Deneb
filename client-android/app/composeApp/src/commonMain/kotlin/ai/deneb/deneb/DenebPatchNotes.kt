@@ -21,6 +21,11 @@ data class DenebPatchNote(
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
         highlights = listOf(
+            "업무 피드를 날짜별로 넘겨봅니다 — 상단에 날짜(요일)가 표시되고 양옆 화살표로 이전/다음 날의 피드로 이동합니다 (항목이 있는 날 사이만, 최신 날부터)",
+        ),
+    ),
+    DenebPatchNote(
+        highlights = listOf(
             "답변 속 이미지를 못 불러올 때 빈 자리 대신 안내가 표시됩니다 — 불러오는 중엔 로딩 표시, 실패하면 깨진 이미지 아이콘과 설명(alt) 텍스트 (예전엔 그냥 빈칸)",
         ),
     ),
