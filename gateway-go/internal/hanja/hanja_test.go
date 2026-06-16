@@ -112,6 +112,24 @@ func TestStreamer_MatchesWholeString(t *testing.T) {
 	}
 }
 
+func TestTransliterate_AllOrNothingRun(t *testing.T) {
+	cases := []struct{ in, want string }{
+		// Simplified-Chinese chars (时=時, 发=發) have no Korean reading. The whole
+		// run is real Chinese → left intact, NOT half-converted to "즉时发생".
+		{"即时发生", "即时发生"},
+		// A genuine Sino-Korean run (every char has a reading) still converts.
+		{"卽時 발생", "즉시 발생"}, // 卽 (traditional 즉) + 時 (시)
+		{"件 처리", "건 처리"},
+		// Mixed sentence: the Korean-Hanja word converts, the Chinese run stays.
+		{"報告書 即时发生", "보고서 即时发生"},
+	}
+	for _, c := range cases {
+		if got := Transliterate(c.in); got != c.want {
+			t.Errorf("Transliterate(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
 func TestStreamer_SplitFenceMarker(t *testing.T) {
 	// A ``` fence marker split across deltas must still toggle the block, so the
 	// Han inside stays verbatim.
