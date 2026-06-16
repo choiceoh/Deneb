@@ -36,6 +36,11 @@ val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     ),
     DenebPatchNote(
         highlights = listOf(
+            "답변에 HTML 블록 태그가 섞여 와도 제대로 렌더됩니다 — 제목(<h1~6>), 구분선(<hr>), 문단(<p>), 목록(<ul>/<ol>/<li>), 인용(<blockquote>)이 글자 그대로 노출되지 않고 본래 형식으로 표시",
+        ),
+    ),
+    DenebPatchNote(
+        highlights = listOf(
             "플릿의 HuggingFace 모델 검색이 좋아졌습니다 — 입력하면 바로 검색되고, 정렬(트렌딩·다운로드·좋아요·최신)·작업 종류·수정일을 함께 보여주며, 다운로드 전에 노드의 디스크 여유를 알려줍니다",
         ),
     ),
