@@ -1,7 +1,6 @@
 package ai.deneb.ui.chat.composables
 
 import ai.deneb.data.Attachment
-import ai.deneb.decodeToImageBitmap
 import ai.deneb.ui.components.LocalShowFullScreenImage
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.handCursor
@@ -39,10 +38,8 @@ import deneb.composeapp.generated.resources.ic_file
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import org.jetbrains.compose.resources.painterResource
-import kotlin.io.encoding.Base64
-import kotlin.io.encoding.ExperimentalEncodingApi
 
-@OptIn(ExperimentalEncodingApi::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun UserMessage(
     message: String,
@@ -79,13 +76,7 @@ internal fun UserMessage(
                     val images = attachments.filter { it.mimeType.startsWith("image/") }
                     val others = attachments.filter { !it.mimeType.startsWith("image/") }
                     for (att in images) {
-                        val imageBitmap = remember(att.data) {
-                            try {
-                                decodeToImageBitmap(Base64.decode(att.data))
-                            } catch (_: Exception) {
-                                null
-                            }
-                        }
+                        val imageBitmap = rememberDecodedImage(att.data)
                         if (imageBitmap != null) {
                             Image(
                                 bitmap = imageBitmap,

@@ -185,8 +185,9 @@ internal fun BotMessage(
             if (imageAttachments.isNotEmpty()) {
                 val showFullScreen = LocalShowFullScreenImage.current
                 for (att in imageAttachments) {
-                    // Module-cached so scrolling a form/receipt back into view doesn't re-decode.
-                    val imageBitmap = remember(att.data) { decodeBase64ImageCached(att.data) }
+                    // Decoded on a background core + module-cached, so it neither janks the
+                    // scroll frame nor re-decodes when scrolled back into view.
+                    val imageBitmap = rememberDecodedImage(att.data)
                     if (imageBitmap != null) {
                         Image(
                             bitmap = imageBitmap,
