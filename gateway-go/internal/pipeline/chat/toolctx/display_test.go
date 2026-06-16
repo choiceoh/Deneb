@@ -10,6 +10,45 @@ func richMsg(role, blocks string) ChatMessage {
 	return ChatMessage{Role: role, Content: json.RawMessage(blocks)}
 }
 
+func TestTransliterateAssistantTextForDisplay(t *testing.T) {
+	msgs := []ChatMessage{
+		// User input keeps its Hanja verbatim (not assistant prose).
+		NewTextChatMessage("user", "報告書 보내줘", 0),
+		// Plain-string assistant content → transliterated.
+		NewTextChatMessage("assistant", "報告書를 첨부합니다. 契約 진행하죠.", 0),
+		// Block-array assistant: text block converted, tool_use args untouched.
+		richMsg("assistant", `[{"type":"text","text":"見積書 확인했습니다"},{"type":"tool_use","id":"t1","name":"exec","input":{"command":"報告"}}]`),
+		// tool_result (user-role) data left intact.
+		richMsg("user", `[{"type":"tool_result","tool_use_id":"t1","content":"報告 raw output"}]`),
+	}
+	out := TransliterateAssistantTextForDisplay(msgs)
+
+	if got := mustText(t, out[0]); got != "報告書 보내줘" {
+		t.Errorf("user message must be untouched, got %q", got)
+	}
+	if got := mustText(t, out[1]); got != "보고서를 첨부합니다. 계약 진행하죠." {
+		t.Errorf("assistant prose = %q, want transliterated", got)
+	}
+	if !strings.Contains(string(out[2].Content), `"견적서 확인했습니다"`) {
+		t.Errorf("assistant text block not transliterated: %s", out[2].Content)
+	}
+	if !strings.Contains(string(out[2].Content), `"command":"報告"`) {
+		t.Errorf("tool_use input must stay verbatim: %s", out[2].Content)
+	}
+	if !strings.Contains(string(out[3].Content), "報告 raw output") {
+		t.Errorf("tool_result data must stay verbatim: %s", out[3].Content)
+	}
+}
+
+func mustText(t *testing.T, m ChatMessage) string {
+	t.Helper()
+	var s string
+	if err := json.Unmarshal(m.Content, &s); err != nil {
+		t.Fatalf("content not a plain string: %s", m.Content)
+	}
+	return s
+}
+
 // A tool turn is persisted as an assistant tool_use followed by a user-role
 // tool_result. The tool_result message must not surface as a chat bubble, while
 // the surrounding turn (including the assistant's text) is preserved in order.

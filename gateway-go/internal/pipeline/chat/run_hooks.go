@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agent"
+	"github.com/choiceoh/deneb/gateway-go/internal/hanja"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/streaming"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 )
@@ -12,6 +13,11 @@ import (
 // WebSocket broadcaster, typing signaler, status reactions, and gateway events.
 // The draft stream loop is wired separately in executeAgentRun because it has
 // defer-based cleanup tied to that scope.
+//
+// It returns the per-run Hanja→Hangul transliterator wrapping the broadcaster's
+// delta sink (nil when there is no broadcaster). The caller MUST Flush it after
+// the agent loop so any backticks held across a fence boundary are released —
+// see executeAgentRun.
 func wireStreamHooks(
 	hc *agent.HookCompositor,
 	params RunParams,
@@ -19,10 +25,16 @@ func wireStreamHooks(
 	broadcaster *streaming.Broadcaster,
 	typingSignaler chatport.TypingSignaler,
 	statusCtrl statusReactor,
-) {
-	// Broadcaster: WebSocket streaming deltas.
+) *hanja.Streamer {
+	var deltaTranslit *hanja.Streamer
+	// Broadcaster: WebSocket streaming deltas. Read Sino-Korean Hanja as Hangul
+	// live (報告書 → 보고서) so a Chinese-lineage model's stream doesn't flash Hanja
+	// before the final settle. The Streamer is stream-safe (carries fence/word
+	// state across deltas) and EmitDelta no-ops on the empty string it returns
+	// while holding a partial fence marker.
 	if broadcaster != nil {
-		hc.OnTextDelta(broadcaster.EmitDelta)
+		deltaTranslit = hanja.NewStreamer()
+		hc.OnTextDelta(func(s string) { broadcaster.EmitDelta(deltaTranslit.Write(s)) })
 		// Reasoning liveness for streaming transports (throttled inside the
 		// broadcaster — OnThinking fires once per reasoning delta).
 		hc.OnThinking(broadcaster.EmitThinking)
@@ -124,4 +136,5 @@ func wireStreamHooks(
 	if params.OnToolResult != nil {
 		hc.OnToolResult(params.OnToolResult)
 	}
+	return deltaTranslit
 }

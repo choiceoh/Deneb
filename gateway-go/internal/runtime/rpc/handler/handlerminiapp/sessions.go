@@ -169,6 +169,9 @@ func sessionsTranscript(deps SessionsDeps) rpcutil.HandlerFunc {
 		msgs = toolctx.StripLinkEnrichmentForDisplay(msgs)
 		msgs = toolctx.StripToolResultBlocksForDisplay(msgs)
 		msgs = toolctx.StripUserMessageTimestampsForDisplay(msgs)
+		// Read Sino-Korean Hanja in assistant prose as Hangul (報告書 → 보고서) —
+		// Chinese-lineage models sometimes emit it. Display-only; transcript intact.
+		msgs = toolctx.TransliterateAssistantTextForDisplay(msgs)
 
 		rows := make([]transcriptMsgOut, 0, len(msgs))
 		for _, m := range msgs {

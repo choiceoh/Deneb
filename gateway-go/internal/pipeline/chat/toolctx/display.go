@@ -19,6 +19,8 @@ import (
 	"encoding/json"
 	"strings"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/hanja"
 )
 
 // LinkEnrichmentHeader marks the start of a link-enrichment block appended to
@@ -92,6 +94,84 @@ func StripLinkEnrichmentForDisplay(msgs []ChatMessage) []ChatMessage {
 		msgs[i].Content = MarshalJSONString(strings.TrimRight(text[:idx], " \n"))
 	}
 	return msgs
+}
+
+// TransliterateAssistantTextForDisplay rewrites Han characters in assistant-role
+// message text into their Sino-Korean Hangul readings (報告書 → 보고서) for the
+// client surface only. Chinese-lineage models (GLM/MiMo/DeepSeek) sometimes write
+// Sino-Korean vocabulary in Hanja, which reads as Chinese to the user. Like the
+// other display strippers, it rewrites only the RPC response — the stored
+// transcript keeps the model's raw output so history reloads stay byte-identical
+// for the LLM (prompt-cache invariant). Only assistant text is touched: user
+// input, tool_use args, and tool_result data pass through verbatim (a code/data
+// surface where Han is not Korean prose to read aloud).
+func TransliterateAssistantTextForDisplay(msgs []ChatMessage) []ChatMessage {
+	for i := range msgs {
+		if msgs[i].Role != "assistant" {
+			continue
+		}
+		// Plain-string content (the common text-only assistant turn).
+		var text string
+		if json.Unmarshal(msgs[i].Content, &text) == nil {
+			if conv := hanja.Transliterate(text); conv != text {
+				msgs[i].Content = MarshalJSONString(conv)
+			}
+			continue
+		}
+		// Block-array content: transliterate text blocks only, leaving tool_use
+		// blocks (and any non-text block) byte-for-byte intact.
+		var blocks []json.RawMessage
+		if json.Unmarshal(msgs[i].Content, &blocks) != nil {
+			continue
+		}
+		changed := false
+		for j, b := range blocks {
+			conv, ok := transliterateTextBlock(b)
+			if !ok {
+				continue
+			}
+			blocks[j] = conv
+			changed = true
+		}
+		if changed {
+			if c, err := json.Marshal(blocks); err == nil {
+				msgs[i].Content = c
+			}
+		}
+	}
+	return msgs
+}
+
+// transliterateTextBlock returns a rewritten copy of a content block when it is a
+// {"type":"text"} block whose text contains Han characters, preserving any other
+// fields on the block (e.g. cache_control). ok is false when the block is not a
+// text block or needs no change.
+func transliterateTextBlock(b json.RawMessage) (json.RawMessage, bool) {
+	var head struct {
+		Type string `json:"type"`
+		Text string `json:"text"`
+	}
+	if json.Unmarshal(b, &head) != nil || head.Type != "text" {
+		return nil, false
+	}
+	conv := hanja.Transliterate(head.Text)
+	if conv == head.Text {
+		return nil, false
+	}
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(b, &fields) != nil {
+		return nil, false
+	}
+	t, err := json.Marshal(conv)
+	if err != nil {
+		return nil, false
+	}
+	fields["text"] = t
+	out, err := json.Marshal(fields)
+	if err != nil {
+		return nil, false
+	}
+	return out, true
 }
 
 // StripUserMessageTimestamp removes the leading "[<RFC3339>] " wall-clock
