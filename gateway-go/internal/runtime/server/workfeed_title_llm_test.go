@@ -35,7 +35,7 @@ func TestRelay_CardTitler(t *testing.T) {
 		d := proactiveRelayDeps{
 			transcriptStore: newRecordingTranscriptStore(),
 			workFeed:        feed,
-			cardTitler:      func(string) string { return "무림 착수신고 확인" },
+			cardTitler:      func(string) (string, string) { return "무림 착수신고 확인", "" },
 		}
 		if _, err := d.relayNative(mailBody); err != nil {
 			t.Fatalf("relayNative: %v", err)
@@ -45,12 +45,44 @@ func TestRelay_CardTitler(t *testing.T) {
 		}
 	})
 
+	t.Run("LLM summary replaces the heuristic when present", func(t *testing.T) {
+		feed := &recordingWorkFeed{}
+		d := proactiveRelayDeps{
+			transcriptStore: newRecordingTranscriptStore(),
+			workFeed:        feed,
+			cardTitler: func(string) (string, string) {
+				return "무림 착수신고 확인", "착수신고가 지연돼 오늘 중 회신이 필요합니다."
+			},
+		}
+		if _, err := d.relayNative(mailBody); err != nil {
+			t.Fatalf("relayNative: %v", err)
+		}
+		if got := feedSummary(feed); got != "착수신고가 지연돼 오늘 중 회신이 필요합니다." {
+			t.Fatalf("summary = %q, want the LLM summary", got)
+		}
+	})
+
+	t.Run("empty LLM summary keeps the heuristic summary", func(t *testing.T) {
+		feed := &recordingWorkFeed{}
+		d := proactiveRelayDeps{
+			transcriptStore: newRecordingTranscriptStore(),
+			workFeed:        feed,
+			cardTitler:      func(string) (string, string) { return "무림 착수신고 확인", "" },
+		}
+		if _, err := d.relayNative(mailBody); err != nil {
+			t.Fatalf("relayNative: %v", err)
+		}
+		if got := feedSummary(feed); got == "" {
+			t.Fatalf("summary is empty, want the heuristic summary as fallback")
+		}
+	})
+
 	t.Run("falls back to heuristic subject when LLM returns empty", func(t *testing.T) {
 		feed := &recordingWorkFeed{}
 		d := proactiveRelayDeps{
 			transcriptStore: newRecordingTranscriptStore(),
 			workFeed:        feed,
-			cardTitler:      func(string) string { return "" },
+			cardTitler:      func(string) (string, string) { return "", "" },
 		}
 		if _, err := d.relayNative(mailBody); err != nil {
 			t.Fatalf("relayNative: %v", err)
@@ -66,7 +98,7 @@ func TestRelay_CardTitler(t *testing.T) {
 		d := proactiveRelayDeps{
 			transcriptStore: newRecordingTranscriptStore(),
 			workFeed:        feed,
-			cardTitler:      func(string) string { return "LG 결재 지연 정리" },
+			cardTitler:      func(string) (string, string) { return "LG 결재 지연 정리", "" },
 		}
 		// Opens with a narration sentence (no heading): the heuristic would grab the
 		// whole sentence, so the lightweight titler names it instead.
@@ -84,7 +116,7 @@ func TestRelay_CardTitler(t *testing.T) {
 		d := proactiveRelayDeps{
 			transcriptStore: newRecordingTranscriptStore(),
 			workFeed:        feed,
-			cardTitler:      func(string) string { called = true; return "SHOULD NOT BE USED" },
+			cardTitler:      func(string) (string, string) { called = true; return "SHOULD NOT BE USED", "" },
 		}
 		if _, err := d.relayNative("## 📅 오늘 일정\n\n- 14:00 대한전선 회의"); err != nil {
 			t.Fatalf("relayNative: %v", err)
@@ -103,4 +135,62 @@ func feedTitle(f *recordingWorkFeed) string {
 		return ""
 	}
 	return f.items[0].Title
+}
+
+func feedSummary(f *recordingWorkFeed) string {
+	if len(f.items) == 0 {
+		return ""
+	}
+	return f.items[0].Summary
+}
+
+func TestParseLLMTitleSummary(t *testing.T) {
+	cases := []struct {
+		name        string
+		raw         string
+		wantTitle   string
+		wantSummary string
+	}{
+		{
+			"labeled 제목 / 요약",
+			"제목: 무림 착수신고 확인\n요약: 착수신고가 지연돼 오늘 중 회신이 필요합니다.",
+			"무림 착수신고 확인",
+			"착수신고가 지연돼 오늘 중 회신이 필요합니다.",
+		},
+		{
+			"unlabeled: first line title, rest summary",
+			"케이블 발주 검토\n진영상사 발주 건을 오늘까지 확인해야 합니다.",
+			"케이블 발주 검토",
+			"진영상사 발주 건을 오늘까지 확인해야 합니다.",
+		},
+		{
+			"markdown + quotes stripped from both",
+			"제목: **\"광명역 배치도\"**\n요약: - 배치도 송부 건, 회신 필요",
+			"광명역 배치도",
+			"배치도 송부 건, 회신 필요",
+		},
+		{
+			"title only (no summary line) → empty summary",
+			"제목: 단가 확인",
+			"단가 확인",
+			"",
+		},
+		{
+			"generic title rejected, summary still returned",
+			"제목: 메일 분석 리포트\n요약: 무림피앤피 과업지시서가 도착했습니다.",
+			"",
+			"무림피앤피 과업지시서가 도착했습니다.",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			gotTitle, gotSummary := parseLLMTitleSummary(tc.raw)
+			if gotTitle != tc.wantTitle {
+				t.Errorf("title = %q, want %q", gotTitle, tc.wantTitle)
+			}
+			if gotSummary != tc.wantSummary {
+				t.Errorf("summary = %q, want %q", gotSummary, tc.wantSummary)
+			}
+		})
+	}
 }

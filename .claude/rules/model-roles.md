@@ -41,7 +41,7 @@ globs: gateway-go/internal/ai/modelrole/**, gateway-go/internal/pipeline/pilot/*
 | 메일 리포트 종합 (stage2) | `mailAnalysisModels()` | **analysis** | 사용자가 읽는 리포트, 품질 최우선 — **의도적 클라우드 OK** |
 | 메일 추출 (stage1) · gmail facts/actions/deal | `mailAnalysisModels()`, `platform/gmailpoll/pipeline_extractors.go` | **tiny** | 단순 구조화 JSON 추출 |
 | 세션 자동 제목 | `chat/session_autotitle.go` | **tiny** | 짧은 명사구 제목 |
-| 워크피드 카드 제목 | `runtime/server/workfeed_title_llm.go` | **lightweight** | 짧은 제목/요약 (#2504 후 lightweight) |
+| 워크피드 카드 제목+요약 | `runtime/server/workfeed_title_llm.go` | **lightweight** | 짧은 제목 + 2줄 카드 요약을 단일 호출로 생성 (#2504 후 lightweight). 휴리스틱(extractCardTitle/Summary)이 폴백 |
 | goal 루프 judge | `runtime/server/goal_task.go` | **lightweight** | 바운드 판정(DONE/CONTINUE), fail-open |
 | 컴팩션 청크 요약 | `chat/run_prepare.go` `localAISummarizer` | **lightweight** | 내부 무손실 요약, 로컬·빠름 (#2508; 이전 analysis-클라우드가 #2489 타임아웃 주원인) |
 | youtube 자막 요약 | `chat/web/web_youtube.go` | **lightweight** | 충실도 요약, 로컬 (#2509) |
