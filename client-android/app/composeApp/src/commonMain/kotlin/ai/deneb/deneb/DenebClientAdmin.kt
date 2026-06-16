@@ -68,6 +68,7 @@ suspend fun DenebGatewayClient.refreshModels(): Boolean {
         }
     _denebRoleModels.value = payload.roles.associate { it.role to it.model }
     _denebModelAdvisories.value = payload.advisories
+    _denebMainHasVision.value = payload.mainHasVision
     return true
 }
 

@@ -80,9 +80,16 @@ internal fun ModelTab(client: DenebGatewayClient) {
     val models by client.denebModels.collectAsState()
     val roleModels by client.denebRoleModels.collectAsState()
     val advisories by client.denebModelAdvisories.collectAsState()
+    val mainHasVision by client.denebMainHasVision.collectAsState()
     val scope = rememberCoroutineScope()
     val haptics = rememberHaptics()
     var role by remember { mutableStateOf(ModelRole.MAIN) }
+    // 비전 role is opt-in AND capability-gated: hide it when the main model is
+    // multimodal (a separate vision model is redundant — images route to main).
+    val visibleRoles = ModelRole.entries.filterNot { it == ModelRole.VISION && mainHasVision }
+    LaunchedEffect(mainHasVision) {
+        if (mainHasVision && role == ModelRole.VISION) role = ModelRole.MAIN
+    }
     var switching by remember { mutableStateOf(false) }
     var switchFailed by remember { mutableStateOf(false) }
     var addBaseUrl by remember { mutableStateOf("") }
@@ -238,7 +245,7 @@ internal fun ModelTab(client: DenebGatewayClient) {
         // so you don't have to click through each segment to see what's wired.
         // Tapping a row selects that role for the model list below.
         SettingsCard(innerPadding = false) {
-            ModelRole.entries.forEachIndexed { i, r ->
+            visibleRoles.forEachIndexed { i, r ->
                 val assignedId = roleModels[r.wire]
                 val assignedName = models.firstOrNull { it.id == assignedId }?.display
                     ?: assignedId ?: "미설정"
@@ -271,7 +278,7 @@ internal fun ModelTab(client: DenebGatewayClient) {
                         modifier = Modifier.weight(1f),
                     )
                 }
-                if (i < ModelRole.entries.lastIndex) {
+                if (i < visibleRoles.lastIndex) {
                     HorizontalDivider(
                         Modifier.padding(start = 16.dp),
                         color = denebHairline(),

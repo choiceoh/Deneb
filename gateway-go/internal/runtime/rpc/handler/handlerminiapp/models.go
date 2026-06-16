@@ -95,6 +95,13 @@ type ModelsListResult struct {
 	// Advisories are the model tuner's open recommendations as Korean
 	// display lines ("provider/model: message"). Empty when all is well.
 	Advisories []string `json:"advisories,omitempty"`
+	// MainHasVision reports whether the main model accepts image input. The
+	// native picker hides the opt-in 비전 role row when true — a multimodal main
+	// model makes a separate vision model redundant (images route to main
+	// directly). Mirrors the gateway's own routing: false exactly when main is
+	// marked vision:false and image turns would otherwise be stripped
+	// (run_prepare.go). Defaults false on an older gateway, so the row shows.
+	MainHasVision bool `json:"mainHasVision"`
 }
 
 // ModelDeps holds the lazy model operations exposed to the Mini App.
@@ -108,6 +115,9 @@ type ModelDeps struct {
 	// Advisories returns the model tuner's open recommendations as display
 	// lines. Optional: nil omits the field.
 	Advisories func() []string
+	// MainHasVision reports whether the main model accepts image input, so the
+	// picker can hide the opt-in vision role when it's redundant. nil → false.
+	MainHasVision func() bool
 }
 
 // ModelMethods returns Mini App model quick-change RPC handlers.
@@ -145,10 +155,11 @@ func modelsList(deps ModelDeps) rpcutil.HandlerFunc {
 			advisories = deps.Advisories()
 		}
 		return rpcutil.RespondOK(req.ID, ModelsListResult{
-			Current:    current,
-			Roles:      roles,
-			Sections:   sections,
-			Advisories: advisories,
+			Current:       current,
+			Roles:         roles,
+			Sections:      sections,
+			Advisories:    advisories,
+			MainHasVision: deps.MainHasVision != nil && deps.MainHasVision(),
 		})
 	}
 }

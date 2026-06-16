@@ -105,6 +105,9 @@ internal data class ModelsPayload(
     val roles: List<RoleModel> = emptyList(),
     val sections: List<ModelSection> = emptyList(),
     val advisories: List<String> = emptyList(),
+    // Whether the main model accepts image input. Defaults true-less (false) so an
+    // older gateway that omits it leaves the 비전 role visible (prior behavior).
+    val mainHasVision: Boolean = false,
 )
 
 @Serializable

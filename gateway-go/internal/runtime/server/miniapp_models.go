@@ -114,12 +114,13 @@ var miniappProbeClient = &http.Client{Timeout: miniappModelHealthTimeout}
 
 func (s *Server) miniappModelMethods() map[string]rpcutil.HandlerFunc {
 	return handlerminiapp.ModelMethods(handlerminiapp.ModelDeps{
-		CurrentModel: s.currentMiniappModel,
-		RoleModels:   s.roleMiniappModels,
-		ListModels:   s.listMiniappModels,
-		SetModel:     s.setMiniappModel,
-		AddModel:     s.addMiniappCustomModel,
-		DeleteModel:  s.deleteMiniappCustomModel,
+		CurrentModel:  s.currentMiniappModel,
+		RoleModels:    s.roleMiniappModels,
+		ListModels:    s.listMiniappModels,
+		SetModel:      s.setMiniappModel,
+		AddModel:      s.addMiniappCustomModel,
+		DeleteModel:   s.deleteMiniappCustomModel,
+		MainHasVision: s.mainModelHasVision,
 		Advisories: func() []string {
 			return modeltuner.LoadScorecard(modeltuner.DefaultStatePath()).AdvisoryLines()
 		},
@@ -194,13 +195,14 @@ func (s *Server) setMiniappModel(ctx context.Context, role, requested string) (s
 	if role == "" {
 		role = "main"
 	}
-	// Must mirror the native picker's ModelRole enum (DenebConfigScreen.kt) and
-	// the roles reported by roleMiniappModels — tiny/analysis were added to both
-	// the picker and the list response in #2065, but this gate stayed at the
-	// original three roles, so switching the 초경량/분석 tiers was rejected here
-	// ("unknown model role") and surfaced as "모델 전환에 실패했어요" to the user.
+	// Must mirror the native picker's ModelRole enum (ConfigModelTab.kt) and the
+	// roles reported by roleMiniappModels. This gate has repeatedly drifted behind
+	// new roles: tiny/analysis (added to the picker + list response in #2065) and
+	// then the opt-in vision role were each rejected here ("unknown model role" →
+	// "모델 전환에 실패했어요") because this case list wasn't updated alongside the
+	// picker. Keep all three lists in sync.
 	switch role {
-	case "main", "tiny", "lightweight", "analysis", "fallback", "chatbot":
+	case "main", "tiny", "lightweight", "analysis", "fallback", "chatbot", "vision":
 	default:
 		return "", rpcerr.InvalidRequest("unknown model role: " + role)
 	}
@@ -287,6 +289,29 @@ func (s *Server) roleMiniappModels() []handlerminiapp.RoleModel {
 		out = append(out, handlerminiapp.RoleModel{Role: string(modelrole.RoleVision), Model: v})
 	}
 	return out
+}
+
+// mainModelHasVision reports whether the live main model accepts image input.
+// The native picker hides the opt-in vision role when this is true (a separate
+// vision model is redundant — images route to main directly). It mirrors the
+// routing-time capability check (run_prepare.go): false exactly when the main
+// model is marked vision:false (modelcaps.NoVision). Unknown models are assumed
+// vision-capable, so the vision row surfaces only when main is known not to be.
+func (s *Server) mainModelHasVision() bool {
+	if s.modelRegistry == nil {
+		return true
+	}
+	main := s.modelRegistry.FullModelID(modelrole.RoleMain)
+	if s.chatHandler != nil {
+		if m := s.chatHandler.DefaultModel(); m != "" {
+			main = m // reflect a live /model switch this session
+		}
+	}
+	if main == "" {
+		return true
+	}
+	providerID, model := modelrole.ParseModelID(main)
+	return !s.modelRegistry.CapabilityForModel(providerID, model).NoVision
 }
 
 func (s *Server) addMiniappCustomModel(ctx context.Context, endpoint, model string) (handlerminiapp.ModelAddResult, error) {

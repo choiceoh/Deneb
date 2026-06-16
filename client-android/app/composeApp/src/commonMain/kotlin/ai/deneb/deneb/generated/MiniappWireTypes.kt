@@ -196,6 +196,7 @@ data class ModelsListResult(
     val roles: List<RoleModel> = emptyList(),
     val sections: List<ModelSection> = emptyList(),
     val advisories: List<String> = emptyList(),
+    val mainHasVision: Boolean = false,
 )
 
 @Serializable
