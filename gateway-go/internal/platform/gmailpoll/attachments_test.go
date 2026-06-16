@@ -27,6 +27,17 @@ func TestAttachmentCandidates_Filters(t *testing.T) {
 	}
 }
 
+func TestAttachmentCandidates_SizeCeiling(t *testing.T) {
+	atts := []gmail.AttachmentInfo{
+		{Filename: "small.pdf", MimeType: "application/pdf", AttachmentID: "a1", Size: 50000},
+		{Filename: "huge.pdf", MimeType: "application/pdf", AttachmentID: "a2", Size: maxAttachmentSize + 1}, // over ceiling → skip
+	}
+	got := attachmentCandidates(atts)
+	if len(got) != 1 || got[0].Filename != "small.pdf" {
+		t.Fatalf("size ceiling: got %v, want [small.pdf]", got)
+	}
+}
+
 func TestAttachmentCandidates_CountCap(t *testing.T) {
 	var atts []gmail.AttachmentInfo
 	for i := 0; i < maxAttachmentCandidates+3; i++ {

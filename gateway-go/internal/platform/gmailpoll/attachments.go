@@ -23,7 +23,9 @@ package gmailpoll
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
 )
@@ -31,6 +33,10 @@ import (
 const (
 	// minAttachmentSize skips tiny inline bits (tracker pixels, signature glyphs).
 	minAttachmentSize = 2048
+	// maxAttachmentSize skips oversized attachments: a quick business document is
+	// small, and downloading+OCR-ing a many-MB scan would spike memory and
+	// latency on the shared unified-memory box for little analysis value.
+	maxAttachmentSize = 15 * 1024 * 1024
 	// maxAttachmentCandidates caps how many attachments are extracted+judged per
 	// mail, bounding OCR cost on a pathological many-attachment mail.
 	maxAttachmentCandidates = 6
@@ -40,6 +46,10 @@ const (
 	attachmentInjectChars = 3500
 	// attachmentInjectTotalChars caps the combined injected attachment text.
 	attachmentInjectTotalChars = 9000
+	// attachmentGateBudget bounds the whole gate (fetch + OCR + judge) so a slow
+	// multi-page scan can never starve the analysis. Mirrors the sibling stage-1
+	// extractors' bounded contexts; on timeout the gate uses whatever it got.
+	attachmentGateBudget = 90 * time.Second
 )
 
 // attachmentExtractTypes are the filename extensions worth extracting. Images
@@ -77,14 +87,22 @@ func gateAndExtractAttachments(ctx context.Context, deps PipelineDeps, msg *gmai
 		return none
 	}
 
+	// Bound the whole gate so a slow multi-page scan can't eat the analysis
+	// budget (the sibling stage-1 extractors bound themselves the same way).
+	gctx, cancel := context.WithTimeout(ctx, attachmentGateBudget)
+	defer cancel()
+
 	// Extract each candidate once (bounded), so the judge sees real content.
 	extracted := make([]extractedAttachment, 0, len(candidates))
 	for _, att := range candidates {
-		data, err := deps.GmailClient.GetAttachment(ctx, msg.ID, att.AttachmentID)
+		if gctx.Err() != nil {
+			break // budget spent — judge on what we have
+		}
+		data, err := deps.GmailClient.GetAttachment(gctx, msg.ID, att.AttachmentID)
 		if err != nil || len(data) == 0 {
 			continue
 		}
-		text := strings.TrimSpace(deps.AttachmentExtractFn(ctx, data, att.Filename, att.MimeType))
+		text := strings.TrimSpace(deps.AttachmentExtractFn(gctx, data, att.Filename, att.MimeType))
 		if text == "" {
 			continue
 		}
@@ -94,12 +112,25 @@ func gateAndExtractAttachments(ctx context.Context, deps PipelineDeps, msg *gmai
 		return none
 	}
 
-	picks := judgeAttachments(ctx, deps, msg, extracted)
+	picks := judgeAttachments(gctx, deps, msg, extracted)
 	if len(picks) == 0 {
 		return none
 	}
 
-	return buildAttachmentSelection(extracted, picks)
+	sel := buildAttachmentSelection(extracted, picks)
+	gateLogger(deps).Debug("mail attachment gate: injected",
+		"id", msg.ID, "candidates", len(candidates), "extracted", len(extracted),
+		"selected", len(picks), "deepReview", len(sel.DeepReview))
+	return sel
+}
+
+// gateLogger returns the deps logger or the default — keeps the gate's Debug
+// observability non-fatal when no logger is wired.
+func gateLogger(deps PipelineDeps) *slog.Logger {
+	if deps.Logger != nil {
+		return deps.Logger
+	}
+	return slog.Default()
 }
 
 // attachmentCandidates applies the heuristic pre-filter: document/image type and
@@ -107,7 +138,7 @@ func gateAndExtractAttachments(ctx context.Context, deps PipelineDeps, msg *gmai
 func attachmentCandidates(atts []gmail.AttachmentInfo) []gmail.AttachmentInfo {
 	out := make([]gmail.AttachmentInfo, 0, len(atts))
 	for _, att := range atts {
-		if att.Size < minAttachmentSize || att.AttachmentID == "" {
+		if att.Size < minAttachmentSize || att.Size > maxAttachmentSize || att.AttachmentID == "" {
 			continue
 		}
 		if !isExtractableAttachment(att) {
