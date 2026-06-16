@@ -59,7 +59,7 @@ func TestExtractCardTitle_MailSubject(t *testing.T) {
 		{
 			"제목 table row (newsletter, unescapes \\_)",
 			"📬 **새 메일 분석 리포트**\n\n## 메일 개요\n\n| 항목 | 내용 |\n|---|---|\n| **발신** | 성창석 |\n| **제목** | Korean Tax Update\\_Samil Commentary June 2026 |\n| **시간** | 13:39 |",
-			"Korean Tax Update_Samil",
+			"Korean Tax Update", // clamped to ≤20 runes (was the full subject)
 			"새 메일 분석 리포트",
 		},
 		{
@@ -78,6 +78,10 @@ func TestExtractCardTitle_MailSubject(t *testing.T) {
 			if got == tc.wantNotEq {
 				t.Errorf("title stayed generic %q, want the subject", got)
 			}
+			// Mail subjects are clamped short (mailSubjectMaxRunes + the "..." suffix).
+			if n := len([]rune(got)); n > mailSubjectMaxRunes+3 {
+				t.Errorf("title %q is %d runes, want <= %d", got, n, mailSubjectMaxRunes+3)
+			}
 		})
 	}
 
@@ -95,6 +99,44 @@ func TestExtractCardTitle_ClipsLong(t *testing.T) {
 	}
 	if !strings.HasSuffix(got, "...") {
 		t.Errorf("want ellipsis suffix, got %q", got)
+	}
+}
+
+func TestTightenMailSubject(t *testing.T) {
+	cases := map[string]string{
+		"Re: 가견적서 재송부":   "가견적서 재송부",     // reply prefix
+		"RE: FW: 과업지시서":  "과업지시서",        // repeated reply/forward prefixes
+		"[회신] 케이블 발주":    "케이블 발주",       // bracketed reply tag
+		"📧 무림P&P 규격서 송부": "무림P&P 규격서 송부", // leading decorative emoji
+		"📧 Re: 케이블 발주":   "케이블 발주",       // emoji + reply prefix, any order
+		"회신: 진영상사 발주 건":  "진영상사 발주 건",    // "회신:" stripped; bare "건" (not "의 건") is kept
+		"태양광 가견적서 송부의 건": "태양광 가견적서 송부",  // trailing "…의 건"
+		"규격서 검토 요청 드립니다": "규격서 검토",       // trailing politeness
+		"도면 재송부 부탁드립니다":  "도면 재송부",       // trailing politeness (no space)
+		"확인 바랍니다":        "확인",           // trailing politeness
+		"[긴급] 단가 확인":     "[긴급] 단가 확인",   // [긴급] is NOT a reply tag → kept
+		"보통 제목":          "보통 제목",        // nothing to strip
+	}
+	for in, want := range cases {
+		if got := tightenMailSubject(in); got != want {
+			t.Errorf("tightenMailSubject(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestClipRunesWord(t *testing.T) {
+	// Within the limit: returned unchanged, no ellipsis.
+	if got := clipRunesWord("짧은 제목", 20); got != "짧은 제목" {
+		t.Errorf("clipRunesWord short = %q, want unchanged", got)
+	}
+	// Over the limit with a near-the-end space: clean word break (no split 어절).
+	if got := clipRunesWord("현대차 울산공장 태양광 가견적서 재송부", 20); got != "현대차 울산공장 태양광 가견적서..." {
+		t.Errorf("clipRunesWord boundary = %q, want a clean word break", got)
+	}
+	// A long trailing token that straddles the limit: hard-cut to keep more of it
+	// rather than dropping the whole token.
+	if got := clipRunesWord("Korean Tax Update_Samil Commentary", 20); got != "Korean Tax Update_Sa..." {
+		t.Errorf("clipRunesWord long-token = %q, want a hard cut", got)
 	}
 }
 

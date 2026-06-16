@@ -29,6 +29,17 @@ var (
 	wfCodeRe    = regexp.MustCompile("`([^`]+)`")
 	wfSpaceRe   = regexp.MustCompile(`[ \t]+`)
 	wfEscapeRe  = regexp.MustCompile(`\\([\\_*~` + "`" + `])`) // markdown escape "\_" → "_"
+
+	// mailSubjectPrefixRe matches leading reply/forward markers on an email subject
+	// (repeatable): "Re:", "RE:", "Fwd:", "FW:", "회신:", "전달:", "답신:", "답장:",
+	// and the bracketed forms "[회신]" / "[전달]" / "[RE]". Stripped so the card title
+	// leads with the actual topic, not "Re: Re: …".
+	mailSubjectPrefixRe = regexp.MustCompile(`(?i)^\s*(\[\s*(re|fw|fwd|회신|전달|답신|답장)\s*\]|(re|fwd?|회신|전달|답신|답장)\s*[:：])\s*`)
+	// mailSubjectSuffixRe matches trailing Korean business-email filler/politeness —
+	// "~요청의 건" / "~관련 건" / "~의 건" and "~요청 드립니다" / "~부탁드립니다" /
+	// "~안내드립니다" / "~드립니다" / "~바랍니다". Stripped once so the topic noun is
+	// kept. Deliberately conservative: never a bare trailing noun (e.g. "사건"·"조건").
+	mailSubjectSuffixRe = regexp.MustCompile(`\s*(요청의\s*건|관련\s*건|의\s*건|요청\s*드립니다|부탁\s*드립니다|안내\s*드립니다|드립니다|바랍니다)\s*$`)
 )
 
 // wfMailFieldLabels are the row/line labels a mail report uses for metadata
@@ -82,8 +93,14 @@ func extractCardTitle(content string) (title, sourceLine string) {
 		if subj := subjectFromMailReport(content, raw); subj != "" {
 			// Summary still starts after the H1 (raw), so the report's opening
 			// context stays in the summary even though the title now leads with
-			// the subject.
-			return clipRunes(subj, workFeedTitleMaxRunes), raw
+			// the subject. The subject is the email's own line, so tighten it
+			// (drop Re:/Fwd:/「의 건」 filler) and clip shorter than a generic
+			// heading — a glanceable topic, matching the LLM titler's brevity.
+			tightened := tightenMailSubject(subj)
+			if tightened == "" {
+				tightened = subj
+			}
+			return clipRunesWord(tightened, mailSubjectMaxRunes), raw
 		}
 	}
 	return clipRunes(t, workFeedTitleMaxRunes), raw
@@ -416,4 +433,71 @@ func clipRunes(s string, maxRunes int) string {
 		return s
 	}
 	return string(r[:maxRunes]) + "..."
+}
+
+// mailSubjectMaxRunes is the heuristic mail-subject fallback's clamp. Tighter than
+// the generic-heading workFeedTitleMaxRunes (40) — a raw email subject should read
+// as a short topic — but a touch looser than the LLM titler's cardTitleMaxRunes
+// (16), since this path keeps the real subject wording rather than a reworded gist.
+const mailSubjectMaxRunes = 20
+
+// tightenMailSubject strips reply/forward prefixes and trailing Korean business-
+// email filler from a raw subject so the card title reads as a short topic. Pure
+// cleanup: returns the trimmed input when nothing matches, and may return "" if the
+// subject was entirely filler (caller falls back to the raw subject).
+func tightenMailSubject(s string) string {
+	s = strings.TrimSpace(s)
+	// Peel leading decorative emoji runs ("📧 ") and reply/forward markers
+	// ("Re: Fwd: …") in any order until neither remains — they waste the budget on
+	// an icon the 📬 card already carries, or on "Re: Re:".
+	for {
+		before := s
+		if r := []rune(s); len(r) > 0 {
+			i := 0
+			for i < len(r) && (unicode.IsSpace(r[i]) || isEmojiRune(r[i])) {
+				i++
+			}
+			s = strings.TrimSpace(string(r[i:]))
+		}
+		s = strings.TrimSpace(mailSubjectPrefixRe.ReplaceAllString(s, ""))
+		if s == before || s == "" {
+			break
+		}
+	}
+	// Drop one trailing filler/politeness tail ("…의 건", "…드립니다").
+	s = strings.TrimSpace(mailSubjectSuffixRe.ReplaceAllString(s, ""))
+	return s
+}
+
+// clipRunesWord clips s to at most maxRunes runes, preferring to break at the last
+// space within the limit so a word/어절 is not split, and appending "..." on
+// overflow. Falls back to a hard rune cut when there is no space to break on (a
+// single long token). A maxRunes <= 0 returns s unchanged.
+func clipRunesWord(s string, maxRunes int) string {
+	if maxRunes <= 0 {
+		return s
+	}
+	r := []rune(s)
+	if len(r) <= maxRunes {
+		return s
+	}
+	cut := maxRunes
+	for i := maxRunes - 1; i > 0; i-- {
+		if unicode.IsSpace(r[i]) {
+			// Use the word break only when it is within the last quarter of the
+			// budget; otherwise a single long trailing token (e.g. "Update_Samil")
+			// would be dropped whole, so hard-cut to keep more of it.
+			if i*4 >= maxRunes*3 {
+				cut = i
+			}
+			break
+		}
+	}
+	// Trim a trailing space or dangling separator left at the break so the result
+	// is not "주제 —..." or "주제 ...".
+	head := strings.TrimRight(string(r[:cut]), " \t-—·,;:")
+	if head == "" {
+		head = string(r[:maxRunes]) // boundary trimmed everything away; hard cut
+	}
+	return head + "..."
 }
