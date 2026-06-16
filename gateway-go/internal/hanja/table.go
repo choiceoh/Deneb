@@ -32,28 +32,31 @@ var readingsTSV string
 // table; see readings.tsv for provenance (Unicode Unihan kHangul, v17.0.0).
 var readings = parseReadings(readingsTSV)
 
-// parseReadings turns the embedded "<hex codepoint>\t<Hangul syllable>" table
-// (with leading '#' comment lines) into the lookup map.
+// parseReadings turns the embedded table into the lookup map. The body is
+// whitespace-separated "<hex codepoint>:<Hangul syllable>" pairs packed many per
+// line (with leading '#' comment lines), e.g. "5831:보 543F:고 …".
 func parseReadings(tsv string) map[rune]rune {
-	m := make(map[rune]rune, 9000)
+	m := make(map[rune]rune, 10000)
 	for _, line := range strings.Split(tsv, "\n") {
 		line = strings.TrimRight(line, "\r")
 		if line == "" || line[0] == '#' {
 			continue
 		}
-		tab := strings.IndexByte(line, '\t')
-		if tab <= 0 {
-			continue
+		for _, tok := range strings.Fields(line) {
+			cpStr, han, ok := strings.Cut(tok, ":")
+			if !ok {
+				continue
+			}
+			cp, err := strconv.ParseInt(cpStr, 16, 32)
+			if err != nil {
+				continue
+			}
+			reading := []rune(han)
+			if len(reading) != 1 {
+				continue // every Unihan kHangul reading is a single syllable; skip anomalies
+			}
+			m[rune(cp)] = reading[0]
 		}
-		cp, err := strconv.ParseInt(line[:tab], 16, 32)
-		if err != nil {
-			continue
-		}
-		reading := []rune(line[tab+1:])
-		if len(reading) != 1 {
-			continue // every Unihan kHangul reading is a single syllable; skip anomalies
-		}
-		m[rune(cp)] = reading[0]
 	}
 	return m
 }

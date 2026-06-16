@@ -37,10 +37,15 @@ Database (Unihan), keyed off `$HOME/Unihan_Readings.txt` and
 ```bash
 curl -sSL -o ~/Unihan.zip https://www.unicode.org/Public/UCD/latest/ucd/Unihan.zip
 unzip -o ~/Unihan.zip Unihan_Readings.txt Unihan_Variants.txt -d ~
-# Then run the two-pass Python generator (see the script in the PR that added
-# Simplified coverage) and write readings.tsv with the provenance header. Update
-# the "Unicode 17.0.0" line to match the fetched version.
+# Then run the two-pass Python generator (see the PR that added Simplified
+# coverage), filter to CJK Unified Ideographs (U+4E00–U+9FFF) only, and write
+# readings.tsv as "<hex>:<Hangul>" pairs packed ~20 per line under the provenance
+# header. Update the "Unicode 17.0.0" line to match the fetched version.
 ```
+
+The U+4E00–U+9FFF filter drops rare Extension-A/B and Compatibility ideographs
+(~880 chars): they never occur in real Korean/Chinese prose, and the
+all-or-nothing run guard leaves any stray one whole rather than half-converting.
 
 Pure-Chinese function words whose Korean reading is gibberish (所以→소이) are not
 covered by readings; a small curated map handles them — see `phrases.go`.
