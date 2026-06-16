@@ -43,6 +43,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -58,6 +59,8 @@ import androidx.compose.ui.unit.isSpecified
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlin.math.sqrt
 
 /**
@@ -100,12 +103,36 @@ fun MarkdownContent(
     textScale: Float = 1f,
     baseStyle: TextStyle? = null,
 ) {
-    val doc = remember(content) {
-        runCatching { parseMarkdown(content) }.getOrElse {
-            MarkdownDocument(persistentListOf(Paragraph(persistentListOf(ai.deneb.ui.markdown.Text(content)))))
-        }
-    }
+    val doc = rememberContentDocument(content)
     MarkdownContent(doc, modifier, isInteractive, onUiCallback, frozen, textScale, baseStyle)
+}
+
+// Bodies up to this length parse synchronously (sub-frame, no async flash); longer ones go to
+// a background core so opening a long page (a big wiki note, a mail body) doesn't jank the
+// first frame.
+private const val SYNC_PARSE_MAX_CHARS = 2000
+
+// rememberContentDocument parses [content] into a document while keeping a large parse off the
+// UI thread. Short bodies parse synchronously (instant). A long body parses on
+// Dispatchers.Default via produceState — one extra frame on open, vs a dropped frame from
+// parsing inline on the composition thread — then shows the formatted document. Malformed
+// input falls back to the raw text as a single paragraph, as before. (Chat uses the
+// MarkdownDocument overload with a pre-parsed doc, so it's unaffected.)
+@Composable
+private fun rememberContentDocument(content: String): MarkdownDocument {
+    val sync = remember(content) {
+        if (content.length <= SYNC_PARSE_MAX_CHARS) parseContentSafely(content) else null
+    }
+    if (sync != null) return sync
+    val empty = remember { parseMarkdown("") }
+    val doc by produceState(initialValue = empty, content) {
+        value = withContext(Dispatchers.Default) { parseContentSafely(content) }
+    }
+    return doc
+}
+
+private fun parseContentSafely(content: String): MarkdownDocument = runCatching { parseMarkdown(content) }.getOrElse {
+    MarkdownDocument(persistentListOf(Paragraph(persistentListOf(ai.deneb.ui.markdown.Text(content)))))
 }
 
 /**
