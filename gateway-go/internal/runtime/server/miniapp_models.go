@@ -114,12 +114,13 @@ var miniappProbeClient = &http.Client{Timeout: miniappModelHealthTimeout}
 
 func (s *Server) miniappModelMethods() map[string]rpcutil.HandlerFunc {
 	return handlerminiapp.ModelMethods(handlerminiapp.ModelDeps{
-		CurrentModel: s.currentMiniappModel,
-		RoleModels:   s.roleMiniappModels,
-		ListModels:   s.listMiniappModels,
-		SetModel:     s.setMiniappModel,
-		AddModel:     s.addMiniappCustomModel,
-		DeleteModel:  s.deleteMiniappCustomModel,
+		CurrentModel:  s.currentMiniappModel,
+		RoleModels:    s.roleMiniappModels,
+		ListModels:    s.listMiniappModels,
+		SetModel:      s.setMiniappModel,
+		AddModel:      s.addMiniappCustomModel,
+		DeleteModel:   s.deleteMiniappCustomModel,
+		MainHasVision: s.mainModelHasVision,
 		Advisories: func() []string {
 			return modeltuner.LoadScorecard(modeltuner.DefaultStatePath()).AdvisoryLines()
 		},
@@ -288,6 +289,29 @@ func (s *Server) roleMiniappModels() []handlerminiapp.RoleModel {
 		out = append(out, handlerminiapp.RoleModel{Role: string(modelrole.RoleVision), Model: v})
 	}
 	return out
+}
+
+// mainModelHasVision reports whether the live main model accepts image input.
+// The native picker hides the opt-in vision role when this is true (a separate
+// vision model is redundant — images route to main directly). It mirrors the
+// routing-time capability check (run_prepare.go): false exactly when the main
+// model is marked vision:false (modelcaps.NoVision). Unknown models are assumed
+// vision-capable, so the vision row surfaces only when main is known not to be.
+func (s *Server) mainModelHasVision() bool {
+	if s.modelRegistry == nil {
+		return true
+	}
+	main := s.modelRegistry.FullModelID(modelrole.RoleMain)
+	if s.chatHandler != nil {
+		if m := s.chatHandler.DefaultModel(); m != "" {
+			main = m // reflect a live /model switch this session
+		}
+	}
+	if main == "" {
+		return true
+	}
+	providerID, model := modelrole.ParseModelID(main)
+	return !s.modelRegistry.CapabilityForModel(providerID, model).NoVision
 }
 
 func (s *Server) addMiniappCustomModel(ctx context.Context, endpoint, model string) (handlerminiapp.ModelAddResult, error) {

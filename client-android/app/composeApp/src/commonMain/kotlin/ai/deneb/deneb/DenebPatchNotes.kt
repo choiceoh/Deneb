@@ -21,6 +21,11 @@ data class DenebPatchNote(
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
         highlights = listOf(
+            "이미지 처리용 '비전' 모델을 설정 > 모델에서 지정할 수 있습니다 — 사진·스크린샷이 포함된 대화를 그 멀티모달 모델로 처리합니다. 메인 모델이 이미 이미지를 볼 수 있으면 불필요하므로 '비전' 역할은 숨겨지고, 메인이 이미지를 못 볼 때만 나타납니다",
+        ),
+    ),
+    DenebPatchNote(
+        highlights = listOf(
             "업무 피드를 날짜별로 넘겨봅니다 — 상단에 날짜(요일)가 표시되고 양옆 화살표로 이전/다음 날의 피드로 이동합니다 (항목이 있는 날 사이만, 최신 날부터)",
         ),
     ),

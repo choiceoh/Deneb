@@ -162,6 +162,12 @@ class DenebGatewayClient(
     internal val _denebModelAdvisories = MutableStateFlow<List<String>>(emptyList())
     val denebModelAdvisories: StateFlow<List<String>> = _denebModelAdvisories
 
+    /** Whether the main model accepts image input (from miniapp.models.list). When
+     *  true the model picker hides the opt-in 비전 role — a separate vision model is
+     *  redundant since images route to the main model directly. */
+    internal val _denebMainHasVision = MutableStateFlow(false)
+    val denebMainHasVision: StateFlow<Boolean> = _denebMainHasVision
+
     internal val _denebSkills = MutableStateFlow<List<SkillRow>>(emptyList())
     val denebSkills: StateFlow<List<SkillRow>> = _denebSkills
 
@@ -318,6 +324,7 @@ class DenebGatewayClient(
         _denebModels.value = emptyList()
         _denebRoleModels.value = emptyMap()
         _denebModelAdvisories.value = emptyList()
+        _denebMainHasVision.value = false
         _denebSkills.value = emptyList()
         _clientStatus.value = null
         // Reset the native-sync cursor + baseline so the new account replays its own
