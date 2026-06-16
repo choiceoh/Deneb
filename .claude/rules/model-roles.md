@@ -65,6 +65,7 @@ globs: gateway-go/internal/ai/modelrole/**, gateway-go/internal/pipeline/pilot/*
 4. **결정적 포맷·트리아지 → LLM 없음.** 주간보고, 우선순위.
 5. **★ analysis 역할은 현재 클라우드다.** 헬퍼 콜을 여기 얹으면 샌다. "왜 로컬 lightweight로 안 되나"를 답 못 하면 lightweight를 써라. (닥스트링이 `CallLocalLLM`/local을 가리키는데 코드가 `CallAnalysisLLM`이면 그건 드리프트 — 원복하라.)
 6. **코드에 모델 이름 하드코딩 금지.** 역할만 고른다.
+7. **★ 도구 무거운 역할(main/fallback)에 새 모델을 배선하기 전, 후보의 도구호출 역량을 측정하라.** 챗 `main`은 150+ 도구를 쓰고 도구호출이 에이전트의 성패를 가른다 — `/v1/models` 200·속도만으로는 빈 `tool_calls`(서빙설정 미스로 도구가 안 나오는 인프라 오진단의 단골)나 프롬프트 인젝션 취약을 못 잡는다. SparkFleet의 `run_tool_eval`(tool-eval-bench 래퍼)로 그 엔드포인트를 벤치해 **멀티스텝 체인·에러복구·Category K(안전·프롬프트 인젝션)** 점수를 확인하고 배선한다(결과 회독: `tool_eval_history`). 이건 코드 게이트가 아니라 **운영자 승격 절차**다 — 게이트웨이는 모델을 소비만 하고, 검증은 플릿 매니저(sparkfleet)에서 한다.
 
 ## PR 체크리스트 (새 LLM 호출 / 역할 변경 시)
 
@@ -72,3 +73,4 @@ globs: gateway-go/internal/ai/modelrole/**, gateway-go/internal/pipeline/pilot/*
 - [ ] 역할 선택 근거 1줄 (왜 이 역할인가)
 - [ ] analysis(클라우드) 선택 시 "왜 로컬 lightweight로 안 되나" 명시
 - [ ] 요약/추출/분류류는 **로컬 lightweight/tiny부터** 검토
+- [ ] 도구 무거운 역할(main/fallback) 배선·교체 시: SparkFleet `run_tool_eval`로 후보 모델의 도구호출 역량(특히 Category K·멀티스텝 체인) 확인
