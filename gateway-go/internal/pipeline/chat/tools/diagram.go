@@ -58,14 +58,23 @@ type ganttTask struct {
 	Status   string `json:"status"`   // done | active | crit (optional)
 }
 
+// timelineEvent is one point on a timeline: a period label and the things that
+// happened then (one or more).
+type timelineEvent struct {
+	Section string   `json:"section"`
+	Period  string   `json:"period"`
+	Items   []string `json:"items"`
+}
+
 type diagramParams struct {
-	DiagramType string        `json:"diagram_type"` // flowchart | gantt
-	Title       string        `json:"title"`
-	Subtitle    string        `json:"subtitle"`
-	Direction   string        `json:"direction"` // flowchart: TD | LR (default TD)
-	Nodes       []diagramNode `json:"nodes"`
-	Edges       []diagramEdge `json:"edges"`
-	Tasks       []ganttTask   `json:"tasks"`
+	DiagramType string          `json:"diagram_type"` // flowchart | gantt | timeline
+	Title       string          `json:"title"`
+	Subtitle    string          `json:"subtitle"`
+	Direction   string          `json:"direction"` // flowchart: TD | LR (default TD)
+	Nodes       []diagramNode   `json:"nodes"`
+	Edges       []diagramEdge   `json:"edges"`
+	Tasks       []ganttTask     `json:"tasks"`
+	Events      []timelineEvent `json:"events"`
 }
 
 // ToolDiagram renders a diagram to a PNG and returns its path for send_file.
@@ -91,8 +100,14 @@ func ToolDiagram() ToolFunc {
 			}
 			mermaidDef = compileGantt(p)
 			window = "2200,1300"
+		case "timeline":
+			if len(p.Events) == 0 {
+				return "", fmt.Errorf("timeline needs at least one event")
+			}
+			mermaidDef = compileTimeline(p)
+			window = "2400,1600"
 		default:
-			return "", fmt.Errorf("unsupported diagram_type %q (use flowchart or gantt)", p.DiagramType)
+			return "", fmt.Errorf("unsupported diagram_type %q (use flowchart, gantt, or timeline)", p.DiagramType)
 		}
 
 		dir := weeklyOutputDir()
@@ -230,6 +245,59 @@ func ganttMeta(t ganttTask, idn int) string {
 	return strings.Join(parts, ", ")
 }
 
+// compileTimeline turns events into a Mermaid timeline definition, grouped by
+// section in first-seen order. Each event is "period : item : item …"; colons are
+// the separator, so they are stripped from the text.
+func compileTimeline(p diagramParams) string {
+	var b strings.Builder
+	b.WriteString("timeline\n")
+
+	order := []string{}
+	groups := map[string][]timelineEvent{}
+	sectioned := false
+	for _, e := range p.Events {
+		sec := strings.TrimSpace(e.Section)
+		if sec != "" {
+			sectioned = true
+		}
+		if _, ok := groups[sec]; !ok {
+			order = append(order, sec)
+		}
+		groups[sec] = append(groups[sec], e)
+	}
+
+	emit := func(e timelineEvent) {
+		period := ganttText(e.Period)
+		if period == "" {
+			period = " "
+		}
+		parts := []string{period}
+		for _, it := range e.Items {
+			if t := ganttText(it); t != "" {
+				parts = append(parts, t)
+			}
+		}
+		if len(parts) == 1 { // period with no items — show the period as its own event
+			parts = append(parts, period)
+		}
+		fmt.Fprintf(&b, "    %s\n", strings.Join(parts, " : "))
+	}
+
+	for _, sec := range order {
+		if sectioned {
+			name := sec
+			if name == "" {
+				name = "·"
+			}
+			fmt.Fprintf(&b, "  section %s\n", ganttText(name))
+		}
+		for _, e := range groups[sec] {
+			emit(e)
+		}
+	}
+	return b.String()
+}
+
 // safeMermaidID maps an arbitrary id string to a valid Mermaid node id
 // (alphanumeric + underscore). Deterministic, so node defs and edge refs match.
 func safeMermaidID(s string) string {
@@ -308,7 +376,8 @@ func buildDiagramHTML(p diagramParams, def string) string {
     flowchart: { curve: 'basis', padding: 14, useMaxWidth: false },
     gantt: { useMaxWidth: false, useWidth: 1500, barHeight: 26, barGap: 8,
       topPadding: 40, gridLineStartPadding: 36, leftPadding: 130, fontSize: 13,
-      tickInterval: '1week' }
+      tickInterval: '1week' },
+    timeline: { useMaxWidth: false, padding: 14 }
   });
 </script>
 </body></html>`,

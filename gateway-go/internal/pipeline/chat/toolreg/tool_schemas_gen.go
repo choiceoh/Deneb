@@ -633,8 +633,8 @@ func diagramToolSchema() map[string]any {
 		"properties": map[string]any{
 			"diagram_type": map[string]any{
 				"type":        "string",
-				"description": "flowchart=절차·흐름·관계·상태도(노드+화살표), gantt=일정·타임라인(작업별 기간 막대). 숫자 비교/추이는 diagram이 아니라 chart를 써라.",
-				"enum":        []string{"flowchart", "gantt"},
+				"description": "flowchart=절차·흐름·관계·상태도(노드+화살표), gantt=일정(작업별 기간 막대), timeline=연혁·이력·로드맵(시점별 사건). 숫자 비교/추이는 diagram이 아니라 chart를 써라.",
+				"enum":        []string{"flowchart", "gantt", "timeline"},
 			},
 			"direction": map[string]any{
 				"type":        "string",
@@ -659,6 +659,31 @@ func diagramToolSchema() map[string]any {
 						"to": map[string]any{
 							"type":        "string",
 							"description": "도착 노드 id.",
+						},
+					},
+				},
+			},
+			"events": map[string]any{
+				"type":        "array",
+				"description": "timeline 사건 목록. 각 항목은 한 시점(period)과 그때 일어난 일들(items).",
+				"items": map[string]any{
+					"type":     "object",
+					"required": []string{"period"},
+					"properties": map[string]any{
+						"items": map[string]any{
+							"type":        "array",
+							"description": "그 시점의 사건들 (하나 이상).",
+							"items": map[string]any{
+								"type": "string",
+							},
+						},
+						"period": map[string]any{
+							"type":        "string",
+							"description": "시점 라벨 (예: '2021', '1분기', '2026-03').",
+						},
+						"section": map[string]any{
+							"type":        "string",
+							"description": "시점을 묶는 시대/구간 이름 (선택, 예: '창업기', '성장기').",
 						},
 					},
 				},
