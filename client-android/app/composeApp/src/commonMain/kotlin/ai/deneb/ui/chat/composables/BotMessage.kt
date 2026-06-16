@@ -12,6 +12,7 @@ import ai.deneb.ui.dynamicui.toSpeakableText
 import ai.deneb.ui.handCursor
 import ai.deneb.ui.markdown.LocalDenebUiStreaming
 import ai.deneb.ui.markdown.MarkdownContent
+import ai.deneb.ui.markdown.MarkdownDocument
 import ai.deneb.ui.markdown.parseMarkdown
 import ai.deneb.ui.markdown.parseMarkdownCached
 import androidx.compose.animation.AnimatedVisibility
@@ -54,6 +55,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
@@ -78,19 +80,21 @@ import deneb.composeapp.generated.resources.ic_volume_up
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import nl.marc_apps.tts.TextToSpeechInstance
 import nl.marc_apps.tts.errors.TextToSpeechSynthesisInterruptedError
 import org.jetbrains.compose.resources.stringResource
 
 // During streaming the answer grows by a token every few ms, and parseMarkdown
-// re-parses the whole string each time — O(n²) over a long answer, which stalls the
-// main thread and janks both the stream and any scrolling. Sample the growing text at
-// a fixed cadence instead: the markdown reflows ~10x/second while the parse count is
-// decoupled from the token rate. Tuned toward smoothness over liveness — a slightly
-// chunkier reflow keeps more frame headroom for scrolling. The finished (non-streaming)
-// string is always parsed exactly and immediately, so the completed message is
+// re-parses the whole string each time — O(n²) over a long answer. Two things tame it:
+// this fixed-cadence sampling decouples the parse count from the token rate (the markdown
+// reflows ~10x/second, not per token), and rememberMessageDocument runs each parse OFF the
+// UI thread, so neither the stream nor scrolling janks. Tuned toward smoothness over
+// liveness — a slightly chunkier reflow keeps more frame headroom. The finished
+// (non-streaming) string is always parsed exactly, so the completed message is
 // byte-identical to having parsed every token.
 private const val STREAM_PARSE_INTERVAL_MS = 96L
 
@@ -113,6 +117,25 @@ private fun rememberStreamingParseSource(message: String, isStreaming: Boolean):
     return if (isStreaming) sampled else message
 }
 
+// rememberMessageDocument turns a (possibly streaming) body into its parsed document while
+// keeping the parse off the UI thread. A finished body is a synchronous cache hit (the
+// history precompute warms it, so no on-frame parse). A streaming body re-parses on each
+// sampled tick — but on Dispatchers.Default (a spare core) via produceState: the previous
+// document stays visible until the new parse lands (no flicker), and a tick superseded
+// before its parse finishes is cancelled (implicit coalescing). Only the cheap finished-body
+// cache touch runs on the UI thread.
+@Composable
+private fun rememberMessageDocument(source: String, isStreaming: Boolean): MarkdownDocument {
+    if (!isStreaming) {
+        return remember(source) { parseMarkdownCached(source) }
+    }
+    val empty = remember { parseMarkdown("") }
+    val document by produceState(initialValue = empty, source) {
+        value = withContext(Dispatchers.Default) { parseMarkdown(source) }
+    }
+    return document
+}
+
 @Composable
 internal fun BotMessage(
     message: String,
@@ -131,11 +154,7 @@ internal fun BotMessage(
 ) {
     val haptics = rememberHaptics()
     val parseSource = rememberStreamingParseSource(message, isStreaming)
-    // Streaming bodies change every tick (don't pollute the cache); a finished body goes
-    // through the module-level cache so scrolling it back into view never re-parses.
-    val document = remember(parseSource, isStreaming) {
-        if (isStreaming) parseMarkdown(parseSource) else parseMarkdownCached(parseSource)
-    }
+    val document = rememberMessageDocument(parseSource, isStreaming)
     var isEditing by remember(frozen) { mutableStateOf(false) }
     val effectiveFrozen = if (isEditing && frozen != null) frozen.copy(pressedEvent = null) else frozen
     val effectiveInteractive = if (frozen != null) (onResubmit != null && isEditing) else isInteractive
