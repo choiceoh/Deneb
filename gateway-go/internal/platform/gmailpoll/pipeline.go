@@ -84,6 +84,13 @@ type PipelineDeps struct {
 	// wires a closure over the message's inline attachment bytes (no network —
 	// they arrived in the message). nil → the attachment gate is skipped.
 	AttachmentBytesFn func(ctx context.Context, messageID, attachmentID string) ([]byte, error)
+
+	// ThinkingKwarg is the analysis model's chat_template_kwargs off-switch
+	// (modelcaps.ThinkingToggleKwarg, e.g. dsv4's "thinking"). Attached to the
+	// "disabled" thinking config so a dual-mode vLLM model actually stops
+	// reasoning instead of exhausting the token budget on a silent <think> block
+	// (→ empty analysis). "" for non-vLLM models, which handle thinking on the wire.
+	ThinkingKwarg string
 }
 
 const (
@@ -254,7 +261,7 @@ func AnalyzeEmailPipeline(ctx context.Context, deps PipelineDeps, msg *gmail.Mes
 		// prompt, so the manual Mini App path — which never wires LocalClient
 		// — still cites related projects.
 		prompt := DefaultPrompt + projectSelectionSuffix(candidates) + importanceSuffix
-		text, err := AnalyzeEmail(ctx, deps.LLMClient, deps.MainModel, prompt, msg)
+		text, err := AnalyzeEmail(ctx, deps.LLMClient, deps.MainModel, prompt, deps.ThinkingKwarg, msg)
 		if err != nil {
 			return AnalysisResult{}, err
 		}

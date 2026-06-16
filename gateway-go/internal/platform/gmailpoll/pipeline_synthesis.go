@@ -268,7 +268,14 @@ func synthesizeAnalysis(ctx context.Context, deps PipelineDeps, msg *gmail.Messa
 	// on ONLY when the synthesis provider emits reasoning as distinct Anthropic
 	// thinking blocks (analysisThinking gates on APIMode); stripReasoningLeak
 	// below still scrubs any stray marker as belt-and-suspenders.
-	thinking := &llm.ThinkingConfig{Type: "disabled"}
+	//
+	// TemplateKwarg carries the model's chat_template_kwargs off-switch (e.g.
+	// dsv4's "thinking"): without it, "disabled" falls back to reasoning_effort,
+	// a no-op on dual-mode vLLM models — they keep reasoning, exhaust the token
+	// budget, and return EMPTY content (the main chat path sets this via
+	// applyModelTuning; this is the analysis-path equivalent). Empty for non-vLLM
+	// models, where Anthropic-wire thinking handling applies instead.
+	thinking := &llm.ThinkingConfig{Type: "disabled", TemplateKwarg: deps.ThinkingKwarg}
 	if deps.DeepThinking {
 		thinking = analysisThinking(deps.LLMClient, maxTok)
 	}
