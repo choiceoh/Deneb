@@ -27,24 +27,19 @@ func extractThreadContext(ctx context.Context, deps PipelineDeps, msg *gmail.Mes
 	// Collect related emails.
 	var relatedEmails []string
 
-	// 1. Fetch other messages with the same subject (thread-like behavior).
-	// Gmail API doesn't expose a thread:ID search operator, so we search
-	// by subject to find related messages in the conversation.
-	if msg.Subject != "" {
-		// Strip common reply/forward prefixes for broader matching.
-		subj := stripReplyPrefix(msg.Subject)
-		query := fmt.Sprintf("subject:%q", subj)
-		threadMsgs, err := deps.GmailClient.Search(ctx, query, maxThreadMessages+1)
+	// 1. The actual Gmail conversation thread (oldest first). Every message
+	// carries a stable threadId, so we fetch the real thread in one call rather
+	// than guessing it by subject — the old subject:"…" search missed replies
+	// whose subject changed and over-matched common subjects, at the cost of one
+	// search plus N per-message metadata fetches. GetThread replaces all of that.
+	if msg.ThreadID != "" {
+		threadMsgs, err := deps.GmailClient.GetThread(ctx, msg.ThreadID)
 		if err == nil {
 			for _, tm := range threadMsgs {
 				if tm.ID == msg.ID {
-					continue
+					continue // skip the message being analyzed
 				}
-				detail, err := deps.GmailClient.GetMessage(ctx, tm.ID)
-				if err != nil {
-					continue
-				}
-				relatedEmails = append(relatedEmails, formatEmailBrief(detail))
+				relatedEmails = append(relatedEmails, formatEmailBrief(tm))
 				if len(relatedEmails) >= maxThreadMessages {
 					break
 				}

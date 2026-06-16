@@ -412,22 +412,6 @@ func extractEmailAddr(from string) string {
 	return ""
 }
 
-// stripReplyPrefix removes Re:, Fwd:, etc. from an email subject.
-func stripReplyPrefix(subject string) string {
-	s := strings.TrimSpace(subject)
-	for {
-		lower := strings.ToLower(s)
-		switch {
-		case strings.HasPrefix(lower, "re:") || strings.HasPrefix(lower, "fw:"):
-			s = strings.TrimSpace(s[3:])
-		case strings.HasPrefix(lower, "fwd:"):
-			s = strings.TrimSpace(s[4:])
-		default:
-			return s
-		}
-	}
-}
-
 func hasThreadContext(tc ThreadContext) bool {
 	return tc.ThreadSummary != "" || tc.PriorExchanges != "" || len(tc.OngoingTopics) > 0 || tc.SenderRelation != ""
 }
