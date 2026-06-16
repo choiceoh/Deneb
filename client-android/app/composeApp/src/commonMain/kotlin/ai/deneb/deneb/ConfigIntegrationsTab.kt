@@ -4,19 +4,31 @@ import ai.deneb.openUrl
 import ai.deneb.ui.DenebSectionLabel
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.denebHint
+import ai.deneb.ui.handCursor
 import ai.deneb.ui.settings.SettingsCard
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RichTooltip
 import androidx.compose.material3.Text
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -25,7 +37,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 
@@ -36,6 +50,7 @@ import kotlinx.coroutines.launch
 // ([DropboxAuthBridge]); elsewhere the user pastes the out-of-band code Dropbox
 // shows. Once linked, the dropbox chat tool (list/search/download/analyze/backup)
 // works. The refresh token lives on the gateway host.
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun IntegrationsTab(client: DenebGatewayClient) {
     var status by remember { mutableStateOf<DropboxStatusOut?>(null) }
@@ -100,13 +115,45 @@ internal fun IntegrationsTab(client: DenebGatewayClient) {
                 loading -> Text("불러오는 중…", style = DenebType.body, color = denebHint())
 
                 s?.connected == true -> {
-                    Text("● 연결됨", style = DenebType.rowTitleStrong, color = MaterialTheme.colorScheme.primary)
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        "채팅에서 dropbox 도구(파일 목록·검색·다운로드·분석·백업)를 사용할 수 있습니다.",
-                        style = DenebType.body,
-                        color = denebHint(),
-                    )
+                    // What the connection unlocks lives behind a "?" tooltip rather
+                    // than a permanent gray caption: once connected it reads as
+                    // clutter, so the connected state stays clean and the detail is
+                    // one tap away for the curious. (Mirrors ConfigModelTab's "?".)
+                    val infoTooltip = rememberTooltipState(isPersistent = true)
+                    val tooltipSpacingPx = with(LocalDensity.current) { 4.dp.roundToPx() }
+                    val clampedTooltipPosition = remember(tooltipSpacingPx) {
+                        ClampedTooltipPositionProvider(tooltipSpacingPx)
+                    }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Text("● 연결됨", style = DenebType.rowTitleStrong, color = MaterialTheme.colorScheme.primary)
+                        TooltipBox(
+                            positionProvider = clampedTooltipPosition,
+                            tooltip = {
+                                RichTooltip(title = { Text("Dropbox 연동") }) {
+                                    Text("채팅에서 dropbox 도구(파일 목록·검색·다운로드·분석·백업)를 사용할 수 있습니다.")
+                                }
+                            },
+                            state = infoTooltip,
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(18.dp)
+                                    .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
+                                    .clickable { scope.launch { infoTooltip.show() } }
+                                    .handCursor(),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(
+                                    "?",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
                     Spacer(Modifier.height(12.dp))
                     // Re-link without leaving the screen: flip back to the wizard.
                     // The App key is saved, so begin reuses it.
