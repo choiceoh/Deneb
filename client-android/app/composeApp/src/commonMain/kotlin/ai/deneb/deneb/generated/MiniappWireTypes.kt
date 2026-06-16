@@ -40,6 +40,33 @@ data class CalendarEventOut(
 )
 
 @Serializable
+data class DropboxEntryOut(
+    val tag: String = "",
+    val name: String = "",
+    val pathDisplay: String = "",
+    val pathLower: String = "",
+    val id: String = "",
+    val size: Long = 0L,
+    val serverModified: String = "",
+)
+
+@Serializable
+data class DropboxListOut(
+    val entries: List<DropboxEntryOut> = emptyList(),
+    val path: String = "",
+)
+
+@Serializable
+data class DropboxShareOut(
+    val url: String = "",
+)
+
+@Serializable
+data class DropboxUploadOut(
+    val entry: DropboxEntryOut = DropboxEntryOut(),
+)
+
+@Serializable
 data class MailAnalysisOut(
     val id: String = "",
     val subject: String = "",
