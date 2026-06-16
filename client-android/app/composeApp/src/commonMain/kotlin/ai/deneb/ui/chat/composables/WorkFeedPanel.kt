@@ -7,6 +7,7 @@ import ai.deneb.ui.chat.WorkFeedItem
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHint
 import ai.deneb.ui.handCursor
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -120,6 +121,7 @@ internal fun WorkFeedRow(
     item: WorkFeedItem,
     onOpen: (String) -> Unit,
     onRunAction: (String, String) -> Unit,
+    expanded: Boolean = false,
 ) {
     // The row already leads with a source icon, so a "📬 …" title would show two
     // icons side by side — strip the leading emoji/symbol run from the title.
@@ -161,37 +163,36 @@ internal fun WorkFeedRow(
                         )
                     }
                 }
-                // Summary and the two fixed quick actions share one row: the summary
-                // takes the width, the actions sit at the trailing edge.
-                Row(
-                    modifier = Modifier.padding(top = 2.dp),
-                    verticalAlignment = Alignment.Top,
-                ) {
-                    if (item.summary.isNotBlank()) {
-                        Text(
-                            text = item.summary,
-                            style = DenebType.snippet,
-                            color = denebHint(),
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier
-                                .weight(1f)
-                                .padding(top = 4.dp, end = 4.dp),
-                        )
-                    } else {
-                        Spacer(Modifier.weight(1f))
-                    }
-                    // Two-action model (matches the mail screen): 보관 = archive (ack →
-                    // moves the card to the 읽음 section) and 휴지통 = permanent delete.
-                    // Both ride the existing onRunAction(id, actionId) path; the gateway
-                    // handles "trash" as a universal delete.
-                    FeedActionButton(Icons.Outlined.Archive, "보관") {
-                        haptics.confirm()
-                        onRunAction(item.id, "ack")
-                    }
-                    FeedActionButton(Icons.Outlined.Delete, "휴지통") {
-                        haptics.confirm()
-                        onRunAction(item.id, "trash")
+                // Summary spans the full row width — the quick actions no longer share
+                // its line, so it wraps cleanly and shows more of the snippet.
+                if (item.summary.isNotBlank()) {
+                    Text(
+                        text = item.summary,
+                        style = DenebType.snippet,
+                        color = denebHint(),
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    )
+                }
+                // Quick actions appear only while the card is open, so collapsed rows
+                // stay clean (icon · title · time · full-width summary). 보관 = archive
+                // (ack → 읽음 section), 휴지통 = permanent delete; both ride onRunAction
+                // (the gateway handles "trash" as a universal delete).
+                if (expanded) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        FeedActionButton(Icons.Outlined.Archive, "보관") {
+                            haptics.confirm()
+                            onRunAction(item.id, "ack")
+                        }
+                        FeedActionButton(Icons.Outlined.Delete, "휴지통") {
+                            haptics.confirm()
+                            onRunAction(item.id, "trash")
+                        }
                     }
                 }
             }
