@@ -68,6 +68,12 @@ func TestExtractCardTitle_MailSubject(t *testing.T) {
 			"고흥 해밀 솔라케이블",
 			"📬 메일 분석 리포트",
 		},
+		{
+			"skips 기본 정보 / 발신자 / 프로젝트 맥락 sections to reach subject",
+			"## 📬 메일 분석 보고\n\n### 메일 기본 정보\n\n**발신자**: 김대희\n\n### 프로젝트 맥락 (부산8호태양광)\n\n### 세창스틸 1·2공장 태양광 견적서",
+			"세창스틸",
+			"📬 메일 분석 보고",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -104,23 +110,70 @@ func TestExtractCardTitle_ClipsLong(t *testing.T) {
 
 func TestTightenMailSubject(t *testing.T) {
 	cases := map[string]string{
-		"Re: 가견적서 재송부":   "가견적서 재송부",     // reply prefix
-		"RE: FW: 과업지시서":  "과업지시서",        // repeated reply/forward prefixes
-		"[회신] 케이블 발주":    "케이블 발주",       // bracketed reply tag
-		"📧 무림P&P 규격서 송부": "무림P&P 규격서 송부", // leading decorative emoji
-		"📧 Re: 케이블 발주":   "케이블 발주",       // emoji + reply prefix, any order
-		"회신: 진영상사 발주 건":  "진영상사 발주 건",    // "회신:" stripped; bare "건" (not "의 건") is kept
-		"태양광 가견적서 송부의 건": "태양광 가견적서 송부",  // trailing "…의 건"
-		"규격서 검토 요청 드립니다": "규격서 검토",       // trailing politeness
-		"도면 재송부 부탁드립니다":  "도면 재송부",       // trailing politeness (no space)
-		"확인 바랍니다":        "확인",           // trailing politeness
-		"[긴급] 단가 확인":     "[긴급] 단가 확인",   // [긴급] is NOT a reply tag → kept
-		"보통 제목":          "보통 제목",        // nothing to strip
+		"Re: 가견적서 재송부":         "가견적서 재송부",         // reply prefix
+		"RE: FW: 과업지시서":        "과업지시서",            // repeated reply/forward prefixes
+		"[회신] 케이블 발주":          "케이블 발주",           // bracketed reply tag
+		"📧 무림P&P 규격서 송부":       "무림P&P 규격서 송부",     // leading decorative emoji
+		"📧 Re: 케이블 발주":         "케이블 발주",           // emoji + reply prefix, any order
+		"회신: 진영상사 발주 건":        "진영상사 발주 건",        // "회신:" stripped; bare "건" (not "의 건") is kept
+		"태양광 가견적서 송부의 건":       "태양광 가견적서 송부",      // trailing "…의 건"
+		"규격서 검토 요청 드립니다":       "규격서 검토",           // trailing politeness
+		"도면 재송부 부탁드립니다":        "도면 재송부",           // trailing politeness (no space)
+		"확인 바랍니다":              "확인",               // trailing politeness
+		"광명역 배치도 송부의 件":        "광명역 배치도 송부",       // hanja 件 (not just hangul 건)
+		"검토 요망":                "검토",               // trailing "요망"
+		"현대차 가견적서 (재송부)":       "현대차 가견적서",         // trailing filler parenthetical
+		"제안서 (2차)":             "제안서",              // numbered filler parenthetical
+		"회의 (긴급)":              "회의 (긴급)",          // non-filler parenthetical → kept
+		"제목: PROIRITY Updated": "PROIRITY Updated", // leading "제목:" field label dropped
+		"[긴급] 단가 확인":           "[긴급] 단가 확인",       // [긴급] is NOT a reply tag → kept
+		"보통 제목":                "보통 제목",            // nothing to strip ("제목" without colon)
 	}
 	for in, want := range cases {
 		if got := tightenMailSubject(in); got != want {
 			t.Errorf("tightenMailSubject(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+// TestExtractCardTitle_AnalysisLabelPrefix covers the "📧 메일 분석: <subject>" form
+// (a generic label with the subject inline after the colon) — observed in real feed
+// titles. The label is dropped and the subject leads, tightened and ≤20 runes.
+func TestExtractCardTitle_AnalysisLabelPrefix(t *testing.T) {
+	cases := []struct {
+		name    string
+		content string
+		wantHas string
+	}{
+		{
+			"emoji + 메일 분석: + trailing (재송부)",
+			"## 📧 메일 분석: 현대자동차 울산공장 생기센터 태양광 가견적서 (재송부)",
+			"현대자동차 울산공장",
+		},
+		{
+			"메일 분석: + 송부의 件",
+			"### 메일 분석: 광명역 B주차장 태양광 배치도 송부의 件",
+			"광명역",
+		},
+		{
+			"bare 분석: label",
+			"📧 분석: 무림피앤피 2차 태양광 물품 제안요청서",
+			"무림피앤피",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, _ := extractCardTitle(tc.content)
+			if !strings.Contains(got, tc.wantHas) {
+				t.Errorf("title = %q, want it to contain %q", got, tc.wantHas)
+			}
+			if strings.Contains(got, "분석") {
+				t.Errorf("title = %q, want the analysis label dropped", got)
+			}
+			if n := len([]rune(got)); n > mailSubjectMaxRunes+3 {
+				t.Errorf("title %q is %d runes, want <= %d", got, n, mailSubjectMaxRunes+3)
+			}
+		})
 	}
 }
 

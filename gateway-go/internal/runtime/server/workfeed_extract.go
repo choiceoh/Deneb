@@ -37,18 +37,33 @@ var (
 	mailSubjectPrefixRe = regexp.MustCompile(`(?i)^\s*(\[\s*(re|fw|fwd|회신|전달|답신|답장)\s*\]|(re|fwd?|회신|전달|답신|답장)\s*[:：])\s*`)
 	// mailSubjectSuffixRe matches trailing Korean business-email filler/politeness —
 	// "~요청의 건" / "~관련 건" / "~의 건" and "~요청 드립니다" / "~부탁드립니다" /
-	// "~안내드립니다" / "~드립니다" / "~바랍니다". Stripped once so the topic noun is
+	// "~안내드립니다" / "~드립니다" / "~바랍니다" / "~요망". The "건" also has the hanja
+	// form "件" (real subjects write "송부의 件"). Stripped once so the topic noun is
 	// kept. Deliberately conservative: never a bare trailing noun (e.g. "사건"·"조건").
-	mailSubjectSuffixRe = regexp.MustCompile(`\s*(요청의\s*건|관련\s*건|의\s*건|요청\s*드립니다|부탁\s*드립니다|안내\s*드립니다|드립니다|바랍니다)\s*$`)
+	mailSubjectSuffixRe = regexp.MustCompile(`\s*(요청의\s*[건件]|관련\s*[건件]|의\s*[건件]|요청\s*드립니다|부탁\s*드립니다|안내\s*드립니다|드립니다|바랍니다|요망)\s*$`)
+	// mailSubjectTrailParenRe matches a trailing parenthetical that is pure filler —
+	// "(재송부)", "(수정)", "(최종)", "(revised)", "(2차)" etc. — not real content.
+	// Half-width and full-width parens. Conservative: only a known filler word inside.
+	mailSubjectTrailParenRe = regexp.MustCompile(`(?i)\s*[\(（]\s*(재송부|재발송|재발신|재전송|수정|보완|보충|최종|revised|final|회신|전달|\d+\s*차|\d+)\s*[\)）]\s*$`)
+	// mailAnalysisLabelRe matches a leading generic analysis label followed by a colon
+	// ("메일 분석:", "이메일 분석:", "메일 분석 보고:", "분석:") — the real subject is
+	// the text after the colon. This is the colon form that isGenericMailReportTitle
+	// (which needs a trailing 리포트/보고 and no colon) does not catch.
+	mailAnalysisLabelRe = regexp.MustCompile(`^\s*((이메일|새\s*메일|메일)\s*분석(\s*(리포트|보고))?|분석)\s*[:：]\s*`)
+	// mailSubjectFieldLabelRe matches a leading "제목:" / "메일 제목:" / "subject:"
+	// label so the subject *value* leads (a bold "**제목**: …" line surfaces as the
+	// subject without the label word).
+	mailSubjectFieldLabelRe = regexp.MustCompile(`(?i)^\s*(메일\s*제목|제목|subject)\s*[:：]\s*`)
 )
 
 // wfMailFieldLabels are the row/line labels a mail report uses for metadata
 // (not the subject). A heading/bold line whose label is one of these is report
 // scaffolding, skipped when hunting for the subject.
 var wfMailFieldLabels = map[string]bool{
-	"발신": true, "수신": true, "참조": true, "cc": true, "일시": true,
-	"시간": true, "중요도": true, "금액": true, "건명": true, "대상": true,
-	"상대방": true, "분석 대상": true, "발주처": true, "공급사": true,
+	"발신": true, "발신자": true, "수신": true, "수신자": true, "참조": true,
+	"cc": true, "일시": true, "날짜": true, "날짜/시간": true, "시간": true,
+	"중요도": true, "금액": true, "건명": true, "대상": true, "상대방": true,
+	"분석 대상": true, "발주처": true, "공급사": true, "도착": true,
 }
 
 // extractCardTitle returns the first meaningful line of content as a card title,
@@ -83,6 +98,16 @@ func extractCardTitle(content string) (title, sourceLine string) {
 				return clipRunes(t+" — "+sub, workFeedTitleMaxRunes), raw2
 			}
 		}
+	}
+	// "📧 메일 분석: <제목>" — a generic analysis label with the subject inline after
+	// the colon (the colon form isGenericMailReportTitle does not catch, since it has
+	// no trailing 리포트/보고). Lead with the subject, tightened and short.
+	if subj := subjectAfterAnalysisLabel(t); subj != "" {
+		tightened := tightenMailSubject(subj)
+		if tightened == "" {
+			tightened = subj
+		}
+		return clipRunesWord(tightened, mailSubjectMaxRunes), raw
 	}
 	// A generic "메일 분석 리포트/보고" heading is redundant with the 📬 work-feed
 	// icon — the card should carry the mail's actual subject. When the body has a
@@ -222,8 +247,27 @@ func isReportScaffoldLine(t string) bool {
 	if isGenericMailReportTitle(t) {
 		return true
 	}
-	for _, g := range []string{"개요", "중요도", "타임라인", "이해관계자", "요약", "조직 맥락", "status board"} {
+	// Short generic section words the report generates — matched as a substring within
+	// a short heading so longer, subject-bearing headings are not caught.
+	for _, g := range []string{"개요", "기본 정보", "기본정보", "중요도", "타임라인", "이해관계자", "요약", "조직 맥락", "status board"} {
 		if strings.Contains(t, g) && len([]rune(t)) <= 14 {
+			return true
+		}
+	}
+	// Analytical section headings (the report's own structure) often carry a trailing
+	// detail — "프로젝트 맥락 (부산8호태양광)", "전체 스레드 타임라인 (5/27→…)" — so
+	// match them by prefix (after a leading emoji run) rather than by length. These
+	// phrases are distinctive enough that a real email subject does not start with them.
+	core := strings.TrimSpace(t)
+	if r := []rune(core); len(r) > 0 {
+		i := 0
+		for i < len(r) && (unicode.IsSpace(r[i]) || isEmojiRune(r[i])) {
+			i++
+		}
+		core = strings.TrimSpace(string(r[i:]))
+	}
+	for _, p := range []string{"프로젝트 맥락", "맥락 해석", "스레드 흐름", "전체 스레드", "이전 스레드", "발신 시점", "사안의 핵심", "발신 시점과 배경"} {
+		if strings.HasPrefix(core, p) {
 			return true
 		}
 	}
@@ -447,9 +491,10 @@ const mailSubjectMaxRunes = 20
 // subject was entirely filler (caller falls back to the raw subject).
 func tightenMailSubject(s string) string {
 	s = strings.TrimSpace(s)
-	// Peel leading decorative emoji runs ("📧 ") and reply/forward markers
-	// ("Re: Fwd: …") in any order until neither remains — they waste the budget on
-	// an icon the 📬 card already carries, or on "Re: Re:".
+	// Peel leading decorative emoji runs ("📧 "), reply/forward markers ("Re: Fwd:
+	// …"), and a "제목:" / "subject:" field label in any order until none remains —
+	// they waste the budget on an icon the 📬 card already carries, "Re: Re:", or the
+	// label word instead of the subject value.
 	for {
 		before := s
 		if r := []rune(s); len(r) > 0 {
@@ -460,13 +505,33 @@ func tightenMailSubject(s string) string {
 			s = strings.TrimSpace(string(r[i:]))
 		}
 		s = strings.TrimSpace(mailSubjectPrefixRe.ReplaceAllString(s, ""))
+		s = strings.TrimSpace(mailSubjectFieldLabelRe.ReplaceAllString(s, ""))
 		if s == before || s == "" {
 			break
 		}
 	}
-	// Drop one trailing filler/politeness tail ("…의 건", "…드립니다").
+	// Drop a trailing filler parenthetical ("(재송부)", "(2차)") then one filler/
+	// politeness tail ("…의 件", "…드립니다"). Paren first so "송부 (재송부)" → "송부".
+	s = strings.TrimSpace(mailSubjectTrailParenRe.ReplaceAllString(s, ""))
 	s = strings.TrimSpace(mailSubjectSuffixRe.ReplaceAllString(s, ""))
 	return s
+}
+
+// subjectAfterAnalysisLabel returns the email subject that follows a leading generic
+// analysis label ("📧 메일 분석: <subject>"), or "" when the title is not in that
+// form. The leading emoji/symbol run is skipped before matching the label.
+func subjectAfterAnalysisLabel(t string) string {
+	r := []rune(t)
+	i := 0
+	for i < len(r) && (unicode.IsSpace(r[i]) || isEmojiRune(r[i])) {
+		i++
+	}
+	s := string(r[i:])
+	loc := mailAnalysisLabelRe.FindStringIndex(s)
+	if loc == nil {
+		return ""
+	}
+	return strings.TrimSpace(s[loc[1]:])
 }
 
 // clipRunesWord clips s to at most maxRunes runes, preferring to break at the last
