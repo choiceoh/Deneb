@@ -3,6 +3,7 @@ package handlerminiapp
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -69,26 +70,46 @@ func TestAnalysisStore_LoadMiss_PromptVersionMismatch(t *testing.T) {
 
 // Defense-in-depth: a hostile msgID containing path separators must
 // neither escape the cache dir on save nor resolve on load.
-func TestAnalysisStore_PathFor_RejectsTraversal(t *testing.T) {
-	store := NewAnalysisStore(t.TempDir())
-	for _, id := range []string{
-		"",
-		"../escape",
-		"a/b",
-		"a\\b",
-		"a.json", // contains '.' — Gmail IDs are [a-zA-Z0-9_-] only
-	} {
-		if p := store.pathFor(id); p != "" {
-			t.Errorf("pathFor(%q) returned %q, want empty (refused)", id, p)
+func TestAnalysisStore_PathFor_SanitizesUnsafe(t *testing.T) {
+	dir := t.TempDir()
+	store := NewAnalysisStore(dir)
+
+	// Empty id has no cache path.
+	if p := store.pathFor(""); p != "" {
+		t.Errorf("pathFor(%q) = %q, want empty", "", p)
+	}
+
+	// Unsafe / dotted ids are sanitized into a filename that stays INSIDE the
+	// cache dir — never refused (the old guard dropped these), never escaping.
+	for _, id := range []string{"../escape", "a/b", "a\\b", "..", "/etc/passwd", "id@host.example.com"} {
+		p := store.pathFor(id)
+		if p == "" {
+			t.Errorf("pathFor(%q) = empty, want a sanitized in-dir path", id)
+			continue
+		}
+		if filepath.Dir(p) != dir {
+			t.Errorf("pathFor(%q) = %q escapes the cache dir %q", id, p, dir)
+		}
+		if strings.ContainsAny(filepath.Base(p), `/\`) {
+			t.Errorf("pathFor(%q) base %q still contains a separator", id, filepath.Base(p))
 		}
 	}
 }
 
-func TestAnalysisStore_Save_RefusesHostileID(t *testing.T) {
+// The LMTP ingest path keys analyses by RFC 5322 Message-IDs (dots + '@'), which
+// the old guard rejected — every LMTP-ingested analysis silently failed to cache.
+func TestAnalysisStore_RoundTrip_DottedMessageID(t *testing.T) {
 	store := NewAnalysisStore(t.TempDir())
-	err := store.save(&analysisRecord{MsgID: "../oops", Analysis: "x"})
-	if err == nil {
-		t.Fatal("expected error for hostile msgID, got nil")
+	id := "lmtp-test-001@topsolar-test.example"
+	if err := store.save(&analysisRecord{MsgID: id, Analysis: "견적 분석", PromptVersion: AnalysisPromptVersion}); err != nil {
+		t.Fatalf("save dotted Message-ID: %v", err)
+	}
+	got, err := store.load(id)
+	if err != nil || got == nil {
+		t.Fatalf("load dotted Message-ID: got=%+v err=%v", got, err)
+	}
+	if got.Analysis != "견적 분석" {
+		t.Errorf("round-trip Analysis = %q, want %q", got.Analysis, "견적 분석")
 	}
 }
 

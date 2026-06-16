@@ -17,6 +17,8 @@
 package handlerminiapp
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"os"
@@ -144,16 +146,39 @@ func (s *AnalysisStore) SaveAnalysis(in CachedAnalysis) error {
 	})
 }
 
-// pathFor returns the on-disk path for msgID. Returns "" if the ID
-// contains characters that could escape the cache dir — Gmail IDs are
-// normally [a-zA-Z0-9_-] only, so anything else is treated as hostile
-// and refused.
+// pathFor returns the on-disk cache path for msgID, sanitized to a safe
+// single-component filename. Gmail IDs ([a-zA-Z0-9_-]) pass through unchanged,
+// so existing cache entries still resolve; an RFC 5322 Message-ID from the LMTP
+// ingest path carries '.' and '@', which are fine in a filename — only path
+// separators and control bytes are neutralized, so a dotted Message-ID can no
+// longer escape the dir. (The previous guard refused any '.', silently dropping
+// every LMTP-ingested analysis from the cache.) Returns "" only for an empty ID.
 func (s *AnalysisStore) pathFor(msgID string) string {
-	if msgID == "" {
+	name := sanitizeCacheFilename(msgID)
+	if name == "" {
 		return ""
 	}
-	if strings.ContainsAny(msgID, `/\.`) || strings.ContainsRune(msgID, 0) {
+	return filepath.Join(s.dir, name+".json")
+}
+
+// sanitizeCacheFilename maps an arbitrary message id to a safe filename: path
+// separators and control bytes become '_' (no separator left → no traversal),
+// and an over-long id (rare for a Message-ID) collapses to its SHA-256 hash so
+// it can't exceed the filesystem's name limit. Returns "" only for an empty id.
+func sanitizeCacheFilename(id string) string {
+	if id == "" {
 		return ""
 	}
-	return filepath.Join(s.dir, msgID+".json")
+	safe := strings.Map(func(r rune) rune {
+		if r == '/' || r == '\\' || r == 0 || r < 0x20 {
+			return '_'
+		}
+		return r
+	}, id)
+	// Cap below the common 255-byte filename limit (leaving room for ".json").
+	if len(safe) > 200 {
+		sum := sha256.Sum256([]byte(id))
+		return hex.EncodeToString(sum[:])
+	}
+	return safe
 }
