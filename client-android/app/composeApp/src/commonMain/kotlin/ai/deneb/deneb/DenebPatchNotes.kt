@@ -10,15 +10,28 @@ package ai.deneb.deneb
 //
 // Newest first. There is no per-entry version label: the app has no semantic
 // versionName anymore (it is identified by versionCode alone), so the sheet is a
-// flat reverse-chronological changelog headed by "현재 빌드 N". When you ship a
-// release with user-facing changes, prepend a new entry here with its highlights.
+// flat reverse-chronological changelog headed by "현재 빌드 N".
+//
+// DO NOT add new entries to the frozen [PATCH_NOTES_HISTORY] list below — for a new
+// user-facing change, drop a `changelog.d/YYYY-MM-DD-<slug>.md` fragment instead (see
+// changelog.d/README.md). Fragments are aggregated at build time into
+// [GENERATED_CHANGELOG_FRAGMENTS] and prepended here, so PRs add a new file rather than
+// all editing this one shared list (which collided on every native PR).
 
 /** One released build and the user-facing highlights it introduced. */
 data class DenebPatchNote(
     val highlights: List<String>,
 )
 
-val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
+/**
+ * Newest changelog.d fragments first, then the frozen history. `by lazy` so it is computed
+ * on first access — [PATCH_NOTES_HISTORY] is declared later in this file, so eager init
+ * would be a forward reference.
+ */
+val DENEB_PATCH_NOTES: List<DenebPatchNote> by lazy { GENERATED_CHANGELOG_FRAGMENTS + PATCH_NOTES_HISTORY }
+
+// Frozen pre-fragments changelog. Do not prepend here — add a changelog.d fragment.
+private val PATCH_NOTES_HISTORY: List<DenebPatchNote> = listOf(
     DenebPatchNote(
         highlights = listOf(
             "더보기 화면의 '음성 입력'이 다른 항목들과 같은 카드 안에 정리됩니다 — 예전엔 혼자 떨어진 별도 박스로 바로 붙어 보이던 것을, 같은 그룹의 마지막 줄(위에 구분선)로 합쳤습니다",

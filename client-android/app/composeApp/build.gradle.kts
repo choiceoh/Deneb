@@ -264,6 +264,54 @@ class VersionGeneratorPlugin : Plugin<Project> {
                     }
                 xcConfigFile.writeText(updatedContent)
             }
+
+            // Aggregate the per-PR patch-note fragments in changelog.d/ into a compiled
+            // list. The native changelog used to be one hand-edited listOf(...) in
+            // DenebPatchNotes.kt; every PR prepended to the same top line, so every native
+            // PR collided. Now each PR drops a YYYY-MM-DD-<slug>.md file there (new file →
+            // no shared lines → no conflict), and this folds them — newest filename first —
+            // into a generated source file under build/ that is NOT committed, so the
+            // generated list can never itself become a shared file every PR edits (which
+            // would just move the conflict). See changelog.d/README.md.
+            val fragmentsDir = rootProject.file("changelog.d")
+            val datePrefix = Regex("""^\d{4}-\d{2}-\d{2}-.*\.md$""")
+            val fragments =
+                (fragmentsDir.listFiles()?.toList() ?: emptyList())
+                    .filter { it.isFile && datePrefix.matches(it.name) }
+                    // Newest first: the date-prefixed name makes a reverse sort chronological.
+                    .sortedByDescending { it.name }
+            val entries =
+                fragments.mapNotNull { file ->
+                    val highlights =
+                        file
+                            .readLines()
+                            .map { it.trim() }
+                            .filter { it.isNotEmpty() && !it.startsWith("#") }
+                    if (highlights.isEmpty()) {
+                        null
+                    } else {
+                        val lines =
+                            highlights.joinToString(",\n") { line ->
+                                // Escape for a Kotlin "..." literal: backslash, quote, dollar.
+                                val esc = line.replace("\\", "\\\\").replace("\"", "\\\"").replace("$", "\\$")
+                                "            \"$esc\""
+                            }
+                        "    DenebPatchNote(\n        highlights = listOf(\n$lines,\n        ),\n    ),"
+                    }
+                }
+            val body = if (entries.isEmpty()) "" else "\n${entries.joinToString("\n")}\n"
+            val changelogFile =
+                layout.buildDirectory
+                    .file("generated/src/commonMain/kotlin/ai/deneb/deneb/DenebChangelogGenerated.kt")
+                    .get()
+                    .asFile
+            changelogFile.parentFile?.mkdirs()
+            changelogFile.writeText(
+                "// Code generated from changelog.d/*.md by composeApp/build.gradle.kts. DO NOT EDIT.\n" +
+                    "package ai.deneb.deneb\n\n" +
+                    "/** Per-PR patch-note fragments, newest first. Prepended to the frozen history. */\n" +
+                    "internal val GENERATED_CHANGELOG_FRAGMENTS: List<DenebPatchNote> = listOf($body)\n",
+            )
         }
     }
 }
