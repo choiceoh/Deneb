@@ -146,8 +146,10 @@ func TestNudger_RunOnce_RespectsEvaluateRejection(t *testing.T) {
 
 func TestNudger_RunReviewOnce_UsesFencedReviewerAfterEvaluate(t *testing.T) {
 	reviewer := &fakeReviewRunner{}
+	tracker := newTestTracker(t)
 	n := newTestNudger(t, 10)
 	n.reviewer = reviewer
+	n.tracker = tracker
 
 	sctx := SessionContext{
 		Turns: 3,
@@ -162,6 +164,35 @@ func TestNudger_RunReviewOnce_UsesFencedReviewerAfterEvaluate(t *testing.T) {
 	}
 	if !ran || reviewer.calls != 1 {
 		t.Fatalf("expected reviewer to run once, ran=%v calls=%d", ran, reviewer.calls)
+	}
+	snap := tracker.LivenessSnapshot()
+	if snap.ReviewAttempts != 1 || snap.ReviewSkips != 0 || snap.LastReviewAt == 0 || !snap.LastReviewOK {
+		t.Fatalf("expected review attempt/run to be observable, got %+v", snap)
+	}
+}
+
+func TestNudger_RunReviewOnce_RecordsEvaluateSkip(t *testing.T) {
+	reviewer := &fakeReviewRunner{}
+	tracker := newTestTracker(t)
+	n := newTestNudger(t, 10)
+	n.reviewer = reviewer
+	n.tracker = tracker
+
+	ran, err := n.runReviewOnce("s", SessionContext{
+		Turns: 1,
+		ToolActivities: []ToolActivity{
+			{Name: "read"}, {Name: "exec"}, {Name: "write"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("runReviewOnce: %v", err)
+	}
+	if ran || reviewer.calls != 0 {
+		t.Fatalf("expected reviewer to be skipped, ran=%v calls=%d", ran, reviewer.calls)
+	}
+	snap := tracker.LivenessSnapshot()
+	if snap.ReviewAttempts != 1 || snap.ReviewSkips != 1 || snap.LastReviewAt != 0 {
+		t.Fatalf("expected evaluate skip to be observable without review heartbeat, got %+v", snap)
 	}
 }
 

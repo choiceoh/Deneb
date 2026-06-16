@@ -52,6 +52,13 @@ func TestBuildToolSummary(t *testing.T) {
 	}
 }
 
+func TestDefaultConfigKeepsAttemptThresholdLow(t *testing.T) {
+	cfg := DefaultConfig()
+	if cfg.MinToolCalls != 2 || cfg.MinTurns != 2 || DefaultNudgeInterval != 3 || DefaultEvolveEventThreshold != 3 {
+		t.Fatalf("unexpected low-attempt defaults: %+v nudge=%d evolveThreshold=%d", cfg, DefaultNudgeInterval, DefaultEvolveEventThreshold)
+	}
+}
+
 func TestEvaluate_MinToolCalls(t *testing.T) {
 	svc := &Service{
 		cfg: Config{MinToolCalls: 5, MinTurns: 3, MaxSkillsPerDay: 10},

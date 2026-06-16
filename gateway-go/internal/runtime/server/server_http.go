@@ -100,10 +100,13 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	if s.genesisTracker != nil {
 		live := s.genesisTracker.LivenessSnapshot()
 		se := map[string]any{
-			"last_review_ms":  live.LastReviewAt,
-			"last_review_ok":  live.LastReviewOK,
-			"last_evolve_ms":  live.LastEvolveAt,
-			"last_genesis_ms": live.LastGenesisAt,
+			"last_review_ms":        live.LastReviewAt,
+			"last_review_ok":        live.LastReviewOK,
+			"last_evolve_ms":        live.LastEvolveAt,
+			"last_genesis_ms":       live.LastGenesisAt,
+			"review_attempts":       live.ReviewAttempts,
+			"review_skips":          live.ReviewSkips,
+			"validation_rejections": live.ValidationRejections,
 		}
 		if live.LastReviewAt > 0 {
 			se["review_age"] = formatUptimeHTTP(time.Since(time.UnixMilli(live.LastReviewAt)))
@@ -115,14 +118,46 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 		// one skill is visible here instead of only in the logs (PR #2328).
 		eh := s.genesisTracker.EvolutionHealth()
 		se["evolves_7d"] = eh.Evolves7d
+		se["evolve_rejected_7d"] = eh.EvolveRejected7d
+		se["evolve_rolled_back_7d"] = eh.EvolveRolledBack7d
 		se["genesis_7d"] = eh.Genesis7d
 		se["distinct_skills_evolved_7d"] = eh.DistinctSkillsEvolved7d
 		if eh.TopEvolvedSkill != "" {
 			se["top_evolved_skill"] = eh.TopEvolvedSkill
 			se["top_evolved_count"] = eh.TopEvolvedCount
 		}
+		if eh.LastRejectedSkill != "" {
+			se["last_rejected_skill"] = eh.LastRejectedSkill
+			se["last_rejected_reason"] = eh.LastRejectedReason
+		}
 		if eh.Thrash {
 			se["thrash"] = true
+		}
+		if usageQuality, err := s.genesisTracker.UsageQualitySummary(""); err == nil {
+			se["usage_records"] = usageQuality.TotalRecords
+			se["usage_counted_records"] = usageQuality.CountedRecords
+			se["ignored_usage_records"] = usageQuality.IgnoredRecords
+			if usageQuality.IgnoredUnactionableLegacyFailures > 0 {
+				se["ignored_unactionable_legacy_failures"] = usageQuality.IgnoredUnactionableLegacyFailures
+				se["top_ignored_unactionable_legacy_failure_skill"] = usageQuality.TopIgnoredUnactionableLegacyFailureSkill
+				se["top_ignored_unactionable_legacy_failure_skill_count"] = usageQuality.TopIgnoredUnactionableLegacyFailureSkillCount
+			}
+		}
+		if validationCases, err := s.genesisTracker.ValidationCaseSummary(""); err == nil {
+			se["validation_case_records"] = validationCases.RawRecords
+			se["validation_cases_unique"] = validationCases.UniqueRecords
+			se["validation_case_duplicates"] = validationCases.DuplicateRecords
+			se["validation_cases_automatic"] = validationCases.AutomaticRecords
+			se["validation_cases_unique_automatic"] = validationCases.UniqueAutomaticRecords
+			se["validation_case_skills"] = validationCases.SkillsWithCases
+			if validationCases.WeakAutomaticRecords > 0 {
+				se["validation_cases_weak_automatic"] = validationCases.WeakAutomaticRecords
+				se["validation_cases_unique_weak_automatic"] = validationCases.UniqueWeakAutomaticCases
+			}
+			if validationCases.TopSkill != "" {
+				se["validation_case_top_skill"] = validationCases.TopSkill
+				se["validation_case_top_skill_cases"] = validationCases.TopSkillUniqueCases
+			}
 		}
 		// Skill-library value: how many self-generated skills earn their keep.
 		// Many unused = net-negative cost (catalog + prompt tokens, no payoff).

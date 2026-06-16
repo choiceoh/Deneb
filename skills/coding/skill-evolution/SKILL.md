@@ -1,6 +1,6 @@
 ---
 name: skill-evolution
-version: "1.0.0"
+version: "1.0.4"
 category: coding
 description: "Evolve and optimize existing skills using autoresearch methodology. Use when: (1) a skill produces suboptimal results, (2) a skill's instructions are outdated or incomplete, (3) systematic improvement of skill quality is requested. NOT for: creating new skills (use skill-factory), cosmetic changes, or skills that already work well."
 metadata:
@@ -8,7 +8,7 @@ metadata:
     "deneb":
       {
         "emoji": "🧬",
-        "tags": ["evolution", "optimization", "improvement", "GEPA", "autoresearch"],
+        "tags": ["evolution", "optimization", "improvement", "GEPA", "autoresearch", "SkillOpt", "rejected-edit-buffer", "held-out-replay"],
         "related_skills": ["evolution-proposal", "skill-factory", "skill-creator"],
       },
   }
@@ -17,6 +17,10 @@ metadata:
 # Skill Evolution — Self-Improving Skills
 
 Inspired by hermes-agent's GEPA (Genetic-Pareto Prompt Evolution): analyze execution traces, understand WHY things fail, propose targeted improvements.
+
+Also follows the SkillOpt stability pattern: treat the skill body as trainable
+text state, propose bounded add/delete/replace edits, accept only after a
+validation gate, and keep rejected edits as future optimizer input.
 
 ## When to Use
 
@@ -50,6 +54,9 @@ Rules from autoresearch methodology:
 - **One change at a time** — never bundle unrelated modifications
 - **Small changes > large rewrites** — 2-line improvement that works > 50-line rewrite that doesn't
 - **Reversible** — every change must be cleanly revertable
+- **Textual learning rate** — prefer a bounded edit budget; don't rewrite a whole skill when one section or warning is enough
+- **Rejected-edit awareness** — check `skill_lifecycle` status for `rejectedEdits` and avoid repeating candidates that already failed validation
+- **Held-out replay awareness** — check `validationCases`; the evolver also injects recent cases into candidate-generation prompts, so do not remove actions, session-extracted tool calls, command fragments, fixture observations, or ordering that a replay case requires
 
 ### Phase 3: Mutate
 
@@ -68,7 +75,7 @@ scripts/dev/iterate.sh --metric "scripts/dev/quality-metric.sh"
 
 ### Phase 4: Evaluate
 
-**Constraint gates** (adapted from hermes self-evolution):
+**Constraint gates** (adapted from hermes self-evolution and SkillOpt):
 
 | Gate | Criterion |
 |---|---|
@@ -76,6 +83,9 @@ scripts/dev/iterate.sh --metric "scripts/dev/quality-metric.sh"
 | Semantic fidelity | Original intent must be preserved |
 | Cache preservation | Changes must not alter the frontmatter structure |
 | No gaming | Don't optimize for the metric at the expense of real quality |
+| Validation gate | Candidate changes must pass self-test and held-out replay cases before they are committed |
+| Rejected buffer | Failed candidates are recorded and should inform the next attempt |
+| Replay regression | A candidate must not drop required actions/tool calls/session-derived input fragments/observations, reorder required traces, or introduce forbidden actions/tool calls/observations from `validationCases` |
 
 **Quality metrics** (use appropriate dev-iterate preset):
 
@@ -88,8 +98,8 @@ scripts/dev/iterate.sh --metric "scripts/dev/quality-metric.sh"
 ### Phase 5: Keep or Revert
 
 - **Improved**: keep the change, bump version patch (e.g., 1.0.0 → 1.0.1)
-- **No change**: revert entirely, try a different hypothesis
-- **Degraded**: revert immediately, document what didn't work
+- **No change**: keep the original; try a different hypothesis informed by `rejectedEdits`
+- **Degraded**: reject immediately, record why, and do not repeat the same edit shape
 
 ### Phase 6: Record
 
@@ -124,6 +134,7 @@ scripts/dev/ar-results.sh --suggest
 3. **No new dependencies** — don't add requires.bins that aren't already available
 4. **Size limit 15KB** — skills should be concise instructions, not encyclopedias
 5. **Semantic drift detection** — if the skill's description no longer matches its body, revert
+6. **Strict acceptance** — never land an evolved skill only because it looks plausible; it must clear validation
 
 ## Stuck Recovery (from autoresearch methodology)
 
@@ -148,3 +159,9 @@ Prioritize skills by:
 1. Most frequently loaded (check session-logs)
 2. Most reported failures
 3. Oldest version (haven't been touched)
+
+## Changelog
+- v1.0.4: Noted that recent validation cases are injected into candidate-generation prompts.
+- v1.0.3: Added session-extracted validation trace awareness.
+- v1.0.2: Added held-out replay validation guidance for evolved skill candidates.
+- v1.0.1: Added SkillOpt-style validation gate and rejected-edit buffer guidance.

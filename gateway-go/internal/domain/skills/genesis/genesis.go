@@ -46,7 +46,7 @@ var ErrSkillDeduped = errors.New("genesis: skill deduplicated (too similar to ex
 // Config configures the genesis service.
 type Config struct {
 	// MinToolCalls is the minimum number of tool calls in a session to
-	// consider it for skill extraction. Default: 3.
+	// consider it for skill extraction. Default: 2.
 	MinToolCalls int
 	// MinTurns is the minimum number of agent turns. Default: 2.
 	MinTurns int
@@ -71,7 +71,7 @@ func DefaultConfig() Config {
 		outputDir = filepath.Join(home, ".deneb", "skills", "genesis")
 	}
 	return Config{
-		MinToolCalls:     3,
+		MinToolCalls:     2,
 		MinTurns:         2,
 		OutputDir:        outputDir,
 		CooldownPerSkill: 24 * time.Hour,
@@ -106,6 +106,8 @@ type SessionContext struct {
 type ToolActivity struct {
 	Name    string `json:"name"`
 	IsError bool   `json:"isError,omitempty"`
+	Input   string `json:"input,omitempty"`
+	Output  string `json:"output,omitempty"`
 }
 
 // GeneratedSkill is the LLM output for a new skill.
@@ -145,7 +147,7 @@ func NewService(cfg Config, llmClient *llm.Client, catalog *skills.Catalog, logg
 		logger = slog.Default()
 	}
 	if cfg.MinToolCalls == 0 {
-		cfg.MinToolCalls = 3
+		cfg.MinToolCalls = 2
 	}
 	if cfg.MinTurns == 0 {
 		cfg.MinTurns = 2

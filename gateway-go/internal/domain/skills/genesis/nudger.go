@@ -29,10 +29,10 @@ import (
 
 // DefaultNudgeInterval is the default number of tool invocations between
 // background skill-review fires. Hermes uses 10, but Deneb's primary I/O
-// surface (the native client) typically ends sessions at 5-7 tool calls
-// before the threshold is ever crossed, so we use a tighter default so the
-// system actually fires on real conversations.
-const DefaultNudgeInterval = 5
+// surface (the native client) often has reusable work by the third tool call.
+// Keep the review trigger cheap and early; quality gates decide whether the
+// review becomes a real genesis/evolve action.
+const DefaultNudgeInterval = 3
 
 // nudgeGenerationTimeout caps a single background review so a stuck LLM
 // call cannot leak goroutines indefinitely.
@@ -40,7 +40,7 @@ const nudgeGenerationTimeout = 90 * time.Second
 
 // maxNudgeBackoffShift caps the per-session review backoff. The fire
 // threshold for a session is interval << min(fires, maxNudgeBackoffShift),
-// so with interval=5 it grows 5 → 10 → 20 → 40 → 80 and then holds at 80.
+// so with interval=3 it grows 3 → 6 → 12 → 24 → 48 and then holds at 48.
 // This stops a long-running session (e.g. a cron job repeating the same class
 // of work) from re-reviewing a near-identical transcript every `interval`
 // tool calls and landing on the same no-op verdict each time.
@@ -264,10 +264,16 @@ func (n *Nudger) runReviewOnce(sessionKey string, snapshot SessionContext) (bool
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), nudgeGenerationTimeout)
 	defer cancel()
+	if n.tracker != nil {
+		n.tracker.RecordEvolutionActivity(SkillActivityReviewAttempt, true, "")
+	}
 	if !n.svc.Evaluate(snapshot) {
 		n.logger.Debug("skill nudger: review evaluate rejected session",
 			"session", sessionKey, "turns", snapshot.Turns,
 			"tools", len(snapshot.ToolActivities))
+		if n.tracker != nil {
+			n.tracker.RecordEvolutionActivity(SkillActivityReviewSkipped, true, "")
+		}
 		return false, nil
 	}
 	err := n.reviewer.RunSkillReview(ctx, sessionKey, snapshot)

@@ -1,0 +1,193 @@
+package genesis
+
+import (
+	"fmt"
+	"log/slog"
+	"strings"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
+)
+
+const (
+	defaultSkillValidationCaseLimit = 20
+	skillHeldOutMinScoreDelta       = 1.0
+)
+
+// SkillValidationEngine is the selector-side held-out gate for skill evolution.
+// It is deliberately separate from Evolver so deterministic invariants and
+// dry-run replay checks can evolve without changing candidate generation.
+type SkillValidationEngine struct {
+	tracker       *Tracker
+	logger        *slog.Logger
+	caseLimit     int
+	minScoreDelta float64
+}
+
+// SkillValidationResult describes original-vs-candidate performance on
+// persisted held-out validation cases.
+type SkillValidationResult struct {
+	Evaluated       bool     `json:"evaluated"`
+	Pass            bool     `json:"pass"`
+	Reason          string   `json:"reason,omitempty"`
+	CaseCount       int      `json:"caseCount,omitempty"`
+	OriginalPassed  int      `json:"originalPassed,omitempty"`
+	OriginalTotal   int      `json:"originalTotal,omitempty"`
+	CandidatePassed int      `json:"candidatePassed,omitempty"`
+	CandidateTotal  int      `json:"candidateTotal,omitempty"`
+	OriginalScore   float64  `json:"originalScore,omitempty"`
+	CandidateScore  float64  `json:"candidateScore,omitempty"`
+	Failures        []string `json:"failures,omitempty"`
+}
+
+func NewSkillValidationEngine(tracker *Tracker, logger *slog.Logger) *SkillValidationEngine {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	return &SkillValidationEngine{
+		tracker:       tracker,
+		logger:        logger,
+		caseLimit:     defaultSkillValidationCaseLimit,
+		minScoreDelta: skillHeldOutMinScoreDelta,
+	}
+}
+
+// ValidateCandidate runs selector-side held-out validation. No stored cases is a
+// pass with Evaluated=false; unavailable storage returns an error so the caller
+// can decide fail-open/fail-closed.
+func (v *SkillValidationEngine) ValidateCandidate(skillName, originalContent, candidateBody string) (SkillValidationResult, error) {
+	if v == nil || v.tracker == nil {
+		return SkillValidationResult{Pass: true}, nil
+	}
+	limit := v.caseLimit
+	if limit <= 0 {
+		limit = defaultSkillValidationCaseLimit
+	}
+	cases, err := v.tracker.RecentSkillValidationCases(skillName, limit)
+	if err != nil {
+		return SkillValidationResult{}, err
+	}
+	if len(cases) == 0 {
+		return SkillValidationResult{Pass: true}, nil
+	}
+
+	orig := scoreSkillValidationCases(skillBodyOnly(originalContent), cases)
+	cand := scoreSkillValidationCases(candidateBody, cases)
+	result := SkillValidationResult{
+		Evaluated:       cand.Total > 0,
+		Pass:            true,
+		CaseCount:       len(cases),
+		OriginalPassed:  orig.Passed,
+		OriginalTotal:   orig.Total,
+		CandidatePassed: cand.Passed,
+		CandidateTotal:  cand.Total,
+		OriginalScore:   orig.Percent(),
+		CandidateScore:  cand.Percent(),
+		Failures:        cand.Failures,
+	}
+	if cand.Total == 0 {
+		return result, nil
+	}
+	if cand.Passed < orig.Passed {
+		result.Pass = false
+		result.Reason = fmt.Sprintf("held-out selection rejected: candidate regressed validation cases (%d/%d vs original %d/%d): %s",
+			cand.Passed, cand.Total, orig.Passed, orig.Total, formatValidationFailures(cand.Failures))
+		return result, nil
+	}
+	minDelta := v.minScoreDelta
+	if minDelta <= 0 {
+		minDelta = skillHeldOutMinScoreDelta
+	}
+	if result.OriginalScore < 100 && result.CandidateScore-result.OriginalScore < minDelta {
+		result.Pass = false
+		result.Reason = fmt.Sprintf("held-out selection rejected: candidate did not improve validation score enough (%.1f vs original %.1f): %s",
+			result.CandidateScore, result.OriginalScore, formatValidationFailures(cand.Failures))
+		return result, nil
+	}
+	return result, nil
+}
+
+type validationCaseScore struct {
+	Passed   int
+	Total    int
+	Failures []string
+}
+
+func (s validationCaseScore) Percent() float64 {
+	if s.Total == 0 {
+		return 100
+	}
+	return float64(s.Passed) * 100 / float64(s.Total)
+}
+
+func scoreSkillValidationCases(body string, cases []SkillValidationCaseRecord) validationCaseScore {
+	var score validationCaseScore
+	normalizedBody := normalizedValidationText(body)
+	headings := map[string]struct{}{}
+	for _, heading := range skillHeadings(body) {
+		headings[heading.normalized] = struct{}{}
+	}
+	for _, tc := range cases {
+		label := validationCaseLabel(tc)
+		for _, required := range tc.RequiredSubstrings {
+			score.Total++
+			if containsNormalizedValidationText(normalizedBody, required) {
+				score.Passed++
+				continue
+			}
+			score.Failures = append(score.Failures, fmt.Sprintf("%s missing required substring %q", label, truncateRunes(required, 80)))
+		}
+		for _, forbidden := range tc.ForbiddenSubstrings {
+			score.Total++
+			if !containsNormalizedValidationText(normalizedBody, forbidden) {
+				score.Passed++
+				continue
+			}
+			score.Failures = append(score.Failures, fmt.Sprintf("%s contains forbidden substring %q", label, truncateRunes(forbidden, 80)))
+		}
+		for _, required := range tc.RequiredHeadings {
+			score.Total++
+			normalizedHeading := strings.ToLower(strings.Join(strings.Fields(required), " "))
+			if _, ok := headings[normalizedHeading]; ok {
+				score.Passed++
+				continue
+			}
+			score.Failures = append(score.Failures, fmt.Sprintf("%s missing required heading %q", label, truncateRunes(required, 80)))
+		}
+		score.add(scoreSkillReplayCase(body, tc))
+	}
+	if len(score.Failures) > 3 {
+		score.Failures = score.Failures[:3]
+	}
+	return score
+}
+
+func (s *validationCaseScore) add(other validationCaseScore) {
+	s.Passed += other.Passed
+	s.Total += other.Total
+	s.Failures = append(s.Failures, other.Failures...)
+}
+
+func validationCaseLabel(tc SkillValidationCaseRecord) string {
+	label := strings.TrimSpace(tc.ID)
+	if label == "" {
+		label = strings.TrimSpace(tc.Description)
+	}
+	if label == "" {
+		label = strings.TrimSpace(tc.SkillName)
+	}
+	return label
+}
+
+func formatValidationFailures(failures []string) string {
+	if len(failures) == 0 {
+		return "no failing assertion, but score did not improve"
+	}
+	return strings.Join(failures, "; ")
+}
+
+func skillBodyOnly(content string) string {
+	if _, bodyOffset := skills.ExtractFrontmatterBlock(content); bodyOffset > 0 && bodyOffset < len(content) {
+		return content[bodyOffset:]
+	}
+	return content
+}

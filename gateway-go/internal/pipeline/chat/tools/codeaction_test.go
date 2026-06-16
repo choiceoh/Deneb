@@ -141,6 +141,45 @@ func TestCodeActionBridge(t *testing.T) {
 	}
 }
 
+func TestCodeActionPromotionCallsSkillLifecycleAfterSuccessfulRun(t *testing.T) {
+	inv := &recordingInvoker{result: `{"ok":true,"route":"genesis","executed":true}`}
+	out := promoteCodeActionWorkflow(context.Background(), inv, CodeActionPromotion{
+		Candidate: "Batch join contacts calendar and wiki in code_action",
+		Evidence:  "used structured as_json joins and local wiki write",
+	}, true)
+	if !strings.Contains(out, "code_action skill promotion") || !strings.Contains(out, `"executed":true`) {
+		t.Fatalf("unexpected promotion output: %s", out)
+	}
+	calls := inv.called()
+	if len(calls) != 1 || !strings.HasPrefix(calls[0], "skill_lifecycle:") {
+		t.Fatalf("expected one skill_lifecycle call, got %v", calls)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimPrefix(calls[0], "skill_lifecycle:")), &payload); err != nil {
+		t.Fatalf("decode promotion payload: %v", err)
+	}
+	if payload["action"] != "propose" ||
+		payload["candidate"] != "Batch join contacts calendar and wiki in code_action" ||
+		payload["route"] != "genesis" ||
+		payload["execute"] != true ||
+		!strings.Contains(payload["evidence"].(string), "successful code_action workflow") {
+		t.Fatalf("unexpected promotion payload: %+v", payload)
+	}
+}
+
+func TestCodeActionPromotionSkipsFailedRun(t *testing.T) {
+	inv := &recordingInvoker{result: "SHOULD_NOT_CALL"}
+	out := promoteCodeActionWorkflow(context.Background(), inv, CodeActionPromotion{
+		Candidate: "Failed workflow",
+	}, false)
+	if !strings.Contains(out, "skipped") {
+		t.Fatalf("expected skipped promotion, got %s", out)
+	}
+	if calls := inv.called(); len(calls) != 0 {
+		t.Fatalf("failed code_action must not call skill_lifecycle, got %v", calls)
+	}
+}
+
 // requirePython skips the test if python3 is not on PATH (CI has no GPU host
 // toolchain guarantee). The pure-Go tests above always run.
 func requirePython(t *testing.T) {

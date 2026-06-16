@@ -99,9 +99,21 @@ func mergeSkillReviewActivities(a, b []genesis.ToolActivity) []genesis.ToolActiv
 	if len(b) == 0 {
 		return append([]genesis.ToolActivity(nil), a...)
 	}
+	if skillReviewActivitiesHaveTrace(a) {
+		return append([]genesis.ToolActivity(nil), a...)
+	}
 	out := append([]genesis.ToolActivity(nil), a...)
 	out = append(out, b...)
 	return out
+}
+
+func skillReviewActivitiesHaveTrace(activities []genesis.ToolActivity) bool {
+	for _, activity := range activities {
+		if strings.TrimSpace(activity.Input) != "" || strings.TrimSpace(activity.Output) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func buildSkillReviewPrompt(sessionKey string, sctx genesis.SessionContext) string {
@@ -132,6 +144,7 @@ Tool summary: %s
 2. If an existing umbrella skill almost covers it, improve that umbrella.
 3. If a support artifact under an existing skill would preserve detailed commands/config better, prefer that over a new skill.
 4. Create/genesis a new skill only for a reusable class-level workflow.
+5. Before repeating an evolve route for a skill, inspect skill_lifecycle status and avoid candidates already present in rejectedEdits.
 
 ## Required Action
 
@@ -143,10 +156,11 @@ Record exactly one lifecycle decision with skill_lifecycle action=propose:
 
 If skill_lifecycle is deferred or not visible, load it with fetch_tools first.
 Set execute=true only when the route is clear and reusable. When unsure, record no-op with the reason.
+If route=evolve/genesis/create is based on a concrete replayable failure or user correction, also call skill_lifecycle action=validation_case_from_session with skillName, sessionKey=%s, and a short description. Add replay.requiredActions or replay.requiredObservations only when the transcript proves the invariant; the tool will extract ordered tool calls and fixture outputs from the target session.
 
 ## Target Transcript
 
-%s`, sessionKey, sctx.Turns, skillReviewToolSummary(sctx.ToolActivities), sessionKey, transcript)
+%s`, sessionKey, sctx.Turns, skillReviewToolSummary(sctx.ToolActivities), sessionKey, sessionKey, transcript)
 }
 
 func skillReviewToolSummary(activities []genesis.ToolActivity) string {

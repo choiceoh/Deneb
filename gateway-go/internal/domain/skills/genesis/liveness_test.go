@@ -18,6 +18,13 @@ func TestLivenessHeartbeat(t *testing.T) {
 	if snap.LastReviewAt == 0 || !snap.LastReviewOK {
 		t.Fatalf("review heartbeat not recorded: %+v", snap)
 	}
+	tr.RecordEvolutionActivity(SkillActivityReviewAttempt, true, "")
+	tr.RecordEvolutionActivity(SkillActivityReviewSkipped, true, "")
+	tr.RecordEvolutionActivity(SkillActivityValidationRejected, true, "")
+	snap = tr.LivenessSnapshot()
+	if snap.ReviewAttempts != 1 || snap.ReviewSkips != 1 || snap.ValidationRejections != 1 {
+		t.Fatalf("attempt/skip/rejection counters not recorded: %+v", snap)
+	}
 
 	tr.RecordEvolutionActivity(SkillActivityEvolve, false, "boom")
 	snap = tr.LivenessSnapshot()

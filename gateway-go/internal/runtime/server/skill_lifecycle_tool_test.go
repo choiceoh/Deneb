@@ -2,11 +2,15 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 	chattools "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
 )
 
@@ -20,6 +24,32 @@ func newSkillLifecycleTestTracker(t *testing.T) *genesis.Tracker {
 	return tracker
 }
 
+type skillLifecycleTranscriptStore struct {
+	msgs  []toolctx.ChatMessage
+	byKey map[string][]toolctx.ChatMessage
+}
+
+func (s skillLifecycleTranscriptStore) Append(string, toolctx.ChatMessage) error { return nil }
+func (s skillLifecycleTranscriptStore) Load(sessionKey string, _ int) ([]toolctx.ChatMessage, int, error) {
+	if s.byKey != nil {
+		msgs := append([]toolctx.ChatMessage(nil), s.byKey[sessionKey]...)
+		return msgs, len(msgs), nil
+	}
+	return append([]toolctx.ChatMessage(nil), s.msgs...), len(s.msgs), nil
+}
+func (s skillLifecycleTranscriptStore) Delete(string) error { return nil }
+func (s skillLifecycleTranscriptStore) ListKeys() ([]string, error) {
+	keys := make([]string, 0, len(s.byKey))
+	for key := range s.byKey {
+		keys = append(keys, key)
+	}
+	return keys, nil
+}
+func (s skillLifecycleTranscriptStore) Search(string, int) ([]toolctx.SearchResult, error) {
+	return nil, nil
+}
+func (s skillLifecycleTranscriptStore) CloneRecent(string, string, int) error { return nil }
+
 func TestSkillLifecycleStatusFiltersBySkillAndStats(t *testing.T) {
 	tracker := newSkillLifecycleTestTracker(t)
 	if err := tracker.RecordUsage(genesis.UsageRecord{
@@ -29,6 +59,12 @@ func TestSkillLifecycleStatusFiltersBySkillAndStats(t *testing.T) {
 		ErrorMsg:   "missing token",
 	}); err != nil {
 		t.Fatalf("RecordUsage: %v", err)
+	}
+	if err := tracker.RecordUsage(genesis.UsageRecord{
+		SkillName: "deploy-helper",
+		Success:   false,
+	}); err != nil {
+		t.Fatalf("RecordUsage empty legacy failure: %v", err)
 	}
 	if err := tracker.LogGenesis("other-skill", "session", "", "coding", "Other workflow"); err != nil {
 		t.Fatalf("LogGenesis(other): %v", err)
@@ -43,6 +79,14 @@ func TestSkillLifecycleStatusFiltersBySkillAndStats(t *testing.T) {
 		Executed:  true,
 	}); err != nil {
 		t.Fatalf("LogEvolutionProposal: %v", err)
+	}
+	if err := tracker.RecordRejectedSkillEdit(genesis.RejectedSkillEditRecord{
+		SkillName:     "deploy-helper",
+		Reason:        "invented command",
+		CandidateBody: "bad candidate",
+		Source:        "self-test",
+	}); err != nil {
+		t.Fatalf("RecordRejectedSkillEdit: %v", err)
 	}
 
 	backend := &skillLifecycleBackend{tracker: tracker}
@@ -62,9 +106,288 @@ func TestSkillLifecycleStatusFiltersBySkillAndStats(t *testing.T) {
 	if stats.SkillName != "deploy-helper" || stats.TotalUses != 1 || stats.SuccessRate != 0 {
 		t.Fatalf("unexpected stats: %+v", stats)
 	}
+	quality := got["usageQuality"].(genesis.UsageQualitySummary)
+	if quality.SkillName != "deploy-helper" || quality.TotalRecords != 2 || quality.CountedRecords != 1 || quality.IgnoredUnactionableLegacyFailures != 1 {
+		t.Fatalf("unexpected usage quality: %+v", quality)
+	}
 	curator := got["curator"].([]genesis.SkillCuratorRecord)
 	if len(curator) != 1 || curator[0].SkillName != "deploy-helper" {
 		t.Fatalf("unexpected curator report: %+v", curator)
+	}
+	rejected := got["rejectedEdits"].([]genesis.RejectedSkillEditRecord)
+	if len(rejected) != 1 || rejected[0].Reason != "invented command" {
+		t.Fatalf("unexpected rejected edits: %+v", rejected)
+	}
+}
+
+func TestSkillLifecycleStatusKeepsPartialStateWhenRejectedEditsUnreadable(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	tracker, err := genesis.NewTracker(slog.Default())
+	if err != nil {
+		t.Fatalf("NewTracker: %v", err)
+	}
+	if err := tracker.LogGenesis("deploy-helper", "session", "telegram:1", "coding", "Deploy workflow"); err != nil {
+		t.Fatalf("LogGenesis: %v", err)
+	}
+
+	rejectedPath := filepath.Join(home, ".deneb", "data", "skill_rejected_edits.jsonl")
+	if err := os.WriteFile(rejectedPath, []byte(strings.Repeat("x", 1<<20+1)+"\n"), 0o644); err != nil {
+		t.Fatalf("write oversized rejected edits sidecar: %v", err)
+	}
+
+	backend := &skillLifecycleBackend{tracker: tracker}
+	gotAny, err := backend.SkillLifecycleStatus(context.Background(), chattools.SkillLifecycleStatusRequest{
+		SkillName: "deploy-helper",
+		Limit:     5,
+	})
+	if err != nil {
+		t.Fatalf("SkillLifecycleStatus should return partial state: %v", err)
+	}
+	got := gotAny.(map[string]any)
+	if got["ok"] != true {
+		t.Fatalf("expected ok partial status, got %+v", got)
+	}
+	recent := got["recent"].([]genesis.LifecycleLogEntry)
+	if len(recent) != 1 || recent[0].SkillName != "deploy-helper" {
+		t.Fatalf("expected lifecycle log to remain available, got %+v", recent)
+	}
+	if rejected, ok := got["rejectedEdits"].([]genesis.RejectedSkillEditRecord); !ok || len(rejected) != 0 {
+		t.Fatalf("expected empty rejected edits on sidecar error, got %#v", got["rejectedEdits"])
+	}
+	if errText, ok := got["rejectedEditsError"].(string); !ok || !strings.Contains(errText, "load rejected edits") {
+		t.Fatalf("expected rejectedEditsError, got %+v", got)
+	}
+}
+
+func TestSkillLifecycleStatusIncludesOptimizerMemory(t *testing.T) {
+	tracker := newSkillLifecycleTestTracker(t)
+	if err := tracker.LogEvolve("deploy-helper", "1.0.1", "tighten verification steps"); err != nil {
+		t.Fatalf("LogEvolve: %v", err)
+	}
+	if err := tracker.LogEvolveRejected("deploy-helper", "invented command"); err != nil {
+		t.Fatalf("LogEvolveRejected: %v", err)
+	}
+
+	backend := &skillLifecycleBackend{tracker: tracker}
+	gotAny, err := backend.SkillLifecycleStatus(context.Background(), chattools.SkillLifecycleStatusRequest{
+		SkillName: "deploy-helper",
+		Limit:     5,
+	})
+	if err != nil {
+		t.Fatalf("SkillLifecycleStatus: %v", err)
+	}
+	got := gotAny.(map[string]any)
+	memory := got["optimizerMemory"].(genesis.SkillOptimizerMemoryEntry)
+	if memory.AcceptedCount != 1 || memory.RejectedCount != 1 {
+		t.Fatalf("unexpected optimizer memory counts: %+v", memory)
+	}
+	if len(memory.StableDirections) != 1 || memory.StableDirections[0] != "tighten verification steps" {
+		t.Fatalf("unexpected stable directions: %+v", memory.StableDirections)
+	}
+	if len(memory.AvoidDirections) != 1 || memory.AvoidDirections[0] != "invented command" {
+		t.Fatalf("unexpected avoid directions: %+v", memory.AvoidDirections)
+	}
+}
+
+func TestSkillLifecycleValidationCaseRecordsAndStatusSurfacesIt(t *testing.T) {
+	tracker := newSkillLifecycleTestTracker(t)
+	backend := &skillLifecycleBackend{tracker: tracker}
+
+	if _, err := backend.RecordSkillValidationCase(context.Background(), chattools.SkillValidationCaseRequest{
+		SkillName:           "topsolar-db",
+		ID:                  "safe-wrapper",
+		Description:         "preserve safe execution wrapper",
+		RequiredSubstrings:  []string{"단일 bash block"},
+		ForbiddenSubstrings: []string{"eval"},
+		RequiredHeadings:    []string{"통합 실행 흐름"},
+		Replay: chattools.SkillReplayCaseRequest{
+			Input:                 "srv1에서 실제 deneb-gateway 상태를 확인하고 개선",
+			RequiredActions:       []string{"ssh srv1", "systemctl --user status deneb-gateway.service"},
+			ForbiddenActions:      []string{"로컬 상태만 보고 판단"},
+			RequiredObservations:  []string{"active (running)"},
+			ForbiddenObservations: []string{"stopped"},
+			RequiredTools:         []string{"ssh"},
+			ExpectedToolCalls: []chattools.SkillReplayToolCallRequest{
+				{Name: "exec", InputIncludes: []string{"ssh srv1"}},
+				{Name: "exec", InputIncludes: []string{"systemctl --user status deneb-gateway.service"}, FixtureOutput: "Active: active (running)"},
+			},
+			ForbiddenToolCalls: []chattools.SkillReplayToolCallRequest{
+				{Name: "exec", InputIncludes: []string{"rm -rf"}},
+			},
+			RequireOrder: true,
+		},
+		Source: "operator",
+	}); err != nil {
+		t.Fatalf("RecordSkillValidationCase: %v", err)
+	}
+
+	gotAny, err := backend.SkillLifecycleStatus(context.Background(), chattools.SkillLifecycleStatusRequest{
+		SkillName: "topsolar-db",
+		Limit:     5,
+	})
+	if err != nil {
+		t.Fatalf("SkillLifecycleStatus: %v", err)
+	}
+	got := gotAny.(map[string]any)
+	cases := got["validationCases"].([]genesis.SkillValidationCaseRecord)
+	if len(cases) != 1 || cases[0].ID != "safe-wrapper" || cases[0].Source != "operator" {
+		t.Fatalf("unexpected validation cases: %+v", cases)
+	}
+	if cases[0].Replay.Input == "" ||
+		len(cases[0].Replay.RequiredActions) != 2 ||
+		len(cases[0].Replay.ForbiddenActions) != 1 ||
+		len(cases[0].Replay.RequiredObservations) != 1 ||
+		len(cases[0].Replay.ForbiddenObservations) != 1 ||
+		len(cases[0].Replay.RequiredTools) != 1 ||
+		len(cases[0].Replay.ExpectedToolCalls) != 2 ||
+		cases[0].Replay.ExpectedToolCalls[1].FixtureOutput == "" ||
+		len(cases[0].Replay.ForbiddenToolCalls) != 1 ||
+		!cases[0].Replay.RequireOrder {
+		t.Fatalf("unexpected replay case: %+v", cases[0].Replay)
+	}
+	summary := got["validationCaseSummary"].(genesis.SkillValidationCaseSummary)
+	if summary.SkillName != "topsolar-db" ||
+		summary.RawRecords != 1 ||
+		summary.UniqueRecords != 1 ||
+		summary.DuplicateRecords != 0 {
+		t.Fatalf("unexpected validation case summary: %+v", summary)
+	}
+}
+
+func TestSkillLifecycleValidationCaseFromSessionExtractsToolTrace(t *testing.T) {
+	tracker := newSkillLifecycleTestTracker(t)
+	store := skillLifecycleTranscriptStore{msgs: []toolctx.ChatMessage{
+		{Role: "user", Content: json.RawMessage(`"srv1에서 실제 deneb-gateway 상태를 확인하고 개선"`)},
+		{Role: "assistant", Content: json.RawMessage(`[
+			{"type":"tool_use","id":"tu_1","name":"exec","input":{"cmd":"ssh srv1 systemctl --user status deneb-gateway.service","workdir":"/srv/deneb"}}
+		]`)},
+		{Role: "user", Content: json.RawMessage(`[
+			{"type":"tool_result","tool_use_id":"tu_1","content":"Active: active (running)","is_error":false}
+		]`)},
+		{Role: "assistant", Content: json.RawMessage(`"실제 서버 상태를 확인했습니다."`)},
+	}}
+	backend := &skillLifecycleBackend{tracker: tracker, transcripts: store}
+
+	gotAny, err := backend.RecordSkillValidationCaseFromSession(context.Background(), chattools.SkillValidationCaseFromSessionRequest{
+		SkillName:   "srv1-ops",
+		SessionKey:  "client:main:srv1",
+		Description: "preserve real server inspection before edits",
+		Replay: chattools.SkillReplayCaseRequest{
+			RequiredActions:      []string{"ssh srv1"},
+			RequiredObservations: []string{"active (running)"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("RecordSkillValidationCaseFromSession: %v", err)
+	}
+	got := gotAny.(map[string]any)
+	if got["expectedToolCalls"] != 1 || got["requiredTools"] != 1 {
+		t.Fatalf("unexpected extraction result: %+v", got)
+	}
+
+	statusAny, err := backend.SkillLifecycleStatus(context.Background(), chattools.SkillLifecycleStatusRequest{
+		SkillName: "srv1-ops",
+		Limit:     5,
+	})
+	if err != nil {
+		t.Fatalf("SkillLifecycleStatus: %v", err)
+	}
+	status := statusAny.(map[string]any)
+	cases := status["validationCases"].([]genesis.SkillValidationCaseRecord)
+	if len(cases) != 1 {
+		t.Fatalf("expected 1 validation case, got %+v", cases)
+	}
+	replay := cases[0].Replay
+	if cases[0].Source != "review-session" ||
+		replay.Input != "srv1에서 실제 deneb-gateway 상태를 확인하고 개선" ||
+		len(replay.ExpectedToolCalls) != 1 ||
+		replay.ExpectedToolCalls[0].Name != "exec" ||
+		len(replay.ExpectedToolCalls[0].InputIncludes) != 2 ||
+		replay.ExpectedToolCalls[0].InputIncludes[0] != "ssh srv1 systemctl --user status deneb-gateway.service" ||
+		replay.ExpectedToolCalls[0].FixtureOutput != "Active: active (running)" ||
+		len(replay.RequiredTools) != 1 ||
+		replay.RequiredTools[0] != "exec" {
+		t.Fatalf("unexpected replay extraction: %+v", replay)
+	}
+}
+
+func TestSkillLifecycleValidationCaseFromSessionSkipsWeakAutomaticTrace(t *testing.T) {
+	tracker := newSkillLifecycleTestTracker(t)
+	store := skillLifecycleTranscriptStore{msgs: []toolctx.ChatMessage{
+		{Role: "user", Content: json.RawMessage(`"상태 확인"`)},
+		{Role: "assistant", Content: json.RawMessage(`[
+			{"type":"tool_use","id":"tu_1","name":"exec","input":{}}
+		]`)},
+	}}
+	backend := &skillLifecycleBackend{tracker: tracker, transcripts: store}
+
+	gotAny, err := backend.RecordSkillValidationCaseFromSession(context.Background(), chattools.SkillValidationCaseFromSessionRequest{
+		SkillName:  "srv1-ops",
+		SessionKey: "client:main:weak",
+	})
+	if err != nil {
+		t.Fatalf("RecordSkillValidationCaseFromSession should skip weak automatic cases: %v", err)
+	}
+	got := gotAny.(map[string]any)
+	if got["skip"] != true {
+		t.Fatalf("expected weak automatic trace to be skipped, got %+v", got)
+	}
+	summary, err := tracker.ValidationCaseSummary("srv1-ops")
+	if err != nil {
+		t.Fatalf("ValidationCaseSummary: %v", err)
+	}
+	if summary.RawRecords != 0 {
+		t.Fatalf("expected weak automatic trace not to be stored, got %+v", summary)
+	}
+}
+
+func TestSkillLifecycleValidationBackfillScansSessionsAndSkipsWeak(t *testing.T) {
+	tracker := newSkillLifecycleTestTracker(t)
+	store := skillLifecycleTranscriptStore{byKey: map[string][]toolctx.ChatMessage{
+		"client:main:z-valid": {
+			{Role: "user", Content: json.RawMessage(`"srv1 상태를 확인"`)},
+			{Role: "assistant", Content: json.RawMessage(`[
+				{"type":"tool_use","id":"tu_1","name":"exec","input":{"cmd":"ssh srv1 uptime"}}
+			]`)},
+			{Role: "user", Content: json.RawMessage(`[
+				{"type":"tool_result","tool_use_id":"tu_1","content":"up 12 days","is_error":false}
+			]`)},
+		},
+		"client:main:a-weak": {
+			{Role: "user", Content: json.RawMessage(`"확인"`)},
+			{Role: "assistant", Content: json.RawMessage(`[
+				{"type":"tool_use","id":"tu_2","name":"exec","input":{}}
+			]`)},
+		},
+	}}
+	backend := &skillLifecycleBackend{tracker: tracker, transcripts: store}
+
+	gotAny, err := backend.BackfillSkillValidationCases(context.Background(), chattools.SkillValidationBackfillRequest{
+		SkillName: "srv1-ops",
+		Limit:     2,
+	})
+	if err != nil {
+		t.Fatalf("BackfillSkillValidationCases: %v", err)
+	}
+	got := gotAny.(map[string]any)
+	if got["scanned"] != 2 || got["recorded"] != 1 || got["skipped"] != 1 {
+		t.Fatalf("unexpected backfill result: %+v", got)
+	}
+	summary := got["validationCaseSummary"].(genesis.SkillValidationCaseSummary)
+	if summary.SkillName != "srv1-ops" || summary.RawRecords != 1 || summary.UniqueRecords != 1 || summary.AutomaticRecords != 1 {
+		t.Fatalf("unexpected backfill validation summary: %+v", summary)
+	}
+	cases, err := tracker.RecentSkillValidationCases("srv1-ops", 5)
+	if err != nil {
+		t.Fatalf("RecentSkillValidationCases: %v", err)
+	}
+	if len(cases) != 1 ||
+		cases[0].Source != "session-backfill" ||
+		cases[0].ID != "session-client:main:z-valid" ||
+		len(cases[0].Replay.ExpectedToolCalls) != 1 ||
+		cases[0].Replay.ExpectedToolCalls[0].InputIncludes[0] != "ssh srv1 uptime" {
+		t.Fatalf("unexpected backfilled case: %+v", cases)
 	}
 }
 
