@@ -35,6 +35,8 @@ import ai.deneb.ui.markdown.ChatbotTextScale
 import ai.deneb.ui.markdown.precomputeMarkdownAsync
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -98,6 +100,7 @@ import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextRange
@@ -240,6 +243,16 @@ internal fun ChatModeScreen(
         }
     }
 
+    // Live follow-the-finger feedback for the 챗봇 ↔ 업무 swipe: the chat surface
+    // tracks the drag (translates left, with resistance + a clamp) so the gesture
+    // reads as "grabbing" the workspace, then springs back on release — replacing the
+    // old discrete "drag past 72dp → instant snap" that felt unresponsive. On commit
+    // the spring-back runs alongside modeSwitchAnim's fade/content-swap; on cancel it
+    // just bounces back. Translation only (layer phase) — no per-frame recomposition.
+    val swipeScope = rememberCoroutineScope()
+    val swipeDragX = remember { Animatable(0f) }
+    val swipeMaxTravelPx = with(LocalDensity.current) { 110.dp.toPx() }
+
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
         ModalNavigationDrawer(
             drawerState = sessionDrawerState,
@@ -284,10 +297,29 @@ internal fun ChatModeScreen(
                     Box(
                         Modifier
                             .fillMaxSize()
-                            .modeSwipeToggle {
-                                swipeHaptics.toggle(!recallNow.value)
-                                swipeActions.value.toggleRecall()
-                            }
+                            .modeSwipeToggle(
+                                onDrag = { dx ->
+                                    // Right-to-left only (dx <= 0), damped + clamped so it
+                                    // rubber-bands rather than tracking the finger 1:1.
+                                    val resisted = (dx * 0.6f).coerceIn(-swipeMaxTravelPx, 0f)
+                                    swipeScope.launch { swipeDragX.snapTo(resisted) }
+                                },
+                                onEnd = { committed ->
+                                    swipeScope.launch {
+                                        if (committed) {
+                                            swipeHaptics.toggle(!recallNow.value)
+                                            swipeActions.value.toggleRecall()
+                                        }
+                                        swipeDragX.animateTo(
+                                            0f,
+                                            spring(
+                                                dampingRatio = Spring.DampingRatioNoBouncy,
+                                                stiffness = Spring.StiffnessMediumLow,
+                                            ),
+                                        )
+                                    }
+                                },
+                            )
                             .background(MaterialTheme.colorScheme.background)
                             // Gemini-style "generating" backdrop: a top-down hue-cycling glow
                             // behind everything while the reply is being thought up; fades to
@@ -371,6 +403,8 @@ internal fun ChatModeScreen(
                                     .graphicsLayer {
                                         val p = modeSwitchAnim.value
                                         alpha = 1f - sin(p * PI).toFloat() * 0.85f
+                                        // Follow-the-finger offset during the 챗봇↔업무 swipe.
+                                        translationX = swipeDragX.value
                                     },
                             ) {
                                 var isDropping by remember {
@@ -878,7 +912,10 @@ internal fun ChatModeScreen(
 // fight. Screen-edge starts are also yielded to the drawer, and a gesture that turns
 // vertical is released so the message list still scrolls — only a clearly-horizontal
 // right-to-left drag past the commit distance fires [onSwitch].
-private fun Modifier.modeSwipeToggle(onSwitch: () -> Unit): Modifier = pointerInput(Unit) {
+private fun Modifier.modeSwipeToggle(
+    onDrag: (Float) -> Unit,
+    onEnd: (committed: Boolean) -> Unit,
+): Modifier = pointerInput(Unit) {
     val edge = 36.dp.toPx()
     val commit = 72.dp.toPx()
     val slop = viewConfiguration.touchSlop
@@ -900,9 +937,14 @@ private fun Modifier.modeSwipeToggle(onSwitch: () -> Unit): Modifier = pointerIn
                 if (abs(dy) > slop && abs(dy) >= abs(dx)) return@awaitEachGesture // vertical → scroll
                 if (abs(dx) > slop && abs(dx) > abs(dy)) horizontal = true
             }
-            if (horizontal) change.consume()
+            if (horizontal) {
+                change.consume()
+                onDrag(dx) // live offset; the composable clamps to right-to-left + resists
+            }
         }
-        if (horizontal && dx <= -commit) onSwitch() // right-to-left only
+        // Commit only a clearly-horizontal right-to-left drag past the distance; onEnd
+        // always fires (even on cancel) so the live offset can spring back.
+        onEnd(horizontal && dx <= -commit)
     }
 }
 
