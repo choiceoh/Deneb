@@ -36,6 +36,16 @@ func TestDiagramRender_Sample(t *testing.T) {
 				{From: "inspect", To: "build", Label: "보완"},
 			},
 		}},
+		{name: "timeline-history", p: diagramParams{
+			DiagramType: "timeline", Title: "탑솔라 연혁", Subtitle: "주요 이정표",
+			Events: []timelineEvent{
+				{Section: "창업기", Period: "2021", Items: []string{"법인 설립", "첫 시공 계약"}},
+				{Section: "창업기", Period: "2022", Items: []string{"누적 1MW 돌파"}},
+				{Section: "성장기", Period: "2023", Items: []string{"남도에코 설립", "케이블 사업 진출"}},
+				{Section: "성장기", Period: "2024", Items: []string{"ERP 도입", "5MW 준공"}},
+				{Section: "도약기", Period: "2025", Items: []string{"AI 비서 Deneb 가동"}},
+			},
+		}},
 		{name: "gantt-project", p: diagramParams{
 			DiagramType: "gantt", Title: "상반기 프로젝트 일정", Subtitle: "단위: 주",
 			Tasks: []ganttTask{
@@ -49,9 +59,12 @@ func TestDiagramRender_Sample(t *testing.T) {
 	}
 	for _, c := range cases {
 		var def, win string
-		if c.p.DiagramType == "gantt" {
+		switch c.p.DiagramType {
+		case "gantt":
 			def, win = compileGantt(c.p), "2200,1300"
-		} else {
+		case "timeline":
+			def, win = compileTimeline(c.p), "2400,1600"
+		default:
 			def, win = compileFlowchart(c.p), "1600,2200"
 		}
 		t.Logf("%s mermaid:\n%s", c.name, def)

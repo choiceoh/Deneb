@@ -399,8 +399,8 @@ func RegisterMediaTools(registry toolctx.ToolRegistrar, workspaceDir string) {
 	})
 	registry.RegisterTool(toolctx.ToolDef{
 		Name: "diagram",
-		Description: "구조·흐름·일정을 다이어그램 이미지(PNG)로 그린다 — 절차/관계/상태도는 flowchart(노드+화살표), 일정/타임라인은 gantt(작업별 기간 막대). " +
-			"인허가 절차, 결재 흐름, 프로젝트 단계별 일정처럼 말이나 표보다 그림이 나은 걸 설명할 때 쓴다. " +
+		Description: "구조·흐름·일정을 다이어그램 이미지(PNG)로 그린다 — 절차/관계/상태도는 flowchart(노드+화살표), 일정은 gantt(작업별 기간 막대), 연혁/이력/로드맵은 timeline(시점별 사건). " +
+			"인허가 절차, 결재 흐름, 프로젝트 일정, 회사 연혁처럼 말이나 표보다 그림이 나은 걸 설명할 때 쓴다. " +
 			"숫자 비교·추이는 diagram이 아니라 chart를 써라. " +
 			"렌더된 PNG 경로를 돌려주므로, 그 경로를 send_file(type:\"photo\")로 사용자에게 전송해야 실제로 보인다.",
 		InputSchema: diagramToolSchema(),
