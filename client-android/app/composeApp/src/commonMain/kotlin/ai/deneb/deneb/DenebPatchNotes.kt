@@ -21,6 +21,11 @@ data class DenebPatchNote(
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
         highlights = listOf(
+            "더보기 화면의 '음성 입력'이 다른 항목들과 같은 카드 안에 정리됩니다 — 예전엔 혼자 떨어진 별도 박스로 바로 붙어 보이던 것을, 같은 그룹의 마지막 줄(위에 구분선)로 합쳤습니다",
+        ),
+    ),
+    DenebPatchNote(
+        highlights = listOf(
             "업무 피드를 날짜별로 넘겨봅니다 — 상단에 날짜(요일)가 표시되고 양옆 화살표로 이전/다음 날의 피드로 이동합니다 (항목이 있는 날 사이만, 최신 날부터)",
         ),
     ),

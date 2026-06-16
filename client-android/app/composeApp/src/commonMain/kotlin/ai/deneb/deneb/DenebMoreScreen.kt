@@ -55,6 +55,13 @@ private val moreEntries = listOf(
 @Composable
 fun DenebMoreScreen(onBack: () -> Unit, onOpen: (Any) -> Unit, chatMode: Boolean = false) {
     val entries = if (chatMode) moreEntries.filterNot { it.workData } else moreEntries
+    // Live voice dictation (system speech recognizer → chat). It is an input action,
+    // not a file, so it lives here rather than cluttering the attach (+) button — that
+    // opens a single picker and auto-routes by file type. Android-only (captures
+    // present); hidden on desktop/iOS. It is the last row of the *same* group as the
+    // nav entries (not a separate DenebGroup) — two stacked groups have no vertical
+    // gap, so an extra group read as a second box jammed flush against the first.
+    val captures = LocalCaptureActions.current
     DenebScreenScaffold(title = "더보기", onBack = onBack) {
         Column(
             Modifier
@@ -69,17 +76,11 @@ fun DenebMoreScreen(onBack: () -> Unit, onOpen: (Any) -> Unit, chatMode: Boolean
                         onClick = { onOpen(entry.dest) },
                         icon = entry.icon,
                         subtitle = entry.desc,
-                        divider = i < entries.lastIndex,
+                        // Keep a divider on the last nav entry when the voice row follows it.
+                        divider = i < entries.lastIndex || captures != null,
                     )
                 }
-            }
-            // Live voice dictation (system speech recognizer → chat). It is an
-            // input action, not a file, so it lives here rather than cluttering the
-            // attach (+) button — that opens a single picker and auto-routes by
-            // file type. Android-only (captures present); hidden on desktop/iOS.
-            val captures = LocalCaptureActions.current
-            if (captures != null) {
-                DenebGroup {
+                if (captures != null) {
                     DenebListRow(
                         title = "음성 입력",
                         onClick = captures.onVoiceInput,
