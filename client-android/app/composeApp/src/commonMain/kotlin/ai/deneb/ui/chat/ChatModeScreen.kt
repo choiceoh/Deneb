@@ -33,6 +33,9 @@ import ai.deneb.ui.dynamicui.toSpeakableText
 import ai.deneb.ui.handCursor
 import ai.deneb.ui.markdown.ChatbotTextScale
 import ai.deneb.ui.markdown.precomputeMarkdownAsync
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.draganddrop.dragAndDropTarget
@@ -117,7 +120,9 @@ import nl.marc_apps.tts.TextToSpeechInstance
 import nl.marc_apps.tts.errors.TextToSpeechSynthesisInterruptedError
 import org.jetbrains.compose.resources.getString
 import org.jetbrains.compose.resources.stringResource
+import kotlin.math.PI
 import kotlin.math.abs
+import kotlin.math.sin
 import kotlin.time.TimeSource
 
 /**
@@ -220,6 +225,20 @@ internal fun ChatModeScreen(
     val swipeHaptics = rememberHaptics()
     val recallNow = rememberUpdatedState(uiState.recallEnabled)
     val swipeActions = rememberUpdatedState(uiState.actions)
+
+    // Soften the 챗봇 ↔ 업무 switch (swipe or top toggle): on a mode flip the chat
+    // surface briefly fades down + slides in, masking the abrupt workspace/content
+    // swap so it reads as a transition rather than a snap. Keyed off recallEnabled;
+    // the prevRecall guard skips the animation on first composition (screen entry).
+    val modeSwitchAnim = remember { Animatable(1f) }
+    val prevRecall = remember { mutableStateOf(uiState.recallEnabled) }
+    LaunchedEffect(uiState.recallEnabled) {
+        if (prevRecall.value != uiState.recallEnabled) {
+            prevRecall.value = uiState.recallEnabled
+            modeSwitchAnim.snapTo(0f)
+            modeSwitchAnim.animateTo(1f, tween(durationMillis = 320, easing = FastOutSlowInEasing))
+        }
+    }
 
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
         ModalNavigationDrawer(
@@ -342,7 +361,18 @@ internal fun ChatModeScreen(
                                 )
                             }
 
-                            Box(Modifier.weight(1f)) {
+                            Box(
+                                Modifier
+                                    .weight(1f)
+                                    // Mode-switch transition: a sinusoidal alpha dip on the
+                                    // conversation ONLY (the top bar/pill + input stay put),
+                                    // masking the async workspace/content swap. Layer phase,
+                                    // so no per-frame recomposition.
+                                    .graphicsLayer {
+                                        val p = modeSwitchAnim.value
+                                        alpha = 1f - sin(p * PI).toFloat() * 0.85f
+                                    },
+                            ) {
                                 var isDropping by remember {
                                     mutableStateOf(false)
                                 }
