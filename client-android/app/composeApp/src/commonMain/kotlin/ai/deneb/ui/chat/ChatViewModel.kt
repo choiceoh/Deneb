@@ -21,6 +21,7 @@ import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -29,12 +30,22 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.sample
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.getString
 import kotlin.coroutines.CoroutineContext
 import kotlin.time.Duration.Companion.seconds
+
+// During streaming chatHistory emits once per token (tens per second). Sampling it to this
+// cadence caps the combine's per-token cost — a whole-history list copy plus a
+// distinctUntilChanged equality over every message — to ~15x/s. The visible text only reflows
+// ~10x/s anyway (STREAM_PARSE_INTERVAL_MS), and Compose already coalesces render to the frame,
+// so nothing visible is lost; non-streaming history changes are delayed at most this long
+// (imperceptible). Other combine inputs (isLoading, …) stay unsampled, so stream start/end and
+// the streaming caret still flip instantly.
+private const val STREAM_HISTORY_SAMPLE_MS = 64L
 
 class ChatViewModel(
     private val dataRepository: DataRepository,
@@ -165,9 +176,12 @@ class ChatViewModel(
     private var cachedConversationsRef: List<Conversation>? = null
     private var cachedSummaries: ImmutableList<ConversationSummary> = persistentListOf()
 
+    @OptIn(FlowPreview::class)
     val state = combine(
         _state,
-        dataRepository.chatHistory,
+        // Sampled (see STREAM_HISTORY_SAMPLE_MS): the per-token stream would otherwise re-run
+        // this whole combine — including the history list copy + equality below — every token.
+        dataRepository.chatHistory.sample(STREAM_HISTORY_SAMPLE_MS),
         dataRepository.savedConversations,
         dataRepository.currentConversationId,
         // Two unread flags folded into a Pair to stay within combine's 5-arg overload.
