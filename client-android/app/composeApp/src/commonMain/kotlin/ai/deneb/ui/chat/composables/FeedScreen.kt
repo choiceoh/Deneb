@@ -137,7 +137,7 @@ private fun FeedDateBar(
     onNext: () -> Unit,
 ) {
     Row(
-        Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 2.dp, bottom = 10.dp),
+        Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 0.dp, bottom = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         FeedDateArrow(Icons.AutoMirrored.Filled.KeyboardArrowLeft, "이전 날", canGoPrev, onPrev)
@@ -160,8 +160,10 @@ private fun FeedDateArrow(
     onClick: () -> Unit,
 ) {
     Box(
+        // Wide-but-short hit area: keeps ← / → easy to tap horizontally while trimming
+        // the bar's height (the 40dp square made the date band look too tall for one line).
         modifier = Modifier
-            .size(40.dp)
+            .size(width = 40.dp, height = 32.dp)
             .clickable(enabled = enabled, onClickLabel = label, role = Role.Button, onClick = onClick)
             .handCursor(),
         contentAlignment = Alignment.Center,
