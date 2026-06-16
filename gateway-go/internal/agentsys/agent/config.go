@@ -66,6 +66,18 @@ type AgentConfig struct {
 	// .claude/rules/prompt-cache.md).
 	ThinkingModulator func(turn int, toolActivities []ToolActivity) *llm.ThinkingConfig
 
+	// ThinkingOffRetry, when non-nil, is the thinking config used to retry a turn
+	// that hit max_tokens producing ONLY reasoning and no answer text (a thinking
+	// runaway). The normal max_tokens recovery scales the output budget and says
+	// "resume" — for a runaway that just lets the model reason even longer (dsv4
+	// cannot lower reasoning_effort; it is high/max only), so a 32K-token think
+	// loop becomes a 64K one. This config — carrying the model's chat_template
+	// off-toggle (TemplateKwarg) — is swapped in for the one retry turn instead, so
+	// the model answers directly within the normal budget. nil keeps the legacy
+	// scale-and-resume recovery for every truncation. Set by the chat effort router
+	// from the model capability (see applyEffortRouter).
+	ThinkingOffRetry *llm.ThinkingConfig
+
 	// FinalizeGate, when non-nil, is consulted as the model attempts to
 	// finish (end_turn / no tool calls). A non-empty return blocks that
 	// finish: the executor appends the assistant message, injects the

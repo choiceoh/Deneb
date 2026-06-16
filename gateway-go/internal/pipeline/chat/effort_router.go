@@ -104,6 +104,13 @@ func isAutomationRun(params RunParams) bool {
 // ("routed:…"/"kept:…", "" when the router gate is closed) for the structured
 // run-complete record.
 func applyEffortRouter(cfg *agent.AgentConfig, params RunParams, messages []llm.Message, profile router.Profile, logger *slog.Logger) (*effortRoute, string) {
+	// Always arm the thinking-runaway recovery for models with a chat_template
+	// off-toggle (dsv4), independent of routing/mode: a KEPT-thinking run (e.g.
+	// kept:automation cron analysis) can still loop in the thinking channel until
+	// max_tokens, and dsv4 can't lower effort — only this off-toggle escapes it.
+	if profile.ToggleKwarg != "" {
+		cfg.ThinkingOffRetry = &llm.ThinkingConfig{Type: "disabled", TemplateKwarg: profile.ToggleKwarg}
+	}
 	mode := effortMode()
 	if mode == effortModeOff || !profile.Enabled {
 		return nil, ""

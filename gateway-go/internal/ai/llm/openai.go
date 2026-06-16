@@ -309,6 +309,10 @@ func applySamplingParams(oaiReq *openAIRequest, req *ChatRequest) {
 	// Map extended thinking config to OpenAI reasoning_effort.
 	if req.Thinking != nil && req.Thinking.Type == "enabled" && req.Thinking.BudgetTokens > 0 {
 		switch {
+		case reasoningEffortHighOnly(req.Model):
+			// DeepSeek-V4 family (dsv4) only accepts reasoning_effort "high"/"max";
+			// "low"/"medium" are rejected. Always send "high" when thinking is on.
+			oaiReq.ReasoningEffort = "high"
 		case req.Thinking.BudgetTokens <= 4096:
 			oaiReq.ReasoningEffort = "low"
 		case req.Thinking.BudgetTokens <= 10240:
@@ -361,6 +365,16 @@ func applySamplingParams(oaiReq *openAIRequest, req *ChatRequest) {
 // remap share one definition.
 func isOpenAIReasoningModel(model string) bool {
 	return modelcaps.IsOpenAIReasoningModel(model)
+}
+
+// reasoningEffortHighOnly reports whether the model accepts only "high"/"max" for
+// reasoning_effort (rejecting "low"/"medium"). The self-hosted DeepSeek-V4 family
+// (dsv4, the main model) is dual-mode — thinking is toggled via chat_template_kwargs
+// and, when on, only the high effort levels are valid — so a small thinking budget
+// must still send "high" rather than a level the server rejects.
+func reasoningEffortHighOnly(model string) bool {
+	m := strings.ToLower(model)
+	return strings.Contains(m, "deepseek-v4") || strings.Contains(m, "deepseek_v4")
 }
 
 func (c *Client) setOpenAIBearerAuth(req *http.Request) {
