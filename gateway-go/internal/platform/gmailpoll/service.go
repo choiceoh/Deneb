@@ -318,9 +318,21 @@ func (s *Service) poll(ctx context.Context, client *gmail.Client) error {
 	}
 	s.sendNotification(ctx, notifyMsg)
 
-	// Mark all as seen after successful notification.
+	// Mark seen ONLY the mails whose individual analysis succeeded (those in
+	// `items`). A mail that AnalyzeBatch skipped on a per-email error is absent
+	// from `items`; leaving it unseen lets the next cycle retry it instead of
+	// burying it. The poll path never sets a Gmail read flag, so dedup is purely
+	// local — a wrongly-marked mail leaves the `newer_than:1h` window and is lost
+	// forever. The all-failed case bails above; this is the partial-failure guard.
+	// (Fetch-failed summaries were already marked seen in the GetMessage loop.)
+	analyzed := make(map[string]bool, len(items))
+	for _, it := range items {
+		analyzed[it.Msg.ID] = true
+	}
 	for _, summary := range newMessages {
-		pollState.markSeen(summary.ID)
+		if analyzed[summary.ID] {
+			pollState.markSeen(summary.ID)
+		}
 	}
 	pollState.LastPollAt = time.Now().UnixMilli()
 	s.saveState(pollState)
@@ -367,18 +379,25 @@ func (s *Service) batchAnalyze(ctx context.Context, gmailClient *gmail.Client, m
 // the thread-context stage simply no-ops (it is best-effort). Safe to call
 // concurrently with the poll loop.
 func (s *Service) IngestMessage(ctx context.Context, msg *gmail.MessageDetail, attBytes map[string][]byte) (AnalysisResult, error) {
-	deps := s.pipelineDeps(s.gmailClient)
-	// LMTP attachments arrive inline (no Gmail fetch): serve the attachment gate
-	// from these bytes so 견적서/계약서 PDFs are OCR'd into the analysis exactly
+	// Read s.gmailClient under the lock the poll loop writes it with, so a
+	// concurrent lazy-init in Run() can't race this read.
+	s.mu.Lock()
+	gmailClient := s.gmailClient
+	s.mu.Unlock()
+	deps := s.pipelineDeps(gmailClient)
+	// LMTP attachments arrive inline (no Gmail fetch): always serve the attachment
+	// gate from these bytes so 견적서/계약서 PDFs are OCR'd into the analysis exactly
 	// like the poll path. Keyed by AttachmentID, which lmtpd.parseMessage sets to
-	// the same value it puts on msg.Attachments[*].AttachmentID.
-	if len(attBytes) > 0 {
-		deps.AttachmentBytesFn = func(_ context.Context, _, attachmentID string) ([]byte, error) {
-			if b, ok := attBytes[attachmentID]; ok {
-				return b, nil
-			}
-			return nil, fmt.Errorf("inline attachment %q not found", attachmentID)
+	// the same value it puts on msg.Attachments[*].AttachmentID. Installed
+	// unconditionally (never inherit gmailClient.GetAttachment) because an LMTP
+	// message id is not a Gmail id — fetching with it would hit the Gmail API in
+	// vain. With no inline bytes the closure finds nothing → gate degrades to
+	// body-only, exactly as intended.
+	deps.AttachmentBytesFn = func(_ context.Context, _, attachmentID string) ([]byte, error) {
+		if b, ok := attBytes[attachmentID]; ok {
+			return b, nil
 		}
+		return nil, fmt.Errorf("inline attachment %q not found", attachmentID)
 	}
 	res, err := AnalyzeEmailPipeline(ctx, deps, msg)
 	if err != nil {
