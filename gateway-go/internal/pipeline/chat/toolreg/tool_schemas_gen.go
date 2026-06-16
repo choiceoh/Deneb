@@ -627,6 +627,113 @@ func chartToolSchema() map[string]any {
 	}
 }
 
+func diagramToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"diagram_type": map[string]any{
+				"type":        "string",
+				"description": "flowchart=절차·흐름·관계·상태도(노드+화살표), gantt=일정·타임라인(작업별 기간 막대). 숫자 비교/추이는 diagram이 아니라 chart를 써라.",
+				"enum":        []string{"flowchart", "gantt"},
+			},
+			"direction": map[string]any{
+				"type":        "string",
+				"description": "flowchart 방향. TD=위→아래, LR=왼쪽→오른쪽 (기본 TD).",
+				"enum":        []string{"TD", "LR", "BT", "RL"},
+			},
+			"edges": map[string]any{
+				"type":        "array",
+				"description": "flowchart 화살표 목록. from 노드 → to 노드.",
+				"items": map[string]any{
+					"type":     "object",
+					"required": []string{"from", "to"},
+					"properties": map[string]any{
+						"from": map[string]any{
+							"type":        "string",
+							"description": "출발 노드 id.",
+						},
+						"label": map[string]any{
+							"type":        "string",
+							"description": "화살표에 붙일 조건/설명 (선택, 예: '승인', '반려').",
+						},
+						"to": map[string]any{
+							"type":        "string",
+							"description": "도착 노드 id.",
+						},
+					},
+				},
+			},
+			"nodes": map[string]any{
+				"type":        "array",
+				"description": "flowchart 노드 목록. 각 노드는 고유 id로 edges에서 참조된다.",
+				"items": map[string]any{
+					"type":     "object",
+					"required": []string{"id"},
+					"properties": map[string]any{
+						"id": map[string]any{
+							"type":        "string",
+							"description": "노드 고유 식별자 (edges의 from/to가 이 값을 참조). 예: 'apply'.",
+						},
+						"label": map[string]any{
+							"type":        "string",
+							"description": "노드에 표시할 텍스트. 생략하면 id를 표시.",
+						},
+						"shape": map[string]any{
+							"type":        "string",
+							"description": "노드 모양. 의사결정/분기는 diamond, 시작/끝은 stadium, 일반 단계는 rect.",
+							"enum":        []string{"rect", "round", "stadium", "diamond", "circle"},
+						},
+					},
+				},
+			},
+			"subtitle": map[string]any{
+				"type":        "string",
+				"description": "제목 아래 보조 설명 한 줄 (선택)",
+			},
+			"tasks": map[string]any{
+				"type":        "array",
+				"description": "gantt 작업 목록. 각 작업은 기간 막대 하나가 된다.",
+				"items": map[string]any{
+					"type":     "object",
+					"required": []string{"name", "start"},
+					"properties": map[string]any{
+						"duration": map[string]any{
+							"type":        "string",
+							"description": "기간 (end 대신 택일, 예: '5d', '2w').",
+						},
+						"end": map[string]any{
+							"type":        "string",
+							"description": "종료일 YYYY-MM-DD (duration 대신 택일).",
+						},
+						"name": map[string]any{
+							"type":        "string",
+							"description": "작업 이름.",
+						},
+						"section": map[string]any{
+							"type":        "string",
+							"description": "작업을 묶는 구간 이름 (선택, 예: '준비', '시공'). 같은 section끼리 그룹으로 표시.",
+						},
+						"start": map[string]any{
+							"type":        "string",
+							"description": "시작일 YYYY-MM-DD.",
+						},
+						"status": map[string]any{
+							"type":        "string",
+							"description": "작업 상태 (선택). done=완료(회색), active=진행중(파랑), crit=중요/지연위험(빨강).",
+							"enum":        []string{"done", "active", "crit"},
+						},
+					},
+				},
+			},
+			"title": map[string]any{
+				"type":        "string",
+				"description": "다이어그램 상단 제목 (예: '인허가 처리 절차')",
+			},
+		},
+		"required": []string{"diagram_type"},
+	}
+}
+
 func gmailToolSchema() map[string]any {
 	return map[string]any{
 		"type": "object",
