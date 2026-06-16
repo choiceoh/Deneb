@@ -51,6 +51,7 @@ func (s *Server) initGmailPoll(snap *config.ConfigSnapshot) {
 		LocalModel:          stage1Model,
 		SenderFactsFn:       s.wikiSenderFacts,
 		AttachmentExtractFn: tools.ExtractAttachmentTextBytes,
+		ThinkingKwarg:       s.analysisThinkingKwarg(),
 	}
 
 	if pollCfg.IntervalMin != nil {
@@ -458,6 +459,20 @@ func (s *Server) mailAnalysisModels() (stage2 *llm.Client, stage2Model string, s
 		s.modelRegistry.Model(modelrole.RoleAnalysis),
 		s.modelRegistry.Client(modelrole.RoleTiny),
 		s.modelRegistry.Model(modelrole.RoleTiny)
+}
+
+// analysisThinkingKwarg returns the chat_template_kwargs thinking off-switch for
+// the mail-analysis model (RoleAnalysis / stage-2), or "" when the model has none
+// (non-vLLM, e.g. an Anthropic-wire cloud model). Threaded into the gmailpoll
+// analysis so its "disabled" thinking config truly stops reasoning on dual-mode
+// vLLM models (dsv4) instead of exhausting the budget and returning empty — the
+// analysis-path equivalent of what applyModelTuning does for the main chat.
+func (s *Server) analysisThinkingKwarg() string {
+	if s.modelRegistry == nil {
+		return ""
+	}
+	c := s.modelRegistry.Config(modelrole.RoleAnalysis)
+	return s.modelRegistry.CapabilityForModel(c.ProviderID, c.Model).ThinkingToggleKwarg
 }
 
 // resolveLightweightModel / resolveFallbackModel read the optional per-role

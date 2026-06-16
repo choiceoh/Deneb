@@ -98,7 +98,11 @@ func FormatEmailForAnalysis(msg *gmail.MessageDetail) string {
 }
 
 // AnalyzeEmail sends an email to the LLM for analysis and returns the result.
-func AnalyzeEmail(ctx context.Context, client *llm.Client, model, prompt string, msg *gmail.MessageDetail) (string, error) {
+// thinkingKwarg is the model's chat_template_kwargs off-switch (e.g. dsv4's
+// "thinking"); "" for models without one. Without it, "disabled" degrades to a
+// no-op reasoning_effort on dual-mode vLLM models, which then exhaust the budget
+// on reasoning and return empty.
+func AnalyzeEmail(ctx context.Context, client *llm.Client, model, prompt, thinkingKwarg string, msg *gmail.MessageDetail) (string, error) {
 	userContent := prompt + "\n\n" + FormatEmailForAnalysis(msg)
 
 	req := llm.ChatRequest{
@@ -113,7 +117,7 @@ func AnalyzeEmail(ctx context.Context, client *llm.Client, model, prompt string,
 		// "분석을 가져오지 못했습니다" in the client. Disable thinking so the model
 		// writes the summary directly — matching how the JSON extraction stages
 		// (which never hit this) already behave.
-		Thinking: &llm.ThinkingConfig{Type: "disabled"},
+		Thinking: &llm.ThinkingConfig{Type: "disabled", TemplateKwarg: thinkingKwarg},
 	}
 
 	events, err := client.StreamChat(ctx, req)

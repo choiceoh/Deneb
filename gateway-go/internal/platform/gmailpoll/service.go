@@ -66,6 +66,12 @@ type Config struct {
 	// the business documents arriving as attachments. nil = attachment gate off.
 	AttachmentExtractFn func(ctx context.Context, data []byte, filename, mimeType string) string
 
+	// ThinkingKwarg is the analysis model's chat_template_kwargs thinking
+	// off-switch (modelcaps.ThinkingToggleKwarg). Forwarded to PipelineDeps so the
+	// "disabled" thinking config truly stops reasoning on dual-mode vLLM models
+	// (else they exhaust the budget and return empty). "" for non-vLLM models.
+	ThinkingKwarg string
+
 	// ArchiveFolder is the Dropbox base folder for archived attachments
 	// (default "/Deneb-Archive/메일"). Archiving runs whenever a Dropbox token
 	// exists (re-checked per cycle), so connecting Dropbox after startup
@@ -334,6 +340,7 @@ func (s *Service) pipelineDeps(gmailClient *gmail.Client) PipelineDeps {
 		ProjectsFn:          s.cfg.ProjectsFn,
 		SenderFactsFn:       s.cfg.SenderFactsFn,
 		AttachmentExtractFn: s.cfg.AttachmentExtractFn,
+		ThinkingKwarg:       s.cfg.ThinkingKwarg,
 	}
 	// Poll path: the attachment gate fetches bytes lazily from Gmail. The LMTP
 	// path (IngestMessage) overrides this with a closure over the inline bytes,
