@@ -166,6 +166,11 @@ func dropboxSearch(deps DropboxBrowseDeps) rpcutil.HandlerFunc {
 		if max <= 0 {
 			max = defaultDropboxSearchMax
 		}
+		// The platform Search silently resets max>100 to 20; cap here so a large
+		// request degrades to 100 (the real limit) rather than collapsing to 20.
+		if max > 100 {
+			max = 100
+		}
 		entries, err := client.Search(ctx, p.Query, max)
 		if err != nil {
 			return mapDropboxError(req.ID, "dropbox search failed", err)
@@ -226,6 +231,11 @@ func dropboxUpload(deps DropboxBrowseDeps) rpcutil.HandlerFunc {
 		dest := strings.TrimSpace(p.Path)
 		if dest == "" {
 			return rpcerr.MissingParam("path").Response(req.ID)
+		}
+		// Dropbox rejects a path without a leading slash with an opaque 400; the
+		// browse RPCs elsewhere root-normalize, so do the same here for symmetry.
+		if !strings.HasPrefix(dest, "/") {
+			dest = "/" + dest
 		}
 		// Strip an optional data-URI prefix, then base64-decode (capture pattern).
 		raw := strings.TrimSpace(p.DataBase64)
@@ -308,7 +318,7 @@ func mapDropboxError(reqID, msg string, err error) *protocol.ResponseFrame {
 		case http.StatusForbidden:
 			return rpcerr.New(protocol.ErrForbidden, msg+": "+apiErr.Error()).Response(reqID)
 		case http.StatusNotFound:
-			return rpcerr.NotFound(msg).Response(reqID)
+			return rpcerr.NotFound(msg + ": " + apiErr.Error()).Response(reqID)
 		}
 	}
 	return rpcerr.WrapUnavailable(msg, err).Response(reqID)
