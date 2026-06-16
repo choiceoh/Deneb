@@ -194,13 +194,14 @@ func (s *Server) setMiniappModel(ctx context.Context, role, requested string) (s
 	if role == "" {
 		role = "main"
 	}
-	// Must mirror the native picker's ModelRole enum (DenebConfigScreen.kt) and
-	// the roles reported by roleMiniappModels — tiny/analysis were added to both
-	// the picker and the list response in #2065, but this gate stayed at the
-	// original three roles, so switching the 초경량/분석 tiers was rejected here
-	// ("unknown model role") and surfaced as "모델 전환에 실패했어요" to the user.
+	// Must mirror the native picker's ModelRole enum (ConfigModelTab.kt) and the
+	// roles reported by roleMiniappModels. This gate has repeatedly drifted behind
+	// new roles: tiny/analysis (added to the picker + list response in #2065) and
+	// then the opt-in vision role were each rejected here ("unknown model role" →
+	// "모델 전환에 실패했어요") because this case list wasn't updated alongside the
+	// picker. Keep all three lists in sync.
 	switch role {
-	case "main", "tiny", "lightweight", "analysis", "fallback", "chatbot":
+	case "main", "tiny", "lightweight", "analysis", "fallback", "chatbot", "vision":
 	default:
 		return "", rpcerr.InvalidRequest("unknown model role: " + role)
 	}
