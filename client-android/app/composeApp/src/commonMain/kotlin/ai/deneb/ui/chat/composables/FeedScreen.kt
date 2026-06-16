@@ -113,7 +113,7 @@ internal fun FeedScreen(
                     FeedRowWithBody(unread[i], expandedId == unread[i].id, open, onRunAction)
                 }
                 if (read.isNotEmpty()) {
-                    item { DenebSectionLabel("읽음") }
+                    item { DenebSectionLabel("읽음", Modifier.padding(start = 12.dp)) }
                     items(read.size) { i ->
                         FeedRowWithBody(read[i], expandedId == read[i].id, open, onRunAction)
                     }
@@ -137,7 +137,7 @@ private fun FeedDateBar(
     onNext: () -> Unit,
 ) {
     Row(
-        Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 0.dp, bottom = 4.dp),
+        Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 0.dp, bottom = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         FeedDateArrow(Icons.AutoMirrored.Filled.KeyboardArrowLeft, "이전 날", canGoPrev, onPrev)
@@ -212,7 +212,7 @@ private fun FeedRowWithBody(
                 content = item.body,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 12.dp),
+                    .padding(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 12.dp),
             )
         }
     }
