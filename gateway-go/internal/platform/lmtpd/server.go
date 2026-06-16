@@ -13,6 +13,7 @@ import (
 	"net"
 	"os"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -27,6 +28,12 @@ const (
 	maxMessageBytes = 50 << 20
 	commandTimeout  = 2 * time.Minute
 	dataTimeout     = 5 * time.Minute
+	// maxRecipients caps RCPT TO per transaction (LMTP emits one reply each); a
+	// local delivery has a handful, so this only bounds a pathological peer.
+	maxRecipients = 100
+	// connReadHeadroom is extra per-connection input budget over one message, for
+	// the command/protocol bytes around the DATA payload.
+	connReadHeadroom = 64 << 10
 )
 
 var errTooBig = errors.New("lmtp: message exceeds size limit")
@@ -39,6 +46,7 @@ type Server struct {
 	handler  Handler
 	log      *slog.Logger
 	hostname string
+	connWg   sync.WaitGroup // tracks in-flight connections for graceful drain
 }
 
 // New builds a server. addr is "host:port" (TCP), "tcp:host:port", or
@@ -83,16 +91,21 @@ func (s *Server) serveListener(ctx context.Context, ln net.Listener) error {
 		if err != nil {
 			select {
 			case <-ctx.Done():
-				return nil // listener closed by graceful shutdown
+				// Drain in-flight connections before returning so the subsystem
+				// isn't declared stopped while a delivery is mid-flight.
+				s.connWg.Wait()
+				return nil
 			default:
 				return fmt.Errorf("lmtp: accept: %w", err)
 			}
 		}
+		s.connWg.Add(1)
 		go s.serveConn(ctx, conn)
 	}
 }
 
 func (s *Server) serveConn(ctx context.Context, conn net.Conn) {
+	defer s.connWg.Done()
 	defer func() {
 		if r := recover(); r != nil {
 			s.log.Error("panic in LMTP connection", "panic", r)
@@ -100,7 +113,21 @@ func (s *Server) serveConn(ctx context.Context, conn net.Conn) {
 		_ = conn.Close()
 	}()
 
-	br := bufio.NewReader(conn)
+	// Close the connection on shutdown so a blocked read returns promptly; an
+	// in-flight (pre-250) message is then re-delivered by the MTA, not lost.
+	stop := make(chan struct{})
+	defer close(stop)
+	go func() {
+		select {
+		case <-ctx.Done():
+			_ = conn.Close()
+		case <-stop:
+		}
+	}()
+
+	// Bound total per-connection input so an unterminated huge line can't OOM the
+	// ReadString buffer (a delivery is one message: 50MiB + protocol headroom).
+	br := bufio.NewReader(&io.LimitedReader{R: conn, N: maxMessageBytes + connReadHeadroom})
 	bw := bufio.NewWriter(conn)
 	reply := func(line string) bool {
 		_ = conn.SetWriteDeadline(time.Now().Add(30 * time.Second))
@@ -114,7 +141,10 @@ func (s *Server) serveConn(ctx context.Context, conn net.Conn) {
 		return
 	}
 
-	var rcptCount int
+	var (
+		rcptCount int
+		mailFrom  bool
+	)
 	for {
 		_ = conn.SetReadDeadline(time.Now().Add(commandTimeout))
 		raw, err := br.ReadString('\n')
@@ -133,12 +163,21 @@ func (s *Server) serveConn(ctx context.Context, conn net.Conn) {
 			reply("250-PIPELINING")
 			reply("250 ENHANCEDSTATUSCODES")
 		case "MAIL":
+			mailFrom = true
 			reply("250 2.1.0 OK")
 		case "RCPT":
+			if !mailFrom {
+				reply("503 5.5.1 MAIL FROM first")
+				continue
+			}
+			if rcptCount >= maxRecipients {
+				reply("452 4.5.3 Too many recipients")
+				continue
+			}
 			rcptCount++
 			reply("250 2.1.5 OK")
 		case "DATA":
-			if rcptCount == 0 {
+			if !mailFrom || rcptCount == 0 {
 				reply("503 5.5.1 RCPT first")
 				continue
 			}
@@ -155,9 +194,9 @@ func (s *Server) serveConn(ctx context.Context, conn net.Conn) {
 					return
 				}
 			}
-			rcptCount = 0
+			rcptCount, mailFrom = 0, false
 		case "RSET":
-			rcptCount = 0
+			rcptCount, mailFrom = 0, false
 			reply("250 2.0.0 OK")
 		case "NOOP":
 			reply("250 2.0.0 OK")

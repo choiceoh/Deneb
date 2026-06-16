@@ -52,14 +52,20 @@ func (s *SeenStore) Seen(key string) bool {
 }
 
 // Mark records key (evicting the oldest past max) and persists the set.
-func (s *SeenStore) Mark(key string) {
+func (s *SeenStore) Mark(key string) { s.MarkIfNew(key) }
+
+// MarkIfNew atomically records key and reports whether it was new (not seen
+// before). The combined check-and-set under one lock is the dedup primitive:
+// concurrent deliveries of the same key won't both pass. An empty key is unkeyed
+// (no Message-ID) — treated as always-new since it can't be deduped.
+func (s *SeenStore) MarkIfNew(key string) bool {
 	if key == "" {
-		return
+		return true
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, ok := s.set[key]; ok {
-		return
+		return false
 	}
 	s.set[key] = struct{}{}
 	s.ring = append(s.ring, key)
@@ -69,6 +75,7 @@ func (s *SeenStore) Mark(key string) {
 		delete(s.set, oldest)
 	}
 	s.persistLocked()
+	return true
 }
 
 func (s *SeenStore) persistLocked() {

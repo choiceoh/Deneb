@@ -98,8 +98,17 @@ func sanitizeID(messageID string) string {
 	if s == "" {
 		return ""
 	}
-	s = strings.NewReplacer("/", "_", "\\", "_", " ", "_").Replace(s)
-	return s
+	s = strings.Map(func(r rune) rune {
+		switch {
+		case r < 0x20, r == 0x7f: // drop control chars / NUL
+			return -1
+		case r == '/', r == '\\', r == ' ':
+			return '_'
+		default:
+			return r
+		}
+	}, s)
+	return strings.Trim(s, ".") // avoid "." / ".." filenames
 }
 
 // part is one node of the MIME tree.
@@ -137,7 +146,7 @@ func (a *mimeAccumulator) walk(p part, depth int) {
 		for {
 			sub, err := mr.NextPart()
 			if err != nil {
-				return
+				break
 			}
 			subType, subParams, _ := mime.ParseMediaType(sub.Header.Get("Content-Type"))
 			if subType == "" {
@@ -158,6 +167,7 @@ func (a *mimeAccumulator) walk(p part, depth int) {
 			}, depth+1)
 			_ = sub.Close()
 		}
+		return // multipart node fully consumed — must not fall through to leaf
 	}
 
 	// Leaf part.
@@ -209,17 +219,23 @@ type base64Sanitizer struct {
 }
 
 func (s *base64Sanitizer) Read(p []byte) (int, error) {
-	tmp := make([]byte, len(p))
-	n, err := s.r.Read(tmp)
-	w := 0
-	for _, b := range tmp[:n] {
-		if b == '\r' || b == '\n' || b == ' ' || b == '\t' {
-			continue
+	for {
+		tmp := make([]byte, len(p))
+		n, err := s.r.Read(tmp)
+		w := 0
+		for _, b := range tmp[:n] {
+			if b == '\r' || b == '\n' || b == ' ' || b == '\t' {
+				continue
+			}
+			p[w] = b
+			w++
 		}
-		p[w] = b
-		w++
+		// Never return (0, nil): an all-whitespace chunk with no error reads
+		// again (the underlying reader makes forward progress, so this ends).
+		if w > 0 || err != nil {
+			return w, err
+		}
 	}
-	return w, err
 }
 
 // charsetDecode converts a body part to UTF-8 from its declared charset.

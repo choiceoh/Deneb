@@ -200,10 +200,20 @@ func TestSeenStore(t *testing.T) {
 	if !s.Seen("k3") {
 		t.Error("k3 should be seen")
 	}
-	// Empty key is never recorded/matched.
+	// MarkIfNew: atomic check-and-set — first true, second false.
+	if !s.MarkIfNew("k4") {
+		t.Error("first MarkIfNew(k4) should be true (new)")
+	}
+	if s.MarkIfNew("k4") {
+		t.Error("second MarkIfNew(k4) should be false (already seen)")
+	}
+	// Empty key is unkeyed: never recorded/matched, MarkIfNew always new.
 	s.Mark("")
 	if s.Seen("") {
 		t.Error("empty key must not match")
+	}
+	if !s.MarkIfNew("") {
+		t.Error("empty key MarkIfNew should be true (unkeyed)")
 	}
 }
 

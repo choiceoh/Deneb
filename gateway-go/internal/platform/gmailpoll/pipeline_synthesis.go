@@ -20,6 +20,9 @@ import (
 
 func extractThreadContext(ctx context.Context, deps PipelineDeps, msg *gmail.MessageDetail) (ThreadContext, error) {
 	var zero ThreadContext
+	if deps.GmailClient == nil {
+		return zero, nil // no Gmail (e.g. LMTP ingest) → skip Gmail thread search
+	}
 
 	// Collect related emails.
 	var relatedEmails []string

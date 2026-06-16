@@ -157,17 +157,24 @@ func (s *Server) initLMTPServer(snap *config.ConfigSnapshot) {
 	// (or wiki-paged / chat-reported) twice.
 	seen := lmtpd.NewSeenStore(filepath.Join(stateDir, "lmtp-seen.json"), 2000)
 
+	// Bound concurrent analyses so a delivery burst can't pile up many in-flight
+	// messages' decoded attachment bytes (held for the analysis + archive window).
+	analyzeSem := make(chan struct{}, 4)
+
 	// ACK delivery as soon as the message parses, then analyze asynchronously:
 	// analysis is an LLM call (seconds), too slow to hold the MTA connection open,
 	// and a slow synchronous reply risks Postfix timing out and re-delivering
 	// (which would double-analyze). Parse failures still NAK inside lmtpd.
 	handler := func(_ context.Context, m *lmtpd.Message) error {
-		if seen.Seen(m.DedupKey) {
+		// Atomic check-and-set: concurrent re-deliveries of the same Message-ID
+		// can't both pass into analysis.
+		if !seen.MarkIfNew(m.DedupKey) {
 			s.logger.Info("LMTP 중복 메일 건너뜀 (이미 처리)", "key", m.DedupKey, "subject", m.Detail.Subject)
 			return nil // ACK — already analyzed on an earlier delivery
 		}
-		seen.Mark(m.DedupKey)
 		s.safeGo("lmtp-analyze", func() {
+			analyzeSem <- struct{}{}
+			defer func() { <-analyzeSem }()
 			actx, cancel := context.WithTimeout(s.ShutdownCtx(), 5*time.Minute)
 			defer cancel()
 			if _, err := svc.IngestMessage(actx, m.Detail, m.AttachmentBytes); err != nil {

@@ -100,7 +100,11 @@ func analysisThinking(client *llm.Client, maxTokens int) *llm.ThinkingConfig {
 
 // canRunPipeline returns true if we have enough deps for the multi-stage pipeline.
 func (d *PipelineDeps) canRunPipeline() bool {
-	return d.LocalClient != nil && d.LocalModel != "" && d.GmailClient != nil
+	// GmailClient is optional — it only powers the best-effort thread-context
+	// stage (Gmail subject search), which no-ops when nil (see
+	// extractThreadContext). The LMTP ingest path has no Gmail client yet still
+	// gets the full multi-stage analysis (sender facts + deal extraction).
+	return d.LocalClient != nil && d.LocalModel != ""
 }
 
 // projectCandidates returns the registered project pages, or nil when no
