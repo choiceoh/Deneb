@@ -104,6 +104,11 @@ func RunAgent(
 	var maxTokensRecoveryCount int
 	baseMaxTokens := cfg.MaxTokens // Original value before any recovery scaling.
 
+	// One-shot per-turn thinking override: set by the thinking-runaway recovery to
+	// force the NEXT turn's thinking off (takes precedence over cfg.Thinking and the
+	// modulator), then cleared so it applies to exactly that retry turn.
+	var thinkingRetryOverride *llm.ThinkingConfig
+
 	// Loop condition permits one extra iteration past MaxTurns when the grace
 	// flag is set — see grace.go. Normal runs behave identically to `range
 	// cfg.MaxTurns`; the grace branch only engages on budget exhaustion.
@@ -160,7 +165,12 @@ func RunAgent(
 		// never re-parse the message array. Thinking is request-level, so this
 		// does not affect prompt cache. Falls back to cfg.Thinking.
 		turnThinking := cfg.Thinking
-		if cfg.ThinkingModulator != nil {
+		switch {
+		case thinkingRetryOverride != nil:
+			// A thinking-runaway recovery forced this one turn off; consume it.
+			turnThinking = thinkingRetryOverride
+			thinkingRetryOverride = nil
+		case cfg.ThinkingModulator != nil:
 			if m := cfg.ThinkingModulator(turn, result.ToolActivities); m != nil {
 				turnThinking = m
 			}
@@ -365,7 +375,25 @@ func RunAgent(
 			cfg.MaxOutputTokensRecovery > 0 && maxTokensRecoveryCount < cfg.MaxOutputTokensRecovery {
 			maxTokensRecoveryCount++
 
-			// Scale up MaxTokens for the next call so the model has more room.
+			// Thinking runaway: the turn produced ONLY reasoning and no answer text,
+			// burning the whole output budget on the thinking channel. Scaling the
+			// budget just lets it reason even longer (dsv4 can't lower effort), so
+			// retry the turn with thinking OFF (resetting the budget) — it then
+			// answers directly. Only when the caller supplied an off-config.
+			if cfg.ThinkingOffRetry != nil && strings.TrimSpace(turnRes.text) == "" &&
+				joinAllThinkingTexts(turnRes.contentBlocks) != "" {
+				thinkingRetryOverride = cfg.ThinkingOffRetry
+				cfg.MaxTokens = baseMaxTokens
+				logger.Info("max_tokens recovery: thinking runaway — retrying with thinking off",
+					"attempt", maxTokensRecoveryCount, "maxAttempts", cfg.MaxOutputTokensRecovery)
+				messages = append(messages, llm.NewBlockMessage("assistant", turnRes.contentBlocks))
+				messages = append(messages, llm.NewTextMessage("user",
+					"[직전 응답이 분석(생각)만 하다 토큰 한도에 걸렸습니다. 추가 분석 없이 곧바로 최종 답변만 작성하세요.]"))
+				continue
+			}
+
+			// Genuine truncated answer: scale up MaxTokens so the model has room to
+			// finish, and resume from where it left off.
 			scale := 2.0 // Default: double the original.
 			if idx := maxTokensRecoveryCount - 1; idx < len(cfg.MaxOutputTokensScaleFactors) {
 				scale = cfg.MaxOutputTokensScaleFactors[idx]
