@@ -201,7 +201,7 @@ private fun FeedRowWithBody(
     onOpen: (String) -> Unit,
     onRunAction: (String, String) -> Unit,
 ) {
-    WorkFeedRow(item = item, onOpen = onOpen, onRunAction = onRunAction)
+    WorkFeedRow(item = item, onOpen = onOpen, onRunAction = onRunAction, expanded = expanded)
     if (expanded && item.body.isNotBlank()) {
         // Proactive reports are markdown (tables, headings, lists), so render with
         // the full chat renderer — a plain Text leaked raw "| 항목 | 내용 |" pipes and
