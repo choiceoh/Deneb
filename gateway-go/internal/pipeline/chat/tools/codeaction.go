@@ -72,9 +72,23 @@ type CodeActionDeps struct {
 	Wiki     *wiki.Store
 }
 
+// CodeActionPromotion asks the Go side of code_action to record a reusable
+// successful Python workflow into the normal skill lifecycle. The Python
+// sandbox never receives a skill-writing primitive; promotion is explicit input
+// from the agent and still goes through skill_lifecycle's proposal/genesis gates.
+type CodeActionPromotion struct {
+	Candidate    string `json:"candidate,omitempty"`
+	Evidence     string `json:"evidence,omitempty"`
+	Route        string `json:"route,omitempty"`
+	Reason       string `json:"reason,omitempty"`
+	SkillName    string `json:"skillName,omitempty"`
+	DreamSummary string `json:"dreamSummary,omitempty"`
+	Execute      *bool  `json:"execute,omitempty"`
+}
+
 // CodeActionDescription is the deferred-listing description. The first sentence
 // is the WHEN trigger (the deferred summary truncates to it).
-const CodeActionDescription = "Run Python in a single turn to orchestrate tools or batch/aggregate data — scan many emails, join calendar×contacts×wiki, count/filter/compute, batch-add calendar events, update the wiki — instead of many separate tool calls. A preloaded `deneb` object exposes read tools plus recoverable internal writes (calendar/wiki/workspace files); outbound actions (email send) are NOT available here — do those as a normal tool call. Only what you print() (and any traceback) is returned. The interpreter is sandboxed: no network except the tool bridge, no subprocess, no raw file writes outside a scratch dir, no secret reads."
+const CodeActionDescription = "Run Python in a single turn to orchestrate tools or batch/aggregate data — scan many emails, join calendar×contacts×wiki, count/filter/compute, batch-add calendar events, update the wiki — instead of many separate tool calls. If the successful script is a reusable workflow, pass promoteToSkill so code_action records a skill_lifecycle proposal/genesis path after the run. A preloaded `deneb` object exposes read tools plus recoverable internal writes (calendar/wiki/workspace files); outbound actions (email send) are NOT available here — do those as a normal tool call. Only what you print() (and any traceback) is returned. The interpreter is sandboxed: no network except the tool bridge, no subprocess, no raw file writes outside a scratch dir, no secret reads."
 
 // codeActionAllowed is the action-granular allowlist. It permits read actions
 // plus recoverable INTERNAL writes: calendar create/update/delete (the calendar
@@ -431,8 +445,9 @@ func ToolCodeAction(d CodeActionDeps) toolctx.ToolFunc {
 			return "", fmt.Errorf("code_action is unavailable")
 		}
 		var p struct {
-			Code    string  `json:"code"`
-			Timeout float64 `json:"timeout"`
+			Code           string               `json:"code"`
+			Timeout        float64              `json:"timeout"`
+			PromoteToSkill *CodeActionPromotion `json:"promoteToSkill,omitempty"`
 		}
 		if err := jsonutil.UnmarshalInto("code_action params", input, &p); err != nil {
 			return "", err
@@ -511,8 +526,96 @@ func ToolCodeAction(d CodeActionDeps) toolctx.ToolFunc {
 		cmd.Stderr = errb
 
 		runErr := cmd.Run()
-		return formatCodeActionResult(out.String(), errb.String(), runErr, execCtx.Err()), nil
+		result := formatCodeActionResult(out.String(), errb.String(), runErr, execCtx.Err())
+		if p.PromoteToSkill != nil {
+			result = appendCodeActionPromotionResult(ctx, d.Invoker, result, *p.PromoteToSkill, runErr == nil && execCtx.Err() == nil)
+		}
+		return result, nil
 	}
+}
+
+func appendCodeActionPromotionResult(ctx context.Context, invoker ToolInvoker, result string, promotion CodeActionPromotion, runOK bool) string {
+	promoText := promoteCodeActionWorkflow(ctx, invoker, promotion, runOK)
+	if strings.TrimSpace(promoText) == "" {
+		return result
+	}
+	if strings.TrimSpace(result) == "" {
+		return promoText
+	}
+	return result + "\n\n" + promoText
+}
+
+func promoteCodeActionWorkflow(ctx context.Context, invoker ToolInvoker, promotion CodeActionPromotion, runOK bool) string {
+	if !runOK {
+		return "[code_action skill promotion: skipped because the script did not complete successfully]"
+	}
+	if invoker == nil {
+		return "[code_action skill promotion: skipped because tool invoker is unavailable]"
+	}
+	candidate := strings.TrimSpace(promotion.Candidate)
+	if candidate == "" {
+		return "[code_action skill promotion: skipped because promoteToSkill.candidate is required]"
+	}
+	route := normalizeCodeActionPromotionRoute(promotion.Route)
+	if route == "" {
+		route = "genesis"
+	}
+	execute := true
+	if promotion.Execute != nil {
+		execute = *promotion.Execute
+	}
+	evidence := strings.TrimSpace(promotion.Evidence)
+	if evidence == "" {
+		evidence = "successful code_action workflow"
+	} else {
+		evidence = "successful code_action workflow: " + evidence
+	}
+	payload := map[string]any{
+		"action":       "propose",
+		"candidate":    candidate,
+		"evidence":     evidence,
+		"route":        route,
+		"reason":       firstNonBlankCodeAction(promotion.Reason, "promote reusable successful code_action workflow"),
+		"skillName":    strings.TrimSpace(promotion.SkillName),
+		"dreamSummary": strings.TrimSpace(promotion.DreamSummary),
+		"execute":      execute,
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return "[code_action skill promotion: failed to encode proposal: " + err.Error() + "]"
+	}
+	out, err := invoker.Execute(ctx, "skill_lifecycle", data)
+	if err != nil {
+		return "[code_action skill promotion: skill_lifecycle unavailable or failed: " + err.Error() + "]"
+	}
+	out = strings.TrimSpace(out)
+	if out == "" {
+		return "[code_action skill promotion: proposal recorded]"
+	}
+	return "[code_action skill promotion]\n" + out
+}
+
+func normalizeCodeActionPromotionRoute(route string) string {
+	switch strings.ToLower(strings.TrimSpace(route)) {
+	case "", "genesis":
+		return "genesis"
+	case "evolve", "create", "no-op", "noop", "no_op":
+		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(route)), "no") {
+			return "no-op"
+		}
+		return strings.ToLower(strings.TrimSpace(route))
+	default:
+		return ""
+	}
+}
+
+func firstNonBlankCodeAction(values ...string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
 }
 
 func newBridgeToken() string {
@@ -592,6 +695,42 @@ func CodeActionSchema() map[string]any {
 			"timeout": map[string]any{
 				"type":        "number",
 				"description": "Wall-clock seconds (default 60, max 120).",
+			},
+			"promoteToSkill": map[string]any{
+				"type":        "object",
+				"description": "Optional. When the script succeeds and the workflow is reusable, code_action calls skill_lifecycle action=propose afterward. This keeps code_action as the discovery/execution surface and uses the normal skill lifecycle for genesis/evolve gates.",
+				"properties": map[string]any{
+					"candidate": map[string]any{
+						"type":        "string",
+						"description": "One-sentence reusable workflow pattern. Required when promoteToSkill is present.",
+					},
+					"evidence": map[string]any{
+						"type":        "string",
+						"description": "Why this successful code_action should become procedural memory: repeated joins, filters, calendar/wiki updates, or tool orchestration.",
+					},
+					"route": map[string]any{
+						"type":        "string",
+						"description": "Lifecycle route, default genesis. Use evolve with skillName when an existing skill should absorb this workflow.",
+						"enum":        []string{"genesis", "evolve", "create", "no-op"},
+					},
+					"skillName": map[string]any{
+						"type":        "string",
+						"description": "Existing skill for route=evolve, or related skill for audit context.",
+					},
+					"reason": map[string]any{
+						"type":        "string",
+						"description": "Reason passed to skill_lifecycle propose.",
+					},
+					"dreamSummary": map[string]any{
+						"type":        "string",
+						"description": "Optional compact summary for genesis when the Python code itself is the reusable pattern.",
+					},
+					"execute": map[string]any{
+						"type":        "boolean",
+						"description": "Whether skill_lifecycle should execute the route after recording the proposal. Default true.",
+						"default":     true,
+					},
+				},
 			},
 		},
 		"required": []any{"code"},

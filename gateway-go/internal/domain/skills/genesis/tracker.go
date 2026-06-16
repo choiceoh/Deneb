@@ -17,9 +17,12 @@ import (
 
 // Self-evolution activity kinds for the liveness heartbeat.
 const (
-	SkillActivityReview  = "review"
-	SkillActivityEvolve  = "evolve"
-	SkillActivityGenesis = "genesis"
+	SkillActivityReview             = "review"
+	SkillActivityReviewAttempt      = "review_attempt"
+	SkillActivityReviewSkipped      = "review_skipped"
+	SkillActivityValidationRejected = "validation_rejected"
+	SkillActivityEvolve             = "evolve"
+	SkillActivityGenesis            = "genesis"
 )
 
 // SkillLivenessState is a persisted heartbeat for the self-evolution loop.
@@ -36,6 +39,12 @@ type SkillLivenessState struct {
 	LastError     string `json:"lastError,omitempty"`
 	LastErrorAt   int64  `json:"lastErrorAt,omitempty"`
 	UpdatedAt     int64  `json:"updatedAt"`
+	// Attempt counters make "low threshold, high gate" observable: operators can
+	// tell whether the loop is not trying, trying but skipping weak transcripts,
+	// or trying and being rejected by validation.
+	ReviewAttempts       int `json:"reviewAttempts,omitempty"`
+	ReviewSkips          int `json:"reviewSkips,omitempty"`
+	ValidationRejections int `json:"validationRejections,omitempty"`
 	// GenesisSinceEvolve counts new skills created since the last event-driven
 	// evolve fired. Persisted so the count survives the frequent SIGUSR1
 	// restarts (the failure mode behind #2035). Event-trigger for evolve.
@@ -76,12 +85,15 @@ type UsageStats struct {
 
 // Tracker records and queries skill usage for evolution decisions.
 type Tracker struct {
-	logger       *slog.Logger
-	mu           sync.Mutex
-	usagePath    string
-	logPath      string
-	curatorPath  string
-	livenessPath string
+	logger              *slog.Logger
+	mu                  sync.Mutex
+	usagePath           string
+	logPath             string
+	curatorPath         string
+	livenessPath        string
+	rejectedPath        string
+	optimizerMemoryPath string
+	validationPath      string
 
 	// In-memory aggregated stats, rebuilt from JSONL on startup.
 	stats        map[string]*usageAgg
@@ -140,14 +152,17 @@ func NewTracker(logger *slog.Logger) (*Tracker, error) {
 	}
 
 	t := &Tracker{
-		logger:       logger,
-		usagePath:    filepath.Join(dir, "skill_usage.jsonl"),
-		logPath:      filepath.Join(dir, "skill_genesis_log.jsonl"),
-		curatorPath:  filepath.Join(dir, "skill_curator_state.json"),
-		livenessPath: filepath.Join(dir, "skill_liveness.json"),
-		stats:        make(map[string]*usageAgg),
-		recentErrors: make(map[string][]string),
-		postEvolve:   make(map[string]*evolveWatch),
+		logger:              logger,
+		usagePath:           filepath.Join(dir, "skill_usage.jsonl"),
+		logPath:             filepath.Join(dir, "skill_genesis_log.jsonl"),
+		curatorPath:         filepath.Join(dir, "skill_curator_state.json"),
+		livenessPath:        filepath.Join(dir, "skill_liveness.json"),
+		rejectedPath:        filepath.Join(dir, "skill_rejected_edits.jsonl"),
+		optimizerMemoryPath: filepath.Join(dir, "skill_optimizer_memory.json"),
+		validationPath:      filepath.Join(dir, "skill_validation_cases.jsonl"),
+		stats:               make(map[string]*usageAgg),
+		recentErrors:        make(map[string][]string),
+		postEvolve:          make(map[string]*evolveWatch),
 	}
 
 	// Rebuild in-memory state from existing JSONL.
@@ -173,25 +188,45 @@ func isConsultInfraError(errMsg string) bool {
 	return strings.Contains(errMsg, "tool skills errored")
 }
 
+// isUnactionableLegacyFailure reports legacy failure records that carry neither
+// a session nor an error. srv1 had a topsolar-db backlog dominated by these
+// empty failures; counting them as real evidence pinned the skill below the
+// evolution threshold even though there was nothing a rewrite could learn from.
+func isUnactionableLegacyFailure(r UsageRecord) bool {
+	return !r.Success &&
+		r.Source == "" &&
+		strings.TrimSpace(r.SessionKey) == "" &&
+		strings.TrimSpace(r.ErrorMsg) == ""
+}
+
 // reviewSessionPrefix marks sessions spawned by the skill-review fork. The fork
 // reads and judges skills as introspection, not real use, so its records (both
 // the verdict and the consult turn) must never feed the real-use success rate.
 const reviewSessionPrefix = "system:skill-review:"
 
+func isReviewUsageRecord(r UsageRecord) bool {
+	switch r.Source {
+	case UsageSourceReviewVerdict, UsageSourceReviewConsult:
+		return true
+	default:
+		return strings.HasPrefix(r.SessionKey, reviewSessionPrefix)
+	}
+}
+
 // isRealUsageRecord reports whether r reflects a genuine, fair execution of the
 // skill — the only signal the evolver's success-rate gate should see. Excluded:
 // records explicitly tagged as a review source, the skill-review fork's own
 // sessions (legacy records carry no Source, so fall back to the session prefix),
-// and consult-infrastructure failures (the skill could not even be loaded).
+// consult-infrastructure failures (the skill could not even be loaded), and
+// legacy empty failures with no actionable session/error evidence.
 func isRealUsageRecord(r UsageRecord) bool {
-	switch r.Source {
-	case UsageSourceReviewVerdict, UsageSourceReviewConsult:
-		return false
-	}
-	if strings.HasPrefix(r.SessionKey, reviewSessionPrefix) {
+	if isReviewUsageRecord(r) {
 		return false
 	}
 	if !r.Success && isConsultInfraError(r.ErrorMsg) {
+		return false
+	}
+	if isUnactionableLegacyFailure(r) {
 		return false
 	}
 	return true
@@ -357,10 +392,14 @@ const (
 // without log spelunking — the failure mode behind every past silent death.
 type EvolutionHealthSummary struct {
 	Evolves7d               int    `json:"evolves7d"`
+	EvolveRejected7d        int    `json:"evolveRejected7d"`
+	EvolveRolledBack7d      int    `json:"evolveRolledBack7d"`
 	Genesis7d               int    `json:"genesis7d"`
 	DistinctSkillsEvolved7d int    `json:"distinctSkillsEvolved7d"`
 	TopEvolvedSkill         string `json:"topEvolvedSkill,omitempty"`
 	TopEvolvedCount         int    `json:"topEvolvedCount,omitempty"`
+	LastRejectedSkill       string `json:"lastRejectedSkill,omitempty"`
+	LastRejectedReason      string `json:"lastRejectedReason,omitempty"`
 	Thrash                  bool   `json:"thrash"`
 }
 
@@ -398,6 +437,14 @@ func (t *Tracker) computeEvolutionHealthLocked(now time.Time) EvolutionHealthSum
 			if e.SkillName != "" {
 				perSkill[e.SkillName]++
 			}
+		case "evolve_rejected":
+			s.EvolveRejected7d++
+			if s.LastRejectedSkill == "" {
+				s.LastRejectedSkill = e.SkillName
+				s.LastRejectedReason = e.Reason
+			}
+		case "evolve_rolled_back":
+			s.EvolveRolledBack7d++
 		case "genesis", "": // legacy genesis entries have no Type
 			s.Genesis7d++
 		}
@@ -541,16 +588,21 @@ type evolveLogEntry struct {
 func (t *Tracker) LogEvolve(skillName, newVersion, description string) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	now := time.Now().UnixMilli()
 	if t.rollbackThreshold > 0 {
 		t.postEvolve[skillName] = &evolveWatch{version: newVersion}
 	}
-	return jsonlstore.Append(t.logPath, evolveLogEntry{
+	if err := jsonlstore.Append(t.logPath, evolveLogEntry{
 		Type:        "evolved",
 		SkillName:   skillName,
 		NewVersion:  newVersion,
 		Description: description,
-		CreatedAt:   time.Now().UnixMilli(),
-	})
+		CreatedAt:   now,
+	}); err != nil {
+		return err
+	}
+	t.recordOptimizerMemoryLocked(skillName, "accepted", description, now)
+	return nil
 }
 
 // LogEvolveRolledBack records that an evolution was reverted after it regressed
@@ -558,11 +610,16 @@ func (t *Tracker) LogEvolve(skillName, newVersion, description string) error {
 func (t *Tracker) LogEvolveRolledBack(skillName string) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	return jsonlstore.Append(t.logPath, evolveLogEntry{
+	now := time.Now().UnixMilli()
+	if err := jsonlstore.Append(t.logPath, evolveLogEntry{
 		Type:      "evolve_rolled_back",
 		SkillName: skillName,
-		CreatedAt: time.Now().UnixMilli(),
-	})
+		CreatedAt: now,
+	}); err != nil {
+		return err
+	}
+	t.recordOptimizerMemoryLocked(skillName, "rolled_back", "post-evolve rollback fired", now)
+	return nil
 }
 
 // LogEvolveRejected records an evolve attempt whose rewrite the self-test
@@ -570,12 +627,17 @@ func (t *Tracker) LogEvolveRolledBack(skillName string) error {
 func (t *Tracker) LogEvolveRejected(skillName, reason string) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	return jsonlstore.Append(t.logPath, evolveLogEntry{
+	now := time.Now().UnixMilli()
+	if err := jsonlstore.Append(t.logPath, evolveLogEntry{
 		Type:      "evolve_rejected",
 		SkillName: skillName,
 		Reason:    reason,
-		CreatedAt: time.Now().UnixMilli(),
-	})
+		CreatedAt: now,
+	}); err != nil {
+		return err
+	}
+	t.recordOptimizerMemoryLocked(skillName, "rejected", reason, now)
+	return nil
 }
 
 // RecentLifecycleLog returns recent genesis/proposal events, newest first.
@@ -606,18 +668,79 @@ func (t *Tracker) RecentLifecycleLog(limit int) ([]LifecycleLogEntry, error) {
 
 // SkillsNeedingEvolution returns skills with high failure rates.
 func (t *Tracker) SkillsNeedingEvolution(minUses int, maxSuccessRate float64) ([]UsageStats, error) {
-	all, err := t.ListAllStats()
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	lastFailureAt, err := t.lastRealFailureBySkillLocked()
+	if err != nil {
+		return nil, err
+	}
+	lastAttemptAt, err := t.lastEvolutionAttemptBySkillLocked()
 	if err != nil {
 		return nil, err
 	}
 
 	var candidates []UsageStats
-	for _, s := range all {
-		if s.TotalUses >= minUses && s.SuccessRate <= maxSuccessRate {
-			candidates = append(candidates, s)
+	for name := range t.stats {
+		s := *t.getStatsLocked(name)
+		if s.TotalUses < minUses || s.SuccessRate > maxSuccessRate {
+			continue
+		}
+		// Once an evolve attempt post-dates the newest real failure, the loop has
+		// already acted on that evidence. Do not keep re-optimizing the same
+		// failure cluster until real usage produces a fresh failure after it.
+		if lastAttemptAt[s.SkillName] > lastFailureAt[s.SkillName] {
+			continue
+		}
+		candidates = append(candidates, s)
+	}
+	sort.Slice(candidates, func(i, j int) bool {
+		return candidates[i].TotalUses > candidates[j].TotalUses
+	})
+	return candidates, nil
+}
+
+func (t *Tracker) lastRealFailureBySkillLocked() (map[string]int64, error) {
+	records, err := jsonlstore.Load[UsageRecord](t.usagePath)
+	if err != nil {
+		return nil, fmt.Errorf("genesis-tracker: load usage for evolution candidates: %w", err)
+	}
+	out := make(map[string]int64)
+	for _, r := range records {
+		if r.SkillName == "" || r.Success || !isRealUsageRecord(r) {
+			continue
+		}
+		if r.UsedAt > out[r.SkillName] {
+			out[r.SkillName] = r.UsedAt
 		}
 	}
-	return candidates, nil
+	return out, nil
+}
+
+func (t *Tracker) lastEvolutionAttemptBySkillLocked() (map[string]int64, error) {
+	entries, err := jsonlstore.Load[LifecycleLogEntry](t.logPath)
+	if err != nil {
+		return nil, fmt.Errorf("genesis-tracker: load lifecycle log for evolution candidates: %w", err)
+	}
+	out := make(map[string]int64)
+	for _, entry := range entries {
+		if entry.SkillName == "" || !isEvolutionAttemptType(entry.Type) {
+			continue
+		}
+		if entry.CreatedAt > out[entry.SkillName] {
+			out[entry.SkillName] = entry.CreatedAt
+		}
+	}
+	return out, nil
+}
+
+func isEvolutionAttemptType(typ string) bool {
+	switch typ {
+	case "evolved", "evolve_rejected", "evolve_rolled_back":
+		return true
+	default:
+		return false
+	}
 }
 
 // RecordEvolutionActivity updates the self-evolution liveness heartbeat.
@@ -637,21 +760,31 @@ func (t *Tracker) recordEvolutionActivityLocked(kind string, ok bool, errMsg str
 		state = &SkillLivenessState{}
 	}
 	now := time.Now().UnixMilli()
+	metricOnly := false
 	switch kind {
 	case SkillActivityReview:
 		state.LastReviewAt = now
 		state.LastReviewOK = ok
+	case SkillActivityReviewAttempt:
+		state.ReviewAttempts++
+		metricOnly = true
+	case SkillActivityReviewSkipped:
+		state.ReviewSkips++
+		metricOnly = true
+	case SkillActivityValidationRejected:
+		state.ValidationRejections++
+		metricOnly = true
 	case SkillActivityEvolve:
 		state.LastEvolveAt = now
 	case SkillActivityGenesis:
 		state.LastGenesisAt = now
 	}
-	if !ok && errMsg != "" {
+	if !metricOnly && !ok && errMsg != "" {
 		// Truncate by rune, not byte: this surfaces in /health JSON, and a
 		// byte slice can split a multi-byte UTF-8 sequence into replacement runes.
 		state.LastError = truncateRunes(errMsg, 200)
 		state.LastErrorAt = now
-	} else if ok {
+	} else if !metricOnly && ok {
 		// A successful activity clears a stale error so /health doesn't keep
 		// surfacing a failure that has since recovered (false-red).
 		state.LastError = ""

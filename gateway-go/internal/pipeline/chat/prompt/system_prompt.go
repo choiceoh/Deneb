@@ -257,7 +257,7 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		ss.WriteString("4. 작업이 끝나면 아래 Skill Genesis 규칙으로 저장/개선한다. `skill_lifecycle`가 보이지 않으면 `fetch_tools`(query=\"skill_lifecycle\")로 먼저 활성화한다.\n\n")
 		// Skill Genesis: instruct the agent to identify reusable patterns.
 		ss.WriteString("### Skill Genesis (경험에서 스킬 자동 생성)\n")
-		ss.WriteString("복합 워크플로우(5+ 도구, 3+ 턴)를 완료하면 시스템이 자동으로 스킬 추출을 평가합니다.\n")
+		ss.WriteString("복합 워크플로우(2+ 도구, 2+ 턴 또는 재사용 가능한 code_action)를 완료하면 시스템이 자동으로 스킬 추출을 평가합니다.\n")
 		ss.WriteString("재사용 가치가 높은 워크플로우를 발견하면:\n")
 		ss.WriteString("1. `evolution-proposal` 스킬로 genesis/create/evolve/no-op 중 하나를 먼저 결정하세요.\n")
 		ss.WriteString("2. 기존 스킬 개선 → 기존 umbrella 보강 → 보조 파일 추가 → 새 class-level 스킬 순서로 보수적으로 판단하세요.\n")
@@ -265,13 +265,16 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		ss.WriteString("4. 제안·생성·진화 실행은 `skill_lifecycle` 도구(propose/genesis/evolve/status)로 닫으세요.\n")
 		ss.WriteString("5. 자세한 config/명령/템플릿은 `skills` action=write_file 로 references/templates/scripts/assets 아래 보존하세요.\n")
 		ss.WriteString("6. agent-created 스킬 상태 조정은 `skill_lifecycle` action=pin/unpin/archive/restore 를 사용하세요.\n")
-		ss.WriteString("7. 사용자 교정(형식, 범위, 검증, 작업 순서)은 memory가 아니라 스킬 개선 신호일 수 있습니다.\n")
+		ss.WriteString("7. 스킬 진화는 검증 통과 시에만 채택하고, `skill_lifecycle` status의 `rejectedEdits`와 `validationCases`를 확인해 같은 실패 후보를 반복하지 마세요.\n")
+		ss.WriteString("8. 실제 실패에서 재현 가능한 검사 조건이 생기면 `skill_lifecycle` action=validation_case_from_session 으로 세션 trace 기반 case를 먼저 남기고, 필요하면 action=validation_case 로 수동 replay/held-out case를 보강하세요.\n")
+		ss.WriteString("9. 사용자 교정(형식, 범위, 검증, 작업 순서)은 memory가 아니라 스킬 개선 신호일 수 있습니다.\n")
+		ss.WriteString("10. `code_action`으로 좋은 배치/조인/정규화/내부-write 워크플로우가 성공했다면 다음 실행부터 `promoteToSkill`에 candidate/evidence를 넣어 `skill_lifecycle` 제안/생성 경로로 승격하세요.\n")
 		// S3: agent-facing save path. The agent itself may decide a
 		// workflow is worth keeping and persist it via skill_manage.
 		// apply=true is an explicit opt-in for mid-session visibility;
 		// the default defers the cache bust so the prompt-cache hit
 		// rate stays high.
-		ss.WriteString("8. 진짜 재사용 가능한 패턴을 방금 해결했다면 `skills`(action=create, ...) 로 직접 저장하세요. ")
+		ss.WriteString("11. 진짜 재사용 가능한 패턴을 방금 해결했다면 `skills`(action=create, ...) 로 직접 저장하세요. ")
 		ss.WriteString("기본은 다음 세션부터 로드되어 프롬프트 캐시를 해치지 않습니다. 이번 세션에서 즉시 쓰려면 apply=true 를 추가하세요.\n\n")
 	} else {
 		// No always-skills, but discoverable skills may still exist.

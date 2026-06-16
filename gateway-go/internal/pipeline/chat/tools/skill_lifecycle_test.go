@@ -8,11 +8,14 @@ import (
 )
 
 type fakeSkillLifecycleBackend struct {
-	proposal SkillEvolutionProposalRequest
-	genesis  SkillGenesisRequest
-	evolve   SkillEvolutionRequest
-	status   SkillLifecycleStatusRequest
-	curator  SkillCuratorActionRequest
+	proposal       SkillEvolutionProposalRequest
+	genesis        SkillGenesisRequest
+	evolve         SkillEvolutionRequest
+	status         SkillLifecycleStatusRequest
+	curator        SkillCuratorActionRequest
+	validationCase SkillValidationCaseRequest
+	fromSession    SkillValidationCaseFromSessionRequest
+	backfill       SkillValidationBackfillRequest
 }
 
 func (f *fakeSkillLifecycleBackend) ProposeSkillEvolution(_ context.Context, req SkillEvolutionProposalRequest) (any, error) {
@@ -38,6 +41,21 @@ func (f *fakeSkillLifecycleBackend) SkillLifecycleStatus(_ context.Context, req 
 func (f *fakeSkillLifecycleBackend) RunSkillCuratorAction(_ context.Context, req SkillCuratorActionRequest) (any, error) {
 	f.curator = req
 	return map[string]any{"ok": true, "action": req.Action, "skillName": req.SkillName}, nil
+}
+
+func (f *fakeSkillLifecycleBackend) RecordSkillValidationCase(_ context.Context, req SkillValidationCaseRequest) (any, error) {
+	f.validationCase = req
+	return map[string]any{"ok": true, "skillName": req.SkillName, "id": req.ID}, nil
+}
+
+func (f *fakeSkillLifecycleBackend) RecordSkillValidationCaseFromSession(_ context.Context, req SkillValidationCaseFromSessionRequest) (any, error) {
+	f.fromSession = req
+	return map[string]any{"ok": true, "skillName": req.SkillName, "id": req.ID, "sessionKey": req.SessionKey}, nil
+}
+
+func (f *fakeSkillLifecycleBackend) BackfillSkillValidationCases(_ context.Context, req SkillValidationBackfillRequest) (any, error) {
+	f.backfill = req
+	return map[string]any{"ok": true, "skillName": req.SkillName, "limit": req.Limit, "sessionKey": req.SessionKey}, nil
 }
 
 func TestToolSkillLifecyclePropose(t *testing.T) {
@@ -84,10 +102,11 @@ func TestToolSkillLifecycleEvolve(t *testing.T) {
 	if _, err := fn(context.Background(), mustJSONSkillLifecycle(t, map[string]any{
 		"action":    "evolve",
 		"skillName": "skill-factory",
+		"finding":   "add validation gate",
 	})); err != nil {
 		t.Fatalf("ToolSkillLifecycle: %v", err)
 	}
-	if backend.evolve.SkillName != "skill-factory" {
+	if backend.evolve.SkillName != "skill-factory" || backend.evolve.Finding != "add validation gate" {
 		t.Fatalf("unexpected evolve request: %+v", backend.evolve)
 	}
 }
@@ -128,6 +147,124 @@ func TestToolSkillLifecycleCuratorAction(t *testing.T) {
 	}
 	if backend.curator.Action != "archive" || backend.curator.SkillName != "generated-helper" {
 		t.Fatalf("unexpected curator request: %+v", backend.curator)
+	}
+}
+
+func TestToolSkillLifecycleValidationCase(t *testing.T) {
+	backend := &fakeSkillLifecycleBackend{}
+	fn := ToolSkillLifecycle(backend)
+
+	out, err := fn(context.Background(), mustJSONSkillLifecycle(t, map[string]any{
+		"action":              "validation_case",
+		"skillName":           "topsolar-db",
+		"id":                  "preserve-single-bash-block",
+		"description":         "candidate must preserve safe execution wrapper",
+		"requiredSubstrings":  []string{"단일 bash block"},
+		"forbiddenSubstrings": []string{"eval"},
+		"requiredHeadings":    []string{"통합 실행 흐름"},
+		"replay": map[string]any{
+			"input":                 "srv1에서 실제 deneb-gateway 상태를 확인하고 개선",
+			"requiredActions":       []string{"ssh srv1", "systemctl --user status deneb-gateway.service"},
+			"forbiddenActions":      []string{"로컬 상태만 보고 판단"},
+			"requiredObservations":  []string{"active (running)"},
+			"forbiddenObservations": []string{"stopped"},
+			"requiredTools":         []string{"ssh"},
+			"expectedToolCalls": []map[string]any{
+				{"name": "exec", "inputIncludes": []string{"ssh srv1"}},
+				{"name": "exec", "inputIncludes": []string{"systemctl --user status deneb-gateway.service"}, "fixtureOutput": "Active: active (running)"},
+			},
+			"forbiddenToolCalls": []map[string]any{
+				{"name": "exec", "inputIncludes": []string{"rm -rf"}},
+			},
+			"requireOrder": true,
+		},
+		"source": "operator",
+	}))
+	if err != nil {
+		t.Fatalf("ToolSkillLifecycle: %v", err)
+	}
+	if !strings.Contains(out, `"id": "preserve-single-bash-block"`) {
+		t.Fatalf("expected validation case result, got %s", out)
+	}
+	if backend.validationCase.SkillName != "topsolar-db" ||
+		backend.validationCase.ID != "preserve-single-bash-block" ||
+		len(backend.validationCase.RequiredSubstrings) != 1 ||
+		len(backend.validationCase.ForbiddenSubstrings) != 1 ||
+		len(backend.validationCase.RequiredHeadings) != 1 ||
+		backend.validationCase.Replay.Input == "" ||
+		len(backend.validationCase.Replay.RequiredActions) != 2 ||
+		len(backend.validationCase.Replay.ForbiddenActions) != 1 ||
+		len(backend.validationCase.Replay.RequiredObservations) != 1 ||
+		len(backend.validationCase.Replay.ForbiddenObservations) != 1 ||
+		len(backend.validationCase.Replay.RequiredTools) != 1 ||
+		len(backend.validationCase.Replay.ExpectedToolCalls) != 2 ||
+		backend.validationCase.Replay.ExpectedToolCalls[1].FixtureOutput == "" ||
+		len(backend.validationCase.Replay.ForbiddenToolCalls) != 1 ||
+		!backend.validationCase.Replay.RequireOrder {
+		t.Fatalf("unexpected validation case request: %+v", backend.validationCase)
+	}
+}
+
+func TestToolSkillLifecycleValidationCaseFromSession(t *testing.T) {
+	backend := &fakeSkillLifecycleBackend{}
+	fn := ToolSkillLifecycle(backend)
+
+	out, err := fn(context.Background(), mustJSONSkillLifecycle(t, map[string]any{
+		"action":      "validation_case_from_session",
+		"skillName":   "srv1-ops",
+		"sessionKey":  "client:main:srv1",
+		"id":          "real-server-state",
+		"description": "preserve real server inspection before edits",
+		"replay": map[string]any{
+			"requiredActions":      []string{"ssh srv1"},
+			"requiredObservations": []string{"active (running)"},
+		},
+		"source": "review-finding",
+	}))
+	if err != nil {
+		t.Fatalf("ToolSkillLifecycle: %v", err)
+	}
+	if !strings.Contains(out, `"sessionKey": "client:main:srv1"`) {
+		t.Fatalf("expected validation case result, got %s", out)
+	}
+	if backend.fromSession.SkillName != "srv1-ops" ||
+		backend.fromSession.SessionKey != "client:main:srv1" ||
+		backend.fromSession.ID != "real-server-state" ||
+		len(backend.fromSession.Replay.RequiredActions) != 1 ||
+		len(backend.fromSession.Replay.RequiredObservations) != 1 ||
+		backend.fromSession.Source != "review-finding" {
+		t.Fatalf("unexpected from-session request: %+v", backend.fromSession)
+	}
+}
+
+func TestToolSkillLifecycleValidationBackfill(t *testing.T) {
+	backend := &fakeSkillLifecycleBackend{}
+	fn := ToolSkillLifecycle(backend)
+
+	out, err := fn(context.Background(), mustJSONSkillLifecycle(t, map[string]any{
+		"action":      "validation_backfill",
+		"skillName":   "srv1-ops",
+		"sessionKey":  "client:main:srv1",
+		"limit":       7,
+		"description": "backfill real server checks",
+		"replay": map[string]any{
+			"requiredActions": []string{"ssh srv1"},
+		},
+		"source": "operator-backfill",
+	}))
+	if err != nil {
+		t.Fatalf("ToolSkillLifecycle: %v", err)
+	}
+	if !strings.Contains(out, `"limit": 7`) {
+		t.Fatalf("expected backfill result, got %s", out)
+	}
+	if backend.backfill.SkillName != "srv1-ops" ||
+		backend.backfill.SessionKey != "client:main:srv1" ||
+		backend.backfill.Limit != 7 ||
+		backend.backfill.Description != "backfill real server checks" ||
+		len(backend.backfill.Replay.RequiredActions) != 1 ||
+		backend.backfill.Source != "operator-backfill" {
+		t.Fatalf("unexpected backfill request: %+v", backend.backfill)
 	}
 }
 

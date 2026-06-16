@@ -18,6 +18,9 @@ type SkillLifecycleBackend interface {
 	RunSkillEvolution(context.Context, SkillEvolutionRequest) (any, error)
 	SkillLifecycleStatus(context.Context, SkillLifecycleStatusRequest) (any, error)
 	RunSkillCuratorAction(context.Context, SkillCuratorActionRequest) (any, error)
+	RecordSkillValidationCase(context.Context, SkillValidationCaseRequest) (any, error)
+	RecordSkillValidationCaseFromSession(context.Context, SkillValidationCaseFromSessionRequest) (any, error)
+	BackfillSkillValidationCases(context.Context, SkillValidationBackfillRequest) (any, error)
 }
 
 // SkillEvolutionProposalRequest records the agent's routing decision after a
@@ -63,6 +66,73 @@ type SkillCuratorActionRequest struct {
 	SkillName string `json:"skillName"`
 }
 
+// SkillValidationCaseRequest records a held-out invariant for future candidate
+// skill validation.
+type SkillValidationCaseRequest struct {
+	SkillName           string                 `json:"skillName"`
+	ID                  string                 `json:"id,omitempty"`
+	Description         string                 `json:"description,omitempty"`
+	RequiredSubstrings  []string               `json:"requiredSubstrings,omitempty"`
+	ForbiddenSubstrings []string               `json:"forbiddenSubstrings,omitempty"`
+	RequiredHeadings    []string               `json:"requiredHeadings,omitempty"`
+	Replay              SkillReplayCaseRequest `json:"replay,omitempty"`
+	Source              string                 `json:"source,omitempty"`
+}
+
+// SkillValidationCaseFromSessionRequest records a held-out invariant by
+// extracting the replay trace from a stored transcript. The optional Replay
+// fields augment the extracted trace when the reviewer knows the precise
+// action/observation that made the session fail.
+type SkillValidationCaseFromSessionRequest struct {
+	SkillName           string                 `json:"skillName"`
+	SessionKey          string                 `json:"sessionKey,omitempty"`
+	ID                  string                 `json:"id,omitempty"`
+	Description         string                 `json:"description,omitempty"`
+	RequiredSubstrings  []string               `json:"requiredSubstrings,omitempty"`
+	ForbiddenSubstrings []string               `json:"forbiddenSubstrings,omitempty"`
+	RequiredHeadings    []string               `json:"requiredHeadings,omitempty"`
+	Replay              SkillReplayCaseRequest `json:"replay,omitempty"`
+	Source              string                 `json:"source,omitempty"`
+}
+
+// SkillValidationBackfillRequest batch-extracts held-out replay traces from
+// recent stored transcripts for a specific skill. Weak automatic cases are
+// skipped by the tracker instead of polluting the validation corpus.
+type SkillValidationBackfillRequest struct {
+	SkillName   string                 `json:"skillName"`
+	SessionKey  string                 `json:"sessionKey,omitempty"`
+	Limit       int                    `json:"limit,omitempty"`
+	Description string                 `json:"description,omitempty"`
+	Replay      SkillReplayCaseRequest `json:"replay,omitempty"`
+	Source      string                 `json:"source,omitempty"`
+}
+
+// SkillReplayCaseRequest records a realistic dry-run task and expected action
+// choices for held-out skill validation.
+type SkillReplayCaseRequest struct {
+	Input                 string                       `json:"input,omitempty"`
+	Context               []string                     `json:"context,omitempty"`
+	RequiredActions       []string                     `json:"requiredActions,omitempty"`
+	ForbiddenActions      []string                     `json:"forbiddenActions,omitempty"`
+	RequiredObservations  []string                     `json:"requiredObservations,omitempty"`
+	ForbiddenObservations []string                     `json:"forbiddenObservations,omitempty"`
+	RequiredTools         []string                     `json:"requiredTools,omitempty"`
+	ForbiddenTools        []string                     `json:"forbiddenTools,omitempty"`
+	ExpectedToolCalls     []SkillReplayToolCallRequest `json:"expectedToolCalls,omitempty"`
+	ForbiddenToolCalls    []SkillReplayToolCallRequest `json:"forbiddenToolCalls,omitempty"`
+	RequireOrder          bool                         `json:"requireOrder,omitempty"`
+}
+
+// SkillReplayToolCallRequest records one expected or forbidden tool invocation
+// shape for replay validation.
+type SkillReplayToolCallRequest struct {
+	Name          string   `json:"name,omitempty"`
+	InputIncludes []string `json:"inputIncludes,omitempty"`
+	InputExcludes []string `json:"inputExcludes,omitempty"`
+	FixtureOutput string   `json:"fixtureOutput,omitempty"`
+	FixtureError  bool     `json:"fixtureError,omitempty"`
+}
+
 // ToolSkillLifecycle exposes propose/genesis/evolve/status as one agent-facing tool.
 func ToolSkillLifecycle(backend SkillLifecycleBackend) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
@@ -72,15 +142,23 @@ func ToolSkillLifecycle(backend SkillLifecycleBackend) ToolFunc {
 		var p struct {
 			Action string `json:"action"`
 
-			Candidate    string `json:"candidate"`
-			Evidence     string `json:"evidence"`
-			Route        string `json:"route"`
-			Reason       string `json:"reason"`
-			SessionKey   string `json:"sessionKey"`
-			DreamSummary string `json:"dreamSummary"`
-			SkillName    string `json:"skillName"`
-			Execute      bool   `json:"execute"`
-			Limit        int    `json:"limit"`
+			Candidate           string                 `json:"candidate"`
+			Evidence            string                 `json:"evidence"`
+			Route               string                 `json:"route"`
+			Reason              string                 `json:"reason"`
+			SessionKey          string                 `json:"sessionKey"`
+			DreamSummary        string                 `json:"dreamSummary"`
+			SkillName           string                 `json:"skillName"`
+			Finding             string                 `json:"finding"`
+			Execute             bool                   `json:"execute"`
+			Limit               int                    `json:"limit"`
+			ID                  string                 `json:"id"`
+			Description         string                 `json:"description"`
+			RequiredSubstrings  []string               `json:"requiredSubstrings"`
+			ForbiddenSubstrings []string               `json:"forbiddenSubstrings"`
+			RequiredHeadings    []string               `json:"requiredHeadings"`
+			Replay              SkillReplayCaseRequest `json:"replay"`
+			Source              string                 `json:"source"`
 		}
 		if err := jsonutil.UnmarshalInto("skill_lifecycle params", input, &p); err != nil {
 			return "", err
@@ -110,6 +188,7 @@ func ToolSkillLifecycle(backend SkillLifecycleBackend) ToolFunc {
 		case "evolve":
 			result, err = backend.RunSkillEvolution(ctx, SkillEvolutionRequest{
 				SkillName: p.SkillName,
+				Finding:   p.Finding,
 			})
 		case "status":
 			result, err = backend.SkillLifecycleStatus(ctx, SkillLifecycleStatusRequest{
@@ -121,8 +200,40 @@ func ToolSkillLifecycle(backend SkillLifecycleBackend) ToolFunc {
 				Action:    p.Action,
 				SkillName: p.SkillName,
 			})
+		case "validation_case":
+			result, err = backend.RecordSkillValidationCase(ctx, SkillValidationCaseRequest{
+				SkillName:           p.SkillName,
+				ID:                  p.ID,
+				Description:         p.Description,
+				RequiredSubstrings:  p.RequiredSubstrings,
+				ForbiddenSubstrings: p.ForbiddenSubstrings,
+				RequiredHeadings:    p.RequiredHeadings,
+				Replay:              p.Replay,
+				Source:              p.Source,
+			})
+		case "validation_case_from_session":
+			result, err = backend.RecordSkillValidationCaseFromSession(ctx, SkillValidationCaseFromSessionRequest{
+				SkillName:           p.SkillName,
+				SessionKey:          p.SessionKey,
+				ID:                  p.ID,
+				Description:         p.Description,
+				RequiredSubstrings:  p.RequiredSubstrings,
+				ForbiddenSubstrings: p.ForbiddenSubstrings,
+				RequiredHeadings:    p.RequiredHeadings,
+				Replay:              p.Replay,
+				Source:              p.Source,
+			})
+		case "validation_backfill":
+			result, err = backend.BackfillSkillValidationCases(ctx, SkillValidationBackfillRequest{
+				SkillName:   p.SkillName,
+				SessionKey:  p.SessionKey,
+				Limit:       p.Limit,
+				Description: p.Description,
+				Replay:      p.Replay,
+				Source:      p.Source,
+			})
 		default:
-			return "action은 propose, genesis, evolve, status, pin, unpin, archive, restore 중 하나를 지정하세요.", nil
+			return "action은 propose, genesis, evolve, status, validation_case, validation_case_from_session, validation_backfill, pin, unpin, archive, restore 중 하나를 지정하세요.", nil
 		}
 		if err != nil {
 			return "", err
@@ -143,8 +254,8 @@ func SkillLifecycleToolSchema() map[string]any {
 		"properties": map[string]any{
 			"action": map[string]any{
 				"type":        "string",
-				"description": "Action: propose (record/route a self-evolution proposal), genesis (generate a skill from sessionKey or dreamSummary), evolve (improve an existing skill), status (inspect recent lifecycle logs, usage stats, and curator state), pin/unpin/archive/restore (manual curator state for agent-created skills)",
-				"enum":        []string{"propose", "genesis", "evolve", "status", "pin", "unpin", "archive", "restore"},
+				"description": "Action: propose (record/route a self-evolution proposal), genesis (generate a skill from sessionKey or dreamSummary), evolve (improve an existing skill), status (inspect recent lifecycle logs, usage stats, and curator state), validation_case (record held-out assertions for a skill), validation_case_from_session (extract a held-out replay trace from sessionKey), validation_backfill (batch-extract held-out replay traces from stored sessions for skillName), pin/unpin/archive/restore (manual curator state for agent-created skills)",
+				"enum":        []string{"propose", "genesis", "evolve", "status", "validation_case", "validation_case_from_session", "validation_backfill", "pin", "unpin", "archive", "restore"},
 			},
 			"candidate": map[string]any{
 				"type":        "string",
@@ -158,6 +269,10 @@ func SkillLifecycleToolSchema() map[string]any {
 				"type":        "string",
 				"description": "Brief evidence for the proposal: tools used, repeated pitfall, or user request",
 			},
+			"finding": map[string]any{
+				"type":        "string",
+				"description": "For evolve: optional review finding or improvement directive to prioritize even when usage stats are sparse",
+			},
 			"execute": map[string]any{
 				"type":        "boolean",
 				"description": "For propose: immediately execute the selected route when possible (default false)",
@@ -165,7 +280,7 @@ func SkillLifecycleToolSchema() map[string]any {
 			},
 			"limit": map[string]any{
 				"type":        "integer",
-				"description": "For status: maximum recent lifecycle log entries to return (default 20, max 50)",
+				"description": "For status: maximum recent lifecycle log entries to return; for validation_backfill: maximum session keys to scan (default 20, max 50)",
 				"minimum":     1,
 				"maximum":     50,
 			},
@@ -180,13 +295,131 @@ func SkillLifecycleToolSchema() map[string]any {
 			},
 			"sessionKey": map[string]any{
 				"type":        "string",
-				"description": "Session key to use for genesis from transcript context",
+				"description": "Session key to use for genesis from transcript context, validation_case_from_session replay extraction, or a single-session validation_backfill",
 			},
 			"skillName": map[string]any{
 				"type":        "string",
-				"description": "Existing skill name for evolve, or optional target/related skill for propose",
+				"description": "Existing skill name for evolve/status/validation_backfill, or optional target/related skill for propose",
+			},
+			"id": map[string]any{
+				"type":        "string",
+				"description": "For validation_case: stable case id",
+			},
+			"description": map[string]any{
+				"type":        "string",
+				"description": "For validation_case/validation_case_from_session/validation_backfill: what real failure or invariant this held-out case protects",
+			},
+			"requiredSubstrings": map[string]any{
+				"type":        "array",
+				"description": "For validation_case: substrings candidate skill bodies must contain",
+				"items":       map[string]any{"type": "string"},
+			},
+			"forbiddenSubstrings": map[string]any{
+				"type":        "array",
+				"description": "For validation_case: substrings candidate skill bodies must not contain",
+				"items":       map[string]any{"type": "string"},
+			},
+			"requiredHeadings": map[string]any{
+				"type":        "array",
+				"description": "For validation_case: markdown headings candidate skill bodies must preserve",
+				"items":       map[string]any{"type": "string"},
+			},
+			"source": map[string]any{
+				"type":        "string",
+				"description": "For validation_case/validation_case_from_session/validation_backfill: source of this held-out case, such as review-finding, session-backfill, or operator",
+			},
+			"replay": map[string]any{
+				"type":        "object",
+				"description": "For validation_case: deterministic dry-run replay task and expected action/tool choices. For validation_case_from_session/validation_backfill: optional extra assertions merged with the extracted trace",
+				"properties": map[string]any{
+					"input": map[string]any{
+						"type":        "string",
+						"description": "Realistic user task to replay against the candidate skill",
+					},
+					"context": map[string]any{
+						"type":        "array",
+						"description": "Relevant state or transcript facts for the replay",
+						"items":       map[string]any{"type": "string"},
+					},
+					"requiredActions": map[string]any{
+						"type":        "array",
+						"description": "Action phrases the candidate skill must lead the agent to perform",
+						"items":       map[string]any{"type": "string"},
+					},
+					"forbiddenActions": map[string]any{
+						"type":        "array",
+						"description": "Action phrases the candidate skill must avoid",
+						"items":       map[string]any{"type": "string"},
+					},
+					"requiredObservations": map[string]any{
+						"type":        "array",
+						"description": "Observation or verification phrases the candidate skill must preserve from fixture outputs",
+						"items":       map[string]any{"type": "string"},
+					},
+					"forbiddenObservations": map[string]any{
+						"type":        "array",
+						"description": "Observation or conclusion phrases the candidate skill must not introduce",
+						"items":       map[string]any{"type": "string"},
+					},
+					"requiredTools": map[string]any{
+						"type":        "array",
+						"description": "Tool or command names the candidate skill must preserve for this replay",
+						"items":       map[string]any{"type": "string"},
+					},
+					"forbiddenTools": map[string]any{
+						"type":        "array",
+						"description": "Tool or command names the candidate skill must not introduce for this replay",
+						"items":       map[string]any{"type": "string"},
+					},
+					"expectedToolCalls": map[string]any{
+						"type":        "array",
+						"description": "Expected tool-call shapes from a successful trace; each item may require a tool name and important input substrings",
+						"items":       skillReplayToolCallSchema(),
+					},
+					"forbiddenToolCalls": map[string]any{
+						"type":        "array",
+						"description": "Forbidden tool-call shapes that future candidates must not introduce",
+						"items":       skillReplayToolCallSchema(),
+					},
+					"requireOrder": map[string]any{
+						"type":        "boolean",
+						"description": "When true, expectedToolCalls must appear in the recorded order",
+						"default":     false,
+					},
+				},
 			},
 		},
 		"required": []string{"action"},
+	}
+}
+
+func skillReplayToolCallSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"name": map[string]any{
+				"type":        "string",
+				"description": "Agent tool name, such as exec, read, skills, or skill_lifecycle",
+			},
+			"inputIncludes": map[string]any{
+				"type":        "array",
+				"description": "Substrings that must appear in the tool input or command described by the candidate skill",
+				"items":       map[string]any{"type": "string"},
+			},
+			"inputExcludes": map[string]any{
+				"type":        "array",
+				"description": "Substrings that must not appear in the tool input or command described by the candidate skill",
+				"items":       map[string]any{"type": "string"},
+			},
+			"fixtureOutput": map[string]any{
+				"type":        "string",
+				"description": "Recorded side-effect-free fixture output for this tool call; not counted as candidate behavior by itself",
+			},
+			"fixtureError": map[string]any{
+				"type":        "boolean",
+				"description": "Whether the fixture output represents a tool error",
+				"default":     false,
+			},
+		},
 	}
 }

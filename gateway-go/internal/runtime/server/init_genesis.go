@@ -107,7 +107,7 @@ func (s *Server) initGenesisServices() {
 
 	// Iteration-based nudger (Hermes-style): fires a mid-session skill
 	// review every N tool calls. Env var DENEB_SKILL_NUDGE_INTERVAL
-	// overrides the default (10); 0 disables.
+	// overrides genesis.DefaultNudgeInterval; 0 disables.
 	// The review fork dispatches through chat.SendSync, which re-resolves the model string into a
 	// provider via resolveModel — so it needs the FULL "provider/model" id. Model() returns the
 	// bare name (e.g. "step3p7"), which has no provider and fails client resolution
@@ -184,6 +184,8 @@ func (s *Server) registerSkillLifecycleTool() {
 		Description: "Closed-loop skill self-evolution: propose (record/route reusable workflow decisions), " +
 			"genesis (generate a skill from sessionKey or dreamSummary), evolve (improve an existing skill), " +
 			"status (inspect recent lifecycle logs, usage stats, and curator state), " +
+			"validation_case (record held-out replay assertions for future candidate selection), " +
+			"validation_case_from_session (extract held-out replay assertions from a real session trace), " +
 			"pin/unpin/archive/restore (manual state for agent-created skills). " +
 			"Use through the evolution-proposal skill after meaningful workflows.",
 		InputSchema: chattools.SkillLifecycleToolSchema(),

@@ -1,8 +1,10 @@
 package genesis
 
 import (
+	"errors"
 	"log/slog"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -11,14 +13,17 @@ func newTestTracker(t *testing.T) *Tracker {
 	t.Helper()
 	dir := t.TempDir()
 	return &Tracker{
-		logger:       slog.Default(),
-		usagePath:    filepath.Join(dir, "skill_usage.jsonl"),
-		logPath:      filepath.Join(dir, "skill_genesis_log.jsonl"),
-		curatorPath:  filepath.Join(dir, "skill_curator_state.json"),
-		livenessPath: filepath.Join(dir, "skill_liveness.json"),
-		stats:        make(map[string]*usageAgg),
-		recentErrors: make(map[string][]string),
-		postEvolve:   make(map[string]*evolveWatch),
+		logger:              slog.Default(),
+		usagePath:           filepath.Join(dir, "skill_usage.jsonl"),
+		logPath:             filepath.Join(dir, "skill_genesis_log.jsonl"),
+		curatorPath:         filepath.Join(dir, "skill_curator_state.json"),
+		livenessPath:        filepath.Join(dir, "skill_liveness.json"),
+		rejectedPath:        filepath.Join(dir, "skill_rejected_edits.jsonl"),
+		optimizerMemoryPath: filepath.Join(dir, "skill_optimizer_memory.json"),
+		validationPath:      filepath.Join(dir, "skill_validation_cases.jsonl"),
+		stats:               make(map[string]*usageAgg),
+		recentErrors:        make(map[string][]string),
+		postEvolve:          make(map[string]*evolveWatch),
 	}
 }
 
@@ -116,6 +121,53 @@ func TestTrackerRecentLifecycleLog_NewestFirstAndTyped(t *testing.T) {
 	}
 }
 
+func TestSkillsNeedingEvolution_SkipsUntilNewRealFailureAfterAttempt(t *testing.T) {
+	tracker := newTestTracker(t)
+	beforeAttempt := time.Now().Add(-2 * time.Second).UnixMilli()
+	for i := 0; i < 3; i++ {
+		if err := tracker.RecordUsage(UsageRecord{
+			SkillName: "topsolar-db",
+			Success:   false,
+			ErrorMsg:  "old real failure",
+			UsedAt:    beforeAttempt + int64(i),
+		}); err != nil {
+			t.Fatalf("RecordUsage old failure: %v", err)
+		}
+	}
+	if err := tracker.LogEvolveRejected("topsolar-db", "judge rejected candidate"); err != nil {
+		t.Fatalf("LogEvolveRejected: %v", err)
+	}
+
+	candidates, err := tracker.SkillsNeedingEvolution(3, 0.7)
+	if err != nil {
+		t.Fatalf("SkillsNeedingEvolution: %v", err)
+	}
+	for _, candidate := range candidates {
+		if candidate.SkillName == "topsolar-db" {
+			t.Fatalf("expected old failures to be suppressed after an evolve attempt, got %+v", candidates)
+		}
+	}
+
+	if err := tracker.RecordUsage(UsageRecord{
+		SkillName: "topsolar-db",
+		Success:   false,
+		ErrorMsg:  "fresh real failure",
+		UsedAt:    time.Now().Add(2 * time.Second).UnixMilli(),
+	}); err != nil {
+		t.Fatalf("RecordUsage fresh failure: %v", err)
+	}
+	candidates, err = tracker.SkillsNeedingEvolution(3, 0.7)
+	if err != nil {
+		t.Fatalf("SkillsNeedingEvolution after fresh failure: %v", err)
+	}
+	for _, candidate := range candidates {
+		if candidate.SkillName == "topsolar-db" {
+			return
+		}
+	}
+	t.Fatalf("expected fresh post-attempt failure to make skill eligible again, got %+v", candidates)
+}
+
 func TestTrackerRecentLifecycleLog_Limit(t *testing.T) {
 	tracker := newTestTracker(t)
 	for _, name := range []string{"one", "two", "three"} {
@@ -133,6 +185,248 @@ func TestTrackerRecentLifecycleLog_Limit(t *testing.T) {
 	}
 	if entries[0].SkillName != "three" || entries[1].SkillName != "two" {
 		t.Fatalf("expected newest two entries, got %+v", entries)
+	}
+}
+
+func TestTrackerRejectedSkillEdits_NewestFirstAndFiltered(t *testing.T) {
+	tracker := newTestTracker(t)
+	if err := tracker.RecordRejectedSkillEdit(RejectedSkillEditRecord{
+		SkillName:     "deploy-helper",
+		Reason:        "missing verification gate",
+		CandidateBody: strings.Repeat("x", 2500),
+		Source:        "self-test",
+	}); err != nil {
+		t.Fatalf("RecordRejectedSkillEdit(first): %v", err)
+	}
+	if err := tracker.RecordRejectedSkillEdit(RejectedSkillEditRecord{
+		SkillName:     "other-skill",
+		Reason:        "irrelevant",
+		CandidateBody: "other",
+	}); err != nil {
+		t.Fatalf("RecordRejectedSkillEdit(other): %v", err)
+	}
+	if err := tracker.RecordRejectedSkillEdit(RejectedSkillEditRecord{
+		SkillName:     "deploy-helper",
+		Reason:        "invented command",
+		CandidateBody: "newer",
+		Source:        "teacher",
+	}); err != nil {
+		t.Fatalf("RecordRejectedSkillEdit(second): %v", err)
+	}
+
+	entries, err := tracker.RecentRejectedSkillEdits("deploy-helper", 5)
+	if err != nil {
+		t.Fatalf("RecentRejectedSkillEdits: %v", err)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("expected 2 deploy-helper rejected edits, got %+v", entries)
+	}
+	if entries[0].Reason != "invented command" || entries[1].Reason != "missing verification gate" {
+		t.Fatalf("expected newest first, got %+v", entries)
+	}
+	if len([]rune(entries[1].CandidateBody)) != 2000 {
+		t.Fatalf("expected candidate body truncated to 2000 runes, got %d", len([]rune(entries[1].CandidateBody)))
+	}
+}
+
+func TestTrackerSkillValidationCases_NewestFirstAndFiltered(t *testing.T) {
+	tracker := newTestTracker(t)
+	if err := tracker.RecordSkillValidationCase(SkillValidationCaseRecord{
+		SkillName: "deploy-helper",
+		ID:        "empty",
+	}); err == nil {
+		t.Fatal("expected validation case without assertions to be rejected")
+	}
+	if err := tracker.RecordSkillValidationCase(SkillValidationCaseRecord{
+		SkillName:          "deploy-helper",
+		ID:                 "verify-health",
+		RequiredSubstrings: []string{"verify health"},
+	}); err != nil {
+		t.Fatalf("RecordSkillValidationCase(first): %v", err)
+	}
+	if err := tracker.RecordSkillValidationCase(SkillValidationCaseRecord{
+		SkillName:          "other-skill",
+		ID:                 "other",
+		RequiredSubstrings: []string{"other"},
+	}); err != nil {
+		t.Fatalf("RecordSkillValidationCase(other): %v", err)
+	}
+	if err := tracker.RecordSkillValidationCase(SkillValidationCaseRecord{
+		SkillName:           "deploy-helper",
+		ID:                  "safe-shell",
+		ForbiddenSubstrings: []string{"eval"},
+		Replay: SkillReplayCaseRecord{
+			Input:                "Deploy and verify the service.",
+			RequiredActions:      []string{"verify health"},
+			RequiredTools:        []string{"curl"},
+			RequiredObservations: []string{"200 OK"},
+			ExpectedToolCalls: []SkillReplayToolCallRecord{
+				{Name: "exec", InputIncludes: []string{"curl /health"}, FixtureOutput: "200 OK"},
+			},
+			RequireOrder: true,
+		},
+	}); err != nil {
+		t.Fatalf("RecordSkillValidationCase(second): %v", err)
+	}
+
+	cases, err := tracker.RecentSkillValidationCases("deploy-helper", 5)
+	if err != nil {
+		t.Fatalf("RecentSkillValidationCases: %v", err)
+	}
+	if len(cases) != 2 {
+		t.Fatalf("expected 2 deploy-helper validation cases, got %+v", cases)
+	}
+	if cases[0].ID != "safe-shell" || cases[1].ID != "verify-health" {
+		t.Fatalf("expected newest first, got %+v", cases)
+	}
+	if cases[0].Replay.Input != "Deploy and verify the service." ||
+		len(cases[0].Replay.RequiredActions) != 1 ||
+		len(cases[0].Replay.RequiredTools) != 1 ||
+		len(cases[0].Replay.RequiredObservations) != 1 ||
+		len(cases[0].Replay.ExpectedToolCalls) != 1 ||
+		cases[0].Replay.ExpectedToolCalls[0].Name != "exec" ||
+		len(cases[0].Replay.ExpectedToolCalls[0].InputIncludes) != 1 ||
+		cases[0].Replay.ExpectedToolCalls[0].FixtureOutput != "200 OK" ||
+		!cases[0].Replay.RequireOrder {
+		t.Fatalf("expected replay fields to round-trip, got %+v", cases[0].Replay)
+	}
+}
+
+func TestTrackerSkillValidationCasesDedupesLatestByIDAndPayload(t *testing.T) {
+	tracker := newTestTracker(t)
+	if err := tracker.RecordSkillValidationCase(SkillValidationCaseRecord{
+		SkillName:          "deploy-helper",
+		ID:                 "verify-health",
+		Description:        "older copy",
+		RequiredSubstrings: []string{"verify health"},
+	}); err != nil {
+		t.Fatalf("RecordSkillValidationCase(id older): %v", err)
+	}
+	if err := tracker.RecordSkillValidationCase(SkillValidationCaseRecord{
+		SkillName:          "deploy-helper",
+		ID:                 "verify-health",
+		Description:        "newer copy",
+		RequiredSubstrings: []string{"verify health"},
+		Source:             "review-session",
+	}); err != nil {
+		t.Fatalf("RecordSkillValidationCase(id newer): %v", err)
+	}
+	if err := tracker.RecordSkillValidationCase(SkillValidationCaseRecord{
+		SkillName:        "deploy-helper",
+		Description:      "manual duplicate older",
+		RequiredHeadings: []string{"Verification"},
+		Replay: SkillReplayCaseRecord{
+			RequiredActions: []string{"curl /health"},
+			RequiredTools:   []string{"exec"},
+		},
+		Source: "operator",
+	}); err != nil {
+		t.Fatalf("RecordSkillValidationCase(payload older): %v", err)
+	}
+	if err := tracker.RecordSkillValidationCase(SkillValidationCaseRecord{
+		SkillName:        "deploy-helper",
+		Description:      "manual duplicate newer",
+		RequiredHeadings: []string{"Verification"},
+		Replay: SkillReplayCaseRecord{
+			RequiredActions: []string{"curl /health"},
+			RequiredTools:   []string{"exec"},
+		},
+		Source: "review-session",
+	}); err != nil {
+		t.Fatalf("RecordSkillValidationCase(payload newer): %v", err)
+	}
+
+	cases, err := tracker.RecentSkillValidationCases("deploy-helper", 10)
+	if err != nil {
+		t.Fatalf("RecentSkillValidationCases: %v", err)
+	}
+	if len(cases) != 2 {
+		t.Fatalf("expected duplicate records to collapse to 2 unique cases, got %+v", cases)
+	}
+	if cases[0].Description != "manual duplicate newer" || cases[1].Description != "newer copy" {
+		t.Fatalf("expected newest unique cases, got %+v", cases)
+	}
+}
+
+func TestTrackerValidationCaseSummaryRejectsWeakAutomaticCases(t *testing.T) {
+	tracker := newTestTracker(t)
+	err := tracker.RecordSkillValidationCase(SkillValidationCaseRecord{
+		SkillName: "deploy-helper",
+		ID:        "weak-auto",
+		Replay: SkillReplayCaseRecord{
+			RequiredTools: []string{"exec"},
+			ExpectedToolCalls: []SkillReplayToolCallRecord{
+				{Name: "exec"},
+			},
+		},
+		Source: "review-session",
+	})
+	if !errors.Is(err, ErrWeakAutomaticValidationCase) {
+		t.Fatalf("expected weak automatic validation case rejection, got %v", err)
+	}
+
+	for _, desc := range []string{"older valid trace", "newer valid trace"} {
+		if err := tracker.RecordSkillValidationCase(SkillValidationCaseRecord{
+			SkillName:   "deploy-helper",
+			ID:          "valid-auto",
+			Description: desc,
+			Replay: SkillReplayCaseRecord{
+				ExpectedToolCalls: []SkillReplayToolCallRecord{
+					{Name: "exec", InputIncludes: []string{"curl /health"}},
+				},
+			},
+			Source: "session-backfill",
+		}); err != nil {
+			t.Fatalf("RecordSkillValidationCase(%s): %v", desc, err)
+		}
+	}
+
+	summary, err := tracker.ValidationCaseSummary("deploy-helper")
+	if err != nil {
+		t.Fatalf("ValidationCaseSummary: %v", err)
+	}
+	if summary.RawRecords != 2 ||
+		summary.UniqueRecords != 1 ||
+		summary.DuplicateRecords != 1 ||
+		summary.AutomaticRecords != 2 ||
+		summary.UniqueAutomaticRecords != 1 ||
+		summary.WeakAutomaticRecords != 0 ||
+		summary.UniqueWeakAutomaticCases != 0 {
+		t.Fatalf("unexpected validation summary: %+v", summary)
+	}
+	cases, err := tracker.RecentSkillValidationCases("deploy-helper", 5)
+	if err != nil {
+		t.Fatalf("RecentSkillValidationCases: %v", err)
+	}
+	if len(cases) != 1 || cases[0].Description != "newer valid trace" {
+		t.Fatalf("expected latest de-duped validation case, got %+v", cases)
+	}
+}
+
+func TestTrackerOptimizerMemoryRecordsAcceptedRejectedAndRollback(t *testing.T) {
+	tracker := newTestTracker(t)
+	if err := tracker.LogEvolve("deploy-helper", "1.0.1", "tighten verification steps"); err != nil {
+		t.Fatalf("LogEvolve: %v", err)
+	}
+	if err := tracker.LogEvolveRejected("deploy-helper", "invented command"); err != nil {
+		t.Fatalf("LogEvolveRejected: %v", err)
+	}
+	if err := tracker.LogEvolveRolledBack("deploy-helper"); err != nil {
+		t.Fatalf("LogEvolveRolledBack: %v", err)
+	}
+
+	memory, err := tracker.OptimizerMemory("deploy-helper")
+	if err != nil {
+		t.Fatalf("OptimizerMemory: %v", err)
+	}
+	if memory.AcceptedCount != 1 || memory.RejectedCount != 1 || memory.RolledBackCount != 1 {
+		t.Fatalf("unexpected optimizer memory counts: %+v", memory)
+	}
+	if len(memory.StableDirections) != 1 || memory.StableDirections[0] != "tighten verification steps" {
+		t.Fatalf("unexpected stable directions: %+v", memory.StableDirections)
+	}
+	if len(memory.AvoidDirections) != 2 || memory.AvoidDirections[0] != "post-evolve rollback fired" || memory.AvoidDirections[1] != "invented command" {
+		t.Fatalf("unexpected avoid directions: %+v", memory.AvoidDirections)
 	}
 }
 
@@ -256,6 +550,77 @@ func TestUsageStats_ExcludeConsultInfraFailures(t *testing.T) {
 	}
 }
 
+func TestUsageStats_ExcludeUnactionableLegacyFailures(t *testing.T) {
+	tr := newTestTracker(t)
+	if err := tr.RecordUsage(UsageRecord{SkillName: "topsolar-db", Success: true}); err != nil {
+		t.Fatalf("RecordUsage success: %v", err)
+	}
+	for i := 0; i < 20; i++ {
+		if err := tr.RecordUsage(UsageRecord{SkillName: "topsolar-db", Success: false}); err != nil {
+			t.Fatalf("RecordUsage empty legacy failure: %v", err)
+		}
+	}
+	if err := tr.RecordUsage(UsageRecord{
+		SkillName: "topsolar-db",
+		Success:   false,
+		ErrorMsg:  "sqlite database missing",
+	}); err != nil {
+		t.Fatalf("RecordUsage actionable failure: %v", err)
+	}
+
+	stats, err := tr.Stats("topsolar-db")
+	if err != nil {
+		t.Fatalf("Stats: %v", err)
+	}
+	if stats.TotalUses != 2 || stats.SuccessCount != 1 || stats.FailureCount != 1 {
+		t.Fatalf("empty legacy failures should be ignored but actionable failure kept: %+v", stats)
+	}
+	if stats.SuccessRate != 0.5 {
+		t.Fatalf("success rate = %v, want 0.5", stats.SuccessRate)
+	}
+	if len(stats.RecentErrors) != 1 || stats.RecentErrors[0] != "sqlite database missing" {
+		t.Fatalf("recent errors should keep only actionable failure, got %+v", stats.RecentErrors)
+	}
+}
+
+func TestUsageQualitySummaryReportsIgnoredRecords(t *testing.T) {
+	tr := newTestTracker(t)
+	records := []UsageRecord{
+		{SkillName: "topsolar-db", Success: true},
+		{SkillName: "topsolar-db", Success: false},
+		{SkillName: "topsolar-db", Success: false},
+		{SkillName: "topsolar-db", Success: true, Source: UsageSourceReviewVerdict, SessionKey: reviewSessionPrefix + "1"},
+		{SkillName: "email-analysis", Success: false, ErrorMsg: "turn failed: tool skills errored"},
+	}
+	for _, record := range records {
+		if err := tr.RecordUsage(record); err != nil {
+			t.Fatalf("RecordUsage(%+v): %v", record, err)
+		}
+	}
+
+	global, err := tr.UsageQualitySummary("")
+	if err != nil {
+		t.Fatalf("UsageQualitySummary(global): %v", err)
+	}
+	if global.TotalRecords != 5 || global.CountedRecords != 1 || global.IgnoredRecords != 4 {
+		t.Fatalf("unexpected global quality counts: %+v", global)
+	}
+	if global.IgnoredReviewRecords != 1 || global.IgnoredConsultInfraFailures != 1 || global.IgnoredUnactionableLegacyFailures != 2 {
+		t.Fatalf("unexpected ignored breakdown: %+v", global)
+	}
+	if global.TopIgnoredUnactionableLegacyFailureSkill != "topsolar-db" || global.TopIgnoredUnactionableLegacyFailureSkillCount != 2 {
+		t.Fatalf("unexpected top ignored legacy failure skill: %+v", global)
+	}
+
+	filtered, err := tr.UsageQualitySummary("topsolar-db")
+	if err != nil {
+		t.Fatalf("UsageQualitySummary(topsolar-db): %v", err)
+	}
+	if filtered.SkillName != "topsolar-db" || filtered.TotalRecords != 4 || filtered.CountedRecords != 1 || filtered.IgnoredUnactionableLegacyFailures != 2 {
+		t.Fatalf("unexpected filtered quality counts: %+v", filtered)
+	}
+}
+
 // TestPostEvolveRollback_IgnoresConsultInfraFailures verifies an infra failure
 // (skill couldn't be loaded) never counts toward a post-evolve rollback, so a
 // good evolution is not reverted by a gateway-side consult error.
@@ -371,6 +736,24 @@ func TestEvolutionHealth_SingleSkillDominanceIsThrash(t *testing.T) {
 	}
 	if !eh.Thrash {
 		t.Fatalf("one skill = 100%% of evolves must flag thrash: %+v", eh)
+	}
+}
+
+func TestEvolutionHealth_IncludesRejectedAndRolledBackSignals(t *testing.T) {
+	tr := newTestTracker(t)
+	if err := tr.LogEvolveRejected("email-analysis", "textual edit budget exceeded"); err != nil {
+		t.Fatalf("LogEvolveRejected: %v", err)
+	}
+	if err := tr.LogEvolveRolledBack("deploy-helper"); err != nil {
+		t.Fatalf("LogEvolveRolledBack: %v", err)
+	}
+
+	eh := tr.EvolutionHealth()
+	if eh.EvolveRejected7d != 1 || eh.EvolveRolledBack7d != 1 {
+		t.Fatalf("unexpected reject/rollback counts: %+v", eh)
+	}
+	if eh.LastRejectedSkill != "email-analysis" || eh.LastRejectedReason != "textual edit budget exceeded" {
+		t.Fatalf("unexpected last rejected summary: %+v", eh)
 	}
 }
 
