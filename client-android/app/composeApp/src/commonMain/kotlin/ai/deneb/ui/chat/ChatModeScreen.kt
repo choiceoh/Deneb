@@ -265,11 +265,9 @@ internal fun ChatModeScreen(
                     Box(
                         Modifier
                             .fillMaxSize()
-                            .modeSwipeToggle { toWork ->
-                                if (toWork != recallNow.value) {
-                                    swipeHaptics.toggle(toWork)
-                                    swipeActions.value.toggleRecall()
-                                }
+                            .modeSwipeToggle {
+                                swipeHaptics.toggle(!recallNow.value)
+                                swipeActions.value.toggleRecall()
                             }
                             .background(MaterialTheme.colorScheme.background)
                             // Gemini-style "generating" backdrop: a top-down hue-cycling glow
@@ -844,13 +842,13 @@ internal fun ChatModeScreen(
     } // CompositionLocalProvider Rtl
 }
 
-// A horizontal swipe across the chat body toggles 챗봇 ↔ 업무, mirroring the top
-// RecallModePill. The modes read left→right as [챗봇 | 업무], so a swipe left lands
-// on 업무 and a swipe right on 챗봇 (the caller no-ops when already there). Starts
-// inside the screen-edge zone are left to the session drawer's open-swipe, and a
-// gesture that turns vertical is released so the message list still scrolls — only
-// a clearly-horizontal drag past the commit distance fires [onSwitch].
-private fun Modifier.modeSwipeToggle(onSwitch: (toWork: Boolean) -> Unit): Modifier = pointerInput(Unit) {
+// A right-to-left swipe across the chat body toggles 챗봇 ↔ 업무, mirroring the top
+// RecallModePill. Only this one direction switches: a left-to-right swipe is left to
+// the session drawer's open-swipe (left edge → right), so the two gestures never
+// fight. Screen-edge starts are also yielded to the drawer, and a gesture that turns
+// vertical is released so the message list still scrolls — only a clearly-horizontal
+// right-to-left drag past the commit distance fires [onSwitch].
+private fun Modifier.modeSwipeToggle(onSwitch: () -> Unit): Modifier = pointerInput(Unit) {
     val edge = 36.dp.toPx()
     val commit = 72.dp.toPx()
     val slop = viewConfiguration.touchSlop
@@ -874,7 +872,7 @@ private fun Modifier.modeSwipeToggle(onSwitch: (toWork: Boolean) -> Unit): Modif
             }
             if (horizontal) change.consume()
         }
-        if (horizontal && abs(dx) >= commit) onSwitch(dx < 0f)
+        if (horizontal && dx <= -commit) onSwitch() // right-to-left only
     }
 }
 
