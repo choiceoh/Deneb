@@ -85,12 +85,14 @@ type proactiveRelayDeps struct {
 	}
 
 	// cardTitler names a mail-report work-feed card from its body using the
-	// lightweight model — the 📬 icon already says "mail", so the card title
-	// should be the email's subject, not the generic "메일 분석 리포트" heading the
-	// analysis model writes. Best-effort: returns "" on any failure, and the
-	// deterministic extractCardTitle heuristic is the fallback. nil in older
-	// wiring/tests (then the heuristic is used directly).
-	cardTitler func(content string) string
+	// lightweight model — the 📬 icon already says "mail", so the card title should be
+	// the email's subject, not the generic "메일 분석 리포트" heading the analysis model
+	// writes — and returns the card's 2-line summary from the same call. Best-effort:
+	// returns ("", "") on any failure, and the deterministic extractCardTitle /
+	// extractCardSummary heuristics are the fallbacks (independently — a non-empty
+	// title still applies when the summary comes back ""). nil in older wiring/tests
+	// (then the heuristics are used directly).
+	cardTitler func(content string) (title, summary string)
 
 	// nativeSync is a durable cursor-based outbox for native clients. It makes
 	// proactive transcript changes recoverable even when the SSE push is missed.
@@ -274,15 +276,22 @@ func (d proactiveRelayDeps) relayNativeToOpts(sessionKey, content string, collap
 		// name it from the email's real subject) OR any proactive body that opens with
 		// a prose sentence (the heuristic then grabbed a whole narration line). The
 		// deterministic extractCardTitle result stays as the fallback.
+		summary := extractCardSummary(content, titleLine)
 		if d.cardTitler != nil && (isMail || isWeakCardTitle(title, titleLine)) {
-			if t := d.cardTitler(content); t != "" {
+			if t, s := d.cardTitler(content); t != "" {
 				title = t
+				// The LLM summary replaces the heuristic only when present; an empty
+				// summary keeps the heuristic (so a good title is never paired with a
+				// blank preview).
+				if s != "" {
+					summary = s
+				}
 			}
 		}
 		if _, err := d.workFeed.Append(workfeed.Item{
 			Source:     source,
 			Title:      title,
-			Summary:    extractCardSummary(content, titleLine),
+			Summary:    summary,
 			Body:       content,
 			SessionKey: target,
 		}); err != nil && d.logger != nil {
