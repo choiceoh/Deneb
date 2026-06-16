@@ -131,7 +131,7 @@ internal fun WorkFeedRow(
             haptics.tap()
             onOpen(item.id)
         },
-        modifier = Modifier.padding(horizontal = 20.dp),
+        modifier = Modifier.padding(horizontal = 12.dp),
     ) {
         Row(verticalAlignment = Alignment.Top) {
             Icon(
