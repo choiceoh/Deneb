@@ -112,8 +112,10 @@ val denebMoreRoutes: Set<String> = setOf(
 
 // Content height of the bar (excludes the system navigation-bar inset, which is added
 // on top). Trimmed well below M3's default 80dp — the default read as a touch tall —
-// while still fitting the icon + small label without clipping.
-private val DenebBottomBarHeight = 58.dp
+// while still fitting the icon + small label without clipping. This sits just above the
+// icon + indicator + label intrinsic stack, so don't trim further without re-checking
+// the live render for clipping.
+private val DenebBottomBarHeight = 52.dp
 
 @Composable
 fun DenebBottomBar(
