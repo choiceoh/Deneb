@@ -73,7 +73,15 @@ func parseMessage(raw []byte, fallbackID string) (*Message, error) {
 	if ctype == "" {
 		ctype = "text/plain"
 	}
-	mediaType, params, _ := mime.ParseMediaType(ctype)
+	mediaType, params, mtErr := mime.ParseMediaType(ctype)
+	if mtErr != nil {
+		// A malformed Content-Type (e.g. "multipart/mixed; boundary=" with an
+		// empty boundary) leaves mediaType empty — the body then neither splits as
+		// multipart nor reads as text, so it silently vanishes and analysis sees an
+		// empty mail. Degrade to plain text so the content is preserved (the
+		// subpart walk already defaults empty subtypes to text/plain).
+		mediaType, params = "text/plain", nil
+	}
 	acc := mimeAccumulator{attBytes: map[string][]byte{}}
 	acc.walk(part{
 		mediaType: mediaType,
@@ -98,17 +106,23 @@ func sanitizeID(messageID string) string {
 	if s == "" {
 		return ""
 	}
-	s = strings.Map(func(r rune) rune {
+	// Percent-encode the path/space chars rather than collapsing them all to "_".
+	// Distinct Message-IDs MUST map to distinct keys: this value is both the dedup
+	// key and the wiki/cache filename, so a collision lets one crafted id suppress
+	// another's analysis (MarkIfNew → false, dropped as a "duplicate") and clobber
+	// its wiki page. Control chars are dropped (invalid in a Message-ID).
+	var b strings.Builder
+	for _, r := range s {
 		switch {
-		case r < 0x20, r == 0x7f: // drop control chars / NUL
-			return -1
-		case r == '/', r == '\\', r == ' ':
-			return '_'
+		case r < 0x20 || r == 0x7f:
+			// drop control chars / NUL
+		case r == '/' || r == '\\' || r == ' ':
+			fmt.Fprintf(&b, "%%%02X", r)
 		default:
-			return r
+			b.WriteRune(r)
 		}
-	}, s)
-	return strings.Trim(s, ".") // avoid "." / ".." filenames
+	}
+	return strings.Trim(b.String(), ".") // avoid "." / ".." filenames
 }
 
 // part is one node of the MIME tree.

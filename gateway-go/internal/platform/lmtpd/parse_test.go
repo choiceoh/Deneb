@@ -161,8 +161,10 @@ func TestParseMessage_MessageIDDedupKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseMessage: %v", err)
 	}
-	// Sanitized Message-ID becomes both the stable cache/wiki key and the dedup key.
-	want := "abc123_x_y@mail.example.com"
+	// Sanitized Message-ID becomes both the stable cache/wiki key and the dedup
+	// key. Unsafe chars are percent-encoded (not collapsed to "_") so distinct
+	// ids stay distinct: '/' → %2F, ' ' → %20.
+	want := "abc123%2Fx%20y@mail.example.com"
 	if msg.DedupKey != want {
 		t.Errorf("DedupKey = %q, want %q", msg.DedupKey, want)
 	}
@@ -174,6 +176,50 @@ func TestParseMessage_MessageIDDedupKey(t *testing.T) {
 	msg2, _ := parseMessage([]byte(crlf("From: a@b.com", "Subject: s", "", "body", "")), "fallback-unique")
 	if msg2.DedupKey != "fallback-unique" {
 		t.Errorf("no Message-ID DedupKey = %q, want fallback", msg2.DedupKey)
+	}
+}
+
+func TestSanitizeID_NoCollision(t *testing.T) {
+	// Distinct Message-IDs that differ only in path/space chars must NOT collapse
+	// to the same dedup key (the old "_"-collapse let one crafted id suppress
+	// another). Percent-encoding keeps them distinct.
+	a := sanitizeID("<a/b>")
+	b := sanitizeID("<a b>")
+	c := sanitizeID("<a\\b>")
+	if a == b || a == c || b == c {
+		t.Fatalf("collision: a/b=%q a b=%q a\\b=%q must all differ", a, b, c)
+	}
+	if a != "a%2Fb" || b != "a%20b" || c != "a%5Cb" {
+		t.Errorf("encodings = %q/%q/%q, want a%%2Fb / a%%20b / a%%5Cb", a, b, c)
+	}
+	// All-unsafe ids stay non-empty and distinct (previously both → "___").
+	if sanitizeID("<///>") == sanitizeID("<   >") {
+		t.Error("/// and spaces must not collide")
+	}
+	// Control chars are dropped; leading/trailing dots stripped (filename safety).
+	if got := sanitizeID("<.\x01a.>"); got != "a" {
+		t.Errorf("control/dot strip = %q, want %q", got, "a")
+	}
+}
+
+func TestParseMessage_MalformedMultipartPreservesBody(t *testing.T) {
+	// A multipart Content-Type with an EMPTY boundary is unparseable; without the
+	// fallback the body neither splits nor reads as text and vanishes. It must be
+	// preserved (degraded to plain text), not silently dropped.
+	raw := crlf(
+		"From: a@b.com",
+		"Subject: 견적",
+		"Content-Type: multipart/mixed; boundary=",
+		"",
+		"본문 내용은 보존되어야 한다",
+		"",
+	)
+	msg, err := parseMessage([]byte(raw), "id")
+	if err != nil {
+		t.Fatalf("parseMessage: %v", err)
+	}
+	if !strings.Contains(msg.Detail.Body, "보존되어야 한다") {
+		t.Errorf("malformed multipart body lost: %q", msg.Detail.Body)
 	}
 }
 

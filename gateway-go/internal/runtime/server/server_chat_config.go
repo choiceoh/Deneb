@@ -173,13 +173,38 @@ func (s *Server) initLMTPServer(snap *config.ConfigSnapshot) {
 			return nil // ACK — already analyzed on an earlier delivery
 		}
 		s.safeGo("lmtp-analyze", func() {
-			analyzeSem <- struct{}{}
+			// ctx-aware acquire: a delivery burst that fills the semaphore must not
+			// wedge this goroutine past shutdown (it is tracked by bgWg).
+			select {
+			case analyzeSem <- struct{}{}:
+			case <-s.ShutdownCtx().Done():
+				return
+			}
 			defer func() { <-analyzeSem }()
 			actx, cancel := context.WithTimeout(s.ShutdownCtx(), 5*time.Minute)
 			defer cancel()
-			if _, err := svc.IngestMessage(actx, m.Detail, m.AttachmentBytes); err != nil {
-				s.logger.Error("LMTP 메일 분석 실패", "error", err, "subject", m.Detail.Subject)
+			// The MTA already got its 250 (analysis is async), so a transient LLM
+			// failure here would silently drop the mail — there is no re-delivery.
+			// Retry with backoff to ride out a brief backend blip before giving up;
+			// the 5-minute ctx bounds the total.
+			attempts := []time.Duration{0, 10 * time.Second, 30 * time.Second}
+			var err error
+			for i, backoff := range attempts {
+				if backoff > 0 {
+					select {
+					case <-actx.Done():
+						return
+					case <-time.After(backoff):
+					}
+				}
+				if _, err = svc.IngestMessage(actx, m.Detail, m.AttachmentBytes); err == nil {
+					return
+				}
+				if i < len(attempts)-1 {
+					s.logger.Warn("LMTP 메일 분석 실패, 재시도", "attempt", i+1, "error", err, "subject", m.Detail.Subject)
+				}
 			}
+			s.logger.Error("LMTP 메일 분석 영구 실패 (재시도 소진)", "error", err, "subject", m.Detail.Subject)
 		})
 		return nil
 	}
