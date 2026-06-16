@@ -33,6 +33,7 @@ import (
 	"log/slog"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
 )
@@ -63,7 +64,7 @@ const (
 	attachmentJudgeBudget = 20 * time.Second
 )
 
-// attachmentExtractTypes are the filename extensions worth extracting. Images
+// attachmentExtractExts are the filename extensions worth extracting. Images
 // are included (scanned 견적서/명세서 photos) on top of dropbox_archive's set.
 var attachmentExtractExts = []string{
 	".pdf", ".xlsx", ".xls", ".docx", ".doc", ".pptx", ".ppt", ".hwp", ".hwpx", ".csv",
@@ -236,13 +237,12 @@ func judgeAttachments(ctx context.Context, deps PipelineDeps, msg *gmail.Message
 }
 
 // buildAttachmentSelection renders the injection section from the selected
-// attachments, honoring the per-attachment and total character caps.
+// attachments, honoring the per-attachment and total character caps (counted in
+// runes throughout). The "## 첨부 내용" header is assembled only when at least
+// one attachment's text was injected.
 func buildAttachmentSelection(extracted []extractedAttachment, picks map[int]bool) attachmentSelection {
-	var body strings.Builder
-	body.WriteString("\n\n## 첨부 내용\n")
-	var deep []string
+	var chunks, deep []string
 	total := 0
-	wrote := false
 	for i, e := range extracted {
 		deepReview, ok := picks[i]
 		if !ok {
@@ -253,21 +253,20 @@ func buildAttachmentSelection(extracted []extractedAttachment, picks map[int]boo
 		}
 		remaining := attachmentInjectTotalChars - total
 		if remaining <= 0 {
-			break
+			continue // total budget spent — still flag any remaining deep-review picks
 		}
-		limit := attachmentInjectChars
-		if limit > remaining {
-			limit = remaining
-		}
+		limit := min(attachmentInjectChars, remaining)
 		text := clipChars(e.text, limit)
-		fmt.Fprintf(&body, "\n### 📎 %s\n%s\n", e.att.Filename, text)
-		total += len(text)
-		wrote = true
+		chunks = append(chunks, fmt.Sprintf("### 📎 %s\n%s", e.att.Filename, text))
+		total += utf8.RuneCountInString(text)
 	}
-	if !wrote {
+	if len(chunks) == 0 {
 		return attachmentSelection{}
 	}
-	return attachmentSelection{Injected: body.String(), DeepReview: deep}
+	return attachmentSelection{
+		Injected:   "\n\n## 첨부 내용\n\n" + strings.Join(chunks, "\n\n") + "\n",
+		DeepReview: deep,
+	}
 }
 
 // clipChars truncates s to at most n runes, appending an ellipsis marker when cut.
