@@ -44,6 +44,17 @@ func RegisterCoreTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDep
 		Fn:          tools.ToolGoal(),
 	})
 
+	// Mail archive reader. Deferred: only the daily-digest cron (background) and
+	// occasional "what mail came in" asks need it, so interactive turns don't pay
+	// for the schema. Reads the on-box deneb-mailarchive store over loopback IMAP.
+	registry.RegisterTool(toolctx.ToolDef{
+		Name:        "mail_archive",
+		Description: "자체 메일 아카이브(자동보관된 수신 메일 + 과거 Gmail 백필)를 조회한다. action=list(오늘/최근 메일 목록+요약 스니펫) | search(발신자·회사·프로젝트명 키워드로 검색). 일일 메일 다이제스트와 '무슨 메일 왔어' 류 질문에 Gmail 대신 사용한다.",
+		InputSchema: mailArchiveToolSchema(),
+		Fn:          tools.ToolMailArchive(),
+		Deferred:    true,
+	})
+
 	// NOTE: Pilot tool is registered separately by chat.RegisterCoreTools
 	// because it depends on local AI hooks that live in the chat package.
 	// NOTE: fetch_tools is registered by chat.RegisterCoreTools because it
