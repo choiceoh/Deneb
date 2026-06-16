@@ -15,6 +15,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/cron"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/dropbox"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/dropboxpoll"
@@ -45,12 +46,13 @@ func (s *Server) initGmailPoll(snap *config.ConfigSnapshot) {
 
 	stage2, stage2Model, stage1, stage1Model := s.mailAnalysisModels()
 	cfg := gmailpoll.Config{
-		StateDir:      stateDir,
-		LLMClient:     stage2,
-		Model:         stage2Model,
-		LocalClient:   stage1,
-		LocalModel:    stage1Model,
-		SenderFactsFn: s.wikiSenderFacts,
+		StateDir:            stateDir,
+		LLMClient:           stage2,
+		Model:               stage2Model,
+		LocalClient:         stage1,
+		LocalModel:          stage1Model,
+		SenderFactsFn:       s.wikiSenderFacts,
+		AttachmentExtractFn: tools.ExtractAttachmentTextBytes,
 	}
 
 	if pollCfg.IntervalMin != nil {
