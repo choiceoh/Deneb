@@ -30,6 +30,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckBox
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.outlined.BrokenImage
 import androidx.compose.material.icons.outlined.CheckBoxOutlineBlank
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
@@ -57,7 +58,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.isSpecified
 import androidx.compose.ui.unit.sp
-import coil3.compose.AsyncImage
+import coil3.compose.SubcomposeAsyncImage
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -311,18 +312,55 @@ private fun HeadingBlock(block: Heading) {
     )
 }
 
+// Placeholder shown while a markdown image loads, or when it can't be fetched: a
+// compact tinted banner with a spinner / broken-image glyph and the alt text, instead
+// of the blank gap plain AsyncImage left on error.
+@Composable
+private fun ImageStatusBox(alt: String, loading: Boolean) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+            .padding(horizontal = 12.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (loading) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(16.dp),
+                strokeWidth = 2.dp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            Icon(
+                imageVector = Icons.Outlined.BrokenImage,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp),
+            )
+        }
+        Spacer(Modifier.width(8.dp))
+        Text(
+            text = if (loading) alt.ifBlank { "이미지 불러오는 중…" } else alt.ifBlank { "이미지를 불러올 수 없습니다" },
+            style = markdownBodyStyle,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 2,
+        )
+    }
+}
+
 @Composable
 private fun ParagraphBlock(block: Paragraph) {
     if (block.inlines.size == 1 && block.inlines[0] is Image) {
         val img = block.inlines[0] as Image
         val showFullScreen = LocalShowFullScreenImageModel.current
-        AsyncImage(
+        // SubcomposeAsyncImage (not AsyncImage) so a slow/broken/unreachable URL shows a
+        // graceful placeholder + the alt text instead of a blank gap — plain AsyncImage
+        // drew nothing on error. Rounded + capped to match attachment images; tapping
+        // opens the fullscreen zoom/pan viewer (same overlay as attachments).
+        SubcomposeAsyncImage(
             model = img.src,
             contentDescription = img.alt,
             contentScale = ContentScale.FillWidth,
-            // Rounded + capped to match attachment images, instead of a raw
-            // edge-to-edge bitmap that can dwarf the message on a wide image.
-            // Tapping opens the fullscreen zoom/pan viewer (same overlay as attachments).
             modifier = Modifier
                 .padding(vertical = 4.dp)
                 .fillMaxWidth()
@@ -330,6 +368,8 @@ private fun ParagraphBlock(block: Paragraph) {
                 .clip(RoundedCornerShape(8.dp))
                 .handCursor()
                 .clickable { showFullScreen(img.src) },
+            loading = { ImageStatusBox(img.alt, loading = true) },
+            error = { ImageStatusBox(img.alt, loading = false) },
         )
         return
     }

@@ -21,6 +21,11 @@ data class DenebPatchNote(
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
         highlights = listOf(
+            "답변 속 이미지를 못 불러올 때 빈 자리 대신 안내가 표시됩니다 — 불러오는 중엔 로딩 표시, 실패하면 깨진 이미지 아이콘과 설명(alt) 텍스트 (예전엔 그냥 빈칸)",
+        ),
+    ),
+    DenebPatchNote(
+        highlights = listOf(
             "답변 아래 복사 버튼 추가 — 누르면 원본 마크다운을 그대로 복사합니다(표는 표 구조, 코드는 그대로 유지). 길게 눌러 선택 복사할 때 인라인 코드에 군더더기 공백이 끼거나 표가 흐트러지던 것과 달리, 노션·옵시디언 등에 붙여도 형식이 살아납니다",
         ),
     ),
