@@ -127,9 +127,23 @@
 
 ## Build Hard Gates
 
-- Before any commit touching `gateway-go/`: run `make check` and it MUST pass.
+- **Before pushing: run `make ci` and it MUST pass.** It's the single pre-push
+  gate that mirrors every CI check — Go (`generate-check`, fmt, vet, lint, test)
+  **and** the native client (spotless, detekt) — in one command with a per-gate
+  PASS/FAIL summary. It keeps going past the first failure, so one run surfaces
+  everything CI would reject (this is the gap that let a gofmt-only failure slip
+  past partial local checks). Use `make ci ARGS=--go` / `ARGS=--kotlin` to run a
+  single lane.
+- **Inner loop: `make ci/fast`** runs only the side you changed (Go *or* Kotlin,
+  path-gated vs `origin/main`) with cached Go tests — seconds, not a full sweep.
+  Not authoritative (changed-only + cache), so still run the full `make ci`
+  before the actual push.
+- `make check` is the **Go-only** subset (no Kotlin) — it does *not* cover the
+  native client's `kotlin-lint` CI gate. Prefer `make ci` whenever you touch
+  `client-android/`, or any time you want the full pre-push guarantee.
 - Do not commit or push with failing build or test checks.
-- Toolchain: Go (1.25+).
+- Toolchain: Go (1.25+); the Kotlin gate needs a JDK + Android SDK
+  (`ANDROID_HOME`, default `~/android-sdk`).
 
 ---
 
@@ -137,7 +151,7 @@
 
 > 단위 테스트 통과 ≠ 제품 품질. 코드 변경 후 가능한 한 라이브 검증.
 
-**현재 enforced 게이트는 `make check`** (build + `-race` 단위 테스트). 커밋 전 반드시 통과.
+**푸시 전 게이트는 `make ci`** (Go + 네이티브 Kotlin, 도메인별 pass/fail 요약). Go만 빠르게 보려면 `make check`. 커밋/푸시 전 반드시 통과.
 
 ```bash
 scripts/dev/live-test.sh restart    # 빌드 + dev 게이트웨이 재시작

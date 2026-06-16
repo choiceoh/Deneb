@@ -8,6 +8,8 @@
        tool-schemas tool-schemas-check \
        data-gen data-gen-check \
        kotlin-models kotlin-models-check \
+       kotlin-check kotlin-spotless kotlin-detekt \
+       ci ci/fast go-test-cached \
        info
 
 # Version from git tags (release-please format: deneb-vX.Y.Z), injected via ldflags.
@@ -49,6 +51,14 @@ endif
 # Ensure Go toolchain binaries (golangci-lint, etc.) are on PATH.
 export PATH := $(HOME)/go/bin:$(PATH)
 
+# Android SDK location for the native client's gradle gates (spotless/detekt).
+# Mirrors the scripts/dev convention (default ~/android-sdk) and is exported so
+# the gradle wrapper picks it up — `make ci` / `make kotlin-check` then run the
+# Kotlin lint gate with no manual env setup (the gap that let gofmt/spotless CI
+# failures slip past local checks). Override with `make kotlin-check ANDROID_HOME=...`.
+ANDROID_HOME ?= $(HOME)/android-sdk
+export ANDROID_HOME
+
 # Default: build Go gateway.
 all: go
 
@@ -82,6 +92,13 @@ go-dev:
 
 go-test:
 	cd gateway-go && $(GO_ENV) CGO_ENABLED=0 go test -p $(GO_PAR) -count=1 ./...
+
+# Cached test variant for the fast inner-loop gate (make ci/fast): drops
+# -count=1 so Go's test cache serves unchanged packages and only re-runs what a
+# change actually invalidated. Not for the authoritative gate — the cache can
+# mask flakes — so plain `go-test` (with -count=1) stays the one CI mirrors.
+go-test-cached:
+	cd gateway-go && $(GO_ENV) CGO_ENABLED=0 go test -p $(GO_PAR) ./...
 
 go-vet:
 	cd gateway-go && $(GO_ENV) go vet -p $(GO_PAR) ./...
@@ -216,6 +233,55 @@ kotlin-models-check:
 		-pkg $(KOTLIN_MODELS_PKG) \
 		-check
 
+# --- Kotlin client lint gates (native client) ---
+#
+# Mirror the kotlin-lint.yml CI gate locally: spotlessCheck = ktlint formatting,
+# detekt = bug-focused static analysis (config/detekt.yml, baseline in
+# config/detekt-baseline.xml). These are GATES — never auto-edit the detekt
+# baseline to silence findings (.claude/rules/testing.md). Until now they had no
+# make target, so the only way to check the native client before push was a manual
+# `ANDROID_HOME=... ./gradlew ...`; that gap is what `make ci` closes.
+#
+# Local runs keep the gradle daemon (faster on repeat); CI uses --no-daemon on
+# fresh runners. The daemon only affects speed, not the pass/fail outcome.
+KOTLIN_APP_DIR = client-android/app
+
+kotlin-spotless:
+	cd $(KOTLIN_APP_DIR) && ./gradlew spotlessCheck --console=plain
+
+kotlin-detekt:
+	cd $(KOTLIN_APP_DIR) && ./gradlew detekt --console=plain
+
+# Native client gate: formatting + bug-lint (matches kotlin-lint.yml).
+kotlin-check: kotlin-spotless kotlin-detekt
+	@echo "Kotlin client checks passed"
+
+# --- CI gate mirror (single pre-push command) ---
+#
+# One command that runs every gate CI enforces — Go (generate-check, fmt, vet,
+# lint, test) AND the native client (spotless, detekt) — and reports a per-gate
+# PASS/FAIL summary with offender detail for failures. Unlike `make check` it
+# continues past the first failure, so a single run surfaces *everything* that
+# would fail CI (the recurring "fix one, rerun, discover the next" trap). The Go
+# and Kotlin suites run in parallel since gradle startup is the long pole.
+#
+#   make ci                  # all gates (Go + Kotlin)
+#   make ci ARGS=--go        # Go gates only (skip the gradle/Kotlin lane)
+#   make ci ARGS=--kotlin    # Kotlin gates only
+#
+# This mirrors CI's *fast* gates only — no -race, coverage threshold, or
+# integration-tagged tests; run those in CI or via `make go-test` variants.
+ci:
+	@scripts/dev/ci-check.sh $(ARGS)
+
+# Fast inner-loop gate: path-gates the lanes (skips the Go or Kotlin side when
+# its tree is untouched vs origin/main, mirroring CI's own path-gating) and uses
+# the Go test cache. Much faster on single-side edits. NOT authoritative — run
+# the full `make ci` before the actual push. Override the diff base with
+# CI_CHECK_BASE=<ref>.
+ci/fast:
+	@scripts/dev/ci-check.sh --fast
+
 # --- Info ---
 
 info:
@@ -228,8 +294,12 @@ info:
 	@echo "  make test       - Run Go tests"
 	@echo "  make go-lint    - Run golangci-lint on Go gateway"
 	@echo "  make go-fmt     - Check Go formatting"
-	@echo "  make check      - Run all checks (generate + fmt + vet + test)"
-	@echo "  make check/fast - Fast checks: fmt + vet only, no tests"
+	@echo "  make ci         - PRE-PUSH GATE: every CI check (Go + Kotlin), pass/fail summary"
+	@echo "                    (ARGS=--go / ARGS=--kotlin to run one lane)"
+	@echo "  make ci/fast    - Inner-loop gate: only the changed side (Go/Kotlin), cached tests"
+	@echo "  make check      - Go-only checks (generate + fmt + vet + lint + test)"
+	@echo "  make check/fast - Fast Go checks: fmt + vet + lint, no tests"
+	@echo "  make kotlin-check - Native client gate (spotless + detekt)"
 	@echo "  make generate         - Run all code generation pipelines"
 	@echo "  make generate-check   - Verify all generated files"
 	@echo "  make clean      - Clean Go build artifacts"
