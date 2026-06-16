@@ -95,28 +95,25 @@ func (s *Source) RelatedMessages(ctx context.Context, msg *gmail.MessageDetail) 
 			continue // mailbox may not exist on this account; skip
 		}
 
-		var uids []string
+		var threadUIDs, senderUIDs []string
 		// 1) Thread ancestors: one search per referenced Message-ID.
 		for _, ref := range msg.References {
 			found, serr := c.uidSearch(fmt.Sprintf(`HEADER "Message-ID" %s`, quote(ref)))
 			if serr == nil {
-				uids = append(uids, found...)
+				threadUIDs = append(threadUIDs, found...)
 			}
 		}
 		// 2) Recent history from the same sender.
 		if sender != "" {
 			found, serr := c.uidSearch(fmt.Sprintf(`FROM %s SINCE %s`, quote(sender), since))
 			if serr == nil {
-				uids = append(uids, found...)
+				senderUIDs = append(senderUIDs, found...)
 			}
 		}
 
-		uids = dedupStrings(uids)
+		uids := pickRelatedUIDs(threadUIDs, senderUIDs, s.maxThread, s.maxSender, s.maxFetch)
 		if len(uids) == 0 {
 			continue
-		}
-		if len(uids) > s.maxFetch {
-			uids = uids[len(uids)-s.maxFetch:] // prefer most-recent (highest UIDs)
 		}
 
 		bodies, ferr := c.uidFetchBodies(strings.Join(uids, ","))
@@ -145,6 +142,32 @@ func (s *Source) RelatedMessages(ctx context.Context, msg *gmail.MessageDetail) 
 		}
 	}
 	return out, nil
+}
+
+// pickRelatedUIDs combines thread-ancestor and sender-history UIDs with SEPARATE
+// caps so a chatty sender can't crowd out the actual thread (the earlier code
+// concatenated both then tail-truncated, which dropped the thread ancestors —
+// the most relevant context — whenever sender history was large). Thread
+// ancestors keep the front (parseRefIDs puts the direct parent / In-Reply-To
+// first); sender history keeps the most recent (UID SEARCH returns ascending).
+// maxFetch is a final safety bound that preserves the thread-first order.
+func pickRelatedUIDs(threadUIDs, senderUIDs []string, maxThread, maxSender, maxFetch int) []string {
+	threadUIDs = dedupStrings(threadUIDs)
+	senderUIDs = dedupStrings(senderUIDs)
+	if maxThread > 0 && len(threadUIDs) > maxThread {
+		threadUIDs = threadUIDs[:maxThread] // nearest ancestors first
+	}
+	if maxSender > 0 && len(senderUIDs) > maxSender {
+		senderUIDs = senderUIDs[len(senderUIDs)-maxSender:] // most-recent sender mail
+	}
+	combined := make([]string, 0, len(threadUIDs)+len(senderUIDs))
+	combined = append(combined, threadUIDs...)
+	combined = append(combined, senderUIDs...)
+	uids := dedupStrings(combined)
+	if maxFetch > 0 && len(uids) > maxFetch {
+		uids = uids[:maxFetch] // keep the front (thread ancestors), not the tail
+	}
+	return uids
 }
 
 // --- helpers ---
