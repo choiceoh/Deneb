@@ -389,20 +389,35 @@ func (s *Service) notifyDreaming(report *DreamReport, err error) {
 			report.FactsPruned + report.PatternsExtracted +
 			report.UserModelUpdated + report.MutualUpdated +
 			report.WikiPagesCreated + report.WikiPagesUpdated
+		dur := float64(report.DurationMs) / 1000
+		// A phase error makes the headline say 실패 / 부분 완료 — otherwise the card
+		// title read "완료: 변경 없음" while the real failure sat in the summary, so a
+		// dream that errored every cycle looked like a quiet no-op (see #… synthesis
+		// parse failures masked as "변경 없음").
+		failed := len(report.PhaseErrors) > 0
 		switch {
+		case total == 0 && failed:
+			// 0 changes *because* a phase failed — surface the failure, not "변경 없음".
+			msg = fmt.Sprintf("⚠️ Aurora Dream 실패 (%.1fs)", dur)
 		case total == 0:
-			msg = fmt.Sprintf("🌙 Aurora Dream 완료: 변경 없음 (%.1fs)", float64(report.DurationMs)/1000)
+			msg = fmt.Sprintf("🌙 Aurora Dream 완료: 변경 없음 (%.1fs)", dur)
 		case report.WikiPagesCreated > 0 || report.WikiPagesUpdated > 0 || report.WikiUpdatesProposed > 0:
 			// Wiki dreaming report.
-			msg = fmt.Sprintf("📖 Wiki Dream 완료: 제안 %d, 생성 %d, 수정 %d (%.1fs)",
-				report.WikiUpdatesProposed, report.WikiPagesCreated, report.WikiPagesUpdated,
-				float64(report.DurationMs)/1000)
+			head := "📖 Wiki Dream 완료"
+			if failed {
+				head = "⚠️ Wiki Dream 부분 완료"
+			}
+			msg = fmt.Sprintf("%s: 제안 %d, 생성 %d, 수정 %d (%.1fs)",
+				head, report.WikiUpdatesProposed, report.WikiPagesCreated, report.WikiPagesUpdated, dur)
 		default:
-			msg = fmt.Sprintf("🌙 Aurora Dream 완료: 검증 %d, 병합 %d, 만료 %d, 정리 %d, 패턴 %d, 프로필 %d, 관계 %d (%.1fs)",
-				report.FactsVerified, report.FactsMerged, report.FactsExpired,
+			head := "🌙 Aurora Dream 완료"
+			if failed {
+				head = "⚠️ Aurora Dream 부분 완료"
+			}
+			msg = fmt.Sprintf("%s: 검증 %d, 병합 %d, 만료 %d, 정리 %d, 패턴 %d, 프로필 %d, 관계 %d (%.1fs)",
+				head, report.FactsVerified, report.FactsMerged, report.FactsExpired,
 				report.FactsPruned, report.PatternsExtracted,
-				report.UserModelUpdated, report.MutualUpdated,
-				float64(report.DurationMs)/1000)
+				report.UserModelUpdated, report.MutualUpdated, dur)
 		}
 		if len(report.VerifyFindings) > 0 {
 			msg += fmt.Sprintf("\n🔍 검증 발견 %d건:", len(report.VerifyFindings))
