@@ -910,18 +910,18 @@ func collectReplayInputFragments(value any, key string, out *[]string) {
 		}
 	case string:
 		if replayInterestingKey(key) {
-			appendReplayInputFragment(out, v)
+			appendReplayInputFragment(out, key, v)
 		}
 	case float64, bool:
 		if replayInterestingKey(key) {
-			appendReplayInputFragment(out, fmt.Sprint(v))
+			appendReplayInputFragment(out, key, fmt.Sprint(v))
 		}
 	}
 }
 
 func replayInterestingKey(key string) bool {
 	switch strings.ToLower(strings.TrimSpace(key)) {
-	case "action", "cmd", "command", "path", "query", "q", "url", "workdir", "sessionkey", "skillname", "ref_id", "id", "filename":
+	case "action", "cmd", "command", "path", "query", "q", "url", "sessionkey", "skillname", "ref_id", "id", "filename":
 		return true
 	default:
 		return false
@@ -938,12 +938,142 @@ func replaySecretKey(key string) bool {
 	return false
 }
 
-func appendReplayInputFragment(out *[]string, value string) {
-	value = strings.TrimSpace(value)
-	if value == "" || looksOpaqueReplayFragment(value) {
-		return
+func appendReplayInputFragment(out *[]string, key, value string) {
+	for _, fragment := range replayInputFragmentsForKey(key, value) {
+		fragment = strings.TrimSpace(fragment)
+		if fragment == "" || looksOpaqueReplayFragment(fragment) {
+			continue
+		}
+		*out = append(*out, truncateRunes(fragment, 180))
+		if len(*out) >= 3 {
+			return
+		}
 	}
-	*out = append(*out, truncateRunes(value, 180))
+}
+
+func replayInputFragmentsForKey(key, value string) []string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	switch strings.ToLower(strings.TrimSpace(key)) {
+	case "cmd", "command":
+		return replayCommandIntentFragments(value)
+	default:
+		return []string{value}
+	}
+}
+
+func replayCommandIntentFragments(command string) []string {
+	fields := strings.Fields(command)
+	if len(fields) == 0 {
+		return nil
+	}
+	var out []string
+	appendUnique := func(value string) {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			return
+		}
+		for _, existing := range out {
+			if strings.EqualFold(existing, value) {
+				return
+			}
+		}
+		out = append(out, value)
+	}
+	for i := 0; i < len(fields); i++ {
+		token := cleanReplayCommandToken(fields[i])
+		switch token {
+		case "ssh":
+			appendUnique(replaySSHIntent("ssh", fields, i+1))
+		case "tailscale":
+			if i+1 < len(fields) && cleanReplayCommandToken(fields[i+1]) == "ssh" {
+				appendUnique(replaySSHIntent("tailscale ssh", fields, i+2))
+			}
+		case "systemctl":
+			appendUnique(systemctlReplayIntent(fields[i:]))
+		}
+		if len(out) >= 3 {
+			return out
+		}
+	}
+	if len(out) == 0 {
+		appendUnique(genericCommandIntent(fields))
+	}
+	return out
+}
+
+func replaySSHIntent(prefix string, fields []string, start int) string {
+	for i := start; i < len(fields); i++ {
+		token := cleanReplayCommandToken(fields[i])
+		if token == "" {
+			continue
+		}
+		if strings.HasPrefix(token, "-") {
+			if !strings.Contains(token, "=") && i+1 < len(fields) {
+				next := cleanReplayCommandToken(fields[i+1])
+				if next != "" && !strings.HasPrefix(next, "-") {
+					i++
+				}
+			}
+			continue
+		}
+		return prefix + " " + token
+	}
+	return ""
+}
+
+func cleanReplayCommandToken(token string) string {
+	return strings.Trim(strings.TrimSpace(token), `"'`)
+}
+
+func systemctlReplayIntent(fields []string) string {
+	if len(fields) == 0 {
+		return ""
+	}
+	parts := []string{cleanReplayCommandToken(fields[0])}
+	hasUser := false
+	subcommand := ""
+	for _, raw := range fields[1:] {
+		token := cleanReplayCommandToken(raw)
+		if token == "" {
+			continue
+		}
+		if token == "--user" {
+			hasUser = true
+			continue
+		}
+		if strings.HasPrefix(token, "-") {
+			continue
+		}
+		if subcommand == "" {
+			subcommand = token
+			break
+		}
+	}
+	if hasUser {
+		parts = append(parts, "--user")
+	}
+	if subcommand != "" {
+		parts = append(parts, subcommand)
+	}
+	return strings.Join(parts, " ")
+}
+
+func genericCommandIntent(fields []string) string {
+	command := cleanReplayCommandToken(fields[0])
+	if command == "" {
+		return ""
+	}
+	for _, raw := range fields[1:] {
+		token := cleanReplayCommandToken(raw)
+		if token == "" || strings.HasPrefix(token, "-") {
+			continue
+		}
+		return command + " " + token
+	}
+	return command
 }
 
 func looksOpaqueReplayFragment(value string) bool {

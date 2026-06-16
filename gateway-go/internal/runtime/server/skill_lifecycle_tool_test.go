@@ -304,7 +304,8 @@ func TestSkillLifecycleValidationCaseFromSessionExtractsToolTrace(t *testing.T) 
 		len(replay.ExpectedToolCalls) != 1 ||
 		replay.ExpectedToolCalls[0].Name != "exec" ||
 		len(replay.ExpectedToolCalls[0].InputIncludes) != 2 ||
-		replay.ExpectedToolCalls[0].InputIncludes[0] != "ssh srv1 systemctl --user status deneb-gateway.service" ||
+		replay.ExpectedToolCalls[0].InputIncludes[0] != "ssh srv1" ||
+		replay.ExpectedToolCalls[0].InputIncludes[1] != "systemctl --user status" ||
 		replay.ExpectedToolCalls[0].FixtureOutput != "Active: active (running)" ||
 		len(replay.RequiredTools) != 1 ||
 		replay.RequiredTools[0] != "exec" {
@@ -386,8 +387,38 @@ func TestSkillLifecycleValidationBackfillScansSessionsAndSkipsWeak(t *testing.T)
 		cases[0].Source != "session-backfill" ||
 		cases[0].ID != "session-client:main:z-valid" ||
 		len(cases[0].Replay.ExpectedToolCalls) != 1 ||
-		cases[0].Replay.ExpectedToolCalls[0].InputIncludes[0] != "ssh srv1 uptime" {
+		cases[0].Replay.ExpectedToolCalls[0].InputIncludes[0] != "ssh srv1" {
 		t.Fatalf("unexpected backfilled case: %+v", cases)
+	}
+
+	engine := genesis.NewSkillValidationEngine(tracker, slog.Default())
+	result, err := engine.ValidateCandidate(
+		"srv1-ops",
+		"---\nname: srv1-ops\n---\n\n# Ops\n\n## Procedure\n- Check status.\n",
+		"# Ops\n\n## Procedure\n- Use exec to run ssh srv1 before changing the service.\n",
+	)
+	if err != nil {
+		t.Fatalf("ValidateCandidate: %v", err)
+	}
+	if !result.Evaluated || !result.Pass {
+		t.Fatalf("automatic replay should not require the one-off uptime command, got %+v", result)
+	}
+}
+
+func TestSkillReplayInputIncludesGeneralizesCommandFragments(t *testing.T) {
+	got := skillReplayInputIncludes(`{"cmd":"ssh srv1 systemctl --user status deneb-gateway.service","workdir":"/srv/deneb"}`)
+	if len(got) != 2 || got[0] != "ssh srv1" || got[1] != "systemctl --user status" {
+		t.Fatalf("expected generalized ssh/systemctl fragments, got %+v", got)
+	}
+
+	got = skillReplayInputIncludes(`{"cmd":"go test ./internal/runtime/server -run TestHandleCronRun_Success"}`)
+	if len(got) != 1 || got[0] != "go test" {
+		t.Fatalf("expected generic go test intent, got %+v", got)
+	}
+
+	got = skillReplayInputIncludes(`{"cmd":"ssh -o BatchMode=yes srv1 uptime"}`)
+	if len(got) != 1 || got[0] != "ssh srv1" {
+		t.Fatalf("expected ssh options to be skipped, got %+v", got)
 	}
 }
 
