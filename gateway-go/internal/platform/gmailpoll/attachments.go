@@ -18,6 +18,13 @@
 // Only the selected attachments' text is injected into the analysis input; the
 // rest are dropped. Best-effort throughout: any failure yields an empty
 // selection and the analysis proceeds body-only.
+//
+// Security note: attachment content is untrusted (it could carry prompt-
+// injection text). The same is already true of the email body and the
+// interactive attachment tool; the autonomous analysis is a read-only synthesis
+// with no tool execution, so the blast radius is a misleading summary, not an
+// action. Keep it that way — do not give this path tools that act on the
+// extracted text.
 package gmailpoll
 
 import (
@@ -46,10 +53,14 @@ const (
 	attachmentInjectChars = 3500
 	// attachmentInjectTotalChars caps the combined injected attachment text.
 	attachmentInjectTotalChars = 9000
-	// attachmentGateBudget bounds the whole gate (fetch + OCR + judge) so a slow
-	// multi-page scan can never starve the analysis. Mirrors the sibling stage-1
-	// extractors' bounded contexts; on timeout the gate uses whatever it got.
-	attachmentGateBudget = 90 * time.Second
+	// attachmentExtractBudget bounds the fetch+OCR phase so a slow multi-page scan
+	// can never starve the analysis. Mirrors the sibling stage-1 extractors'
+	// bounded contexts; on timeout the gate judges whatever it extracted so far.
+	attachmentExtractBudget = 90 * time.Second
+	// attachmentJudgeBudget bounds the relevance decision on a fresh context
+	// derived from the parent (not the extract budget), so slow extraction can't
+	// starve the cheap judgment and waste the extraction work.
+	attachmentJudgeBudget = 20 * time.Second
 )
 
 // attachmentExtractTypes are the filename extensions worth extracting. Images
@@ -87,22 +98,24 @@ func gateAndExtractAttachments(ctx context.Context, deps PipelineDeps, msg *gmai
 		return none
 	}
 
-	// Bound the whole gate so a slow multi-page scan can't eat the analysis
-	// budget (the sibling stage-1 extractors bound themselves the same way).
-	gctx, cancel := context.WithTimeout(ctx, attachmentGateBudget)
-	defer cancel()
+	// Bound extraction (fetch + OCR) so a slow multi-page scan can't eat the
+	// analysis budget. The judge gets its OWN budget from the parent ctx below,
+	// so even if extraction consumes all of ectx the judgment still runs on what
+	// was extracted — extraction work is never wasted.
+	ectx, ecancel := context.WithTimeout(ctx, attachmentExtractBudget)
+	defer ecancel()
 
 	// Extract each candidate once (bounded), so the judge sees real content.
 	extracted := make([]extractedAttachment, 0, len(candidates))
 	for _, att := range candidates {
-		if gctx.Err() != nil {
-			break // budget spent — judge on what we have
+		if ectx.Err() != nil {
+			break // extraction budget spent — judge on what we have
 		}
-		data, err := deps.GmailClient.GetAttachment(gctx, msg.ID, att.AttachmentID)
+		data, err := deps.GmailClient.GetAttachment(ectx, msg.ID, att.AttachmentID)
 		if err != nil || len(data) == 0 {
 			continue
 		}
-		text := strings.TrimSpace(deps.AttachmentExtractFn(gctx, data, att.Filename, att.MimeType))
+		text := strings.TrimSpace(deps.AttachmentExtractFn(ectx, data, att.Filename, att.MimeType))
 		if text == "" {
 			continue
 		}
@@ -112,7 +125,11 @@ func gateAndExtractAttachments(ctx context.Context, deps PipelineDeps, msg *gmai
 		return none
 	}
 
-	picks := judgeAttachments(gctx, deps, msg, extracted)
+	// Judge on a fresh budget from the parent ctx, decoupled from extraction, so
+	// slow extraction can never starve the (cheap) relevance decision.
+	jctx, jcancel := context.WithTimeout(ctx, attachmentJudgeBudget)
+	defer jcancel()
+	picks := judgeAttachments(jctx, deps, msg, extracted)
 	if len(picks) == 0 {
 		return none
 	}
