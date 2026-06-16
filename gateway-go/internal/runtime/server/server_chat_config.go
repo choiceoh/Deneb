@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -41,8 +40,7 @@ func (s *Server) initGmailPoll(snap *config.ConfigSnapshot) {
 		return
 	}
 
-	home, _ := os.UserHomeDir()
-	stateDir := filepath.Join(home, ".deneb")
+	stateDir := config.ResolveStateDir()
 
 	stage2, stage2Model, stage1, stage1Model := s.mailAnalysisModels()
 	cfg := gmailpoll.Config{
@@ -136,8 +134,7 @@ func (s *Server) initLMTPServer(snap *config.ConfigSnapshot) {
 		addr = "127.0.0.1:10024"
 	}
 
-	home, _ := os.UserHomeDir()
-	stateDir := filepath.Join(home, ".deneb")
+	stateDir := config.ResolveStateDir()
 	stage2, stage2Model, stage1, stage1Model := s.mailAnalysisModels()
 	cfg := gmailpoll.Config{
 		StateDir:            stateDir,
@@ -281,9 +278,8 @@ func (s *Server) initDropboxPoll(snap *config.ConfigSnapshot) {
 		return
 	}
 
-	home, _ := os.UserHomeDir()
 	cfg := dropboxpoll.Config{
-		StateDir:   filepath.Join(home, ".deneb"),
+		StateDir:   config.ResolveStateDir(),
 		FolderPath: "/Deneb-Inbox",
 	}
 	if pollCfg.FolderPath != "" {
@@ -653,10 +649,9 @@ func resolveWorkspaceDir() string {
 	return config.ResolveAgentWorkspaceDir(nil)
 }
 
-// resolveDenebDir returns the path to ~/.deneb.
+// resolveDenebDir returns the Deneb state dir (DENEB_STATE_DIR, else ~/.deneb).
+// Routed through config.ResolveStateDir so a test/dev gateway with an isolated
+// state dir doesn't fall back to prod ~/.deneb.
 func resolveDenebDir() string {
-	if home, err := os.UserHomeDir(); err == nil {
-		return filepath.Join(home, ".deneb")
-	}
-	return "/tmp/deneb"
+	return config.ResolveStateDir()
 }

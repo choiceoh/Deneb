@@ -6,8 +6,11 @@ package wiki
 
 import (
 	"os"
+	"path/filepath"
 	"strconv"
 	"sync"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 )
 
 // Config holds wiki feature configuration.
@@ -35,9 +38,13 @@ var (
 // The result is cached after the first call.
 func ConfigFromEnv() Config {
 	configOnce.Do(func() {
-		home, _ := os.UserHomeDir()
-		defaultDir := home + "/.deneb/wiki"
-		defaultDiary := home + "/.deneb/memory/diary"
+		// Derive defaults from the resolved state dir (honors DENEB_STATE_DIR) so a
+		// test/dev gateway with an isolated state dir keeps its wiki + diary out of
+		// prod ~/.deneb. Prod sets DENEB_STATE_DIR=~/.deneb, so the path is identical
+		// there. DENEB_WIKI_DIR / DENEB_WIKI_DIARY_DIR still override explicitly.
+		stateDir := config.ResolveStateDir()
+		defaultDir := filepath.Join(stateDir, "wiki")
+		defaultDiary := filepath.Join(stateDir, "memory", "diary")
 
 		cachedConfig = Config{
 			Enabled:            envBool("DENEB_WIKI_ENABLED", true),

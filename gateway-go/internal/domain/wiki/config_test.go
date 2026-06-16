@@ -33,3 +33,24 @@ func TestConfigFromEnv_Overrides(t *testing.T) {
 		t.Errorf("Tier1MinImportance = %f", cfg.Tier1MinImportance)
 	}
 }
+
+// With no explicit DENEB_WIKI_DIR, the wiki + diary dirs follow DENEB_STATE_DIR so
+// a test/dev gateway with an isolated state dir keeps its wiki out of prod ~/.deneb.
+func TestConfigFromEnv_DefaultsFollowStateDir(t *testing.T) {
+	ResetConfigForTest()
+	os.Setenv("DENEB_STATE_DIR", "/tmp/deneb-iso-test")
+	os.Unsetenv("DENEB_WIKI_DIR")
+	os.Unsetenv("DENEB_WIKI_DIARY_DIR")
+	defer func() {
+		os.Unsetenv("DENEB_STATE_DIR")
+		ResetConfigForTest()
+	}()
+
+	cfg := ConfigFromEnv()
+	if cfg.Dir != "/tmp/deneb-iso-test/wiki" {
+		t.Errorf("Dir = %q, want /tmp/deneb-iso-test/wiki", cfg.Dir)
+	}
+	if cfg.DiaryDir != "/tmp/deneb-iso-test/memory/diary" {
+		t.Errorf("DiaryDir = %q, want /tmp/deneb-iso-test/memory/diary", cfg.DiaryDir)
+	}
+}
