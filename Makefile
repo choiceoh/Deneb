@@ -9,7 +9,7 @@
        data-gen data-gen-check \
        kotlin-models kotlin-models-check \
        kotlin-check kotlin-spotless kotlin-detekt \
-       ci \
+       ci ci/fast go-test-cached \
        info
 
 # Version from git tags (release-please format: deneb-vX.Y.Z), injected via ldflags.
@@ -92,6 +92,13 @@ go-dev:
 
 go-test:
 	cd gateway-go && $(GO_ENV) CGO_ENABLED=0 go test -p $(GO_PAR) -count=1 ./...
+
+# Cached test variant for the fast inner-loop gate (make ci/fast): drops
+# -count=1 so Go's test cache serves unchanged packages and only re-runs what a
+# change actually invalidated. Not for the authoritative gate — the cache can
+# mask flakes — so plain `go-test` (with -count=1) stays the one CI mirrors.
+go-test-cached:
+	cd gateway-go && $(GO_ENV) CGO_ENABLED=0 go test -p $(GO_PAR) ./...
 
 go-vet:
 	cd gateway-go && $(GO_ENV) go vet -p $(GO_PAR) ./...
@@ -267,6 +274,14 @@ kotlin-check: kotlin-spotless kotlin-detekt
 ci:
 	@scripts/dev/ci-check.sh $(ARGS)
 
+# Fast inner-loop gate: path-gates the lanes (skips the Go or Kotlin side when
+# its tree is untouched vs origin/main, mirroring CI's own path-gating) and uses
+# the Go test cache. Much faster on single-side edits. NOT authoritative — run
+# the full `make ci` before the actual push. Override the diff base with
+# CI_CHECK_BASE=<ref>.
+ci/fast:
+	@scripts/dev/ci-check.sh --fast
+
 # --- Info ---
 
 info:
@@ -281,6 +296,7 @@ info:
 	@echo "  make go-fmt     - Check Go formatting"
 	@echo "  make ci         - PRE-PUSH GATE: every CI check (Go + Kotlin), pass/fail summary"
 	@echo "                    (ARGS=--go / ARGS=--kotlin to run one lane)"
+	@echo "  make ci/fast    - Inner-loop gate: only the changed side (Go/Kotlin), cached tests"
 	@echo "  make check      - Go-only checks (generate + fmt + vet + lint + test)"
 	@echo "  make check/fast - Fast Go checks: fmt + vet + lint, no tests"
 	@echo "  make kotlin-check - Native client gate (spotless + detekt)"

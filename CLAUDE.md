@@ -134,6 +134,10 @@
   everything CI would reject (this is the gap that let a gofmt-only failure slip
   past partial local checks). Use `make ci ARGS=--go` / `ARGS=--kotlin` to run a
   single lane.
+- **Inner loop: `make ci/fast`** runs only the side you changed (Go *or* Kotlin,
+  path-gated vs `origin/main`) with cached Go tests — seconds, not a full sweep.
+  Not authoritative (changed-only + cache), so still run the full `make ci`
+  before the actual push.
 - `make check` is the **Go-only** subset (no Kotlin) — it does *not* cover the
   native client's `kotlin-lint` CI gate. Prefer `make ci` whenever you touch
   `client-android/`, or any time you want the full pre-push guarantee.
