@@ -32,6 +32,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/dropbox"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmailpoll"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/localcal"
@@ -328,6 +329,17 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		// the PKCE OAuth flow that used to require the deneb-dropbox-auth host CLI,
 		// exposed so the operator can link Dropbox from Settings > 연동.
 		s.miniappDropboxMethods(),
+
+		// Native Dropbox file browser (miniapp.dropbox.{list,search,share,upload}):
+		// read/share/upload over the Dropbox client. Lazy factory around
+		// dropbox.DefaultClient — a missing token returns UNAVAILABLE so the
+		// browser shows the connect CTA. (miniapp.dropbox.analyze runs an agent
+		// turn and is registered late via the chat bridge.)
+		handlerminiapp.DropboxBrowseMethods(handlerminiapp.DropboxBrowseDeps{
+			Client: func() (handlerminiapp.DropboxBrowseClient, error) {
+				return dropbox.DefaultClient()
+			},
+		}),
 
 		// Mini App Gmail domain (miniapp.gmail.list_recent / get /
 		// mark_read / archive). Lazy factory around gmail.DefaultClient
