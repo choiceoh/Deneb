@@ -25,6 +25,14 @@ type MessageDetail struct {
 	Body        string
 	Labels      []string
 	Attachments []AttachmentInfo
+
+	// Threading headers, used by the local archive thread-context lookup (the
+	// LMTP path has no Gmail ThreadID, so the thread is reconstructed from these).
+	// MessageIDHeader is the raw "<...@host>" Message-ID; References are the raw
+	// ids referenced by this message (References + In-Reply-To). Empty for the
+	// Gmail API path, which threads via ThreadID instead.
+	MessageIDHeader string
+	References      []string
 }
 
 // AttachmentInfo describes a single message attachment. The raw bytes are

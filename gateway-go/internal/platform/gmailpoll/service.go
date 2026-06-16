@@ -77,6 +77,10 @@ type Config struct {
 	// exists (re-checked per cycle), so connecting Dropbox after startup
 	// activates it without a gateway restart.
 	ArchiveFolder string
+
+	// ThreadSource supplies thread/sender context from the on-box archive for the
+	// LMTP path (no Gmail client). Forwarded to PipelineDeps. nil = none.
+	ThreadSource ThreadSource
 }
 
 // Compile-time interface compliance.
@@ -353,6 +357,7 @@ func (s *Service) pipelineDeps(gmailClient *gmail.Client) PipelineDeps {
 		SenderFactsFn:       s.cfg.SenderFactsFn,
 		AttachmentExtractFn: s.cfg.AttachmentExtractFn,
 		ThinkingKwarg:       s.cfg.ThinkingKwarg,
+		ThreadSource:        s.cfg.ThreadSource,
 	}
 	// Poll path: the attachment gate fetches bytes lazily from Gmail. The LMTP
 	// path (IngestMessage) overrides this with a closure over the inline bytes,

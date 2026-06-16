@@ -15,6 +15,7 @@ import (
 	"mime/multipart"
 	"mime/quotedprintable"
 	"net/mail"
+	"regexp"
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
@@ -61,12 +62,14 @@ func parseMessage(raw []byte, fallbackID string) (*Message, error) {
 	}
 
 	detail := &gmail.MessageDetail{
-		ID:      key,
-		From:    decodeHeader(hdr.Get("From")),
-		To:      decodeHeader(hdr.Get("To")),
-		CC:      decodeHeader(hdr.Get("Cc")),
-		Subject: decodeHeader(hdr.Get("Subject")),
-		Date:    hdr.Get("Date"),
+		ID:              key,
+		From:            decodeHeader(hdr.Get("From")),
+		To:              decodeHeader(hdr.Get("To")),
+		CC:              decodeHeader(hdr.Get("Cc")),
+		Subject:         decodeHeader(hdr.Get("Subject")),
+		Date:            hdr.Get("Date"),
+		MessageIDHeader: strings.TrimSpace(hdr.Get("Message-ID")),
+		References:      parseRefIDs(hdr.Get("References"), hdr.Get("In-Reply-To")),
 	}
 
 	ctype := hdr.Get("Content-Type")
@@ -97,6 +100,40 @@ func parseMessage(raw []byte, fallbackID string) (*Message, error) {
 	detail.Body = clampRunes(strings.TrimSpace(text), maxBodyRunes)
 	detail.Attachments = acc.atts
 	return &Message{Detail: detail, AttachmentBytes: acc.attBytes, DedupKey: key}, nil
+}
+
+// ParseDetail parses a raw RFC822 message into a gmail.MessageDetail (headers
+// decoded, body flattened to text), discarding attachment bytes. It is the
+// read-only counterpart to the LMTP ingest parse, used to turn archive-fetched
+// messages into thread context.
+func ParseDetail(raw []byte) (*gmail.MessageDetail, error) {
+	m, err := parseMessage(raw, "")
+	if err != nil {
+		return nil, err
+	}
+	return m.Detail, nil
+}
+
+// refIDRe matches RFC 5322 msg-id tokens "<...>" in References / In-Reply-To.
+var refIDRe = regexp.MustCompile(`<[^<>\s]+>`)
+
+// parseRefIDs collects referenced Message-IDs from the References and In-Reply-To
+// headers (raw "<...>" form), de-duplicated, In-Reply-To first (the most direct
+// parent), then the References chain. These drive the archive thread lookup.
+func parseRefIDs(references, inReplyTo string) []string {
+	seen := map[string]bool{}
+	var out []string
+	add := func(h string) {
+		for _, id := range refIDRe.FindAllString(h, -1) {
+			if !seen[id] {
+				seen[id] = true
+				out = append(out, id)
+			}
+		}
+	}
+	add(inReplyTo)
+	add(references)
+	return out
 }
 
 // sanitizeID turns a Message-ID header into a safe, stable key usable as a wiki

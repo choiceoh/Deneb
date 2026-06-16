@@ -1451,6 +1451,39 @@ func goalToolSchema() map[string]any {
 	}
 }
 
+func mailArchiveToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"action": map[string]any{
+				"type":        "string",
+				"description": "list(메일함의 최근/오늘 메일 목록+요약 스니펫) | search(키워드로 검색: 발신자·제목·본문 매칭)",
+				"enum":        []string{"list", "search"},
+			},
+			"days": map[string]any{
+				"type":        "number",
+				"description": "action=list에서 최근 며칠치를 볼지 (기본 1=오늘). 예: 7=최근 7일",
+				"minimum":     1,
+			},
+			"limit": map[string]any{
+				"type":        "number",
+				"description": "최대 반환 건수 (기본 50)",
+				"minimum":     1,
+			},
+			"mailbox": map[string]any{
+				"type":        "string",
+				"description": "조회할 메일함. INBOX(자동보관된 수신 메일, 기본) | Gmail(과거 이력 백필)",
+				"enum":        []string{"INBOX", "Gmail"},
+			},
+			"query": map[string]any{
+				"type":        "string",
+				"description": "action=search의 검색어 (발신자/회사/프로젝트명 등) — 발신자·제목·본문에서 매칭",
+			},
+		},
+		"required": []string{"action"},
+	}
+}
+
 // ToolMaxOutputs returns per-tool output character budgets from tool_schemas.json.
 // Tools not in this map use agent.DefaultMaxOutput.
 func ToolMaxOutputs() map[string]int {
