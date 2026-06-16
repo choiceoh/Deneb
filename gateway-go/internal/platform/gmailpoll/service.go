@@ -61,6 +61,11 @@ type Config struct {
 	// Forwarded to PipelineDeps; nil = fall back to the graphify subprocess.
 	SenderFactsFn func(ctx context.Context, displayName string) string
 
+	// AttachmentExtractFn extracts readable text from an attachment's bytes
+	// (documents + image OCR). Forwarded to PipelineDeps so the analysis can read
+	// the business documents arriving as attachments. nil = attachment gate off.
+	AttachmentExtractFn func(ctx context.Context, data []byte, filename, mimeType string) string
+
 	// ArchiveFolder is the Dropbox base folder for archived attachments
 	// (default "/Deneb-Archive/메일"). Archiving runs whenever a Dropbox token
 	// exists (re-checked per cycle), so connecting Dropbox after startup
@@ -316,22 +321,25 @@ func (s *Service) poll(ctx context.Context, client *gmail.Client) error {
 	return nil
 }
 
-// batchAnalyze analyzes a batch: per-email individual analyses + one
-// consolidated report. Returns the report plus the per-email items so the
-// caller can persist each (cache + wiki page).
+// pipelineDeps assembles the PipelineDeps for an analysis run from the service
+// config (shared by the batch and single-email paths).
 func (s *Service) pipelineDeps(gmailClient *gmail.Client) PipelineDeps {
 	return PipelineDeps{
-		GmailClient:   gmailClient,
-		LLMClient:     s.llmClient,
-		LocalClient:   s.cfg.LocalClient,
-		LocalModel:    s.cfg.LocalModel,
-		MainModel:     s.cfg.Model,
-		Logger:        s.log,
-		ProjectsFn:    s.cfg.ProjectsFn,
-		SenderFactsFn: s.cfg.SenderFactsFn,
+		GmailClient:         gmailClient,
+		LLMClient:           s.llmClient,
+		LocalClient:         s.cfg.LocalClient,
+		LocalModel:          s.cfg.LocalModel,
+		MainModel:           s.cfg.Model,
+		Logger:              s.log,
+		ProjectsFn:          s.cfg.ProjectsFn,
+		SenderFactsFn:       s.cfg.SenderFactsFn,
+		AttachmentExtractFn: s.cfg.AttachmentExtractFn,
 	}
 }
 
+// batchAnalyze analyzes a batch: per-email individual analyses + one
+// consolidated report. Returns the report plus the per-email items so the
+// caller can persist each (cache + wiki page).
 func (s *Service) batchAnalyze(ctx context.Context, gmailClient *gmail.Client, msgs []*gmail.MessageDetail) (string, []BatchItem, error) {
 	s.log.Debug("batch analysis 실행", "count", len(msgs))
 	return AnalyzeBatch(ctx, s.pipelineDeps(gmailClient), msgs)

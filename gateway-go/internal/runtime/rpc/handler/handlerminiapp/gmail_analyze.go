@@ -325,19 +325,20 @@ const interactiveAnalysisStage2Tokens = 4096
 // senderFactsFn (optional) resolves sender context in-process from the wiki
 // graph; when supplied it is preferred over the external graphify CLI so the
 // analysis always has "who is this person to us" even on a fresh deploy.
-func PipelineFromGmailpoll(gmailClient *gmail.Client, llmClient, localClient *llm.Client, mainModel, localModel string, projectsFn func() []gmailpoll.ProjectCandidate, senderFactsFn func(ctx context.Context, displayName string) string) (AnalyzePipeline, error) {
+func PipelineFromGmailpoll(gmailClient *gmail.Client, llmClient, localClient *llm.Client, mainModel, localModel string, projectsFn func() []gmailpoll.ProjectCandidate, senderFactsFn func(ctx context.Context, displayName string) string, attachmentExtractFn func(ctx context.Context, data []byte, filename, mimeType string) string) (AnalyzePipeline, error) {
 	if llmClient == nil || strings.TrimSpace(mainModel) == "" {
 		return nil, ErrAnalyzeNoLLM
 	}
 	return &gmailpollPipeline{
 		deps: gmailpoll.PipelineDeps{
-			GmailClient:   gmailClient,
-			LLMClient:     llmClient,
-			LocalClient:   localClient,
-			LocalModel:    localModel,
-			MainModel:     mainModel,
-			ProjectsFn:    projectsFn,
-			SenderFactsFn: senderFactsFn,
+			GmailClient:         gmailClient,
+			LLMClient:           llmClient,
+			LocalClient:         localClient,
+			LocalModel:          localModel,
+			MainModel:           mainModel,
+			ProjectsFn:          projectsFn,
+			SenderFactsFn:       senderFactsFn,
+			AttachmentExtractFn: attachmentExtractFn,
 			// Interactive path: deeper budget + extended thinking (gated to
 			// Anthropic-mode providers inside the pipeline).
 			Stage2MaxTokens: interactiveAnalysisStage2Tokens,

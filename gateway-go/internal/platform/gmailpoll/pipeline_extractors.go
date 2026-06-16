@@ -250,11 +250,14 @@ func normalizeActionPriority(p string) string {
 	}
 }
 
-// extractDealInfo runs the local-AI extractor over the analysis text (which
-// includes attachment OCR) and returns structured deal data, or nil when the
-// mail carries no recognizable business document. Best-effort; mirrors
-// extractFactsForWiki — same local model, same stage-1 budget. Callers gate
-// this on attachment presence so it doesn't fire on every plain mail.
+// extractDealInfo runs the local-AI extractor over the analysis text and
+// returns structured deal data, or nil when the mail carries no recognizable
+// business document. The analysis text includes the relevant attachments'
+// content when the attachment gate selected any (synthesizeAnalysis →
+// gateAndExtractAttachments), so for a 견적서 PDF this reads the document's real
+// figures rather than just the body. Best-effort; mirrors extractFactsForWiki —
+// same local model, same stage-1 budget. Callers gate this on attachment
+// presence so it doesn't fire on every plain mail.
 func extractDealInfo(ctx context.Context, deps PipelineDeps, analysisText string) *DealInfo {
 	if deps.LocalClient == nil || deps.LocalModel == "" {
 		return nil

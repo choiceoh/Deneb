@@ -211,6 +211,13 @@ func extractDisplayName(from string) string {
 func synthesizeAnalysis(ctx context.Context, deps PipelineDeps, msg *gmail.MessageDetail, tc ThreadContext, mc MemoryContext, candidates []ProjectCandidate) (AnalysisResult, error) {
 	emailText := FormatEmailForAnalysis(msg)
 
+	// Read the attachments a local LLM judges relevant (견적서/계약서 등) so the
+	// analysis — and the deal extractor downstream — see the actual document
+	// content, not just the body. Best-effort: an empty selection leaves the
+	// analysis body-only.
+	attach := gateAndExtractAttachments(ctx, deps, msg)
+	emailText += attach.Injected
+
 	// Build optional context sections.
 	var threadSection, memorySection string
 
@@ -313,10 +320,20 @@ func synthesizeAnalysis(ctx context.Context, deps PipelineDeps, msg *gmail.Messa
 
 	// Deal-document extraction is gated on attachments: business documents
 	// (견적서/계약서/세금계산서) arrive as files, so this avoids an extra local
-	// call on every plain mail and keeps extraction precise.
+	// call on every plain mail and keeps extraction precise. The analysis text
+	// now carries the relevant attachments' content (see gateAndExtractAttachments
+	// above), so the extractor reads the actual document, not just the body.
 	var deal *DealInfo
 	if len(msg.Attachments) > 0 {
 		deal = extractDealInfo(ctx, deps, clean)
+	}
+
+	// Surface a deep-review hint for attachments the gate judged dense enough to
+	// warrant the chat agent's full read — a one-tap escalation, not a second
+	// autonomous pass.
+	if len(attach.DeepReview) > 0 {
+		clean = clean + "\n\n📎 정밀 검토 권장: " + strings.Join(attach.DeepReview, ", ") +
+			" — 자세히 보려면 채팅에서 이 첨부를 열어 분석을 요청하세요."
 	}
 
 	return AnalysisResult{Text: clean, RelatedProjects: projects, ActionItems: actions, Deal: deal, Importance: importance}, nil

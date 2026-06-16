@@ -670,7 +670,7 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 				if err != nil {
 					return nil, err
 				}
-				return handlerminiapp.PipelineFromGmailpoll(gmailClient, llmClient, localClient, model, localModel, s.projectCandidatesFn(), s.wikiSenderFacts)
+				return handlerminiapp.PipelineFromGmailpoll(gmailClient, llmClient, localClient, model, localModel, s.projectCandidatesFn(), s.wikiSenderFacts, tools.ExtractAttachmentTextBytes)
 			},
 			Cache:      handlerminiapp.NewAnalysisStore(filepath.Join(s.denebDir, "cache", "mail_analysis")),
 			SaveToWiki: makeMailAnalysisWikiSink(hub),

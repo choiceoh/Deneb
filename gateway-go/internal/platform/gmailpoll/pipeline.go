@@ -68,6 +68,14 @@ type PipelineDeps struct {
 	// external graphify CLI, so sender context is available even when the graph
 	// was never snapshotted. nil → fall back to the graphify subprocess.
 	SenderFactsFn func(ctx context.Context, displayName string) string
+
+	// AttachmentExtractFn extracts readable text from an attachment's raw bytes
+	// (documents and images/OCR). When set together with a LocalClient, the
+	// attachment selection gate (attachments.go) reads the business documents the
+	// analysis would otherwise be blind to — but only the ones a local LLM judges
+	// relevant, so logos/signatures/boilerplate never pollute the analysis. nil →
+	// the gate is skipped and analysis stays body-only.
+	AttachmentExtractFn func(ctx context.Context, data []byte, filename, mimeType string) string
 }
 
 const (
