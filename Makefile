@@ -10,6 +10,7 @@
        kotlin-models kotlin-models-check \
        kotlin-check kotlin-spotless kotlin-detekt \
        ci ci/fast go-test-cached \
+       preview native-smoke \
        info
 
 # Version from git tags (release-please format: deneb-vX.Y.Z), injected via ldflags.
@@ -282,6 +283,28 @@ ci:
 ci/fast:
 	@scripts/dev/ci-check.sh --fast
 
+# --- Native client verification (live / headless) ---
+#
+# Discoverability for the native-client verification harness that previously
+# lived only in raw gradle + scripts/dev/ (and needed a manual ANDROID_HOME).
+# These surface it through make; ANDROID_HOME is exported above, so no env setup.
+# The gateway side already has good ergonomics via scripts/dev/live-test.sh.
+
+# Render Deneb Compose previews to PNG headlessly (Skia, no Xvfb, no APK) — a
+# fast UI eyeball of stateless composables with mock data.
+# Output: /tmp/deneb-render/*.png
+preview:
+	cd $(KOTLIN_APP_DIR) && ./gradlew :composeApp:renderPreviews --console=plain
+	@echo "Previews rendered to /tmp/deneb-render/*.png"
+
+# Boot the live desktop app and walk the key screens (OCR anchors + screenshots),
+# flagging render-time crashes that compile + unit tests miss (e.g. #1959's
+# LazyColumn duplicate-key crash). READ-ONLY against the gateway. Needs the live
+# harness (Xvfb + a reachable gateway) — a manual pre-release gate, not CI.
+# For interactive driving (start/shot/tap/type/stop) use scripts/dev/native-app.sh.
+native-smoke:
+	scripts/dev/native-app-smoke.sh
+
 # --- Info ---
 
 info:
@@ -304,5 +327,12 @@ info:
 	@echo "  make generate-check   - Verify all generated files"
 	@echo "  make clean      - Clean Go build artifacts"
 	@echo "  make go-bench   - Run Go gateway benchmarks"
+	@echo ""
+	@echo "  Verification & live testing:"
+	@echo "  make preview      - Render Compose previews to PNG (/tmp/deneb-render, headless)"
+	@echo "  make native-smoke - Live-app OCR smoke walk (Xvfb + gateway; pre-release gate)"
+	@echo "  scripts/dev/native-app.sh - Drive the live desktop app (start/shot/tap/type/stop)"
+	@echo "  scripts/dev/live-test.sh  - Gateway live test (restart/smoke/chat/logs-errors)"
+	@echo "  scripts/check-dev-env.sh  - Check dev prerequisites"
 	@echo ""
 	@echo "  GO_PAR=$(GO_PAR)  - parallel build/test actions (auto from free RAM; override: make go GO_PAR=4)"
