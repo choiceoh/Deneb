@@ -30,12 +30,18 @@ const (
 	// cardTitleTimeout bounds the lightweight call so a stalled model never holds
 	// up proactive delivery.
 	cardTitleTimeout = 8 * time.Second
+	// cardTitleMaxRunes hard-caps the LLM card title (the mail-report titler) at a
+	// short, glanceable length. The prompt asks for ≤16 Korean characters; this is
+	// the safety clamp if the model overshoots. Kept separate from the heuristic
+	// fallback's workFeedTitleMaxRunes (40), which clips raw subjects / daily-summary
+	// headings that are legitimately longer.
+	cardTitleMaxRunes = 16
 )
 
 const cardTitleSystemPrompt = `너는 업무 알림 카드의 제목 한 줄만 뽑아내는 도구다. 입력은 메일 분석 리포트, 일정 브리핑, 분석 메모 등 다양하다.
 출력 규칙:
 - 그 알림이 무엇에 관한 것인지 나타내는 짧은 한국어 명사구 한 줄만 출력한다 (핵심 주제/제목).
-- 30자 이내. 따옴표·마크다운·머리기호·이모지 금지.
+- 한글 16자 이내로 최대한 짧게. 따옴표·마크다운·머리기호·이모지 금지.
 - "메일 분석", "리포트", "보고" 같은 군더더기 단어를 붙이지 마라.
 - 문장 종결("~합니다", "~다")·설명·접두어 없이 제목 문자열만 출력한다.`
 
@@ -71,5 +77,5 @@ func cleanLLMCardTitle(raw string) string {
 	if len([]rune(line)) < 3 || isGenericMailReportTitle(line) {
 		return ""
 	}
-	return clipRunes(line, workFeedTitleMaxRunes)
+	return clipRunes(line, cardTitleMaxRunes)
 }
