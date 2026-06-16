@@ -548,21 +548,18 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 
 		// Model tuner: every 6h, aggregate the last 24h of agent logs by
 		// model, auto-apply the bounded output-token floor for models that
-		// keep hitting the ceiling, calibrate newly served vLLM models, and
-		// notify (only on change) about stalls / cache breaks / slow tails.
-		// Scorecard: ~/.deneb/model-stats.json.
+		// keep hitting the ceiling, and calibrate newly served vLLM models.
+		// Recommendations (stalls / cache breaks / slow tails) are not pushed
+		// as a notification — they surface under the native model picker
+		// (miniapp_models AdvisoryLines/NoteFor, read from the scorecard), so
+		// the tuner runs silently. Scorecard: ~/.deneb/model-stats.json.
 		if s.modelRegistry != nil && s.agentLogWriter != nil {
-			var tunerNotify func(ctx context.Context, msg string) error
-			if n := s.proactiveRelay.notifierForSession(nativeWorkSessionKey); n != nil {
-				tunerNotify = n.Notify
-			}
 			s.autonomousSvc.RegisterTask(modeltuner.NewTask(modeltuner.Deps{
 				Logs:     s.agentLogWriter,
 				Registry: s.modelRegistry,
 				// DENEB_STATE_DIR-aware so a dev gateway's tuner never writes
 				// into the production ~/.deneb scorecard.
 				StatePath: modeltuner.DefaultStatePath(),
-				Notify:    tunerNotify,
 				Logger:    s.logger,
 			}))
 
@@ -571,12 +568,16 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 			// auto-edits a prompt, so it ships behind a flag.
 			if os.Getenv("DENEB_COMPACTION_TUNER") == "1" && s.polarisStore != nil && s.modelRegistry != nil {
 				if lw := s.modelRegistry.Client(modelrole.RoleLightweight); lw != nil {
+					var compactNotify func(ctx context.Context, msg string) error
+					if n := s.proactiveRelay.notifierForSession(nativeWorkSessionKey); n != nil {
+						compactNotify = n.Notify
+					}
 					s.autonomousSvc.RegisterTask(compactuner.NewTask(compactuner.Deps{
 						Summaries:  s.polarisStore,
 						Guidelines: compaction.NewGuidelineStore(filepath.Join(config.ResolveStateDir(), compaction.GuidelineFileName)),
 						Client:     lw,
 						Model:      s.modelRegistry.Model(modelrole.RoleLightweight),
-						Notify:     tunerNotify,
+						Notify:     compactNotify,
 						Logger:     s.logger,
 					}))
 					s.logger.Info("compaction-tuner: enabled (DENEB_COMPACTION_TUNER)")
