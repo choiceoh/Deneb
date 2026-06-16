@@ -21,6 +21,11 @@ data class DenebPatchNote(
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
         highlights = listOf(
+            "답변 아래 복사 버튼 추가 — 누르면 원본 마크다운을 그대로 복사합니다(표는 표 구조, 코드는 그대로 유지). 길게 눌러 선택 복사할 때 인라인 코드에 군더더기 공백이 끼거나 표가 흐트러지던 것과 달리, 노션·옵시디언 등에 붙여도 형식이 살아납니다",
+        ),
+    ),
+    DenebPatchNote(
+        highlights = listOf(
             "위키·일기·스킬·인물·크론 화면의 본문도 채팅과 똑같이 풀 마크다운으로 렌더됩니다 — 표·각주·수식·접기(<details>)·HTML이 이제 그 화면들에서도 제대로 표시(글씨 크기 등 기존 모양은 그대로)",
         ),
     ),
