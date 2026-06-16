@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/base64"
+	"regexp"
 	"strings"
 	"time"
 	"unicode"
@@ -204,6 +205,15 @@ func (d proactiveRelayDeps) relayNativeToOpts(sessionKey, content string, collap
 	// diagnosis.
 	if isContentlessProactive(content) {
 		d.logProactive("suppressed", "contentless", origLen, pushPreview(content))
+		return false, nil
+	}
+	// Floor #2: drop bodies that are the model's working-narration, a stray
+	// markup/tool fragment, or a bare generic label — self-talk that leaked into a
+	// terminal turn ("이제 분석 보고를 정리해.", "<tool>", "분석") with no report behind
+	// it. stripProactiveMetaPreamble only peels a narration *head* that real content
+	// follows; this catches the case where narration is the *whole* body.
+	if isNarrationOnlyProactive(content) {
+		d.logProactive("suppressed", "narration", origLen, pushPreview(content))
 		return false, nil
 	}
 
@@ -423,6 +433,81 @@ func containsContentlessFragment(s string, collapsed bool) bool {
 	return false
 }
 
+// markupFragmentRe matches a body that is just a stray HTML/tool tag the model
+// emitted instead of a report ("<pre>", "<tool>", "<function=…>", "</thinking>").
+var markupFragmentRe = regexp.MustCompile(`^\s*</?(pre|code|tool|thinking|function|div|span|p|details|summary)\b[^>]*>?\s*$`)
+
+// bareProactiveLabels are generic label strings that, alone, carry no report — a
+// card body that is only one of these is the model emitting a heading word with no
+// content. Compared against substantiveText (spaces/emoji stripped, so "메일 분석"
+// is matched as "메일분석").
+var bareProactiveLabels = map[string]bool{
+	"분석": true, "메일분석": true, "이메일분석": true, "분석요약": true,
+	"분석보고": true, "메일분석보고": true, "메일분석리포트": true,
+	"업무리포트": true, "모델튜너분석": true, "분석결과": true,
+}
+
+// hasReportStructure reports whether any line is markdown report structure (a
+// heading, table row, or list item) — a strong signal the body is a real report,
+// not a one-paragraph self-narration.
+func hasReportStructure(s string) bool {
+	for _, raw := range strings.Split(s, "\n") {
+		t := strings.TrimSpace(raw)
+		if wfHeaderRe.MatchString(t) || wfBulletRe.MatchString(t) ||
+			wfOrderedRe.MatchString(t) || strings.HasPrefix(t, "|") {
+			return true
+		}
+	}
+	return false
+}
+
+// containsMetaPreambleSignal reports whether s contains any working-narration
+// signal phrase (the set stripProactiveMetaPreamble peels by).
+func containsMetaPreambleSignal(s string) bool {
+	for _, sig := range metaPreambleSignals {
+		if strings.Contains(s, sig) {
+			return true
+		}
+	}
+	return false
+}
+
+// isNarrationOnlyProactive reports whether a proactive body is the model's own
+// working narration, a stray markup/tool fragment, or a bare generic label — with
+// no actual report. These leak as 업무 리포트 cards when a terminal turn emits
+// self-talk ("이제 분석 보고를 정리해.", "<tool>", "분석") instead of, or before, a
+// report. Distinct from isContentlessProactive ("nothing to report" pings): this is
+// "the model narrated its process instead of reporting". Conservative — any report
+// structure, real length, or a factual tell (a digit) keeps the card.
+func isNarrationOnlyProactive(content string) bool {
+	s := strings.TrimSpace(content)
+	if s == "" {
+		return true
+	}
+	if hasReportStructure(s) {
+		return false
+	}
+	if markupFragmentRe.MatchString(s) {
+		return true
+	}
+	body := substantiveText(s)
+	n := len([]rune(body))
+	if n == 0 {
+		// Structure stripped to nothing (e.g. only "---") — not narration; leave it to
+		// the existing markers-only delivery behavior (empty title → store default).
+		return false
+	}
+	if n > contentlessSubstanceMaxRunes {
+		return false // long enough to be real content
+	}
+	if bareProactiveLabels[body] {
+		return true
+	}
+	// A short, structureless paragraph with a narration signal and no factual tell
+	// (digit) is the model talking about its process, not reporting.
+	return !strings.ContainsAny(body, "0123456789") && containsMetaPreambleSignal(s)
+}
+
 // metaPreambleMaxRunes bounds how long a leading paragraph may be and still count
 // as throwaway working-narration. Observed leaks are all under ~50 runes; a real
 // report lede that opens on the subject runs longer. The signal match below is
@@ -448,10 +533,15 @@ var metaPreambleSignals = []string{
 	"파악됐습니다", "파악했습니다", "파악 완료",
 	// 분석/정리/작성/수집/업데이트 완료·전환 서술
 	"분석 완료", "분석을 완료", "분석이 완료", "분석 결과 정리", "분석 결과를 정리",
-	"정리합니다", "정리하겠습니다", "정리해서 보고", "정리할게요", "정리했습니다",
-	"작성한다", "작성합니다", "작성하겠습니다", "작성할게요",
+	"정리합니다", "정리하겠습니다", "정리해서 보고", "정리할게요", "정리했습니다", "정리해.", "정리한다",
+	"작성한다", "작성합니다", "작성하겠습니다", "작성할게요", "작성할게",
 	"수집 완료", "수집했습니다",
 	"업데이트까지 끝", "업데이트 완료",
+	"준비 완료", "준비 완료했",
+	"다 모였",
+	// 다음 단계로 넘어가는 자기서술 (작업 narration)
+	"확인해볼게", "확인해 볼게", "확인할게", "읽어오겠습니다", "읽어올게", "읽어오겠",
+	"도구를 활성화", "도구를 켜", "활성화하고",
 	// 보고 행위 자기언급
 	"보고드릴게요", "보고드리겠습니다", "보고하겠습니다", "보고할게요",
 	// 트리거 감지 서술 (실시간 메일 분석)
