@@ -32,20 +32,36 @@ const (
 	maxPartsCount = 200     // defensive cap on multipart parts walked
 )
 
-// parseMessage turns a raw RFC822 message into a gmail.MessageDetail. Headers are
+// Message is a parsed LMTP delivery: the MessageDetail fed to analysis, the raw
+// attachment bytes (keyed by AttachmentInfo.AttachmentID, for Dropbox archiving),
+// and a stable dedup key derived from the Message-ID header (so a re-delivery of
+// the same mail isn't analyzed — or wiki-paged — twice).
+type Message struct {
+	Detail          *gmail.MessageDetail
+	AttachmentBytes map[string][]byte
+	DedupKey        string
+}
+
+// parseMessage turns a raw RFC822 message into a Message. Headers are
 // RFC2047-decoded (so EUC-KR/UTF-8 encoded subjects read correctly); the body is
 // the flattened text (text/plain preferred, else HTML flattened the same way the
-// Gmail path does); attachments carry filename/mime/size only (the analysis works
-// from metadata + body, like the Gmail path before any attachment fetch).
-func parseMessage(raw []byte, id string) (*gmail.MessageDetail, error) {
+// Gmail path does); attachments carry filename/mime/size plus their bytes for
+// archiving. The MessageDetail.ID is the sanitized Message-ID when present (a
+// stable cache/wiki key across re-delivery), else a fresh unique id.
+func parseMessage(raw []byte, fallbackID string) (*Message, error) {
 	m, err := mail.ReadMessage(bytes.NewReader(raw))
 	if err != nil {
 		return nil, fmt.Errorf("lmtp: parse message: %w", err)
 	}
 	hdr := m.Header
 
+	key := sanitizeID(hdr.Get("Message-ID"))
+	if key == "" {
+		key = fallbackID // no Message-ID → unique per delivery (can't dedup)
+	}
+
 	detail := &gmail.MessageDetail{
-		ID:      id,
+		ID:      key,
 		From:    decodeHeader(hdr.Get("From")),
 		To:      decodeHeader(hdr.Get("To")),
 		CC:      decodeHeader(hdr.Get("Cc")),
@@ -58,14 +74,13 @@ func parseMessage(raw []byte, id string) (*gmail.MessageDetail, error) {
 		ctype = "text/plain"
 	}
 	mediaType, params, _ := mime.ParseMediaType(ctype)
-	leaf := part{
+	acc := mimeAccumulator{attBytes: map[string][]byte{}}
+	acc.walk(part{
 		mediaType: mediaType,
 		params:    params,
 		cte:       hdr.Get("Content-Transfer-Encoding"),
 		body:      m.Body,
-	}
-	var acc mimeAccumulator
-	acc.walk(leaf, 0)
+	}, 0)
 
 	text := acc.plain
 	if strings.TrimSpace(text) == "" && acc.html != "" {
@@ -73,7 +88,18 @@ func parseMessage(raw []byte, id string) (*gmail.MessageDetail, error) {
 	}
 	detail.Body = clampRunes(strings.TrimSpace(text), maxBodyRunes)
 	detail.Attachments = acc.atts
-	return detail, nil
+	return &Message{Detail: detail, AttachmentBytes: acc.attBytes, DedupKey: key}, nil
+}
+
+// sanitizeID turns a Message-ID header into a safe, stable key usable as a wiki
+// page / cache id: strips angle brackets and path separators. "" if absent.
+func sanitizeID(messageID string) string {
+	s := strings.Trim(strings.TrimSpace(messageID), "<>")
+	if s == "" {
+		return ""
+	}
+	s = strings.NewReplacer("/", "_", "\\", "_", " ", "_").Replace(s)
+	return s
 }
 
 // part is one node of the MIME tree.
@@ -86,13 +112,14 @@ type part struct {
 	body       io.Reader
 }
 
-// mimeAccumulator collects the flattened text bodies and attachment metadata as
-// the tree is walked.
+// mimeAccumulator collects the flattened text bodies, attachment metadata, and
+// attachment bytes (keyed by the synthetic AttachmentID) as the tree is walked.
 type mimeAccumulator struct {
-	plain string
-	html  string
-	atts  []gmail.AttachmentInfo
-	parts int
+	plain    string
+	html     string
+	atts     []gmail.AttachmentInfo
+	attBytes map[string][]byte
+	parts    int
 }
 
 func (a *mimeAccumulator) walk(p part, depth int) {
@@ -138,11 +165,16 @@ func (a *mimeAccumulator) walk(p part, depth int) {
 
 	isText := strings.HasPrefix(p.mediaType, "text/")
 	if p.attachment || (p.filename != "" && !isText) {
+		attID := fmt.Sprintf("att-%d", len(a.atts))
 		a.atts = append(a.atts, gmail.AttachmentInfo{
-			Filename: p.filename,
-			MimeType: p.mediaType,
-			Size:     len(decoded),
+			Filename:     p.filename,
+			MimeType:     p.mediaType,
+			AttachmentID: attID,
+			Size:         len(decoded),
 		})
+		if a.attBytes != nil {
+			a.attBytes[attID] = decoded
+		}
 		return
 	}
 	if !isText {

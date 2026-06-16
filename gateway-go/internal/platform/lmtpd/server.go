@@ -14,14 +14,12 @@ import (
 	"os"
 	"strings"
 	"time"
-
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
 )
 
-// Handler processes one fully-received, parsed message. Returning an error makes
-// the server reply with a temporary failure (4xx) so the sending MTA retries
-// later — the message is never silently dropped.
-type Handler func(ctx context.Context, msg *gmail.MessageDetail) error
+// Handler processes one fully-received, parsed message (detail + attachment bytes
+// + dedup key). Returning an error makes the server reply with a temporary failure
+// (4xx) so the sending MTA retries later — the message is never silently dropped.
+type Handler func(ctx context.Context, msg *Message) error
 
 const (
 	// maxMessageBytes bounds a single DATA payload. A docker-mailserver delivery
@@ -191,10 +189,10 @@ func (s *Server) process(ctx context.Context, body []byte, readErr error) string
 		return "554 5.6.0 Parse error"
 	}
 	if err := s.handler(ctx, msg); err != nil {
-		s.log.Error("LMTP 메시지 처리 실패", "error", err, "subject", msg.Subject)
+		s.log.Error("LMTP 메시지 처리 실패", "error", err, "subject", msg.Detail.Subject)
 		return "451 4.3.0 Processing failed, try again"
 	}
-	s.log.Info("LMTP 메시지 수신·처리", "from", msg.From, "subject", msg.Subject)
+	s.log.Info("LMTP 메시지 수신·처리", "from", msg.Detail.From, "subject", msg.Detail.Subject)
 	return "250 2.0.0 OK"
 }
 

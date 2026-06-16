@@ -18,7 +18,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/cron"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/dropbox"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/dropboxpoll"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmailpoll"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/lmtpd"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
@@ -154,16 +153,25 @@ func (s *Server) initLMTPServer(snap *config.ConfigSnapshot) {
 	svc := gmailpoll.NewService(cfg, s.logger)
 	svc.SetNotifier(s.proactiveRelay.notifierForSession(nativeWorkSessionKey))
 
+	// Dedup by Message-ID across restarts so an MTA re-delivery isn't analyzed
+	// (or wiki-paged / chat-reported) twice.
+	seen := lmtpd.NewSeenStore(filepath.Join(stateDir, "lmtp-seen.json"), 2000)
+
 	// ACK delivery as soon as the message parses, then analyze asynchronously:
 	// analysis is an LLM call (seconds), too slow to hold the MTA connection open,
 	// and a slow synchronous reply risks Postfix timing out and re-delivering
 	// (which would double-analyze). Parse failures still NAK inside lmtpd.
-	handler := func(_ context.Context, msg *gmail.MessageDetail) error {
+	handler := func(_ context.Context, m *lmtpd.Message) error {
+		if seen.Seen(m.DedupKey) {
+			s.logger.Info("LMTP 중복 메일 건너뜀 (이미 처리)", "key", m.DedupKey, "subject", m.Detail.Subject)
+			return nil // ACK — already analyzed on an earlier delivery
+		}
+		seen.Mark(m.DedupKey)
 		s.safeGo("lmtp-analyze", func() {
 			actx, cancel := context.WithTimeout(s.ShutdownCtx(), 5*time.Minute)
 			defer cancel()
-			if _, err := svc.IngestMessage(actx, msg); err != nil {
-				s.logger.Error("LMTP 메일 분석 실패", "error", err, "subject", msg.Subject)
+			if _, err := svc.IngestMessage(actx, m.Detail, m.AttachmentBytes); err != nil {
+				s.logger.Error("LMTP 메일 분석 실패", "error", err, "subject", m.Detail.Subject)
 			}
 		})
 		return nil

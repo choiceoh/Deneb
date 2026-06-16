@@ -9,8 +9,6 @@ import (
 	"sync"
 	"testing"
 	"time"
-
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
 )
 
 // readReply reads one (possibly multi-line) SMTP/LMTP reply, returning the final
@@ -33,10 +31,10 @@ func readReply(t *testing.T, r *bufio.Reader) string {
 func TestServer_Delivery(t *testing.T) {
 	var (
 		mu   sync.Mutex
-		got  *gmail.MessageDetail
+		got  *Message
 		seen = make(chan struct{}, 1)
 	)
-	handler := func(_ context.Context, msg *gmail.MessageDetail) error {
+	handler := func(_ context.Context, msg *Message) error {
 		mu.Lock()
 		got = msg
 		mu.Unlock()
@@ -117,14 +115,14 @@ func TestServer_Delivery(t *testing.T) {
 	if got == nil {
 		t.Fatal("no message captured")
 	}
-	if got.Subject != "발주서" {
-		t.Errorf("Subject = %q, want 발주서", got.Subject)
+	if got.Detail.Subject != "발주서" {
+		t.Errorf("Subject = %q, want 발주서", got.Detail.Subject)
 	}
-	if !strings.Contains(got.Body, "본문 첫 줄") {
-		t.Errorf("Body = %q", got.Body)
+	if !strings.Contains(got.Detail.Body, "본문 첫 줄") {
+		t.Errorf("Body = %q", got.Detail.Body)
 	}
-	if !strings.Contains(got.Body, ".dot-stuffed line") {
-		t.Errorf("dot-unstuffing failed: %q", got.Body)
+	if !strings.Contains(got.Detail.Body, ".dot-stuffed line") {
+		t.Errorf("dot-unstuffing failed: %q", got.Detail.Body)
 	}
 }
 

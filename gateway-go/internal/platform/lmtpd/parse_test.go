@@ -23,17 +23,17 @@ func TestParseMessage_PlainText(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseMessage: %v", err)
 	}
-	if msg.ID != "id1" {
-		t.Errorf("ID = %q, want id1", msg.ID)
+	if msg.Detail.ID != "id1" {
+		t.Errorf("ID = %q, want id1", msg.Detail.ID)
 	}
-	if !strings.Contains(msg.From, "kim@topsolar.kr") {
-		t.Errorf("From = %q", msg.From)
+	if !strings.Contains(msg.Detail.From, "kim@topsolar.kr") {
+		t.Errorf("From = %q", msg.Detail.From)
 	}
-	if msg.Subject != "회의 자료" {
-		t.Errorf("Subject = %q, want 회의 자료", msg.Subject)
+	if msg.Detail.Subject != "회의 자료" {
+		t.Errorf("Subject = %q, want 회의 자료", msg.Detail.Subject)
 	}
-	if !strings.Contains(msg.Body, "검토 부탁드립니다") {
-		t.Errorf("Body = %q", msg.Body)
+	if !strings.Contains(msg.Detail.Body, "검토 부탁드립니다") {
+		t.Errorf("Body = %q", msg.Detail.Body)
 	}
 }
 
@@ -51,8 +51,8 @@ func TestParseMessage_RFC2047Subject(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseMessage: %v", err)
 	}
-	if msg.Subject != "회의 자료" {
-		t.Errorf("decoded subject = %q, want 회의 자료", msg.Subject)
+	if msg.Detail.Subject != "회의 자료" {
+		t.Errorf("decoded subject = %q, want 회의 자료", msg.Detail.Subject)
 	}
 }
 
@@ -77,11 +77,11 @@ func TestParseMessage_MultipartPrefersPlain(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseMessage: %v", err)
 	}
-	if !strings.Contains(msg.Body, "PLAIN BODY") {
-		t.Errorf("Body = %q, want PLAIN BODY", msg.Body)
+	if !strings.Contains(msg.Detail.Body, "PLAIN BODY") {
+		t.Errorf("Body = %q, want PLAIN BODY", msg.Detail.Body)
 	}
-	if strings.Contains(msg.Body, "<p>") {
-		t.Errorf("Body should prefer plain, got HTML markup: %q", msg.Body)
+	if strings.Contains(msg.Detail.Body, "<p>") {
+		t.Errorf("Body should prefer plain, got HTML markup: %q", msg.Detail.Body)
 	}
 }
 
@@ -98,11 +98,11 @@ func TestParseMessage_HTMLOnlyFlattened(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseMessage: %v", err)
 	}
-	if !strings.Contains(msg.Body, "안녕하세요") || !strings.Contains(msg.Body, "본문") {
-		t.Errorf("HTML not flattened: %q", msg.Body)
+	if !strings.Contains(msg.Detail.Body, "안녕하세요") || !strings.Contains(msg.Detail.Body, "본문") {
+		t.Errorf("HTML not flattened: %q", msg.Detail.Body)
 	}
-	if strings.Contains(msg.Body, "<p>") {
-		t.Errorf("HTML tags leaked: %q", msg.Body)
+	if strings.Contains(msg.Detail.Body, "<p>") {
+		t.Errorf("HTML tags leaked: %q", msg.Detail.Body)
 	}
 }
 
@@ -129,18 +129,81 @@ func TestParseMessage_AttachmentMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseMessage: %v", err)
 	}
-	if !strings.Contains(msg.Body, "견적서 첨부합니다") {
-		t.Errorf("Body = %q", msg.Body)
+	if !strings.Contains(msg.Detail.Body, "견적서 첨부합니다") {
+		t.Errorf("Body = %q", msg.Detail.Body)
 	}
-	if len(msg.Attachments) != 1 {
-		t.Fatalf("attachments = %d, want 1", len(msg.Attachments))
+	if len(msg.Detail.Attachments) != 1 {
+		t.Fatalf("attachments = %d, want 1", len(msg.Detail.Attachments))
 	}
-	att := msg.Attachments[0]
+	att := msg.Detail.Attachments[0]
 	if att.Filename != "quote.pdf" || att.MimeType != "application/pdf" {
 		t.Errorf("attachment = %+v", att)
 	}
 	if att.Size == 0 {
 		t.Errorf("attachment size should be > 0 (decoded base64)")
+	}
+	if len(msg.AttachmentBytes[att.AttachmentID]) == 0 {
+		t.Errorf("attachment bytes not retained for archiving (%s)", att.AttachmentID)
+	}
+}
+
+func TestParseMessage_MessageIDDedupKey(t *testing.T) {
+	raw := crlf(
+		"From: a@b.com",
+		"Subject: s",
+		"Message-ID: <abc123/x y@mail.example.com>",
+		"Content-Type: text/plain; charset=utf-8",
+		"",
+		"body",
+		"",
+	)
+	msg, err := parseMessage([]byte(raw), "fallback-unique")
+	if err != nil {
+		t.Fatalf("parseMessage: %v", err)
+	}
+	// Sanitized Message-ID becomes both the stable cache/wiki key and the dedup key.
+	want := "abc123_x_y@mail.example.com"
+	if msg.DedupKey != want {
+		t.Errorf("DedupKey = %q, want %q", msg.DedupKey, want)
+	}
+	if msg.Detail.ID != want {
+		t.Errorf("Detail.ID = %q, want %q (stable key)", msg.Detail.ID, want)
+	}
+
+	// No Message-ID → falls back to the unique per-delivery id.
+	msg2, _ := parseMessage([]byte(crlf("From: a@b.com", "Subject: s", "", "body", "")), "fallback-unique")
+	if msg2.DedupKey != "fallback-unique" {
+		t.Errorf("no Message-ID DedupKey = %q, want fallback", msg2.DedupKey)
+	}
+}
+
+func TestSeenStore(t *testing.T) {
+	path := t.TempDir() + "/seen.json"
+	s := NewSeenStore(path, 2)
+	if s.Seen("k1") {
+		t.Error("k1 should not be seen yet")
+	}
+	s.Mark("k1")
+	if !s.Seen("k1") {
+		t.Error("k1 should be seen after Mark")
+	}
+	// Persistence: a fresh store loads the saved key.
+	if !NewSeenStore(path, 2).Seen("k1") {
+		t.Error("k1 should persist across reload")
+	}
+	// Bounded eviction (max=2): adding k2,k3 evicts k1.
+	s.Mark("k2")
+	s.Mark("k3")
+	if s.Seen("k1") {
+		t.Error("k1 should have been evicted past max")
+	}
+	if !s.Seen("k3") {
+		t.Error("k3 should be seen")
+	}
+	// Empty key is never recorded/matched.
+	s.Mark("")
+	if s.Seen("") {
+		t.Error("empty key must not match")
 	}
 }
 
@@ -160,11 +223,11 @@ func TestParseMessage_QuotedPrintable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseMessage: %v", err)
 	}
-	if !strings.Contains(msg.Body, "café") {
-		t.Errorf("quoted-printable not decoded: %q", msg.Body)
+	if !strings.Contains(msg.Detail.Body, "café") {
+		t.Errorf("quoted-printable not decoded: %q", msg.Detail.Body)
 	}
-	if !strings.Contains(msg.Body, "continues here") {
-		t.Errorf("soft line break not joined: %q", msg.Body)
+	if !strings.Contains(msg.Detail.Body, "continues here") {
+		t.Errorf("soft line break not joined: %q", msg.Detail.Body)
 	}
 }
 

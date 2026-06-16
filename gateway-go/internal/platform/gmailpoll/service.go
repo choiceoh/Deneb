@@ -344,7 +344,7 @@ func (s *Service) batchAnalyze(ctx context.Context, gmailClient *gmail.Client, m
 // chat). The Gmail client is optional: an LMTP message has no Gmail thread id, so
 // the thread-context stage simply no-ops (it is best-effort). Safe to call
 // concurrently with the poll loop.
-func (s *Service) IngestMessage(ctx context.Context, msg *gmail.MessageDetail) (AnalysisResult, error) {
+func (s *Service) IngestMessage(ctx context.Context, msg *gmail.MessageDetail, attBytes map[string][]byte) (AnalysisResult, error) {
 	res, err := AnalyzeEmailPipeline(ctx, s.pipelineDeps(s.gmailClient), msg)
 	if err != nil {
 		return AnalysisResult{}, err
@@ -352,8 +352,22 @@ func (s *Service) IngestMessage(ctx context.Context, msg *gmail.MessageDetail) (
 	if s.cfg.OnAnalyzed != nil {
 		s.cfg.OnAnalyzed(msg, res)
 	}
-	if strings.TrimSpace(res.Text) != "" {
-		s.sendNotification(ctx, res.Text)
+
+	notify := strings.TrimSpace(res.Text)
+	// Archive substantive attachments to Dropbox from their inline bytes (the LMTP
+	// path has them in-message — no Gmail fetch), and note it on the report, exactly
+	// like the poll path's archiveAttachments does.
+	if archived := s.archiveInlineAttachments(ctx, msg, attBytes); len(archived) > 0 && notify != "" {
+		var b strings.Builder
+		b.WriteString(notify)
+		fmt.Fprintf(&b, "\n\n📎 첨부 %d개를 Dropbox에 보관했습니다:\n", len(archived))
+		for _, p := range archived {
+			fmt.Fprintf(&b, "- `%s`\n", p)
+		}
+		notify = b.String()
+	}
+	if notify != "" {
+		s.sendNotification(ctx, notify)
 	}
 	return res, nil
 }
