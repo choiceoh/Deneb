@@ -91,6 +91,8 @@ func TestStreamer_MatchesWholeString(t *testing.T) {
 		"報告書 검토 後 契約 진행. 旅行 일정도 料金 포함.",
 		"코드:\n```\n報告 = 1\n```\n結果 報告 완료, 利用 가능.",
 		"백틱 경계 `報告` 와 ```\n中\n``` 혼합 報告.",
+		// Simplified (时间→시간) + a dict connector (所以) split across deltas.
+		"时间 분석 끝. 없어.所以 報告書 송부, 即时发生 확인.",
 	}
 	chunkings := [][]int{{1}, {2}, {3}, {5}, {7}} // split every N runes
 	for _, in := range inputs {
@@ -112,16 +114,26 @@ func TestStreamer_MatchesWholeString(t *testing.T) {
 	}
 }
 
-func TestTransliterate_AllOrNothingRun(t *testing.T) {
+func TestTransliterate_SimplifiedAndChinese(t *testing.T) {
 	cases := []struct{ in, want string }{
-		// Simplified-Chinese chars (时=時, 发=發) have no Korean reading. The whole
-		// run is real Chinese → left intact, NOT half-converted to "즉时发생".
-		{"即时发生", "即时发生"},
-		// A genuine Sino-Korean run (every char has a reading) still converts.
-		{"卽時 발생", "즉시 발생"}, // 卽 (traditional 즉) + 時 (시)
-		{"件 처리", "건 처리"},
-		// Mixed sentence: the Korean-Hanja word converts, the Chinese run stays.
-		{"報告書 即时发生", "보고서 即时发生"},
+		// (1) Simplified Chinese reads via kTraditionalVariant: 时→時→시 etc., so
+		// Chinese Sino-vocabulary surfaces as the equivalent Korean word.
+		{"时间 발생", "시간 발생"},
+		{"发生 보고", "발생 보고"},
+		{"问题 해결", "문제 해결"},
+		{"经济 상황", "경제 상황"},
+		{"即时发生", "즉시발생"}, // a Sino-compound reads as Korean (즉시 발생)
+		// (2) Pure-Chinese connectors (gibberish reading) → Korean via the dict.
+		{"없어.所以 진행", "없어.그래서 진행"},
+		{"但是 문제가 있다", "하지만 문제가 있다"},
+		{"这个 항목", "이것 항목"},
+		// Valid Korean-Hanja words NOT in the dict fall through to their reading.
+		{"不過 3개월", "불과 3개월"},
+		{"目前 상황", "목전 상황"},
+		{"然後 진행", "연후 진행"},
+		// (3) All-or-nothing guard: a run with a no-reading char (U+20000) stays
+		// whole rather than half-converting.
+		{"報\U00020000告", "報\U00020000告"},
 	}
 	for _, c := range cases {
 		if got := Transliterate(c.in); got != c.want {

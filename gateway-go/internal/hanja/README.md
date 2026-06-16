@@ -23,21 +23,27 @@ word-initial heuristic that can miss morpheme-internal cases (新女性→신녀
 ## Regenerating `readings.tsv`
 
 The reading table is the **only** data input and is committed (no codegen step;
-it is `go:embed`-ed and parsed at init). It is derived from the Unicode Character
-Database (Unihan) `kHangul` field, taking the first (dominant) reading per char.
+it is `go:embed`-ed and parsed at init). Two passes over the Unicode Character
+Database (Unihan), keyed off `$HOME/Unihan_Readings.txt` and
+`$HOME/Unihan_Variants.txt` (from `Unihan.zip`):
+
+1. **Traditional/shared** — the `kHangul` field, preferring the standard South
+   Korean reading (source flag `E`), else the first reading.
+2. **Simplified** — for a Simplified char with no `kHangul` of its own, resolve
+   `kTraditionalVariant` to its Traditional form and reuse that reading (时→時→시,
+   发→發→발). This is why reading Chinese Sino-vocabulary as Korean works
+   (时间→시간, 发生→발생).
 
 ```bash
-# 1. Fetch Unihan (≈8.5 MB) and extract the readings file.
-curl -sSL -o /tmp/Unihan.zip https://www.unicode.org/Public/UCD/latest/ucd/Unihan.zip
-unzip -o /tmp/Unihan.zip Unihan_Readings.txt -d /tmp
-
-# 2. Project kHangul → "<hex codepoint>\t<first Hangul syllable>" (strip :source).
-awk -F'\t' '/\tkHangul\t/ {cp=$1; sub(/^U\+/,"",cp); split($3,a," "); r=a[1]; sub(/:.*/,"",r); print cp"\t"r}' \
-  /tmp/Unihan_Readings.txt > /tmp/body.tsv
-
-# 3. Re-attach the provenance header (keep the existing one in readings.tsv),
-#    then append /tmp/body.tsv. Update the "Unicode Version" line to match.
+curl -sSL -o ~/Unihan.zip https://www.unicode.org/Public/UCD/latest/ucd/Unihan.zip
+unzip -o ~/Unihan.zip Unihan_Readings.txt Unihan_Variants.txt -d ~
+# Then run the two-pass Python generator (see the script in the PR that added
+# Simplified coverage) and write readings.tsv with the provenance header. Update
+# the "Unicode 17.0.0" line to match the fetched version.
 ```
+
+Pure-Chinese function words whose Korean reading is gibberish (所以→소이) are not
+covered by readings; a small curated map handles them — see `phrases.go`.
 
 Unicode data is under the Unicode License
 (<https://www.unicode.org/terms_of_use.html>); attribution is in the

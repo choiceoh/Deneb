@@ -87,6 +87,14 @@ func (s *Streamer) flushRun(b *strings.Builder) {
 	if len(s.run) == 0 {
 		return
 	}
+	// Pure-Chinese connector whose per-char reading is gibberish (所以→소이): an
+	// exact whole-run match translates it. Keyed on the full run, so it never
+	// fires on Korean-Hanja vocabulary (see phrases.go).
+	if tr, ok := chinesePhrases[string(s.run)]; ok {
+		b.WriteString(tr)
+		s.run = s.run[:0]
+		return
+	}
 	allHave := true
 	for _, r := range s.run {
 		if _, ok := readings[r]; !ok {
