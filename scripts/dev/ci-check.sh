@@ -129,6 +129,46 @@ LOGDIR="$(mktemp -d "${TMPDIR:-/tmp}/deneb-ci-check.XXXXXX")"
 now_ms() { date +%s%3N; }
 fmt_dur() { printf '%d.%01ds' "$(( $1 / 1000 ))" "$(( ($1 % 1000) / 100 ))"; }
 
+# offenders <gate> <log>: distill a gate's raw log down to the actual findings,
+# dropping toolchain noise (make enter/leave, gradle config + the Kotlin/Native
+# "host not supported" warning that every aarch64 gradle run emits, golangci's
+# level= lines, the ok/no-test-file spam from `go test`). Echoes nothing if it
+# finds no recognizable pattern — the caller then falls back to the raw tail, so
+# a failure is never hidden, only tidied.
+offenders() {
+  local gate="$1" log="$2"
+  case "$gate" in
+    go-fmt)
+      # the file list between the header and make's error line
+      awk '/Go files need formatting:/{f=1;next} /^make(\[|:)/{f=0} f && NF' "$log" ;;
+    go-lint)
+      # golangci "file:line:col: msg (linter)" findings; drop the level= spam
+      grep -E '^[^[:space:]].+:[0-9]+:[0-9]+: ' "$log" | grep -v '^level=' ;;
+    go-vet)
+      grep -E '\.go:[0-9]+:[0-9]+: ' "$log" | grep -vE '^(cd |level=)' ;;
+    go-test)
+      # failing tests + failing packages + build errors; drop ok/?/echo/make noise
+      grep -E '^(--- FAIL:|FAIL($|[[:space:]])|# |panic:|=== FAIL)|\.go:[0-9]+:' "$log" \
+        | grep -vE '^(ok |\?[[:space:]]|cd |make(\[|:))' ;;
+    kotlin-spotless)
+      # the "format violations" section through the spotlessApply hint
+      awk '/format violations:/{f=1} f{print} /spotlessApply/{f=0}' "$log" ;;
+    kotlin-detekt)
+      grep -E '\.kt:[0-9]+:[0-9]+:|Analysis failed with' "$log" ;;
+    generate-check)
+      grep -E '^==> |^diff --git|^\+\+\+ |^--- |^@@ |out of date|not up to date' "$log" ;;
+  esac
+}
+
+# fixhint <gate>: one-line "how to fix" for gates with a mechanical remedy.
+fixhint() {
+  case "$1" in
+    go-fmt)          echo "fix: make fmt" ;;
+    kotlin-spotless) echo "fix: (cd client-android/app && ./gradlew spotlessApply)" ;;
+    generate-check)  echo "fix: make generate" ;;
+  esac
+}
+
 # run_gate <gate-name>: run the gate's make target, capture output + timing + rc,
 # and print a one-line completion marker (lanes run in parallel, so these appear
 # in completion order — live feedback while the slow gradle gate churns).
@@ -199,12 +239,27 @@ if [ "$failed" -gt 0 ]; then
     read -r _rc _dur target < "$LOGDIR/$g.meta"
     echo
     echo "${RED}${BOLD}▼ $g${RESET} ${DIM}(make $target)${RESET}"
-    lines=$(wc -l < "$LOGDIR/$g.log" 2>/dev/null || echo 0)
-    if [ "${lines:-0}" -gt 200 ]; then
-      echo "  ${DIM}(last 200 of $lines lines — full log: $LOGDIR/$g.log)${RESET}"
-      tail -n 200 "$LOGDIR/$g.log" | sed 's/^/  /'
+    off=$(offenders "$g" "$LOGDIR/$g.log")
+    if [ -n "$off" ]; then
+      # Parsed a clean offender list — show it (bounded), with a fix hint.
+      total=$(printf '%s\n' "$off" | wc -l)
+      if [ "$total" -gt 60 ]; then
+        printf '%s\n' "$off" | head -n 60 | sed 's/^/  /'
+        echo "  ${DIM}... +$((total - 60)) more (full log: $LOGDIR/$g.log)${RESET}"
+      else
+        printf '%s\n' "$off" | sed 's/^/  /'
+      fi
+      hint=$(fixhint "$g"); [ -n "$hint" ] && echo "  ${YELLOW}$hint${RESET}"
+      echo "  ${DIM}(full log: $LOGDIR/$g.log)${RESET}"
     else
-      sed 's/^/  /' "$LOGDIR/$g.log"
+      # Nothing recognizable parsed — fall back to the raw tail so nothing hides.
+      lines=$(wc -l < "$LOGDIR/$g.log" 2>/dev/null || echo 0)
+      if [ "${lines:-0}" -gt 200 ]; then
+        echo "  ${DIM}(unparsed; last 200 of $lines lines — full log: $LOGDIR/$g.log)${RESET}"
+        tail -n 200 "$LOGDIR/$g.log" | sed 's/^/  /'
+      else
+        sed 's/^/  /' "$LOGDIR/$g.log"
+      fi
     fi
   done
   echo
