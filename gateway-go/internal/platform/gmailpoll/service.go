@@ -324,7 +324,7 @@ func (s *Service) poll(ctx context.Context, client *gmail.Client) error {
 // pipelineDeps assembles the PipelineDeps for an analysis run from the service
 // config (shared by the batch and single-email paths).
 func (s *Service) pipelineDeps(gmailClient *gmail.Client) PipelineDeps {
-	return PipelineDeps{
+	deps := PipelineDeps{
 		GmailClient:         gmailClient,
 		LLMClient:           s.llmClient,
 		LocalClient:         s.cfg.LocalClient,
@@ -335,6 +335,13 @@ func (s *Service) pipelineDeps(gmailClient *gmail.Client) PipelineDeps {
 		SenderFactsFn:       s.cfg.SenderFactsFn,
 		AttachmentExtractFn: s.cfg.AttachmentExtractFn,
 	}
+	// Poll path: the attachment gate fetches bytes lazily from Gmail. The LMTP
+	// path (IngestMessage) overrides this with a closure over the inline bytes,
+	// since an LMTP message id isn't a Gmail id and the bytes are in-message.
+	if gmailClient != nil {
+		deps.AttachmentBytesFn = gmailClient.GetAttachment
+	}
+	return deps
 }
 
 // batchAnalyze analyzes a batch: per-email individual analyses + one
@@ -353,7 +360,20 @@ func (s *Service) batchAnalyze(ctx context.Context, gmailClient *gmail.Client, m
 // the thread-context stage simply no-ops (it is best-effort). Safe to call
 // concurrently with the poll loop.
 func (s *Service) IngestMessage(ctx context.Context, msg *gmail.MessageDetail, attBytes map[string][]byte) (AnalysisResult, error) {
-	res, err := AnalyzeEmailPipeline(ctx, s.pipelineDeps(s.gmailClient), msg)
+	deps := s.pipelineDeps(s.gmailClient)
+	// LMTP attachments arrive inline (no Gmail fetch): serve the attachment gate
+	// from these bytes so 견적서/계약서 PDFs are OCR'd into the analysis exactly
+	// like the poll path. Keyed by AttachmentID, which lmtpd.parseMessage sets to
+	// the same value it puts on msg.Attachments[*].AttachmentID.
+	if len(attBytes) > 0 {
+		deps.AttachmentBytesFn = func(_ context.Context, _, attachmentID string) ([]byte, error) {
+			if b, ok := attBytes[attachmentID]; ok {
+				return b, nil
+			}
+			return nil, fmt.Errorf("inline attachment %q not found", attachmentID)
+		}
+	}
+	res, err := AnalyzeEmailPipeline(ctx, deps, msg)
 	if err != nil {
 		return AnalysisResult{}, err
 	}

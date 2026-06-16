@@ -90,7 +90,7 @@ type extractedAttachment struct {
 // analysis then proceeds body-only exactly as before.
 func gateAndExtractAttachments(ctx context.Context, deps PipelineDeps, msg *gmail.MessageDetail) attachmentSelection {
 	var none attachmentSelection
-	if deps.AttachmentExtractFn == nil || deps.LocalClient == nil || deps.GmailClient == nil || msg == nil {
+	if deps.AttachmentExtractFn == nil || deps.LocalClient == nil || deps.AttachmentBytesFn == nil || msg == nil {
 		return none
 	}
 
@@ -112,7 +112,7 @@ func gateAndExtractAttachments(ctx context.Context, deps PipelineDeps, msg *gmai
 		if ectx.Err() != nil {
 			break // extraction budget spent — judge on what we have
 		}
-		data, err := deps.GmailClient.GetAttachment(ectx, msg.ID, att.AttachmentID)
+		data, err := deps.AttachmentBytesFn(ectx, msg.ID, att.AttachmentID)
 		if err != nil || len(data) == 0 {
 			continue
 		}

@@ -76,6 +76,14 @@ type PipelineDeps struct {
 	// relevant, so logos/signatures/boilerplate never pollute the analysis. nil →
 	// the gate is skipped and analysis stays body-only.
 	AttachmentExtractFn func(ctx context.Context, data []byte, filename, mimeType string) string
+
+	// AttachmentBytesFn fetches one attachment's raw bytes by (messageID,
+	// attachmentID). It abstracts where the bytes come from so the same gate
+	// (attachments.go) serves both ingest paths: the poll path wires
+	// gmailClient.GetAttachment (lazy fetch from Gmail), while the LMTP path
+	// wires a closure over the message's inline attachment bytes (no network —
+	// they arrived in the message). nil → the attachment gate is skipped.
+	AttachmentBytesFn func(ctx context.Context, messageID, attachmentID string) ([]byte, error)
 }
 
 const (
