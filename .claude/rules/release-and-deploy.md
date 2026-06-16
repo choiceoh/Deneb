@@ -42,7 +42,8 @@ DENEB_APK_BASE_URL=http://<gateway-host>:19010 \
 
 - **트리거**: main 에 `client-android/**` 변경이 머지될 때 자동. versionCode 단독화라 릴리스마다 바뀌는 버전 파일이 없어 게이트할 대상이 없다 — **네이티브 변경을 머지하는 것 자체가 새 빌드 발행 신호(연속 배포)**. 수동 `workflow_dispatch`(노트 입력)도 가능. **fork PR 로는 절대 안 돈다** (호스트 러너에서 미신뢰 코드 실행 차단).
 - **노트**: dispatch 입력 우선, 없으면 head 커밋 제목. 사용자에게 보이는 정돈된 한국어 changelog 는 어차피 컴파일된 `DenebPatchNotes` 가 오프라인으로 보여주므로 version.json 노트는 보조다.
-- **버전 bump 불필요**: versionName 제거로 릴리스 시 손댈 버전 파일이 사라졌다. `DenebPatchNotes` 는 version 라벨 없는 시간순 changelog 라 빌드마다 강제 갱신 불필요(테스트는 비어있지 않으면 통과) — **사용자 영향 변경 때만** head 에 항목 prepend. *"release/publish 는 명시 승인"* 원칙은 "네이티브 변경 PR 을 머지하는 행위" 가 그 승인.
+- **버전 bump 불필요**: versionName 제거로 릴리스 시 손댈 버전 파일이 사라졌다. `DenebPatchNotes` 는 version 라벨 없는 시간순 changelog 라 빌드마다 강제 갱신 불필요(테스트는 비어있지 않으면 통과) — **사용자 영향 변경 때만** 노트를 추가. *"release/publish 는 명시 승인"* 원칙은 "네이티브 변경 PR 을 머지하는 행위" 가 그 승인.
+- **★ 패치노트는 조각파일로 (충돌 방지)**: 사용자 표시 노트는 `DenebPatchNotes.kt` 의 frozen 히스토리에 prepend하지 **말고**, `client-android/app/changelog.d/YYYY-MM-DD-<slug>.md` 조각파일을 **새로 추가**한다(PR마다 새 파일 → 같은 줄 안 건드림 → 머지 충돌 0). 빌드 시 `composeApp/build.gradle.kts` 가 조각들을 파일명 역순(최신 먼저)으로 모아 `build/generated/.../DenebChangelogGenerated.kt`(`GENERATED_CHANGELOG_FRAGMENTS`)로 생성하고(**커밋 안 함** — 커밋하면 그 파일이 다시 공유 prepend 파일이 됨), `DENEB_PATCH_NOTES = GENERATED_CHANGELOG_FRAGMENTS + frozen 히스토리`로 합쳐 버전 카드가 그대로 읽는다. 한 줄=하이라이트 1개, `#` 줄=주석. 상세=`changelog.d/README.md`. 내부/빌드/테스트-only 변경엔 조각 불필요.
 - **교착 방지**: `publish-apk.sh` 의 flock 은 `-w 600`(10분 대기 상한). 이전 발행이 hang 채 락을 쥐면 후속(자동·수동)이 job 30분 timeout 까지 막히던 사고(2026-06-08 좀비 publish 가 serve-dir 락 점유 → CI 포함 전 발행 블록)를 막아 빠르게 실패한다. 락 점유 의심 시 `fuser ~/.cache/deneb-apk/.publish.lock` 로 holder 확인 후 정리.
 
 ### gx10 self-hosted 러너 1회 셋업 (운영자만)
