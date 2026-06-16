@@ -21,7 +21,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -363,41 +362,10 @@ func htmlEscape(s string) string {
 	return r.Replace(s)
 }
 
-// chartRenderImage screenshots the chart HTML to a fixed-size PNG via headless
-// Chromium. Mirrors weeklyRenderImage but uses the chart canvas size and skips
-// the white-background trim (the Deneb theme is dark).
+// chartRenderImage screenshots the chart HTML to a fixed-size PNG via the shared
+// headless-Chromium renderer. Fixed canvas (the chart fills it) so no trim is
+// needed; charts render synchronously, so a 4s virtual-time budget is plenty.
 func chartRenderImage(ctx context.Context, htmlPath, pngPath string) error {
-	bin := weeklyFindChromium()
-	if bin == "" {
-		return fmt.Errorf("chromium not found")
-	}
-	// Isolate Chromium's scratch on the real-disk output dir so a full tmpfs can't
-	// abort the render with ENOSPC (same guard as the weekly report).
-	workDir := filepath.Dir(pngPath)
-	udd, err := os.MkdirTemp(workDir, "chrome-")
-	if err != nil {
-		return fmt.Errorf("chromium scratch dir: %w", err)
-	}
-	defer os.RemoveAll(udd) //nolint:errcheck // best-effort scratch cleanup
-	rctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
 	window := fmt.Sprintf("%d,%d", chartCanvasW, chartCanvasH)
-	cmd := exec.CommandContext(rctx, bin,
-		"--headless", "--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage", "--hide-scrollbars",
-		// 2x device scale: --window-size is CSS px, so the 900x560 card renders to
-		// an 1800x1120 PNG — crisp when downscaled into the chat bubble.
-		"--virtual-time-budget=4000", "--force-device-scale-factor=2",
-		"--default-background-color=00000000",
-		"--window-size="+window,
-		"--user-data-dir="+udd, "--crash-dumps-dir="+udd,
-		"--screenshot="+pngPath, "file://"+htmlPath,
-	)
-	cmd.Env = append(os.Environ(), "TMPDIR="+udd)
-	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("chromium screenshot: %w (%s)", err, weeklyClip(string(out), 200))
-	}
-	if fi, err := os.Stat(pngPath); err != nil || fi.Size() == 0 {
-		return fmt.Errorf("no png produced")
-	}
-	return nil
+	return renderHTMLToPNG(ctx, htmlPath, pngPath, window, 4000)
 }

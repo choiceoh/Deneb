@@ -700,6 +700,138 @@
     ]
   },
   {
+    "name": "diagram",
+    "properties": {
+      "diagram_type": {
+        "type": "string",
+        "description": "flowchart=절차·흐름·관계·상태도(노드+화살표), gantt=일정·타임라인(작업별 기간 막대). 숫자 비교/추이는 diagram이 아니라 chart를 써라.",
+        "enum": [
+          "flowchart",
+          "gantt"
+        ]
+      },
+      "title": {
+        "type": "string",
+        "description": "다이어그램 상단 제목 (예: '인허가 처리 절차')"
+      },
+      "subtitle": {
+        "type": "string",
+        "description": "제목 아래 보조 설명 한 줄 (선택)"
+      },
+      "direction": {
+        "type": "string",
+        "description": "flowchart 방향. TD=위→아래, LR=왼쪽→오른쪽 (기본 TD).",
+        "enum": [
+          "TD",
+          "LR",
+          "BT",
+          "RL"
+        ]
+      },
+      "nodes": {
+        "type": "array",
+        "description": "flowchart 노드 목록. 각 노드는 고유 id로 edges에서 참조된다.",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "노드 고유 식별자 (edges의 from/to가 이 값을 참조). 예: 'apply'."
+            },
+            "label": {
+              "type": "string",
+              "description": "노드에 표시할 텍스트. 생략하면 id를 표시."
+            },
+            "shape": {
+              "type": "string",
+              "description": "노드 모양. 의사결정/분기는 diamond, 시작/끝은 stadium, 일반 단계는 rect.",
+              "enum": [
+                "rect",
+                "round",
+                "stadium",
+                "diamond",
+                "circle"
+              ]
+            }
+          },
+          "required": [
+            "id"
+          ]
+        }
+      },
+      "edges": {
+        "type": "array",
+        "description": "flowchart 화살표 목록. from 노드 → to 노드.",
+        "items": {
+          "type": "object",
+          "properties": {
+            "from": {
+              "type": "string",
+              "description": "출발 노드 id."
+            },
+            "to": {
+              "type": "string",
+              "description": "도착 노드 id."
+            },
+            "label": {
+              "type": "string",
+              "description": "화살표에 붙일 조건/설명 (선택, 예: '승인', '반려')."
+            }
+          },
+          "required": [
+            "from",
+            "to"
+          ]
+        }
+      },
+      "tasks": {
+        "type": "array",
+        "description": "gantt 작업 목록. 각 작업은 기간 막대 하나가 된다.",
+        "items": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "작업 이름."
+            },
+            "section": {
+              "type": "string",
+              "description": "작업을 묶는 구간 이름 (선택, 예: '준비', '시공'). 같은 section끼리 그룹으로 표시."
+            },
+            "start": {
+              "type": "string",
+              "description": "시작일 YYYY-MM-DD."
+            },
+            "end": {
+              "type": "string",
+              "description": "종료일 YYYY-MM-DD (duration 대신 택일)."
+            },
+            "duration": {
+              "type": "string",
+              "description": "기간 (end 대신 택일, 예: '5d', '2w')."
+            },
+            "status": {
+              "type": "string",
+              "description": "작업 상태 (선택). done=완료(회색), active=진행중(파랑), crit=중요/지연위험(빨강).",
+              "enum": [
+                "done",
+                "active",
+                "crit"
+              ]
+            }
+          },
+          "required": [
+            "name",
+            "start"
+          ]
+        }
+      }
+    },
+    "required": [
+      "diagram_type"
+    ]
+  },
+  {
     "name": "gmail",
     "properties": {
       "action": {
