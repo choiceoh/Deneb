@@ -8,6 +8,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
+	"github.com/choiceoh/deneb/gateway-go/internal/hanja"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/shortid"
 )
 
@@ -239,10 +240,13 @@ func (h *Handler) buildSyncResult(model string, result *chatRunResult) (*SyncRes
 	// Strip any chain-of-thought delimiters that leaked into the answer (see
 	// reasoning_leak.go). The block regex matches here because the full assembled
 	// text is available. TrimSpace cleans the gap a removed leading block leaves.
+	// Then read Sino-Korean Hanja as Hangul (報告書 → 보고서) so a Chinese-lineage
+	// model's output surfaces in Korean — this is the chokepoint for every
+	// BestText() consumer (the stream done frame, proactive bridge, auto-title).
 	return &SyncResult{
-		Text:            strings.TrimSpace(stripReasoningLeak(result.Text)),
-		AllText:         strings.TrimSpace(stripReasoningLeak(result.AllText)),
-		DeliverableText: strings.TrimSpace(stripReasoningLeak(result.DeliverableText)),
+		Text:            hanja.Transliterate(strings.TrimSpace(stripReasoningLeak(result.Text))),
+		AllText:         hanja.Transliterate(strings.TrimSpace(stripReasoningLeak(result.AllText))),
+		DeliverableText: hanja.Transliterate(strings.TrimSpace(stripReasoningLeak(result.DeliverableText))),
 		Model:           resolvedModel,
 		FellBack:        result.FellBack,
 		InputTokens:     result.Usage.InputTokens,

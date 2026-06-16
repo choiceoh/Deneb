@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
+	"github.com/choiceoh/deneb/gateway-go/internal/hanja"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
 )
 
@@ -135,7 +136,10 @@ func synthesizeBatchReport(ctx context.Context, deps PipelineDeps, items []Batch
 	if err != nil {
 		return "", err
 	}
-	return stripReasoningLeak(report), nil
+	// Read Sino-Korean Hanja in the consolidated report as Hangul (the analysis
+	// model may be a Chinese-lineage one). Per-email items were transliterated in
+	// synthesizeAnalysis; this covers the cross-email synthesis prose.
+	return hanja.Transliterate(stripReasoningLeak(report)), nil
 }
 
 // extractThreadContext fetches related emails and extracts thread context via local LLM.

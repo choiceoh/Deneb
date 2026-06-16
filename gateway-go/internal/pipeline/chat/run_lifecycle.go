@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agent"
+	"github.com/choiceoh/deneb/gateway-go/internal/hanja"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/streaming"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
@@ -85,7 +86,10 @@ func handleRunSuccess(
 	}
 
 	if broadcaster != nil {
-		broadcaster.EmitComplete(result.Text, result.Usage)
+		// Read Sino-Korean Hanja as Hangul for the done frame the client settles
+		// to (報告書 → 보고서). The persisted transcript keeps the raw text; the
+		// display read transliterates it (toolctx.TransliterateAssistantTextForDisplay).
+		broadcaster.EmitComplete(hanja.Transliterate(result.Text), result.Usage)
 	}
 
 	// Deliver response back to the originating channel (e.g., the native client).

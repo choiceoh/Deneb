@@ -366,6 +366,7 @@ func (h *Handler) History(_ context.Context, req *protocol.RequestFrame) *protoc
 		msgs = toolctx.StripLinkEnrichmentForDisplay(msgs)
 		msgs = toolctx.StripToolResultBlocksForDisplay(msgs)
 		msgs = toolctx.StripUserMessageTimestampsForDisplay(msgs)
+		msgs = toolctx.TransliterateAssistantTextForDisplay(msgs)
 		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
 			"messages": msgs,
 			"total":    total,

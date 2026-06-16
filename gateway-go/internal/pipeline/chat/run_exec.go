@@ -265,7 +265,7 @@ func executeAgentRun(
 
 	// Set up stream hooks via compositor: fan-out dispatch for each hook type.
 	var hc agent.HookCompositor
-	wireStreamHooks(&hc, params, deps, broadcaster, typingSignaler, statusCtrl)
+	deltaTranslit := wireStreamHooks(&hc, params, deps, broadcaster, typingSignaler, statusCtrl)
 	// Untrusted-origin tool gate (interactive runs only): block irreversible
 	// tools once promptware enters the turn. Placed here so prep.RecallMemory is
 	// available to seed the taint; composes with any gate wireStreamHooks set.
@@ -302,6 +302,16 @@ func executeAgentRun(
 			Aborted: ctx.Err() != nil,
 		})
 		return nil, err
+	}
+
+	// Release any trailing backticks the delta transliterator held back to
+	// disambiguate a fence marker that could have spanned deltas (run ended
+	// first). Emitted before the done frame so the live view's last tokens
+	// aren't dropped; the final/persisted text is transliterated separately.
+	if deltaTranslit != nil && broadcaster != nil {
+		if tail := deltaTranslit.Flush(); tail != "" {
+			broadcaster.EmitDelta(tail)
+		}
 	}
 
 	agentMs := time.Since(agentStart).Milliseconds()
