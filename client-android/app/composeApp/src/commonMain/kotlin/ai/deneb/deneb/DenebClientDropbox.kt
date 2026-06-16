@@ -89,6 +89,9 @@ data class DropboxEntry(
     val isFolder: Boolean,
     val size: Long,
     val modified: String,
+    // Dropbox's globally-unique file/folder id — the stable LazyColumn key (paths
+    // can be missing/duplicated on degenerate search hits; id never is).
+    val id: String = "",
 )
 
 private fun DropboxEntryOut.toEntry() = DropboxEntry(
@@ -98,6 +101,7 @@ private fun DropboxEntryOut.toEntry() = DropboxEntry(
     isFolder = tag == "folder",
     size = size,
     modified = serverModified,
+    id = id,
 )
 
 /** List a folder's entries (""/"/" = account root). Null on failure. */

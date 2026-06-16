@@ -95,10 +95,32 @@ fun DenebDropboxScreen(
     var actionTarget by remember { mutableStateOf<DropboxEntry?>(null) }
     var uploading by remember { mutableStateOf(false) }
     var uploadError by remember { mutableStateOf<String?>(null) }
+    // Monotonic load token: each navigation/search/refresh bumps it and captures
+    // the value; a slower in-flight load that finds the token changed bails out
+    // instead of overwriting a newer folder's contents (out-of-order RPC guard).
+    var loadToken by remember { mutableStateOf(0) }
 
     suspend fun loadCurrent() {
+        val token = ++loadToken
         loadOk = null
         val res = client.dropboxList(pathStack.last())
+        if (token != loadToken) return // a newer load superseded this one
+        entries = res ?: emptyList()
+        loadOk = res != null
+    }
+
+    // Reload whatever view is current — the active search, else the folder. Retry
+    // uses this: loadCurrent alone would re-list the folder behind a failed search.
+    suspend fun reload() {
+        val q = activeQuery
+        if (q == null) {
+            loadCurrent()
+            return
+        }
+        val token = ++loadToken
+        loadOk = null
+        val res = client.dropboxSearch(q)
+        if (token != loadToken) return
         entries = res ?: emptyList()
         loadOk = res != null
     }
@@ -106,7 +128,10 @@ fun DenebDropboxScreen(
     fun openFolder(e: DropboxEntry) {
         searchText = ""
         activeQuery = null
-        pathStack.add(e.pathLower.ifBlank { e.pathDisplay })
+        // Push the display-cased path: Dropbox path_lower is lowercased, which would
+        // render the folder title/breadcrumb (and upload dest) in all-lowercase for
+        // mixed-case names. list_folder accepts the display path too.
+        pathStack.add(e.pathDisplay.ifBlank { e.pathLower })
         scope.launch { loadCurrent() }
     }
 
@@ -131,16 +156,7 @@ fun DenebDropboxScreen(
         val q = raw.trim().ifBlank { null }
         if (q == activeQuery) return
         activeQuery = q
-        scope.launch {
-            loadOk = null
-            if (q == null) {
-                loadCurrent()
-            } else {
-                val res = client.dropboxSearch(q)
-                entries = res ?: emptyList()
-                loadOk = res != null
-            }
-        }
+        scope.launch { reload() }
     }
 
     LaunchedEffect(Unit) {
@@ -270,7 +286,7 @@ fun DenebDropboxScreen(
                             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                                 DenebError(
                                     "Dropbox를 불러오지 못했습니다.",
-                                    onRetry = { scope.launch { if (activeQuery != null) runSearch(activeQuery!!) else loadCurrent() } },
+                                    onRetry = { scope.launch { reload() } },
                                 )
                             }
 
@@ -284,11 +300,11 @@ fun DenebDropboxScreen(
                             onRefresh = {
                                 scope.launch {
                                     refreshing = true
-                                    if (activeQuery != null) {
-                                        entries = client.dropboxSearch(activeQuery!!) ?: entries
-                                    } else {
-                                        client.dropboxList(pathStack.last())?.let { entries = it }
-                                    }
+                                    val token = ++loadToken
+                                    val q = activeQuery
+                                    val res = if (q != null) client.dropboxSearch(q) else client.dropboxList(pathStack.last())
+                                    // Drop a stale refresh result if the user navigated meanwhile.
+                                    if (token == loadToken) res?.let { entries = it }
                                     refreshing = false
                                 }
                             },
@@ -343,7 +359,7 @@ internal fun DropboxListContent(
     modifier: Modifier = Modifier,
 ) {
     LazyColumn(modifier.fillMaxSize()) {
-        items(entries, key = { it.pathLower.ifBlank { it.name } }) { e ->
+        items(entries, key = { it.id.ifBlank { it.pathLower.ifBlank { it.pathDisplay } } }) { e ->
             DropboxRow(entry = e, onClick = { if (e.isFolder) onOpenFolder(e) else onFileAction(e) })
             HorizontalDivider(color = denebHairline())
         }
