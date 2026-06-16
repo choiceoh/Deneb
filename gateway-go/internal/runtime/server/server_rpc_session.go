@@ -592,6 +592,7 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 	// Load deneb.json once and share the snapshot across the poll initializers.
 	cfgSnap, _ := config.LoadConfigFromDefaultPath()
 	s.initGmailPoll(cfgSnap)
+	s.initLMTPServer(cfgSnap)
 	s.seedDropboxBackupJob()
 	s.initDropboxPoll(cfgSnap)
 

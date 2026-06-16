@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
@@ -17,7 +18,9 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/cron"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/dropbox"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/dropboxpoll"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmailpoll"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/lmtpd"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 )
 
@@ -110,6 +113,69 @@ func (s *Server) initGmailPoll(snap *config.ConfigSnapshot) {
 	} else {
 		s.logger.Warn("gmailpoll: autonomous service not available, polling disabled")
 	}
+}
+
+// initLMTPServer starts the LMTP (RFC 2033) mail-ingest server when enabled. An
+// on-box mail server (e.g. a Docker mail service) PUSHES new mail over LMTP, which
+// replaces IMAP polling for that source: each message is parsed and analyzed
+// through the same pipeline as a polled one (Mini App cache + per-message wiki +
+// proactive 업무 chat). A dedicated gmailpoll.Service — built with the same analysis
+// deps but NOT registered as a periodic task and given a real chat notifier —
+// carries the analysis + delivery wiring; the LMTP server just feeds it messages.
+func (s *Server) initLMTPServer(snap *config.ConfigSnapshot) {
+	if snap == nil {
+		return
+	}
+	lcfg := snap.Config.MailLMTP
+	if lcfg == nil || lcfg.Enabled == nil || !*lcfg.Enabled {
+		return
+	}
+	addr := lcfg.ListenAddr
+	if addr == "" {
+		addr = "127.0.0.1:10024"
+	}
+
+	home, _ := os.UserHomeDir()
+	stateDir := filepath.Join(home, ".deneb")
+	stage2, stage2Model, stage1, stage1Model := s.mailAnalysisModels()
+	cfg := gmailpoll.Config{
+		StateDir:      stateDir,
+		LLMClient:     stage2,
+		Model:         stage2Model,
+		LocalClient:   stage1,
+		LocalModel:    stage1Model,
+		SenderFactsFn: s.wikiSenderFacts,
+		OnAnalyzed:    s.makeMailAnalysisSink(),
+		ProjectsFn:    s.projectCandidatesFn(),
+	}
+	if s.wikiStore != nil && s.wikiStore.DiaryDir() != "" {
+		cfg.DiaryDir = s.wikiStore.DiaryDir()
+	}
+	svc := gmailpoll.NewService(cfg, s.logger)
+	svc.SetNotifier(s.proactiveRelay.notifierForSession(nativeWorkSessionKey))
+
+	// ACK delivery as soon as the message parses, then analyze asynchronously:
+	// analysis is an LLM call (seconds), too slow to hold the MTA connection open,
+	// and a slow synchronous reply risks Postfix timing out and re-delivering
+	// (which would double-analyze). Parse failures still NAK inside lmtpd.
+	handler := func(_ context.Context, msg *gmail.MessageDetail) error {
+		s.safeGo("lmtp-analyze", func() {
+			actx, cancel := context.WithTimeout(s.ShutdownCtx(), 5*time.Minute)
+			defer cancel()
+			if _, err := svc.IngestMessage(actx, msg); err != nil {
+				s.logger.Error("LMTP 메일 분석 실패", "error", err, "subject", msg.Subject)
+			}
+		})
+		return nil
+	}
+
+	srv := lmtpd.New(addr, handler, s.logger)
+	s.safeGo("lmtp-server", func() {
+		if err := srv.Serve(s.ShutdownCtx()); err != nil {
+			s.logger.Error("LMTP 서버 종료(오류)", "error", err)
+		}
+	})
+	s.logger.Info("LMTP mail ingest 활성화 (IMAP 폴링 대체)", "addr", addr)
 }
 
 // seedDropboxBackupJob installs a weekly Dropbox backup cron job once (idempotent
