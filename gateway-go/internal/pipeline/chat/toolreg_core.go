@@ -41,14 +41,17 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 	// code_action (CodeAct): the model writes Python to orchestrate several
 	// read-only tools / batch-process data in one turn. Registered here (like
 	// fetch_tools) because it dials back into this ToolRegistry as its bridge.
-	// Deferred — niche but powerful, so it stays out of the eager prompt and is
-	// loaded via fetch_tools. Main-only by construction: it is absent from
-	// toolpreset, so restricted sub-agents cannot reach this primitive.
+	// Eager (2026-06-17): batching N read/grep/calendar/wiki ops into one Python
+	// turn collapses N tool-loop steps into 1, and multi-step tool turns are
+	// decode-bound (each step pays full thinking decode), so fewer steps is the
+	// main latency lever — worth the ~300-450 prompt tokens/turn for its schema.
+	// Main-only is preserved independently: absent from toolpreset, so restricted
+	// sub-agents cannot reach this primitive (the preset allowlist gates them
+	// regardless of eager/deferred).
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "code_action",
 		Description: tools.CodeActionDescription,
 		InputSchema: tools.CodeActionSchema(),
-		Deferred:    true,
 		Fn: tools.ToolCodeAction(tools.CodeActionDeps{
 			Invoker:  registry,
 			Contacts: deps.Contacts.Store, // structured deneb.contacts(as_json=True); nil-safe
