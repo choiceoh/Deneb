@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -20,6 +21,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/dropboxpoll"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmailpoll"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/lmtpd"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailarchive"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 )
 
@@ -115,6 +117,31 @@ func (s *Server) initGmailPoll(snap *config.ConfigSnapshot) {
 	}
 }
 
+// archiveThreadSource builds the on-box archive IMAP thread source for the LMTP
+// analysis path — it reconstructs a message's thread + sender history from the
+// local mail archive instead of Gmail. Returns nil (thread context disabled)
+// until archive IMAP credentials are configured. Env:
+//
+//	DENEB_ARCHIVE_IMAP_ADDR  (default 127.0.0.1:1143)
+//	DENEB_ARCHIVE_IMAP_USER  / DENEB_ARCHIVE_IMAP_PASS  (required to enable)
+func (s *Server) archiveThreadSource() gmailpoll.ThreadSource {
+	addr := strings.TrimSpace(os.Getenv("DENEB_ARCHIVE_IMAP_ADDR"))
+	if addr == "" {
+		addr = "127.0.0.1:1143"
+	}
+	user := strings.TrimSpace(os.Getenv("DENEB_ARCHIVE_IMAP_USER"))
+	pass := os.Getenv("DENEB_ARCHIVE_IMAP_PASS")
+	if user == "" || pass == "" {
+		return nil // stays off until creds are set (graceful: analysis runs without it)
+	}
+	src := mailarchive.New(mailarchive.Config{Addr: addr, User: user, Pass: pass})
+	if src == nil {
+		return nil
+	}
+	s.logger.Info("LMTP 분석: 아카이브 스레드 컨텍스트 활성화", "addr", addr)
+	return src
+}
+
 // initLMTPServer starts the LMTP (RFC 2033) mail-ingest server when enabled. An
 // on-box mail server (e.g. a Docker mail service) PUSHES new mail over LMTP, which
 // replaces IMAP polling for that source: each message is parsed and analyzed
@@ -147,6 +174,7 @@ func (s *Server) initLMTPServer(snap *config.ConfigSnapshot) {
 		AttachmentExtractFn: tools.ExtractAttachmentTextBytes,
 		OnAnalyzed:          s.makeMailAnalysisSink(),
 		ProjectsFn:          s.projectCandidatesFn(),
+		ThreadSource:        s.archiveThreadSource(),
 	}
 	if s.wikiStore != nil && s.wikiStore.DiaryDir() != "" {
 		cfg.DiaryDir = s.wikiStore.DiaryDir()

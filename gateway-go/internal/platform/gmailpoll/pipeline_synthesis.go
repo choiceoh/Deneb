@@ -21,58 +21,15 @@ import (
 
 func extractThreadContext(ctx context.Context, deps PipelineDeps, msg *gmail.MessageDetail) (ThreadContext, error) {
 	var zero ThreadContext
-	if deps.GmailClient == nil {
-		return zero, nil // no Gmail (e.g. LMTP ingest) → skip Gmail thread search
+
+	related := gatherRelatedMessages(ctx, deps, msg)
+	if len(related) == 0 {
+		return zero, nil // no source wired, or nothing related → skip
 	}
 
-	// Collect related emails.
-	var relatedEmails []string
-
-	// 1. The actual Gmail conversation thread (oldest first). Every message
-	// carries a stable threadId, so we fetch the real thread in one call rather
-	// than guessing it by subject — the old subject:"…" search missed replies
-	// whose subject changed and over-matched common subjects, at the cost of one
-	// search plus N per-message metadata fetches. GetThread replaces all of that.
-	if msg.ThreadID != "" {
-		threadMsgs, err := deps.GmailClient.GetThread(ctx, msg.ThreadID)
-		if err == nil {
-			for _, tm := range threadMsgs {
-				if tm.ID == msg.ID {
-					continue // skip the message being analyzed
-				}
-				relatedEmails = append(relatedEmails, formatEmailBrief(tm))
-				if len(relatedEmails) >= maxThreadMessages {
-					break
-				}
-			}
-		}
-	}
-
-	// 2. Fetch recent emails from the same sender.
-	senderEmail := extractEmailAddr(msg.From)
-	if senderEmail != "" {
-		query := fmt.Sprintf("from:%s newer_than:30d", senderEmail)
-		senderMsgs, err := deps.GmailClient.Search(ctx, query, maxSenderMessages+1)
-		if err == nil {
-			for _, sm := range senderMsgs {
-				if sm.ID == msg.ID {
-					continue
-				}
-				detail, err := deps.GmailClient.GetMessage(ctx, sm.ID)
-				if err != nil {
-					continue
-				}
-				relatedEmails = append(relatedEmails, formatEmailBrief(detail))
-				if len(relatedEmails) >= maxThreadMessages+maxSenderMessages {
-					break
-				}
-			}
-		}
-	}
-
-	if len(relatedEmails) == 0 {
-		// No context to extract — return empty.
-		return zero, nil
+	relatedEmails := make([]string, 0, len(related))
+	for _, rm := range related {
+		relatedEmails = append(relatedEmails, formatEmailBrief(rm))
 	}
 
 	currentEmail := formatEmailBrief(&gmail.MessageDetail{
@@ -91,6 +48,72 @@ func extractThreadContext(ctx context.Context, deps PipelineDeps, msg *gmail.Mes
 		return zero, fmt.Errorf("thread context extraction failed: %w", err)
 	}
 	return result, nil
+}
+
+// gatherRelatedMessages collects prior messages related to msg from whichever
+// source is wired: the Gmail API (poll path) or the local archive (LMTP path).
+func gatherRelatedMessages(ctx context.Context, deps PipelineDeps, msg *gmail.MessageDetail) []*gmail.MessageDetail {
+	switch {
+	case deps.GmailClient != nil:
+		return gatherRelatedFromGmail(ctx, deps, msg)
+	case deps.ThreadSource != nil:
+		rel, err := deps.ThreadSource.RelatedMessages(ctx, msg)
+		if err != nil {
+			if deps.Logger != nil {
+				deps.Logger.Warn("archive thread lookup failed", "error", err)
+			}
+			return nil // best-effort: proceed without thread context
+		}
+		return rel
+	default:
+		return nil // no thread source (e.g. LMTP without archive configured)
+	}
+}
+
+// gatherRelatedFromGmail is the original Gmail-API gather: the real conversation
+// thread (by threadId) plus the sender's recent messages, oldest-first-ish.
+func gatherRelatedFromGmail(ctx context.Context, deps PipelineDeps, msg *gmail.MessageDetail) []*gmail.MessageDetail {
+	var related []*gmail.MessageDetail
+
+	// 1. The actual Gmail conversation thread. Every message carries a stable
+	// threadId, so we fetch the real thread in one call rather than guessing it
+	// by subject (which missed subject-changed replies and over-matched common
+	// subjects).
+	if msg.ThreadID != "" {
+		if threadMsgs, err := deps.GmailClient.GetThread(ctx, msg.ThreadID); err == nil {
+			for _, tm := range threadMsgs {
+				if tm.ID == msg.ID {
+					continue // skip the message being analyzed
+				}
+				related = append(related, tm)
+				if len(related) >= maxThreadMessages {
+					break
+				}
+			}
+		}
+	}
+
+	// 2. Recent emails from the same sender.
+	senderEmail := extractEmailAddr(msg.From)
+	if senderEmail != "" {
+		query := fmt.Sprintf("from:%s newer_than:30d", senderEmail)
+		if senderMsgs, err := deps.GmailClient.Search(ctx, query, maxSenderMessages+1); err == nil {
+			for _, sm := range senderMsgs {
+				if sm.ID == msg.ID {
+					continue
+				}
+				detail, err := deps.GmailClient.GetMessage(ctx, sm.ID)
+				if err != nil {
+					continue
+				}
+				related = append(related, detail)
+				if len(related) >= maxThreadMessages+maxSenderMessages {
+					break
+				}
+			}
+		}
+	}
+	return related
 }
 
 // graphifyQueryTimeout caps how long the wiki-graph subprocess may run before

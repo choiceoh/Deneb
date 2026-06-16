@@ -44,6 +44,12 @@ type PipelineDeps struct {
 	MainModel   string       // main LLM model name
 	Logger      *slog.Logger // optional; nil = slog.Default()
 
+	// ThreadSource supplies prior related messages (thread + sender history)
+	// from the on-box archive when there is no Gmail client — i.e. the LMTP
+	// ingest path reconstructs thread context locally instead of from Gmail.
+	// nil → no archive thread context (analysis still runs without it).
+	ThreadSource ThreadSource
+
 	// ProjectsFn lists the registered project wiki pages so the analyzer
 	// can cite related ones by real path. Optional; nil = no candidates
 	// offered (analysis still runs, RelatedProjects stays empty).
@@ -142,6 +148,14 @@ func (d *PipelineDeps) projectCandidates() []ProjectCandidate {
 		cands = cands[:maxProjectCandidates]
 	}
 	return cands
+}
+
+// ThreadSource yields prior messages related to msg — same thread and recent
+// same-sender history — for thread-context extraction. The mailarchive package
+// implements it against the on-box archive IMAP; it is an interface here so
+// gmailpoll does not depend on that package.
+type ThreadSource interface {
+	RelatedMessages(ctx context.Context, msg *gmail.MessageDetail) ([]*gmail.MessageDetail, error)
 }
 
 // ThreadContext holds extracted context from email thread history.
