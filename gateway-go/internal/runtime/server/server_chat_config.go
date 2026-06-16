@@ -140,14 +140,15 @@ func (s *Server) initLMTPServer(snap *config.ConfigSnapshot) {
 	stateDir := filepath.Join(home, ".deneb")
 	stage2, stage2Model, stage1, stage1Model := s.mailAnalysisModels()
 	cfg := gmailpoll.Config{
-		StateDir:      stateDir,
-		LLMClient:     stage2,
-		Model:         stage2Model,
-		LocalClient:   stage1,
-		LocalModel:    stage1Model,
-		SenderFactsFn: s.wikiSenderFacts,
-		OnAnalyzed:    s.makeMailAnalysisSink(),
-		ProjectsFn:    s.projectCandidatesFn(),
+		StateDir:            stateDir,
+		LLMClient:           stage2,
+		Model:               stage2Model,
+		LocalClient:         stage1,
+		LocalModel:          stage1Model,
+		SenderFactsFn:       s.wikiSenderFacts,
+		AttachmentExtractFn: tools.ExtractAttachmentTextBytes,
+		OnAnalyzed:          s.makeMailAnalysisSink(),
+		ProjectsFn:          s.projectCandidatesFn(),
 	}
 	if s.wikiStore != nil && s.wikiStore.DiaryDir() != "" {
 		cfg.DiaryDir = s.wikiStore.DiaryDir()
