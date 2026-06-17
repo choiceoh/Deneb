@@ -497,3 +497,547 @@ func TestCleanForDisplay_DoesNotTreatNumberedAddressAsSignature(t *testing.T) {
 		}
 	}
 }
+
+func TestCleanForDisplay_DoesNotTreatRoleProseAsSignature(t *testing.T) {
+	body := strings.Join([]string{
+		"지난 4월 09일 노스랜드파워에서 계약서 초안을 보내줘 11:00~12:30분까지",
+		"미래사업실 김상겸 전무 등 3명과 법무실장 백종관 홍상호 회계사님이 참석하여 영문본과 한글 번역본으로 회의를 진행한바 있습니다",
+		"한글 번역본으로 회의를 진행하였으나 우리 탑솔라에서 인식하고 있는 의사 표현이 맞는지 여부에 대해 논쟁이 있어 노스랜드측에",
+		"한글 번역본을 요청하였으나 MOA계약서 작성 당시 협의는 영문으로 진행하고 계약서 완결본에 대한 서명은 한글본과 영문본으로 기재 하기로 약속이 되었다고",
+		"노스랜드 한국대표인 정세현에게 회신이 왔습니다",
+		"결론은 주식양도양수 계약서에 따른 한글본은 제공할수 없다고 회신이 온것입니다",
+		"우리가 변호사를 선임하여 영문본 계약 검토를 진행하던가 또는 문구 변경시 마다 변호인에게 의뢰를 해야 하는 상황입니다",
+		"최종 완성본에 따른 한글과 영문 계약서를 작성하는것은 상호 동의하고 있읍니다",
+		"이와 관련한 의견을 구합니다",
+		"탑솔라(주)",
+		"미래사업실 / 김상겸 전무",
+		"광주광역시 북구 첨단연신로 30번길 41",
+		"HP 010-1111-2222",
+		"E mail kim@example.com",
+	}, "\n")
+
+	got := CleanForDisplay(body)
+	for _, want := range []string{"한글 번역본", "제공할수 없다고", "의견을 구합니다"} {
+		if !strings.Contains(got.Body, want) {
+			t.Fatalf("business prose missing %q:\n%s", want, got.Body)
+		}
+	}
+	for _, gone := range []string{"미래사업실 / 김상겸", "HP 010"} {
+		if strings.Contains(got.Body, gone) {
+			t.Fatalf("signature leaked %q:\n%s", gone, got.Body)
+		}
+	}
+}
+
+func TestCleanForDisplay_DoesNotTreatIncidentRoleProseAsSignature(t *testing.T) {
+	body := strings.Join([]string{
+		"수신: 기획조정실 김세미 과장님",
+		"발신: 탑솔라(주) / 신안 비금태양광 EPC 전기팀 / 강민수 과장",
+		"안녕하십니까.",
+		"비금 현장 탑솔라(주) 강민수 과장입니다.",
+		"비금 설치 모듈 - 진코635Wp 모듈 관련하여",
+		"모듈 - 모듈 간 어레이 공사 진행 중",
+		"1직렬 중간 지점 모듈-모듈 MC4 연결부 10곳 이상에서 현재 화재가 발생하여 MC4 화재가 발생한 상황입니다.",
+		"현장 내에서는 정확한 문제 분석이 힘들며, 추측으로는 MC4커넥터의 불량으로 1차적 판단 상황입니다.",
+		"첨부 사진 자료를 확인 바라며",
+		"진코솔라측 기술적 담당자 현장 방문 및 문제 분석이 시급히 필요하오니 진코솔라측에 협조 요청드립니다.",
+		"감사합니다.",
+		"탑솔라(주) / 신안 비금태양광 / EPC 전기팀 강민수 과장",
+		"광주광역시 북구 첨단연신로30번길 41",
+		"T: 062-111-2222 F: 062-333-4444",
+		"M: 010-1111-2222 E-mail: kang@example.com",
+	}, "\n")
+
+	got := CleanForDisplay(body)
+	for _, want := range []string{"MC4 화재", "문제 분석", "협조 요청"} {
+		if !strings.Contains(got.Body, want) {
+			t.Fatalf("incident body missing %q:\n%s", want, got.Body)
+		}
+	}
+	for _, gone := range []string{"E-mail", "첨단연신로30번길"} {
+		if strings.Contains(got.Body, gone) {
+			t.Fatalf("signature leaked %q:\n%s", gone, got.Body)
+		}
+	}
+}
+
+func TestCleanForDisplay_DoesNotTreatBulletScheduleAsSignature(t *testing.T) {
+	body := strings.Join([]string{
+		"수신 : 김성훈 이사님께.",
+		"안녕하세요, 이사님 트리나솔라 임형철 입니다.",
+		"차주 상하이 SNEC 전시회 기간 중 6월 4일 예정으로 진행될 협약식 및 석식 일정 정보 아래와 같이 공유 드리오니",
+		"참고하여 주시기 바랍니다.",
+		"1. 협약식 일정",
+		"1)일정 : 6월 4일 : 15:00~16:00",
+		"2)참석자 :",
+		"- Todd Li (APAC & MEA 대표이사)",
+		"- Lina (Korea,Japan,Israel sales head, APMEA)",
+		"- Hank Zhang (Korea regional sales head, APMEA)",
+		"- 임형철 부장 (Korea sales manager, APMEA)",
+		"3)장소 :",
+		"- 협약식 장소는 InterContinental 호텔 회의실(2층)에서 진행될 예정입니다.",
+		"2. 저녁 석식일정.",
+		"- 일시 : 6월 4일 18:00~",
+		"- 주소 :",
+		"1) 중문 : 上海宫宴（北京西路1485号，静安区）",
+		"2) 영문 : 1485 West Beijing Road.",
+		"차주 일정 관련하여 궁금하신 사항에 언제든지 연락 주시기 바랍니다.",
+		"감사합니다.",
+		"임형철 배상",
+	}, "\n")
+
+	got := CleanForDisplay(body)
+	for _, want := range []string{"Todd Li", "InterContinental", "저녁 석식일정", "1485 West Beijing Road"} {
+		if !strings.Contains(got.Body, want) {
+			t.Fatalf("schedule detail missing %q:\n%s", want, got.Body)
+		}
+	}
+	if strings.Contains(got.Body, "임형철 배상") {
+		t.Fatalf("closing signature leaked:\n%s", got.Body)
+	}
+}
+
+func TestCleanForDisplay_KeepsForwardedBodyAfterHTMLSignaturePrefix(t *testing.T) {
+	body := strings.Join([]string{
+		"화웨이 자동출력제어 기기 공유드립니다!",
+		"고 건",
+		"<span ng-if=\"showField('title')\">기획조정실 대리",
+		"Mobile:<span ng-if=\"showField('mobile')\"> 010-1111-2222",
+		"Email:<span ng-if=\"showField('email')\"> go@example.com",
+		"<span ng-if=\"showField('address1')\">광주광역시 북구 첨단연신로 30번길 41",
+		"<hr dze_content_sep=\"\">",
+		"보내는사람: Kim Noh Young <noah@example.com>",
+		"받는사람 : 고건 <go@example.com>",
+		"보낸 날짜 : 2026-03-13 11:01",
+		"제목 : [한국화웨이] Zero export 관련 자료 송부의 건",
+		"<meta http-equiv=\"Content-Type\" content=\"text/html; charset=ks_c_5601-1987\">",
+		"안녕하세요 탑솔라 고건 대리님.",
+		"말씀드린 내용, 하기와 첨부파일 확인 부탁드립니다.",
+		"SmartLogger(화웨이 구매) 구매 및 Load 데이터 수집용 파워미터는 반드시 설치가 필요하오니 이 부분 참고 부탁드립니다.",
+		"Zero export 구조",
+		"대부분 자가소비형 on-site PPA 현장이 많기 때문에 원격감시제어를 포함하는 경우와 역송방지 시스템만 구현하는 경우로 나뉩니다.",
+	}, "\n")
+
+	got := CleanForDisplay(body)
+	for _, want := range []string{"SmartLogger", "Zero export", "역송방지"} {
+		if !strings.Contains(got.Body, want) {
+			t.Fatalf("forwarded body missing %q:\n%s", want, got.Body)
+		}
+	}
+	for _, gone := range []string{"화웨이 자동출력제어", "showField", "보내는사람"} {
+		if strings.Contains(got.Body, gone) {
+			t.Fatalf("wrapper/header leaked %q:\n%s", gone, got.Body)
+		}
+	}
+}
+
+func TestCleanForDisplay_StripsForwardedAttachmentMetadataAfterReplyHeader(t *testing.T) {
+	body := strings.Join([]string{
+		"이사님",
+		"자료 잘 받았습니다",
+		"안현철 드림",
+		"________________________________",
+		"보낸 사람: 김성훈 <kim@example.com>",
+		"보낸 날짜: Thursday, February 12, 2026 8:52:04 AM",
+		"받는 사람: Hyunchul An <an@example.com>",
+		"제목: 보해매실농원 관련 법률자문_실무자료 등_탑솔라",
+		"대용량 파일첨부 6개 (32.45 MB) 다운로드 기간 : 2026-02-12 ~ 2026-03-13",
+		"(대용량 첨부 파일은 30일간 보관)",
+		"*   법률자문요청_20260212_최종본.docx (78.52 KB)<https://example.com/doc>",
+		"*   첨부문서 합본.zip (31.29 MB)<https://example.com/zip>",
+		"안녕하세요, 안현철 변호사님.",
+		"탑솔라 주식회사 김성훈 이사입니다.",
+		"당사 법무실에서 보해매실농원 건과 관련하여 법률자문을 요청드린 것으로 알고 있습니다.",
+		"자문 검토에 참고하실 수 있도록 관련 계약서, 합의서, 이메일 교신 내역 등 실무 자료를 첨부하여 송부드립니다.",
+		"검토 과정에서 실무적으로 확인이 필요하신 사항이 있으시면 아래 연락처로 편하게 연락 주시기 바랍니다.",
+		"감사합니다.",
+		"김성훈 드림",
+	}, "\n")
+
+	got := CleanForDisplay(body)
+	for _, want := range []string{"법률자문", "실무 자료", "확인이 필요"} {
+		if !strings.Contains(got.Body, want) {
+			t.Fatalf("forwarded business body missing %q:\n%s", want, got.Body)
+		}
+	}
+	for _, gone := range []string{"대용량 파일첨부", "첨부문서 합본.zip", "보낸 사람"} {
+		if strings.Contains(got.Body, gone) {
+			t.Fatalf("forwarded metadata leaked %q:\n%s", gone, got.Body)
+		}
+	}
+}
+
+func TestCleanForDisplay_KeepsFinancialReceiptDetails(t *testing.T) {
+	body := strings.Join([]string{
+		"Anthropic, PBC  (<https://example.com>)",
+		"Anthropic, PBC",
+		"Credit note from Anthropic, PBC $25.00 Issued May 2, 2026 Download invoice Download credit note Credit note number WLGPLVNK-0021-CN-01 Invoice number WLGPLVNK-0021",
+		"Credit note # WLGPLVNK-0021-CN-01 Credit - Other $25.00 Refund issued - American Express - 6216 $25.00 Total credit $25.00 Questions? Visit our support site.",
+		"Powered by stripe logo",
+	}, "\n")
+
+	got := CleanForDisplay(body)
+	for _, want := range []string{"Credit note", "$25.00", "Total credit"} {
+		if !strings.Contains(got.Body, want) {
+			t.Fatalf("receipt detail missing %q:\n%s", want, got.Body)
+		}
+	}
+	if strings.Contains(got.Body, "stripe logo") {
+		t.Fatalf("trailing logo leaked:\n%s", got.Body)
+	}
+}
+
+func TestCleanForDisplay_StripsExpandedEnglishSignature(t *testing.T) {
+	body := strings.Join([]string{
+		"Nice weekend. Fred again.",
+		"ENCLOSED OFFICIAL TUV test report and UV certificate for your info and record.",
+		"Hi Sara, Jin Yun and Park,",
+		"Could you kindly confirm the enclosed draft TUV test report to issue the official test report.",
+		"Looking forward to long-term cooperation with you.",
+		"Best Regards & Thanks so much",
+		"Fred Lee | Overseas Manager",
+		"JOCA Special Cable (Shanghai) Co., Ltd.",
+		"Wuxi JOCA Cable Technology Group Co., Ltd.",
+		"Mobile: +86 111 2222 3333",
+		"E-mail: fred@example.com",
+	}, "\n")
+
+	got := CleanForDisplay(body)
+	for _, want := range []string{"TUV test report", "confirm the enclosed"} {
+		if !strings.Contains(got.Body, want) {
+			t.Fatalf("business body missing %q:\n%s", want, got.Body)
+		}
+	}
+	for _, gone := range []string{"Best Regards", "Overseas Manager", "Mobile:"} {
+		if strings.Contains(got.Body, gone) {
+			t.Fatalf("signature leaked %q:\n%s", gone, got.Body)
+		}
+	}
+}
+
+func TestCleanForDisplay_StripsEnglishProfessionalSignatureAfterShortBody(t *testing.T) {
+	body := strings.Join([]string{
+		"Hi Sarah:",
+		"Please check the draft documents for customs clearance.",
+		"Best Regards,",
+		"Cherish Xie(Pei)",
+		"Logistics Specialist",
+		"International Business Division",
+		"Marine Industry Group",
+		"Factory: Zhongtian Technology Submarine Cable Co., Ltd.",
+	}, "\n")
+
+	got := CleanForDisplay(body)
+	for _, want := range []string{"Hi Sarah", "draft documents"} {
+		if !strings.Contains(got.Body, want) {
+			t.Fatalf("short business body missing %q:\n%s", want, got.Body)
+		}
+	}
+	for _, gone := range []string{"Best Regards", "Logistics Specialist", "Factory:"} {
+		if strings.Contains(got.Body, gone) {
+			t.Fatalf("professional signature leaked %q:\n%s", gone, got.Body)
+		}
+	}
+}
+
+func TestCleanForDisplay_StripsYoursSincerelySignature(t *testing.T) {
+	body := strings.Join([]string{
+		"Dear Sara",
+		"May you please check the invoice statement.",
+		"The invoice for customs is slightly different from the payment invoice.",
+		"The final amount of the 5 batches will be added to the actual contract value.",
+		"Kindly advise the comment on the excelsheet if to be modified.",
+		"Yours sincerely.",
+		"Best Regards,",
+		"Christina Gu (Li Zhen)",
+		"Project Execution Manager",
+		"International Business Division",
+		"Marine Industry Group",
+		"Email: christina@example.com Website: www.example.com",
+	}, "\n")
+
+	got := CleanForDisplay(body)
+	for _, want := range []string{"invoice statement", "final amount", "excelsheet"} {
+		if !strings.Contains(got.Body, want) {
+			t.Fatalf("business body missing %q:\n%s", want, got.Body)
+		}
+	}
+	for _, gone := range []string{"Yours sincerely", "Best Regards", "Project Execution Manager"} {
+		if strings.Contains(got.Body, gone) {
+			t.Fatalf("closing signature leaked %q:\n%s", gone, got.Body)
+		}
+	}
+}
+
+func TestCleanForDisplay_StripsKoreanCompanySignatureAfterShortBody(t *testing.T) {
+	body := strings.Join([]string{
+		"업무에 고생이 많으십니다.",
+		"무림 울산풍력 사업 검토안 입니다.",
+		"감사합니다.",
+		"탑솔라(주)",
+		"미래사업실 / 박종원 부장",
+		"광주광역시 북구 첨단연신로 30번길 41",
+		"HP 010-1111-2222",
+		"E mail park@example.com",
+	}, "\n")
+
+	got := CleanForDisplay(body)
+	for _, want := range []string{"고생이 많으십니다", "검토안"} {
+		if !strings.Contains(got.Body, want) {
+			t.Fatalf("short Korean business body missing %q:\n%s", want, got.Body)
+		}
+	}
+	for _, gone := range []string{"감사합니다", "탑솔라(주)", "미래사업실", "HP 010"} {
+		if strings.Contains(got.Body, gone) {
+			t.Fatalf("Korean signature leaked %q:\n%s", gone, got.Body)
+		}
+	}
+}
+
+func TestCleanForDisplay_KeepsBusinessBulletAfterThanks(t *testing.T) {
+	body := strings.Join([]string{
+		"업무에 고생이 많으십니다.",
+		"2월 풍황데이터 입니다.",
+		"감사합니다.",
+		"- 2월 풍속값 : 6.4m/s (110m기준)",
+		"탑솔라(주)",
+		"미래사업실 / 박종원 부장",
+		"광주광역시 북구 첨단연신로 30번길 41",
+		"HP 010-1111-2222",
+		"E mail park@example.com",
+	}, "\n")
+
+	got := CleanForDisplay(body)
+	for _, want := range []string{"2월 풍황데이터", "6.4m/s"} {
+		if !strings.Contains(got.Body, want) {
+			t.Fatalf("business bullet missing %q:\n%s", want, got.Body)
+		}
+	}
+	for _, gone := range []string{"탑솔라(주)", "미래사업실", "HP 010"} {
+		if strings.Contains(got.Body, gone) {
+			t.Fatalf("signature leaked %q:\n%s", gone, got.Body)
+		}
+	}
+}
+
+func TestCleanForDisplay_DoesNotTreatSubstantiveShortForwardAsWrapper(t *testing.T) {
+	body := strings.Join([]string{
+		"대용량 파일첨부 2개",
+		"(18.5 MB)",
+		"다운로드 기간 : 2026-06-10 ~ 2026-07-09",
+		"(대용량 첨부 파일은 30일간 보관)",
+		"module.zip",
+		"(14.67 MB)",
+		"안녕하십니까, 탑솔라(주) 고건 대리입니다.",
+		"당사에서 주력으로 사용하고있는 진코 635, 640 모듈 자료 송부드리오니 업무에 참고부탁드립니다.",
+		"궁금하신점은 언제든 연락 부탁드립니다.",
+		"감사합니다!",
+		"고 건",
+		"<span ng-if=\"showField('title')\">기획조정실 대리",
+		"Mobile:<span ng-if=\"showField('mobile')\"> 010-1111-2222",
+		"<hr dze_content_sep=\"\">",
+		"보내는사람: 임상훈 <lim@example.com>",
+		"받는사람 : 고건 <go@example.com>",
+		"보낸 날짜 : 2026-06-08 10:00",
+		"제목 : RE: RFP 참고자료 송부",
+		"주의 : 이 메일은 조직 외부에서 발송되었습니다.",
+		"안녕하십니까, 탑솔라(주) 고건 대리입니다.",
+		"참고하실수있는 RFP자료 공유드리오니 업무에 참고부탁드립니다.",
+	}, "\n")
+
+	got := CleanForDisplay(body)
+	for _, want := range []string{"진코 635, 640", "궁금하신점"} {
+		if !strings.Contains(got.Body, want) {
+			t.Fatalf("latest substantive body missing %q:\n%s", want, got.Body)
+		}
+	}
+	for _, gone := range []string{"조직 외부", "RFP자료", "보내는사람"} {
+		if strings.Contains(got.Body, gone) {
+			t.Fatalf("old forwarded body leaked %q:\n%s", gone, got.Body)
+		}
+	}
+}
+
+func TestCleanForDisplay_KeepsForwardedBodyAfterNameAndHTMLSignaturePrefix(t *testing.T) {
+	body := strings.Join([]string{
+		"양 도 현",
+		"<span ng-if=\"showField('title')\">설계실 팀장/부장",
+		"Mobile:<span ng-if=\"showField('mobile')\"> 010-1111-2222",
+		"Email:<span ng-if=\"showField('email')\"> yang@example.com",
+		"<span ng-if=\"showField('address1')\">광주광역시 북구 첨단연신로 30번길 41",
+		"<hr dze_content_sep=\"\">",
+		"보내는사람: 고건 <go@example.com>",
+		"받는사람 : 양도현 <yang@example.com>",
+		"보낸 날짜 : 2026-06-01 10:00",
+		"제목 : [현대자동차 아산 원동실 태양광]가배치도면 요청의 건",
+		"대용량 파일첨부 2개(53.9 MB)다운로드 기간 : 2026-06-01 ~ 2026-06-30",
+		"(대용량 첨부 파일은 30일간 보관)",
+		"layout.zip (49.78 MB)",
+		"안녕하십니까! 탑솔라(주) 고건 대리입니다.",
+		"표제와 같이 가배치 도면 요청드리며, 관련 내용은 미팅내용 정리 자료 보시면 확인 가능하십니다.",
+		"증축예정인 곳까지 포함하여 가배치도 요청 드립니다.",
+		"감사합니다!!!!!",
+		"고 건",
+	}, "\n")
+
+	got := CleanForDisplay(body)
+	for _, want := range []string{"가배치 도면 요청", "증축예정인 곳"} {
+		if !strings.Contains(got.Body, want) {
+			t.Fatalf("forwarded body missing %q:\n%s", want, got.Body)
+		}
+	}
+	for _, gone := range []string{"양 도 현", "showField", "대용량 파일첨부", "보내는사람"} {
+		if strings.Contains(got.Body, gone) {
+			t.Fatalf("signature/header leaked %q:\n%s", gone, got.Body)
+		}
+	}
+}
+
+func TestCleanForDisplay_DoesNotTreatRoleMentionBusinessBodyAsSignature(t *testing.T) {
+	body := strings.Join([]string{
+		"장재일 차장님",
+		"안녕하세요 제이티에너지 임은진 입니다.",
+		"삼신화학공업 한전설계검토비 외2건 납부 관련하여, 2건은 4/17일까지 1건은 5/9일까지 납부일이였습니다.",
+		"고지서를 받고, 김대희과장 및 탑솔라 측에,",
+		"저희가 부탁 드린것이, 삼신화학공업으로 미납 안내가 가지 않게 해 달라는 부탁이였습니다.",
+		"하지만, 결국 4/17일 미납건에 대해, 삼신화학 담당자에게 한전에서 연락이 갔습니다.",
+		"이번에 5/9일까지 납부가 되지 않은 건에 대해서도 한전에서 연락이 간다면, 임대인 쪽에서 보는 시선이 좋지 않을것이라 생각됩니다.",
+		"그래서, 당사에서 해당 비용에 대해 금일 납부하고 입금확인증 송부 드립니다.",
+		"삼신화학공업 한전선로비 대납 진행 금액에 대해서, 첨부의 당사 계좌로 입금 될 수 있도록 처리해 주시기 바랍니다.",
+		"세금계산서 발행을 어떻게 하실껀지 문의하셔서, 알려주시기 바랍니다.",
+		"빠른 실행이 될 수 있도록 부탁 드리겠습니다.",
+		"감사합니다.",
+		"(주)제이티에너지",
+		"임은진 차장 / H. 010-1111-2222",
+		"T. 02-111-2222 / E. lim@example.com",
+	}, "\n")
+
+	got := CleanForDisplay(body)
+	for _, want := range []string{"고지서를 받고", "미납건", "입금확인증", "세금계산서"} {
+		if !strings.Contains(got.Body, want) {
+			t.Fatalf("role-bearing business body missing %q:\n%s", want, got.Body)
+		}
+	}
+	for _, gone := range []string{"(주)제이티에너지", "임은진 차장 / H", "T. 02"} {
+		if strings.Contains(got.Body, gone) {
+			t.Fatalf("signature leaked %q:\n%s", gone, got.Body)
+		}
+	}
+}
+
+func TestCleanForDisplay_StripsAttachmentTotalWithLinkedFiles(t *testing.T) {
+	body := strings.Join([]string{
+		"대용량 첨부파일 총 (7개) ※ 다운로드 기간 : 2026-04-29 ~ 2026-05-29",
+		"구조계산서_EcoPro AP.pdf<<url> (38.63 MB)",
+		"구조계산서_EcoPro BM.pdf<<url> (93.55 MB)",
+		"수신 : 수신처제위",
+		"발신 : 박지선 책임 / 에코프로 구매혁신팀",
+		"안녕하세요.",
+		"에코프로 그룹사 주차장 구조계산서 송부드립니다. 견적 산출 시 참고 바랍니다.",
+		"감사합니다.",
+		"박지선 책임 / 에코프로 구매혁신팀",
+		"T. 043-111-2222 / E. park@example.com",
+	}, "\n")
+
+	got := CleanForDisplay(body)
+	for _, want := range []string{"수신 : 수신처제위", "구조계산서 송부", "견적 산출"} {
+		if !strings.Contains(got.Body, want) {
+			t.Fatalf("business body missing %q:\n%s", want, got.Body)
+		}
+	}
+	for _, gone := range []string{"대용량 첨부파일", "EcoPro AP.pdf", "38.63 MB", "T. 043"} {
+		if strings.Contains(got.Body, gone) {
+			t.Fatalf("attachment/signature noise leaked %q:\n%s", gone, got.Body)
+		}
+	}
+}
+
+func TestCleanForDisplay_StripsLooseForwardedAttachmentExpiryRows(t *testing.T) {
+	body := strings.Join([]string{
+		"자료 공유드립니다.",
+		"<hr dze_content_sep=\"\">",
+		"보내는사람: 김승우 <kim@example.com>",
+		"받는사람 : 김대희 <daehee@example.com>",
+		"제목 : 화성산단 태양광 관련",
+		"대용량 첨부 5개 11MB",
+		"수협 약정식 제출서류 안내_화성산단태양광.xlsx 20283",
+		"~ 2026/03/27",
+		"1. 컨소시엄 합의서_화성산단태양광_RPS.docx 31735",
+		"~ 2026/03/27",
+		"기한이 있는 파일은 30일 보관 / 100회 다운로드 가능",
+		"안녕하세요, 오늘회계법인 김승우입니다.",
+		"어제 화성산단태양광 대출약정은 체결이 되었으며,",
+		"추후 공사도급계약/관리운영계약 날인시 시공사 날인 필요한 양식 안내드립니다. 첨부 참고해주시기 바랍니다.",
+		"-컨소시엄 합의서 : 한화시스템에 제출",
+		"-대출약정서의 별지 양식(별지7. 책임준공확약서, 별첨5. 확약서): 수협 제출",
+		"첨부의 제출서류목록 2. 시공사 관련 서류도 참고하여 준비 부탁드립니다.",
+		"감사합니다.",
+		"김승우 드림",
+		"김 승 우 공인회계사(KICPA)",
+		"오늘회계법인 서울 강남구 테헤란로 429 원방빌딩 14층",
+		"Tel. 02-111-2222",
+	}, "\n")
+
+	got := CleanForDisplay(body)
+	for _, want := range []string{"오늘회계법인", "대출약정", "컨소시엄 합의서", "책임준공확약서", "제출서류목록"} {
+		if !strings.Contains(got.Body, want) {
+			t.Fatalf("forwarded body missing %q:\n%s", want, got.Body)
+		}
+	}
+	for _, gone := range []string{"대용량 첨부", "~ 2026/03/27", "xlsx 20283", "김승우 드림", "공인회계사", "Tel."} {
+		if strings.Contains(got.Body, gone) {
+			t.Fatalf("loose attachment metadata leaked %q:\n%s", gone, got.Body)
+		}
+	}
+}
+
+func TestCleanForDisplay_StripsSpacedSignoffAndTailName(t *testing.T) {
+	body := strings.Join([]string{
+		"안녕하세요 상무님, 잘 지내시지요?",
+		"그룹사 주차장 대상 태양광 PPA 사업을 검토하고 있습니다.",
+		"의견 부탁드립니다.",
+		"감사합니다.",
+		"P.S : 본 내용은 외부 유출되지 않도록 보안 유의 부탁드립니다.",
+		"송 기 섭 드림",
+		"Yours sincerely,",
+		"송 기 섭 팀장",
+		"Tel.",
+		"010-1111-2222",
+	}, "\n")
+
+	got := CleanForDisplay(body)
+	for _, want := range []string{"PPA 사업", "보안 유의"} {
+		if !strings.Contains(got.Body, want) {
+			t.Fatalf("business body missing %q:\n%s", want, got.Body)
+		}
+	}
+	for _, gone := range []string{"송 기 섭 드림", "Yours sincerely", "Tel."} {
+		if strings.Contains(got.Body, gone) {
+			t.Fatalf("spaced signoff leaked %q:\n%s", gone, got.Body)
+		}
+	}
+}
+
+func TestCleanForDisplay_StripsBilingualTailName(t *testing.T) {
+	body := strings.Join([]string{
+		"안녕하세요 이사님,",
+		"유첨의 내용으로 당사 100MW 견적서 내용을 송부드리오니 참조 부탁드립니다.",
+		"감사합니다.",
+		"좋은 하루 되세요.",
+		"|",
+		"|",
+		"최종원 / Jongwon Choi",
+		"해외영업부 / Overseas Sales Dept.",
+		"모바일 (Mob)： +82-10-1111-2222",
+	}, "\n")
+
+	got := CleanForDisplay(body)
+	if !strings.Contains(got.Body, "100MW 견적서") {
+		t.Fatalf("business body missing:\n%s", got.Body)
+	}
+	for _, gone := range []string{"최종원 / Jongwon Choi", "Overseas Sales", "Mob"} {
+		if strings.Contains(got.Body, gone) {
+			t.Fatalf("tail name signature leaked %q:\n%s", gone, got.Body)
+		}
+	}
+}
