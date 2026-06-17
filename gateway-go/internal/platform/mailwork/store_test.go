@@ -213,3 +213,18 @@ func TestStoreDoesNotOverwriteCorruptState(t *testing.T) {
 		t.Fatalf("corrupt state was overwritten: %q", string(got))
 	}
 }
+
+func TestStoreSummaryWithErrorSurfacesCorruptState(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mail_work_state.json")
+	if err := os.WriteFile(path, []byte("{not-json"), 0o600); err != nil {
+		t.Fatalf("seed corrupt state: %v", err)
+	}
+
+	summary, err := New(path).SummaryWithError()
+	if err == nil {
+		t.Fatalf("expected corrupt state error")
+	}
+	if summary.Messages != 0 {
+		t.Fatalf("summary = %+v, want zero on load error", summary)
+	}
+}

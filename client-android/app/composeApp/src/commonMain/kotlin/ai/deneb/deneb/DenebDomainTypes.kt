@@ -126,6 +126,7 @@ data class MailNativePipeline(
     val calendarCandidates: Int = 0,
     val todoCandidates: Int = 0,
     val updatedAt: String = "",
+    val error: String = "",
 )
 
 /** A wiki project page cited by an analysis, surfaced as a tappable chip. */

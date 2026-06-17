@@ -249,6 +249,7 @@ type mailNativePipelineOut struct {
 	CalendarCandidates int    `json:"calendarCandidates"`
 	TodoCandidates     int    `json:"todoCandidates"`
 	UpdatedAt          string `json:"updatedAt,omitempty"`
+	Error              string `json:"error,omitempty"`
 }
 
 func gmailNativeStatus(deps GmailDeps) rpcutil.HandlerFunc {
@@ -323,7 +324,7 @@ func mailPipelineStatusOut(store *mailwork.Store) mailNativePipelineOut {
 	if store == nil {
 		return mailNativePipelineOut{}
 	}
-	s := store.Summary()
+	s, err := store.SummaryWithError()
 	out := mailNativePipelineOut{
 		Messages:           s.Messages,
 		Analyzed:           s.Analyzed,
@@ -336,6 +337,9 @@ func mailPipelineStatusOut(store *mailwork.Store) mailNativePipelineOut {
 	}
 	if s.UpdatedAtMs > 0 {
 		out.UpdatedAt = time.UnixMilli(s.UpdatedAtMs).UTC().Format(time.RFC3339)
+	}
+	if err != nil {
+		out.Error = "state_load_failed"
 	}
 	return out
 }
