@@ -3,6 +3,7 @@ package ai.deneb.deneb
 import ai.deneb.deneb.generated.MailAnalysisOut
 import ai.deneb.deneb.generated.MailMessageOut
 import ai.deneb.deneb.generated.MailNativeStatusOut
+import ai.deneb.deneb.generated.MailRowOut
 import ai.deneb.deneb.generated.QATurn
 import io.ktor.client.call.body
 import io.ktor.client.plugins.timeout
@@ -17,7 +18,7 @@ import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 
 /**
- * Mail surface of [DenebGatewayClient] (`miniapp.gmail.*`): inbox list +
+ * Mail surface of [DenebGatewayClient] (`miniapp.gmail.*`): recent mail list +
  * pagination, message detail, read/archive/trash mutations, AI analysis, Q&A,
  * attachments, and sender context. Extensions so the gateway client stays one
  * facade while each RPC domain lives in its own file.
@@ -32,7 +33,7 @@ private const val MAIL_LIST_PAGE_SIZE = 60
  * Re-apply the session read-overlay to a freshly fetched page: a mail the user
  * has read this session shows no unread dot even when the server's row still
  * says unread. The gateway caches list_recent for 30s and mark_read deliberately
- * does NOT invalidate it (inbox membership is unchanged), leaning on this
+ * does NOT invalidate it (mailbox membership is unchanged), leaning on this
  * optimistic clear to mask the stale dot. Phone back-nav recomposes the list and
  * re-runs refreshMail within that window, so without re-applying here the cached
  * unread would resurrect a dot the user already cleared. Identity (no allocation)
@@ -57,22 +58,22 @@ internal fun recordReadId(into: LinkedHashSet<String>, id: String, max: Int = MA
 
 /** Refresh the mail list. With a [query] it runs a full-mailbox mail search
  *  (native/archive-aware syntax: keywords, `from:`, `has:attachment`, …); null/blank falls
- *  back to the server's default recent-inbox view. Returns false on a fetch
+ *  back to the server's default recent-mail view. Returns false on a fetch
  *  failure so the screen can show a retry instead of a misleading empty state. */
 suspend fun DenebGatewayClient.refreshMail(query: String? = null): Boolean {
     val q = query?.trim()?.ifBlank { null }
     // Pin the credential epoch: if the user switches gateways while this fetch is in
-    // flight, the old-account inbox must neither become the visible list nor repopulate
+    // flight, the old-account mail list must neither become visible nor repopulate
     // the (just-cleared) cache under the new credentials.
     val epoch = credEpoch
-    // Cache-then-network for the default inbox (no query): render the encrypted
+    // Cache-then-network for the default recent mail view (no query): render the encrypted
     // local copy instantly so the mail tab has no spinner on open, then revalidate.
     // Query searches are not cached (query-specific, transient).
     if (q == null && _denebMail.value.isEmpty()) {
         loadCachedMail()?.let {
             if (epoch != credEpoch) return@let // credentials switched — don't show the old account's cache
             _denebMail.value = applyReadOverlay(it, locallyReadMailIds)
-            // The cached rows ARE the default inbox, so drop any stale search
+            // The cached rows ARE the default recent mail view, so drop any stale search
             // cursor/query left over from a prior paged view — otherwise a "더 보기"
             // tap before the network refresh below would append the wrong page.
             denebMailActiveQuery = null
@@ -92,7 +93,7 @@ suspend fun DenebGatewayClient.refreshMail(query: String? = null): Boolean {
     denebMailActiveQuery = q
     val rows = payload.messages
         .filter { it.id.isNotBlank() }
-        .map { MailMessage(it.id, it.from, it.subject, it.snippet, it.date, it.isUnread, it.priority, it.priorityHint) }
+        .map { it.toDomainMailMessage() }
     val overlaid = applyReadOverlay(rows, locallyReadMailIds)
     _denebMail.value = overlaid
     _denebMailNextToken.value = payload.nextPageToken.ifBlank { null }
@@ -135,8 +136,8 @@ suspend fun DenebGatewayClient.refreshMailNativeStatus(): MailNativeStatus? {
     return status
 }
 
-// --- Default inbox cache (cache-then-network) -----------------------------
-// Only the no-query inbox list is cached, encrypted in settings, for an instant
+// --- Default recent mail cache (cache-then-network) -----------------------
+// Only the no-query recent mail list is cached, encrypted in settings, for an instant
 // mail-tab render. The owner fingerprint prevents a prior gateway/account cache
 // from rendering under the current URL/token if credential migration or a manual
 // settings edit bypassed the normal cache purge path. The network refresh above
@@ -181,7 +182,7 @@ internal fun DenebGatewayClient.storeCachedMail(rows: List<MailMessage>) {
 }
 
 /**
- * Apply an inbox mutation (read/archive/trash) to the cached default-inbox copy so
+ * Apply a mail mutation (read/archive/trash) to the cached default recent copy so
  * that an app kill or unreachable gateway before the next successful refresh can't
  * resurrect a cleared unread dot or a removed row from the cache. Reads the cache
  * directly (not [_denebMail], which may currently hold a search view), so it's
@@ -192,7 +193,7 @@ internal fun DenebGatewayClient.patchCachedMail(transform: (List<MailMessage>) -
     storeCachedMail(transform(cached))
 }
 
-/** Append the next page of the current view (inbox or active search) to the list. */
+/** Append the next page of the current view (recent mail or active search) to the list. */
 suspend fun DenebGatewayClient.loadMoreMail() {
     val epoch = credEpoch
     val token = _denebMailNextToken.value ?: return
@@ -211,7 +212,7 @@ suspend fun DenebGatewayClient.loadMoreMail() {
     _denebMail.value = _denebMail.value + applyReadOverlay(
         payload.messages
             .filter { it.id.isNotBlank() && it.id !in seen }
-            .map { MailMessage(it.id, it.from, it.subject, it.snippet, it.date, it.isUnread, it.priority, it.priorityHint) },
+            .map { it.toDomainMailMessage() },
         locallyReadMailIds,
     )
     _denebMailNextToken.value = payload.nextPageToken.ifBlank { null }
@@ -257,7 +258,7 @@ suspend fun DenebGatewayClient.markMailRead(id: String): Boolean {
     return ok
 }
 
-/** Archive (drop from inbox); optimistically removes the row from the list. */
+/** Archive (drop from the active list); optimistically removes the row from the list. */
 suspend fun DenebGatewayClient.archiveMail(id: String): Boolean {
     val ok = callRpc<OkPayload>("miniapp.gmail.archive", buildJsonObject { put("id", id) })?.ok == true
     if (ok) {
@@ -373,7 +374,21 @@ suspend fun DenebGatewayClient.fetchRecentFromSender(email: String, limit: Int =
     return applyReadOverlay(
         payload.messages
             .filter { it.id.isNotBlank() }
-            .map { MailMessage(it.id, it.from, it.subject, it.snippet, it.date, it.isUnread, it.priority, it.priorityHint) },
+            .map { it.toDomainMailMessage() },
         locallyReadMailIds,
     )
 }
+
+private fun MailRowOut.toDomainMailMessage(): MailMessage = MailMessage(
+    id = id,
+    from = from,
+    subject = subject,
+    snippet = snippet,
+    date = date,
+    unread = isUnread,
+    priority = priority,
+    priorityHint = priorityHint,
+    mailbox = mailbox,
+    hasAttachment = hasAttachment || attachmentCount > 0,
+    attachmentCount = attachmentCount,
+)

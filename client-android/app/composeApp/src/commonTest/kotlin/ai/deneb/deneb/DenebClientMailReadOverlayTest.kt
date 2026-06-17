@@ -100,6 +100,20 @@ class DenebClientMailReadOverlayTest {
     }
 
     @Test
+    fun mail_row_native_meta_summarizes_attachment_and_mailbox() {
+        assertNull(mailRowNativeMeta(row("plain", false)))
+
+        val attached = row("attached", false).copy(hasAttachment = true, attachmentCount = 2)
+        assertEquals("첨부 2", mailRowNativeMeta(attached))
+
+        val archived = row("archived", false).copy(mailbox = "Gmail")
+        assertEquals("Gmail 보관함", mailRowNativeMeta(archived))
+
+        val both = row("both", false).copy(hasAttachment = true, attachmentCount = 1, mailbox = "Gmail")
+        assertEquals("첨부 · Gmail 보관함", mailRowNativeMeta(both))
+    }
+
+    @Test
     fun native_status_line_summarizes_archive_state() {
         val line = mailNativeStatusLine(
             MailNativeStatus(

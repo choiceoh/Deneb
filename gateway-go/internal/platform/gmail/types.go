@@ -4,13 +4,16 @@ package gmail
 
 // MessageSummary holds metadata for a message returned by list/search.
 type MessageSummary struct {
-	ID       string
-	ThreadID string
-	From     string
-	Subject  string
-	Date     string
-	Snippet  string
-	Labels   []string
+	ID              string
+	ThreadID        string
+	From            string
+	Subject         string
+	Date            string
+	Snippet         string
+	Labels          []string
+	Mailbox         string
+	HasAttachment   bool
+	AttachmentCount int
 }
 
 // MessageDetail holds the full content of a single message.

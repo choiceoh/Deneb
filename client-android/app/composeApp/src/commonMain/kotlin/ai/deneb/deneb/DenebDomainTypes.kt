@@ -46,6 +46,11 @@ data class MailMessage(
     val priority: String = "",
     /** Short Korean signal hint for the tier (e.g. "낙찰 · 마감 표현"). */
     val priorityHint: String = "",
+    /** Local archive mailbox that produced this row (e.g. INBOX, Gmail). */
+    val mailbox: String = "",
+    /** True when the local archive parser saw at least one attachment. */
+    val hasAttachment: Boolean = false,
+    val attachmentCount: Int = 0,
 )
 
 /** Full Gmail message for the native detail screen. */

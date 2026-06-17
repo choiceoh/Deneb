@@ -314,11 +314,16 @@ type archiveQuery struct {
 	Criteria      string
 	DefaultView   bool
 	HasAttachment bool
+	InboxOnly     bool
 }
 
 func parseArchiveQuery(query string, now time.Time) (archiveQuery, error) {
 	q := strings.TrimSpace(query)
 	defaultView := isDefaultArchiveViewQuery(q)
+	inboxOnly := inInboxRe.MatchString(q) && !defaultView
+	if inAnywhereRe.MatchString(q) {
+		inboxOnly = false
+	}
 	since := time.Time{}
 	if defaultView {
 		since = now.Add(-defaultNativeLookback)
@@ -365,15 +370,15 @@ func parseArchiveQuery(query string, now time.Time) (archiveQuery, error) {
 	if len(parts) == 0 {
 		parts = append(parts, "ALL")
 	}
-	return archiveQuery{Criteria: strings.Join(parts, " "), DefaultView: defaultView, HasAttachment: hasAttachment}, nil
+	return archiveQuery{Criteria: strings.Join(parts, " "), DefaultView: defaultView, HasAttachment: hasAttachment, InboxOnly: inboxOnly}, nil
 }
 
 func isDefaultArchiveViewQuery(q string) bool {
 	q = strings.TrimSpace(q)
 	return q == "" ||
 		strings.EqualFold(q, "{in:inbox is:unread} newer_than:30d") ||
-		// Older native builds sent the previous default explicitly. Keep its
-		// inbox/read-overlay semantics while still honoring its 7-day lookback.
+		// Older native builds sent the previous default explicitly. Treat it as
+		// the native recent view while still honoring its 7-day lookback.
 		strings.EqualFold(q, "{in:inbox is:unread} newer_than:7d")
 }
 
@@ -381,6 +386,8 @@ var (
 	newerThanRe           = regexp.MustCompile(`(?i)\bnewer_than:(\d+)([dmy])\b`)
 	fromQueryRe           = regexp.MustCompile(`(?i)\bfrom:(?:"([^"]+)"|([^\s}]+))`)
 	hasAttachmentRe       = regexp.MustCompile(`(?i)\bhas:attachment\b`)
+	inInboxRe             = regexp.MustCompile(`(?i)\bin:inbox\b`)
+	inAnywhereRe          = regexp.MustCompile(`(?i)\bin:anywhere\b`)
 	stripQuerySyntaxRe    = regexp.MustCompile(`(?i)[{}]|\bin:(?:inbox|anywhere)\b|\bis:unread\b|\bnewer_than:\d+[dmy]\b|\bhas:attachment\b|\bfrom:(?:"[^"]+"|[^\s}]+)`)
 	unsupportedOperatorRe = regexp.MustCompile(`(?i)\b(?:is|in|label|has|category|after|before|older_than):[^\s}]+`)
 )
@@ -399,6 +406,19 @@ func extractFromQuery(query string) string {
 func normalizeArchiveTextQuery(query string) string {
 	text := stripQuerySyntaxRe.ReplaceAllString(query, " ")
 	return strings.TrimSpace(strings.Join(strings.Fields(text), " "))
+}
+
+func archiveSearchMailboxes(configured []string, spec archiveQuery) []string {
+	if !spec.InboxOnly {
+		return configured
+	}
+	var out []string
+	for _, mailbox := range configured {
+		if strings.EqualFold(strings.TrimSpace(mailbox), "INBOX") {
+			out = append(out, mailbox)
+		}
+	}
+	return out
 }
 
 type archiveRow struct {
@@ -435,7 +455,7 @@ func (r *Repository) searchArchive(ctx context.Context, spec archiveQuery, pageT
 
 	var all []archiveRow
 	seen := map[string]bool{}
-	for _, mailbox := range r.cfg.Mailboxes {
+	for _, mailbox := range archiveSearchMailboxes(r.cfg.Mailboxes, spec) {
 		mailbox = strings.TrimSpace(mailbox)
 		if mailbox == "" {
 			continue
@@ -473,7 +493,7 @@ func (r *Repository) searchArchive(ctx context.Context, spec archiveQuery, pageT
 			seen[id] = true
 			_ = r.state.RememberLocator(id, mailbox, uid)
 			st := r.state.Get(id)
-			if st.Trashed || (spec.DefaultView && (st.Archived || st.Read)) {
+			if st.Trashed || (spec.InboxOnly && st.Archived) || (spec.DefaultView && (st.Archived || st.Read)) {
 				continue
 			}
 			if spec.HasAttachment && len(detail.Attachments) == 0 {
@@ -641,13 +661,16 @@ func (r *Repository) canMutateArchiveMessage(ctx context.Context, messageID stri
 
 func detailToSummary(detail *gmail.MessageDetail, mailbox string, st MessageState) gmail.MessageSummary {
 	return gmail.MessageSummary{
-		ID:       detail.ID,
-		ThreadID: detail.ThreadID,
-		From:     detail.From,
-		Subject:  detail.Subject,
-		Date:     detail.Date,
-		Snippet:  snippetFromBody(detail.Body),
-		Labels:   labelsForArchiveMessage(mailbox, st),
+		ID:              detail.ID,
+		ThreadID:        detail.ThreadID,
+		From:            detail.From,
+		Subject:         detail.Subject,
+		Date:            detail.Date,
+		Snippet:         snippetFromBody(detail.Body),
+		Labels:          labelsForArchiveMessage(mailbox, st),
+		Mailbox:         mailbox,
+		HasAttachment:   len(detail.Attachments) > 0,
+		AttachmentCount: len(detail.Attachments),
 	}
 }
 

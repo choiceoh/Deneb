@@ -145,14 +145,17 @@ func gmailClientOrErr(deps GmailDeps, reqID string) (GmailClient, *protocol.Resp
 
 //deneb:wire
 type mailRowOut struct {
-	ID       string   `json:"id"`
-	ThreadID string   `json:"threadId"`
-	From     string   `json:"from"`
-	Subject  string   `json:"subject"`
-	Snippet  string   `json:"snippet"`
-	Date     string   `json:"date"`
-	IsUnread bool     `json:"isUnread"`
-	Labels   []string `json:"labels"`
+	ID              string   `json:"id"`
+	ThreadID        string   `json:"threadId"`
+	From            string   `json:"from"`
+	Subject         string   `json:"subject"`
+	Snippet         string   `json:"snippet"`
+	Date            string   `json:"date"`
+	IsUnread        bool     `json:"isUnread"`
+	Labels          []string `json:"labels"`
+	Mailbox         string   `json:"mailbox,omitempty"`
+	HasAttachment   bool     `json:"hasAttachment,omitempty"`
+	AttachmentCount int      `json:"attachmentCount,omitempty"`
 	// Priority is the glanceable heuristic tier ("urgent"/"attention",
 	// empty for routine mail) computed at list time by domain/mailpriority;
 	// PriorityHint names the strongest signals (e.g. "낙찰 · 마감 표현").
@@ -373,14 +376,17 @@ func gmailListRecent(deps GmailDeps, cache *listCache) rpcutil.HandlerFunc {
 		out := make([]mailRowOut, 0, len(results))
 		for _, m := range results {
 			row := mailRowOut{
-				ID:       m.ID,
-				ThreadID: m.ThreadID,
-				From:     m.From,
-				Subject:  m.Subject,
-				Snippet:  m.Snippet,
-				Date:     normalizeDate(m.Date),
-				IsUnread: hasUnreadLabel(m.Labels),
-				Labels:   nonNilLabels(m.Labels),
+				ID:              m.ID,
+				ThreadID:        m.ThreadID,
+				From:            m.From,
+				Subject:         m.Subject,
+				Snippet:         m.Snippet,
+				Date:            normalizeDate(m.Date),
+				IsUnread:        hasUnreadLabel(m.Labels),
+				Labels:          nonNilLabels(m.Labels),
+				Mailbox:         m.Mailbox,
+				HasAttachment:   m.HasAttachment || m.AttachmentCount > 0,
+				AttachmentCount: m.AttachmentCount,
 			}
 			row.Priority, row.PriorityHint = rowPriority(deps, m.ID, m.From, m.Subject, m.Snippet)
 			out = append(out, row)

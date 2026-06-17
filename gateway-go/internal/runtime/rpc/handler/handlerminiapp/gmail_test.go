@@ -162,7 +162,7 @@ func TestGmailListRecent_DefaultsAndShape(t *testing.T) {
 func TestGmailListRecent_NilLabelsSerializeAsEmptyArray(t *testing.T) {
 	client := &fakeGmailClient{
 		searchFn: func(_ context.Context, _ string, _ int) ([]gmail.MessageSummary, error) {
-			return []gmail.MessageSummary{{ID: "m1", Subject: "No labels"}}, nil
+			return []gmail.MessageSummary{{ID: "m1", Subject: "No labels", Mailbox: "Gmail", HasAttachment: true, AttachmentCount: 2}}, nil
 		},
 	}
 	h := gmailListRecent(depsFor(client), nil)
@@ -177,6 +177,9 @@ func TestGmailListRecent_NilLabelsSerializeAsEmptyArray(t *testing.T) {
 	}
 	if !strings.Contains(raw, `"labels":[]`) {
 		t.Fatalf("payload missing empty labels array: %s", raw)
+	}
+	if !strings.Contains(raw, `"mailbox":"Gmail"`) || !strings.Contains(raw, `"hasAttachment":true`) || !strings.Contains(raw, `"attachmentCount":2`) {
+		t.Fatalf("payload missing native row metadata: %s", raw)
 	}
 }
 

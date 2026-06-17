@@ -71,15 +71,15 @@ import kotlinx.datetime.todayIn
 import kotlin.time.Clock
 
 /**
- * Native inbox triage backed by `miniapp.gmail.list_recent`, in the Deneb idiom:
+ * Native mail triage backed by `miniapp.gmail.list_recent`, in the Deneb idiom:
  * ultralight view title, full-width hairline rules between rows, DenebType roles,
  * and time-bucketed section labels (오늘 / 어제 / 이번 주 / 이전). Pull to refresh;
  * long-press a row (with haptic) to multi-select; a flat bottom bar runs bulk
  * read / archive / trash, and "더 보기" pages through nextPageToken. Tapping a
  * row opens the detail screen. The search field runs a full-mailbox native mail
- * query (IME search submits; clearing it returns to the inbox view). Search and
+ * query (IME search submits; clearing it returns to the recent mail view). Search and
  * native filters stay out of the list until the top-right toolbar icons open
- * them, so the inbox starts directly at the messages. Controls (checkbox,
+ * them, so the mail tab starts directly at the messages. Controls (checkbox,
  * buttons, search field, pull refresh) stay Material; only the presentation is
  * Deneb.
  */
@@ -111,7 +111,7 @@ fun DenebMailScreen(
     var busy by remember { mutableStateOf(false) }
     var loadingMore by remember { mutableStateOf(false) }
     // Full-mailbox mail search: the field holds what the user types; activeQuery
-    // is the query the current list actually came from (null = default inbox).
+    // is the query the current list actually came from (null = default recent mail).
     var searchText by remember { mutableStateOf("") }
     var activeQuery by remember { mutableStateOf<String?>(null) }
     var searchVisible by remember { mutableStateOf(false) }
@@ -286,7 +286,7 @@ fun DenebMailScreen(
                                         query = searchText,
                                         onQueryChange = {
                                             searchText = it
-                                            // Clearing the field (✕ or backspace-to-empty) returns to the inbox.
+                                            // Clearing the field (✕ or backspace-to-empty) returns to recent mail.
                                             if (it.isBlank() && activeQuery != null) runSearch("")
                                         },
                                         placeholder = "전체 메일 검색 (키워드, from:…)",
@@ -493,6 +493,16 @@ internal fun MailRow(
                     modifier = Modifier.weight(1f),
                 )
             }
+            mailRowNativeMeta(message)?.let { meta ->
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    meta,
+                    style = DenebType.meta,
+                    color = if (message.hasAttachment) MaterialTheme.colorScheme.primary else denebHint(),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
             if (message.snippet.isNotBlank()) {
                 Spacer(Modifier.height(2.dp))
                 Text(
@@ -507,11 +517,11 @@ internal fun MailRow(
     }
 }
 
-/** One time bucket of the inbox, newest-first within the original list order. */
+/** One time bucket of the mail list, newest-first within the original list order. */
 internal data class MailSection(val label: String, val items: List<MailMessage>)
 
 /**
- * Buckets the (newest-first) inbox into 오늘 / 어제 / 이번 주 / 이전 sections for
+ * Buckets the (newest-first) mail list into 오늘 / 어제 / 이번 주 / 이전 sections for
  * the section labels. Unparseable dates land in 이전 so a bad timestamp can
  * never crash or reorder the list. Section order is fixed regardless of the
  * encounter order, so a stray out-of-order item cannot duplicate a header.
@@ -561,6 +571,23 @@ private fun senderName(from: String): String {
     return if (lt > 0) from.substring(0, lt).trim().trim('"') else from.trim()
 }
 
+internal fun mailRowNativeMeta(message: MailMessage): String? = buildList {
+    if (message.hasAttachment) {
+        val count = message.attachmentCount
+        add(if (count > 1) "첨부 $count" else "첨부")
+    }
+    mailRowMailboxLabel(message.mailbox)?.let { add(it) }
+}.joinToString(" · ").ifBlank { null }
+
+private fun mailRowMailboxLabel(mailbox: String): String? {
+    val normalized = mailbox.trim()
+    if (normalized.isBlank() || normalized.equals("INBOX", ignoreCase = true)) return null
+    return when {
+        normalized.equals("Gmail", ignoreCase = true) -> "Gmail 보관함"
+        else -> normalized
+    }
+}
+
 /**
  * UTC ISO-8601 from the gateway (e.g. "2026-05-30T12:41:31Z") -> local "MM-dd HH:mm".
  * The gateway sends UTC (gmail.go normalizeDate uses t.UTC()), so we MUST convert to the
@@ -576,10 +603,11 @@ internal fun shortDate(date: String): String = runCatching {
 private data class MailNativeFilter(val label: String, val query: String?)
 
 private fun mailNativeFilters(offlineCapable: Boolean): List<MailNativeFilter> = buildList {
-    add(MailNativeFilter("받은함", null))
+    add(MailNativeFilter(if (offlineCapable) "전체" else "최근", null))
+    add(MailNativeFilter("받은함", "in:inbox newer_than:30d"))
+    add(MailNativeFilter("오늘", "newer_than:1d"))
     add(MailNativeFilter("첨부", "has:attachment"))
-    add(MailNativeFilter("7일", "{in:inbox is:unread} newer_than:7d"))
-    if (offlineCapable) add(MailNativeFilter("전체", "in:anywhere"))
+    add(MailNativeFilter("7일", "newer_than:7d"))
 }
 
 @Composable

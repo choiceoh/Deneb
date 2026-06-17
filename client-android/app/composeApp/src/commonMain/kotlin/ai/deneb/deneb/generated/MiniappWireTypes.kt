@@ -155,6 +155,9 @@ data class MailRowOut(
     val date: String = "",
     val isUnread: Boolean = false,
     val labels: List<String> = emptyList(),
+    val mailbox: String = "",
+    val hasAttachment: Boolean = false,
+    val attachmentCount: Int = 0,
     val priority: String = "",
     val priorityHint: String = "",
 )
