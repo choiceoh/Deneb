@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -277,6 +278,18 @@ func prepareContextAndPrompt(
 			ctxFiles = prompt.LoadContextFiles(workspaceDir, prompt.WithSessionSnapshot(params.SessionKey))
 		}
 
+		// Operator-edited 업무 persona (Settings prompt corner). Only the 업무 path
+		// uses it (챗봇 keeps its neutral identity); "" override → default persona
+		// renders, byte-identical to before. PersonaCacheKey (content hash) keys
+		// the Static cache per persona so an edit invalidates only its own entry.
+		var personaText, personaCacheKey string
+		if deps.personaOverrideFn != nil && !chatbot {
+			if ov := strings.TrimSpace(deps.personaOverrideFn()); ov != "" {
+				personaText = ov
+				personaCacheKey = prompt.PersonaCacheKeyFor(ov)
+			}
+		}
+
 		spp := prompt.SystemPromptParams{
 			WorkspaceDir:       workspaceDir,
 			ToolDefs:           toolDefs,
@@ -293,6 +306,8 @@ func prepareContextAndPrompt(
 			TopicKnowledge:     topicKnowledge,
 			TopicCacheKey:      topicCacheKey,
 			TopicKnowledgePath: topicKnowledgePath,
+			PersonaText:        personaText,
+			PersonaCacheKey:    personaCacheKey,
 		}
 
 		systemPrompt = llm.SystemBlocks(prompt.BuildSystemPromptBlocks(spp))

@@ -26,6 +26,27 @@ const SilentReplyToken = "NO_REPLY"
 // constant — keep them as a single source of truth.
 const HeartbeatTriggerPrefix = "[시스템 하트비트]"
 
+// PromptIDSystemPersona is the prompt-store ID for the editable Nev identity +
+// 역할 (chief-of-staff role) text that opens the 업무 (non-chatbot) Static block.
+// The Settings prompt corner edits it; run_prepare passes any override as
+// SystemPromptParams.PersonaText with a content-hash PersonaCacheKey so the
+// Static cache entry is keyed per persona (vLLM APC stays byte-stable within a
+// session, and an edit invalidates only its own entry). No override →
+// PersonaText "" → the DefaultPersona bytes and the unchanged cache key keep the
+// existing Static entry. The server registry (server/prompt_store.go) uses this
+// ID + DefaultPersona, so the two stay a single source of truth.
+const PromptIDSystemPersona = "system.persona"
+
+// DefaultPersona is the default identity + 역할 text rendered at the top of the
+// 업무 Static block. It is the single source of truth for both the rendered
+// default (buildPromptSections) and the prompt-store registry default
+// (server/prompt_store.go) so "reset" restores byte-identical behavior. Edits
+// here must keep the concatenation byte-identical to the prior three inline
+// WriteString calls (Identity, "## 역할" header, role body).
+const DefaultPersona = "You are Nev — a personal assistant running inside Deneb (https://github.com/choiceoh/deneb). Deneb is a single-user AI agent platform on DGX Spark.\n\n" +
+	"## 역할\n" +
+	"당신은 비서실장형 단일 에이전트다 — 분석가와 비서를 분리하지 않는다. **업무분석**(메일·프로젝트·인물·거래의 맥락을 합성해 \"왜 지금 중요한가\"와 리스크·기한)과 **업무비서**(일정·미팅 준비·임박 알림으로 \"언제까지 무엇을\")를 한 머리로 수행한다. 좋은 답에는 분석의 '왜'와 비서의 '언제까지'가 한 응답에 함께 담긴다 — 둘을 분리된 응답이나 탭으로 가르지 마라.\n\n"
+
 // ToolDef describes a tool entry for the system prompt (name only; used to
 // build the compact tool list and conditional prompt sections).
 // This is a minimal view of chat.ToolDef — only the fields needed for prompt
@@ -110,6 +131,20 @@ type SystemPromptParams struct {
 	// from the topic key, so the Static cache key needs no extra input; frozen
 	// per session together with TopicKnowledge.
 	TopicKnowledgePath string
+
+	// PersonaText overrides the default Nev identity + 역할 text at the top of the
+	// 업무 (non-chatbot) Static block, edited via the Settings prompt corner
+	// (PromptIDSystemPersona). Empty = use DefaultPersona (byte-identical to
+	// before). Only the 업무 path consumes it; 챗봇 keeps its neutral identity.
+	// It is byte-stable between edits (rare operator action) so the Static cache
+	// holds; PersonaCacheKey keys the cache per persona content.
+	PersonaText string
+	// PersonaCacheKey is the sha256[:12] of an edited PersonaText, folded into
+	// buildStaticCacheKey so (a) an edited persona never shares the default
+	// persona's Static cache entry and (b) editing the persona invalidates it.
+	// Empty = no override → the Static cache key stays byte-identical to before
+	// (the default-persona entry is preserved). Use PersonaCacheKeyFor to derive.
+	PersonaCacheKey string
 }
 
 // RuntimeInfo describes the current runtime environment for the system prompt.

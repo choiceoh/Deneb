@@ -49,12 +49,12 @@ func TestStaticCacheKeyIgnoresSkills(t *testing.T) {
 	tools := []ToolDef{{Name: "read"}, {Name: "exec"}, {Name: "wiki"}}
 	deferred := []DeferredToolInfo{{Name: "gmail", Description: "Gmail"}}
 
-	keyNoSkills := buildStaticCacheKey(tools, deferred, "", false)
+	keyNoSkills := buildStaticCacheKey(tools, deferred, "", "", false)
 
 	// Same tools + deferred list; the SkillsPrompt is NOT an input to this
 	// function. Calling again must return the identical key regardless of
 	// what skills are active.
-	keyAgain := buildStaticCacheKey(tools, deferred, "", false)
+	keyAgain := buildStaticCacheKey(tools, deferred, "", "", false)
 	if keyNoSkills != keyAgain {
 		t.Fatalf("buildStaticCacheKey not deterministic: %q vs %q", keyNoSkills, keyAgain)
 	}
@@ -134,10 +134,10 @@ func TestStaticCacheKeyVariesByTopic(t *testing.T) {
 	tools := []ToolDef{{Name: "read"}, {Name: "exec"}}
 	deferred := []DeferredToolInfo{{Name: "gmail", Description: "Gmail"}}
 
-	base := buildStaticCacheKey(tools, deferred, "", false)
-	coding := buildStaticCacheKey(tools, deferred, "coding:hashA", false)
-	codingEdited := buildStaticCacheKey(tools, deferred, "coding:hashB", false)
-	work := buildStaticCacheKey(tools, deferred, "work:hashA", false)
+	base := buildStaticCacheKey(tools, deferred, "", "", false)
+	coding := buildStaticCacheKey(tools, deferred, "coding:hashA", "", false)
+	codingEdited := buildStaticCacheKey(tools, deferred, "coding:hashB", "", false)
+	work := buildStaticCacheKey(tools, deferred, "work:hashA", "", false)
 
 	if coding == base {
 		t.Errorf("topic key must differ from the topic-less key")
@@ -157,7 +157,7 @@ func TestStaticCacheKeyTopicEmptyEqualsLegacy(t *testing.T) {
 	tools := []ToolDef{{Name: "read"}, {Name: "wiki"}}
 	deferred := []DeferredToolInfo{{Name: "gmail", Description: "Gmail"}}
 
-	withEmpty := buildStaticCacheKey(tools, deferred, "", false)
+	withEmpty := buildStaticCacheKey(tools, deferred, "", "", false)
 	if strings.Contains(withEmpty, "|topic=") {
 		t.Errorf("empty topic must not append a topic suffix: %q", withEmpty)
 	}
@@ -193,5 +193,104 @@ func TestTopicKnowledgeOnlyInStaticBlock(t *testing.T) {
 	}
 	if strings.Contains(dynamicText, marker) {
 		t.Errorf("topic knowledge leaked into DYNAMIC block — causes cache miss every turn")
+	}
+}
+
+// TestPersonaDefaultByteIdentical asserts that with no persona override the 업무
+// Static block still opens with DefaultPersona verbatim and the cache key adds
+// no "|persona=" suffix — so the common (unedited) case is a zero-regression
+// byte-identical match to the pre-feature behavior, preserving the existing
+// vLLM APC / Anthropic Static cache entry.
+func TestPersonaDefaultByteIdentical(t *testing.T) {
+	tools := []ToolDef{{Name: "read"}, {Name: "persona_test_sentinel"}}
+	params := SystemPromptParams{
+		WorkspaceDir: "/tmp",
+		ToolDefs:     tools,
+	}
+	staticText, _, _ := buildPromptSections(params)
+	if !strings.HasPrefix(staticText, DefaultPersona) {
+		t.Errorf("default 업무 Static block must open with DefaultPersona verbatim (byte-identity); got prefix %q", staticText[:min(len(staticText), 120)])
+	}
+	key := buildStaticCacheKey(tools, nil, "", "", false)
+	if strings.Contains(key, "|persona=") {
+		t.Errorf("no override must not append a persona suffix: %q", key)
+	}
+}
+
+// TestPersonaOverrideInStaticBlock asserts an override replaces the default
+// identity/role text in the Static block (and only there), and that its content
+// hash gives the Static cache key a distinct "|persona=" slot so an edited
+// persona never reuses the default entry.
+func TestPersonaOverrideInStaticBlock(t *testing.T) {
+	tools := []ToolDef{{Name: "read"}, {Name: "persona_test_sentinel"}}
+	marker := "DENEB_PERSONA_SENTINEL_QQQ"
+	override := "너는 커스텀 페르소나다. " + marker
+	personaKey := PersonaCacheKeyFor(override)
+	params := SystemPromptParams{
+		WorkspaceDir:    "/tmp",
+		ToolDefs:        tools,
+		PersonaText:     override,
+		PersonaCacheKey: personaKey,
+	}
+	staticText, semiStaticText, dynamicText := buildPromptSections(params)
+	if !strings.Contains(staticText, marker) {
+		t.Errorf("persona override missing from STATIC block — not delivered to model")
+	}
+	if strings.Contains(staticText, "비서실장형 단일 에이전트") {
+		t.Errorf("default role text must be replaced by the override, but it is still present")
+	}
+	if strings.Contains(semiStaticText, marker) || strings.Contains(dynamicText, marker) {
+		t.Errorf("persona override leaked out of the STATIC block")
+	}
+	key := buildStaticCacheKey(tools, nil, "", personaKey, false)
+	if !strings.Contains(key, "|persona="+personaKey) {
+		t.Errorf("override must add its content-hash persona suffix to the cache key: %q", key)
+	}
+}
+
+// TestPersonaIgnoredForChatbot asserts the 챗봇 (general-assistant) path never
+// consumes the 업무 persona override — it keeps its neutral identity, since the
+// prompt corner edits the 업무 persona only.
+func TestPersonaIgnoredForChatbot(t *testing.T) {
+	tools := []ToolDef{{Name: "read"}, {Name: "persona_cb_sentinel"}}
+	marker := "DENEB_PERSONA_SENTINEL_CB"
+	params := SystemPromptParams{
+		WorkspaceDir:    "/tmp",
+		ToolDefs:        tools,
+		Chatbot:         true,
+		PersonaText:     "업무 페르소나 " + marker,
+		PersonaCacheKey: PersonaCacheKeyFor("업무 페르소나 " + marker),
+	}
+	staticText, _, _ := buildPromptSections(params)
+	if strings.Contains(staticText, marker) {
+		t.Errorf("챗봇 path must not render the 업무 persona override")
+	}
+	if !strings.Contains(staticText, "helpful, knowledgeable AI assistant") {
+		t.Errorf("챗봇 path must keep its neutral general-assistant identity")
+	}
+}
+
+// TestPersonaCacheKeyFor asserts the persona hash helper: empty for blank text,
+// deterministic, distinct per content, and 12 hex chars (matching the topic
+// hash scheme).
+func TestPersonaCacheKeyFor(t *testing.T) {
+	if PersonaCacheKeyFor("") != "" || PersonaCacheKeyFor("   \n\t ") != "" {
+		t.Errorf("blank persona text must yield an empty cache key")
+	}
+	a := PersonaCacheKeyFor("페르소나 A")
+	b := PersonaCacheKeyFor("페르소나 B")
+	if a == "" || b == "" || a == b {
+		t.Errorf("distinct persona texts must yield distinct non-empty keys: %q vs %q", a, b)
+	}
+	if a != PersonaCacheKeyFor("페르소나 A") {
+		t.Errorf("persona cache key must be deterministic")
+	}
+	if len(a) != 12 {
+		t.Errorf("persona cache key must be 12 hex chars (topic-hash scheme), got %d: %q", len(a), a)
+	}
+	// Leading/trailing whitespace must not change the key (TrimSpace parity with
+	// the override render path).
+	if a != PersonaCacheKeyFor("  페르소나 A  ") {
+		t.Errorf("persona cache key must be whitespace-insensitive (TrimSpace)")
 	}
 }

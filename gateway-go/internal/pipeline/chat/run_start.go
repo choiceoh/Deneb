@@ -167,6 +167,7 @@ func (h *Handler) buildRunDeps() runDeps {
 		skillUsageRecorder: h.skillUsageRecorder,
 		topicResolver:      h.topicResolver,
 		calendarGlanceFn:   h.calendarGlanceFn,
+		personaOverrideFn:  h.personaOverrideFn,
 
 		// Atomic snapshot of channel callbacks (reply, media, typing, etc.).
 		callbacks: h.Snapshot(),
