@@ -250,6 +250,26 @@ func (s *Server) makeMailFeedDeliverySink() func([]string) {
 	}
 }
 
+func (s *Server) makeMailAnalysisFailureSink() func(*gmail.MessageDetail, error) {
+	workStore := mailwork.New(filepath.Join(s.denebDir, "mail_work_state.json"))
+	return func(msg *gmail.MessageDetail, err error) {
+		if msg == nil || strings.TrimSpace(msg.ID) == "" {
+			return
+		}
+		if _, werr := workStore.MarkAnalysisFailed(mailwork.MessageInput{
+			ID:              msg.ID,
+			ThreadID:        msg.ThreadID,
+			From:            msg.From,
+			Subject:         msg.Subject,
+			Date:            msg.Date,
+			HasAttachment:   len(msg.Attachments) > 0,
+			AttachmentCount: len(msg.Attachments),
+		}, err); werr != nil {
+			s.logger.Warn("mail workflow failure 상태 저장 실패", "id", msg.ID, "error", werr)
+		}
+	}
+}
+
 // fileDealFromMail files a structured business-document extraction onto its
 // counterparty's 거래 wiki page. Silent and best-effort: no push, deduped by
 // the mail id, failures logged only. nil deal (non-deal mail) is a no-op.

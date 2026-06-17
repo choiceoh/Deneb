@@ -2,6 +2,7 @@ package gmailpoll
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -64,6 +65,11 @@ type Config struct {
 	// to the configured Notifier without error. The server uses it to mark the
 	// corresponding per-message workflow rows as feed-delivered.
 	OnDelivered func(messageIDs []string)
+
+	// OnAnalysisFailed, if set, is invoked for a message that could not be
+	// analyzed. Polling keeps such messages retryable when appropriate; this
+	// callback is only for native workflow observability.
+	OnAnalysisFailed func(msg *gmail.MessageDetail, err error)
 
 	// ProjectsFn lists registered project wiki pages so analysis can cite
 	// related projects by real path. Forwarded to PipelineDeps. nil = none.
@@ -276,6 +282,13 @@ func (s *Service) poll(ctx context.Context, client *gmail.Client) error {
 		detail, err := client.GetMessage(ctx, summary.ID)
 		if err != nil {
 			s.log.Warn("메일 본문 조회 실패", "id", summary.ID, "error", err)
+			s.markAnalysisFailed(&gmail.MessageDetail{
+				ID:       summary.ID,
+				ThreadID: summary.ThreadID,
+				From:     summary.From,
+				Subject:  summary.Subject,
+				Date:     summary.Date,
+			}, err)
 			pollState.markSeen(summary.ID)
 			s.saveState(pollState)
 			continue
@@ -302,10 +315,12 @@ func (s *Service) poll(ctx context.Context, client *gmail.Client) error {
 		// per-email analyses, which are persisted below; only the all-failed
 		// case bails here.
 		if len(items) == 0 {
+			s.markSkippedAnalyses(details, nil, err)
 			return nil
 		}
 		report = "(분석 실패)"
 	}
+	s.markSkippedAnalyses(details, items, nil)
 
 	// Auto-archive substantive attachments to Dropbox (best-effort). The note is
 	// added to the notification only (kept out of the diary so durable wiki
@@ -450,6 +465,7 @@ func (s *Service) IngestMessage(ctx context.Context, msg *gmail.MessageDetail, a
 	}
 	res, err := AnalyzeEmailPipeline(ctx, deps, msg)
 	if err != nil {
+		s.markAnalysisFailed(msg, err)
 		return AnalysisResult{}, err
 	}
 	if s.cfg.OnAnalyzed != nil {
@@ -480,6 +496,33 @@ func (s *Service) IngestMessage(ctx context.Context, msg *gmail.MessageDetail, a
 func (s *Service) saveState(state *PollState) {
 	if err := s.state.Save(state); err != nil {
 		s.log.Error("폴링 상태 저장 실패", "error", err)
+	}
+}
+
+func (s *Service) markSkippedAnalyses(details []*gmail.MessageDetail, items []BatchItem, err error) {
+	if s.cfg.OnAnalysisFailed == nil || len(details) == 0 {
+		return
+	}
+	ok := make(map[string]bool, len(items))
+	for _, it := range items {
+		if it.Msg != nil && it.Msg.ID != "" {
+			ok[it.Msg.ID] = true
+		}
+	}
+	if err == nil {
+		err = errors.New("individual email analysis failed")
+	}
+	for _, msg := range details {
+		if msg == nil || msg.ID == "" || ok[msg.ID] {
+			continue
+		}
+		s.markAnalysisFailed(msg, err)
+	}
+}
+
+func (s *Service) markAnalysisFailed(msg *gmail.MessageDetail, err error) {
+	if s.cfg.OnAnalysisFailed != nil {
+		s.cfg.OnAnalysisFailed(msg, err)
 	}
 }
 
