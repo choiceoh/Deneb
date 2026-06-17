@@ -24,6 +24,7 @@ func TestStoreRememberAndMarkAnalysisDone(t *testing.T) {
 	if _, err := store.MarkAnalysisDone(AnalysisInput{
 		MessageInput:          MessageInput{ID: "m1", Subject: "견적 요청"},
 		Quality:               "attention",
+		DerivedCountsKnown:    true,
 		CalendarProposalCount: 1,
 		TodoCount:             2,
 		DurationMs:            321,
@@ -50,7 +51,11 @@ func TestStoreRememberAndMarkAnalysisDone(t *testing.T) {
 
 func TestStoreSummary(t *testing.T) {
 	store := New(filepath.Join(t.TempDir(), "mail_work_state.json"))
-	_, _ = store.MarkAnalysisDone(AnalysisInput{MessageInput: MessageInput{ID: "done"}, CalendarProposalCount: 1})
+	_, _ = store.MarkAnalysisDone(AnalysisInput{
+		MessageInput:          MessageInput{ID: "done"},
+		DerivedCountsKnown:    true,
+		CalendarProposalCount: 1,
+	})
 	_, _ = store.MarkAnalysisAnalyzing(MessageInput{ID: "running"})
 	_, _ = store.MarkAnalysisFailed(MessageInput{ID: "failed"}, errors.New("provider down"))
 	_, _ = store.MarkFeedCreated("done")
@@ -65,6 +70,70 @@ func TestStoreSummary(t *testing.T) {
 	}
 	if got.CalendarCandidates != 1 || got.TodoCandidates != 2 {
 		t.Fatalf("derived summary = %+v", got)
+	}
+}
+
+func TestStoreMarkAnalysisDoneReplacesKnownDerivedCounts(t *testing.T) {
+	store := New(filepath.Join(t.TempDir(), "mail_work_state.json"))
+
+	if _, err := store.MarkAnalysisDone(AnalysisInput{
+		MessageInput:          MessageInput{ID: "m1"},
+		DerivedCountsKnown:    true,
+		CalendarProposalCount: 2,
+		TodoCount:             1,
+	}); err != nil {
+		t.Fatalf("seed MarkAnalysisDone: %v", err)
+	}
+	if _, err := store.MarkAnalysisDone(AnalysisInput{
+		MessageInput:       MessageInput{ID: "m1"},
+		DerivedCountsKnown: true,
+	}); err != nil {
+		t.Fatalf("replacement MarkAnalysisDone: %v", err)
+	}
+
+	got := store.Get("m1")
+	if got.CalendarProposalCount != 0 || got.TodoCount != 0 {
+		t.Fatalf("known zero counts should replace stale derived counts: %+v", got)
+	}
+}
+
+func TestStoreMarkAnalysisDonePreservesUnknownDerivedCounts(t *testing.T) {
+	store := New(filepath.Join(t.TempDir(), "mail_work_state.json"))
+
+	if _, err := store.MarkAnalysisDone(AnalysisInput{
+		MessageInput:          MessageInput{ID: "m1"},
+		DerivedCountsKnown:    true,
+		CalendarProposalCount: 1,
+		TodoCount:             2,
+	}); err != nil {
+		t.Fatalf("seed MarkAnalysisDone: %v", err)
+	}
+	if _, err := store.MarkAnalysisDone(AnalysisInput{
+		MessageInput: MessageInput{ID: "m1"},
+		Quality:      "routine",
+	}); err != nil {
+		t.Fatalf("cache-hydration MarkAnalysisDone: %v", err)
+	}
+
+	got := store.Get("m1")
+	if got.CalendarProposalCount != 1 || got.TodoCount != 2 {
+		t.Fatalf("unknown counts should preserve existing downstream state: %+v", got)
+	}
+}
+
+func TestStoreMarkDerivedCountsReplacesCounts(t *testing.T) {
+	store := New(filepath.Join(t.TempDir(), "mail_work_state.json"))
+
+	if _, err := store.MarkDerivedCounts("m1", 3, 2); err != nil {
+		t.Fatalf("seed MarkDerivedCounts: %v", err)
+	}
+	if _, err := store.MarkDerivedCounts("m1", 0, 0); err != nil {
+		t.Fatalf("replacement MarkDerivedCounts: %v", err)
+	}
+
+	got := store.Get("m1")
+	if got.CalendarProposalCount != 0 || got.TodoCount != 0 {
+		t.Fatalf("derived counts should be exact latest values: %+v", got)
 	}
 }
 
