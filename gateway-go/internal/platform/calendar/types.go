@@ -31,6 +31,10 @@ type Event struct {
 	Source      string
 	SourceLabel string
 	Kind        string
+	// Docs lists the originating mail's document attachments (견적서/계약서 등
+	// filenames) so meeting prep can pull the documents themselves. Empty for
+	// Google and plain manual events.
+	Docs []string
 }
 
 // Attendee is a calendar participant. Email is normalized to lowercase.

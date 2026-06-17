@@ -126,6 +126,7 @@ func calendarProposalsAccept(deps CalendarDeps) rpcutil.HandlerFunc {
 			Source:      proposalEventSource(prop.Source),
 			SourceLabel: prop.SourceSubject,
 			Kind:        prop.Kind,
+			Docs:        prop.Docs,
 		})
 		if cerr != nil {
 			_, _ = deps.Proposals.Decide(p.ID, calprop.StatusPending, "") // release so it can be retried

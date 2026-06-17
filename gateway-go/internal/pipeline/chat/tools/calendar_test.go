@@ -397,6 +397,22 @@ func TestCalendar_PrepPullsLinkedContext(t *testing.T) {
 	}
 }
 
+func TestCalendar_PrepShowsDocs(t *testing.T) {
+	local := newTestLocalCal(t)
+	start := time.Now().Add(3 * time.Hour)
+	ev, err := local.Create(localcal.CreateInput{
+		Summary: "ZTT 미팅", Start: start, End: start.Add(time.Hour),
+		Source: "mail:abc", Kind: "meeting", Docs: []string{"ZTT_견적서.pdf"},
+	})
+	if err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	out := callCal(t, &toolctx.CalendarDeps{Local: local}, map[string]any{"action": "prep", "id": ev.ID})
+	if !strings.Contains(out, "관련 문서") || !strings.Contains(out, "ZTT_견적서.pdf") || !strings.Contains(out, "dropbox") {
+		t.Errorf("prep should surface linked documents:\n%s", out)
+	}
+}
+
 func TestCalendar_PrepSkipsAllDayForNextMeeting(t *testing.T) {
 	local := newTestLocalCal(t)
 	loc := calDisplayLoc()

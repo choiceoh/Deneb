@@ -40,9 +40,10 @@ type Proposal struct {
 
 	// Source is a stable provenance/dedup key (e.g. "mail:<msgID>|<title>"),
 	// so re-analysis of the same message never piles up duplicate proposals.
-	Source        string `json:"source,omitempty"`
-	SourceSubject string `json:"sourceSubject,omitempty"`
-	SourceFrom    string `json:"sourceFrom,omitempty"`
+	Source        string   `json:"source,omitempty"`
+	SourceSubject string   `json:"sourceSubject,omitempty"`
+	SourceFrom    string   `json:"sourceFrom,omitempty"`
+	Docs          []string `json:"docs,omitempty"` // originating mail's document attachments
 
 	Status          Status `json:"status"`
 	CalendarEventID string `json:"calendarEventId,omitempty"` // set when accepted
@@ -59,6 +60,7 @@ type CreateInput struct {
 	Source        string
 	SourceSubject string
 	SourceFrom    string
+	Docs          []string
 }
 
 // Store is a JSON-file-backed proposal store. Safe for concurrent use.
@@ -177,6 +179,7 @@ func (s *Store) CreateIfAbsent(in CreateInput) (Proposal, bool, error) {
 		Source:        in.Source,
 		SourceSubject: in.SourceSubject,
 		SourceFrom:    in.SourceFrom,
+		Docs:          in.Docs,
 		Status:        StatusPending,
 		CreatedAtMs:   nowMs(),
 	}

@@ -32,7 +32,7 @@ func (s *Server) autoProposeCalendarFromMail(msg *gmail.MessageDetail, items []g
 	if msg == nil {
 		return 0
 	}
-	inputs := calendarProposalsFromMail(msg.ID, msg.Subject, msg.From, items, deal, time.Now())
+	inputs := calendarProposalsFromMail(msg.ID, msg.Subject, msg.From, documentAttachmentNames(msg.Attachments), items, deal, time.Now())
 	if len(inputs) == 0 {
 		return 0
 	}
@@ -60,7 +60,7 @@ func (s *Server) autoProposeCalendarFromMail(msg *gmail.MessageDetail, items []g
 
 // calendarProposalsFromMail is the pure decision: pick the schedule-worthy items
 // and build a calprop.CreateInput for each. Exposed for unit testing.
-func calendarProposalsFromMail(msgID, subject, from string, items []gmailpoll.ActionItem, deal *gmailpoll.DealInfo, now time.Time) []calprop.CreateInput {
+func calendarProposalsFromMail(msgID, subject, from string, docs []string, items []gmailpoll.ActionItem, deal *gmailpoll.DealInfo, now time.Time) []calprop.CreateInput {
 	var out []calprop.CreateInput
 
 	for _, it := range items {
@@ -92,6 +92,7 @@ func calendarProposalsFromMail(msgID, subject, from string, items []gmailpoll.Ac
 			Source:        "mail:" + msgID + "|" + title,
 			SourceSubject: subject,
 			SourceFrom:    from,
+			Docs:          docs,
 		})
 	}
 
@@ -105,6 +106,7 @@ func calendarProposalsFromMail(msgID, subject, from string, items []gmailpoll.Ac
 				Source:        "mail:" + msgID + "|deal-due",
 				SourceSubject: subject,
 				SourceFrom:    from,
+				Docs:          docs,
 			})
 		}
 	}
@@ -188,4 +190,45 @@ func dealDeadlineTitle(deal *gmailpoll.DealInfo) string {
 	}
 	parts = append(parts, "결제 기한")
 	return strings.Join(parts, " ")
+}
+
+// documentAttachmentNames returns the filenames of an email's document-like
+// attachments (견적서/계약서/세금계산서 등) so a calendar event generated from the mail
+// can point meeting prep at the actual documents. Images/logos/signatures and
+// media are skipped; the list is capped so a mail with many files stays bounded.
+func documentAttachmentNames(atts []gmail.AttachmentInfo) []string {
+	const maxDocs = 5
+	var out []string
+	for _, a := range atts {
+		name := strings.TrimSpace(a.Filename)
+		if name == "" || !isDocumentAttachment(a.MimeType, name) {
+			continue
+		}
+		out = append(out, name)
+		if len(out) >= maxDocs {
+			break
+		}
+	}
+	return out
+}
+
+// isDocumentAttachment reports whether an attachment is a business document
+// (by MIME or extension), not an inline image / logo / media file.
+func isDocumentAttachment(mime, filename string) bool {
+	m := strings.ToLower(strings.TrimSpace(mime))
+	if strings.HasPrefix(m, "image/") || strings.HasPrefix(m, "video/") || strings.HasPrefix(m, "audio/") {
+		return false
+	}
+	lf := strings.ToLower(filename)
+	for _, ext := range []string{".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".hwp", ".hwpx", ".csv", ".txt"} {
+		if strings.HasSuffix(lf, ext) {
+			return true
+		}
+	}
+	for _, frag := range []string{"pdf", "word", "excel", "spreadsheet", "presentation", "officedocument", "hwp"} {
+		if strings.Contains(m, frag) {
+			return true
+		}
+	}
+	return false
 }
