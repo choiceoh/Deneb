@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -155,6 +156,27 @@ func TestGmailListRecent_DefaultsAndShape(t *testing.T) {
 	}
 	if date, _ := row["date"].(string); date == "" {
 		t.Errorf("date missing/empty: %v", row["date"])
+	}
+}
+
+func TestGmailListRecent_NilLabelsSerializeAsEmptyArray(t *testing.T) {
+	client := &fakeGmailClient{
+		searchFn: func(_ context.Context, _ string, _ int) ([]gmail.MessageSummary, error) {
+			return []gmail.MessageSummary{{ID: "m1", Subject: "No labels"}}, nil
+		},
+	}
+	h := gmailListRecent(depsFor(client), nil)
+
+	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.list_recent", nil))
+	if resp == nil || !resp.OK {
+		t.Fatalf("response not OK: %+v", resp)
+	}
+	raw := string(resp.Payload)
+	if strings.Contains(raw, `"labels":null`) {
+		t.Fatalf("payload contains labels:null: %s", raw)
+	}
+	if !strings.Contains(raw, `"labels":[]`) {
+		t.Fatalf("payload missing empty labels array: %s", raw)
 	}
 }
 

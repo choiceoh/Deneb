@@ -300,6 +300,13 @@ func rowPriority(deps GmailDeps, msgID, from, subject, snippet string) (string, 
 	return deps.Priority(from, subject, snippet)
 }
 
+func nonNilLabels(labels []string) []string {
+	if labels == nil {
+		return []string{}
+	}
+	return labels
+}
+
 func gmailListRecent(deps GmailDeps, cache *listCache) rpcutil.HandlerFunc {
 	type params struct {
 		Query     string `json:"query,omitempty"`
@@ -373,7 +380,7 @@ func gmailListRecent(deps GmailDeps, cache *listCache) rpcutil.HandlerFunc {
 				Snippet:  m.Snippet,
 				Date:     normalizeDate(m.Date),
 				IsUnread: hasUnreadLabel(m.Labels),
-				Labels:   m.Labels,
+				Labels:   nonNilLabels(m.Labels),
 			}
 			row.Priority, row.PriorityHint = rowPriority(deps, m.ID, m.From, m.Subject, m.Snippet)
 			out = append(out, row)
@@ -447,7 +454,7 @@ func gmailGet(deps GmailDeps) rpcutil.HandlerFunc {
 			Date:        normalizeDate(msg.Date),
 			Body:        body,
 			BodyTotal:   total,
-			Labels:      msg.Labels,
+			Labels:      nonNilLabels(msg.Labels),
 			Attachments: atts,
 		})
 	}
