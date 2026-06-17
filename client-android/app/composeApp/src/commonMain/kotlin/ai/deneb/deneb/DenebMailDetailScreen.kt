@@ -114,6 +114,18 @@ fun DenebMailDetailScreen(
     var actionMsg by remember(messageId) { mutableStateOf<String?>(null) }
     var loadingFullBody by remember(messageId) { mutableStateOf(false) }
 
+    fun mergeWorkState(state: MailWorkState) {
+        if (state.analysisStatus.isBlank() &&
+            state.feedStatus.isBlank() &&
+            state.calendarProposalCount == 0 &&
+            state.todoCount == 0 &&
+            state.hint.isBlank()
+        ) {
+            return
+        }
+        detail = detail?.copy(workState = state)
+    }
+
     suspend fun load() {
         loadFailed = false
         detail = null
@@ -128,6 +140,7 @@ fun DenebMailDetailScreen(
             if (d != null) {
                 client.markMailRead(messageId)
                 analysis = analysisDeferred.await()
+                analysis?.let { mergeWorkState(it.workState) }
             } else {
                 analysisDeferred.cancel()
             }
@@ -142,7 +155,13 @@ fun DenebMailDetailScreen(
             // An explicit run is a request to *see* the result — pop the card open.
             analysisExpanded = true
             val a = client.analyzeMail(messageId, force)
-            if (a != null) analysis = a else analysisFailed = true
+            if (a != null) {
+                analysis = a
+                mergeWorkState(a.workState)
+            } else {
+                analysisFailed = true
+                client.fetchMailDetail(messageId)?.let { detail = it }
+            }
             analyzing = false
         }
     }
@@ -175,6 +194,7 @@ fun DenebMailDetailScreen(
                 color = denebHint(),
             )
         }
+        MailWorkflowStatus(mail.workState)
         Spacer(Modifier.height(16.dp))
 
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -480,4 +500,51 @@ fun DenebMailDetailScreen(
             }
         }
     }
+}
+
+@Composable
+private fun MailWorkflowStatus(state: MailWorkState) {
+    val parts = mailWorkflowStatusParts(state)
+    if (parts.isEmpty()) return
+    Spacer(Modifier.height(6.dp))
+    Text(
+        parts.joinToString(" · "),
+        style = DenebType.meta,
+        color = if (state.analysisStatus == "failed") MaterialTheme.colorScheme.error else denebHint(),
+        maxLines = 2,
+        overflow = TextOverflow.Ellipsis,
+    )
+    if (state.analysisStatus == "failed" && state.hint.isNotBlank()) {
+        Spacer(Modifier.height(2.dp))
+        Text(
+            state.hint,
+            style = DenebType.meta,
+            color = MaterialTheme.colorScheme.error,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+private fun mailWorkflowStatusParts(state: MailWorkState): List<String> = buildList {
+    when (state.analysisStatus) {
+        "failed" -> add("분석 실패")
+        "analyzing" -> add("분석 중")
+        "queued" -> add("분석 대기")
+        "stale" -> add("재분석 필요")
+        "done" -> add(
+            when (state.analysisQuality) {
+                "urgent" -> "분석 완료: 긴급"
+                "attention" -> "분석 완료: 확인"
+                "routine" -> "분석 완료: 일반"
+                else -> "분석 완료"
+            },
+        )
+    }
+    when (state.feedStatus) {
+        "created" -> add("피드 반영")
+        "failed" -> add("피드 실패")
+    }
+    if (state.calendarProposalCount > 0) add("일정 후보 ${state.calendarProposalCount}")
+    if (state.todoCount > 0) add("할 일 ${state.todoCount}")
 }
