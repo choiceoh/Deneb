@@ -88,6 +88,7 @@ import androidx.compose.ui.Alignment.Companion.BottomCenter
 import androidx.compose.ui.Alignment.Companion.CenterEnd
 import androidx.compose.ui.Alignment.Companion.CenterHorizontally
 import androidx.compose.ui.Alignment.Companion.TopCenter
+import androidx.compose.ui.Alignment.Companion.TopStart
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draganddrop.DragAndDropEvent
 import androidx.compose.ui.draganddrop.DragAndDropTarget
@@ -100,6 +101,7 @@ import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -146,6 +148,14 @@ internal fun ChatModeScreen(
     }
     val keyboardController = LocalSoftwareKeyboardController.current
     val snackbarHostState = remember { SnackbarHostState() }
+
+    // Immersive top overlay: the top bar + banners float over the conversation,
+    // which fills the full height and scrolls under them (and under the transparent
+    // status bar — enableEdgeToEdge is set in MainActivity). The overlay's measured
+    // height feeds the message list's top contentPadding so the first message rests
+    // just below the bar instead of under it, while older messages scroll behind.
+    val topOverlayDensity = LocalDensity.current
+    var topOverlayHeightPx by remember { mutableStateOf(0) }
 
     // Left navigation drawer (analysis surfaces): opened by the top-bar
     // hamburger or a left-edge swipe; system back closes it before exiting.
@@ -328,71 +338,13 @@ internal fun ChatModeScreen(
                             // 챗봇·업무 모드 모두에 적용 — 생성 중 글로우는 컨텍스트 토글과 무관.
                             .generatingBackdrop(active = generatingActive)
                             .navigationBarsPadding()
-                            .statusBarsPadding()
+                            // No statusBarsPadding here: the conversation fills the full
+                            // height and scrolls under the transparent status bar + the
+                            // floating top overlay below (statusBarsPadding moves onto that
+                            // overlay so its controls still clear the status bar).
                             .imePadding(),
                     ) {
                         Column(Modifier.fillMaxSize()) {
-                            TopBar(
-                                textToSpeech = textToSpeech,
-                                isSpeechOutputEnabled = uiState.isSpeechOutputEnabled,
-                                isSpeaking = uiState.isSpeaking,
-                                actions = uiState.actions,
-                                isChatHistoryEmpty = uiState.history.isEmpty(),
-                                recallEnabled = uiState.recallEnabled,
-                                // Desktop has the persistent sidebar, so no hamburger (null → DrawerButton hides).
-                                onOpenDrawer = if (currentPlatform is Platform.Desktop) {
-                                    null
-                                } else {
-                                    { drawerScope.launch { drawerState.open() } }
-                                },
-                                navigationTabBar = navigationTabBar,
-                                // Desktop opens sessions via this button (right drawer); on
-                                // phone the hamburger opens sessions (left drawer), so hide it.
-                                onOpenSessionDrawer = if (currentPlatform is Platform.Desktop) {
-                                    { drawerScope.launch { sessionDrawerState.open() } }
-                                } else {
-                                    null
-                                },
-                            )
-
-                            HeartbeatBanner(
-                                visible = uiState.hasUnreadHeartbeat,
-                                onTap = {
-                                    uiState.heartbeatConversationId?.let { uiState.actions.loadConversation(it) }
-                                    uiState.actions.clearUnreadHeartbeat()
-                                },
-                                onDismiss = {
-                                    uiState.actions.clearUnreadHeartbeat()
-                                },
-                            )
-
-                            WorkReportBanner(
-                                visible = uiState.hasUnreadWorkReport,
-                                onTap = {
-                                    uiState.actions.openWorkReport()
-                                },
-                                onDismiss = {
-                                    uiState.actions.clearUnreadWorkReport()
-                                },
-                            )
-
-                            PendingSmsBanners(
-                                drafts = uiState.smsDrafts,
-                                onSend = uiState.actions.sendSmsDraft,
-                                onDiscard = uiState.actions.discardSmsDraft,
-                            )
-
-                            uiState.warning?.let { warning ->
-                                Text(
-                                    text = stringResource(warning),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.error,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                                )
-                            }
-
                             Box(
                                 Modifier
                                     .weight(1f)
@@ -705,7 +657,13 @@ internal fun ChatModeScreen(
                                                 modifier = Modifier.fillMaxSize().verticalEdgeFade(top = 10.dp, bottom = 22.dp),
                                                 state = listState,
                                                 horizontalAlignment = CenterHorizontally,
-                                                contentPadding = PaddingValues(top = 2.dp, bottom = 8.dp),
+                                                // Top inset = the floating overlay's measured height (status
+                                                // bar + top bar + any banners) so the first message rests just
+                                                // below the bar; older messages scroll up behind it (immersive).
+                                                contentPadding = PaddingValues(
+                                                    top = with(topOverlayDensity) { topOverlayHeightPx.toDp() },
+                                                    bottom = 8.dp,
+                                                ),
                                             ) {
                                                 items(uiState.history, key = { it.id }, contentType = { it.role }) { history ->
                                                     // Readable measure on a wide desktop window: cap every row at the
@@ -891,6 +849,85 @@ internal fun ChatModeScreen(
                                         onSelectService = uiState.actions.selectService,
                                     )
                                 }
+                            }
+                        }
+                        // Immersive top overlay: the bar + banners float over the conversation
+                        // (which scrolls full-height behind them, under the transparent status
+                        // bar). The vertical scrim keeps the bar's controls legible over
+                        // scrolling messages; statusBarsPadding clears the OS status bar; the
+                        // measured height drives the message list's top contentPadding above.
+                        Column(
+                            modifier = Modifier
+                                .align(TopStart)
+                                .fillMaxWidth()
+                                .onSizeChanged { topOverlayHeightPx = it.height }
+                                .background(
+                                    Brush.verticalGradient(
+                                        0f to MaterialTheme.colorScheme.background,
+                                        1f to Color.Transparent,
+                                    ),
+                                )
+                                .statusBarsPadding(),
+                        ) {
+                            TopBar(
+                                textToSpeech = textToSpeech,
+                                isSpeechOutputEnabled = uiState.isSpeechOutputEnabled,
+                                isSpeaking = uiState.isSpeaking,
+                                actions = uiState.actions,
+                                isChatHistoryEmpty = uiState.history.isEmpty(),
+                                recallEnabled = uiState.recallEnabled,
+                                // Desktop has the persistent sidebar, so no hamburger (null → DrawerButton hides).
+                                onOpenDrawer = if (currentPlatform is Platform.Desktop) {
+                                    null
+                                } else {
+                                    { drawerScope.launch { drawerState.open() } }
+                                },
+                                navigationTabBar = navigationTabBar,
+                                // Desktop opens sessions via this button (right drawer); on
+                                // phone the hamburger opens sessions (left drawer), so hide it.
+                                onOpenSessionDrawer = if (currentPlatform is Platform.Desktop) {
+                                    { drawerScope.launch { sessionDrawerState.open() } }
+                                } else {
+                                    null
+                                },
+                            )
+
+                            HeartbeatBanner(
+                                visible = uiState.hasUnreadHeartbeat,
+                                onTap = {
+                                    uiState.heartbeatConversationId?.let { uiState.actions.loadConversation(it) }
+                                    uiState.actions.clearUnreadHeartbeat()
+                                },
+                                onDismiss = {
+                                    uiState.actions.clearUnreadHeartbeat()
+                                },
+                            )
+
+                            WorkReportBanner(
+                                visible = uiState.hasUnreadWorkReport,
+                                onTap = {
+                                    uiState.actions.openWorkReport()
+                                },
+                                onDismiss = {
+                                    uiState.actions.clearUnreadWorkReport()
+                                },
+                            )
+
+                            PendingSmsBanners(
+                                drafts = uiState.smsDrafts,
+                                onSend = uiState.actions.sendSmsDraft,
+                                onDiscard = uiState.actions.discardSmsDraft,
+                            )
+
+                            uiState.warning?.let { warning ->
+                                Text(
+                                    text = stringResource(warning),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                                )
                             }
                         }
                         SnackbarHost(
