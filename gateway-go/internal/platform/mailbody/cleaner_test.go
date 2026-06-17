@@ -671,7 +671,7 @@ func TestCleanForDisplay_KeepsFinancialReceiptDetails(t *testing.T) {
 	body := strings.Join([]string{
 		"Anthropic, PBC  (<https://example.com>)",
 		"Anthropic, PBC",
-		"Credit note from Anthropic, PBC $25.00 Issued May 2, 2026 Download invoice Download credit note Credit note number WLGPLVNK-0021-CN-01 Invoice number WLGPLVNK-0021",
+		"Credit note from Anthropic, PBC $25.00 Issued May 2, 2026 (invoice illustration [<url>] Download invoice (<url>) Download credit note (<url>) Credit note number WLGPLVNK-0021-CN-01 Invoice number WLGPLVNK-0021",
 		"Credit note # WLGPLVNK-0021-CN-01 Credit - Other $25.00 Refund issued - American Express - 6216 $25.00 Total credit $25.00 Questions? Visit our support site.",
 		"Powered by stripe logo",
 	}, "\n")
@@ -684,6 +684,11 @@ func TestCleanForDisplay_KeepsFinancialReceiptDetails(t *testing.T) {
 	}
 	if strings.Contains(got.Body, "stripe logo") {
 		t.Fatalf("trailing logo leaked:\n%s", got.Body)
+	}
+	for _, gone := range []string{"Anthropic, PBC  (<https://example.com>)", "Download invoice", "Visit our support site"} {
+		if strings.Contains(got.Body, gone) {
+			t.Fatalf("receipt boilerplate leaked %q:\n%s", gone, got.Body)
+		}
 	}
 }
 
@@ -1038,6 +1043,107 @@ func TestCleanForDisplay_StripsBilingualTailName(t *testing.T) {
 	for _, gone := range []string{"최종원 / Jongwon Choi", "Overseas Sales", "Mob"} {
 		if strings.Contains(got.Body, gone) {
 			t.Fatalf("tail name signature leaked %q:\n%s", gone, got.Body)
+		}
+	}
+}
+
+func TestCleanForDisplay_DoesNotTreatRecipientRoleLineBeforeBusinessAsSignature(t *testing.T) {
+	body := strings.Join([]string{
+		"안녕하십니까. 일진전기 국내영업2팀 은종훈 대리입니다.",
+		"업무에 노고가 많으십니다.",
+		"이시연 주임님",
+		"제 2조 7항 부분 내 지체상금 관련하여, 최대 상금(CAP) 10% 명기 요청드립니다.",
+		"기타 문의사항 있으시다면 연락 부탁 드립니다.",
+		"감사합니다.",
+		"은종훈  Eun Jong Hun",
+		"일진전기 ㅣ 전선사업본부 국내영업2팀 ㅣ 대리",
+		"서울시 강서구 마곡중앙14로 15 (마곡동) 7층 일진전기",
+		"T 02-111-2222   F 02-333-4444   M 010-5555-6666",
+		"E-mail  eun@example.com",
+	}, "\n")
+
+	got := CleanForDisplay(body)
+	for _, want := range []string{"이시연 주임님", "CAP) 10% 명기", "연락 부탁"} {
+		if !strings.Contains(got.Body, want) {
+			t.Fatalf("recipient/business line missing %q:\n%s", want, got.Body)
+		}
+	}
+	for _, gone := range []string{"은종훈  Eun", "전선사업본부", "T 02"} {
+		if strings.Contains(got.Body, gone) {
+			t.Fatalf("signature leaked %q:\n%s", gone, got.Body)
+		}
+	}
+}
+
+func TestCleanForDisplay_StripsAttachmentOnlyBody(t *testing.T) {
+	body := strings.Join([]string{
+		"대용량 파일첨부 1개",
+		"(15.5 MB)",
+		"다운로드 기간 : 2026-04-11 ~ 2026-05-10",
+		"(대용량 첨부 파일은 30일간 보관)",
+		"에코프로_가배치.zip",
+		"(15.5 MB)",
+	}, "\n")
+
+	got := CleanForDisplay(body)
+	if got.Body != "" {
+		t.Fatalf("attachment-only body should be empty, got:\n%s", got.Body)
+	}
+	if len(got.HiddenBlocks) == 0 || got.HiddenBlocks[0].Kind != "attachment" {
+		t.Fatalf("expected attachment hidden block, got %+v", got.HiddenBlocks)
+	}
+}
+
+func TestCleanForDisplay_StripsInlineLargeAttachmentPrefix(t *testing.T) {
+	body := "대용량 첨부파일 (Timezone : +0900 Asia/Seoul) 공장동 단면도.dwg 41.8 MB 05/24 23:59 지붕 상세.dwg 458.0 KB 05/24 23:59 안녕하세요 MAP허근범 소장입니다. 함평공장 공장도 계획 단면도 및 지붕 상세도 전달 드리니 확인 부탁드립니다."
+
+	got := CleanForDisplay(body)
+	for _, want := range []string{"안녕하세요 MAP허근범", "확인 부탁드립니다"} {
+		if !strings.Contains(got.Body, want) {
+			t.Fatalf("body missing %q:\n%s", want, got.Body)
+		}
+	}
+	for _, gone := range []string{"대용량 첨부파일", "공장동 단면도.dwg", "Timezone"} {
+		if strings.Contains(got.Body, gone) {
+			t.Fatalf("inline attachment metadata leaked %q:\n%s", gone, got.Body)
+		}
+	}
+}
+
+func TestCleanForDisplay_StripsDecorativeSeparators(t *testing.T) {
+	body := strings.Join([]string{
+		"안녕하세요. 탑솔라 재경실입니다.",
+		"2026년 1월 미처리 세금계산서 내역을 첨부와 같이 전달드립니다.",
+		"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+		"-------------------------------------------   아   래   -------------------------------------------",
+		"연장된 마감기한 : 2026년 2월 20일",
+		"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+		"바쁘신 와중에도 협조해 주셔서 감사합니다.",
+	}, "\n")
+
+	got := CleanForDisplay(body)
+	for _, want := range []string{"미처리 세금계산서", "연장된 마감기한"} {
+		if !strings.Contains(got.Body, want) {
+			t.Fatalf("business body missing %q:\n%s", want, got.Body)
+		}
+	}
+	if strings.Contains(got.Body, "━━━━") || strings.Contains(got.Body, "아   래") {
+		t.Fatalf("decorative separator leaked:\n%s", got.Body)
+	}
+}
+
+func TestCleanForDisplay_CutsInlineReplyHistoryAndAttachmentMetadata(t *testing.T) {
+	body := "안녕하세요 MAP허근범 소장입니다. 함평공장 공장도 계획 단면도 및 지붕 상세도 전달 드리니 확인 부탁드립니다. 감사합니다. 허근 범 KEUNBEOM HEO 설계부문 / 설계 2 본부 /2 그룹 소장 D 02. 520.9346 M kbheo@example.com 상기 메일은 지정된 수신인만을 위한 것이며 기밀정보를 포함할 수 있습니다. Date: 2026/04/24 08:42:20 From: 김대희 <kdh@example.com> To: kbheo@example.com Cc: team@example.com Subject: [탑솔라(주)] 금호타이어 함평공장 TPO 관련 자료 송부의 件 대용량 파일첨부 4개 (23.64 MB) 다운로드 기간 : 2026-04-24 ~ 2026-05-24 TPO자료.pdf (3.86 MB) 소장님 안녕하십니까. 탑솔라 기획조정실 김대희과장입니다."
+
+	got := CleanForDisplay(body)
+	for _, want := range []string{"안녕하세요 MAP허근범", "확인 부탁드립니다"} {
+		if !strings.Contains(got.Body, want) {
+			t.Fatalf("latest body missing %q:\n%s", want, got.Body)
+		}
+	}
+	for _, gone := range []string{"KEUNBEOM", "상기 메일은", "Date:", "From:", "대용량 파일첨부", "TPO자료.pdf", "소장님 안녕하십니까"} {
+		if strings.Contains(got.Body, gone) {
+			t.Fatalf("inline history/noise leaked %q:\n%s", gone, got.Body)
 		}
 	}
 }
