@@ -139,6 +139,48 @@ func TestCleanForDisplay_StripsLeadingLargeAttachmentMetadata(t *testing.T) {
 	}
 }
 
+func TestCleanForDisplay_StripsAttachmentThenForwardHeader(t *testing.T) {
+	body := strings.Join([]string{
+		"대용량 파일첨부 1개",
+		"(15.94 MB)",
+		"다운로드 기간 : 2026-02-26 ~ 2026-03-28",
+		"(대용량 첨부 파일은 30일간 보관)",
+		"투자자료.pdf",
+		"(15.94 MB)",
+		"<hr dze_content_sep=\"\">",
+		"보내는사람: 최원철 <choi@example.com>",
+		"받는사람 : 본부장 <lead@example.com>",
+		"참조 : team@example.com",
+		"보낸 날짜 : 2026-02-12 11:37",
+		"제목 : [삼성증권] 태양광 펀드 투자 관련 자료 송부 건",
+		"<meta http-equiv=\"Content-Type\" content=\"text/html; charset=UTF-8\">",
+		"본부장님, 안녕하십니까.",
+		"삼성증권 최원철입니다.",
+		"유선 상 말씀 드린 블라인드펀드 투자자 모집 관련 자료 송부 드리오니 검토 부탁 드립니다.",
+		"자세한 내용은 하기 메일 및 첨부 자료 참고 부탁 드리며,",
+		"문의사항 있으시면 언제든지 말씀 부탁 드립니다.",
+		"감사합니다.",
+		"최원철 드림",
+		"--------- Original Message ---------",
+		"Sender : 김창경 <kim@example.com>",
+		"Date : 2026-02-12 10:27",
+		"Title : 재생 에너지 리츠 관련 자료 송부",
+		"이전 메일 본문입니다.",
+	}, "\n")
+
+	got := CleanForDisplay(body)
+	for _, want := range []string{"본부장님", "블라인드펀드", "검토 부탁"} {
+		if !strings.Contains(got.Body, want) {
+			t.Fatalf("forwarded body missing %q:\n%s", want, got.Body)
+		}
+	}
+	for _, gone := range []string{"대용량 파일첨부", "<hr", "<meta", "보내는사람", "Original Message", "이전 메일 본문"} {
+		if strings.Contains(got.Body, gone) {
+			t.Fatalf("forward header/history leaked %q:\n%s", gone, got.Body)
+		}
+	}
+}
+
 func TestCleanForDisplay_CutsForwardedHistoryThenSignature(t *testing.T) {
 	body := strings.Join([]string{
 		"안녕하세요.",
