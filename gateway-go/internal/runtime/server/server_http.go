@@ -75,19 +75,31 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	}
 
 	uptime := time.Since(s.startedAt)
+	subsystems := map[string]any{
+		"core":      "go",
+		"local_ai":  localAIStatus,
+		"embedding": embeddingStatus,
+	}
+	if v := s.mailIngestHealth.Load(); v != nil {
+		if mh, ok := v.(mailIngestHealth); ok {
+			if s.mailIngestQueueStats != nil {
+				mh.Queue = s.mailIngestQueueStats()
+			}
+			subsystems["mail_ingest"] = mh
+		} else {
+			subsystems["mail_ingest"] = v
+		}
+	}
+
 	health := map[string]any{
-		"status":    "ok",
-		"version":   s.version,
-		"model":     currentModel,
-		"uptime":    formatUptimeHTTP(uptime),
-		"uptime_ms": uptime.Milliseconds(),
-		"subsystems": map[string]any{
-			"core":      "go",
-			"local_ai":  localAIStatus,
-			"embedding": embeddingStatus,
-		},
-		"sessions": s.sessions.Count(),
-		"channels": channelHealthSummary,
+		"status":     "ok",
+		"version":    s.version,
+		"model":      currentModel,
+		"uptime":     formatUptimeHTTP(uptime),
+		"uptime_ms":  uptime.Milliseconds(),
+		"subsystems": subsystems,
+		"sessions":   s.sessions.Count(),
+		"channels":   channelHealthSummary,
 		"workers": map[string]int{
 			"processes": activeProcesses,
 			"cron":      cronTasks,

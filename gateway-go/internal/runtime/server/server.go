@@ -168,6 +168,11 @@ type Server struct {
 	// call start() unconditionally; the service is a no-op.
 	calendarBriefing *calendarBriefingService
 
+	// mailIngestHealth stores mailIngestHealth when LMTP ingest is enabled so
+	// /health exposes archive-context degradation instead of leaving it in logs.
+	mailIngestHealth     atomic.Value
+	mailIngestQueueStats func() map[string]int
+
 	// logSwap wraps the gateway logger so the notify service can install
 	// an ERROR-mirroring handler after creation. Set once in New(); never
 	// nil if logger is non-nil.

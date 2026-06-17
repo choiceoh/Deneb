@@ -41,10 +41,10 @@ import (
 const (
 	// minAttachmentSize skips tiny inline bits (tracker pixels, signature glyphs).
 	minAttachmentSize = 2048
-	// maxAttachmentSize skips oversized attachments: a quick business document is
-	// small, and downloading+OCR-ing a many-MB scan would spike memory and
-	// latency on the shared unified-memory box for little analysis value.
-	maxAttachmentSize = 15 * 1024 * 1024
+	// maxAttachmentSize skips oversized attachments. Kept aligned with the LMTP
+	// parser's per-part cap so larger business PDFs can be analyzed without
+	// injecting partial, truncated files.
+	maxAttachmentSize = 32 * 1024 * 1024
 	// maxAttachmentCandidates caps how many attachments are extracted+judged per
 	// mail, bounding OCR cost on a pathological many-attachment mail.
 	maxAttachmentCandidates = 6
@@ -156,6 +156,9 @@ func gateLogger(deps PipelineDeps) *slog.Logger {
 func attachmentCandidates(atts []gmail.AttachmentInfo) []gmail.AttachmentInfo {
 	out := make([]gmail.AttachmentInfo, 0, len(atts))
 	for _, att := range atts {
+		if att.Truncated {
+			continue
+		}
 		if att.Size < minAttachmentSize || att.Size > maxAttachmentSize || att.AttachmentID == "" {
 			continue
 		}

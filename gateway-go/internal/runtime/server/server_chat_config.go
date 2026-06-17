@@ -33,6 +33,26 @@ type noopGmailNotifier struct{}
 
 func (noopGmailNotifier) Notify(context.Context, string) error { return nil }
 
+type mailIngestHealth struct {
+	Status               string         `json:"status"`
+	LMTPEnabled          bool           `json:"lmtp_enabled"`
+	ArchiveThreadContext bool           `json:"archive_thread_context"`
+	ArchiveAddr          string         `json:"archive_addr,omitempty"`
+	ArchiveStatus        string         `json:"archive_status"`
+	LastError            string         `json:"last_error,omitempty"`
+	QueueDir             string         `json:"queue_dir,omitempty"`
+	Workers              int            `json:"workers"`
+	Queue                map[string]int `json:"queue,omitempty"`
+}
+
+const (
+	lmtpAnalysisWorkers     = 4
+	lmtpQueueMaxAttempts    = 6
+	lmtpQueueIdleDelay      = 2 * time.Second
+	lmtpQueueRetryDelay     = 10 * time.Second
+	lmtpAnalysisItemTimeout = 5 * time.Minute
+)
+
 func (s *Server) initGmailPoll(snap *config.ConfigSnapshot) {
 	if snap == nil {
 		return
@@ -125,13 +145,11 @@ func (s *Server) initGmailPoll(snap *config.ConfigSnapshot) {
 //	DENEB_ARCHIVE_IMAP_ADDR  (default 127.0.0.1:1143)
 //	DENEB_ARCHIVE_IMAP_USER  / DENEB_ARCHIVE_IMAP_PASS  (required to enable)
 func (s *Server) archiveThreadSource() gmailpoll.ThreadSource {
-	addr := strings.TrimSpace(os.Getenv("DENEB_ARCHIVE_IMAP_ADDR"))
-	if addr == "" {
-		addr = "127.0.0.1:1143"
-	}
+	addr := archiveIMAPAddr()
 	user := strings.TrimSpace(os.Getenv("DENEB_ARCHIVE_IMAP_USER"))
 	pass := os.Getenv("DENEB_ARCHIVE_IMAP_PASS")
 	if user == "" || pass == "" {
+		s.logger.Warn("LMTP 분석: 아카이브 스레드 컨텍스트 비활성화 (DENEB_ARCHIVE_IMAP_USER/PASS 미설정)", "addr", addr)
 		return nil // stays off until creds are set (graceful: analysis runs without it)
 	}
 	src := mailarchive.New(mailarchive.Config{Addr: addr, User: user, Pass: pass})
@@ -164,6 +182,7 @@ func (s *Server) initLMTPServer(snap *config.ConfigSnapshot) {
 
 	stateDir := config.ResolveStateDir()
 	stage2, stage2Model, stage1, stage1Model := s.mailAnalysisModels()
+	threadSource := s.archiveThreadSource()
 	cfg := gmailpoll.Config{
 		StateDir:            stateDir,
 		LLMClient:           stage2,
@@ -174,7 +193,7 @@ func (s *Server) initLMTPServer(snap *config.ConfigSnapshot) {
 		AttachmentExtractFn: tools.ExtractAttachmentTextBytes,
 		OnAnalyzed:          s.makeMailAnalysisSink(),
 		ProjectsFn:          s.projectCandidatesFn(),
-		ThreadSource:        s.archiveThreadSource(),
+		ThreadSource:        threadSource,
 	}
 	if s.wikiStore != nil && s.wikiStore.DiaryDir() != "" {
 		cfg.DiaryDir = s.wikiStore.DiaryDir()
@@ -182,59 +201,58 @@ func (s *Server) initLMTPServer(snap *config.ConfigSnapshot) {
 	svc := gmailpoll.NewService(cfg, s.logger)
 	svc.SetNotifier(s.proactiveRelay.notifierForSession(nativeWorkSessionKey))
 
+	queue, err := lmtpd.NewQueue(filepath.Join(stateDir, "lmtp-queue"))
+	if err != nil {
+		s.mailIngestHealth.Store(mailIngestHealth{
+			Status:        "queue_error",
+			LMTPEnabled:   false,
+			ArchiveAddr:   archiveIMAPAddr(),
+			ArchiveStatus: archiveStatus(threadSource != nil),
+			LastError:     err.Error(),
+		})
+		s.logger.Error("LMTP queue 초기화 실패; 메일 수신 비활성화", "error", err)
+		return
+	}
+	s.mailIngestHealth.Store(mailIngestHealth{
+		Status:               "running",
+		LMTPEnabled:          true,
+		ArchiveThreadContext: threadSource != nil,
+		ArchiveAddr:          archiveIMAPAddr(),
+		ArchiveStatus:        archiveStatus(threadSource != nil),
+		QueueDir:             queue.Dir(),
+		Workers:              lmtpAnalysisWorkers,
+	})
+	s.mailIngestQueueStats = func() map[string]int {
+		st := queue.Stats()
+		return map[string]int{
+			"pending":    st.Pending,
+			"processing": st.Processing,
+			"failed":     st.Failed,
+		}
+	}
+
 	// Dedup by Message-ID across restarts so an MTA re-delivery isn't analyzed
-	// (or wiki-paged / chat-reported) twice.
+	// (or wiki-paged / chat-reported) twice. Marked only after queued analysis
+	// succeeds; queued/processing duplicates are suppressed by the durable queue.
 	seen := lmtpd.NewSeenStore(filepath.Join(stateDir, "lmtp-seen.json"), 2000)
 
-	// Bound concurrent analyses so a delivery burst can't pile up many in-flight
-	// messages' decoded attachment bytes (held for the analysis + archive window).
-	analyzeSem := make(chan struct{}, 4)
+	s.startLMTPAnalysisWorkers(queue, seen, svc)
 
-	// ACK delivery as soon as the message parses, then analyze asynchronously:
-	// analysis is an LLM call (seconds), too slow to hold the MTA connection open,
-	// and a slow synchronous reply risks Postfix timing out and re-delivering
-	// (which would double-analyze). Parse failures still NAK inside lmtpd.
+	// ACK delivery only after the parsed message is durably queued. Analysis is an
+	// LLM call, too slow for the LMTP transaction; the queue gives us post-ACK retry
+	// semantics without holding decoded attachment bytes in unbounded goroutines.
 	handler := func(_ context.Context, m *lmtpd.Message) error {
-		// Atomic check-and-set: concurrent re-deliveries of the same Message-ID
-		// can't both pass into analysis.
-		if !seen.MarkIfNew(m.DedupKey) {
-			s.logger.Info("LMTP 중복 메일 건너뜀 (이미 처리)", "key", m.DedupKey, "subject", m.Detail.Subject)
+		if seen.Seen(m.DedupKey) {
+			s.logger.Info("LMTP 중복 메일 건너뜀 (분석 완료)", "key", m.DedupKey, "subject", m.Detail.Subject)
 			return nil // ACK — already analyzed on an earlier delivery
 		}
-		s.safeGo("lmtp-analyze", func() {
-			// ctx-aware acquire: a delivery burst that fills the semaphore must not
-			// wedge this goroutine past shutdown (it is tracked by bgWg).
-			select {
-			case analyzeSem <- struct{}{}:
-			case <-s.ShutdownCtx().Done():
-				return
-			}
-			defer func() { <-analyzeSem }()
-			actx, cancel := context.WithTimeout(s.ShutdownCtx(), 5*time.Minute)
-			defer cancel()
-			// The MTA already got its 250 (analysis is async), so a transient LLM
-			// failure here would silently drop the mail — there is no re-delivery.
-			// Retry with backoff to ride out a brief backend blip before giving up;
-			// the 5-minute ctx bounds the total.
-			attempts := []time.Duration{0, 10 * time.Second, 30 * time.Second}
-			var err error
-			for i, backoff := range attempts {
-				if backoff > 0 {
-					select {
-					case <-actx.Done():
-						return
-					case <-time.After(backoff):
-					}
-				}
-				if _, err = svc.IngestMessage(actx, m.Detail, m.AttachmentBytes); err == nil {
-					return
-				}
-				if i < len(attempts)-1 {
-					s.logger.Warn("LMTP 메일 분석 실패, 재시도", "attempt", i+1, "error", err, "subject", m.Detail.Subject)
-				}
-			}
-			s.logger.Error("LMTP 메일 분석 영구 실패 (재시도 소진)", "error", err, "subject", m.Detail.Subject)
-		})
+		queued, err := queue.Enqueue(m)
+		if err != nil {
+			return err // 451: MTA retries; no post-ACK loss
+		}
+		if !queued {
+			s.logger.Info("LMTP 중복 메일 건너뜀 (이미 큐에 있음)", "key", m.DedupKey, "subject", m.Detail.Subject)
+		}
 		return nil
 	}
 
@@ -245,6 +263,95 @@ func (s *Server) initLMTPServer(snap *config.ConfigSnapshot) {
 		}
 	})
 	s.logger.Info("LMTP mail ingest 활성화 (IMAP 폴링 대체)", "addr", addr)
+}
+
+func (s *Server) startLMTPAnalysisWorkers(queue *lmtpd.Queue, seen *lmtpd.SeenStore, svc *gmailpoll.Service) {
+	for i := 0; i < lmtpAnalysisWorkers; i++ {
+		workerID := i + 1
+		s.safeGo("lmtp-analyze-worker", func() {
+			ctx := s.ShutdownCtx()
+			for {
+				if ctx.Err() != nil {
+					return
+				}
+				item, err := queue.Claim()
+				if err != nil {
+					s.logger.Warn("LMTP queue claim 실패", "worker", workerID, "error", err)
+					if !sleepOrDone(ctx, lmtpQueueIdleDelay) {
+						return
+					}
+					continue
+				}
+				if item == nil {
+					if !sleepOrDone(ctx, lmtpQueueIdleDelay) {
+						return
+					}
+					continue
+				}
+				err = s.processLMTPQueueItem(ctx, svc, item)
+				if err == nil {
+					seen.Mark(item.Key)
+					if cerr := queue.Complete(item); cerr != nil {
+						s.logger.Warn("LMTP queue complete 실패", "worker", workerID, "key", item.Key, "error", cerr)
+					}
+					continue
+				}
+				if ctx.Err() != nil {
+					return // leave processing file; queue recovery will retry on restart
+				}
+				finalAttempt := item.Attempts+1 >= lmtpQueueMaxAttempts
+				if ferr := queue.Fail(item, err, lmtpQueueMaxAttempts); ferr != nil {
+					s.logger.Error("LMTP queue fail 기록 실패", "worker", workerID, "key", item.Key, "error", ferr)
+				} else if finalAttempt {
+					s.logger.Error("LMTP 메일 분석 최종 실패; failed queue로 이동", "worker", workerID, "key", item.Key, "attempts", item.Attempts, "error", err)
+				} else {
+					s.logger.Warn("LMTP 메일 분석 실패; 큐 재시도 예정", "worker", workerID, "key", item.Key, "attempts", item.Attempts, "error", err)
+				}
+				if !sleepOrDone(ctx, lmtpQueueRetryDelay) {
+					return
+				}
+			}
+		})
+	}
+}
+
+func (s *Server) processLMTPQueueItem(ctx context.Context, svc *gmailpoll.Service, item *lmtpd.QueueItem) error {
+	if item == nil {
+		return nil
+	}
+	msg, err := lmtpd.ParseMessage(item.Raw, item.Key)
+	if err != nil {
+		return err
+	}
+	actx, cancel := context.WithTimeout(ctx, lmtpAnalysisItemTimeout)
+	defer cancel()
+	_, err = svc.IngestMessage(actx, msg.Detail, msg.AttachmentBytes)
+	return err
+}
+
+func sleepOrDone(ctx context.Context, d time.Duration) bool {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-timer.C:
+		return true
+	}
+}
+
+func archiveIMAPAddr() string {
+	if addr := strings.TrimSpace(os.Getenv("DENEB_ARCHIVE_IMAP_ADDR")); addr != "" {
+		return addr
+	}
+	return "127.0.0.1:1143"
+}
+
+func archiveStatus(enabled bool) string {
+	if enabled {
+		return "ok"
+	}
+	return "disabled_missing_credentials"
 }
 
 // seedDropboxBackupJob installs a weekly Dropbox backup cron job once (idempotent

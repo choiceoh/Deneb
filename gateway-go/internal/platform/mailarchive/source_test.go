@@ -36,6 +36,16 @@ func TestPrioritizedArchiveUIDGroupsDisablesZeroCaps(t *testing.T) {
 	}
 }
 
+func TestNewSourceCapsReferenceSearches(t *testing.T) {
+	src := New(Config{Addr: "127.0.0.1:1143"})
+	if src == nil {
+		t.Fatal("source should be configured with an address")
+	}
+	if src.maxReferences != defaultMaxReferences {
+		t.Fatalf("maxReferences = %d, want %d", src.maxReferences, defaultMaxReferences)
+	}
+}
+
 func TestSameArchivedMessageByMessageID(t *testing.T) {
 	current := &gmail.MessageDetail{MessageIDHeader: "<A@Example.COM>"}
 	archived := &gmail.MessageDetail{MessageIDHeader: " <a@example.com> "}
