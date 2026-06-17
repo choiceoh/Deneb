@@ -24,8 +24,9 @@ type Handler func(ctx context.Context, msg *Message) error
 
 const (
 	// maxMessageBytes bounds a single DATA payload. A docker-mailserver delivery
-	// is one message; 50 MiB comfortably covers business mail with attachments.
-	maxMessageBytes = 50 << 20
+	// is one message; 100 MiB covers larger business-document bundles while still
+	// bounding untrusted local input.
+	maxMessageBytes = 100 << 20
 	commandTimeout  = 2 * time.Minute
 	dataTimeout     = 5 * time.Minute
 	// maxRecipients caps RCPT TO per transaction (LMTP emits one reply each); a
@@ -236,6 +237,7 @@ func (s *Server) process(ctx context.Context, body []byte, readErr error) string
 		s.log.Error("LMTP 메시지 파싱 실패", "error", err)
 		return "554 5.6.0 Parse error"
 	}
+	msg.Raw = body
 	if err := s.handler(ctx, msg); err != nil {
 		s.log.Error("LMTP 메시지 처리 실패", "error", err, "subject", msg.Detail.Subject)
 		return "451 4.3.0 Processing failed, try again"

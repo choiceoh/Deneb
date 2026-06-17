@@ -28,9 +28,9 @@ import (
 // flattened body fed to analysis. Korean business mail with embedded images can
 // be large, but the analysis only needs text — attachments are kept as metadata.
 const (
-	maxBodyRunes  = 200_000 // flattened body cap (analysis input)
-	maxLeafBytes  = 8 << 20 // per-part decode cap (defensive)
-	maxPartsCount = 200     // defensive cap on multipart parts walked
+	maxBodyRunes  = 200_000  // flattened body cap (analysis input)
+	maxLeafBytes  = 32 << 20 // per-part decoded attachment cap (defensive)
+	maxPartsCount = 200      // defensive cap on multipart parts walked
 )
 
 // Message is a parsed LMTP delivery: the MessageDetail fed to analysis, the raw
@@ -41,6 +41,7 @@ type Message struct {
 	Detail          *gmail.MessageDetail
 	AttachmentBytes map[string][]byte
 	DedupKey        string
+	Raw             []byte
 }
 
 // parseMessage turns a raw RFC822 message into a Message. Headers are
@@ -100,6 +101,12 @@ func parseMessage(raw []byte, fallbackID string) (*Message, error) {
 	detail.Body = clampRunes(strings.TrimSpace(text), maxBodyRunes)
 	detail.Attachments = acc.atts
 	return &Message{Detail: detail, AttachmentBytes: acc.attBytes, DedupKey: key}, nil
+}
+
+// ParseMessage turns raw RFC822 bytes into a Message. It is exported for the
+// durable LMTP queue worker, which re-parses queued raw deliveries after ACK.
+func ParseMessage(raw []byte, fallbackID string) (*Message, error) {
+	return parseMessage(raw, fallbackID)
 }
 
 // ParseDetail parses a raw RFC822 message into a gmail.MessageDetail (headers
@@ -222,7 +229,7 @@ func (a *mimeAccumulator) walk(p part, depth int) {
 	}
 
 	// Leaf part.
-	decoded, _ := io.ReadAll(io.LimitReader(transferDecode(p.cte, p.body), maxLeafBytes))
+	decoded, truncated := readCapped(transferDecode(p.cte, p.body), maxLeafBytes)
 
 	isText := strings.HasPrefix(p.mediaType, "text/")
 	if p.attachment || (p.filename != "" && !isText) {
@@ -232,6 +239,7 @@ func (a *mimeAccumulator) walk(p part, depth int) {
 			MimeType:     p.mediaType,
 			AttachmentID: attID,
 			Size:         len(decoded),
+			Truncated:    truncated,
 		})
 		if a.attBytes != nil {
 			a.attBytes[attID] = decoded
@@ -249,6 +257,17 @@ func (a *mimeAccumulator) walk(p part, depth int) {
 	default: // text/plain and unknown text/*
 		a.plain += text
 	}
+}
+
+func readCapped(r io.Reader, max int64) ([]byte, bool) {
+	if max <= 0 {
+		return nil, true
+	}
+	data, _ := io.ReadAll(io.LimitReader(r, max+1))
+	if int64(len(data)) <= max {
+		return data, false
+	}
+	return data[:max], true
 }
 
 // transferDecode wraps the reader to undo the Content-Transfer-Encoding.

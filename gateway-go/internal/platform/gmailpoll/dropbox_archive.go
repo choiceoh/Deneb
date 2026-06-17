@@ -111,6 +111,9 @@ func (s *Service) ensureDropbox() (*dropbox.Client, error) {
 }
 
 func isArchivable(att gmail.AttachmentInfo) bool {
+	if att.Truncated {
+		return false
+	}
 	if att.Size < minArchiveSize {
 		return false
 	}

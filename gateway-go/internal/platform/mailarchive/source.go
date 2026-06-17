@@ -14,11 +14,12 @@ import (
 // Default tuning. These mirror the Gmail-path caps in gmailpoll so the LLM thread
 // extractor sees a comparable amount of context regardless of source.
 const (
-	defaultMaxThread    = 10
-	defaultMaxSender    = 5
-	defaultMaxFetch     = 18 // hard cap on bodies fetched per incoming message
-	defaultSenderWindow = 30 * 24 * time.Hour
-	defaultTimeout      = 15 * time.Second
+	defaultMaxThread     = 10
+	defaultMaxSender     = 5
+	defaultMaxFetch      = 18 // hard cap on bodies fetched per incoming message
+	defaultMaxReferences = 20 // bound per-message HEADER searches on long threads
+	defaultSenderWindow  = 30 * 24 * time.Hour
+	defaultTimeout       = 15 * time.Second
 )
 
 // Config configures a Source. Mailboxes are searched in order; INBOX (ongoing
@@ -35,11 +36,12 @@ type Config struct {
 // replacement for the Gmail thread/search the analysis pipeline used to do, so
 // the LMTP ingest path gets thread context with no Gmail dependency.
 type Source struct {
-	cfg          Config
-	maxThread    int
-	maxSender    int
-	maxFetch     int
-	senderWindow time.Duration
+	cfg           Config
+	maxThread     int
+	maxSender     int
+	maxFetch      int
+	maxReferences int
+	senderWindow  time.Duration
 }
 
 // New builds a Source. Returns nil if no address is configured (the pipeline then
@@ -55,11 +57,12 @@ func New(cfg Config) *Source {
 		cfg.Mailboxes = []string{"INBOX", "Gmail"}
 	}
 	return &Source{
-		cfg:          cfg,
-		maxThread:    defaultMaxThread,
-		maxSender:    defaultMaxSender,
-		maxFetch:     defaultMaxFetch,
-		senderWindow: defaultSenderWindow,
+		cfg:           cfg,
+		maxThread:     defaultMaxThread,
+		maxSender:     defaultMaxSender,
+		maxFetch:      defaultMaxFetch,
+		maxReferences: defaultMaxReferences,
+		senderWindow:  defaultSenderWindow,
 	}
 }
 
@@ -79,6 +82,15 @@ func (s *Source) RelatedMessages(ctx context.Context, msg *gmail.MessageDetail) 
 		return nil, err
 	}
 	defer c.logout()
+	done := make(chan struct{})
+	go func() {
+		select {
+		case <-ctx.Done():
+			c.close()
+		case <-done:
+		}
+	}()
+	defer close(done)
 
 	selfID := normalizeMsgID(msg.MessageIDHeader)
 	sender := extractAddr(msg.From)
@@ -98,7 +110,10 @@ func (s *Source) RelatedMessages(ctx context.Context, msg *gmail.MessageDetail) 
 
 		var threadUIDs []string
 		// 1) Thread ancestors: one search per referenced Message-ID.
-		for _, ref := range msg.References {
+		for _, ref := range capFirstStrings(msg.References, s.maxReferences) {
+			if ctx.Err() != nil {
+				break
+			}
 			found, serr := c.uidSearch(fmt.Sprintf(`HEADER "Message-ID" %s`, quote(ref)))
 			if serr == nil {
 				threadUIDs = append(threadUIDs, found...)
@@ -106,7 +121,7 @@ func (s *Source) RelatedMessages(ctx context.Context, msg *gmail.MessageDetail) 
 		}
 		// 2) Recent history from the same sender.
 		var senderUIDs []string
-		if sender != "" {
+		if sender != "" && ctx.Err() == nil {
 			found, serr := c.uidSearch(fmt.Sprintf(`FROM %s SINCE %s`, quote(sender), since))
 			if serr == nil {
 				senderUIDs = append(senderUIDs, found...)
@@ -119,7 +134,7 @@ func (s *Source) RelatedMessages(ctx context.Context, msg *gmail.MessageDetail) 
 		}
 
 		for _, uids := range uidGroups {
-			if len(uids) == 0 || len(out) >= limit {
+			if len(uids) == 0 || len(out) >= limit || ctx.Err() != nil {
 				break
 			}
 			bodies, ferr := c.uidFetchBodies(strings.Join(uids, ","))

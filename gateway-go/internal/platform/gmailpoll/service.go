@@ -50,8 +50,10 @@ type Config struct {
 	// OnAnalyzed, if set, is invoked once per individually-analyzed email in
 	// a poll cycle so the server layer can cache the result and write a
 	// per-message wiki page (Related = identified projects). nil = skip
-	// per-email persistence (consolidated report/diary still run).
-	OnAnalyzed func(msg *gmail.MessageDetail, res AnalysisResult)
+	// per-email persistence (consolidated report/diary still run). The poll path
+	// logs callback failures and continues; LMTP ingest returns the error so the
+	// durable queue can retry instead of marking the mail done.
+	OnAnalyzed func(msg *gmail.MessageDetail, res AnalysisResult) error
 
 	// ProjectsFn lists registered project wiki pages so analysis can cite
 	// related projects by real path. Forwarded to PipelineDeps. nil = none.
@@ -302,7 +304,9 @@ func (s *Service) poll(ctx context.Context, client *gmail.Client) error {
 	// consolidated report failed — the per-email results are independent.
 	if s.cfg.OnAnalyzed != nil {
 		for _, it := range items {
-			s.cfg.OnAnalyzed(it.Msg, it.Result)
+			if err := s.cfg.OnAnalyzed(it.Msg, it.Result); err != nil {
+				s.log.Warn("mail analysis sink 실패", "id", it.Msg.ID, "error", err)
+			}
 		}
 	}
 
@@ -409,7 +413,9 @@ func (s *Service) IngestMessage(ctx context.Context, msg *gmail.MessageDetail, a
 		return AnalysisResult{}, err
 	}
 	if s.cfg.OnAnalyzed != nil {
-		s.cfg.OnAnalyzed(msg, res)
+		if err := s.cfg.OnAnalyzed(msg, res); err != nil {
+			return AnalysisResult{}, err
+		}
 	}
 
 	notify := strings.TrimSpace(res.Text)
