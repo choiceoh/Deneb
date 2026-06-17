@@ -88,6 +88,32 @@ suspend fun DenebGatewayClient.updateCalendarEvent(
  *  a Korean error message otherwise (e.g. when the id is a read-only Google event). */
 suspend fun DenebGatewayClient.deleteCalendarEvent(id: String): String? = rpcWrite("miniapp.calendar.delete", buildJsonObject { put("id", id) })
 
+/** Refresh the pending calendar proposals (the bell). Returns false on a fetch
+ *  failure so the screen can tell a real "no proposals" from a network error. */
+suspend fun DenebGatewayClient.refreshCalendarProposals(): Boolean {
+    val payload = callRpc<CalProposalsPayload>(
+        "miniapp.calendar.proposals.list",
+        buildJsonObject {},
+    ) ?: return false
+    _denebCalProposals.value = payload.proposals.filter { it.id.isNotBlank() }
+    return true
+}
+
+/** Accept a proposal — the gateway creates a local event and marks it accepted.
+ *  Refreshes the proposal list on success. Null on success, Korean error otherwise. */
+suspend fun DenebGatewayClient.acceptCalendarProposal(id: String): String? {
+    val err = rpcWrite("miniapp.calendar.proposals.accept", buildJsonObject { put("id", id) })
+    if (err == null) refreshCalendarProposals()
+    return err
+}
+
+/** Reject (dismiss) a proposal so it is never re-proposed. Refreshes the list. */
+suspend fun DenebGatewayClient.rejectCalendarProposal(id: String): String? {
+    val err = rpcWrite("miniapp.calendar.proposals.reject", buildJsonObject { put("id", id) })
+    if (err == null) refreshCalendarProposals()
+    return err
+}
+
 /** Full calendar event (attendees, Meet link, description) for the detail screen. */
 suspend fun DenebGatewayClient.fetchCalendarEvent(id: String): CalendarEventDetail? {
     val p = callRpc<CalendarEventOut>(
