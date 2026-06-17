@@ -41,6 +41,48 @@ func TestCreateGetDelete(t *testing.T) {
 	}
 }
 
+func TestUpdatePreservesProvenance(t *testing.T) {
+	s := newTestStore(t)
+	start := time.Date(2026, 6, 10, 14, 0, 0, 0, time.UTC)
+	ev, err := s.Create(CreateInput{
+		Summary:     "ZTT 미팅",
+		Start:       start,
+		Source:      "mail:abc123",
+		SourceLabel: "비금 154kV 통관",
+		Kind:        "meeting",
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	// A normal edit (time + title) carries no provenance — it must survive.
+	newStart := start.Add(2 * time.Hour)
+	updated, err := s.Update(ev.ID, CreateInput{Summary: "ZTT 미팅 (시간 변경)", Start: newStart})
+	if err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	if updated.Source != "mail:abc123" || updated.SourceLabel != "비금 154kV 통관" || updated.Kind != "meeting" {
+		t.Fatalf("update dropped provenance: %+v", updated)
+	}
+	if updated.Summary != "ZTT 미팅 (시간 변경)" || !updated.Start.Equal(newStart) {
+		t.Fatalf("update didn't apply the edit: %+v", updated)
+	}
+	// Survives a reload from disk.
+	if s2, _ := New(s.path); s2.Get(ev.ID) == nil || s2.Get(ev.ID).Source != "mail:abc123" {
+		t.Fatalf("provenance lost across reload")
+	}
+	// An explicitly supplied value still overrides, per field.
+	over, err := s.Update(ev.ID, CreateInput{
+		Summary: "ZTT 미팅", Start: newStart,
+		Source: "mail:zzz", SourceLabel: "새 출처", Kind: "deadline",
+	})
+	if err != nil {
+		t.Fatalf("Update override: %v", err)
+	}
+	if over.Source != "mail:zzz" || over.SourceLabel != "새 출처" || over.Kind != "deadline" {
+		t.Errorf("explicit provenance override not applied: %+v", over)
+	}
+}
+
 func TestCreatePreservesProvenance(t *testing.T) {
 	s := newTestStore(t)
 	start := time.Date(2026, 6, 10, 14, 0, 0, 0, time.UTC)
