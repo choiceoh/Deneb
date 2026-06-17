@@ -39,6 +39,7 @@ import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -85,7 +86,7 @@ import kotlin.time.Instant
 
 /**
  * Month-grid calendar (`miniapp.calendar.list_range`): a tappable month grid on
- * top (dots mark days with events), the selected day's events below, and a "추가"
+ * top (dots mark days with events), the selected day's events below, and a "+"
  * button that opens the manual add screen. Pull to refresh re-fetches the month.
  *
  * Design split (see .claude/rules/native-design-system.md): the frame + type are
@@ -227,10 +228,6 @@ fun DenebCalendarScreen(
                 onBell = { showProposals = !showProposals },
                 onPrev = { scope.launch { pagerState.animateScrollToPage(pagerState.currentPage - 1) } },
                 onNext = { scope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) } },
-                onToday = {
-                    selected = today
-                    scope.launch { pagerState.animateScrollToPage(startIndex) }
-                },
                 onAdd = { onAddEvent(selected) },
             )
             if (showProposals) {
@@ -546,13 +543,14 @@ private fun MonthControls(
     onBell: () -> Unit,
     onPrev: () -> Unit,
     onNext: () -> Unit,
-    onToday: () -> Unit,
     onAdd: () -> Unit,
 ) {
     // Month control (‹ label ›) hugs the left at its natural (compact) width; a
-    // weighted Spacer pushes the right-side actions to the edge and leaves a gap
-    // for the bell badge. 추가 stays on one row via softWrap=false + maxLines=1,
-    // so the narrower title can't force it to wrap.
+    // weighted Spacer pushes the right-side actions (bell + add) to the edge. The
+    // add affordance is a compact "+" tonal icon button — adding the proposal bell
+    // had squeezed a "추가" text button into wrapping/truncation at phone width, so
+    // the text was dropped in favor of the glyph (the explicit "오늘" jump went too;
+    // the ‹ › nav still returns to any month).
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         IconButton(onClick = onPrev, modifier = Modifier.size(36.dp)) {
             Text("‹", style = DenebType.subject, color = MaterialTheme.colorScheme.onBackground)
@@ -568,11 +566,9 @@ private fun MonthControls(
         }
         Spacer(Modifier.weight(1f))
         CalendarBell(count = proposalCount, onClick = onBell)
-        TextButton(onClick = onToday, contentPadding = PaddingValues(horizontal = 8.dp)) { Text("오늘") }
-        FilledTonalButton(
-            onClick = onAdd,
-            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
-        ) { Text("추가", maxLines = 1, softWrap = false) }
+        FilledTonalIconButton(onClick = onAdd) {
+            Text("+", style = DenebType.subject)
+        }
     }
 }
 
