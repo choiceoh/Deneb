@@ -178,7 +178,7 @@ func calActionBrief(ctx context.Context, d *toolctx.CalendarDeps, p calParams) s
 	if warn != "" {
 		sb.WriteString("\n(" + warn + ")")
 	}
-	sb.WriteString("\n\n이걸 사람이 바로 읽을 브리핑으로 정리해. 연결된 일정([미팅]·「메일 제목」·mail:<id>)은 mail_archive로 원본 맥락을 확인해 왜 지금 중요한지·무엇을 준비해야 하는지 한 줄씩 덧붙이고, 겹치는 일정이 있으면 먼저 경고해. 연결·맥락 없는 일정은 시간·제목만 간단히.")
+	sb.WriteString("\n\n이걸 사람이 바로 읽을 브리핑으로 정리해. 연결 표시([미팅]·「메일 제목」)가 있는 일정은 calendar(action=\"prep\", id=…) 또는 그 제목으로 mail_archive 검색해 원본 맥락을 확인하고, 왜 지금 중요한지·무엇을 준비해야 하는지 한 줄씩 덧붙여. 겹치는 일정이 있으면 먼저 경고해. 연결·맥락 없는 일정은 시간·제목만 간단히.")
 	return strings.TrimRight(sb.String(), "\n")
 }
 
@@ -334,6 +334,14 @@ func calNextEvent(ctx context.Context, d *toolctx.CalendarDeps) *calendar.Event 
 	events, _ := calMerged(ctx, d, now, now.Add(14*24*time.Hour))
 	if len(events) == 0 {
 		return nil
+	}
+	// Prefer the next timed event — "다음 미팅" means a meeting, not an all-day
+	// marker — falling back to the soonest event when everything is all-day.
+	for i := range events {
+		if !events[i].AllDay {
+			e := events[i]
+			return &e
+		}
 	}
 	e := events[0]
 	return &e
