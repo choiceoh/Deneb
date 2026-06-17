@@ -28,18 +28,18 @@ import (
 
 // autoProposeCalendarFromMail creates calendar proposals from a mail analysis.
 // Best-effort: a missing store or a per-item failure is logged and skipped.
-func (s *Server) autoProposeCalendarFromMail(msg *gmail.MessageDetail, items []gmailpoll.ActionItem, deal *gmailpoll.DealInfo) {
+func (s *Server) autoProposeCalendarFromMail(msg *gmail.MessageDetail, items []gmailpoll.ActionItem, deal *gmailpoll.DealInfo) int {
 	if msg == nil {
-		return
+		return 0
 	}
 	inputs := calendarProposalsFromMail(msg.ID, msg.Subject, msg.From, items, deal, time.Now())
 	if len(inputs) == 0 {
-		return
+		return 0
 	}
 	store, err := calprop.Default()
 	if err != nil {
 		s.logger.Warn("mail→calendar: proposal store unavailable", "id", msg.ID, "error", err)
-		return
+		return len(inputs)
 	}
 	created := 0
 	for _, in := range inputs {
@@ -55,6 +55,7 @@ func (s *Server) autoProposeCalendarFromMail(msg *gmail.MessageDetail, items []g
 	if created > 0 {
 		s.logger.Info("mail→calendar: proposed calendar events from analysis", "id", msg.ID, "count", created)
 	}
+	return len(inputs)
 }
 
 // calendarProposalsFromMail is the pure decision: pick the schedule-worthy items

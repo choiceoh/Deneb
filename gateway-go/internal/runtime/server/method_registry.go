@@ -689,6 +689,7 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 				return handlerminiapp.PipelineFromGmailpoll(gmailClient, llmClient, localClient, model, localModel, s.mailAnalysisPrompt(), s.projectCandidatesFn(), s.wikiSenderFacts, tools.ExtractAttachmentTextBytes)
 			},
 			Cache:      handlerminiapp.NewAnalysisStore(filepath.Join(s.denebDir, "cache", "mail_analysis")),
+			WorkState:  mailwork.New(filepath.Join(s.denebDir, "mail_work_state.json")),
 			SaveToWiki: makeMailAnalysisWikiSink(hub),
 			WikiStore: func() (handlerminiapp.MemorySearcher, error) {
 				store := hub.WikiStore()

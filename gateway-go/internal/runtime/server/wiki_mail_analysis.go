@@ -17,6 +17,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmailpoll"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailwork"
 	handlerminiapp "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp"
 )
 
@@ -170,6 +171,7 @@ func (s *Server) projectCandidatesFn() func() []gmailpoll.ProjectCandidate {
 // manual tap.
 func (s *Server) makeMailAnalysisSink() func(*gmail.MessageDetail, gmailpoll.AnalysisResult) error {
 	cacheStore := handlerminiapp.NewAnalysisStore(filepath.Join(s.denebDir, "cache", "mail_analysis"))
+	workStore := mailwork.New(filepath.Join(s.denebDir, "mail_work_state.json"))
 	return func(msg *gmail.MessageDetail, res gmailpoll.AnalysisResult) error {
 		if msg == nil {
 			return nil
@@ -204,14 +206,31 @@ func (s *Server) makeMailAnalysisSink() func(*gmail.MessageDetail, gmailpoll.Ana
 		}
 		// Turn the analysis's high-priority follow-up actions into to-dos
 		// (best-effort, deduped per mail). See mail_todo.go.
-		s.autoCreateTodosFromMail(msg, res.ActionItems)
+		todoCount := s.autoCreateTodosFromMail(msg, res.ActionItems)
 		// File any extracted business document onto a 거래 wiki page (silent
 		// knowledge enrichment — no push).
 		s.fileDealFromMail(msg, res.Deal)
 		// Propose schedule-worthy items (meetings, deadlines) as calendar
 		// proposals the operator accepts from the calendar bell. See
 		// mail_calendar.go. No push — bell badge only.
-		s.autoProposeCalendarFromMail(msg, res.ActionItems, res.Deal)
+		calendarCount := s.autoProposeCalendarFromMail(msg, res.ActionItems, res.Deal)
+		if _, err := workStore.MarkAnalysisDone(mailwork.AnalysisInput{
+			MessageInput: mailwork.MessageInput{
+				ID:              msg.ID,
+				ThreadID:        msg.ThreadID,
+				From:            msg.From,
+				Subject:         msg.Subject,
+				Date:            msg.Date,
+				HasAttachment:   len(msg.Attachments) > 0,
+				AttachmentCount: len(msg.Attachments),
+			},
+			Quality:               res.Importance,
+			CalendarProposalCount: calendarCount,
+			TodoCount:             todoCount,
+		}); err != nil {
+			s.logger.Warn("mail workflow state 저장 실패", "id", msg.ID, "error", err)
+			errs = append(errs, err)
+		}
 		return errors.Join(errs...)
 	}
 }
