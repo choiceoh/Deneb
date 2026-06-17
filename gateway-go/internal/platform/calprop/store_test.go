@@ -99,3 +99,36 @@ func TestPersistsAcrossReload(t *testing.T) {
 		t.Error("persisted Source should dedup across reload")
 	}
 }
+
+func TestCreateIfAbsent_PrunesOldTerminal(t *testing.T) {
+	s := newTestStore(t)
+	orig := nowMs
+	defer func() { nowMs = orig }()
+	base := int64(1_700_000_000_000)
+	nowMs = func() int64 { return base }
+
+	p, _, _ := s.CreateIfAbsent(CreateInput{Title: "old", Start: "2026-07-01", AllDay: true, Source: "s:old"})
+	if _, err := s.Decide(p.ID, StatusRejected, ""); err != nil {
+		t.Fatalf("Decide: %v", err)
+	}
+	// Advance past the retention window, then a new create triggers the prune.
+	nowMs = func() int64 { return base + terminalRetention.Milliseconds() + 1 }
+	s.CreateIfAbsent(CreateInput{Title: "new", Start: "2026-07-02", AllDay: true, Source: "s:new"})
+
+	// The pruned terminal's Source is forgotten → re-proposable.
+	_, created, _ := s.CreateIfAbsent(CreateInput{Title: "old again", Start: "2026-07-01", AllDay: true, Source: "s:old"})
+	if !created {
+		t.Error("a long-decided proposal's Source should be re-proposable after prune")
+	}
+}
+
+func TestCreateIfAbsent_KeepsRecentTerminal(t *testing.T) {
+	s := newTestStore(t)
+	p, _, _ := s.CreateIfAbsent(CreateInput{Title: "r", Start: "2026-07-01", AllDay: true, Source: "s:r"})
+	s.Decide(p.ID, StatusRejected, "")
+	// A new create runs the prune, but a recently-decided terminal must stay.
+	s.CreateIfAbsent(CreateInput{Title: "other", Start: "2026-07-02", AllDay: true, Source: "s:other"})
+	if _, created, _ := s.CreateIfAbsent(CreateInput{Title: "r2", Start: "2026-07-01", AllDay: true, Source: "s:r"}); created {
+		t.Error("a recently-rejected proposal should still dedup (not be re-proposed)")
+	}
+}

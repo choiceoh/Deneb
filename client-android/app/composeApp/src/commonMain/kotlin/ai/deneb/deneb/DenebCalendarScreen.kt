@@ -635,13 +635,21 @@ private fun CalendarProposalsPopup(
                 if (proposals.isEmpty()) {
                     Text("새 일정 제안이 없습니다.", style = DenebType.body, color = denebHint())
                 } else {
-                    proposals.forEachIndexed { i, p ->
-                        if (i > 0) {
-                            Spacer(Modifier.height(8.dp))
-                            HorizontalDivider(color = denebHairline())
-                            Spacer(Modifier.height(8.dp))
+                    // Cap the height and scroll so a large backlog can't overflow the
+                    // card / push the grid off-screen. The header above stays pinned.
+                    Column(
+                        Modifier
+                            .heightIn(max = 360.dp)
+                            .verticalScroll(rememberScrollState()),
+                    ) {
+                        proposals.forEachIndexed { i, p ->
+                            if (i > 0) {
+                                Spacer(Modifier.height(8.dp))
+                                HorizontalDivider(color = denebHairline())
+                                Spacer(Modifier.height(8.dp))
+                            }
+                            CalendarProposalRow(p, onAccept = { onAccept(p.id) }, onReject = { onReject(p.id) })
                         }
-                        CalendarProposalRow(p, onAccept = { onAccept(p.id) }, onReject = { onReject(p.id) })
                     }
                 }
             }
