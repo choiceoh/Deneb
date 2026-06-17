@@ -45,6 +45,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -54,6 +55,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalDate
@@ -190,6 +192,19 @@ fun DenebMailScreen(
         // and the field simply shows — with no scroll range there is no way to
         // pull it out, so that is the right fallback.)
         val listState = rememberLazyListState(initialFirstVisibleItemIndex = 1)
+        LaunchedEffect(listState, nextToken, activeQuery) {
+            snapshotFlow {
+                val layout = listState.layoutInfo
+                val lastVisible = layout.visibleItemsInfo.lastOrNull()?.index ?: -1
+                layout.totalItemsCount > 0 && lastVisible >= layout.totalItemsCount - 4
+            }.distinctUntilChanged().collect { nearEnd ->
+                if (nearEnd && nextToken != null && !loadingMore) {
+                    loadingMore = true
+                    client.loadMoreMail()
+                    loadingMore = false
+                }
+            }
+        }
 
         Box(Modifier.weight(1f).fillMaxWidth()) {
             if (mail.isEmpty() && loadOk == null) {
@@ -257,7 +272,7 @@ fun DenebMailScreen(
                         } else if (mail.isEmpty()) {
                             item(key = "empty") {
                                 Box(Modifier.padding(horizontal = 24.dp)) {
-                                    DenebEmpty(if (activeQuery != null) "검색 결과 없음" else "최근 7일 메일 없음")
+                                    DenebEmpty(if (activeQuery != null) "검색 결과 없음" else "최근 30일 메일 없음")
                                 }
                             }
                         }
@@ -511,7 +526,7 @@ private fun MailNativeFilterRow(
         buildList {
             add(MailNativeFilter("받은함", null))
             add(MailNativeFilter("첨부", "has:attachment"))
-            add(MailNativeFilter("30일", "{in:inbox is:unread} newer_than:30d"))
+            add(MailNativeFilter("7일", "{in:inbox is:unread} newer_than:7d"))
             if (offlineCapable) add(MailNativeFilter("전체", "in:anywhere"))
         }
     }
