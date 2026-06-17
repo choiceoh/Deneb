@@ -325,8 +325,8 @@ internal fun ChatModeScreen(
                             // behind everything while the reply is being thought up; fades to
                             // black once the answer starts rendering. Drawn over the solid
                             // background but under the content (top bar / chat / input).
-                            // 챗봇 모드 전용 — 업무 모드(recall on)에서는 끈다.
-                            .generatingBackdrop(active = generatingActive && !uiState.recallEnabled)
+                            // 챗봇·업무 모드 모두에 적용 — 생성 중 글로우는 컨텍스트 토글과 무관.
+                            .generatingBackdrop(active = generatingActive)
                             .navigationBarsPadding()
                             .statusBarsPadding()
                             .imePadding(),
@@ -702,10 +702,10 @@ internal fun ChatModeScreen(
                                                 // the bars as it scrolls past, instead of reading as hard-cut /
                                                 // covered. The chat still fills the full height (small padding,
                                                 // not a wide gap) — it just flows under the bars, uncovered.
-                                                modifier = Modifier.fillMaxSize().verticalEdgeFade(top = 28.dp, bottom = 22.dp),
+                                                modifier = Modifier.fillMaxSize().verticalEdgeFade(top = 10.dp, bottom = 22.dp),
                                                 state = listState,
                                                 horizontalAlignment = CenterHorizontally,
-                                                contentPadding = PaddingValues(top = 6.dp, bottom = 8.dp),
+                                                contentPadding = PaddingValues(top = 2.dp, bottom = 8.dp),
                                             ) {
                                                 items(uiState.history, key = { it.id }, contentType = { it.role }) { history ->
                                                     // Readable measure on a wide desktop window: cap every row at the

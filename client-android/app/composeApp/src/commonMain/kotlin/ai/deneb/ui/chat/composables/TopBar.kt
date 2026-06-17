@@ -10,21 +10,25 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import deneb.composeapp.generated.resources.Res
 import deneb.composeapp.generated.resources.ic_add
@@ -36,6 +40,18 @@ import deneb.composeapp.generated.resources.toggle_speech_output_content_descrip
 import nl.marc_apps.tts.TextToSpeechInstance
 import org.jetbrains.compose.resources.stringResource
 import org.jetbrains.compose.resources.vectorResource
+
+// TopBarHeight: trimmed from 52dp. Once the icon buttons stop reserving Material's
+// 48dp enforced touch target (see IconTouchTarget), the bar no longer needs the
+// extra height and sits tighter.
+private val TopBarHeight = 40.dp
+
+// IconTouchTarget: top-bar icon buttons drop from Material's 48dp enforced minimum
+// to a snug target just larger than the 24dp glyph. The bar is a dense mouse+touch
+// surface the operator asked to compact, so we disable the minimum-interactive
+// enforcement (LocalMinimumInteractiveComponentSize = Unspecified) around the bar
+// and let this explicit size apply.
+private val IconTouchTarget = 36.dp
 
 @Composable
 internal fun TopBar(
@@ -49,53 +65,59 @@ internal fun TopBar(
     navigationTabBar: (@Composable () -> Unit)? = null,
     onOpenSessionDrawer: (() -> Unit)? = null,
 ) {
-    if (navigationTabBar != null) {
-        Box(
-            modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 52.dp),
-        ) {
-            Row(modifier = Modifier.align(Alignment.CenterStart)) {
-                DrawerButton(onOpenDrawer)
-                LeadingButtons(textToSpeech, isSpeechOutputEnabled, isSpeaking, actions, isChatHistoryEmpty)
-            }
-            Box(modifier = Modifier.align(Alignment.Center)) {
-                navigationTabBar()
-            }
-            Row(
-                modifier = Modifier.align(Alignment.CenterEnd),
-                verticalAlignment = Alignment.CenterVertically,
+    // Disable the 48dp minimum-interactive enforcement for the whole bar so the
+    // icon buttons can shrink to IconTouchTarget and the bar to TopBarHeight.
+    CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
+        if (navigationTabBar != null) {
+            Box(
+                modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = TopBarHeight),
             ) {
-                RecallModePill(recallEnabled, actions)
-                if (textToSpeech != null) {
-                    SpeechToggleButton(textToSpeech, isSpeechOutputEnabled, isSpeaking, actions)
+                Row(
+                    modifier = Modifier.align(Alignment.CenterStart),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    DrawerButton(onOpenDrawer)
+                    LeadingButtons(textToSpeech, isSpeechOutputEnabled, isSpeaking, actions, isChatHistoryEmpty)
                 }
-                SessionButton(onOpenSessionDrawer)
-            }
-        }
-    } else {
-        // Phone/desktop (no nav tab bar): the 챗봇/업무 mode pill takes the true
-        // center of the bar (Trae-style), with leading buttons pinned at the
-        // start and trailing icons at the end. A Box with three aligned slots —
-        // not a weight Row — so the pill is centered on the bar itself, not just
-        // pushed to the right of the leading group (the previous off-center bug).
-        Box(modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 52.dp)) {
-            Row(
-                modifier = Modifier.align(Alignment.CenterStart),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                DrawerButton(onOpenDrawer)
-                LeadingButtons(textToSpeech, isSpeechOutputEnabled, isSpeaking, actions, isChatHistoryEmpty)
-            }
-            Box(modifier = Modifier.align(Alignment.Center)) {
-                RecallModePill(recallEnabled, actions)
-            }
-            Row(
-                modifier = Modifier.align(Alignment.CenterEnd),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                if (textToSpeech != null) {
-                    SpeechToggleButton(textToSpeech, isSpeechOutputEnabled, isSpeaking, actions)
+                Box(modifier = Modifier.align(Alignment.Center)) {
+                    navigationTabBar()
                 }
-                SessionButton(onOpenSessionDrawer)
+                Row(
+                    modifier = Modifier.align(Alignment.CenterEnd),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    RecallModePill(recallEnabled, actions)
+                    if (textToSpeech != null) {
+                        SpeechToggleButton(textToSpeech, isSpeechOutputEnabled, isSpeaking, actions)
+                    }
+                    SessionButton(onOpenSessionDrawer)
+                }
+            }
+        } else {
+            // Phone/desktop (no nav tab bar): the 챗봇/업무 mode pill takes the true
+            // center of the bar (Trae-style), with leading buttons pinned at the
+            // start and trailing icons at the end. A Box with three aligned slots —
+            // not a weight Row — so the pill is centered on the bar itself.
+            Box(modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = TopBarHeight)) {
+                Row(
+                    modifier = Modifier.align(Alignment.CenterStart),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    DrawerButton(onOpenDrawer)
+                    LeadingButtons(textToSpeech, isSpeechOutputEnabled, isSpeaking, actions, isChatHistoryEmpty)
+                }
+                Box(modifier = Modifier.align(Alignment.Center)) {
+                    RecallModePill(recallEnabled, actions)
+                }
+                Row(
+                    modifier = Modifier.align(Alignment.CenterEnd),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (textToSpeech != null) {
+                        SpeechToggleButton(textToSpeech, isSpeechOutputEnabled, isSpeaking, actions)
+                    }
+                    SessionButton(onOpenSessionDrawer)
+                }
             }
         }
     }
@@ -108,7 +130,7 @@ private fun SessionButton(onOpenSessionDrawer: (() -> Unit)?) {
     val haptics = rememberHaptics()
     if (onOpenSessionDrawer == null) return
     IconButton(
-        modifier = Modifier.handCursor(),
+        modifier = Modifier.handCursor().size(IconTouchTarget),
         onClick = {
             haptics.tap()
             onOpenSessionDrawer()
@@ -129,7 +151,7 @@ private fun DrawerButton(onOpenDrawer: (() -> Unit)?) {
     val haptics = rememberHaptics()
     if (onOpenDrawer == null) return
     IconButton(
-        modifier = Modifier.handCursor(),
+        modifier = Modifier.handCursor().size(IconTouchTarget),
         onClick = {
             haptics.tap()
             onOpenDrawer()
@@ -154,7 +176,7 @@ private fun LeadingButtons(
     val haptics = rememberHaptics()
     if (!isChatHistoryEmpty) {
         IconButton(
-            modifier = Modifier.handCursor(),
+            modifier = Modifier.handCursor().size(IconTouchTarget),
             onClick = {
                 haptics.tap()
                 if (isSpeechOutputEnabled && isSpeaking) {
@@ -242,7 +264,7 @@ private fun SpeechToggleButton(
 ) {
     val haptics = rememberHaptics()
     IconButton(
-        modifier = Modifier.handCursor(),
+        modifier = Modifier.handCursor().size(IconTouchTarget),
         onClick = {
             haptics.toggle(!isSpeechOutputEnabled)
             if (isSpeechOutputEnabled && isSpeaking) {
