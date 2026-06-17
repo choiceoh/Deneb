@@ -529,9 +529,13 @@ private fun MailWorkflowStatus(state: MailWorkState) {
 private fun mailWorkflowStatusParts(state: MailWorkState): List<String> = buildList {
     when (state.analysisStatus) {
         "failed" -> add("분석 실패")
+
         "analyzing" -> add("분석 중")
+
         "queued" -> add("분석 대기")
+
         "stale" -> add("재분석 필요")
+
         "done" -> add(
             when (state.analysisQuality) {
                 "urgent" -> "분석 완료: 긴급"

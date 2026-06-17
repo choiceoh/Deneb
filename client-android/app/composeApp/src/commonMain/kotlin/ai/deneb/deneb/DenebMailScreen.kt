@@ -589,15 +589,20 @@ internal fun mailRowNativeMeta(message: MailMessage): String? = buildList {
 
 private fun mailRowAnalysisLabel(state: MailWorkState): String? = when (state.analysisStatus) {
     "failed" -> "분석 실패"
+
     "analyzing" -> "분석 중"
+
     "queued" -> "분석 대기"
+
     "stale" -> "재분석 필요"
+
     "done" -> when (state.analysisQuality) {
         "urgent" -> "분석: 긴급"
         "attention" -> "분석: 확인"
         "routine" -> "분석: 일반"
         else -> "분석 완료"
     }
+
     else -> null
 }
 
