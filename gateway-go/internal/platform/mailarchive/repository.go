@@ -19,8 +19,14 @@ import (
 const (
 	archivePageTokenPrefix = "archive:"
 	archiveLocatorPrefix   = "archive|"
-	defaultNativeLookback  = 7 * 24 * time.Hour
-	maxArchiveFetchPerBox  = 250
+	defaultNativeLookback  = 30 * 24 * time.Hour
+	// Search syntax such as has:attachment and the local read/archive overlay
+	// are applied after IMAP returns candidates. Scan a wider local window than
+	// one page so a list does not look nearly empty just because the newest rows
+	// were filtered out.
+	minArchiveFetchPerBox           = 300
+	maxArchiveFetchPerBox           = 1000
+	archivePostFilterScanMultiplier = 6
 )
 
 var (
@@ -312,7 +318,7 @@ type archiveQuery struct {
 
 func parseArchiveQuery(query string, now time.Time) (archiveQuery, error) {
 	q := strings.TrimSpace(query)
-	defaultView := q == "" || strings.EqualFold(q, "{in:inbox is:unread} newer_than:7d")
+	defaultView := isDefaultArchiveViewQuery(q)
 	since := time.Time{}
 	if defaultView {
 		since = now.Add(-defaultNativeLookback)
@@ -362,6 +368,15 @@ func parseArchiveQuery(query string, now time.Time) (archiveQuery, error) {
 	return archiveQuery{Criteria: strings.Join(parts, " "), DefaultView: defaultView, HasAttachment: hasAttachment}, nil
 }
 
+func isDefaultArchiveViewQuery(q string) bool {
+	q = strings.TrimSpace(q)
+	return q == "" ||
+		strings.EqualFold(q, "{in:inbox is:unread} newer_than:30d") ||
+		// Older native builds sent the previous default explicitly. Keep its
+		// inbox/read-overlay semantics while still honoring its 7-day lookback.
+		strings.EqualFold(q, "{in:inbox is:unread} newer_than:7d")
+}
+
 var (
 	newerThanRe           = regexp.MustCompile(`(?i)\bnewer_than:(\d+)([dmy])\b`)
 	fromQueryRe           = regexp.MustCompile(`(?i)\bfrom:(?:"([^"]+)"|([^\s}]+))`)
@@ -400,9 +415,9 @@ func (r *Repository) searchArchive(ctx context.Context, spec archiveQuery, pageT
 	if err != nil {
 		return nil, "", err
 	}
-	fetchPerBox := offset + maxResults + 1
-	if fetchPerBox < maxResults {
-		fetchPerBox = maxResults
+	fetchPerBox := offset + maxResults*archivePostFilterScanMultiplier + 1
+	if fetchPerBox < minArchiveFetchPerBox {
+		fetchPerBox = minArchiveFetchPerBox
 	}
 	if fetchPerBox > maxArchiveFetchPerBox {
 		fetchPerBox = maxArchiveFetchPerBox

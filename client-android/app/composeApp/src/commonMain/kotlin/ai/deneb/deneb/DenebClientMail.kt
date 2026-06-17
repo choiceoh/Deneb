@@ -26,6 +26,7 @@ import kotlinx.serialization.json.putJsonArray
 /** Cap on the session read-overlay so a very long session can't grow it without
  *  bound (EmailStore caps its pending queue for the same reason). */
 private const val MAX_LOCAL_READ_IDS = 1000
+private const val MAIL_LIST_PAGE_SIZE = 60
 
 /**
  * Re-apply the session read-overlay to a freshly fetched page: a mail the user
@@ -81,7 +82,7 @@ suspend fun DenebGatewayClient.refreshMail(query: String? = null): Boolean {
     val payload = callRpc<MailListPayload>(
         "miniapp.gmail.list_recent",
         buildJsonObject {
-            put("limit", 25)
+            put("limit", MAIL_LIST_PAGE_SIZE)
             q?.let { put("query", it) }
         },
     ) ?: return false
@@ -170,7 +171,7 @@ suspend fun DenebGatewayClient.loadMoreMail() {
     val payload = callRpc<MailListPayload>(
         "miniapp.gmail.list_recent",
         buildJsonObject {
-            put("limit", 25)
+            put("limit", MAIL_LIST_PAGE_SIZE)
             put("pageToken", token)
             denebMailActiveQuery?.let { put("query", it) }
         },

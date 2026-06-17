@@ -181,6 +181,52 @@ func TestRepositorySearchPageFiltersHasAttachmentInArchive(t *testing.T) {
 	}
 }
 
+func TestRepositorySearchPageScansPastFilteredNewestRows(t *testing.T) {
+	msgs := map[string][]byte{}
+	for i := 1; i <= 80; i++ {
+		uid := fmt.Sprintf("%d", i)
+		msgs[uid] = []byte(archiveTestMessage(
+			fmt.Sprintf("m%03d@example.com", i),
+			"sender@example.com",
+			fmt.Sprintf("Message %03d", i),
+			"Archive body for native mail.",
+			"",
+		))
+	}
+	srv := newTestIMAPArchive(t, map[string]map[string][]byte{
+		"INBOX": msgs,
+	})
+	repo := NewRepository(Config{
+		Addr:      srv.addr,
+		User:      "u",
+		Pass:      "p",
+		Mailboxes: []string{"INBOX"},
+		Timeout:   time.Second,
+	}, RepositoryOptions{
+		StatePath: t.TempDir() + "/state.json",
+		Now:       func() time.Time { return time.Date(2026, 6, 17, 12, 0, 0, 0, time.UTC) },
+	})
+	for i := 51; i <= 80; i++ {
+		if err := repo.state.MarkRead(fmt.Sprintf("m%03d@example.com", i)); err != nil {
+			t.Fatalf("mark read: %v", err)
+		}
+	}
+
+	rows, next, err := repo.SearchPage(context.Background(), "", "", 10)
+	if err != nil {
+		t.Fatalf("SearchPage: %v", err)
+	}
+	if len(rows) != 10 {
+		t.Fatalf("rows len = %d, want a full page after skipping read newest rows: %#v", len(rows), rows)
+	}
+	if rows[0].ID != "m050@example.com" || rows[9].ID != "m041@example.com" {
+		t.Fatalf("rows = %#v, want newest unread range m050..m041", rows)
+	}
+	if next == "" {
+		t.Fatalf("next is empty, want more unread rows behind the first page")
+	}
+}
+
 func TestRepositoryMutationResolvesArchiveIDWithoutPriorList(t *testing.T) {
 	raw := archiveTestMessage("m3@example.com", "sender@example.com", "Push action", "Opened from notification.", "")
 	srv := newTestIMAPArchive(t, map[string]map[string][]byte{

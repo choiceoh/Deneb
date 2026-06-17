@@ -72,12 +72,12 @@ type GmailDeps struct {
 }
 
 // Default list query and limit applied when the Mini App omits them.
-// Tuned for triage: everything in the inbox OR still unread (the latter
-// captures auto-archived-yet-unread mail from filter workflows), in
-// the last week, single screenful. Gmail uses {} as a logical OR group.
+// Tuned for native triage: everything in the inbox OR still unread (the latter
+// captures auto-archived-yet-unread mail from filter workflows), in the last
+// month. Gmail uses {} as a logical OR group.
 const (
-	defaultGmailQuery = "{in:inbox is:unread} newer_than:7d"
-	defaultGmailLimit = 20
+	defaultGmailQuery = "{in:inbox is:unread} newer_than:30d"
+	defaultGmailLimit = 60
 	maxGmailLimit     = 100
 	maxGmailBodyChars = 3000
 	// maxGmailFullBodyChars caps the "full" body view requested by the
