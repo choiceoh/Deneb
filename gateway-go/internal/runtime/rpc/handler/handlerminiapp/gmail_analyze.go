@@ -325,7 +325,7 @@ const interactiveAnalysisStage2Tokens = 4096
 // senderFactsFn (optional) resolves sender context in-process from the wiki
 // graph; when supplied it is preferred over the external graphify CLI so the
 // analysis always has "who is this person to us" even on a fresh deploy.
-func PipelineFromGmailpoll(gmailClient *gmail.Client, llmClient, localClient *llm.Client, mainModel, localModel string, projectsFn func() []gmailpoll.ProjectCandidate, senderFactsFn func(ctx context.Context, displayName string) string, attachmentExtractFn func(ctx context.Context, data []byte, filename, mimeType string) string) (AnalyzePipeline, error) {
+func PipelineFromGmailpoll(gmailClient *gmail.Client, llmClient, localClient *llm.Client, mainModel, localModel, analysisPrompt string, projectsFn func() []gmailpoll.ProjectCandidate, senderFactsFn func(ctx context.Context, displayName string) string, attachmentExtractFn func(ctx context.Context, data []byte, filename, mimeType string) string) (AnalyzePipeline, error) {
 	if llmClient == nil || strings.TrimSpace(mainModel) == "" {
 		return nil, ErrAnalyzeNoLLM
 	}
@@ -336,6 +336,7 @@ func PipelineFromGmailpoll(gmailClient *gmail.Client, llmClient, localClient *ll
 			LocalClient:         localClient,
 			LocalModel:          localModel,
 			MainModel:           mainModel,
+			AnalysisPrompt:      strings.TrimSpace(analysisPrompt),
 			ProjectsFn:          projectsFn,
 			SenderFactsFn:       senderFactsFn,
 			AttachmentExtractFn: attachmentExtractFn,

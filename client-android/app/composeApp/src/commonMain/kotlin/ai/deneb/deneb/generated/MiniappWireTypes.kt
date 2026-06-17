@@ -246,6 +246,36 @@ data class ProjectRef(
 )
 
 @Serializable
+data class PromptDetailOut(
+    val id: String = "",
+    val title: String = "",
+    val description: String = "",
+    val category: String = "",
+    val text: String = "",
+    val defaultText: String = "",
+    val editable: Boolean = false,
+    val overridden: Boolean = false,
+    val updatedAtMs: Long = 0L,
+)
+
+@Serializable
+data class PromptListResponse(
+    val prompts: List<PromptRow> = emptyList(),
+    val count: Int = 0,
+)
+
+@Serializable
+data class PromptRow(
+    val id: String = "",
+    val title: String = "",
+    val description: String = "",
+    val category: String = "",
+    val editable: Boolean = false,
+    val overridden: Boolean = false,
+    val updatedAtMs: Long = 0L,
+)
+
+@Serializable
 data class QATurn(
     val q: String = "",
     val a: String = "",

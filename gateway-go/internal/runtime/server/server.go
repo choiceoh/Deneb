@@ -20,6 +20,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/daemon"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/monitoring"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/prompts"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/push"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/metrics"
@@ -189,6 +190,10 @@ type Server struct {
 	// wiring (checkpoint root, log dir, etc.) reads this instead of
 	// re-resolving — single source of truth.
 	denebDir string
+
+	// promptStore persists operator-editable prompt overrides surfaced in the
+	// native Settings prompt corner. nil only if initialization is skipped in tests.
+	promptStore *prompts.Store
 
 	// Session, chat, and hook subsystems — logically grouped to reduce God-Object growth.
 	*SessionManager // sessions, transcript
@@ -368,6 +373,7 @@ func New(addr string, opts ...Option) (*Server, error) {
 	// Subsystem construction: each independently testable.
 	denebDir := resolveDenebDir()
 	s.denebDir = denebDir
+	s.promptStore = newPromptStore(denebDir)
 	s.InfraSubsystem = NewInfraSubsystem(s.logger, denebDir)
 	s.WorkflowSubsystem = NewWorkflowSubsystem(s.logger)
 

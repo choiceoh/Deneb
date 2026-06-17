@@ -358,11 +358,11 @@ func TestGmailAnalyzeMethods_MissingDepsReturnsNil(t *testing.T) {
 }
 
 func TestPipelineFromGmailpoll_NoLLM(t *testing.T) {
-	_, err := PipelineFromGmailpoll(nil, nil, nil, "", "", nil, nil, nil)
+	_, err := PipelineFromGmailpoll(nil, nil, nil, "", "", "", nil, nil, nil)
 	if !errors.Is(err, ErrAnalyzeNoLLM) {
 		t.Errorf("err = %v, want ErrAnalyzeNoLLM", err)
 	}
-	_, err = PipelineFromGmailpoll(nil, nil, nil, "claude-opus", "", nil, nil, nil)
+	_, err = PipelineFromGmailpoll(nil, nil, nil, "claude-opus", "", "", nil, nil, nil)
 	if !errors.Is(err, ErrAnalyzeNoLLM) {
 		t.Errorf("nil LLMClient should still return ErrAnalyzeNoLLM, got %v", err)
 	}

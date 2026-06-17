@@ -12,25 +12,26 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
 
-// DefaultPrompt is the default email analysis prompt.
-//
-// This is the single-email, no-tools analysis path (autonomous Gmail poll).
-// It mirrors the email-analysis skill's *stance* (not a fixed form): the email
-// decides what leads and how deep to go. The lens — why now, stakeholders,
-// risk/deadline, next steps — is offered as things worth considering, not as
-// mandatory sections to fill in order.
-const DefaultPrompt = `다음 이메일을 업무 관점에서 깊이 읽어주세요. 이건 채워야 할
-양식이 아니라 분석 자세입니다.
+const PromptIDAutoMailAnalysis = "mail.auto.analysis"
 
-먼저 이 메일이 왜 지금 왔는지 생각하고, 그 사안에서 가장 중요한 것부터 풀어내세요.
-다루면 좋은 것들: 발신자가 무엇을 요청·통보하는지, 결제 기한·마감·금액처럼 시간과
-돈에 민감한 것(있으면 ⚠️로 표시), 그리고 추측이 아닌 구체적인 다음 행동.
+// DefaultPrompt is the editable default instruction block for single-mail
+// analysis. The pipeline owns the source/context insertion; operators edit this
+// stance text from the native Prompt Corner.
+const DefaultPrompt = `카카오메일 알림으로 도착한 새 메일을 업무 관점에서 깊이 분석한다.
+업무 무관한 광고·뉴스레터·자동 알림이면 길게 분석하지 말고 "참고"로 짧게 끝낸다.
 
-무엇을 앞세우고 어떻게 묶을지는 그 메일이 정합니다. 고정된 섹션 틀에 끼워 맞추지
-말고 — 어떤 메일은 한 사람의 결정이 핵심이고, 어떤 메일은 타임라인이 전부입니다 —
-짧으면 짧게 복잡하면 깊게 쓰세요. 근거 있는 것만 말하되 리스크나 판단에는 그 근거가
-된 메일 문구나 맥락을 짧게 인용해 사실과 추측이 구분되게 하고, 모르는 건 추측으로
-메우지 마세요. 한국어로 작성합니다.`
+분석은 고정 양식 채우기가 아니라 판단이다. 그래도 다음 관점은 반드시 확인한다.
+- 이 메일이 왜 지금 왔는지: 직전 합의, 바뀐 조건, 이어지는 요청을 이전 메일 맥락과 관련 기억으로 연결한다.
+- 발신자·수신자·회사·프로젝트 관계: 누가 어떤 입장에서 말하고 있고, 실무/결정 라인이 어떻게 움직이는지 본다.
+- 프로젝트 맥락: 현재 어디까지 진행됐고, 이 메일이 그 흐름에서 어떤 의미인지 설명한다.
+- 숫자와 조건: 단가·수량·금액·납기·결제기한·마감·승인 조건이 있으면 원문 수치를 보존하고, 이전 맥락과 달라진 값이 있을 때만 비교한다.
+- 첨부파일 내용이 주어졌으면 본문보다 첨부 원문 수치를 우선해 반영한다.
+- 마지막은 추측이 아닌 구체적인 다음 행동으로 끝낸다.
+
+보고는 먼저 사람이 바로 읽을 수 있는 텍스트로 출력한다. 메일 전체 본문을 그대로 전달하지 않는다.
+중요도는 "긴급", "확인 필요", "참고" 중 하나가 드러나게 쓰되, 장식용 이모지는 쓰지 않는다.
+기한·금액처럼 놓치면 손해가 큰 경고에만 ⚠️를 드물게 쓸 수 있다.
+한국어로 간결하게 쓰고, 근거가 필요한 판단에는 메일 문구나 이전 맥락을 짧게 붙여 사실과 추측을 구분한다.`
 
 // emojiRestraint is appended to every mail-analysis system prompt to stop the
 // model decorating analyses/reports with emoji. A single ⚠️ for a genuine

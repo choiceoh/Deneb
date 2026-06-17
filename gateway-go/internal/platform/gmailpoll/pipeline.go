@@ -38,11 +38,14 @@ const (
 // PipelineDeps holds dependencies for the multi-stage analysis pipeline.
 type PipelineDeps struct {
 	GmailClient *gmail.Client
-	LLMClient   *llm.Client  // main LLM for final analysis (stage 2)
-	LocalClient *llm.Client  // local AI for extractors (stage 1)
-	LocalModel  string       // local AI model name
-	MainModel   string       // main LLM model name
-	Logger      *slog.Logger // optional; nil = slog.Default()
+	LLMClient   *llm.Client // main LLM for final analysis (stage 2)
+	LocalClient *llm.Client // local AI for extractors (stage 1)
+	LocalModel  string      // local AI model name
+	MainModel   string      // main LLM model name
+	// AnalysisPrompt is the operator-editable instruction block for the final
+	// mail analysis. Empty falls back to DefaultPrompt.
+	AnalysisPrompt string
+	Logger         *slog.Logger // optional; nil = slog.Default()
 
 	// ThreadSource supplies prior related messages (thread + sender history)
 	// from the on-box archive when there is no Gmail client — i.e. the LMTP
@@ -242,22 +245,17 @@ const SourceEmailAnalysis = "email_analysis"
 
 const finalAnalysisSystem = `당신은 이메일 분석 어시스턴트입니다. 이메일 본문, 이전 메일 맥락, 관련 기억을 종합하여 깊이 있는 분석을 제공합니다. 모든 섹션 제목·라벨은 한국어로 쓰세요 ('Primary Analysis', 'Summary', 'Action Items' 같은 영문 라벨 금지). ` + emojiRestraint
 
-const finalAnalysisPrompt = `다음 이메일을 종합적으로 분석해주세요. 이건 채워야 할
-양식이 아니라 분석 자세입니다.
-
-먼저 이 메일이 왜 지금 왔는지 — 직전에 무슨 합의가 있었고 무엇이 바뀌었는지 —
-아래 주어진 이전 맥락과 기억을 엮어 생각하세요. 그다음 사람을 봅니다: 누가
-누구에게 어떤 입장에서 보냈는지. 결제 기한·마감·금액·미해결 이슈처럼 시간과 돈에
-민감한 것은 묻히지 않게 하고, 마지막은 추측이 아닌 구체적인 다음 행동입니다.
-
-무엇을 앞세우고 어떻게 묶을지는 그 메일이 정합니다. 고정된 섹션 틀에 끼워 맞추지
-말고 사안에서 중요한 것이 먼저 오게 하세요. 짧으면 짧게, 복잡하면 깊게. 근거 있는
-것만 말하되 리스크나 판단에는 그 근거가 된 메일 문구나 이전 맥락을 짧게 인용해
-사실과 추측을 구분하고, 모르는 건 모른다고 두세요. 한국어로 간결하게.
-
+const finalAnalysisPrompt = `%s
 ## 이메일 원문
 %s
 %s%s`
+
+func analysisPrompt(deps PipelineDeps) string {
+	if prompt := strings.TrimSpace(deps.AnalysisPrompt); prompt != "" {
+		return prompt
+	}
+	return DefaultPrompt
+}
 
 // AnalyzeEmailPipeline runs a 2-stage multi-LLM analysis pipeline.
 // Stage 1: extract thread context via local LLM and query the wiki knowledge
@@ -274,7 +272,7 @@ func AnalyzeEmailPipeline(ctx context.Context, deps PipelineDeps, msg *gmail.Mes
 		// selection is still offered by appending the candidate block to the
 		// prompt, so the manual Mini App path — which never wires LocalClient
 		// — still cites related projects.
-		prompt := DefaultPrompt + projectSelectionSuffix(candidates) + importanceSuffix
+		prompt := analysisPrompt(deps) + projectSelectionSuffix(candidates) + importanceSuffix
 		text, err := AnalyzeEmail(ctx, deps.LLMClient, deps.MainModel, prompt, deps.ThinkingKwarg, msg)
 		if err != nil {
 			return AnalysisResult{}, err
