@@ -320,7 +320,7 @@ func synthesizeAnalysis(ctx context.Context, deps PipelineDeps, msg *gmail.Messa
 	if err != nil {
 		return AnalysisResult{}, err
 	}
-	analysis = stripReasoningLeak(analysis)
+	analysis = sanitizeAnalysisLeak(analysis)
 
 	// Parse + strip the RELATED_PROJECTS tag before appending the facts
 	// block, so the tag stays at the analysis tail where the parser expects
