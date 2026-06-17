@@ -235,6 +235,21 @@ func (s *Server) makeMailAnalysisSink() func(*gmail.MessageDetail, gmailpoll.Ana
 	}
 }
 
+func (s *Server) makeMailFeedDeliverySink() func([]string) {
+	workStore := mailwork.New(filepath.Join(s.denebDir, "mail_work_state.json"))
+	return func(ids []string) {
+		for _, id := range ids {
+			id = strings.TrimSpace(id)
+			if id == "" {
+				continue
+			}
+			if _, err := workStore.MarkFeedCreated(id); err != nil {
+				s.logger.Warn("mail workflow feed 상태 저장 실패", "id", id, "error", err)
+			}
+		}
+	}
+}
+
 // fileDealFromMail files a structured business-document extraction onto its
 // counterparty's 거래 wiki page. Silent and best-effort: no push, deduped by
 // the mail id, failures logged only. nil deal (non-deal mail) is a no-op.

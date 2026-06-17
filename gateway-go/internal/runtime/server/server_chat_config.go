@@ -107,6 +107,9 @@ func (s *Server) initGmailPoll(snap *config.ConfigSnapshot) {
 	// Run the synthesis as a chat agent turn so the analysis prompt's tools
 	// (wiki, mail_archive) execute instead of leaking as <tool_call> text.
 	cfg.AgentSynthesisFn = s.mailAnalysisAgentSynthesis
+	if pollCfg.Silent == nil || !*pollCfg.Silent {
+		cfg.OnDelivered = s.makeMailFeedDeliverySink()
+	}
 
 	s.gmailPollSvc = gmailpoll.NewService(cfg, s.logger)
 
@@ -220,6 +223,7 @@ func (s *Server) initLMTPServer(snap *config.ConfigSnapshot) {
 		AttachmentExtractFn: tools.ExtractAttachmentTextBytes,
 		PromptOverride:      s.promptOverride,
 		OnAnalyzed:          s.makeMailAnalysisSink(),
+		OnDelivered:         s.makeMailFeedDeliverySink(),
 		ProjectsFn:          s.projectCandidatesFn(),
 		ThreadSource:        threadSource,
 		ThinkingKwarg:       s.analysisThinkingKwarg(),

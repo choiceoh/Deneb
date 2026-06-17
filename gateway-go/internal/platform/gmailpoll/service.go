@@ -60,6 +60,11 @@ type Config struct {
 	// durable queue can retry instead of marking the mail done.
 	OnAnalyzed func(msg *gmail.MessageDetail, res AnalysisResult) error
 
+	// OnDelivered, if set, is invoked after a poll/ingest notification is handed
+	// to the configured Notifier without error. The server uses it to mark the
+	// corresponding per-message workflow rows as feed-delivered.
+	OnDelivered func(messageIDs []string)
+
 	// ProjectsFn lists registered project wiki pages so analysis can cite
 	// related projects by real path. Forwarded to PipelineDeps. nil = none.
 	ProjectsFn func() []ProjectCandidate
@@ -334,7 +339,17 @@ func (s *Service) poll(ctx context.Context, client *gmail.Client) error {
 		}
 		notifyMsg = b.String()
 	}
-	s.sendNotification(ctx, notifyMsg)
+	if s.sendNotification(ctx, notifyMsg) && s.cfg.OnDelivered != nil {
+		ids := make([]string, 0, len(items))
+		for _, it := range items {
+			if it.Msg != nil && it.Msg.ID != "" {
+				ids = append(ids, it.Msg.ID)
+			}
+		}
+		if len(ids) > 0 {
+			s.cfg.OnDelivered(ids)
+		}
+	}
 
 	// Mark seen ONLY the mails whose individual analysis succeeded (those in
 	// `items`). A mail that AnalyzeBatch skipped on a per-email error is absent
@@ -456,8 +471,8 @@ func (s *Service) IngestMessage(ctx context.Context, msg *gmail.MessageDetail, a
 		}
 		notify = b.String()
 	}
-	if notify != "" {
-		s.sendNotification(ctx, notify)
+	if notify != "" && s.sendNotification(ctx, notify) && s.cfg.OnDelivered != nil {
+		s.cfg.OnDelivered([]string{msg.ID})
 	}
 	return res, nil
 }
@@ -480,14 +495,14 @@ func (s *Service) logToDiary(count int, report string) {
 	}
 }
 
-func (s *Service) sendNotification(ctx context.Context, message string) {
+func (s *Service) sendNotification(ctx context.Context, message string) bool {
 	s.mu.Lock()
 	notifier := s.notifier
 	s.mu.Unlock()
 
 	if notifier == nil {
 		s.log.Warn("알림 전송 불가: notifier가 설정되지 않음")
-		return
+		return false
 	}
 
 	notifyCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
@@ -495,5 +510,7 @@ func (s *Service) sendNotification(ctx context.Context, message string) {
 
 	if err := notifier.Notify(notifyCtx, message); err != nil {
 		s.log.Error("알림 전송 실패", "error", err)
+		return false
 	}
+	return true
 }
