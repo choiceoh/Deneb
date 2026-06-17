@@ -2,6 +2,7 @@ package llm
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -343,13 +344,52 @@ func TestDoStream_ExpiredContext_MinRequestTimeout(t *testing.T) {
 	}, WithMinRequestTimeout(5*time.Second), WithRetry(0, 0, 0))
 
 	// Create a context with a deadline that has already passed.
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Millisecond))
 	defer cancel()
-	time.Sleep(5 * time.Millisecond) // ensure deadline passes
+	if !errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		t.Fatalf("context error = %v, want deadline exceeded", ctx.Err())
+	}
 
 	req, _ := http.NewRequest(http.MethodPost, server.URL+"/v1/chat/completions", nil)
 	body := testutil.Must(c.DoStream(ctx, req))
 	defer body.Close()
+}
+
+func TestDoStream_MinRequestTimeout_ParentDeadlineDoesNotCancelRequest(t *testing.T) {
+	// A too-short parent deadline should not cancel the fresh per-request
+	// timeout. Explicit parent cancellation is covered by the next test.
+	reqReceived := make(chan struct{})
+	c, server := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		close(reqReceived)
+		time.Sleep(50 * time.Millisecond)
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, "data: ok\n\n")
+	}, WithMinRequestTimeout(500*time.Millisecond), WithRetry(0, 0, 0))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Millisecond)
+	defer cancel()
+
+	req, _ := http.NewRequest(http.MethodPost, server.URL+"/v1/chat/completions", nil)
+
+	done := make(chan error, 1)
+	go func() {
+		body, err := c.DoStream(ctx, req)
+		if err == nil {
+			err = body.Close()
+		}
+		done <- err
+	}()
+
+	<-reqReceived
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("DoStream returned error after parent deadline: %v", err)
+		}
+	case <-time.After(250 * time.Millisecond):
+		t.Fatal("DoStream did not complete within min request timeout")
+	}
 }
 
 func TestDoStream_MinRequestTimeout_ParentCancelPropagates(t *testing.T) {

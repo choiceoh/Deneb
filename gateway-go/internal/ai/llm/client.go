@@ -322,20 +322,22 @@ func (c *Client) requestContext(parent context.Context) (context.Context, contex
 	if !hasDL || time.Until(dl) >= c.minRequestTimeout {
 		return parent, func() {}
 	}
+	if errors.Is(parent.Err(), context.Canceled) {
+		return parent, func() {}
+	}
 
 	// Parent deadline is too tight. Create a derived context with the
 	// minimum timeout.
 	child, cancel := context.WithTimeout(context.Background(), c.minRequestTimeout)
 
-	// If the parent is not yet done, propagate explicit cancellation
-	// (agent abort) via AfterFunc. If the parent is already done (deadline
-	// expired), skip AfterFunc — it would fire immediately and cancel the
-	// fresh context we just created.
-	if parent.Err() == nil {
-		stop := context.AfterFunc(parent, func() { cancel() })
-		return child, func() { stop(); cancel() }
-	}
-	return child, cancel
+	// Propagate explicit cancellation (agent abort), but not the parent
+	// deadline we intentionally extended for this single HTTP request.
+	stop := context.AfterFunc(parent, func() {
+		if errors.Is(parent.Err(), context.Canceled) {
+			cancel()
+		}
+	})
+	return child, func() { stop(); cancel() }
 }
 
 // cancelOnClose wraps an io.ReadCloser to call a cancel function on Close.
