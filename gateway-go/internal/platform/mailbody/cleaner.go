@@ -17,20 +17,20 @@ const (
 var (
 	bodyPrepBlankLineRE = regexp.MustCompile(`\n{3,}`)
 	bodyPrepContactREs  = []*regexp.Regexp{
-		regexp.MustCompile(`(?i)^\s*(?:T|Tel|M|Mob|Mobile|HP|H\.P|F|Fax|E|Email|Mail|Web|Homepage|Addr|Address)\s*[:.)-]`),
+		regexp.MustCompile(`(?i)^\s*(?:T|Tel|M|Mob|Mobile|HP|H\.P|F|Fax|E|Email|Mail|Web|Homepage|Addr|Address)\s*[:.)_-]`),
 		regexp.MustCompile(`(?i)\b(?:tel|mobile|phone|fax|e-?mail|email|www|homepage|site|address)\b`),
 		regexp.MustCompile(`(?i)^\s*(?:web|website|homepage|site|url)\s*[:：]|\bwww\.[A-Z0-9.\-]+\.[A-Z]{2,}\b`),
 		regexp.MustCompile(`(?i)\b[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}\b`),
 		regexp.MustCompile(`\b0\d{1,2}[-.\s]?\d{3,4}[-.\s]?\d{4}\b`),
-		regexp.MustCompile(`(?:대표|상무|전무|이사|부장|차장|과장|대리|팀장|실장|책임|선임|연구원)`),
+		regexp.MustCompile(`(?:대표|상무|전무|이사|부장|차장|과장|대리|주임|팀장|실장|책임|선임|연구원)`),
 		regexp.MustCompile(`(?:소속|부서|직급|직책|담당|팀명|회사명)\s*[:：]`),
 		regexp.MustCompile(`(?i)\b(?:manager|director|ceo|cto|cfo)\b`),
-		regexp.MustCompile(`(?:주식회사|\(주\)|㈜)`),
+		regexp.MustCompile(`(?:주식회사|\(주\)|\(유\)|㈜)`),
 		regexp.MustCompile(`(?i)\b(?:inc\.?|ltd\.?|corp\.?|co\.,?\s*ltd)\b`),
 		regexp.MustCompile(`(?:사업자\s*(?:등록)?\s*번호|법인\s*(?:등록)?\s*번호|통신판매(?:업)?\s*(?:신고|번호)|대표전화|대표\s*번호|우편번호|주소\s*:)`),
 		regexp.MustCompile(`(?:서울|경기|인천|부산|대구|광주|대전|울산|세종|강원|충북|충남|전북|전남|경북|경남|제주).{0,50}(?:로|길)\s*\d`),
 	}
-	bodyPrepClosingRE       = regexp.MustCompile(`(?i)^\s*(감사합니다|감사드립니다|고맙습니다|수고하세요|수고하십시오|best\s+regards|kind\s+regards|regards|sincerely|thanks|thank\s+you)[\s,.!！。]*$`)
+	bodyPrepClosingRE       = regexp.MustCompile(`(?i)^\s*(감사합니다|감사드립니다|고맙습니다|수고하세요|수고하십시오|best|best\s+regards|kind\s+regards|regards|sincerely|thanks|thank\s+you)[\s,.!！。]*$`)
 	bodyPrepSeparatorRE     = regexp.MustCompile(`^\s*[-_=*─━]{3,}\s*$`)
 	bodyPrepSignatureLeadRE = regexp.MustCompile(`(?i)(?:[가-힣]{2,4}|[A-Z][a-z]+)\s*(?:[/|·-]\s*)?.*(?:[가-힣A-Za-z0-9]+(?:팀|실|센터|본부|파트|부서|부문)|담당|\b(?:group|team|dept|department)\b)`)
 	bodyPrepHeadNoiseREs    = []*regexp.Regexp{
@@ -53,7 +53,7 @@ var (
 		regexp.MustCompile(`^\s*-{2,}\s*전달된\s*메시지\s*-{2,}\s*$`),
 		regexp.MustCompile(`^\s*-{2,}\s*(?:邮件原件|原始邮件|转发邮件)\s*-{2,}\s*$`),
 		regexp.MustCompile(`(?i)^\s*(?:from|sent|to|cc|subject|date)\s*:`),
-		regexp.MustCompile(`^\s*(?:보낸\s*사람|보내는\s*사람|발신자|보낸\s*날짜|보낸\s*일시|받는\s*사람|수신자|참조|제목|날짜)\s*[:：]`),
+		regexp.MustCompile(`^\s*(?:보낸\s*사람|보내는\s*사람|발신자|보낸\s*날짜|보낸\s*일시|받는\s*사람|받은\s*사람|수신자|참조|제목|날짜)\s*[:：]`),
 		regexp.MustCompile(`^\s*(?:发件人|寄件者|发送时间|发送日期|收件人|抄送|主题|日期)\s*[:：]`),
 	}
 	bodyPrepStrongReplyBoundaryREs = []*regexp.Regexp{
@@ -74,13 +74,18 @@ var (
 	bodyPrepHTMLBlankRE       = regexp.MustCompile(`(?i)^\s*(?:<o:p>\s*</o:p>|<o:p>\s*(?:&nbsp;|\s)*\s*</o:p>|<br\s*/?>)\s*$`)
 	bodyPrepHTMLMetaRE        = regexp.MustCompile(`(?i)^\s*<meta\b[^>]*>\s*$`)
 	bodyPrepThinForwardRE     = regexp.MustCompile(`(?i)(?:전달|참조|참고|송부|공유|자료|아래|below|forward|fyi|attached|see\s+below)`)
-	bodyPrepAttachmentLeadRE  = regexp.MustCompile(`(?i)^\s*(?:대용량\s*)?(?:파일\s*첨부|첨부\s*파일)\s*\d+\s*개\s*$`)
+	bodyPrepAttachmentLeadRE  = regexp.MustCompile(`(?i)^\s*(?:대용량\s*)?(?:파일\s*첨부|첨부\s*파일|첨부)\s*\d+\s*개(?:\s*[0-9][0-9.,]*\s*(?:b|kb|mb|gb|tb))?\s*$`)
 	bodyPrepAttachmentMetaREs = []*regexp.Regexp{
 		regexp.MustCompile(`(?i)^\s*\([0-9][0-9.,]*\s*(?:b|kb|mb|gb|tb)\)\s*$`),
 		regexp.MustCompile(`^\s*다운로드\s*기간\s*[:：]`),
+		regexp.MustCompile(`^\s*기한이\s*있는\s*파일은\s*\d+\s*일\s*보관`),
 		regexp.MustCompile(`^\s*\((?:대용량\s*)?첨부\s*파일은\s*\d+\s*일간\s*보관\)\s*$`),
-		regexp.MustCompile(`(?i)\.(?:zip|7z|rar|pdf|xlsx?|docx?|pptx?|hwp|hwpx|dwg|dxf|jpg|jpeg|png|gif|heic|csv|txt|eml|msg)(?:\s*$|\s*\(|\s*-)`),
+		regexp.MustCompile(`(?i)\.(?:zip|7z|rar|pdf|xlsx?|docx?|pptx?|hwp|hwpx|dwg|dxf|jpg|jpeg|png|gif|heic|csv|txt|eml|msg)(?:\s*$|\s*\(|\s*-|\s+[0-9])`),
 	}
+	bodyPrepBusinessListLeadRE = regexp.MustCompile(`^\s*(?:\d{1,2}[.)]|[가-하][.)])\s+`)
+	bodyPrepPrefixCompanyRE    = regexp.MustCompile(`(?i)(?:co\.,?\s*ltd|company|energy|주식회사|\(주\)|\(유\)|㈜|[가-힣]{2,4}\s*(?:이사|부장|차장|과장|대리|주임|책임|선임))`)
+	bodyPrepPrefixRoleRE       = regexp.MustCompile(`(?i)(?:manager|director|clerk|division|group|team|dept|department|senior|junior|overseas|sales|project|execution)`)
+	bodyPrepPrefixAddressRE    = regexp.MustCompile(`(?i)(?:korea|china|gwangju|seoul|buk-gu|district|road|ro\b|gil\b|beon-gil)`)
 )
 
 type CleanResult struct {
@@ -134,12 +139,16 @@ func CleanForDisplay(body string) CleanResult {
 	}
 	lines = compactBodyPrepBlankLines(lines)
 
-	cut := bodyPrepReplyHistoryCutLine(lines)
-	if cut >= 0 && bodyPrepCutLeavesVisiblePrefix(lines, cut) {
-		if bodyPrepLooksLikeThinForwardWrapper(lines[:cut]) {
+	for pass := 0; pass < 3; pass++ {
+		cut := bodyPrepReplyHistoryCutLine(lines)
+		if cut < 0 || !bodyPrepCutLeavesVisiblePrefix(lines, cut) {
+			break
+		}
+		if bodyPrepLooksLikeForwardPrefix(lines[:cut]) {
 			if start := bodyPrepForwardedBodyStart(lines, cut); start > cut && start < len(lines) && bodyPrepLinesVisibleEnough(lines[start:]) {
 				result.HiddenBlocks = append(result.HiddenBlocks, HiddenBlock{Kind: "history-header", Lines: bodyPrepNonBlankLineCount(lines[:start])})
 				lines = compactBodyPrepBlankLines(lines[start:])
+				continue
 			} else {
 				result.HiddenBlocks = append(result.HiddenBlocks, HiddenBlock{Kind: "history", Lines: bodyPrepNonBlankLineCount(lines[cut:])})
 				lines = compactBodyPrepBlankLines(lines[:cut])
@@ -148,9 +157,10 @@ func CleanForDisplay(body string) CleanResult {
 			result.HiddenBlocks = append(result.HiddenBlocks, HiddenBlock{Kind: "history", Lines: bodyPrepNonBlankLineCount(lines[cut:])})
 			lines = compactBodyPrepBlankLines(lines[:cut])
 		}
+		break
 	}
 
-	cut = bodyPrepTailNoiseCutLine(lines)
+	cut := bodyPrepTailNoiseCutLine(lines)
 	if cut >= 0 && bodyPrepCutLeavesVisiblePrefix(lines, cut) {
 		result.HiddenBlocks = append(result.HiddenBlocks, HiddenBlock{Kind: "boilerplate", Lines: bodyPrepNonBlankLineCount(lines[cut:])})
 		lines = compactBodyPrepBlankLines(lines[:cut])
@@ -504,21 +514,64 @@ func bodyPrepLinesVisibleEnough(lines []string) bool {
 	return visibleBodyPrepRunes(body) >= bodyPrepMinPrefixVisible
 }
 
-func bodyPrepLooksLikeThinForwardWrapper(lines []string) bool {
-	nonblank := 0
-	var text []string
+func bodyPrepLooksLikeForwardPrefix(lines []string) bool {
+	content := 0
+	signals := 0
+	var contentText []string
 	for _, raw := range lines {
 		line := strings.TrimSpace(raw)
 		if line == "" || bodyPrepLooksLikeSeparatorLine(line) {
 			continue
 		}
-		nonblank++
-		text = append(text, line)
+		if bodyPrepLooksLikeSignatureishPrefixLine(line) {
+			signals++
+			continue
+		}
+		content++
+		contentText = append(contentText, line)
 	}
-	if nonblank == 0 || nonblank > 3 {
+
+	contentBody := strings.Join(contentText, " ")
+	if content > 0 && content <= 3 && visibleBodyPrepRunes(contentBody) <= 120 && bodyPrepThinForwardRE.MatchString(contentBody) {
+		return true
+	}
+	if content == 0 && signals >= 2 {
+		return true
+	}
+	return false
+}
+
+func bodyPrepLooksLikeSignatureishPrefixLine(line string) bool {
+	if bodyPrepClosingRE.MatchString(line) || bodyPrepTrailingSignoffRE.MatchString(line) || bodyPrepMobileSignatureRE.MatchString(line) {
+		return true
+	}
+	if bodyPrepLooksLikeSignatureLine(line) || bodyPrepLooksLikeSignatureLeadLine(line) {
+		return true
+	}
+	if utf8.RuneCountInString(line) <= 40 && bodyPrepPrefixCompanyRE.MatchString(line) {
+		return true
+	}
+	if utf8.RuneCountInString(line) <= 80 && bodyPrepPrefixRoleRE.MatchString(line) {
+		return true
+	}
+	if utf8.RuneCountInString(line) <= 120 && bodyPrepPrefixAddressRE.MatchString(line) {
+		return true
+	}
+	return false
+}
+
+func bodyPrepLooksLikeBusinessListLine(line string) bool {
+	return bodyPrepBusinessListLeadRE.MatchString(line)
+}
+
+func bodyPrepLooksLikeSignatureLeadLine(line string) bool {
+	if bodyPrepLooksLikeBusinessListLine(line) {
 		return false
 	}
-	return bodyPrepThinForwardRE.MatchString(strings.Join(text, " "))
+	if utf8.RuneCountInString(line) > 60 {
+		return false
+	}
+	return bodyPrepSignatureLeadRE.MatchString(line)
 }
 
 func bodyPrepForwardedBodyStart(lines []string, cut int) int {
@@ -669,14 +722,10 @@ func bodyPrepLooksLikeTrailingNoiseLine(line string) bool {
 	return false
 }
 
-func bodyPrepLooksLikeSignatureLeadLine(line string) bool {
-	if utf8.RuneCountInString(line) > 60 {
+func bodyPrepLooksLikeSignatureLine(line string) bool {
+	if bodyPrepLooksLikeBusinessListLine(line) {
 		return false
 	}
-	return bodyPrepSignatureLeadRE.MatchString(line)
-}
-
-func bodyPrepLooksLikeSignatureLine(line string) bool {
 	if utf8.RuneCountInString(line) > 90 {
 		return false
 	}

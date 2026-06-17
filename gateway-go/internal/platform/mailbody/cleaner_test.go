@@ -361,3 +361,139 @@ func TestCleanForDisplay_KeepsForwardedBodyWhenWrapperIsThin(t *testing.T) {
 		}
 	}
 }
+
+func TestCleanForDisplay_KeepsForwardedBodyAfterSignatureOnlyPrefix(t *testing.T) {
+	body := strings.Join([]string{
+		"(유)남도에코에너지",
+		"이 시 연 주임",
+		"광주광역시 북구 첨단연신로29번길 26, 1층",
+		"T_062-571-0300 F_062-973-9877",
+		"M_010-1111-2222 sara@example.com",
+		"Namdoeco Energy Co.,LTD",
+		"Lee, Si-Yeon (Sara) / Senior Clerk",
+		"#1, 26, Cheomdanyeonsin-ro 29beon-gil, Buk-gu, Gwangju, Korea",
+		"<hr dze_content_sep=\"\">",
+		"보내는사람: 이시연 <sara@example.com>",
+		"받는사람 : Alan Zhang <alan@example.com>",
+		"보낸 날짜 : 2026-02-17 14:43",
+		"제목 : Re: Project cable request",
+		"Dear Alan,",
+		"Please find attached the signed contract addendum reflecting the revised quantity.",
+		"Kindly ask you sign and send it back to us.",
+		"Best,",
+		"Sara.",
+		"(유)남도에코에너지",
+		"이 시 연 주임",
+		"T_062-571-0300 F_062-973-9877",
+	}, "\n")
+
+	got := CleanForDisplay(body)
+	for _, want := range []string{"Dear Alan", "signed contract addendum", "revised quantity"} {
+		if !strings.Contains(got.Body, want) {
+			t.Fatalf("forwarded body missing %q:\n%s", want, got.Body)
+		}
+	}
+	for _, gone := range []string{"보내는사람", "Cheomdanyeonsin", "T_062"} {
+		if strings.Contains(got.Body, gone) {
+			t.Fatalf("signature/header leaked %q:\n%s", gone, got.Body)
+		}
+	}
+}
+
+func TestCleanForDisplay_KeepsForwardedBodyAfterThinWrapperSignature(t *testing.T) {
+	body := strings.Join([]string{
+		"더존 아마란스 API 목록 공유 드립니다.",
+		"기획조정실/3팀",
+		"김성훈 이사",
+		"M: 010-1111-2222",
+		"E-mail: kim@example.com",
+		"========================================",
+		"보낸사람 : 김기성 <kim@example.com>",
+		"받은사람 : 김성훈 <director@example.com>",
+		"보낸일시 : 2026-04-23 16:00",
+		"제목 : [더존비즈온] 더존 아마란스 10 API목록 안내",
+		"수신 : 탑솔라(주) 김성훈 이사님",
+		"안녕하십니까 이사님",
+		"어제 미팅시 요청주신 Amaranth 10 표준 API 목록 첨부와 같이 보내드립니다.",
+		"현재 필요하신 표준 API 목록은",
+		"1. UC(그룹웨어 기본) 표준 API",
+		"2. 물류 공통 표준API",
+		"3. 영업관리 표준API",
+		"4. 구매자재 표준API",
+		"내용 확인 부탁드립니다.",
+	}, "\n")
+
+	got := CleanForDisplay(body)
+	for _, want := range []string{"Amaranth 10 표준 API", "물류 공통", "구매자재"} {
+		if !strings.Contains(got.Body, want) {
+			t.Fatalf("forwarded body missing %q:\n%s", want, got.Body)
+		}
+	}
+	for _, gone := range []string{"목록 공유 드립니다", "보낸사람", "기획조정실/3팀", "M: 010"} {
+		if strings.Contains(got.Body, gone) {
+			t.Fatalf("wrapper/signature/header leaked %q:\n%s", gone, got.Body)
+		}
+	}
+}
+
+func TestCleanForDisplay_StripsLooseLargeAttachmentMetadata(t *testing.T) {
+	body := strings.Join([]string{
+		"대용량 첨부 5개 48MB",
+		"20260420 구조계산서.pdf 5988497 ~ 2026/06/07",
+		"건물도면.zip 29420690 ~ 2026/06/07",
+		"기한이 있는 파일은 30일 보관 / 100회 다운로드 가능",
+		"고건대리님",
+		"안녕하세요 제이티에너지 임은진 차장입니다",
+		"어제 요청 주셨던 부산8 3개소의 구조검토 보고서 자료 송부 드립니다.",
+		"1. 인천은성전기 - 구조계산서, 구조도면 첨부",
+		"2. 메탈스타 - 구조계산서, 건물도면",
+		"3. 해비코 - 구조계산서, 건물도면",
+		"확인을 부탁 드리며, 다음주 실사 일정 주시면 최종 날짜 조율해서 전달 드리겠습니다",
+	}, "\n")
+
+	got := CleanForDisplay(body)
+	for _, want := range []string{"구조검토 보고서", "인천은성전기", "다음주 실사 일정"} {
+		if !strings.Contains(got.Body, want) {
+			t.Fatalf("business body missing %q:\n%s", want, got.Body)
+		}
+	}
+	for _, gone := range []string{"대용량 첨부", "구조계산서.pdf", "100회 다운로드"} {
+		if strings.Contains(got.Body, gone) {
+			t.Fatalf("attachment metadata leaked %q:\n%s", gone, got.Body)
+		}
+	}
+}
+
+func TestCleanForDisplay_DoesNotTreatNumberedAddressAsSignature(t *testing.T) {
+	body := strings.Join([]string{
+		"대용량 파일첨부 2개",
+		"(68.77 MB)",
+		"다운로드 기간 : 2026-02-26 ~ 2026-03-28",
+		"(대용량 첨부 파일은 30일간 보관)",
+		"건축도면.zip",
+		"(65.74 MB)",
+		"팀장님 안녕하십니까.",
+		"탑솔라 기획조정실 김대희과장입니다.",
+		"광명역 B환승 주차장 가배치 요청 드립니다.",
+		"1. 주소 : 경기 광명시 덕안로 16 광명역B주차장",
+		"2. 사용모듈 : 현대 645Wp",
+		"3. 특이사항",
+		"가. 지붕위에 디자인 구조체 존재. 음영 피해야 될 것으로 판단됨",
+		"나. 주차장 측면도 함께 요청",
+		"다. 필요시 주차면 감소시킬 수 있으며, 감소면수 표기 요청",
+		"기타 문의사항은 연락주시기 바랍니다.",
+		"감사합니다.",
+	}, "\n")
+
+	got := CleanForDisplay(body)
+	for _, want := range []string{"1. 주소", "현대 645Wp", "주차면 감소"} {
+		if !strings.Contains(got.Body, want) {
+			t.Fatalf("numbered business detail missing %q:\n%s", want, got.Body)
+		}
+	}
+	for _, gone := range []string{"대용량 파일첨부", "건축도면.zip"} {
+		if strings.Contains(got.Body, gone) {
+			t.Fatalf("attachment metadata leaked %q:\n%s", gone, got.Body)
+		}
+	}
+}
