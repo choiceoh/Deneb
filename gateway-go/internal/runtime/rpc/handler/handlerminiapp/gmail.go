@@ -99,6 +99,10 @@ const (
 	// it. 5 is enough for plausible filter shapes without blowing
 	// out the request budget.
 	maxEmptyPageHops = 5
+	// maxWorkFilterPageHops bounds extra pages scanned for Deneb-native
+	// workflow filters. These filters are applied after Gmail/archive search,
+	// so the first backend page can legitimately contain zero matching rows.
+	maxWorkFilterPageHops = 5
 )
 
 // GmailMethods returns the miniapp.gmail.* handler map. Returns nil if deps
@@ -450,15 +454,17 @@ func mailWorkStateForSummary(deps GmailDeps, m gmail.MessageSummary) mailwork.Me
 		return mailwork.MessageState{}
 	}
 	st, _ := deps.WorkState.RememberMessage(messageInputFromSummary(m))
-	if st.AnalysisStatus == mailwork.AnalysisDone {
+	if st.AnalysisStatus != "" {
 		return st
 	}
-	if rec, err := deps.AnalysisCache.load(m.ID); err == nil && rec != nil {
-		st, _ = deps.WorkState.MarkAnalysisDone(mailwork.AnalysisInput{
-			MessageInput: messageInputFromSummary(m),
-			Quality:      rec.Importance,
-			DurationMs:   rec.DurationMs,
-		})
+	if deps.AnalysisCache != nil {
+		if rec, err := deps.AnalysisCache.load(m.ID); err == nil && rec != nil {
+			st, _ = deps.WorkState.MarkAnalysisDone(mailwork.AnalysisInput{
+				MessageInput: messageInputFromSummary(m),
+				Quality:      rec.Importance,
+				DurationMs:   rec.DurationMs,
+			})
+		}
 	}
 	return st
 }
@@ -468,17 +474,26 @@ func mailWorkStateForDetail(deps GmailDeps, msg *gmail.MessageDetail) mailwork.M
 		return mailwork.MessageState{}
 	}
 	st, _ := deps.WorkState.RememberMessage(messageInputFromDetail(msg))
-	if st.AnalysisStatus == mailwork.AnalysisDone {
+	if st.AnalysisStatus != "" {
 		return st
 	}
-	if rec, err := deps.AnalysisCache.load(msg.ID); err == nil && rec != nil {
-		st, _ = deps.WorkState.MarkAnalysisDone(mailwork.AnalysisInput{
-			MessageInput: messageInputFromDetail(msg),
-			Quality:      rec.Importance,
-			DurationMs:   rec.DurationMs,
-		})
+	if deps.AnalysisCache != nil {
+		if rec, err := deps.AnalysisCache.load(msg.ID); err == nil && rec != nil {
+			st, _ = deps.WorkState.MarkAnalysisDone(mailwork.AnalysisInput{
+				MessageInput: messageInputFromDetail(msg),
+				Quality:      rec.Importance,
+				DurationMs:   rec.DurationMs,
+			})
+		}
 	}
 	return st
+}
+
+func mailWorkCacheRevision(deps GmailDeps) int64 {
+	if deps.WorkState == nil {
+		return 0
+	}
+	return deps.WorkState.Summary().UpdatedAtMs
 }
 
 func applyMailWorkRow(row *mailRowOut, st mailwork.MessageState) {
@@ -503,6 +518,35 @@ func applyMailWorkMessage(out *mailMessageOut, st mailwork.MessageState) {
 	out.CalendarProposalCount = st.CalendarProposalCount
 	out.TodoCount = st.TodoCount
 	out.WorkStateHint = st.LastError
+}
+
+func appendMailRows(out []mailRowOut, deps GmailDeps, results []gmail.MessageSummary, workFilter mailWorkFilter, limit int) []mailRowOut {
+	for _, m := range results {
+		state := mailWorkStateForSummary(deps, m)
+		if !workFilter.matches(state) {
+			continue
+		}
+		row := mailRowOut{
+			ID:              m.ID,
+			ThreadID:        m.ThreadID,
+			From:            m.From,
+			Subject:         m.Subject,
+			Snippet:         m.Snippet,
+			Date:            normalizeDate(m.Date),
+			IsUnread:        hasUnreadLabel(m.Labels),
+			Labels:          nonNilLabels(m.Labels),
+			Mailbox:         m.Mailbox,
+			HasAttachment:   m.HasAttachment || m.AttachmentCount > 0,
+			AttachmentCount: m.AttachmentCount,
+		}
+		row.Priority, row.PriorityHint = rowPriority(deps, m.ID, m.From, m.Subject, m.Snippet)
+		applyMailWorkRow(&row, state)
+		out = append(out, row)
+		if len(out) >= limit {
+			break
+		}
+	}
+	return out
 }
 
 func gmailListRecent(deps GmailDeps, cache *listCache) rpcutil.HandlerFunc {
@@ -542,7 +586,7 @@ func gmailListRecent(deps GmailDeps, cache *listCache) rpcutil.HandlerFunc {
 		if cacheQueryKey == "" {
 			cacheQueryKey = query
 		}
-		cacheKey := cacheQueryKey + "|" + itoa(limit) + "|" + p.PageToken
+		cacheKey := cacheQueryKey + "|" + itoa(limit) + "|" + p.PageToken + "|" + itoa64(mailWorkCacheRevision(deps))
 		now := time.Now()
 		if payload, ok := cache.get(cacheKey, now); ok {
 			return rpcutil.RespondOK(req.ID, payload)
@@ -577,31 +621,13 @@ func gmailListRecent(deps GmailDeps, cache *listCache) rpcutil.HandlerFunc {
 			}
 		}
 
-		out := make([]mailRowOut, 0, len(results))
-		for _, m := range results {
-			state := mailWorkStateForSummary(deps, m)
-			if !workFilter.matches(state) {
-				continue
+		out := appendMailRows(make([]mailRowOut, 0, len(results)), deps, results, workFilter, limit)
+		for hops := 0; workFilter != "" && len(out) < limit && nextPageToken != "" && hops < maxWorkFilterPageHops; hops++ {
+			results, nextPageToken, err = client.SearchPage(ctx, query, nextPageToken, searchLimit)
+			if err != nil {
+				return mapGmailError(req.ID, "gmail search failed", err)
 			}
-			row := mailRowOut{
-				ID:              m.ID,
-				ThreadID:        m.ThreadID,
-				From:            m.From,
-				Subject:         m.Subject,
-				Snippet:         m.Snippet,
-				Date:            normalizeDate(m.Date),
-				IsUnread:        hasUnreadLabel(m.Labels),
-				Labels:          nonNilLabels(m.Labels),
-				Mailbox:         m.Mailbox,
-				HasAttachment:   m.HasAttachment || m.AttachmentCount > 0,
-				AttachmentCount: m.AttachmentCount,
-			}
-			row.Priority, row.PriorityHint = rowPriority(deps, m.ID, m.From, m.Subject, m.Snippet)
-			applyMailWorkRow(&row, state)
-			out = append(out, row)
-			if len(out) >= limit {
-				break
-			}
+			out = appendMailRows(out, deps, results, workFilter, limit)
 		}
 		payload := map[string]any{
 			"messages":      out,
@@ -830,6 +856,29 @@ func suffixFor(total int) string {
 
 // itoa avoids strconv import for the single integer-to-decimal we need.
 func itoa(n int) string {
+	if n == 0 {
+		return "0"
+	}
+	negative := false
+	if n < 0 {
+		negative = true
+		n = -n
+	}
+	var buf [20]byte
+	i := len(buf)
+	for n > 0 {
+		i--
+		buf[i] = byte('0' + n%10)
+		n /= 10
+	}
+	if negative {
+		i--
+		buf[i] = '-'
+	}
+	return string(buf[i:])
+}
+
+func itoa64(n int64) string {
 	if n == 0 {
 		return "0"
 	}

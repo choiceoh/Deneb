@@ -11,6 +11,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/clientauth"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailarchive"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailwork"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
@@ -392,6 +393,96 @@ func TestGmailListRecent_EmptyPageHopBudget(t *testing.T) {
 	wantCalls := 1 + maxEmptyPageHops
 	if calls != wantCalls {
 		t.Errorf("calls = %d, want %d (initial + %d hops)", calls, wantCalls, maxEmptyPageHops)
+	}
+}
+
+func TestGmailListRecent_WorkFilterScansPastFirstBackendPage(t *testing.T) {
+	store := mailwork.New(t.TempDir() + "/mail_work_state.json")
+	if _, err := store.MarkAnalysisFailed(mailwork.MessageInput{ID: "m2"}, errors.New("provider down")); err != nil {
+		t.Fatalf("seed work state: %v", err)
+	}
+	var calls int
+	client := &fakeGmailClient{
+		searchPageFn: func(_ context.Context, _, pageToken string, n int) ([]gmail.MessageSummary, string, error) {
+			calls++
+			if n != maxGmailLimit {
+				t.Errorf("filtered search limit = %d, want %d", n, maxGmailLimit)
+			}
+			switch pageToken {
+			case "":
+				return []gmail.MessageSummary{{ID: "m1", Subject: "ordinary"}}, "tok1", nil
+			case "tok1":
+				return []gmail.MessageSummary{{ID: "m2", Subject: "failed later"}}, "tok2", nil
+			default:
+				t.Fatalf("unexpected page token %q", pageToken)
+				return nil, "", nil
+			}
+		},
+	}
+	deps := depsFor(client)
+	deps.WorkState = store
+	h := gmailListRecent(deps, nil)
+
+	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.list_recent", map[string]any{
+		"query": "deneb:analysis_failed",
+		"limit": 1,
+	}))
+	var got struct {
+		Messages      []map[string]any `json:"messages"`
+		NextPageToken string           `json:"nextPageToken"`
+	}
+	decode(t, resp, &got)
+
+	if calls != 2 {
+		t.Fatalf("calls = %d, want 2 pages scanned", calls)
+	}
+	if len(got.Messages) != 1 || got.Messages[0]["id"] != "m2" {
+		t.Fatalf("messages = %+v, want only m2", got.Messages)
+	}
+	if got.Messages[0]["analysisStatus"] != mailwork.AnalysisFailed {
+		t.Fatalf("analysisStatus = %+v", got.Messages[0]["analysisStatus"])
+	}
+	if got.NextPageToken != "tok2" {
+		t.Fatalf("nextPageToken = %q, want tok2", got.NextPageToken)
+	}
+}
+
+func TestGmailListRecent_WorkStateFailureBeatsCachedAnalysis(t *testing.T) {
+	cache := NewAnalysisStore(t.TempDir())
+	if err := cache.SaveAnalysis(CachedAnalysis{
+		MsgID:      "m1",
+		Analysis:   "cached",
+		Importance: "attention",
+	}); err != nil {
+		t.Fatalf("seed cache: %v", err)
+	}
+	store := mailwork.New(t.TempDir() + "/mail_work_state.json")
+	if _, err := store.MarkAnalysisFailed(mailwork.MessageInput{ID: "m1"}, errors.New("provider down")); err != nil {
+		t.Fatalf("seed work state: %v", err)
+	}
+	client := &fakeGmailClient{
+		searchFn: func(_ context.Context, _ string, _ int) ([]gmail.MessageSummary, error) {
+			return []gmail.MessageSummary{{ID: "m1", Subject: "cached but failed"}}, nil
+		},
+	}
+	deps := depsFor(client)
+	deps.AnalysisCache = cache
+	deps.WorkState = store
+	h := gmailListRecent(deps, nil)
+
+	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.list_recent", map[string]any{
+		"query": "deneb:analysis_failed",
+	}))
+	var got struct {
+		Messages []map[string]any `json:"messages"`
+	}
+	decode(t, resp, &got)
+
+	if len(got.Messages) != 1 || got.Messages[0]["analysisStatus"] != mailwork.AnalysisFailed {
+		t.Fatalf("cached analysis should not hide failed workflow state: %+v", got.Messages)
+	}
+	if state := store.Get("m1"); state.AnalysisStatus != mailwork.AnalysisFailed {
+		t.Fatalf("state was overwritten by cache hydration: %+v", state)
 	}
 }
 

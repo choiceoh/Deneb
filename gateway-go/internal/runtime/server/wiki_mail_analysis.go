@@ -225,6 +225,7 @@ func (s *Server) makeMailAnalysisSink() func(*gmail.MessageDetail, gmailpoll.Ana
 				AttachmentCount: len(msg.Attachments),
 			},
 			Quality:               res.Importance,
+			DerivedCountsKnown:    true,
 			CalendarProposalCount: calendarCount,
 			TodoCount:             todoCount,
 		}); err != nil {

@@ -46,7 +46,11 @@ type MessageInput struct {
 
 type AnalysisInput struct {
 	MessageInput
-	Quality               string
+	Quality            string
+	DerivedCountsKnown bool
+	// CalendarProposalCount and TodoCount are exact counts for the current
+	// analysis only when DerivedCountsKnown is true. Cache hydration paths do
+	// not have this information and must preserve existing downstream state.
 	CalendarProposalCount int
 	TodoCount             int
 	DurationMs            int64
@@ -191,8 +195,10 @@ func (s *Store) MarkAnalysisDone(in AnalysisInput) (MessageState, error) {
 		ms.AnalysisQuality = strings.TrimSpace(in.Quality)
 		ms.AnalysisDurationMs = in.DurationMs
 		ms.AnalysisUpdatedAtMs = now
-		ms.CalendarProposalCount = maxInt(ms.CalendarProposalCount, in.CalendarProposalCount)
-		ms.TodoCount = maxInt(ms.TodoCount, in.TodoCount)
+		if in.DerivedCountsKnown {
+			ms.CalendarProposalCount = nonNegativeInt(in.CalendarProposalCount)
+			ms.TodoCount = nonNegativeInt(in.TodoCount)
+		}
 		ms.LastError = ""
 		ms.UpdatedAtMs = now
 		return ms
@@ -225,8 +231,8 @@ func (s *Store) MarkDerivedCounts(id string, calendarProposalCount, todoCount in
 			ms.ID = strings.TrimSpace(id)
 			ms.CreatedAtMs = now
 		}
-		ms.CalendarProposalCount = maxInt(ms.CalendarProposalCount, calendarProposalCount)
-		ms.TodoCount = maxInt(ms.TodoCount, todoCount)
+		ms.CalendarProposalCount = nonNegativeInt(calendarProposalCount)
+		ms.TodoCount = nonNegativeInt(todoCount)
 		ms.UpdatedAtMs = now
 		return ms
 	})
@@ -404,16 +410,16 @@ func truncateError(s string) string {
 	return string(runes[:maxLastErrorChars])
 }
 
-func maxInt(a, b int) int {
+func maxInt64(a, b int64) int64 {
 	if b > a {
 		return b
 	}
 	return a
 }
 
-func maxInt64(a, b int64) int64 {
-	if b > a {
-		return b
+func nonNegativeInt(v int) int {
+	if v < 0 {
+		return 0
 	}
-	return a
+	return v
 }
