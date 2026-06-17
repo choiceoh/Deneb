@@ -456,6 +456,15 @@ internal fun MailRow(
                     modifier = Modifier.weight(1f),
                 )
                 Spacer(Modifier.width(8.dp))
+                mailRowAnalysisStatusLabel(message.workState)?.let { status ->
+                    Text(
+                        status,
+                        style = DenebType.meta,
+                        color = mailRowAnalysisStatusColor(message.workState),
+                        maxLines = 1,
+                    )
+                    Spacer(Modifier.width(6.dp))
+                }
                 Text(
                     mailTimeLabel(message.date, today),
                     style = DenebType.meta,
@@ -572,7 +581,6 @@ private fun senderName(from: String): String {
 }
 
 internal fun mailRowNativeMeta(message: MailMessage): String? = buildList {
-    mailRowAnalysisLabel(message.workState)?.let { add(it) }
     if (message.workState.feedStatus == "created") add("피드 반영")
     if (message.workState.calendarProposalCount > 0) {
         add("일정 후보 ${message.workState.calendarProposalCount}")
@@ -580,37 +588,32 @@ internal fun mailRowNativeMeta(message: MailMessage): String? = buildList {
     if (message.workState.todoCount > 0) {
         add("할 일 ${message.workState.todoCount}")
     }
-    if (message.hasAttachment) {
-        val count = message.attachmentCount
-        add(if (count > 1) "첨부 $count" else "첨부")
-    }
     mailRowMailboxLabel(message.mailbox)?.let { add(it) }
 }.joinToString(" · ").ifBlank { null }
 
-private fun mailRowAnalysisLabel(state: MailWorkState): String? = when (state.analysisStatus) {
-    "failed" -> "분석 실패"
-
-    "analyzing" -> "분석 중"
-
-    "queued" -> "분석 대기"
-
-    "stale" -> "재분석 필요"
-
-    "done" -> when (state.analysisQuality) {
-        "urgent" -> "분석: 긴급"
-        "attention" -> "분석: 확인"
-        "routine" -> "분석: 일반"
-        else -> "분석 완료"
-    }
-
+internal fun mailRowAnalysisStatusLabel(state: MailWorkState): String? = when (state.analysisStatus) {
+    "failed" -> "실패"
+    "analyzing" -> "분석중"
+    "queued" -> "대기"
+    "stale" -> "재분석"
+    "done" -> "분석"
     else -> null
 }
 
 @Composable
 private fun mailRowMetaColor(message: MailMessage): Color = when {
-    message.workState.analysisStatus == "failed" -> MaterialTheme.colorScheme.error
-    message.workState.calendarProposalCount > 0 || message.workState.todoCount > 0 -> MaterialTheme.colorScheme.primary
-    message.workState.analysisStatus.isNotBlank() || message.hasAttachment -> MaterialTheme.colorScheme.primary
+    message.workState.feedStatus == "created" ||
+        message.workState.calendarProposalCount > 0 ||
+        message.workState.todoCount > 0 -> MaterialTheme.colorScheme.primary
+
+    else -> denebHint()
+}
+
+@Composable
+private fun mailRowAnalysisStatusColor(state: MailWorkState): Color = when (state.analysisStatus) {
+    "failed" -> MaterialTheme.colorScheme.error
+    "analyzing", "queued", "stale" -> MaterialTheme.colorScheme.tertiary
+    "done" -> MaterialTheme.colorScheme.primary
     else -> denebHint()
 }
 
