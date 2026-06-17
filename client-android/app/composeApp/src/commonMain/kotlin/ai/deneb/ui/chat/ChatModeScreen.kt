@@ -156,6 +156,10 @@ internal fun ChatModeScreen(
     // just below the bar instead of under it, while older messages scroll behind.
     val topOverlayDensity = LocalDensity.current
     var topOverlayHeightPx by remember { mutableStateOf(0) }
+    // Same idea at the bottom: the input bar floats over the conversation; its
+    // measured height becomes the list's bottom contentPadding so the last message
+    // rests just above the input while older messages scroll behind it.
+    var bottomOverlayHeightPx by remember { mutableStateOf(0) }
 
     // Left navigation drawer (analysis surfaces): opened by the top-bar
     // hamburger or a left-edge swipe; system back closes it before exiting.
@@ -662,7 +666,9 @@ internal fun ChatModeScreen(
                                                 // below the bar; older messages scroll up behind it (immersive).
                                                 contentPadding = PaddingValues(
                                                     top = with(topOverlayDensity) { topOverlayHeightPx.toDp() },
-                                                    bottom = 8.dp,
+                                                    // Bottom inset = the floating input bar's measured height so the
+                                                    // last message rests just above it; older messages scroll behind.
+                                                    bottom = with(topOverlayDensity) { bottomOverlayHeightPx.toDp() },
                                                 ),
                                             ) {
                                                 items(uiState.history, key = { it.id }, contentType = { it.role }) { history ->
@@ -830,26 +836,6 @@ internal fun ChatModeScreen(
                                     }
                                 }
                             }
-
-                            // Same cap as the message rows so the input bar lines up with the
-                            // conversation column on desktop instead of spanning the whole pane.
-                            Box(Modifier.fillMaxWidth(), contentAlignment = TopCenter) {
-                                Column(denebContentWidthModifier()) {
-                                    QuestionInput(
-                                        files = uiState.files,
-                                        addFile = uiState.actions.addFile,
-                                        removeFile = uiState.actions.removeFile,
-                                        ask = uiState.actions.ask,
-                                        supportedFileExtensions = uiState.supportedFileExtensions,
-                                        textState = questionInputText,
-                                        onTextStateChange = { questionInputText = it },
-                                        isLoading = uiState.isLoading,
-                                        cancel = uiState.actions.cancel,
-                                        availableServices = uiState.availableServices,
-                                        onSelectService = uiState.actions.selectService,
-                                    )
-                                }
-                            }
                         }
                         // Immersive top overlay: the bar + banners float over the conversation
                         // (which scrolls full-height behind them, under the transparent status
@@ -927,6 +913,42 @@ internal fun ChatModeScreen(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .padding(horizontal = 16.dp, vertical = 8.dp),
+                                )
+                            }
+                        }
+                        // Immersive bottom: the input bar floats over the conversation (which
+                        // scrolls under it). A bottom-up scrim keeps it legible over scrolling
+                        // messages; the measured height feeds the list's bottom contentPadding so
+                        // the last message rests just above the input. The nav-bar + ime insets
+                        // come from the root Box, so the input still sits above the gesture bar
+                        // and rises with the keyboard. Same width cap as the message rows so it
+                        // lines up with the conversation column on desktop.
+                        Box(
+                            modifier = Modifier
+                                .align(BottomCenter)
+                                .fillMaxWidth()
+                                .onSizeChanged { bottomOverlayHeightPx = it.height }
+                                .background(
+                                    Brush.verticalGradient(
+                                        0f to Color.Transparent,
+                                        1f to MaterialTheme.colorScheme.background,
+                                    ),
+                                ),
+                            contentAlignment = TopCenter,
+                        ) {
+                            Column(denebContentWidthModifier()) {
+                                QuestionInput(
+                                    files = uiState.files,
+                                    addFile = uiState.actions.addFile,
+                                    removeFile = uiState.actions.removeFile,
+                                    ask = uiState.actions.ask,
+                                    supportedFileExtensions = uiState.supportedFileExtensions,
+                                    textState = questionInputText,
+                                    onTextStateChange = { questionInputText = it },
+                                    isLoading = uiState.isLoading,
+                                    cancel = uiState.actions.cancel,
+                                    availableServices = uiState.availableServices,
+                                    onSelectService = uiState.actions.selectService,
                                 )
                             }
                         }
