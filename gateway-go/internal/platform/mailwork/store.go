@@ -103,6 +103,9 @@ type Store struct {
 var (
 	globalMu    sync.Mutex
 	globalStore *Store
+
+	pathLocksMu sync.Mutex
+	pathLocks   = map[string]*sync.Mutex{}
 )
 
 func Default() *Store {
@@ -122,9 +125,12 @@ func (s *Store) Get(id string) MessageState {
 	if s == nil || strings.TrimSpace(id) == "" {
 		return MessageState{}
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	st := s.loadLocked()
+	unlock := s.lock()
+	defer unlock()
+	st, err := s.loadLocked()
+	if err != nil {
+		return MessageState{}
+	}
 	return st.Messages[strings.TrimSpace(id)]
 }
 
@@ -132,9 +138,12 @@ func (s *Store) Snapshot() map[string]MessageState {
 	if s == nil {
 		return nil
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	st := s.loadLocked()
+	unlock := s.lock()
+	defer unlock()
+	st, err := s.loadLocked()
+	if err != nil {
+		return nil
+	}
 	out := make(map[string]MessageState, len(st.Messages))
 	for id, msg := range st.Messages {
 		out[id] = msg
@@ -146,9 +155,12 @@ func (s *Store) Summary() Summary {
 	if s == nil {
 		return Summary{}
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	st := s.loadLocked()
+	unlock := s.lock()
+	defer unlock()
+	st, err := s.loadLocked()
+	if err != nil {
+		return Summary{}
+	}
 	return summarize(st.Messages)
 }
 
@@ -286,9 +298,12 @@ func (s *Store) update(id string, mutate func(MessageState) MessageState) (Messa
 	if s == nil || id == "" {
 		return MessageState{}, nil
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	st := s.loadLocked()
+	unlock := s.lock()
+	defer unlock()
+	st, err := s.loadLocked()
+	if err != nil {
+		return MessageState{}, err
+	}
 	ms := mutate(st.Messages[id])
 	if ms.ID == "" {
 		ms.ID = id
@@ -303,20 +318,56 @@ func (s *Store) update(id string, mutate func(MessageState) MessageState) (Messa
 	return ms, nil
 }
 
-func (s *Store) loadLocked() diskModel {
+func (s *Store) lock() func() {
+	if s == nil {
+		return func() {}
+	}
+	key := storeLockKey(s.path)
+	if key == "" {
+		s.mu.Lock()
+		return s.mu.Unlock
+	}
+	pathLocksMu.Lock()
+	l := pathLocks[key]
+	if l == nil {
+		l = &sync.Mutex{}
+		pathLocks[key] = l
+	}
+	pathLocksMu.Unlock()
+	l.Lock()
+	return l.Unlock
+}
+
+func storeLockKey(path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return ""
+	}
+	if abs, err := filepath.Abs(path); err == nil {
+		path = abs
+	}
+	return filepath.Clean(path)
+}
+
+func (s *Store) loadLocked() (diskModel, error) {
 	st := diskModel{Messages: map[string]MessageState{}}
 	if s == nil || s.path == "" {
-		return st
+		return st, nil
 	}
 	data, err := os.ReadFile(s.path)
 	if err != nil {
-		return st
+		if errors.Is(err, os.ErrNotExist) {
+			return st, nil
+		}
+		return st, err
 	}
-	_ = json.Unmarshal(data, &st)
+	if err := json.Unmarshal(data, &st); err != nil {
+		return diskModel{Messages: map[string]MessageState{}}, err
+	}
 	if st.Messages == nil {
 		st.Messages = map[string]MessageState{}
 	}
-	return st
+	return st, nil
 }
 
 func (s *Store) saveLocked(st diskModel) error {

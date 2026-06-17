@@ -2,7 +2,9 @@ package mailwork
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 )
 
@@ -148,5 +150,66 @@ func TestStoreMarkAnalysisFailedTruncatesError(t *testing.T) {
 	}
 	if got := []rune(store.Get("m1").LastError); len(got) != maxLastErrorChars {
 		t.Fatalf("last error rune len = %d, want %d", len(got), maxLastErrorChars)
+	}
+}
+
+func TestStoreConcurrentInstancesPreserveUpdates(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mail_work_state.json")
+	for i := 0; i < 50; i++ {
+		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("remove state: %v", err)
+		}
+		analysisStore := New(path)
+		feedStore := New(path)
+
+		var wg sync.WaitGroup
+		errs := make(chan error, 2)
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			_, err := analysisStore.MarkAnalysisDone(AnalysisInput{
+				MessageInput:       MessageInput{ID: "m1", Subject: "견적 요청"},
+				Quality:            "attention",
+				DerivedCountsKnown: true,
+				TodoCount:          1,
+			})
+			errs <- err
+		}()
+		go func() {
+			defer wg.Done()
+			_, err := feedStore.MarkFeedCreated("m1")
+			errs <- err
+		}()
+		wg.Wait()
+		close(errs)
+		for err := range errs {
+			if err != nil {
+				t.Fatalf("concurrent update: %v", err)
+			}
+		}
+
+		got := New(path).Get("m1")
+		if got.AnalysisStatus != AnalysisDone || got.FeedStatus != FeedCreated || got.TodoCount != 1 {
+			t.Fatalf("iteration %d lost a concurrent update: %+v", i, got)
+		}
+	}
+}
+
+func TestStoreDoesNotOverwriteCorruptState(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mail_work_state.json")
+	original := []byte("{not-json")
+	if err := os.WriteFile(path, original, 0o600); err != nil {
+		t.Fatalf("seed corrupt state: %v", err)
+	}
+
+	if _, err := New(path).MarkFeedCreated("m1"); err == nil {
+		t.Fatalf("expected corrupt state error")
+	}
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read state: %v", err)
+	}
+	if string(got) != string(original) {
+		t.Fatalf("corrupt state was overwritten: %q", string(got))
 	}
 }
