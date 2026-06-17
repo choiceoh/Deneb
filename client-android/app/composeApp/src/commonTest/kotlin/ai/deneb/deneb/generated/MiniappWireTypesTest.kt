@@ -201,6 +201,37 @@ class MiniappWireTypesTest {
     }
 
     @Test
+    fun `mail native status decodes archive mailbox stats`() {
+        val status = json.decodeFromString<MailNativeStatusOut>(
+            """
+            {
+              "source": "archive",
+              "available": true,
+              "offlineCapable": true,
+              "generatedAt": "2026-06-17T01:02:03Z",
+              "mailboxes": [
+                {
+                  "name": "INBOX",
+                  "total": 12,
+                  "unread": 3,
+                  "locallyRead": 2,
+                  "latestUid": "55",
+                  "attachmentCapable": true
+                }
+              ],
+              "overlay": { "messages": 4, "read": 2, "archived": 1, "trashed": 1 }
+            }
+            """.trimIndent(),
+        )
+
+        assertEquals("archive", status.source)
+        assertTrue(status.offlineCapable)
+        assertEquals("INBOX", status.mailboxes.single().name)
+        assertEquals(3, status.mailboxes.single().unread)
+        assertEquals(1, status.overlay.archived)
+    }
+
+    @Test
     fun `session row decodes with optional pointer fields absent as null`() {
         // startedAtMs/runtimeMs/totalTokens are *int64 (omitempty) on the gateway,
         // so for a not-yet-started session they are absent → null, not 0.

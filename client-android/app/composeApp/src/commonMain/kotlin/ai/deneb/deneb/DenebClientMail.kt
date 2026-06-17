@@ -2,6 +2,7 @@ package ai.deneb.deneb
 
 import ai.deneb.deneb.generated.MailAnalysisOut
 import ai.deneb.deneb.generated.MailMessageOut
+import ai.deneb.deneb.generated.MailNativeStatusOut
 import ai.deneb.deneb.generated.QATurn
 import io.ktor.client.call.body
 import io.ktor.client.plugins.timeout
@@ -53,8 +54,8 @@ internal fun recordReadId(into: LinkedHashSet<String>, id: String, max: Int = MA
     }
 }
 
-/** Refresh the mail list. With a [query] it runs a full-mailbox Gmail search
- *  (any Gmail syntax: keywords, `from:`, `has:attachment`, …); null/blank falls
+/** Refresh the mail list. With a [query] it runs a full-mailbox mail search
+ *  (native/archive-aware syntax: keywords, `from:`, `has:attachment`, …); null/blank falls
  *  back to the server's default recent-inbox view. Returns false on a fetch
  *  failure so the screen can show a retry instead of a misleading empty state. */
 suspend fun DenebGatewayClient.refreshMail(query: String? = null): Boolean {
@@ -98,7 +99,39 @@ suspend fun DenebGatewayClient.refreshMail(query: String? = null): Boolean {
     // for ~30s and won't reflect a just-read mail, so persisting raw rows would let a
     // cold start resurrect a unread dot the user already cleared.
     if (q == null) storeCachedMail(overlaid)
+    refreshMailNativeStatus()
     return true
+}
+
+suspend fun DenebGatewayClient.refreshMailNativeStatus(): MailNativeStatus? {
+    val p = callRpc<MailNativeStatusOut>("miniapp.gmail.native_status", buildJsonObject {}) ?: return null
+    val status = MailNativeStatus(
+        source = p.source,
+        available = p.available,
+        offlineCapable = p.offlineCapable,
+        mailboxes = p.mailboxes.map {
+            MailNativeMailbox(
+                name = it.name,
+                total = it.total,
+                unread = it.unread,
+                locallyRead = it.locallyRead,
+                locallyArchived = it.locallyArchived,
+                locallyTrashed = it.locallyTrashed,
+                latestUid = it.latestUid,
+                attachmentCapable = it.attachmentCapable,
+            )
+        },
+        overlay = MailNativeOverlay(
+            messages = p.overlay.messages,
+            read = p.overlay.read,
+            archived = p.overlay.archived,
+            trashed = p.overlay.trashed,
+        ),
+        generatedAt = p.generatedAt,
+        error = p.error,
+    )
+    _denebMailNativeStatus.value = status
+    return status
 }
 
 // --- Default inbox cache (cache-then-network) -----------------------------
@@ -190,6 +223,7 @@ suspend fun DenebGatewayClient.markMailRead(id: String): Boolean {
         recordReadId(locallyReadMailIds, id)
         _denebMail.update { list -> list.map { if (it.id == id) it.copy(unread = false) else it } }
         patchCachedMail { list -> list.map { if (it.id == id) it.copy(unread = false) else it } }
+        refreshMailNativeStatus()
     }
     return ok
 }
@@ -200,6 +234,7 @@ suspend fun DenebGatewayClient.archiveMail(id: String): Boolean {
     if (ok) {
         _denebMail.update { list -> list.filterNot { it.id == id } }
         patchCachedMail { list -> list.filterNot { it.id == id } }
+        refreshMailNativeStatus()
     }
     return ok
 }
@@ -210,6 +245,7 @@ suspend fun DenebGatewayClient.trashMail(id: String): Boolean {
     if (ok) {
         _denebMail.update { list -> list.filterNot { it.id == id } }
         patchCachedMail { list -> list.filterNot { it.id == id } }
+        refreshMailNativeStatus()
     }
     return ok
 }

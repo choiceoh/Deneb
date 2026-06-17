@@ -3,6 +3,7 @@ package ai.deneb.deneb
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebSectionLabel
 import ai.deneb.ui.DenebType
+import ai.deneb.ui.components.DenebChip
 import ai.deneb.ui.components.DenebSearchField
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
@@ -10,6 +11,7 @@ import ai.deneb.ui.denebHint
 import ai.deneb.ui.denebPressable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -23,6 +25,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
@@ -66,7 +69,7 @@ import kotlin.time.Clock
  * and time-bucketed section labels (오늘 / 어제 / 이번 주 / 이전). Pull to refresh;
  * long-press a row (with haptic) to multi-select; a flat bottom bar runs bulk
  * read / archive / trash, and "더 보기" pages through nextPageToken. Tapping a
- * row opens the detail screen. The search field runs a full-mailbox Gmail
+ * row opens the detail screen. The search field runs a full-mailbox native mail
  * query (IME search submits; clearing it returns to the inbox view). It is the
  * first list item, parked just above the viewport (iOS Mail style): the inbox
  * opens without it, dragging the list down reveals it, and pulling past it
@@ -89,6 +92,7 @@ fun DenebMailScreen(
 ) {
     val mail by client.denebMail.collectAsState()
     val nextToken by client.denebMailNextToken.collectAsState()
+    val nativeStatus by client.denebMailNativeStatus.collectAsState()
     val scope = rememberCoroutineScope()
     val haptics = rememberHaptics()
 
@@ -99,12 +103,15 @@ fun DenebMailScreen(
     val selected = remember { mutableStateListOf<String>() }
     var busy by remember { mutableStateOf(false) }
     var loadingMore by remember { mutableStateOf(false) }
-    // Full-mailbox Gmail search: the field holds what the user types; activeQuery
+    // Full-mailbox mail search: the field holds what the user types; activeQuery
     // is the query the current list actually came from (null = default inbox).
     var searchText by remember { mutableStateOf("") }
     var activeQuery by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(Unit) { loadOk = client.refreshMail() }
+    LaunchedEffect(Unit) {
+        client.refreshMailNativeStatus()
+        loadOk = client.refreshMail()
+    }
 
     fun runSearch(raw: String) {
         val q = raw.trim().ifBlank { null }
@@ -155,13 +162,25 @@ fun DenebMailScreen(
                 )
                 TextButton(onClick = { clearSelection() }) { Text("취소") }
             }
-        } else if (mail.isNotEmpty()) {
-            Text(
-                "${mail.size}통 · 안 읽음 ${mail.count { it.unread }}",
-                style = DenebType.hint,
-                color = denebHint(),
-                modifier = Modifier.padding(start = 24.dp, end = 24.dp, bottom = 6.dp),
-            )
+        } else if (mail.isNotEmpty() || nativeStatus != null) {
+            Column(Modifier.padding(start = 24.dp, end = 24.dp, bottom = 6.dp)) {
+                if (mail.isNotEmpty()) {
+                    Text(
+                        "${mail.size}통 · 안 읽음 ${mail.count { it.unread }}",
+                        style = DenebType.hint,
+                        color = denebHint(),
+                    )
+                }
+                mailNativeStatusLine(nativeStatus)?.let {
+                    Text(
+                        it,
+                        style = DenebType.meta,
+                        color = denebHint(),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
         }
 
         // The search field lives inside the list as item 0, and the list starts
@@ -205,6 +224,16 @@ fun DenebMailScreen(
                                     // Field carries its own 8dp inset; 16dp more aligns the pill with
                                     // the screen's 24dp content margins.
                                     modifier = Modifier.padding(horizontal = 16.dp),
+                                )
+                            }
+                            item(key = "native-filters") {
+                                MailNativeFilterRow(
+                                    activeQuery = activeQuery,
+                                    offlineCapable = nativeStatus?.offlineCapable == true,
+                                    onPick = { query ->
+                                        searchText = query.orEmpty()
+                                        runSearch(query.orEmpty())
+                                    },
                                 )
                             }
                         }
@@ -469,6 +498,68 @@ internal fun shortDate(date: String): String = runCatching {
     fun p(n: Int) = n.toString().padStart(2, '0')
     "${p(t.monthNumber)}-${p(t.dayOfMonth)} ${p(t.hour)}:${p(t.minute)}"
 }.getOrElse { if (date.length >= 16) date.substring(5, 16).replace('T', ' ') else date }
+
+private data class MailNativeFilter(val label: String, val query: String?)
+
+@Composable
+private fun MailNativeFilterRow(
+    activeQuery: String?,
+    offlineCapable: Boolean,
+    onPick: (String?) -> Unit,
+) {
+    val filters = remember(offlineCapable) {
+        buildList {
+            add(MailNativeFilter("받은함", null))
+            add(MailNativeFilter("첨부", "has:attachment"))
+            add(MailNativeFilter("30일", "{in:inbox is:unread} newer_than:30d"))
+            if (offlineCapable) add(MailNativeFilter("전체", "in:anywhere"))
+        }
+    }
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        filters.forEachIndexed { index, filter ->
+            if (index > 0) Spacer(Modifier.width(8.dp))
+            DenebChip(
+                selected = activeQuery.normalizeMailQuery() == filter.query.normalizeMailQuery(),
+                onClick = { onPick(filter.query) },
+            ) {
+                Text(filter.label, style = MaterialTheme.typography.labelLarge)
+            }
+        }
+    }
+}
+
+private fun String?.normalizeMailQuery(): String? = this?.trim()?.ifBlank { null }
+
+internal fun mailNativeStatusLine(status: MailNativeStatus?): String? {
+    status ?: return null
+    return when {
+        status.source == "archive" && status.available -> {
+            val total = status.mailboxes.sumOf { it.total }
+            val unread = status.mailboxes.sumOf { it.unread }
+            val boxes = status.mailboxes.count { it.total > 0 }.coerceAtLeast(status.mailboxes.size)
+            val overlay = status.overlay.archived + status.overlay.trashed
+            buildList {
+                add("로컬 보관함")
+                add("${boxes}개함 ${total}통")
+                if (unread > 0) add("미읽음 $unread")
+                if (overlay > 0) add("로컬정리 $overlay")
+                if (status.offlineCapable) add("오프라인")
+            }.joinToString(" · ")
+        }
+
+        status.source == "archive" -> "로컬 보관함 연결 불안정"
+
+        status.source == "gmail" -> "Gmail 대체 경로"
+
+        else -> null
+    }
+}
 
 /** Desktop split-view right-pane placeholder, shown until a mail is selected. */
 @Composable

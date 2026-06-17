@@ -115,6 +115,37 @@ data class MailMessageOut(
 )
 
 @Serializable
+data class MailNativeMailboxOut(
+    val name: String = "",
+    val total: Int = 0,
+    val unread: Int = 0,
+    val locallyRead: Int = 0,
+    val locallyArchived: Int = 0,
+    val locallyTrashed: Int = 0,
+    val latestUid: String = "",
+    val attachmentCapable: Boolean = false,
+)
+
+@Serializable
+data class MailNativeOverlayOut(
+    val messages: Int = 0,
+    val read: Int = 0,
+    val archived: Int = 0,
+    val trashed: Int = 0,
+)
+
+@Serializable
+data class MailNativeStatusOut(
+    val source: String = "",
+    val available: Boolean = false,
+    val offlineCapable: Boolean = false,
+    val mailboxes: List<MailNativeMailboxOut> = emptyList(),
+    val overlay: MailNativeOverlayOut = MailNativeOverlayOut(),
+    val generatedAt: String = "",
+    val error: String = "",
+)
+
+@Serializable
 data class MailRowOut(
     val id: String = "",
     val threadId: String = "",

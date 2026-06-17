@@ -117,6 +117,70 @@ func TestRepositoryGetAttachmentUsesArchiveRawMessage(t *testing.T) {
 	}
 }
 
+func TestRepositoryNativeStatusSummarizesArchiveAndOverlay(t *testing.T) {
+	raw1 := archiveTestMessage("m1@example.com", "sender@example.com", "One", "Body one.", "")
+	raw2 := archiveTestMessage("m2@example.com", "sender@example.com", "Two", "Body two.", "%PDF")
+	srv := newTestIMAPArchive(t, map[string]map[string][]byte{
+		"INBOX": {"1": []byte(raw1), "2": []byte(raw2)},
+	})
+	repo := NewRepository(Config{
+		Addr:      srv.addr,
+		User:      "u",
+		Pass:      "p",
+		Mailboxes: []string{"INBOX"},
+		Timeout:   time.Second,
+	}, RepositoryOptions{StatePath: t.TempDir() + "/state.json"})
+
+	rows, _, err := repo.SearchPage(context.Background(), "", "", 10)
+	if err != nil {
+		t.Fatalf("SearchPage: %v", err)
+	}
+	if err := repo.ModifyLabels(context.Background(), rows[0].ID, nil, []string{"UNREAD"}); err != nil {
+		t.Fatalf("mark read: %v", err)
+	}
+
+	status, err := repo.NativeStatus(context.Background())
+	if err != nil {
+		t.Fatalf("NativeStatus: %v", err)
+	}
+	if status.Source != "archive" || !status.Available || !status.OfflineCapable {
+		t.Fatalf("status source/availability = %#v", status)
+	}
+	if len(status.Mailboxes) != 1 {
+		t.Fatalf("mailboxes = %#v, want one", status.Mailboxes)
+	}
+	mb := status.Mailboxes[0]
+	if mb.Name != "INBOX" || mb.Total != 2 || mb.Unread != 1 || mb.LocallyRead != 1 || mb.LatestUID != "2" || !mb.AttachmentCapable {
+		t.Fatalf("mailbox status = %#v", mb)
+	}
+	if status.Overlay.Messages != 2 || status.Overlay.Read != 1 {
+		t.Fatalf("overlay = %#v, want locator snapshots plus one read", status.Overlay)
+	}
+}
+
+func TestRepositorySearchPageFiltersHasAttachmentInArchive(t *testing.T) {
+	rawPlain := archiveTestMessage("plain@example.com", "sender@example.com", "Plain", "No attachment.", "")
+	rawAttached := archiveTestMessage("attached@example.com", "sender@example.com", "Attached", "See attached.", "%PDF")
+	srv := newTestIMAPArchive(t, map[string]map[string][]byte{
+		"INBOX": {"1": []byte(rawPlain), "2": []byte(rawAttached)},
+	})
+	repo := NewRepository(Config{
+		Addr:      srv.addr,
+		User:      "u",
+		Pass:      "p",
+		Mailboxes: []string{"INBOX"},
+		Timeout:   time.Second,
+	}, RepositoryOptions{StatePath: t.TempDir() + "/state.json"})
+
+	rows, _, err := repo.SearchPage(context.Background(), "has:attachment", "", 10)
+	if err != nil {
+		t.Fatalf("SearchPage: %v", err)
+	}
+	if len(rows) != 1 || rows[0].ID != "attached@example.com" {
+		t.Fatalf("rows = %#v, want only attached mail", rows)
+	}
+}
+
 func TestRepositoryMutationResolvesArchiveIDWithoutPriorList(t *testing.T) {
 	raw := archiveTestMessage("m3@example.com", "sender@example.com", "Push action", "Opened from notification.", "")
 	srv := newTestIMAPArchive(t, map[string]map[string][]byte{

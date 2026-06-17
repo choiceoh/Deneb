@@ -47,6 +47,33 @@ type RepositoryOptions struct {
 	Now       func() time.Time
 }
 
+type NativeStatus struct {
+	Source         string
+	Available      bool
+	OfflineCapable bool
+	Mailboxes      []NativeMailboxStatus
+	Overlay        NativeOverlayStatus
+	GeneratedAt    time.Time
+}
+
+type NativeMailboxStatus struct {
+	Name              string
+	Total             int
+	Unread            int
+	LocallyRead       int
+	LocallyArchived   int
+	LocallyTrashed    int
+	LatestUID         string
+	AttachmentCapable bool
+}
+
+type NativeOverlayStatus struct {
+	Messages int
+	Read     int
+	Archived int
+	Trashed  int
+}
+
 // Repository exposes the on-box IMAP archive through the Gmail-like interface
 // already used by miniapp.gmail.*. Reads prefer the local archive; Gmail remains
 // a compatibility fallback for disabled archive setups and unsupported legacy
@@ -185,6 +212,84 @@ func (r *Repository) GetAttachment(ctx context.Context, messageID, attachmentID 
 	return nil, ErrArchiveUnavailable
 }
 
+func (r *Repository) NativeStatus(ctx context.Context) (NativeStatus, error) {
+	if r == nil || !r.archiveEnabled() {
+		return NativeStatus{Source: "gmail", Available: r != nil && r.fallback != nil}, nil
+	}
+	status := NativeStatus{
+		Source:         "archive",
+		Available:      true,
+		OfflineCapable: true,
+		GeneratedAt:    r.now(),
+		Overlay:        nativeOverlayStatus(r.state.Snapshot()),
+	}
+	c, err := dialIMAP(ctx, r.cfg.Addr, r.cfg.Timeout)
+	if err != nil {
+		status.Available = false
+		return status, err
+	}
+	defer c.close()
+	if err := c.login(r.cfg.User, r.cfg.Pass); err != nil {
+		status.Available = false
+		return status, err
+	}
+	defer c.logout()
+
+	snapshot := r.state.Snapshot()
+	for _, mailbox := range r.cfg.Mailboxes {
+		mailbox = strings.TrimSpace(mailbox)
+		if mailbox == "" {
+			continue
+		}
+		if err := c.examine(mailbox); err != nil {
+			status.Mailboxes = append(status.Mailboxes, NativeMailboxStatus{
+				Name:              mailbox,
+				AttachmentCapable: true,
+			})
+			continue
+		}
+		uids, err := c.uidSearch("ALL")
+		if err != nil {
+			status.Mailboxes = append(status.Mailboxes, NativeMailboxStatus{
+				Name:              mailbox,
+				AttachmentCapable: true,
+			})
+			continue
+		}
+		mb := NativeMailboxStatus{
+			Name:              mailbox,
+			Total:             len(uids),
+			LatestUID:         latestUID(uids),
+			AttachmentCapable: true,
+		}
+		if strings.EqualFold(mailbox, "INBOX") {
+			mb.Unread = len(uids)
+		}
+		for _, st := range snapshot {
+			if st.Mailbox != mailbox || st.UID == "" {
+				continue
+			}
+			if st.Read {
+				mb.LocallyRead++
+			}
+			if st.Archived {
+				mb.LocallyArchived++
+			}
+			if st.Trashed {
+				mb.LocallyTrashed++
+			}
+			if strings.EqualFold(mailbox, "INBOX") && (st.Read || st.Archived || st.Trashed) {
+				mb.Unread--
+			}
+		}
+		if mb.Unread < 0 {
+			mb.Unread = 0
+		}
+		status.Mailboxes = append(status.Mailboxes, mb)
+	}
+	return status, nil
+}
+
 func (r *Repository) archiveEnabled() bool {
 	return r != nil &&
 		strings.TrimSpace(r.cfg.Addr) != "" &&
@@ -200,8 +305,9 @@ func (r *Repository) fallbackSearchPage(ctx context.Context, query, pageToken st
 }
 
 type archiveQuery struct {
-	Criteria    string
-	DefaultView bool
+	Criteria      string
+	DefaultView   bool
+	HasAttachment bool
 }
 
 func parseArchiveQuery(query string, now time.Time) (archiveQuery, error) {
@@ -228,6 +334,7 @@ func parseArchiveQuery(query string, now time.Time) (archiveQuery, error) {
 		}
 	}
 
+	hasAttachment := hasAttachmentRe.MatchString(q)
 	from := extractFromQuery(q)
 	text := normalizeArchiveTextQuery(q)
 	hasUnsupportedOnly := unsupportedOperatorRe.MatchString(text)
@@ -252,13 +359,14 @@ func parseArchiveQuery(query string, now time.Time) (archiveQuery, error) {
 	if len(parts) == 0 {
 		parts = append(parts, "ALL")
 	}
-	return archiveQuery{Criteria: strings.Join(parts, " "), DefaultView: defaultView}, nil
+	return archiveQuery{Criteria: strings.Join(parts, " "), DefaultView: defaultView, HasAttachment: hasAttachment}, nil
 }
 
 var (
 	newerThanRe           = regexp.MustCompile(`(?i)\bnewer_than:(\d+)([dmy])\b`)
 	fromQueryRe           = regexp.MustCompile(`(?i)\bfrom:(?:"([^"]+)"|([^\s}]+))`)
-	stripQuerySyntaxRe    = regexp.MustCompile(`(?i)[{}]|\bin:inbox\b|\bis:unread\b|\bnewer_than:\d+[dmy]\b|\bfrom:(?:"[^"]+"|[^\s}]+)`)
+	hasAttachmentRe       = regexp.MustCompile(`(?i)\bhas:attachment\b`)
+	stripQuerySyntaxRe    = regexp.MustCompile(`(?i)[{}]|\bin:(?:inbox|anywhere)\b|\bis:unread\b|\bnewer_than:\d+[dmy]\b|\bhas:attachment\b|\bfrom:(?:"[^"]+"|[^\s}]+)`)
 	unsupportedOperatorRe = regexp.MustCompile(`(?i)\b(?:is|in|label|has|category|after|before|older_than):[^\s}]+`)
 )
 
@@ -351,6 +459,9 @@ func (r *Repository) searchArchive(ctx context.Context, spec archiveQuery, pageT
 			_ = r.state.RememberLocator(id, mailbox, uid)
 			st := r.state.Get(id)
 			if st.Trashed || (spec.DefaultView && (st.Archived || st.Read)) {
+				continue
+			}
+			if spec.HasAttachment && len(detail.Attachments) == 0 {
 				continue
 			}
 			row := detailToSummary(detail, mailbox, st)
@@ -630,4 +741,37 @@ func reverseStrings(in []string) {
 func parseUID(uid string) int {
 	n, _ := strconv.Atoi(strings.TrimSpace(uid))
 	return n
+}
+
+func latestUID(uids []string) string {
+	if len(uids) == 0 {
+		return ""
+	}
+	latest := strings.TrimSpace(uids[0])
+	latestN := parseUID(latest)
+	for _, uid := range uids[1:] {
+		n := parseUID(uid)
+		if n > latestN {
+			latest = strings.TrimSpace(uid)
+			latestN = n
+		}
+	}
+	return latest
+}
+
+func nativeOverlayStatus(snapshot map[string]MessageState) NativeOverlayStatus {
+	var out NativeOverlayStatus
+	out.Messages = len(snapshot)
+	for _, st := range snapshot {
+		if st.Read {
+			out.Read++
+		}
+		if st.Archived {
+			out.Archived++
+		}
+		if st.Trashed {
+			out.Trashed++
+		}
+	}
+	return out
 }

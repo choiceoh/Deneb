@@ -171,15 +171,18 @@ class DenebGatewayClient(
     internal val _denebSkills = MutableStateFlow<List<SkillRow>>(emptyList())
     val denebSkills: StateFlow<List<SkillRow>> = _denebSkills
 
-    // Recent Gmail surfaced in the native mail screen.
+    // Recent mail surfaced in the native mail screen.
     internal val _denebMail = MutableStateFlow<List<MailMessage>>(emptyList())
     val denebMail: StateFlow<List<MailMessage>> = _denebMail
+
+    internal val _denebMailNativeStatus = MutableStateFlow<MailNativeStatus?>(null)
+    val denebMailNativeStatus: StateFlow<MailNativeStatus?> = _denebMailNativeStatus
 
     // Pagination cursor for the inbox; null when there are no more pages.
     internal val _denebMailNextToken = MutableStateFlow<String?>(null)
     val denebMailNextToken: StateFlow<String?> = _denebMailNextToken
 
-    // Gmail query behind the current mail list (null = default inbox view).
+    // Mail query behind the current mail list (null = default inbox view).
     // Set by refreshMail on success; loadMoreMail must send the same query or
     // the next page would come from a different result set than the cursor.
     internal var denebMailActiveQuery: String? = null
@@ -316,6 +319,7 @@ class DenebGatewayClient(
         _chatHistory.value = emptyList()
         _savedConversations.value = emptyList()
         _denebMail.value = emptyList()
+        _denebMailNativeStatus.value = null
         _denebMailNextToken.value = null
         denebMailActiveQuery = null
         locallyReadMailIds.clear()

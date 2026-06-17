@@ -118,6 +118,7 @@ var requiredMethods = []string{
 	"miniapp.gmail.mark_read",
 	"miniapp.gmail.archive",
 	"miniapp.gmail.trash",
+	"miniapp.gmail.native_status",
 	"miniapp.gmail.sender_context",
 	"miniapp.models.add_custom",
 	"miniapp.models.delete_custom",
