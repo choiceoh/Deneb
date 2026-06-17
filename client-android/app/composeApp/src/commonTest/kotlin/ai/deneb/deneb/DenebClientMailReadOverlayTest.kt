@@ -100,17 +100,17 @@ class DenebClientMailReadOverlayTest {
     }
 
     @Test
-    fun mail_row_native_meta_summarizes_attachment_and_mailbox() {
+    fun mail_row_native_meta_hides_attachment_and_analysis_status() {
         assertNull(mailRowNativeMeta(row("plain", false)))
 
         val attached = row("attached", false).copy(hasAttachment = true, attachmentCount = 2)
-        assertEquals("첨부 2", mailRowNativeMeta(attached))
+        assertNull(mailRowNativeMeta(attached))
 
         val archived = row("archived", false).copy(mailbox = "Gmail")
         assertEquals("Gmail 보관함", mailRowNativeMeta(archived))
 
         val both = row("both", false).copy(hasAttachment = true, attachmentCount = 1, mailbox = "Gmail")
-        assertEquals("첨부 · Gmail 보관함", mailRowNativeMeta(both))
+        assertEquals("Gmail 보관함", mailRowNativeMeta(both))
 
         val analyzed = row("analyzed", false).copy(
             workState = MailWorkState(
@@ -120,10 +120,20 @@ class DenebClientMailReadOverlayTest {
                 todoCount = 2,
             ),
         )
-        assertEquals("분석: 확인 · 일정 후보 1 · 할 일 2", mailRowNativeMeta(analyzed))
+        assertEquals("일정 후보 1 · 할 일 2", mailRowNativeMeta(analyzed))
 
         val failed = row("failed", false).copy(workState = MailWorkState(analysisStatus = "failed"))
-        assertEquals("분석 실패", mailRowNativeMeta(failed))
+        assertNull(mailRowNativeMeta(failed))
+    }
+
+    @Test
+    fun mail_row_analysis_status_label_is_compact_for_the_time_column() {
+        assertNull(mailRowAnalysisStatusLabel(MailWorkState()))
+        assertEquals("분석", mailRowAnalysisStatusLabel(MailWorkState(analysisStatus = "done", analysisQuality = "urgent")))
+        assertEquals("실패", mailRowAnalysisStatusLabel(MailWorkState(analysisStatus = "failed")))
+        assertEquals("분석중", mailRowAnalysisStatusLabel(MailWorkState(analysisStatus = "analyzing")))
+        assertEquals("대기", mailRowAnalysisStatusLabel(MailWorkState(analysisStatus = "queued")))
+        assertEquals("재분석", mailRowAnalysisStatusLabel(MailWorkState(analysisStatus = "stale")))
     }
 
     @Test
