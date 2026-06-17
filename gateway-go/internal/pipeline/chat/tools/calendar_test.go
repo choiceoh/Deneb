@@ -376,3 +376,23 @@ func TestCalendar_BriefShowsLinkAndDirective(t *testing.T) {
 		t.Errorf("brief missing synthesis directive:\n%s", out)
 	}
 }
+
+func TestCalendar_PrepPullsLinkedContext(t *testing.T) {
+	local := newTestLocalCal(t)
+	start := time.Now().Add(3 * time.Hour)
+	ev, err := local.Create(localcal.CreateInput{
+		Summary:     "ZTT 미팅",
+		Start:       start,
+		End:         start.Add(time.Hour),
+		Source:      "mail:abc123",
+		SourceLabel: "비금 154kV 통관",
+		Kind:        "meeting",
+	})
+	if err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	out := callCal(t, &toolctx.CalendarDeps{Local: local}, map[string]any{"action": "prep", "id": ev.ID})
+	if !strings.Contains(out, "미팅 준비") || !strings.Contains(out, "mail:abc123") || !strings.Contains(out, "mail_archive") {
+		t.Errorf("prep missing linked-context directive:\n%s", out)
+	}
+}
