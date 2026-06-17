@@ -41,6 +41,14 @@ type CreateInput struct {
 	Start       time.Time
 	End         time.Time
 	AllDay      bool
+
+	// Deneb provenance — set when an event is generated from analysis (a mail
+	// proposal, a deal due date). Source is a machine link ("mail:<msgID>"),
+	// SourceLabel a human one (the mail subject), Kind the type ("meeting" |
+	// "deadline"). All empty for a plain hand-added event.
+	Source      string
+	SourceLabel string
+	Kind        string
 }
 
 // storedEvent is the on-disk shape. Times are RFC3339 strings so the file stays
@@ -53,6 +61,9 @@ type storedEvent struct {
 	Start       string `json:"start"` // RFC3339
 	End         string `json:"end"`   // RFC3339
 	AllDay      bool   `json:"allDay,omitempty"`
+	Source      string `json:"source,omitempty"`
+	SourceLabel string `json:"sourceLabel,omitempty"`
+	Kind        string `json:"kind,omitempty"`
 	Created     string `json:"created,omitempty"`
 	Updated     string `json:"updated,omitempty"`
 }
@@ -69,6 +80,9 @@ func (e storedEvent) toCalendar() calendar.Event {
 		End:         end,
 		AllDay:      e.AllDay,
 		Status:      "confirmed",
+		Source:      e.Source,
+		SourceLabel: e.SourceLabel,
+		Kind:        e.Kind,
 	}
 }
 
@@ -247,6 +261,9 @@ func buildRecord(id string, in CreateInput) storedEvent {
 		Start:       in.Start.Format(time.RFC3339),
 		End:         end.Format(time.RFC3339),
 		AllDay:      in.AllDay,
+		Source:      strings.TrimSpace(in.Source),
+		SourceLabel: strings.TrimSpace(in.SourceLabel),
+		Kind:        strings.TrimSpace(in.Kind),
 		Created:     now,
 		Updated:     now,
 	}

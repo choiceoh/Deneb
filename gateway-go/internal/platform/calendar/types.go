@@ -22,6 +22,15 @@ type Event struct {
 	Organizer   Attendee        // empty if Google omitted it
 	Attendees   []Attendee      // empty when nobody is invited
 	Conference  *ConferenceInfo // nil when no Meet/Zoom is attached
+
+	// Deneb annotations — empty for Google events and plain manual ones. They make
+	// a locally-created event a first-class linked object so the agent can brief
+	// and prep over it and follow it back to its origin. Source is a machine link
+	// ("mail:<msgID>"), SourceLabel a human one (the mail subject), Kind the event
+	// type ("meeting" | "deadline").
+	Source      string
+	SourceLabel string
+	Kind        string
 }
 
 // Attendee is a calendar participant. Email is normalized to lowercase.

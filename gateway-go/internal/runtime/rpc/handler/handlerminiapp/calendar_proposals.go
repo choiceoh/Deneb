@@ -120,6 +120,12 @@ func calendarProposalsAccept(deps CalendarDeps) rpcutil.HandlerFunc {
 			Start:   start,
 			End:     end,
 			AllDay:  allDay,
+			// Carry the proposal's provenance onto the event so it stays a
+			// first-class linked object: the agent can brief on it and follow it
+			// back to the originating mail (the bell used to drop all of this).
+			Source:      proposalEventSource(prop.Source),
+			SourceLabel: prop.SourceSubject,
+			Kind:        prop.Kind,
 		})
 		if cerr != nil {
 			_, _ = deps.Proposals.Decide(p.ID, calprop.StatusPending, "") // release so it can be retried
@@ -165,6 +171,18 @@ func calendarProposalsReject(deps CalendarDeps) rpcutil.HandlerFunc {
 		}
 		return rpcutil.RespondOK(req.ID, map[string]any{"ok": true, "proposal": proposalOut(*updated)})
 	}
+}
+
+// proposalEventSource turns a proposal's dedup Source ("mail:<msgID>|<title>")
+// into the clean machine link stored on the event ("mail:<msgID>"), dropping the
+// per-title suffix that only kept proposals unique. Returned unchanged when it
+// carries no "|" suffix.
+func proposalEventSource(source string) string {
+	source = strings.TrimSpace(source)
+	if i := strings.IndexByte(source, '|'); i >= 0 {
+		return strings.TrimSpace(source[:i])
+	}
+	return source
 }
 
 // proposalTimes resolves a proposal's Start string into event start/end times.

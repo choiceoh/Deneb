@@ -144,6 +144,40 @@ func attendeeLabel(a calendar.Attendee) string {
 	return strings.TrimSpace(a.Email)
 }
 
+// calKindLabel maps a Deneb event Kind to a Korean label, "" for none/unknown.
+func calKindLabel(kind string) string {
+	switch strings.TrimSpace(kind) {
+	case "meeting":
+		return "미팅"
+	case "deadline":
+		return "기한"
+	default:
+		return ""
+	}
+}
+
+// calSourceLine renders the Deneb origin of a generated event — its kind, the
+// mail it came from, and the machine link the agent can follow back (mail:<id>)
+// — so the agent can brief and prep over it. "" for a plain manual or Google
+// event that carries no Deneb annotation.
+func calSourceLine(e calendar.Event) string {
+	src := strings.TrimSpace(e.Source)
+	if src == "" && calKindLabel(e.Kind) == "" {
+		return ""
+	}
+	var parts []string
+	if k := calKindLabel(e.Kind); k != "" {
+		parts = append(parts, k)
+	}
+	if lbl := strings.TrimSpace(e.SourceLabel); lbl != "" {
+		parts = append(parts, fmt.Sprintf("메일 「%s」", lbl))
+	}
+	if src != "" {
+		parts = append(parts, src)
+	}
+	return "연결: " + strings.Join(parts, " · ")
+}
+
 // countExternalAttendees counts non-self, non-declined attendees — the people
 // the user is actually meeting, for the list badge.
 func countExternalAttendees(attendees []calendar.Attendee) int {
