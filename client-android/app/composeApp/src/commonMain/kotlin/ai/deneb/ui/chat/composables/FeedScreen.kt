@@ -24,6 +24,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -37,9 +38,12 @@ import androidx.compose.ui.unit.dp
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.LocalTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.minus
 import kotlinx.datetime.plus
+import kotlinx.datetime.toInstant
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.datetime.todayIn
 import kotlin.time.Clock
@@ -60,26 +64,34 @@ internal fun FeedScreen(
     loaded: Boolean,
     seenIds: Set<String>,
     onMarkSeen: (String) -> Unit,
+    onLoadDateRange: (Long, Long) -> Unit,
     onRunAction: (String, String) -> Unit,
 ) {
     DenebScreenScaffold(title = "피드", onBack = {}, showBack = false) {
+        // The feed spans several days of as-yet-unacked items. Group by local day and
+        // step through the days that have items: default to the newest (so the screen
+        // opens on content), bound navigation to [oldest, newest] so ← / → never page
+        // into empty pre-/post-history. selectedDate resets to the newest day whenever
+        // a newer item arrives (maxDate advances), but survives a same-day refresh.
+        val tz = remember { TimeZone.currentSystemDefault() }
+        val today = remember { Clock.System.todayIn(tz) }
+        val dates = remember(items) { items.map { localDateOf(it.createdAtMs) } }
+        val minDate = dates.minOrNull() ?: today
+        val maxDate = dates.maxOrNull() ?: today
+        var selectedDate by remember(maxDate) { mutableStateOf(maxDate) }
+        LaunchedEffect(selectedDate) {
+            onLoadDateRange(
+                dayStartMs(selectedDate, tz),
+                dayStartMs(selectedDate.plus(1, DateTimeUnit.DAY), tz),
+            )
+        }
+
         if (items.isEmpty()) {
             // Before the first fetch finishes, show the skeleton instead of "no feed"
             // so a cold launch into the 업무 home doesn't flash an empty state.
             if (loaded) DenebEmpty("오늘 받은 피드가 없습니다") else DenebLoading()
             return@DenebScreenScaffold
         }
-
-        // The feed spans several days of as-yet-unacked items. Group by local day and
-        // step through the days that have items: default to the newest (so the screen
-        // opens on content), bound navigation to [oldest, newest] so ← / → never page
-        // into empty pre-/post-history. selectedDate resets to the newest day whenever
-        // a newer item arrives (maxDate advances), but survives a same-day refresh.
-        val today = remember { Clock.System.todayIn(TimeZone.currentSystemDefault()) }
-        val dates = remember(items) { items.map { localDateOf(it.createdAtMs) } }
-        val minDate = dates.minOrNull() ?: today
-        val maxDate = dates.maxOrNull() ?: today
-        var selectedDate by remember(maxDate) { mutableStateOf(maxDate) }
 
         FeedDateBar(
             label = feedDateLabel(selectedDate, today),
@@ -182,6 +194,9 @@ private val koreanWeekday = listOf("월", "화", "수", "목", "금", "토", "�
 
 /** The local calendar day a feed item was created on. */
 private fun localDateOf(epochMs: Long): LocalDate = Instant.fromEpochMilliseconds(epochMs).toLocalDateTime(TimeZone.currentSystemDefault()).date
+
+/** Local day boundary for a server-side work-feed date query. */
+private fun dayStartMs(date: LocalDate, tz: TimeZone): Long = LocalDateTime(date, LocalTime(0, 0)).toInstant(tz).toEpochMilliseconds()
 
 /** "오늘 · 6월 16일 (월)" / "어제 · …" / bare "6월 16일 (월)" for older days. */
 private fun feedDateLabel(date: LocalDate, today: LocalDate): String {

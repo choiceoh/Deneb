@@ -13,6 +13,8 @@ type fakeWorkFeedStore struct {
 	items       []workfeed.Item
 	lastLimit   int
 	lastInclude bool
+	lastSince   int64
+	lastBefore  int64
 	ackID       string
 	ackErr      error
 	runItemID   string
@@ -28,6 +30,28 @@ func (f *fakeWorkFeedStore) List(limit int, includeAcked bool) ([]workfeed.Item,
 		out = out[:limit]
 	}
 	return out, len(f.items), nil
+}
+
+func (f *fakeWorkFeedStore) ListRange(limit int, includeAcked bool, sinceMs, beforeMs int64) ([]workfeed.Item, int, error) {
+	f.lastLimit = limit
+	f.lastInclude = includeAcked
+	f.lastSince = sinceMs
+	f.lastBefore = beforeMs
+	out := make([]workfeed.Item, 0, len(f.items))
+	for _, item := range f.items {
+		if sinceMs > 0 && item.CreatedAtMs < sinceMs {
+			continue
+		}
+		if beforeMs > 0 && item.CreatedAtMs >= beforeMs {
+			continue
+		}
+		out = append(out, item)
+	}
+	total := len(out)
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
+	return out, total, nil
 }
 
 func (f *fakeWorkFeedStore) Ack(id string) (workfeed.Item, error) {
@@ -94,6 +118,48 @@ func TestWorkFeedList(t *testing.T) {
 	}
 	if got.Count != 2 || got.Total != 2 {
 		t.Fatalf("count/total = %d/%d, want 2/2", got.Count, got.Total)
+	}
+}
+
+func TestWorkFeedListRange(t *testing.T) {
+	store := &fakeWorkFeedStore{
+		items: []workfeed.Item{
+			{ID: "old", Title: "Old", Status: workfeed.StatusUnread, CreatedAtMs: 1_000},
+			{ID: "today", Title: "Today", Status: workfeed.StatusUnread, CreatedAtMs: 10_000},
+		},
+	}
+	h := workFeedList(WorkFeedDeps{Store: store})
+	resp := h(authedCtx(), reqWith(t, "miniapp.workfeed.list", map[string]any{
+		"limit":    20,
+		"sinceMs":  9_000,
+		"beforeMs": 11_000,
+	}))
+
+	var got struct {
+		Items []workfeed.Item `json:"items"`
+		Count int             `json:"count"`
+		Total int             `json:"total"`
+	}
+	decode(t, resp, &got)
+	if store.lastSince != 9_000 || store.lastBefore != 11_000 {
+		t.Fatalf("range = %d/%d, want 9000/11000", store.lastSince, store.lastBefore)
+	}
+	if got.Count != 1 || got.Total != 1 || got.Items[0].ID != "today" {
+		t.Fatalf("payload = %+v, want today only", got)
+	}
+}
+
+func TestWorkFeedListRejectsInvalidRange(t *testing.T) {
+	h := workFeedList(WorkFeedDeps{Store: &fakeWorkFeedStore{}})
+	resp := h(authedCtx(), reqWith(t, "miniapp.workfeed.list", map[string]any{
+		"sinceMs":  11_000,
+		"beforeMs": 9_000,
+	}))
+	if resp.OK {
+		t.Fatalf("expected invalid params")
+	}
+	if resp.Error.Code != protocol.ErrInvalidRequest {
+		t.Fatalf("code = %s, want %s", resp.Error.Code, protocol.ErrInvalidRequest)
 	}
 }
 

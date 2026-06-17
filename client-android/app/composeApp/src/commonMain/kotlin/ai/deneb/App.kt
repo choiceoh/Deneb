@@ -421,6 +421,7 @@ private fun AppContent(
                                     appSettings.markFeedSeen(id)
                                     feedSeenIds = appSettings.getFeedSeenIds()
                                 },
+                                onLoadDateRange = feedState.actions.refreshWorkFeedRange,
                                 onRunAction = feedState.actions.runWorkFeedAction,
                             )
                         }

@@ -923,6 +923,10 @@ class DenebGatewayClient(
         scope.launch { refreshWorkFeed() }
     }
 
+    fun refreshWorkFeedRangeAsync(sinceMs: Long, beforeMs: Long) {
+        scope.launch { refreshWorkFeed(sinceMs = sinceMs, beforeMs = beforeMs, merge = true) }
+    }
+
     fun syncNativeStateAsync() {
         scope.launch { syncNativeState() }
     }
@@ -988,12 +992,15 @@ class DenebGatewayClient(
         return true
     }
 
-    suspend fun refreshWorkFeed(): Boolean {
+    suspend fun refreshWorkFeed(sinceMs: Long = 0L, beforeMs: Long = 0L, merge: Boolean = false): Boolean {
         val epoch = credEpoch
+        val ranged = sinceMs > 0L || beforeMs > 0L
         val payload = callRpc<WorkFeedPayload>(
             "miniapp.workfeed.list",
             buildJsonObject {
-                put("limit", 20)
+                put("limit", if (ranged) 100 else 20)
+                if (sinceMs > 0L) put("sinceMs", sinceMs)
+                if (beforeMs > 0L) put("beforeMs", beforeMs)
             },
         )
         if (payload == null) {
@@ -1003,7 +1010,18 @@ class DenebGatewayClient(
             return false
         }
         if (epoch != credEpoch) return false // credentials switched — don't show the old account's work-feed
-        _denebWorkFeed.value = payload.items.filter { it.id.isNotBlank() }
+        val incoming = payload.items.filter { it.id.isNotBlank() }
+        if (merge && ranged) {
+            _denebWorkFeed.update { current ->
+                val kept = current.filterNot { item ->
+                    (sinceMs <= 0L || item.createdAtMs >= sinceMs) &&
+                        (beforeMs <= 0L || item.createdAtMs < beforeMs)
+                }
+                sortWorkFeedItems(kept + incoming)
+            }
+        } else {
+            _denebWorkFeed.value = incoming
+        }
         _workFeedLoaded.value = true
         return true
     }
@@ -1126,9 +1144,15 @@ class DenebGatewayClient(
         }
         _denebWorkFeed.update { items ->
             val next = items.filterNot { it.id == item.id } + item
-            next.sortedByDescending { it.createdAtMs }
+            sortWorkFeedItems(next)
         }
     }
+
+    private fun sortWorkFeedItems(items: List<WorkFeedItem>): List<WorkFeedItem> = items.sortedWith(
+        compareByDescending<WorkFeedItem> { it.priority }
+            .thenByDescending { it.createdAtMs }
+            .thenByDescending { it.id },
+    )
 
     // Raise a durable proactive notification for a freshly-created work-feed item.
     // Called from applyNativeSyncEvent under nativeSyncGate, so the baseline read

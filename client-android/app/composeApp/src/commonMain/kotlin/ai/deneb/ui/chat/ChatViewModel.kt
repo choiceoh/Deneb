@@ -72,6 +72,7 @@ class ChatViewModel(
         clearUnreadWorkReport = ::clearUnreadWorkReport,
         openWorkReport = ::openWorkReport,
         openWorkFeedItem = ::openWorkFeedItem,
+        refreshWorkFeedRange = ::refreshWorkFeedRange,
         consumePendingScroll = ::consumePendingScroll,
         runWorkFeedAction = ::runWorkFeedAction,
         clearSnackbar = ::clearSnackbar,
@@ -474,6 +475,14 @@ class ChatViewModel(
             if (!prompt.isNullOrBlank()) {
                 askInternal(prompt, null)
             }
+        }
+    }
+
+    private fun refreshWorkFeedRange(sinceMs: Long, beforeMs: Long) {
+        if (sinceMs <= 0L || beforeMs <= sinceMs) return
+        viewModelScope.launch(backgroundDispatcher) {
+            (dataRepository as? DenebGatewayClient)
+                ?.refreshWorkFeed(sinceMs = sinceMs, beforeMs = beforeMs, merge = true)
         }
     }
 

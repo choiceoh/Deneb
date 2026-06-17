@@ -24,6 +24,7 @@ data class ChatActions(
     val clearUnreadWorkReport: () -> Unit,
     val openWorkReport: () -> Unit,
     val openWorkFeedItem: (String) -> Unit,
+    val refreshWorkFeedRange: (Long, Long) -> Unit,
     // Clears ChatUiState.pendingScrollToMessageId after the chat list lands on it.
     val consumePendingScroll: () -> Unit,
     val runWorkFeedAction: (String, String) -> Unit,

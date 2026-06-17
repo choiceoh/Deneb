@@ -45,6 +45,7 @@ data class WorkFeedItem(
     val body: String = "",
     val sessionKey: String = "",
     val status: String = "",
+    val priority: Int = 0,
     val actions: List<WorkFeedAction> = emptyList(),
     val createdAtMs: Long = 0,
 )

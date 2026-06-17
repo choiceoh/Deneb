@@ -18,6 +18,10 @@ type WorkFeedStore interface {
 	RunAction(itemID, actionID string) (workfeed.ActionResult, error)
 }
 
+type rangedWorkFeedStore interface {
+	ListRange(limit int, includeAcked bool, sinceMs, beforeMs int64) ([]workfeed.Item, int, error)
+}
+
 type WorkFeedDeps struct {
 	Store WorkFeedStore
 }
@@ -40,8 +44,10 @@ func WorkFeedMethods(deps WorkFeedDeps) map[string]rpcutil.HandlerFunc {
 
 func workFeedList(deps WorkFeedDeps) rpcutil.HandlerFunc {
 	type params struct {
-		Limit        int  `json:"limit,omitempty"`
-		IncludeAcked bool `json:"includeAcked,omitempty"`
+		Limit        int   `json:"limit,omitempty"`
+		IncludeAcked bool  `json:"includeAcked,omitempty"`
+		SinceMs      int64 `json:"sinceMs,omitempty"`
+		BeforeMs     int64 `json:"beforeMs,omitempty"`
 	}
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		if errResp := requireAuth(ctx, req.ID); errResp != nil {
@@ -60,7 +66,23 @@ func workFeedList(deps WorkFeedDeps) rpcutil.HandlerFunc {
 		if limit > maxWorkFeedLimit {
 			limit = maxWorkFeedLimit
 		}
-		items, total, err := deps.Store.List(limit, p.IncludeAcked)
+		if p.SinceMs > 0 && p.BeforeMs > 0 && p.BeforeMs <= p.SinceMs {
+			return rpcerr.InvalidParams(errors.New("beforeMs must be greater than sinceMs")).Response(req.ID)
+		}
+		var (
+			items []workfeed.Item
+			total int
+			err   error
+		)
+		if p.SinceMs > 0 || p.BeforeMs > 0 {
+			ranged, ok := deps.Store.(rangedWorkFeedStore)
+			if !ok {
+				return rpcerr.WrapUnavailable("work feed range unavailable", errors.New("store does not support range queries")).Response(req.ID)
+			}
+			items, total, err = ranged.ListRange(limit, p.IncludeAcked, p.SinceMs, p.BeforeMs)
+		} else {
+			items, total, err = deps.Store.List(limit, p.IncludeAcked)
+		}
 		if err != nil {
 			return rpcerr.WrapUnavailable("work feed unavailable", err).Response(req.ID)
 		}

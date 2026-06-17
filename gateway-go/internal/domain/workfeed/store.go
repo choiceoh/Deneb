@@ -163,7 +163,22 @@ func fingerprint(body string) string {
 	return strings.Join(strings.Fields(body), " ")
 }
 
+type ListOptions struct {
+	Limit        int
+	IncludeAcked bool
+	SinceMs      int64
+	BeforeMs     int64
+}
+
 func (s *Store) List(limit int, includeAcked bool) ([]Item, int, error) {
+	return s.ListFiltered(ListOptions{Limit: limit, IncludeAcked: includeAcked})
+}
+
+func (s *Store) ListRange(limit int, includeAcked bool, sinceMs, beforeMs int64) ([]Item, int, error) {
+	return s.ListFiltered(ListOptions{Limit: limit, IncludeAcked: includeAcked, SinceMs: sinceMs, BeforeMs: beforeMs})
+}
+
+func (s *Store) ListFiltered(opts ListOptions) ([]Item, int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -197,7 +212,7 @@ func (s *Store) List(limit int, includeAcked bool) ([]Item, int, error) {
 
 	filtered := make([]Item, 0, len(items))
 	for _, item := range items {
-		if !includeAcked {
+		if !opts.IncludeAcked {
 			if item.Status == StatusAcked {
 				continue
 			}
@@ -208,11 +223,17 @@ func (s *Store) List(limit int, includeAcked bool) ([]Item, int, error) {
 				item.Status = StatusUnread // snooze elapsed — re-surface as actionable
 			}
 		}
+		if opts.SinceMs > 0 && item.CreatedAtMs < opts.SinceMs {
+			continue
+		}
+		if opts.BeforeMs > 0 && item.CreatedAtMs >= opts.BeforeMs {
+			continue
+		}
 		filtered = append(filtered, item)
 	}
 	total := len(filtered)
-	if limit > 0 && len(filtered) > limit {
-		filtered = filtered[:limit]
+	if opts.Limit > 0 && len(filtered) > opts.Limit {
+		filtered = filtered[:opts.Limit]
 	}
 	return filtered, total, nil
 }
