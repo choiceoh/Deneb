@@ -45,6 +45,19 @@ func TestExtractLiteralPayload(t *testing.T) {
 	}
 }
 
+func TestExtractFetchUID(t *testing.T) {
+	tests := map[string]string{
+		"* 1 FETCH (UID 5 BODY[] {11}\r\nHELLO WORLD)\r\n": "5",
+		"* 9 FETCH (FLAGS () UID 42 BODY[] {1}\r\nx)\r\n":  "42",
+		"* SEARCH 1 2 3\r\n":                               "",
+	}
+	for entry, want := range tests {
+		if got := extractFetchUID([]byte(entry)); got != want {
+			t.Errorf("extractFetchUID(%q) = %q, want %q", entry, got, want)
+		}
+	}
+}
+
 func TestExtractAddr(t *testing.T) {
 	cases := map[string]string{
 		`Christina Gu <christina.gu@zttgroup.com>`: "christina.gu@zttgroup.com",
