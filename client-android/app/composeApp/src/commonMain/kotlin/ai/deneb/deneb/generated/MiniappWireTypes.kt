@@ -88,6 +88,12 @@ data class MailAnalysisOut(
     val durationMs: Long = 0L,
     val cached: Boolean = false,
     val createdAt: String = "",
+    val analysisStatus: String = "",
+    val analysisQuality: String = "",
+    val feedStatus: String = "",
+    val calendarProposalCount: Int = 0,
+    val todoCount: Int = 0,
+    val workStateHint: String = "",
 )
 
 @Serializable
@@ -112,6 +118,12 @@ data class MailMessageOut(
     val bodyTotal: Int = 0,
     val labels: List<String> = emptyList(),
     val attachments: List<MailAttachmentOut> = emptyList(),
+    val analysisStatus: String = "",
+    val analysisQuality: String = "",
+    val feedStatus: String = "",
+    val calendarProposalCount: Int = 0,
+    val todoCount: Int = 0,
+    val workStateHint: String = "",
 )
 
 @Serializable
@@ -135,12 +147,26 @@ data class MailNativeOverlayOut(
 )
 
 @Serializable
+data class MailNativePipelineOut(
+    val messages: Int = 0,
+    val analyzed: Int = 0,
+    val analyzing: Int = 0,
+    val failed: Int = 0,
+    val feedCreated: Int = 0,
+    val feedMissing: Int = 0,
+    val calendarCandidates: Int = 0,
+    val todoCandidates: Int = 0,
+    val updatedAt: String = "",
+)
+
+@Serializable
 data class MailNativeStatusOut(
     val source: String = "",
     val available: Boolean = false,
     val offlineCapable: Boolean = false,
     val mailboxes: List<MailNativeMailboxOut> = emptyList(),
     val overlay: MailNativeOverlayOut = MailNativeOverlayOut(),
+    val pipeline: MailNativePipelineOut = MailNativePipelineOut(),
     val generatedAt: String = "",
     val error: String = "",
 )
@@ -155,8 +181,17 @@ data class MailRowOut(
     val date: String = "",
     val isUnread: Boolean = false,
     val labels: List<String> = emptyList(),
+    val mailbox: String = "",
+    val hasAttachment: Boolean = false,
+    val attachmentCount: Int = 0,
     val priority: String = "",
     val priorityHint: String = "",
+    val analysisStatus: String = "",
+    val analysisQuality: String = "",
+    val feedStatus: String = "",
+    val calendarProposalCount: Int = 0,
+    val todoCount: Int = 0,
+    val workStateHint: String = "",
 )
 
 @Serializable

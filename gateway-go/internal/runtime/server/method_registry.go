@@ -38,6 +38,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmailpoll"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/localcal"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/localtodo"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailwork"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/insights"
 	handleragent "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/agent"
 	handlerchat "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/chat"
@@ -352,6 +353,7 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 			// write to (the store is a stateless dir wrapper) — list rows
 			// prefer its LLM verdict over the heuristic below.
 			AnalysisCache: handlerminiapp.NewAnalysisStore(filepath.Join(denebDir, "cache", "mail_analysis")),
+			WorkState:     mailwork.New(filepath.Join(denebDir, "mail_work_state.json")),
 			// Row priority: cheap local heuristics + address-book VIP
 			// lookup. contactsStore is created above in this same
 			// registration pass; a nil store just drops the VIP signal.
@@ -687,6 +689,7 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 				return handlerminiapp.PipelineFromGmailpoll(gmailClient, llmClient, localClient, model, localModel, s.mailAnalysisPrompt(), s.projectCandidatesFn(), s.wikiSenderFacts, tools.ExtractAttachmentTextBytes)
 			},
 			Cache:      handlerminiapp.NewAnalysisStore(filepath.Join(s.denebDir, "cache", "mail_analysis")),
+			WorkState:  mailwork.New(filepath.Join(s.denebDir, "mail_work_state.json")),
 			SaveToWiki: makeMailAnalysisWikiSink(hub),
 			WikiStore: func() (handlerminiapp.MemorySearcher, error) {
 				store := hub.WikiStore()

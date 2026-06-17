@@ -26,18 +26,18 @@ const mailTodoSourcePrefix = "mail:"
 // autoCreateTodosFromMail creates to-dos for the high-priority follow-up
 // actions of a mail analysis. Best-effort: a missing store or a per-item
 // failure is logged and skipped, never disrupting the analysis sink.
-func (s *Server) autoCreateTodosFromMail(msg *gmail.MessageDetail, items []gmailpoll.ActionItem) {
+func (s *Server) autoCreateTodosFromMail(msg *gmail.MessageDetail, items []gmailpoll.ActionItem) int {
 	if msg == nil {
-		return
+		return 0
 	}
 	inputs := todosFromActionItems(msg.ID, msg.Subject, msg.From, items, time.Now())
 	if len(inputs) == 0 {
-		return
+		return 0
 	}
 	store, err := localtodo.Default()
 	if err != nil {
 		s.logger.Warn("mail→todo: store unavailable", "id", msg.ID, "error", err)
-		return
+		return len(inputs)
 	}
 	created := 0
 	for _, in := range inputs {
@@ -54,6 +54,7 @@ func (s *Server) autoCreateTodosFromMail(msg *gmail.MessageDetail, items []gmail
 	if created > 0 {
 		s.logger.Info("mail→todo: auto-created to-dos from analysis", "id", msg.ID, "count", created)
 	}
+	return len(inputs)
 }
 
 // todosFromActionItems is the pure decision: keep only high-priority actions

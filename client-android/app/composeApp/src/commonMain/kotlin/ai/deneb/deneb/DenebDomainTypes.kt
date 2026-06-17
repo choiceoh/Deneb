@@ -46,6 +46,13 @@ data class MailMessage(
     val priority: String = "",
     /** Short Korean signal hint for the tier (e.g. "낙찰 · 마감 표현"). */
     val priorityHint: String = "",
+    /** Local archive mailbox that produced this row (e.g. INBOX, Gmail). */
+    val mailbox: String = "",
+    /** True when the local archive parser saw at least one attachment. */
+    val hasAttachment: Boolean = false,
+    val attachmentCount: Int = 0,
+    /** Deneb-native workflow state layered over the immutable mail archive. */
+    val workState: MailWorkState = MailWorkState(),
 )
 
 /** Full Gmail message for the native detail screen. */
@@ -59,6 +66,7 @@ data class MailDetail(
     val body: String,
     val bodyTotal: Int,
     val attachments: List<MailAttachment>,
+    val workState: MailWorkState = MailWorkState(),
 )
 
 /** A downloadable attachment on a message (id + size kept for download). */
@@ -75,6 +83,7 @@ data class MailNativeStatus(
     val offlineCapable: Boolean,
     val mailboxes: List<MailNativeMailbox>,
     val overlay: MailNativeOverlay,
+    val pipeline: MailNativePipeline = MailNativePipeline(),
     val generatedAt: String = "",
     val error: String = "",
 )
@@ -97,6 +106,28 @@ data class MailNativeOverlay(
     val trashed: Int,
 )
 
+@Serializable
+data class MailWorkState(
+    val analysisStatus: String = "",
+    val analysisQuality: String = "",
+    val feedStatus: String = "",
+    val calendarProposalCount: Int = 0,
+    val todoCount: Int = 0,
+    val hint: String = "",
+)
+
+data class MailNativePipeline(
+    val messages: Int = 0,
+    val analyzed: Int = 0,
+    val analyzing: Int = 0,
+    val failed: Int = 0,
+    val feedCreated: Int = 0,
+    val feedMissing: Int = 0,
+    val calendarCandidates: Int = 0,
+    val todoCandidates: Int = 0,
+    val updatedAt: String = "",
+)
+
 /** A wiki project page cited by an analysis, surfaced as a tappable chip. */
 data class RelatedProject(val path: String, val title: String, val summary: String)
 
@@ -107,6 +138,7 @@ data class MailAnalysis(
     val cached: Boolean = false,
     val createdAt: String = "",
     val durationMs: Long = 0,
+    val workState: MailWorkState = MailWorkState(),
 )
 
 /** Sender relationship context (recent volume + cited wiki pages). */

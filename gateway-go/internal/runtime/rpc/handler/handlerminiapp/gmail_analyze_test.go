@@ -8,6 +8,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmailpoll"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailwork"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
@@ -71,6 +72,37 @@ func TestGmailAnalyze_HappyPath(t *testing.T) {
 	}
 }
 
+func TestGmailAnalyze_RecordsWorkflowState(t *testing.T) {
+	store := mailwork.New(t.TempDir() + "/mail_work_state.json")
+	gmailClient := &fakeGmailClient{
+		getMessageFn: func(_ context.Context, id string) (*gmail.MessageDetail, error) {
+			return &gmail.MessageDetail{
+				ID:      id,
+				From:    "Alice <alice@example.com>",
+				Subject: "Meeting tomorrow",
+				Date:    "Mon, 26 May 2026 14:30:00 +0900",
+			}, nil
+		},
+	}
+	pipeline := &fakeAnalyzePipeline{
+		analyzeFn: func(_ context.Context, _ *gmail.MessageDetail) (gmailpoll.AnalysisResult, error) {
+			return gmailpoll.AnalysisResult{Text: "analysis", Importance: "attention"}, nil
+		},
+	}
+	deps := analyzeDeps(gmailClient, pipeline)
+	deps.WorkState = store
+	h := gmailAnalyze(deps)
+
+	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.analyze", map[string]any{"id": "m1"}))
+	if !resp.OK {
+		t.Fatalf("expected OK, got %+v", resp.Error)
+	}
+	got := store.Get("m1")
+	if got.AnalysisStatus != mailwork.AnalysisDone || got.AnalysisQuality != "attention" {
+		t.Fatalf("workflow state = %+v", got)
+	}
+}
+
 func TestGmailAnalyze_MissingID(t *testing.T) {
 	h := gmailAnalyze(analyzeDeps(&fakeGmailClient{}, &fakeAnalyzePipeline{}))
 	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.analyze", map[string]any{}))
@@ -127,6 +159,32 @@ func TestGmailAnalyze_PipelineFailure(t *testing.T) {
 	}
 	if resp.Error.Code != protocol.ErrUnavailable {
 		t.Errorf("code = %s, want UNAVAILABLE", resp.Error.Code)
+	}
+}
+
+func TestGmailAnalyze_RecordsWorkflowFailure(t *testing.T) {
+	store := mailwork.New(t.TempDir() + "/mail_work_state.json")
+	gmailClient := &fakeGmailClient{
+		getMessageFn: func(_ context.Context, _ string) (*gmail.MessageDetail, error) {
+			return &gmail.MessageDetail{ID: "m1"}, nil
+		},
+	}
+	pipeline := &fakeAnalyzePipeline{
+		analyzeFn: func(_ context.Context, _ *gmail.MessageDetail) (gmailpoll.AnalysisResult, error) {
+			return gmailpoll.AnalysisResult{}, errors.New("LLM call timed out")
+		},
+	}
+	deps := analyzeDeps(gmailClient, pipeline)
+	deps.WorkState = store
+	h := gmailAnalyze(deps)
+
+	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.analyze", map[string]any{"id": "m1"}))
+	if resp.OK {
+		t.Fatalf("expected error")
+	}
+	got := store.Get("m1")
+	if got.AnalysisStatus != mailwork.AnalysisFailed || !strings.Contains(got.LastError, "timed out") {
+		t.Fatalf("workflow state = %+v", got)
 	}
 }
 

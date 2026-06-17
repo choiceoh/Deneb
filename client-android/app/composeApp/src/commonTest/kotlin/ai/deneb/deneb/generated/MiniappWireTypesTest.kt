@@ -193,11 +193,14 @@ class MiniappWireTypesTest {
     @Test
     fun `mail list row decodes the fields the list view reads`() {
         val row = json.decodeFromString<MailRowOut>(
-            """{ "id": "m2", "from": "x@y.kr", "subject": "회의", "snippet": "내일", "date": "2026-06-03", "isUnread": true }""",
+            """{ "id": "m2", "from": "x@y.kr", "subject": "회의", "snippet": "내일", "date": "2026-06-03", "isUnread": true, "mailbox": "Gmail", "hasAttachment": true, "attachmentCount": 2 }""",
         )
         assertEquals("m2", row.id)
         assertEquals("회의", row.subject)
         assertTrue(row.isUnread)
+        assertEquals("Gmail", row.mailbox)
+        assertTrue(row.hasAttachment)
+        assertEquals(2, row.attachmentCount)
     }
 
     @Test

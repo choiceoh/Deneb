@@ -32,6 +32,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/clientauth"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailarchive"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailwork"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
@@ -69,6 +70,10 @@ type GmailDeps struct {
 	// SUPPRESSES the heuristic (the analysis looked at the full body and
 	// judged it FYI), and absent/blank falls through to the heuristic.
 	AnalysisCache *AnalysisStore
+	// WorkState records Deneb-native workflow status: analysis, feed,
+	// calendar-proposal, and to-do state per message ID. Nil disables the
+	// overlay so legacy Gmail-only tests and deployments keep working.
+	WorkState *mailwork.Store
 }
 
 // Default list query and limit applied when the Mini App omits them.
@@ -145,19 +150,29 @@ func gmailClientOrErr(deps GmailDeps, reqID string) (GmailClient, *protocol.Resp
 
 //deneb:wire
 type mailRowOut struct {
-	ID       string   `json:"id"`
-	ThreadID string   `json:"threadId"`
-	From     string   `json:"from"`
-	Subject  string   `json:"subject"`
-	Snippet  string   `json:"snippet"`
-	Date     string   `json:"date"`
-	IsUnread bool     `json:"isUnread"`
-	Labels   []string `json:"labels"`
+	ID              string   `json:"id"`
+	ThreadID        string   `json:"threadId"`
+	From            string   `json:"from"`
+	Subject         string   `json:"subject"`
+	Snippet         string   `json:"snippet"`
+	Date            string   `json:"date"`
+	IsUnread        bool     `json:"isUnread"`
+	Labels          []string `json:"labels"`
+	Mailbox         string   `json:"mailbox,omitempty"`
+	HasAttachment   bool     `json:"hasAttachment,omitempty"`
+	AttachmentCount int      `json:"attachmentCount,omitempty"`
 	// Priority is the glanceable heuristic tier ("urgent"/"attention",
 	// empty for routine mail) computed at list time by domain/mailpriority;
 	// PriorityHint names the strongest signals (e.g. "낙찰 · 마감 표현").
 	Priority     string `json:"priority,omitempty"`
 	PriorityHint string `json:"priorityHint,omitempty"`
+
+	AnalysisStatus        string `json:"analysisStatus,omitempty"`
+	AnalysisQuality       string `json:"analysisQuality,omitempty"`
+	FeedStatus            string `json:"feedStatus,omitempty"`
+	CalendarProposalCount int    `json:"calendarProposalCount,omitempty"`
+	TodoCount             int    `json:"todoCount,omitempty"`
+	WorkStateHint         string `json:"workStateHint,omitempty"`
 }
 
 type mailAttachmentOut struct {
@@ -181,6 +196,13 @@ type mailMessageOut struct {
 	BodyTotal   int                 `json:"bodyTotal"`
 	Labels      []string            `json:"labels"`
 	Attachments []mailAttachmentOut `json:"attachments"`
+
+	AnalysisStatus        string `json:"analysisStatus,omitempty"`
+	AnalysisQuality       string `json:"analysisQuality,omitempty"`
+	FeedStatus            string `json:"feedStatus,omitempty"`
+	CalendarProposalCount int    `json:"calendarProposalCount,omitempty"`
+	TodoCount             int    `json:"todoCount,omitempty"`
+	WorkStateHint         string `json:"workStateHint,omitempty"`
 }
 
 //deneb:wire
@@ -190,6 +212,7 @@ type mailNativeStatusOut struct {
 	OfflineCapable bool                   `json:"offlineCapable"`
 	Mailboxes      []mailNativeMailboxOut `json:"mailboxes"`
 	Overlay        mailNativeOverlayOut   `json:"overlay"`
+	Pipeline       mailNativePipelineOut  `json:"pipeline"`
 	GeneratedAt    string                 `json:"generatedAt,omitempty"`
 	Error          string                 `json:"error,omitempty"`
 }
@@ -212,6 +235,18 @@ type mailNativeOverlayOut struct {
 	Trashed  int `json:"trashed"`
 }
 
+type mailNativePipelineOut struct {
+	Messages           int    `json:"messages"`
+	Analyzed           int    `json:"analyzed"`
+	Analyzing          int    `json:"analyzing"`
+	Failed             int    `json:"failed"`
+	FeedCreated        int    `json:"feedCreated"`
+	FeedMissing        int    `json:"feedMissing"`
+	CalendarCandidates int    `json:"calendarCandidates"`
+	TodoCandidates     int    `json:"todoCandidates"`
+	UpdatedAt          string `json:"updatedAt,omitempty"`
+}
+
 func gmailNativeStatus(deps GmailDeps) rpcutil.HandlerFunc {
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		if errResp := requireAuth(ctx, req.ID); errResp != nil {
@@ -222,6 +257,7 @@ func gmailNativeStatus(deps GmailDeps) rpcutil.HandlerFunc {
 			out := mailNativeStatusOut{
 				Source:    "unavailable",
 				Available: false,
+				Pipeline:  mailPipelineStatusOut(deps.WorkState),
 			}
 			if err != nil {
 				out.Error = err.Error()
@@ -234,10 +270,12 @@ func gmailNativeStatus(deps GmailDeps) rpcutil.HandlerFunc {
 				Source:         "gmail",
 				Available:      true,
 				OfflineCapable: false,
+				Pipeline:       mailPipelineStatusOut(deps.WorkState),
 			})
 		}
 		status, err := native.NativeStatus(ctx)
 		out := nativeStatusOut(status)
+		out.Pipeline = mailPipelineStatusOut(deps.WorkState)
 		if err != nil {
 			out.Available = false
 			out.Error = err.Error()
@@ -277,6 +315,27 @@ func nativeStatusOut(status mailarchive.NativeStatus) mailNativeStatusOut {
 	return out
 }
 
+func mailPipelineStatusOut(store *mailwork.Store) mailNativePipelineOut {
+	if store == nil {
+		return mailNativePipelineOut{}
+	}
+	s := store.Summary()
+	out := mailNativePipelineOut{
+		Messages:           s.Messages,
+		Analyzed:           s.Analyzed,
+		Analyzing:          s.Analyzing,
+		Failed:             s.Failed,
+		FeedCreated:        s.FeedCreated,
+		FeedMissing:        s.FeedMissing,
+		CalendarCandidates: s.CalendarCandidates,
+		TodoCandidates:     s.TodoCandidates,
+	}
+	if s.UpdatedAtMs > 0 {
+		out.UpdatedAt = time.UnixMilli(s.UpdatedAtMs).UTC().Format(time.RFC3339)
+	}
+	return out
+}
+
 // --- list_recent ---------------------------------------------------------
 
 // rowPriority resolves one row's glanceable marker, layered: the per-mail
@@ -307,6 +366,145 @@ func nonNilLabels(labels []string) []string {
 	return labels
 }
 
+type mailWorkFilter string
+
+const (
+	mailWorkFilterAnalysisFailed    mailWorkFilter = "analysis_failed"
+	mailWorkFilterFeedMissing       mailWorkFilter = "feed_missing"
+	mailWorkFilterCalendarCandidate mailWorkFilter = "calendar_candidate"
+	mailWorkFilterTodo              mailWorkFilter = "todo"
+)
+
+func parseMailWorkQuery(query string) (string, mailWorkFilter) {
+	var filter mailWorkFilter
+	fields := strings.Fields(strings.TrimSpace(query))
+	kept := make([]string, 0, len(fields))
+	for _, f := range fields {
+		if !strings.HasPrefix(f, "deneb:") {
+			kept = append(kept, f)
+			continue
+		}
+		switch strings.TrimPrefix(f, "deneb:") {
+		case string(mailWorkFilterAnalysisFailed):
+			filter = mailWorkFilterAnalysisFailed
+		case string(mailWorkFilterFeedMissing):
+			filter = mailWorkFilterFeedMissing
+		case string(mailWorkFilterCalendarCandidate):
+			filter = mailWorkFilterCalendarCandidate
+		case string(mailWorkFilterTodo):
+			filter = mailWorkFilterTodo
+		default:
+			kept = append(kept, f)
+		}
+	}
+	return strings.Join(kept, " "), filter
+}
+
+func (f mailWorkFilter) matches(st mailwork.MessageState) bool {
+	switch f {
+	case "":
+		return true
+	case mailWorkFilterAnalysisFailed:
+		return st.AnalysisStatus == mailwork.AnalysisFailed
+	case mailWorkFilterFeedMissing:
+		return st.AnalysisStatus == mailwork.AnalysisDone && st.FeedStatus != mailwork.FeedCreated
+	case mailWorkFilterCalendarCandidate:
+		return st.CalendarProposalCount > 0
+	case mailWorkFilterTodo:
+		return st.TodoCount > 0
+	default:
+		return true
+	}
+}
+
+func messageInputFromSummary(m gmail.MessageSummary) mailwork.MessageInput {
+	return mailwork.MessageInput{
+		ID:              m.ID,
+		ThreadID:        m.ThreadID,
+		From:            m.From,
+		Subject:         m.Subject,
+		Date:            normalizeDate(m.Date),
+		Mailbox:         m.Mailbox,
+		HasAttachment:   m.HasAttachment || m.AttachmentCount > 0,
+		AttachmentCount: m.AttachmentCount,
+	}
+}
+
+func messageInputFromDetail(msg *gmail.MessageDetail) mailwork.MessageInput {
+	if msg == nil {
+		return mailwork.MessageInput{}
+	}
+	return mailwork.MessageInput{
+		ID:              msg.ID,
+		ThreadID:        msg.ThreadID,
+		From:            msg.From,
+		Subject:         msg.Subject,
+		Date:            normalizeDate(msg.Date),
+		HasAttachment:   len(msg.Attachments) > 0,
+		AttachmentCount: len(msg.Attachments),
+	}
+}
+
+func mailWorkStateForSummary(deps GmailDeps, m gmail.MessageSummary) mailwork.MessageState {
+	if deps.WorkState == nil {
+		return mailwork.MessageState{}
+	}
+	st, _ := deps.WorkState.RememberMessage(messageInputFromSummary(m))
+	if st.AnalysisStatus == mailwork.AnalysisDone {
+		return st
+	}
+	if rec, err := deps.AnalysisCache.load(m.ID); err == nil && rec != nil {
+		st, _ = deps.WorkState.MarkAnalysisDone(mailwork.AnalysisInput{
+			MessageInput: messageInputFromSummary(m),
+			Quality:      rec.Importance,
+			DurationMs:   rec.DurationMs,
+		})
+	}
+	return st
+}
+
+func mailWorkStateForDetail(deps GmailDeps, msg *gmail.MessageDetail) mailwork.MessageState {
+	if deps.WorkState == nil || msg == nil {
+		return mailwork.MessageState{}
+	}
+	st, _ := deps.WorkState.RememberMessage(messageInputFromDetail(msg))
+	if st.AnalysisStatus == mailwork.AnalysisDone {
+		return st
+	}
+	if rec, err := deps.AnalysisCache.load(msg.ID); err == nil && rec != nil {
+		st, _ = deps.WorkState.MarkAnalysisDone(mailwork.AnalysisInput{
+			MessageInput: messageInputFromDetail(msg),
+			Quality:      rec.Importance,
+			DurationMs:   rec.DurationMs,
+		})
+	}
+	return st
+}
+
+func applyMailWorkRow(row *mailRowOut, st mailwork.MessageState) {
+	if row == nil {
+		return
+	}
+	row.AnalysisStatus = st.AnalysisStatus
+	row.AnalysisQuality = st.AnalysisQuality
+	row.FeedStatus = st.FeedStatus
+	row.CalendarProposalCount = st.CalendarProposalCount
+	row.TodoCount = st.TodoCount
+	row.WorkStateHint = st.LastError
+}
+
+func applyMailWorkMessage(out *mailMessageOut, st mailwork.MessageState) {
+	if out == nil {
+		return
+	}
+	out.AnalysisStatus = st.AnalysisStatus
+	out.AnalysisQuality = st.AnalysisQuality
+	out.FeedStatus = st.FeedStatus
+	out.CalendarProposalCount = st.CalendarProposalCount
+	out.TodoCount = st.TodoCount
+	out.WorkStateHint = st.LastError
+}
+
 func gmailListRecent(deps GmailDeps, cache *listCache) rpcutil.HandlerFunc {
 	type params struct {
 		Query     string `json:"query,omitempty"`
@@ -323,7 +521,8 @@ func gmailListRecent(deps GmailDeps, cache *listCache) rpcutil.HandlerFunc {
 				return rpcerr.InvalidParams(err).Response(req.ID)
 			}
 		}
-		query := strings.TrimSpace(p.Query)
+		rawQuery := strings.TrimSpace(p.Query)
+		query, workFilter := parseMailWorkQuery(rawQuery)
 		if query == "" {
 			query = defaultGmailQuery
 		}
@@ -339,7 +538,11 @@ func gmailListRecent(deps GmailDeps, cache *listCache) rpcutil.HandlerFunc {
 		// inbox (back from a mail, tab switch) is instant. Keyed by the
 		// exact query/limit/page so pagination and custom queries each
 		// cache independently. A nil cache (tests) makes get a no-op.
-		cacheKey := query + "|" + itoa(limit) + "|" + p.PageToken
+		cacheQueryKey := rawQuery
+		if cacheQueryKey == "" {
+			cacheQueryKey = query
+		}
+		cacheKey := cacheQueryKey + "|" + itoa(limit) + "|" + p.PageToken
 		now := time.Now()
 		if payload, ok := cache.get(cacheKey, now); ok {
 			return rpcutil.RespondOK(req.ID, payload)
@@ -349,7 +552,11 @@ func gmailListRecent(deps GmailDeps, cache *listCache) rpcutil.HandlerFunc {
 		if errResp != nil {
 			return errResp
 		}
-		results, nextPageToken, err := client.SearchPage(ctx, query, p.PageToken, limit)
+		searchLimit := limit
+		if workFilter != "" {
+			searchLimit = maxGmailLimit
+		}
+		results, nextPageToken, err := client.SearchPage(ctx, query, p.PageToken, searchLimit)
 		if err != nil {
 			// Route through mapGmailError so 403 (Gmail OAuth scope
 			// missing) and 404 stay distinguishable from transient
@@ -364,7 +571,7 @@ func gmailListRecent(deps GmailDeps, cache *listCache) rpcutil.HandlerFunc {
 		// truly empty inbox. Hop forward up to maxEmptyPageHops times
 		// until we get at least one message or run out of pages.
 		for hops := 0; hops < maxEmptyPageHops && len(results) == 0 && nextPageToken != ""; hops++ {
-			results, nextPageToken, err = client.SearchPage(ctx, query, nextPageToken, limit)
+			results, nextPageToken, err = client.SearchPage(ctx, query, nextPageToken, searchLimit)
 			if err != nil {
 				return mapGmailError(req.ID, "gmail search failed", err)
 			}
@@ -372,18 +579,29 @@ func gmailListRecent(deps GmailDeps, cache *listCache) rpcutil.HandlerFunc {
 
 		out := make([]mailRowOut, 0, len(results))
 		for _, m := range results {
+			state := mailWorkStateForSummary(deps, m)
+			if !workFilter.matches(state) {
+				continue
+			}
 			row := mailRowOut{
-				ID:       m.ID,
-				ThreadID: m.ThreadID,
-				From:     m.From,
-				Subject:  m.Subject,
-				Snippet:  m.Snippet,
-				Date:     normalizeDate(m.Date),
-				IsUnread: hasUnreadLabel(m.Labels),
-				Labels:   nonNilLabels(m.Labels),
+				ID:              m.ID,
+				ThreadID:        m.ThreadID,
+				From:            m.From,
+				Subject:         m.Subject,
+				Snippet:         m.Snippet,
+				Date:            normalizeDate(m.Date),
+				IsUnread:        hasUnreadLabel(m.Labels),
+				Labels:          nonNilLabels(m.Labels),
+				Mailbox:         m.Mailbox,
+				HasAttachment:   m.HasAttachment || m.AttachmentCount > 0,
+				AttachmentCount: m.AttachmentCount,
 			}
 			row.Priority, row.PriorityHint = rowPriority(deps, m.ID, m.From, m.Subject, m.Snippet)
+			applyMailWorkRow(&row, state)
 			out = append(out, row)
+			if len(out) >= limit {
+				break
+			}
 		}
 		payload := map[string]any{
 			"messages":      out,
@@ -444,7 +662,7 @@ func gmailGet(deps GmailDeps) rpcutil.HandlerFunc {
 				Truncated: a.Truncated,
 			})
 		}
-		return rpcutil.RespondOK(req.ID, mailMessageOut{
+		out := mailMessageOut{
 			ID:          msg.ID,
 			ThreadID:    msg.ThreadID,
 			From:        msg.From,
@@ -456,7 +674,9 @@ func gmailGet(deps GmailDeps) rpcutil.HandlerFunc {
 			BodyTotal:   total,
 			Labels:      nonNilLabels(msg.Labels),
 			Attachments: atts,
-		})
+		}
+		applyMailWorkMessage(&out, mailWorkStateForDetail(deps, msg))
+		return rpcutil.RespondOK(req.ID, out)
 	}
 }
 

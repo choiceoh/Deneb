@@ -103,10 +103,14 @@ func (s *Server) initGmailPoll(snap *config.ConfigSnapshot) {
 	// related-project selection. Both read the same wiki store the Mini App
 	// uses, so a polled email shows up already-analyzed with its projects.
 	cfg.OnAnalyzed = s.makeMailAnalysisSink()
+	cfg.OnAnalysisFailed = s.makeMailAnalysisFailureSink()
 	cfg.ProjectsFn = s.projectCandidatesFn()
 	// Run the synthesis as a chat agent turn so the analysis prompt's tools
 	// (wiki, mail_archive) execute instead of leaking as <tool_call> text.
 	cfg.AgentSynthesisFn = s.mailAnalysisAgentSynthesis
+	if pollCfg.Silent == nil || !*pollCfg.Silent {
+		cfg.OnDelivered = s.makeMailFeedDeliverySink()
+	}
 
 	s.gmailPollSvc = gmailpoll.NewService(cfg, s.logger)
 
@@ -220,6 +224,8 @@ func (s *Server) initLMTPServer(snap *config.ConfigSnapshot) {
 		AttachmentExtractFn: tools.ExtractAttachmentTextBytes,
 		PromptOverride:      s.promptOverride,
 		OnAnalyzed:          s.makeMailAnalysisSink(),
+		OnDelivered:         s.makeMailFeedDeliverySink(),
+		OnAnalysisFailed:    s.makeMailAnalysisFailureSink(),
 		ProjectsFn:          s.projectCandidatesFn(),
 		ThreadSource:        threadSource,
 		ThinkingKwarg:       s.analysisThinkingKwarg(),

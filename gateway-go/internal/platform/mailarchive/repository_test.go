@@ -179,6 +179,71 @@ func TestRepositorySearchPageFiltersHasAttachmentInArchive(t *testing.T) {
 	if len(rows) != 1 || rows[0].ID != "attached@example.com" {
 		t.Fatalf("rows = %#v, want only attached mail", rows)
 	}
+	if rows[0].Mailbox != "INBOX" || !rows[0].HasAttachment || rows[0].AttachmentCount != 1 {
+		t.Fatalf("attachment metadata = %#v, want INBOX + one attachment", rows[0])
+	}
+}
+
+func TestRepositorySearchPageSearchesAllMailboxesByDefaultAndNarrowsExplicitInbox(t *testing.T) {
+	rawInbox := archiveTestMessage("inbox@example.com", "sender@example.com", "Inbox", "Inbox body.", "")
+	rawGmail := archiveTestMessage("gmail@example.com", "sender@example.com", "Gmail", "Gmail body.", "")
+	srv := newTestIMAPArchive(t, map[string]map[string][]byte{
+		"INBOX": {"1": []byte(rawInbox)},
+		"Gmail": {"2": []byte(rawGmail)},
+	})
+	repo := NewRepository(Config{
+		Addr:      srv.addr,
+		User:      "u",
+		Pass:      "p",
+		Mailboxes: []string{"INBOX", "Gmail"},
+		Timeout:   time.Second,
+	}, RepositoryOptions{
+		StatePath: t.TempDir() + "/state.json",
+		Now:       func() time.Time { return time.Date(2026, 6, 17, 12, 0, 0, 0, time.UTC) },
+	})
+
+	rows, _, err := repo.SearchPage(context.Background(), "{in:inbox is:unread} newer_than:30d", "", 10)
+	if err != nil {
+		t.Fatalf("SearchPage default: %v", err)
+	}
+	got := map[string]string{}
+	for _, row := range rows {
+		got[row.ID] = row.Mailbox
+	}
+	if got["inbox@example.com"] != "INBOX" || got["gmail@example.com"] != "Gmail" {
+		t.Fatalf("default rows = %#v, want INBOX and Gmail", rows)
+	}
+
+	rows, _, err = repo.SearchPage(context.Background(), "in:inbox newer_than:30d", "", 10)
+	if err != nil {
+		t.Fatalf("SearchPage inbox: %v", err)
+	}
+	if len(rows) != 1 || rows[0].ID != "inbox@example.com" || rows[0].Mailbox != "INBOX" {
+		t.Fatalf("inbox rows = %#v, want only INBOX", rows)
+	}
+
+	if err := repo.state.MarkArchived("inbox@example.com"); err != nil {
+		t.Fatalf("archive overlay: %v", err)
+	}
+	rows, _, err = repo.SearchPage(context.Background(), "in:inbox newer_than:30d", "", 10)
+	if err != nil {
+		t.Fatalf("SearchPage inbox after archive overlay: %v", err)
+	}
+	if len(rows) != 0 {
+		t.Fatalf("inbox rows after archive overlay = %#v, want hidden", rows)
+	}
+
+	rows, _, err = repo.SearchPage(context.Background(), "in:anywhere sender@example.com", "", 10)
+	if err != nil {
+		t.Fatalf("SearchPage anywhere: %v", err)
+	}
+	got = map[string]string{}
+	for _, row := range rows {
+		got[row.ID] = row.Mailbox
+	}
+	if got["inbox@example.com"] != "INBOX" || got["gmail@example.com"] != "Gmail" {
+		t.Fatalf("anywhere rows = %#v, want INBOX and Gmail", rows)
+	}
 }
 
 func TestRepositorySearchPageScansPastFilteredNewestRows(t *testing.T) {
