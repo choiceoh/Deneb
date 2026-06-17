@@ -31,6 +31,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/clientauth"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailarchive"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
@@ -45,6 +46,10 @@ type GmailClient interface {
 	GetMessage(ctx context.Context, messageID string) (*gmail.MessageDetail, error)
 	ModifyLabels(ctx context.Context, messageID string, addNames, removeNames []string) error
 	Trash(ctx context.Context, messageID string) error
+}
+
+type nativeMailStatusClient interface {
+	NativeStatus(ctx context.Context) (mailarchive.NativeStatus, error)
 }
 
 // GmailDeps groups the values the handlers need at registration time.
@@ -105,11 +110,12 @@ func GmailMethods(deps GmailDeps) map[string]rpcutil.HandlerFunc {
 	// gmail_list_cache.go).
 	cache := newListCache(listCacheTTL)
 	return map[string]rpcutil.HandlerFunc{
-		"miniapp.gmail.list_recent": gmailListRecent(deps, cache),
-		"miniapp.gmail.get":         gmailGet(deps),
-		"miniapp.gmail.mark_read":   gmailMarkRead(deps),
-		"miniapp.gmail.archive":     gmailArchive(deps, cache),
-		"miniapp.gmail.trash":       gmailTrash(deps, cache),
+		"miniapp.gmail.list_recent":   gmailListRecent(deps, cache),
+		"miniapp.gmail.get":           gmailGet(deps),
+		"miniapp.gmail.mark_read":     gmailMarkRead(deps),
+		"miniapp.gmail.archive":       gmailArchive(deps, cache),
+		"miniapp.gmail.trash":         gmailTrash(deps, cache),
+		"miniapp.gmail.native_status": gmailNativeStatus(deps),
 	}
 }
 
@@ -175,6 +181,100 @@ type mailMessageOut struct {
 	BodyTotal   int                 `json:"bodyTotal"`
 	Labels      []string            `json:"labels"`
 	Attachments []mailAttachmentOut `json:"attachments"`
+}
+
+//deneb:wire
+type mailNativeStatusOut struct {
+	Source         string                 `json:"source"`
+	Available      bool                   `json:"available"`
+	OfflineCapable bool                   `json:"offlineCapable"`
+	Mailboxes      []mailNativeMailboxOut `json:"mailboxes"`
+	Overlay        mailNativeOverlayOut   `json:"overlay"`
+	GeneratedAt    string                 `json:"generatedAt,omitempty"`
+	Error          string                 `json:"error,omitempty"`
+}
+
+type mailNativeMailboxOut struct {
+	Name              string `json:"name"`
+	Total             int    `json:"total"`
+	Unread            int    `json:"unread"`
+	LocallyRead       int    `json:"locallyRead"`
+	LocallyArchived   int    `json:"locallyArchived"`
+	LocallyTrashed    int    `json:"locallyTrashed"`
+	LatestUID         string `json:"latestUid,omitempty"`
+	AttachmentCapable bool   `json:"attachmentCapable"`
+}
+
+type mailNativeOverlayOut struct {
+	Messages int `json:"messages"`
+	Read     int `json:"read"`
+	Archived int `json:"archived"`
+	Trashed  int `json:"trashed"`
+}
+
+func gmailNativeStatus(deps GmailDeps) rpcutil.HandlerFunc {
+	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		if errResp := requireAuth(ctx, req.ID); errResp != nil {
+			return errResp
+		}
+		client, err := deps.Client()
+		if err != nil || client == nil {
+			out := mailNativeStatusOut{
+				Source:    "unavailable",
+				Available: false,
+			}
+			if err != nil {
+				out.Error = err.Error()
+			}
+			return rpcutil.RespondOK(req.ID, out)
+		}
+		native, ok := client.(nativeMailStatusClient)
+		if !ok {
+			return rpcutil.RespondOK(req.ID, mailNativeStatusOut{
+				Source:         "gmail",
+				Available:      true,
+				OfflineCapable: false,
+			})
+		}
+		status, err := native.NativeStatus(ctx)
+		out := nativeStatusOut(status)
+		if err != nil {
+			out.Available = false
+			out.Error = err.Error()
+		}
+		return rpcutil.RespondOK(req.ID, out)
+	}
+}
+
+func nativeStatusOut(status mailarchive.NativeStatus) mailNativeStatusOut {
+	out := mailNativeStatusOut{
+		Source:         status.Source,
+		Available:      status.Available,
+		OfflineCapable: status.OfflineCapable,
+		Mailboxes:      make([]mailNativeMailboxOut, 0, len(status.Mailboxes)),
+		Overlay: mailNativeOverlayOut{
+			Messages: status.Overlay.Messages,
+			Read:     status.Overlay.Read,
+			Archived: status.Overlay.Archived,
+			Trashed:  status.Overlay.Trashed,
+		},
+	}
+	if !status.GeneratedAt.IsZero() {
+		out.GeneratedAt = status.GeneratedAt.UTC().Format(time.RFC3339)
+	}
+	for _, m := range status.Mailboxes {
+		out.Mailboxes = append(out.Mailboxes, mailNativeMailboxOut{
+			Name:              m.Name,
+			Total:             m.Total,
+			Unread:            m.Unread,
+			LocallyRead:       m.LocallyRead,
+			LocallyArchived:   m.LocallyArchived,
+			LocallyTrashed:    m.LocallyTrashed,
+			LatestUID:         m.LatestUID,
+			AttachmentCapable: m.AttachmentCapable,
+		})
+	}
+	return out
 }
 
 // --- list_recent ---------------------------------------------------------

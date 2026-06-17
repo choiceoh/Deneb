@@ -9,6 +9,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/clientauth"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailarchive"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
@@ -20,6 +21,16 @@ type fakeGmailClient struct {
 	getMessageFn   func(ctx context.Context, id string) (*gmail.MessageDetail, error)
 	modifyLabelsFn func(ctx context.Context, id string, add, remove []string) error
 	trashFn        func(ctx context.Context, id string) error
+}
+
+type fakeNativeStatusClient struct {
+	fakeGmailClient
+	status mailarchive.NativeStatus
+	err    error
+}
+
+func (f *fakeNativeStatusClient) NativeStatus(ctx context.Context) (mailarchive.NativeStatus, error) {
+	return f.status, f.err
 }
 
 func (f *fakeGmailClient) Search(ctx context.Context, q string, n int) ([]gmail.MessageSummary, error) {
@@ -703,10 +714,54 @@ func TestGmailMethods_RegistersAll(t *testing.T) {
 		"miniapp.gmail.mark_read",
 		"miniapp.gmail.archive",
 		"miniapp.gmail.trash",
+		"miniapp.gmail.native_status",
 	} {
 		if _, ok := got[name]; !ok {
 			t.Errorf("missing method %q", name)
 		}
+	}
+}
+
+func TestGmailNativeStatus_ArchiveClient(t *testing.T) {
+	h := gmailNativeStatus(depsFor(&fakeNativeStatusClient{
+		status: mailarchive.NativeStatus{
+			Source:         "archive",
+			Available:      true,
+			OfflineCapable: true,
+			GeneratedAt:    time.Date(2026, 6, 17, 1, 2, 3, 0, time.UTC),
+			Mailboxes: []mailarchive.NativeMailboxStatus{{
+				Name:              "INBOX",
+				Total:             10,
+				Unread:            3,
+				LocallyRead:       2,
+				LatestUID:         "55",
+				AttachmentCapable: true,
+			}},
+			Overlay: mailarchive.NativeOverlayStatus{Messages: 4, Read: 2, Archived: 1, Trashed: 1},
+		},
+	}))
+
+	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.native_status", nil))
+	var got mailNativeStatusOut
+	decode(t, resp, &got)
+	if got.Source != "archive" || !got.Available || !got.OfflineCapable || got.GeneratedAt != "2026-06-17T01:02:03Z" {
+		t.Fatalf("status = %#v", got)
+	}
+	if len(got.Mailboxes) != 1 || got.Mailboxes[0].Name != "INBOX" || got.Mailboxes[0].Unread != 3 || got.Mailboxes[0].LatestUID != "55" {
+		t.Fatalf("mailboxes = %#v", got.Mailboxes)
+	}
+	if got.Overlay.Messages != 4 || got.Overlay.Archived != 1 {
+		t.Fatalf("overlay = %#v", got.Overlay)
+	}
+}
+
+func TestGmailNativeStatus_GmailFallbackClient(t *testing.T) {
+	h := gmailNativeStatus(depsFor(&fakeGmailClient{}))
+	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.native_status", nil))
+	var got mailNativeStatusOut
+	decode(t, resp, &got)
+	if got.Source != "gmail" || !got.Available || got.OfflineCapable {
+		t.Fatalf("status = %#v, want gmail available without offline capability", got)
 	}
 }
 

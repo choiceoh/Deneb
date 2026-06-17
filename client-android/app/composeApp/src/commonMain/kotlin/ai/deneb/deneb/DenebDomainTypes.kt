@@ -69,6 +69,34 @@ data class MailAttachment(
     val size: Int,
 )
 
+data class MailNativeStatus(
+    val source: String,
+    val available: Boolean,
+    val offlineCapable: Boolean,
+    val mailboxes: List<MailNativeMailbox>,
+    val overlay: MailNativeOverlay,
+    val generatedAt: String = "",
+    val error: String = "",
+)
+
+data class MailNativeMailbox(
+    val name: String,
+    val total: Int,
+    val unread: Int,
+    val locallyRead: Int,
+    val locallyArchived: Int,
+    val locallyTrashed: Int,
+    val latestUid: String,
+    val attachmentCapable: Boolean,
+)
+
+data class MailNativeOverlay(
+    val messages: Int,
+    val read: Int,
+    val archived: Int,
+    val trashed: Int,
+)
+
 /** A wiki project page cited by an analysis, surfaced as a tappable chip. */
 data class RelatedProject(val path: String, val title: String, val summary: String)
 

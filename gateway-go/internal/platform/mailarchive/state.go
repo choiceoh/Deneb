@@ -57,6 +57,20 @@ func (s *StateStore) Known(id string) bool {
 	return ok
 }
 
+func (s *StateStore) Snapshot() map[string]MessageState {
+	if s == nil {
+		return nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	st := s.loadLocked()
+	out := make(map[string]MessageState, len(st.Messages))
+	for id, ms := range st.Messages {
+		out[id] = ms
+	}
+	return out
+}
+
 func (s *StateStore) RememberLocator(id, mailbox, uid string) error {
 	if s == nil || id == "" || mailbox == "" || uid == "" {
 		return nil

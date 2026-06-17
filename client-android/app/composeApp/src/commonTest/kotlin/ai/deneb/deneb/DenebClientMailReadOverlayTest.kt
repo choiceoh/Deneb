@@ -69,4 +69,40 @@ class DenebClientMailReadOverlayTest {
         assertEquals(setOf("a", "c"), set, "recently re-read id survives; the now-oldest is evicted")
         assertFalse("b" in set)
     }
+
+    @Test
+    fun native_status_line_summarizes_archive_state() {
+        val line = mailNativeStatusLine(
+            MailNativeStatus(
+                source = "archive",
+                available = true,
+                offlineCapable = true,
+                mailboxes = listOf(
+                    MailNativeMailbox(
+                        name = "INBOX",
+                        total = 12,
+                        unread = 3,
+                        locallyRead = 2,
+                        locallyArchived = 1,
+                        locallyTrashed = 0,
+                        latestUid = "55",
+                        attachmentCapable = true,
+                    ),
+                    MailNativeMailbox(
+                        name = "Gmail",
+                        total = 90,
+                        unread = 0,
+                        locallyRead = 0,
+                        locallyArchived = 0,
+                        locallyTrashed = 1,
+                        latestUid = "9",
+                        attachmentCapable = true,
+                    ),
+                ),
+                overlay = MailNativeOverlay(messages = 4, read = 2, archived = 1, trashed = 1),
+            ),
+        )
+
+        assertEquals("로컬 보관함 · 2개함 102통 · 미읽음 3 · 로컬정리 2 · 오프라인", line)
+    }
 }
