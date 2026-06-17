@@ -129,6 +129,17 @@ suspend fun DenebGatewayClient.refreshMailNativeStatus(): MailNativeStatus? {
             archived = p.overlay.archived,
             trashed = p.overlay.trashed,
         ),
+        pipeline = MailNativePipeline(
+            messages = p.pipeline.messages,
+            analyzed = p.pipeline.analyzed,
+            analyzing = p.pipeline.analyzing,
+            failed = p.pipeline.failed,
+            feedCreated = p.pipeline.feedCreated,
+            feedMissing = p.pipeline.feedMissing,
+            calendarCandidates = p.pipeline.calendarCandidates,
+            todoCandidates = p.pipeline.todoCandidates,
+            updatedAt = p.pipeline.updatedAt,
+        ),
         generatedAt = p.generatedAt,
         error = p.error,
     )
@@ -240,6 +251,14 @@ suspend fun DenebGatewayClient.fetchMailDetail(id: String, full: Boolean = false
         attachments = row.attachments
             .filter { it.id.isNotBlank() }
             .map { MailAttachment(it.id, it.filename.ifBlank { it.mimeType }, it.mimeType, it.size) },
+        workState = MailWorkState(
+            analysisStatus = row.analysisStatus,
+            analysisQuality = row.analysisQuality,
+            feedStatus = row.feedStatus,
+            calendarProposalCount = row.calendarProposalCount,
+            todoCount = row.todoCount,
+            hint = row.workStateHint,
+        ),
     )
 }
 
@@ -301,6 +320,14 @@ private fun MailAnalysisOut.toAnalysis(): MailAnalysis? = if (analysis.isBlank()
         cached = cached,
         createdAt = createdAt,
         durationMs = durationMs,
+        workState = MailWorkState(
+            analysisStatus = analysisStatus,
+            analysisQuality = analysisQuality,
+            feedStatus = feedStatus,
+            calendarProposalCount = calendarProposalCount,
+            todoCount = todoCount,
+            hint = workStateHint,
+        ),
     )
 }
 
@@ -391,4 +418,12 @@ private fun MailRowOut.toDomainMailMessage(): MailMessage = MailMessage(
     mailbox = mailbox,
     hasAttachment = hasAttachment || attachmentCount > 0,
     attachmentCount = attachmentCount,
+    workState = MailWorkState(
+        analysisStatus = analysisStatus,
+        analysisQuality = analysisQuality,
+        feedStatus = feedStatus,
+        calendarProposalCount = calendarProposalCount,
+        todoCount = todoCount,
+        hint = workStateHint,
+    ),
 )
