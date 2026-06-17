@@ -88,7 +88,7 @@ func FormatEmailForAnalysis(msg *gmail.MessageDetail) string {
 	fmt.Fprintf(&sb, "Date: %s\n", msg.Date)
 	sb.WriteString("\n--- 본문 ---\n")
 
-	body := msg.Body
+	body := cleanMailBodyForAnalysis(msg.Body)
 	// Truncate very long bodies to keep within LLM context.
 	if len(body) > maxBodyChars {
 		body = textutil.TruncateBytes(body, maxBodyChars) + "\n\n... (본문 생략)"
