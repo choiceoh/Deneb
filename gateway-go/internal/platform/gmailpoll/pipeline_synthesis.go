@@ -227,6 +227,51 @@ func extractDisplayName(from string) string {
 }
 
 // synthesizeAnalysis combines the email with extracted contexts for final LLM analysis.
+// runFinalSynthesis turns the assembled userPrompt into the analysis text. With
+// deps.AgentSynthesisFn set it runs a chat agent turn that actually EXECUTES the
+// analysis prompt's tool steps (wiki search, mail_archive) — so the tools run
+// instead of the model role-playing them as <tool_call> text that leaked into the
+// feed — folding finalAnalysisSystem into the prompt because the agent turn
+// carries the chat session's system prompt, not ours. Any agent failure falls
+// back to the legacy single completion so an analysis is never lost.
+//
+// Legacy path reasoning is disabled: GLM-5.1 and the local vLLM (OpenAI-mode)
+// stream chain-of-thought into the answer body as ordinary text, which
+// collectStreamText can't tell from the analysis. DeepThinking flips it on only
+// when the provider emits reasoning as distinct Anthropic thinking blocks.
+// ThinkingKwarg carries the chat_template_kwargs off-switch so "disabled" truly
+// stops reasoning on dual-mode vLLM models (else they exhaust the budget and
+// return empty); sanitizeAnalysisLeak at the call site scrubs any stray marker.
+func runFinalSynthesis(ctx context.Context, deps PipelineDeps, userPrompt string, maxTok int) (string, error) {
+	if deps.AgentSynthesisFn != nil {
+		agentPrompt := finalAnalysisSystem + "\n\n" + userPrompt
+		out, err := deps.AgentSynthesisFn(ctx, agentPrompt)
+		if err == nil && strings.TrimSpace(out) != "" {
+			return out, nil
+		}
+		if deps.Logger != nil {
+			deps.Logger.Warn("mail analysis: agent synthesis unavailable; falling back to single completion", "error", err)
+		}
+	}
+	thinking := &llm.ThinkingConfig{Type: "disabled", TemplateKwarg: deps.ThinkingKwarg}
+	if deps.DeepThinking {
+		thinking = analysisThinking(deps.LLMClient, maxTok)
+	}
+	req := llm.ChatRequest{
+		Model:     deps.MainModel,
+		Messages:  []llm.Message{llm.NewTextMessage("user", userPrompt)},
+		System:    llm.SystemString(finalAnalysisSystem),
+		MaxTokens: maxTok,
+		Stream:    true,
+		Thinking:  thinking,
+	}
+	events, err := deps.LLMClient.StreamChat(ctx, req)
+	if err != nil {
+		return "", fmt.Errorf("final analysis LLM call failed: %w", err)
+	}
+	return collectStreamText(ctx, events)
+}
+
 func synthesizeAnalysis(ctx context.Context, deps PipelineDeps, msg *gmail.MessageDetail, tc ThreadContext, mc MemoryContext, candidates []ProjectCandidate) (AnalysisResult, error) {
 	emailText := FormatEmailForAnalysis(msg)
 
@@ -285,38 +330,7 @@ func synthesizeAnalysis(ctx context.Context, deps PipelineDeps, msg *gmail.Messa
 		maxTok = deps.Stage2MaxTokens
 	}
 
-	// Reasoning is disabled by default: GLM-5.1 and the local vLLM (OpenAI-mode)
-	// stream chain-of-thought into the answer body as ordinary text, which
-	// collectStreamText can't tell apart from the analysis. DeepThinking flips it
-	// on ONLY when the synthesis provider emits reasoning as distinct Anthropic
-	// thinking blocks (analysisThinking gates on APIMode); stripReasoningLeak
-	// below still scrubs any stray marker as belt-and-suspenders.
-	//
-	// TemplateKwarg carries the model's chat_template_kwargs off-switch (e.g.
-	// dsv4's "thinking"): without it, "disabled" falls back to reasoning_effort,
-	// a no-op on dual-mode vLLM models — they keep reasoning, exhaust the token
-	// budget, and return EMPTY content (the main chat path sets this via
-	// applyModelTuning; this is the analysis-path equivalent). Empty for non-vLLM
-	// models, where Anthropic-wire thinking handling applies instead.
-	thinking := &llm.ThinkingConfig{Type: "disabled", TemplateKwarg: deps.ThinkingKwarg}
-	if deps.DeepThinking {
-		thinking = analysisThinking(deps.LLMClient, maxTok)
-	}
-	req := llm.ChatRequest{
-		Model:     deps.MainModel,
-		Messages:  []llm.Message{llm.NewTextMessage("user", userPrompt)},
-		System:    llm.SystemString(finalAnalysisSystem),
-		MaxTokens: maxTok,
-		Stream:    true,
-		Thinking:  thinking,
-	}
-
-	events, err := deps.LLMClient.StreamChat(ctx, req)
-	if err != nil {
-		return AnalysisResult{}, fmt.Errorf("final analysis LLM call failed: %w", err)
-	}
-
-	analysis, err := collectStreamText(ctx, events)
+	analysis, err := runFinalSynthesis(ctx, deps, userPrompt, maxTok)
 	if err != nil {
 		return AnalysisResult{}, err
 	}

@@ -100,6 +100,15 @@ type PipelineDeps struct {
 	// reasoning instead of exhausting the token budget on a silent <think> block
 	// (→ empty analysis). "" for non-vLLM models, which handle thinking on the wire.
 	ThinkingKwarg string
+
+	// AgentSynthesisFn runs the final synthesis as a chat agent turn with the full
+	// toolset (wiki search, mail_archive, …) and returns the clean deliverable
+	// text. When set, it replaces the tool-less single completion so the analysis
+	// prompt's tool steps actually EXECUTE — the model calls the tools instead of
+	// role-playing them as <tool_call> text that leaked into the feed. On any
+	// failure the synthesis falls back to the single-completion path so an analysis
+	// is never lost. nil = the legacy tool-less synthesis.
+	AgentSynthesisFn func(ctx context.Context, prompt string) (string, error)
 }
 
 const (

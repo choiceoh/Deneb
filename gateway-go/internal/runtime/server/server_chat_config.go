@@ -104,6 +104,9 @@ func (s *Server) initGmailPoll(snap *config.ConfigSnapshot) {
 	// uses, so a polled email shows up already-analyzed with its projects.
 	cfg.OnAnalyzed = s.makeMailAnalysisSink()
 	cfg.ProjectsFn = s.projectCandidatesFn()
+	// Run the synthesis as a chat agent turn so the analysis prompt's tools
+	// (wiki, mail_archive) execute instead of leaking as <tool_call> text.
+	cfg.AgentSynthesisFn = s.mailAnalysisAgentSynthesis
 
 	s.gmailPollSvc = gmailpoll.NewService(cfg, s.logger)
 
@@ -161,6 +164,29 @@ func (s *Server) archiveThreadSource() gmailpoll.ThreadSource {
 	return src
 }
 
+// mailAnalysisAgentSynthesis runs the mail-analysis synthesis as a chat agent
+// turn with the full toolset, so the analysis prompt's tool steps (wiki search,
+// mail_archive) actually execute instead of leaking as <tool_call> text into the
+// feed. Mirrors dropboxAgentAdapter: an isolated "system:" session (kept out of
+// recall + the session drawer) with ephemeral messages so the fixed-key
+// transcript can't grow unbounded. s.chatHandler is read at call time — long
+// after startup — so wiring order does not matter; a nil handler returns an error
+// and the pipeline falls back to its single-completion synthesis.
+func (s *Server) mailAnalysisAgentSynthesis(ctx context.Context, prompt string) (string, error) {
+	if s.chatHandler == nil {
+		return "", fmt.Errorf("chat handler unavailable")
+	}
+	result, err := s.chatHandler.SendSync(ctx, "system:mailpoll", prompt, "", &chat.SyncOptions{
+		AutoDeliveredOutput: true,
+		EphemeralUser:       true,
+		EphemeralAssistant:  true,
+	})
+	if err != nil {
+		return "", err
+	}
+	return result.BestText(), nil
+}
+
 // initLMTPServer starts the LMTP (RFC 2033) mail-ingest server when enabled. An
 // on-box mail server (e.g. a Docker mail service) PUSHES new mail over LMTP, which
 // replaces IMAP polling for that source: each message is parsed and analyzed
@@ -201,6 +227,9 @@ func (s *Server) initLMTPServer(snap *config.ConfigSnapshot) {
 	if s.wikiStore != nil && s.wikiStore.DiaryDir() != "" {
 		cfg.DiaryDir = s.wikiStore.DiaryDir()
 	}
+	// Run the synthesis as a chat agent turn so the analysis prompt's tools
+	// (wiki, mail_archive) execute instead of leaking as <tool_call> text.
+	cfg.AgentSynthesisFn = s.mailAnalysisAgentSynthesis
 	svc := gmailpoll.NewService(cfg, s.logger)
 	svc.SetNotifier(s.proactiveRelay.mailNotifierForSession(nativeWorkSessionKey))
 

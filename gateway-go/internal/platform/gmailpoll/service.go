@@ -88,6 +88,11 @@ type Config struct {
 	// ThreadSource supplies thread/sender context from the on-box archive for the
 	// LMTP path (no Gmail client). Forwarded to PipelineDeps. nil = none.
 	ThreadSource ThreadSource
+
+	// AgentSynthesisFn runs the final synthesis as a chat agent turn with the full
+	// toolset so the analysis prompt's tool steps execute instead of leaking as
+	// <tool_call> text. Forwarded to PipelineDeps; nil = legacy tool-less synthesis.
+	AgentSynthesisFn func(ctx context.Context, prompt string) (string, error)
 }
 
 // Compile-time interface compliance.
@@ -368,6 +373,7 @@ func (s *Service) pipelineDeps(gmailClient *gmail.Client) PipelineDeps {
 		AttachmentExtractFn: s.cfg.AttachmentExtractFn,
 		ThinkingKwarg:       s.cfg.ThinkingKwarg,
 		ThreadSource:        s.cfg.ThreadSource,
+		AgentSynthesisFn:    s.cfg.AgentSynthesisFn,
 	}
 	// Poll path: the attachment gate fetches bytes lazily from Gmail. The LMTP
 	// path (IngestMessage) overrides this with a closure over the inline bytes,
