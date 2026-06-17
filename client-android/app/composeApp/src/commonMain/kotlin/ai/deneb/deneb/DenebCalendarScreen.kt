@@ -137,6 +137,12 @@ fun DenebCalendarScreen(
     // from. Fetched once on entry and re-fetched after each accept/reject.
     val proposals by client.denebCalProposals.collectAsState()
     var showProposals by remember { mutableStateOf(false) }
+    // Ids with an accept/reject RPC in flight: their row buttons disable so a fast
+    // double-tap can't fire a second accept (which the server also guards against,
+    // but this stops the duplicate request — and a spurious "이미 처리됨" — at the source).
+    var busyProposals by remember { mutableStateOf<Set<String>>(emptySet()) }
+    // Last accept/reject failure, shown in the popup so a failed action isn't silent.
+    var proposalError by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) { client.refreshCalendarProposals() }
 
     suspend fun loadMonth(m: CalMonth, force: Boolean) {
@@ -233,14 +239,37 @@ fun DenebCalendarScreen(
             if (showProposals) {
                 CalendarProposalsPopup(
                     proposals = proposals,
+                    busy = busyProposals,
+                    error = proposalError,
                     onAccept = { id ->
-                        scope.launch {
-                            client.acceptCalendarProposal(id)
-                            loadMonth(visible, force = true) // re-fetch so the new event shows
+                        if (id !in busyProposals) {
+                            busyProposals = busyProposals + id
+                            proposalError = null
+                            scope.launch {
+                                val err = client.acceptCalendarProposal(id)
+                                if (err != null) {
+                                    proposalError = err
+                                } else {
+                                    loadMonth(visible, force = true) // re-fetch so the new event shows
+                                }
+                                busyProposals = busyProposals - id
+                            }
                         }
                     },
-                    onReject = { id -> scope.launch { client.rejectCalendarProposal(id) } },
-                    onDismiss = { showProposals = false },
+                    onReject = { id ->
+                        if (id !in busyProposals) {
+                            busyProposals = busyProposals + id
+                            proposalError = null
+                            scope.launch {
+                                client.rejectCalendarProposal(id)?.let { proposalError = it }
+                                busyProposals = busyProposals - id
+                            }
+                        }
+                    },
+                    onDismiss = {
+                        showProposals = false
+                        proposalError = null
+                    },
                 )
             }
             Spacer(Modifier.height(4.dp))
@@ -598,6 +627,8 @@ private fun CalendarBell(count: Int, onClick: () -> Unit) {
 @Composable
 private fun CalendarProposalsPopup(
     proposals: List<ai.deneb.deneb.generated.CalendarProposalOut>,
+    busy: Set<String>,
+    error: String?,
     onAccept: (String) -> Unit,
     onReject: (String) -> Unit,
     onDismiss: () -> Unit,
@@ -628,6 +659,10 @@ private fun CalendarProposalsPopup(
                     TextButton(onClick = onDismiss, contentPadding = PaddingValues(horizontal = 8.dp)) { Text("닫기") }
                 }
                 Spacer(Modifier.height(6.dp))
+                if (error != null) {
+                    Text(error, style = DenebType.meta, color = MaterialTheme.colorScheme.error)
+                    Spacer(Modifier.height(6.dp))
+                }
                 if (proposals.isEmpty()) {
                     Text("새 일정 제안이 없습니다.", style = DenebType.body, color = denebHint())
                 } else {
@@ -644,7 +679,7 @@ private fun CalendarProposalsPopup(
                                 HorizontalDivider(color = denebHairline())
                                 Spacer(Modifier.height(8.dp))
                             }
-                            CalendarProposalRow(p, onAccept = { onAccept(p.id) }, onReject = { onReject(p.id) })
+                            CalendarProposalRow(p, busy = p.id in busy, onAccept = { onAccept(p.id) }, onReject = { onReject(p.id) })
                         }
                     }
                 }
@@ -656,6 +691,7 @@ private fun CalendarProposalsPopup(
 @Composable
 private fun CalendarProposalRow(
     p: ai.deneb.deneb.generated.CalendarProposalOut,
+    busy: Boolean,
     onAccept: () -> Unit,
     onReject: () -> Unit,
 ) {
@@ -672,10 +708,11 @@ private fun CalendarProposalRow(
         Row {
             FilledTonalButton(
                 onClick = onAccept,
+                enabled = !busy,
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
             ) { Text("수락") }
             Spacer(Modifier.width(8.dp))
-            TextButton(onClick = onReject, contentPadding = PaddingValues(horizontal = 12.dp)) { Text("거절") }
+            TextButton(onClick = onReject, enabled = !busy, contentPadding = PaddingValues(horizontal = 12.dp)) { Text("거절") }
         }
     }
 }

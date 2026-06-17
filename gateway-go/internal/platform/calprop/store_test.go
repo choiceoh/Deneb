@@ -132,3 +132,59 @@ func TestCreateIfAbsent_KeepsRecentTerminal(t *testing.T) {
 		t.Error("a recently-rejected proposal should still dedup (not be re-proposed)")
 	}
 }
+
+func TestClaimForAccept_OnlyFirstWins(t *testing.T) {
+	s := newTestStore(t)
+	p, _, _ := s.CreateIfAbsent(CreateInput{Title: "킥오프", Start: "2026-07-03", AllDay: true, Source: "s:k"})
+
+	// First claim wins and flips the proposal to accepted.
+	got, claimed, err := s.ClaimForAccept(p.ID)
+	if err != nil || !claimed {
+		t.Fatalf("first claim: claimed=%v err=%v", claimed, err)
+	}
+	if got == nil || got.Status != StatusAccepted {
+		t.Fatalf("claimed proposal not accepted: %+v", got)
+	}
+
+	// Second claim (the double-tap) must lose — the caller must not create a 2nd event.
+	if _, claimed2, _ := s.ClaimForAccept(p.ID); claimed2 {
+		t.Error("second ClaimForAccept on the same proposal must not win")
+	}
+
+	// It's out of the pending list once claimed.
+	if pending, _ := s.ListPending(); len(pending) != 0 {
+		t.Errorf("want 0 pending after claim, got %d", len(pending))
+	}
+}
+
+func TestClaimForAccept_UnknownID(t *testing.T) {
+	s := newTestStore(t)
+	if got, claimed, err := s.ClaimForAccept("cp_nope"); err != nil || claimed || got != nil {
+		t.Errorf("unknown id: got=%v claimed=%v err=%v", got, claimed, err)
+	}
+}
+
+func TestClaimForAccept_ReleaseReopens(t *testing.T) {
+	s := newTestStore(t)
+	p, _, _ := s.CreateIfAbsent(CreateInput{Title: "회의", Start: "2026-07-04", AllDay: true, Source: "s:m"})
+
+	if _, claimed, _ := s.ClaimForAccept(p.ID); !claimed {
+		t.Fatal("claim should win")
+	}
+	// Releasing the claim (event creation failed) reopens it for a retry, with no
+	// lingering decision time.
+	released, err := s.Decide(p.ID, StatusPending, "")
+	if err != nil || released == nil {
+		t.Fatalf("release: %+v err=%v", released, err)
+	}
+	if released.Status != StatusPending || released.DecidedAtMs != 0 {
+		t.Errorf("released proposal not cleanly reopened: %+v", released)
+	}
+	if pending, _ := s.ListPending(); len(pending) != 1 {
+		t.Errorf("reopened proposal should be pending again, got %d", len(pending))
+	}
+	// And it can be claimed again after the release.
+	if _, claimed, _ := s.ClaimForAccept(p.ID); !claimed {
+		t.Error("a reopened proposal should be claimable again")
+	}
+}

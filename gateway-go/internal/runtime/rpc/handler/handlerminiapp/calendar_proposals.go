@@ -25,7 +25,7 @@ import (
 // CalProposals is the subset of *calprop.Store the handlers use.
 type CalProposals interface {
 	ListPending() ([]calprop.Proposal, error)
-	Get(id string) (*calprop.Proposal, error)
+	ClaimForAccept(id string) (*calprop.Proposal, bool, error)
 	Decide(id string, status calprop.Status, calendarEventID string) (*calprop.Proposal, error)
 }
 
@@ -96,18 +96,23 @@ func calendarProposalsAccept(deps CalendarDeps) rpcutil.HandlerFunc {
 		if strings.TrimSpace(p.ID) == "" {
 			return rpcerr.MissingParam("id").Response(req.ID)
 		}
-		prop, err := deps.Proposals.Get(p.ID)
+		// Claim the proposal before creating any event: a single atomic
+		// pending→accepted transition, so a fast double-tap on 수락 (two concurrent
+		// accept RPCs) can't both pass the pending check and create duplicate
+		// events. The loser gets claimed=false and creates nothing.
+		prop, claimed, err := deps.Proposals.ClaimForAccept(p.ID)
 		if err != nil {
 			return rpcerr.WrapUnavailable("calendar proposal lookup failed", err).Response(req.ID)
 		}
 		if prop == nil {
 			return rpcerr.NotFound("proposal " + rpcutil.TruncateForError(p.ID)).Response(req.ID)
 		}
-		if prop.Status != calprop.StatusPending {
+		if !claimed {
 			return rpcerr.ValidationFailed("이미 처리된 제안입니다.").Response(req.ID)
 		}
 		start, end, allDay, perr := proposalTimes(prop)
 		if perr != nil {
+			_, _ = deps.Proposals.Decide(p.ID, calprop.StatusPending, "") // release the claim
 			return rpcerr.ValidationFailed("제안의 날짜를 해석할 수 없습니다.").Response(req.ID)
 		}
 		ev, cerr := deps.Local.Create(localcal.CreateInput{
@@ -117,6 +122,7 @@ func calendarProposalsAccept(deps CalendarDeps) rpcutil.HandlerFunc {
 			AllDay:  allDay,
 		})
 		if cerr != nil {
+			_, _ = deps.Proposals.Decide(p.ID, calprop.StatusPending, "") // release so it can be retried
 			return rpcerr.WrapUnavailable("calendar create failed", cerr).Response(req.ID)
 		}
 		updated, derr := deps.Proposals.Decide(p.ID, calprop.StatusAccepted, ev.ID)
