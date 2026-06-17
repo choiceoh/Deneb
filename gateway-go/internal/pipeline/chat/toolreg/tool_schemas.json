@@ -1484,6 +1484,34 @@
     ]
   },
   {
+    "name": "todo",
+    "properties": {
+      "action": {
+        "type": "string",
+        "description": "list | add | done | delete"
+      },
+      "title": {
+        "type": "string",
+        "description": "Title of the to-do (required for add)"
+      },
+      "id": {
+        "type": "string",
+        "description": "To-do id for done/delete (run list first to get it)"
+      },
+      "done": {
+        "type": "boolean",
+        "description": "Completion state for the done action (default true)"
+      },
+      "due": {
+        "type": "string",
+        "description": "Optional due date, YYYY-MM-DD"
+      }
+    },
+    "required": [
+      "action"
+    ]
+  },
+  {
     "name": "watch",
     "properties": {
       "source": {

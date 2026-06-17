@@ -1304,6 +1304,35 @@ func heartbeatUpdateToolSchema() map[string]any {
 	}
 }
 
+func todoToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"action": map[string]any{
+				"type":        "string",
+				"description": "list | add | done | delete",
+			},
+			"done": map[string]any{
+				"type":        "boolean",
+				"description": "Completion state for the done action (default true)",
+			},
+			"due": map[string]any{
+				"type":        "string",
+				"description": "Optional due date, YYYY-MM-DD",
+			},
+			"id": map[string]any{
+				"type":        "string",
+				"description": "To-do id for done/delete (run list first to get it)",
+			},
+			"title": map[string]any{
+				"type":        "string",
+				"description": "Title of the to-do (required for add)",
+			},
+		},
+		"required": []string{"action"},
+	}
+}
+
 func watchToolSchema() map[string]any {
 	return map[string]any{
 		"type": "object",

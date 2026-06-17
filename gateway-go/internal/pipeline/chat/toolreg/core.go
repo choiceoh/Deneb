@@ -317,6 +317,14 @@ func RegisterChronoTools(registry toolctx.ToolRegistrar) {
 		InputSchema: heartbeatUpdateToolSchema(),
 		Fn:          tools.ToolHeartbeatUpdate(),
 	})
+	registry.RegisterTool(toolctx.ToolDef{
+		Name: "todo",
+		Description: "Manage the user's 할일 (to-do) list — the SAME localtodo store the native client reads via miniapp.todo.*. " +
+			"Actions: list | add (needs title; optional due YYYY-MM-DD) | done (needs id; optional done=false to un-complete) | delete (needs id). " +
+			"Use THIS for the user's checkable tasks (a to-do added here appears on the user's device); heartbeat_update is the agent's own free-form work memo, not the user's task list.",
+		InputSchema: todoToolSchema(),
+		Fn:          tools.ToolTodo(),
+	})
 }
 
 // RegisterRoutineTools registers tools for recurring/scheduled tasks —
