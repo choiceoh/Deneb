@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Article
 import androidx.compose.material.icons.outlined.Dns
 import androidx.compose.material.icons.outlined.Extension
 import androidx.compose.material.icons.outlined.Hub
@@ -118,6 +119,8 @@ fun DenebConfigScreen(
 
             ConfigTab.CRON -> denebClient?.let { CronTab(it, onOpenCron) } ?: NotConnectedTab()
 
+            ConfigTab.PROMPTS -> denebClient?.let { PromptsTab(it) } ?: NotConnectedTab()
+
             ConfigTab.OBSERVE -> denebClient?.let { ObserveTab(it) } ?: NotConnectedTab()
 
             ConfigTab.WORMHOLE -> denebClient?.let { WormholeTab(it) } ?: NotConnectedTab()
@@ -138,7 +141,7 @@ fun DenebConfigScreen(
  *  a [DenebGroup]. */
 private val configGroups: List<Pair<String, List<ConfigTab>>> = listOf(
     "시스템" to listOf(ConfigTab.GATEWAY, ConfigTab.APPEARANCE, ConfigTab.MODEL),
-    "자동화 · 관찰" to listOf(ConfigTab.SKILLS, ConfigTab.CRON, ConfigTab.OBSERVE),
+    "자동화 · 관찰" to listOf(ConfigTab.SKILLS, ConfigTab.CRON, ConfigTab.PROMPTS, ConfigTab.OBSERVE),
     "라우팅 · 인프라" to listOf(ConfigTab.WORMHOLE, ConfigTab.FLEET),
     "연동" to listOf(ConfigTab.INTEGRATIONS),
     "정보" to listOf(ConfigTab.VERSION),
@@ -201,4 +204,5 @@ private enum class ConfigTab(val label: String, val desc: String, val icon: Imag
     FLEET("플릿", "GPU 노드 상태, 모델 기동/중지, 작업 로그", Icons.Outlined.Storage),
     VERSION("버전", "현재 빌드, 패치노트, 업데이트", Icons.Outlined.Info),
     INTEGRATIONS("연동", "Dropbox 등 외부 서비스 연결", Icons.Outlined.Link),
+    PROMPTS("프롬프트 코너", "자동 분석·도구 프롬프트 편집", Icons.Outlined.Article),
 }

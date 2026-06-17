@@ -39,6 +39,11 @@ type Config struct {
 	StateDir    string      // directory for state persistence (default ~/.deneb)
 	LLMClient   *llm.Client // pre-configured LLM client from modelrole registry
 
+	// PromptOverride returns a native-UI edited prompt by ID. When it returns a
+	// non-empty override, it takes precedence over PromptFile; otherwise the
+	// existing file/default fallback remains intact.
+	PromptOverride func(id string) (string, bool)
+
 	// Multi-stage pipeline deps (all optional — nil = skip that stage).
 	LocalClient *llm.Client // local AI for stage-1 extractors
 	LocalModel  string      // local AI model name
@@ -356,6 +361,7 @@ func (s *Service) pipelineDeps(gmailClient *gmail.Client) PipelineDeps {
 		LocalClient:         s.cfg.LocalClient,
 		LocalModel:          s.cfg.LocalModel,
 		MainModel:           s.cfg.Model,
+		AnalysisPrompt:      s.analysisPrompt(),
 		Logger:              s.log,
 		ProjectsFn:          s.cfg.ProjectsFn,
 		SenderFactsFn:       s.cfg.SenderFactsFn,
@@ -370,6 +376,19 @@ func (s *Service) pipelineDeps(gmailClient *gmail.Client) PipelineDeps {
 		deps.AttachmentBytesFn = gmailClient.GetAttachment
 	}
 	return deps
+}
+
+func (s *Service) analysisPrompt() string {
+	prompt := loadPrompt(s.cfg.PromptFile)
+	if s.cfg.PromptOverride == nil {
+		return prompt
+	}
+	if override, ok := s.cfg.PromptOverride(PromptIDAutoMailAnalysis); ok {
+		if override = strings.TrimSpace(override); override != "" {
+			return override
+		}
+	}
+	return prompt
 }
 
 // batchAnalyze analyzes a batch: per-email individual analyses + one

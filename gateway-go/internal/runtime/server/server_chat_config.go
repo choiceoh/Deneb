@@ -73,6 +73,7 @@ func (s *Server) initGmailPoll(snap *config.ConfigSnapshot) {
 		LocalModel:          stage1Model,
 		SenderFactsFn:       s.wikiSenderFacts,
 		AttachmentExtractFn: tools.ExtractAttachmentTextBytes,
+		PromptOverride:      s.promptOverride,
 		ThinkingKwarg:       s.analysisThinkingKwarg(),
 	}
 
@@ -191,9 +192,11 @@ func (s *Server) initLMTPServer(snap *config.ConfigSnapshot) {
 		LocalModel:          stage1Model,
 		SenderFactsFn:       s.wikiSenderFacts,
 		AttachmentExtractFn: tools.ExtractAttachmentTextBytes,
+		PromptOverride:      s.promptOverride,
 		OnAnalyzed:          s.makeMailAnalysisSink(),
 		ProjectsFn:          s.projectCandidatesFn(),
 		ThreadSource:        threadSource,
+		ThinkingKwarg:       s.analysisThinkingKwarg(),
 	}
 	if s.wikiStore != nil && s.wikiStore.DiaryDir() != "" {
 		cfg.DiaryDir = s.wikiStore.DiaryDir()

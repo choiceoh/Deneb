@@ -30,6 +30,43 @@ func TestLoadPrompt_CustomFile(t *testing.T) {
 	}
 }
 
+func TestServiceAnalysisPromptPrefersNativeOverride(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "custom-prompt.md")
+	if err := os.WriteFile(path, []byte("file prompt"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	svc := NewService(Config{
+		PromptFile: path,
+		PromptOverride: func(id string) (string, bool) {
+			if id != PromptIDAutoMailAnalysis {
+				t.Fatalf("unexpected prompt id: %s", id)
+			}
+			return " native prompt ", true
+		},
+	}, nil)
+	if got := svc.analysisPrompt(); got != "native prompt" {
+		t.Fatalf("analysisPrompt = %q, want native override", got)
+	}
+}
+
+func TestServiceAnalysisPromptFallsBackToPromptFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "custom-prompt.md")
+	if err := os.WriteFile(path, []byte("file prompt"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	svc := NewService(Config{
+		PromptFile: path,
+		PromptOverride: func(string) (string, bool) {
+			return "", false
+		},
+	}, nil)
+	if got := svc.analysisPrompt(); got != "file prompt" {
+		t.Fatalf("analysisPrompt = %q, want file prompt", got)
+	}
+}
+
 func TestFormatEmailForAnalysis(t *testing.T) {
 	msg := &gmail.MessageDetail{
 		From:    "sender@example.com",

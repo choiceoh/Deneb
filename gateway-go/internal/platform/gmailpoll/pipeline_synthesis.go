@@ -273,7 +273,7 @@ func synthesizeAnalysis(ctx context.Context, deps PipelineDeps, msg *gmail.Messa
 		memorySection = sb.String()
 	}
 
-	userPrompt := fmt.Sprintf(finalAnalysisPrompt, emailText, threadSection, memorySection)
+	userPrompt := fmt.Sprintf(finalAnalysisPrompt, analysisPrompt(deps), emailText, threadSection, memorySection)
 	userPrompt += projectSelectionSuffix(candidates)
 	userPrompt += importanceSuffix
 

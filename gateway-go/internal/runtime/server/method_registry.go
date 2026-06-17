@@ -305,6 +305,7 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 					"pushFallback":    s.pushNotifier != nil,
 					"gmailAttachment": true,
 					"updateManifest":  true,
+					"prompts":         s.promptStore != nil,
 				}
 			},
 		}),
@@ -416,6 +417,9 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 				}
 				return svc, nil
 			},
+		}),
+		handlerminiapp.PromptMethods(handlerminiapp.PromptDeps{
+			Store: s.promptStore,
 		}),
 
 		// Mini App sessions recent + transcript (miniapp.sessions.*).
@@ -682,7 +686,7 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 				if err != nil {
 					return nil, err
 				}
-				return handlerminiapp.PipelineFromGmailpoll(gmailClient, llmClient, localClient, model, localModel, s.projectCandidatesFn(), s.wikiSenderFacts, tools.ExtractAttachmentTextBytes)
+				return handlerminiapp.PipelineFromGmailpoll(gmailClient, llmClient, localClient, model, localModel, s.mailAnalysisPrompt(), s.projectCandidatesFn(), s.wikiSenderFacts, tools.ExtractAttachmentTextBytes)
 			},
 			Cache:      handlerminiapp.NewAnalysisStore(filepath.Join(s.denebDir, "cache", "mail_analysis")),
 			SaveToWiki: makeMailAnalysisWikiSink(hub),
