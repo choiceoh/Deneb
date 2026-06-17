@@ -51,8 +51,8 @@ var (
 		regexp.MustCompile(`^\s*(?:보낸\s*사람|보낸\s*날짜|받는\s*사람|참조|제목|날짜)\s*:`),
 	}
 	bodyPrepTrailingNoiseREs = []*regexp.Regexp{
-		regexp.MustCompile(`(?i)^\s*(?:cid:|\[cid|\[image|<image|첨부\s*이미지|logo\b)`),
-		regexp.MustCompile(`(?i)^\s*(?:https?://|www\.)\S*(?:facebook|instagram|youtube|linkedin|twitter|x\.com|blog)\S*\s*$`),
+		regexp.MustCompile(`(?i)(?:cid:|\[cid|\[image|<image|\blogo\b)`),
+		regexp.MustCompile(`(?i)(?:^|\s)(?:https?://|www\.)\S*(?:facebook|instagram|youtube|linkedin|twitter|x\.com|blog)\S*\s*$`),
 	}
 )
 
