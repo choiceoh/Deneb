@@ -122,6 +122,30 @@ func newID() string {
 // nowMs is overridable in tests; production uses the wall clock.
 var nowMs = func() int64 { return time.Now().UnixMilli() }
 
+// terminalRetention bounds how long decided (accepted/rejected) proposals are
+// kept. They linger so a rejected item isn't re-proposed and an accepted one
+// isn't re-suggested, but a months-old mail is never re-analyzed (LMTP dedups by
+// Message-ID), so old terminal records are safe to drop — keeping the file (and
+// the per-create dedup scan) bounded. Pending proposals are never pruned.
+const terminalRetention = 90 * 24 * time.Hour
+
+// pruneTerminalLocked drops decided proposals older than terminalRetention,
+// in place. Returns whether anything was removed.
+func pruneTerminalLocked(m *fileModel) bool {
+	cutoff := nowMs() - terminalRetention.Milliseconds()
+	kept := m.Proposals[:0]
+	changed := false
+	for _, p := range m.Proposals {
+		if p.Status != StatusPending && p.DecidedAtMs > 0 && p.DecidedAtMs < cutoff {
+			changed = true
+			continue
+		}
+		kept = append(kept, p)
+	}
+	m.Proposals = kept
+	return changed
+}
+
 // CreateIfAbsent inserts a pending proposal unless one with the same non-empty
 // Source already exists (in any status — a rejected proposal stays rejected and
 // is not re-proposed). Returns the proposal and whether it was newly created.
@@ -132,9 +156,14 @@ func (s *Store) CreateIfAbsent(in CreateInput) (Proposal, bool, error) {
 	if err != nil {
 		return Proposal{}, false, err
 	}
+	pruned := pruneTerminalLocked(m)
 	if in.Source != "" {
 		for _, p := range m.Proposals {
 			if p.Source == in.Source {
+				if pruned {
+					// Persist the prune even though we're not adding a proposal.
+					_ = s.saveLocked(m)
+				}
 				return p, false, nil
 			}
 		}
