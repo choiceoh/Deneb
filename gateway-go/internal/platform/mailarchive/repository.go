@@ -673,6 +673,9 @@ func labelsForArchiveMessage(mailbox string, st MessageState) []string {
 			labels = append(labels, "UNREAD")
 		}
 	}
+	if labels == nil {
+		return []string{}
+	}
 	return labels
 }
 
