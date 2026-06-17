@@ -8,6 +8,7 @@ import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -24,15 +25,22 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
+import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -40,6 +48,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -52,6 +61,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -119,6 +130,13 @@ fun DenebCalendarScreen(
     // To-dos are independent of the visible month (a to-do has at most one due
     // date), so they're fetched once and filtered to the selected day below.
     var todos by remember { mutableStateOf<List<Todo>>(emptyList()) }
+
+    // Calendar proposals (the bell): schedule-worthy items mail analysis surfaced,
+    // shown as a count badge on the bell and an expanding popup the user accepts
+    // from. Fetched once on entry and re-fetched after each accept/reject.
+    val proposals by client.denebCalProposals.collectAsState()
+    var showProposals by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { client.refreshCalendarProposals() }
 
     suspend fun loadMonth(m: CalMonth, force: Boolean) {
         if (!force && cache[m] != null) return
@@ -205,6 +223,8 @@ fun DenebCalendarScreen(
         Column(Modifier.fillMaxWidth().weight(1f).padding(horizontal = 16.dp)) {
             MonthControls(
                 month = visible,
+                proposalCount = proposals.size,
+                onBell = { showProposals = !showProposals },
                 onPrev = { scope.launch { pagerState.animateScrollToPage(pagerState.currentPage - 1) } },
                 onNext = { scope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) } },
                 onToday = {
@@ -213,7 +233,20 @@ fun DenebCalendarScreen(
                 },
                 onAdd = { onAddEvent(selected) },
             )
-            Spacer(Modifier.height(8.dp))
+            if (showProposals) {
+                CalendarProposalsPopup(
+                    proposals = proposals,
+                    onAccept = { id ->
+                        scope.launch {
+                            client.acceptCalendarProposal(id)
+                            loadMonth(visible, force = true) // re-fetch so the new event shows
+                        }
+                    },
+                    onReject = { id -> scope.launch { client.rejectCalendarProposal(id) } },
+                    onDismiss = { showProposals = false },
+                )
+            }
+            Spacer(Modifier.height(4.dp))
             WeekdayHeader()
             // Each page builds its grid from the per-month cache, so the neighbor
             // pages the pager pre-composes already show their events.
@@ -509,14 +542,17 @@ internal fun CalendarEmptyDay(onAdd: () -> Unit) {
 @Composable
 private fun MonthControls(
     month: CalMonth,
+    proposalCount: Int,
+    onBell: () -> Unit,
     onPrev: () -> Unit,
     onNext: () -> Unit,
     onToday: () -> Unit,
     onAdd: () -> Unit,
 ) {
-    // Title takes the slack (weight) so the right-side actions keep their natural
-    // width — at phone width (412dp) a Spacer-pushed layout squeezed "추가" into
-    // two lines. Compact icon buttons + tight button padding keep it on one row.
+    // Month control (‹ label ›) hugs the left at its natural (compact) width; a
+    // weighted Spacer pushes the right-side actions to the edge and leaves a gap
+    // for the bell badge. 추가 stays on one row via softWrap=false + maxLines=1,
+    // so the narrower title can't force it to wrap.
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         IconButton(onClick = onPrev, modifier = Modifier.size(36.dp)) {
             Text("‹", style = DenebType.subject, color = MaterialTheme.colorScheme.onBackground)
@@ -526,17 +562,117 @@ private fun MonthControls(
             style = DenebType.subject,
             color = MaterialTheme.colorScheme.onBackground,
             maxLines = 1,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.weight(1f),
         )
         IconButton(onClick = onNext, modifier = Modifier.size(36.dp)) {
             Text("›", style = DenebType.subject, color = MaterialTheme.colorScheme.onBackground)
         }
+        Spacer(Modifier.weight(1f))
+        CalendarBell(count = proposalCount, onClick = onBell)
         TextButton(onClick = onToday, contentPadding = PaddingValues(horizontal = 8.dp)) { Text("오늘") }
         FilledTonalButton(
             onClick = onAdd,
             contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
         ) { Text("추가", maxLines = 1, softWrap = false) }
+    }
+}
+
+/** Calendar bell: a notifications icon with a count badge for pending calendar
+ *  proposals. Muted (hint) when empty so it doesn't draw the eye. */
+@Composable
+private fun CalendarBell(count: Int, onClick: () -> Unit) {
+    BadgedBox(
+        badge = {
+            if (count > 0) {
+                Badge { Text(if (count > 9) "9+" else count.toString()) }
+            }
+        },
+    ) {
+        IconButton(onClick = onClick, modifier = Modifier.size(36.dp)) {
+            Icon(
+                Icons.Outlined.Notifications,
+                contentDescription = "일정 제안 ${count}건",
+                tint = if (count > 0) MaterialTheme.colorScheme.onBackground else denebHint(),
+            )
+        }
+    }
+}
+
+/** Proposals modal that scales out from the bell (top-end), listing pending
+ *  calendar proposals with accept/reject. A Popup so it floats above the grid. */
+@Composable
+private fun CalendarProposalsPopup(
+    proposals: List<ai.deneb.deneb.generated.CalendarProposalOut>,
+    onAccept: (String) -> Unit,
+    onReject: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    // Expands from the bell (top-end): a right-aligned card that scales + fades
+    // in via graphicsLayer (a draw-time transform, so its measured size is intact).
+    // Rendered in-scene (not a Popup) so it shows on every platform — Compose
+    // Desktop draws Popups in a separate window the test harness can't capture.
+    var shown by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { shown = true }
+    val scale by animateFloatAsState(if (shown) 1f else 0.82f, label = "proposalScale")
+    val alpha by animateFloatAsState(if (shown) 1f else 0f, label = "proposalAlpha")
+    Row(Modifier.fillMaxWidth().padding(top = 4.dp)) {
+        Spacer(Modifier.weight(1f))
+        ElevatedCard(
+            modifier = Modifier
+                .widthIn(max = 340.dp)
+                .graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                    this.alpha = alpha
+                    transformOrigin = TransformOrigin(1f, 0f)
+                },
+        ) {
+            Column(Modifier.padding(14.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("일정 제안", style = DenebType.subject, color = MaterialTheme.colorScheme.onBackground, modifier = Modifier.weight(1f))
+                    TextButton(onClick = onDismiss, contentPadding = PaddingValues(horizontal = 8.dp)) { Text("닫기") }
+                }
+                Spacer(Modifier.height(6.dp))
+                if (proposals.isEmpty()) {
+                    Text("새 일정 제안이 없습니다.", style = DenebType.body, color = denebHint())
+                } else {
+                    proposals.forEachIndexed { i, p ->
+                        if (i > 0) {
+                            Spacer(Modifier.height(8.dp))
+                            HorizontalDivider(color = denebHairline())
+                            Spacer(Modifier.height(8.dp))
+                        }
+                        CalendarProposalRow(p, onAccept = { onAccept(p.id) }, onReject = { onReject(p.id) })
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CalendarProposalRow(
+    p: ai.deneb.deneb.generated.CalendarProposalOut,
+    onAccept: () -> Unit,
+    onReject: () -> Unit,
+) {
+    Column(Modifier.fillMaxWidth()) {
+        Text(p.title, style = DenebType.rowTitle, color = MaterialTheme.colorScheme.onBackground, maxLines = 2)
+        Spacer(Modifier.height(2.dp))
+        val when_ = if (p.allDay) p.start else p.start.replace("T", " ").take(16)
+        val kindLabel = if (p.kind == "deadline") "기한" else "일정"
+        Text("$when_ · $kindLabel", style = DenebType.meta, color = denebHint())
+        if (p.sourceSubject.isNotBlank()) {
+            Text("메일: ${p.sourceSubject}", style = DenebType.meta, color = denebHint(), maxLines = 1)
+        }
+        Spacer(Modifier.height(8.dp))
+        Row {
+            FilledTonalButton(
+                onClick = onAccept,
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
+            ) { Text("수락") }
+            Spacer(Modifier.width(8.dp))
+            TextButton(onClick = onReject, contentPadding = PaddingValues(horizontal = 12.dp)) { Text("거절") }
+        }
     }
 }
 

@@ -40,6 +40,17 @@ data class CalendarEventOut(
 )
 
 @Serializable
+data class CalendarProposalOut(
+    val id: String = "",
+    val title: String = "",
+    val start: String = "",
+    val allDay: Boolean = false,
+    val kind: String = "",
+    val sourceSubject: String = "",
+    val sourceFrom: String = "",
+)
+
+@Serializable
 data class DropboxEntryOut(
     val tag: String = "",
     val name: String = "",

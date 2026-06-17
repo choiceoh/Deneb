@@ -197,6 +197,11 @@ class DenebGatewayClient(
     internal val _denebCalendar = MutableStateFlow<List<CalendarEvent>>(emptyList())
     val denebCalendar: StateFlow<List<CalendarEvent>> = _denebCalendar
 
+    // Pending calendar proposals (the calendar bell) — schedule-worthy items mail
+    // analysis surfaced, awaiting accept/reject.
+    internal val _denebCalProposals = MutableStateFlow<List<ai.deneb.deneb.generated.CalendarProposalOut>>(emptyList())
+    val denebCalProposals: StateFlow<List<ai.deneb.deneb.generated.CalendarProposalOut>> = _denebCalProposals
+
     // Native-client handshake snapshot: gateway version, active model, and
     // feature flags exposed by miniapp.client.hello.
     private val _clientStatus = MutableStateFlow<ClientStatus?>(null)
@@ -321,6 +326,7 @@ class DenebGatewayClient(
         _denebMemories.value = emptyList()
         _denebScheduledTasks.value = emptyList()
         _denebCalendar.value = emptyList()
+        _denebCalProposals.value = emptyList()
         _denebModels.value = emptyList()
         _denebRoleModels.value = emptyMap()
         _denebModelAdvisories.value = emptyList()

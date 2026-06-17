@@ -148,6 +148,11 @@ internal data class SenderContextPayload(
 @Serializable
 internal data class CalListPayload(val events: List<CalendarEventOut> = emptyList())
 
+// Calendar-proposal (bell) list envelope. CalendarProposalOut is generated from
+// the Go struct so the bell list shares one source of truth with the gateway.
+@Serializable
+internal data class CalProposalsPayload(val proposals: List<ai.deneb.deneb.generated.CalendarProposalOut> = emptyList())
+
 // To-do list envelope. The element shape (TodoOut) is generated from the Go
 // todoOut struct, so the to-do list and calendar share one source of truth.
 @Serializable

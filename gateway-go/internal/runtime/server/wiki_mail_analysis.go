@@ -208,6 +208,10 @@ func (s *Server) makeMailAnalysisSink() func(*gmail.MessageDetail, gmailpoll.Ana
 		// File any extracted business document onto a 거래 wiki page (silent
 		// knowledge enrichment — no push).
 		s.fileDealFromMail(msg, res.Deal)
+		// Propose schedule-worthy items (meetings, deadlines) as calendar
+		// proposals the operator accepts from the calendar bell. See
+		// mail_calendar.go. No push — bell badge only.
+		s.autoProposeCalendarFromMail(msg, res.ActionItems, res.Deal)
 		return errors.Join(errs...)
 	}
 }
