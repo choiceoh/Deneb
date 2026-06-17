@@ -32,6 +32,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/calprop"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/dropbox"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmailpoll"
@@ -372,7 +373,8 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 			Client: func() (handlerminiapp.CalendarClient, error) {
 				return calendar.DefaultClient()
 			},
-			Local: resolveLocalCalendar(s.logger),
+			Local:     resolveLocalCalendar(s.logger),
+			Proposals: resolveCalendarProposals(s.logger),
 		}),
 
 		// Mini App To-do domain (miniapp.todo.*). The task-list companion to
@@ -774,6 +776,20 @@ func resolveLocalCalendar(logger *slog.Logger) handlerminiapp.LocalCalendar {
 	if err != nil {
 		if logger != nil {
 			logger.Error("local calendar store unavailable — add/edit/delete disabled", "error", err)
+		}
+		return nil
+	}
+	return store
+}
+
+// resolveCalendarProposals returns the process-wide calendar-proposal store
+// (the bell), or a nil interface when its file can't be read. Mirrors
+// resolveLocalCalendar. The store lives at {stateDir}/calendar_proposals.json.
+func resolveCalendarProposals(logger *slog.Logger) handlerminiapp.CalProposals {
+	store, err := calprop.Default()
+	if err != nil {
+		if logger != nil {
+			logger.Error("calendar proposal store unavailable — bell disabled", "error", err)
 		}
 		return nil
 	}

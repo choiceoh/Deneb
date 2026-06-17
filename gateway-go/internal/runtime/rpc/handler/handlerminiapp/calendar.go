@@ -52,8 +52,9 @@ type LocalCalendar interface {
 // CalendarDeps wraps the lazy Google client factory and the local store.
 // Either may be nil; handlers degrade (Google-only, local-only, or UNAVAILABLE).
 type CalendarDeps struct {
-	Client func() (CalendarClient, error)
-	Local  LocalCalendar
+	Client    func() (CalendarClient, error)
+	Local     LocalCalendar
+	Proposals CalProposals // calendar-event proposals (bell); nil = feature off
 }
 
 const (
@@ -111,7 +112,7 @@ func CalendarMethods(deps CalendarDeps) map[string]rpcutil.HandlerFunc {
 	if deps.Client == nil && deps.Local == nil {
 		return nil
 	}
-	return map[string]rpcutil.HandlerFunc{
+	m := map[string]rpcutil.HandlerFunc{
 		"miniapp.calendar.list_upcoming": calendarListUpcoming(deps),
 		"miniapp.calendar.list_range":    calendarListRange(deps),
 		"miniapp.calendar.get":           calendarGet(deps),
@@ -119,6 +120,14 @@ func CalendarMethods(deps CalendarDeps) map[string]rpcutil.HandlerFunc {
 		"miniapp.calendar.update":        calendarUpdate(deps),
 		"miniapp.calendar.delete":        calendarDelete(deps),
 	}
+	// Calendar-event proposals (the bell). Requires the local store to accept a
+	// proposal into. See calendar_proposals.go.
+	if deps.Proposals != nil && deps.Local != nil {
+		m["miniapp.calendar.proposals.list"] = calendarProposalsList(deps)
+		m["miniapp.calendar.proposals.accept"] = calendarProposalsAccept(deps)
+		m["miniapp.calendar.proposals.reject"] = calendarProposalsReject(deps)
+	}
+	return m
 }
 
 // listMerged returns Google events in [from, to] (when the Google client is
