@@ -54,6 +54,8 @@ var (
 		regexp.MustCompile(`(?i)(?:cid:|\[cid|\[image|<image|\blogo\b)`),
 		regexp.MustCompile(`(?i)(?:^|\s)(?:https?://|www\.)\S*(?:facebook|instagram|youtube|linkedin|twitter|x\.com|blog)\S*\s*$`),
 	}
+	bodyPrepTrailingSignoffRE = regexp.MustCompile(`^\s*(?:(?:[가-힣]{2,4}\s*)?(?:드림|올림|배상))[\s,.!！。]*$`)
+	bodyPrepMobileSignatureRE = regexp.MustCompile(`(?i)^\s*(?:sent\s+from\s+my|sent\s+from\s+outlook\s+for|나의\s+.+에서\s+보냄|iPhone에서\s+보냄|Galaxy에서\s+보냄|Android에서\s+보냄).*$`)
 )
 
 // cleanMailBodyForAnalysis removes trailing signature/contact blocks from the
@@ -386,6 +388,9 @@ func bodyPrepLooksLikeReplyHeaderLine(line string) bool {
 }
 
 func bodyPrepLooksLikeTrailingNoiseLine(line string) bool {
+	if bodyPrepClosingRE.MatchString(line) || bodyPrepTrailingSignoffRE.MatchString(line) || bodyPrepMobileSignatureRE.MatchString(line) {
+		return true
+	}
 	for _, re := range bodyPrepTrailingNoiseREs {
 		if re.MatchString(line) {
 			return true
