@@ -48,6 +48,9 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -113,6 +116,7 @@ fun DenebMailDetailScreen(
     var loadFailed by remember(messageId) { mutableStateOf(false) }
     var actionMsg by remember(messageId) { mutableStateOf<String?>(null) }
     var loadingFullBody by remember(messageId) { mutableStateOf(false) }
+    var showRawBody by remember(messageId) { mutableStateOf(false) }
 
     fun mergeWorkState(state: MailWorkState) {
         if (state.analysisStatus.isBlank() &&
@@ -342,20 +346,58 @@ fun DenebMailDetailScreen(
         Spacer(Modifier.height(16.dp))
         HorizontalDivider(color = denebHairline())
         Spacer(Modifier.height(12.dp))
+        val canShowRawBody = mail.bodyCleaned && mail.rawBody.isNotBlank()
+        val displayedBody = if (showRawBody && canShowRawBody) mail.rawBody else mail.body
+        val displayedBodyTotal = if (showRawBody && canShowRawBody) mail.rawBodyTotal else mail.bodyTotal
+        if (canShowRawBody) {
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                SingleChoiceSegmentedButtonRow(Modifier.weight(1f)) {
+                    SegmentedButton(
+                        selected = !showRawBody,
+                        onClick = {
+                            haptics.tap()
+                            showRawBody = false
+                        },
+                        shape = SegmentedButtonDefaults.itemShape(0, 2),
+                    ) { Text("정리본") }
+                    SegmentedButton(
+                        selected = showRawBody,
+                        onClick = {
+                            haptics.tap()
+                            showRawBody = true
+                        },
+                        shape = SegmentedButtonDefaults.itemShape(1, 2),
+                    ) { Text("원문") }
+                }
+                val hiddenLines = mail.bodyHiddenLineCount
+                if (hiddenLines > 0) {
+                    Text(
+                        "${hiddenLines}줄 정리",
+                        style = DenebType.meta,
+                        color = denebHint(),
+                    )
+                }
+            }
+            Spacer(Modifier.height(10.dp))
+        }
         // The body is plain text (gateway already rendered HTML → text), not
         // markdown — but its URLs must be tappable (auth/CTA mails are the
         // link) and the text copyable. Email addresses stay plain on purpose.
         SelectionContainer {
             LinkifiedText(
-                text = mail.body.ifBlank { "(본문 없음)" },
+                text = displayedBody.ifBlank { "(본문 없음)" },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurface,
             )
         }
-        if (mail.bodyTotal > mail.body.length) {
+        if (displayedBodyTotal > displayedBody.length) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    "${mail.bodyTotal}자 중 일부만 표시",
+                    "${displayedBodyTotal}자 중 일부만 표시",
                     style = DenebType.meta,
                     color = denebHint(),
                 )

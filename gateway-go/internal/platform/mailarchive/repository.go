@@ -14,6 +14,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/lmtpd"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailbody"
 )
 
 const (
@@ -714,6 +715,9 @@ func cloneDetail(detail *gmail.MessageDetail) *gmail.MessageDetail {
 }
 
 func snippetFromBody(body string) string {
+	if cleaned := strings.TrimSpace(mailbody.CleanForDisplay(body).Body); cleaned != "" {
+		body = cleaned
+	}
 	body = strings.TrimSpace(strings.Join(strings.Fields(body), " "))
 	const max = 360
 	if len([]rune(body)) <= max {

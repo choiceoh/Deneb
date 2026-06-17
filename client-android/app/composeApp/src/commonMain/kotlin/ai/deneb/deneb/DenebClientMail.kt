@@ -249,6 +249,11 @@ suspend fun DenebGatewayClient.fetchMailDetail(id: String, full: Boolean = false
         date = row.date,
         body = row.body,
         bodyTotal = row.bodyTotal,
+        rawBody = row.rawBody,
+        rawBodyTotal = row.rawBodyTotal,
+        bodyCleaned = row.bodyCleaned,
+        bodyHiddenBlockCount = row.bodyHiddenBlockCount,
+        bodyHiddenLineCount = row.bodyHiddenLineCount,
         attachments = row.attachments
             .filter { it.id.isNotBlank() }
             .map { MailAttachment(it.id, it.filename.ifBlank { it.mimeType }, it.mimeType, it.size) },

@@ -185,6 +185,38 @@ func TestGmailListRecent_NilLabelsSerializeAsEmptyArray(t *testing.T) {
 	}
 }
 
+func TestGmailListRecent_CleansHumanSnippet(t *testing.T) {
+	client := &fakeGmailClient{
+		searchFn: func(_ context.Context, _ string, _ int) ([]gmail.MessageSummary, error) {
+			return []gmail.MessageSummary{{
+				ID:      "m1",
+				Subject: "해남 인버터 배치",
+				Snippet: strings.Join([]string{
+					"주의: 외부 발신 메일입니다. 링크나 첨부파일을 열기 전 확인하세요.",
+					"---",
+					"",
+					"안녕하세요. 해남 인버터 배치 수량은 기존 안대로 유지하겠습니다.",
+					"OCI 인터뷰 전까지 수정 도면만 다시 공유 부탁드립니다.",
+				}, "\n"),
+			}}, nil
+		},
+	}
+	h := gmailListRecent(depsFor(client), nil)
+
+	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.list_recent", nil))
+	var got struct {
+		Messages []map[string]any `json:"messages"`
+	}
+	decode(t, resp, &got)
+	snippet := got.Messages[0]["snippet"].(string)
+	if strings.Contains(snippet, "외부 발신") || strings.Contains(snippet, "첨부파일을 열기") {
+		t.Fatalf("head noise leaked into snippet: %q", snippet)
+	}
+	if !strings.Contains(snippet, "해남 인버터 배치 수량") {
+		t.Fatalf("business snippet missing: %q", snippet)
+	}
+}
+
 func TestGmailListRecent_PriorityFields(t *testing.T) {
 	client := &fakeGmailClient{
 		searchFn: func(_ context.Context, _ string, _ int) ([]gmail.MessageSummary, error) {
@@ -604,6 +636,43 @@ func TestGmailGet_HappyPath(t *testing.T) {
 	att := atts[0].(map[string]any)
 	if att["filename"] != "doc.pdf" || att["id"] != "att1" {
 		t.Errorf("attachment shape: %+v", att)
+	}
+}
+
+func TestGmailGet_ReturnsCleanDisplayBodyAndRawBody(t *testing.T) {
+	body := strings.Join([]string{
+		"안녕하세요. 기아 화성 모듈 납기 변경안 검토 부탁드립니다.",
+		"6월 24일 입고분은 기존 수량 유지, 6월 28일 입고분만 96장으로 조정해 주세요.",
+		"",
+		"감사합니다.",
+		"홍길동 드림",
+	}, "\n")
+	client := &fakeGmailClient{
+		getMessageFn: func(_ context.Context, _ string) (*gmail.MessageDetail, error) {
+			return &gmail.MessageDetail{ID: "m1", Body: body}, nil
+		},
+	}
+	h := gmailGet(depsFor(client))
+	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.get", map[string]any{"id": "m1"}))
+
+	var got map[string]any
+	decode(t, resp, &got)
+	displayBody := got["body"].(string)
+	rawBody := got["rawBody"].(string)
+	if strings.Contains(displayBody, "감사합니다") || strings.Contains(displayBody, "홍길동 드림") {
+		t.Fatalf("display body leaked tail noise:\n%s", displayBody)
+	}
+	if !strings.Contains(displayBody, "6월 28일 입고분만 96장") {
+		t.Fatalf("display body missing business text:\n%s", displayBody)
+	}
+	if !strings.Contains(rawBody, "홍길동 드림") {
+		t.Fatalf("raw body must preserve original tail:\n%s", rawBody)
+	}
+	if got["bodyCleaned"] != true {
+		t.Fatalf("bodyCleaned = %v, want true", got["bodyCleaned"])
+	}
+	if got["bodyHiddenLineCount"].(float64) < 2 {
+		t.Fatalf("bodyHiddenLineCount = %v, want >= 2", got["bodyHiddenLineCount"])
 	}
 }
 
