@@ -280,6 +280,53 @@ func TestFormatEmailForAnalysis_StripsTrailingLogoResidueLine(t *testing.T) {
 	}
 }
 
+func TestFormatEmailForAnalysis_StripsTrailingClosingOnly(t *testing.T) {
+	body := strings.Join([]string{
+		"안녕하세요. 기아 화성 모듈 납기 변경안 검토 부탁드립니다.",
+		"6월 24일 입고분은 기존 수량 유지, 6월 28일 입고분만 96장으로 조정해 주세요.",
+		"",
+		"감사합니다.",
+	}, "\n")
+	msg := &gmail.MessageDetail{
+		From: "sender@example.com",
+		To:   "me@example.com",
+		Body: body,
+	}
+
+	result := FormatEmailForAnalysis(msg)
+	if !strings.Contains(result, "6월 28일 입고분만 96장") {
+		t.Fatalf("business body missing after trailing closing strip:\n%s", result)
+	}
+	if strings.Contains(result, "감사합니다") {
+		t.Fatalf("trailing closing leaked:\n%s", result)
+	}
+}
+
+func TestFormatEmailForAnalysis_StripsTrailingKoreanSignoff(t *testing.T) {
+	body := strings.Join([]string{
+		"안녕하세요. 해남 인버터 배치 수량은 기존 안대로 유지하겠습니다.",
+		"OCI 인터뷰 전까지 수정 도면만 다시 공유 부탁드립니다.",
+		"",
+		"감사합니다",
+		"홍길동 드림",
+	}, "\n")
+	msg := &gmail.MessageDetail{
+		From: "sender@example.com",
+		To:   "me@example.com",
+		Body: body,
+	}
+
+	result := FormatEmailForAnalysis(msg)
+	if !strings.Contains(result, "OCI 인터뷰 전까지 수정 도면") {
+		t.Fatalf("business body missing after signoff strip:\n%s", result)
+	}
+	for _, gone := range []string{"감사합니다", "홍길동 드림"} {
+		if strings.Contains(result, gone) {
+			t.Fatalf("trailing signoff leaked %q:\n%s", gone, result)
+		}
+	}
+}
+
 func TestFormatEmailForAnalysis_StripsBlankHeavySignature(t *testing.T) {
 	body := strings.Join([]string{
 		"안녕하세요. 납품 일정은 6월 24일 기준으로 유지하겠습니다.",
@@ -395,5 +442,19 @@ func TestFormatEmailForAnalysis_DoesNotStripTinyReplySignature(t *testing.T) {
 	result := FormatEmailForAnalysis(msg)
 	if !strings.Contains(result, "김대희 부장") {
 		t.Fatalf("tiny reply signature should remain to avoid over-stripping:\n%s", result)
+	}
+}
+
+func TestFormatEmailForAnalysis_DoesNotStripTinyClosingOnlyReply(t *testing.T) {
+	body := "검토했습니다.\n\n감사합니다"
+	msg := &gmail.MessageDetail{
+		From: "sender@example.com",
+		To:   "me@example.com",
+		Body: body,
+	}
+
+	result := FormatEmailForAnalysis(msg)
+	if !strings.Contains(result, "감사합니다") {
+		t.Fatalf("tiny reply closing should remain to avoid over-stripping:\n%s", result)
 	}
 }
