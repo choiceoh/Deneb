@@ -396,3 +396,23 @@ func TestCalendar_PrepPullsLinkedContext(t *testing.T) {
 		t.Errorf("prep missing linked-context directive:\n%s", out)
 	}
 }
+
+func TestCalendar_PrepSkipsAllDayForNextMeeting(t *testing.T) {
+	local := newTestLocalCal(t)
+	loc := calDisplayLoc()
+	now := time.Now().In(loc)
+	// An all-day marker today (sorts first) + a timed meeting — "다음 미팅" should
+	// be the meeting, not the all-day block.
+	allDayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
+	if _, err := local.Create(localcal.CreateInput{Summary: "휴가", Start: allDayStart, AllDay: true}); err != nil {
+		t.Fatalf("seed all-day: %v", err)
+	}
+	timedStart := now.Add(2 * time.Hour)
+	if _, err := local.Create(localcal.CreateInput{Summary: "ZTT 미팅", Start: timedStart, End: timedStart.Add(time.Hour)}); err != nil {
+		t.Fatalf("seed timed: %v", err)
+	}
+	out := callCal(t, &toolctx.CalendarDeps{Local: local}, map[string]any{"action": "prep"})
+	if !strings.Contains(out, "ZTT 미팅") || strings.Contains(out, "휴가") {
+		t.Errorf("prep should target the next timed meeting, not the all-day block:\n%s", out)
+	}
+}
