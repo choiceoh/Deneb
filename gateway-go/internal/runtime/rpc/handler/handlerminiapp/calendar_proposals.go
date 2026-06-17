@@ -162,14 +162,19 @@ func calendarProposalsReject(deps CalendarDeps) rpcutil.HandlerFunc {
 }
 
 // proposalTimes resolves a proposal's Start string into event start/end times.
-// All-day → [date 00:00, +24h); timed → [start, +1h).
+// All-day events anchor at local NOON (not midnight) so the date survives the
+// store's RFC3339 round-trip — a local-midnight instant serializes with a TZ
+// offset that can roll back to the previous day in UTC, which showed a 6/20
+// proposal as a 6/19 event. The AllDay flag drives whole-day rendering, so the
+// time-of-day is cosmetic. Timed → [start, +1h).
 func proposalTimes(p *calprop.Proposal) (start, end time.Time, allDay bool, err error) {
 	if p.AllDay {
 		d, perr := time.ParseInLocation("2006-01-02", p.Start, time.Local)
 		if perr != nil {
 			return time.Time{}, time.Time{}, false, perr
 		}
-		return d, d.Add(24 * time.Hour), true, nil
+		start = time.Date(d.Year(), d.Month(), d.Day(), 12, 0, 0, 0, time.Local)
+		return start, start.Add(time.Hour), true, nil
 	}
 	t, perr := time.Parse(time.RFC3339, p.Start)
 	if perr != nil {
