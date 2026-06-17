@@ -104,6 +104,7 @@ class DenebGatewayClient(
     internal val jsonCodec = Json {
         ignoreUnknownKeys = true
         isLenient = true
+        coerceInputValues = true
     }
 
     internal val http = httpClient {

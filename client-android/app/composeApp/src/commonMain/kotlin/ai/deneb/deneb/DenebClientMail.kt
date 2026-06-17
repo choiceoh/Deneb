@@ -9,7 +9,7 @@ import io.ktor.client.plugins.timeout
 import io.ktor.client.request.get
 import io.ktor.http.encodeURLParameter
 import kotlinx.coroutines.flow.update
-import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonObject
@@ -137,19 +137,47 @@ suspend fun DenebGatewayClient.refreshMailNativeStatus(): MailNativeStatus? {
 
 // --- Default inbox cache (cache-then-network) -----------------------------
 // Only the no-query inbox list is cached, encrypted in settings, for an instant
-// mail-tab render. Mirrors the transcript cache; the network refresh above
+// mail-tab render. The owner fingerprint prevents a prior gateway/account cache
+// from rendering under the current URL/token if credential migration or a manual
+// settings edit bypassed the normal cache purge path. The network refresh above
 // overwrites with the authoritative list.
 private val mailCacheJson = Json { ignoreUnknownKeys = true }
-private val mailCacheSerializer = ListSerializer(MailMessage.serializer())
+
+@Serializable
+private data class MailCacheEnvelope(
+    val owner: String = "",
+    val rows: List<MailMessage> = emptyList(),
+)
+
+internal fun mailCacheOwner(url: String, token: String): String {
+    val normalizedUrl = url.trim().trimEnd('/')
+    return "$normalizedUrl#${stableMailCacheFingerprint(token)}"
+}
+
+private fun stableMailCacheFingerprint(value: String): String {
+    var hash = 1125899906842597L
+    value.forEach { hash = hash * 131 + it.code }
+    return "${value.length}:$hash"
+}
+
+internal fun encodeMailCache(rows: List<MailMessage>, owner: String): String = mailCacheJson.encodeToString(
+    MailCacheEnvelope(owner = owner, rows = rows),
+)
+
+internal fun decodeMailCache(json: String, expectedOwner: String): List<MailMessage>? = runCatching {
+    mailCacheJson.decodeFromString<MailCacheEnvelope>(json)
+}.getOrNull()
+    ?.takeIf { it.owner == expectedOwner }
+    ?.rows
+    ?.takeIf { it.isNotEmpty() }
 
 internal fun DenebGatewayClient.loadCachedMail(): List<MailMessage>? {
     val json = appSettings.getCachedMailList() ?: return null
-    return runCatching { mailCacheJson.decodeFromString(mailCacheSerializer, json) }
-        .getOrNull()?.takeIf { it.isNotEmpty() }
+    return decodeMailCache(json, mailCacheOwner(gatewayUrl, clientToken))
 }
 
 internal fun DenebGatewayClient.storeCachedMail(rows: List<MailMessage>) {
-    appSettings.putCachedMailList(mailCacheJson.encodeToString(mailCacheSerializer, rows))
+    appSettings.putCachedMailList(encodeMailCache(rows, mailCacheOwner(gatewayUrl, clientToken)))
 }
 
 /**

@@ -3,6 +3,7 @@ package ai.deneb.deneb
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
@@ -68,6 +69,34 @@ class DenebClientMailReadOverlayTest {
         recordReadId(set, "c", max = 2) // evicts the oldest
         assertEquals(setOf("a", "c"), set, "recently re-read id survives; the now-oldest is evicted")
         assertFalse("b" in set)
+    }
+
+    @Test
+    fun mail_cache_is_scoped_to_gateway_owner() {
+        val owner = mailCacheOwner("https://srv1.example.test/", "token-a")
+        val encoded = encodeMailCache(listOf(row("m1", true)), owner)
+
+        assertEquals("m1", decodeMailCache(encoded, owner)?.single()?.id)
+        assertNull(decodeMailCache(encoded, mailCacheOwner("https://srv2.example.test/", "token-a")))
+        assertNull(decodeMailCache(encoded, mailCacheOwner("https://srv1.example.test/", "token-b")))
+    }
+
+    @Test
+    fun mail_cache_rejects_legacy_unscoped_rows() {
+        val legacy = """
+            [
+              {
+                "id": "legacy",
+                "from": "a@b.com",
+                "subject": "old",
+                "snippet": "cached",
+                "date": "2026-06-11T00:00:00Z",
+                "unread": true
+              }
+            ]
+        """.trimIndent()
+
+        assertNull(decodeMailCache(legacy, mailCacheOwner("https://srv1.example.test", "token")))
     }
 
     @Test
