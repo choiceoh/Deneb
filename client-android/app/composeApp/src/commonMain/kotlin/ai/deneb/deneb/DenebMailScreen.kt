@@ -27,10 +27,15 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.FilterList
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -72,11 +77,11 @@ import kotlin.time.Clock
  * long-press a row (with haptic) to multi-select; a flat bottom bar runs bulk
  * read / archive / trash, and "더 보기" pages through nextPageToken. Tapping a
  * row opens the detail screen. The search field runs a full-mailbox native mail
- * query (IME search submits; clearing it returns to the inbox view). It is the
- * first list item, parked just above the viewport (iOS Mail style): the inbox
- * opens without it, dragging the list down reveals it, and pulling past it
- * still triggers the refresh. Controls (checkbox, buttons, search field, pull
- * refresh) stay Material; only the presentation is Deneb.
+ * query (IME search submits; clearing it returns to the inbox view). Search and
+ * native filters stay out of the list until the top-right toolbar icons open
+ * them, so the inbox starts directly at the messages. Controls (checkbox,
+ * buttons, search field, pull refresh) stay Material; only the presentation is
+ * Deneb.
  */
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -109,6 +114,8 @@ fun DenebMailScreen(
     // is the query the current list actually came from (null = default inbox).
     var searchText by remember { mutableStateOf("") }
     var activeQuery by remember { mutableStateOf<String?>(null) }
+    var searchVisible by remember { mutableStateOf(false) }
+    var filtersVisible by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         client.refreshMailNativeStatus()
@@ -142,10 +149,59 @@ fun DenebMailScreen(
         }
     }
 
+    val offlineCapable = nativeStatus?.offlineCapable == true
+    val activeFilter = remember(activeQuery, offlineCapable) {
+        mailNativeFilters(offlineCapable)
+            .firstOrNull { activeQuery.normalizeMailQuery() == it.query.normalizeMailQuery() }
+    }
+    val hasFreeTextSearch = activeQuery.normalizeMailQuery() != null && activeFilter?.query.normalizeMailQuery() != activeQuery.normalizeMailQuery()
+    val showSearchField = searchVisible || hasFreeTextSearch
+    val filterActive = activeFilter?.query.normalizeMailQuery() != null
+    val screenTitle = when {
+        hasFreeTextSearch -> "메일 검색"
+        filterActive -> activeFilter?.label ?: "받은 메일"
+        else -> "받은 메일"
+    }
+
     DenebScreenScaffold(
-        title = if (activeQuery != null) "메일 검색" else "받은 메일",
+        title = screenTitle,
         onBack = onBack,
         tabBar = navigationTabBar,
+        actions = {
+            if (!selecting) {
+                IconButton(
+                    onClick = {
+                        haptics.tap()
+                        if (showSearchField && !hasFreeTextSearch) {
+                            searchVisible = false
+                            searchText = ""
+                        } else {
+                            searchVisible = true
+                        }
+                    },
+                    modifier = Modifier.size(40.dp),
+                ) {
+                    Icon(
+                        Icons.Outlined.Search,
+                        contentDescription = if (showSearchField) "메일 검색 닫기" else "메일 검색 열기",
+                        tint = if (showSearchField) MaterialTheme.colorScheme.primary else denebHint(),
+                    )
+                }
+                IconButton(
+                    onClick = {
+                        haptics.tap()
+                        filtersVisible = !filtersVisible
+                    },
+                    modifier = Modifier.size(40.dp),
+                ) {
+                    Icon(
+                        Icons.Outlined.FilterList,
+                        contentDescription = if (filtersVisible) "메일 필터 닫기" else "메일 필터 열기",
+                        tint = if (filtersVisible || filterActive) MaterialTheme.colorScheme.primary else denebHint(),
+                    )
+                }
+            }
+        },
         // The desktop split-view always shows this pane, so a back affordance is noise;
         // fillWidth keeps the column inside the 380dp pane instead of the desktop cap.
         showBack = !panelMode,
@@ -185,13 +241,12 @@ fun DenebMailScreen(
             }
         }
 
-        // The search field lives inside the list as item 0, and the list starts
-        // at item 1 so the field sits just above the viewport: dragging the list
-        // down reveals it, pulling past it still reaches the refresh indicator.
-        // (When the content is shorter than the viewport the offset clamps to 0
-        // and the field simply shows — with no scroll range there is no way to
-        // pull it out, so that is the right fallback.)
-        val listState = rememberLazyListState(initialFirstVisibleItemIndex = 1)
+        val listState = rememberLazyListState()
+        LaunchedEffect(showSearchField, filtersVisible) {
+            if (showSearchField || filtersVisible) {
+                listState.animateScrollToItem(0)
+            }
+        }
         LaunchedEffect(listState, nextToken, activeQuery) {
             snapshotFlow {
                 val layout = listState.layoutInfo
@@ -225,36 +280,40 @@ fun DenebMailScreen(
                     val sections = remember(mail, today) { mailSections(mail, today) }
                     LazyColumn(Modifier.fillMaxSize(), state = listState) {
                         if (!selecting) {
-                            item(key = "search") {
-                                DenebSearchField(
-                                    query = searchText,
-                                    onQueryChange = {
-                                        searchText = it
-                                        // Clearing the field (✕ or backspace-to-empty) returns to the inbox.
-                                        if (it.isBlank() && activeQuery != null) runSearch("")
-                                    },
-                                    placeholder = "전체 메일 검색 (키워드, from:…)",
-                                    onSearch = { runSearch(searchText) },
-                                    clearContentDescription = "검색 지우기",
-                                    // Field carries its own 8dp inset; 16dp more aligns the pill with
-                                    // the screen's 24dp content margins.
-                                    modifier = Modifier.padding(horizontal = 16.dp),
-                                )
+                            if (showSearchField) {
+                                item(key = "search") {
+                                    DenebSearchField(
+                                        query = searchText,
+                                        onQueryChange = {
+                                            searchText = it
+                                            // Clearing the field (✕ or backspace-to-empty) returns to the inbox.
+                                            if (it.isBlank() && activeQuery != null) runSearch("")
+                                        },
+                                        placeholder = "전체 메일 검색 (키워드, from:…)",
+                                        onSearch = { runSearch(searchText) },
+                                        clearContentDescription = "검색 지우기",
+                                        // Field carries its own 8dp inset; 16dp more aligns the pill with
+                                        // the screen's 24dp content margins.
+                                        modifier = Modifier.padding(horizontal = 16.dp),
+                                    )
+                                }
                             }
-                            item(key = "native-filters") {
-                                MailNativeFilterRow(
-                                    activeQuery = activeQuery,
-                                    offlineCapable = nativeStatus?.offlineCapable == true,
-                                    onPick = { query ->
-                                        searchText = query.orEmpty()
-                                        runSearch(query.orEmpty())
-                                    },
-                                )
+                            if (filtersVisible) {
+                                item(key = "native-filters") {
+                                    MailNativeFilterRow(
+                                        activeQuery = activeQuery,
+                                        offlineCapable = offlineCapable,
+                                        onPick = { query ->
+                                            searchText = query.orEmpty()
+                                            runSearch(query.orEmpty())
+                                        },
+                                    )
+                                }
                             }
                         }
-                        // Error and empty render inside the list so the search field
-                        // stays reachable — a failed or empty *search* must keep the
-                        // field available to edit or clear the query.
+                        // Error and empty render inside the list so toolbar search
+                        // and filter controls can still be opened after a failure or
+                        // empty result.
                         if (mail.isEmpty() && loadOk == false) {
                             item(key = "load-error") {
                                 Box(Modifier.fillParentMaxSize(), contentAlignment = Alignment.Center) {
@@ -516,20 +575,20 @@ internal fun shortDate(date: String): String = runCatching {
 
 private data class MailNativeFilter(val label: String, val query: String?)
 
+private fun mailNativeFilters(offlineCapable: Boolean): List<MailNativeFilter> = buildList {
+    add(MailNativeFilter("받은함", null))
+    add(MailNativeFilter("첨부", "has:attachment"))
+    add(MailNativeFilter("7일", "{in:inbox is:unread} newer_than:7d"))
+    if (offlineCapable) add(MailNativeFilter("전체", "in:anywhere"))
+}
+
 @Composable
 private fun MailNativeFilterRow(
     activeQuery: String?,
     offlineCapable: Boolean,
     onPick: (String?) -> Unit,
 ) {
-    val filters = remember(offlineCapable) {
-        buildList {
-            add(MailNativeFilter("받은함", null))
-            add(MailNativeFilter("첨부", "has:attachment"))
-            add(MailNativeFilter("7일", "{in:inbox is:unread} newer_than:7d"))
-            if (offlineCapable) add(MailNativeFilter("전체", "in:anywhere"))
-        }
-    }
+    val filters = remember(offlineCapable) { mailNativeFilters(offlineCapable) }
     Row(
         Modifier
             .fillMaxWidth()

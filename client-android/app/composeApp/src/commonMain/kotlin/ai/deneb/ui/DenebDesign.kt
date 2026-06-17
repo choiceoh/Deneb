@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -28,6 +29,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -175,6 +177,7 @@ fun DenebScreenScaffold(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     tabBar: (@Composable () -> Unit)? = null,
+    actions: (@Composable RowScope.() -> Unit)? = null,
     maxContentWidth: Dp = DenebMaxContentWidth,
     showBack: Boolean = true,
     fillWidth: Boolean = false,
@@ -227,11 +230,22 @@ fun DenebScreenScaffold(
                                 )
                             }
                         }
-                        Text(
-                            text = title,
-                            style = DenebType.viewTitle,
-                            color = MaterialTheme.colorScheme.onBackground,
-                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = title,
+                                style = DenebType.viewTitle,
+                                color = MaterialTheme.colorScheme.onBackground,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f),
+                            )
+                            if (actions != null) {
+                                Row(verticalAlignment = Alignment.CenterVertically, content = actions)
+                            }
+                        }
                     }
                     content()
                 }
