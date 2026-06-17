@@ -638,10 +638,10 @@ internal fun ChatModeScreen(
                                                 // the bars as it scrolls past, instead of reading as hard-cut /
                                                 // covered. The chat still fills the full height (small padding,
                                                 // not a wide gap) — it just flows under the bars, uncovered.
-                                                modifier = Modifier.fillMaxSize().verticalEdgeFade(top = 28.dp, bottom = 22.dp),
+                                                modifier = Modifier.fillMaxSize().verticalEdgeFade(top = 10.dp, bottom = 22.dp),
                                                 state = listState,
                                                 horizontalAlignment = CenterHorizontally,
-                                                contentPadding = PaddingValues(top = 6.dp, bottom = 8.dp),
+                                                contentPadding = PaddingValues(top = 2.dp, bottom = 8.dp),
                                             ) {
                                                 items(uiState.history, key = { it.id }, contentType = { it.role }) { history ->
                                                     // Readable measure on a wide desktop window: cap every row at the
