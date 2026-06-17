@@ -46,9 +46,21 @@ var (
 	}
 	bodyPrepReplyHeaderREs = []*regexp.Regexp{
 		regexp.MustCompile(`(?i)^\s*-{2,}\s*original\s+message\s*-{2,}\s*$`),
+		regexp.MustCompile(`(?i)^\s*-{2,}\s*forwarded\s+message\s*-{2,}\s*$`),
 		regexp.MustCompile(`^\s*-{2,}\s*원본\s*메시지\s*-{2,}\s*$`),
+		regexp.MustCompile(`^\s*-{2,}\s*전달된\s*메시지\s*-{2,}\s*$`),
+		regexp.MustCompile(`^\s*-{2,}\s*(?:邮件原件|原始邮件|转发邮件)\s*-{2,}\s*$`),
 		regexp.MustCompile(`(?i)^\s*(?:from|sent|to|cc|subject|date)\s*:`),
 		regexp.MustCompile(`^\s*(?:보낸\s*사람|보낸\s*날짜|받는\s*사람|참조|제목|날짜)\s*:`),
+		regexp.MustCompile(`^\s*(?:发件人|寄件者|发送时间|发送日期|收件人|抄送|主题|日期)\s*[:：]`),
+	}
+	bodyPrepStrongReplyBoundaryREs = []*regexp.Regexp{
+		regexp.MustCompile(`(?i)^\s*-{2,}\s*(?:original|forwarded)\s+(?:message|mail)\s*-{2,}\s*$`),
+		regexp.MustCompile(`^\s*-{2,}\s*(?:원본|전달된)\s*메시지\s*-{2,}\s*$`),
+		regexp.MustCompile(`^\s*-{2,}\s*(?:邮件原件|原始邮件|转发邮件)\s*-{2,}\s*$`),
+		regexp.MustCompile(`(?i)^\s*on\s+.{3,240}\bwrote\s*:\s*$`),
+		regexp.MustCompile(`^\s*.{3,240}<[^>]+@[^>]+>.*(?:작성|씀|写道)\s*:\s*$`),
+		regexp.MustCompile(`^\s*\d{4}년\s*\d{1,2}월\s*\d{1,2}일.{0,180}(?:작성|씀)\s*:\s*$`),
 	}
 	bodyPrepTrailingNoiseREs = []*regexp.Regexp{
 		regexp.MustCompile(`(?i)(?:cid:|\[cid|\[image|<image|\blogo\b)`),
@@ -98,8 +110,12 @@ func CleanForDisplay(body string) CleanResult {
 	lines = compactBodyPrepBlankLines(lines)
 	cleaned := strings.Join(lines, "\n")
 
-	cut := bodyPrepTailNoiseCutLine(lines)
-	cutKind := "boilerplate"
+	cut := bodyPrepReplyHistoryCutLine(lines)
+	cutKind := "history"
+	if cut < 0 {
+		cut = bodyPrepTailNoiseCutLine(lines)
+		cutKind = "boilerplate"
+	}
 	if cut < 0 {
 		cut = bodyPrepSignatureCutLine(lines)
 		cutKind = "signature"
@@ -222,6 +238,33 @@ func bodyPrepTailNoiseCutLine(lines []string) int {
 				return cut
 			}
 			continue
+		}
+	}
+	return -1
+}
+
+func bodyPrepReplyHistoryCutLine(lines []string) int {
+	if len(lines) == 0 {
+		return -1
+	}
+	for i, raw := range lines {
+		line := strings.TrimSpace(raw)
+		if line == "" {
+			continue
+		}
+		if bodyPrepLooksLikeStrongReplyBoundaryLine(line) {
+			if cut := bodyPrepReplyCutLine(lines, i); bodyPrepCutLeavesVisiblePrefix(lines, cut) {
+				return cut
+			}
+			continue
+		}
+		if !bodyPrepLooksLikeReplyHeaderLine(line) {
+			continue
+		}
+		if bodyPrepLocalReplyHeaderSignalCount(lines[i:], 8) >= 2 {
+			if cut := bodyPrepReplyCutLine(lines, i); bodyPrepCutLeavesVisiblePrefix(lines, cut) {
+				return cut
+			}
 		}
 	}
 	return -1
@@ -378,10 +421,14 @@ func bodyPrepSuffixSignatureSignalCount(lines []string) int {
 }
 
 func bodyPrepSuffixReplyHeaderSignalCount(lines []string) int {
+	return bodyPrepLocalReplyHeaderSignalCount(lines, bodyPrepSignatureTailLines)
+}
+
+func bodyPrepLocalReplyHeaderSignalCount(lines []string, maxLines int) int {
 	count := 0
 	limit := len(lines)
-	if limit > bodyPrepSignatureTailLines {
-		limit = bodyPrepSignatureTailLines
+	if maxLines > 0 && limit > maxLines {
+		limit = maxLines
 	}
 	for i := 0; i < limit; i++ {
 		line := strings.TrimSpace(lines[i])
@@ -415,6 +462,15 @@ func bodyPrepLooksLikeFooterLine(line string) bool {
 
 func bodyPrepLooksLikeReplyHeaderLine(line string) bool {
 	for _, re := range bodyPrepReplyHeaderREs {
+		if re.MatchString(line) {
+			return true
+		}
+	}
+	return false
+}
+
+func bodyPrepLooksLikeStrongReplyBoundaryLine(line string) bool {
+	for _, re := range bodyPrepStrongReplyBoundaryREs {
 		if re.MatchString(line) {
 			return true
 		}
