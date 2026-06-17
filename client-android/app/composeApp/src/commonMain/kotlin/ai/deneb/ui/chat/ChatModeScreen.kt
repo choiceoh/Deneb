@@ -325,8 +325,8 @@ internal fun ChatModeScreen(
                             // behind everything while the reply is being thought up; fades to
                             // black once the answer starts rendering. Drawn over the solid
                             // background but under the content (top bar / chat / input).
-                            // 챗봇 모드 전용 — 업무 모드(recall on)에서는 끈다.
-                            .generatingBackdrop(active = generatingActive && !uiState.recallEnabled)
+                            // 챗봇·업무 모드 모두에 적용 — 생성 중 글로우는 컨텍스트 토글과 무관.
+                            .generatingBackdrop(active = generatingActive)
                             .navigationBarsPadding()
                             .statusBarsPadding()
                             .imePadding(),
