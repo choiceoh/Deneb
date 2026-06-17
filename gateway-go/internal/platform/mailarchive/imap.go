@@ -26,6 +26,14 @@ type imapConn struct {
 	dl   time.Duration
 }
 
+// FetchedMessage is one raw RFC822 message returned by UID FETCH, retaining the
+// archive UID so callers can build stable locators for later detail/attachment
+// reads.
+type FetchedMessage struct {
+	UID string
+	Raw []byte
+}
+
 // dialIMAP connects and consumes the server greeting. addr is host:port.
 func dialIMAP(ctx context.Context, addr string, timeout time.Duration) (*imapConn, error) {
 	d := net.Dialer{Timeout: timeout}
@@ -172,10 +180,11 @@ func (c *imapConn) uidSearch(criteria string) ([]string, error) {
 	return uids, nil
 }
 
-// uidFetchBodies fetches full message bodies (BODY.PEEK[]) for the given UID set
-// (e.g. "1,4,9"). Returns raw RFC822 bytes per message (UID mapping is not
-// needed by callers — they dedup by Message-ID after parsing).
-func (c *imapConn) uidFetchBodies(uidSet string) ([][]byte, error) {
+// uidFetchMessages fetches full message bodies (BODY.PEEK[]) for the given UID
+// set (e.g. "1,4,9"). It preserves the returned UID for each FETCH entry so
+// higher-level repository code can re-open an already-listed message without a
+// fuzzy Message-ID search.
+func (c *imapConn) uidFetchMessages(uidSet string) ([]FetchedMessage, error) {
 	if strings.TrimSpace(uidSet) == "" {
 		return nil, nil
 	}
@@ -186,19 +195,37 @@ func (c *imapConn) uidFetchBodies(uidSet string) ([][]byte, error) {
 	if status != "OK" {
 		return nil, fmt.Errorf("imap fetch rejected: %s", status)
 	}
-	var bodies [][]byte
+	var out []FetchedMessage
 	for _, entry := range untagged {
 		// Each FETCH entry holds one literal (the body). Find where the literal
 		// payload starts: just after the first "{n}" marker's CRLF.
 		body, ok := extractLiteralPayload(entry)
 		if ok {
-			bodies = append(bodies, body)
+			out = append(out, FetchedMessage{
+				UID: extractFetchUID(entry),
+				Raw: body,
+			})
 		}
+	}
+	return out, nil
+}
+
+// uidFetchBodies is the older body-only helper used by the analysis thread
+// source. Keep it as a wrapper so that path remains unchanged.
+func (c *imapConn) uidFetchBodies(uidSet string) ([][]byte, error) {
+	msgs, err := c.uidFetchMessages(uidSet)
+	if err != nil {
+		return nil, err
+	}
+	bodies := make([][]byte, 0, len(msgs))
+	for _, msg := range msgs {
+		bodies = append(bodies, msg.Raw)
 	}
 	return bodies, nil
 }
 
 var anyLiteralRe = regexp.MustCompile(`\{(\d+)\}\r?\n`)
+var fetchUIDRe = regexp.MustCompile(`(?i)\bUID\s+(\d+)\b`)
 
 // extractLiteralPayload pulls the first literal's raw bytes out of a folded FETCH
 // entry produced by exec (which appended the literal bytes right after "{n}\r\n").
@@ -219,6 +246,14 @@ func extractLiteralPayload(entry []byte) ([]byte, bool) {
 		return nil, false
 	}
 	return entry[start : start+n], true
+}
+
+func extractFetchUID(entry []byte) string {
+	m := fetchUIDRe.FindSubmatch(entry)
+	if m == nil {
+		return ""
+	}
+	return string(m[1])
 }
 
 func (c *imapConn) logout() {

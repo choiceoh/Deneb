@@ -34,7 +34,6 @@ import (
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/clientauth"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
@@ -47,13 +46,11 @@ import (
 // maxMiniappChatStreamBodyBytes.
 const maxMiniappRPCBodyBytes = 128 << 20 // 128 MiB
 
-type miniappGmailAttachmentClient interface {
+type miniappMailAttachmentClient interface {
 	GetAttachment(ctx context.Context, messageID, attachmentID string) ([]byte, error)
 }
 
-var miniappGmailAttachmentClientFactory = func() (miniappGmailAttachmentClient, error) {
-	return gmail.DefaultClient()
-}
+var miniappMailAttachmentClientFactory func() (miniappMailAttachmentClient, error)
 
 // handleMiniappRPC bridges native-client HTTP POSTs into the existing RPC
 // dispatcher. It enforces client-token auth before dispatch and rejects any
@@ -128,10 +125,10 @@ func (s *Server) handleMiniappRPC(w http.ResponseWriter, r *http.Request) {
 	writeRPCJSON(w, r, resp, s.logger, frame.Method)
 }
 
-// handleMiniappGmailAttachment streams a Gmail attachment over a normal
+// handleMiniappGmailAttachment streams a mail attachment over a normal
 // authenticated GET. This path exists because a browser opening a download
 // link cannot attach a custom header; the native client puts the client token
-// in the query string and this handler verifies it before touching Gmail.
+// in the query string and this handler verifies it before touching mail storage.
 func (s *Server) handleMiniappGmailAttachment(w http.ResponseWriter, r *http.Request) {
 	if _, ok := s.authenticateMiniappDownloadRequest(w, r); !ok {
 		return
@@ -149,16 +146,20 @@ func (s *Server) handleMiniappGmailAttachment(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	client, err := miniappGmailAttachmentClientFactory()
+	factory := miniappMailAttachmentClientFactory
+	if factory == nil {
+		factory = s.newMiniappMailAttachmentClient
+	}
+	client, err := factory()
 	if err != nil || client == nil {
 		if err != nil {
 			s.writeJSON(w, http.StatusServiceUnavailable, map[string]any{
-				"error": "gmail client unavailable: " + err.Error(),
+				"error": "mail attachment client unavailable: " + err.Error(),
 			})
 			return
 		}
 		s.writeJSON(w, http.StatusServiceUnavailable, map[string]any{
-			"error": "gmail client unavailable",
+			"error": "mail attachment client unavailable",
 		})
 		return
 	}
@@ -166,7 +167,7 @@ func (s *Server) handleMiniappGmailAttachment(w http.ResponseWriter, r *http.Req
 	data, err := client.GetAttachment(r.Context(), messageID, attachmentID)
 	if err != nil {
 		s.writeJSON(w, statusForMiniappGmailAttachmentError(err), map[string]any{
-			"error": "gmail attachment download failed: " + err.Error(),
+			"error": "mail attachment download failed: " + err.Error(),
 		})
 		return
 	}

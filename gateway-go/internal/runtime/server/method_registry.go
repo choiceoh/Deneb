@@ -343,15 +343,11 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 			},
 		}),
 
-		// Mini App Gmail domain (miniapp.gmail.list_recent / get /
-		// mark_read / archive). Lazy factory around gmail.DefaultClient
-		// — if OAuth tokens are missing the gateway still starts; the
-		// RPC just returns UNAVAILABLE until the operator runs the
-		// Gmail auth flow.
+		// Native mail domain. The RPC namespace stays miniapp.gmail.* for
+		// client compatibility, but the server now prefers the on-box archive
+		// repository and keeps Gmail as a fallback for legacy queries/tokens.
 		handlerminiapp.GmailMethods(handlerminiapp.GmailDeps{
-			Client: func() (handlerminiapp.GmailClient, error) {
-				return gmail.DefaultClient()
-			},
+			Client: s.miniappMailClientFactory(denebDir),
 			// Same per-msgID cache directory the analyze handler/poller
 			// write to (the store is a stateless dir wrapper) — list rows
 			// prefer its LLM verdict over the heuristic below.

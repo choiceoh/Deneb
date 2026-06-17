@@ -92,11 +92,11 @@ func getMiniappAttachment(t *testing.T, s *Server, token string, params map[stri
 	return rec
 }
 
-func withMiniappAttachmentClientFactory(t *testing.T, factory func() (miniappGmailAttachmentClient, error)) {
+func withMiniappAttachmentClientFactory(t *testing.T, factory func() (miniappMailAttachmentClient, error)) {
 	t.Helper()
-	orig := miniappGmailAttachmentClientFactory
-	miniappGmailAttachmentClientFactory = factory
-	t.Cleanup(func() { miniappGmailAttachmentClientFactory = orig })
+	orig := miniappMailAttachmentClientFactory
+	miniappMailAttachmentClientFactory = factory
+	t.Cleanup(func() { miniappMailAttachmentClientFactory = orig })
 }
 
 func TestHandleMiniappRPC_ValidClientToken_Whoami(t *testing.T) {
@@ -136,7 +136,7 @@ func TestHandleMiniappGmailAttachment_ValidClientTokenStreamsBytes(t *testing.T)
 	token := withClientToken(t)
 	s := newTestServer(t)
 	client := &fakeMiniappAttachmentClient{data: []byte("%PDF")}
-	withMiniappAttachmentClientFactory(t, func() (miniappGmailAttachmentClient, error) {
+	withMiniappAttachmentClientFactory(t, func() (miniappMailAttachmentClient, error) {
 		return client, nil
 	})
 
@@ -190,7 +190,7 @@ func TestHandleMiniappGmailAttachment_MissingParams(t *testing.T) {
 func TestHandleMiniappGmailAttachment_ClientUnavailable(t *testing.T) {
 	token := withClientToken(t)
 	s := newTestServer(t)
-	withMiniappAttachmentClientFactory(t, func() (miniappGmailAttachmentClient, error) {
+	withMiniappAttachmentClientFactory(t, func() (miniappMailAttachmentClient, error) {
 		return nil, errors.New("OAuth not configured")
 	})
 
@@ -206,7 +206,7 @@ func TestHandleMiniappGmailAttachment_ClientUnavailable(t *testing.T) {
 func TestHandleMiniappGmailAttachment_GmailNotFound(t *testing.T) {
 	token := withClientToken(t)
 	s := newTestServer(t)
-	withMiniappAttachmentClientFactory(t, func() (miniappGmailAttachmentClient, error) {
+	withMiniappAttachmentClientFactory(t, func() (miniappMailAttachmentClient, error) {
 		return &fakeMiniappAttachmentClient{err: errors.New("Gmail API error (HTTP 404): not found")}, nil
 	})
 
