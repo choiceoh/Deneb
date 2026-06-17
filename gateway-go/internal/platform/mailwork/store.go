@@ -152,16 +152,21 @@ func (s *Store) Snapshot() map[string]MessageState {
 }
 
 func (s *Store) Summary() Summary {
+	summary, _ := s.SummaryWithError()
+	return summary
+}
+
+func (s *Store) SummaryWithError() (Summary, error) {
 	if s == nil {
-		return Summary{}
+		return Summary{}, nil
 	}
 	unlock := s.lock()
 	defer unlock()
 	st, err := s.loadLocked()
 	if err != nil {
-		return Summary{}
+		return Summary{}, err
 	}
-	return summarize(st.Messages)
+	return summarize(st.Messages), nil
 }
 
 func (s *Store) RememberMessage(in MessageInput) (MessageState, error) {

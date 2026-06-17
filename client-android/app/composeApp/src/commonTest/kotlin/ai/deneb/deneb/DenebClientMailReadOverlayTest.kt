@@ -162,4 +162,20 @@ class DenebClientMailReadOverlayTest {
 
         assertEquals("로컬 보관함 · 2개함 102통 · 미읽음 3 · 로컬정리 2 · 분석 5 · 실패 1 · 피드대기 2 · 일정 1 · 오프라인", line)
     }
+
+    @Test
+    fun native_status_line_surfaces_pipeline_error() {
+        val line = mailNativeStatusLine(
+            MailNativeStatus(
+                source = "archive",
+                available = true,
+                offlineCapable = false,
+                mailboxes = emptyList(),
+                overlay = MailNativeOverlay(messages = 0, read = 0, archived = 0, trashed = 0),
+                pipeline = MailNativePipeline(error = "invalid workflow state"),
+            ),
+        )
+
+        assertEquals("로컬 보관함 · 0개함 0통 · 분석상태 오류", line)
+    }
 }

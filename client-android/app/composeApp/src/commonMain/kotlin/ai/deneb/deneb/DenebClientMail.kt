@@ -139,6 +139,7 @@ suspend fun DenebGatewayClient.refreshMailNativeStatus(): MailNativeStatus? {
             calendarCandidates = p.pipeline.calendarCandidates,
             todoCandidates = p.pipeline.todoCandidates,
             updatedAt = p.pipeline.updatedAt,
+            error = p.pipeline.error,
         ),
         generatedAt = p.generatedAt,
         error = p.error,

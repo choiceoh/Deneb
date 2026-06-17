@@ -704,6 +704,7 @@ internal fun mailNativeStatusLine(status: MailNativeStatus?): String? {
 }
 
 private fun mailPipelineStatusParts(pipeline: MailNativePipeline): List<String> = buildList {
+    if (pipeline.error.isNotBlank()) add("분석상태 오류")
     if (pipeline.analyzed > 0) add("분석 ${pipeline.analyzed}")
     if (pipeline.analyzing > 0) add("진행 ${pipeline.analyzing}")
     if (pipeline.failed > 0) add("실패 ${pipeline.failed}")

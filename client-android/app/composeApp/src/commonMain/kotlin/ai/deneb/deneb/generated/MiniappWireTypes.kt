@@ -157,6 +157,7 @@ data class MailNativePipelineOut(
     val calendarCandidates: Int = 0,
     val todoCandidates: Int = 0,
     val updatedAt: String = "",
+    val error: String = "",
 )
 
 @Serializable

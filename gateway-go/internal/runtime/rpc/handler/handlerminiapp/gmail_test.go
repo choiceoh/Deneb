@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -878,6 +879,23 @@ func TestGmailNativeStatus_GmailFallbackClient(t *testing.T) {
 	decode(t, resp, &got)
 	if got.Source != "gmail" || !got.Available || got.OfflineCapable {
 		t.Fatalf("status = %#v, want gmail available without offline capability", got)
+	}
+}
+
+func TestGmailNativeStatus_SurfacePipelineStateError(t *testing.T) {
+	path := t.TempDir() + "/mail_work_state.json"
+	if err := os.WriteFile(path, []byte("{not-json"), 0o600); err != nil {
+		t.Fatalf("seed corrupt work state: %v", err)
+	}
+	deps := depsFor(&fakeGmailClient{})
+	deps.WorkState = mailwork.New(path)
+	h := gmailNativeStatus(deps)
+
+	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.native_status", nil))
+	var got mailNativeStatusOut
+	decode(t, resp, &got)
+	if got.Pipeline.Error != "state_load_failed" {
+		t.Fatalf("pipeline error = %q, want state_load_failed", got.Pipeline.Error)
 	}
 }
 
