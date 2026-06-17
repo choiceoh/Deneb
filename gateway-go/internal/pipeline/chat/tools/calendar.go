@@ -101,8 +101,12 @@ func ToolCalendar(d *toolctx.CalendarDeps) toolctx.ToolFunc {
 			return calActionDelete(d, p), nil
 		case "free_slots":
 			return calActionFreeSlots(ctx, d, p), nil
+		case "brief":
+			return calActionBrief(ctx, d, p), nil
+		case "prep":
+			return calActionPrep(ctx, d, p), nil
 		default:
-			return fmt.Sprintf("알 수 없는 액션: %s. 사용 가능: list(일정 조회), get(상세), create(추가), update(수정), delete(삭제), free_slots(빈 시간 찾기)", p.Action), nil
+			return fmt.Sprintf("알 수 없는 액션: %s. 사용 가능: list(일정 조회), get(상세), create(추가), update(수정), delete(삭제), free_slots(빈 시간 찾기), brief(브리핑), prep(미팅 준비)", p.Action), nil
 		}
 	}
 }
@@ -140,6 +144,57 @@ func calActionList(ctx context.Context, d *toolctx.CalendarDeps, p calParams) st
 	}
 	sb.WriteString("\n상세·수정·삭제는 calendar(action=\"get|update|delete\", id=\"...\"). 빈 시간은 free_slots.")
 	return strings.TrimRight(sb.String(), "\n")
+}
+
+// --- brief ---------------------------------------------------------------
+
+// calActionBrief renders a briefing skeleton for the agent: the window's events
+// (default: the rest of today) with their kind + linked origin shown inline and
+// any conflicts flagged, then a directive to pull the linked-mail context and
+// synthesize a human-readable brief. The link annotations come from the event
+// provenance (Source/SourceLabel/Kind) — so a meeting carries which mail it came
+// from, and the brief can say *why* it matters, not just *when*.
+func calActionBrief(ctx context.Context, d *toolctx.CalendarDeps, p calParams) string {
+	from, to := calBriefWindow(p)
+	events, warn := calMerged(ctx, d, from, to)
+	if len(events) == 0 {
+		msg := fmt.Sprintf("%s ~ %s 브리핑할 일정이 없습니다.", calDay(from), calDay(to))
+		if warn != "" {
+			msg += "\n(" + warn + ")"
+		}
+		return msg
+	}
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "📋 %s ~ %s 일정 %d건:\n", calDay(from), calDay(to), len(events))
+	for i, e := range events {
+		sb.WriteString(calListRow(i+1, e))
+	}
+	if conflicts := detectConflicts(events); len(conflicts) > 0 {
+		sb.WriteString("\n⚠️ 겹치는 일정:\n")
+		for _, c := range conflicts {
+			fmt.Fprintf(&sb, "  - %s ↔ %s\n", c[0], c[1])
+		}
+	}
+	if warn != "" {
+		sb.WriteString("\n(" + warn + ")")
+	}
+	sb.WriteString("\n\n이걸 사람이 바로 읽을 브리핑으로 정리해. 연결된 일정([미팅]·「메일 제목」·mail:<id>)은 mail_archive로 원본 맥락을 확인해 왜 지금 중요한지·무엇을 준비해야 하는지 한 줄씩 덧붙이고, 겹치는 일정이 있으면 먼저 경고해. 연결·맥락 없는 일정은 시간·제목만 간단히.")
+	return strings.TrimRight(sb.String(), "\n")
+}
+
+// calBriefWindow resolves the briefing window: an explicit from/to or hours_ahead
+// wins (e.g. "이번 주"); otherwise it defaults to the rest of today (now → next
+// local midnight), the natural "오늘 브리핑" scope.
+func calBriefWindow(p calParams) (from, to time.Time) {
+	if strings.TrimSpace(p.From) != "" || strings.TrimSpace(p.To) != "" || p.HoursAhead > 0 {
+		if f, t, errMsg := calResolveWindow(p.From, p.To, p.HoursAhead); errMsg == "" {
+			return f, t
+		}
+	}
+	loc := calDisplayLoc()
+	now := time.Now().In(loc)
+	endToday := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc).Add(24 * time.Hour)
+	return now, endToday
 }
 
 // calResolveWindow resolves the [from, to) read window shared by the text list
@@ -190,6 +245,7 @@ func calListRow(n int, e calendar.Event) string {
 	if localcal.IsLocalID(e.ID) {
 		b.WriteString(" · (로컬)")
 	}
+	b.WriteString(calLinkBadge(e))
 	b.WriteString("\n")
 	return b.String()
 }
@@ -199,34 +255,88 @@ func calListRow(n int, e calendar.Event) string {
 // calActionGet returns rich detail for one event — the substrate for 미팅 준비:
 // time, location, full description, attendees with RSVP state, and the Meet link.
 func calActionGet(ctx context.Context, d *toolctx.CalendarDeps, p calParams) string {
-	id := strings.TrimSpace(p.ID)
-	if id == "" {
-		return "id는 필수입니다 (list로 일정 ID를 먼저 확인하세요)."
-	}
-
-	var ev *calendar.Event
-	if localcal.IsLocalID(id) {
-		if d.Local == nil {
-			return "로컬 캘린더가 없어 이 일정을 찾을 수 없습니다."
-		}
-		ev = d.Local.Get(id)
-	} else {
-		if d.Client == nil {
-			return "구글 캘린더가 연결되지 않아 이 일정을 조회할 수 없습니다."
-		}
-		client, err := d.Client()
-		if err != nil {
-			return "구글 캘린더 클라이언트를 사용할 수 없습니다: " + err.Error()
-		}
-		ev, err = client.Get(ctx, id)
-		if err != nil {
-			return "일정 조회 실패: " + err.Error()
-		}
-	}
-	if ev == nil {
-		return fmt.Sprintf("ID '%s'에 해당하는 일정을 찾지 못했습니다.", id)
+	ev, errMsg := calLookup(ctx, d, p.ID)
+	if errMsg != "" {
+		return errMsg
 	}
 	return calDetail(*ev)
+}
+
+// calLookup resolves an event by id from the local store ("local:" prefix) or
+// Google. Returns (nil, errMsg) with a user-facing Korean message on any failure,
+// (event, "") on success. Shared by get and prep.
+func calLookup(ctx context.Context, d *toolctx.CalendarDeps, rawID string) (*calendar.Event, string) {
+	id := strings.TrimSpace(rawID)
+	if id == "" {
+		return nil, "id는 필수입니다 (list로 일정 ID를 먼저 확인하세요)."
+	}
+	if localcal.IsLocalID(id) {
+		if d.Local == nil {
+			return nil, "로컬 캘린더가 없어 이 일정을 찾을 수 없습니다."
+		}
+		ev := d.Local.Get(id)
+		if ev == nil {
+			return nil, fmt.Sprintf("ID '%s'에 해당하는 일정을 찾지 못했습니다.", id)
+		}
+		return ev, ""
+	}
+	if d.Client == nil {
+		return nil, "구글 캘린더가 연결되지 않아 이 일정을 조회할 수 없습니다."
+	}
+	client, err := d.Client()
+	if err != nil {
+		return nil, "구글 캘린더 클라이언트를 사용할 수 없습니다: " + err.Error()
+	}
+	ev, err := client.Get(ctx, id)
+	if err != nil {
+		return nil, "일정 조회 실패: " + err.Error()
+	}
+	if ev == nil {
+		return nil, fmt.Sprintf("ID '%s'에 해당하는 일정을 찾지 못했습니다.", id)
+	}
+	return ev, ""
+}
+
+// --- prep ----------------------------------------------------------------
+
+// calActionPrep readies the operator for a meeting: the event detail plus a
+// directive to pull its linked-mail context (the Source link an analysis-generated
+// event carries) and build a prep checklist. With no id it targets the next
+// upcoming event, so "다음 미팅 준비해줘" works. The agent does the fetch + synthesis.
+func calActionPrep(ctx context.Context, d *toolctx.CalendarDeps, p calParams) string {
+	var ev *calendar.Event
+	if strings.TrimSpace(p.ID) != "" {
+		got, errMsg := calLookup(ctx, d, p.ID)
+		if errMsg != "" {
+			return errMsg
+		}
+		ev = got
+	} else {
+		ev = calNextEvent(ctx, d)
+		if ev == nil {
+			return "다가오는 일정이 없습니다 — 준비할 미팅이 없습니다."
+		}
+	}
+	var sb strings.Builder
+	sb.WriteString("📑 미팅 준비\n")
+	sb.WriteString(calDetail(*ev))
+	if src := strings.TrimSpace(ev.Source); src != "" {
+		fmt.Fprintf(&sb, "\n\n이 일정의 연결된 메일(%s)을 mail_archive로 열어, 직전 합의·미결 사항·상대 요청을 정리하고 '내가 준비/확인해야 할 것'을 체크리스트로 만들어줘. 참석자·장소·Meet도 함께 짚어줘.", src)
+	} else {
+		sb.WriteString("\n\n연결된 메일이 없는 일정이야. 제목·참석자·메모로 무엇을 준비할지 정리하고, 관련 메일이 있으면 mail_archive로 찾아 맥락을 보강해줘.")
+	}
+	return sb.String()
+}
+
+// calNextEvent returns the soonest event from now (next 14 days), or nil.
+func calNextEvent(ctx context.Context, d *toolctx.CalendarDeps) *calendar.Event {
+	now := time.Now()
+	events, _ := calMerged(ctx, d, now, now.Add(14*24*time.Hour))
+	if len(events) == 0 {
+		return nil
+	}
+	e := events[0]
+	return &e
 }
 
 // calDetail formats one event in full. Korean-first, plain text (the native
