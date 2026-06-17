@@ -187,7 +187,8 @@ func (s *Store) Create(in CreateInput) (calendar.Event, error) {
 	return rec.toCalendar(), nil
 }
 
-// Update replaces the event with id (preserving its Created stamp) and persists.
+// Update replaces the event with id (preserving its Created stamp and Deneb
+// provenance) and persists.
 func (s *Store) Update(id string, in CreateInput) (*calendar.Event, error) {
 	if err := validate(in); err != nil {
 		return nil, err
@@ -200,6 +201,19 @@ func (s *Store) Update(id string, in CreateInput) (*calendar.Event, error) {
 		}
 		rec := buildRecord(id, in)
 		rec.Created = s.events[i].Created
+		// Preserve the origin link the editor didn't re-supply: a user editing the
+		// time/title of a proposal-accepted meeting must not lose which mail it came
+		// from (the update callers only carry summary/time/location, never these).
+		// An explicit value in `in` still overrides, per field.
+		if rec.Source == "" {
+			rec.Source = s.events[i].Source
+		}
+		if rec.SourceLabel == "" {
+			rec.SourceLabel = s.events[i].SourceLabel
+		}
+		if rec.Kind == "" {
+			rec.Kind = s.events[i].Kind
+		}
 		s.events[i] = rec
 		if err := s.persistLocked(); err != nil {
 			return nil, err
