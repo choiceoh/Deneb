@@ -256,6 +256,30 @@ func TestFormatEmailForAnalysis_StripsTrailingImageNoiseLine(t *testing.T) {
 	}
 }
 
+func TestFormatEmailForAnalysis_StripsTrailingLogoResidueLine(t *testing.T) {
+	body := strings.Join([]string{
+		"안녕하세요. 해남 프로젝트 주간 회의는 금요일 10시로 유지하겠습니다.",
+		"자료는 전일 오후까지 공유하겠습니다.",
+		"",
+		"Company logo image cid:abc123 facebook youtube linkedin",
+	}, "\n")
+	msg := &gmail.MessageDetail{
+		From: "sender@example.com",
+		To:   "me@example.com",
+		Body: body,
+	}
+
+	result := FormatEmailForAnalysis(msg)
+	if !strings.Contains(result, "해남 프로젝트 주간 회의는 금요일 10시") {
+		t.Fatalf("business body missing after logo residue strip:\n%s", result)
+	}
+	for _, gone := range []string{"Company logo", "cid:abc123", "facebook"} {
+		if strings.Contains(result, gone) {
+			t.Fatalf("trailing logo residue leaked %q:\n%s", gone, result)
+		}
+	}
+}
+
 func TestFormatEmailForAnalysis_StripsBlankHeavySignature(t *testing.T) {
 	body := strings.Join([]string{
 		"안녕하세요. 납품 일정은 6월 24일 기준으로 유지하겠습니다.",
