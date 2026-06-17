@@ -141,7 +141,7 @@ func synthesizeBatchReport(ctx context.Context, deps PipelineDeps, items []Batch
 	// Read Sino-Korean Hanja in the consolidated report as Hangul (the analysis
 	// model may be a Chinese-lineage one). Per-email items were transliterated in
 	// synthesizeAnalysis; this covers the cross-email synthesis prose.
-	return hanja.Transliterate(stripReasoningLeak(report)), nil
+	return hanja.Transliterate(sanitizeAnalysisLeak(report)), nil
 }
 
 // extractThreadContext fetches related emails and extracts thread context via local LLM.
