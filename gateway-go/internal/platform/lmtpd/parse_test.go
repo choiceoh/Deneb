@@ -147,6 +147,24 @@ func TestParseMessage_AttachmentMetadata(t *testing.T) {
 	}
 }
 
+func TestReadCappedDetectsTruncation(t *testing.T) {
+	got, truncated := readCapped(strings.NewReader("abcdef"), 4)
+	if !truncated {
+		t.Fatal("expected truncation")
+	}
+	if string(got) != "abcd" {
+		t.Fatalf("got %q want abcd", got)
+	}
+
+	got, truncated = readCapped(strings.NewReader("abcd"), 4)
+	if truncated {
+		t.Fatal("did not expect exact-size input to be marked truncated")
+	}
+	if string(got) != "abcd" {
+		t.Fatalf("got %q want abcd", got)
+	}
+}
+
 func TestParseMessage_MessageIDDedupKey(t *testing.T) {
 	raw := crlf(
 		"From: a@b.com",

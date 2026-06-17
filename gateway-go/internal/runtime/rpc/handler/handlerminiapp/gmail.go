@@ -155,10 +155,11 @@ type mailRowOut struct {
 }
 
 type mailAttachmentOut struct {
-	ID       string `json:"id"`
-	Filename string `json:"filename"`
-	MimeType string `json:"mimeType"`
-	Size     int    `json:"size"`
+	ID        string `json:"id"`
+	Filename  string `json:"filename"`
+	MimeType  string `json:"mimeType"`
+	Size      int    `json:"size"`
+	Truncated bool   `json:"truncated,omitempty"`
 }
 
 //deneb:wire
@@ -329,10 +330,11 @@ func gmailGet(deps GmailDeps) rpcutil.HandlerFunc {
 		atts := make([]mailAttachmentOut, 0, len(msg.Attachments))
 		for _, a := range msg.Attachments {
 			atts = append(atts, mailAttachmentOut{
-				ID:       a.AttachmentID,
-				Filename: a.Filename,
-				MimeType: a.MimeType,
-				Size:     a.Size,
+				ID:        a.AttachmentID,
+				Filename:  a.Filename,
+				MimeType:  a.MimeType,
+				Size:      a.Size,
+				Truncated: a.Truncated,
 			})
 		}
 		return rpcutil.RespondOK(req.ID, mailMessageOut{

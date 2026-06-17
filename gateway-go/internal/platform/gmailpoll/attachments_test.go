@@ -15,6 +15,7 @@ func TestAttachmentCandidates_Filters(t *testing.T) {
 		{Filename: "note.txt", MimeType: "text/plain", AttachmentID: "a4", Size: 9000},                   // not extractable type → skip
 		{Filename: "명세서.xlsx", MimeType: "application/vnd.openxmlformats", AttachmentID: "", Size: 8000}, // no id → skip
 		{Filename: "계약서.docx", MimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", AttachmentID: "a6", Size: 20000},
+		{Filename: "잘린견적서.pdf", MimeType: "application/pdf", AttachmentID: "a7", Size: 20000, Truncated: true},
 	}
 	got := attachmentCandidates(atts)
 	var names []string

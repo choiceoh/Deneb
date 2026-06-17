@@ -42,6 +42,9 @@ type AttachmentInfo struct {
 	MimeType     string
 	AttachmentID string
 	Size         int
+	// Truncated is true when the local LMTP parser had to cap retained bytes.
+	// Gmail API attachments are fetched on demand and leave this false.
+	Truncated bool
 }
 
 // LabelInfo describes a Gmail label.

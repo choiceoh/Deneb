@@ -9,6 +9,7 @@
 package server
 
 import (
+	"errors"
 	"path/filepath"
 	"strings"
 	"time"
@@ -167,12 +168,13 @@ func (s *Server) projectCandidatesFn() func() []gmailpoll.ProjectCandidate {
 // mirroring what the manual analyze handler does on a fresh run. This is
 // what lets a polled email show up already-analyzed in the Mini App with no
 // manual tap.
-func (s *Server) makeMailAnalysisSink() func(*gmail.MessageDetail, gmailpoll.AnalysisResult) {
+func (s *Server) makeMailAnalysisSink() func(*gmail.MessageDetail, gmailpoll.AnalysisResult) error {
 	cacheStore := handlerminiapp.NewAnalysisStore(filepath.Join(s.denebDir, "cache", "mail_analysis"))
-	return func(msg *gmail.MessageDetail, res gmailpoll.AnalysisResult) {
+	return func(msg *gmail.MessageDetail, res gmailpoll.AnalysisResult) error {
 		if msg == nil {
-			return
+			return nil
 		}
+		var errs []error
 		if err := cacheStore.SaveAnalysis(handlerminiapp.CachedAnalysis{
 			MsgID:           msg.ID,
 			Subject:         msg.Subject,
@@ -184,6 +186,7 @@ func (s *Server) makeMailAnalysisSink() func(*gmail.MessageDetail, gmailpoll.Ana
 			CreatedAt:       time.Now().UTC(),
 		}); err != nil {
 			s.logger.Warn("mail analysis cache 저장 실패", "id", msg.ID, "error", err)
+			errs = append(errs, err)
 		}
 		if s.wikiStore != nil {
 			page := buildMailAnalysisPage(handlerminiapp.WikiAnalysisInput{
@@ -196,6 +199,7 @@ func (s *Server) makeMailAnalysisSink() func(*gmail.MessageDetail, gmailpoll.Ana
 			})
 			if err := s.wikiStore.WritePage(mailAnalysisWikiPath(msg.ID, res.RelatedProjects), page); err != nil {
 				s.logger.Warn("mail analysis 위키 저장 실패", "id", msg.ID, "error", err)
+				errs = append(errs, err)
 			}
 		}
 		// Turn the analysis's high-priority follow-up actions into to-dos
@@ -204,6 +208,7 @@ func (s *Server) makeMailAnalysisSink() func(*gmail.MessageDetail, gmailpoll.Ana
 		// File any extracted business document onto a 거래 wiki page (silent
 		// knowledge enrichment — no push).
 		s.fileDealFromMail(msg, res.Deal)
+		return errors.Join(errs...)
 	}
 }
 
