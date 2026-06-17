@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmailpoll"
 )
 
@@ -18,7 +19,7 @@ func TestCalendarProposalsFromMail(t *testing.T) {
 	}
 	deal := &gmailpoll.DealInfo{Counterparty: "탑솔라", DocType: "세금계산서", DueDate: "2026-06-30"}
 
-	got := calendarProposalsFromMail("m1", "FW: 미팅", "boss@example.com", items, deal, now)
+	got := calendarProposalsFromMail("m1", "FW: 미팅", "boss@example.com", []string{"견적서.pdf"}, items, deal, now)
 
 	if len(got) != 2 {
 		t.Fatalf("got %d proposals, want 2: %+v", len(got), got)
@@ -37,6 +38,32 @@ func TestCalendarProposalsFromMail(t *testing.T) {
 	if got[1].Start != "2026-06-30" || got[1].Source != "mail:m1|deal-due" {
 		t.Errorf("proposal[1] start/source = %q / %q", got[1].Start, got[1].Source)
 	}
+	// both proposals carry the mail's document attachments
+	for i := range got {
+		if len(got[i].Docs) != 1 || got[i].Docs[0] != "견적서.pdf" {
+			t.Errorf("proposal[%d] docs = %v, want [견적서.pdf]", i, got[i].Docs)
+		}
+	}
+}
+
+func TestDocumentAttachmentNames(t *testing.T) {
+	atts := []gmail.AttachmentInfo{
+		{Filename: "견적서.pdf", MimeType: "application/pdf"},
+		{Filename: "logo.png", MimeType: "image/png"},                                                          // image → skipped
+		{Filename: "명세서.xlsx", MimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"},  // doc
+		{Filename: "sig.gif", MimeType: "image/gif"},                                                           // image → skipped
+		{Filename: "계약서", MimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document"}, // doc by mime, no ext
+	}
+	got := documentAttachmentNames(atts)
+	want := []string{"견적서.pdf", "명세서.xlsx", "계약서"}
+	if len(got) != len(want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("doc[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
 }
 
 func TestCalendarProposalsFromMail_NoneWhenNothingQualifies(t *testing.T) {
@@ -45,7 +72,7 @@ func TestCalendarProposalsFromMail_NoneWhenNothingQualifies(t *testing.T) {
 		{Title: "막연한 후속", DueHint: "", Priority: "high"}, // no date
 		{Title: "낮은 우선순위", DueHint: "내일", Priority: "low"},
 	}
-	if got := calendarProposalsFromMail("m2", "s", "f", items, nil, now); len(got) != 0 {
+	if got := calendarProposalsFromMail("m2", "s", "f", nil, items, nil, now); len(got) != 0 {
 		t.Fatalf("want 0 proposals, got %d: %+v", len(got), got)
 	}
 }
@@ -102,7 +129,7 @@ func TestCalendarProposalsFromMail_TimedMeeting(t *testing.T) {
 		// and as a timed (not all-day) event.
 		{Title: "주간 회의 참석", DueHint: "6월 18일 14:00", Priority: "medium"},
 	}
-	got := calendarProposalsFromMail("m1", "회의", "boss@example.com", items, nil, now)
+	got := calendarProposalsFromMail("m1", "회의", "boss@example.com", nil, items, nil, now)
 	if len(got) != 1 {
 		t.Fatalf("want 1 proposal, got %d: %+v", len(got), got)
 	}

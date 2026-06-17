@@ -41,6 +41,30 @@ func TestCreateGetDelete(t *testing.T) {
 	}
 }
 
+func TestDocsRoundTripAndPreservedAcrossUpdate(t *testing.T) {
+	s := newTestStore(t)
+	start := time.Date(2026, 6, 10, 14, 0, 0, 0, time.UTC)
+	ev, err := s.Create(CreateInput{Summary: "ZTT 미팅", Start: start, Docs: []string{"견적서.pdf", "계약서.docx"}})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if len(ev.Docs) != 2 || ev.Docs[0] != "견적서.pdf" {
+		t.Fatalf("create dropped docs: %+v", ev.Docs)
+	}
+	// A normal edit (no docs in input) preserves them.
+	up, err := s.Update(ev.ID, CreateInput{Summary: "ZTT 미팅 (변경)", Start: start.Add(time.Hour)})
+	if err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	if len(up.Docs) != 2 || up.Docs[1] != "계약서.docx" {
+		t.Errorf("update dropped docs: %+v", up.Docs)
+	}
+	// Survives a reload from disk.
+	if s2, _ := New(s.path); s2.Get(ev.ID) == nil || len(s2.Get(ev.ID).Docs) != 2 {
+		t.Error("docs lost across reload")
+	}
+}
+
 func TestUpdatePreservesProvenance(t *testing.T) {
 	s := newTestStore(t)
 	start := time.Date(2026, 6, 10, 14, 0, 0, 0, time.UTC)

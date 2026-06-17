@@ -49,23 +49,28 @@ type CreateInput struct {
 	Source      string
 	SourceLabel string
 	Kind        string
+	// Docs lists the originating mail's document attachments (견적서/계약서 등
+	// filenames) so meeting prep can pull the actual documents, not just the mail
+	// text. Empty for a plain event.
+	Docs []string
 }
 
 // storedEvent is the on-disk shape. Times are RFC3339 strings so the file stays
 // human-readable and stable across restarts.
 type storedEvent struct {
-	ID          string `json:"id"`
-	Summary     string `json:"summary"`
-	Description string `json:"description,omitempty"`
-	Location    string `json:"location,omitempty"`
-	Start       string `json:"start"` // RFC3339
-	End         string `json:"end"`   // RFC3339
-	AllDay      bool   `json:"allDay,omitempty"`
-	Source      string `json:"source,omitempty"`
-	SourceLabel string `json:"sourceLabel,omitempty"`
-	Kind        string `json:"kind,omitempty"`
-	Created     string `json:"created,omitempty"`
-	Updated     string `json:"updated,omitempty"`
+	ID          string   `json:"id"`
+	Summary     string   `json:"summary"`
+	Description string   `json:"description,omitempty"`
+	Location    string   `json:"location,omitempty"`
+	Start       string   `json:"start"` // RFC3339
+	End         string   `json:"end"`   // RFC3339
+	AllDay      bool     `json:"allDay,omitempty"`
+	Source      string   `json:"source,omitempty"`
+	SourceLabel string   `json:"sourceLabel,omitempty"`
+	Kind        string   `json:"kind,omitempty"`
+	Docs        []string `json:"docs,omitempty"`
+	Created     string   `json:"created,omitempty"`
+	Updated     string   `json:"updated,omitempty"`
 }
 
 func (e storedEvent) toCalendar() calendar.Event {
@@ -83,6 +88,7 @@ func (e storedEvent) toCalendar() calendar.Event {
 		Source:      e.Source,
 		SourceLabel: e.SourceLabel,
 		Kind:        e.Kind,
+		Docs:        e.Docs,
 	}
 }
 
@@ -214,6 +220,9 @@ func (s *Store) Update(id string, in CreateInput) (*calendar.Event, error) {
 		if rec.Kind == "" {
 			rec.Kind = s.events[i].Kind
 		}
+		if len(rec.Docs) == 0 {
+			rec.Docs = s.events[i].Docs
+		}
 		s.events[i] = rec
 		if err := s.persistLocked(); err != nil {
 			return nil, err
@@ -278,6 +287,7 @@ func buildRecord(id string, in CreateInput) storedEvent {
 		Source:      strings.TrimSpace(in.Source),
 		SourceLabel: strings.TrimSpace(in.SourceLabel),
 		Kind:        strings.TrimSpace(in.Kind),
+		Docs:        in.Docs,
 		Created:     now,
 		Updated:     now,
 	}
