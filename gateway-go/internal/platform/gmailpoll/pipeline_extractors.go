@@ -43,7 +43,7 @@ const actionExtractorPrompt = `다음 이메일 분석에서 운영자가 직접
 JSON 응답 형식:
 {
   "actions": [
-    {"title": "할 일 (명령형 한 문장)", "dueHint": "기한 단서 (예: 내일, 3일 후, 6월 15일 / 없으면 빈 문자열)", "priority": "high|medium|low"}
+    {"title": "할 일 (명령형 한 문장)", "dueHint": "기한·시각 단서 — 회의·통화 등 시각이 있으면 함께 (예: 내일, 3일 후, 6월 15일, 6월 15일 14:00, 내일 오후 2시 / 없으면 빈 문자열)", "priority": "high|medium|low"}
   ]
 }
 

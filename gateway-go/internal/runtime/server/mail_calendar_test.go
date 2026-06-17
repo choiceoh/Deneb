@@ -1,6 +1,7 @@
 package server
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -62,5 +63,54 @@ func TestDealDeadlineTitle(t *testing.T) {
 		if got := dealDeadlineTitle(&c.deal); got != c.want {
 			t.Errorf("dealDeadlineTitle(%+v) = %q, want %q", c.deal, got, c.want)
 		}
+	}
+}
+
+func TestParseTimeOfDay(t *testing.T) {
+	cases := []struct {
+		hint string
+		h, m int
+		ok   bool
+	}{
+		{"6월 15일 14:00", 14, 0, true},
+		{"내일 오후 2시", 14, 0, true},
+		{"오전 9시 30분", 9, 30, true},
+		{"14시", 14, 0, true},
+		{"오후 2:30", 14, 30, true},
+		{"오전 12시", 0, 0, true},  // midnight
+		{"6월 15일", 0, 0, false}, // date only, no time
+		{"2시간 후", 0, 0, false},  // duration, not a clock time
+		{"내일", 0, 0, false},
+		{"", 0, 0, false},
+	}
+	for _, c := range cases {
+		h, m, ok := parseTimeOfDay(c.hint)
+		if ok != c.ok {
+			t.Errorf("parseTimeOfDay(%q) ok=%v want %v", c.hint, ok, c.ok)
+			continue
+		}
+		if ok && (h != c.h || m != c.m) {
+			t.Errorf("parseTimeOfDay(%q) = %d:%02d want %d:%02d", c.hint, h, m, c.h, c.m)
+		}
+	}
+}
+
+func TestCalendarProposalsFromMail_TimedMeeting(t *testing.T) {
+	now := time.Date(2026, 6, 17, 10, 0, 0, 0, time.Local)
+	items := []gmailpoll.ActionItem{
+		// medium priority but TIMED → should still be proposed (a real meeting),
+		// and as a timed (not all-day) event.
+		{Title: "주간 회의 참석", DueHint: "6월 18일 14:00", Priority: "medium"},
+	}
+	got := calendarProposalsFromMail("m1", "회의", "boss@example.com", items, nil, now)
+	if len(got) != 1 {
+		t.Fatalf("want 1 proposal, got %d: %+v", len(got), got)
+	}
+	if got[0].AllDay {
+		t.Error("a timed meeting must not be all-day")
+	}
+	// Start is RFC3339 with the 14:00 time.
+	if !strings.Contains(got[0].Start, "T14:00") {
+		t.Errorf("expected 14:00 in start, got %q", got[0].Start)
 	}
 }
