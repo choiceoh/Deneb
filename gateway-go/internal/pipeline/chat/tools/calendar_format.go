@@ -178,6 +178,23 @@ func calSourceLine(e calendar.Event) string {
 	return "연결: " + strings.Join(parts, " · ")
 }
 
+// calLinkBadge renders a compact inline annotation of an event's Deneb origin
+// (kind + the mail it came from) for list/brief rows, "" when it carries none.
+func calLinkBadge(e calendar.Event) string {
+	kind := calKindLabel(e.Kind)
+	lbl := strings.TrimSpace(e.SourceLabel)
+	switch {
+	case kind != "" && lbl != "":
+		return fmt.Sprintf(" · [%s] 「%s」", kind, lbl)
+	case kind != "":
+		return " · [" + kind + "]"
+	case lbl != "":
+		return " · 「" + lbl + "」"
+	default:
+		return ""
+	}
+}
+
 // countExternalAttendees counts non-self, non-declined attendees — the people
 // the user is actually meeting, for the list badge.
 func countExternalAttendees(attendees []calendar.Attendee) int {

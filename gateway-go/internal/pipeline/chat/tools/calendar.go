@@ -101,8 +101,10 @@ func ToolCalendar(d *toolctx.CalendarDeps) toolctx.ToolFunc {
 			return calActionDelete(d, p), nil
 		case "free_slots":
 			return calActionFreeSlots(ctx, d, p), nil
+		case "brief":
+			return calActionBrief(ctx, d, p), nil
 		default:
-			return fmt.Sprintf("알 수 없는 액션: %s. 사용 가능: list(일정 조회), get(상세), create(추가), update(수정), delete(삭제), free_slots(빈 시간 찾기)", p.Action), nil
+			return fmt.Sprintf("알 수 없는 액션: %s. 사용 가능: list(일정 조회), get(상세), create(추가), update(수정), delete(삭제), free_slots(빈 시간 찾기), brief(브리핑)", p.Action), nil
 		}
 	}
 }
@@ -140,6 +142,57 @@ func calActionList(ctx context.Context, d *toolctx.CalendarDeps, p calParams) st
 	}
 	sb.WriteString("\n상세·수정·삭제는 calendar(action=\"get|update|delete\", id=\"...\"). 빈 시간은 free_slots.")
 	return strings.TrimRight(sb.String(), "\n")
+}
+
+// --- brief ---------------------------------------------------------------
+
+// calActionBrief renders a briefing skeleton for the agent: the window's events
+// (default: the rest of today) with their kind + linked origin shown inline and
+// any conflicts flagged, then a directive to pull the linked-mail context and
+// synthesize a human-readable brief. The link annotations come from the event
+// provenance (Source/SourceLabel/Kind) — so a meeting carries which mail it came
+// from, and the brief can say *why* it matters, not just *when*.
+func calActionBrief(ctx context.Context, d *toolctx.CalendarDeps, p calParams) string {
+	from, to := calBriefWindow(p)
+	events, warn := calMerged(ctx, d, from, to)
+	if len(events) == 0 {
+		msg := fmt.Sprintf("%s ~ %s 브리핑할 일정이 없습니다.", calDay(from), calDay(to))
+		if warn != "" {
+			msg += "\n(" + warn + ")"
+		}
+		return msg
+	}
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "📋 %s ~ %s 일정 %d건:\n", calDay(from), calDay(to), len(events))
+	for i, e := range events {
+		sb.WriteString(calListRow(i+1, e))
+	}
+	if conflicts := detectConflicts(events); len(conflicts) > 0 {
+		sb.WriteString("\n⚠️ 겹치는 일정:\n")
+		for _, c := range conflicts {
+			fmt.Fprintf(&sb, "  - %s ↔ %s\n", c[0], c[1])
+		}
+	}
+	if warn != "" {
+		sb.WriteString("\n(" + warn + ")")
+	}
+	sb.WriteString("\n\n이걸 사람이 바로 읽을 브리핑으로 정리해. 연결된 일정([미팅]·「메일 제목」·mail:<id>)은 mail_archive로 원본 맥락을 확인해 왜 지금 중요한지·무엇을 준비해야 하는지 한 줄씩 덧붙이고, 겹치는 일정이 있으면 먼저 경고해. 연결·맥락 없는 일정은 시간·제목만 간단히.")
+	return strings.TrimRight(sb.String(), "\n")
+}
+
+// calBriefWindow resolves the briefing window: an explicit from/to or hours_ahead
+// wins (e.g. "이번 주"); otherwise it defaults to the rest of today (now → next
+// local midnight), the natural "오늘 브리핑" scope.
+func calBriefWindow(p calParams) (from, to time.Time) {
+	if strings.TrimSpace(p.From) != "" || strings.TrimSpace(p.To) != "" || p.HoursAhead > 0 {
+		if f, t, errMsg := calResolveWindow(p.From, p.To, p.HoursAhead); errMsg == "" {
+			return f, t
+		}
+	}
+	loc := calDisplayLoc()
+	now := time.Now().In(loc)
+	endToday := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc).Add(24 * time.Hour)
+	return now, endToday
 }
 
 // calResolveWindow resolves the [from, to) read window shared by the text list
@@ -190,6 +243,7 @@ func calListRow(n int, e calendar.Event) string {
 	if localcal.IsLocalID(e.ID) {
 		b.WriteString(" · (로컬)")
 	}
+	b.WriteString(calLinkBadge(e))
 	b.WriteString("\n")
 	return b.String()
 }

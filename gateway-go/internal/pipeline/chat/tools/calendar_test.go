@@ -331,3 +331,48 @@ func TestCalendar_CreateRequiresFields(t *testing.T) {
 		t.Errorf("expected start-required, got:\n%s", out)
 	}
 }
+
+func TestCalLinkBadge(t *testing.T) {
+	cases := []struct {
+		name string
+		ev   calendar.Event
+		want string
+	}{
+		{"none", calendar.Event{Summary: "x"}, ""},
+		{"kind only", calendar.Event{Kind: "meeting"}, " · [미팅]"},
+		{"label only", calendar.Event{SourceLabel: "비금 통관"}, " · 「비금 통관」"},
+		{"kind+label", calendar.Event{Kind: "deadline", SourceLabel: "납기"}, " · [기한] 「납기」"},
+	}
+	for _, c := range cases {
+		if got := calLinkBadge(c.ev); got != c.want {
+			t.Errorf("%s: calLinkBadge = %q, want %q", c.name, got, c.want)
+		}
+	}
+}
+
+func TestCalendar_BriefShowsLinkAndDirective(t *testing.T) {
+	local := newTestLocalCal(t)
+	start := time.Now().In(calDisplayLoc()).Add(2 * time.Hour)
+	if _, err := local.Create(localcal.CreateInput{
+		Summary:     "ZTT 미팅",
+		Start:       start,
+		End:         start.Add(time.Hour),
+		Source:      "mail:abc123",
+		SourceLabel: "비금 154kV 통관",
+		Kind:        "meeting",
+	}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	// Explicit window so the test is deterministic regardless of wall-clock.
+	out := callCal(t, &toolctx.CalendarDeps{Local: local}, map[string]any{
+		"action": "brief",
+		"from":   start.Add(-time.Hour).Format(time.RFC3339),
+		"to":     start.Add(2 * time.Hour).Format(time.RFC3339),
+	})
+	if !strings.Contains(out, "[미팅]") || !strings.Contains(out, "비금 154kV 통관") {
+		t.Errorf("brief missing link badge:\n%s", out)
+	}
+	if !strings.Contains(out, "브리핑으로 정리") {
+		t.Errorf("brief missing synthesis directive:\n%s", out)
+	}
+}
