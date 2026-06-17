@@ -16,6 +16,8 @@
 package server
 
 import (
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -69,8 +71,15 @@ func calendarProposalsFromMail(msgID, subject, from string, items []gmailpoll.Ac
 		if due.IsZero() {
 			continue // no concrete date ⇒ not calendar-worthy
 		}
-		// Conservative: keep real meetings (timed) and important deadlines (high
-		// priority). Skip low-signal all-day, non-high items.
+		// Promote to a timed event when the hint carries a clock time ("14시",
+		// "오후 2시", "14:00") — a real meeting should land at its time, not be an
+		// all-day blob. A timed item is calendar-worthy regardless of priority.
+		if h, m, ok := parseTimeOfDay(it.DueHint); ok {
+			due = time.Date(due.Year(), due.Month(), due.Day(), h, m, 0, 0, due.Location())
+			allDay = false
+		}
+		// Conservative for the remaining all-day items: keep only high priority
+		// (a dated-but-untimed follow-up). Timed meetings already passed above.
 		if allDay && !strings.EqualFold(it.Priority, "high") {
 			continue
 		}
@@ -99,6 +108,49 @@ func calendarProposalsFromMail(msgID, subject, from string, items []gmailpoll.Ac
 		}
 	}
 	return out
+}
+
+var (
+	timeColonRe = regexp.MustCompile(`(\d{1,2}):(\d{2})`)
+	timeKoRe    = regexp.MustCompile(`(오전|오후)?\s*(\d{1,2})\s*시(?:\s*(\d{1,2})\s*분)?`)
+)
+
+// parseTimeOfDay extracts a clock time from a Korean due hint: "14:00",
+// "오후 2시", "오전 9시 30분", "14시". 오전/오후 (AM/PM) adjust a 12-hour value.
+// ok is false when the hint carries no time (the event stays all-day). A
+// "N시간" duration is excluded so "2시간 후" is not misread as 2:00.
+func parseTimeOfDay(hint string) (hour, minute int, ok bool) {
+	pm := strings.Contains(hint, "오후")
+	am := strings.Contains(hint, "오전")
+	apply := func(h int) int {
+		if pm && h < 12 {
+			return h + 12
+		}
+		if am && h == 12 {
+			return 0
+		}
+		return h
+	}
+	if m := timeColonRe.FindStringSubmatch(hint); m != nil {
+		h, _ := strconv.Atoi(m[1])
+		mi, _ := strconv.Atoi(m[2])
+		if h = apply(h); h < 24 && mi < 60 {
+			return h, mi, true
+		}
+	}
+	if !strings.Contains(hint, "시간") {
+		if m := timeKoRe.FindStringSubmatch(hint); m != nil {
+			h, _ := strconv.Atoi(m[2])
+			mi := 0
+			if m[3] != "" {
+				mi, _ = strconv.Atoi(m[3])
+			}
+			if h = apply(h); h < 24 && mi < 60 {
+				return h, mi, true
+			}
+		}
+	}
+	return 0, 0, false
 }
 
 // formatProposalStart renders a resolved due time as the proposal Start string:
