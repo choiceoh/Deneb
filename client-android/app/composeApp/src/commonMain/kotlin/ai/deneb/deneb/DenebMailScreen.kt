@@ -498,7 +498,7 @@ internal fun MailRow(
                 Text(
                     meta,
                     style = DenebType.meta,
-                    color = if (message.hasAttachment) MaterialTheme.colorScheme.primary else denebHint(),
+                    color = mailRowMetaColor(message),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -572,12 +572,42 @@ private fun senderName(from: String): String {
 }
 
 internal fun mailRowNativeMeta(message: MailMessage): String? = buildList {
+    mailRowAnalysisLabel(message.workState)?.let { add(it) }
+    if (message.workState.feedStatus == "created") add("피드 반영")
+    if (message.workState.calendarProposalCount > 0) {
+        add("일정 후보 ${message.workState.calendarProposalCount}")
+    }
+    if (message.workState.todoCount > 0) {
+        add("할 일 ${message.workState.todoCount}")
+    }
     if (message.hasAttachment) {
         val count = message.attachmentCount
         add(if (count > 1) "첨부 $count" else "첨부")
     }
     mailRowMailboxLabel(message.mailbox)?.let { add(it) }
 }.joinToString(" · ").ifBlank { null }
+
+private fun mailRowAnalysisLabel(state: MailWorkState): String? = when (state.analysisStatus) {
+    "failed" -> "분석 실패"
+    "analyzing" -> "분석 중"
+    "queued" -> "분석 대기"
+    "stale" -> "재분석 필요"
+    "done" -> when (state.analysisQuality) {
+        "urgent" -> "분석: 긴급"
+        "attention" -> "분석: 확인"
+        "routine" -> "분석: 일반"
+        else -> "분석 완료"
+    }
+    else -> null
+}
+
+@Composable
+private fun mailRowMetaColor(message: MailMessage): Color = when {
+    message.workState.analysisStatus == "failed" -> MaterialTheme.colorScheme.error
+    message.workState.calendarProposalCount > 0 || message.workState.todoCount > 0 -> MaterialTheme.colorScheme.primary
+    message.workState.analysisStatus.isNotBlank() || message.hasAttachment -> MaterialTheme.colorScheme.primary
+    else -> denebHint()
+}
 
 private fun mailRowMailboxLabel(mailbox: String): String? {
     val normalized = mailbox.trim()
@@ -608,6 +638,10 @@ private fun mailNativeFilters(offlineCapable: Boolean): List<MailNativeFilter> =
     add(MailNativeFilter("오늘", "newer_than:1d"))
     add(MailNativeFilter("첨부", "has:attachment"))
     add(MailNativeFilter("7일", "newer_than:7d"))
+    add(MailNativeFilter("분석 실패", "deneb:analysis_failed"))
+    add(MailNativeFilter("피드 대기", "deneb:feed_missing"))
+    add(MailNativeFilter("일정 후보", "deneb:calendar_candidate"))
+    add(MailNativeFilter("할 일", "deneb:todo"))
 }
 
 @Composable
@@ -651,6 +685,7 @@ internal fun mailNativeStatusLine(status: MailNativeStatus?): String? {
                 add("${boxes}개함 ${total}통")
                 if (unread > 0) add("미읽음 $unread")
                 if (overlay > 0) add("로컬정리 $overlay")
+                addAll(mailPipelineStatusParts(status.pipeline))
                 if (status.offlineCapable) add("오프라인")
             }.joinToString(" · ")
         }
@@ -661,6 +696,15 @@ internal fun mailNativeStatusLine(status: MailNativeStatus?): String? {
 
         else -> null
     }
+}
+
+private fun mailPipelineStatusParts(pipeline: MailNativePipeline): List<String> = buildList {
+    if (pipeline.analyzed > 0) add("분석 ${pipeline.analyzed}")
+    if (pipeline.analyzing > 0) add("진행 ${pipeline.analyzing}")
+    if (pipeline.failed > 0) add("실패 ${pipeline.failed}")
+    if (pipeline.feedMissing > 0) add("피드대기 ${pipeline.feedMissing}")
+    if (pipeline.calendarCandidates > 0) add("일정 ${pipeline.calendarCandidates}")
+    if (pipeline.todoCandidates > 0) add("할일 ${pipeline.todoCandidates}")
 }
 
 /** Desktop split-view right-pane placeholder, shown until a mail is selected. */

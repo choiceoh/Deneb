@@ -111,6 +111,19 @@ class DenebClientMailReadOverlayTest {
 
         val both = row("both", false).copy(hasAttachment = true, attachmentCount = 1, mailbox = "Gmail")
         assertEquals("첨부 · Gmail 보관함", mailRowNativeMeta(both))
+
+        val analyzed = row("analyzed", false).copy(
+            workState = MailWorkState(
+                analysisStatus = "done",
+                analysisQuality = "attention",
+                calendarProposalCount = 1,
+                todoCount = 2,
+            ),
+        )
+        assertEquals("분석: 확인 · 일정 후보 1 · 할 일 2", mailRowNativeMeta(analyzed))
+
+        val failed = row("failed", false).copy(workState = MailWorkState(analysisStatus = "failed"))
+        assertEquals("분석 실패", mailRowNativeMeta(failed))
     }
 
     @Test
@@ -143,9 +156,10 @@ class DenebClientMailReadOverlayTest {
                     ),
                 ),
                 overlay = MailNativeOverlay(messages = 4, read = 2, archived = 1, trashed = 1),
+                pipeline = MailNativePipeline(analyzed = 5, failed = 1, feedMissing = 2, calendarCandidates = 1),
             ),
         )
 
-        assertEquals("로컬 보관함 · 2개함 102통 · 미읽음 3 · 로컬정리 2 · 오프라인", line)
+        assertEquals("로컬 보관함 · 2개함 102통 · 미읽음 3 · 로컬정리 2 · 분석 5 · 실패 1 · 피드대기 2 · 일정 1 · 오프라인", line)
     }
 }
