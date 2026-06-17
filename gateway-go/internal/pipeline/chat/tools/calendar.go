@@ -257,6 +257,9 @@ func calDetail(e calendar.Event) string {
 	if desc := strings.TrimSpace(e.Description); desc != "" {
 		fmt.Fprintf(&sb, "메모: %s\n", desc)
 	}
+	if link := calSourceLine(e); link != "" {
+		sb.WriteString(link + "\n")
+	}
 	source := "구글 캘린더 (읽기 전용)"
 	if localcal.IsLocalID(e.ID) {
 		source = "로컬 (수정·삭제 가능)"

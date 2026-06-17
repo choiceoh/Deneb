@@ -41,6 +41,35 @@ func TestCreateGetDelete(t *testing.T) {
 	}
 }
 
+func TestCreatePreservesProvenance(t *testing.T) {
+	s := newTestStore(t)
+	start := time.Date(2026, 6, 10, 14, 0, 0, 0, time.UTC)
+	ev, err := s.Create(CreateInput{
+		Summary:     "ZTT 미팅",
+		Start:       start,
+		Source:      "mail:abc123",
+		SourceLabel: "비금 154kV 통관",
+		Kind:        "meeting",
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if ev.Source != "mail:abc123" || ev.SourceLabel != "비금 154kV 통관" || ev.Kind != "meeting" {
+		t.Fatalf("provenance not returned on create: %+v", ev)
+	}
+	if got := s.Get(ev.ID); got == nil || got.Source != "mail:abc123" || got.Kind != "meeting" {
+		t.Fatalf("Get lost provenance: %+v", got)
+	}
+	// Survives a reload from disk (the on-disk shape carries the fields).
+	s2, err := New(s.path)
+	if err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	if got := s2.Get(ev.ID); got == nil || got.SourceLabel != "비금 154kV 통관" {
+		t.Fatalf("provenance lost across reload: %+v", got)
+	}
+}
+
 func TestCreateAllDayDefaultsToNextDayEnd(t *testing.T) {
 	s := newTestStore(t)
 	start := time.Date(2026, 6, 12, 0, 0, 0, 0, time.UTC)
