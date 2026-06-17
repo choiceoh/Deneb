@@ -124,6 +124,10 @@ func CleanForDisplay(body string) CleanResult {
 	if removed > 0 {
 		result.HiddenBlocks = append(result.HiddenBlocks, HiddenBlock{Kind: "attachment", Lines: removed})
 	}
+	lines, removed = stripBodyPrepHeadReplyHeaderBlock(lines)
+	if removed > 0 {
+		result.HiddenBlocks = append(result.HiddenBlocks, HiddenBlock{Kind: "history-header", Lines: removed})
+	}
 	lines, removed = stripBodyPrepTrailingNoiseLines(lines)
 	if removed > 0 {
 		result.HiddenBlocks = append(result.HiddenBlocks, HiddenBlock{Kind: "tail", Lines: removed})
@@ -251,7 +255,7 @@ func stripBodyPrepHeadReplyHeaderBlock(lines []string) ([]string, int) {
 	}
 	for i := start; i < limit; i++ {
 		line := strings.TrimSpace(lines[i])
-		if line == "" || bodyPrepLooksLikeSeparatorLine(line) {
+		if line == "" || bodyPrepLooksLikeSeparatorLine(line) || bodyPrepHTMLMetaRE.MatchString(line) {
 			continue
 		}
 		if bodyPrepLooksLikeReplyHeaderLine(line) {
@@ -267,7 +271,7 @@ func stripBodyPrepHeadReplyHeaderBlock(lines []string) ([]string, int) {
 	cut := start
 	for cut < len(lines) {
 		line := strings.TrimSpace(lines[cut])
-		if line == "" || bodyPrepLooksLikeSeparatorLine(line) || bodyPrepLooksLikeReplyHeaderLine(line) {
+		if line == "" || bodyPrepLooksLikeSeparatorLine(line) || bodyPrepLooksLikeReplyHeaderLine(line) || bodyPrepHTMLMetaRE.MatchString(line) {
 			cut++
 			continue
 		}
