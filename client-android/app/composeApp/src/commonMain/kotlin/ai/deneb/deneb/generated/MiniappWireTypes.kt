@@ -85,6 +85,7 @@ data class MailAttachmentOut(
     val filename: String = "",
     val mimeType: String = "",
     val size: Int = 0,
+    val truncated: Boolean = false,
 )
 
 @Serializable
