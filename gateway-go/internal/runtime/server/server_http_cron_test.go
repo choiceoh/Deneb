@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/cron"
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
@@ -85,6 +86,15 @@ func TestHandleCronRun_UnknownName(t *testing.T) {
 func TestHandleCronRun_Success(t *testing.T) {
 	srv := testutil.Must(New(":0"))
 	svc := installCleanCronService(t, srv)
+	finished := make(chan cron.CronEvent, 1)
+	svc.OnEvent(func(event cron.CronEvent) {
+		if event.Type == "job_finished" && event.JobID == "job-success" {
+			select {
+			case finished <- event:
+			default:
+			}
+		}
+	})
 	if err := svc.Add(context.Background(), cron.StoreJob{
 		ID:       "job-success",
 		Name:     "happy-path",
@@ -111,6 +121,12 @@ func TestHandleCronRun_Success(t *testing.T) {
 	}
 	if body["jobId"] != "job-success" {
 		t.Errorf("jobId = %v, want \"job-success\"", body["jobId"])
+	}
+
+	select {
+	case <-finished:
+	case <-time.After(2 * time.Second):
+		t.Fatal("cron job did not finish within 2s")
 	}
 }
 
