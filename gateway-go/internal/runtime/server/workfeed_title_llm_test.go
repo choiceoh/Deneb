@@ -1,8 +1,11 @@
 package server
 
 import (
+	"context"
 	"strings"
 	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
 )
 
 func TestCleanLLMCardTitle(t *testing.T) {
@@ -77,6 +80,26 @@ func TestRelay_CardTitler(t *testing.T) {
 		}
 	})
 
+	t.Run("LLM summary can win while title falls back", func(t *testing.T) {
+		feed := &recordingWorkFeed{}
+		d := proactiveRelayDeps{
+			transcriptStore: newRecordingTranscriptStore(),
+			workFeed:        feed,
+			cardTitler: func(string) (string, string) {
+				return "", "착수신고가 지연돼 오늘 중 회신이 필요합니다."
+			},
+		}
+		if _, err := d.relayNative(mailBody); err != nil {
+			t.Fatalf("relayNative: %v", err)
+		}
+		if got := feedTitle(feed); got == "" || got == "메일 리포트" {
+			t.Fatalf("title = %q, want heuristic fallback title", got)
+		}
+		if got := feedSummary(feed); got != "착수신고가 지연돼 오늘 중 회신이 필요합니다." {
+			t.Fatalf("summary = %q, want the LLM summary", got)
+		}
+	})
+
 	t.Run("falls back to heuristic subject when LLM returns empty", func(t *testing.T) {
 		feed := &recordingWorkFeed{}
 		d := proactiveRelayDeps{
@@ -126,6 +149,39 @@ func TestRelay_CardTitler(t *testing.T) {
 		}
 		if got := feedTitle(feed); got != "📅 오늘 일정" {
 			t.Errorf("non-mail title = %q, want the heuristic heading", got)
+		}
+	})
+
+	t.Run("mail notifier LLM-titles prompt-edited analysis", func(t *testing.T) {
+		feed := &recordingWorkFeed{}
+		called := false
+		d := proactiveRelayDeps{
+			transcriptStore: newRecordingTranscriptStore(),
+			workFeed:        feed,
+			cardTitler: func(string) (string, string) {
+				called = true
+				return "JOCA 견적 회신", "6월 13일까지 단가 확인과 회신이 필요합니다."
+			},
+		}
+		body := "긴급: JOCA Cable 견적 회신\n\n발신자: fred@example.com\n\n6/13까지 단가 확인이 필요합니다."
+		if err := d.mailNotifierForSession(nativeWorkSessionKey).Notify(context.Background(), body); err != nil {
+			t.Fatalf("mail notifier Notify: %v", err)
+		}
+		if !called {
+			t.Fatal("cardTitler was not called for explicit mail notifier delivery")
+		}
+		if len(feed.items) != 1 {
+			t.Fatalf("got %d work-feed item(s), want 1", len(feed.items))
+		}
+		it := feed.items[0]
+		if it.Source != workfeed.SourceMailReport {
+			t.Fatalf("source = %q, want %q", it.Source, workfeed.SourceMailReport)
+		}
+		if it.Title != "JOCA 견적 회신" {
+			t.Fatalf("title = %q, want LLM title", it.Title)
+		}
+		if it.Summary != "6월 13일까지 단가 확인과 회신이 필요합니다." {
+			t.Fatalf("summary = %q, want LLM summary", it.Summary)
 		}
 	})
 }

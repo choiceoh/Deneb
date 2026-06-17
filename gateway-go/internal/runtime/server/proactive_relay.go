@@ -166,12 +166,25 @@ func (d proactiveRelayDeps) relayNativeTo(sessionKey, content string) (bool, err
 	return d.relayNativeToOpts(sessionKey, content, false)
 }
 
+type proactiveRelayOptions struct {
+	collapse       bool
+	workFeedSource string
+}
+
 // relayNativeToOpts is relayNativeTo with the collapse switch: when collapse is
 // true the transcript message is wrapped as a collapsed deneb-ui accordion
 // (title-only card, tap to expand) while every other consumer of the body —
 // suppression gates, work-feed card extraction, push/sync previews — keeps
 // reading the raw prose.
 func (d proactiveRelayDeps) relayNativeToOpts(sessionKey, content string, collapse bool) (bool, error) {
+	return d.relayNativeToOptions(sessionKey, content, proactiveRelayOptions{collapse: collapse})
+}
+
+// relayNativeToOptions is relayNativeTo with delivery metadata. workFeedSource
+// lets source-aware producers (notably Gmail/LMTP mail analysis) preserve their
+// card type even when the user-edited prompt no longer starts with a generic
+// "메일 분석 리포트" heading.
+func (d proactiveRelayDeps) relayNativeToOptions(sessionKey, content string, opts proactiveRelayOptions) (bool, error) {
 	target := sessionKey
 	if target == "" {
 		target = nativeWorkSessionKey
@@ -242,7 +255,7 @@ func (d proactiveRelayDeps) relayNativeToOpts(sessionKey, content string, collap
 		// follow-up turns in client:main still have the full analysis in context.
 		// A body whose title can't be derived falls back to plain prose delivery.
 		transcriptBody := content
-		if collapse {
+		if opts.collapse {
 			if title, titleLine := extractCardTitle(content); strings.TrimSpace(title) != "" {
 				transcriptBody = denebui.CollapsedReportFence(title, collapsedReportBody(content, title, titleLine))
 			}
@@ -275,9 +288,14 @@ func (d proactiveRelayDeps) relayNativeToOpts(sessionKey, content string, collap
 		// "---") into every card. An empty title falls back to the store's
 		// defaultTitle ("업무 리포트"). See workfeed_extract.go.
 		title, titleLine := extractCardTitle(content)
-		// Mail reports get the envelope card icon (SourceMailReport).
-		isMail := isMailReportBody(content)
-		source := workfeed.SourceProactive
+		source := strings.TrimSpace(opts.workFeedSource)
+		if source == "" {
+			source = workfeed.SourceProactive
+		}
+		// Mail reports get the envelope card icon (SourceMailReport). Prefer the
+		// explicit source from Gmail/LMTP delivery; fall back to body-shape detection
+		// for older callers and tests.
+		isMail := source == workfeed.SourceMailReport || isMailReportBody(content)
 		if isMail {
 			source = workfeed.SourceMailReport
 		}
@@ -288,8 +306,10 @@ func (d proactiveRelayDeps) relayNativeToOpts(sessionKey, content string, collap
 		// deterministic extractCardTitle result stays as the fallback.
 		summary := extractCardSummary(content, titleLine)
 		if d.cardTitler != nil && (isMail || isWeakCardTitle(title, titleLine)) {
-			if t, s := d.cardTitler(content); t != "" {
-				title = t
+			if t, s := d.cardTitler(content); t != "" || s != "" {
+				if t != "" {
+					title = t
+				}
 				// The LLM summary replaces the heuristic only when present; an empty
 				// summary keeps the heuristic (so a good title is never paired with a
 				// blank preview).
@@ -728,13 +748,14 @@ const nativeWorkSessionKeyTo = "main"
 type relayNotifier struct {
 	deps       proactiveRelayDeps
 	sessionKey string
+	opts       proactiveRelayOptions
 }
 
 // Notify satisfies autonomous.Notifier and gmailpoll.Notifier. Returns the
 // underlying send error; delivery-not-wired (relay returns false with no error)
 // is treated as a silent no-op.
 func (n *relayNotifier) Notify(_ context.Context, message string) error {
-	_, err := n.deps.relayNativeTo(n.sessionKey, message)
+	_, err := n.deps.relayNativeToOptions(n.sessionKey, message, n.opts)
 	return err
 }
 
@@ -744,4 +765,18 @@ func (n *relayNotifier) Notify(_ context.Context, message string) error {
 // not a Telegram plugin.
 func (d proactiveRelayDeps) notifierForSession(sessionKey string) *relayNotifier {
 	return &relayNotifier{deps: d, sessionKey: sessionKey}
+}
+
+// mailNotifierForSession is the same relay binding, but source-tags the work-feed
+// item as a mail report. This keeps the envelope card icon and LLM title/summary
+// path stable even when the editable mail-analysis prompt opens with the actual
+// subject instead of a generic "메일 분석 리포트" heading.
+func (d proactiveRelayDeps) mailNotifierForSession(sessionKey string) *relayNotifier {
+	return &relayNotifier{
+		deps:       d,
+		sessionKey: sessionKey,
+		opts: proactiveRelayOptions{
+			workFeedSource: workfeed.SourceMailReport,
+		},
+	}
 }

@@ -124,7 +124,7 @@ func (s *Server) initGmailPoll(snap *config.ConfigSnapshot) {
 		s.gmailPollSvc.SetNotifier(noopGmailNotifier{})
 		s.logger.Info("gmailpoll: silent mode — cache/wiki pre-warm only, chat delivery suppressed")
 	} else {
-		s.gmailPollSvc.SetNotifier(s.proactiveRelay.notifierForSession(nativeWorkSessionKey))
+		s.gmailPollSvc.SetNotifier(s.proactiveRelay.mailNotifierForSession(nativeWorkSessionKey))
 	}
 
 	// Register as a periodic task within the autonomous service.
@@ -202,7 +202,7 @@ func (s *Server) initLMTPServer(snap *config.ConfigSnapshot) {
 		cfg.DiaryDir = s.wikiStore.DiaryDir()
 	}
 	svc := gmailpoll.NewService(cfg, s.logger)
-	svc.SetNotifier(s.proactiveRelay.notifierForSession(nativeWorkSessionKey))
+	svc.SetNotifier(s.proactiveRelay.mailNotifierForSession(nativeWorkSessionKey))
 
 	queue, err := lmtpd.NewQueue(filepath.Join(stateDir, "lmtp-queue"))
 	if err != nil {
