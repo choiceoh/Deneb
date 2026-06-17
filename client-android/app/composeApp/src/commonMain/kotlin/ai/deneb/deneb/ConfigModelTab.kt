@@ -80,16 +80,16 @@ internal fun ModelTab(client: DenebGatewayClient) {
     val models by client.denebModels.collectAsState()
     val roleModels by client.denebRoleModels.collectAsState()
     val advisories by client.denebModelAdvisories.collectAsState()
-    val mainHasVision by client.denebMainHasVision.collectAsState()
     val scope = rememberCoroutineScope()
     val haptics = rememberHaptics()
     var role by remember { mutableStateOf(ModelRole.MAIN) }
-    // 비전 role is opt-in AND capability-gated: hide it when the main model is
-    // multimodal (a separate vision model is redundant — images route to main).
-    val visibleRoles = ModelRole.entries.filterNot { it == ModelRole.VISION && mainHasVision }
-    LaunchedEffect(mainHasVision) {
-        if (mainHasVision && role == ModelRole.VISION) role = ModelRole.MAIN
-    }
+    // 비전 role is a plain opt-in, like 챗봇: always selectable, showing "미설정"
+    // until an operator assigns a multimodal model. It used to auto-hide when the
+    // main model was deemed "multimodal", but multimodality can't be detected
+    // reliably — modelcaps carries only a negative NoVision flag that nothing sets
+    // by default (miniapp_models.go mainModelHasVision), so the gate hid the row
+    // for every non-vision main and the role became unreachable from settings.
+    val visibleRoles = ModelRole.entries
     var switching by remember { mutableStateOf(false) }
     var switchFailed by remember { mutableStateOf(false) }
     var addBaseUrl by remember { mutableStateOf("") }
