@@ -39,6 +39,10 @@ func (s *nativeWorkFeedStore) List(limit int, includeAcked bool) ([]workfeed.Ite
 	return s.store.List(limit, includeAcked)
 }
 
+func (s *nativeWorkFeedStore) ListRange(limit int, includeAcked bool, sinceMs, beforeMs int64) ([]workfeed.Item, int, error) {
+	return s.store.ListRange(limit, includeAcked, sinceMs, beforeMs)
+}
+
 func (s *nativeWorkFeedStore) Ack(id string) (workfeed.Item, error) {
 	item, err := s.store.Ack(id)
 	if err != nil {

@@ -65,6 +65,42 @@ func TestStoreAppendListAck(t *testing.T) {
 	}
 }
 
+func TestStoreListRangeFiltersBeforeLimit(t *testing.T) {
+	store := NewStore(filepath.Join(t.TempDir(), "workfeed.jsonl"))
+	for i := 0; i < 5; i++ {
+		if _, err := store.Append(Item{
+			ID:          "urgent-old-" + string(rune('a'+i)),
+			Source:      SourceProactive,
+			Title:       "old urgent",
+			Body:        "긴급 오래된 카드",
+			Priority:    PriorityUrgent,
+			Status:      StatusUnread,
+			CreatedAtMs: int64(1_000 + i),
+		}); err != nil {
+			t.Fatalf("append old urgent: %v", err)
+		}
+	}
+	if _, err := store.Append(Item{
+		ID:          "today-normal",
+		Source:      SourceMailReport,
+		Title:       "today mail",
+		Body:        "보통 오늘 메일",
+		Priority:    PriorityNormal,
+		Status:      StatusUnread,
+		CreatedAtMs: 10_000,
+	}); err != nil {
+		t.Fatalf("append today: %v", err)
+	}
+
+	items, total, err := store.ListRange(1, false, 9_000, 11_000)
+	if err != nil {
+		t.Fatalf("list range: %v", err)
+	}
+	if total != 1 || len(items) != 1 || items[0].ID != "today-normal" {
+		t.Fatalf("range list = total %d items %+v, want today-normal only", total, items)
+	}
+}
+
 func TestStoreAckMissing(t *testing.T) {
 	store := NewStore(filepath.Join(t.TempDir(), "workfeed.jsonl"))
 	if _, err := store.Ack("missing"); !errors.Is(err, ErrNotFound) {
