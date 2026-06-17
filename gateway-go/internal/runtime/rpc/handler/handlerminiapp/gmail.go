@@ -32,6 +32,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/clientauth"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailarchive"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailbody"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailwork"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
@@ -189,17 +190,22 @@ type mailAttachmentOut struct {
 
 //deneb:wire
 type mailMessageOut struct {
-	ID          string              `json:"id"`
-	ThreadID    string              `json:"threadId"`
-	From        string              `json:"from"`
-	To          string              `json:"to"`
-	CC          string              `json:"cc,omitempty"`
-	Subject     string              `json:"subject"`
-	Date        string              `json:"date"`
-	Body        string              `json:"body"`
-	BodyTotal   int                 `json:"bodyTotal"`
-	Labels      []string            `json:"labels"`
-	Attachments []mailAttachmentOut `json:"attachments"`
+	ID                   string              `json:"id"`
+	ThreadID             string              `json:"threadId"`
+	From                 string              `json:"from"`
+	To                   string              `json:"to"`
+	CC                   string              `json:"cc,omitempty"`
+	Subject              string              `json:"subject"`
+	Date                 string              `json:"date"`
+	Body                 string              `json:"body"`
+	BodyTotal            int                 `json:"bodyTotal"`
+	RawBody              string              `json:"rawBody,omitempty"`
+	RawBodyTotal         int                 `json:"rawBodyTotal,omitempty"`
+	BodyCleaned          bool                `json:"bodyCleaned,omitempty"`
+	BodyHiddenBlockCount int                 `json:"bodyHiddenBlockCount,omitempty"`
+	BodyHiddenLineCount  int                 `json:"bodyHiddenLineCount,omitempty"`
+	Labels               []string            `json:"labels"`
+	Attachments          []mailAttachmentOut `json:"attachments"`
 
 	AnalysisStatus        string `json:"analysisStatus,omitempty"`
 	AnalysisQuality       string `json:"analysisQuality,omitempty"`
@@ -530,12 +536,13 @@ func appendMailRows(out []mailRowOut, deps GmailDeps, results []gmail.MessageSum
 		if !workFilter.matches(state) {
 			continue
 		}
+		snippet := mailSnippetForDisplay(m.Snippet)
 		row := mailRowOut{
 			ID:              m.ID,
 			ThreadID:        m.ThreadID,
 			From:            m.From,
 			Subject:         m.Subject,
-			Snippet:         m.Snippet,
+			Snippet:         snippet,
 			Date:            normalizeDate(m.Date),
 			IsUnread:        hasUnreadLabel(m.Labels),
 			Labels:          nonNilLabels(m.Labels),
@@ -543,7 +550,7 @@ func appendMailRows(out []mailRowOut, deps GmailDeps, results []gmail.MessageSum
 			HasAttachment:   m.HasAttachment || m.AttachmentCount > 0,
 			AttachmentCount: m.AttachmentCount,
 		}
-		row.Priority, row.PriorityHint = rowPriority(deps, m.ID, m.From, m.Subject, m.Snippet)
+		row.Priority, row.PriorityHint = rowPriority(deps, m.ID, m.From, m.Subject, snippet)
 		applyMailWorkRow(&row, state)
 		out = append(out, row)
 		if len(out) >= limit {
@@ -681,7 +688,18 @@ func gmailGet(deps GmailDeps) rpcutil.HandlerFunc {
 		if p.Full {
 			bodyLimit = maxGmailFullBodyChars
 		}
-		body, total := truncateBody(msg.Body, bodyLimit)
+		cleaned := mailbody.CleanForDisplay(msg.Body)
+		displayBody := cleaned.Body
+		if strings.TrimSpace(displayBody) == "" && strings.TrimSpace(msg.Body) != "" {
+			displayBody = strings.TrimSpace(msg.Body)
+		}
+		body, total := truncateBody(displayBody, bodyLimit)
+		bodyCleaned := mailBodyWasCleaned(cleaned, msg.Body)
+		rawBody := ""
+		rawTotal := 0
+		if bodyCleaned {
+			rawBody, rawTotal = truncateBody(msg.Body, bodyLimit)
+		}
 		atts := make([]mailAttachmentOut, 0, len(msg.Attachments))
 		for _, a := range msg.Attachments {
 			atts = append(atts, mailAttachmentOut{
@@ -693,17 +711,22 @@ func gmailGet(deps GmailDeps) rpcutil.HandlerFunc {
 			})
 		}
 		out := mailMessageOut{
-			ID:          msg.ID,
-			ThreadID:    msg.ThreadID,
-			From:        msg.From,
-			To:          msg.To,
-			CC:          msg.CC,
-			Subject:     msg.Subject,
-			Date:        normalizeDate(msg.Date),
-			Body:        body,
-			BodyTotal:   total,
-			Labels:      nonNilLabels(msg.Labels),
-			Attachments: atts,
+			ID:                   msg.ID,
+			ThreadID:             msg.ThreadID,
+			From:                 msg.From,
+			To:                   msg.To,
+			CC:                   msg.CC,
+			Subject:              msg.Subject,
+			Date:                 normalizeDate(msg.Date),
+			Body:                 body,
+			BodyTotal:            total,
+			RawBody:              rawBody,
+			RawBodyTotal:         rawTotal,
+			BodyCleaned:          bodyCleaned,
+			BodyHiddenBlockCount: len(cleaned.HiddenBlocks),
+			BodyHiddenLineCount:  mailHiddenLineCount(cleaned.HiddenBlocks),
+			Labels:               nonNilLabels(msg.Labels),
+			Attachments:          atts,
 		}
 		applyMailWorkMessage(&out, mailWorkStateForDetail(deps, msg))
 		return rpcutil.RespondOK(req.ID, out)
@@ -813,6 +836,32 @@ func modifyLabelsHandler(deps GmailDeps, cache *listCache, removeLabels []string
 }
 
 // --- helpers --------------------------------------------------------------
+
+func mailSnippetForDisplay(snippet string) string {
+	cleaned := mailbody.CleanForDisplay(snippet).Body
+	if strings.TrimSpace(cleaned) == "" {
+		cleaned = strings.TrimSpace(snippet)
+	}
+	cleaned = strings.TrimSpace(strings.Join(strings.Fields(cleaned), " "))
+	const max = 360
+	runes := []rune(cleaned)
+	if len(runes) <= max {
+		return cleaned
+	}
+	return string(runes[:max]) + "..."
+}
+
+func mailBodyWasCleaned(cleaned mailbody.CleanResult, raw string) bool {
+	return len(cleaned.HiddenBlocks) > 0 && strings.TrimSpace(cleaned.Body) != strings.TrimSpace(raw)
+}
+
+func mailHiddenLineCount(blocks []mailbody.HiddenBlock) int {
+	n := 0
+	for _, block := range blocks {
+		n += block.Lines
+	}
+	return n
+}
 
 // hasUnreadLabel reports whether labels contains the Gmail UNREAD system
 // label. Inline (rather than a generic hasLabel(labels, target) helper)

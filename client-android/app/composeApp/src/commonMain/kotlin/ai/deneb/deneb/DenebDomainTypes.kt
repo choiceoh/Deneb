@@ -65,6 +65,11 @@ data class MailDetail(
     val date: String,
     val body: String,
     val bodyTotal: Int,
+    val rawBody: String = "",
+    val rawBodyTotal: Int = 0,
+    val bodyCleaned: Boolean = false,
+    val bodyHiddenBlockCount: Int = 0,
+    val bodyHiddenLineCount: Int = 0,
     val attachments: List<MailAttachment>,
     val workState: MailWorkState = MailWorkState(),
 )
