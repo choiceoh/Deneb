@@ -222,8 +222,45 @@ func (s *Store) Get(id string) (*Proposal, error) {
 	return nil, nil
 }
 
-// Decide sets a proposal's terminal status (and the created calendar event id on
-// accept). Returns the updated proposal, or nil if id is unknown.
+// ClaimForAccept atomically transitions a pending proposal to accepted so that
+// only one of several concurrent accepts (e.g. a fast double-tap on 수락) can win
+// the right to create the event. Returns (proposal, true) on a successful claim:
+// the caller then creates the calendar event and calls Decide(StatusAccepted,
+// eventID) to attach its id — or Decide(StatusPending, "") to release the claim
+// if creation fails, leaving it retryable. Returns (proposal, false) when it was
+// already decided (the caller must NOT create an event, or it would duplicate),
+// or (nil, false) when id is unknown.
+func (s *Store) ClaimForAccept(id string) (*Proposal, bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	m, err := s.loadLocked()
+	if err != nil {
+		return nil, false, err
+	}
+	for i := range m.Proposals {
+		if m.Proposals[i].ID != id {
+			continue
+		}
+		if m.Proposals[i].Status != StatusPending {
+			p := m.Proposals[i]
+			return &p, false, nil
+		}
+		m.Proposals[i].Status = StatusAccepted
+		m.Proposals[i].DecidedAtMs = nowMs()
+		if err := s.saveLocked(m); err != nil {
+			return nil, false, err
+		}
+		p := m.Proposals[i]
+		return &p, true, nil
+	}
+	return nil, false, nil
+}
+
+// Decide sets a proposal's status (and the created calendar event id on accept).
+// Passing StatusPending with an empty event id reopens a proposal — used to
+// release a ClaimForAccept when event creation fails — and clears DecidedAtMs so
+// the "pending ⇒ no decision time" invariant holds. Returns the updated proposal,
+// or nil if id is unknown.
 func (s *Store) Decide(id string, status Status, calendarEventID string) (*Proposal, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -237,7 +274,11 @@ func (s *Store) Decide(id string, status Status, calendarEventID string) (*Propo
 		}
 		m.Proposals[i].Status = status
 		m.Proposals[i].CalendarEventID = calendarEventID
-		m.Proposals[i].DecidedAtMs = nowMs()
+		if status == StatusPending {
+			m.Proposals[i].DecidedAtMs = 0 // reopened: no decision time
+		} else {
+			m.Proposals[i].DecidedAtMs = nowMs()
+		}
 		if err := s.saveLocked(m); err != nil {
 			return nil, err
 		}
