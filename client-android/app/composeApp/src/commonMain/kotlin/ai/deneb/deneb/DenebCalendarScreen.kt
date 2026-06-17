@@ -33,13 +33,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -575,11 +575,12 @@ private fun MonthControls(
     onAdd: () -> Unit,
 ) {
     // Month control (‹ label ›) hugs the left at its natural (compact) width; a
-    // weighted Spacer pushes the right-side actions (bell + add) to the edge. The
-    // add affordance is a compact "+" tonal icon button — adding the proposal bell
-    // had squeezed a "추가" text button into wrapping/truncation at phone width, so
-    // the text was dropped in favor of the glyph (the explicit "오늘" jump went too;
-    // the ‹ › nav still returns to any month).
+    // weighted Spacer pushes the right-side actions (bell + add) to the edge. Bell
+    // and add are matching 36.dp bare IconButtons with outlined vector icons — same
+    // size, style, and alignment as each other and the ‹ › nav, so the control row
+    // reads as one consistent set. (An earlier filled-tonal "+" clashed with the
+    // bare bell; the "추가"/"오늘" text buttons were dropped before that to fit phone
+    // width — the ‹ › nav still returns to any month.)
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         IconButton(onClick = onPrev, modifier = Modifier.size(36.dp)) {
             Text("‹", style = DenebType.subject, color = MaterialTheme.colorScheme.onBackground)
@@ -595,8 +596,12 @@ private fun MonthControls(
         }
         Spacer(Modifier.weight(1f))
         CalendarBell(count = proposalCount, onClick = onBell)
-        FilledTonalIconButton(onClick = onAdd) {
-            Text("+", style = DenebType.subject)
+        IconButton(onClick = onAdd, modifier = Modifier.size(36.dp)) {
+            Icon(
+                Icons.Outlined.Add,
+                contentDescription = "일정 추가",
+                tint = MaterialTheme.colorScheme.onBackground,
+            )
         }
     }
 }
