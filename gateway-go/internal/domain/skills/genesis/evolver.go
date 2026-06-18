@@ -814,6 +814,162 @@ func supportedFailureSignatures(patterns []skillFailurePattern) []string {
 	return out
 }
 
+func validateSelfHarnessEditedSurface(audit HarnessEditAudit, originalContent, candidateBody string) (bool, string) {
+	surfaces := normalizedEditedSurfaces(audit.EditedSurface)
+	if len(surfaces) == 0 {
+		return false, "self-harness surface rejected: edited_surface is empty"
+	}
+	originalBody := skillBodyOnly(originalContent)
+	candidateBody = skillBodyOnly(candidateBody)
+	changed := changedSkillSections(originalBody, candidateBody)
+	for _, surface := range surfaces {
+		switch surface {
+		case "metadata", "frontmatter", "support-file", "support file", "tool", "tools", "runtime", "orchestration":
+			return false, fmt.Sprintf("self-harness surface rejected: edited_surface %q is not editable by SKILL.md body evolve", audit.EditedSurface)
+		case "body", "skill body", "skill.md", "skill.md body":
+			if normalizeSectionBody(originalBody) == normalizeSectionBody(candidateBody) {
+				return false, "self-harness surface rejected: edited_surface body but candidate body did not change"
+			}
+			continue
+		}
+		if !surfaceChanged(surface, changed) {
+			return false, fmt.Sprintf("self-harness surface rejected: edited_surface %q did not match changed SKILL.md sections: %s",
+				audit.EditedSurface, strings.Join(changedSectionNames(changed), ", "))
+		}
+	}
+	return true, ""
+}
+
+func normalizedEditedSurfaces(value string) []string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	value = strings.NewReplacer(";", ",", "|", ",", "/", ",", "&", ",", " and ", ",").Replace(value)
+	parts := strings.Split(value, ",")
+	out := make([]string, 0, len(parts))
+	seen := map[string]struct{}{}
+	for _, part := range parts {
+		part = strings.Join(strings.Fields(strings.TrimSpace(part)), " ")
+		if part == "" {
+			continue
+		}
+		if _, ok := seen[part]; ok {
+			continue
+		}
+		seen[part] = struct{}{}
+		out = append(out, part)
+	}
+	return out
+}
+
+type changedSkillSection struct {
+	Display   string
+	Canonical string
+}
+
+func changedSkillSections(originalBody, candidateBody string) []changedSkillSection {
+	original := skillSections(originalBody)
+	candidate := skillSections(candidateBody)
+	keys := map[string]string{}
+	for key, section := range original {
+		keys[key] = section.Display
+	}
+	for key, section := range candidate {
+		keys[key] = section.Display
+	}
+	out := make([]changedSkillSection, 0, len(keys))
+	for key, display := range keys {
+		if normalizeSectionBody(original[key].Body) == normalizeSectionBody(candidate[key].Body) {
+			continue
+		}
+		out = append(out, changedSkillSection{Display: display, Canonical: canonicalSkillSurface(key)})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].Display < out[j].Display
+	})
+	return out
+}
+
+type skillSection struct {
+	Display string
+	Body    string
+}
+
+func skillSections(content string) map[string]skillSection {
+	lines := strings.Split(skillBodyOnly(content), "\n")
+	sections := map[string]skillSection{}
+	currentKey := "body"
+	currentDisplay := "body"
+	var current []string
+	flush := func() {
+		if len(current) == 0 && currentKey != "body" {
+			return
+		}
+		sections[currentKey] = skillSection{Display: currentDisplay, Body: strings.Join(current, "\n")}
+	}
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "#") {
+			flush()
+			text := strings.TrimSpace(strings.TrimLeft(trimmed, "#"))
+			if text == "" {
+				text = "body"
+			}
+			currentKey = normalizeSkillSurface(text)
+			currentDisplay = text
+			current = []string{trimmed}
+			continue
+		}
+		current = append(current, line)
+	}
+	flush()
+	return sections
+}
+
+func surfaceChanged(surface string, changed []changedSkillSection) bool {
+	surface = canonicalSkillSurface(normalizeSkillSurface(surface))
+	for _, section := range changed {
+		if section.Canonical == surface || section.Display == surface {
+			return true
+		}
+	}
+	return false
+}
+
+func changedSectionNames(changed []changedSkillSection) []string {
+	if len(changed) == 0 {
+		return []string{"(none)"}
+	}
+	out := make([]string, 0, len(changed))
+	for _, section := range changed {
+		if section.Display != "" {
+			out = append(out, section.Display)
+		}
+	}
+	return out
+}
+
+func normalizeSkillSurface(value string) string {
+	return strings.ToLower(strings.Join(strings.Fields(strings.TrimSpace(value)), " "))
+}
+
+func canonicalSkillSurface(surface string) string {
+	switch {
+	case surface == "procedure" || strings.Contains(surface, "procedure") || strings.Contains(surface, "workflow") || strings.Contains(surface, "step") || strings.Contains(surface, "절차") || strings.Contains(surface, "흐름"):
+		return "procedure"
+	case surface == "pitfalls" || strings.Contains(surface, "pitfall") || strings.Contains(surface, "gotcha") || strings.Contains(surface, "caution") || strings.Contains(surface, "주의") || strings.Contains(surface, "위험"):
+		return "pitfalls"
+	case surface == "verification" || strings.Contains(surface, "verification") || strings.Contains(surface, "verify") || strings.Contains(surface, "검증") || strings.Contains(surface, "확인"):
+		return "verification"
+	case surface == "when to use" || strings.Contains(surface, "when to use") || strings.Contains(surface, "usage") || strings.Contains(surface, "사용"):
+		return "when to use"
+	default:
+		return surface
+	}
+}
+
+func normalizeSectionBody(value string) string {
+	return strings.Join(strings.Fields(strings.TrimSpace(value)), " ")
+}
+
 func validateTextualEditBudget(originalContent, candidateBody string) (bool, string) {
 	if strings.TrimSpace(candidateBody) == "" {
 		return false, "textual edit budget rejected empty candidate body"
@@ -1162,6 +1318,9 @@ func (e *Evolver) validateCandidatePreflight(skillName, originalContent, candida
 		}
 	}
 	if ok, reason := validateSelfHarnessAudit(audit, stats, reviewFinding); !ok {
+		return false, reason
+	}
+	if ok, reason := validateSelfHarnessEditedSurface(audit, originalContent, candidateBody); !ok {
 		return false, reason
 	}
 	return true, ""

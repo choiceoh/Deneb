@@ -311,6 +311,38 @@ func TestValidateSelfHarnessAuditRequiresSupportedSignature(t *testing.T) {
 	}
 }
 
+func TestValidateSelfHarnessEditedSurfaceRequiresClaimedSectionChange(t *testing.T) {
+	original := strings.Join([]string{
+		"# Deploy Helper",
+		"## Procedure",
+		"- Verify deploys.",
+		"## Verification",
+		"- Report exact health check.",
+	}, "\n")
+	candidate := strings.Join([]string{
+		"# Deploy Helper",
+		"## Procedure",
+		"- Verify deploys.",
+		"- If a command times out, pivot to a bounded recovery path.",
+		"## Verification",
+		"- Report exact health check.",
+	}, "\n")
+	mismatch := HarnessEditAudit{
+		EditedSurface: "Verification",
+	}
+	if ok, reason := validateSelfHarnessEditedSurface(mismatch, original, candidate); ok || !strings.Contains(reason, "did not match changed SKILL.md sections") {
+		t.Fatalf("expected edited surface mismatch, ok=%v reason=%q", ok, reason)
+	}
+	matching := HarnessEditAudit{EditedSurface: "Procedure"}
+	if ok, reason := validateSelfHarnessEditedSurface(matching, original, candidate); !ok {
+		t.Fatalf("expected changed Procedure section to pass, reason=%q", reason)
+	}
+	supportFile := HarnessEditAudit{EditedSurface: "support-file"}
+	if ok, reason := validateSelfHarnessEditedSurface(supportFile, original, candidate); ok || !strings.Contains(reason, "not editable by SKILL.md body evolve") {
+		t.Fatalf("expected support-file surface rejection, ok=%v reason=%q", ok, reason)
+	}
+}
+
 func TestParseAndApplyUsesTeacherRewriteAuditWhenEscalated(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "SKILL.md")
@@ -727,7 +759,7 @@ func TestAcceptJudgeVerdictRequiresStrictScoreImprovement(t *testing.T) {
 func TestParseAndApply_StripsEchoedFrontmatterAndBumpsVersion(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "SKILL.md")
-	original := "---\nname: demo\nversion: \"1.1.0\"\n---\n\n# Demo\n\nold body\n"
+	original := "---\nname: demo\nversion: \"1.1.0\"\n---\n\n# Demo\n\n## Procedure\nold body\n"
 	if err := os.WriteFile(path, []byte(original), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -745,7 +777,7 @@ func TestParseAndApply_StripsEchoedFrontmatterAndBumpsVersion(t *testing.T) {
 	}}
 
 	// LLM response: body echoes the frontmatter, new_version is unchanged.
-	resp := `{"skip":false,"changes":{"description":"d","new_version":"1.1.0","target_signature":"terminal=timeout|mechanism=bounded-execution","edited_surface":"Procedure","expected_behavior_change":"demo handles timeout recovery","regression_risk":"preserve existing demo body","body":"---\nname: demo\nversion: \"1.1.0\"\n---\n\n# Demo\n\nnew body"}}`
+	resp := `{"skip":false,"changes":{"description":"d","new_version":"1.1.0","target_signature":"terminal=timeout|mechanism=bounded-execution","edited_surface":"Procedure","expected_behavior_change":"demo handles timeout recovery","regression_risk":"preserve existing demo body","body":"---\nname: demo\nversion: \"1.1.0\"\n---\n\n# Demo\n\n## Procedure\nnew body"}}`
 
 	result, err := e.parseAndApply(context.Background(), resp, entry, original, &UsageStats{
 		SkillName:    "demo",
