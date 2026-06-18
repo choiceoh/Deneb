@@ -97,10 +97,9 @@ internal fun stampOf(rfc3339: String, allDay: Boolean): CalStamp? {
 /** Max event ribbon lanes drawn per week; extra concurrent spans are dropped. */
 private const val MaxBarLanes = 3
 
-private const val BarPaletteSize = 3
-
-/** A ribbon segment in one day cell: its lane (row), a stable per-event color
- *  index, and whether this day is the span's first/last (for corner rounding). */
+/** A ribbon segment in one day cell: its lane (row), a category color index
+ *  (본인/타인/기한, see categoryColorIndex), and whether this day is the span's
+ *  first/last (for corner rounding). */
 internal data class DayBar(
     val lane: Int,
     val colorIndex: Int,
@@ -141,7 +140,7 @@ internal fun layoutMonthBars(
         if (days.isEmpty()) return@mapNotNull null
         // Single-day timed events are dots (timedSingleDayDots), not ribbons.
         if (!ev.allDay && days.size == 1) return@mapNotNull null
-        Span(days.first(), days.last(), colorIndexFor(ev.id))
+        Span(days.first(), days.last(), categoryColorIndex(ev.category))
     }
     val out = HashMap<LocalDate, MutableList<DayBar>>()
     grid.cells.chunked(7).forEach { week ->
@@ -180,19 +179,28 @@ internal fun layoutMonthBars(
     return out
 }
 
-/** Days with single-day timed events, counted — drawn as dots (not ribbons) so a
- *  brief meeting reads lighter than an all-day or multi-day commitment. */
-internal fun timedSingleDayDots(events: List<CalendarEvent>, tz: TimeZone): Map<LocalDate, Int> {
-    val out = HashMap<LocalDate, Int>()
+/** Days with single-day timed events, each mapped to its events' category color
+ *  indexes (본인/타인/기한) in start order — drawn as colored dots (not ribbons) so a
+ *  brief meeting reads lighter than an all-day or multi-day commitment while still
+ *  carrying its category color. Events arrive start-sorted, so the list order is
+ *  stable; the renderer caps how many dots it draws. */
+internal fun timedSingleDayDots(events: List<CalendarEvent>, tz: TimeZone): Map<LocalDate, List<Int>> {
+    val out = HashMap<LocalDate, MutableList<Int>>()
     events.forEach { ev ->
         val days = eventDays(ev.start, ev.end, ev.allDay, tz)
         if (!ev.allDay && days.size == 1) {
-            val d = days.first()
-            out[d] = (out[d] ?: 0) + 1
+            out.getOrPut(days.first()) { ArrayList() }.add(categoryColorIndex(ev.category))
         }
     }
     return out
 }
 
-/** Stable palette slot for an event id, so its ribbon keeps one color. */
-private fun colorIndexFor(id: String): Int = (id.hashCode() and Int.MAX_VALUE) % BarPaletteSize
+/** Palette slot for an event's category, so a bar/dot reads as 본인/타인/기한 rather
+ *  than an arbitrary per-id hue. 0 = mine (own/solo/local), 1 = others (invited by
+ *  someone else), 2 = deadline. Unknown/empty falls back to 본인. Order must match
+ *  barPalette(). */
+internal fun categoryColorIndex(category: String): Int = when (category) {
+    "deadline" -> 2
+    "others" -> 1
+    else -> 0
+}

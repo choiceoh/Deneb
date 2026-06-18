@@ -200,6 +200,9 @@ data class CalendarEvent(
     val end: String,
     val allDay: Boolean,
     val local: Boolean = false,
+    // Month-grid color bucket from the gateway: "mine" | "others" | "deadline"
+    // (see eventCategory in calendar.go). Empty falls back to "mine".
+    val category: String = "",
 )
 
 /** Full calendar event for the detail screen. */

@@ -88,6 +88,10 @@ type calendarConferenceOut struct {
 // Local field is true for events stored in the local store (vs read-only Google),
 // so the native client can show edit/delete only where they actually work.
 //
+// Category buckets the event for the month grid's color coding — "mine",
+// "others", or "deadline" (see eventCategory). Empty only on the rare event with
+// no signal; the client treats empty as "mine".
+//
 //deneb:wire
 type calendarEventOut struct {
 	ID          string                 `json:"id"`
@@ -100,6 +104,7 @@ type calendarEventOut struct {
 	Status      string                 `json:"status,omitempty"`
 	HTMLLink    string                 `json:"htmlLink,omitempty"`
 	Local       bool                   `json:"local,omitempty"`
+	Category    string                 `json:"category,omitempty"`
 	Organizer   *calendarAttendeeOut   `json:"organizer,omitempty"`
 	Attendees   []calendarAttendeeOut  `json:"attendees,omitempty"`
 	Conference  *calendarConferenceOut `json:"conference,omitempty"`
@@ -466,6 +471,7 @@ func projectEventOut(e calendar.Event, includeDetail bool) calendarEventOut {
 		Status:   e.Status,
 		HTMLLink: e.HTMLLink,
 		Local:    localcal.IsLocalID(e.ID),
+		Category: eventCategory(e),
 	}
 	if includeDetail {
 		row.Description = e.Description
@@ -486,6 +492,28 @@ func projectEventOut(e calendar.Event, includeDetail bool) calendarEventOut {
 		row.Attendees = append(row.Attendees, projectAttendeeOut(att))
 	}
 	return row
+}
+
+// eventCategory buckets an event into one of the three colors the native month
+// grid renders:
+//
+//   - "deadline" — a due-date marker (mail-derived deal/action deadlines carry
+//     Kind=="deadline"); these read as a warm warning hue.
+//   - "others"   — an event someone else organized and invited the user to
+//     (a non-self organizer is present).
+//   - "mine"     — everything the user owns: events they organized, solo events,
+//     and hand-added local ones (no organizer, or organizer is self).
+//
+// Deadline wins over the organizer check so a deadline invited by someone else
+// still reads as a deadline.
+func eventCategory(e calendar.Event) string {
+	if e.Kind == "deadline" {
+		return "deadline"
+	}
+	if !e.Organizer.Self && (e.Organizer.Email != "" || e.Organizer.DisplayName != "") {
+		return "others"
+	}
+	return "mine"
 }
 
 func projectAttendeeOut(a calendar.Attendee) calendarAttendeeOut {

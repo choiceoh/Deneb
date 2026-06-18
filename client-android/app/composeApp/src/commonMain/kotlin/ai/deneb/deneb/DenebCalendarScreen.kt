@@ -8,6 +8,7 @@ import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
+import ai.deneb.ui.denebInsight
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -303,7 +304,9 @@ fun DenebCalendarScreen(
                     },
                 )
             }
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(10.dp))
+            CalendarLegend()
+            Spacer(Modifier.height(10.dp))
             HorizontalDivider(color = denebHairline())
             Spacer(Modifier.height(8.dp))
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -371,7 +374,7 @@ internal fun CalendarMonthGrid(
     today: LocalDate,
     selected: LocalDate,
     bars: Map<LocalDate, List<DayBar>>,
-    dots: Map<LocalDate, Int>,
+    dots: Map<LocalDate, List<Int>>,
     onSelect: (LocalDate) -> Unit,
 ) {
     val haptics = rememberHaptics()
@@ -395,7 +398,7 @@ internal fun CalendarMonthGrid(
                         isSelected = date == selected,
                         bars = bars[date].orEmpty(),
                         laneCount = laneCount,
-                        dotCount = dots[date] ?: 0,
+                        dotColors = dots[date].orEmpty(),
                         showDotRow = showDotRow,
                         palette = palette,
                         modifier = Modifier.weight(1f),
@@ -410,6 +413,34 @@ internal fun CalendarMonthGrid(
     }
 }
 
+/** Compact one-line key for the grid's category colors (본인 / 타인 / 기한): a small
+ *  filled dot in each palette color plus a label, so the colors carry meaning instead
+ *  of reading as decoration. Index order matches categoryColorIndex / barPalette. */
+@Composable
+internal fun CalendarLegend() {
+    val palette = barPalette()
+    Row(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterHorizontally),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        LegendDot(palette[0], "본인")
+        LegendDot(palette[1], "타인")
+        LegendDot(palette[2], "기한")
+    }
+}
+
+@Composable
+private fun LegendDot(color: Color, label: String) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+    ) {
+        Box(Modifier.size(7.dp).clip(CircleShape).background(color))
+        Text(label, style = DenebType.meta, color = denebHint())
+    }
+}
+
 @Composable
 private fun DayCell(
     date: LocalDate,
@@ -418,7 +449,7 @@ private fun DayCell(
     isSelected: Boolean,
     bars: List<DayBar>,
     laneCount: Int,
-    dotCount: Int,
+    dotColors: List<Int>,
     showDotRow: Boolean,
     palette: List<Color>,
     modifier: Modifier = Modifier,
@@ -480,8 +511,9 @@ private fun DayCell(
                 }
             }
         }
-        // Dots: single-day timed events. A fixed-height row reserved grid-wide (when
-        // any day has dots) so cells stay aligned; up to three dots per day.
+        // Dots: single-day timed events, each in its category color (본인/타인/기한). A
+        // fixed-height row reserved grid-wide (when any day has dots) so cells stay
+        // aligned; up to three dots per day.
         if (showDotRow) {
             Spacer(Modifier.height(3.dp))
             Row(
@@ -489,8 +521,8 @@ private fun DayCell(
                 horizontalArrangement = Arrangement.spacedBy(3.dp, Alignment.CenterHorizontally),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                repeat(minOf(dotCount, 3)) {
-                    Box(Modifier.size(5.dp).clip(CircleShape).background(scheme.primary))
+                dotColors.take(3).forEach { idx ->
+                    Box(Modifier.size(5.dp).clip(CircleShape).background(palette[idx % palette.size]))
                 }
             }
         }
@@ -767,13 +799,16 @@ private fun dayHeadLabel(date: LocalDate, today: LocalDate, count: Int): String 
     return if (count > 0) "$head · ${count}건" else head
 }
 
-/** Ribbon colors — calm, content-only hues from the active scheme. Deliberately
- *  excludes error red (reserved for Sunday / warnings) and the Saturday-blue header
- *  tint, so a bar never reads as a weekday/date color. */
+/** Category colors for event bars and dots — index order matches categoryColorIndex:
+ *  [0] 본인 (cool primary), [1] 타인 (teal tertiary), [2] 기한 (warm apricot insight).
+ *  Two cool hues plus one warm makes 기한 stand out without inventing a new color —
+ *  the warm tone is the theme's second accent (denebInsight). Deliberately excludes
+ *  error red (reserved for Sunday / warnings) and the Saturday-blue header tint, so a
+ *  bar never reads as a weekday/date color. */
 @Composable
 internal fun barPalette(): List<Color> {
     val s = MaterialTheme.colorScheme
-    return listOf(s.primary, s.tertiary, s.secondary)
+    return listOf(s.primary, s.tertiary, denebInsight())
 }
 
 /** Rounds only a ribbon segment's outer corners: the start day's left, the end

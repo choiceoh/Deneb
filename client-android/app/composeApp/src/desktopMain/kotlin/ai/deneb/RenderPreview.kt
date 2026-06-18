@@ -9,6 +9,7 @@ import ai.deneb.deneb.CalendarEmptyDay
 import ai.deneb.deneb.CalendarEvent
 import ai.deneb.deneb.CalendarEventContent
 import ai.deneb.deneb.CalendarEventDetail
+import ai.deneb.deneb.CalendarLegend
 import ai.deneb.deneb.CalendarMonthGrid
 import ai.deneb.deneb.CronEditContent
 import ai.deneb.deneb.DropboxEntry
@@ -324,12 +325,14 @@ private fun renderCalendarMonth(name: String, scheme: ColorScheme) {
     val selected = LocalDate(2026, 6, 3)
     val tz = TimeZone.UTC
     // Mix single-day and multi-day events; the latter exercise the ribbon lanes,
-    // including one span (e4) that crosses a week boundary.
+    // including one span (e4) that crosses a week boundary. Categories cover all
+    // three colors: 본인 (mine), 타인 (others), 기한 (deadline).
     val events = listOf(
-        CalendarEvent("e1", "기획조정실 주간 회의", "본사 3층 대회의실", "2026-06-03T05:00:00Z", "2026-06-03T06:00:00Z", false),
-        CalendarEvent("e2", "에코프로 구매팀 미팅", "남도에코에너지", "2026-06-03T07:30:00Z", "2026-06-03T08:30:00Z", false),
-        CalendarEvent("e3", "출장 (서울)", "", "2026-06-10T00:00:00Z", "2026-06-13T00:00:00Z", true),
-        CalendarEvent("e4", "RE100 전시 부스", "코엑스", "2026-06-19T00:00:00Z", "2026-06-24T00:00:00Z", true),
+        CalendarEvent("e1", "기획조정실 주간 회의", "본사 3층 대회의실", "2026-06-03T05:00:00Z", "2026-06-03T06:00:00Z", false, category = "mine"),
+        CalendarEvent("e2", "에코프로 구매팀 미팅", "남도에코에너지", "2026-06-03T07:30:00Z", "2026-06-03T08:30:00Z", false, category = "others"),
+        CalendarEvent("e3", "출장 (서울)", "", "2026-06-10T00:00:00Z", "2026-06-13T00:00:00Z", true, category = "mine"),
+        CalendarEvent("e4", "RE100 전시 부스", "코엑스", "2026-06-19T00:00:00Z", "2026-06-24T00:00:00Z", true, category = "others"),
+        CalendarEvent("e5", "계약서 제출 마감", "", "2026-06-16T00:00:00Z", "2026-06-17T00:00:00Z", true, category = "deadline"),
     )
     val bars = layoutMonthBars(events, grid, tz)
     val dots = timedSingleDayDots(events, tz)
@@ -356,6 +359,8 @@ private fun renderCalendarMonth(name: String, scheme: ColorScheme) {
                         }
                     }
                     CalendarMonthGrid(grid, today, selected, bars, dots, {})
+                    Spacer(Modifier.height(10.dp))
+                    CalendarLegend()
                     Spacer(Modifier.height(12.dp))
                     HorizontalDivider(color = denebHairline())
                     Spacer(Modifier.height(8.dp))

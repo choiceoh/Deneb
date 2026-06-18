@@ -552,3 +552,40 @@ func TestCalendarUpdate_RejectsGoogleID(t *testing.T) {
 		t.Errorf("expected FORBIDDEN, got ok=%v err=%+v", resp.OK, resp.Error)
 	}
 }
+
+// TestEventCategory pins the month-grid color buckets: deadline by Kind,
+// others by a non-self organizer, mine for everything the user owns.
+func TestEventCategory(t *testing.T) {
+	cases := []struct {
+		name string
+		ev   calendar.Event
+		want string
+	}{
+		{"deadline by kind", calendar.Event{Kind: "deadline"}, "deadline"},
+		{"deadline beats a foreign organizer", calendar.Event{Kind: "deadline", Organizer: calendar.Attendee{Email: "boss@example.com"}}, "deadline"},
+		{"others: non-self organizer (email)", calendar.Event{Organizer: calendar.Attendee{Email: "boss@example.com"}}, "others"},
+		{"others: non-self organizer (display name only)", calendar.Event{Organizer: calendar.Attendee{DisplayName: "Boss"}}, "others"},
+		{"mine: self organizer", calendar.Event{Organizer: calendar.Attendee{Email: "me@example.com", Self: true}}, "mine"},
+		{"mine: no organizer (solo/local)", calendar.Event{Summary: "혼자 일정"}, "mine"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := eventCategory(tc.ev); got != tc.want {
+				t.Errorf("eventCategory(%+v) = %q, want %q", tc.ev, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestProjectEventOut_SetsCategory confirms the wire projection carries the
+// bucket through so the native grid can color by it.
+func TestProjectEventOut_SetsCategory(t *testing.T) {
+	out := projectEventOut(calendar.Event{
+		ID:        "g1",
+		Summary:   "에코프로 미팅",
+		Organizer: calendar.Attendee{Email: "boss@example.com"},
+	}, false)
+	if out.Category != "others" {
+		t.Errorf("Category = %q, want %q", out.Category, "others")
+	}
+}

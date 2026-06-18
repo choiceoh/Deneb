@@ -37,6 +37,7 @@ data class CalendarEventOut(
     val status: String = "",
     val htmlLink: String = "",
     val local: Boolean = false,
+    val category: String = "",
     val organizer: CalendarAttendeeOut? = null,
     val attendees: List<CalendarAttendeeOut> = emptyList(),
     val conference: CalendarConferenceOut? = null,
