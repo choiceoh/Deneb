@@ -94,6 +94,12 @@ func TestHealthEndpointIncludesUsageQualitySignals(t *testing.T) {
 	if propus["state"] != "attention" {
 		t.Fatalf("expected Propus attention state, got %+v", propus)
 	}
+	if propus["overview_state"] == "" || propus["coverage_state"] == "" {
+		t.Fatalf("expected unified Propus overview/coverage state, got %+v", propus)
+	}
+	if _, ok := propus["next_actions"].([]any); !ok {
+		t.Fatalf("expected Propus next actions from unified overview, got %+v", propus)
+	}
 	if attention, ok := propus["attention"].([]any); !ok || len(attention) == 0 {
 		t.Fatalf("expected Propus attention signals, got %+v", propus)
 	}

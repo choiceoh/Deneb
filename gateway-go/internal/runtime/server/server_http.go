@@ -112,12 +112,14 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	// If review_age keeps growing, the nudger→review→evolve pipeline stalled.
 	if s.genesisTracker != nil {
 		live := s.genesisTracker.LivenessSnapshot()
-		doctrine := genesis.PropusDoctrine()
-		lastActivity := propusLastActivityMS(live)
+		identity := genesis.BuildPropusSystemIdentity(genesis.PropusScopeGlobal)
+		lastActivity := genesis.PropusLastActivityMS(live)
 		se := map[string]any{
-			"system":                "Propus",
-			"tool":                  "skill_lifecycle",
-			"doctrine_version":      doctrine.Version,
+			"system":                identity.Name,
+			"tool":                  identity.Tool,
+			"doctrine_version":      identity.Version,
+			"source_papers":         identity.SourcePapers,
+			"filtered_sources":      identity.FilteredSources,
 			"last_review_ms":        live.LastReviewAt,
 			"last_review_ok":        live.LastReviewOK,
 			"last_evolve_ms":        live.LastEvolveAt,
@@ -125,7 +127,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 			"review_attempts":       live.ReviewAttempts,
 			"review_skips":          live.ReviewSkips,
 			"validation_rejections": live.ValidationRejections,
-			"quality_gates":         doctrine.QualityGates,
+			"quality_gates":         identity.QualityGates,
 		}
 		if lastActivity > 0 {
 			se["last_activity_ms"] = lastActivity
@@ -156,14 +158,16 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 		if eh.Thrash {
 			se["thrash"] = true
 		}
-		if usageQuality, err := s.genesisTracker.UsageQualitySummary(""); err == nil {
-			se["usage_records"] = usageQuality.TotalRecords
-			se["usage_counted_records"] = usageQuality.CountedRecords
-			se["ignored_usage_records"] = usageQuality.IgnoredRecords
-			if usageQuality.IgnoredUnactionableLegacyFailures > 0 {
-				se["ignored_unactionable_legacy_failures"] = usageQuality.IgnoredUnactionableLegacyFailures
-				se["top_ignored_unactionable_legacy_failure_skill"] = usageQuality.TopIgnoredUnactionableLegacyFailureSkill
-				se["top_ignored_unactionable_legacy_failure_skill_count"] = usageQuality.TopIgnoredUnactionableLegacyFailureSkillCount
+		usageQuality := genesis.UsageQualitySummary{}
+		if quality, err := s.genesisTracker.UsageQualitySummary(""); err == nil {
+			usageQuality = quality
+			se["usage_records"] = quality.TotalRecords
+			se["usage_counted_records"] = quality.CountedRecords
+			se["ignored_usage_records"] = quality.IgnoredRecords
+			if quality.IgnoredUnactionableLegacyFailures > 0 {
+				se["ignored_unactionable_legacy_failures"] = quality.IgnoredUnactionableLegacyFailures
+				se["top_ignored_unactionable_legacy_failure_skill"] = quality.TopIgnoredUnactionableLegacyFailureSkill
+				se["top_ignored_unactionable_legacy_failure_skill_count"] = quality.TopIgnoredUnactionableLegacyFailureSkillCount
 			}
 		}
 		validationSummary := genesis.SkillValidationCaseSummary{}
@@ -174,6 +178,9 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 			se["validation_case_duplicates"] = validationCases.DuplicateRecords
 			se["validation_cases_automatic"] = validationCases.AutomaticRecords
 			se["validation_cases_unique_automatic"] = validationCases.UniqueAutomaticRecords
+			se["validation_cases_easy_anchor"] = validationCases.UniqueEasyAnchorCases
+			se["validation_cases_mixed_frontier"] = validationCases.UniqueMixedFrontierCases
+			se["validation_cases_hard_frontier"] = validationCases.UniqueHardFrontierCases
 			se["validation_case_skills"] = validationCases.SkillsWithCases
 			if validationCases.WeakAutomaticRecords > 0 {
 				se["validation_cases_weak_automatic"] = validationCases.WeakAutomaticRecords
@@ -193,10 +200,35 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 			se["agent_skills"] = total
 			se["unused_agent_skills"] = unused
 		}
-		attention := propusHealthAttention(live, eh, validationSummary, agentSkills, unusedAgentSkills)
-		se["state"] = propusHealthState(live, lastActivity, attention)
-		if len(attention) > 0 {
-			se["attention"] = attention
+		recent, _ := s.genesisTracker.RecentLifecycleLog(60)
+		stats, _ := s.genesisTracker.ListAllStats()
+		curator, _ := s.genesisTracker.SkillCuratorReport("")
+		opportunities, _ := s.genesisTracker.RecentSkillOpportunities("", 60)
+		selfCorrections, _ := s.genesisTracker.RecentSelfCorrectionCandidates("", genesis.SelfCorrectionStatusProposed, 60)
+		overview := genesis.BuildPropusOverview(genesis.PropusOverviewInput{
+			Scope:             genesis.PropusScopeGlobal,
+			Recent:            recent,
+			Stats:             stats,
+			Curator:           curator,
+			UsageQuality:      usageQuality,
+			ValidationSummary: validationSummary,
+			Opportunities:     opportunities,
+			SelfCorrections:   selfCorrections,
+		})
+		healthSnapshot := genesis.BuildPropusHealth(genesis.PropusHealthInput{
+			Liveness:          live,
+			Evolution:         eh,
+			Validation:        validationSummary,
+			AgentSkills:       agentSkills,
+			UnusedAgentSkills: unusedAgentSkills,
+		})
+		se["state"] = healthSnapshot.State
+		se["overview_state"] = overview.State
+		se["coverage_state"] = overview.DoctrineCoverage.State
+		se["coverage_gaps"] = overview.DoctrineCoverage.Gaps
+		se["next_actions"] = overview.NextActions
+		if len(healthSnapshot.Attention) > 0 {
+			se["attention"] = healthSnapshot.Attention
 		}
 		health["propus"] = se
 		health["self_evolution"] = se
@@ -207,65 +239,6 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	}
 
 	s.writeJSON(w, http.StatusOK, health)
-}
-
-func propusLastActivityMS(live genesis.SkillLivenessState) int64 {
-	last := live.LastReviewAt
-	if live.LastEvolveAt > last {
-		last = live.LastEvolveAt
-	}
-	if live.LastGenesisAt > last {
-		last = live.LastGenesisAt
-	}
-	if live.LastErrorAt > last {
-		last = live.LastErrorAt
-	}
-	return last
-}
-
-func propusHealthState(live genesis.SkillLivenessState, lastActivity int64, attention []string) string {
-	if live.LastError != "" {
-		return "degraded"
-	}
-	if len(attention) > 0 {
-		return "attention"
-	}
-	if lastActivity > 0 || live.ReviewAttempts > 0 || live.ReviewSkips > 0 || live.ValidationRejections > 0 {
-		return "observing"
-	}
-	return "idle"
-}
-
-func propusHealthAttention(
-	live genesis.SkillLivenessState,
-	evo genesis.EvolutionHealthSummary,
-	validation genesis.SkillValidationCaseSummary,
-	agentSkills int,
-	unusedAgentSkills int,
-) []string {
-	attention := make([]string, 0, 6)
-	if live.LastError != "" {
-		attention = append(attention, "last_error")
-	}
-	if evo.Thrash {
-		attention = append(attention, "evolve_thrash")
-	}
-	if evo.EvolveRolledBack7d > 0 {
-		attention = append(attention, "recent_rollbacks")
-	}
-	if evo.EvolveRejected7d > 0 {
-		attention = append(attention, "recent_rejections")
-	}
-	if live.ReviewAttempts > 0 && live.ReviewAttempts == live.ReviewSkips && live.LastReviewAt == 0 {
-		attention = append(attention, "reviews_all_skipped")
-	}
-	if live.ValidationRejections > 0 && validation.UniqueRecords == 0 {
-		attention = append(attention, "validation_rejections_without_corpus")
-	}
-	if agentSkills >= 3 && unusedAgentSkills*2 >= agentSkills {
-		attention = append(attention, "many_unused_agent_skills")
-	}
-	return attention
 }
 
 // handleReady responds with readiness status.

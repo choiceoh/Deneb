@@ -152,11 +152,11 @@ func TestSkillLifecycleStatusFiltersBySkillAndStats(t *testing.T) {
 	}
 	nextActions := overview["nextActions"].([]string)
 	if len(nextActions) < 3 ||
-		nextActions[0] != "review_pending_self_corrections" ||
-		nextActions[1] != "record_validation_case_from_session" ||
-		nextActions[2] != "triage_opportunity_backlog" {
+		nextActions[0] != "review_pending_self_corrections" {
 		t.Fatalf("unexpected Propus next actions: %+v", nextActions)
 	}
+	requireStringSliceContains(t, nextActions, "record_validation_case_from_session")
+	requireStringSliceContains(t, nextActions, "triage_opportunity_backlog")
 	coverage := overview["doctrineCoverage"].(map[string]any)
 	if coverage["state"] != "partial" || coverage["sourcePolicy"] != "core_sources_only_filtered_sources_not_gates" {
 		t.Fatalf("unexpected doctrine coverage: %+v", coverage)

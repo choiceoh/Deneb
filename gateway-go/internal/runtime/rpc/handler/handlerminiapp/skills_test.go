@@ -58,6 +58,30 @@ func testSkillsDeps() SkillsDeps {
 				{Type: "genesis", SkillName: "morning-letter", Description: "생성", CreatedAt: 111},
 			}, nil
 		},
+		ValidationSummary: func(skillName string) (genesis.SkillValidationCaseSummary, error) {
+			return genesis.SkillValidationCaseSummary{
+				SkillName:                skillName,
+				RawRecords:               2,
+				UniqueRecords:            2,
+				UniqueEasyAnchorCases:    1,
+				UniqueMixedFrontierCases: 1,
+				SkillsWithCases:          1,
+			}, nil
+		},
+		RecentOpportunities: func(skillName string, limit int) ([]genesis.SkillOpportunityRecord, error) {
+			if skillName == "morning-letter" {
+				return nil, nil
+			}
+			return []genesis.SkillOpportunityRecord{{
+				SkillName: skillName,
+				Candidate: "record frontier tiers",
+				Route:     "evolve",
+				Evidence:  "Propus coverage check",
+			}}, nil
+		},
+		RecentSelfCorrections: func(skillName string, limit int) ([]genesis.SelfCorrectionCandidateRecord, error) {
+			return nil, nil
+		},
 	}
 }
 
@@ -194,7 +218,7 @@ func TestSkillsLifecycle_MappingAndLimit(t *testing.T) {
 		t.Fatalf("expected 4 events (limit), got %d", payload.Count)
 	}
 	if payload.Summary.System != "Propus" ||
-		payload.Summary.State != "attention" ||
+		payload.Summary.State != "needs_attention" ||
 		payload.Summary.Total != 4 ||
 		payload.Summary.Evolved != 1 ||
 		payload.Summary.Review != 1 ||
@@ -208,6 +232,9 @@ func TestSkillsLifecycle_MappingAndLimit(t *testing.T) {
 		len(payload.Summary.FilteredSources) != len(genesis.PropusDoctrine().FilteredSourceIDs()) ||
 		len(payload.Summary.Principles) != len(genesis.PropusDoctrine().ProductRules()) ||
 		len(payload.Summary.QualityGates) != len(genesis.PropusDoctrine().QualityGates) ||
+		payload.Summary.CoverageState != "covered" ||
+		len(payload.Summary.CoverageGaps) != 0 ||
+		len(payload.Summary.NextActions) == 0 ||
 		payload.Summary.NextCue == "" ||
 		payload.Summary.QualityGate == "" {
 		t.Fatalf("unexpected Propus summary: %+v", payload.Summary)
@@ -257,7 +284,7 @@ func TestSkillsLifecycle_SkillFilter(t *testing.T) {
 	if payload.Count != 1 || payload.Events[0].Type != "genesis" {
 		t.Fatalf("expected single genesis event for morning-letter, got %+v", payload.Events)
 	}
-	if payload.Summary.State != "observing" || payload.Summary.Genesis != 1 || payload.Summary.Attention != 0 {
+	if payload.Summary.State != "steady" || payload.Summary.Genesis != 1 || payload.Summary.Attention != 0 {
 		t.Fatalf("unexpected filtered Propus summary: %+v", payload.Summary)
 	}
 }
@@ -266,6 +293,11 @@ func TestSkillsLifecycle_SkillFilter(t *testing.T) {
 func TestSkillsLifecycle_NilProvider(t *testing.T) {
 	deps := testSkillsDeps()
 	deps.RecentLifecycle = nil
+	deps.CuratorRecords = nil
+	deps.UsageStats = nil
+	deps.ValidationSummary = nil
+	deps.RecentOpportunities = nil
+	deps.RecentSelfCorrections = nil
 	h := skillsLifecycle(deps)
 	resp := h(authedSkillsCtx(), &protocol.RequestFrame{ID: "1", Method: "miniapp.skills.lifecycle"})
 	payload := decodeSkillsPayload[SkillsLifecycleResponse](t, resp)
