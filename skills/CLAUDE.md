@@ -245,16 +245,21 @@ curator task. Manual `skill_lifecycle` actions are available for `pin`, `unpin`,
 
 ### Self-Evolution
 
-Skills improve over time via the autoresearch loop, with SkillOpt-style
-stability gates:
-1. Diagnose failure patterns in skill usage
-2. Form a single hypothesis for improvement
+Skills improve over time via a Self-Harness-style autoresearch loop, with
+SkillOpt stability gates:
+1. Mine failure patterns from real skill usage, grouping them by terminal cause,
+   causal status, and reusable agent mechanism instead of treating raw errors as
+   isolated anecdotes
+2. Form a single hypothesis tied to one supported, addressable failure mechanism
 3. Mutate the SKILL.md with a bounded textual learning-rate budget (one atomic add/delete/replace)
 4. Evaluate via `scripts/dev/iterate.sh` or the built-in self-test/teacher gate
 5. Keep only validated improvements; record rejected edits so the next pass does not repeat them
 
 Operational rules:
 - Treat the skill body as trainable external state for a frozen agent; do not add inference-time calls to use an optimized skill.
+- A candidate must name the failure mechanism, editable surface, expected behavior change, and regression risk; weak or non-addressable evidence should produce a no-op, not a speculative rewrite.
+- Background automatic evolution should wait for repeated real failures; a review finding can still trigger immediate evolution because it carries session-level evidence.
+- Persist Self-Harness audit fields for accepted/rejected evolves so the lifecycle feed can explain what changed and why.
 - Candidate edits must preserve frontmatter, category-level scope, and real tool availability.
 - `skill_lifecycle status` includes `rejectedEdits` and `validationCases`; review them before rerunning an evolve route.
 - When a real failure can be replayed from a stored transcript, prefer `skill_lifecycle` action `validation_case_from_session` with `skillName`, `sessionKey`, and a short description; it extracts ordered tool calls, important input fragments, and fixture outputs from the trace. Use `validation_case` with a manual `replay` block (`input`, `requiredActions`, `forbiddenActions`, `expectedToolCalls`, `forbiddenToolCalls`, `requiredObservations`, `forbiddenObservations`, `requireOrder`) when the invariant is not recoverable from the session trace.

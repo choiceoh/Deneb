@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/pkg/atomicfile"
+	"github.com/choiceoh/deneb/gateway-go/pkg/jsonlstore"
 )
 
 // SkillOptimizerMemoryEntry is the slow/meta-update memory from SkillOpt,
@@ -44,13 +45,16 @@ func (t *Tracker) OptimizerMemory(skillName string) (SkillOptimizerMemoryEntry, 
 	if err != nil {
 		return SkillOptimizerMemoryEntry{SkillName: key}, err
 	}
-	if state == nil || state.Skills == nil {
-		return SkillOptimizerMemoryEntry{SkillName: key}, nil
+	if state != nil && state.Skills != nil {
+		if entry, ok := state.Skills[key]; ok && optimizerMemoryHasSignal(entry) {
+			return entry, nil
+		}
 	}
-	if entry, ok := state.Skills[key]; ok {
-		return entry, nil
+	entry, err := t.optimizerMemoryFromLifecycleLocked(key, nil)
+	if err != nil {
+		return SkillOptimizerMemoryEntry{SkillName: key}, err
 	}
-	return SkillOptimizerMemoryEntry{SkillName: key}, nil
+	return entry, nil
 }
 
 func (t *Tracker) recordOptimizerMemoryLocked(skillName, outcome, note string, at int64) {
@@ -70,6 +74,95 @@ func (t *Tracker) recordOptimizerMemoryLocked(skillName, outcome, note string, a
 	}
 	entry := state.Skills[skillName]
 	entry.SkillName = skillName
+	if !optimizerMemoryHasSignal(entry) {
+		backfilled, err := t.optimizerMemoryFromLifecycleLocked(skillName, &optimizerMemorySkip{
+			Outcome:   outcome,
+			Note:      note,
+			CreatedAt: at,
+		})
+		if err != nil {
+			if t.logger != nil {
+				t.logger.Warn("genesis-tracker: optimizer memory lifecycle backfill failed", "skill", skillName, "error", err)
+			}
+		} else {
+			entry = backfilled
+		}
+	}
+	applyOptimizerMemoryOutcome(&entry, outcome, note, at)
+	state.Skills[skillName] = entry
+	if err := t.saveOptimizerMemoryLocked(state); err != nil && t.logger != nil {
+		t.logger.Warn("genesis-tracker: optimizer memory write failed", "skill", skillName, "error", err)
+	}
+}
+
+type optimizerMemorySkip struct {
+	Outcome   string
+	Note      string
+	CreatedAt int64
+}
+
+func (t *Tracker) optimizerMemoryFromLifecycleLocked(skillName string, skip *optimizerMemorySkip) (SkillOptimizerMemoryEntry, error) {
+	entry := SkillOptimizerMemoryEntry{SkillName: skillName}
+	if strings.TrimSpace(skillName) == "" || t.logPath == "" {
+		return entry, nil
+	}
+	events, err := jsonlstore.Load[LifecycleLogEntry](t.logPath)
+	if err != nil {
+		return entry, fmt.Errorf("genesis-tracker: load lifecycle optimizer memory: %w", err)
+	}
+	skipped := false
+	for _, event := range events {
+		if event.SkillName != skillName {
+			continue
+		}
+		outcome, note, ok := lifecycleOptimizerOutcome(event)
+		if !ok {
+			continue
+		}
+		if skip != nil && !skipped && event.CreatedAt == skip.CreatedAt && outcome == skip.Outcome && note == skip.Note {
+			skipped = true
+			continue
+		}
+		applyOptimizerMemoryOutcome(&entry, outcome, note, event.CreatedAt)
+	}
+	return entry, nil
+}
+
+func lifecycleOptimizerOutcome(event LifecycleLogEntry) (string, string, bool) {
+	switch event.Type {
+	case "evolved":
+		return "accepted", event.Description, true
+	case "evolve_rejected":
+		return "rejected", event.Reason, true
+	case "evolve_rolled_back":
+		note := strings.TrimSpace(event.Reason)
+		if note == "" {
+			note = strings.TrimSpace(event.Description)
+		}
+		if note == "" {
+			note = "post-evolve rollback fired"
+		}
+		return "rolled_back", note, true
+	default:
+		return "", "", false
+	}
+}
+
+func optimizerMemoryHasSignal(entry SkillOptimizerMemoryEntry) bool {
+	return entry.AcceptedCount > 0 ||
+		entry.RejectedCount > 0 ||
+		entry.RolledBackCount > 0 ||
+		entry.LastAcceptedAt > 0 ||
+		entry.LastRejectedAt > 0 ||
+		entry.LastRolledBackAt > 0 ||
+		len(entry.StableDirections) > 0 ||
+		len(entry.AvoidDirections) > 0
+}
+
+func applyOptimizerMemoryOutcome(entry *SkillOptimizerMemoryEntry, outcome, note string, at int64) {
+	if entry == nil {
+		return
+	}
 	direction := strings.TrimSpace(truncateRunes(note, 400))
 	switch outcome {
 	case "accepted":
@@ -84,10 +177,6 @@ func (t *Tracker) recordOptimizerMemoryLocked(skillName, outcome, note string, a
 		entry.RolledBackCount++
 		entry.LastRolledBackAt = at
 		entry.AvoidDirections = prependOptimizerDirection(entry.AvoidDirections, direction)
-	}
-	state.Skills[skillName] = entry
-	if err := t.saveOptimizerMemoryLocked(state); err != nil && t.logger != nil {
-		t.logger.Warn("genesis-tracker: optimizer memory write failed", "skill", skillName, "error", err)
 	}
 }
 

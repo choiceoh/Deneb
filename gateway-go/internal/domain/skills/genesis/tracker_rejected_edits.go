@@ -2,6 +2,7 @@ package genesis
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -60,12 +61,66 @@ func (t *Tracker) RecentRejectedSkillEdits(skillName string, limit int) ([]Rejec
 		return nil, fmt.Errorf("genesis-tracker: load rejected edits: %w", err)
 	}
 	out := make([]RejectedSkillEditRecord, 0, min(limit, len(entries)))
-	for i := len(entries) - 1; i >= 0 && len(out) < limit; i-- {
+	for i := len(entries) - 1; i >= 0; i-- {
 		rec := entries[i]
 		if filter != "" && rec.SkillName != filter {
 			continue
 		}
 		out = append(out, rec)
 	}
+	fallback, err := t.rejectedSkillEditsFromLifecycleLocked(filter)
+	if err != nil {
+		return nil, err
+	}
+	out = append(out, fallback...)
+	sort.SliceStable(out, func(i, j int) bool {
+		return out[i].CreatedAt > out[j].CreatedAt
+	})
+	out = dedupeRejectedSkillEdits(out)
+	if len(out) > limit {
+		out = out[:limit]
+	}
 	return out, nil
+}
+
+func (t *Tracker) rejectedSkillEditsFromLifecycleLocked(filter string) ([]RejectedSkillEditRecord, error) {
+	entries, err := jsonlstore.Load[LifecycleLogEntry](t.logPath)
+	if err != nil {
+		return nil, fmt.Errorf("genesis-tracker: load lifecycle rejected edits: %w", err)
+	}
+	out := make([]RejectedSkillEditRecord, 0)
+	for _, entry := range entries {
+		if entry.Type != "evolve_rejected" {
+			continue
+		}
+		skillName := strings.TrimSpace(entry.SkillName)
+		if skillName == "" || (filter != "" && skillName != filter) {
+			continue
+		}
+		reason := strings.TrimSpace(entry.Reason)
+		if reason == "" {
+			reason = "rejected"
+		}
+		out = append(out, RejectedSkillEditRecord{
+			SkillName: skillName,
+			Reason:    reason,
+			Source:    "lifecycle-fallback",
+			CreatedAt: entry.CreatedAt,
+		})
+	}
+	return out, nil
+}
+
+func dedupeRejectedSkillEdits(records []RejectedSkillEditRecord) []RejectedSkillEditRecord {
+	seen := make(map[string]bool, len(records))
+	out := records[:0]
+	for _, rec := range records {
+		key := strings.TrimSpace(rec.SkillName) + "\x00" + strings.TrimSpace(rec.Reason)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, rec)
+	}
+	return out
 }

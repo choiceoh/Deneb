@@ -283,7 +283,7 @@ func normalizedValidationCaseKey(value string) string {
 
 func isAutomaticValidationCase(rec SkillValidationCaseRecord) bool {
 	switch strings.ToLower(strings.TrimSpace(rec.Source)) {
-	case "review-session", "review-finding", "self-review", "session-backfill":
+	case "review-session", "review-finding", "self-review", "session-backfill", "auto-failed-skill-use":
 		return true
 	default:
 		return strings.HasPrefix(strings.ToLower(strings.TrimSpace(rec.Source)), "review")

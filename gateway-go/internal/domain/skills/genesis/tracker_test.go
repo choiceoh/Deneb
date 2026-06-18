@@ -3,6 +3,7 @@ package genesis
 import (
 	"errors"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -119,6 +120,38 @@ func TestTrackerRecentLifecycleLog_NewestFirstAndTyped(t *testing.T) {
 	}
 	if entries[1].Type != "genesis" || entries[1].SkillName != "deploy-helper" {
 		t.Fatalf("expected typed genesis entry second, got %+v", entries[1])
+	}
+}
+
+func TestTrackerLifecycleLogStoresSelfHarnessAudit(t *testing.T) {
+	tracker := newTestTracker(t)
+	audit := HarnessEditAudit{
+		TargetSignature:        "terminal=timeout|mechanism=bounded-execution",
+		EditedSurface:          "Procedure",
+		ExpectedBehaviorChange: "pivot after a timeout",
+		RegressionRisk:         "do not skip final verification",
+	}
+	if err := tracker.LogEvolveWithAudit("deploy-helper", "1.0.1", "tighten timeout recovery", audit); err != nil {
+		t.Fatalf("LogEvolveWithAudit: %v", err)
+	}
+	if err := tracker.LogEvolveRejectedWithAudit("deploy-helper", "judge rejected candidate", audit); err != nil {
+		t.Fatalf("LogEvolveRejectedWithAudit: %v", err)
+	}
+
+	entries, err := tracker.RecentLifecycleLog(2)
+	if err != nil {
+		t.Fatalf("RecentLifecycleLog: %v", err)
+	}
+	for _, entry := range entries {
+		if entry.SelfHarnessAudit == nil {
+			t.Fatalf("expected audit on lifecycle entry, got %+v", entry)
+		}
+		if entry.SelfHarnessAudit.TargetSignature != audit.TargetSignature ||
+			entry.SelfHarnessAudit.EditedSurface != audit.EditedSurface ||
+			entry.SelfHarnessAudit.ExpectedBehaviorChange != audit.ExpectedBehaviorChange ||
+			entry.SelfHarnessAudit.RegressionRisk != audit.RegressionRisk {
+			t.Fatalf("audit mismatch: got %+v want %+v", entry.SelfHarnessAudit, audit)
+		}
 	}
 }
 
@@ -251,6 +284,48 @@ func TestSkillsNeedingEvolution_IgnoresExpiredFailureEvidence(t *testing.T) {
 	t.Fatalf("expected fresh bounded evidence to trigger candidate, got %+v", candidates)
 }
 
+func TestSkillsNeedingEvolution_SkipsThrashingTopSkillDuringCooldown(t *testing.T) {
+	tracker := newTestTracker(t)
+	for i := 0; i < evolutionThrashMinEvolves; i++ {
+		if err := tracker.LogEvolve("deploy-helper", "1.0.1", "tighten deploy workflow"); err != nil {
+			t.Fatalf("LogEvolve(%d): %v", i, err)
+		}
+	}
+	freshFailureAt := time.Now().Add(2 * time.Second).UnixMilli()
+	for _, skillName := range []string{"deploy-helper", "calendar-helper"} {
+		for i := 0; i < 3; i++ {
+			if err := tracker.RecordUsage(UsageRecord{
+				SkillName:  skillName,
+				SessionKey: "client:main",
+				Success:    false,
+				ErrorMsg:   "fresh real failure",
+				UsedAt:     freshFailureAt + int64(i),
+			}); err != nil {
+				t.Fatalf("RecordUsage(%s): %v", skillName, err)
+			}
+		}
+	}
+
+	candidates, err := tracker.SkillsNeedingEvolution(3, 0.7)
+	if err != nil {
+		t.Fatalf("SkillsNeedingEvolution: %v", err)
+	}
+	seen := map[string]bool{}
+	for _, candidate := range candidates {
+		seen[candidate.SkillName] = true
+	}
+	if seen["deploy-helper"] {
+		t.Fatalf("expected thrashing top skill to cool down, got candidates %+v", candidates)
+	}
+	if !seen["calendar-helper"] {
+		t.Fatalf("expected non-thrashing failed skill to remain eligible, got candidates %+v", candidates)
+	}
+	health := tracker.EvolutionHealth()
+	if !health.Thrash || health.TopEvolvedSkill != "deploy-helper" || health.ThrashCooldownUntil <= time.Now().UnixMilli() {
+		t.Fatalf("expected deploy-helper thrash cooldown in health summary, got %+v", health)
+	}
+}
+
 func TestTrackerRecentLifecycleLog_Limit(t *testing.T) {
 	tracker := newTestTracker(t)
 	for _, name := range []string{"one", "two", "three"} {
@@ -351,6 +426,24 @@ func TestTrackerSkillOpportunities_NewestFirstAndFiltered(t *testing.T) {
 	}
 	if records[0].Type != "skill_opportunity" || records[0].Source != "proposal" {
 		t.Fatalf("expected default type/source, got %+v", records[0])
+	}
+}
+
+func TestTrackerRejectedSkillEditsFallsBackToLifecycleLog(t *testing.T) {
+	tracker := newTestTracker(t)
+	if err := tracker.LogEvolveRejected("deploy-helper", "judge rejected candidate"); err != nil {
+		t.Fatalf("LogEvolveRejected: %v", err)
+	}
+
+	entries, err := tracker.RecentRejectedSkillEdits("deploy-helper", 5)
+	if err != nil {
+		t.Fatalf("RecentRejectedSkillEdits: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("expected one lifecycle fallback rejected edit, got %+v", entries)
+	}
+	if entries[0].Reason != "judge rejected candidate" || entries[0].Source != "lifecycle-fallback" {
+		t.Fatalf("unexpected lifecycle fallback rejected edit: %+v", entries[0])
 	}
 }
 
@@ -552,6 +645,66 @@ func TestTrackerOptimizerMemoryRecordsAcceptedRejectedAndRollback(t *testing.T) 
 	}
 	if len(memory.AvoidDirections) != 2 || memory.AvoidDirections[0] != "post-evolve rollback fired" || memory.AvoidDirections[1] != "invented command" {
 		t.Fatalf("unexpected avoid directions: %+v", memory.AvoidDirections)
+	}
+}
+
+func TestTrackerOptimizerMemoryFallsBackToLifecycleLogWhenSidecarMissing(t *testing.T) {
+	tracker := newTestTracker(t)
+	if err := tracker.LogEvolve("deploy-helper", "1.0.1", "tighten verification steps"); err != nil {
+		t.Fatalf("LogEvolve: %v", err)
+	}
+	if err := tracker.LogEvolveRejected("deploy-helper", "invented command"); err != nil {
+		t.Fatalf("LogEvolveRejected: %v", err)
+	}
+	if err := tracker.LogEvolveRolledBack("deploy-helper"); err != nil {
+		t.Fatalf("LogEvolveRolledBack: %v", err)
+	}
+	if err := os.Remove(tracker.optimizerMemoryPath); err != nil {
+		t.Fatalf("remove optimizer memory sidecar: %v", err)
+	}
+
+	memory, err := tracker.OptimizerMemory("deploy-helper")
+	if err != nil {
+		t.Fatalf("OptimizerMemory: %v", err)
+	}
+	if memory.AcceptedCount != 1 || memory.RejectedCount != 1 || memory.RolledBackCount != 1 {
+		t.Fatalf("unexpected lifecycle fallback optimizer memory counts: %+v", memory)
+	}
+	if len(memory.StableDirections) != 1 || memory.StableDirections[0] != "tighten verification steps" {
+		t.Fatalf("unexpected fallback stable directions: %+v", memory.StableDirections)
+	}
+	if len(memory.AvoidDirections) != 2 || memory.AvoidDirections[0] != "post-evolve rollback fired" || memory.AvoidDirections[1] != "invented command" {
+		t.Fatalf("unexpected fallback avoid directions: %+v", memory.AvoidDirections)
+	}
+}
+
+func TestTrackerOptimizerMemoryBackfillsLifecycleBeforeFirstSidecarWrite(t *testing.T) {
+	tracker := newTestTracker(t)
+	if err := tracker.LogEvolve("deploy-helper", "1.0.1", "old accepted direction"); err != nil {
+		t.Fatalf("LogEvolve: %v", err)
+	}
+	if err := tracker.LogEvolveRejected("deploy-helper", "old rejected direction"); err != nil {
+		t.Fatalf("LogEvolveRejected(old): %v", err)
+	}
+	if err := os.Remove(tracker.optimizerMemoryPath); err != nil {
+		t.Fatalf("remove optimizer memory sidecar: %v", err)
+	}
+	if err := tracker.LogEvolveRejected("deploy-helper", "new rejected direction"); err != nil {
+		t.Fatalf("LogEvolveRejected(new): %v", err)
+	}
+
+	memory, err := tracker.OptimizerMemory("deploy-helper")
+	if err != nil {
+		t.Fatalf("OptimizerMemory: %v", err)
+	}
+	if memory.AcceptedCount != 1 || memory.RejectedCount != 2 || memory.RolledBackCount != 0 {
+		t.Fatalf("unexpected backfilled optimizer memory counts: %+v", memory)
+	}
+	if len(memory.StableDirections) != 1 || memory.StableDirections[0] != "old accepted direction" {
+		t.Fatalf("unexpected backfilled stable directions: %+v", memory.StableDirections)
+	}
+	if len(memory.AvoidDirections) != 2 || memory.AvoidDirections[0] != "new rejected direction" || memory.AvoidDirections[1] != "old rejected direction" {
+		t.Fatalf("unexpected backfilled avoid directions: %+v", memory.AvoidDirections)
 	}
 }
 

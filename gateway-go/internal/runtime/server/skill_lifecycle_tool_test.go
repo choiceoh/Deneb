@@ -325,6 +325,51 @@ func TestSkillLifecycleValidationCaseFromSessionExtractsToolTrace(t *testing.T) 
 	}
 }
 
+func TestChatUsageRecorderAutoValidationCaseFromFailedUse(t *testing.T) {
+	tracker := newSkillLifecycleTestTracker(t)
+	store := skillLifecycleTranscriptStore{msgs: []toolctx.ChatMessage{
+		{Role: "user", Content: json.RawMessage(`"srv1에서 실제 deneb-gateway 상태를 확인하고 개선"`)},
+		{Role: "assistant", Content: json.RawMessage(`[
+			{"type":"tool_use","id":"tu_1","name":"exec","input":{"cmd":"ssh srv1 systemctl --user status deneb-gateway.service","workdir":"/srv/deneb"}}
+		]`)},
+		{Role: "user", Content: json.RawMessage(`[
+			{"type":"tool_result","tool_use_id":"tu_1","content":"Active: failed","is_error":true}
+		]`)},
+	}}
+	rec := newChatUsageRecorderAdapter(tracker, store, slog.Default())
+
+	rec.RecordSkillUse("client:main:srv1", "srv1-ops", false, "turn failed: tool exec errored")
+	rec.RecordSkillUse("client:main:srv1", "srv1-ops", false, "turn failed: tool exec errored")
+
+	cases, err := tracker.RecentSkillValidationCases("srv1-ops", 5)
+	if err != nil {
+		t.Fatalf("RecentSkillValidationCases: %v", err)
+	}
+	if len(cases) != 1 {
+		t.Fatalf("expected one auto validation case, got %+v", cases)
+	}
+	tc := cases[0]
+	if tc.Source != "auto-failed-skill-use" ||
+		tc.ID != "session-client:main:srv1" ||
+		!strings.Contains(tc.Description, "turn failed: tool exec errored") ||
+		tc.Replay.Input != "srv1에서 실제 deneb-gateway 상태를 확인하고 개선" ||
+		len(tc.Replay.ExpectedToolCalls) != 1 ||
+		tc.Replay.ExpectedToolCalls[0].Name != "exec" ||
+		len(tc.Replay.ExpectedToolCalls[0].InputIncludes) != 2 ||
+		tc.Replay.ExpectedToolCalls[0].InputIncludes[0] != "ssh srv1" ||
+		tc.Replay.ExpectedToolCalls[0].InputIncludes[1] != "systemctl --user status" ||
+		!tc.Replay.ExpectedToolCalls[0].FixtureError {
+		t.Fatalf("unexpected auto validation case: %+v", tc)
+	}
+	summary, err := tracker.ValidationCaseSummary("srv1-ops")
+	if err != nil {
+		t.Fatalf("ValidationCaseSummary: %v", err)
+	}
+	if summary.RawRecords != 1 || summary.AutomaticRecords != 1 || summary.UniqueAutomaticRecords != 1 {
+		t.Fatalf("expected auto failed-use case in automatic summary, got %+v", summary)
+	}
+}
+
 func TestSkillLifecycleValidationCaseFromSessionSkipsWeakAutomaticTrace(t *testing.T) {
 	tracker := newSkillLifecycleTestTracker(t)
 	store := skillLifecycleTranscriptStore{msgs: []toolctx.ChatMessage{

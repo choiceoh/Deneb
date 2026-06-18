@@ -2,7 +2,9 @@ package server
 
 import (
 	"context"
+	"errors"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
@@ -133,7 +135,7 @@ func (s *Server) initGenesisServices() {
 	// succeed) gives the Evolver the success-rate signal its
 	// SkillsNeedingEvolution gate reads — without it the loop runs blind.
 	if s.chatHandler != nil && s.genesisTracker != nil {
-		s.chatHandler.SetSkillUsageRecorder(newChatUsageRecorderAdapter(s.genesisTracker, s.logger))
+		s.chatHandler.SetSkillUsageRecorder(newChatUsageRecorderAdapter(s.genesisTracker, s.genesisTranscripts, s.logger))
 	}
 	s.registerSkillLifecycleTool()
 
@@ -231,12 +233,13 @@ func (a *chatNudgerAdapter) Reset(sessionKey string) { a.inner.Reset(sessionKey)
 // genesis usage records. Lives in the server package (the only place that knows
 // both types) so neither chat nor genesis imports the other.
 type chatUsageRecorderAdapter struct {
-	inner  *genesis.Tracker
-	logger *slog.Logger
+	inner       *genesis.Tracker
+	transcripts toolctx.TranscriptStore
+	logger      *slog.Logger
 }
 
-func newChatUsageRecorderAdapter(t *genesis.Tracker, logger *slog.Logger) chat.SkillUsageRecorder {
-	return &chatUsageRecorderAdapter{inner: t, logger: logger}
+func newChatUsageRecorderAdapter(t *genesis.Tracker, transcripts toolctx.TranscriptStore, logger *slog.Logger) chat.SkillUsageRecorder {
+	return &chatUsageRecorderAdapter{inner: t, transcripts: transcripts, logger: logger}
 }
 
 func (a *chatUsageRecorderAdapter) RecordSkillUse(sessionKey, skillName string, success bool, errMsg string) {
@@ -254,6 +257,72 @@ func (a *chatUsageRecorderAdapter) RecordSkillUse(sessionKey, skillName string, 
 		// chat turn, but log it so a persistently failing tracker is visible.
 		a.logger.Warn("genesis: skill usage record failed", "skill", skillName, "error", err)
 	}
+	if !success {
+		a.recordValidationCaseFromFailedUse(sessionKey, skillName, errMsg)
+	}
+}
+
+func (a *chatUsageRecorderAdapter) recordValidationCaseFromFailedUse(sessionKey, skillName, errMsg string) {
+	sessionKey = strings.TrimSpace(sessionKey)
+	skillName = strings.TrimSpace(skillName)
+	if sessionKey == "" || skillName == "" || a.transcripts == nil {
+		return
+	}
+	sctx, err := buildSkillLifecycleSessionContext(a.transcripts, sessionKey)
+	if err != nil {
+		if a.logger != nil {
+			a.logger.Warn("genesis: auto validation case transcript load failed",
+				"skill", skillName, "session", sessionKey, "error", err)
+		}
+		return
+	}
+	description := "Failed skill use in session " + sessionKey
+	if msg := strings.TrimSpace(errMsg); msg != "" {
+		description += ": " + truncateRunes(msg, 180)
+	}
+	record := buildSkillValidationCaseFromSession(chattools.SkillValidationCaseFromSessionRequest{
+		SkillName:   skillName,
+		SessionKey:  sessionKey,
+		Description: description,
+		Source:      "auto-failed-skill-use",
+	}, sctx)
+	if a.validationCaseAlreadyRecorded(skillName, record.ID) {
+		return
+	}
+	if err := a.inner.RecordSkillValidationCase(record); err != nil {
+		if errors.Is(err, genesis.ErrWeakAutomaticValidationCase) {
+			if a.logger != nil {
+				a.logger.Debug("genesis: auto validation case skipped weak failed-use trace",
+					"skill", skillName, "session", sessionKey)
+			}
+			return
+		}
+		if a.logger != nil {
+			a.logger.Warn("genesis: auto validation case record failed",
+				"skill", skillName, "session", sessionKey, "error", err)
+		}
+	}
+}
+
+func (a *chatUsageRecorderAdapter) validationCaseAlreadyRecorded(skillName, id string) bool {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return false
+	}
+	cases, err := a.inner.RecentSkillValidationCases(skillName, 50)
+	if err != nil {
+		if a.logger != nil {
+			a.logger.Warn("genesis: auto validation case duplicate check failed",
+				"skill", skillName, "id", id, "error", err)
+		}
+		return false
+	}
+	for _, tc := range cases {
+		if strings.TrimSpace(tc.ID) == id {
+			return true
+		}
+	}
+	return false
 }
 
 // registerGenesisAutonomousTasks registers periodic background tasks for genesis.
