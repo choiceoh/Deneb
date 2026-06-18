@@ -306,7 +306,7 @@ func (e *Evolver) EvolveSkill(ctx context.Context, skillName, reviewFinding stri
 		}
 	}
 
-	return e.parseAndApply(ctx, sb.String(), entry, string(currentContent), stats)
+	return e.parseAndApply(ctx, sb.String(), entry, string(currentContent), stats, reviewFinding)
 }
 
 // evolutionSuppressed reports whether an automated evolve of skillName should be
@@ -386,7 +386,7 @@ func (e *Evolver) EvolveUnderperformers(ctx context.Context) ([]EvolveResult, er
 	return results, nil //nolint:nilerr // individual skill errors collected in results, not propagated
 }
 
-func (e *Evolver) parseAndApply(ctx context.Context, text string, entry *skills.SkillEntry, originalContent string, stats *UsageStats) (*EvolveResult, error) {
+func (e *Evolver) parseAndApply(ctx context.Context, text string, entry *skills.SkillEntry, originalContent string, stats *UsageStats, reviewFinding string) (*EvolveResult, error) {
 	resp, err := jsonutil.UnmarshalLLM[evolveResp](text)
 	if err != nil {
 		return nil, fmt.Errorf("evolver: parse response: %w", err)
@@ -428,7 +428,7 @@ func (e *Evolver) parseAndApply(ctx context.Context, text string, entry *skills.
 	// is disabled for cost/latency, candidates must still obey bounded edit and
 	// held-out validation constraints.
 	if !e.selfTest {
-		if ok, reason := e.validateCandidatePreflight(entry.Skill.Name, originalContent, candidateBody); !ok {
+		if ok, reason := e.validateCandidatePreflight(entry.Skill.Name, originalContent, candidateBody, audit, stats, reviewFinding); !ok {
 			if e.tracker != nil {
 				if logErr := e.tracker.LogEvolveRejectedWithAudit(entry.Skill.Name, reason, audit); logErr != nil {
 					e.logger.Warn("evolver: lifecycle log write failed",
@@ -448,7 +448,7 @@ func (e *Evolver) parseAndApply(ctx context.Context, text string, entry *skills.
 	// keeps the original — a bad "improvement" is worse than no change. When a
 	// teacher (main) model is wired, it gets one escalated attempt first (#4).
 	if e.selfTest {
-		accepted, ok, reason := e.selfTestAndMaybeEscalate(ctx, entry, originalContent, candidateBody, stats)
+		accepted, ok, reason := e.selfTestAndMaybeEscalate(ctx, entry, originalContent, candidateBody, stats, audit, reviewFinding)
 		if !ok {
 			// Best-effort lifecycle record so rejected attempts are visible in
 			// the native observability feed, not just operator logs.
@@ -745,6 +745,75 @@ func hasSufficientEvolutionEvidence(stats *UsageStats, reviewFinding string) boo
 		len(stats.RecentErrors) > 0
 }
 
+func validateSelfHarnessAudit(audit HarnessEditAudit, stats *UsageStats, reviewFinding string) (bool, string) {
+	missing := make([]string, 0, 4)
+	if strings.TrimSpace(audit.TargetSignature) == "" {
+		missing = append(missing, "target_signature")
+	}
+	if strings.TrimSpace(audit.EditedSurface) == "" {
+		missing = append(missing, "edited_surface")
+	}
+	if strings.TrimSpace(audit.ExpectedBehaviorChange) == "" {
+		missing = append(missing, "expected_behavior_change")
+	}
+	if strings.TrimSpace(audit.RegressionRisk) == "" {
+		missing = append(missing, "regression_risk")
+	}
+	if len(missing) > 0 {
+		return false, "self-harness audit rejected: missing " + strings.Join(missing, ", ")
+	}
+
+	// Review findings are already scoped, externalized evidence from the review
+	// fork. They may not have a mined terminal=... signature, but they still need
+	// a complete audit so the transition remains queryable and rollbackable.
+	if strings.TrimSpace(reviewFinding) != "" {
+		return true, ""
+	}
+
+	patterns := mineSkillFailurePatterns(stats)
+	if len(patterns) == 0 {
+		return false, "self-harness audit rejected: no failure evidence bundle or review finding supports target_signature"
+	}
+	target := normalizedSelfHarnessSignature(audit.TargetSignature)
+	for _, pattern := range patterns {
+		if selfHarnessSignatureMatches(target, normalizedSelfHarnessSignature(pattern.Signature)) {
+			return true, ""
+		}
+	}
+	return false, fmt.Sprintf("self-harness audit rejected: target_signature %q does not match supported failure signatures: %s",
+		audit.TargetSignature, strings.Join(supportedFailureSignatures(patterns), ", "))
+}
+
+func normalizedSelfHarnessSignature(value string) string {
+	value = strings.ToLower(strings.Join(strings.Fields(strings.TrimSpace(value)), " "))
+	replacer := strings.NewReplacer(
+		" = ", "=",
+		"= ", "=",
+		" =", "=",
+		" | ", "|",
+		"| ", "|",
+		" |", "|",
+	)
+	return replacer.Replace(value)
+}
+
+func selfHarnessSignatureMatches(target, supported string) bool {
+	if target == "" || supported == "" {
+		return false
+	}
+	return target == supported || strings.Contains(target, supported) || strings.Contains(supported, target)
+}
+
+func supportedFailureSignatures(patterns []skillFailurePattern) []string {
+	out := make([]string, 0, len(patterns))
+	for _, pattern := range patterns {
+		if signature := strings.TrimSpace(pattern.Signature); signature != "" {
+			out = append(out, signature)
+		}
+	}
+	return out
+}
+
 func validateTextualEditBudget(originalContent, candidateBody string) (bool, string) {
 	if strings.TrimSpace(candidateBody) == "" {
 		return false, "textual edit budget rejected empty candidate body"
@@ -1024,7 +1093,7 @@ type acceptedSkillCandidate struct {
 // candidate. On fail it escalates to the teacher model (if wired) for one more
 // attempt, then re-judges. ok=false means the caller must keep the original
 // skill untouched.
-func (e *Evolver) selfTestAndMaybeEscalate(ctx context.Context, entry *skills.SkillEntry, originalContent, candidateBody string, stats *UsageStats) (acceptedSkillCandidate, bool, string) {
+func (e *Evolver) selfTestAndMaybeEscalate(ctx context.Context, entry *skills.SkillEntry, originalContent, candidateBody string, stats *UsageStats, audit HarnessEditAudit, reviewFinding string) (acceptedSkillCandidate, bool, string) {
 	teacherClient, teacherModel := e.teacherModelSnapshot()
 	hasTeacher := teacherClient != nil && teacherModel != ""
 
@@ -1033,14 +1102,14 @@ func (e *Evolver) selfTestAndMaybeEscalate(ctx context.Context, entry *skills.Sk
 	// self-preference bias skews toward accepting it (LLM-judge survey
 	// arXiv:2508.02994). pickCandidateJudge routes to the teacher when wired.
 	judgeClient, judgeModel := e.pickCandidateJudge()
-	pass, reason, err := e.validateCandidate(ctx, entry.Skill.Name, judgeClient, judgeModel, originalContent, candidateBody, stats)
+	pass, reason, err := e.validateCandidate(ctx, entry.Skill.Name, judgeClient, judgeModel, originalContent, candidateBody, stats, audit, reviewFinding)
 	if err != nil {
 		e.logger.Warn("evolver: self-test errored, keeping original",
 			"skill", entry.Skill.Name, "error", err)
 		return acceptedSkillCandidate{}, false, "judge error"
 	}
 	if pass {
-		return acceptedSkillCandidate{Body: candidateBody}, true, reason
+		return acceptedSkillCandidate{Body: candidateBody, Audit: audit}, true, reason
 	}
 	e.logger.Info("evolver: self-test rejected lightweight rewrite",
 		"skill", entry.Skill.Name, "reason", reason)
@@ -1060,7 +1129,7 @@ func (e *Evolver) selfTestAndMaybeEscalate(ctx context.Context, entry *skills.Sk
 	// stamp its own rewrite. A weaker judge may false-reject a good rewrite, but
 	// the loop is fail-closed (keeps the original), so that errs safe.
 	primaryClient, primaryModel := e.primaryModel()
-	tpass, treason, tjerr := e.validateCandidate(ctx, entry.Skill.Name, primaryClient, primaryModel, originalContent, teacherCandidate.Body, stats)
+	tpass, treason, tjerr := e.validateCandidate(ctx, entry.Skill.Name, primaryClient, primaryModel, originalContent, teacherCandidate.Body, stats, teacherCandidate.Audit, reviewFinding)
 	if tjerr != nil || !tpass {
 		e.logger.Info("evolver: teacher rewrite still failed self-test",
 			"skill", entry.Skill.Name, "reason", treason)
@@ -1070,14 +1139,14 @@ func (e *Evolver) selfTestAndMaybeEscalate(ctx context.Context, entry *skills.Sk
 	return teacherCandidate, true, treason
 }
 
-func (e *Evolver) validateCandidate(ctx context.Context, skillName string, client *llm.Client, model, originalContent, candidateBody string, stats *UsageStats) (pass bool, reason string, err error) {
-	if ok, reason := e.validateCandidatePreflight(skillName, originalContent, candidateBody); !ok {
+func (e *Evolver) validateCandidate(ctx context.Context, skillName string, client *llm.Client, model, originalContent, candidateBody string, stats *UsageStats, audit HarnessEditAudit, reviewFinding string) (pass bool, reason string, err error) {
+	if ok, reason := e.validateCandidatePreflight(skillName, originalContent, candidateBody, audit, stats, reviewFinding); !ok {
 		return false, reason, nil
 	}
 	return e.judgeCandidate(ctx, skillName, client, model, originalContent, candidateBody, stats)
 }
 
-func (e *Evolver) validateCandidatePreflight(skillName, originalContent, candidateBody string) (bool, string) {
+func (e *Evolver) validateCandidatePreflight(skillName, originalContent, candidateBody string, audit HarnessEditAudit, stats *UsageStats, reviewFinding string) (bool, string) {
 	if ok, reason := validateTextualEditBudget(originalContent, candidateBody); !ok {
 		return false, reason
 	}
@@ -1091,6 +1160,9 @@ func (e *Evolver) validateCandidatePreflight(skillName, originalContent, candida
 		} else if result.Evaluated && !result.Pass {
 			return false, result.Reason
 		}
+	}
+	if ok, reason := validateSelfHarnessAudit(audit, stats, reviewFinding); !ok {
+		return false, reason
 	}
 	return true, ""
 }

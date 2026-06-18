@@ -150,7 +150,7 @@ func TestParseAndApplyRunsHeldOutGateWhenSelfTestDisabled(t *testing.T) {
 	}}
 	resp := `{"skip":false,"changes":{"description":"d","new_version":"1.0.1","body":"# Skill\n\n## Procedure\n- eval 로 실행"}}`
 
-	result, err := e.parseAndApply(context.Background(), resp, entry, original, &UsageStats{SkillName: "topsolar-db"})
+	result, err := e.parseAndApply(context.Background(), resp, entry, original, &UsageStats{SkillName: "topsolar-db"}, "validation regression fixture")
 	if err != nil {
 		t.Fatalf("parseAndApply: %v", err)
 	}
@@ -165,6 +165,57 @@ func TestParseAndApplyRunsHeldOutGateWhenSelfTestDisabled(t *testing.T) {
 		t.Fatalf("rejected candidate must not modify skill file\n got: %q\nwant: %q", got, original)
 	}
 	rejected, err := tracker.RecentRejectedSkillEdits("topsolar-db", 1)
+	if err != nil {
+		t.Fatalf("RecentRejectedSkillEdits: %v", err)
+	}
+	if len(rejected) != 1 || rejected[0].Source != "preflight" {
+		t.Fatalf("expected preflight rejected-edit record, got %+v", rejected)
+	}
+}
+
+func TestParseAndApplyRejectsMissingSelfHarnessAudit(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "SKILL.md")
+	original := "---\nname: deploy-helper\nversion: \"1.0.0\"\n---\n\n# Deploy Helper\n\n## Procedure\n- Verify deploys.\n"
+	if err := os.WriteFile(path, []byte(original), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tracker := newTestTracker(t)
+	e := &Evolver{
+		logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
+		tracker:  tracker,
+		selfTest: false,
+	}
+	entry := &skills.SkillEntry{Skill: skills.Skill{
+		Name:     "deploy-helper",
+		Version:  "1.0.0",
+		FilePath: path,
+	}}
+	resp := `{"skip":false,"changes":{"description":"generic timeout note","new_version":"1.0.1","body":"# Deploy Helper\n\n## Procedure\n- Verify deploys.\n- Handle timeouts carefully."}}`
+
+	result, err := e.parseAndApply(context.Background(), resp, entry, original, &UsageStats{
+		SkillName:    "deploy-helper",
+		TotalUses:    2,
+		FailureCount: 2,
+		RecentErrors: []string{
+			"context deadline exceeded while deploying",
+			"tool timed out during deployment verification",
+		},
+	}, "")
+	if err != nil {
+		t.Fatalf("parseAndApply: %v", err)
+	}
+	if result.Evolved || !strings.Contains(result.Reason, "self-harness audit rejected: missing") {
+		t.Fatalf("expected missing-audit rejection, got %+v", result)
+	}
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != original {
+		t.Fatalf("rejected missing-audit candidate must not modify skill file\n got: %q\nwant: %q", got, original)
+	}
+	rejected, err := tracker.RecentRejectedSkillEdits("deploy-helper", 1)
 	if err != nil {
 		t.Fatalf("RecentRejectedSkillEdits: %v", err)
 	}
@@ -196,7 +247,15 @@ func TestParseAndApplyRecordsSelfHarnessAudit(t *testing.T) {
 	}}
 	resp := `{"skip":false,"changes":{"description":"target timeout recovery in Procedure; risk: preserve verification","new_version":"1.0.1","target_signature":"terminal=timeout|mechanism=bounded-execution","edited_surface":"Procedure","expected_behavior_change":"pivot after timeout before finalizing","regression_risk":"must still verify deployed artifact","body":"# Deploy Helper\n\n## Procedure\n- Verify deploys.\n- If a command times out, pivot to a bounded recovery path before finalizing."}}`
 
-	result, err := e.parseAndApply(context.Background(), resp, entry, original, &UsageStats{SkillName: "deploy-helper"})
+	result, err := e.parseAndApply(context.Background(), resp, entry, original, &UsageStats{
+		SkillName:    "deploy-helper",
+		TotalUses:    2,
+		FailureCount: 2,
+		RecentErrors: []string{
+			"context deadline exceeded while deploying",
+			"tool timed out during deployment verification",
+		},
+	}, "")
 	if err != nil {
 		t.Fatalf("parseAndApply: %v", err)
 	}
@@ -218,6 +277,37 @@ func TestParseAndApplyRecordsSelfHarnessAudit(t *testing.T) {
 	}
 	if entries[0].SelfHarnessAudit.TargetSignature != result.Audit.TargetSignature {
 		t.Fatalf("lifecycle audit mismatch: %+v vs %+v", entries[0].SelfHarnessAudit, result.Audit)
+	}
+}
+
+func TestValidateSelfHarnessAuditRequiresSupportedSignature(t *testing.T) {
+	stats := &UsageStats{
+		SkillName:    "deploy-helper",
+		TotalUses:    2,
+		FailureCount: 2,
+		RecentErrors: []string{
+			"context deadline exceeded while deploying",
+			"tool timed out during deployment verification",
+		},
+	}
+	mismatch := HarnessEditAudit{
+		TargetSignature:        "terminal=schema-format|mechanism=structured-contract",
+		EditedSurface:          "Procedure",
+		ExpectedBehaviorChange: "tighten JSON formatting",
+		RegressionRisk:         "preserve deployment verification",
+	}
+	if ok, reason := validateSelfHarnessAudit(mismatch, stats, ""); ok || !strings.Contains(reason, "does not match supported failure signatures") {
+		t.Fatalf("expected supported-signature rejection, ok=%v reason=%q", ok, reason)
+	}
+	matching := mismatch
+	matching.TargetSignature = "terminal=timeout|mechanism=bounded-execution"
+	if ok, reason := validateSelfHarnessAudit(matching, stats, ""); !ok {
+		t.Fatalf("expected matching signature to pass, reason=%q", reason)
+	}
+	noBundleReviewFinding := mismatch
+	noBundleReviewFinding.TargetSignature = "review-finding: missing deploy proof"
+	if ok, reason := validateSelfHarnessAudit(noBundleReviewFinding, &UsageStats{SkillName: "deploy-helper"}, "review found missing deploy proof"); !ok {
+		t.Fatalf("expected review finding backed audit to pass, reason=%q", reason)
 	}
 }
 
@@ -253,9 +343,17 @@ func TestParseAndApplyUsesTeacherRewriteAuditWhenEscalated(t *testing.T) {
 	e := NewEvolver(llm.NewClient(lightweightServer.URL, "test-key"), cat, tracker, "lightweight", slog.New(slog.NewTextHandler(io.Discard, nil)))
 	e.SetTeacher(llm.NewClient(teacherServer.URL, "test-key"), "teacher")
 	entry := &skills.SkillEntry{Skill: skills.Skill{Name: "deploy-helper", Version: "1.0.0", FilePath: path}}
-	resp := `{"skip":false,"changes":{"description":"lightweight description","new_version":"1.0.1","target_signature":"lightweight-target","edited_surface":"Procedure","expected_behavior_change":"lightweight behavior","regression_risk":"lightweight risk","body":"# Deploy Helper\n\n## Procedure\n- Verify deploys.\n- Retry forever."}}`
+	resp := `{"skip":false,"changes":{"description":"lightweight description","new_version":"1.0.1","target_signature":"terminal=timeout|mechanism=bounded-execution","edited_surface":"Procedure","expected_behavior_change":"lightweight behavior","regression_risk":"lightweight risk","body":"# Deploy Helper\n\n## Procedure\n- Verify deploys.\n- Retry forever."}}`
 
-	result, err := e.parseAndApply(context.Background(), resp, entry, original, &UsageStats{SkillName: "deploy-helper"})
+	result, err := e.parseAndApply(context.Background(), resp, entry, original, &UsageStats{
+		SkillName:    "deploy-helper",
+		TotalUses:    2,
+		FailureCount: 2,
+		RecentErrors: []string{
+			"context deadline exceeded while deploying",
+			"tool timed out during deployment verification",
+		},
+	}, "")
 	if err != nil {
 		t.Fatalf("parseAndApply: %v", err)
 	}
@@ -647,9 +745,17 @@ func TestParseAndApply_StripsEchoedFrontmatterAndBumpsVersion(t *testing.T) {
 	}}
 
 	// LLM response: body echoes the frontmatter, new_version is unchanged.
-	resp := `{"skip":false,"changes":{"description":"d","new_version":"1.1.0","body":"---\nname: demo\nversion: \"1.1.0\"\n---\n\n# Demo\n\nnew body"}}`
+	resp := `{"skip":false,"changes":{"description":"d","new_version":"1.1.0","target_signature":"terminal=timeout|mechanism=bounded-execution","edited_surface":"Procedure","expected_behavior_change":"demo handles timeout recovery","regression_risk":"preserve existing demo body","body":"---\nname: demo\nversion: \"1.1.0\"\n---\n\n# Demo\n\nnew body"}}`
 
-	result, err := e.parseAndApply(context.Background(), resp, entry, original, &UsageStats{SkillName: "demo"})
+	result, err := e.parseAndApply(context.Background(), resp, entry, original, &UsageStats{
+		SkillName:    "demo",
+		TotalUses:    2,
+		FailureCount: 2,
+		RecentErrors: []string{
+			"context deadline exceeded while running demo",
+			"tool timed out while running demo",
+		},
+	}, "")
 	if err != nil {
 		t.Fatalf("parseAndApply: %v", err)
 	}

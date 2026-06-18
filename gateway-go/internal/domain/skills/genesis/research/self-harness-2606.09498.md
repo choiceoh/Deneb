@@ -109,6 +109,10 @@ Runtime:
   fields: target signature, edited surface, expected behavior change, and
   regression risk. `miniapp.skills.lifecycle` projects those fields so the
   native skill timeline can render or inspect them.
+- Self-Harness audit metadata is now a promotion gate, not just observability:
+  committed candidates must include all audit fields, and failure-bundle-based
+  edits must target a mined supported signature. Review-finding-based edits can
+  still proceed, but only with a complete audit record.
 
 Prompts and skill docs:
 
