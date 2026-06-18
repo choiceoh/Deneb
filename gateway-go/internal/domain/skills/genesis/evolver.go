@@ -135,10 +135,12 @@ func (e *Evolver) EvolveSkill(ctx context.Context, skillName, reviewFinding stri
 		return nil, fmt.Errorf("evolver: read skill file: %w", err)
 	}
 
-	// Get usage stats.
+	// Get the bounded usage evidence this evolution is allowed to act on.
+	// Lifetime Stats() can include old failures that should remain observable
+	// but must not keep driving fresh rewrites.
 	var stats *UsageStats
 	if e.tracker != nil {
-		stats, _ = e.tracker.Stats(skillName)
+		stats, _ = e.tracker.EvolutionEvidenceStats(skillName)
 	}
 	if stats == nil {
 		stats = &UsageStats{SkillName: skillName}

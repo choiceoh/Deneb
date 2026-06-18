@@ -248,6 +248,7 @@ func (a *chatUsageRecorderAdapter) RecordSkillUse(sessionKey, skillName string, 
 		SessionKey: sessionKey,
 		Success:    success,
 		ErrorMsg:   errMsg,
+		Source:     genesis.UsageSourceReal,
 	}); err != nil && a.logger != nil {
 		// Usage telemetry is best-effort — a write failure must never affect the
 		// chat turn, but log it so a persistently failing tracker is visible.
