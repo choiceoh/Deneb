@@ -51,7 +51,25 @@ func TestWorkerPoolStats(t *testing.T) {
 
 	wg.Wait()
 
-	stats := pool.Stats()
+	// Synchronize on the pool's own bookkeeping, not the user WaitGroup.
+	// Each task's deferred wg.Done() fires when the task body returns, which
+	// unblocks wg.Wait() *before* the pool's goroutine wrapper records its
+	// accounting: active--/done++ run in the wrapper's defer, after task()
+	// returns (see Submit in workerpool.go). Reading Stats() right after
+	// wg.Wait() can therefore observe Done<3 / Active>0. Stats() also samples
+	// Active before Done, so a settle requires both fields, not just Done.
+	// Poll until the pool reports a settled snapshot, bounded so a genuine
+	// hang fails the test instead of spinning forever.
+	var stats WorkerPoolStats
+	deadline := time.Now().Add(time.Second)
+	for {
+		stats = pool.Stats()
+		if (stats.Done == 3 && stats.Active == 0) || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+
 	if stats.Done != 3 {
 		t.Errorf("got %d, want 3 done", stats.Done)
 	}
