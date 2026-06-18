@@ -48,13 +48,14 @@ func TestCodeActionAllow(t *testing.T) {
 		action string
 		ok     bool
 	}{
-		{"gmail", "search", true},
-		{"gmail", "inbox", true},
-		{"gmail", "analyze", true},
-		{"gmail", "send", false},  // outbound — never on the bridge
-		{"gmail", "reply", false}, // outbound
-		{"gmail", "label", false}, // Gmail-account mutation — top-level only
-		{"gmail", "attachment", false},
+		{"mail_archive", "search", true},
+		{"mail_archive", "list", true},
+		{"mail_archive", "project_history", true},
+		{"gmail", "search", false},     // Gmail OAuth/account surface — top-level only
+		{"gmail", "send", false},       // outbound — never on the bridge
+		{"gmail", "reply", false},      // outbound
+		{"gmail", "label", false},      // Gmail-account mutation — top-level only
+		{"gmail", "attachment", false}, // attachment download may write outside the bridge
 		{"calendar", "list", true},
 		{"calendar", "free_slots", true},
 		{"calendar", "create", true}, // internal write (local store)
@@ -87,8 +88,8 @@ func TestCodeActionAllow(t *testing.T) {
 	}
 
 	// A known tool with a missing action is rejected (not silently allowed).
-	if err := codeActionAllow("gmail", map[string]any{}); err == nil {
-		t.Error("gmail with no action should be rejected")
+	if err := codeActionAllow("mail_archive", map[string]any{}); err == nil {
+		t.Error("mail_archive with no action should be rejected")
 	}
 }
 
@@ -114,29 +115,29 @@ func TestCodeActionBridge(t *testing.T) {
 	}
 
 	// Wrong token → 403, invoker untouched.
-	if code, _ := post("wrong", `{"tool":"gmail","args":{"action":"search"}}`); code != http.StatusForbidden {
+	if code, _ := post("wrong", `{"tool":"mail_archive","args":{"action":"search"}}`); code != http.StatusForbidden {
 		t.Fatalf("wrong token: want 403, got %d", code)
 	}
 
 	// Allowed call → forwarded, result returned.
-	code, out := post("secret-token", `{"tool":"gmail","args":{"action":"search","query":"탑솔라"}}`)
+	code, out := post("secret-token", `{"tool":"mail_archive","args":{"action":"search","query":"탑솔라"}}`)
 	if code != http.StatusOK || out["ok"] != true || out["result"] != "RESULT_OK" {
 		t.Fatalf("allowed call: code=%d out=%v", code, out)
 	}
 
 	// Disallowed action → ok:false, invoker NOT called for it.
-	_, out = post("secret-token", `{"tool":"gmail","args":{"action":"send","to":"x","body":"y"}}`)
+	_, out = post("secret-token", `{"tool":"gmail","args":{"action":"search","query":"x"}}`)
 	if out["ok"] != false {
-		t.Fatalf("send should be rejected, got %v", out)
+		t.Fatalf("gmail should be rejected, got %v", out)
 	}
 
 	calls := inv.called()
-	if len(calls) != 1 || !strings.HasPrefix(calls[0], "gmail:") || !strings.Contains(calls[0], "search") {
+	if len(calls) != 1 || !strings.HasPrefix(calls[0], "mail_archive:") || !strings.Contains(calls[0], "search") {
 		t.Fatalf("invoker should have been called once for the search, got %v", calls)
 	}
 	for _, c := range calls {
-		if strings.Contains(c, "send") {
-			t.Fatalf("send must never reach the invoker, got %v", calls)
+		if strings.Contains(c, "gmail") {
+			t.Fatalf("gmail must never reach the invoker, got %v", calls)
 		}
 	}
 }
@@ -217,12 +218,12 @@ func newTestContactsStore(t *testing.T) *contacts.Store {
 }
 
 // TestCodeAction_OutputAndBridge runs real Python: print() round-trips and a
-// permitted deneb.gmail call reaches the (fake) invoker.
+// permitted deneb.mail_archive call reaches the (fake) invoker.
 func TestCodeAction_OutputAndBridge(t *testing.T) {
 	requirePython(t)
 	inv := &recordingInvoker{result: "MAILS:a,b,c"}
 	out := runCodeAction(t, CodeActionDeps{Invoker: inv}, `
-mails = deneb.gmail("search", query="탑솔라", max=5)
+mails = deneb.mail_archive("search", query="탑솔라", limit=5)
 print("GOT", mails)
 `)
 	if !strings.Contains(out, "GOT MAILS:a,b,c") {
@@ -230,7 +231,7 @@ print("GOT", mails)
 	}
 	calls := inv.called()
 	if len(calls) != 1 || !strings.Contains(calls[0], `"action":"search"`) || !strings.Contains(calls[0], "탑솔라") {
-		t.Fatalf("expected one gmail search call, got %v", calls)
+		t.Fatalf("expected one mail_archive search call, got %v", calls)
 	}
 }
 
@@ -401,7 +402,7 @@ func TestCodeActionBridge_structured(t *testing.T) {
 		t.Fatalf("structured result should be a JSON array with 오선택, got %q", result)
 	}
 
-	// gmail has no structured handler → clear error, not a crash.
+	// gmail is intentionally absent from the code_action bridge.
 	out = post(`{"tool":"gmail","args":{"action":"search","query":"x"},"json":true}`)
 	if out["ok"] != false {
 		t.Fatalf("structured gmail should be rejected, got %v", out)
@@ -620,8 +621,8 @@ print("HAS", any("topsolar" in p for p in paths))
 }
 
 // TestCodeAction_InternalWrites confirms internal writes (calendar create, wiki
-// write, fs write) forward to the tool registry, while outbound gmail send is
-// rejected at the bridge and never reaches the invoker.
+// write, fs write) forward to the tool registry, while Gmail access is rejected
+// inside the code_action runtime and never reaches the invoker.
 func TestCodeAction_InternalWrites(t *testing.T) {
 	requirePython(t)
 	inv := &recordingInvoker{result: "ok"}
@@ -633,7 +634,7 @@ try:
     deneb.gmail("send", to="a@b.c", body="x")
     print("LEAK: send allowed")
 except Exception as e:
-    print("BLOCKED:", "not allowed" in str(e))
+    print("BLOCKED:", "not available" in str(e))
 `)
 	if strings.Contains(out, "LEAK") {
 		t.Fatalf("gmail send must be blocked, got:\n%s", out)

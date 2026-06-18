@@ -152,6 +152,7 @@ func (s *Server) initGmailPoll(snap *config.ConfigSnapshot) {
 //
 //	DENEB_ARCHIVE_IMAP_ADDR  (default 127.0.0.1:1143)
 //	DENEB_ARCHIVE_IMAP_USER  / DENEB_ARCHIVE_IMAP_PASS  (required to enable)
+//	DENEB_ARCHIVE_IMAP_MAILBOXES (optional, e.g. INBOX,Archive)
 func (s *Server) archiveThreadSource() gmailpoll.ThreadSource {
 	addr := archiveIMAPAddr()
 	user := strings.TrimSpace(os.Getenv("DENEB_ARCHIVE_IMAP_USER"))
@@ -160,7 +161,7 @@ func (s *Server) archiveThreadSource() gmailpoll.ThreadSource {
 		s.logger.Warn("LMTP 분석: 아카이브 스레드 컨텍스트 비활성화 (DENEB_ARCHIVE_IMAP_USER/PASS 미설정)", "addr", addr)
 		return nil // stays off until creds are set (graceful: analysis runs without it)
 	}
-	src := mailarchive.New(mailarchive.Config{Addr: addr, User: user, Pass: pass})
+	src := mailarchive.New(mailarchive.Config{Addr: addr, User: user, Pass: pass, Mailboxes: archiveIMAPMailboxes()})
 	if src == nil {
 		return nil
 	}

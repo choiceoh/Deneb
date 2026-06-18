@@ -513,7 +513,7 @@ func sessionsSpawnToolSchema() map[string]any {
 			},
 			"tool_preset": map[string]any{
 				"type":        "string",
-				"description": "Tool preset restricting which tools the sub-agent can use. researcher=context gathering (read/grep/web/gmail/wiki/knowledge/polaris/contacts/graphify; no shell, no file writes), implementer=researcher+write/edit/exec/process, verifier=read/grep/exec/process only (build/test validation). Omit for the full toolset",
+				"description": "Tool preset restricting which tools the sub-agent can use. researcher=context gathering (read/grep/web/mail_archive/wiki/knowledge/polaris/contacts/graphify; no shell, no file writes, no Gmail OAuth surface), implementer=researcher+write/edit/exec/process, verifier=read/grep/exec/process only (build/test validation). Omit for the full toolset",
 				"enum":        []string{"researcher", "implementer", "verifier"},
 			},
 		},
@@ -765,7 +765,7 @@ func gmailToolSchema() map[string]any {
 		"properties": map[string]any{
 			"action": map[string]any{
 				"type":        "string",
-				"description": "Gmail action to perform",
+				"description": "Gmail OAuth2 fallback/account action. Use mail_archive first for received-mail lookup, project history, and archive-backed analysis prep; use this only for send/reply/label/OAuth or Gmail-only fallback.",
 				"enum":        []string{"inbox", "search", "read", "thread", "attachment", "send", "reply", "label", "analyze"},
 			},
 			"attachment": map[string]any{
@@ -811,11 +811,11 @@ func gmailToolSchema() map[string]any {
 			},
 			"message_id": map[string]any{
 				"type":        "string",
-				"description": "Email message ID (for read, reply, label, attachment actions; for thread action, resolves the containing thread). Copy it EXACTLY from a gmail search/inbox result's 'ID:' field — never construct or guess one. For read, you may omit it and pass query instead.",
+				"description": "Gmail message ID (for read, reply, label, attachment actions; for thread action, resolves the containing thread). Copy it EXACTLY from a Gmail result's 'ID:' field — never construct or guess one. For read, you may omit it and pass query instead.",
 			},
 			"query": map[string]any{
 				"type":        "string",
-				"description": "Gmail search query (supports Gmail operators like from:, to:, subject:, newer_than:, is:unread, has:attachment, etc.). For the read action, when message_id is absent or wrong, query reads the top matching mail — prefer this over guessing an ID.",
+				"description": "Gmail search query (supports Gmail operators like from:, to:, subject:, newer_than:, is:unread, has:attachment, etc.). Prefer mail_archive for normal received-mail searches; use this only for Gmail-only fallback.",
 			},
 			"subject": map[string]any{
 				"type":        "string",
@@ -1509,8 +1509,7 @@ func mailArchiveToolSchema() map[string]any {
 			},
 			"mailbox": map[string]any{
 				"type":        "string",
-				"description": "조회할 메일함. all(기본: INBOX+Gmail) | INBOX(자동보관된 수신 메일) | Gmail(과거 이력 백필)",
-				"enum":        []string{"all", "INBOX", "Gmail"},
+				"description": "조회할 메일함 selector. all(기본: 설정된 자체 아카이브 전체) | INBOX(자동보관 수신함) | archive/backfill(일반/과거 백필 mailbox; Archive/All Mail/Gmail 후보) | legacy_gmail(구 Gmail 백필 mailbox) | 실제 IMAP mailbox 이름",
 			},
 			"message_id": map[string]any{
 				"type":        "string",

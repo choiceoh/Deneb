@@ -49,7 +49,7 @@ func RegisterCoreTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDep
 	// for the schema. Reads the on-box deneb-mailarchive store over loopback IMAP.
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "mail_archive",
-		Description: "자체 메일 아카이브(자동보관 수신 메일 + 과거 Gmail 백필)를 조회해 ID/Locator를 얻고, 전체 스레드와 프로젝트 히스토리를 복원한다. action=list(오늘/최근 메일) | search(키워드) | read(Locator/ID 또는 query로 원문 열기) | thread(Message-ID/References 기반 전체 대화) | project_history(회사·프로젝트 키워드 시간선+스레드 후보). 업무 맥락·메일 기반 미팅 준비·프로젝트 과거 확인에는 Gmail 대신 우선 사용한다.",
+		Description: "자체 메일 아카이브(자동보관 수신 메일 + 과거 백필)를 조회해 ID/Locator를 얻고, 전체 스레드와 프로젝트 히스토리를 복원한다. action=list(오늘/최근 메일) | search(키워드) | read(Locator/ID 또는 query로 원문 열기) | thread(Message-ID/References 기반 전체 대화) | project_history(회사·프로젝트 키워드 시간선+스레드 후보). 업무 맥락·메일 기반 미팅 준비·프로젝트 과거 확인에는 이 도구를 우선 사용한다.",
 		InputSchema: mailArchiveToolSchema(),
 		Fn: tools.ToolMailArchive(tools.MailArchiveDeps{
 			Wiki:     deps.Wiki.Store,
@@ -357,8 +357,8 @@ func RegisterRoutineTools(registry toolctx.ToolRegistrar, chrono *toolctx.Chrono
 	}
 	registry.RegisterTool(toolctx.ToolDef{
 		Name: "gmail",
-		Description: "Gmail (native OAuth2): inbox, search, read, thread (대화 전체를 시간순으로), attachment (첨부파일 추출 — PDF/Excel/Word/PowerPoint/이미지 OCR, 또는 download로 파일 저장), send, reply, labels, analyze (LLM 이메일 분석, 첨부 내용 자동 포함). " +
-			"메일 분석/요약 요청(\"이 메일 분석해줘\", \"안 읽은 메일 정리해줘\")이면 analyze를 써라 (query=\"is:unread newer_than:1h\", max=5 식; 특정 메일은 message_id=...) — 핵심 요약·이해관계자·중요도·리스크/기한·다음 단계를 돌려준다. 결과로 알게 된 금액·기한·역할 변경은 '분석 → 위키 갱신' 원칙대로 기록하라. " +
+		Description: "Gmail OAuth2 레거시/계정 작업: send, reply, label, Gmail-only search/read/thread/attachment/analyze fallback. 받은 메일 조회·프로젝트 히스토리·일반 분석 준비는 먼저 mail_archive를 사용하고, Gmail API가 꼭 필요한 발송/답장/라벨/OAuth/아카이브 미수집 메일에만 이 도구를 가져온다. " +
+			"Gmail analyze를 쓸 때도 결과로 알게 된 금액·기한·역할 변경은 '분석 → 위키 갱신' 원칙대로 기록하라. " +
 			"첨부 파일을 사용자에게 전달하라는 요청(\"그 PDF 보내줘\")이면 한 턴에서 chain하라: ① attachment(message_id=..., attachment=\"파일명 또는 번호\", download=true)로 디스크 저장 → ② 반환된 경로를 send_file(file_path=...)에 넘기고 \"전송했습니다\"만 답하라. " +
 			"Auth: ~/.deneb/credentials/gmail_client.json + gmail_token.json",
 		InputSchema: gmailToolSchema(),

@@ -44,12 +44,12 @@ func TestAllowedTools_Researcher(t *testing.T) {
 	if allowed == nil {
 		t.Fatal("researcher preset should return non-nil allowed set")
 	}
-	// Context-gathering surfaces, including deferred ones (gmail/contacts/
+	// Context-gathering surfaces, including deferred ones (mail_archive/contacts/
 	// graphify) that must be named to pass fetch_tools + Execute.
 	for _, name := range []string{
 		"read", "grep", "read_spillover", "web",
 		"wiki", "knowledge", "polaris",
-		"gmail", "contacts", "graphify", "fetch_tools",
+		"mail_archive", "contacts", "graphify", "fetch_tools",
 	} {
 		if _, ok := allowed[name]; !ok {
 			t.Errorf("researcher preset should include %q", name)
@@ -59,7 +59,7 @@ func TestAllowedTools_Researcher(t *testing.T) {
 	for _, name := range []string{
 		"write", "edit", "exec", "process",
 		"message", "send_file", "cron", "gateway",
-		"sessions_spawn", "subagents", "sessions", "skills",
+		"sessions_spawn", "subagents", "sessions", "skills", "gmail",
 	} {
 		if _, ok := allowed[name]; ok {
 			t.Errorf("researcher preset should NOT include %q", name)

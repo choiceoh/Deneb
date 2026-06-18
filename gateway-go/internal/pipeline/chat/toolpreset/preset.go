@@ -23,11 +23,11 @@ var conversationTools = toSet(
 
 // bootTools are the tools available to startup and daily-check agent turns.
 // The boot turn checks system status, reviews overnight mail/schedule, inspects
-// memory, and proactively notifies the user. gateway/gmail/cron/message are
+// memory, and proactively notifies the user. gateway/mail_archive/cron/message are
 // deferred, so they are listed here only to pass the Execute allow-list — the
 // LLM loads their schemas on demand via fetch_tools.
 var bootTools = toSet(
-	"gateway", "gmail", "cron", "message", // deferred — loaded via fetch_tools
+	"gateway", "mail_archive", "cron", "message", // deferred — loaded via fetch_tools
 	"wiki", "knowledge", // memory / knowledge inspection
 	"read",        // file reads
 	"fetch_tools", // loads the deferred tools above
@@ -44,12 +44,11 @@ var selfReviewTools = toSet(
 )
 
 // Spawn presets back the sandbox the sessions_spawn schema promises
-// (tool_preset enum: researcher/implementer/verifier). Tuned against actual
-// sub-agent tool usage in ~/.deneb/agent-logs (2026-06-13 audit over 181
-// spawned-child sessions: gmail 903, exec 638, read 594, wiki 539,
-// fetch_tools 129, web 120 calls — mail/wiki research dominates delegation).
+// (tool_preset enum: researcher/implementer/verifier). Mail research uses the
+// local archive; Gmail OAuth surfaces stay out of coding agents unless the
+// unrestricted parent explicitly calls them.
 //
-// Like bootTools, deferred tools (gmail/contacts/graphify/edit/process) must
+// Like bootTools, deferred tools (mail_archive/contacts/graphify/edit/process) must
 // be listed by name: the allow-list gates the eager prompt listing, the
 // deferred listing, fetch_tools activation, AND Execute — a deferred tool
 // missing here stays invisible and uncallable for the preset.
@@ -62,13 +61,11 @@ var selfReviewTools = toSet(
 
 // researcherTools: read-focused context gathering — files, web, mail,
 // wiki/knowledge/graph, contacts, session recall. wiki·knowledge keep their
-// write sub-actions ("분석 → 위키 갱신" doctrine) and gmail keeps send/reply;
-// per-action filtering would need a deeper mechanism than this name-based
-// allow-list. The preset's job is removing the general-purpose escalation
-// surfaces: shell, file writes, user messaging, scheduling, gateway
-// self-management, spawn.
+// write sub-actions ("분석 → 위키 갱신" doctrine). Gmail is intentionally absent:
+// coding agents should read received mail through mail_archive and leave
+// account-level Gmail actions to the unrestricted parent.
 var researcherTools = toSet(
-	"gmail", "contacts", "graphify", // deferred — loaded via fetch_tools
+	"mail_archive", "contacts", "graphify", // deferred — loaded via fetch_tools
 	"read", "grep", "read_spillover", // file inspection
 	"web",                          // web search + page fetch
 	"wiki", "knowledge", "polaris", // knowledge bases + recall

@@ -22,8 +22,9 @@ const (
 	defaultTimeout       = 15 * time.Second
 )
 
-// Config configures a Source. Mailboxes are searched in order; INBOX (ongoing
-// auto-archived mail) then Gmail (historical backfill) is the natural order.
+// Config configures a Source. Mailboxes are searched in order; INBOX is ongoing
+// auto-archived mail, and the second mailbox is the historical backfill
+// (legacy name: Gmail, neutral target name: Archive).
 type Config struct {
 	Addr      string // host:port of the archive IMAP server
 	User      string
@@ -54,7 +55,7 @@ func New(cfg Config) *Source {
 		cfg.Timeout = defaultTimeout
 	}
 	if len(cfg.Mailboxes) == 0 {
-		cfg.Mailboxes = []string{"INBOX", "Gmail"}
+		cfg.Mailboxes = DefaultMailboxes()
 	}
 	return &Source{
 		cfg:           cfg,
