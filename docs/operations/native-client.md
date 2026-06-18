@@ -167,7 +167,8 @@ The 설정 hub has these tabs:
   self-corrections. The log starts with the gateway's compact Propus summary
   so recent review, creation, evolution, and rollback pressure are visible
   before opening individual rows; the client does not maintain a second
-  interpretation of Propus state.
+  interpretation of Propus state. The summary also carries the source-paper
+  doctrine version and quality gates from the gateway.
 - **크론** — the gateway's scheduled tasks, with a per-task detail screen
   (schedule, instruction, delivery target, state; enable, run now, delete).
 - **관찰** — a read-only operator dashboard: the gateway's recent behavior plus

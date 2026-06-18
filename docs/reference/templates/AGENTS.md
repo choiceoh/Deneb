@@ -66,7 +66,10 @@ prompt's wiki section is the canonical guide to the recall stack
   record plausible-but-unvalidated correction ideas with action
   `self_correction`, then review queued `selfCorrectionCandidates` in batches
   before applying. Treat Propus overview/status as canonical instead of
-  inferring a separate lifecycle policy from raw logs.
+  inferring a separate lifecycle policy from raw logs. Preserve the source
+  doctrine: skills are governed artifacts, experience must close the loop,
+  self-critique needs external evidence, and role presentation affects review
+  reliability.
 
 ## Red Lines
 

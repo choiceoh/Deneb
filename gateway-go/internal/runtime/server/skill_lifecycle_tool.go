@@ -1091,24 +1091,24 @@ func propusStatePriority(state string) int {
 }
 
 func propusSystemStatus(skillName string) map[string]any {
+	doctrine := genesis.PropusDoctrine()
 	scope := "global"
 	if strings.TrimSpace(skillName) != "" {
 		scope = "skill"
 	}
 	return map[string]any{
-		"name":        "Propus",
-		"codename":    "propus",
-		"tool":        "skill_lifecycle",
-		"scope":       scope,
-		"description": "Deneb closed-loop self-improvement: observe work, propose reusable changes, validate with held-out replay cases, evolve or generate skills, watch outcomes, rollback regressions, and queue deferred self-corrections.",
-		"loop": []string{
-			"observe",
-			"propose",
-			"validate",
-			"genesis_or_evolve",
-			"watch",
-			"rollback_or_backlog",
-		},
+		"name":             doctrine.Name,
+		"codename":         doctrine.Codename,
+		"version":          doctrine.Version,
+		"tool":             "skill_lifecycle",
+		"scope":            scope,
+		"description":      "Deneb closed-loop self-improvement: observe work, propose reusable changes, validate with held-out replay cases, evolve or generate skills, watch outcomes, rollback regressions, and queue deferred self-corrections.",
+		"loop":             doctrine.Lifecycle,
+		"sourcePapers":     doctrine.SourceIDs(),
+		"principles":       doctrine.ProductRules(),
+		"invariants":       doctrine.Invariants,
+		"qualityGates":     doctrine.QualityGates,
+		"sourcePrinciples": doctrine.Papers,
 	}
 }
 

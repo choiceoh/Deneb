@@ -267,6 +267,15 @@ private fun PropusTimelineHeader(summary: PropusLifecycleSummary) {
             color = MaterialTheme.colorScheme.primary,
             fontWeight = FontWeight.SemiBold,
         )
+        val doctrineMeta = listOfNotNull(
+            summary.doctrineVersion.takeIf { it.isNotBlank() },
+            summary.sourcePapers.size.takeIf { it > 0 }?.let { "논문 ${it}개" },
+            summary.qualityGates.size.takeIf { it > 0 }?.let { "게이트 ${it}개" },
+        ).joinToString(" · ")
+        if (doctrineMeta.isNotBlank()) {
+            Spacer(Modifier.height(2.dp))
+            Text(doctrineMeta, style = DenebType.meta, color = denebHint(), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
         Spacer(Modifier.height(2.dp))
         Text(activity, style = DenebType.meta, color = denebHint())
         Spacer(Modifier.height(2.dp))
@@ -279,6 +288,11 @@ private fun PropusTimelineHeader(summary: PropusLifecycleSummary) {
         if (cue.isNotBlank()) {
             Spacer(Modifier.height(2.dp))
             Text(cue, style = DenebType.meta, color = denebHint(), maxLines = 2, overflow = TextOverflow.Ellipsis)
+        }
+        val gate = summary.qualityGate.ifBlank { summary.qualityGates.firstOrNull().orEmpty() }
+        if (gate.isNotBlank()) {
+            Spacer(Modifier.height(2.dp))
+            Text(gate, style = DenebType.meta, color = denebHint(), maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }

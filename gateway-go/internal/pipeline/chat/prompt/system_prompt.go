@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
 )
 
 // toolCategories defines tool groupings for the compact tool list.
@@ -271,6 +272,7 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		// self-improvement loop in one control plane.
 		ss.WriteString("### Propus (스킬·자가개선 루프)\n")
 		ss.WriteString("Propus는 경험 → 제안 → 검증 → 스킬 생성/진화 → 관찰/롤백 → 자가수정 후보를 하나로 묶는 자기개선 시스템입니다. `skill_lifecycle`는 호환성을 위해 유지되는 Propus control plane 도구입니다.\n")
+		writePropusDoctrinePrompt(&ss)
 		ss.WriteString("복합 워크플로우(2+ 도구, 2+ 턴 또는 재사용 가능한 code_action)를 완료하면 Propus가 스킬 추출·개선 여부를 평가합니다.\n")
 		ss.WriteString("재사용 가치가 높은 워크플로우를 발견하면:\n")
 		ss.WriteString("1. `evolution-proposal` 스킬로 genesis/create/evolve/no-op 중 하나를 먼저 결정하세요.\n")
@@ -515,6 +517,25 @@ func truncateDescription(s string, maxLen int) string {
 		return s
 	}
 	return string(runes[:maxLen]) + "..."
+}
+
+func writePropusDoctrinePrompt(b *strings.Builder) {
+	doctrine := genesis.PropusDoctrine()
+	fmt.Fprintf(b, "Source doctrine `%s`: %s.\n", doctrine.Version, doctrine.LifecycleText())
+	if sources := doctrine.SourceIDs(); len(sources) > 0 {
+		fmt.Fprintf(b, "Sources: %s.\n", strings.Join(sources, ", "))
+	}
+	rules := doctrine.ProductRules()
+	if len(rules) > 0 {
+		b.WriteString("Operational rules:\n")
+		for i, rule := range rules {
+			fmt.Fprintf(b, "- P%d: %s\n", i+1, rule)
+		}
+	}
+	if len(doctrine.QualityGates) > 0 {
+		fmt.Fprintf(b, "Quality gates: %s.\n", strings.Join(doctrine.QualityGates, ", "))
+	}
+	b.WriteString("\n")
 }
 
 // writeCompactToolList writes a categorized tool name list (no descriptions).

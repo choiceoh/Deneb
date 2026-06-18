@@ -88,6 +88,7 @@ The compatible tool name is still `skill_lifecycle`.
 
 - Before coding, review, or skill-evolution work, inspect `skill_lifecycle` action `status`, read `overview.nextActions`, then check `selfCorrectionCandidates`.
 - Treat Propus overview/status as the canonical state model. Do not infer a separate lifecycle policy from raw logs when an overview field exists.
+- Preserve the source doctrine: SoK treats skills as governed/evaluated supply-chain artifacts, EvolveR requires closed-loop experience distillation, Self-Correction Bench warns against same-turn self-critique, and Self-Correction Illusion makes external role presentation a reliability lever.
 - If you notice a plausible correction but cannot safely apply and validate it now, record it with `skill_lifecycle` action `self_correction` using `title`, `evidence`, `targetFiles`, `proposedChange`, and `risk`.
 - Treat queued items as unapplied hypotheses. Apply them only after batch review and tests, then mark them with `skill_lifecycle` action `self_correction_review` as `accepted`, `rejected`, `superseded`, or `applied`.
 - The append-only queue is stored at `~/.deneb/data/self_correction_candidates.jsonl` for agents that need direct inspection.
