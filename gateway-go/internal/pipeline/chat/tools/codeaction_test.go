@@ -234,6 +234,38 @@ print("GOT", mails)
 	}
 }
 
+func TestCodeAction_MailArchiveBridge(t *testing.T) {
+	requirePython(t)
+	inv := &recordingInvoker{result: "ARCHIVE:thread"}
+	out := runCodeAction(t, CodeActionDeps{Invoker: inv}, `
+thread = deneb.mail_archive("thread", message_id="archive|INBOX|1", limit=20)
+print("GOT", thread)
+`)
+	if !strings.Contains(out, "GOT ARCHIVE:thread") {
+		t.Fatalf("expected mail_archive bridge result echoed, got:\n%s", out)
+	}
+	calls := inv.called()
+	if len(calls) != 1 || !strings.HasPrefix(calls[0], "mail_archive:") || !strings.Contains(calls[0], `"action":"thread"`) {
+		t.Fatalf("expected one mail_archive thread call, got %v", calls)
+	}
+}
+
+func TestCodeAction_MailArchiveStructuredJSON(t *testing.T) {
+	requirePython(t)
+	inv := &recordingInvoker{result: `{"action":"list","messages":[{"subject":"Alpha","locator":"archive|INBOX|1"}]}`}
+	out := runCodeAction(t, CodeActionDeps{Invoker: inv}, `
+rows = deneb.mail_archive("list", as_json=True)
+print(rows["messages"][0]["subject"], rows["messages"][0]["locator"])
+`)
+	if !strings.Contains(out, "Alpha archive|INBOX|1") {
+		t.Fatalf("expected structured mail_archive JSON decoded, got:\n%s", out)
+	}
+	calls := inv.called()
+	if len(calls) != 1 || !strings.HasPrefix(calls[0], "mail_archive:") || !strings.Contains(calls[0], `"as_json":true`) {
+		t.Fatalf("expected one mail_archive JSON call, got %v", calls)
+	}
+}
+
 // TestCodeAction_SandboxBlocks is the security core: the audit hook must block
 // network, subprocess, out-of-sandbox writes, and secret reads — each surfacing
 // as a traceback the model can read.

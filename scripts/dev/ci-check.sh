@@ -126,8 +126,78 @@ fi
 
 LOGDIR="$(mktemp -d "${TMPDIR:-/tmp}/deneb-ci-check.XXXXXX")"
 
-now_ms() { date +%s%3N; }
+now_ms() {
+  local v
+  v=$(date +%s%3N)
+  if [[ "$v" =~ ^[0-9]+$ ]]; then
+    echo "$v"
+    return
+  fi
+  python3 - <<'PY'
+import time
+print(int(time.time() * 1000))
+PY
+}
 fmt_dur() { printf '%d.%01ds' "$(( $1 / 1000 ))" "$(( ($1 % 1000) / 100 ))"; }
+
+GENERATED_CHECK_FILES=(
+  gateway-go/internal/pipeline/chat/toolreg/tool_schemas_gen.go
+  gateway-go/internal/pipeline/chat/tool_classification_gen.go
+  client-android/app/composeApp/src/commonMain/kotlin/ai/deneb/deneb/generated/MiniappWireTypes.kt
+)
+
+# make generate-check is correct on CI's clean checkout, but it uses git diff
+# against HEAD, so it falsely fails in a dirty worktree where source JSON and the
+# generated file were both intentionally edited. For the local ci mirror, check
+# the real invariant instead: regeneration must not change any generated file
+# relative to the state at gate start.
+run_generate_check_dirty_safe() {
+  local log="$1"
+  local before="$LOGDIR/generate-check-before"
+  local f before_f rc=0 changed=0
+  mkdir -p "$before"
+  for f in "${GENERATED_CHECK_FILES[@]}"; do
+    if [ -e "$f" ]; then
+      before_f="$before/$f"
+      mkdir -p "$(dirname "$before_f")"
+      cp "$f" "$before_f"
+    fi
+  done
+
+  {
+    echo "==> [1/3] tool schemas (tool_schemas.json -> tool_schemas_gen.go)"
+    make tool-schemas
+    echo "==> [2/3] data tables (*.json -> *_gen.go)"
+    make data-gen
+    echo "==> [3/3] kotlin wire models (Go //deneb:wire -> MiniappWireTypes.kt)"
+    make kotlin-models
+  } >"$log" 2>&1 || rc=$?
+  if [ "$rc" -ne 0 ]; then
+    return "$rc"
+  fi
+
+  for f in "${GENERATED_CHECK_FILES[@]}"; do
+    before_f="$before/$f"
+    if [ ! -e "$before_f" ] && [ ! -e "$f" ]; then
+      continue
+    fi
+    if [ -e "$before_f" ] && [ -e "$f" ] && cmp -s "$before_f" "$f"; then
+      continue
+    fi
+    changed=1
+    {
+      echo "generated file changed after regeneration: $f"
+      if [ -e "$before_f" ] && [ -e "$f" ]; then
+        diff -u "$before_f" "$f" || true
+      elif [ -e "$f" ]; then
+        echo "created by regeneration"
+      else
+        echo "removed by regeneration"
+      fi
+    } >>"$log"
+  done
+  return "$changed"
+}
 
 # offenders <gate> <log>: distill a gate's raw log down to the actual findings,
 # dropping toolchain noise (make enter/leave, gradle config + the Kotlin/Native
@@ -156,7 +226,7 @@ offenders() {
     kotlin-detekt)
       grep -E '\.kt:[0-9]+:[0-9]+:|Analysis failed with' "$log" ;;
     generate-check)
-      grep -E '^==> |^diff --git|^\+\+\+ |^--- |^@@ |out of date|not up to date' "$log" ;;
+      grep -E '^==> |^diff --git|^\+\+\+ |^--- |^@@ |generated file changed|out of date|not up to date' "$log" ;;
   esac
 }
 
@@ -180,8 +250,13 @@ run_gate() {
   local log="$LOGDIR/$name.log"
   local start end dur rc
   start=$(now_ms)
-  make "$target" >"$log" 2>&1
-  rc=$?
+  if [ "$name" = generate-check ]; then
+    run_generate_check_dirty_safe "$log"
+    rc=$?
+  else
+    make "$target" >"$log" 2>&1
+    rc=$?
+  fi
   end=$(now_ms); dur=$(( end - start ))
   printf '%s %s %s\n' "$rc" "$dur" "$target" > "$LOGDIR/$name.meta"
   if [ "$rc" -eq 0 ]; then

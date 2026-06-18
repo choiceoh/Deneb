@@ -98,10 +98,11 @@ const CodeActionDescription = "Run Python in a single turn to orchestrate tools 
 // model does those as visible top-level tool calls. (fs read/write/edit have no
 // "action" and are gated in codeActionAllow.)
 var codeActionAllowed = map[string]map[string]bool{
-	"gmail":    {"inbox": true, "search": true, "read": true, "thread": true, "analyze": true},
-	"calendar": {"list": true, "get": true, "free_slots": true, "create": true, "update": true, "delete": true},
-	"contacts": {"lookup": true, "search": true},
-	"wiki":     {"search": true, "read": true, "index": true, "daily": true, "status": true, "write": true, "log": true},
+	"gmail":        {"inbox": true, "search": true, "read": true, "thread": true, "analyze": true},
+	"mail_archive": {"list": true, "search": true, "read": true, "thread": true, "project_history": true, "history": true},
+	"calendar":     {"list": true, "get": true, "free_slots": true, "create": true, "update": true, "delete": true},
+	"contacts":     {"lookup": true, "search": true},
+	"wiki":         {"search": true, "read": true, "index": true, "daily": true, "status": true, "write": true, "log": true},
 }
 
 // codeActionAllow returns nil if (tool, args.action) is a permitted call, or a
@@ -116,7 +117,7 @@ func codeActionAllow(tool string, args map[string]any) error {
 	}
 	actions, ok := codeActionAllowed[tool]
 	if !ok {
-		return fmt.Errorf("tool %q is not available from code_action (allowed: gmail, calendar, contacts, wiki, read, write, edit)", tool)
+		return fmt.Errorf("tool %q is not available from code_action (allowed: gmail, mail_archive, calendar, contacts, wiki, read, write, edit)", tool)
 	}
 	action, _ := args["action"].(string)
 	action = strings.TrimSpace(action)
@@ -228,6 +229,24 @@ func (b *codeActionBridge) structuredResult(tool string, args map[string]any) (a
 			return nil, fmt.Errorf("wiki is unavailable for structured output")
 		}
 		return wikiStructured(b.ctx, b.wiki, args)
+	case "mail_archive":
+		if b.invoker == nil {
+			return nil, fmt.Errorf("mail_archive invoker is unavailable for structured output")
+		}
+		args["as_json"] = true
+		data, err := json.Marshal(args)
+		if err != nil {
+			return nil, err
+		}
+		result, err := b.invoker.Execute(b.ctx, "mail_archive", data)
+		if err != nil {
+			return nil, err
+		}
+		var out any
+		if err := json.Unmarshal([]byte(result), &out); err != nil {
+			return nil, fmt.Errorf("mail_archive structured output was not JSON: %w", err)
+		}
+		return out, nil
 	default:
 		return nil, fmt.Errorf("structured output (as_json=True) is not available for %q — call it without as_json", tool)
 	}
@@ -690,7 +709,7 @@ func CodeActionSchema() map[string]any {
 		"properties": map[string]any{
 			"code": map[string]any{
 				"type":        "string",
-				"description": "Python 3 source. A preloaded `deneb` object exposes Deneb tools: deneb.gmail(action, query=…, message_id=…, max=…) [inbox|search|read|thread|analyze — read-only, NO send], deneb.calendar(action, **kw) [list|get|free_slots; create|update|delete on the local calendar], deneb.contacts(action, query) [lookup|search], deneb.wiki(action, query=…, **kw) [search|read|index|daily|status; write|log], and workspace files deneb.read(file_path) / deneb.write(file_path, content) / deneb.edit(file_path, old_string, new_string). Pass as_json=True for parsed objects instead of text — deneb.contacts (list of {name,phones,emails,org}), deneb.calendar list/get (events {id,title,start,end,location,all_day,attendees}), deneb.wiki search/read/index ({path,snippet,score} / {path,title,summary,body} / list of page paths) — ideal for filtering, counting, joining. Writes are internal and recoverable; outbound email send is NOT available here — do that as a normal tool call. Use print() to return data — only stdout and any traceback come back. Sandbox: no network except the bridge, no subprocess, no raw file writes outside the scratch dir (use deneb.write for workspace files).",
+				"description": "Python 3 source. A preloaded `deneb` object exposes Deneb tools: deneb.gmail(action, query=…, message_id=…, max=…) [inbox|search|read|thread|analyze — read-only, NO send], deneb.mail_archive(action, query=…, message_id=…, limit=…, as_json=True) [list|search|read|thread|project_history over the native archive], deneb.calendar(action, **kw) [list|get|free_slots; create|update|delete on the local calendar], deneb.contacts(action, query) [lookup|search], deneb.wiki(action, query=…, **kw) [search|read|index|daily|status; write|log], and workspace files deneb.read(file_path) / deneb.write(file_path, content) / deneb.edit(file_path, old_string, new_string). Pass as_json=True for parsed objects instead of text — deneb.mail_archive (messages/history with locators, ranking, related_wiki, related_events), deneb.contacts (list of {name,phones,emails,org}), deneb.calendar list/get (events {id,title,start,end,location,all_day,attendees}), deneb.wiki search/read/index ({path,snippet,score} / {path,title,summary,body} / list of page paths) — ideal for filtering, counting, joining. Writes are internal and recoverable; outbound email send is NOT available here — do that as a normal tool call. Use print() to return data — only stdout and any traceback come back. Sandbox: no network except the bridge, no subprocess, no raw file writes outside the scratch dir (use deneb.write for workspace files).",
 			},
 			"timeout": map[string]any{
 				"type":        "number",

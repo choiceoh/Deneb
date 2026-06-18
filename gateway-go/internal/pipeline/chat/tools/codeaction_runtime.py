@@ -139,6 +139,10 @@ class _Deneb:
     Methods return the tool's text result (a str) by default. Allowed surface:
       deneb.gmail(action, query=..., message_id=..., max=...)
           actions: inbox, search, read, thread, analyze (READ-ONLY — no send).
+      deneb.mail_archive(action, query=..., message_id=..., limit=..., as_json=False)
+          actions: list, search, read, thread, project_history over the native
+          archive (INBOX + Gmail backfill by default). as_json=True returns
+          messages/history with locators, rank metadata, wiki/calendar links.
       deneb.calendar(action, as_json=False, **kw)
           read: list, get, free_slots. write: create, update, delete (local
           calendar). as_json=True (list/get) returns event dicts
@@ -176,6 +180,12 @@ class _Deneb:
     def gmail(self, action, **kw):
         kw["action"] = action
         return self._call("gmail", kw)
+
+    def mail_archive(self, action, as_json=False, **kw):
+        kw["action"] = action
+        if as_json:
+            kw["as_json"] = True
+        return self._call("mail_archive", kw, as_json=as_json)
 
     def calendar(self, action, as_json=False, **kw):
         kw["action"] = action
