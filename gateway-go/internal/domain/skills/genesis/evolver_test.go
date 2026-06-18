@@ -220,6 +220,75 @@ func TestParseAndApplyRecordsSelfHarnessAudit(t *testing.T) {
 	}
 }
 
+func TestParseAndApplyUsesTeacherRewriteAuditWhenEscalated(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "SKILL.md")
+	original := "---\nname: deploy-helper\nversion: \"1.0.0\"\n---\n\n# Deploy Helper\n\n## Procedure\n- Verify deploys.\n"
+	if err := os.WriteFile(path, []byte(original), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tracker := newTestTracker(t)
+	cat := skills.NewCatalog(slog.New(slog.NewTextHandler(io.Discard, nil)))
+	cat.Register(skills.SkillEntry{Skill: skills.Skill{Name: "deploy-helper", Version: "1.0.0", FilePath: path}})
+
+	teacherCalls := 0
+	teacherServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		teacherCalls++
+		w.Header().Set("Content-Type", "text/event-stream")
+		switch teacherCalls {
+		case 1:
+			writeTestSSEJSON(t, w, `{"pass":false,"original_score":80,"candidate_score":81,"reason":"lightweight audit is vague"}`)
+		default:
+			writeTestSSEJSON(t, w, `{"skip":false,"changes":{"description":"teacher targeted bounded timeout recovery","target_signature":"teacher-terminal=timeout|mechanism=bounded-execution","edited_surface":"Procedure","expected_behavior_change":"teacher rewrite pivots after timeout","regression_risk":"teacher preserves final verification","body":"# Deploy Helper\n\n## Procedure\n- Verify deploys.\n- Use bounded timeout recovery before finalizing."}}`)
+		}
+	}))
+	defer teacherServer.Close()
+	lightweightServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		writeTestSSEJSON(t, w, `{"pass":true,"original_score":80,"candidate_score":90,"reason":"teacher rewrite is safer"}`)
+	}))
+	defer lightweightServer.Close()
+
+	e := NewEvolver(llm.NewClient(lightweightServer.URL, "test-key"), cat, tracker, "lightweight", slog.New(slog.NewTextHandler(io.Discard, nil)))
+	e.SetTeacher(llm.NewClient(teacherServer.URL, "test-key"), "teacher")
+	entry := &skills.SkillEntry{Skill: skills.Skill{Name: "deploy-helper", Version: "1.0.0", FilePath: path}}
+	resp := `{"skip":false,"changes":{"description":"lightweight description","new_version":"1.0.1","target_signature":"lightweight-target","edited_surface":"Procedure","expected_behavior_change":"lightweight behavior","regression_risk":"lightweight risk","body":"# Deploy Helper\n\n## Procedure\n- Verify deploys.\n- Retry forever."}}`
+
+	result, err := e.parseAndApply(context.Background(), resp, entry, original, &UsageStats{SkillName: "deploy-helper"})
+	if err != nil {
+		t.Fatalf("parseAndApply: %v", err)
+	}
+	if !result.Evolved || result.Description != "teacher targeted bounded timeout recovery" {
+		t.Fatalf("expected teacher metadata on result, got %+v", result)
+	}
+	if result.Audit == nil || result.Audit.TargetSignature != "teacher-terminal=timeout|mechanism=bounded-execution" {
+		t.Fatalf("expected teacher audit on result, got %+v", result.Audit)
+	}
+	entries, err := tracker.RecentLifecycleLog(1)
+	if err != nil {
+		t.Fatalf("RecentLifecycleLog: %v", err)
+	}
+	if len(entries) != 1 || entries[0].Description != result.Description ||
+		entries[0].SelfHarnessAudit == nil ||
+		entries[0].SelfHarnessAudit.TargetSignature != result.Audit.TargetSignature {
+		t.Fatalf("expected lifecycle log to use teacher metadata, got %+v", entries)
+	}
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(got), "bounded timeout recovery") || strings.Contains(string(got), "Retry forever") {
+		t.Fatalf("expected teacher body to be committed, got:\n%s", got)
+	}
+}
+
+func writeTestSSEJSON(t *testing.T, w http.ResponseWriter, payload string) {
+	t.Helper()
+	fmt.Fprintf(w, "data: {\"choices\":[{\"delta\":{\"role\":\"assistant\",\"content\":%q}}]}\n\n", payload)
+	fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n")
+	fmt.Fprint(w, "data: [DONE]\n\n")
+}
+
 func TestStripEchoedFrontmatter(t *testing.T) {
 	fm := "---\nname: demo\nversion: \"1.1.0\"\n---\n"
 	body := "# Demo\n\n## Procedure\n- step one"

@@ -15,6 +15,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 	chattools "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
+	"github.com/choiceoh/deneb/gateway-go/pkg/safego"
 )
 
 // initGenesisServices creates the genesis service, tracker, and evolver.
@@ -269,7 +270,9 @@ func (a *chatUsageRecorderAdapter) RecordSkillUse(sessionKey, skillName string, 
 		a.logger.Warn("genesis: skill usage record failed", "skill", skillName, "error", err)
 	}
 	if !success {
-		a.recordValidationCaseFromFailedUse(sessionKey, skillName, errMsg)
+		safego.GoWithSlog(a.logger, "skill-failed-use-validation-case", func() {
+			a.recordValidationCaseFromFailedUse(sessionKey, skillName, errMsg)
+		})
 	}
 }
 
@@ -297,6 +300,7 @@ func (a *chatUsageRecorderAdapter) recordValidationCaseFromFailedUse(sessionKey,
 		Description: description,
 		Source:      "auto-failed-skill-use",
 	}, sctx)
+	record.Replay = failedUseValidationReplay(record.Replay)
 	if a.validationCaseAlreadyRecorded(skillName, record.ID) {
 		return
 	}
@@ -334,6 +338,25 @@ func (a *chatUsageRecorderAdapter) validationCaseAlreadyRecorded(skillName, id s
 		}
 	}
 	return false
+}
+
+func failedUseValidationReplay(replay genesis.SkillReplayCaseRecord) genesis.SkillReplayCaseRecord {
+	forbidden := make([]genesis.SkillReplayToolCallRecord, 0, len(replay.ExpectedToolCalls))
+	for _, call := range replay.ExpectedToolCalls {
+		if !call.FixtureError || len(call.InputIncludes)+len(call.InputExcludes) == 0 {
+			continue
+		}
+		forbidden = append(forbidden, genesis.SkillReplayToolCallRecord{
+			Name:          call.Name,
+			InputIncludes: append([]string(nil), call.InputIncludes...),
+			InputExcludes: append([]string(nil), call.InputExcludes...),
+		})
+	}
+	replay.RequiredTools = nil
+	replay.ExpectedToolCalls = nil
+	replay.ForbiddenToolCalls = append(replay.ForbiddenToolCalls, forbidden...)
+	replay.RequireOrder = false
+	return replay
 }
 
 // registerGenesisAutonomousTasks registers periodic background tasks for genesis.

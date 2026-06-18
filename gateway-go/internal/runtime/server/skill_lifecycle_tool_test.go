@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
@@ -352,26 +353,36 @@ func TestChatUsageRecorderAutoValidationCaseFromFailedUse(t *testing.T) {
 	rec := newChatUsageRecorderAdapter(tracker, store, slog.Default())
 
 	rec.RecordSkillUse("client:main:srv1", "srv1-ops", false, "turn failed: tool exec errored")
-	rec.RecordSkillUse("client:main:srv1", "srv1-ops", false, "turn failed: tool exec errored")
 
-	cases, err := tracker.RecentSkillValidationCases("srv1-ops", 5)
-	if err != nil {
-		t.Fatalf("RecentSkillValidationCases: %v", err)
+	var cases []genesis.SkillValidationCaseRecord
+	var err error
+	for i := 0; i < 20; i++ {
+		cases, err = tracker.RecentSkillValidationCases("srv1-ops", 5)
+		if err != nil {
+			t.Fatalf("RecentSkillValidationCases: %v", err)
+		}
+		if len(cases) > 0 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 	if len(cases) != 1 {
 		t.Fatalf("expected one auto validation case, got %+v", cases)
 	}
+	rec.RecordSkillUse("client:main:srv1", "srv1-ops", false, "turn failed: tool exec errored")
+	time.Sleep(50 * time.Millisecond)
 	tc := cases[0]
 	if tc.Source != "auto-failed-skill-use" ||
 		tc.ID != "session-client:main:srv1" ||
 		!strings.Contains(tc.Description, "turn failed: tool exec errored") ||
 		tc.Replay.Input != "srv1에서 실제 deneb-gateway 상태를 확인하고 개선" ||
-		len(tc.Replay.ExpectedToolCalls) != 1 ||
-		tc.Replay.ExpectedToolCalls[0].Name != "exec" ||
-		len(tc.Replay.ExpectedToolCalls[0].InputIncludes) != 2 ||
-		tc.Replay.ExpectedToolCalls[0].InputIncludes[0] != "ssh srv1" ||
-		tc.Replay.ExpectedToolCalls[0].InputIncludes[1] != "systemctl --user status" ||
-		!tc.Replay.ExpectedToolCalls[0].FixtureError {
+		len(tc.Replay.ExpectedToolCalls) != 0 ||
+		len(tc.Replay.RequiredTools) != 0 ||
+		len(tc.Replay.ForbiddenToolCalls) != 1 ||
+		tc.Replay.ForbiddenToolCalls[0].Name != "exec" ||
+		len(tc.Replay.ForbiddenToolCalls[0].InputIncludes) != 2 ||
+		tc.Replay.ForbiddenToolCalls[0].InputIncludes[0] != "ssh srv1" ||
+		tc.Replay.ForbiddenToolCalls[0].InputIncludes[1] != "systemctl --user status" {
 		t.Fatalf("unexpected auto validation case: %+v", tc)
 	}
 	summary, err := tracker.ValidationCaseSummary("srv1-ops")

@@ -335,6 +335,8 @@ func (e *Evolver) parseAndApply(ctx context.Context, text string, entry *skills.
 		ExpectedBehaviorChange: strings.TrimSpace(resp.Changes.ExpectedBehaviorChange),
 		RegressionRisk:         strings.TrimSpace(resp.Changes.RegressionRisk),
 	}
+	committedDescription := strings.TrimSpace(resp.Changes.Description)
+	committedAudit := audit
 
 	// Deterministic selector gates are not optional: even when LLM self-testing
 	// is disabled for cost/latency, candidates must still obey bounded edit and
@@ -360,7 +362,7 @@ func (e *Evolver) parseAndApply(ctx context.Context, text string, entry *skills.
 	// keeps the original — a bad "improvement" is worse than no change. When a
 	// teacher (main) model is wired, it gets one escalated attempt first (#4).
 	if e.selfTest {
-		body, ok, reason := e.selfTestAndMaybeEscalate(ctx, entry, originalContent, candidateBody, stats)
+		accepted, ok, reason := e.selfTestAndMaybeEscalate(ctx, entry, originalContent, candidateBody, stats)
 		if !ok {
 			// Best-effort lifecycle record so rejected attempts are visible in
 			// the native observability feed, not just operator logs.
@@ -377,7 +379,13 @@ func (e *Evolver) parseAndApply(ctx context.Context, text string, entry *skills.
 				Reason:    "self-test rejected: " + reason,
 			}, nil
 		}
-		candidateBody = body
+		candidateBody = accepted.Body
+		if strings.TrimSpace(accepted.Description) != "" {
+			committedDescription = strings.TrimSpace(accepted.Description)
+		}
+		if !accepted.Audit.empty() {
+			committedAudit = accepted.Audit
+		}
 	}
 
 	// Guard the empty-version case: strings.Replace with an empty "old"
@@ -410,14 +418,14 @@ func (e *Evolver) parseAndApply(ctx context.Context, text string, entry *skills.
 	e.logger.Info("evolver: skill evolved",
 		"skill", entry.Skill.Name,
 		"version", newVersion,
-		"description", resp.Changes.Description,
+		"description", committedDescription,
 	)
 
 	// Durable lifecycle record for the evolution timeline. The curator's
 	// MarkSkillPatched only tracks agent-created skills, so without this a
 	// committed evolve of a user-authored skill leaves no queryable trace.
 	if e.tracker != nil {
-		if logErr := e.tracker.LogEvolveWithAudit(entry.Skill.Name, newVersion, resp.Changes.Description, audit); logErr != nil {
+		if logErr := e.tracker.LogEvolveWithAudit(entry.Skill.Name, newVersion, committedDescription, committedAudit); logErr != nil {
 			e.logger.Warn("evolver: lifecycle log write failed",
 				"skill", entry.Skill.Name, "error", logErr)
 		}
@@ -427,8 +435,8 @@ func (e *Evolver) parseAndApply(ctx context.Context, text string, entry *skills.
 		SkillName:   entry.Skill.Name,
 		Evolved:     true,
 		NewVersion:  newVersion,
-		Description: resp.Changes.Description,
-		Audit:       audit.ptr(),
+		Description: committedDescription,
+		Audit:       committedAudit.ptr(),
 	}, nil
 }
 
@@ -906,11 +914,17 @@ func drainStreamText(events <-chan llm.StreamEvent) string {
 	return sb.String()
 }
 
+type acceptedSkillCandidate struct {
+	Body        string
+	Description string
+	Audit       HarnessEditAudit
+}
+
 // selfTestAndMaybeEscalate judges a candidate rewrite. On pass it returns the
 // candidate. On fail it escalates to the teacher model (if wired) for one more
-// attempt, then re-judges. Returns (finalBody, ok, reason). ok=false means the
-// caller must keep the original skill untouched.
-func (e *Evolver) selfTestAndMaybeEscalate(ctx context.Context, entry *skills.SkillEntry, originalContent, candidateBody string, stats *UsageStats) (body string, ok bool, reason string) {
+// attempt, then re-judges. ok=false means the caller must keep the original
+// skill untouched.
+func (e *Evolver) selfTestAndMaybeEscalate(ctx context.Context, entry *skills.SkillEntry, originalContent, candidateBody string, stats *UsageStats) (acceptedSkillCandidate, bool, string) {
 	hasTeacher := e.teacherClient != nil && e.teacherModel != ""
 
 	// Judge != producer. The candidate came from the lightweight model, so a
@@ -922,36 +936,36 @@ func (e *Evolver) selfTestAndMaybeEscalate(ctx context.Context, entry *skills.Sk
 	if err != nil {
 		e.logger.Warn("evolver: self-test errored, keeping original",
 			"skill", entry.Skill.Name, "error", err)
-		return "", false, "judge error"
+		return acceptedSkillCandidate{}, false, "judge error"
 	}
 	if pass {
-		return candidateBody, true, reason
+		return acceptedSkillCandidate{Body: candidateBody}, true, reason
 	}
 	e.logger.Info("evolver: self-test rejected lightweight rewrite",
 		"skill", entry.Skill.Name, "reason", reason)
 
 	// Teacher-escalation: let the stronger model rewrite once.
 	if !hasTeacher {
-		return "", false, reason
+		return acceptedSkillCandidate{}, false, reason
 	}
-	teacherBody, terr := e.teacherRewrite(ctx, entry.Skill.Name, originalContent, candidateBody, reason, stats)
-	if terr != nil || strings.TrimSpace(teacherBody) == "" {
+	teacherCandidate, terr := e.teacherRewrite(ctx, entry.Skill.Name, originalContent, candidateBody, reason, stats)
+	if terr != nil || strings.TrimSpace(teacherCandidate.Body) == "" {
 		e.logger.Warn("evolver: teacher escalation failed",
 			"skill", entry.Skill.Name, "error", terr)
-		return "", false, "teacher escalation failed"
+		return acceptedSkillCandidate{}, false, "teacher escalation failed"
 	}
 	// This rewrite came from the teacher, so judge it with the lightweight model
 	// — again keeping judge != producer rather than letting the teacher rubber-
 	// stamp its own rewrite. A weaker judge may false-reject a good rewrite, but
 	// the loop is fail-closed (keeps the original), so that errs safe.
-	tpass, treason, tjerr := e.validateCandidate(ctx, entry.Skill.Name, e.llmClient, e.resolveModel(), originalContent, teacherBody, stats)
+	tpass, treason, tjerr := e.validateCandidate(ctx, entry.Skill.Name, e.llmClient, e.resolveModel(), originalContent, teacherCandidate.Body, stats)
 	if tjerr != nil || !tpass {
 		e.logger.Info("evolver: teacher rewrite still failed self-test",
 			"skill", entry.Skill.Name, "reason", treason)
-		return "", false, "teacher: " + treason
+		return acceptedSkillCandidate{}, false, "teacher: " + treason
 	}
 	e.logger.Info("evolver: teacher escalation succeeded", "skill", entry.Skill.Name)
-	return teacherBody, true, treason
+	return teacherCandidate, true, treason
 }
 
 func (e *Evolver) validateCandidate(ctx context.Context, skillName string, client *llm.Client, model, originalContent, candidateBody string, stats *UsageStats) (pass bool, reason string, err error) {
@@ -1165,8 +1179,8 @@ type evolveResp struct {
 
 // teacherRewrite asks the stronger model to produce a better body after the
 // lightweight rewrite failed self-test. Reuses the evolve envelope; returns
-// the new body (or "" when the teacher declines).
-func (e *Evolver) teacherRewrite(ctx context.Context, skillName, originalContent, failedCandidate, rejectReason string, stats *UsageStats) (string, error) {
+// the accepted candidate fields (or an empty Body when the teacher declines).
+func (e *Evolver) teacherRewrite(ctx context.Context, skillName, originalContent, failedCandidate, rejectReason string, stats *UsageStats) (acceptedSkillCandidate, error) {
 	validationSection := formatValidationCasesForPrompt(e.validationCasesForPrompt(skillName))
 	failurePatternSection := formatFailurePatternsForPrompt(stats)
 	userPrompt := fmt.Sprintf(`## 현재 SKILL.md
@@ -1199,14 +1213,14 @@ func (e *Evolver) teacherRewrite(ctx context.Context, skillName, originalContent
 		ResponseFormat: &llm.ResponseFormat{Type: "json_object"},
 	})
 	if err != nil {
-		return "", fmt.Errorf("teacher rewrite LLM call: %w", err)
+		return acceptedSkillCandidate{}, fmt.Errorf("teacher rewrite LLM call: %w", err)
 	}
 	if events == nil {
-		return "", fmt.Errorf("teacher rewrite: nil event channel")
+		return acceptedSkillCandidate{}, fmt.Errorf("teacher rewrite: nil event channel")
 	}
 	raw := drainStreamText(events)
 	if strings.TrimSpace(raw) == "" {
-		return "", nil
+		return acceptedSkillCandidate{}, nil
 	}
 	// Robust parse: a long skill body sometimes hits the token cap mid-string
 	// ("unexpected end of JSON input") or carries unescaped newlines —
@@ -1214,12 +1228,21 @@ func (e *Evolver) teacherRewrite(ctx context.Context, skillName, originalContent
 	// broken body still fails the caller's self-test, so recovery is safe.
 	resp, err := jsonutil.UnmarshalLLM[teacherRewriteResp](raw)
 	if err != nil {
-		return "", fmt.Errorf("teacher rewrite: parse: %w", err)
+		return acceptedSkillCandidate{}, fmt.Errorf("teacher rewrite: parse: %w", err)
 	}
 	if resp.Skip || resp.Changes == nil {
-		return "", nil
+		return acceptedSkillCandidate{}, nil
 	}
-	return stripEchoedFrontmatter(resp.Changes.Body), nil
+	return acceptedSkillCandidate{
+		Body:        stripEchoedFrontmatter(resp.Changes.Body),
+		Description: strings.TrimSpace(resp.Changes.Description),
+		Audit: HarnessEditAudit{
+			TargetSignature:        strings.TrimSpace(resp.Changes.TargetSignature),
+			EditedSurface:          strings.TrimSpace(resp.Changes.EditedSurface),
+			ExpectedBehaviorChange: strings.TrimSpace(resp.Changes.ExpectedBehaviorChange),
+			RegressionRisk:         strings.TrimSpace(resp.Changes.RegressionRisk),
+		},
+	}, nil
 }
 
 // teacherRewriteResp is the teacher model's rewrite verdict: skip, or a changed
@@ -1227,7 +1250,12 @@ func (e *Evolver) teacherRewrite(ctx context.Context, skillName, originalContent
 type teacherRewriteResp struct {
 	Skip    bool `json:"skip"`
 	Changes *struct {
-		Body string `json:"body"`
+		Description            string `json:"description"`
+		TargetSignature        string `json:"target_signature,omitempty"`
+		EditedSurface          string `json:"edited_surface,omitempty"`
+		ExpectedBehaviorChange string `json:"expected_behavior_change,omitempty"`
+		RegressionRisk         string `json:"regression_risk,omitempty"`
+		Body                   string `json:"body"`
 	} `json:"changes,omitempty"`
 }
 
