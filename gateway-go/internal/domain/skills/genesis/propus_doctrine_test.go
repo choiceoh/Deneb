@@ -17,7 +17,6 @@ func TestPropusDoctrinePreservesSourcePrinciples(t *testing.T) {
 		"arxiv:2606.05976",
 		"arxiv:2606.09498",
 		"arxiv:2606.11459",
-		"arxiv:2606.15363",
 		"arxiv:2605.21240",
 	}
 	gotIDs := doctrine.SourceIDs()
@@ -35,6 +34,14 @@ func TestPropusDoctrinePreservesSourcePrinciples(t *testing.T) {
 	if len(doctrine.Invariants) < 9 || len(doctrine.QualityGates) < 8 || len(doctrine.ProductRules()) != len(wantIDs) {
 		t.Fatalf("doctrine lost product constraints: %+v", doctrine)
 	}
+	filteredIDs := doctrine.FilteredSourceIDs()
+	if len(filteredIDs) != 1 || filteredIDs[0] != "arxiv:2606.15363" ||
+		!strings.Contains(doctrine.FilteredPapers[0].FilterReason, "Single-agent") {
+		t.Fatalf("weak APEX source should be filtered, got ids=%+v papers=%+v", filteredIDs, doctrine.FilteredPapers)
+	}
+	if strings.Contains(strings.Join(doctrine.SourceIDs(), "\n"), "2606.15363") {
+		t.Fatalf("filtered APEX source leaked into canonical sources: %+v", doctrine.SourceIDs())
+	}
 	for _, want := range []string{
 		"untrusted until validated",
 		"evidence path",
@@ -42,11 +49,13 @@ func TestPropusDoctrinePreservesSourcePrinciples(t *testing.T) {
 		"external evidence",
 		"failure signature",
 		"Mixed frontier",
-		"evolution axis",
 		"exploration map",
 	} {
 		if !strings.Contains(strings.Join(doctrine.ProductRules(), "\n"), want) {
 			t.Fatalf("doctrine lost source principle %q: %+v", want, doctrine.ProductRules())
 		}
+	}
+	if !strings.Contains(strings.Join(doctrine.Invariants, "\n"), "diagnostic") {
+		t.Fatalf("doctrine should keep change-axis only as diagnostic metadata: %+v", doctrine.Invariants)
 	}
 }

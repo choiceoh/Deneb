@@ -269,6 +269,7 @@ private fun PropusTimelineHeader(summary: PropusLifecycleSummary) {
         val doctrineMeta = listOfNotNull(
             summary.doctrineVersion.takeIf { it.isNotBlank() },
             summary.sourcePapers.size.takeIf { it > 0 }?.let { "논문 ${it}개" },
+            summary.filteredSources.size.takeIf { it > 0 }?.let { "보류 ${it}개" },
             summary.qualityGates.size.takeIf { it > 0 }?.let { "게이트 ${it}개" },
         ).joinToString(" · ")
         if (doctrineMeta.isNotBlank()) {

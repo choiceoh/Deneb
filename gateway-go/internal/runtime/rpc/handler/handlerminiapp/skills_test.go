@@ -205,6 +205,7 @@ func TestSkillsLifecycle_MappingAndLimit(t *testing.T) {
 		payload.Summary.LatestSkill != "email-analysis" ||
 		payload.Summary.DoctrineVersion != genesis.PropusDoctrine().Version ||
 		len(payload.Summary.SourcePapers) != len(genesis.PropusDoctrine().SourceIDs()) ||
+		len(payload.Summary.FilteredSources) != len(genesis.PropusDoctrine().FilteredSourceIDs()) ||
 		len(payload.Summary.Principles) != len(genesis.PropusDoctrine().ProductRules()) ||
 		len(payload.Summary.QualityGates) != len(genesis.PropusDoctrine().QualityGates) ||
 		payload.Summary.NextCue == "" ||

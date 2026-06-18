@@ -25,6 +25,16 @@ func newSkillLifecycleTestTracker(t *testing.T) *genesis.Tracker {
 	return tracker
 }
 
+func requireStringSliceContains(t *testing.T, values []string, want string) {
+	t.Helper()
+	for _, value := range values {
+		if value == want {
+			return
+		}
+	}
+	t.Fatalf("expected %q in %+v", want, values)
+}
+
 type skillLifecycleTranscriptStore struct {
 	msgs  []toolctx.ChatMessage
 	byKey map[string][]toolctx.ChatMessage
@@ -129,6 +139,10 @@ func TestSkillLifecycleStatusFiltersBySkillAndStats(t *testing.T) {
 		sourcePapers[len(sourcePapers)-1] != "arxiv:2605.21240" {
 		t.Fatalf("unexpected source papers: %+v", sourcePapers)
 	}
+	filteredSources := system["filteredSources"].([]string)
+	if len(filteredSources) != 1 || filteredSources[0] != "arxiv:2606.15363" {
+		t.Fatalf("unexpected filtered sources: %+v", filteredSources)
+	}
 	overview := got["overview"].(map[string]any)
 	if overview["state"] != "needs_review" ||
 		overview["pendingSelfCorrections"] != 1 ||
@@ -142,6 +156,17 @@ func TestSkillLifecycleStatusFiltersBySkillAndStats(t *testing.T) {
 		nextActions[1] != "record_validation_case_from_session" ||
 		nextActions[2] != "triage_opportunity_backlog" {
 		t.Fatalf("unexpected Propus next actions: %+v", nextActions)
+	}
+	coverage := overview["doctrineCoverage"].(map[string]any)
+	if coverage["state"] != "partial" || coverage["sourcePolicy"] != "core_sources_only_filtered_sources_not_gates" {
+		t.Fatalf("unexpected doctrine coverage: %+v", coverage)
+	}
+	requireStringSliceContains(t, coverage["covered"].([]string), "exploration_backlog_available")
+	requireStringSliceContains(t, coverage["gaps"].([]string), "missing_held_out_validation_corpus")
+	requireStringSliceContains(t, coverage["gaps"].([]string), "apex_mixed_frontier_unmeasured")
+	coverageFiltered := coverage["filteredSources"].([]string)
+	if len(coverageFiltered) != 1 || coverageFiltered[0] != "arxiv:2606.15363" {
+		t.Fatalf("unexpected coverage filtered sources: %+v", coverageFiltered)
 	}
 	recent := got["recent"].([]genesis.LifecycleLogEntry)
 	if len(recent) != 2 {
@@ -271,6 +296,7 @@ func TestSkillLifecycleValidationCaseRecordsAndStatusSurfacesIt(t *testing.T) {
 		SkillName:           "topsolar-db",
 		ID:                  "safe-wrapper",
 		Description:         "preserve safe execution wrapper",
+		FrontierTier:        "mixed",
 		RequiredSubstrings:  []string{"단일 bash block"},
 		ForbiddenSubstrings: []string{"eval"},
 		RequiredHeadings:    []string{"통합 실행 흐름"},
@@ -307,6 +333,9 @@ func TestSkillLifecycleValidationCaseRecordsAndStatusSurfacesIt(t *testing.T) {
 	if len(cases) != 1 || cases[0].ID != "safe-wrapper" || cases[0].Source != "operator" {
 		t.Fatalf("unexpected validation cases: %+v", cases)
 	}
+	if cases[0].FrontierTier != "mixed" {
+		t.Fatalf("expected normalized frontier tier, got %+v", cases[0])
+	}
 	if cases[0].Replay.Input == "" ||
 		len(cases[0].Replay.RequiredActions) != 2 ||
 		len(cases[0].Replay.ForbiddenActions) != 1 ||
@@ -325,6 +354,82 @@ func TestSkillLifecycleValidationCaseRecordsAndStatusSurfacesIt(t *testing.T) {
 		summary.UniqueRecords != 1 ||
 		summary.DuplicateRecords != 0 {
 		t.Fatalf("unexpected validation case summary: %+v", summary)
+	}
+	if summary.UniqueMixedFrontierCases != 1 {
+		t.Fatalf("unexpected frontier tier summary: %+v", summary)
+	}
+}
+
+func TestSkillLifecycleStatusRequiresTieredApexFrontierEvidence(t *testing.T) {
+	tracker := newSkillLifecycleTestTracker(t)
+	if err := tracker.LogGenesis("deploy-helper", "session", "telegram:1", "coding", "Deploy workflow"); err != nil {
+		t.Fatalf("LogGenesis: %v", err)
+	}
+	audit := genesis.HarnessEditAudit{
+		TargetSignature:        "terminal=timeout|mechanism=bounded-execution",
+		EditedSurface:          "Procedure",
+		ExpectedBehaviorChange: "bounded recovery",
+		RegressionRisk:         "preserve verification",
+	}
+	if err := tracker.LogEvolveWithAudit("deploy-helper", "1.0.1", "tighten timeout recovery", audit); err != nil {
+		t.Fatalf("LogEvolveWithAudit: %v", err)
+	}
+	for _, rec := range []genesis.SkillValidationCaseRecord{
+		{
+			SkillName:          "deploy-helper",
+			ID:                 "easy-anchor",
+			FrontierTier:       "easy",
+			RequiredSubstrings: []string{"origin/main"},
+			Source:             "operator",
+		},
+		{
+			SkillName:          "deploy-helper",
+			ID:                 "mixed-frontier",
+			FrontierTier:       "mixed",
+			RequiredSubstrings: []string{"real listener"},
+			Source:             "operator",
+		},
+	} {
+		if err := tracker.RecordSkillValidationCase(rec); err != nil {
+			t.Fatalf("RecordSkillValidationCase(%s): %v", rec.ID, err)
+		}
+	}
+	if err := tracker.RecordSkillOpportunity(genesis.SkillOpportunityRecord{
+		Candidate: "record production deploy proof variants",
+		Route:     "evolve",
+		SkillName: "deploy-helper",
+		Evidence:  "operator repeatedly asks for real-state verification",
+	}); err != nil {
+		t.Fatalf("RecordSkillOpportunity: %v", err)
+	}
+
+	backend := &skillLifecycleBackend{tracker: tracker}
+	gotAny, err := backend.SkillLifecycleStatus(context.Background(), chattools.SkillLifecycleStatusRequest{
+		SkillName: "deploy-helper",
+		Limit:     5,
+	})
+	if err != nil {
+		t.Fatalf("SkillLifecycleStatus: %v", err)
+	}
+	got := gotAny.(map[string]any)
+	overview := got["overview"].(map[string]any)
+	coverage := overview["doctrineCoverage"].(map[string]any)
+	if coverage["state"] != "covered" {
+		t.Fatalf("expected covered doctrine coverage, got %+v", coverage)
+	}
+	for _, want := range []string{
+		"held_out_validation_corpus",
+		"self_harness_failure_signature_audit",
+		"apex_mixed_frontier_with_easy_anchor",
+		"exploration_backlog_available",
+	} {
+		requireStringSliceContains(t, coverage["covered"].([]string), want)
+	}
+	if gaps := coverage["gaps"].([]string); len(gaps) != 0 {
+		t.Fatalf("expected no doctrine coverage gaps, got %+v", gaps)
+	}
+	if coverage["easyAnchorCases"] != 1 || coverage["mixedFrontierCases"] != 1 {
+		t.Fatalf("unexpected frontier coverage counts: %+v", coverage)
 	}
 }
 

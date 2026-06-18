@@ -698,6 +698,58 @@ func TestTrackerValidationCaseSummaryRejectsWeakAutomaticCases(t *testing.T) {
 	}
 }
 
+func TestTrackerValidationCaseSummaryCountsFrontierTiers(t *testing.T) {
+	tracker := newTestTracker(t)
+	for _, rec := range []SkillValidationCaseRecord{
+		{
+			SkillName:          "deploy-helper",
+			ID:                 "easy",
+			FrontierTier:       "easy_anchor",
+			RequiredSubstrings: []string{"origin/main"},
+			Source:             "operator",
+		},
+		{
+			SkillName:          "deploy-helper",
+			ID:                 "mixed",
+			FrontierTier:       "mixed-frontier",
+			RequiredSubstrings: []string{"verify listener"},
+			Source:             "operator",
+		},
+		{
+			SkillName:          "deploy-helper",
+			ID:                 "hard",
+			FrontierTier:       "hard",
+			RequiredSubstrings: []string{"unknown future signal"},
+			Source:             "operator",
+		},
+	} {
+		if err := tracker.RecordSkillValidationCase(rec); err != nil {
+			t.Fatalf("RecordSkillValidationCase(%s): %v", rec.ID, err)
+		}
+	}
+
+	summary, err := tracker.ValidationCaseSummary("deploy-helper")
+	if err != nil {
+		t.Fatalf("ValidationCaseSummary: %v", err)
+	}
+	if summary.UniqueEasyAnchorCases != 1 ||
+		summary.UniqueMixedFrontierCases != 1 ||
+		summary.UniqueHardFrontierCases != 1 {
+		t.Fatalf("unexpected frontier tier summary: %+v", summary)
+	}
+	cases, err := tracker.RecentSkillValidationCases("deploy-helper", 5)
+	if err != nil {
+		t.Fatalf("RecentSkillValidationCases: %v", err)
+	}
+	tiers := map[string]bool{}
+	for _, tc := range cases {
+		tiers[tc.FrontierTier] = true
+	}
+	if !tiers["easy"] || !tiers["mixed"] || !tiers["hard"] {
+		t.Fatalf("frontier tiers were not normalized in stored cases: %+v", cases)
+	}
+}
+
 func TestTrackerOptimizerMemoryRecordsAcceptedRejectedAndRollback(t *testing.T) {
 	tracker := newTestTracker(t)
 	if err := tracker.LogEvolve("deploy-helper", "1.0.1", "tighten verification steps"); err != nil {

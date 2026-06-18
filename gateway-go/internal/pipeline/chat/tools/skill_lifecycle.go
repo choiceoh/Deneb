@@ -103,6 +103,7 @@ type SkillValidationCaseRequest struct {
 	SkillName           string                 `json:"skillName"`
 	ID                  string                 `json:"id,omitempty"`
 	Description         string                 `json:"description,omitempty"`
+	FrontierTier        string                 `json:"frontierTier,omitempty"`
 	RequiredSubstrings  []string               `json:"requiredSubstrings,omitempty"`
 	ForbiddenSubstrings []string               `json:"forbiddenSubstrings,omitempty"`
 	RequiredHeadings    []string               `json:"requiredHeadings,omitempty"`
@@ -121,6 +122,7 @@ type SkillValidationCaseFromSessionRequest struct {
 	SessionKey          string                 `json:"sessionKey,omitempty"`
 	ID                  string                 `json:"id,omitempty"`
 	Description         string                 `json:"description,omitempty"`
+	FrontierTier        string                 `json:"frontierTier,omitempty"`
 	RequiredSubstrings  []string               `json:"requiredSubstrings,omitempty"`
 	ForbiddenSubstrings []string               `json:"forbiddenSubstrings,omitempty"`
 	RequiredHeadings    []string               `json:"requiredHeadings,omitempty"`
@@ -132,12 +134,13 @@ type SkillValidationCaseFromSessionRequest struct {
 // recent stored transcripts for a specific skill. Weak automatic cases are
 // skipped by the tracker instead of polluting the validation corpus.
 type SkillValidationBackfillRequest struct {
-	SkillName   string                 `json:"skillName"`
-	SessionKey  string                 `json:"sessionKey,omitempty"`
-	Limit       int                    `json:"limit,omitempty"`
-	Description string                 `json:"description,omitempty"`
-	Replay      SkillReplayCaseRequest `json:"replay,omitempty"`
-	Source      string                 `json:"source,omitempty"`
+	SkillName    string                 `json:"skillName"`
+	SessionKey   string                 `json:"sessionKey,omitempty"`
+	Limit        int                    `json:"limit,omitempty"`
+	Description  string                 `json:"description,omitempty"`
+	FrontierTier string                 `json:"frontierTier,omitempty"`
+	Replay       SkillReplayCaseRequest `json:"replay,omitempty"`
+	Source       string                 `json:"source,omitempty"`
 }
 
 // SkillReplayCaseRequest records a realistic dry-run task and expected/forbidden
@@ -195,6 +198,7 @@ func ToolSkillLifecycle(backend SkillLifecycleBackend) ToolFunc {
 			ReviewNote          string                 `json:"reviewNote"`
 			ID                  string                 `json:"id"`
 			Description         string                 `json:"description"`
+			FrontierTier        string                 `json:"frontierTier"`
 			RequiredSubstrings  []string               `json:"requiredSubstrings"`
 			ForbiddenSubstrings []string               `json:"forbiddenSubstrings"`
 			RequiredHeadings    []string               `json:"requiredHeadings"`
@@ -246,6 +250,7 @@ func ToolSkillLifecycle(backend SkillLifecycleBackend) ToolFunc {
 				SkillName:           p.SkillName,
 				ID:                  p.ID,
 				Description:         p.Description,
+				FrontierTier:        p.FrontierTier,
 				RequiredSubstrings:  p.RequiredSubstrings,
 				ForbiddenSubstrings: p.ForbiddenSubstrings,
 				RequiredHeadings:    p.RequiredHeadings,
@@ -258,6 +263,7 @@ func ToolSkillLifecycle(backend SkillLifecycleBackend) ToolFunc {
 				SessionKey:          p.SessionKey,
 				ID:                  p.ID,
 				Description:         p.Description,
+				FrontierTier:        p.FrontierTier,
 				RequiredSubstrings:  p.RequiredSubstrings,
 				ForbiddenSubstrings: p.ForbiddenSubstrings,
 				RequiredHeadings:    p.RequiredHeadings,
@@ -266,12 +272,13 @@ func ToolSkillLifecycle(backend SkillLifecycleBackend) ToolFunc {
 			})
 		case "validation_backfill":
 			result, err = backend.BackfillSkillValidationCases(ctx, SkillValidationBackfillRequest{
-				SkillName:   p.SkillName,
-				SessionKey:  p.SessionKey,
-				Limit:       p.Limit,
-				Description: p.Description,
-				Replay:      p.Replay,
-				Source:      p.Source,
+				SkillName:    p.SkillName,
+				SessionKey:   p.SessionKey,
+				Limit:        p.Limit,
+				Description:  p.Description,
+				FrontierTier: p.FrontierTier,
+				Replay:       p.Replay,
+				Source:       p.Source,
 			})
 		case "self_correction":
 			result, err = backend.RecordSelfCorrectionCandidate(ctx, SkillSelfCorrectionCandidateRequest{
@@ -405,6 +412,11 @@ func SkillLifecycleToolSchema() map[string]any {
 			"description": map[string]any{
 				"type":        "string",
 				"description": "For validation_case/validation_case_from_session/validation_backfill: what real failure or invariant this held-out case protects",
+			},
+			"frontierTier": map[string]any{
+				"type":        "string",
+				"description": "For validation_case/validation_case_from_session/validation_backfill: APEX data-selection tier for this held-out case. Use mixed when prompt/skill variants disagree, easy for anchors that should stay solved, and hard for failures not yet addressable.",
+				"enum":        []string{"easy", "mixed", "hard"},
 			},
 			"requiredSubstrings": map[string]any{
 				"type":        "array",

@@ -141,6 +141,7 @@ type PropusLifecycleSummary struct {
 	DoctrineVersion string   `json:"doctrineVersion,omitempty"`
 	Doctrine        string   `json:"doctrine,omitempty"`
 	SourcePapers    []string `json:"sourcePapers,omitempty"`
+	FilteredSources []string `json:"filteredSources,omitempty"`
 	Principles      []string `json:"principles,omitempty"`
 	QualityGates    []string `json:"qualityGates,omitempty"`
 	NextCue         string   `json:"nextCue,omitempty"`
@@ -410,6 +411,7 @@ func propusLifecycleSummary(events []SkillLifecycleEvent) PropusLifecycleSummary
 		DoctrineVersion: doctrine.Version,
 		Doctrine:        doctrine.LifecycleText(),
 		SourcePapers:    doctrine.SourceIDs(),
+		FilteredSources: doctrine.FilteredSourceIDs(),
 		Principles:      doctrine.ProductRules(),
 		QualityGates:    doctrine.QualityGates,
 		QualityGate:     "검증 없는 생성/진화는 skill debt로 취급",

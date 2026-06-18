@@ -102,7 +102,7 @@ sidebarTitle: "Agent Papers 2026"
 - **evolve self-test에 역할 재라벨 적용** (`genesis/evolver.go`): 검증 대상 스킬 본문·테스트 결과를 모델 자신의 출력이 아닌 user/tool 역할 콘텐츠로 제시 — 프롬프트 구성 변경만으로 수정률 대폭 상승 기대. 난이도 최하.
 - 진화 후 실효 검증 부재 ↔ skill debt 경고 일치: 진화본 vs 이전본의 사용 성공률 비교(tracker 데이터 기존재)를 LogEvolve(#2271)에 추가 — A/B 폐쇄 루프.
 - skillcurator(stale 30일/archive 90일)는 EvolveR의 무한 축적 열화 증거로 정당화됨 — 유지.
-- Propus doctrine: 여러 논문 축을 하나의 제품 규칙으로 정규화한다. **검증 전 생성/진화는 debt**, **모호한 원리는 reject**, **같은 실패 후보 반복 금지**, **Self-Harness식 failure signature/edit surface/audit 필수**, **APEX식 Mixed frontier + Easy anchor + workflow axis 분리**, **상태 판단은 서버 overview/summary가 단일 출처**. 코드의 단일 출처는 `genesis.PropusDoctrine()`이며, 네이티브 `miniapp.skills.lifecycle.summary`와 `skill_lifecycle status.system`이 이 스펙을 노출한다.
+- Propus doctrine: 여러 논문 축을 하나의 제품 규칙으로 정규화한다. **검증 전 생성/진화는 debt**, **모호한 원리는 reject**, **같은 실패 후보 반복 금지**, **Self-Harness식 failure signature/edit surface/audit 필수**, **APEX식 Mixed frontier + Easy anchor는 validation case `frontierTier`로 증명될 때만 covered**, **workflow axis는 약한 APEX 근거를 gate로 승격하지 않는 진단 메타데이터**, **상태 판단은 서버 overview/summary가 단일 출처**. 코드의 단일 출처는 `genesis.PropusDoctrine()`이며, 네이티브 `miniapp.skills.lifecycle.summary`와 `skill_lifecycle status.system`이 이 스펙을 노출한다.
 
 ## 축 6 — 능동형 개입
 

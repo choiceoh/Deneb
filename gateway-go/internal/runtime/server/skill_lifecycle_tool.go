@@ -449,6 +449,7 @@ func (b *skillLifecycleBackend) RecordSkillValidationCase(_ context.Context, req
 		SkillName:           req.SkillName,
 		ID:                  req.ID,
 		Description:         req.Description,
+		FrontierTier:        req.FrontierTier,
 		RequiredSubstrings:  req.RequiredSubstrings,
 		ForbiddenSubstrings: req.ForbiddenSubstrings,
 		RequiredHeadings:    req.RequiredHeadings,
@@ -637,11 +638,12 @@ func skillValidationBackfillCaseRequest(req chattools.SkillValidationBackfillReq
 		description = "Backfilled replay trace from session " + strings.TrimSpace(sessionKey)
 	}
 	return chattools.SkillValidationCaseFromSessionRequest{
-		SkillName:   req.SkillName,
-		SessionKey:  sessionKey,
-		Description: description,
-		Replay:      req.Replay,
-		Source:      source,
+		SkillName:    req.SkillName,
+		SessionKey:   sessionKey,
+		Description:  description,
+		FrontierTier: req.FrontierTier,
+		Replay:       req.Replay,
+		Source:       source,
 	}
 }
 
@@ -701,6 +703,7 @@ func buildSkillValidationCaseFromSession(req chattools.SkillValidationCaseFromSe
 		SkillName:           req.SkillName,
 		ID:                  id,
 		Description:         description,
+		FrontierTier:        req.FrontierTier,
 		RequiredSubstrings:  req.RequiredSubstrings,
 		ForbiddenSubstrings: req.ForbiddenSubstrings,
 		RequiredHeadings:    req.RequiredHeadings,
@@ -925,6 +928,8 @@ func propusSkillOverview(
 		state = propusMaxState(state, "has_backlog")
 		nextActions = append(nextActions, "triage_opportunity_backlog")
 	}
+	doctrineCoverage, doctrineActions := propusDoctrineCoverage(counts, validationSummary, opportunities)
+	nextActions = appendUniqueStrings(nextActions, doctrineActions...)
 	if len(nextActions) == 0 {
 		nextActions = append(nextActions, "continue_observing")
 	}
@@ -955,6 +960,7 @@ func propusSkillOverview(
 		"openOpportunities":      len(opportunities),
 		"curatorState":           curatorState,
 		"createdBy":              createdBy,
+		"doctrineCoverage":       doctrineCoverage,
 		"nextActions":            nextActions,
 	}
 }
@@ -1007,6 +1013,8 @@ func propusGlobalOverview(
 		state = propusMaxState(state, "has_backlog")
 		nextActions = append(nextActions, "route_opportunity_backlog")
 	}
+	doctrineCoverage, doctrineActions := propusDoctrineCoverage(counts, validationSummary, opportunities)
+	nextActions = appendUniqueStrings(nextActions, doctrineActions...)
 	if len(nextActions) == 0 {
 		nextActions = append(nextActions, "continue_observing")
 	}
@@ -1025,8 +1033,80 @@ func propusGlobalOverview(
 		"curatedSkills":          len(curator),
 		"staleSkills":            staleSkills,
 		"archivedSkills":         archivedSkills,
+		"doctrineCoverage":       doctrineCoverage,
 		"nextActions":            nextActions,
 	}
+}
+
+func propusDoctrineCoverage(
+	counts map[string]int,
+	validationSummary genesis.SkillValidationCaseSummary,
+	opportunities []genesis.SkillOpportunityRecord,
+) (map[string]any, []string) {
+	doctrine := genesis.PropusDoctrine()
+	covered := make([]string, 0, 4)
+	gaps := make([]string, 0, 4)
+	actions := make([]string, 0, 4)
+
+	auditEvents := counts["validation_sensitive"]
+	evolveEvents := counts["evolved"] + counts["evolve_rejected"] + counts["evolve_rolled_back"]
+	axisCoverage := map[string]int{
+		"harness_patch":          auditEvents,
+		"principle_distillation": counts["genesis"],
+		"workflow_topology":      0,
+	}
+	if len(opportunities) > 0 {
+		axisCoverage["workflow_topology"] = len(opportunities)
+	}
+
+	if validationSummary.UniqueRecords > 0 {
+		covered = append(covered, "held_out_validation_corpus")
+	} else {
+		gaps = append(gaps, "missing_held_out_validation_corpus")
+		actions = append(actions, "record_validation_case_from_session")
+	}
+	if auditEvents > 0 {
+		covered = append(covered, "self_harness_failure_signature_audit")
+	} else if evolveEvents > 0 {
+		gaps = append(gaps, "evolve_history_without_self_harness_audit")
+		actions = append(actions, "require_failure_signature_audit_before_next_evolve")
+	}
+	if validationSummary.UniqueMixedFrontierCases > 0 && validationSummary.UniqueEasyAnchorCases > 0 {
+		covered = append(covered, "apex_mixed_frontier_with_easy_anchor")
+	} else if validationSummary.UniqueRecords >= 2 {
+		gaps = append(gaps, "validation_cases_not_tiered_for_apex_frontier")
+		actions = append(actions, "tag_validation_cases_easy_mixed_hard")
+	} else {
+		gaps = append(gaps, "apex_mixed_frontier_unmeasured")
+		actions = append(actions, "collect_more_validation_cases_before_large_rewrite")
+	}
+	if len(opportunities) > 0 {
+		covered = append(covered, "exploration_backlog_available")
+	} else {
+		gaps = append(gaps, "exploration_map_empty")
+		actions = append(actions, "record_repeated_noop_or_near_miss_as_opportunity")
+	}
+
+	state := "unproven"
+	if len(gaps) == 0 {
+		state = "covered"
+	} else if len(covered) > 0 {
+		state = "partial"
+	}
+	return map[string]any{
+		"state":              state,
+		"covered":            covered,
+		"gaps":               gaps,
+		"axisCoverage":       axisCoverage,
+		"sourcePolicy":       "core_sources_only_filtered_sources_not_gates",
+		"filteredSources":    doctrine.FilteredSourceIDs(),
+		"selfHarnessAudits":  auditEvents,
+		"validationCases":    validationSummary.UniqueRecords,
+		"easyAnchorCases":    validationSummary.UniqueEasyAnchorCases,
+		"mixedFrontierCases": validationSummary.UniqueMixedFrontierCases,
+		"hardFrontierCases":  validationSummary.UniqueHardFrontierCases,
+		"opportunities":      len(opportunities),
+	}, actions
 }
 
 func propusLifecycleCounts(entries []genesis.LifecycleLogEntry) map[string]int {
@@ -1097,18 +1177,20 @@ func propusSystemStatus(skillName string) map[string]any {
 		scope = "skill"
 	}
 	return map[string]any{
-		"name":             doctrine.Name,
-		"codename":         doctrine.Codename,
-		"version":          doctrine.Version,
-		"tool":             "skill_lifecycle",
-		"scope":            scope,
-		"description":      "Deneb closed-loop self-improvement: observe work, propose reusable changes, validate with held-out replay cases, evolve or generate skills, watch outcomes, rollback regressions, and queue deferred self-corrections.",
-		"loop":             doctrine.Lifecycle,
-		"sourcePapers":     doctrine.SourceIDs(),
-		"principles":       doctrine.ProductRules(),
-		"invariants":       doctrine.Invariants,
-		"qualityGates":     doctrine.QualityGates,
-		"sourcePrinciples": doctrine.Papers,
+		"name":               doctrine.Name,
+		"codename":           doctrine.Codename,
+		"version":            doctrine.Version,
+		"tool":               "skill_lifecycle",
+		"scope":              scope,
+		"description":        "Deneb closed-loop self-improvement: observe work, propose reusable changes, validate with held-out replay cases, evolve or generate skills, watch outcomes, rollback regressions, and queue deferred self-corrections.",
+		"loop":               doctrine.Lifecycle,
+		"sourcePapers":       doctrine.SourceIDs(),
+		"filteredSources":    doctrine.FilteredSourceIDs(),
+		"principles":         doctrine.ProductRules(),
+		"invariants":         doctrine.Invariants,
+		"qualityGates":       doctrine.QualityGates,
+		"sourcePrinciples":   doctrine.Papers,
+		"filteredPrinciples": doctrine.FilteredPapers,
 	}
 }
 
