@@ -58,8 +58,8 @@ func TestRepositorySearchPageUsesArchiveAndLocalOverlay(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SearchPage after read: %v", err)
 	}
-	if len(rows) != 0 {
-		t.Fatalf("default rows after read = %#v, want hidden", rows)
+	if len(rows) != 1 || rows[0].ID != row.ID || hasLabel(rows[0].Labels, "UNREAD") {
+		t.Fatalf("default rows after read = %#v, want same row without UNREAD", rows)
 	}
 	rows, _, err = repo.SearchPage(context.Background(), `from:"sender@example.com"`, "", 10)
 	if err != nil {
@@ -272,8 +272,8 @@ func TestRepositorySearchPageScansPastFilteredNewestRows(t *testing.T) {
 		Now:       func() time.Time { return time.Date(2026, 6, 17, 12, 0, 0, 0, time.UTC) },
 	})
 	for i := 51; i <= 80; i++ {
-		if err := repo.state.MarkRead(fmt.Sprintf("m%03d@example.com", i)); err != nil {
-			t.Fatalf("mark read: %v", err)
+		if err := repo.state.MarkArchived(fmt.Sprintf("m%03d@example.com", i)); err != nil {
+			t.Fatalf("mark archived: %v", err)
 		}
 	}
 
@@ -282,10 +282,10 @@ func TestRepositorySearchPageScansPastFilteredNewestRows(t *testing.T) {
 		t.Fatalf("SearchPage: %v", err)
 	}
 	if len(rows) != 10 {
-		t.Fatalf("rows len = %d, want a full page after skipping read newest rows: %#v", len(rows), rows)
+		t.Fatalf("rows len = %d, want a full page after skipping archived newest rows: %#v", len(rows), rows)
 	}
 	if rows[0].ID != "m050@example.com" || rows[9].ID != "m041@example.com" {
-		t.Fatalf("rows = %#v, want newest unread range m050..m041", rows)
+		t.Fatalf("rows = %#v, want newest visible range m050..m041", rows)
 	}
 	if next == "" {
 		t.Fatalf("next is empty, want more unread rows behind the first page")
@@ -319,8 +319,8 @@ func TestRepositoryMutationResolvesArchiveIDWithoutPriorList(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SearchPage: %v", err)
 	}
-	if len(rows) != 0 {
-		t.Fatalf("default rows = %#v, want hidden after read overlay", rows)
+	if len(rows) != 1 || rows[0].ID != "m3@example.com" || hasLabel(rows[0].Labels, "UNREAD") {
+		t.Fatalf("default rows = %#v, want read mail still visible without UNREAD", rows)
 	}
 }
 

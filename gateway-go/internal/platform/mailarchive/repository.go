@@ -494,7 +494,7 @@ func (r *Repository) searchArchive(ctx context.Context, spec archiveQuery, pageT
 			seen[id] = true
 			_ = r.state.RememberLocator(id, mailbox, uid)
 			st := r.state.Get(id)
-			if st.Trashed || (spec.InboxOnly && st.Archived) || (spec.DefaultView && (st.Archived || st.Read)) {
+			if st.Trashed || (spec.InboxOnly && st.Archived) || (spec.DefaultView && st.Archived) {
 				continue
 			}
 			if spec.HasAttachment && len(detail.Attachments) == 0 {
