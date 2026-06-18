@@ -671,7 +671,7 @@ func TestCleanForDisplay_KeepsFinancialReceiptDetails(t *testing.T) {
 	body := strings.Join([]string{
 		"Anthropic, PBC  (<https://example.com>)",
 		"Anthropic, PBC",
-		"Credit note from Anthropic, PBC $25.00 Issued May 2, 2026 (invoice illustration [<url>] Download invoice (<url>) Download credit note (<url>) Credit note number WLGPLVNK-0021-CN-01 Invoice number WLGPLVNK-0021",
+		"Credit note from Anthropic, PBC $25.00 Issued May 2, 2026 (invoice illustration [<url>] Download invoice (<url>) Download credit note (<url>) Credit note number WLGPLVNK-0021-CN-01 Invoice number WLGPLVNK-0021 Credit to astra7471@gmail.com View updated invoice (https://invoice.stripe.com/example)",
 		"Credit note # WLGPLVNK-0021-CN-01 Credit - Other $25.00 Refund issued - American Express - 6216 $25.00 Total credit $25.00 Questions? Visit our support site.",
 		"Powered by stripe logo",
 	}, "\n")
@@ -685,7 +685,7 @@ func TestCleanForDisplay_KeepsFinancialReceiptDetails(t *testing.T) {
 	if strings.Contains(got.Body, "stripe logo") {
 		t.Fatalf("trailing logo leaked:\n%s", got.Body)
 	}
-	for _, gone := range []string{"Anthropic, PBC  (<https://example.com>)", "Download invoice", "Visit our support site"} {
+	for _, gone := range []string{"Anthropic, PBC  (<https://example.com>)", "Download invoice", "View updated invoice", "Visit our support site"} {
 		if strings.Contains(got.Body, gone) {
 			t.Fatalf("receipt boilerplate leaked %q:\n%s", gone, got.Body)
 		}
@@ -1144,6 +1144,125 @@ func TestCleanForDisplay_CutsInlineReplyHistoryAndAttachmentMetadata(t *testing.
 	for _, gone := range []string{"KEUNBEOM", "상기 메일은", "Date:", "From:", "대용량 파일첨부", "TPO자료.pdf", "소장님 안녕하십니까"} {
 		if strings.Contains(got.Body, gone) {
 			t.Fatalf("inline history/noise leaked %q:\n%s", gone, got.Body)
+		}
+	}
+}
+
+func TestCleanForDisplay_StripsOpenRouterReceiptSupportFooter(t *testing.T) {
+	body := strings.Join([]string{
+		"Receipt from OpenRouter, Inc Receipt #1937-7192",
+		"Amount paid",
+		"$52.75",
+		"Date paid",
+		"May 15, 2026, 12:53:38 PM",
+		"Payment method",
+		"- 1880",
+		"Summary",
+		"- OpenRouter Credits : $52.75",
+		"- Amount paid : $52.75",
+		"If you have any questions, visit our support site at https://discord.gg/example, contact us at support@example.com.",
+		"Something wrong with the email? View in browser: https://dashboard.stripe.com/receipts/payment/example",
+		"You're receiving this email because you made a purchase at OpenRouter, Inc, which partners with Stripe.",
+	}, "\n")
+
+	got := CleanForDisplay(body)
+	for _, want := range []string{"Receipt #1937-7192", "$52.75", "May 15, 2026"} {
+		if !strings.Contains(got.Body, want) {
+			t.Fatalf("receipt detail missing %q:\n%s", want, got.Body)
+		}
+	}
+	for _, gone := range []string{"support site", "View in browser", "partners with Stripe"} {
+		if strings.Contains(got.Body, gone) {
+			t.Fatalf("receipt footer leaked %q:\n%s", gone, got.Body)
+		}
+	}
+}
+
+func TestCleanForDisplay_StripsOriginalBoundaryAndMobileSignature(t *testing.T) {
+	body := strings.Join([]string{
+		"Hi Sara,",
+		"Well received the attached stamped PI and PO with thanks.",
+		"We will produce the cables accordingly after our CNY holiday.",
+		"Fred/JOCA CABLE",
+		"�����ҵ�iPhone",
+		"------------------ Original ------------------",
+		"From: Sara <sara@example.com>",
+		"Sent: Monday, March 9, 2026 10:00 AM",
+		"Subject: previous message",
+		"Old thread body.",
+	}, "\n")
+
+	got := CleanForDisplay(body)
+	for _, want := range []string{"stamped PI", "CNY holiday"} {
+		if !strings.Contains(got.Body, want) {
+			t.Fatalf("latest body missing %q:\n%s", want, got.Body)
+		}
+	}
+	for _, gone := range []string{"iPhone", "Original", "Old thread"} {
+		if strings.Contains(got.Body, gone) {
+			t.Fatalf("original/mobile noise leaked %q:\n%s", gone, got.Body)
+		}
+	}
+}
+
+func TestCleanForDisplay_StripsForwardWrapperContactSignature(t *testing.T) {
+	body := strings.Join([]string{
+		"전달바랍니다.",
+		"이현성 HYUN SUNG LEE",
+		"광주시설관리팀 책임매니저",
+		"Facilities Management Team - AutoLand Gwangju",
+		"E 2555151@kia.com",
+		"T +82-62-370-3396",
+		"보낸사람 : 이전 담당자 <old@example.com>",
+		"제목 : 이전 메일",
+		"이전 본문입니다.",
+	}, "\n")
+
+	got := CleanForDisplay(body)
+	if strings.TrimSpace(got.Body) != "전달바랍니다." {
+		t.Fatalf("expected only thin forward wrapper, got:\n%s", got.Body)
+	}
+}
+
+func TestCleanForDisplay_StripsHTMLWrapperOnlyLine(t *testing.T) {
+	body := strings.Join([]string{
+		`<mailplughtml xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">`,
+		"안녕하십니까 차장님",
+		"내주 미팅관련하여 하기와 같이 회신 드립니다.",
+		"일정: 내주 화요일 13시 30분",
+		"장소: 여의도 파크원타워2",
+	}, "\n")
+
+	got := CleanForDisplay(body)
+	for _, want := range []string{"내주 미팅", "파크원타워2"} {
+		if !strings.Contains(got.Body, want) {
+			t.Fatalf("business body missing %q:\n%s", want, got.Body)
+		}
+	}
+	if strings.Contains(got.Body, "mailplughtml") {
+		t.Fatalf("html wrapper leaked:\n%s", got.Body)
+	}
+}
+
+func TestCleanForDisplay_StripsGitHubNotificationFooter(t *testing.T) {
+	body := strings.Join([]string{
+		"Exploring acceleration methods for self-hosting",
+		"Session completed",
+		"choiceoh/osty",
+		"View session: https://github.com/choiceoh/osty/tasks/example",
+		"Share feedback on Copilot cloud agent: https://gh.io/copilot-coding-agent-survey",
+		"Manage notification settings: https://github.com/settings/notifications",
+	}, "\n")
+
+	got := CleanForDisplay(body)
+	for _, want := range []string{"Session completed", "View session"} {
+		if !strings.Contains(got.Body, want) {
+			t.Fatalf("notification detail missing %q:\n%s", want, got.Body)
+		}
+	}
+	for _, gone := range []string{"Share feedback", "Manage notification"} {
+		if strings.Contains(got.Body, gone) {
+			t.Fatalf("notification footer leaked %q:\n%s", gone, got.Body)
 		}
 	}
 }

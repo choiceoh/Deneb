@@ -47,6 +47,8 @@ var (
 		regexp.MustCompile(`(?i)(?:all\s+rights\s+reserved|copyright|ⓒ|©|before\s+printing|think\s+about\s+the\s+environment|환경을\s*생각|인쇄하기\s*전)`),
 		regexp.MustCompile(`(?i)(?:sent\s+with|protected\s+by|scanned\s+by|virus-free|avast|ahnlab|v3|메일보안)`),
 		regexp.MustCompile(`(?i)(?:feedback\s*&\s*support|we'?re\s+here\s+to\s+help|start\s+building)`),
+		regexp.MustCompile(`(?i)(?:if\s+you\s+have\s+any\s+questions,?\s+visit\s+our\s+support\s+site|something\s+wrong\s+with\s+the\s+email\?|view\s+in\s+browser|you'?re\s+receiving\s+this\s+email\s+because\s+you\s+made\s+a\s+purchase|partners\s+with\s+stripe)`),
+		regexp.MustCompile(`(?i)(?:share\s+feedback\s+on|manage\s+notification\s+settings|you\s+are\s+receiving\s+this\s+because|unsubscribe\s+from\s+this\s+thread)`),
 	}
 	bodyPrepReplyHeaderREs = []*regexp.Regexp{
 		regexp.MustCompile(`(?i)^\s*-{2,}\s*original\s+message\s*-{2,}\s*$`),
@@ -63,6 +65,7 @@ var (
 		regexp.MustCompile(`(?i)^\s*-{2,}\s*(?:original|forwarded)\s+(?:message|mail)\s*-{2,}\s*$`),
 		regexp.MustCompile(`^\s*-{2,}\s*(?:원본|전달된)\s*메시지\s*-{2,}\s*$`),
 		regexp.MustCompile(`^\s*-{2,}\s*(?:邮件原件|原始邮件|转发邮件)\s*-{2,}\s*$`),
+		regexp.MustCompile(`(?i)^\s*-{2,}\s*original\s*-{2,}\s*$`),
 		regexp.MustCompile(`(?i)^\s*on\s+.{3,240}\bwrote\s*:\s*$`),
 		regexp.MustCompile(`^\s*.{3,240}<[^>]+@[^>]+>.*(?:작성|씀|写道)\s*:\s*$`),
 		regexp.MustCompile(`^\s*\d{4}년\s*\d{1,2}월\s*\d{1,2}일.{0,180}(?:작성|씀)\s*:\s*$`),
@@ -72,12 +75,13 @@ var (
 		regexp.MustCompile(`(?i)(?:^|\s)(?:https?://|www\.)\S*(?:facebook|instagram|youtube|linkedin|twitter|x\.com|blog)\S*\s*$`),
 	}
 	bodyPrepTrailingSignoffRE = regexp.MustCompile(`^\s*(?:(?:[가-힣](?:\s*[가-힣]){1,3}|[가-힣]{2,4})\s*)?(?:드림|올림|배상)[\s,.!！。]*$`)
-	bodyPrepMobileSignatureRE = regexp.MustCompile(`(?i)^\s*(?:sent\s+from\s+my|sent\s+from\s+outlook\s+for|나의\s+.+에서\s+보냄|iPhone에서\s+보냄|Galaxy에서\s+보냄|Android에서\s+보냄).*$`)
+	bodyPrepMobileSignatureRE = regexp.MustCompile(`(?i)^\s*(?:sent\s+from\s+my|sent\s+from\s+outlook\s+for|나의\s+.+에서\s+보냄|iPhone에서\s+보냄|Galaxy에서\s+보냄|Android에서\s+보냄|.{0,40}iPhone)\s*$`)
 	bodyPrepShortNameRE       = regexp.MustCompile(`^\s*(?:[가-힣]\s*[가-힣]{1,3}|[A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2})\s*$`)
-	bodyPrepTailNameRE        = regexp.MustCompile(`^\s*(?:[가-힣](?:\s*[가-힣]){1,3}|[가-힣]{2,4}\s*/\s*[A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z]+){0,2}|[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2})\s*$`)
+	bodyPrepTailNameRE        = regexp.MustCompile(`^\s*(?:[가-힣](?:\s*[가-힣]){1,3}|[가-힣]{2,4}\s*/\s*[A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z]+){0,2}|[가-힣]{2,4}\s+[A-Z]{2,}(?:\s+[A-Z]{2,}){1,3}|[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2})\s*$`)
 	bodyPrepHTMLSeparatorRE   = regexp.MustCompile(`(?i)^\s*<hr\b[^>]*>\s*$`)
 	bodyPrepHTMLBlankRE       = regexp.MustCompile(`(?i)^\s*(?:<o:p>\s*</o:p>|<o:p>\s*(?:&nbsp;|\s)*\s*</o:p>|<br\s*/?>)\s*$`)
 	bodyPrepHTMLMetaRE        = regexp.MustCompile(`(?i)^\s*<meta\b[^>]*>\s*$`)
+	bodyPrepHTMLWrapperRE     = regexp.MustCompile(`(?i)^\s*</?(?:mailplughtml|html|head|body)\b[^>]*>\s*$`)
 	bodyPrepHTMLSignatureRE   = regexp.MustCompile(`(?i)<span\b[^>]*\bshowField\(`)
 	bodyPrepThinForwardRE     = regexp.MustCompile(`(?i)(?:전달|아래|하기|원문|메일|below|forward|fyi|see\s+below)`)
 	bodyPrepThinShareRE       = regexp.MustCompile(`(?i)(?:참조|참고|송부|공유|자료|attached)`)
@@ -100,6 +104,7 @@ var (
 	bodyPrepReceiptInlineREs   = []*regexp.Regexp{
 		regexp.MustCompile(`(?i)\s*\(?invoice\s+illustration\s*(?:\[[^\]]*\]|\([^)]*\)|<[^>]*>)?`),
 		regexp.MustCompile(`(?i)\s*download\s+(?:invoice|receipt|credit\s+note)\s*(?:\([^)]*\)|<[^>]*>)?`),
+		regexp.MustCompile(`(?i)\s*view\s+(?:updated\s+)?(?:invoice|receipt|credit\s+note)\s*(?:\([^)]*\)|<[^>]*>|\S+)?`),
 	}
 	bodyPrepInlineFooterLeadRE       = regexp.MustCompile(`(?i)\s+(?:상기\s*메일은|본\s*(?:메일|전자우편)은|this\s+(?:message|email)\s+is\s+confidential|this\s+(?:message|email).{0,80}intended\s+only)`)
 	bodyPrepInlineClosingSignatureRE = regexp.MustCompile(`(?:감사합니다|감사드립니다|고맙습니다)[\s,.!！。]*(?:[가-힣]\s*){2,4}\s+[A-Z][A-Za-z]`)
@@ -188,6 +193,11 @@ func CleanForDisplay(body string) CleanResult {
 			lines = compactBodyPrepBlankLines(lines[:cut])
 		}
 		break
+	}
+
+	lines, removed = stripBodyPrepTrailingNoiseLines(lines)
+	if removed > 0 {
+		result.HiddenBlocks = append(result.HiddenBlocks, HiddenBlock{Kind: "tail", Lines: removed})
 	}
 
 	lines, removed = stripBodyPrepInlineTailNoise(lines)
@@ -280,7 +290,7 @@ func normalizeBodyPrepLine(line string) string {
 		line = cleanBodyPrepFinancialLine(line)
 	}
 	line = strings.TrimRight(line, " \t\u200b\u200c\u200d\ufeff")
-	if strings.Trim(strings.TrimSpace(line), "\u200b\u200c\u200d\ufeff") == "" || bodyPrepHTMLBlankRE.MatchString(line) {
+	if strings.Trim(strings.TrimSpace(line), "\u200b\u200c\u200d\ufeff") == "" || bodyPrepHTMLBlankRE.MatchString(line) || bodyPrepHTMLWrapperRE.MatchString(line) {
 		return ""
 	}
 	return line
@@ -748,6 +758,9 @@ func bodyPrepCutLeavesUsablePrefix(lines []string, cut int) bool {
 		return false
 	}
 	prefix := strings.TrimSpace(strings.Join(lines[:cut], "\n"))
+	if bodyPrepThinForwardRE.MatchString(prefix) || bodyPrepThinShareRE.MatchString(prefix) {
+		return true
+	}
 	if visibleBodyPrepRunes(prefix) < 12 {
 		return false
 	}
