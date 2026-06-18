@@ -445,6 +445,62 @@ func TestChatUsageRecorderAutoValidationCaseFromFailedUse(t *testing.T) {
 	}
 }
 
+func TestChatUsageRecorderAutoValidationCaseRefreshesRicherFailedUseTrace(t *testing.T) {
+	tracker := newSkillLifecycleTestTracker(t)
+	sessionKey := "client:main:srv1"
+	store := skillLifecycleTranscriptStore{byKey: map[string][]toolctx.ChatMessage{
+		sessionKey: {
+			{Role: "user", Content: json.RawMessage(`"srv1에서 deneb-gateway 복구"`)},
+			{Role: "assistant", Content: json.RawMessage(`[
+				{"type":"tool_use","id":"tu_1","name":"exec","input":{"cmd":"systemctl --user restart deneb-gateway.service"}}
+			]`)},
+			{Role: "user", Content: json.RawMessage(`[
+				{"type":"tool_result","tool_use_id":"tu_1","content":"Failed to connect to bus","is_error":true}
+			]`)},
+		},
+	}}
+	rec := &chatUsageRecorderAdapter{inner: tracker, transcripts: store, logger: slog.Default()}
+
+	rec.recordValidationCaseFromFailedUse(sessionKey, "srv1-ops", "turn failed: local restart errored")
+	store.byKey[sessionKey] = []toolctx.ChatMessage{
+		{Role: "user", Content: json.RawMessage(`"srv1에서 deneb-gateway 복구"`)},
+		{Role: "assistant", Content: json.RawMessage(`[
+			{"type":"tool_use","id":"tu_1","name":"exec","input":{"cmd":"systemctl --user restart deneb-gateway.service"}},
+			{"type":"tool_use","id":"tu_2","name":"exec","input":{"cmd":"ssh srv1 systemctl --user status deneb-gateway.service"}}
+		]`)},
+		{Role: "user", Content: json.RawMessage(`[
+			{"type":"tool_result","tool_use_id":"tu_1","content":"Failed to connect to bus","is_error":true},
+			{"type":"tool_result","tool_use_id":"tu_2","content":"Active: active (running)","is_error":false}
+		]`)},
+	}
+	rec.recordValidationCaseFromFailedUse(sessionKey, "srv1-ops", "turn failed: local restart errored")
+
+	summary, err := tracker.ValidationCaseSummary("srv1-ops")
+	if err != nil {
+		t.Fatalf("ValidationCaseSummary: %v", err)
+	}
+	if summary.RawRecords != 2 || summary.UniqueRecords != 1 || summary.DuplicateRecords != 1 {
+		t.Fatalf("expected richer same-session case to append and dedupe, got %+v", summary)
+	}
+	cases, err := tracker.RecentSkillValidationCases("srv1-ops", 5)
+	if err != nil {
+		t.Fatalf("RecentSkillValidationCases: %v", err)
+	}
+	if len(cases) != 1 {
+		t.Fatalf("expected one effective case, got %+v", cases)
+	}
+	replay := cases[0].Replay
+	if len(replay.ExpectedToolCalls) != 1 ||
+		replay.ExpectedToolCalls[0].InputIncludes[0] != "ssh srv1" ||
+		replay.ExpectedToolCalls[0].InputIncludes[1] != "systemctl --user status" ||
+		len(replay.ForbiddenToolCalls) != 1 ||
+		replay.ForbiddenToolCalls[0].InputIncludes[0] != "systemctl --user restart" ||
+		len(replay.RequiredTools) != 1 ||
+		replay.RequiredTools[0] != "exec" {
+		t.Fatalf("expected richer replay to preserve recovery and forbidden calls, got %+v", replay)
+	}
+}
+
 func TestSkillLifecycleValidationCaseFromSessionSkipsWeakAutomaticTrace(t *testing.T) {
 	tracker := newSkillLifecycleTestTracker(t)
 	store := skillLifecycleTranscriptStore{msgs: []toolctx.ChatMessage{

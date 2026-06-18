@@ -335,7 +335,7 @@ func (a *chatUsageRecorderAdapter) recordValidationCaseFromFailedUse(sessionKey,
 		Source:      "auto-failed-skill-use",
 	}, sctx)
 	record.Replay = failedUseValidationReplay(record.Replay)
-	if a.validationCaseAlreadyRecorded(skillName, record.ID) {
+	if a.validationCaseAlreadyRecorded(skillName, record) {
 		return
 	}
 	if err := a.inner.RecordSkillValidationCase(record); err != nil {
@@ -353,8 +353,8 @@ func (a *chatUsageRecorderAdapter) recordValidationCaseFromFailedUse(sessionKey,
 	}
 }
 
-func (a *chatUsageRecorderAdapter) validationCaseAlreadyRecorded(skillName, id string) bool {
-	id = strings.TrimSpace(id)
+func (a *chatUsageRecorderAdapter) validationCaseAlreadyRecorded(skillName string, record genesis.SkillValidationCaseRecord) bool {
+	id := strings.TrimSpace(record.ID)
 	if id == "" {
 		return false
 	}
@@ -366,8 +366,9 @@ func (a *chatUsageRecorderAdapter) validationCaseAlreadyRecorded(skillName, id s
 		}
 		return false
 	}
+	nextWeight := validationCaseAssertionWeight(record)
 	for _, tc := range cases {
-		if strings.TrimSpace(tc.ID) == id {
+		if strings.TrimSpace(tc.ID) == id && validationCaseAssertionWeight(tc) >= nextWeight {
 			return true
 		}
 	}
@@ -375,9 +376,15 @@ func (a *chatUsageRecorderAdapter) validationCaseAlreadyRecorded(skillName, id s
 }
 
 func failedUseValidationReplay(replay genesis.SkillReplayCaseRecord) genesis.SkillReplayCaseRecord {
-	forbidden := make([]genesis.SkillReplayToolCallRecord, 0, len(replay.ExpectedToolCalls))
+	expected := make([]genesis.SkillReplayToolCallRecord, 0, len(replay.ExpectedToolCalls))
+	forbidden := make([]genesis.SkillReplayToolCallRecord, 0, len(replay.ForbiddenToolCalls)+len(replay.ExpectedToolCalls))
+	forbidden = append(forbidden, replay.ForbiddenToolCalls...)
 	for _, call := range replay.ExpectedToolCalls {
-		if !call.FixtureError || len(call.InputIncludes)+len(call.InputExcludes) == 0 {
+		if !call.FixtureError {
+			expected = append(expected, call)
+			continue
+		}
+		if len(call.InputIncludes)+len(call.InputExcludes) == 0 {
 			continue
 		}
 		forbidden = append(forbidden, genesis.SkillReplayToolCallRecord{
@@ -386,11 +393,44 @@ func failedUseValidationReplay(replay genesis.SkillReplayCaseRecord) genesis.Ski
 			InputExcludes: append([]string(nil), call.InputExcludes...),
 		})
 	}
-	replay.RequiredTools = nil
-	replay.ExpectedToolCalls = nil
-	replay.ForbiddenToolCalls = append(replay.ForbiddenToolCalls, forbidden...)
-	replay.RequireOrder = false
+	replay.ExpectedToolCalls = expected
+	replay.ForbiddenToolCalls = forbidden
+	replay.RequiredTools = skillReplayToolNames(expected)
+	if len(expected) < 2 {
+		replay.RequireOrder = false
+	}
 	return replay
+}
+
+func validationCaseAssertionWeight(record genesis.SkillValidationCaseRecord) int {
+	weight := len(record.RequiredSubstrings) + len(record.ForbiddenSubstrings) + len(record.RequiredHeadings)
+	replay := record.Replay
+	weight += len(replay.RequiredActions) + len(replay.ForbiddenActions)
+	weight += len(replay.RequiredObservations) + len(replay.ForbiddenObservations)
+	weight += len(replay.RequiredTools) + len(replay.ForbiddenTools)
+	weight += replayToolCallAssertionWeight(replay.ExpectedToolCalls)
+	weight += replayToolCallAssertionWeight(replay.ForbiddenToolCalls)
+	if replay.RequireOrder && len(replay.ExpectedToolCalls) > 1 {
+		weight++
+	}
+	return weight
+}
+
+func replayToolCallAssertionWeight(calls []genesis.SkillReplayToolCallRecord) int {
+	weight := 0
+	for _, call := range calls {
+		if strings.TrimSpace(call.Name) != "" {
+			weight++
+		}
+		weight += len(call.InputIncludes) + len(call.InputExcludes)
+		if strings.TrimSpace(call.FixtureOutput) != "" {
+			weight++
+		}
+		if call.FixtureError {
+			weight++
+		}
+	}
+	return weight
 }
 
 // registerGenesisAutonomousTasks registers periodic background tasks for genesis.
