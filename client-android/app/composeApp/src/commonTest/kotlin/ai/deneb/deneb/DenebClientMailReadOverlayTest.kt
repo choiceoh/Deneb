@@ -120,8 +120,18 @@ class DenebClientMailReadOverlayTest {
                 todoCount = 2,
             ),
         )
-        assertEquals("일정 1 · 할 일 2", mailRowNativeMeta(analyzed))
+        // Analysis finished without a feed card -> flagged "피드 없음" (feed_missing).
+        assertEquals("피드 없음 · 일정 1 · 할 일 2", mailRowNativeMeta(analyzed))
 
+        // Once a feed card exists the row drops the tag — fed mail is already handled.
+        val fed = analyzed.copy(workState = analyzed.workState.copy(feedStatus = "created"))
+        assertEquals("일정 1 · 할 일 2", mailRowNativeMeta(fed))
+
+        // Analyzed, no feed, no extracted work: the missing-feed tag stands alone.
+        val bareMissing = row("bare", false).copy(workState = MailWorkState(analysisStatus = "done"))
+        assertEquals("피드 없음", mailRowNativeMeta(bareMissing))
+
+        // Not-yet-analyzed mail (failed/queued/none) is never tagged feed-missing.
         val failed = row("failed", false).copy(workState = MailWorkState(analysisStatus = "failed"))
         assertNull(mailRowNativeMeta(failed))
     }
