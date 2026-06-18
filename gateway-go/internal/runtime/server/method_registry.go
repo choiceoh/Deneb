@@ -520,6 +520,18 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 			},
 		}),
 
+		// Mini App self-improvement coding queue. This is not a skill list and
+		// not a Propus event log: it is the deferred coding-correction backlog
+		// that an AI coding agent should batch-review before applying changes.
+		handlerminiapp.SelfImprovementCodingMethods(handlerminiapp.SelfImprovementCodingDeps{
+			RecentCandidates: func(status string, limit int) ([]genesis.SelfCorrectionCandidateRecord, error) {
+				if s.genesisTracker == nil {
+					return nil, nil
+				}
+				return s.genesisTracker.RecentSelfCorrectionCandidates("", status, limit)
+			},
+		}),
+
 		// Mini App unified search (miniapp.search.all). Single entry
 		// point that fans out to wiki + diary + people in parallel.
 		// Replaces the per-domain home menu entries — there's now one

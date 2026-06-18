@@ -348,7 +348,6 @@ func skillsLifecycle(deps SkillsDeps) rpcutil.HandlerFunc {
 				}
 			}
 		}
-
 		return rpcutil.RespondOK(req.ID, SkillsLifecycleResponse{
 			Events:  events,
 			Count:   len(events),
