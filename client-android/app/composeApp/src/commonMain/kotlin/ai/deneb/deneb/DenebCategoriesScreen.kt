@@ -114,7 +114,12 @@ fun DenebCategoriesScreen(
                         color = denebHint(),
                     )
                     Spacer(Modifier.height(8.dp))
-                    topLevelCategories(d.categories).filter { it.name != PEOPLE_WIKI_CATEGORY }.forEach { cat ->
+                    // Memoize the grouping + filter so it isn't recomputed on every
+                    // recomposition — only when the category list itself changes.
+                    val visibleCategories = remember(d.categories) {
+                        topLevelCategories(d.categories).filter { it.name != PEOPLE_WIKI_CATEGORY }
+                    }
+                    visibleCategories.forEach { cat ->
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
