@@ -182,22 +182,26 @@ func TestFetchTools_NonDeferredExcluded(t *testing.T) {
 func TestFetchTools_PresetBlocksDisallowedName(t *testing.T) {
 	reg := &fakeFetchRegistry{
 		defs: map[string]toolctx.ToolDef{
-			"cron":  {Name: "cron", Description: "Schedule recurring jobs", Deferred: true},
-			"gmail": {Name: "gmail", Description: "Send and read email", Deferred: true},
+			"cron":         {Name: "cron", Description: "Schedule recurring jobs", Deferred: true},
+			"gmail":        {Name: "gmail", Description: "Send and read email", Deferred: true},
+			"mail_archive": {Name: "mail_archive", Description: "Read local mail archive", Deferred: true},
 		},
 	}
 	fn := ToolFetchTools(reg)
 	ctx := toolctx.WithToolPreset(context.Background(), "researcher")
 
-	out, err := fn(ctx, mustJSON(t, map[string]any{"names": []string{"cron", "gmail"}}))
+	out, err := fn(ctx, mustJSON(t, map[string]any{"names": []string{"cron", "gmail", "mail_archive"}}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if !strings.Contains(out, "- cron: not available under the current tool preset") {
 		t.Fatalf("expected cron blocked under researcher preset, got: %s", out)
 	}
-	// gmail IS in the researcher allow-list — must still activate.
-	assertActivated(t, out, "gmail")
+	if !strings.Contains(out, "- gmail: not available under the current tool preset") {
+		t.Fatalf("expected gmail blocked under researcher preset, got: %s", out)
+	}
+	// mail_archive IS in the researcher allow-list — must still activate.
+	assertActivated(t, out, "mail_archive")
 }
 
 func TestFetchTools_PresetFiltersQueryResults(t *testing.T) {

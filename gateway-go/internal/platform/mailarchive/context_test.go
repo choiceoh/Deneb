@@ -38,6 +38,22 @@ func TestThreadContextReconstructsArchiveThreadAcrossMailboxes(t *testing.T) {
 	}
 }
 
+func TestReadContextMessageResolvesLegacyGmailLocatorAfterArchiveRename(t *testing.T) {
+	raw := archiveContextTestMessage("renamed@deneb", "alpha@example.com", "Archive renamed", "Wed, 17 Jun 2026 09:00:00 +0000", "Renamed mailbox body.", "", "")
+	srv := newTestIMAPArchive(t, map[string]map[string][]byte{
+		"Archive": {"7": []byte(raw)},
+	})
+	cfg := Config{Addr: srv.addr, User: "u", Pass: "p", Mailboxes: []string{"INBOX", "Archive"}, Timeout: time.Second}
+
+	msg, err := ReadContextMessage(context.Background(), cfg, archiveLocator("Gmail", "7"), "", ContextOptions{Limit: 10})
+	if err != nil {
+		t.Fatalf("ReadContextMessage: %v", err)
+	}
+	if msg.Mailbox != "Archive" || msg.Locator != archiveLocator("Archive", "7") || msg.MessageID != "<renamed@deneb>" {
+		t.Fatalf("message = %#v, want Archive mailbox via legacy locator", msg)
+	}
+}
+
 func TestThreadContextFallsBackToSubjectParticipantsWhenHeadersAreMissing(t *testing.T) {
 	older := archiveContextTestMessage("alpha-fallback-old@deneb", "alpha@example.com", "Alpha fallback decision", "Wed, 17 Jun 2026 09:00:00 +0000", "Original decision.", "", "")
 	reply := archiveContextTestMessage("alpha-fallback-reply@deneb", "alpha@example.com", "Re: Alpha fallback decision", "Wed, 17 Jun 2026 11:00:00 +0000", "Reply without References.", "", "")

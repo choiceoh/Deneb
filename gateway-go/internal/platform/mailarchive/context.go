@@ -382,10 +382,19 @@ func searchContextMessagesLimited(ctx context.Context, c *imapConn, cfg Config, 
 }
 
 func fetchContextUID(ctx context.Context, c *imapConn, mailbox, uid string, opts ContextOptions) (ContextMessage, error) {
-	if err := c.examine(mailbox); err != nil {
-		return ContextMessage{}, err
+	for _, candidate := range lookupMailboxCandidates(mailbox) {
+		if ctx.Err() != nil {
+			return ContextMessage{}, ctx.Err()
+		}
+		if err := c.examine(candidate); err != nil {
+			continue
+		}
+		msg, err := fetchContextUIDAfterExamine(ctx, c, candidate, uid, opts)
+		if err == nil {
+			return msg, nil
+		}
 	}
-	return fetchContextUIDAfterExamine(ctx, c, mailbox, uid, opts)
+	return ContextMessage{}, ErrArchiveNotFound
 }
 
 func fetchContextUIDAfterExamine(ctx context.Context, c *imapConn, mailbox, uid string, opts ContextOptions) (ContextMessage, error) {
@@ -461,7 +470,7 @@ func contextMailboxes(cfg Config, override []string) []string {
 		src = cfg.Mailboxes
 	}
 	if len(src) == 0 {
-		src = defaultMailboxes()
+		src = DefaultMailboxes()
 	}
 	out := make([]string, 0, len(src))
 	seen := map[string]bool{}

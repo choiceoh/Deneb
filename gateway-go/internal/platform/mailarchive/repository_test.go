@@ -117,6 +117,28 @@ func TestRepositoryGetAttachmentUsesArchiveRawMessage(t *testing.T) {
 	}
 }
 
+func TestRepositoryResolvesLegacyGmailLocatorAfterArchiveRename(t *testing.T) {
+	raw := archiveTestMessage("m-legacy@example.com", "sender@example.com", "Renamed archive", "Still reachable.", "")
+	srv := newTestIMAPArchive(t, map[string]map[string][]byte{
+		"Archive": {"9": []byte(raw)},
+	})
+	repo := NewRepository(Config{
+		Addr:      srv.addr,
+		User:      "u",
+		Pass:      "p",
+		Mailboxes: []string{"INBOX", "Archive"},
+		Timeout:   time.Second,
+	}, RepositoryOptions{StatePath: t.TempDir() + "/state.json"})
+
+	msg, err := repo.GetMessage(context.Background(), archiveLocator("Gmail", "9"))
+	if err != nil {
+		t.Fatalf("GetMessage legacy Gmail locator: %v", err)
+	}
+	if msg.ID != "m-legacy@example.com" || msg.Subject != "Renamed archive" {
+		t.Fatalf("message = %#v, want renamed archive mail", msg)
+	}
+}
+
 func TestRepositoryNativeStatusSummarizesArchiveAndOverlay(t *testing.T) {
 	raw1 := archiveTestMessage("m1@example.com", "sender@example.com", "One", "Body one.", "")
 	raw2 := archiveTestMessage("m2@example.com", "sender@example.com", "Two", "Body two.", "%PDF")

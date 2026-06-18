@@ -20,8 +20,7 @@ type MailArchiveDeps struct {
 }
 
 // ToolMailArchive reads the on-box mail archive (the deneb-mailarchive IMAP store)
-// so the agent can review received mail locally — the daily-digest cron uses this
-// instead of the Gmail tool, completing the move off Gmail. Archive credentials
+// so the agent can review received mail locally. Archive credentials
 // come from env (DENEB_ARCHIVE_IMAP_USER/PASS; addr default 127.0.0.1:1143);
 // without them the tool reports that it is unconfigured rather than erroring.
 func ToolMailArchive(optional ...MailArchiveDeps) func(ctx context.Context, input json.RawMessage) (string, error) {
@@ -42,7 +41,8 @@ func ToolMailArchive(optional ...MailArchiveDeps) func(ctx context.Context, inpu
 		}
 		_ = json.Unmarshal(input, &args)
 
-		mailboxes := mailArchiveMailboxes(args.Mailbox)
+		configuredMailboxes := mailarchive.ParseMailboxList(os.Getenv("DENEB_ARCHIVE_IMAP_MAILBOXES"))
+		mailboxes := mailarchive.SelectMailboxes(args.Mailbox, configuredMailboxes)
 		cfg := mailarchive.Config{
 			Addr:      mailArchiveAddr(),
 			User:      os.Getenv("DENEB_ARCHIVE_IMAP_USER"),
@@ -189,15 +189,6 @@ func mailArchiveAddr() string {
 		return v
 	}
 	return "127.0.0.1:1143"
-}
-
-func mailArchiveMailboxes(mailbox string) []string {
-	switch strings.ToLower(strings.TrimSpace(mailbox)) {
-	case "", "all", "*":
-		return []string{"INBOX", "Gmail"}
-	default:
-		return []string{strings.TrimSpace(mailbox)}
-	}
 }
 
 func mailArchiveMailboxLabel(mailboxes []string) string {

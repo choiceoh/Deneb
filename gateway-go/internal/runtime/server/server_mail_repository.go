@@ -78,15 +78,5 @@ func miniappArchiveMailConfig() mailarchive.Config {
 }
 
 func archiveIMAPMailboxes() []string {
-	raw := strings.TrimSpace(os.Getenv("DENEB_ARCHIVE_IMAP_MAILBOXES"))
-	if raw == "" {
-		return nil
-	}
-	var out []string
-	for _, part := range strings.Split(raw, ",") {
-		if mailbox := strings.TrimSpace(part); mailbox != "" {
-			out = append(out, mailbox)
-		}
-	}
-	return out
+	return mailarchive.ParseMailboxList(os.Getenv("DENEB_ARCHIVE_IMAP_MAILBOXES"))
 }

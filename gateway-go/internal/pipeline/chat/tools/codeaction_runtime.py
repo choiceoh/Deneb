@@ -137,11 +137,9 @@ class _Deneb:
     """Access to Deneb tools via the in-process bridge.
 
     Methods return the tool's text result (a str) by default. Allowed surface:
-      deneb.gmail(action, query=..., message_id=..., max=...)
-          actions: inbox, search, read, thread, analyze (READ-ONLY — no send).
       deneb.mail_archive(action, query=..., message_id=..., limit=..., as_json=False)
           actions: list, search, read, thread, project_history over the native
-          archive (INBOX + Gmail backfill by default). as_json=True returns
+          archive (INBOX + neutral backfill mailbox by default). as_json=True returns
           messages/history with locators, rank metadata, wiki/calendar links.
       deneb.calendar(action, as_json=False, **kw)
           read: list, get, free_slots. write: create, update, delete (local
@@ -159,8 +157,8 @@ class _Deneb:
       deneb.edit(file_path, old_string, new_string)
           workspace files (paths clamped to the workspace; system files and
           secrets are unreachable).
-    Writes here are internal and recoverable. Outbound actions (gmail
-    send/reply) are rejected — do those as a normal top-level tool call."""
+    Writes here are internal and recoverable. Gmail OAuth/account actions
+    are top-level only; use mail_archive for received-mail reads."""
 
     def _call(self, tool, args, as_json=False):
         body = json.dumps({"tool": tool, "args": args, "json": as_json}).encode("utf-8")
@@ -178,8 +176,10 @@ class _Deneb:
         return result
 
     def gmail(self, action, **kw):
-        kw["action"] = action
-        return self._call("gmail", kw)
+        raise RuntimeError(
+            "deneb.gmail is not available in code_action. "
+            "Use deneb.mail_archive(...) for received mail; use a top-level Gmail tool call for OAuth/account actions."
+        )
 
     def mail_archive(self, action, as_json=False, **kw):
         kw["action"] = action

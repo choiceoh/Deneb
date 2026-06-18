@@ -97,7 +97,7 @@ func NewRepository(cfg Config, opts RepositoryOptions) *Repository {
 		cfg.Timeout = 5 * time.Second
 	}
 	if len(cfg.Mailboxes) == 0 {
-		cfg.Mailboxes = defaultMailboxes()
+		cfg.Mailboxes = DefaultMailboxes()
 	}
 	now := opts.Now
 	if now == nil {
@@ -112,7 +112,7 @@ func NewRepository(cfg Config, opts RepositoryOptions) *Repository {
 }
 
 func defaultMailboxes() []string {
-	return []string{"INBOX", "Gmail"}
+	return DefaultMailboxes()
 }
 
 func (r *Repository) Search(ctx context.Context, query string, maxResults int) ([]gmail.MessageSummary, error) {
@@ -571,6 +571,16 @@ func (r *Repository) fetchArchiveUID(ctx context.Context, mailbox, uid string) (
 		return nil, err
 	}
 	defer c.logout()
+	for _, candidate := range lookupMailboxCandidates(mailbox) {
+		parsed, err := r.fetchArchiveUIDAfterLogin(c, candidate, uid)
+		if err == nil {
+			return parsed, nil
+		}
+	}
+	return nil, ErrArchiveNotFound
+}
+
+func (r *Repository) fetchArchiveUIDAfterLogin(c *imapConn, mailbox, uid string) (*lmtpd.Message, error) {
 	if err := c.examine(mailbox); err != nil {
 		return nil, err
 	}
