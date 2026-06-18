@@ -52,6 +52,9 @@ fun DenebCalendarEventScreen(
     onBack: () -> Unit,
     onEdit: (String) -> Unit = {},
     onDeleted: () -> Unit = {},
+    // Submits a templated message to the main chat (and the caller navigates there)
+    // so a meeting's prep/회의록 actions run as an agent turn the user can watch.
+    onAskInChat: (String) -> Unit = {},
     navigationTabBar: (@Composable () -> Unit)? = null,
 ) {
     var event by remember(eventId) { mutableStateOf<CalendarEventDetail?>(null) }
@@ -89,6 +92,7 @@ fun DenebCalendarEventScreen(
                     ev = ev,
                     isLocal = ev.local,
                     actionError = actionError,
+                    onAskInChat = onAskInChat,
                     onEdit = { onEdit(eventId) },
                     onDelete = { showDelete = true },
                 )
@@ -134,6 +138,7 @@ internal fun CalendarEventContent(
     ev: CalendarEventDetail,
     isLocal: Boolean = false,
     actionError: String? = null,
+    onAskInChat: (String) -> Unit = {},
     onEdit: () -> Unit = {},
     onDelete: () -> Unit = {},
 ) {
@@ -172,8 +177,25 @@ internal fun CalendarEventContent(
         Text(ev.description, style = DenebType.body, color = MaterialTheme.colorScheme.onBackground)
     }
 
-    if (isLocal) {
+    // Meeting (timed) events get the agentic actions: prep before, 회의록 after.
+    // They run in the main chat (the caller navigates there), so they work for
+    // Google and local events alike — not gated by isLocal.
+    if (!ev.allDay) {
         Spacer(Modifier.height(20.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = {
+                haptics.tap()
+                onAskInChat("이 일정 미팅 준비 도와줘 — '${ev.title}' (id=${ev.id})")
+            }) { Text("미팅 준비") }
+            OutlinedButton(onClick = {
+                haptics.tap()
+                onAskInChat("이 일정 회의록 정리해줘 — '${ev.title}' (id=${ev.id})")
+            }) { Text("회의록 정리") }
+        }
+    }
+
+    if (isLocal) {
+        Spacer(Modifier.height(if (ev.allDay) 20.dp else 8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(onClick = {
                 haptics.tap()
