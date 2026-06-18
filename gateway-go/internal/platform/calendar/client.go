@@ -65,9 +65,30 @@ var (
 	globalClient *Client
 )
 
+// googleCalendarEnabled reports whether the read-only Google Calendar integration
+// is on. It is OPT-IN (default off): the Deneb calendar is local-only unless
+// DENEB_CALENDAR_GOOGLE is truthy. A Google list is a ~270ms API round-trip on
+// every cold calendar load while the local store is instant, so the integration
+// is off by default; set DENEB_CALENDAR_GOOGLE=1 (with credentials present) to
+// re-enable. All callers already degrade to the local store when this errors.
+func googleCalendarEnabled() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("DENEB_CALENDAR_GOOGLE"))) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
+}
+
 // DefaultClient returns the singleton Calendar client, initializing on
 // first call. Mirrors gmail.DefaultClient: failed init can be retried.
+// Returns an error (so every caller falls back to the local calendar) when the
+// Google integration is disabled — the default; see googleCalendarEnabled.
 func DefaultClient() (*Client, error) {
+	if !googleCalendarEnabled() {
+		return nil, fmt.Errorf("Google Calendar 연동이 꺼져 있습니다 — 로컬 캘린더만 사용 (DENEB_CALENDAR_GOOGLE=1 로 활성화)") //nolint:staticcheck // ST1005 — Korean operator-facing message
+	}
+
 	globalMu.Lock()
 	defer globalMu.Unlock()
 
