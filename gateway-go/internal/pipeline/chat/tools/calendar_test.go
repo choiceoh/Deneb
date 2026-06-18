@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -232,6 +233,20 @@ func TestCalendar_TimelineRejectsBadRange(t *testing.T) {
 	})
 	if !strings.Contains(out, "뒤여야") {
 		t.Errorf("expected inverted-range rejection, got:\n%s", out)
+	}
+}
+
+func TestCalendar_AuditPartialDataNotClean(t *testing.T) {
+	// Google fetch fails → calMerged returns a warn with only local data, so the
+	// audit must not certify the schedule clean.
+	google := &fakeCalReader{listErr: errors.New("google down")}
+	d := depsWith(google, newTestLocalCal(t))
+	out := callCal(t, d, map[string]any{"action": "audit"})
+	if strings.Contains(out, "일정 양호") {
+		t.Errorf("partial-data audit must not certify clean:\n%s", out)
+	}
+	if !strings.Contains(out, "확인하지 못했") {
+		t.Errorf("expected a partial-data caveat, got:\n%s", out)
 	}
 }
 
