@@ -35,8 +35,18 @@ suspend fun DenebGatewayClient.refreshCalendar(): Boolean {
  * The month grid uses this because it needs a whole month — often reaching into the
  * past — rather than [refreshCalendar]'s now-anchored look-ahead. Returns null on a
  * fetch failure so the screen can tell a real "no events" from a network error.
+ *
+ * Served from a short-lived client cache so re-opening the calendar (a new screen
+ * composition on every tab switch) doesn't re-hit Google for the same months;
+ * [force] (pull-to-refresh, after an add/edit) bypasses the cache and refreshes it.
  */
-suspend fun DenebGatewayClient.fetchCalendarRange(fromIso: String, toIso: String): List<CalendarEvent>? {
+suspend fun DenebGatewayClient.fetchCalendarRange(
+    fromIso: String,
+    toIso: String,
+    force: Boolean = false,
+): List<CalendarEvent>? {
+    val key = "$fromIso|$toIso"
+    if (!force) cachedCalendarRange(key)?.let { return it }
     val payload = callRpc<CalListPayload>(
         "miniapp.calendar.list_range",
         buildJsonObject {
@@ -44,9 +54,11 @@ suspend fun DenebGatewayClient.fetchCalendarRange(fromIso: String, toIso: String
             put("to", toIso)
         },
     ) ?: return null
-    return payload.events
+    val events = payload.events
         .filter { it.id.isNotBlank() }
         .map { CalendarEvent(it.id, it.summary, it.location, it.start, it.end, it.allDay, it.local) }
+    storeCalendarRange(key, events)
+    return events
 }
 
 /**
