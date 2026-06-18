@@ -518,6 +518,24 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 				}
 				return s.genesisTracker.RecentLifecycleLog(limit)
 			},
+			ValidationSummary: func(skillName string) (genesis.SkillValidationCaseSummary, error) {
+				if s.genesisTracker == nil {
+					return genesis.SkillValidationCaseSummary{SkillName: strings.TrimSpace(skillName)}, nil
+				}
+				return s.genesisTracker.ValidationCaseSummary(strings.TrimSpace(skillName))
+			},
+			RecentOpportunities: func(skillName string, limit int) ([]genesis.SkillOpportunityRecord, error) {
+				if s.genesisTracker == nil {
+					return nil, nil
+				}
+				return s.genesisTracker.RecentSkillOpportunities(strings.TrimSpace(skillName), limit)
+			},
+			RecentSelfCorrections: func(skillName string, limit int) ([]genesis.SelfCorrectionCandidateRecord, error) {
+				if s.genesisTracker == nil {
+					return nil, nil
+				}
+				return s.genesisTracker.RecentSelfCorrectionCandidates(strings.TrimSpace(skillName), genesis.SelfCorrectionStatusProposed, limit)
+			},
 		}),
 
 		// Mini App unified search (miniapp.search.all). Single entry

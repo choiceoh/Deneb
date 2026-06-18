@@ -144,6 +144,9 @@ type PropusLifecycleSummary struct {
 	FilteredSources []string `json:"filteredSources,omitempty"`
 	Principles      []string `json:"principles,omitempty"`
 	QualityGates    []string `json:"qualityGates,omitempty"`
+	NextActions     []string `json:"nextActions,omitempty"`
+	CoverageState   string   `json:"coverageState,omitempty"`
+	CoverageGaps    []string `json:"coverageGaps,omitempty"`
 	NextCue         string   `json:"nextCue,omitempty"`
 	QualityGate     string   `json:"qualityGate,omitempty"`
 	AttentionCue    string   `json:"attentionCue,omitempty"`
@@ -183,10 +186,13 @@ type SkillDetailResponse struct {
 // rows stay un-enriched and the lifecycle feed is empty (the gateway can boot
 // without a genesis tracker).
 type SkillsDeps struct {
-	List            func() []skills.SkillEntry
-	CuratorRecords  func() ([]genesis.SkillCuratorRecord, error)
-	UsageStats      func() ([]genesis.UsageStats, error)
-	RecentLifecycle func(limit int) ([]genesis.LifecycleLogEntry, error)
+	List                  func() []skills.SkillEntry
+	CuratorRecords        func() ([]genesis.SkillCuratorRecord, error)
+	UsageStats            func() ([]genesis.UsageStats, error)
+	RecentLifecycle       func(limit int) ([]genesis.LifecycleLogEntry, error)
+	ValidationSummary     func(skillName string) (genesis.SkillValidationCaseSummary, error)
+	RecentOpportunities   func(skillName string, limit int) ([]genesis.SkillOpportunityRecord, error)
+	RecentSelfCorrections func(skillName string, limit int) ([]genesis.SelfCorrectionCandidateRecord, error)
 }
 
 // SkillsMethods returns the miniapp.skills.* handler map, or nil when no
@@ -327,6 +333,7 @@ func skillsLifecycle(deps SkillsDeps) rpcutil.HandlerFunc {
 		}
 
 		events := make([]SkillLifecycleEvent, 0, p.Limit)
+		lifecycleEntries := make([]genesis.LifecycleLogEntry, 0, p.Limit)
 		if deps.RecentLifecycle != nil {
 			// Over-fetch when filtering by skill so the filter doesn't starve
 			// the requested window.
@@ -342,17 +349,19 @@ func skillsLifecycle(deps SkillsDeps) rpcutil.HandlerFunc {
 				if p.SkillName != "" && entry.SkillName != p.SkillName {
 					continue
 				}
+				lifecycleEntries = append(lifecycleEntries, entry)
 				events = append(events, lifecycleEvent(entry))
 				if len(events) >= p.Limit {
 					break
 				}
 			}
 		}
+		summary := propusLifecycleSummary(deps, lifecycleEntries, strings.TrimSpace(p.SkillName), p.Limit)
 
 		return rpcutil.RespondOK(req.ID, SkillsLifecycleResponse{
 			Events:  events,
 			Count:   len(events),
-			Summary: propusLifecycleSummary(events),
+			Summary: summary,
 		})
 	}
 }
@@ -402,56 +411,87 @@ func lifecycleEvent(e genesis.LifecycleLogEntry) SkillLifecycleEvent {
 	return ev
 }
 
-func propusLifecycleSummary(events []SkillLifecycleEvent) PropusLifecycleSummary {
-	doctrine := genesis.PropusDoctrine()
-	summary := PropusLifecycleSummary{
-		System:          doctrine.Name,
-		State:           "observing",
-		Total:           len(events),
-		DoctrineVersion: doctrine.Version,
-		Doctrine:        doctrine.LifecycleText(),
-		SourcePapers:    doctrine.SourceIDs(),
-		FilteredSources: doctrine.FilteredSourceIDs(),
-		Principles:      doctrine.ProductRules(),
-		QualityGates:    doctrine.QualityGates,
-		QualityGate:     "검증 없는 생성/진화는 skill debt로 취급",
+func propusLifecycleSummary(deps SkillsDeps, entries []genesis.LifecycleLogEntry, skillName string, limit int) PropusLifecycleSummary {
+	scope := genesis.PropusScopeGlobal
+	if strings.TrimSpace(skillName) != "" {
+		scope = genesis.PropusScopeSkill
 	}
-	for _, event := range events {
-		if event.At > summary.LatestAt {
-			summary.LatestAt = event.At
-			summary.LatestType = event.Type
-			summary.LatestSkill = event.SkillName
-		}
-		switch event.Type {
-		case "genesis":
-			summary.Genesis++
-		case "evolved":
-			summary.Evolved++
-		case "evolve_rejected":
-			summary.Rejected++
-			summary.Attention++
-		case "evolve_rolled_back":
-			summary.RolledBack++
-			summary.Attention++
-		default:
-			summary.Review++
-		}
+	stats, _ := skillsDepsUsageStats(deps)
+	curator, _ := skillsDepsCuratorRecords(deps)
+	validationSummary, _ := skillsDepsValidationSummary(deps, skillName)
+	opportunities, _ := skillsDepsOpportunities(deps, skillName, limit)
+	selfCorrections, _ := skillsDepsSelfCorrections(deps, skillName, limit)
+	shared := genesis.BuildPropusLifecycleSummary(genesis.PropusLifecycleSummaryInput{
+		Scope:             scope,
+		SkillName:         skillName,
+		Recent:            entries,
+		Stats:             stats,
+		Curator:           curator,
+		ValidationSummary: validationSummary,
+		Opportunities:     opportunities,
+		SelfCorrections:   selfCorrections,
+	})
+	return PropusLifecycleSummary{
+		System:          shared.System,
+		State:           shared.State,
+		Total:           shared.Total,
+		Genesis:         shared.Genesis,
+		Evolved:         shared.Evolved,
+		Review:          shared.Review,
+		Rejected:        shared.Rejected,
+		RolledBack:      shared.RolledBack,
+		Attention:       shared.Attention,
+		LatestAt:        shared.LatestAt,
+		LatestType:      shared.LatestType,
+		LatestSkill:     shared.LatestSkill,
+		DoctrineVersion: shared.DoctrineVersion,
+		Doctrine:        shared.Doctrine,
+		SourcePapers:    shared.SourcePapers,
+		FilteredSources: shared.FilteredSources,
+		Principles:      shared.Principles,
+		QualityGates:    shared.QualityGates,
+		NextActions:     shared.NextActions,
+		CoverageState:   shared.DoctrineCoverage.State,
+		CoverageGaps:    shared.DoctrineCoverage.Gaps,
+		NextCue:         shared.NextCue,
+		QualityGate:     shared.QualityGate,
+		AttentionCue:    shared.AttentionCue,
 	}
-	switch {
-	case summary.Total == 0:
-		summary.State = "idle"
-		summary.NextCue = "Propus 활동이 쌓이면 생성/진화/리뷰 압력을 요약합니다"
-	case summary.Attention > 0:
-		summary.State = "attention"
-		summary.AttentionCue = "기각/롤백 이벤트를 먼저 열어 같은 실패 후보를 반복하지 마세요"
-		summary.NextCue = "기각/롤백 근거 확인"
-	case summary.Review > 0 && summary.Evolved+summary.Genesis == 0:
-		summary.State = "reviewing"
-		summary.NextCue = "리뷰 판정에서 재사용 가치가 반복되는지 확인"
-	default:
-		summary.NextCue = "최근 생성/진화가 검증 근거와 연결되는지 확인"
+}
+
+func skillsDepsUsageStats(deps SkillsDeps) ([]genesis.UsageStats, error) {
+	if deps.UsageStats == nil {
+		return nil, nil
 	}
-	return summary
+	return deps.UsageStats()
+}
+
+func skillsDepsCuratorRecords(deps SkillsDeps) ([]genesis.SkillCuratorRecord, error) {
+	if deps.CuratorRecords == nil {
+		return nil, nil
+	}
+	return deps.CuratorRecords()
+}
+
+func skillsDepsValidationSummary(deps SkillsDeps, skillName string) (genesis.SkillValidationCaseSummary, error) {
+	if deps.ValidationSummary == nil {
+		return genesis.SkillValidationCaseSummary{SkillName: strings.TrimSpace(skillName)}, nil
+	}
+	return deps.ValidationSummary(strings.TrimSpace(skillName))
+}
+
+func skillsDepsOpportunities(deps SkillsDeps, skillName string, limit int) ([]genesis.SkillOpportunityRecord, error) {
+	if deps.RecentOpportunities == nil {
+		return nil, nil
+	}
+	return deps.RecentOpportunities(strings.TrimSpace(skillName), limit)
+}
+
+func skillsDepsSelfCorrections(deps SkillsDeps, skillName string, limit int) ([]genesis.SelfCorrectionCandidateRecord, error) {
+	if deps.RecentSelfCorrections == nil {
+		return nil, nil
+	}
+	return deps.RecentSelfCorrections(strings.TrimSpace(skillName), limit)
 }
 
 // evolveAgg folds committed-evolve lifecycle entries per skill.
