@@ -224,25 +224,6 @@ fun DenebMailScreen(
                 )
                 TextButton(onClick = { clearSelection() }) { Text("취소") }
             }
-        } else if (mail.isNotEmpty() || nativeStatus != null) {
-            Column(Modifier.padding(start = 24.dp, end = 24.dp, bottom = 6.dp)) {
-                if (mail.isNotEmpty()) {
-                    Text(
-                        "${mail.size}통 · 안 읽음 ${mail.count { it.unread }}",
-                        style = DenebType.hint,
-                        color = denebHint(),
-                    )
-                }
-                mailNativeStatusLine(nativeStatus)?.let {
-                    Text(
-                        it,
-                        style = DenebType.meta,
-                        color = denebHint(),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            }
         }
 
         val listState = rememberLazyListState()
