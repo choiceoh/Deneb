@@ -118,8 +118,12 @@ fun DenebMailScreen(
     var filtersVisible by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
-        client.refreshMailNativeStatus()
+        // refreshMail() already refreshes native_status on success, so calling it
+        // here too would fetch miniapp.gmail.native_status twice on every open. Only
+        // fetch it standalone when the list fails, so the status line (offline /
+        // local-archive state) still shows when the live fetch can't.
         loadOk = client.refreshMail()
+        if (loadOk != true) client.refreshMailNativeStatus()
     }
 
     fun runSearch(raw: String) {
