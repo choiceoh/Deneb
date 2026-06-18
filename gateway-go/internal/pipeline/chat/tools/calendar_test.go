@@ -194,6 +194,34 @@ func TestCalendar_AuditClean(t *testing.T) {
 	}
 }
 
+func TestCalendar_Timeline(t *testing.T) {
+	local := newTestLocalCal(t)
+	d := &toolctx.CalendarDeps{Local: local}
+	day := time.Now().Add(48 * time.Hour)
+	mk := func(title string) {
+		start := time.Date(day.Year(), day.Month(), day.Day(), 10, 0, 0, 0, day.Location())
+		callCal(t, d, map[string]any{"action": "create", "summary": title, "start": start.Format(time.RFC3339)})
+	}
+	mk("현대차 견적 회의")
+	mk("내부 주간 회의") // unrelated to the query
+
+	out := callCal(t, d, map[string]any{"action": "timeline", "query": "현대차"})
+	if !strings.Contains(out, "타임라인") || !strings.Contains(out, "현대차 견적 회의") {
+		t.Errorf("timeline missing header/matched event:\n%s", out)
+	}
+	if strings.Contains(out, "내부 주간 회의") {
+		t.Errorf("timeline included an unrelated event:\n%s", out)
+	}
+}
+
+func TestCalendar_TimelineNeedsQuery(t *testing.T) {
+	d := &toolctx.CalendarDeps{Local: newTestLocalCal(t)}
+	out := callCal(t, d, map[string]any{"action": "timeline"})
+	if !strings.Contains(out, "query") {
+		t.Errorf("expected a query-required hint, got:\n%s", out)
+	}
+}
+
 func TestCalendar_RejectGoogleWrite(t *testing.T) {
 	local := newTestLocalCal(t)
 	d := &toolctx.CalendarDeps{Local: local}
