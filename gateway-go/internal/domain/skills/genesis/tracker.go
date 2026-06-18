@@ -84,6 +84,7 @@ type UsageStats struct {
 }
 
 const defaultSkillEvolutionEvidenceWindowDays = 7
+const evolveRollbackReason = "post-evolve rollback fired"
 
 // Tracker records and queries skill usage for evolution decisions.
 type Tracker struct {
@@ -658,11 +659,12 @@ func (t *Tracker) LogEvolveRolledBack(skillName string) error {
 	if err := jsonlstore.Append(t.logPath, evolveLogEntry{
 		Type:      "evolve_rolled_back",
 		SkillName: skillName,
+		Reason:    evolveRollbackReason,
 		CreatedAt: now,
 	}); err != nil {
 		return err
 	}
-	t.recordOptimizerMemoryLocked(skillName, "rolled_back", "post-evolve rollback fired", now)
+	t.recordOptimizerMemoryLocked(skillName, "rolled_back", evolveRollbackReason, now)
 	return nil
 }
 

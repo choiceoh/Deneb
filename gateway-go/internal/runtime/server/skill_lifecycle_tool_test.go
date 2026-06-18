@@ -308,7 +308,7 @@ func TestSkillLifecycleValidationCaseFromSessionExtractsToolTrace(t *testing.T) 
 		t.Fatalf("RecordSkillValidationCaseFromSession: %v", err)
 	}
 	got := gotAny.(map[string]any)
-	if got["expectedToolCalls"] != 1 || got["requiredTools"] != 1 {
+	if got["expectedToolCalls"] != 1 || got["forbiddenToolCalls"] != 0 || got["requiredTools"] != 1 {
 		t.Fatalf("unexpected extraction result: %+v", got)
 	}
 
@@ -336,6 +336,57 @@ func TestSkillLifecycleValidationCaseFromSessionExtractsToolTrace(t *testing.T) 
 		len(replay.RequiredTools) != 1 ||
 		replay.RequiredTools[0] != "exec" {
 		t.Fatalf("unexpected replay extraction: %+v", replay)
+	}
+}
+
+func TestSkillLifecycleValidationCaseFromSessionSeparatesErroredToolTrace(t *testing.T) {
+	tracker := newSkillLifecycleTestTracker(t)
+	store := skillLifecycleTranscriptStore{msgs: []toolctx.ChatMessage{
+		{Role: "user", Content: json.RawMessage(`"srv1 배포 상태 확인 후 필요하면 복구"`)},
+		{Role: "assistant", Content: json.RawMessage(`[
+			{"type":"tool_use","id":"tu_1","name":"exec","input":{"cmd":"systemctl --user restart deneb-gateway.service"}},
+			{"type":"tool_use","id":"tu_2","name":"exec","input":{"cmd":"ssh srv1 systemctl --user status deneb-gateway.service"}}
+		]`)},
+		{Role: "user", Content: json.RawMessage(`[
+			{"type":"tool_result","tool_use_id":"tu_1","content":"Failed to connect to bus","is_error":true},
+			{"type":"tool_result","tool_use_id":"tu_2","content":"Active: active (running)","is_error":false}
+		]`)},
+		{Role: "assistant", Content: json.RawMessage(`"srv1에서 실제 상태를 확인했습니다."`)},
+	}}
+	backend := &skillLifecycleBackend{tracker: tracker, transcripts: store}
+
+	gotAny, err := backend.RecordSkillValidationCaseFromSession(context.Background(), chattools.SkillValidationCaseFromSessionRequest{
+		SkillName:  "srv1-ops",
+		SessionKey: "client:main:mixed-trace",
+	})
+	if err != nil {
+		t.Fatalf("RecordSkillValidationCaseFromSession: %v", err)
+	}
+	got := gotAny.(map[string]any)
+	if got["expectedToolCalls"] != 1 || got["forbiddenToolCalls"] != 1 || got["requiredTools"] != 1 {
+		t.Fatalf("unexpected extraction result: %+v", got)
+	}
+
+	cases, err := tracker.RecentSkillValidationCases("srv1-ops", 5)
+	if err != nil {
+		t.Fatalf("RecentSkillValidationCases: %v", err)
+	}
+	if len(cases) != 1 {
+		t.Fatalf("expected 1 validation case, got %+v", cases)
+	}
+	replay := cases[0].Replay
+	if len(replay.ExpectedToolCalls) != 1 ||
+		replay.ExpectedToolCalls[0].Name != "exec" ||
+		len(replay.ExpectedToolCalls[0].InputIncludes) != 2 ||
+		replay.ExpectedToolCalls[0].InputIncludes[0] != "ssh srv1" ||
+		replay.ExpectedToolCalls[0].InputIncludes[1] != "systemctl --user status" ||
+		replay.ExpectedToolCalls[0].FixtureError ||
+		len(replay.ForbiddenToolCalls) != 1 ||
+		replay.ForbiddenToolCalls[0].Name != "exec" ||
+		len(replay.ForbiddenToolCalls[0].InputIncludes) != 1 ||
+		replay.ForbiddenToolCalls[0].InputIncludes[0] != "systemctl --user restart" ||
+		replay.ForbiddenToolCalls[0].FixtureError {
+		t.Fatalf("expected errored trace to become forbidden, got %+v", replay)
 	}
 }
 

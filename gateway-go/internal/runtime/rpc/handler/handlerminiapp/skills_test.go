@@ -53,6 +53,7 @@ func testSkillsDeps() SkillsDeps {
 				{Type: "evolved", SkillName: "email-analysis", NewVersion: "1.1.1", Description: "개선", CreatedAt: 333, SelfHarnessAudit: audit},
 				{Type: "evolution_proposal", SkillName: "email-analysis", Route: "no-op", Reason: "기존 커버", Evidence: "세션 관찰 기록", CreatedAt: 300},
 				{Type: "evolve_rejected", SkillName: "email-analysis", Reason: "judge 기각", CreatedAt: 250},
+				{Type: "evolve_rolled_back", SkillName: "email-analysis", Reason: "post-evolve rollback fired", CreatedAt: 225},
 				{Type: "evolved", SkillName: "email-analysis", NewVersion: "1.1.0", CreatedAt: 200},
 				{Type: "genesis", SkillName: "morning-letter", Description: "생성", CreatedAt: 111},
 			}, nil
@@ -185,12 +186,12 @@ func TestSkillsDetail_UnknownAndMissingName(t *testing.T) {
 
 func TestSkillsLifecycle_MappingAndLimit(t *testing.T) {
 	h := skillsLifecycle(testSkillsDeps())
-	params, _ := json.Marshal(map[string]any{"limit": 3})
+	params, _ := json.Marshal(map[string]any{"limit": 4})
 	resp := h(authedSkillsCtx(), &protocol.RequestFrame{ID: "1", Method: "miniapp.skills.lifecycle", Params: params})
 	payload := decodeSkillsPayload[SkillsLifecycleResponse](t, resp)
 
-	if payload.Count != 3 {
-		t.Fatalf("expected 3 events (limit), got %d", payload.Count)
+	if payload.Count != 4 {
+		t.Fatalf("expected 4 events (limit), got %d", payload.Count)
 	}
 	first := payload.Events[0]
 	if first.Type != "evolved" || first.Version != "1.1.1" || first.Detail != "개선" {
@@ -212,6 +213,10 @@ func TestSkillsLifecycle_MappingAndLimit(t *testing.T) {
 	third := payload.Events[2]
 	if third.Type != "evolve_rejected" || third.Detail != "judge 기각" {
 		t.Errorf("third event = %+v, want evolve_rejected", third)
+	}
+	fourth := payload.Events[3]
+	if fourth.Type != "evolve_rolled_back" || fourth.Detail != "post-evolve rollback fired" {
+		t.Errorf("fourth event = %+v, want evolve_rolled_back", fourth)
 	}
 }
 

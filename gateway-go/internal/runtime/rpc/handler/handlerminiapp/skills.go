@@ -92,12 +92,12 @@ type SkillsListResponse struct {
 }
 
 // SkillLifecycleEvent is one entry in the self-evolution timeline:
-// a skill creation, a committed evolve, a rejected evolve, or a review
-// decision (the per-session routing verdict that precedes them).
+// a skill creation, a committed evolve, a rejected/rolled-back evolve, or a
+// review decision (the per-session routing verdict that precedes them).
 //
 //deneb:wire
 type SkillLifecycleEvent struct {
-	// Type: genesis | evolved | evolve_rejected | review.
+	// Type: genesis | evolved | evolve_rejected | evolve_rolled_back | review.
 	Type      string `json:"type"`
 	SkillName string `json:"skillName,omitempty"`
 	At        int64  `json:"at,omitempty"` // unix millis
@@ -348,6 +348,9 @@ func lifecycleEvent(e genesis.LifecycleLogEntry) SkillLifecycleEvent {
 	case "evolve_rejected":
 		ev.Type = "evolve_rejected"
 		ev.Detail = e.Reason
+	case "evolve_rolled_back":
+		ev.Type = "evolve_rolled_back"
+		ev.Detail = firstNonBlank(e.Reason, e.Description, "post-evolve rollback fired")
 	default:
 		// evolution_proposal (and any future type) renders as a review verdict.
 		ev.Type = "review"
@@ -436,4 +439,13 @@ func truncateDetail(s string, maxRunes int) string {
 		return s
 	}
 	return string(runes[:maxRunes]) + "…"
+}
+
+func firstNonBlank(values ...string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
 }
