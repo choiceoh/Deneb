@@ -511,6 +511,14 @@ data class SelfCorrectionCandidate(
 data class SelfImprovementCodingListResponse(
     val candidates: List<SelfCorrectionCandidate> = emptyList(),
     val count: Int = 0,
+    val statusCounts: List<SelfImprovementCodingStatusCount> = emptyList(),
+)
+
+@Immutable
+@Serializable
+data class SelfImprovementCodingStatusCount(
+    val status: String = "",
+    val count: Int = 0,
 )
 
 @Immutable

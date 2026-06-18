@@ -32,6 +32,8 @@ import ai.deneb.deneb.TodoListContent
 import ai.deneb.deneb.buildMonthGrid
 import ai.deneb.deneb.eventDays
 import ai.deneb.deneb.generated.SelfCorrectionCandidate
+import ai.deneb.deneb.generated.SelfImprovementCodingListResponse
+import ai.deneb.deneb.generated.SelfImprovementCodingStatusCount
 import ai.deneb.deneb.generated.SkillDetailResponse
 import ai.deneb.deneb.generated.SkillLifecycleEvent
 import ai.deneb.deneb.generated.SkillRow
@@ -1068,18 +1070,29 @@ private fun sampleLifecycleEvents(now: Long) = listOf(
     ),
 )
 
-private fun sampleSelfCorrectionCandidates(now: Long) = listOf(
-    SelfCorrectionCandidate(
-        id = "sc-coding-1",
-        status = "proposed",
-        scope = "code",
-        title = "코딩 모델 후보를 네이티브에 노출",
-        proposedChange = "자가개선 코딩 화면에 self-correction 후보 대기열을 표시",
-        evidence = "코딩 에이전트가 기록한 후보가 JSONL에만 남아 native에서 검토되지 않음",
-        risk = "적용 완료 이벤트와 후보가 섞이면 상태를 오해할 수 있음",
-        targetFiles = listOf("ConfigSkillsTab.kt", "skills.go"),
-        createdAt = now - 45 * 60_000L,
-        updatedAt = now - 45 * 60_000L,
+private fun sampleSelfImprovementCodingQueue(now: Long) = SelfImprovementCodingListResponse(
+    candidates = listOf(
+        SelfCorrectionCandidate(
+            id = "sc-coding-1",
+            status = "proposed",
+            scope = "code",
+            title = "MOSS식 소스 후보 상태 표면",
+            proposedChange = "자가개선 코딩 화면에서 코드 후보의 대기/적용/기각 상태를 분리해 표시",
+            evidence = "코딩 에이전트가 기록한 후보가 JSONL에만 남아 native에서 검토되지 않음",
+            risk = "적용 완료 이벤트와 후보가 섞이면 상태를 오해할 수 있음",
+            targetFiles = listOf("ConfigSelfImprovementCodingTab.kt", "self_improvement_coding.go"),
+            createdAt = now - 45 * 60_000L,
+            updatedAt = now - 45 * 60_000L,
+        ),
+    ),
+    count = 1,
+    statusCounts = listOf(
+        SelfImprovementCodingStatusCount(status = "proposed", count = 1),
+        SelfImprovementCodingStatusCount(status = "accepted", count = 0),
+        SelfImprovementCodingStatusCount(status = "applied", count = 1),
+        SelfImprovementCodingStatusCount(status = "rejected", count = 1),
+        SelfImprovementCodingStatusCount(status = "superseded", count = 0),
+        SelfImprovementCodingStatusCount(status = "all", count = 3),
     ),
 )
 
@@ -1148,7 +1161,7 @@ private fun renderSelfImprovementCoding(name: String, scheme: ColorScheme) {
     val scene = ImageComposeScene(width = 824, height = 760, density = Density(2f)) {
         MaterialTheme(colorScheme = scheme) {
             Surface(color = MaterialTheme.colorScheme.background) {
-                SelfImprovementCodingContent(sampleSelfCorrectionCandidates(now))
+                SelfImprovementCodingContent(sampleSelfImprovementCodingQueue(now))
             }
         }
     }

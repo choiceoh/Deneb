@@ -247,19 +247,25 @@ suspend fun DenebGatewayClient.fetchSkillLifecycleResponse(
     },
 )
 
-/** Pending self-improvement coding candidates for Settings > 자가개선 코딩.
+/** Self-improvement coding queue for Settings > 자가개선 코딩.
  *  These are deferred code-change hypotheses, not skills and not Propus log
  *  events. */
-suspend fun DenebGatewayClient.fetchSelfImprovementCodingCandidates(
+suspend fun DenebGatewayClient.fetchSelfImprovementCodingQueue(
     limit: Int = 60,
     status: String = "proposed",
-): List<SelfCorrectionCandidate>? = callRpc<SelfImprovementCodingListResponse>(
+): SelfImprovementCodingListResponse? = callRpc<SelfImprovementCodingListResponse>(
     "miniapp.self_improvement_coding.list",
     buildJsonObject {
         put("limit", limit)
         if (status.isNotBlank()) put("status", status)
     },
-)?.candidates
+)
+
+/** Pending self-improvement coding candidates for callers that only need rows. */
+suspend fun DenebGatewayClient.fetchSelfImprovementCodingCandidates(
+    limit: Int = 60,
+    status: String = "proposed",
+): List<SelfCorrectionCandidate>? = fetchSelfImprovementCodingQueue(limit, status)?.candidates
 
 /** One skill's enriched row + SKILL.md body for the tap-through detail screen.
  *  Null on transport failure or unknown skill name. */
