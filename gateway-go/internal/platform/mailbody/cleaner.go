@@ -10,7 +10,7 @@ import (
 
 const (
 	bodyPrepMinPrefixVisible   = 30
-	bodyPrepSignatureTailLines = 30
+	bodyPrepSignatureTailLines = 80
 	bodyPrepHeadNoiseMaxLines  = 8
 )
 
@@ -43,12 +43,14 @@ var (
 		regexp.MustCompile(`(?i)(?:본\s*(?:메일|전자우편)|이\s*(?:메일|전자우편)).{0,120}(?:기밀|비밀|수신자|무단|복사|배포|전재|삭제|법적|오발송|잘못\s*수신)`),
 		regexp.MustCompile(`(?i)\b(?:confidential|privileged|intended\s+recipient|intended\s+only|intended\s+solely|not\s+the\s+intended\s+recipient|received\s+this\s+(?:email|message)\s+in\s+error|unauthori[sz]ed|disclaimer|delete\s+this\s+email|virus\s+scanned)\b`),
 		regexp.MustCompile(`(?i)(?:발신전용|회신\s*불가|자동\s*발송|\bdo\s*not\s*reply\b|\bno-?reply\b|auto(?:matically)?\s*generated|automated\s+(?:message|email))`),
-		regexp.MustCompile(`(?i)(?:수신\s*거부|구독\s*취소|메일\s*수신을\s*원치|광고성\s*정보|개인정보처리방침|이용약관|\bunsubscribe\b|privacy\s+policy|terms\s+of\s+use|manage\s+preferences)`),
+		regexp.MustCompile(`(?i)(?:수신\s*거부|구독\s*취소|메일\s*수신을\s*원치|광고성\s*정보|개인정보처리방침|이용약관|\bunsubscribe\b|unsubscription|privacy\s+policy|terms\s+of\s+use|manage\s+preferences)`),
 		regexp.MustCompile(`(?i)(?:all\s+rights\s+reserved|copyright|ⓒ|©|before\s+printing|think\s+about\s+the\s+environment|환경을\s*생각|인쇄하기\s*전)`),
 		regexp.MustCompile(`(?i)(?:sent\s+with|protected\s+by|scanned\s+by|virus-free|avast|ahnlab|v3|메일보안)`),
 		regexp.MustCompile(`(?i)(?:feedback\s*&\s*support|we'?re\s+here\s+to\s+help|start\s+building)`),
 		regexp.MustCompile(`(?i)(?:if\s+you\s+have\s+any\s+questions,?\s+visit\s+our\s+support\s+site|something\s+wrong\s+with\s+the\s+email\?|view\s+in\s+browser|you'?re\s+receiving\s+this\s+email\s+because\s+you\s+made\s+a\s+purchase|partners\s+with\s+stripe)`),
 		regexp.MustCompile(`(?i)(?:share\s+feedback\s+on|manage\s+notification\s+settings|you\s+are\s+receiving\s+this\s+because|unsubscribe\s+from\s+this\s+thread)`),
+		regexp.MustCompile(`(?i)(?:if\s+you\s+believe\s+you\s+are\s+getting\s+this\s+email\s+in\s+error|to\s+learn\s+more\s+about\s+link|one\s+wilton\s+park)`),
+		regexp.MustCompile(`(?i)(?:newsletter\s+has\s+been\s+prepared|does\s+not\s+include\s+the\s+opinion)`),
 	}
 	bodyPrepReplyHeaderREs = []*regexp.Regexp{
 		regexp.MustCompile(`(?i)^\s*-{2,}\s*original\s+message\s*-{2,}\s*$`),
@@ -76,22 +78,27 @@ var (
 		regexp.MustCompile(`(?i)(?:cid:|\[cid|\[image|<image|\blogo\b)`),
 		regexp.MustCompile(`(?i)(?:^|\s)(?:https?://|www\.)\S*(?:facebook|instagram|youtube|linkedin|twitter|x\.com|blog)\S*\s*$`),
 	}
-	bodyPrepTrailingSignoffRE = regexp.MustCompile(`^\s*(?:(?:[가-힣](?:\s*[가-힣]){1,3}|[가-힣]{2,4})\s*)?(?:드림|올림|배상)[\s,.!！。]*$`)
-	bodyPrepMobileSignatureRE = regexp.MustCompile(`(?i)^\s*(?:sent\s+from\s+my|sent\s+from\s+outlook\s+for|나의\s+.+에서\s+보냄|iPhone에서\s+보냄|Galaxy에서\s+보냄|Android에서\s+보냄|.{0,40}iPhone)\s*$`)
-	bodyPrepShortNameRE       = regexp.MustCompile(`^\s*(?:[가-힣]\s*[가-힣]{1,3}|[A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2})\s*$`)
-	bodyPrepTailNameRE        = regexp.MustCompile(`^\s*(?:[가-힣](?:\s*[가-힣]){1,3}|[가-힣]{2,4}\s*/\s*[A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z]+){0,2}|[가-힣]{2,4}\s+[A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z]+){0,3}|[가-힣]{2,4}\s+[A-Z]{2,}(?:\s+[A-Z]{2,}){1,3}|[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2})\s*$`)
-	bodyPrepKoreanTitleTailRE = regexp.MustCompile(`^\s*(?:감사실|[가-힣]\s*[가-힣]\s*[가-힣]\s+(?:감사|공인회계사)(?:\s|/|$).*|.*공인회계사.*)\s*$`)
-	bodyPrepHTMLSeparatorRE   = regexp.MustCompile(`(?i)^\s*<hr\b[^>]*>\s*$`)
-	bodyPrepHTMLBlankRE       = regexp.MustCompile(`(?i)^\s*(?:<o:p>\s*</o:p>|<o:p>\s*(?:&nbsp;|\s)*\s*</o:p>|<br\s*/?>)\s*$`)
-	bodyPrepHTMLMetaRE        = regexp.MustCompile(`(?i)^\s*<meta\b[^>]*>\s*$`)
-	bodyPrepHTMLWrapperRE     = regexp.MustCompile(`(?i)^\s*</?(?:mailplughtml|html|head|body)\b[^>]*>\s*$`)
-	bodyPrepHTMLSignatureRE   = regexp.MustCompile(`(?i)<span\b[^>]*\bshowField\(`)
-	bodyPrepThinForwardRE     = regexp.MustCompile(`(?i)(?:전달|아래|하기|원문|메일|below|forward|fyi|see\s+below)`)
-	bodyPrepThinShareRE       = regexp.MustCompile(`(?i)(?:참조|참고|송부|공유|자료|attached)`)
-	bodyPrepAttachmentLeadRE  = regexp.MustCompile(`(?i)^\s*(?:대용량\s*)?(?:파일\s*첨부|첨부\s*파일|첨부)(?:\s*총)?\s*\(?\s*\d+\s*개\s*\)?(?:\s*\(?[0-9][0-9.,]*\s*(?:b|kb|mb|gb|tb)\)?)?(?:.*다운로드\s*기간\s*[:：].*)?\s*$`)
-	bodyPrepAttachmentHeadRE  = regexp.MustCompile(`(?i)^\s*(?:대용량\s*)?(?:파일\s*첨부|첨부\s*파일|첨부파일|첨부)(?:\s|$|\()`)
-	bodyPrepAttachmentBodyRE  = regexp.MustCompile(`(?i)(?:[가-힣A-Za-z0-9()/·\s]{1,30}님\s+안녕하(?:세요|십니까)|안녕하(?:세요|십니까)|업무에\s+고생|수신\s*[:：]|발신\s*[:：]|\bDear\s+[A-Za-z가-힣]|\bHi[,\s]+[A-Za-z가-힣]|\bHello[,\s]+[A-Za-z가-힣])`)
-	bodyPrepAttachmentMetaREs = []*regexp.Regexp{
+	bodyPrepTrailingSignoffRE  = regexp.MustCompile(`^\s*(?:(?:[가-힣](?:\s*[가-힣]){1,3}|[가-힣]{2,4})\s*)?(?:드림|올림|배상)[\s,.!！。]*$`)
+	bodyPrepMobileSignatureRE  = regexp.MustCompile(`(?i)^\s*(?:sent\s+from\s+my|sent\s+from\s+outlook\s+for|나의\s+.+에서\s+보냄|iPhone에서\s+보냄|Galaxy에서\s+보냄|Android에서\s+보냄|.{0,40}iPhone)\s*$`)
+	bodyPrepShortNameRE        = regexp.MustCompile(`^\s*(?:[가-힣]\s*[가-힣]{1,3}|[A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2})\s*$`)
+	bodyPrepTailNameRE         = regexp.MustCompile(`^\s*(?:[가-힣](?:\s*[가-힣]){1,3}|[가-힣]{2,4}\s*/\s*[A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z]+){0,2}|[가-힣]{2,4}\s+[A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z]+){0,3}|[가-힣]{2,4}\s+[A-Z]{2,}(?:\s+[A-Z]{2,}){1,3}|[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2})\s*$`)
+	bodyPrepKoreanTitleTailRE  = regexp.MustCompile(`^\s*(?:감사실|[가-힣]\s*[가-힣]\s*[가-힣]\s+(?:감사|공인회계사)(?:\s|/|$).*|.*공인회계사.*)\s*$`)
+	bodyPrepHTMLSeparatorRE    = regexp.MustCompile(`(?i)^\s*<hr\b[^>]*>\s*$`)
+	bodyPrepHTMLBlankRE        = regexp.MustCompile(`(?i)^\s*(?:<o:p>\s*</o:p>|<o:p>\s*(?:&nbsp;|\s)*\s*</o:p>|<br\s*/?>)\s*$`)
+	bodyPrepHTMLMetaRE         = regexp.MustCompile(`(?i)^\s*<meta\b[^>]*>\s*$`)
+	bodyPrepHTMLWrapperRE      = regexp.MustCompile(`(?i)^\s*</?(?:mailplughtml|html|head|body)\b[^>]*>\s*$`)
+	bodyPrepHTMLInlineTagRE    = regexp.MustCompile(`(?i)</?(?:div|span|p|br|a|img|table|tbody|tr|td|font|strong|em|b|i|ul|ol|li|center)\b[^>]*>`)
+	bodyPrepHTMLBreakTagRE     = regexp.MustCompile(`(?i)<br\s*/?>`)
+	bodyPrepHTMLImageOnlyRE    = regexp.MustCompile(`(?i)^\s*<img\b[^>]*>\s*$`)
+	bodyPrepHTMLTagRE          = regexp.MustCompile(`(?i)<[^>]+>`)
+	bodyPrepHTMLSignatureRE    = regexp.MustCompile(`(?i)<span\b[^>]*\bshowField\(`)
+	bodyPrepSpaceBeforePunctRE = regexp.MustCompile(`\s+([.,;:!?])`)
+	bodyPrepThinForwardRE      = regexp.MustCompile(`(?i)(?:전달|아래|하기|원문|메일|below|forward|fyi|see\s+below)`)
+	bodyPrepThinShareRE        = regexp.MustCompile(`(?i)(?:참조|참고|송부|공유|자료|attached)`)
+	bodyPrepAttachmentLeadRE   = regexp.MustCompile(`(?i)^\s*(?:대용량\s*)?(?:파일\s*첨부|첨부\s*파일|첨부)(?:\s*총)?\s*\(?\s*\d+\s*개\s*\)?(?:\s*\(?[0-9][0-9.,]*\s*(?:b|kb|mb|gb|tb)\)?)?(?:.*다운로드\s*기간\s*[:：].*)?\s*$`)
+	bodyPrepAttachmentHeadRE   = regexp.MustCompile(`(?i)^\s*(?:대용량\s*)?(?:파일\s*첨부|첨부\s*파일|첨부파일|첨부)(?:\s|$|\()`)
+	bodyPrepAttachmentBodyRE   = regexp.MustCompile(`(?i)(?:[가-힣A-Za-z0-9()/·\s]{1,30}님\s+안녕하(?:세요|십니까)|안녕하(?:세요|십니까)|업무에\s+고생|수신\s*[:：]|발신\s*[:：]|\bDear\s+[A-Za-z가-힣]|\bHi[,\s]+[A-Za-z가-힣]|\bHello[,\s]+[A-Za-z가-힣])`)
+	bodyPrepAttachmentMetaREs  = []*regexp.Regexp{
 		regexp.MustCompile(`(?i)^\s*\([0-9][0-9.,]*\s*(?:b|kb|mb|gb|tb)\)\s*$`),
 		regexp.MustCompile(`^\s*다운로드\s*기간\s*[:：]`),
 		regexp.MustCompile(`^\s*~\s*\d{4}[/-]\d{1,2}[/-]\d{1,2}\s*$`),
@@ -254,13 +261,20 @@ func stripBodyPrepForwardedHeadArtifacts(lines []string, result *CleanResult) []
 }
 
 func splitBodyPrepLines(s string) []string {
-	raw := strings.Split(strings.ReplaceAll(s, "\r\n", "\n"), "\n")
+	raw := strings.Split(expandBodyPrepSoftBreaks(strings.ReplaceAll(s, "\r\n", "\n")), "\n")
 	lines := make([]string, 0, len(raw))
 	for _, line := range raw {
 		line = normalizeBodyPrepLine(line)
 		lines = append(lines, splitBodyPrepInlineReplyHeaders(line)...)
 	}
 	return lines
+}
+
+func expandBodyPrepSoftBreaks(s string) string {
+	for _, marker := range []string{"\u200b", "\u200c", "\u200d", "\ufeff"} {
+		s = strings.ReplaceAll(s, marker, "\n")
+	}
+	return s
 }
 
 func splitBodyPrepInlineReplyHeaders(line string) []string {
@@ -295,6 +309,7 @@ func splitBodyPrepInlineReplyHeaders(line string) []string {
 func normalizeBodyPrepLine(line string) string {
 	line = html.UnescapeString(line)
 	line = strings.ReplaceAll(line, "\u00a0", " ")
+	line = cleanBodyPrepInlineHTMLLine(line)
 	if bodyPrepLooksLikeFinancialDocumentLine(line) {
 		line = cleanBodyPrepFinancialLine(line)
 	}
@@ -303,6 +318,19 @@ func normalizeBodyPrepLine(line string) string {
 		return ""
 	}
 	return line
+}
+
+func cleanBodyPrepInlineHTMLLine(line string) string {
+	if !bodyPrepHTMLInlineTagRE.MatchString(line) {
+		return line
+	}
+	if bodyPrepHTMLImageOnlyRE.MatchString(line) {
+		return ""
+	}
+	line = bodyPrepHTMLBreakTagRE.ReplaceAllString(line, " ")
+	line = bodyPrepHTMLTagRE.ReplaceAllString(line, " ")
+	line = strings.Join(strings.Fields(line), " ")
+	return bodyPrepSpaceBeforePunctRE.ReplaceAllString(line, "$1")
 }
 
 func cleanBodyPrepFinancialLine(line string) string {

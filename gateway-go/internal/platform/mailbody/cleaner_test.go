@@ -1353,3 +1353,115 @@ func TestCleanForDisplay_StripsAuditOfficeSignatureTail(t *testing.T) {
 		t.Fatalf("expected audit signature stripped, got:\n%s", got.Body)
 	}
 }
+
+func TestCleanForDisplay_CutsRepeatedThreadAfterFirstSignatureBlock(t *testing.T) {
+	body := strings.Join([]string{
+		"Hi Sara, Jin Yun & Park ,",
+		"For lower copper price level, here update you the CNY&USD lower prices Solar PV DC cable H1Z2Z2-K 6mm2 for your purchase decision.",
+		"Looking forward to long-term cooperation with you.",
+		"Best Regards & Thanks so much",
+		"Fred Lee | Overseas Manager",
+		"JOCA Special Cable (Shanghai) Co., Ltd.",
+		"Wuxi JOCA Cable Technology Group Co., Ltd.",
+		"www.joca-cable.com     www.jocagroup.com",
+		"Mobile: +86 13651882591 (WhatsApp)",
+		"E-mail: fred@jocacable.com,fred@jiukaicable.com,",
+		"Add :No 875, Puwei Rd , Fengxian District, Shanghai ,China ,201402.",
+		"Hi Sara, Jin Yun & Park ,",
+		"Fred again.",
+		"Further to our quoted Solar PV DC cable prices, could we have your comments?",
+		"Best Regards & Thanks so much",
+		"Fred Lee | Overseas Manager",
+	}, "\n")
+
+	got := CleanForDisplay(body)
+	for _, want := range []string{"lower copper price", "purchase decision"} {
+		if !strings.Contains(got.Body, want) {
+			t.Fatalf("latest body missing %q:\n%s", want, got.Body)
+		}
+	}
+	for _, gone := range []string{"Fred again", "Mobile:", "E-mail:", "Wuxi JOCA"} {
+		if strings.Contains(got.Body, gone) {
+			t.Fatalf("repeated thread/signature leaked %q:\n%s", gone, got.Body)
+		}
+	}
+}
+
+func TestCleanForDisplay_StripsInlineHTMLMarketingWrapper(t *testing.T) {
+	body := strings.Join([]string{
+		`<div style="font-size: 16px; font-family: Verdana, sans-serif; max-width: 600px; margin:auto; background-color: #F8F8F8; padding: 24px;">`,
+		`<img src="https://example.com/logo.svg" style="display: block;" />`,
+		`<br>Hi 오선택,`,
+		`<br>We have activated the free plan for your account so that you can try the API right away.`,
+		`Your API Key can be found on the Metals.Dev <a href="https://metals.dev/dashboard" target="_blank">dashboard</a>.`,
+		`<br><br>Regards, <br>Team Metals.Dev.</div>`,
+	}, "\n")
+
+	got := CleanForDisplay(body)
+	for _, want := range []string{"Hi 오선택", "free plan", "dashboard"} {
+		if !strings.Contains(got.Body, want) {
+			t.Fatalf("html body missing %q:\n%s", want, got.Body)
+		}
+	}
+	for _, gone := range []string{"<div", "font-family", "<img", "<br", "</a>"} {
+		if strings.Contains(got.Body, gone) {
+			t.Fatalf("html wrapper leaked %q:\n%s", gone, got.Body)
+		}
+	}
+}
+
+func TestCleanForDisplay_StripsZeroWidthInlineFooterAndReplyHistory(t *testing.T) {
+	body := strings.Join([]string{
+		"대리님 안녕하세요.",
+		"요청하신 자료 송부드립니다.",
+		"누락된 자료는 PDF 스캔본 참고하셔서 새로 단선결선도 작성 부탁드립니다.",
+		"감사합니다.",
+		"김 우 종  대리 | 전기팀",
+		"대한전선주식회사 31791 충청남도 당진시 고대면 대호만로 870 당진공장",
+		"M 010-2940-3086   T 041-360-9823  F 041-360-9299   E woojong0607@example.com",
+		"본 e-mail(첨부자료 포함)은 지정된 수신인에 한하여 이용 가능합니다.",
+		"This e-mail [including attachment(s)] is solely for the use of intended recipient(s).",
+		"From : 윤남열<old@example.com>",
+		"Sent : 2026-05-11 09:02",
+		"Subject : Fw: [탑솔라(주)] 전기 설계 실사 이후 자료 요청의 건",
+		"아래 내용 확인 후 자료 송부 바랍니다.",
+	}, "\u200b")
+
+	got := CleanForDisplay(body)
+	for _, want := range []string{"요청하신 자료", "단선결선도 작성"} {
+		if !strings.Contains(got.Body, want) {
+			t.Fatalf("business body missing %q:\n%s", want, got.Body)
+		}
+	}
+	for _, gone := range []string{"본 e-mail", "This e-mail", "From :", "아래 내용", "woojong0607"} {
+		if strings.Contains(got.Body, gone) {
+			t.Fatalf("inline footer/history leaked %q:\n%s", gone, got.Body)
+		}
+	}
+}
+
+func TestCleanForDisplay_StripsLinkAccountFooter(t *testing.T) {
+	body := strings.Join([]string{
+		"New login detected",
+		"We noticed a login to your Link account from a new device. If this was you, no further action is needed.",
+		"- Device: Android (Samsung Internet)",
+		"- Location: Buk-gu, Gwangju, South Korea",
+		"- When: May 22, 2026 at 12:25:45 AM GMT+9",
+		"- How: Verified with one-time passcode sent to phone",
+		"If this was not you, log in to your Link account and review your purchases for suspicious activity. If you notice any signs that your account might be compromised, contact us for assistance.",
+		"If you believe you are getting this email in error or want to close your Link account, please visit our support site.",
+		"One Wilton Park, Wilton Place, Dublin 2 D02 FX04, Ireland",
+	}, "\n")
+
+	got := CleanForDisplay(body)
+	for _, want := range []string{"New login detected", "Android", "one-time passcode"} {
+		if !strings.Contains(got.Body, want) {
+			t.Fatalf("security detail missing %q:\n%s", want, got.Body)
+		}
+	}
+	for _, gone := range []string{"close your Link account", "support site", "One Wilton Park"} {
+		if strings.Contains(got.Body, gone) {
+			t.Fatalf("link footer leaked %q:\n%s", gone, got.Body)
+		}
+	}
+}
