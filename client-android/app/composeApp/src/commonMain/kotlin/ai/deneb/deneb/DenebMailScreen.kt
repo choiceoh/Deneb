@@ -575,7 +575,13 @@ private fun senderName(from: String): String {
 }
 
 internal fun mailRowNativeMeta(message: MailMessage): String? = buildList {
-    if (message.workState.feedStatus == "created") add("피드")
+    // Surface the *absence* of a work-feed card, not its presence: fed mail is
+    // already handled, so the row instead flags mail the analysis finished
+    // without producing a feed (the gateway's feed_missing state — analysis
+    // done && feedStatus != created). This highlights what slipped through.
+    if (message.workState.analysisStatus == "done" && message.workState.feedStatus != "created") {
+        add("피드 없음")
+    }
     if (message.workState.calendarProposalCount > 0) {
         add("일정 ${message.workState.calendarProposalCount}")
     }
@@ -596,8 +602,9 @@ internal fun mailRowAnalysisStatusLabel(state: MailWorkState): String? = when (s
 
 @Composable
 private fun mailRowMetaColor(message: MailMessage): Color = when {
-    message.workState.feedStatus == "created" ||
-        message.workState.calendarProposalCount > 0 ||
+    // "피드 없음" stays muted (it is an absence, not extracted work); only real
+    // signals — calendar proposals or todos — lift the meta line to the accent.
+    message.workState.calendarProposalCount > 0 ||
         message.workState.todoCount > 0 -> MaterialTheme.colorScheme.primary
 
     else -> denebHint()
