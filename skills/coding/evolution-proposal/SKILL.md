@@ -1,6 +1,6 @@
 ---
 name: evolution-proposal
-version: "1.0.6"
+version: "1.0.7"
 category: coding
 description: "Propose, record, and execute self-evolution after a meaningful workflow via the skill_lifecycle tool. Use when: (1) a completed task may deserve a reusable skill, (2) the user asks for skill genesis, self-evolution, or an evolution proposal, (3) an existing skill should be evolved instead of creating a new one. NOT for: ordinary coding work, one-off notes, or directly authoring a SKILL.md without first deciding the route."
 metadata:
@@ -8,7 +8,7 @@ metadata:
     "deneb":
       {
         "emoji": "🧭",
-        "tags": ["self-evolution", "genesis", "proposal", "procedural-memory", "routing", "SkillOpt", "Self-Harness", "held-out-replay"],
+        "tags": ["self-evolution", "genesis", "proposal", "procedural-memory", "routing", "SkillOpt", "Self-Harness", "held-out-replay", "self-correction-queue"],
         "related_skills": ["skill-factory", "skill-creator", "skill-evolution"],
       },
   }
@@ -63,7 +63,9 @@ deciding, to inspect usage stats, or to see curator state for agent-created
 skills before evolving/duplicating one. Read `rejectedEdits` in the status
 output before proposing another evolve route; they are failed candidate patches
 that should not be repeated. Read `validationCases` as held-out replay tests
-that future evolved candidates must still satisfy. Use `pin`, `unpin`,
+that future evolved candidates must still satisfy. Read `selfCorrectionCandidates`
+as the deferred queue of unapplied correction ideas for a future coding agent to
+batch-review. Use `pin`, `unpin`,
 `archive`, or `restore` only for agent-created skills whose curator state needs
 explicit operator control.
 
@@ -74,7 +76,7 @@ explicit operator control.
 3. If a close match exists, prefer `Evolve`; if detailed config/code snippets are the reusable part, preserve them inside the existing skill or a support file.
 4. Decide the route using the table above.
 5. Load `skill_lifecycle` with `fetch_tools` if the schema is not visible.
-6. If the session history is unclear, call `skill_lifecycle` action `status` first and review recent lifecycle records.
+6. If the session history is unclear, call `skill_lifecycle` action `status` first and review recent lifecycle records plus `selfCorrectionCandidates`.
 7. Record the decision with `skill_lifecycle` action `propose`.
 8. If route is `Genesis`, pass `execute=true` or call action `genesis`; omit `sessionKey` to use the current session, or pass a concise `dreamSummary`.
 9. If route is `Evolve`, pass `execute=true` with `skillName` and put the concrete improvement directive in `reason`/`evidence`; tie the directive to one supported failure mechanism, editable surface, expected behavior change, and regression risk. The evolver will persist those Self-Harness audit fields when the candidate supplies them. For direct action `evolve`, pass the same directive as `finding`.
@@ -82,8 +84,9 @@ explicit operator control.
 11. If route is `Create`, load `skill-factory` and create a concise `SKILL.md` with `skills` action `create`.
 12. If the durable detail is a command/config/code reference, add it with `skills` action `write_file` under `references/`, `templates/`, `scripts/`, or `assets/`.
 13. If the task exposed a concrete failure that can be replayed from a stored transcript, record it with `skill_lifecycle` action `validation_case_from_session` before or after evolve; pass `skillName`, `sessionKey`, and a short `description`. Use manual `validation_case` only when the invariant needs extra replay fields (`input`, `requiredActions`, `forbiddenActions`, `expectedToolCalls`, `forbiddenToolCalls`, `requiredObservations`, `forbiddenObservations`, `requireOrder`) that the transcript cannot prove by itself.
-14. For executed `Genesis`/`Evolve` routes, call `skill_lifecycle` action `status` with `limit: 5` when you need an audit trail.
-15. Report what changed, or why no change was made.
+14. If you notice a plausible correction but cannot safely apply and validate it now, record it with `skill_lifecycle` action `self_correction` using `title`, `evidence`, `targetFiles`, `proposedChange`, and `risk`; do not mutate files in that action.
+15. For executed `Genesis`/`Evolve` routes, call `skill_lifecycle` action `status` with `limit: 5` when you need an audit trail.
+16. Report what changed, what was only queued, or why no change was made.
 
 ## Proposal Template
 
@@ -178,6 +181,7 @@ Typical manual held-out replay case:
 - Do not store secrets, private contact data, or single-session context in a skill.
 - Do not name new skills after PR numbers, exact errors, codenames, or one session's artifact; make the name class-level.
 - Do not mutate a skill and invalidate prompt cache mid-session unless immediate use is necessary; prefer deferred application.
+- Do not silently leave a useful correction in chat only; if it should be revisited by a coding agent, queue it with `skill_lifecycle` action `self_correction`.
 - Do not widen narrow chat presets just to expose lifecycle tools; if the current surface lacks `skill_lifecycle`, state the intended proposal route and stop there.
 - Do not confuse skills with memory/wiki: skills are reusable procedures; memory/wiki stores durable facts or personal context.
 - Do not put support files outside `references/`, `templates/`, `scripts/`, or `assets/`; those directories are the safe support-file surface.
@@ -193,8 +197,10 @@ Typical manual held-out replay case:
 - Proposal route: the result includes `route` and `executed`, so the loop is auditable.
 - Code-action promotion: `code_action` output includes `[code_action skill promotion]`, and `skill_lifecycle` status shows the proposal/genesis record.
 - Audit route: `skill_lifecycle` action `status` shows recent proposal/genesis records, usage stats, rejected edits, validation cases, and curator state for agent-created skills.
+- Deferred correction route: `skill_lifecycle` status shows the candidate in `selfCorrectionCandidates` until a reviewer marks it accepted/rejected/superseded/applied with `self_correction_review`.
 
 ## Changelog
+- v1.0.7: Added deferred self-correction queue guidance.
 - v1.0.6: Noted persisted Self-Harness audit fields for evolve routes.
 - v1.0.5: Added Self-Harness evidence-grounding for evolve proposals.
 - v1.0.4: Added `code_action.promoteToSkill` route for successful reusable code workflows.

@@ -530,14 +530,17 @@ func TestDeleteCustomProviderModel(t *testing.T) {
 		if err := PersistRoleModel(cfgPath, "lightweight", "custom/bad-main", logger); err != nil {
 			t.Fatal(err)
 		}
+		if err := PersistRoleModel(cfgPath, "coding", "custom/bad-main", logger); err != nil {
+			t.Fatal(err)
+		}
 
 		res, err := DeleteCustomProviderModel(cfgPath, "custom/bad-main", logger)
 		if err != nil {
 			t.Fatal(err)
 		}
-		wantRoles := map[string]bool{"main": true, "lightweight": true}
-		if len(res.ClearedRoles) != 2 {
-			t.Fatalf("ClearedRoles = %v, want main+lightweight", res.ClearedRoles)
+		wantRoles := map[string]bool{"main": true, "lightweight": true, "coding": true}
+		if len(res.ClearedRoles) != 3 {
+			t.Fatalf("ClearedRoles = %v, want main+lightweight+coding", res.ClearedRoles)
 		}
 		for _, r := range res.ClearedRoles {
 			if !wantRoles[r] {
@@ -555,6 +558,9 @@ func TestDeleteCustomProviderModel(t *testing.T) {
 		}
 		if _, present := agents["lightweightModel"]; present {
 			t.Error("agents.lightweightModel still present, want cleared")
+		}
+		if _, present := agents["codingModel"]; present {
+			t.Error("agents.codingModel still present, want cleared")
 		}
 	})
 

@@ -96,6 +96,15 @@ func TestSkillLifecycleStatusFiltersBySkillAndStats(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("RecordSkillOpportunity: %v", err)
 	}
+	if _, err := tracker.RecordSelfCorrectionCandidate(genesis.SelfCorrectionCandidateRecord{
+		Scope:          "skill",
+		SkillName:      "deploy-helper",
+		Title:          "Tighten deploy verification",
+		Candidate:      "add origin/main proof reminder",
+		ProposedChange: "record deferred patch for batch review",
+	}); err != nil {
+		t.Fatalf("RecordSelfCorrectionCandidate: %v", err)
+	}
 
 	backend := &skillLifecycleBackend{tracker: tracker}
 	gotAny, err := backend.SkillLifecycleStatus(context.Background(), chattools.SkillLifecycleStatusRequest{
@@ -129,6 +138,10 @@ func TestSkillLifecycleStatusFiltersBySkillAndStats(t *testing.T) {
 	opportunities := got["opportunities"].([]genesis.SkillOpportunityRecord)
 	if len(opportunities) != 1 || opportunities[0].Candidate != "repeatable deploy fix" {
 		t.Fatalf("unexpected opportunities: %+v", opportunities)
+	}
+	selfCorrections := got["selfCorrectionCandidates"].([]genesis.SelfCorrectionCandidateRecord)
+	if len(selfCorrections) != 1 || selfCorrections[0].SkillName != "deploy-helper" {
+		t.Fatalf("unexpected self-correction candidates: %+v", selfCorrections)
 	}
 }
 
@@ -505,6 +518,58 @@ func TestSkillLifecycleLogProposalStoresActualExecutionAndTruncates(t *testing.T
 	}
 	if !strings.HasSuffix(entries[0].Result, "...[truncated]") {
 		t.Fatalf("expected truncated result, got length %d", len(entries[0].Result))
+	}
+}
+
+func TestSkillLifecycleSelfCorrectionRecordReviewAndStatus(t *testing.T) {
+	tracker := newSkillLifecycleTestTracker(t)
+	backend := &skillLifecycleBackend{tracker: tracker}
+
+	gotAny, err := backend.RecordSelfCorrectionCandidate(context.Background(), chattools.SkillSelfCorrectionCandidateRequest{
+		Scope:          "code",
+		Title:          "Defer route threshold tweak",
+		Candidate:      "adjust effort router threshold after batch review",
+		Evidence:       "operator correction",
+		TargetFiles:    []string{"gateway-go/internal/pipeline/chat/effort_router.go"},
+		ProposedChange: "review threshold constants against agentlog",
+		Risk:           "could route hard turns too cheaply",
+		Source:         "operator",
+	})
+	if err != nil {
+		t.Fatalf("RecordSelfCorrectionCandidate: %v", err)
+	}
+	got := gotAny.(map[string]any)
+	rec := got["candidate"].(genesis.SelfCorrectionCandidateRecord)
+	if rec.ID == "" || rec.Status != genesis.SelfCorrectionStatusProposed {
+		t.Fatalf("unexpected candidate: %+v", rec)
+	}
+
+	statusAny, err := backend.SkillLifecycleStatus(context.Background(), chattools.SkillLifecycleStatusRequest{Limit: 5})
+	if err != nil {
+		t.Fatalf("SkillLifecycleStatus: %v", err)
+	}
+	status := statusAny.(map[string]any)
+	pending := status["selfCorrectionCandidates"].([]genesis.SelfCorrectionCandidateRecord)
+	if len(pending) != 1 || pending[0].ID != rec.ID {
+		t.Fatalf("expected pending candidate in status, got %+v", pending)
+	}
+
+	if _, err := backend.ReviewSelfCorrectionCandidate(context.Background(), chattools.SkillSelfCorrectionReviewRequest{
+		ID:         rec.ID,
+		Status:     genesis.SelfCorrectionStatusRejected,
+		Reviewer:   "codex",
+		ReviewNote: "superseded by existing scorecard",
+	}); err != nil {
+		t.Fatalf("ReviewSelfCorrectionCandidate: %v", err)
+	}
+	statusAny, err = backend.SkillLifecycleStatus(context.Background(), chattools.SkillLifecycleStatusRequest{Limit: 5})
+	if err != nil {
+		t.Fatalf("SkillLifecycleStatus after review: %v", err)
+	}
+	status = statusAny.(map[string]any)
+	pending = status["selfCorrectionCandidates"].([]genesis.SelfCorrectionCandidateRecord)
+	if len(pending) != 0 {
+		t.Fatalf("reviewed candidate should leave pending status view, got %+v", pending)
 	}
 }
 

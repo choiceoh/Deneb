@@ -199,6 +199,7 @@ type AgentsConfig struct {
 	// and the chat fallback chain). Empty leaves the built-in default
 	// (the local vLLM model) in place. Format: "provider/model".
 	LightweightModel string                `json:"lightweightModel,omitempty"`
+	CodingModel      string                `json:"codingModel,omitempty"`
 	FallbackModel    string                `json:"fallbackModel,omitempty"`
 	DefaultSystem    string                `json:"defaultSystem,omitempty"`
 	Defaults         *AgentsDefaultsConfig `json:"defaults,omitempty"`

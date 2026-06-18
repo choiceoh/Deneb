@@ -1,5 +1,5 @@
 ---
-description: 모델 역할(main/tiny/lightweight/analysis/fallback/chatbot/vision)별 작업 배치의 단일 진실원 — 어떤 임무가 어떤 역할을 쓰고 왜. 새 LLM 호출 추가·역할 변경 시 필독.
+description: 모델 역할(main/tiny/lightweight/analysis/coding/fallback/chatbot/vision)별 작업 배치의 단일 진실원 — 어떤 임무가 어떤 역할을 쓰고 왜. 새 LLM 호출 추가·역할 변경 시 필독.
 globs: gateway-go/internal/ai/modelrole/**, gateway-go/internal/pipeline/pilot/**, gateway-go/internal/runtime/server/server_chat_config.go
 ---
 
@@ -7,7 +7,7 @@ globs: gateway-go/internal/ai/modelrole/**, gateway-go/internal/pipeline/pilot/*
 
 > 어떤 임무가 어떤 모델 역할을 쓰는지의 **단일 진실원**. 실제 모델 이름은 코드에 하드코딩하지 않는다 — 코드는 **역할만 고르고**, 역할→모델은 `~/.deneb/deneb.json` 의 `agents.*Model` + wormhole 라우터가 결정한다. 새 LLM 호출을 추가하거나 역할을 바꿀 때 아래 "임무→역할 표"에 행을 추가하고 근거를 적는다.
 
-## 역할 7종 + 의도
+## 역할 8종 + 의도
 
 상수: `gateway-go/internal/ai/modelrole/registry.go`. 모델 매핑: `~/.deneb/deneb.json` `agents.*Model` (예시는 *현재값*일 뿐 — 코드 판단 기준이 아니다).
 
@@ -16,6 +16,7 @@ globs: gateway-go/internal/ai/modelrole/**, gateway-go/internal/pipeline/pilot/*
 | main | `RoleMain` | 대화·분석·도구호출·생성물 합성 (가장 강력) | 로컬 (deepseek-v4-flash) |
 | chatbot | `RoleChatbot` | 챗봇 워크스페이스(`chat:`) 전용 | (config) |
 | analysis | `RoleAnalysis` | **추론급 품질** 종합 (리포트 등) | ⚠️ **현재 클라우드** (glm-5.2) |
+| coding | `RoleCoding` | 코드 수정·구현자 서브에이전트·스킬 패치 | (config) |
 | lightweight | `RoleLightweight` | **바운드 요약**·로컬 잡일꾼 | 로컬 (qwen3.6-35b) |
 | tiny | `RoleTiny` | **단순 분류/추출** (가장 작음) | 로컬 (qwen3.6-35b) |
 | fallback | `RoleFallback` | 폴백 체인 | (config) |
@@ -29,6 +30,7 @@ globs: gateway-go/internal/ai/modelrole/**, gateway-go/internal/pipeline/pilot/*
 |---|---|
 | **에이전트 턴** (cron/chat 합성) | main (`agents.defaultModel`) |
 | `pilot.CallAnalysisLLM` | analysis |
+| `pilot.CallCodingLLM` | coding |
 | `pilot.CallLocalLLM` | lightweight |
 | `pilot.CallTinyLLM` | tiny |
 | `(*Server).mailAnalysisModels()` | stage2 = analysis, stage1 = tiny |
@@ -48,6 +50,8 @@ globs: gateway-go/internal/ai/modelrole/**, gateway-go/internal/pipeline/pilot/*
 | watch 영상 전사 분석 | `chat/tools/watch.go` | **lightweight** | 자막 기반 분석 요약 |
 | 도구출력 압축 | `chat/localai_hooks.go` | **lightweight** | 큰 입력 압축 |
 | polaris 검색/요약 헬퍼 | `runtime/server/chat_pipeline.go` (`LocalAIFunc`) | **lightweight** | 회상 핫패스 |
+| 구현자 서브에이전트 | `sessions_spawn(tool_preset=implementer)` | **coding** when configured, else subagent/default | 파일 쓰기·exec를 할 수 있는 코드 수정 위임. 코딩 전용 모델은 네이티브 설정의 `agents.codingModel`로 opt-in |
+| 스킬 진화 패치 생성 | `init_genesis.go` → `genesis.Evolver` | **coding** when configured, else lightweight | SKILL.md 실제 수정 후보를 만드는 경로. 코딩 전용 모델 설정 시 main teacher rewrite를 끄고 coding 역할이 패치 생성을 담당 |
 
 ## LLM 안 쓰는 곳 (의도적)
 

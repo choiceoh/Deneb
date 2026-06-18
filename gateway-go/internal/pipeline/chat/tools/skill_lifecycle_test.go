@@ -16,6 +16,8 @@ type fakeSkillLifecycleBackend struct {
 	validationCase SkillValidationCaseRequest
 	fromSession    SkillValidationCaseFromSessionRequest
 	backfill       SkillValidationBackfillRequest
+	selfCorrection SkillSelfCorrectionCandidateRequest
+	selfReview     SkillSelfCorrectionReviewRequest
 }
 
 func (f *fakeSkillLifecycleBackend) ProposeSkillEvolution(_ context.Context, req SkillEvolutionProposalRequest) (any, error) {
@@ -56,6 +58,16 @@ func (f *fakeSkillLifecycleBackend) RecordSkillValidationCaseFromSession(_ conte
 func (f *fakeSkillLifecycleBackend) BackfillSkillValidationCases(_ context.Context, req SkillValidationBackfillRequest) (any, error) {
 	f.backfill = req
 	return map[string]any{"ok": true, "skillName": req.SkillName, "limit": req.Limit, "sessionKey": req.SessionKey}, nil
+}
+
+func (f *fakeSkillLifecycleBackend) RecordSelfCorrectionCandidate(_ context.Context, req SkillSelfCorrectionCandidateRequest) (any, error) {
+	f.selfCorrection = req
+	return map[string]any{"ok": true, "title": req.Title, "scope": req.Scope}, nil
+}
+
+func (f *fakeSkillLifecycleBackend) ReviewSelfCorrectionCandidate(_ context.Context, req SkillSelfCorrectionReviewRequest) (any, error) {
+	f.selfReview = req
+	return map[string]any{"ok": true, "id": req.ID, "status": req.Status}, nil
 }
 
 func TestToolSkillLifecyclePropose(t *testing.T) {
@@ -128,6 +140,52 @@ func TestToolSkillLifecycleStatus(t *testing.T) {
 	}
 	if backend.status.SkillName != "skill-factory" || backend.status.Limit != 3 {
 		t.Fatalf("unexpected status request: %+v", backend.status)
+	}
+}
+
+func TestToolSkillLifecycleSelfCorrection(t *testing.T) {
+	backend := &fakeSkillLifecycleBackend{}
+	fn := ToolSkillLifecycle(backend)
+
+	out, err := fn(context.Background(), mustJSONSkillLifecycle(t, map[string]any{
+		"action":         "self_correction",
+		"scope":          "skill",
+		"skillName":      "email-analysis",
+		"title":          "Defer noisy mail rewrite",
+		"candidate":      "tighten calendar extraction",
+		"targetFiles":    []string{"skills/productivity/email-analysis/SKILL.md"},
+		"proposedChange": "add proposal-only guard",
+		"risk":           "may suppress a valid event",
+	}))
+	if err != nil {
+		t.Fatalf("ToolSkillLifecycle: %v", err)
+	}
+	if !strings.Contains(out, `"scope": "skill"`) {
+		t.Fatalf("expected self-correction result, got %s", out)
+	}
+	if backend.selfCorrection.SkillName != "email-analysis" || backend.selfCorrection.Scope != "skill" {
+		t.Fatalf("unexpected self-correction request: %+v", backend.selfCorrection)
+	}
+	if len(backend.selfCorrection.TargetFiles) != 1 {
+		t.Fatalf("expected target file, got %+v", backend.selfCorrection.TargetFiles)
+	}
+}
+
+func TestToolSkillLifecycleSelfCorrectionReview(t *testing.T) {
+	backend := &fakeSkillLifecycleBackend{}
+	fn := ToolSkillLifecycle(backend)
+
+	if _, err := fn(context.Background(), mustJSONSkillLifecycle(t, map[string]any{
+		"action":     "self_correction_review",
+		"id":         "sc-1",
+		"status":     "accepted",
+		"reviewer":   "codex",
+		"reviewNote": "batch accepted",
+	})); err != nil {
+		t.Fatalf("ToolSkillLifecycle: %v", err)
+	}
+	if backend.selfReview.ID != "sc-1" || backend.selfReview.Status != "accepted" || backend.selfReview.Reviewer != "codex" {
+		t.Fatalf("unexpected self-correction review request: %+v", backend.selfReview)
 	}
 }
 

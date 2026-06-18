@@ -77,6 +77,13 @@ cp docs/reference/AGENTS.default.md ~/.deneb/workspace/AGENTS.md
 - Tools live in skills; follow each skill’s `SKILL.md` when you need it.
 - Keep environment-specific notes in `TOOLS.md` (Notes for Skills).
 
+## Deferred self-corrections
+
+- Before coding, review, or skill-evolution work, inspect `skill_lifecycle` action `status` and read `selfCorrectionCandidates`.
+- If you notice a plausible correction but cannot safely apply and validate it now, record it with `skill_lifecycle` action `self_correction` using `title`, `evidence`, `targetFiles`, `proposedChange`, and `risk`.
+- Treat queued items as unapplied hypotheses. Apply them only after batch review and tests, then mark them with `skill_lifecycle` action `self_correction_review` as `accepted`, `rejected`, `superseded`, or `applied`.
+- The append-only queue is stored at `~/.deneb/data/self_correction_candidates.jsonl` for agents that need direct inspection.
+
 ## Backup tip (recommended)
 
 If you treat this workspace as the agent's memory, make it a git repo (ideally private) so `AGENTS.md` and your memory files are backed up.

@@ -205,19 +205,21 @@ func (b *skillLifecycleBackend) SkillLifecycleStatus(_ context.Context, req chat
 		validationCases, validationCasesErr := b.recentSkillValidationCases(skillName, limit)
 		validationSummary, validationSummaryErr := b.validationCaseSummary(skillName)
 		opportunities, opportunitiesErr := b.recentSkillOpportunities(skillName, limit)
+		selfCorrections, selfCorrectionsErr := b.recentSelfCorrectionCandidates(skillName, limit)
 		status := map[string]any{
-			"ok":                    true,
-			"skillName":             skillName,
-			"limit":                 limit,
-			"recent":                recent,
-			"stats":                 stats,
-			"curator":               curator,
-			"rejectedEdits":         rejected,
-			"usageQuality":          usageQuality,
-			"optimizerMemory":       optimizerMemory,
-			"validationCases":       validationCases,
-			"validationCaseSummary": validationSummary,
-			"opportunities":         opportunities,
+			"ok":                       true,
+			"skillName":                skillName,
+			"limit":                    limit,
+			"recent":                   recent,
+			"stats":                    stats,
+			"curator":                  curator,
+			"rejectedEdits":            rejected,
+			"usageQuality":             usageQuality,
+			"optimizerMemory":          optimizerMemory,
+			"validationCases":          validationCases,
+			"validationCaseSummary":    validationSummary,
+			"opportunities":            opportunities,
+			"selfCorrectionCandidates": selfCorrections,
 		}
 		if rejectedErr != "" {
 			status["rejectedEditsError"] = rejectedErr
@@ -237,6 +239,9 @@ func (b *skillLifecycleBackend) SkillLifecycleStatus(_ context.Context, req chat
 		if opportunitiesErr != "" {
 			status["opportunitiesError"] = opportunitiesErr
 		}
+		if selfCorrectionsErr != "" {
+			status["selfCorrectionCandidatesError"] = selfCorrectionsErr
+		}
 		return status, nil
 	}
 
@@ -253,17 +258,19 @@ func (b *skillLifecycleBackend) SkillLifecycleStatus(_ context.Context, req chat
 	validationCases, validationCasesErr := b.recentSkillValidationCases("", limit)
 	validationSummary, validationSummaryErr := b.validationCaseSummary("")
 	opportunities, opportunitiesErr := b.recentSkillOpportunities("", limit)
+	selfCorrections, selfCorrectionsErr := b.recentSelfCorrectionCandidates("", limit)
 	status := map[string]any{
-		"ok":                    true,
-		"limit":                 limit,
-		"recent":                recent,
-		"stats":                 stats,
-		"curator":               curator,
-		"rejectedEdits":         rejected,
-		"usageQuality":          usageQuality,
-		"validationCases":       validationCases,
-		"validationCaseSummary": validationSummary,
-		"opportunities":         opportunities,
+		"ok":                       true,
+		"limit":                    limit,
+		"recent":                   recent,
+		"stats":                    stats,
+		"curator":                  curator,
+		"rejectedEdits":            rejected,
+		"usageQuality":             usageQuality,
+		"validationCases":          validationCases,
+		"validationCaseSummary":    validationSummary,
+		"opportunities":            opportunities,
+		"selfCorrectionCandidates": selfCorrections,
 	}
 	if rejectedErr != "" {
 		status["rejectedEditsError"] = rejectedErr
@@ -279,6 +286,9 @@ func (b *skillLifecycleBackend) SkillLifecycleStatus(_ context.Context, req chat
 	}
 	if opportunitiesErr != "" {
 		status["opportunitiesError"] = opportunitiesErr
+	}
+	if selfCorrectionsErr != "" {
+		status["selfCorrectionCandidatesError"] = selfCorrectionsErr
 	}
 	return status, nil
 }
@@ -353,6 +363,73 @@ func (b *skillLifecycleBackend) recentSkillOpportunities(skillName string, limit
 			"skill", skillName, "error", err)
 	}
 	return []genesis.SkillOpportunityRecord{}, err.Error()
+}
+
+func (b *skillLifecycleBackend) recentSelfCorrectionCandidates(skillName string, limit int) ([]genesis.SelfCorrectionCandidateRecord, string) {
+	candidates, err := b.tracker.RecentSelfCorrectionCandidates(skillName, genesis.SelfCorrectionStatusProposed, limit)
+	if err == nil {
+		return candidates, ""
+	}
+	if b.logger != nil {
+		b.logger.Warn("skill lifecycle: self-correction candidates unavailable",
+			"skill", skillName, "error", err)
+	}
+	return []genesis.SelfCorrectionCandidateRecord{}, err.Error()
+}
+
+func (b *skillLifecycleBackend) RecordSelfCorrectionCandidate(ctx context.Context, req chattools.SkillSelfCorrectionCandidateRequest) (any, error) {
+	if b.tracker == nil {
+		return map[string]any{
+			"ok":     false,
+			"reason": "skill tracker is not configured",
+		}, nil
+	}
+	if req.SessionKey == "" {
+		req.SessionKey = toolctx.SessionKeyFromContext(ctx)
+	}
+	rec, err := b.tracker.RecordSelfCorrectionCandidate(genesis.SelfCorrectionCandidateRecord{
+		ID:             req.ID,
+		Scope:          req.Scope,
+		SkillName:      req.SkillName,
+		SessionKey:     req.SessionKey,
+		Title:          req.Title,
+		Candidate:      req.Candidate,
+		Evidence:       req.Evidence,
+		Reason:         req.Reason,
+		TargetFiles:    req.TargetFiles,
+		ProposedChange: req.ProposedChange,
+		Risk:           req.Risk,
+		Source:         req.Source,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{
+		"ok":        true,
+		"candidate": rec,
+	}, nil
+}
+
+func (b *skillLifecycleBackend) ReviewSelfCorrectionCandidate(_ context.Context, req chattools.SkillSelfCorrectionReviewRequest) (any, error) {
+	if b.tracker == nil {
+		return map[string]any{
+			"ok":     false,
+			"reason": "skill tracker is not configured",
+		}, nil
+	}
+	rec, err := b.tracker.RecordSelfCorrectionReview(genesis.SelfCorrectionCandidateRecord{
+		ID:         req.ID,
+		Status:     req.Status,
+		Reviewer:   req.Reviewer,
+		ReviewNote: req.ReviewNote,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{
+		"ok":     true,
+		"review": rec,
+	}, nil
 }
 
 func (b *skillLifecycleBackend) RecordSkillValidationCase(_ context.Context, req chattools.SkillValidationCaseRequest) (any, error) {

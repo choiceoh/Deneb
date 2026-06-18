@@ -267,14 +267,15 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		ss.WriteString("6. agent-created 스킬 상태 조정은 `skill_lifecycle` action=pin/unpin/archive/restore 를 사용하세요.\n")
 		ss.WriteString("7. 스킬 진화는 검증 통과 시에만 채택하고, `skill_lifecycle` status의 `opportunities`, `rejectedEdits`, `validationCases`를 확인해 반복 near-miss는 승격하고 같은 실패 후보는 반복하지 마세요.\n")
 		ss.WriteString("8. 실제 실패에서 재현 가능한 검사 조건이 생기면 `skill_lifecycle` action=validation_case_from_session 으로 세션 trace 기반 case를 먼저 남기고, 필요하면 action=validation_case 로 수동 replay/held-out case를 보강하세요.\n")
-		ss.WriteString("9. 사용자 교정(형식, 범위, 검증, 작업 순서)은 memory가 아니라 스킬 개선 신호일 수 있습니다.\n")
-		ss.WriteString("10. `code_action`으로 좋은 배치/조인/정규화/내부-write 워크플로우가 성공했다면 다음 실행부터 `promoteToSkill`에 candidate/evidence를 넣어 `skill_lifecycle` 제안/생성 경로로 승격하세요.\n")
+		ss.WriteString("9. 사용자 교정(형식, 범위, 검증, 작업 순서)이나 자기수정 아이디어는 즉시 적용하지 말고, 적용 전 후보로 남길 때 `skill_lifecycle` action=self_correction 에 title/evidence/targetFiles/proposedChange/risk 를 기록하세요.\n")
+		ss.WriteString("10. 새 세션/리뷰/코딩 작업을 시작할 때 `skill_lifecycle` status 의 selfCorrectionCandidates 를 확인하고, batch review 후 accepted/rejected/superseded/applied 를 `skill_lifecycle` action=self_correction_review 로 표시하세요.\n")
+		ss.WriteString("11. `code_action`으로 좋은 배치/조인/정규화/내부-write 워크플로우가 성공했다면 다음 실행부터 `promoteToSkill`에 candidate/evidence를 넣어 `skill_lifecycle` 제안/생성 경로로 승격하세요.\n")
 		// S3: agent-facing save path. The agent itself may decide a
 		// workflow is worth keeping and persist it via skill_manage.
 		// apply=true is an explicit opt-in for mid-session visibility;
 		// the default defers the cache bust so the prompt-cache hit
 		// rate stays high.
-		ss.WriteString("11. 진짜 재사용 가능한 패턴을 방금 해결했다면 `skills`(action=create, ...) 로 직접 저장하세요. ")
+		ss.WriteString("12. 진짜 재사용 가능한 패턴을 방금 해결했다면 `skills`(action=create, ...) 로 직접 저장하세요. ")
 		ss.WriteString("기본은 다음 세션부터 로드되어 프롬프트 캐시를 해치지 않습니다. 이번 세션에서 즉시 쓰려면 apply=true 를 추가하세요.\n\n")
 	} else {
 		// No always-skills, but discoverable skills may still exist.
@@ -371,6 +372,7 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		d.WriteString("## Sub-Agents\n")
 		d.WriteString("병렬 위임이 가능하다. 독립적인 부분이 2개 이상이거나 리서치/빌드 검증처럼 10초+ 걸릴 작업은 `sessions_spawn`으로 나눠라.\n")
 		d.WriteString("- 호출: `sessions_spawn(task=\"구체적 지시\", tool_preset=\"researcher|implementer|verifier\")` (preset 생략 시 제한 없음)\n")
+		d.WriteString("- 코드 구현/수정 위임은 `tool_preset=\"implementer\"`를 사용한다. 코딩 전용 모델이 설정되어 있으면 해당 child는 자동으로 `coding` 역할을 쓴다.\n")
 		d.WriteString("- spawn 후에는 네 턴을 끝내라. 결과는 자동 전달된다. 직접 반복하거나 `subagents`로 폴링하지 마라.\n")
 		d.WriteString("- task는 구체적으로: 대상 파일·키워드·기대 결과를 명시.\n\n")
 	}

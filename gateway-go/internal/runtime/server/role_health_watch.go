@@ -11,8 +11,8 @@
 // llm.Client production traffic uses.
 //
 // Design:
-//   - Probes the unique cloud providers behind the five roles (main / tiny /
-//     lightweight / analysis / fallback). Local endpoints are skipped — they
+//   - Probes the unique cloud providers behind the core roles (main / tiny /
+//     lightweight / analysis / coding / fallback). Local endpoints are skipped — they
 //     have no credential to expire and the miniapp reachability probes
 //     already cover them.
 //   - One 1-token completion per provider per cycle (~a few tokens/day).
@@ -223,7 +223,7 @@ func (w *roleHealthWatch) collectTargets() []roleHealthTarget {
 	byProvider := make(map[string]*roleHealthTarget)
 	for _, role := range []modelrole.Role{
 		modelrole.RoleMain, modelrole.RoleTiny, modelrole.RoleLightweight,
-		modelrole.RoleAnalysis, modelrole.RoleFallback,
+		modelrole.RoleAnalysis, modelrole.RoleCoding, modelrole.RoleFallback,
 	} {
 		cfg := reg.Config(role)
 		if cfg.ProviderID == "" || cfg.BaseURL == "" || isLocalURL(cfg.BaseURL) {

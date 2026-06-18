@@ -504,8 +504,8 @@ func sessionsSpawnToolSchema() map[string]any {
 			},
 			"model": map[string]any{
 				"type":        "string",
-				"description": "Model role to use (default: main)",
-				"enum":        []string{"main", "lightweight", "fallback"},
+				"description": "Model role to use (default: main; implementer uses coding automatically when configured)",
+				"enum":        []string{"main", "coding", "lightweight", "fallback"},
 			},
 			"task": map[string]any{
 				"type":        "string",

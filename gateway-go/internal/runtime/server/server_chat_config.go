@@ -684,6 +684,13 @@ func resolveFallbackModel(logger *slog.Logger) string {
 	return resolveAgentRoleModel("fallbackModel", logger)
 }
 
+// resolveCodingModel reads the optional agents.codingModel override from
+// deneb.json. Empty leaves RoleCoding absent, so code-writing sub-agents and
+// skill rewrites use their existing defaults.
+func resolveCodingModel(logger *slog.Logger) string {
+	return resolveAgentRoleModel("codingModel", logger)
+}
+
 // resolveTinyModel / resolveAnalysisModel read the optional per-role overrides
 // agents.tinyModel / agents.analysisModel from deneb.json. Empty leaves the
 // registry's lightweight model for that role (the prior single-tier behavior).

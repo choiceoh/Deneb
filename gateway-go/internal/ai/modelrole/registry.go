@@ -1,6 +1,6 @@
 // Package modelrole provides a centralized model role registry for the gateway.
 //
-// Four model roles are defined (main, lightweight, pilot, fallback), each with
+// Model roles are defined (main, lightweight, tiny, analysis, coding, fallback, ...), each with
 // a provider, model name, base URL, and API type. Subsystems declare which ROLE
 // they need (e.g., "lightweight"); the registry resolves the concrete model
 // config and provides a cached LLM client.
@@ -8,6 +8,7 @@
 // Fallback chains are automatic:
 //
 //	Main       → Lightweight → Fallback
+//	Coding     → Main → Fallback
 //	Lightweight → Fallback
 //	Fallback   → (none)
 package modelrole
@@ -30,7 +31,12 @@ const (
 	RoleTiny        Role = "tiny"        // smallest model: trivial classification/extraction
 	RoleLightweight Role = "lightweight" // mid model: bounded summarization
 	RoleAnalysis    Role = "analysis"    // highest-quality local model: reasoning-grade tasks
-	RoleFallback    Role = "fallback"
+	// RoleCoding is the opt-in model used for code-writing/editing work such as
+	// implementer sub-agents and lifecycle-managed skill rewrites. It stays
+	// separate from RoleMain so a coding-specialized subscription/model can
+	// patch files without taking over the general assistant.
+	RoleCoding   Role = "coding"
+	RoleFallback Role = "fallback"
 	// RoleChatbot is the 챗봇 workspace model (chat: sessions), distinct from
 	// RoleMain (업무, client: sessions) so focused general chat can run a
 	// different/lighter model. OPT-IN: the role is absent unless
@@ -107,7 +113,10 @@ type RegistryOptions struct {
 	LightweightModel string // override for RoleLightweight; empty → local vLLM
 	TinyModel        string // override for RoleTiny; empty → same as lightweight
 	AnalysisModel    string // override for RoleAnalysis; empty → same as lightweight
-	FallbackModel    string // override for RoleFallback; empty → local vLLM
+	// CodingModel overrides RoleCoding (code-writing/editing work). Empty → the
+	// role is absent and implementer sub-agents fall back to their normal default.
+	CodingModel   string // format: "provider/model"
+	FallbackModel string // override for RoleFallback; empty → local vLLM
 	// ChatbotModel overrides RoleChatbot (챗봇 workspace). Empty → the role is
 	// absent and 챗봇 turns fall back to the main model (prior behavior).
 	ChatbotModel string
@@ -256,6 +265,9 @@ func NewRegistryWithOptions(logger *slog.Logger, opts RegistryOptions) *Registry
 	if opts.AnalysisModel != "" {
 		models[RoleAnalysis] = resolveModelConfig(opts.AnalysisModel, opts.Providers)
 	}
+	if opts.CodingModel != "" {
+		models[RoleCoding] = resolveModelConfig(opts.CodingModel, opts.Providers)
+	}
 	// Chatbot role is OPT-IN: only added to the map when explicitly configured,
 	// so an unconfigured deployment leaves 챗봇 turns on the main model. Its
 	// presence in the map is what resolveModel keys off to activate the role.
@@ -278,6 +290,9 @@ func NewRegistryWithOptions(logger *slog.Logger, opts RegistryOptions) *Registry
 	vllmWindows := make(map[string]int)
 	probedVllmURLs := make(map[string]bool)
 	reconcileRoles := []Role{RoleMain, RoleTiny, RoleLightweight, RoleAnalysis, RoleFallback}
+	if _, ok := models[RoleCoding]; ok {
+		reconcileRoles = append(reconcileRoles, RoleCoding)
+	}
 	if _, ok := models[RoleChatbot]; ok {
 		reconcileRoles = append(reconcileRoles, RoleChatbot)
 	}
@@ -323,6 +338,7 @@ func NewRegistryWithOptions(logger *slog.Logger, opts RegistryOptions) *Registry
 		"tiny", logModelAlias(models[RoleTiny]),
 		"lightweight", logModelAlias(models[RoleLightweight]),
 		"analysis", logModelAlias(models[RoleAnalysis]),
+		"coding", logModelAlias(models[RoleCoding]),
 		"fallback", logModelAlias(models[RoleFallback]),
 	)
 
@@ -391,7 +407,7 @@ func (r *Registry) VllmBaseURLs() []string {
 	defer r.mu.RUnlock()
 	var out []string
 	seen := make(map[string]bool)
-	for _, role := range []Role{RoleMain, RoleAnalysis, RoleLightweight, RoleTiny, RoleFallback} {
+	for _, role := range []Role{RoleMain, RoleAnalysis, RoleCoding, RoleLightweight, RoleTiny, RoleFallback} {
 		cfg, ok := r.models[role]
 		if !ok || cfg.ProviderID != "vllm" || cfg.BaseURL == "" || seen[cfg.BaseURL] {
 			continue
@@ -489,6 +505,11 @@ func (r *Registry) ResolveModel(modelOrRole string) (fullModelID string, role Ro
 	case RoleMain, RoleTiny, RoleLightweight, RoleAnalysis, RoleFallback:
 		role = Role(modelOrRole)
 		return r.FullModelID(role), role, true
+	case RoleCoding:
+		role = Role(modelOrRole)
+		if id := r.FullModelID(role); id != "" {
+			return id, role, true
+		}
 	}
 	return modelOrRole, "", false
 }
@@ -502,7 +523,7 @@ func (r *Registry) RoleForModel(fullModelID string) (Role, bool) {
 	// lightweight default maps that shared model back to the lightweight role
 	// (preserving prior behavior); an explicitly configured tiny/analysis model
 	// still matches its own role.
-	for _, role := range []Role{RoleMain, RoleLightweight, RoleTiny, RoleAnalysis, RoleFallback} {
+	for _, role := range []Role{RoleMain, RoleCoding, RoleLightweight, RoleTiny, RoleAnalysis, RoleFallback, RoleChatbot, RoleVision} {
 		cfg, ok := r.models[role]
 		if !ok {
 			continue
@@ -530,6 +551,11 @@ func (r *Registry) FallbackChain(role Role) []Role {
 		return []Role{RoleLightweight, RoleFallback}
 	case RoleAnalysis:
 		return []Role{RoleAnalysis, RoleLightweight, RoleFallback}
+	case RoleCoding:
+		// Code edits are quality-sensitive and tool-heavy. If the dedicated
+		// coding role fails, degrade to the general main model before the shared
+		// fallback instead of a smaller summarization role.
+		return []Role{RoleCoding, RoleMain, RoleFallback}
 	case RoleChatbot:
 		// On chatbot-model failure, degrade to the main (업무) model, then the
 		// shared fallback — so a bad chatbot model never leaves 챗봇 dead.
@@ -582,7 +608,7 @@ func (r *Registry) SetRoleModelID(role Role, modelID string) ModelConfig {
 // ClearRole removes a role's explicit model so it reverts to its default
 // resolution. Used when the model a role pointed at is deleted. The always-on
 // roles (main/lightweight/fallback/tiny/analysis) are reset via SetRoleModelID
-// instead; this is for opt-in roles like RoleChatbot that should disappear —
+// instead; this is for opt-in roles like RoleChatbot/RoleCoding that should disappear —
 // and fall back to the main model — when left unconfigured.
 func (r *Registry) ClearRole(role Role) {
 	r.mu.Lock()

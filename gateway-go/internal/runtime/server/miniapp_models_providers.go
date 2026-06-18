@@ -205,7 +205,8 @@ func providerEntries(spec providerSpec) []modelEntry {
 	return entries
 }
 
-// registryRoleEntries builds the role-based section (main/lightweight/fallback).
+// registryRoleEntries builds the role-based section (main/lightweight/fallback
+// plus opt-in roles that may otherwise be absent from provider discovery).
 func registryRoleEntries(reg *modelrole.Registry, liveMain string) []modelEntry {
 	if reg == nil {
 		return nil
@@ -215,6 +216,7 @@ func registryRoleEntries(reg *modelrole.Registry, liveMain string) []modelEntry 
 		label string
 	}{
 		{modelrole.RoleMain, "main"},
+		{modelrole.RoleCoding, "coding"},
 		{modelrole.RoleLightweight, "lightweight"},
 		{modelrole.RoleFallback, "fallback"},
 	}

@@ -36,6 +36,7 @@ func (s *Server) initMemorySubsystem(chatCfg *chat.HandlerConfig, regPtr **model
 		LightweightModel: resolveLightweightModel(s.logger),
 		TinyModel:        resolveTinyModel(s.logger),
 		AnalysisModel:    resolveAnalysisModel(s.logger),
+		CodingModel:      resolveCodingModel(s.logger),
 		FallbackModel:    resolveFallbackModel(s.logger),
 		ChatbotModel:     resolveChatbotModel(s.logger),
 		VisionModel:      resolveVisionModel(s.logger),
@@ -120,6 +121,7 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 			Manager:              s.sessions,
 			Transcript:           transcriptStore,
 			SubagentDefaultModel: chatCfg.SubagentDefaultModel,
+			CodingDefaultModel:   reg.FullModelID(modelrole.RoleCoding),
 		},
 		Chrono: chat.ChronoDeps{
 			Service: s.cronService,

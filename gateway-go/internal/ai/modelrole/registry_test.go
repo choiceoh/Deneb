@@ -44,6 +44,7 @@ func TestResolveModel(t *testing.T) {
 		{"main", "zai/test-model", RoleMain, true},
 		{"lightweight", "vllm/" + DefaultVllmModel, RoleLightweight, true},
 		{"fallback", "vllm/" + DefaultVllmModel, RoleFallback, true},
+		{"coding", "coding", "", false},
 		// Actual model names pass through unchanged.
 		{"google/gemini-3.1-pro", "google/gemini-3.1-pro", "", false},
 		{"some-unknown-model", "some-unknown-model", "", false},
@@ -66,8 +67,29 @@ func TestResolveModel(t *testing.T) {
 	}
 }
 
+func TestResolveModel_CodingOptIn(t *testing.T) {
+	reg := NewRegistryWithOptions(slog.Default(), RegistryOptions{
+		MainModel:   "zai/test-model",
+		CodingModel: "kimi/kimi-for-coding",
+	})
+
+	gotID, gotRole, gotOK := reg.ResolveModel("coding")
+	if !gotOK {
+		t.Fatal("ResolveModel(coding) ok = false, want true when coding role is configured")
+	}
+	if gotID != "kimi/kimi-for-coding" {
+		t.Errorf("ResolveModel(coding) id = %q, want kimi/kimi-for-coding", gotID)
+	}
+	if gotRole != RoleCoding {
+		t.Errorf("ResolveModel(coding) role = %q, want %q", gotRole, RoleCoding)
+	}
+}
+
 func TestRoleForModel(t *testing.T) {
-	reg := NewRegistry(slog.Default(), "zai/test-model", "")
+	reg := NewRegistryWithOptions(slog.Default(), RegistryOptions{
+		MainModel:   "zai/test-model",
+		CodingModel: "kimi/kimi-for-coding",
+	})
 
 	tests := []struct {
 		fullModelID string
@@ -75,6 +97,7 @@ func TestRoleForModel(t *testing.T) {
 		wantFound   bool
 	}{
 		{"zai/test-model", RoleMain, true},
+		{"kimi/kimi-for-coding", RoleCoding, true},
 		// Lightweight and Fallback both use vllm/qwen36; RoleForModel returns the
 		// first match (Lightweight) when iterating roles in order.
 		{"vllm/" + DefaultVllmModel, RoleLightweight, true},
@@ -164,6 +187,7 @@ func TestFallbackChain(t *testing.T) {
 		want []Role
 	}{
 		{RoleMain, []Role{RoleMain, RoleLightweight, RoleFallback}},
+		{RoleCoding, []Role{RoleCoding, RoleMain, RoleFallback}},
 		{RoleLightweight, []Role{RoleLightweight, RoleFallback}},
 		{RoleFallback, []Role{RoleFallback}},
 	}
