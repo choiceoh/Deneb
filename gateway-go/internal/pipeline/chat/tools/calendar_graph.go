@@ -64,6 +64,12 @@ func calActionTimeline(ctx context.Context, d *toolctx.CalendarDeps, p calParams
 	fmt.Fprintf(&sb, "🗂️ '%s' 관련 일정 타임라인 (%s ~ %s, %d건)\n", q, calDay(from), calDay(to), len(matched))
 	for i, e := range matched {
 		sb.WriteString(calListRow(i+1, e))
+		// calListRow shows the [미팅]·「mail」 badge but not the attached document
+		// names; surface them so the agent can fetch the linked deal files via
+		// dropbox without an extra per-event get.
+		if len(e.Docs) > 0 {
+			fmt.Fprintf(&sb, "   📎 %s\n", strings.Join(e.Docs, ", "))
+		}
 	}
 	fmt.Fprintf(&sb, "\n위는 '%s' 관련 일정만 모은 거야. 연결된 메일(「제목」·[미팅] 표시는 mail_archive로), 관련 위키(wiki/graphify), 거래 문서(📎는 dropbox)를 엮어 과거 합의 → 예정 일정 → 미결의 전체 흐름을 한 타임라인으로 정리해.", q)
 	if warn != "" {
