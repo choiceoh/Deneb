@@ -111,6 +111,12 @@ type SkillLifecycleEvent struct {
 	// Evidence is the session observation a review verdict was based on —
 	// only set when it isn't already serving as Detail.
 	Evidence string `json:"evidence,omitempty"`
+	// Self-Harness audit fields keep the target failure mechanism and
+	// regression risk queryable for evolved/rejected events.
+	TargetSignature        string `json:"targetSignature,omitempty"`
+	EditedSurface          string `json:"editedSurface,omitempty"`
+	ExpectedBehaviorChange string `json:"expectedBehaviorChange,omitempty"`
+	RegressionRisk         string `json:"regressionRisk,omitempty"`
 }
 
 // SkillsLifecycleResponse is the miniapp.skills.lifecycle payload,
@@ -325,6 +331,12 @@ const lifecycleTextMaxRunes = 2000
 // lifecycleEvent projects a tracker log entry into the slim wire event.
 func lifecycleEvent(e genesis.LifecycleLogEntry) SkillLifecycleEvent {
 	ev := SkillLifecycleEvent{SkillName: e.SkillName, At: e.CreatedAt}
+	if e.SelfHarnessAudit != nil {
+		ev.TargetSignature = e.SelfHarnessAudit.TargetSignature
+		ev.EditedSurface = e.SelfHarnessAudit.EditedSurface
+		ev.ExpectedBehaviorChange = e.SelfHarnessAudit.ExpectedBehaviorChange
+		ev.RegressionRisk = e.SelfHarnessAudit.RegressionRisk
+	}
 	switch e.Type {
 	case "genesis":
 		ev.Type = "genesis"

@@ -1,6 +1,6 @@
 ---
 name: evolution-proposal
-version: "1.0.4"
+version: "1.0.6"
 category: coding
 description: "Propose, record, and execute self-evolution after a meaningful workflow via the skill_lifecycle tool. Use when: (1) a completed task may deserve a reusable skill, (2) the user asks for skill genesis, self-evolution, or an evolution proposal, (3) an existing skill should be evolved instead of creating a new one. NOT for: ordinary coding work, one-off notes, or directly authoring a SKILL.md without first deciding the route."
 metadata:
@@ -8,7 +8,7 @@ metadata:
     "deneb":
       {
         "emoji": "🧭",
-        "tags": ["self-evolution", "genesis", "proposal", "procedural-memory", "routing", "SkillOpt", "held-out-replay"],
+        "tags": ["self-evolution", "genesis", "proposal", "procedural-memory", "routing", "SkillOpt", "Self-Harness", "held-out-replay"],
         "related_skills": ["skill-factory", "skill-creator", "skill-evolution"],
       },
   }
@@ -17,8 +17,9 @@ metadata:
 # Evolution Proposal
 
 Lightweight entry point for Deneb's skill lifecycle. Inspired by Hermes'
-`evolution_proposal`: decide whether recent experience should become a new
-skill, improve an existing skill, or be ignored.
+`evolution_proposal` and Self-Harness: decide whether recent experience should
+become a new skill, improve an existing skill, or be ignored, then keep only
+evidence-grounded, validation-gated changes.
 
 ## When to Use
 
@@ -76,7 +77,7 @@ explicit operator control.
 6. If the session history is unclear, call `skill_lifecycle` action `status` first and review recent lifecycle records.
 7. Record the decision with `skill_lifecycle` action `propose`.
 8. If route is `Genesis`, pass `execute=true` or call action `genesis`; omit `sessionKey` to use the current session, or pass a concise `dreamSummary`.
-9. If route is `Evolve`, pass `execute=true` with `skillName` and put the concrete improvement directive in `reason`/`evidence`; for direct action `evolve`, pass the same directive as `finding`.
+9. If route is `Evolve`, pass `execute=true` with `skillName` and put the concrete improvement directive in `reason`/`evidence`; tie the directive to one supported failure mechanism, editable surface, expected behavior change, and regression risk. The evolver will persist those Self-Harness audit fields when the candidate supplies them. For direct action `evolve`, pass the same directive as `finding`.
 10. If the reusable workflow is being implemented with `code_action`, pass `promoteToSkill` in the same call once the pattern is clear. It records a `skill_lifecycle` proposal after the Python run succeeds and skips promotion when the script fails.
 11. If route is `Create`, load `skill-factory` and create a concise `SKILL.md` with `skills` action `create`.
 12. If the durable detail is a command/config/code reference, add it with `skills` action `write_file` under `references/`, `templates/`, `scripts/`, or `assets/`.
@@ -182,6 +183,7 @@ Typical manual held-out replay case:
 - Do not put support files outside `references/`, `templates/`, `scripts/`, or `assets/`; those directories are the safe support-file surface.
 - Do not repeat an evolve candidate that already appears in `rejectedEdits`; propose a smaller or differently scoped patch instead.
 - Do not make replay cases so broad that every candidate fails; each case should protect one concrete regression.
+- Do not propose a speculative evolution when the failure evidence is weak or the failure is not addressable by a skill surface; record a no-op or validation case instead.
 
 ## Verification
 
@@ -193,6 +195,8 @@ Typical manual held-out replay case:
 - Audit route: `skill_lifecycle` action `status` shows recent proposal/genesis records, usage stats, rejected edits, validation cases, and curator state for agent-created skills.
 
 ## Changelog
+- v1.0.6: Noted persisted Self-Harness audit fields for evolve routes.
+- v1.0.5: Added Self-Harness evidence-grounding for evolve proposals.
 - v1.0.4: Added `code_action.promoteToSkill` route for successful reusable code workflows.
 - v1.0.3: Added session-extracted validation case guidance.
 - v1.0.2: Added held-out replay validation case guidance.

@@ -43,8 +43,14 @@ func testSkillsDeps() SkillsDeps {
 			return []genesis.UsageStats{{SkillName: "email-analysis", TotalUses: 7, LastUsed: 222}}, nil
 		},
 		RecentLifecycle: func(limit int) ([]genesis.LifecycleLogEntry, error) {
+			audit := &genesis.HarnessEditAudit{
+				TargetSignature:        "terminal=timeout|mechanism=bounded-execution",
+				EditedSurface:          "Procedure",
+				ExpectedBehaviorChange: "bounded recovery",
+				RegressionRisk:         "preserve verification",
+			}
 			return []genesis.LifecycleLogEntry{
-				{Type: "evolved", SkillName: "email-analysis", NewVersion: "1.1.1", Description: "개선", CreatedAt: 333},
+				{Type: "evolved", SkillName: "email-analysis", NewVersion: "1.1.1", Description: "개선", CreatedAt: 333, SelfHarnessAudit: audit},
 				{Type: "evolution_proposal", SkillName: "email-analysis", Route: "no-op", Reason: "기존 커버", Evidence: "세션 관찰 기록", CreatedAt: 300},
 				{Type: "evolve_rejected", SkillName: "email-analysis", Reason: "judge 기각", CreatedAt: 250},
 				{Type: "evolved", SkillName: "email-analysis", NewVersion: "1.1.0", CreatedAt: 200},
@@ -189,6 +195,12 @@ func TestSkillsLifecycle_MappingAndLimit(t *testing.T) {
 	first := payload.Events[0]
 	if first.Type != "evolved" || first.Version != "1.1.1" || first.Detail != "개선" {
 		t.Errorf("first event = %+v, want evolved/1.1.1/개선", first)
+	}
+	if first.TargetSignature != "terminal=timeout|mechanism=bounded-execution" ||
+		first.EditedSurface != "Procedure" ||
+		first.ExpectedBehaviorChange != "bounded recovery" ||
+		first.RegressionRisk != "preserve verification" {
+		t.Errorf("first event audit = %+v", first)
 	}
 	second := payload.Events[1]
 	if second.Type != "review" || second.Route != "no-op" || second.Detail != "기존 커버" {

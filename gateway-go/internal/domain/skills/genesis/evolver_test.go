@@ -105,6 +105,21 @@ func TestEvolveSkillSkipsWithoutSufficientEvidence(t *testing.T) {
 	}
 }
 
+func TestHasSufficientEvolutionEvidenceRequiresRepeatedBackgroundFailures(t *testing.T) {
+	if hasSufficientEvolutionEvidence(&UsageStats{TotalUses: 2, FailureCount: 1, RecentErrors: []string{"timeout"}}, "") {
+		t.Fatal("background evolution should not run on a single real failure")
+	}
+	if hasSufficientEvolutionEvidence(&UsageStats{TotalUses: 2, FailureCount: 2}, "") {
+		t.Fatal("background evolution should not run without recent error evidence")
+	}
+	if !hasSufficientEvolutionEvidence(&UsageStats{TotalUses: 2, FailureCount: 2, RecentErrors: []string{"timeout"}}, "") {
+		t.Fatal("background evolution should run on repeated real failures")
+	}
+	if !hasSufficientEvolutionEvidence(&UsageStats{TotalUses: 0, FailureCount: 0}, "review found a concrete failure") {
+		t.Fatal("review finding should still be sufficient evidence")
+	}
+}
+
 func TestParseAndApplyRunsHeldOutGateWhenSelfTestDisabled(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "SKILL.md")
@@ -154,6 +169,54 @@ func TestParseAndApplyRunsHeldOutGateWhenSelfTestDisabled(t *testing.T) {
 	}
 	if len(rejected) != 1 || rejected[0].Source != "preflight" {
 		t.Fatalf("expected preflight rejected-edit record, got %+v", rejected)
+	}
+}
+
+func TestParseAndApplyRecordsSelfHarnessAudit(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "SKILL.md")
+	original := "---\nname: deploy-helper\nversion: \"1.0.0\"\n---\n\n# Deploy Helper\n\n## Procedure\n- Verify deploys.\n"
+	if err := os.WriteFile(path, []byte(original), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tracker := newTestTracker(t)
+	cat := skills.NewCatalog(slog.New(slog.NewTextHandler(io.Discard, nil)))
+	cat.Register(skills.SkillEntry{Skill: skills.Skill{Name: "deploy-helper", Version: "1.0.0", FilePath: path}})
+	e := &Evolver{
+		logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
+		catalog:  cat,
+		tracker:  tracker,
+		selfTest: false,
+	}
+	entry := &skills.SkillEntry{Skill: skills.Skill{
+		Name:     "deploy-helper",
+		Version:  "1.0.0",
+		FilePath: path,
+	}}
+	resp := `{"skip":false,"changes":{"description":"target timeout recovery in Procedure; risk: preserve verification","new_version":"1.0.1","target_signature":"terminal=timeout|mechanism=bounded-execution","edited_surface":"Procedure","expected_behavior_change":"pivot after timeout before finalizing","regression_risk":"must still verify deployed artifact","body":"# Deploy Helper\n\n## Procedure\n- Verify deploys.\n- If a command times out, pivot to a bounded recovery path before finalizing."}}`
+
+	result, err := e.parseAndApply(context.Background(), resp, entry, original, &UsageStats{SkillName: "deploy-helper"})
+	if err != nil {
+		t.Fatalf("parseAndApply: %v", err)
+	}
+	if !result.Evolved || result.Audit == nil {
+		t.Fatalf("expected evolved result with audit, got %+v", result)
+	}
+	if result.Audit.TargetSignature != "terminal=timeout|mechanism=bounded-execution" ||
+		result.Audit.EditedSurface != "Procedure" ||
+		result.Audit.ExpectedBehaviorChange != "pivot after timeout before finalizing" ||
+		result.Audit.RegressionRisk != "must still verify deployed artifact" {
+		t.Fatalf("unexpected result audit: %+v", result.Audit)
+	}
+	entries, err := tracker.RecentLifecycleLog(1)
+	if err != nil {
+		t.Fatalf("RecentLifecycleLog: %v", err)
+	}
+	if len(entries) != 1 || entries[0].SelfHarnessAudit == nil {
+		t.Fatalf("expected lifecycle audit, got %+v", entries)
+	}
+	if entries[0].SelfHarnessAudit.TargetSignature != result.Audit.TargetSignature {
+		t.Fatalf("lifecycle audit mismatch: %+v vs %+v", entries[0].SelfHarnessAudit, result.Audit)
 	}
 }
 
@@ -313,6 +376,43 @@ func TestFormatValidationCasesForPromptIncludesReplayTrace(t *testing.T) {
 	}
 }
 
+func TestMineSkillFailurePatternsClustersRealFailures(t *testing.T) {
+	stats := &UsageStats{SkillName: "deploy-helper", RecentErrors: []string{
+		"context deadline exceeded while waiting for build",
+		"tool timed out during artifact validation",
+		"invalid JSON: expected object",
+		"invalid yaml schema in config",
+		"no such file or directory: answer.txt",
+	}}
+
+	patterns := mineSkillFailurePatterns(stats)
+	if len(patterns) < 3 {
+		t.Fatalf("expected clustered failure patterns, got %+v", patterns)
+	}
+	if patterns[0].Signature != "terminal=schema-format|mechanism=structured-contract" || patterns[0].Support != 2 {
+		t.Fatalf("expected schema/format cluster first by signature tie-break, got %+v", patterns[0])
+	}
+	if patterns[1].Signature != "terminal=timeout|mechanism=bounded-execution" || patterns[1].Support != 2 {
+		t.Fatalf("expected timeout cluster second, got %+v", patterns[1])
+	}
+
+	section := formatFailurePatternsForPrompt(stats)
+	for _, want := range []string{
+		"Self-Harness failure evidence bundle",
+		"terminal cause",
+		"causal status",
+		"agent mechanism",
+		"structured output contract",
+	} {
+		if !strings.Contains(section, want) {
+			t.Fatalf("formatted failure pattern section missing %q:\n%s", want, section)
+		}
+	}
+	if strings.Contains(formatFailurePatternsForPrompt(&UsageStats{}), "Self-Harness") {
+		t.Fatal("empty usage stats should not add failure evidence")
+	}
+}
+
 func TestEvolveSkillPromptIncludesValidationCases(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "SKILL.md")
@@ -334,6 +434,19 @@ func TestEvolveSkillPromptIncludesValidationCases(t *testing.T) {
 		Source: "review-session",
 	}); err != nil {
 		t.Fatalf("RecordSkillValidationCase: %v", err)
+	}
+	for _, msg := range []string{
+		"context deadline exceeded while checking srv1",
+		"tool timed out while checking srv1",
+	} {
+		if err := tracker.RecordUsage(UsageRecord{
+			SkillName: "srv1-ops",
+			Success:   false,
+			ErrorMsg:  msg,
+			Source:    UsageSourceReal,
+		}); err != nil {
+			t.Fatalf("RecordUsage: %v", err)
+		}
 	}
 
 	var capturedPrompt string
@@ -381,6 +494,8 @@ func TestEvolveSkillPromptIncludesValidationCases(t *testing.T) {
 		"real-server-trace",
 		"ssh srv1 systemctl --user status deneb-gateway.service",
 		"Active: active (running)",
+		"Self-Harness failure evidence bundle",
+		"terminal=timeout|mechanism=bounded-execution",
 	} {
 		if !strings.Contains(capturedPrompt, want) {
 			t.Fatalf("evolve prompt missing validation case fragment %q:\n%s", want, capturedPrompt)

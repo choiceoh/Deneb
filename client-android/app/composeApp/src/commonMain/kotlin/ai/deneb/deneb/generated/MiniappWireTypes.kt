@@ -443,6 +443,10 @@ data class SkillLifecycleEvent(
     val detail: String = "",
     val route: String = "",
     val evidence: String = "",
+    val targetSignature: String = "",
+    val editedSurface: String = "",
+    val expectedBehaviorChange: String = "",
+    val regressionRisk: String = "",
 )
 
 @Serializable

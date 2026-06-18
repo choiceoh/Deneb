@@ -400,6 +400,7 @@ func (t *Tracker) ListAllStats() ([]UsageStats, error) {
 const (
 	evolutionHealthWindow   = 7 * 24 * time.Hour
 	evolutionHealthCacheTTL = 60 * time.Second
+	evolutionThrashCooldown = 24 * time.Hour
 	// Thrash = one skill re-evolved >= evolutionThrashMinEvolves times in the
 	// window AND accounting for >= evolutionThrashDominancePct of all evolves. A
 	// good evolve should stick, so a skill needing 3+ fixes in a week while
@@ -423,6 +424,7 @@ type EvolutionHealthSummary struct {
 	LastRejectedSkill       string `json:"lastRejectedSkill,omitempty"`
 	LastRejectedReason      string `json:"lastRejectedReason,omitempty"`
 	Thrash                  bool   `json:"thrash"`
+	ThrashCooldownUntil     int64  `json:"thrashCooldownUntil,omitempty"`
 }
 
 // EvolutionHealth summarizes evolve/genesis activity over the last 7 days from
@@ -480,6 +482,15 @@ func (t *Tracker) computeEvolutionHealthLocked(now time.Time) EvolutionHealthSum
 	if s.TopEvolvedCount >= evolutionThrashMinEvolves &&
 		s.TopEvolvedCount*100 >= s.Evolves7d*evolutionThrashDominancePct {
 		s.Thrash = true
+		for _, e := range entries {
+			if e.CreatedAt < cutoff || e.Type != "evolved" || e.SkillName != s.TopEvolvedSkill {
+				continue
+			}
+			cooldownUntil := time.UnixMilli(e.CreatedAt).Add(evolutionThrashCooldown).UnixMilli()
+			if cooldownUntil > s.ThrashCooldownUntil {
+				s.ThrashCooldownUntil = cooldownUntil
+			}
+		}
 	}
 	return s
 }
@@ -511,20 +522,21 @@ func (t *Tracker) AgentSkillValueSummary() (total, unused int) {
 // proposal events. Older genesis entries may not have Type populated; readers
 // normalize those to "genesis".
 type LifecycleLogEntry struct {
-	Type        string `json:"type,omitempty"`
-	SkillName   string `json:"skillName,omitempty"`
-	Source      string `json:"source,omitempty"`
-	SessionKey  string `json:"sessionKey,omitempty"`
-	CreatedAt   int64  `json:"createdAt,omitempty"`
-	Category    string `json:"category,omitempty"`
-	Description string `json:"description,omitempty"`
-	Candidate   string `json:"candidate,omitempty"`
-	Route       string `json:"route,omitempty"`
-	Evidence    string `json:"evidence,omitempty"`
-	Reason      string `json:"reason,omitempty"`
-	Executed    bool   `json:"executed,omitempty"`
-	Result      string `json:"result,omitempty"`
-	NewVersion  string `json:"newVersion,omitempty"`
+	Type             string            `json:"type,omitempty"`
+	SkillName        string            `json:"skillName,omitempty"`
+	Source           string            `json:"source,omitempty"`
+	SessionKey       string            `json:"sessionKey,omitempty"`
+	CreatedAt        int64             `json:"createdAt,omitempty"`
+	Category         string            `json:"category,omitempty"`
+	Description      string            `json:"description,omitempty"`
+	Candidate        string            `json:"candidate,omitempty"`
+	Route            string            `json:"route,omitempty"`
+	Evidence         string            `json:"evidence,omitempty"`
+	Reason           string            `json:"reason,omitempty"`
+	Executed         bool              `json:"executed,omitempty"`
+	Result           string            `json:"result,omitempty"`
+	NewVersion       string            `json:"newVersion,omitempty"`
+	SelfHarnessAudit *HarnessEditAudit `json:"selfHarnessAudit,omitempty"`
 }
 
 // genesisLogEntry is the JSONL format for genesis log events.
@@ -597,17 +609,24 @@ func (t *Tracker) LogEvolutionProposal(record EvolutionProposalRecord) error {
 // records every committed or rejected evolve — including ones on user-authored
 // skills — so the native client can render a complete evolution timeline.
 type evolveLogEntry struct {
-	Type        string `json:"type"` // "evolved" | "evolve_rejected" | "evolve_rolled_back"
-	SkillName   string `json:"skillName"`
-	NewVersion  string `json:"newVersion,omitempty"`
-	Description string `json:"description,omitempty"`
-	Reason      string `json:"reason,omitempty"`
-	CreatedAt   int64  `json:"createdAt"`
+	Type             string            `json:"type"` // "evolved" | "evolve_rejected" | "evolve_rolled_back"
+	SkillName        string            `json:"skillName"`
+	NewVersion       string            `json:"newVersion,omitempty"`
+	Description      string            `json:"description,omitempty"`
+	Reason           string            `json:"reason,omitempty"`
+	CreatedAt        int64             `json:"createdAt"`
+	SelfHarnessAudit *HarnessEditAudit `json:"selfHarnessAudit,omitempty"`
 }
 
 // LogEvolve records a committed skill evolution (rewrite applied to disk) and
 // starts the post-evolve rollback watch so the next few uses are monitored.
 func (t *Tracker) LogEvolve(skillName, newVersion, description string) error {
+	return t.LogEvolveWithAudit(skillName, newVersion, description, HarnessEditAudit{})
+}
+
+// LogEvolveWithAudit records a committed skill evolution with structured
+// Self-Harness transition metadata.
+func (t *Tracker) LogEvolveWithAudit(skillName, newVersion, description string, audit HarnessEditAudit) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	now := time.Now().UnixMilli()
@@ -615,11 +634,12 @@ func (t *Tracker) LogEvolve(skillName, newVersion, description string) error {
 		t.postEvolve[skillName] = &evolveWatch{version: newVersion}
 	}
 	if err := jsonlstore.Append(t.logPath, evolveLogEntry{
-		Type:        "evolved",
-		SkillName:   skillName,
-		NewVersion:  newVersion,
-		Description: description,
-		CreatedAt:   now,
+		Type:             "evolved",
+		SkillName:        skillName,
+		NewVersion:       newVersion,
+		Description:      description,
+		CreatedAt:        now,
+		SelfHarnessAudit: audit.ptr(),
 	}); err != nil {
 		return err
 	}
@@ -647,14 +667,21 @@ func (t *Tracker) LogEvolveRolledBack(skillName string) error {
 // LogEvolveRejected records an evolve attempt whose rewrite the self-test
 // refused to commit (the original skill was kept).
 func (t *Tracker) LogEvolveRejected(skillName, reason string) error {
+	return t.LogEvolveRejectedWithAudit(skillName, reason, HarnessEditAudit{})
+}
+
+// LogEvolveRejectedWithAudit records a rejected skill evolution with structured
+// Self-Harness transition metadata from the candidate that failed validation.
+func (t *Tracker) LogEvolveRejectedWithAudit(skillName, reason string, audit HarnessEditAudit) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	now := time.Now().UnixMilli()
 	if err := jsonlstore.Append(t.logPath, evolveLogEntry{
-		Type:      "evolve_rejected",
-		SkillName: skillName,
-		Reason:    reason,
-		CreatedAt: now,
+		Type:             "evolve_rejected",
+		SkillName:        skillName,
+		Reason:           reason,
+		CreatedAt:        now,
+		SelfHarnessAudit: audit.ptr(),
 	}); err != nil {
 		return err
 	}
@@ -697,11 +724,18 @@ func (t *Tracker) SkillsNeedingEvolution(minUses int, maxSuccessRate float64) ([
 	if err != nil {
 		return nil, err
 	}
+	now := time.Now()
+	evoHealth := t.computeEvolutionHealthLocked(now)
 
 	var candidates []UsageStats
 	for _, stats := range statsBySkill {
 		s := *stats
 		if s.TotalUses < minUses || s.FailureCount == 0 || s.SuccessRate > maxSuccessRate {
+			continue
+		}
+		if evoHealth.Thrash &&
+			s.SkillName == evoHealth.TopEvolvedSkill &&
+			evoHealth.ThrashCooldownUntil > now.UnixMilli() {
 			continue
 		}
 		candidates = append(candidates, s)

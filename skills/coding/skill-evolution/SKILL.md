@@ -1,6 +1,6 @@
 ---
 name: skill-evolution
-version: "1.0.4"
+version: "1.0.6"
 category: coding
 description: "Evolve and optimize existing skills using autoresearch methodology. Use when: (1) a skill produces suboptimal results, (2) a skill's instructions are outdated or incomplete, (3) systematic improvement of skill quality is requested. NOT for: creating new skills (use skill-factory), cosmetic changes, or skills that already work well."
 metadata:
@@ -8,7 +8,7 @@ metadata:
     "deneb":
       {
         "emoji": "🧬",
-        "tags": ["evolution", "optimization", "improvement", "GEPA", "autoresearch", "SkillOpt", "rejected-edit-buffer", "held-out-replay"],
+        "tags": ["evolution", "optimization", "improvement", "GEPA", "autoresearch", "SkillOpt", "Self-Harness", "failure-clustering", "rejected-edit-buffer", "held-out-replay"],
         "related_skills": ["evolution-proposal", "skill-factory", "skill-creator"],
       },
   }
@@ -21,6 +21,10 @@ Inspired by hermes-agent's GEPA (Genetic-Pareto Prompt Evolution): analyze execu
 Also follows the SkillOpt stability pattern: treat the skill body as trainable
 text state, propose bounded add/delete/replace edits, accept only after a
 validation gate, and keep rejected edits as future optimizer input.
+
+Also follows the Self-Harness pattern: mine recurrent failure mechanisms,
+propose bounded edits to declared skill surfaces, and promote only candidates
+that clear regression gates.
 
 ## When to Use
 
@@ -37,7 +41,9 @@ Before modifying anything, understand the current state:
 
 1. **Read the skill** — full SKILL.md content
 2. **Check session history** — how has this skill been used? (use session-logs)
-3. **Identify failure patterns** — what goes wrong and why?
+3. **Identify failure patterns** — group failures by terminal cause, causal
+   status, and reusable agent mechanism; do not treat raw error strings as
+   independent anecdotes.
 4. **Check related skills** — are there overlaps or conflicts?
 
 Ask: "What SPECIFIC problem am I solving? What would success look like?"
@@ -57,6 +63,14 @@ Rules from autoresearch methodology:
 - **Textual learning rate** — prefer a bounded edit budget; don't rewrite a whole skill when one section or warning is enough
 - **Rejected-edit awareness** — check `skill_lifecycle` status for `rejectedEdits` and avoid repeating candidates that already failed validation
 - **Held-out replay awareness** — check `validationCases`; the evolver also injects recent cases into candidate-generation prompts, so do not remove actions, session-extracted tool calls, command fragments, fixture observations, or ordering that a replay case requires
+- **Self-Harness evidence discipline** — a candidate should map one supported,
+  addressable failure mechanism to one editable surface (`Procedure`,
+  `Pitfalls`, `Verification`, metadata/tags). If evidence is weak or not
+  addressable by the skill body, skip instead of speculating.
+- **Background evidence threshold** — automatic/background evolution should wait
+  for repeated real failures with recent error evidence; a fresh review finding
+  can still justify an immediate evolve because it carries session-level
+  evidence.
 
 ### Phase 3: Mutate
 
@@ -86,6 +100,7 @@ scripts/dev/iterate.sh --metric "scripts/dev/quality-metric.sh"
 | Validation gate | Candidate changes must pass self-test and held-out replay cases before they are committed |
 | Rejected buffer | Failed candidates are recorded and should inform the next attempt |
 | Replay regression | A candidate must not drop required actions/tool calls/session-derived input fragments/observations, reorder required traces, or introduce forbidden actions/tool calls/observations from `validationCases` |
+| Evidence binding | Candidate descriptions and audit fields must state the target failure mechanism, edited surface, expected behavior change, and regression risk |
 
 **Quality metrics** (use appropriate dev-iterate preset):
 
@@ -161,6 +176,8 @@ Prioritize skills by:
 3. Oldest version (haven't been touched)
 
 ## Changelog
+- v1.0.6: Added background repeated-failure threshold and structured audit-field expectation.
+- v1.0.5: Added Self-Harness failure-clustering and evidence-binding discipline for skill evolution.
 - v1.0.4: Noted that recent validation cases are injected into candidate-generation prompts.
 - v1.0.3: Added session-extracted validation trace awareness.
 - v1.0.2: Added held-out replay validation guidance for evolved skill candidates.
