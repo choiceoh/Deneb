@@ -63,7 +63,7 @@ version: "1.0.0"                  # REQUIRED: Semver version
 category: coding                  # REQUIRED: Must match parent directory name
 description: "What this does."    # REQUIRED: When to use + NOT for
 homepage: https://example.com     # OPTIONAL: Docs/homepage URL
-metadata:                         # OPTIONAL: Tool requirements and behavior
+metadata:                         # OPTIONAL: JSON-like deneb metadata block
   {
     "deneb":
       {
@@ -71,7 +71,7 @@ metadata:                         # OPTIONAL: Tool requirements and behavior
         "requires": { "bins": ["tool"] },
         "tags": ["keyword1", "keyword2"],
         "related_skills": ["other-skill"],
-        "install": [...],
+        "install": [...]
       },
   }
 user-invocable: true              # OPTIONAL: Allow /skill-name commands (default: true)
@@ -81,7 +81,9 @@ disable-model-invocation: false   # OPTIONAL: Hide from LLM (default: false)
 
 ### Metadata Object
 
-The `metadata` field contains a JSON object under the `deneb` key:
+The `metadata` field contains a JSON-like object under the `deneb` key. Keep
+keys and string values quoted like JSON; indentation and trailing commas are
+allowed so bundled skills stay readable in Markdown frontmatter.
 
 | Field | Type | Description |
 |---|---|---|
@@ -93,7 +95,7 @@ The `metadata` field contains a JSON object under the `deneb` key:
 | `related_skills` | string[] | Cross-references to complementary skills |
 | `requires_tools` | string[] | Show only when ALL listed agent tools are available |
 | `fallback_for_tools` | string[] | Show only when ANY listed tool is UNavailable (fallback) |
-| `install` | object[] | Installation specs (brew/node/go/uv/apt/download) |
+| `install` | object[] | Installation specs (`apt`, `brew`, `node`, `go`, `uv`, `download`) |
 
 ### Description Field Convention
 

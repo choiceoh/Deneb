@@ -41,6 +41,32 @@ alt: 'single quoted'
 	}
 }
 
+func TestParseFrontmatter_MultilineMetadataBlock(t *testing.T) {
+	content := `---
+name: github
+metadata:
+  {
+    "deneb":
+      {
+        "emoji": "🐙",
+        "tags": ["git", "PR"],
+      },
+  }
+user-invocable: true
+---`
+
+	fm := ParseFrontmatter(content)
+	if fm["name"] != "github" {
+		t.Fatalf("name = %q, want github", fm["name"])
+	}
+	if !strings.Contains(fm["metadata"], `"emoji": "🐙"`) {
+		t.Fatalf("metadata block missing emoji: %q", fm["metadata"])
+	}
+	if fm["user-invocable"] != "true" {
+		t.Fatalf("user-invocable = %q, want true", fm["user-invocable"])
+	}
+}
+
 func TestParseFrontmatterBool(t *testing.T) {
 	fm := ParsedFrontmatter{
 		"enabled":  "true",
@@ -152,6 +178,30 @@ func TestNormalizeSafeGoModule(t *testing.T) {
 	}
 }
 
+func TestNormalizeSafeAptPackage(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"gh", "gh"},
+		{"python3-venv", "python3-venv"},
+		{"libssl3:arm64", "libssl3:arm64"},
+		{"", ""},
+		{"-bad", ""},
+		{"with/slash", ""},
+		{"with space", ""},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.input, func(t *testing.T) {
+			got := normalizeSafeAptPackage(tc.input)
+			if got != tc.want {
+				t.Errorf("normalizeSafeAptPackage(%q) = %q, want %q", tc.input, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestNormalizeSafeUvPackage(t *testing.T) {
 	tests := []struct {
 		input string
@@ -215,6 +265,60 @@ func TestResolveDenebMetadata_ValidMetadata(t *testing.T) {
 	}
 	if meta.Emoji != "☀️" {
 		t.Errorf("got %q, want emoji='☀️'", meta.Emoji)
+	}
+}
+
+func TestResolveDenebMetadata_RelaxedMetadataBlock(t *testing.T) {
+	content := `---
+name: github
+metadata:
+  {
+    "deneb":
+      {
+        "emoji": "🐙",
+        "requires": { "bins": ["gh"] },
+        "tags": ["git", "PR", "issues"],
+        "related_skills": ["skill-creator"],
+        "install":
+          [
+            {
+              "id": "brew",
+              "kind": "brew",
+              "formula": "gh",
+              "bins": ["gh"],
+            },
+            {
+              "id": "apt",
+              "kind": "apt",
+              "package": "gh",
+              "bins": ["gh"],
+            },
+          ],
+      },
+  }
+---`
+
+	meta := ResolveDenebMetadata(ParseFrontmatter(content))
+	if meta == nil {
+		t.Fatal("expected non-nil metadata")
+	}
+	if meta.Emoji != "🐙" {
+		t.Fatalf("emoji = %q, want 🐙", meta.Emoji)
+	}
+	if len(meta.Tags) != 3 || meta.Tags[0] != "git" {
+		t.Fatalf("tags = %#v, want parsed tags", meta.Tags)
+	}
+	if len(meta.RelatedSkills) != 1 || meta.RelatedSkills[0] != "skill-creator" {
+		t.Fatalf("related skills = %#v, want skill-creator", meta.RelatedSkills)
+	}
+	if meta.Requires == nil || len(meta.Requires.Bins) != 1 || meta.Requires.Bins[0] != "gh" {
+		t.Fatalf("requires = %#v, want gh bin", meta.Requires)
+	}
+	if len(meta.Install) != 2 {
+		t.Fatalf("install count = %d, want 2", len(meta.Install))
+	}
+	if meta.Install[1].Kind != "apt" || meta.Install[1].Package != "gh" {
+		t.Fatalf("apt install spec = %#v, want apt package gh", meta.Install[1])
 	}
 }
 
