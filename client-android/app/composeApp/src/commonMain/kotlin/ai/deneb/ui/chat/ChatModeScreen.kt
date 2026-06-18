@@ -645,7 +645,12 @@ internal fun ChatModeScreen(
                                             }
                                         }
                                         val streamingLen = uiState.history.lastOrNull()?.content?.length ?: 0
-                                        LaunchedEffect(streamingLen, uiState.isLoading) {
+                                        // Coalesce the follow-scroll: the streaming reply's text is sampled
+                                        // ~15×/s, so keying on the raw length would fire scrollToItem on every
+                                        // emission. Bucketing by ~48 chars (≈1–2 lines) drops that to a few
+                                        // snaps/sec — invisibly smooth given the 240px near-bottom slack above,
+                                        // and far less layout churn on the hot streaming path.
+                                        LaunchedEffect(streamingLen / 48, uiState.isLoading) {
                                             if (uiState.isLoading && isNearBottom) {
                                                 val total = listState.layoutInfo.totalItemsCount
                                                 if (total > 0) listState.scrollToItem(total - 1, Int.MAX_VALUE)
