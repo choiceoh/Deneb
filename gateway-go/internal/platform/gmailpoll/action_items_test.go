@@ -8,13 +8,13 @@ func TestSanitizeActionItems_TrimsCapsNormalizes(t *testing.T) {
 		{Title: "", Priority: "high"},    // empty title → dropped
 		{Title: "검토", Priority: "weird"}, // unknown → medium
 		{Title: "a", Priority: "low"},
-		{Title: "b", Priority: "low"},
-		{Title: "c", Priority: "low"},
+		{Title: "b", Priority: "low"}, // beyond cap (3) → dropped
+		{Title: "c", Priority: "low"}, // beyond cap → dropped
 		{Title: "d", Priority: "low"}, // beyond cap → dropped
 	}
 	got := sanitizeActionItems(in)
-	if len(got) != 5 {
-		t.Fatalf("expected cap of 5, got %d: %+v", len(got), got)
+	if len(got) != 3 {
+		t.Fatalf("expected cap of 3, got %d: %+v", len(got), got)
 	}
 	if got[0].Title != "회신" || got[0].DueHint != "내일" {
 		t.Errorf("fields not trimmed: %+v", got[0])

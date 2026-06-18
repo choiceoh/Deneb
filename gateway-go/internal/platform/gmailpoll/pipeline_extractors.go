@@ -34,11 +34,12 @@ JSON 응답 형식:
 ## 분석 결과
 %s`
 
-const actionExtractorSystem = `당신은 이메일 분석에서 "받는 사람이 직접 해야 할 후속 행동"만 뽑는 추출기입니다.
-단순 정보·참고 사항·상대방이 할 일은 제외하고, 운영자 본인의 실행 항목만 추출합니다.
+const actionExtractorSystem = `당신은 이메일 분석에서 "수신자가 반드시 본인 손으로 처리해야 할 일"만 뽑는 추출기입니다.
+수신자는 실무를 조직(팀·담당자)에 위임하는 고위 임원(전무·실장·대표)입니다. 부하 직원이 대신 할 수 있는 실무는 절대 넣지 말고, 임원 본인만 할 수 있는 일(최종 결재·승인, 본인이 내려야 할 의사결정, 본인 자격의 외부 약속, 본인에게 직접 온 판단 요청)만 추출합니다.
+애매하면 넣지 마세요(빈 배열). 임원이 직접 할 일은 원래 적습니다 — 과다 추출보다 누락이 낫습니다.
 반드시 JSON으로만 응답하세요.`
 
-const actionExtractorPrompt = `다음 이메일 분석에서 운영자가 직접 처리해야 할 후속 행동을 추출해주세요.
+const actionExtractorPrompt = `다음 이메일 분석에서 임원 본인이 직접 처리해야 할 일만 추출해주세요.
 
 JSON 응답 형식:
 {
@@ -47,11 +48,19 @@ JSON 응답 형식:
   ]
 }
 
-추출 기준:
-- 운영자 본인이 실행할 구체적 행동만 (회신·검토·결재·송금·일정확정·자료준비 등)
-- 단순 안내·상대 담당 업무·이미 끝난 일은 제외
-- priority: 마감 임박·금액 큼·계약/결재 관련은 high
-- 최대 5개
+포함 (임원 본인만 할 수 있는 일):
+- 최종 결재·승인 (본인 서명/재가가 필요한 것)
+- 본인이 내려야 할 의사결정·방향 지시
+- 대표·임원 자격의 외부 약속·미팅·서명
+- 수신자 본인 앞으로 직접 온 판단·회신 요청
+
+제외 (팀·담당자가 위임받아 처리할 실무 — 임원이 직접 해야 한다고 명시되지 않는 한 넣지 않음):
+- 자료·문서 준비, 데이터 정리, 견적/계산 작업, 단순 회신, 실무 검토, 일정 조율, 일반 사무
+- 단순 안내·참고 정보, 상대방이 할 일, 이미 끝난 일
+
+기타:
+- priority: 마감 임박·고액·계약/결재 관련만 high
+- 최대 3개. 임원의 직접 할 일은 보통 0~2개다. 본인 몫이 아니면 비운다.
 - 해당 없으면 actions 배열을 비워서 응답
 
 ## 분석 결과
@@ -216,9 +225,11 @@ func extractActionItems(ctx context.Context, deps PipelineDeps, analysisText str
 
 // sanitizeActionItems drops empty-title items, trims fields, normalizes
 // priority to high|medium|low, and caps the list so a runaway extraction can't
-// flood the to-do list.
+// flood the to-do list. The cap is low (3): the recipient is a delegating
+// executive, so a single mail rarely warrants more than a couple of personal
+// action items — the prompt asks for the same, and this is the hard backstop.
 func sanitizeActionItems(in []ActionItem) []ActionItem {
-	const maxActions = 5
+	const maxActions = 3
 	out := make([]ActionItem, 0, len(in))
 	for _, a := range in {
 		title := strings.TrimSpace(a.Title)
