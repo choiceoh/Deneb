@@ -65,6 +65,22 @@ func TestRun_MergesProposedGuidelines(t *testing.T) {
 	}
 }
 
+func TestRunWithReport_MergesProposedGuidelines(t *testing.T) {
+	src := fakeSummaries{nodes: []polaris.SummaryNode{
+		leaf("비용 논의를 했다"), leaf("담당자와 통화"), leaf("일정 방향 정함"), leaf("결제 관련 합의"),
+	}}
+	llmc := &fakeLLM{reply: `{"guidelines": ["금액은 정확한 숫자와 통화로 보존하라", "사람은 실제 이름으로 보존하라"]}`}
+	task, _ := newTask(t, src, llmc)
+
+	report := task.RunWithReport(context.Background())
+	if !report.Ran || !report.Changed || report.Reason != "updated" {
+		t.Fatalf("unexpected report: %#v", report)
+	}
+	if report.LeafSummaries != 4 || len(report.Added) != 2 || report.AfterCount != 2 {
+		t.Fatalf("report counts wrong: %#v", report)
+	}
+}
+
 func TestRun_SkipsWhenTooFewSummaries(t *testing.T) {
 	src := fakeSummaries{nodes: []polaris.SummaryNode{leaf("a"), leaf("b")}} // < minSummaries
 	llmc := &fakeLLM{reply: `{"guidelines": ["x를 보존하라"]}`}
@@ -78,6 +94,20 @@ func TestRun_SkipsWhenTooFewSummaries(t *testing.T) {
 	}
 	if got := gs.Load(); got != nil {
 		t.Fatalf("no guidelines should be written, got %v", got)
+	}
+}
+
+func TestRunWithReport_SkipsWhenTooFewSummaries(t *testing.T) {
+	src := fakeSummaries{nodes: []polaris.SummaryNode{leaf("a"), leaf("b")}} // < minSummaries
+	llmc := &fakeLLM{reply: `{"guidelines": ["x를 보존하라"]}`}
+	task, _ := newTask(t, src, llmc)
+
+	report := task.RunWithReport(context.Background())
+	if report.Ran || report.Changed || report.Reason != "too_few_summaries" || report.LeafSummaries != 2 {
+		t.Fatalf("unexpected report: %#v", report)
+	}
+	if llmc.calls != 0 {
+		t.Fatalf("must not call the LLM with too few summaries (calls=%d)", llmc.calls)
 	}
 }
 

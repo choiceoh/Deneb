@@ -392,6 +392,28 @@ data class PromptRow(
 
 @Immutable
 @Serializable
+data class PromptTunerReport(
+    val ran: Boolean = false,
+    val changed: Boolean = false,
+    val reason: String = "",
+    val error: String = "",
+    val leafSummaries: Int = 0,
+    val minSummaries: Int = 0,
+    val proposed: List<String> = emptyList(),
+    val added: List<String> = emptyList(),
+    val beforeCount: Int = 0,
+    val afterCount: Int = 0,
+)
+
+@Immutable
+@Serializable
+data class PromptTunerRunResponse(
+    val target: String = "",
+    val report: PromptTunerReport = PromptTunerReport(),
+)
+
+@Immutable
+@Serializable
 data class PropusLifecycleSummary(
     val system: String = "",
     val state: String = "",

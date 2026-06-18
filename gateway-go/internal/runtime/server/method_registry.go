@@ -308,6 +308,7 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 					"gmailAttachment": true,
 					"updateManifest":  true,
 					"prompts":         s.promptStore != nil,
+					"promptTuner":     s.compactTuner != nil,
 				}
 			},
 		}),
@@ -420,6 +421,11 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		}),
 		handlerminiapp.PromptMethods(handlerminiapp.PromptDeps{
 			Store: s.promptStore,
+		}),
+		handlerminiapp.PromptTunerMethods(handlerminiapp.PromptTunerDeps{
+			Tuner: func() handlerminiapp.PromptTuner {
+				return s.compactTuner
+			},
 		}),
 
 		// Mini App sessions recent + transcript (miniapp.sessions.*).

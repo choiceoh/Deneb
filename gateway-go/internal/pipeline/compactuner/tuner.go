@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
@@ -59,7 +60,26 @@ type Deps struct {
 }
 
 // Task is the autonomous.PeriodicTask.
-type Task struct{ deps Deps }
+type Task struct {
+	deps Deps
+	mu   sync.Mutex
+}
+
+// Report describes one tuner cycle. It is intentionally small and wire-safe so
+// operator surfaces can show why an automatic prompt-improvement pass changed
+// something, or why it was a no-op.
+type Report struct {
+	Ran           bool     `json:"ran"`
+	Changed       bool     `json:"changed"`
+	Reason        string   `json:"reason"`
+	Error         string   `json:"error,omitempty"`
+	LeafSummaries int      `json:"leafSummaries"`
+	MinSummaries  int      `json:"minSummaries"`
+	Proposed      []string `json:"proposed,omitempty"`
+	Added         []string `json:"added,omitempty"`
+	BeforeCount   int      `json:"beforeCount"`
+	AfterCount    int      `json:"afterCount"`
+}
 
 // NewTask builds the tuner task.
 func NewTask(d Deps) *Task {
@@ -74,43 +94,80 @@ func (t *Task) Interval() time.Duration { return taskInterval }
 
 // Run audits recent summaries and merges any new preservation guidelines.
 func (t *Task) Run(ctx context.Context) error {
-	if t.deps.Summaries == nil || t.deps.Guidelines == nil || t.deps.Client == nil {
-		return nil
+	report := t.RunWithReport(ctx)
+	switch report.Reason {
+	case "updated":
+		t.deps.Logger.Info("compaction-tuner: guidelines updated",
+			"added", report.Added, "total", report.AfterCount)
+	case "critique_failed", "save_failed":
+		t.deps.Logger.Warn("compaction-tuner: cycle failed",
+			"reason", report.Reason, "error", report.Error)
+	default:
+		t.deps.Logger.Debug("compaction-tuner: no change",
+			"reason", report.Reason, "leafSummaries", report.LeafSummaries)
 	}
-	texts := leafSummaryTexts(t.deps.Summaries.RecentSummariesAcrossSessions(auditLimit))
-	if len(texts) < minSummaries {
-		return nil // not enough signal to audit
-	}
-
-	bullets, err := t.critique(ctx, texts)
-	if err != nil {
-		t.deps.Logger.Warn("compaction-tuner: critique failed", "error", err)
-		return nil
-	}
-	if len(bullets) == 0 {
-		return nil // summaries already specific enough
-	}
-
-	before := t.deps.Guidelines.Load()
-	// Newest-first: prepend this cycle's proposals; Save dedups + caps.
-	if err := t.deps.Guidelines.Save(append(append([]string{}, bullets...), before...)); err != nil {
-		t.deps.Logger.Error("compaction-tuner: guideline save failed", "error", err)
-		return nil
-	}
-	after := t.deps.Guidelines.Load()
-	if strings.Join(after, "\n") == strings.Join(before, "\n") {
-		return nil // proposals were all duplicates — no change
-	}
-
-	t.deps.Logger.Info("compaction-tuner: guidelines updated",
-		"added", bullets, "total", len(after))
-	if t.deps.Notify != nil {
+	if report.Changed && t.deps.Notify != nil {
+		after := t.deps.Guidelines.Load()
 		msg := "압축 요약 보존 지침이 갱신되었습니다 (과거 요약의 구체성 부족에서 학습):\n- " + strings.Join(after, "\n- ")
 		if err := t.deps.Notify(ctx, msg); err != nil {
 			t.deps.Logger.Warn("compaction-tuner: notify failed", "error", err)
 		}
 	}
 	return nil
+}
+
+// RunWithReport audits recent summaries and returns a structured outcome.
+// It preserves Run's safety posture: recoverable model/save failures are
+// reported as no-change outcomes rather than making the periodic loop fail.
+func (t *Task) RunWithReport(ctx context.Context) Report {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	report := Report{MinSummaries: minSummaries}
+	if t.deps.Summaries == nil || t.deps.Guidelines == nil || t.deps.Client == nil {
+		report.Reason = "unavailable"
+		return report
+	}
+	texts := leafSummaryTexts(t.deps.Summaries.RecentSummariesAcrossSessions(auditLimit))
+	report.LeafSummaries = len(texts)
+	if len(texts) < minSummaries {
+		report.Reason = "too_few_summaries"
+		return report
+	}
+
+	bullets, err := t.critique(ctx, texts)
+	if err != nil {
+		report.Ran = true
+		report.Reason = "critique_failed"
+		report.Error = err.Error()
+		return report
+	}
+	report.Ran = true
+	report.Proposed = append([]string{}, bullets...)
+	if len(bullets) == 0 {
+		report.Reason = "no_guidelines"
+		return report
+	}
+
+	before := t.deps.Guidelines.Load()
+	report.BeforeCount = len(before)
+	// Newest-first: prepend this cycle's proposals; Save dedups + caps.
+	if err := t.deps.Guidelines.Save(append(append([]string{}, bullets...), before...)); err != nil {
+		report.Reason = "save_failed"
+		report.Error = err.Error()
+		return report
+	}
+	after := t.deps.Guidelines.Load()
+	report.AfterCount = len(after)
+	if strings.Join(after, "\n") == strings.Join(before, "\n") {
+		report.Reason = "duplicate_guidelines"
+		return report
+	}
+
+	report.Changed = true
+	report.Reason = "updated"
+	report.Added = addedGuidelines(before, after)
+	return report
 }
 
 // leafSummaryTexts keeps non-empty level-1 (leaf) summary bodies — condensed
@@ -123,6 +180,20 @@ func leafSummaryTexts(nodes []polaris.SummaryNode) []string {
 			if c := strings.TrimSpace(n.Content); c != "" {
 				out = append(out, c)
 			}
+		}
+	}
+	return out
+}
+
+func addedGuidelines(before, after []string) []string {
+	seen := make(map[string]bool, len(before))
+	for _, g := range before {
+		seen[g] = true
+	}
+	out := make([]string, 0, len(after))
+	for _, g := range after {
+		if !seen[g] {
+			out = append(out, g)
 		}
 	}
 	return out
