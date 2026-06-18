@@ -4,8 +4,10 @@
 
 package ai.deneb.deneb.generated
 
+import androidx.compose.runtime.Immutable
 import kotlinx.serialization.Serializable
 
+@Immutable
 @Serializable
 data class CalendarAttendeeOut(
     val email: String = "",
@@ -15,12 +17,14 @@ data class CalendarAttendeeOut(
     val organizer: Boolean = false,
 )
 
+@Immutable
 @Serializable
 data class CalendarConferenceOut(
     val solution: String = "",
     val uri: String = "",
 )
 
+@Immutable
 @Serializable
 data class CalendarEventOut(
     val id: String = "",
@@ -39,6 +43,7 @@ data class CalendarEventOut(
     val hasMeet: Boolean = false,
 )
 
+@Immutable
 @Serializable
 data class CalendarProposalOut(
     val id: String = "",
@@ -50,6 +55,7 @@ data class CalendarProposalOut(
     val sourceFrom: String = "",
 )
 
+@Immutable
 @Serializable
 data class DropboxEntryOut(
     val tag: String = "",
@@ -61,22 +67,26 @@ data class DropboxEntryOut(
     val serverModified: String = "",
 )
 
+@Immutable
 @Serializable
 data class DropboxListOut(
     val entries: List<DropboxEntryOut> = emptyList(),
     val path: String = "",
 )
 
+@Immutable
 @Serializable
 data class DropboxShareOut(
     val url: String = "",
 )
 
+@Immutable
 @Serializable
 data class DropboxUploadOut(
     val entry: DropboxEntryOut = DropboxEntryOut(),
 )
 
+@Immutable
 @Serializable
 data class MailAnalysisOut(
     val id: String = "",
@@ -96,6 +106,7 @@ data class MailAnalysisOut(
     val workStateHint: String = "",
 )
 
+@Immutable
 @Serializable
 data class MailAttachmentOut(
     val id: String = "",
@@ -105,6 +116,7 @@ data class MailAttachmentOut(
     val truncated: Boolean = false,
 )
 
+@Immutable
 @Serializable
 data class MailMessageOut(
     val id: String = "",
@@ -131,6 +143,7 @@ data class MailMessageOut(
     val workStateHint: String = "",
 )
 
+@Immutable
 @Serializable
 data class MailNativeMailboxOut(
     val name: String = "",
@@ -143,6 +156,7 @@ data class MailNativeMailboxOut(
     val attachmentCapable: Boolean = false,
 )
 
+@Immutable
 @Serializable
 data class MailNativeOverlayOut(
     val messages: Int = 0,
@@ -151,6 +165,7 @@ data class MailNativeOverlayOut(
     val trashed: Int = 0,
 )
 
+@Immutable
 @Serializable
 data class MailNativePipelineOut(
     val messages: Int = 0,
@@ -165,6 +180,7 @@ data class MailNativePipelineOut(
     val error: String = "",
 )
 
+@Immutable
 @Serializable
 data class MailNativeStatusOut(
     val source: String = "",
@@ -177,6 +193,7 @@ data class MailNativeStatusOut(
     val error: String = "",
 )
 
+@Immutable
 @Serializable
 data class MailRowOut(
     val id: String = "",
@@ -200,12 +217,14 @@ data class MailRowOut(
     val workStateHint: String = "",
 )
 
+@Immutable
 @Serializable
 data class MemoryCategoryRow(
     val name: String = "",
     val pageCount: Int = 0,
 )
 
+@Immutable
 @Serializable
 data class MemoryPageRow(
     val path: String = "",
@@ -214,6 +233,7 @@ data class MemoryPageRow(
     val updated: String = "",
 )
 
+@Immutable
 @Serializable
 data class MiniappCronDetail(
     val id: String = "",
@@ -248,6 +268,7 @@ data class MiniappCronDetail(
     val updatedAtMs: Long = 0L,
 )
 
+@Immutable
 @Serializable
 data class MiniappCronRow(
     val id: String = "",
@@ -262,6 +283,7 @@ data class MiniappCronRow(
     val lastError: String = "",
 )
 
+@Immutable
 @Serializable
 data class ModelAddResult(
     val ok: Boolean = false,
@@ -272,6 +294,7 @@ data class ModelAddResult(
     val added: Boolean = false,
 )
 
+@Immutable
 @Serializable
 data class ModelDeleteResult(
     val ok: Boolean = false,
@@ -281,6 +304,7 @@ data class ModelDeleteResult(
     val current: String = "",
 )
 
+@Immutable
 @Serializable
 data class ModelOption(
     val id: String = "",
@@ -295,12 +319,14 @@ data class ModelOption(
     val note: String = "",
 )
 
+@Immutable
 @Serializable
 data class ModelSection(
     val title: String = "",
     val models: List<ModelOption> = emptyList(),
 )
 
+@Immutable
 @Serializable
 data class ModelsListResult(
     val current: String = "",
@@ -310,6 +336,7 @@ data class ModelsListResult(
     val mainHasVision: Boolean = false,
 )
 
+@Immutable
 @Serializable
 data class PersonRow(
     val email: String = "",
@@ -321,6 +348,7 @@ data class PersonRow(
     val wikiSummary: String = "",
 )
 
+@Immutable
 @Serializable
 data class ProjectRef(
     val path: String = "",
@@ -328,6 +356,7 @@ data class ProjectRef(
     val summary: String = "",
 )
 
+@Immutable
 @Serializable
 data class PromptDetailOut(
     val id: String = "",
@@ -341,12 +370,14 @@ data class PromptDetailOut(
     val updatedAtMs: Long = 0L,
 )
 
+@Immutable
 @Serializable
 data class PromptListResponse(
     val prompts: List<PromptRow> = emptyList(),
     val count: Int = 0,
 )
 
+@Immutable
 @Serializable
 data class PromptRow(
     val id: String = "",
@@ -358,18 +389,21 @@ data class PromptRow(
     val updatedAtMs: Long = 0L,
 )
 
+@Immutable
 @Serializable
 data class QATurn(
     val q: String = "",
     val a: String = "",
 )
 
+@Immutable
 @Serializable
 data class RoleModel(
     val role: String = "",
     val model: String = "",
 )
 
+@Immutable
 @Serializable
 data class SearchAllResult(
     val wiki: List<SearchWikiHit> = emptyList(),
@@ -377,6 +411,7 @@ data class SearchAllResult(
     val people: List<PersonRow> = emptyList(),
 )
 
+@Immutable
 @Serializable
 data class SearchDiaryHit(
     val file: String = "",
@@ -386,6 +421,7 @@ data class SearchDiaryHit(
     val score: Double = 0.0,
 )
 
+@Immutable
 @Serializable
 data class SearchWikiHit(
     val path: String = "",
@@ -396,6 +432,7 @@ data class SearchWikiHit(
     val score: Double = 0.0,
 )
 
+@Immutable
 @Serializable
 data class SenderRecentOut(
     val count: Int = 0,
@@ -404,6 +441,7 @@ data class SenderRecentOut(
     val truncated: Boolean = false,
 )
 
+@Immutable
 @Serializable
 data class SenderWikiHitOut(
     val path: String = "",
@@ -412,6 +450,7 @@ data class SenderWikiHitOut(
     val category: String = "",
 )
 
+@Immutable
 @Serializable
 data class SessionRowOut(
     val key: String = "",
@@ -426,6 +465,7 @@ data class SessionRowOut(
     val totalTokens: Long? = null,
 )
 
+@Immutable
 @Serializable
 data class SkillDetailResponse(
     val skill: SkillRow = SkillRow(),
@@ -434,6 +474,7 @@ data class SkillDetailResponse(
     val path: String = "",
 )
 
+@Immutable
 @Serializable
 data class SkillLifecycleEvent(
     val type: String = "",
@@ -449,6 +490,7 @@ data class SkillLifecycleEvent(
     val regressionRisk: String = "",
 )
 
+@Immutable
 @Serializable
 data class SkillRow(
     val name: String = "",
@@ -465,18 +507,21 @@ data class SkillRow(
     val curatorState: String = "",
 )
 
+@Immutable
 @Serializable
 data class SkillsLifecycleResponse(
     val events: List<SkillLifecycleEvent> = emptyList(),
     val count: Int = 0,
 )
 
+@Immutable
 @Serializable
 data class SkillsListResponse(
     val skills: List<SkillRow> = emptyList(),
     val count: Int = 0,
 )
 
+@Immutable
 @Serializable
 data class TodoOut(
     val id: String = "",
@@ -488,6 +533,7 @@ data class TodoOut(
     val doneAt: String = "",
 )
 
+@Immutable
 @Serializable
 data class TranscriptAttachmentOut(
     val type: String = "",
@@ -498,6 +544,7 @@ data class TranscriptAttachmentOut(
     val size: Long = 0L,
 )
 
+@Immutable
 @Serializable
 data class TranscriptMsgOut(
     val id: String = "",
@@ -507,6 +554,7 @@ data class TranscriptMsgOut(
     val timestampMs: Long = 0L,
 )
 
+@Immutable
 @Serializable
 data class WormholeModelOut(
     val name: String = "",
@@ -516,6 +564,7 @@ data class WormholeModelOut(
     val source: String = "",
 )
 
+@Immutable
 @Serializable
 data class WormholeStatusOut(
     val reachable: Boolean = false,

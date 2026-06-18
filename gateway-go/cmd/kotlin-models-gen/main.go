@@ -333,12 +333,17 @@ func render(classes []kotClass, pkg, srcDir string) string {
 	fmt.Fprintf(&b, "// Source: %s (structs marked //%s)\n", src, wireMarker)
 	fmt.Fprintf(&b, "// Regenerate: make kotlin-models\n\n")
 	fmt.Fprintf(&b, "package %s\n\n", pkg)
+	// @Immutable: these are decode-once, val-only DTOs that are never mutated, so
+	// Compose can treat them as stable and skip recomposition when an equal value
+	// is re-emitted — the same promise the hand-written DenebDomainTypes carry.
+	fmt.Fprintf(&b, "import androidx.compose.runtime.Immutable\n")
 	fmt.Fprintf(&b, "import kotlinx.serialization.Serializable\n\n")
 
 	for i, cls := range classes {
 		if i > 0 {
 			b.WriteString("\n")
 		}
+		fmt.Fprintf(&b, "@Immutable\n")
 		fmt.Fprintf(&b, "@Serializable\n")
 		fmt.Fprintf(&b, "data class %s(\n", cls.name)
 		for _, f := range cls.fields {

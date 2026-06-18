@@ -1,13 +1,20 @@
 package ai.deneb.deneb
 
+import androidx.compose.runtime.Immutable
 import kotlinx.serialization.Serializable
 
 // Domain models surfaced to the native UI by DenebGatewayClient. These are the
 // shapes the screens consume — distinct from the on-the-wire RPC types (those
 // are generated in deneb/generated/ or kept private to the client). Split out of
 // DenebGatewayClient.kt to keep that file focused on transport + state.
+//
+// Every type here is @Immutable: each is a val-only DTO decoded once from an RPC
+// response and never mutated, so the promise holds even for the List/Map members
+// Compose otherwise treats as unstable. Marking them lets composables skip
+// recomposition when an equal value is re-emitted (a re-fetch, a parent redraw).
 
 /** A switchable Deneb model surfaced in the config screen's model picker. */
+@Immutable
 data class ModelOption(
     val id: String,
     val display: String,
@@ -23,6 +30,7 @@ data class ModelOption(
 )
 
 /** Gateway/native API status returned by `miniapp.client.hello`. */
+@Immutable
 data class ClientStatus(
     val version: String,
     val nativeApiVersion: Int,
@@ -34,6 +42,7 @@ data class ClientStatus(
 
 /** A recent Gmail message shown in the native mail screen. [Serializable] so the
  *  default inbox list can be cached locally for instant render (DenebClientMail). */
+@Immutable
 @Serializable
 data class MailMessage(
     val id: String,
@@ -56,6 +65,7 @@ data class MailMessage(
 )
 
 /** Full Gmail message for the native detail screen. */
+@Immutable
 data class MailDetail(
     val id: String,
     val from: String,
@@ -75,6 +85,7 @@ data class MailDetail(
 )
 
 /** A downloadable attachment on a message (id + size kept for download). */
+@Immutable
 data class MailAttachment(
     val id: String,
     val filename: String,
@@ -82,6 +93,7 @@ data class MailAttachment(
     val size: Int,
 )
 
+@Immutable
 data class MailNativeStatus(
     val source: String,
     val available: Boolean,
@@ -93,6 +105,7 @@ data class MailNativeStatus(
     val error: String = "",
 )
 
+@Immutable
 data class MailNativeMailbox(
     val name: String,
     val total: Int,
@@ -104,6 +117,7 @@ data class MailNativeMailbox(
     val attachmentCapable: Boolean,
 )
 
+@Immutable
 data class MailNativeOverlay(
     val messages: Int,
     val read: Int,
@@ -111,6 +125,7 @@ data class MailNativeOverlay(
     val trashed: Int,
 )
 
+@Immutable
 @Serializable
 data class MailWorkState(
     val analysisStatus: String = "",
@@ -121,6 +136,7 @@ data class MailWorkState(
     val hint: String = "",
 )
 
+@Immutable
 data class MailNativePipeline(
     val messages: Int = 0,
     val analyzed: Int = 0,
@@ -135,9 +151,11 @@ data class MailNativePipeline(
 )
 
 /** A wiki project page cited by an analysis, surfaced as a tappable chip. */
+@Immutable
 data class RelatedProject(val path: String, val title: String, val summary: String)
 
 /** Result of an AI mail analysis (fresh or cached). */
+@Immutable
 data class MailAnalysis(
     val text: String,
     val related: List<RelatedProject> = emptyList(),
@@ -148,6 +166,7 @@ data class MailAnalysis(
 )
 
 /** Sender relationship context (recent volume + cited wiki pages). */
+@Immutable
 data class SenderContext(
     val displayName: String,
     val email: String,
@@ -157,9 +176,11 @@ data class SenderContext(
     val wikiFacts: String,
 )
 
+@Immutable
 data class SenderWikiHit(val title: String, val summary: String, val category: String, val path: String = "")
 
 /** Glanceable home-widget data: next meeting, unread count, latest-mail line. */
+@Immutable
 data class WidgetSummary(
     val meeting: String = "",
     val unread: Int = 0,
@@ -170,6 +191,7 @@ data class WidgetSummary(
 
 /** An upcoming calendar event shown in the native calendar screen. `local` is
  *  true for gateway-stored events the user can edit/delete (vs read-only Google). */
+@Immutable
 data class CalendarEvent(
     val id: String,
     val title: String,
@@ -181,6 +203,7 @@ data class CalendarEvent(
 )
 
 /** Full calendar event for the detail screen. */
+@Immutable
 data class CalendarEventDetail(
     val id: String,
     val title: String,
@@ -199,6 +222,7 @@ data class CalendarEventDetail(
  *  `due` is an RFC3339 instant or "" when the to-do has no due date; `dueAllDay`
  *  marks a whole-day due (time-of-day ignored). All to-dos are gateway-stored and
  *  editable. */
+@Immutable
 data class Todo(
     val id: String,
     val title: String,
@@ -209,6 +233,7 @@ data class Todo(
 )
 
 /** Full cron job detail for the cron screen (`miniapp.crons.get`). */
+@Immutable
 data class CronDetail(
     val id: String,
     val name: String,
@@ -230,17 +255,20 @@ data class CronDetail(
 )
 
 /** Unified search results across wiki, diary and people. */
+@Immutable
 data class SearchResults(
     val wiki: List<SearchHit>,
     val diary: List<SearchHit>,
     val people: List<PersonHit>,
 )
 
+@Immutable
 data class SearchHit(val path: String, val title: String, val snippet: String, val category: String)
 
 /** One row of the merged people directory: a recent Gmail counterparty, an 인물
  *  wiki person, or both (matched server-side — see miniapp.people.list). A row
  *  with a blank [email] and zero [messageCount] is wiki-only. */
+@Immutable
 data class PersonHit(
     val name: String,
     val email: String,
@@ -251,6 +279,7 @@ data class PersonHit(
 )
 
 /** Full wiki/memory page for the page view. */
+@Immutable
 data class WikiPage(
     val path: String,
     val title: String,
@@ -262,9 +291,11 @@ data class WikiPage(
 )
 
 /** A wiki category with its page count, for the category browser. */
+@Immutable
 data class WikiCategory(val name: String, val pageCount: Int)
 
 /** All wiki categories plus corpus totals. */
+@Immutable
 data class WikiCategories(
     val categories: List<WikiCategory>,
     val totalPages: Int,
@@ -272,6 +303,7 @@ data class WikiCategories(
 )
 
 /** A page reference within a category listing (tap -> wiki page). */
+@Immutable
 data class WikiPageRef(
     val path: String,
     val title: String,
@@ -281,6 +313,7 @@ data class WikiPageRef(
 
 /** One diary entry for the recent-diary timeline. [header] is the entry's
  *  heading (often a date/time); [file] is the source diary file. */
+@Immutable
 data class DiaryEntry(
     val header: String,
     val content: String,
