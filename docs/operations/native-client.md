@@ -161,9 +161,12 @@ The 설정 hub has these tabs:
   work: main is chat, analysis runs mail analysis and compaction, lightweight
   and tiny take scoped summaries and extraction, fallback is used when main
   fails.
-- **스킬** — the skills the agent can use (read-only). Mirrors the gateway's
-  skill list: name, description, category, and whether a skill is
-  user-invocable.
+- **스킬** — the skills the agent can use (read-only), plus the Propus log.
+  Propus is the gateway's self-improvement loop for proposals, skill
+  genesis/evolution, held-out validation, rollback visibility, and deferred
+  self-corrections. The log starts with a compact Propus summary so recent
+  review, creation, evolution, and rollback pressure are visible before
+  opening individual rows.
 - **크론** — the gateway's scheduled tasks, with a per-task detail screen
   (schedule, instruction, delivery target, state; enable, run now, delete).
 - **관찰** — a read-only operator dashboard: the gateway's recent behavior plus

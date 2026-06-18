@@ -61,9 +61,11 @@ prompt's wiki section is the canonical guide to the recall stack
 - **Writing to the wiki is not a reply.** If your human asked for analysis or
   an opinion, put the substance in your response text — "I filed it away"
   reads as no answer at all.
-- **Deferred corrections:** When `skill_lifecycle` is available, record
-  plausible-but-unvalidated correction ideas with action `self_correction`,
-  then review queued `selfCorrectionCandidates` in batches before applying.
+- **Propus deferred corrections:** `skill_lifecycle` is the Propus control
+  plane. When available, start with action `status` and `overview.nextActions`,
+  record plausible-but-unvalidated correction ideas with action
+  `self_correction`, then review queued `selfCorrectionCandidates` in batches
+  before applying.
 
 ## Red Lines
 

@@ -4,8 +4,8 @@
 // (DenebConfigScreen Skills tab) as a read-only list ("which skills does
 // this agent have?"), a per-skill detail (miniapp.skills.detail: the same
 // enriched row plus the SKILL.md body for the tap-through detail screen),
-// plus the self-evolution lifecycle feed (miniapp.skills.lifecycle) so the
-// operator can watch the genesis → review → evolve loop work. The skills.*
+// plus the Propus lifecycle feed (miniapp.skills.lifecycle) so the operator can
+// watch the proposal → validation → genesis/evolve → rollback/backlog loop. The skills.*
 // RPC surface (skill/ handler) already covers the full
 // snapshot/install/configure flow for richer consumers; this slim
 // projection is presentation-only.
@@ -66,7 +66,7 @@ type SkillRow struct {
 	// agents-skills-personal | agents-skills-project | bundled | plugin | extra.
 	Source  string `json:"source,omitempty"`
 	Version string `json:"version,omitempty"`
-	// Origin separates self-evolution output from pre-existing skills:
+	// Origin separates Propus-authored output from pre-existing skills:
 	// "genesis" (the loop created it) | "initial" (installed or hand-authored).
 	Origin string `json:"origin,omitempty"`
 	// CreatedAt is the genesis creation time (unix millis); 0 for initial skills.
@@ -91,7 +91,7 @@ type SkillsListResponse struct {
 	Count  int        `json:"count"`
 }
 
-// SkillLifecycleEvent is one entry in the self-evolution timeline:
+// SkillLifecycleEvent is one entry in the Propus timeline:
 // a skill creation, a committed evolve, a rejected/rolled-back evolve, or a
 // review decision (the per-session routing verdict that precedes them).
 //

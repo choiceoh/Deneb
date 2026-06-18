@@ -8,7 +8,7 @@ const (
 	PresetNone         Preset = ""             // no restriction — all tools available
 	PresetConversation Preset = "conversation" // chat + web tools only (대화모드)
 	PresetBoot         Preset = "boot"         // minimal tools for startup/daily check
-	PresetSelfReview   Preset = "self-review"  // background skill review / self-evolution only
+	PresetSelfReview   Preset = "self-review"  // background Propus skill review only
 	PresetResearcher   Preset = "researcher"   // spawn preset: read-focused context gathering
 	PresetImplementer  Preset = "implementer"  // spawn preset: researcher + file mutation + shell
 	PresetVerifier     Preset = "verifier"     // spawn preset: read + build/test execution

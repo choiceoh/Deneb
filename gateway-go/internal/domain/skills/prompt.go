@@ -195,7 +195,7 @@ func formatSkillsCompact(skills []PromptSkill) string {
 // One markdown list line per skill instead of the per-field XML the other
 // formats use: the prompt audit (2026-06-13) measured the XML tags at ~22
 // wire tokens per skill of pure markup, paid on every turn and growing with
-// every skill the self-evolution loop creates. The <available_skills>
+// every skill Propus creates. The <available_skills>
 // envelope stays so the system-prompt instructions keep a stable anchor.
 func formatSkillsIndex(skills []PromptSkill) string {
 	if len(skills) == 0 {

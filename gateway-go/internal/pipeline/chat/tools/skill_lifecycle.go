@@ -8,7 +8,8 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
-// SkillLifecycleBackend executes Deneb's closed-loop skill lifecycle.
+// SkillLifecycleBackend executes Propus, Deneb's closed-loop self-improvement
+// system. The tool name remains skill_lifecycle for compatibility.
 // The chat tool package owns only the agent-facing JSON surface; the server
 // supplies the actual genesis/evolution implementation after those services
 // have been initialized.
@@ -308,15 +309,15 @@ func ToolSkillLifecycle(backend SkillLifecycleBackend) ToolFunc {
 	}
 }
 
-// SkillLifecycleToolSchema returns the JSON schema for the late-bound
-// skill_lifecycle tool.
+// SkillLifecycleToolSchema returns the JSON schema for the late-bound Propus
+// control-plane tool (skill_lifecycle).
 func SkillLifecycleToolSchema() map[string]any {
 	return map[string]any{
 		"type": "object",
 		"properties": map[string]any{
 			"action": map[string]any{
 				"type":        "string",
-				"description": "Action: propose (record/route a self-evolution proposal), genesis (generate a skill from sessionKey or dreamSummary), evolve (improve an existing skill), status (inspect recent lifecycle logs, opportunity backlog, usage stats, curator state, and pending self-corrections), self_correction (record a deferred correction candidate without applying it), self_correction_review (mark a candidate accepted/rejected/superseded/applied after batch review), validation_case (record held-out assertions for a skill), validation_case_from_session (extract a held-out replay trace from sessionKey), validation_backfill (batch-extract held-out replay traces from stored sessions for skillName), pin/unpin/archive/restore (manual curator state for agent-created skills)",
+				"description": "Propus action: propose (record/route a self-improvement proposal), genesis (generate a skill from sessionKey or dreamSummary), evolve (improve an existing skill), status (inspect Propus overview.nextActions plus lifecycle logs, opportunity backlog, usage stats, validation corpus, curator state, and pending self-corrections), self_correction (record a deferred correction candidate without applying it), self_correction_review (mark a candidate accepted/rejected/superseded/applied after batch review), validation_case (record held-out assertions for a skill), validation_case_from_session (extract a held-out replay trace from sessionKey), validation_backfill (batch-extract held-out replay traces from stored sessions for skillName), pin/unpin/archive/restore (manual curator state for agent-created skills)",
 				"enum":        []string{"propose", "genesis", "evolve", "status", "self_correction", "self_correction_review", "validation_case", "validation_case_from_session", "validation_backfill", "pin", "unpin", "archive", "restore"},
 			},
 			"candidate": map[string]any{

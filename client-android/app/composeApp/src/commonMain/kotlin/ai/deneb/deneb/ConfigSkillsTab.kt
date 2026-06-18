@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.item
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.selection.selectable
@@ -53,12 +54,14 @@ import kotlin.time.Clock
 import kotlin.time.Instant
 
 // Settings hub "스킬" tab: skills the agent can use (read-only) plus the
-// self-evolution timeline. The list mirrors the system-prompt skill catalog via
-// miniapp.skills.list — name, description, category, source — now enriched with
-// the skill's origin (생성 = the self-evolution loop authored it, 최초 = it was
-// installed or hand-written) and evolve/usage counters. The 진화 내역 segment
-// streams miniapp.skills.lifecycle: genesis creations, committed evolves,
-// rejected/rolled-back evolve attempts, and review verdicts, newest first.
+// Propus log. Propus is Deneb's self-improvement system: proposal, genesis,
+// evolution, validation, rollback, and deferred self-correction in one loop.
+// The list mirrors the system-prompt skill catalog via miniapp.skills.list —
+// name, description, category, source — now enriched with the skill's origin
+// (생성 = Propus authored it, 최초 = it was installed or hand-written) and
+// evolve/usage counters. The Propus segment streams miniapp.skills.lifecycle:
+// genesis creations, committed evolves, rejected/rolled-back evolve attempts,
+// and review verdicts, newest first.
 // Timeline rows expand on tap — full reason, review evidence, absolute time,
 // verdict — and link through to the skill when the event names one.
 // No toggles: discovery is filesystem-driven, so the list reflects what's
@@ -106,14 +109,14 @@ internal fun SkillsTab(client: DenebGatewayClient, onOpenSkill: (String) -> Unit
             when {
                 lifecycleFailed && events == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     DenebError(
-                        "진화 내역을 불러오지 못했습니다.",
+                        "Propus 로그를 불러오지 못했습니다.",
                         onRetry = { scope.launch { loadLifecycle() } },
                     )
                 }
 
                 events == null -> DenebLoading()
 
-                events.isEmpty() -> EmptyTab("아직 자기진화 활동이 없습니다.")
+                events.isEmpty() -> EmptyTab("아직 Propus 활동이 없습니다.")
 
                 else -> SkillLifecycleContent(events, onOpenSkill)
             }
@@ -136,7 +139,7 @@ internal fun SkillsViewSwitcher(showLifecycle: Boolean, onSelect: (Boolean) -> U
             Modifier.padding(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            listOf("스킬 목록" to false, "진화 내역" to true).forEach { (label, lifecycle) ->
+            listOf("스킬 목록" to false, "Propus 로그" to true).forEach { (label, lifecycle) ->
                 val selected = showLifecycle == lifecycle
                 Text(
                     label,
@@ -220,16 +223,87 @@ internal fun SkillListContent(skills: List<SkillRow>, onOpenSkill: (String) -> U
     }
 }
 
-// Stateless self-evolution timeline — previewable without a gateway client.
+// Stateless Propus timeline — previewable without a gateway client.
 // Rows expand on tap; [onOpenSkill] backs the expanded row's 스킬 보기 link.
 @Composable
 internal fun SkillLifecycleContent(events: List<SkillLifecycleEvent>, onOpenSkill: (String) -> Unit = {}) {
     LazyColumn(Modifier.fillMaxSize()) {
+        item {
+            PropusTimelineHeader(events)
+            HorizontalDivider(Modifier.padding(start = 16.dp), color = denebHairline())
+        }
         itemsIndexed(events) { _, event ->
             SkillLifecycleRow(event, onOpenSkill = onOpenSkill)
             HorizontalDivider(Modifier.padding(start = 16.dp), color = denebHairline())
         }
     }
+}
+
+private data class PropusTimelineSummary(
+    val total: Int,
+    val genesis: Int,
+    val evolved: Int,
+    val review: Int,
+    val attention: Int,
+    val latestAt: Long,
+)
+
+@Composable
+private fun PropusTimelineHeader(events: List<SkillLifecycleEvent>) {
+    val summary = remember(events) { propusTimelineSummary(events) }
+    val activity = listOfNotNull(
+        "최근 ${summary.total}건",
+        "생성 ${summary.genesis}",
+        "진화 ${summary.evolved}",
+        "리뷰 ${summary.review}",
+        summary.latestAt.takeIf { it > 0L }?.let { "마지막 ${lifecycleTime(it)}" },
+    ).joinToString(" · ")
+    val state = if (summary.attention > 0) {
+        "주의 ${summary.attention}건 · 기각/롤백 포함"
+    } else {
+        "정상 관찰 중"
+    }
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+        Text(
+            "Propus",
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.primary,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Spacer(Modifier.height(2.dp))
+        Text(activity, style = DenebType.meta, color = denebHint())
+        Spacer(Modifier.height(2.dp))
+        Text(
+            state,
+            style = DenebType.rowSubtitle,
+            color = if (summary.attention > 0) MaterialTheme.colorScheme.error else denebHint(),
+        )
+    }
+}
+
+private fun propusTimelineSummary(events: List<SkillLifecycleEvent>): PropusTimelineSummary {
+    var genesis = 0
+    var evolved = 0
+    var review = 0
+    var attention = 0
+    var latestAt = 0L
+    for (event in events) {
+        if (event.at > latestAt) latestAt = event.at
+        when (event.type) {
+            "genesis" -> genesis++
+            "evolved" -> evolved++
+            "evolve_rejected", "evolve_rolled_back" -> attention++
+            else -> review++
+        }
+    }
+    return PropusTimelineSummary(
+        total = events.size,
+        genesis = genesis,
+        evolved = evolved,
+        review = review,
+        attention = attention,
+        latestAt = latestAt,
+    )
 }
 
 // One lifecycle event row — shared by the tab timeline (above) and the
@@ -334,7 +408,7 @@ internal fun SkillLifecycleRow(
     }
 }
 
-// Origin badge: 생성 (self-evolution authored) vs 최초 (installed/hand-written).
+// Origin badge: 생성 (Propus authored) vs 최초 (installed/hand-written).
 // Both render so the distinction is explicit, not inferred from absence. A
 // self-authored skill is AI-analysis output, so 생성 takes the warm apricot
 // insight accent (2026-06 doctrine); 최초 stays a neutral mono chip.

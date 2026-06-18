@@ -15,7 +15,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonlstore"
 )
 
-// Self-evolution activity kinds for the liveness heartbeat.
+// Propus activity kinds for the liveness heartbeat.
 const (
 	SkillActivityReview             = "review"
 	SkillActivityReviewAttempt      = "review_attempt"
@@ -25,7 +25,7 @@ const (
 	SkillActivityGenesis            = "genesis"
 )
 
-// SkillLivenessState is a persisted heartbeat for the self-evolution loop.
+// SkillLivenessState is a persisted heartbeat for the Propus loop.
 // Its sole purpose is to make silent death observable: every past failure of
 // this loop (#1932 bare model id, #2031 token-budget underflow, #2035 restart
 // interval reset) was silent — nothing logged that an operator would notice.
@@ -590,7 +590,7 @@ func (t *Tracker) LogGenesis(skillName, source, sessionKey, category, descriptio
 	return t.markSkillAgentCreatedLocked(skillName, createdAt)
 }
 
-// LogEvolutionProposal records a self-evolution routing decision.
+// LogEvolutionProposal records a Propus routing decision.
 func (t *Tracker) LogEvolutionProposal(record EvolutionProposalRecord) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -846,7 +846,7 @@ func isEvolutionAttemptType(typ string) bool {
 	}
 }
 
-// RecordEvolutionActivity updates the self-evolution liveness heartbeat.
+// RecordEvolutionActivity updates the Propus liveness heartbeat.
 // kind is one of SkillActivityReview/Evolve/Genesis. ok=false also records the
 // error so an operator can see WHY the loop stalled. Best-effort: a liveness
 // write failure must never break the caller (this is observability, not state).
@@ -898,7 +898,7 @@ func (t *Tracker) recordEvolutionActivityLocked(kind string, ok bool, errMsg str
 	}
 }
 
-// LivenessSnapshot returns the current self-evolution heartbeat for /health.
+// LivenessSnapshot returns the current Propus heartbeat for /health.
 func (t *Tracker) LivenessSnapshot() SkillLivenessState {
 	t.mu.Lock()
 	defer t.mu.Unlock()

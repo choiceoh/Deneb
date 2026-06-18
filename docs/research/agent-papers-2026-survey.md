@@ -87,7 +87,7 @@ sidebarTitle: "Agent Papers 2026"
 - 라우터 비용 원칙: 현행 O(1) 휴리스틱 → 임베딩 수준까지가 적정선. LLM 호출 라우터는 금지.
 - ASRR의 self-recovery 기제는 dsv4 thinking:false 운용(쉬운 턴 비추론)의 사후 정당화.
 
-## 축 5 — 자기진화 스킬
+## 축 5 — Propus / 자기개선 스킬
 
 | 논문 | 핵심 결과 | 주의/한계 |
 |---|---|---|

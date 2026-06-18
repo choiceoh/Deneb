@@ -160,7 +160,7 @@ type SkillNudgeToolActivity struct {
 // satisfies (via adapter). The run loop calls it per turn to record that the
 // agent consulted a skill and whether that turn succeeded; this populates the
 // usage stats the Evolver's SkillsNeedingEvolution(minUses, maxSuccessRate)
-// gate reads, so the self-evolution loop converges on skills that actually
+// gate reads, so Propus converges on skills that actually
 // fail rather than evolving blind. Keeps chat free of any domain import.
 type SkillUsageRecorder interface {
 	// RecordSkillUse logs one skill-consult outcome. Must not block — the chat

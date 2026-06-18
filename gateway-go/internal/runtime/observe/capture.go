@@ -1,5 +1,5 @@
 // Package observe is Deneb's unified observation plane — the single access
-// point a coding agent (external Claude Code, the internal self-evolution loop,
+// point a coding agent (external Claude Code, Propus,
 // or a human operator) uses to watch the gateway's logging, runtime behavior,
 // and the code paths that produced them.
 //

@@ -91,7 +91,7 @@ func (s *Server) initGenesisServices() {
 	// provider via resolveModel — so it needs the FULL "provider/model" id. Model() returns the
 	// bare name (e.g. "step3p7"), which has no provider and fails client resolution
 	// ("no LLM client available, provider=\"\""), silently killing every nudger review and leaving
-	// the whole skill self-evolution loop dead. Generate() uses lwClient directly, so the bare name
+	// the whole Propus loop dead. Generate() uses lwClient directly, so the bare name
 	// is fine there; only this SendSync path needs the prefix.
 	reviewModel := s.modelRegistry.FullModelID(modelrole.RoleLightweight)
 	reviewFork := newSkillReviewFork(s.chatHandler, s.genesisTranscripts, s.genesisTracker, reviewModel, s.logger)
@@ -229,11 +229,13 @@ func (s *Server) registerSkillLifecycleTool() {
 	}
 	s.chatHandler.RegisterTool(toolctx.ToolDef{
 		Name: "skill_lifecycle",
-		Description: "Closed-loop skill self-evolution: propose (record/route reusable workflow decisions), " +
+		Description: "Propus control plane for Deneb self-improvement (tool name kept as skill_lifecycle for compatibility): " +
+			"propose (record/route reusable workflow decisions), " +
 			"genesis (generate a skill from sessionKey or dreamSummary), evolve (improve an existing skill), " +
-			"status (inspect recent lifecycle logs, usage stats, and curator state), " +
+			"status (inspect Propus overview.nextActions, lifecycle logs, usage stats, validation corpus, opportunities, and curator state), " +
 			"validation_case (record held-out replay assertions for future candidate selection), " +
 			"validation_case_from_session (extract held-out replay assertions from a real session trace), " +
+			"validation_backfill (batch-extract replay cases), self_correction/self_correction_review (deferred code/prompt/skill fixes), " +
 			"pin/unpin/archive/restore (manual state for agent-created skills). " +
 			"Use through the evolution-proposal skill after meaningful workflows.",
 		InputSchema: chattools.SkillLifecycleToolSchema(),

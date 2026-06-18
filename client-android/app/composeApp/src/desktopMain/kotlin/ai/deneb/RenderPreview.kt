@@ -619,7 +619,7 @@ private fun renderDesignRefresh(name: String, scheme: ColorScheme) {
                     }
                     Spacer(Modifier.height(22.dp))
                     DenebGroup(label = "자동화 · 관찰") {
-                        DenebListRow("스킬", {}, icon = Icons.Outlined.Extension, subtitle = "설치 · 수명 주기")
+                        DenebListRow("스킬", {}, icon = Icons.Outlined.Extension, subtitle = "설치 · Propus")
                         DenebListRow("크론", {}, icon = Icons.Outlined.Schedule, subtitle = "예약 작업")
                         DenebListRow("관찰", {}, icon = Icons.Outlined.Visibility, subtitle = "동작 · 로그", divider = false)
                     }
@@ -1000,7 +1000,7 @@ private fun render(name: String, scheme: ColorScheme) {
 
 // --- Skills tab (settings) -------------------------------------------------
 // Validates the origin badges (생성 vs 최초) on the skill list and the
-// self-evolution timeline rows (genesis/evolved/rejected/review badges).
+// Propus timeline rows (genesis/evolved/rejected/review badges).
 
 private val sampleSkillRows = listOf(
     SkillRow(

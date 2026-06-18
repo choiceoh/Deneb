@@ -205,7 +205,7 @@ private val PATCH_NOTES_HISTORY: List<DenebPatchNote> = listOf(
     ),
     DenebPatchNote(
         highlights = listOf(
-            "설정 > 스킬 > 진화 내역의 항목을 누르면 그 자리에서 펼쳐짐 — 잘렸던 전체 사유와 판단 근거, 정확한 시각, 리뷰 판정까지. 스킬이 지정된 항목은 '스킬 보기'로 해당 스킬 상세로 이동",
+            "설정 > 스킬 > Propus 로그의 항목을 누르면 그 자리에서 펼쳐짐 — 잘렸던 전체 사유와 판단 근거, 정확한 시각, 리뷰 판정까지. 스킬이 지정된 항목은 '스킬 보기'로 해당 스킬 상세로 이동",
         ),
     ),
     DenebPatchNote(
@@ -221,7 +221,7 @@ private val PATCH_NOTES_HISTORY: List<DenebPatchNote> = listOf(
     ),
     DenebPatchNote(
         highlights = listOf(
-            "설정 > 스킬에서 스킬을 누르면 상세 화면이 열림 — 전체 설명·생성/사용/진화 이력과 SKILL.md 문서 본문, 그 스킬만의 진화 내역까지",
+            "설정 > 스킬에서 스킬을 누르면 상세 화면이 열림 — 전체 설명·생성/사용/진화 이력과 SKILL.md 문서 본문, 그 스킬만의 Propus 로그까지",
         ),
     ),
     DenebPatchNote(
