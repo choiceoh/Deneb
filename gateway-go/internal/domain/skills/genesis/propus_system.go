@@ -137,16 +137,17 @@ func EvaluatePropusDoctrineCoverage(
 }
 
 type PropusOverviewInput struct {
-	Scope             string
-	SkillName         string
-	Recent            []LifecycleLogEntry
-	SkillStats        *UsageStats
-	Stats             []UsageStats
-	Curator           []SkillCuratorRecord
-	UsageQuality      UsageQualitySummary
-	ValidationSummary SkillValidationCaseSummary
-	Opportunities     []SkillOpportunityRecord
-	SelfCorrections   []SelfCorrectionCandidateRecord
+	Scope              string
+	SkillName          string
+	Recent             []LifecycleLogEntry
+	SkillStats         *UsageStats
+	Stats              []UsageStats
+	Curator            []SkillCuratorRecord
+	UsageQuality       UsageQualitySummary
+	ValidationSummary  SkillValidationCaseSummary
+	Opportunities      []SkillOpportunityRecord
+	SelfCorrections    []SelfCorrectionCandidateRecord
+	SelfHarnessSignals SelfHarnessSignalSummary
 }
 
 // PropusOverview is the single operational state model. Tool status, native
@@ -167,6 +168,9 @@ type PropusOverview struct {
 	SkillsWithValidation   int                    `json:"skillsWithValidation,omitempty"`
 	PendingSelfCorrections int                    `json:"pendingSelfCorrections"`
 	OpenOpportunities      int                    `json:"openOpportunities"`
+	SelfHarnessRejections  int                    `json:"selfHarnessRejections,omitempty"`
+	SelfHarnessDrafts      int                    `json:"selfHarnessDrafts,omitempty"`
+	SelfHarnessRecurrences int                    `json:"selfHarnessRecurrences,omitempty"`
 	CuratedSkills          int                    `json:"curatedSkills,omitempty"`
 	StaleSkills            int                    `json:"staleSkills,omitempty"`
 	ArchivedSkills         int                    `json:"archivedSkills,omitempty"`
@@ -222,6 +226,14 @@ func BuildPropusOverview(input PropusOverviewInput) PropusOverview {
 			nextActions = append(nextActions, "inspect_recent_rejections_and_rollbacks")
 		}
 	}
+	if input.SelfHarnessSignals.TargetRecurrences7d > 0 {
+		state = propusMaxState(state, "needs_attention")
+		nextActions = append(nextActions, "inspect_self_harness_target_recurrences")
+	}
+	if input.SelfHarnessSignals.ValidationDrafts7d > 0 {
+		state = propusMaxState(state, "needs_review")
+		nextActions = append(nextActions, "review_rejected_evolve_validation_drafts")
+	}
 	if len(input.Opportunities) > 0 {
 		state = propusMaxState(state, "has_backlog")
 		if scope == PropusScopeSkill {
@@ -251,6 +263,9 @@ func BuildPropusOverview(input PropusOverviewInput) PropusOverview {
 		SkillsWithValidation:   input.ValidationSummary.SkillsWithCases,
 		PendingSelfCorrections: len(input.SelfCorrections),
 		OpenOpportunities:      len(input.Opportunities),
+		SelfHarnessRejections:  input.SelfHarnessSignals.Rejections7d,
+		SelfHarnessDrafts:      input.SelfHarnessSignals.ValidationDrafts7d,
+		SelfHarnessRecurrences: input.SelfHarnessSignals.TargetRecurrences7d,
 		CuratedSkills:          len(input.Curator),
 		DoctrineCoverage:       doctrineCoverage,
 		NextActions:            nextActions,
@@ -275,15 +290,16 @@ func BuildPropusOverview(input PropusOverviewInput) PropusOverview {
 }
 
 type PropusLifecycleSummaryInput struct {
-	Scope             string
-	SkillName         string
-	Recent            []LifecycleLogEntry
-	Stats             []UsageStats
-	Curator           []SkillCuratorRecord
-	UsageQuality      UsageQualitySummary
-	ValidationSummary SkillValidationCaseSummary
-	Opportunities     []SkillOpportunityRecord
-	SelfCorrections   []SelfCorrectionCandidateRecord
+	Scope              string
+	SkillName          string
+	Recent             []LifecycleLogEntry
+	Stats              []UsageStats
+	Curator            []SkillCuratorRecord
+	UsageQuality       UsageQualitySummary
+	ValidationSummary  SkillValidationCaseSummary
+	Opportunities      []SkillOpportunityRecord
+	SelfCorrections    []SelfCorrectionCandidateRecord
+	SelfHarnessSignals SelfHarnessSignalSummary
 }
 
 type PropusLifecycleSummary struct {
@@ -324,16 +340,17 @@ func BuildPropusLifecycleSummary(input PropusLifecycleSummaryInput) PropusLifecy
 		}
 	}
 	overview := BuildPropusOverview(PropusOverviewInput{
-		Scope:             input.Scope,
-		SkillName:         input.SkillName,
-		Recent:            input.Recent,
-		SkillStats:        skillStats,
-		Stats:             input.Stats,
-		Curator:           input.Curator,
-		UsageQuality:      input.UsageQuality,
-		ValidationSummary: input.ValidationSummary,
-		Opportunities:     input.Opportunities,
-		SelfCorrections:   input.SelfCorrections,
+		Scope:              input.Scope,
+		SkillName:          input.SkillName,
+		Recent:             input.Recent,
+		SkillStats:         skillStats,
+		Stats:              input.Stats,
+		Curator:            input.Curator,
+		UsageQuality:       input.UsageQuality,
+		ValidationSummary:  input.ValidationSummary,
+		Opportunities:      input.Opportunities,
+		SelfCorrections:    input.SelfCorrections,
+		SelfHarnessSignals: input.SelfHarnessSignals,
 	})
 	counts := overview.EventCounts
 	summary := PropusLifecycleSummary{
@@ -424,6 +441,7 @@ type PropusHealthInput struct {
 	Liveness          SkillLivenessState
 	Evolution         EvolutionHealthSummary
 	Validation        SkillValidationCaseSummary
+	SelfHarness       SelfHarnessSignalSummary
 	AgentSkills       int
 	UnusedAgentSkills int
 }
@@ -471,12 +489,16 @@ func PropusNextCue(state string, nextActions []string) string {
 		switch nextActions[0] {
 		case "review_pending_self_corrections":
 			return "자가수정 후보를 먼저 리뷰하세요"
+		case "review_rejected_evolve_validation_drafts":
+			return "반려된 evolve 후보를 held-out validation으로 승격할지 리뷰하세요"
 		case "record_validation_case_from_session", "backfill_validation_cases_for_active_skills":
 			return "검증 케이스를 기록해 생성/진화 debt를 줄이세요"
 		case "inspect_usage_failures_and_propose_evolve", "triage_low_success_skills":
 			return "낮은 성공률 근거를 확인하고 evolve 후보를 좁히세요"
 		case "inspect_rejected_or_rolled_back_edits", "inspect_recent_rejections_and_rollbacks":
 			return "기각/롤백 근거 확인"
+		case "inspect_self_harness_target_recurrences":
+			return "Self-Harness target signature 재발을 확인하세요"
 		case "triage_opportunity_backlog", "route_opportunity_backlog":
 			return "opportunity backlog를 route/evolve/no-op로 정리하세요"
 		case "tag_validation_cases_easy_mixed_hard":
@@ -554,9 +576,9 @@ func propusPrioritizeNextActions(state string, actions []string) []string {
 
 func propusActionPriority(action string) int {
 	switch action {
-	case "inspect_rejected_or_rolled_back_edits", "inspect_recent_rejections_and_rollbacks":
+	case "inspect_rejected_or_rolled_back_edits", "inspect_recent_rejections_and_rollbacks", "inspect_self_harness_target_recurrences":
 		return 60
-	case "review_pending_self_corrections":
+	case "review_pending_self_corrections", "review_rejected_evolve_validation_drafts":
 		return 50
 	case "inspect_usage_failures_and_propose_evolve", "triage_low_success_skills":
 		return 40
@@ -582,6 +604,15 @@ func propusHealthAttention(input PropusHealthInput) []string {
 	}
 	if input.Evolution.EvolveRejected7d > 0 {
 		attention = append(attention, "recent_rejections")
+	}
+	if input.SelfHarness.TargetRecurrences7d > 0 {
+		attention = append(attention, "self_harness_target_recurrence")
+	}
+	if input.SelfHarness.SignatureMismatchRejections7d+input.SelfHarness.SurfaceMismatchRejections7d > 0 {
+		attention = append(attention, "self_harness_gate_rejections")
+	}
+	if input.SelfHarness.ValidationDrafts7d > 0 {
+		attention = append(attention, "rejected_evolve_validation_drafts")
 	}
 	if input.Liveness.ReviewAttempts > 0 && input.Liveness.ReviewAttempts == input.Liveness.ReviewSkips && input.Liveness.LastReviewAt == 0 {
 		attention = append(attention, "reviews_all_skipped")

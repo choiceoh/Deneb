@@ -66,6 +66,17 @@ func TestHealthEndpointIncludesUsageQualitySignals(t *testing.T) {
 			t.Fatalf("RecordSkillValidationCase(%s): %v", desc, err)
 		}
 	}
+	if err := tracker.LogEvolveRejectedWithAudit("topsolar-db", "self-harness audit rejected: missing target_signature", genesis.HarnessEditAudit{}); err != nil {
+		t.Fatalf("LogEvolveRejectedWithAudit: %v", err)
+	}
+	if _, err := tracker.RecordSelfCorrectionCandidate(genesis.SelfCorrectionCandidateRecord{
+		Scope:     "test",
+		SkillName: "topsolar-db",
+		Title:     "Promote rejected evolve into held-out validation",
+		Source:    "self-harness-rejected-evolve:preflight",
+	}); err != nil {
+		t.Fatalf("RecordSelfCorrectionCandidate: %v", err)
+	}
 
 	srv := testutil.Must(New(":0"))
 	srv.GenesisSubsystem = &GenesisSubsystem{genesisTracker: tracker}
@@ -130,6 +141,14 @@ func TestHealthEndpointIncludesUsageQualitySignals(t *testing.T) {
 	if selfEvolution["validation_case_top_skill"] != "topsolar-db" ||
 		selfEvolution["validation_case_top_skill_cases"] != float64(1) {
 		t.Fatalf("unexpected top validation-case skill: %+v", selfEvolution)
+	}
+	if selfEvolution["self_harness_rejections_7d"] != float64(1) ||
+		selfEvolution["self_harness_missing_audit_rejections_7d"] != float64(1) ||
+		selfEvolution["self_harness_validation_drafts_7d"] != float64(1) {
+		t.Fatalf("unexpected self-harness health payload: %+v", selfEvolution)
+	}
+	if propus["self_harness_rejections_7d"] != selfEvolution["self_harness_rejections_7d"] {
+		t.Fatalf("propus and self_evolution self-harness payloads diverged: propus=%+v self=%+v", propus, selfEvolution)
 	}
 }
 

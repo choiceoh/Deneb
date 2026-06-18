@@ -263,9 +263,10 @@ func (b *skillLifecycleBackend) SkillLifecycleStatus(_ context.Context, req chat
 	validationSummary, validationSummaryErr := b.validationCaseSummary("")
 	opportunities, opportunitiesErr := b.recentSkillOpportunities("", limit)
 	selfCorrections, selfCorrectionsErr := b.recentSelfCorrectionCandidates("", limit)
+	selfHarnessSignals := b.tracker.SelfHarnessSignals()
 	status := map[string]any{
 		"system":                   propusSystemStatus(""),
-		"overview":                 propusGlobalOverview(recent, stats, curator, usageQuality, validationSummary, opportunities, selfCorrections),
+		"overview":                 propusGlobalOverview(recent, stats, curator, usageQuality, validationSummary, opportunities, selfCorrections, selfHarnessSignals),
 		"ok":                       true,
 		"limit":                    limit,
 		"recent":                   recent,
@@ -277,6 +278,7 @@ func (b *skillLifecycleBackend) SkillLifecycleStatus(_ context.Context, req chat
 		"validationCaseSummary":    validationSummary,
 		"opportunities":            opportunities,
 		"selfCorrectionCandidates": selfCorrections,
+		"selfHarnessSignals":       selfHarnessSignals,
 	}
 	if rejectedErr != "" {
 		status["rejectedEditsError"] = rejectedErr
@@ -926,16 +928,18 @@ func propusGlobalOverview(
 	validationSummary genesis.SkillValidationCaseSummary,
 	opportunities []genesis.SkillOpportunityRecord,
 	selfCorrections []genesis.SelfCorrectionCandidateRecord,
+	selfHarnessSignals genesis.SelfHarnessSignalSummary,
 ) map[string]any {
 	return propusOverviewMap(genesis.BuildPropusOverview(genesis.PropusOverviewInput{
-		Scope:             genesis.PropusScopeGlobal,
-		Recent:            recent,
-		Stats:             stats,
-		Curator:           curator,
-		UsageQuality:      usageQuality,
-		ValidationSummary: validationSummary,
-		Opportunities:     opportunities,
-		SelfCorrections:   selfCorrections,
+		Scope:              genesis.PropusScopeGlobal,
+		Recent:             recent,
+		Stats:              stats,
+		Curator:            curator,
+		UsageQuality:       usageQuality,
+		ValidationSummary:  validationSummary,
+		Opportunities:      opportunities,
+		SelfCorrections:    selfCorrections,
+		SelfHarnessSignals: selfHarnessSignals,
 	}))
 }
 
@@ -973,6 +977,9 @@ func propusOverviewMap(overview genesis.PropusOverview) map[string]any {
 		"validationCases":        overview.ValidationCases,
 		"pendingSelfCorrections": overview.PendingSelfCorrections,
 		"openOpportunities":      overview.OpenOpportunities,
+		"selfHarnessRejections":  overview.SelfHarnessRejections,
+		"selfHarnessDrafts":      overview.SelfHarnessDrafts,
+		"selfHarnessRecurrences": overview.SelfHarnessRecurrences,
 		"doctrineCoverage":       propusDoctrineCoverageMap(overview.DoctrineCoverage),
 		"nextActions":            overview.NextActions,
 	}

@@ -26,6 +26,7 @@ func newTestTracker(t *testing.T) *Tracker {
 		selfCorrectionPath:  filepath.Join(dir, "self_correction_candidates.jsonl"),
 		stats:               make(map[string]*usageAgg),
 		recentErrors:        make(map[string][]string),
+		recentFailureTraces: make(map[string][]UsageFailureTrace),
 		postEvolve:          make(map[string]*evolveWatch),
 	}
 }
@@ -987,6 +988,71 @@ func TestUsageStats_ExcludeUnactionableLegacyFailures(t *testing.T) {
 	}
 	if len(stats.RecentErrors) != 1 || stats.RecentErrors[0] != "sqlite database missing" {
 		t.Fatalf("recent errors should keep only actionable failure, got %+v", stats.RecentErrors)
+	}
+}
+
+func TestUsageStatsRecordsStructuredFailureTrace(t *testing.T) {
+	tr := newTestTracker(t)
+	if err := tr.RecordUsage(UsageRecord{
+		SkillName: "deploy-helper",
+		Success:   false,
+		FailureTrace: &UsageFailureTrace{
+			ToolName:   "exec",
+			ToolInput:  "systemctl --user status deneb-gateway.service",
+			ToolOutput: "context deadline exceeded",
+			ToolError:  true,
+		},
+	}); err != nil {
+		t.Fatalf("RecordUsage trace failure: %v", err)
+	}
+
+	stats, err := tr.Stats("deploy-helper")
+	if err != nil {
+		t.Fatalf("Stats: %v", err)
+	}
+	if stats.TotalUses != 1 || stats.FailureCount != 1 {
+		t.Fatalf("structured trace failure should count as actionable evidence: %+v", stats)
+	}
+	if len(stats.RecentFailureTraces) != 1 {
+		t.Fatalf("expected recent structured failure trace, got %+v", stats.RecentFailureTraces)
+	}
+	trace := stats.RecentFailureTraces[0]
+	if trace.Signature != "terminal=timeout|mechanism=bounded-execution" ||
+		trace.TerminalCause != "timeout" ||
+		!strings.Contains(trace.CausalStatus, "tool trace") {
+		t.Fatalf("unexpected normalized failure trace: %+v", trace)
+	}
+}
+
+func TestSelfHarnessSignalsCountTargetRecurrence(t *testing.T) {
+	tr := newTestTracker(t)
+	audit := HarnessEditAudit{
+		TargetSignature:        "terminal=timeout|mechanism=bounded-execution",
+		EditedSurface:          "Procedure",
+		ExpectedBehaviorChange: "add bounded execution",
+		RegressionRisk:         "may reject slow but valid commands",
+	}
+	if err := tr.LogEvolveWithAudit("deploy-helper", "1.0.1", "timeout recovery", audit); err != nil {
+		t.Fatalf("LogEvolveWithAudit: %v", err)
+	}
+	if err := tr.RecordUsage(UsageRecord{
+		SkillName:  "deploy-helper",
+		SessionKey: "client:main",
+		Success:    false,
+		ErrorMsg:   "context deadline exceeded while deploying",
+		Source:     UsageSourceReal,
+	}); err != nil {
+		t.Fatalf("RecordUsage recurrence: %v", err)
+	}
+
+	signals := tr.SelfHarnessSignals()
+	if signals.TargetRecurrences7d != 1 {
+		t.Fatalf("expected one target recurrence, got %+v", signals)
+	}
+	if signals.TopRecurringTargetSkill != "deploy-helper" ||
+		signals.TopRecurringTargetSignature != audit.TargetSignature ||
+		signals.TopRecurringTargetRecurrences != 1 {
+		t.Fatalf("unexpected top recurring target: %+v", signals)
 	}
 }
 
