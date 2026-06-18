@@ -36,7 +36,7 @@ import kotlinx.serialization.json.put
 /**
  * Admin surface of [DenebGatewayClient]: the model registry / role switcher
  * (`miniapp.models.*`), the chat-input model switcher entries, skills
- * (`miniapp.skills.list`), and cron jobs (`miniapp.crons.*`). Extensions so the
+ * (`miniapp.skills.*`), and cron jobs (`miniapp.crons.*`). Extensions so the
  * gateway client stays one facade while each RPC domain lives in its own file.
  */
 
@@ -211,9 +211,10 @@ fun DenebGatewayClient.selectDenebModelInstance(instanceId: String) {
 // local-provider instance).
 private const val DENEB_MODEL_PREFIX = "deneb-model:"
 
-// --- Skills (read-only) → Settings Skills tab ---------------------------
+// --- Skills → Settings Skills tab ---------------------------------------
 // The native client doesn't know server-side skill paths; miniapp.skills.list
 // resolves the workspace itself and returns the same skills the agent sees.
+// Mutations are guarded server-side and only enabled for local mutable skills.
 
 fun DenebGatewayClient.refreshSkillsAsync() {
     scope.launch { refreshSkills() }
@@ -273,6 +274,28 @@ suspend fun DenebGatewayClient.fetchSkillDetail(name: String): SkillDetailRespon
     "miniapp.skills.detail",
     buildJsonObject { put("name", name) },
 )
+
+/** Replace one mutable local skill's SKILL.md. Returns null on success, or the
+ *  gateway's reason when validation/write fails. */
+suspend fun DenebGatewayClient.updateSkill(name: String, body: String): String? {
+    val err = rpcWrite(
+        "miniapp.skills.update",
+        buildJsonObject {
+            put("name", name)
+            put("body", body)
+        },
+    )
+    if (err == null) refreshSkills()
+    return err
+}
+
+/** Delete one mutable local skill directory. Returns null on success, or the
+ *  gateway's reason when the skill is protected or deletion fails. */
+suspend fun DenebGatewayClient.deleteSkill(name: String): String? {
+    val err = rpcWrite("miniapp.skills.delete", buildJsonObject { put("name", name) })
+    if (err == null) refreshSkills()
+    return err
+}
 
 // --- Scheduler screen → Deneb cron --------------------------------------
 

@@ -123,6 +123,9 @@ func TestSkillsList_OriginAndEvolveEnrichment(t *testing.T) {
 	if ea.CuratorState != "" {
 		t.Errorf("initial skill must not carry curator state, got %q", ea.CuratorState)
 	}
+	if !ea.Editable || !ea.Deletable {
+		t.Errorf("managed skill mutability = (editable=%v, deletable=%v), want true/true", ea.Editable, ea.Deletable)
+	}
 
 	ml := byName["morning-letter"]
 	if ml.Origin != skillOriginGenesis {
@@ -179,6 +182,121 @@ func TestSkillsDetail_RowAndBody(t *testing.T) {
 	}
 	if payload.Path != path {
 		t.Errorf("path = %q, want %q", payload.Path, path)
+	}
+}
+
+func TestSkillsUpdate_WritesBodyAndInvalidates(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "SKILL.md")
+	original := "---\nname: email-analysis\n---\n\n# Old\n"
+	updated := "---\nname: email-analysis\nversion: 1.2.0\n---\n\n# New\n\n절차를 갱신합니다.\n"
+	if err := os.WriteFile(path, []byte(original), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	invalidated := 0
+	deps := testSkillsDeps()
+	base := deps.List
+	deps.List = func() []skills.SkillEntry {
+		entries := base()
+		entries[0].Skill.FilePath = path
+		return entries[:1]
+	}
+	deps.InvalidateSkills = func() { invalidated++ }
+
+	h := skillsUpdate(deps)
+	params, _ := json.Marshal(map[string]any{"name": "email-analysis", "body": updated})
+	resp := h(authedSkillsCtx(), &protocol.RequestFrame{ID: "1", Method: "miniapp.skills.update", Params: params})
+	payload := decodeSkillsPayload[SkillDetailResponse](t, resp)
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != updated {
+		t.Errorf("file body = %q, want updated body", string(data))
+	}
+	if payload.Body != updated || payload.Skill.Name != "email-analysis" || !payload.Skill.Editable {
+		t.Errorf("unexpected update response: %+v", payload)
+	}
+	if invalidated != 1 {
+		t.Errorf("InvalidateSkills calls = %d, want 1", invalidated)
+	}
+}
+
+func TestSkillsUpdate_RejectsRenameAndImmutableSources(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "SKILL.md")
+	original := "---\nname: email-analysis\n---\n\n# Old\n"
+	if err := os.WriteFile(path, []byte(original), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	deps := testSkillsDeps()
+	base := deps.List
+	deps.List = func() []skills.SkillEntry {
+		entries := base()
+		entries[0].Skill.FilePath = path
+		return entries[:1]
+	}
+	params, _ := json.Marshal(map[string]any{"name": "email-analysis", "body": "---\nname: other\n---\n\n# Rename\n"})
+	if resp := skillsUpdate(deps)(authedSkillsCtx(), &protocol.RequestFrame{ID: "1", Method: "miniapp.skills.update", Params: params}); resp.OK {
+		t.Fatal("expected rename attempt to fail")
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != original {
+		t.Errorf("rename failure changed file to %q", string(data))
+	}
+
+	deps.List = func() []skills.SkillEntry {
+		entries := base()
+		entries[0].Skill.FilePath = path
+		entries[0].Skill.Source = skills.SourceBundled
+		return entries[:1]
+	}
+	params, _ = json.Marshal(map[string]any{"name": "email-analysis", "body": original})
+	if resp := skillsUpdate(deps)(authedSkillsCtx(), &protocol.RequestFrame{ID: "2", Method: "miniapp.skills.update", Params: params}); resp.OK {
+		t.Fatal("expected bundled skill update to fail")
+	}
+}
+
+func TestSkillsDelete_RemovesSkillDirectoryAndInvalidates(t *testing.T) {
+	root := t.TempDir()
+	skillDir := filepath.Join(root, "email-analysis")
+	path := filepath.Join(skillDir, "SKILL.md")
+	if err := os.MkdirAll(skillDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("---\nname: email-analysis\n---\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(skillDir, "notes.md"), []byte("sidecar"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	invalidated := 0
+	deps := testSkillsDeps()
+	base := deps.List
+	deps.List = func() []skills.SkillEntry {
+		entries := base()
+		entries[0].Skill.FilePath = path
+		return entries[:1]
+	}
+	deps.InvalidateSkills = func() { invalidated++ }
+
+	params, _ := json.Marshal(map[string]any{"name": "email-analysis"})
+	resp := skillsDelete(deps)(authedSkillsCtx(), &protocol.RequestFrame{ID: "1", Method: "miniapp.skills.delete", Params: params})
+	if resp == nil || !resp.OK {
+		t.Fatalf("expected OK delete response, got %+v", resp)
+	}
+	if _, err := os.Stat(skillDir); !os.IsNotExist(err) {
+		t.Fatalf("skill dir still exists or stat failed unexpectedly: %v", err)
+	}
+	if invalidated != 1 {
+		t.Errorf("InvalidateSkills calls = %d, want 1", invalidated)
 	}
 }
 

@@ -594,6 +594,8 @@ data class SkillRow(
     val totalUses: Int = 0,
     val lastUsedAt: Long = 0L,
     val curatorState: String = "",
+    val editable: Boolean = false,
+    val deletable: Boolean = false,
 )
 
 @Immutable
