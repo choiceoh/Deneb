@@ -219,3 +219,191 @@ func freeWithin(winStart, winEnd time.Time, busy []interval, minDur time.Duratio
 	}
 	return gaps
 }
+
+// --- schedule audit (time protection) -----------------------------------
+
+const (
+	auditBufferGap     = 10 * time.Minute // gap below this between meetings = no buffer (back-to-back)
+	auditBackToBackRun = 3                // consecutive back-to-back meetings worth flagging
+	auditOverloadCount = 5                // meetings in a day that mark it overloaded
+	auditOverloadHours = 5 * time.Hour    // meeting hours in a day that mark it overloaded
+	auditFocusMin      = 60 * time.Minute // a usable focus block is at least this long
+)
+
+// calActionAudit reviews the schedule for double-bookings, overloaded days, and
+// back-to-back runs with no buffer, then points at free blocks to protect as
+// focus time — the "time protection" pass. Pure analysis returned as guidance;
+// the agent presents it and offers to create the protective blocks (and, for a
+// delegating executive, to send a 담당자 to delegable meetings instead). Pull-only,
+// so it adds no proactive notification.
+func calActionAudit(ctx context.Context, d *toolctx.CalendarDeps, p calParams) string {
+	loc := calDisplayLoc()
+	now := time.Now().In(loc)
+	from, to, errMsg := freeSlotsRange(p, now)
+	if errMsg != "" {
+		return errMsg
+	}
+	dayStart, dayEnd := freeSlotsHours(p)
+	events, warn := calMerged(ctx, d, from, to)
+
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "📋 일정 점검 (%s ~ %s)\n", calDay(from), calDay(to))
+
+	conflicts := detectConflicts(events)
+	if len(conflicts) > 0 {
+		sb.WriteString("\n⚠️ 겹침(더블부킹):\n")
+		for _, c := range conflicts {
+			fmt.Fprintf(&sb, "  • %s ↔ %s\n", c[0], c[1])
+		}
+	}
+
+	var overloads, runs, noFocus, suggestions []string
+	for day := startOfDay(from, loc); !day.After(to); day = day.AddDate(0, 0, 1) {
+		dayTimed := timedEventsOn(events, day, loc)
+		if len(dayTimed) == 0 {
+			continue
+		}
+		dayMidnight := startOfDay(day, loc)
+		dayNext := dayMidnight.AddDate(0, 0, 1)
+		var total time.Duration
+		var busy []interval
+		for _, e := range dayTimed {
+			// Clip an event that runs in from the previous day (or out past
+			// midnight) to this day, so load/focus reflect only today's portion.
+			s := e.Start.In(loc)
+			if s.Before(dayMidnight) {
+				s = dayMidnight
+			}
+			en := eventEnd(e).In(loc)
+			if en.After(dayNext) {
+				en = dayNext
+			}
+			total += en.Sub(s)
+			busy = append(busy, interval{s, en})
+		}
+		overloaded := len(dayTimed) >= auditOverloadCount || total >= auditOverloadHours
+		label := calDayWeekday(day)
+
+		if overloaded {
+			overloads = append(overloads, fmt.Sprintf("%s 회의 %d건·%s", label, len(dayTimed), shortDur(total)))
+		}
+		if run := longestBackToBack(dayTimed); run >= auditBackToBackRun {
+			runs = append(runs, fmt.Sprintf("%s %d연속(버퍼 없음)", label, run))
+		}
+		if overloaded {
+			winStart := time.Date(day.Year(), day.Month(), day.Day(), dayStart, 0, 0, 0, loc)
+			winEnd := time.Date(day.Year(), day.Month(), day.Day(), dayEnd, 0, 0, 0, loc)
+			// Keep the focus suggestion inside the audited range and not in the
+			// past — an explicit from/to must never yield a block outside it.
+			if winStart.Before(from) {
+				winStart = from
+			}
+			if winEnd.After(to) {
+				winEnd = to
+			}
+			if winStart.Before(now) {
+				winStart = now
+			}
+			var focus []interval
+			if winEnd.After(winStart) {
+				focus = freeWithin(winStart, winEnd, busy, auditFocusMin)
+			}
+			if len(focus) == 0 {
+				noFocus = append(noFocus, label)
+			} else {
+				f := focus[0]
+				suggestions = append(suggestions, fmt.Sprintf("%s %02d:%02d–%02d:%02d 포커스 블록 확보",
+					label, f.start.Hour(), f.start.Minute(), f.end.Hour(), f.end.Minute()))
+			}
+		}
+	}
+
+	if len(overloads) > 0 {
+		sb.WriteString("\n🔴 과부하: " + strings.Join(overloads, " · ") + "\n")
+	}
+	if len(runs) > 0 {
+		sb.WriteString("⏱️ 연속 회의: " + strings.Join(runs, " · ") + "\n")
+	}
+	if len(noFocus) > 0 {
+		sb.WriteString("🚫 포커스 시간 없음: " + strings.Join(noFocus, " · ") + "\n")
+	}
+	if len(suggestions) > 0 {
+		sb.WriteString("\n💡 보호 제안:\n")
+		for _, s := range suggestions {
+			fmt.Fprintf(&sb, "  • %s\n", s)
+		}
+	}
+
+	if len(conflicts) == 0 && len(overloads) == 0 && len(runs) == 0 {
+		sb.WriteString("\n일정 양호 — 더블부킹·과부하·버퍼 부족 없음.")
+		if warn != "" {
+			sb.WriteString("\n(" + warn + ")")
+		}
+		return strings.TrimRight(sb.String(), "\n")
+	}
+
+	sb.WriteString("\n위 보호 제안을 calendar(action=\"create\")로 잡아줄지 사용자에게 제안해. 사용자는 위임하는 임원이니, 과부하 날의 회의 중 본인이 꼭 가야 할 것과 담당자·팀에 위임 가능한 것을 구분해 대리 참석도 함께 권해.")
+	if warn != "" {
+		sb.WriteString("\n(" + warn + ")")
+	}
+	return strings.TrimRight(sb.String(), "\n")
+}
+
+// eventEnd returns an event's end, defaulting to start+1h when missing/invalid —
+// the same convention detectConflicts and free_slots use.
+func eventEnd(e calendar.Event) time.Time {
+	end := e.End
+	if end.IsZero() || !end.After(e.Start) {
+		end = e.Start.Add(time.Hour)
+	}
+	return end
+}
+
+// timedEventsOn returns the timed events that OVERLAP day (local), in the input
+// order (calMerged is already start-sorted). Overlap rather than start-date
+// equality, so a meeting/travel block running in from the previous day still
+// counts toward the day's load and blocks its focus time. All-day markers are
+// excluded.
+func timedEventsOn(events []calendar.Event, day time.Time, loc *time.Location) []calendar.Event {
+	dayStart := startOfDay(day, loc)
+	dayEnd := dayStart.AddDate(0, 0, 1)
+	var out []calendar.Event
+	for _, e := range events {
+		if e.AllDay || e.Start.IsZero() {
+			continue
+		}
+		if e.Start.In(loc).Before(dayEnd) && eventEnd(e).In(loc).After(dayStart) {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+// longestBackToBack returns the longest run of consecutive meetings whose
+// inter-meeting gap is below the buffer threshold. Input must be start-sorted.
+func longestBackToBack(dayTimed []calendar.Event) int {
+	if len(dayTimed) == 0 {
+		return 0
+	}
+	maxRun, run := 1, 1
+	for i := 1; i < len(dayTimed); i++ {
+		if dayTimed[i].Start.Sub(eventEnd(dayTimed[i-1])) < auditBufferGap {
+			run++
+			if run > maxRun {
+				maxRun = run
+			}
+		} else {
+			run = 1
+		}
+	}
+	return maxRun
+}
+
+// shortDur renders a meeting-load duration: "5.5시간" / "3시간" / "90분".
+func shortDur(d time.Duration) string {
+	if d >= time.Hour {
+		s := fmt.Sprintf("%.1f시간", d.Hours())
+		return strings.Replace(s, ".0시간", "시간", 1)
+	}
+	return fmt.Sprintf("%d분", int(d.Minutes()))
+}
