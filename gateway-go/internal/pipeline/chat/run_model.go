@@ -96,7 +96,7 @@ func resolveModel(
 	// agent and a "<provider>-subagent" config exists, use the alternate
 	// API key. This allows main and sub-agents to use different accounts
 	// on the same provider (separate rate limits).
-	if sess != nil && sess.SpawnedBy != "" && providerID != "" {
+	if sess != nil && sess.SpawnedBy != "" && providerID != "" && shouldRemapSubagentProvider(initialRole, providerID) {
 		alt := providerID + "-subagent"
 		if deps.providerConfigs != nil {
 			if _, ok := deps.providerConfigs[alt]; ok {
@@ -109,5 +109,17 @@ func resolveModel(
 		model:       model,
 		providerID:  providerID,
 		initialRole: initialRole,
+	}
+}
+
+func shouldRemapSubagentProvider(role modelrole.Role, providerID string) bool {
+	if role != modelrole.RoleCoding {
+		return true
+	}
+	switch providerID {
+	case "kimi", "mimo", "mimo-plan":
+		return false
+	default:
+		return true
 	}
 }

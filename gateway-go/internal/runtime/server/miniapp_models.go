@@ -247,6 +247,9 @@ func (s *Server) setMiniappModel(ctx context.Context, role, requested string) (s
 			return "", rpcerr.Unavailable("model registry is not ready")
 		}
 		s.modelRegistry.SetRoleModelID(modelrole.Role(role), modelID)
+		if role == string(modelrole.RoleCoding) {
+			s.refreshCodingModelConsumers()
+		}
 	}
 	return modelID, nil
 }
@@ -435,6 +438,7 @@ func (s *Server) deleteMiniappCustomModel(_ context.Context, id string) (handler
 			// sub-agents fall back to their normal default after deletion.
 			if s.modelRegistry != nil {
 				s.modelRegistry.ClearRole(modelrole.RoleCoding)
+				s.refreshCodingModelConsumers()
 			}
 		case "vision":
 			// Vision is opt-in like chatbot: clear the role so image turns revert

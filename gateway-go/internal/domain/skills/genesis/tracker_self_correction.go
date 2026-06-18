@@ -106,6 +106,23 @@ func (t *Tracker) RecordSelfCorrectionReview(record SelfCorrectionCandidateRecor
 	if record.Status == "" || record.Status == SelfCorrectionStatusProposed {
 		return record, fmt.Errorf("genesis-tracker: review status must be accepted, rejected, superseded, or applied")
 	}
+	entries, err := jsonlstore.Load[SelfCorrectionCandidateRecord](t.selfCorrectionPath)
+	if err != nil {
+		return record, fmt.Errorf("genesis-tracker: load self-correction candidates: %w", err)
+	}
+	found := false
+	for _, existing := range entries {
+		if existing.Type == SelfCorrectionTypeReview {
+			continue
+		}
+		if strings.TrimSpace(existing.ID) == record.ID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return record, fmt.Errorf("genesis-tracker: self-correction candidate not found: %s", record.ID)
+	}
 	if err := jsonlstore.Append(t.selfCorrectionPath, record); err != nil {
 		return record, fmt.Errorf("genesis-tracker: append self-correction review: %w", err)
 	}

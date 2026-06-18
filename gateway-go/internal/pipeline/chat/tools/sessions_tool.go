@@ -441,6 +441,7 @@ func ToolSessionsSpawn(d *toolctx.SessionDeps) ToolFunc {
 		if p.Task == "" {
 			return "", fmt.Errorf("task is required")
 		}
+		p.Model = strings.TrimSpace(p.Model)
 
 		// Fail closed on unknown presets: AllowedTools returns nil (= no
 		// restriction) for unrecognized names, so a typo'd preset would
@@ -458,6 +459,10 @@ func ToolSessionsSpawn(d *toolctx.SessionDeps) ToolFunc {
 
 		if d == nil || d.Manager == nil || d.SendFn == nil {
 			return "Sub-agent spawning is not available (session dependencies not wired).", nil
+		}
+		codingDefaultModel := sessionCodingDefaultModel(d)
+		if p.Model == "coding" && codingDefaultModel == "" {
+			return "Spawn rejected: model \"coding\" is not configured. Choose another model or configure the coding role in Settings first.", nil
 		}
 
 		// Create a unique session key for the sub-agent.
@@ -495,7 +500,7 @@ func ToolSessionsSpawn(d *toolctx.SessionDeps) ToolFunc {
 		childSession := d.Manager.Create(childKey, session.KindDirect)
 		if p.Model != "" {
 			childSession.Model = p.Model
-		} else if p.ToolPreset == string(toolpreset.PresetImplementer) && d.CodingDefaultModel != "" {
+		} else if p.ToolPreset == string(toolpreset.PresetImplementer) && codingDefaultModel != "" {
 			// Implementer children can write/edit/exec. When the operator has
 			// configured a dedicated coding model, keep the session on the role
 			// name rather than the resolved model ID so live role changes and
@@ -531,4 +536,14 @@ func ToolSessionsSpawn(d *toolctx.SessionDeps) ToolFunc {
 		}
 		return result, nil
 	}
+}
+
+func sessionCodingDefaultModel(d *toolctx.SessionDeps) string {
+	if d == nil {
+		return ""
+	}
+	if d.CodingDefaultModelFn != nil {
+		return strings.TrimSpace(d.CodingDefaultModelFn())
+	}
+	return strings.TrimSpace(d.CodingDefaultModel)
 }

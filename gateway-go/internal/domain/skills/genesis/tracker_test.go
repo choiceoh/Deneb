@@ -212,6 +212,26 @@ func TestSelfCorrectionCandidatesRecordAndReview(t *testing.T) {
 	}
 }
 
+func TestSelfCorrectionReviewRejectsUnknownID(t *testing.T) {
+	tracker := newTestTracker(t)
+
+	if _, err := tracker.RecordSelfCorrectionReview(SelfCorrectionCandidateRecord{
+		ID:       "missing-candidate",
+		Status:   SelfCorrectionStatusAccepted,
+		Reviewer: "codex",
+	}); err == nil || !strings.Contains(err.Error(), "self-correction candidate not found") {
+		t.Fatalf("expected not-found error, got %v", err)
+	}
+
+	got, err := tracker.RecentSelfCorrectionCandidates("", "", 10)
+	if err != nil {
+		t.Fatalf("RecentSelfCorrectionCandidates: %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("orphan review should not create a visible candidate, got %+v", got)
+	}
+}
+
 func TestSkillsNeedingEvolution_SkipsUntilNewRealFailureAfterAttempt(t *testing.T) {
 	tracker := newTestTracker(t)
 	beforeAttempt := time.Now().Add(-2 * time.Second).UnixMilli()
