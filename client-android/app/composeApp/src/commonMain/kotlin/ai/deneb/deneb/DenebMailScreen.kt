@@ -575,9 +575,9 @@ private fun senderName(from: String): String {
 }
 
 internal fun mailRowNativeMeta(message: MailMessage): String? = buildList {
-    if (message.workState.feedStatus == "created") add("피드 반영")
+    if (message.workState.feedStatus == "created") add("피드")
     if (message.workState.calendarProposalCount > 0) {
-        add("일정 후보 ${message.workState.calendarProposalCount}")
+        add("일정 ${message.workState.calendarProposalCount}")
     }
     if (message.workState.todoCount > 0) {
         add("할 일 ${message.workState.todoCount}")
@@ -642,7 +642,7 @@ private fun mailNativeFilters(offlineCapable: Boolean): List<MailNativeFilter> =
     add(MailNativeFilter("7일", "newer_than:7d"))
     add(MailNativeFilter("분석 실패", "deneb:analysis_failed"))
     add(MailNativeFilter("피드 대기", "deneb:feed_missing"))
-    add(MailNativeFilter("일정 후보", "deneb:calendar_candidate"))
+    add(MailNativeFilter("일정", "deneb:calendar_candidate"))
     add(MailNativeFilter("할 일", "deneb:todo"))
 }
 

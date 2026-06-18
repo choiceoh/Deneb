@@ -120,7 +120,7 @@ class DenebClientMailReadOverlayTest {
                 todoCount = 2,
             ),
         )
-        assertEquals("일정 후보 1 · 할 일 2", mailRowNativeMeta(analyzed))
+        assertEquals("일정 1 · 할 일 2", mailRowNativeMeta(analyzed))
 
         val failed = row("failed", false).copy(workState = MailWorkState(analysisStatus = "failed"))
         assertNull(mailRowNativeMeta(failed))
