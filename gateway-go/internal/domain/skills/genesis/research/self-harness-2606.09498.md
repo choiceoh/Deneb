@@ -113,6 +113,10 @@ Runtime:
   committed candidates must include all audit fields, and failure-bundle-based
   edits must target a mined supported signature. Review-finding-based edits can
   still proceed, but only with a complete audit record.
+- The gate also checks the claimed editable surface against the actual SKILL.md
+  body diff: a candidate that claims `Verification` must change that section,
+  while non-body surfaces such as support files or runtime orchestration are
+  rejected by this body-only evolve path.
 
 Prompts and skill docs:
 
