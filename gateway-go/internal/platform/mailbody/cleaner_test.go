@@ -289,7 +289,7 @@ func TestCleanForDisplay_KeepsMeetingJoinDetailsBeforeSignature(t *testing.T) {
 	got := CleanForDisplay(body)
 	for _, want := range []string{"Microsoft Teams meeting", "Join: https://teams.microsoft.com", "Meeting ID", "Passcode"} {
 		if !strings.Contains(got.Body, want) {
-			t.Fatalf("meeting detail missing %q:\n%s", want, got.Body)
+			t.Fatalf("meeting detail missing %q hidden=%v:\n%s", want, got.HiddenBlocks, got.Body)
 		}
 	}
 	for _, gone := range []string{"Project Execution Manager", "This message is confidential", "Previous thread"} {
@@ -1264,5 +1264,92 @@ func TestCleanForDisplay_StripsGitHubNotificationFooter(t *testing.T) {
 		if strings.Contains(got.Body, gone) {
 			t.Fatalf("notification footer leaked %q:\n%s", gone, got.Body)
 		}
+	}
+}
+
+func TestCleanForDisplay_StripsMojibakeReplyBoundary(t *testing.T) {
+	body := strings.Join([]string{
+		"Dear Sara and Park",
+		"Sorry I'm currently on a business trip in the Philippines, so I'm unable to participate in this reception.",
+		"Christina will be there to support you if any issues arise.",
+		"----------�ظ����ʼ���Ϣ----------",
+		"From: Sara <sara@example.com>",
+		"Subject: old message",
+		"Old thread body.",
+	}, "\n")
+
+	got := CleanForDisplay(body)
+	for _, want := range []string{"business trip", "Christina"} {
+		if !strings.Contains(got.Body, want) {
+			t.Fatalf("latest body missing %q:\n%s", want, got.Body)
+		}
+	}
+	for _, gone := range []string{"�ظ", "From:", "Old thread"} {
+		if strings.Contains(got.Body, gone) {
+			t.Fatalf("mojibake reply boundary leaked %q:\n%s", gone, got.Body)
+		}
+	}
+}
+
+func TestCleanForDisplay_StripsSplitOriginalMessageBoundary(t *testing.T) {
+	body := strings.Join([]string{
+		"안녕하세요? 부장님",
+		"파인드그린 신정훈 입니다.",
+		"주말 잘 보내셨나요?",
+		"보내주신 메일에 대해 답신을 드립니다.",
+		"첨부된 공문 참고 하십시요",
+		"신정훈 드림",
+		"---------- Original",
+		"message ----------",
+		"From: old@example.com",
+		"Subject: old message",
+		"이전 본문입니다.",
+	}, "\n")
+
+	got := CleanForDisplay(body)
+	for _, want := range []string{"파인드그린", "공문 참고"} {
+		if !strings.Contains(got.Body, want) {
+			t.Fatalf("latest body missing %q:\n%s", want, got.Body)
+		}
+	}
+	for _, gone := range []string{"신정훈 드림", "Original", "message ----------", "이전 본문"} {
+		if strings.Contains(got.Body, gone) {
+			t.Fatalf("split original boundary/signoff leaked %q:\n%s", gone, got.Body)
+		}
+	}
+}
+
+func TestCleanForDisplay_StripsTrailingImageAndBilingualNameAfterShortBusinessLine(t *testing.T) {
+	body := strings.Join([]string{
+		"견적 제출은 5/26(화) 오전까지 부탁드립니다.",
+		"[Image]",
+		"정한구 Hangoo Jung",
+		"Facilities Management Team",
+		"T +82-62-370-0000",
+		"From: old@example.com",
+		"Subject: old message",
+		"이전 본문입니다.",
+	}, "\n")
+
+	got := CleanForDisplay(body)
+	if strings.TrimSpace(got.Body) != "견적 제출은 5/26(화) 오전까지 부탁드립니다." {
+		t.Fatalf("expected only short business line, got:\n%s", got.Body)
+	}
+}
+
+func TestCleanForDisplay_StripsAuditOfficeSignatureTail(t *testing.T) {
+	body := strings.Join([]string{
+		"검토의견입니다.",
+		"업무에 참고하십시요",
+		"감사실",
+		"홍 상 호  감사 / 공인회계사",
+		"From: old@example.com",
+		"Subject: old message",
+		"이전 본문입니다.",
+	}, "\n")
+
+	got := CleanForDisplay(body)
+	if strings.TrimSpace(got.Body) != "검토의견입니다.\n업무에 참고하십시요" {
+		t.Fatalf("expected audit signature stripped, got:\n%s", got.Body)
 	}
 }
