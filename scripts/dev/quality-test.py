@@ -15,6 +15,8 @@ Usage:
     python3 scripts/quality-test.py --scenario system      # system mgmt
     python3 scripts/quality-test.py --scenario core        # core quick tests
     python3 scripts/quality-test.py --custom "메시지"       # custom message
+    python3 scripts/quality-test.py --apex-plan            # show frontier sample
+    python3 scripts/quality-test.py --sample apex --record # run APEX sample
     python3 scripts/quality-test.py --list                 # list all tests
 """
 
@@ -25,6 +27,7 @@ import time
 import argparse
 import re
 import os
+import random
 import socket
 import sqlite3
 import subprocess
@@ -46,8 +49,7 @@ from checks import (  # noqa: E402
 try:
     import yaml
 except ImportError:
-    print("ERROR: pip install pyyaml")
-    sys.exit(1)
+    yaml = None
 
 # --- Configuration ---
 
@@ -124,6 +126,31 @@ class QualityResult:
 
 
 # ChatCapture is imported from mock_native_client.
+
+
+@dataclass
+class ApexCaseState:
+    """Recent outcome state for one test, used by APEX frontier sampling."""
+    name: str
+    category: str = ""
+    tier: str = "unseen"          # easy | hard | mixed | unseen
+    current_state: Optional[int] = None  # 1 pass, 0 fail, None skipped/unknown
+    outcomes: list[int] = field(default_factory=list)  # newest first
+    scores: list[float] = field(default_factory=list)
+    last_seen_run_id: int = 0
+    latest_run_id: int = 0
+
+    @property
+    def pass_rate(self) -> Optional[float]:
+        if not self.outcomes:
+            return None
+        return sum(self.outcomes) / len(self.outcomes)
+
+    @property
+    def current_label(self) -> str:
+        if self.current_state is None:
+            return "skip"
+        return "pass" if self.current_state else "fail"
 
 
 # --- Result Store (SQLite) ---
@@ -288,6 +315,53 @@ class ResultStore:
         cols = [d[0] for d in cur.description]
         return [dict(zip(cols, row)) for row in cur.fetchall()]
 
+    def latest_run_id(self) -> int:
+        cur = self.conn.execute("SELECT COALESCE(MAX(run_id), 0) FROM runs")
+        return int(cur.fetchone()[0] or 0)
+
+    def apex_case_states(self, tests: list[dict], lookback: int = 5) -> dict[str, ApexCaseState]:
+        """Classify tests into APEX Easy/Hard/Mixed tiers from recent runs.
+
+        Each test is a datapoint. Recent pass/fail outcomes approximate prompt
+        lineage behavior; a missing row in the latest run is treated as the
+        current prompt having skipped that datapoint.
+        """
+        lookback = max(1, int(lookback))
+        latest_run_id = self.latest_run_id()
+        out: dict[str, ApexCaseState] = {}
+        for tdef in tests:
+            name = tdef.get("name", "")
+            if not name:
+                continue
+            state = ApexCaseState(
+                name=name,
+                category=tdef.get("cat", ""),
+                latest_run_id=latest_run_id,
+            )
+            cur = self.conn.execute("""
+                SELECT run_id, passed, score
+                FROM test_results
+                WHERE test_name = ?
+                ORDER BY run_id DESC
+                LIMIT ?
+            """, (name, lookback))
+            rows = cur.fetchall()
+            if rows:
+                state.outcomes = [int(r[1]) for r in rows]
+                state.scores = [float(r[2]) for r in rows]
+                state.last_seen_run_id = int(rows[0][0])
+                if state.last_seen_run_id == latest_run_id:
+                    state.current_state = state.outcomes[0]
+                unique = set(state.outcomes)
+                if unique == {1}:
+                    state.tier = "easy"
+                elif unique == {0}:
+                    state.tier = "hard"
+                else:
+                    state.tier = "mixed"
+            out[name] = state
+        return out
+
     def close(self):
         self.conn.close()
 
@@ -424,6 +498,161 @@ def print_trend(store: ResultStore, test_name: str, limit: int = 20):
         model = d["model"][:30] if d["model"] else "?"
         icon = "✓" if d["passed"] else "✗"
         print(f"  #{d['run_id']:<5} {ts:<20} {model:<30} {icon} {d['score']:.0%}  {d['latency_ms']:.0f}ms")
+    print()
+
+
+# --- APEX Frontier Sampling ---
+
+def _apex_pass_rate(states: list[ApexCaseState], mixed_only: bool = False) -> float:
+    vals = [
+        s.current_state for s in states
+        if s.current_state is not None and (not mixed_only or s.tier == "mixed")
+    ]
+    if not vals:
+        vals = [
+            s.outcomes[0] for s in states
+            if s.outcomes and (not mixed_only or s.tier == "mixed")
+        ]
+    if not vals:
+        return 0.0
+    return sum(vals) / len(vals)
+
+
+def _take_cases(pool: list[ApexCaseState], n: int, selected: set[str],
+                rng: random.Random) -> list[ApexCaseState]:
+    if n <= 0:
+        return []
+    candidates = [s for s in pool if s.name not in selected]
+    rng.shuffle(candidates)
+    shuffled_rank = {s.name: i for i, s in enumerate(candidates)}
+    candidates.sort(key=lambda s: (
+        0 if s.tier == "mixed" else 1,
+        0 if s.current_state is None else 1,
+        -(len(s.outcomes)),
+        shuffled_rank.get(s.name, 0),
+    ))
+    return candidates[:n]
+
+
+def select_apex_tests(tests: list[dict], states: dict[str, ApexCaseState],
+                      budget: int, anchor_ratio: float = 0.2,
+                      seed: int = 0) -> tuple[list[dict], dict]:
+    """Select a rank-sensitive APEX subset from historical quality results."""
+    if budget <= 0 or budget >= len(tests):
+        selected = list(tests)
+        return selected, {
+            "enabled": False,
+            "reason": "budget covers the full scenario",
+            "budget": budget,
+            "selected": len(selected),
+        }
+
+    rng = random.Random(seed)
+    by_name = {t.get("name", ""): t for t in tests}
+    case_states = [states[t["name"]] for t in tests if t.get("name") in states]
+    selected: list[ApexCaseState] = []
+    selected_names: set[str] = set()
+
+    def add(pool: list[ApexCaseState], n: int) -> int:
+        picked = _take_cases(pool, n, selected_names, rng)
+        selected.extend(picked)
+        selected_names.update(s.name for s in picked)
+        return len(picked)
+
+    # Dreq = BM,empty: historically mixed datapoints skipped in the latest run.
+    required = [s for s in case_states if s.tier == "mixed" and s.current_state is None]
+    add(required, min(len(required), budget))
+
+    remaining = budget - len(selected)
+    rho_mix = _apex_pass_rate(case_states, mixed_only=True)
+    rho_all = _apex_pass_rate(case_states, mixed_only=False)
+    kpos = int(min(max(anchor_ratio, 0.0), rho_mix, rho_all) * remaining)
+    kneg = remaining - kpos
+
+    # Dpos prioritizes BM,1 then easy skipped/anchors to catch regressions.
+    positive = (
+        [s for s in case_states if s.tier == "mixed" and s.current_state == 1] +
+        [s for s in case_states if s.tier == "easy" and s.current_state is None] +
+        [s for s in case_states if s.tier == "easy" and s.current_state == 1]
+    )
+    got_pos = add(positive, kpos)
+
+    # Dneg prioritizes BM,0 then hard skipped/anchors to confirm fixes.
+    negative = (
+        [s for s in case_states if s.tier == "mixed" and s.current_state == 0] +
+        [s for s in case_states if s.tier == "hard" and s.current_state is None] +
+        [s for s in case_states if s.tier == "hard" and s.current_state == 0]
+    )
+    got_neg = add(negative, kneg)
+
+    if len(selected) < budget:
+        fallback = (
+            [s for s in case_states if s.tier == "unseen"] +
+            [s for s in case_states if s.tier == "mixed"] +
+            [s for s in case_states if s.tier == "hard"] +
+            [s for s in case_states if s.tier == "easy"]
+        )
+        add(fallback, budget - len(selected))
+
+    selected_tests = [by_name[s.name] for s in selected if s.name in by_name]
+    bucket_counts: dict[str, int] = {}
+    for s in case_states:
+        key = f"{s.tier}/{s.current_label}"
+        bucket_counts[key] = bucket_counts.get(key, 0) + 1
+    selected_counts: dict[str, int] = {}
+    for s in selected:
+        key = f"{s.tier}/{s.current_label}"
+        selected_counts[key] = selected_counts.get(key, 0) + 1
+
+    mutation_pool = [
+        s.name for s in (
+            [s for s in case_states if s.tier == "mixed" and s.current_state == 0] +
+            [s for s in case_states if s.tier == "hard" and s.current_state == 0]
+        )
+    ][:5]
+
+    plan = {
+        "enabled": True,
+        "budget": budget,
+        "selected": len(selected_tests),
+        "lookback": max((len(s.outcomes) for s in case_states), default=0),
+        "anchor_ratio": anchor_ratio,
+        "rho_mix": round(rho_mix, 4),
+        "rho_all": round(rho_all, 4),
+        "positive_target": kpos,
+        "negative_target": kneg,
+        "positive_selected": got_pos,
+        "negative_selected": got_neg,
+        "required_selected": min(len(required), budget),
+        "bucket_counts": dict(sorted(bucket_counts.items())),
+        "selected_counts": dict(sorted(selected_counts.items())),
+        "mutation_frontier": mutation_pool,
+    }
+    return selected_tests, plan
+
+
+def print_apex_plan(plan: dict, selected_tests: list[dict]) -> None:
+    print()
+    print("APEX frontier plan")
+    print("-" * 70)
+    if not plan.get("enabled"):
+        print(f"  disabled: {plan.get('reason', 'not needed')}")
+    print(f"  selected: {plan.get('selected', len(selected_tests))}/{plan.get('budget', len(selected_tests))}")
+    if plan.get("enabled"):
+        print(f"  rho_mix={plan.get('rho_mix', 0):.2f} rho_all={plan.get('rho_all', 0):.2f} "
+              f"anchor={plan.get('anchor_ratio', 0):.2f}")
+        print(f"  required={plan.get('required_selected', 0)} "
+              f"positive={plan.get('positive_selected', 0)}/{plan.get('positive_target', 0)} "
+              f"negative={plan.get('negative_selected', 0)}/{plan.get('negative_target', 0)}")
+        print("  buckets:")
+        for key, count in plan.get("bucket_counts", {}).items():
+            picked = plan.get("selected_counts", {}).get(key, 0)
+            print(f"    {key:<12} {picked:>3}/{count:<3}")
+        if plan.get("mutation_frontier"):
+            print(f"  mutation frontier: {', '.join(plan['mutation_frontier'])}")
+    print("  tests:")
+    for t in selected_tests:
+        print(f"    - {t.get('name')} [{t.get('cat', '?')}]")
     print()
 
 
@@ -835,6 +1064,8 @@ def load_tests(path: Path) -> tuple[dict, dict, list]:
 
     Returns (profiles, category_defaults, tests).
     """
+    if yaml is None:
+        raise RuntimeError("PyYAML is required for quality test definitions: pip install pyyaml")
     with open(path) as f:
         data = yaml.safe_load(f)
     return data.get("profiles", {}), data.get("category_defaults", {}), data.get("tests", [])
@@ -1249,6 +1480,34 @@ def list_tests(tests: list, scenario: str = "all") -> None:
         print(f"  Core tests: {len(CORE_TESTS)}")
 
 
+def filter_tests_for_scenario(all_tests: list[dict], scenario: str) -> list[dict]:
+    if scenario == "all":
+        return list(all_tests)
+    if scenario == "core":
+        return [t for t in all_tests if t["name"] in CORE_TESTS]
+    if scenario in SCENARIO_ALIASES:
+        cats = set(SCENARIO_ALIASES[scenario])
+        return [t for t in all_tests if t.get("cat") in cats]
+    return [t for t in all_tests if t.get("cat") == scenario]
+
+
+def build_apex_selection(args, all_tests: list[dict]) -> tuple[list[dict], dict]:
+    tests = filter_tests_for_scenario(all_tests, args.scenario)
+    db_path = Path(args.db_path) if args.db_path else None
+    store = ResultStore(db_path)
+    try:
+        states = store.apex_case_states(tests, lookback=args.apex_lookback)
+    finally:
+        store.close()
+    return select_apex_tests(
+        tests,
+        states,
+        budget=args.apex_budget,
+        anchor_ratio=args.apex_anchor_ratio,
+        seed=args.apex_seed,
+    )
+
+
 # --- Main ---
 
 async def run(args):
@@ -1257,7 +1516,11 @@ async def run(args):
         print(f"ERROR: {TESTS_YAML} not found")
         return 1
 
-    profiles, cat_defaults, all_tests = load_tests(TESTS_YAML)
+    try:
+        profiles, cat_defaults, all_tests = load_tests(TESTS_YAML)
+    except RuntimeError as e:
+        print(f"ERROR: {e}")
+        return 1
 
     if args.list:
         list_tests(all_tests, args.scenario)
@@ -1265,16 +1528,11 @@ async def run(args):
 
     # Filter tests by scenario.
     scenario = args.scenario
-    if scenario == "all":
-        tests = all_tests
-    elif scenario == "core":
-        tests = [t for t in all_tests if t["name"] in CORE_TESTS]
-    elif scenario in SCENARIO_ALIASES:
-        cats = set(SCENARIO_ALIASES[scenario])
-        tests = [t for t in all_tests if t.get("cat") in cats]
-    else:
-        # Direct category name.
-        tests = [t for t in all_tests if t.get("cat") == scenario]
+    tests = filter_tests_for_scenario(all_tests, scenario)
+
+    if args.sample == "apex" and not args.custom:
+        tests, apex_plan = build_apex_selection(args, all_tests)
+        print_apex_plan(apex_plan, tests)
 
     if not tests and not args.custom:
         print(f"No tests found for scenario '{scenario}'")
@@ -1364,7 +1622,7 @@ async def run(args):
         metadata = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "model": model,
-            "scenario": scenario,
+            "scenario": f"{scenario}:apex" if args.sample == "apex" else scenario,
             "git_branch": branch,
             "git_commit": commit,
             "gateway_version": version,
@@ -1411,6 +1669,18 @@ def main():
                         help="Ignored (kept for compat)")
     parser.add_argument("--report", action="store_true",
                         help="Run full quality report (same as --scenario all)")
+    parser.add_argument("--sample", choices=["all", "apex"], default="all",
+                        help="Test selection strategy. 'apex' prioritizes mixed/frontier cases from recorded history")
+    parser.add_argument("--apex-plan", action="store_true",
+                        help="Show APEX frontier selection without connecting to the gateway")
+    parser.add_argument("--apex-budget", type=int, default=100,
+                        help="Maximum tests to run with --sample apex (default: 100)")
+    parser.add_argument("--apex-lookback", type=int, default=5,
+                        help="Recent recorded outcomes used for Easy/Hard/Mixed classification (default: 5)")
+    parser.add_argument("--apex-anchor-ratio", type=float, default=0.2,
+                        help="Positive anchor ratio for APEX rank-sensitive sampling (default: 0.2)")
+    parser.add_argument("--apex-seed", type=int, default=0,
+                        help="Deterministic shuffle seed for APEX sampling")
     # Recording & history.
     parser.add_argument("--record", action="store_true",
                         help="Record results to persistent SQLite database")
@@ -1428,7 +1698,20 @@ def main():
                         help="Show score trend for a specific test across runs")
     args = parser.parse_args()
 
-    # History commands (no gateway needed).
+    # History/APEX planning commands (no gateway needed).
+    if args.apex_plan:
+        if not TESTS_YAML.exists():
+            print(f"ERROR: {TESTS_YAML} not found")
+            return
+        try:
+            _, _, all_tests = load_tests(TESTS_YAML)
+        except RuntimeError as e:
+            print(f"ERROR: {e}")
+            return
+        selected, plan = build_apex_selection(args, all_tests)
+        print_apex_plan(plan, selected)
+        return
+
     if args.history or args.history_detail or args.compare or args.trend:
         db_path = Path(args.db_path) if args.db_path else None
         store = ResultStore(db_path)

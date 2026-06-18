@@ -21,9 +21,20 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
+
+const phoneSSHFailureBackoff = 60 * time.Second
+
+var phoneSSHFailures = struct {
+	sync.Mutex
+	target string
+	until  time.Time
+	err    string
+}{}
 
 // phoneSSHTarget returns the ssh destination args for the phone. Default is the
 // "phone" config alias; DENEB_PHONE_SSH overrides with arbitrary ssh args.
@@ -34,18 +45,82 @@ func phoneSSHTarget() []string {
 	return []string{"phone"}
 }
 
+func phoneSSHTargetKey(target []string) string {
+	return strings.Join(target, "\x00")
+}
+
+func activePhoneSSHFailure(target []string) error {
+	key := phoneSSHTargetKey(target)
+	now := time.Now()
+
+	phoneSSHFailures.Lock()
+	defer phoneSSHFailures.Unlock()
+	if phoneSSHFailures.target != key || phoneSSHFailures.until.Before(now) {
+		return nil
+	}
+	return fmt.Errorf("phone ssh recently failed; retry after %s: %s",
+		time.Until(phoneSSHFailures.until).Round(time.Second), phoneSSHFailures.err)
+}
+
+func recordPhoneSSHFailure(target []string, err error) {
+	phoneSSHFailures.Lock()
+	defer phoneSSHFailures.Unlock()
+	phoneSSHFailures.target = phoneSSHTargetKey(target)
+	phoneSSHFailures.until = time.Now().Add(phoneSSHFailureBackoff)
+	phoneSSHFailures.err = err.Error()
+}
+
+func clearPhoneSSHFailure(target []string) {
+	key := phoneSSHTargetKey(target)
+	phoneSSHFailures.Lock()
+	defer phoneSSHFailures.Unlock()
+	if phoneSSHFailures.target == key {
+		phoneSSHFailures.target = ""
+		phoneSSHFailures.until = time.Time{}
+		phoneSSHFailures.err = ""
+	}
+}
+
+func isPhoneSSHTransportFailure(output string, err error) bool {
+	if err == nil {
+		return false
+	}
+	text := strings.ToLower(output + " " + err.Error())
+	for _, needle := range []string{
+		"connection refused",
+		"connection timed out",
+		"could not resolve hostname",
+		"host key verification failed",
+		"network is unreachable",
+		"no route to host",
+		"operation timed out",
+		"permission denied (publickey",
+		"connection reset",
+	} {
+		if strings.Contains(text, needle) {
+			return true
+		}
+	}
+	return false
+}
+
 // runPhone runs one command on the phone over ssh. When stdinText is non-empty it
 // is piped to the remote command's stdin, so notification/tts/clipboard text
 // (quotes, newlines, emoji) never needs shell-escaping. Returns trimmed combined
 // output; a non-zero exit (tunnel down, termux-api app missing, no permission) is
 // an error the agent sees and can relay.
 func runPhone(ctx context.Context, stdinText, remoteCmd string) (string, error) {
+	target := phoneSSHTarget()
+	if err := activePhoneSSHFailure(target); err != nil {
+		return "", err
+	}
+
 	args := make([]string, 0, 8)
 	if stdinText == "" {
 		args = append(args, "-n") // no stdin to consume
 	}
 	args = append(args, "-o", "BatchMode=yes", "-o", "ConnectTimeout=10")
-	args = append(args, phoneSSHTarget()...)
+	args = append(args, target...)
 	args = append(args, remoteCmd)
 	cmd := exec.CommandContext(ctx, "ssh", args...)
 	if stdinText != "" {
@@ -54,8 +129,13 @@ func runPhone(ctx context.Context, stdinText, remoteCmd string) (string, error) 
 	out, err := cmd.CombinedOutput()
 	trimmed := strings.TrimSpace(string(out))
 	if err != nil {
-		return "", fmt.Errorf("phone ssh failed: %w (output: %q)", err, trimmed)
+		wrapped := fmt.Errorf("phone ssh failed: %w (output: %q)", err, trimmed)
+		if isPhoneSSHTransportFailure(trimmed, err) {
+			recordPhoneSSHFailure(target, wrapped)
+		}
+		return "", wrapped
 	}
+	clearPhoneSSHFailure(target)
 	return trimmed, nil
 }
 

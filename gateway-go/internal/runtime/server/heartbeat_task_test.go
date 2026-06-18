@@ -113,6 +113,9 @@ func TestHeartbeatSyncOptionsAreTranscriptIsolated(t *testing.T) {
 	if opts == nil {
 		t.Fatal("heartbeatSyncOptions returned nil")
 	}
+	if opts.MaxHistoryTokens != heartbeatHistoryBudget {
+		t.Fatalf("heartbeat history budget = %d, want %d", opts.MaxHistoryTokens, heartbeatHistoryBudget)
+	}
 	if !opts.EphemeralUser {
 		t.Fatal("heartbeat trigger must not persist as a user message")
 	}

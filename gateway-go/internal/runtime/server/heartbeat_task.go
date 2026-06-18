@@ -72,6 +72,11 @@ func (t *heartbeatTask) Interval() time.Duration { return 30 * time.Minute }
 const (
 	heartbeatActiveStartHour = 8
 	heartbeatActiveEndHour   = 23
+	// Heartbeat piggybacks on a live client session for recent commitments, but
+	// production logs showed routine ticks assembling 60K+ history tokens from
+	// client:main. Keep enough recent transcript to resolve follow-ups while
+	// forcing Polaris to summarize the long tail before the autonomous check.
+	heartbeatHistoryBudget = 12_000
 )
 
 // heartbeatTriggerTemplate is injected as a user-role message into the active
@@ -210,6 +215,7 @@ func composeHeartbeatBody(signalSummary, content string) string {
 
 func heartbeatSyncOptions() *chat.SyncOptions {
 	return &chat.SyncOptions{
+		MaxHistoryTokens:   heartbeatHistoryBudget,
 		EphemeralUser:      true,
 		EphemeralAssistant: true,
 	}
