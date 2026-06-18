@@ -95,6 +95,14 @@ type proactiveRelayDeps struct {
 	// (then the heuristics are used directly).
 	cardTitler func(content string) (title, summary string)
 
+	// workModel resolves the display name of the model that produced a proactive
+	// 업무 feed report, so each feed card can show which model did the work. The
+	// main feed's LLM content is uniformly a main-model agent turn (cron morning
+	// letter, mail-analysis synthesis, heartbeat, goal, event ingest), so this
+	// returns the main role's model. nil-safe (nil in older wiring/tests) and a
+	// "" return both leave the body untouched — no footer is appended.
+	workModel func() string
+
 	// nativeSync is a durable cursor-based outbox for native clients. It makes
 	// proactive transcript changes recoverable even when the SSE push is missed.
 	nativeSync interface {
@@ -230,6 +238,21 @@ func (d proactiveRelayDeps) relayNativeToOptions(sessionKey, content string, opt
 		return false, nil
 	}
 
+	// Stamp the producing model at the foot of every 업무 feed report so the user
+	// can see which model did the work. Scoped to the main feed (client:main),
+	// where proactive content is uniformly a main-model agent turn. The footer
+	// goes only into the DELIVERED body (the work-feed card / transcript message),
+	// never into `content` — which keeps feeding the title/summary heuristics and
+	// the push preview the clean report, so the stamp can't leak into a card's
+	// title or 2-line summary. nil-safe; a "" resolver result (e.g. no model
+	// registry) leaves the delivered body equal to content.
+	deliverBody := content
+	if target == nativeWorkSessionKey && d.workModel != nil {
+		if model := strings.TrimSpace(d.workModel()); model != "" {
+			deliverBody = appendWorkModelFooter(content, model)
+		}
+	}
+
 	// The main 업무 feed (client:main) delivers proactive reports to the work FEED
 	// only — not the chat transcript — so the chat stays a place to ask, not a wall
 	// of pushed reports. The feed card carries the full body, read in the 피드 screen
@@ -254,10 +277,10 @@ func (d proactiveRelayDeps) relayNativeToOptions(sessionKey, content string, opt
 		// that expands in place; the raw prose stays inside its markdown child, so
 		// follow-up turns in client:main still have the full analysis in context.
 		// A body whose title can't be derived falls back to plain prose delivery.
-		transcriptBody := content
+		transcriptBody := deliverBody
 		if opts.collapse {
 			if title, titleLine := extractCardTitle(content); strings.TrimSpace(title) != "" {
-				transcriptBody = denebui.CollapsedReportFence(title, collapsedReportBody(content, title, titleLine))
+				transcriptBody = denebui.CollapsedReportFence(title, collapsedReportBody(deliverBody, title, titleLine))
 			}
 		}
 		msg := toolctx.NewTextChatMessage("assistant", transcriptBody, time.Now().UnixMilli())
@@ -322,7 +345,7 @@ func (d proactiveRelayDeps) relayNativeToOptions(sessionKey, content string, opt
 			Source:     source,
 			Title:      title,
 			Summary:    summary,
-			Body:       content,
+			Body:       deliverBody,
 			SessionKey: target,
 		}); err != nil && d.logger != nil {
 			d.logger.Error("proactive native relay: work feed append failed",
@@ -709,6 +732,14 @@ func (d proactiveRelayDeps) deliverNativeImage(caption string, pngBytes []byte) 
 		d.pushHub.publish(clientPushEvent{Title: "Deneb", Body: caption})
 	}
 	return true, nil
+}
+
+// appendWorkModelFooter returns body with the producing model's name on its own
+// line at the very end — the bare name, no label or emoji. The trailing position
+// keeps it clear of the work-feed card's title/summary extraction (which read the
+// head) and the push preview (first line only).
+func appendWorkModelFooter(body, model string) string {
+	return strings.TrimRight(body, "\n") + "\n\n" + model
 }
 
 // pushPreview trims a relayed body to a notification-sized single line. The full
