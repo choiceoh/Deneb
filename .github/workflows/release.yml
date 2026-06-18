@@ -1,0 +1,98 @@
+name: Release
+
+# Build & publish Windows + macOS desktop bundles (Tauri) to a GitHub Release.
+#
+# Trigger: push a version tag like `v0.1.0`, or run manually (workflow_dispatch,
+# pick a tag in the "Run workflow" dropdown for correct naming).
+#
+# Before tagging, bump the version in all three places so bundle filenames match
+# the tag (Tauri stamps versions from tauri.conf.json):
+#   - package.json            "version"
+#   - src-tauri/tauri.conf.json "version"
+#   - src-tauri/Cargo.toml     [package] version
+#
+# Builds are UNSIGNED by default (works with zero secrets). First-launch OS warnings:
+#   - macOS: right-click → Open, or `xattr -dr com.apple.quarantine /Applications/Andromeda.app`
+#   - Windows: SmartScreen → More info → Run anyway
+# To enable signing/notarization later, set the secrets referenced in the commented
+# `env:` block on the "Build and release" step below.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+# tauri-action creates the GitHub Release and uploads assets, so the job needs write.
+permissions:
+  contents: write
+
+jobs:
+  release:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest # Apple Silicon (arm64)
+            args: "--target aarch64-apple-darwin"
+            rust_target: aarch64-apple-darwin
+          - platform: macos-latest # Intel (x86_64) — drop this row if unneeded
+            args: "--target x86_64-apple-darwin"
+            rust_target: x86_64-apple-darwin
+          - platform: windows-latest
+            args: ""
+            rust_target: ""
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_target }}
+
+      - name: Cache Rust build
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build and release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # --- macOS signing & notarization (optional; add as repo secrets to enable) ---
+          # APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          # APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          # APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          # APPLE_ID: ${{ secrets.APPLE_ID }}
+          # APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          # APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # --- Windows signing (optional) ---
+          # Configure tauri.conf.json > bundle.windows.certificateThumbprint (cert in
+          # the runner's store) or an Azure/external signer; no env var needed here.
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "Andromeda ${{ github.ref_name }}"
+          releaseBody: |
+            Andromeda 데스크탑 빌드 (Windows · macOS).
+
+            서명되지 않은 빌드라 첫 실행 시 OS 경고가 날 수 있습니다.
+            - macOS: 우클릭 → 열기, 또는 `xattr -dr com.apple.quarantine /Applications/Andromeda.app`
+            - Windows: SmartScreen → 추가 정보 → 실행
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}
