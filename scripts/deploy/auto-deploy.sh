@@ -33,6 +33,8 @@ PROD_DIR="${DENEB_PROD_DIR:-$HOME/deneb}"
 STATE_DIR="${DENEB_STATE_DIR:-$HOME/.deneb}"
 STATE_FILE="$STATE_DIR/auto-deploy.deployed-head"
 FAIL_FILE="$STATE_DIR/auto-deploy.failed-head"
+DIRTY_FAIL_FILE="$STATE_DIR/auto-deploy.dirty-failed"
+PAUSE_FILE="${DENEB_AUTO_DEPLOY_PAUSE_FILE:-$STATE_DIR/auto-deploy.paused}"
 LOCK_FILE="/tmp/deneb-auto-deploy.lock"
 LOG_FILE="/tmp/deneb-auto-deploy.log"
 RETRY_SEC="${DENEB_AUTO_DEPLOY_RETRY_SEC:-600}"
@@ -51,6 +53,12 @@ record_failure() {
     printf '%s %s\n' "$head" "$(date +%s)" > "$FAIL_FILE"
 }
 
+record_dirty_failure() {
+    local key="$1"
+    mkdir -p "$STATE_DIR"
+    printf '%s %s\n' "$key" "$(date +%s)" > "$DIRTY_FAIL_FILE"
+}
+
 recent_failed_head() {
     local head="$1"
     [[ -f "$FAIL_FILE" ]] || return 1
@@ -63,6 +71,25 @@ recent_failed_head() {
     local now
     now=$(date +%s)
     (( now - failed_at < RETRY_SEC ))
+}
+
+recent_dirty_failure() {
+    local key="$1"
+    [[ -f "$DIRTY_FAIL_FILE" ]] || return 1
+
+    local failed_key=""
+    local failed_at=""
+    read -r failed_key failed_at < "$DIRTY_FAIL_FILE" || return 1
+    [[ "$failed_key" == "$key" ]] || return 1
+    [[ "$failed_at" =~ ^[0-9]+$ ]] || return 1
+
+    local now
+    now=$(date +%s)
+    (( now - failed_at < RETRY_SEC ))
+}
+
+tracked_status_key() {
+    git status --porcelain --untracked-files=no | git hash-object --stdin
 }
 
 # Acquire lock or exit silently — the previous tick is still deploying.
@@ -80,6 +107,20 @@ if [[ ! -d "$PROD_DIR/.git" ]]; then
 fi
 
 cd "$PROD_DIR"
+
+if [[ -f "$PAUSE_FILE" ]]; then
+    pause_reason=$(head -n 1 "$PAUSE_FILE" 2>/dev/null || true)
+    pause_key="paused"
+    if ! recent_dirty_failure "$pause_key"; then
+        if [[ -n "$pause_reason" ]]; then
+            log "INFO: auto-deploy paused: $pause_reason"
+        else
+            log "INFO: auto-deploy paused: $PAUSE_FILE exists"
+        fi
+        record_dirty_failure "$pause_key"
+    fi
+    exit 0
+fi
 
 branch=$(git branch --show-current)
 if [[ "$branch" != "main" ]]; then
@@ -105,7 +146,22 @@ fi
 # and an aggressive stash could swallow build outputs we'd want to
 # keep around.
 AUTOSTASH_REF=""
+unmerged_files=$(git diff --name-only --diff-filter=U)
+if [[ -n "$unmerged_files" ]]; then
+    dirty_key="unmerged:$(printf '%s\n' "$unmerged_files" | git hash-object --stdin)"
+    if ! recent_dirty_failure "$dirty_key"; then
+        log "WARN: worktree has unresolved merge conflicts; auto-deploy paused until operator resolves:"
+        printf '%s\n' "$unmerged_files" | head -5 | sed 's/^/  /' >> "$LOG_FILE"
+        record_dirty_failure "$dirty_key"
+    fi
+    exit 0
+fi
+
 if ! git diff --quiet || ! git diff --cached --quiet; then
+    dirty_key="dirty:$(tracked_status_key)"
+    if recent_dirty_failure "$dirty_key"; then
+        exit 0
+    fi
     dirty_summary=$(git status --porcelain --untracked-files=no | head -5)
     log "INFO: worktree dirty, auto-stashing for deploy:"
     printf '%s\n' "$dirty_summary" | sed 's/^/  /' >> "$LOG_FILE"
@@ -114,10 +170,14 @@ if ! git diff --quiet || ! git diff --cached --quiet; then
     # we want a fully clean tree for the upcoming build, so omit it.
     if git stash push --message "$stash_msg" >>"$LOG_FILE" 2>&1; then
         AUTOSTASH_REF="$stash_msg"
+        rm -f "$DIRTY_FAIL_FILE"
     else
+        record_dirty_failure "$dirty_key"
         log "WARN: auto-stash failed; skipping this tick — inspect with 'git -C $PROD_DIR status'"
         exit 0
     fi
+else
+    rm -f "$DIRTY_FAIL_FILE"
 fi
 
 # Always try to restore stashed changes on exit, even if the deploy
@@ -200,7 +260,7 @@ if (( rc == 0 )); then
     deployed_now=$(git rev-parse HEAD)
     mkdir -p "$STATE_DIR"
     printf '%s\n' "$deployed_now" > "$STATE_FILE"
-    rm -f "$FAIL_FILE"
+    rm -f "$FAIL_FILE" "$DIRTY_FAIL_FILE"
     log "deploy OK (head now $deployed_now)"
 else
     record_failure "$remote_head"

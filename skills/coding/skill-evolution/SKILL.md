@@ -1,6 +1,6 @@
 ---
 name: skill-evolution
-version: "1.0.7"
+version: "1.0.8"
 category: coding
 description: "Evolve and optimize existing skills using autoresearch methodology. Use when: (1) a skill produces suboptimal results, (2) a skill's instructions are outdated or incomplete, (3) systematic improvement of skill quality is requested. NOT for: creating new skills (use skill-factory), cosmetic changes, or skills that already work well."
 metadata:
@@ -8,7 +8,7 @@ metadata:
     "deneb":
       {
         "emoji": "🧬",
-        "tags": ["evolution", "optimization", "improvement", "GEPA", "autoresearch", "SkillOpt", "Self-Harness", "failure-clustering", "rejected-edit-buffer", "held-out-replay", "self-correction-queue"],
+        "tags": ["evolution", "optimization", "improvement", "GEPA", "APEX", "autoresearch", "SkillOpt", "Self-Harness", "failure-clustering", "rejected-edit-buffer", "held-out-replay", "self-correction-queue"],
         "related_skills": ["evolution-proposal", "skill-factory", "skill-creator"],
       },
   }
@@ -61,6 +61,7 @@ Rules from autoresearch methodology:
 - **Small changes > large rewrites** — 2-line improvement that works > 50-line rewrite that doesn't
 - **Reversible** — every change must be cleanly revertable
 - **Textual learning rate** — prefer a bounded edit budget; don't rewrite a whole skill when one section or warning is enough
+- **APEX frontier selection** — when enough validation history exists, prioritize mixed recent cases (`scripts/dev/quality-test.py --apex-plan` / `--sample apex`) for diagnosis and evaluation instead of random or full-suite sampling
 - **Rejected-edit awareness** — check `skill_lifecycle` status for `rejectedEdits` and avoid repeating candidates that already failed validation
 - **Held-out replay awareness** — check `validationCases`; the evolver also injects recent cases into candidate-generation prompts, so do not remove actions, session-extracted tool calls, command fragments, fixture observations, or ordering that a replay case requires
 - **Self-Harness evidence discipline** — a candidate should map one supported,
@@ -111,6 +112,18 @@ scripts/dev/iterate.sh --metric "scripts/dev/quality-metric.sh"
 | Chat/prompt skills | `scripts/dev/quality-metric.sh` |
 | Tool-using skills | `scripts/dev/iterate.sh --metric "scripts/dev/quality-metric.sh"` |
 | Format skills | `scripts/dev/iterate.sh --metric "scripts/dev/quality-metric.sh"` |
+
+When running broader Deneb quality suites, prefer APEX sampling after at least
+one recorded baseline exists:
+
+```bash
+python3 scripts/dev/quality-test.py --apex-plan --scenario all
+python3 scripts/dev/quality-test.py --scenario all --sample apex --record
+```
+
+Use full-suite runs as periodic anchors. Do not let frontier sampling become
+the only gate, because Easy regressions and genuinely Hard capability gaps still
+need periodic visibility.
 
 ### Phase 5: Keep or Revert
 
@@ -179,6 +192,7 @@ Prioritize skills by:
 3. Oldest version (haven't been touched)
 
 ## Changelog
+- v1.0.8: Added APEX-style mixed/frontier sampling guidance for validation selection.
 - v1.0.7: Added deferred self-correction queue handling.
 - v1.0.6: Added background repeated-failure threshold and structured audit-field expectation.
 - v1.0.5: Added Self-Harness failure-clustering and evidence-binding discipline for skill evolution.
