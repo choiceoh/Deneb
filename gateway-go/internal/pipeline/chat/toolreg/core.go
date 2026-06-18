@@ -77,7 +77,7 @@ func FetchToolsSchema() map[string]any { return fetchToolsToolSchema() }
 func RegisterPhoneTools(registry toolctx.ToolRegistrar) {
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "phone_read",
-		Description: "사용자 스마트폰을 조회한다(reverse SSH→Termux). what=location(현재 GPS 좌표) | clipboard(방금 복사한 내용) | battery(배터리·충전 상태). '지금 어디', '방금 복사한 거' 같은 질문이나, 능동 판단 시 맥락 보강에 사용.",
+		Description: "사용자 스마트폰을 조회한다(reverse SSH→Termux). what=location(현재 GPS 좌표) | clipboard(방금 복사한 내용) | battery(배터리·충전 상태) | calllog(최근 통화기록 20건) | contacts(폰 주소록 — 특정 인물 검색은 `contacts` 도구가 더 낫다). '지금 어디', '방금 복사한 거', '최근 통화 누구랑' 같은 질문이나, 능동 판단 시 맥락 보강에 사용.",
 		InputSchema: phoneReadToolSchema(),
 		Fn:          tools.ToolPhoneRead(),
 		Deferred:    true,

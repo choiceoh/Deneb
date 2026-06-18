@@ -119,7 +119,7 @@ func phoneEventKindLabel(eventType string) string {
 func phoneEventGuidance(eventType string) string {
 	switch strings.TrimSpace(strings.ToLower(eventType)) {
 	case "context":
-		return `이것은 상황 변화 신호다(위치·네트워크 등). 이 맥락에서 사용자에게 선제적으로 도움될 일이 있으면 제공하라 — 예: 회사 도착(출근)이면 오늘 일정과 미처리 우선업무를, 귀가(퇴근)면 하루 마감 요약을. 현재 시간대에 비춰 단순 이동이거나 지금 도울 게 없으면 다른 말 없이 %s 만 출력하라.`
+		return `이것은 상황 변화 신호다(위치·네트워크 등). 대부분의 상태 변화는 알릴 가치가 없으니 기본은 침묵이다 — 평일 아침 첫 출근 도착(→오늘 일정·우선업무 브리핑)이나 저녁 귀가(→하루 마감 요약)처럼 명확히 행동을 부르는 드문 전환일 때만 보고하라. 단순 이동·경유·반복 접속·시간대상 애매한 신호, 그리고 위치·네트워크 변화 자체의 중계는 전부 다른 말 없이 %s 만 출력하라.`
 	case "clipboard":
 		return `이것은 사용자가 복사(캡처)한 내용이다. 일정·할일·연락처·금액·주소가 들어 있으면 추출해 정리하고, 회의록·대화·문서면 핵심을 요약하라. 그냥 짧은 보관용 텍스트라 처리할 일이 없으면 다른 말 없이 %s 만 출력하라.`
 	default: // notification, sms, and any free label

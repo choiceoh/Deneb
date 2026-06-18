@@ -1615,11 +1615,13 @@
     "properties": {
       "what": {
         "type": "string",
-        "description": "조회 대상: location(현재 GPS 좌표) | clipboard(방금 복사한 내용) | battery(배터리·충전 상태)",
+        "description": "조회 대상: location(현재 GPS 좌표) | clipboard(방금 복사한 내용) | battery(배터리·충전 상태) | calllog(최근 통화기록 20건) | contacts(폰 주소록)",
         "enum": [
           "location",
           "clipboard",
-          "battery"
+          "battery",
+          "calllog",
+          "contacts"
         ]
       }
     },
