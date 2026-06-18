@@ -112,10 +112,12 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	// If review_age keeps growing, the nudger→review→evolve pipeline stalled.
 	if s.genesisTracker != nil {
 		live := s.genesisTracker.LivenessSnapshot()
+		doctrine := genesis.PropusDoctrine()
 		lastActivity := propusLastActivityMS(live)
 		se := map[string]any{
 			"system":                "Propus",
 			"tool":                  "skill_lifecycle",
+			"doctrine_version":      doctrine.Version,
 			"last_review_ms":        live.LastReviewAt,
 			"last_review_ok":        live.LastReviewOK,
 			"last_evolve_ms":        live.LastEvolveAt,
@@ -123,6 +125,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 			"review_attempts":       live.ReviewAttempts,
 			"review_skips":          live.ReviewSkips,
 			"validation_rejections": live.ValidationRejections,
+			"quality_gates":         doctrine.QualityGates,
 		}
 		if lastActivity > 0 {
 			se["last_activity_ms"] = lastActivity

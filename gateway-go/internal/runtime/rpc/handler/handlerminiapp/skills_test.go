@@ -203,6 +203,10 @@ func TestSkillsLifecycle_MappingAndLimit(t *testing.T) {
 		payload.Summary.Attention != 2 ||
 		payload.Summary.LatestAt != 333 ||
 		payload.Summary.LatestSkill != "email-analysis" ||
+		payload.Summary.DoctrineVersion != genesis.PropusDoctrine().Version ||
+		len(payload.Summary.SourcePapers) != 4 ||
+		len(payload.Summary.Principles) != 4 ||
+		len(payload.Summary.QualityGates) != 4 ||
 		payload.Summary.NextCue == "" ||
 		payload.Summary.QualityGate == "" {
 		t.Fatalf("unexpected Propus summary: %+v", payload.Summary)

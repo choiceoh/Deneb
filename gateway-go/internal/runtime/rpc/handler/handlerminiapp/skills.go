@@ -126,22 +126,26 @@ type SkillLifecycleEvent struct {
 //
 //deneb:wire
 type PropusLifecycleSummary struct {
-	System       string `json:"system"`
-	State        string `json:"state"`
-	Total        int    `json:"total"`
-	Genesis      int    `json:"genesis"`
-	Evolved      int    `json:"evolved"`
-	Review       int    `json:"review"`
-	Rejected     int    `json:"rejected"`
-	RolledBack   int    `json:"rolledBack"`
-	Attention    int    `json:"attention"`
-	LatestAt     int64  `json:"latestAt,omitempty"`
-	LatestType   string `json:"latestType,omitempty"`
-	LatestSkill  string `json:"latestSkill,omitempty"`
-	Doctrine     string `json:"doctrine,omitempty"`
-	NextCue      string `json:"nextCue,omitempty"`
-	QualityGate  string `json:"qualityGate,omitempty"`
-	AttentionCue string `json:"attentionCue,omitempty"`
+	System          string   `json:"system"`
+	State           string   `json:"state"`
+	Total           int      `json:"total"`
+	Genesis         int      `json:"genesis"`
+	Evolved         int      `json:"evolved"`
+	Review          int      `json:"review"`
+	Rejected        int      `json:"rejected"`
+	RolledBack      int      `json:"rolledBack"`
+	Attention       int      `json:"attention"`
+	LatestAt        int64    `json:"latestAt,omitempty"`
+	LatestType      string   `json:"latestType,omitempty"`
+	LatestSkill     string   `json:"latestSkill,omitempty"`
+	DoctrineVersion string   `json:"doctrineVersion,omitempty"`
+	Doctrine        string   `json:"doctrine,omitempty"`
+	SourcePapers    []string `json:"sourcePapers,omitempty"`
+	Principles      []string `json:"principles,omitempty"`
+	QualityGates    []string `json:"qualityGates,omitempty"`
+	NextCue         string   `json:"nextCue,omitempty"`
+	QualityGate     string   `json:"qualityGate,omitempty"`
+	AttentionCue    string   `json:"attentionCue,omitempty"`
 }
 
 // SkillsLifecycleResponse is the miniapp.skills.lifecycle payload,
@@ -398,12 +402,17 @@ func lifecycleEvent(e genesis.LifecycleLogEntry) SkillLifecycleEvent {
 }
 
 func propusLifecycleSummary(events []SkillLifecycleEvent) PropusLifecycleSummary {
+	doctrine := genesis.PropusDoctrine()
 	summary := PropusLifecycleSummary{
-		System:      "Propus",
-		State:       "observing",
-		Total:       len(events),
-		Doctrine:    "observe -> propose -> validate -> genesis/evolve -> watch -> rollback/backlog",
-		QualityGate: "검증 없는 생성/진화는 skill debt로 취급",
+		System:          doctrine.Name,
+		State:           "observing",
+		Total:           len(events),
+		DoctrineVersion: doctrine.Version,
+		Doctrine:        doctrine.LifecycleText(),
+		SourcePapers:    doctrine.SourceIDs(),
+		Principles:      doctrine.ProductRules(),
+		QualityGates:    doctrine.QualityGates,
+		QualityGate:     "검증 없는 생성/진화는 skill debt로 취급",
 	}
 	for _, event := range events {
 		if event.At > summary.LatestAt {

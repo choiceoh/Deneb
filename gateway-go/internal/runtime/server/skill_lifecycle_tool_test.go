@@ -120,6 +120,13 @@ func TestSkillLifecycleStatusFiltersBySkillAndStats(t *testing.T) {
 	if system["name"] != "Propus" || system["tool"] != "skill_lifecycle" || system["scope"] != "skill" {
 		t.Fatalf("unexpected Propus system status: %+v", system)
 	}
+	if system["version"] != genesis.PropusDoctrine().Version {
+		t.Fatalf("unexpected Propus doctrine version: %+v", system)
+	}
+	sourcePapers := system["sourcePapers"].([]string)
+	if len(sourcePapers) != 4 || sourcePapers[0] != "arxiv:2602.20867" {
+		t.Fatalf("unexpected source papers: %+v", sourcePapers)
+	}
 	overview := got["overview"].(map[string]any)
 	if overview["state"] != "needs_review" ||
 		overview["pendingSelfCorrections"] != 1 ||
