@@ -8,7 +8,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonlstore"
 )
 
-// SkillOpportunityRecord is a lightweight backlog of self-evolution signals.
+// SkillOpportunityRecord is a lightweight backlog of Propus signals.
 // Unlike lifecycle logs, this is not only an audit trail of what happened; it is
 // fed back into future background reviews so weak no-op/near-miss proposals can
 // accumulate into a confident genesis/evolve route.
@@ -25,7 +25,7 @@ type SkillOpportunityRecord struct {
 	CreatedAt  int64  `json:"createdAt,omitempty"`
 }
 
-// RecordSkillOpportunity appends one observed self-evolution signal.
+// RecordSkillOpportunity appends one observed Propus signal.
 func (t *Tracker) RecordSkillOpportunity(record SkillOpportunityRecord) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()

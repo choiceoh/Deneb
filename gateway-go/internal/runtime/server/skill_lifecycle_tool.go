@@ -178,8 +178,10 @@ func (b *skillLifecycleBackend) RunSkillEvolution(ctx context.Context, req chatt
 func (b *skillLifecycleBackend) SkillLifecycleStatus(_ context.Context, req chattools.SkillLifecycleStatusRequest) (any, error) {
 	if b.tracker == nil {
 		return map[string]any{
-			"ok":     false,
-			"reason": "skill tracker is not configured",
+			"system":   propusSystemStatus(strings.TrimSpace(req.SkillName)),
+			"overview": propusUnavailableOverview(strings.TrimSpace(req.SkillName)),
+			"ok":       false,
+			"reason":   "skill tracker is not configured",
 		}, nil
 	}
 
@@ -207,6 +209,8 @@ func (b *skillLifecycleBackend) SkillLifecycleStatus(_ context.Context, req chat
 		opportunities, opportunitiesErr := b.recentSkillOpportunities(skillName, limit)
 		selfCorrections, selfCorrectionsErr := b.recentSelfCorrectionCandidates(skillName, limit)
 		status := map[string]any{
+			"system":                   propusSystemStatus(skillName),
+			"overview":                 propusSkillOverview(skillName, recent, stats, curator, usageQuality, validationSummary, opportunities, selfCorrections),
 			"ok":                       true,
 			"skillName":                skillName,
 			"limit":                    limit,
@@ -260,6 +264,8 @@ func (b *skillLifecycleBackend) SkillLifecycleStatus(_ context.Context, req chat
 	opportunities, opportunitiesErr := b.recentSkillOpportunities("", limit)
 	selfCorrections, selfCorrectionsErr := b.recentSelfCorrectionCandidates("", limit)
 	status := map[string]any{
+		"system":                   propusSystemStatus(""),
+		"overview":                 propusGlobalOverview(recent, stats, curator, usageQuality, validationSummary, opportunities, selfCorrections),
 		"ok":                       true,
 		"limit":                    limit,
 		"recent":                   recent,
@@ -871,6 +877,239 @@ func normalizeSkillValidationBackfillLimit(limit int) int {
 		return skillLifecycleMaxValidationBackfillSessions
 	}
 	return limit
+}
+
+func propusUnavailableOverview(skillName string) map[string]any {
+	scope := "global"
+	if strings.TrimSpace(skillName) != "" {
+		scope = "skill"
+	}
+	return map[string]any{
+		"state":       "unavailable",
+		"scope":       scope,
+		"skillName":   strings.TrimSpace(skillName),
+		"nextActions": []string{"configure_skill_tracker"},
+	}
+}
+
+func propusSkillOverview(
+	skillName string,
+	recent []genesis.LifecycleLogEntry,
+	stats *genesis.UsageStats,
+	curator []genesis.SkillCuratorRecord,
+	usageQuality genesis.UsageQualitySummary,
+	validationSummary genesis.SkillValidationCaseSummary,
+	opportunities []genesis.SkillOpportunityRecord,
+	selfCorrections []genesis.SelfCorrectionCandidateRecord,
+) map[string]any {
+	counts := propusLifecycleCounts(recent)
+	nextActions := make([]string, 0, 5)
+	state := "steady"
+	if len(selfCorrections) > 0 {
+		state = propusMaxState(state, "needs_review")
+		nextActions = append(nextActions, "review_pending_self_corrections")
+	}
+	if validationSummary.UniqueRecords == 0 {
+		state = propusMaxState(state, "needs_validation")
+		nextActions = append(nextActions, "record_validation_case_from_session")
+	}
+	if stats != nil && stats.TotalUses >= 2 && stats.SuccessRate < 0.5 {
+		state = propusMaxState(state, "needs_evolution")
+		nextActions = append(nextActions, "inspect_usage_failures_and_propose_evolve")
+	}
+	if counts["evolve_rejected"]+counts["evolve_rolled_back"] > 0 {
+		state = propusMaxState(state, "needs_attention")
+		nextActions = append(nextActions, "inspect_rejected_or_rolled_back_edits")
+	}
+	if len(opportunities) > 0 {
+		state = propusMaxState(state, "has_backlog")
+		nextActions = append(nextActions, "triage_opportunity_backlog")
+	}
+	if len(nextActions) == 0 {
+		nextActions = append(nextActions, "continue_observing")
+	}
+
+	totalUses := 0
+	successRate := 0.0
+	if stats != nil {
+		totalUses = stats.TotalUses
+		successRate = stats.SuccessRate
+	}
+	createdBy := ""
+	curatorState := ""
+	if len(curator) > 0 {
+		createdBy = curator[0].CreatedBy
+		curatorState = curator[0].State
+	}
+	return map[string]any{
+		"state":                  state,
+		"scope":                  "skill",
+		"skillName":              skillName,
+		"eventCounts":            counts,
+		"totalUses":              totalUses,
+		"successRate":            successRate,
+		"countedUsageRecords":    usageQuality.CountedRecords,
+		"ignoredUsageRecords":    usageQuality.IgnoredRecords,
+		"validationCases":        validationSummary.UniqueRecords,
+		"pendingSelfCorrections": len(selfCorrections),
+		"openOpportunities":      len(opportunities),
+		"curatorState":           curatorState,
+		"createdBy":              createdBy,
+		"nextActions":            nextActions,
+	}
+}
+
+func propusGlobalOverview(
+	recent []genesis.LifecycleLogEntry,
+	stats []genesis.UsageStats,
+	curator []genesis.SkillCuratorRecord,
+	usageQuality genesis.UsageQualitySummary,
+	validationSummary genesis.SkillValidationCaseSummary,
+	opportunities []genesis.SkillOpportunityRecord,
+	selfCorrections []genesis.SelfCorrectionCandidateRecord,
+) map[string]any {
+	counts := propusLifecycleCounts(recent)
+	nextActions := make([]string, 0, 5)
+	state := "steady"
+	lowSuccessSkills := 0
+	for _, s := range stats {
+		if s.TotalUses >= 2 && s.SuccessRate < 0.5 {
+			lowSuccessSkills++
+		}
+	}
+	staleSkills := 0
+	archivedSkills := 0
+	for _, c := range curator {
+		switch c.State {
+		case genesis.SkillCuratorStateStale:
+			staleSkills++
+		case genesis.SkillCuratorStateArchived:
+			archivedSkills++
+		}
+	}
+	if len(selfCorrections) > 0 {
+		state = propusMaxState(state, "needs_review")
+		nextActions = append(nextActions, "review_pending_self_corrections")
+	}
+	if validationSummary.UniqueRecords == 0 && len(stats) > 0 {
+		state = propusMaxState(state, "needs_validation")
+		nextActions = append(nextActions, "backfill_validation_cases_for_active_skills")
+	}
+	if lowSuccessSkills > 0 {
+		state = propusMaxState(state, "needs_evolution")
+		nextActions = append(nextActions, "triage_low_success_skills")
+	}
+	if counts["evolve_rejected"]+counts["evolve_rolled_back"] > 0 {
+		state = propusMaxState(state, "needs_attention")
+		nextActions = append(nextActions, "inspect_recent_rejections_and_rollbacks")
+	}
+	if len(opportunities) > 0 {
+		state = propusMaxState(state, "has_backlog")
+		nextActions = append(nextActions, "route_opportunity_backlog")
+	}
+	if len(nextActions) == 0 {
+		nextActions = append(nextActions, "continue_observing")
+	}
+	return map[string]any{
+		"state":                  state,
+		"scope":                  "global",
+		"eventCounts":            counts,
+		"trackedSkills":          len(stats),
+		"lowSuccessSkills":       lowSuccessSkills,
+		"countedUsageRecords":    usageQuality.CountedRecords,
+		"ignoredUsageRecords":    usageQuality.IgnoredRecords,
+		"validationCases":        validationSummary.UniqueRecords,
+		"skillsWithValidation":   validationSummary.SkillsWithCases,
+		"pendingSelfCorrections": len(selfCorrections),
+		"openOpportunities":      len(opportunities),
+		"curatedSkills":          len(curator),
+		"staleSkills":            staleSkills,
+		"archivedSkills":         archivedSkills,
+		"nextActions":            nextActions,
+	}
+}
+
+func propusLifecycleCounts(entries []genesis.LifecycleLogEntry) map[string]int {
+	counts := map[string]int{
+		"genesis":              0,
+		"review":               0,
+		"evolved":              0,
+		"evolve_rejected":      0,
+		"evolve_rolled_back":   0,
+		"other":                0,
+		"executed_review":      0,
+		"non_executed_review":  0,
+		"validation_sensitive": 0,
+	}
+	for _, entry := range entries {
+		typ := strings.TrimSpace(entry.Type)
+		if typ == "" {
+			typ = "genesis"
+		}
+		switch typ {
+		case "genesis", "evolved", "evolve_rejected", "evolve_rolled_back":
+			counts[typ]++
+		case "evolution_proposal":
+			counts["review"]++
+			if entry.Executed {
+				counts["executed_review"]++
+			} else {
+				counts["non_executed_review"]++
+			}
+		default:
+			counts["other"]++
+		}
+		if entry.SelfHarnessAudit != nil {
+			counts["validation_sensitive"]++
+		}
+	}
+	return counts
+}
+
+func propusMaxState(current, candidate string) string {
+	if propusStatePriority(candidate) > propusStatePriority(current) {
+		return candidate
+	}
+	return current
+}
+
+func propusStatePriority(state string) int {
+	switch state {
+	case "needs_attention":
+		return 5
+	case "needs_review":
+		return 4
+	case "needs_evolution":
+		return 3
+	case "needs_validation":
+		return 2
+	case "has_backlog":
+		return 1
+	default:
+		return 0
+	}
+}
+
+func propusSystemStatus(skillName string) map[string]any {
+	scope := "global"
+	if strings.TrimSpace(skillName) != "" {
+		scope = "skill"
+	}
+	return map[string]any{
+		"name":        "Propus",
+		"codename":    "propus",
+		"tool":        "skill_lifecycle",
+		"scope":       scope,
+		"description": "Deneb closed-loop self-improvement: observe work, propose reusable changes, validate with held-out replay cases, evolve or generate skills, watch outcomes, rollback regressions, and queue deferred self-corrections.",
+		"loop": []string{
+			"observe",
+			"propose",
+			"validate",
+			"genesis_or_evolve",
+			"watch",
+			"rollback_or_backlog",
+		},
+	}
 }
 
 func filterSkillLifecycleLog(entries []genesis.LifecycleLogEntry, skillName string) []genesis.LifecycleLogEntry {

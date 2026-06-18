@@ -266,10 +266,12 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		ss.WriteString("1. `fetch_tools`(query=\"skills\") → `skills`(action=list, query=\"작업 핵심어\")로 기존 스킬을 찾고 있으면 SKILL.md를 읽는다.\n")
 		ss.WriteString("2. 스킬이 없거나 사용자가 '전처럼/지난번처럼/같은 작업'을 뜻하면 `fetch_tools`(query=\"sessions\") → `sessions`(action=search, query=\"작업 핵심어\", maxResults=10)로 과거 세션을 찾는다.\n")
 		ss.WriteString("3. 후보 세션이 있으면 `sessions`(action=history, sessionKey=..., limit=40)로 절차·검증·실패/교정 내용을 복원한 뒤 현재 작업에 적용한다.\n")
-		ss.WriteString("4. 작업이 끝나면 아래 Skill Genesis 규칙으로 저장/개선한다. `skill_lifecycle`가 보이지 않으면 `fetch_tools`(query=\"skill_lifecycle\")로 먼저 활성화한다.\n\n")
-		// Skill Genesis: instruct the agent to identify reusable patterns.
-		ss.WriteString("### Skill Genesis (경험에서 스킬 자동 생성)\n")
-		ss.WriteString("복합 워크플로우(2+ 도구, 2+ 턴 또는 재사용 가능한 code_action)를 완료하면 시스템이 자동으로 스킬 추출을 평가합니다.\n")
+		ss.WriteString("4. 작업이 끝나면 아래 Propus 규칙으로 저장/개선한다. `skill_lifecycle`가 보이지 않으면 `fetch_tools`(query=\"skill_lifecycle\")로 먼저 활성화한다.\n\n")
+		// Propus: instruct the agent to identify reusable patterns and keep the
+		// self-improvement loop in one control plane.
+		ss.WriteString("### Propus (스킬·자가개선 루프)\n")
+		ss.WriteString("Propus는 경험 → 제안 → 검증 → 스킬 생성/진화 → 관찰/롤백 → 자가수정 후보를 하나로 묶는 자기개선 시스템입니다. `skill_lifecycle`는 호환성을 위해 유지되는 Propus control plane 도구입니다.\n")
+		ss.WriteString("복합 워크플로우(2+ 도구, 2+ 턴 또는 재사용 가능한 code_action)를 완료하면 Propus가 스킬 추출·개선 여부를 평가합니다.\n")
 		ss.WriteString("재사용 가치가 높은 워크플로우를 발견하면:\n")
 		ss.WriteString("1. `evolution-proposal` 스킬로 genesis/create/evolve/no-op 중 하나를 먼저 결정하세요.\n")
 		ss.WriteString("2. 기존 스킬 개선 → 기존 umbrella 보강 → 보조 파일 추가 → 새 class-level 스킬 순서로 보수적으로 판단하세요.\n")
@@ -277,17 +279,18 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		ss.WriteString("4. 제안·생성·진화 실행은 `skill_lifecycle` 도구(propose/genesis/evolve/status)로 닫으세요.\n")
 		ss.WriteString("5. 자세한 config/명령/템플릿은 `skills` action=write_file 로 references/templates/scripts/assets 아래 보존하세요.\n")
 		ss.WriteString("6. agent-created 스킬 상태 조정은 `skill_lifecycle` action=pin/unpin/archive/restore 를 사용하세요.\n")
-		ss.WriteString("7. 스킬 진화는 검증 통과 시에만 채택하고, `skill_lifecycle` status의 `opportunities`, `rejectedEdits`, `validationCases`를 확인해 반복 near-miss는 승격하고 같은 실패 후보는 반복하지 마세요.\n")
-		ss.WriteString("8. 실제 실패에서 재현 가능한 검사 조건이 생기면 `skill_lifecycle` action=validation_case_from_session 으로 세션 trace 기반 case를 먼저 남기고, 필요하면 action=validation_case 로 수동 replay/held-out case를 보강하세요.\n")
-		ss.WriteString("9. 사용자 교정(형식, 범위, 검증, 작업 순서)이나 자기수정 아이디어는 즉시 적용하지 말고, 적용 전 후보로 남길 때 `skill_lifecycle` action=self_correction 에 title/evidence/targetFiles/proposedChange/risk 를 기록하세요.\n")
-		ss.WriteString("10. 새 세션/리뷰/코딩 작업을 시작할 때 `skill_lifecycle` status 의 selfCorrectionCandidates 를 확인하고, batch review 후 accepted/rejected/superseded/applied 를 `skill_lifecycle` action=self_correction_review 로 표시하세요.\n")
-		ss.WriteString("11. `code_action`으로 좋은 배치/조인/정규화/내부-write 워크플로우가 성공했다면 다음 실행부터 `promoteToSkill`에 candidate/evidence를 넣어 `skill_lifecycle` 제안/생성 경로로 승격하세요.\n")
+		ss.WriteString("7. `skill_lifecycle` status는 먼저 `overview.state`와 `overview.nextActions`를 읽어 다음 Propus 조치를 고르고, 필요 원자료(`opportunities`, `rejectedEdits`, `validationCases`, `selfCorrectionCandidates`)로 근거를 확인하세요.\n")
+		ss.WriteString("8. 스킬 진화는 검증 통과 시에만 채택하고, 반복 near-miss는 승격하고 같은 실패 후보는 반복하지 마세요.\n")
+		ss.WriteString("9. 실제 실패에서 재현 가능한 검사 조건이 생기면 `skill_lifecycle` action=validation_case_from_session 으로 세션 trace 기반 case를 먼저 남기고, 필요하면 action=validation_case 로 수동 replay/held-out case를 보강하세요.\n")
+		ss.WriteString("10. 사용자 교정(형식, 범위, 검증, 작업 순서)이나 자기수정 아이디어는 즉시 적용하지 말고, 적용 전 후보로 남길 때 `skill_lifecycle` action=self_correction 에 title/evidence/targetFiles/proposedChange/risk 를 기록하세요.\n")
+		ss.WriteString("11. 새 세션/리뷰/코딩 작업을 시작할 때 `skill_lifecycle` status 의 selfCorrectionCandidates 를 확인하고, batch review 후 accepted/rejected/superseded/applied 를 `skill_lifecycle` action=self_correction_review 로 표시하세요.\n")
+		ss.WriteString("12. `code_action`으로 좋은 배치/조인/정규화/내부-write 워크플로우가 성공했다면 다음 실행부터 `promoteToSkill`에 candidate/evidence를 넣어 `skill_lifecycle` 제안/생성 경로로 승격하세요.\n")
 		// S3: agent-facing save path. The agent itself may decide a
 		// workflow is worth keeping and persist it via skill_manage.
 		// apply=true is an explicit opt-in for mid-session visibility;
 		// the default defers the cache bust so the prompt-cache hit
 		// rate stays high.
-		ss.WriteString("12. 진짜 재사용 가능한 패턴을 방금 해결했다면 `skills`(action=create, ...) 로 직접 저장하세요. ")
+		ss.WriteString("13. 진짜 재사용 가능한 패턴을 방금 해결했다면 `skills`(action=create, ...) 로 직접 저장하세요. ")
 		ss.WriteString("기본은 다음 세션부터 로드되어 프롬프트 캐시를 해치지 않습니다. 이번 세션에서 즉시 쓰려면 apply=true 를 추가하세요.\n\n")
 	} else {
 		// No always-skills, but discoverable skills may still exist.

@@ -81,6 +81,19 @@ func TestHealthEndpointIncludesUsageQualitySignals(t *testing.T) {
 		t.Fatalf("decode: %v", err)
 	}
 	selfEvolution := resp["self_evolution"].(map[string]any)
+	propus := resp["propus"].(map[string]any)
+	if propus["system"] != "Propus" || propus["tool"] != "skill_lifecycle" {
+		t.Fatalf("unexpected Propus health identity: %+v", propus)
+	}
+	if propus["state"] != "attention" {
+		t.Fatalf("expected Propus attention state, got %+v", propus)
+	}
+	if attention, ok := propus["attention"].([]any); !ok || len(attention) == 0 {
+		t.Fatalf("expected Propus attention signals, got %+v", propus)
+	}
+	if propus["validation_case_records"] != selfEvolution["validation_case_records"] {
+		t.Fatalf("propus and self_evolution health payloads diverged: propus=%+v self=%+v", propus, selfEvolution)
+	}
 	if selfEvolution["usage_records"] != float64(2) ||
 		selfEvolution["usage_counted_records"] != float64(1) ||
 		selfEvolution["ignored_unactionable_legacy_failures"] != float64(1) {

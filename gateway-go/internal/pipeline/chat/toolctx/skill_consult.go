@@ -7,7 +7,7 @@ import (
 
 // SkillConsultLog records which skills the agent consulted (read via the
 // `skills` tool's read action) during a single agent run. It feeds the
-// self-evolution Evolver a real usage and success-rate signal: the run loop
+// Propus Evolver a real usage and success-rate signal: the run loop
 // drains it per turn and attributes that turn's outcome (clean vs. a tool
 // error) to each skill consulted, calling RecordUsage. Without this the
 // Evolver's SkillsNeedingEvolution(minUses, maxSuccessRate) gate sees empty

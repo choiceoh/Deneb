@@ -145,7 +145,7 @@ var requiredMethods = []string{
 	// FCM sender stays dormant without credentials.
 	"miniapp.push.register",
 	"miniapp.push.unregister",
-	// Skills catalog + detail + self-evolution feed — List is always wired,
+	// Skills catalog + detail + Propus feed — List is always wired,
 	// so all three register unconditionally (tracker absence degrades the
 	// payload, not the registration).
 	"miniapp.skills.list",

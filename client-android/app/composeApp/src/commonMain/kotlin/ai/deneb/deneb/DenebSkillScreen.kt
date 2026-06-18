@@ -37,9 +37,9 @@ import kotlin.time.Instant
 /**
  * Skill detail (`miniapp.skills.detail`): the full catalog meta the list row
  * truncates, the SKILL.md document itself, and the skill's own slice of the
- * self-evolution timeline (`miniapp.skills.lifecycle` filtered by skillName).
+ * Propus timeline (`miniapp.skills.lifecycle` filtered by skillName).
  * Read-only, like the Skills tab that opens it — skills are managed on the
- * gateway host (and by the self-evolution loop), not edited from the client.
+ * gateway host (and by Propus), not edited from the client.
  */
 @Composable
 fun DenebSkillScreen(
@@ -142,10 +142,10 @@ internal fun SkillDetailContent(detail: SkillDetailResponse, events: List<SkillL
     Spacer(Modifier.height(16.dp))
     HorizontalDivider(color = denebHairline())
     Spacer(Modifier.height(12.dp))
-    Text("진화 내역", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+    Text("Propus 로그", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
     if (events.isEmpty()) {
         Spacer(Modifier.height(8.dp))
-        Text("이 스킬의 자기진화 활동이 아직 없습니다.", style = MaterialTheme.typography.bodySmall, color = denebHint())
+        Text("이 스킬의 Propus 활동이 아직 없습니다.", style = MaterialTheme.typography.bodySmall, color = denebHint())
     } else {
         events.forEachIndexed { idx, event ->
             SkillLifecycleRow(event, showSkillName = false, horizontalPadding = 0.dp)

@@ -34,7 +34,7 @@ const proactiveStaleWindowMs = 48 * 60 * 60 * 1000
 // Some vLLM builds never fill per-request cached_tokens, so this scrape is
 // the only reliable cache signal there.
 //
-// This is the self-observation adapter: the self-evolution loop or the operator
+// This is the self-observation adapter: Propus or the operator
 // in chat ("방금 그 턴 왜 느렸어?") can read it without leaving the agent.
 func ToolObserve(lc *observe.LogCapture, alog *agentlog.Writer, wf *workfeed.Store, vllmBases func() []string) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {

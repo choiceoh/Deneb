@@ -116,6 +116,24 @@ func TestSkillLifecycleStatusFiltersBySkillAndStats(t *testing.T) {
 		t.Fatalf("SkillLifecycleStatus: %v", err)
 	}
 	got := gotAny.(map[string]any)
+	system := got["system"].(map[string]any)
+	if system["name"] != "Propus" || system["tool"] != "skill_lifecycle" || system["scope"] != "skill" {
+		t.Fatalf("unexpected Propus system status: %+v", system)
+	}
+	overview := got["overview"].(map[string]any)
+	if overview["state"] != "needs_review" ||
+		overview["pendingSelfCorrections"] != 1 ||
+		overview["openOpportunities"] != 1 ||
+		overview["validationCases"] != 0 {
+		t.Fatalf("unexpected Propus overview: %+v", overview)
+	}
+	nextActions := overview["nextActions"].([]string)
+	if len(nextActions) < 3 ||
+		nextActions[0] != "review_pending_self_corrections" ||
+		nextActions[1] != "record_validation_case_from_session" ||
+		nextActions[2] != "triage_opportunity_backlog" {
+		t.Fatalf("unexpected Propus next actions: %+v", nextActions)
+	}
 	recent := got["recent"].([]genesis.LifecycleLogEntry)
 	if len(recent) != 2 {
 		t.Fatalf("expected 2 deploy-helper lifecycle entries, got %+v", recent)
@@ -143,6 +161,26 @@ func TestSkillLifecycleStatusFiltersBySkillAndStats(t *testing.T) {
 	selfCorrections := got["selfCorrectionCandidates"].([]genesis.SelfCorrectionCandidateRecord)
 	if len(selfCorrections) != 1 || selfCorrections[0].SkillName != "deploy-helper" {
 		t.Fatalf("unexpected self-correction candidates: %+v", selfCorrections)
+	}
+}
+
+func TestSkillLifecycleStatusIdentifiesPropusWhenTrackerMissing(t *testing.T) {
+	backend := &skillLifecycleBackend{}
+	gotAny, err := backend.SkillLifecycleStatus(context.Background(), chattools.SkillLifecycleStatusRequest{})
+	if err != nil {
+		t.Fatalf("SkillLifecycleStatus: %v", err)
+	}
+	got := gotAny.(map[string]any)
+	if got["ok"] != false {
+		t.Fatalf("expected unavailable status, got %+v", got)
+	}
+	system := got["system"].(map[string]any)
+	if system["name"] != "Propus" || system["scope"] != "global" {
+		t.Fatalf("unexpected Propus system status: %+v", system)
+	}
+	overview := got["overview"].(map[string]any)
+	if overview["state"] != "unavailable" {
+		t.Fatalf("unexpected unavailable overview: %+v", overview)
 	}
 }
 

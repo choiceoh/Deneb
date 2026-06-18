@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/process"
 )
 
@@ -107,11 +108,14 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 		"providers": providerCount,
 	}
 
-	// Self-evolution liveness: makes silent death of the skill loop visible.
+	// Propus liveness: makes silent death of the self-improvement loop visible.
 	// If review_age keeps growing, the nudger→review→evolve pipeline stalled.
 	if s.genesisTracker != nil {
 		live := s.genesisTracker.LivenessSnapshot()
+		lastActivity := propusLastActivityMS(live)
 		se := map[string]any{
+			"system":                "Propus",
+			"tool":                  "skill_lifecycle",
 			"last_review_ms":        live.LastReviewAt,
 			"last_review_ok":        live.LastReviewOK,
 			"last_evolve_ms":        live.LastEvolveAt,
@@ -119,6 +123,10 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 			"review_attempts":       live.ReviewAttempts,
 			"review_skips":          live.ReviewSkips,
 			"validation_rejections": live.ValidationRejections,
+		}
+		if lastActivity > 0 {
+			se["last_activity_ms"] = lastActivity
+			se["last_activity_age"] = formatUptimeHTTP(time.Since(time.UnixMilli(lastActivity)))
 		}
 		if live.LastReviewAt > 0 {
 			se["review_age"] = formatUptimeHTTP(time.Since(time.UnixMilli(live.LastReviewAt)))
@@ -155,7 +163,9 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 				se["top_ignored_unactionable_legacy_failure_skill_count"] = usageQuality.TopIgnoredUnactionableLegacyFailureSkillCount
 			}
 		}
+		validationSummary := genesis.SkillValidationCaseSummary{}
 		if validationCases, err := s.genesisTracker.ValidationCaseSummary(""); err == nil {
+			validationSummary = validationCases
 			se["validation_case_records"] = validationCases.RawRecords
 			se["validation_cases_unique"] = validationCases.UniqueRecords
 			se["validation_case_duplicates"] = validationCases.DuplicateRecords
@@ -173,10 +183,19 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 		}
 		// Skill-library value: how many self-generated skills earn their keep.
 		// Many unused = net-negative cost (catalog + prompt tokens, no payoff).
-		if agentSkills, unused := s.genesisTracker.AgentSkillValueSummary(); agentSkills > 0 {
-			se["agent_skills"] = agentSkills
+		agentSkills, unusedAgentSkills := 0, 0
+		if total, unused := s.genesisTracker.AgentSkillValueSummary(); total > 0 {
+			agentSkills = total
+			unusedAgentSkills = unused
+			se["agent_skills"] = total
 			se["unused_agent_skills"] = unused
 		}
+		attention := propusHealthAttention(live, eh, validationSummary, agentSkills, unusedAgentSkills)
+		se["state"] = propusHealthState(live, lastActivity, attention)
+		if len(attention) > 0 {
+			se["attention"] = attention
+		}
+		health["propus"] = se
 		health["self_evolution"] = se
 	}
 
@@ -185,6 +204,65 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	}
 
 	s.writeJSON(w, http.StatusOK, health)
+}
+
+func propusLastActivityMS(live genesis.SkillLivenessState) int64 {
+	last := live.LastReviewAt
+	if live.LastEvolveAt > last {
+		last = live.LastEvolveAt
+	}
+	if live.LastGenesisAt > last {
+		last = live.LastGenesisAt
+	}
+	if live.LastErrorAt > last {
+		last = live.LastErrorAt
+	}
+	return last
+}
+
+func propusHealthState(live genesis.SkillLivenessState, lastActivity int64, attention []string) string {
+	if live.LastError != "" {
+		return "degraded"
+	}
+	if len(attention) > 0 {
+		return "attention"
+	}
+	if lastActivity > 0 || live.ReviewAttempts > 0 || live.ReviewSkips > 0 || live.ValidationRejections > 0 {
+		return "observing"
+	}
+	return "idle"
+}
+
+func propusHealthAttention(
+	live genesis.SkillLivenessState,
+	evo genesis.EvolutionHealthSummary,
+	validation genesis.SkillValidationCaseSummary,
+	agentSkills int,
+	unusedAgentSkills int,
+) []string {
+	attention := make([]string, 0, 6)
+	if live.LastError != "" {
+		attention = append(attention, "last_error")
+	}
+	if evo.Thrash {
+		attention = append(attention, "evolve_thrash")
+	}
+	if evo.EvolveRolledBack7d > 0 {
+		attention = append(attention, "recent_rollbacks")
+	}
+	if evo.EvolveRejected7d > 0 {
+		attention = append(attention, "recent_rejections")
+	}
+	if live.ReviewAttempts > 0 && live.ReviewAttempts == live.ReviewSkips && live.LastReviewAt == 0 {
+		attention = append(attention, "reviews_all_skipped")
+	}
+	if live.ValidationRejections > 0 && validation.UniqueRecords == 0 {
+		attention = append(attention, "validation_rejections_without_corpus")
+	}
+	if agentSkills >= 3 && unusedAgentSkills*2 >= agentSkills {
+		attention = append(attention, "many_unused_agent_skills")
+	}
+	return attention
 }
 
 // handleReady responds with readiness status.

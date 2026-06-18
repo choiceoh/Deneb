@@ -194,7 +194,7 @@ private enum class ConfigTab(val label: String, val desc: String, val icon: Imag
     GATEWAY("게이트웨이", "연결, 상태, 연락처 동기화", Icons.Outlined.Dns),
     APPEARANCE("화면", "테마, UI 배율", Icons.Outlined.Palette),
     MODEL("모델", "역할별 모델 지정, 엔드포인트", Icons.Outlined.Memory),
-    SKILLS("스킬", "설치된 스킬, 수명 주기", Icons.Outlined.Extension),
+    SKILLS("스킬", "설치된 스킬, Propus", Icons.Outlined.Extension),
     CRON("크론", "예약 작업", Icons.Outlined.Schedule),
     OBSERVE("관찰", "게이트웨이 동작, 로그", Icons.Outlined.Visibility),
     WORMHOLE("Wormhole", "모델 라우터 상태, 기능 토글", Icons.Outlined.Hub),

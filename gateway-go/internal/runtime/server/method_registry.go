@@ -479,7 +479,7 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 			},
 		}),
 
-		// Mini App skills list + self-evolution feed (miniapp.skills.list,
+		// Mini App skills list + Propus feed (miniapp.skills.list,
 		// miniapp.skills.lifecycle). Read-only catalog for the Settings →
 		// Skills tab plus the genesis → review → evolve timeline. Uses the
 		// same archived + eligibility filtering as the system prompt
