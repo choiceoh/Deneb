@@ -544,6 +544,12 @@ private fun AppContent(
                                     onBack = { navController.navigateUp() },
                                     onEdit = { id -> navController.navigate(DenebCalendarEdit(id)) },
                                     onDeleted = { navController.navigateUp() },
+                                    // 미팅 준비 / 회의록 정리 run as a main-chat agent turn; submit
+                                    // the templated message and jump to the chat to watch it.
+                                    onAskInChat = { msg ->
+                                        feedState.actions.ask(msg)
+                                        navController.navigate(Home)
+                                    },
                                     navigationTabBar = if (showTabBar) navigationTabBar else null,
                                 )
                             }
