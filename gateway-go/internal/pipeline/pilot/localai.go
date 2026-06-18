@@ -195,6 +195,13 @@ func CallAnalysisLLM(ctx context.Context, system, userMessage string, maxTokens 
 	return CallRoleLLM(ctx, modelrole.RoleAnalysis, system, userMessage, maxTokens, extraBody...)
 }
 
+// CallCodingLLM invokes the coding model role for code-writing/editing tasks.
+// The role is opt-in; callers that require a configured coding role should
+// check the registry before calling.
+func CallCodingLLM(ctx context.Context, system, userMessage string, maxTokens int, extraBody ...map[string]any) (string, error) {
+	return CallRoleLLM(ctx, modelrole.RoleCoding, system, userMessage, maxTokens, extraBody...)
+}
+
 // CollectStream reads all events from a streaming LLM response and returns the text.
 func CollectStream(ctx context.Context, events <-chan llm.StreamEvent) (string, error) {
 	var sb strings.Builder

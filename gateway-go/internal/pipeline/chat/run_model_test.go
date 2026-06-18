@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 )
 
 // TestResolveModel_ChatbotWorkspace verifies that a 챗봇 (chat:) session routes
@@ -80,5 +81,31 @@ func TestResolveModel_ChatbotWorkspace(t *testing.T) {
 				t.Errorf("initialRole = %q, want %q", got.initialRole, tc.wantRole)
 			}
 		})
+	}
+}
+
+func TestResolveModel_SubagentCodingRole(t *testing.T) {
+	reg := modelrole.NewRegistryWithOptions(slog.Default(), modelrole.RegistryOptions{
+		MainModel:   "zai/glm-main",
+		CodingModel: "kimi/kimi-for-coding",
+	})
+	deps := runDeps{
+		registry:  reg,
+		callbacks: CallbackSnapshot{defaultModel: "zai/glm-main"},
+	}
+	sess := &session.Session{
+		Model:       "coding",
+		AgentConfig: session.AgentConfig{SpawnedBy: "client:main"},
+	}
+
+	got := resolveModel(RunParams{SessionKey: "client:main:impl"}, deps, sess)
+	if got.model != "kimi-for-coding" {
+		t.Errorf("model = %q, want kimi-for-coding", got.model)
+	}
+	if got.providerID != "kimi" {
+		t.Errorf("providerID = %q, want kimi", got.providerID)
+	}
+	if got.initialRole != modelrole.RoleCoding {
+		t.Errorf("initialRole = %q, want %q", got.initialRole, modelrole.RoleCoding)
 	}
 }

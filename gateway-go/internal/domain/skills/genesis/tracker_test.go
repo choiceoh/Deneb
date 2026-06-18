@@ -23,6 +23,7 @@ func newTestTracker(t *testing.T) *Tracker {
 		opportunityPath:     filepath.Join(dir, "skill_opportunities.jsonl"),
 		optimizerMemoryPath: filepath.Join(dir, "skill_optimizer_memory.json"),
 		validationPath:      filepath.Join(dir, "skill_validation_cases.jsonl"),
+		selfCorrectionPath:  filepath.Join(dir, "self_correction_candidates.jsonl"),
 		stats:               make(map[string]*usageAgg),
 		recentErrors:        make(map[string][]string),
 		postEvolve:          make(map[string]*evolveWatch),
@@ -152,6 +153,62 @@ func TestTrackerLifecycleLogStoresSelfHarnessAudit(t *testing.T) {
 			entry.SelfHarnessAudit.RegressionRisk != audit.RegressionRisk {
 			t.Fatalf("audit mismatch: got %+v want %+v", entry.SelfHarnessAudit, audit)
 		}
+	}
+}
+
+func TestSelfCorrectionCandidatesRecordAndReview(t *testing.T) {
+	tracker := newTestTracker(t)
+	rec, err := tracker.RecordSelfCorrectionCandidate(SelfCorrectionCandidateRecord{
+		Scope:          "skill",
+		SkillName:      "email-analysis",
+		SessionKey:     "client:main",
+		Title:          "Defer noisy mail rewrite",
+		Candidate:      "tighten calendar extraction rules",
+		Evidence:       "user corrected noisy schedule proposal",
+		TargetFiles:    []string{"skills/productivity/email-analysis/SKILL.md", "skills/productivity/email-analysis/SKILL.md"},
+		ProposedChange: "Add a conservative proposal-only rule",
+		Risk:           "Could hide valid schedule candidates",
+		Source:         "self-correction",
+	})
+	if err != nil {
+		t.Fatalf("RecordSelfCorrectionCandidate: %v", err)
+	}
+	if rec.ID == "" || rec.Status != SelfCorrectionStatusProposed {
+		t.Fatalf("candidate missing id/default status: %+v", rec)
+	}
+	if len(rec.TargetFiles) != 1 {
+		t.Fatalf("target files should be cleaned/deduped, got %+v", rec.TargetFiles)
+	}
+
+	got, err := tracker.RecentSelfCorrectionCandidates("email-analysis", SelfCorrectionStatusProposed, 10)
+	if err != nil {
+		t.Fatalf("RecentSelfCorrectionCandidates: %v", err)
+	}
+	if len(got) != 1 || got[0].ID != rec.ID {
+		t.Fatalf("expected pending candidate, got %+v", got)
+	}
+
+	if _, err := tracker.RecordSelfCorrectionReview(SelfCorrectionCandidateRecord{
+		ID:         rec.ID,
+		Status:     SelfCorrectionStatusAccepted,
+		Reviewer:   "codex",
+		ReviewNote: "will batch with validation case",
+	}); err != nil {
+		t.Fatalf("RecordSelfCorrectionReview: %v", err)
+	}
+	pending, err := tracker.RecentSelfCorrectionCandidates("email-analysis", SelfCorrectionStatusProposed, 10)
+	if err != nil {
+		t.Fatalf("RecentSelfCorrectionCandidates pending: %v", err)
+	}
+	if len(pending) != 0 {
+		t.Fatalf("accepted candidate must leave pending queue, got %+v", pending)
+	}
+	accepted, err := tracker.RecentSelfCorrectionCandidates("email-analysis", SelfCorrectionStatusAccepted, 10)
+	if err != nil {
+		t.Fatalf("RecentSelfCorrectionCandidates accepted: %v", err)
+	}
+	if len(accepted) != 1 || accepted[0].Reviewer != "codex" || accepted[0].ReviewNote == "" {
+		t.Fatalf("review fields not merged into candidate: %+v", accepted)
 	}
 }
 

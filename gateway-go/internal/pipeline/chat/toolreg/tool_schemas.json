@@ -556,10 +556,11 @@
         "type": "string",
         "enum": [
           "main",
+          "coding",
           "lightweight",
           "fallback"
         ],
-        "description": "Model role to use (default: main)"
+        "description": "Model role to use (default: main; implementer uses coding automatically when configured)"
       },
       "tool_preset": {
         "type": "string",

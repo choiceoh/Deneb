@@ -21,6 +21,8 @@ type SkillLifecycleBackend interface {
 	RecordSkillValidationCase(context.Context, SkillValidationCaseRequest) (any, error)
 	RecordSkillValidationCaseFromSession(context.Context, SkillValidationCaseFromSessionRequest) (any, error)
 	BackfillSkillValidationCases(context.Context, SkillValidationBackfillRequest) (any, error)
+	RecordSelfCorrectionCandidate(context.Context, SkillSelfCorrectionCandidateRequest) (any, error)
+	ReviewSelfCorrectionCandidate(context.Context, SkillSelfCorrectionReviewRequest) (any, error)
 }
 
 // SkillEvolutionProposalRequest records the agent's routing decision after a
@@ -58,6 +60,33 @@ type SkillEvolutionRequest struct {
 type SkillLifecycleStatusRequest struct {
 	SkillName string `json:"skillName,omitempty"`
 	Limit     int    `json:"limit,omitempty"`
+}
+
+// SkillSelfCorrectionCandidateRequest records a deferred self-correction
+// candidate for a future coding agent to review in batch. It must not apply the
+// change.
+type SkillSelfCorrectionCandidateRequest struct {
+	ID             string   `json:"id,omitempty"`
+	Scope          string   `json:"scope,omitempty"`
+	SkillName      string   `json:"skillName,omitempty"`
+	SessionKey     string   `json:"sessionKey,omitempty"`
+	Title          string   `json:"title,omitempty"`
+	Candidate      string   `json:"candidate,omitempty"`
+	Evidence       string   `json:"evidence,omitempty"`
+	Reason         string   `json:"reason,omitempty"`
+	TargetFiles    []string `json:"targetFiles,omitempty"`
+	ProposedChange string   `json:"proposedChange,omitempty"`
+	Risk           string   `json:"risk,omitempty"`
+	Source         string   `json:"source,omitempty"`
+}
+
+// SkillSelfCorrectionReviewRequest updates a deferred candidate after batch
+// review. The underlying ledger remains append-only.
+type SkillSelfCorrectionReviewRequest struct {
+	ID         string `json:"id"`
+	Status     string `json:"status"`
+	Reviewer   string `json:"reviewer,omitempty"`
+	ReviewNote string `json:"reviewNote,omitempty"`
 }
 
 // SkillCuratorActionRequest manually updates curator state for agent-created
@@ -153,6 +182,14 @@ func ToolSkillLifecycle(backend SkillLifecycleBackend) ToolFunc {
 			Finding             string                 `json:"finding"`
 			Execute             bool                   `json:"execute"`
 			Limit               int                    `json:"limit"`
+			Scope               string                 `json:"scope"`
+			Title               string                 `json:"title"`
+			TargetFiles         []string               `json:"targetFiles"`
+			ProposedChange      string                 `json:"proposedChange"`
+			Risk                string                 `json:"risk"`
+			Status              string                 `json:"status"`
+			Reviewer            string                 `json:"reviewer"`
+			ReviewNote          string                 `json:"reviewNote"`
 			ID                  string                 `json:"id"`
 			Description         string                 `json:"description"`
 			RequiredSubstrings  []string               `json:"requiredSubstrings"`
@@ -233,8 +270,30 @@ func ToolSkillLifecycle(backend SkillLifecycleBackend) ToolFunc {
 				Replay:      p.Replay,
 				Source:      p.Source,
 			})
+		case "self_correction":
+			result, err = backend.RecordSelfCorrectionCandidate(ctx, SkillSelfCorrectionCandidateRequest{
+				ID:             p.ID,
+				Scope:          p.Scope,
+				SkillName:      p.SkillName,
+				SessionKey:     p.SessionKey,
+				Title:          p.Title,
+				Candidate:      p.Candidate,
+				Evidence:       p.Evidence,
+				Reason:         p.Reason,
+				TargetFiles:    p.TargetFiles,
+				ProposedChange: p.ProposedChange,
+				Risk:           p.Risk,
+				Source:         p.Source,
+			})
+		case "self_correction_review":
+			result, err = backend.ReviewSelfCorrectionCandidate(ctx, SkillSelfCorrectionReviewRequest{
+				ID:         p.ID,
+				Status:     p.Status,
+				Reviewer:   p.Reviewer,
+				ReviewNote: p.ReviewNote,
+			})
 		default:
-			return "action은 propose, genesis, evolve, status, validation_case, validation_case_from_session, validation_backfill, pin, unpin, archive, restore 중 하나를 지정하세요.", nil
+			return "action은 propose, genesis, evolve, status, self_correction, self_correction_review, validation_case, validation_case_from_session, validation_backfill, pin, unpin, archive, restore 중 하나를 지정하세요.", nil
 		}
 		if err != nil {
 			return "", err
@@ -255,8 +314,8 @@ func SkillLifecycleToolSchema() map[string]any {
 		"properties": map[string]any{
 			"action": map[string]any{
 				"type":        "string",
-				"description": "Action: propose (record/route a self-evolution proposal), genesis (generate a skill from sessionKey or dreamSummary), evolve (improve an existing skill), status (inspect recent lifecycle logs, opportunity backlog, usage stats, and curator state), validation_case (record held-out assertions for a skill), validation_case_from_session (extract a held-out replay trace from sessionKey), validation_backfill (batch-extract held-out replay traces from stored sessions for skillName), pin/unpin/archive/restore (manual curator state for agent-created skills)",
-				"enum":        []string{"propose", "genesis", "evolve", "status", "validation_case", "validation_case_from_session", "validation_backfill", "pin", "unpin", "archive", "restore"},
+				"description": "Action: propose (record/route a self-evolution proposal), genesis (generate a skill from sessionKey or dreamSummary), evolve (improve an existing skill), status (inspect recent lifecycle logs, opportunity backlog, usage stats, curator state, and pending self-corrections), self_correction (record a deferred correction candidate without applying it), self_correction_review (mark a candidate accepted/rejected/superseded/applied after batch review), validation_case (record held-out assertions for a skill), validation_case_from_session (extract a held-out replay trace from sessionKey), validation_backfill (batch-extract held-out replay traces from stored sessions for skillName), pin/unpin/archive/restore (manual curator state for agent-created skills)",
+				"enum":        []string{"propose", "genesis", "evolve", "status", "self_correction", "self_correction_review", "validation_case", "validation_case_from_session", "validation_backfill", "pin", "unpin", "archive", "restore"},
 			},
 			"candidate": map[string]any{
 				"type":        "string",
@@ -281,7 +340,7 @@ func SkillLifecycleToolSchema() map[string]any {
 			},
 			"limit": map[string]any{
 				"type":        "integer",
-				"description": "For status: maximum recent lifecycle log entries to return; for validation_backfill: maximum session keys to scan (default 20, max 50)",
+				"description": "For status: maximum recent lifecycle/self-correction entries to return; for validation_backfill: maximum session keys to scan (default 20, max 50)",
 				"minimum":     1,
 				"maximum":     50,
 			},
@@ -304,7 +363,41 @@ func SkillLifecycleToolSchema() map[string]any {
 			},
 			"id": map[string]any{
 				"type":        "string",
-				"description": "For validation_case: stable case id",
+				"description": "For validation_case: stable case id. For self_correction: optional candidate id. For self_correction_review: required candidate id",
+			},
+			"scope": map[string]any{
+				"type":        "string",
+				"description": "For self_correction: candidate scope, such as skill, code, prompt, docs, ops, config, test, or other",
+			},
+			"title": map[string]any{
+				"type":        "string",
+				"description": "For self_correction: short human-readable title for the deferred candidate",
+			},
+			"targetFiles": map[string]any{
+				"type":        "array",
+				"description": "For self_correction: repo-relative files or skill paths a future coding agent should inspect",
+				"items":       map[string]any{"type": "string"},
+			},
+			"proposedChange": map[string]any{
+				"type":        "string",
+				"description": "For self_correction: concrete change idea. Do not apply it in this action",
+			},
+			"risk": map[string]any{
+				"type":        "string",
+				"description": "For self_correction: risk, validation need, or rollback concern for the future reviewer",
+			},
+			"status": map[string]any{
+				"type":        "string",
+				"description": "For self_correction_review: accepted, rejected, superseded, or applied",
+				"enum":        []string{"accepted", "rejected", "superseded", "applied"},
+			},
+			"reviewer": map[string]any{
+				"type":        "string",
+				"description": "For self_correction_review: reviewer identity, such as codex or operator",
+			},
+			"reviewNote": map[string]any{
+				"type":        "string",
+				"description": "For self_correction_review: why this status was chosen, including tests or PR if applied",
 			},
 			"description": map[string]any{
 				"type":        "string",

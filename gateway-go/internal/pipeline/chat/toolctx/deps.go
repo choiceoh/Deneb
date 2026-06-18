@@ -79,6 +79,10 @@ type SessionDeps struct {
 	// SubagentDefaultModel is the default model for sub-agent sessions
 	// (from agents.defaults.subagents.model in deneb.json).
 	SubagentDefaultModel string
+	// CodingDefaultModel is non-empty when the operator configured the
+	// dedicated coding role. Implementer sub-agents use the "coding" role by
+	// default so code edits can run on the coding-specialized model.
+	CodingDefaultModel string
 }
 
 // ChronoDeps holds dependencies for the cron scheduling tool.

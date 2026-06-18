@@ -432,7 +432,7 @@ func ToolSessionsSpawn(d *toolctx.SessionDeps) ToolFunc {
 		var p struct {
 			Task       string `json:"task"`
 			Label      string `json:"label"`
-			Model      string `json:"model"`       // role name: "main","lightweight","fallback"
+			Model      string `json:"model"`       // role name: "main","coding","lightweight","fallback"
 			ToolPreset string `json:"tool_preset"` // tool preset: "researcher","implementer","verifier"
 		}
 		if err := jsonutil.UnmarshalInto("sessions_spawn params", input, &p); err != nil {
@@ -495,6 +495,12 @@ func ToolSessionsSpawn(d *toolctx.SessionDeps) ToolFunc {
 		childSession := d.Manager.Create(childKey, session.KindDirect)
 		if p.Model != "" {
 			childSession.Model = p.Model
+		} else if p.ToolPreset == string(toolpreset.PresetImplementer) && d.CodingDefaultModel != "" {
+			// Implementer children can write/edit/exec. When the operator has
+			// configured a dedicated coding model, keep the session on the role
+			// name rather than the resolved model ID so live role changes and
+			// coding-specific fallback behavior still apply at run time.
+			childSession.Model = "coding"
 		} else if d.SubagentDefaultModel != "" {
 			childSession.Model = d.SubagentDefaultModel
 		}
@@ -519,6 +525,9 @@ func ToolSessionsSpawn(d *toolctx.SessionDeps) ToolFunc {
 		result := fmt.Sprintf("Sub-agent spawned.\nSession: %s\nTask: %s", childKey, p.Task)
 		if p.ToolPreset != "" {
 			result += fmt.Sprintf("\nTool preset: %s", p.ToolPreset)
+		}
+		if childSession.Model != "" {
+			result += fmt.Sprintf("\nModel: %s", childSession.Model)
 		}
 		return result, nil
 	}

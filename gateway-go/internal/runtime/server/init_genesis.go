@@ -32,6 +32,16 @@ func (s *Server) initGenesisServices() {
 		s.logger.Debug("genesis: skipped (lightweight model not configured)")
 		return
 	}
+	evolverRole := modelrole.RoleLightweight
+	evolverClient := lwClient
+	evolverModel := lwModel
+	if codingModel := s.modelRegistry.Model(modelrole.RoleCoding); codingModel != "" {
+		if codingClient := s.modelRegistry.Client(modelrole.RoleCoding); codingClient != nil {
+			evolverRole = modelrole.RoleCoding
+			evolverClient = codingClient
+			evolverModel = codingModel
+		}
+	}
 
 	cfg := genesis.DefaultConfigFromEnv()
 	cfg.Model = lwModel
@@ -66,18 +76,16 @@ func (s *Server) initGenesisServices() {
 		}
 	}
 
-	s.genesisEvolver = genesis.NewEvolver(lwClient, s.skillCatalog, s.genesisTracker, lwModel, s.logger)
+	s.genesisEvolver = genesis.NewEvolver(evolverClient, s.skillCatalog, s.genesisTracker, evolverModel, s.logger)
 
 	// Teacher-escalation: wire the stronger main model so a rewrite that fails
-	// the lightweight self-test gets one escalated attempt (#4). The evolver
-	// calls the client directly (not SendSync), so it takes the BARE model name
-	// (Model(), not FullModelID() — the latter is only for the provider-
-	// re-resolving SendSync path, see the review-fork note above). Skipped when
-	// main is unconfigured or identical to lightweight (escalation would be a
-	// no-op).
+	// the default lightweight self-test gets one escalated attempt (#4). When a
+	// dedicated coding model is configured, it owns the patch-generation path;
+	// keep main out of the rewrite loop so code/skill edits are made by the
+	// coding role the operator selected.
 	mainClient := s.modelRegistry.Client(modelrole.RoleMain)
 	mainModel := s.modelRegistry.Model(modelrole.RoleMain)
-	if mainClient != nil && mainModel != "" && mainModel != lwModel {
+	if evolverRole != modelrole.RoleCoding && mainClient != nil && mainModel != "" && mainModel != lwModel {
 		s.genesisEvolver.SetTeacher(mainClient, mainModel)
 	}
 
@@ -87,8 +95,11 @@ func (s *Server) initGenesisServices() {
 	// truncated JSON ("judge error"). Keyed by bare model name to match the names
 	// the evolver passes to thinkingOff.
 	thinkingKwargs := map[string]string{}
-	for _, role := range []modelrole.Role{modelrole.RoleLightweight, modelrole.RoleMain} {
+	for _, role := range []modelrole.Role{modelrole.RoleLightweight, modelrole.RoleCoding, modelrole.RoleMain} {
 		mc := s.modelRegistry.Config(role)
+		if mc.Model == "" {
+			continue
+		}
 		if k := s.modelRegistry.CapabilityForModel(mc.ProviderID, mc.Model).ThinkingToggleKwarg; k != "" {
 			thinkingKwargs[mc.Model] = k
 		}
@@ -140,7 +151,7 @@ func (s *Server) initGenesisServices() {
 	s.registerSkillLifecycleTool()
 
 	s.logger.Info("genesis: services initialized",
-		"model", lwModel, "outputDir", cfg.OutputDir,
+		"model", lwModel, "evolverRole", evolverRole, "evolverModel", evolverModel, "outputDir", cfg.OutputDir,
 		"nudgeInterval", s.genesisNudger.Interval(),
 		"minToolCalls", cfg.MinToolCalls,
 		"minTurns", cfg.MinTurns,

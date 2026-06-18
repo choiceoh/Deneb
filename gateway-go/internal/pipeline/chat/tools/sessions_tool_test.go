@@ -158,6 +158,40 @@ func TestSessionsSpawn_StoresToolPreset(t *testing.T) {
 	}
 }
 
+func TestSessionsSpawn_ImplementerUsesCodingRoleWhenConfigured(t *testing.T) {
+	sm := session.NewManager()
+	ctx := toolctx.WithSessionKey(context.Background(), "client:main")
+	deps := spawnDeps(sm)
+	deps.CodingDefaultModel = "kimi/kimi-for-coding"
+
+	input := sessionSearchJSON(t, map[string]string{
+		"task": "fix the build", "label": "impl", "tool_preset": "implementer",
+	})
+	out, err := ToolSessionsSpawn(deps)(ctx, input)
+	if err != nil {
+		t.Fatalf("spawn: %v", err)
+	}
+	if !strings.Contains(out, "Model: coding") {
+		t.Fatalf("expected coding role echo in output, got: %s", out)
+	}
+
+	var child *session.Session
+	for _, s := range sm.List() {
+		if s.SpawnedBy == "client:main" {
+			child = s
+		}
+	}
+	if child == nil {
+		t.Fatal("child session not created")
+	}
+	if child.Model != "coding" {
+		t.Errorf("child Model = %q, want coding", child.Model)
+	}
+	if child.ToolPreset != "implementer" {
+		t.Errorf("child ToolPreset = %q, want implementer", child.ToolPreset)
+	}
+}
+
 // TestSessionsSpawn_RejectsUnknownToolPreset pins the fail-closed contract:
 // toolpreset.AllowedTools returns nil (= unrestricted) for unknown names, so
 // a typo'd preset must reject the spawn instead of silently granting the

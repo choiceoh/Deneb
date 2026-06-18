@@ -1,6 +1,6 @@
 ---
 name: skill-evolution
-version: "1.0.6"
+version: "1.0.7"
 category: coding
 description: "Evolve and optimize existing skills using autoresearch methodology. Use when: (1) a skill produces suboptimal results, (2) a skill's instructions are outdated or incomplete, (3) systematic improvement of skill quality is requested. NOT for: creating new skills (use skill-factory), cosmetic changes, or skills that already work well."
 metadata:
@@ -8,7 +8,7 @@ metadata:
     "deneb":
       {
         "emoji": "🧬",
-        "tags": ["evolution", "optimization", "improvement", "GEPA", "autoresearch", "SkillOpt", "Self-Harness", "failure-clustering", "rejected-edit-buffer", "held-out-replay"],
+        "tags": ["evolution", "optimization", "improvement", "GEPA", "autoresearch", "SkillOpt", "Self-Harness", "failure-clustering", "rejected-edit-buffer", "held-out-replay", "self-correction-queue"],
         "related_skills": ["evolution-proposal", "skill-factory", "skill-creator"],
       },
   }
@@ -71,6 +71,7 @@ Rules from autoresearch methodology:
   for repeated real failures with recent error evidence; a fresh review finding
   can still justify an immediate evolve because it carries session-level
   evidence.
+- **Deferred self-correction awareness** — check `selfCorrectionCandidates`; treat them as unapplied hypotheses for batch review, not as permission to mutate immediately
 
 ### Phase 3: Mutate
 
@@ -99,6 +100,7 @@ scripts/dev/iterate.sh --metric "scripts/dev/quality-metric.sh"
 | No gaming | Don't optimize for the metric at the expense of real quality |
 | Validation gate | Candidate changes must pass self-test and held-out replay cases before they are committed |
 | Rejected buffer | Failed candidates are recorded and should inform the next attempt |
+| Deferred queue | Plausible but unvalidated ideas should be recorded with `skill_lifecycle` action `self_correction`, then reviewed in batch |
 | Replay regression | A candidate must not drop required actions/tool calls/session-derived input fragments/observations, reorder required traces, or introduce forbidden actions/tool calls/observations from `validationCases` |
 | Evidence binding | Candidate descriptions and audit fields must state the target failure mechanism, edited surface, expected behavior change, and regression risk |
 
@@ -115,6 +117,7 @@ scripts/dev/iterate.sh --metric "scripts/dev/quality-metric.sh"
 - **Improved**: keep the change, bump version patch (e.g., 1.0.0 → 1.0.1)
 - **No change**: keep the original; try a different hypothesis informed by `rejectedEdits`
 - **Degraded**: reject immediately, record why, and do not repeat the same edit shape
+- **Promising but not validated now**: leave the file untouched and queue it through `skill_lifecycle` action `self_correction` with evidence, target files, proposed change, and risk
 
 ### Phase 6: Record
 
@@ -176,6 +179,7 @@ Prioritize skills by:
 3. Oldest version (haven't been touched)
 
 ## Changelog
+- v1.0.7: Added deferred self-correction queue handling.
 - v1.0.6: Added background repeated-failure threshold and structured audit-field expectation.
 - v1.0.5: Added Self-Harness failure-clustering and evidence-binding discipline for skill evolution.
 - v1.0.4: Noted that recent validation cases are injected into candidate-generation prompts.
