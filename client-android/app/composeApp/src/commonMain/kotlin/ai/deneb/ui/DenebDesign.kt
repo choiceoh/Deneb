@@ -136,6 +136,7 @@ fun DenebSectionLabel(text: String, modifier: Modifier = Modifier) {
 @Composable
 fun DenebRow(
     onClick: (() -> Unit)? = null,
+    onLongClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit,
 ) {
@@ -143,7 +144,7 @@ fun DenebRow(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .then(if (onClick != null) Modifier.denebPressable(onClick = onClick).handCursor() else Modifier)
+            .then(if (onClick != null) Modifier.denebPressable(onClick = onClick, onLongClick = onLongClick).handCursor() else Modifier)
             .drawBehind {
                 val stroke = 1.dp.toPx()
                 val y = size.height - stroke / 2f

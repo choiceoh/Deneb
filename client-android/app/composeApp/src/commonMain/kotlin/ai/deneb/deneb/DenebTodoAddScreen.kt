@@ -82,6 +82,8 @@ fun DenebTodoAddScreen(
     var showDatePicker by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
     var saving by remember { mutableStateOf(false) }
+    var deleting by remember { mutableStateOf(false) }
+    var confirmDelete by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var prefilling by remember { mutableStateOf(isEdit) }
     val scope = rememberCoroutineScope()
@@ -130,6 +132,17 @@ fun DenebTodoAddScreen(
         }
     }
 
+    fun delete() {
+        val id = editTodoId ?: return
+        scope.launch {
+            deleting = true
+            error = null
+            val err = client.deleteTodo(id)
+            deleting = false
+            if (err == null) onSaved() else error = err
+        }
+    }
+
     // Guard against losing an in-progress todo to a stray back: snapshot the fields
     // once they're ready (after edit-prefill, or immediately for a new todo) and
     // confirm before leaving if they've since changed.
@@ -158,12 +171,39 @@ fun DenebTodoAddScreen(
                     dueTimeLabel = todoTimeLabel(dueTime),
                     onPickTime = { showTimePicker = true },
                     error = error,
-                    saving = saving,
+                    saving = saving || deleting,
                     saveLabel = if (isEdit) "저장" else "추가",
                     onSave = { save() },
+                    onDelete = if (isEdit) {
+                        { confirmDelete = true }
+                    } else {
+                        null
+                    },
                 )
             }
         }
+    }
+
+    if (confirmDelete) {
+        AlertDialog(
+            onDismissRequest = { if (!deleting) confirmDelete = false },
+            title = { Text("할 일 삭제") },
+            text = { Text("이 할 일을 삭제할까요? 되돌릴 수 없습니다.") },
+            confirmButton = {
+                TextButton(
+                    enabled = !deleting,
+                    onClick = {
+                        confirmDelete = false
+                        delete()
+                    },
+                ) {
+                    Text("삭제", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(enabled = !deleting, onClick = { confirmDelete = false }) { Text("취소") }
+            },
+        )
     }
 
     if (showDatePicker) {
@@ -219,6 +259,7 @@ internal fun TodoAddContent(
     saving: Boolean,
     saveLabel: String,
     onSave: () -> Unit,
+    onDelete: (() -> Unit)? = null,
 ) {
     val haptics = rememberHaptics()
     Spacer(Modifier.height(8.dp))
@@ -287,6 +328,19 @@ internal fun TodoAddContent(
         onSave()
     }, enabled = !saving, modifier = Modifier.fillMaxWidth()) {
         Text(if (saving) "$saveLabel 중…" else saveLabel)
+    }
+    if (onDelete != null) {
+        Spacer(Modifier.height(8.dp))
+        TextButton(
+            onClick = {
+                haptics.longPress()
+                onDelete()
+            },
+            enabled = !saving,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text("삭제", color = MaterialTheme.colorScheme.error)
+        }
     }
     Spacer(Modifier.height(24.dp))
 }

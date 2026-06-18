@@ -5,7 +5,9 @@ import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebSectionLabel
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.rememberHaptics
+import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
+import ai.deneb.ui.denebPressable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -14,14 +16,24 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -32,6 +44,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -69,6 +82,9 @@ fun DenebTodoScreen(
     // null = load in flight, true = ok, false = fetch failed.
     var loadOk by remember { mutableStateOf<Boolean?>(null) }
     var refreshing by remember { mutableStateOf(false) }
+    var actionTodo by remember { mutableStateOf<Todo?>(null) }
+    var confirmDelete by remember { mutableStateOf<Todo?>(null) }
+    var actionError by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
 
     suspend fun load() {
@@ -89,6 +105,20 @@ fun DenebTodoScreen(
         scope.launch {
             client.setTodoDone(id, done)
             load()
+        }
+    }
+
+    fun delete(todo: Todo) {
+        val previous = todos
+        todos = todos.filterNot { it.id == todo.id }
+        scope.launch {
+            val err = client.deleteTodo(todo.id)
+            if (err == null) {
+                load()
+            } else {
+                todos = previous
+                actionError = err
+            }
         }
     }
 
@@ -135,12 +165,69 @@ fun DenebTodoScreen(
 
                         todos.isEmpty() -> DenebEmpty("할 일이 없습니다.", actionLabel = "할 일 추가", onAction = onAddTodo)
 
-                        else -> TodoListContent(todos, onToggle = ::toggle, onOpen = onOpenTodo)
+                        else -> TodoListContent(
+                            todos,
+                            onToggle = ::toggle,
+                            onOpen = onOpenTodo,
+                            onAction = { todo ->
+                                actionTodo = todo
+                            },
+                        )
                     }
                     Spacer(Modifier.height(24.dp))
                 }
             }
         }
+    }
+
+    actionTodo?.let { todo ->
+        ModalBottomSheet(onDismissRequest = { actionTodo = null }) {
+            TodoActionSheetContent(
+                todo = todo,
+                onOpen = {
+                    actionTodo = null
+                    onOpenTodo(todo.id)
+                },
+                onToggle = {
+                    actionTodo = null
+                    toggle(todo.id, !todo.done)
+                },
+                onDelete = {
+                    actionTodo = null
+                    confirmDelete = todo
+                },
+            )
+        }
+    }
+
+    confirmDelete?.let { todo ->
+        AlertDialog(
+            onDismissRequest = { confirmDelete = null },
+            title = { Text("할 일 삭제") },
+            text = { Text("'${todo.title.ifBlank { "제목 없음" }}' 할 일을 삭제할까요? 되돌릴 수 없습니다.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmDelete = null
+                    delete(todo)
+                }) {
+                    Text("삭제", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmDelete = null }) { Text("취소") }
+            },
+        )
+    }
+
+    actionError?.let { msg ->
+        AlertDialog(
+            onDismissRequest = { actionError = null },
+            title = { Text("작업 실패") },
+            text = { Text(msg) },
+            confirmButton = {
+                TextButton(onClick = { actionError = null }) { Text("확인") }
+            },
+        )
     }
 }
 
@@ -154,6 +241,7 @@ internal fun TodoListContent(
     todos: List<Todo>,
     onToggle: (String, Boolean) -> Unit,
     onOpen: (String) -> Unit,
+    onAction: ((Todo) -> Unit)? = null,
 ) {
     val tz = remember { TimeZone.currentSystemDefault() }
     val active = todos.filter { !it.done }
@@ -161,11 +249,11 @@ internal fun TodoListContent(
     Column(Modifier.fillMaxWidth()) {
         if (active.isNotEmpty()) {
             DenebSectionLabel("할 일")
-            active.forEach { TodoCheckRow(it, tz, onToggle, onOpen) }
+            active.forEach { TodoCheckRow(it, tz, onToggle, onOpen, onAction) }
         }
         if (done.isNotEmpty()) {
             DenebSectionLabel("완료")
-            done.forEach { TodoCheckRow(it, tz, onToggle, onOpen) }
+            done.forEach { TodoCheckRow(it, tz, onToggle, onOpen, onAction) }
         }
     }
 }
@@ -178,13 +266,22 @@ internal fun TodoCheckRow(
     tz: TimeZone,
     onToggle: (String, Boolean) -> Unit,
     onOpen: (String) -> Unit,
+    onLongAction: ((Todo) -> Unit)? = null,
 ) {
     val haptics = rememberHaptics()
     val due = todoDueLabel(todo.due, todo.dueAllDay, tz)
-    DenebRow(onClick = {
-        haptics.tap()
-        onOpen(todo.id)
-    }) {
+    DenebRow(
+        onClick = {
+            haptics.tap()
+            onOpen(todo.id)
+        },
+        onLongClick = onLongAction?.let {
+            {
+                haptics.longPress()
+                it(todo)
+            }
+        },
+    ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
             Checkbox(
                 checked = todo.done,
@@ -218,6 +315,54 @@ internal fun TodoCheckRow(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun TodoActionSheetContent(
+    todo: Todo,
+    onOpen: () -> Unit,
+    onToggle: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    Column(Modifier.fillMaxWidth().padding(bottom = 24.dp)) {
+        Text(
+            todo.title.ifBlank { "(제목 없음)" },
+            style = DenebType.subject,
+            color = MaterialTheme.colorScheme.onBackground,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
+        )
+        HorizontalDivider(color = denebHairline())
+        TodoSheetAction(Icons.Outlined.Edit, "편집", onOpen = onOpen)
+        TodoSheetAction(
+            Icons.Filled.CheckCircle,
+            if (todo.done) "미완료로 변경" else "완료로 변경",
+            onOpen = onToggle,
+        )
+        TodoSheetAction(Icons.Outlined.Delete, "삭제", destructive = true, onOpen = onDelete)
+    }
+}
+
+@Composable
+private fun TodoSheetAction(
+    icon: ImageVector,
+    label: String,
+    destructive: Boolean = false,
+    onOpen: () -> Unit,
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .denebPressable(onClick = onOpen)
+            .padding(horizontal = 24.dp, vertical = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        val color = if (destructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+        Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(22.dp))
+        Spacer(Modifier.width(16.dp))
+        Text(label, style = DenebType.rowTitle, color = if (destructive) color else MaterialTheme.colorScheme.onBackground)
     }
 }
 
