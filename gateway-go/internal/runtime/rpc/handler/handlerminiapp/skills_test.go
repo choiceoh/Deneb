@@ -193,6 +193,20 @@ func TestSkillsLifecycle_MappingAndLimit(t *testing.T) {
 	if payload.Count != 4 {
 		t.Fatalf("expected 4 events (limit), got %d", payload.Count)
 	}
+	if payload.Summary.System != "Propus" ||
+		payload.Summary.State != "attention" ||
+		payload.Summary.Total != 4 ||
+		payload.Summary.Evolved != 1 ||
+		payload.Summary.Review != 1 ||
+		payload.Summary.Rejected != 1 ||
+		payload.Summary.RolledBack != 1 ||
+		payload.Summary.Attention != 2 ||
+		payload.Summary.LatestAt != 333 ||
+		payload.Summary.LatestSkill != "email-analysis" ||
+		payload.Summary.NextCue == "" ||
+		payload.Summary.QualityGate == "" {
+		t.Fatalf("unexpected Propus summary: %+v", payload.Summary)
+	}
 	first := payload.Events[0]
 	if first.Type != "evolved" || first.Version != "1.1.1" || first.Detail != "개선" {
 		t.Errorf("first event = %+v, want evolved/1.1.1/개선", first)
@@ -238,6 +252,9 @@ func TestSkillsLifecycle_SkillFilter(t *testing.T) {
 	if payload.Count != 1 || payload.Events[0].Type != "genesis" {
 		t.Fatalf("expected single genesis event for morning-letter, got %+v", payload.Events)
 	}
+	if payload.Summary.State != "observing" || payload.Summary.Genesis != 1 || payload.Summary.Attention != 0 {
+		t.Fatalf("unexpected filtered Propus summary: %+v", payload.Summary)
+	}
 }
 
 // Without a tracker the feed degrades to empty instead of erroring.
@@ -249,5 +266,8 @@ func TestSkillsLifecycle_NilProvider(t *testing.T) {
 	payload := decodeSkillsPayload[SkillsLifecycleResponse](t, resp)
 	if payload.Count != 0 {
 		t.Fatalf("expected empty feed, got %d events", payload.Count)
+	}
+	if payload.Summary.State != "idle" || payload.Summary.System != "Propus" {
+		t.Fatalf("unexpected nil-provider Propus summary: %+v", payload.Summary)
 	}
 }

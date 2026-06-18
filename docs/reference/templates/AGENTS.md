@@ -65,7 +65,8 @@ prompt's wiki section is the canonical guide to the recall stack
   plane. When available, start with action `status` and `overview.nextActions`,
   record plausible-but-unvalidated correction ideas with action
   `self_correction`, then review queued `selfCorrectionCandidates` in batches
-  before applying.
+  before applying. Treat Propus overview/status as canonical instead of
+  inferring a separate lifecycle policy from raw logs.
 
 ## Red Lines
 

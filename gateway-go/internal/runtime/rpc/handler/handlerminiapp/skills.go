@@ -119,13 +119,39 @@ type SkillLifecycleEvent struct {
 	RegressionRisk         string `json:"regressionRisk,omitempty"`
 }
 
+// PropusLifecycleSummary is the server-owned summary for the native Propus log.
+// Keep this in the payload instead of recomputing it in the client: Propus has
+// one state model, and the UI should render that model rather than drifting into
+// a second interpretation of the same event feed.
+//
+//deneb:wire
+type PropusLifecycleSummary struct {
+	System       string `json:"system"`
+	State        string `json:"state"`
+	Total        int    `json:"total"`
+	Genesis      int    `json:"genesis"`
+	Evolved      int    `json:"evolved"`
+	Review       int    `json:"review"`
+	Rejected     int    `json:"rejected"`
+	RolledBack   int    `json:"rolledBack"`
+	Attention    int    `json:"attention"`
+	LatestAt     int64  `json:"latestAt,omitempty"`
+	LatestType   string `json:"latestType,omitempty"`
+	LatestSkill  string `json:"latestSkill,omitempty"`
+	Doctrine     string `json:"doctrine,omitempty"`
+	NextCue      string `json:"nextCue,omitempty"`
+	QualityGate  string `json:"qualityGate,omitempty"`
+	AttentionCue string `json:"attentionCue,omitempty"`
+}
+
 // SkillsLifecycleResponse is the miniapp.skills.lifecycle payload,
 // newest first.
 //
 //deneb:wire
 type SkillsLifecycleResponse struct {
-	Events []SkillLifecycleEvent `json:"events"`
-	Count  int                   `json:"count"`
+	Events  []SkillLifecycleEvent  `json:"events"`
+	Count   int                    `json:"count"`
+	Summary PropusLifecycleSummary `json:"summary"`
 }
 
 // SkillDetailResponse is the miniapp.skills.detail payload: the same enriched
@@ -318,7 +344,11 @@ func skillsLifecycle(deps SkillsDeps) rpcutil.HandlerFunc {
 			}
 		}
 
-		return rpcutil.RespondOK(req.ID, SkillsLifecycleResponse{Events: events, Count: len(events)})
+		return rpcutil.RespondOK(req.ID, SkillsLifecycleResponse{
+			Events:  events,
+			Count:   len(events),
+			Summary: propusLifecycleSummary(events),
+		})
 	}
 }
 
@@ -365,6 +395,52 @@ func lifecycleEvent(e genesis.LifecycleLogEntry) SkillLifecycleEvent {
 	ev.Detail = truncateDetail(ev.Detail, lifecycleTextMaxRunes)
 	ev.Evidence = truncateDetail(ev.Evidence, lifecycleTextMaxRunes)
 	return ev
+}
+
+func propusLifecycleSummary(events []SkillLifecycleEvent) PropusLifecycleSummary {
+	summary := PropusLifecycleSummary{
+		System:      "Propus",
+		State:       "observing",
+		Total:       len(events),
+		Doctrine:    "observe -> propose -> validate -> genesis/evolve -> watch -> rollback/backlog",
+		QualityGate: "검증 없는 생성/진화는 skill debt로 취급",
+	}
+	for _, event := range events {
+		if event.At > summary.LatestAt {
+			summary.LatestAt = event.At
+			summary.LatestType = event.Type
+			summary.LatestSkill = event.SkillName
+		}
+		switch event.Type {
+		case "genesis":
+			summary.Genesis++
+		case "evolved":
+			summary.Evolved++
+		case "evolve_rejected":
+			summary.Rejected++
+			summary.Attention++
+		case "evolve_rolled_back":
+			summary.RolledBack++
+			summary.Attention++
+		default:
+			summary.Review++
+		}
+	}
+	switch {
+	case summary.Total == 0:
+		summary.State = "idle"
+		summary.NextCue = "Propus 활동이 쌓이면 생성/진화/리뷰 압력을 요약합니다"
+	case summary.Attention > 0:
+		summary.State = "attention"
+		summary.AttentionCue = "기각/롤백 이벤트를 먼저 열어 같은 실패 후보를 반복하지 마세요"
+		summary.NextCue = "기각/롤백 근거 확인"
+	case summary.Review > 0 && summary.Evolved+summary.Genesis == 0:
+		summary.State = "reviewing"
+		summary.NextCue = "리뷰 판정에서 재사용 가치가 반복되는지 확인"
+	default:
+		summary.NextCue = "최근 생성/진화가 검증 근거와 연결되는지 확인"
+	}
+	return summary
 }
 
 // evolveAgg folds committed-evolve lifecycle entries per skill.

@@ -391,6 +391,27 @@ data class PromptRow(
 
 @Immutable
 @Serializable
+data class PropusLifecycleSummary(
+    val system: String = "",
+    val state: String = "",
+    val total: Int = 0,
+    val genesis: Int = 0,
+    val evolved: Int = 0,
+    val review: Int = 0,
+    val rejected: Int = 0,
+    val rolledBack: Int = 0,
+    val attention: Int = 0,
+    val latestAt: Long = 0L,
+    val latestType: String = "",
+    val latestSkill: String = "",
+    val doctrine: String = "",
+    val nextCue: String = "",
+    val qualityGate: String = "",
+    val attentionCue: String = "",
+)
+
+@Immutable
+@Serializable
 data class QATurn(
     val q: String = "",
     val a: String = "",
@@ -512,6 +533,7 @@ data class SkillRow(
 data class SkillsLifecycleResponse(
     val events: List<SkillLifecycleEvent> = emptyList(),
     val count: Int = 0,
+    val summary: PropusLifecycleSummary = PropusLifecycleSummary(),
 )
 
 @Immutable
