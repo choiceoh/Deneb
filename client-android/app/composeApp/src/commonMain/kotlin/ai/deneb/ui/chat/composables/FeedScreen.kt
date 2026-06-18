@@ -51,11 +51,13 @@ import kotlinx.datetime.todayIn
 import kotlin.time.Clock
 import kotlin.time.Instant
 
+private const val EmptyFeedLookbackDays = 31
+
 /**
  * The 업무 (work) home: the work feed as the main screen rather than a modal behind
  * the chat. A date stepper under the title scopes the feed to one day at a time —
- * ← / → move between the days that actually have items (newest day first). Within
- * the selected day, unread items sit on top; tapping one marks it 읽음 (seen,
+ * ← / → move by calendar day, even when the selected day is empty. Within the
+ * selected day, unread items sit on top; tapping one marks it 읽음 (seen,
  * client-side — distinct from the server ack the action buttons do) and expands its
  * full body inline, so the report is read here instead of being mirrored into the
  * chat transcript. Read items collect in a section at the bottom.
@@ -71,17 +73,15 @@ internal fun FeedScreen(
     onRunAction: (String, String) -> Unit,
 ) {
     DenebScreenScaffold(title = "피드", onBack = {}, showBack = false) {
-        // The feed spans several days of as-yet-unacked items. Group by local day and
-        // step through the days that have items: default to the newest (so the screen
-        // opens on content), bound navigation to [oldest, newest] so ← / → never page
-        // into empty pre-/post-history. selectedDate resets to the newest day whenever
-        // a newer item arrives (maxDate advances), but survives a same-day refresh.
+        // Keep the selected date independent of the loaded item list. A ranged fetch
+        // for today can legitimately return zero items; if selectedDate were derived
+        // from items, the empty response would remove the date bar and trap the user
+        // on today with no way to request yesterday.
         val tz = remember { TimeZone.currentSystemDefault() }
         val today = remember { Clock.System.todayIn(tz) }
         val dates = remember(items) { items.map { localDateOf(it.createdAtMs) } }
-        val minDate = dates.minOrNull() ?: today
-        val maxDate = dates.maxOrNull() ?: today
-        var selectedDate by remember(maxDate) { mutableStateOf(maxDate) }
+        var selectedDate by remember { mutableStateOf(today) }
+        val nav = feedDateNavState(selectedDate, today, dates)
         LaunchedEffect(selectedDate) {
             onLoadDateRange(
                 dayStartMs(selectedDate, tz),
@@ -89,20 +89,20 @@ internal fun FeedScreen(
             )
         }
 
+        FeedDateBar(
+            label = feedDateLabel(selectedDate, today),
+            canGoPrev = nav.canGoPrev,
+            canGoNext = nav.canGoNext,
+            onPrev = { if (nav.canGoPrev) selectedDate = selectedDate.minus(1, DateTimeUnit.DAY) },
+            onNext = { if (nav.canGoNext) selectedDate = selectedDate.plus(1, DateTimeUnit.DAY) },
+        )
+
         if (items.isEmpty()) {
             // Before the first fetch finishes, show the skeleton instead of "no feed"
             // so a cold launch into the 업무 home doesn't flash an empty state.
-            if (loaded) DenebEmpty("오늘 받은 피드가 없습니다") else DenebLoading()
+            if (loaded) DenebEmpty(feedEmptyLabel(selectedDate, today)) else DenebLoading()
             return@DenebScreenScaffold
         }
-
-        FeedDateBar(
-            label = feedDateLabel(selectedDate, today),
-            canGoPrev = selectedDate > minDate,
-            canGoNext = selectedDate < maxDate,
-            onPrev = { if (selectedDate > minDate) selectedDate = selectedDate.minus(1, DateTimeUnit.DAY) },
-            onNext = { if (selectedDate < maxDate) selectedDate = selectedDate.plus(1, DateTimeUnit.DAY) },
-        )
 
         var expandedId by remember { mutableStateOf<String?>(null) }
         // Partition by a snapshot of seenIds taken when the feed's items load, not
@@ -122,7 +122,7 @@ internal fun FeedScreen(
         }
 
         if (dayItems.isEmpty()) {
-            DenebEmpty("이 날 받은 피드가 없습니다")
+            DenebEmpty(feedEmptyLabel(selectedDate, today))
         } else {
             LazyColumn(Modifier.fillMaxWidth().weight(1f)) {
                 items(unread.size) { i ->
@@ -220,6 +220,27 @@ private fun FeedDateArrow(
 /** Korean short weekday, indexed by LocalDate.dayOfWeek.ordinal (0 = Monday). */
 private val koreanWeekday = listOf("월", "화", "수", "목", "금", "토", "일")
 
+internal data class FeedDateNavState(
+    val canGoPrev: Boolean,
+    val canGoNext: Boolean,
+)
+
+internal fun feedDateNavState(
+    selectedDate: LocalDate,
+    today: LocalDate,
+    loadedDates: List<LocalDate>,
+): FeedDateNavState {
+    val earliestLoaded = loadedDates.minOrNull()
+    val latestLoaded = loadedDates.maxOrNull()
+    val fallbackMinDate = today.minus(EmptyFeedLookbackDays, DateTimeUnit.DAY)
+    val minDate = minOf(fallbackMinDate, earliestLoaded ?: fallbackMinDate)
+    val maxDate = maxOf(today, latestLoaded ?: today)
+    return FeedDateNavState(
+        canGoPrev = selectedDate > minDate,
+        canGoNext = selectedDate < maxDate,
+    )
+}
+
 /** The local calendar day a feed item was created on. */
 private fun localDateOf(epochMs: Long): LocalDate = Instant.fromEpochMilliseconds(epochMs).toLocalDateTime(TimeZone.currentSystemDefault()).date
 
@@ -235,6 +256,12 @@ private fun feedDateLabel(date: LocalDate, today: LocalDate): String {
         today.minus(1, DateTimeUnit.DAY) -> "어제 · $md"
         else -> md
     }
+}
+
+private fun feedEmptyLabel(date: LocalDate, today: LocalDate): String = when (date) {
+    today -> "오늘 받은 피드가 없습니다"
+    today.minus(1, DateTimeUnit.DAY) -> "어제 받은 피드가 없습니다"
+    else -> "이 날 받은 피드가 없습니다"
 }
 
 @Composable
