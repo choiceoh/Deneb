@@ -5,7 +5,9 @@ import ai.deneb.ui.DenebRow
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.chat.WorkFeedItem
 import ai.deneb.ui.components.rememberHaptics
+import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
+import ai.deneb.ui.denebPressable
 import ai.deneb.ui.handCursor
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -24,8 +26,10 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.outlined.Archive
+import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.MailOutline
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -122,6 +126,7 @@ internal fun WorkFeedRow(
     onOpen: (String) -> Unit,
     onRunAction: (String, String) -> Unit,
     expanded: Boolean = false,
+    onLongAction: ((WorkFeedItem) -> Unit)? = null,
 ) {
     // The row already leads with a source icon, so a "📬 …" title would show two
     // icons side by side — strip the leading emoji/symbol run from the title.
@@ -132,6 +137,12 @@ internal fun WorkFeedRow(
         onClick = {
             haptics.tap()
             onOpen(item.id)
+        },
+        onLongClick = onLongAction?.let {
+            {
+                haptics.longPress()
+                it(item)
+            }
         },
         modifier = Modifier.padding(horizontal = 12.dp),
     ) {
@@ -197,6 +208,72 @@ internal fun WorkFeedRow(
                 }
             }
         }
+    }
+}
+
+@Composable
+internal fun WorkFeedActionSheetContent(
+    item: WorkFeedItem,
+    onOpen: () -> Unit,
+    onRunAction: (String) -> Unit,
+    onArchive: () -> Unit,
+    onTrash: () -> Unit,
+) {
+    val title = if (item.title.isBlank()) stringResource(Res.string.work_feed_title) else stripLeadingIcon(item.title)
+    val extraActions = item.actions.filter { action ->
+        action.id.isNotBlank() &&
+            action.id !in setOf("open", "ack", "trash") &&
+            action.label.isNotBlank()
+    }
+    val archiveLabel = item.actions.firstOrNull { it.id == "ack" }?.label?.ifBlank { null } ?: "보관"
+    val trashLabel = item.actions.firstOrNull { it.id == "trash" }?.label?.ifBlank { null } ?: "휴지통"
+    Column(Modifier.fillMaxWidth().padding(bottom = 24.dp)) {
+        Text(
+            title,
+            style = DenebType.subject,
+            color = MaterialTheme.colorScheme.onBackground,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
+        )
+        if (item.summary.isNotBlank()) {
+            Text(
+                item.summary,
+                style = DenebType.snippet,
+                color = denebHint(),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(horizontal = 24.dp).padding(bottom = 12.dp),
+            )
+        }
+        HorizontalDivider(color = denebHairline())
+        WorkFeedSheetAction(Icons.Outlined.MailOutline, "열기", onOpen = onOpen)
+        extraActions.forEach { action ->
+            WorkFeedSheetAction(Icons.Outlined.AutoAwesome, action.label, onOpen = { onRunAction(action.id) })
+        }
+        WorkFeedSheetAction(Icons.Outlined.Archive, archiveLabel, onOpen = onArchive)
+        WorkFeedSheetAction(Icons.Outlined.Delete, trashLabel, destructive = true, onOpen = onTrash)
+    }
+}
+
+@Composable
+private fun WorkFeedSheetAction(
+    icon: ImageVector,
+    label: String,
+    destructive: Boolean = false,
+    onOpen: () -> Unit,
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .denebPressable(onClick = onOpen)
+            .padding(horizontal = 24.dp, vertical = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        val color = if (destructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+        Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(22.dp))
+        Spacer(Modifier.width(16.dp))
+        Text(label, style = DenebType.rowTitle, color = if (destructive) color else MaterialTheme.colorScheme.onBackground)
     }
 }
 

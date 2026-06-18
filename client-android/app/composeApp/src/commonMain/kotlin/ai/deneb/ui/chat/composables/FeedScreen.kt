@@ -20,8 +20,10 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -58,6 +60,7 @@ import kotlin.time.Instant
  * full body inline, so the report is read here instead of being mirrored into the
  * chat transcript. Read items collect in a section at the bottom.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun FeedScreen(
     items: ImmutableList<WorkFeedItem>,
@@ -111,6 +114,7 @@ internal fun FeedScreen(
         val dayItems = items.filter { localDateOf(it.createdAtMs) == selectedDate }
         val unread = dayItems.filterNot { seenSnapshot.contains(it.id) }
         val read = dayItems.filter { seenSnapshot.contains(it.id) }
+        var actionItem by remember { mutableStateOf<WorkFeedItem?>(null) }
 
         val open: (String) -> Unit = { id ->
             expandedId = if (expandedId == id) null else id
@@ -122,14 +126,38 @@ internal fun FeedScreen(
         } else {
             LazyColumn(Modifier.fillMaxWidth().weight(1f)) {
                 items(unread.size) { i ->
-                    FeedRowWithBody(unread[i], expandedId == unread[i].id, open, onRunAction)
+                    FeedRowWithBody(unread[i], expandedId == unread[i].id, open, onRunAction) { actionItem = it }
                 }
                 if (read.isNotEmpty()) {
                     item { DenebSectionLabel("읽음", Modifier.padding(start = 12.dp)) }
                     items(read.size) { i ->
-                        FeedRowWithBody(read[i], expandedId == read[i].id, open, onRunAction)
+                        FeedRowWithBody(read[i], expandedId == read[i].id, open, onRunAction) { actionItem = it }
                     }
                 }
+            }
+        }
+
+        actionItem?.let { item ->
+            ModalBottomSheet(onDismissRequest = { actionItem = null }) {
+                WorkFeedActionSheetContent(
+                    item = item,
+                    onOpen = {
+                        actionItem = null
+                        open(item.id)
+                    },
+                    onRunAction = { actionId ->
+                        actionItem = null
+                        onRunAction(item.id, actionId)
+                    },
+                    onArchive = {
+                        actionItem = null
+                        onRunAction(item.id, "ack")
+                    },
+                    onTrash = {
+                        actionItem = null
+                        onRunAction(item.id, "trash")
+                    },
+                )
             }
         }
     }
@@ -215,8 +243,9 @@ private fun FeedRowWithBody(
     expanded: Boolean,
     onOpen: (String) -> Unit,
     onRunAction: (String, String) -> Unit,
+    onLongAction: (WorkFeedItem) -> Unit,
 ) {
-    WorkFeedRow(item = item, onOpen = onOpen, onRunAction = onRunAction, expanded = expanded)
+    WorkFeedRow(item = item, onOpen = onOpen, onRunAction = onRunAction, expanded = expanded, onLongAction = onLongAction)
     if (expanded && item.body.isNotBlank()) {
         // Proactive reports are markdown (tables, headings, lists), so render with
         // the full chat renderer — a plain Text leaked raw "| 항목 | 내용 |" pipes and
