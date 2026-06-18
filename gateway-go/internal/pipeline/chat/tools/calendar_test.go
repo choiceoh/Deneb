@@ -161,6 +161,39 @@ func TestCalendar_Capture(t *testing.T) {
 	}
 }
 
+func TestCalendar_Audit(t *testing.T) {
+	local := newTestLocalCal(t)
+	d := &toolctx.CalendarDeps{Local: local}
+	// Tomorrow, inside the default 7-day window + 09–18 working hours.
+	base := time.Now().Add(24 * time.Hour)
+	day := time.Date(base.Year(), base.Month(), base.Day(), 0, 0, 0, 0, base.Location())
+	mk := func(h, m int, title string) {
+		start := time.Date(day.Year(), day.Month(), day.Day(), h, m, 0, 0, day.Location())
+		callCal(t, d, map[string]any{"action": "create", "summary": title, "start": start.Format(time.RFC3339)})
+	}
+	mk(10, 0, "A")
+	mk(10, 30, "B") // overlaps A (default 1h) → double-booking
+	mk(13, 0, "C")
+	mk(14, 0, "D")
+	mk(15, 0, "E")
+	mk(16, 0, "F") // 6 meetings → overloaded day
+
+	out := callCal(t, d, map[string]any{"action": "audit"})
+	for _, want := range []string{"일정 점검", "겹침", "과부하"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("audit output missing %q:\n%s", want, out)
+		}
+	}
+}
+
+func TestCalendar_AuditClean(t *testing.T) {
+	d := &toolctx.CalendarDeps{Local: newTestLocalCal(t)}
+	out := callCal(t, d, map[string]any{"action": "audit"})
+	if !strings.Contains(out, "일정 양호") {
+		t.Errorf("empty calendar should audit clean, got:\n%s", out)
+	}
+}
+
 func TestCalendar_RejectGoogleWrite(t *testing.T) {
 	local := newTestLocalCal(t)
 	d := &toolctx.CalendarDeps{Local: local}

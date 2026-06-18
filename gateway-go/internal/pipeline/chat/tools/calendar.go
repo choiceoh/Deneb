@@ -107,8 +107,10 @@ func ToolCalendar(d *toolctx.CalendarDeps) toolctx.ToolFunc {
 			return calActionPrep(ctx, d, p), nil
 		case "capture":
 			return calActionCapture(ctx, d, p), nil
+		case "audit":
+			return calActionAudit(ctx, d, p), nil
 		default:
-			return fmt.Sprintf("알 수 없는 액션: %s. 사용 가능: list(일정 조회), get(상세), create(추가), update(수정), delete(삭제), free_slots(빈 시간 찾기), brief(브리핑), prep(미팅 준비), capture(회의록 정리)", p.Action), nil
+			return fmt.Sprintf("알 수 없는 액션: %s. 사용 가능: list(일정 조회), get(상세), create(추가), update(수정), delete(삭제), free_slots(빈 시간 찾기), brief(브리핑), prep(미팅 준비), capture(회의록 정리), audit(일정 점검·시간 보호)", p.Action), nil
 		}
 	}
 }
