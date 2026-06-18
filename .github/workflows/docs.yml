@@ -99,9 +99,9 @@ jobs:
       - name: Validate docs config and internal links
         working-directory: docs
         run: |
-          if mintlify check --help >/dev/null 2>&1; then
+          if mintlify --help 2>/dev/null | node -e "let data=''; process.stdin.on('data', c => data += c); process.stdin.on('end', () => process.exit(/^\\s*mintlify check\\b/m.test(data) ? 0 : 1));"; then
             mintlify check
           else
-            echo "mintlify check is unavailable in the current CLI; running docs.json syntax smoke."
+            echo "mintlify check command is unavailable in the current CLI; running docs.json syntax smoke."
             node -e "JSON.parse(require('fs').readFileSync('docs.json', 'utf8'))"
           fi
