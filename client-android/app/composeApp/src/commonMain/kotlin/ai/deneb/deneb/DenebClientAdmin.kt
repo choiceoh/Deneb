@@ -5,6 +5,8 @@ import ai.deneb.data.ServiceEntry
 import ai.deneb.data.TaskStatus
 import ai.deneb.data.TaskTrigger
 import ai.deneb.deneb.generated.MiniappCronDetail
+import ai.deneb.deneb.generated.SelfCorrectionCandidate
+import ai.deneb.deneb.generated.SelfImprovementCodingListResponse
 import ai.deneb.deneb.generated.SkillDetailResponse
 import ai.deneb.deneb.generated.SkillLifecycleEvent
 import ai.deneb.deneb.generated.SkillsLifecycleResponse
@@ -244,6 +246,20 @@ suspend fun DenebGatewayClient.fetchSkillLifecycleResponse(
         if (!skillName.isNullOrBlank()) put("skillName", skillName)
     },
 )
+
+/** Pending self-improvement coding candidates for Settings > 자가개선 코딩.
+ *  These are deferred code-change hypotheses, not skills and not Propus log
+ *  events. */
+suspend fun DenebGatewayClient.fetchSelfImprovementCodingCandidates(
+    limit: Int = 60,
+    status: String = "proposed",
+): List<SelfCorrectionCandidate>? = callRpc<SelfImprovementCodingListResponse>(
+    "miniapp.self_improvement_coding.list",
+    buildJsonObject {
+        put("limit", limit)
+        if (status.isNotBlank()) put("status", status)
+    },
+)?.candidates
 
 /** One skill's enriched row + SKILL.md body for the tap-through detail screen.
  *  Null on transport failure or unknown skill name. */

@@ -463,6 +463,35 @@ data class SearchWikiHit(
 
 @Immutable
 @Serializable
+data class SelfCorrectionCandidate(
+    val id: String = "",
+    val status: String = "",
+    val scope: String = "",
+    val skillName: String = "",
+    val sessionKey: String = "",
+    val title: String = "",
+    val candidate: String = "",
+    val evidence: String = "",
+    val reason: String = "",
+    val targetFiles: List<String> = emptyList(),
+    val proposedChange: String = "",
+    val risk: String = "",
+    val source: String = "",
+    val reviewer: String = "",
+    val reviewNote: String = "",
+    val createdAt: Long = 0L,
+    val updatedAt: Long = 0L,
+)
+
+@Immutable
+@Serializable
+data class SelfImprovementCodingListResponse(
+    val candidates: List<SelfCorrectionCandidate> = emptyList(),
+    val count: Int = 0,
+)
+
+@Immutable
+@Serializable
 data class SenderRecentOut(
     val count: Int = 0,
     val lastReceivedAt: String = "",

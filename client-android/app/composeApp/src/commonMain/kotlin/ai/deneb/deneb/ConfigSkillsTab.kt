@@ -68,7 +68,6 @@ import kotlin.time.Instant
 // No toggles: discovery is filesystem-driven, so the list reflects what's
 // installed on the gateway host. Tapping a row opens [DenebSkillScreen]
 // (full meta + SKILL.md body + per-skill timeline) via [onOpenSkill].
-// Hosted by [DenebConfigScreen]'s pager.
 @Composable
 internal fun SkillsTab(client: DenebGatewayClient, onOpenSkill: (String) -> Unit = {}) {
     val skills by client.denebSkills.collectAsState()
@@ -118,7 +117,7 @@ internal fun SkillsTab(client: DenebGatewayClient, onOpenSkill: (String) -> Unit
 
                 events == null -> DenebLoading()
 
-                events.isEmpty() -> EmptyTab("아직 Propus 활동이 없습니다.")
+                events.isEmpty() -> EmptyTab("아직 Propus 로그가 없습니다.")
 
                 else -> SkillLifecycleContent(events, onOpenSkill, payload.summary)
             }

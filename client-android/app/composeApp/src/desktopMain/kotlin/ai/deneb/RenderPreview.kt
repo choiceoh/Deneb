@@ -19,6 +19,7 @@ import ai.deneb.deneb.MailMessage
 import ai.deneb.deneb.MailRow
 import ai.deneb.deneb.SchedMode
 import ai.deneb.deneb.ScheduleDraft
+import ai.deneb.deneb.SelfImprovementCodingContent
 import ai.deneb.deneb.SkillDetailContent
 import ai.deneb.deneb.SkillLifecycleContent
 import ai.deneb.deneb.SkillLifecycleRow
@@ -29,6 +30,7 @@ import ai.deneb.deneb.TodoAddContent
 import ai.deneb.deneb.TodoListContent
 import ai.deneb.deneb.buildMonthGrid
 import ai.deneb.deneb.eventDays
+import ai.deneb.deneb.generated.SelfCorrectionCandidate
 import ai.deneb.deneb.generated.SkillDetailResponse
 import ai.deneb.deneb.generated.SkillLifecycleEvent
 import ai.deneb.deneb.generated.SkillRow
@@ -174,6 +176,8 @@ fun main() {
     renderWaitingChip("waiting_chip_light.png", LightColorScheme)
     renderSkillsList("skills_list_dark.png", DarkColorScheme)
     renderSkillsList("skills_list_light.png", LightColorScheme)
+    renderSelfImprovementCoding("self_improvement_coding_dark.png", DarkColorScheme)
+    renderSelfImprovementCoding("self_improvement_coding_light.png", LightColorScheme)
     renderSkillLifecycle("skills_lifecycle_dark.png", DarkColorScheme)
     renderSkillLifecycle("skills_lifecycle_light.png", LightColorScheme)
     renderSkillDetail("skill_detail_dark.png", DarkColorScheme)
@@ -1059,6 +1063,21 @@ private fun sampleLifecycleEvents(now: Long) = listOf(
     ),
 )
 
+private fun sampleSelfCorrectionCandidates(now: Long) = listOf(
+    SelfCorrectionCandidate(
+        id = "sc-coding-1",
+        status = "proposed",
+        scope = "code",
+        title = "코딩 모델 후보를 네이티브에 노출",
+        proposedChange = "자가개선 코딩 화면에 self-correction 후보 대기열을 표시",
+        evidence = "코딩 에이전트가 기록한 후보가 JSONL에만 남아 native에서 검토되지 않음",
+        risk = "적용 완료 이벤트와 후보가 섞이면 상태를 오해할 수 있음",
+        targetFiles = listOf("ConfigSkillsTab.kt", "skills.go"),
+        createdAt = now - 45 * 60_000L,
+        updatedAt = now - 45 * 60_000L,
+    ),
+)
+
 private fun renderSkillsList(name: String, scheme: ColorScheme) {
     val scene = ImageComposeScene(width = 824, height = 700, density = Density(2f)) {
         MaterialTheme(colorScheme = scheme) {
@@ -1119,6 +1138,22 @@ private fun renderSkillDetail(name: String, scheme: ColorScheme) {
     scene.close()
 }
 
+private fun renderSelfImprovementCoding(name: String, scheme: ColorScheme) {
+    val now = System.currentTimeMillis()
+    val scene = ImageComposeScene(width = 824, height = 760, density = Density(2f)) {
+        MaterialTheme(colorScheme = scheme) {
+            Surface(color = MaterialTheme.colorScheme.background) {
+                SelfImprovementCodingContent(sampleSelfCorrectionCandidates(now))
+            }
+        }
+    }
+    val image = scene.render()
+    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
+    File("/tmp/deneb-render").mkdirs()
+    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
+    scene.close()
+}
+
 private fun renderSkillLifecycle(name: String, scheme: ColorScheme) {
     val scene = ImageComposeScene(width = 824, height = 700, density = Density(2f)) {
         MaterialTheme(colorScheme = scheme) {
@@ -1127,7 +1162,8 @@ private fun renderSkillLifecycle(name: String, scheme: ColorScheme) {
                     SkillsViewSwitcher(showLifecycle = true, onSelect = {})
                     // First row pre-expanded to validate the tap-to-expand state:
                     // full reason, 근거 evidence, absolute time + verdict, 스킬 보기.
-                    val events = sampleLifecycleEvents(System.currentTimeMillis())
+                    val now = System.currentTimeMillis()
+                    val events = sampleLifecycleEvents(now)
                     SkillLifecycleRow(events[1], initiallyExpanded = true, onOpenSkill = {})
                     HorizontalDivider(Modifier.padding(start = 16.dp), color = denebHairline())
                     SkillLifecycleContent(events.filterIndexed { i, _ -> i != 1 })
