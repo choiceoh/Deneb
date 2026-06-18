@@ -25,3 +25,14 @@ export async function secureSetToken(token: string, account: string = DEFAULT_AC
   }
   localStorage.setItem(TOKEN_KEY, token);
 }
+
+// Desktop auto-connect: resolve the client token without manual entry — first the
+// OS keychain, then the canonical ~/.deneb/client_token file the gateway writes.
+// Returns null off-desktop or when no token is found.
+export async function readDesktopToken(): Promise<string | null> {
+  if (!isTauri()) return null;
+  const { invoke } = await import("@tauri-apps/api/core");
+  const fromKeychain = await invoke<string | null>("token_get", { account: DEFAULT_ACCOUNT }).catch(() => null);
+  if (fromKeychain) return fromKeychain;
+  return (await invoke<string | null>("token_from_file").catch(() => null)) ?? null;
+}

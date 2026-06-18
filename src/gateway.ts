@@ -17,14 +17,26 @@ export interface GatewayConfig {
   token: string; // hex64 client token (~/.deneb/client_token)
 }
 
+// Build-time gateway defaults (VITE_GATEWAY_URL / VITE_GATEWAY_TOKEN), so a
+// configured deployment auto-connects without manual entry. Prefer the desktop
+// keychain / ~/.deneb/client_token for the token over committing it.
+function configFromEnv(): Partial<GatewayConfig> {
+  return { url: import.meta.env.VITE_GATEWAY_URL, token: import.meta.env.VITE_GATEWAY_TOKEN };
+}
+
+// Resolve the initial config: a saved (sidebar-entered) value wins per field,
+// falling back to env defaults. Desktop also hydrates the token from the OS
+// keychain / token file at startup (see tauri.readDesktopToken + App bootstrap).
 export function loadConfig(): GatewayConfig {
+  let saved: Partial<GatewayConfig> = {};
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return JSON.parse(raw) as GatewayConfig;
+    if (raw) saved = JSON.parse(raw) as GatewayConfig;
   } catch {
     /* ignore corrupt storage */
   }
-  return { url: "", token: "" };
+  const env = configFromEnv();
+  return { url: saved.url || env.url || "", token: saved.token || env.token || "" };
 }
 
 export function saveConfig(cfg: GatewayConfig): void {

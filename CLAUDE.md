@@ -119,11 +119,27 @@ name to `resources.ts` as a constant. See `WikiPane.tsx` for read+edit+save.
   with `fakeProvider(fixtures)` to drive grids without a gateway. See `App.test.tsx`.
 - Add/extend tests with every behavior change; `pnpm verify` must stay green.
 
+## Connecting the gateway
+
+Config resolution (`loadConfig` + App bootstrap), highest priority first:
+
+1. Saved config (entered in the sidebar → localStorage).
+2. Desktop: token from the OS keychain, then `~/.deneb/client_token` (via the Rust
+   `token_from_file` command + `readDesktopToken`). Auto-fills on launch.
+3. Env defaults: `VITE_GATEWAY_URL` / `VITE_GATEWAY_TOKEN` (see `.env.example`).
+
+So on the real host/laptop it auto-connects with no manual entry. For local UI work
+without a gateway, use `pnpm dev:mock` (MSW). To smoke-test against a _real_ gateway
+from a reachable network, set the env vars (or enter URL+token) and watch the
+sidebar status / `[andromeda:rpc]` logs.
+
 ## Gotchas / environment
 
 - **No live gateway in CI/sandbox.** RPC-dependent behavior can't be E2E-verified
   here; the disconnected/error UI paths are what tests exercise. Field names in
-  panes are best-effort vs DESIGN §5 — reconcile against the real gateway.
+  panes are best-effort vs DESIGN §5 — reconcile against the real gateway. Note the
+  execution sandbox is network-isolated (a synthetic `192.0.2.0/24` net), so it
+  **cannot reach the gateway even on the same host** — verify live on the real machine.
 - **Tauri:** full `cargo`/`tauri build` needs system GUI libs (webkit2gtk-4.1) that
   the dev sandbox lacks; only config/structure/dep-resolution are verifiable here.
   `@tauri-apps/api` is dynamically imported so the web build never pulls it.

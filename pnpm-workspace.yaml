@@ -1,9 +1,13 @@
 # This pnpm distribution gates package build scripts via a supply-chain policy and
-# fails install until each is explicitly approved here. esbuild ships a prebuilt
-# platform binary (used by vite + vitest), so approve it.
+# fails install until each is explicitly approved here.
+# - esbuild: prebuilt platform binary (vite + vitest)
+# - msw: postinstall is non-essential for our Node/test usage; the browser worker
+#   is committed under public/ via `msw init`.
 allowBuilds:
   esbuild: true
+  msw: true
 onlyBuiltDependencies:
   - esbuild
+  - msw
 # CI installs deps explicitly, so skip pnpm's per-run deps re-verification.
 verifyDepsBeforeRun: false

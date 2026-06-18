@@ -31,10 +31,9 @@ function initialLevel(): LogLevel {
   } catch {
     /* localStorage unavailable */
   }
-  const env = (import.meta as { env?: Record<string, string | undefined> }).env;
-  const fromEnv = env?.VITE_LOG_LEVEL;
+  const fromEnv = import.meta.env.VITE_LOG_LEVEL;
   if (fromEnv && fromEnv in ORDER) return fromEnv as LogLevel;
-  return env?.DEV ? "debug" : "info";
+  return import.meta.env.DEV ? "debug" : "info";
 }
 
 let minLevel: LogLevel = initialLevel();

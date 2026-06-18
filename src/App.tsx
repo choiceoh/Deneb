@@ -1,9 +1,10 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Refine } from "@refinedev/core";
-import { type GatewayConfig, loadConfig } from "./gateway";
+import { type GatewayConfig, loadConfig, saveConfig } from "./gateway";
 import { denebDataProvider } from "./dataProvider";
 import { denebAuthProvider } from "./authProvider";
 import { refineResources } from "./resources";
+import { readDesktopToken } from "./tauri";
 import { WorkspaceProvider } from "./workspaceContext";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Workstation } from "./components/Workstation";
@@ -16,6 +17,25 @@ export function App() {
   const dataProvider = useMemo(() => denebDataProvider(cfg), [cfg]);
   const authProvider = useMemo(() => denebAuthProvider(cfg), [cfg]);
   const connected = Boolean(cfg.url && cfg.token);
+
+  // Desktop auto-connect: if we have no token yet, pull it from the OS keychain /
+  // ~/.deneb/client_token so the live gateway connects without manual entry.
+  useEffect(() => {
+    if (cfg.token) return;
+    let cancelled = false;
+    void readDesktopToken().then((token) => {
+      if (cancelled || !token) return;
+      setCfg((c) => {
+        if (c.token) return c;
+        const next = { ...c, token };
+        saveConfig(next);
+        return next;
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [cfg.token]);
 
   return (
     <ErrorBoundary>
