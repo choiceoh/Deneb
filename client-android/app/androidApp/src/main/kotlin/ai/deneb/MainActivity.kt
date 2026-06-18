@@ -6,6 +6,7 @@ import ai.deneb.data.ThemeMode
 import ai.deneb.deneb.DenebGatewayClient
 import ai.deneb.deneb.DropboxAuthBridge
 import ai.deneb.deneb.captureAudio
+import ai.deneb.deneb.captureDocument
 import ai.deneb.deneb.captureImage
 import ai.deneb.ui.DarkColorScheme
 import ai.deneb.ui.LightColorScheme
@@ -128,6 +129,7 @@ class MainActivity : ComponentActivity() {
                     // bytes and run the matching gateway capture.
                     onImageFile = { file -> captureFromPlatformFile(file, audio = false) },
                     onAudioFile = { file -> captureFromPlatformFile(file, audio = true) },
+                    onDocumentFile = { file -> captureDocumentFromPlatformFile(file) },
                     onVoiceInput = { launchVoiceCapture() },
                 ),
             )
@@ -247,6 +249,25 @@ class MainActivity : ComponentActivity() {
             val bytes = runCatching { file.readBytes() }.getOrNull()
             if (bytes == null || bytes.isEmpty()) return@launch
             if (audio) client.captureAudio(bytes, mime) else client.captureImage(bytes, mime)
+        }
+    }
+
+    // captureDocumentFromPlatformFile reads a picked document (pdf/text/code/csv)
+    // and runs the gateway's document-extraction capture turn. The gateway sniffs
+    // the bytes + filename, so a pdf -> "application/pdf" and everything else ->
+    // "text/plain" (the csv case still matches by .csv suffix server-side) is
+    // enough to drive its format dispatch.
+    private fun captureDocumentFromPlatformFile(file: PlatformFile) {
+        val client = get<DataRepository>() as? DenebGatewayClient ?: return
+        val mime = if (file.name.substringAfterLast('.', "").lowercase() == "pdf") {
+            "application/pdf"
+        } else {
+            "text/plain"
+        }
+        lifecycleScope.launch {
+            val bytes = runCatching { file.readBytes() }.getOrNull()
+            if (bytes == null || bytes.isEmpty()) return@launch
+            client.captureDocument(bytes, file.name, mime)
         }
     }
 

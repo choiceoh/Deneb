@@ -29,6 +29,11 @@ type Deps struct {
 	// voice/meeting capture) via the VibeVoice-ASR sidecar. hotwords is an
 	// optional proper-noun bias list. Optional; nil disables miniapp.capture.audio.
 	Transcribe func(ctx context.Context, audio []byte, mimeType, hotwords string) (string, error)
+	// ExtractDocument extracts readable text from a directly-shared document's raw
+	// bytes — PDF/Excel/Word/PowerPoint/CSV/text, with a scanned-PDF / image OCR
+	// fallback (the native-client document attach path). Optional; nil disables
+	// miniapp.capture.document.
+	ExtractDocument func(ctx context.Context, data []byte, filename, mimeType string) string
 	// Hotwords supplies proper-noun bias (wiki people/companies/domain terms)
 	// for audio-capture transcription. Optional; nil or "" means no bias.
 	Hotwords func() string

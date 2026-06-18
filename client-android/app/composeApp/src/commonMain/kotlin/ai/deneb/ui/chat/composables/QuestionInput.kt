@@ -163,8 +163,13 @@ fun QuestionInput(
                 if (file == null) return@rememberFilePickerLauncher
                 when (routeAttachment(file.extension, captures != null)) {
                     AttachmentRoute.IMAGE_CAPTURE -> captures?.onImageFile(file)
+
                     AttachmentRoute.AUDIO_CAPTURE -> captures?.onAudioFile(file)
-                    AttachmentRoute.FILE_ATTACH -> addFile(file)
+
+                    // Documents extract + analyze in one turn (like image/audio).
+                    // Without platform captures (desktop/iOS) fall back to attaching.
+                    AttachmentRoute.FILE_ATTACH ->
+                        if (captures != null) captures.onDocumentFile(file) else addFile(file)
                 }
             }
         } else {

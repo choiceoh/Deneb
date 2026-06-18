@@ -17,6 +17,7 @@ const (
 	SourceMailReport      = "mail_report" // proactive mail analysis — gets the envelope card icon
 	SourceCaptureImage    = "capture_image"
 	SourceCaptureAudio    = "capture_audio"
+	SourceCaptureDocument = "capture_document"
 	SourceCaptureContacts = "capture_contacts"
 
 	StatusUnread  = "unread"
@@ -583,6 +584,8 @@ func defaultTitle(source string) string {
 		return "공유 이미지"
 	case SourceCaptureAudio:
 		return "공유 녹음"
+	case SourceCaptureDocument:
+		return "공유 문서"
 	case SourceCaptureContacts:
 		return "주소록 동기화"
 	default:
@@ -640,6 +643,8 @@ func actionLabel(kind, source string) string {
 			return "액션 정리"
 		case SourceCaptureImage:
 			return "문서화"
+		case SourceCaptureDocument:
+			return "정리"
 		case SourceCaptureContacts:
 			return "확인"
 		default:
@@ -722,6 +727,8 @@ func followUpPrompt(item Item) string {
 		return "이 녹음/회의 내용을 업무 관점에서 다시 정리해줘. 결정사항, 액션아이템(담당/기한), 리스크, 다음 후속을 분리하고 빠진 정보는 질문으로 남겨줘.\n\n## 내용\n" + body
 	case SourceCaptureImage:
 		return "이 공유 이미지/OCR 결과를 업무 문서로 정리해줘. 중요한 사실, 해야 할 일, 확인해야 할 리스크를 분리하고 필요하면 위키에 남길 초안도 제안해줘.\n\n## 내용\n" + body
+	case SourceCaptureDocument:
+		return "이 공유 문서를 업무 관점에서 정리해줘. 핵심 내용, 해야 할 일(담당/기한), 확인해야 할 리스크를 분리하고 필요하면 위키에 남길 초안도 제안해줘.\n\n## 내용\n" + body
 	case SourceCaptureContacts:
 		return "방금 동기화한 주소록 결과를 바탕으로 지금 확인할 점이나 활용 가능한 후속 작업을 짧게 정리해줘.\n\n## 내용\n" + body
 	default:
