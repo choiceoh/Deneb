@@ -39,7 +39,7 @@ func TestCleanForDisplay_DoesNotStripTinyHumanReply(t *testing.T) {
 	}
 }
 
-func TestCleanForDisplay_CutsLongReplyHistory(t *testing.T) {
+func TestCleanForDisplay_PreservesQuotedReplyHistory(t *testing.T) {
 	body := strings.Join([]string{
 		"김대희 과장님,",
 		"요청하신 기아 화성 모듈 납기 변경안은 6월 28일 입고분만 96장으로 조정하겠습니다.",
@@ -57,17 +57,19 @@ func TestCleanForDisplay_CutsLongReplyHistory(t *testing.T) {
 	if !strings.Contains(got.Body, "6월 28일 입고분만 96장") {
 		t.Fatalf("latest body missing:\n%s", got.Body)
 	}
-	for _, gone := range []string{"On Wed", "이전 회신", "김세미"} {
-		if strings.Contains(got.Body, gone) {
-			t.Fatalf("reply history leaked %q:\n%s", gone, got.Body)
+	for _, want := range []string{"이전 회신"} {
+		if !strings.Contains(got.Body, want) {
+			t.Fatalf("quoted reply history missing %q:\n%s", want, got.Body)
 		}
 	}
-	if len(got.HiddenBlocks) == 0 || got.HiddenBlocks[len(got.HiddenBlocks)-1].Kind != "history" {
-		t.Fatalf("expected history hidden block, got %+v", got.HiddenBlocks)
+	for _, gone := range []string{"On Wed", "From:", "Subject:"} {
+		if strings.Contains(got.Body, gone) {
+			t.Fatalf("reply header leaked %q:\n%s", gone, got.Body)
+		}
 	}
 }
 
-func TestCleanForDisplay_CutsChineseOutlookHeaderBlock(t *testing.T) {
+func TestCleanForDisplay_PreservesChineseOutlookQuotedBody(t *testing.T) {
 	body := strings.Join([]string{
 		"Please confirm the accessory installation drawing by Friday.",
 		"The latest revision should be used for the Bigeum 154kV package.",
@@ -84,9 +86,14 @@ func TestCleanForDisplay_CutsChineseOutlookHeaderBlock(t *testing.T) {
 	if !strings.Contains(got.Body, "latest revision") {
 		t.Fatalf("latest body missing:\n%s", got.Body)
 	}
-	for _, gone := range []string{"发件人", "Old thread body"} {
+	for _, want := range []string{"Old thread body"} {
+		if !strings.Contains(got.Body, want) {
+			t.Fatalf("quoted body missing %q:\n%s", want, got.Body)
+		}
+	}
+	for _, gone := range []string{"发件人", "主题"} {
 		if strings.Contains(got.Body, gone) {
-			t.Fatalf("quoted history leaked %q:\n%s", gone, got.Body)
+			t.Fatalf("reply header leaked %q:\n%s", gone, got.Body)
 		}
 	}
 }
@@ -174,7 +181,7 @@ func TestCleanForDisplay_StripsAttachmentThenForwardHeader(t *testing.T) {
 			t.Fatalf("forwarded body missing %q:\n%s", want, got.Body)
 		}
 	}
-	for _, gone := range []string{"대용량 파일첨부", "<hr", "<meta", "보내는사람", "Original Message", "이전 메일 본문"} {
+	for _, gone := range []string{"대용량 파일첨부", "<hr", "<meta", "보내는사람", "Original Message", "Sender :", "Title :"} {
 		if strings.Contains(got.Body, gone) {
 			t.Fatalf("forward header/history leaked %q:\n%s", gone, got.Body)
 		}
@@ -207,22 +214,22 @@ func TestCleanForDisplay_CutsForwardedHistoryThenSignature(t *testing.T) {
 			t.Fatalf("latest body missing %q:\n%s", want, got.Body)
 		}
 	}
-	for _, gone := range []string{"기획조정실", "E-mail", "보내는사람", "이전 회신"} {
+	if !strings.Contains(got.Body, "이전 회신 본문") {
+		t.Fatalf("quoted body missing:\n%s", got.Body)
+	}
+	for _, gone := range []string{"기획조정실", "E-mail", "보내는사람", "제목 :"} {
 		if strings.Contains(got.Body, gone) {
 			t.Fatalf("noise leaked %q:\n%s", gone, got.Body)
 		}
 	}
-	var sawHistory, sawSignature bool
+	var sawSignature bool
 	for _, block := range got.HiddenBlocks {
-		if block.Kind == "history" {
-			sawHistory = true
-		}
 		if block.Kind == "signature" {
 			sawSignature = true
 		}
 	}
-	if !sawHistory || !sawSignature {
-		t.Fatalf("expected history and signature hidden blocks, got %+v", got.HiddenBlocks)
+	if !sawSignature {
+		t.Fatalf("expected signature hidden block, got %+v", got.HiddenBlocks)
 	}
 }
 
@@ -355,7 +362,7 @@ func TestCleanForDisplay_KeepsForwardedBodyWhenWrapperIsThin(t *testing.T) {
 			t.Fatalf("forwarded body missing %q:\n%s", want, got.Body)
 		}
 	}
-	for _, gone := range []string{"보내는사람", "앞서 전달드린", "jung@example.com"} {
+	for _, gone := range []string{"보내는사람", "jung@example.com"} {
 		if strings.Contains(got.Body, gone) {
 			t.Fatalf("forward wrapper/header leaked %q:\n%s", gone, got.Body)
 		}
@@ -429,7 +436,7 @@ func TestCleanForDisplay_KeepsForwardedBodyAfterThinWrapperSignature(t *testing.
 			t.Fatalf("forwarded body missing %q:\n%s", want, got.Body)
 		}
 	}
-	for _, gone := range []string{"목록 공유 드립니다", "보낸사람", "기획조정실/3팀", "M: 010"} {
+	for _, gone := range []string{"보낸사람", "기획조정실/3팀", "M: 010"} {
 		if strings.Contains(got.Body, gone) {
 			t.Fatalf("wrapper/signature/header leaked %q:\n%s", gone, got.Body)
 		}
@@ -624,7 +631,7 @@ func TestCleanForDisplay_KeepsForwardedBodyAfterHTMLSignaturePrefix(t *testing.T
 			t.Fatalf("forwarded body missing %q:\n%s", want, got.Body)
 		}
 	}
-	for _, gone := range []string{"화웨이 자동출력제어", "showField", "보내는사람"} {
+	for _, gone := range []string{"showField", "보내는사람"} {
 		if strings.Contains(got.Body, gone) {
 			t.Fatalf("wrapper/header leaked %q:\n%s", gone, got.Body)
 		}
@@ -856,9 +863,71 @@ func TestCleanForDisplay_DoesNotTreatSubstantiveShortForwardAsWrapper(t *testing
 			t.Fatalf("latest substantive body missing %q:\n%s", want, got.Body)
 		}
 	}
-	for _, gone := range []string{"조직 외부", "RFP자료", "보내는사람"} {
+	for _, gone := range []string{"조직 외부", "보내는사람"} {
 		if strings.Contains(got.Body, gone) {
 			t.Fatalf("old forwarded body leaked %q:\n%s", gone, got.Body)
+		}
+	}
+}
+
+func TestCleanForDisplay_PreservesShortLatestBodyAndQuotedBusinessBody(t *testing.T) {
+	body := strings.Join([]string{
+		"안녕하십니까! 탑솔라(주) 고건 대리입니다.",
+		"",
+		"유선상으로 요청주신 모듈 최신자료 공유드리오니,",
+		"업무에 참고부탁드립니다.",
+		"",
+		"감사합니다!!",
+		"고 건",
+		"<span ng-if=\"showField('title')\">기획조정실 대리",
+		"Mobile:<span ng-if=\"showField('mobile')\"> 010-1111-2222",
+		"<hr dze_content_sep=\"\">",
+		"보내는사람: 김세미 <semi@example.com>",
+		"받는사람 : 고건 <go@example.com>",
+		"보낸 날짜 : 2026-06-18 10:10",
+		"제목 : [탑솔라(주)] 모듈 자료 재송부의 건",
+		"대용량 파일첨부 1개",
+		"image0",
+		"(4KB)",
+		"안녕하세요. 탑솔라(주) 기획조정실 3팀 김세미과장입니다.",
+		"",
+		"모듈 자료 유첨하여 송부드립니다.",
+	}, "\n")
+
+	got := CleanForDisplay(body)
+	for _, want := range []string{"유선상으로 요청주신", "업무에 참고부탁드립니다", "김세미과장", "모듈 자료 유첨"} {
+		if !strings.Contains(got.Body, want) {
+			t.Fatalf("business content missing %q hidden=%v:\n%s", want, got.HiddenBlocks, got.Body)
+		}
+	}
+	for _, gone := range []string{"showField", "Mobile:"} {
+		if strings.Contains(got.Body, gone) {
+			t.Fatalf("signature noise leaked %q:\n%s", gone, got.Body)
+		}
+	}
+}
+
+func TestCleanForAnalysis_PreservesQuotedBusinessBody(t *testing.T) {
+	body := strings.Join([]string{
+		"검토 의견 공유드립니다.",
+		"",
+		"From: 구매팀 <buy@example.com>",
+		"Sent: Thursday, June 18, 2026 9:30 AM",
+		"To: 탑솔라 <top@example.com>",
+		"Subject: RE: 모듈 자료",
+		"",
+		"유선상으로 요청주신 모듈 최신자료 공유드리오니 업무에 참고부탁드립니다.",
+	}, "\n")
+
+	got := CleanForAnalysis(body)
+	for _, want := range []string{"검토 의견", "모듈 최신자료"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("analysis body lost quoted context %q:\n%s", want, got)
+		}
+	}
+	for _, gone := range []string{"From:", "Subject:"} {
+		if strings.Contains(got, gone) {
+			t.Fatalf("analysis header leaked %q:\n%s", gone, got)
 		}
 	}
 }
@@ -891,7 +960,7 @@ func TestCleanForDisplay_KeepsForwardedBodyAfterNameAndHTMLSignaturePrefix(t *te
 			t.Fatalf("forwarded body missing %q:\n%s", want, got.Body)
 		}
 	}
-	for _, gone := range []string{"양 도 현", "showField", "대용량 파일첨부", "보내는사람"} {
+	for _, gone := range []string{"showField", "대용량 파일첨부", "보내는사람"} {
 		if strings.Contains(got.Body, gone) {
 			t.Fatalf("signature/header leaked %q:\n%s", gone, got.Body)
 		}
@@ -1198,7 +1267,10 @@ func TestCleanForDisplay_StripsOriginalBoundaryAndMobileSignature(t *testing.T) 
 			t.Fatalf("latest body missing %q:\n%s", want, got.Body)
 		}
 	}
-	for _, gone := range []string{"iPhone", "Original", "Old thread"} {
+	if !strings.Contains(got.Body, "Old thread body") {
+		t.Fatalf("quoted body missing:\n%s", got.Body)
+	}
+	for _, gone := range []string{"iPhone", "Original", "From:", "Subject:"} {
 		if strings.Contains(got.Body, gone) {
 			t.Fatalf("original/mobile noise leaked %q:\n%s", gone, got.Body)
 		}
@@ -1219,8 +1291,15 @@ func TestCleanForDisplay_StripsForwardWrapperContactSignature(t *testing.T) {
 	}, "\n")
 
 	got := CleanForDisplay(body)
-	if strings.TrimSpace(got.Body) != "전달바랍니다." {
-		t.Fatalf("expected only thin forward wrapper, got:\n%s", got.Body)
+	for _, want := range []string{"전달바랍니다", "이전 본문입니다"} {
+		if !strings.Contains(got.Body, want) {
+			t.Fatalf("forward body missing %q:\n%s", want, got.Body)
+		}
+	}
+	for _, gone := range []string{"HYUN SUNG", "Facilities Management", "2555151", "보낸사람", "제목 :"} {
+		if strings.Contains(got.Body, gone) {
+			t.Fatalf("forward signature/header leaked %q:\n%s", gone, got.Body)
+		}
 	}
 }
 
@@ -1284,7 +1363,10 @@ func TestCleanForDisplay_StripsMojibakeReplyBoundary(t *testing.T) {
 			t.Fatalf("latest body missing %q:\n%s", want, got.Body)
 		}
 	}
-	for _, gone := range []string{"�ظ", "From:", "Old thread"} {
+	if !strings.Contains(got.Body, "Old thread body") {
+		t.Fatalf("quoted body missing:\n%s", got.Body)
+	}
+	for _, gone := range []string{"�ظ", "From:", "Subject:"} {
 		if strings.Contains(got.Body, gone) {
 			t.Fatalf("mojibake reply boundary leaked %q:\n%s", gone, got.Body)
 		}
@@ -1312,7 +1394,10 @@ func TestCleanForDisplay_StripsSplitOriginalMessageBoundary(t *testing.T) {
 			t.Fatalf("latest body missing %q:\n%s", want, got.Body)
 		}
 	}
-	for _, gone := range []string{"신정훈 드림", "Original", "message ----------", "이전 본문"} {
+	if !strings.Contains(got.Body, "이전 본문입니다") {
+		t.Fatalf("quoted body missing:\n%s", got.Body)
+	}
+	for _, gone := range []string{"신정훈 드림", "Original", "message ----------", "From:", "Subject:"} {
 		if strings.Contains(got.Body, gone) {
 			t.Fatalf("split original boundary/signoff leaked %q:\n%s", gone, got.Body)
 		}
@@ -1332,8 +1417,15 @@ func TestCleanForDisplay_StripsTrailingImageAndBilingualNameAfterShortBusinessLi
 	}, "\n")
 
 	got := CleanForDisplay(body)
-	if strings.TrimSpace(got.Body) != "견적 제출은 5/26(화) 오전까지 부탁드립니다." {
-		t.Fatalf("expected only short business line, got:\n%s", got.Body)
+	for _, want := range []string{"견적 제출", "이전 본문입니다"} {
+		if !strings.Contains(got.Body, want) {
+			t.Fatalf("business/quoted body missing %q:\n%s", want, got.Body)
+		}
+	}
+	for _, gone := range []string{"[Image]", "Hangoo Jung", "Facilities Management", "From:", "Subject:"} {
+		if strings.Contains(got.Body, gone) {
+			t.Fatalf("signature/header leaked %q:\n%s", gone, got.Body)
+		}
 	}
 }
 
@@ -1349,8 +1441,15 @@ func TestCleanForDisplay_StripsAuditOfficeSignatureTail(t *testing.T) {
 	}, "\n")
 
 	got := CleanForDisplay(body)
-	if strings.TrimSpace(got.Body) != "검토의견입니다.\n업무에 참고하십시요" {
-		t.Fatalf("expected audit signature stripped, got:\n%s", got.Body)
+	for _, want := range []string{"검토의견입니다", "업무에 참고하십시요", "이전 본문입니다"} {
+		if !strings.Contains(got.Body, want) {
+			t.Fatalf("business/quoted body missing %q:\n%s", want, got.Body)
+		}
+	}
+	for _, gone := range []string{"감사실", "공인회계사", "From:", "Subject:"} {
+		if strings.Contains(got.Body, gone) {
+			t.Fatalf("audit signature/header leaked %q:\n%s", gone, got.Body)
+		}
 	}
 }
 
@@ -1428,12 +1527,12 @@ func TestCleanForDisplay_StripsZeroWidthInlineFooterAndReplyHistory(t *testing.T
 	}, "\u200b")
 
 	got := CleanForDisplay(body)
-	for _, want := range []string{"요청하신 자료", "단선결선도 작성"} {
+	for _, want := range []string{"요청하신 자료", "단선결선도 작성", "아래 내용 확인"} {
 		if !strings.Contains(got.Body, want) {
 			t.Fatalf("business body missing %q:\n%s", want, got.Body)
 		}
 	}
-	for _, gone := range []string{"본 e-mail", "This e-mail", "From :", "아래 내용", "woojong0607"} {
+	for _, gone := range []string{"본 e-mail", "This e-mail", "From :", "woojong0607"} {
 		if strings.Contains(got.Body, gone) {
 			t.Fatalf("inline footer/history leaked %q:\n%s", gone, got.Body)
 		}

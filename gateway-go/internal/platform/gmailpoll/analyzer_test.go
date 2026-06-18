@@ -379,7 +379,7 @@ func TestFormatEmailForAnalysis_KeepsStandaloneUsefulURL(t *testing.T) {
 	}
 }
 
-func TestFormatEmailForAnalysis_StripsQuotedReplyHeadersAtTail(t *testing.T) {
+func TestFormatEmailForAnalysis_PreservesQuotedReplyBodyAtTail(t *testing.T) {
 	body := strings.Join([]string{
 		"확인했습니다. LG 모듈 450W 견적 조건은 이번 주 안으로 정리하겠습니다.",
 		"다만 단가 변경 가능성이 있어 최종 견적서는 금요일 오후에 다시 보내겠습니다.",
@@ -400,10 +400,11 @@ func TestFormatEmailForAnalysis_StripsQuotedReplyHeadersAtTail(t *testing.T) {
 
 	result := FormatEmailForAnalysis(msg)
 	if !strings.Contains(result, "이번 주 안으로 정리") ||
-		!strings.Contains(result, "금요일 오후에 다시") {
+		!strings.Contains(result, "금요일 오후에 다시") ||
+		!strings.Contains(result, "이전 메일 본문입니다") {
 		t.Fatalf("current reply missing after quote strip:\n%s", result)
 	}
-	for _, gone := range []string{"Original Message", "Sent: Tuesday", "이전 메일 본문입니다"} {
+	for _, gone := range []string{"Original Message", "Sent: Tuesday"} {
 		if strings.Contains(result, gone) {
 			t.Fatalf("quoted reply noise leaked %q:\n%s", gone, result)
 		}
