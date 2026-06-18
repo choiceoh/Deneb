@@ -54,20 +54,23 @@ import kotlinx.datetime.toLocalDateTime
 import kotlin.time.Clock
 import kotlin.time.Instant
 
-// Settings hub "스킬" tab: skills the agent can use (read-only) plus the
-// Propus log. Propus is Deneb's self-improvement system: proposal, genesis,
-// evolution, validation, rollback, and deferred self-correction in one loop.
+// Settings hub "스킬" tab: skills the agent can use plus the Propus log and
+// guarded edit/delete entry points for mutable local skills. Propus is Deneb's
+// self-improvement system: proposal, genesis, evolution, validation, rollback,
+// and deferred self-correction in one loop.
 // The list mirrors the system-prompt skill catalog via miniapp.skills.list —
 // name, description, category, source — now enriched with the skill's origin
-// (생성 = Propus authored it, 최초 = it was installed or hand-written) and
-// evolve/usage counters. The Propus segment streams miniapp.skills.lifecycle:
+// (생성 = Propus authored it, 최초 = it was installed or hand-written),
+// native edit/delete capability, and evolve/usage counters. The Propus
+// segment streams miniapp.skills.lifecycle:
 // a server-owned Propus summary plus genesis creations, committed evolves,
 // rejected/rolled-back evolve attempts, and review verdicts, newest first.
 // Timeline rows expand on tap — full reason, review evidence, absolute time,
 // verdict — and link through to the skill when the event names one.
 // No toggles: discovery is filesystem-driven, so the list reflects what's
 // installed on the gateway host. Tapping a row opens [DenebSkillScreen]
-// (full meta + SKILL.md body + per-skill timeline) via [onOpenSkill].
+// (full meta + SKILL.md body, guarded edit/delete for mutable local skills,
+// and per-skill timeline) via [onOpenSkill].
 @Composable
 internal fun SkillsTab(client: DenebGatewayClient, onOpenSkill: (String) -> Unit = {}) {
     val skills by client.denebSkills.collectAsState()
@@ -556,6 +559,7 @@ internal fun skillSourceLabel(source: String): String = when (source) {
 private fun skillMetaLine(skill: SkillRow): String = listOfNotNull(
     skill.category.takeIf { it.isNotBlank() },
     skillSourceLabel(skill.source).takeIf { it.isNotBlank() },
+    (skill.editable && skill.deletable).takeIf { it }?.let { "수정/삭제 가능" },
     skill.version.takeIf { it.isNotBlank() }?.let { "v$it" },
     skill.evolveCount.takeIf { it > 0 }?.let { "진화 ${it}회" },
     skill.totalUses.takeIf { it > 0 }?.let { "사용 ${it}회" },

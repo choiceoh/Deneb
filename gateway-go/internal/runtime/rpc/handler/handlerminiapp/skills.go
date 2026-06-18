@@ -1,14 +1,13 @@
 // skills.go — miniapp.skills.* RPC handlers.
 //
 // Exposes the workspace skill catalog to the native client settings
-// (DenebConfigScreen Skills tab) as a read-only list ("which skills does
-// this agent have?"), a per-skill detail (miniapp.skills.detail: the same
-// enriched row plus the SKILL.md body for the tap-through detail screen),
-// plus the Propus lifecycle feed (miniapp.skills.lifecycle) so the operator can
+// (DenebConfigScreen Skills tab), a per-skill detail
+// (miniapp.skills.detail: the same enriched row plus the SKILL.md body for
+// the tap-through detail screen), write RPCs for mutable local skills, plus
+// the Propus lifecycle feed (miniapp.skills.lifecycle) so the operator can
 // watch the proposal → validation → genesis/evolve → rollback/backlog loop. The skills.*
-// RPC surface (skill/ handler) already covers the full
-// snapshot/install/configure flow for richer consumers; this slim
-// projection is presentation-only.
+// RPC surface (skill/ handler) still covers the full snapshot/install/configure
+// flow for richer consumers; this miniapp projection is intentionally narrow.
 //
 // The skills are pre-filtered by the caller (chat.EligibleWorkspaceSkills)
 // through the same archived + eligibility passes the system prompt applies,
@@ -27,6 +26,7 @@ package handlerminiapp
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -35,6 +35,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
+	"github.com/choiceoh/deneb/gateway-go/pkg/atomicfile"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
@@ -55,7 +56,7 @@ const lifecycleScanLimit = 500
 const skillBodyMaxRunes = 60_000
 
 // SkillRow is one entry in the Settings skills list. A slim projection of
-// skills.SkillEntry — only the fields the read-only list renders.
+// skills.SkillEntry — only the fields the native list/detail screens render.
 //
 //deneb:wire
 type SkillRow struct {
@@ -81,6 +82,10 @@ type SkillRow struct {
 	// CuratorState is active | stale | archived for curator-managed
 	// (agent-created) skills; empty for initial skills.
 	CuratorState string `json:"curatorState,omitempty"`
+	// Editable / Deletable are true only for local mutable skill sources.
+	// Bundled and plugin skills are visible but protected from native writes.
+	Editable  bool `json:"editable,omitempty"`
+	Deletable bool `json:"deletable,omitempty"`
 }
 
 // SkillsListResponse is the miniapp.skills.list payload.
@@ -180,11 +185,11 @@ type SkillDetailResponse struct {
 
 // SkillsDeps provides the already-filtered workspace skills plus optional
 // tracker projections. List returns the skills after the archived +
-// eligibility passes (see chat.EligibleWorkspaceSkills), keeping this handler
-// presentation-only. A nil List disables the domain so method_registry can
-// register conditionally. The tracker providers are nil-safe: without them
-// rows stay un-enriched and the lifecycle feed is empty (the gateway can boot
-// without a genesis tracker).
+// eligibility passes (see chat.EligibleWorkspaceSkills), so read rows and
+// guarded writes target the same catalog the agent actually sees. A nil List
+// disables the domain so method_registry can register conditionally. The
+// tracker providers are nil-safe: without them rows stay un-enriched and the
+// lifecycle feed is empty (the gateway can boot without a genesis tracker).
 type SkillsDeps struct {
 	List                  func() []skills.SkillEntry
 	CuratorRecords        func() ([]genesis.SkillCuratorRecord, error)
@@ -194,6 +199,7 @@ type SkillsDeps struct {
 	RecentOpportunities   func(skillName string, limit int) ([]genesis.SkillOpportunityRecord, error)
 	RecentSelfCorrections func(skillName string, limit int) ([]genesis.SelfCorrectionCandidateRecord, error)
 	SelfHarnessSignals    func() genesis.SelfHarnessSignalSummary
+	InvalidateSkills      func()
 }
 
 // SkillsMethods returns the miniapp.skills.* handler map, or nil when no
@@ -205,6 +211,8 @@ func SkillsMethods(deps SkillsDeps) map[string]rpcutil.HandlerFunc {
 	return map[string]rpcutil.HandlerFunc{
 		"miniapp.skills.list":      skillsList(deps),
 		"miniapp.skills.detail":    skillsDetail(deps),
+		"miniapp.skills.update":    skillsUpdate(deps),
+		"miniapp.skills.delete":    skillsDelete(deps),
 		"miniapp.skills.lifecycle": skillsLifecycle(deps),
 	}
 }
@@ -247,6 +255,8 @@ func buildSkillRow(
 		Version:     e.Skill.Version,
 		Origin:      skillOriginInitial,
 	}
+	row.Editable = skillEntryMutable(e)
+	row.Deletable = row.Editable
 	rec, isManaged := curator[e.Skill.Name]
 	agentCreated := isManaged && rec.CreatedBy == genesis.SkillCuratorCreatedByAgent
 	// Two origin signals, belt and suspenders: the curator marker is
@@ -288,29 +298,154 @@ func skillsDetail(deps SkillsDeps) rpcutil.HandlerFunc {
 			return rpcerr.MissingParam("name").Response(req.ID)
 		}
 
-		var entry *skills.SkillEntry
-		for _, e := range deps.List() {
-			if e.Skill.Name == p.Name {
-				entry = &e
-				break
-			}
-		}
-		if entry == nil {
+		entry, ok := skillEntryByName(deps, p.Name)
+		if !ok {
 			return rpcerr.NotFound("skill").Response(req.ID)
 		}
 
-		row := buildSkillRow(*entry, curatorBySkill(deps), usageBySkill(deps), evolveAggBySkill(deps))
-		resp := SkillDetailResponse{Skill: row, Path: entry.Skill.FilePath}
-		// Body read is best-effort: catalog entries always carry a FilePath from
-		// discovery, but the file may have been removed since the last scan.
-		if data, err := os.ReadFile(entry.Skill.FilePath); err == nil {
-			resp.Body = string(data)
-			if runes := []rune(resp.Body); len(runes) > skillBodyMaxRunes {
-				resp.Body = string(runes[:skillBodyMaxRunes])
-				resp.BodyTruncated = true
+		return rpcutil.RespondOK(req.ID, skillDetailResponse(deps, entry))
+	}
+}
+
+func skillsUpdate(deps SkillsDeps) rpcutil.HandlerFunc {
+	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		if errResp := requireAuth(ctx, req.ID); errResp != nil {
+			return errResp
+		}
+
+		var p struct {
+			Name string `json:"name"`
+			Body string `json:"body"`
+		}
+		if len(req.Params) > 0 {
+			if err := json.Unmarshal(req.Params, &p); err != nil {
+				return rpcerr.InvalidParams(err).Response(req.ID)
 			}
 		}
-		return rpcutil.RespondOK(req.ID, resp)
+		p.Name = strings.TrimSpace(p.Name)
+		if p.Name == "" {
+			return rpcerr.MissingParam("name").Response(req.ID)
+		}
+		if strings.TrimSpace(p.Body) == "" {
+			return rpcerr.MissingParam("body").Response(req.ID)
+		}
+
+		entry, ok := skillEntryByName(deps, p.Name)
+		if !ok {
+			return rpcerr.NotFound("skill").Response(req.ID)
+		}
+		if !skillEntryMutable(entry) {
+			return rpcerr.InvalidRequest("skill is not editable from the native app").Response(req.ID)
+		}
+		if err := validateSkillUpdateBody(p.Name, p.Body); err != nil {
+			return rpcerr.InvalidParams(err).Response(req.ID)
+		}
+		if err := atomicfile.WriteFile(entry.Skill.FilePath, []byte(p.Body), nil); err != nil {
+			return rpcerr.WrapUnavailable("failed to write SKILL.md", err).Response(req.ID)
+		}
+		invalidateSkills(deps)
+
+		if refreshed, ok := skillEntryByName(deps, p.Name); ok {
+			return rpcutil.RespondOK(req.ID, skillDetailResponse(deps, refreshed))
+		}
+		return rpcutil.RespondOK(req.ID, skillDetailResponse(deps, entry))
+	}
+}
+
+func skillsDelete(deps SkillsDeps) rpcutil.HandlerFunc {
+	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		if errResp := requireAuth(ctx, req.ID); errResp != nil {
+			return errResp
+		}
+
+		var p struct {
+			Name string `json:"name"`
+		}
+		if len(req.Params) > 0 {
+			if err := json.Unmarshal(req.Params, &p); err != nil {
+				return rpcerr.InvalidParams(err).Response(req.ID)
+			}
+		}
+		p.Name = strings.TrimSpace(p.Name)
+		if p.Name == "" {
+			return rpcerr.MissingParam("name").Response(req.ID)
+		}
+
+		entry, ok := skillEntryByName(deps, p.Name)
+		if !ok {
+			return rpcerr.NotFound("skill").Response(req.ID)
+		}
+		if !skillEntryMutable(entry) {
+			return rpcerr.InvalidRequest("skill is not deletable from the native app").Response(req.ID)
+		}
+		if err := os.RemoveAll(filepath.Dir(entry.Skill.FilePath)); err != nil {
+			return rpcerr.WrapUnavailable("failed to delete skill directory", err).Response(req.ID)
+		}
+		invalidateSkills(deps)
+
+		return rpcutil.RespondOK(req.ID, map[string]any{"name": p.Name, "deleted": true})
+	}
+}
+
+func skillEntryByName(deps SkillsDeps, name string) (skills.SkillEntry, bool) {
+	name = strings.TrimSpace(name)
+	if name == "" || deps.List == nil {
+		return skills.SkillEntry{}, false
+	}
+	for _, e := range deps.List() {
+		if e.Skill.Name == name {
+			return e, true
+		}
+	}
+	return skills.SkillEntry{}, false
+}
+
+func skillDetailResponse(deps SkillsDeps, entry skills.SkillEntry) SkillDetailResponse {
+	row := buildSkillRow(entry, curatorBySkill(deps), usageBySkill(deps), evolveAggBySkill(deps))
+	resp := SkillDetailResponse{Skill: row, Path: entry.Skill.FilePath}
+	// Body read is best-effort: catalog entries always carry a FilePath from
+	// discovery, but the file may have been removed since the last scan.
+	if data, err := os.ReadFile(entry.Skill.FilePath); err == nil {
+		resp.Body = string(data)
+		if runes := []rune(resp.Body); len(runes) > skillBodyMaxRunes {
+			resp.Body = string(runes[:skillBodyMaxRunes])
+			resp.BodyTruncated = true
+		}
+	}
+	return resp
+}
+
+func skillEntryMutable(entry skills.SkillEntry) bool {
+	if strings.TrimSpace(entry.Skill.FilePath) == "" || filepath.Base(entry.Skill.FilePath) != "SKILL.md" {
+		return false
+	}
+	switch entry.Skill.Source {
+	case skills.SourceManaged, skills.SourceWorkspace, skills.SourceExtra, skills.SourcePersonal, skills.SourceProject:
+		return true
+	default:
+		return false
+	}
+}
+
+func validateSkillUpdateBody(skillName, body string) error {
+	header, _ := skills.ExtractFrontmatterBlock(body)
+	if header == "" {
+		return fmt.Errorf("body must include SKILL.md frontmatter (---\\nname: ...\\n---)")
+	}
+	fm := skills.ParseFrontmatter(body)
+	name := strings.TrimSpace(fm["name"])
+	if name == "" {
+		return fmt.Errorf("frontmatter must include name")
+	}
+	if name != skillName {
+		return fmt.Errorf("frontmatter name %q must match skill %q", name, skillName)
+	}
+	return nil
+}
+
+func invalidateSkills(deps SkillsDeps) {
+	if deps.InvalidateSkills != nil {
+		deps.InvalidateSkills()
 	}
 }
 

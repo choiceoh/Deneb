@@ -485,10 +485,11 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 			},
 		}),
 
-		// Mini App skills list + Propus feed (miniapp.skills.list,
-		// miniapp.skills.lifecycle). Read-only catalog for the Settings →
-		// Skills tab plus the genesis → review → evolve timeline. Uses the
-		// same archived + eligibility filtering as the system prompt
+		// Mini App skills list/detail/write surface + Propus feed
+		// (miniapp.skills.*). Catalog for the Settings → Skills tab, guarded
+		// update/delete for mutable local skills, plus the genesis → review →
+		// evolve timeline. Uses the same archived + eligibility filtering as
+		// the system prompt
 		// (chat.EligibleWorkspaceSkills), so the tab advertises only skills
 		// the agent can actually use. The tracker projections read
 		// s.genesisTracker lazily (it is wired after early registration) and
@@ -548,6 +549,7 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 				}
 				return s.genesisTracker.SelfHarnessSignals()
 			},
+			InvalidateSkills: chat.InvalidateSkillsCache,
 		}),
 
 		// Mini App self-improvement coding queue. This is not a skill list and

@@ -145,11 +145,13 @@ var requiredMethods = []string{
 	// FCM sender stays dormant without credentials.
 	"miniapp.push.register",
 	"miniapp.push.unregister",
-	// Skills catalog + detail + Propus feed — List is always wired,
-	// so all three register unconditionally (tracker absence degrades the
-	// payload, not the registration).
+	// Skills catalog/detail/write surface + Propus feed — List is always wired,
+	// so these register unconditionally (tracker absence degrades the payload,
+	// not the registration).
 	"miniapp.skills.list",
 	"miniapp.skills.detail",
+	"miniapp.skills.update",
+	"miniapp.skills.delete",
 	"miniapp.skills.lifecycle",
 	// To-do domain — local store always resolves in tests (temp state dir),
 	// so these always register.
