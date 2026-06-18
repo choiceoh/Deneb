@@ -7,13 +7,14 @@ import "strings"
 // mapping next to the operational rule so future Propus surfaces preserve the
 // original ideas instead of re-interpreting raw lifecycle logs ad hoc.
 type PropusDoctrineSpec struct {
-	Name         string
-	Codename     string
-	Version      string
-	Lifecycle    []string
-	Papers       []PropusDoctrinePaper
-	Invariants   []string
-	QualityGates []string
+	Name           string
+	Codename       string
+	Version        string
+	Lifecycle      []string
+	Papers         []PropusDoctrinePaper
+	FilteredPapers []PropusDoctrinePaper
+	Invariants     []string
+	QualityGates   []string
 }
 
 type PropusDoctrinePaper struct {
@@ -21,13 +22,15 @@ type PropusDoctrinePaper struct {
 	Title             string
 	OriginalPrinciple string
 	PropusRule        string
+	EvidenceGrade     string
+	FilterReason      string
 }
 
 func PropusDoctrine() PropusDoctrineSpec {
 	return PropusDoctrineSpec{
 		Name:     "Propus",
 		Codename: "propus",
-		Version:  "2026-06-expanded-source-doctrine",
+		Version:  "2026-06-filtered-source-doctrine",
 		Lifecycle: []string{
 			"observe",
 			"propose",
@@ -71,19 +74,25 @@ func PropusDoctrine() PropusDoctrineSpec {
 				ID:                "arxiv:2606.11459",
 				Title:             "APEX: Automated Prompt Engineering eXpert with Dynamic Data Selection",
 				OriginalPrinciple: "Prompt optimization is data-selection limited; Easy/Hard/Mixed tiers from lineage identify Mixed frontier cases for mutation and ranking while Easy anchors protect mastered behavior.",
-				PropusRule:        "Prioritize Mixed frontier validation cases, retain Easy anchors, and avoid Hard-only prompt or skill rewrites until the failure is addressable.",
-			},
-			{
-				ID:                "arxiv:2606.15363",
-				Title:             "APEX: Adaptive Principle EXtraction A Three-Layer Self-Evolution Framework for Production AI Agents",
-				OriginalPrinciple: "Self-evolution is multi-dimensional: harness patches, behavioral principle distillation, and workflow topology selection should co-evolve on the same production trace pool.",
-				PropusRule:        "Classify Propus changes by evolution axis: harness patch, principle distillation, or workflow topology change; do not treat one axis as system completion.",
+				PropusRule:        "Only claim APEX-style frontier coverage when validation cases carry Mixed frontier and Easy anchor tiers; otherwise treat the signal as an unproven corpus gap.",
+				EvidenceGrade:     "core",
 			},
 			{
 				ID:                "arxiv:2605.21240",
 				Title:             "APEX: Autonomous Policy Exploration for Self-Evolving LLM Agents",
 				OriginalPrinciple: "Self-evolving agents can collapse into familiar high-reward routines unless they maintain an explicit strategy map of tried and unexplored directions.",
 				PropusRule:        "Keep opportunity backlog as an exploration map: record tried routes, expose unexplored forks, and balance exploitation against frontier discovery.",
+				EvidenceGrade:     "supporting-transfer",
+			},
+		},
+		FilteredPapers: []PropusDoctrinePaper{
+			{
+				ID:                "arxiv:2606.15363",
+				Title:             "APEX: Adaptive Principle EXtraction A Three-Layer Self-Evolution Framework for Production AI Agents",
+				OriginalPrinciple: "Self-evolution is multi-dimensional: harness patches, behavioral principle distillation, and workflow topology selection should co-evolve on the same production trace pool.",
+				PropusRule:        "Do not promote the three-axis completion claim into a Propus quality gate until it has broader validation than a single production-agent case study.",
+				EvidenceGrade:     "filtered",
+				FilterReason:      "Single-agent production case study with a custom composite score; reported ablation stores L2 principles but does not inject them, so it is useful background rather than a canonical Propus source.",
 			},
 		},
 		Invariants: []string{
@@ -92,8 +101,8 @@ func PropusDoctrine() PropusDoctrineSpec {
 			"same_failure_candidate_must_not_repeat_without_new_evidence",
 			"judgement_uses_externalized_evidence_not_same_turn_introspection",
 			"evolve_candidate_declares_failure_signature_surface_behavior_and_risk",
-			"validation_selection_prefers_mixed_frontier_with_easy_anchors",
-			"propus_change_declares_harness_principle_or_workflow_axis",
+			"validation_selection_records_mixed_frontier_and_easy_anchor_tiers",
+			"propus_change_axis_is_diagnostic_metadata_not_completion_proof",
 			"opportunity_backlog_tracks_tried_routes_and_unexplored_forks",
 			"status_and_summary_are_the_single_state_model",
 		},
@@ -103,8 +112,8 @@ func PropusDoctrine() PropusDoctrineSpec {
 			"deduped_and_curator_visible",
 			"post_evolve_watch_or_rollback",
 			"failure_signature_surface_behavior_risk_audit",
-			"mixed_frontier_with_easy_anchor_selection",
-			"evolution_axis_declared_harness_principle_workflow",
+			"mixed_frontier_with_easy_anchor_tiers_recorded",
+			"change_axis_recorded_for_diagnostics_not_completion_claim",
 			"exploration_map_updates_tried_and_frontier_routes",
 		},
 	}
@@ -122,10 +131,20 @@ func (d PropusDoctrineSpec) SourceIDs() []string {
 	return out
 }
 
+func (d PropusDoctrineSpec) FilteredSourceIDs() []string {
+	out := make([]string, 0, len(d.FilteredPapers))
+	for _, paper := range d.FilteredPapers {
+		out = append(out, paper.ID)
+	}
+	return out
+}
+
 func (d PropusDoctrineSpec) ProductRules() []string {
 	out := make([]string, 0, len(d.Papers))
 	for _, paper := range d.Papers {
-		out = append(out, paper.PropusRule)
+		if rule := strings.TrimSpace(paper.PropusRule); rule != "" {
+			out = append(out, rule)
+		}
 	}
 	return out
 }

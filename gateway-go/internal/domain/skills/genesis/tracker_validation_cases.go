@@ -20,6 +20,7 @@ type SkillValidationCaseRecord struct {
 	SkillName           string                `json:"skillName"`
 	ID                  string                `json:"id,omitempty"`
 	Description         string                `json:"description,omitempty"`
+	FrontierTier        string                `json:"frontierTier,omitempty"`
 	RequiredSubstrings  []string              `json:"requiredSubstrings,omitempty"`
 	ForbiddenSubstrings []string              `json:"forbiddenSubstrings,omitempty"`
 	RequiredHeadings    []string              `json:"requiredHeadings,omitempty"`
@@ -40,6 +41,9 @@ type SkillValidationCaseSummary struct {
 	WeakAutomaticRecords     int    `json:"weakAutomaticRecords"`
 	UniqueAutomaticRecords   int    `json:"uniqueAutomaticRecords"`
 	UniqueWeakAutomaticCases int    `json:"uniqueWeakAutomaticCases"`
+	UniqueEasyAnchorCases    int    `json:"uniqueEasyAnchorCases"`
+	UniqueMixedFrontierCases int    `json:"uniqueMixedFrontierCases"`
+	UniqueHardFrontierCases  int    `json:"uniqueHardFrontierCases"`
 	SkillsWithCases          int    `json:"skillsWithCases,omitempty"`
 	TopSkill                 string `json:"topSkill,omitempty"`
 	TopSkillUniqueCases      int    `json:"topSkillUniqueCases,omitempty"`
@@ -87,6 +91,7 @@ func (t *Tracker) RecordSkillValidationCase(record SkillValidationCaseRecord) er
 	record.SkillName = strings.TrimSpace(record.SkillName)
 	record.ID = strings.TrimSpace(truncateRunes(record.ID, 120))
 	record.Description = strings.TrimSpace(truncateRunes(record.Description, 400))
+	record.FrontierTier = normalizedValidationFrontierTier(record.FrontierTier)
 	record.Source = strings.TrimSpace(truncateRunes(record.Source, 120))
 	record.RequiredSubstrings = cleanValidationStrings(record.RequiredSubstrings)
 	record.ForbiddenSubstrings = cleanValidationStrings(record.ForbiddenSubstrings)
@@ -197,6 +202,14 @@ func (t *Tracker) ValidationCaseSummary(skillName string) (SkillValidationCaseSu
 		if isWeakAutomaticValidationCase(rec) {
 			summary.UniqueWeakAutomaticCases++
 		}
+		switch normalizedValidationFrontierTier(rec.FrontierTier) {
+		case "easy":
+			summary.UniqueEasyAnchorCases++
+		case "mixed":
+			summary.UniqueMixedFrontierCases++
+		case "hard":
+			summary.UniqueHardFrontierCases++
+		}
 		name := strings.TrimSpace(rec.SkillName)
 		if name != "" {
 			bySkill[name]++
@@ -219,12 +232,14 @@ func validationCaseDedupeKey(rec SkillValidationCaseRecord) string {
 	}
 	payload := struct {
 		SkillName           string                `json:"skillName"`
+		FrontierTier        string                `json:"frontierTier,omitempty"`
 		RequiredSubstrings  []string              `json:"requiredSubstrings,omitempty"`
 		ForbiddenSubstrings []string              `json:"forbiddenSubstrings,omitempty"`
 		RequiredHeadings    []string              `json:"requiredHeadings,omitempty"`
 		Replay              SkillReplayCaseRecord `json:"replay,omitempty"`
 	}{
 		SkillName:           skillName,
+		FrontierTier:        normalizedValidationFrontierTier(rec.FrontierTier),
 		RequiredSubstrings:  normalizedValidationCaseStrings(rec.RequiredSubstrings),
 		ForbiddenSubstrings: normalizedValidationCaseStrings(rec.ForbiddenSubstrings),
 		RequiredHeadings:    normalizedValidationCaseStrings(rec.RequiredHeadings),
@@ -279,6 +294,19 @@ func normalizedValidationCaseStrings(values []string) []string {
 
 func normalizedValidationCaseKey(value string) string {
 	return strings.ToLower(strings.Join(strings.Fields(value), " "))
+}
+
+func normalizedValidationFrontierTier(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "easy", "easy_anchor", "easy-anchor", "anchor":
+		return "easy"
+	case "mixed", "mixed_frontier", "mixed-frontier", "frontier":
+		return "mixed"
+	case "hard", "hard_frontier", "hard-frontier":
+		return "hard"
+	default:
+		return ""
+	}
 }
 
 func isAutomaticValidationCase(rec SkillValidationCaseRecord) bool {

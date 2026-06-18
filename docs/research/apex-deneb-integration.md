@@ -3,10 +3,13 @@
 Source: https://arxiv.org/html/2606.11459v1, arXiv v1, 2026-06-09.
 
 This note covers **APEX: Automated Prompt Engineering eXpert with Dynamic Data
-Selection**. Propus doctrine also tracks the agent self-evolution APEX papers:
-Adaptive Principle EXtraction (`arxiv:2606.15363`) for three-layer
-harness/principle/workflow co-evolution, and Autonomous Policy Exploration
-(`arxiv:2605.21240`) for strategy-map exploration against collapse.
+Selection**. Propus treats this as the core APEX source for frontier data
+selection. It separately keeps Autonomous Policy Exploration (`arxiv:2605.21240`)
+as supporting transfer evidence for strategy-map exploration against collapse.
+Adaptive Principle EXtraction (`arxiv:2606.15363`) is intentionally filtered from
+canonical Propus sources: it is useful background vocabulary, but its single
+production-agent case study and incomplete L2 integration are not strong enough
+to create a product quality gate.
 
 ## 논문 핵심
 
@@ -70,6 +73,7 @@ python3 scripts/dev/quality-test.py --scenario all --record
 
 2. 스킬 evolution 검증
    - 기존 rejected edit buffer와 held-out validation case가 있다.
+   - `skill_lifecycle` validation case의 `frontierTier`가 `mixed`와 `easy`를 모두 포함할 때만 Propus status가 APEX frontier coverage를 인정한다.
    - Mixed validation case를 mutation/evaluation 우선순위로 올리면 실패 재현과 회귀 방지가 좋아진다.
 
 3. 일반 품질 suite

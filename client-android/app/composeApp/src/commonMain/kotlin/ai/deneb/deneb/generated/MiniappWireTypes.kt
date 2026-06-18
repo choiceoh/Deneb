@@ -407,6 +407,7 @@ data class PropusLifecycleSummary(
     val doctrineVersion: String = "",
     val doctrine: String = "",
     val sourcePapers: List<String> = emptyList(),
+    val filteredSources: List<String> = emptyList(),
     val principles: List<String> = emptyList(),
     val qualityGates: List<String> = emptyList(),
     val nextCue: String = "",
