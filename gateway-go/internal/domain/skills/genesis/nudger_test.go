@@ -68,10 +68,10 @@ func TestNudger_CountsIncrement(t *testing.T) {
 
 func TestNudger_ThresholdResetsCounter(t *testing.T) {
 	n := newTestNudger(t, 10)
-	// Supply a snapshot that Evaluate will reject so nothing spawns.
+	// Supply a snapshot that EvaluateReview will reject so nothing spawns.
 	sctx := SessionContext{
 		ToolActivities: []ToolActivity{{Name: "read"}},
-		Turns:          1, // fails MinTurns gate in Evaluate
+		Turns:          1, // too little observed work for review
 	}
 	n.OnToolCalls(context.TODO(), "s", 10, sctx)
 	// Wait briefly for the background fire to clear inflight state.
@@ -179,10 +179,8 @@ func TestNudger_RunReviewOnce_RecordsEvaluateSkip(t *testing.T) {
 	n.tracker = tracker
 
 	ran, err := n.runReviewOnce("s", SessionContext{
-		Turns: 1,
-		ToolActivities: []ToolActivity{
-			{Name: "read"}, {Name: "exec"}, {Name: "write"},
-		},
+		Turns:          1,
+		ToolActivities: []ToolActivity{{Name: "read"}},
 	})
 	if err != nil {
 		t.Fatalf("runReviewOnce: %v", err)

@@ -19,6 +19,7 @@ func newTestTracker(t *testing.T) *Tracker {
 		curatorPath:         filepath.Join(dir, "skill_curator_state.json"),
 		livenessPath:        filepath.Join(dir, "skill_liveness.json"),
 		rejectedPath:        filepath.Join(dir, "skill_rejected_edits.jsonl"),
+		opportunityPath:     filepath.Join(dir, "skill_opportunities.jsonl"),
 		optimizerMemoryPath: filepath.Join(dir, "skill_optimizer_memory.json"),
 		validationPath:      filepath.Join(dir, "skill_validation_cases.jsonl"),
 		stats:               make(map[string]*usageAgg),
@@ -308,6 +309,48 @@ func TestTrackerRejectedSkillEdits_NewestFirstAndFiltered(t *testing.T) {
 	}
 	if len([]rune(entries[1].CandidateBody)) != 2000 {
 		t.Fatalf("expected candidate body truncated to 2000 runes, got %d", len([]rune(entries[1].CandidateBody)))
+	}
+}
+
+func TestTrackerSkillOpportunities_NewestFirstAndFiltered(t *testing.T) {
+	tracker := newTestTracker(t)
+	if err := tracker.RecordSkillOpportunity(SkillOpportunityRecord{
+		Candidate:  "add merge verification proof",
+		Route:      "evolve",
+		SkillName:  "pr-merge-flow",
+		SessionKey: "client:main",
+		Evidence:   "user asked if it really merged",
+	}); err != nil {
+		t.Fatalf("RecordSkillOpportunity(first): %v", err)
+	}
+	if err := tracker.RecordSkillOpportunity(SkillOpportunityRecord{
+		Candidate: "other",
+		Route:     "genesis",
+		SkillName: "other-skill",
+	}); err != nil {
+		t.Fatalf("RecordSkillOpportunity(other): %v", err)
+	}
+	if err := tracker.RecordSkillOpportunity(SkillOpportunityRecord{
+		Candidate: "repeat origin/main proof",
+		Route:     "evolve",
+		SkillName: "pr-merge-flow",
+		Reason:    "same near-miss repeated",
+	}); err != nil {
+		t.Fatalf("RecordSkillOpportunity(second): %v", err)
+	}
+
+	records, err := tracker.RecentSkillOpportunities("pr-merge-flow", 5)
+	if err != nil {
+		t.Fatalf("RecentSkillOpportunities: %v", err)
+	}
+	if len(records) != 2 {
+		t.Fatalf("expected 2 filtered opportunities, got %+v", records)
+	}
+	if records[0].Candidate != "repeat origin/main proof" || records[1].Candidate != "add merge verification proof" {
+		t.Fatalf("opportunities not newest-first: %+v", records)
+	}
+	if records[0].Type != "skill_opportunity" || records[0].Source != "proposal" {
+		t.Fatalf("expected default type/source, got %+v", records[0])
 	}
 }
 

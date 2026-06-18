@@ -29,6 +29,7 @@ const skillReviewHistoryBudget = 32000
 type skillReviewFork struct {
 	chat        *chat.Handler
 	transcripts toolctx.TranscriptStore
+	tracker     *genesis.Tracker
 	model       string
 	logger      *slog.Logger
 }
@@ -36,12 +37,14 @@ type skillReviewFork struct {
 func newSkillReviewFork(
 	chatHandler *chat.Handler,
 	transcripts toolctx.TranscriptStore,
+	tracker *genesis.Tracker,
 	model string,
 	logger *slog.Logger,
 ) *skillReviewFork {
 	return &skillReviewFork{
 		chat:        chatHandler,
 		transcripts: transcripts,
+		tracker:     tracker,
 		model:       model,
 		logger:      logger,
 	}
@@ -60,7 +63,7 @@ func (r *skillReviewFork) RunSkillReview(ctx context.Context, sessionKey string,
 		}
 	}
 
-	prompt := buildSkillReviewPrompt(sessionKey, reviewCtx)
+	prompt := buildSkillReviewPrompt(sessionKey, reviewCtx, r.recentOpportunityContext())
 	maxTokens := 2048
 	_, err := r.chat.SendSync(ctx, skillReviewSessionKey(sessionKey), prompt, r.model, &chat.SyncOptions{
 		ToolPreset:         string(toolpreset.PresetSelfReview),
@@ -116,10 +119,28 @@ func skillReviewActivitiesHaveTrace(activities []genesis.ToolActivity) bool {
 	return false
 }
 
-func buildSkillReviewPrompt(sessionKey string, sctx genesis.SessionContext) string {
+func (r *skillReviewFork) recentOpportunityContext() string {
+	if r == nil || r.tracker == nil {
+		return "(none)"
+	}
+	records, err := r.tracker.RecentSkillOpportunities("", 8)
+	if err != nil {
+		if r.logger != nil {
+			r.logger.Warn("skill review fork: opportunity backlog unavailable", "error", err)
+		}
+		return "(unavailable)"
+	}
+	return formatSkillReviewOpportunities(records)
+}
+
+func buildSkillReviewPrompt(sessionKey string, sctx genesis.SessionContext, opportunities string) string {
 	transcript := truncateRunes(sctx.AllText, skillReviewMaxTranscriptRunes)
 	if strings.TrimSpace(transcript) == "" {
 		transcript = "(no transcript text available; decide conservatively from tool summary)"
+	}
+	opportunities = strings.TrimSpace(opportunities)
+	if opportunities == "" {
+		opportunities = "(none)"
 	}
 	return fmt.Sprintf(`# Background Skill Self-Improvement Review
 
@@ -145,6 +166,7 @@ Tool summary: %s
 3. If a support artifact under an existing skill would preserve detailed commands/config better, prefer that over a new skill.
 4. Create/genesis a new skill only for a reusable class-level workflow.
 5. Before repeating an evolve route for a skill, inspect skill_lifecycle status and avoid candidates already present in rejectedEdits.
+6. Compare the target transcript with the recent opportunity backlog. A weak single-session signal can become route=evolve/genesis when the same candidate or user correction repeats across sessions.
 
 ## Required Action
 
@@ -158,9 +180,42 @@ If skill_lifecycle is deferred or not visible, load it with fetch_tools first.
 Set execute=true only when the route is clear and reusable. When unsure, record no-op with the reason.
 If route=evolve/genesis/create is based on a concrete replayable failure or user correction, also call skill_lifecycle action=validation_case_from_session with skillName, sessionKey=%s, and a short description. Add replay.requiredActions or replay.requiredObservations only when the transcript proves the invariant; the tool will extract ordered tool calls and fixture outputs from the target session.
 
+## Recent Opportunity Backlog
+
+%s
+
 ## Target Transcript
 
-%s`, sessionKey, sctx.Turns, skillReviewToolSummary(sctx.ToolActivities), sessionKey, sessionKey, transcript)
+%s`, sessionKey, sctx.Turns, skillReviewToolSummary(sctx.ToolActivities), sessionKey, sessionKey, opportunities, transcript)
+}
+
+func formatSkillReviewOpportunities(records []genesis.SkillOpportunityRecord) string {
+	if len(records) == 0 {
+		return "(none)"
+	}
+	parts := make([]string, 0, len(records))
+	for _, rec := range records {
+		route := strings.TrimSpace(rec.Route)
+		if route == "" {
+			route = "no-op"
+		}
+		target := strings.TrimSpace(rec.SkillName)
+		if target == "" {
+			target = "(new/unknown)"
+		}
+		candidate := strings.TrimSpace(rec.Candidate)
+		if candidate == "" {
+			candidate = strings.TrimSpace(rec.Reason)
+		}
+		if candidate == "" {
+			candidate = strings.TrimSpace(rec.Evidence)
+		}
+		if candidate == "" {
+			candidate = "(no candidate text)"
+		}
+		parts = append(parts, fmt.Sprintf("- route=%s skill=%s candidate=%s", route, target, truncateRunes(candidate, 220)))
+	}
+	return strings.Join(parts, "\n")
 }
 
 func skillReviewToolSummary(activities []genesis.ToolActivity) string {

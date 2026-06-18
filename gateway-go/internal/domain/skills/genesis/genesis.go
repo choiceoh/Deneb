@@ -283,6 +283,27 @@ func (s *Service) Evaluate(sctx SessionContext) bool {
 	return len(toolSet) >= 2
 }
 
+// EvaluateReview checks whether a session has enough signal to run the
+// background skill-review fork. This is deliberately broader than Evaluate:
+// Evaluate gates immediate genesis/persist decisions, while review only records
+// a routed proposal or no-op and can catch single-tool corrections, repeated
+// verification misses, and near-miss evolution opportunities for later
+// accumulation.
+func (s *Service) EvaluateReview(sctx SessionContext) bool {
+	minTools := s.cfg.MinToolCalls
+	if minTools <= 0 || minTools > 2 {
+		minTools = 2
+	}
+	if len(sctx.ToolActivities) < minTools {
+		return false
+	}
+	minTurns := s.cfg.MinTurns
+	if minTurns <= 0 || minTurns > 1 {
+		minTurns = 1
+	}
+	return sctx.Turns >= minTurns
+}
+
 // Generate calls the LLM to synthesize a skill from the session context.
 // Returns nil if the LLM determines no skill is worth creating.
 func (s *Service) Generate(ctx context.Context, sctx SessionContext) (*GeneratedSkill, error) {

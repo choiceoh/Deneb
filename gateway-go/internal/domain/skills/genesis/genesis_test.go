@@ -124,6 +124,31 @@ func TestEvaluate_Pass(t *testing.T) {
 	}
 }
 
+func TestEvaluateReview_AllowsNarrowButReviewWorthySignal(t *testing.T) {
+	svc := &Service{
+		cfg: Config{MinToolCalls: 5, MinTurns: 3, MaxSkillsPerDay: 10},
+	}
+	sctx := SessionContext{
+		ToolActivities: []ToolActivity{{Name: "exec"}, {Name: "exec"}},
+		Turns:          1,
+	}
+	if !svc.EvaluateReview(sctx) {
+		t.Fatal("review should run for narrow repeated tool activity even when genesis diversity gate would reject")
+	}
+	if svc.Evaluate(sctx) {
+		t.Fatal("genesis Evaluate should remain stricter than review EvaluateReview")
+	}
+}
+
+func TestEvaluateReview_StillRequiresObservedToolWork(t *testing.T) {
+	svc := &Service{
+		cfg: Config{MinToolCalls: 5, MinTurns: 3, MaxSkillsPerDay: 10},
+	}
+	if svc.EvaluateReview(SessionContext{ToolActivities: []ToolActivity{{Name: "read"}}, Turns: 1}) {
+		t.Fatal("review should reject a single trivial tool observation")
+	}
+}
+
 func TestSkillSpecificityIssues(t *testing.T) {
 	good := &GeneratedSkill{
 		Name:        "deploy-gateway",

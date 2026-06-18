@@ -267,7 +267,7 @@ func (n *Nudger) runReviewOnce(sessionKey string, snapshot SessionContext) (bool
 	if n.tracker != nil {
 		n.tracker.RecordEvolutionActivity(SkillActivityReviewAttempt, true, "")
 	}
-	if !n.svc.Evaluate(snapshot) {
+	if !n.svc.EvaluateReview(snapshot) {
 		n.logger.Debug("skill nudger: review evaluate rejected session",
 			"session", sessionKey, "turns", snapshot.Turns,
 			"tools", len(snapshot.ToolActivities))

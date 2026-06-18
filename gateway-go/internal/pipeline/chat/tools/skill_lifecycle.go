@@ -52,8 +52,9 @@ type SkillEvolutionRequest struct {
 	Finding   string `json:"finding,omitempty"`
 }
 
-// SkillLifecycleStatusRequest queries recent lifecycle decisions, usage stats,
-// and curator state so future agents can audit what happened.
+// SkillLifecycleStatusRequest queries recent lifecycle decisions, opportunity
+// backlog, usage stats, and curator state so future agents can audit what
+// happened and detect repeated near-miss skill/evolution candidates.
 type SkillLifecycleStatusRequest struct {
 	SkillName string `json:"skillName,omitempty"`
 	Limit     int    `json:"limit,omitempty"`
@@ -254,7 +255,7 @@ func SkillLifecycleToolSchema() map[string]any {
 		"properties": map[string]any{
 			"action": map[string]any{
 				"type":        "string",
-				"description": "Action: propose (record/route a self-evolution proposal), genesis (generate a skill from sessionKey or dreamSummary), evolve (improve an existing skill), status (inspect recent lifecycle logs, usage stats, and curator state), validation_case (record held-out assertions for a skill), validation_case_from_session (extract a held-out replay trace from sessionKey), validation_backfill (batch-extract held-out replay traces from stored sessions for skillName), pin/unpin/archive/restore (manual curator state for agent-created skills)",
+				"description": "Action: propose (record/route a self-evolution proposal), genesis (generate a skill from sessionKey or dreamSummary), evolve (improve an existing skill), status (inspect recent lifecycle logs, opportunity backlog, usage stats, and curator state), validation_case (record held-out assertions for a skill), validation_case_from_session (extract a held-out replay trace from sessionKey), validation_backfill (batch-extract held-out replay traces from stored sessions for skillName), pin/unpin/archive/restore (manual curator state for agent-created skills)",
 				"enum":        []string{"propose", "genesis", "evolve", "status", "validation_case", "validation_case_from_session", "validation_backfill", "pin", "unpin", "archive", "restore"},
 			},
 			"candidate": map[string]any{

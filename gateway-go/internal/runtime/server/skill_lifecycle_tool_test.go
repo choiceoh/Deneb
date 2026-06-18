@@ -88,6 +88,14 @@ func TestSkillLifecycleStatusFiltersBySkillAndStats(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("RecordRejectedSkillEdit: %v", err)
 	}
+	if err := tracker.RecordSkillOpportunity(genesis.SkillOpportunityRecord{
+		Candidate: "repeatable deploy fix",
+		Route:     "evolve",
+		SkillName: "deploy-helper",
+		Evidence:  "same deploy gap repeated",
+	}); err != nil {
+		t.Fatalf("RecordSkillOpportunity: %v", err)
+	}
 
 	backend := &skillLifecycleBackend{tracker: tracker}
 	gotAny, err := backend.SkillLifecycleStatus(context.Background(), chattools.SkillLifecycleStatusRequest{
@@ -117,6 +125,10 @@ func TestSkillLifecycleStatusFiltersBySkillAndStats(t *testing.T) {
 	rejected := got["rejectedEdits"].([]genesis.RejectedSkillEditRecord)
 	if len(rejected) != 1 || rejected[0].Reason != "invented command" {
 		t.Fatalf("unexpected rejected edits: %+v", rejected)
+	}
+	opportunities := got["opportunities"].([]genesis.SkillOpportunityRecord)
+	if len(opportunities) != 1 || opportunities[0].Candidate != "repeatable deploy fix" {
+		t.Fatalf("unexpected opportunities: %+v", opportunities)
 	}
 }
 
@@ -521,6 +533,34 @@ func TestProposeSkillEvolution_NoOpWithoutCandidate(t *testing.T) {
 	}
 	if m["route"] != "no-op" {
 		t.Errorf("expected route=no-op, got %v", m["route"])
+	}
+}
+
+func TestProposeSkillEvolution_RecordsOpportunityBacklog(t *testing.T) {
+	tracker := newSkillLifecycleTestTracker(t)
+	b := &skillLifecycleBackend{tracker: tracker}
+
+	_, err := b.ProposeSkillEvolution(context.Background(), chattools.SkillEvolutionProposalRequest{
+		Route:      "no-op",
+		SkillName:  "deploy-helper",
+		SessionKey: "client:main",
+		Reason:     "candidate is weak once, but useful if repeated",
+		Evidence:   "user corrected merge verification",
+	})
+	if err != nil {
+		t.Fatalf("ProposeSkillEvolution: %v", err)
+	}
+
+	records, err := tracker.RecentSkillOpportunities("deploy-helper", 5)
+	if err != nil {
+		t.Fatalf("RecentSkillOpportunities: %v", err)
+	}
+	if len(records) != 1 {
+		t.Fatalf("expected one opportunity record, got %+v", records)
+	}
+	got := records[0]
+	if got.Route != "no-op" || got.SkillName != "deploy-helper" || got.Source != "skill_lifecycle" || got.Reason == "" {
+		t.Fatalf("unexpected opportunity record: %+v", got)
 	}
 }
 

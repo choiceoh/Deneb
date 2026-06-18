@@ -115,7 +115,7 @@ func (s *Server) initGenesisServices() {
 	// the whole skill self-evolution loop dead. Generate() uses lwClient directly, so the bare name
 	// is fine there; only this SendSync path needs the prefix.
 	reviewModel := s.modelRegistry.FullModelID(modelrole.RoleLightweight)
-	reviewFork := newSkillReviewFork(s.chatHandler, s.genesisTranscripts, reviewModel, s.logger)
+	reviewFork := newSkillReviewFork(s.chatHandler, s.genesisTranscripts, s.genesisTracker, reviewModel, s.logger)
 	s.genesisNudger = genesis.NewNudgerFromEnvWithTrackerAndReviewer(
 		s.genesisSvc,
 		s.genesisTracker,

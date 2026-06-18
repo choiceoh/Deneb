@@ -16,7 +16,7 @@ func TestBuildSkillReviewPromptPinsHermesDecisionOrderAndTargetSession(t *testin
 			{Name: "exec"},
 		},
 		AllText: "user: scope correction\nassistant: fixed it",
-	})
+	}, "- route=evolve skill=deploy-helper candidate=merge verification repeated")
 
 	for _, want := range []string{
 		"Target session key: telegram:direct:42",
@@ -25,6 +25,8 @@ func TestBuildSkillReviewPromptPinsHermesDecisionOrderAndTargetSession(t *testin
 		"Check whether an existing skill already covers",
 		"Record exactly one lifecycle decision",
 		"route=genesis with sessionKey=telegram:direct:42",
+		"Recent Opportunity Backlog",
+		"merge verification repeated",
 	} {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("prompt missing %q:\n%s", want, prompt)
