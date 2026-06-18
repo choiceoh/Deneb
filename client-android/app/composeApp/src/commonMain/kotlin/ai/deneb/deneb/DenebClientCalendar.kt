@@ -26,7 +26,7 @@ suspend fun DenebGatewayClient.refreshCalendar(): Boolean {
     ) ?: return false
     _denebCalendar.value = payload.events
         .filter { it.id.isNotBlank() }
-        .map { CalendarEvent(it.id, it.summary, it.location, it.start, it.end, it.allDay, it.local) }
+        .map { CalendarEvent(it.id, it.summary, it.location, it.start, it.end, it.allDay, it.local, it.category) }
     return true
 }
 
@@ -56,7 +56,7 @@ suspend fun DenebGatewayClient.fetchCalendarRange(
     ) ?: return null
     val events = payload.events
         .filter { it.id.isNotBlank() }
-        .map { CalendarEvent(it.id, it.summary, it.location, it.start, it.end, it.allDay, it.local) }
+        .map { CalendarEvent(it.id, it.summary, it.location, it.start, it.end, it.allDay, it.local, it.category) }
     storeCalendarRange(key, events)
     return events
 }
