@@ -263,12 +263,23 @@ func calActionAudit(ctx context.Context, d *toolctx.CalendarDeps, p calParams) s
 		if len(dayTimed) == 0 {
 			continue
 		}
+		dayMidnight := startOfDay(day, loc)
+		dayNext := dayMidnight.AddDate(0, 0, 1)
 		var total time.Duration
 		var busy []interval
 		for _, e := range dayTimed {
-			end := eventEnd(e)
-			total += end.Sub(e.Start)
-			busy = append(busy, interval{e.Start.In(loc), end.In(loc)})
+			// Clip an event that runs in from the previous day (or out past
+			// midnight) to this day, so load/focus reflect only today's portion.
+			s := e.Start.In(loc)
+			if s.Before(dayMidnight) {
+				s = dayMidnight
+			}
+			en := eventEnd(e).In(loc)
+			if en.After(dayNext) {
+				en = dayNext
+			}
+			total += en.Sub(s)
+			busy = append(busy, interval{s, en})
 		}
 		overloaded := len(dayTimed) >= auditOverloadCount || total >= auditOverloadHours
 		label := calDayWeekday(day)
@@ -282,6 +293,14 @@ func calActionAudit(ctx context.Context, d *toolctx.CalendarDeps, p calParams) s
 		if overloaded {
 			winStart := time.Date(day.Year(), day.Month(), day.Day(), dayStart, 0, 0, 0, loc)
 			winEnd := time.Date(day.Year(), day.Month(), day.Day(), dayEnd, 0, 0, 0, loc)
+			// Keep the focus suggestion inside the audited range and not in the
+			// past — an explicit from/to must never yield a block outside it.
+			if winStart.Before(from) {
+				winStart = from
+			}
+			if winEnd.After(to) {
+				winEnd = to
+			}
 			if winStart.Before(now) {
 				winStart = now
 			}
@@ -340,17 +359,20 @@ func eventEnd(e calendar.Event) time.Time {
 	return end
 }
 
-// timedEventsOn returns the timed events that START on day (local), in the input
-// order (calMerged is already start-sorted). All-day markers are excluded.
+// timedEventsOn returns the timed events that OVERLAP day (local), in the input
+// order (calMerged is already start-sorted). Overlap rather than start-date
+// equality, so a meeting/travel block running in from the previous day still
+// counts toward the day's load and blocks its focus time. All-day markers are
+// excluded.
 func timedEventsOn(events []calendar.Event, day time.Time, loc *time.Location) []calendar.Event {
-	y, m, dd := day.Date()
+	dayStart := startOfDay(day, loc)
+	dayEnd := dayStart.AddDate(0, 0, 1)
 	var out []calendar.Event
 	for _, e := range events {
 		if e.AllDay || e.Start.IsZero() {
 			continue
 		}
-		s := e.Start.In(loc)
-		if s.Year() == y && s.Month() == m && s.Day() == dd {
+		if e.Start.In(loc).Before(dayEnd) && eventEnd(e).In(loc).After(dayStart) {
 			out = append(out, e)
 		}
 	}

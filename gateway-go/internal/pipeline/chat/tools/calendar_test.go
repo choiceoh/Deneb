@@ -222,6 +222,19 @@ func TestCalendar_TimelineNeedsQuery(t *testing.T) {
 	}
 }
 
+func TestCalendar_TimelineRejectsBadRange(t *testing.T) {
+	d := &toolctx.CalendarDeps{Local: newTestLocalCal(t)}
+	// Inverted from/to must be rejected, not silently widened to the default.
+	out := callCal(t, d, map[string]any{
+		"action": "timeline", "query": "현대차",
+		"from": "2026-07-01T00:00:00+09:00",
+		"to":   "2026-06-01T00:00:00+09:00",
+	})
+	if !strings.Contains(out, "뒤여야") {
+		t.Errorf("expected inverted-range rejection, got:\n%s", out)
+	}
+}
+
 func TestCalendar_RejectGoogleWrite(t *testing.T) {
 	local := newTestLocalCal(t)
 	d := &toolctx.CalendarDeps{Local: local}

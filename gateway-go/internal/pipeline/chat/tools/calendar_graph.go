@@ -33,7 +33,14 @@ func calActionTimeline(ctx context.Context, d *toolctx.CalendarDeps, p calParams
 	loc := calDisplayLoc()
 	now := time.Now().In(loc)
 	from, to := now.AddDate(0, 0, -timelineWindowDays), now.AddDate(0, 0, timelineWindowDays)
-	if f, t, ok := timelineExplicitRange(p); ok {
+	// An explicit from/to overrides the default window — but if one is given and
+	// it's incomplete/malformed/inverted, surface the error instead of silently
+	// searching the default range (matches free_slots / list_range).
+	if strings.TrimSpace(p.From) != "" || strings.TrimSpace(p.To) != "" {
+		f, t, errMsg := parseTimelineRange(p)
+		if errMsg != "" {
+			return errMsg
+		}
 		from, to = f, t
 	}
 
@@ -65,19 +72,27 @@ func calActionTimeline(ctx context.Context, d *toolctx.CalendarDeps, p calParams
 	return sb.String()
 }
 
-// timelineExplicitRange honors an explicit from/to (RFC3339) when both parse and
-// to is after from; otherwise the caller's wide default window is used.
-func timelineExplicitRange(p calParams) (from, to time.Time, ok bool) {
+// parseTimelineRange validates an explicit from/to (both required, RFC3339, to
+// after from), returning a Korean error message on bad input so timeline rejects
+// malformed/inverted ranges instead of silently falling back to the default
+// window — the same contract as free_slots / list_range.
+func parseTimelineRange(p calParams) (from, to time.Time, errMsg string) {
 	fs, ts := strings.TrimSpace(p.From), strings.TrimSpace(p.To)
 	if fs == "" || ts == "" {
-		return time.Time{}, time.Time{}, false
+		return time.Time{}, time.Time{}, "from·to는 함께 지정해야 합니다 (RFC3339)."
 	}
-	f, err1 := time.Parse(time.RFC3339, fs)
-	t, err2 := time.Parse(time.RFC3339, ts)
-	if err1 != nil || err2 != nil || !t.After(f) {
-		return time.Time{}, time.Time{}, false
+	f, err := time.Parse(time.RFC3339, fs)
+	if err != nil {
+		return time.Time{}, time.Time{}, "from은 RFC3339 형식이어야 합니다 (예: 2026-06-10T00:00:00+09:00)."
 	}
-	return f, t, true
+	t, err := time.Parse(time.RFC3339, ts)
+	if err != nil {
+		return time.Time{}, time.Time{}, "to는 RFC3339 형식이어야 합니다."
+	}
+	if !t.After(f) {
+		return time.Time{}, time.Time{}, "to는 from보다 뒤여야 합니다."
+	}
+	return f, t, ""
 }
 
 // eventMatchesEntity reports whether an event is about the entity (lowercased
@@ -90,7 +105,10 @@ func eventMatchesEntity(e calendar.Event, ql string) bool {
 		strings.Contains(strings.ToLower(e.Description), ql) {
 		return true
 	}
-	for _, a := range e.Attendees {
+	// Organizer is stored separately from Attendees (and on a Google event may be
+	// the only identity attached to a meeting the queried entity organized), so
+	// check it alongside the attendees.
+	for _, a := range append([]calendar.Attendee{e.Organizer}, e.Attendees...) {
 		if strings.Contains(strings.ToLower(attendeeLabel(a)), ql) ||
 			strings.Contains(strings.ToLower(a.Email), ql) {
 			return true
