@@ -64,23 +64,41 @@ const (
 
 // UsageRecord represents a single skill usage event.
 type UsageRecord struct {
-	SkillName  string `json:"skillName"`
-	SessionKey string `json:"sessionKey"`
-	Success    bool   `json:"success"`
-	ErrorMsg   string `json:"errorMsg,omitempty"`
-	UsedAt     int64  `json:"usedAt"`           // unix millis
-	Source     string `json:"source,omitempty"` // "" = legacy (classified by session prefix)
+	SkillName    string             `json:"skillName"`
+	SessionKey   string             `json:"sessionKey"`
+	Success      bool               `json:"success"`
+	ErrorMsg     string             `json:"errorMsg,omitempty"`
+	FailureTrace *UsageFailureTrace `json:"failureTrace,omitempty"`
+	UsedAt       int64              `json:"usedAt"`           // unix millis
+	Source       string             `json:"source,omitempty"` // "" = legacy (classified by session prefix)
+}
+
+// UsageFailureTrace is the structured failure evidence carried by a real skill
+// use. ErrorMsg is still kept for backward compatibility; this trace gives
+// Propus/Self-Harness a stable terminal signature and the tool boundary that
+// produced it when transcript data is available.
+type UsageFailureTrace struct {
+	Signature      string `json:"signature,omitempty"`
+	TerminalCause  string `json:"terminalCause,omitempty"`
+	CausalStatus   string `json:"causalStatus,omitempty"`
+	AgentMechanism string `json:"agentMechanism,omitempty"`
+	ToolName       string `json:"toolName,omitempty"`
+	ToolInput      string `json:"toolInput,omitempty"`
+	ToolOutput     string `json:"toolOutput,omitempty"`
+	ToolError      bool   `json:"toolError,omitempty"`
+	ErrorMsg       string `json:"errorMsg,omitempty"`
 }
 
 // UsageStats aggregates usage metrics for a skill.
 type UsageStats struct {
-	SkillName    string   `json:"skillName"`
-	TotalUses    int      `json:"totalUses"`
-	SuccessCount int      `json:"successCount"`
-	FailureCount int      `json:"failureCount"`
-	SuccessRate  float64  `json:"successRate"`
-	LastUsed     int64    `json:"lastUsed,omitempty"`
-	RecentErrors []string `json:"recentErrors,omitempty"`
+	SkillName           string              `json:"skillName"`
+	TotalUses           int                 `json:"totalUses"`
+	SuccessCount        int                 `json:"successCount"`
+	FailureCount        int                 `json:"failureCount"`
+	SuccessRate         float64             `json:"successRate"`
+	LastUsed            int64               `json:"lastUsed,omitempty"`
+	RecentErrors        []string            `json:"recentErrors,omitempty"`
+	RecentFailureTraces []UsageFailureTrace `json:"recentFailureTraces,omitempty"`
 }
 
 const defaultSkillEvolutionEvidenceWindowDays = 7
@@ -101,8 +119,9 @@ type Tracker struct {
 	selfCorrectionPath  string
 
 	// In-memory aggregated stats, rebuilt from JSONL on startup.
-	stats        map[string]*usageAgg
-	recentErrors map[string][]string // skill -> last 5 error messages
+	stats               map[string]*usageAgg
+	recentErrors        map[string][]string            // skill -> last 5 error messages
+	recentFailureTraces map[string][]UsageFailureTrace // skill -> last 5 structured failures
 
 	// Event-driven evolve trigger (set via SetEvolveTrigger). When N new
 	// skills accumulate, evolveTrigger is fired in the background. All guarded
@@ -129,8 +148,10 @@ type Tracker struct {
 
 // evolveWatch tracks consecutive failures of a skill since its last evolve.
 type evolveWatch struct {
-	version          string
-	consecutiveFails int
+	version           string
+	consecutiveFails  int
+	audit             HarnessEditAudit
+	targetRecurrences int
 }
 
 // usageAgg holds running aggregates per skill.
@@ -169,6 +190,7 @@ func NewTracker(logger *slog.Logger) (*Tracker, error) {
 		selfCorrectionPath:  filepath.Join(dir, "self_correction_candidates.jsonl"),
 		stats:               make(map[string]*usageAgg),
 		recentErrors:        make(map[string][]string),
+		recentFailureTraces: make(map[string][]UsageFailureTrace),
 		postEvolve:          make(map[string]*evolveWatch),
 	}
 
@@ -203,7 +225,8 @@ func isUnactionableLegacyFailure(r UsageRecord) bool {
 	return !r.Success &&
 		r.Source == "" &&
 		strings.TrimSpace(r.SessionKey) == "" &&
-		strings.TrimSpace(r.ErrorMsg) == ""
+		strings.TrimSpace(r.ErrorMsg) == "" &&
+		usageFailureTraceFromRecord(r) == nil
 }
 
 // reviewSessionPrefix marks sessions spawned by the skill-review fork. The fork
@@ -239,6 +262,102 @@ func isRealUsageRecord(r UsageRecord) bool {
 	return true
 }
 
+func normalizeUsageFailureTrace(record UsageRecord) UsageRecord {
+	if record.Success {
+		record.FailureTrace = nil
+		return record
+	}
+	trace := usageFailureTraceFromRecord(record)
+	if trace == nil {
+		return record
+	}
+	record.FailureTrace = trace
+	return record
+}
+
+func usageFailureTraceFromRecord(record UsageRecord) *UsageFailureTrace {
+	if record.Success {
+		return nil
+	}
+	var trace UsageFailureTrace
+	if record.FailureTrace != nil {
+		trace = *record.FailureTrace
+	}
+	trace.ErrorMsg = firstNonBlank(trace.ErrorMsg, record.ErrorMsg)
+	trace.Signature = strings.TrimSpace(trace.Signature)
+	trace.TerminalCause = strings.TrimSpace(trace.TerminalCause)
+	trace.CausalStatus = strings.TrimSpace(trace.CausalStatus)
+	trace.AgentMechanism = strings.TrimSpace(trace.AgentMechanism)
+	trace.ToolName = truncateRunes(strings.TrimSpace(trace.ToolName), 120)
+	trace.ToolInput = truncateRunes(strings.TrimSpace(trace.ToolInput), 1000)
+	trace.ToolOutput = truncateRunes(strings.TrimSpace(trace.ToolOutput), 1000)
+	trace.ErrorMsg = truncateRunes(strings.TrimSpace(trace.ErrorMsg), 1000)
+
+	classifyText := usageFailureTraceText(trace)
+	if strings.TrimSpace(classifyText) == "" {
+		return nil
+	}
+	if trace.Signature == "" || trace.TerminalCause == "" || trace.AgentMechanism == "" {
+		signature, terminalCause, mechanism := classifySkillFailure(classifyText)
+		if trace.Signature == "" {
+			trace.Signature = signature
+		}
+		if trace.TerminalCause == "" {
+			trace.TerminalCause = terminalCause
+		}
+		if trace.AgentMechanism == "" {
+			trace.AgentMechanism = mechanism
+		}
+	}
+	if trace.CausalStatus == "" {
+		if trace.ToolName != "" || trace.ToolInput != "" || trace.ToolOutput != "" {
+			trace.CausalStatus = "real-use tool trace classified from transcript/error boundary"
+		} else {
+			trace.CausalStatus = "filtered real-use failure; trace-level causality unavailable"
+		}
+	}
+	if trace.Signature == "" {
+		return nil
+	}
+	return &trace
+}
+
+func usageFailureTraceText(trace UsageFailureTrace) string {
+	parts := make([]string, 0, 4)
+	for _, part := range []string{trace.ErrorMsg, trace.ToolName, trace.ToolInput, trace.ToolOutput} {
+		if part = strings.TrimSpace(part); part != "" {
+			parts = append(parts, part)
+		}
+	}
+	return strings.Join(parts, "\n")
+}
+
+func firstNonBlank(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
+}
+
+func usageFailureTraceExample(trace UsageFailureTrace) string {
+	var parts []string
+	if trace.ToolName != "" {
+		parts = append(parts, "tool="+trace.ToolName)
+	}
+	if trace.ErrorMsg != "" {
+		parts = append(parts, "error="+trace.ErrorMsg)
+	}
+	if trace.ToolOutput != "" {
+		parts = append(parts, "output="+trace.ToolOutput)
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return truncateRunes(strings.Join(parts, "; "), 160)
+}
+
 // ingest updates in-memory aggregates from a single usage record. Only real-use
 // records (isRealUsageRecord) count toward the success-rate aggregate the
 // evolver gates on — both live and on startup replay, which also discards the
@@ -271,6 +390,14 @@ func (t *Tracker) ingest(r UsageRecord) {
 		}
 		t.recentErrors[r.SkillName] = errs
 	}
+	if trace := usageFailureTraceFromRecord(r); trace != nil {
+		traces := t.recentFailureTraces[r.SkillName]
+		traces = append(traces, *trace)
+		if len(traces) > 5 {
+			traces = traces[len(traces)-5:]
+		}
+		t.recentFailureTraces[r.SkillName] = traces
+	}
 }
 
 // RecordUsage logs a skill usage event.
@@ -281,6 +408,7 @@ func (t *Tracker) RecordUsage(record UsageRecord) error {
 	if record.UsedAt == 0 {
 		record.UsedAt = time.Now().UnixMilli()
 	}
+	record = normalizeUsageFailureTrace(record)
 
 	if err := jsonlstore.Append(t.usagePath, record); err != nil {
 		return fmt.Errorf("genesis-tracker: append usage: %w", err)
@@ -319,6 +447,9 @@ func (t *Tracker) maybeFireRollbackLocked(r UsageRecord) {
 		delete(t.postEvolve, r.SkillName)
 		return
 	}
+	if selfHarnessTargetRecurred(w.audit, r) {
+		w.targetRecurrences++
+	}
 	w.consecutiveFails++
 	if w.consecutiveFails < t.rollbackThreshold {
 		return
@@ -334,6 +465,18 @@ func (t *Tracker) maybeFireRollbackLocked(r UsageRecord) {
 		}()
 		fn(skill)
 	}()
+}
+
+func selfHarnessTargetRecurred(audit HarnessEditAudit, r UsageRecord) bool {
+	target := normalizedSelfHarnessSignature(audit.TargetSignature)
+	if target == "" || r.Success || !isRealUsageRecord(r) {
+		return false
+	}
+	trace := usageFailureTraceFromRecord(r)
+	if trace == nil {
+		return false
+	}
+	return selfHarnessSignatureMatches(target, normalizedSelfHarnessSignature(trace.Signature))
 }
 
 // Stats returns aggregated usage stats for a skill.
@@ -360,6 +503,10 @@ func (t *Tracker) getStatsLocked(skillName string) *UsageStats {
 	if errs := t.recentErrors[skillName]; len(errs) > 0 {
 		stats.RecentErrors = make([]string, len(errs))
 		copy(stats.RecentErrors, errs)
+	}
+	if traces := t.recentFailureTraces[skillName]; len(traces) > 0 {
+		stats.RecentFailureTraces = make([]UsageFailureTrace, len(traces))
+		copy(stats.RecentFailureTraces, traces)
 	}
 	return stats
 }
@@ -634,7 +781,7 @@ func (t *Tracker) LogEvolveWithAudit(skillName, newVersion, description string, 
 	defer t.mu.Unlock()
 	now := time.Now().UnixMilli()
 	if t.rollbackThreshold > 0 {
-		t.postEvolve[skillName] = &evolveWatch{version: newVersion}
+		t.postEvolve[skillName] = &evolveWatch{version: newVersion, audit: audit}
 	}
 	if err := jsonlstore.Append(t.logPath, evolveLogEntry{
 		Type:             "evolved",
@@ -816,6 +963,12 @@ func addUsageRecordToStats(stats *UsageStats, r UsageRecord) {
 		stats.RecentErrors = append(stats.RecentErrors, r.ErrorMsg)
 		if len(stats.RecentErrors) > 5 {
 			stats.RecentErrors = stats.RecentErrors[len(stats.RecentErrors)-5:]
+		}
+	}
+	if trace := usageFailureTraceFromRecord(r); trace != nil {
+		stats.RecentFailureTraces = append(stats.RecentFailureTraces, *trace)
+		if len(stats.RecentFailureTraces) > 5 {
+			stats.RecentFailureTraces = stats.RecentFailureTraces[len(stats.RecentFailureTraces)-5:]
 		}
 	}
 }

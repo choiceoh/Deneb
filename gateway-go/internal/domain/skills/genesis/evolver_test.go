@@ -171,6 +171,15 @@ func TestParseAndApplyRunsHeldOutGateWhenSelfTestDisabled(t *testing.T) {
 	if len(rejected) != 1 || rejected[0].Source != "preflight" {
 		t.Fatalf("expected preflight rejected-edit record, got %+v", rejected)
 	}
+	drafts, err := tracker.RecentSelfCorrectionCandidates("topsolar-db", SelfCorrectionStatusProposed, 5)
+	if err != nil {
+		t.Fatalf("RecentSelfCorrectionCandidates: %v", err)
+	}
+	if len(drafts) != 1 ||
+		!strings.HasPrefix(drafts[0].Source, "self-harness-rejected-evolve") ||
+		drafts[0].Scope != "test" {
+		t.Fatalf("expected rejected evolve validation draft, got %+v", drafts)
+	}
 }
 
 func TestParseAndApplyRejectsMissingSelfHarnessAudit(t *testing.T) {
@@ -221,6 +230,15 @@ func TestParseAndApplyRejectsMissingSelfHarnessAudit(t *testing.T) {
 	}
 	if len(rejected) != 1 || rejected[0].Source != "preflight" {
 		t.Fatalf("expected preflight rejected-edit record, got %+v", rejected)
+	}
+	drafts, err := tracker.RecentSelfCorrectionCandidates("deploy-helper", SelfCorrectionStatusProposed, 5)
+	if err != nil {
+		t.Fatalf("RecentSelfCorrectionCandidates: %v", err)
+	}
+	if len(drafts) != 1 ||
+		!strings.HasPrefix(drafts[0].Source, "self-harness-rejected-evolve") ||
+		drafts[0].Scope != "test" {
+		t.Fatalf("expected rejected evolve validation draft, got %+v", drafts)
 	}
 }
 
@@ -565,6 +583,7 @@ func TestFormatValidationCasesForPromptIncludesReplayTrace(t *testing.T) {
 		"ssh srv1",
 		"input includes",
 		"fixture output example",
+		"rubric",
 		"과거 관찰 데이터",
 	} {
 		if !strings.Contains(got, want) {
@@ -610,6 +629,33 @@ func TestMineSkillFailurePatternsClustersRealFailures(t *testing.T) {
 	}
 	if strings.Contains(formatFailurePatternsForPrompt(&UsageStats{}), "Self-Harness") {
 		t.Fatal("empty usage stats should not add failure evidence")
+	}
+}
+
+func TestMineSkillFailurePatternsPrefersStructuredTrace(t *testing.T) {
+	stats := &UsageStats{
+		SkillName:    "deploy-helper",
+		RecentErrors: []string{"generic fallback error"},
+		RecentFailureTraces: []UsageFailureTrace{
+			{
+				Signature:      "terminal=permission-auth|mechanism=preflight",
+				TerminalCause:  "permission/auth failure",
+				CausalStatus:   "real-use tool trace classified from transcript/error boundary",
+				AgentMechanism: "preflight/auth gate is missing or unclear",
+				ToolName:       "exec",
+				ErrorMsg:       "permission denied",
+			},
+		},
+	}
+
+	patterns := mineSkillFailurePatterns(stats)
+	if len(patterns) != 1 {
+		t.Fatalf("expected one trace-derived pattern, got %+v", patterns)
+	}
+	if patterns[0].Signature != "terminal=permission-auth|mechanism=preflight" ||
+		patterns[0].CausalStatus != "real-use tool trace classified from transcript/error boundary" ||
+		!strings.Contains(strings.Join(patterns[0].Examples, "\n"), "tool=exec") {
+		t.Fatalf("expected structured trace pattern, got %+v", patterns[0])
 	}
 }
 

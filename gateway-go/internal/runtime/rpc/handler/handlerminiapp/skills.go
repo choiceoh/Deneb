@@ -193,6 +193,7 @@ type SkillsDeps struct {
 	ValidationSummary     func(skillName string) (genesis.SkillValidationCaseSummary, error)
 	RecentOpportunities   func(skillName string, limit int) ([]genesis.SkillOpportunityRecord, error)
 	RecentSelfCorrections func(skillName string, limit int) ([]genesis.SelfCorrectionCandidateRecord, error)
+	SelfHarnessSignals    func() genesis.SelfHarnessSignalSummary
 }
 
 // SkillsMethods returns the miniapp.skills.* handler map, or nil when no
@@ -421,15 +422,20 @@ func propusLifecycleSummary(deps SkillsDeps, entries []genesis.LifecycleLogEntry
 	validationSummary, _ := skillsDepsValidationSummary(deps, skillName)
 	opportunities, _ := skillsDepsOpportunities(deps, skillName, limit)
 	selfCorrections, _ := skillsDepsSelfCorrections(deps, skillName, limit)
+	selfHarnessSignals := genesis.SelfHarnessSignalSummary{}
+	if deps.SelfHarnessSignals != nil && strings.TrimSpace(skillName) == "" {
+		selfHarnessSignals = deps.SelfHarnessSignals()
+	}
 	shared := genesis.BuildPropusLifecycleSummary(genesis.PropusLifecycleSummaryInput{
-		Scope:             scope,
-		SkillName:         skillName,
-		Recent:            entries,
-		Stats:             stats,
-		Curator:           curator,
-		ValidationSummary: validationSummary,
-		Opportunities:     opportunities,
-		SelfCorrections:   selfCorrections,
+		Scope:              scope,
+		SkillName:          skillName,
+		Recent:             entries,
+		Stats:              stats,
+		Curator:            curator,
+		ValidationSummary:  validationSummary,
+		Opportunities:      opportunities,
+		SelfCorrections:    selfCorrections,
+		SelfHarnessSignals: selfHarnessSignals,
 	})
 	return PropusLifecycleSummary{
 		System:          shared.System,

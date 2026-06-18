@@ -542,6 +542,12 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 				}
 				return s.genesisTracker.RecentSelfCorrectionCandidates(strings.TrimSpace(skillName), genesis.SelfCorrectionStatusProposed, limit)
 			},
+			SelfHarnessSignals: func() genesis.SelfHarnessSignalSummary {
+				if s.genesisTracker == nil {
+					return genesis.SelfHarnessSignalSummary{}
+				}
+				return s.genesisTracker.SelfHarnessSignals()
+			},
 		}),
 
 		// Mini App self-improvement coding queue. This is not a skill list and

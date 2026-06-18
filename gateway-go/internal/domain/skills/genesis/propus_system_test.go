@@ -121,6 +121,7 @@ func TestBuildPropusHealthPreservesOperationalAttention(t *testing.T) {
 		},
 		Evolution:         EvolutionHealthSummary{EvolveRejected7d: 1},
 		Validation:        SkillValidationCaseSummary{},
+		SelfHarness:       SelfHarnessSignalSummary{SignatureMismatchRejections7d: 1, ValidationDrafts7d: 1, TargetRecurrences7d: 1},
 		AgentSkills:       4,
 		UnusedAgentSkills: 3,
 	})
@@ -128,7 +129,7 @@ func TestBuildPropusHealthPreservesOperationalAttention(t *testing.T) {
 	if health.State != "attention" {
 		t.Fatalf("state = %q, want attention", health.State)
 	}
-	for _, want := range []string{"recent_rejections", "reviews_all_skipped", "validation_rejections_without_corpus", "many_unused_agent_skills"} {
+	for _, want := range []string{"recent_rejections", "self_harness_gate_rejections", "self_harness_target_recurrence", "rejected_evolve_validation_drafts", "reviews_all_skipped", "validation_rejections_without_corpus", "many_unused_agent_skills"} {
 		if !containsString(health.Attention, want) {
 			t.Fatalf("attention missing %q: %#v", want, health.Attention)
 		}

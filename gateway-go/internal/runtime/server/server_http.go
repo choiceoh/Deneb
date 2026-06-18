@@ -158,6 +158,19 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 		if eh.Thrash {
 			se["thrash"] = true
 		}
+		sh := s.genesisTracker.SelfHarnessSignals()
+		se["self_harness_rejections_7d"] = sh.Rejections7d
+		se["self_harness_missing_audit_rejections_7d"] = sh.MissingAuditRejections7d
+		se["self_harness_signature_mismatch_rejections_7d"] = sh.SignatureMismatchRejections7d
+		se["self_harness_surface_mismatch_rejections_7d"] = sh.SurfaceMismatchRejections7d
+		se["self_harness_held_out_replay_rejections_7d"] = sh.HeldOutReplayRejections7d
+		se["self_harness_validation_drafts_7d"] = sh.ValidationDrafts7d
+		se["self_harness_target_recurrences_7d"] = sh.TargetRecurrences7d
+		if sh.TopRecurringTargetSkill != "" {
+			se["self_harness_top_recurring_target_skill"] = sh.TopRecurringTargetSkill
+			se["self_harness_top_recurring_target_signature"] = sh.TopRecurringTargetSignature
+			se["self_harness_top_recurring_target_recurrences"] = sh.TopRecurringTargetRecurrences
+		}
 		usageQuality := genesis.UsageQualitySummary{}
 		if quality, err := s.genesisTracker.UsageQualitySummary(""); err == nil {
 			usageQuality = quality
@@ -206,19 +219,21 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 		opportunities, _ := s.genesisTracker.RecentSkillOpportunities("", 60)
 		selfCorrections, _ := s.genesisTracker.RecentSelfCorrectionCandidates("", genesis.SelfCorrectionStatusProposed, 60)
 		overview := genesis.BuildPropusOverview(genesis.PropusOverviewInput{
-			Scope:             genesis.PropusScopeGlobal,
-			Recent:            recent,
-			Stats:             stats,
-			Curator:           curator,
-			UsageQuality:      usageQuality,
-			ValidationSummary: validationSummary,
-			Opportunities:     opportunities,
-			SelfCorrections:   selfCorrections,
+			Scope:              genesis.PropusScopeGlobal,
+			Recent:             recent,
+			Stats:              stats,
+			Curator:            curator,
+			UsageQuality:       usageQuality,
+			ValidationSummary:  validationSummary,
+			Opportunities:      opportunities,
+			SelfCorrections:    selfCorrections,
+			SelfHarnessSignals: sh,
 		})
 		healthSnapshot := genesis.BuildPropusHealth(genesis.PropusHealthInput{
 			Liveness:          live,
 			Evolution:         eh,
 			Validation:        validationSummary,
+			SelfHarness:       sh,
 			AgentSkills:       agentSkills,
 			UnusedAgentSkills: unusedAgentSkills,
 		})

@@ -164,20 +164,22 @@ func skillsEvolve(deps GenesisDeps) rpcutil.HandlerFunc {
 // skillsUsage records a skill usage event.
 func skillsUsage(deps GenesisDeps) rpcutil.HandlerFunc {
 	type params struct {
-		SkillName  string `json:"skillName"`
-		SessionKey string `json:"sessionKey"`
-		Success    bool   `json:"success"`
-		ErrorMsg   string `json:"errorMsg,omitempty"`
+		SkillName    string                     `json:"skillName"`
+		SessionKey   string                     `json:"sessionKey"`
+		Success      bool                       `json:"success"`
+		ErrorMsg     string                     `json:"errorMsg,omitempty"`
+		FailureTrace *genesis.UsageFailureTrace `json:"failureTrace,omitempty"`
 	}
 	return rpcutil.BindHandler[params](func(p params) (any, error) {
 		if p.SkillName == "" {
 			return nil, rpcerr.MissingParam("skillName")
 		}
 		err := deps.Tracker.RecordUsage(genesis.UsageRecord{
-			SkillName:  p.SkillName,
-			SessionKey: p.SessionKey,
-			Success:    p.Success,
-			ErrorMsg:   p.ErrorMsg,
+			SkillName:    p.SkillName,
+			SessionKey:   p.SessionKey,
+			Success:      p.Success,
+			ErrorMsg:     p.ErrorMsg,
+			FailureTrace: p.FailureTrace,
 		})
 		if err != nil {
 			return nil, err

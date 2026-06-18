@@ -294,12 +294,14 @@ func (a *chatUsageRecorderAdapter) RecordSkillUse(sessionKey, skillName string, 
 	if a == nil || a.inner == nil {
 		return
 	}
+	failureTrace := a.failureTraceForSkillUse(sessionKey, success, errMsg)
 	if err := a.inner.RecordUsage(genesis.UsageRecord{
-		SkillName:  skillName,
-		SessionKey: sessionKey,
-		Success:    success,
-		ErrorMsg:   errMsg,
-		Source:     genesis.UsageSourceReal,
+		SkillName:    skillName,
+		SessionKey:   sessionKey,
+		Success:      success,
+		ErrorMsg:     errMsg,
+		FailureTrace: failureTrace,
+		Source:       genesis.UsageSourceReal,
 	}); err != nil && a.logger != nil {
 		// Usage telemetry is best-effort — a write failure must never affect the
 		// chat turn, but log it so a persistently failing tracker is visible.
@@ -310,6 +312,45 @@ func (a *chatUsageRecorderAdapter) RecordSkillUse(sessionKey, skillName string, 
 			a.recordValidationCaseFromFailedUse(sessionKey, skillName, errMsg)
 		})
 	}
+}
+
+func (a *chatUsageRecorderAdapter) failureTraceForSkillUse(sessionKey string, success bool, errMsg string) *genesis.UsageFailureTrace {
+	if success {
+		return nil
+	}
+	trace := &genesis.UsageFailureTrace{ErrorMsg: strings.TrimSpace(errMsg)}
+	if a == nil || a.transcripts == nil || strings.TrimSpace(sessionKey) == "" {
+		if trace.ErrorMsg == "" {
+			return nil
+		}
+		return trace
+	}
+	sctx, err := buildSkillLifecycleSessionContext(a.transcripts, sessionKey)
+	if err != nil {
+		if a.logger != nil {
+			a.logger.Debug("genesis: skill failure trace transcript load failed",
+				"session", sessionKey, "error", err)
+		}
+		if trace.ErrorMsg == "" {
+			return nil
+		}
+		return trace
+	}
+	for i := len(sctx.ToolActivities) - 1; i >= 0; i-- {
+		activity := sctx.ToolActivities[i]
+		if !activity.IsError {
+			continue
+		}
+		trace.ToolName = strings.TrimSpace(activity.Name)
+		trace.ToolInput = truncateRunes(strings.TrimSpace(activity.Input), 1000)
+		trace.ToolOutput = truncateRunes(strings.TrimSpace(activity.Output), 1000)
+		trace.ToolError = true
+		break
+	}
+	if trace.ErrorMsg == "" && trace.ToolName == "" && trace.ToolInput == "" && trace.ToolOutput == "" {
+		return nil
+	}
+	return trace
 }
 
 func (a *chatUsageRecorderAdapter) recordValidationCaseFromFailedUse(sessionKey, skillName, errMsg string) {

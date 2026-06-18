@@ -13,11 +13,12 @@ import (
 // evolution. A failed candidate is not just discarded; the next optimizer pass
 // can read why it failed and avoid repeating the same mutation.
 type RejectedSkillEditRecord struct {
-	SkillName     string `json:"skillName"`
-	Reason        string `json:"reason"`
-	CandidateBody string `json:"candidateBody,omitempty"`
-	Source        string `json:"source,omitempty"`
-	CreatedAt     int64  `json:"createdAt"`
+	SkillName        string            `json:"skillName"`
+	Reason           string            `json:"reason"`
+	CandidateBody    string            `json:"candidateBody,omitempty"`
+	Source           string            `json:"source,omitempty"`
+	SelfHarnessAudit *HarnessEditAudit `json:"selfHarnessAudit,omitempty"`
+	CreatedAt        int64             `json:"createdAt"`
 }
 
 // RecordRejectedSkillEdit appends a failed skill-evolution candidate to the
@@ -31,6 +32,9 @@ func (t *Tracker) RecordRejectedSkillEdit(record RejectedSkillEditRecord) error 
 	record.Reason = strings.TrimSpace(record.Reason)
 	record.Source = strings.TrimSpace(record.Source)
 	record.CandidateBody = strings.TrimSpace(truncateRunes(record.CandidateBody, 1997))
+	if record.SelfHarnessAudit != nil && record.SelfHarnessAudit.empty() {
+		record.SelfHarnessAudit = nil
+	}
 	if record.SkillName == "" {
 		return fmt.Errorf("genesis-tracker: rejected edit skillName is required")
 	}
@@ -102,10 +106,11 @@ func (t *Tracker) rejectedSkillEditsFromLifecycleLocked(filter string) ([]Reject
 			reason = "rejected"
 		}
 		out = append(out, RejectedSkillEditRecord{
-			SkillName: skillName,
-			Reason:    reason,
-			Source:    "lifecycle-fallback",
-			CreatedAt: entry.CreatedAt,
+			SkillName:        skillName,
+			Reason:           reason,
+			Source:           "lifecycle-fallback",
+			SelfHarnessAudit: entry.SelfHarnessAudit,
+			CreatedAt:        entry.CreatedAt,
 		})
 	}
 	return out, nil
