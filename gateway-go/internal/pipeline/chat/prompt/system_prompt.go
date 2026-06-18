@@ -265,7 +265,7 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		ss.WriteString("4. 제안·생성·진화 실행은 `skill_lifecycle` 도구(propose/genesis/evolve/status)로 닫으세요.\n")
 		ss.WriteString("5. 자세한 config/명령/템플릿은 `skills` action=write_file 로 references/templates/scripts/assets 아래 보존하세요.\n")
 		ss.WriteString("6. agent-created 스킬 상태 조정은 `skill_lifecycle` action=pin/unpin/archive/restore 를 사용하세요.\n")
-		ss.WriteString("7. 스킬 진화는 검증 통과 시에만 채택하고, `skill_lifecycle` status의 `rejectedEdits`와 `validationCases`를 확인해 같은 실패 후보를 반복하지 마세요.\n")
+		ss.WriteString("7. 스킬 진화는 검증 통과 시에만 채택하고, `skill_lifecycle` status의 `opportunities`, `rejectedEdits`, `validationCases`를 확인해 반복 near-miss는 승격하고 같은 실패 후보는 반복하지 마세요.\n")
 		ss.WriteString("8. 실제 실패에서 재현 가능한 검사 조건이 생기면 `skill_lifecycle` action=validation_case_from_session 으로 세션 trace 기반 case를 먼저 남기고, 필요하면 action=validation_case 로 수동 replay/held-out case를 보강하세요.\n")
 		ss.WriteString("9. 사용자 교정(형식, 범위, 검증, 작업 순서)은 memory가 아니라 스킬 개선 신호일 수 있습니다.\n")
 		ss.WriteString("10. `code_action`으로 좋은 배치/조인/정규화/내부-write 워크플로우가 성공했다면 다음 실행부터 `promoteToSkill`에 candidate/evidence를 넣어 `skill_lifecycle` 제안/생성 경로로 승격하세요.\n")

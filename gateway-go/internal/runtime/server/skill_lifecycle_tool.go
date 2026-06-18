@@ -204,6 +204,7 @@ func (b *skillLifecycleBackend) SkillLifecycleStatus(_ context.Context, req chat
 		optimizerMemory, optimizerMemoryErr := b.optimizerMemory(skillName)
 		validationCases, validationCasesErr := b.recentSkillValidationCases(skillName, limit)
 		validationSummary, validationSummaryErr := b.validationCaseSummary(skillName)
+		opportunities, opportunitiesErr := b.recentSkillOpportunities(skillName, limit)
 		status := map[string]any{
 			"ok":                    true,
 			"skillName":             skillName,
@@ -216,6 +217,7 @@ func (b *skillLifecycleBackend) SkillLifecycleStatus(_ context.Context, req chat
 			"optimizerMemory":       optimizerMemory,
 			"validationCases":       validationCases,
 			"validationCaseSummary": validationSummary,
+			"opportunities":         opportunities,
 		}
 		if rejectedErr != "" {
 			status["rejectedEditsError"] = rejectedErr
@@ -232,6 +234,9 @@ func (b *skillLifecycleBackend) SkillLifecycleStatus(_ context.Context, req chat
 		if validationSummaryErr != "" {
 			status["validationCaseSummaryError"] = validationSummaryErr
 		}
+		if opportunitiesErr != "" {
+			status["opportunitiesError"] = opportunitiesErr
+		}
 		return status, nil
 	}
 
@@ -247,6 +252,7 @@ func (b *skillLifecycleBackend) SkillLifecycleStatus(_ context.Context, req chat
 	usageQuality, usageQualityErr := b.usageQualitySummary("")
 	validationCases, validationCasesErr := b.recentSkillValidationCases("", limit)
 	validationSummary, validationSummaryErr := b.validationCaseSummary("")
+	opportunities, opportunitiesErr := b.recentSkillOpportunities("", limit)
 	status := map[string]any{
 		"ok":                    true,
 		"limit":                 limit,
@@ -257,6 +263,7 @@ func (b *skillLifecycleBackend) SkillLifecycleStatus(_ context.Context, req chat
 		"usageQuality":          usageQuality,
 		"validationCases":       validationCases,
 		"validationCaseSummary": validationSummary,
+		"opportunities":         opportunities,
 	}
 	if rejectedErr != "" {
 		status["rejectedEditsError"] = rejectedErr
@@ -269,6 +276,9 @@ func (b *skillLifecycleBackend) SkillLifecycleStatus(_ context.Context, req chat
 	}
 	if validationSummaryErr != "" {
 		status["validationCaseSummaryError"] = validationSummaryErr
+	}
+	if opportunitiesErr != "" {
+		status["opportunitiesError"] = opportunitiesErr
 	}
 	return status, nil
 }
@@ -331,6 +341,18 @@ func (b *skillLifecycleBackend) validationCaseSummary(skillName string) (genesis
 			"skill", skillName, "error", err)
 	}
 	return genesis.SkillValidationCaseSummary{}, err.Error()
+}
+
+func (b *skillLifecycleBackend) recentSkillOpportunities(skillName string, limit int) ([]genesis.SkillOpportunityRecord, string) {
+	opportunities, err := b.tracker.RecentSkillOpportunities(skillName, limit)
+	if err == nil {
+		return opportunities, ""
+	}
+	if b.logger != nil {
+		b.logger.Warn("skill lifecycle: opportunities unavailable",
+			"skill", skillName, "error", err)
+	}
+	return []genesis.SkillOpportunityRecord{}, err.Error()
 }
 
 func (b *skillLifecycleBackend) RecordSkillValidationCase(_ context.Context, req chattools.SkillValidationCaseRequest) (any, error) {
@@ -699,6 +721,18 @@ func (b *skillLifecycleBackend) logProposal(req chattools.SkillEvolutionProposal
 		Result:     resultText,
 	}); err != nil && b.logger != nil {
 		b.logger.Warn("skill lifecycle: proposal log failed", "error", err)
+	}
+	if err := b.tracker.RecordSkillOpportunity(genesis.SkillOpportunityRecord{
+		Candidate:  req.Candidate,
+		Route:      route,
+		SessionKey: req.SessionKey,
+		SkillName:  req.SkillName,
+		Evidence:   req.Evidence,
+		Reason:     req.Reason,
+		Executed:   executed,
+		Source:     "skill_lifecycle",
+	}); err != nil && b.logger != nil {
+		b.logger.Warn("skill lifecycle: opportunity log failed", "error", err)
 	}
 }
 

@@ -94,6 +94,7 @@ type Tracker struct {
 	curatorPath         string
 	livenessPath        string
 	rejectedPath        string
+	opportunityPath     string
 	optimizerMemoryPath string
 	validationPath      string
 
@@ -160,6 +161,7 @@ func NewTracker(logger *slog.Logger) (*Tracker, error) {
 		curatorPath:         filepath.Join(dir, "skill_curator_state.json"),
 		livenessPath:        filepath.Join(dir, "skill_liveness.json"),
 		rejectedPath:        filepath.Join(dir, "skill_rejected_edits.jsonl"),
+		opportunityPath:     filepath.Join(dir, "skill_opportunities.jsonl"),
 		optimizerMemoryPath: filepath.Join(dir, "skill_optimizer_memory.json"),
 		validationPath:      filepath.Join(dir, "skill_validation_cases.jsonl"),
 		stats:               make(map[string]*usageAgg),
