@@ -283,6 +283,14 @@ private fun PropusTimelineHeader(summary: PropusLifecycleSummary) {
             style = DenebType.rowSubtitle,
             color = if (summary.attention > 0) MaterialTheme.colorScheme.error else denebHint(),
         )
+        val coverage = listOfNotNull(
+            summary.coverageState.takeIf { it.isNotBlank() }?.let { "근거 $it" },
+            summary.coverageGaps.firstOrNull()?.let { "공백 $it" },
+        ).joinToString(" · ")
+        if (coverage.isNotBlank()) {
+            Spacer(Modifier.height(2.dp))
+            Text(coverage, style = DenebType.meta, color = denebHint(), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
         val cue = summary.attentionCue.ifBlank { summary.nextCue }
         if (cue.isNotBlank()) {
             Spacer(Modifier.height(2.dp))
@@ -333,11 +341,11 @@ private fun propusTimelineSummary(events: List<SkillLifecycleEvent>): PropusLife
     return PropusLifecycleSummary(
         system = "Propus",
         state = if (attention > 0) {
-            "attention"
+            "needs_attention"
         } else if (events.isEmpty()) {
             "idle"
         } else {
-            "observing"
+            "steady"
         },
         total = events.size,
         genesis = genesis,
@@ -349,17 +357,28 @@ private fun propusTimelineSummary(events: List<SkillLifecycleEvent>): PropusLife
         latestAt = latestAt,
         latestType = latestType,
         latestSkill = latestSkill,
-        nextCue = when {
-            attention > 0 -> "기각/롤백 근거 확인"
-            else -> "최근 생성/진화가 검증 근거와 연결되는지 확인"
+        coverageState = if (events.isEmpty()) "unproven" else "partial",
+        coverageGaps = if (events.isEmpty()) listOf("missing_held_out_validation_corpus") else emptyList(),
+        nextActions = if (attention > 0) {
+            listOf("inspect_rejected_or_rolled_back_edits")
+        } else if (events.isEmpty()) {
+            listOf("record_validation_case_from_session")
+        } else {
+            listOf("continue_observing")
         },
+        nextCue = if (attention > 0) "기각/롤백 근거 확인" else "최근 생성/진화가 검증 근거와 연결되는지 확인",
     )
 }
 
 private fun propusSummaryStateLabel(state: String): String = when (state) {
     "idle" -> "아직 관찰 대기 중"
+    "steady" -> "정상 관찰 중"
+    "has_backlog" -> "개선 후보 대기"
+    "needs_validation" -> "검증 필요"
+    "needs_evolution" -> "진화 검토 필요"
+    "needs_review" -> "리뷰 필요"
+    "needs_attention", "attention" -> "주의 필요"
     "reviewing" -> "리뷰 판정 관찰 중"
-    "attention" -> "주의 필요"
     else -> "정상 관찰 중"
 }
 

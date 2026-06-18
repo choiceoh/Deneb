@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -158,6 +159,94 @@ func TestCalendar_Capture(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Errorf("capture output missing %q:\n%s", want, out)
 		}
+	}
+}
+
+func TestCalendar_Audit(t *testing.T) {
+	local := newTestLocalCal(t)
+	d := &toolctx.CalendarDeps{Local: local}
+	// Tomorrow, inside the default 7-day window + 09–18 working hours.
+	base := time.Now().Add(24 * time.Hour)
+	day := time.Date(base.Year(), base.Month(), base.Day(), 0, 0, 0, 0, base.Location())
+	mk := func(h, m int, title string) {
+		start := time.Date(day.Year(), day.Month(), day.Day(), h, m, 0, 0, day.Location())
+		callCal(t, d, map[string]any{"action": "create", "summary": title, "start": start.Format(time.RFC3339)})
+	}
+	mk(10, 0, "A")
+	mk(10, 30, "B") // overlaps A (default 1h) → double-booking
+	mk(13, 0, "C")
+	mk(14, 0, "D")
+	mk(15, 0, "E")
+	mk(16, 0, "F") // 6 meetings → overloaded day
+
+	out := callCal(t, d, map[string]any{"action": "audit"})
+	for _, want := range []string{"일정 점검", "겹침", "과부하"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("audit output missing %q:\n%s", want, out)
+		}
+	}
+}
+
+func TestCalendar_AuditClean(t *testing.T) {
+	d := &toolctx.CalendarDeps{Local: newTestLocalCal(t)}
+	out := callCal(t, d, map[string]any{"action": "audit"})
+	if !strings.Contains(out, "일정 양호") {
+		t.Errorf("empty calendar should audit clean, got:\n%s", out)
+	}
+}
+
+func TestCalendar_Timeline(t *testing.T) {
+	local := newTestLocalCal(t)
+	d := &toolctx.CalendarDeps{Local: local}
+	day := time.Now().Add(48 * time.Hour)
+	mk := func(title string) {
+		start := time.Date(day.Year(), day.Month(), day.Day(), 10, 0, 0, 0, day.Location())
+		callCal(t, d, map[string]any{"action": "create", "summary": title, "start": start.Format(time.RFC3339)})
+	}
+	mk("현대차 견적 회의")
+	mk("내부 주간 회의") // unrelated to the query
+
+	out := callCal(t, d, map[string]any{"action": "timeline", "query": "현대차"})
+	if !strings.Contains(out, "타임라인") || !strings.Contains(out, "현대차 견적 회의") {
+		t.Errorf("timeline missing header/matched event:\n%s", out)
+	}
+	if strings.Contains(out, "내부 주간 회의") {
+		t.Errorf("timeline included an unrelated event:\n%s", out)
+	}
+}
+
+func TestCalendar_TimelineNeedsQuery(t *testing.T) {
+	d := &toolctx.CalendarDeps{Local: newTestLocalCal(t)}
+	out := callCal(t, d, map[string]any{"action": "timeline"})
+	if !strings.Contains(out, "query") {
+		t.Errorf("expected a query-required hint, got:\n%s", out)
+	}
+}
+
+func TestCalendar_TimelineRejectsBadRange(t *testing.T) {
+	d := &toolctx.CalendarDeps{Local: newTestLocalCal(t)}
+	// Inverted from/to must be rejected, not silently widened to the default.
+	out := callCal(t, d, map[string]any{
+		"action": "timeline", "query": "현대차",
+		"from": "2026-07-01T00:00:00+09:00",
+		"to":   "2026-06-01T00:00:00+09:00",
+	})
+	if !strings.Contains(out, "뒤여야") {
+		t.Errorf("expected inverted-range rejection, got:\n%s", out)
+	}
+}
+
+func TestCalendar_AuditPartialDataNotClean(t *testing.T) {
+	// Google fetch fails → calMerged returns a warn with only local data, so the
+	// audit must not certify the schedule clean.
+	google := &fakeCalReader{listErr: errors.New("google down")}
+	d := depsWith(google, newTestLocalCal(t))
+	out := callCal(t, d, map[string]any{"action": "audit"})
+	if strings.Contains(out, "일정 양호") {
+		t.Errorf("partial-data audit must not certify clean:\n%s", out)
+	}
+	if !strings.Contains(out, "확인하지 못했") {
+		t.Errorf("expected a partial-data caveat, got:\n%s", out)
 	}
 }
 
