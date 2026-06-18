@@ -41,16 +41,15 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -117,6 +116,9 @@ fun DenebMailDetailScreen(
     var actionMsg by remember(messageId) { mutableStateOf<String?>(null) }
     var loadingFullBody by remember(messageId) { mutableStateOf(false) }
     var showRawBody by remember(messageId) { mutableStateOf(false) }
+    // The "ask about this mail" field is collapsed behind a 돋보기 in the bottom
+    // action bar — opened on demand instead of always occupying the reading flow.
+    var askVisible by remember(messageId) { mutableStateOf(false) }
 
     fun mergeWorkState(state: MailWorkState) {
         if (state.analysisStatus.isBlank() &&
@@ -349,41 +351,8 @@ fun DenebMailDetailScreen(
         val canShowRawBody = mail.bodyCleaned && mail.rawBody.isNotBlank()
         val displayedBody = if (showRawBody && canShowRawBody) mail.rawBody else mail.body
         val displayedBodyTotal = if (showRawBody && canShowRawBody) mail.rawBodyTotal else mail.bodyTotal
-        if (canShowRawBody) {
-            Row(
-                Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                SingleChoiceSegmentedButtonRow(Modifier.weight(1f)) {
-                    SegmentedButton(
-                        selected = !showRawBody,
-                        onClick = {
-                            haptics.tap()
-                            showRawBody = false
-                        },
-                        shape = SegmentedButtonDefaults.itemShape(0, 2),
-                    ) { Text("정리본") }
-                    SegmentedButton(
-                        selected = showRawBody,
-                        onClick = {
-                            haptics.tap()
-                            showRawBody = true
-                        },
-                        shape = SegmentedButtonDefaults.itemShape(1, 2),
-                    ) { Text("원문") }
-                }
-                val hiddenLines = mail.bodyHiddenLineCount
-                if (hiddenLines > 0) {
-                    Text(
-                        "${hiddenLines}줄 정리",
-                        style = DenebType.meta,
-                        color = denebHint(),
-                    )
-                }
-            }
-            Spacer(Modifier.height(10.dp))
-        }
+        // The 정리본 ↔ 원문 switch lives in the bottom action bar now (see below) —
+        // out of the reading flow, paired with the 돋보기 ask affordance.
         // The body is plain text (gateway already rendered HTML → text), not
         // markdown — but its URLs must be tappable (auth/CTA mails are the
         // link) and the text copyable. Email addresses stay plain on purpose.
@@ -476,42 +445,97 @@ fun DenebMailDetailScreen(
             }
         }
 
-        Spacer(Modifier.height(20.dp))
-        Text("이 메일에 질문", style = DenebType.cardTitle, color = MaterialTheme.colorScheme.onSurface)
+        // Bottom action bar: the 정리본 ↔ 원문 switch (when there's a raw body) and a
+        // 돋보기 to ask about this mail — both kept out of the reading flow and
+        // surfaced together on one line at the very bottom.
+        Spacer(Modifier.height(16.dp))
+        HorizontalDivider(color = denebHairline())
         Spacer(Modifier.height(8.dp))
-        qa.forEach { (question, answer) ->
-            Column(Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
-                Text("Q. $question", style = DenebType.rowTitleStrong, color = MaterialTheme.colorScheme.onSurface)
-                Spacer(Modifier.height(2.dp))
-                MarkdownContent(answer)
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            if (canShowRawBody) {
+                // Flat text switcher (a view transition, not a segmented pill, per the
+                // design system): the active view in the cool accent, the other muted.
+                Text(
+                    "정리본",
+                    style = DenebType.rowTitle,
+                    color = if (!showRawBody) MaterialTheme.colorScheme.primary else denebHint(),
+                    modifier = Modifier
+                        .clickable {
+                            haptics.tap()
+                            showRawBody = false
+                        }
+                        .handCursor(),
+                )
+                Text("·", style = DenebType.rowTitle, color = denebHint(), modifier = Modifier.padding(horizontal = 8.dp))
+                Text(
+                    "원문",
+                    style = DenebType.rowTitle,
+                    color = if (showRawBody) MaterialTheme.colorScheme.primary else denebHint(),
+                    modifier = Modifier
+                        .clickable {
+                            haptics.tap()
+                            showRawBody = true
+                        }
+                        .handCursor(),
+                )
+                val hiddenLines = mail.bodyHiddenLineCount
+                if (hiddenLines > 0) {
+                    Spacer(Modifier.width(8.dp))
+                    Text("${hiddenLines}줄 정리", style = DenebType.meta, color = denebHint())
+                }
+            }
+            Spacer(Modifier.weight(1f))
+            // 돋보기: reveal the "ask about this mail" field on demand (it used to be a
+            // permanently-open chat box — collapsed to one icon to declutter the bottom).
+            IconButton(onClick = {
+                haptics.tap()
+                askVisible = !askVisible
+            }) {
+                Icon(
+                    imageVector = Icons.Outlined.Search,
+                    contentDescription = if (askVisible) "질문 닫기" else "이 메일에 질문",
+                    tint = if (askVisible) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            OutlinedTextField(
-                value = askText,
-                onValueChange = { askText = it },
-                placeholder = { Text("질문 입력…") },
-                modifier = Modifier.weight(1f),
-                enabled = !asking,
-            )
-            Spacer(Modifier.width(8.dp))
-            TextButton(
-                onClick = {
-                    val q = askText.trim()
-                    if (q.isNotEmpty() && !asking) {
-                        haptics.tap()
-                        askText = ""
-                        scope.launch {
-                            asking = true
-                            // Send prior turns so follow-ups have context.
-                            val a = client.askMail(mail.id, q, qa.toList()) ?: "답변을 가져오지 못했습니다."
-                            qa.add(q to a)
-                            asking = false
-                        }
+        AnimatedVisibility(visible = askVisible, enter = denebExpandIn, exit = denebShrinkOut) {
+            Column {
+                Spacer(Modifier.height(8.dp))
+                qa.forEach { (question, answer) ->
+                    Column(Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
+                        Text("Q. $question", style = DenebType.rowTitleStrong, color = MaterialTheme.colorScheme.onSurface)
+                        Spacer(Modifier.height(2.dp))
+                        MarkdownContent(answer)
                     }
-                },
-                enabled = !asking,
-            ) { Text(if (asking) "…" else "질문") }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedTextField(
+                        value = askText,
+                        onValueChange = { askText = it },
+                        placeholder = { Text("질문 입력…") },
+                        modifier = Modifier.weight(1f),
+                        enabled = !asking,
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    TextButton(
+                        onClick = {
+                            val q = askText.trim()
+                            if (q.isNotEmpty() && !asking) {
+                                haptics.tap()
+                                askText = ""
+                                scope.launch {
+                                    asking = true
+                                    // Send prior turns so follow-ups have context.
+                                    val a = client.askMail(mail.id, q, qa.toList()) ?: "답변을 가져오지 못했습니다."
+                                    qa.add(q to a)
+                                    asking = false
+                                }
+                            }
+                        },
+                        enabled = !asking,
+                    ) { Text(if (asking) "…" else "질문") }
+                }
+            }
         }
         Spacer(Modifier.height(24.dp))
     }
