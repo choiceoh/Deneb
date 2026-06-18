@@ -1056,8 +1056,8 @@ func calendarToolSchema() map[string]any {
 		"properties": map[string]any{
 			"action": map[string]any{
 				"type":        "string",
-				"description": "list: 일정 조회 (기본 지금부터 48시간; from/to로 명시 범위, 또는 hours_ahead). 겹치는 일정은 ⚠️로, 연결된 일정은 [미팅]·「메일 제목」으로 출처 표시. get: id로 상세(참석자·장소·Meet·메모·연결 출처 — 미팅 준비용). create: 일정 추가(로컬). update: 로컬 일정 수정. delete: 로컬 일정 삭제. free_slots: 근무시간 내 빈 시간(미팅 넣을 자리) 찾기. brief: 오늘(기본; hours_ahead/from·to로 기간) 일정을 연결된 메일 맥락·겹침과 함께 브리핑 골격으로 정리 — 연결된 일정은 mail_archive로 맥락 보강해 '왜 중요한지·무엇을 준비할지'까지 서술. prep: 미팅 준비 — id(생략 시 다음 일정)의 상세 + 연결된 메일을 mail_archive로 열어 직전 합의·미결·준비물 체크리스트 작성 지시. 구글 일정은 읽기 전용이라 수정·삭제 불가.",
-				"enum":        []string{"list", "get", "create", "update", "delete", "free_slots", "brief", "prep"},
+				"description": "list: 일정 조회 (기본 지금부터 48시간; from/to로 명시 범위, 또는 hours_ahead). 겹치는 일정은 ⚠️로, 연결된 일정은 [미팅]·「메일 제목」으로 출처 표시. get: id로 상세(참석자·장소·Meet·메모·연결 출처 — 미팅 준비용). create: 일정 추가(로컬). update: 로컬 일정 수정. delete: 로컬 일정 삭제. free_slots: 근무시간 내 빈 시간(미팅 넣을 자리) 찾기. brief: 오늘(기본; hours_ahead/from·to로 기간) 일정을 연결된 메일 맥락·겹침과 함께 브리핑 골격으로 정리 — 연결된 일정은 mail_archive로 맥락 보강해 '왜 중요한지·무엇을 준비할지'까지 서술. prep: 미팅 준비 — id(생략 시 다음 일정)의 상세 + 연결된 메일을 mail_archive로 열어 직전 합의·미결·준비물 체크리스트 작성 지시. capture: 회의록 정리(끝난 미팅) — id(생략 시 방금 끝난 미팅)의 메모·녹취를 결정·액션·리스크·후속으로 정리하고 update로 일정 description에 기록(일정 자체가 회의 기록). 임원 본인 후속만 강조, 위임 실무는 본문에. 구글 일정은 읽기 전용이라 수정·삭제 불가.",
+				"enum":        []string{"list", "get", "create", "update", "delete", "free_slots", "brief", "prep", "capture"},
 			},
 			"all_day": map[string]any{
 				"type":        "boolean",

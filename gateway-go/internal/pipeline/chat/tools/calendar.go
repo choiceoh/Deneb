@@ -105,8 +105,10 @@ func ToolCalendar(d *toolctx.CalendarDeps) toolctx.ToolFunc {
 			return calActionBrief(ctx, d, p), nil
 		case "prep":
 			return calActionPrep(ctx, d, p), nil
+		case "capture":
+			return calActionCapture(ctx, d, p), nil
 		default:
-			return fmt.Sprintf("알 수 없는 액션: %s. 사용 가능: list(일정 조회), get(상세), create(추가), update(수정), delete(삭제), free_slots(빈 시간 찾기), brief(브리핑), prep(미팅 준비)", p.Action), nil
+			return fmt.Sprintf("알 수 없는 액션: %s. 사용 가능: list(일정 조회), get(상세), create(추가), update(수정), delete(삭제), free_slots(빈 시간 찾기), brief(브리핑), prep(미팅 준비), capture(회의록 정리)", p.Action), nil
 		}
 	}
 }
@@ -329,6 +331,62 @@ func calActionPrep(ctx context.Context, d *toolctx.CalendarDeps, p calParams) st
 		sb.WriteString(" 위 📎 관련 문서는 dropbox로 파일명을 검색해 열고, 핵심 수치·조건을 요약해.")
 	}
 	return sb.String()
+}
+
+// calActionCapture is the post-meeting mirror of calActionPrep: it turns a
+// finished meeting into a record. It returns guidance directing the agent to
+// distill the user's notes/transcript into minutes and write them BACK onto the
+// event (calendar update → description), so the event itself becomes the meeting
+// record — the native-ownership lever a read-only Google calendar never allowed.
+// Delegation-aware: the user is a delegating executive, so only their own
+// follow-ups are surfaced; delegable execution stays in the minutes body.
+func calActionCapture(ctx context.Context, d *toolctx.CalendarDeps, p calParams) string {
+	var ev *calendar.Event
+	if strings.TrimSpace(p.ID) != "" {
+		got, errMsg := calLookup(ctx, d, p.ID)
+		if errMsg != "" {
+			return errMsg
+		}
+		ev = got
+	} else {
+		ev = calRecentEndedEvent(ctx, d)
+		if ev == nil {
+			return "최근 끝난 미팅을 찾지 못했습니다 — 정리할 회의의 id를 지정하거나 어떤 회의인지 알려주세요."
+		}
+	}
+	var sb strings.Builder
+	sb.WriteString("📝 회의록 정리\n")
+	sb.WriteString(calDetail(*ev))
+	sb.WriteString("\n\n위 일정에 대해 사용자가 제공한 메모·녹취를 바탕으로(없으면 핵심을 사용자에게 물어봐) 회의록을 정리해:\n")
+	sb.WriteString("• 결정사항 / 합의\n• 액션아이템 (담당·기한)\n• 리스크 · 미결\n• 다음 후속\n")
+	sb.WriteString("\n그런 다음 calendar(action=\"update\", id=\"")
+	sb.WriteString(ev.ID)
+	sb.WriteString("\", description=…)로 이 회의록을 일정에 기록해 — 기존 메모는 보존하고 그 아래에 덧붙여서, 일정 자체가 회의 기록이 되도록. ")
+	sb.WriteString("사용자는 실무를 위임하는 임원이다: 후속 중 ‘본인이 직접 해야 할 것’만 따로 강조하고, 팀·담당자가 처리할 실무는 회의록 본문에 적되 임원의 할일로 만들지 마라.")
+	if src := strings.TrimSpace(ev.Source); src != "" {
+		fmt.Fprintf(&sb, " 연결된 메일(%s)이 있으면 mail_archive로 직전 맥락을 확인해 정확도를 높여라.", src)
+	}
+	return sb.String()
+}
+
+// calRecentEndedEvent returns the most recently ended timed meeting in the last
+// 24h, so "방금 회의 정리해줘" (capture with no id) targets the meeting that just
+// wrapped. All-day markers and not-yet-ended events are skipped.
+func calRecentEndedEvent(ctx context.Context, d *toolctx.CalendarDeps) *calendar.Event {
+	now := time.Now()
+	events, _ := calMerged(ctx, d, now.Add(-24*time.Hour), now)
+	var best *calendar.Event
+	for i := range events {
+		e := events[i]
+		if e.AllDay || e.End.IsZero() || e.End.After(now) {
+			continue
+		}
+		if best == nil || e.End.After(best.End) {
+			cp := e
+			best = &cp
+		}
+	}
+	return best
 }
 
 // calNextEvent returns the soonest event from now (next 14 days), or nil.

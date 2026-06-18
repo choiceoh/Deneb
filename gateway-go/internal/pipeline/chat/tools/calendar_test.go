@@ -139,6 +139,28 @@ func TestCalendar_CreateGetUpdateDelete(t *testing.T) {
 	}
 }
 
+func TestCalendar_Capture(t *testing.T) {
+	local := newTestLocalCal(t)
+	d := &toolctx.CalendarDeps{Local: local}
+	start := time.Now().Add(-2 * time.Hour).Truncate(time.Hour)
+
+	createOut := callCal(t, d, map[string]any{
+		"action":  "create",
+		"summary": "현대차 견적 회의",
+		"start":   start.Format(time.RFC3339),
+	})
+	id := extractCalID(createOut)
+
+	out := callCal(t, d, map[string]any{"action": "capture", "id": id})
+	// Capture returns minutes guidance that names the event, instructs the
+	// writeback to THIS event via update, and carries the delegation framing.
+	for _, want := range []string{"회의록", "현대차 견적 회의", id, "update", "임원"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("capture output missing %q:\n%s", want, out)
+		}
+	}
+}
+
 func TestCalendar_RejectGoogleWrite(t *testing.T) {
 	local := newTestLocalCal(t)
 	d := &toolctx.CalendarDeps{Local: local}
