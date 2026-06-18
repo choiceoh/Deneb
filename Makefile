@@ -253,18 +253,27 @@ kotlin-spotless:
 kotlin-detekt:
 	cd $(KOTLIN_APP_DIR) && ./gradlew detekt --console=plain
 
-# Native client gate: formatting + bug-lint (matches kotlin-lint.yml).
-kotlin-check: kotlin-spotless kotlin-detekt
+kotlin-desktop-smoke-test:
+	cd $(KOTLIN_APP_DIR) && ./gradlew desktopTest --console=plain \
+		--tests 'ai.deneb.data.TaskStoreMigrationTest*' \
+		--tests 'ai.deneb.data.CronExpressionTest*' \
+		--tests 'ai.deneb.deneb.generated.MiniappWireTypesTest*' \
+		--tests 'ai.deneb.data.AttachmentRouteTest*' \
+		--tests 'ai.deneb.network.UiErrorTest*'
+
+# Native client gate: formatting + bug-lint + stable JVM smoke tests
+# (matches kotlin-lint.yml).
+kotlin-check: kotlin-spotless kotlin-detekt kotlin-desktop-smoke-test
 	@echo "Kotlin client checks passed"
 
 # --- CI gate mirror (single pre-push command) ---
 #
-# One command that runs every gate CI enforces — Go (generate-check, fmt, vet,
-# lint, test) AND the native client (spotless, detekt) — and reports a per-gate
-# PASS/FAIL summary with offender detail for failures. Unlike `make check` it
-# continues past the first failure, so a single run surfaces *everything* that
-# would fail CI (the recurring "fix one, rerun, discover the next" trap). The Go
-# and Kotlin suites run in parallel since gradle startup is the long pole.
+# One command that runs the fast PR gates locally — Go (generate-check, fmt, vet,
+# lint, test) AND the native client (spotless, detekt, desktop smoke tests) — and
+# reports a per-gate PASS/FAIL summary with offender detail for failures. Unlike
+# `make check` it continues past the first failure, so a single run surfaces the
+# whole local pre-push set in one pass. The Go and Kotlin suites run in parallel
+# since gradle startup is the long pole.
 #
 #   make ci                  # all gates (Go + Kotlin)
 #   make ci ARGS=--go        # Go gates only (skip the gradle/Kotlin lane)

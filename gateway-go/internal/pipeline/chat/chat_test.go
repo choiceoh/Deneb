@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
@@ -164,13 +165,14 @@ func TestSessionsAbort_NoActiveRun(t *testing.T) {
 
 func TestSessionsAbort_ByRunID(t *testing.T) {
 	h := newTestHandler()
-	// Start a run to create an abort entry.
-	sendReq := makeReq("1", "sessions.send", map[string]any{
-		"key":            "sess-abort",
-		"message":        "hello",
-		"idempotencyKey": "run-to-abort",
+	cancelled := false
+	h.abort.Register("run-to-abort", &AbortEntry{
+		SessionKey: "sess-abort",
+		CancelFn: func(error) {
+			cancelled = true
+		},
+		ExpiresAt: time.Now().Add(time.Hour),
 	})
-	h.SessionsSend(context.Background(), sendReq)
 
 	// Abort by runId.
 	abortReq := makeReq("2", "sessions.abort", map[string]any{"runId": "run-to-abort"})
@@ -187,6 +189,9 @@ func TestSessionsAbort_ByRunID(t *testing.T) {
 	}
 	if payload["abortedRunId"] != "run-to-abort" {
 		t.Errorf("got %v, want abortedRunId=run-to-abort", payload["abortedRunId"])
+	}
+	if !cancelled {
+		t.Error("CancelFn was not called")
 	}
 }
 

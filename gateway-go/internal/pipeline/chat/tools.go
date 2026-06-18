@@ -41,6 +41,7 @@ type ToolRegistry struct {
 	order          []string // preserves registration order
 	postProcess    *PostProcessRegistry
 	spillStore     *agent.SpilloverStore // optional; spills large tool results to disk
+	provenanceRoot string                // optional workspace root for content-free file effect metadata
 	cachedLLMTools []llm.Tool            // cached tool list; invalidated on RegisterTool
 }
 
@@ -210,6 +211,22 @@ func (r *ToolRegistry) SpilloverStore() *agent.SpilloverStore {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.spillStore
+}
+
+// SetToolProvenanceRoot sets the workspace root used by the agent executor
+// when logging content-free file effect metadata for mutating tools.
+func (r *ToolRegistry) SetToolProvenanceRoot(root string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.provenanceRoot = root
+}
+
+// ToolProvenanceRoot returns the workspace root used by the agent executor
+// for provenance snapshots. It satisfies agent's optional provider interface.
+func (r *ToolRegistry) ToolProvenanceRoot() string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.provenanceRoot
 }
 
 // ApplyMaxOutputs sets per-tool max output budgets from a name→chars map.

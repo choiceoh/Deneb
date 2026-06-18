@@ -89,12 +89,13 @@ type SkillInvocationPolicy struct {
 var (
 	brewFormulaPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9@+._/-]*$`)
 	goModulePattern    = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._~+\-/]*(?:@[A-Za-z0-9][A-Za-z0-9._~+\-/]*)?$`)
+	aptPackagePattern  = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9.+:-]*$`)
 	uvPackagePattern   = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._\-\[\]=<>!~+,]*$`)
 )
 
 // Allowed install spec kinds.
 var allowedInstallKinds = map[string]struct{}{
-	"brew": {}, "node": {}, "go": {}, "uv": {}, "download": {},
+	"apt": {}, "brew": {}, "node": {}, "go": {}, "uv": {}, "download": {},
 }
 
 // ExtractFrontmatterBlock returns only the frontmatter portion of content
@@ -166,12 +167,37 @@ func ParseFrontmatter(content string) ParsedFrontmatter {
 		return result
 	}
 
+	currentKey := ""
+	var currentBlock []string
+	flushBlock := func() {
+		if currentKey == "" {
+			return
+		}
+		result[currentKey] = dedentFrontmatterBlock(currentBlock)
+		currentKey = ""
+		currentBlock = nil
+	}
+
 	// Find closing delimiter and extract key-value pairs.
 	for i := startIdx + 1; i < len(lines); i++ {
-		trimmed := strings.TrimSpace(lines[i])
+		line := lines[i]
+		trimmed := strings.TrimSpace(line)
 		if trimmed == "---" {
+			flushBlock()
 			break
 		}
+		if trimmed == "" {
+			if currentKey != "" {
+				currentBlock = append(currentBlock, "")
+			}
+			continue
+		}
+		if currentKey != "" && hasFrontmatterIndent(line) {
+			currentBlock = append(currentBlock, line)
+			continue
+		}
+		flushBlock()
+
 		// Parse key: value pairs.
 		colonIdx := strings.IndexByte(trimmed, ':')
 		if colonIdx < 1 {
@@ -184,8 +210,14 @@ func ParseFrontmatter(content string) ParsedFrontmatter {
 			(value[0] == '\'' && value[len(value)-1] == '\'')) {
 			value = value[1 : len(value)-1]
 		}
+		if value == "" {
+			currentKey = key
+			currentBlock = nil
+			continue
+		}
 		result[key] = value
 	}
+	flushBlock()
 	return result
 }
 
@@ -196,6 +228,7 @@ func ResolveDenebMetadata(frontmatter ParsedFrontmatter) *DenebSkillMetadata {
 	if !ok || raw == "" {
 		return nil
 	}
+	raw = sanitizeRelaxedJSON(raw)
 
 	// Parse the metadata JSON block.
 	var outer map[string]json.RawMessage
@@ -302,6 +335,12 @@ func parseInstallSpec(raw json.RawMessage) *SkillInstallSpec {
 	spec.Bins = parseJSONStringList(obj, "bins")
 
 	switch kind {
+	case "apt":
+		parseJSONString(obj, "package", &spec.Package)
+		spec.Package = normalizeSafeAptPackage(spec.Package)
+		if spec.Package == "" {
+			return nil
+		}
 	case "brew":
 		parseJSONString(obj, "formula", &spec.Formula)
 		spec.Formula = normalizeSafeBrewFormula(spec.Formula)
@@ -367,6 +406,17 @@ func normalizeSafeGoModule(raw string) string {
 		return ""
 	}
 	if !goModulePattern.MatchString(s) {
+		return ""
+	}
+	return s
+}
+
+func normalizeSafeAptPackage(raw string) string {
+	s := strings.TrimSpace(raw)
+	if s == "" || s[0] == '-' || strings.ContainsAny(s, "\\/\t\r\n ") {
+		return ""
+	}
+	if !aptPackagePattern.MatchString(s) {
 		return ""
 	}
 	return s
@@ -464,4 +514,91 @@ func parseFrontmatterBool(fm ParsedFrontmatter, key string, fallback bool) bool 
 	default:
 		return fallback
 	}
+}
+
+func hasFrontmatterIndent(line string) bool {
+	return len(line) > 0 && (line[0] == ' ' || line[0] == '\t')
+}
+
+func dedentFrontmatterBlock(lines []string) string {
+	if len(lines) == 0 {
+		return ""
+	}
+	minIndent := -1
+	for _, line := range lines {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		indent := len(line) - len(strings.TrimLeft(line, " \t"))
+		if minIndent == -1 || indent < minIndent {
+			minIndent = indent
+		}
+	}
+	if minIndent <= 0 {
+		return strings.TrimSpace(strings.Join(lines, "\n"))
+	}
+	dedented := make([]string, 0, len(lines))
+	for _, line := range lines {
+		if strings.TrimSpace(line) == "" {
+			dedented = append(dedented, "")
+			continue
+		}
+		if len(line) >= minIndent {
+			dedented = append(dedented, line[minIndent:])
+			continue
+		}
+		dedented = append(dedented, strings.TrimLeft(line, " \t"))
+	}
+	return strings.TrimSpace(strings.Join(dedented, "\n"))
+}
+
+func sanitizeRelaxedJSON(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return raw
+	}
+	var b strings.Builder
+	b.Grow(len(raw))
+	inString := false
+	escaped := false
+	for i := 0; i < len(raw); i++ {
+		ch := raw[i]
+		if inString {
+			b.WriteByte(ch)
+			if escaped {
+				escaped = false
+				continue
+			}
+			if ch == '\\' {
+				escaped = true
+				continue
+			}
+			if ch == '"' {
+				inString = false
+			}
+			continue
+		}
+		if ch == '"' {
+			inString = true
+			b.WriteByte(ch)
+			continue
+		}
+		if ch == ',' {
+			j := i + 1
+			for j < len(raw) {
+				switch raw[j] {
+				case ' ', '\t', '\n', '\r':
+					j++
+				default:
+					goto foundNext
+				}
+			}
+		foundNext:
+			if j >= len(raw) || raw[j] == '}' || raw[j] == ']' {
+				continue
+			}
+		}
+		b.WriteByte(ch)
+	}
+	return b.String()
 }

@@ -81,6 +81,75 @@ func TestWriter_ReadFilterByType(t *testing.T) {
 	}
 }
 
+func TestWriter_ToolProvenance(t *testing.T) {
+	dir := t.TempDir()
+	w := NewWriter(dir)
+
+	tool1, _ := json.Marshal(TurnToolData{
+		Turn:       1,
+		Name:       "edit",
+		ToolUseID:  "tool-1",
+		InputHash:  "input-a",
+		OutputHash: "output-a",
+		Targets:    []string{"src/foo.go"},
+		FileEffects: []ToolFileEffect{{
+			Path:         "src/foo.go",
+			ExistsBefore: true,
+			ExistsAfter:  true,
+			Changed:      true,
+			AddedLines:   2,
+			RemovedLines: 1,
+		}},
+	})
+	tool2, _ := json.Marshal(TurnToolData{
+		Turn:      2,
+		Name:      "exec",
+		ToolUseID: "tool-2",
+		Targets:   []string{"scripts/deploy.sh"},
+		IsError:   true,
+		Error:     "failed",
+	})
+	tool3, _ := json.Marshal(TurnToolData{
+		Turn:      1,
+		Name:      "write",
+		ToolUseID: "tool-3",
+		FileEffects: []ToolFileEffect{{
+			Path:        "generated/bar.go",
+			ExistsAfter: true,
+			Changed:     true,
+			AddedLines:  3,
+		}},
+	})
+	_ = w.Append(LogEntry{Ts: 1000, Type: TypeTurnTool, RunID: "run-a", Session: "s1", Data: tool1})
+	_ = w.Append(LogEntry{Ts: 2000, Type: TypeTurnTool, RunID: "run-b", Session: "s2", Data: tool2})
+	_ = w.Append(LogEntry{Ts: 3000, Type: TypeTurnTool, RunID: "run-c", Session: "s3", Data: tool3})
+
+	byTarget := w.ToolProvenance(ToolProvenanceQuery{Target: "FOO", Limit: 10})
+	if len(byTarget) != 1 {
+		t.Fatalf("target query returned %d events, want 1", len(byTarget))
+	}
+	if got := byTarget[0]; got.RunID != "run-a" || got.Name != "edit" || got.ToolUseID != "tool-1" {
+		t.Errorf("target query event = %+v, want run-a/edit/tool-1", got)
+	}
+	if len(byTarget[0].FileEffects) != 1 || !byTarget[0].FileEffects[0].Changed {
+		t.Errorf("file effects = %+v, want changed effect", byTarget[0].FileEffects)
+	}
+	byEffectTarget := w.ToolProvenance(ToolProvenanceQuery{Target: "bar.go", Limit: 10})
+	if len(byEffectTarget) != 1 || byEffectTarget[0].RunID != "run-c" {
+		t.Errorf("effect target query = %+v, want run-c from FileEffects.Path", byEffectTarget)
+	}
+
+	byTool := w.ToolProvenance(ToolProvenanceQuery{Tool: "exec", Limit: 10})
+	if len(byTool) != 1 || byTool[0].RunID != "run-b" || !byTool[0].IsError {
+		t.Errorf("tool query = %+v, want errored run-b", byTool)
+	}
+
+	bySince := w.ToolProvenance(ToolProvenanceQuery{SinceMs: 1500, Limit: 10})
+	if len(bySince) != 2 || bySince[0].RunID != "run-c" || bySince[1].RunID != "run-b" {
+		t.Errorf("since query = %+v, want run-c then run-b", bySince)
+	}
+}
+
 func TestWriter_ReadLimit(t *testing.T) {
 	dir := t.TempDir()
 	w := NewWriter(dir)

@@ -4,11 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
@@ -63,11 +67,13 @@ func (f *fakeLLMStreamer) stream() <-chan llm.StreamEvent {
 
 // fakeToolExecutor records calls and returns configurable outputs.
 type fakeToolExecutor struct {
-	mu       sync.Mutex
-	calls    []toolCall
-	outputs  map[string]string // name -> output
-	errors   map[string]error  // name -> error
-	execTime time.Duration     // simulated execution time
+	mu             sync.Mutex
+	calls          []toolCall
+	outputs        map[string]string // name -> output
+	errors         map[string]error  // name -> error
+	execTime       time.Duration     // simulated execution time
+	provenanceRoot string
+	onExecute      func(name string, input json.RawMessage)
 }
 
 type toolCall struct {
@@ -89,6 +95,9 @@ func (f *fakeToolExecutor) Execute(_ context.Context, name string, input json.Ra
 	f.mu.Lock()
 	f.calls = append(f.calls, toolCall{Name: name, Input: input})
 	f.mu.Unlock()
+	if f.onExecute != nil {
+		f.onExecute(name, input)
+	}
 
 	if err, ok := f.errors[name]; ok {
 		return "", err
@@ -97,6 +106,10 @@ func (f *fakeToolExecutor) Execute(_ context.Context, name string, input json.Ra
 		return out, nil
 	}
 	return "ok", nil
+}
+
+func (f *fakeToolExecutor) ToolProvenanceRoot() string {
+	return f.provenanceRoot
 }
 
 func (f *fakeToolExecutor) callCount() int {
@@ -655,6 +668,171 @@ func TestRunAgent_StreamHooks_Called(t *testing.T) {
 	}
 	if atomic.LoadInt32(&toolResults) != 1 {
 		t.Errorf("OnToolResult called %d times, want 1", toolResults)
+	}
+}
+
+func TestRunAgent_LogsToolProvenance(t *testing.T) {
+	targetPath := filepath.Join(t.TempDir(), "foo.go")
+	inputJSON := fmt.Sprintf(`{"file_path":%q,"new_string":"package main"}`, targetPath)
+	tools := newFakeToolExecutor()
+	tools.outputs["edit"] = "edited"
+	streamer := &fakeLLMStreamer{
+		turns: [][]llm.StreamEvent{
+			buildToolUseTurnEventsWithNames([]toolUseSpec{
+				{id: "toolu_prov", name: "edit", inputJSON: inputJSON},
+			}, 100, 30),
+			buildTextTurnEvents("finished", 200, 40),
+		},
+	}
+
+	logs := agentlog.NewWriter(t.TempDir())
+	runLog := agentlog.NewRunLogger(logs, "client:prov", "run-prov")
+	cfg := AgentConfig{
+		MaxTurns:  10,
+		Timeout:   10 * time.Second,
+		MaxTokens: 4096,
+	}
+
+	messages := []llm.Message{llm.NewTextMessage("user", "edit file")}
+	_, err := RunAgent(context.Background(), cfg, messages, streamer, tools, StreamHooks{}, nil, runLog)
+	testutil.NoError(t, err)
+
+	entries := logs.Read(agentlog.ReadOpts{SessionKey: "client:prov", Type: agentlog.TypeTurnTool}).Entries
+	if len(entries) != 1 {
+		t.Fatalf("turn.tool entries = %d, want 1", len(entries))
+	}
+	var data agentlog.TurnToolData
+	if err := json.Unmarshal(entries[0].Data, &data); err != nil {
+		t.Fatalf("unmarshal turn.tool data: %v", err)
+	}
+	if data.Name != "edit" || data.ToolUseID != "toolu_prov" {
+		t.Errorf("tool identity = %+v, want edit/toolu_prov", data)
+	}
+	if data.InputBytes != len(inputJSON) {
+		t.Errorf("InputBytes = %d, want %d", data.InputBytes, len(inputJSON))
+	}
+	if len(data.InputHash) != 64 || len(data.OutputHash) != 64 {
+		t.Errorf("hashes not full sha256: input=%q output=%q", data.InputHash, data.OutputHash)
+	}
+	if data.OutputLen != len("edited") {
+		t.Errorf("OutputLen = %d, want %d", data.OutputLen, len("edited"))
+	}
+	if len(data.Targets) != 1 || !strings.HasSuffix(data.Targets[0], "/foo.go") {
+		t.Errorf("Targets = %+v, want sanitized foo.go path", data.Targets)
+	}
+}
+
+func TestRunAgent_LogsMutatingToolFileEffects(t *testing.T) {
+	dir := t.TempDir()
+	targetPath := filepath.Join(dir, "foo.go")
+	if err := os.WriteFile(targetPath, []byte("old\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	inputJSON := fmt.Sprintf(`{"file_path":%q,"content":"new\nline\n"}`, targetPath)
+	tools := newFakeToolExecutor()
+	tools.provenanceRoot = dir
+	tools.outputs["write"] = "wrote"
+	tools.onExecute = func(name string, input json.RawMessage) {
+		if name != "write" {
+			return
+		}
+		var p struct {
+			FilePath string `json:"file_path"`
+			Content  string `json:"content"`
+		}
+		if err := json.Unmarshal(input, &p); err == nil {
+			_ = os.WriteFile(p.FilePath, []byte(p.Content), 0o644)
+		}
+	}
+	streamer := &fakeLLMStreamer{
+		turns: [][]llm.StreamEvent{
+			buildToolUseTurnEventsWithNames([]toolUseSpec{
+				{id: "toolu_write", name: "write", inputJSON: inputJSON},
+			}, 100, 30),
+			buildTextTurnEvents("finished", 200, 40),
+		},
+	}
+
+	logs := agentlog.NewWriter(t.TempDir())
+	runLog := agentlog.NewRunLogger(logs, "client:effects", "run-effects")
+	cfg := AgentConfig{
+		MaxTurns:  10,
+		Timeout:   10 * time.Second,
+		MaxTokens: 4096,
+	}
+
+	messages := []llm.Message{llm.NewTextMessage("user", "write file")}
+	_, err := RunAgent(context.Background(), cfg, messages, streamer, tools, StreamHooks{}, nil, runLog)
+	testutil.NoError(t, err)
+
+	entries := logs.Read(agentlog.ReadOpts{SessionKey: "client:effects", Type: agentlog.TypeTurnTool}).Entries
+	if len(entries) != 1 {
+		t.Fatalf("turn.tool entries = %d, want 1", len(entries))
+	}
+	var data agentlog.TurnToolData
+	if err := json.Unmarshal(entries[0].Data, &data); err != nil {
+		t.Fatalf("unmarshal turn.tool data: %v", err)
+	}
+	if len(data.FileEffects) != 1 {
+		t.Fatalf("FileEffects = %+v, want one effect", data.FileEffects)
+	}
+	effect := data.FileEffects[0]
+	if !effect.ExistsBefore || !effect.ExistsAfter || !effect.Changed {
+		t.Errorf("effect existence/change = %+v, want existing changed file", effect)
+	}
+	if effect.BeforeHash == "" || effect.AfterHash == "" || effect.BeforeHash == effect.AfterHash {
+		t.Errorf("hash transition = %q -> %q, want distinct hashes", effect.BeforeHash, effect.AfterHash)
+	}
+	if effect.BeforeLines != 1 || effect.AfterLines != 2 {
+		t.Errorf("line counts = %d -> %d, want 1 -> 2", effect.BeforeLines, effect.AfterLines)
+	}
+	if effect.AddedLines != 2 || effect.RemovedLines != 1 {
+		t.Errorf("line delta = +%d/-%d, want +2/-1", effect.AddedLines, effect.RemovedLines)
+	}
+}
+
+func TestRunAgent_SkipsFileEffectsOutsideProvenanceRoot(t *testing.T) {
+	dir := t.TempDir()
+	outsideDir := t.TempDir()
+	outsidePath := filepath.Join(outsideDir, "outside.go")
+	if err := os.WriteFile(outsidePath, []byte("secret\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	inputJSON := fmt.Sprintf(`{"file_path":%q,"content":"changed\n"}`, outsidePath)
+	tools := newFakeToolExecutor()
+	tools.provenanceRoot = dir
+	tools.outputs["write"] = "rejected"
+	streamer := &fakeLLMStreamer{
+		turns: [][]llm.StreamEvent{
+			buildToolUseTurnEventsWithNames([]toolUseSpec{
+				{id: "toolu_write_outside", name: "write", inputJSON: inputJSON},
+			}, 100, 30),
+			buildTextTurnEvents("finished", 200, 40),
+		},
+	}
+
+	logs := agentlog.NewWriter(t.TempDir())
+	runLog := agentlog.NewRunLogger(logs, "client:effects-outside", "run-effects-outside")
+	cfg := AgentConfig{
+		MaxTurns:  10,
+		Timeout:   10 * time.Second,
+		MaxTokens: 4096,
+	}
+
+	messages := []llm.Message{llm.NewTextMessage("user", "write outside file")}
+	_, err := RunAgent(context.Background(), cfg, messages, streamer, tools, StreamHooks{}, nil, runLog)
+	testutil.NoError(t, err)
+
+	entries := logs.Read(agentlog.ReadOpts{SessionKey: "client:effects-outside", Type: agentlog.TypeTurnTool}).Entries
+	if len(entries) != 1 {
+		t.Fatalf("turn.tool entries = %d, want 1", len(entries))
+	}
+	var data agentlog.TurnToolData
+	if err := json.Unmarshal(entries[0].Data, &data); err != nil {
+		t.Fatalf("unmarshal turn.tool data: %v", err)
+	}
+	if len(data.FileEffects) != 0 {
+		t.Fatalf("FileEffects = %+v, want no effects for path outside provenance root", data.FileEffects)
 	}
 }
 

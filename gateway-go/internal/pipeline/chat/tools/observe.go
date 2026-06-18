@@ -21,13 +21,14 @@ const proactiveStaleWindowMs = 48 * 60 * 60 * 1000
 
 // ToolObserve lets the agent inspect its OWN runtime through the in-process
 // observation plane (internal/runtime/observe) — the same core the external
-// `deneb observe` CLI and miniapp.observe.* RPC read. Three actions:
+// `deneb observe` CLI and miniapp.observe.* RPC read. Supported actions:
 //
 //   - turn:     one run's shape (tokens/tools/cache/compaction) joined with its
 //     captured log lines — "what happened on run X, and why"
 //   - logs:     query the in-memory log ring (runId/session/level/contains)
 //   - behavior: cross-session roll-up (tool usage, proactive funnel, bg jobs),
 //     plus the vLLM engine's prefix-cache hit rate scraped live from /metrics
+//   - provenance: recent turn.tool provenance filtered by target/tool/runId
 //
 // vllmBases lazily lists the OpenAI-mode vLLM role base URLs to scrape for
 // engine-level prefix-cache counters (nil or empty → the line is omitted).
@@ -46,6 +47,8 @@ func ToolObserve(lc *observe.LogCapture, alog *agentlog.Writer, wf *workfeed.Sto
 			Days     flexInt `json:"days"`
 			Limit    flexInt `json:"limit"`
 			Contains string  `json:"contains"`
+			Target   string  `json:"target"`
+			Tool     string  `json:"tool"`
 		}
 		if err := jsonutil.UnmarshalInto("observe params", input, &p); err != nil {
 			return "", err
@@ -110,8 +113,25 @@ func ToolObserve(lc *observe.LogCapture, alog *agentlog.Writer, wf *workfeed.Sto
 			}
 			return formatObserveProactive(stat), nil
 
+		case "provenance":
+			if alog == nil {
+				return "agent log is not wired (no provenance data available)", nil
+			}
+			var since int64
+			if days := p.Days.Int(); days > 0 {
+				since = time.Now().Add(-time.Duration(days) * 24 * time.Hour).UnixMilli()
+			}
+			events := alog.ToolProvenance(agentlog.ToolProvenanceQuery{
+				Target:  p.Target,
+				Tool:    p.Tool,
+				RunID:   p.RunID,
+				SinceMs: since,
+				Limit:   p.Limit.Int(),
+			})
+			return formatObserveProvenance(events), nil
+
 		default:
-			return "", fmt.Errorf("observe: unknown action %q — use turn | logs | behavior | effort | proactive", p.Action)
+			return "", fmt.Errorf("observe: unknown action %q — use turn | logs | behavior | effort | proactive | provenance", p.Action)
 		}
 	}
 }
@@ -140,7 +160,11 @@ func formatObserveTurn(v observe.TurnView) string {
 			if t.IsError {
 				suffix = " — ERROR: " + t.Error
 			}
-			fmt.Fprintf(&b, "    %s %dms (out %dB)%s\n", t.Name, t.DurationMs, t.OutputLen, suffix)
+			prov := formatToolProvenance(t)
+			if prov != "" {
+				prov = ", " + prov
+			}
+			fmt.Fprintf(&b, "    %s %dms (out %dB%s)%s\n", t.Name, t.DurationMs, t.OutputLen, prov, suffix)
 		}
 	}
 	if len(v.Logs) > 0 {
@@ -152,6 +176,40 @@ func formatObserveTurn(v observe.TurnView) string {
 		b.WriteString("  logs: none in the ring (older run — rotated out)\n")
 	}
 	return b.String()
+}
+
+func formatToolProvenance(t agentlog.TurnToolData) string {
+	var parts []string
+	if t.ToolUseID != "" {
+		parts = append(parts, "id="+t.ToolUseID)
+	}
+	if t.InputBytes > 0 {
+		parts = append(parts, fmt.Sprintf("in %dB", t.InputBytes))
+	}
+	if t.InputHash != "" {
+		parts = append(parts, "in#="+shortHash(t.InputHash))
+	}
+	if t.OutputHash != "" {
+		parts = append(parts, "out#="+shortHash(t.OutputHash))
+	}
+	if len(t.Targets) > 0 {
+		targets := t.Targets
+		if len(targets) > 3 {
+			targets = targets[:3]
+		}
+		parts = append(parts, "target="+strings.Join(targets, ","))
+	}
+	if effects := formatFileEffects(t.FileEffects); effects != "" {
+		parts = append(parts, "file="+effects)
+	}
+	return strings.Join(parts, ", ")
+}
+
+func shortHash(h string) string {
+	if len(h) <= 12 {
+		return h
+	}
+	return h[:12]
 }
 
 func formatObserveLogs(lines []observe.LogLine) string {
@@ -170,6 +228,73 @@ func formatObserveLogs(lines []observe.LogLine) string {
 		fmt.Fprintf(&b, "  [%s]%s %s\n", l.Level, tag, l.Msg)
 	}
 	return b.String()
+}
+
+func formatObserveProvenance(events []agentlog.ToolProvenanceEvent) string {
+	if len(events) == 0 {
+		return "no matching tool provenance in retained agent logs"
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "%d tool provenance event(s), newest first:\n", len(events))
+	for _, e := range events {
+		target := ""
+		if len(e.Targets) > 0 {
+			target = " target=" + strings.Join(e.Targets, ",")
+		}
+		id := ""
+		if e.ToolUseID != "" {
+			id = " id=" + e.ToolUseID
+		}
+		hashes := ""
+		if e.InputHash != "" {
+			hashes += " in#=" + shortHash(e.InputHash)
+		}
+		if e.OutputHash != "" {
+			hashes += " out#=" + shortHash(e.OutputHash)
+		}
+		effect := ""
+		if formatted := formatFileEffects(e.FileEffects); formatted != "" {
+			effect = " effect=" + formatted
+		}
+		errMark := ""
+		if e.IsError {
+			errMark = " ERROR"
+		}
+		fmt.Fprintf(&b, "  %s run=%s session=%s turn=%d%s%s%s%s%s\n",
+			e.Name, e.RunID, e.Session, e.Turn, id, target, hashes, effect, errMark)
+	}
+	return b.String()
+}
+
+func formatFileEffects(effects []agentlog.ToolFileEffect) string {
+	if len(effects) == 0 {
+		return ""
+	}
+	limit := len(effects)
+	if limit > 3 {
+		limit = 3
+	}
+	parts := make([]string, 0, limit+1)
+	for _, effect := range effects[:limit] {
+		status := "unchanged"
+		switch {
+		case !effect.ExistsBefore && effect.ExistsAfter:
+			status = "created"
+		case effect.ExistsBefore && !effect.ExistsAfter:
+			status = "deleted"
+		case effect.Changed:
+			status = "changed"
+		}
+		delta := ""
+		if effect.AddedLines > 0 || effect.RemovedLines > 0 {
+			delta = fmt.Sprintf(" +%d/-%d", effect.AddedLines, effect.RemovedLines)
+		}
+		parts = append(parts, fmt.Sprintf("%s:%s%s", effect.Path, status, delta))
+	}
+	if len(effects) > limit {
+		parts = append(parts, fmt.Sprintf("...+%d", len(effects)-limit))
+	}
+	return strings.Join(parts, ";")
 }
 
 // formatTurnEffort renders the per-step effort decisions across a run's turns —

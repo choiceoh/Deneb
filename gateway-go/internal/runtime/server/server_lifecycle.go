@@ -138,13 +138,7 @@ func (s *Server) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-
-	addrStr := ln.Addr().String()
-	s.boundAddr.Store(&addrStr)
-
-	if s.OnListening != nil {
-		s.OnListening(ln.Addr())
-	}
+	s.markListening(ln.Addr())
 
 	errCh := make(chan error, 1)
 	go func() {
@@ -170,6 +164,7 @@ func (s *Server) StartAndListen(ctx context.Context) (net.Addr, error) {
 	if err != nil {
 		return nil, err
 	}
+	s.markListening(ln.Addr())
 
 	go func() {
 		if err := s.httpServer.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -178,6 +173,17 @@ func (s *Server) StartAndListen(ctx context.Context) (net.Addr, error) {
 	}()
 
 	return ln.Addr(), nil
+}
+
+func (s *Server) markListening(addr net.Addr) {
+	if addr == nil {
+		return
+	}
+	addrStr := addr.String()
+	s.boundAddr.Store(&addrStr)
+	if s.OnListening != nil {
+		s.OnListening(addr)
+	}
 }
 
 // Close gracefully shuts down the server.

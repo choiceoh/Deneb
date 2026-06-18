@@ -34,6 +34,7 @@ func executeOneTool(
 		hooks.OnToolEmit(tc.Name, tc.ID, tc.Input)
 	}
 	logger.Info("exec", "name", tc.Name, "turn", turn)
+	start := time.Now()
 
 	// Tool loop detection: check for stuck patterns before executing.
 	if loopDetector != nil {
@@ -51,6 +52,7 @@ func executeOneTool(
 				if hooks.OnToolResult != nil {
 					hooks.OnToolResult(tc.Name, tc.ID, loopResult.Message, true)
 				}
+				logToolExecution(runLog, turn, tc, result, time.Since(start), nil)
 				return result
 			}
 			// Warning level: inject the warning as a prefix but allow execution.
@@ -72,11 +74,13 @@ func executeOneTool(
 			if hooks.OnToolResult != nil {
 				hooks.OnToolResult(tc.Name, tc.ID, reason, true)
 			}
+			logToolExecution(runLog, turn, tc, result, time.Since(start), nil)
 			return result
 		}
 	}
 
-	start := time.Now()
+	provenanceRoot := toolProvenanceRoot(tools)
+	beforeFiles := captureToolFileSnapshots(provenanceRoot, tc.Name, tc.Input)
 
 	// Periodic tool-progress heartbeat: while this tool call is still running,
 	// fire OnToolProgress every toolHeartbeatInterval seconds so surface
@@ -165,6 +169,7 @@ func executeOneTool(
 	} else {
 		block.Content = fenceUntrustedToolOutput(tc.Name, toolOutput, logger)
 	}
+	fileEffects := buildToolFileEffects(beforeFiles, captureToolFileSnapshots(provenanceRoot, tc.Name, tc.Input))
 
 	// Record result hash for no-progress detection.
 	if loopDetector != nil {
@@ -177,19 +182,7 @@ func executeOneTool(
 	}
 
 	// Log tool execution to agent detail log.
-	if runLog != nil {
-		td := agentlog.TurnToolData{
-			Turn:       turn + 1,
-			Name:       tc.Name,
-			DurationMs: elapsed.Milliseconds(),
-			OutputLen:  len(block.Content),
-			IsError:    block.IsError,
-		}
-		if block.IsError {
-			td.Error = block.Content
-		}
-		runLog.LogTurnTool(td)
-	}
+	logToolExecution(runLog, turn, tc, block, elapsed, fileEffects)
 
 	// Gateway-log a compact "tool complete" entry — pairs with the existing
 	// "exec" start line so each tool call has a bracketed timing + outcome. On

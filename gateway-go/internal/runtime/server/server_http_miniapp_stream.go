@@ -6,7 +6,7 @@
 // Pipeline:
 //
 //	POST /api/v1/miniapp/chat/stream
-//	  X-Deneb-Client-Token: <token>   (or Authorization: tma <initData>)
+//	  X-Deneb-Client-Token: <token>
 //	  Body: {"sessionKey"?, "message", "model"?}
 //	    │
 //	    ▼  same auth as handleMiniappRPC
@@ -41,6 +41,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/clientauth"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
+	handlerchat "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/chat"
 )
 
 // maxMiniappChatStreamBodyBytes caps the POST /api/v1/miniapp/chat/stream body.
@@ -49,12 +50,6 @@ import (
 // still stopping an unbounded io.ReadAll. Captures (base64 blobs) go through the
 // RPC endpoint, which has the larger maxMiniappRPCBodyBytes.
 const maxMiniappChatStreamBodyBytes = 8 << 20 // 8 MiB
-
-// nativeClientChannel mirrors the constant of the same name in the blocking
-// miniapp chat bridge (internal/runtime/rpc/handler/chat/miniapp_bridge.go).
-// Both must name the same channel so the streaming and blocking paths share
-// one session and one channel. Kept in sync by hand — there is no shared export.
-const nativeClientChannel = "client"
 
 // chatStreamKeepaliveInterval bounds how long the SSE connection may sit silent
 // during a long tool call that emits no text. A periodic comment frame keeps
@@ -136,10 +131,7 @@ func (s *Server) handleMiniappChatStream(w http.ResponseWriter, r *http.Request)
 		s.writeJSON(w, http.StatusBadRequest, map[string]any{"error": "missing message"})
 		return
 	}
-	sessionKey := strings.TrimSpace(reqBody.SessionKey)
-	if sessionKey == "" {
-		sessionKey = nativeClientChannel + ":main"
-	}
+	sessionKey := handlerchat.DefaultSessionKey(reqBody.SessionKey)
 	if s.chatHandler == nil {
 		s.writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "chat handler not ready"})
 		return
@@ -159,7 +151,7 @@ func (s *Server) handleMiniappChatStream(w http.ResponseWriter, r *http.Request)
 	ctx := clientauth.WithContext(r.Context(), identity)
 	runner := func(ctx context.Context, sinks chatStreamSinks) (*chatStreamResult, error) {
 		res, err := s.chatHandler.SendSyncStream(ctx, sessionKey, reqBody.Message, strings.TrimSpace(reqBody.Model), &chat.SyncOptions{
-			Delivery: &chat.DeliveryContext{Channel: nativeClientChannel, To: sessionKey},
+			Delivery: &chat.DeliveryContext{Channel: handlerchat.NativeClientChannel, To: sessionKey},
 			// The reply text is streamed here, not pushed via the message tool.
 			AutoDeliveredOutput: true,
 			SkipRecall:          reqBody.SkipRecall,

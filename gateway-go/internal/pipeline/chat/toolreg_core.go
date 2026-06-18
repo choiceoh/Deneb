@@ -10,6 +10,7 @@ import (
 // It delegates to toolreg.RegisterCoreTools for the bulk of registrations,
 // then adds tools that depend on chat-internal state (post-processors).
 func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
+	registry.SetToolProvenanceRoot(deps.WorkspaceDir)
 	toolreg.RegisterCoreTools(registry, deps)
 
 	// Skills discovery + management: list, create, patch, delete skills at runtime.

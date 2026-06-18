@@ -92,7 +92,25 @@ func TestToolObserve_TurnJoinsAgentLog(t *testing.T) {
 	dir := t.TempDir()
 	w := agentlog.NewWriter(dir)
 	rl := agentlog.NewRunLogger(w, "client:main", "run-9")
-	rl.LogTurnTool(agentlog.TurnToolData{Turn: 1, Name: "grep", DurationMs: 7})
+	rl.LogTurnTool(agentlog.TurnToolData{
+		Turn:       1,
+		Name:       "grep",
+		ToolUseID:  "tool-1",
+		DurationMs: 7,
+		InputBytes: 17,
+		InputHash:  "input-hash-for-test",
+		OutputLen:  2,
+		OutputHash: "output-hash-for-test",
+		Targets:    []string{"foo.go"},
+		FileEffects: []agentlog.ToolFileEffect{{
+			Path:         "foo.go",
+			ExistsBefore: true,
+			ExistsAfter:  true,
+			Changed:      true,
+			AddedLines:   2,
+			RemovedLines: 1,
+		}},
+	})
 	rl.LogEnd(agentlog.RunEndData{StopReason: "end_turn", Turns: 1, OutputTokens: 40})
 
 	fn := ToolObserve(nil, w, nil, nil) // nil capture: turn still works off the agent log
@@ -100,9 +118,43 @@ func TestToolObserve_TurnJoinsAgentLog(t *testing.T) {
 	if err != nil {
 		t.Fatalf("turn errored: %v", err)
 	}
-	for _, want := range []string{"run-9", "end_turn", "grep"} {
+	for _, want := range []string{"run-9", "end_turn", "grep", "id=tool-1", "in#=input-hash-f", "out#=output-hash-", "target=foo.go", "file=foo.go:changed +2/-1"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("turn output missing %q:\n%s", want, out)
+		}
+	}
+}
+
+func TestToolObserve_Provenance(t *testing.T) {
+	dir := t.TempDir()
+	w := agentlog.NewWriter(dir)
+	rl := agentlog.NewRunLogger(w, "client:main", "run-prov")
+	rl.LogTurnTool(agentlog.TurnToolData{
+		Turn:       1,
+		Name:       "edit",
+		ToolUseID:  "tool-prov",
+		InputHash:  "input-hash-for-provenance-test",
+		OutputHash: "output-hash-for-provenance-test",
+		Targets:    []string{"src/foo.go"},
+		FileEffects: []agentlog.ToolFileEffect{{
+			Path:        "src/foo.go",
+			ExistsAfter: true,
+			Changed:     true,
+			AddedLines:  3,
+		}},
+	})
+
+	fn := ToolObserve(nil, w, nil, nil)
+	out, err := callTool(t, fn, map[string]any{
+		"action": "provenance",
+		"target": "foo.go",
+	})
+	if err != nil {
+		t.Fatalf("provenance errored: %v", err)
+	}
+	for _, want := range []string{"tool provenance", "run-prov", "edit", "id=tool-prov", "target=src/foo.go", "in#=input-hash-f", "effect=src/foo.go:created +3/-0"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("provenance output missing %q:\n%s", want, out)
 		}
 	}
 }
