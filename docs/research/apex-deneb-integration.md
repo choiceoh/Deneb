@@ -1,6 +1,12 @@
-# APEX 도입 분석과 Deneb 적용 범위
+# APEX Prompt-Optimization 도입 분석과 Deneb 적용 범위
 
 Source: https://arxiv.org/html/2606.11459v1, arXiv v1, 2026-06-09.
+
+This note covers **APEX: Automated Prompt Engineering eXpert with Dynamic Data
+Selection**. Propus doctrine also tracks the agent self-evolution APEX papers:
+Adaptive Principle EXtraction (`arxiv:2606.15363`) for three-layer
+harness/principle/workflow co-evolution, and Autonomous Policy Exploration
+(`arxiv:2605.21240`) for strategy-map exploration against collapse.
 
 ## 논문 핵심
 

@@ -27,7 +27,7 @@ func PropusDoctrine() PropusDoctrineSpec {
 	return PropusDoctrineSpec{
 		Name:     "Propus",
 		Codename: "propus",
-		Version:  "2026-06-source-doctrine",
+		Version:  "2026-06-expanded-source-doctrine",
 		Lifecycle: []string{
 			"observe",
 			"propose",
@@ -61,12 +61,40 @@ func PropusDoctrine() PropusDoctrineSpec {
 				OriginalPrinciple: "Correction success depends on chat-template role labels; byte-identical claims are corrected more when presented as external user/tool/memory content.",
 				PropusRule:        "Present candidate failures to judges as external evidence, not as the model's own thought.",
 			},
+			{
+				ID:                "arxiv:2606.09498",
+				Title:             "Self-Harness: Harnesses That Improve Themselves",
+				OriginalPrinciple: "Harness improvement should mine repeated verifier-grounded failure mechanisms, propose bounded edits to concrete harness surfaces, and promote only regression-tested candidates while keeping the base model fixed.",
+				PropusRule:        "Every evolve candidate must name one supported failure signature, edited surface, expected behavior change, and regression risk before validation.",
+			},
+			{
+				ID:                "arxiv:2606.11459",
+				Title:             "APEX: Automated Prompt Engineering eXpert with Dynamic Data Selection",
+				OriginalPrinciple: "Prompt optimization is data-selection limited; Easy/Hard/Mixed tiers from lineage identify Mixed frontier cases for mutation and ranking while Easy anchors protect mastered behavior.",
+				PropusRule:        "Prioritize Mixed frontier validation cases, retain Easy anchors, and avoid Hard-only prompt or skill rewrites until the failure is addressable.",
+			},
+			{
+				ID:                "arxiv:2606.15363",
+				Title:             "APEX: Adaptive Principle EXtraction A Three-Layer Self-Evolution Framework for Production AI Agents",
+				OriginalPrinciple: "Self-evolution is multi-dimensional: harness patches, behavioral principle distillation, and workflow topology selection should co-evolve on the same production trace pool.",
+				PropusRule:        "Classify Propus changes by evolution axis: harness patch, principle distillation, or workflow topology change; do not treat one axis as system completion.",
+			},
+			{
+				ID:                "arxiv:2605.21240",
+				Title:             "APEX: Autonomous Policy Exploration for Self-Evolving LLM Agents",
+				OriginalPrinciple: "Self-evolving agents can collapse into familiar high-reward routines unless they maintain an explicit strategy map of tried and unexplored directions.",
+				PropusRule:        "Keep opportunity backlog as an exploration map: record tried routes, expose unexplored forks, and balance exploitation against frontier discovery.",
+			},
 		},
 		Invariants: []string{
 			"generated_or_evolved_skill_requires_validation_evidence",
 			"ambiguous_or_non_actionable_principle_is_rejected",
 			"same_failure_candidate_must_not_repeat_without_new_evidence",
 			"judgement_uses_externalized_evidence_not_same_turn_introspection",
+			"evolve_candidate_declares_failure_signature_surface_behavior_and_risk",
+			"validation_selection_prefers_mixed_frontier_with_easy_anchors",
+			"propus_change_declares_harness_principle_or_workflow_axis",
+			"opportunity_backlog_tracks_tried_routes_and_unexplored_forks",
 			"status_and_summary_are_the_single_state_model",
 		},
 		QualityGates: []string{
@@ -74,6 +102,10 @@ func PropusDoctrine() PropusDoctrineSpec {
 			"specific_trigger_procedure_pitfalls_verification",
 			"deduped_and_curator_visible",
 			"post_evolve_watch_or_rollback",
+			"failure_signature_surface_behavior_risk_audit",
+			"mixed_frontier_with_easy_anchor_selection",
+			"evolution_axis_declared_harness_principle_workflow",
+			"exploration_map_updates_tried_and_frontier_routes",
 		},
 	}
 }

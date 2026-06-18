@@ -68,8 +68,9 @@ prompt's wiki section is the canonical guide to the recall stack
   before applying. Treat Propus overview/status as canonical instead of
   inferring a separate lifecycle policy from raw logs. Preserve the source
   doctrine: skills are governed artifacts, experience must close the loop,
-  self-critique needs external evidence, and role presentation affects review
-  reliability.
+  self-critique needs external evidence, Self-Harness edits need a bounded
+  failure signature, and APEX keeps validation/frontier/workflow evolution
+  distinct.
 
 ## Red Lines
 
