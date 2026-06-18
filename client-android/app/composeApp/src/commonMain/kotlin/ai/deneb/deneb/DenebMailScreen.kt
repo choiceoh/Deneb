@@ -320,9 +320,18 @@ fun DenebMailScreen(
                                 }
                             }
                         }
-                        sections.forEach { section ->
+                        sections.forEachIndexed { index, section ->
                             item(key = "section-${section.label}") {
-                                DenebSectionLabel(section.label, Modifier.padding(horizontal = 24.dp))
+                                // The first section sits directly under the screen title when no
+                                // search field, filter row, or selection header precedes it. Drop
+                                // its 22dp separator there so the title-to-list gap isn't an empty
+                                // band — the removed stats header used to fill that space.
+                                val firstUnderTitle = index == 0 && !selecting && !showSearchField && !filtersVisible
+                                DenebSectionLabel(
+                                    section.label,
+                                    Modifier.padding(horizontal = 24.dp),
+                                    topPadding = if (firstUnderTitle) 6.dp else 22.dp,
+                                )
                             }
                             items(section.items, key = { it.id }) { m ->
                                 Column(Modifier.animateItem()) {
