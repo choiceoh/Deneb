@@ -265,29 +265,44 @@ func calActionAudit(ctx context.Context, d *toolctx.CalendarDeps, p calParams) s
 		}
 		dayMidnight := startOfDay(day, loc)
 		dayNext := dayMidnight.AddDate(0, 0, 1)
+		// Bound this day to the audited range: an explicit sub-day from/to must not
+		// count meeting time outside it, and a run-in from another day is clipped.
+		lo, hi := dayMidnight, dayNext
+		if from.After(lo) {
+			lo = from
+		}
+		if to.Before(hi) {
+			hi = to
+		}
 		var total time.Duration
 		var busy []interval
+		inWindow := dayTimed[:0:0] // events actually overlapping [lo, hi)
 		for _, e := range dayTimed {
-			// Clip an event that runs in from the previous day (or out past
-			// midnight) to this day, so load/focus reflect only today's portion.
 			s := e.Start.In(loc)
-			if s.Before(dayMidnight) {
-				s = dayMidnight
+			if s.Before(lo) {
+				s = lo
 			}
 			en := eventEnd(e).In(loc)
-			if en.After(dayNext) {
-				en = dayNext
+			if en.After(hi) {
+				en = hi
 			}
+			if !en.After(s) {
+				continue // falls entirely outside the audited window
+			}
+			inWindow = append(inWindow, e)
 			total += en.Sub(s)
 			busy = append(busy, interval{s, en})
 		}
-		overloaded := len(dayTimed) >= auditOverloadCount || total >= auditOverloadHours
+		if len(inWindow) == 0 {
+			continue
+		}
+		overloaded := len(inWindow) >= auditOverloadCount || total >= auditOverloadHours
 		label := calDayWeekday(day)
 
 		if overloaded {
-			overloads = append(overloads, fmt.Sprintf("%s 회의 %d건·%s", label, len(dayTimed), shortDur(total)))
+			overloads = append(overloads, fmt.Sprintf("%s 회의 %d건·%s", label, len(inWindow), shortDur(total)))
 		}
-		if run := longestBackToBack(dayTimed); run >= auditBackToBackRun {
+		if run := longestBackToBack(inWindow); run >= auditBackToBackRun {
 			runs = append(runs, fmt.Sprintf("%s %d연속(버퍼 없음)", label, run))
 		}
 		if overloaded {
@@ -335,9 +350,12 @@ func calActionAudit(ctx context.Context, d *toolctx.CalendarDeps, p calParams) s
 	}
 
 	if len(conflicts) == 0 && len(overloads) == 0 && len(runs) == 0 {
-		sb.WriteString("\n일정 양호 — 더블부킹·과부하·버퍼 부족 없음.")
 		if warn != "" {
-			sb.WriteString("\n(" + warn + ")")
+			// The primary (Google) calendar fetch had a problem, so we only saw
+			// local events — don't certify the whole schedule clean.
+			sb.WriteString("\n로컬 일정 기준으로는 더블부킹·과부하가 없지만, " + warn + " — 전체 일정을 확인하지 못했습니다.")
+		} else {
+			sb.WriteString("\n일정 양호 — 더블부킹·과부하·버퍼 부족 없음.")
 		}
 		return strings.TrimRight(sb.String(), "\n")
 	}
