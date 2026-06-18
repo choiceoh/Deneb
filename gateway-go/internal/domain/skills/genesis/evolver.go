@@ -181,6 +181,27 @@ func (e *Evolver) EvolveSkill(ctx context.Context, skillName, reviewFinding stri
 		return nil, fmt.Errorf("evolver: skill %q not found in catalog", skillName)
 	}
 
+	// Circuit breakers, checked before any LLM call is spent. Both previously
+	// lived only in the periodic candidate selector (SkillsNeedingEvolution); the
+	// background skill-review path (RunSkillEvolution) reaches EvolveSkill
+	// directly with a review finding and so bypassed them, re-evolving a
+	// non-converging skill on every review (topsolar-db: 18 evolves over 4 days,
+	// all landing the same version, ~6 days after its last real use). Enforcing
+	// them here — at the single choke point every caller funnels through — closes
+	// that bypass. The suppression is logged as evolve_rejected so it is auditable
+	// instead of a silent re-evolve.
+	if blocked, reason := e.evolutionSuppressed(skillName, time.Now()); blocked {
+		if e.tracker != nil {
+			if logErr := e.tracker.LogEvolveRejectedWithAudit(skillName, reason, HarnessEditAudit{}); logErr != nil && e.logger != nil {
+				e.logger.Warn("evolver: lifecycle log write failed", "skill", skillName, "error", logErr)
+			}
+		}
+		if e.logger != nil {
+			e.logger.Info("evolver: evolve suppressed", "skill", skillName, "reason", reason)
+		}
+		return &EvolveResult{SkillName: skillName, Evolved: false, Reason: reason}, nil
+	}
+
 	currentContent, err := os.ReadFile(entry.Skill.FilePath)
 	if err != nil {
 		return nil, fmt.Errorf("evolver: read skill file: %w", err)
@@ -286,6 +307,42 @@ func (e *Evolver) EvolveSkill(ctx context.Context, skillName, reviewFinding stri
 	}
 
 	return e.parseAndApply(ctx, sb.String(), entry, string(currentContent), stats)
+}
+
+// evolutionSuppressed reports whether an automated evolve of skillName should be
+// skipped before an LLM call is spent, returning a human-readable reason for the
+// lifecycle log. Two circuit breakers, enforced here so every EvolveSkill caller
+// (periodic underperformer sweep, background review, manual RPC) obeys them —
+// the guard previously sat only in the periodic candidate selector, which the
+// review path bypassed:
+//
+//   - Guard (thrash): a skill that dominates the recent evolve budget without
+//     converging is paused for evolutionThrashCooldown after its last evolve.
+//   - Gate (recency): a skill with no real use inside the evolution-evidence
+//     window has no fresh signal a rewrite could act on, so re-evolving it just
+//     burns model budget. Reuses the same freshness horizon the periodic path
+//     already enforces via the evidence cutoff. Never-used skills (LastUsed == 0)
+//     are exempt — seeding a sparse or brand-new skill from a review finding is
+//     the review path's legitimate purpose.
+func (e *Evolver) evolutionSuppressed(skillName string, now time.Time) (bool, string) {
+	if e.tracker == nil {
+		return false, ""
+	}
+	if h := e.tracker.EvolutionHealth(); h.Thrash && h.TopEvolvedSkill == skillName &&
+		h.ThrashCooldownUntil > now.UnixMilli() {
+		return true, fmt.Sprintf(
+			"thrash cooldown: %q evolved %d times in 7d without converging; paused until %s",
+			skillName, h.TopEvolvedCount, time.UnixMilli(h.ThrashCooldownUntil).Format(time.RFC3339))
+	}
+	if window := skillEvolutionEvidenceWindow(); window > 0 {
+		if stats, err := e.tracker.Stats(skillName); err == nil && stats.LastUsed > 0 &&
+			stats.LastUsed < now.Add(-window).UnixMilli() {
+			return true, fmt.Sprintf(
+				"recency gate: %q last really used %s, older than the %d-day evidence window; no fresh signal to evolve on",
+				skillName, time.UnixMilli(stats.LastUsed).Format("2006-01-02"), int(window/(24*time.Hour)))
+		}
+	}
+	return false, ""
 }
 
 // EvolveUnderperformers finds and evolves skills with poor success rates.

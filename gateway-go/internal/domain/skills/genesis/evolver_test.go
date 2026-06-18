@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
@@ -676,5 +677,135 @@ func TestParseAndApply_StripsEchoedFrontmatterAndBumpsVersion(t *testing.T) {
 	gotEntry, ok := cat.Get("demo")
 	if !ok || gotEntry.Skill.Version != "1.1.1" {
 		t.Fatalf("catalog version = (%v, %q), want registered 1.1.1", ok, gotEntry.Skill.Version)
+	}
+}
+
+// TestEvolutionSuppressed_ThrashGuardAndRecencyGate covers the two circuit
+// breakers that gate every EvolveSkill caller: the thrash cooldown (a skill
+// re-evolved without converging) and the recency gate (a skill with no fresh
+// real use). Both must fire even for the review path, which supplies a finding
+// and otherwise bypasses the periodic candidate selector.
+func TestEvolutionSuppressed_ThrashGuardAndRecencyGate(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	t.Run("nil tracker never suppresses", func(t *testing.T) {
+		e := &Evolver{logger: logger}
+		if blocked, reason := e.evolutionSuppressed("any", time.Now()); blocked {
+			t.Fatalf("nil tracker should not suppress, got %q", reason)
+		}
+	})
+
+	t.Run("thrash cooldown suppresses the dominating skill", func(t *testing.T) {
+		tr := newTestTracker(t)
+		for i := 0; i < evolutionThrashMinEvolves; i++ {
+			if err := tr.LogEvolve("topsolar-db", "1.0.1", "rewrite"); err != nil {
+				t.Fatalf("LogEvolve(%d): %v", i, err)
+			}
+		}
+		e := &Evolver{logger: logger, tracker: tr}
+		blocked, reason := e.evolutionSuppressed("topsolar-db", time.Now())
+		if !blocked || !strings.Contains(reason, "thrash cooldown") {
+			t.Fatalf("expected thrash-cooldown suppression, got blocked=%v reason=%q", blocked, reason)
+		}
+		// A different skill that is not the thrash offender stays eligible.
+		if blocked, reason := e.evolutionSuppressed("calendar-helper", time.Now()); blocked {
+			t.Fatalf("non-offending skill should not be suppressed by thrash guard, got %q", reason)
+		}
+	})
+
+	t.Run("recency gate suppresses a stale skill", func(t *testing.T) {
+		t.Setenv("DENEB_SKILL_EVOLVE_EVIDENCE_DAYS", "7")
+		tr := newTestTracker(t)
+		staleAt := time.Now().Add(-30 * 24 * time.Hour).UnixMilli()
+		if err := tr.RecordUsage(UsageRecord{
+			SkillName:  "stale-skill",
+			SessionKey: "client:main",
+			Success:    false,
+			ErrorMsg:   "old failure",
+			UsedAt:     staleAt,
+		}); err != nil {
+			t.Fatalf("RecordUsage: %v", err)
+		}
+		e := &Evolver{logger: logger, tracker: tr}
+		blocked, reason := e.evolutionSuppressed("stale-skill", time.Now())
+		if !blocked || !strings.Contains(reason, "recency gate") {
+			t.Fatalf("expected recency-gate suppression, got blocked=%v reason=%q", blocked, reason)
+		}
+	})
+
+	t.Run("fresh real use is not suppressed", func(t *testing.T) {
+		t.Setenv("DENEB_SKILL_EVOLVE_EVIDENCE_DAYS", "7")
+		tr := newTestTracker(t)
+		if err := tr.RecordUsage(UsageRecord{
+			SkillName:  "fresh-skill",
+			SessionKey: "client:main",
+			Success:    false,
+			ErrorMsg:   "recent failure",
+			UsedAt:     time.Now().UnixMilli(),
+		}); err != nil {
+			t.Fatalf("RecordUsage: %v", err)
+		}
+		e := &Evolver{logger: logger, tracker: tr}
+		if blocked, reason := e.evolutionSuppressed("fresh-skill", time.Now()); blocked {
+			t.Fatalf("fresh skill should not be suppressed, got %q", reason)
+		}
+	})
+
+	t.Run("never-used skill is exempt from the recency gate", func(t *testing.T) {
+		t.Setenv("DENEB_SKILL_EVOLVE_EVIDENCE_DAYS", "7")
+		tr := newTestTracker(t)
+		e := &Evolver{logger: logger, tracker: tr}
+		if blocked, reason := e.evolutionSuppressed("brand-new", time.Now()); blocked {
+			t.Fatalf("never-used skill (LastUsed==0) should be exempt, got %q", reason)
+		}
+	})
+}
+
+// TestEvolveSkill_SuppressesThrashingSkillBeforeLLM proves the gate is wired into
+// the EvolveSkill choke point: a thrashing skill is rejected before any model
+// call (the Evolver has no LLM client, so reaching the call would error), and the
+// suppression is recorded as an auditable evolve_rejected lifecycle entry.
+func TestEvolveSkill_SuppressesThrashingSkillBeforeLLM(t *testing.T) {
+	tr := newTestTracker(t)
+	for i := 0; i < evolutionThrashMinEvolves; i++ {
+		if err := tr.LogEvolve("topsolar-db", "1.0.1", "rewrite"); err != nil {
+			t.Fatalf("LogEvolve(%d): %v", i, err)
+		}
+	}
+	dir := t.TempDir()
+	skillFile := filepath.Join(dir, "SKILL.md")
+	if err := os.WriteFile(skillFile, []byte("---\nname: topsolar-db\nversion: \"1.0.8\"\n---\n\n# Skill\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cat := skills.NewCatalog(slog.New(slog.NewTextHandler(io.Discard, nil)))
+	cat.Register(skills.SkillEntry{Skill: skills.Skill{Name: "topsolar-db", FilePath: skillFile, Version: "1.0.8"}})
+	e := &Evolver{
+		logger:  slog.New(slog.NewTextHandler(io.Discard, nil)),
+		catalog: cat,
+		tracker: tr,
+		// Intentionally no llmClient: if the gate fails to short-circuit,
+		// EvolveSkill reaches e.primaryModel()==nil and errors — so a clean
+		// Evolved:false proves the guard fired before any LLM call.
+	}
+	result, err := e.EvolveSkill(context.Background(), "topsolar-db", "review found a flaky bash block")
+	if err != nil {
+		t.Fatalf("EvolveSkill should short-circuit cleanly, got error: %v", err)
+	}
+	if result.Evolved || !strings.Contains(result.Reason, "thrash cooldown") {
+		t.Fatalf("expected thrash-cooldown suppression, got %+v", result)
+	}
+	recent, err := tr.RecentLifecycleLog(10)
+	if err != nil {
+		t.Fatalf("RecentLifecycleLog: %v", err)
+	}
+	found := false
+	for _, ent := range recent {
+		if ent.Type == "evolve_rejected" && ent.SkillName == "topsolar-db" && strings.Contains(ent.Reason, "thrash") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected an evolve_rejected lifecycle entry for the suppressed evolve, got %+v", recent)
 	}
 }
