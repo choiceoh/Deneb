@@ -59,7 +59,8 @@ func runPhone(ctx context.Context, stdinText, remoteCmd string) (string, error) 
 	return trimmed, nil
 }
 
-// ToolPhoneRead queries the phone: what = location | clipboard | battery.
+// ToolPhoneRead queries the phone: what = location | clipboard | battery |
+// calllog | contacts.
 func ToolPhoneRead() ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
@@ -76,8 +77,18 @@ func ToolPhoneRead() ToolFunc {
 			return runPhone(ctx, "", "termux-clipboard-get")
 		case "battery":
 			return runPhone(ctx, "", "termux-battery-status")
+		case "calllog", "calls":
+			// Recent call history (Termux:API). JSON array of {name, phone_number,
+			// type(incoming/outgoing/missed), date, duration}. Capped to the latest
+			// 20 so a long history doesn't blow the turn's context.
+			return runPhone(ctx, "", "termux-call-log -l 20")
+		case "contacts", "addressbook":
+			// Live address book from the phone (Termux:API). JSON array of
+			// {name, number}. For a targeted lookup prefer the `contacts` tool
+			// (the synced store with phone/company search); this is the raw phone list.
+			return runPhone(ctx, "", "termux-contact-list")
 		default:
-			return "", fmt.Errorf("phone_read: unknown what=%q (use location|clipboard|battery)", p.What)
+			return "", fmt.Errorf("phone_read: unknown what=%q (use location|clipboard|battery|calllog|contacts)", p.What)
 		}
 	}
 }

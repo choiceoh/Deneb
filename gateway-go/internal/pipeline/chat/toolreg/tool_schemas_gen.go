@@ -1424,8 +1424,8 @@ func phoneReadToolSchema() map[string]any {
 		"properties": map[string]any{
 			"what": map[string]any{
 				"type":        "string",
-				"description": "조회 대상: location(현재 GPS 좌표) | clipboard(방금 복사한 내용) | battery(배터리·충전 상태)",
-				"enum":        []string{"location", "clipboard", "battery"},
+				"description": "조회 대상: location(현재 GPS 좌표) | clipboard(방금 복사한 내용) | battery(배터리·충전 상태) | calllog(최근 통화기록 20건) | contacts(폰 주소록)",
+				"enum":        []string{"location", "clipboard", "battery", "calllog", "contacts"},
 			},
 		},
 		"required": []string{"what"},
