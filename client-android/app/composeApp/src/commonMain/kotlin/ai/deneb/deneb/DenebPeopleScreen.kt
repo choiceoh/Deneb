@@ -80,7 +80,11 @@ fun DenebPeopleScreen(
                 // Recent Gmail counterparties vs. wiki-only people (no recent
                 // mail). The gateway appends the wiki-only block, but partition
                 // here so each section is labeled and keyed independently.
-                val (contacts, wikiOnly) = list.partition { it.email.isNotBlank() || it.messageCount > 0 }
+                // Memoize the partition so it isn't recomputed on every
+                // recomposition — only when the people list itself changes.
+                val (contacts, wikiOnly) = remember(list) {
+                    list.partition { it.email.isNotBlank() || it.messageCount > 0 }
+                }
                 LazyColumn(Modifier.fillMaxWidth().weight(1f)) {
                     if (contacts.isNotEmpty()) {
                         item(key = "h:contacts") {
