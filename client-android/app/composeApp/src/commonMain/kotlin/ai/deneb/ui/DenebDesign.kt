@@ -115,12 +115,12 @@ fun denebHint(): Color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5
 
 /** Tracked-caps section header in the Mini App idiom (uppercased). */
 @Composable
-fun DenebSectionLabel(text: String, modifier: Modifier = Modifier) {
+fun DenebSectionLabel(text: String, modifier: Modifier = Modifier, topPadding: Dp = 22.dp) {
     Text(
         text = text.uppercase(),
         style = DenebType.sectionLabel,
         color = denebHint(),
-        modifier = modifier.padding(top = 22.dp, bottom = 8.dp),
+        modifier = modifier.padding(top = topPadding, bottom = 8.dp),
     )
 }
 
