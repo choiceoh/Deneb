@@ -88,7 +88,7 @@ func TestHealthEndpointIncludesUsageQualitySignals(t *testing.T) {
 	if propus["doctrine_version"] != genesis.PropusDoctrine().Version {
 		t.Fatalf("unexpected Propus doctrine version: %+v", propus)
 	}
-	if gates, ok := propus["quality_gates"].([]any); !ok || len(gates) != 4 {
+	if gates, ok := propus["quality_gates"].([]any); !ok || len(gates) != len(genesis.PropusDoctrine().QualityGates) {
 		t.Fatalf("expected Propus quality gates, got %+v", propus)
 	}
 	if propus["state"] != "attention" {

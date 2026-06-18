@@ -12,6 +12,8 @@ sidebarTitle: "Self-Harness"
 
 Source: <https://arxiv.org/html/2606.09498v1>
 Read date: 2026-06-18
+Doctrine mapping: `genesis.PropusDoctrine()` records this as the bounded
+failure-signature/edit-surface/audit rule for Propus evolution.
 
 ## One-line take
 

@@ -124,7 +124,9 @@ func TestSkillLifecycleStatusFiltersBySkillAndStats(t *testing.T) {
 		t.Fatalf("unexpected Propus doctrine version: %+v", system)
 	}
 	sourcePapers := system["sourcePapers"].([]string)
-	if len(sourcePapers) != 4 || sourcePapers[0] != "arxiv:2602.20867" {
+	if len(sourcePapers) != len(genesis.PropusDoctrine().SourceIDs()) ||
+		sourcePapers[0] != "arxiv:2602.20867" ||
+		sourcePapers[len(sourcePapers)-1] != "arxiv:2605.21240" {
 		t.Fatalf("unexpected source papers: %+v", sourcePapers)
 	}
 	overview := got["overview"].(map[string]any)
