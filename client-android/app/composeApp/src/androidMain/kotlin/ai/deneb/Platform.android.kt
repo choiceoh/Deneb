@@ -168,8 +168,32 @@ actual fun openUrl(url: String): Boolean = try {
     false
 }
 
+// Cap on-screen image decode resolution. Inbound images (chat attachments,
+// inline mail images) are only ever drawn at phone-screen scale, so decoding a
+// 12MP photo at full res (~48MB ARGB_8888) just to show it in a ~400px bubble
+// both wastes memory and risks OOM on Android's limited per-app heap. 2048px
+// keeps full-screen viewing crisp while quartering the worst offenders.
+private const val maxDisplayImageDim = 2048
+
+// Smallest power-of-two inSampleSize that keeps the larger decoded dimension at
+// or under maxDim. BitmapFactory only honors powers of two, so we pick one
+// directly. outWidth/outHeight are <= 0 when the bounds pass failed → sample 1.
+private fun displayInSampleSize(width: Int, height: Int, maxDim: Int): Int {
+    if (width <= 0 || height <= 0) return 1
+    var sample = 1
+    while (maxOf(width, height) / sample > maxDim) sample *= 2
+    return sample
+}
+
 actual fun decodeToImageBitmap(bytes: ByteArray): ImageBitmap? = try {
-    android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
+    // Pass 1: read dimensions only (no pixel allocation) to size the downsample.
+    val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+    // Pass 2: decode downsampled to display scale.
+    val opts = android.graphics.BitmapFactory.Options().apply {
+        inSampleSize = displayInSampleSize(bounds.outWidth, bounds.outHeight, maxDisplayImageDim)
+    }
+    android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts)?.asImageBitmap()
 } catch (_: Exception) {
     null
 }
