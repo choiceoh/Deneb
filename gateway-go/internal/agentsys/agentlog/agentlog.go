@@ -98,10 +98,42 @@ type TurnLLMData struct {
 type TurnToolData struct {
 	Turn       int    `json:"turn"`
 	Name       string `json:"name"`
+	ToolUseID  string `json:"toolUseId,omitempty"`
 	DurationMs int64  `json:"durationMs"`
+	InputBytes int    `json:"inputBytes,omitempty"`
+	InputHash  string `json:"inputHash,omitempty"`
 	OutputLen  int    `json:"outputLen"`
-	IsError    bool   `json:"isError,omitempty"`
-	Error      string `json:"error,omitempty"`
+	OutputHash string `json:"outputHash,omitempty"`
+	// Targets is a small, sanitized set of path-like input values such as
+	// file_path/path/workdir. It intentionally excludes raw commands, message
+	// bodies, and file contents while preserving enough provenance to answer
+	// "which file-ish thing did this tool operate on?"
+	Targets []string `json:"targets,omitempty"`
+	// FileEffects summarizes before/after metadata for known file-mutating
+	// tools. It stores hashes, sizes, line counts, and coarse diff stats only;
+	// file contents stay out of agentlog.
+	FileEffects []ToolFileEffect `json:"fileEffects,omitempty"`
+	IsError     bool             `json:"isError,omitempty"`
+	Error       string           `json:"error,omitempty"`
+}
+
+// ToolFileEffect is a content-free summary of one file observed before and
+// after a mutating tool call. The before/after hashes are SHA-256 of file
+// bytes when the file was small enough to hash safely.
+type ToolFileEffect struct {
+	Path         string `json:"path"`
+	ExistsBefore bool   `json:"existsBefore"`
+	ExistsAfter  bool   `json:"existsAfter"`
+	BeforeHash   string `json:"beforeHash,omitempty"`
+	AfterHash    string `json:"afterHash,omitempty"`
+	BeforeBytes  int64  `json:"beforeBytes,omitempty"`
+	AfterBytes   int64  `json:"afterBytes,omitempty"`
+	BeforeLines  int    `json:"beforeLines,omitempty"`
+	AfterLines   int    `json:"afterLines,omitempty"`
+	AddedLines   int    `json:"addedLines,omitempty"`
+	RemovedLines int    `json:"removedLines,omitempty"`
+	Changed      bool   `json:"changed"`
+	Error        string `json:"error,omitempty"`
 }
 
 // RunEndData records agent run completion. Beyond the raw token/turn totals it

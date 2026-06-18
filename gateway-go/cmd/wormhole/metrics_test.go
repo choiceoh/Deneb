@@ -56,13 +56,26 @@ func TestServe_RecordsMetricsAndExposes(t *testing.T) {
 	defer srv.Close()
 
 	// One successful request + one to an unknown model (404, an error).
-	_, _ = http.Post(srv.URL+"/v1/chat/completions", "application/json", strings.NewReader(`{"model":"m1"}`))
-	_, _ = http.Post(srv.URL+"/v1/chat/completions", "application/json", strings.NewReader(`{"model":"nope"}`))
+	postAndClose := func(model string, wantStatus int) {
+		t.Helper()
+		resp, err := http.Post(srv.URL+"/v1/chat/completions", "application/json", strings.NewReader(`{"model":"`+model+`"}`))
+		if err != nil {
+			t.Fatalf("POST model %q: %v", model, err)
+		}
+		defer resp.Body.Close()
+		_, _ = io.Copy(io.Discard, resp.Body)
+		if resp.StatusCode != wantStatus {
+			t.Fatalf("POST model %q status = %d, want %d", model, resp.StatusCode, wantStatus)
+		}
+	}
+	postAndClose("m1", http.StatusOK)
+	postAndClose("nope", http.StatusNotFound)
 
 	resp, err := http.Get(srv.URL + "/metrics")
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer resp.Body.Close()
 	body, _ := io.ReadAll(resp.Body)
 	out := string(body)
 	if !strings.Contains(out, "wormhole_requests_total 2") {

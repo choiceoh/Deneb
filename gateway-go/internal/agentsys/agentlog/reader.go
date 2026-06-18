@@ -102,6 +102,123 @@ func (w *Writer) ReadRun(runID string) (entries []LogEntry, session string) {
 	return entries, session
 }
 
+// ToolProvenanceQuery filters turn.tool provenance events. Empty fields are
+// ignored. Target is a case-insensitive substring match against sanitized
+// TurnToolData.Targets.
+type ToolProvenanceQuery struct {
+	Target  string
+	Tool    string
+	RunID   string
+	SinceMs int64
+	Limit   int
+}
+
+// ToolProvenanceEvent is the read-optimized shape for one turn.tool entry,
+// joined with the enclosing log metadata. It backs the observe provenance view:
+// "which recent agent/tool/run touched this path-like thing?"
+type ToolProvenanceEvent struct {
+	Ts          int64            `json:"ts"`
+	RunID       string           `json:"runId,omitempty"`
+	Session     string           `json:"session,omitempty"`
+	Turn        int              `json:"turn,omitempty"`
+	Name        string           `json:"name"`
+	ToolUseID   string           `json:"toolUseId,omitempty"`
+	DurationMs  int64            `json:"durationMs,omitempty"`
+	InputBytes  int              `json:"inputBytes,omitempty"`
+	InputHash   string           `json:"inputHash,omitempty"`
+	OutputLen   int              `json:"outputLen,omitempty"`
+	OutputHash  string           `json:"outputHash,omitempty"`
+	Targets     []string         `json:"targets,omitempty"`
+	FileEffects []ToolFileEffect `json:"fileEffects,omitempty"`
+	IsError     bool             `json:"isError,omitempty"`
+	Error       string           `json:"error,omitempty"`
+}
+
+// ToolProvenance scans retained turn.tool JSONL entries newest-first. It is a
+// derived query over the existing agentlog store; if this becomes hot, the same
+// shape can be backed by an index without changing callers.
+func (w *Writer) ToolProvenance(q ToolProvenanceQuery) []ToolProvenanceEvent {
+	if w == nil {
+		return nil
+	}
+	limit := q.Limit
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 200 {
+		limit = 200
+	}
+
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	var out []ToolProvenanceEvent
+	paths, _ := filepath.Glob(filepath.Join(w.baseDir, "*.jsonl"))
+	for _, path := range paths {
+		for _, e := range readAllEntries(path) {
+			if e.Type != TypeTurnTool {
+				continue
+			}
+			if q.SinceMs > 0 && e.Ts < q.SinceMs {
+				continue
+			}
+			if q.RunID != "" && e.RunID != q.RunID {
+				continue
+			}
+			var d TurnToolData
+			if json.Unmarshal(e.Data, &d) != nil {
+				continue
+			}
+			if q.Tool != "" && d.Name != q.Tool {
+				continue
+			}
+			if q.Target != "" && !targetMatches(d.Targets, d.FileEffects, q.Target) {
+				continue
+			}
+			out = append(out, ToolProvenanceEvent{
+				Ts:          e.Ts,
+				RunID:       e.RunID,
+				Session:     e.Session,
+				Turn:        d.Turn,
+				Name:        d.Name,
+				ToolUseID:   d.ToolUseID,
+				DurationMs:  d.DurationMs,
+				InputBytes:  d.InputBytes,
+				InputHash:   d.InputHash,
+				OutputLen:   d.OutputLen,
+				OutputHash:  d.OutputHash,
+				Targets:     append([]string(nil), d.Targets...),
+				FileEffects: append([]ToolFileEffect(nil), d.FileEffects...),
+				IsError:     d.IsError,
+				Error:       d.Error,
+			})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Ts > out[j].Ts })
+	if len(out) > limit {
+		out = out[:limit]
+	}
+	return out
+}
+
+func targetMatches(targets []string, effects []ToolFileEffect, query string) bool {
+	query = strings.ToLower(strings.TrimSpace(query))
+	if query == "" {
+		return true
+	}
+	for _, target := range targets {
+		if strings.Contains(strings.ToLower(target), query) {
+			return true
+		}
+	}
+	for _, effect := range effects {
+		if strings.Contains(strings.ToLower(effect.Path), query) {
+			return true
+		}
+	}
+	return false
+}
+
 // ToolStat aggregates one tool's usage across every recorded run.
 type ToolStat struct {
 	Name    string `json:"name"`

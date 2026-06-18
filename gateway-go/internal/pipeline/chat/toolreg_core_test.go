@@ -10,6 +10,9 @@ func TestRegisterCoreTools(t *testing.T) {
 		WorkspaceDir: "/tmp/test-workspace",
 	}
 	RegisterCoreTools(registry, deps)
+	if got := registry.ToolProvenanceRoot(); got != deps.WorkspaceDir {
+		t.Fatalf("ToolProvenanceRoot() = %q, want %q", got, deps.WorkspaceDir)
+	}
 
 	// Verify expected tools are registered.
 	expectedTools := []string{
