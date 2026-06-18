@@ -339,7 +339,7 @@ internal fun ChatModeScreen(
                             // behind everything while the reply is being thought up; fades to
                             // black once the answer starts rendering. Drawn over the solid
                             // background but under the content (top bar / chat / input).
-                            // 챗봇·업무 모드 모두에 적용 — 생성 중 글로우는 컨텍스트 토글과 무관.
+                            // 챗봇·업무 공통 — 생성 중 오로라 글로우를 두 워크스페이스 모두에 표시.
                             .generatingBackdrop(active = generatingActive)
                             .navigationBarsPadding()
                             // No statusBarsPadding here: the conversation fills the full

@@ -41,10 +41,9 @@ import nl.marc_apps.tts.TextToSpeechInstance
 import org.jetbrains.compose.resources.stringResource
 import org.jetbrains.compose.resources.vectorResource
 
-// TopBarHeight: trimmed from 52dp. Once the icon buttons stop reserving Material's
-// 48dp enforced touch target (see IconTouchTarget), the bar no longer needs the
-// extra height and sits tighter.
-private val TopBarHeight = 40.dp
+// TopBarHeight: user-preserved 48dp chat chrome height. Icon buttons still use
+// the compact IconTouchTarget below, but the bar keeps the operator-tuned height.
+private val TopBarHeight = 48.dp
 
 // IconTouchTarget: top-bar icon buttons drop from Material's 48dp enforced minimum
 // to a snug target just larger than the 24dp glyph. The bar is a dense mouse+touch
