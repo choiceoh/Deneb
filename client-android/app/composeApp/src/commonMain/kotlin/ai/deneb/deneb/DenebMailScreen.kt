@@ -516,16 +516,6 @@ internal fun MailRow(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            if (message.snippet.isNotBlank()) {
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    message.snippet,
-                    style = DenebType.snippet,
-                    color = denebHint(),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
         }
     }
 }
