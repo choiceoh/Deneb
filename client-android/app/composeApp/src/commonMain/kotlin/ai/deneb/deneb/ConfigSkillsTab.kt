@@ -1,7 +1,9 @@
 package ai.deneb.deneb
 
+import ai.deneb.deneb.generated.PropusLifecycleSummary
 import ai.deneb.deneb.generated.SkillLifecycleEvent
 import ai.deneb.deneb.generated.SkillRow
+import ai.deneb.deneb.generated.SkillsLifecycleResponse
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
@@ -60,8 +62,8 @@ import kotlin.time.Instant
 // name, description, category, source — now enriched with the skill's origin
 // (생성 = Propus authored it, 최초 = it was installed or hand-written) and
 // evolve/usage counters. The Propus segment streams miniapp.skills.lifecycle:
-// genesis creations, committed evolves, rejected/rolled-back evolve attempts,
-// and review verdicts, newest first.
+// a server-owned Propus summary plus genesis creations, committed evolves,
+// rejected/rolled-back evolve attempts, and review verdicts, newest first.
 // Timeline rows expand on tap — full reason, review evidence, absolute time,
 // verdict — and link through to the skill when the event names one.
 // No toggles: discovery is filesystem-driven, so the list reflects what's
@@ -74,19 +76,19 @@ internal fun SkillsTab(client: DenebGatewayClient, onOpenSkill: (String) -> Unit
     val scope = rememberCoroutineScope()
     var loadFailed by remember { mutableStateOf(false) }
     var showLifecycle by remember { mutableStateOf(false) }
-    var lifecycleEvents by remember { mutableStateOf<List<SkillLifecycleEvent>?>(null) }
+    var lifecyclePayload by remember { mutableStateOf<SkillsLifecycleResponse?>(null) }
     var lifecycleFailed by remember { mutableStateOf(false) }
 
     suspend fun loadLifecycle() {
         lifecycleFailed = false
-        val fetched = client.fetchSkillLifecycle()
-        lifecycleEvents = fetched
+        val fetched = client.fetchSkillLifecycleResponse()
+        lifecyclePayload = fetched
         if (fetched == null) lifecycleFailed = true
     }
 
     LaunchedEffect(Unit) { loadFailed = !client.refreshSkills() }
     LaunchedEffect(showLifecycle) {
-        if (showLifecycle && lifecycleEvents == null) loadLifecycle()
+        if (showLifecycle && lifecyclePayload == null) loadLifecycle()
     }
 
     Column(Modifier.fillMaxSize()) {
@@ -105,7 +107,8 @@ internal fun SkillsTab(client: DenebGatewayClient, onOpenSkill: (String) -> Unit
                 else -> SkillListContent(skills, onOpenSkill)
             }
         } else {
-            val events = lifecycleEvents
+            val payload = lifecyclePayload
+            val events = payload?.events
             when {
                 lifecycleFailed && events == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     DenebError(
@@ -118,7 +121,7 @@ internal fun SkillsTab(client: DenebGatewayClient, onOpenSkill: (String) -> Unit
 
                 events.isEmpty() -> EmptyTab("아직 Propus 활동이 없습니다.")
 
-                else -> SkillLifecycleContent(events, onOpenSkill)
+                else -> SkillLifecycleContent(events, onOpenSkill, payload.summary)
             }
         }
     }
@@ -226,10 +229,14 @@ internal fun SkillListContent(skills: List<SkillRow>, onOpenSkill: (String) -> U
 // Stateless Propus timeline — previewable without a gateway client.
 // Rows expand on tap; [onOpenSkill] backs the expanded row's 스킬 보기 link.
 @Composable
-internal fun SkillLifecycleContent(events: List<SkillLifecycleEvent>, onOpenSkill: (String) -> Unit = {}) {
+internal fun SkillLifecycleContent(
+    events: List<SkillLifecycleEvent>,
+    onOpenSkill: (String) -> Unit = {},
+    summary: PropusLifecycleSummary = propusTimelineSummary(events),
+) {
     LazyColumn(Modifier.fillMaxSize()) {
         item {
-            PropusTimelineHeader(events)
+            PropusTimelineHeader(summary)
             HorizontalDivider(Modifier.padding(start = 16.dp), color = denebHairline())
         }
         itemsIndexed(events) { _, event ->
@@ -239,18 +246,8 @@ internal fun SkillLifecycleContent(events: List<SkillLifecycleEvent>, onOpenSkil
     }
 }
 
-private data class PropusTimelineSummary(
-    val total: Int,
-    val genesis: Int,
-    val evolved: Int,
-    val review: Int,
-    val attention: Int,
-    val latestAt: Long,
-)
-
 @Composable
-private fun PropusTimelineHeader(events: List<SkillLifecycleEvent>) {
-    val summary = remember(events) { propusTimelineSummary(events) }
+private fun PropusTimelineHeader(summary: PropusLifecycleSummary) {
     val activity = listOfNotNull(
         "최근 ${summary.total}건",
         "생성 ${summary.genesis}",
@@ -261,11 +258,11 @@ private fun PropusTimelineHeader(events: List<SkillLifecycleEvent>) {
     val state = if (summary.attention > 0) {
         "주의 ${summary.attention}건 · 기각/롤백 포함"
     } else {
-        "정상 관찰 중"
+        propusSummaryStateLabel(summary.state)
     }
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
         Text(
-            "Propus",
+            summary.system.ifBlank { "Propus" },
             style = MaterialTheme.typography.titleSmall,
             color = MaterialTheme.colorScheme.primary,
             fontWeight = FontWeight.SemiBold,
@@ -278,32 +275,76 @@ private fun PropusTimelineHeader(events: List<SkillLifecycleEvent>) {
             style = DenebType.rowSubtitle,
             color = if (summary.attention > 0) MaterialTheme.colorScheme.error else denebHint(),
         )
+        val cue = summary.attentionCue.ifBlank { summary.nextCue }
+        if (cue.isNotBlank()) {
+            Spacer(Modifier.height(2.dp))
+            Text(cue, style = DenebType.meta, color = denebHint(), maxLines = 2, overflow = TextOverflow.Ellipsis)
+        }
     }
 }
 
-private fun propusTimelineSummary(events: List<SkillLifecycleEvent>): PropusTimelineSummary {
+private fun propusTimelineSummary(events: List<SkillLifecycleEvent>): PropusLifecycleSummary {
     var genesis = 0
     var evolved = 0
     var review = 0
     var attention = 0
+    var rejected = 0
+    var rolledBack = 0
     var latestAt = 0L
+    var latestType = ""
+    var latestSkill = ""
     for (event in events) {
-        if (event.at > latestAt) latestAt = event.at
+        if (event.at > latestAt) {
+            latestAt = event.at
+            latestType = event.type
+            latestSkill = event.skillName
+        }
         when (event.type) {
             "genesis" -> genesis++
+
             "evolved" -> evolved++
-            "evolve_rejected", "evolve_rolled_back" -> attention++
+
+            "evolve_rejected" -> {
+                rejected++
+                attention++
+            }
+
+            "evolve_rolled_back" -> {
+                rolledBack++
+                attention++
+            }
+
             else -> review++
         }
     }
-    return PropusTimelineSummary(
+    return PropusLifecycleSummary(
+        system = "Propus",
+        state = if (attention > 0) {
+            "attention"
+        } else if (events.isEmpty()) {
+            "idle"
+        } else {
+            "observing"
+        },
         total = events.size,
         genesis = genesis,
         evolved = evolved,
         review = review,
+        rejected = rejected,
+        rolledBack = rolledBack,
         attention = attention,
         latestAt = latestAt,
+        latestType = latestType,
+        latestSkill = latestSkill,
+        nextCue = if (attention > 0) "기각/롤백 근거 확인" else "최근 생성/진화가 검증 근거와 연결되는지 확인",
     )
+}
+
+private fun propusSummaryStateLabel(state: String): String = when (state) {
+    "idle" -> "아직 관찰 대기 중"
+    "reviewing" -> "리뷰 판정 관찰 중"
+    "attention" -> "주의 필요"
+    else -> "정상 관찰 중"
 }
 
 // One lifecycle event row — shared by the tab timeline (above) and the

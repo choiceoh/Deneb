@@ -232,13 +232,18 @@ suspend fun DenebGatewayClient.refreshSkills(): Boolean {
 suspend fun DenebGatewayClient.fetchSkillLifecycle(
     limit: Int = 60,
     skillName: String? = null,
-): List<SkillLifecycleEvent>? = callRpc<SkillsLifecycleResponse>(
+): List<SkillLifecycleEvent>? = fetchSkillLifecycleResponse(limit = limit, skillName = skillName)?.events
+
+suspend fun DenebGatewayClient.fetchSkillLifecycleResponse(
+    limit: Int = 60,
+    skillName: String? = null,
+): SkillsLifecycleResponse? = callRpc<SkillsLifecycleResponse>(
     "miniapp.skills.lifecycle",
     buildJsonObject {
         put("limit", limit)
         if (!skillName.isNullOrBlank()) put("skillName", skillName)
     },
-)?.events
+)
 
 /** One skill's enriched row + SKILL.md body for the tap-through detail screen.
  *  Null on transport failure or unknown skill name. */
