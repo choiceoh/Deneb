@@ -148,7 +148,7 @@ fun DenebCalendarScreen(
     suspend fun loadMonth(m: CalMonth, force: Boolean) {
         if (!force && cache[m] != null) return
         val (from, to) = gridRangeIso(buildMonthGrid(m), tz)
-        val ev = client.fetchCalendarRange(from, to)
+        val ev = client.fetchCalendarRange(from, to, force = force)
         if (ev == null) {
             failed[m] = true
         } else {

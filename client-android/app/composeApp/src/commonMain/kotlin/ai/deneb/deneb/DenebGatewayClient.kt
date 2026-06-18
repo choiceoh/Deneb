@@ -63,6 +63,7 @@ import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.put
 import kotlin.concurrent.Volatile
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeSource
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
@@ -206,6 +207,22 @@ class DenebGatewayClient(
     internal val _denebCalProposals = MutableStateFlow<List<ai.deneb.deneb.generated.CalendarProposalOut>>(emptyList())
     val denebCalProposals: StateFlow<List<ai.deneb.deneb.generated.CalendarProposalOut>> = _denebCalProposals
 
+    // Calendar month cache (range-key → when-fetched + events). The calendar
+    // screen's own cache is composition-scoped, so every tab switch back to the
+    // calendar re-hit Google for the visible month + both neighbors (~270ms each).
+    // This client-level cache survives navigation, making a rapid re-open instant;
+    // a short TTL bounds staleness and force=true (pull-to-refresh, after an edit)
+    // bypasses it. Accessed only from the screen's Main-scoped coroutines.
+    private val calRangeCache = mutableMapOf<String, Pair<TimeSource.Monotonic.ValueTimeMark, List<CalendarEvent>>>()
+
+    /** Cached events for [key] if still within the TTL, else null. */
+    internal fun cachedCalendarRange(key: String): List<CalendarEvent>? = calRangeCache[key]?.takeIf { it.first.elapsedNow() < CAL_RANGE_TTL }?.second
+
+    /** Store a freshly-fetched range under [key], stamped now. */
+    internal fun storeCalendarRange(key: String, events: List<CalendarEvent>) {
+        calRangeCache[key] = TimeSource.Monotonic.markNow() to events
+    }
+
     // Native-client handshake snapshot: gateway version, active model, and
     // feature flags exposed by miniapp.client.hello.
     private val _clientStatus = MutableStateFlow<ClientStatus?>(null)
@@ -332,6 +349,7 @@ class DenebGatewayClient(
         _denebScheduledTasks.value = emptyList()
         _denebCalendar.value = emptyList()
         _denebCalProposals.value = emptyList()
+        calRangeCache.clear()
         _denebModels.value = emptyList()
         _denebRoleModels.value = emptyMap()
         _denebModelAdvisories.value = emptyList()
@@ -1813,5 +1831,11 @@ class DenebGatewayClient(
         // Max idle between bytes on the chat SSE stream. The server emits a
         // keepalive comment every 15s, so this only trips on a real stall.
         const val STREAM_SOCKET_TIMEOUT_MS = 120_000L
+
+        // How long a fetched calendar month is served from the client cache before
+        // a re-open refetches. Short enough that an event added elsewhere surfaces
+        // soon (and pull-to-refresh / edits force immediately), long enough that
+        // rapid tab-switching back to the calendar is instant.
+        val CAL_RANGE_TTL = 120.seconds
     }
 }
