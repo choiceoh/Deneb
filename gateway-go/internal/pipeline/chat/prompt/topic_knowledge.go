@@ -23,6 +23,21 @@ const maxTopicKnowledgeChars = 24_000
 // files when TopicsConfig.Dir is empty.
 const defaultTopicDir = "topics"
 
+// PersonaCacheKeyFor returns the Static-cache key fragment for an edited persona
+// override: sha256[:12] of the trimmed text, matching TopicKnowledge.Hash's
+// scheme. "" for empty text (no override) so the Static cache key stays
+// unchanged and the default-persona entry is preserved. The chat pipeline
+// (run_prepare) calls this and passes the result as
+// SystemPromptParams.PersonaCacheKey.
+func PersonaCacheKeyFor(text string) string {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return ""
+	}
+	sum := sha256.Sum256([]byte(text))
+	return hex.EncodeToString(sum[:])[:12]
+}
+
 // TopicKnowledge holds resolved per-forum-topic knowledge for the system
 // prompt. Key/Content/Hash/Path are all empty when there is no injection (no
 // topic mapped, unsafe key, or missing/empty file).

@@ -89,8 +89,8 @@ func TestBuildSystemPromptChatbot(t *testing.T) {
 
 	// Static cache key: 업무 (false) byte-identical to the pre-flag key (no
 	// "chatbot" marker), 챗봇 (true) distinct so the two never share a cache slot.
-	keyWork := buildStaticCacheKey(tools, nil, "", false)
-	keyChat := buildStaticCacheKey(tools, nil, "", true)
+	keyWork := buildStaticCacheKey(tools, nil, "", "", false)
+	keyChat := buildStaticCacheKey(tools, nil, "", "", true)
 	if strings.Contains(keyWork, "chatbot") {
 		t.Errorf("업무 static cache key must be unchanged, got %q", keyWork)
 	}

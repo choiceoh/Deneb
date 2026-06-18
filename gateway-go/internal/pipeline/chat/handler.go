@@ -103,6 +103,10 @@ type Handler struct {
 	// the dynamic system-prompt block. Optional: nil disables ambient calendar
 	// awareness (the live `calendar` tool is unaffected).
 	calendarGlanceFn CalendarGlanceFunc
+
+	// personaOverrideFn returns the operator-edited 업무 persona text (Settings
+	// prompt corner). Optional: nil → default persona always renders.
+	personaOverrideFn PersonaOverrideFunc
 }
 
 // TopicResolver maps a forum/topic threadID to a per-topic knowledge key
@@ -205,6 +209,10 @@ type HandlerConfig struct {
 	// system-prompt block. Optional: nil disables ambient calendar awareness.
 	CalendarGlanceFn CalendarGlanceFunc
 
+	// PersonaOverrideFn returns the operator-edited 업무 persona text (Settings
+	// prompt corner), or "" when unedited. Optional: nil → default persona.
+	PersonaOverrideFn PersonaOverrideFunc
+
 	// RecordActivity is called for user-originating chat turns so the server
 	// can remember the latest active channel session for autonomous follow-ups.
 	// The server owns filtering; chat only reports the session key.
@@ -297,6 +305,7 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 		jobTracker:           cfg.JobTracker,
 		topicResolver:        cfg.TopicResolver,
 		calendarGlanceFn:     cfg.CalendarGlanceFn,
+		personaOverrideFn:    cfg.PersonaOverrideFn,
 		providerConfigs:      cloneProviderConfigs(cfg.ProviderConfigs),
 		embeddingClient:      cfg.EmbeddingClient,
 		wikiStore:            cfg.WikiStore,

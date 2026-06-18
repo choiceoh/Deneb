@@ -28,7 +28,7 @@ var toolCategories = []struct {
 
 // buildStaticCacheKey returns a stable string key for the static prompt block
 // based on the sorted tool name list.
-func buildStaticCacheKey(toolDefs []ToolDef, deferredTools []DeferredToolInfo, topicCacheKey string, chatbot bool) string {
+func buildStaticCacheKey(toolDefs []ToolDef, deferredTools []DeferredToolInfo, topicCacheKey, personaCacheKey string, chatbot bool) string {
 	names := make([]string, 0, len(toolDefs)+len(deferredTools))
 	for _, d := range toolDefs {
 		names = append(names, d.Name)
@@ -44,12 +44,18 @@ func buildStaticCacheKey(toolDefs []ToolDef, deferredTools []DeferredToolInfo, t
 	if chatbot {
 		base += "|chatbot"
 	}
-	if topicCacheKey == "" {
-		// No topic → identical key to the pre-topic implementation, so
-		// topic-less sessions keep sharing the existing Static cache entry.
-		return base
+	// Persona override: only an edited persona carries a key, so the default
+	// (unedited) 업무 key stays byte-identical to before and keeps sharing the
+	// existing Static cache entry. An edit's content hash gives it its own slot.
+	if personaCacheKey != "" {
+		base += "|persona=" + personaCacheKey
 	}
-	return base + "|topic=" + topicCacheKey
+	// Topic stays last so the empty-everything key equals the pre-topic
+	// implementation (topic-less, persona-less sessions keep the existing entry).
+	if topicCacheKey != "" {
+		base += "|topic=" + topicCacheKey
+	}
+	return base
 }
 
 // buildPromptSections assembles the system prompt into static, semi-static, and dynamic parts.
@@ -74,7 +80,7 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 	// --- Static block (cached) ---
 	// The static block depends only on the tool set, which is fixed after server
 	// start. Cache it to avoid rebuilding ~2 KB of strings on every request.
-	cacheKey := buildStaticCacheKey(params.ToolDefs, params.DeferredTools, params.TopicCacheKey, params.Chatbot)
+	cacheKey := buildStaticCacheKey(params.ToolDefs, params.DeferredTools, params.TopicCacheKey, params.PersonaCacheKey, params.Chatbot)
 	if cached, ok := Cache.StaticPrompt(cacheKey); ok {
 		staticText = cached
 	} else {
@@ -88,12 +94,18 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 			// tier-1 wiki, calendar) is withheld upstream; the tool surface stays.
 			s.WriteString("You are a helpful, knowledgeable AI assistant. 사용자의 질문에 한국어로 명확하고 자연스럽게 답한다. 대화·설명·브레인스토밍·글쓰기·코딩 등 무엇이든 돕는다. 군더더기 없이 직접적으로, 결과로 신뢰를 쌓아라.\n\n")
 		} else {
-			// Identity.
-			s.WriteString("You are Nev — a personal assistant running inside Deneb (https://github.com/choiceoh/deneb). Deneb is a single-user AI agent platform on DGX Spark.\n\n")
-
-			// Role (chief-of-staff persona — see CLAUDE.md "비서실장형 단일 에이전트").
-			s.WriteString("## 역할\n")
-			s.WriteString("당신은 비서실장형 단일 에이전트다 — 분석가와 비서를 분리하지 않는다. **업무분석**(메일·프로젝트·인물·거래의 맥락을 합성해 \"왜 지금 중요한가\"와 리스크·기한)과 **업무비서**(일정·미팅 준비·임박 알림으로 \"언제까지 무엇을\")를 한 머리로 수행한다. 좋은 답에는 분석의 '왜'와 비서의 '언제까지'가 한 응답에 함께 담긴다 — 둘을 분리된 응답이나 탭으로 가르지 마라.\n\n")
+			// Identity + 역할 (chief-of-staff persona — see CLAUDE.md "비서실장형 단일
+			// 에이전트"). Editable via the Settings prompt corner: an override
+			// arrives as params.PersonaText (byte-stable per session, hash-keyed in
+			// the Static cache key); no override → DefaultPersona, byte-identical to
+			// the prior three inline WriteString calls. 챗봇 keeps its neutral identity
+			// above, so the override never touches the general-assistant path.
+			if params.PersonaText != "" {
+				s.WriteString(strings.TrimSpace(params.PersonaText))
+				s.WriteString("\n\n")
+			} else {
+				s.WriteString(DefaultPersona)
+			}
 		}
 
 		// Topic background knowledge (per-forum-topic; config-mapped). Lives in

@@ -164,6 +164,11 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 	// the calendar tool. nil when no calendar source is wired (feature off).
 	chatCfg.CalendarGlanceFn = chat.NewCalendarGlanceFunc(&s.toolDeps.Calendar)
 
+	// Operator-edited 업무 persona (Settings prompt corner → prompt store). Returns
+	// "" when unedited so the chat pipeline renders the default persona. Reading
+	// the store keeps the chat package free of the prompt-store import.
+	chatCfg.PersonaOverrideFn = s.personaOverride
+
 	// Spillover store: saves large tool results to disk, replaces with preview.
 	// Session-end events release per-session spill files immediately instead of
 	// waiting for the 30-minute TTL sweep (see server_spillover_lifecycle.go).

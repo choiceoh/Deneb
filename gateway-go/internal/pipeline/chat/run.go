@@ -211,9 +211,24 @@ type runDeps struct {
 	// system-prompt block. nil disables ambient calendar awareness.
 	calendarGlanceFn CalendarGlanceFunc
 
+	// personaOverrideFn returns the operator-edited 업무 persona text (Settings
+	// prompt corner), or "" when unedited. nil disables the override (the
+	// default persona renders). Read per turn — byte-stable between rare edits,
+	// so the Static cache holds; an edit changes the PersonaCacheKey and thus the
+	// cache slot. The chat package stays free of the prompts/server import by
+	// talking through this closure (wired in server/chat_pipeline.go).
+	personaOverrideFn PersonaOverrideFunc
+
 	// chatport holds injected adapters that decouple chat from autoreply.
 	chatport chatportAdapters
 }
+
+// PersonaOverrideFunc returns the operator-edited 업무 persona override text, or
+// "" when there is no override. The concrete implementation lives in the server
+// package and reads the prompt store; the chat package stays free of any
+// infra/config import by talking through this function. nil disables the
+// override entirely (DefaultPersona renders).
+type PersonaOverrideFunc func() string
 
 // abbreviateSession shortens channel prefixes in session keys for compact log output.
 // e.g. "client:main:task:ts" → "cl:main:task:ts"
