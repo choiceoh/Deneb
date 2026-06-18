@@ -16,7 +16,9 @@ export function SearchPane() {
 
   const aiText = hits.length
     ? `[검색 "${q}" — ${hits.length}건]\n` +
-      hits.map((h) => `- ${h.type ? `[${h.type}] ` : ""}${h.title ?? ""}${h.snippet ? ` — ${h.snippet}` : ""}`).join("\n")
+      hits
+        .map((h) => `- ${h.type ? `[${h.type}] ` : ""}${h.title ?? ""}${h.snippet ? ` — ${h.snippet}` : ""}`)
+        .join("\n")
     : "";
   useRegisterPane(undefined, aiText);
 

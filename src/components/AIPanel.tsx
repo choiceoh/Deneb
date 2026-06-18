@@ -28,7 +28,9 @@ export function AIPanel({ cfg }: { cfg: GatewayConfig }) {
       <div style={{ fontSize: 12, opacity: 0.5, marginBottom: 6 }}>
         현재 뷰({paneLabel(view)})를 읽고, 도구로 바꾸면 즉시 반영됩니다
       </div>
-      {thinking && <div style={{ fontSize: 12, opacity: 0.6, fontStyle: "italic", marginBottom: 6 }}>🤔 {thinking}…</div>}
+      {thinking && (
+        <div style={{ fontSize: 12, opacity: 0.6, fontStyle: "italic", marginBottom: 6 }}>🤔 {thinking}…</div>
+      )}
       <pre style={{ flex: 1, whiteSpace: "pre-wrap", fontSize: 13, lineHeight: 1.5, margin: 0 }}>
         {out || (busy ? "응답 대기 중…" : "메시지를 보내면 응답이 스트리밍됩니다.")}
       </pre>

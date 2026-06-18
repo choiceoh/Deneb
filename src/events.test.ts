@@ -38,7 +38,10 @@ describe("subscribeEvents", () => {
   });
 
   it("throws on a non-ok response", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => new Response("nope", { status: 500 })));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("nope", { status: 500 })),
+    );
     await expect(subscribeEvents({ url: "http://x", token: "t" }, {})).rejects.toThrow(/HTTP 500/);
   });
 });

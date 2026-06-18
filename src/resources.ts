@@ -65,9 +65,7 @@ export const MEMORY_RPC = {
 
 export const SEARCH_RPC = "miniapp.search.all";
 
-export const RESOURCE_MAP: Record<string, ResourceDef> = Object.fromEntries(
-  RESOURCE_DEFS.map((r) => [r.name, r]),
-);
+export const RESOURCE_MAP: Record<string, ResourceDef> = Object.fromEntries(RESOURCE_DEFS.map((r) => [r.name, r]));
 
 export function resourceDef(name: string): ResourceDef {
   const r = RESOURCE_MAP[name];

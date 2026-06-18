@@ -20,14 +20,14 @@
 
 ## 한눈에
 
-| 항목 | 값 |
-|---|---|
-| 정체성 | 개인 AI 업무 총괄 워크스테이션 (데네브 데스크탑 사령탑) |
-| 스택 | **Tauri 2** (Rust 셸) + **React** + admin 프레임워크 (**Refine** 유력) |
-| 플랫폼 | 크로스플랫폼 — 직장 Windows · 집 Mac 둘 다 (경량, Electron 회피) |
-| 연동 | Deneb 게이트웨이 `miniapp.*` RPC(data provider) + SSE(`X-Deneb-Client-Token`) |
-| 세션 | `client:main` 공유 (모바일과 같은 단일 에이전트 세션) |
-| 상태 | **Phase 1 완료 + Phase 2 골격** — Tauri 셸·테스트/CI·events 계층 기초 구축. 상세는 [`docs/DESIGN.md`](docs/DESIGN.md) |
+| 항목   | 값                                                                                                                    |
+| ------ | --------------------------------------------------------------------------------------------------------------------- |
+| 정체성 | 개인 AI 업무 총괄 워크스테이션 (데네브 데스크탑 사령탑)                                                               |
+| 스택   | **Tauri 2** (Rust 셸) + **React** + admin 프레임워크 (**Refine** 유력)                                                |
+| 플랫폼 | 크로스플랫폼 — 직장 Windows · 집 Mac 둘 다 (경량, Electron 회피)                                                      |
+| 연동   | Deneb 게이트웨이 `miniapp.*` RPC(data provider) + SSE(`X-Deneb-Client-Token`)                                         |
+| 세션   | `client:main` 공유 (모바일과 같은 단일 에이전트 세션)                                                                 |
+| 상태   | **Phase 1 완료 + Phase 2 골격** — Tauri 셸·테스트/CI·events 계층 기초 구축. 상세는 [`docs/DESIGN.md`](docs/DESIGN.md) |
 
 ## 핵심 설계 판단 (왜 이 스택인가)
 

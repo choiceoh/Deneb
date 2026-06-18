@@ -5,6 +5,9 @@
 // EventSource can't set the X-Deneb-Client-Token header, so we read the SSE stream
 // off fetch() with an AbortSignal (same approach as chatStream).
 import { type GatewayConfig, TOKEN_HEADER, base } from "./gateway";
+import { log } from "./log";
+
+const evLog = log.child("events");
 
 export interface ProactiveEvent {
   id: string;
@@ -46,8 +49,12 @@ export async function subscribeEvents(
     headers: { [TOKEN_HEADER]: cfg.token },
     signal,
   });
-  if (!res.ok) throw new Error(`events: HTTP ${res.status}`);
+  if (!res.ok) {
+    evLog.error(`✗ subscribe: HTTP ${res.status}`);
+    throw new Error(`events: HTTP ${res.status}`);
+  }
   if (!res.body) throw new Error("events: empty response body");
+  evLog.info("stream open");
   handlers.onOpen?.();
 
   const reader = res.body.getReader();
@@ -71,7 +78,9 @@ export async function subscribeEvents(
       if (!data) continue;
       try {
         const obj = JSON.parse(data) as Record<string, unknown>;
-        handlers.onEvent?.(toEvent(event, obj));
+        const ev = toEvent(event, obj);
+        evLog.debug(`event ${ev.kind ?? "?"}`, ev.title ?? "");
+        handlers.onEvent?.(ev);
       } catch {
         /* ignore malformed frame */
       }

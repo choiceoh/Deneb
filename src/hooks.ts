@@ -112,6 +112,8 @@ export function useEvents(cfg: GatewayConfig, connected: boolean): EventsState {
       if (!controller.signal.aborted) setStatus(`오류: ${(e as Error).message}`);
     });
     return () => controller.abort();
+    // Re-subscribe only when the connection identity changes, not on every cfg ref.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cfg.url, cfg.token, connected]);
 
   const dismiss = (id: string) => setEvents((prev) => prev.filter((e) => e.id !== id));

@@ -22,7 +22,11 @@ describe("resource registry", () => {
   });
 
   it("wires todo CRUD and mail/calendar reads per DESIGN §5", () => {
-    expect(resourceDef("todo")).toMatchObject({ create: expect.any(String), update: expect.any(String), remove: expect.any(String) });
+    expect(resourceDef("todo")).toMatchObject({
+      create: expect.any(String),
+      update: expect.any(String),
+      remove: expect.any(String),
+    });
     expect(resourceDef("mail").get).toBe("miniapp.gmail.get");
     expect(resourceDef("calendar").list).toBe("miniapp.calendar.list_upcoming");
   });

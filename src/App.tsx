@@ -5,6 +5,7 @@ import { denebDataProvider } from "./dataProvider";
 import { denebAuthProvider } from "./authProvider";
 import { refineResources } from "./resources";
 import { WorkspaceProvider } from "./workspaceContext";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Workstation } from "./components/Workstation";
 
 // App owns the gateway config and the Refine providers (data + auth, both derived
@@ -17,15 +18,17 @@ export function App() {
   const connected = Boolean(cfg.url && cfg.token);
 
   return (
-    <Refine
-      dataProvider={dataProvider}
-      authProvider={authProvider}
-      resources={refineResources}
-      options={{ disableTelemetry: true }}
-    >
-      <WorkspaceProvider connected={connected} cfg={cfg}>
-        <Workstation cfg={cfg} setCfg={setCfg} />
-      </WorkspaceProvider>
-    </Refine>
+    <ErrorBoundary>
+      <Refine
+        dataProvider={dataProvider}
+        authProvider={authProvider}
+        resources={refineResources}
+        options={{ disableTelemetry: true }}
+      >
+        <WorkspaceProvider connected={connected} cfg={cfg}>
+          <Workstation cfg={cfg} setCfg={setCfg} />
+        </WorkspaceProvider>
+      </Refine>
+    </ErrorBoundary>
   );
 }

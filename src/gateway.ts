@@ -3,6 +3,10 @@
 // Phase 0 (this file): raw RPC envelope + token auth + ping + chat SSE stream.
 // Phase 1: wrap callRpc() in a Refine data provider so resources (mail, calendar,
 // todo, memory …) flow into grids/forms automatically.
+import { log } from "./log";
+
+const rpcLog = log.child("rpc");
+const chatLog = log.child("chat");
 
 export const TOKEN_HEADER = "X-Deneb-Client-Token";
 const STORAGE_KEY = "andromeda.gateway";
@@ -41,21 +45,24 @@ interface RpcEnvelope<T> {
 export const base = (url: string) => url.replace(/\/$/, "");
 
 // One JSON-RPC call against POST /api/v1/miniapp/rpc.
-export async function callRpc<T>(
-  cfg: GatewayConfig,
-  method: string,
-  params: Record<string, unknown> = {},
-): Promise<T> {
+export async function callRpc<T>(cfg: GatewayConfig, method: string, params: Record<string, unknown> = {}): Promise<T> {
   const body: RpcRequest = { id: crypto.randomUUID(), method, params };
-  const res = await fetch(`${base(cfg.url)}/api/v1/miniapp/rpc`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", [TOKEN_HEADER]: cfg.token },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) throw new Error(`RPC ${method}: HTTP ${res.status}`);
-  const env = (await res.json()) as RpcEnvelope<T>;
-  if (!env.ok) throw new Error(env.error?.message ?? `RPC ${method} failed`);
-  return env.payload as T;
+  rpcLog.debug(`→ ${method}`, params);
+  try {
+    const res = await fetch(`${base(cfg.url)}/api/v1/miniapp/rpc`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", [TOKEN_HEADER]: cfg.token },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error(`RPC ${method}: HTTP ${res.status}`);
+    const env = (await res.json()) as RpcEnvelope<T>;
+    if (!env.ok) throw new Error(env.error?.message ?? `RPC ${method} failed`);
+    rpcLog.debug(`← ${method}`);
+    return env.payload as T;
+  } catch (e) {
+    rpcLog.error(`✗ ${method}: ${(e as Error).message}`);
+    throw e;
+  }
 }
 
 export interface PingResult {
@@ -103,12 +110,16 @@ export async function chatStream(
   const composed = workspaceContext?.trim()
     ? `[작업 영역 — 현재 내용]\n${workspaceContext}\n\n[요청]\n${message}`
     : message;
+  chatLog.debug(`→ stream (session ${sessionKey}, +context ${Boolean(workspaceContext?.trim())})`);
   const res = await fetch(`${base(cfg.url)}/api/v1/miniapp/chat/stream`, {
     method: "POST",
     headers: { "Content-Type": "application/json", [TOKEN_HEADER]: cfg.token },
     body: JSON.stringify({ message: composed, sessionKey }),
   });
-  if (!res.ok) throw new Error(`chat stream: HTTP ${res.status}`);
+  if (!res.ok) {
+    chatLog.error(`✗ stream: HTTP ${res.status}`);
+    throw new Error(`chat stream: HTTP ${res.status}`);
+  }
   if (!res.body) throw new Error("chat stream: empty response body");
 
   const reader = res.body.getReader();

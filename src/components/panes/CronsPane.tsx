@@ -12,7 +12,10 @@ export function CronsPane() {
   const aiText = crons.length
     ? `[크론 ${crons.length}건]\n` +
       crons
-        .map((c) => `- ${c.name ?? "(이름 없음)"}${c.schedule ? ` (${c.schedule})` : ""}${c.enabled === false ? " [중지]" : ""}`)
+        .map(
+          (c) =>
+            `- ${c.name ?? "(이름 없음)"}${c.schedule ? ` (${c.schedule})` : ""}${c.enabled === false ? " [중지]" : ""}`,
+        )
         .join("\n")
     : "";
   useRegisterPane("crons", aiText);
