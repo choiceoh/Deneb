@@ -131,6 +131,7 @@ const evolveSystemPrompt = `당신은 AI 에이전트의 스킬 개선 시스템
 10. **Held-out case 보존**: "Held-out validation/replay cases"의 required action/tool/input/order/observation은 후보 본문에 절차나 검증 조건으로 반영하라. fixture output은 과거 관찰 예시일 뿐 미래 상태로 단정하지 말고, 확인해야 할 조건으로 표현하라
 11. **Self-Harness targeting**: 후보는 지원(support)이 있는 failure evidence bundle의 한 가지 주 실패 메커니즘 또는 명시적인 Review Finding에 연결되어야 한다. evidence가 약하거나 스킬 본문으로 addressable하지 않으면 억지로 고치지 말고 skip하라
 12. **Auditability**: changes.description에는 목표 failure signature, 수정한 editable surface(예: Procedure/Pitfalls/Verification), 기대 행동 변화, 회귀 위험을 한 문장으로 포함하라
+13. **Promotion gate**: skip=false라면 target_signature, edited_surface, expected_behavior_change, regression_risk는 필수다. failure evidence bundle을 쓰는 경우 target_signature는 bundle의 signature 문자열과 일치해야 한다
 
 ## 출력 형식
 
