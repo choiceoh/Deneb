@@ -79,7 +79,7 @@ jobs:
           working-directory: gateway-go
           args: --new-from-rev=HEAD~1
 
-      - name: Test (race detector)
+      - name: Test (coverage)
         run: CGO_ENABLED=0 go test -count=1 -coverprofile=coverage.out -covermode=atomic ./...
 
       - name: Coverage gate (threshold 50%)

@@ -8,6 +8,9 @@
 #   - detekt: bug catchers only (config/detekt.yml; style rulesets are off,
 #     accepted pre-existing findings live in config/detekt-baseline.xml —
 #     baseline updates need operator approval per .claude/rules/testing.md)
+#   - desktopTest smoke subset: stable shared/common logic tests on the desktop
+#     JVM path so client regressions are caught before merge without inheriting
+#     the currently flaky chat-viewmodel suite
 name: kotlin-lint
 
 on:
@@ -26,7 +29,7 @@ permissions:
 
 jobs:
   lint:
-    name: spotless + detekt
+    name: spotless + detekt + desktopTest smoke
     runs-on: ubuntu-latest
     timeout-minutes: 20
     defaults:
@@ -51,3 +54,12 @@ jobs:
 
       - name: detekt
         run: ./gradlew detekt --no-daemon
+
+      - name: desktopTest smoke subset
+        run: |
+          ./gradlew desktopTest --no-daemon \
+            --tests 'ai.deneb.data.TaskStoreMigrationTest*' \
+            --tests 'ai.deneb.data.CronExpressionTest*' \
+            --tests 'ai.deneb.deneb.generated.MiniappWireTypesTest*' \
+            --tests 'ai.deneb.data.AttachmentRouteTest*' \
+            --tests 'ai.deneb.network.UiErrorTest*'

@@ -17,11 +17,21 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
-// nativeClientChannel is the channel identity for standalone native-client chat
+// NativeClientChannel is the channel identity for standalone native-client chat
 // turns — it keys the session, delivery, and the system prompt's runtime line.
 // (deneb-ui blocks still render on the native side; the gateway no longer
 // prompts the model to emit them — see PR removing the deneb-ui instructions.)
-const nativeClientChannel = "client"
+const NativeClientChannel = "client"
+
+// DefaultSessionKey normalizes the native client's optional session key onto the
+// shared default conversation so the blocking and streaming bridges cannot drift.
+func DefaultSessionKey(sessionKey string) string {
+	sessionKey = strings.TrimSpace(sessionKey)
+	if sessionKey == "" {
+		return NativeClientChannel + ":main"
+	}
+	return sessionKey
+}
 
 // Work-feed digest bounds: read at most maxFeedDigestItems rows, keep at most
 // feedDigestLineCap of today's, each trimmed to feedDigestRuneCap runes — so a
@@ -166,12 +176,7 @@ func handleMiniappCaptureImage(deps Deps) rpcutil.HandlerFunc {
 		if strings.TrimSpace(text) == "" {
 			return rpcerr.Unavailable("no text found in image").Response(req.ID)
 		}
-		sessionKey := strings.TrimSpace(p.SessionKey)
-		if sessionKey == "" {
-			sessionKey = nativeClientChannel + ":main"
-		}
-		// Persist the raw extracted text before the turn: the agent only
-		// summarizes, and the original must outlive the chat transcript.
+		sessionKey := DefaultSessionKey(p.SessionKey)
 		var savedPath string
 		if deps.SaveCapture != nil {
 			if rel, serr := deps.SaveCapture("image", p.Caption, text); serr != nil {
@@ -197,7 +202,7 @@ func handleMiniappCaptureImage(deps Deps) rpcutil.HandlerFunc {
 		}
 		defer release()
 		res, err := deps.Chat.SendSync(ctx, sessionKey, message, "", &chatpkg.SyncOptions{
-			Delivery:            &chatpkg.DeliveryContext{Channel: nativeClientChannel, To: sessionKey},
+			Delivery:            &chatpkg.DeliveryContext{Channel: NativeClientChannel, To: sessionKey},
 			AutoDeliveredOutput: true,
 			// OCR'd text is untrusted (a malicious screenshot): block exec/gmail send if it carries promptware.
 			GateUntrustedTools: true,
@@ -263,10 +268,7 @@ func handleMiniappCaptureDocument(deps Deps) rpcutil.HandlerFunc {
 		if strings.TrimSpace(text) == "" {
 			return rpcerr.Unavailable("no text could be extracted from the document").Response(req.ID)
 		}
-		sessionKey := strings.TrimSpace(p.SessionKey)
-		if sessionKey == "" {
-			sessionKey = nativeClientChannel + ":main"
-		}
+		sessionKey := DefaultSessionKey(p.SessionKey)
 		// Persist the raw extracted text before the turn: the agent only
 		// summarizes, and the original must outlive the chat transcript.
 		var savedPath string
@@ -297,7 +299,7 @@ func handleMiniappCaptureDocument(deps Deps) rpcutil.HandlerFunc {
 		}
 		defer release()
 		res, err := deps.Chat.SendSync(ctx, sessionKey, message, "", &chatpkg.SyncOptions{
-			Delivery:            &chatpkg.DeliveryContext{Channel: nativeClientChannel, To: sessionKey},
+			Delivery:            &chatpkg.DeliveryContext{Channel: NativeClientChannel, To: sessionKey},
 			AutoDeliveredOutput: true,
 			// Document content is untrusted (a malicious attachment): block exec/gmail send if it carries promptware.
 			GateUntrustedTools: true,
@@ -343,10 +345,7 @@ func handleMiniappDropboxAnalyze(deps Deps) rpcutil.HandlerFunc {
 		if path == "" {
 			return rpcerr.MissingParam("path").Response(req.ID)
 		}
-		sessionKey := strings.TrimSpace(p.SessionKey)
-		if sessionKey == "" {
-			sessionKey = nativeClientChannel + ":main"
-		}
+		sessionKey := DefaultSessionKey(p.SessionKey)
 		// Drive the agent's dropbox tool (download → extract → reason). Extraction
 		// lives in the tool (pipeline/chat/tools), keeping this bridge layer-clean.
 		message := "📄 Dropbox 파일을 분석해줘. dropbox 도구의 analyze 액션(path=" + path + ")으로 " +
@@ -358,7 +357,7 @@ func handleMiniappDropboxAnalyze(deps Deps) rpcutil.HandlerFunc {
 		}
 		defer release()
 		res, err := deps.Chat.SendSync(ctx, sessionKey, message, "", &chatpkg.SyncOptions{
-			Delivery:            &chatpkg.DeliveryContext{Channel: nativeClientChannel, To: sessionKey},
+			Delivery:            &chatpkg.DeliveryContext{Channel: NativeClientChannel, To: sessionKey},
 			AutoDeliveredOutput: true,
 			// Dropbox file content is untrusted: block exec/gmail send if it carries promptware.
 			GateUntrustedTools: true,
@@ -420,10 +419,7 @@ func handleMiniappCaptureAudio(deps Deps) rpcutil.HandlerFunc {
 		if strings.TrimSpace(transcript) == "" {
 			return rpcerr.Unavailable("no speech found in audio").Response(req.ID)
 		}
-		sessionKey := strings.TrimSpace(p.SessionKey)
-		if sessionKey == "" {
-			sessionKey = nativeClientChannel + ":main"
-		}
+		sessionKey := DefaultSessionKey(p.SessionKey)
 		// Persist the full diarized transcript before the turn: minutes are a
 		// summary, and the one number the summary dropped lives only here.
 		var savedPath string
@@ -454,7 +450,7 @@ func handleMiniappCaptureAudio(deps Deps) rpcutil.HandlerFunc {
 		}
 		defer release()
 		res, err := deps.Chat.SendSync(ctx, sessionKey, message, "", &chatpkg.SyncOptions{
-			Delivery:            &chatpkg.DeliveryContext{Channel: nativeClientChannel, To: sessionKey},
+			Delivery:            &chatpkg.DeliveryContext{Channel: NativeClientChannel, To: sessionKey},
 			AutoDeliveredOutput: true,
 			// Transcribed audio is untrusted input: block exec/gmail send if it carries promptware.
 			GateUntrustedTools: true,
@@ -526,10 +522,7 @@ func handleMiniappCaptureContacts(deps Deps) rpcutil.HandlerFunc {
 				enrich = res
 			}
 		}
-		sessionKey := strings.TrimSpace(p.SessionKey)
-		if sessionKey == "" {
-			sessionKey = nativeClientChannel + ":main"
-		}
+		sessionKey := DefaultSessionKey(p.SessionKey)
 		text := contactsSummary(saved, enrich)
 		recordWorkFeed(deps, workfeed.Item{
 			Source:     workfeed.SourceCaptureContacts,
@@ -603,10 +596,7 @@ func handleMiniappChatSend(deps Deps) rpcutil.HandlerFunc {
 		if strings.TrimSpace(p.Message) == "" {
 			return rpcerr.MissingParam("message").Response(req.ID)
 		}
-		sessionKey := strings.TrimSpace(p.SessionKey)
-		if sessionKey == "" {
-			sessionKey = nativeClientChannel + ":main"
-		}
+		sessionKey := DefaultSessionKey(p.SessionKey)
 
 		// Bound concurrent interactive turns (unified-memory OOM guard).
 		release, aerr := deps.Chat.AcquireInteractiveTurn(ctx)
@@ -627,7 +617,7 @@ func handleMiniappChatSend(deps Deps) rpcutil.HandlerFunc {
 		}
 
 		res, err := deps.Chat.SendSync(ctx, sessionKey, p.Message, strings.TrimSpace(p.Model), &chatpkg.SyncOptions{
-			Delivery: &chatpkg.DeliveryContext{Channel: nativeClientChannel, To: sessionKey},
+			Delivery: &chatpkg.DeliveryContext{Channel: NativeClientChannel, To: sessionKey},
 			// The reply text is returned here, not pushed via the message tool.
 			AutoDeliveredOutput: true,
 			SkipRecall:          p.SkipRecall,

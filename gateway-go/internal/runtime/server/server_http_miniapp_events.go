@@ -1,7 +1,7 @@
 // server_http_miniapp_events.go — proactive-event SSE stream for the native client.
 //
 //	GET /api/v1/miniapp/events
-//	  X-Deneb-Client-Token: <token>   (or Authorization: tma <initData>)
+//	  X-Deneb-Client-Token: <token>
 //
 // The native app's foreground daemon holds this connection open and raises a
 // local notification for each frame:
