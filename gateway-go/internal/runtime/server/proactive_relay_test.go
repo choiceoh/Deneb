@@ -309,6 +309,74 @@ func TestRelay_StripsMetaPreamble(t *testing.T) {
 	}
 }
 
+// TestRelay_WorkModelFooter verifies the bare model name is appended at the foot
+// of a 업무 feed report (client:main) when the resolver yields a name, that it sits
+// at the end without polluting the card title/summary, and that it is absent when
+// the resolver is unwired or returns "". The report body never contains the model
+// name, so Contains(...) is a clean discriminator for the stamp.
+func TestRelay_WorkModelFooter(t *testing.T) {
+	const model = "deepseek-v4-flash"
+	body := "📊 일일 브리핑\n\n오늘 처리할 핵심 안건이 있습니다.\n- 대한전선 당진 2차 착수보고회 참석 확인\n- 무림 울산공장 풍력 검토안 회신"
+
+	t.Run("stamped on the feed card", func(t *testing.T) {
+		feed := &recordingWorkFeed{}
+		d := proactiveRelayDeps{workFeed: feed, workModel: func() string { return model }}
+		delivered, err := d.relayNative(body)
+		if err != nil || !delivered {
+			t.Fatalf("relayNative: delivered=%v err=%v", delivered, err)
+		}
+		if n := len(feed.items); n != 1 {
+			t.Fatalf("got %d work-feed item(s), want 1", n)
+		}
+		card := feed.items[0]
+		if !strings.HasSuffix(strings.TrimRight(card.Body, "\n"), model) {
+			t.Errorf("feed body must end with the bare model name %q, got:\n%s", model, card.Body)
+		}
+		// The stamp is meta — it must not leak into the card's title or 2-line summary.
+		if strings.Contains(card.Title, model) || strings.Contains(card.Summary, model) {
+			t.Errorf("model name leaked into title/summary: title=%q summary=%q", card.Title, card.Summary)
+		}
+		// The real report content must survive ahead of the stamp.
+		if !strings.Contains(card.Body, "일일 브리핑") || !strings.Contains(card.Body, "착수보고회") {
+			t.Errorf("report content lost from feed body:\n%s", card.Body)
+		}
+	})
+
+	t.Run("absent when resolver unwired or empty", func(t *testing.T) {
+		for name, resolver := range map[string]func() string{
+			"nil":   nil,
+			"empty": func() string { return "" },
+		} {
+			feed := &recordingWorkFeed{}
+			d := proactiveRelayDeps{workFeed: feed, workModel: resolver}
+			if _, err := d.relayNative(body); err != nil {
+				t.Fatalf("%s resolver: relayNative: %v", name, err)
+			}
+			if n := len(feed.items); n != 1 {
+				t.Fatalf("%s resolver: got %d work-feed item(s), want 1", name, n)
+			}
+			if got := feed.items[0].Body; got != body {
+				t.Errorf("%s resolver: feed body must equal the unstamped report, got:\n%s", name, got)
+			}
+		}
+	})
+
+	t.Run("scoped to the main feed — sub-sessions unstamped", func(t *testing.T) {
+		store := newRecordingTranscriptStore()
+		d := proactiveRelayDeps{transcriptStore: store, workModel: func() string { return model }}
+		if _, err := d.relayNativeTo(dreamWorkSessionKey, body); err != nil {
+			t.Fatalf("relayNativeTo(dream): %v", err)
+		}
+		msgs := store.appends[dreamWorkSessionKey]
+		if len(msgs) != 1 {
+			t.Fatalf("got %d dream append(s), want 1", len(msgs))
+		}
+		if got := msgs[0].TextContent(); strings.Contains(got, model) {
+			t.Errorf("dream sub-session must not be stamped, got:\n%s", got)
+		}
+	})
+}
+
 func TestIsContentlessProactive(t *testing.T) {
 	contentless := []string{
 		"",

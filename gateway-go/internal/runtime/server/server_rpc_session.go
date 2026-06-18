@@ -297,6 +297,7 @@ func (s *Server) registerSessionRPCMethods() {
 		behaviorLog:     agentLogWriter,
 		sessions:        s.sessions,
 		cardTitler:      s.cardTitleSummary,
+		workModel:       s.resolveFeedWorkModel,
 	}
 
 	// Wire transcript cloner for subagent cron session support.
@@ -401,6 +402,18 @@ func (s *Server) registerSessionRPCMethods() {
 
 	// Chat, BTW, Exec, Aurora, and cron wiring are registered in
 	// registerLateMethods() after this function returns.
+}
+
+// resolveFeedWorkModel returns the display name of the model behind proactive
+// 업무 feed reports — the main agent-turn model. Cron morning letter, mail
+// analysis synthesis, heartbeat, goal, and event ingest all run as main-role
+// turns, so the main model is the "작업 모델" for the feed. Returns "" when the
+// model registry is unwired (older tests), which leaves the feed footer off.
+func (s *Server) resolveFeedWorkModel() string {
+	if s.modelRegistry == nil {
+		return ""
+	}
+	return s.modelRegistry.Model(modelrole.RoleMain)
 }
 
 // registerWorkflowSideEffects wires non-RPC business logic: process approval
