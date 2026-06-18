@@ -182,6 +182,9 @@ internal data class CaptureImagePayload(val text: String = "")
 internal data class CaptureAudioPayload(val text: String = "")
 
 @Serializable
+internal data class CaptureDocumentPayload(val text: String = "")
+
+@Serializable
 internal data class CaptureContactsPayload(val text: String = "")
 
 // --- Observation plane (miniapp.observe.*) ---

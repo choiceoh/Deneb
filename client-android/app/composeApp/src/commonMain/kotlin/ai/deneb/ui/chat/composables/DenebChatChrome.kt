@@ -9,21 +9,23 @@ import io.github.vinceglb.filekit.PlatformFile
 //
 // The attach (+) button no longer asks "what to insert" — it opens one file picker
 // and the chat input routes by file type: an image goes to [onImageFile] (OCR), an
-// audio file to [onAudioFile] (transcription), and any other file is attached for
-// the next message. The live mic ([onVoiceInput], system speech recognizer) is not
-// a file, so it lives in the 더보기 screen instead of the input bar.
+// audio file to [onAudioFile] (transcription), and any other file (pdf/doc/sheet/
+// text) to [onDocumentFile] (extract + analyze). The live mic ([onVoiceInput],
+// system speech recognizer) is not a file, so it lives in the 더보기 screen.
 
 /**
  * Platform capture actions. Provided by the Android entry point via
  * [LocalCaptureActions]; null (the default) on platforms (desktop/iOS) without
  * these system launchers — there the attach picker simply attaches the file.
  *
- * [onImageFile]/[onAudioFile] receive an already-picked file (the input owns the
- * single picker); the entry point reads its bytes and runs the gateway capture.
+ * [onImageFile]/[onAudioFile]/[onDocumentFile] receive an already-picked file (the
+ * input owns the single picker); the entry point reads its bytes and runs the
+ * matching gateway capture turn.
  */
 data class CaptureActions(
     val onImageFile: (PlatformFile) -> Unit,
     val onAudioFile: (PlatformFile) -> Unit,
+    val onDocumentFile: (PlatformFile) -> Unit,
     val onVoiceInput: () -> Unit,
 )
 

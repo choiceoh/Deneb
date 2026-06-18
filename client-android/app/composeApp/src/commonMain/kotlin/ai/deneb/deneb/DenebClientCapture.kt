@@ -79,6 +79,48 @@ suspend fun DenebGatewayClient.captureAudio(bytes: ByteArray, mimeType: String) 
 }
 
 /**
+ * Extract text from a shared document (pdf / Word / Excel / PowerPoint / CSV /
+ * plain text) on the gateway and run one agent turn over it, showing the result
+ * in the chat. The native client's "attach a document to Deneb" path — the
+ * gateway uses the in-house extractor with a scanned-PDF / image OCR fallback.
+ */
+@OptIn(ExperimentalEncodingApi::class)
+suspend fun DenebGatewayClient.captureDocument(
+    bytes: ByteArray,
+    filename: String,
+    mimeType: String,
+    caption: String = "",
+): Boolean {
+    if (clientToken.isEmpty() || bytes.isEmpty()) return false
+    val name = filename.trim().ifBlank { "문서" }
+    val trimmedCaption = caption.trim()
+    val label = if (trimmedCaption.isNotBlank()) {
+        trimmedCaption + "\n📄 $name 분석 중…"
+    } else {
+        "📄 문서 공유됨: $name (분석 중…)"
+    }
+    _chatHistory.update { it + History(role = History.Role.USER, content = label) }
+    val reply = runCatching {
+        val payload = callRpc<CaptureDocumentPayload>(
+            "miniapp.capture.document",
+            buildJsonObject {
+                put("document", Base64.encode(bytes))
+                put("filename", filename)
+                put("mimeType", mimeType)
+                put("sessionKey", sessionKey)
+                // The text the user typed alongside the attachment becomes source
+                // context the gateway prepends to the extraction turn.
+                if (trimmedCaption.isNotBlank()) put("caption", trimmedCaption)
+            },
+        )
+        payload?.text?.ifBlank { null } ?: "문서에서 텍스트를 추출하지 못했거나 분석에 실패했습니다."
+    }.getOrElse { "⚠️ ${it.message ?: "문서 캡처 실패"}" }
+    _chatHistory.update { it + History(role = History.Role.ASSISTANT, content = reply) }
+    syncNativeStateAsync()
+    return true
+}
+
+/**
  * Sync the device address book into the gateway. The gateway enriches ONLY the
  * people already in its wiki (it creates no pages) with phone/email/org — so a
  * sync both sharpens ASR proper-noun bias and powers "whose number is this?"

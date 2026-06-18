@@ -111,6 +111,11 @@ func MiniappMethods(deps Deps) map[string]rpcutil.HandlerFunc {
 	if deps.Transcribe != nil {
 		m["miniapp.capture.audio"] = handleMiniappCaptureAudio(deps)
 	}
+	// Document capture (attach a pdf/doc/spreadsheet in the chat composer) needs
+	// the in-house document extractor wired; skip the method cleanly when it isn't.
+	if deps.ExtractDocument != nil {
+		m["miniapp.capture.document"] = handleMiniappCaptureDocument(deps)
+	}
 	// Contacts sync stores the whole address book (phone lookup / name search / ASR
 	// hotwords) and, as a bonus, enriches existing wiki people. Either dependency is
 	// enough to register; skip the method cleanly only when both are absent.
@@ -210,6 +215,106 @@ func handleMiniappCaptureImage(deps Deps) rpcutil.HandlerFunc {
 		return rpcutil.RespondOK(req.ID, map[string]any{
 			"text":       res.Text,
 			"ocr":        strings.TrimSpace(text),
+			"model":      res.Model,
+			"sessionKey": sessionKey,
+		})
+	}
+}
+
+// handleMiniappCaptureDocument extracts text from a directly-attached document and
+// runs one agent turn over it — the native client's "attach a pdf/doc/sheet to
+// Deneb" path. Mirrors handleMiniappCaptureImage but uses the in-house document
+// extractor (PDF/Excel/Word/PowerPoint/CSV/text, with a scanned-PDF / image OCR
+// fallback) instead of plain image OCR.
+//
+// Params:
+//   - document   (base64, required; an optional `data:...;base64,` prefix is stripped)
+//   - filename   (string, optional): drives the extractor's format dispatch
+//   - mimeType   (string, optional)
+//   - sessionKey (string, optional): defaults to "client:main"
+//   - caption    (string, optional): source context — e.g. the question the user
+//     typed alongside the attachment. Prepended to the turn.
+func handleMiniappCaptureDocument(deps Deps) rpcutil.HandlerFunc {
+	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		p, errResp := rpcutil.DecodeParams[struct {
+			Document   string `json:"document"`
+			Filename   string `json:"filename"`
+			MimeType   string `json:"mimeType"`
+			SessionKey string `json:"sessionKey"`
+			Caption    string `json:"caption"`
+		}](req)
+		if errResp != nil {
+			return errResp
+		}
+		raw := strings.TrimSpace(p.Document)
+		if strings.HasPrefix(raw, "data:") {
+			if i := strings.IndexByte(raw, ','); i > 0 {
+				raw = raw[i+1:]
+			}
+		}
+		if raw == "" {
+			return rpcerr.MissingParam("document").Response(req.ID)
+		}
+		data, err := base64.StdEncoding.DecodeString(raw)
+		if err != nil || len(data) == 0 {
+			return rpcerr.InvalidParams(fmt.Errorf("document is not valid base64")).Response(req.ID)
+		}
+		text := deps.ExtractDocument(ctx, data, p.Filename, p.MimeType)
+		if strings.TrimSpace(text) == "" {
+			return rpcerr.Unavailable("no text could be extracted from the document").Response(req.ID)
+		}
+		sessionKey := strings.TrimSpace(p.SessionKey)
+		if sessionKey == "" {
+			sessionKey = nativeClientChannel + ":main"
+		}
+		// Persist the raw extracted text before the turn: the agent only
+		// summarizes, and the original must outlive the chat transcript.
+		var savedPath string
+		if deps.SaveCapture != nil {
+			if rel, serr := deps.SaveCapture("document", p.Caption, text); serr != nil {
+				slog.Error("capture document: raw persistence failed", "error", serr)
+			} else {
+				savedPath = rel
+			}
+		}
+		header := "📄 공유 문서에서 추출한 텍스트"
+		if name := strings.TrimSpace(p.Filename); name != "" {
+			header += " (" + name + ")"
+		}
+		message := header + ":\n\n" + strings.TrimSpace(text)
+		if c := strings.TrimSpace(p.Caption); c != "" {
+			// The caption carries the question the user typed with the attachment;
+			// lead with it so the turn analyzes the document in that light.
+			message = "📲 공유 맥락:\n" + c + "\n\n" + message
+		}
+		if savedPath != "" {
+			message += "\n\n(원문 보관: memory/" + savedPath + ")"
+		}
+		// Bound concurrent interactive turns (unified-memory OOM guard).
+		release, aerr := deps.Chat.AcquireInteractiveTurn(ctx)
+		if aerr != nil {
+			return rpcerr.Unavailable("gateway busy: too many concurrent turns").Response(req.ID)
+		}
+		defer release()
+		res, err := deps.Chat.SendSync(ctx, sessionKey, message, "", &chatpkg.SyncOptions{
+			Delivery:            &chatpkg.DeliveryContext{Channel: nativeClientChannel, To: sessionKey},
+			AutoDeliveredOutput: true,
+			// Document content is untrusted (a malicious attachment): block exec/gmail send if it carries promptware.
+			GateUntrustedTools: true,
+		})
+		if err != nil {
+			return rpcerr.WrapDependencyFailed("chat send failed", err).Response(req.ID)
+		}
+		recordWorkFeed(deps, workfeed.Item{
+			Source:     workfeed.SourceCaptureDocument,
+			Title:      "공유 문서",
+			Summary:    workfeed.Preview(res.BestText(), 180),
+			Body:       res.BestText(),
+			SessionKey: sessionKey,
+		})
+		return rpcutil.RespondOK(req.ID, map[string]any{
+			"text":       res.Text,
+			"document":   strings.TrimSpace(text),
 			"model":      res.Model,
 			"sessionKey": sessionKey,
 		})

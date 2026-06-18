@@ -587,6 +587,9 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 			Chat:       hub.Chat(),
 			OcrImage:   tools.OcrImageBytes,
 			Transcribe: tools.TranscribeAudio,
+			// Document attach (pdf/doc/sheet) → in-house extractor (PDF/Excel/Word/
+			// PowerPoint/CSV/text, with a scanned-PDF / image OCR fallback).
+			ExtractDocument: tools.ExtractAttachmentTextBytes,
 			// Raw capture persistence: full OCR text / diarized transcript →
 			// {memory}/captures/ + diary breadcrumb (recallable, dream-distilled,
 			// backed up). The agent turn only summarizes; this keeps the original.
