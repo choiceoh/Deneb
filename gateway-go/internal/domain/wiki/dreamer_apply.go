@@ -124,42 +124,7 @@ func (wd *WikiDreamer) synthesize(ctx context.Context, diaryContent string, stat
 		}
 	}
 
-	prompt := fmt.Sprintf(`당신은 위키 지식베이스 관리자입니다. 아래 일지 내용을 분석하여 위키 페이지를 생성하거나 업데이트할 지시사항을 JSON 배열로 반환하세요.
-
-## 현재 위키 인덱스
-%s
-
-## 최근 처리 이력
-%s
-%s
-## 새 일지 내용
-%s
-
-## 규칙
-- 일시적인 내용(인사, 잡담)은 무시
-- 중요한 결정, 새로운 사실, 인물 정보, 프로젝트 진행 등만 위키에 반영
-- 기존 페이지가 있으면 action:"update", 없으면 action:"create"
-- 최근 처리 이력에 이미 반영된 주제/경로는 새 사실이 추가된 경우에만 update하고, 같은 내용을 반복 생성하지 마라
-- 카테고리는 반드시 다음 6개 중 하나 (경로의 첫 디렉토리 = 카테고리):
-  - 프로젝트: 진행 중인 일·거래·결정 — 거래처/금액/납기가 걸린 건, 의사결정 근거 등 특정 건별 컨텍스트
-  - 인물: 사람·조직 — 연락처, 관계, 담당자, 거래처 인물
-  - 시스템: Deneb 자신의 구성·운영 — 서버/모델/배포/도구 설정
-  - 업무: 직무 도메인 지식 — 태양광·전선·구리값 등 일에 직접 쓰이는 지식
-  - 사용자: 사용자 개인 — 선호, 톤·스타일 규칙, 개인 컨텍스트
-  - 기타: 그 외 일반/세상 지식 — 국제정세·시사·잡학 등 위 분류에 안 맞는 것 (catch-all)
-- 프로젝트 중 거래성 건(거래처·금액·납기)은 가장 임박한 결제기한/마감일을 frontmatter의 due 필드(YYYY-MM-DD)에 기록
-- content는 마크다운 형식. create 시 전체 본문, update 시 추가할 섹션/내용. 본문에서 다른 페이지를 언급할 때는 [[경로-또는-제목]] 형식의 위키링크를 쓰면 지식그래프 엣지가 된다 (예: [[프로젝트/dgx-spark]], [[홍길동]])
-- importance: 0.5(일반) ~ 0.9(핵심 결정)
-- type: 페이지 유형 — concept(개념), entity(인물/조직), source(출처), comparison(비교), log(이력)
-- confidence: 정보 신뢰도 — high(검증됨), medium(합리적 추론), low(불확실)
-- due: 임박한 결제기한·마감일 (YYYY-MM-DD). 프로젝트의 거래성 건에서만 사용, 없으면 생략
-- supersedes: 새 일지 내용이 기존 페이지의 사실과 **모순되거나 그것을 대체**할 때, 대체되는 기존 페이지 경로 (인덱스에서 선택). 단순 추가 정보면 생략 — 사실이 바뀐 경우에만 (예: 단가 변경, 담당자 교체, 정책 폐기)
-- id: 짧은 kebab-case 식별자 (예: "dgx-spark", "gemma4-switch", "peter-kim")
-- summary: 한 줄 요약 (~80자, 한국어)
-- related: 의미적으로 관련된 기존 위키 페이지 경로 목록 (인덱스에서 선택)
-- 업데이트가 불필요하면 빈 배열 [] 반환
-
-JSON 배열만 반환하세요. 다른 텍스트 없이.`, indexContent, processedHistory, polarisSection, diaryContent)
+	prompt := buildWikiSynthesisPrompt(indexContent, processedHistory, polarisSection, diaryContent)
 
 	systemJSON, _ := json.Marshal("You are a wiki knowledge base maintainer. Respond only with a JSON array.")
 	resp, err := wd.client.Complete(ctx, llm.ChatRequest{
@@ -201,6 +166,49 @@ JSON 배열만 반환하세요. 다른 텍스트 없이.`, indexContent, process
 	}
 
 	return updates, nil
+}
+
+func buildWikiSynthesisPrompt(indexContent, processedHistory, polarisSection, diaryContent string) string {
+	return fmt.Sprintf(`당신은 위키 지식베이스 관리자입니다. 아래 일지 내용을 분석하여 위키 페이지를 생성하거나 업데이트할 지시사항을 JSON 배열로 반환하세요.
+
+## 현재 위키 인덱스
+%s
+
+## 최근 처리 이력
+%s
+%s
+## 새 일지 내용
+%s
+
+## 규칙
+- 일시적인 내용(인사, 잡담)은 무시
+- 중요한 결정, 새로운 사실, 인물 정보, 프로젝트 진행 등만 위키에 반영
+- 기존 페이지가 있으면 action:"update", 없으면 action:"create"
+- 최근 처리 이력에 이미 반영된 주제/경로는 새 사실이 추가된 경우에만 update하고, 같은 내용을 반복 생성하지 마라
+- 지식은 저장만 하지 말고 연결·정리하라. 다음 세션이 다시 추론하지 않도록 상호링크·모순 표시·정리 위치를 함께 결정한다
+- 카테고리는 반드시 다음 6개 중 하나 (경로의 첫 디렉토리 = 카테고리):
+  - 프로젝트: 진행 중인 일·거래·결정 — 거래처/금액/납기가 걸린 건, 의사결정 근거 등 특정 건별 컨텍스트
+  - 인물: 사람·조직 — 연락처, 관계, 담당자, 거래처 인물
+  - 시스템: Deneb 자신의 구성·운영 — 서버/모델/배포/도구 설정
+  - 업무: 직무 도메인 지식 — 태양광·전선·구리값 등 일에 직접 쓰이는 지식
+  - 사용자: 사용자 개인 — 선호, 톤·스타일 규칙, 개인 컨텍스트
+  - 기타: 그 외 일반/세상 지식 — 국제정세·시사·잡학 등 위 분류에 안 맞는 것 (catch-all)
+- 프로젝트 중 거래성 건(거래처·금액·납기)은 가장 임박한 결제기한/마감일을 frontmatter의 due 필드(YYYY-MM-DD)에 기록
+- content는 마크다운 형식. create 시 전체 본문, update 시 추가할 섹션/내용. 본문에서 다른 페이지를 언급할 때는 [[경로-또는-제목]] 형식의 위키링크를 쓰면 지식그래프 엣지가 된다 (예: [[프로젝트/dgx-spark]], [[홍길동]])
+- 상호링크: related에는 인덱스에 존재하는 관련 페이지 경로를 1~3개만 넣고, content에도 필요한 곳에 [[...]] 링크를 남겨라. 관련 페이지가 불확실하면 억지로 만들지 마라
+- 모순/갱신: 새 일지 내용이 기존 페이지와 충돌하거나 대체하면 content에 "모순/갱신:" 섹션 또는 bullet로 날짜·근거·최신 기준을 적고 supersedes에 대체되는 기존 페이지 경로를 넣어라
+- 지식 정리: 반복될 운영법·실패 회피법은 loose log 페이지를 늘리지 말고 기존 프로젝트/시스템/업무 페이지의 troubleshooting/recipe 성격 섹션에 병합하라. 새 페이지가 필요하면 반드시 6개 카테고리 아래에 둔다
+- importance: 0.5(일반) ~ 0.9(핵심 결정)
+- type: 페이지 유형 — concept(개념), entity(인물/조직), source(출처), comparison(비교), log(이력)
+- confidence: 정보 신뢰도 — high(검증됨), medium(합리적 추론), low(불확실)
+- due: 임박한 결제기한·마감일 (YYYY-MM-DD). 프로젝트의 거래성 건에서만 사용, 없으면 생략
+- supersedes: 새 일지 내용이 기존 페이지의 사실과 **모순되거나 그것을 대체**할 때, 대체되는 기존 페이지 경로 (인덱스에서 선택). 단순 추가 정보면 생략 — 사실이 바뀐 경우에만 (예: 단가 변경, 담당자 교체, 정책 폐기)
+- id: 짧은 kebab-case 식별자 (예: "dgx-spark", "gemma4-switch", "peter-kim")
+- summary: 한 줄 요약 (~80자, 한국어)
+- related: 의미적으로 관련된 기존 위키 페이지 경로 목록 (인덱스에서 선택)
+- 업데이트가 불필요하면 빈 배열 [] 반환
+
+JSON 배열만 반환하세요. 다른 텍스트 없이.`, indexContent, processedHistory, polarisSection, diaryContent)
 }
 
 // applyUpdates creates or updates wiki pages based on LLM instructions.

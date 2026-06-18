@@ -61,6 +61,9 @@ prompt's wiki section is the canonical guide to the recall stack
 - **Writing to the wiki is not a reply.** If your human asked for analysis or
   an opinion, put the substance in your response text — "I filed it away"
   reads as no answer at all.
+- Keep wiki knowledge compounding: connect durable notes with 1-3 precise
+  `[[wikilinks]]`, mark contradictions or superseded facts explicitly, and
+  fold repeated lessons into the relevant project/system/work page.
 - **Propus deferred corrections:** `skill_lifecycle` is the Propus control
   plane. When available, start with action `status` and `overview.nextActions`,
   record plausible-but-unvalidated correction ideas with action

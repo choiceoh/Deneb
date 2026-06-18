@@ -28,6 +28,7 @@ func ToolWiki(d *toolctx.WikiDeps, workspaceDir string) toolctx.ToolFunc {
 			Content    string   `json:"content"`
 			Tags       []string `json:"tags"`
 			Related    []string `json:"related"`
+			Supersedes []string `json:"supersedes"`
 			Importance float64  `json:"importance"`
 			Type       string   `json:"type"`
 			Confidence string   `json:"confidence"`
@@ -51,7 +52,7 @@ func ToolWiki(d *toolctx.WikiDeps, workspaceDir string) toolctx.ToolFunc {
 		case "index":
 			return wikiIndex(d.Store, p.Category)
 		case "write":
-			return wikiWrite(d.Store, d.Contacts, p.Query, p.Title, p.ID, p.Summary, p.Category, p.Content, p.Tags, p.Related, p.Importance, p.Type, p.Confidence, p.Due)
+			return wikiWrite(d.Store, d.Contacts, p.Query, p.Title, p.ID, p.Summary, p.Category, p.Content, p.Tags, p.Related, p.Supersedes, p.Importance, p.Type, p.Confidence, p.Due)
 		case "log":
 			return wikiLog(workspaceDir, d.Store, p.Content)
 		case "daily":
@@ -167,7 +168,7 @@ func wikiIndex(store *wiki.Store, category string) (string, error) {
 	return sb.String(), nil
 }
 
-func wikiWrite(store *wiki.Store, contactsStore *contacts.Store, path, title, id, summary, category, content string, tags, related []string, importance float64, pageType, confidence, due string) (string, error) {
+func wikiWrite(store *wiki.Store, contactsStore *contacts.Store, path, title, id, summary, category, content string, tags, related, supersedes []string, importance float64, pageType, confidence, due string) (string, error) {
 	if title == "" {
 		return "title은 필수입니다.", nil
 	}
@@ -248,13 +249,38 @@ func wikiWrite(store *wiki.Store, contactsStore *contacts.Store, path, title, id
 	if err := store.WritePage(path, page); err != nil {
 		return fmt.Sprintf("위키 페이지 쓰기 실패: %v", err), nil
 	}
+	marked, failed := markSupersededPages(store, supersedes, path)
 
 	action := "생성"
 	if existing != nil {
 		action = "업데이트"
 	}
 	note := autoRecordPeople(store, contactsStore, page, category)
+	if len(marked) > 0 {
+		note += fmt.Sprintf(" · 대체 표시 %d건", len(marked))
+	}
+	if len(failed) > 0 {
+		note += fmt.Sprintf(" · 대체 표시 실패: %s", strings.Join(failed, ", "))
+	}
 	return fmt.Sprintf("위키 페이지 %s: %s (%s)%s", action, path, title, note), nil
+}
+
+func markSupersededPages(store *wiki.Store, oldPaths []string, newPath string) (marked, failed []string) {
+	if store == nil || newPath == "" {
+		return nil, nil
+	}
+	for _, old := range oldPaths {
+		old = strings.TrimSpace(old)
+		if old == "" {
+			continue
+		}
+		if err := store.MarkSuperseded(old, newPath); err != nil {
+			failed = append(failed, old)
+			continue
+		}
+		marked = append(marked, old)
+	}
+	return marked, failed
 }
 
 // autoRecordPeople ties a wiki write to the device address book. After a page is

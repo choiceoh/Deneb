@@ -68,7 +68,7 @@ func TestBuildSystemPromptChatbot(t *testing.T) {
 		"비서실장",
 		"## 위키 — 너의 외부 메모리",
 		"## 분석 → 위키 갱신",
-		"## Hindsight (작업",
+		"## 작업 기억",
 	} {
 		if strings.Contains(chat, gone) {
 			t.Errorf("챗봇 prompt must not contain 업무 framing: %q", gone)
@@ -82,10 +82,13 @@ func TestBuildSystemPromptChatbot(t *testing.T) {
 
 	// 업무 workspace unchanged: Nev persona + 비서실장 + 위키 외부메모리 all present.
 	work := BuildSystemPrompt(SystemPromptParams{ToolDefs: tools, Chatbot: false})
-	for _, want := range []string{"You are Nev", "비서실장", "## 위키 — 너의 외부 메모리"} {
+	for _, want := range []string{"You are Nev", "비서실장", "## 위키 — 너의 외부 메모리", "## 작업 기억"} {
 		if !strings.Contains(work, want) {
 			t.Errorf("업무 prompt regression — missing %q", want)
 		}
+	}
+	if strings.Contains(work, "Hindsight") {
+		t.Error("업무 prompt should use wiki/diary work memory, not Hindsight")
 	}
 
 	// Static cache key: 업무 (false) byte-identical to the pre-flag key (no

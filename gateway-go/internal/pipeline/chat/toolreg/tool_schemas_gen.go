@@ -1011,6 +1011,13 @@ func wikiToolSchema() map[string]any {
 				"type":        "string",
 				"description": "한 줄 요약 (~80자)",
 			},
+			"supersedes": map[string]any{
+				"type":        "array",
+				"description": "Existing wiki page paths this write replaces because the new fact contradicts or supersedes them. Marking them demotes stale pages in recall/search.",
+				"items": map[string]any{
+					"type": "string",
+				},
+			},
 			"tags": map[string]any{
 				"type":        "array",
 				"description": "Tags for the page (write action)",
@@ -1200,7 +1207,7 @@ func knowledgeToolSchema() map[string]any {
 			},
 			"ref": map[string]any{
 				"type":        "string",
-				"description": "단건 ref (op=read). 형식 `<layer>:<id>` — 예: `w:인물/박부장`, `h:mem-7K9L`",
+				"description": "단건 ref (op=read). 형식 `<layer>:<id>` — 예: `w:인물/박부장`",
 			},
 			"related": map[string]any{
 				"type":        "array",
@@ -1212,6 +1219,13 @@ func knowledgeToolSchema() map[string]any {
 			"summary": map[string]any{
 				"type":        "string",
 				"description": "인덱스용 한 줄 요약 (op=record, ~80자)",
+			},
+			"supersedes": map[string]any{
+				"type":        "array",
+				"description": "새 기록이 모순/갱신으로 대체하는 기존 wiki 페이지 경로들 (op=record). stale 페이지는 superseded_by로 표시되어 recall/search에서 감가된다.",
+				"items": map[string]any{
+					"type": "string",
+				},
 			},
 			"tags": map[string]any{
 				"type":        "array",

@@ -132,5 +132,14 @@ func (a *wikiAdapter) Record(_ context.Context, opts RecordOptions) (Ref, error)
 	if err := a.store.WritePage(path, page); err != nil {
 		return Ref{}, fmt.Errorf("write wiki page %q: %w", path, err)
 	}
+	for _, old := range opts.Supersedes {
+		old = strings.TrimSpace(old)
+		if old == "" {
+			continue
+		}
+		if err := a.store.MarkSuperseded(old, path); err != nil {
+			return Ref{}, fmt.Errorf("mark superseded %q -> %q: %w", old, path, err)
+		}
+	}
 	return Ref{Layer: LayerWiki, ID: path}, nil
 }

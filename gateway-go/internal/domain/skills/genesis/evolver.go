@@ -771,6 +771,8 @@ const (
 	skillEditBudgetMaxChangedRatio    = 0.65
 	skillEditBudgetMaxAddedLines      = 80
 	skillEditBudgetMaxGrowthMultiple  = 2
+	skillHermesMaxSkillBytes          = 15 * 1024
+	skillHermesMaxChangedSections     = 3
 	skillJudgeMinScoreDelta           = 3.0
 	skillEvolutionMinEvidenceUses     = 2
 	skillEvolutionMinEvidenceFailures = 2
@@ -1043,6 +1045,51 @@ func validateTextualEditBudget(originalContent, candidateBody string) (bool, str
 		return false, fmt.Sprintf("textual edit budget exceeded: changed %.0f%% of meaningful lines (max %.0f%%)", changedRatio*100, skillEditBudgetMaxChangedRatio*100)
 	}
 	return true, ""
+}
+
+func validateHermesEvolutionGuardrails(originalContent, candidateBody string) (bool, string) {
+	candidateBody = skillBodyOnly(candidateBody)
+	size := candidateSkillBytes(originalContent, candidateBody)
+	if size > skillHermesMaxSkillBytes {
+		return false, fmt.Sprintf("Hermes patch-first gate rejected: candidate SKILL.md size %d bytes exceeds %d byte limit", size, skillHermesMaxSkillBytes)
+	}
+
+	originalBody := skillBodyOnly(originalContent)
+	originalTitle := firstTopLevelHeading(originalBody)
+	candidateTitle := firstTopLevelHeading(candidateBody)
+	if originalTitle != "" && candidateTitle != "" &&
+		normalizeSkillSurface(originalTitle) != normalizeSkillSurface(candidateTitle) {
+		return false, fmt.Sprintf("Hermes semantic-preservation gate rejected: title changed from %q to %q", originalTitle, candidateTitle)
+	}
+
+	originalLines := meaningfulSkillLines(originalBody)
+	if len(originalLines) >= skillEditBudgetMinOriginalLines {
+		changed := changedSkillSections(originalBody, candidateBody)
+		if len(changed) > skillHermesMaxChangedSections {
+			return false, fmt.Sprintf("Hermes patch-first gate rejected broad rewrite: changed %d sections (%s), max %d",
+				len(changed), strings.Join(changedSectionNames(changed), ", "), skillHermesMaxChangedSections)
+		}
+	}
+	return true, ""
+}
+
+func candidateSkillBytes(originalContent, candidateBody string) int {
+	header, bodyOffset := skills.ExtractFrontmatterBlock(originalContent)
+	if bodyOffset <= 0 || header == "" {
+		return len([]byte(candidateBody))
+	}
+	return len([]byte(header)) + 2 + len([]byte(candidateBody))
+}
+
+func firstTopLevelHeading(content string) string {
+	for _, line := range strings.Split(content, "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "# ") {
+			continue
+		}
+		return strings.TrimSpace(strings.TrimPrefix(line, "# "))
+	}
+	return ""
 }
 
 func meaningfulSkillLines(content string) []string {
@@ -1405,6 +1452,9 @@ func (e *Evolver) validateCandidate(ctx context.Context, skillName string, clien
 }
 
 func (e *Evolver) validateCandidatePreflight(skillName, originalContent, candidateBody string, audit HarnessEditAudit, stats *UsageStats, reviewFinding string) (bool, string) {
+	if ok, reason := validateHermesEvolutionGuardrails(originalContent, candidateBody); !ok {
+		return false, reason
+	}
 	if ok, reason := validateTextualEditBudget(originalContent, candidateBody); !ok {
 		return false, reason
 	}

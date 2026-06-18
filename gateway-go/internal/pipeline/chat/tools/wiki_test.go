@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 // newTestWikiStore constructs a Store backed by a temp dir, pre-loaded with
@@ -105,6 +106,43 @@ func TestWikiRead_AcceptsNamespacedRef(t *testing.T) {
 	}
 	if !strings.Contains(out, "Phase 2") {
 		t.Errorf("expected page content for w: ref, got: %q", out)
+	}
+}
+
+func TestWikiWrite_MarksSupersededPages(t *testing.T) {
+	store := newTestWikiStore(t)
+	old := wiki.NewPage("Old fact", "프로젝트", nil)
+	old.Body = "old body"
+	if err := store.WritePage("프로젝트/old-fact.md", old); err != nil {
+		t.Fatalf("write old page: %v", err)
+	}
+
+	out, err := wikiWrite(
+		store,
+		nil,
+		"프로젝트/new-fact.md",
+		"New fact",
+		"new-fact",
+		"새 기준",
+		"프로젝트",
+		"모순/갱신: old fact를 대체한다.",
+		[]string{"deneb"},
+		[]string{"프로젝트/old-fact.md"},
+		[]string{"프로젝트/old-fact.md"},
+		0.8,
+		"concept",
+		"high",
+		"",
+	)
+	if err != nil {
+		t.Fatalf("wikiWrite: %v", err)
+	}
+	if !strings.Contains(out, "대체 표시 1건") {
+		t.Fatalf("expected superseded note, got: %s", out)
+	}
+	got := testutil.Must(store.ReadPage("프로젝트/old-fact.md"))
+	if got.Meta.SupersededBy != "프로젝트/new-fact.md" {
+		t.Fatalf("SupersededBy = %q, want 프로젝트/new-fact.md", got.Meta.SupersededBy)
 	}
 }
 

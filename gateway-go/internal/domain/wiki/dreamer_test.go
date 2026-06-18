@@ -223,6 +223,21 @@ func TestParseWikiUpdates_NonArrayIsError(t *testing.T) {
 	}
 }
 
+func TestBuildWikiSynthesisPromptIncludesCompoundingRules(t *testing.T) {
+	prompt := buildWikiSynthesisPrompt("index", "history", "", "diary")
+	for _, want := range []string{
+		"상호링크",
+		"모순/갱신",
+		"지식 정리",
+		"supersedes",
+		"[[경로-또는-제목]]",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Errorf("synthesis prompt missing %q", want)
+		}
+	}
+}
+
 func scanContent(scan *diaryScanResult) string {
 	if scan == nil {
 		return ""

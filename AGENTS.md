@@ -106,7 +106,7 @@ git commit -m "Add Deneb workspace"
 Skill discovery is filesystem-driven — the gateway indexes `skills/` at startup
 and the native client's Settings → 스킬 tab lists them read-only (no toggles).
 
-- **productivity/** — email-analysis, hindsight, meeting-minutes, morning-letter, session-logs, summarize, weekly-report
+- **productivity/** — email-analysis, meeting-minutes, morning-letter, session-logs, summarize, weekly-report
 - **coding/** — github, skill-creator, skill-factory, skill-evolution, evolution-proposal
 - **devops/** — healthcheck, tmux
 - **security/** — 1password

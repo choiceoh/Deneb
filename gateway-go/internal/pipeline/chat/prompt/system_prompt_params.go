@@ -89,7 +89,7 @@ type SystemPromptParams struct {
 	// Chatbot selects the clean general-purpose assistant prompt for the 챗봇
 	// workspace (chat: sessions): a neutral identity instead of the Nev
 	// chief-of-staff persona, and the 업무 work-loop sections (비서실장 role,
-	// 분석→위키, Hindsight, 위키 외부메모리) are dropped — so 챗봇 reads like a
+	// 분석→위키, 작업 기억, 위키 외부메모리) are dropped — so 챗봇 reads like a
 	// vanilla general assistant. The tool surface is unchanged. The work context
 	// inputs (ContextFiles, TopicKnowledge, CalendarGlance, tier-1 wiki) are
 	// withheld upstream (run_prepare) for chat: sessions, so the existing
