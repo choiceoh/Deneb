@@ -502,12 +502,13 @@ func (b *skillLifecycleBackend) RecordSkillValidationCaseFromSession(ctx context
 		return nil, err
 	}
 	return map[string]any{
-		"ok":                true,
-		"skillName":         strings.TrimSpace(req.SkillName),
-		"id":                record.ID,
-		"sessionKey":        strings.TrimSpace(req.SessionKey),
-		"expectedToolCalls": len(record.Replay.ExpectedToolCalls),
-		"requiredTools":     len(record.Replay.RequiredTools),
+		"ok":                 true,
+		"skillName":          strings.TrimSpace(req.SkillName),
+		"id":                 record.ID,
+		"sessionKey":         strings.TrimSpace(req.SessionKey),
+		"expectedToolCalls":  len(record.Replay.ExpectedToolCalls),
+		"forbiddenToolCalls": len(record.Replay.ForbiddenToolCalls),
+		"requiredTools":      len(record.Replay.RequiredTools),
 	}, nil
 }
 
@@ -598,11 +599,12 @@ func (b *skillLifecycleBackend) backfillSkillValidationCasesFromKeys(ctx context
 		recorded++
 		if len(details) < 20 {
 			details = append(details, map[string]any{
-				"sessionKey":        key,
-				"ok":                true,
-				"id":                got["id"],
-				"expectedToolCalls": got["expectedToolCalls"],
-				"requiredTools":     got["requiredTools"],
+				"sessionKey":         key,
+				"ok":                 true,
+				"id":                 got["id"],
+				"expectedToolCalls":  got["expectedToolCalls"],
+				"forbiddenToolCalls": got["forbiddenToolCalls"],
+				"requiredTools":      got["requiredTools"],
 			})
 		}
 	}
@@ -667,14 +669,15 @@ func buildSkillValidationCaseFromSession(req chattools.SkillValidationCaseFromSe
 	}
 	replay.Context = append(replay.Context, skillReplayContextFromTranscript(sctx.AllText)...)
 
-	autoCalls := skillReplayToolCallsFromActivities(sctx.ToolActivities)
-	if len(autoCalls) > 0 {
-		replay.ExpectedToolCalls = append(autoCalls, replay.ExpectedToolCalls...)
-		replay.RequiredTools = appendUniqueStrings(replay.RequiredTools, skillReplayToolNames(autoCalls)...)
-		if len(autoCalls) > 1 {
+	autoExpectedCalls, autoForbiddenCalls := skillReplayToolCallsFromActivities(sctx.ToolActivities)
+	if len(autoExpectedCalls) > 0 {
+		replay.ExpectedToolCalls = append(autoExpectedCalls, replay.ExpectedToolCalls...)
+		replay.RequiredTools = appendUniqueStrings(replay.RequiredTools, skillReplayToolNames(autoExpectedCalls)...)
+		if len(autoExpectedCalls) > 1 {
 			replay.RequireOrder = true
 		}
 	}
+	replay.ForbiddenToolCalls = append(autoForbiddenCalls, replay.ForbiddenToolCalls...)
 
 	source := strings.TrimSpace(req.Source)
 	if source == "" {
@@ -700,25 +703,37 @@ func buildSkillValidationCaseFromSession(req chattools.SkillValidationCaseFromSe
 	}
 }
 
-func skillReplayToolCallsFromActivities(activities []genesis.ToolActivity) []genesis.SkillReplayToolCallRecord {
+func skillReplayToolCallsFromActivities(activities []genesis.ToolActivity) ([]genesis.SkillReplayToolCallRecord, []genesis.SkillReplayToolCallRecord) {
 	const maxExtractedReplayToolCalls = 12
-	out := make([]genesis.SkillReplayToolCallRecord, 0, min(len(activities), maxExtractedReplayToolCalls))
+	expected := make([]genesis.SkillReplayToolCallRecord, 0, min(len(activities), maxExtractedReplayToolCalls))
+	forbidden := make([]genesis.SkillReplayToolCallRecord, 0, min(len(activities), maxExtractedReplayToolCalls))
 	for _, activity := range activities {
 		name := strings.TrimSpace(activity.Name)
 		if name == "" {
 			continue
 		}
-		out = append(out, genesis.SkillReplayToolCallRecord{
+		call := genesis.SkillReplayToolCallRecord{
 			Name:          name,
 			InputIncludes: skillReplayInputIncludes(activity.Input),
 			FixtureOutput: truncateRunes(strings.TrimSpace(activity.Output), 1000),
 			FixtureError:  activity.IsError,
-		})
-		if len(out) >= maxExtractedReplayToolCalls {
+		}
+		if activity.IsError {
+			if len(call.InputIncludes)+len(call.InputExcludes) > 0 {
+				forbidden = append(forbidden, genesis.SkillReplayToolCallRecord{
+					Name:          call.Name,
+					InputIncludes: append([]string(nil), call.InputIncludes...),
+					InputExcludes: append([]string(nil), call.InputExcludes...),
+				})
+			}
+		} else {
+			expected = append(expected, call)
+		}
+		if len(expected)+len(forbidden) >= maxExtractedReplayToolCalls {
 			break
 		}
 	}
-	return out
+	return expected, forbidden
 }
 
 func skillReplayToolNames(calls []genesis.SkillReplayToolCallRecord) []string {

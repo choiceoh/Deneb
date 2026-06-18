@@ -58,9 +58,9 @@ import kotlin.time.Instant
 // the skill's origin (생성 = the self-evolution loop authored it, 최초 = it was
 // installed or hand-written) and evolve/usage counters. The 진화 내역 segment
 // streams miniapp.skills.lifecycle: genesis creations, committed evolves,
-// rejected evolve attempts, and review verdicts, newest first. Timeline rows
-// expand on tap — full reason, review evidence, absolute time, verdict — and
-// link through to the skill when the event names one.
+// rejected/rolled-back evolve attempts, and review verdicts, newest first.
+// Timeline rows expand on tap — full reason, review evidence, absolute time,
+// verdict — and link through to the skill when the event names one.
 // No toggles: discovery is filesystem-driven, so the list reflects what's
 // installed on the gateway host. Tapping a row opens [DenebSkillScreen]
 // (full meta + SKILL.md body + per-skill timeline) via [onOpenSkill].
@@ -359,6 +359,7 @@ private fun lifecycleTypeLabel(type: String): String = when (type) {
     "genesis" -> "생성"
     "evolved" -> "진화"
     "evolve_rejected" -> "기각"
+    "evolve_rolled_back" -> "롤백"
     else -> "리뷰"
 }
 
@@ -366,11 +367,13 @@ private fun lifecycleTypeLabel(type: String): String = when (type) {
 private fun LifecycleTypeBadge(type: String) {
     // Two-accent + semantic mapping (2026-06 doctrine): genesis (AI authored a new
     // skill) = warm apricot insight; evolved (an applied/committed change) = cool
-    // interactive primary; rejected = semantic error; review/no-op = neutral mono.
+    // interactive primary; rejected/rolled back = semantic warning/error;
+    // review/no-op = neutral mono.
     val (bg, fg) = when (type) {
         "genesis" -> denebInsightContainer() to denebInsight()
         "evolved" -> MaterialTheme.colorScheme.primaryContainer to MaterialTheme.colorScheme.onPrimaryContainer
         "evolve_rejected" -> MaterialTheme.colorScheme.errorContainer to MaterialTheme.colorScheme.onErrorContainer
+        "evolve_rolled_back" -> MaterialTheme.colorScheme.tertiaryContainer to MaterialTheme.colorScheme.onTertiaryContainer
         else -> MaterialTheme.colorScheme.surfaceVariant to MaterialTheme.colorScheme.onSurfaceVariant
     }
     Text(

@@ -110,9 +110,11 @@ type SkillValidationCaseRequest struct {
 }
 
 // SkillValidationCaseFromSessionRequest records a held-out invariant by
-// extracting the replay trace from a stored transcript. The optional Replay
-// fields augment the extracted trace when the reviewer knows the precise
-// action/observation that made the session fail.
+// extracting the replay trace from a stored transcript. Successful tool calls
+// become expected replay steps; errored calls with concrete input fragments
+// become forbidden replay steps. The optional Replay fields augment the
+// extracted trace when the reviewer knows the precise action/observation that
+// made the session fail.
 type SkillValidationCaseFromSessionRequest struct {
 	SkillName           string                 `json:"skillName"`
 	SessionKey          string                 `json:"sessionKey,omitempty"`
@@ -137,8 +139,8 @@ type SkillValidationBackfillRequest struct {
 	Source      string                 `json:"source,omitempty"`
 }
 
-// SkillReplayCaseRequest records a realistic dry-run task and expected action
-// choices for held-out skill validation.
+// SkillReplayCaseRequest records a realistic dry-run task and expected/forbidden
+// action choices for held-out skill validation.
 type SkillReplayCaseRequest struct {
 	Input                 string                       `json:"input,omitempty"`
 	Context               []string                     `json:"context,omitempty"`
@@ -424,7 +426,7 @@ func SkillLifecycleToolSchema() map[string]any {
 			},
 			"replay": map[string]any{
 				"type":        "object",
-				"description": "For validation_case: deterministic dry-run replay task and expected action/tool choices. For validation_case_from_session/validation_backfill: optional extra assertions merged with the extracted trace",
+				"description": "For validation_case: deterministic dry-run replay task and expected/forbidden action/tool choices. For validation_case_from_session/validation_backfill: optional extra assertions merged with the extracted trace; successful extracted tool calls become expectedToolCalls, errored extracted calls with concrete input fragments become forbiddenToolCalls",
 				"properties": map[string]any{
 					"input": map[string]any{
 						"type":        "string",
@@ -467,12 +469,12 @@ func SkillLifecycleToolSchema() map[string]any {
 					},
 					"expectedToolCalls": map[string]any{
 						"type":        "array",
-						"description": "Expected tool-call shapes from a successful trace; each item may require a tool name and important input substrings",
+						"description": "Expected tool-call shapes from a successful trace only; do not put failed tool invocations here",
 						"items":       skillReplayToolCallSchema(),
 					},
 					"forbiddenToolCalls": map[string]any{
 						"type":        "array",
-						"description": "Forbidden tool-call shapes that future candidates must not introduce",
+						"description": "Forbidden tool-call shapes that future candidates must not introduce, including failed invocations extracted from real sessions",
 						"items":       skillReplayToolCallSchema(),
 					},
 					"requireOrder": map[string]any{
