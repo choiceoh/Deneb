@@ -16,6 +16,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/localai"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modeltuner"
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/regressionwatch"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/approval"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
@@ -573,6 +574,18 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 				// DENEB_STATE_DIR-aware so a dev gateway's tuner never writes
 				// into the production ~/.deneb scorecard.
 				StatePath: modeltuner.DefaultStatePath(),
+				Logger:    s.logger,
+			}))
+
+			// Regression watch (Stage 1 of the autoresearch cold-start trigger,
+			// OBSERVE-ONLY): every 6h, sample operational telemetry (agentlog rates,
+			// model-health circuit, error-log spikes — see regressionSources),
+			// compare to a rolling baseline, and log regressions. It does NOT create
+			// optimization goals yet — that path is gated until these thresholds are
+			// validated against real traffic. Baseline: ~/.deneb/regression-baseline.json.
+			s.autonomousSvc.RegisterTask(regressionwatch.NewTask(regressionwatch.Deps{
+				Sources:   s.regressionSources(),
+				StatePath: regressionwatch.DefaultStatePath(),
 				Logger:    s.logger,
 			}))
 
