@@ -585,14 +585,15 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 					if n := s.proactiveRelay.notifierForSession(nativeWorkSessionKey); n != nil {
 						compactNotify = n.Notify
 					}
-					s.autonomousSvc.RegisterTask(compactuner.NewTask(compactuner.Deps{
+					s.compactTuner = compactuner.NewTask(compactuner.Deps{
 						Summaries:  s.polarisStore,
 						Guidelines: compaction.NewGuidelineStore(filepath.Join(config.ResolveStateDir(), compaction.GuidelineFileName)),
 						Client:     lw,
 						Model:      s.modelRegistry.Model(modelrole.RoleLightweight),
 						Notify:     compactNotify,
 						Logger:     s.logger,
-					}))
+					})
+					s.autonomousSvc.RegisterTask(s.compactTuner)
 					s.logger.Info("compaction-tuner: enabled (DENEB_COMPACTION_TUNER)")
 				}
 			}
