@@ -38,6 +38,7 @@ func ToolKnowledge(router *knowledge.Router) toolctx.ToolFunc {
 			Summary    string   `json:"summary"`
 			Tags       []string `json:"tags"`
 			Related    []string `json:"related"`
+			Supersedes []string `json:"supersedes"`
 			Importance float64  `json:"importance"`
 		}
 		if err := jsonutil.UnmarshalInto("knowledge params", input, &p); err != nil {
@@ -61,6 +62,7 @@ func ToolKnowledge(router *knowledge.Router) toolctx.ToolFunc {
 				Summary:    p.Summary,
 				Tags:       p.Tags,
 				Related:    p.Related,
+				Supersedes: p.Supersedes,
 				Importance: p.Importance,
 			})
 		default:

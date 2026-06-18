@@ -45,8 +45,9 @@ type RecordOptions struct {
 	// Body is the markdown content.
 	Body string
 	// Tags / Related populate the page frontmatter.
-	Tags    []string
-	Related []string
+	Tags       []string
+	Related    []string
+	Supersedes []string
 	// Summary is the one-line index-level description.
 	Summary string
 	// Importance 0.0–1.0 for Tier1 surfacing.

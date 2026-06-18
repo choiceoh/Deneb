@@ -139,7 +139,7 @@ func TestRouter_Read_Routes(t *testing.T) {
 
 	_, err = r.Read(context.Background(), Ref{Layer: layerTest, ID: "x"})
 	if err == nil {
-		t.Error("hindsight read should error (mock returns error)")
+		t.Error("retired-layer read should error (mock returns error)")
 	}
 }
 

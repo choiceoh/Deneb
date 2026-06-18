@@ -521,6 +521,58 @@ func TestValidateTextualEditBudget(t *testing.T) {
 	}
 }
 
+func TestValidateHermesEvolutionGuardrails(t *testing.T) {
+	originalBody := strings.Join([]string{
+		"# Deploy Helper",
+		"## When to Use",
+		"- Use for deploy tasks.",
+		"## Procedure",
+		"1. Check branch.",
+		"2. Run tests.",
+		"3. Build artifact.",
+		"4. Deploy.",
+		"5. Verify health.",
+		"## Pitfalls",
+		"- Do not skip verification.",
+		"- Do not invent commands.",
+		"## Verification",
+		"- Report exact result.",
+	}, "\n")
+	original := "---\nname: deploy-helper\nversion: \"1.0.0\"\n---\n\n" + originalBody + "\n"
+
+	smallPatch := originalBody + "\n- Capture rollback command."
+	if ok, reason := validateHermesEvolutionGuardrails(original, smallPatch); !ok {
+		t.Fatalf("small Hermes-style patch should pass, reason=%q", reason)
+	}
+
+	oversized := "# Deploy Helper\n\n" + strings.Repeat("- keep going\n", 1800)
+	if ok, reason := validateHermesEvolutionGuardrails(original, oversized); ok || !strings.Contains(reason, "15") {
+		t.Fatalf("oversized candidate should fail Hermes size gate, ok=%v reason=%q", ok, reason)
+	}
+
+	retitled := strings.Replace(originalBody, "# Deploy Helper", "# Incident Responder", 1)
+	if ok, reason := validateHermesEvolutionGuardrails(original, retitled); ok || !strings.Contains(reason, "title changed") {
+		t.Fatalf("title drift should fail semantic-preservation gate, ok=%v reason=%q", ok, reason)
+	}
+
+	broadRewrite := strings.Join([]string{
+		"# Deploy Helper",
+		"## When to Use",
+		"- Use for every operational task.",
+		"## Procedure",
+		"1. Think.",
+		"2. Act.",
+		"3. Summarize.",
+		"## Pitfalls",
+		"- Avoid mistakes.",
+		"## Verification",
+		"- Say done.",
+	}, "\n")
+	if ok, reason := validateHermesEvolutionGuardrails(original, broadRewrite); ok || !strings.Contains(reason, "broad rewrite") {
+		t.Fatalf("broad multi-section rewrite should fail Hermes patch-first gate, ok=%v reason=%q", ok, reason)
+	}
+}
+
 func TestFormatRejectedSkillEditsFencesCandidateBody(t *testing.T) {
 	got := formatRejectedSkillEdits([]RejectedSkillEditRecord{{
 		SkillName:     "deploy-helper",

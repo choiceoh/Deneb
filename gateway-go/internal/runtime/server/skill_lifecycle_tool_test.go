@@ -136,7 +136,7 @@ func TestSkillLifecycleStatusFiltersBySkillAndStats(t *testing.T) {
 	sourcePapers := system["sourcePapers"].([]string)
 	if len(sourcePapers) != len(genesis.PropusDoctrine().SourceIDs()) ||
 		sourcePapers[0] != "arxiv:2602.20867" ||
-		sourcePapers[len(sourcePapers)-1] != "arxiv:2605.21240" {
+		sourcePapers[len(sourcePapers)-1] != "hermes:agent-self-evolution" {
 		t.Fatalf("unexpected source papers: %+v", sourcePapers)
 	}
 	filteredSources := system["filteredSources"].([]string)

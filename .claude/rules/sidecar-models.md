@@ -114,7 +114,7 @@ DENEB_ASR_LIVE=1 DENEB_ASR_AUDIO=/path/to.wav DENEB_ASR_URL=http://127.0.0.1:180
 Hindsight(Hermes 계열 FastAPI+pgvector 장기기억 서비스)는 **2026-06-15 게이트웨이 회상에서 은퇴**했다. puppet 회상 측정 결과 순기여 ~0 — 합성 점수(0.60–0.92)가 wiki/diary 의 BM25 밴드(wiki ≥1.6, diary 3–9)보다 낮아 wiki·diary 가 히트하면 항상 랭킹 탈락했고, surface 될 때도 wiki 페이지 요약과 같은 사실을 중복 주입했다. recall 소스·retain recorder·`domain/hindsight` 클라이언트·knowledge hindsight 어댑터·`DENEB_HINDSIGHT_*` env·시스템 프롬프트 서비스 블록 모두 제거. 장기기억은 이제 **wiki(큐레이션·시맨틱)+diary(원문)+polaris(세션)** 가 담당한다.
 
 - **호스트 정리(운영자 작업)**: `cd ~/hindsight && docker compose down` 으로 컨테이너(8888/pgvector) 내림. systemd 의 `DENEB_HINDSIGHT_URL` Environment 도 제거(있어도 코드가 더는 안 읽음). 데이터는 `~/hindsight/hindsight-backup-20260610.sql.gz` 백업에 보존 — 되살리려면 백업 복원 + 코드 revert.
-- **self-memory 개념은 별개로 유지**: "Hindsight" 정체성(wiki·polaris·graphify 로 작업 연속성을 잇는 자기 기억)은 서비스가 아니라 페르소나다 — `skills/productivity/hindsight/SKILL.md` + 시스템 프롬프트 `## Hindsight (작업 전·작업 후)` 로 살아 있다.
+- **작업 기억은 wiki/diary/polaris로 흡수**: Hindsight 이름의 서비스·스킬·프롬프트 섹션은 더 이상 쓰지 않는다. 작업 연속성은 wiki/diary/polaris/graphify가 담당하고, 모순·대체 관계는 wiki의 `supersedes`/`superseded_by` 흐름으로 남긴다.
 
 ---
 

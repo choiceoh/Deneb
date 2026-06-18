@@ -1146,6 +1146,13 @@
         },
         "description": "Related page topics (write action)"
       },
+      "supersedes": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "Existing wiki page paths this write replaces because the new fact contradicts or supersedes them. Marking them demotes stale pages in recall/search."
+      },
       "importance": {
         "type": "number",
         "description": "Page importance 0.0-1.0 (write action, default: 0.5)",
@@ -1367,7 +1374,7 @@
       },
       "ref": {
         "type": "string",
-        "description": "단건 ref (op=read). 형식 `<layer>:<id>` — 예: `w:인물/박부장`, `h:mem-7K9L`"
+        "description": "단건 ref (op=read). 형식 `<layer>:<id>` — 예: `w:인물/박부장`"
       },
       "page": {
         "type": "string",
@@ -1402,6 +1409,13 @@
           "type": "string"
         },
         "description": "관련 페이지 경로들 (op=record)"
+      },
+      "supersedes": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "새 기록이 모순/갱신으로 대체하는 기존 wiki 페이지 경로들 (op=record). stale 페이지는 superseded_by로 표시되어 recall/search에서 감가된다."
       },
       "importance": {
         "type": "number",

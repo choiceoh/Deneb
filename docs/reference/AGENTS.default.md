@@ -69,6 +69,9 @@ cp docs/reference/AGENTS.default.md ~/.deneb/workspace/AGENTS.md
   canonical guide to the recall stack (`knowledge` / `wiki` / `polaris` / `graphify`).
 - Daily log: `wiki(action="log")` diary entries — raw notes of what happened.
 - Curated knowledge: `knowledge(op="record")` pages for people, projects, decisions.
+- When recording work, keep the wiki compounding: add 1-3 relevant `[[wikilinks]]`,
+  mark contradictions or superseded facts explicitly, and move repeated lessons
+  into the relevant project/system/work page instead of leaving them as loose logs.
 - Personal context file: `MEMORY.md` for durable facts, preferences, and decisions
   (loaded into every main-session turn).
 - Capture: decisions, preferences, constraints, open loops — verbatim numbers,
@@ -115,7 +118,7 @@ git commit -m "Add Deneb workspace"
 Skill discovery is filesystem-driven — the gateway indexes `skills/` at startup
 and the native client's Settings → 스킬 tab lists them read-only (no toggles).
 
-- **productivity/** — email-analysis, hindsight, meeting-minutes, morning-letter, session-logs, summarize, weekly-report
+- **productivity/** — email-analysis, meeting-minutes, morning-letter, session-logs, summarize, weekly-report
 - **coding/** — github, skill-creator, skill-factory, skill-evolution, evolution-proposal
 - **devops/** — healthcheck, tmux
 - **security/** — 1password

@@ -19,6 +19,7 @@ func TestPropusDoctrinePreservesSourcePrinciples(t *testing.T) {
 		"arxiv:2605.22794",
 		"arxiv:2606.11459",
 		"arxiv:2605.21240",
+		"hermes:agent-self-evolution",
 	}
 	gotIDs := doctrine.SourceIDs()
 	if len(gotIDs) != len(wantIDs) {
@@ -52,13 +53,20 @@ func TestPropusDoctrinePreservesSourcePrinciples(t *testing.T) {
 		"self-improvement coding queue",
 		"Mixed frontier",
 		"exploration map",
+		"Hermes-style evolution",
 	} {
 		if !strings.Contains(strings.Join(doctrine.ProductRules(), "\n"), want) {
 			t.Fatalf("doctrine lost source principle %q: %+v", want, doctrine.ProductRules())
 		}
 	}
+	if !strings.Contains(strings.Join(doctrine.Invariants, "\n"), "hermes_style_evolution") {
+		t.Fatalf("doctrine should preserve Hermes patch-first gate: %+v", doctrine.Invariants)
+	}
 	if !strings.Contains(strings.Join(doctrine.Invariants, "\n"), "diagnostic") {
 		t.Fatalf("doctrine should keep change-axis only as diagnostic metadata: %+v", doctrine.Invariants)
+	}
+	if !strings.Contains(strings.Join(doctrine.QualityGates, "\n"), "under_15kb") {
+		t.Fatalf("doctrine should preserve Hermes size/semantic gate: %+v", doctrine.QualityGates)
 	}
 	if !strings.Contains(strings.Join(doctrine.QualityGates, "\n"), "source_candidate_records") {
 		t.Fatalf("doctrine should preserve MOSS source-candidate gate: %+v", doctrine.QualityGates)

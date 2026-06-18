@@ -190,7 +190,7 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		s.WriteString("- `polaris(action=\"expand\", summary_id=N)` — 특정 구간 원문 복원. `question`을 더하면 LLM이 원문 기반으로 답한다.\n")
 		s.WriteString("자동 `<recall-context>`는 cue 기반 preflight라 턴 시작에 한 번 주입될 뿐이다 — 대화 도중 새 회상이 필요해지면 이 도구를 직접 사용하라.\n\n")
 
-		// 챗봇 skips the 업무 work-loop coaching (분석→위키, Hindsight) below.
+		// 챗봇 skips the 업무 work-loop coaching (분석→위키, 작업 기억) below.
 		if !params.Chatbot {
 			// Analysis → wiki write-back loop (SOUL.md continuity contract).
 			s.WriteString("## 분석 → 위키 갱신\n")
@@ -198,12 +198,14 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 			s.WriteString("**확신이 없으면 추측으로 리포트를 쓰지 마라.** 틀린 분석은 안 하느니만 못하고, 사용자가 그걸 믿고 움직이면 더 위험하다. 결론을 가르는 핵심 사실(이 인물이 누구인지, 이 거래의 맥락·조건, 이 건의 우선순위 등)이 불확실하거나 비어 있으면 — 그럴듯하게 메우지 말고, 모르는 부분을 분명히 밝힌 뒤 사용자에게 확인 질문을 먼저 하라. 받은 답은 즉시 위키에 기록해 **다음 분석부터는 같은 것을 다시 틀리지도, 다시 묻지도 않게** 하라(불확실 → 질문 → 기록의 닫힌 루프).\n")
 			s.WriteString("기록은 **습관은 일관되게, 형식은 사안에 맞게**: 각 프로젝트·거래·인물 페이지는 그 사안에 중요한 축을 페이지가 스스로 정해 최신 상태로 유지하라 — 모든 건에 같은 양식·필드를 강요하지 마라(부동산은 잔금·등기, 개발은 마일스톤·검수처럼 무엇이 중요한지가 다르다). 변하지 않는 규율은 셋뿐이다: ① 근거(메일 문구·날짜·금액)를 사실과 함께 남긴다, ② 관련 인물·프로젝트는 `related`로 연결한다, ③ 빠뜨리지 않고 갱신한다.\n\n")
 
-			// Hindsight reflex (SOUL.md "시간을 가로지르는 자기 기억" — self-work continuity).
-			s.WriteString("## Hindsight (작업 전·작업 후)\n")
-			s.WriteString("**Hindsight**는 SOUL.md에 정의된 정체성이다: wiki·polaris·graphify를 가로질러 어제의 나와 오늘의 나를 잇는 자기 기억 인프라. 외부 사건 분석(↑ 위 섹션)이 아니라 **내가 한 작업 자체**를 다룬다. 두 곳에서 발화한다:\n")
-			s.WriteString("- **작업 전**: 도구 호출 2회 이상이 필요한 새 작업(설치/설정/배포/누구에게 응답 작성 등)을 시작할 때 — **딱 한 번** `polaris(action=\"search\")` 또는 `wiki(action=\"search\")`로 \"전에 비슷한 거 한 적 있나\" 검색. 같은 작업 발견 → 거기서 시작. 검색은 빠르고 실수보다 싸다.\n")
-			s.WriteString("- **작업 후**: 시행착오·실패·회피법은 `wiki(action=\"log\")` 또는 `wiki(action=\"write\")`로 1~3줄: \"X 시도 → 결과 → 다음엔 Y\". 성공도 실패도 똑같이 기록할 가치가 있다 — 다음번 같은 작업이 빨라지는 만큼.\n")
-			s.WriteString("구체 절차(검색 쿼리 패턴, 기록 포맷, 예시)는 `skills(action=read, name=\"hindsight\")`에. 같은 실수를 두 번 하지 않기 위해.\n\n")
+			// Work-memory reflex: wiki/diary/polaris own the retired memory
+			// service's useful behavior without keeping a separate skill or
+			// recall layer.
+			s.WriteString("## 작업 기억 (wiki/diary)\n")
+			s.WriteString("wiki·diary·polaris·graphify는 어제의 나와 오늘의 나를 잇는 기억 인프라다. 외부 사건 분석(↑ 위 섹션)이 아니라 **내가 한 작업 자체**를 다룬다. 두 곳에서 발화한다:\n")
+			s.WriteString("- **작업 전**: 도구 호출 2회 이상이 필요한 새 작업(설치/설정/배포/누구에게 응답 작성 등)을 시작할 때 — **딱 한 번** `polaris(action=\"search\")` 또는 `knowledge(op=\"recall\")`/`wiki(action=\"search\")`로 \"전에 비슷한 거 한 적 있나\" 검색. 같은 작업 발견 → 거기서 시작. 검색은 빠르고 실수보다 싸다.\n")
+			s.WriteString("- **작업 후**: 시행착오·실패·회피법은 자동 일지에 쌓인다. 재사용 가치가 있거나 반복될 주제면 `wiki(action=\"write\")`/`knowledge(op=\"record\")`로 관련 페이지에 병합하고, 관련 항목은 `related`와 `[[wikilink]]`로 잇는다.\n")
+			s.WriteString("- **충돌 처리**: 이번 작업 결과가 과거 기록과 다르면 본문에 `모순/갱신:` 근거와 날짜를 남기고 `supersedes`로 대체되는 페이지를 표시한다. 오래된 거짓을 조용히 덮어쓰지 않는다.\n\n")
 		}
 
 		// Tooling: compact categorized list (descriptions are in tool schemas).
@@ -355,6 +357,9 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		d.WriteString("- **순서 엄수: 먼저 사용자에게 답변(분석 본문 포함)을 완성하고, 그 다음 필요한 경우에만 기록 도구(wiki write/log)를 호출한다.** 기록만 하고 응답 텍스트를 비우면 사용자는 아무것도 못 받는다 — 절대 금지.\n")
 		d.WriteString("- **\"위키에 정리해뒀어\" / \"저장했어\" 만으로 응답을 끝내지 마라.** 사용자가 비교·분석·코멘트를 요청했는데 응답이 저장 알림뿐이면, 사용자는 요청한 내용을 못 받은 것이다. 저장 사실 자체는 메타 정보이지 응답이 아니다.\n")
 		d.WriteString("- 카테고리는 프로젝트·인물·시스템·업무·사용자·기타 여섯 중 하나. 판단이 어려우면 \"기타\"에 넣어라.\n")
+		d.WriteString("- 상호링크: 관련 프로젝트·인물·시스템·결정 페이지는 `related`에 1~3개만 넣고, 본문에도 필요한 곳에 `[[경로-또는-제목]]` 링크를 남겨라. 링크 스팸은 피하고 검색/그래프에 도움이 되는 연결만 둔다.\n")
+		d.WriteString("- 모순/갱신: 새 사실이 기존 페이지를 대체하거나 충돌하면 조용히 덮어쓰지 말고 본문에 `모순/갱신:` 근거와 날짜를 적고, `supersedes`에 대체되는 기존 페이지 경로를 넣어 stale recall을 낮춰라.\n")
+		d.WriteString("- 지식 정리: 반복될 운영법·실패 회피법은 loose log로만 두지 말고 관련 프로젝트/시스템/업무 페이지의 섹션으로 접어 넣어라.\n")
 		d.WriteString("- 장기 보존 가치가 애매하면 자동 일지에 맡기고, 위키 페이지는 반복해서 쓸 사실·선호·결정·프로젝트 맥락만 남겨라.\n\n")
 	}
 

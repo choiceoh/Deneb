@@ -30,7 +30,7 @@ func PropusDoctrine() PropusDoctrineSpec {
 	return PropusDoctrineSpec{
 		Name:     "Propus",
 		Codename: "propus",
-		Version:  "2026-06-filtered-source-doctrine",
+		Version:  "2026-06-hermes-evolution-guardrails",
 		Lifecycle: []string{
 			"observe",
 			"propose",
@@ -91,6 +91,13 @@ func PropusDoctrine() PropusDoctrineSpec {
 				PropusRule:        "Keep opportunity backlog as an exploration map: record tried routes, expose unexplored forks, and balance exploitation against frontier discovery.",
 				EvidenceGrade:     "supporting-transfer",
 			},
+			{
+				ID:                "hermes:agent-self-evolution",
+				Title:             "Hermes Agent Self-Evolution",
+				OriginalPrinciple: "Operational self-evolution should mutate skills as small targeted variants from execution traces, then pass constraint gates such as tests, size limits, cache compatibility, semantic preservation, and human-visible review before promotion.",
+				PropusRule:        "Treat Hermes-style evolution as a patch-first promotion gate: candidates must stay under the skill size budget, preserve the original skill purpose, avoid broad rewrites, remain review-visible, and pass Deneb validation before commit.",
+				EvidenceGrade:     "operational-transfer",
+			},
 		},
 		FilteredPapers: []PropusDoctrinePaper{
 			{
@@ -112,6 +119,7 @@ func PropusDoctrine() PropusDoctrineSpec {
 			"propus_change_axis_is_diagnostic_metadata_not_completion_proof",
 			"opportunity_backlog_tracks_tried_routes_and_unexplored_forks",
 			"source_level_self_corrections_are_not_skill_lifecycle_events",
+			"hermes_style_evolution_is_patch_first_size_bounded_and_review_visible",
 			"status_and_summary_are_the_single_state_model",
 		},
 		QualityGates: []string{
@@ -124,6 +132,7 @@ func PropusDoctrine() PropusDoctrineSpec {
 			"change_axis_recorded_for_diagnostics_not_completion_claim",
 			"exploration_map_updates_tried_and_frontier_routes",
 			"source_candidate_records_evidence_target_files_risk_status_and_rollback_path",
+			"candidate_is_patch_sized_under_15kb_semantic_preserving_and_review_visible",
 		},
 	}
 }
