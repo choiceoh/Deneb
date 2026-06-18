@@ -75,6 +75,7 @@ type Evolver struct {
 	validationEngine *SkillValidationEngine
 	model            string
 	logger           *slog.Logger
+	configMu         sync.RWMutex
 
 	// selfTest gates the verification loop: when true, a rewritten skill is
 	// judged before being committed (a bad "improvement" is worse than none).
@@ -116,12 +117,24 @@ func NewEvolver(llmClient *llm.Client, catalog *skills.Catalog, tracker *Tracker
 	}
 }
 
+// SetPrimary updates the model/client used for rewrite generation. It mutates
+// the existing evolver so RPC handlers and tools holding this pointer observe
+// Settings changes without being re-registered.
+func (e *Evolver) SetPrimary(client *llm.Client, model string) {
+	e.configMu.Lock()
+	defer e.configMu.Unlock()
+	e.llmClient = client
+	e.model = strings.TrimSpace(model)
+}
+
 // SetTeacher wires an optional stronger model (typically modelrole main) used
 // to escalate a rewrite that fails the lightweight self-test. Safe to call
 // with a nil client (no-op escalation).
 func (e *Evolver) SetTeacher(client *llm.Client, model string) {
+	e.configMu.Lock()
+	defer e.configMu.Unlock()
 	e.teacherClient = client
-	e.teacherModel = model
+	e.teacherModel = strings.TrimSpace(model)
 }
 
 // SetThinkingKwargs wires per-model chat_template_kwargs thinking toggles so the
@@ -130,14 +143,26 @@ func (e *Evolver) SetTeacher(client *llm.Client, model string) {
 // model name. Safe to call with nil (the calls then fall back to the provider's
 // reasoning-effort floor).
 func (e *Evolver) SetThinkingKwargs(kwargs map[string]string) {
-	e.thinkingKwargs = kwargs
+	cloned := make(map[string]string, len(kwargs))
+	for k, v := range kwargs {
+		if strings.TrimSpace(k) == "" || strings.TrimSpace(v) == "" {
+			continue
+		}
+		cloned[strings.TrimSpace(k)] = strings.TrimSpace(v)
+	}
+	e.configMu.Lock()
+	defer e.configMu.Unlock()
+	e.thinkingKwargs = cloned
 }
 
 // thinkingOff returns a disabled ThinkingConfig for model, naming the model's
 // chat_template_kwargs toggle when known so the provider layer emits a real
 // off-switch instead of merely lowering reasoning effort.
 func (e *Evolver) thinkingOff(model string) *llm.ThinkingConfig {
-	return &llm.ThinkingConfig{Type: "disabled", TemplateKwarg: e.thinkingKwargs[model]}
+	e.configMu.RLock()
+	kwarg := e.thinkingKwargs[model]
+	e.configMu.RUnlock()
+	return &llm.ThinkingConfig{Type: "disabled", TemplateKwarg: kwarg}
 }
 
 // EvolveSkill attempts to improve a single skill based on usage feedback.
@@ -226,13 +251,17 @@ func (e *Evolver) EvolveSkill(ctx context.Context, skillName, reviewFinding stri
 		validationSection,
 		findingSection)
 
-	events, err := e.llmClient.StreamChat(ctx, llm.ChatRequest{
-		Model:          e.resolveModel(),
+	primaryClient, primaryModel := e.primaryModel()
+	if primaryClient == nil {
+		return nil, fmt.Errorf("evolver: primary client not configured")
+	}
+	events, err := primaryClient.StreamChat(ctx, llm.ChatRequest{
+		Model:          primaryModel,
 		Messages:       []llm.Message{llm.NewTextMessage("user", userPrompt)},
 		System:         llm.SystemString(evolveSystemPrompt),
 		MaxTokens:      4096,
 		Stream:         true,
-		Thinking:       e.thinkingOff(e.resolveModel()),
+		Thinking:       e.thinkingOff(primaryModel),
 		ResponseFormat: &llm.ResponseFormat{Type: "json_object"},
 	})
 	if err != nil {
@@ -441,10 +470,24 @@ func (e *Evolver) parseAndApply(ctx context.Context, text string, entry *skills.
 }
 
 func (e *Evolver) resolveModel() string {
-	if e.model != "" {
-		return e.model
+	_, model := e.primaryModel()
+	return model
+}
+
+func (e *Evolver) primaryModel() (*llm.Client, string) {
+	e.configMu.RLock()
+	defer e.configMu.RUnlock()
+	model := e.model
+	if model == "" {
+		model = "gemini-2.5-flash"
 	}
-	return "gemini-2.5-flash"
+	return e.llmClient, model
+}
+
+func (e *Evolver) teacherModelSnapshot() (*llm.Client, string) {
+	e.configMu.RLock()
+	defer e.configMu.RUnlock()
+	return e.teacherClient, e.teacherModel
 }
 
 // stripEchoedFrontmatter removes any leading YAML frontmatter block(s) an LLM
@@ -925,7 +968,8 @@ type acceptedSkillCandidate struct {
 // attempt, then re-judges. ok=false means the caller must keep the original
 // skill untouched.
 func (e *Evolver) selfTestAndMaybeEscalate(ctx context.Context, entry *skills.SkillEntry, originalContent, candidateBody string, stats *UsageStats) (acceptedSkillCandidate, bool, string) {
-	hasTeacher := e.teacherClient != nil && e.teacherModel != ""
+	teacherClient, teacherModel := e.teacherModelSnapshot()
+	hasTeacher := teacherClient != nil && teacherModel != ""
 
 	// Judge != producer. The candidate came from the lightweight model, so a
 	// lightweight judge would be grading its own output — same-family /
@@ -948,7 +992,7 @@ func (e *Evolver) selfTestAndMaybeEscalate(ctx context.Context, entry *skills.Sk
 	if !hasTeacher {
 		return acceptedSkillCandidate{}, false, reason
 	}
-	teacherCandidate, terr := e.teacherRewrite(ctx, entry.Skill.Name, originalContent, candidateBody, reason, stats)
+	teacherCandidate, terr := e.teacherRewrite(ctx, teacherClient, teacherModel, entry.Skill.Name, originalContent, candidateBody, reason, stats)
 	if terr != nil || strings.TrimSpace(teacherCandidate.Body) == "" {
 		e.logger.Warn("evolver: teacher escalation failed",
 			"skill", entry.Skill.Name, "error", terr)
@@ -958,7 +1002,8 @@ func (e *Evolver) selfTestAndMaybeEscalate(ctx context.Context, entry *skills.Sk
 	// — again keeping judge != producer rather than letting the teacher rubber-
 	// stamp its own rewrite. A weaker judge may false-reject a good rewrite, but
 	// the loop is fail-closed (keeps the original), so that errs safe.
-	tpass, treason, tjerr := e.validateCandidate(ctx, entry.Skill.Name, e.llmClient, e.resolveModel(), originalContent, teacherCandidate.Body, stats)
+	primaryClient, primaryModel := e.primaryModel()
+	tpass, treason, tjerr := e.validateCandidate(ctx, entry.Skill.Name, primaryClient, primaryModel, originalContent, teacherCandidate.Body, stats)
 	if tjerr != nil || !tpass {
 		e.logger.Info("evolver: teacher rewrite still failed self-test",
 			"skill", entry.Skill.Name, "reason", treason)
@@ -1072,10 +1117,10 @@ func (e *Evolver) RollbackSkill(skillName string) {
 // producer to avoid same-family self-preference bias, arXiv:2508.02994), else
 // the lightweight model itself (self-judge is unavoidable with no teacher).
 func (e *Evolver) pickCandidateJudge() (*llm.Client, string) {
-	if e.teacherClient != nil && e.teacherModel != "" {
-		return e.teacherClient, e.teacherModel
+	if client, model := e.teacherModelSnapshot(); client != nil && model != "" {
+		return client, model
 	}
-	return e.llmClient, e.resolveModel()
+	return e.primaryModel()
 }
 
 // judgeCandidate asks a model to validate a rewritten skill body against the
@@ -1180,7 +1225,10 @@ type evolveResp struct {
 // teacherRewrite asks the stronger model to produce a better body after the
 // lightweight rewrite failed self-test. Reuses the evolve envelope; returns
 // the accepted candidate fields (or an empty Body when the teacher declines).
-func (e *Evolver) teacherRewrite(ctx context.Context, skillName, originalContent, failedCandidate, rejectReason string, stats *UsageStats) (acceptedSkillCandidate, error) {
+func (e *Evolver) teacherRewrite(ctx context.Context, teacherClient *llm.Client, teacherModel, skillName, originalContent, failedCandidate, rejectReason string, stats *UsageStats) (acceptedSkillCandidate, error) {
+	if teacherClient == nil || strings.TrimSpace(teacherModel) == "" {
+		return acceptedSkillCandidate{}, fmt.Errorf("teacher rewrite: teacher not configured")
+	}
 	validationSection := formatValidationCasesForPrompt(e.validationCasesForPrompt(skillName))
 	failurePatternSection := formatFailurePatternsForPrompt(stats)
 	userPrompt := fmt.Sprintf(`## 현재 SKILL.md
@@ -1203,13 +1251,13 @@ func (e *Evolver) teacherRewrite(ctx context.Context, skillName, originalContent
 		failurePatternSection,
 		validationSection)
 
-	events, err := e.teacherClient.StreamChat(ctx, llm.ChatRequest{
-		Model:          e.teacherModel,
+	events, err := teacherClient.StreamChat(ctx, llm.ChatRequest{
+		Model:          teacherModel,
 		Messages:       []llm.Message{llm.NewTextMessage("user", userPrompt)},
 		System:         llm.SystemString(evolveSystemPrompt),
 		MaxTokens:      4096,
 		Stream:         true,
-		Thinking:       e.thinkingOff(e.teacherModel),
+		Thinking:       e.thinkingOff(teacherModel),
 		ResponseFormat: &llm.ResponseFormat{Type: "json_object"},
 	})
 	if err != nil {

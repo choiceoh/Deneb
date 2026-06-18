@@ -192,6 +192,47 @@ func TestSessionsSpawn_ImplementerUsesCodingRoleWhenConfigured(t *testing.T) {
 	}
 }
 
+func TestSessionsSpawn_RejectsExplicitCodingWhenUnconfigured(t *testing.T) {
+	sm := session.NewManager()
+	ctx := toolctx.WithSessionKey(context.Background(), "client:main")
+
+	input := sessionSearchJSON(t, map[string]string{
+		"task": "fix the build", "label": "impl", "model": "coding",
+	})
+	out, err := ToolSessionsSpawn(spawnDeps(sm))(ctx, input)
+	if err != nil {
+		t.Fatalf("spawn: %v", err)
+	}
+	if !strings.Contains(out, "Spawn rejected: model \"coding\" is not configured") {
+		t.Fatalf("expected coding rejection, got: %s", out)
+	}
+	for _, s := range sm.List() {
+		if s.SpawnedBy == "client:main" {
+			t.Fatalf("no child session should be created when coding is unconfigured, found %s", s.Key)
+		}
+	}
+}
+
+func TestSessionsSpawn_ImplementerUsesLiveCodingRole(t *testing.T) {
+	sm := session.NewManager()
+	ctx := toolctx.WithSessionKey(context.Background(), "client:main")
+	deps := spawnDeps(sm)
+	codingModel := ""
+	deps.CodingDefaultModelFn = func() string { return codingModel }
+
+	codingModel = "kimi/kimi-for-coding"
+	input := sessionSearchJSON(t, map[string]string{
+		"task": "fix the build", "label": "impl", "tool_preset": "implementer",
+	})
+	out, err := ToolSessionsSpawn(deps)(ctx, input)
+	if err != nil {
+		t.Fatalf("spawn: %v", err)
+	}
+	if !strings.Contains(out, "Model: coding") {
+		t.Fatalf("expected coding role echo in output, got: %s", out)
+	}
+}
+
 // TestSessionsSpawn_RejectsUnknownToolPreset pins the fail-closed contract:
 // toolpreset.AllowedTools returns nil (= unrestricted) for unknown names, so
 // a typo'd preset must reject the spawn instead of silently granting the

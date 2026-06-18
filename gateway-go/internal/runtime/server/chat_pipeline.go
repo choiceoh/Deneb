@@ -122,6 +122,12 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 			Transcript:           transcriptStore,
 			SubagentDefaultModel: chatCfg.SubagentDefaultModel,
 			CodingDefaultModel:   reg.FullModelID(modelrole.RoleCoding),
+			CodingDefaultModelFn: func() string {
+				if reg == nil {
+					return ""
+				}
+				return reg.FullModelID(modelrole.RoleCoding)
+			},
 		},
 		Chrono: chat.ChronoDeps{
 			Service: s.cronService,

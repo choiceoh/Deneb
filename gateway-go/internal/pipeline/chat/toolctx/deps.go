@@ -83,6 +83,10 @@ type SessionDeps struct {
 	// dedicated coding role. Implementer sub-agents use the "coding" role by
 	// default so code edits can run on the coding-specialized model.
 	CodingDefaultModel string
+	// CodingDefaultModelFn returns the live coding role binding. When set it
+	// supersedes CodingDefaultModel so Settings changes take effect without a
+	// gateway restart.
+	CodingDefaultModelFn func() string
 }
 
 // ChronoDeps holds dependencies for the cron scheduling tool.

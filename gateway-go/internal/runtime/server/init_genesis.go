@@ -33,17 +33,6 @@ func (s *Server) initGenesisServices() {
 		s.logger.Debug("genesis: skipped (lightweight model not configured)")
 		return
 	}
-	evolverRole := modelrole.RoleLightweight
-	evolverClient := lwClient
-	evolverModel := lwModel
-	if codingModel := s.modelRegistry.Model(modelrole.RoleCoding); codingModel != "" {
-		if codingClient := s.modelRegistry.Client(modelrole.RoleCoding); codingClient != nil {
-			evolverRole = modelrole.RoleCoding
-			evolverClient = codingClient
-			evolverModel = codingModel
-		}
-	}
-
 	cfg := genesis.DefaultConfigFromEnv()
 	cfg.Model = lwModel
 
@@ -77,41 +66,17 @@ func (s *Server) initGenesisServices() {
 		}
 	}
 
-	s.genesisEvolver = genesis.NewEvolver(evolverClient, s.skillCatalog, s.genesisTracker, evolverModel, s.logger)
-
-	// Teacher-escalation: wire the stronger main model so a rewrite that fails
-	// the default lightweight self-test gets one escalated attempt (#4). When a
-	// dedicated coding model is configured, it owns the patch-generation path;
-	// keep main out of the rewrite loop so code/skill edits are made by the
-	// coding role the operator selected.
-	mainClient := s.modelRegistry.Client(modelrole.RoleMain)
-	mainModel := s.modelRegistry.Model(modelrole.RoleMain)
-	if evolverRole != modelrole.RoleCoding && mainClient != nil && mainModel != "" && mainModel != lwModel {
-		s.genesisEvolver.SetTeacher(mainClient, mainModel)
-	}
-
-	// Resolve per-model thinking toggles so the evolver's judge/teacher/rewrite
-	// calls truly disable reasoning on dual-mode vLLM models (dsv4) instead of
-	// burning their whole output budget on chain-of-thought and returning
-	// truncated JSON ("judge error"). Keyed by bare model name to match the names
-	// the evolver passes to thinkingOff.
-	thinkingKwargs := map[string]string{}
-	for _, role := range []modelrole.Role{modelrole.RoleLightweight, modelrole.RoleCoding, modelrole.RoleMain} {
-		mc := s.modelRegistry.Config(role)
-		if mc.Model == "" {
-			continue
-		}
-		if k := s.modelRegistry.CapabilityForModel(mc.ProviderID, mc.Model).ThinkingToggleKwarg; k != "" {
-			thinkingKwargs[mc.Model] = k
-		}
-	}
-	s.genesisEvolver.SetThinkingKwargs(thinkingKwargs)
+	s.genesisEvolver = genesis.NewEvolver(lwClient, s.skillCatalog, s.genesisTracker, lwModel, s.logger)
+	evolverRole, evolverModel := s.configureGenesisEvolverModels(s.genesisEvolver)
+	thinkingKwargs := s.genesisThinkingKwargs()
 
 	// Quality-gate generated skills with the stronger main model (judge !=
 	// producer): rejects semantic duplicates + vague/one-off skills the
 	// specificity heuristic can't catch. Self-generated skills are net-harmful
 	// unless curated (SoK SkillsBench -1.3pp), so this is the genesis counterpart
 	// to the evolver's self-test. Thinking off (same dsv4 toggle as the evolver).
+	mainClient := s.modelRegistry.Client(modelrole.RoleMain)
+	mainModel := s.modelRegistry.Model(modelrole.RoleMain)
 	if mainClient != nil && mainModel != "" {
 		s.genesisSvc.SetJudge(mainClient, mainModel, &llm.ThinkingConfig{
 			Type:          "disabled",
@@ -157,6 +122,75 @@ func (s *Server) initGenesisServices() {
 		"minToolCalls", cfg.MinToolCalls,
 		"minTurns", cfg.MinTurns,
 		"maxSkillsPerDay", cfg.MaxSkillsPerDay)
+}
+
+func (s *Server) refreshCodingModelConsumers() {
+	if s.modelRegistry == nil {
+		return
+	}
+	codingModel := s.modelRegistry.FullModelID(modelrole.RoleCoding)
+	if s.toolDeps != nil {
+		s.toolDeps.Sessions.CodingDefaultModel = codingModel
+	}
+	if s.genesisEvolver != nil {
+		role, model := s.configureGenesisEvolverModels(s.genesisEvolver)
+		s.logger.Info("genesis: evolver model refreshed",
+			"codingModel", codingModel, "evolverRole", role, "evolverModel", model)
+	}
+}
+
+func (s *Server) configureGenesisEvolverModels(evolver *genesis.Evolver) (modelrole.Role, string) {
+	if evolver == nil || s.modelRegistry == nil {
+		return "", ""
+	}
+	evolverRole := modelrole.RoleLightweight
+	evolverClient := s.modelRegistry.Client(modelrole.RoleLightweight)
+	evolverModel := s.modelRegistry.Model(modelrole.RoleLightweight)
+	if codingModel := s.modelRegistry.Model(modelrole.RoleCoding); codingModel != "" {
+		if codingClient := s.modelRegistry.Client(modelrole.RoleCoding); codingClient != nil {
+			evolverRole = modelrole.RoleCoding
+			evolverClient = codingClient
+			evolverModel = codingModel
+		}
+	}
+	evolver.SetPrimary(evolverClient, evolverModel)
+
+	// Teacher-escalation: wire the stronger main model so a rewrite that fails
+	// the default lightweight self-test gets one escalated attempt (#4). When a
+	// dedicated coding model is configured, it owns the patch-generation path;
+	// keep main out of the rewrite loop so code/skill edits are made by the
+	// coding role the operator selected.
+	mainClient := s.modelRegistry.Client(modelrole.RoleMain)
+	mainModel := s.modelRegistry.Model(modelrole.RoleMain)
+	if evolverRole != modelrole.RoleCoding && mainClient != nil && mainModel != "" && mainModel != evolverModel {
+		evolver.SetTeacher(mainClient, mainModel)
+	} else {
+		evolver.SetTeacher(nil, "")
+	}
+	evolver.SetThinkingKwargs(s.genesisThinkingKwargs())
+	return evolverRole, evolverModel
+}
+
+func (s *Server) genesisThinkingKwargs() map[string]string {
+	if s.modelRegistry == nil {
+		return nil
+	}
+	// Resolve per-model thinking toggles so the evolver's judge/teacher/rewrite
+	// calls truly disable reasoning on dual-mode vLLM models (dsv4) instead of
+	// burning their whole output budget on chain-of-thought and returning
+	// truncated JSON ("judge error"). Keyed by bare model name to match the names
+	// the evolver passes to thinkingOff.
+	thinkingKwargs := map[string]string{}
+	for _, role := range []modelrole.Role{modelrole.RoleLightweight, modelrole.RoleCoding, modelrole.RoleMain} {
+		mc := s.modelRegistry.Config(role)
+		if mc.Model == "" {
+			continue
+		}
+		if k := s.modelRegistry.CapabilityForModel(mc.ProviderID, mc.Model).ThinkingToggleKwarg; k != "" {
+			thinkingKwargs[mc.Model] = k
+		}
+	}
+	return thinkingKwargs
 }
 
 func (s *Server) seedSkillCatalog() {
