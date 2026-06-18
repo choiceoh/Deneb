@@ -450,13 +450,70 @@ func (s *testIMAPArchive) searchUIDs(mailbox, criteria string) []string {
 	msgs := s.msgs[mailbox]
 	var uids []string
 	for uid, raw := range msgs {
-		if strings.Contains(criteria, `HEADER "Message-ID"`) && !strings.Contains(string(raw), strings.Trim(criteria[strings.LastIndex(criteria, " ")+1:], `"`)) {
+		if !testIMAPMessageMatches(raw, criteria) {
 			continue
 		}
 		uids = append(uids, uid)
 	}
 	sortUIDStrings(uids)
 	return uids
+}
+
+func testIMAPMessageMatches(raw []byte, criteria string) bool {
+	criteria = strings.TrimSpace(criteria)
+	upperCriteria := strings.ToUpper(criteria)
+	if criteria == "" || strings.EqualFold(criteria, "ALL") || strings.HasPrefix(upperCriteria, "SINCE ") && !strings.Contains(upperCriteria, " OR ") && !strings.Contains(upperCriteria, " FROM ") && !strings.Contains(upperCriteria, " SUBJECT ") && !strings.Contains(upperCriteria, " TEXT ") {
+		return true
+	}
+	rawText := string(raw)
+	lowerRaw := strings.ToLower(rawText)
+	lowerCriteria := strings.ToLower(criteria)
+	if strings.Contains(lowerCriteria, "header ") {
+		needle := lastQuotedTerm(criteria)
+		if needle == "" {
+			return true
+		}
+		return strings.Contains(rawText, needle) || strings.Contains(lowerRaw, strings.ToLower(needle))
+	}
+	terms := quotedTerms(criteria)
+	if len(terms) == 0 {
+		fields := strings.Fields(criteria)
+		if len(fields) > 0 {
+			terms = append(terms, fields[len(fields)-1])
+		}
+	}
+	for _, term := range terms {
+		term = strings.TrimSpace(term)
+		if term != "" && strings.Contains(lowerRaw, strings.ToLower(term)) {
+			return true
+		}
+	}
+	return false
+}
+
+func lastQuotedTerm(s string) string {
+	terms := quotedTerms(s)
+	if len(terms) == 0 {
+		return ""
+	}
+	return terms[len(terms)-1]
+}
+
+func quotedTerms(s string) []string {
+	var out []string
+	for {
+		start := strings.IndexByte(s, '"')
+		if start < 0 {
+			return out
+		}
+		s = s[start+1:]
+		end := strings.IndexByte(s, '"')
+		if end < 0 {
+			return out
+		}
+		out = append(out, strings.ReplaceAll(s[:end], `\"`, `"`))
+		s = s[end+1:]
+	}
 }
 
 func splitUIDSet(uidSet string) []string {

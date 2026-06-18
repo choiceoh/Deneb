@@ -49,10 +49,13 @@ func RegisterCoreTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDep
 	// for the schema. Reads the on-box deneb-mailarchive store over loopback IMAP.
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "mail_archive",
-		Description: "자체 메일 아카이브(자동보관된 수신 메일 + 과거 Gmail 백필)를 조회한다. action=list(오늘/최근 메일 목록+요약 스니펫) | search(발신자·회사·프로젝트명 키워드로 검색). 일일 메일 다이제스트와 '무슨 메일 왔어' 류 질문에 Gmail 대신 사용한다.",
+		Description: "자체 메일 아카이브(자동보관 수신 메일 + 과거 Gmail 백필)를 조회해 ID/Locator를 얻고, 전체 스레드와 프로젝트 히스토리를 복원한다. action=list(오늘/최근 메일) | search(키워드) | read(Locator/ID 또는 query로 원문 열기) | thread(Message-ID/References 기반 전체 대화) | project_history(회사·프로젝트 키워드 시간선+스레드 후보). 업무 맥락·메일 기반 미팅 준비·프로젝트 과거 확인에는 Gmail 대신 우선 사용한다.",
 		InputSchema: mailArchiveToolSchema(),
-		Fn:          tools.ToolMailArchive(),
-		Deferred:    true,
+		Fn: tools.ToolMailArchive(tools.MailArchiveDeps{
+			Wiki:     deps.Wiki.Store,
+			Calendar: &deps.Calendar,
+		}),
+		Deferred: true,
 	})
 
 	// NOTE: Pilot tool is registered separately by chat.RegisterCoreTools
