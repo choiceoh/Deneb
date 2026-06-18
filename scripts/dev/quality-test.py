@@ -631,29 +631,29 @@ def select_apex_tests(tests: list[dict], states: dict[str, ApexCaseState],
     return selected_tests, plan
 
 
-def print_apex_plan(plan: dict, selected_tests: list[dict]) -> None:
-    print()
-    print("APEX frontier plan")
-    print("-" * 70)
+def print_apex_plan(plan: dict, selected_tests: list[dict], *, file=sys.stdout) -> None:
+    print(file=file)
+    print("APEX frontier plan", file=file)
+    print("-" * 70, file=file)
     if not plan.get("enabled"):
-        print(f"  disabled: {plan.get('reason', 'not needed')}")
-    print(f"  selected: {plan.get('selected', len(selected_tests))}/{plan.get('budget', len(selected_tests))}")
+        print(f"  disabled: {plan.get('reason', 'not needed')}", file=file)
+    print(f"  selected: {plan.get('selected', len(selected_tests))}/{plan.get('budget', len(selected_tests))}", file=file)
     if plan.get("enabled"):
         print(f"  rho_mix={plan.get('rho_mix', 0):.2f} rho_all={plan.get('rho_all', 0):.2f} "
-              f"anchor={plan.get('anchor_ratio', 0):.2f}")
+              f"anchor={plan.get('anchor_ratio', 0):.2f}", file=file)
         print(f"  required={plan.get('required_selected', 0)} "
               f"positive={plan.get('positive_selected', 0)}/{plan.get('positive_target', 0)} "
-              f"negative={plan.get('negative_selected', 0)}/{plan.get('negative_target', 0)}")
-        print("  buckets:")
+              f"negative={plan.get('negative_selected', 0)}/{plan.get('negative_target', 0)}", file=file)
+        print("  buckets:", file=file)
         for key, count in plan.get("bucket_counts", {}).items():
             picked = plan.get("selected_counts", {}).get(key, 0)
-            print(f"    {key:<12} {picked:>3}/{count:<3}")
+            print(f"    {key:<12} {picked:>3}/{count:<3}", file=file)
         if plan.get("mutation_frontier"):
-            print(f"  mutation frontier: {', '.join(plan['mutation_frontier'])}")
-    print("  tests:")
+            print(f"  mutation frontier: {', '.join(plan['mutation_frontier'])}", file=file)
+    print("  tests:", file=file)
     for t in selected_tests:
-        print(f"    - {t.get('name')} [{t.get('cat', '?')}]")
-    print()
+        print(f"    - {t.get('name')} [{t.get('cat', '?')}]", file=file)
+    print(file=file)
 
 
 # --- Native Client Wrapper ---
@@ -1511,15 +1511,21 @@ def build_apex_selection(args, all_tests: list[dict]) -> tuple[list[dict], dict]
 # --- Main ---
 
 async def run(args):
+    progress_stream = sys.stderr if args.json else sys.stdout
+
+    def log(*values, **kwargs):
+        kwargs.setdefault("file", progress_stream)
+        print(*values, **kwargs)
+
     # Load test definitions.
     if not TESTS_YAML.exists():
-        print(f"ERROR: {TESTS_YAML} not found")
+        log(f"ERROR: {TESTS_YAML} not found")
         return 1
 
     try:
         profiles, cat_defaults, all_tests = load_tests(TESTS_YAML)
     except RuntimeError as e:
-        print(f"ERROR: {e}")
+        log(f"ERROR: {e}")
         return 1
 
     if args.list:
@@ -1532,17 +1538,17 @@ async def run(args):
 
     if args.sample == "apex" and not args.custom:
         tests, apex_plan = build_apex_selection(args, all_tests)
-        print_apex_plan(apex_plan, tests)
+        print_apex_plan(apex_plan, tests, file=progress_stream)
 
     if not tests and not args.custom:
-        print(f"No tests found for scenario '{scenario}'")
-        print(f"Available categories: {sorted(set(t.get('cat') for t in all_tests))}")
+        log(f"No tests found for scenario '{scenario}'")
+        log(f"Available categories: {sorted(set(t.get('cat') for t in all_tests))}")
         return 1
 
     # Prerequisite check.
     ok, detail = check_prerequisites(HOST, args.port)
     if not ok:
-        print(f"Native chat prerequisites not met: {detail}")
+        log(f"Native chat prerequisites not met: {detail}")
         return 1
 
     # Connectivity check via the native miniapp RPC surface.
@@ -1553,10 +1559,10 @@ async def run(args):
         count = len(tests) if not args.custom else 1
         conc = args.concurrency
         conc_label = f", concurrency={conc}" if conc > 1 else ""
-        print(f"Connected to {version} — running {count} tests via native miniapp RPC{conc_label}")
+        log(f"Connected to {version} — running {count} tests via native miniapp RPC{conc_label}")
     except Exception as e:
-        print(f"Failed to connect to gateway: {e}")
-        print("Is the dev gateway + mock running? Try: scripts/live-test.sh start")
+        log(f"Failed to connect to gateway: {e}")
+        log("Is the dev gateway + mock running? Try: scripts/live-test.sh start")
         return 1
     finally:
         await probe.close()
@@ -1588,29 +1594,29 @@ async def run(args):
                 for i, tdef in enumerate(tests, 1):
                     name = tdef["name"]
                     total = len(tests)
-                    print(f"[{i}/{total}] {name}...")
+                    log(f"[{i}/{total}] {name}...")
                     try:
                         r = await run_test(client, tdef, profiles, cat_defaults)
                         results.append(r)
                         status = "PASS" if r.passed else "FAIL"
-                        print(f"  {status} ({r.latency_ms:.0f}ms)")
+                        log(f"  {status} ({r.latency_ms:.0f}ms)")
                     except Exception as e:
                         r = QualityResult(name=name)
                         r.add_check("execution", False, str(e))
                         results.append(r)
-                        print(f"  ERROR: {e}")
+                        log(f"  ERROR: {e}")
             finally:
                 await client.close()
 
     except KeyboardInterrupt:
-        print("\nInterrupted — showing partial results")
+        log("\nInterrupted — showing partial results")
     except Exception as e:
-        print(f"Test error: {e}")
+        log(f"Test error: {e}")
         import traceback
-        traceback.print_exc()
+        traceback.print_exc(file=progress_stream)
 
     if not results:
-        print("No results")
+        log("No results")
         return 1
 
     exit_code = print_report(results, json_output=args.json)
@@ -1632,7 +1638,7 @@ async def run(args):
         store = ResultStore(db_path)
         run_id = store.record_run(results, metadata)
         store.close()
-        print(f"\n  Recorded run #{run_id} to {store.db_path}")
+        log(f"\n  Recorded run #{run_id} to {store.db_path}")
 
     return exit_code
 
@@ -1701,13 +1707,13 @@ def main():
     # History/APEX planning commands (no gateway needed).
     if args.apex_plan:
         if not TESTS_YAML.exists():
-            print(f"ERROR: {TESTS_YAML} not found")
-            return
+            print(f"ERROR: {TESTS_YAML} not found", file=sys.stderr)
+            sys.exit(1)
         try:
             _, _, all_tests = load_tests(TESTS_YAML)
         except RuntimeError as e:
-            print(f"ERROR: {e}")
-            return
+            print(f"ERROR: {e}", file=sys.stderr)
+            sys.exit(1)
         selected, plan = build_apex_selection(args, all_tests)
         print_apex_plan(plan, selected)
         return
