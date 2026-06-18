@@ -83,6 +83,8 @@ type UsageStats struct {
 	RecentErrors []string `json:"recentErrors,omitempty"`
 }
 
+const defaultSkillEvolutionEvidenceWindowDays = 7
+
 // Tracker records and queries skill usage for evolution decisions.
 type Tracker struct {
 	logger              *slog.Logger
@@ -355,6 +357,24 @@ func (t *Tracker) getStatsLocked(skillName string) *UsageStats {
 		copy(stats.RecentErrors, errs)
 	}
 	return stats
+}
+
+// EvolutionEvidenceStats returns the bounded usage evidence that the automatic
+// evolver is allowed to act on. It intentionally differs from Stats(), which is
+// a lifetime observability aggregate: stale failures should remain visible in
+// status output, but they must not keep triggering fresh rewrites forever.
+func (t *Tracker) EvolutionEvidenceStats(skillName string) (*UsageStats, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	statsBySkill, err := t.evolutionEvidenceStatsBySkillLocked(time.Now())
+	if err != nil {
+		return nil, err
+	}
+	if stats := statsBySkill[skillName]; stats != nil {
+		return stats, nil
+	}
+	return &UsageStats{SkillName: skillName}, nil
 }
 
 // ListAllStats returns usage stats for all tracked skills.
@@ -666,30 +686,20 @@ func (t *Tracker) RecentLifecycleLog(limit int) ([]LifecycleLogEntry, error) {
 	return entries, nil
 }
 
-// SkillsNeedingEvolution returns skills with high failure rates.
+// SkillsNeedingEvolution returns skills with recent unresolved failure rates.
 func (t *Tracker) SkillsNeedingEvolution(minUses int, maxSuccessRate float64) ([]UsageStats, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	lastFailureAt, err := t.lastRealFailureBySkillLocked()
-	if err != nil {
-		return nil, err
-	}
-	lastAttemptAt, err := t.lastEvolutionAttemptBySkillLocked()
+	statsBySkill, err := t.evolutionEvidenceStatsBySkillLocked(time.Now())
 	if err != nil {
 		return nil, err
 	}
 
 	var candidates []UsageStats
-	for name := range t.stats {
-		s := *t.getStatsLocked(name)
-		if s.TotalUses < minUses || s.SuccessRate > maxSuccessRate {
-			continue
-		}
-		// Once an evolve attempt post-dates the newest real failure, the loop has
-		// already acted on that evidence. Do not keep re-optimizing the same
-		// failure cluster until real usage produces a fresh failure after it.
-		if lastAttemptAt[s.SkillName] > lastFailureAt[s.SkillName] {
+	for _, stats := range statsBySkill {
+		s := *stats
+		if s.TotalUses < minUses || s.FailureCount == 0 || s.SuccessRate > maxSuccessRate {
 			continue
 		}
 		candidates = append(candidates, s)
@@ -700,21 +710,74 @@ func (t *Tracker) SkillsNeedingEvolution(minUses int, maxSuccessRate float64) ([
 	return candidates, nil
 }
 
-func (t *Tracker) lastRealFailureBySkillLocked() (map[string]int64, error) {
+func (t *Tracker) evolutionEvidenceStatsBySkillLocked(now time.Time) (map[string]*UsageStats, error) {
+	lastAttemptAt, err := t.lastEvolutionAttemptBySkillLocked()
+	if err != nil {
+		return nil, err
+	}
 	records, err := jsonlstore.Load[UsageRecord](t.usagePath)
 	if err != nil {
-		return nil, fmt.Errorf("genesis-tracker: load usage for evolution candidates: %w", err)
+		return nil, fmt.Errorf("genesis-tracker: load usage for evolution evidence: %w", err)
 	}
-	out := make(map[string]int64)
+
+	statsBySkill := make(map[string]*UsageStats)
 	for _, r := range records {
-		if r.SkillName == "" || r.Success || !isRealUsageRecord(r) {
+		if r.SkillName == "" || !isRealUsageRecord(r) {
 			continue
 		}
-		if r.UsedAt > out[r.SkillName] {
-			out[r.SkillName] = r.UsedAt
+		if cutoff := evolutionEvidenceCutoff(now, lastAttemptAt[r.SkillName]); cutoff > 0 && r.UsedAt <= cutoff {
+			continue
+		}
+		stats := statsBySkill[r.SkillName]
+		if stats == nil {
+			stats = &UsageStats{SkillName: r.SkillName}
+			statsBySkill[r.SkillName] = stats
+		}
+		addUsageRecordToStats(stats, r)
+	}
+	for _, stats := range statsBySkill {
+		if stats.TotalUses > 0 {
+			stats.SuccessRate = float64(stats.SuccessCount) / float64(stats.TotalUses)
 		}
 	}
-	return out, nil
+	return statsBySkill, nil
+}
+
+func evolutionEvidenceCutoff(now time.Time, lastAttemptAt int64) int64 {
+	cutoff := lastAttemptAt
+	if window := skillEvolutionEvidenceWindow(); window > 0 {
+		windowCutoff := now.Add(-window).UnixMilli()
+		if windowCutoff > cutoff {
+			cutoff = windowCutoff
+		}
+	}
+	return cutoff
+}
+
+func skillEvolutionEvidenceWindow() time.Duration {
+	days := envInt("DENEB_SKILL_EVOLVE_EVIDENCE_DAYS", defaultSkillEvolutionEvidenceWindowDays)
+	if days <= 0 {
+		return 0
+	}
+	return time.Duration(days) * 24 * time.Hour
+}
+
+func addUsageRecordToStats(stats *UsageStats, r UsageRecord) {
+	stats.TotalUses++
+	if r.Success {
+		stats.SuccessCount++
+	} else {
+		stats.FailureCount++
+	}
+	if r.UsedAt > stats.LastUsed {
+		stats.LastUsed = r.UsedAt
+	}
+	if !r.Success && r.ErrorMsg != "" {
+		stats.RecentErrors = append(stats.RecentErrors, r.ErrorMsg)
+		if len(stats.RecentErrors) > 5 {
+			stats.RecentErrors = stats.RecentErrors[len(stats.RecentErrors)-5:]
+		}
+	}
 }
 
 func (t *Tracker) lastEvolutionAttemptBySkillLocked() (map[string]int64, error) {

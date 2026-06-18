@@ -156,16 +156,98 @@ func TestSkillsNeedingEvolution_SkipsUntilNewRealFailureAfterAttempt(t *testing.
 	}); err != nil {
 		t.Fatalf("RecordUsage fresh failure: %v", err)
 	}
+	for i := 0; i < 2; i++ {
+		if err := tracker.RecordUsage(UsageRecord{
+			SkillName: "topsolar-db",
+			Success:   true,
+			UsedAt:    time.Now().Add(time.Duration(3+i) * time.Second).UnixMilli(),
+		}); err != nil {
+			t.Fatalf("RecordUsage fresh success: %v", err)
+		}
+	}
 	candidates, err = tracker.SkillsNeedingEvolution(3, 0.7)
 	if err != nil {
-		t.Fatalf("SkillsNeedingEvolution after fresh failure: %v", err)
+		t.Fatalf("SkillsNeedingEvolution after fresh evidence: %v", err)
 	}
 	for _, candidate := range candidates {
 		if candidate.SkillName == "topsolar-db" {
 			return
 		}
 	}
-	t.Fatalf("expected fresh post-attempt failure to make skill eligible again, got %+v", candidates)
+	t.Fatalf("expected fresh post-attempt evidence to make skill eligible again, got %+v", candidates)
+}
+
+func TestSkillsNeedingEvolution_IgnoresExpiredFailureEvidence(t *testing.T) {
+	t.Setenv("DENEB_SKILL_EVOLVE_EVIDENCE_DAYS", "7")
+	tracker := newTestTracker(t)
+	old := time.Now().Add(-8 * 24 * time.Hour).UnixMilli()
+	for i := 0; i < 3; i++ {
+		if err := tracker.RecordUsage(UsageRecord{
+			SkillName: "stale-skill",
+			Success:   false,
+			ErrorMsg:  "old real failure",
+			UsedAt:    old + int64(i),
+		}); err != nil {
+			t.Fatalf("RecordUsage old failure: %v", err)
+		}
+	}
+
+	stats, err := tracker.EvolutionEvidenceStats("stale-skill")
+	if err != nil {
+		t.Fatalf("EvolutionEvidenceStats: %v", err)
+	}
+	if stats.TotalUses != 0 {
+		t.Fatalf("expired failures must not enter evolution evidence, got %+v", stats)
+	}
+	candidates, err := tracker.SkillsNeedingEvolution(2, 0.7)
+	if err != nil {
+		t.Fatalf("SkillsNeedingEvolution: %v", err)
+	}
+	for _, candidate := range candidates {
+		if candidate.SkillName == "stale-skill" {
+			t.Fatalf("expired failures must not trigger evolution, got %+v", candidates)
+		}
+	}
+
+	fresh := time.Now().UnixMilli()
+	if err := tracker.RecordUsage(UsageRecord{
+		SkillName: "stale-skill",
+		Success:   false,
+		ErrorMsg:  "fresh real failure",
+		UsedAt:    fresh,
+	}); err != nil {
+		t.Fatalf("RecordUsage fresh failure: %v", err)
+	}
+	candidates, err = tracker.SkillsNeedingEvolution(2, 0.7)
+	if err != nil {
+		t.Fatalf("SkillsNeedingEvolution after one fresh failure: %v", err)
+	}
+	for _, candidate := range candidates {
+		if candidate.SkillName == "stale-skill" {
+			t.Fatalf("one fresh use plus expired failures must not meet min evidence, got %+v", candidates)
+		}
+	}
+
+	if err := tracker.RecordUsage(UsageRecord{
+		SkillName: "stale-skill",
+		Success:   true,
+		UsedAt:    fresh + 1,
+	}); err != nil {
+		t.Fatalf("RecordUsage fresh success: %v", err)
+	}
+	candidates, err = tracker.SkillsNeedingEvolution(2, 0.7)
+	if err != nil {
+		t.Fatalf("SkillsNeedingEvolution after bounded evidence: %v", err)
+	}
+	for _, candidate := range candidates {
+		if candidate.SkillName == "stale-skill" {
+			if candidate.TotalUses != 2 || candidate.FailureCount != 1 || candidate.SuccessCount != 1 {
+				t.Fatalf("candidate must use bounded evidence only, got %+v", candidate)
+			}
+			return
+		}
+	}
+	t.Fatalf("expected fresh bounded evidence to trigger candidate, got %+v", candidates)
 }
 
 func TestTrackerRecentLifecycleLog_Limit(t *testing.T) {
