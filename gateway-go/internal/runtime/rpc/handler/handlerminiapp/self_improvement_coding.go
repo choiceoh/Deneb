@@ -3,6 +3,7 @@ package handlerminiapp
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
@@ -42,6 +43,16 @@ type SelfCorrectionCandidate struct {
 	UpdatedAt      int64    `json:"updatedAt,omitempty"`
 }
 
+// SelfImprovementCodingStatusCount summarizes the deferred coding queue by
+// review status so native can show the queue as a lifecycle surface, not only a
+// one-off pending list.
+//
+//deneb:wire
+type SelfImprovementCodingStatusCount struct {
+	Status string `json:"status"`
+	Count  int    `json:"count"`
+}
+
 // SelfImprovementCodingListResponse is the miniapp.self_improvement_coding.list
 // payload.
 //
@@ -49,6 +60,8 @@ type SelfCorrectionCandidate struct {
 type SelfImprovementCodingListResponse struct {
 	Candidates []SelfCorrectionCandidate `json:"candidates"`
 	Count      int                       `json:"count"`
+	// StatusCounts is computed over the latest queue window across all statuses.
+	StatusCounts []SelfImprovementCodingStatusCount `json:"statusCounts,omitempty"`
 }
 
 func SelfImprovementCodingMethods(deps SelfImprovementCodingDeps) map[string]rpcutil.HandlerFunc {
@@ -78,11 +91,15 @@ func selfImprovementCodingList(deps SelfImprovementCodingDeps) rpcutil.HandlerFu
 		if p.Limit <= 0 || p.Limit > lifecycleScanLimit {
 			p.Limit = 60
 		}
-		status := strings.TrimSpace(p.Status)
-		if status == "" {
-			status = genesis.SelfCorrectionStatusProposed
+		status, err := normalizeSelfImprovementCodingStatus(p.Status)
+		if err != nil {
+			return rpcerr.InvalidParams(err).Response(req.ID)
 		}
 		recs, err := deps.RecentCandidates(status, p.Limit)
+		if err != nil {
+			return rpcerr.WrapUnavailable("self-improvement coding queue unavailable", err).Response(req.ID)
+		}
+		allRecs, err := deps.RecentCandidates("", lifecycleScanLimit)
 		if err != nil {
 			return rpcerr.WrapUnavailable("self-improvement coding queue unavailable", err).Response(req.ID)
 		}
@@ -91,8 +108,9 @@ func selfImprovementCodingList(deps SelfImprovementCodingDeps) rpcutil.HandlerFu
 			candidates = append(candidates, selfCorrectionCandidate(rec))
 		}
 		return rpcutil.RespondOK(req.ID, SelfImprovementCodingListResponse{
-			Candidates: candidates,
-			Count:      len(candidates),
+			Candidates:   candidates,
+			Count:        len(candidates),
+			StatusCounts: selfImprovementCodingStatusCounts(allRecs),
 		})
 	}
 }
@@ -117,4 +135,58 @@ func selfCorrectionCandidate(rec genesis.SelfCorrectionCandidateRecord) SelfCorr
 		CreatedAt:      rec.CreatedAt,
 		UpdatedAt:      rec.UpdatedAt,
 	}
+}
+
+func normalizeSelfImprovementCodingStatus(status string) (string, error) {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "":
+		return genesis.SelfCorrectionStatusProposed, nil
+	case "all", "*":
+		return "", nil
+	case "pending", "proposed", "open":
+		return genesis.SelfCorrectionStatusProposed, nil
+	case "accept", "accepted":
+		return genesis.SelfCorrectionStatusAccepted, nil
+	case "reject", "rejected":
+		return genesis.SelfCorrectionStatusRejected, nil
+	case "supersede", "superseded":
+		return genesis.SelfCorrectionStatusSuperseded, nil
+	case "apply", "applied":
+		return genesis.SelfCorrectionStatusApplied, nil
+	default:
+		return "", fmt.Errorf("unknown self-improvement coding status %q", status)
+	}
+}
+
+func selfImprovementCodingStatusCounts(recs []genesis.SelfCorrectionCandidateRecord) []SelfImprovementCodingStatusCount {
+	counts := map[string]int{
+		"all":                                  len(recs),
+		genesis.SelfCorrectionStatusProposed:   0,
+		genesis.SelfCorrectionStatusAccepted:   0,
+		genesis.SelfCorrectionStatusApplied:    0,
+		genesis.SelfCorrectionStatusRejected:   0,
+		genesis.SelfCorrectionStatusSuperseded: 0,
+	}
+	for _, rec := range recs {
+		status := strings.TrimSpace(rec.Status)
+		if status == "" {
+			status = genesis.SelfCorrectionStatusProposed
+		}
+		if _, ok := counts[status]; ok {
+			counts[status]++
+		}
+	}
+	order := []string{
+		genesis.SelfCorrectionStatusProposed,
+		genesis.SelfCorrectionStatusAccepted,
+		genesis.SelfCorrectionStatusApplied,
+		genesis.SelfCorrectionStatusRejected,
+		genesis.SelfCorrectionStatusSuperseded,
+		"all",
+	}
+	out := make([]SelfImprovementCodingStatusCount, 0, len(order))
+	for _, status := range order {
+		out = append(out, SelfImprovementCodingStatusCount{Status: status, Count: counts[status]})
+	}
+	return out
 }

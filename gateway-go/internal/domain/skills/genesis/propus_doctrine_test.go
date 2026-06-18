@@ -16,6 +16,7 @@ func TestPropusDoctrinePreservesSourcePrinciples(t *testing.T) {
 		"arxiv:2507.02778",
 		"arxiv:2606.05976",
 		"arxiv:2606.09498",
+		"arxiv:2605.22794",
 		"arxiv:2606.11459",
 		"arxiv:2605.21240",
 	}
@@ -48,6 +49,7 @@ func TestPropusDoctrinePreservesSourcePrinciples(t *testing.T) {
 		"same-turn self-critique",
 		"external evidence",
 		"failure signature",
+		"self-improvement coding queue",
 		"Mixed frontier",
 		"exploration map",
 	} {
@@ -57,5 +59,8 @@ func TestPropusDoctrinePreservesSourcePrinciples(t *testing.T) {
 	}
 	if !strings.Contains(strings.Join(doctrine.Invariants, "\n"), "diagnostic") {
 		t.Fatalf("doctrine should keep change-axis only as diagnostic metadata: %+v", doctrine.Invariants)
+	}
+	if !strings.Contains(strings.Join(doctrine.QualityGates, "\n"), "source_candidate_records") {
+		t.Fatalf("doctrine should preserve MOSS source-candidate gate: %+v", doctrine.QualityGates)
 	}
 }

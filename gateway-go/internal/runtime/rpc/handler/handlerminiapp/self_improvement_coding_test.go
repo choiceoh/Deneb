@@ -24,9 +24,31 @@ func testSelfImprovementCodingDeps() SelfImprovementCodingDeps {
 				Source:         "self-correction",
 				CreatedAt:      444,
 				UpdatedAt:      444,
+			}, {
+				ID:             "sc-2",
+				Status:         genesis.SelfCorrectionStatusApplied,
+				Scope:          "code",
+				Title:          "적용된 코드 후보",
+				ProposedChange: "검증된 후보를 적용 완료로 표시",
+				CreatedAt:      333,
+				UpdatedAt:      333,
+			}, {
+				ID:             "sc-3",
+				Status:         genesis.SelfCorrectionStatusRejected,
+				Scope:          "code",
+				Title:          "기각된 코드 후보",
+				ProposedChange: "근거가 약한 후보를 숨기지 않고 기각으로 보존",
+				CreatedAt:      222,
+				UpdatedAt:      222,
 			}}
-			if status != "" && status != genesis.SelfCorrectionStatusProposed {
-				return nil, nil
+			if status != "" {
+				filtered := make([]genesis.SelfCorrectionCandidateRecord, 0, len(recs))
+				for _, rec := range recs {
+					if rec.Status == status {
+						filtered = append(filtered, rec)
+					}
+				}
+				recs = filtered
 			}
 			if limit > 0 && limit < len(recs) {
 				return recs[:limit], nil
@@ -43,6 +65,12 @@ func TestSelfImprovementCodingList_PendingCandidates(t *testing.T) {
 
 	if payload.Count != 1 || len(payload.Candidates) != 1 {
 		t.Fatalf("expected one candidate, got %+v", payload)
+	}
+	if countSelfImprovementCodingStatus(payload.StatusCounts, "all") != 3 ||
+		countSelfImprovementCodingStatus(payload.StatusCounts, genesis.SelfCorrectionStatusProposed) != 1 ||
+		countSelfImprovementCodingStatus(payload.StatusCounts, genesis.SelfCorrectionStatusApplied) != 1 ||
+		countSelfImprovementCodingStatus(payload.StatusCounts, genesis.SelfCorrectionStatusRejected) != 1 {
+		t.Fatalf("unexpected status counts: %+v", payload.StatusCounts)
 	}
 	candidate := payload.Candidates[0]
 	if candidate.ID != "sc-1" ||
@@ -64,8 +92,35 @@ func TestSelfImprovementCodingList_StatusFilter(t *testing.T) {
 		Params: params,
 	})
 	payload := decodeSkillsPayload[SelfImprovementCodingListResponse](t, resp)
-	if payload.Count != 0 || len(payload.Candidates) != 0 {
-		t.Fatalf("expected empty applied candidate view, got %+v", payload)
+	if payload.Count != 1 || len(payload.Candidates) != 1 || payload.Candidates[0].ID != "sc-2" {
+		t.Fatalf("expected applied candidate view, got %+v", payload)
+	}
+}
+
+func TestSelfImprovementCodingList_AllStatus(t *testing.T) {
+	h := selfImprovementCodingList(testSelfImprovementCodingDeps())
+	params, _ := json.Marshal(map[string]any{"status": "all"})
+	resp := h(authedSkillsCtx(), &protocol.RequestFrame{
+		ID:     "1",
+		Method: "miniapp.self_improvement_coding.list",
+		Params: params,
+	})
+	payload := decodeSkillsPayload[SelfImprovementCodingListResponse](t, resp)
+	if payload.Count != 3 || len(payload.Candidates) != 3 {
+		t.Fatalf("expected all candidates, got %+v", payload)
+	}
+}
+
+func TestSelfImprovementCodingList_RejectsUnknownStatus(t *testing.T) {
+	h := selfImprovementCodingList(testSelfImprovementCodingDeps())
+	params, _ := json.Marshal(map[string]any{"status": "mystery"})
+	resp := h(authedSkillsCtx(), &protocol.RequestFrame{
+		ID:     "1",
+		Method: "miniapp.self_improvement_coding.list",
+		Params: params,
+	})
+	if resp.Error == nil {
+		t.Fatalf("expected invalid params for unknown status, got %+v", resp)
 	}
 }
 
@@ -73,4 +128,13 @@ func TestSelfImprovementCodingMethods_NilProvider(t *testing.T) {
 	if got := SelfImprovementCodingMethods(SelfImprovementCodingDeps{}); got != nil {
 		t.Fatalf("SelfImprovementCodingMethods(nil) = %#v, want nil", got)
 	}
+}
+
+func countSelfImprovementCodingStatus(counts []SelfImprovementCodingStatusCount, status string) int {
+	for _, count := range counts {
+		if count.Status == status {
+			return count.Count
+		}
+	}
+	return -1
 }

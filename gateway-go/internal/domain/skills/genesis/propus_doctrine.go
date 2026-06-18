@@ -71,6 +71,13 @@ func PropusDoctrine() PropusDoctrineSpec {
 				PropusRule:        "Every evolve candidate must name one supported failure signature, edited surface, expected behavior change, and regression risk before validation.",
 			},
 			{
+				ID:                "arxiv:2605.22794",
+				Title:             "MOSS: Self-Evolution through Source-Level Rewriting in Autonomous Agent Systems",
+				OriginalPrinciple: "Production self-evolution must reach source-level harness code when failures live in routing, hooks, dispatch, session state, or promotion mechanics; text-mutable skills and prompts cannot repair those layers.",
+				PropusRule:        "Keep source-level self-correction candidates in a separate self-improvement coding queue with evidence, target files, risk, status, explicit agent review, test proof, user consent, and rollback before promotion.",
+				EvidenceGrade:     "core",
+			},
+			{
 				ID:                "arxiv:2606.11459",
 				Title:             "APEX: Automated Prompt Engineering eXpert with Dynamic Data Selection",
 				OriginalPrinciple: "Prompt optimization is data-selection limited; Easy/Hard/Mixed tiers from lineage identify Mixed frontier cases for mutation and ranking while Easy anchors protect mastered behavior.",
@@ -104,6 +111,7 @@ func PropusDoctrine() PropusDoctrineSpec {
 			"validation_selection_records_mixed_frontier_and_easy_anchor_tiers",
 			"propus_change_axis_is_diagnostic_metadata_not_completion_proof",
 			"opportunity_backlog_tracks_tried_routes_and_unexplored_forks",
+			"source_level_self_corrections_are_not_skill_lifecycle_events",
 			"status_and_summary_are_the_single_state_model",
 		},
 		QualityGates: []string{
@@ -115,6 +123,7 @@ func PropusDoctrine() PropusDoctrineSpec {
 			"mixed_frontier_with_easy_anchor_tiers_recorded",
 			"change_axis_recorded_for_diagnostics_not_completion_claim",
 			"exploration_map_updates_tried_and_frontier_routes",
+			"source_candidate_records_evidence_target_files_risk_status_and_rollback_path",
 		},
 	}
 }
