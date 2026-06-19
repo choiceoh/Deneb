@@ -1,0 +1,206 @@
+package tools
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/filestore"
+	"github.com/choiceoh/deneb/gateway-go/internal/infra/fileshare"
+	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
+)
+
+// FilesParams holds parsed input for the files tool.
+type FilesParams struct {
+	Action    string `json:"action"`
+	Path      string `json:"path"`       // store path (list/download/share/analyze)
+	Query     string `json:"query"`      // search query
+	LocalPath string `json:"local_path"` // local file to save into the store (upload)
+	DestPath  string `json:"dest_path"`  // store destination for upload
+	Overwrite bool   `json:"overwrite"`  // overwrite on upload (default: autorename)
+	Extract   bool   `json:"extract"`    // also extract text on download
+	Recursive bool   `json:"recursive"`  // recurse into subfolders on list
+	Max       int    `json:"max"`        // max results (list/search)
+}
+
+// ToolFiles implements the files tool over Deneb's local file store
+// (internal/domain/filestore) — the local-disk replacement for the former
+// Dropbox tool. No external API, no OAuth: the store lives under DENEB_FILES_DIR
+// (default ~/.deneb/files). Extracted text is returned for the agent to reason
+// over (the tool calls no LLM); share links are minted via internal/infra/fileshare.
+func ToolFiles() ToolFunc {
+	return func(ctx context.Context, input json.RawMessage) (string, error) {
+		var p FilesParams
+		if err := jsonutil.UnmarshalInto("files params", input, &p); err != nil {
+			return "", err
+		}
+		store, err := filestore.DefaultLocalStore()
+		if err != nil {
+			return fmt.Sprintf("파일 저장소를 열 수 없습니다: %s", err), nil
+		}
+
+		switch p.Action {
+		case "list":
+			return filesList(ctx, store, p)
+		case "search":
+			return filesSearch(ctx, store, p)
+		case "download":
+			return filesDownload(ctx, store, p)
+		case "upload", "save":
+			return filesUpload(ctx, store, p)
+		case "share":
+			return filesShare(ctx, store, p)
+		case "analyze":
+			return filesAnalyze(ctx, store, p)
+		default:
+			return fmt.Sprintf("알 수 없는 files 액션: %q. 지원: list, search, download, upload, share, analyze", p.Action), nil
+		}
+	}
+}
+
+// --- list ---
+
+func filesList(ctx context.Context, store *filestore.LocalStore, p FilesParams) (string, error) {
+	entries, err := store.List(ctx, p.Path, p.Recursive, p.Max)
+	if err != nil {
+		return "", err
+	}
+	loc := strings.TrimSpace(p.Path)
+	if loc == "" || loc == "/" {
+		loc = "/ (루트)"
+	}
+	return fmt.Sprintf("## 📂 파일 저장소: %s\n\n%s", loc, filestore.FormatEntries(entries)), nil
+}
+
+// --- search ---
+
+func filesSearch(ctx context.Context, store *filestore.LocalStore, p FilesParams) (string, error) {
+	if strings.TrimSpace(p.Query) == "" {
+		return "", fmt.Errorf("query는 search 액션에 필수입니다")
+	}
+	entries, err := store.Search(ctx, p.Query, p.Max)
+	if err != nil {
+		return "", err
+	}
+	if len(entries) == 0 {
+		return fmt.Sprintf("검색 결과 없음: %q", p.Query), nil
+	}
+	return fmt.Sprintf("## 🔍 파일 검색: %s\n\n%s", p.Query, filestore.FormatEntries(entries)), nil
+}
+
+// --- download: resolve to an absolute path for send_file (no temp copy — the
+// file already lives on local disk), optionally extracting text ---
+
+func filesDownload(ctx context.Context, store *filestore.LocalStore, p FilesParams) (string, error) {
+	if strings.TrimSpace(p.Path) == "" {
+		return "", fmt.Errorf("path는 download 액션에 필수입니다")
+	}
+	abs, err := store.AbsPath(p.Path)
+	if err != nil {
+		return "", err
+	}
+	meta, err := store.Stat(ctx, p.Path)
+	if err != nil {
+		return "", err
+	}
+
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "✓ 파일: **%s** (%s)\n경로: `%s`\n", meta.Name, filestore.HumanSize(meta.Size), abs)
+	if p.Extract {
+		if data, _, gerr := store.Get(ctx, p.Path); gerr == nil {
+			if text := extractFileText(ctx, meta.Name, data); text != "" {
+				fmt.Fprintf(&sb, "\n--- 추출된 내용 ---\n%s\n", truncateRunes(text, 50000))
+			} else {
+				sb.WriteString("\n(텍스트를 추출할 수 없는 형식입니다)\n")
+			}
+		}
+	}
+	sb.WriteString("\n사용자에게 파일을 보내려면 send_file 도구에 위 경로를 사용하세요.")
+	return sb.String(), nil
+}
+
+// --- upload: save a local file into the store ---
+
+func filesUpload(ctx context.Context, store *filestore.LocalStore, p FilesParams) (string, error) {
+	if strings.TrimSpace(p.LocalPath) == "" {
+		return "", fmt.Errorf("local_path는 upload 액션에 필수입니다")
+	}
+	dest := strings.TrimSpace(p.DestPath)
+	if dest == "" {
+		dest = "/" + filepath.Base(p.LocalPath)
+	}
+	data, err := os.ReadFile(p.LocalPath)
+	if err != nil {
+		return fmt.Sprintf("로컬 파일을 읽을 수 없습니다: %s", err), nil
+	}
+	meta, err := store.Put(ctx, dest, data, p.Overwrite)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("✓ 저장 완료: `%s` (%s)", meta.PathDisplay, filestore.HumanSize(meta.Size)), nil
+}
+
+// --- share: mint a time-limited, path-scoped download link for external sharing ---
+
+func filesShare(ctx context.Context, store *filestore.LocalStore, p FilesParams) (string, error) {
+	if strings.TrimSpace(p.Path) == "" {
+		return "", fmt.Errorf("path는 share 액션에 필수입니다")
+	}
+	meta, err := store.Stat(ctx, p.Path)
+	if err != nil {
+		return "", err
+	}
+	if meta.IsFolder() {
+		return "폴더는 공유 링크를 만들 수 없습니다. 파일 경로를 지정하세요.", nil
+	}
+	link := fileshare.Link(meta.PathDisplay)
+	if link == "" {
+		return "공유 링크를 만들 수 없습니다 (게이트웨이 공개 URL 또는 클라이언트 토큰 미설정). 파일을 직접 전달하려면 send_file 도구를 사용하세요.", nil
+	}
+	return fmt.Sprintf("🔗 공유 링크 (7일 유효): %s", link), nil
+}
+
+// --- analyze: extract text for the agent to reason over ---
+
+func filesAnalyze(ctx context.Context, store *filestore.LocalStore, p FilesParams) (string, error) {
+	if strings.TrimSpace(p.Path) == "" {
+		return "", fmt.Errorf("path는 analyze 액션에 필수입니다")
+	}
+	data, meta, err := store.Get(ctx, p.Path)
+	if err != nil {
+		return "", err
+	}
+	text := extractFileText(ctx, meta.Name, data)
+	if text == "" {
+		return fmt.Sprintf("**%s**에서 텍스트를 추출할 수 없습니다 (지원: PDF/이미지/Excel/Word/PowerPoint/텍스트).", meta.Name), nil
+	}
+	return fmt.Sprintf("## 📄 %s\n\n%s", meta.Name, truncateRunes(text, 50000)), nil
+}
+
+// --- shared helpers ---
+
+// extractFileText extracts text from file bytes via the shared document
+// dispatcher (document_extract.go). An empty MIME type degrades to filename-only
+// classification. Returns "" when the format is unsupported or extraction fails
+// — except CSV, which falls back to the raw bytes (an empty/garbled CSV is still
+// worth showing the agent).
+func extractFileText(ctx context.Context, name string, data []byte) string {
+	r := extractDocument(ctx, data, name, "")
+	if r.kind == docCSV && r.err != nil {
+		return string(data)
+	}
+	return r.text
+}
+
+// truncateRunes caps s to maxRunes on a rune boundary so Korean text is never
+// split mid-character.
+func truncateRunes(s string, maxRunes int) string {
+	r := []rune(s)
+	if len(r) <= maxRunes {
+		return s
+	}
+	return string(r[:maxRunes]) + "\n... (이하 생략)"
+}

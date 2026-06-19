@@ -20,6 +20,7 @@ func (s *Server) buildMux() *http.ServeMux {
 	mux.HandleFunc("GET /api/v1/miniapp/gmail/attachment", s.handleMiniappGmailAttachment)
 	mux.HandleFunc("GET /api/v1/app/update/manifest", s.handleAppUpdateManifest)
 	mux.HandleFunc("GET /api/v1/app/update/download", s.handleAppUpdateDownload)
+	mux.HandleFunc("GET /api/v1/files/download", s.handleFilesDownload)
 	// Fleet passthrough — the native app manages SparkFleet through the gateway
 	// (subtree route; the handler enforces method+path allowlist + client token).
 	mux.HandleFunc("/api/v1/fleet/", s.handleFleetProxy)
@@ -53,6 +54,7 @@ func (s *Server) buildMux() *http.ServeMux {
 	mux.HandleFunc("/api/v1/miniapp/chat/stream", methodNotAllowed)
 	mux.HandleFunc("/api/v1/miniapp/events", methodNotAllowed)
 	mux.HandleFunc("/api/v1/miniapp/gmail/attachment", methodNotAllowed)
+	mux.HandleFunc("/api/v1/files/download", methodNotAllowed)
 	// Catch-all handler: root fallback.
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		// Root fallback for exact "/" GET.
