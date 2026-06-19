@@ -81,3 +81,18 @@ jobs:
         run: |
           set -euo pipefail
           scripts/dev/publish-apk.sh "$NOTES"
+
+      # The gateway runs on srv4 but the build runs here (the gx10/srv1 runner, which
+      # has the Android SDK). publish-apk.sh wrote the APK + version.json to THIS
+      # runner's serve dir; copy the just-published build to srv4's serve dir so the
+      # gateway's OTA manifest (highest-versionCode scan of ~/.cache/deneb-apk) sees it.
+      # Only the newest APK matters (manifest takes the top code), so we ship that one
+      # + version.json, not the whole 300+ build history.
+      - name: Sync published APK to srv4 gateway serve dir
+        run: |
+          set -euo pipefail
+          d="${DENEB_APK_DIR:-$HOME/.cache/deneb-apk}"
+          latest="$(ls -t "$d"/*.apk | head -1)"
+          ssh -o StrictHostKeyChecking=accept-new srv4 'mkdir -p ~/.cache/deneb-apk'
+          rsync -a "$latest" "$d/version.json" srv4:.cache/deneb-apk/
+          echo "synced $(basename "$latest") + version.json -> srv4 gateway serve dir"
