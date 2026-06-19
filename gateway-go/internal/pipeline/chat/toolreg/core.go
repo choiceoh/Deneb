@@ -387,13 +387,13 @@ func RegisterRoutineTools(registry toolctx.ToolRegistrar, chrono *toolctx.Chrono
 
 // RegisterSkillsTools registers the unified skills tool
 // (list/create/patch/delete/read/list_files/write_file/remove_file).
-func RegisterSkillsTools(registry toolctx.ToolRegistrar, getSnapshot tools.SkillsSnapshotProvider, workspaceDir string, invalidateCache tools.SkillManageInvalidateFn) {
+func RegisterSkillsTools(registry toolctx.ToolRegistrar, getSnapshot tools.SkillsSnapshotProvider, workspaceDir, bundledSkillsDir string, invalidateCache tools.SkillManageInvalidateFn) {
 	registry.RegisterTool(toolctx.ToolDef{
 		Name: "skills",
 		Description: "Skill management: list (browse/search), create, patch, read, delete, list_files, write_file, remove_file. " +
 			"Use list when the current task might match a skill. Create reusable workflows from complex tasks.",
 		InputSchema: skillsToolSchema(),
-		Fn:          tools.ToolSkills(getSnapshot, workspaceDir, invalidateCache),
+		Fn:          tools.ToolSkills(getSnapshot, workspaceDir, bundledSkillsDir, invalidateCache),
 		Deferred:    true,
 	})
 }

@@ -50,7 +50,7 @@ func loadCachedSkillsPrompt(workspaceDir string, availableToolNames []string) st
 	cfg := skills.SnapshotConfig{
 		DiscoverConfig: skills.DiscoverConfig{
 			WorkspaceDir:     workspaceDir,
-			BundledSkillsDir: bundledSkillsDir(),
+			BundledSkillsDir: BundledSkillsDir(),
 		},
 		Eligibility: skills.EligibilityContext{
 			EnvVars:        skills.EnvSnapshotFromOS(),
@@ -113,7 +113,7 @@ func EligibleWorkspaceSkills(workspaceDir string, availableToolNames []string) [
 	}
 	entries := skills.DiscoverWorkspaceSkills(skills.DiscoverConfig{
 		WorkspaceDir:     workspaceDir,
-		BundledSkillsDir: bundledSkillsDir(),
+		BundledSkillsDir: BundledSkillsDir(),
 	})
 	entries = skills.FilterExcludedSkills(entries, loadArchivedCuratorSkillNames())
 	entries = skills.FilterEligibleSkills(entries, skills.EligibilityContext{
@@ -124,7 +124,7 @@ func EligibleWorkspaceSkills(workspaceDir string, availableToolNames []string) [
 	return entries
 }
 
-// bundledSkillsDir returns the repo's checked-in skills/ directory so the agent
+// BundledSkillsDir returns the repo's checked-in skills/ directory so the agent
 // prompt and the Settings → Skills tab surface the bundled skills WITHOUT
 // copying them into the runtime workspace (~/.deneb/workspace/skills). Discovery
 // merges this SourceBundled set under the workspace (bundled < workspace), so a
@@ -134,7 +134,7 @@ func EligibleWorkspaceSkills(workspaceDir string, availableToolNames []string) [
 // gateway binary (dist/deneb-gateway → ../skills) and the working directory
 // (deploy runs the binary from the repo root). Returns "" when no skills/ dir is
 // found — discovery then simply skips the bundled source.
-func bundledSkillsDir() string {
+func BundledSkillsDir() string {
 	if dir := strings.TrimSpace(os.Getenv("DENEB_BUNDLED_SKILLS_DIR")); dir != "" {
 		return dir
 	}

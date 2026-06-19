@@ -29,7 +29,7 @@ func newSkillManageHarness(t *testing.T) (fn ToolFunc, workspaceDir string, inva
 	// getSnapshot returns nil — list falls through gracefully in
 	// toolSkillsList when no snapshot is available.
 	snapshotFn := func() *skills.FullSkillSnapshot { return nil }
-	fn = ToolSkills(snapshotFn, workspaceDir, invalidate)
+	fn = ToolSkills(snapshotFn, workspaceDir, "", invalidate)
 	return fn, workspaceDir, invalidateCount
 }
 
@@ -574,7 +574,7 @@ func TestSkillManage_Read_ResolvesViaSnapshotFilePath(t *testing.T) {
 			},
 		}
 	}
-	fn := ToolSkills(getSnapshot, workspaceDir, func() {})
+	fn := ToolSkills(getSnapshot, workspaceDir, "", func() {})
 	out, err := callSkillTool(t, fn, map[string]any{
 		"action": "read",
 		"name":   "email-analysis",
@@ -584,6 +584,51 @@ func TestSkillManage_Read_ResolvesViaSnapshotFilePath(t *testing.T) {
 	}
 	if !strings.Contains(out, "Email Analysis Skill") {
 		t.Errorf("expected snapshot-resolved content, got: %s", out)
+	}
+}
+
+func TestSkillManage_BundledSkillReadOnly(t *testing.T) {
+	bundledDir := t.TempDir()
+	skillPath := filepath.Join(bundledDir, "coding", "demo", "SKILL.md")
+	if err := os.MkdirAll(filepath.Dir(skillPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(skillPath, []byte(validSkillContent("demo")), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	getSnapshot := func() *skills.FullSkillSnapshot {
+		return &skills.FullSkillSnapshot{
+			ResolvedSkills: []skills.PromptSkill{{Name: "demo", FilePath: skillPath}},
+		}
+	}
+	fn := ToolSkills(getSnapshot, t.TempDir(), bundledDir, func() {})
+
+	// Mutating actions on a bundled (repo-checked-in) skill must be rejected so
+	// the agent can't modify or delete the source files.
+	for _, action := range []string{"patch", "delete", "write_file", "remove_file"} {
+		_, err := callSkillTool(t, fn, map[string]any{
+			"action":       action,
+			"name":         "demo",
+			"old_text":     "x",
+			"new_text":     "y",
+			"file_path":    "scripts/x.sh",
+			"file_content": "echo hi",
+		})
+		if err == nil {
+			t.Errorf("%s on a bundled skill should be rejected", action)
+			continue
+		}
+		if !strings.Contains(err.Error(), "번들") {
+			t.Errorf("%s rejection should mention 번들, got: %v", action, err)
+		}
+	}
+
+	// read stays allowed (inspection only), and the file is untouched.
+	if _, err := callSkillTool(t, fn, map[string]any{"action": "read", "name": "demo"}); err != nil {
+		t.Errorf("read on a bundled skill should be allowed: %v", err)
+	}
+	if _, err := os.Stat(skillPath); err != nil {
+		t.Errorf("bundled SKILL.md should survive rejected mutations: %v", err)
 	}
 }
 
