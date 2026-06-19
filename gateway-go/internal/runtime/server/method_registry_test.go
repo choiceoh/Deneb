@@ -163,6 +163,8 @@ var requiredMethods = []string{
 	// miniapp.memory.{search,get_page,categories,list_in_category,diary_recent}
 	// are conditional on wiki being enabled (DENEB_WIKI_ENABLED) — omitted
 	// here, matching the wiki.* exclusion above.
+	// miniapp.notebook.{list,get} depend on s.notebookStore (set in late chat
+	// init); omitted here for the same lazy-store reason as memory.
 	// miniapp.crons.list registers only when the cron service is wired
 	// (always true in production but the test harness can skip it).
 

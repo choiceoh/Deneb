@@ -199,6 +199,10 @@ object DenebCategories
 object DenebDiary
 
 @Serializable
+@SerialName("deneb_notebooks")
+object DenebNotebooks
+
+@Serializable
 @SerialName("deneb_category_pages")
 data class DenebCategoryPages(val category: String)
 
@@ -603,6 +607,15 @@ private fun AppContent(
                                 onOpen = { dest -> navController.navigate(dest) },
                                 chatMode = navChatMode,
                             )
+                        }
+                        composable<DenebNotebooks> {
+                            denebClient?.let { client ->
+                                DenebNotebooksScreen(
+                                    client = client,
+                                    onBack = { navController.navigateUp() },
+                                    navigationTabBar = if (showTabBar) navigationTabBar else null,
+                                )
+                            }
                         }
                         composable<DenebDropbox> {
                             denebClient?.let { client ->

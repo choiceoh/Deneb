@@ -24,6 +24,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/mailpriority"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/nativesync"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/notebook"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/push"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
@@ -72,6 +73,10 @@ var errTranscriptUnavailable = errors.New("session transcript store not initiali
 // cron subsystem). Treated as UNAVAILABLE by the handler so the Mini
 // App shows a "automation not configured" banner instead of crashing.
 var errCronUnavailable = errors.New("cron service not configured")
+
+// errNotebookDisabled surfaces from the miniapp notebook factory when the
+// notebook store failed to initialize. Treated as UNAVAILABLE by the handler.
+var errNotebookDisabled = errors.New("notebook store not configured")
 
 // wikiSenderFacts resolves "who is this person to us" in-process from the wiki
 // graph — used by the analyze pipeline and the sender_context card. Returns ""
@@ -403,6 +408,20 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 			// then notifies the home chat. Off the request path so the Mini
 			// App never blocks on a slow/down model.
 			StartMerge: s.makeWikiMergeStarter(hub),
+		}),
+
+		// Mini App notebook read surface (miniapp.notebook.*). Lazy factory
+		// around s.notebookStore (set in the late chat-init phase); deferring
+		// the lookup to per-request means the store is wired by the first RPC.
+		// A gateway whose notebook store failed to init gets a clean
+		// UNAVAILABLE per call instead of a boot crash.
+		handlerminiapp.NotebookMethods(handlerminiapp.NotebookDeps{
+			Store: func() (*notebook.Store, error) {
+				if s.notebookStore == nil {
+					return nil, errNotebookDisabled
+				}
+				return s.notebookStore, nil
+			},
 		}),
 
 		// Mini App cron job list (miniapp.crons.list). Same lazy-factory

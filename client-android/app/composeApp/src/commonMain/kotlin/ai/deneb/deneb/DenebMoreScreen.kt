@@ -4,6 +4,7 @@ import ai.deneb.DenebCategories
 import ai.deneb.DenebConfig
 import ai.deneb.DenebDiary
 import ai.deneb.DenebDropbox
+import ai.deneb.DenebNotebooks
 import ai.deneb.DenebSearch
 import ai.deneb.DenebTodo
 import ai.deneb.ui.DenebGroup
@@ -17,6 +18,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.MenuBook
+import androidx.compose.material.icons.outlined.Book
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.GridView
@@ -42,6 +44,7 @@ private val moreEntries = listOf(
     MoreEntry("할일", DenebTodo, Icons.Outlined.CheckCircle, "할 일 목록"),
     MoreEntry("일기", DenebDiary, Icons.AutoMirrored.Outlined.MenuBook, "일기 기록"),
     MoreEntry("카테고리", DenebCategories, Icons.Outlined.GridView, "위키 분류, 사람", workData = true),
+    MoreEntry("노트북", DenebNotebooks, Icons.Outlined.Book, "딜·프로젝트 자료 모음", workData = true),
     MoreEntry("Dropbox", DenebDropbox, Icons.Outlined.Folder, "파일 탐색·검색·업로드", workData = true),
     MoreEntry("설정", DenebConfig, Icons.Outlined.Settings, "환경설정, 모델, 플릿"),
 )
