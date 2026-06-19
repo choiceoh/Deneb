@@ -195,6 +195,20 @@ internal fun timedSingleDayDots(events: List<CalendarEvent>, tz: TimeZone): Map<
     return out
 }
 
+/** Local days with an incomplete to-do due, so the month grid can mark a deadline
+ *  (the 기한 color) even when no calendar event sits on that day — keeping due-date
+ *  tracking consistent with the grid's category colors. Done to-dos are excluded:
+ *  a met deadline isn't a pending mark. */
+internal fun todoDueDays(todos: List<Todo>, tz: TimeZone): Set<LocalDate> {
+    val out = HashSet<LocalDate>()
+    todos.forEach { todo ->
+        if (!todo.done && todo.due.isNotBlank()) {
+            eventLocalDate(todo.due, tz)?.let { out.add(it) }
+        }
+    }
+    return out
+}
+
 /** Palette slot for an event's category, so a bar/dot reads as 본인/타인/기한 rather
  *  than an arbitrary per-id hue. 0 = mine (own/solo/local), 1 = others (invited by
  *  someone else), 2 = deadline. Unknown/empty falls back to 본인. Order must match
