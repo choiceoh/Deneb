@@ -72,6 +72,8 @@ internal fun FeedScreen(
     onLoadDateRange: (Long, Long) -> Unit,
     onRunAction: (String, String) -> Unit,
     onSubmitFeedback: (String, String) -> Unit,
+    onRewrite: (String) -> Unit,
+    onAsk: (String) -> Unit,
 ) {
     DenebScreenScaffold(title = "피드", onBack = {}, showBack = false) {
         // Keep the selected date independent of the loaded item list. A ranged fetch
@@ -143,25 +145,17 @@ internal fun FeedScreen(
             ModalBottomSheet(onDismissRequest = { actionItem = null }) {
                 WorkFeedActionSheetContent(
                     item = item,
-                    onOpen = {
-                        actionItem = null
-                        open(item.id)
-                    },
-                    onRunAction = { actionId ->
-                        actionItem = null
-                        onRunAction(item.id, actionId)
-                    },
-                    onArchive = {
-                        actionItem = null
-                        onRunAction(item.id, "ack")
-                    },
-                    onTrash = {
-                        actionItem = null
-                        onRunAction(item.id, "trash")
-                    },
                     onFeedback = {
                         actionItem = null
                         feedbackItem = item
+                    },
+                    onRewrite = {
+                        actionItem = null
+                        onRewrite(item.id)
+                    },
+                    onAsk = {
+                        actionItem = null
+                        onAsk(item.id)
                     },
                 )
             }

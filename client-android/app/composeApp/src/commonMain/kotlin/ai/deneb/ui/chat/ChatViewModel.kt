@@ -76,6 +76,7 @@ class ChatViewModel(
         consumePendingScroll = ::consumePendingScroll,
         runWorkFeedAction = ::runWorkFeedAction,
         submitWorkFeedFeedback = ::submitWorkFeedFeedback,
+        rewriteWorkFeedCard = ::rewriteWorkFeedCard,
         clearSnackbar = ::clearSnackbar,
         undoDeleteConversation = ::undoDeleteConversation,
         submitUiCallback = ::submitUiCallback,
@@ -514,6 +515,17 @@ class ChatViewModel(
         if (itemId.isBlank() || feedback.isBlank()) return
         viewModelScope.launch(backgroundDispatcher) {
             (dataRepository as? DenebGatewayClient)?.sendWorkFeedFeedback(itemId, feedback)
+        }
+    }
+
+    // Fire-and-forget a card rewrite from the feed long-press sheet. The gateway runs
+    // one (ephemeral) agent turn that regenerates the analysis and replaces the card
+    // body; the returned card is upserted into the feed. Runs on viewModelScope so it
+    // survives the sheet closing.
+    private fun rewriteWorkFeedCard(itemId: String) {
+        if (itemId.isBlank()) return
+        viewModelScope.launch(backgroundDispatcher) {
+            (dataRepository as? DenebGatewayClient)?.rewriteWorkFeedCard(itemId)
         }
     }
 

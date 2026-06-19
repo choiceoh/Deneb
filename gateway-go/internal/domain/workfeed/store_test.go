@@ -119,6 +119,56 @@ func TestStoreCorrect(t *testing.T) {
 	}
 }
 
+func TestStoreRewrite(t *testing.T) {
+	store := NewStore(filepath.Join(t.TempDir(), "workfeed.jsonl"))
+
+	if _, err := store.Append(Item{
+		ID:          "r1",
+		Source:      SourceMailReport,
+		Title:       "원본 제목",
+		Summary:     "원본 요약",
+		Body:        "원본 분석 본문",
+		SessionKey:  "client:main",
+		CreatedAtMs: 1_000,
+	}); err != nil {
+		t.Fatalf("append: %v", err)
+	}
+
+	const newBody = "다시 쓴 분석 — 🔴 긴급 처리 필요"
+	out, err := store.Rewrite("r1", newBody)
+	if err != nil {
+		t.Fatalf("rewrite: %v", err)
+	}
+	if out.Body != newBody {
+		t.Fatalf("body not replaced: %q", out.Body)
+	}
+	// Title/summary stay (stable row preview); priority is re-inferred from the new
+	// body — the 🔴 marker lifts it to urgent.
+	if out.Title != "원본 제목" || out.Summary != "원본 요약" {
+		t.Fatalf("title/summary should be preserved: %+v", out)
+	}
+	if out.Priority != PriorityUrgent {
+		t.Fatalf("priority re-inferred = %d, want %d (urgent)", out.Priority, PriorityUrgent)
+	}
+
+	items, _, err := store.List(10, true)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(items) != 1 || items[0].Body != newBody {
+		t.Fatalf("persisted body = %+v, want rewrite", items)
+	}
+
+	// A blank rewrite is rejected so a failed regeneration never wipes the card.
+	if _, err := store.Rewrite("r1", "   "); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("blank rewrite = %v, want ErrNotFound", err)
+	}
+	// Rewriting a missing card reports not-found.
+	if _, err := store.Rewrite("missing", "x"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("rewrite missing = %v, want ErrNotFound", err)
+	}
+}
+
 func TestStoreListRangeFiltersBeforeLimit(t *testing.T) {
 	store := NewStore(filepath.Join(t.TempDir(), "workfeed.jsonl"))
 	for i := 0; i < 5; i++ {

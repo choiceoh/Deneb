@@ -31,6 +31,7 @@ import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.MailOutline
+import androidx.compose.material.icons.outlined.QuestionAnswer
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -225,20 +226,11 @@ internal fun WorkFeedRow(
 @Composable
 internal fun WorkFeedActionSheetContent(
     item: WorkFeedItem,
-    onOpen: () -> Unit,
-    onRunAction: (String) -> Unit,
-    onArchive: () -> Unit,
-    onTrash: () -> Unit,
     onFeedback: () -> Unit,
+    onRewrite: () -> Unit,
+    onAsk: () -> Unit,
 ) {
     val title = if (item.title.isBlank()) stringResource(Res.string.work_feed_title) else stripLeadingIcon(item.title)
-    val extraActions = item.actions.filter { action ->
-        action.id.isNotBlank() &&
-            action.id !in setOf("open", "ack", "trash") &&
-            action.label.isNotBlank()
-    }
-    val archiveLabel = item.actions.firstOrNull { it.id == "ack" }?.label?.ifBlank { null } ?: "보관"
-    val trashLabel = item.actions.firstOrNull { it.id == "trash" }?.label?.ifBlank { null } ?: "휴지통"
     Column(Modifier.fillMaxWidth().padding(bottom = 24.dp)) {
         Text(
             title,
@@ -259,15 +251,12 @@ internal fun WorkFeedActionSheetContent(
             )
         }
         HorizontalDivider(color = denebHairline())
-        WorkFeedSheetAction(Icons.Outlined.MailOutline, "열기", onOpen = onOpen)
-        extraActions.forEach { action ->
-            WorkFeedSheetAction(Icons.Outlined.AutoAwesome, action.label, onOpen = { onRunAction(action.id) })
-        }
-        // Teach/correct the agent: wrong fact, something it didn't know, etc. Opens
-        // a text-input sheet; the gateway fixes the durable knowledge + annotates this card.
+        // AI actions on this card's analysis. Inbox lifecycle (열기/완료/휴지통/나중에)
+        // moved off this menu — tap the card to expand (= 열기), and the expanded row
+        // carries the 보관/휴지통 quick buttons.
         WorkFeedSheetAction(Icons.Outlined.Edit, "정정·피드백", onOpen = onFeedback)
-        WorkFeedSheetAction(Icons.Outlined.Archive, archiveLabel, onOpen = onArchive)
-        WorkFeedSheetAction(Icons.Outlined.Delete, trashLabel, destructive = true, onOpen = onTrash)
+        WorkFeedSheetAction(Icons.Outlined.AutoAwesome, "다시 작성", onOpen = onRewrite)
+        WorkFeedSheetAction(Icons.Outlined.QuestionAnswer, "해당 피드 질문", onOpen = onAsk)
     }
 }
 

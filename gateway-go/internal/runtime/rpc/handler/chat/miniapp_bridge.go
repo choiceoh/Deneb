@@ -137,6 +137,9 @@ func MiniappMethods(deps Deps) map[string]rpcutil.HandlerFunc {
 	// knowledge. Needs the work-feed store wired (List + Correct).
 	if deps.WorkFeed != nil {
 		m["miniapp.workfeed.feedback"] = handleMiniappWorkfeedFeedback(deps)
+		// Rewrite (long-press a card → 다시 작성): one agent turn regenerates the
+		// card's analysis and the result replaces the card body in place.
+		m["miniapp.workfeed.rewrite"] = handleMiniappWorkfeedRewrite(deps)
 	}
 	return m
 }
@@ -681,6 +684,107 @@ func buildWorkfeedFeedbackMessage(card workfeed.Item, feedback string) string {
 	}
 	b.WriteString("\n## 사용자 피드백\n")
 	b.WriteString(feedback)
+	return b.String()
+}
+
+// handleMiniappWorkfeedRewrite regenerates a work-feed card's analysis and
+// replaces the card body in place — the native "다시 작성" path. One ephemeral
+// agent turn rewrites the analysis from the card's current content; its reply
+// becomes the new body (title/summary stay, so the row preview is stable). The
+// turn is ephemeral so the rewrite never lands in the client:main transcript; a
+// blank rewrite is rejected so a failed turn never wipes the card.
+//
+// Params:
+//   - itemId (string, required): the work-feed card id
+func handleMiniappWorkfeedRewrite(deps Deps) rpcutil.HandlerFunc {
+	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		p, errResp := rpcutil.DecodeParams[struct {
+			ItemID string `json:"itemId"`
+		}](req)
+		if errResp != nil {
+			return errResp
+		}
+		itemID := strings.TrimSpace(p.ItemID)
+		if itemID == "" {
+			return rpcerr.MissingParam("itemId").Response(req.ID)
+		}
+		var card workfeed.Item
+		found := false
+		if items, _, lerr := deps.WorkFeed.List(0, true); lerr == nil {
+			for _, it := range items {
+				if it.ID == itemID {
+					card = it
+					found = true
+					break
+				}
+			}
+		}
+		if !found {
+			return rpcerr.NotFound("work feed item").Response(req.ID)
+		}
+		sessionKey := DefaultSessionKey(card.SessionKey)
+		message := buildWorkfeedRewriteMessage(card)
+		release, aerr := deps.Chat.AcquireInteractiveTurn(ctx)
+		if aerr != nil {
+			return rpcerr.Unavailable("gateway busy: too many concurrent turns").Response(req.ID)
+		}
+		defer release()
+		res, serr := deps.Chat.SendSync(ctx, sessionKey, message, "", &chatpkg.SyncOptions{
+			Delivery:            &chatpkg.DeliveryContext{Channel: NativeClientChannel, To: sessionKey},
+			AutoDeliveredOutput: true,
+			EphemeralUser:       true,
+			EphemeralAssistant:  true,
+			GateUntrustedTools:  true,
+		})
+		if serr != nil {
+			return rpcerr.WrapDependencyFailed("chat send failed", serr).Response(req.ID)
+		}
+		newBody := strings.TrimSpace(res.BestText())
+		if newBody == "" {
+			// Never wipe the card on an empty regeneration; report softly.
+			return rpcutil.RespondOK(req.ID, map[string]any{
+				"ok":         true,
+				"item":       card,
+				"text":       "다시 작성에 실패했어요. 카드는 그대로 두었습니다.",
+				"sessionKey": sessionKey,
+			})
+		}
+		updated, rerr := deps.WorkFeed.Rewrite(itemID, newBody)
+		if rerr != nil {
+			return rpcerr.WrapDependencyFailed("work feed rewrite failed", rerr).Response(req.ID)
+		}
+		return rpcutil.RespondOK(req.ID, map[string]any{
+			"ok":         true,
+			"item":       updated,
+			"text":       "카드를 다시 작성했습니다.",
+			"model":      res.Model,
+			"sessionKey": sessionKey,
+		})
+	}
+}
+
+// buildWorkfeedRewriteMessage instructs the turn to regenerate the card's analysis
+// from its current content — same facts, clearer structure — and to output ONLY the
+// rewritten body (no preamble) so the reply can be stored directly as the new card.
+func buildWorkfeedRewriteMessage(card workfeed.Item) string {
+	var b strings.Builder
+	b.WriteString("아래 업무 피드 카드의 분석을 다시 작성하라. 같은 사실·정보를 기반으로 하되, ")
+	b.WriteString("더 명확하고 정돈된 구조로 — 핵심 상황, 근거·숫자, 지금 할 다음 행동이 잘 드러나게 한국어로 다시 써라. ")
+	b.WriteString("필요하면 wiki 등 도구로 맥락을 보강해도 좋다. ")
+	b.WriteString("출력은 **다시 쓴 분석 본문만** 내라 — '다시 작성했습니다' 같은 머리말·맺음말이나 메타 설명 없이 본문 마크다운만.\n\n")
+	b.WriteString("## 원본 카드\n")
+	if t := strings.TrimSpace(card.Title); t != "" {
+		b.WriteString("제목: ")
+		b.WriteString(t)
+		b.WriteByte('\n')
+	}
+	if body := strings.TrimSpace(card.Body); body != "" {
+		b.WriteString(body)
+		b.WriteByte('\n')
+	} else if s := strings.TrimSpace(card.Summary); s != "" {
+		b.WriteString(s)
+		b.WriteByte('\n')
+	}
 	return b.String()
 }
 
