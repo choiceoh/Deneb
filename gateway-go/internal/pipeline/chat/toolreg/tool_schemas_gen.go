@@ -1504,12 +1504,16 @@ func mailArchiveToolSchema() map[string]any {
 		"properties": map[string]any{
 			"action": map[string]any{
 				"type":        "string",
-				"description": "list(최근/오늘 메일 목록+Locator) | search(키워드 검색+Locator) | read(Locator/ID 또는 query로 원문 열기) | thread(References/In-Reply-To + 제목/참여자 fallback 기반 전체 스레드 복원) | project_history(회사·프로젝트 키워드 시간선+스레드 후보; 로컬 FTS+업무 신호 랭킹)",
-				"enum":        []string{"list", "search", "read", "thread", "project_history", "history"},
+				"description": "list(최근/오늘 메일 목록+Locator) | search(키워드 검색+Locator) | read(Locator/ID 또는 query로 원문 열기; 첨부는 이름만 표시) | thread(References/In-Reply-To + 제목/참여자 fallback 기반 전체 스레드 복원) | project_history(회사·프로젝트 키워드 시간선+스레드 후보; 로컬 FTS+업무 신호 랭킹) | attachment(그 메일의 첨부 PDF/Excel/Word/이미지를 실제로 열어 본문 텍스트를 추출 — 견적서·계약서·세금계산서 내용을 직접 읽을 때. message_id 또는 query로 메일을 지정하고, attachment로 어떤 첨부인지 고른다)",
+				"enum":        []string{"list", "search", "read", "thread", "project_history", "history", "attachment"},
 			},
 			"as_json": map[string]any{
 				"type":        "boolean",
 				"description": "true면 사람이 읽는 텍스트 대신 구조화 JSON을 반환한다. code_action에서는 deneb.mail_archive(..., as_json=True)로 메시지/히스토리, Locator, rank_reasons, related_wiki, related_events를 바로 조인·필터링할 수 있다",
+			},
+			"attachment": map[string]any{
+				"type":        "string",
+				"description": "action=attachment에서 어떤 첨부를 읽을지 선택. 비우면 그 메일의 모든 문서·이미지 첨부를 추출. 파일명 일부(예: '견적', '계약서') 또는 1-기반 인덱스('1','2')로 특정 첨부만 지정",
 			},
 			"days": map[string]any{
 				"type":        "number",
@@ -1531,7 +1535,7 @@ func mailArchiveToolSchema() map[string]any {
 			},
 			"message_id": map[string]any{
 				"type":        "string",
-				"description": "read/thread에서 열 기준. mail_archive 결과의 Locator를 그대로 넣는 것이 가장 안정적이며, 일반 Message-ID-derived ID도 가능",
+				"description": "read/thread/attachment에서 열 기준. mail_archive 결과의 Locator를 그대로 넣는 것이 가장 안정적이며, 일반 Message-ID-derived ID도 가능",
 			},
 			"query": map[string]any{
 				"type":        "string",
