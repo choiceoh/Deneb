@@ -3,11 +3,13 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/mail"
 	"os"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
@@ -35,6 +37,7 @@ func ToolMailArchive(optional ...MailArchiveDeps) func(ctx context.Context, inpu
 			Days        int    `json:"days"`
 			Query       string `json:"query"`
 			MessageID   string `json:"message_id"`
+			Attachment  string `json:"attachment"`
 			Limit       int    `json:"limit"`
 			IncludeBody bool   `json:"include_body"`
 			AsJSON      bool   `json:"as_json"`
@@ -178,10 +181,66 @@ func ToolMailArchive(optional ...MailArchiveDeps) func(ctx context.Context, inpu
 				}
 				return formatArchiveMessages(fmt.Sprintf("최근 %d일 메일 (%s)", days, mailArchiveMailboxLabel(mailboxes)), msgs, args.IncludeBody), nil
 			}
+		case "attachment":
+			atts, err := mailarchive.ReadAttachment(ctx, cfg, args.MessageID, args.Query, args.Attachment, opts)
+			if err != nil {
+				if errors.Is(err, mailarchive.ErrArchiveNotFound) {
+					return "해당 메일을 아카이브에서 찾지 못했습니다. message_id(Locator) 또는 query를 확인하세요.", nil
+				}
+				return "", fmt.Errorf("첨부 읽기 실패: %w", err)
+			}
+			if len(atts) == 0 {
+				return "선택한 조건에 맞는 첨부가 없습니다. action=read로 첨부 목록을 먼저 확인하세요.", nil
+			}
+			return formatArchiveAttachments(ctx, atts), nil
 		default:
-			return "", fmt.Errorf("알 수 없는 action %q (list|search|read|thread|project_history)", args.Action)
+			return "", fmt.Errorf("알 수 없는 action %q (list|search|read|thread|project_history|attachment)", args.Action)
 		}
 	}
+}
+
+// Active on-demand attachment read caps. Generous because the agent or user
+// explicitly asked to read THIS attachment (unlike the autonomous gate's bounded
+// pre-injection): a multi-page 견적서/계약서 should come back whole.
+const (
+	archiveAttachmentPerDocRunes = 20000
+	archiveAttachmentTotalRunes  = 48000
+)
+
+// formatArchiveAttachments extracts text from each selected attachment (the same
+// PDF/Excel/Word/OCR extractor the autonomous gate uses) and renders it, honoring
+// per-document and total rune caps so one huge file can't flood the turn.
+func formatArchiveAttachments(ctx context.Context, atts []mailarchive.ArchivedAttachment) string {
+	var b strings.Builder
+	total := 0
+	for _, a := range atts {
+		fmt.Fprintf(&b, "### 📎 %s (%s)\n", a.Filename, a.MimeType)
+		text := strings.TrimSpace(ExtractAttachmentTextBytes(ctx, a.Bytes, a.Filename, a.MimeType))
+		if text == "" {
+			b.WriteString("(텍스트를 추출하지 못했습니다 — 스캔 품질이 낮거나 지원하지 않는 형식일 수 있습니다.)\n\n")
+			continue
+		}
+		remaining := archiveAttachmentTotalRunes - total
+		if remaining <= 0 {
+			b.WriteString("(이하 첨부는 전체 분량 한도로 생략 — 개별 첨부로 다시 요청하세요.)\n")
+			break
+		}
+		limit := min(archiveAttachmentPerDocRunes, remaining)
+		clipped := clipArchiveRunes(text, limit)
+		b.WriteString(clipped)
+		b.WriteString("\n\n")
+		total += utf8.RuneCountInString(clipped)
+	}
+	return strings.TrimSpace(b.String())
+}
+
+// clipArchiveRunes truncates s to at most n runes, marking the cut.
+func clipArchiveRunes(s string, n int) string {
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return string(r[:n]) + " …(생략 — 전체가 필요하면 더 좁은 첨부 선택자로 다시 요청하세요.)"
 }
 
 func mailArchiveAddr() string {
