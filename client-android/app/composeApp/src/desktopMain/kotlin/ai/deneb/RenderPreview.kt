@@ -9,7 +9,6 @@ import ai.deneb.deneb.CalendarEmptyDay
 import ai.deneb.deneb.CalendarEvent
 import ai.deneb.deneb.CalendarEventContent
 import ai.deneb.deneb.CalendarEventDetail
-import ai.deneb.deneb.CalendarLegend
 import ai.deneb.deneb.CalendarMonthGrid
 import ai.deneb.deneb.CronEditContent
 import ai.deneb.deneb.DropboxEntry
@@ -361,8 +360,6 @@ private fun renderCalendarMonth(name: String, scheme: ColorScheme) {
                         }
                     }
                     CalendarMonthGrid(grid, today, selected, bars, dots, {})
-                    Spacer(Modifier.height(10.dp))
-                    CalendarLegend()
                     Spacer(Modifier.height(12.dp))
                     HorizontalDivider(color = denebHairline())
                     Spacer(Modifier.height(8.dp))

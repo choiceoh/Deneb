@@ -304,9 +304,7 @@ fun DenebCalendarScreen(
                     },
                 )
             }
-            Spacer(Modifier.height(10.dp))
-            CalendarLegend()
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(12.dp))
             HorizontalDivider(color = denebHairline())
             Spacer(Modifier.height(8.dp))
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -410,34 +408,6 @@ internal fun CalendarMonthGrid(
                 }
             }
         }
-    }
-}
-
-/** Compact one-line key for the grid's category colors (본인 / 타인 / 기한): a small
- *  filled dot in each palette color plus a label, so the colors carry meaning instead
- *  of reading as decoration. Index order matches categoryColorIndex / barPalette. */
-@Composable
-internal fun CalendarLegend() {
-    val palette = barPalette()
-    Row(
-        Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterHorizontally),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        LegendDot(palette[0], "본인")
-        LegendDot(palette[1], "타인")
-        LegendDot(palette[2], "기한")
-    }
-}
-
-@Composable
-private fun LegendDot(color: Color, label: String) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(5.dp),
-    ) {
-        Box(Modifier.size(7.dp).clip(CircleShape).background(color))
-        Text(label, style = DenebType.meta, color = denebHint())
     }
 }
 
