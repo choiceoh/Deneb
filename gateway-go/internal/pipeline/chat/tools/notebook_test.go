@@ -184,6 +184,67 @@ func TestNotebookBriefManySourcesStaysValidJSON(t *testing.T) {
 	}
 }
 
+func TestNotebookPinToDealAndResolveByDealRef(t *testing.T) {
+	fn, deps := newTestNotebookTool(t)
+	const deal = "프로젝트/탑솔라.md"
+
+	// pin_to_deal auto-creates the deal's notebook and pins in one shot.
+	out := callNotebook(t, fn, map[string]any{
+		"action": "pin_to_deal", "deal_ref": deal, "deal_name": "탑솔라 딜",
+		"kind": "note", "text": "견적가 1.2억",
+	})
+	if !strings.Contains(out, "S1") {
+		t.Fatalf("pin_to_deal should report the pinned cite: %q", out)
+	}
+	nb, ok := deps.Store.GetByDealRef(deal)
+	if !ok || len(nb.Sources) != 1 {
+		t.Fatalf("deal notebook not created/pinned: %+v ok=%v", nb, ok)
+	}
+
+	// A second pin reuses the same notebook (no duplicate).
+	callNotebook(t, fn, map[string]any{
+		"action": "pin_to_deal", "deal_ref": deal, "kind": "note", "text": "납기 8주",
+	})
+	if got := deps.Store.List(); len(got) != 1 {
+		t.Fatalf("pin_to_deal created a duplicate notebook: %d", len(got))
+	}
+
+	// brief resolves by deal_ref (no id needed) and grounds on both sources.
+	brief := callNotebook(t, fn, map[string]any{"action": "brief", "deal_ref": deal})
+	var parsed struct {
+		Sources []struct {
+			Text string `json:"text"`
+		} `json:"sources"`
+	}
+	if err := json.Unmarshal([]byte(brief), &parsed); err != nil {
+		t.Fatalf("brief by deal_ref not JSON: %v\n%s", err, brief)
+	}
+	if len(parsed.Sources) != 2 {
+		t.Fatalf("brief by deal_ref sources = %d, want 2", len(parsed.Sources))
+	}
+}
+
+func TestNotebookForDealCreatesAndShows(t *testing.T) {
+	fn, deps := newTestNotebookTool(t)
+	out := callNotebook(t, fn, map[string]any{
+		"action": "for_deal", "deal_ref": "프로젝트/x.md", "deal_name": "X 딜",
+	})
+	if !strings.Contains(out, "X 딜") {
+		t.Fatalf("for_deal should show the deal notebook: %q", out)
+	}
+	if _, ok := deps.Store.GetByDealRef("프로젝트/x.md"); !ok {
+		t.Fatal("for_deal should have created the deal notebook")
+	}
+}
+
+func TestNotebookPinToDealRequiresRef(t *testing.T) {
+	fn, _ := newTestNotebookTool(t)
+	out := callNotebook(t, fn, map[string]any{"action": "pin_to_deal", "kind": "note", "text": "x"})
+	if !strings.Contains(out, "deal_ref") {
+		t.Fatalf("pin_to_deal without deal_ref should prompt for it: %q", out)
+	}
+}
+
 func TestNotebookUnknownAction(t *testing.T) {
 	fn, _ := newTestNotebookTool(t)
 	out := callNotebook(t, fn, map[string]any{"action": "frobnicate"})

@@ -46,6 +46,8 @@ func ToolNotebook(d *toolctx.NotebookDeps) toolctx.ToolFunc {
 			ID          string `json:"id"`
 			Name        string `json:"name"`
 			Description string `json:"description"`
+			DealRef     string `json:"deal_ref"`  // deal/project anchor (for_deal, pin_to_deal)
+			DealName    string `json:"deal_name"` // notebook name when auto-creating for a deal
 			Kind        string `json:"kind"`
 			Ref         string `json:"ref"`
 			Title       string `json:"title"`
@@ -60,25 +62,66 @@ func ToolNotebook(d *toolctx.NotebookDeps) toolctx.ToolFunc {
 			return "노트북이 비활성 상태입니다.", nil
 		}
 
+		// id may be given directly, or resolved from a deal_ref for the
+		// deal-anchored actions (a deal has at most one notebook).
+		id := p.ID
+		if id == "" && p.DealRef != "" {
+			if nb, ok := d.Store.GetByDealRef(p.DealRef); ok {
+				id = nb.ID
+			}
+		}
+
 		switch p.Action {
 		case "create":
 			return notebookCreate(d, p.Name, p.Description)
+		case "for_deal":
+			return notebookForDeal(d, p.DealRef, p.DealName)
+		case "pin_to_deal":
+			return notebookPinToDeal(d, p.DealRef, p.DealName, p.Kind, p.Ref, p.Title, p.Text)
 		case "list":
 			return notebookList(d), nil
 		case "show":
-			return notebookShow(d, p.ID)
+			return notebookShow(d, id)
 		case "add_source":
-			return notebookAddSource(d, p.ID, p.Kind, p.Ref, p.Title, p.Text)
+			return notebookAddSource(d, id, p.Kind, p.Ref, p.Title, p.Text)
 		case "remove_source":
-			return notebookRemoveSource(d, p.ID, p.Source)
+			return notebookRemoveSource(d, id, p.Source)
 		case "delete":
-			return notebookDelete(d, p.ID)
+			return notebookDelete(d, id)
 		case "brief":
-			return notebookBrief(d, p.ID, p.Focus)
+			return notebookBrief(d, id, p.Focus)
 		default:
-			return fmt.Sprintf("알 수 없는 액션: %s. 사용 가능: create, list, show, add_source, remove_source, delete, brief", p.Action), nil
+			return fmt.Sprintf("알 수 없는 액션: %s. 사용 가능: create, for_deal, pin_to_deal, list, show, add_source, remove_source, delete, brief", p.Action), nil
 		}
 	}
+}
+
+// notebookForDeal returns (creating if needed) the deal's notebook and shows it.
+// This is how the agent resolves "탑솔라 딜 노트북" without tracking its id.
+func notebookForDeal(d *toolctx.NotebookDeps, dealRef, dealName string) (string, error) {
+	if strings.TrimSpace(dealRef) == "" {
+		return "deal_ref를 지정하세요 (딜/프로젝트 식별자).", nil
+	}
+	nb, err := d.Store.EnsureForDeal(dealRef, dealName, "")
+	if err != nil {
+		return fmt.Sprintf("딜 노트북 준비 실패: %v", err), nil
+	}
+	return notebookShow(d, nb.ID)
+}
+
+// notebookPinToDeal is the one-shot save path: ensure the deal's notebook exists,
+// then pin a source to it. The mail pipeline (deal extraction) and the native
+// "save to deal" action both flow through this — same deal_ref the wiki deal
+// page uses, so raw evidence and curated facts share one identity.
+func notebookPinToDeal(d *toolctx.NotebookDeps, dealRef, dealName, kind, ref, title, text string) (string, error) {
+	if strings.TrimSpace(dealRef) == "" {
+		return "deal_ref를 지정하세요 (딜/프로젝트 식별자).", nil
+	}
+	nb, err := d.Store.EnsureForDeal(dealRef, dealName, "")
+	if err != nil {
+		return fmt.Sprintf("자료 추가 실패: %v", err), nil
+	}
+	return notebookAddSource(d, nb.ID, kind, ref, title, text)
 }
 
 func notebookCreate(d *toolctx.NotebookDeps, name, description string) (string, error) {
