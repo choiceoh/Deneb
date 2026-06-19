@@ -12,12 +12,26 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 )
 
-// notebookBriefByteBudget is the total bytes the brief may spend on source
-// texts combined. The tool's max_output (24KB) is enforced by BYTE-length
-// head/tail truncation (tools.go), which would corrupt the brief JSON the model
-// must parse — so the source texts are budgeted together (not per-source) and
-// kept well under 24KB after the JSON envelope (meta + instruction + wrappers).
-const notebookBriefByteBudget = 18000
+// notebookBriefByteBudget is the starting total bytes the brief spends on source
+// texts combined; notebookBriefMaxBytes is the hard cap on the FINAL marshaled
+// JSON (kept under the tool's 24KB byte cap, which is enforced by head/tail
+// truncation that would corrupt the JSON the model must parse). notebookBrief
+// re-encodes under a shrinking budget until the marshaled output fits the cap.
+const (
+	notebookBriefByteBudget = 18000
+	notebookBriefMaxBytes   = 23000
+	notebookMinSourceBytes  = 200
+)
+
+// briefSource is one source as presented to the model in a brief.
+type briefSource struct {
+	Cite  string `json:"cite"`
+	Kind  string `json:"kind"`
+	Ref   string `json:"ref,omitempty"`
+	Title string `json:"title,omitempty"`
+	Text  string `json:"text"`
+	Note  string `json:"note,omitempty"` // read error / staleness / truncation marker
+}
 
 // ToolNotebook returns the notebook tool — NotebookLM-style scoped source
 // collections for grounded, cited synthesis (the "이 딜 자료만으로 브리핑" path).
@@ -181,14 +195,6 @@ func notebookBrief(d *toolctx.NotebookDeps, id, focus string) (string, error) {
 		return fmt.Sprintf("노트북 %q에 핀된 자료가 없어 브리핑을 만들 수 없습니다. add_source로 먼저 자료를 추가하세요.", nb.Name), nil
 	}
 
-	type briefSource struct {
-		Cite  string `json:"cite"`
-		Kind  string `json:"kind"`
-		Ref   string `json:"ref,omitempty"`
-		Title string `json:"title,omitempty"`
-		Text  string `json:"text"`
-		Note  string `json:"note,omitempty"` // read error / staleness marker
-	}
 	out := struct {
 		Notebook    map[string]string `json:"notebook"`
 		Focus       string            `json:"focus,omitempty"`
@@ -202,35 +208,65 @@ func notebookBrief(d *toolctx.NotebookDeps, id, focus string) (string, error) {
 			"note 필드(자료 누락·대체·보관 경고)가 있으면 신뢰도에 반영하라. " +
 			"구성: 핵심 요약 → 주요 사실 → 리스크/확인 필요 → 다음 액션.",
 	}
-	// Share the byte budget evenly across sources so a few large pages cannot
-	// push the marshaled brief past the tool's 24KB byte cap (head/tail
-	// truncation there would corrupt the JSON). Truncation is marked per source.
-	perSource := notebookBriefByteBudget / len(nb.Sources)
-	if perSource < 500 {
-		perSource = 500 // floor: with many sources, still give each a usable excerpt
+	// Enforce the budget on the ENCODED output, not just raw source text: the
+	// tool's 24KB cap is applied by byte-length head/tail truncation after this
+	// returns, which would corrupt the JSON. JSON quoting/indentation expands the
+	// payload, and with very many sources the per-source budget floor alone can
+	// overshoot — so we encode, and if it's over cap, first shrink the per-source
+	// text budget, then (last resort) drop trailing sources, until it fits.
+	baseInstruction := out.Instruction
+	sources := nb.Sources
+	perSource := notebookBriefByteBudget / len(sources)
+	if perSource < notebookMinSourceBytes {
+		perSource = notebookMinSourceBytes
 	}
-	for _, src := range nb.Sources {
-		bs := briefSource{Cite: src.Cite, Kind: src.Kind, Ref: src.Ref, Title: src.Title}
-		switch src.Kind {
-		case notebook.KindNote:
-			var truncated bool
-			bs.Text, truncated = truncateBytesRuneSafe(src.Text, perSource)
-			if truncated {
-				bs.Note = appendNote(bs.Note, "⚠ 길이 초과로 일부만 표시(잘림)")
-			}
-		case notebook.KindWiki:
-			bs.Text, bs.Note = readWikiSource(d.Wiki, src.Ref, perSource)
-		default:
-			bs.Note = "지원하지 않는 자료 유형"
+	var data []byte
+	for {
+		out.Sources = out.Sources[:0]
+		out.Instruction = baseInstruction
+		if omitted := len(nb.Sources) - len(sources); omitted > 0 {
+			out.Instruction += fmt.Sprintf(" (자료 %d건은 출력 길이 제한으로 생략됨 — notebook show로 전체 확인)", omitted)
 		}
-		out.Sources = append(out.Sources, bs)
-	}
-
-	data, err := json.MarshalIndent(out, "", "  ")
-	if err != nil {
-		return "", fmt.Errorf("marshal notebook brief: %w", err)
+		for _, src := range sources {
+			out.Sources = append(out.Sources, buildBriefSource(d, src, perSource))
+		}
+		var err error
+		data, err = json.MarshalIndent(out, "", "  ")
+		if err != nil {
+			return "", fmt.Errorf("marshal notebook brief: %w", err)
+		}
+		if len(data) <= notebookBriefMaxBytes {
+			break
+		}
+		switch {
+		case perSource > notebookMinSourceBytes:
+			perSource = perSource * 3 / 4 // JSON expansion / large pages: shrink excerpts
+		case len(sources) > 1:
+			sources = sources[:len(sources)-1] // metadata-heavy: drop a trailing source
+		default:
+			return string(data), nil // single minimal source: nothing more to trim
+		}
 	}
 	return string(data), nil
+}
+
+// buildBriefSource resolves one source's content for a brief, truncated to
+// maxBytes and annotated with any read/staleness/truncation note.
+func buildBriefSource(d *toolctx.NotebookDeps, src notebook.Source, maxBytes int) briefSource {
+	bs := briefSource{Cite: src.Cite, Kind: src.Kind, Ref: src.Ref, Title: src.Title}
+	switch src.Kind {
+	case notebook.KindNote:
+		var truncated bool
+		bs.Text, truncated = truncateBytesRuneSafe(src.Text, maxBytes)
+		if truncated {
+			bs.Note = appendNote(bs.Note, "⚠ 길이 초과로 일부만 표시(잘림)")
+		}
+	case notebook.KindWiki:
+		bs.Text, bs.Note = readWikiSource(d.Wiki, src.Ref, maxBytes)
+	default:
+		bs.Note = "지원하지 않는 자료 유형"
+	}
+	return bs
 }
 
 // readWikiSource reads a pinned wiki page live, returning its grounding text

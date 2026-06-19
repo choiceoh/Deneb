@@ -158,6 +158,32 @@ func TestNotebookBriefRespectsByteBudget(t *testing.T) {
 	}
 }
 
+func TestNotebookBriefManySourcesStaysValidJSON(t *testing.T) {
+	fn, deps := newTestNotebookTool(t)
+	callNotebook(t, fn, map[string]any{"action": "create", "name": "다건 노트북"})
+	id := extractID(t, deps)
+
+	// Many sources: even minimal per-source text + JSON envelope must not push
+	// the encoded brief past the cap into head/tail-truncated invalid JSON.
+	mid := strings.Repeat("내용", 600) // ~3.6KB each
+	for i := 0; i < 60; i++ {
+		callNotebook(t, fn, map[string]any{
+			"action": "add_source", "id": id, "kind": "note", "text": mid,
+		})
+	}
+	brief := callNotebook(t, fn, map[string]any{"action": "brief", "id": id})
+	if len(brief) > 24000 {
+		t.Fatalf("brief is %d bytes, exceeds the 24KB tool budget", len(brief))
+	}
+	var parsed map[string]any
+	if err := json.Unmarshal([]byte(brief), &parsed); err != nil {
+		t.Fatalf("many-source brief produced invalid JSON: %v", err)
+	}
+	if _, ok := parsed["sources"]; !ok {
+		t.Fatal("brief missing sources field")
+	}
+}
+
 func TestNotebookUnknownAction(t *testing.T) {
 	fn, _ := newTestNotebookTool(t)
 	out := callNotebook(t, fn, map[string]any{"action": "frobnicate"})
