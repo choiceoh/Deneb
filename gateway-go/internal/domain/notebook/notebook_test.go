@@ -199,6 +199,68 @@ func TestGetReturnsCopy(t *testing.T) {
 	}
 }
 
+func TestEnsureForDealIsIdempotent(t *testing.T) {
+	s := newTestStore(t)
+	a, err := s.EnsureForDeal("프로젝트/탑솔라.md", "탑솔라 딜", "")
+	if err != nil {
+		t.Fatalf("EnsureForDeal: %v", err)
+	}
+	if a.DealRef != "프로젝트/탑솔라.md" {
+		t.Fatalf("DealRef = %q, want anchored", a.DealRef)
+	}
+	// Same deal ref → same notebook (get-or-create), not a duplicate.
+	b, _ := s.EnsureForDeal("프로젝트/탑솔라.md", "다른 이름", "")
+	if b.ID != a.ID {
+		t.Fatalf("EnsureForDeal created a duplicate: %q vs %q", b.ID, a.ID)
+	}
+	if got := s.List(); len(got) != 1 {
+		t.Fatalf("notebooks = %d, want 1 (no duplicate)", len(got))
+	}
+	// Different deal ref → different notebook.
+	c, _ := s.EnsureForDeal("프로젝트/other.md", "", "")
+	if c.ID == a.ID {
+		t.Fatal("distinct deals must get distinct notebooks")
+	}
+	if c.Name != "프로젝트/other.md" {
+		t.Fatalf("blank name should default to deal ref, got %q", c.Name)
+	}
+}
+
+func TestEnsureForDealRequiresRef(t *testing.T) {
+	s := newTestStore(t)
+	if _, err := s.EnsureForDeal("  ", "x", ""); err == nil {
+		t.Fatal("EnsureForDeal with blank deal ref should error")
+	}
+}
+
+func TestGetByDealRef(t *testing.T) {
+	s := newTestStore(t)
+	if _, ok := s.GetByDealRef("프로젝트/탑솔라.md"); ok {
+		t.Fatal("GetByDealRef should miss before creation")
+	}
+	created, _ := s.EnsureForDeal("프로젝트/탑솔라.md", "탑솔라", "")
+	got, ok := s.GetByDealRef("프로젝트/탑솔라.md")
+	if !ok || got.ID != created.ID {
+		t.Fatalf("GetByDealRef = %+v ok=%v, want %q", got, ok, created.ID)
+	}
+}
+
+func TestDealRefPersists(t *testing.T) {
+	dir := t.TempDir()
+	s, _ := NewStore(dir)
+	nb, _ := s.EnsureForDeal("프로젝트/탑솔라.md", "탑솔라", "")
+	_, _ = s.AddSource(nb.ID, Source{Kind: KindNote, Text: "견적"})
+
+	s2, _ := NewStore(dir)
+	got, ok := s2.GetByDealRef("프로젝트/탑솔라.md")
+	if !ok {
+		t.Fatal("deal-anchored notebook not reloaded")
+	}
+	if got.DealRef != "프로젝트/탑솔라.md" || len(got.Sources) != 1 {
+		t.Fatalf("deal anchor/source not persisted: %+v", got)
+	}
+}
+
 func TestSlugify(t *testing.T) {
 	cases := map[string]string{
 		"탑솔라 딜":          "탑솔라-딜",

@@ -1206,6 +1206,8 @@
         "type": "string",
         "enum": [
           "create",
+          "for_deal",
+          "pin_to_deal",
           "list",
           "show",
           "add_source",
@@ -1213,7 +1215,15 @@
           "delete",
           "brief"
         ],
-        "description": "create: 노트북 생성. list: 노트북 목록. show: 한 노트북의 핀된 자료 보기. add_source: 자료 핀. remove_source: 자료 제거. delete: 노트북 삭제. brief: 핀된 자료에만 근거한 인용([S1]) 포함 브리핑 데이터 생성 (모델이 종합)."
+        "description": "create: 노트북 생성. for_deal: 딜/프로젝트의 노트북 보기(없으면 생성, deal_ref). pin_to_deal: 딜 노트북에 자료 한 번에 저장(없으면 생성; deal_ref+kind+ref/text). list: 노트북 목록. show: 핀된 자료 보기(id 또는 deal_ref). add_source: 자료 핀. remove_source: 자료 제거. delete: 노트북 삭제. brief: 핀된 자료에만 근거한 인용([S1]) 포함 브리핑 데이터 생성(모델이 종합; id 또는 deal_ref)."
+      },
+      "deal_ref": {
+        "type": "string",
+        "description": "딜/프로젝트 식별자 (for_deal/pin_to_deal, 또는 show/brief에서 id 대신). 메일 딜 추출·위키 딜 페이지와 같은 ref를 쓰면 raw 증거(노트북)와 정제 사실(위키)이 한 딜로 묶인다."
+      },
+      "deal_name": {
+        "type": "string",
+        "description": "딜 노트북 자동 생성 시 이름 (for_deal/pin_to_deal, 선택; 미지정 시 deal_ref 사용)."
       },
       "id": {
         "type": "string",

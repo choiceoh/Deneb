@@ -54,10 +54,16 @@ type Source struct {
 }
 
 // Notebook is a user-scoped collection of sources for grounded synthesis.
+//
+// DealRef optionally anchors the notebook to a deal/project (the same ref the
+// gmail pipeline's deal extraction and wiki.UpsertDealPage use), so a deal's
+// raw evidence (notebook) and its curated facts (wiki page) hang off one
+// identity. At most one notebook per DealRef (EnsureForDeal enforces this).
 type Notebook struct {
 	ID          string   `json:"id"`
 	Name        string   `json:"name"`
 	Description string   `json:"description,omitempty"`
+	DealRef     string   `json:"dealRef,omitempty"`
 	Sources     []Source `json:"sources"`
 	Created     int64    `json:"created"` // unix millis
 	Updated     int64    `json:"updated"` // unix millis
@@ -143,15 +149,80 @@ func (s *Store) Create(name, description string) (*Notebook, error) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	nb, err := s.createLocked(name, description, "")
+	if err != nil {
+		return nil, err
+	}
+	return clone(nb), nil
+}
+
+// createLocked builds, registers, and persists a new notebook. Caller holds mu.
+func (s *Store) createLocked(name, description, dealRef string) (*Notebook, error) {
 	id := s.uniqueIDLocked(slugify(name))
 	now := s.stampLocked()
-	nb := &Notebook{ID: id, Name: name, Description: strings.TrimSpace(description), Created: now, Updated: now}
+	nb := &Notebook{
+		ID:          id,
+		Name:        name,
+		Description: strings.TrimSpace(description),
+		DealRef:     strings.TrimSpace(dealRef),
+		Created:     now,
+		Updated:     now,
+	}
 	s.nbs[id] = nb
 	if err := s.saveLocked(nb); err != nil {
 		delete(s.nbs, id)
 		return nil, err
 	}
+	return nb, nil
+}
+
+// GetByDealRef returns a copy of the notebook anchored to dealRef, if any.
+func (s *Store) GetByDealRef(dealRef string) (*Notebook, bool) {
+	dealRef = strings.TrimSpace(dealRef)
+	if dealRef == "" {
+		return nil, false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if nb := s.byDealRefLocked(dealRef); nb != nil {
+		return clone(nb), true
+	}
+	return nil, false
+}
+
+// EnsureForDeal returns the notebook anchored to dealRef, creating one (named
+// name) if none exists. This is the idempotent entry point the mail pipeline and
+// native "save to deal" path use: one notebook per deal, get-or-create.
+func (s *Store) EnsureForDeal(dealRef, name, description string) (*Notebook, error) {
+	dealRef = strings.TrimSpace(dealRef)
+	if dealRef == "" {
+		return nil, errors.New("notebook: deal ref is required")
+	}
+	name = strings.TrimSpace(name)
+	if name == "" {
+		name = dealRef
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if nb := s.byDealRefLocked(dealRef); nb != nil {
+		return clone(nb), nil
+	}
+	nb, err := s.createLocked(name, description, dealRef)
+	if err != nil {
+		return nil, err
+	}
 	return clone(nb), nil
+}
+
+// byDealRefLocked returns the (live) notebook with the given dealRef, or nil.
+// Caller holds mu. Linear scan — a single user has few notebooks.
+func (s *Store) byDealRefLocked(dealRef string) *Notebook {
+	for _, nb := range s.nbs {
+		if nb.DealRef == dealRef {
+			return nb
+		}
+	}
+	return nil
 }
 
 // Get returns a copy of the notebook with the given id.
