@@ -89,6 +89,37 @@ data class DropboxUploadOut(
 
 @Immutable
 @Serializable
+data class FilesEntryOut(
+    val tag: String = "",
+    val name: String = "",
+    val pathDisplay: String = "",
+    val pathLower: String = "",
+    val id: String = "",
+    val size: Long = 0L,
+    val serverModified: String = "",
+)
+
+@Immutable
+@Serializable
+data class FilesListOut(
+    val entries: List<FilesEntryOut> = emptyList(),
+    val path: String = "",
+)
+
+@Immutable
+@Serializable
+data class FilesShareOut(
+    val url: String = "",
+)
+
+@Immutable
+@Serializable
+data class FilesUploadOut(
+    val entry: FilesEntryOut = FilesEntryOut(),
+)
+
+@Immutable
+@Serializable
 data class MailAnalysisOut(
     val id: String = "",
     val subject: String = "",

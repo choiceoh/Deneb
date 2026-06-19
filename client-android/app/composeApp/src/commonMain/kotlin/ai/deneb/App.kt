@@ -15,6 +15,7 @@ import ai.deneb.deneb.DenebCronEditScreen
 import ai.deneb.deneb.DenebCronScreen
 import ai.deneb.deneb.DenebDiaryScreen
 import ai.deneb.deneb.DenebDropboxScreen
+import ai.deneb.deneb.DenebFilesScreen
 import ai.deneb.deneb.DenebFleetScreen
 import ai.deneb.deneb.DenebGatewayClient
 import ai.deneb.deneb.DenebMailDetailScreen
@@ -222,6 +223,10 @@ data class DenebCronEdit(val cronId: String)
 @Serializable
 @SerialName("deneb_dropbox")
 object DenebDropbox
+
+@Serializable
+@SerialName("deneb_files")
+object DenebFiles
 
 @Composable
 fun App(
@@ -630,6 +635,15 @@ private fun AppContent(
                                         navController.navigate(Home)
                                     },
                                     onConnect = { navController.navigate(DenebConfig) },
+                                    navigationTabBar = if (showTabBar) navigationTabBar else null,
+                                )
+                            }
+                        }
+                        composable<DenebFiles> {
+                            denebClient?.let { client ->
+                                DenebFilesScreen(
+                                    client = client,
+                                    onBack = { navController.navigateUp() },
                                     navigationTabBar = if (showTabBar) navigationTabBar else null,
                                 )
                             }
