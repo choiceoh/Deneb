@@ -275,6 +275,10 @@ fun DenebCalendarScreen(
             }
             Spacer(Modifier.height(4.dp))
             WeekdayHeader()
+            // Incomplete to-do due dates, marked grid-wide (기한 color) so a deadline
+            // shows even when no calendar event sits on that day. Todos are
+            // month-independent, so this is computed once and shared across pages.
+            val todoDueDates = remember(todos, tz) { todoDueDays(todos, tz) }
             // Each page builds its grid from the per-month cache, so the neighbor
             // pages the pager pre-composes already show their events.
             HorizontalPager(
@@ -293,6 +297,7 @@ fun DenebCalendarScreen(
                     selected = selected,
                     bars = bars,
                     dots = dots,
+                    todoDueDays = todoDueDates,
                     onSelect = { date ->
                         // Tapping a leading/trailing cell selects that day and pages
                         // to its month.
@@ -373,6 +378,7 @@ internal fun CalendarMonthGrid(
     selected: LocalDate,
     bars: Map<LocalDate, List<DayBar>>,
     dots: Map<LocalDate, List<Int>>,
+    todoDueDays: Set<LocalDate>,
     onSelect: (LocalDate) -> Unit,
 ) {
     val haptics = rememberHaptics()
@@ -380,7 +386,9 @@ internal fun CalendarMonthGrid(
     // Shared across the grid so every cell reserves equal height: bars on the same
     // lane line up row-to-row, and the dot row is present-or-absent grid-wide.
     val laneCount = bars.values.maxOfOrNull { day -> day.maxOfOrNull { it.lane + 1 } ?: 0 } ?: 0
-    val showDotRow = dots.isNotEmpty()
+    // The marker row carries event dots and to-do due rings; reserve it grid-wide
+    // when any day has either so cells stay vertically aligned.
+    val showDotRow = dots.isNotEmpty() || todoDueDays.isNotEmpty()
     // Month paging is owned by the HorizontalPager in the screen shell; this grid is
     // pure presentation. Each cell owns its tap; the pager claims horizontal drags.
     Column(Modifier.fillMaxWidth()) {
@@ -397,6 +405,7 @@ internal fun CalendarMonthGrid(
                         bars = bars[date].orEmpty(),
                         laneCount = laneCount,
                         dotColors = dots[date].orEmpty(),
+                        hasTodoDue = date in todoDueDays,
                         showDotRow = showDotRow,
                         palette = palette,
                         modifier = Modifier.weight(1f),
@@ -420,6 +429,7 @@ private fun DayCell(
     bars: List<DayBar>,
     laneCount: Int,
     dotColors: List<Int>,
+    hasTodoDue: Boolean,
     showDotRow: Boolean,
     palette: List<Color>,
     modifier: Modifier = Modifier,
@@ -493,6 +503,14 @@ private fun DayCell(
             ) {
                 dotColors.take(3).forEach { idx ->
                     Box(Modifier.size(5.dp).clip(CircleShape).background(palette[idx % palette.size]))
+                }
+                // To-do due: a hollow 기한-colored ring, distinct from the filled
+                // event dots, so a deadline reads as "due" rather than a scheduled block.
+                if (hasTodoDue) {
+                    Box(
+                        Modifier.size(5.dp).clip(CircleShape)
+                            .border(1.dp, palette[2 % palette.size], CircleShape),
+                    )
                 }
             }
         }

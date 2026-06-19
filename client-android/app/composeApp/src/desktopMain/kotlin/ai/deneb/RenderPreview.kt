@@ -337,6 +337,7 @@ private fun renderCalendarMonth(name: String, scheme: ColorScheme) {
     )
     val bars = layoutMonthBars(events, grid, tz)
     val dots = timedSingleDayDots(events, tz)
+    val todoDueDates = setOf(LocalDate(2026, 6, 18)) // a to-do due on an event-free day
     val dayEvents = events.filter { selected in eventDays(it.start, it.end, it.allDay, tz) }
     val scene = ImageComposeScene(width = 824, height = 1280, density = Density(2f)) {
         MaterialTheme(colorScheme = scheme) {
@@ -359,7 +360,7 @@ private fun renderCalendarMonth(name: String, scheme: ColorScheme) {
                             )
                         }
                     }
-                    CalendarMonthGrid(grid, today, selected, bars, dots, {})
+                    CalendarMonthGrid(grid, today, selected, bars, dots, todoDueDates, {})
                     Spacer(Modifier.height(12.dp))
                     HorizontalDivider(color = denebHairline())
                     Spacer(Modifier.height(8.dp))
