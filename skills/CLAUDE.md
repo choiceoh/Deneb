@@ -32,7 +32,7 @@ description: One-line description of what skills belong in this category.
 | `coding` | Software development, code generation, version control, CI/CD | evolution-proposal, github, skill-creator, skill-evolution, skill-factory |
 | `productivity` | Daily workflows, documents, summarization, personal automation | email-analysis, meeting-minutes, morning-letter, session-logs, summarize, weekly-report |
 | `devops` | System monitoring, terminal management, infrastructure | healthcheck, tmux |
-| `security` | Security, secrets management, and credential handling | 1password |
+| `security` | Security, secrets management, and credential handling | (none) |
 | `integration` | External service connectivity, API bridges | (none) |
 
 ## Skill vs Tool Decision
