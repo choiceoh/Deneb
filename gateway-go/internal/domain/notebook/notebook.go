@@ -65,20 +65,28 @@ type Notebook struct {
 
 // Store is a directory-backed collection of notebooks, guarded by a single
 // mutex (single-user traffic is serial, so coarse locking is fine).
+//
+// lastStamp backs stampLocked: timestamps are strictly monotonic so two
+// mutations in the same wall-clock millisecond never tie. Without this, List's
+// "most-recently-updated first" order would fall back to map iteration on a tie
+// and become nondeterministic.
 type Store struct {
-	dir string
-	mu  sync.Mutex
-	nbs map[string]*Notebook
+	dir       string
+	mu        sync.Mutex
+	nbs       map[string]*Notebook
+	lastStamp int64
 }
 
 // NewStore opens (creating if needed) a notebook store rooted at dir and loads
-// any existing notebooks from disk.
+// any existing notebooks from disk. Notebook note sources can hold confidential
+// pasted content (email bodies, quotes), so the directory and files are private
+// (0700/0600), matching the other secret-bearing state stores.
 func NewStore(dir string) (*Store, error) {
 	dir = strings.TrimSpace(dir)
 	if dir == "" {
 		return nil, errors.New("notebook: empty dir")
 	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, fmt.Errorf("notebook: mkdir %s: %w", dir, err)
 	}
 	s := &Store{dir: dir, nbs: make(map[string]*Notebook)}
@@ -87,7 +95,8 @@ func NewStore(dir string) (*Store, error) {
 }
 
 // loadAll reads every *.json under the store dir. Unreadable/corrupt files are
-// skipped (best-effort) rather than failing startup.
+// skipped (best-effort) rather than failing startup. It also seeds lastStamp to
+// the newest timestamp on disk so stamps stay monotonic across restarts.
 func (s *Store) loadAll() {
 	entries, err := os.ReadDir(s.dir)
 	if err != nil {
@@ -106,7 +115,23 @@ func (s *Store) loadAll() {
 			continue
 		}
 		s.nbs[nb.ID] = &nb
+		for _, t := range []int64{nb.Created, nb.Updated} {
+			if t > s.lastStamp {
+				s.lastStamp = t
+			}
+		}
 	}
+}
+
+// stampLocked returns a strictly-increasing unix-millis timestamp so ordering
+// ties are impossible. Caller holds mu.
+func (s *Store) stampLocked() int64 {
+	now := time.Now().UnixMilli()
+	if now <= s.lastStamp {
+		now = s.lastStamp + 1
+	}
+	s.lastStamp = now
+	return now
 }
 
 // Create makes a new empty notebook. The id is a slug of the name, made unique
@@ -119,7 +144,7 @@ func (s *Store) Create(name, description string) (*Notebook, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	id := s.uniqueIDLocked(slugify(name))
-	now := time.Now().UnixMilli()
+	now := s.stampLocked()
 	nb := &Notebook{ID: id, Name: name, Description: strings.TrimSpace(description), Created: now, Updated: now}
 	s.nbs[id] = nb
 	if err := s.saveLocked(nb); err != nil {
@@ -148,7 +173,14 @@ func (s *Store) List() []*Notebook {
 	for _, nb := range s.nbs {
 		out = append(out, clone(nb))
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Updated > out[j].Updated })
+	// Updated desc; ID asc as a deterministic tie-breaker (stamps are monotonic
+	// so ties should not occur, but this keeps order stable regardless).
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Updated != out[j].Updated {
+			return out[i].Updated > out[j].Updated
+		}
+		return out[i].ID < out[j].ID
+	})
 	return out
 }
 
@@ -159,9 +191,14 @@ func (s *Store) Delete(id string) error {
 	if _, ok := s.nbs[id]; !ok {
 		return ErrNotFound
 	}
+	// Remove the file first: a real removal failure (read-only dir, permissions)
+	// must surface as an error and keep the in-memory entry, or "delete" would
+	// report success while the notebook reloads on the next restart. A missing
+	// file is fine — proceed to drop it from memory.
+	if err := os.Remove(filepath.Join(s.dir, id+".json")); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("notebook: remove %s: %w", id, err)
+	}
 	delete(s.nbs, id)
-	// Best-effort file removal: a missing file is not an error worth surfacing.
-	_ = os.Remove(filepath.Join(s.dir, id+".json"))
 	return nil
 }
 
@@ -178,7 +215,7 @@ func (s *Store) AddSource(id string, src Source) (*Source, error) {
 		return nil, ErrNotFound
 	}
 	src.Cite = nextCite(nb.Sources)
-	src.Added = time.Now().UnixMilli()
+	src.Added = s.stampLocked()
 	src.Ref = strings.TrimSpace(src.Ref)
 	src.Title = strings.TrimSpace(src.Title)
 	nb.Sources = append(nb.Sources, src)
@@ -214,7 +251,7 @@ func (s *Store) RemoveSource(id, cite string) error {
 	}
 	removed := nb.Sources[idx]
 	nb.Sources = append(nb.Sources[:idx], nb.Sources[idx+1:]...)
-	nb.Updated = time.Now().UnixMilli()
+	nb.Updated = s.stampLocked()
 	if err := s.saveLocked(nb); err != nil {
 		// Restore on save failure to keep memory consistent with disk.
 		nb.Sources = append(nb.Sources, Source{})
@@ -286,7 +323,7 @@ func (s *Store) saveLocked(nb *Notebook) error {
 	}
 	final := filepath.Join(s.dir, nb.ID+".json")
 	tmp := final + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+	if err := os.WriteFile(tmp, data, 0o600); err != nil {
 		return fmt.Errorf("notebook: write %s: %w", tmp, err)
 	}
 	if err := os.Rename(tmp, final); err != nil {

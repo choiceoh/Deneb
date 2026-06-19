@@ -12,10 +12,12 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 )
 
-// notebookSourceMaxRunes caps each source's text in a brief so a few large
-// pages cannot blow the tool output budget; brief composition is a summary,
-// not a verbatim dump.
-const notebookSourceMaxRunes = 5000
+// notebookBriefByteBudget is the total bytes the brief may spend on source
+// texts combined. The tool's max_output (24KB) is enforced by BYTE-length
+// head/tail truncation (tools.go), which would corrupt the brief JSON the model
+// must parse — so the source texts are budgeted together (not per-source) and
+// kept well under 24KB after the JSON envelope (meta + instruction + wrappers).
+const notebookBriefByteBudget = 18000
 
 // ToolNotebook returns the notebook tool — NotebookLM-style scoped source
 // collections for grounded, cited synthesis (the "이 딜 자료만으로 브리핑" path).
@@ -200,13 +202,24 @@ func notebookBrief(d *toolctx.NotebookDeps, id, focus string) (string, error) {
 			"note 필드(자료 누락·대체·보관 경고)가 있으면 신뢰도에 반영하라. " +
 			"구성: 핵심 요약 → 주요 사실 → 리스크/확인 필요 → 다음 액션.",
 	}
+	// Share the byte budget evenly across sources so a few large pages cannot
+	// push the marshaled brief past the tool's 24KB byte cap (head/tail
+	// truncation there would corrupt the JSON). Truncation is marked per source.
+	perSource := notebookBriefByteBudget / len(nb.Sources)
+	if perSource < 500 {
+		perSource = 500 // floor: with many sources, still give each a usable excerpt
+	}
 	for _, src := range nb.Sources {
 		bs := briefSource{Cite: src.Cite, Kind: src.Kind, Ref: src.Ref, Title: src.Title}
 		switch src.Kind {
 		case notebook.KindNote:
-			bs.Text = truncateRunes(src.Text, notebookSourceMaxRunes)
+			var truncated bool
+			bs.Text, truncated = truncateBytesRuneSafe(src.Text, perSource)
+			if truncated {
+				bs.Note = appendNote(bs.Note, "⚠ 길이 초과로 일부만 표시(잘림)")
+			}
 		case notebook.KindWiki:
-			bs.Text, bs.Note = readWikiSource(d.Wiki, src.Ref)
+			bs.Text, bs.Note = readWikiSource(d.Wiki, src.Ref, perSource)
 		default:
 			bs.Note = "지원하지 않는 자료 유형"
 		}
@@ -221,9 +234,10 @@ func notebookBrief(d *toolctx.NotebookDeps, id, focus string) (string, error) {
 }
 
 // readWikiSource reads a pinned wiki page live, returning its grounding text
-// and an optional note (read failure or staleness). Reading live — rather than
-// snapshotting at add time — means the brief always reflects the current page.
-func readWikiSource(store *wiki.Store, ref string) (text, note string) {
+// (capped to maxBytes) and an optional note (read failure, staleness, or
+// truncation). Reading live — rather than snapshotting at add time — means the
+// brief always reflects the current page.
+func readWikiSource(store *wiki.Store, ref string, maxBytes int) (text, note string) {
 	if store == nil {
 		return "", "위키 비활성 — 이 자료를 읽을 수 없음"
 	}
@@ -242,7 +256,36 @@ func readWikiSource(store *wiki.Store, ref string) (text, note string) {
 		sb.WriteString("요약: " + page.Meta.Summary + "\n\n")
 	}
 	sb.WriteString(strings.TrimSpace(page.Body))
-	return truncateRunes(sb.String(), notebookSourceMaxRunes), note
+	text, truncated := truncateBytesRuneSafe(sb.String(), maxBytes)
+	if truncated {
+		note = appendNote(note, "⚠ 길이 초과로 일부만 표시(잘림)")
+	}
+	return text, note
+}
+
+// truncateBytesRuneSafe caps s to maxBytes, cutting on a UTF-8 rune boundary so
+// Korean text is never split mid-character. The byte cap (not a rune cap) is
+// what keeps the marshaled brief under the byte-enforced tool output budget.
+func truncateBytesRuneSafe(s string, maxBytes int) (string, bool) {
+	if len(s) <= maxBytes {
+		return s, false
+	}
+	cut := 0
+	for i := range s { // i is the byte offset of each rune start
+		if i > maxBytes {
+			break
+		}
+		cut = i
+	}
+	return s[:cut], true
+}
+
+// appendNote joins a base note with an additional clause.
+func appendNote(base, extra string) string {
+	if base == "" {
+		return extra
+	}
+	return base + " · " + extra
 }
 
 // normalizeWikiRef accepts a bare path or a "w:" namespaced ref and returns a

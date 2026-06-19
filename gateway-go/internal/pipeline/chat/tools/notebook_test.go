@@ -124,6 +124,40 @@ func TestNotebookWikiSourceMissingPageNoted(t *testing.T) {
 	}
 }
 
+func TestNotebookBriefRespectsByteBudget(t *testing.T) {
+	fn, deps := newTestNotebookTool(t)
+	callNotebook(t, fn, map[string]any{"action": "create", "name": "큰 노트북"})
+	id := extractID(t, deps)
+
+	// Several large Korean note sources (3 bytes/rune) — naive per-source caps
+	// would blow the 24KB byte-enforced tool budget and corrupt the JSON.
+	big := strings.Repeat("가나다라마", 4000) // 20k runes ≈ 60KB each
+	for i := 0; i < 6; i++ {
+		callNotebook(t, fn, map[string]any{
+			"action": "add_source", "id": id, "kind": "note", "text": big,
+		})
+	}
+
+	brief := callNotebook(t, fn, map[string]any{"action": "brief", "id": id})
+	if len(brief) > 24000 {
+		t.Fatalf("brief is %d bytes, exceeds the 24KB tool budget", len(brief))
+	}
+	var parsed struct {
+		Sources []struct {
+			Note string `json:"note"`
+		} `json:"sources"`
+	}
+	if err := json.Unmarshal([]byte(brief), &parsed); err != nil {
+		t.Fatalf("over-budget brief produced invalid JSON: %v", err)
+	}
+	if len(parsed.Sources) != 6 {
+		t.Fatalf("sources = %d, want 6", len(parsed.Sources))
+	}
+	if !strings.Contains(parsed.Sources[0].Note, "잘림") {
+		t.Fatalf("truncated source should carry a truncation note: %q", parsed.Sources[0].Note)
+	}
+}
+
 func TestNotebookUnknownAction(t *testing.T) {
 	fn, _ := newTestNotebookTool(t)
 	out := callNotebook(t, fn, map[string]any{"action": "frobnicate"})
