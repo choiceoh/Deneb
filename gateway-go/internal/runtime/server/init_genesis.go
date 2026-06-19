@@ -341,6 +341,17 @@ func (a *chatUsageRecorderAdapter) RecordSkillUse(sessionKey, skillName string, 
 		safego.GoWithSlog(a.logger, "skill-failed-use-validation-case", func() {
 			a.recordValidationCaseFromFailedUse(sessionKey, skillName, errMsg)
 		})
+	} else if replayExecutorEnabled() {
+		// Success mirror of the failed-use capture above: record the proven-good
+		// tool-call behavior of a successful run as a held-out replay case so the
+		// behavioral evolve gate (SkillValidationEngine.EvaluateBehavior) has
+		// something to protect against regression — without this corpus the gate
+		// is inert. Gated by the same flag as the gate (DENEB_SKILL_EVOLVE_REPLAY)
+		// so capture and consume turn on together, and the far-more-frequent
+		// successful turns don't write cases nothing reads.
+		safego.GoWithSlog(a.logger, "skill-success-use-validation-case", func() {
+			a.recordValidationCaseFromSuccessfulUse(sessionKey, skillName)
+		})
 	}
 }
 
@@ -421,6 +432,58 @@ func (a *chatUsageRecorderAdapter) recordValidationCaseFromFailedUse(sessionKey,
 		}
 		if a.logger != nil {
 			a.logger.Warn("genesis: auto validation case record failed",
+				"skill", skillName, "session", sessionKey, "error", err)
+		}
+	}
+}
+
+// recordValidationCaseFromSuccessfulUse is the success mirror of
+// recordValidationCaseFromFailedUse: it captures a successful run's tool-call
+// behavior as a held-out replay case whose ExpectedToolCalls are the proven-good
+// calls the agent actually made. This is the corpus the behavioral evolve gate
+// (SkillValidationEngine.EvaluateBehavior) consumes — without it the gate has no
+// cases and stays inert. The caller gates this on DENEB_SKILL_EVOLVE_REPLAY.
+func (a *chatUsageRecorderAdapter) recordValidationCaseFromSuccessfulUse(sessionKey, skillName string) {
+	sessionKey = strings.TrimSpace(sessionKey)
+	skillName = strings.TrimSpace(skillName)
+	if sessionKey == "" || skillName == "" || a.transcripts == nil {
+		return
+	}
+	sctx, err := buildSkillLifecycleSessionContext(a.transcripts, sessionKey)
+	if err != nil {
+		if a.logger != nil {
+			a.logger.Warn("genesis: auto success validation case transcript load failed",
+				"skill", skillName, "session", sessionKey, "error", err)
+		}
+		return
+	}
+	record := buildSkillValidationCaseFromSession(chattools.SkillValidationCaseFromSessionRequest{
+		SkillName:   skillName,
+		SessionKey:  sessionKey,
+		Description: "Successful skill use in session " + sessionKey,
+		Source:      "auto-successful-skill-use",
+	}, sctx)
+	// Unlike the failed-use path, keep the auto-extracted ExpectedToolCalls as
+	// EXPECTED behavior — the case asserts "a correct run makes these tool
+	// calls", exactly what a regressing rewrite must not drop. With no extracted
+	// tool calls there is nothing for the behavioral gate to protect (and the
+	// weak-automatic guard would reject it), so skip early.
+	if len(record.Replay.ExpectedToolCalls) == 0 {
+		return
+	}
+	if a.validationCaseAlreadyRecorded(skillName, record) {
+		return
+	}
+	if err := a.inner.RecordSkillValidationCase(record); err != nil {
+		if errors.Is(err, genesis.ErrWeakAutomaticValidationCase) {
+			if a.logger != nil {
+				a.logger.Debug("genesis: auto success validation case skipped weak trace",
+					"skill", skillName, "session", sessionKey)
+			}
+			return
+		}
+		if a.logger != nil {
+			a.logger.Warn("genesis: auto success validation case record failed",
 				"skill", skillName, "session", sessionKey, "error", err)
 		}
 	}
