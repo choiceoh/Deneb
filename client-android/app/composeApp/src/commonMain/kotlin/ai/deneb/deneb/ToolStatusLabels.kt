@@ -28,7 +28,6 @@ internal object ToolStatusLabels {
         "clarify" to "질문 정리 중",
         "contacts" to "연락처 확인 중",
         "cron" to "예약 작업 처리 중",
-        "dropbox" to "Dropbox 확인 중",
         "edit" to "파일 수정 중",
         "exec" to "명령 실행 중",
         "fetch_tools" to "도구 준비 중",

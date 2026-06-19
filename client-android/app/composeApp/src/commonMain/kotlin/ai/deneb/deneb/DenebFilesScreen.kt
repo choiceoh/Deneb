@@ -55,16 +55,16 @@ import kotlinx.coroutines.launch
 
 /**
  * Native local file browser backed by `miniapp.files.*`, in the Deneb idiom
- * (DenebScreenScaffold, full-width hairline rows, DenebType roles). The local-disk
- * twin of [DenebDropboxScreen]: same browser shape, but over the gateway's local
- * file store. Browse folders (tap a folder to descend, system/back arrow to ascend),
- * full-store search, upload a device file into the current folder, and a per-file
- * action sheet that opens a signed download link. Controls (search field, bottom
- * sheet, pull refresh, buttons) stay Material; only the presentation is Deneb.
+ * (DenebScreenScaffold, full-width hairline rows, DenebType roles), over the
+ * gateway's local file store. Browse folders (tap a folder to descend, system/back
+ * arrow to ascend), full-store search, upload a device file into the current folder,
+ * and a per-file action sheet that opens a signed download link. Controls (search
+ * field, bottom sheet, pull refresh, buttons) stay Material; only the presentation
+ * is Deneb.
  *
- * Unlike Dropbox there is no OAuth/connect wizard — the store is always available,
- * so the screen shows the browser straight away (failures surface as retry/empty).
- * "AI 분석" is also absent: the local store has no analyze chat-bridge RPC.
+ * There is no OAuth/connect wizard — the store is always available, so the screen
+ * shows the browser straight away (failures surface as retry/empty). "AI 분석" is
+ * also absent: the local store has no analyze chat-bridge RPC.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

@@ -18,8 +18,7 @@ import (
 //   - ExtractDocumentText — the exported (text, ok) facade used by web fetch and
 //     the attachment-classifier; declines images/plain-text (not "documents").
 //   - extractAttachmentText (gmail_attachment.go) — adds Gmail Korean headers/errors.
-//   - extractDropboxFileText (dropbox.go) — returns the raw text or "".
-// One switch, three thin formatters — so the paths can never drift apart again.
+// One switch, two thin formatters — so the paths can never drift apart again.
 
 // csvToMarkdown parses CSV bytes and renders them as a markdown table so the
 // model reads columns as a grid instead of comma soup. Ragged rows are

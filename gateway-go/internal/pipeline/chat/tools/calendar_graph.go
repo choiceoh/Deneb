@@ -24,7 +24,7 @@ const timelineWindowDays = 90
 // calActionTimeline returns the events about p.Query (an entity: client,
 // project, person, place) as one chronological timeline, then directs the agent
 // to join the linked mail/wiki/deal context. Read-only guidance: the agent does
-// the cross-domain weave with its mail_archive / wiki / dropbox tools.
+// the cross-domain weave with its mail_archive / wiki / files tools.
 func calActionTimeline(ctx context.Context, d *toolctx.CalendarDeps, p calParams) string {
 	q := strings.TrimSpace(p.Query)
 	if q == "" {
@@ -66,12 +66,12 @@ func calActionTimeline(ctx context.Context, d *toolctx.CalendarDeps, p calParams
 		sb.WriteString(calListRow(i+1, e))
 		// calListRow shows the [미팅]·「mail」 badge but not the attached document
 		// names; surface them so the agent can fetch the linked deal files via
-		// dropbox without an extra per-event get.
+		// the files tool without an extra per-event get.
 		if len(e.Docs) > 0 {
 			fmt.Fprintf(&sb, "   📎 %s\n", strings.Join(e.Docs, ", "))
 		}
 	}
-	fmt.Fprintf(&sb, "\n위는 '%s' 관련 일정만 모은 거야. 연결된 메일(「제목」·[미팅] 표시는 mail_archive로), 관련 위키(wiki/graphify), 거래 문서(📎는 dropbox)를 엮어 과거 합의 → 예정 일정 → 미결의 전체 흐름을 한 타임라인으로 정리해.", q)
+	fmt.Fprintf(&sb, "\n위는 '%s' 관련 일정만 모은 거야. 연결된 메일(「제목」·[미팅] 표시는 mail_archive로), 관련 위키(wiki/graphify), 거래 문서(📎는 files)를 엮어 과거 합의 → 예정 일정 → 미결의 전체 흐름을 한 타임라인으로 정리해.", q)
 	if warn != "" {
 		sb.WriteString("\n(" + warn + ")")
 	}

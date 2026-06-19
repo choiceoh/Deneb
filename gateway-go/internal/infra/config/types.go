@@ -79,17 +79,16 @@ const (
 // Only gateway-relevant sections are fully typed; other sections are preserved
 // as raw JSON for forwarding to the Node.js Plugin Host bridge.
 type DenebConfig struct {
-	Meta        *MetaConfig        `json:"meta,omitempty"`
-	Gateway     *GatewayConfig     `json:"gateway,omitempty"`
-	Logging     *LoggingConfig     `json:"logging,omitempty"`
-	Hooks       *HooksConfig       `json:"hooks,omitempty"`
-	Session     *SessionConfig     `json:"session,omitempty"`
-	Agents      *AgentsConfig      `json:"agents,omitempty"`
-	GmailPoll   *GmailPollConfig   `json:"gmailPoll,omitempty"`
-	MailLMTP    *MailLMTPConfig    `json:"mailLmtp,omitempty"`
-	DropboxPoll *DropboxPollConfig `json:"dropboxPoll,omitempty"`
-	Cron        *CronConfig        `json:"cron,omitempty"`
-	Topics      *TopicsConfig      `json:"topics,omitempty"`
+	Meta      *MetaConfig      `json:"meta,omitempty"`
+	Gateway   *GatewayConfig   `json:"gateway,omitempty"`
+	Logging   *LoggingConfig   `json:"logging,omitempty"`
+	Hooks     *HooksConfig     `json:"hooks,omitempty"`
+	Session   *SessionConfig   `json:"session,omitempty"`
+	Agents    *AgentsConfig    `json:"agents,omitempty"`
+	GmailPoll *GmailPollConfig `json:"gmailPoll,omitempty"`
+	MailLMTP  *MailLMTPConfig  `json:"mailLmtp,omitempty"`
+	Cron      *CronConfig      `json:"cron,omitempty"`
+	Topics    *TopicsConfig    `json:"topics,omitempty"`
 	// Timezone is an optional IANA zone name (e.g. "Asia/Seoul") used by
 	// pkg/dentime for Deneb's zone-aware clock. The DENEB_TIMEZONE env var
 	// still wins; an empty or invalid value falls back to server local.
@@ -286,14 +285,4 @@ type MailLMTPConfig struct {
 	// docker-bridge address (or share a unix socket via a volume) so the
 	// container can reach it; never expose it to the public internet.
 	ListenAddr string `json:"listenAddr,omitempty"`
-}
-
-// DropboxPollConfig configures the periodic Dropbox folder watcher. When
-// enabled, new files in FolderPath trigger an agent turn that analyzes them
-// (dropbox + wiki tools) and reports to the 업무 chat.
-type DropboxPollConfig struct {
-	Enabled     *bool  `json:"enabled,omitempty"`
-	FolderPath  string `json:"folderPath,omitempty"`  // watched folder (default "/Deneb-Inbox")
-	IntervalMin *int   `json:"intervalMin,omitempty"` // poll interval in minutes (default 10)
-	MaxPerCycle *int   `json:"maxPerCycle,omitempty"` // max files per cycle (default 10)
 }

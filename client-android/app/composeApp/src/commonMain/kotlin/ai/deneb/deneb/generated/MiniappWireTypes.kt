@@ -58,37 +58,6 @@ data class CalendarProposalOut(
 
 @Immutable
 @Serializable
-data class DropboxEntryOut(
-    val tag: String = "",
-    val name: String = "",
-    val pathDisplay: String = "",
-    val pathLower: String = "",
-    val id: String = "",
-    val size: Long = 0L,
-    val serverModified: String = "",
-)
-
-@Immutable
-@Serializable
-data class DropboxListOut(
-    val entries: List<DropboxEntryOut> = emptyList(),
-    val path: String = "",
-)
-
-@Immutable
-@Serializable
-data class DropboxShareOut(
-    val url: String = "",
-)
-
-@Immutable
-@Serializable
-data class DropboxUploadOut(
-    val entry: DropboxEntryOut = DropboxEntryOut(),
-)
-
-@Immutable
-@Serializable
 data class FilesEntryOut(
     val tag: String = "",
     val name: String = "",

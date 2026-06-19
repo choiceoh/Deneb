@@ -124,19 +124,10 @@ var requiredMethods = []string{
 	"miniapp.models.delete_custom",
 	"miniapp.models.list",
 	"miniapp.models.set",
-	"miniapp.dropbox.status",
-	"miniapp.dropbox.begin",
-	"miniapp.dropbox.complete",
-	"miniapp.dropbox.list",
-	"miniapp.dropbox.search",
-	"miniapp.dropbox.share",
-	"miniapp.dropbox.upload",
 	"miniapp.files.list",
 	"miniapp.files.search",
 	"miniapp.files.share",
 	"miniapp.files.upload",
-	// miniapp.dropbox.analyze registers via the chat bridge (MiniappMethods,
-	// needs the chat handler) — like miniapp.chat.send, it's omitted here.
 	// miniapp.gmail.analyze and miniapp.gmail.analysis_cached are
 	// conditional on an LLM client being configured
 	// (modelRegistry.Client(RoleMain) returning non-nil) — not in the

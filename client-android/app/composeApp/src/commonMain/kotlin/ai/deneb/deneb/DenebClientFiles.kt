@@ -11,15 +11,14 @@ import kotlin.io.encoding.ExperimentalEncodingApi
 
 /**
  * Local file-store browser surface of [DenebGatewayClient] (`miniapp.files.{list,
- * search,share,upload}`) — powers [DenebFilesScreen]. The local-disk twin of the
- * Dropbox browser ([DenebClientDropbox]): same browser shape over a local backend,
- * so [FilesEntry] mirrors [DropboxEntry] field-for-field. No OAuth, no connect
- * wizard — the store is always available; failures just surface as retry/empty.
+ * search,share,upload}`) — powers [DenebFilesScreen]. The store lives on the
+ * gateway host: no OAuth, no connect wizard — it is always available; failures
+ * just surface as retry/empty.
  *
  * All four are pure RPCs that return null on failure (so the screen shows retry,
  * not a misleading empty folder). share returns a signed, TTL-bounded download
- * link (not a provider link). "Analyze a file" is intentionally absent here — it
- * runs a full agent turn via the chat bridge (mirrors the Dropbox split).
+ * link. "Analyze a file" is intentionally absent here — it runs a full agent
+ * turn via the chat bridge.
  */
 
 /** One local file or folder for the browser UI (decoded from the wire shape). */

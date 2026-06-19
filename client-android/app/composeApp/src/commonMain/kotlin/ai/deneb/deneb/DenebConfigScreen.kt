@@ -22,7 +22,6 @@ import androidx.compose.material.icons.outlined.Dns
 import androidx.compose.material.icons.outlined.Extension
 import androidx.compose.material.icons.outlined.Hub
 import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.Memory
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.Schedule
@@ -129,8 +128,6 @@ fun DenebConfigScreen(
 
             ConfigTab.WORMHOLE -> denebClient?.let { WormholeTab(it) } ?: NotConnectedTab()
 
-            ConfigTab.INTEGRATIONS -> denebClient?.let { IntegrationsTab(it) } ?: NotConnectedTab()
-
             ConfigTab.VERSION -> VersionTab(denebClient)
 
             // FLEET never becomes an in-place detail: its row opens the standalone
@@ -147,7 +144,6 @@ private val configGroups: List<Pair<String, List<ConfigTab>>> = listOf(
     "시스템" to listOf(ConfigTab.GATEWAY, ConfigTab.APPEARANCE, ConfigTab.MODEL),
     "자동화 · 관찰" to listOf(ConfigTab.SKILLS, ConfigTab.SELF_IMPROVEMENT_CODING, ConfigTab.CRON, ConfigTab.PROMPTS, ConfigTab.OBSERVE),
     "라우팅 · 인프라" to listOf(ConfigTab.WORMHOLE, ConfigTab.FLEET),
-    "연동" to listOf(ConfigTab.INTEGRATIONS),
     "정보" to listOf(ConfigTab.VERSION),
 )
 
@@ -207,7 +203,6 @@ private enum class ConfigTab(val label: String, val desc: String, val icon: Imag
     // death) keep pointing at the same section across this change.
     FLEET("플릿", "GPU 노드 상태, 모델 기동/중지, 작업 로그", Icons.Outlined.Storage),
     VERSION("버전", "현재 빌드, 패치노트, 업데이트", Icons.Outlined.Info),
-    INTEGRATIONS("연동", "Dropbox 등 외부 서비스 연결", Icons.Outlined.Link),
     PROMPTS("프롬프트 코너", "자동 분석·도구 프롬프트, 토픽 배경 편집", Icons.Outlined.Article),
     SELF_IMPROVEMENT_CODING("자가개선 코딩", "코딩 수정 후보, 적용 대기열", Icons.Outlined.Code),
 }

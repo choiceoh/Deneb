@@ -333,7 +333,7 @@ func calActionPrep(ctx context.Context, d *toolctx.CalendarDeps, p calParams) st
 		sb.WriteString("\n\n연결된 메일이 없는 일정이야. 제목·참석자·메모로 무엇을 준비할지 정리하고, 관련 메일이 있으면 mail_archive로 찾아 맥락을 보강해줘.")
 	}
 	if len(ev.Docs) > 0 {
-		sb.WriteString(" 위 📎 관련 문서는 dropbox로 파일명을 검색해 열고, 핵심 수치·조건을 요약해.")
+		sb.WriteString(" 위 📎 관련 문서는 files로 파일명을 검색해 열고, 핵심 수치·조건을 요약해.")
 	}
 	return sb.String()
 }

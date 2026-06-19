@@ -155,7 +155,7 @@ func TestDestructiveActionKey(t *testing.T) {
 		{"gmail send is destructive", "gmail", `{"action":"send","to":"a@b.c"}`, true},
 		{"gmail read is not", "gmail", `{"action":"read","id":"1"}`, false},
 		{"gmail inbox is not", "gmail", `{"action":"inbox"}`, false},
-		{"dropbox upload is destructive", "dropbox", `{"action":"upload","path":"/x"}`, true},
+		{"files upload is destructive", "files", `{"action":"upload","path":"/x"}`, true},
 		{"calendar create is destructive", "calendar", `{"action":"create"}`, true},
 		{"wiki search is not", "wiki", `{"action":"search","query":"x"}`, false},
 		{"plain read tool is not", "read", `{"path":"/x"}`, false},

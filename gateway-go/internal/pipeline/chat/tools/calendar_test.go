@@ -519,7 +519,7 @@ func TestCalendar_PrepShowsDocs(t *testing.T) {
 		t.Fatalf("seed: %v", err)
 	}
 	out := callCal(t, &toolctx.CalendarDeps{Local: local}, map[string]any{"action": "prep", "id": ev.ID})
-	if !strings.Contains(out, "관련 문서") || !strings.Contains(out, "ZTT_견적서.pdf") || !strings.Contains(out, "dropbox") {
+	if !strings.Contains(out, "관련 문서") || !strings.Contains(out, "ZTT_견적서.pdf") || !strings.Contains(out, "files") {
 		t.Errorf("prep should surface linked documents:\n%s", out)
 	}
 }
