@@ -81,6 +81,18 @@ func TestSelfImprovementCodingList_PendingCandidates(t *testing.T) {
 		len(candidate.TargetFiles) != 1 {
 		t.Fatalf("unexpected self-improvement coding candidate: %+v", candidate)
 	}
+	if len(candidate.EvidenceKinds) != 3 ||
+		candidate.EvidenceKinds[0] != "evidence" ||
+		candidate.EvidenceKinds[1] != "target_files" ||
+		candidate.EvidenceKinds[2] != "risk" {
+		t.Fatalf("unexpected evidence kinds: %+v", candidate.EvidenceKinds)
+	}
+	if len(candidate.ReviewActions) != 3 ||
+		candidate.ReviewActions[0] != "inspect_target_files" ||
+		candidate.ReviewActions[1] != "run_focused_validation" ||
+		candidate.ReviewActions[2] != "mark_review_status" {
+		t.Fatalf("unexpected review actions: %+v", candidate.ReviewActions)
+	}
 }
 
 func TestSelfImprovementCodingList_StatusFilter(t *testing.T) {

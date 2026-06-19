@@ -24,7 +24,14 @@ func testSkillsDeps() SkillsDeps {
 				{Skill: skills.Skill{
 					Name: "email-analysis", Version: "1.1.0", Source: skills.SourceManaged,
 					FilePath: "/home/u/.deneb/skills/email-analysis/SKILL.md",
-				}},
+				},
+					Frontmatter: skills.ParsedFrontmatter{"homepage": "https://deneb.local/skills/email-analysis"},
+					Metadata: &skills.DenebSkillMetadata{
+						Tags:          []string{"mail", "analysis"},
+						RelatedSkills: []string{"meeting-minutes"},
+						Requires:      &skills.SkillRequires{Bins: []string{"gh"}, Env: []string{"GMAIL_TOKEN"}},
+						Install:       []skills.SkillInstallSpec{{Kind: "brew", Formula: "gh", Label: "Install GitHub CLI"}},
+					}},
 				{Skill: skills.Skill{
 					Name: "morning-letter", Version: "0.1.0", Source: skills.SourceManaged,
 					FilePath: "/home/u/.deneb/skills/genesis/productivity/morning-letter/SKILL.md",
@@ -119,6 +126,13 @@ func TestSkillsList_OriginAndEvolveEnrichment(t *testing.T) {
 	}
 	if ea.TotalUses != 7 || ea.LastUsedAt != 222 {
 		t.Errorf("email-analysis usage = (%d, %d), want (7, 222)", ea.TotalUses, ea.LastUsedAt)
+	}
+	if ea.Homepage != "https://deneb.local/skills/email-analysis" ||
+		len(ea.Tags) != 2 ||
+		len(ea.RelatedSkills) != 1 ||
+		len(ea.DependencySummary) != 2 ||
+		len(ea.InstallSummary) != 1 {
+		t.Errorf("email-analysis metadata not exposed: %+v", ea)
 	}
 	if ea.CuratorState != "" {
 		t.Errorf("initial skill must not carry curator state, got %q", ea.CuratorState)

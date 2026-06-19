@@ -341,6 +341,17 @@ private fun skillFactLines(skill: ai.deneb.deneb.generated.SkillRow): List<Strin
         skillSourceLabel(skill.source).takeIf { it.isNotBlank() },
         skill.version.takeIf { it.isNotBlank() }?.let { "v$it" },
     ).joinToString(" · ")
+    val homepage = skill.homepage.takeIf { it.isNotBlank() }?.let { "홈페이지 $it" }.orEmpty()
+    val tags = skill.tags.takeIf { it.isNotEmpty() }?.joinToString(" · ")?.let { "태그 $it" }.orEmpty()
+    val related = skill.relatedSkills.takeIf { it.isNotEmpty() }?.joinToString(" · ")?.let { "관련 스킬 $it" }.orEmpty()
+    val dependencies = skill.dependencySummary.takeIf { it.isNotEmpty() }
+        ?.joinToString(" · ")
+        ?.let { "요구조건 $it" }
+        .orEmpty()
+    val installs = skill.installSummary.takeIf { it.isNotEmpty() }
+        ?.joinToString(" · ")
+        ?.let { "설치 힌트 $it" }
+        .orEmpty()
     val mutability = when {
         skill.editable && skill.deletable -> "앱에서 수정/삭제 가능"
         skill.editable -> "앱에서 수정 가능"
@@ -359,7 +370,7 @@ private fun skillFactLines(skill: ai.deneb.deneb.generated.SkillRow): List<Strin
         skill.evolveCount.takeIf { it > 0 }?.let { "진화 ${it}회" },
         skill.lastEvolvedAt.takeIf { it > 0 }?.let { "마지막 진화 ${lifecycleTime(it)}" },
     ).joinToString(" · ")
-    return listOf(identity, mutability, genesis, usage, evolve).filter { it.isNotBlank() }
+    return listOf(identity, homepage, tags, related, dependencies, installs, mutability, genesis, usage, evolve).filter { it.isNotBlank() }
 }
 
 /** Curator state for agent-created skills ("상태 활성" 등); null for initial

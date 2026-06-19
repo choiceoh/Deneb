@@ -60,9 +60,12 @@ const skillBodyMaxRunes = 60_000
 //
 //deneb:wire
 type SkillRow struct {
-	Name        string `json:"name"`
-	Description string `json:"description,omitempty"`
-	Category    string `json:"category,omitempty"`
+	Name          string   `json:"name"`
+	Description   string   `json:"description,omitempty"`
+	Category      string   `json:"category,omitempty"`
+	Homepage      string   `json:"homepage,omitempty"`
+	Tags          []string `json:"tags,omitempty"`
+	RelatedSkills []string `json:"relatedSkills,omitempty"`
 	// Source is the discovery origin: managed | workspace |
 	// agents-skills-personal | agents-skills-project | bundled | plugin | extra.
 	Source  string `json:"source,omitempty"`
@@ -86,6 +89,11 @@ type SkillRow struct {
 	// Bundled and plugin skills are visible but protected from native writes.
 	Editable  bool `json:"editable,omitempty"`
 	Deletable bool `json:"deletable,omitempty"`
+	// DependencySummary / InstallSummary expose the metadata.deneb.requires and
+	// metadata.deneb.install hints that decide whether a skill is eligible and
+	// how the operator can satisfy missing host dependencies.
+	DependencySummary []string `json:"dependencySummary,omitempty"`
+	InstallSummary    []string `json:"installSummary,omitempty"`
 }
 
 // SkillsListResponse is the miniapp.skills.list payload.
@@ -251,9 +259,16 @@ func buildSkillRow(
 		Name:        e.Skill.Name,
 		Description: e.Skill.Description,
 		Category:    e.Skill.Category,
+		Homepage:    skillHomepage(e),
 		Source:      string(e.Skill.Source),
 		Version:     e.Skill.Version,
 		Origin:      skillOriginInitial,
+	}
+	if e.Metadata != nil {
+		row.Tags = e.Metadata.Tags
+		row.RelatedSkills = e.Metadata.RelatedSkills
+		row.DependencySummary = skillDependencySummary(e.Metadata)
+		row.InstallSummary = skillInstallSummary(e.Metadata.Install)
 	}
 	row.Editable = skillEntryMutable(e)
 	row.Deletable = row.Editable
@@ -278,6 +293,76 @@ func buildSkillRow(
 		row.LastEvolvedAt = agg.lastAt
 	}
 	return row
+}
+
+func skillHomepage(e skills.SkillEntry) string {
+	if e.Metadata != nil && strings.TrimSpace(e.Metadata.Homepage) != "" {
+		return strings.TrimSpace(e.Metadata.Homepage)
+	}
+	return strings.TrimSpace(e.Frontmatter["homepage"])
+}
+
+func skillDependencySummary(meta *skills.DenebSkillMetadata) []string {
+	if meta == nil {
+		return nil
+	}
+	out := make([]string, 0, 8)
+	if len(meta.RequiresTools) > 0 {
+		out = append(out, "tools "+strings.Join(meta.RequiresTools, ", "))
+	}
+	if len(meta.FallbackForTools) > 0 {
+		out = append(out, "fallback when missing "+strings.Join(meta.FallbackForTools, ", "))
+	}
+	if meta.Requires == nil {
+		return out
+	}
+	req := meta.Requires
+	if len(req.Bins) > 0 {
+		out = append(out, "bins "+strings.Join(req.Bins, ", "))
+	}
+	if len(req.AnyBins) > 0 {
+		out = append(out, "any bin "+strings.Join(req.AnyBins, " / "))
+	}
+	if len(req.Env) > 0 {
+		out = append(out, "env "+strings.Join(req.Env, ", "))
+	}
+	if len(req.Config) > 0 {
+		out = append(out, "config "+strings.Join(req.Config, ", "))
+	}
+	return out
+}
+
+func skillInstallSummary(specs []skills.SkillInstallSpec) []string {
+	out := make([]string, 0, len(specs))
+	for _, spec := range specs {
+		label := strings.TrimSpace(spec.Label)
+		if label == "" {
+			label = skillInstallSpecLabel(spec)
+		}
+		if label != "" {
+			out = append(out, label)
+		}
+	}
+	return out
+}
+
+func skillInstallSpecLabel(spec skills.SkillInstallSpec) string {
+	switch spec.Kind {
+	case "brew":
+		return "brew " + spec.Formula
+	case "apt":
+		return "apt " + spec.Package
+	case "node":
+		return "node " + spec.Package
+	case "go":
+		return "go " + spec.Module
+	case "uv":
+		return "uv " + spec.Package
+	case "download":
+		return "download " + spec.URL
+	default:
+		return ""
+	}
 }
 
 func skillsDetail(deps SkillsDeps) rpcutil.HandlerFunc {

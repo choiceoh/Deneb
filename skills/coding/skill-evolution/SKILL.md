@@ -73,6 +73,9 @@ Rules from autoresearch methodology:
   can still justify an immediate evolve because it carries session-level
   evidence.
 - **Deferred self-correction awareness** — check `selfCorrectionCandidates`; treat them as unapplied hypotheses for batch review, not as permission to mutate immediately
+- **Next-state feedback discipline** — user corrections, PR comments, tests, and
+  deploy checks are external hints. Preserve the evidence and scope in
+  validation cases or self-correction candidates before mutating a skill.
 
 ### Phase 3: Mutate
 

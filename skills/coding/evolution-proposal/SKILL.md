@@ -86,6 +86,21 @@ explicit operator control.
 13. If the task exposed a concrete failure that can be replayed from a stored transcript, record it with `skill_lifecycle` action `validation_case_from_session` before or after evolve; pass `skillName`, `sessionKey`, and a short `description`. Use manual `validation_case` only when the invariant needs extra replay fields (`input`, `requiredActions`, `forbiddenActions`, `expectedToolCalls`, `forbiddenToolCalls`, `requiredObservations`, `forbiddenObservations`, `requireOrder`) that the transcript cannot prove by itself.
 14. If you notice a plausible correction but cannot safely apply and validate it now, record it with `skill_lifecycle` action `self_correction` using `title`, `evidence`, `targetFiles`, `proposedChange`, and `risk`; do not mutate files in that action.
 15. For executed `Genesis`/`Evolve` routes, call `skill_lifecycle` action `status` with `limit: 5` when you need an audit trail.
+
+### Next-State Feedback
+
+Treat user corrections, PR review comments, failed tests, tool errors, and
+post-merge/deploy reality checks as next-state evidence. Convert only the
+actionable part into one of:
+
+- `validation_case_from_session` when the transcript can replay the invariant.
+- `self_correction` when a future coding agent should inspect code, prompts,
+  docs, config, or tests before applying anything.
+- no-op when the signal is preference-only, already covered, or not
+  reproducible.
+
+Do not present this as model training. In Deneb it is an auditable queue:
+external feedback -> structured hint -> batch review -> focused validation.
 16. Report what changed, what was only queued, or why no change was made.
 
 ## Proposal Template

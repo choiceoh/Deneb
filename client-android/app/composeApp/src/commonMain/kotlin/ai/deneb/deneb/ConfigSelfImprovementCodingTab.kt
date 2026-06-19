@@ -225,6 +225,12 @@ private fun SelfImprovementCodingCandidateRow(candidate: SelfCorrectionCandidate
         }
         if (expanded) {
             val detailLines = listOfNotNull(
+                candidate.evidenceKinds.takeIf { it.isNotEmpty() }
+                    ?.joinToString(" · ") { selfImprovementCodingEvidenceLabel(it) }
+                    ?.let { "증거 상태: $it" },
+                candidate.reviewActions.takeIf { it.isNotEmpty() }
+                    ?.joinToString(" · ") { selfImprovementCodingActionLabel(it) }
+                    ?.let { "검토 순서: $it" },
                 candidate.evidence.takeIf { it.isNotBlank() }?.let { "근거: $it" },
                 candidate.risk.takeIf { it.isNotBlank() }?.let { "리스크: $it" },
                 candidate.reason.takeIf { it.isNotBlank() }?.let { "메모: $it" },
@@ -289,6 +295,26 @@ private fun selfImprovementCodingScopeLabel(scope: String): String = when (scope
     "config" -> "설정"
     "test" -> "테스트"
     else -> scope
+}
+
+private fun selfImprovementCodingEvidenceLabel(kind: String): String = when (kind) {
+    "session" -> "세션"
+    "evidence" -> "근거"
+    "target_files" -> "대상 파일"
+    "risk" -> "리스크"
+    "review" -> "리뷰"
+    "needs_evidence" -> "근거 필요"
+    else -> kind
+}
+
+private fun selfImprovementCodingActionLabel(action: String): String = when (action) {
+    "open_session" -> "세션 확인"
+    "inspect_target_files" -> "파일 확인"
+    "add_evidence" -> "근거 보강"
+    "assess_risk" -> "리스크 판단"
+    "run_focused_validation" -> "집중 검증"
+    "mark_review_status" -> "상태 기록"
+    else -> action
 }
 
 private const val selfImprovementCodingDefaultStatus = "proposed"
