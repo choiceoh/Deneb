@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -28,13 +29,22 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.outlined.Archive
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.MailOutline
+import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.painter.Painter
@@ -47,6 +57,7 @@ import deneb.composeapp.generated.resources.ic_file
 import deneb.composeapp.generated.resources.ic_image
 import deneb.composeapp.generated.resources.work_feed_title
 import kotlinx.collections.immutable.ImmutableList
+import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 import kotlin.time.Clock
@@ -218,6 +229,7 @@ internal fun WorkFeedActionSheetContent(
     onRunAction: (String) -> Unit,
     onArchive: () -> Unit,
     onTrash: () -> Unit,
+    onFeedback: () -> Unit,
 ) {
     val title = if (item.title.isBlank()) stringResource(Res.string.work_feed_title) else stripLeadingIcon(item.title)
     val extraActions = item.actions.filter { action ->
@@ -251,8 +263,89 @@ internal fun WorkFeedActionSheetContent(
         extraActions.forEach { action ->
             WorkFeedSheetAction(Icons.Outlined.AutoAwesome, action.label, onOpen = { onRunAction(action.id) })
         }
+        // Teach/correct the agent: wrong fact, something it didn't know, etc. Opens
+        // a text-input sheet; the gateway fixes the durable knowledge + annotates this card.
+        WorkFeedSheetAction(Icons.Outlined.Edit, "정정·피드백", onOpen = onFeedback)
         WorkFeedSheetAction(Icons.Outlined.Archive, archiveLabel, onOpen = onArchive)
         WorkFeedSheetAction(Icons.Outlined.Delete, trashLabel, destructive = true, onOpen = onTrash)
+    }
+}
+
+/**
+ * Feedback input for a work-feed card (long-press → 정정·피드백). The user teaches the
+ * agent — a wrong fact in the analysis, something it didn't know. On send, the
+ * gateway annotates this card with the correction and runs one agent turn to fix
+ * the durable wiki knowledge. Controls stay Material (field + buttons); the send is
+ * fire-and-forget (the parent closes after the brief "sent" confirmation).
+ */
+@Composable
+internal fun WorkFeedFeedbackSheetContent(
+    item: WorkFeedItem,
+    onSubmit: (String) -> Unit,
+    onClose: () -> Unit,
+) {
+    val title = if (item.title.isBlank()) stringResource(Res.string.work_feed_title) else stripLeadingIcon(item.title)
+    var text by remember { mutableStateOf("") }
+    var sent by remember { mutableStateOf(false) }
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .navigationBarsPadding()
+            .padding(horizontal = 24.dp, vertical = 12.dp),
+    ) {
+        Text(
+            "정정·피드백",
+            style = DenebType.subject,
+            color = MaterialTheme.colorScheme.onBackground,
+        )
+        Text(
+            title,
+            style = DenebType.snippet,
+            color = denebHint(),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = 2.dp),
+        )
+        Spacer(Modifier.height(12.dp))
+        if (sent) {
+            Text(
+                "✓ 피드백을 보냈습니다. 관련 지식을 바로잡고 카드에 반영할게요.",
+                style = DenebType.rowTitle,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(vertical = 12.dp),
+            )
+            // Self-dismiss after the user has seen the confirmation.
+            LaunchedEffect(Unit) {
+                delay(1500)
+                onClose()
+            }
+        } else {
+            Text(
+                "이 카드 분석에서 틀렸거나 에이전트가 몰랐던 내용을 알려주세요.",
+                style = DenebType.snippet,
+                color = denebHint(),
+            )
+            Spacer(Modifier.height(10.dp))
+            OutlinedTextField(
+                value = text,
+                onValueChange = { text = it },
+                placeholder = { Text("예: 이 거래처 담당자는 김 부장이 아니라 이서연 차장입니다") },
+                modifier = Modifier.fillMaxWidth().heightIn(min = 104.dp),
+                minLines = 3,
+            )
+            Spacer(Modifier.height(12.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = onClose) { Text("취소") }
+                Spacer(Modifier.width(8.dp))
+                Button(
+                    onClick = {
+                        onSubmit(text.trim())
+                        sent = true
+                    },
+                    enabled = text.isNotBlank(),
+                ) { Text("보내기") }
+            }
+        }
     }
 }
 

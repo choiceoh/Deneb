@@ -75,6 +75,7 @@ class ChatViewModel(
         refreshWorkFeedRange = ::refreshWorkFeedRange,
         consumePendingScroll = ::consumePendingScroll,
         runWorkFeedAction = ::runWorkFeedAction,
+        submitWorkFeedFeedback = ::submitWorkFeedFeedback,
         clearSnackbar = ::clearSnackbar,
         undoDeleteConversation = ::undoDeleteConversation,
         submitUiCallback = ::submitUiCallback,
@@ -502,6 +503,17 @@ class ChatViewModel(
             if (!prompt.isNullOrBlank()) {
                 askInternal(prompt, null)
             }
+        }
+    }
+
+    // Fire-and-forget a card correction from the feed long-press sheet. The gateway
+    // annotates the card and runs one (ephemeral) agent turn to fix the durable wiki
+    // knowledge; the returned annotated item is upserted into the feed by the client.
+    // Runs on viewModelScope so it survives the sheet closing.
+    private fun submitWorkFeedFeedback(itemId: String, feedback: String) {
+        if (itemId.isBlank() || feedback.isBlank()) return
+        viewModelScope.launch(backgroundDispatcher) {
+            (dataRepository as? DenebGatewayClient)?.sendWorkFeedFeedback(itemId, feedback)
         }
     }
 

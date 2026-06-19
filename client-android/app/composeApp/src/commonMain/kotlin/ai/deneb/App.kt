@@ -423,6 +423,7 @@ private fun AppContent(
                                 },
                                 onLoadDateRange = feedState.actions.refreshWorkFeedRange,
                                 onRunAction = feedState.actions.runWorkFeedAction,
+                                onSubmitFeedback = feedState.actions.submitWorkFeedFeedback,
                             )
                         }
                         composable<DenebConfig> {

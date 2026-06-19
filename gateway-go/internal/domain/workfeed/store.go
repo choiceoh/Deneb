@@ -332,6 +332,56 @@ func (s *Store) Ack(id string) (Item, error) {
 	return out, nil
 }
 
+// Correct annotates the card identified by id with a user correction, appending
+// note to the body as a dated "사용자 정정" erratum block and bumping UpdatedAtMs.
+// The card stays in the feed, now visibly carrying the correction so a wrong
+// analysis is never shown unqualified. Applies to every item sharing the id
+// (legacy id twins), mirroring Ack. The durable knowledge fix (wiki) is the
+// caller's separate agent turn; this is only the on-card erratum.
+func (s *Store) Correct(id, note string) (Item, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	id = strings.TrimSpace(id)
+	note = strings.TrimSpace(note)
+	if id == "" {
+		return Item{}, ErrNotFound
+	}
+	items, err := jsonlstore.Load[Item](s.path)
+	if err != nil {
+		return Item{}, err
+	}
+	now := time.Now().UnixMilli()
+	block := formatCorrection(note, now)
+	var out Item
+	found := false
+	for i := range items {
+		items[i] = normalizeExisting(items[i])
+		if items[i].ID == id {
+			if note != "" {
+				items[i].Body = strings.TrimRight(items[i].Body, "\n") + block
+			}
+			items[i].UpdatedAtMs = now
+			out = items[i]
+			found = true
+		}
+	}
+	if !found {
+		return Item{}, ErrNotFound
+	}
+	if err := jsonlstore.Snapshot(s.path, items); err != nil {
+		return Item{}, err
+	}
+	return out, nil
+}
+
+// formatCorrection renders a user correction as a dated block appended to a card
+// body, kept visually distinct from the original analysis by a rule + marker.
+func formatCorrection(note string, atMs int64) string {
+	date := time.UnixMilli(atMs).Format("2006-01-02")
+	return "\n\n---\n\n✏️ **사용자 정정** (" + date + ")\n" + note
+}
+
 func (s *Store) RunAction(itemID, actionID string) (ActionResult, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

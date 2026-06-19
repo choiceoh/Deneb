@@ -65,6 +65,60 @@ func TestStoreAppendListAck(t *testing.T) {
 	}
 }
 
+func TestStoreCorrect(t *testing.T) {
+	store := NewStore(filepath.Join(t.TempDir(), "workfeed.jsonl"))
+
+	if _, err := store.Append(Item{
+		ID:          "c1",
+		Source:      SourceMailReport,
+		Title:       "거래처 분석",
+		Body:        "담당자는 김 부장입니다.",
+		SessionKey:  "client:main",
+		CreatedAtMs: 1_000,
+	}); err != nil {
+		t.Fatalf("append: %v", err)
+	}
+
+	out, err := store.Correct("c1", "담당자는 이서연 차장입니다.")
+	if err != nil {
+		t.Fatalf("correct: %v", err)
+	}
+	// The correction is appended (the original analysis is kept, not replaced) and
+	// carries the erratum marker; UpdatedAtMs is bumped.
+	if !strings.Contains(out.Body, "이서연 차장") {
+		t.Fatalf("corrected body missing note: %q", out.Body)
+	}
+	if !strings.Contains(out.Body, "사용자 정정") {
+		t.Fatalf("corrected body missing marker: %q", out.Body)
+	}
+	if !strings.Contains(out.Body, "담당자는 김 부장입니다.") {
+		t.Fatalf("corrected body dropped the original analysis: %q", out.Body)
+	}
+	if out.UpdatedAtMs == 0 {
+		t.Fatalf("UpdatedAtMs not bumped")
+	}
+
+	// The correction persists across a reload.
+	items, _, err := store.List(10, true)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(items) != 1 || !strings.Contains(items[0].Body, "이서연 차장") {
+		t.Fatalf("persisted body = %+v, want the correction", items)
+	}
+
+	// A blank note finds the card but makes no body change (handler guards blank
+	// feedback anyway; this just must not error or duplicate the block).
+	if _, err := store.Correct("c1", "   "); err != nil {
+		t.Fatalf("blank-note correct: %v", err)
+	}
+
+	// Correcting a missing card reports not-found.
+	if _, err := store.Correct("missing", "x"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("correct missing = %v, want ErrNotFound", err)
+	}
+}
+
 func TestStoreListRangeFiltersBeforeLimit(t *testing.T) {
 	store := NewStore(filepath.Join(t.TempDir(), "workfeed.jsonl"))
 	for i := 0; i < 5; i++ {

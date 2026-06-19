@@ -28,6 +28,8 @@ data class ChatActions(
     // Clears ChatUiState.pendingScrollToMessageId after the chat list lands on it.
     val consumePendingScroll: () -> Unit,
     val runWorkFeedAction: (String, String) -> Unit,
+    // Long-press a feed card → 정정·피드백: teach/correct the agent. (itemId, feedback)
+    val submitWorkFeedFeedback: (String, String) -> Unit,
     val clearSnackbar: () -> Unit,
     val undoDeleteConversation: () -> Unit,
     val submitUiCallback: (event: String, data: Map<String, String>) -> Unit,
