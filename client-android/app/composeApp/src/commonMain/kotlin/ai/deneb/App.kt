@@ -20,6 +20,7 @@ import ai.deneb.deneb.DenebGatewayClient
 import ai.deneb.deneb.DenebMailDetailScreen
 import ai.deneb.deneb.DenebMailScreen
 import ai.deneb.deneb.DenebMoreScreen
+import ai.deneb.deneb.DenebNotebooksScreen
 import ai.deneb.deneb.DenebPeopleScreen
 import ai.deneb.deneb.DenebPersonScreen
 import ai.deneb.deneb.DenebSearchScreen
