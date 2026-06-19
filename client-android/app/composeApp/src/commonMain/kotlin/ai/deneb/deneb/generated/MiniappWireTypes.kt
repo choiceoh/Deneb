@@ -339,6 +339,44 @@ data class ModelsListResult(
 
 @Immutable
 @Serializable
+data class NotebookListOut(
+    val notebooks: List<NotebookSummaryOut> = emptyList(),
+)
+
+@Immutable
+@Serializable
+data class NotebookOut(
+    val id: String = "",
+    val name: String = "",
+    val description: String = "",
+    val dealRef: String = "",
+    val sources: List<NotebookSourceOut> = emptyList(),
+    val updated: Long = 0L,
+)
+
+@Immutable
+@Serializable
+data class NotebookSourceOut(
+    val cite: String = "",
+    val kind: String = "",
+    val ref: String = "",
+    val title: String = "",
+    val text: String = "",
+)
+
+@Immutable
+@Serializable
+data class NotebookSummaryOut(
+    val id: String = "",
+    val name: String = "",
+    val description: String = "",
+    val dealRef: String = "",
+    val sourceCount: Int = 0,
+    val updated: Long = 0L,
+)
+
+@Immutable
+@Serializable
 data class PersonRow(
     val email: String = "",
     val name: String = "",
