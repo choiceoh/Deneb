@@ -57,9 +57,10 @@ import androidx.compose.ui.unit.dp
  * this screen.
  *
  * The per-topic knowledge doc (workspace/topics/&lt;key&gt;.md, injected into the
- * system prompt) has no section on purpose: it is edited by asking the agent in
- * chat — the injected prompt block carries its source path (gateway
- * system_prompt.go).
+ * system prompt) has no section of its own: it is edited inside the 프롬프트 코너
+ * ([PromptsTab]), which reuses its prompt editor for that one file-backed doc via
+ * miniapp.topicdocs.* (the topic is .md-backed, not prompt-override-JSON backed, so
+ * it cannot be a prompts-store entry without breaking injection).
  *
  * People browsing is NOT a section here: it is a content destination with its
  * own drawer entry + full screen (DenebPeopleScreen), like mail and calendar.
@@ -207,6 +208,6 @@ private enum class ConfigTab(val label: String, val desc: String, val icon: Imag
     FLEET("플릿", "GPU 노드 상태, 모델 기동/중지, 작업 로그", Icons.Outlined.Storage),
     VERSION("버전", "현재 빌드, 패치노트, 업데이트", Icons.Outlined.Info),
     INTEGRATIONS("연동", "Dropbox 등 외부 서비스 연결", Icons.Outlined.Link),
-    PROMPTS("프롬프트 코너", "자동 분석·도구 프롬프트 편집", Icons.Outlined.Article),
+    PROMPTS("프롬프트 코너", "자동 분석·도구 프롬프트, 토픽 배경 편집", Icons.Outlined.Article),
     SELF_IMPROVEMENT_CODING("자가개선 코딩", "코딩 수정 후보, 적용 대기열", Icons.Outlined.Code),
 }

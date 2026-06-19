@@ -17,6 +17,7 @@ import ai.deneb.deneb.DropboxNotConnected
 import ai.deneb.deneb.IntervalUnit
 import ai.deneb.deneb.MailMessage
 import ai.deneb.deneb.MailRow
+import ai.deneb.deneb.PromptStyleEditor
 import ai.deneb.deneb.SchedMode
 import ai.deneb.deneb.ScheduleDraft
 import ai.deneb.deneb.SelfImprovementCodingContent
@@ -77,12 +78,16 @@ import androidx.compose.material.icons.outlined.Dns
 import androidx.compose.material.icons.outlined.Extension
 import androidx.compose.material.icons.outlined.Memory
 import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.material.icons.outlined.Restore
+import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.ui.Alignment
@@ -166,6 +171,10 @@ fun main() {
     renderCronEdit("cron_edit_light.png", LightColorScheme, cronWeeklyDraft, "Asia/Seoul")
     renderCronEdit("cron_edit_interval.png", DarkColorScheme, cronIntervalDraft, "")
     renderCronEdit("cron_edit_advanced.png", DarkColorScheme, cronAdvancedDraft, "Asia/Seoul")
+    renderPromptEditor("prompt_editor_dark.png", DarkColorScheme)
+    renderPromptEditor("prompt_editor_light.png", LightColorScheme)
+    renderTopicDocEditor("topic_doc_editor_dark.png", DarkColorScheme)
+    renderTopicDocEditor("topic_doc_editor_light.png", LightColorScheme)
     renderChart("chart_dark.png", DarkColorScheme)
     renderChart("chart_light.png", LightColorScheme)
     renderWorkFeed("workfeed_dark.png", DarkColorScheme)
@@ -574,6 +583,93 @@ private fun renderCronEdit(name: String, scheme: ColorScheme, draft: ScheduleDra
                         onSave = {},
                     )
                 }
+            }
+        }
+    }
+    val image = scene.render()
+    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
+    File("/tmp/deneb-render").mkdirs()
+    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
+    scene.close()
+}
+
+// Validates the prompts-corner editor (PromptStyleEditor) in its prompt form: header
+// (back + title + meta), description, monospace body, footer char count, and the
+// prompt-only trailing "복구" (reset-to-default) action beside save.
+private fun renderPromptEditor(name: String, scheme: ColorScheme) {
+    val body = """
+        다음 메일을 한국어로 심층 분석하라.
+        - 발신자/거래처 맥락을 위키에서 결합
+        - 마감·금액·의사결정 신호를 추출
+        - 중요도(긴급/주의/일반)로 분류
+    """.trimIndent()
+    val scene = ImageComposeScene(width = 824, height = 980, density = Density(2f)) {
+        MaterialTheme(colorScheme = scheme) {
+            DenebScreenScaffold(title = "프롬프트 코너", onBack = {}) {
+                PromptStyleEditor(
+                    title = "자동 메일 분석",
+                    meta = "productivity · 수정됨 · mail-analysis",
+                    description = "새 메일 도착 시 자동 분석에 쓰이는 프롬프트입니다.",
+                    draft = body,
+                    onDraft = {},
+                    readOnly = false,
+                    saving = false,
+                    error = null,
+                    notice = "저장됨",
+                    onBack = {},
+                    canSave = true,
+                    onSave = {},
+                    trailingActions = {
+                        OutlinedButton(onClick = {}, enabled = true) {
+                            Icon(Icons.Outlined.Restore, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("복구")
+                        }
+                    },
+                )
+            }
+        }
+    }
+    val image = scene.render()
+    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
+    File("/tmp/deneb-render").mkdirs()
+    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
+    scene.close()
+}
+
+// Validates the same editor in its topic-background form: the byte-cap meta line and
+// the "즉시 적용" (apply-now) checkbox as the trailing action instead of 복구.
+private fun renderTopicDocEditor(name: String, scheme: ColorScheme) {
+    val body = """
+        # 탑솔라 업무 배경
+
+        - 사업: 태양광 EPC · 모듈 유통 · RE100 고객사
+        - 핵심 거래처: 남도에코에너지, 에코프로, JOCA Cable
+        - 의사결정: 견적 단가·납기는 김민준 부장 확인 후 회신
+    """.trimIndent()
+    val scene = ImageComposeScene(width = 824, height = 980, density = Density(2f)) {
+        MaterialTheme(colorScheme = scheme) {
+            DenebScreenScaffold(title = "프롬프트 코너", onBack = {}) {
+                PromptStyleEditor(
+                    title = "업무.md",
+                    meta = "업무 · ${body.encodeToByteArray().size}/24000B",
+                    description = "시스템 프롬프트에 주입되는 이 토픽의 배경 지식입니다. 저장하면 다음 세션부터 반영됩니다.",
+                    draft = body,
+                    onDraft = {},
+                    readOnly = false,
+                    saving = false,
+                    error = null,
+                    notice = "저장됨 · 다음 세션부터 반영",
+                    onBack = {},
+                    canSave = true,
+                    onSave = {},
+                    trailingActions = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(checked = true, onCheckedChange = {}, enabled = true)
+                            Text("즉시 적용", style = DenebType.meta, color = denebHint())
+                        }
+                    },
+                )
             }
         }
     }

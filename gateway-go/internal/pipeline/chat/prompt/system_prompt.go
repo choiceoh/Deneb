@@ -119,7 +119,7 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 			s.WriteString("## 토픽 배경지식\n")
 			s.WriteString("현재 대화 토픽에 대한 배경지식이다. 이 토픽의 작업·질문에 이 지식을 우선 활용하라.\n")
 			if params.TopicKnowledgePath != "" {
-				s.WriteString("원본 파일: `" + params.TopicKnowledgePath + "` — 사용자가 이 배경지식의 추가·수정을 요청하면 이 파일을 직접 편집하라 (반영은 다음 세션부터; 별도 편집 UI는 없다).\n")
+				s.WriteString("원본 파일: `" + params.TopicKnowledgePath + "` — 사용자가 이 배경지식의 추가·수정을 요청하면 이 파일을 직접 편집하라 (채팅 편집의 반영은 다음 세션부터). 설정의 편집 표면으로도 같은 파일을 직접 수정할 수 있다.\n")
 			}
 			s.WriteString("\n")
 			s.WriteString(strings.TrimSpace(params.TopicKnowledge))

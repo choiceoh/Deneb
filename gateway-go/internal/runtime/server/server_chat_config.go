@@ -876,3 +876,40 @@ func resolveWorkspaceDir() string {
 func resolveDenebDir() string {
 	return config.ResolveStateDir()
 }
+
+// resolveTopicsDir resolves the absolute "<workspace>/<topics.dir>" directory
+// holding the per-topic <key>.md knowledge files, mirroring the path logic in
+// prompt.loadTopicKnowledgeFromDisk: an empty topics.dir defaults to "topics",
+// a relative dir resolves against the agent workspace, an absolute dir is used
+// as-is. Returns "" when topics are unconfigured so the topicdocs handler
+// registers conditionally (no editor surface). Read per call (not snapshotted)
+// so a config change takes effect without a restart — this is the editor path,
+// not a per-turn hot path, so the prompt-cache Rule C reload concern does not
+// apply here.
+func resolveTopicsDir() string {
+	snap, err := config.LoadConfigFromDefaultPath()
+	if err != nil || snap == nil || snap.Config.Topics == nil {
+		return ""
+	}
+	dir := strings.TrimSpace(snap.Config.Topics.Dir)
+	if dir == "" {
+		dir = "topics"
+	}
+	if !filepath.IsAbs(dir) {
+		dir = filepath.Join(resolveWorkspaceDir(), dir)
+	}
+	return dir
+}
+
+// resolveCurrentTopicKey resolves the topic key for the native client / the
+// threadId-less default delivery, which both normalize to the "0" source ID
+// (see topicResolver.TopicKey). Returns "" when topics are unconfigured or the
+// map has no "0" entry — exactly the cases where no topic knowledge injects, so
+// the editor stays unavailable instead of editing a file no session reads.
+func resolveCurrentTopicKey() string {
+	snap, err := config.LoadConfigFromDefaultPath()
+	if err != nil || snap == nil || snap.Config.Topics == nil {
+		return ""
+	}
+	return strings.TrimSpace(snap.Config.Topics.Map["0"])
+}

@@ -186,7 +186,7 @@ func TestTopicKnowledgeOnlyInStaticBlock(t *testing.T) {
 		t.Errorf("topic knowledge missing from STATIC block — not delivered to model")
 	}
 	if !strings.Contains(staticText, pathMarker) {
-		t.Errorf("topic knowledge source path missing from STATIC block — the agent cannot locate the doc to edit it (the chat agent is the only edit surface)")
+		t.Errorf("topic knowledge source path missing from STATIC block — the agent cannot locate the doc to edit it on request (chat edit + the Settings topicdocs editor both target this path)")
 	}
 	if strings.Contains(semiStaticText, marker) {
 		t.Errorf("topic knowledge leaked into SEMI-STATIC block")
