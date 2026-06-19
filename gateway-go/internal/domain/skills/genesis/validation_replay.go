@@ -12,12 +12,23 @@ type skillReplayTrace struct {
 }
 
 func scoreSkillReplayCase(body string, tc SkillValidationCaseRecord) validationCaseScore {
+	if !tc.Replay.hasAssertions() {
+		return validationCaseScore{}
+	}
+	return scoreReplayAgainstTrace(buildSkillReplayTrace(body, tc.Replay), tc)
+}
+
+// scoreReplayAgainstTrace scores a replay case against an already-built trace.
+// The trace may be derived from the static skill body (deterministic selector
+// gate) or from a model-emitted tool-call plan (execution-grounded behavioral
+// gate). The assertion matching is identical either way, so the behavioral
+// executor reuses every hasTool / hasToolCall / order check below.
+func scoreReplayAgainstTrace(trace skillReplayTrace, tc SkillValidationCaseRecord) validationCaseScore {
 	replay := tc.Replay
 	if !replay.hasAssertions() {
 		return validationCaseScore{}
 	}
 	label := validationCaseLabel(tc)
-	trace := buildSkillReplayTrace(body, replay)
 	var score validationCaseScore
 	for _, action := range replay.RequiredActions {
 		score.Total++

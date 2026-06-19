@@ -137,6 +137,17 @@ func (e *Evolver) SetTeacher(client *llm.Client, model string) {
 	e.teacherModel = strings.TrimSpace(model)
 }
 
+// SetReplayExecutor wires the behavioral-replay executor model used by the
+// held-out validation engine to score a candidate rewrite's tool-call behavior
+// (SkillValidationEngine.EvaluateBehavior). Safe to call with nil (disables the
+// behavioral gate). The engine guards the executor with its own lock, so this
+// does not take configMu.
+func (e *Evolver) SetReplayExecutor(client *llm.Client, model string) {
+	if e.validationEngine != nil {
+		e.validationEngine.SetExecutor(client, model)
+	}
+}
+
 // SetThinkingKwargs wires per-model chat_template_kwargs thinking toggles so the
 // evolver's judge/teacher/rewrite calls truly disable reasoning on dual-mode
 // vLLM models (the only effective control on e.g. deepseek-v4). Keyed by bare
@@ -423,6 +434,29 @@ func (e *Evolver) parseAndApply(ctx context.Context, text string, entry *skills.
 	}
 	committedDescription := strings.TrimSpace(resp.Changes.Description)
 	committedAudit := audit
+
+	// Execution-grounded behavioral gate (do-no-harm safety net). Replays the
+	// candidate vs the original through the executor model on stored replay
+	// cases and rejects a candidate that regresses the proven tool-call
+	// behavior. Orthogonal to the self-test/judge below, so it runs in both
+	// modes. Fail-open: disabled, no cases, or executor error never blocks.
+	if behavior, berr := e.validationEngine.EvaluateBehavior(ctx, entry.Skill.Name, skillBodyOnly(originalContent), candidateBody); berr != nil {
+		e.logger.Warn("evolver: behavioral replay unavailable, skipping gate",
+			"skill", entry.Skill.Name, "error", berr)
+	} else if behavior.Evaluated && !behavior.Pass {
+		if e.tracker != nil {
+			if logErr := e.tracker.LogEvolveRejectedWithAudit(entry.Skill.Name, behavior.Reason, audit); logErr != nil {
+				e.logger.Warn("evolver: lifecycle log write failed",
+					"skill", entry.Skill.Name, "error", logErr)
+			}
+		}
+		e.recordRejectedSkillEdit(entry.Skill.Name, candidateBody, behavior.Reason, "behavioral-replay", audit)
+		return &EvolveResult{
+			SkillName: entry.Skill.Name,
+			Evolved:   false,
+			Reason:    "behavioral replay rejected: " + behavior.Reason,
+		}, nil
+	}
 
 	// Deterministic selector gates are not optional: even when LLM self-testing
 	// is disabled for cost/latency, candidates must still obey bounded edit and
