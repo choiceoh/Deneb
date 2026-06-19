@@ -5,6 +5,20 @@ import (
 	"net/http/pprof"
 )
 
+func (s *Server) protectPprof(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Keep local diagnosis friction-free, but require the operator client
+		// token for any off-host access so a LAN/tailnet bind does not expose
+		// raw profiles, goroutine dumps, or stack traces anonymously.
+		if !isLoopbackRemote(r.RemoteAddr) {
+			if _, ok := s.authenticateMiniappRequest(w, r); !ok {
+				return
+			}
+		}
+		next(w, r)
+	}
+}
+
 // buildMux configures HTTP routing for health, RPC/WS, API, hooks, and plugin routes.
 func (s *Server) buildMux() *http.ServeMux {
 	mux := http.NewServeMux()
@@ -32,11 +46,11 @@ func (s *Server) buildMux() *http.ServeMux {
 	// production; these endpoints are never reachable from outside the host.
 	// Visit /debug/pprof/goroutine?debug=2 when the gateway appears hung —
 	// it returns a full stack dump without killing the process.
-	mux.HandleFunc("/debug/pprof/", pprof.Index)
-	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
-	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
-	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
-	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+	mux.HandleFunc("/debug/pprof/", s.protectPprof(pprof.Index))
+	mux.HandleFunc("/debug/pprof/cmdline", s.protectPprof(pprof.Cmdline))
+	mux.HandleFunc("/debug/pprof/profile", s.protectPprof(pprof.Profile))
+	mux.HandleFunc("/debug/pprof/symbol", s.protectPprof(pprof.Symbol))
+	mux.HandleFunc("/debug/pprof/trace", s.protectPprof(pprof.Trace))
 
 	// Explicit method-not-allowed for health/ready endpoints.
 	// Without these, non-GET requests fall through to the catch-all "/" handler

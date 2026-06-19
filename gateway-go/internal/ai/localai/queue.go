@@ -43,12 +43,18 @@ func (q *requestQueue) Close() {
 	q.cond.Broadcast()
 }
 
-// Push adds an entry and signals the dispatcher.
-func (q *requestQueue) Push(e *queueEntry) {
+// Push adds an entry and signals the dispatcher. Returns false when the queue
+// is already closed so callers can fail fast instead of waiting forever on an
+// entry that will never be dispatched.
+func (q *requestQueue) Push(e *queueEntry) bool {
 	q.mu.Lock()
+	defer q.mu.Unlock()
+	if q.closed {
+		return false
+	}
 	heap.Push(&q.h, e)
-	q.mu.Unlock()
 	q.cond.Signal()
+	return true
 }
 
 // PopWait blocks until an entry is available or the queue is closed.

@@ -264,7 +264,10 @@ func (h *Hub) Submit(ctx context.Context, req Request) (Response, error) {
 		resultCh:   ch,
 		enqueuedAt: time.Now(),
 	}
-	h.queue.Push(entry)
+	if !h.queue.Push(entry) {
+		h.Stats.Failed.Add(1)
+		return Response{}, ErrHubShutdown
+	}
 
 	// Drop oldest background if over depth.
 	if h.queue.Len() > h.cfg.MaxQueueDepth {

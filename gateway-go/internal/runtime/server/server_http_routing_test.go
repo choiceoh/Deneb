@@ -52,3 +52,39 @@ func TestBuildMux_RegistersExpectedRoutes(t *testing.T) {
 // well-formed JSON response with the expected fields and values.
 
 // TestHandleRoot_ContentType verifies that root handler sets JSON content type.
+
+func TestBuildMux_PprofRequiresClientTokenOffHost(t *testing.T) {
+	token := withClientToken(t)
+	srv := newTestServer(t)
+	mux := srv.buildMux()
+
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/debug/pprof/", nil)
+	req.RemoteAddr = "100.64.0.8:5555"
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("missing token: got %d want %d", w.Code, http.StatusUnauthorized)
+	}
+
+	req = httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/debug/pprof/", nil)
+	req.RemoteAddr = "100.64.0.8:5555"
+	req.Header.Set("X-Deneb-Client-Token", token)
+	w = httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("valid token: got %d want %d (body: %s)", w.Code, http.StatusOK, w.Body.String())
+	}
+}
+
+func TestBuildMux_PprofAllowsLoopbackWithoutToken(t *testing.T) {
+	srv := newTestServer(t)
+	mux := srv.buildMux()
+
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/debug/pprof/", nil)
+	req.RemoteAddr = "127.0.0.1:5555"
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("loopback pprof: got %d want %d", w.Code, http.StatusOK)
+	}
+}

@@ -74,8 +74,12 @@ func TestPriorityQueue(t *testing.T) {
 		enqueuedAt: time.Now().Add(time.Second), // enqueued later
 	}
 
-	q.Push(bg)
-	q.Push(crit)
+	if !q.Push(bg) {
+		t.Fatal("background push rejected")
+	}
+	if !q.Push(crit) {
+		t.Fatal("critical push rejected")
+	}
 
 	// Critical should come out first despite being enqueued later.
 	done := make(chan struct{})
@@ -106,9 +110,15 @@ func TestQueueDropOldestBackground(t *testing.T) {
 		resultCh:   make(chan submitResult, 1),
 		enqueuedAt: time.Now().Add(time.Second),
 	}
-	q.Push(normal)
-	q.Push(bg1)
-	q.Push(bg2)
+	if !q.Push(normal) {
+		t.Fatal("normal push rejected")
+	}
+	if !q.Push(bg1) {
+		t.Fatal("background push rejected")
+	}
+	if !q.Push(bg2) {
+		t.Fatal("background push rejected")
+	}
 
 	// Drop with max depth 2. Should drop bg1 (oldest background).
 	dropped := q.DropOldestBackground(2)
@@ -243,4 +253,26 @@ func TestSubmit_UnhealthyRejectsBackground(t *testing.T) {
 	}
 
 	h.cancel()
+}
+
+func TestSubmit_AfterShutdownReturnsErrHubShutdown(t *testing.T) {
+	cfg := Config{}
+	h := &Hub{
+		cfg:   cfg.withDefaults(),
+		queue: newRequestQueue(),
+		cache: newResponseCache(0, 0),
+		Stats: &HubStats{},
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	h.ctx = ctx
+	h.cancel = cancel
+	h.budgetCond = sync.NewCond(&h.budgetMu)
+
+	h.Shutdown()
+
+	req := SimpleRequest("sys", "test", 100, PriorityCritical, "test")
+	_, err := h.Submit(context.Background(), req)
+	if !errors.Is(err, ErrHubShutdown) {
+		t.Fatalf("got %v, want ErrHubShutdown", err)
+	}
 }
