@@ -22,6 +22,9 @@ type WikiDeps = toolctx.WikiDeps
 // ContactsDeps holds dependencies for the contacts address-book tool.
 type ContactsDeps = toolctx.ContactsDeps
 
+// NotebookDeps holds dependencies for the notebook tool.
+type NotebookDeps = toolctx.NotebookDeps
+
 // CalendarDeps holds dependencies for the calendar tool.
 type CalendarDeps = toolctx.CalendarDeps
 

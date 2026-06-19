@@ -1039,6 +1039,65 @@ func wikiToolSchema() map[string]any {
 	}
 }
 
+func notebookToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"action": map[string]any{
+				"type":        "string",
+				"description": "create: 노트북 생성. for_deal: 딜/프로젝트의 노트북 보기(없으면 생성, deal_ref). pin_to_deal: 딜 노트북에 자료 한 번에 저장(없으면 생성; deal_ref+kind+ref/text). list: 노트북 목록. show: 핀된 자료 보기(id 또는 deal_ref). add_source: 자료 핀. remove_source: 자료 제거. delete: 노트북 삭제. brief: 핀된 자료에만 근거한 인용([S1]) 포함 브리핑 데이터 생성(모델이 종합; id 또는 deal_ref).",
+				"enum":        []string{"create", "for_deal", "pin_to_deal", "list", "show", "add_source", "remove_source", "delete", "brief"},
+			},
+			"deal_name": map[string]any{
+				"type":        "string",
+				"description": "딜 노트북 자동 생성 시 이름 (for_deal/pin_to_deal, 선택; 미지정 시 deal_ref 사용).",
+			},
+			"deal_ref": map[string]any{
+				"type":        "string",
+				"description": "딜/프로젝트 식별자 (for_deal/pin_to_deal, 또는 show/brief에서 id 대신). 메일 딜 추출·위키 딜 페이지와 같은 ref를 쓰면 raw 증거(노트북)와 정제 사실(위키)이 한 딜로 묶인다.",
+			},
+			"description": map[string]any{
+				"type":        "string",
+				"description": "노트북 설명 (create, 선택).",
+			},
+			"focus": map[string]any{
+				"type":        "string",
+				"description": "브리핑 초점 (brief, 선택) — 예: '계약 조건과 리스크 위주로'.",
+			},
+			"id": map[string]any{
+				"type":        "string",
+				"description": "노트북 id (show/add_source/remove_source/delete/brief).",
+			},
+			"kind": map[string]any{
+				"type":        "string",
+				"description": "자료 유형 (add_source): wiki=위키 페이지(ref에 경로, brief 시 현행 내용을 라이브로 읽음), note=붙여넣기 텍스트(text에 내용).",
+				"enum":        []string{"wiki", "note"},
+			},
+			"name": map[string]any{
+				"type":        "string",
+				"description": "노트북 이름 (create) — 예: '탑솔라 딜'.",
+			},
+			"ref": map[string]any{
+				"type":        "string",
+				"description": "위키 페이지 경로 (kind=wiki) — 예: '프로젝트/topsolar.md' 또는 'w:프로젝트/topsolar'.",
+			},
+			"source": map[string]any{
+				"type":        "string",
+				"description": "제거할 자료의 인용 태그 (remove_source) — 예: 'S2'.",
+			},
+			"text": map[string]any{
+				"type":        "string",
+				"description": "자료 본문 (kind=note) — 메일 본문·견적·회의 메모 등 붙여넣기 텍스트.",
+			},
+			"title": map[string]any{
+				"type":        "string",
+				"description": "자료 표시 이름 (add_source, 선택; wiki는 미지정 시 페이지 제목 자동).",
+			},
+		},
+		"required": []string{"action"},
+	}
+}
+
 func contactsToolSchema() map[string]any {
 	return map[string]any{
 		"type": "object",
@@ -1553,6 +1612,7 @@ func ToolMaxOutputs() map[string]int {
 		"calendar": 8000,
 		"contacts": 8000,
 		"exec":     32000,
+		"notebook": 24000,
 		"wiki":     20000,
 	}
 }

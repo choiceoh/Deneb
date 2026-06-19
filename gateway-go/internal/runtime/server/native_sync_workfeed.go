@@ -61,6 +61,15 @@ func (s *nativeWorkFeedStore) Correct(id, note string) (workfeed.Item, error) {
 	return item, nil
 }
 
+func (s *nativeWorkFeedStore) Rewrite(id, newBody string) (workfeed.Item, error) {
+	item, err := s.store.Rewrite(id, newBody)
+	if err != nil {
+		return workfeed.Item{}, err
+	}
+	s.record(nativesync.WorkFeedUpdated(item))
+	return item, nil
+}
+
 func (s *nativeWorkFeedStore) RunAction(itemID, actionID string) (workfeed.ActionResult, error) {
 	result, err := s.store.RunAction(itemID, actionID)
 	if err != nil {

@@ -114,7 +114,7 @@ func TestMutationFailureError_StripsBanner(t *testing.T) {
 
 func TestMutationVerifyTools_Deterministic(t *testing.T) {
 	got := mutationVerifyTools()
-	want := []string{"cron", "gateway", "gmail", "wiki"}
+	want := []string{"cron", "gateway", "gmail", "notebook", "wiki"}
 	if len(got) != len(want) {
 		t.Fatalf("got %v, want %v", got, want)
 	}

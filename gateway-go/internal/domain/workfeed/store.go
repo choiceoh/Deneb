@@ -382,6 +382,48 @@ func formatCorrection(note string, atMs int64) string {
 	return "\n\n---\n\n✏️ **사용자 정정** (" + date + ")\n" + note
 }
 
+// Rewrite replaces the body of the card identified by id with newBody (a freshly
+// regenerated analysis), re-derives the glance priority from the new content, and
+// bumps UpdatedAtMs. Title and summary are left intact so the row preview stays
+// stable; the regenerated analysis shows when the card is expanded. Applies to
+// every item sharing the id (legacy twins), mirroring Ack/Correct. The native
+// "다시 작성" path: the agent rewrites the analysis and the result lands here. A
+// blank newBody is rejected so a failed regeneration never wipes the card.
+func (s *Store) Rewrite(id, newBody string) (Item, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	id = strings.TrimSpace(id)
+	newBody = strings.TrimSpace(newBody)
+	if id == "" || newBody == "" {
+		return Item{}, ErrNotFound
+	}
+	items, err := jsonlstore.Load[Item](s.path)
+	if err != nil {
+		return Item{}, err
+	}
+	now := time.Now().UnixMilli()
+	var out Item
+	found := false
+	for i := range items {
+		items[i] = normalizeExisting(items[i])
+		if items[i].ID == id {
+			items[i].Body = newBody
+			items[i].Priority = inferPriority(items[i])
+			items[i].UpdatedAtMs = now
+			out = items[i]
+			found = true
+		}
+	}
+	if !found {
+		return Item{}, ErrNotFound
+	}
+	if err := jsonlstore.Snapshot(s.path, items); err != nil {
+		return Item{}, err
+	}
+	return out, nil
+}
+
 func (s *Store) RunAction(itemID, actionID string) (ActionResult, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

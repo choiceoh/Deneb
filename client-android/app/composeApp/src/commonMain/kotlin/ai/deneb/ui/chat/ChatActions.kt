@@ -30,6 +30,8 @@ data class ChatActions(
     val runWorkFeedAction: (String, String) -> Unit,
     // Long-press a feed card → 정정·피드백: teach/correct the agent. (itemId, feedback)
     val submitWorkFeedFeedback: (String, String) -> Unit,
+    // Long-press a feed card → 다시 작성: regenerate the card's analysis in place. (itemId)
+    val rewriteWorkFeedCard: (String) -> Unit,
     val clearSnackbar: () -> Unit,
     val undoDeleteConversation: () -> Unit,
     val submitUiCallback: (event: String, data: Map<String, String>) -> Unit,

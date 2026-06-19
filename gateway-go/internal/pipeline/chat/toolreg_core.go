@@ -20,6 +20,10 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 	// Wiki knowledge base tools (always active when wiki is configured).
 	toolreg.RegisterWikiTools(registry, &deps.Wiki, deps.WorkspaceDir)
 
+	// Notebook: NotebookLM-style scoped source collections for grounded, cited
+	// synthesis (딜/프로젝트 브리핑). Active when the notebook store is wired.
+	toolreg.RegisterNotebookTool(registry, &deps.Notebook)
+
 	// Contacts address-book lookup (phone lookup + name/company search).
 	// Active when the contacts store is wired (native-client contacts sync).
 	toolreg.RegisterContactsTool(registry, &deps.Contacts)
