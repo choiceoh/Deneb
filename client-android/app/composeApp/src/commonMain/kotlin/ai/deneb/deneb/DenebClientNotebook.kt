@@ -21,9 +21,7 @@ suspend fun DenebGatewayClient.fetchNotebooks(): List<NotebookSummaryOut>? {
 }
 
 /** One notebook with its pinned sources, by id. Null on miss/failure. */
-suspend fun DenebGatewayClient.fetchNotebook(id: String): NotebookOut? {
-    return callRpc<NotebookOut>(
-        "miniapp.notebook.get",
-        buildJsonObject { put("id", id) },
-    )
-}
+suspend fun DenebGatewayClient.fetchNotebook(id: String): NotebookOut? = callRpc<NotebookOut>(
+    "miniapp.notebook.get",
+    buildJsonObject { put("id", id) },
+)
