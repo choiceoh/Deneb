@@ -3,6 +3,7 @@ package server
 import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/nativesync"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/notebook"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
 )
@@ -14,6 +15,7 @@ import (
 // Embedded in Server so fields are promoted and existing access patterns are unchanged.
 type MemorySubsystem struct {
 	wikiStore       *wiki.Store       // set during initMemorySubsystem()
+	notebookStore   *notebook.Store   // set during initToolsAndDeps(); deal-anchored source collections
 	contactsStore   *contacts.Store   // set during registerEarlyMethods()
 	workFeedStore   *workfeed.Store   // set during registerEarlyMethods()
 	nativeSyncStore *nativesync.Store // set during registerEarlyMethods()

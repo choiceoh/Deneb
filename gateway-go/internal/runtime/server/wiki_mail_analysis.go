@@ -10,10 +10,12 @@ package server
 
 import (
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/notebook"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmailpoll"
@@ -293,4 +295,69 @@ func (s *Server) fileDealFromMail(msg *gmail.MessageDetail, deal *gmailpoll.Deal
 		return
 	}
 	s.logger.Info("mail→deal: 거래 페이지 갱신", "id", msg.ID, "path", relPath, "created", created)
+
+	// Pin the raw deal evidence to the same deal's notebook (keyed by the deal
+	// page path, so curated facts (wiki) and citable evidence (notebook) share
+	// one identity). Same IsDeal gate as the wiki write — only recognized deal
+	// documents, not every email — so the notebook stays high-signal.
+	s.pinDealEvidenceToNotebook(msg, deal, relPath)
+}
+
+// pinDealEvidenceToNotebook auto-pins a deal email's extraction onto its deal
+// notebook. Silent, best-effort, deduped by mail id (PinUnique): re-analysis of
+// the same email never double-pins. Mirrors fileDealFromMail's silent behavior.
+func (s *Server) pinDealEvidenceToNotebook(msg *gmail.MessageDetail, deal *gmailpoll.DealInfo, dealRef string) {
+	if s.notebookStore == nil || dealRef == "" {
+		return
+	}
+	added, err := s.notebookStore.PinUnique(dealRef, deal.Counterparty, notebook.Source{
+		Kind:  notebook.KindNote,
+		Ref:   "mail:" + msg.ID, // provenance + dedup key
+		Title: dealEvidenceTitle(deal),
+		Text:  dealEvidenceText(deal, msg),
+	})
+	if err != nil {
+		s.logger.Warn("mail→notebook: 딜 증거 핀 실패", "id", msg.ID, "deal", dealRef, "error", err)
+		return
+	}
+	if added {
+		s.logger.Info("mail→notebook: 딜 증거 핀", "id", msg.ID, "deal", dealRef)
+	}
+}
+
+// dealEvidenceTitle is the human label for a pinned deal source ("견적서 · 탑솔라").
+func dealEvidenceTitle(deal *gmailpoll.DealInfo) string {
+	parts := make([]string, 0, 2)
+	if t := strings.TrimSpace(deal.DocType); t != "" {
+		parts = append(parts, t)
+	}
+	if c := strings.TrimSpace(deal.Counterparty); c != "" {
+		parts = append(parts, c)
+	}
+	if len(parts) == 0 {
+		return "거래 문서"
+	}
+	return strings.Join(parts, " · ")
+}
+
+// dealEvidenceText renders the extracted deal fields as the pinned note body —
+// the citable evidence a brief grounds on.
+func dealEvidenceText(deal *gmailpoll.DealInfo, msg *gmail.MessageDetail) string {
+	var b strings.Builder
+	writeField := func(label, val string) {
+		if v := strings.TrimSpace(val); v != "" {
+			fmt.Fprintf(&b, "%s: %s\n", label, v)
+		}
+	}
+	writeField("거래처", deal.Counterparty)
+	writeField("문서", deal.DocType)
+	writeField("금액", deal.Amount)
+	writeField("일자", deal.Date)
+	writeField("마감", deal.DueDate)
+	if len(deal.Items) > 0 {
+		fmt.Fprintf(&b, "품목: %s\n", strings.Join(deal.Items, ", "))
+	}
+	writeField("요약", deal.Summary)
+	writeField("메일 제목", msg.Subject)
+	return strings.TrimSpace(b.String())
 }
