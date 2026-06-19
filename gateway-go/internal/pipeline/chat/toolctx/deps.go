@@ -8,6 +8,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/notebook"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
@@ -37,6 +38,7 @@ type CoreToolDeps struct {
 	Sessions         SessionDeps
 	Chrono           ChronoDeps
 	Wiki             WikiDeps
+	Notebook         NotebookDeps
 	Contacts         ContactsDeps
 	Calendar         CalendarDeps
 	LLMClient        *llm.Client
@@ -114,6 +116,16 @@ type WikiDeps struct {
 // ContactsDeps holds dependencies for the contacts address-book tool.
 type ContactsDeps struct {
 	Store *contacts.Store // may be nil when the contacts store failed to init
+}
+
+// NotebookDeps holds dependencies for the notebook tool (NotebookLM-style
+// scoped source collections for grounded, cited synthesis). Wiki reads pinned
+// wiki-page sources live at brief time. Either may be nil (feature off / no
+// wiki); a nil Store disables the tool, a nil Wiki just makes wiki sources
+// unreadable (note sources still work).
+type NotebookDeps struct {
+	Store *notebook.Store
+	Wiki  *wiki.Store
 }
 
 // CalendarReader is the read-only slice of the Google calendar client the agent

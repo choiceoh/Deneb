@@ -17,6 +17,7 @@ var mutatingTools = map[string]struct{}{
 // Internal / already-small tools add no compression value.
 var toolCompressSkipSet = map[string]struct{}{
 	"grep":            {},
+	"notebook":        {},
 	"sessions":        {},
 	"skill_lifecycle": {},
 	"wiki":            {},

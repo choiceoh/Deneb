@@ -17,6 +17,7 @@
     "_values": {
       "grep": true,
       "wiki": true,
+      "notebook": true,
       "sessions": true,
       "skill_lifecycle": true
     }

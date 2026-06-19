@@ -1039,6 +1039,57 @@ func wikiToolSchema() map[string]any {
 	}
 }
 
+func notebookToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"action": map[string]any{
+				"type":        "string",
+				"description": "create: 노트북 생성. list: 노트북 목록. show: 한 노트북의 핀된 자료 보기. add_source: 자료 핀. remove_source: 자료 제거. delete: 노트북 삭제. brief: 핀된 자료에만 근거한 인용([S1]) 포함 브리핑 데이터 생성 (모델이 종합).",
+				"enum":        []string{"create", "list", "show", "add_source", "remove_source", "delete", "brief"},
+			},
+			"description": map[string]any{
+				"type":        "string",
+				"description": "노트북 설명 (create, 선택).",
+			},
+			"focus": map[string]any{
+				"type":        "string",
+				"description": "브리핑 초점 (brief, 선택) — 예: '계약 조건과 리스크 위주로'.",
+			},
+			"id": map[string]any{
+				"type":        "string",
+				"description": "노트북 id (show/add_source/remove_source/delete/brief).",
+			},
+			"kind": map[string]any{
+				"type":        "string",
+				"description": "자료 유형 (add_source): wiki=위키 페이지(ref에 경로, brief 시 현행 내용을 라이브로 읽음), note=붙여넣기 텍스트(text에 내용).",
+				"enum":        []string{"wiki", "note"},
+			},
+			"name": map[string]any{
+				"type":        "string",
+				"description": "노트북 이름 (create) — 예: '탑솔라 딜'.",
+			},
+			"ref": map[string]any{
+				"type":        "string",
+				"description": "위키 페이지 경로 (kind=wiki) — 예: '프로젝트/topsolar.md' 또는 'w:프로젝트/topsolar'.",
+			},
+			"source": map[string]any{
+				"type":        "string",
+				"description": "제거할 자료의 인용 태그 (remove_source) — 예: 'S2'.",
+			},
+			"text": map[string]any{
+				"type":        "string",
+				"description": "자료 본문 (kind=note) — 메일 본문·견적·회의 메모 등 붙여넣기 텍스트.",
+			},
+			"title": map[string]any{
+				"type":        "string",
+				"description": "자료 표시 이름 (add_source, 선택; wiki는 미지정 시 페이지 제목 자동).",
+			},
+		},
+		"required": []string{"action"},
+	}
+}
+
 func contactsToolSchema() map[string]any {
 	return map[string]any{
 		"type": "object",
@@ -1553,6 +1604,7 @@ func ToolMaxOutputs() map[string]int {
 		"calendar": 8000,
 		"contacts": 8000,
 		"exec":     32000,
+		"notebook": 24000,
 		"wiki":     20000,
 	}
 }
