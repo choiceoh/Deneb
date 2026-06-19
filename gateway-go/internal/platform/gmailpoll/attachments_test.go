@@ -66,25 +66,58 @@ func TestBuildAttachmentSelection_OnlyPicked(t *testing.T) {
 		{att: gmail.AttachmentInfo{Filename: "logo.png"}, text: "회사로고"},
 		{att: gmail.AttachmentInfo{Filename: "계약서.pdf"}, text: "계약 조건 다수"},
 	}
-	picks := map[int]bool{0: false, 2: true} // 0 relevant, 2 relevant + deep review
+	picks := map[int]bool{0: true, 2: true} // 0 and 2 selected, 1 (logo) not
 	sel := buildAttachmentSelection(ext, picks)
 
 	if !strings.Contains(sel.Injected, "견적서.pdf") || !strings.Contains(sel.Injected, "5,000,000원") {
 		t.Fatalf("expected 견적서 content injected, got: %q", sel.Injected)
 	}
+	if !strings.Contains(sel.Injected, "계약서.pdf") {
+		t.Fatalf("expected 계약서 content injected, got: %q", sel.Injected)
+	}
 	if strings.Contains(sel.Injected, "logo.png") {
 		t.Fatal("unpicked logo must not be injected")
 	}
-	if len(sel.DeepReview) != 1 || sel.DeepReview[0] != "계약서.pdf" {
-		t.Fatalf("deep review = %v, want [계약서.pdf]", sel.DeepReview)
+	if len(sel.Truncated) != 0 {
+		t.Fatalf("short docs must not be truncated, got %v", sel.Truncated)
 	}
 }
 
 func TestBuildAttachmentSelection_EmptyWhenNoPicks(t *testing.T) {
 	ext := []extractedAttachment{{att: gmail.AttachmentInfo{Filename: "x.pdf"}, text: "x"}}
 	sel := buildAttachmentSelection(ext, map[int]bool{})
-	if sel.Injected != "" || len(sel.DeepReview) != 0 {
+	if sel.Injected != "" || len(sel.Truncated) != 0 {
 		t.Fatalf("expected empty selection, got %+v", sel)
+	}
+}
+
+func TestBuildAttachmentSelection_TruncatesOversized(t *testing.T) {
+	big := strings.Repeat("가", attachmentInjectChars+500) // exceeds the per-doc cap
+	ext := []extractedAttachment{
+		{att: gmail.AttachmentInfo{Filename: "긴계약서.pdf"}, text: big},
+		{att: gmail.AttachmentInfo{Filename: "짧은견적.pdf"}, text: "총액 100원"},
+	}
+	sel := buildAttachmentSelection(ext, map[int]bool{0: true, 1: true})
+	if len(sel.Truncated) != 1 || sel.Truncated[0] != "긴계약서.pdf" {
+		t.Fatalf("truncated = %v, want [긴계약서.pdf]", sel.Truncated)
+	}
+	if !strings.Contains(sel.Injected, "짧은견적.pdf") || !strings.Contains(sel.Injected, "100원") {
+		t.Fatal("short doc after a big one must still be injected in full")
+	}
+}
+
+func TestIsClearBusinessDoc(t *testing.T) {
+	yes := []string{"견적서_효성중공업_260602.pdf", "계약서.docx", "거래명세서.xlsx", "발주서.xls", "Quotation-final.PDF"}
+	for _, f := range yes {
+		if !isClearBusinessDoc(f) {
+			t.Errorf("%q should be a clear business doc", f)
+		}
+	}
+	no := []string{"계약.png", "logo.pdf", "newsletter.pdf", "signature.jpg", "계약조건.txt"}
+	for _, f := range no {
+		if isClearBusinessDoc(f) {
+			t.Errorf("%q should NOT be force-included (image, no signal, or non-doc ext)", f)
+		}
 	}
 }
 

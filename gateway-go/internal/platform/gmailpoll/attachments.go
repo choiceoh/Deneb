@@ -12,12 +12,18 @@
 //  2. Bounded extraction — each candidate is extracted once (page/char bounded
 //     by the extractor + the caps here) so the judge sees real content, not just
 //     an opaque filename.
-//  3. LLM relevance gate — a local-model call picks the subset worth injecting
-//     and flags any that warrant a deeper agentic read (escalation to chat).
+//  3. LLM relevance gate — a local-model call picks the subset worth injecting.
+//     Unambiguous business documents (견적서/계약서/세금계산서 등, by filename) are
+//     force-included so a flaky tiny-model verdict never silently drops a real
+//     deal document; and if the judge call fails outright, all pre-filtered
+//     candidates are injected rather than dropped (best-effort INCLUDE, since the
+//     executive wants the documents read).
 //
-// Only the selected attachments' text is injected into the analysis input; the
-// rest are dropped. Best-effort throughout: any failure yields an empty
-// selection and the analysis proceeds body-only.
+// Selected attachments' text is injected into the analysis input up to a generous
+// per-document cap (a multi-page 견적서/계약서 fits in full); anything longer is
+// injected up to the cap and reported in Truncated so the analysis can note the
+// original runs longer. Best-effort throughout: extraction failure for a file
+// drops just that file; the analysis proceeds with whatever was read.
 //
 // Security note: attachment content is untrusted (it could carry prompt-
 // injection text). The same is already true of the email body and the
@@ -51,9 +57,14 @@ const (
 	// attachmentSnippetChars bounds the per-candidate snippet shown to the judge.
 	attachmentSnippetChars = 600
 	// attachmentInjectChars bounds each selected attachment's injected text.
-	attachmentInjectChars = 3500
-	// attachmentInjectTotalChars caps the combined injected attachment text.
-	attachmentInjectTotalChars = 9000
+	// Sized to fit a multi-page 견적서/계약서 in full (≈6-10 pages of Korean
+	// business text) so the autonomous analysis reads the actual document, not
+	// just its cover page. Documents longer than this are injected up to the cap
+	// and flagged as partially-included (see attachmentSelection.Truncated).
+	attachmentInjectChars = 12000
+	// attachmentInjectTotalChars caps the combined injected attachment text across
+	// all selected attachments on one mail, bounding the per-cycle prompt size.
+	attachmentInjectTotalChars = 30000
 	// attachmentExtractBudget bounds the fetch+OCR phase so a slow multi-page scan
 	// can never starve the analysis. Mirrors the sibling stage-1 extractors'
 	// bounded contexts; on timeout the gate judges whatever it extracted so far.
@@ -72,10 +83,11 @@ var attachmentExtractExts = []string{
 }
 
 // attachmentSelection is the gate's output: the text section to append to the
-// analysis input, and the filenames flagged for a deeper agentic read.
+// analysis input, and the filenames that exceeded the injection cap (only a
+// bounded prefix made it in, so the analysis can flag that the original is longer).
 type attachmentSelection struct {
-	Injected   string   // "## 첨부 내용" section, or "" when nothing selected
-	DeepReview []string // filenames the judge flagged for chat-agent deep review
+	Injected  string   // "## 첨부 내용" section, or "" when nothing selected
+	Truncated []string // filenames whose text was clipped to the inject cap
 }
 
 // extractedAttachment pairs a candidate with its bounded extracted text.
@@ -136,9 +148,9 @@ func gateAndExtractAttachments(ctx context.Context, deps PipelineDeps, msg *gmai
 	}
 
 	sel := buildAttachmentSelection(extracted, picks)
-	gateLogger(deps).Debug("mail attachment gate: injected",
+	gateLogger(deps).Info("mail attachment gate: injected",
 		"id", msg.ID, "candidates", len(candidates), "extracted", len(extracted),
-		"selected", len(picks), "deepReview", len(sel.DeepReview))
+		"selected", len(picks), "truncated", len(sel.Truncated))
 	return sel
 }
 
@@ -193,16 +205,15 @@ type attachGateResult struct {
 }
 
 type attachGateItem struct {
-	Index      int  `json:"index"`
-	Relevant   bool `json:"relevant"`
-	DeepReview bool `json:"deep_review"`
+	Index    int  `json:"index"`
+	Relevant bool `json:"relevant"`
 }
 
 const attachGateSystem = "당신은 업무 메일 분석을 돕는 첨부 선별기입니다. " +
 	"메일 내용에 비추어, 분석에 본문으로 읽을 가치가 있는 첨부만 고릅니다. " +
 	"견적서·계약서·세금계산서·거래명세서·발주서·제안서·사양서처럼 업무 판단에 필요한 문서는 relevant=true. " +
 	"로고·서명 이미지·약관·홍보물·수신거부 안내·반복 푸터처럼 노이즈는 relevant=false. " +
-	"내용이 길고 조밀해 정밀 검토가 필요한 문서는 deep_review=true."
+	"애매하면 relevant=true로 둔다 — 업무 문서를 놓치는 것이 노이즈를 넣는 것보다 나쁘다."
 
 const attachGatePrompt = `메일:
 제목: %s
@@ -213,12 +224,18 @@ const attachGatePrompt = `메일:
 %s
 
 각 첨부를 분석에 읽을지 판단하라. 정확히 다음 JSON만 출력:
-{"selections":[{"index":0,"relevant":true,"deep_review":false}]}`
+{"selections":[{"index":0,"relevant":true}]}`
 
-// judgeAttachments asks the local model which extracted attachments to inject.
-// Returns the set of selected indices (and their deep-review flag). On any
-// failure it returns nil so the caller drops attachments rather than guessing.
+// judgeAttachments asks the local model which extracted attachments to inject and
+// returns the set of selected indices. Failure-open by design: if the judge call
+// fails, all pre-filtered candidates are selected (they already passed the
+// document/image + size filter), and unambiguous business documents are always
+// selected regardless of the judge — a flaky tiny-model verdict must never
+// silently drop a 견적서/계약서. The cost of an extra noisy attachment is far
+// smaller than missing a deal document the executive needs.
 func judgeAttachments(ctx context.Context, deps PipelineDeps, msg *gmail.MessageDetail, extracted []extractedAttachment) map[int]bool {
+	picks := make(map[int]bool, len(extracted))
+
 	var sb strings.Builder
 	for i, e := range extracted {
 		fmt.Fprintf(&sb, "[%d] %s (%s)\n%s\n\n", i, e.att.Filename, e.att.MimeType, clipChars(e.text, attachmentSnippetChars))
@@ -228,38 +245,91 @@ func judgeAttachments(ctx context.Context, deps PipelineDeps, msg *gmail.Message
 
 	res, err := callLocalLLMJSON[attachGateResult](ctx, deps.LocalClient, deps.LocalModel, attachGateSystem, prompt, stage1MaxTokens)
 	if err != nil {
-		return nil
+		// Judge unavailable — include all extracted candidates rather than drop
+		// them. They already cleared the heuristic pre-filter.
+		for i := range extracted {
+			picks[i] = true
+		}
+		return picks
 	}
-	picks := make(map[int]bool, len(res.Selections))
 	for _, s := range res.Selections {
 		if s.Relevant && s.Index >= 0 && s.Index < len(extracted) {
-			picks[s.Index] = s.DeepReview
+			picks[s.Index] = true
+		}
+	}
+	// Force-include unambiguous business documents the tiny judge may have missed.
+	for i, e := range extracted {
+		if !picks[i] && isClearBusinessDoc(e.att.Filename) {
+			picks[i] = true
 		}
 	}
 	return picks
 }
 
+// attachmentDocExts is the document subset of attachmentExtractExts (images
+// excluded): only real documents are force-included by filename, so a photo named
+// "계약" still goes through the OCR-relevance judge instead of being injected blind.
+var attachmentDocExts = []string{
+	".pdf", ".xlsx", ".xls", ".docx", ".doc", ".pptx", ".ppt", ".hwp", ".hwpx", ".csv",
+}
+
+// businessDocSignals mark documents the executive always wants read in full —
+// 견적서/계약서/세금계산서/거래명세서/발주서 등. A document whose filename carries one
+// of these is injected even if the tiny relevance judge misjudged it as noise.
+var businessDocSignals = []string{
+	"견적", "계약", "세금계산서", "계산서", "거래명세", "명세서", "발주", "수주", "주문",
+	"제안", "사양", "단가", "invoice", "quote", "quotation", "contract", "estimate", "purchase",
+}
+
+// isClearBusinessDoc reports whether filename is an unambiguous business document
+// (a document-type extension carrying a 견적/계약/세금계산서/… signal).
+func isClearBusinessDoc(filename string) bool {
+	lower := strings.ToLower(filename)
+	isDoc := false
+	for _, ext := range attachmentDocExts {
+		if strings.HasSuffix(lower, ext) {
+			isDoc = true
+			break
+		}
+	}
+	if !isDoc {
+		return false
+	}
+	for _, sig := range businessDocSignals {
+		if strings.Contains(lower, sig) {
+			return true
+		}
+	}
+	return false
+}
+
 // buildAttachmentSelection renders the injection section from the selected
 // attachments, honoring the per-attachment and total character caps (counted in
-// runes throughout). The "## 첨부 내용" header is assembled only when at least
-// one attachment's text was injected.
+// runes throughout). A document whose text exceeds its cap is injected up to the
+// cap and recorded in Truncated so the analysis can note the original runs longer.
+// The "## 첨부 내용" header is assembled only when at least one attachment's text
+// was injected.
 func buildAttachmentSelection(extracted []extractedAttachment, picks map[int]bool) attachmentSelection {
-	var chunks, deep []string
+	var chunks, truncated []string
 	total := 0
 	for i, e := range extracted {
-		deepReview, ok := picks[i]
-		if !ok {
+		if !picks[i] {
 			continue
 		}
-		if deepReview {
-			deep = append(deep, e.att.Filename)
-		}
+		full := strings.TrimSpace(e.text)
+		fullLen := utf8.RuneCountInString(full)
 		remaining := attachmentInjectTotalChars - total
 		if remaining <= 0 {
-			continue // total budget spent — still flag any remaining deep-review picks
+			// Total budget spent before this doc — none of it is injected, so the
+			// analysis should know this attachment went unread.
+			truncated = append(truncated, e.att.Filename)
+			continue
 		}
 		limit := min(attachmentInjectChars, remaining)
-		text := clipChars(e.text, limit)
+		text := clipChars(full, limit)
+		if fullLen > limit {
+			truncated = append(truncated, e.att.Filename)
+		}
 		chunks = append(chunks, fmt.Sprintf("### 📎 %s\n%s", e.att.Filename, text))
 		total += utf8.RuneCountInString(text)
 	}
@@ -267,8 +337,8 @@ func buildAttachmentSelection(extracted []extractedAttachment, picks map[int]boo
 		return attachmentSelection{}
 	}
 	return attachmentSelection{
-		Injected:   "\n\n## 첨부 내용\n\n" + strings.Join(chunks, "\n\n") + "\n",
-		DeepReview: deep,
+		Injected:  "\n\n## 첨부 내용\n\n" + strings.Join(chunks, "\n\n") + "\n",
+		Truncated: truncated,
 	}
 }
 

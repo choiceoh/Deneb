@@ -372,12 +372,14 @@ func synthesizeAnalysis(ctx context.Context, deps PipelineDeps, msg *gmail.Messa
 		deal = extractDealInfo(ctx, deps, dealInput)
 	}
 
-	// Surface a deep-review hint for attachments the gate judged dense enough to
-	// warrant the chat agent's full read — a one-tap escalation, not a second
-	// autonomous pass.
-	if len(attach.DeepReview) > 0 {
-		clean = clean + "\n\n📎 정밀 검토 권장: " + strings.Join(attach.DeepReview, ", ") +
-			" — 자세히 보려면 채팅에서 이 첨부를 열어 분석을 요청하세요."
+	// The gate reads each attachment up to a generous cap, so the analysis above
+	// already covers the documents. Only when a document ran longer than the cap do
+	// we note that the injected text was a (bounded) prefix — so a genuinely huge
+	// 계약서 still gets a "the original runs longer" flag instead of silently
+	// looking complete.
+	if len(attach.Truncated) > 0 {
+		clean = clean + "\n\n📎 분량이 커 일부만 반영된 첨부: " + strings.Join(attach.Truncated, ", ") +
+			" — 전체가 필요하면 채팅에서 원본을 열어 확인하세요."
 	}
 
 	// Read Sino-Korean Hanja in the report as Hangul (報告書 → 보고서) — the
