@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
@@ -48,7 +49,8 @@ func loadCachedSkillsPrompt(workspaceDir string, availableToolNames []string) st
 
 	cfg := skills.SnapshotConfig{
 		DiscoverConfig: skills.DiscoverConfig{
-			WorkspaceDir: workspaceDir,
+			WorkspaceDir:     workspaceDir,
+			BundledSkillsDir: bundledSkillsDir(),
 		},
 		Eligibility: skills.EligibilityContext{
 			EnvVars:        skills.EnvSnapshotFromOS(),
@@ -109,7 +111,10 @@ func EligibleWorkspaceSkills(workspaceDir string, availableToolNames []string) [
 	for _, name := range availableToolNames {
 		availableTools[name] = struct{}{}
 	}
-	entries := skills.DiscoverWorkspaceSkills(skills.DiscoverConfig{WorkspaceDir: workspaceDir})
+	entries := skills.DiscoverWorkspaceSkills(skills.DiscoverConfig{
+		WorkspaceDir:     workspaceDir,
+		BundledSkillsDir: bundledSkillsDir(),
+	})
 	entries = skills.FilterExcludedSkills(entries, loadArchivedCuratorSkillNames())
 	entries = skills.FilterEligibleSkills(entries, skills.EligibilityContext{
 		EnvVars:        skills.EnvSnapshotFromOS(),
@@ -117,6 +122,39 @@ func EligibleWorkspaceSkills(workspaceDir string, availableToolNames []string) [
 		AvailableTools: availableTools,
 	})
 	return entries
+}
+
+// bundledSkillsDir returns the repo's checked-in skills/ directory so the agent
+// prompt and the Settings → Skills tab surface the bundled skills WITHOUT
+// copying them into the runtime workspace (~/.deneb/workspace/skills). Discovery
+// merges this SourceBundled set under the workspace (bundled < workspace), so a
+// workspace copy still overrides a bundled skill of the same name.
+//
+// DENEB_BUNDLED_SKILLS_DIR overrides the path; otherwise it probes next to the
+// gateway binary (dist/deneb-gateway → ../skills) and the working directory
+// (deploy runs the binary from the repo root). Returns "" when no skills/ dir is
+// found — discovery then simply skips the bundled source.
+func bundledSkillsDir() string {
+	if dir := strings.TrimSpace(os.Getenv("DENEB_BUNDLED_SKILLS_DIR")); dir != "" {
+		return dir
+	}
+	var candidates []string
+	if exe, err := os.Executable(); err == nil {
+		exeDir := filepath.Dir(exe)
+		candidates = append(candidates,
+			filepath.Join(exeDir, "skills"),
+			filepath.Join(exeDir, "..", "skills"),
+		)
+	}
+	if wd, err := os.Getwd(); err == nil {
+		candidates = append(candidates, filepath.Join(wd, "skills"))
+	}
+	for _, c := range candidates {
+		if info, err := os.Stat(c); err == nil && info.IsDir() {
+			return c
+		}
+	}
+	return ""
 }
 
 // InvalidateSkillsCache forces the skills prompt to be rebuilt on next access.
