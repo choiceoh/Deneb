@@ -121,15 +121,16 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 
 	// Notebook store: NotebookLM-style scoped source collections (딜/프로젝트
 	// 브리핑). Lives under the gateway state dir; a failure just disables the
-	// notebook tool (nil store), it does not block chat init.
-	var notebookStore *notebook.Store
+	// notebook tool (nil store), it does not block chat init. Promoted to the
+	// server so the mail pipeline (fileDealFromMail) can auto-pin deal evidence.
 	notebookDir := filepath.Join(config.ResolveStateDir(), "notebooks")
 	if ns, err := notebook.NewStore(notebookDir); err != nil {
 		s.logger.Warn("notebook store unavailable", "error", err)
 	} else {
-		notebookStore = ns
+		s.notebookStore = ns
 		s.logger.Info("notebook store enabled", "dir", notebookDir)
 	}
+	notebookStore := s.notebookStore
 
 	s.toolDeps = &chat.CoreToolDeps{
 		WorkspaceDir:      workspaceDir,
