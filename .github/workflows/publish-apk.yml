@@ -92,7 +92,12 @@ jobs:
         run: |
           set -euo pipefail
           d="${DENEB_APK_DIR:-$HOME/.cache/deneb-apk}"
-          latest="$(ls -t "$d"/*.apk | head -1)"
+          # Newest APK by mtime. Avoid `ls | head`: under `set -o pipefail` head
+          # closing early makes ls fail with SIGPIPE once the serve dir holds many
+          # builds, which silently broke this sync. mapfile reads the full stream.
+          mapfile -t _apks < <(ls -t "$d"/*.apk 2>/dev/null)
+          latest="${_apks[0]:-}"
+          if [ -z "$latest" ]; then echo "no APK to sync" >&2; exit 0; fi
           ssh -o StrictHostKeyChecking=accept-new srv4 'mkdir -p ~/.cache/deneb-apk'
           rsync -a "$latest" "$d/version.json" srv4:.cache/deneb-apk/
           echo "synced $(basename "$latest") + version.json -> srv4 gateway serve dir"
