@@ -11,9 +11,6 @@ import ai.deneb.deneb.CalendarEventContent
 import ai.deneb.deneb.CalendarEventDetail
 import ai.deneb.deneb.CalendarMonthGrid
 import ai.deneb.deneb.CronEditContent
-import ai.deneb.deneb.DropboxEntry
-import ai.deneb.deneb.DropboxListContent
-import ai.deneb.deneb.DropboxNotConnected
 import ai.deneb.deneb.IntervalUnit
 import ai.deneb.deneb.MailMessage
 import ai.deneb.deneb.MailRow
@@ -162,9 +159,6 @@ fun main() {
     renderCalendarEmpty("calendar_empty_light.png", LightColorScheme)
     renderTodoList("todo_list_dark.png", DarkColorScheme)
     renderTodoList("todo_list_light.png", LightColorScheme)
-    renderDropboxList("dropbox_list_dark.png", DarkColorScheme)
-    renderDropboxList("dropbox_list_light.png", LightColorScheme)
-    renderDropboxNotConnected("dropbox_notconnected_dark.png", DarkColorScheme)
     renderTodoAdd("todo_add_dark.png", DarkColorScheme)
     renderTodoAdd("todo_add_light.png", LightColorScheme)
     renderCronEdit("cron_edit_dark.png", DarkColorScheme, cronWeeklyDraft, "Asia/Seoul")
@@ -422,47 +416,6 @@ private fun renderTodoList(name: String, scheme: ColorScheme) {
                 Column(Modifier.padding(horizontal = 24.dp)) {
                     TodoListContent(sampleTodos, onToggle = { _, _ -> }, onOpen = {})
                 }
-            }
-        }
-    }
-    val image = scene.render()
-    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
-    File("/tmp/deneb-render").mkdirs()
-    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
-    scene.close()
-}
-
-private val sampleDropbox = listOf(
-    DropboxEntry("거래처", "/Deneb-Inbox/거래처", "/deneb-inbox/거래처", isFolder = true, size = 0, modified = ""),
-    DropboxEntry("2026 사업계획", "/Deneb-Inbox/2026 사업계획", "/deneb-inbox/2026 사업계획", isFolder = true, size = 0, modified = ""),
-    DropboxEntry("탑솔라_모듈_견적서.pdf", "/Deneb-Inbox/탑솔라_모듈_견적서.pdf", "/deneb-inbox/탑솔라_모듈_견적서.pdf", isFolder = false, size = 248_000, modified = "2026-06-15T11:15:00Z"),
-    DropboxEntry("준공정산서_남도에코.xlsx", "/Deneb-Inbox/준공정산서_남도에코.xlsx", "/deneb-inbox/준공정산서_남도에코.xlsx", isFolder = false, size = 1_950_000, modified = "2026-06-14T09:02:00Z"),
-    DropboxEntry("6월 회의록.docx", "/Deneb-Inbox/6월 회의록.docx", "/deneb-inbox/6월 회의록.docx", isFolder = false, size = 36_000, modified = "2026-06-12T18:40:00Z"),
-)
-
-// Validates the Dropbox browser list: folder rows (accent folder icon) vs file
-// rows (size · modified meta), full-width hairlines, under the standard scaffold.
-private fun renderDropboxList(name: String, scheme: ColorScheme) {
-    val scene = ImageComposeScene(width = 824, height = 760, density = Density(2f)) {
-        MaterialTheme(colorScheme = scheme) {
-            DenebScreenScaffold(title = "Dropbox", onBack = {}) {
-                DropboxListContent(sampleDropbox, onOpenFolder = {}, onFileAction = {})
-            }
-        }
-    }
-    val image = scene.render()
-    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
-    File("/tmp/deneb-render").mkdirs()
-    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
-    scene.close()
-}
-
-// Validates the not-connected CTA (DenebEmpty + 연동하기 action).
-private fun renderDropboxNotConnected(name: String, scheme: ColorScheme) {
-    val scene = ImageComposeScene(width = 824, height = 520, density = Density(2f)) {
-        MaterialTheme(colorScheme = scheme) {
-            DenebScreenScaffold(title = "Dropbox", onBack = {}) {
-                DropboxNotConnected(onConnect = {})
             }
         }
     }

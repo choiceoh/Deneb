@@ -36,7 +36,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calprop"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/dropbox"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmailpoll"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/localcal"
@@ -341,26 +340,10 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		}),
 		s.miniappModelMethods(),
 
-		// Native Dropbox connect wizard (miniapp.dropbox.{status,begin,complete}):
-		// the PKCE OAuth flow that used to require the deneb-dropbox-auth host CLI,
-		// exposed so the operator can link Dropbox from Settings > 연동.
-		s.miniappDropboxMethods(),
-
-		// Native Dropbox file browser (miniapp.dropbox.{list,search,share,upload}):
-		// read/share/upload over the Dropbox client. Lazy factory around
-		// dropbox.DefaultClient — a missing token returns UNAVAILABLE so the
-		// browser shows the connect CTA. (miniapp.dropbox.analyze runs an agent
-		// turn and is registered late via the chat bridge.)
-		handlerminiapp.DropboxBrowseMethods(handlerminiapp.DropboxBrowseDeps{
-			Client: func() (handlerminiapp.DropboxBrowseClient, error) {
-				return dropbox.DefaultClient()
-			},
-		}),
-
 		// Native local file browser (miniapp.files.{list,search,share,upload}):
-		// list/search/share/upload over the on-box file store (filestore) — the
-		// local-disk replacement for the Dropbox browser. share mints a signed
-		// download link (fileshare); a nil store (open error) skips the domain.
+		// list/search/share/upload over the on-box file store (filestore). share
+		// mints a signed download link (fileshare); a nil store (open error)
+		// skips the domain.
 		handlerminiapp.FilesBrowseMethods(handlerminiapp.FilesBrowseDeps{
 			Store: localFileStoreOrNil(s.logger),
 		}),

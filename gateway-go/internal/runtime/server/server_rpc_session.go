@@ -621,8 +621,6 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 	cfgSnap, _ := config.LoadConfigFromDefaultPath()
 	s.initGmailPoll(cfgSnap)
 	s.initLMTPServer(cfgSnap)
-	s.seedDropboxBackupJob()
-	s.initDropboxPoll(cfgSnap)
 
 	// Calendar briefing service: D-15min push for upcoming meetings.
 	// Delivers to the native client (업무 transcript + live push) via the
