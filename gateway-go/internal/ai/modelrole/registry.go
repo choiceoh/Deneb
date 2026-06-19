@@ -396,6 +396,11 @@ func (r *Registry) BaseURL(role Role) string {
 	return r.Config(role).BaseURL
 }
 
+// APIKey returns the API key for the given role (empty for keyless providers).
+func (r *Registry) APIKey(role Role) string {
+	return r.Config(role).APIKey
+}
+
 // VllmBaseURLs returns the deduped base URLs (".../v1") of every role that
 // targets the OpenAI-mode vLLM provider, main role first. The observation
 // plane scrapes each endpoint's /metrics for engine-level prefix-cache

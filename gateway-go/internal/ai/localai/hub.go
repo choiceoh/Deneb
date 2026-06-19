@@ -112,6 +112,7 @@ type Hub struct {
 	client   *llm.Client
 	model    string
 	baseURL  string
+	apiKey   string
 	registry *modelrole.Registry
 
 	// Vendor-recommended sampling defaults, resolved once at startup.
@@ -183,6 +184,7 @@ func New(cfg Config, registry *modelrole.Registry, logger *slog.Logger) *Hub {
 		h.client = registry.Client(modelrole.RoleLightweight)
 		h.model = registry.Model(modelrole.RoleLightweight)
 		h.baseURL = registry.BaseURL(modelrole.RoleLightweight)
+		h.apiKey = registry.APIKey(modelrole.RoleLightweight)
 	}
 
 	// Resolve vendor-recommended sampling defaults once at startup.
@@ -191,7 +193,7 @@ func New(cfg Config, registry *modelrole.Registry, logger *slog.Logger) *Hub {
 	// Start background goroutines.
 	h.wg.Add(2)
 	go h.dispatchLoop()
-	go (&healthChecker{hub: h, baseURL: h.baseURL, started: time.Now()}).run()
+	go (&healthChecker{hub: h, baseURL: h.baseURL, apiKey: h.apiKey, started: time.Now()}).run()
 
 	// Cache janitor.
 	h.wg.Add(1)

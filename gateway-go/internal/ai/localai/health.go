@@ -17,6 +17,7 @@ const (
 type healthChecker struct {
 	hub     *Hub
 	baseURL string
+	apiKey  string
 	started time.Time
 }
 
@@ -58,6 +59,12 @@ func (hc *healthChecker) pingModels() bool {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	if err != nil {
 		return false
+	}
+	// The lightweight provider may sit behind an authenticated proxy (wormhole)
+	// whose /models returns 401 without a token — that would falsely mark the hub
+	// unhealthy even though completions (which carry the key) succeed.
+	if hc.apiKey != "" {
+		req.Header.Set("Authorization", "Bearer "+hc.apiKey)
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
