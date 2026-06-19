@@ -672,6 +672,26 @@ data class TodoOut(
 
 @Immutable
 @Serializable
+data class TopicDocOut(
+    val key: String = "",
+    val name: String = "",
+    val content: String = "",
+    val size: Long = 0L,
+    val modified: String = "",
+)
+
+@Immutable
+@Serializable
+data class TopicDocWriteOut(
+    val key: String = "",
+    val name: String = "",
+    val size: Long = 0L,
+    val modified: String = "",
+    val applied: Boolean = false,
+)
+
+@Immutable
+@Serializable
 data class TranscriptAttachmentOut(
     val type: String = "",
     val mimeType: String = "",
