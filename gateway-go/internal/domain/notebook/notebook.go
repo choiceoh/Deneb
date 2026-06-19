@@ -300,6 +300,52 @@ func (s *Store) AddSource(id string, src Source) (*Source, error) {
 	return &added, nil
 }
 
+// PinUnique ensures the deal's notebook exists (get-or-create by dealRef) and
+// pins src, UNLESS a source with the same non-empty Ref is already present. This
+// is the idempotent entry point for pipeline auto-pins keyed by a stable id
+// (e.g. Ref "mail:<id>"): re-analyzing the same email never double-pins. Returns
+// whether a new source was added. The whole operation is atomic under the store
+// lock (ensure + dedup check + append), avoiding a get-then-add race.
+func (s *Store) PinUnique(dealRef, name string, src Source) (bool, error) {
+	if err := validateSource(src); err != nil {
+		return false, err
+	}
+	dealRef = strings.TrimSpace(dealRef)
+	if dealRef == "" {
+		return false, errors.New("notebook: deal ref is required")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	nb := s.byDealRefLocked(dealRef)
+	if nb == nil {
+		if strings.TrimSpace(name) == "" {
+			name = dealRef
+		}
+		var err error
+		if nb, err = s.createLocked(name, "", dealRef); err != nil {
+			return false, err
+		}
+	}
+	if ref := strings.TrimSpace(src.Ref); ref != "" {
+		for _, ex := range nb.Sources {
+			if ex.Ref == ref {
+				return false, nil // already pinned — idempotent no-op
+			}
+		}
+	}
+	src.Cite = nextCite(nb.Sources)
+	src.Added = s.stampLocked()
+	src.Ref = strings.TrimSpace(src.Ref)
+	src.Title = strings.TrimSpace(src.Title)
+	nb.Sources = append(nb.Sources, src)
+	nb.Updated = src.Added
+	if err := s.saveLocked(nb); err != nil {
+		nb.Sources = nb.Sources[:len(nb.Sources)-1]
+		return false, err
+	}
+	return true, nil
+}
+
 // RemoveSource unpins the source with the given cite tag. The remaining cites
 // are left untouched (gaps are fine — cites are stable, not contiguous).
 func (s *Store) RemoveSource(id, cite string) error {

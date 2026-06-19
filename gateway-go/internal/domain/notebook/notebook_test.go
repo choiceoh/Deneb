@@ -261,6 +261,52 @@ func TestDealRefPersists(t *testing.T) {
 	}
 }
 
+func TestPinUniqueDedupsByRefAndCreatesDeal(t *testing.T) {
+	s := newTestStore(t)
+	const deal = "프로젝트/탑솔라.md"
+
+	// First pin creates the deal notebook and adds the source.
+	added, err := s.PinUnique(deal, "탑솔라", Source{Kind: KindNote, Ref: "mail:abc", Text: "견적"})
+	if err != nil || !added {
+		t.Fatalf("first PinUnique added=%v err=%v, want added", added, err)
+	}
+	nb, ok := s.GetByDealRef(deal)
+	if !ok || len(nb.Sources) != 1 {
+		t.Fatalf("deal notebook not created/pinned: %+v ok=%v", nb, ok)
+	}
+
+	// Re-pinning the same Ref (same mail re-analyzed) is an idempotent no-op.
+	added, err = s.PinUnique(deal, "탑솔라", Source{Kind: KindNote, Ref: "mail:abc", Text: "견적(재분석)"})
+	if err != nil || added {
+		t.Fatalf("duplicate PinUnique added=%v err=%v, want not-added", added, err)
+	}
+	if nb, _ := s.GetByDealRef(deal); len(nb.Sources) != 1 {
+		t.Fatalf("dedup failed: sources = %d, want 1", len(nb.Sources))
+	}
+
+	// A different Ref on the same deal does add (and reuses the notebook).
+	added, _ = s.PinUnique(deal, "탑솔라", Source{Kind: KindNote, Ref: "mail:def", Text: "계약서"})
+	if !added {
+		t.Fatal("distinct ref should be added")
+	}
+	if got := s.List(); len(got) != 1 {
+		t.Fatalf("PinUnique created a duplicate notebook: %d", len(got))
+	}
+	if nb, _ := s.GetByDealRef(deal); len(nb.Sources) != 2 {
+		t.Fatalf("sources = %d, want 2", len(nb.Sources))
+	}
+}
+
+func TestPinUniqueRequiresRefAndValidSource(t *testing.T) {
+	s := newTestStore(t)
+	if _, err := s.PinUnique("", "x", Source{Kind: KindNote, Text: "y"}); err == nil {
+		t.Fatal("PinUnique without deal ref should error")
+	}
+	if _, err := s.PinUnique("deal", "x", Source{Kind: KindNote}); err == nil {
+		t.Fatal("PinUnique with invalid source (no text) should error")
+	}
+}
+
 func TestSlugify(t *testing.T) {
 	cases := map[string]string{
 		"탑솔라 딜":          "탑솔라-딜",
