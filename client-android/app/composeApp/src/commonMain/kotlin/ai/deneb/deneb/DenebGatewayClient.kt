@@ -1139,6 +1139,28 @@ class DenebGatewayClient(
         return payload.text.ifBlank { null }
     }
 
+    /**
+     * Regenerates a work-feed card's analysis (long-press → 다시 작성). The gateway
+     * runs one agent turn that rewrites the analysis and replaces the card body in
+     * place; the returned (rewritten) item is upserted so the card reflects it.
+     * Suspends until the gateway turn completes — call from a background scope.
+     */
+    suspend fun rewriteWorkFeedCard(itemId: String): String? {
+        if (itemId.isBlank()) return null
+        val payload = callRpc<WorkFeedFeedbackPayload>(
+            "miniapp.workfeed.rewrite",
+            buildJsonObject {
+                put("itemId", itemId)
+            },
+        ) ?: return null
+        if (payload.item.id.isNotBlank()) {
+            _denebWorkFeed.update { items ->
+                items.map { if (it.id == payload.item.id) payload.item else it }
+            }
+        }
+        return payload.text.ifBlank { null }
+    }
+
     private fun applyNativeSyncEvent(event: NativeSyncEvent, reloadSessions: MutableSet<String>) {
         when (event.type) {
             "workfeed.created" -> {

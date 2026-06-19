@@ -61,6 +61,9 @@ type Deps struct {
 		// Correct annotates a card with a user correction (native long-press
 		// feedback) and returns the updated item; used by miniapp.workfeed.feedback.
 		Correct(id, note string) (workfeed.Item, error)
+		// Rewrite replaces a card's body with a regenerated analysis and returns
+		// the updated item; used by miniapp.workfeed.rewrite.
+		Rewrite(id, newBody string) (workfeed.Item, error)
 	}
 }
 

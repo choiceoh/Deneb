@@ -424,6 +424,13 @@ private fun AppContent(
                                 onLoadDateRange = feedState.actions.refreshWorkFeedRange,
                                 onRunAction = feedState.actions.runWorkFeedAction,
                                 onSubmitFeedback = feedState.actions.submitWorkFeedFeedback,
+                                onRewrite = feedState.actions.rewriteWorkFeedCard,
+                                // 해당 피드 질문: open the card's dedicated chat (context injected)
+                                // and jump to the chat screen so the user can ask there.
+                                onAsk = { id ->
+                                    feedState.actions.openWorkFeedItem(id)
+                                    navigateToDenebSection(navController, Home)
+                                },
                             )
                         }
                         composable<DenebConfig> {
