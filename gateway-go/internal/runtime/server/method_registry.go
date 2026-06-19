@@ -22,6 +22,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/filestore"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/mailpriority"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/nativesync"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/notebook"
@@ -354,6 +355,14 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 			Client: func() (handlerminiapp.DropboxBrowseClient, error) {
 				return dropbox.DefaultClient()
 			},
+		}),
+
+		// Native local file browser (miniapp.files.{list,search,share,upload}):
+		// list/search/share/upload over the on-box file store (filestore) — the
+		// local-disk replacement for the Dropbox browser. share mints a signed
+		// download link (fileshare); a nil store (open error) skips the domain.
+		handlerminiapp.FilesBrowseMethods(handlerminiapp.FilesBrowseDeps{
+			Store: localFileStoreOrNil(s.logger),
 		}),
 
 		// Native mail domain. The RPC namespace stays miniapp.gmail.* for
@@ -860,6 +869,20 @@ func makeMailAnalysisWikiSink(hub *rpcutil.GatewayHub) func(handlerminiapp.WikiA
 // interface (so handlers degrade) when its file can't be read. Returning a nil
 // literal — not the (nil, err) store — avoids a non-nil interface wrapping a nil
 // pointer. The store lives at {stateDir}/calendar.json (dev uses its own dir).
+// localFileStoreOrNil opens the default on-box file store, returning a nil
+// interface (not a typed-nil *LocalStore) on error so FilesBrowseMethods skips
+// the domain rather than panicking on a nil deref later.
+func localFileStoreOrNil(logger *slog.Logger) filestore.Store {
+	store, err := filestore.DefaultLocalStore()
+	if err != nil {
+		if logger != nil {
+			logger.Error("local file store unavailable — miniapp.files.* disabled", "error", err)
+		}
+		return nil
+	}
+	return store
+}
+
 func resolveLocalCalendar(logger *slog.Logger) handlerminiapp.LocalCalendar {
 	store, err := localcal.Default()
 	if err != nil {

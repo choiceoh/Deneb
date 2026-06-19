@@ -131,6 +131,10 @@ var requiredMethods = []string{
 	"miniapp.dropbox.search",
 	"miniapp.dropbox.share",
 	"miniapp.dropbox.upload",
+	"miniapp.files.list",
+	"miniapp.files.search",
+	"miniapp.files.share",
+	"miniapp.files.upload",
 	// miniapp.dropbox.analyze registers via the chat bridge (MiniappMethods,
 	// needs the chat handler) — like miniapp.chat.send, it's omitted here.
 	// miniapp.gmail.analyze and miniapp.gmail.analysis_cached are
