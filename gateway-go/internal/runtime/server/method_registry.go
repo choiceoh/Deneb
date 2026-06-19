@@ -31,6 +31,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/prompt"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calprop"
@@ -314,6 +315,11 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 					"updateManifest":  true,
 					"prompts":         s.promptStore != nil,
 					"promptTuner":     s.compactTuner != nil,
+					// topicDocs gates the native single-topic background editor.
+					// True only when a current topic key resolves (topics.map
+					// has a "0" entry) — i.e. there is actually a doc to edit
+					// that injects into the prompt.
+					"topicDocs": resolveCurrentTopicKey() != "",
 				}
 			},
 		}),
@@ -445,6 +451,20 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 			Tuner: func() handlerminiapp.PromptTuner {
 				return s.compactTuner
 			},
+		}),
+		// Mini App single-topic background editor (miniapp.topicdocs.*).
+		// Edits <workspace>/topics/<key>.md for the current topic key, the
+		// same file prompt.LoadTopicKnowledge injects into the Static block.
+		// Resolved per call (dir + "0"-key) so a config change applies without
+		// a restart; both factories are nil-tolerant so when topics are
+		// unconfigured the handler responds UNAVAILABLE rather than 404.
+		// applyNow drops the frozen topic snapshots so an edit lands this
+		// session (the RPC analog of slash "--now"); the default is deferred
+		// (next-session) to keep the Static prompt cache stable.
+		handlerminiapp.TopicDocsMethods(handlerminiapp.TopicDocsDeps{
+			TopicsDir:  func() (string, error) { return resolveTopicsDir(), nil },
+			CurrentKey: resolveCurrentTopicKey,
+			ApplyNow:   prompt.Cache.ClearAllTopicSnapshots,
 		}),
 
 		// Mini App sessions recent + transcript (miniapp.sessions.*).

@@ -19,6 +19,11 @@ import (
 // tokens (more for Korean-heavy text).
 const maxTopicKnowledgeChars = 24_000
 
+// MaxTopicKnowledgeChars exposes the per-topic injection cap to the
+// miniapp.topicdocs editor so a write can never persist content the loader
+// would silently truncate on injection (what you save is what the model sees).
+const MaxTopicKnowledgeChars = maxTopicKnowledgeChars
+
 // defaultTopicDir is the workspace-relative directory holding <topicKey>.md
 // files when TopicsConfig.Dir is empty.
 const defaultTopicDir = "topics"
@@ -45,7 +50,7 @@ type TopicKnowledge struct {
 	Key     string // topic key (e.g. "coding"); "" = no injection
 	Content string // file body (trimmed, truncated); "" = no injection
 	Hash    string // sha256 hex (12 chars) of Content; "" when Content==""
-	Path    string // absolute source file path; lets the agent edit the doc on request (the only edit surface since the settings tab was removed)
+	Path    string // absolute source file path; lets the agent edit the doc on request (chat edit + the Settings topicdocs editor both target this path)
 }
 
 // LoadTopicKnowledge reads <dir>/<topicKey>.md and freezes the result per

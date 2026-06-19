@@ -166,6 +166,19 @@ func (c *PromptCache) ClearSession(key string) {
 	delete(c.sessTopicStore, key)
 }
 
+// ClearAllTopicSnapshots drops every session's frozen per-topic knowledge so the
+// next turn re-reads <key>.md from disk. It backs miniapp.topicdocs.write_current
+// with applyNow=true: topic background is shared across all session keys
+// (client:main, its sub-conversations, cron, …), so clearing one session would
+// not fully apply an edit — the whole topic store must be swept. Frozen context
+// files are left intact (a topic edit does not touch CLAUDE.md/SOUL.md/etc.).
+// The cost is a one-time Static-cache miss per active session on the next turn.
+func (c *PromptCache) ClearAllTopicSnapshots() {
+	c.sessMu.Lock()
+	defer c.sessMu.Unlock()
+	c.sessTopicStore = nil
+}
+
 // --- One-time values ---
 
 // Timezone returns the resolved timezone string and location.

@@ -160,6 +160,10 @@ var requiredMethods = []string{
 	"miniapp.todo.update",
 	"miniapp.todo.set_done",
 	"miniapp.todo.delete",
+	// Single-topic background editor — registers whenever topics resolve
+	// (the test harness loads the real deneb.json topics map {"0":"업무"}).
+	"miniapp.topicdocs.read_current",
+	"miniapp.topicdocs.write_current",
 	// miniapp.memory.{search,get_page,categories,list_in_category,diary_recent}
 	// are conditional on wiki being enabled (DENEB_WIKI_ENABLED) — omitted
 	// here, matching the wiki.* exclusion above.
