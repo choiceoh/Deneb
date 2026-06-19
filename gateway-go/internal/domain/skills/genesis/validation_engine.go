@@ -1,10 +1,13 @@
 package genesis
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
 )
 
@@ -21,6 +24,34 @@ type SkillValidationEngine struct {
 	logger        *slog.Logger
 	caseLimit     int
 	minScoreDelta float64
+
+	// executor is the optional behavioral-replay model (set via SetExecutor).
+	// nil → the behavioral gate is disabled and EvaluateBehavior fails open.
+	// Guarded because SetExecutor (startup/reconfig) can race an in-flight evolve.
+	mu            sync.RWMutex
+	executor      *llm.Client
+	executorModel string
+}
+
+// replayBehaviorMaxCases bounds how many replay cases the behavioral gate runs
+// per evolve. Each case costs two executor calls (original + candidate), so the
+// cap keeps a background evolve cycle from ballooning into many LLM calls.
+const replayBehaviorMaxCases = 5
+
+// SkillBehaviorResult reports the execution-grounded comparison of a candidate
+// rewrite against the original on stored replay cases. Evaluated is false when
+// the gate did not run (no executor / no cases / executor error) — callers must
+// treat that as a pass (fail-open), never a block.
+type SkillBehaviorResult struct {
+	Evaluated       bool     `json:"evaluated"`
+	Pass            bool     `json:"pass"`
+	Reason          string   `json:"reason,omitempty"`
+	CaseCount       int      `json:"caseCount,omitempty"`
+	OriginalPassed  int      `json:"originalPassed,omitempty"`
+	OriginalTotal   int      `json:"originalTotal,omitempty"`
+	CandidatePassed int      `json:"candidatePassed,omitempty"`
+	CandidateTotal  int      `json:"candidateTotal,omitempty"`
+	Failures        []string `json:"failures,omitempty"`
 }
 
 // SkillValidationResult describes original-vs-candidate performance on
@@ -49,6 +80,120 @@ func NewSkillValidationEngine(tracker *Tracker, logger *slog.Logger) *SkillValid
 		caseLimit:     defaultSkillValidationCaseLimit,
 		minScoreDelta: skillHeldOutMinScoreDelta,
 	}
+}
+
+// SetExecutor wires the optional behavioral-replay executor: a model that
+// simulates the production agent following a skill so EvaluateBehavior can score
+// the candidate's tool-call behavior. Passing nil disables the behavioral gate.
+func (v *SkillValidationEngine) SetExecutor(client *llm.Client, model string) {
+	if v == nil {
+		return
+	}
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	v.executor = client
+	v.executorModel = strings.TrimSpace(model)
+}
+
+func (v *SkillValidationEngine) executorSnapshot() (*llm.Client, string) {
+	v.mu.RLock()
+	defer v.mu.RUnlock()
+	return v.executor, v.executorModel
+}
+
+// EvaluateBehavior replays the original and candidate skill bodies through the
+// executor model on stored replay cases and rejects a candidate that REGRESSES
+// the proven tool-call behavior. It is a do-no-harm safety net orthogonal to the
+// LLM self-test/judge (which assesses overall improvement): a rewrite that drops
+// or reorders a required tool call is caught even if it "reads" better, because
+// the executor is asked what the skill would make the agent DO, not how it looks.
+//
+// Fail-open: no executor, no behavior-evaluable cases, or any executor/parse
+// error returns an un-evaluated pass (Evaluated=false). A flaky simulation must
+// never block a real improvement — the same doctrine as the goal-loop judge.
+func (v *SkillValidationEngine) EvaluateBehavior(ctx context.Context, skillName, originalBody, candidateBody string) (SkillBehaviorResult, error) {
+	if v == nil || v.tracker == nil {
+		return SkillBehaviorResult{}, nil
+	}
+	executor, model := v.executorSnapshot()
+	if executor == nil {
+		return SkillBehaviorResult{}, nil
+	}
+	limit := v.caseLimit
+	if limit <= 0 {
+		limit = defaultSkillValidationCaseLimit
+	}
+	cases, err := v.tracker.RecentSkillValidationCases(skillName, limit)
+	if err != nil {
+		return SkillBehaviorResult{}, err
+	}
+	evaluable := make([]SkillValidationCaseRecord, 0, len(cases))
+	for _, tc := range cases {
+		if replayBehaviorEvaluable(tc.Replay) {
+			evaluable = append(evaluable, tc)
+			if len(evaluable) >= replayBehaviorMaxCases {
+				break
+			}
+		}
+	}
+	if len(evaluable) == 0 {
+		return SkillBehaviorResult{}, nil
+	}
+
+	var orig, cand validationCaseScore
+	for _, tc := range evaluable {
+		origTrace, oerr := v.runReplayExecutorWith(ctx, executor, model, originalBody, tc.Replay)
+		if oerr != nil {
+			if v.logger != nil {
+				v.logger.Warn("genesis: behavioral replay executor failed (original), skipping gate",
+					"skill", skillName, "error", oerr)
+			}
+			return SkillBehaviorResult{}, nil
+		}
+		candTrace, cerr := v.runReplayExecutorWith(ctx, executor, model, candidateBody, tc.Replay)
+		if cerr != nil {
+			if v.logger != nil {
+				v.logger.Warn("genesis: behavioral replay executor failed (candidate), skipping gate",
+					"skill", skillName, "error", cerr)
+			}
+			return SkillBehaviorResult{}, nil
+		}
+		orig.add(scoreReplayAgainstTrace(origTrace, tc))
+		cand.add(scoreReplayAgainstTrace(candTrace, tc))
+	}
+
+	result := SkillBehaviorResult{
+		Evaluated:       cand.Total > 0,
+		Pass:            true,
+		CaseCount:       len(evaluable),
+		OriginalPassed:  orig.Passed,
+		OriginalTotal:   orig.Total,
+		CandidatePassed: cand.Passed,
+		CandidateTotal:  cand.Total,
+		Failures:        cand.Failures,
+	}
+	if cand.Total == 0 {
+		result.Evaluated = false
+		return result, nil
+	}
+	// Regression-only gate: the candidate must not match FEWER tool-call
+	// assertions than the original. Requiring strict improvement here would
+	// wrongly block legitimate non-behavioral edits (a clarified pitfall, a
+	// fixed path) that preserve the same correct tool plan — the LLM judge
+	// owns the "is it better" question; this owns "did it break what worked".
+	if cand.Passed < orig.Passed {
+		result.Pass = false
+		result.Reason = fmt.Sprintf(
+			"behavioral replay regressed: candidate matched %d/%d tool-call assertions vs original %d/%d: %s",
+			cand.Passed, cand.Total, orig.Passed, orig.Total, formatValidationFailures(cand.Failures))
+	}
+	return result, nil
+}
+
+// replayBehaviorEvaluable reports whether a replay case can be executed: it needs
+// a user task to simulate and at least one assertion to score the resulting plan.
+func replayBehaviorEvaluable(r SkillReplayCaseRecord) bool {
+	return strings.TrimSpace(r.Input) != "" && r.hasAssertions()
 }
 
 // ValidateCandidate runs selector-side held-out validation. No stored cases is a

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"os"
 	"strings"
 	"time"
 
@@ -168,7 +169,36 @@ func (s *Server) configureGenesisEvolverModels(evolver *genesis.Evolver) (modelr
 		evolver.SetTeacher(nil, "")
 	}
 	evolver.SetThinkingKwargs(s.genesisThinkingKwargs())
+
+	// Behavioral-replay executor (DENEB_SKILL_EVOLVE_REPLAY, off by default).
+	// A lightweight, LOCAL model simulates the production agent following a
+	// skill so the held-out gate can score tool-call behavior and reject a
+	// rewrite that regresses it. Lightweight (not main) is the right role: a
+	// consistent, cheap discriminator for the original-vs-candidate delta that
+	// avoids chat contention — the gate scores both bodies with the SAME model,
+	// so any executor bias cancels (.claude/rules/model-roles.md). Off until the
+	// replay-case corpus is fed; turning it on with an empty corpus is a no-op.
+	if replayExecutorEnabled() {
+		evolver.SetReplayExecutor(
+			s.modelRegistry.Client(modelrole.RoleLightweight),
+			s.modelRegistry.Model(modelrole.RoleLightweight),
+		)
+	} else {
+		evolver.SetReplayExecutor(nil, "")
+	}
 	return evolverRole, evolverModel
+}
+
+// replayExecutorEnabled reports whether the behavioral-replay validation gate is
+// switched on via DENEB_SKILL_EVOLVE_REPLAY. It is opt-in because each evaluated
+// case spends two extra (local) LLM calls per evolve.
+func replayExecutorEnabled() bool {
+	switch strings.TrimSpace(strings.ToLower(os.Getenv("DENEB_SKILL_EVOLVE_REPLAY"))) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *Server) genesisThinkingKwargs() map[string]string {
