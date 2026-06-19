@@ -13,8 +13,10 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/knowledge"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/notebook"
 	domskills "github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
+	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolreg"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
@@ -117,6 +119,18 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 		skillCatalogDirs = append(skillCatalogDirs, bundledSkillsDir)
 	}
 
+	// Notebook store: NotebookLM-style scoped source collections (딜/프로젝트
+	// 브리핑). Lives under the gateway state dir; a failure just disables the
+	// notebook tool (nil store), it does not block chat init.
+	var notebookStore *notebook.Store
+	notebookDir := filepath.Join(config.ResolveStateDir(), "notebooks")
+	if ns, err := notebook.NewStore(notebookDir); err != nil {
+		s.logger.Warn("notebook store unavailable", "error", err)
+	} else {
+		notebookStore = ns
+		s.logger.Info("notebook store enabled", "dir", notebookDir)
+	}
+
 	s.toolDeps = &chat.CoreToolDeps{
 		WorkspaceDir:      workspaceDir,
 		SkillsCatalogDirs: skillCatalogDirs,
@@ -146,6 +160,12 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 			// Same address book the contacts tool uses; lets a wiki write
 			// auto-record a referenced person's contact details.
 			Contacts: s.contactsStore,
+		},
+		Notebook: chat.NotebookDeps{
+			Store: notebookStore,
+			// Pinned wiki-page sources are read live from the same store at
+			// brief time, so a notebook briefing reflects the current page.
+			Wiki: chatCfg.WikiStore,
 		},
 		Contacts: chat.ContactsDeps{
 			// Created during registerEarlyMethods (no chat dep), so it's already

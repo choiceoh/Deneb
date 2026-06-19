@@ -496,3 +496,18 @@ func RegisterWikiTools(registry toolctx.ToolRegistrar, wikiDeps *toolctx.WikiDep
 		})
 	}
 }
+
+// RegisterNotebookTool registers the notebook tool — NotebookLM-style scoped
+// source collections for grounded, cited synthesis (딜/프로젝트 브리핑). Skipped
+// when the notebook store is unavailable.
+func RegisterNotebookTool(registry toolctx.ToolRegistrar, deps *toolctx.NotebookDeps) {
+	if deps == nil || deps.Store == nil {
+		return
+	}
+	registry.RegisterTool(toolctx.ToolDef{
+		Name:        "notebook",
+		Description: "NotebookLM식 자료 노트북: create (노트북 생성), list (목록), show (자료 보기), add_source (자료 핀: kind=wiki 위키페이지 또는 kind=note 붙여넣기 텍스트), remove_source (자료 제거), delete (노트북 삭제), brief (핀된 자료에만 근거한 인용 포함 브리핑 생성). 특정 딜/프로젝트의 메일·문서·메모를 한데 모아 그 자료만으로 출처 추적 가능한 종합을 만들 때 사용. brief는 [S1] 형식으로 각 사실을 인용한다",
+		InputSchema: notebookToolSchema(),
+		Fn:          tools.ToolNotebook(deps),
+	})
+}
