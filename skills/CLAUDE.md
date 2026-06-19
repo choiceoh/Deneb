@@ -29,9 +29,9 @@ description: One-line description of what skills belong in this category.
 
 | Category | Description | Skills |
 |---|---|---|
-| `coding` | Software development, code generation, version control, CI/CD | evolution-proposal, github, skill-creator, skill-evolution, skill-factory |
+| `coding` | Software development, code generation, version control, CI/CD | evolution-proposal, github, review-closeout, skill-creator, skill-evolution, skill-factory, taskflow |
 | `productivity` | Daily workflows, documents, summarization, personal automation | email-analysis, meeting-minutes, morning-letter, session-logs, summarize, weekly-report |
-| `devops` | System monitoring, terminal management, infrastructure | healthcheck, tmux |
+| `devops` | System monitoring, terminal management, infrastructure | healthcheck, node-connect, remote-validation, tmux |
 | `security` | Security, secrets management, and credential handling | (none) |
 | `integration` | External service connectivity, API bridges | (none) |
 
@@ -195,6 +195,8 @@ Experience → Proposal → Genesis/Create → Use → Evolution → Improved Sk
 | **Creation** | `skill-factory` | Extract reusable patterns from complex workflows |
 | **Authoring** | `skill-creator` | Create/edit/audit SKILL.md files |
 | **Evolution** | `skill-evolution` | Optimize skills via autoresearch methodology |
+| **Closeout** | `review-closeout` | Triage PR review findings, keep scope bounded, and prove merge readiness |
+| **Task flow** | `taskflow` | Keep long coding/ops work tied to one owner, state, wait, and proof path |
 
 ### Autonomous Skill Creation
 

@@ -561,6 +561,8 @@ private fun skillMetaLine(skill: SkillRow): String = listOfNotNull(
     skillSourceLabel(skill.source).takeIf { it.isNotBlank() },
     (skill.editable && skill.deletable).takeIf { it }?.let { "수정/삭제 가능" },
     skill.version.takeIf { it.isNotBlank() }?.let { "v$it" },
+    skill.dependencySummary.size.takeIf { it > 0 }?.let { "요구 ${it}개" },
+    skill.installSummary.size.takeIf { it > 0 }?.let { "설치 ${it}개" },
     skill.evolveCount.takeIf { it > 0 }?.let { "진화 ${it}회" },
     skill.totalUses.takeIf { it > 0 }?.let { "사용 ${it}회" },
 ).joinToString(" · ")

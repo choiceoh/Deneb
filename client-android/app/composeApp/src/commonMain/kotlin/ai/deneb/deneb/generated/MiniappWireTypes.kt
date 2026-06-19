@@ -502,6 +502,8 @@ data class SelfCorrectionCandidate(
     val source: String = "",
     val reviewer: String = "",
     val reviewNote: String = "",
+    val evidenceKinds: List<String> = emptyList(),
+    val reviewActions: List<String> = emptyList(),
     val createdAt: Long = 0L,
     val updatedAt: Long = 0L,
 )
@@ -585,6 +587,9 @@ data class SkillRow(
     val name: String = "",
     val description: String = "",
     val category: String = "",
+    val homepage: String = "",
+    val tags: List<String> = emptyList(),
+    val relatedSkills: List<String> = emptyList(),
     val source: String = "",
     val version: String = "",
     val origin: String = "",
@@ -596,6 +601,8 @@ data class SkillRow(
     val curatorState: String = "",
     val editable: Boolean = false,
     val deletable: Boolean = false,
+    val dependencySummary: List<String> = emptyList(),
+    val installSummary: List<String> = emptyList(),
 )
 
 @Immutable

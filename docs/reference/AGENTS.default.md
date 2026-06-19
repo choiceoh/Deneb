@@ -119,8 +119,8 @@ Skill discovery is filesystem-driven — the gateway indexes `skills/` at startu
 and the native client's Settings → 스킬 tab lists them read-only (no toggles).
 
 - **productivity/** — email-analysis, meeting-minutes, morning-letter, session-logs, summarize, weekly-report
-- **coding/** — github, skill-creator, skill-factory, skill-evolution, evolution-proposal
-- **devops/** — healthcheck, tmux
+- **coding/** — github, review-closeout, skill-creator, skill-factory, skill-evolution, evolution-proposal, taskflow
+- **devops/** — healthcheck, node-connect, remote-validation, tmux
 - **security/** — 1password
 
 ## Usage Notes

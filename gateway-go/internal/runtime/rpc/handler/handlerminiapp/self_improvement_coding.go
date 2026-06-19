@@ -39,6 +39,8 @@ type SelfCorrectionCandidate struct {
 	Source         string   `json:"source,omitempty"`
 	Reviewer       string   `json:"reviewer,omitempty"`
 	ReviewNote     string   `json:"reviewNote,omitempty"`
+	EvidenceKinds  []string `json:"evidenceKinds,omitempty"`
+	ReviewActions  []string `json:"reviewActions,omitempty"`
 	CreatedAt      int64    `json:"createdAt,omitempty"`
 	UpdatedAt      int64    `json:"updatedAt,omitempty"`
 }
@@ -132,9 +134,52 @@ func selfCorrectionCandidate(rec genesis.SelfCorrectionCandidateRecord) SelfCorr
 		Source:         rec.Source,
 		Reviewer:       rec.Reviewer,
 		ReviewNote:     truncateDetail(rec.ReviewNote, lifecycleTextMaxRunes),
+		EvidenceKinds:  selfCorrectionEvidenceKinds(rec),
+		ReviewActions:  selfCorrectionReviewActions(rec),
 		CreatedAt:      rec.CreatedAt,
 		UpdatedAt:      rec.UpdatedAt,
 	}
+}
+
+func selfCorrectionEvidenceKinds(rec genesis.SelfCorrectionCandidateRecord) []string {
+	out := make([]string, 0, 6)
+	if strings.TrimSpace(rec.SessionKey) != "" {
+		out = append(out, "session")
+	}
+	if strings.TrimSpace(rec.Evidence) != "" {
+		out = append(out, "evidence")
+	}
+	if len(rec.TargetFiles) > 0 {
+		out = append(out, "target_files")
+	}
+	if strings.TrimSpace(rec.Risk) != "" {
+		out = append(out, "risk")
+	}
+	if strings.TrimSpace(rec.Reviewer) != "" || strings.TrimSpace(rec.ReviewNote) != "" {
+		out = append(out, "review")
+	}
+	if len(out) == 0 {
+		out = append(out, "needs_evidence")
+	}
+	return out
+}
+
+func selfCorrectionReviewActions(rec genesis.SelfCorrectionCandidateRecord) []string {
+	out := make([]string, 0, 5)
+	if strings.TrimSpace(rec.SessionKey) != "" {
+		out = append(out, "open_session")
+	}
+	if len(rec.TargetFiles) > 0 {
+		out = append(out, "inspect_target_files")
+	}
+	if strings.TrimSpace(rec.Evidence) == "" {
+		out = append(out, "add_evidence")
+	}
+	if strings.TrimSpace(rec.Risk) == "" {
+		out = append(out, "assess_risk")
+	}
+	out = append(out, "run_focused_validation", "mark_review_status")
+	return out
 }
 
 func normalizeSelfImprovementCodingStatus(status string) (string, error) {
