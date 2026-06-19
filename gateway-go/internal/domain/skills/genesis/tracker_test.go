@@ -1032,6 +1032,13 @@ func TestSelfHarnessSignalsCountTargetRecurrence(t *testing.T) {
 		ExpectedBehaviorChange: "add bounded execution",
 		RegressionRisk:         "may reject slow but valid commands",
 	}
+	// The recurrence gate (addTargetRecurrenceSignalsLocked) only counts a
+	// failure whose UsedAt is strictly AFTER the evolve. In production the two
+	// are minutes/hours apart; stamp the failure explicitly past the evolve so
+	// the test does not race the millisecond clock — previously both calls took
+	// the same time.Now().UnixMilli(), so the recurrence was dropped whenever
+	// they landed in the same millisecond (a wall-clock-dependent flake).
+	evolveAt := time.Now().UnixMilli()
 	if err := tr.LogEvolveWithAudit("deploy-helper", "1.0.1", "timeout recovery", audit); err != nil {
 		t.Fatalf("LogEvolveWithAudit: %v", err)
 	}
@@ -1041,6 +1048,7 @@ func TestSelfHarnessSignalsCountTargetRecurrence(t *testing.T) {
 		Success:    false,
 		ErrorMsg:   "context deadline exceeded while deploying",
 		Source:     UsageSourceReal,
+		UsedAt:     evolveAt + 1000,
 	}); err != nil {
 		t.Fatalf("RecordUsage recurrence: %v", err)
 	}
