@@ -4,7 +4,6 @@ import ai.deneb.data.AppSettings
 import ai.deneb.data.DataRepository
 import ai.deneb.data.ThemeMode
 import ai.deneb.deneb.DenebGatewayClient
-import ai.deneb.deneb.DropboxAuthBridge
 import ai.deneb.deneb.captureAudio
 import ai.deneb.deneb.captureDocument
 import ai.deneb.deneb.captureImage
@@ -68,7 +67,6 @@ class MainActivity : ComponentActivity() {
         handleDeepLinkIntent(intent)
         handleShareIntent(intent)
         handleVoiceIntent(intent)
-        handleDropboxAuthIntent(intent)
 
         val dynamicColor = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
         val appSettings: AppSettings = get()
@@ -193,7 +191,6 @@ class MainActivity : ComponentActivity() {
         handleDeepLinkIntent(intent)
         handleShareIntent(intent)
         handleVoiceIntent(intent)
-        handleDropboxAuthIntent(intent)
     }
 
     // Voice capture (음성 캡처 app shortcut): launch the system speech recognizer.
@@ -201,17 +198,6 @@ class MainActivity : ComponentActivity() {
         if (intent?.data?.toString() != "deneb://voice") return
         intent.data = null // consume so a configuration change doesn't re-launch
         launchVoiceCapture()
-    }
-
-    // Dropbox OAuth redirect: after consent Dropbox returns to
-    // deneb://dropbox-auth?code=…; hand the code to the connect wizard
-    // (Settings > 연동) via DropboxAuthBridge, which exchanges it for a token.
-    private fun handleDropboxAuthIntent(intent: Intent?) {
-        val data = intent?.data ?: return
-        if (data.scheme != "deneb" || data.host != "dropbox-auth") return
-        val code = data.getQueryParameter("code")
-        intent.data = null // consume so a configuration change doesn't re-deliver
-        if (!code.isNullOrBlank()) DropboxAuthBridge.code.value = code
     }
 
     // launchVoiceCapture fires the system speech recognizer; its transcript is
