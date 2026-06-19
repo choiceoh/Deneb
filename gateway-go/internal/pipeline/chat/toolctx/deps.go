@@ -28,18 +28,23 @@ type CoreToolDeps struct {
 	// locations listed in the system prompt are actually readable —
 	// without this they were clamped to the workspace root. Empty disables.
 	SkillsCatalogDirs []string
-	Process           ProcessDeps
-	Sessions          SessionDeps
-	Chrono            ChronoDeps
-	Wiki              WikiDeps
-	Contacts          ContactsDeps
-	Calendar          CalendarDeps
-	LLMClient         *llm.Client
-	DefaultModel      string
-	AgentLog          *agentlog.Writer
-	LogCapture        *observe.LogCapture   // optional; in-memory log ring for the observe tool
-	WorkFeed          *workfeed.Store       // optional; proactive-card engagement for observe action=proactive
-	SpilloverStore    *agent.SpilloverStore // optional; spills large tool results to disk
+	// BundledSkillsDir is the repo's checked-in skills/ root (SourceBundled). The
+	// skills tool rejects mutating actions on paths under it so an agent can't
+	// modify or delete checked-in skill files — it must create a workspace
+	// override instead. Empty disables the guard.
+	BundledSkillsDir string
+	Process          ProcessDeps
+	Sessions         SessionDeps
+	Chrono           ChronoDeps
+	Wiki             WikiDeps
+	Contacts         ContactsDeps
+	Calendar         CalendarDeps
+	LLMClient        *llm.Client
+	DefaultModel     string
+	AgentLog         *agentlog.Writer
+	LogCapture       *observe.LogCapture   // optional; in-memory log ring for the observe tool
+	WorkFeed         *workfeed.Store       // optional; proactive-card engagement for observe action=proactive
+	SpilloverStore   *agent.SpilloverStore // optional; spills large tool results to disk
 
 	// VllmBaseURLs lazily lists the deduped base URLs of OpenAI-mode vLLM
 	// roles; the observe tool scrapes each endpoint's /metrics for the

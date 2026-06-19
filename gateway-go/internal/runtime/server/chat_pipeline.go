@@ -104,15 +104,23 @@ func (s *Server) initMemorySubsystem(chatCfg *chat.HandlerConfig, regPtr **model
 func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Registry, transcriptStore chat.TranscriptStore, agentLogWriter *agentlog.Writer) {
 	workspaceDir := resolveWorkspaceDir()
 
+	// Out-of-workspace skill catalog roots: lets the read tool reach the SKILL.md
+	// locations the skills index advertises (same roots the discovery walks;
+	// workspace-local roots need no allowance). The repo's bundled skills/ root is
+	// included so bundled SKILL.md bodies are readable too (not just listed).
+	bundledSkillsDir := chat.BundledSkillsDir()
+	skillCatalogDirs := []string{
+		domskills.DefaultManagedSkillsDir(),
+		domskills.DefaultPersonalSkillsDir(),
+	}
+	if bundledSkillsDir != "" {
+		skillCatalogDirs = append(skillCatalogDirs, bundledSkillsDir)
+	}
+
 	s.toolDeps = &chat.CoreToolDeps{
-		WorkspaceDir: workspaceDir,
-		// Out-of-workspace skill catalog roots: lets the read tool reach the
-		// SKILL.md locations the skills index advertises (same roots the
-		// discovery walks; workspace-local roots need no allowance).
-		SkillsCatalogDirs: []string{
-			domskills.DefaultManagedSkillsDir(),
-			domskills.DefaultPersonalSkillsDir(),
-		},
+		WorkspaceDir:      workspaceDir,
+		SkillsCatalogDirs: skillCatalogDirs,
+		BundledSkillsDir:  bundledSkillsDir,
 		Process: chat.ProcessDeps{
 			Mgr:          s.processes,
 			WorkspaceDir: workspaceDir,

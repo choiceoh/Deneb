@@ -27,9 +27,9 @@ type SkillManageInvalidateFn func()
 
 // ToolSkills creates the unified skills tool with action dispatch
 // (list/create/patch/delete/read/list_files/write_file/remove_file).
-func ToolSkills(getSnapshot SkillsSnapshotProvider, workspaceDir string, invalidate SkillManageInvalidateFn) ToolFunc {
+func ToolSkills(getSnapshot SkillsSnapshotProvider, workspaceDir, bundledSkillsDir string, invalidate SkillManageInvalidateFn) ToolFunc {
 	listFn := toolSkillsList(getSnapshot)
-	manageFn := toolSkillManage(getSnapshot, workspaceDir, invalidate)
+	manageFn := toolSkillManage(getSnapshot, workspaceDir, bundledSkillsDir, invalidate)
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			Action string `json:"action"`
@@ -58,7 +58,7 @@ func ToolSkills(getSnapshot SkillsSnapshotProvider, workspaceDir string, invalid
 // but the system prompt is NOT rebuilt until the next session starts.
 // Pass `apply: true` to opt into immediate invalidation when the agent
 // truly needs the change visible in the current turn (rare).
-func toolSkillManage(getSnapshot SkillsSnapshotProvider, workspaceDir string, invalidate SkillManageInvalidateFn) ToolFunc {
+func toolSkillManage(getSnapshot SkillsSnapshotProvider, workspaceDir, bundledSkillsDir string, invalidate SkillManageInvalidateFn) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			Action      string `json:"action"`
@@ -98,6 +98,13 @@ func toolSkillManage(getSnapshot SkillsSnapshotProvider, workspaceDir string, in
 			if rerr != nil {
 				return "", rerr
 			}
+			// Bundled (repo-checked-in) skills are read-only: reject mutating
+			// actions so the agent can't modify or delete the source skills/...
+			// files. To change one it must create a same-named workspace skill
+			// (workspace overrides bundled in discovery).
+			if isMutatingSkillAction(p.Action) && isPathUnder(skillPath, bundledSkillsDir) {
+				return "", fmt.Errorf("'%s'는 레포에 체크인된 번들 스킬이라 직접 수정·삭제할 수 없습니다. 변경하려면 create로 동명 스킬을 워크스페이스에 만드세요(워크스페이스가 번들보다 우선합니다)", p.Name)
+			}
 			switch p.Action {
 			case "patch":
 				result, err = skillPatch(skillPath, p.Name, p.OldText, p.NewText, effectiveInvalidate)
@@ -126,6 +133,29 @@ func toolSkillManage(getSnapshot SkillsSnapshotProvider, workspaceDir string, in
 		}
 		return result + cacheApplyNotice(p.Apply), nil
 	}
+}
+
+// isMutatingSkillAction reports whether an action writes or deletes skill files
+// (as opposed to read/list_files which only inspect).
+func isMutatingSkillAction(action string) bool {
+	switch action {
+	case "patch", "delete", "write_file", "remove_file":
+		return true
+	}
+	return false
+}
+
+// isPathUnder reports whether path is inside root. Empty root returns false so
+// the bundled-skill guard is a no-op when no bundled dir is configured.
+func isPathUnder(path, root string) bool {
+	if root == "" {
+		return false
+	}
+	rel, err := filepath.Rel(root, path)
+	if err != nil {
+		return false
+	}
+	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
 // cacheApplyNotice returns a short Korean notice the agent sees after
