@@ -71,6 +71,7 @@ internal fun FeedScreen(
     onMarkSeen: (String) -> Unit,
     onLoadDateRange: (Long, Long) -> Unit,
     onRunAction: (String, String) -> Unit,
+    onSubmitFeedback: (String, String) -> Unit,
 ) {
     DenebScreenScaffold(title = "피드", onBack = {}, showBack = false) {
         // Keep the selected date independent of the loaded item list. A ranged fetch
@@ -115,6 +116,7 @@ internal fun FeedScreen(
         val unread = dayItems.filterNot { seenSnapshot.contains(it.id) }
         val read = dayItems.filter { seenSnapshot.contains(it.id) }
         var actionItem by remember { mutableStateOf<WorkFeedItem?>(null) }
+        var feedbackItem by remember { mutableStateOf<WorkFeedItem?>(null) }
 
         val open: (String) -> Unit = { id ->
             expandedId = if (expandedId == id) null else id
@@ -157,6 +159,20 @@ internal fun FeedScreen(
                         actionItem = null
                         onRunAction(item.id, "trash")
                     },
+                    onFeedback = {
+                        actionItem = null
+                        feedbackItem = item
+                    },
+                )
+            }
+        }
+
+        feedbackItem?.let { item ->
+            ModalBottomSheet(onDismissRequest = { feedbackItem = null }) {
+                WorkFeedFeedbackSheetContent(
+                    item = item,
+                    onSubmit = { text -> onSubmitFeedback(item.id, text) },
+                    onClose = { feedbackItem = null },
                 )
             }
         }

@@ -132,6 +132,12 @@ func MiniappMethods(deps Deps) map[string]rpcutil.HandlerFunc {
 	if deps.SaveContacts != nil || deps.EnrichContacts != nil {
 		m["miniapp.capture.contacts"] = handleMiniappCaptureContacts(deps)
 	}
+	// Work-feed feedback (long-press a card → 정정·피드백): annotate the card with
+	// the user's correction and run one agent turn to fix the durable wiki
+	// knowledge. Needs the work-feed store wired (List + Correct).
+	if deps.WorkFeed != nil {
+		m["miniapp.workfeed.feedback"] = handleMiniappWorkfeedFeedback(deps)
+	}
 	return m
 }
 
@@ -547,6 +553,135 @@ func recordWorkFeed(deps Deps, item workfeed.Item) {
 		return
 	}
 	_, _ = deps.WorkFeed.Append(item)
+}
+
+// handleMiniappWorkfeedFeedback records a user's correction on a work-feed card
+// and runs one agent turn to reconcile the durable knowledge — the native
+// client's "long-press a feed card → 정정·피드백" path, where the user teaches the
+// agent something it got wrong or didn't know. Two effects, by design (both):
+//
+//  1. The card is annotated in place with the user's verbatim correction (an
+//     on-card erratum), so the wrong analysis is never shown unqualified. This
+//     happens first, so the correction is never lost even if the turn below fails.
+//  2. One agent turn — with the wiki tool — updates the durable knowledge base
+//     (인물/프로젝트/거래처/시스템 pages) so future analysis and recall reflect the fix.
+//
+// The turn runs ephemeral (EphemeralUser+EphemeralAssistant): a correction made
+// from the feed must not land as visible messages in the client:main chat
+// transcript, but the wiki write (a tool side effect) still persists.
+//
+// Params:
+//   - itemId   (string, required): the work-feed card id
+//   - feedback (string, required): the user's correction / teaching text
+func handleMiniappWorkfeedFeedback(deps Deps) rpcutil.HandlerFunc {
+	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		p, errResp := rpcutil.DecodeParams[struct {
+			ItemID   string `json:"itemId"`
+			Feedback string `json:"feedback"`
+		}](req)
+		if errResp != nil {
+			return errResp
+		}
+		itemID := strings.TrimSpace(p.ItemID)
+		feedback := strings.TrimSpace(p.Feedback)
+		if itemID == "" {
+			return rpcerr.MissingParam("itemId").Response(req.ID)
+		}
+		if feedback == "" {
+			return rpcerr.MissingParam("feedback").Response(req.ID)
+		}
+		// Locate the card so the turn can reconcile against the exact analysis the
+		// user is correcting. List(0, true) returns every retained item (no limit,
+		// includes acked/snoozed) — the card may have been acked before correcting.
+		var card workfeed.Item
+		found := false
+		if items, _, lerr := deps.WorkFeed.List(0, true); lerr == nil {
+			for _, it := range items {
+				if it.ID == itemID {
+					card = it
+					found = true
+					break
+				}
+			}
+		}
+		if !found {
+			return rpcerr.NotFound("work feed item").Response(req.ID)
+		}
+		// 1) Annotate the card immediately (built from the pre-correction card body
+		// below, so the turn still sees the original analysis).
+		updated, cerr := deps.WorkFeed.Correct(itemID, feedback)
+		if cerr != nil {
+			return rpcerr.WrapDependencyFailed("work feed correct failed", cerr).Response(req.ID)
+		}
+		sessionKey := DefaultSessionKey(card.SessionKey)
+		// 2) One agent turn updates the durable knowledge (wiki) from the correction.
+		message := buildWorkfeedFeedbackMessage(card, feedback)
+		release, aerr := deps.Chat.AcquireInteractiveTurn(ctx)
+		if aerr != nil {
+			return rpcerr.Unavailable("gateway busy: too many concurrent turns").Response(req.ID)
+		}
+		defer release()
+		res, serr := deps.Chat.SendSync(ctx, sessionKey, message, "", &chatpkg.SyncOptions{
+			Delivery:            &chatpkg.DeliveryContext{Channel: NativeClientChannel, To: sessionKey},
+			AutoDeliveredOutput: true,
+			// A feed correction is a side action, not a chat message — keep it out of
+			// the client:main transcript (the wiki write still persists).
+			EphemeralUser:      true,
+			EphemeralAssistant: true,
+			// The card body can carry untrusted mail/doc content: block exec/gmail send.
+			GateUntrustedTools: true,
+		})
+		if serr != nil {
+			// The card annotation already succeeded; surface the knowledge-turn
+			// failure softly but still return the annotated item so the client
+			// reflects the on-card correction.
+			return rpcutil.RespondOK(req.ID, map[string]any{
+				"ok":         true,
+				"item":       updated,
+				"text":       "정정 내용을 카드에 반영했습니다. (지식 업데이트는 일시적으로 실패했어요.)",
+				"sessionKey": sessionKey,
+			})
+		}
+		return rpcutil.RespondOK(req.ID, map[string]any{
+			"ok":         true,
+			"item":       updated,
+			"text":       res.BestText(),
+			"model":      res.Model,
+			"sessionKey": sessionKey,
+		})
+	}
+}
+
+// buildWorkfeedFeedbackMessage assembles the one-turn instruction: take the user's
+// correction as ground truth, fix the durable wiki knowledge, and report briefly.
+// The card's on-card erratum is handled by the store, so the turn is told not to
+// repeat it.
+func buildWorkfeedFeedbackMessage(card workfeed.Item, feedback string) string {
+	var b strings.Builder
+	b.WriteString("사용자가 아래 업무 피드 카드의 분석 내용에 대해 정정·보강 피드백을 보냈다. ")
+	b.WriteString("[사용자 피드백]이 사용자가 직접 알려준 정확한 지식이니 사실로 받아들여라.\n\n")
+	b.WriteString("할 일:\n")
+	b.WriteString("1. 관련 위키 지식(인물·프로젝트·거래처·시스템 등)을 wiki 도구로 정정하거나 보강하라. ")
+	b.WriteString("기존 페이지가 있으면 고치고 없으면 적절한 카테고리에 새로 만들되, 바뀐 사실을 정확히 반영하고 ")
+	b.WriteString("출처가 '사용자 직접 정정(업무 피드 피드백)'임을 남겨라.\n")
+	b.WriteString("2. 무엇을 어떻게 반영했는지 한국어로 1~3줄로 간단히 보고하라. ")
+	b.WriteString("(이 카드 자체의 정정 표기는 시스템이 이미 처리했으니 다시 하지 마라.)\n\n")
+	b.WriteString("## 원본 카드\n")
+	if t := strings.TrimSpace(card.Title); t != "" {
+		b.WriteString("제목: ")
+		b.WriteString(t)
+		b.WriteByte('\n')
+	}
+	if body := strings.TrimSpace(card.Body); body != "" {
+		b.WriteString(body)
+		b.WriteByte('\n')
+	} else if s := strings.TrimSpace(card.Summary); s != "" {
+		b.WriteString(s)
+		b.WriteByte('\n')
+	}
+	b.WriteString("\n## 사용자 피드백\n")
+	b.WriteString(feedback)
+	return b.String()
 }
 
 // contactsSummary renders a short Korean summary of an address-book sync for the

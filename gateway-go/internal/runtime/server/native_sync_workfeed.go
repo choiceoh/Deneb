@@ -52,6 +52,15 @@ func (s *nativeWorkFeedStore) Ack(id string) (workfeed.Item, error) {
 	return item, nil
 }
 
+func (s *nativeWorkFeedStore) Correct(id, note string) (workfeed.Item, error) {
+	item, err := s.store.Correct(id, note)
+	if err != nil {
+		return workfeed.Item{}, err
+	}
+	s.record(nativesync.WorkFeedUpdated(item))
+	return item, nil
+}
+
 func (s *nativeWorkFeedStore) RunAction(itemID, actionID string) (workfeed.ActionResult, error) {
 	result, err := s.store.RunAction(itemID, actionID)
 	if err != nil {

@@ -1114,6 +1114,31 @@ class DenebGatewayClient(
         return payload.prompt.ifBlank { null }
     }
 
+    /**
+     * Sends a user correction on a work-feed card (long-press → 정정·피드백). The
+     * gateway annotates the card in place with the correction and runs one agent
+     * turn to fix the durable wiki knowledge. The returned (annotated) item is
+     * upserted so the card reflects the correction; returns the agent's short
+     * confirmation text (or null). Suspends until the gateway turn completes —
+     * call from a background scope (the feed sheet closes optimistically).
+     */
+    suspend fun sendWorkFeedFeedback(itemId: String, feedback: String): String? {
+        if (itemId.isBlank() || feedback.isBlank()) return null
+        val payload = callRpc<WorkFeedFeedbackPayload>(
+            "miniapp.workfeed.feedback",
+            buildJsonObject {
+                put("itemId", itemId)
+                put("feedback", feedback)
+            },
+        ) ?: return null
+        if (payload.item.id.isNotBlank()) {
+            _denebWorkFeed.update { items ->
+                items.map { if (it.id == payload.item.id) payload.item else it }
+            }
+        }
+        return payload.text.ifBlank { null }
+    }
+
     private fun applyNativeSyncEvent(event: NativeSyncEvent, reloadSessions: MutableSet<String>) {
         when (event.type) {
             "workfeed.created" -> {

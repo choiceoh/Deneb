@@ -45,6 +45,14 @@ internal data class WorkFeedActionRunPayload(
 )
 
 @Serializable
+internal data class WorkFeedFeedbackPayload(
+    val ok: Boolean = false,
+    val item: WorkFeedItem = WorkFeedItem(),
+    val text: String = "",
+    val sessionKey: String = "",
+)
+
+@Serializable
 internal data class NativeSyncPayload(
     val events: List<NativeSyncEvent> = emptyList(),
     val cursor: Long = 0,

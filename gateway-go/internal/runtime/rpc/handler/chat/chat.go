@@ -58,6 +58,9 @@ type Deps struct {
 	WorkFeed interface {
 		Append(workfeed.Item) (workfeed.Item, error)
 		List(limit int, includeAcked bool) ([]workfeed.Item, int, error)
+		// Correct annotates a card with a user correction (native long-press
+		// feedback) and returns the updated item; used by miniapp.workfeed.feedback.
+		Correct(id, note string) (workfeed.Item, error)
 	}
 }
 
