@@ -29,9 +29,9 @@ func TestExtractDocument_ConsistentAcrossCallers(t *testing.T) {
 		t.Errorf("ExtractDocumentText diverged: ok=%v\n got=%q\nwant=%q", ok, got, r.text)
 	}
 
-	// Dropbox path returns the identical text (no header).
-	if dbx := extractDropboxFileText(ctx, "report.xlsx", xlsx); dbx != r.text {
-		t.Errorf("dropbox diverged:\n got=%q\nwant=%q", dbx, r.text)
+	// files store path returns the identical text (no header).
+	if fs := extractFileText(ctx, "report.xlsx", xlsx); fs != r.text {
+		t.Errorf("files store extract diverged:\n got=%q\nwant=%q", fs, r.text)
 	}
 
 	// Gmail path embeds the identical text under its own Korean header.
@@ -61,7 +61,7 @@ func TestExtractDocument_CallerDivergences(t *testing.T) {
 	if _, ok := ExtractDocumentText(ctx, txt, "note.txt", "text/plain"); ok {
 		t.Error("ExtractDocumentText must decline plain text")
 	}
-	if got := extractDropboxFileText(ctx, "note.txt", txt); got != "hello world" {
+	if got := extractFileText(ctx, "note.txt", txt); got != "hello world" {
 		t.Errorf("dropbox text = %q, want raw passthrough", got)
 	}
 	att := &gmail.AttachmentInfo{Filename: "note.txt", Size: len(txt)}
@@ -77,7 +77,7 @@ func TestExtractDocument_CallerDivergences(t *testing.T) {
 	if _, ok := ExtractDocumentText(ctx, bin, "blob.bin", "application/octet-stream"); ok {
 		t.Error("ExtractDocumentText must decline unknown binary")
 	}
-	if got := extractDropboxFileText(ctx, "blob.bin", bin); got != "" {
+	if got := extractFileText(ctx, "blob.bin", bin); got != "" {
 		t.Errorf("dropbox unsupported = %q, want empty", got)
 	}
 }

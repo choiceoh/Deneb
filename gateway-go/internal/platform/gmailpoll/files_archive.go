@@ -7,31 +7,27 @@ import (
 	"strings"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/dropbox"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/filestore"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
 )
 
-// archivableExts are attachment extensions substantive enough to keep in
-// Dropbox. Inline images, signatures, and calendar invites are skipped.
+// archivableExts are attachment extensions substantive enough to keep in the
+// file store. Inline images, signatures, and calendar invites are skipped.
 var archivableExts = []string{".pdf", ".xlsx", ".xls", ".docx", ".doc", ".pptx", ".ppt", ".hwp", ".hwpx", ".zip", ".csv"}
 
 // minArchiveSize skips tiny inline bits (1px trackers, signature glyphs).
 const minArchiveSize = 1024
 
-// archiveAttachments uploads substantive attachments of the analyzed emails to
-// Dropbox under ArchiveFolder/<date>/. Best-effort: a token-less host or any
-// per-file failure is logged and skipped, never failing the poll cycle. Returns
-// the archived destination paths for inclusion in the consolidated report.
+// archiveAttachments saves substantive attachments of the analyzed emails to the
+// local file store under ArchiveFolder/<date>/. Best-effort: opening the store or
+// any per-file failure is logged and skipped, never failing the poll cycle.
+// Returns the archived store paths for inclusion in the consolidated report.
+// Unlike the old Dropbox path there is no token gate — the local store is always
+// available, so attachments are always archived.
 func (s *Service) archiveAttachments(ctx context.Context, client *gmail.Client, details []*gmail.MessageDetail) []string {
-	// Re-check per cycle (cheap file stat) so connecting Dropbox after startup
-	// activates archiving without a restart — no startup-latched bool.
-	if !dropbox.HasToken() {
-		return nil
-	}
-	dbx, err := s.ensureDropbox()
+	store, err := filestore.DefaultLocalStore()
 	if err != nil {
-		// No Dropbox token yet (user hasn't run deneb-dropbox-auth) → skip.
-		s.log.Debug("첨부 아카이브 건너뜀 — Dropbox 미연동", "error", err)
+		s.log.Warn("첨부 아카이브 건너뜀 — 파일 저장소 열기 실패", "error", err)
 		return nil
 	}
 
@@ -49,27 +45,27 @@ func (s *Service) archiveAttachments(ctx context.Context, client *gmail.Client, 
 			}
 			dest := fmt.Sprintf("%s/%s/%s_%s", s.cfg.ArchiveFolder, day,
 				sanitizePathComponent(d.From), sanitizePathComponent(att.Filename))
-			if _, err := dbx.Upload(ctx, dest, data, false); err != nil {
-				s.log.Warn("첨부 Dropbox 업로드 실패", "dest", dest, "error", err)
+			meta, err := store.Put(ctx, dest, data, false)
+			if err != nil {
+				s.log.Warn("첨부 저장 실패", "dest", dest, "error", err)
 				continue
 			}
-			archived = append(archived, dest)
+			archived = append(archived, meta.PathDisplay)
 		}
 	}
 	return archived
 }
 
-// archiveInlineAttachments uploads the substantive attachments of an
-// LMTP-delivered message to Dropbox from their inline bytes (no Gmail fetch),
+// archiveInlineAttachments saves the substantive attachments of an LMTP-delivered
+// message to the local file store from their inline bytes (no Gmail fetch),
 // mirroring archiveAttachments' policy (isArchivable + dated, sender-tagged path).
-// Best-effort: a token-less host or any per-file failure is logged and skipped.
 func (s *Service) archiveInlineAttachments(ctx context.Context, msg *gmail.MessageDetail, bytesByID map[string][]byte) []string {
-	if len(bytesByID) == 0 || !dropbox.HasToken() {
+	if len(bytesByID) == 0 {
 		return nil
 	}
-	dbx, err := s.ensureDropbox()
+	store, err := filestore.DefaultLocalStore()
 	if err != nil {
-		s.log.Debug("첨부 아카이브 건너뜀 — Dropbox 미연동", "error", err)
+		s.log.Warn("첨부 아카이브 건너뜀 — 파일 저장소 열기 실패", "error", err)
 		return nil
 	}
 
@@ -85,29 +81,14 @@ func (s *Service) archiveInlineAttachments(ctx context.Context, msg *gmail.Messa
 		}
 		dest := fmt.Sprintf("%s/%s/%s_%s", s.cfg.ArchiveFolder, day,
 			sanitizePathComponent(msg.From), sanitizePathComponent(att.Filename))
-		if _, err := dbx.Upload(ctx, dest, data, false); err != nil {
-			s.log.Warn("첨부 Dropbox 업로드 실패", "dest", dest, "error", err)
+		meta, err := store.Put(ctx, dest, data, false)
+		if err != nil {
+			s.log.Warn("첨부 저장 실패", "dest", dest, "error", err)
 			continue
 		}
-		archived = append(archived, dest)
+		archived = append(archived, meta.PathDisplay)
 	}
 	return archived
-}
-
-// ensureDropbox lazily resolves the singleton Dropbox client (retries each call
-// if a previous init failed, e.g. token added after startup).
-func (s *Service) ensureDropbox() (*dropbox.Client, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.dropboxClient != nil {
-		return s.dropboxClient, nil
-	}
-	c, err := dropbox.DefaultClient()
-	if err != nil {
-		return nil, err
-	}
-	s.dropboxClient = c
-	return c, nil
 }
 
 func isArchivable(att gmail.AttachmentInfo) bool {
@@ -126,8 +107,8 @@ func isArchivable(att gmail.AttachmentInfo) bool {
 	return false
 }
 
-// sanitizePathComponent reduces a sender or filename to a safe single Dropbox
-// path component (no separators, no angle brackets).
+// sanitizePathComponent reduces a sender or filename to a safe single path
+// component (no separators, no angle brackets).
 func sanitizePathComponent(s string) string {
 	s = strings.TrimSpace(strings.Trim(strings.TrimSpace(s), "<>"))
 	s = strings.ReplaceAll(s, "/", "_")

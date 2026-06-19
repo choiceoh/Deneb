@@ -367,10 +367,10 @@ func RegisterRoutineTools(registry toolctx.ToolRegistrar, chrono *toolctx.Chrono
 	})
 
 	registry.RegisterTool(toolctx.ToolDef{
-		Name:        "dropbox",
-		Description: "Dropbox (native OAuth2): list, search, download (extract=true로 텍스트 추출 — PDF/이미지 OCR·Excel/Word/PowerPoint), upload, share (공유 링크), analyze (문서 가져와 내용 추출), backup (위키/주간보고/transcripts를 /Deneb-Backup/<날짜>/에 업로드). Auth: ~/.deneb/credentials/dropbox_app.json + dropbox_token.json (cmd/deneb-dropbox-auth로 발급)",
-		InputSchema: dropboxToolSchema(),
-		Fn:          tools.ToolDropbox(),
+		Name:        "files",
+		Description: "파일 저장소 (로컬 디스크, 외부 클라우드 아님): list, search, download (extract=true로 텍스트 추출 — PDF/이미지 OCR·Excel/Word/PowerPoint), upload (로컬 파일을 저장소에 저장), share (7일 유효 공유 링크), analyze (문서 내용 추출). 저장 위치: DENEB_FILES_DIR (기본 ~/.deneb/files). 인증 불필요.",
+		InputSchema: filesToolSchema(),
+		Fn:          tools.ToolFiles(),
 		Deferred:    true,
 	})
 	// Morning-letter data collection: six sections in parallel, raw JSON out;

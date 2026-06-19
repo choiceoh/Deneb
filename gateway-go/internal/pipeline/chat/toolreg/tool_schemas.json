@@ -956,36 +956,35 @@
     ]
   },
   {
-    "name": "dropbox",
+    "name": "files",
     "properties": {
       "action": {
         "type": "string",
-        "description": "Dropbox action to perform",
+        "description": "File store action to perform",
         "enum": [
           "list",
           "search",
           "download",
           "upload",
           "share",
-          "analyze",
-          "backup"
+          "analyze"
         ]
       },
       "path": {
         "type": "string",
-        "description": "Dropbox path for list/download/share/analyze (e.g. /folder/file.pdf). Empty means the account root (list)."
+        "description": "Store path for list/download/share/analyze (e.g. /메일/견적서.pdf). Empty means the store root (list)."
       },
       "query": {
         "type": "string",
-        "description": "Search query (for the search action)"
+        "description": "Search query matching file/folder names (for the search action)"
       },
       "local_path": {
         "type": "string",
-        "description": "Local file path to upload (for the upload action)"
+        "description": "Local file path to save into the store (for the upload action)"
       },
       "dest_path": {
         "type": "string",
-        "description": "Dropbox destination path for upload (default: /<local filename>)"
+        "description": "Store destination path for upload (default: /<local filename>)"
       },
       "overwrite": {
         "type": "boolean",
@@ -1008,16 +1007,6 @@
         "default": 20,
         "minimum": 1,
         "maximum": 100
-      },
-      "target": {
-        "type": "string",
-        "description": "Backup target for the backup action: which Deneb artifacts to upload to /Deneb-Backup/<date>/",
-        "enum": [
-          "wiki",
-          "weekly",
-          "transcripts",
-          "all"
-        ]
       }
     },
     "required": [

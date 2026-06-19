@@ -51,9 +51,9 @@ const maxToolDetailRunes = 48
 var toolDetailKeys = map[string][]string{
 	"calendar":  {"summary"},
 	"contacts":  {"query"},
-	"dropbox":   {"query", "path"},
 	"edit":      {"file_path"},
 	"exec":      {"command"},
+	"files":     {"query", "path"},
 	"gmail":     {"query"},
 	"graphify":  {"question", "node"},
 	"grep":      {"pattern"},

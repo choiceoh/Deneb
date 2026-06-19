@@ -12,7 +12,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/autonomous"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/dropbox"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
 )
 
@@ -90,10 +89,9 @@ type Config struct {
 	// (else they exhaust the budget and return empty). "" for non-vLLM models.
 	ThinkingKwarg string
 
-	// ArchiveFolder is the Dropbox base folder for archived attachments
-	// (default "/Deneb-Archive/메일"). Archiving runs whenever a Dropbox token
-	// exists (re-checked per cycle), so connecting Dropbox after startup
-	// activates it without a gateway restart.
+	// ArchiveFolder is the local file-store base folder for archived attachments
+	// (default "/Deneb-Archive/메일"). The local store is always available, so
+	// substantive attachments are archived every cycle.
 	ArchiveFolder string
 
 	// ThreadSource supplies thread/sender context from the on-box archive for the
@@ -117,11 +115,10 @@ type Service struct {
 	cfg Config
 	log *slog.Logger
 
-	gmailClient   *gmail.Client
-	llmClient     *llm.Client
-	notifier      Notifier
-	state         *stateStore
-	dropboxClient *dropbox.Client // lazy, for attachment archiving
+	gmailClient *gmail.Client
+	llmClient   *llm.Client
+	notifier    Notifier
+	state       *stateStore
 }
 
 // NewService creates a gmail poll service.
@@ -348,7 +345,7 @@ func (s *Service) poll(ctx context.Context, client *gmail.Client) error {
 	if err == nil && len(archived) > 0 {
 		var b strings.Builder
 		b.WriteString(notifyMsg)
-		fmt.Fprintf(&b, "\n\n📎 첨부 %d개를 Dropbox에 보관했습니다:\n", len(archived))
+		fmt.Fprintf(&b, "\n\n📎 첨부 %d개를 로컬 저장소에 보관했습니다:\n", len(archived))
 		for _, p := range archived {
 			fmt.Fprintf(&b, "- `%s`\n", p)
 		}
@@ -475,13 +472,13 @@ func (s *Service) IngestMessage(ctx context.Context, msg *gmail.MessageDetail, a
 	}
 
 	notify := strings.TrimSpace(res.Text)
-	// Archive substantive attachments to Dropbox from their inline bytes (the LMTP
+	// Archive substantive attachments to the local file store from their inline bytes (the LMTP
 	// path has them in-message — no Gmail fetch), and note it on the report, exactly
 	// like the poll path's archiveAttachments does.
 	if archived := s.archiveInlineAttachments(ctx, msg, attBytes); len(archived) > 0 && notify != "" {
 		var b strings.Builder
 		b.WriteString(notify)
-		fmt.Fprintf(&b, "\n\n📎 첨부 %d개를 Dropbox에 보관했습니다:\n", len(archived))
+		fmt.Fprintf(&b, "\n\n📎 첨부 %d개를 로컬 저장소에 보관했습니다:\n", len(archived))
 		for _, p := range archived {
 			fmt.Fprintf(&b, "- `%s`\n", p)
 		}
