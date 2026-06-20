@@ -50,6 +50,16 @@ const maxIndexFileBytes = 5 << 20 // 5 MiB
 // whitespace-only tail), which carry no signal.
 const minChunkRunes = 8
 
+// minSemanticScore is the cosine floor a file's best chunk must clear to count
+// as a semantic hit. BGE-M3 returns a non-trivial cosine (~0.3–0.6) even for
+// unrelated text, so a bare best>0 filter would always return up to `max`
+// results whenever the embedder is healthy — burying exact name/content matches
+// under semantic noise and starving the caller's lexical fallback (which only
+// triggers on an *empty* semantic result). 0.4 matches the wiki's BGE-M3
+// support band (wiki/search.go semSupportThreshold); below it the match is
+// noise, so the query falls through to name/content search as intended.
+const minSemanticScore = 0.4
+
 // embedBatchSize bounds how many chunks are embedded per request. Kept small
 // because the CPU BGE-M3 server drops (EOF) on large batches — the wiki index
 // learned the same lesson (semanticEmbedBatch=32).
@@ -374,8 +384,9 @@ func (si *SemanticIndex) Search(ctx context.Context, query string, max int, embe
 				bestSnip = fe.Chunks[i].Snippet
 			}
 		}
-		if best <= 0 {
-			continue // no usable chunk (empty entry or non-positive similarity)
+		if best < minSemanticScore {
+			continue // below the cosine floor (empty entry, or only noise-level
+			// similarity) ⇒ not a semantic hit; the caller's lexical fallback handles it
 		}
 		hits = append(hits, scored{path: p, size: fe.Size, mtime: fe.MTime, score: best, snippet: bestSnip})
 	}

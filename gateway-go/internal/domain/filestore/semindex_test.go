@@ -78,6 +78,77 @@ func TestSemanticIndex_ReindexAndSearch(t *testing.T) {
 	}
 }
 
+// fixedEmbedder returns a caller-chosen vector per exact text, so a test can
+// place a file's chunk at a precise cosine distance from the query — letting us
+// exercise the minSemanticScore floor (a real BGE-M3 scores unrelated text in a
+// non-zero band, which the plain vocab-count fakeEmbedder can't reproduce since
+// disjoint vocab yields an exact-0 cosine).
+type fixedEmbedder struct{ vecs map[string][]float32 }
+
+func (f *fixedEmbedder) IsHealthy() bool { return true }
+
+func (f *fixedEmbedder) Embed(_ context.Context, texts []string) ([][]float32, error) {
+	out := make([][]float32, len(texts))
+	for i, t := range texts {
+		v, ok := f.vecs[t]
+		if !ok {
+			v = []float32{0, 0} // unknown text → zero vector (cosine 0)
+		}
+		out[i] = v
+	}
+	return out, nil
+}
+
+// An irrelevant query whose best chunk cosine falls below minSemanticScore must
+// yield an EMPTY result (not a max-capped list of noise), so the caller's
+// name/content fallback kicks in. Pre-floor, the bare best>0 filter returned the
+// files because their cosine (~0.30) was positive — burying lexical matches.
+func TestSemanticIndex_ScoreFloor(t *testing.T) {
+	ctx := context.Background()
+	store := newTestStore(t)
+	// Bodies must clear minChunkRunes (8) to produce a chunk at all.
+	const fileA = "계약 납기 지연 위약금 조항입니다"
+	const fileB = "점심 메뉴 커피 음료 목록입니다"
+	mustPut(t, store, "/계약/납기.txt", fileA)
+	mustPut(t, store, "/회의/메뉴.txt", fileB)
+
+	// Each file chunk sits on its own unit axis; the irrelevant query points
+	// mostly along a third axis the files don't span, so its cosine to each file
+	// is 1/√11 ≈ 0.302 — positive (old filter kept it) but below the 0.4 floor.
+	const noiseQuery = "전혀 무관한 다른 질문입니다" // >= 8 runes (Search rejects shorter)
+	const matchQuery = "계약 납기 위약금 질문입니다"
+	embed := &fixedEmbedder{vecs: map[string][]float32{
+		fileA:      {1, 0, 0},
+		fileB:      {0, 1, 0},
+		noiseQuery: {1, 1, 3}, // ~0.302 to each file → all under the floor
+		matchQuery: {1, 0, 0}, // identical to fileA's chunk → cosine 1.0
+	}}
+
+	idx := NewSemanticIndex(filepath.Join(t.TempDir(), "idx.json"))
+	if _, err := idx.Reindex(ctx, store, plainText, embed); err != nil {
+		t.Fatalf("Reindex: %v", err)
+	}
+
+	hits, err := idx.Search(ctx, noiseQuery, 5, embed)
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if len(hits) != 0 {
+		t.Fatalf("below-floor query returned %d hits, want 0 (floor=%v): %+v",
+			len(hits), minSemanticScore, hits)
+	}
+
+	// Sanity: a query that DOES clear the floor still returns its file, proving
+	// the floor only cuts noise, not real hits.
+	good, err := idx.Search(ctx, matchQuery, 5, embed)
+	if err != nil {
+		t.Fatalf("Search (above floor): %v", err)
+	}
+	if len(good) != 1 || good[0].Entry.PathDisplay != "/계약/납기.txt" {
+		t.Fatalf("above-floor query hits = %+v, want 1 hit /계약/납기.txt", good)
+	}
+}
+
 func TestSemanticIndex_Incremental(t *testing.T) {
 	ctx := context.Background()
 	store := newTestStore(t)
