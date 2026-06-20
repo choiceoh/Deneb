@@ -58,6 +58,15 @@ data class CalendarProposalOut(
 
 @Immutable
 @Serializable
+data class ContactRow(
+    val name: String = "",
+    val phones: List<String> = emptyList(),
+    val emails: List<String> = emptyList(),
+    val org: String = "",
+)
+
+@Immutable
+@Serializable
 data class DashboardItem(
     val title: String = "",
     val subtitle: String = "",

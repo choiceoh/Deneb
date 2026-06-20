@@ -567,6 +567,20 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 			},
 		}),
 
+		// Mini App full address-book list (miniapp.contacts.list): the raw
+		// contacts.json mirror for the native 전체 연락처 browser, sectioned
+		// alphabetically on the client. Distinct from people.list (ranked Gmail
+		// counterparties). UNAVAILABLE when the store isn't configured.
+		handlerminiapp.ContactsMethods(handlerminiapp.ContactsDeps{
+			Store: func() (*contacts.Store, error) {
+				cs := hub.ContactsStore()
+				if cs == nil {
+					return nil, errors.New("contacts store not configured")
+				}
+				return cs, nil
+			},
+		}),
+
 		// Mini App skills list/detail/write surface + Propus feed
 		// (miniapp.skills.*). Catalog for the Settings → Skills tab, guarded
 		// update/delete for mutable local skills, plus the genesis → review →
