@@ -68,6 +68,8 @@ import ai.deneb.ui.denebInsight
 import ai.deneb.ui.denebInsightContainer
 import ai.deneb.ui.dynamicui.ChartNode
 import ai.deneb.ui.dynamicui.DenebUiRenderer
+import ai.deneb.ui.launcher.AppDrawer
+import ai.deneb.ui.launcher.LauncherAppEntry
 import ai.deneb.ui.markdown.MarkdownContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -176,6 +178,8 @@ fun main() {
     renderBrowser("browser_dark.png", DarkColorScheme)
     renderBrowser("browser_light.png", LightColorScheme)
     renderMarkdown("markdown_dark.png", DarkColorScheme)
+    renderAppDrawer("app_drawer_dark.png", DarkColorScheme)
+    renderAppDrawer("app_drawer_light.png", LightColorScheme)
     renderAnalysis("analysis_clip.png", DarkColorScheme)
     renderCollapsedReport("mail_collapsed_dark.png", DarkColorScheme, expanded = false)
     renderCollapsedReport("mail_collapsed_light.png", LightColorScheme, expanded = false)
@@ -1221,6 +1225,30 @@ private fun renderOrgEditor(name: String, scheme: ColorScheme) {
         MaterialTheme(colorScheme = scheme) {
             Surface(color = MaterialTheme.colorScheme.background) {
                 OrgNodeEditor(node = node, onChange = {}, onDelete = {}, onDone = {})
+            }
+        }
+    }
+    val image = scene.render()
+    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
+    File("/tmp/deneb-render").mkdirs()
+    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
+    scene.close()
+}
+
+// Work-launcher app drawer (Phase 0): the live-filtered installed-app grid. Uses
+// lettered placeholders here (no real PackageManager icons on desktop), so this
+// validates layout/legibility of the drawer shell, not the icons.
+private fun renderAppDrawer(name: String, scheme: ColorScheme) {
+    val apps = listOf(
+        "메일", "캘린더", "카카오톡", "전화", "탑솔라 ERP", "드롭박스",
+        "은행", "메시지", "카메라", "설정", "지도", "사진", "유튜브", "크롬",
+    ).mapIndexed { i, label -> LauncherAppEntry(label = label, packageName = "pkg.$i") }
+    val scene = ImageComposeScene(width = 824, height = 1100, density = Density(2f)) {
+        MaterialTheme(colorScheme = scheme) {
+            Surface(color = MaterialTheme.colorScheme.background) {
+                Box(Modifier.width(412.dp)) {
+                    AppDrawer(apps = apps, onLaunch = {})
+                }
             }
         }
     }

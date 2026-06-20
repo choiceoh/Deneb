@@ -1,5 +1,6 @@
 package ai.deneb.deneb
 
+import ai.deneb.DenebApps
 import ai.deneb.DenebCategories
 import ai.deneb.DenebConfig
 import ai.deneb.DenebDashboard
@@ -21,6 +22,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.outlined.AccountTree
+import androidx.compose.material.icons.outlined.Apps
 import androidx.compose.material.icons.outlined.Book
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Dashboard
@@ -44,6 +46,7 @@ private data class MoreEntry(
 )
 
 private val moreEntries = listOf(
+    MoreEntry("앱", DenebApps, Icons.Outlined.Apps, "설치된 앱 실행"),
     MoreEntry("파트별 업무 현황", DenebDashboard, Icons.Outlined.Dashboard, "팀·파트별 일정·업무 한눈에", workData = true),
     MoreEntry("조직도", DenebOrgChart, Icons.Outlined.AccountTree, "그룹·회사·팀 구조 보기·편집", workData = true),
     MoreEntry("검색", DenebSearch, Icons.Outlined.Search, "메일·위키 통합 검색", workData = true),

@@ -179,19 +179,27 @@ func (s *Server) handleEventIngest(w http.ResponseWriter, r *http.Request) {
 		s.writeJSON(w, http.StatusBadRequest, map[string]any{"error": "text is required"})
 		return
 	}
-	source := strings.TrimSpace(req.Source)
+	s.ingestPhoneEventAsync(req.Type, req.Source, text)
+
+	s.writeJSON(w, http.StatusAccepted, map[string]any{"status": "accepted"})
+}
+
+// ingestPhoneEventAsync queues the proactive 비서실장 judgment turn for one phone
+// event and is the single shared entry point for every phone-event source: the
+// loopback /api/event/ingest (SSH-tunneled Termux) and the authenticated
+// miniapp.event.ingest (the native NotificationListener). The phone forwards
+// broadly; the gateway does the per-type judgment + relay. Fire-and-forget — the
+// caller only needs to know the event was accepted; the report arrives later via
+// the proactive push, exactly like a cron run.
+func (s *Server) ingestPhoneEventAsync(eventType, source, text string) {
+	source = strings.TrimSpace(source)
 	if source == "" {
 		source = "(미상)"
 	}
-	eventType := req.Type
-
 	command := fmt.Sprintf(phoneEventPromptTmpl,
 		phoneEventKindLabel(eventType), source, text,
 		fmt.Sprintf(phoneEventGuidance(eventType), chat.SilentReplyToken))
 
-	// Fire-and-forget: the judgment turn (with tool calls) can take seconds, but
-	// the phone only needs to know the event was accepted. The proactive report
-	// arrives later via push — exactly like a cron run.
 	safego.GoWithSlog(s.logger, "phone-event-ingest", func() {
 		ctx, cancel := context.WithTimeout(s.ShutdownCtx(), phoneEventTurnDeadline)
 		defer cancel()
@@ -223,6 +231,4 @@ func (s *Server) handleEventIngest(w http.ResponseWriter, r *http.Request) {
 			"source", source, "type", eventType,
 			"delivered", delivered, "outputLen", len(output))
 	})
-
-	s.writeJSON(w, http.StatusAccepted, map[string]any{"status": "accepted"})
 }
