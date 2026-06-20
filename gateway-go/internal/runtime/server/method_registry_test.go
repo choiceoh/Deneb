@@ -166,6 +166,9 @@ var requiredMethods = []string{
 	"miniapp.todo.update",
 	"miniapp.todo.set_done",
 	"miniapp.todo.delete",
+	// Full address-book list (miniapp.contacts.list) — the contacts store
+	// resolves in tests (temp state dir), so this always registers.
+	"miniapp.contacts.list",
 	// Single-topic background editor — registers whenever topics resolve
 	// (the test harness loads the real deneb.json topics map {"0":"업무"}).
 	"miniapp.topicdocs.read_current",
