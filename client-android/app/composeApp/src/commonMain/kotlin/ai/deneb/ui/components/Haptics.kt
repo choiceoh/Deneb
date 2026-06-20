@@ -18,6 +18,8 @@ import androidx.compose.ui.platform.LocalHapticFeedback
  *  - [reject]    a destructive / negative commit: delete, discard
  *  - [longPress] a long-press gesture landing
  *  - [segmentTick] crossing a discrete step while dragging (slider notches)
+ *  - [segmentFrequentTick] same, but tuned for steps crossed in RAPID succession
+ *    (fast-scroll index flick) — a lighter tick that stays crisp instead of buzzy
  *
  * Back / cancel / dismiss stay silent (no call) by convention. The richer types
  * (Confirm/Reject/ToggleOn/ToggleOff) need Compose's expanded HapticFeedbackType
@@ -35,6 +37,7 @@ class Haptics(private val hf: HapticFeedback) {
     fun reject() = hf.performHapticFeedback(HapticFeedbackType.Reject)
     fun longPress() = hf.performHapticFeedback(HapticFeedbackType.LongPress)
     fun segmentTick() = hf.performHapticFeedback(HapticFeedbackType.SegmentTick)
+    fun segmentFrequentTick() = hf.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick)
 }
 
 @Composable
