@@ -11,6 +11,14 @@
 #   - desktopTest smoke subset: stable shared/common logic tests on the desktop
 #     JVM path so client regressions are caught before merge without inheriting
 #     the currently flaky chat-viewmodel suite
+#   - android compile: :composeApp:compileAndroidMain + :androidApp:compileFossReleaseKotlin.
+#     compileKotlinDesktop only type-checks the desktop source set, so commonMain
+#     code that resolves only on the Android target (#2698) and stale androidApp
+#     references (#2702) compiled clean here yet broke publish-apk. These are the
+#     exact tasks the fossRelease APK build depends on. ubuntu-latest ships the
+#     Android SDK (ANDROID_HOME=/usr/local/lib/android/sdk), so no SDK setup is
+#     needed; it is x86_64 so Kotlin/Native is supported (the Android compile does
+#     not use it regardless).
 name: kotlin-lint
 
 on:
@@ -63,3 +71,11 @@ jobs:
             --tests 'ai.deneb.deneb.generated.MiniappWireTypesTest*' \
             --tests 'ai.deneb.data.AttachmentRouteTest*' \
             --tests 'ai.deneb.network.UiErrorTest*'
+
+      # Android compile gate — catches breaks the desktop path cannot see (see the
+      # file header). ubuntu-latest pre-sets ANDROID_HOME, so no SDK setup step.
+      - name: android compile (composeApp androidMain + androidApp fossRelease)
+        run: |
+          ./gradlew --no-daemon \
+            :composeApp:compileAndroidMain \
+            :androidApp:compileFossReleaseKotlin

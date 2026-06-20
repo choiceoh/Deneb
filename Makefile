@@ -8,7 +8,7 @@
        tool-schemas tool-schemas-check \
        data-gen data-gen-check \
        kotlin-models kotlin-models-check \
-       kotlin-check kotlin-spotless kotlin-detekt \
+       kotlin-check kotlin-spotless kotlin-detekt kotlin-desktop-smoke-test kotlin-android-compile \
        ci ci/fast go-test-cached \
        preview native-smoke \
        info
@@ -261,9 +261,24 @@ kotlin-desktop-smoke-test:
 		--tests 'ai.deneb.data.AttachmentRouteTest*' \
 		--tests 'ai.deneb.network.UiErrorTest*'
 
-# Native client gate: formatting + bug-lint + stable JVM smoke tests
-# (matches kotlin-lint.yml).
-kotlin-check: kotlin-spotless kotlin-detekt kotlin-desktop-smoke-test
+# Android compile gate. compileKotlinDesktop (the desktop smoke + renderPreviews
+# path) only type-checks the desktop source set, so two whole classes of break
+# reach publish-apk undetected:
+#   - composeApp:compileAndroidMain — commonMain code that references an import or
+#     API resolved only on the Android target (an androidMain expect/actual, an
+#     Android-only dependency). Compiles for desktop, fails for Android (#2698).
+#   - androidApp:compileFossReleaseKotlin — the androidApp module itself (its
+#     sources never touch the desktop target). A stale androidApp reference is
+#     invisible to every desktop gate (#2702).
+# Both are exactly the tasks the fossRelease APK build depends on, so this turns
+# "green CI, red publish-apk" into a pre-merge failure. Android compilation does
+# NOT need Kotlin/Native, so the linux-aarch64 host warning is irrelevant here.
+kotlin-android-compile:
+	cd $(KOTLIN_APP_DIR) && ./gradlew :composeApp:compileAndroidMain :androidApp:compileFossReleaseKotlin --console=plain
+
+# Native client gate: formatting + bug-lint + stable JVM smoke tests + Android
+# compile (matches kotlin-lint.yml).
+kotlin-check: kotlin-spotless kotlin-detekt kotlin-desktop-smoke-test kotlin-android-compile
 	@echo "Kotlin client checks passed"
 
 # --- CI gate mirror (single pre-push command) ---
