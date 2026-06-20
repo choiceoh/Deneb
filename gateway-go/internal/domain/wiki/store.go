@@ -487,8 +487,13 @@ func (s *Store) AppendLog(operation, details string) error {
 	return err
 }
 
-// Close releases the FTS search database.
+// Close stops the background semantic refresh (waiting for any in-flight
+// re-embed so its cache write cannot land after teardown) and releases the FTS
+// search database.
 func (s *Store) Close() error {
+	if s.sem != nil {
+		s.sem.shutdown()
+	}
 	if s.fts != nil {
 		return s.fts.close()
 	}
