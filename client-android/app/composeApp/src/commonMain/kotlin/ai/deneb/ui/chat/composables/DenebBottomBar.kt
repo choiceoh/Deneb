@@ -89,6 +89,7 @@ val denebWorkDataRoutes: Set<String> = setOf(
     "deneb_categories",
     "deneb_fleet",
     "deneb_dashboard",
+    "deneb_org",
 )
 
 // Top-level routes that show the bottom bar: the 4 tabs + the 더보기 screen and its

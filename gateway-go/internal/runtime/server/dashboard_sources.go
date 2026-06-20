@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/classification"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/org"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp"
 )
@@ -52,21 +53,39 @@ func (d dashboardCalendarSource) ListRange(ctx context.Context, from, to time.Ti
 }
 
 // dashboardDeps assembles the production DashboardDeps. Sources are nil-tolerant:
-// a nil work-feed store or calendar simply drops that lane's contributions. The
-// Rules loader is classification.Load (reads the operator's
-// {stateDir}/classification_rules.json, falling back to keyword defaults when the
-// file is absent) — it is always non-nil so the dashboard always registers.
+// a nil work-feed store or calendar simply drops that lane's contributions.
+//
+// Rules + Lanes both derive from the operator's org chart when present (the
+// chart is the master): org.LoadRules derives classification rules from the
+// chart's lane-tagged nodes, and org.LoadLanes derives the dashboard column set
+// from the same nodes. When no org.json exists (or it defines no parts), both
+// fall back to the legacy classification path — org.LoadRules → the operator's
+// {stateDir}/classification_rules.json (or keyword defaults), and org.LoadLanes
+// → nil so the handler uses its hardcoded part set. Both are always non-nil so
+// the dashboard always registers and always renders a part skeleton.
 func (s *Server) dashboardDeps() handlerminiapp.DashboardDeps {
 	var wf handlerminiapp.DashboardWorkFeedSource
 	if nwf := s.nativeWorkFeedStore(); nwf != nil {
 		wf = nwf
 	}
 	return handlerminiapp.DashboardDeps{
-		Rules: func() (classification.Rules, error) { return classification.Load() },
+		Rules: func() (classification.Rules, error) { return org.LoadRules() },
+		Lanes: func() ([]org.LaneDef, error) { return org.LoadLanes() },
 		Calendar: dashboardCalendarSource{
 			client: func() (handlerminiapp.CalendarClient, error) { return calendar.DefaultClient() },
 			local:  resolveLocalCalendar(s.logger),
 		},
 		WorkFeed: wf,
+	}
+}
+
+// orgDeps assembles the production OrgDeps for the miniapp.org.* editor. Load
+// reads the operator's {stateDir}/org.json (missing → empty tree); SavePath
+// resolves that same path for the atomic write. Always non-nil so the editor
+// registers unconditionally (a fresh install opens to a blank chart).
+func (s *Server) orgDeps() handlerminiapp.OrgDeps {
+	return handlerminiapp.OrgDeps{
+		Load:     func() (org.OrgTree, error) { return org.Load() },
+		SavePath: org.ResolvePath,
 	}
 }

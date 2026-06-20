@@ -245,6 +245,14 @@ data class MailRowOut(
 
 @Immutable
 @Serializable
+data class MemberOut(
+    val name: String = "",
+    val rank: String = "",
+    val position: String = "",
+)
+
+@Immutable
+@Serializable
 data class MemoryCategoryRow(
     val name: String = "",
     val pageCount: Int = 0,
@@ -398,6 +406,33 @@ data class NotebookSummaryOut(
     val dealRef: String = "",
     val sourceCount: Int = 0,
     val updated: Long = 0L,
+)
+
+@Immutable
+@Serializable
+data class OrgNodeOut(
+    val id: String = "",
+    val name: String = "",
+    val type: String = "",
+    val parentId: String = "",
+    val lane: String = "",
+    val members: List<MemberOut> = emptyList(),
+    val keywords: List<String> = emptyList(),
+    val companies: List<String> = emptyList(),
+)
+
+@Immutable
+@Serializable
+data class OrgSaveOut(
+    val saved: Boolean = false,
+    val nodeCount: Int = 0,
+    val hasLanes: Boolean = false,
+)
+
+@Immutable
+@Serializable
+data class OrgTreeOut(
+    val nodes: List<OrgNodeOut> = emptyList(),
 )
 
 @Immutable

@@ -23,6 +23,7 @@ import ai.deneb.deneb.DenebMailDetailScreen
 import ai.deneb.deneb.DenebMailScreen
 import ai.deneb.deneb.DenebMoreScreen
 import ai.deneb.deneb.DenebNotebooksScreen
+import ai.deneb.deneb.DenebOrgChartScreen
 import ai.deneb.deneb.DenebPeopleScreen
 import ai.deneb.deneb.DenebPersonScreen
 import ai.deneb.deneb.DenebSearchScreen
@@ -203,6 +204,10 @@ object DenebNotebooks
 @Serializable
 @SerialName("deneb_dashboard")
 object DenebDashboard
+
+@Serializable
+@SerialName("deneb_org")
+object DenebOrgChart
 
 @Serializable
 @SerialName("deneb_category_pages")
@@ -701,6 +706,15 @@ private fun AppContent(
                                         url = entry.toRoute<DenebBrowser>().url,
                                         client = client,
                                         onBack = { navController.navigateUp() },
+                                    )
+                                }
+                            }
+                            composable<DenebOrgChart> {
+                                denebClient?.let { client ->
+                                    DenebOrgChartScreen(
+                                        client = client,
+                                        onBack = { navController.navigateUp() },
+                                        navigationTabBar = if (showTabBar) navigationTabBar else null,
                                     )
                                 }
                             }

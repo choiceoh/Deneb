@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/classification"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/org"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
@@ -243,6 +244,70 @@ func TestDashboardLanes_RulesLoaderErrorFallsBackToDefaults(t *testing.T) {
 	decode(t, resp, &got)
 	if l := findLane(got.Lanes, "team1"); l == nil || len(l.Items) != 1 || l.Items[0].RefID != "wf1" {
 		t.Fatalf("team1 = %+v, want [wf1] via default keyword 인허가", l)
+	}
+}
+
+func TestDashboardLanes_OrgChartLanesDriveColumns(t *testing.T) {
+	// When a Lanes loader yields org-chart lanes, the dashboard renders THOSE
+	// columns (chart order + names + custom keys), not the legacy hardcoded set.
+	now := time.Now()
+	deps := DashboardDeps{
+		// Rules route a custom lane key "sales" that the legacy set never had.
+		Rules: func() (classification.Rules, error) {
+			return classification.Rules{
+				KeywordToLane: map[string]classification.Lane{"제안": classification.Lane("sales")},
+			}, nil
+		},
+		// Chart defines two parts with custom keys/names, in this order.
+		Lanes: func() ([]org.LaneDef, error) {
+			return []org.LaneDef{
+				{Key: "sales", Name: "영업본부"},
+				{Key: "ops", Name: "운영팀"},
+			}, nil
+		},
+		WorkFeed: fakeDashboardFeed{items: []workfeed.Item{
+			{ID: "wf1", Title: "제안서 작성", CreatedAtMs: now.UnixMilli()},
+		}},
+	}
+	resp := dashboardLanes(deps)(authedCtx(), reqWith(t, "miniapp.dashboard.lanes", nil))
+	var got DashboardOut
+	decode(t, resp, &got)
+
+	// Exactly the chart's two lanes, in chart order, with chart names.
+	if len(got.Lanes) != 2 {
+		t.Fatalf("lanes = %d, want 2 chart lanes", len(got.Lanes))
+	}
+	if got.Lanes[0].Key != "sales" || got.Lanes[0].Name != "영업본부" {
+		t.Fatalf("lane[0] = %+v, want sales/영업본부", got.Lanes[0])
+	}
+	if got.Lanes[1].Key != "ops" || got.Lanes[1].Name != "운영팀" {
+		t.Fatalf("lane[1] = %+v, want ops/운영팀", got.Lanes[1])
+	}
+	// The custom-lane keyword routed the card into the chart lane.
+	if l := findLane(got.Lanes, "sales"); l == nil || len(l.Items) != 1 || l.Items[0].RefID != "wf1" {
+		t.Fatalf("sales = %+v, want [wf1]", l)
+	}
+	// No legacy lane (team1/…) leaked in.
+	if findLane(got.Lanes, "team1") != nil {
+		t.Fatal("legacy hardcoded lane leaked despite org chart lanes")
+	}
+}
+
+func TestDashboardLanes_LanesLoaderEmptyFallsBackToLegacy(t *testing.T) {
+	// A Lanes loader that returns nil/empty (no chart parts) → legacy hardcoded
+	// lanes, preserving prior behavior.
+	deps := DashboardDeps{
+		Rules: fakeRulesLoader(),
+		Lanes: func() ([]org.LaneDef, error) { return nil, nil },
+	}
+	resp := dashboardLanes(deps)(authedCtx(), reqWith(t, "miniapp.dashboard.lanes", nil))
+	var got DashboardOut
+	decode(t, resp, &got)
+	if len(got.Lanes) != len(classification.AllLanes) {
+		t.Fatalf("lanes = %d, want %d legacy lanes", len(got.Lanes), len(classification.AllLanes))
+	}
+	if got.Lanes[0].Key != string(classification.LaneTeam1) {
+		t.Fatalf("lane[0] = %q, want team1 (legacy)", got.Lanes[0].Key)
 	}
 }
 

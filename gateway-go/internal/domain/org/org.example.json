@@ -1,0 +1,80 @@
+{
+  "_comment": "Example group org chart (조직도) for the 파트별 업무 현황 dashboard. Copy this to {stateDir}/org.json (default ~/.deneb/org.json) and replace the FAKE names below with the real chart. This .example.json ships with fake data ONLY — never commit real person/company names. Nodes are a flat list joined by parentId; a node with a non-empty 'lane' becomes a dashboard part (its name = column title; its members/keywords/companies seed that part's classification rules). type is one of group|company|division|team. Affiliation (계열사/실/팀) is the tree itself — a person belongs to the node they sit under, and 겸직 is the same person listed under several nodes — so a member has no affiliation field. Each member carries only an optional 직급 (rank: 회장·사장·부사장·전무·상무·이사·부장·차장·과장·대리·주임·사원) and 직책 (position: 회장·대표·본부장·실장·팀장·팀원); both optional. Only a member's name affects classification; rank/position are display/sort/filter only. A node's leader (부서장) is the member whose position is 본부장/실장/팀장 — there is no separate 'head' field.",
+  "nodes": [
+    {
+      "id": "group",
+      "name": "예시그룹",
+      "type": "group",
+      "members": [
+        { "name": "홍길동", "rank": "회장", "position": "회장" }
+      ]
+    },
+    {
+      "id": "planning",
+      "name": "기획조정실",
+      "type": "division",
+      "parentId": "group",
+      "members": [
+        { "name": "김철수", "rank": "전무", "position": "실장" }
+      ]
+    },
+    {
+      "id": "team1",
+      "name": "기획조정실 1팀",
+      "type": "team",
+      "parentId": "planning",
+      "lane": "team1",
+      "members": [
+        { "name": "김철수", "rank": "전무", "position": "팀장" },
+        { "name": "이몽룡", "rank": "과장", "position": "팀원" }
+      ],
+      "keywords": ["인허가", "개발행위"],
+      "companies": ["사아건설"]
+    },
+    {
+      "id": "team2",
+      "name": "기획조정실 2팀",
+      "type": "team",
+      "parentId": "planning",
+      "lane": "team2",
+      "members": [
+        { "name": "성춘향", "rank": "부장", "position": "팀장" },
+        { "name": "변학도", "rank": "대리", "position": "팀원" }
+      ],
+      "keywords": ["루프탑", "지붕"],
+      "companies": ["마바솔라"]
+    },
+    {
+      "id": "team3",
+      "name": "기획조정실 3팀",
+      "type": "team",
+      "parentId": "planning",
+      "lane": "team3",
+      "members": [
+        { "name": "임꺽정", "rank": "차장", "position": "팀장" }
+      ],
+      "keywords": ["발주", "모듈"],
+      "companies": []
+    },
+    {
+      "id": "namdo",
+      "name": "남도에코",
+      "type": "company",
+      "parentId": "group",
+      "lane": "namdo",
+      "members": [
+        { "name": "장끼동", "rank": "상무", "position": "대표" },
+        { "name": "까투리", "rank": "주임", "position": "팀원" }
+      ],
+      "keywords": ["케이블", "전선"],
+      "companies": ["가나에너지", "다라전기"]
+    },
+    {
+      "id": "personal",
+      "name": "개인/기타",
+      "type": "team",
+      "parentId": "group",
+      "lane": "personal"
+    }
+  ]
+}
