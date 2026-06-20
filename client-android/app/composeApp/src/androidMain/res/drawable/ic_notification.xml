@@ -3,12 +3,15 @@
     android:height="24dp"
     android:viewportWidth="24"
     android:viewportHeight="24">
+    <!-- Deneb 4-point sparkle (✦), matching the chat StarIndicator's denebSparklePath:
+         four N/E/S/W tips (radius 10) joined by quadratic curves whose controls sit near
+         the centre (offset = 12% of radius), so the rays read thin and concave — a glint
+         of starlight, not a chunky 5-point star. White silhouette; the system tints it. -->
     <path
-        android:pathData="M9.2,12m-8.4,0a8.4,8.4 0,1 1,16.8 0a8.4,8.4 0,1 1,-16.8 0"
-        android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="2.25"/>
-    <path
-        android:pathData="M14.8,12m-8.4,0a8.4,8.4 0,1 1,16.8 0a8.4,8.4 0,1 1,-16.8 0"
-        android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="2.25"/>
+        android:pathData="M12,2 Q13.2,10.8 22,12 Q13.2,13.2 12,22 Q10.8,13.2 2,12 Q10.8,10.8 12,2 Z"
+        android:fillColor="#FFFFFF"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.44"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round"/>
 </vector>
