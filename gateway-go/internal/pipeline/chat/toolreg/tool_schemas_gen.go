@@ -848,11 +848,11 @@ func filesToolSchema() map[string]any {
 			"action": map[string]any{
 				"type":        "string",
 				"description": "File store action to perform",
-				"enum":        []string{"list", "search", "download", "upload", "share", "analyze"},
+				"enum":        []string{"list", "search", "download", "upload", "share", "analyze", "delete", "mkdir", "move"},
 			},
 			"dest_path": map[string]any{
 				"type":        "string",
-				"description": "Store destination path for upload (default: /<local filename>)",
+				"description": "Destination store path: for upload (default: /<local filename>), and the target path for move (a rename is a move within the same folder; an existing target is auto-renamed).",
 			},
 			"extract": map[string]any{
 				"type":        "boolean",
@@ -877,7 +877,7 @@ func filesToolSchema() map[string]any {
 			},
 			"path": map[string]any{
 				"type":        "string",
-				"description": "Store path for list/download/share/analyze (e.g. /메일/견적서.pdf). Empty means the store root (list).",
+				"description": "Store path for list/download/share/analyze/delete/mkdir, and the source path for move (e.g. /메일/견적서.pdf). Empty means the store root (list). delete removes a file or empty folder; mkdir creates a folder (parents included).",
 			},
 			"query": map[string]any{
 				"type":        "string",

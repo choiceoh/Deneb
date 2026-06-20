@@ -55,8 +55,14 @@ func ToolFiles() ToolFunc {
 			return filesShare(ctx, store, p)
 		case "analyze":
 			return filesAnalyze(ctx, store, p)
+		case "delete":
+			return filesDelete(ctx, store, p)
+		case "mkdir":
+			return filesMkdir(ctx, store, p)
+		case "move", "rename":
+			return filesMove(ctx, store, p)
 		default:
-			return fmt.Sprintf("알 수 없는 files 액션: %q. 지원: list, search, download, upload, share, analyze", p.Action), nil
+			return fmt.Sprintf("알 수 없는 files 액션: %q. 지원: list, search, download, upload, share, analyze, delete, mkdir, move", p.Action), nil
 		}
 	}
 }
@@ -178,6 +184,47 @@ func filesAnalyze(ctx context.Context, store *filestore.LocalStore, p FilesParam
 		return fmt.Sprintf("**%s**에서 텍스트를 추출할 수 없습니다 (지원: PDF/이미지/Excel/Word/PowerPoint/텍스트).", meta.Name), nil
 	}
 	return fmt.Sprintf("## 📄 %s\n\n%s", meta.Name, truncateRunes(text, 50000)), nil
+}
+
+// --- delete: remove a file or empty folder ---
+
+func filesDelete(ctx context.Context, store *filestore.LocalStore, p FilesParams) (string, error) {
+	if strings.TrimSpace(p.Path) == "" {
+		return "", fmt.Errorf("path는 delete 액션에 필수입니다")
+	}
+	if err := store.Delete(ctx, p.Path); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("✓ 삭제 완료: `%s`", strings.TrimSpace(p.Path)), nil
+}
+
+// --- mkdir: create a folder (parents included) ---
+
+func filesMkdir(ctx context.Context, store *filestore.LocalStore, p FilesParams) (string, error) {
+	if strings.TrimSpace(p.Path) == "" {
+		return "", fmt.Errorf("path는 mkdir 액션에 필수입니다")
+	}
+	meta, err := store.Mkdir(ctx, p.Path)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("✓ 폴더 생성: `%s`", meta.PathDisplay), nil
+}
+
+// --- move/rename: move src (Path) to dst (DestPath); a rename is a same-parent move ---
+
+func filesMove(ctx context.Context, store *filestore.LocalStore, p FilesParams) (string, error) {
+	if strings.TrimSpace(p.Path) == "" {
+		return "", fmt.Errorf("path(원본)는 move 액션에 필수입니다")
+	}
+	if strings.TrimSpace(p.DestPath) == "" {
+		return "", fmt.Errorf("dest_path(대상)는 move 액션에 필수입니다")
+	}
+	meta, err := store.Move(ctx, p.Path, p.DestPath)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("✓ 이동 완료: `%s` → `%s`", strings.TrimSpace(p.Path), meta.PathDisplay), nil
 }
 
 // --- shared helpers ---

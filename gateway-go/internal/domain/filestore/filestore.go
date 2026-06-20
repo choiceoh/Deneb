@@ -59,6 +59,13 @@ type Store interface {
 	Stat(ctx context.Context, path string) (*Entry, error)
 	// Delete removes a file (or empty folder); removing the root is rejected.
 	Delete(ctx context.Context, path string) error
+	// Mkdir creates a folder at path (parents included). An existing folder is
+	// returned as-is (not an error); the root is rejected.
+	Mkdir(ctx context.Context, path string) (*Entry, error)
+	// Move renames/moves src to dst. A rename is a move within the same parent.
+	// When dst already exists it is auto-renamed (same anti-clobber rule as Put);
+	// moving the root, or onto the root, is rejected. The moved Entry is returned.
+	Move(ctx context.Context, src, dst string) (*Entry, error)
 }
 
 // FormatEntries renders entries as a Markdown list for chat display. Output is
