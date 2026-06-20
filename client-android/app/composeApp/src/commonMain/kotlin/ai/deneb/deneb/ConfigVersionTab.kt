@@ -1,5 +1,6 @@
 package ai.deneb.deneb
 
+import ai.deneb.openUrl
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.handCursor
 import ai.deneb.ui.settings.SettingsCard
@@ -30,7 +31,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
@@ -43,7 +43,6 @@ import kotlinx.coroutines.launch
 @Composable
 internal fun VersionTab(denebClient: DenebGatewayClient?) {
     val scope = rememberCoroutineScope()
-    val uriHandler = LocalUriHandler.current
     var checking by remember { mutableStateOf(false) }
     var checked by remember { mutableStateOf(false) }
     var update by remember { mutableStateOf<UpdateInfo?>(null) }
@@ -92,7 +91,7 @@ internal fun VersionTab(denebClient: DenebGatewayClient?) {
                     // OTA: download the APK in-app and launch the installer. Falls back to
                     // opening the URL in a browser if install can't proceed (no permission,
                     // non-Android platform).
-                    onClick = { installAppUpdate(info.apkUrl) { uriHandler.openUri(info.apkUrl) } },
+                    onClick = { installAppUpdate(info.apkUrl) { openUrl(info.apkUrl) } },
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text("다운로드 후 설치")

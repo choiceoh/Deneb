@@ -1,6 +1,7 @@
 package ai.deneb.deneb
 
 import ai.deneb.PlatformBackHandler
+import ai.deneb.openUrl
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.DenebSearchField
@@ -58,7 +59,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -91,7 +91,6 @@ fun DenebFilesScreen(
 ) {
     val scope = rememberCoroutineScope()
     val haptics = rememberHaptics()
-    val uriHandler = LocalUriHandler.current
     val showFullScreenImage = LocalShowFullScreenImageModel.current
 
     // Folder path stack; the current folder is the last element ("" = store root).
@@ -415,7 +414,7 @@ fun DenebFilesScreen(
                 } else {
                     {
                         actionTarget = null
-                        scope.launch { client.filesShare(target.pathDisplay)?.let { uriHandler.openUri(it) } }
+                        scope.launch { client.filesShare(target.pathDisplay)?.let { openUrl(it) } }
                     }
                 },
                 onRename = {
