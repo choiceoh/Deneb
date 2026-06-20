@@ -306,11 +306,6 @@ private fun AppContent(
 ) {
     val appSettings = koinInject<AppSettings>()
     val denebClient = koinInject<DataRepository>() as? DenebGatewayClient
-    // Gates the in-app swipe-up-for-app-drawer gesture to when Deneb is the device home.
-    // The controller is stable; the enabled flag is re-read per navigation (below) so
-    // toggling 런처 모드 in settings takes effect on the next return to 자체앱 — App() is
-    // composed once and would otherwise cache a stale value for the whole session.
-    val launcherMode = remember { createLauncherMode() }
 
     // Track app opens after Koin is initialized
     onAppOpens?.let { callback ->
@@ -831,15 +826,14 @@ private fun AppContent(
                 // 챗봇 workspace is a clean focus-chat space: no bottom tab bar at all
                 // (the top 챗봇/업무 pill is the only way in/out). 업무 keeps the super-app bar.
                 val showBar = route in denebBottomBarRoutes && !imeVisible && !navChatMode
-                // Launcher idiom: a bottom-edge swipe-up on the 자체앱 mini-apps grid
-                // summons the external app drawer (Deneb's apps → swipe up → all phone
-                // apps, the Niagara drawer). Scoped to 자체앱 (an apps surface, not the
-                // scrolling feed) + launcher mode, so it never surprises normal use.
+                // Launcher idiom: swipe up on the 자체앱 mini-apps grid → the external
+                // app drawer (Deneb's apps → swipe up → all phone apps, the Niagara
+                // drawer). Scoped to 자체앱 only (the grid doesn't scroll, so the swipe
+                // can't be mistaken for a list fling); no launcher-mode gate — the 자체앱
+                // tab is itself an apps surface, so swipe-up-for-more-apps fits there.
                 val onAppHub = currentBackStackEntry?.destination?.hasRoute<DenebAppHub>() == true
-                // Re-read per navigation so a 런처 모드 toggle takes effect on return here.
-                val launcherEnabled = remember(currentBackStackEntry) { launcherMode.isEnabled() }
                 Column(
-                    Modifier.fillMaxSize().bottomSwipeUpToApps(enabled = launcherEnabled && onAppHub) {
+                    Modifier.fillMaxSize().swipeUpToApps(enabled = onAppHub) {
                         navController.navigate(DenebApps) { launchSingleTop = true }
                     },
                 ) {
@@ -884,25 +878,21 @@ private fun AppContent(
 }
 
 /**
- * Bottom-edge swipe-up that opens the app drawer — the launcher idiom (swipe up on
- * home → all apps), but a Niagara drawer. Active only when [enabled] (Deneb is the
- * home + on the 피드). The gesture starts only in the bottom edge zone, so the feed's
- * vertical scroll (which starts higher) and bottom-bar taps (no movement) are
- * untouched; it commits only on a clear upward drag past the threshold. Mirrors
- * ChatModeScreen.modeSwipeToggle. ⚠️ Feel (zone size, threshold, bar coexistence)
- * needs on-device tuning — the desktop harness can't reproduce touch.
+ * Swipe-up that opens the app drawer — the launcher idiom (swipe up → all apps), but
+ * a Niagara drawer. Active only when [enabled] (the caller scopes it to 자체앱). Fires
+ * from anywhere on the screen: the 자체앱 grid is small and doesn't scroll, so an
+ * upward drag can't be mistaken for a list fling, and a tap (no movement) still falls
+ * through to the grid / bottom bar. Commits only on a clear upward drag past the
+ * threshold. Mirrors ChatModeScreen.modeSwipeToggle. ⚠️ Feel (threshold) needs
+ * on-device tuning — the desktop harness can't reproduce touch.
  */
-private fun Modifier.bottomSwipeUpToApps(enabled: Boolean, onOpen: () -> Unit): Modifier {
+private fun Modifier.swipeUpToApps(enabled: Boolean, onOpen: () -> Unit): Modifier {
     if (!enabled) return this
     return this.pointerInput(Unit) {
-        val edge = 56.dp.toPx() // bottom zone where an up-swipe summons the drawer
         val commit = 64.dp.toPx() // upward distance to commit
         val slop = viewConfiguration.touchSlop
         awaitEachGesture {
             val down = awaitFirstDown(requireUnconsumed = false)
-            // Only gestures starting in the bottom edge zone — the feed scroll starts
-            // higher, and a tap (no movement) falls through to the bottom bar.
-            if (down.position.y < size.height - edge) return@awaitEachGesture
             var dx = 0f
             var dy = 0f
             var vertical = false
