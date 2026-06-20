@@ -410,20 +410,19 @@ func rowScoreContaining(out, val string) float64 {
 	return 0
 }
 
-// TestRecallSynthesisDrift measures CL-Bench's central curation hazard —
-// "spurious generalizations" — head on. The gain corpus only seeds wiki==diary
-// AGREEMENT, so it cannot see the failure that matters most: when the dreamer
-// mis-synthesizes a fact, the curated wiki value DRIFTS from the faithful raw
-// diary, and the wiki's higher prior can rank the WRONG value above the right one.
+// TestRecallSynthesisDrift is the END-TO-END regression guard for CL-Bench's
+// central curation hazard — "spurious generalizations". The gain corpus only
+// seeds wiki==diary AGREEMENT, so it cannot see the failure that matters most:
+// when the dreamer mis-synthesizes a fact, the curated wiki value DRIFTS from the
+// faithful raw diary, and the wiki's higher prior (0.80 > 0.70) used to rank the
+// WRONG value above the right one (measured: drift 1.39 over correct 1.16).
 //
-// One fact, two conflicting values: the diary holds the correct figure (as first
-// observed), the wiki holds a drifted one (the dreamer fat-fingered the same
-// deal). A query asks the figure; we measure which value recall ranks higher.
-//
-// Informational, not a hard gate on which wins — it reports the ranking so a
-// drift that overrides raw ground truth is visible and can inform the wiki↔diary
-// prior. The ONE hard failure is the drift completely suppressing the correct
-// value: then the user can never recover ground truth from recall at all.
+// applyProvenancePenalty (recall_provenance.go, wired into buildRecallPreflight)
+// now demotes a wiki figure that numerically contradicts the raw diary below that
+// raw row, so the faithful figure wins. This drives the REAL recall pipeline and
+// asserts that: the correct raw value ranks above the drift, and (the original
+// floor) the correct value is never suppressed entirely. Remove the penalty and
+// this fails. The unit-level rule is in recall_provenance_test.go.
 func TestRecallSynthesisDrift(t *testing.T) {
 	const (
 		correct = "1,950" // faithful raw diary value (as first observed)
@@ -472,16 +471,14 @@ func TestRecallSynthesisDrift(t *testing.T) {
 		driftScore, correctScore, driftPresent, correctPresent, top)
 	t.Logf("query=%q  output:\n%s", query, out)
 
-	// Hard failure: the drifted wiki value entirely suppressed the correct raw one
-	// — ground truth is then unrecoverable from recall.
+	// The drifted wiki value must not be suppressed entirely (ground truth has to
+	// stay recoverable) AND must not outrank the faithful raw diary — the
+	// provenance penalty guarantees the raw observation wins a numeric conflict.
 	if !correctPresent {
-		t.Errorf("the correct raw diary value %q was absent from recall — the drifted wiki value suppressed ground truth", correct)
+		t.Errorf("the correct raw diary value %q was absent from recall — ground truth suppressed", correct)
 	}
-	// Honest observation (logged, not gated): the curated drift outranking the raw
-	// truth is CL-Bench's spurious-generalization failure made concrete — evidence
-	// to weigh when tuning the wiki↔diary prior (the deferred rebalance question).
 	if driftOnTop {
-		t.Logf("SPURIOUS-GENERALIZATION OBSERVED: curated wiki drift %q (score %.2f) outranks faithful raw diary %q (score %.2f). Both surface, so the conflict is visible — but recall presents the wrong figure first. Evidence for capping the wiki>diary prior.",
+		t.Errorf("provenance penalty failed: curated drift %q (%.2f) still outranks faithful raw %q (%.2f) — spurious generalization not contained",
 			drift, driftScore, correct, correctScore)
 	}
 }

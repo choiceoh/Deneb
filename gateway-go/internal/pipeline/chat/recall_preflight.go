@@ -298,6 +298,13 @@ func buildRecallPreflight(ctx context.Context, params RunParams, deps runDeps, l
 	// polaris summary + diary echo); duplicate rows waste the evidence budget.
 	evidence = dedupRecallEvidence(evidence)
 
+	// Situational provenance weighting: a curated wiki figure that numerically
+	// contradicts the raw diary for the same fact (dreamer synthesis drift) is
+	// demoted below that raw observation, so the fixed wiki>diary prior cannot
+	// rank a drifted value first. Type-aware + entity-scoped — see
+	// recall_provenance.go. Must run before the sort (it adjusts scores).
+	applyProvenancePenalty(evidence)
+
 	sort.SliceStable(evidence, func(i, j int) bool {
 		if evidence[i].Score == evidence[j].Score {
 			return evidence[i].At > evidence[j].At
