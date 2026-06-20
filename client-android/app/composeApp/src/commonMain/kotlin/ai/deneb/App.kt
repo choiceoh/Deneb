@@ -5,6 +5,7 @@ package ai.deneb
 import ai.deneb.data.AppSettings
 import ai.deneb.data.DataRepository
 import ai.deneb.data.ThemeMode
+import ai.deneb.deneb.DenebAppHubScreen
 import ai.deneb.deneb.DenebBrowserScreen
 import ai.deneb.deneb.DenebCalendarAddScreen
 import ai.deneb.deneb.DenebCalendarEventScreen
@@ -55,9 +56,6 @@ import ai.deneb.ui.chat.composables.denebWorkDataRoutes
 import ai.deneb.ui.chat.composables.navigateToDenebSection
 import ai.deneb.ui.components.FullScreenImageHost
 import ai.deneb.ui.handCursor
-import ai.deneb.ui.launcher.AppDrawerScreen
-import ai.deneb.ui.launcher.DenebAppHubScreen
-import ai.deneb.ui.launcher.createLauncherMode
 import ai.deneb.ui.withBlackBackground
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -183,15 +181,9 @@ data class DenebTodoEdit(val id: String)
 @SerialName("deneb_search")
 object DenebSearch
 
-// Work-launcher app drawer (Phase 0). A local, gateway-independent screen listing
-// installed apps; reached by a bottom-edge swipe-up on the 자체앱 grid (launcher mode).
-@Serializable
-@SerialName("deneb_apps")
-object DenebApps
-
 // 자체앱 — Deneb's own mini-apps as a home-screen grid (bottom-bar center tab). Absorbed
 // the old 더보기 list (메일·달력·검색·할일·일기·조직도·파트별현황·카테고리·노트북·파일·
-// 설정) plus 채팅. Distinct from DenebApps (external installed apps, via swipe-up).
+// 설정) plus 채팅.
 @Serializable
 @SerialName("deneb_app_hub")
 object DenebAppHub
@@ -638,12 +630,6 @@ private fun AppContent(
                                     chatMode = navChatMode,
                                 )
                             }
-                            composable<DenebApps> {
-                                AppDrawerScreen(
-                                    onBack = { navController.navigateUp() },
-                                    navigationTabBar = if (showTabBar) navigationTabBar else null,
-                                )
-                            }
                             composable<DenebNotebooks> {
                                 denebClient?.let { client ->
                                     DenebNotebooksScreen(
@@ -822,26 +808,7 @@ private fun AppContent(
                 // 챗봇 workspace is a clean focus-chat space: no bottom tab bar at all
                 // (the top 챗봇/업무 pill is the only way in/out). 업무 keeps the super-app bar.
                 val showBar = route in denebBottomBarRoutes && !imeVisible && !navChatMode
-                // Launcher idiom: swipe up on the 자체앱 mini-apps grid → the external app
-                // drawer (Deneb's apps → swipe up → all phone apps, the Niagara drawer).
-                // Via nested-scroll overscroll (not a parent pointerInput) so it fires even
-                // when the swipe starts ON the grid: the LazyVerticalGrid leaves the up-drag
-                // unconsumed (it fits, or is scrolled to its bottom) and we catch that
-                // overscroll. The old pointerInput only won in the empty area *below* the
-                // grid, so as the grid grew (3→13 tiles) the working zone shrank to a thin
-                // bottom strip ("only works way at the bottom"). Mirror of the drawer's
-                // pull-down-to-exit (AppDrawer.exitOnTopOverscroll). Scoped to 자체앱.
-                val onAppHub = currentBackStackEntry?.destination?.hasRoute<DenebAppHub>() == true
-                // Launcher mode (Deneb-as-home alias): when OFF, the bottom bar swaps its
-                // external-app shortcuts (통화/인터넷/카톡) for Deneb sections (메일/달력/설정).
-                // Re-read on each navigation so toggling 설정 → 런처 모드 reflects on return.
-                val launcherMode = remember { createLauncherMode() }
-                var launcherEnabled by remember { mutableStateOf(launcherMode.isEnabled()) }
-                LaunchedEffect(currentBackStackEntry) { launcherEnabled = launcherMode.isEnabled() }
-                val swipeUpToApps = rememberSwipeUpToOpenApps(enabled = onAppHub) {
-                    navController.navigate(DenebApps) { launchSingleTop = true }
-                }
-                Column(Modifier.fillMaxSize().nestedScroll(swipeUpToApps)) {
+                Column(Modifier.fillMaxSize()) {
                     Box(
                         Modifier
                             .weight(1f)
@@ -860,78 +827,10 @@ private fun AppContent(
                         DenebBottomBar(
                             currentRoute = route,
                             onNavigate = { dest -> navigateToDenebSection(navController, dest) },
-                            // 통화 action tab: open the system dialer. tel: with no number
-                            // lands on the dialer's keypad (no auto-dial). Reuses the same
-                            // LocalUriHandler path OrgContactActions uses for contact calls —
-                            // no expect/actual needed for a URI any platform can open.
-                            onCall = { systemUriHandler.openUri("tel:") },
-                            // 인터넷 action tab: launch Samsung Internet (external browser,
-                            // Android package intent). Falls back to the default browser if
-                            // Samsung Internet isn't installed; opens a blank https page off
-                            // Android. The in-app translation browser is now the 자체앱
-                            // grid's "브라우저" tile (DenebBrowser route), not this tab.
-                            onInternet = { launchSamsungBrowser() },
-                            // 카톡 action tab: launch the KakaoTalk app (Android package
-                            // intent). No-op (and graceful store fallback) off Android.
-                            onKakao = { launchKakaoTalk() },
                             feedUnread = feedUnread,
-                            // 런처 모드 OFF → 통화/인터넷/카톡 자리에 메일/달력/설정.
-                            launcherEnabled = launcherEnabled,
                         )
                     }
                 }
-            }
-        }
-    }
-}
-
-/**
- * A [NestedScrollConnection] that opens the app drawer when the user pulls UP past a
- * commit distance at the bottom of the 자체앱 grid — the launcher idiom (swipe up → all
- * apps), and the exact mirror of the drawer's pull-down-to-exit.
- *
- * Why nested scroll and not a parent pointerInput: the 자체앱 content is a
- * LazyVerticalGrid, and a parent pointerInput loses the vertical drag to the grid's own
- * scrollable whenever the swipe starts on a tile — so the old version only fired in the
- * empty strip below the grid. This instead catches the up-drag the grid leaves
- * *unconsumed*: when the grid fits (few/no pins) every up-drag overscrolls, so it fires
- * from anywhere on the tiles; when the grid scrolls (many pins) you reach the bottom
- * then keep pulling. Fling momentum (source != UserInput) is excluded. [enabled] scopes
- * it to 자체앱 (the connection sits on the shared host, so it must ignore other screens).
- * ⚠️ Feel (threshold) needs on-device tuning — the desktop harness can't reproduce touch.
- */
-@Composable
-private fun rememberSwipeUpToOpenApps(enabled: Boolean, onOpen: () -> Unit): NestedScrollConnection {
-    val commitPx = with(LocalDensity.current) { 64.dp.toPx() }
-    val latestEnabled by rememberUpdatedState(enabled)
-    val latestOpen by rememberUpdatedState(onOpen)
-    return remember(commitPx) {
-        object : NestedScrollConnection {
-            private var pulled = 0f
-
-            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                // A downward drag means we're scrolling back into the grid — cancel a pending pull.
-                if (available.y > 0f) pulled = 0f
-                return Offset.Zero
-            }
-
-            override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
-                // available.y < 0 here = an upward drag the grid couldn't consume (it fits, or
-                // is at its bottom). Accumulate the overscroll; open once past the commit.
-                if (latestEnabled && source == NestedScrollSource.UserInput && available.y < 0f) {
-                    pulled += -available.y
-                    if (pulled >= commitPx) {
-                        pulled = 0f
-                        latestOpen()
-                    }
-                }
-                return Offset.Zero
-            }
-
-            override suspend fun onPreFling(available: Velocity): Velocity {
-                // Released without committing — reset so the next gesture starts clean.
-                pulled = 0f
-                return Velocity.Zero
             }
         }
     }

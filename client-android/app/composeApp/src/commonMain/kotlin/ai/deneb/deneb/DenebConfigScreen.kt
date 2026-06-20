@@ -5,9 +5,6 @@ import ai.deneb.data.AppSettings
 import ai.deneb.ui.DenebGroup
 import ai.deneb.ui.DenebListRow
 import ai.deneb.ui.DenebScreenScaffold
-import ai.deneb.ui.launcher.LauncherMode
-import ai.deneb.ui.launcher.LauncherTab
-import ai.deneb.ui.launcher.createLauncherMode
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -84,10 +81,6 @@ fun DenebConfigScreen(
     // detail survives rotation / process death like any pushed screen.
     var selectedOrdinal by rememberSaveable { mutableStateOf(-1) }
     val selected = ConfigTab.entries.getOrNull(selectedOrdinal)
-    // Home-launcher mode is foss-Android-only; on every other target the section is
-    // hidden (the alias doesn't exist, so there's nothing to toggle).
-    val launcherMode = remember { createLauncherMode() }
-
     if (selected == null) {
         // Level 1 — the section list. Keeps the app navigation tab bar (this is a
         // top-level destination); back exits settings.
@@ -97,7 +90,6 @@ fun DenebConfigScreen(
             tabBar = navigationTabBar,
         ) {
             ConfigSectionList(
-                launcherSupported = launcherMode.supported,
                 onOpen = {
                     // Fleet opens its own full screen (its own pager + scaffold);
                     // every other section pushes into the in-place detail below.
@@ -118,8 +110,6 @@ fun DenebConfigScreen(
     ) {
         when (selected) {
             ConfigTab.GATEWAY -> GatewayTab(appSettings, onBack, denebClient)
-
-            ConfigTab.LAUNCHER -> LauncherTab(launcherMode)
 
             ConfigTab.APPEARANCE -> AppearanceTab(appSettings)
 
@@ -151,7 +141,6 @@ fun DenebConfigScreen(
  *  a [DenebGroup]. */
 private val configGroups: List<Pair<String, List<ConfigTab>>> = listOf(
     "시스템" to listOf(ConfigTab.GATEWAY, ConfigTab.APPEARANCE, ConfigTab.MODEL),
-    "기기" to listOf(ConfigTab.LAUNCHER),
     "자동화 · 관찰" to listOf(ConfigTab.SKILLS, ConfigTab.SELF_IMPROVEMENT_CODING, ConfigTab.CRON, ConfigTab.PROMPTS, ConfigTab.OBSERVE),
     "라우팅 · 인프라" to listOf(ConfigTab.WORMHOLE, ConfigTab.FLEET),
     "정보" to listOf(ConfigTab.VERSION),
@@ -161,7 +150,7 @@ private val configGroups: List<Pair<String, List<ConfigTab>>> = listOf(
  *  [DenebListRow]): each [ConfigTab] is a row with its icon, label, and one-line
  *  summary. Tapping pushes into that section's detail. */
 @Composable
-private fun ConfigSectionList(launcherSupported: Boolean, onOpen: (ConfigTab) -> Unit) {
+private fun ConfigSectionList(onOpen: (ConfigTab) -> Unit) {
     Column(
         Modifier
             .fillMaxSize()
@@ -169,18 +158,14 @@ private fun ConfigSectionList(launcherSupported: Boolean, onOpen: (ConfigTab) ->
             .padding(top = 4.dp, bottom = 24.dp),
     ) {
         configGroups.forEach { (label, tabs) ->
-            // The 런처 section only exists where Deneb can be a home app (foss Android);
-            // drop the row — and any group it empties — everywhere else.
-            val rows = tabs.filter { it != ConfigTab.LAUNCHER || launcherSupported }
-            if (rows.isEmpty()) return@forEach
             DenebGroup(label = label) {
-                rows.forEachIndexed { i, tab ->
+                tabs.forEachIndexed { i, tab ->
                     DenebListRow(
                         title = tab.label,
                         onClick = { onOpen(tab) },
                         icon = tab.icon,
                         subtitle = tab.desc,
-                        divider = i < rows.lastIndex,
+                        divider = i < tabs.lastIndex,
                     )
                 }
             }
@@ -219,5 +204,4 @@ private enum class ConfigTab(val label: String, val desc: String, val icon: Imag
     VERSION("버전", "현재 빌드, 패치노트, 업데이트", Icons.Outlined.Info),
     PROMPTS("프롬프트 코너", "자동 분석·도구 프롬프트, 토픽 배경 편집", Icons.Outlined.Article),
     SELF_IMPROVEMENT_CODING("자가개선 코딩", "코딩 수정 후보, 적용 대기열", Icons.Outlined.Code),
-    LAUNCHER("런처", "홈 화면으로 사용", Icons.Outlined.Home),
 }

@@ -97,28 +97,12 @@ val denebScreenTabs: List<DenebTabItem.Screen> = listOf(
 )
 
 /**
- * Build the full five-slot tab list in display order — 피드 · 통화 · 자체앱 · 인터넷 · 카톡
- * — splicing the three action tabs around the two screen tabs. The host supplies the
- * action callbacks ([onCall] = dialer, [onInternet] = Samsung Internet, [onKakao] =
- * KakaoTalk) since they fire platform side effects.
+ * Build the five-slot tab list — 피드 · 메일 · 자체앱 · 달력 · 설정. 피드 and 자체앱 are the
+ * two screen tabs (selectable, highlightable when current); 메일/달력/설정 are
+ * navigate-actions that jump into the section (which hides the bar and keeps its own
+ * back nav, like tapping the matching 자체앱 grid tile), so they never select.
  */
-fun denebBottomTabs(onCall: () -> Unit, onInternet: () -> Unit, onKakao: () -> Unit): List<DenebTabItem> = listOf(
-    denebScreenTabs[0], // 피드
-    DenebTabItem.Action("통화", Icons.Outlined.CallOutlined, onCall),
-    denebScreenTabs[1], // 자체앱 (center)
-    // 인터넷 launches Samsung Internet (external browser) — keeps the globe glyph.
-    DenebTabItem.Action("인터넷", Icons.Outlined.LanguageOutlined, onInternet),
-    DenebTabItem.Action("카톡", Icons.AutoMirrored.Outlined.ChatBubbleOutlined, onKakao),
-)
-
-/**
- * The non-launcher (app-mode) five-slot list — 피드 · 메일 · 자체앱 · 달력 · 설정. When
- * launcher mode is OFF, Deneb is an ordinary app, so the three external-app shortcuts
- * (통화/인터넷/카톡) give way to Deneb's own sections. These are navigate-actions (they
- * jump into the section, which hides the bar and keeps its own back nav — like tapping
- * the matching 자체앱 grid tile), so they never carry a selection indicator.
- */
-fun denebBottomTabsAppMode(onNavigate: (Any) -> Unit): List<DenebTabItem> = listOf(
+fun denebBottomTabs(onNavigate: (Any) -> Unit): List<DenebTabItem> = listOf(
     denebScreenTabs[0], // 피드
     DenebTabItem.Action("메일", Icons.Outlined.EmailOutlined) { onNavigate(DenebMail) },
     denebScreenTabs[1], // 자체앱 (center)
@@ -176,15 +160,9 @@ private val DenebBottomBarHeight = 52.dp
 fun DenebBottomBar(
     currentRoute: String?,
     onNavigate: (Any) -> Unit,
-    onCall: () -> Unit,
-    onInternet: () -> Unit,
-    onKakao: () -> Unit,
     modifier: Modifier = Modifier,
     // Unread work-feed count badged on the 피드 tab (the old top-bar bell moved here).
     feedUnread: Int = 0,
-    // When false (Deneb isn't the phone's home app), the external-app shortcuts
-    // (통화/인터넷/카톡) are replaced by Deneb's own sections (메일/달력/설정).
-    launcherEnabled: Boolean = true,
 ) {
     val haptics = rememberHaptics()
     val hairline = denebHairline()
@@ -213,12 +191,7 @@ fun DenebBottomBar(
                 drawLine(hairline, Offset(0f, 0f), Offset(size.width, 0f), strokeWidth = 1.dp.toPx())
             },
     ) {
-        val tabs = if (launcherEnabled) {
-            denebBottomTabs(onCall = onCall, onInternet = onInternet, onKakao = onKakao)
-        } else {
-            denebBottomTabsAppMode(onNavigate = onNavigate)
-        }
-        tabs.forEach { tab ->
+        denebBottomTabs(onNavigate = onNavigate).forEach { tab ->
             when (tab) {
                 is DenebTabItem.Screen -> {
                     val selected = currentRoute == tab.route
