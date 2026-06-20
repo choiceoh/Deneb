@@ -1,6 +1,7 @@
 package ai.deneb.deneb
 
 import ai.deneb.deneb.generated.CalendarEventOut
+import ai.deneb.deneb.generated.ContactRow
 import ai.deneb.deneb.generated.MailRowOut
 import ai.deneb.deneb.generated.MemoryCategoryRow
 import ai.deneb.deneb.generated.MemoryPageRow
@@ -168,6 +169,9 @@ internal data class TodoListPayload(val todos: List<TodoOut> = emptyList())
 
 @Serializable
 internal data class PeopleListPayload(val people: List<PersonRow> = emptyList())
+
+@Serializable
+internal data class ContactsListPayload(val contacts: List<ContactRow> = emptyList())
 
 @Serializable
 internal data class WikiPagePayload(

@@ -4,6 +4,7 @@ import ai.deneb.DenebApps
 import ai.deneb.DenebBrowser
 import ai.deneb.DenebCategories
 import ai.deneb.DenebConfig
+import ai.deneb.DenebContacts
 import ai.deneb.DenebDashboard
 import ai.deneb.DenebDiary
 import ai.deneb.DenebFiles
@@ -26,6 +27,7 @@ import androidx.compose.material.icons.outlined.AccountTree
 import androidx.compose.material.icons.outlined.Apps
 import androidx.compose.material.icons.outlined.Book
 import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.Contacts
 import androidx.compose.material.icons.outlined.Dashboard
 import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.material.icons.outlined.KeyboardVoice
@@ -55,6 +57,7 @@ private val moreEntries = listOf(
     MoreEntry("할일", DenebTodo, Icons.Outlined.CheckCircle, "할 일 목록"),
     MoreEntry("일기", DenebDiary, Icons.AutoMirrored.Outlined.MenuBook, "일기 기록"),
     MoreEntry("카테고리", DenebCategories, Icons.Outlined.GridView, "위키 분류, 사람", workData = true),
+    MoreEntry("전체 연락처", DenebContacts, Icons.Outlined.Contacts, "주소록 전체, 이름·번호 검색", workData = true),
     MoreEntry("노트북", DenebNotebooks, Icons.Outlined.Book, "딜·프로젝트 자료 모음", workData = true),
     MoreEntry("파일", DenebFiles, Icons.Outlined.Storage, "로컬 파일 탐색·검색·업로드", workData = true),
     MoreEntry("브라우저", DenebBrowser(""), Icons.Outlined.Public, "웹 페이지 열기 · 한국어 번역"),

@@ -1,6 +1,7 @@
 package ai.deneb.deneb
 
 import ai.deneb.data.MemoryEntry
+import ai.deneb.deneb.generated.ContactRow
 import ai.deneb.deneb.generated.SearchAllResult
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.add
@@ -204,4 +205,15 @@ suspend fun DenebGatewayClient.fetchPeople(): List<PersonHit>? {
                 wikiSummary = it.wikiSummary,
             )
         }
+}
+
+/** The full device address book (miniapp.contacts.list) for the 전체 연락처 browser:
+ *  every synced contact (name + phones/emails/org), unsorted — the screen sections it
+ *  alphabetically (ㄱㄴㄷ). Null on transport/auth failure or an unconfigured store. */
+suspend fun DenebGatewayClient.fetchContacts(): List<ContactRow>? {
+    val p = callRpc<ContactsListPayload>(
+        "miniapp.contacts.list",
+        buildJsonObject {},
+    ) ?: return null
+    return p.contacts.filter { it.name.isNotBlank() }
 }
