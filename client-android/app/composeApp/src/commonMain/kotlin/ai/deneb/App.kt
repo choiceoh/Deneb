@@ -377,18 +377,6 @@ private fun AppContent(
                         navigateToDenebSection(navController, Home)
                     }
                 }
-                // Home-launcher: a Home press (CATEGORY_HOME → MainActivity.requestOpenHome)
-                // resets to the 피드 briefing, like any launcher returning to its home
-                // screen — instead of leaving the user wherever they last navigated.
-                LaunchedEffect(denebClient) {
-                    val client = denebClient ?: return@LaunchedEffect
-                    client.openHomeRequested.collect { requested ->
-                        if (requested) {
-                            navigateToDenebSection(navController, DenebFeed)
-                            client.consumeOpenHomeRequest()
-                        }
-                    }
-                }
 
                 val navigationTabBar: @Composable () -> Unit = {
                     val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl

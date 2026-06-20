@@ -142,14 +142,6 @@ class FakeDataRepository : DataRepository {
         openWorkTopicRequested.value = false
     }
 
-    override val openHomeRequested: MutableStateFlow<Boolean> = MutableStateFlow(false)
-    override fun requestOpenHome() {
-        openHomeRequested.value = true
-    }
-    override fun consumeOpenHomeRequest() {
-        openHomeRequested.value = false
-    }
-
     override val hasUnreadWorkReport: MutableStateFlow<Boolean> = MutableStateFlow(false)
     override fun clearUnreadWorkReport() {
         hasUnreadWorkReport.value = false
