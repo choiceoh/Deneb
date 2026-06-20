@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"sort"
 	"strings"
@@ -10,29 +11,39 @@ import (
 	"unicode"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
+	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
 // Translation quality + speed benchmark for the in-app browser translator
 // (en/ru → ko). Reuses the production prompt/parse (buildTranslatePrompt /
-// parseTranslations), so it measures the exact translate logic — just against a
-// caller-chosen endpoint/model so you can compare candidates while tuning the
+// parseTranslations) so it measures the exact translate logic — against a
+// caller-chosen endpoint/model, to compare candidates while tuning the
 // `translation` model role.
 //
-// Quality = chrF (character n-gram F-score) vs the references below: deterministic
-// and reproducible (no judge model), which is what you want to RANK models.
-// Speed = batch throughput (the in-place path ships batches) + per-segment p50/p90.
+// QUALITY — primary: an LLM judge (set DENEB_TRANSLATE_JUDGE_MODEL).
+//   - Two models (set DENEB_TRANSLATE_MODEL_B): PAIRWISE "which is better" — the
+//     most reliable signal for ranking models. Each segment is judged in BOTH
+//     orders to cancel position bias; a model wins only when both orders agree.
+//   - One model: ABSOLUTE adequacy + fluency (1–5), reference-free.
+//   The judge MUST be independent of the candidates (a candidate judging itself
+//   self-prefers); use a strong third model.
+// QUALITY — secondary: chrF vs the references below. Cheap + deterministic, so
+//   it's a regression/sanity signal even with no judge (surface overlap only,
+//   not meaning/fluency — that's why the LLM judge is primary).
+// SPEED: batch throughput (the in-place path ships batches) + per-segment p50/p90.
 //
-// CI runs only TestChrF (the metric itself). The live benchmark is gated — it
-// needs a local LLM — so it skips unless DENEB_TRANSLATE_LIVE is set:
+// CI runs only the metric/parse unit tests. The live benchmark is gated:
 //
-//	DENEB_TRANSLATE_LIVE=1 DENEB_TRANSLATE_MODEL=<served-name> \
-//	  [DENEB_TRANSLATE_URL=http://127.0.0.1:8000/v1] [DENEB_TRANSLATE_KEY=...] \
+//	DENEB_TRANSLATE_LIVE=1 DENEB_TRANSLATE_MODEL=<served> \
+//	  [DENEB_TRANSLATE_MODEL_B=<other> for pairwise] \
+//	  [DENEB_TRANSLATE_JUDGE_MODEL=<strong, independent>] \
+//	  [DENEB_TRANSLATE_URL=… URL_B=… JUDGE_URL=… KEY=… JUDGE_KEY=…] \
 //	  go test -run TestTranslateBench_Live -v ./internal/pipeline/chat/tools/
 
 type benchCase struct {
 	lang string
 	src  string
-	ref  string // a Korean reference translation (approximate; consistent for ranking)
+	ref  string // a Korean reference (approximate; used only by the secondary chrF)
 }
 
 var translateBenchCorpus = []benchCase{
@@ -50,61 +61,133 @@ var translateBenchCorpus = []benchCase{
 	{"ru", "Пожалуйста, подтвердите свой адрес электронной почты.", "이메일 주소를 확인해 주세요."},
 }
 
-// TestTranslateBench_Live measures translation quality (chrF) and speed against a
-// live LLM endpoint. Gated; see the file comment for the run command.
 func TestTranslateBench_Live(t *testing.T) {
 	if os.Getenv("DENEB_TRANSLATE_LIVE") == "" {
 		t.Skip("set DENEB_TRANSLATE_LIVE=1 (needs a local LLM endpoint) to run the translate benchmark")
 	}
-	model := strings.TrimSpace(os.Getenv("DENEB_TRANSLATE_MODEL"))
-	if model == "" {
+	modelA := strings.TrimSpace(os.Getenv("DENEB_TRANSLATE_MODEL"))
+	if modelA == "" {
 		t.Skip("set DENEB_TRANSLATE_MODEL=<served model name> to benchmark")
 	}
-	base := envOrDefault("DENEB_TRANSLATE_URL", "http://127.0.0.1:8000/v1")
-	client := llm.NewClient(base, os.Getenv("DENEB_TRANSLATE_KEY"))
+	urlA := envOrDefault("DENEB_TRANSLATE_URL", "http://127.0.0.1:8000/v1")
+	clientA := llm.NewClient(urlA, os.Getenv("DENEB_TRANSLATE_KEY"))
+
+	modelB := strings.TrimSpace(os.Getenv("DENEB_TRANSLATE_MODEL_B"))
+	var clientB *llm.Client
+	if modelB != "" {
+		clientB = llm.NewClient(envOrDefault("DENEB_TRANSLATE_URL_B", urlA), os.Getenv("DENEB_TRANSLATE_KEY"))
+	}
+	judgeModel := strings.TrimSpace(os.Getenv("DENEB_TRANSLATE_JUDGE_MODEL"))
+	var judge *llm.Client
+	if judgeModel != "" {
+		judge = llm.NewClient(envOrDefault("DENEB_TRANSLATE_JUDGE_URL", urlA), os.Getenv("DENEB_TRANSLATE_JUDGE_KEY"))
+		if judgeModel == modelA || judgeModel == modelB {
+			t.Logf("⚠ judge model %q is also a candidate — self-preference bias; prefer an independent judge", judgeModel)
+		}
+	}
 
 	srcs := make([]string, len(translateBenchCorpus))
 	for i, c := range translateBenchCorpus {
 		srcs[i] = c.src
 	}
 
-	// Batch path (what the in-place translator actually does): one call, total latency.
-	batchStart := time.Now()
-	outputs := benchTranslate(t, client, model, srcs)
-	batchElapsed := time.Since(batchStart)
-
-	var sumF float64
-	t.Logf("── per-segment quality (model=%s) ──", model)
-	for i, c := range translateBenchCorpus {
-		f := chrF(outputs[i], c.ref)
-		sumF += f
-		t.Logf("[%s] chrF=%5.1f  %q → %q  (ref %q)", c.lang, f, c.src, outputs[i], c.ref)
+	outA, batchA := timedTranslate(t, clientA, modelA, srcs)
+	var outB []string
+	var batchB time.Duration
+	if clientB != nil {
+		outB, batchB = timedTranslate(t, clientB, modelB, srcs)
 	}
-	meanF := sumF / float64(len(translateBenchCorpus))
 
-	// Per-segment latency (a small batch ships as the user scrolls).
+	// ── Primary quality: LLM judge ──
+	if judge != nil {
+		if clientB != nil {
+			aWins, bWins, ties := 0, 0, 0
+			t.Logf("── pairwise judgment (judge=%s): A=%s vs B=%s ──", judgeModel, modelA, modelB)
+			for i, c := range translateBenchCorpus {
+				switch judgePairwise(t, judge, judgeModel, c.src, outA[i], outB[i]) {
+				case 1:
+					aWins++
+				case -1:
+					bWins++
+				default:
+					ties++
+				}
+				t.Logf("[%s] A=%q  B=%q", c.lang, outA[i], outB[i])
+			}
+			n := float64(len(translateBenchCorpus))
+			t.Logf("QUALITY (pairwise, order-debiased): A=%s wins %d · B=%s wins %d · tie %d  → A win-rate %.0f%%",
+				modelA, aWins, modelB, bWins, ties, 100*float64(aWins)/n)
+		} else {
+			var sa, sf float64
+			for _, c := range translateBenchCorpus {
+				ad, fl := judgeAbsolute(t, judge, judgeModel, c.src, outA[indexOfSrc(c.src, srcs)])
+				sa += float64(ad)
+				sf += float64(fl)
+			}
+			n := float64(len(translateBenchCorpus))
+			t.Logf("QUALITY (absolute, judge=%s): adequacy %.2f/5 · fluency %.2f/5", judgeModel, sa/n, sf/n)
+		}
+	} else {
+		t.Logf("QUALITY (LLM judge skipped): set DENEB_TRANSLATE_JUDGE_MODEL=<strong, independent> for meaning/fluency scoring")
+	}
+
+	// ── Secondary quality: chrF (deterministic) ──
+	t.Logf("QUALITY (chrF, secondary): A=%s mean=%.1f%s", modelA, meanChrF(outA),
+		func() string {
+			if clientB != nil {
+				return fmt.Sprintf("   B=%s mean=%.1f", modelB, meanChrF(outB))
+			}
+			return ""
+		}())
+
+	// ── Speed ──
+	reportSpeed(t, "A="+modelA, clientA, modelA, srcs, batchA)
+	if clientB != nil {
+		reportSpeed(t, "B="+modelB, clientB, modelB, srcs, batchB)
+	}
+}
+
+func meanChrF(out []string) float64 {
+	var sum float64
+	for i, c := range translateBenchCorpus {
+		sum += chrF(out[i], c.ref)
+	}
+	return sum / float64(len(translateBenchCorpus))
+}
+
+func indexOfSrc(src string, srcs []string) int {
+	for i, s := range srcs {
+		if s == src {
+			return i
+		}
+	}
+	return 0
+}
+
+func reportSpeed(t *testing.T, label string, client *llm.Client, model string, srcs []string, batch time.Duration) {
+	t.Helper()
 	lats := make([]time.Duration, 0, len(srcs))
 	for _, s := range srcs {
 		st := time.Now()
-		benchTranslate(t, client, model, []string{s})
+		timedTranslate(t, client, model, []string{s})
 		lats = append(lats, time.Since(st))
 	}
 	sort.Slice(lats, func(i, j int) bool { return lats[i] < lats[j] })
-	p50 := lats[len(lats)/2]
-	p90 := lats[(len(lats)*9)/10]
 	var sum time.Duration
 	for _, d := range lats {
 		sum += d
 	}
-	mean := sum / time.Duration(len(lats))
-	segPerSec := float64(len(srcs)) / batchElapsed.Seconds()
+	t.Logf("SPEED %s: batch %v (%.1f seg/s) · per-segment p50=%v p90=%v mean=%v",
+		label, batch.Round(time.Millisecond), float64(len(srcs))/batch.Seconds(),
+		lats[len(lats)/2].Round(time.Millisecond), lats[(len(lats)*9)/10].Round(time.Millisecond),
+		(sum / time.Duration(len(lats))).Round(time.Millisecond))
+}
 
-	t.Logf("════ TRANSLATE BENCH ════")
-	t.Logf("model=%s  url=%s  segments=%d", model, base, len(srcs))
-	t.Logf("QUALITY  mean chrF = %.1f / 100", meanF)
-	t.Logf("SPEED    batch: %v total, %.1f seg/s   | per-segment: p50=%v p90=%v mean=%v",
-		batchElapsed.Round(time.Millisecond), segPerSec,
-		p50.Round(time.Millisecond), p90.Round(time.Millisecond), mean.Round(time.Millisecond))
+func timedTranslate(t *testing.T, client *llm.Client, model string, segs []string) ([]string, time.Duration) {
+	t.Helper()
+	start := time.Now()
+	out := benchTranslate(t, client, model, segs)
+	return out, time.Since(start)
 }
 
 // benchTranslate runs the production prompt/parse against the caller's client,
@@ -138,9 +221,122 @@ func envOrDefault(key, def string) string {
 	return def
 }
 
-// chrF is the character n-gram F-score (orders 1..6, β=2: recall-weighted), a
-// standard MT metric well-suited to Korean (character-level, no word tokenization).
-// Returns 0..100. Whitespace is stripped so spacing variants don't skew the score.
+// ── LLM judge ──
+
+type pairVerdict struct {
+	Winner string `json:"winner"`
+	Reason string `json:"reason"`
+}
+
+type absScore struct {
+	Adequacy int `json:"adequacy"`
+	Fluency  int `json:"fluency"`
+}
+
+// judgePairwise returns +1 (A better), -1 (B better), or 0 (tie/inconsistent),
+// judging both orders so a positional preference cancels out (a model wins only
+// when it's preferred regardless of slot).
+func judgePairwise(t *testing.T, judge *llm.Client, judgeModel, src, aTrans, bTrans string) int {
+	fwd := judgeVerdict(t, judge, judgeModel, src, aTrans, bTrans) // slot A = aTrans
+	rev := judgeVerdict(t, judge, judgeModel, src, bTrans, aTrans) // slot A = bTrans
+	score := 0
+	switch fwd {
+	case "A":
+		score++
+	case "B":
+		score--
+	}
+	switch rev {
+	case "A":
+		score-- // slot A here is bTrans, so an "A" win favors B
+	case "B":
+		score++
+	}
+	if score > 0 {
+		return 1
+	}
+	if score < 0 {
+		return -1
+	}
+	return 0
+}
+
+func judgeVerdict(t *testing.T, judge *llm.Client, judgeModel, src, a, b string) string {
+	t.Helper()
+	const system = `당신은 번역 품질 심판입니다. 원문(영어 또는 러시아어)과 두 한국어 번역 A·B가 주어집니다.
+의미 정확성과 한국어의 자연스러움을 종합해 더 나은 쪽을 고르세요. 우열을 가리기 어려우면 tie.
+설명·markdown 없이 JSON만 출력: {"winner":"A|B|tie","reason":"한 줄 근거"}`
+	user := fmt.Sprintf("원문:\n%s\n\n번역 A:\n%s\n\n번역 B:\n%s", src, a, b)
+	raw, err := judge.Complete(context.Background(), llm.ChatRequest{
+		Model:          judgeModel,
+		System:         llm.SystemString(system),
+		Messages:       []llm.Message{llm.NewTextMessage("user", user)},
+		MaxTokens:      256,
+		Thinking:       &llm.ThinkingConfig{Type: "disabled"},
+		ResponseFormat: &llm.ResponseFormat{Type: "json_object"},
+	})
+	if err != nil {
+		t.Fatalf("judge call (model=%s): %v", judgeModel, err)
+	}
+	return normalizeWinner(parseWinner(raw))
+}
+
+func judgeAbsolute(t *testing.T, judge *llm.Client, judgeModel, src, trans string) (int, int) {
+	t.Helper()
+	const system = `원문(영어 또는 러시아어)과 그 한국어 번역이 주어집니다. 두 항목을 1~5 정수로 채점하세요:
+adequacy(원문 의미를 정확히 전달하는가), fluency(자연스럽고 매끄러운 한국어인가).
+설명·markdown 없이 JSON만 출력: {"adequacy":N,"fluency":N}`
+	user := fmt.Sprintf("원문:\n%s\n\n번역:\n%s", src, trans)
+	raw, err := judge.Complete(context.Background(), llm.ChatRequest{
+		Model:          judgeModel,
+		System:         llm.SystemString(system),
+		Messages:       []llm.Message{llm.NewTextMessage("user", user)},
+		MaxTokens:      128,
+		Thinking:       &llm.ThinkingConfig{Type: "disabled"},
+		ResponseFormat: &llm.ResponseFormat{Type: "json_object"},
+	})
+	if err != nil {
+		t.Fatalf("judge call (model=%s): %v", judgeModel, err)
+	}
+	s, _ := jsonutil.UnmarshalLLM[absScore](raw)
+	return clampScore(s.Adequacy), clampScore(s.Fluency)
+}
+
+func parseWinner(raw string) string {
+	if v, err := jsonutil.UnmarshalLLM[pairVerdict](raw); err == nil {
+		return v.Winner
+	}
+	return ""
+}
+
+// normalizeWinner maps the judge's winner field to "A" / "B" / "tie", defaulting
+// to "tie" for anything unrecognized (so noise never fabricates a win).
+func normalizeWinner(w string) string {
+	switch strings.ToLower(strings.TrimSpace(w)) {
+	case "a":
+		return "A"
+	case "b":
+		return "B"
+	default:
+		return "tie"
+	}
+}
+
+func clampScore(n int) int {
+	if n < 1 {
+		return 1
+	}
+	if n > 5 {
+		return 5
+	}
+	return n
+}
+
+// ── chrF (secondary, deterministic) ──
+
+// chrF is the character n-gram F-score (orders 1..6, β=2), a standard MT metric
+// well-suited to Korean (character-level). Returns 0..100. Whitespace is stripped
+// so spacing variants don't skew the score.
 func chrF(candidate, reference string) float64 {
 	cand := stripSpace(candidate)
 	ref := stripSpace(reference)
@@ -208,8 +404,8 @@ func stripSpace(s string) string {
 	}, s)
 }
 
-// TestChrF verifies the metric (runs in CI; no LLM): identical ≈ 100, empty = 0,
-// and monotonicity (closer translation scores higher).
+// ── metric/parse unit tests (CI; no LLM) ──
+
 func TestChrF(t *testing.T) {
 	if got := chrF("안녕하세요 세계", "안녕하세요 세계"); got < 99.9 {
 		t.Fatalf("identical strings should score ~100, got %.2f", got)
@@ -225,5 +421,26 @@ func TestChrF(t *testing.T) {
 	}
 	if none < 0 || full > 100 {
 		t.Fatalf("chrF out of range: none=%.1f full=%.1f", none, full)
+	}
+}
+
+func TestJudgeParsing(t *testing.T) {
+	winners := map[string]string{
+		`{"winner":"A"}`:                   "A",
+		`{"winner":"b"}`:                   "B",
+		`{"winner":"tie"}`:                 "tie",
+		"```json\n{\"winner\":\"A\"}\n```": "A",
+		`{"winner":"unsure"}`:              "tie",
+		`not json`:                         "tie",
+	}
+	for raw, want := range winners {
+		if got := normalizeWinner(parseWinner(raw)); got != want {
+			t.Fatalf("winner parse %q → %q, want %q", raw, got, want)
+		}
+	}
+	for in, want := range map[int]int{0: 1, 1: 1, 3: 3, 5: 5, 9: 5, -2: 1} {
+		if got := clampScore(in); got != want {
+			t.Fatalf("clampScore(%d)=%d want %d", in, got, want)
+		}
 	}
 }
