@@ -1,7 +1,5 @@
 package ai.deneb.deneb
 
-import ai.deneb.Platform
-import ai.deneb.currentPlatform
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
@@ -128,9 +126,7 @@ fun DenebFleetScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text("플릿", style = DenebType.viewTitle, modifier = Modifier.weight(1f))
-                if (currentPlatform !is Platform.Desktop) {
-                    TextButton(onClick = onBack) { Text("닫기") }
-                }
+                TextButton(onClick = onBack) { Text("닫기") }
             }
             // Pill tab bar — same look as the settings hub so the two screens
             // read as siblings.

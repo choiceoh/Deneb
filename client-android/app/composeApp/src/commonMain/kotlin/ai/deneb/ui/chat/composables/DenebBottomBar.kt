@@ -55,8 +55,8 @@ import androidx.compose.material.icons.outlined.Settings as SettingsOutlined
  * wires [onMore]) for the secondary sections.
  *
  * Stateless: the host (App.kt) owns navigation and passes [currentRoute] for
- * highlighting, so this stays previewable. Desktop keeps its persistent
- * [DenebSidebar]; this bar is mounted on phones only.
+ * highlighting, so this stays previewable. The native client is mobile-only, so this
+ * bar is the app's primary navigation surface.
  */
 data class DenebTab(
     val label: String,

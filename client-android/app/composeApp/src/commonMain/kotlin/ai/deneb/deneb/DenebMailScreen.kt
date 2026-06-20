@@ -706,17 +706,3 @@ private fun mailPipelineStatusParts(pipeline: MailNativePipeline): List<String> 
     if (pipeline.calendarCandidates > 0) add("일정 ${pipeline.calendarCandidates}")
     if (pipeline.todoCandidates > 0) add("할일 ${pipeline.todoCandidates}")
 }
-
-/** Desktop split-view right-pane placeholder, shown until a mail is selected. */
-@Composable
-internal fun EmptyMailPanel() {
-    Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text(
-                "메일을 선택하세요",
-                style = MaterialTheme.typography.bodyMedium,
-                color = denebHint(),
-            )
-        }
-    }
-}

@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -91,15 +90,11 @@ import androidx.compose.ui.unit.sp
 val DenebMaxContentWidth: Dp = 760.dp
 
 /**
- * A width modifier for screen content: a fixed [cap] on desktop, full width on phone.
- *
- * NOTE: we deliberately do NOT use `widthIn(max).fillMaxSize()` (fillMaxSize fills the
- * incoming max and drops the cap) nor `BoxWithConstraints { width(min(maxWidth, cap)) }`
- * — under the headless native-app desktop harness `maxWidth` comes back as a bogus value
- * so `min()` misfires. A platform-gated fixed width is the only reliable cap here.
+ * A width modifier for screen content: full width. The desktop product had a fixed
+ * content-width cap here; the native client is mobile-only now, so content always fills.
  */
 @Composable
-fun denebContentWidthModifier(cap: Dp = DenebMaxContentWidth): Modifier = if (currentPlatform is Platform.Desktop) Modifier.width(cap) else Modifier.fillMaxWidth()
+fun denebContentWidthModifier(): Modifier = Modifier.fillMaxWidth()
 
 /** Hairline rule color — onBackground at low alpha, theme-aware (≈white 9% dark / black 6% light). */
 @Composable
@@ -202,7 +197,7 @@ fun DenebScreenScaffold(
                 ) { tabBar() }
             }
             Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.TopCenter) {
-                val widthMod = if (fillWidth) Modifier.fillMaxWidth() else denebContentWidthModifier(maxContentWidth)
+                val widthMod = denebContentWidthModifier()
                 Column(widthMod.fillMaxHeight()) {
                     Column(Modifier.padding(start = 24.dp, end = 24.dp, top = 14.dp, bottom = 6.dp)) {
                         // Android has a system back button/gesture, so the in-app ← is
