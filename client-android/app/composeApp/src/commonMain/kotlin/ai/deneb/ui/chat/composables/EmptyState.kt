@@ -1,12 +1,15 @@
 package ai.deneb.ui.chat.composables
 
 import ai.deneb.ui.DenebType
-import ai.deneb.ui.components.LogoAnimation
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -45,7 +48,15 @@ internal fun EmptyState(
         } else {
             "안녕하세요? 무슨 대화를 할까요?"
         }
-        LogoAnimation()
+        // A muted monochrome sparkle — a calm "assistant" anchor that stays on-palette.
+        // (Replaced the purple logo orb, which was the one element breaking the
+        // monochrome + cool/warm accent idiom on the most-seen screen.)
+        Icon(
+            Icons.Outlined.AutoAwesome,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
+            modifier = Modifier.size(44.dp),
+        )
         Spacer(Modifier.height(16.dp))
         Text(
             text = greeting,
