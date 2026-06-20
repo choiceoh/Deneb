@@ -6,6 +6,7 @@ package gmailpoll
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 )
 
@@ -286,13 +287,24 @@ func extractDealInfo(ctx context.Context, deps PipelineDeps, analysisText string
 	if err != nil {
 		return nil
 	}
-	return dealInfoFromExtract(ext)
+	// Pass the same source the extractor read so the amount gate can corroborate
+	// the figure against the original document text. deps.Logger may be nil in
+	// tests / minimal wiring — the gate handles that.
+	return dealInfoFromExtract(ext, analysisText, deps.Logger)
 }
 
 // dealInfoFromExtract is the pure post-processing of a deal extraction: returns
 // nil when it isn't a deal or has no counterparty, otherwise trims fields and
 // drops empty items. Split out so it can be tested without a local LLM.
-func dealInfoFromExtract(ext dealExtract) *DealInfo {
+//
+// Amount verification gate (FinAcumen ③, deterministic + LLM-free): the Amount
+// comes from RoleTiny (the smallest model) and gets frozen onto a wiki deal page
+// + pinned as citable notebook evidence, so a hallucinated figure becomes a
+// "fact". Mirroring parseRelatedProjects (which drops LLM project paths absent
+// from the candidate set while keeping the rest), we drop a non-corroborated
+// AMOUNT while preserving the rest of the deal. Source is the same text fed to
+// the extractor (clean analysis + verbatim attachment); logger may be nil.
+func dealInfoFromExtract(ext dealExtract, source string, logger *slog.Logger) *DealInfo {
 	counterparty := strings.TrimSpace(ext.Counterparty)
 	if !ext.IsDeal || counterparty == "" {
 		return nil
@@ -303,7 +315,7 @@ func dealInfoFromExtract(ext dealExtract) *DealInfo {
 			items = append(items, t)
 		}
 	}
-	return &DealInfo{
+	deal := &DealInfo{
 		Counterparty: counterparty,
 		DocType:      strings.TrimSpace(ext.DocType),
 		Amount:       strings.TrimSpace(ext.Amount),
@@ -311,5 +323,40 @@ func dealInfoFromExtract(ext dealExtract) *DealInfo {
 		DueDate:      strings.TrimSpace(ext.DueDate),
 		Items:        items,
 		Summary:      strings.TrimSpace(ext.Summary),
+	}
+	gateDealAmount(deal, source, logger)
+	return deal
+}
+
+// gateDealAmount verifies deal.Amount against the source text by integer
+// equivalence and mutates deal in place when the figure is not corroborated.
+//
+// Decisions (over-block avoidance is the priority — a parse we can't trust never
+// blanks a possibly-correct amount):
+//   - empty Amount            → no-op (the prompt explicitly allows blank).
+//   - Amount unparseable       → keep as-is (over-block guard; we can't claim it's wrong).
+//   - Amount found in source   → keep as-is (corroborated).
+//   - Amount NOT in source     → blank Amount + append a visible ⚠️ flag to Summary
+//     and Warn-log. Never silent (this codebase's repeated lesson): the operator
+//     and the log both see that the extracted figure failed source corroboration.
+func gateDealAmount(deal *DealInfo, source string, logger *slog.Logger) {
+	if deal.Amount == "" {
+		return
+	}
+	found, parsed := amountFoundInSource(deal.Amount, source)
+	if !parsed || found {
+		return // over-block guard, or corroborated → keep the amount
+	}
+	bad := deal.Amount
+	deal.Amount = ""
+	flag := "⚠️ 금액 원문 대조 실패 (추출: " + bad + ")"
+	if deal.Summary == "" {
+		deal.Summary = flag
+	} else {
+		deal.Summary = deal.Summary + " " + flag
+	}
+	if logger != nil {
+		logger.Warn("mail→deal: 추출 금액이 원문에 없어 비움",
+			"counterparty", deal.Counterparty, "extractedAmount", bad)
 	}
 }
