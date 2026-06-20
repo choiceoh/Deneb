@@ -51,6 +51,22 @@ func recordPhoneHeartbeat(logger *slog.Logger) {
 	}
 }
 
+// phoneLocationPath is the native client's last-known-location cache. The payload is
+// stored verbatim (the FusedLocationProvider JSON the app pushed) and the file mtime
+// is the freshness signal — same convention as the heartbeat marker. The phone_read
+// tool reads this so the agent gets a recent location without an SSH round-trip.
+func phoneLocationPath() string {
+	return filepath.Join(config.ResolveStateDir(), "phone-location.json")
+}
+
+// recordPhoneLocation caches the native client's pushed location (best-effort).
+func recordPhoneLocation(logger *slog.Logger, payload string) {
+	p := phoneLocationPath()
+	if err := os.WriteFile(p, []byte(strings.TrimSpace(payload)), 0o600); err != nil && logger != nil {
+		logger.Warn("phone location: cache write failed", "path", p, "error", err)
+	}
+}
+
 // phoneEventMaxTokens caps the judgment turn's reply. A phone-event alert should
 // be a tight "왜 지금 중요한가 + 무엇을 언제까지" message, not an essay.
 const phoneEventMaxTokens = 1536
@@ -197,6 +213,14 @@ func (s *Server) handleEventIngest(w http.ResponseWriter, r *http.Request) {
 // caller only needs to know the event was accepted; the report arrives later via
 // the proactive push, exactly like a cron run.
 func (s *Server) ingestPhoneEventAsync(eventType, source, text string) {
+	// location_update: the native client's periodic / on-demand location push. Cache it
+	// for phone_read (file mtime = freshness) and return — it is data to look up, not an
+	// event to surface, so it never spends a judgment turn. (Geofence arrivals are sent
+	// as ordinary events and DO run the judgment, so they can surface "사무실 도착".)
+	if strings.EqualFold(strings.TrimSpace(eventType), "location_update") {
+		recordPhoneLocation(s.logger, text)
+		return
+	}
 	source = strings.TrimSpace(source)
 	if source == "" {
 		source = "(미상)"
