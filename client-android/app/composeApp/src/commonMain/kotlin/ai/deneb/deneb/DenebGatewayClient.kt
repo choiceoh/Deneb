@@ -304,6 +304,14 @@ class DenebGatewayClient(
     internal val clientToken: String
         get() = appSettings.settings.getString(KEY_TOKEN, "")
 
+    init {
+        // Cache-then-network for the 업무 home: seed the feed from the last-known
+        // briefing so a cold start renders instantly and, when the gateway is
+        // unreachable (the offline-first launcher shell), the home isn't empty.
+        // refreshWorkFeed overwrites with the authoritative list when it succeeds.
+        loadCachedWorkFeed()?.let { _denebWorkFeed.value = it }
+    }
+
     // In-process guard for the window AFTER [callRpc] returns a (still-valid) result
     // but BEFORE the caller assigns it to a StateFlow: a state-mutating caller captures
     // credEpoch at its start and re-checks it before the assignment, so a gateway switch
@@ -1044,6 +1052,9 @@ class DenebGatewayClient(
             _denebWorkFeed.value = incoming
         }
         _workFeedLoaded.value = true
+        // Persist the recent feed so the home renders it instantly on the next cold
+        // start and survives an unreachable gateway (the offline-first launcher shell).
+        storeCachedWorkFeed(_denebWorkFeed.value)
         return true
     }
 
@@ -1180,6 +1191,25 @@ class DenebGatewayClient(
             }
         }
         return payload.text.ifBlank { null }
+    }
+
+    /**
+     * Forwards a captured phone event (the native NotificationListener's broad
+     * notification capture) to the gateway's proactive judgment via
+     * miniapp.event.ingest. The gateway triages — OTP/spam/routine stay silent,
+     * signal lands in the work feed + push. Fire-and-forget: returns true once the
+     * gateway accepted it (the judgment runs async server-side).
+     */
+    suspend fun ingestEvent(type: String, source: String, text: String): Boolean {
+        if (text.isBlank()) return false
+        return callRpc<JsonObject>(
+            "miniapp.event.ingest",
+            buildJsonObject {
+                put("type", type)
+                put("source", source)
+                put("text", text)
+            },
+        ) != null
     }
 
     private fun applyNativeSyncEvent(event: NativeSyncEvent, reloadSessions: MutableSet<String>) {

@@ -69,6 +69,11 @@ type Deps struct {
 		// the updated item; used by miniapp.workfeed.rewrite.
 		Rewrite(id, newBody string) (workfeed.Item, error)
 	}
+	// IngestEvent queues a proactive 비서실장 judgment turn for a phone event — the
+	// native NotificationListener's broad capture (the gateway triages: OTP/spam/
+	// routine → NO_REPLY, signal → work feed + push). Optional; nil disables
+	// miniapp.event.ingest. eventType is "notification"/"context"/"clipboard"/sms.
+	IngestEvent func(eventType, source, text string)
 }
 
 // BtwDeps holds the dependencies for the chat.btw side-question RPC method.

@@ -341,6 +341,16 @@ class AppSettings(internal val settings: Settings) {
         settings.putString(KEY_MAIL_CACHE, json)
     }
 
+    // Work-feed (업무 home) cache (single key — the recent feed, for an instant feed
+    // render and, crucially, an offline-first launcher home: the feed shows the
+    // last-known briefing when the gateway is unreachable. Owner-fingerprinted like
+    // the mail cache so a prior account's feed can't render under new credentials.
+    fun getCachedWorkFeed(): String? = settings.getStringOrNull(KEY_WORK_FEED_CACHE)
+
+    fun putCachedWorkFeed(json: String) {
+        settings.putString(KEY_WORK_FEED_CACHE, json)
+    }
+
     /**
      * Purge ALL cached private content (every transcript + the inbox list). Called
      * when the gateway URL or client token changes: those cache keys are global, so
@@ -356,7 +366,7 @@ class AppSettings(internal val settings: Settings) {
     @OptIn(ExperimentalSettingsApi::class)
     fun clearCachedContent() {
         settings.keys
-            .filter { it.startsWith(KEY_TX_CACHE_PREFIX) || it == KEY_TX_CACHE_LRU || it == KEY_MAIL_CACHE }
+            .filter { it.startsWith(KEY_TX_CACHE_PREFIX) || it == KEY_TX_CACHE_LRU || it == KEY_MAIL_CACHE || it == KEY_WORK_FEED_CACHE }
             .forEach { settings.remove(it) }
     }
 
@@ -409,6 +419,7 @@ class AppSettings(internal val settings: Settings) {
         const val KEY_SANDBOX_ENABLED = "sandbox_enabled"
 
         const val KEY_MAIL_CACHE = "mail_list_cache"
+        const val KEY_WORK_FEED_CACHE = "work_feed_cache"
         const val KEY_TX_CACHE_PREFIX = "tx_cache:"
         const val KEY_TX_CACHE_LRU = "tx_cache_lru"
         const val TX_CACHE_MAX_SESSIONS = 12

@@ -752,7 +752,8 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 				}
 				return ws.EnrichContacts(contactsJSON)
 			},
-			WorkFeed: s.nativeWorkFeedStore(),
+			WorkFeed:    s.nativeWorkFeedStore(),
+			IngestEvent: s.ingestPhoneEventAsync,
 		}),
 		handlersession.ExecMethods(handlersession.ExecDeps{
 			Chat:       hub.Chat(),

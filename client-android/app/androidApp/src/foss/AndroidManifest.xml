@@ -21,4 +21,40 @@
     -->
     <uses-permission android:name="android.permission.READ_CONTACTS"/>
 
+    <!--
+      Work-launcher app drawer (FOSS-only). Package visibility (Android 11+) to see
+      and launch other apps' MAIN/LAUNCHER activities — scoped to launchable apps,
+      not the broad QUERY_ALL_PACKAGES. Declared only in the foss flavor so the Play
+      Store variant never gains app-visibility it doesn't use. (A default home app
+      is granted this automatically, but the drawer must work before being set as
+      default too.)
+    -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+    </queries>
+
+    <!--
+      Notification sensing (FOSS-only): the launcher's background information-gathering
+      service. Reads posted notifications, drops noise + security-sensitive ones
+      on-device, and forwards signal candidates to the gateway's proactive judgment
+      (which suppresses OTP/spam/routine and surfaces only signal). Requires the user
+      to grant Notification access (Settings > Notification access) — that grant is
+      the explicit opt-in; BIND_NOTIFICATION_LISTENER_SERVICE is held by the system.
+      The empty <application> merges this <service> into the main manifest's app.
+    -->
+    <application>
+        <service
+            android:name="ai.deneb.DenebNotificationListenerService"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+    </application>
+
 </manifest>

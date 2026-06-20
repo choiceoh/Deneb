@@ -141,6 +141,13 @@ func MiniappMethods(deps Deps) map[string]rpcutil.HandlerFunc {
 		// card's analysis and the result replaces the card body in place.
 		m["miniapp.workfeed.rewrite"] = handleMiniappWorkfeedRewrite(deps)
 	}
+	// Notification sensing: the native NotificationListener forwards broadly-captured
+	// phone events; the gateway runs the proactive judgment + relay (OTP/spam/routine
+	// suppressed, signal → work feed + push). The native equivalent of the loopback
+	// /api/event/ingest, which only the SSH-tunneled phone can reach.
+	if deps.IngestEvent != nil {
+		m["miniapp.event.ingest"] = handleMiniappEventIngest(deps)
+	}
 	return m
 }
 
@@ -538,6 +545,37 @@ func recordWorkFeed(deps Deps, item workfeed.Item) {
 		return
 	}
 	_, _ = deps.WorkFeed.Append(item)
+}
+
+// handleMiniappEventIngest queues a proactive judgment turn for a phone event from
+// the native client — the NotificationListener's broad notification capture (and,
+// later, context/clipboard). The native, token-authenticated equivalent of the
+// loopback /api/event/ingest: the gateway does the per-type judgment + relay, so
+// OTP/spam/routine alerts are suppressed (NO_REPLY) and only signal reaches the
+// work feed + push. Fire-and-forget — the judgment runs async on the server
+// lifecycle; the client only needs the "accepted" ack.
+//
+// Params:
+//   - type   (string, optional): "notification" (default) / "context" / "clipboard" / "sms"
+//   - source (string, optional): app/sender label (e.g. "카카오톡")
+//   - text   (string, required): the notification/event body
+func handleMiniappEventIngest(deps Deps) rpcutil.HandlerFunc {
+	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		p, errResp := rpcutil.DecodeParams[struct {
+			Type   string `json:"type"`
+			Source string `json:"source"`
+			Text   string `json:"text"`
+		}](req)
+		if errResp != nil {
+			return errResp
+		}
+		text := strings.TrimSpace(p.Text)
+		if text == "" {
+			return rpcerr.MissingParam("text").Response(req.ID)
+		}
+		deps.IngestEvent(p.Type, p.Source, text)
+		return rpcutil.RespondOK(req.ID, map[string]any{"status": "accepted"})
+	}
 }
 
 // handleMiniappWorkfeedFeedback records a user's correction on a work-feed card

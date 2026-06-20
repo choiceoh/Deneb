@@ -56,6 +56,7 @@ import ai.deneb.ui.chat.composables.denebWorkDataRoutes
 import ai.deneb.ui.chat.composables.navigateToDenebSection
 import ai.deneb.ui.components.FullScreenImageHost
 import ai.deneb.ui.handCursor
+import ai.deneb.ui.launcher.AppDrawerScreen
 import ai.deneb.ui.withBlackBackground
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -176,6 +177,12 @@ object DenebSearch
 @Serializable
 @SerialName("deneb_more")
 object DenebMore
+
+// Work-launcher app drawer (Phase 0). A local, gateway-independent screen listing
+// installed apps; reached from 더보기 for now, later the home swipe-up.
+@Serializable
+@SerialName("deneb_apps")
+object DenebApps
 
 @Serializable
 @SerialName("deneb_wiki")
@@ -595,6 +602,12 @@ private fun AppContent(
                                     onBack = { navController.navigateUp() },
                                     onOpen = { dest -> navController.navigate(dest) },
                                     chatMode = navChatMode,
+                                )
+                            }
+                            composable<DenebApps> {
+                                AppDrawerScreen(
+                                    onBack = { navController.navigateUp() },
+                                    navigationTabBar = if (showTabBar) navigationTabBar else null,
                                 )
                             }
                             composable<DenebNotebooks> {
