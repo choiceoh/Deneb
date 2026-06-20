@@ -8,8 +8,10 @@ import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.koin.java.KoinJavaComponent.inject
 
@@ -20,6 +22,9 @@ import org.koin.java.KoinJavaComponent.inject
  * miniapp.event.ingest. The gateway runs the proactive 비서실장 judgment (OTP/spam/
  * routine → silent NO_REPLY; signal → work feed + push), so the user only ever
  * sees signal. "다 읽되 다 보여주지 않는다": broad capture here, narrow surface server-side.
+ *
+ * A short coalescing window collapses notification bursts (group chat, batched
+ * approvals) into a single event, so one burst costs one judgment turn, not N.
  *
  * Requires the user to grant Notification access (Settings > Notification access >
  * Deneb). FOSS-only — declared in the foss manifest, like the SMS/contacts features.
@@ -34,11 +39,49 @@ class DenebNotificationListenerService : NotificationListenerService() {
     override fun onNotificationPosted(sbn: StatusBarNotification?, rankingMap: RankingMap?) {
         val event = extractEvent(sbn, rankingMap) ?: return
         if (isRecentDuplicate(event.key)) return // a re-posted / updated notification within the window
+        enqueue(event)
+    }
+
+    // Burst coalescing: a group-chat burst or batched approvals fire many distinct
+    // notifications within a second or two. Forwarding each individually spends one
+    // gateway judgment turn per notification, so we buffer for a short window and
+    // collapse a burst (>= BATCH_THRESHOLD in the window) into ONE event — mirroring
+    // the Termux watcher's batch behavior. A lone notification just waits out the
+    // window (~2s, negligible for proactive sensing) then forwards as-is. Guarded by
+    // the `pending` monitor; notification callbacks can overlap.
+    private val pending = mutableListOf<NotifEvent>()
+    private var flushJob: Job? = null
+
+    private fun enqueue(event: NotifEvent) {
+        synchronized(pending) {
+            pending.add(event)
+            if (flushJob == null) {
+                flushJob = scope.launch {
+                    delay(COALESCE_WINDOW_MS)
+                    flushAndForward()
+                }
+            }
+        }
+    }
+
+    private suspend fun flushAndForward() {
+        val batch: List<NotifEvent>
+        synchronized(pending) {
+            batch = pending.toList()
+            pending.clear()
+            flushJob = null
+        }
+        if (batch.isEmpty()) return
         val client = repository as? DenebGatewayClient ?: return
-        scope.launch {
-            // Fire-and-forget: the gateway acks immediately and judges async. A
-            // transport failure (gateway down) just drops this one notification.
-            runCatching { client.ingestEvent("notification", event.source, event.text) }
+        // Fire-and-forget: the gateway acks immediately and judges async. A transport
+        // failure (gateway down) just drops these notifications.
+        if (batch.size >= BATCH_THRESHOLD) {
+            val lines = batch.joinToString("\n") { "• " + "${it.source}: ${it.text}".replace("\n", " ").trim() }
+            runCatching { client.ingestEvent("notification", "여러 앱", "알림 ${batch.size}건 도착:\n$lines") }
+        } else {
+            for (ev in batch) {
+                runCatching { client.ingestEvent("notification", ev.source, ev.text) }
+            }
         }
     }
 
@@ -118,6 +161,12 @@ class DenebNotificationListenerService : NotificationListenerService() {
     private companion object {
         private const val DEDUP_WINDOW_MS = 45_000L
         private const val MAX_DEDUP_KEYS = 200
+
+        // Burst coalescing: buffer notifications this long, then forward the window's
+        // events together — batched into one event when >= BATCH_THRESHOLD arrive. A
+        // couple seconds is invisible for proactive sensing and collapses bursts.
+        private const val COALESCE_WINDOW_MS = 2_000L
+        private const val BATCH_THRESHOLD = 3
 
         // Best-effort hygiene blocklist: password managers / authenticators whose
         // notifications carry codes or vault access.
