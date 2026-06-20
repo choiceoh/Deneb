@@ -165,10 +165,17 @@ private fun ScrubIndex(keys: List<String>, onScrub: (String) -> Unit, modifier: 
         modifier.pointerInput(keys) {
             awaitEachGesture {
                 val down = awaitFirstDown(requireUnconsumed = false)
+                // Dedup within a drag: fire scrollToItem only when the target section
+                // changes, not on every pointer frame (each was a fresh coroutine).
+                var lastKey: String? = null
                 fun pick(y: Float) {
                     if (size.height <= 0) return
                     val i = ((y / size.height) * keys.size).toInt().coerceIn(0, keys.lastIndex)
-                    onScrub(keys[i])
+                    val key = keys[i]
+                    if (key != lastKey) {
+                        lastKey = key
+                        onScrub(key)
+                    }
                 }
                 pick(down.position.y)
                 down.consume()
@@ -205,11 +212,14 @@ private fun hangulInitial(c: Char): Char? {
     }
 }
 
-/** Section key for a label: Hangul initial, else uppercase Latin/other letter, else #. */
+/** Section key for a label: Hangul initial (syllable or standalone basic jamo), else
+ *  uppercase Latin, else # — so CJK/accented/symbol labels share one bucket whose key
+ *  matches their #-rank (otherwise each formed an orphan section colliding at rank 1000). */
 private fun initialKey(label: String): String {
     val c = label.trimStart().firstOrNull() ?: return "#"
     hangulInitial(c)?.let { return it.toString() }
-    return if (c.isLetter()) c.uppercaseChar().toString() else "#"
+    if (c in HANGUL_ORDER) return c.toString() // standalone basic jamo → merge with its section
+    return if (c in 'A'..'Z' || c in 'a'..'z') c.uppercaseChar().toString() else "#"
 }
 
 /** Sort order: Hangul (ㄱ→ㅎ), then Latin (A→Z), then # (digits/symbols) last. */
