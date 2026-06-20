@@ -1,7 +1,10 @@
 package ai.deneb.ui.chat.composables
 
 import ai.deneb.DenebAppHub
+import ai.deneb.DenebCalendar
+import ai.deneb.DenebConfig
 import ai.deneb.DenebFeed
+import ai.deneb.DenebMail
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
@@ -28,9 +31,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.automirrored.outlined.Chat as ChatBubbleOutlined
 import androidx.compose.material.icons.filled.Notifications as NotificationsFilled
 import androidx.compose.material.icons.filled.Widgets as WidgetsFilled
+import androidx.compose.material.icons.outlined.CalendarMonth as CalendarMonthOutlined
 import androidx.compose.material.icons.outlined.Call as CallOutlined
+import androidx.compose.material.icons.outlined.Email as EmailOutlined
 import androidx.compose.material.icons.outlined.Language as LanguageOutlined
 import androidx.compose.material.icons.outlined.Notifications as NotificationsOutlined
+import androidx.compose.material.icons.outlined.Settings as SettingsOutlined
 import androidx.compose.material.icons.outlined.Widgets as WidgetsOutlined
 
 /**
@@ -105,6 +111,21 @@ fun denebBottomTabs(onCall: () -> Unit, onInternet: () -> Unit, onKakao: () -> U
     DenebTabItem.Action("카톡", Icons.AutoMirrored.Outlined.ChatBubbleOutlined, onKakao),
 )
 
+/**
+ * The non-launcher (app-mode) five-slot list — 피드 · 메일 · 자체앱 · 달력 · 설정. When
+ * launcher mode is OFF, Deneb is an ordinary app, so the three external-app shortcuts
+ * (통화/인터넷/카톡) give way to Deneb's own sections. These are navigate-actions (they
+ * jump into the section, which hides the bar and keeps its own back nav — like tapping
+ * the matching 자체앱 grid tile), so they never carry a selection indicator.
+ */
+fun denebBottomTabsAppMode(onNavigate: (Any) -> Unit): List<DenebTabItem> = listOf(
+    denebScreenTabs[0], // 피드
+    DenebTabItem.Action("메일", Icons.Outlined.EmailOutlined) { onNavigate(DenebMail) },
+    denebScreenTabs[1], // 자체앱 (center)
+    DenebTabItem.Action("달력", Icons.Outlined.CalendarMonthOutlined) { onNavigate(DenebCalendar) },
+    DenebTabItem.Action("설정", Icons.Outlined.SettingsOutlined) { onNavigate(DenebConfig) },
+)
+
 // Routes that surface 업무 데이터 — used by App.kt to bounce a 챗봇-mode session back to
 // home if it ever lands on one (defensive — the 챗봇 workspace has no bottom bar). 피드 is
 // 업무-only (the work feed home), so it bounces; the 자체앱 grid filters its own 업무 tiles.
@@ -144,6 +165,9 @@ fun DenebBottomBar(
     modifier: Modifier = Modifier,
     // Unread work-feed count badged on the 피드 tab (the old top-bar bell moved here).
     feedUnread: Int = 0,
+    // When false (Deneb isn't the phone's home app), the external-app shortcuts
+    // (통화/인터넷/카톡) are replaced by Deneb's own sections (메일/달력/설정).
+    launcherEnabled: Boolean = true,
 ) {
     val haptics = rememberHaptics()
     val hairline = denebHairline()
@@ -172,7 +196,12 @@ fun DenebBottomBar(
                 drawLine(hairline, Offset(0f, 0f), Offset(size.width, 0f), strokeWidth = 1.dp.toPx())
             },
     ) {
-        denebBottomTabs(onCall = onCall, onInternet = onInternet, onKakao = onKakao).forEach { tab ->
+        val tabs = if (launcherEnabled) {
+            denebBottomTabs(onCall = onCall, onInternet = onInternet, onKakao = onKakao)
+        } else {
+            denebBottomTabsAppMode(onNavigate = onNavigate)
+        }
+        tabs.forEach { tab ->
             when (tab) {
                 is DenebTabItem.Screen -> {
                     val selected = currentRoute == tab.route
