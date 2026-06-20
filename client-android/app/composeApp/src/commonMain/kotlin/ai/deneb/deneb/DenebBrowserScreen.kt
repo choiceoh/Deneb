@@ -176,6 +176,19 @@ fun DenebBrowserChrome(
                         tint = denebHint(),
                     )
                 }
+                IconButton(
+                    onClick = {
+                        haptics.tap()
+                        state.translateEnabled = !state.translateEnabled
+                    },
+                    modifier = Modifier.size(40.dp),
+                ) {
+                    Icon(
+                        Icons.Outlined.Translate,
+                        contentDescription = if (state.translateEnabled) "원문 보기" else "한국어로 번역",
+                        tint = if (state.translateEnabled) denebInsight() else denebHint(),
+                    )
+                }
                 Box {
                     IconButton(
                         onClick = {
@@ -187,21 +200,6 @@ fun DenebBrowserChrome(
                         Icon(Icons.Outlined.MoreVert, contentDescription = "더보기", tint = denebHint())
                     }
                     DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                        DropdownMenuItem(
-                            text = { Text(if (state.translateEnabled) "원문 보기" else "한국어로 번역") },
-                            leadingIcon = {
-                                Icon(
-                                    Icons.Outlined.Translate,
-                                    contentDescription = null,
-                                    tint = if (state.translateEnabled) denebInsight() else denebHint(),
-                                )
-                            },
-                            onClick = {
-                                haptics.tap()
-                                state.translateEnabled = !state.translateEnabled
-                                menuOpen = false
-                            },
-                        )
                         DropdownMenuItem(
                             text = { Text("URL 복사") },
                             leadingIcon = { Icon(Icons.Outlined.ContentCopy, contentDescription = null, tint = denebHint()) },
