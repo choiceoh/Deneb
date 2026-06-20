@@ -14,6 +14,8 @@ import ai.deneb.deneb.CronEditContent
 import ai.deneb.deneb.DashboardLanesContent
 import ai.deneb.deneb.DenebBrowserChrome
 import ai.deneb.deneb.DenebWebViewState
+import ai.deneb.deneb.FilesSearchMode
+import ai.deneb.deneb.FilesSearchModeRow
 import ai.deneb.deneb.FilesTextViewerContent
 import ai.deneb.deneb.IntervalUnit
 import ai.deneb.deneb.MailMessage
@@ -226,6 +228,9 @@ fun main() {
     renderFilesText("files_text_markdown_dark.png", DarkColorScheme, displayName = "프로젝트_X.md", markdown = true, text = markdownSample)
     renderFilesText("files_text_markdown_light.png", LightColorScheme, displayName = "프로젝트_X.md", markdown = true, text = markdownSample)
     renderFilesText("files_text_plain_dark.png", DarkColorScheme, displayName = "deploy.log", markdown = false, text = filesPlainSample)
+    renderFilesSearchMode("files_search_mode_name_dark.png", DarkColorScheme, FilesSearchMode.NAME)
+    renderFilesSearchMode("files_search_mode_semantic_dark.png", DarkColorScheme, FilesSearchMode.SEMANTIC)
+    renderFilesSearchMode("files_search_mode_content_light.png", LightColorScheme, FilesSearchMode.CONTENT)
     println("rendered -> /tmp/deneb-render/")
 }
 
@@ -783,6 +788,24 @@ private fun renderFilesText(name: String, scheme: ColorScheme, displayName: Stri
                     onBack = {},
                     onRetry = {},
                 )
+            }
+        }
+    }
+    val image = scene.render()
+    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
+    File("/tmp/deneb-render").mkdirs()
+    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
+    scene.close()
+}
+
+// Validates the 이름 / 내용 / 의미 search-scope selector (FilesSearchModeRow): the
+// Material SingleChoiceSegmentedButton with the given mode highlighted, at phone
+// width — confirms the three Korean labels fit and the selected segment reads.
+private fun renderFilesSearchMode(name: String, scheme: ColorScheme, mode: FilesSearchMode) {
+    val scene = ImageComposeScene(width = 824, height = 140, density = Density(2f)) {
+        MaterialTheme(colorScheme = scheme) {
+            Surface(color = MaterialTheme.colorScheme.background) {
+                FilesSearchModeRow(mode = mode, onModeChange = {})
             }
         }
     }
