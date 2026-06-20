@@ -34,6 +34,10 @@ type Deps struct {
 	// fallback (the native-client document attach path). Optional; nil disables
 	// miniapp.capture.document.
 	ExtractDocument func(ctx context.Context, data []byte, filename, mimeType string) string
+	// Translate translates web-page text segments for the in-app browser's
+	// in-place translation (en/ru → ko). Returns a same-length, same-order
+	// slice. Optional; nil disables miniapp.web.translate.
+	Translate func(ctx context.Context, segments []string, targetLang string) ([]string, error)
 	// Hotwords supplies proper-noun bias (wiki people/companies/domain terms)
 	// for audio-capture transcription. Optional; nil or "" means no bias.
 	Hotwords func() string

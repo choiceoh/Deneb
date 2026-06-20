@@ -49,6 +49,12 @@ const (
 	// reject it. OPT-IN: absent unless agents.visionModel is configured; when
 	// absent, image turns fall through to the main model exactly as before.
 	RoleVision Role = "vision"
+	// RoleTranslation is the model used to translate web-page text for the
+	// in-app browser (en/ru → ko). Translation of extracted page text is a
+	// bounded local transform, so it DEFAULTS to the lightweight model;
+	// agents.translationModel opts in to a translation-specialized model
+	// independently (the operator-classifiable role the browser feature wants).
+	RoleTranslation Role = "translation"
 )
 
 // ModelConfig holds the provider and endpoint settings for a single model role.
@@ -123,6 +129,9 @@ type RegistryOptions struct {
 	// VisionModel overrides RoleVision (multimodal/image turns). Empty → the role
 	// is absent and image turns use the main model. Format: "provider/model".
 	VisionModel string
+	// TranslationModel overrides RoleTranslation (web-page translation). Empty →
+	// defaults to the (possibly overridden) lightweight model. Format: "provider/model".
+	TranslationModel string
 	// Providers is the deneb.json provider catalog (providerID → resolved
 	// endpoint/credentials). A role whose provider is present here resolves
 	// from the catalog; otherwise it falls back to the built-in switch.
@@ -265,6 +274,13 @@ func NewRegistryWithOptions(logger *slog.Logger, opts RegistryOptions) *Registry
 	if opts.AnalysisModel != "" {
 		models[RoleAnalysis] = resolveModelConfig(opts.AnalysisModel, opts.Providers)
 	}
+	// Translation defaults to the (possibly overridden) lightweight model so an
+	// unconfigured deployment translates locally out of the box; deneb.json opts
+	// in to a translation-specialized model independently.
+	models[RoleTranslation] = models[RoleLightweight]
+	if opts.TranslationModel != "" {
+		models[RoleTranslation] = resolveModelConfig(opts.TranslationModel, opts.Providers)
+	}
 	if opts.CodingModel != "" {
 		models[RoleCoding] = resolveModelConfig(opts.CodingModel, opts.Providers)
 	}
@@ -289,7 +305,7 @@ func NewRegistryWithOptions(logger *slog.Logger, opts RegistryOptions) *Registry
 	// (empty) entry that would make the opt-in role look configured.
 	vllmWindows := make(map[string]int)
 	probedVllmURLs := make(map[string]bool)
-	reconcileRoles := []Role{RoleMain, RoleTiny, RoleLightweight, RoleAnalysis, RoleFallback}
+	reconcileRoles := []Role{RoleMain, RoleTiny, RoleLightweight, RoleAnalysis, RoleFallback, RoleTranslation}
 	if _, ok := models[RoleCoding]; ok {
 		reconcileRoles = append(reconcileRoles, RoleCoding)
 	}
@@ -340,6 +356,7 @@ func NewRegistryWithOptions(logger *slog.Logger, opts RegistryOptions) *Registry
 		"analysis", logModelAlias(models[RoleAnalysis]),
 		"coding", logModelAlias(models[RoleCoding]),
 		"fallback", logModelAlias(models[RoleFallback]),
+		"translation", logModelAlias(models[RoleTranslation]),
 	)
 
 	return r
