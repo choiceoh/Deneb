@@ -11,15 +11,20 @@ import (
 )
 
 const (
-	// translateMaxSegmentsPerBatch bounds how many DOM text segments go to the
-	// model in one call. Kept small on purpose: a batch of long article paragraphs
-	// whose combined translation exceeds translateMaxTokens gets truncated → invalid
-	// JSON → parse fail → the whole batch falls back to originals (a real page came
-	// back ENTIRELY untranslated at 40). 10 keeps each batch's output well inside the
-	// budget; an oversized batch still self-heals via translateRange's split-retry.
-	translateMaxSegmentsPerBatch = 10
-	// translateMaxTokens is the per-batch output cap — headroom for ~10 long
-	// paragraphs of translated text so the JSON array isn't cut off mid-string.
+	// translateMaxCharsPerBatch is the PRIMARY batch bound — total source chars per LLM
+	// call. Auto-researched on real article prose against the live model: ~1200 chars is
+	// the sweet spot on all three axes — 100% reliability, fastest wall-clock, and best
+	// quality (a direct read scored ~1200-char batches cleaner than even single-segment
+	// translations). Bigger batches (≥~1600) overflow translateMaxTokens → the JSON array
+	// truncates → parse fail → slow split-retry storms that leave segments untranslated (a
+	// 40-segment page took 75s and half-failed at a fixed count of 10); smaller batches add
+	// round-trips and over-concurrency without quality gain.
+	translateMaxCharsPerBatch = 1200
+	// translateMaxSegmentsPerBatch caps a batch when segments are short (nav/labels) so a
+	// run of tiny strings doesn't pack hundreds into one call. The char bound dominates.
+	translateMaxSegmentsPerBatch = 20
+	// translateMaxTokens is the per-batch output cap — headroom for a ~1200-char batch's
+	// translated JSON so the array isn't cut off mid-string.
 	translateMaxTokens         = 8192
 	defaultTranslateTargetLang = "Korean"
 )
@@ -43,11 +48,28 @@ func TranslateSegments(ctx context.Context, segments []string, targetLang string
 	}
 	out := make([]string, len(segments))
 	copy(out, segments) // safe default: originals, overwritten only on a clean batch
-	for start := 0; start < len(segments); start += translateMaxSegmentsPerBatch {
-		end := min(start+translateMaxSegmentsPerBatch, len(segments))
+	for start := 0; start < len(segments); {
+		end := nextBatchEnd(segments, start)
 		translateRange(ctx, segments, out, start, end, lang)
+		start = end
 	}
 	return out, nil
+}
+
+// nextBatchEnd grows a batch from start, accumulating segments until adding the next
+// would exceed translateMaxCharsPerBatch or translateMaxSegmentsPerBatch — but always
+// takes at least one segment, so a lone over-long segment becomes its own batch (which
+// translateRange still handles, splitting only if its output truncates).
+func nextBatchEnd(segments []string, start int) int {
+	end := start + 1
+	chars := len(segments[start])
+	for end < len(segments) &&
+		end-start < translateMaxSegmentsPerBatch &&
+		chars+len(segments[end]) <= translateMaxCharsPerBatch {
+		chars += len(segments[end])
+		end++
+	}
+	return end
 }
 
 // translateRange translates segments[start:end] into out[start:end]. On a batch
