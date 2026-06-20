@@ -179,8 +179,8 @@ fun main() {
     renderBrowser("browser_dark.png", DarkColorScheme)
     renderBrowser("browser_light.png", LightColorScheme)
     renderMarkdown("markdown_dark.png", DarkColorScheme)
-    renderAppDrawer("app_drawer_dark.png", DarkColorScheme)
-    renderAppDrawer("app_drawer_light.png", LightColorScheme)
+    renderScreen("app_drawer_dark.png", "app_drawer", DarkColorScheme, 824, 1100)
+    renderScreen("app_drawer_light.png", "app_drawer", LightColorScheme, 824, 1100)
     renderAnalysis("analysis_clip.png", DarkColorScheme)
     renderCollapsedReport("mail_collapsed_dark.png", DarkColorScheme, expanded = false)
     renderCollapsedReport("mail_collapsed_light.png", LightColorScheme, expanded = false)
@@ -216,15 +216,15 @@ fun main() {
     renderScreen("topic_doc_editor_light.png", "topic_doc_editor", LightColorScheme, 824, 980)
     renderChart("chart_dark.png", DarkColorScheme)
     renderChart("chart_light.png", LightColorScheme)
-    renderWorkFeed("workfeed_dark.png", DarkColorScheme)
-    renderWorkFeed("workfeed_light.png", LightColorScheme)
-    renderDashboard("dashboard_dark.png", DarkColorScheme)
-    renderDashboard("dashboard_light.png", LightColorScheme)
-    renderOrgChart("org_chart_dark.png", DarkColorScheme)
-    renderOrgChart("org_chart_light.png", LightColorScheme)
-    renderOrgChart("org_chart_search_dark.png", DarkColorScheme, query = "김철수")
-    renderOrgEditor("org_editor_dark.png", DarkColorScheme)
-    renderOrgEditor("org_editor_light.png", LightColorScheme)
+    renderScreen("workfeed_dark.png", "workfeed", DarkColorScheme, 824, 1100)
+    renderScreen("workfeed_light.png", "workfeed", LightColorScheme, 824, 1100)
+    renderScreen("dashboard_dark.png", "dashboard", DarkColorScheme, 824, 1900)
+    renderScreen("dashboard_light.png", "dashboard", LightColorScheme, 824, 1900)
+    renderScreen("org_chart_dark.png", "org_chart", DarkColorScheme, 824, 1500)
+    renderScreen("org_chart_light.png", "org_chart", LightColorScheme, 824, 1500)
+    renderScreen("org_chart_search_dark.png", "org_chart_search", DarkColorScheme, 824, 1500)
+    renderScreen("org_editor_dark.png", "org_editor", DarkColorScheme, 824, 1280)
+    renderScreen("org_editor_light.png", "org_editor", LightColorScheme, 824, 1280)
     renderWidget("widget_loaded.png", "6/3 14:00 · 기획조정실 주간 회의 3분기 점검", "김민준 부장 · 회의 자료 검토 부탁드립니다", "미읽음 3")
     renderWidget("widget_loading.png", "불러오는 중…", "", "")
     renderSkeleton("skeleton_dark.png", DarkColorScheme)
@@ -576,7 +576,64 @@ internal val previewScreens: Map<String, @Composable (ColorScheme) -> Unit> = ma
             }
         }
     },
+    "workfeed" to { scheme ->
+        MaterialTheme(colorScheme = scheme) {
+            Surface(color = MaterialTheme.colorScheme.background) {
+                Box(Modifier.width(412.dp)) {
+                    WorkFeedPanel(items = sampleFeed, onOpen = {}, onRunAction = { _, _ -> }, onClose = {})
+                }
+            }
+        }
+    },
+    "dashboard" to { scheme ->
+        MaterialTheme(colorScheme = scheme) {
+            DenebScreenScaffold(title = "파트별 업무 현황", onBack = {}) {
+                DashboardLanesContent(sampleDashboard)
+            }
+        }
+    },
+    "org_chart" to { scheme -> orgChartBody(scheme, "") },
+    "org_chart_search" to { scheme -> orgChartBody(scheme, "김철수") },
+    "org_editor" to { scheme ->
+        MaterialTheme(colorScheme = scheme) {
+            Surface(color = MaterialTheme.colorScheme.background) {
+                OrgNodeEditor(node = sampleOrg.first { it.id == "team1" }, onChange = {}, onDelete = {}, onDone = {})
+            }
+        }
+    },
+    "app_drawer" to { scheme ->
+        val apps = listOf(
+            "메일", "캘린더", "카카오톡", "전화", "탑솔라 ERP", "드롭박스",
+            "은행", "메시지", "카메라", "설정", "지도", "사진", "유튜브", "크롬",
+        ).mapIndexed { i, label -> LauncherAppEntry(label = label, packageName = "pkg.$i") }
+        MaterialTheme(colorScheme = scheme) {
+            Surface(color = MaterialTheme.colorScheme.background) {
+                Box(Modifier.width(412.dp)) {
+                    AppDrawer(apps = apps, onLaunch = {})
+                }
+            }
+        }
+    },
 )
+
+// Org chart body (diagram + people search). A non-blank [query] seeds the search box so
+// the search-active state (hit highlight + results strip) is previewable.
+@Composable
+private fun orgChartBody(scheme: ColorScheme, query: String) {
+    MaterialTheme(colorScheme = scheme) {
+        DenebScreenScaffold(title = "조직도", onBack = {}) {
+            OrgChartContent(
+                nodes = sampleOrg,
+                notice = null,
+                error = null,
+                onEditNode = {},
+                onAddChild = {},
+                onAddRoot = {},
+                initialQuery = query,
+            )
+        }
+    }
+}
 
 // Shared cron-edit body for the three schedule-mode variants (weekly / interval /
 // advanced), each driven by a different [draft]. Used by the previewScreens entries.
@@ -1015,28 +1072,6 @@ private val sampleFeed = persistentListOf(
     ),
 )
 
-private fun renderWorkFeed(name: String, scheme: ColorScheme) {
-    val scene = ImageComposeScene(width = 824, height = 1100, density = Density(2f)) {
-        MaterialTheme(colorScheme = scheme) {
-            Surface(color = MaterialTheme.colorScheme.background) {
-                Box(Modifier.width(412.dp)) {
-                    WorkFeedPanel(
-                        items = sampleFeed,
-                        onOpen = {},
-                        onRunAction = { _, _ -> },
-                        onClose = {},
-                    )
-                }
-            }
-        }
-    }
-    val image = scene.render()
-    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
-    File("/tmp/deneb-render").mkdirs()
-    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
-    scene.close()
-}
-
 // The part-grouped work dashboard (파트별 업무 현황): the five fixed 파트 lanes (one
 // empty to exercise the "지금 할 일이 없습니다" line) plus the muted 미분류 triage lane.
 // Mixed scheduled times (오늘/내일/dated) exercise dashboardTimeLabel; lane 2 is empty.
@@ -1079,22 +1114,6 @@ private val sampleDashboard = listOf(
         ),
     ),
 )
-
-private fun renderDashboard(name: String, scheme: ColorScheme) {
-    // Tall enough to show all six lanes including the muted 미분류 triage bucket.
-    val scene = ImageComposeScene(width = 824, height = 1900, density = Density(2f)) {
-        MaterialTheme(colorScheme = scheme) {
-            DenebScreenScaffold(title = "파트별 업무 현황", onBack = {}) {
-                DashboardLanesContent(sampleDashboard)
-            }
-        }
-    }
-    val image = scene.render()
-    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
-    File("/tmp/deneb-render").mkdirs()
-    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
-    scene.close()
-}
 
 // The org chart (조직도): a group → 실/회사 → 팀 → 파트 hierarchy joined by parentId,
 // with lane-tagged parts (the 파트 chip) and members carrying 직급/직책. Fake names only
@@ -1152,75 +1171,6 @@ private val sampleOrg = listOf(
     ),
     OrgNodeOut(id = "personal", name = "개인/기타", type = "team", parentId = "group"),
 )
-
-// The 조직도 chart view (diagram + people search) with the full sample chart. A non-blank
-// [query] seeds the search box so the search-active state (hit highlight + results strip)
-// can be previewed.
-private fun renderOrgChart(name: String, scheme: ColorScheme, query: String = "") {
-    val scene = ImageComposeScene(width = 824, height = 1500, density = Density(2f)) {
-        MaterialTheme(colorScheme = scheme) {
-            DenebScreenScaffold(title = "조직도", onBack = {}) {
-                OrgChartContent(
-                    nodes = sampleOrg,
-                    notice = null,
-                    error = null,
-                    onEditNode = {},
-                    onAddChild = {},
-                    onAddRoot = {},
-                    initialQuery = query,
-                )
-            }
-        }
-    }
-    val image = scene.render()
-    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
-    File("/tmp/deneb-render").mkdirs()
-    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
-    scene.close()
-}
-
-// The node editor sheet body: name field, type/lane pickers, the dashboard-part
-// toggle (on), and a member with 직급/직책 dropdowns. Previews the edit surface a
-// ModalBottomSheet hosts at runtime (rendered bare here, sheet chrome is Material).
-private fun renderOrgEditor(name: String, scheme: ColorScheme) {
-    val node = sampleOrg.first { it.id == "team1" }
-    val scene = ImageComposeScene(width = 824, height = 1280, density = Density(2f)) {
-        MaterialTheme(colorScheme = scheme) {
-            Surface(color = MaterialTheme.colorScheme.background) {
-                OrgNodeEditor(node = node, onChange = {}, onDelete = {}, onDone = {})
-            }
-        }
-    }
-    val image = scene.render()
-    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
-    File("/tmp/deneb-render").mkdirs()
-    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
-    scene.close()
-}
-
-// Work-launcher app drawer (Phase 0): the live-filtered installed-app grid. Uses
-// lettered placeholders here (no real PackageManager icons on desktop), so this
-// validates layout/legibility of the drawer shell, not the icons.
-private fun renderAppDrawer(name: String, scheme: ColorScheme) {
-    val apps = listOf(
-        "메일", "캘린더", "카카오톡", "전화", "탑솔라 ERP", "드롭박스",
-        "은행", "메시지", "카메라", "설정", "지도", "사진", "유튜브", "크롬",
-    ).mapIndexed { i, label -> LauncherAppEntry(label = label, packageName = "pkg.$i") }
-    val scene = ImageComposeScene(width = 824, height = 1100, density = Density(2f)) {
-        MaterialTheme(colorScheme = scheme) {
-            Surface(color = MaterialTheme.colorScheme.background) {
-                Box(Modifier.width(412.dp)) {
-                    AppDrawer(apps = apps, onLaunch = {})
-                }
-            }
-        }
-    }
-    val image = scene.render()
-    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
-    File("/tmp/deneb-render").mkdirs()
-    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
-    scene.close()
-}
 
 // Validates the loading skeleton (sweeping-shimmer placeholders). A static capture
 // shows the base tint at rest; the highlight band only appears mid-sweep, so this
