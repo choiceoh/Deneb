@@ -673,6 +673,9 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 			// Document attach (pdf/doc/sheet) → in-house extractor (PDF/Excel/Word/
 			// PowerPoint/CSV/text, with a scanned-PDF / image OCR fallback).
 			ExtractDocument: tools.ExtractAttachmentTextBytes,
+			// In-app browser in-place translation (en/ru → ko) via the translation
+			// model role (defaults to local lightweight; agents.translationModel opts in).
+			Translate: tools.TranslateSegments,
 			// Raw capture persistence: full OCR text / diarized transcript →
 			// {memory}/captures/ + diary breadcrumb (recallable, dream-distilled,
 			// backed up). The agent turn only summarizes; this keeps the original.

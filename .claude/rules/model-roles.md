@@ -7,7 +7,7 @@ globs: gateway-go/internal/ai/modelrole/**, gateway-go/internal/pipeline/pilot/*
 
 > 어떤 임무가 어떤 모델 역할을 쓰는지의 **단일 진실원**. 실제 모델 이름은 코드에 하드코딩하지 않는다 — 코드는 **역할만 고르고**, 역할→모델은 `~/.deneb/deneb.json` 의 `agents.*Model` + wormhole 라우터가 결정한다. 새 LLM 호출을 추가하거나 역할을 바꿀 때 아래 "임무→역할 표"에 행을 추가하고 근거를 적는다.
 
-## 역할 8종 + 의도
+## 역할 9종 + 의도
 
 상수: `gateway-go/internal/ai/modelrole/registry.go`. 모델 매핑: `~/.deneb/deneb.json` `agents.*Model` (예시는 *현재값*일 뿐 — 코드 판단 기준이 아니다).
 
@@ -21,6 +21,7 @@ globs: gateway-go/internal/ai/modelrole/**, gateway-go/internal/pipeline/pilot/*
 | tiny | `RoleTiny` | **단순 분류/추출** (가장 작음) | 로컬 (qwen3.6-35b) |
 | fallback | `RoleFallback` | 폴백 체인 | (config) |
 | vision | `RoleVision` | 이미지 턴 (#2510) | (config) |
+| translation | `RoleTranslation` | 인앱 브라우저 웹페이지 번역 (en/ru→ko) | 로컬 (미설정 시 lightweight 폴백) |
 
 > ⚠️ **analysis 역할의 함정.** enum 주석은 "highest-quality **LOCAL** model"이라 적혀 있지만, 현재 deneb.json은 `analysis → glm-5.2`(클라우드)로 지정한다(chatbot·fallback과 공유). 즉 **analysis 역할에 임무를 얹으면 클라우드로 샌다** — 비용(구독 크레딧) + 레이턴시(~20s/콜). 요약류 헬퍼 콜을 무심코 analysis로 두면 안 된다. 실제로 **컴팩션·youtube 요약이 이렇게 샜다가** #2508/#2509로 lightweight(로컬)로 환원됐다.
 
@@ -53,6 +54,8 @@ globs: gateway-go/internal/ai/modelrole/**, gateway-go/internal/pipeline/pilot/*
 | 구현자 서브에이전트 | `sessions_spawn(tool_preset=implementer)` | **coding** when configured, else subagent/default | 파일 쓰기·exec를 할 수 있는 코드 수정 위임. 코딩 전용 모델은 네이티브 설정의 `agents.codingModel`로 opt-in |
 | 스킬 진화 패치 생성 | `init_genesis.go` → `genesis.Evolver` | **coding** when configured, else lightweight | SKILL.md 실제 수정 후보를 만드는 경로. 코딩 전용 모델 설정 시 main teacher rewrite를 끄고 coding 역할이 패치 생성을 담당 |
 | 스킬 진화 behavioral replay (도구호출 회귀 검증) | `domain/skills/genesis/validation_executor.go` (executor) + `init_genesis.go` 배선 | **lightweight** | 후보 SKILL.md를 부작용 없이 시뮬레이션해 도구호출 plan을 뽑고, original↔candidate 행동 회귀를 채점하는 검증 게이트. 로컬·바운드. **왜 lightweight인가**: main은 챗 핫패스와 GPU 경합 + 과비용이고, 게이트는 두 본문을 **같은 모델**로 비교하므로 절대 충실도보다 일관된 판별력이 중요(executor 편향은 델타에서 상쇄). `DENEB_SKILL_EVOLVE_REPLAY`로 opt-in, fail-open |
+
+| 웹페이지 인앱 번역 (인플레이스, en/ru→ko) | `chat/tools/translate.go` → `miniapp.web.translate` 브리지 | **translation** (신설, 미설정 시 lightweight 폴백) | 인앱 브라우저가 보낸 DOM 텍스트 세그먼트 배치를 번역. 바운드 로컬 변환이라 기본 lightweight, `agents.translationModel` 로 번역 특화 모델 opt-in. **개수 보존**(LLM 응답이 입력 개수와 불일치하면 그 배치는 원문 유지 — 텍스트 드롭/재정렬 금지) |
 
 ## LLM 안 쓰는 곳 (의도적)
 

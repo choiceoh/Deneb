@@ -202,6 +202,13 @@ func CallCodingLLM(ctx context.Context, system, userMessage string, maxTokens in
 	return CallRoleLLM(ctx, modelrole.RoleCoding, system, userMessage, maxTokens, extraBody...)
 }
 
+// CallTranslationLLM invokes the translation model role — used to translate
+// web-page text for the in-app browser (en/ru → ko). Defaults to the lightweight
+// model unless agents.translationModel opts in to a translation-specialized one.
+func CallTranslationLLM(ctx context.Context, system, userMessage string, maxTokens int, extraBody ...map[string]any) (string, error) {
+	return CallRoleLLM(ctx, modelrole.RoleTranslation, system, userMessage, maxTokens, extraBody...)
+}
+
 // CollectStream reads all events from a streaming LLM response and returns the text.
 func CollectStream(ctx context.Context, events <-chan llm.StreamEvent) (string, error) {
 	var sb strings.Builder

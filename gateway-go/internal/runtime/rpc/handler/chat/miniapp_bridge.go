@@ -121,6 +121,11 @@ func MiniappMethods(deps Deps) map[string]rpcutil.HandlerFunc {
 	if deps.ExtractDocument != nil {
 		m["miniapp.capture.document"] = handleMiniappCaptureDocument(deps)
 	}
+	// Web translation (in-app browser in-place translate) needs the translation
+	// model role wired; skip the method cleanly when it isn't.
+	if deps.Translate != nil {
+		m["miniapp.web.translate"] = handleMiniappWebTranslate(deps)
+	}
 	// Contacts sync stores the whole address book (phone lookup / name search / ASR
 	// hotwords) and, as a bonus, enriches existing wiki people. Either dependency is
 	// enough to register; skip the method cleanly only when both are absent.
@@ -323,6 +328,38 @@ func handleMiniappCaptureDocument(deps Deps) rpcutil.HandlerFunc {
 			"document":   strings.TrimSpace(text),
 			"model":      res.Model,
 			"sessionKey": sessionKey,
+		})
+	}
+}
+
+// handleMiniappWebTranslate translates a batch of web-page text segments for the
+// in-app browser's in-place translation (en/ru → ko). The native DOM walker
+// sends the page's visible text segments and applies the returned — same-length,
+// same-order — translations in place. No agent turn: a direct call to the
+// translation model role, so it is cheap enough to run per batch as the page
+// loads and mutates.
+//
+// Params:
+//   - segments   ([]string, required): page text segments to translate
+//   - targetLang (string, optional): defaults to Korean
+func handleMiniappWebTranslate(deps Deps) rpcutil.HandlerFunc {
+	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		p, errResp := rpcutil.DecodeParams[struct {
+			Segments   []string `json:"segments"`
+			TargetLang string   `json:"targetLang"`
+		}](req)
+		if errResp != nil {
+			return errResp
+		}
+		if len(p.Segments) == 0 {
+			return rpcerr.MissingParam("segments").Response(req.ID)
+		}
+		translated, err := deps.Translate(ctx, p.Segments, p.TargetLang)
+		if err != nil {
+			return rpcerr.WrapDependencyFailed("translate failed", err).Response(req.ID)
+		}
+		return rpcutil.RespondOK(req.ID, map[string]any{
+			"translated": translated,
 		})
 	}
 }

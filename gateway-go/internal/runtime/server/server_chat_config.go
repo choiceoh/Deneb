@@ -606,6 +606,13 @@ func resolveVisionModel(logger *slog.Logger) string {
 	return resolveAgentRoleModel("visionModel", logger)
 }
 
+// resolveTranslationModel reads the optional agents.translationModel override
+// from deneb.json. Empty → RoleTranslation defaults to the lightweight model
+// (local, bounded) — separating a translation-specialized model is fully opt-in.
+func resolveTranslationModel(logger *slog.Logger) string {
+	return resolveAgentRoleModel("translationModel", logger)
+}
+
 // resolveAgentRoleModel reads a string field directly under "agents" in
 // deneb.json (e.g. "lightweightModel"). Returns "" when absent/unparseable.
 func resolveAgentRoleModel(field string, logger *slog.Logger) string {
