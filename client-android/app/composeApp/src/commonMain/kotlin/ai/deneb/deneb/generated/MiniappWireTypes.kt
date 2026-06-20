@@ -249,6 +249,8 @@ data class MemberOut(
     val name: String = "",
     val rank: String = "",
     val position: String = "",
+    val phones: List<String> = emptyList(),
+    val emails: List<String> = emptyList(),
 )
 
 @Immutable

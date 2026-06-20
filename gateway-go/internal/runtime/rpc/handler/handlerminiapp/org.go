@@ -50,18 +50,36 @@ type OrgDeps struct {
 	Load func() (org.OrgTree, error)
 	// SavePath resolves the file to write (org.ResolvePath in production).
 	SavePath func() string
+	// LookupContact enriches a member at GET time with the address book: given a
+	// member's display name it returns the matching contact's phones and emails
+	// (nil/empty when no contact matches). It is read-only and best-effort —
+	// the org chart (names/ranks/positions) stays the source of truth for the
+	// chart, while the contacts store stays the source of truth for numbers, so
+	// the two are never written back into org.json. A nil LookupContact (no
+	// contacts store) simply disables enrichment; the editor still works.
+	LookupContact func(name string) (phones, emails []string)
 }
 
 // MemberOut is the wire shape for one person in a node: their name plus the
-// optional 직급 (rank) and 직책 (position). Mirrors org.Member field-for-field.
-// There is no affiliation field — a person's affiliation (계열사/실/팀) is the
-// tree node they sit under, so it is structural, not a member attribute.
+// optional 직급 (rank) and 직책 (position), and — only on the GET response — the
+// phones/emails enriched from the contacts store so the native org chart can
+// call or email a node's people directly. There is no affiliation field — a
+// person's affiliation (계열사/실/팀) is the tree node they sit under, so it is
+// structural, not a member attribute.
+//
+// Phones/Emails are read-only enrichment: they are filled at GET time by name-
+// matching against the address book (the source of truth for numbers) and are
+// NOT persisted — membersFromWire drops them, so org.save only ever stores
+// name/rank/position. They round-trip through the wire as a convenience for the
+// client, never back into org.json.
 //
 //deneb:wire
 type MemberOut struct {
-	Name     string `json:"name"`
-	Rank     string `json:"rank,omitempty"`
-	Position string `json:"position,omitempty"`
+	Name     string   `json:"name"`
+	Rank     string   `json:"rank,omitempty"`
+	Position string   `json:"position,omitempty"`
+	Phones   []string `json:"phones,omitempty"`
+	Emails   []string `json:"emails,omitempty"`
 }
 
 // OrgNodeOut is the wire shape for one chart node. It mirrors org.OrgNode field-
@@ -126,7 +144,7 @@ func orgGet(deps OrgDeps) rpcutil.HandlerFunc {
 		if err != nil {
 			return rpcerr.WrapUnavailable("org chart unavailable", err).Response(req.ID)
 		}
-		return rpcutil.RespondOK(req.ID, projectOrgTree(tree))
+		return rpcutil.RespondOK(req.ID, projectOrgTree(tree, deps.LookupContact))
 	}
 }
 
@@ -168,11 +186,12 @@ func orgSave(deps OrgDeps) rpcutil.HandlerFunc {
 
 // --- projection ------------------------------------------------------------
 
-// projectOrgTree maps the domain tree to its wire shape. The field sets are
-// identical, so this is a 1:1 copy (kept explicit rather than aliasing the types
-// so the domain stays free of //deneb:wire and the handler owns the wire
-// contract).
-func projectOrgTree(t org.OrgTree) OrgTreeOut {
+// projectOrgTree maps the domain tree to its wire shape. The structural fields
+// are a 1:1 copy (kept explicit rather than aliasing the types so the domain
+// stays free of //deneb:wire and the handler owns the wire contract); members
+// are additionally enriched with contact phones/emails via lookup (nil lookup =
+// no enrichment).
+func projectOrgTree(t org.OrgTree, lookup func(name string) (phones, emails []string)) OrgTreeOut {
 	out := OrgTreeOut{Nodes: make([]OrgNodeOut, 0, len(t.Nodes))}
 	for _, n := range t.Nodes {
 		out.Nodes = append(out.Nodes, OrgNodeOut{
@@ -181,7 +200,7 @@ func projectOrgTree(t org.OrgTree) OrgTreeOut {
 			Type:      n.Type,
 			ParentID:  n.ParentID,
 			Lane:      n.Lane,
-			Members:   membersToWire(n.Members),
+			Members:   membersToWire(n.Members, lookup),
 			Keywords:  n.Keywords,
 			Companies: n.Companies,
 		})
@@ -190,14 +209,21 @@ func projectOrgTree(t org.OrgTree) OrgTreeOut {
 }
 
 // membersToWire maps domain members to their wire shape (nil stays nil so an
-// empty member list omits the JSON field).
-func membersToWire(ms []org.Member) []MemberOut {
+// empty member list omits the JSON field). When lookup is non-nil, each member's
+// name is matched against the contacts store and the resulting phones/emails are
+// attached (read-only enrichment — never persisted; see MemberOut). A nil lookup
+// (no contacts store wired) leaves phones/emails empty.
+func membersToWire(ms []org.Member, lookup func(name string) (phones, emails []string)) []MemberOut {
 	if ms == nil {
 		return nil
 	}
 	out := make([]MemberOut, 0, len(ms))
 	for _, m := range ms {
-		out = append(out, MemberOut{Name: m.Name, Rank: m.Rank, Position: m.Position})
+		mo := MemberOut{Name: m.Name, Rank: m.Rank, Position: m.Position}
+		if lookup != nil {
+			mo.Phones, mo.Emails = lookup(m.Name)
+		}
+		out = append(out, mo)
 	}
 	return out
 }
@@ -222,7 +248,10 @@ func orgTreeFromWire(w OrgTreeOut) org.OrgTree {
 }
 
 // membersFromWire maps inbound wire members back to the domain type (nil stays
-// nil).
+// nil). It deliberately copies only name/rank/position and DROPS any inbound
+// phones/emails: those are GET-time enrichment from the contacts store, not chart
+// data, so a save must never write them into org.json (the contacts store stays
+// the source of truth for numbers).
 func membersFromWire(ms []MemberOut) []org.Member {
 	if ms == nil {
 		return nil

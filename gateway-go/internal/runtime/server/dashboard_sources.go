@@ -10,10 +10,13 @@ package server
 import (
 	"context"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/classification"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/org"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp"
 )
@@ -83,9 +86,70 @@ func (s *Server) dashboardDeps() handlerminiapp.DashboardDeps {
 // reads the operator's {stateDir}/org.json (missing → empty tree); SavePath
 // resolves that same path for the atomic write. Always non-nil so the editor
 // registers unconditionally (a fresh install opens to a blank chart).
+// LookupContact wires the contacts store so org.get enriches each member with
+// their phone/email (read-only; never persisted) — nil-safe when the store is
+// absent (enrichment just yields nothing).
 func (s *Server) orgDeps() handlerminiapp.OrgDeps {
 	return handlerminiapp.OrgDeps{
-		Load:     func() (org.OrgTree, error) { return org.Load() },
-		SavePath: org.ResolvePath,
+		Load:          func() (org.OrgTree, error) { return org.Load() },
+		SavePath:      org.ResolvePath,
+		LookupContact: orgContactLookup(s.contactsStore),
 	}
+}
+
+// orgContactLookup builds the name → (phones, emails) enrichment used by
+// miniapp.org.get. It matches a member's display name to the address book the
+// same way the people directory does — via wiki.NormalizePersonName, which peels
+// honorific/role suffixes and affiliation parentheticals so "김민준 부장" matches
+// the contact "김민준" (exact on the normalized key; no substring matching, which
+// would mis-pair "이수" with "이수민").
+//
+// A nil store (contacts sync disabled / load failed) yields a nil function so
+// OrgDeps.LookupContact stays nil and the handler skips enrichment cleanly. The
+// index is rebuilt from the current snapshot on each call so freshly-synced
+// contacts are reflected without restarting; the chart is tiny and GET is
+// infrequent, so one O(contacts) build per request is negligible. When several
+// contacts collapse to the same normalized name (homonyms), their phones/emails
+// are unioned (deduped, first-seen order).
+func orgContactLookup(store *contacts.Store) func(name string) (phones, emails []string) {
+	if store == nil {
+		return nil
+	}
+	return func(name string) (phones, emails []string) {
+		key := wiki.NormalizePersonName(name)
+		if key == "" {
+			return nil, nil
+		}
+		for _, c := range store.All() {
+			if wiki.NormalizePersonName(c.Name) != key {
+				continue
+			}
+			phones = appendDedup(phones, c.Phones)
+			emails = appendDedup(emails, c.Emails)
+		}
+		return phones, emails
+	}
+}
+
+// appendDedup appends the trimmed, non-empty entries of add to dst, skipping any
+// value already present (case-sensitive for phones; callers pass already-formatted
+// strings). Preserves first-seen order. Returns dst unchanged when add is empty.
+func appendDedup(dst, add []string) []string {
+	for _, v := range add {
+		v = strings.TrimSpace(v)
+		if v == "" {
+			continue
+		}
+		dup := false
+		for _, e := range dst {
+			if e == v {
+				dup = true
+				break
+			}
+		}
+		if !dup {
+			dst = append(dst, v)
+		}
+	}
+	return dst
 }

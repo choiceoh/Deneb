@@ -20,8 +20,8 @@ import ai.deneb.deneb.FilesTextViewerContent
 import ai.deneb.deneb.IntervalUnit
 import ai.deneb.deneb.MailMessage
 import ai.deneb.deneb.MailRow
+import ai.deneb.deneb.OrgChartContent
 import ai.deneb.deneb.OrgNodeEditor
-import ai.deneb.deneb.OrgTreeContent
 import ai.deneb.deneb.PromptStyleEditor
 import ai.deneb.deneb.SchedMode
 import ai.deneb.deneb.ScheduleDraft
@@ -221,6 +221,7 @@ fun main() {
     renderDashboard("dashboard_light.png", LightColorScheme)
     renderOrgChart("org_chart_dark.png", DarkColorScheme)
     renderOrgChart("org_chart_light.png", LightColorScheme)
+    renderOrgChart("org_chart_search_dark.png", DarkColorScheme, query = "김철수")
     renderOrgEditor("org_editor_dark.png", DarkColorScheme)
     renderOrgEditor("org_editor_light.png", LightColorScheme)
     renderWidget("widget_loaded.png", "6/3 14:00 · 기획조정실 주간 회의 3분기 점검", "김민준 부장 · 회의 자료 검토 부탁드립니다", "미읽음 3")
@@ -1160,31 +1161,48 @@ private fun renderDashboard(name: String, scheme: ColorScheme) {
     scene.close()
 }
 
-// The org chart (조직도) tree: a small group → 실/회사 → 팀 hierarchy joined by
-// parentId, with two lane-tagged parts (the 파트 chip) and members carrying 직급/직책.
-// Fake names only (mirrors org.example.json) — exercises the indent tree, type
-// badges, lane chips, leader summary, and member lines. The bare 개인/기타 node (no
-// members) checks the empty-summary branch.
+// The org chart (조직도): a group → 실/회사 → 팀 → 파트 hierarchy joined by parentId,
+// with lane-tagged parts (the 파트 chip) and members carrying 직급/직책. Fake names only
+// (mirrors org.example.json) — exercises the multi-level DIAGRAM (boxes + connector
+// lines), type badges, lane chips, leader/member-count summaries, a 4th level (the two
+// sub-parts under 1팀) to show depth, a 겸직 (김철수 appears in both 기획조정실 and 1팀)
+// for the search demo, and the bare 개인/기타 node (no members) for the empty-summary box.
+// A few members carry FAKE phones/emails (as the gateway's GET enrichment would attach
+// from the contacts store) so the contact call/email shortcuts render in the editor +
+// search previews: 김철수 has both (search-result + editor), 이몽룡 email-only and 성춘향
+// phone-only (single-glyph cases), the rest none (no contact row).
 private val sampleOrg = listOf(
     OrgNodeOut(id = "group", name = "예시그룹", type = "group", parentId = "", members = listOf(MemberOut("홍길동", "회장", "회장"))),
-    OrgNodeOut(id = "planning", name = "기획조정실", type = "division", parentId = "group", members = listOf(MemberOut("김철수", "전무", "실장"))),
+    OrgNodeOut(
+        id = "planning",
+        name = "기획조정실",
+        type = "division",
+        parentId = "group",
+        members = listOf(MemberOut("김철수", "전무", "실장", phones = listOf("010-0000-0001"), emails = listOf("kim@example.test"))),
+    ),
     OrgNodeOut(
         id = "team1",
         name = "기획조정실 1팀",
         type = "team",
         parentId = "planning",
         lane = "team1",
-        members = listOf(MemberOut("김철수", "전무", "팀장"), MemberOut("이몽룡", "과장", "팀원")),
+        members = listOf(
+            MemberOut("김철수", "전무", "팀장", phones = listOf("010-0000-0001"), emails = listOf("kim@example.test")),
+            MemberOut("이몽룡", "과장", "팀원", emails = listOf("lee@example.test")),
+        ),
         keywords = listOf("인허가", "개발행위"),
         companies = listOf("사아건설"),
     ),
+    // 4th level: two parts under 1팀 — exercises a deeper branch + the connector bus.
+    OrgNodeOut(id = "team1a", name = "인허가파트", type = "team", parentId = "team1", lane = "team1a", members = listOf(MemberOut("이몽룡", "과장", "팀장", emails = listOf("lee@example.test")))),
+    OrgNodeOut(id = "team1b", name = "개발행위파트", type = "team", parentId = "team1", members = listOf(MemberOut("방자", "대리", "팀원"))),
     OrgNodeOut(
         id = "team2",
         name = "기획조정실 2팀",
         type = "team",
         parentId = "planning",
         lane = "team2",
-        members = listOf(MemberOut("성춘향", "부장", "팀장"), MemberOut("변학도", "대리", "팀원")),
+        members = listOf(MemberOut("성춘향", "부장", "팀장", phones = listOf("010-0000-0002")), MemberOut("변학도", "대리", "팀원")),
         keywords = listOf("루프탑", "지붕"),
     ),
     OrgNodeOut(
@@ -1200,12 +1218,22 @@ private val sampleOrg = listOf(
     OrgNodeOut(id = "personal", name = "개인/기타", type = "team", parentId = "group"),
 )
 
-// The 조직도 tree view (read/expand) with the full sample chart.
-private fun renderOrgChart(name: String, scheme: ColorScheme) {
+// The 조직도 chart view (diagram + people search) with the full sample chart. A non-blank
+// [query] seeds the search box so the search-active state (hit highlight + results strip)
+// can be previewed.
+private fun renderOrgChart(name: String, scheme: ColorScheme, query: String = "") {
     val scene = ImageComposeScene(width = 824, height = 1500, density = Density(2f)) {
         MaterialTheme(colorScheme = scheme) {
             DenebScreenScaffold(title = "조직도", onBack = {}) {
-                OrgTreeContent(nodes = sampleOrg, onEditNode = {}, onAddChild = {})
+                OrgChartContent(
+                    nodes = sampleOrg,
+                    notice = null,
+                    error = null,
+                    onEditNode = {},
+                    onAddChild = {},
+                    onAddRoot = {},
+                    initialQuery = query,
+                )
             }
         }
     }

@@ -9,6 +9,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/org"
@@ -193,4 +194,168 @@ func TestOrgSave_EmptyTreeClearsChart(t *testing.T) {
 	if !ack.Saved || ack.NodeCount != 0 || ack.HasLanes {
 		t.Fatalf("empty save ack = %+v, want saved/0/no-lanes", ack)
 	}
+}
+
+// --- contact enrichment (org.get only) ---------------------------------------
+
+// fakeContactBook is a tiny in-test address book keyed by the SAME normalization
+// the production wiring uses, so it exercises name-matching without importing the
+// real contacts store. FAKE names/numbers only.
+type fakeContactBook map[string]struct {
+	phones []string
+	emails []string
+}
+
+// lookup mirrors the production OrgDeps.LookupContact contract: it matches a
+// member's (possibly title-suffixed) name against the book, returning the hit's
+// phones/emails or nil when there is no match.
+func (b fakeContactBook) lookup(name string) (phones, emails []string) {
+	// The book is keyed by raw display name here; matching uses simple title
+	// peeling so "김민준 부장" finds "김민준". This is a deliberately small stand-in
+	// for wiki.NormalizePersonName (which the real wiring uses) — enough to prove
+	// the handler attaches whatever the lookup returns.
+	for _, suffix := range []string{"", " 부장", " 대표", "님"} {
+		trimmed := name
+		if suffix != "" && len(name) > len(suffix) && name[len(name)-len(suffix):] == suffix {
+			trimmed = name[:len(name)-len(suffix)]
+		}
+		if hit, ok := b[trimmed]; ok {
+			return hit.phones, hit.emails
+		}
+	}
+	return nil, nil
+}
+
+// enrichedDeps wires a temp-file chart plus a fake contact book for the lookup.
+func enrichedDeps(t *testing.T, book fakeContactBook) (OrgDeps, string) {
+	t.Helper()
+	deps, path := fakeOrgDeps(t)
+	deps.LookupContact = book.lookup
+	return deps, path
+}
+
+// memberTree is a one-team chart whose single member carries the given display
+// name (FAKE), so a get can enrich it.
+func memberTree(memberName string) OrgTreeOut {
+	return OrgTreeOut{Nodes: []OrgNodeOut{
+		{ID: "g", Name: "예시그룹", Type: org.NodeTypeGroup},
+		{ID: "t1", Name: "1팀", Type: org.NodeTypeTeam, ParentID: "g", Lane: "team1",
+			Members: []MemberOut{{Name: memberName, Rank: org.RankExecVP, Position: org.PositionTeamLead}}},
+	}}
+}
+
+func TestOrgGet_EnrichesMatchingMember(t *testing.T) {
+	book := fakeContactBook{
+		"김철수": {phones: []string{"010-1111-2222"}, emails: []string{"chulsoo@example.test"}},
+	}
+	deps, _ := enrichedDeps(t, book)
+	if r := orgSave(deps)(authedCtx(), reqWith(t, "miniapp.org.save", memberTree("김철수"))); !r.OK {
+		t.Fatalf("seed save failed: %v", r.Error)
+	}
+	resp := orgGet(deps)(authedCtx(), reqWith(t, "miniapp.org.get", nil))
+	var got OrgTreeOut
+	decode(t, resp, &got)
+	m := got.Nodes[1].Members[0]
+	if len(m.Phones) != 1 || m.Phones[0] != "010-1111-2222" {
+		t.Fatalf("phones = %v, want [010-1111-2222]", m.Phones)
+	}
+	if len(m.Emails) != 1 || m.Emails[0] != "chulsoo@example.test" {
+		t.Fatalf("emails = %v, want [chulsoo@example.test]", m.Emails)
+	}
+}
+
+func TestOrgGet_EnrichMatchesAcrossTitleSuffix(t *testing.T) {
+	// The member is "김철수 부장" but the contact is bare "김철수": the title-peeling
+	// match still attaches the contact (the production wiring uses
+	// wiki.NormalizePersonName for the same effect).
+	book := fakeContactBook{
+		"김철수": {phones: []string{"010-3333-4444"}},
+	}
+	deps, _ := enrichedDeps(t, book)
+	if r := orgSave(deps)(authedCtx(), reqWith(t, "miniapp.org.save", memberTree("김철수 부장"))); !r.OK {
+		t.Fatalf("seed save failed: %v", r.Error)
+	}
+	resp := orgGet(deps)(authedCtx(), reqWith(t, "miniapp.org.get", nil))
+	var got OrgTreeOut
+	decode(t, resp, &got)
+	if m := got.Nodes[1].Members[0]; len(m.Phones) != 1 || m.Phones[0] != "010-3333-4444" {
+		t.Fatalf("title-suffixed match phones = %v, want [010-3333-4444]", m.Phones)
+	}
+}
+
+func TestOrgGet_NoMatchLeavesContactsEmpty(t *testing.T) {
+	book := fakeContactBook{
+		"이영희": {phones: []string{"010-9999-0000"}},
+	}
+	deps, _ := enrichedDeps(t, book)
+	if r := orgSave(deps)(authedCtx(), reqWith(t, "miniapp.org.save", memberTree("김철수"))); !r.OK {
+		t.Fatalf("seed save failed: %v", r.Error)
+	}
+	resp := orgGet(deps)(authedCtx(), reqWith(t, "miniapp.org.get", nil))
+	var got OrgTreeOut
+	decode(t, resp, &got)
+	if m := got.Nodes[1].Members[0]; len(m.Phones) != 0 || len(m.Emails) != 0 {
+		t.Fatalf("unmatched member enriched: phones=%v emails=%v, want empty", m.Phones, m.Emails)
+	}
+}
+
+func TestOrgGet_NilLookupSkipsEnrichment(t *testing.T) {
+	// No contacts store wired (LookupContact nil) — get must still work and just
+	// omit phones/emails.
+	deps, _ := fakeOrgDeps(t) // no LookupContact
+	if r := orgSave(deps)(authedCtx(), reqWith(t, "miniapp.org.save", memberTree("김철수"))); !r.OK {
+		t.Fatalf("seed save failed: %v", r.Error)
+	}
+	resp := orgGet(deps)(authedCtx(), reqWith(t, "miniapp.org.get", nil))
+	var got OrgTreeOut
+	decode(t, resp, &got)
+	if m := got.Nodes[1].Members[0]; len(m.Phones) != 0 || len(m.Emails) != 0 {
+		t.Fatalf("nil lookup enriched: phones=%v emails=%v, want empty", m.Phones, m.Emails)
+	}
+}
+
+func TestOrgSave_DropsInboundContacts(t *testing.T) {
+	// A client that sends phones/emails on save (e.g. echoing an enriched get)
+	// must NOT have them persisted: org.json holds only name/rank/position.
+	book := fakeContactBook{
+		"김철수": {phones: []string{"010-1111-2222"}, emails: []string{"chulsoo@example.test"}},
+	}
+	deps, path := enrichedDeps(t, book)
+	tree := memberTree("김철수")
+	tree.Nodes[1].Members[0].Phones = []string{"010-1111-2222"}
+	tree.Nodes[1].Members[0].Emails = []string{"chulsoo@example.test"}
+	if r := orgSave(deps)(authedCtx(), reqWith(t, "miniapp.org.save", tree)); !r.OK {
+		t.Fatalf("save failed: %v", r.Error)
+	}
+	// On-disk member carries no contact fields (the domain type has none).
+	reloaded, err := org.LoadFromFile(path)
+	if err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	var found bool
+	for _, n := range reloaded.Nodes {
+		for _, m := range n.Members {
+			if m.Name == "김철수" {
+				found = true
+				if m.Rank != org.RankExecVP || m.Position != org.PositionTeamLead {
+					t.Fatalf("member rank/position lost: %+v", m)
+				}
+			}
+		}
+	}
+	if !found {
+		t.Fatal("saved member 김철수 missing")
+	}
+	// Raw file bytes must not contain the phone/email (proves nothing leaked into
+	// org.json even via an unexpected field).
+	raw, _ := os.ReadFile(path)
+	for _, leak := range []string{"010-1111-2222", "chulsoo@example.test"} {
+		if bytesContains(raw, leak) {
+			t.Fatalf("org.json leaked contact data %q", leak)
+		}
+	}
+}
+
+func bytesContains(b []byte, sub string) bool {
+	return strings.Contains(string(b), sub)
 }
