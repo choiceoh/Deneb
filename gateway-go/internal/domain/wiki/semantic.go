@@ -71,10 +71,14 @@ type semanticIndex struct {
 	// for it to fully exit — so its saveCache write cannot land after the store
 	// is torn down (a truncated cache on real shutdown; a "directory not empty"
 	// TempDir cleanup race in tests, since saveCache repopulates the wiki dir
-	// after RemoveAll has enumerated it).
+	// after RemoveAll has enumerated it). closed (under mu) serializes wg.Add
+	// against wg.Wait: once shutdown sets it, refreshAsync starts no new goroutine,
+	// so a positive Add can never race a zero-counter Wait (the sync.WaitGroup
+	// contract). All three are guarded by mu.
 	baseCtx context.Context
 	cancel  context.CancelFunc
 	wg      sync.WaitGroup
+	closed  bool
 }
 
 func newSemanticIndex(e Embedder) *semanticIndex {
@@ -84,8 +88,13 @@ func newSemanticIndex(e Embedder) *semanticIndex {
 
 // shutdown cancels any in-flight background refresh and waits for it to finish,
 // guaranteeing no saveCache write happens after this returns. Called from
-// Store.Close. Idempotent: cancel is safe to call repeatedly.
+// Store.Close. Idempotent: safe to call repeatedly. Setting closed under mu
+// happens-before any later wg.Add check, so wg.Wait below never races a starting
+// Add (the goroutine is registered, or it never starts).
 func (si *semanticIndex) shutdown() {
+	si.mu.Lock()
+	si.closed = true
+	si.mu.Unlock()
 	si.cancel()
 	si.wg.Wait()
 }
@@ -113,7 +122,17 @@ func (si *semanticIndex) refreshAsync(store *Store) {
 	if !si.refreshing.CompareAndSwap(false, true) {
 		return // a refresh is already in flight
 	}
+	// Register the goroutine under mu so a concurrent shutdown (which sets closed
+	// under the same mu before wg.Wait) either sees it counted or stops it from
+	// starting — never a positive Add racing a zero-counter Wait.
+	si.mu.Lock()
+	if si.closed {
+		si.mu.Unlock()
+		si.refreshing.Store(false) // not spawning; release the single-flight guard
+		return
+	}
 	si.wg.Add(1)
+	si.mu.Unlock()
 	safego.GoWithSlog(slog.Default(), "wiki-semantic-refresh", func() {
 		defer si.wg.Done()
 		defer si.refreshing.Store(false)
