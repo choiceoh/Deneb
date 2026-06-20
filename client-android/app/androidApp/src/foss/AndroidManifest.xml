@@ -23,6 +23,17 @@
     <uses-permission android:name="android.permission.READ_CONTACTS"/>
 
     <!--
+      Location sensing (FOSS-only): an on-demand FusedLocationProvider read, forwarded
+      (throttled) to the gateway as a location_update so phone_read("location") answers
+      from cache without an SSH round-trip. FINE/COARSE only — no background location
+      (the read happens while the app is active, on sync). Declared in foss only so the
+      Play Store variant never requests it; readCurrentLocation gates at runtime on the
+      permission being granted.
+    -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+
+    <!--
       Usage-rhythm sensing (FOSS-only): reads recent app-usage on-device, compresses
       it to a coarse work-rhythm digest, and forwards it — throttled — to the gateway's
       proactive judgment (default-silence; only a genuine work signal surfaces). Like

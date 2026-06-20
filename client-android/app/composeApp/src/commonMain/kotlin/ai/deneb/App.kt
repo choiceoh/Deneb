@@ -34,9 +34,11 @@ import ai.deneb.deneb.DenebTodoScreen
 import ai.deneb.deneb.DenebWikiPageScreen
 import ai.deneb.tools.CalendarPermissionController
 import ai.deneb.tools.ContactsPermissionController
+import ai.deneb.tools.LocationPermissionController
 import ai.deneb.tools.NotificationPermissionController
 import ai.deneb.tools.SetupCalendarPermissionHandler
 import ai.deneb.tools.SetupContactsPermissionHandler
+import ai.deneb.tools.SetupLocationPermissionHandler
 import ai.deneb.tools.SetupNotificationPermissionHandler
 import ai.deneb.tools.SetupSmsPermissionHandler
 import ai.deneb.tools.SetupSmsSendPermissionHandler
@@ -313,6 +315,9 @@ private fun AppContent(
 
     val contactsPermissionController = koinInject<ContactsPermissionController>()
     SetupContactsPermissionHandler(contactsPermissionController)
+
+    val locationPermissionController = koinInject<LocationPermissionController>()
+    SetupLocationPermissionHandler(locationPermissionController)
 
     val smsPermissionController = koinInject<SmsPermissionController>()
     SetupSmsPermissionHandler(smsPermissionController)

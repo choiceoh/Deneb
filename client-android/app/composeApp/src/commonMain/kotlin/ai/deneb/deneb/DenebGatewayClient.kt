@@ -13,6 +13,7 @@ import ai.deneb.data.SmsDraftStore
 import ai.deneb.data.UiSubmission
 import ai.deneb.deneb.generated.SkillRow
 import ai.deneb.httpClient
+import ai.deneb.sensing.readCurrentLocation
 import ai.deneb.sensing.readWorkUsageDigest
 import ai.deneb.sms.SmsSendResult
 import ai.deneb.sms.SmsSender
@@ -305,6 +306,12 @@ class DenebGatewayClient(
     // Set even when the read returns null (no permission / no signal) so we don't probe
     // UsageStats on every sync. Serialized on the sync coroutine, so no lock.
     private var lastUsageForward: TimeSource.Monotonic.ValueTimeMark? = null
+
+    // Throttle for the on-demand location forward (same "read broad, surface narrow"
+    // sensing model). Pushed every LOCATION_FORWARD_INTERVAL so phone_read has a recent
+    // fix without per-sync battery cost. Set even when the read returns null (no
+    // permission / no fix). Serialized on the sync coroutine, so no lock.
+    private var lastLocationForward: TimeSource.Monotonic.ValueTimeMark? = null
 
     // Restored to the last-open session of the persisted workspace (업무 ↔ 챗봇),
     // so a restart reopens the space the user left, not always client:main.
@@ -1055,6 +1062,7 @@ class DenebGatewayClient(
         // frames don't storm; each refresh owner-fingerprints + persists its own cache.
         warmHomeCachesThrottled()
         maybeForwardUsageDigest()
+        maybeForwardLocation()
         return true
     }
 
@@ -1079,6 +1087,18 @@ class DenebGatewayClient(
         lastUsageForward = TimeSource.Monotonic.markNow()
         val digest = readWorkUsageDigest() ?: return
         ingestEvent("usage", "앱 사용 리듬", digest)
+    }
+
+    // Sensing: forward an on-demand location fix, throttled to LOCATION_FORWARD_INTERVAL.
+    // The gateway caches it (type location_update → no judgment turn) so phone_read
+    // ("location") answers without an SSH round-trip. readCurrentLocation is a no-op
+    // (null) off Android or without the location permission; we still arm the throttle
+    // so we don't probe FusedLocation on every sync.
+    private suspend fun maybeForwardLocation() {
+        lastLocationForward?.let { if (it.elapsedNow() < LOCATION_FORWARD_INTERVAL) return }
+        lastLocationForward = TimeSource.Monotonic.markNow()
+        val fix = readCurrentLocation() ?: return
+        ingestEvent("location_update", "", fix)
     }
 
     suspend fun refreshWorkFeed(sinceMs: Long = 0L, beforeMs: Long = 0L, merge: Boolean = false): Boolean {
@@ -2008,5 +2028,10 @@ class DenebGatewayClient(
         // spend judgment turns re-reporting the same rhythm; ~6h keeps the gateway's
         // ambient work-context fresh without noise.
         val USAGE_FORWARD_INTERVAL = 6.hours
+
+        // Minimum gap between location forwards (see maybeForwardLocation). Frequent
+        // enough that phone_read has a recent fix, sparse enough to spare the battery;
+        // the gateway treats a cache older than ~30min as stale and does a live read.
+        val LOCATION_FORWARD_INTERVAL = 10.minutes
     }
 }

@@ -33,6 +33,7 @@ reorderable = "3.1.0"
 materialIcons = "1.7.3"
 google-services = "4.4.2"
 firebase-messaging = "24.1.1"
+playServicesLocation = "21.3.0"
 
 [libraries]
 coil-compose = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coil" }
@@ -88,6 +89,7 @@ compose-ui-tooling = { module = "org.jetbrains.compose.ui:ui-tooling", version.r
 bouncycastle-provider = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bouncycastle" }
 reorderable = { module = "sh.calvin.reorderable:reorderable", version.ref = "reorderable" }
 firebase-messaging = { module = "com.google.firebase:firebase-messaging", version.ref = "firebase-messaging" }
+play-services-location = { module = "com.google.android.gms:play-services-location", version.ref = "playServicesLocation" }
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }

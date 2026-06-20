@@ -99,6 +99,9 @@ kotlin {
             implementation(libs.koin.android)
             implementation(libs.material)
             implementation(libs.bouncycastle.provider)
+            // FusedLocationProvider for on-demand location sensing (foss flavor only
+            // declares the permission; readCurrentLocation gates on it at runtime).
+            implementation(libs.play.services.location)
         }
         commonMain.dependencies {
             implementation(libs.compose.material3)

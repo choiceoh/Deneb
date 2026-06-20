@@ -21,6 +21,7 @@ import ai.deneb.sms.SmsReader
 import ai.deneb.sms.SmsSender
 import ai.deneb.tools.CalendarPermissionController
 import ai.deneb.tools.ContactsPermissionController
+import ai.deneb.tools.LocationPermissionController
 import ai.deneb.tools.NotificationPermissionController
 import ai.deneb.tools.SmsPermissionController
 import ai.deneb.tools.SmsSendPermissionController
@@ -32,6 +33,7 @@ val appModule = module {
     single<CalendarPermissionController> { CalendarPermissionController() }
     single<ContactsPermissionController> { ContactsPermissionController() }
     single<ContactsReader> { ContactsReader() }
+    single<LocationPermissionController> { LocationPermissionController() }
     single<NotificationPermissionController> { NotificationPermissionController() }
     single<SmsPermissionController> { SmsPermissionController() }
     single<SmsSendPermissionController> { SmsSendPermissionController() }
