@@ -65,6 +65,7 @@ import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.put
 import kotlin.concurrent.Volatile
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeSource
 import kotlin.uuid.ExperimentalUuidApi
@@ -290,6 +291,11 @@ class DenebGatewayClient(
     // raise a notification. Read/written only under nativeSyncGate, so the gate's
     // happens-before covers visibility without @Volatile.
     private var nativeSyncBaselined = false
+
+    // Throttle for background home-cache warming. Every SSE frame / FCM wake / foreground
+    // resume funnels through syncNativeState(); without this gate each one would re-fetch
+    // calendar + mail. Written/read only on the sync coroutine (serialized), so no lock.
+    private var lastHomeWarm: TimeSource.Monotonic.ValueTimeMark? = null
 
     // Restored to the last-open session of the persisted workspace (업무 ↔ 챗봇),
     // so a restart reopens the space the user left, not always client:main.
@@ -1020,7 +1026,24 @@ class DenebGatewayClient(
         if (eventCount == 0 && _denebWorkFeed.value.isEmpty()) {
             refreshWorkFeed()
         }
+        // Reaching here means the gateway answered the pull, so it's reachable: warm the
+        // rest of the home so the offline shell stays RECENT, not just last-visited. The
+        // feed is already current (incremental sync events + the cold-prime above), but
+        // calendar and mail only refreshed on screen entry — a long background stretch
+        // then rendered a days-old glance on the next cold open. Throttled so bursty SSE
+        // frames don't storm; each refresh owner-fingerprints + persists its own cache.
+        warmHomeCachesThrottled()
         return true
+    }
+
+    // Background freshness for the offline launcher shell. Called only from a successful
+    // syncNativeState() (gateway reachable). Independent refreshes: a calendar failure
+    // must not starve mail. Both are credEpoch-fenced and persist their own caches.
+    private suspend fun warmHomeCachesThrottled() {
+        lastHomeWarm?.let { if (it.elapsedNow() < HOME_WARM_INTERVAL) return }
+        lastHomeWarm = TimeSource.Monotonic.markNow()
+        refreshCalendar()
+        refreshMail()
     }
 
     suspend fun refreshWorkFeed(sinceMs: Long = 0L, beforeMs: Long = 0L, merge: Boolean = false): Boolean {
@@ -1937,5 +1960,12 @@ class DenebGatewayClient(
         // soon (and pull-to-refresh / edits force immediately), long enough that
         // rapid tab-switching back to the calendar is instant.
         val CAL_RANGE_TTL = 120.seconds
+
+        // Minimum gap between background warms of the calendar + mail caches (see
+        // warmHomeCachesThrottled). Frequent enough that a backgrounded app keeps a
+        // recent offline glance, sparse enough that bursty SSE frames don't re-fetch
+        // the home trio on every proactive event. User-driven refreshes (screen entry,
+        // pull-to-refresh) are independent and always immediate.
+        val HOME_WARM_INTERVAL = 10.minutes
     }
 }
