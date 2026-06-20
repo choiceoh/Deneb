@@ -105,6 +105,8 @@ func phoneEventKindLabel(eventType string) string {
 		return "상황 변화 (위치·네트워크 등)"
 	case "clipboard":
 		return "클립보드 캡처"
+	case "usage":
+		return "앱 사용 리듬"
 	case "sms":
 		return "문자 메시지"
 	default:
@@ -123,6 +125,8 @@ func phoneEventGuidance(eventType string) string {
 		return `이것은 상황 변화 신호다(위치·네트워크 등). 대부분의 상태 변화는 알릴 가치가 없으니 기본은 침묵이다 — 평일 아침 첫 출근 도착(→오늘 일정·우선업무 브리핑)이나 저녁 귀가(→하루 마감 요약)처럼 명확히 행동을 부르는 드문 전환일 때만 보고하라. 단순 이동·경유·반복 접속·시간대상 애매한 신호, 그리고 위치·네트워크 변화 자체의 중계는 전부 다른 말 없이 %s 만 출력하라.`
 	case "clipboard":
 		return `이것은 사용자가 복사(캡처)한 내용이다. 일정·할일·연락처·금액·주소가 들어 있으면 추출해 정리하고, 회의록·대화·문서면 핵심을 요약하라. 그냥 짧은 보관용 텍스트라 처리할 일이 없으면 다른 말 없이 %s 만 출력하라.`
+	case "usage":
+		return `이것은 사용자 스마트폰의 최근 앱 사용 패턴 요약이다(앱별 사용 시간). 사용량 그 자체는 거의 항상 알릴 가치가 없으니 기본은 침묵이다 — 업무 맥락상 분명한 신호일 때만 아주 간결히 보고하라. 신호의 예: 특정 거래처/메신저 앱에 평소와 다른 장시간 집중(→ 관련 딜·이슈가 달아오르는지 일정·메일로 확인 후 한 줄), 또는 업무시간인데 업무앱 사용이 전무(→ 오늘 일정·우선업무 상기 제안). 단순 사용량 나열, 일상적 사용, 판단 근거가 약한 패턴은 전부 다른 말 없이 %s 만 출력하라.`
 	default: // notification, sms, and any free label
 		return `지금 사용자에게 알릴 가치가 있는가? 광고·스팸·인증번호(OTP)·결제 영수증·일상적 시스템 알림처럼 별도 행동이 필요 없으면 다른 말 없이 %s 만 출력하라.`
 	}
@@ -249,7 +253,10 @@ func (s *Server) ingestPhoneEventAsync(eventType, source, text string) {
 // clipboard) that should always run the full judgment regardless of the tiny gate.
 func notificationLikeEvent(eventType string) bool {
 	switch strings.TrimSpace(strings.ToLower(eventType)) {
-	case "context", "clipboard":
+	case "context", "clipboard", "usage":
+		// usage digests are forwarded rarely (client throttles to ~6h) and carry a
+		// default-silence guidance, so they run the full judgment directly rather than
+		// the notification-specific tiny gate (whose ads/OTP prompt doesn't fit them).
 		return false
 	default:
 		return true

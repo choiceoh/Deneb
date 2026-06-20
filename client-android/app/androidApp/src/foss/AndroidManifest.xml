@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <!--
       SMS read/send are opt-in, FOSS-only features. These permissions are intentionally
@@ -35,6 +36,18 @@
             <category android:name="android.intent.category.LAUNCHER" />
         </intent>
     </queries>
+
+    <!--
+      Usage-rhythm sensing (FOSS-only): reads recent app-usage on-device, compresses
+      it to a coarse work-rhythm digest, and forwards it — throttled — to the gateway's
+      proactive judgment (default-silence; only a genuine work signal surfaces). Like
+      Notification access, this is a special-access permission the user grants in
+      Settings (Special app access > Usage access); the declaration just makes Deneb
+      eligible. tools:ignore silences the lint warning for this protected permission.
+    -->
+    <uses-permission
+        android:name="android.permission.PACKAGE_USAGE_STATS"
+        tools:ignore="ProtectedPermissions" />
 
     <!--
       Notification sensing (FOSS-only): the launcher's background information-gathering
