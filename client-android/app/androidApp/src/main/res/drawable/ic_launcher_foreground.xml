@@ -1,21 +1,38 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="512"
     android:viewportHeight="512">
-  <!-- Deneb mark: white five-pointed star with rounded vertices (stroke-linejoin/
-       linecap round, stroke-width 34) — same path as the desktop icon.png/ico/icns.
-       Scaled to 0.84 so the rounded tips stay inside the adaptive-icon safe zone. -->
+  <!-- Deneb mark: the 4-point sparkle (✦), same geometry as the chat "thinking"
+       StarIndicator (denebSparklePath) and the status-bar notification icon — four
+       N/E/S/W tips at radius 180 from centre (256,256), joined by quadratic curves
+       whose controls sit near the centre (offset = 12% of radius) so the rays read
+       thin and concave. No stroke: the gradient fill carries the colour, and the
+       four tips stay mathematically sharp like a glint of starlight.
+
+       Cool blue-family hue gradient (cyan -> sky -> indigo, ~70 deg of hue travel),
+       swept top-left to bottom-right over the navy ic_launcher_background. Restrained
+       on-brand colour, distinct from a full rainbow. Group scale 0.84 keeps the tips
+       inside the adaptive-icon safe zone (final radius ~151 < ~156 safe). -->
   <group android:scaleX="0.84"
       android:scaleY="0.84"
       android:translateX="40.96"
       android:translateY="40.96">
     <path
-        android:pathData="M256,96 L293,205 L408,207 L316,276 L350,385 L256,319 L162,385 L196,276 L104,207 L219,205 Z"
-        android:fillColor="#FFFFFF"
-        android:strokeColor="#FFFFFF"
-        android:strokeWidth="34"
-        android:strokeLineJoin="round"
-        android:strokeLineCap="round"/>
+        android:pathData="M256,76 Q277.6,234.4 436,256 Q277.6,277.6 256,436 Q234.4,277.6 76,256 Q234.4,234.4 256,76 Z">
+      <aapt:attr name="android:fillColor">
+        <gradient
+            android:type="linear"
+            android:startX="76"
+            android:startY="76"
+            android:endX="436"
+            android:endY="436">
+          <item android:offset="0.0" android:color="#FF66D9E8"/>
+          <item android:offset="0.5" android:color="#FF7FA8D0"/>
+          <item android:offset="1.0" android:color="#FF9B8CE0"/>
+        </gradient>
+      </aapt:attr>
+    </path>
   </group>
 </vector>

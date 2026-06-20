@@ -1,18 +1,32 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="90"
     android:viewportHeight="90">
-  <!-- Deneb mark: a five-pointed star with softly rounded tips. -->
+  <!-- Deneb mark: the 4-point sparkle (✦) with the cool blue-family hue gradient
+       (cyan -> sky -> indigo). Library-module copy of androidApp's launcher
+       foreground; the application module's @drawable/ic_launcher is authoritative,
+       this is kept in sync to avoid resource drift. Four N/E/S/W tips at radius 40
+       from centre (45,45), concave quadratic rays (control offset 12% of radius). -->
   <group android:scaleX="0.59"
       android:scaleY="0.59"
       android:translateX="18.45"
       android:translateY="18.45">
     <path
-        android:pathData="M45,5 L55,31.2 L83,32.6 L61.2,50.2 L68.5,77.4 L45,62 L21.5,77.4 L28.8,50.2 L7,32.6 L35,31.2 Z"
-        android:fillColor="#FFFFFF"
-        android:strokeColor="#FFFFFF"
-        android:strokeWidth="4"
-        android:strokeLineJoin="round"/>
+        android:pathData="M45,5 Q49.8,40.2 85,45 Q49.8,49.8 45,85 Q40.2,49.8 5,45 Q40.2,40.2 45,5 Z">
+      <aapt:attr name="android:fillColor">
+        <gradient
+            android:type="linear"
+            android:startX="5"
+            android:startY="5"
+            android:endX="85"
+            android:endY="85">
+          <item android:offset="0.0" android:color="#FF66D9E8"/>
+          <item android:offset="0.5" android:color="#FF7FA8D0"/>
+          <item android:offset="1.0" android:color="#FF9B8CE0"/>
+        </gradient>
+      </aapt:attr>
+    </path>
   </group>
 </vector>
