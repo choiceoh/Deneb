@@ -147,6 +147,9 @@ actual fun openUrl(url: String): Boolean = try {
     false
 }
 
+// No Android-package concept on desktop — the 카톡 tab is Android-only.
+actual fun launchKakaoTalk(): Boolean = false
+
 actual fun decodeToImageBitmap(bytes: ByteArray): ImageBitmap? = try {
     org.jetbrains.skia.Image.makeFromEncoded(bytes).toComposeImageBitmap()
 } catch (_: Exception) {

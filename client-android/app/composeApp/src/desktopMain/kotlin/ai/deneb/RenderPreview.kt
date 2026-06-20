@@ -207,10 +207,13 @@ fun main() {
     renderCollapsedReport("mail_expanded_dark.png", DarkColorScheme, expanded = true)
     renderDesignRefresh("design_refresh_dark.png", DarkColorScheme)
     renderDesignRefresh("design_refresh_light.png", LightColorScheme)
-    renderBottomBar("bottombar_chat_dark.png", DarkColorScheme, "home")
-    renderBottomBar("bottombar_chat_light.png", LightColorScheme, "home")
-    renderBottomBar("bottombar_mail_dark.png", DarkColorScheme, "deneb_mail")
-    renderBottomBar("bottombar_more_dark.png", DarkColorScheme, "", moreActive = true)
+    // Five-slot super-app bar: 피드·통화·자체앱·인터넷·카톡. One shot per selectable
+    // screen tab (피드/자체앱/인터넷) so the filled-vs-outlined active glyph is checked;
+    // 통화/카톡 are action tabs (never selected) and show on every shot.
+    renderBottomBar("bottombar_feed_dark.png", DarkColorScheme, "deneb_feed")
+    renderBottomBar("bottombar_feed_light.png", LightColorScheme, "deneb_feed")
+    renderBottomBar("bottombar_apphub_dark.png", DarkColorScheme, "deneb_app_hub")
+    renderBottomBar("bottombar_browser_dark.png", DarkColorScheme, "deneb_browser")
     renderDesignSample("design_dark.png", DarkColorScheme)
     renderDesignSample("design_light.png", LightColorScheme)
     renderScreen("calendar_event_dark.png", "calendar_event", DarkColorScheme, 760, 1100)
@@ -814,8 +817,11 @@ private val cronWeeklyDraft = ScheduleDraft(SchedMode.WEEKLY, "08:00", setOf(1, 
 private val cronIntervalDraft = ScheduleDraft(SchedMode.INTERVAL, "09:00", emptySet(), "15", IntervalUnit.MIN, LocalDate.parse("2026-06-13"), "")
 private val cronAdvancedDraft = ScheduleDraft(SchedMode.ADVANCED, "09:00", emptySet(), "30", IntervalUnit.MIN, LocalDate.parse("2026-06-13"), "*/5 8-22 * * 1-6")
 
-private fun renderBottomBar(name: String, scheme: ColorScheme, route: String, moreActive: Boolean = false) {
-    // Phone width (412dp = 824px @ density 2) so the bar matches the real device.
+private fun renderBottomBar(name: String, scheme: ColorScheme, route: String) {
+    // Phone width (412dp = 824px @ density 2) so the bar matches the real device. The
+    // five-slot bar (피드·통화·자체앱·인터넷·카톡) renders the same regardless of the
+    // action-tab callbacks, so they're no-ops here — this checks the icons/labels/
+    // selection only (the 통화/카톡 intents don't fire in the headless harness).
     val scene = ImageComposeScene(width = 824, height = 240, density = Density(2f)) {
         MaterialTheme(colorScheme = scheme) {
             Surface(color = MaterialTheme.colorScheme.background) {
@@ -823,9 +829,9 @@ private fun renderBottomBar(name: String, scheme: ColorScheme, route: String, mo
                     Spacer(Modifier.weight(1f))
                     DenebBottomBar(
                         currentRoute = route,
-                        moreActive = moreActive,
                         onNavigate = {},
-                        onMore = {},
+                        onCall = {},
+                        onKakao = {},
                     )
                 }
             }

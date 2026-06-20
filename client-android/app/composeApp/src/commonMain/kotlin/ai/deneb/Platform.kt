@@ -69,6 +69,16 @@ expect suspend fun compressImageBytes(bytes: ByteArray, mimeType: String): ByteA
 
 expect fun openUrl(url: String): Boolean
 
+/**
+ * Launch the KakaoTalk app (a super-app bottom-tab action — not an in-app screen).
+ * Android resolves the `com.kakao.talk` launch intent; if it isn't installed this
+ * returns false (the caller can fall back to opening the Play Store page). Desktop,
+ * iOS, and web have no Android-package concept, so they are no-ops returning false.
+ * Unlike `tel:` (a URI any platform's UriHandler can open), launching a specific
+ * Android package needs the platform intent, hence expect/actual rather than a URI.
+ */
+expect fun launchKakaoTalk(): Boolean
+
 @androidx.compose.runtime.Composable
 expect fun PlatformBackHandler(enabled: Boolean, onBack: () -> Unit)
 
