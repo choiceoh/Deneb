@@ -326,6 +326,13 @@ func (t OrgTree) Validate() error {
 			}
 		}
 		if lane := strings.TrimSpace(n.Lane); lane != "" {
+			// "unclassified" is the dashboard's reserved holding-lane key
+			// (classification.LaneUnclassified). A chart lane that claimed it
+			// would collide with the triage column groupByLane appends, so
+			// reject it here rather than render two columns with the same key.
+			if lane == string(classification.LaneUnclassified) {
+				return fmt.Errorf("org: node %q uses reserved lane key %q", n.ID, lane)
+			}
 			if owner, dup := seenLane[lane]; dup {
 				return fmt.Errorf("org: lane key %q used by both %q and %q", lane, owner, n.ID)
 			}
@@ -369,12 +376,17 @@ func (t OrgTree) checkNoCycles(byID map[string]int) error {
 //	Keywords  → KeywordToLane  (lowercased, matched as substrings)
 //	Companies → CompanyToLane  (lowercased + space-stripped)
 //
-// The in-code domain keyword defaults (classification.DefaultKeywordRules) are
-// used as a BASE so a fresh chart that hasn't enumerated keywords still routes
-// generic domain terms; a node's own keywords merge on top (and can override a
-// default that collides). People/company maps start empty — those are operator
-// data and only the chart supplies them. The returned Rules feeds
-// classification.Classify unchanged.
+// ★ Lane-key source: the chart is the master. When the tree defines lanes
+// (HasLanes), the derived rules reference ONLY the chart's lane keys — the
+// in-code domain keyword defaults (classification.DefaultKeywordRules, keyed to
+// the fixed team1/team2/… constants) are deliberately NOT seeded. Seeding them
+// would route items to constant lanes (e.g. "인허가" → team1) that the chart's
+// dashboard columns (keyed n<ms>) don't contain, so groupByLane would silently
+// drop them (the regression this guards). A chart that wants generic-keyword
+// routing must enumerate those keywords on its own lane nodes. The legacy path
+// (no lane nodes) keeps the keyword defaults via classification.Load — see
+// loader.go LoadRules. People/company maps always start empty (operator data,
+// only the chart supplies them).
 //
 // Because the lane keys here come from the chart (not the fixed
 // classification.Lane constants), the derived rules can reference any lane the
@@ -387,12 +399,6 @@ func (t OrgTree) DeriveRules() classification.Rules {
 		CompanyToLane: map[string]classification.Lane{},
 		KeywordToLane: map[string]classification.Lane{},
 	}
-	// Seed with the generic in-code keyword defaults so unconfigured charts
-	// still classify domain terms. A lane node's own keywords override on
-	// collision (applied below, after the seed).
-	for kw, lane := range classification.DefaultKeywordRules() {
-		rules.KeywordToLane[kw] = lane
-	}
 
 	for _, n := range t.LaneNodes() {
 		lane := classification.Lane(strings.TrimSpace(n.Lane))
@@ -403,24 +409,40 @@ func (t OrgTree) DeriveRules() classification.Rules {
 			if len([]rune(key)) < 2 {
 				continue // too short/ambiguous to be a reliable person key
 			}
-			rules.PersonToLane[key] = lane
+			// 겸직 (one person under several lane nodes): keep the
+			// lexicographically smallest lane so DeriveRules agrees with the
+			// engine's pickLane tie-break (which also takes the min lane). A
+			// plain assignment would keep whichever node came last in input
+			// order and silently lose the person's first affiliation.
+			setLaneMin(rules.PersonToLane, key, lane)
 		}
 		for _, c := range n.Companies {
 			key := classification.NormalizeCompany(c)
 			if key == "" {
 				continue
 			}
-			rules.CompanyToLane[key] = lane
+			setLaneMin(rules.CompanyToLane, key, lane)
 		}
 		for _, kw := range n.Keywords {
 			key := strings.ToLower(strings.TrimSpace(kw))
 			if key == "" {
 				continue
 			}
-			rules.KeywordToLane[key] = lane
+			setLaneMin(rules.KeywordToLane, key, lane)
 		}
 	}
 	return rules
+}
+
+// setLaneMin assigns lane to m[key] only when key is unset or lane sorts before
+// the existing value. This makes a multi-lane key (a 겸직 person, or a keyword/
+// company shared by two lane nodes) resolve to the same lexicographically
+// smallest lane the classifier's pickLane would pick — so the derived map can't
+// disagree with the engine by collapsing on input order.
+func setLaneMin(m map[string]classification.Lane, key string, lane classification.Lane) {
+	if existing, ok := m[key]; !ok || lane < existing {
+		m[key] = lane
+	}
 }
 
 // LaneDef is a derived dashboard lane: the chart-defined key plus its display

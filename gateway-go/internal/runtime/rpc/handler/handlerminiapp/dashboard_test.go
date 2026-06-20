@@ -6,7 +6,10 @@ package handlerminiapp
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -290,6 +293,85 @@ func TestDashboardLanes_OrgChartLanesDriveColumns(t *testing.T) {
 	// No legacy lane (team1/…) leaked in.
 	if findLane(got.Lanes, "team1") != nil {
 		t.Fatal("legacy hardcoded lane leaked despite org chart lanes")
+	}
+}
+
+// TestDashboardLanes_ProductionPath_NoSilentDropWithNodeIDLanes drives the REAL
+// production wiring (org.LoadRules → DeriveRules, org.LoadLanes → DeriveLanes)
+// off an on-disk chart whose lane keys are node ids (n<ms>), exactly as the
+// native editor writes them. A work item whose text matches a generic domain
+// keyword (인허가) must NOT vanish: with the HIGH fix, DeriveRules no longer seeds
+// the constant-lane keyword defaults, so the item is unclassified and surfaces
+// in 미분류 instead of being routed to a non-existent "team1" column and dropped.
+//
+// This exercises the path the unit tests above bypass by injecting Rules/Lanes
+// by hand — the original regression lived precisely in that gap.
+func TestDashboardLanes_ProductionPath_NoSilentDropWithNodeIDLanes(t *testing.T) {
+	// A minimal chart with ONE lane node keyed by a node id (like the editor).
+	// It enumerates no keywords, so the generic 인허가 term matches nothing here.
+	chart := map[string]any{
+		"nodes": []map[string]any{
+			{"id": "n100", "name": "영업본부", "type": "team", "lane": "n100"},
+		},
+	}
+	orgPath := filepath.Join(t.TempDir(), "org.json")
+	data, err := json.Marshal(chart)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(orgPath, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("DENEB_ORG_FILE", orgPath)
+
+	now := time.Now()
+	deps := DashboardDeps{
+		// REAL production loaders — same closures as dashboard_sources.go.
+		Rules: func() (classification.Rules, error) { return org.LoadRules() },
+		Lanes: func() ([]org.LaneDef, error) { return org.LoadLanes() },
+		WorkFeed: fakeDashboardFeed{items: []workfeed.Item{
+			// 인허가 is a default keyword (would route to constant lane team1).
+			{ID: "wf1", Title: "인허가 신청 건", CreatedAtMs: now.UnixMilli()},
+		}},
+	}
+	resp := dashboardLanes(deps)(authedCtx(), reqWith(t, "miniapp.dashboard.lanes", nil))
+	var got DashboardOut
+	decode(t, resp, &got)
+
+	// The chart's single node-id column is present.
+	if findLane(got.Lanes, "n100") == nil {
+		t.Fatalf("chart lane n100 missing; lanes=%+v", got.Lanes)
+	}
+	// No constant legacy lane leaked (chart is master).
+	if findLane(got.Lanes, "team1") != nil {
+		t.Fatal("constant lane team1 leaked despite node-id chart lanes")
+	}
+	// THE INVARIANT: the item is not lost. It surfaces in 미분류.
+	un := findLane(got.Lanes, string(classification.LaneUnclassified))
+	if un == nil || len(un.Items) != 1 || un.Items[0].RefID != "wf1" {
+		t.Fatalf("item silently dropped: unclassified=%+v, want [wf1]", un)
+	}
+}
+
+// TestGroupByLane_AbsorbsOrphanedBucket is the unit-level guarantee for the
+// groupByLane safety net: an item classified to a lane that is in neither the
+// column set nor the reserved key is folded into 미분류, never dropped.
+func TestGroupByLane_AbsorbsOrphanedBucket(t *testing.T) {
+	items := []classifiedItem{
+		// Lane "ghost" matches no column below.
+		{lane: classification.Lane("ghost"), item: DashboardItem{Title: "고아", RefID: "x1"}},
+		// A normal item in a real column.
+		{lane: classification.Lane("real"), item: DashboardItem{Title: "정상", RefID: "x2"}},
+	}
+	out := groupByLane(items, []org.LaneDef{{Key: "real", Name: "실재"}})
+
+	if l := findLane(out.Lanes, "real"); l == nil || len(l.Items) != 1 || l.Items[0].RefID != "x2" {
+		t.Fatalf("real lane = %+v, want [x2]", l)
+	}
+	// The orphaned item is rescued into 미분류 rather than vanishing.
+	un := findLane(out.Lanes, string(classification.LaneUnclassified))
+	if un == nil || len(un.Items) != 1 || un.Items[0].RefID != "x1" {
+		t.Fatalf("orphaned bucket not absorbed: unclassified=%+v, want [x1]", un)
 	}
 }
 
