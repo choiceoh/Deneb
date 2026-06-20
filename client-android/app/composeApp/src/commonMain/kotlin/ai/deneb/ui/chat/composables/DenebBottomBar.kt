@@ -1,6 +1,6 @@
 package ai.deneb.ui.chat.composables
 
-import ai.deneb.DenebCalendar
+import ai.deneb.DenebAppHub
 import ai.deneb.DenebConfig
 import ai.deneb.DenebFeed
 import ai.deneb.DenebMail
@@ -30,15 +30,15 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.automirrored.filled.Chat as ChatFilled
 import androidx.compose.material.icons.automirrored.outlined.Chat as ChatOutlined
-import androidx.compose.material.icons.filled.CalendarMonth as CalFilled
 import androidx.compose.material.icons.filled.Email as EmailFilled
 import androidx.compose.material.icons.filled.Notifications as NotificationsFilled
 import androidx.compose.material.icons.filled.Settings as SettingsFilled
-import androidx.compose.material.icons.outlined.CalendarMonth as CalOutlined
+import androidx.compose.material.icons.filled.Widgets as WidgetsFilled
 import androidx.compose.material.icons.outlined.Email as EmailOutlined
 import androidx.compose.material.icons.outlined.MoreHoriz as MoreOutlined
 import androidx.compose.material.icons.outlined.Notifications as NotificationsOutlined
 import androidx.compose.material.icons.outlined.Settings as SettingsOutlined
+import androidx.compose.material.icons.outlined.Widgets as WidgetsOutlined
 
 /**
  * The phone's bottom tab bar — the super-app's primary navigation (토스식).
@@ -49,10 +49,10 @@ import androidx.compose.material.icons.outlined.Settings as SettingsOutlined
  * when idle and a filled icon when active, label always shown. The *skin* is
  * Deneb-calm — monochrome (no colored tabs), a faint ink indicator instead of the
  * bright M3 secondaryContainer pill, a hairline top edge, and small [DenebType]
- * labels. Chat is tab 1 (the killer hub / home); mail·calendar·categories surface
- * the all-in-one sections so they are visible and thumb-reachable instead of
- * hidden behind a drawer. 더보기 navigates to a full DenebMore screen (the host
- * wires [onMore]) for the secondary sections.
+ * labels. The tabs are 피드·메일·자체앱·채팅 — 자체앱 is the launcher for Deneb's own
+ * mini-apps (browser·chat·calendar) so they stay thumb-reachable, and 채팅 keeps a tab
+ * for the agent itself. 더보기 navigates to a full DenebMore screen (the host wires
+ * [onMore]) for the secondary sections.
  *
  * Stateless: the host (App.kt) owns navigation and passes [currentRoute] for
  * highlighting, so this stays previewable. The native client is mobile-only, so this
@@ -66,15 +66,16 @@ data class DenebTab(
     val filled: ImageVector,
 )
 
-// The four primary 업무 sections — 피드 leads (the work home) and 채팅 is now a tab,
-// not the default. Search·todo·diary·categories and 설정 live under 더보기 (and fleet
-// inside settings). The whole bar is hidden in the 챗봇 workspace (App.kt), so there
-// is no per-tab filtering here.
+// The four primary 업무 sections — 피드 leads (the work home), then 메일 and the 자체앱
+// launcher (Deneb's own mini-apps grid: browser·chat·calendar), with 채팅 kept as a tab
+// too. 달력 moved off the bar into 자체앱. Search·todo·diary·categories and 설정 live under
+// 더보기 (and fleet inside settings). The whole bar is hidden in the 챗봇 workspace
+// (App.kt), so there is no per-tab filtering here.
 val denebBottomTabs: List<DenebTab> = listOf(
     DenebTab("피드", "deneb_feed", DenebFeed, Icons.Outlined.NotificationsOutlined, Icons.Filled.NotificationsFilled),
-    DenebTab("채팅", "home", Home, Icons.AutoMirrored.Outlined.ChatOutlined, Icons.AutoMirrored.Filled.ChatFilled),
     DenebTab("메일", "deneb_mail", DenebMail, Icons.Outlined.EmailOutlined, Icons.Filled.EmailFilled),
-    DenebTab("달력", "deneb_calendar", DenebCalendar, Icons.Outlined.CalOutlined, Icons.Filled.CalFilled),
+    DenebTab("자체앱", "deneb_app_hub", DenebAppHub, Icons.Outlined.WidgetsOutlined, Icons.Filled.WidgetsFilled),
+    DenebTab("채팅", "home", Home, Icons.AutoMirrored.Outlined.ChatOutlined, Icons.AutoMirrored.Filled.ChatFilled),
 )
 
 // Routes that surface 업무 데이터 (feed/mail/calendar/search/categories/fleet). Used by
@@ -97,7 +98,7 @@ val denebWorkDataRoutes: Set<String> = setOf(
 // they hide the bar and keep their own back nav. Fleet is now a settings sub-screen
 // (like skill/cron) — a pushed detail with its own back nav, so it is not listed here.
 val denebBottomBarRoutes: Set<String> = setOf(
-    "deneb_feed", "home", "deneb_mail", "deneb_calendar", "deneb_config",
+    "deneb_feed", "home", "deneb_mail", "deneb_app_hub", "deneb_calendar", "deneb_config",
     "deneb_more", "deneb_search", "deneb_todo", "deneb_diary", "deneb_categories",
     "deneb_dashboard",
 )
