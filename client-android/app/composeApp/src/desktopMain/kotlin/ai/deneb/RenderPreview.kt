@@ -215,6 +215,8 @@ fun main() {
     renderBottomBar("bottombar_feed_light.png", LightColorScheme, "deneb_feed")
     renderBottomBar("bottombar_chat_dark.png", DarkColorScheme, "home")
     renderBottomBar("bottombar_more_dark.png", DarkColorScheme, "deneb_more")
+    // 메일·달력 are now selectable tabs — they highlight when their section is active.
+    renderBottomBar("bottombar_mail_dark.png", DarkColorScheme, "deneb_mail")
     renderDesignSample("design_dark.png", DarkColorScheme)
     renderDesignSample("design_light.png", LightColorScheme)
     renderScreen("calendar_event_dark.png", "calendar_event", DarkColorScheme, 760, 1100)

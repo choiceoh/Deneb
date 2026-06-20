@@ -30,6 +30,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.automirrored.filled.Chat as ChatFilled
 import androidx.compose.material.icons.automirrored.outlined.Chat as ChatOutlined
+import androidx.compose.material.icons.filled.CalendarMonth as CalendarMonthFilled
+import androidx.compose.material.icons.filled.Email as EmailFilled
 import androidx.compose.material.icons.filled.MoreHoriz as MoreFilled
 import androidx.compose.material.icons.filled.Notifications as NotificationsFilled
 import androidx.compose.material.icons.outlined.CalendarMonth as CalendarMonthOutlined
@@ -41,10 +43,10 @@ import androidx.compose.material.icons.outlined.Notifications as NotificationsOu
  * The phone's bottom tab bar — the assistant app's primary navigation.
  *
  * Five slots: 피드 · 메일 · 채팅 · 달력 · 더보기, with 채팅 the emphasized center (the core
- * assistant conversation). Three are *screen tabs* that select + highlight when current
- * (피드, 채팅, 더보기); 메일 and 달력 are *navigate-actions* that jump into their section —
- * the section keeps the bar (it is a bottom-bar route, so you can tab-switch without
- * backing out) but never carries a selection indicator. 더보기 opens the section hub
+ * assistant conversation). All are *screen tabs* that select + highlight when current
+ * (outlined idle → filled active) so the bar always shows "you are here" — including on
+ * 메일 and 달력, which jump into their section and keep the bar (the section is a bottom-bar
+ * route, so you can tab-switch without backing out). 더보기 opens the section hub
  * ([DenebMore]) — a grouped text list of the remaining sections (파트별 업무 현황·조직도·
  * 검색·할일·일기·카테고리·전체 연락처·노트북·파일·브라우저·설정).
  *
@@ -59,49 +61,54 @@ import androidx.compose.material.icons.outlined.Notifications as NotificationsOu
  * highlighting. The native client is mobile-only, so this bar is the app's primary
  * navigation surface.
  */
-sealed interface DenebTabItem {
-    val label: String
-
-    /** A screen tab — navigating to [dest] and highlightable when [route] is current. */
-    data class Screen(
-        override val label: String,
-        val route: String,
-        val dest: Any,
-        val outlined: ImageVector,
-        val filled: ImageVector,
-    ) : DenebTabItem
-
-    /** A navigate-action — jumps into a section (which keeps its own ← back) and never selects. */
-    data class Action(
-        override val label: String,
-        val icon: ImageVector,
-        val onClick: () -> Unit,
-    ) : DenebTabItem
-}
+/** A bottom-bar tab: navigates to [dest] and highlights (outlined → filled) when [route]
+ *  is current. Every slot — including 메일·달력 — is one of these, so the bar always shows
+ *  the active section. */
+data class DenebTabItem(
+    val label: String,
+    val route: String,
+    val dest: Any,
+    val outlined: ImageVector,
+    val filled: ImageVector,
+)
 
 // Screen-tab routes (used by App.kt to decide when to show the bar and which is active).
 const val ROUTE_FEED = "deneb_feed"
 const val ROUTE_HOME = "home"
 const val ROUTE_MORE = "deneb_more"
 
-// The three screen tabs. 피드 = the work briefing home; 채팅 = the assistant conversation
-// (center); 더보기 = the section hub list. 메일/달력 are spliced in as navigate-actions by
-// [denebBottomTabs] (they need the host's onNavigate callback).
-private val feedTab = DenebTabItem.Screen(
+// The five tabs. 피드 = work briefing home; 채팅 = the assistant conversation (center);
+// 더보기 = the section hub list; 메일·달력 jump into their section (which keeps the bar).
+// All highlight when current — see [denebBottomTabs].
+private val feedTab = DenebTabItem(
     "피드",
     ROUTE_FEED,
     DenebFeed,
     Icons.Outlined.NotificationsOutlined,
     Icons.Filled.NotificationsFilled,
 )
-private val chatTab = DenebTabItem.Screen(
+private val mailTab = DenebTabItem(
+    "메일",
+    "deneb_mail",
+    DenebMail,
+    Icons.Outlined.EmailOutlined,
+    Icons.Filled.EmailFilled,
+)
+private val chatTab = DenebTabItem(
     "채팅",
     ROUTE_HOME,
     Home,
     Icons.AutoMirrored.Outlined.ChatOutlined,
     Icons.AutoMirrored.Filled.ChatFilled,
 )
-private val moreTab = DenebTabItem.Screen(
+private val calendarTab = DenebTabItem(
+    "달력",
+    "deneb_calendar",
+    DenebCalendar,
+    Icons.Outlined.CalendarMonthOutlined,
+    Icons.Filled.CalendarMonthFilled,
+)
+private val moreTab = DenebTabItem(
     "더보기",
     ROUTE_MORE,
     DenebMore,
@@ -109,18 +116,9 @@ private val moreTab = DenebTabItem.Screen(
     Icons.Filled.MoreFilled,
 )
 
-/**
- * Build the five-slot tab list — 피드 · 메일 · 채팅 · 달력 · 더보기. 피드/채팅/더보기 are the
- * screen tabs (selectable); 메일/달력 are navigate-actions that jump into the section
- * (which keeps the bar and its own back nav), so they never select.
- */
-fun denebBottomTabs(onNavigate: (Any) -> Unit): List<DenebTabItem> = listOf(
-    feedTab,
-    DenebTabItem.Action("메일", Icons.Outlined.EmailOutlined) { onNavigate(DenebMail) },
-    chatTab, // center
-    DenebTabItem.Action("달력", Icons.Outlined.CalendarMonthOutlined) { onNavigate(DenebCalendar) },
-    moreTab,
-)
+// The five-slot tab list — 피드 · 메일 · 채팅 · 달력 · 더보기 (채팅 center). All select +
+// highlight when current; 메일/달력 jump into their section, which keeps the bar.
+val denebBottomTabs: List<DenebTabItem> = listOf(feedTab, mailTab, chatTab, calendarTab, moreTab)
 
 // Routes that surface 업무 데이터 — used by App.kt to bounce a 챗봇-mode session back to
 // home if it ever lands on one (defensive — the 챗봇 workspace has no bottom bar). 피드 is
@@ -203,53 +201,33 @@ fun DenebBottomBar(
                 drawLine(hairline, Offset(0f, 0f), Offset(size.width, 0f), strokeWidth = 1.dp.toPx())
             },
     ) {
-        denebBottomTabs(onNavigate = onNavigate).forEach { tab ->
-            when (tab) {
-                is DenebTabItem.Screen -> {
-                    val selected = currentRoute == tab.route
-                    NavigationBarItem(
-                        selected = selected,
-                        onClick = {
-                            haptics.tap()
-                            onNavigate(tab.dest)
-                        },
-                        icon = {
-                            val glyph = @Composable {
-                                Icon(
-                                    imageVector = if (selected) tab.filled else tab.outlined,
-                                    contentDescription = tab.label,
-                                )
-                            }
-                            if (tab.route == ROUTE_FEED && feedUnread > 0) {
-                                BadgedBox(
-                                    badge = { Badge { Text(if (feedUnread > 9) "9+" else feedUnread.toString()) } },
-                                ) { glyph() }
-                            } else {
-                                glyph()
-                            }
-                        },
-                        label = { Text(tab.label, style = DenebType.meta) },
-                        alwaysShowLabel = true,
-                        colors = colors,
-                    )
-                }
-
-                is DenebTabItem.Action -> {
-                    // Navigate-actions (메일·달력) jump into a section and are never selected — the
-                    // outlined glyph stays at the unselected (hint) weight regardless of route.
-                    NavigationBarItem(
-                        selected = false,
-                        onClick = {
-                            haptics.tap()
-                            tab.onClick()
-                        },
-                        icon = { Icon(tab.icon, contentDescription = tab.label) },
-                        label = { Text(tab.label, style = DenebType.meta) },
-                        alwaysShowLabel = true,
-                        colors = colors,
-                    )
-                }
-            }
+        denebBottomTabs.forEach { tab ->
+            val selected = currentRoute == tab.route
+            NavigationBarItem(
+                selected = selected,
+                onClick = {
+                    haptics.tap()
+                    onNavigate(tab.dest)
+                },
+                icon = {
+                    val glyph = @Composable {
+                        Icon(
+                            imageVector = if (selected) tab.filled else tab.outlined,
+                            contentDescription = tab.label,
+                        )
+                    }
+                    if (tab.route == ROUTE_FEED && feedUnread > 0) {
+                        BadgedBox(
+                            badge = { Badge { Text(if (feedUnread > 9) "9+" else feedUnread.toString()) } },
+                        ) { glyph() }
+                    } else {
+                        glyph()
+                    }
+                },
+                label = { Text(tab.label, style = DenebType.meta) },
+                alwaysShowLabel = true,
+                colors = colors,
+            )
         }
     }
 }
