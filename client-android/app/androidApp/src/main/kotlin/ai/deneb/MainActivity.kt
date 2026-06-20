@@ -279,6 +279,14 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handleDeepLinkIntent(intent: Intent?) {
+        // Home-launcher: when Deneb is the device's home app, pressing Home delivers a
+        // MAIN/CATEGORY_HOME intent (cold start via onCreate, or onNewIntent while
+        // already running — launchMode=singleTop). Reset to the 피드 briefing so Home
+        // always returns to the launcher's home screen. No-op when Deneb isn't the
+        // home app (that intent only arrives when it is).
+        if (intent?.action == Intent.ACTION_MAIN && intent.hasCategory(Intent.CATEGORY_HOME)) {
+            get<DataRepository>().requestOpenHome()
+        }
         if (intent?.getBooleanExtra(EXTRA_OPEN_HEARTBEAT, false) == true) {
             val dataRepository: DataRepository = get()
             dataRepository.requestOpenHeartbeat()

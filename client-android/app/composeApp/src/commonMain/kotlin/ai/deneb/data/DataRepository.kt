@@ -77,6 +77,17 @@ interface DataRepository {
     fun consumeOpenWorkTopicRequest()
 
     /**
+     * Pulse that fires when the user presses Home while Deneb is the device's home
+     * launcher (a MAIN/CATEGORY_HOME intent reaches MainActivity). Resets navigation
+     * to the 피드 briefing — the launcher's home screen — so Home always returns to the
+     * briefing instead of wherever the user last navigated. Set by MainActivity,
+     * collected by `App`.
+     */
+    val openHomeRequested: StateFlow<Boolean>
+    fun requestOpenHome()
+    fun consumeOpenHomeRequest()
+
+    /**
      * Unread badge for a proactive report (morning-letter, mail-analysis) that
      * landed in the 업무 (client:main) topic while the user was looking at a
      * different conversation. Surfaced as an in-app banner; tapping it opens the
