@@ -24,10 +24,10 @@ func TestShouldReleaseCheckpoints(t *testing.T) {
 		want  bool
 	}{
 		{"delete always releases", session.Event{Kind: session.EventDeleted, Key: "k"}, true},
-		{"status → done releases", session.Event{Kind: session.EventStatusChanged, NewStatus: session.StatusDone}, true},
-		{"status → failed releases", session.Event{Kind: session.EventStatusChanged, NewStatus: session.StatusFailed}, true},
-		{"status → killed releases", session.Event{Kind: session.EventStatusChanged, NewStatus: session.StatusKilled}, true},
-		{"status → timeout releases", session.Event{Kind: session.EventStatusChanged, NewStatus: session.StatusTimeout}, true},
+		{"status → done preserves", session.Event{Kind: session.EventStatusChanged, NewStatus: session.StatusDone}, false},
+		{"status → failed preserves", session.Event{Kind: session.EventStatusChanged, NewStatus: session.StatusFailed}, false},
+		{"status → killed preserves", session.Event{Kind: session.EventStatusChanged, NewStatus: session.StatusKilled}, false},
+		{"status → timeout preserves", session.Event{Kind: session.EventStatusChanged, NewStatus: session.StatusTimeout}, false},
 		{"reset (empty status) releases", session.Event{Kind: session.EventStatusChanged, NewStatus: ""}, true},
 		{"status → running does NOT release", session.Event{Kind: session.EventStatusChanged, NewStatus: session.StatusRunning}, false},
 		{"create does NOT release", session.Event{Kind: session.EventCreated}, false},
@@ -41,13 +41,12 @@ func TestShouldReleaseCheckpoints(t *testing.T) {
 	}
 }
 
-// TestCheckpointLifecycle_RemovesOnTerminal builds the minimum wiring needed
+// TestCheckpointLifecycle_PreservesOnTerminal builds the minimum wiring needed
 // to exercise the real subscription path: a session.Manager, a real
 // checkpoint Manager, and the subscriber installed via initCheckpointLifecycle.
 // When the session transitions to a terminal phase, the checkpoint directory
-// must be removed within a short timeout — proving the hook fires and the
-// removal runs end to end.
-func TestCheckpointLifecycle_RemovesOnTerminal(t *testing.T) {
+// must stay in place so /rollback can still inspect and restore it.
+func TestCheckpointLifecycle_PreservesOnTerminal(t *testing.T) {
 	root := t.TempDir()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
@@ -85,12 +84,54 @@ func TestCheckpointLifecycle_RemovesOnTerminal(t *testing.T) {
 	}
 
 	// Drive the session through start → end. The End event fires
-	// EventStatusChanged with NewStatus=done, which must trigger removal.
+	// EventStatusChanged with NewStatus=done, which must NOT trigger removal.
 	s.sessions.ApplyLifecycleEvent(sessionKey, session.LifecycleEvent{Phase: session.PhaseStart, Ts: 1})
 	s.sessions.ApplyLifecycleEvent(sessionKey, session.LifecycleEvent{Phase: session.PhaseEnd, Ts: 2})
 
+	time.Sleep(300 * time.Millisecond)
+	if _, err := os.Stat(sessionDir); err != nil {
+		t.Fatalf("checkpoint dir %s should survive terminal transition, stat err=%v", sessionDir, err)
+	}
+}
+
+func TestCheckpointLifecycle_RemovesOnDelete(t *testing.T) {
+	root := t.TempDir()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	s := &Server{
+		ServerTransport: &ServerTransport{},
+		ServerRPC:       &ServerRPC{},
+		ServerRuntime:   &ServerRuntime{},
+		SessionManager:  &SessionManager{sessions: session.NewManager()},
+		ChatManager:     &ChatManager{},
+		HookManager:     &HookManager{},
+		logger:          logger,
+	}
+	s.initCheckpointLifecycle(root)
+	t.Cleanup(func() {
+		if s.checkpointLifecycleUnsub != nil {
+			s.checkpointLifecycleUnsub()
+		}
+	})
+
+	const sessionKey = "sess-delete"
+	s.sessions.ApplyLifecycleEvent(sessionKey, session.LifecycleEvent{Phase: session.PhaseStart, Ts: 1})
+
+	cpm := checkpoint.New(root, sessionKey)
+	target := filepath.Join(t.TempDir(), "file.txt")
+	if err := os.WriteFile(target, []byte("bye"), 0o600); err != nil {
+		t.Fatalf("write target: %v", err)
+	}
+	if _, err := cpm.Snapshot(context.Background(), target, "fs_write"); err != nil {
+		t.Fatalf("snapshot: %v", err)
+	}
+	sessionDir := cpm.SessionDir()
+
+	if deleted := s.sessions.Delete(sessionKey); !deleted {
+		t.Fatal("Delete returned false — precondition not met")
+	}
 	if !waitForMissing(sessionDir, 2*time.Second) {
-		t.Fatalf("checkpoint dir %s still exists after terminal transition", sessionDir)
+		t.Fatalf("checkpoint dir %s still exists after delete", sessionDir)
 	}
 }
 

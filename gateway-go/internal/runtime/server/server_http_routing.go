@@ -28,15 +28,23 @@ func (s *Server) buildMux() *http.ServeMux {
 	mux.HandleFunc("POST /api/hooks/fleet", s.handleFleetHook)
 
 	// /debug/pprof/* — runtime profiling + goroutine dumps for live diagnosis.
-	// Safe to expose because the gateway binds loopback by default in
-	// production; these endpoints are never reachable from outside the host.
-	// Visit /debug/pprof/goroutine?debug=2 when the gateway appears hung —
-	// it returns a full stack dump without killing the process.
-	mux.HandleFunc("/debug/pprof/", pprof.Index)
-	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
-	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
-	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
-	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+	// These handlers stay loopback-only even if the gateway is accidentally
+	// bound wider or placed behind a proxy, because the responses expose full
+	// process internals and some endpoints can consume significant CPU.
+	pprofLocalOnly := func(next http.HandlerFunc) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			if !isLoopbackRemote(r.RemoteAddr) {
+				s.writeJSON(w, http.StatusForbidden, map[string]any{"error": "localhost only"})
+				return
+			}
+			next(w, r)
+		}
+	}
+	mux.HandleFunc("/debug/pprof/", pprofLocalOnly(pprof.Index))
+	mux.HandleFunc("/debug/pprof/cmdline", pprofLocalOnly(pprof.Cmdline))
+	mux.HandleFunc("/debug/pprof/profile", pprofLocalOnly(pprof.Profile))
+	mux.HandleFunc("/debug/pprof/symbol", pprofLocalOnly(pprof.Symbol))
+	mux.HandleFunc("/debug/pprof/trace", pprofLocalOnly(pprof.Trace))
 
 	// Explicit method-not-allowed for health/ready endpoints.
 	// Without these, non-GET requests fall through to the catch-all "/" handler
