@@ -1,4 +1,4 @@
-package ai.deneb.deneb
+package ai.deneb.ui.launcher
 
 import ai.deneb.DenebBrowser
 import ai.deneb.DenebCalendar
@@ -19,9 +19,6 @@ import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebSectionLabel
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.rememberHaptics
-import ai.deneb.ui.launcher.LauncherAppEntry
-import ai.deneb.ui.launcher.appInitial
-import ai.deneb.ui.launcher.createLauncherApps
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement

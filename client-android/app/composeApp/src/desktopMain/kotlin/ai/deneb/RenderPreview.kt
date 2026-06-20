@@ -13,7 +13,6 @@ import ai.deneb.deneb.CalendarMonthGrid
 import ai.deneb.deneb.ContactsList
 import ai.deneb.deneb.CronEditContent
 import ai.deneb.deneb.DashboardLanesContent
-import ai.deneb.deneb.DenebAppHubContent
 import ai.deneb.deneb.DenebBrowserChrome
 import ai.deneb.deneb.DenebWebViewState
 import ai.deneb.deneb.FilesSearchMode
@@ -73,6 +72,7 @@ import ai.deneb.ui.denebInsightContainer
 import ai.deneb.ui.dynamicui.ChartNode
 import ai.deneb.ui.dynamicui.DenebUiRenderer
 import ai.deneb.ui.launcher.AppDrawer
+import ai.deneb.ui.launcher.DenebAppHubContent
 import ai.deneb.ui.launcher.LauncherAppEntry
 import ai.deneb.ui.markdown.MarkdownContent
 import androidx.compose.foundation.background
