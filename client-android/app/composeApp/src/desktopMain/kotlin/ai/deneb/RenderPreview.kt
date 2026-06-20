@@ -62,6 +62,7 @@ import ai.deneb.ui.LightColorScheme
 import ai.deneb.ui.chat.WorkFeedAction
 import ai.deneb.ui.chat.WorkFeedItem
 import ai.deneb.ui.chat.composables.DenebBottomBar
+import ai.deneb.ui.chat.composables.EmptyState
 import ai.deneb.ui.chat.composables.WaitingResponseRow
 import ai.deneb.ui.chat.composables.WorkFeedPanel
 import ai.deneb.ui.components.SectionedScrubList
@@ -217,6 +218,8 @@ fun main() {
     renderBottomBar("bottombar_more_dark.png", DarkColorScheme, "deneb_more")
     // 메일·달력 are now selectable tabs — they highlight when their section is active.
     renderBottomBar("bottombar_mail_dark.png", DarkColorScheme, "deneb_mail")
+    // Chat empty/welcome — muted sparkle + greeting (replaced the purple orb).
+    renderScreen("chat_empty_dark.png", "chat_empty", DarkColorScheme, 824, 720)
     renderDesignSample("design_dark.png", DarkColorScheme)
     renderDesignSample("design_light.png", LightColorScheme)
     renderScreen("calendar_event_dark.png", "calendar_event", DarkColorScheme, 760, 1100)
@@ -687,6 +690,14 @@ internal val previewScreens: Map<String, @Composable (ColorScheme) -> Unit> = ma
                         MailRow(m, selecting = false, isSelected = false, onTap = {}, onLongPress = {})
                     }
                 }
+            }
+        }
+    },
+    // Chat empty/welcome — muted sparkle glyph + personalized greeting (was a purple orb).
+    "chat_empty" to { scheme ->
+        MaterialTheme(colorScheme = scheme) {
+            Surface(color = MaterialTheme.colorScheme.background) {
+                EmptyState(recallEnabled = true, modifier = Modifier.fillMaxSize())
             }
         }
     },
