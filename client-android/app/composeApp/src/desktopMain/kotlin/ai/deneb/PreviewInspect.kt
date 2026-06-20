@@ -29,6 +29,7 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.runDesktopComposeUiTest
 import androidx.compose.ui.unit.dp
+import kotlin.system.exitProcess
 
 /**
  * Headless semantics inspector + driver — a vision-free way for an AI agent to SEE and
@@ -79,10 +80,14 @@ fun main() {
     if (body == null) {
         println("unknown screen '$name'. available: ${screens.keys.sorted().joinToString(", ")}")
         println("=== UI-INSPECT END ===")
-        return
+        exitProcess(1)
     }
 
     val scheme = if (dark) DarkColorScheme else LightColorScheme
+    // Count action failures so this can be used as a verification gate: a missing node,
+    // an ambiguous match, or a throwing handler must make ui-inspect exit non-zero — not
+    // silently skip the re-dump and let an agent treat an unverified UI state as success.
+    var actionFailures = 0
     runDesktopComposeUiTest(width = 412, height = 915) {
         setContent { body(scheme) }
         waitForIdle()
@@ -93,10 +98,16 @@ fun main() {
             if (applyAction(action)) {
                 waitForIdle()
                 dumpTree()
+            } else {
+                actionFailures++
             }
         }
     }
     println("=== UI-INSPECT END ===")
+    if (actionFailures > 0) {
+        System.err.println("ui-inspect: $actionFailures action(s) failed")
+        exitProcess(1)
+    }
 }
 
 /** Walk the merged semantics tree, printing one line per informative node. */

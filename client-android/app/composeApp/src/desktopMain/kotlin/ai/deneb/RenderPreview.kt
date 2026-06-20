@@ -196,16 +196,16 @@ fun main() {
     renderScreen("calendar_event_dark.png", "calendar_event", DarkColorScheme, 760, 1100)
     renderScreen("calendar_event_light.png", "calendar_event", LightColorScheme, 760, 1100)
     renderScreen("calendar_event_multiday_light.png", "calendar_event_multiday", LightColorScheme, 760, 1100)
-    renderCalendarMonth("calendar_month_dark.png", DarkColorScheme)
-    renderCalendarMonth("calendar_month_light.png", LightColorScheme)
-    renderCalendarAdd("calendar_add_dark.png", DarkColorScheme)
-    renderCalendarAdd("calendar_add_light.png", LightColorScheme)
+    renderScreen("calendar_month_dark.png", "calendar_month", DarkColorScheme, 824, 1280)
+    renderScreen("calendar_month_light.png", "calendar_month", LightColorScheme, 824, 1280)
+    renderScreen("calendar_add_dark.png", "calendar_add", DarkColorScheme, 824, 1300)
+    renderScreen("calendar_add_light.png", "calendar_add", LightColorScheme, 824, 1300)
     renderScreen("calendar_empty_dark.png", "calendar_empty", DarkColorScheme, 824, 520)
     renderScreen("calendar_empty_light.png", "calendar_empty", LightColorScheme, 824, 520)
     renderScreen("todo_list_dark.png", "todo_list", DarkColorScheme, 824, 760)
     renderScreen("todo_list_light.png", "todo_list", LightColorScheme, 824, 760)
-    renderTodoAdd("todo_add_dark.png", DarkColorScheme)
-    renderTodoAdd("todo_add_light.png", LightColorScheme)
+    renderScreen("todo_add_dark.png", "todo_add", DarkColorScheme, 824, 980)
+    renderScreen("todo_add_light.png", "todo_add", LightColorScheme, 824, 980)
     renderCronEdit("cron_edit_dark.png", DarkColorScheme, cronWeeklyDraft, "Asia/Seoul")
     renderCronEdit("cron_edit_light.png", LightColorScheme, cronWeeklyDraft, "Asia/Seoul")
     renderCronEdit("cron_edit_interval.png", DarkColorScheme, cronIntervalDraft, "")
@@ -358,67 +358,6 @@ private val sampleSpanEvent = CalendarEventDetail(
     status = "confirmed",
 )
 
-// Validates the new month-grid calendar body at phone width (412dp): the grid
-// (dots on days with events, today + selected highlighted) and the selected
-// day's event list. The weekday header is inlined here for column context.
-private fun renderCalendarMonth(name: String, scheme: ColorScheme) {
-    val month = CalMonth(2026, 6)
-    val grid = buildMonthGrid(month)
-    val today = LocalDate(2026, 6, 8)
-    val selected = LocalDate(2026, 6, 3)
-    val tz = TimeZone.UTC
-    // Mix single-day and multi-day events; the latter exercise the ribbon lanes,
-    // including one span (e4) that crosses a week boundary. Categories cover all
-    // three colors: 본인 (mine), 타인 (others), 기한 (deadline).
-    val events = listOf(
-        CalendarEvent("e1", "기획조정실 주간 회의", "본사 3층 대회의실", "2026-06-03T05:00:00Z", "2026-06-03T06:00:00Z", false, category = "mine"),
-        CalendarEvent("e2", "에코프로 구매팀 미팅", "남도에코에너지", "2026-06-03T07:30:00Z", "2026-06-03T08:30:00Z", false, category = "others"),
-        CalendarEvent("e3", "출장 (서울)", "", "2026-06-10T00:00:00Z", "2026-06-13T00:00:00Z", true, category = "mine"),
-        CalendarEvent("e4", "RE100 전시 부스", "코엑스", "2026-06-19T00:00:00Z", "2026-06-24T00:00:00Z", true, category = "others"),
-        CalendarEvent("e5", "계약서 제출 마감", "", "2026-06-16T00:00:00Z", "2026-06-17T00:00:00Z", true, category = "deadline"),
-    )
-    val bars = layoutMonthBars(events, grid, tz)
-    val dots = timedSingleDayDots(events, tz)
-    val todoDueDates = setOf(LocalDate(2026, 6, 18)) // a to-do due on an event-free day
-    val dayEvents = events.filter { selected in eventDays(it.start, it.end, it.allDay, tz) }
-    val scene = ImageComposeScene(width = 824, height = 1280, density = Density(2f)) {
-        MaterialTheme(colorScheme = scheme) {
-            DenebScreenScaffold(title = "일정", onBack = {}) {
-                Column(Modifier.padding(horizontal = 16.dp)) {
-                    Text(
-                        "${month.year}년 ${month.month}월",
-                        style = DenebType.subject,
-                        color = MaterialTheme.colorScheme.onBackground,
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Row(Modifier.fillMaxWidth()) {
-                        koreanDayOfWeek.forEach { d ->
-                            Text(
-                                d,
-                                style = DenebType.meta,
-                                color = denebHint(),
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.weight(1f).padding(vertical = 4.dp),
-                            )
-                        }
-                    }
-                    CalendarMonthGrid(grid, today, selected, bars, dots, todoDueDates, {})
-                    Spacer(Modifier.height(12.dp))
-                    HorizontalDivider(color = denebHairline())
-                    Spacer(Modifier.height(8.dp))
-                    Text("6월 3일 (수) · ${dayEvents.size}건", style = DenebType.sectionLabel, color = MaterialTheme.colorScheme.primary)
-                    CalendarDayList(dayEvents, selected, tz, {})
-                }
-            }
-        }
-    }
-    val image = scene.render()
-    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
-    File("/tmp/deneb-render").mkdirs()
-    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
-    scene.close()
-}
-
 private val sampleTodos = listOf(
     Todo("todo:1", "남도에코 모듈 견적 회신", note = "6월말 납기 확인", due = "2026-06-09T00:00:00Z", dueAllDay = true),
     Todo("todo:2", "RE100 계약서 검토", due = "2026-06-10T05:00:00Z"),
@@ -473,60 +412,44 @@ internal val previewScreens: Map<String, @Composable (ColorScheme) -> Unit> = ma
             }
         }
     },
-)
-
-// Render a registry screen to a PNG at [width]x[height]@[density] — the common
-// ImageComposeScene plumbing the per-screen render* functions used to repeat.
-private fun renderScreen(pngName: String, screen: String, scheme: ColorScheme, width: Int, height: Int, density: Float = 2f) {
-    val body = previewScreens[screen] ?: error("unknown preview screen '$screen'")
-    val scene = ImageComposeScene(width = width, height = height, density = Density(density)) { body(scheme) }
-    val image = scene.render()
-    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
-    File("/tmp/deneb-render").mkdirs()
-    File("/tmp/deneb-render/$pngName").writeBytes(data.bytes)
-    scene.close()
-}
-
-// Validates the add/edit-to-do form: Material inputs (title, note, due switches +
-// date/time picker buttons) under Deneb section labels.
-private fun renderTodoAdd(name: String, scheme: ColorScheme) {
-    val scene = ImageComposeScene(width = 824, height = 980, density = Density(2f)) {
+    "calendar_month" to { scheme ->
+        val month = CalMonth(2026, 6)
+        val grid = buildMonthGrid(month)
+        val today = LocalDate(2026, 6, 8)
+        val selected = LocalDate(2026, 6, 3)
+        val tz = TimeZone.UTC
+        val events = listOf(
+            CalendarEvent("e1", "기획조정실 주간 회의", "본사 3층 대회의실", "2026-06-03T05:00:00Z", "2026-06-03T06:00:00Z", false, category = "mine"),
+            CalendarEvent("e2", "에코프로 구매팀 미팅", "남도에코에너지", "2026-06-03T07:30:00Z", "2026-06-03T08:30:00Z", false, category = "others"),
+            CalendarEvent("e3", "출장 (서울)", "", "2026-06-10T00:00:00Z", "2026-06-13T00:00:00Z", true, category = "mine"),
+            CalendarEvent("e4", "RE100 전시 부스", "코엑스", "2026-06-19T00:00:00Z", "2026-06-24T00:00:00Z", true, category = "others"),
+            CalendarEvent("e5", "계약서 제출 마감", "", "2026-06-16T00:00:00Z", "2026-06-17T00:00:00Z", true, category = "deadline"),
+        )
+        val bars = layoutMonthBars(events, grid, tz)
+        val dots = timedSingleDayDots(events, tz)
+        val todoDueDates = setOf(LocalDate(2026, 6, 18))
+        val dayEvents = events.filter { selected in eventDays(it.start, it.end, it.allDay, tz) }
         MaterialTheme(colorScheme = scheme) {
-            DenebScreenScaffold(title = "할 일 추가", onBack = {}) {
-                Column(Modifier.padding(horizontal = 24.dp)) {
-                    TodoAddContent(
-                        title = "남도에코 모듈 견적 회신",
-                        onTitle = {},
-                        note = "6월말 납기 확인",
-                        onNote = {},
-                        hasDue = true,
-                        onHasDue = {},
-                        allDay = false,
-                        onAllDay = {},
-                        dueDateLabel = "2026년 6월 10일 (수)",
-                        onPickDate = {},
-                        dueTimeLabel = "14:00",
-                        onPickTime = {},
-                        error = null,
-                        saving = false,
-                        saveLabel = "추가",
-                        onSave = {},
-                    )
+            DenebScreenScaffold(title = "일정", onBack = {}) {
+                Column(Modifier.padding(horizontal = 16.dp)) {
+                    Text("${month.year}년 ${month.month}월", style = DenebType.subject, color = MaterialTheme.colorScheme.onBackground)
+                    Spacer(Modifier.height(8.dp))
+                    Row(Modifier.fillMaxWidth()) {
+                        koreanDayOfWeek.forEach { d ->
+                            Text(d, style = DenebType.meta, color = denebHint(), textAlign = TextAlign.Center, modifier = Modifier.weight(1f).padding(vertical = 4.dp))
+                        }
+                    }
+                    CalendarMonthGrid(grid, today, selected, bars, dots, todoDueDates, {})
+                    Spacer(Modifier.height(12.dp))
+                    HorizontalDivider(color = denebHairline())
+                    Spacer(Modifier.height(8.dp))
+                    Text("6월 3일 (수) · ${dayEvents.size}건", style = DenebType.sectionLabel, color = MaterialTheme.colorScheme.primary)
+                    CalendarDayList(dayEvents, selected, tz, {})
                 }
             }
         }
-    }
-    val image = scene.render()
-    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
-    File("/tmp/deneb-render").mkdirs()
-    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
-    scene.close()
-}
-
-// Validates the manual add-event form: Material inputs (text fields, all-day
-// switch, date/time picker buttons) under Deneb section labels.
-private fun renderCalendarAdd(name: String, scheme: ColorScheme) {
-    val scene = ImageComposeScene(width = 824, height = 1300, density = Density(2f)) {
+    },
+    "calendar_add" to { scheme ->
         MaterialTheme(colorScheme = scheme) {
             DenebScreenScaffold(title = "일정 추가", onBack = {}) {
                 Column(Modifier.padding(horizontal = 24.dp)) {
@@ -557,11 +480,44 @@ private fun renderCalendarAdd(name: String, scheme: ColorScheme) {
                 }
             }
         }
-    }
+    },
+    "todo_add" to { scheme ->
+        MaterialTheme(colorScheme = scheme) {
+            DenebScreenScaffold(title = "할 일 추가", onBack = {}) {
+                Column(Modifier.padding(horizontal = 24.dp)) {
+                    TodoAddContent(
+                        title = "남도에코 모듈 견적 회신",
+                        onTitle = {},
+                        note = "6월말 납기 확인",
+                        onNote = {},
+                        hasDue = true,
+                        onHasDue = {},
+                        allDay = false,
+                        onAllDay = {},
+                        dueDateLabel = "2026년 6월 10일 (수)",
+                        onPickDate = {},
+                        dueTimeLabel = "14:00",
+                        onPickTime = {},
+                        error = null,
+                        saving = false,
+                        saveLabel = "추가",
+                        onSave = {},
+                    )
+                }
+            }
+        }
+    },
+)
+
+// Render a registry screen to a PNG at [width]x[height]@[density] — the common
+// ImageComposeScene plumbing the per-screen render* functions used to repeat.
+private fun renderScreen(pngName: String, screen: String, scheme: ColorScheme, width: Int, height: Int, density: Float = 2f) {
+    val body = previewScreens[screen] ?: error("unknown preview screen '$screen'")
+    val scene = ImageComposeScene(width = width, height = height, density = Density(density)) { body(scheme) }
     val image = scene.render()
     val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
     File("/tmp/deneb-render").mkdirs()
-    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
+    File("/tmp/deneb-render/$pngName").writeBytes(data.bytes)
     scene.close()
 }
 
