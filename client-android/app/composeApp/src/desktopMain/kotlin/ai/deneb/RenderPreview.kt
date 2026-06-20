@@ -101,6 +101,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.Modifier
@@ -192,17 +193,17 @@ fun main() {
     renderBottomBar("bottombar_more_dark.png", DarkColorScheme, "", moreActive = true)
     renderDesignSample("design_dark.png", DarkColorScheme)
     renderDesignSample("design_light.png", LightColorScheme)
-    renderCalendarEvent("calendar_event_dark.png", DarkColorScheme)
-    renderCalendarEvent("calendar_event_light.png", LightColorScheme)
-    renderCalendarEvent("calendar_event_multiday_light.png", LightColorScheme, sampleSpanEvent)
+    renderScreen("calendar_event_dark.png", "calendar_event", DarkColorScheme, 760, 1100)
+    renderScreen("calendar_event_light.png", "calendar_event", LightColorScheme, 760, 1100)
+    renderScreen("calendar_event_multiday_light.png", "calendar_event_multiday", LightColorScheme, 760, 1100)
     renderCalendarMonth("calendar_month_dark.png", DarkColorScheme)
     renderCalendarMonth("calendar_month_light.png", LightColorScheme)
     renderCalendarAdd("calendar_add_dark.png", DarkColorScheme)
     renderCalendarAdd("calendar_add_light.png", LightColorScheme)
-    renderCalendarEmpty("calendar_empty_dark.png", DarkColorScheme)
-    renderCalendarEmpty("calendar_empty_light.png", LightColorScheme)
-    renderTodoList("todo_list_dark.png", DarkColorScheme)
-    renderTodoList("todo_list_light.png", LightColorScheme)
+    renderScreen("calendar_empty_dark.png", "calendar_empty", DarkColorScheme, 824, 520)
+    renderScreen("calendar_empty_light.png", "calendar_empty", LightColorScheme, 824, 520)
+    renderScreen("todo_list_dark.png", "todo_list", DarkColorScheme, 824, 760)
+    renderScreen("todo_list_light.png", "todo_list", LightColorScheme, 824, 760)
     renderTodoAdd("todo_add_dark.png", DarkColorScheme)
     renderTodoAdd("todo_add_light.png", LightColorScheme)
     renderCronEdit("cron_edit_dark.png", DarkColorScheme, cronWeeklyDraft, "Asia/Seoul")
@@ -357,25 +358,6 @@ private val sampleSpanEvent = CalendarEventDetail(
     status = "confirmed",
 )
 
-// Validates the calendar-event detail in the hybrid idiom: Deneb type skin
-// (subject + section labels + body) with the Meet join as a Material button.
-private fun renderCalendarEvent(name: String, scheme: ColorScheme, ev: CalendarEventDetail = sampleEvent) {
-    val scene = ImageComposeScene(width = 760, height = 1100, density = Density(2f)) {
-        MaterialTheme(colorScheme = scheme) {
-            DenebScreenScaffold(title = "일정", onBack = {}) {
-                Column(Modifier.padding(horizontal = 24.dp)) {
-                    CalendarEventContent(ev = ev, isLocal = true)
-                }
-            }
-        }
-    }
-    val image = scene.render()
-    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
-    File("/tmp/deneb-render").mkdirs()
-    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
-    scene.close()
-}
-
 // Validates the new month-grid calendar body at phone width (412dp): the grid
 // (dots on days with events, today + selected highlighted) and the selected
 // day's event list. The weekday header is inlined here for column context.
@@ -437,9 +419,41 @@ private fun renderCalendarMonth(name: String, scheme: ColorScheme) {
     scene.close()
 }
 
-// Validates the empty-day state: a quiet line plus the inline "add to this day" CTA.
-private fun renderCalendarEmpty(name: String, scheme: ColorScheme) {
-    val scene = ImageComposeScene(width = 824, height = 520, density = Density(2f)) {
+private val sampleTodos = listOf(
+    Todo("todo:1", "남도에코 모듈 견적 회신", note = "6월말 납기 확인", due = "2026-06-09T00:00:00Z", dueAllDay = true),
+    Todo("todo:2", "RE100 계약서 검토", due = "2026-06-10T05:00:00Z"),
+    Todo("todo:3", "법인카드 정산", note = "5월분"),
+    Todo("todo:4", "주간 보고 작성", due = "2026-06-08T00:00:00Z", dueAllDay = true, done = true),
+)
+
+// ── Shared screen registry ───────────────────────────────────────────────────
+// Single source of truth for inspectable screens: name -> body. Reused by the PNG
+// renderer (renderScreen, below) AND the headless semantics inspector
+// (PreviewInspect.kt / ui-inspect.sh), so the SAME composition projects to pixels
+// (vision) or to a text semantics tree (vision-free). Each body is the bare screen
+// under its theme; the caller supplies the surface + size. Screens migrate into this
+// map incrementally — entries here are inspectable, render-only previews below are not
+// yet. The body reuses the same mock data the old per-screen render* functions used.
+internal val previewScreens: Map<String, @Composable (ColorScheme) -> Unit> = mapOf(
+    "calendar_event" to { scheme ->
+        MaterialTheme(colorScheme = scheme) {
+            DenebScreenScaffold(title = "일정", onBack = {}) {
+                Column(Modifier.padding(horizontal = 24.dp)) {
+                    CalendarEventContent(ev = sampleEvent, isLocal = true)
+                }
+            }
+        }
+    },
+    "calendar_event_multiday" to { scheme ->
+        MaterialTheme(colorScheme = scheme) {
+            DenebScreenScaffold(title = "일정", onBack = {}) {
+                Column(Modifier.padding(horizontal = 24.dp)) {
+                    CalendarEventContent(ev = sampleSpanEvent, isLocal = true)
+                }
+            }
+        }
+    },
+    "calendar_empty" to { scheme ->
         MaterialTheme(colorScheme = scheme) {
             DenebScreenScaffold(title = "일정", onBack = {}) {
                 Column(Modifier.padding(horizontal = 16.dp)) {
@@ -449,25 +463,8 @@ private fun renderCalendarEmpty(name: String, scheme: ColorScheme) {
                 }
             }
         }
-    }
-    val image = scene.render()
-    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
-    File("/tmp/deneb-render").mkdirs()
-    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
-    scene.close()
-}
-
-private val sampleTodos = listOf(
-    Todo("todo:1", "남도에코 모듈 견적 회신", note = "6월말 납기 확인", due = "2026-06-09T00:00:00Z", dueAllDay = true),
-    Todo("todo:2", "RE100 계약서 검토", due = "2026-06-10T05:00:00Z"),
-    Todo("todo:3", "법인카드 정산", note = "5월분"),
-    Todo("todo:4", "주간 보고 작성", due = "2026-06-08T00:00:00Z", dueAllDay = true, done = true),
-)
-
-// Validates the to-do list: active items (Material checkbox + struck-through done)
-// under "할 일", completed under "완료", in the Deneb row idiom.
-private fun renderTodoList(name: String, scheme: ColorScheme) {
-    val scene = ImageComposeScene(width = 824, height = 760, density = Density(2f)) {
+    },
+    "todo_list" to { scheme ->
         MaterialTheme(colorScheme = scheme) {
             DenebScreenScaffold(title = "할 일", onBack = {}) {
                 Column(Modifier.padding(horizontal = 24.dp)) {
@@ -475,11 +472,18 @@ private fun renderTodoList(name: String, scheme: ColorScheme) {
                 }
             }
         }
-    }
+    },
+)
+
+// Render a registry screen to a PNG at [width]x[height]@[density] — the common
+// ImageComposeScene plumbing the per-screen render* functions used to repeat.
+private fun renderScreen(pngName: String, screen: String, scheme: ColorScheme, width: Int, height: Int, density: Float = 2f) {
+    val body = previewScreens[screen] ?: error("unknown preview screen '$screen'")
+    val scene = ImageComposeScene(width = width, height = height, density = Density(density)) { body(scheme) }
     val image = scene.render()
     val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
     File("/tmp/deneb-render").mkdirs()
-    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
+    File("/tmp/deneb-render/$pngName").writeBytes(data.bytes)
     scene.close()
 }
 
