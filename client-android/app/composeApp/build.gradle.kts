@@ -149,6 +149,13 @@ kotlin {
             implementation(libs.ktor.client.cio)
             implementation(libs.bouncycastle.provider)
             implementation(libs.slf4j.nop)
+            // Compose UI test API powers the headless semantics inspector (ui-inspect.sh /
+            // the previewInspect task): it dumps the semantics tree as TEXT and drives nodes
+            // by text/role, so a non-vision agent can verify + drive the mobile UI without
+            // reading PNGs. Desktop-only — this is the verification harness target. Direct
+            // coordinate because the compose.uiTest accessor is deprecated; the desktop
+            // variant (ui-test-desktop, which carries runDesktopComposeUiTest) auto-resolves.
+            implementation("org.jetbrains.compose.ui:ui-test:${libs.versions.compose.multiplatform.get()}")
         }
         iosMain.dependencies {
             implementation(libs.ktor.client.darwin)
@@ -305,4 +312,26 @@ tasks.register<JavaExec>("benchScrollRender") {
     mainClass.set("ai.deneb.ScrollRenderBenchKt")
     systemProperty("java.awt.headless", "true")
     systemProperty("deneb.platform", "phone")
+}
+
+// Headless semantics inspector (desktopMain/.../PreviewInspect.kt): dumps a screen's
+// semantics tree as TEXT and drives it by node, so a non-vision agent can verify + drive
+// the mobile UI without reading PNGs. Prefer scripts/dev/ui-inspect.sh; raw:
+//   ./gradlew :composeApp:previewInspect -Pscreen=todo -Pactions="click:증가"
+tasks.register<JavaExec>("previewInspect") {
+    group = "deneb"
+    description = "Dump (and optionally drive) a screen's semantics tree as text"
+    val desktopMain =
+        kotlin.targets
+            .getByName("desktop")
+            .compilations
+            .getByName("main")
+    dependsOn(desktopMain.compileTaskProvider)
+    classpath = files(desktopMain.output.allOutputs, desktopMain.runtimeDependencyFiles)
+    mainClass.set("ai.deneb.PreviewInspectKt")
+    systemProperty("java.awt.headless", "true")
+    systemProperty("deneb.platform", "phone")
+    systemProperty("deneb.screen", (project.findProperty("screen") as? String) ?: "")
+    systemProperty("deneb.actions", (project.findProperty("actions") as? String) ?: "")
+    systemProperty("deneb.dark", (project.findProperty("dark") as? String) ?: "false")
 }

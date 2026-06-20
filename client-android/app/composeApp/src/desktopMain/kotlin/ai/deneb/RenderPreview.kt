@@ -101,6 +101,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.Modifier
@@ -173,13 +174,13 @@ private fun renderBrowser(name: String, scheme: ColorScheme) {
 
 fun main() {
     System.setProperty("java.awt.headless", "true")
-    render("mail_dark.png", DarkColorScheme)
-    render("mail_light.png", LightColorScheme)
+    renderScreen("mail_dark.png", "mail", DarkColorScheme, 840, 1100)
+    renderScreen("mail_light.png", "mail", LightColorScheme, 840, 1100)
     renderBrowser("browser_dark.png", DarkColorScheme)
     renderBrowser("browser_light.png", LightColorScheme)
     renderMarkdown("markdown_dark.png", DarkColorScheme)
-    renderAppDrawer("app_drawer_dark.png", DarkColorScheme)
-    renderAppDrawer("app_drawer_light.png", LightColorScheme)
+    renderScreen("app_drawer_dark.png", "app_drawer", DarkColorScheme, 824, 1100)
+    renderScreen("app_drawer_light.png", "app_drawer", LightColorScheme, 824, 1100)
     renderAnalysis("analysis_clip.png", DarkColorScheme)
     renderCollapsedReport("mail_collapsed_dark.png", DarkColorScheme, expanded = false)
     renderCollapsedReport("mail_collapsed_light.png", LightColorScheme, expanded = false)
@@ -192,55 +193,55 @@ fun main() {
     renderBottomBar("bottombar_more_dark.png", DarkColorScheme, "", moreActive = true)
     renderDesignSample("design_dark.png", DarkColorScheme)
     renderDesignSample("design_light.png", LightColorScheme)
-    renderCalendarEvent("calendar_event_dark.png", DarkColorScheme)
-    renderCalendarEvent("calendar_event_light.png", LightColorScheme)
-    renderCalendarEvent("calendar_event_multiday_light.png", LightColorScheme, sampleSpanEvent)
-    renderCalendarMonth("calendar_month_dark.png", DarkColorScheme)
-    renderCalendarMonth("calendar_month_light.png", LightColorScheme)
-    renderCalendarAdd("calendar_add_dark.png", DarkColorScheme)
-    renderCalendarAdd("calendar_add_light.png", LightColorScheme)
-    renderCalendarEmpty("calendar_empty_dark.png", DarkColorScheme)
-    renderCalendarEmpty("calendar_empty_light.png", LightColorScheme)
-    renderTodoList("todo_list_dark.png", DarkColorScheme)
-    renderTodoList("todo_list_light.png", LightColorScheme)
-    renderTodoAdd("todo_add_dark.png", DarkColorScheme)
-    renderTodoAdd("todo_add_light.png", LightColorScheme)
-    renderCronEdit("cron_edit_dark.png", DarkColorScheme, cronWeeklyDraft, "Asia/Seoul")
-    renderCronEdit("cron_edit_light.png", LightColorScheme, cronWeeklyDraft, "Asia/Seoul")
-    renderCronEdit("cron_edit_interval.png", DarkColorScheme, cronIntervalDraft, "")
-    renderCronEdit("cron_edit_advanced.png", DarkColorScheme, cronAdvancedDraft, "Asia/Seoul")
-    renderPromptEditor("prompt_editor_dark.png", DarkColorScheme)
-    renderPromptEditor("prompt_editor_light.png", LightColorScheme)
-    renderTopicDocEditor("topic_doc_editor_dark.png", DarkColorScheme)
-    renderTopicDocEditor("topic_doc_editor_light.png", LightColorScheme)
+    renderScreen("calendar_event_dark.png", "calendar_event", DarkColorScheme, 760, 1100)
+    renderScreen("calendar_event_light.png", "calendar_event", LightColorScheme, 760, 1100)
+    renderScreen("calendar_event_multiday_light.png", "calendar_event_multiday", LightColorScheme, 760, 1100)
+    renderScreen("calendar_month_dark.png", "calendar_month", DarkColorScheme, 824, 1280)
+    renderScreen("calendar_month_light.png", "calendar_month", LightColorScheme, 824, 1280)
+    renderScreen("calendar_add_dark.png", "calendar_add", DarkColorScheme, 824, 1300)
+    renderScreen("calendar_add_light.png", "calendar_add", LightColorScheme, 824, 1300)
+    renderScreen("calendar_empty_dark.png", "calendar_empty", DarkColorScheme, 824, 520)
+    renderScreen("calendar_empty_light.png", "calendar_empty", LightColorScheme, 824, 520)
+    renderScreen("todo_list_dark.png", "todo_list", DarkColorScheme, 824, 760)
+    renderScreen("todo_list_light.png", "todo_list", LightColorScheme, 824, 760)
+    renderScreen("todo_add_dark.png", "todo_add", DarkColorScheme, 824, 980)
+    renderScreen("todo_add_light.png", "todo_add", LightColorScheme, 824, 980)
+    renderScreen("cron_edit_dark.png", "cron_edit", DarkColorScheme, 824, 1300)
+    renderScreen("cron_edit_light.png", "cron_edit", LightColorScheme, 824, 1300)
+    renderScreen("cron_edit_interval.png", "cron_edit_interval", DarkColorScheme, 824, 1300)
+    renderScreen("cron_edit_advanced.png", "cron_edit_advanced", DarkColorScheme, 824, 1300)
+    renderScreen("prompt_editor_dark.png", "prompt_editor", DarkColorScheme, 824, 980)
+    renderScreen("prompt_editor_light.png", "prompt_editor", LightColorScheme, 824, 980)
+    renderScreen("topic_doc_editor_dark.png", "topic_doc_editor", DarkColorScheme, 824, 980)
+    renderScreen("topic_doc_editor_light.png", "topic_doc_editor", LightColorScheme, 824, 980)
     renderChart("chart_dark.png", DarkColorScheme)
     renderChart("chart_light.png", LightColorScheme)
-    renderWorkFeed("workfeed_dark.png", DarkColorScheme)
-    renderWorkFeed("workfeed_light.png", LightColorScheme)
-    renderDashboard("dashboard_dark.png", DarkColorScheme)
-    renderDashboard("dashboard_light.png", LightColorScheme)
-    renderOrgChart("org_chart_dark.png", DarkColorScheme)
-    renderOrgChart("org_chart_light.png", LightColorScheme)
-    renderOrgChart("org_chart_search_dark.png", DarkColorScheme, query = "김철수")
-    renderOrgEditor("org_editor_dark.png", DarkColorScheme)
-    renderOrgEditor("org_editor_light.png", LightColorScheme)
+    renderScreen("workfeed_dark.png", "workfeed", DarkColorScheme, 824, 1100)
+    renderScreen("workfeed_light.png", "workfeed", LightColorScheme, 824, 1100)
+    renderScreen("dashboard_dark.png", "dashboard", DarkColorScheme, 824, 1900)
+    renderScreen("dashboard_light.png", "dashboard", LightColorScheme, 824, 1900)
+    renderScreen("org_chart_dark.png", "org_chart", DarkColorScheme, 824, 1500)
+    renderScreen("org_chart_light.png", "org_chart", LightColorScheme, 824, 1500)
+    renderScreen("org_chart_search_dark.png", "org_chart_search", DarkColorScheme, 824, 1500)
+    renderScreen("org_editor_dark.png", "org_editor", DarkColorScheme, 824, 1280)
+    renderScreen("org_editor_light.png", "org_editor", LightColorScheme, 824, 1280)
     renderWidget("widget_loaded.png", "6/3 14:00 · 기획조정실 주간 회의 3분기 점검", "김민준 부장 · 회의 자료 검토 부탁드립니다", "미읽음 3")
     renderWidget("widget_loading.png", "불러오는 중…", "", "")
     renderSkeleton("skeleton_dark.png", DarkColorScheme)
     renderSkeleton("skeleton_light.png", LightColorScheme)
     renderWaitingChip("waiting_chip_dark.png", DarkColorScheme)
     renderWaitingChip("waiting_chip_light.png", LightColorScheme)
-    renderSkillsList("skills_list_dark.png", DarkColorScheme)
-    renderSkillsList("skills_list_light.png", LightColorScheme)
-    renderSelfImprovementCoding("self_improvement_coding_dark.png", DarkColorScheme)
-    renderSelfImprovementCoding("self_improvement_coding_light.png", LightColorScheme)
-    renderSkillLifecycle("skills_lifecycle_dark.png", DarkColorScheme)
-    renderSkillLifecycle("skills_lifecycle_light.png", LightColorScheme)
-    renderSkillDetail("skill_detail_dark.png", DarkColorScheme)
-    renderSkillDetail("skill_detail_light.png", LightColorScheme)
-    renderFilesText("files_text_markdown_dark.png", DarkColorScheme, displayName = "프로젝트_X.md", markdown = true, text = markdownSample)
-    renderFilesText("files_text_markdown_light.png", LightColorScheme, displayName = "프로젝트_X.md", markdown = true, text = markdownSample)
-    renderFilesText("files_text_plain_dark.png", DarkColorScheme, displayName = "deploy.log", markdown = false, text = filesPlainSample)
+    renderScreen("skills_list_dark.png", "skills_list", DarkColorScheme, 824, 700)
+    renderScreen("skills_list_light.png", "skills_list", LightColorScheme, 824, 700)
+    renderScreen("self_improvement_coding_dark.png", "self_improvement_coding", DarkColorScheme, 824, 760)
+    renderScreen("self_improvement_coding_light.png", "self_improvement_coding", LightColorScheme, 824, 760)
+    renderScreen("skills_lifecycle_dark.png", "skills_lifecycle", DarkColorScheme, 824, 700)
+    renderScreen("skills_lifecycle_light.png", "skills_lifecycle", LightColorScheme, 824, 700)
+    renderScreen("skill_detail_dark.png", "skill_detail", DarkColorScheme, 824, 1400)
+    renderScreen("skill_detail_light.png", "skill_detail", LightColorScheme, 824, 1400)
+    renderScreen("files_text_markdown_dark.png", "files_text_markdown", DarkColorScheme, 824, 900)
+    renderScreen("files_text_markdown_light.png", "files_text_markdown", LightColorScheme, 824, 900)
+    renderScreen("files_text_plain_dark.png", "files_text_plain", DarkColorScheme, 824, 900)
     renderFilesSearchMode("files_search_mode_name_dark.png", DarkColorScheme, FilesSearchMode.NAME)
     renderFilesSearchMode("files_search_mode_semantic_dark.png", DarkColorScheme, FilesSearchMode.SEMANTIC)
     renderFilesSearchMode("files_search_mode_content_light.png", LightColorScheme, FilesSearchMode.CONTENT)
@@ -357,67 +358,85 @@ private val sampleSpanEvent = CalendarEventDetail(
     status = "confirmed",
 )
 
-// Validates the calendar-event detail in the hybrid idiom: Deneb type skin
-// (subject + section labels + body) with the Meet join as a Material button.
-private fun renderCalendarEvent(name: String, scheme: ColorScheme, ev: CalendarEventDetail = sampleEvent) {
-    val scene = ImageComposeScene(width = 760, height = 1100, density = Density(2f)) {
+private val sampleTodos = listOf(
+    Todo("todo:1", "남도에코 모듈 견적 회신", note = "6월말 납기 확인", due = "2026-06-09T00:00:00Z", dueAllDay = true),
+    Todo("todo:2", "RE100 계약서 검토", due = "2026-06-10T05:00:00Z"),
+    Todo("todo:3", "법인카드 정산", note = "5월분"),
+    Todo("todo:4", "주간 보고 작성", due = "2026-06-08T00:00:00Z", dueAllDay = true, done = true),
+)
+
+// ── Shared screen registry ───────────────────────────────────────────────────
+// Single source of truth for inspectable screens: name -> body. Reused by the PNG
+// renderer (renderScreen, below) AND the headless semantics inspector
+// (PreviewInspect.kt / ui-inspect.sh), so the SAME composition projects to pixels
+// (vision) or to a text semantics tree (vision-free). Each body is the bare screen
+// under its theme; the caller supplies the surface + size. Screens migrate into this
+// map incrementally — entries here are inspectable, render-only previews below are not
+// yet. The body reuses the same mock data the old per-screen render* functions used.
+internal val previewScreens: Map<String, @Composable (ColorScheme) -> Unit> = mapOf(
+    "calendar_event" to { scheme ->
         MaterialTheme(colorScheme = scheme) {
             DenebScreenScaffold(title = "일정", onBack = {}) {
                 Column(Modifier.padding(horizontal = 24.dp)) {
-                    CalendarEventContent(ev = ev, isLocal = true)
+                    CalendarEventContent(ev = sampleEvent, isLocal = true)
                 }
             }
         }
-    }
-    val image = scene.render()
-    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
-    File("/tmp/deneb-render").mkdirs()
-    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
-    scene.close()
-}
-
-// Validates the new month-grid calendar body at phone width (412dp): the grid
-// (dots on days with events, today + selected highlighted) and the selected
-// day's event list. The weekday header is inlined here for column context.
-private fun renderCalendarMonth(name: String, scheme: ColorScheme) {
-    val month = CalMonth(2026, 6)
-    val grid = buildMonthGrid(month)
-    val today = LocalDate(2026, 6, 8)
-    val selected = LocalDate(2026, 6, 3)
-    val tz = TimeZone.UTC
-    // Mix single-day and multi-day events; the latter exercise the ribbon lanes,
-    // including one span (e4) that crosses a week boundary. Categories cover all
-    // three colors: 본인 (mine), 타인 (others), 기한 (deadline).
-    val events = listOf(
-        CalendarEvent("e1", "기획조정실 주간 회의", "본사 3층 대회의실", "2026-06-03T05:00:00Z", "2026-06-03T06:00:00Z", false, category = "mine"),
-        CalendarEvent("e2", "에코프로 구매팀 미팅", "남도에코에너지", "2026-06-03T07:30:00Z", "2026-06-03T08:30:00Z", false, category = "others"),
-        CalendarEvent("e3", "출장 (서울)", "", "2026-06-10T00:00:00Z", "2026-06-13T00:00:00Z", true, category = "mine"),
-        CalendarEvent("e4", "RE100 전시 부스", "코엑스", "2026-06-19T00:00:00Z", "2026-06-24T00:00:00Z", true, category = "others"),
-        CalendarEvent("e5", "계약서 제출 마감", "", "2026-06-16T00:00:00Z", "2026-06-17T00:00:00Z", true, category = "deadline"),
-    )
-    val bars = layoutMonthBars(events, grid, tz)
-    val dots = timedSingleDayDots(events, tz)
-    val todoDueDates = setOf(LocalDate(2026, 6, 18)) // a to-do due on an event-free day
-    val dayEvents = events.filter { selected in eventDays(it.start, it.end, it.allDay, tz) }
-    val scene = ImageComposeScene(width = 824, height = 1280, density = Density(2f)) {
+    },
+    "calendar_event_multiday" to { scheme ->
+        MaterialTheme(colorScheme = scheme) {
+            DenebScreenScaffold(title = "일정", onBack = {}) {
+                Column(Modifier.padding(horizontal = 24.dp)) {
+                    CalendarEventContent(ev = sampleSpanEvent, isLocal = true)
+                }
+            }
+        }
+    },
+    "calendar_empty" to { scheme ->
         MaterialTheme(colorScheme = scheme) {
             DenebScreenScaffold(title = "일정", onBack = {}) {
                 Column(Modifier.padding(horizontal = 16.dp)) {
-                    Text(
-                        "${month.year}년 ${month.month}월",
-                        style = DenebType.subject,
-                        color = MaterialTheme.colorScheme.onBackground,
-                    )
+                    Text("6월 9일 (화)", style = DenebType.sectionLabel, color = MaterialTheme.colorScheme.primary)
+                    Spacer(Modifier.height(4.dp))
+                    CalendarEmptyDay(onAdd = {})
+                }
+            }
+        }
+    },
+    "todo_list" to { scheme ->
+        MaterialTheme(colorScheme = scheme) {
+            DenebScreenScaffold(title = "할 일", onBack = {}) {
+                Column(Modifier.padding(horizontal = 24.dp)) {
+                    TodoListContent(sampleTodos, onToggle = { _, _ -> }, onOpen = {})
+                }
+            }
+        }
+    },
+    "calendar_month" to { scheme ->
+        val month = CalMonth(2026, 6)
+        val grid = buildMonthGrid(month)
+        val today = LocalDate(2026, 6, 8)
+        val selected = LocalDate(2026, 6, 3)
+        val tz = TimeZone.UTC
+        val events = listOf(
+            CalendarEvent("e1", "기획조정실 주간 회의", "본사 3층 대회의실", "2026-06-03T05:00:00Z", "2026-06-03T06:00:00Z", false, category = "mine"),
+            CalendarEvent("e2", "에코프로 구매팀 미팅", "남도에코에너지", "2026-06-03T07:30:00Z", "2026-06-03T08:30:00Z", false, category = "others"),
+            CalendarEvent("e3", "출장 (서울)", "", "2026-06-10T00:00:00Z", "2026-06-13T00:00:00Z", true, category = "mine"),
+            CalendarEvent("e4", "RE100 전시 부스", "코엑스", "2026-06-19T00:00:00Z", "2026-06-24T00:00:00Z", true, category = "others"),
+            CalendarEvent("e5", "계약서 제출 마감", "", "2026-06-16T00:00:00Z", "2026-06-17T00:00:00Z", true, category = "deadline"),
+        )
+        val bars = layoutMonthBars(events, grid, tz)
+        val dots = timedSingleDayDots(events, tz)
+        val todoDueDates = setOf(LocalDate(2026, 6, 18))
+        val dayEvents = events.filter { selected in eventDays(it.start, it.end, it.allDay, tz) }
+        MaterialTheme(colorScheme = scheme) {
+            DenebScreenScaffold(title = "일정", onBack = {}) {
+                Column(Modifier.padding(horizontal = 16.dp)) {
+                    Text("${month.year}년 ${month.month}월", style = DenebType.subject, color = MaterialTheme.colorScheme.onBackground)
                     Spacer(Modifier.height(8.dp))
                     Row(Modifier.fillMaxWidth()) {
                         koreanDayOfWeek.forEach { d ->
-                            Text(
-                                d,
-                                style = DenebType.meta,
-                                color = denebHint(),
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.weight(1f).padding(vertical = 4.dp),
-                            )
+                            Text(d, style = DenebType.meta, color = denebHint(), textAlign = TextAlign.Center, modifier = Modifier.weight(1f).padding(vertical = 4.dp))
                         }
                     }
                     CalendarMonthGrid(grid, today, selected, bars, dots, todoDueDates, {})
@@ -429,100 +448,8 @@ private fun renderCalendarMonth(name: String, scheme: ColorScheme) {
                 }
             }
         }
-    }
-    val image = scene.render()
-    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
-    File("/tmp/deneb-render").mkdirs()
-    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
-    scene.close()
-}
-
-// Validates the empty-day state: a quiet line plus the inline "add to this day" CTA.
-private fun renderCalendarEmpty(name: String, scheme: ColorScheme) {
-    val scene = ImageComposeScene(width = 824, height = 520, density = Density(2f)) {
-        MaterialTheme(colorScheme = scheme) {
-            DenebScreenScaffold(title = "일정", onBack = {}) {
-                Column(Modifier.padding(horizontal = 16.dp)) {
-                    Text("6월 9일 (화)", style = DenebType.sectionLabel, color = MaterialTheme.colorScheme.primary)
-                    Spacer(Modifier.height(4.dp))
-                    CalendarEmptyDay(onAdd = {})
-                }
-            }
-        }
-    }
-    val image = scene.render()
-    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
-    File("/tmp/deneb-render").mkdirs()
-    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
-    scene.close()
-}
-
-private val sampleTodos = listOf(
-    Todo("todo:1", "남도에코 모듈 견적 회신", note = "6월말 납기 확인", due = "2026-06-09T00:00:00Z", dueAllDay = true),
-    Todo("todo:2", "RE100 계약서 검토", due = "2026-06-10T05:00:00Z"),
-    Todo("todo:3", "법인카드 정산", note = "5월분"),
-    Todo("todo:4", "주간 보고 작성", due = "2026-06-08T00:00:00Z", dueAllDay = true, done = true),
-)
-
-// Validates the to-do list: active items (Material checkbox + struck-through done)
-// under "할 일", completed under "완료", in the Deneb row idiom.
-private fun renderTodoList(name: String, scheme: ColorScheme) {
-    val scene = ImageComposeScene(width = 824, height = 760, density = Density(2f)) {
-        MaterialTheme(colorScheme = scheme) {
-            DenebScreenScaffold(title = "할 일", onBack = {}) {
-                Column(Modifier.padding(horizontal = 24.dp)) {
-                    TodoListContent(sampleTodos, onToggle = { _, _ -> }, onOpen = {})
-                }
-            }
-        }
-    }
-    val image = scene.render()
-    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
-    File("/tmp/deneb-render").mkdirs()
-    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
-    scene.close()
-}
-
-// Validates the add/edit-to-do form: Material inputs (title, note, due switches +
-// date/time picker buttons) under Deneb section labels.
-private fun renderTodoAdd(name: String, scheme: ColorScheme) {
-    val scene = ImageComposeScene(width = 824, height = 980, density = Density(2f)) {
-        MaterialTheme(colorScheme = scheme) {
-            DenebScreenScaffold(title = "할 일 추가", onBack = {}) {
-                Column(Modifier.padding(horizontal = 24.dp)) {
-                    TodoAddContent(
-                        title = "남도에코 모듈 견적 회신",
-                        onTitle = {},
-                        note = "6월말 납기 확인",
-                        onNote = {},
-                        hasDue = true,
-                        onHasDue = {},
-                        allDay = false,
-                        onAllDay = {},
-                        dueDateLabel = "2026년 6월 10일 (수)",
-                        onPickDate = {},
-                        dueTimeLabel = "14:00",
-                        onPickTime = {},
-                        error = null,
-                        saving = false,
-                        saveLabel = "추가",
-                        onSave = {},
-                    )
-                }
-            }
-        }
-    }
-    val image = scene.render()
-    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
-    File("/tmp/deneb-render").mkdirs()
-    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
-    scene.close()
-}
-
-// Validates the manual add-event form: Material inputs (text fields, all-day
-// switch, date/time picker buttons) under Deneb section labels.
-private fun renderCalendarAdd(name: String, scheme: ColorScheme) {
-    val scene = ImageComposeScene(width = 824, height = 1300, density = Density(2f)) {
+    },
+    "calendar_add" to { scheme ->
         MaterialTheme(colorScheme = scheme) {
             DenebScreenScaffold(title = "일정 추가", onBack = {}) {
                 Column(Modifier.padding(horizontal = 24.dp)) {
@@ -553,74 +480,50 @@ private fun renderCalendarAdd(name: String, scheme: ColorScheme) {
                 }
             }
         }
-    }
-    val image = scene.render()
-    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
-    File("/tmp/deneb-render").mkdirs()
-    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
-    scene.close()
-}
-
-// Sample drafts for the cron edit previews — one per schedule mode so the segmented
-// control, weekday chips, interval row, and raw-cron fallback all get exercised.
-private val cronWeeklyDraft = ScheduleDraft(SchedMode.WEEKLY, "08:00", setOf(1, 3, 5), "30", IntervalUnit.MIN, LocalDate.parse("2026-06-13"), "")
-private val cronIntervalDraft = ScheduleDraft(SchedMode.INTERVAL, "09:00", emptySet(), "15", IntervalUnit.MIN, LocalDate.parse("2026-06-13"), "")
-private val cronAdvancedDraft = ScheduleDraft(SchedMode.ADVANCED, "09:00", emptySet(), "30", IntervalUnit.MIN, LocalDate.parse("2026-06-13"), "*/5 8-22 * * 1-6")
-
-// Validates the cron edit form: soft filled fields, the frequency segmented control,
-// and the per-mode inputs (weekday chips / time / interval / raw-cron) under Deneb
-// section labels. Driven per schedule mode via [draft].
-private fun renderCronEdit(name: String, scheme: ColorScheme, draft: ScheduleDraft, tz: String) {
-    val scene = ImageComposeScene(width = 824, height = 1300, density = Density(2f)) {
+    },
+    "todo_add" to { scheme ->
         MaterialTheme(colorScheme = scheme) {
-            DenebScreenScaffold(title = "크론 편집", onBack = {}) {
+            DenebScreenScaffold(title = "할 일 추가", onBack = {}) {
                 Column(Modifier.padding(horizontal = 24.dp)) {
-                    CronEditContent(
-                        name = "주간 업무 보고",
-                        onName = {},
-                        draft = draft,
-                        onDraft = {},
-                        onceDateLabel = "2026년 6월 13일",
-                        onPickOnceDate = {},
-                        tz = tz,
-                        onTz = {},
-                        prompt = "이번 주 진행 상황과 미결 항목을 정리해 보고해 줘.",
-                        onPrompt = {},
-                        model = "",
-                        onModel = {},
+                    TodoAddContent(
+                        title = "남도에코 모듈 견적 회신",
+                        onTitle = {},
+                        note = "6월말 납기 확인",
+                        onNote = {},
+                        hasDue = true,
+                        onHasDue = {},
+                        allDay = false,
+                        onAllDay = {},
+                        dueDateLabel = "2026년 6월 10일 (수)",
+                        onPickDate = {},
+                        dueTimeLabel = "14:00",
+                        onPickTime = {},
                         error = null,
                         saving = false,
+                        saveLabel = "추가",
                         onSave = {},
                     )
                 }
             }
         }
-    }
-    val image = scene.render()
-    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
-    File("/tmp/deneb-render").mkdirs()
-    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
-    scene.close()
-}
-
-// Validates the prompts-corner editor (PromptStyleEditor) in its prompt form: header
-// (back + title + meta), description, monospace body, footer char count, and the
-// prompt-only trailing "복구" (reset-to-default) action beside save.
-private fun renderPromptEditor(name: String, scheme: ColorScheme) {
-    val body = """
-        다음 메일을 한국어로 심층 분석하라.
-        - 발신자/거래처 맥락을 위키에서 결합
-        - 마감·금액·의사결정 신호를 추출
-        - 중요도(긴급/주의/일반)로 분류
-    """.trimIndent()
-    val scene = ImageComposeScene(width = 824, height = 980, density = Density(2f)) {
+    },
+    "cron_edit" to { scheme -> cronEditBody(scheme, cronWeeklyDraft, "Asia/Seoul") },
+    "cron_edit_interval" to { scheme -> cronEditBody(scheme, cronIntervalDraft, "") },
+    "cron_edit_advanced" to { scheme -> cronEditBody(scheme, cronAdvancedDraft, "Asia/Seoul") },
+    "prompt_editor" to { scheme ->
+        val draft = """
+            다음 메일을 한국어로 심층 분석하라.
+            - 발신자/거래처 맥락을 위키에서 결합
+            - 마감·금액·의사결정 신호를 추출
+            - 중요도(긴급/주의/일반)로 분류
+        """.trimIndent()
         MaterialTheme(colorScheme = scheme) {
             DenebScreenScaffold(title = "프롬프트 코너", onBack = {}) {
                 PromptStyleEditor(
                     title = "자동 메일 분석",
                     meta = "productivity · 수정됨 · mail-analysis",
                     description = "새 메일 도착 시 자동 분석에 쓰이는 프롬프트입니다.",
-                    draft = body,
+                    draft = draft,
                     onDraft = {},
                     readOnly = false,
                     saving = false,
@@ -639,32 +542,22 @@ private fun renderPromptEditor(name: String, scheme: ColorScheme) {
                 )
             }
         }
-    }
-    val image = scene.render()
-    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
-    File("/tmp/deneb-render").mkdirs()
-    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
-    scene.close()
-}
+    },
+    "topic_doc_editor" to { scheme ->
+        val draft = """
+            # 탑솔라 업무 배경
 
-// Validates the same editor in its topic-background form: the byte-cap meta line and
-// the "즉시 적용" (apply-now) checkbox as the trailing action instead of 복구.
-private fun renderTopicDocEditor(name: String, scheme: ColorScheme) {
-    val body = """
-        # 탑솔라 업무 배경
-
-        - 사업: 태양광 EPC · 모듈 유통 · RE100 고객사
-        - 핵심 거래처: 남도에코에너지, 에코프로, JOCA Cable
-        - 의사결정: 견적 단가·납기는 김민준 부장 확인 후 회신
-    """.trimIndent()
-    val scene = ImageComposeScene(width = 824, height = 980, density = Density(2f)) {
+            - 사업: 태양광 EPC · 모듈 유통 · RE100 고객사
+            - 핵심 거래처: 남도에코에너지, 에코프로, JOCA Cable
+            - 의사결정: 견적 단가·납기는 김민준 부장 확인 후 회신
+        """.trimIndent()
         MaterialTheme(colorScheme = scheme) {
             DenebScreenScaffold(title = "프롬프트 코너", onBack = {}) {
                 PromptStyleEditor(
                     title = "업무.md",
-                    meta = "업무 · ${body.encodeToByteArray().size}/24000B",
+                    meta = "업무 · ${draft.encodeToByteArray().size}/24000B",
                     description = "시스템 프롬프트에 주입되는 이 토픽의 배경 지식입니다. 저장하면 다음 세션부터 반영됩니다.",
-                    draft = body,
+                    draft = draft,
                     onDraft = {},
                     readOnly = false,
                     saving = false,
@@ -682,13 +575,205 @@ private fun renderTopicDocEditor(name: String, scheme: ColorScheme) {
                 )
             }
         }
+    },
+    "workfeed" to { scheme ->
+        MaterialTheme(colorScheme = scheme) {
+            Surface(color = MaterialTheme.colorScheme.background) {
+                Box(Modifier.width(412.dp)) {
+                    WorkFeedPanel(items = sampleFeed, onOpen = {}, onRunAction = { _, _ -> }, onClose = {})
+                }
+            }
+        }
+    },
+    "dashboard" to { scheme ->
+        MaterialTheme(colorScheme = scheme) {
+            DenebScreenScaffold(title = "파트별 업무 현황", onBack = {}) {
+                DashboardLanesContent(sampleDashboard)
+            }
+        }
+    },
+    "org_chart" to { scheme -> orgChartBody(scheme, "") },
+    "org_chart_search" to { scheme -> orgChartBody(scheme, "김철수") },
+    "org_editor" to { scheme ->
+        MaterialTheme(colorScheme = scheme) {
+            Surface(color = MaterialTheme.colorScheme.background) {
+                OrgNodeEditor(node = sampleOrg.first { it.id == "team1" }, onChange = {}, onDelete = {}, onDone = {})
+            }
+        }
+    },
+    "app_drawer" to { scheme ->
+        val apps = listOf(
+            "메일", "캘린더", "카카오톡", "전화", "탑솔라 ERP", "드롭박스",
+            "은행", "메시지", "카메라", "설정", "지도", "사진", "유튜브", "크롬",
+        ).mapIndexed { i, label -> LauncherAppEntry(label = label, packageName = "pkg.$i") }
+        MaterialTheme(colorScheme = scheme) {
+            Surface(color = MaterialTheme.colorScheme.background) {
+                Box(Modifier.width(412.dp)) {
+                    AppDrawer(apps = apps, onLaunch = {})
+                }
+            }
+        }
+    },
+    "mail" to { scheme ->
+        MaterialTheme(colorScheme = scheme) {
+            Surface(color = MaterialTheme.colorScheme.background) {
+                Column {
+                    Text(
+                        "받은 메일",
+                        style = MaterialTheme.typography.headlineMedium,
+                        modifier = Modifier.padding(16.dp),
+                    )
+                    sample.forEach { m ->
+                        MailRow(m, selecting = false, isSelected = false, onTap = {}, onLongPress = {})
+                    }
+                }
+            }
+        }
+    },
+    "files_text_markdown" to { scheme -> filesTextBody(scheme, "프로젝트_X.md", true, markdownSample) },
+    "files_text_plain" to { scheme -> filesTextBody(scheme, "deploy.log", false, filesPlainSample) },
+    "skills_list" to { scheme ->
+        MaterialTheme(colorScheme = scheme) {
+            Surface(color = MaterialTheme.colorScheme.background) {
+                Column {
+                    SkillsViewSwitcher(showLifecycle = false, onSelect = {})
+                    SkillListContent(sampleSkillRows)
+                }
+            }
+        }
+    },
+    "skill_detail" to { scheme ->
+        val now = System.currentTimeMillis()
+        val detail = SkillDetailResponse(
+            skill = sampleSkillRows[1].copy(
+                evolveCount = 1,
+                lastEvolvedAt = now - 2 * 3_600_000L,
+                totalUses = 2,
+                lastUsedAt = now - 9 * 3_600_000L,
+            ),
+            body = """
+                ---
+                name: morning-letter-composite
+                description: 아침 브리핑 편지를 일정·메일·할일 데이터로 합성하는 절차
+                version: 0.1.0
+                ---
+
+                # 아침 편지 합성
+
+                ## 절차
+                1. 오늘 일정(`miniapp.calendar`)과 미결 할일을 모은다.
+                2. 밤사이 도착한 메일 요약을 합친다.
+                3. **한 통의 편지**로 합성해 아침 브리핑으로 보낸다.
+            """.trimIndent(),
+            path = "/home/u/.deneb/skills/genesis/productivity/morning-letter-composite/SKILL.md",
+        )
+        val events = sampleLifecycleEvents(now).filter { it.skillName == "morning-letter-composite" }
+        MaterialTheme(colorScheme = scheme) {
+            Surface(color = MaterialTheme.colorScheme.background) {
+                Column(Modifier.padding(horizontal = 24.dp, vertical = 8.dp)) {
+                    SkillDetailContent(detail, events)
+                }
+            }
+        }
+    },
+    "self_improvement_coding" to { scheme ->
+        MaterialTheme(colorScheme = scheme) {
+            Surface(color = MaterialTheme.colorScheme.background) {
+                SelfImprovementCodingContent(sampleSelfImprovementCodingQueue(System.currentTimeMillis()))
+            }
+        }
+    },
+    "skills_lifecycle" to { scheme ->
+        MaterialTheme(colorScheme = scheme) {
+            Surface(color = MaterialTheme.colorScheme.background) {
+                Column {
+                    SkillsViewSwitcher(showLifecycle = true, onSelect = {})
+                    val now = System.currentTimeMillis()
+                    val events = sampleLifecycleEvents(now)
+                    SkillLifecycleRow(events[1], initiallyExpanded = true, onOpenSkill = {})
+                    HorizontalDivider(Modifier.padding(start = 16.dp), color = denebHairline())
+                    SkillLifecycleContent(events.filterIndexed { i, _ -> i != 1 })
+                }
+            }
+        }
+    },
+)
+
+// Org chart body (diagram + people search). A non-blank [query] seeds the search box so
+// the search-active state (hit highlight + results strip) is previewable.
+@Composable
+private fun orgChartBody(scheme: ColorScheme, query: String) {
+    MaterialTheme(colorScheme = scheme) {
+        DenebScreenScaffold(title = "조직도", onBack = {}) {
+            OrgChartContent(
+                nodes = sampleOrg,
+                notice = null,
+                error = null,
+                onEditNode = {},
+                onAddChild = {},
+                onAddRoot = {},
+                initialQuery = query,
+            )
+        }
     }
+}
+
+// Files text viewer body (markdown / plain), driven by [displayName]/[markdown]/[text].
+@Composable
+private fun filesTextBody(scheme: ColorScheme, displayName: String, markdown: Boolean, text: String) {
+    MaterialTheme(colorScheme = scheme) {
+        Surface(color = MaterialTheme.colorScheme.background) {
+            FilesTextViewerContent(name = displayName, markdown = markdown, text = text, loadOk = true, onBack = {}, onRetry = {})
+        }
+    }
+}
+
+// Shared cron-edit body for the three schedule-mode variants (weekly / interval /
+// advanced), each driven by a different [draft]. Used by the previewScreens entries.
+@Composable
+private fun cronEditBody(scheme: ColorScheme, draft: ScheduleDraft, tz: String) {
+    MaterialTheme(colorScheme = scheme) {
+        DenebScreenScaffold(title = "크론 편집", onBack = {}) {
+            Column(Modifier.padding(horizontal = 24.dp)) {
+                CronEditContent(
+                    name = "주간 업무 보고",
+                    onName = {},
+                    draft = draft,
+                    onDraft = {},
+                    onceDateLabel = "2026년 6월 13일",
+                    onPickOnceDate = {},
+                    tz = tz,
+                    onTz = {},
+                    prompt = "이번 주 진행 상황과 미결 항목을 정리해 보고해 줘.",
+                    onPrompt = {},
+                    model = "",
+                    onModel = {},
+                    error = null,
+                    saving = false,
+                    onSave = {},
+                )
+            }
+        }
+    }
+}
+
+// Render a registry screen to a PNG at [width]x[height]@[density] — the common
+// ImageComposeScene plumbing the per-screen render* functions used to repeat.
+private fun renderScreen(pngName: String, screen: String, scheme: ColorScheme, width: Int, height: Int, density: Float = 2f) {
+    val body = previewScreens[screen] ?: error("unknown preview screen '$screen'")
+    val scene = ImageComposeScene(width = width, height = height, density = Density(density)) { body(scheme) }
     val image = scene.render()
     val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
     File("/tmp/deneb-render").mkdirs()
-    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
+    File("/tmp/deneb-render/$pngName").writeBytes(data.bytes)
     scene.close()
 }
+
+// Sample drafts for the cron edit previews — one per schedule mode so the segmented
+// control, weekday chips, interval row, and raw-cron fallback all get exercised.
+private val cronWeeklyDraft = ScheduleDraft(SchedMode.WEEKLY, "08:00", setOf(1, 3, 5), "30", IntervalUnit.MIN, LocalDate.parse("2026-06-13"), "")
+private val cronIntervalDraft = ScheduleDraft(SchedMode.INTERVAL, "09:00", emptySet(), "15", IntervalUnit.MIN, LocalDate.parse("2026-06-13"), "")
+private val cronAdvancedDraft = ScheduleDraft(SchedMode.ADVANCED, "09:00", emptySet(), "30", IntervalUnit.MIN, LocalDate.parse("2026-06-13"), "*/5 8-22 * * 1-6")
 
 private fun renderBottomBar(name: String, scheme: ColorScheme, route: String, moreActive: Boolean = false) {
     // Phone width (412dp = 824px @ density 2) so the bar matches the real device.
@@ -776,31 +861,6 @@ private fun renderMarkdown(name: String, scheme: ColorScheme) {
         MaterialTheme(colorScheme = scheme) {
             Surface(color = MaterialTheme.colorScheme.background) {
                 MarkdownContent(markdownSample, Modifier.padding(20.dp), baseStyle = MaterialTheme.typography.bodyMedium)
-            }
-        }
-    }
-    val image = scene.render()
-    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
-    File("/tmp/deneb-render").mkdirs()
-    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
-    scene.close()
-}
-
-// Validates the in-app file text/markdown viewer body (FilesTextViewerContent):
-// the DenebScreenScaffold frame + markdown (tables/lists) vs monospace branch, at
-// phone width with a loaded body.
-private fun renderFilesText(name: String, scheme: ColorScheme, displayName: String = "file", markdown: Boolean, text: String) {
-    val scene = ImageComposeScene(width = 824, height = 900, density = Density(2f)) {
-        MaterialTheme(colorScheme = scheme) {
-            Surface(color = MaterialTheme.colorScheme.background) {
-                FilesTextViewerContent(
-                    name = displayName,
-                    markdown = markdown,
-                    text = text,
-                    loadOk = true,
-                    onBack = {},
-                    onRetry = {},
-                )
             }
         }
     }
@@ -1080,28 +1140,6 @@ private val sampleFeed = persistentListOf(
     ),
 )
 
-private fun renderWorkFeed(name: String, scheme: ColorScheme) {
-    val scene = ImageComposeScene(width = 824, height = 1100, density = Density(2f)) {
-        MaterialTheme(colorScheme = scheme) {
-            Surface(color = MaterialTheme.colorScheme.background) {
-                Box(Modifier.width(412.dp)) {
-                    WorkFeedPanel(
-                        items = sampleFeed,
-                        onOpen = {},
-                        onRunAction = { _, _ -> },
-                        onClose = {},
-                    )
-                }
-            }
-        }
-    }
-    val image = scene.render()
-    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
-    File("/tmp/deneb-render").mkdirs()
-    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
-    scene.close()
-}
-
 // The part-grouped work dashboard (파트별 업무 현황): the five fixed 파트 lanes (one
 // empty to exercise the "지금 할 일이 없습니다" line) plus the muted 미분류 triage lane.
 // Mixed scheduled times (오늘/내일/dated) exercise dashboardTimeLabel; lane 2 is empty.
@@ -1144,22 +1182,6 @@ private val sampleDashboard = listOf(
         ),
     ),
 )
-
-private fun renderDashboard(name: String, scheme: ColorScheme) {
-    // Tall enough to show all six lanes including the muted 미분류 triage bucket.
-    val scene = ImageComposeScene(width = 824, height = 1900, density = Density(2f)) {
-        MaterialTheme(colorScheme = scheme) {
-            DenebScreenScaffold(title = "파트별 업무 현황", onBack = {}) {
-                DashboardLanesContent(sampleDashboard)
-            }
-        }
-    }
-    val image = scene.render()
-    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
-    File("/tmp/deneb-render").mkdirs()
-    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
-    scene.close()
-}
 
 // The org chart (조직도): a group → 실/회사 → 팀 → 파트 hierarchy joined by parentId,
 // with lane-tagged parts (the 파트 chip) and members carrying 직급/직책. Fake names only
@@ -1218,75 +1240,6 @@ private val sampleOrg = listOf(
     OrgNodeOut(id = "personal", name = "개인/기타", type = "team", parentId = "group"),
 )
 
-// The 조직도 chart view (diagram + people search) with the full sample chart. A non-blank
-// [query] seeds the search box so the search-active state (hit highlight + results strip)
-// can be previewed.
-private fun renderOrgChart(name: String, scheme: ColorScheme, query: String = "") {
-    val scene = ImageComposeScene(width = 824, height = 1500, density = Density(2f)) {
-        MaterialTheme(colorScheme = scheme) {
-            DenebScreenScaffold(title = "조직도", onBack = {}) {
-                OrgChartContent(
-                    nodes = sampleOrg,
-                    notice = null,
-                    error = null,
-                    onEditNode = {},
-                    onAddChild = {},
-                    onAddRoot = {},
-                    initialQuery = query,
-                )
-            }
-        }
-    }
-    val image = scene.render()
-    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
-    File("/tmp/deneb-render").mkdirs()
-    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
-    scene.close()
-}
-
-// The node editor sheet body: name field, type/lane pickers, the dashboard-part
-// toggle (on), and a member with 직급/직책 dropdowns. Previews the edit surface a
-// ModalBottomSheet hosts at runtime (rendered bare here, sheet chrome is Material).
-private fun renderOrgEditor(name: String, scheme: ColorScheme) {
-    val node = sampleOrg.first { it.id == "team1" }
-    val scene = ImageComposeScene(width = 824, height = 1280, density = Density(2f)) {
-        MaterialTheme(colorScheme = scheme) {
-            Surface(color = MaterialTheme.colorScheme.background) {
-                OrgNodeEditor(node = node, onChange = {}, onDelete = {}, onDone = {})
-            }
-        }
-    }
-    val image = scene.render()
-    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
-    File("/tmp/deneb-render").mkdirs()
-    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
-    scene.close()
-}
-
-// Work-launcher app drawer (Phase 0): the live-filtered installed-app grid. Uses
-// lettered placeholders here (no real PackageManager icons on desktop), so this
-// validates layout/legibility of the drawer shell, not the icons.
-private fun renderAppDrawer(name: String, scheme: ColorScheme) {
-    val apps = listOf(
-        "메일", "캘린더", "카카오톡", "전화", "탑솔라 ERP", "드롭박스",
-        "은행", "메시지", "카메라", "설정", "지도", "사진", "유튜브", "크롬",
-    ).mapIndexed { i, label -> LauncherAppEntry(label = label, packageName = "pkg.$i") }
-    val scene = ImageComposeScene(width = 824, height = 1100, density = Density(2f)) {
-        MaterialTheme(colorScheme = scheme) {
-            Surface(color = MaterialTheme.colorScheme.background) {
-                Box(Modifier.width(412.dp)) {
-                    AppDrawer(apps = apps, onLaunch = {})
-                }
-            }
-        }
-    }
-    val image = scene.render()
-    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
-    File("/tmp/deneb-render").mkdirs()
-    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
-    scene.close()
-}
-
 // Validates the loading skeleton (sweeping-shimmer placeholders). A static capture
 // shows the base tint at rest; the highlight band only appears mid-sweep, so this
 // mainly guards that the placeholder reads as visible (not a blank screen) and that
@@ -1296,41 +1249,6 @@ private fun renderSkeleton(name: String, scheme: ColorScheme) {
         MaterialTheme(colorScheme = scheme) {
             Surface(color = MaterialTheme.colorScheme.background) {
                 SkeletonList(rows = 6)
-            }
-        }
-    }
-    val image = scene.render()
-    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
-    File("/tmp/deneb-render").mkdirs()
-    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
-    scene.close()
-}
-
-private fun render(name: String, scheme: ColorScheme) {
-    val scene = ImageComposeScene(width = 840, height = 1100, density = Density(2f)) {
-        MaterialTheme(colorScheme = scheme) {
-            Surface(color = MaterialTheme.colorScheme.background) {
-                Column {
-                    Text(
-                        "받은 메일",
-                        style = MaterialTheme.typography.headlineMedium,
-                        modifier = Modifier.padding(16.dp),
-                    )
-                    sample.forEach { m ->
-                        MailRow(m, selecting = false, isSelected = false, onTap = {}, onLongPress = {})
-                    }
-                    // Body-visibility check: this Text sets NO explicit color, so it
-                    // relies on the Surface providing onBackground. If it renders, the
-                    // dark-mode invisible-text fix works.
-                    Text(
-                        "— 상세 본문(색 미지정 테스트) —",
-                        modifier = Modifier.padding(16.dp),
-                    )
-                    Text(
-                        "이 문장은 색을 명시하지 않았습니다. Surface가 onBackground를 공급해 다크모드에서도 보여야 정상입니다.",
-                        modifier = Modifier.padding(horizontal = 16.dp),
-                    )
-                }
             }
         }
     }
@@ -1433,103 +1351,3 @@ private fun sampleSelfImprovementCodingQueue(now: Long) = SelfImprovementCodingL
         SelfImprovementCodingStatusCount(status = "all", count = 3),
     ),
 )
-
-private fun renderSkillsList(name: String, scheme: ColorScheme) {
-    val scene = ImageComposeScene(width = 824, height = 700, density = Density(2f)) {
-        MaterialTheme(colorScheme = scheme) {
-            Surface(color = MaterialTheme.colorScheme.background) {
-                Column {
-                    SkillsViewSwitcher(showLifecycle = false, onSelect = {})
-                    SkillListContent(sampleSkillRows)
-                }
-            }
-        }
-    }
-    val image = scene.render()
-    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
-    File("/tmp/deneb-render").mkdirs()
-    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
-    scene.close()
-}
-
-private fun renderSkillDetail(name: String, scheme: ColorScheme) {
-    val now = System.currentTimeMillis()
-    val detail = SkillDetailResponse(
-        skill = sampleSkillRows[1].copy(
-            evolveCount = 1,
-            lastEvolvedAt = now - 2 * 3_600_000L,
-            totalUses = 2,
-            lastUsedAt = now - 9 * 3_600_000L,
-        ),
-        body = """
-            ---
-            name: morning-letter-composite
-            description: 아침 브리핑 편지를 일정·메일·할일 데이터로 합성하는 절차
-            version: 0.1.0
-            ---
-
-            # 아침 편지 합성
-
-            ## 절차
-            1. 오늘 일정(`miniapp.calendar`)과 미결 할일을 모은다.
-            2. 밤사이 도착한 메일 요약을 합친다.
-            3. **한 통의 편지**로 합성해 아침 브리핑으로 보낸다.
-        """.trimIndent(),
-        path = "/home/u/.deneb/skills/genesis/productivity/morning-letter-composite/SKILL.md",
-    )
-    val events = sampleLifecycleEvents(now).filter { it.skillName == "morning-letter-composite" }
-    val scene = ImageComposeScene(width = 824, height = 1400, density = Density(2f)) {
-        MaterialTheme(colorScheme = scheme) {
-            Surface(color = MaterialTheme.colorScheme.background) {
-                Column(Modifier.padding(horizontal = 24.dp, vertical = 8.dp)) {
-                    SkillDetailContent(detail, events)
-                }
-            }
-        }
-    }
-    val image = scene.render()
-    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
-    File("/tmp/deneb-render").mkdirs()
-    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
-    scene.close()
-}
-
-private fun renderSelfImprovementCoding(name: String, scheme: ColorScheme) {
-    val now = System.currentTimeMillis()
-    val scene = ImageComposeScene(width = 824, height = 760, density = Density(2f)) {
-        MaterialTheme(colorScheme = scheme) {
-            Surface(color = MaterialTheme.colorScheme.background) {
-                SelfImprovementCodingContent(sampleSelfImprovementCodingQueue(now))
-            }
-        }
-    }
-    val image = scene.render()
-    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
-    File("/tmp/deneb-render").mkdirs()
-    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
-    scene.close()
-}
-
-private fun renderSkillLifecycle(name: String, scheme: ColorScheme) {
-    val scene = ImageComposeScene(width = 824, height = 700, density = Density(2f)) {
-        MaterialTheme(colorScheme = scheme) {
-            Surface(color = MaterialTheme.colorScheme.background) {
-                Column {
-                    SkillsViewSwitcher(showLifecycle = true, onSelect = {})
-                    // First row pre-expanded to validate the tap-to-expand state:
-                    // full reason, 근거 evidence, absolute time + verdict, 스킬 보기.
-                    val now = System.currentTimeMillis()
-                    val events = sampleLifecycleEvents(now)
-                    SkillLifecycleRow(events[1], initiallyExpanded = true, onOpenSkill = {})
-                    HorizontalDivider(Modifier.padding(start = 16.dp), color = denebHairline())
-                    SkillLifecycleContent(events.filterIndexed { i, _ -> i != 1 })
-                }
-            }
-        }
-    }
-    val image = scene.render()
-    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
-    File("/tmp/deneb-render").mkdirs()
-    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
-    scene.close()
-}
