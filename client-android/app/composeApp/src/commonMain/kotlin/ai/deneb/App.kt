@@ -60,6 +60,8 @@ import ai.deneb.ui.handCursor
 import ai.deneb.ui.launcher.AppDrawerScreen
 import ai.deneb.ui.withBlackBackground
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -85,6 +87,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalUriHandler
@@ -94,6 +98,7 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -118,6 +123,7 @@ import org.koin.compose.KoinApplication
 import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.dsl.koinConfiguration
+import kotlin.math.abs
 
 @Serializable
 @SerialName("home")
@@ -293,6 +299,10 @@ private fun AppContent(
 ) {
     val appSettings = koinInject<AppSettings>()
     val denebClient = koinInject<DataRepository>() as? DenebGatewayClient
+    // Whether Deneb is acting as the device home — gates the in-app swipe-up-for-app-
+    // drawer gesture so it never appears in normal (non-launcher) use. Read once: the
+    // launcher-mode toggle is rare, and a fresh App composition re-reads it.
+    val launcherEnabled = remember { createLauncherMode().isEnabled() }
 
     // Track app opens after Koin is initialized
     onAppOpens?.let { callback ->
@@ -804,7 +814,16 @@ private fun AppContent(
                 // 챗봇 workspace is a clean focus-chat space: no bottom tab bar at all
                 // (the top 챗봇/업무 pill is the only way in/out). 업무 keeps the super-app bar.
                 val showBar = route in denebBottomBarRoutes && !imeVisible && !navChatMode
-                Column(Modifier.fillMaxSize()) {
+                // Launcher idiom: a bottom-edge swipe-up on the 자체앱 mini-apps grid
+                // summons the external app drawer (Deneb's apps → swipe up → all phone
+                // apps, the Niagara drawer). Scoped to 자체앱 (an apps surface, not the
+                // scrolling feed) + launcher mode, so it never surprises normal use.
+                val onAppHub = currentBackStackEntry?.destination?.hasRoute<DenebAppHub>() == true
+                Column(
+                    Modifier.fillMaxSize().bottomSwipeUpToApps(enabled = launcherEnabled && onAppHub) {
+                        navController.navigate(DenebApps)
+                    },
+                ) {
                     Box(
                         Modifier
                             .weight(1f)
@@ -841,6 +860,46 @@ private fun AppContent(
                     }
                 }
             }
+        }
+    }
+}
+
+/**
+ * Bottom-edge swipe-up that opens the app drawer — the launcher idiom (swipe up on
+ * home → all apps), but a Niagara drawer. Active only when [enabled] (Deneb is the
+ * home + on the 피드). The gesture starts only in the bottom edge zone, so the feed's
+ * vertical scroll (which starts higher) and bottom-bar taps (no movement) are
+ * untouched; it commits only on a clear upward drag past the threshold. Mirrors
+ * ChatModeScreen.modeSwipeToggle. ⚠️ Feel (zone size, threshold, bar coexistence)
+ * needs on-device tuning — the desktop harness can't reproduce touch.
+ */
+private fun Modifier.bottomSwipeUpToApps(enabled: Boolean, onOpen: () -> Unit): Modifier {
+    if (!enabled) return this
+    return this.pointerInput(Unit) {
+        val edge = 56.dp.toPx() // bottom zone where an up-swipe summons the drawer
+        val commit = 64.dp.toPx() // upward distance to commit
+        val slop = viewConfiguration.touchSlop
+        awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = false)
+            // Only gestures starting in the bottom edge zone — the feed scroll starts
+            // higher, and a tap (no movement) falls through to the bottom bar.
+            if (down.position.y < size.height - edge) return@awaitEachGesture
+            var dx = 0f
+            var dy = 0f
+            var vertical = false
+            while (true) {
+                val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
+                if (!change.pressed) break
+                val delta = change.positionChange()
+                dx += delta.x
+                dy += delta.y
+                if (!vertical) {
+                    if (abs(dx) > slop && abs(dx) > abs(dy)) return@awaitEachGesture // horizontal → leave it
+                    if (abs(dy) > slop && abs(dy) >= abs(dx)) vertical = true
+                }
+                if (vertical) change.consume()
+            }
+            if (vertical && dy <= -commit) onOpen() // committed upward drag opens the drawer
         }
     }
 }
