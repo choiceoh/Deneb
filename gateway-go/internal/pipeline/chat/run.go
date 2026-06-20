@@ -219,6 +219,13 @@ type runDeps struct {
 	// talking through this closure (wired in server/chat_pipeline.go).
 	personaOverrideFn PersonaOverrideFunc
 
+	// fileRecallFn runs a hybrid semantic search over the on-box file store for
+	// the recall preflight, surfacing relevant uploaded files as recall evidence
+	// (injected into the last user message tail, like the other recall sources).
+	// nil disables the files recall source. Wired in server/chat_pipeline.go from
+	// the shared file semantic index.
+	fileRecallFn FileRecallFunc
+
 	// chatport holds injected adapters that decouple chat from autoreply.
 	chatport chatportAdapters
 }

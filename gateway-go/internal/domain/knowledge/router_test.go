@@ -47,6 +47,7 @@ func TestParseRef(t *testing.T) {
 		isErr bool
 	}{
 		{"w:인물/박부장", Ref{Layer: LayerWiki, ID: "인물/박부장"}, false},
+		{"f:/메일/계약서.pdf", Ref{Layer: LayerFiles, ID: "/메일/계약서.pdf"}, false},
 		{"h:mem-abc", Ref{}, true}, // retired layer → unknown
 		{"  w:거래/ABC상사  ", Ref{Layer: LayerWiki, ID: "거래/ABC상사"}, false},
 		{"", Ref{}, true},
@@ -105,6 +106,60 @@ func TestRouter_Recall_Merges(t *testing.T) {
 	// Highest score first.
 	if got[0].Score != 0.95 {
 		t.Errorf("first hit score = %v, want 0.95", got[0].Score)
+	}
+}
+
+// TestRouter_Recall_LayerQuota pins the per-layer quota: a layer that returns
+// many high-scoring hits must not sweep the whole merged window — the other
+// layer's hit survives even though every files hit outscores it. This is the
+// hindsight-lesson guard (a higher score band must not monopolize recall).
+func TestRouter_Recall_LayerQuota(t *testing.T) {
+	// Files layer: 5 hits, all scoring ABOVE the single wiki hit.
+	files := &mockAdapter{layer: LayerFiles}
+	for i := 0; i < 5; i++ {
+		files.results = append(files.results, Result{
+			Ref:   Ref{Layer: LayerFiles, ID: "/f" + string(rune('A'+i))},
+			Score: 0.90 + float64(i)*0.01, // 0.90..0.94, all > wiki's 0.50
+		})
+	}
+	wikiA := &mockAdapter{layer: LayerWiki, results: []Result{
+		{Ref: Ref{Layer: LayerWiki, ID: "인물/박부장"}, Score: 0.50},
+	}}
+	r := New(wikiA, files)
+
+	// limit 5 → quota = ceil(5*0.6) = 3 files max, leaving room for the wiki hit.
+	got := r.Recall(context.Background(), "q", 5)
+	var wikiSeen, fileCount int
+	for _, h := range got {
+		if h.Ref.Layer == LayerWiki {
+			wikiSeen++
+		}
+		if h.Ref.Layer == LayerFiles {
+			fileCount++
+		}
+	}
+	if wikiSeen != 1 {
+		t.Errorf("wiki hit was crowded out by the higher-band files layer (quota failed): got %+v", got)
+	}
+	if fileCount > 3 {
+		t.Errorf("files layer exceeded its quota: %d files in %+v", fileCount, got)
+	}
+}
+
+// TestRouter_Recall_SingleLayerUnquota'd ensures the quota never throttles a
+// single-layer router (the production wiki-only case before files wiring).
+func TestRouter_Recall_SingleLayerUnquotaed(t *testing.T) {
+	wikiA := &mockAdapter{layer: LayerWiki}
+	for i := 0; i < 5; i++ {
+		wikiA.results = append(wikiA.results, Result{
+			Ref:   Ref{Layer: LayerWiki, ID: "p" + string(rune('A'+i))},
+			Score: 0.9 - float64(i)*0.1,
+		})
+	}
+	r := New(wikiA)
+	got := r.Recall(context.Background(), "q", 5)
+	if len(got) != 5 {
+		t.Fatalf("single-layer router should not be quota-throttled: got %d, want 5", len(got))
 	}
 }
 
