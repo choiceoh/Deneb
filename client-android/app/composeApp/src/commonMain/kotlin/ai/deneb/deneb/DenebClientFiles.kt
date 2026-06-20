@@ -53,9 +53,18 @@ private fun FilesEntryOut.toEntry() = FilesEntry(
 suspend fun DenebGatewayClient.filesList(path: String = ""): List<FilesEntry>? = callRpc<FilesListOut>("miniapp.files.list", buildJsonObject { put("path", path) })
     ?.entries?.map { it.toEntry() }
 
-/** Search the whole store by name query (results span folders). Null on failure. */
-suspend fun DenebGatewayClient.filesSearch(query: String): List<FilesEntry>? = callRpc<FilesListOut>("miniapp.files.search", buildJsonObject { put("query", query) })
-    ?.entries?.map { it.toEntry() }
+/**
+ * Search the whole store by query (results span folders). Null on failure.
+ * [content] true also matches inside extracted file text (PDF/Word/Excel/…), not
+ * just file names — slower, since the gateway reads and extracts each file.
+ */
+suspend fun DenebGatewayClient.filesSearch(query: String, content: Boolean = false): List<FilesEntry>? = callRpc<FilesListOut>(
+    "miniapp.files.search",
+    buildJsonObject {
+        put("query", query)
+        if (content) put("content", true)
+    },
+)?.entries?.map { it.toEntry() }
 
 /** Mint a signed, TTL-bounded download link for a file; open it to view/download. */
 suspend fun DenebGatewayClient.filesShare(path: String): String? = callRpc<FilesShareOut>("miniapp.files.share", buildJsonObject { put("path", path) })

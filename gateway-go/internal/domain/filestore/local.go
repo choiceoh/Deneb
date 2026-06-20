@@ -246,6 +246,69 @@ func (s *LocalStore) Search(ctx context.Context, query string, maxResults int) (
 	return out, nil
 }
 
+// maxContentExtractBytes bounds the per-file payload SearchContent will run
+// through extractFn. Files larger than this match on name only — extracting a
+// huge PDF/spreadsheet for a substring scan would dominate latency for little
+// gain, so the cap keeps the walk bounded.
+const maxContentExtractBytes = 5 << 20 // 5 MiB
+
+// SearchContent walks the tree and returns files whose name OR extracted text
+// contains query (case-insensitive). It reuses List(recursive) to enumerate and
+// Get to read each file, so the same path clamping and internal-file filtering
+// apply. Folders are skipped (no content to scan). Files over
+// maxContentExtractBytes — or that fail to read — match on name only. A nil
+// extractFn (or text it returns empty for) reduces to name-only matching, so
+// SearchContent is a strict superset of Search.
+func (s *LocalStore) SearchContent(ctx context.Context, query string, maxResults int, extractFn func(ctx context.Context, data []byte, name string) string) ([]Entry, error) {
+	q := strings.ToLower(strings.TrimSpace(query))
+	if q == "" {
+		return nil, fmt.Errorf("filestore: 검색어가 비어 있습니다") //nolint:staticcheck // ST1005 — Korean error surfaced to user
+	}
+	if maxResults <= 0 || maxResults > 100 {
+		maxResults = 20
+	}
+	// Enumerate every descendant; defaultListCap bounds the candidate set.
+	all, err := s.List(ctx, "/", true, defaultListCap)
+	if err != nil {
+		return nil, err
+	}
+	var out []Entry
+	for _, e := range all {
+		if cerr := ctx.Err(); cerr != nil {
+			return out, cerr
+		}
+		if e.IsFolder() {
+			continue // no content to scan
+		}
+		// Name match is the cheap path and never needs the file bytes.
+		if strings.Contains(strings.ToLower(e.Name), q) {
+			out = append(out, e)
+			if len(out) >= maxResults {
+				break
+			}
+			continue
+		}
+		// Content match: read + extract, skipping oversized or unreadable files
+		// (they fall back to the already-checked name match, i.e. no match here).
+		if extractFn == nil || e.Size > maxContentExtractBytes {
+			continue
+		}
+		data, _, gerr := s.Get(ctx, e.PathDisplay)
+		if gerr != nil {
+			continue // vanished/unreadable mid-walk — name didn't match, so skip
+		}
+		text := extractFn(ctx, data, e.Name)
+		if text != "" && strings.Contains(strings.ToLower(text), q) {
+			out = append(out, e)
+			if len(out) >= maxResults {
+				break
+			}
+		}
+	}
+	sortEntries(out)
+	return out, nil
+}
+
 // Get returns the file bytes and metadata at path.
 func (s *LocalStore) Get(ctx context.Context, p string) ([]byte, *Entry, error) {
 	if cerr := ctx.Err(); cerr != nil {

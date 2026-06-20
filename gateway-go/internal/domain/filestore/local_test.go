@@ -170,6 +170,66 @@ func TestLocalStore_Search(t *testing.T) {
 	}
 }
 
+// TestLocalStore_SearchContent covers the full-text widening: a match on the
+// file name, a match on the extracted text (with an extractFn), and the
+// nil-extractFn fallback that must behave exactly like name-only Search.
+func TestLocalStore_SearchContent(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	mustPut(t, s, "/메일/견적서.pdf", "총 공급가액 1억원")  // name has 견적, body has 공급가
+	mustPut(t, s, "/메일/명세서.txt", "납품 명세 견적 포함") // name lacks 공급가, body has 견적
+	mustPut(t, s, "/계약/내역.docx", "공급가 산정 내역서")  // name lacks both, body has 공급가
+
+	// A trivial extractor: bytes-as-text. Real callers pass the document
+	// extractor; here we just need extractFn to surface the stored content.
+	extract := func(_ context.Context, data []byte, _ string) string { return string(data) }
+
+	// Name OR content: "견적" hits 견적서.pdf (name) and 명세서.txt (body) = 2.
+	byName, err := s.SearchContent(ctx, "견적", 0, extract)
+	if err != nil {
+		t.Fatalf("SearchContent 견적: %v", err)
+	}
+	if len(byName) != 2 {
+		t.Fatalf("SearchContent '견적' = %d hits, want 2 (%+v)", len(byName), byName)
+	}
+
+	// Content-only: "공급가" is in no file name, only the PDF and docx bodies = 2.
+	byContent, err := s.SearchContent(ctx, "공급가", 0, extract)
+	if err != nil {
+		t.Fatalf("SearchContent 공급가: %v", err)
+	}
+	if len(byContent) != 2 {
+		t.Fatalf("SearchContent '공급가' (content) = %d hits, want 2 (%+v)", len(byContent), byContent)
+	}
+
+	// nil extractFn must reduce to name-only matching: "공급가" now hits nothing
+	// (it appears only in bodies), exactly like the legacy Search.
+	nilFn, err := s.SearchContent(ctx, "공급가", 0, nil)
+	if err != nil {
+		t.Fatalf("SearchContent nil extractFn: %v", err)
+	}
+	if len(nilFn) != 0 {
+		t.Errorf("SearchContent '공급가' with nil extractFn = %d, want 0 (name-only)", len(nilFn))
+	}
+	// And name-only "견적" with nil extractFn matches the same set as Search.
+	nameOnly, err := s.SearchContent(ctx, "견적", 0, nil)
+	if err != nil {
+		t.Fatalf("SearchContent name-only: %v", err)
+	}
+	legacy, err := s.Search(ctx, "견적", 0)
+	if err != nil {
+		t.Fatalf("Search 견적: %v", err)
+	}
+	if len(nameOnly) != len(legacy) {
+		t.Errorf("nil-extractFn SearchContent (%d) != Search (%d) for '견적'", len(nameOnly), len(legacy))
+	}
+
+	// Blank query is rejected, same as Search.
+	if _, err := s.SearchContent(ctx, "   ", 0, extract); err == nil {
+		t.Error("blank query should error")
+	}
+}
+
 // TestLocalStore_PathEscape is the security-critical test: a virtual path with
 // "../" (or absolute re-anchoring) must never read or write outside the root.
 func TestLocalStore_PathEscape(t *testing.T) {

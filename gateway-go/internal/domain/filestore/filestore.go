@@ -45,6 +45,13 @@ type Store interface {
 	List(ctx context.Context, dir string, recursive bool, limit int) ([]Entry, error)
 	// Search returns files/folders whose name contains query (case-insensitive).
 	Search(ctx context.Context, query string, maxResults int) ([]Entry, error)
+	// SearchContent is Search widened to file *contents*: a file matches when the
+	// query (case-insensitive) is in its name OR in its extracted text. extractFn
+	// turns a file's bytes into searchable text (e.g. PDF/docx/xlsx via the chat
+	// tools' document extractor); it is injected so the domain never imports the
+	// tools layer (a layer inversion). A nil extractFn degrades to name-only
+	// matching, making this a strict superset of Search.
+	SearchContent(ctx context.Context, query string, maxResults int, extractFn func(ctx context.Context, data []byte, name string) string) ([]Entry, error)
 	// Get returns the file bytes and its metadata.
 	Get(ctx context.Context, path string) ([]byte, *Entry, error)
 	// Open returns a read-seekable handle for streaming downloads
