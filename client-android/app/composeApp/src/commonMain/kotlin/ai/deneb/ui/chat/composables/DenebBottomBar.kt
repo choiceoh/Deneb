@@ -140,12 +140,29 @@ val denebWorkDataRoutes: Set<String> = setOf(
     "deneb_org",
 )
 
-// Top-level routes that show the bottom bar: the 2 screen tabs only. Pushed detail
-// screens (data-class routes with args, and every section opened from the 자체앱 grid —
-// including the 브라우저 tile) are absent, so they hide the bar and keep their own back nav.
+// Routes that show the bottom bar. Per the user's call (toss-style persistent nav), the
+// bar stays on every 자체앱-grid SECTION — 메일·달력·검색·할일·일기·카테고리·조직도·현황·
+// 노트북·파일·브라우저·설정 — not just 피드·자체앱, so you can tab-switch without backing
+// out first. Excluded on purpose: deep DETAILS reached *from* a section (a specific
+// mail/event/wiki page/person, settings sub-screens like fleet/skill/cron, the app
+// drawer) — those are data-class/arg routes that drill down and keep their own ← back
+// nav. 채팅(home) is also out: its own bottom input would fight the bar. The 챗봇
+// workspace hides the bar separately (navChatMode in App.kt).
 val denebBottomBarRoutes: Set<String> = setOf(
     ROUTE_FEED,
     ROUTE_APP_HUB,
+    "deneb_mail",
+    "deneb_calendar",
+    "deneb_search",
+    "deneb_todo",
+    "deneb_diary",
+    "deneb_categories",
+    "deneb_org",
+    "deneb_dashboard",
+    "deneb_notebooks",
+    "deneb_files",
+    "deneb_browser",
+    "deneb_config",
 )
 
 // Content height of the bar (excludes the system navigation-bar inset, which is added
