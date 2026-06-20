@@ -30,21 +30,16 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 
-/**
- * One launchable app for the work-launcher app drawer. [icon] is unused by the
- * text-first drawer (kept for source compatibility; the Niagara-style list shows
- * labels, not icons) and is null on platforms without an installed-app list.
- */
+/** One launchable app for the work-launcher app drawer (label + package — the
+ *  Niagara text list shows labels, not icons). */
 data class LauncherAppEntry(
     val label: String,
     val packageName: String,
-    val icon: ImageBitmap? = null,
 )
 
 /**
