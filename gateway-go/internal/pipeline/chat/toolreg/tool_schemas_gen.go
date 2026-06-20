@@ -850,6 +850,11 @@ func filesToolSchema() map[string]any {
 				"description": "File store action to perform",
 				"enum":        []string{"list", "search", "download", "upload", "share", "analyze", "delete", "mkdir", "move"},
 			},
+			"content": map[string]any{
+				"type":        "boolean",
+				"description": "On search, also match inside extracted file contents (PDF/Word/Excel/PowerPoint/text), not just file names. Slower (reads and extracts each file). Default false (name-only).",
+				"default":     false,
+			},
 			"dest_path": map[string]any{
 				"type":        "string",
 				"description": "Destination store path: for upload (default: /<local filename>), and the target path for move (a rename is a move within the same folder; an existing target is auto-renamed).",
@@ -881,7 +886,7 @@ func filesToolSchema() map[string]any {
 			},
 			"query": map[string]any{
 				"type":        "string",
-				"description": "Search query matching file/folder names (for the search action)",
+				"description": "Search query (for the search action). Matches file/folder names by default; set content=true to also match inside extracted file text (PDF/Word/Excel/PowerPoint/text).",
 			},
 			"recursive": map[string]any{
 				"type":        "boolean",

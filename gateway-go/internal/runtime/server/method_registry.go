@@ -346,6 +346,13 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		// skips the domain.
 		handlerminiapp.FilesBrowseMethods(handlerminiapp.FilesBrowseDeps{
 			Store: localFileStoreOrNil(s.logger),
+			// Content search (search content=true) extracts file text via the chat
+			// tools' document extractor. Wired here (server layer may import tools);
+			// the handler keeps it as an injected callback to avoid a layer inversion.
+			ExtractText: func(ctx context.Context, d []byte, n string) string {
+				t, _ := tools.ExtractDocumentText(ctx, d, n, "")
+				return t
+			},
 		}),
 
 		// Native mail domain. The RPC namespace stays miniapp.gmail.* for
