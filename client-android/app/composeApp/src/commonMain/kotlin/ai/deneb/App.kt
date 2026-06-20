@@ -32,6 +32,8 @@ import ai.deneb.deneb.DenebSkillScreen
 import ai.deneb.deneb.DenebTodoAddScreen
 import ai.deneb.deneb.DenebTodoScreen
 import ai.deneb.deneb.DenebWikiPageScreen
+import ai.deneb.sensing.applyGeofences
+import ai.deneb.sensing.decodeGeofences
 import ai.deneb.tools.CalendarPermissionController
 import ai.deneb.tools.ContactsPermissionController
 import ai.deneb.tools.LocationPermissionController
@@ -318,6 +320,14 @@ private fun AppContent(
 
     val locationPermissionController = koinInject<LocationPermissionController>()
     SetupLocationPermissionHandler(locationPermissionController)
+
+    // Re-register saved geofences (집/직장) on launch — the OS clears geofences on reboot
+    // and there's no boot receiver, so app start is when they come back. No-op off Android
+    // or when none are pinned.
+    LaunchedEffect(Unit) {
+        val saved = decodeGeofences(appSettings.getGeofencesJson())
+        if (saved.isNotEmpty()) applyGeofences(saved)
+    }
 
     val smsPermissionController = koinInject<SmsPermissionController>()
     SetupSmsPermissionHandler(smsPermissionController)

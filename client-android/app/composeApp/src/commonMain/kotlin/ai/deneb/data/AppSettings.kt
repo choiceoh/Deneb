@@ -83,6 +83,14 @@ class AppSettings(internal val settings: Settings) {
         }
     }
 
+    // Geofences (집/직장) — stored as a JSON string; the sensing layer encodes/decodes
+    // (encodeGeofences/decodeGeofences) so AppSettings stays decoupled from the model.
+    fun getGeofencesJson(): String = settings.getString(KEY_GEOFENCES, "[]")
+
+    fun setGeofencesJson(json: String) {
+        settings.putString(KEY_GEOFENCES, json)
+    }
+
     // Soul (system prompt)
     fun getSoulText(): String = settings.getString(KEY_SOUL, "")
 
@@ -397,6 +405,7 @@ class AppSettings(internal val settings: Settings) {
         const val KEY_MEMORY_INSTRUCTIONS = "memory_instructions"
         const val KEY_AGENT_MEMORIES = "agent_memories"
         const val KEY_SCHEDULED_TASKS = "scheduled_tasks"
+        const val KEY_GEOFENCES = "geofences"
         const val KEY_SCHEDULING_ENABLED = "scheduling_enabled"
         const val KEY_DYNAMIC_UI_ENABLED = "dynamic_ui_enabled"
         const val KEY_OLED_MODE_ENABLED = "oled_mode_enabled"
