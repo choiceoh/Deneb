@@ -5,6 +5,7 @@ package ai.deneb
 import ai.deneb.data.AppSettings
 import ai.deneb.data.DataRepository
 import ai.deneb.data.ThemeMode
+import ai.deneb.deneb.DenebBrowserScreen
 import ai.deneb.deneb.DenebCalendarAddScreen
 import ai.deneb.deneb.DenebCalendarEventScreen
 import ai.deneb.deneb.DenebCalendarScreen
@@ -214,6 +215,10 @@ data class DenebCategoryPages(val category: String)
 @Serializable
 @SerialName("deneb_skill")
 data class DenebSkill(val name: String)
+
+@Serializable
+@SerialName("deneb_browser")
+data class DenebBrowser(val url: String)
 
 @Serializable
 @SerialName("deneb_cron")
@@ -709,6 +714,15 @@ private fun AppContent(
                                     skillName = entry.toRoute<DenebSkill>().name,
                                     onBack = { navController.navigateUp() },
                                     navigationTabBar = if (showTabBar) navigationTabBar else null,
+                                )
+                            }
+                        }
+                        composable<DenebBrowser> { entry ->
+                            denebClient?.let { client ->
+                                DenebBrowserScreen(
+                                    url = entry.toRoute<DenebBrowser>().url,
+                                    client = client,
+                                    onBack = { navController.navigateUp() },
                                 )
                             }
                         }
