@@ -11,6 +11,7 @@ import ai.deneb.deneb.CalendarEventContent
 import ai.deneb.deneb.CalendarEventDetail
 import ai.deneb.deneb.CalendarMonthGrid
 import ai.deneb.deneb.CronEditContent
+import ai.deneb.deneb.FilesTextViewerContent
 import ai.deneb.deneb.IntervalUnit
 import ai.deneb.deneb.MailMessage
 import ai.deneb.deneb.MailRow
@@ -131,6 +132,14 @@ private val markdownSample = """
     2. PR 병합
 """.trimIndent()
 
+// Plain (non-markdown) sample for the monospace branch of the files text viewer.
+private val filesPlainSample = """
+    2026-06-20T09:12:01Z INFO  gateway 시작 (port=18789)
+    2026-06-20T09:12:02Z INFO  provider wormhole 연결됨
+    2026-06-20T09:12:03Z WARN  prefix_cache 미적중 (cold start)
+    2026-06-20T09:12:08Z INFO  miniapp.files.list ok (entries=14)
+""".trimIndent()
+
 fun main() {
     System.setProperty("java.awt.headless", "true")
     render("mail_dark.png", DarkColorScheme)
@@ -187,6 +196,9 @@ fun main() {
     renderSkillLifecycle("skills_lifecycle_light.png", LightColorScheme)
     renderSkillDetail("skill_detail_dark.png", DarkColorScheme)
     renderSkillDetail("skill_detail_light.png", LightColorScheme)
+    renderFilesText("files_text_markdown_dark.png", DarkColorScheme, displayName = "프로젝트_X.md", markdown = true, text = markdownSample)
+    renderFilesText("files_text_markdown_light.png", LightColorScheme, displayName = "프로젝트_X.md", markdown = true, text = markdownSample)
+    renderFilesText("files_text_plain_dark.png", DarkColorScheme, displayName = "deploy.log", markdown = false, text = filesPlainSample)
     println("rendered -> /tmp/deneb-render/")
 }
 
@@ -719,6 +731,31 @@ private fun renderMarkdown(name: String, scheme: ColorScheme) {
         MaterialTheme(colorScheme = scheme) {
             Surface(color = MaterialTheme.colorScheme.background) {
                 MarkdownContent(markdownSample, Modifier.padding(20.dp), baseStyle = MaterialTheme.typography.bodyMedium)
+            }
+        }
+    }
+    val image = scene.render()
+    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
+    File("/tmp/deneb-render").mkdirs()
+    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
+    scene.close()
+}
+
+// Validates the in-app file text/markdown viewer body (FilesTextViewerContent):
+// the DenebScreenScaffold frame + markdown (tables/lists) vs monospace branch, at
+// phone width with a loaded body.
+private fun renderFilesText(name: String, scheme: ColorScheme, displayName: String = "file", markdown: Boolean, text: String) {
+    val scene = ImageComposeScene(width = 824, height = 900, density = Density(2f)) {
+        MaterialTheme(colorScheme = scheme) {
+            Surface(color = MaterialTheme.colorScheme.background) {
+                FilesTextViewerContent(
+                    name = displayName,
+                    markdown = markdown,
+                    text = text,
+                    loadOk = true,
+                    onBack = {},
+                    onRetry = {},
+                )
             }
         }
     }

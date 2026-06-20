@@ -4,10 +4,12 @@ import ai.deneb.PlatformBackHandler
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.DenebSearchField
+import ai.deneb.ui.components.LocalShowFullScreenImageModel
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
 import ai.deneb.ui.denebPressable
+import ai.deneb.ui.markdown.MarkdownContent
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -20,11 +22,14 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.InsertDriveFile
 import androidx.compose.material.icons.outlined.CloudUpload
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Link
+import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -45,8 +50,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import io.github.vinceglb.filekit.dialogs.FileKitType
 import io.github.vinceglb.filekit.dialogs.compose.rememberFilePickerLauncher
 import io.github.vinceglb.filekit.name
@@ -76,6 +83,7 @@ fun DenebFilesScreen(
     val scope = rememberCoroutineScope()
     val haptics = rememberHaptics()
     val uriHandler = LocalUriHandler.current
+    val showFullScreenImage = LocalShowFullScreenImageModel.current
 
     // Folder path stack; the current folder is the last element ("" = store root).
     val pathStack = remember { mutableStateListOf("") }
@@ -87,6 +95,8 @@ fun DenebFilesScreen(
     // The query the current list came from (null = browsing the folder, not searching).
     var activeQuery by remember { mutableStateOf<String?>(null) }
     var actionTarget by remember { mutableStateOf<FilesEntry?>(null) }
+    // File currently open in the in-app text/markdown viewer (null = closed).
+    var textPreview by remember { mutableStateOf<FilesEntry?>(null) }
     var uploading by remember { mutableStateOf(false) }
     var uploadError by remember { mutableStateOf<String?>(null) }
     // Monotonic load token: each navigation/search/refresh bumps it and captures
@@ -310,17 +320,40 @@ fun DenebFilesScreen(
         }
     }
 
-    // Per-file action sheet. Material control; Deneb-styled rows inside.
+    // Per-file action sheet. Material control; Deneb-styled rows inside. Preview-able
+    // types (image / text·markdown) get a primary "미리보기" action that opens an in-app
+    // viewer; everything else (and the always-present 공유 링크) falls back to the signed
+    // download link opened in the browser.
     actionTarget?.let { target ->
         ModalBottomSheet(onDismissRequest = { actionTarget = null }) {
             FilesActionSheetContent(
                 entry = target,
-                onOpen = {
+                onPreview = previewKindOf(target.name)?.let { kind ->
+                    {
+                        actionTarget = null
+                        when (kind) {
+                            FilePreviewKind.IMAGE -> showFullScreenImage(client.filesDownloadUrl(target.pathLower))
+                            FilePreviewKind.TEXT -> textPreview = target
+                        }
+                    }
+                },
+                onShare = {
                     actionTarget = null
                     scope.launch { client.filesShare(target.pathLower)?.let { uriHandler.openUri(it) } }
                 },
             )
         }
+    }
+
+    // In-app text / markdown viewer (full screen). Fetches the body lazily; `.md`
+    // renders through the chat markdown renderer (tables included), other text shows
+    // monospace.
+    textPreview?.let { target ->
+        FilesTextViewerHost(
+            client = client,
+            entry = target,
+            onBack = { textPreview = null },
+        )
     }
 }
 
@@ -378,11 +411,16 @@ internal fun FilesRow(entry: FilesEntry, onClick: () -> Unit) {
     }
 }
 
-/** Bottom-sheet action for a single file: open its signed download link. */
+/**
+ * Bottom-sheet actions for a single file. When [onPreview] is non-null (image /
+ * text·markdown) it is the primary "미리보기" action; the signed download link
+ * ([onShare]) is always offered as the fallback / share path.
+ */
 @Composable
 internal fun FilesActionSheetContent(
     entry: FilesEntry,
-    onOpen: () -> Unit,
+    onPreview: (() -> Unit)?,
+    onShare: () -> Unit,
 ) {
     Column(Modifier.fillMaxWidth().padding(bottom = 24.dp)) {
         Text(
@@ -394,17 +432,39 @@ internal fun FilesActionSheetContent(
             modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
         )
         HorizontalDivider(color = denebHairline())
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .denebPressable(onClick = onOpen)
-                .padding(horizontal = 24.dp, vertical = 16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(Icons.Outlined.Link, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
-            Spacer(Modifier.width(16.dp))
-            Text("열기 / 공유 링크", style = DenebType.rowTitle, color = MaterialTheme.colorScheme.onBackground)
+        if (onPreview != null) {
+            FilesActionRow(
+                icon = Icons.Outlined.Visibility,
+                label = "미리보기",
+                onClick = onPreview,
+            )
+            HorizontalDivider(color = denebHairline())
         }
+        FilesActionRow(
+            icon = Icons.Outlined.Link,
+            label = "공유 링크",
+            onClick = onShare,
+        )
+    }
+}
+
+/** One tappable action row in the file action sheet (icon + label). */
+@Composable
+private fun FilesActionRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    onClick: () -> Unit,
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .denebPressable(onClick = onClick)
+            .padding(horizontal = 24.dp, vertical = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
+        Spacer(Modifier.width(16.dp))
+        Text(label, style = DenebType.rowTitle, color = MaterialTheme.colorScheme.onBackground)
     }
 }
 
@@ -414,4 +474,124 @@ private fun filesRowMeta(e: FilesEntry): String {
     val size = humanBytes(e.size)
     val date = e.modified.takeIf { it.isNotBlank() }?.let { shortDate(it) }
     return if (date != null) "$size · $date" else size
+}
+
+// --- In-app preview -------------------------------------------------------
+
+/** What kind of in-app preview a file supports, by extension. */
+internal enum class FilePreviewKind { IMAGE, TEXT }
+
+private val IMAGE_EXTS = setOf("png", "jpg", "jpeg", "gif", "webp", "bmp")
+
+// Text-ish extensions we render in-app (markdown gets the rich renderer, the rest
+// monospace). Kept conservative — anything not listed (pdf/docx/binaries) falls
+// back to the share link.
+private val TEXT_EXTS = setOf(
+    "txt", "md", "markdown", "json", "csv", "tsv", "log", "xml", "yaml", "yml",
+    "kt", "go", "py", "js", "ts", "tsx", "jsx", "sh", "conf", "ini", "toml",
+    "java", "c", "cpp", "h", "rs", "rb", "php", "sql", "html", "css", "env",
+    "properties", "gradle", "kts",
+)
+
+/** Lower-cased extension after the last dot ("" when none). */
+private fun fileExt(name: String): String = name.substringAfterLast('.', "").lowercase()
+
+/** The preview kind for [name], or null when only the share link applies. */
+internal fun previewKindOf(name: String): FilePreviewKind? = when (fileExt(name)) {
+    in IMAGE_EXTS -> FilePreviewKind.IMAGE
+    in TEXT_EXTS -> FilePreviewKind.TEXT
+    else -> null
+}
+
+/** True when [name]'s extension wants the rich markdown renderer (tables etc.). */
+private fun isMarkdown(name: String): Boolean = fileExt(name) in setOf("md", "markdown")
+
+/**
+ * Stateful host for the text/markdown viewer: fetches the body lazily and shows
+ * loading / error / content via the stateless [FilesTextViewerContent]. Separated
+ * so the body can be exercised by renderPreviews with mock data.
+ */
+@Composable
+private fun FilesTextViewerHost(
+    client: DenebGatewayClient,
+    entry: FilesEntry,
+    onBack: () -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    // null = loading, else loaded (text may be "" for an empty file); ok=false → error.
+    var text by remember(entry.pathLower) { mutableStateOf<String?>(null) }
+    var loadOk by remember(entry.pathLower) { mutableStateOf<Boolean?>(null) }
+
+    suspend fun load() {
+        loadOk = null
+        text = null
+        val res = client.filesDownloadText(entry.pathLower)
+        text = res
+        loadOk = res != null
+    }
+
+    LaunchedEffect(entry.pathLower) { load() }
+    // Android hardware back closes the viewer first.
+    PlatformBackHandler(enabled = true) { onBack() }
+
+    FilesTextViewerContent(
+        name = entry.name,
+        markdown = isMarkdown(entry.name),
+        text = text,
+        loadOk = loadOk,
+        onBack = onBack,
+        onRetry = { scope.launch { load() } },
+    )
+}
+
+/**
+ * Stateless text/markdown viewer body in the Deneb idiom (DenebScreenScaffold).
+ * [text] null = loading; [loadOk] false = fetch failed. Markdown files render via
+ * the chat [MarkdownContent] renderer (tables, lists, …); other text shows in a
+ * scrollable monospace block.
+ */
+@Composable
+internal fun FilesTextViewerContent(
+    name: String,
+    markdown: Boolean,
+    text: String?,
+    loadOk: Boolean?,
+    onBack: () -> Unit,
+    onRetry: () -> Unit,
+) {
+    DenebScreenScaffold(title = name, onBack = onBack) {
+        when {
+            text == null && loadOk == null ->
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { DenebLoading() }
+
+            loadOk == false ->
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    DenebError("파일을 불러오지 못했습니다.", onRetry = onRetry)
+                }
+
+            (text ?: "").isBlank() ->
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    DenebEmpty("빈 파일입니다")
+                }
+
+            else -> Column(
+                Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp, vertical = 8.dp),
+            ) {
+                val body = text ?: ""
+                if (markdown) {
+                    MarkdownContent(body, baseStyle = MaterialTheme.typography.bodyMedium)
+                } else {
+                    Text(
+                        body,
+                        style = DenebType.body.copy(fontFamily = FontFamily.Monospace, fontSize = 13.sp),
+                        color = MaterialTheme.colorScheme.onBackground,
+                    )
+                }
+                Spacer(Modifier.height(24.dp))
+            }
+        }
+    }
 }

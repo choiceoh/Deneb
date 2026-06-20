@@ -4,6 +4,11 @@ import ai.deneb.deneb.generated.FilesEntryOut
 import ai.deneb.deneb.generated.FilesListOut
 import ai.deneb.deneb.generated.FilesShareOut
 import ai.deneb.deneb.generated.FilesUploadOut
+import io.ktor.client.request.get
+import io.ktor.client.request.header
+import io.ktor.client.statement.bodyAsText
+import io.ktor.http.encodeURLParameter
+import io.ktor.http.isSuccess
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlin.io.encoding.Base64
@@ -67,3 +72,40 @@ suspend fun DenebGatewayClient.filesUpload(destPath: String, bytes: ByteArray, m
         put("dataBase64", Base64.encode(bytes))
     },
 )?.entry?.toEntry()
+
+/**
+ * Direct download URL for a file, authed by the client token in the query string
+ * (the gateway's GET /api/v1/files/download can't read the X-Deneb-Client-Token
+ * header from a browser/Coil fetch, so the token rides the URL — acceptable in
+ * this single-user local setup, same as [DenebGatewayClient.attachmentUrl]).
+ * Coil fetches this directly for the in-app image viewer; it also supports Range,
+ * so a large file resumes over a flaky link.
+ */
+fun DenebGatewayClient.filesDownloadUrl(pathLower: String): String {
+    fun e(s: String) = s.encodeURLParameter()
+    return "$gatewayUrl/api/v1/files/download?path=${e(pathLower)}&clientToken=${e(clientToken)}"
+}
+
+/**
+ * Fetch a file's body as text for the in-app text/markdown viewer, capped at
+ * [maxBytes] so a huge log can't blow up memory (the body is truncated, with a
+ * marker appended). Null on any transport/HTTP failure — the caller then falls
+ * back to the share link.
+ */
+suspend fun DenebGatewayClient.filesDownloadText(pathLower: String, maxBytes: Int = 256 * 1024): String? {
+    if (clientToken.isEmpty() || gatewayUrl.isBlank()) return null
+    return runCatching {
+        val resp = http.get(filesDownloadUrl(pathLower)) {
+            header(DenebGatewayClient.CLIENT_TOKEN_HEADER, clientToken)
+        }
+        if (!resp.status.isSuccess()) return@runCatching null
+        val body = resp.bodyAsText()
+        // Cap by char count (a safe proxy for the byte budget here — bounded
+        // protection, not an exact byte slice). A multibyte tail is fine.
+        if (body.length > maxBytes) {
+            body.take(maxBytes) + "\n\n…(이하 생략 — 파일이 너무 큽니다)"
+        } else {
+            body
+        }
+    }.getOrNull()
+}
