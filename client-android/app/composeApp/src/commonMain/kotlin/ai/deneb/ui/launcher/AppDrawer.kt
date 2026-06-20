@@ -5,11 +5,17 @@ import ai.deneb.deneb.DenebLoading
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.DenebSearchField
 import ai.deneb.ui.components.SectionedScrubList
+import ai.deneb.ui.denebHint
 import ai.deneb.ui.denebPressable
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -18,6 +24,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
@@ -53,11 +60,23 @@ fun AppDrawer(
     modifier: Modifier = Modifier,
     loaded: Boolean = true,
     onExit: () -> Unit = {},
+    // Package names pinned to the 자체앱 favorites home — pinned rows show a marker, and
+    // long-pressing any row toggles its pin (the only place pins are added/removed).
+    pinned: Set<String> = emptySet(),
+    onTogglePin: (String) -> Unit = {},
 ) {
     var query by remember { mutableStateOf("") }
     val filtered = remember(apps, query) {
         val q = query.trim()
-        if (q.isEmpty()) apps else apps.filter { it.label.contains(q, ignoreCase = true) }
+        if (q.isEmpty()) {
+            apps
+        } else {
+            // Match the visible label OR the Korean reading, so typing 유튜브 finds
+            // "YouTube" (the same reading the ㄱㄴㄷ index files it under).
+            apps.filter { app ->
+                app.label.contains(q, ignoreCase = true) || appKoreanReading(app.label)?.contains(q) == true
+            }
+        }
     }
     Column(modifier.fillMaxSize().nestedScroll(exitOnTopOverscroll(onExit))) {
         DenebSearchField(
@@ -78,10 +97,12 @@ fun AppDrawer(
             filtered.isEmpty() -> DenebEmpty(if (apps.isEmpty()) "앱이 없습니다" else "검색 결과 없음")
 
             else -> SectionedScrubList(
+                // Section/scrub by the Korean reading (YouTube→유튜브→ㅇ) so the index is
+                // a unified ㄱㄴㄷ, not a mixed ㄱㄴㄷ+A–Z. The row still shows the raw label.
                 items = filtered,
-                label = { it.label },
+                label = { koreanAppSortKey(it.label) },
                 key = { it.packageName },
-            ) { app -> AppRow(app, onLaunch) }
+            ) { app -> AppRow(app, app.packageName in pinned, onLaunch, onTogglePin) }
         }
     }
 }
@@ -136,16 +157,38 @@ private fun exitOnTopOverscroll(onExit: () -> Unit): NestedScrollConnection {
 }
 
 @Composable
-private fun AppRow(app: LauncherAppEntry, onLaunch: (String) -> Unit) {
-    Text(
-        app.label,
-        style = DenebType.rowTitle,
-        color = MaterialTheme.colorScheme.onBackground,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
+private fun AppRow(
+    app: LauncherAppEntry,
+    pinned: Boolean,
+    onLaunch: (String) -> Unit,
+    onTogglePin: (String) -> Unit,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .denebPressable(onClick = { onLaunch(app.packageName) })
+            // Tap launches; long-press toggles the pin to the 자체앱 favorites home.
+            .denebPressable(
+                onClick = { onLaunch(app.packageName) },
+                onLongClick = { onTogglePin(app.packageName) },
+            )
             .padding(horizontal = 20.dp, vertical = 11.dp),
-    )
+    ) {
+        Text(
+            app.label,
+            style = DenebType.rowTitle,
+            color = MaterialTheme.colorScheme.onBackground,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        if (pinned) {
+            Icon(
+                Icons.Filled.PushPin,
+                contentDescription = "핀고정됨",
+                tint = denebHint(),
+                modifier = Modifier.size(15.dp),
+            )
+        }
+    }
 }
