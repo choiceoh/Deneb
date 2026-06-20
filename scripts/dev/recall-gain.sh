@@ -24,13 +24,15 @@ cd "$(dirname "$0")/../../gateway-go"
 # failing stale-belief guard would still print the positive gain line and the
 # iterate loop (metric>0 == pass) would count a broken run as a success.
 out=$(go test ./internal/pipeline/chat/ \
-    -run 'TestRecallWikiGain|TestRecallStaleBeliefGuard' -count=1 -v 2>&1) && rc=0 || rc=$?
+    -run 'TestRecallWikiGain|TestRecallStaleBeliefGuard|TestRecallSynthesisDrift' -count=1 -v 2>&1) && rc=0 || rc=$?
 
 gain_line=$(grep -oE 'RECALL_GAIN both=[0-9]+ diaryonly=[0-9]+ wikionly=[0-9]+ gain=-?[0-9]+ total=[0-9]+' <<<"$out" | tail -1 || true)
 stale_line=$(grep -oE 'RECALL_STALELEAK [^[:cntrl:]]*new_surfaced=(true|false)' <<<"$out" | tail -1 || true)
+drift_line=$(grep -oE 'RECALL_DRIFT [^[:cntrl:]]*top=(drift|correct)' <<<"$out" | tail -1 || true)
 
 [[ -n "$gain_line" ]] && echo "$gain_line"
 [[ -n "$stale_line" ]] && echo "$stale_line"
+[[ -n "$drift_line" ]] && echo "$drift_line"
 
 # Any test failure (e.g. the stale-belief guard) ⇒ not a healthy run: report 0.
 if [[ $rc -ne 0 ]]; then

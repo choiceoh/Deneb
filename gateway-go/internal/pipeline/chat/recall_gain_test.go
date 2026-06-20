@@ -37,6 +37,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -387,5 +388,100 @@ func TestRecallStaleBeliefGuard(t *testing.T) {
 	// so an unmarked stale row may persist — but the wiki must never make it worse.
 	if wikiUnmarked > rawUnmarked {
 		t.Errorf("wiki path increased unmarked stale rows (%d > %d): curation regressed the raw baseline", wikiUnmarked, rawUnmarked)
+	}
+}
+
+// rowScoreContaining returns the score= of the first evidence row whose content
+// contains val (0 if none). Lets a test compare the recall ranking of two values
+// that live in different sources.
+func rowScoreContaining(out, val string) float64 {
+	for _, row := range recallRows(out) {
+		if !strings.Contains(row, "- source=") || !strings.Contains(row, val) {
+			continue
+		}
+		i := strings.Index(row, "score=")
+		if i < 0 {
+			return 0
+		}
+		field := strings.TrimSpace(strings.SplitN(row[i+len("score="):], " ", 2)[0])
+		v, _ := strconv.ParseFloat(field, 64)
+		return v
+	}
+	return 0
+}
+
+// TestRecallSynthesisDrift measures CL-Bench's central curation hazard —
+// "spurious generalizations" — head on. The gain corpus only seeds wiki==diary
+// AGREEMENT, so it cannot see the failure that matters most: when the dreamer
+// mis-synthesizes a fact, the curated wiki value DRIFTS from the faithful raw
+// diary, and the wiki's higher prior can rank the WRONG value above the right one.
+//
+// One fact, two conflicting values: the diary holds the correct figure (as first
+// observed), the wiki holds a drifted one (the dreamer fat-fingered the same
+// deal). A query asks the figure; we measure which value recall ranks higher.
+//
+// Informational, not a hard gate on which wins — it reports the ranking so a
+// drift that overrides raw ground truth is visible and can inform the wiki↔diary
+// prior. The ONE hard failure is the drift completely suppressing the correct
+// value: then the user can never recover ground truth from recall at all.
+func TestRecallSynthesisDrift(t *testing.T) {
+	const (
+		correct = "1,950" // faithful raw diary value (as first observed)
+		drift   = "2,950" // dreamer mis-summarized the SAME deal into the wiki
+		query   = "에코프로 케이블 견적 미터 수 얼마였지?"
+	)
+	dir := t.TempDir()
+	diaryDir := filepath.Join(dir, "diary")
+	if err := os.MkdirAll(diaryDir, 0o755); err != nil {
+		t.Fatalf("diary mkdir: %v", err)
+	}
+	day := time.Now().AddDate(0, 0, -1)
+	section := fmt.Sprintf("\n## %s\n\n%s\n", day.Format("15:04"), "에코프로 케이블 "+correct+"m 견적 회신함.")
+	if err := os.WriteFile(filepath.Join(diaryDir, "diary-"+day.Format("2006-01-02")+".md"), []byte(section), 0o644); err != nil {
+		t.Fatalf("write diary: %v", err)
+	}
+
+	store, err := wiki.NewStore(filepath.Join(dir, "wiki"), diaryDir)
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	// The curated wiki carries the DRIFTED figure — title/summary/tags give it
+	// more match surface than the one raw diary line, plus an importance prior.
+	if err := store.WritePage("거래/ecopro-cable.md", &wiki.Page{
+		Meta: wiki.Frontmatter{ID: "ecopro", Title: "에코프로 케이블 견적", Category: "거래",
+			Summary: "에코프로 케이블 " + drift + "m 견적 회신", Tags: []string{"에코프로", "케이블", "견적"}, Importance: 0.8},
+		Body: "에코프로 케이블 " + drift + "m 견적 회신.",
+	}); err != nil {
+		t.Fatalf("WritePage: %v", err)
+	}
+
+	out := recallOnce(store, query)
+	driftScore := rowScoreContaining(out, drift)
+	correctScore := rowScoreContaining(out, correct)
+	driftPresent := strings.Contains(out, drift)
+	correctPresent := strings.Contains(out, correct)
+	driftOnTop := driftPresent && (!correctPresent || driftScore > correctScore)
+
+	top := "correct"
+	if driftOnTop {
+		top = "drift"
+	}
+	fmt.Printf("RECALL_DRIFT drift_score=%.2f correct_score=%.2f drift_present=%v correct_present=%v top=%s\n",
+		driftScore, correctScore, driftPresent, correctPresent, top)
+	t.Logf("query=%q  output:\n%s", query, out)
+
+	// Hard failure: the drifted wiki value entirely suppressed the correct raw one
+	// — ground truth is then unrecoverable from recall.
+	if !correctPresent {
+		t.Errorf("the correct raw diary value %q was absent from recall — the drifted wiki value suppressed ground truth", correct)
+	}
+	// Honest observation (logged, not gated): the curated drift outranking the raw
+	// truth is CL-Bench's spurious-generalization failure made concrete — evidence
+	// to weigh when tuning the wiki↔diary prior (the deferred rebalance question).
+	if driftOnTop {
+		t.Logf("SPURIOUS-GENERALIZATION OBSERVED: curated wiki drift %q (score %.2f) outranks faithful raw diary %q (score %.2f). Both surface, so the conflict is visible — but recall presents the wrong figure first. Evidence for capping the wiki>diary prior.",
+			drift, driftScore, correct, correctScore)
 	}
 }
