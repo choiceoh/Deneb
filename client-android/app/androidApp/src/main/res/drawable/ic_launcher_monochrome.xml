@@ -3,17 +3,15 @@
     android:height="108dp"
     android:viewportWidth="512"
     android:viewportHeight="512">
-  <!-- Deneb mark (monochrome): same rounded-vertex star, tinted by the system. -->
+  <!-- Deneb mark (monochrome): the same 4-point sparkle silhouette as
+       ic_launcher_foreground, but a single solid fill — the system tints it for
+       themed (monochrome) icons, so no gradient here. -->
   <group android:scaleX="0.84"
       android:scaleY="0.84"
       android:translateX="40.96"
       android:translateY="40.96">
     <path
-        android:pathData="M256,96 L293,205 L408,207 L316,276 L350,385 L256,319 L162,385 L196,276 L104,207 L219,205 Z"
-        android:fillColor="#FFFFFF"
-        android:strokeColor="#FFFFFF"
-        android:strokeWidth="34"
-        android:strokeLineJoin="round"
-        android:strokeLineCap="round"/>
+        android:pathData="M256,76 Q277.6,234.4 436,256 Q277.6,277.6 256,436 Q234.4,277.6 76,256 Q234.4,234.4 256,76 Z"
+        android:fillColor="#FFFFFF"/>
   </group>
 </vector>
