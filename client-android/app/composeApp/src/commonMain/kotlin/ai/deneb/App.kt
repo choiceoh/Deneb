@@ -299,10 +299,11 @@ private fun AppContent(
 ) {
     val appSettings = koinInject<AppSettings>()
     val denebClient = koinInject<DataRepository>() as? DenebGatewayClient
-    // Whether Deneb is acting as the device home — gates the in-app swipe-up-for-app-
-    // drawer gesture so it never appears in normal (non-launcher) use. Read once: the
-    // launcher-mode toggle is rare, and a fresh App composition re-reads it.
-    val launcherEnabled = remember { createLauncherMode().isEnabled() }
+    // Gates the in-app swipe-up-for-app-drawer gesture to when Deneb is the device home.
+    // The controller is stable; the enabled flag is re-read per navigation (below) so
+    // toggling 런처 모드 in settings takes effect on the next return to 자체앱 — App() is
+    // composed once and would otherwise cache a stale value for the whole session.
+    val launcherMode = remember { createLauncherMode() }
 
     // Track app opens after Koin is initialized
     onAppOpens?.let { callback ->
@@ -819,9 +820,11 @@ private fun AppContent(
                 // apps, the Niagara drawer). Scoped to 자체앱 (an apps surface, not the
                 // scrolling feed) + launcher mode, so it never surprises normal use.
                 val onAppHub = currentBackStackEntry?.destination?.hasRoute<DenebAppHub>() == true
+                // Re-read per navigation so a 런처 모드 toggle takes effect on return here.
+                val launcherEnabled = remember(currentBackStackEntry) { launcherMode.isEnabled() }
                 Column(
                     Modifier.fillMaxSize().bottomSwipeUpToApps(enabled = launcherEnabled && onAppHub) {
-                        navController.navigate(DenebApps)
+                        navController.navigate(DenebApps) { launchSingleTop = true }
                     },
                 ) {
                     Box(
