@@ -59,6 +59,9 @@ actual fun openUrl(url: String): Boolean = try {
     false
 }
 
+// The 카톡 tab launches the Android package; web has no equivalent — no-op.
+actual fun launchKakaoTalk(): Boolean = false
+
 actual fun decodeToImageBitmap(bytes: ByteArray): ImageBitmap? = try {
     org.jetbrains.skia.Image.makeFromEncoded(bytes).toComposeImageBitmap()
 } catch (_: Exception) {

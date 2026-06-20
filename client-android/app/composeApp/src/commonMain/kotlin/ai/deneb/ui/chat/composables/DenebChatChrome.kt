@@ -11,7 +11,8 @@ import io.github.vinceglb.filekit.PlatformFile
 // and the chat input routes by file type: an image goes to [onImageFile] (OCR), an
 // audio file to [onAudioFile] (transcription), and any other file (pdf/doc/sheet/
 // text) to [onDocumentFile] (extract + analyze). The live mic ([onVoiceInput],
-// system speech recognizer) is not a file, so it lives in the 더보기 screen.
+// system speech recognizer) is not a file, so it is the chat input's trailing mic
+// button (shown when the field is empty) rather than crowding the attach picker.
 
 /**
  * Platform capture actions. Provided by the Android entry point via

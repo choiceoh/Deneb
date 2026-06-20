@@ -1,10 +1,8 @@
 package ai.deneb.ui.chat.composables
 
 import ai.deneb.DenebAppHub
-import ai.deneb.DenebConfig
+import ai.deneb.DenebBrowser
 import ai.deneb.DenebFeed
-import ai.deneb.DenebMail
-import ai.deneb.Home
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
@@ -28,60 +26,90 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
-import androidx.compose.material.icons.automirrored.filled.Chat as ChatFilled
-import androidx.compose.material.icons.automirrored.outlined.Chat as ChatOutlined
-import androidx.compose.material.icons.filled.Email as EmailFilled
+import androidx.compose.material.icons.automirrored.outlined.Chat as ChatBubbleOutlined
+import androidx.compose.material.icons.filled.Language as LanguageFilled
 import androidx.compose.material.icons.filled.Notifications as NotificationsFilled
-import androidx.compose.material.icons.filled.Settings as SettingsFilled
 import androidx.compose.material.icons.filled.Widgets as WidgetsFilled
-import androidx.compose.material.icons.outlined.Email as EmailOutlined
-import androidx.compose.material.icons.outlined.MoreHoriz as MoreOutlined
+import androidx.compose.material.icons.outlined.Call as CallOutlined
+import androidx.compose.material.icons.outlined.Language as LanguageOutlined
 import androidx.compose.material.icons.outlined.Notifications as NotificationsOutlined
-import androidx.compose.material.icons.outlined.Settings as SettingsOutlined
 import androidx.compose.material.icons.outlined.Widgets as WidgetsOutlined
 
 /**
- * The phone's bottom tab bar — the super-app's primary navigation (토스식).
+ * The phone's bottom tab bar — the super-app's launcher navigation (토스식 슈퍼앱).
  *
- * Doctrine (project_superapp_vision, native-design-system.md): the *structure*
- * is Material/Apple-practical — an M3 [NavigationBar] substrate (system insets,
- * ripple, Role.Tab a11y, haptics) with the Apple SF pattern of an outlined icon
- * when idle and a filled icon when active, label always shown. The *skin* is
- * Deneb-calm — monochrome (no colored tabs), a faint ink indicator instead of the
- * bright M3 secondaryContainer pill, a hairline top edge, and small [DenebType]
- * labels. The tabs are 피드·메일·자체앱·채팅 — 자체앱 is the launcher for Deneb's own
- * mini-apps (browser·chat·calendar) so they stay thumb-reachable, and 채팅 keeps a tab
- * for the agent itself. 더보기 navigates to a full DenebMore screen (the host wires
- * [onMore]) for the secondary sections.
+ * Final shape (user's call): five slots 피드 · 통화 · 자체앱 · 인터넷 · 카톡, with 자체앱
+ * as the emphasized center (the launcher for Deneb's own mini-apps). Two of the five
+ * are *action tabs*, not screens:
+ *   - **통화** fires the phone dialer (`tel:`) and never carries a selection indicator.
+ *   - **카톡** launches the KakaoTalk app (Android package intent) — likewise no select.
+ * The three screen tabs (피드 · 자체앱 · 인터넷) are the only ones that can be selected;
+ * 인터넷 is the in-app browser (DenebBrowser), an internal screen, not an external app.
+ * 채팅 · 메일 · 달력 · 더보기 all moved into the 자체앱 grid.
+ *
+ * Doctrine (project_superapp_vision, native-design-system.md): the *structure* is
+ * Material/Apple-practical — an M3 [NavigationBar] substrate (system insets, ripple,
+ * Role.Tab a11y, haptics) with the Apple SF pattern of an outlined icon when idle and
+ * a filled icon when active, label always shown. The *skin* is Deneb-calm — monochrome
+ * (no colored tabs), a faint ink indicator instead of the bright M3 secondaryContainer
+ * pill, a hairline top edge, and small [DenebType] labels.
  *
  * Stateless: the host (App.kt) owns navigation and passes [currentRoute] for
- * highlighting, so this stays previewable. The native client is mobile-only, so this
- * bar is the app's primary navigation surface.
+ * highlighting, plus the [onCall]/[onKakao] action callbacks. The native client is
+ * mobile-only, so this bar is the app's primary navigation surface.
  */
-data class DenebTab(
-    val label: String,
-    val route: String,
-    val dest: Any,
-    val outlined: ImageVector,
-    val filled: ImageVector,
+sealed interface DenebTabItem {
+    val label: String
+
+    /** A screen tab — navigating to [dest] and highlightable when [route] is current. */
+    data class Screen(
+        override val label: String,
+        val route: String,
+        val dest: Any,
+        val outlined: ImageVector,
+        val filled: ImageVector,
+    ) : DenebTabItem
+
+    /** An action tab — fires a side effect (dialer / external app) and never selects. */
+    data class Action(
+        override val label: String,
+        val icon: ImageVector,
+        val onClick: () -> Unit,
+    ) : DenebTabItem
+}
+
+// Screen tab routes (used by App.kt to decide when to show the bar and which is active).
+const val ROUTE_FEED = "deneb_feed"
+const val ROUTE_APP_HUB = "deneb_app_hub"
+const val ROUTE_BROWSER = "deneb_browser"
+
+// The screen tabs (action tabs 통화/카톡 are spliced in by [denebBottomTabs] since they
+// need host callbacks). 피드 leads (the work home), 자체앱 is the launcher center, 인터넷
+// is the in-app browser. 채팅·메일·달력·검색·할일·일기·…·설정 all live in the 자체앱 grid.
+val denebScreenTabs: List<DenebTabItem.Screen> = listOf(
+    DenebTabItem.Screen("피드", ROUTE_FEED, DenebFeed, Icons.Outlined.NotificationsOutlined, Icons.Filled.NotificationsFilled),
+    DenebTabItem.Screen("자체앱", ROUTE_APP_HUB, DenebAppHub, Icons.Outlined.WidgetsOutlined, Icons.Filled.WidgetsFilled),
+    // 인터넷 opens the in-app browser with a blank start (the address bar takes over).
+    DenebTabItem.Screen("인터넷", ROUTE_BROWSER, DenebBrowser(""), Icons.Outlined.LanguageOutlined, Icons.Filled.LanguageFilled),
 )
 
-// The four primary 업무 sections — 피드 leads (the work home), then 메일 and the 자체앱
-// launcher (Deneb's own mini-apps grid: browser·chat·calendar), with 채팅 kept as a tab
-// too. 달력 moved off the bar into 자체앱. Search·todo·diary·categories and 설정 live under
-// 더보기 (and fleet inside settings). The whole bar is hidden in the 챗봇 workspace
-// (App.kt), so there is no per-tab filtering here.
-val denebBottomTabs: List<DenebTab> = listOf(
-    DenebTab("피드", "deneb_feed", DenebFeed, Icons.Outlined.NotificationsOutlined, Icons.Filled.NotificationsFilled),
-    DenebTab("메일", "deneb_mail", DenebMail, Icons.Outlined.EmailOutlined, Icons.Filled.EmailFilled),
-    DenebTab("자체앱", "deneb_app_hub", DenebAppHub, Icons.Outlined.WidgetsOutlined, Icons.Filled.WidgetsFilled),
-    DenebTab("채팅", "home", Home, Icons.AutoMirrored.Outlined.ChatOutlined, Icons.AutoMirrored.Filled.ChatFilled),
+/**
+ * Build the full five-slot tab list in display order — 피드 · 통화 · 자체앱 · 인터넷 · 카톡
+ * — splicing the two action tabs around the three screen tabs. The host supplies the
+ * action callbacks ([onCall] = dialer, [onKakao] = KakaoTalk) since they fire platform
+ * side effects.
+ */
+fun denebBottomTabs(onCall: () -> Unit, onKakao: () -> Unit): List<DenebTabItem> = listOf(
+    denebScreenTabs[0], // 피드
+    DenebTabItem.Action("통화", Icons.Outlined.CallOutlined, onCall),
+    denebScreenTabs[1], // 자체앱 (center)
+    denebScreenTabs[2], // 인터넷
+    DenebTabItem.Action("카톡", Icons.AutoMirrored.Outlined.ChatBubbleOutlined, onKakao),
 )
 
-// Routes that surface 업무 데이터 (feed/mail/calendar/search/categories/fleet). Used by
-// App.kt to bounce a 챗봇-mode session back to home if it ever lands on one (defensive —
-// the 챗봇 workspace has no bottom bar and the desktop rail hides these rows) and by the
-// desktop rail's row filter. 피드 is 업무-only too (the work feed home), so it bounces.
+// Routes that surface 업무 데이터 — used by App.kt to bounce a 챗봇-mode session back to
+// home if it ever lands on one (defensive — the 챗봇 workspace has no bottom bar). 피드 is
+// 업무-only (the work feed home), so it bounces; the 자체앱 grid filters its own 업무 tiles.
 val denebWorkDataRoutes: Set<String> = setOf(
     "deneb_feed",
     "deneb_mail",
@@ -93,26 +121,13 @@ val denebWorkDataRoutes: Set<String> = setOf(
     "deneb_org",
 )
 
-// Top-level routes that show the bottom bar: the 4 tabs + the 더보기 screen and its
-// destinations. Pushed detail screens (data-class routes with args) are absent, so
-// they hide the bar and keep their own back nav. Fleet is now a settings sub-screen
-// (like skill/cron) — a pushed detail with its own back nav, so it is not listed here.
+// Top-level routes that show the bottom bar: the 3 screen tabs only. Pushed detail
+// screens (data-class routes with args, and every section opened from the 자체앱 grid)
+// are absent, so they hide the bar and keep their own back nav.
 val denebBottomBarRoutes: Set<String> = setOf(
-    "deneb_feed", "home", "deneb_mail", "deneb_app_hub", "deneb_calendar", "deneb_config",
-    "deneb_more", "deneb_search", "deneb_todo", "deneb_diary", "deneb_categories",
-    "deneb_dashboard",
-)
-
-// Routes where 더보기 is the active tab (the More screen itself, or a section opened
-// from it). 설정 now lives here too (moved out of the primary tabs).
-val denebMoreRoutes: Set<String> = setOf(
-    "deneb_more",
-    "deneb_config",
-    "deneb_search",
-    "deneb_todo",
-    "deneb_diary",
-    "deneb_categories",
-    "deneb_dashboard",
+    ROUTE_FEED,
+    ROUTE_APP_HUB,
+    ROUTE_BROWSER,
 )
 
 // Content height of the bar (excludes the system navigation-bar inset, which is added
@@ -125,9 +140,9 @@ private val DenebBottomBarHeight = 52.dp
 @Composable
 fun DenebBottomBar(
     currentRoute: String?,
-    moreActive: Boolean,
     onNavigate: (Any) -> Unit,
-    onMore: () -> Unit,
+    onCall: () -> Unit,
+    onKakao: () -> Unit,
     modifier: Modifier = Modifier,
     // Unread work-feed count badged on the 피드 tab (the old top-bar bell moved here).
     feedUnread: Int = 0,
@@ -159,44 +174,53 @@ fun DenebBottomBar(
                 drawLine(hairline, Offset(0f, 0f), Offset(size.width, 0f), strokeWidth = 1.dp.toPx())
             },
     ) {
-        denebBottomTabs.forEach { tab ->
-            val selected = currentRoute == tab.route
-            NavigationBarItem(
-                selected = selected,
-                onClick = {
-                    haptics.tap()
-                    onNavigate(tab.dest)
-                },
-                icon = {
-                    val glyph = @Composable {
-                        Icon(
-                            imageVector = if (selected) tab.filled else tab.outlined,
-                            contentDescription = tab.label,
-                        )
-                    }
-                    if (tab.route == "deneb_feed" && feedUnread > 0) {
-                        BadgedBox(
-                            badge = { Badge { Text(if (feedUnread > 9) "9+" else feedUnread.toString()) } },
-                        ) { glyph() }
-                    } else {
-                        glyph()
-                    }
-                },
-                label = { Text(tab.label, style = DenebType.meta) },
-                alwaysShowLabel = true,
-                colors = colors,
-            )
+        denebBottomTabs(onCall = onCall, onKakao = onKakao).forEach { tab ->
+            when (tab) {
+                is DenebTabItem.Screen -> {
+                    val selected = currentRoute == tab.route
+                    NavigationBarItem(
+                        selected = selected,
+                        onClick = {
+                            haptics.tap()
+                            onNavigate(tab.dest)
+                        },
+                        icon = {
+                            val glyph = @Composable {
+                                Icon(
+                                    imageVector = if (selected) tab.filled else tab.outlined,
+                                    contentDescription = tab.label,
+                                )
+                            }
+                            if (tab.route == ROUTE_FEED && feedUnread > 0) {
+                                BadgedBox(
+                                    badge = { Badge { Text(if (feedUnread > 9) "9+" else feedUnread.toString()) } },
+                                ) { glyph() }
+                            } else {
+                                glyph()
+                            }
+                        },
+                        label = { Text(tab.label, style = DenebType.meta) },
+                        alwaysShowLabel = true,
+                        colors = colors,
+                    )
+                }
+
+                is DenebTabItem.Action -> {
+                    // Action tabs (통화·카톡) fire a side effect and are never selected — the
+                    // outlined glyph stays at the unselected (hint) weight regardless of route.
+                    NavigationBarItem(
+                        selected = false,
+                        onClick = {
+                            haptics.tap()
+                            tab.onClick()
+                        },
+                        icon = { Icon(tab.icon, contentDescription = tab.label) },
+                        label = { Text(tab.label, style = DenebType.meta) },
+                        alwaysShowLabel = true,
+                        colors = colors,
+                    )
+                }
+            }
         }
-        NavigationBarItem(
-            selected = moreActive,
-            onClick = {
-                haptics.tap()
-                onMore()
-            },
-            icon = { Icon(Icons.Outlined.MoreOutlined, contentDescription = "더보기") },
-            label = { Text("더보기", style = DenebType.meta) },
-            alwaysShowLabel = true,
-            colors = colors,
-        )
     }
 }

@@ -23,7 +23,6 @@ import ai.deneb.deneb.DenebFleetScreen
 import ai.deneb.deneb.DenebGatewayClient
 import ai.deneb.deneb.DenebMailDetailScreen
 import ai.deneb.deneb.DenebMailScreen
-import ai.deneb.deneb.DenebMoreScreen
 import ai.deneb.deneb.DenebNotebooksScreen
 import ai.deneb.deneb.DenebOrgChartScreen
 import ai.deneb.deneb.DenebPeopleScreen
@@ -53,7 +52,6 @@ import ai.deneb.ui.chat.composables.DenebBottomBar
 import ai.deneb.ui.chat.composables.FeedScreen
 import ai.deneb.ui.chat.composables.LocalCaptureActions
 import ai.deneb.ui.chat.composables.denebBottomBarRoutes
-import ai.deneb.ui.chat.composables.denebMoreRoutes
 import ai.deneb.ui.chat.composables.denebWorkDataRoutes
 import ai.deneb.ui.chat.composables.navigateToDenebSection
 import ai.deneb.ui.components.FullScreenImageHost
@@ -182,18 +180,15 @@ data class DenebTodoEdit(val id: String)
 @SerialName("deneb_search")
 object DenebSearch
 
-@Serializable
-@SerialName("deneb_more")
-object DenebMore
-
 // Work-launcher app drawer (Phase 0). A local, gateway-independent screen listing
-// installed apps; reached from 더보기 for now, later the home swipe-up.
+// installed apps; reached by a bottom-edge swipe-up on the 자체앱 grid (launcher mode).
 @Serializable
 @SerialName("deneb_apps")
 object DenebApps
 
-// 자체앱 — Deneb's own mini-apps as a home-screen grid (bottom tab 3): browser, chat,
-// and calendar (moved off the bottom bar). Distinct from DenebApps (external installed apps).
+// 자체앱 — Deneb's own mini-apps as a home-screen grid (bottom-bar center tab). Absorbed
+// the old 더보기 list (메일·달력·검색·할일·일기·조직도·파트별현황·카테고리·노트북·파일·
+// 설정) plus 채팅. Distinct from DenebApps (external installed apps, via swipe-up).
 @Serializable
 @SerialName("deneb_app_hub")
 object DenebAppHub
@@ -364,6 +359,10 @@ private fun AppContent(
                 // Web shows the chat/settings tab bar; mobile uses the bottom bar / drawer
                 // instead, so it never had it.
                 val showTabBar = currentPlatform is Platform.Web
+                // The platform-default URI handler (NOT the in-app-browser override, which is
+                // only provided deeper inside navHost). The 통화 bottom-tab opens tel: through
+                // it, same as OrgContactActions does for contact calls.
+                val systemUriHandler = LocalUriHandler.current
                 val currentBackStackEntry by navController.currentBackStackEntryAsState()
                 val isHome = currentBackStackEntry?.destination?.route == "home"
 
@@ -629,17 +628,11 @@ private fun AppContent(
                                     )
                                 }
                             }
-                            composable<DenebMore> {
-                                DenebMoreScreen(
-                                    onBack = { navController.navigateUp() },
-                                    onOpen = { dest -> navController.navigate(dest) },
-                                    chatMode = navChatMode,
-                                )
-                            }
                             composable<DenebAppHub> {
                                 DenebAppHubScreen(
                                     onBack = { navController.navigateUp() },
                                     onOpen = { dest -> navController.navigate(dest) },
+                                    chatMode = navChatMode,
                                 )
                             }
                             composable<DenebApps> {
@@ -854,20 +847,15 @@ private fun AppContent(
                     if (showBar) {
                         DenebBottomBar(
                             currentRoute = route,
-                            moreActive = route in denebMoreRoutes,
                             onNavigate = { dest -> navigateToDenebSection(navController, dest) },
-                            // 더보기 always lands on the More list — not the last-opened
-                            // section. Sections are pushed onto DenebMore via a plain
-                            // navigate (onOpen below), so the shared navigateToDenebSection
-                            // (restoreState = true) restored that saved sub-stack and left
-                            // the user on the section. Pop to start and push a fresh DenebMore
-                            // (no restoreState) so the list always shows.
-                            onMore = {
-                                navController.navigate(DenebMore) {
-                                    popUpTo(navController.graph.startDestinationId) { saveState = true }
-                                    launchSingleTop = true
-                                }
-                            },
+                            // 통화 action tab: open the system dialer. tel: with no number
+                            // lands on the dialer's keypad (no auto-dial). Reuses the same
+                            // LocalUriHandler path OrgContactActions uses for contact calls —
+                            // no expect/actual needed for a URI any platform can open.
+                            onCall = { systemUriHandler.openUri("tel:") },
+                            // 카톡 action tab: launch the KakaoTalk app (Android package
+                            // intent). No-op (and graceful store fallback) off Android.
+                            onKakao = { launchKakaoTalk() },
                             feedUnread = feedUnread,
                         )
                     }
