@@ -2,8 +2,6 @@ package ai.deneb.ui.launcher
 
 import android.content.Context
 import android.content.Intent
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.core.graphics.drawable.toBitmap
 import org.koin.java.KoinJavaComponent.inject
 
 actual fun createLauncherApps(): LauncherApps = AndroidLauncherApps()
@@ -28,10 +26,9 @@ class AndroidLauncherApps : LauncherApps {
                 if (pkg == context.packageName) return@mapNotNull null // hide self
                 val label = runCatching { ri.loadLabel(pm).toString() }.getOrNull()?.trim().orEmpty()
                 if (label.isEmpty()) return@mapNotNull null
-                // App icons can be large adaptive drawables; cap the rasterized size so the
-                // grid stays light. Failure (odd drawable) falls back to the lettered disc.
-                val icon = runCatching { ri.loadIcon(pm).toBitmap(width = 144, height = 144).asImageBitmap() }.getOrNull()
-                LauncherAppEntry(label = label, packageName = pkg, icon = icon)
+                // The Niagara-style drawer is text-only, so skip icon rasterization
+                // entirely — loading 100+ adaptive drawables we never show was pure waste.
+                LauncherAppEntry(label = label, packageName = pkg)
             }
             .distinctBy { it.packageName }
             .sortedBy { it.label.lowercase() }
