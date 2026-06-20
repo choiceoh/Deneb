@@ -562,6 +562,7 @@ private enum class ModelRole(val wire: String, val label: String, val desc: Stri
     CHATBOT("chatbot", "챗봇", "챗봇 모드(일반 대화) 전용 모델. 미설정이면 메인 모델을 그대로 사용"),
     CODING("coding", "코딩", "코드 수정·구현자 서브에이전트·스킬 진화 패치를 담당하는 전용 모델. 미설정이면 기존 기본 모델을 사용"),
     VISION("vision", "비전", "사진·스크린샷 등 이미지가 포함된 대화를 처리하는 멀티모달 모델. 미설정이면 메인 모델(이미지 무시)을 사용"),
+    TRANSLATION("translation", "번역", "인앱 브라우저 웹페이지 번역(영어·러시아어→한국어) 전용 모델. 미설정이면 경량 모델을 사용"),
     TINY("tiny", "초경량", "세션 제목·메일 1차 추출 같은 사소한 분류·추출"),
     LIGHTWEIGHT("lightweight", "경량", "위키 병합·파일럿·스킬 리뷰 같은 범위가 정해진 요약"),
     ANALYSIS("analysis", "분석", "메일 본문 분석·대화 압축·기록 요약 같은 추론 작업"),

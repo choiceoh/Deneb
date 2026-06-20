@@ -95,6 +95,8 @@ func PersistRoleModel(configPath, role, model string, logger *slog.Logger) error
 		field = "chatbotModel"
 	case "vision":
 		field = "visionModel"
+	case "translation":
+		field = "translationModel"
 	default:
 		return fmt.Errorf("unknown model role %q", role)
 	}
