@@ -3,7 +3,6 @@ package ai.deneb.ui.launcher
 import ai.deneb.deneb.DenebEmpty
 import ai.deneb.deneb.DenebLoading
 import ai.deneb.ui.DenebType
-import ai.deneb.ui.components.DenebSearchField
 import ai.deneb.ui.components.SectionedScrubList
 import ai.deneb.ui.denebHint
 import ai.deneb.ui.denebPressable
@@ -20,10 +19,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -65,41 +62,18 @@ fun AppDrawer(
     pinned: Set<String> = emptySet(),
     onTogglePin: (String) -> Unit = {},
 ) {
-    var query by remember { mutableStateOf("") }
-    val filtered = remember(apps, query) {
-        val q = query.trim()
-        if (q.isEmpty()) {
-            apps
-        } else {
-            // Match the visible label OR the Korean reading, so typing 유튜브 finds
-            // "YouTube" (the same reading the ㄱㄴㄷ index files it under).
-            apps.filter { app ->
-                app.label.contains(q, ignoreCase = true) || appKoreanReading(app.label)?.contains(q) == true
-            }
-        }
-    }
     Column(modifier.fillMaxSize().nestedScroll(exitOnTopOverscroll(onExit))) {
-        DenebSearchField(
-            query = query,
-            onQueryChange = { query = it },
-            placeholder = "앱 검색",
-            clearContentDescription = "검색 지우기",
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-            // Launcher idiom: when the query narrows to a single app, the keyboard's
-            // Search/Enter launches it directly — type a few letters, hit enter, gone.
-            onSearch = { filtered.singleOrNull()?.let { onLaunch(it.packageName) } },
-        )
         when {
             // Distinct loading vs empty: the provider loads off-thread, so without this
             // the drawer flashed "앱 없음" on every open before the list populated.
             !loaded -> DenebLoading()
 
-            filtered.isEmpty() -> DenebEmpty(if (apps.isEmpty()) "앱이 없습니다" else "검색 결과 없음")
+            apps.isEmpty() -> DenebEmpty("앱이 없습니다")
 
             else -> SectionedScrubList(
                 // Section/scrub by the Korean reading (YouTube→유튜브→ㅇ) so the index is
                 // a unified ㄱㄴㄷ, not a mixed ㄱㄴㄷ+A–Z. The row still shows the raw label.
-                items = filtered,
+                items = apps,
                 label = { koreanAppSortKey(it.label) },
                 key = { it.packageName },
             ) { app -> AppRow(app, app.packageName in pinned, onLaunch, onTogglePin) }
