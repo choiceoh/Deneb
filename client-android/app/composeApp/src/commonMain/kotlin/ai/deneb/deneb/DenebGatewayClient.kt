@@ -1954,6 +1954,15 @@ class DenebGatewayClient(
         _openWorkTopicRequested.value = false
     }
 
+    private val _openHomeRequested = MutableStateFlow(false)
+    override val openHomeRequested: StateFlow<Boolean> = _openHomeRequested
+    override fun requestOpenHome() {
+        _openHomeRequested.value = true
+    }
+    override fun consumeOpenHomeRequest() {
+        _openHomeRequested.value = false
+    }
+
     private val _hasUnreadWorkReport = MutableStateFlow(false)
     override val hasUnreadWorkReport: StateFlow<Boolean> = _hasUnreadWorkReport
     override fun clearUnreadWorkReport() {
