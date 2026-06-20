@@ -64,6 +64,7 @@ import ai.deneb.ui.chat.WorkFeedItem
 import ai.deneb.ui.chat.composables.DenebBottomBar
 import ai.deneb.ui.chat.composables.WaitingResponseRow
 import ai.deneb.ui.chat.composables.WorkFeedPanel
+import ai.deneb.ui.components.SectionedScrubList
 import ai.deneb.ui.components.SkeletonList
 import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
@@ -199,6 +200,8 @@ fun main() {
     renderMarkdown("markdown_dark.png", DarkColorScheme)
     renderScreen("app_drawer_dark.png", "app_drawer", DarkColorScheme, 824, 1100)
     renderScreen("app_drawer_light.png", "app_drawer", LightColorScheme, 824, 1100)
+    renderScreen("scrub_active_dark.png", "scrub_active", DarkColorScheme, 824, 1100)
+    renderScreen("scrub_active_light.png", "scrub_active", LightColorScheme, 824, 1100)
     renderScreen("contacts_dark.png", "contacts", DarkColorScheme, 824, 1100)
     renderScreen("contacts_light.png", "contacts", LightColorScheme, 824, 1100)
     renderAnalysis("analysis_clip.png", DarkColorScheme)
@@ -630,6 +633,34 @@ internal val previewScreens: Map<String, @Composable (ColorScheme) -> Unit> = ma
             Surface(color = MaterialTheme.colorScheme.background) {
                 Box(Modifier.width(412.dp)) {
                     AppDrawer(apps = apps, onLaunch = {})
+                }
+            }
+        }
+    },
+    "scrub_active" to { scheme ->
+        // The shared scrub list rendered MID-SCRUB (previewActiveKey) so the static
+        // image shows the magnified bubble + active-letter highlight + wider strip.
+        val labels = listOf(
+            "가온전자", "강원물산", "남도에코", "다온", "라온상사", "메일", "바다물산",
+            "사진", "삼성전자", "아워홈", "이마트", "자이언트", "전화", "차차상사",
+            "카카오톡", "타이거", "파인", "하나은행", "Google", "Notion", "Slack", "Zoom",
+        )
+        MaterialTheme(colorScheme = scheme) {
+            Surface(color = MaterialTheme.colorScheme.background) {
+                Box(Modifier.width(412.dp)) {
+                    SectionedScrubList(
+                        items = labels,
+                        label = { it },
+                        key = { it },
+                        previewActiveKey = "ㅈ",
+                    ) { label ->
+                        Text(
+                            label,
+                            style = DenebType.rowTitle,
+                            color = MaterialTheme.colorScheme.onBackground,
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 11.dp),
+                        )
+                    }
                 }
             }
         }
