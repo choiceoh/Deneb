@@ -74,6 +74,13 @@ func (s *Server) initFileSemanticIndex() {
 // unavailable. Bounded by semindexQueryTimeout so a slow embed never stalls a
 // chat turn or RPC.
 //
+// It uses the index's HYBRID search: BM25 lexical overlap (file name + extracted
+// text) fused with dense-vector cosine, admitting a file when either signal is
+// convincing. This keeps the calibrated semantic floor's clean rejection of
+// Korean noise while letting exact name/content matches survive below the floor —
+// strictly better than the cosine-only Search for the user-facing "의미" mode, so
+// that one mode now covers lexical+semantic in a single call (no extra flag).
+//
 // Results are validated against the live store with Stat, dropping any hit whose
 // path no longer exists. The index is reindexed only every 15 minutes, and the
 // move/delete hooks (Rename/Remove) cover the in-process mutations — but this
@@ -86,7 +93,7 @@ func (s *Server) fileSemanticSearch(ctx context.Context, query string, max int) 
 	}
 	qctx, cancel := context.WithTimeout(ctx, semindexQueryTimeout)
 	defer cancel()
-	hits, err := s.fileSemanticIndex.Search(qctx, query, max, s.embeddingClient)
+	hits, err := s.fileSemanticIndex.HybridSearch(qctx, query, max, s.embeddingClient, fileSemindexExtract)
 	if err != nil || len(hits) == 0 || s.fileStore == nil {
 		return hits, err
 	}
