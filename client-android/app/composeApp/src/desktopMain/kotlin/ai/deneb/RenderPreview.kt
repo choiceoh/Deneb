@@ -12,6 +12,7 @@ import ai.deneb.deneb.CalendarEventDetail
 import ai.deneb.deneb.CalendarMonthGrid
 import ai.deneb.deneb.CronEditContent
 import ai.deneb.deneb.DashboardLanesContent
+import ai.deneb.deneb.DenebAppHubScreen
 import ai.deneb.deneb.DenebBrowserChrome
 import ai.deneb.deneb.DenebWebViewState
 import ai.deneb.deneb.FilesSearchMode
@@ -172,12 +173,27 @@ private fun renderBrowser(name: String, scheme: ColorScheme) {
     scene.close()
 }
 
+private fun renderAppHub(name: String, scheme: ColorScheme) {
+    val scene = ImageComposeScene(width = 824, height = 900, density = Density(2f)) {
+        MaterialTheme(colorScheme = scheme) {
+            DenebAppHubScreen(onBack = {}, onOpen = {})
+        }
+    }
+    val image = scene.render()
+    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
+    File("/tmp/deneb-render").mkdirs()
+    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
+    scene.close()
+}
+
 fun main() {
     System.setProperty("java.awt.headless", "true")
     renderScreen("mail_dark.png", "mail", DarkColorScheme, 840, 1100)
     renderScreen("mail_light.png", "mail", LightColorScheme, 840, 1100)
     renderBrowser("browser_dark.png", DarkColorScheme)
     renderBrowser("browser_light.png", LightColorScheme)
+    renderAppHub("app_hub_dark.png", DarkColorScheme)
+    renderAppHub("app_hub_light.png", LightColorScheme)
     renderMarkdown("markdown_dark.png", DarkColorScheme)
     renderScreen("app_drawer_dark.png", "app_drawer", DarkColorScheme, 824, 1100)
     renderScreen("app_drawer_light.png", "app_drawer", LightColorScheme, 824, 1100)

@@ -5,6 +5,7 @@ package ai.deneb
 import ai.deneb.data.AppSettings
 import ai.deneb.data.DataRepository
 import ai.deneb.data.ThemeMode
+import ai.deneb.deneb.DenebAppHubScreen
 import ai.deneb.deneb.DenebBrowserScreen
 import ai.deneb.deneb.DenebCalendarAddScreen
 import ai.deneb.deneb.DenebCalendarEventScreen
@@ -183,6 +184,12 @@ object DenebMore
 @Serializable
 @SerialName("deneb_apps")
 object DenebApps
+
+// 자체앱 — Deneb's own mini-apps as a home-screen grid (bottom tab 3): browser, chat,
+// and calendar (moved off the bottom bar). Distinct from DenebApps (external installed apps).
+@Serializable
+@SerialName("deneb_app_hub")
+object DenebAppHub
 
 @Serializable
 @SerialName("deneb_wiki")
@@ -602,6 +609,12 @@ private fun AppContent(
                                     onBack = { navController.navigateUp() },
                                     onOpen = { dest -> navController.navigate(dest) },
                                     chatMode = navChatMode,
+                                )
+                            }
+                            composable<DenebAppHub> {
+                                DenebAppHubScreen(
+                                    onBack = { navController.navigateUp() },
+                                    onOpen = { dest -> navController.navigate(dest) },
                                 )
                             }
                             composable<DenebApps> {
