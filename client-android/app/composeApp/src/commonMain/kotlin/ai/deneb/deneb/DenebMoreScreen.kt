@@ -5,7 +5,6 @@ import ai.deneb.DenebCategories
 import ai.deneb.DenebConfig
 import ai.deneb.DenebContacts
 import ai.deneb.DenebDashboard
-import ai.deneb.DenebDiary
 import ai.deneb.DenebFiles
 import ai.deneb.DenebNotebooks
 import ai.deneb.DenebOrgChart
@@ -16,12 +15,13 @@ import ai.deneb.ui.DenebListRow
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.chat.composables.LocalCaptureActions
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.outlined.AccountTree
 import androidx.compose.material.icons.outlined.Book
 import androidx.compose.material.icons.outlined.CheckCircle
@@ -42,26 +42,35 @@ private data class MoreEntry(
     val label: String,
     val dest: Any,
     val icon: ImageVector,
-    val desc: String,
-    // 업무 데이터 entry: hidden in the 챗봇 workspace (검색·조직도·파트별현황·카테고리·
-    // 연락처·노트북·파일). 할일·일기·브라우저·설정 stay in both workspaces.
+    // 업무 데이터 entry: hidden in the 챗봇 workspace. 할일·브라우저·설정 stay in both.
     val workData: Boolean = false,
 )
 
-// The secondary sections, in the order they appear under 더보기. 채팅·피드·메일·달력 are NOT
-// here — they are first-class bottom-bar tabs (DenebBottomBar). Add a section by appending.
-private val moreEntries = listOf(
-    MoreEntry("파트별 업무 현황", DenebDashboard, Icons.Outlined.Dashboard, "팀·파트별 일정·업무 한눈에", workData = true),
-    MoreEntry("조직도", DenebOrgChart, Icons.Outlined.AccountTree, "그룹·회사·팀 구조 보기·편집", workData = true),
-    MoreEntry("검색", DenebSearch, Icons.Outlined.Search, "메일·위키 통합 검색", workData = true),
-    MoreEntry("할일", DenebTodo, Icons.Outlined.CheckCircle, "할 일 목록"),
-    MoreEntry("일기", DenebDiary, Icons.AutoMirrored.Outlined.MenuBook, "일기 기록"),
-    MoreEntry("카테고리", DenebCategories, Icons.Outlined.GridView, "위키 분류, 사람", workData = true),
-    MoreEntry("전체 연락처", DenebContacts, Icons.Outlined.Contacts, "주소록 전체, 이름·번호 검색", workData = true),
-    MoreEntry("노트북", DenebNotebooks, Icons.Outlined.Book, "딜·프로젝트 자료 모음", workData = true),
-    MoreEntry("파일", DenebFiles, Icons.Outlined.Storage, "로컬 파일 탐색·검색·업로드", workData = true),
-    MoreEntry("브라우저", DenebBrowser(""), Icons.Outlined.Public, "웹 페이지 열기 · 한국어 번역"),
-    MoreEntry("설정", DenebConfig, Icons.Outlined.Settings, "환경설정, 모델, 플릿"),
+// Voice dictation (Android-only input action) tails this group.
+private const val TOOLS_GROUP = "할일 · 도구"
+
+// The secondary sections, grouped into labeled inset cards — the same idiom as the
+// settings hub (DenebConfigScreen.configGroups), so 더보기 and 설정 read identically.
+// 채팅·피드·메일·달력 are first-class bottom-bar tabs, not here. 일기 is omitted (reachable
+// via 카테고리). Icon + title only — no one-line descriptions (a hub you visit often reads
+// cleaner without them). Add a section by appending to the right group.
+private val moreGroups: List<Pair<String, List<MoreEntry>>> = listOf(
+    "업무 · 지식" to listOf(
+        MoreEntry("파트별 업무 현황", DenebDashboard, Icons.Outlined.Dashboard, workData = true),
+        MoreEntry("조직도", DenebOrgChart, Icons.Outlined.AccountTree, workData = true),
+        MoreEntry("검색", DenebSearch, Icons.Outlined.Search, workData = true),
+        MoreEntry("카테고리", DenebCategories, Icons.Outlined.GridView, workData = true),
+        MoreEntry("전체 연락처", DenebContacts, Icons.Outlined.Contacts, workData = true),
+        MoreEntry("노트북", DenebNotebooks, Icons.Outlined.Book, workData = true),
+    ),
+    TOOLS_GROUP to listOf(
+        MoreEntry("할일", DenebTodo, Icons.Outlined.CheckCircle),
+        MoreEntry("파일", DenebFiles, Icons.Outlined.Storage, workData = true),
+        MoreEntry("브라우저", DenebBrowser(""), Icons.Outlined.Public),
+    ),
+    "시스템" to listOf(
+        MoreEntry("설정", DenebConfig, Icons.Outlined.Settings),
+    ),
 )
 
 /**
@@ -69,19 +78,14 @@ private val moreEntries = listOf(
  * (피드·메일·채팅·달력·더보기), as a full page so it reads like the other sections and keeps
  * the 더보기 tab in the navigation model (the bottom bar stays visible with 더보기 active).
  *
- * Uses the same grouped inset-card idiom as the settings hub (DenebGroup + DenebListRow:
- * leading icon, title, one-line summary, chevron) so 더보기 and 설정 read identically.
- * [chatMode] hides the 업무 데이터 entries, leaving only 할일·일기·브라우저·설정.
+ * Grouped labeled inset cards (DenebGroup(label) + DenebListRow), matching the settings
+ * hub. [chatMode] hides the 업무 데이터 entries; a group that empties out is skipped.
  */
 @Composable
 fun DenebMoreScreen(onBack: () -> Unit, onOpen: (Any) -> Unit, chatMode: Boolean = false) {
-    val entries = if (chatMode) moreEntries.filterNot { it.workData } else moreEntries
-    // Live voice dictation (system speech recognizer → chat). It is an input action,
-    // not a file, so it lives here rather than cluttering the attach (+) button — that
-    // opens a single picker and auto-routes by file type. Android-only (captures
-    // present); hidden on desktop/iOS. It is the last row of the *same* group as the
-    // nav entries (not a separate DenebGroup) — two stacked groups have no vertical
-    // gap, so an extra group read as a second box jammed flush against the first.
+    // Live voice dictation (system speech recognizer → chat). An input action, not a
+    // file, so it lives here rather than cluttering the attach (+) button. Android-only
+    // (captures present); hidden on desktop/iOS.
     val captures = LocalCaptureActions.current
     DenebScreenScaffold(title = "더보기", onBack = onBack) {
         Column(
@@ -90,27 +94,30 @@ fun DenebMoreScreen(onBack: () -> Unit, onOpen: (Any) -> Unit, chatMode: Boolean
                 .verticalScroll(rememberScrollState())
                 .padding(top = 4.dp, bottom = 24.dp),
         ) {
-            DenebGroup {
-                entries.forEachIndexed { i, entry ->
-                    DenebListRow(
-                        title = entry.label,
-                        onClick = { onOpen(entry.dest) },
-                        icon = entry.icon,
-                        subtitle = entry.desc,
-                        // Keep a divider on the last nav entry when the voice row follows it.
-                        divider = i < entries.lastIndex || captures != null,
-                    )
+            moreGroups.forEach { (label, all) ->
+                val entries = if (chatMode) all.filterNot { it.workData } else all
+                val withVoice = label == TOOLS_GROUP && captures != null
+                if (entries.isEmpty() && !withVoice) return@forEach
+                DenebGroup(label = label) {
+                    entries.forEachIndexed { i, entry ->
+                        DenebListRow(
+                            title = entry.label,
+                            onClick = { onOpen(entry.dest) },
+                            icon = entry.icon,
+                            divider = i < entries.lastIndex || withVoice,
+                        )
+                    }
+                    if (withVoice) {
+                        DenebListRow(
+                            title = "음성 입력",
+                            onClick = captures.onVoiceInput,
+                            icon = Icons.Outlined.KeyboardVoice,
+                            divider = false,
+                            chevron = false,
+                        )
+                    }
                 }
-                if (captures != null) {
-                    DenebListRow(
-                        title = "음성 입력",
-                        onClick = captures.onVoiceInput,
-                        icon = Icons.Outlined.KeyboardVoice,
-                        subtitle = "말하면 받아써서 보냅니다",
-                        divider = false,
-                        chevron = false,
-                    )
-                }
+                Spacer(Modifier.height(20.dp))
             }
         }
     }
