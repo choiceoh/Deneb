@@ -1,6 +1,7 @@
 package ai.deneb.deneb
 
 import ai.deneb.DenebApps
+import ai.deneb.DenebBrowser
 import ai.deneb.DenebCategories
 import ai.deneb.DenebConfig
 import ai.deneb.DenebDashboard
@@ -28,6 +29,7 @@ import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Dashboard
 import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.material.icons.outlined.KeyboardVoice
+import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Storage
@@ -55,6 +57,7 @@ private val moreEntries = listOf(
     MoreEntry("카테고리", DenebCategories, Icons.Outlined.GridView, "위키 분류, 사람", workData = true),
     MoreEntry("노트북", DenebNotebooks, Icons.Outlined.Book, "딜·프로젝트 자료 모음", workData = true),
     MoreEntry("파일", DenebFiles, Icons.Outlined.Storage, "로컬 파일 탐색·검색·업로드", workData = true),
+    MoreEntry("브라우저", DenebBrowser(""), Icons.Outlined.Public, "웹 페이지 열기 · 한국어 번역"),
     MoreEntry("설정", DenebConfig, Icons.Outlined.Settings, "환경설정, 모델, 플릿"),
 )
 

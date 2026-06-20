@@ -4,6 +4,7 @@ package ai.deneb.deneb
 
 import ai.deneb.decodeToImageBitmap
 import ai.deneb.getBackgroundDispatcher
+import ai.deneb.openUrl
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.LinkifiedText
@@ -67,7 +68,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.async
@@ -103,7 +103,6 @@ fun DenebMailDetailScreen(
 ) {
     val scope = rememberCoroutineScope()
     val haptics = rememberHaptics()
-    val uriHandler = LocalUriHandler.current
     var detail by remember(messageId) { mutableStateOf<MailDetail?>(null) }
     var analysis by remember(messageId) { mutableStateOf<MailAnalysis?>(null) }
     var analyzing by remember(messageId) { mutableStateOf(false) }
@@ -390,7 +389,7 @@ fun DenebMailDetailScreen(
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 mail.attachments.forEach { att ->
                     AssistChip(
-                        onClick = { uriHandler.openUri(client.attachmentUrl(mail.id, att)) },
+                        onClick = { openUrl(client.attachmentUrl(mail.id, att)) },
                         label = { Text(att.filename + "  " + humanBytes(att.size.toLong())) },
                     )
                 }
@@ -436,7 +435,7 @@ fun DenebMailDetailScreen(
                                     .fillMaxWidth()
                                     .heightIn(max = 360.dp)
                                     .clip(RoundedCornerShape(8.dp))
-                                    .clickable { uriHandler.openUri(client.attachmentUrl(mail.id, att)) },
+                                    .clickable { openUrl(client.attachmentUrl(mail.id, att)) },
                                 contentScale = ContentScale.Fit,
                             )
                         }

@@ -8,11 +8,13 @@ import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
 import ai.deneb.ui.denebInsight
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.Refresh
@@ -21,11 +23,18 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 
 /**
@@ -54,8 +63,9 @@ fun DenebBrowserScreen(
 /**
  * Stateless browser chrome (scaffold + URL bar + actions), separated from the
  * stateful shell so renderPreviews can exercise the look with mock state. The URL
- * bar always shows the real current URL (link safety — an in-app WebView otherwise
- * hides where you are); the open-external action escapes to the system browser.
+ * bar shows the real current URL (link safety — an in-app WebView otherwise hides
+ * where you are) and is editable (type/paste a URL + Go); the open-external action
+ * escapes to the system browser.
  *
  * Design system: Material IconButtons with functional icons (like the mail
  * toolbar), skinned with Deneb colors — the translate toggle lights the warm
@@ -117,19 +127,56 @@ fun DenebBrowserChrome(
             }
         },
     ) {
-        Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
-            Text(
-                text = state.currentUrl,
-                style = DenebType.meta,
-                color = denebHint(),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
+        val focusManager = LocalFocusManager.current
+        // Editable address bar: shows the real current URL (link safety) but also lets
+        // you type/paste a URL and Go — the only way to reach a page when arriving from
+        // the More menu rather than a tapped link. Flat field (no box/fill), so it keeps
+        // the hairline-only idiom; the divider below is the hairline.
+        var field by remember(state.currentUrl) { mutableStateOf(state.currentUrl) }
+        BasicTextField(
+            value = field,
+            onValueChange = { field = it },
+            singleLine = true,
+            textStyle = DenebType.meta.copy(color = MaterialTheme.colorScheme.onSurface),
+            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Go),
+            keyboardActions = KeyboardActions(
+                onGo = {
+                    val target = normalizeUrl(field)
+                    if (target.isNotEmpty()) {
+                        state.load(target)
+                        field = target
+                    }
+                    focusManager.clearFocus()
+                },
+            ),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+            decorationBox = { innerTextField ->
+                if (field.isEmpty()) {
+                    Text("주소 입력", style = DenebType.meta, color = denebHint(), maxLines = 1)
+                }
+                innerTextField()
+            },
+        )
         HorizontalDivider(color = denebHairline())
         if (state.loading) {
             LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), progress = { state.progress / 100f })
         }
         content()
+    }
+}
+
+/**
+ * Turns address-bar input into a loadable URL: keeps an explicit http(s) scheme,
+ * otherwise assumes https. Empty input stays empty (the blank "new tab" state, which
+ * the WebView's blank-guard leaves unloaded).
+ */
+private fun normalizeUrl(input: String): String {
+    val s = input.trim()
+    if (s.isEmpty()) return ""
+    return if (s.startsWith("http://", ignoreCase = true) || s.startsWith("https://", ignoreCase = true)) {
+        s
+    } else {
+        "https://$s"
     }
 }
