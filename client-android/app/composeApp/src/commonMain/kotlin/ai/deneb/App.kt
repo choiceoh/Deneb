@@ -825,6 +825,12 @@ private fun AppContent(
                 // can't be mistaken for a list fling); no launcher-mode gate — the 자체앱
                 // tab is itself an apps surface, so swipe-up-for-more-apps fits there.
                 val onAppHub = currentBackStackEntry?.destination?.hasRoute<DenebAppHub>() == true
+                // Launcher mode (Deneb-as-home alias): when OFF, the bottom bar swaps its
+                // external-app shortcuts (통화/인터넷/카톡) for Deneb sections (메일/달력/설정).
+                // Re-read on each navigation so toggling 설정 → 런처 모드 reflects on return.
+                val launcherMode = remember { createLauncherMode() }
+                var launcherEnabled by remember { mutableStateOf(launcherMode.isEnabled()) }
+                LaunchedEffect(currentBackStackEntry) { launcherEnabled = launcherMode.isEnabled() }
                 Column(
                     Modifier.fillMaxSize().swipeUpToApps(enabled = onAppHub) {
                         navController.navigate(DenebApps) { launchSingleTop = true }
@@ -863,6 +869,8 @@ private fun AppContent(
                             // intent). No-op (and graceful store fallback) off Android.
                             onKakao = { launchKakaoTalk() },
                             feedUnread = feedUnread,
+                            // 런처 모드 OFF → 통화/인터넷/카톡 자리에 메일/달력/설정.
+                            launcherEnabled = launcherEnabled,
                         )
                     }
                 }

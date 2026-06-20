@@ -224,6 +224,9 @@ fun main() {
     renderBottomBar("bottombar_feed_dark.png", DarkColorScheme, "deneb_feed")
     renderBottomBar("bottombar_feed_light.png", LightColorScheme, "deneb_feed")
     renderBottomBar("bottombar_apphub_dark.png", DarkColorScheme, "deneb_app_hub")
+    // Launcher mode ON (통화·인터넷·카톡) vs OFF (메일·달력·설정).
+    renderBottomBar("bottombar_launcher_on.png", DarkColorScheme, "deneb_app_hub", launcherEnabled = true)
+    renderBottomBar("bottombar_launcher_off.png", DarkColorScheme, "deneb_app_hub", launcherEnabled = false)
     renderDesignSample("design_dark.png", DarkColorScheme)
     renderDesignSample("design_light.png", LightColorScheme)
     renderScreen("calendar_event_dark.png", "calendar_event", DarkColorScheme, 760, 1100)
@@ -860,11 +863,11 @@ private val cronWeeklyDraft = ScheduleDraft(SchedMode.WEEKLY, "08:00", setOf(1, 
 private val cronIntervalDraft = ScheduleDraft(SchedMode.INTERVAL, "09:00", emptySet(), "15", IntervalUnit.MIN, LocalDate.parse("2026-06-13"), "")
 private val cronAdvancedDraft = ScheduleDraft(SchedMode.ADVANCED, "09:00", emptySet(), "30", IntervalUnit.MIN, LocalDate.parse("2026-06-13"), "*/5 8-22 * * 1-6")
 
-private fun renderBottomBar(name: String, scheme: ColorScheme, route: String) {
+private fun renderBottomBar(name: String, scheme: ColorScheme, route: String, launcherEnabled: Boolean = true) {
     // Phone width (412dp = 824px @ density 2) so the bar matches the real device. The
-    // five-slot bar (피드·통화·자체앱·인터넷·카톡) renders the same regardless of the
-    // action-tab callbacks, so they're no-ops here — this checks the icons/labels/
-    // selection only (the 통화/인터넷/카톡 intents don't fire in the headless harness).
+    // five-slot bar renders the same regardless of the action-tab callbacks, so they're
+    // no-ops here — this checks the icons/labels/selection only. launcherEnabled=false
+    // swaps the external 통화/인터넷/카톡 for the 메일/달력/설정 sections.
     val scene = ImageComposeScene(width = 824, height = 240, density = Density(2f)) {
         MaterialTheme(colorScheme = scheme) {
             Surface(color = MaterialTheme.colorScheme.background) {
@@ -876,6 +879,7 @@ private fun renderBottomBar(name: String, scheme: ColorScheme, route: String) {
                         onCall = {},
                         onInternet = {},
                         onKakao = {},
+                        launcherEnabled = launcherEnabled,
                     )
                 }
             }
