@@ -253,6 +253,96 @@ func (idx *Index) collectCandidates(queryTokens []string, andMode bool) map[stri
 	return result
 }
 
+// DocFreq returns the number of indexed documents a query token matches,
+// using the SAME matching semantics as scoring (exact for Latin, Hangul-prefix
+// for Hangul) so the value equals the `df` the BM25 IDF is computed from. Zero
+// means the token is absent. Token is lowercased to match the index. Callers
+// use it to gauge a term's corpus rarity (high df == common-in-corpus == a weak
+// recall anchor); see NormalizedRarity.
+func (idx *Index) DocFreq(token string) int {
+	token = strings.ToLower(strings.TrimSpace(token))
+	if token == "" {
+		return 0
+	}
+	idx.mu.RLock()
+	defer idx.mu.RUnlock()
+	return len(idx.matchingDocs(token))
+}
+
+// normalizedRarityLocked computes a token's rarity under a held read lock so the
+// (df, N) pair is read atomically. Caller must hold idx.mu.RLock.
+func (idx *Index) normalizedRarityLocked(token string) float64 {
+	token = strings.ToLower(strings.TrimSpace(token))
+	if token == "" {
+		return 0
+	}
+	df := len(idx.matchingDocs(token))
+	if df <= 0 {
+		return 0
+	}
+	n := float64(len(idx.docs))
+	if n <= 1 {
+		return 0
+	}
+	idfOf := func(d float64) float64 {
+		return math.Log(1 + (n-d+0.5)/(d+0.5))
+	}
+	base := idfOf(1) // IDF of the rarest possible term in this corpus
+	if base <= 0 {
+		return 0
+	}
+	r := idfOf(float64(df)) / base
+	if r < 0 {
+		return 0
+	}
+	if r > 1 {
+		r = 1
+	}
+	return r
+}
+
+// NormalizedRarity maps a query token to a corpus-size-invariant rarity in
+// [0,1]: 1.0 == as rare as the rarest possible term (df==1), → 0 == appears in
+// nearly every document. It is IDF(df)/IDF(df==1), which cancels the raw IDF's
+// strong dependence on N (a fixed raw-IDF or normalized-BM25 threshold drifts
+// with corpus size; this ratio holds: df==1 is 1.0 and a noun in ~15% of pages
+// is ~0.3-0.5 at any realistic N). Returns 0 for an absent token (df==0) and for
+// a degenerate single-doc corpus. This is the discriminator between a rare
+// proper noun (거래처명, 고유명사 — a strong single-term anchor) and a noun that
+// is merely common in the corpus (a weak anchor that lexically matches many
+// off-topic pages).
+func (idx *Index) NormalizedRarity(token string) float64 {
+	idx.mu.RLock()
+	defer idx.mu.RUnlock()
+	return idx.normalizedRarityLocked(token)
+}
+
+// QueryMaxRarity tokenizes a query the same way Search does and returns the
+// highest NormalizedRarity among its tokens that are present in the corpus
+// (df>0). It answers "does this query contain ANY rare anchor term?": a high
+// value means at least one token is specific (a proper noun / distinctive term),
+// so a lexical hit is trustworthy; a low value means every matchable token is
+// corpus-common, so a BM25-only hit is a likely common-word false positive (the
+// measured recall leak). Tokens absent from the corpus (df==0) contribute
+// nothing — they cannot have produced any hit. Returns 0 for an empty query or
+// one whose tokens are all absent. A single read lock spans all tokens so the
+// corpus snapshot (matched df + N) is consistent across the whole query.
+func (idx *Index) QueryMaxRarity(query string) float64 {
+	tokens := tokenize(query)
+	if len(tokens) == 0 {
+		return 0
+	}
+	idx.mu.RLock()
+	defer idx.mu.RUnlock()
+	maxR := 0.0
+	for _, tok := range tokens {
+		if r := idx.normalizedRarityLocked(tok); r > maxR {
+			maxR = r
+		}
+	}
+	return maxR
+}
+
 // matchingDocs returns all document IDs matching a token.
 // Supports Hangul prefix matching: if the token contains Hangul,
 // also matches index entries that start with the token.

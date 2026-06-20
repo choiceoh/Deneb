@@ -72,7 +72,7 @@ func TestMergeSearchResultsDemotesBM25Only(t *testing.T) {
 		{Path: "semonly.md", Score: 0.75},  // semantic-only, ABOVE the floor → admitted
 		{Path: "semfloor.md", Score: 0.50}, // semantic-only, BELOW the floor → excluded
 	}
-	out := mergeSearchResults(bm25, sem, 10)
+	out := mergeSearchResults(bm25, sem, 10, false)
 	score := func(p string) float64 {
 		for _, r := range out {
 			if r.Path == p {
@@ -132,17 +132,17 @@ func TestMergeSearchResults_SemanticOnlyFloorOverride(t *testing.T) {
 	}
 	// Floor BELOW the cosine (reproduces the old floorless behavior) → injected.
 	t.Setenv("DENEB_WIKI_SEM_FLOOR", "0.40")
-	if !has(mergeSearchResults(nil, sem, 10), "거래/hyundai.md") {
+	if !has(mergeSearchResults(nil, sem, 10, false), "거래/hyundai.md") {
 		t.Errorf("floor=0.40 (below the %.4f leak cosine) must admit the off-topic hit — old floorless behavior", measuredLeakCos)
 	}
 	// Shipped default floor (0.70, above the cosine) → excluded (no leak).
 	t.Setenv("DENEB_WIKI_SEM_FLOOR", "")
-	if has(mergeSearchResults(nil, sem, 10), "거래/hyundai.md") {
+	if has(mergeSearchResults(nil, sem, 10, false), "거래/hyundai.md") {
 		t.Errorf("default floor must exclude the %.4f off-topic leak cosine", measuredLeakCos)
 	}
 	// A malformed override is ignored → back to the default exclusion.
 	t.Setenv("DENEB_WIKI_SEM_FLOOR", "not-a-number")
-	if has(mergeSearchResults(nil, sem, 10), "거래/hyundai.md") {
+	if has(mergeSearchResults(nil, sem, 10, false), "거래/hyundai.md") {
 		t.Errorf("malformed override should fall back to the default floor and exclude the hit")
 	}
 }

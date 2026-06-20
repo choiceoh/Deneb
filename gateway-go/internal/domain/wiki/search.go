@@ -121,6 +121,27 @@ func (s *searchDB) search(_ context.Context, query string, limit int) ([]SearchR
 	return results, nil
 }
 
+// queryMaxRarity returns the highest corpus-rarity (0–1) among the query's
+// tokens that exist in the index (see textsearch.QueryMaxRarity). Used to gate
+// the lexical (BM25) recall leak: a query whose only matchable tokens are
+// corpus-common (rarity below bm25RarityFloor) cannot anchor a trustworthy
+// BM25-only hit.
+func (s *searchDB) queryMaxRarity(query string) float64 {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.idx.QueryMaxRarity(query)
+}
+
+// docCount returns the number of indexed pages (corpus size N). The lexical
+// rarity gate needs it to stay disabled for corpora too small to estimate
+// "common in corpus" — in a tiny wiki every term looks common (df is a large
+// fraction of N) and gating would drop legitimate hits.
+func (s *searchDB) docCount() int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.idx.Len()
+}
+
 // rebuildIndex clears and rebuilds the index from all .md files in dir.
 func (s *searchDB) rebuildIndex(dir string) error {
 	s.mu.Lock()
@@ -192,11 +213,32 @@ func (s *Store) Search(ctx context.Context, query string, limit int) ([]SearchRe
 	if err != nil {
 		return nil, err
 	}
+	// Lexical-leak gate: a query whose only matchable tokens are corpus-common
+	// (no rare anchor term) produces BM25 hits that matched on a frequent word
+	// and are likely off-topic — the measured recall leak. commonOnlyQuery is
+	// true for exactly those; it gates UNCONFIRMED lexical hits below.
+	//
+	// DISABLED below bm25GateMinCorpus: in a tiny wiki every term's df is a large
+	// fraction of N, so even a distinctive term scores "common" and the gate
+	// would drop legitimate hits (a single-page corpus searched for its one rare
+	// word, a 2-page corpus where both pages share the query terms). The leak it
+	// guards needs many pages for a common word to collide with off-topic ones;
+	// at small N there is little to leak and the conservative choice is gate-off.
+	commonOnlyQuery := s.fts.docCount() >= bm25GateMinCorpus &&
+		s.fts.queryMaxRarity(query) < bm25RarityFloorValue()
+
 	sem := s.searchSemantic(ctx, query, max(limit, semanticBlendK))
 	if len(sem) == 0 {
+		// Pure-BM25 path (no embedder / server down / CI). Nothing can confirm a
+		// lexical hit here, so a common-only query's hits are all weak matches and
+		// are dropped — this is the floorless branch that injected an off-topic
+		// page for a single common noun. A query WITH a rare anchor is unaffected.
+		if commonOnlyQuery {
+			return nil, nil
+		}
 		return s.fts.applyValidity(bm25), nil
 	}
-	return s.fts.applyValidity(mergeSearchResults(bm25, sem, limit)), nil
+	return s.fts.applyValidity(mergeSearchResults(bm25, sem, limit, commonOnlyQuery)), nil
 }
 
 const (
@@ -247,7 +289,59 @@ const (
 	// is not dropped. An srv4 sweep over the real wiki corpus is the final
 	// confirmation of the exact value; 0.70 is the measurement-grounded default.
 	semanticOnlyFloor = 0.70
+
+	// bm25RarityFloor is the SYMMETRIC counterpart to semanticOnlyFloor, for the
+	// lexical (BM25) path. It is the minimum corpus-rarity (textsearch
+	// NormalizedRarity, 0–1) the rarest matchable token of a query must clear for
+	// a BM25-ONLY hit (no semantic confirmation) to be admitted. A query whose
+	// every matchable token is corpus-common (rarity below the floor) is a weak
+	// lexical query: its hits matched on a frequent word and are likely off-topic
+	// (the measured recall leak — a single common noun like "보고"/"일정" matched
+	// unrelated pages at confidence high/medium). Hits from such a query are kept
+	// ONLY when semantic similarity independently confirms them.
+	//
+	// This gate is deliberately MORE conservative than semanticOnlyFloor, by
+	// design: semantic similarity scores EVERY page against the query, so a weak
+	// semantic-only match is always noise; but a single lexical match CAN be a
+	// strong signal when the term is rare (a 거래처명/고유명사 appearing in one
+	// page is a legitimate one-term recall). So the gate keys on the term's
+	// rarity, not the hit's score — a rare anchor survives, only common-only
+	// queries are floored, and it never touches a semantically-confirmed hit.
+	//
+	// Value 0.55 (override via DENEB_WIKI_BM25_RARITY_FLOOR). Rationale, measured
+	// across corpus sizes N∈{22,30,100,200,263} (NormalizedRarity is N-stable,
+	// unlike raw IDF or normalized BM25 which both drift with N): a rare term
+	// (df 1–3) scores 0.69–1.0 at every N — comfortably above the floor; a noun
+	// in ~10–20% of pages (the leak band, e.g. "보고" at df 40/263) scores
+	// 0.31–0.52 at realistic N — below it. 0.55 sits in that valley, leaving
+	// headroom so a df=2–3 term in even a small corpus (rarity ≥0.69) is never
+	// dropped (conservative: when unsure, keep).
+	bm25RarityFloor = 0.55
+
+	// bm25GateMinCorpus is the smallest corpus (page count N) at which the
+	// lexical rarity gate engages. Below it the gate is OFF: NormalizedRarity is
+	// a ratio of IDFs, and when N is small even a df of 2–3 is a large fraction
+	// of N so every term reads as "common" (measured: at N=2 a query both pages
+	// share scores rarity ~0.26; at N=22 a df=3 term is ~0.69, right at the
+	// boundary). The leak the gate guards is a scale phenomenon — a common word
+	// needs many pages to collide with off-topic ones — so disabling it for small
+	// wikis costs no real protection while preventing false drops in a young or
+	// test corpus. 30 is comfortably below the production wiki (~260 pages) and
+	// above the band where the rarity ratio is too coarse to trust.
+	bm25GateMinCorpus = 30
 )
+
+// bm25RarityFloorValue returns the lexical-query rarity floor, honoring the
+// DENEB_WIKI_BM25_RARITY_FLOOR override (mirrors semanticOnlyFloorValue). A
+// malformed or out-of-(0,1] override is ignored in favor of the default.
+func bm25RarityFloorValue() float64 {
+	if v := os.Getenv("DENEB_WIKI_BM25_RARITY_FLOOR"); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil && f > 0 && f <= 1 {
+			return f
+		}
+	}
+	return bm25RarityFloor
+}
 
 // semanticOnlyFloorValue returns the cosine admission floor for semantic-only
 // hits, honoring the DENEB_WIKI_SEM_FLOOR override (mirrors filestore's
@@ -270,7 +364,15 @@ func semanticOnlyFloorValue() float64 {
 // semanticOnlyFloor and then keeps its cosine — the floor is the admission gate
 // the floorless semantic-only branch lacked. BM25 snippets are preserved. Order
 // is by blended score, descending; ties broken by path.
-func mergeSearchResults(bm25, sem []SearchResult, limit int) []SearchResult {
+//
+// commonOnlyQuery is the lexical counterpart to that floor: when true (the query
+// has no rare anchor term — every matchable token is corpus-common), a BM25 hit
+// that semantic does NOT independently confirm (cosine < semSupportThreshold) is
+// DROPPED, not merely demoted — it matched only on a frequent word and is the
+// measured leak. Semantically-confirmed lexical hits and genuine semantic-only
+// hits are unaffected, so a relevant page that happens to share a common word
+// still surfaces via its meaning.
+func mergeSearchResults(bm25, sem []SearchResult, limit int, commonOnlyQuery bool) []SearchResult {
 	type merged struct {
 		res       SearchResult
 		bm25Score float64
@@ -316,6 +418,14 @@ func mergeSearchResults(bm25, sem []SearchResult, limit int) []SearchResult {
 		// floored — they took a lexical path and keep the existing
 		// bonus/penalty treatment below.
 		if !m.inBM25 && m.semCos < floor {
+			continue
+		}
+		// Lexical-leak gate (symmetric to the floor above): for a common-only
+		// query (no rare anchor term), a lexical hit semantic does not confirm
+		// (cosine < semSupportThreshold) matched only on a frequent word — drop
+		// it. A semantically-confirmed lexical hit (>= threshold) survives, so a
+		// genuinely relevant page sharing a common word is not lost.
+		if commonOnlyQuery && m.inBM25 && m.semCos < semSupportThreshold {
 			continue
 		}
 		m.final = m.bm25Score
