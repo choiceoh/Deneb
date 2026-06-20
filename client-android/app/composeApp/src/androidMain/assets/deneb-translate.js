@@ -156,6 +156,15 @@
     enabled = !!on;
     if (enabled) {
       applyAll();
+      // Diagnostic + UX: report how many translatable nodes were found this enable
+      // (0 → "no text"; >0 → "translating N…"). Guarded so a missing bridge is a no-op.
+      try {
+        var n = 0;
+        for (var k in nodes) if (nodes.hasOwnProperty(k)) n++;
+        if (window.DenebTranslateBridge && window.DenebTranslateBridge.onEnable) {
+          window.DenebTranslateBridge.onEnable(n);
+        }
+      } catch (e) {}
       return;
     }
     // Restore originals.
