@@ -67,9 +67,10 @@ func TestMergeSearchResultsDemotesBM25Only(t *testing.T) {
 		{Path: "strong.md", Score: 0.7}, // lexical confirmed by strong cosine
 	}
 	sem := []SearchResult{
-		{Path: "weak.md", Score: 0.30},   // below semSupportThreshold
-		{Path: "strong.md", Score: 0.60}, // above semSupportThreshold
-		{Path: "semonly.md", Score: 0.50},
+		{Path: "weak.md", Score: 0.30},     // below semSupportThreshold (but inBM25, so kept)
+		{Path: "strong.md", Score: 0.60},   // above semSupportThreshold
+		{Path: "semonly.md", Score: 0.75},  // semantic-only, ABOVE the floor → admitted
+		{Path: "semfloor.md", Score: 0.50}, // semantic-only, BELOW the floor → excluded
 	}
 	out := mergeSearchResults(bm25, sem, 10)
 	score := func(p string) float64 {
@@ -88,15 +89,61 @@ func TestMergeSearchResultsDemotesBM25Only(t *testing.T) {
 	if got := score("weak.md"); got >= 0.9 {
 		t.Errorf("bm25 hit with weak cosine should be demoted, got %.3f", got)
 	}
+	// A BM25 hit is never excluded by the semantic-only floor, even with a cosine
+	// (0.30) below it — the floor gates only the floorless semantic-only branch.
+	if got := score("weak.md"); got < 0 {
+		t.Errorf("bm25 hit must not be excluded by the semantic-only floor, got %.3f", got)
+	}
 	// The semantically-confirmed hit (cosine >= threshold) gets the bonus and
 	// outranks both lexical false positives despite its lower raw BM25.
 	if score("strong.md") <= score("nosem.md") || score("strong.md") <= score("weak.md") {
 		t.Errorf("semantically-confirmed hit (%.3f) must outrank lexical false positives (nosem %.3f, weak %.3f)",
 			score("strong.md"), score("nosem.md"), score("weak.md"))
 	}
-	// Semantic-only hits keep their cosine (no penalty, no bonus).
-	if got := score("semonly.md"); got != 0.5 {
-		t.Errorf("semantic-only hit should keep its score, got %.3f", got)
+	// A semantic-only hit ABOVE the floor keeps its cosine (no penalty, no bonus).
+	if got := score("semonly.md"); got != 0.75 {
+		t.Errorf("semantic-only hit above the floor should keep its score, got %.3f", got)
+	}
+	// A semantic-only hit BELOW the floor is excluded entirely — this is the
+	// admission gate the floorless branch lacked (the measured wiki leak).
+	if got := score("semfloor.md"); got >= 0 {
+		t.Errorf("semantic-only hit below the floor must be excluded, got %.3f", got)
+	}
+}
+
+// TestMergeSearchResults_SemanticOnlyFloorOverride confirms the
+// DENEB_WIKI_SEM_FLOOR env override moves the admission gate, that a malformed
+// override falls back to the default, and — using the exact MEASURED leak
+// cosine (0.6302) — proves the leak→no-leak transition: the off-topic
+// semantic-only hit is injected when the floor is below it (old floorless
+// behavior) and excluded at the shipped 0.70 default.
+func TestMergeSearchResults_SemanticOnlyFloorOverride(t *testing.T) {
+	// The measured leak: an off-topic wiki page injected at score 0.6302 == its
+	// raw cosine, with no admission gate on the semantic-only branch.
+	const measuredLeakCos = 0.6302
+	sem := []SearchResult{{Path: "거래/hyundai.md", Score: measuredLeakCos}}
+	has := func(out []SearchResult, p string) bool {
+		for _, r := range out {
+			if r.Path == p {
+				return true
+			}
+		}
+		return false
+	}
+	// Floor BELOW the cosine (reproduces the old floorless behavior) → injected.
+	t.Setenv("DENEB_WIKI_SEM_FLOOR", "0.40")
+	if !has(mergeSearchResults(nil, sem, 10), "거래/hyundai.md") {
+		t.Errorf("floor=0.40 (below the %.4f leak cosine) must admit the off-topic hit — old floorless behavior", measuredLeakCos)
+	}
+	// Shipped default floor (0.70, above the cosine) → excluded (no leak).
+	t.Setenv("DENEB_WIKI_SEM_FLOOR", "")
+	if has(mergeSearchResults(nil, sem, 10), "거래/hyundai.md") {
+		t.Errorf("default floor must exclude the %.4f off-topic leak cosine", measuredLeakCos)
+	}
+	// A malformed override is ignored → back to the default exclusion.
+	t.Setenv("DENEB_WIKI_SEM_FLOOR", "not-a-number")
+	if has(mergeSearchResults(nil, sem, 10), "거래/hyundai.md") {
+		t.Errorf("malformed override should fall back to the default floor and exclude the hit")
 	}
 }
 
