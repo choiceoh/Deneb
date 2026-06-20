@@ -65,10 +65,29 @@ type semanticIndex struct {
 	vecs        map[string]cachedVec // relPath -> embedding
 	refreshing  atomic.Bool          // single-flight guard for refreshAsync
 	syncRefresh bool                 // tests only: run refreshAsync inline for deterministic assertions
+
+	// Lifecycle for the background refresh goroutine: baseCtx is cancelled by
+	// shutdown() so an in-flight re-embed stops promptly, and wg lets Close wait
+	// for it to fully exit — so its saveCache write cannot land after the store
+	// is torn down (a truncated cache on real shutdown; a "directory not empty"
+	// TempDir cleanup race in tests, since saveCache repopulates the wiki dir
+	// after RemoveAll has enumerated it).
+	baseCtx context.Context
+	cancel  context.CancelFunc
+	wg      sync.WaitGroup
 }
 
 func newSemanticIndex(e Embedder) *semanticIndex {
-	return &semanticIndex{embedder: e, vecs: make(map[string]cachedVec)}
+	ctx, cancel := context.WithCancel(context.Background())
+	return &semanticIndex{embedder: e, vecs: make(map[string]cachedVec), baseCtx: ctx, cancel: cancel}
+}
+
+// shutdown cancels any in-flight background refresh and waits for it to finish,
+// guaranteeing no saveCache write happens after this returns. Called from
+// Store.Close. Idempotent: cancel is safe to call repeatedly.
+func (si *semanticIndex) shutdown() {
+	si.cancel()
+	si.wg.Wait()
 }
 
 // semanticRefreshTimeout bounds a background re-embed. Generous because the CPU
@@ -94,10 +113,13 @@ func (si *semanticIndex) refreshAsync(store *Store) {
 	if !si.refreshing.CompareAndSwap(false, true) {
 		return // a refresh is already in flight
 	}
+	si.wg.Add(1)
 	safego.GoWithSlog(slog.Default(), "wiki-semantic-refresh", func() {
+		defer si.wg.Done()
 		defer si.refreshing.Store(false)
-		// Background work with no plumbed shutdown ctx; bounded so it cannot wedge.
-		ctx, cancel := context.WithTimeout(context.Background(), semanticRefreshTimeout)
+		// Derived from baseCtx so Store.Close can cancel it; still self-bounded so
+		// it cannot wedge if Close is never called.
+		ctx, cancel := context.WithTimeout(si.baseCtx, semanticRefreshTimeout)
 		defer cancel()
 		_ = si.refresh(ctx, store)
 	})
