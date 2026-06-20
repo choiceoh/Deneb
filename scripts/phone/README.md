@@ -1,5 +1,23 @@
 # Deneb 폰 연동 (phone ↔ gateway over SSH)
 
+> ## ⚠️ 상태 (2026-06-21): push 센싱 은퇴 — 배터리 때문에
+> **폰→서버 push 묶음(아래 `deneb-supervisor`·`deneb-tunnel`·`deneb-*-watch`·
+> `deneb-heartbeat`)은 운영에서 내렸다.** `termux-wake-lock`이 폰을 못 자게 하고
+> autossh·GPS 폴링이 24/7 돌아 배터리를 빠르게 갉아먹었기 때문. 그 일들은 이제
+> **네이티브 클라가 시스템-관리 방식으로** 한다: 알림=`NotificationListenerService`,
+> 위치="지금 어디" 온디맨드(#2782)+집/직장 지오펜스 도착(#2784), 사용리듬=UsageSensor.
+> 모두 앱의 게이트웨이 연결로 보내므로 wake-lock·터널이 필요 없다.
+>
+> **Termux 의 남은 역할 = host→phone 원격 조회/제어뿐**(`phone_read`/`phone_write`,
+> `ssh phone` :8022 sshd). 클립보드는 안드 백그라운드 제한으로 네이티브가 불가해 여기
+> 남는다. 그래서 **Termux:Boot 는 이제 `sshd` 한 줄만**(wake-lock·supervisor 없음).
+>
+> 호스트 측 `deneb-phone-link-check` 타이머는 heartbeat 가 끊겨 stale 경고만 내므로
+> 비활성화한다(`systemctl --user disable --now deneb-phone-link-check.timer`).
+>
+> 아래 push 문서는 **폴백 참조**로 남긴다(네이티브 지오펜스/위치 실기기 검증 전까지).
+> 되살리려면 `deneb-supervisor start`(주의: wake-lock 복귀 = 배터리).
+
 스마트폰(Termux)에서 발생한 이벤트 — 알림·위치·클립보드 — 를 SSH 터널로 Deneb
 게이트웨이의 `POST /api/event/ingest` 로 보내, 비서실장 능동판정 턴을 돌린다.
 알릴 가치가 있으면 네이티브 업무 피드에 카드+푸시로 뜨고, 광고·OTP 같은 노이즈는
