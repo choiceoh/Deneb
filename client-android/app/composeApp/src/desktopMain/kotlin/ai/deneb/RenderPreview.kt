@@ -12,6 +12,8 @@ import ai.deneb.deneb.CalendarEventDetail
 import ai.deneb.deneb.CalendarMonthGrid
 import ai.deneb.deneb.CronEditContent
 import ai.deneb.deneb.DashboardLanesContent
+import ai.deneb.deneb.DenebBrowserChrome
+import ai.deneb.deneb.DenebWebViewState
 import ai.deneb.deneb.FilesTextViewerContent
 import ai.deneb.deneb.IntervalUnit
 import ai.deneb.deneb.MailMessage
@@ -143,10 +145,30 @@ private val filesPlainSample = """
     2026-06-20T09:12:08Z INFO  miniapp.files.list ok (entries=14)
 """.trimIndent()
 
+private fun renderBrowser(name: String, scheme: ColorScheme) {
+    val state = DenebWebViewState("https://en.wikipedia.org/wiki/Deneb").apply { translateEnabled = true }
+    val scene = ImageComposeScene(width = 824, height = 900, density = Density(2f)) {
+        MaterialTheme(colorScheme = scheme) {
+            DenebBrowserChrome(state = state, onBack = {}) {
+                Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
+                    Text("(웹 페이지 — Android WebView)", style = DenebType.meta, color = denebHint())
+                }
+            }
+        }
+    }
+    val image = scene.render()
+    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
+    File("/tmp/deneb-render").mkdirs()
+    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
+    scene.close()
+}
+
 fun main() {
     System.setProperty("java.awt.headless", "true")
     render("mail_dark.png", DarkColorScheme)
     render("mail_light.png", LightColorScheme)
+    renderBrowser("browser_dark.png", DarkColorScheme)
+    renderBrowser("browser_light.png", LightColorScheme)
     renderMarkdown("markdown_dark.png", DarkColorScheme)
     renderAnalysis("analysis_clip.png", DarkColorScheme)
     renderCollapsedReport("mail_collapsed_dark.png", DarkColorScheme, expanded = false)

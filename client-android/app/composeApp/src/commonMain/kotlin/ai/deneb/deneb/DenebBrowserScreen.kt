@@ -4,28 +4,35 @@ import ai.deneb.PlatformBackHandler
 import ai.deneb.openUrl
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebType
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Row
+import ai.deneb.ui.components.rememberHaptics
+import ai.deneb.ui.denebHairline
+import ai.deneb.ui.denebHint
+import ai.deneb.ui.denebInsight
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.OpenInNew
+import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.Translate
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
 /**
  * In-app browser for external links, with one-tap in-place translation (en/ru →
- * ko). The URL bar always shows the real current URL (link safety — an in-app
- * WebView otherwise hides where you are), and "열기" escapes to the system
- * browser. Translation toggles the injected DOM translator (see deneb-translate.js).
- *
- * Android renders a real WebView; other platforms show an Android-only stub
- * (the chrome and navigation still render, so the desktop harness can exercise them).
+ * ko). Android renders a real WebView; other platforms show an Android-only stub
+ * (the chrome and navigation still render, so the desktop harness / renderPreviews
+ * can exercise them).
  */
 @Composable
 fun DenebBrowserScreen(
@@ -35,6 +42,34 @@ fun DenebBrowserScreen(
     modifier: Modifier = Modifier,
 ) {
     val state = remember(url) { DenebWebViewState(url) }
+    DenebBrowserChrome(state = state, onBack = onBack, modifier = modifier) {
+        DenebWebView(
+            state = state,
+            translate = { segments, lang -> client.translateSegments(segments, lang) },
+            modifier = Modifier.fillMaxWidth().weight(1f),
+        )
+    }
+}
+
+/**
+ * Stateless browser chrome (scaffold + URL bar + actions), separated from the
+ * stateful shell so renderPreviews can exercise the look with mock state. The URL
+ * bar always shows the real current URL (link safety — an in-app WebView otherwise
+ * hides where you are); the open-external action escapes to the system browser.
+ *
+ * Design system: Material IconButtons with functional icons (like the mail
+ * toolbar), skinned with Deneb colors — the translate toggle lights the warm
+ * insight accent when ON (translation is an AI surface), inactive actions use the
+ * muted hint color. [content] is the page area (the real WebView, or a stub).
+ */
+@Composable
+fun DenebBrowserChrome(
+    state: DenebWebViewState,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val haptics = rememberHaptics()
 
     // Back pops the page's own history first; the screen is left only at the root.
     PlatformBackHandler(enabled = state.canGoBack) { state.goBack() }
@@ -45,38 +80,56 @@ fun DenebBrowserScreen(
         modifier = modifier,
         fillWidth = true,
         actions = {
-            TextButton(onClick = { state.translateEnabled = !state.translateEnabled }) {
-                Text(if (state.translateEnabled) "원문" else "번역", style = DenebType.button)
+            IconButton(
+                onClick = {
+                    haptics.tap()
+                    state.reload()
+                },
+                modifier = Modifier.size(40.dp),
+            ) {
+                Icon(Icons.Outlined.Refresh, contentDescription = "새로고침", tint = denebHint())
             }
-            TextButton(onClick = { openUrl(state.currentUrl) }) {
-                Text("열기", style = DenebType.button)
+            IconButton(
+                onClick = {
+                    haptics.tap()
+                    state.translateEnabled = !state.translateEnabled
+                },
+                modifier = Modifier.size(40.dp),
+            ) {
+                Icon(
+                    Icons.Outlined.Translate,
+                    contentDescription = if (state.translateEnabled) "원문 보기" else "한국어로 번역",
+                    tint = if (state.translateEnabled) denebInsight() else denebHint(),
+                )
+            }
+            IconButton(
+                onClick = {
+                    haptics.tap()
+                    openUrl(state.currentUrl)
+                },
+                modifier = Modifier.size(40.dp),
+            ) {
+                Icon(
+                    Icons.AutoMirrored.Outlined.OpenInNew,
+                    contentDescription = "외부 브라우저로 열기",
+                    tint = denebHint(),
+                )
             }
         },
     ) {
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            TextButton(onClick = { state.reload() }) { Text("↻", style = DenebType.button) }
+        Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
             Text(
                 text = state.currentUrl,
                 style = DenebType.meta,
+                color = denebHint(),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
             )
         }
+        HorizontalDivider(color = denebHairline())
         if (state.loading) {
-            LinearProgressIndicator(
-                progress = { state.progress / 100f },
-                modifier = Modifier.fillMaxWidth(),
-            )
+            LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), progress = { state.progress / 100f })
         }
-        DenebWebView(
-            state = state,
-            translate = { segments, lang -> client.translateSegments(segments, lang) },
-            modifier = Modifier.fillMaxWidth().weight(1f),
-        )
+        content()
     }
 }
