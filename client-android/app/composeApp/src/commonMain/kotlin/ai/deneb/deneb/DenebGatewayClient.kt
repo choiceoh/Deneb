@@ -58,6 +58,8 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.put
@@ -1043,6 +1045,25 @@ class DenebGatewayClient(
         }
         _workFeedLoaded.value = true
         return true
+    }
+
+    /** In-app browser in-place translation (en/ru → ko): ships the page's text
+     *  segments to miniapp.web.translate and returns a SAME-length, SAME-order
+     *  list of translations. Null on transport/auth failure or when the
+     *  translation role is unwired; the JS bridge then keeps the originals. */
+    @Serializable
+    private data class TranslatePayload(val translated: List<String> = emptyList())
+
+    internal suspend fun translateSegments(segments: List<String>, targetLang: String = "ko"): List<String>? {
+        if (segments.isEmpty()) return emptyList()
+        val payload: TranslatePayload? = callRpc(
+            "miniapp.web.translate",
+            buildJsonObject {
+                put("segments", buildJsonArray { segments.forEach { add(it) } })
+                put("targetLang", targetLang)
+            },
+        )
+        return payload?.translated
     }
 
     /** Observation plane (miniapp.observe.*): read the gateway's own behavior and
