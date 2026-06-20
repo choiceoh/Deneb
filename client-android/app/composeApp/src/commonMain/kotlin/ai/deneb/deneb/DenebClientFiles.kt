@@ -55,14 +55,30 @@ suspend fun DenebGatewayClient.filesList(path: String = ""): List<FilesEntry>? =
 
 /**
  * Search the whole store by query (results span folders). Null on failure.
- * [content] true also matches inside extracted file text (PDF/Word/Excel/…), not
- * just file names — slower, since the gateway reads and extracts each file.
+ *
+ * Three search scopes (the wire flags are mutually exclusive here):
+ * - default (both false): match file names only — fastest.
+ * - [content] true: also match inside extracted file text (PDF/Word/Excel/…),
+ *   slower since the gateway reads and extracts each file.
+ * - [semantic] true: BGE-M3 meaning search (results come back ranked by score
+ *   from the backend); takes priority over [content] when both are set. If the
+ *   embedding server is down the gateway falls back to name/content on its own,
+ *   so the UI needs no special handling.
  */
-suspend fun DenebGatewayClient.filesSearch(query: String, content: Boolean = false): List<FilesEntry>? = callRpc<FilesListOut>(
+suspend fun DenebGatewayClient.filesSearch(
+    query: String,
+    content: Boolean = false,
+    semantic: Boolean = false,
+): List<FilesEntry>? = callRpc<FilesListOut>(
     "miniapp.files.search",
     buildJsonObject {
         put("query", query)
-        if (content) put("content", true)
+        // semantic wins over content (exclusive) so we never send both.
+        if (semantic) {
+            put("semantic", true)
+        } else if (content) {
+            put("content", true)
+        }
     },
 )?.entries?.map { it.toEntry() }
 
