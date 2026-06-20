@@ -91,6 +91,7 @@ private fun SectionHeader(key: String) {
 
 @Composable
 private fun ScrubIndex(keys: List<String>, onScrub: (String) -> Unit, modifier: Modifier = Modifier) {
+    val haptics = rememberHaptics()
     Column(
         // Touch-and-slide over the column maps Y → section key and fires onScrub
         // continuously, so a single drag flies down the alphabet (Niagara idiom).
@@ -106,6 +107,11 @@ private fun ScrubIndex(keys: List<String>, onScrub: (String) -> Unit, modifier: 
                     val key = keys[i]
                     if (key != lastKey) {
                         lastKey = key
+                        // A detent tick each time the drag crosses into a new initial —
+                        // the scrub feels like notches under the thumb and confirms the
+                        // jump landed without the user looking (Niagara/iOS index idiom).
+                        // Shared, so both the launcher and the 전체 연락처 scrubber get it.
+                        haptics.segmentTick()
                         onScrub(key)
                     }
                 }
