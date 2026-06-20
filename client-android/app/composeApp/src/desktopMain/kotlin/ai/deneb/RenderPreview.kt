@@ -174,8 +174,8 @@ private fun renderBrowser(name: String, scheme: ColorScheme) {
 
 fun main() {
     System.setProperty("java.awt.headless", "true")
-    render("mail_dark.png", DarkColorScheme)
-    render("mail_light.png", LightColorScheme)
+    renderScreen("mail_dark.png", "mail", DarkColorScheme, 840, 1100)
+    renderScreen("mail_light.png", "mail", LightColorScheme, 840, 1100)
     renderBrowser("browser_dark.png", DarkColorScheme)
     renderBrowser("browser_light.png", LightColorScheme)
     renderMarkdown("markdown_dark.png", DarkColorScheme)
@@ -231,17 +231,17 @@ fun main() {
     renderSkeleton("skeleton_light.png", LightColorScheme)
     renderWaitingChip("waiting_chip_dark.png", DarkColorScheme)
     renderWaitingChip("waiting_chip_light.png", LightColorScheme)
-    renderSkillsList("skills_list_dark.png", DarkColorScheme)
-    renderSkillsList("skills_list_light.png", LightColorScheme)
-    renderSelfImprovementCoding("self_improvement_coding_dark.png", DarkColorScheme)
-    renderSelfImprovementCoding("self_improvement_coding_light.png", LightColorScheme)
-    renderSkillLifecycle("skills_lifecycle_dark.png", DarkColorScheme)
-    renderSkillLifecycle("skills_lifecycle_light.png", LightColorScheme)
-    renderSkillDetail("skill_detail_dark.png", DarkColorScheme)
-    renderSkillDetail("skill_detail_light.png", LightColorScheme)
-    renderFilesText("files_text_markdown_dark.png", DarkColorScheme, displayName = "프로젝트_X.md", markdown = true, text = markdownSample)
-    renderFilesText("files_text_markdown_light.png", LightColorScheme, displayName = "프로젝트_X.md", markdown = true, text = markdownSample)
-    renderFilesText("files_text_plain_dark.png", DarkColorScheme, displayName = "deploy.log", markdown = false, text = filesPlainSample)
+    renderScreen("skills_list_dark.png", "skills_list", DarkColorScheme, 824, 700)
+    renderScreen("skills_list_light.png", "skills_list", LightColorScheme, 824, 700)
+    renderScreen("self_improvement_coding_dark.png", "self_improvement_coding", DarkColorScheme, 824, 760)
+    renderScreen("self_improvement_coding_light.png", "self_improvement_coding", LightColorScheme, 824, 760)
+    renderScreen("skills_lifecycle_dark.png", "skills_lifecycle", DarkColorScheme, 824, 700)
+    renderScreen("skills_lifecycle_light.png", "skills_lifecycle", LightColorScheme, 824, 700)
+    renderScreen("skill_detail_dark.png", "skill_detail", DarkColorScheme, 824, 1400)
+    renderScreen("skill_detail_light.png", "skill_detail", LightColorScheme, 824, 1400)
+    renderScreen("files_text_markdown_dark.png", "files_text_markdown", DarkColorScheme, 824, 900)
+    renderScreen("files_text_markdown_light.png", "files_text_markdown", LightColorScheme, 824, 900)
+    renderScreen("files_text_plain_dark.png", "files_text_plain", DarkColorScheme, 824, 900)
     renderFilesSearchMode("files_search_mode_name_dark.png", DarkColorScheme, FilesSearchMode.NAME)
     renderFilesSearchMode("files_search_mode_semantic_dark.png", DarkColorScheme, FilesSearchMode.SEMANTIC)
     renderFilesSearchMode("files_search_mode_content_light.png", LightColorScheme, FilesSearchMode.CONTENT)
@@ -614,6 +614,89 @@ internal val previewScreens: Map<String, @Composable (ColorScheme) -> Unit> = ma
             }
         }
     },
+    "mail" to { scheme ->
+        MaterialTheme(colorScheme = scheme) {
+            Surface(color = MaterialTheme.colorScheme.background) {
+                Column {
+                    Text(
+                        "받은 메일",
+                        style = MaterialTheme.typography.headlineMedium,
+                        modifier = Modifier.padding(16.dp),
+                    )
+                    sample.forEach { m ->
+                        MailRow(m, selecting = false, isSelected = false, onTap = {}, onLongPress = {})
+                    }
+                }
+            }
+        }
+    },
+    "files_text_markdown" to { scheme -> filesTextBody(scheme, "프로젝트_X.md", true, markdownSample) },
+    "files_text_plain" to { scheme -> filesTextBody(scheme, "deploy.log", false, filesPlainSample) },
+    "skills_list" to { scheme ->
+        MaterialTheme(colorScheme = scheme) {
+            Surface(color = MaterialTheme.colorScheme.background) {
+                Column {
+                    SkillsViewSwitcher(showLifecycle = false, onSelect = {})
+                    SkillListContent(sampleSkillRows)
+                }
+            }
+        }
+    },
+    "skill_detail" to { scheme ->
+        val now = System.currentTimeMillis()
+        val detail = SkillDetailResponse(
+            skill = sampleSkillRows[1].copy(
+                evolveCount = 1,
+                lastEvolvedAt = now - 2 * 3_600_000L,
+                totalUses = 2,
+                lastUsedAt = now - 9 * 3_600_000L,
+            ),
+            body = """
+                ---
+                name: morning-letter-composite
+                description: 아침 브리핑 편지를 일정·메일·할일 데이터로 합성하는 절차
+                version: 0.1.0
+                ---
+
+                # 아침 편지 합성
+
+                ## 절차
+                1. 오늘 일정(`miniapp.calendar`)과 미결 할일을 모은다.
+                2. 밤사이 도착한 메일 요약을 합친다.
+                3. **한 통의 편지**로 합성해 아침 브리핑으로 보낸다.
+            """.trimIndent(),
+            path = "/home/u/.deneb/skills/genesis/productivity/morning-letter-composite/SKILL.md",
+        )
+        val events = sampleLifecycleEvents(now).filter { it.skillName == "morning-letter-composite" }
+        MaterialTheme(colorScheme = scheme) {
+            Surface(color = MaterialTheme.colorScheme.background) {
+                Column(Modifier.padding(horizontal = 24.dp, vertical = 8.dp)) {
+                    SkillDetailContent(detail, events)
+                }
+            }
+        }
+    },
+    "self_improvement_coding" to { scheme ->
+        MaterialTheme(colorScheme = scheme) {
+            Surface(color = MaterialTheme.colorScheme.background) {
+                SelfImprovementCodingContent(sampleSelfImprovementCodingQueue(System.currentTimeMillis()))
+            }
+        }
+    },
+    "skills_lifecycle" to { scheme ->
+        MaterialTheme(colorScheme = scheme) {
+            Surface(color = MaterialTheme.colorScheme.background) {
+                Column {
+                    SkillsViewSwitcher(showLifecycle = true, onSelect = {})
+                    val now = System.currentTimeMillis()
+                    val events = sampleLifecycleEvents(now)
+                    SkillLifecycleRow(events[1], initiallyExpanded = true, onOpenSkill = {})
+                    HorizontalDivider(Modifier.padding(start = 16.dp), color = denebHairline())
+                    SkillLifecycleContent(events.filterIndexed { i, _ -> i != 1 })
+                }
+            }
+        }
+    },
 )
 
 // Org chart body (diagram + people search). A non-blank [query] seeds the search box so
@@ -631,6 +714,16 @@ private fun orgChartBody(scheme: ColorScheme, query: String) {
                 onAddRoot = {},
                 initialQuery = query,
             )
+        }
+    }
+}
+
+// Files text viewer body (markdown / plain), driven by [displayName]/[markdown]/[text].
+@Composable
+private fun filesTextBody(scheme: ColorScheme, displayName: String, markdown: Boolean, text: String) {
+    MaterialTheme(colorScheme = scheme) {
+        Surface(color = MaterialTheme.colorScheme.background) {
+            FilesTextViewerContent(name = displayName, markdown = markdown, text = text, loadOk = true, onBack = {}, onRetry = {})
         }
     }
 }
@@ -768,31 +861,6 @@ private fun renderMarkdown(name: String, scheme: ColorScheme) {
         MaterialTheme(colorScheme = scheme) {
             Surface(color = MaterialTheme.colorScheme.background) {
                 MarkdownContent(markdownSample, Modifier.padding(20.dp), baseStyle = MaterialTheme.typography.bodyMedium)
-            }
-        }
-    }
-    val image = scene.render()
-    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
-    File("/tmp/deneb-render").mkdirs()
-    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
-    scene.close()
-}
-
-// Validates the in-app file text/markdown viewer body (FilesTextViewerContent):
-// the DenebScreenScaffold frame + markdown (tables/lists) vs monospace branch, at
-// phone width with a loaded body.
-private fun renderFilesText(name: String, scheme: ColorScheme, displayName: String = "file", markdown: Boolean, text: String) {
-    val scene = ImageComposeScene(width = 824, height = 900, density = Density(2f)) {
-        MaterialTheme(colorScheme = scheme) {
-            Surface(color = MaterialTheme.colorScheme.background) {
-                FilesTextViewerContent(
-                    name = displayName,
-                    markdown = markdown,
-                    text = text,
-                    loadOk = true,
-                    onBack = {},
-                    onRetry = {},
-                )
             }
         }
     }
@@ -1191,41 +1259,6 @@ private fun renderSkeleton(name: String, scheme: ColorScheme) {
     scene.close()
 }
 
-private fun render(name: String, scheme: ColorScheme) {
-    val scene = ImageComposeScene(width = 840, height = 1100, density = Density(2f)) {
-        MaterialTheme(colorScheme = scheme) {
-            Surface(color = MaterialTheme.colorScheme.background) {
-                Column {
-                    Text(
-                        "받은 메일",
-                        style = MaterialTheme.typography.headlineMedium,
-                        modifier = Modifier.padding(16.dp),
-                    )
-                    sample.forEach { m ->
-                        MailRow(m, selecting = false, isSelected = false, onTap = {}, onLongPress = {})
-                    }
-                    // Body-visibility check: this Text sets NO explicit color, so it
-                    // relies on the Surface providing onBackground. If it renders, the
-                    // dark-mode invisible-text fix works.
-                    Text(
-                        "— 상세 본문(색 미지정 테스트) —",
-                        modifier = Modifier.padding(16.dp),
-                    )
-                    Text(
-                        "이 문장은 색을 명시하지 않았습니다. Surface가 onBackground를 공급해 다크모드에서도 보여야 정상입니다.",
-                        modifier = Modifier.padding(horizontal = 16.dp),
-                    )
-                }
-            }
-        }
-    }
-    val image = scene.render()
-    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
-    File("/tmp/deneb-render").mkdirs()
-    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
-    scene.close()
-}
-
 // --- Skills tab (settings) -------------------------------------------------
 // Validates the origin badges (생성 vs 최초) on the skill list and the
 // Propus timeline rows (genesis/evolved/rejected/review badges).
@@ -1318,103 +1351,3 @@ private fun sampleSelfImprovementCodingQueue(now: Long) = SelfImprovementCodingL
         SelfImprovementCodingStatusCount(status = "all", count = 3),
     ),
 )
-
-private fun renderSkillsList(name: String, scheme: ColorScheme) {
-    val scene = ImageComposeScene(width = 824, height = 700, density = Density(2f)) {
-        MaterialTheme(colorScheme = scheme) {
-            Surface(color = MaterialTheme.colorScheme.background) {
-                Column {
-                    SkillsViewSwitcher(showLifecycle = false, onSelect = {})
-                    SkillListContent(sampleSkillRows)
-                }
-            }
-        }
-    }
-    val image = scene.render()
-    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
-    File("/tmp/deneb-render").mkdirs()
-    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
-    scene.close()
-}
-
-private fun renderSkillDetail(name: String, scheme: ColorScheme) {
-    val now = System.currentTimeMillis()
-    val detail = SkillDetailResponse(
-        skill = sampleSkillRows[1].copy(
-            evolveCount = 1,
-            lastEvolvedAt = now - 2 * 3_600_000L,
-            totalUses = 2,
-            lastUsedAt = now - 9 * 3_600_000L,
-        ),
-        body = """
-            ---
-            name: morning-letter-composite
-            description: 아침 브리핑 편지를 일정·메일·할일 데이터로 합성하는 절차
-            version: 0.1.0
-            ---
-
-            # 아침 편지 합성
-
-            ## 절차
-            1. 오늘 일정(`miniapp.calendar`)과 미결 할일을 모은다.
-            2. 밤사이 도착한 메일 요약을 합친다.
-            3. **한 통의 편지**로 합성해 아침 브리핑으로 보낸다.
-        """.trimIndent(),
-        path = "/home/u/.deneb/skills/genesis/productivity/morning-letter-composite/SKILL.md",
-    )
-    val events = sampleLifecycleEvents(now).filter { it.skillName == "morning-letter-composite" }
-    val scene = ImageComposeScene(width = 824, height = 1400, density = Density(2f)) {
-        MaterialTheme(colorScheme = scheme) {
-            Surface(color = MaterialTheme.colorScheme.background) {
-                Column(Modifier.padding(horizontal = 24.dp, vertical = 8.dp)) {
-                    SkillDetailContent(detail, events)
-                }
-            }
-        }
-    }
-    val image = scene.render()
-    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
-    File("/tmp/deneb-render").mkdirs()
-    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
-    scene.close()
-}
-
-private fun renderSelfImprovementCoding(name: String, scheme: ColorScheme) {
-    val now = System.currentTimeMillis()
-    val scene = ImageComposeScene(width = 824, height = 760, density = Density(2f)) {
-        MaterialTheme(colorScheme = scheme) {
-            Surface(color = MaterialTheme.colorScheme.background) {
-                SelfImprovementCodingContent(sampleSelfImprovementCodingQueue(now))
-            }
-        }
-    }
-    val image = scene.render()
-    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
-    File("/tmp/deneb-render").mkdirs()
-    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
-    scene.close()
-}
-
-private fun renderSkillLifecycle(name: String, scheme: ColorScheme) {
-    val scene = ImageComposeScene(width = 824, height = 700, density = Density(2f)) {
-        MaterialTheme(colorScheme = scheme) {
-            Surface(color = MaterialTheme.colorScheme.background) {
-                Column {
-                    SkillsViewSwitcher(showLifecycle = true, onSelect = {})
-                    // First row pre-expanded to validate the tap-to-expand state:
-                    // full reason, 근거 evidence, absolute time + verdict, 스킬 보기.
-                    val now = System.currentTimeMillis()
-                    val events = sampleLifecycleEvents(now)
-                    SkillLifecycleRow(events[1], initiallyExpanded = true, onOpenSkill = {})
-                    HorizontalDivider(Modifier.padding(start = 16.dp), color = denebHairline())
-                    SkillLifecycleContent(events.filterIndexed { i, _ -> i != 1 })
-                }
-            }
-        }
-    }
-    val image = scene.render()
-    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
-    File("/tmp/deneb-render").mkdirs()
-    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
-    scene.close()
-}
