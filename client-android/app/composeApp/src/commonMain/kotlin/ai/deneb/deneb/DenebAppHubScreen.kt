@@ -1,5 +1,6 @@
 package ai.deneb.deneb
 
+import ai.deneb.DenebBrowser
 import ai.deneb.DenebCalendar
 import ai.deneb.DenebCategories
 import ai.deneb.DenebConfig
@@ -40,6 +41,7 @@ import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Dashboard
 import androidx.compose.material.icons.outlined.Email
 import androidx.compose.material.icons.outlined.GridView
+import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Storage
@@ -66,8 +68,10 @@ private data class AppTile(
 // 자체앱 — Deneb's own mini-apps as a home-screen launcher grid. This is the single
 // source for the launcher; it absorbed the old 더보기 list (메일·달력·검색·할일·일기·
 // 조직도·파트별현황·카테고리·노트북·파일·설정) plus 채팅. 채팅 leads (used most, so top-
-// left and eye-catching). 브라우저 is NOT here — it became the 인터넷 bottom tab.
-// Add a tile by appending here.
+// left and eye-catching). 브라우저 = the in-app translation browser (DenebBrowser, blank
+// start): it lives here as a tile because the 인터넷 bottom tab now launches Samsung
+// Internet (the external browser) instead — so this tile keeps the in-app translating
+// browser reachable. Add a tile by appending here.
 private val appHubTiles = listOf(
     AppTile("채팅", Home, Icons.AutoMirrored.Outlined.Chat),
     AppTile("메일", DenebMail, Icons.Outlined.Email, workData = true),
@@ -80,6 +84,9 @@ private val appHubTiles = listOf(
     AppTile("카테고리", DenebCategories, Icons.Outlined.GridView, workData = true),
     AppTile("노트북", DenebNotebooks, Icons.Outlined.Book, workData = true),
     AppTile("파일", DenebFiles, Icons.Outlined.Storage, workData = true),
+    // In-app translating browser (blank start — the address bar takes over). Distinct
+    // from the 인터넷 tab, which launches the external Samsung Internet app.
+    AppTile("브라우저", DenebBrowser(""), Icons.Outlined.Public),
     AppTile("설정", DenebConfig, Icons.Outlined.Settings),
 )
 

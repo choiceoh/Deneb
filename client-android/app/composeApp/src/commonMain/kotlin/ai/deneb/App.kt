@@ -853,6 +853,12 @@ private fun AppContent(
                             // LocalUriHandler path OrgContactActions uses for contact calls —
                             // no expect/actual needed for a URI any platform can open.
                             onCall = { systemUriHandler.openUri("tel:") },
+                            // 인터넷 action tab: launch Samsung Internet (external browser,
+                            // Android package intent). Falls back to the default browser if
+                            // Samsung Internet isn't installed; opens a blank https page off
+                            // Android. The in-app translation browser is now the 자체앱
+                            // grid's "브라우저" tile (DenebBrowser route), not this tab.
+                            onInternet = { launchSamsungBrowser() },
                             // 카톡 action tab: launch the KakaoTalk app (Android package
                             // intent). No-op (and graceful store fallback) off Android.
                             onKakao = { launchKakaoTalk() },

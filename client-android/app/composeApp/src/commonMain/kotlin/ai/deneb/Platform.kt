@@ -79,6 +79,18 @@ expect fun openUrl(url: String): Boolean
  */
 expect fun launchKakaoTalk(): Boolean
 
+/**
+ * Launch Samsung Internet (the 인터넷 bottom-tab action — an *external* browser, not
+ * the in-app DenebBrowser). Android resolves the `com.sec.android.app.sbrowser`
+ * launch intent; if Samsung Internet isn't installed (non-Samsung devices) it falls
+ * back to `ACTION_VIEW https://` so the system's default browser opens instead —
+ * unlike 카톡's Play-Store fallback, a generic browser is the sensible substitute
+ * here. Returns true if Samsung Internet itself launched, false on the fallback or a
+ * failure. Desktop/iOS/web have no Android-package concept; they open a blank https
+ * page via the system UriHandler where possible, else no-op false.
+ */
+expect fun launchSamsungBrowser(): Boolean
+
 @androidx.compose.runtime.Composable
 expect fun PlatformBackHandler(enabled: Boolean, onBack: () -> Unit)
 
