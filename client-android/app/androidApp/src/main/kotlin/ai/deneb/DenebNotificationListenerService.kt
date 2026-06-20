@@ -33,6 +33,7 @@ class DenebNotificationListenerService : NotificationListenerService() {
 
     override fun onNotificationPosted(sbn: StatusBarNotification?, rankingMap: RankingMap?) {
         val event = extractEvent(sbn, rankingMap) ?: return
+        if (isRecentDuplicate(event.key)) return // a re-posted / updated notification within the window
         val client = repository as? DenebGatewayClient ?: return
         scope.launch {
             // Fire-and-forget: the gateway acks immediately and judges async. A
@@ -46,7 +47,24 @@ class DenebNotificationListenerService : NotificationListenerService() {
         super.onDestroy()
     }
 
-    private data class NotifEvent(val source: String, val text: String)
+    // On-device dedup/throttle: apps re-post the same notification on every update
+    // (a chat counter ticking, a media card, a sync banner), so without this the
+    // gateway is flooded with near-identical judgment turns. Access-ordered + size-
+    // bounded; skips a content key seen within the window. Notification callbacks can
+    // overlap, so access is synchronized.
+    private val recentlyForwarded = object : LinkedHashMap<String, Long>(64, 0.75f, true) {
+        override fun removeEldestEntry(eldest: Map.Entry<String, Long>): Boolean = size > MAX_DEDUP_KEYS
+    }
+
+    private fun isRecentDuplicate(key: String): Boolean = synchronized(recentlyForwarded) {
+        val now = System.currentTimeMillis()
+        val last = recentlyForwarded[key]
+        if (last != null && now - last < DEDUP_WINDOW_MS) return true
+        recentlyForwarded[key] = now
+        false
+    }
+
+    private data class NotifEvent(val source: String, val text: String, val key: String)
 
     /**
      * On-device pre-filter: keep volume + cost down and exclude security-sensitive
@@ -89,7 +107,7 @@ class DenebNotificationListenerService : NotificationListenerService() {
         if (title.isEmpty() && body.isEmpty()) return null
 
         val text = listOf(title, body).filter { it.isNotEmpty() }.joinToString("\n")
-        return NotifEvent(source = appLabel(sbn.packageName), text = text)
+        return NotifEvent(source = appLabel(sbn.packageName), text = text, key = sbn.packageName + "|" + text)
     }
 
     private fun appLabel(pkg: String): String = runCatching {
@@ -98,6 +116,9 @@ class DenebNotificationListenerService : NotificationListenerService() {
     }.getOrNull()?.takeIf { it.isNotBlank() } ?: pkg
 
     private companion object {
+        private const val DEDUP_WINDOW_MS = 45_000L
+        private const val MAX_DEDUP_KEYS = 200
+
         // Best-effort hygiene blocklist: password managers / authenticators whose
         // notifications carry codes or vault access.
         val SENSITIVE_PACKAGES = setOf(

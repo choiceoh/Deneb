@@ -27,6 +27,7 @@ suspend fun DenebGatewayClient.refreshCalendar(): Boolean {
     _denebCalendar.value = payload.events
         .filter { it.id.isNotBlank() }
         .map { CalendarEvent(it.id, it.summary, it.location, it.start, it.end, it.allDay, it.local, it.category) }
+    storeCachedCalendar(_denebCalendar.value)
     return true
 }
 
