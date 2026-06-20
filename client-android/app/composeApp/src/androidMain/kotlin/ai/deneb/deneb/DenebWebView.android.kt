@@ -1,10 +1,13 @@
 package ai.deneb.deneb
 
 import android.annotation.SuppressLint
+import android.os.Handler
+import android.os.Looper
 import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.Toast
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -119,13 +122,29 @@ private class TranslateBridge(
     private val translate: TranslateFn,
     private val holder: WebViewHolder,
 ) {
+    // Diagnostic + UX: when translation is enabled, the page reports how many
+    // translatable nodes it found. 0 → nothing to translate (e.g. the page is already
+    // Korean, or the DOM walk found nothing); >0 → translating. Surfaced as a brief
+    // toast so a silent no-op is visible to the user (and pinpoints where it breaks).
+    @JavascriptInterface
+    fun onEnable(count: Int) {
+        toast(if (count == 0) "번역할 텍스트를 찾지 못했습니다" else "${count}개 번역 중…")
+    }
+
     @JavascriptInterface
     fun translate(requestId: String, segmentsJson: String) {
         val segments = decodeStringList(segmentsJson)
         if (segments.isEmpty()) return
         scope.launch {
-            val translated = runCatching { translate(segments, "ko") }.getOrNull() ?: return@launch
-            if (translated.size != segments.size) return@launch
+            val translated = runCatching { translate(segments, "ko") }.getOrNull()
+            if (translated == null) {
+                toast("번역 실패 — 서버 응답 없음")
+                return@launch
+            }
+            if (translated.size != segments.size) {
+                toast("번역 응답 개수 불일치")
+                return@launch
+            }
             val ridLiteral = jsStringLiteral(requestId)
             val payloadLiteral = jsStringLiteral(encodeStringList(translated))
             withContext(Dispatchers.Main) {
@@ -135,6 +154,11 @@ private class TranslateBridge(
                 )
             }
         }
+    }
+
+    private fun toast(msg: String) {
+        val ctx = holder.web?.context ?: return
+        Handler(Looper.getMainLooper()).post { Toast.makeText(ctx, msg, Toast.LENGTH_SHORT).show() }
     }
 }
 
