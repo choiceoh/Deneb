@@ -380,6 +380,14 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 			Proposals: resolveCalendarProposals(s.logger),
 		}),
 
+		// Mini App part-status dashboard (miniapp.dashboard.lanes). Groups work
+		// items (calendar + work feed in this 1차 scope) into the operator's
+		// managed parts via the rule-based classifier. The classifier roster is
+		// loaded from {stateDir}/classification_rules.json (operator data, never
+		// in the repo); each source is nil-tolerant so a down Google calendar or
+		// absent feed degrades that lane only, not the whole dashboard.
+		handlerminiapp.DashboardMethods(s.dashboardDeps()),
+
 		// Mini App To-do domain (miniapp.todo.*). The task-list companion to
 		// the calendar, backed by a local store ({stateDir}/todos.json). No
 		// external provider — every method writes locally, so it works without

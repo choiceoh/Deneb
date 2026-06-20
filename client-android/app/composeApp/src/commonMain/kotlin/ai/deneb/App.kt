@@ -13,6 +13,7 @@ import ai.deneb.deneb.DenebCategoryPagesScreen
 import ai.deneb.deneb.DenebConfigScreen
 import ai.deneb.deneb.DenebCronEditScreen
 import ai.deneb.deneb.DenebCronScreen
+import ai.deneb.deneb.DenebDashboardScreen
 import ai.deneb.deneb.DenebDiaryScreen
 import ai.deneb.deneb.DenebFilesScreen
 import ai.deneb.deneb.DenebFleetScreen
@@ -201,6 +202,10 @@ object DenebDiary
 @Serializable
 @SerialName("deneb_notebooks")
 object DenebNotebooks
+
+@Serializable
+@SerialName("deneb_dashboard")
+object DenebDashboard
 
 @Serializable
 @SerialName("deneb_category_pages")
@@ -607,6 +612,15 @@ private fun AppContent(
                         composable<DenebNotebooks> {
                             denebClient?.let { client ->
                                 DenebNotebooksScreen(
+                                    client = client,
+                                    onBack = { navController.navigateUp() },
+                                    navigationTabBar = if (showTabBar) navigationTabBar else null,
+                                )
+                            }
+                        }
+                        composable<DenebDashboard> {
+                            denebClient?.let { client ->
+                                DenebDashboardScreen(
                                     client = client,
                                     onBack = { navController.navigateUp() },
                                     navigationTabBar = if (showTabBar) navigationTabBar else null,

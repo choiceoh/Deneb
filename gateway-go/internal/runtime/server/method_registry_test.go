@@ -148,6 +148,10 @@ var requiredMethods = []string{
 	"miniapp.skills.update",
 	"miniapp.skills.delete",
 	"miniapp.skills.lifecycle",
+	// Part-status dashboard — the classifier Rules loader is always non-nil
+	// (classification.Load falls back to keyword defaults), so this registers
+	// unconditionally even when no data source is wired in tests.
+	"miniapp.dashboard.lanes",
 	// To-do domain — local store always resolves in tests (temp state dir),
 	// so these always register.
 	"miniapp.todo.list",
