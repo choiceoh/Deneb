@@ -13,7 +13,7 @@ import ai.deneb.deneb.CalendarMonthGrid
 import ai.deneb.deneb.ContactsList
 import ai.deneb.deneb.CronEditContent
 import ai.deneb.deneb.DashboardLanesContent
-import ai.deneb.deneb.DenebAppHubScreen
+import ai.deneb.deneb.DenebAppHubContent
 import ai.deneb.deneb.DenebBrowserChrome
 import ai.deneb.deneb.DenebWebViewState
 import ai.deneb.deneb.FilesSearchMode
@@ -176,10 +176,12 @@ private fun renderBrowser(name: String, scheme: ColorScheme) {
     scene.close()
 }
 
-private fun renderAppHub(name: String, scheme: ColorScheme) {
+private fun renderAppHub(name: String, scheme: ColorScheme, pins: List<LauncherAppEntry>) {
     val scene = ImageComposeScene(width = 824, height = 900, density = Density(2f)) {
         MaterialTheme(colorScheme = scheme) {
-            DenebAppHubScreen(onBack = {}, onOpen = {})
+            Surface(color = MaterialTheme.colorScheme.background) {
+                DenebAppHubContent(onOpen = {}, onLaunch = {}, pinnedApps = pins)
+            }
         }
     }
     val image = scene.render()
@@ -195,8 +197,14 @@ fun main() {
     renderScreen("mail_light.png", "mail", LightColorScheme, 840, 1100)
     renderBrowser("browser_dark.png", DarkColorScheme)
     renderBrowser("browser_light.png", LightColorScheme)
-    renderAppHub("app_hub_dark.png", DarkColorScheme)
-    renderAppHub("app_hub_light.png", LightColorScheme)
+    // Latin-brand pins demonstrate the Korean 초성 monogram (YouTube→ㅇ, Gmail→ㅈ,
+    // Strava→ㅅ, James→ㅈ) rather than a Latin Y/G/S/J.
+    val appHubPins = listOf("카카오톡", "YouTube", "은행", "Gmail", "Strava", "James")
+        .mapIndexed { i, l -> LauncherAppEntry(label = l, packageName = "pin.$i") }
+    renderAppHub("app_hub_dark.png", DarkColorScheme, appHubPins)
+    renderAppHub("app_hub_light.png", LightColorScheme, appHubPins)
+    // Empty-pins variant exercises the 핀고정 discoverability hint (swipe-up + long-press).
+    renderAppHub("app_hub_empty_dark.png", DarkColorScheme, emptyList())
     renderMarkdown("markdown_dark.png", DarkColorScheme)
     renderScreen("app_drawer_dark.png", "app_drawer", DarkColorScheme, 824, 1100)
     renderScreen("app_drawer_light.png", "app_drawer", LightColorScheme, 824, 1100)
@@ -627,14 +635,19 @@ internal val previewScreens: Map<String, @Composable (ColorScheme) -> Unit> = ma
         }
     },
     "app_drawer" to { scheme ->
+        // Mix of Korean labels and Latin-brand apps — the latter must file under their
+        // Korean reading (YouTube→ㅇ, Chrome→ㅋ, Gmail→ㅈ, Strava→ㅅ), so the scrub stays
+        // a unified ㄱㄴㄷ with no A–Z tail.
         val apps = listOf(
-            "메일", "캘린더", "카카오톡", "전화", "탑솔라 ERP", "드롭박스",
-            "은행", "메시지", "카메라", "설정", "지도", "사진", "유튜브", "크롬",
+            "메일", "캘린더", "카카오톡", "전화", "탑솔라 ERP", "은행", "메시지",
+            "카메라", "설정", "지도", "사진", "YouTube", "Chrome", "Gmail",
+            "Instagram", "Strava",
         ).mapIndexed { i, label -> LauncherAppEntry(label = label, packageName = "pkg.$i") }
         MaterialTheme(colorScheme = scheme) {
             Surface(color = MaterialTheme.colorScheme.background) {
                 Box(Modifier.width(412.dp)) {
-                    AppDrawer(apps = apps, onLaunch = {})
+                    // Two pinned rows show the pin marker (카카오톡, YouTube).
+                    AppDrawer(apps = apps, onLaunch = {}, pinned = setOf("pkg.2", "pkg.11"))
                 }
             }
         }

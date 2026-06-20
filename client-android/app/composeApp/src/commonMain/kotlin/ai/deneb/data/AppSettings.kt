@@ -57,6 +57,32 @@ class AppSettings(internal val settings: Settings) {
         settings.putString(KEY_FEED_SEEN_IDS, bounded.joinToString(","))
     }
 
+    // Launcher 핀고정 — external phone-app package names the user pinned to the 자체앱
+    // favorites home, ordered by pin time (package names never contain commas, so a
+    // comma-joined string suffices — like KEY_FEED_SEEN_IDS). Pure-local launcher
+    // state. Exposed as a flow because two surfaces observe it: the 자체앱 favorites
+    // grid renders the pins, and the app drawer marks pinned rows + toggles them, so a
+    // pin/unpin on one reflects live on the other.
+    private val _pinnedAppsFlow = MutableStateFlow(loadPinnedApps())
+    val pinnedAppsFlow: StateFlow<List<String>> = _pinnedAppsFlow
+
+    private fun loadPinnedApps(): List<String> = settings.getStringOrNull(KEY_PINNED_APPS)
+        ?.split(',')
+        ?.filter { it.isNotBlank() }
+        ?: emptyList()
+
+    fun getPinnedApps(): List<String> = _pinnedAppsFlow.value
+
+    /** Toggle [pkg] in the pinned list — appended on pin (newest last), dropped on
+     *  unpin — then persisted and published. Bounded so it can't grow without limit. */
+    fun togglePinnedApp(pkg: String) {
+        if (pkg.isBlank()) return
+        val cur = _pinnedAppsFlow.value
+        val next = if (pkg in cur) cur - pkg else (cur + pkg).takeLast(100)
+        settings.putString(KEY_PINNED_APPS, next.joinToString(","))
+        _pinnedAppsFlow.value = next
+    }
+
     fun getCurrentConversationId(): String? = settings.getStringOrNull(KEY_CURRENT_CONVERSATION_ID)
 
     fun setCurrentConversationId(id: String?) {
@@ -383,6 +409,7 @@ class AppSettings(internal val settings: Settings) {
         const val KEY_APP_OPENS = "app_opens"
 
         const val KEY_FEED_SEEN_IDS = "feed_seen_ids"
+        const val KEY_PINNED_APPS = "pinned_apps"
         const val KEY_CONVERSATIONS = "conversations_json"
         const val KEY_CURRENT_CONVERSATION_ID = "current_conversation_id"
         const val KEY_CURRENT_CONVERSATION_MIGRATED = "current_conversation_migrated"
