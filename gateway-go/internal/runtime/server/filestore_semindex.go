@@ -73,13 +73,49 @@ func (s *Server) initFileSemanticIndex() {
 // an error to the caller's fallback logic) when the index/embedding server is
 // unavailable. Bounded by semindexQueryTimeout so a slow embed never stalls a
 // chat turn or RPC.
+//
+// Results are validated against the live store with Stat, dropping any hit whose
+// path no longer exists. The index is reindexed only every 15 minutes, and the
+// move/delete hooks (Rename/Remove) cover the in-process mutations — but this
+// Stat backstop also catches paths that vanished by any other route (a direct
+// filesystem delete, an external mount change), so a search never hands back a
+// path that would 404 at download time.
 func (s *Server) fileSemanticSearch(ctx context.Context, query string, max int) ([]filestore.ScoredEntry, error) {
 	if s.fileSemanticIndex == nil || s.embeddingClient == nil {
 		return nil, nil
 	}
 	qctx, cancel := context.WithTimeout(ctx, semindexQueryTimeout)
 	defer cancel()
-	return s.fileSemanticIndex.Search(qctx, query, max, s.embeddingClient)
+	hits, err := s.fileSemanticIndex.Search(qctx, query, max, s.embeddingClient)
+	if err != nil || len(hits) == 0 || s.fileStore == nil {
+		return hits, err
+	}
+	live := hits[:0] // reuse backing array; we only ever shrink
+	for _, h := range hits {
+		if _, serr := s.fileStore.Stat(qctx, h.Entry.PathDisplay); serr == nil {
+			live = append(live, h)
+		}
+	}
+	return live, nil
+}
+
+// fileIndexRemove drops a deleted/moved-away path from the semantic index
+// immediately (between 15-min reindex passes). Wired into the files RPC delete
+// path. No-op when the index isn't enabled.
+func (s *Server) fileIndexRemove(path string) {
+	if s.fileSemanticIndex == nil {
+		return
+	}
+	s.fileSemanticIndex.Remove(path)
+}
+
+// fileIndexRename re-keys a moved path in the semantic index immediately. Wired
+// into the files RPC move path. No-op when the index isn't enabled.
+func (s *Server) fileIndexRename(oldPath, newPath string) {
+	if s.fileSemanticIndex == nil {
+		return
+	}
+	s.fileSemanticIndex.Rename(oldPath, newPath)
 }
 
 // fileSemindexExtract is the text extractor the reindex passes to the index —

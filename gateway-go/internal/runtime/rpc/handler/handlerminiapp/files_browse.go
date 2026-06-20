@@ -89,10 +89,19 @@ type FilesUploadOut struct {
 // semantic=true mode. The server owns the embedding client + index and injects
 // this closure; a nil func — or an empty result when the embedding server is
 // down — falls back to name/content search, so semantic search is optional.
+//
+// OnDelete / OnMove keep the semantic index fresh after a mutation: without
+// them, a deleted/moved file would still surface in semantic search (and 404 at
+// download time) until the next 15-minute reindex. The server wires them to the
+// shared index's Remove/Rename. Both are optional (nil = no-op); a Stat backstop
+// in the search path also drops vanished hits, so these are a freshness
+// optimization, not a correctness requirement.
 type FilesBrowseDeps struct {
 	Store          filestore.Store
 	ExtractText    func(ctx context.Context, data []byte, name string) string
 	SemanticSearch func(ctx context.Context, query string, max int) ([]filestore.ScoredEntry, error)
+	OnDelete       func(path string)
+	OnMove         func(oldPath, newPath string)
 }
 
 // FilesBrowseMethods returns the
@@ -304,6 +313,12 @@ func filesBrowseDelete(deps FilesBrowseDeps) rpcutil.HandlerFunc {
 		if err := deps.Store.Delete(ctx, path); err != nil {
 			return mapFilesError(req.ID, "file delete failed", err)
 		}
+		// Drop any semantic-index entry for the deleted path so search stops
+		// returning it before the next reindex. Folders aren't indexed, so a
+		// folder delete is simply a no-op here.
+		if deps.OnDelete != nil {
+			deps.OnDelete(path)
+		}
 		// Empty OK envelope — the client refreshes the folder on success.
 		return rpcutil.RespondOK(req.ID, struct{}{})
 	}
@@ -370,6 +385,13 @@ func filesBrowseMove(deps FilesBrowseDeps) rpcutil.HandlerFunc {
 		if meta != nil {
 			entry = projectFilesEntry(*meta)
 		}
+		// Re-key the semantic index from the old path to the *actual* new path
+		// (the store auto-renames on a clash, so trust meta.PathDisplay over the
+		// requested dst). Keeps the moved file findable at its new location before
+		// the next reindex.
+		if deps.OnMove != nil && meta != nil {
+			deps.OnMove(src, meta.PathDisplay)
+		}
 		return rpcutil.RespondOK(req.ID, entry)
 	}
 }
@@ -398,13 +420,18 @@ func projectFilesEntries(es []filestore.Entry) []FilesEntryOut {
 
 // mapFilesError maps a filestore error to an RPC error code. A missing path
 // surfaces as NOT_FOUND (the store wraps fs.ErrNotExist); a path-escape attempt
-// or any other failure degrades to UNAVAILABLE.
+// is a malformed client path, so it surfaces as INVALID_REQUEST (a 4xx-class
+// client error) rather than UNAVAILABLE (which implies a transient server fault
+// the client should retry); any other failure degrades to UNAVAILABLE.
 func mapFilesError(reqID, msg string, err error) *protocol.ResponseFrame {
 	if err == nil {
 		return rpcerr.Unavailable(msg).Response(reqID)
 	}
 	if errors.Is(err, os.ErrNotExist) {
 		return rpcerr.NotFound(msg + ": " + err.Error()).Response(reqID)
+	}
+	if errors.Is(err, filestore.ErrPathEscape) {
+		return rpcerr.WrapInvalidRequest(msg, err).Response(reqID)
 	}
 	return rpcerr.WrapUnavailable(msg, err).Response(reqID)
 }

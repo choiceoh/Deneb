@@ -2,6 +2,7 @@ package filestore
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -101,8 +102,16 @@ func (f *fixedEmbedder) Embed(_ context.Context, texts []string) ([][]float32, e
 
 // An irrelevant query whose best chunk cosine falls below minSemanticScore must
 // yield an EMPTY result (not a max-capped list of noise), so the caller's
-// name/content fallback kicks in. Pre-floor, the bare best>0 filter returned the
-// files because their cosine (~0.30) was positive — burying lexical matches.
+// name/content fallback kicks in.
+//
+// The floor (0.73) is tuned to BGE-M3's *Korean* cosine distribution, measured
+// live on srv4: unrelated Korean queries score ~0.58–0.69 against Korean office
+// docs, relevant ones ~0.77–0.86. So the dangerous case isn't an exactly-0.30
+// cosine (any floor catches that) — it's the ~0.6 "Korean noise band" the old
+// 0.4 floor let straight through (e.g. "오늘 날씨" returning a 개발행위허가 PDF).
+// This test pins both a 0.6-band noise hit (must be dropped) and a 0.8 relevant
+// hit (must survive), so a regression that lowers the floor back into the noise
+// band fails here.
 func TestSemanticIndex_ScoreFloor(t *testing.T) {
 	ctx := context.Background()
 	store := newTestStore(t)
@@ -112,16 +121,20 @@ func TestSemanticIndex_ScoreFloor(t *testing.T) {
 	mustPut(t, store, "/계약/납기.txt", fileA)
 	mustPut(t, store, "/회의/메뉴.txt", fileB)
 
-	// Each file chunk sits on its own unit axis; the irrelevant query points
-	// mostly along a third axis the files don't span, so its cosine to each file
-	// is 1/√11 ≈ 0.302 — positive (old filter kept it) but below the 0.4 floor.
+	// fileA/fileB sit on orthogonal unit axes. Each query vector is hand-placed
+	// at a known cosine to fileA ({1,0,0}):
+	//   noiseQuery  → ~0.302 (well below any floor)
+	//   bandQuery   → ~0.6   (in the Korean noise band: old 0.4 kept it, 0.73 drops it)
+	//   matchQuery  → 1.0    (a real, relevant hit)
 	const noiseQuery = "전혀 무관한 다른 질문입니다" // >= 8 runes (Search rejects shorter)
+	const bandQuery = "애매하게 걸치는 한국어 질문입니다"
 	const matchQuery = "계약 납기 위약금 질문입니다"
 	embed := &fixedEmbedder{vecs: map[string][]float32{
 		fileA:      {1, 0, 0},
 		fileB:      {0, 1, 0},
-		noiseQuery: {1, 1, 3}, // ~0.302 to each file → all under the floor
-		matchQuery: {1, 0, 0}, // identical to fileA's chunk → cosine 1.0
+		noiseQuery: {1, 1, 3},     // ~0.302 to each file
+		bandQuery:  {0.6, 0, 0.8}, // cos to fileA = 0.6 → Korean-noise band
+		matchQuery: {1, 0, 0},     // identical to fileA's chunk → cosine 1.0
 	}}
 
 	idx := NewSemanticIndex(filepath.Join(t.TempDir(), "idx.json"))
@@ -129,13 +142,16 @@ func TestSemanticIndex_ScoreFloor(t *testing.T) {
 		t.Fatalf("Reindex: %v", err)
 	}
 
-	hits, err := idx.Search(ctx, noiseQuery, 5, embed)
-	if err != nil {
-		t.Fatalf("Search: %v", err)
-	}
-	if len(hits) != 0 {
-		t.Fatalf("below-floor query returned %d hits, want 0 (floor=%v): %+v",
-			len(hits), minSemanticScore, hits)
+	// Both the exact-noise and the 0.6-band query must return nothing.
+	for _, q := range []string{noiseQuery, bandQuery} {
+		hits, err := idx.Search(ctx, q, 5, embed)
+		if err != nil {
+			t.Fatalf("Search(%q): %v", q, err)
+		}
+		if len(hits) != 0 {
+			t.Fatalf("below-floor query %q returned %d hits, want 0 (floor=%v): %+v",
+				q, len(hits), minSemanticScore, hits)
+		}
 	}
 
 	// Sanity: a query that DOES clear the floor still returns its file, proving
@@ -191,6 +207,112 @@ func TestSemanticIndex_Incremental(t *testing.T) {
 	if embed.texts <= before {
 		t.Error("changed file was not re-embedded")
 	}
+}
+
+// A file overwritten with DIFFERENT content but the SAME byte size and SAME
+// mtime (second granularity) must still re-embed. The (mtime,size) key alone
+// can't see this — the content-prefix hash is what catches it.
+func TestSemanticIndex_ContentHashReindex(t *testing.T) {
+	ctx := context.Background()
+	store := newTestStore(t)
+	// Two bodies of identical byte length but different content.
+	const v1 = "delivery delay 납기 지연 위약금 AAAA"
+	const v2 = "delivery delay 납기 지연 위약금 BBBB"
+	if len(v1) != len(v2) {
+		t.Fatalf("test setup: v1/v2 byte lengths differ (%d vs %d)", len(v1), len(v2))
+	}
+	mustPut(t, store, "/a.txt", v1)
+
+	embed := newFakeEmbedder("aaaa", "bbbb", "납기")
+	idx := NewSemanticIndex(filepath.Join(t.TempDir(), "idx.json"))
+	if _, err := idx.Reindex(ctx, store, plainText, embed); err != nil {
+		t.Fatalf("Reindex 1: %v", err)
+	}
+	// Capture the file's mtime so we can pin it back after the overwrite.
+	abs := filepath.Join(store.Root(), "a.txt")
+	fi, err := os.Stat(abs)
+	if err != nil {
+		t.Fatalf("stat: %v", err)
+	}
+	origMtime := fi.ModTime()
+
+	// Overwrite with same-size, different content, then force mtime back to the
+	// original — reproducing a same-second, same-size overwrite exactly.
+	mustPut(t, store, "/a.txt", v2)
+	if err := os.Chtimes(abs, origMtime, origMtime); err != nil {
+		t.Fatalf("chtimes: %v", err)
+	}
+	fi2, err := os.Stat(abs)
+	if err != nil {
+		t.Fatalf("stat 2: %v", err)
+	}
+	if !fi2.ModTime().Equal(origMtime) || fi2.Size() != fi.Size() {
+		t.Fatalf("test setup: mtime/size not equal after overwrite (mtime %v==%v? size %d==%d?)",
+			fi2.ModTime(), origMtime, fi2.Size(), fi.Size())
+	}
+
+	before := embed.texts
+	stats, err := idx.Reindex(ctx, store, plainText, embed)
+	if err != nil {
+		t.Fatalf("Reindex 2: %v", err)
+	}
+	if stats.Embedded != 1 {
+		t.Errorf("same-mtime/size overwrite Embedded = %d, want 1 (content hash should detect it)", stats.Embedded)
+	}
+	if embed.texts <= before {
+		t.Error("content-changed file was not re-embedded")
+	}
+
+	// The index now reflects v2: a query for the new content's vocab finds it.
+	// (Query must be >= minChunkRunes (8) runes or Search rejects it as too short.)
+	hits, err := idx.Search(ctx, "bbbb 납기 지연 검색", 5, embed)
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if len(hits) != 1 || hits[0].Entry.PathDisplay != "/a.txt" {
+		t.Fatalf("post-overwrite search hits = %+v, want 1 hit /a.txt", hits)
+	}
+}
+
+// Remove drops a deleted file's entry immediately (no reindex), so search stops
+// returning it. Rename re-keys a moved file so it's findable at the new path.
+func TestSemanticIndex_RemoveAndRename(t *testing.T) {
+	ctx := context.Background()
+	store := newTestStore(t)
+	mustPut(t, store, "/계약/납기.txt", "delivery delay 납기 지연")
+	embed := newFakeEmbedder("delivery", "납기", "지연")
+	idx := NewSemanticIndex(filepath.Join(t.TempDir(), "idx.json"))
+	if _, err := idx.Reindex(ctx, store, plainText, embed); err != nil {
+		t.Fatalf("Reindex: %v", err)
+	}
+
+	// Baseline: the file is found. (Query must be >= minChunkRunes (8) runes.)
+	const q = "납기 지연 위약금 검색"
+	hits, _ := idx.Search(ctx, q, 5, embed)
+	if len(hits) != 1 || hits[0].Entry.PathDisplay != "/계약/납기.txt" {
+		t.Fatalf("baseline hits = %+v, want 1 hit /계약/납기.txt", hits)
+	}
+
+	// Rename re-keys the entry to the new path (vectors unchanged).
+	idx.Rename("/계약/납기.txt", "/보관/납기-2025.txt")
+	hits, _ = idx.Search(ctx, q, 5, embed)
+	if len(hits) != 1 || hits[0].Entry.PathDisplay != "/보관/납기-2025.txt" {
+		t.Fatalf("after Rename hits = %+v, want 1 hit /보관/납기-2025.txt", hits)
+	}
+
+	// Remove drops it entirely.
+	idx.Remove("/보관/납기-2025.txt")
+	hits, _ = idx.Search(ctx, q, 5, embed)
+	if len(hits) != 0 {
+		t.Fatalf("after Remove hits = %+v, want 0", hits)
+	}
+
+	// Remove/Rename of an unknown path is a safe no-op; nil receiver too.
+	idx.Remove("/nope.txt")
+	idx.Rename("/nope.txt", "/also-nope.txt")
+	var nilIdx *SemanticIndex
+	nilIdx.Remove("/x")
+	nilIdx.Rename("/x", "/y")
 }
 
 func TestSemanticIndex_GC(t *testing.T) {

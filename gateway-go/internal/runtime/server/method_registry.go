@@ -362,6 +362,11 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 			SemanticSearch: func(ctx context.Context, query string, max int) ([]filestore.ScoredEntry, error) {
 				return s.fileSemanticSearch(ctx, query, max)
 			},
+			// Keep the semantic index fresh after a delete/move so search doesn't
+			// hand back a stale path between 15-min reindex passes. Lazy like
+			// SemanticSearch (the index is created later in initToolsAndDeps).
+			OnDelete: s.fileIndexRemove,
+			OnMove:   s.fileIndexRename,
 		}),
 
 		// Native mail domain. The RPC namespace stays miniapp.gmail.* for

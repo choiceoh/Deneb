@@ -18,8 +18,11 @@ package filestore
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math"
 	"os"
 	"sort"
@@ -50,15 +53,47 @@ const maxIndexFileBytes = 5 << 20 // 5 MiB
 // whitespace-only tail), which carry no signal.
 const minChunkRunes = 8
 
+// contentHashPrefixBytes is how many leading bytes are hashed (together with the
+// size) to form the content-change key. ServerModified is RFC3339 (1-second
+// granularity), so a file overwritten within the same second at the same byte
+// size would keep its stale vectors under an (mtime,size)-only key. A hash of
+// the first 64 KiB catches the common overwrite (a re-export, a `cp` of
+// different content) cheaply — reading a full multi-MB file every pass just to
+// detect this rare collision would defeat the incremental design. The residual
+// blind spot (two files identical in their first 64 KiB but differing later,
+// same size, same second) is vanishingly rare and self-heals on the next mtime
+// change.
+const contentHashPrefixBytes = 64 << 10 // 64 KiB
+
 // minSemanticScore is the cosine floor a file's best chunk must clear to count
-// as a semantic hit. BGE-M3 returns a non-trivial cosine (~0.3–0.6) even for
-// unrelated text, so a bare best>0 filter would always return up to `max`
-// results whenever the embedder is healthy — burying exact name/content matches
-// under semantic noise and starving the caller's lexical fallback (which only
-// triggers on an *empty* semantic result). 0.4 matches the wiki's BGE-M3
-// support band (wiki/search.go semSupportThreshold); below it the match is
-// noise, so the query falls through to name/content search as intended.
-const minSemanticScore = 0.4
+// as a semantic hit. BGE-M3 packs *Korean* text into a high, narrow band: even
+// a totally unrelated query scores ~0.58–0.69 against a Korean office document,
+// and a genuinely relevant query scores ~0.77–0.86. A low floor therefore lets
+// every Korean query "match" every file — measured on the live srv4 BGE-M3
+// (:8001), the old 0.4 floor kept 15/15 irrelevant queries (e.g. "오늘 날씨
+// 어때" returned the 개발행위허가 PDF). The floor must sit *inside* the
+// Korean separation band, not at the generic-cosine band the wiki uses.
+//
+// Measured cosine distribution (srv4 BGE-M3, 20 relevant + 23 irrelevant
+// Korean (query, file) pairs across two office-doc corpora):
+//
+//	relevant   : min 0.7722, mean 0.8137, max 0.8619
+//	irrelevant : min 0.5847, mean 0.6307, max 0.6890   (best chunk over all files)
+//	"오늘 날씨 어때" vs 개발행위허가 PDF: 0.5626
+//
+// Floor sweep (relevant kept / irrelevant kept):
+//
+//	0.40 → 20/20, 23/23   (the old floor — useless for Korean)
+//	0.70 → 20/20,  0/23   (clean)
+//	0.76 → 20/20,  0/23   (clean)
+//	0.78 → drops real hits (토지 형질변경 0.772, 인사 발령 명단 0.772)
+//
+// The clean window is [0.689 irrelevant-max, 0.772 relevant-min]; 0.73 is its
+// midpoint, keeping every relevant pair and rejecting every irrelevant one with
+// ~0.04 margin on each side. An absolute floor separates cleanly, so no
+// per-query normalization or BM25 hybrid is needed. Below it the match is noise
+// and the query falls through to name/content search as intended.
+const minSemanticScore = 0.73
 
 // embedBatchSize bounds how many chunks are embedded per request. Kept small
 // because the CPU BGE-M3 server drops (EOF) on large batches — the wiki index
@@ -85,12 +120,14 @@ type chunk struct {
 }
 
 // fileEntry is the index record for one file: its identity (path), the
-// freshness keys used for incremental reindex (mtime/size), and its chunks.
+// freshness keys used for incremental reindex (mtime/size/content hash), and its
+// chunks.
 type fileEntry struct {
-	Path   string  `json:"path"`   // virtual store path ("/메일/foo.pdf")
-	MTime  string  `json:"mtime"`  // ServerModified (RFC3339); changed file ⇒ re-embed
-	Size   int64   `json:"size"`   // byte size; changed file ⇒ re-embed
-	Chunks []chunk `json:"chunks"` // empty allowed (e.g. extract returned text but all chunks too short)
+	Path    string  `json:"path"`              // virtual store path ("/메일/foo.pdf")
+	MTime   string  `json:"mtime"`             // ServerModified (RFC3339); changed file ⇒ re-embed
+	Size    int64   `json:"size"`              // byte size; changed file ⇒ re-embed
+	Content string  `json:"content,omitempty"` // content-prefix hash; disambiguates same-second+same-size overwrites
+	Chunks  []chunk `json:"chunks"`            // empty allowed (e.g. extract returned text but all chunks too short)
 }
 
 // indexData is the on-disk JSON shape (version + path→entry map).
@@ -101,10 +138,16 @@ type indexData struct {
 
 // SemanticIndex is a file-backed, incrementally-maintained vector index over the
 // store. Concurrency: a single mutex guards the in-memory map and is held only
-// around map reads/writes — never across the network embed call or disk I/O.
+// around map reads/writes — never across the network embed call, the cosine
+// scan, or disk I/O (marshal + write). The slow paths (save, Search) snapshot
+// under the lock and do the heavy work outside it, so a large index never
+// freezes a concurrent Search or write (see .claude/rules/concurrency.md: no
+// network/disk I/O while holding a lock).
 //
-// Lock discipline (see .claude/rules/concurrency.md): callers must hold mu when
-// invoking a *Locked helper; public methods take/release mu themselves.
+// Lock discipline: callers must hold mu when invoking a *Locked helper; public
+// methods take/release mu themselves. Chunk slices in fileEntry are never
+// mutated in place — an entry is always replaced wholesale — so a snapshot may
+// retain entry pointers and read their chunks lock-free.
 type SemanticIndex struct {
 	path string // sidecar JSON path; "" disables persistence (tests)
 
@@ -162,15 +205,27 @@ func (si *SemanticIndex) load() {
 	}
 }
 
-// saveLocked mirrors the in-memory map to disk atomically. Caller holds mu.
+// save mirrors the in-memory map to disk atomically. It snapshots the map under
+// the lock, then marshals and writes *without* the lock held — marshaling a
+// large index can take tens of ms, and holding mu across it would stall every
+// concurrent Search/write (the bug this fixes). The caller MUST NOT hold mu.
 // Failures only cost a warm start, so they are returned for the caller to log
 // (not fatal).
-func (si *SemanticIndex) saveLocked() error {
+func (si *SemanticIndex) save() error {
 	if si.path == "" {
 		return nil
 	}
-	d := indexData{Version: semindexVersion, Files: si.files}
-	raw, err := json.Marshal(d)
+	// Shallow-copy the path→entry map under the lock. Entries are immutable once
+	// stored (replaced wholesale, never mutated in place), so sharing the
+	// *fileEntry pointers with the marshaler is safe even as the map mutates.
+	si.mu.Lock()
+	snapshot := make(map[string]*fileEntry, len(si.files))
+	for p, fe := range si.files {
+		snapshot[p] = fe
+	}
+	si.mu.Unlock()
+
+	raw, err := json.Marshal(indexData{Version: semindexVersion, Files: snapshot})
 	if err != nil {
 		return fmt.Errorf("filestore semindex: marshal: %w", err)
 	}
@@ -181,6 +236,49 @@ func (si *SemanticIndex) saveLocked() error {
 		return fmt.Errorf("filestore semindex: write %s: %w", si.path, err)
 	}
 	return nil
+}
+
+// Remove drops the index entry for path (a deleted/moved-away file) so a search
+// stops returning a stale path that would 404 at download time, without waiting
+// for the next 15-minute reindex. A no-op when the path isn't indexed. Persisted
+// best-effort; a save failure only costs a warm start (the GC pass would drop it
+// anyway). Safe to call even when persistence is disabled (path == "").
+func (si *SemanticIndex) Remove(path string) {
+	if si == nil || path == "" {
+		return
+	}
+	si.mu.Lock()
+	_, existed := si.files[path]
+	if existed {
+		delete(si.files, path)
+	}
+	si.mu.Unlock()
+	if existed {
+		_ = si.save()
+	}
+}
+
+// Rename re-keys the index entry from oldPath to newPath after a move, so search
+// returns the new path immediately (the vectors are unchanged — only the file's
+// location moved). If newPath already has an entry it is overwritten (the moved
+// file's content wins). A no-op when oldPath isn't indexed or the paths are
+// equal. Persisted best-effort. The entry's Path field is updated so a later
+// save/search reports the new location.
+func (si *SemanticIndex) Rename(oldPath, newPath string) {
+	if si == nil || oldPath == "" || newPath == "" || oldPath == newPath {
+		return
+	}
+	si.mu.Lock()
+	fe, ok := si.files[oldPath]
+	if ok {
+		delete(si.files, oldPath)
+		fe.Path = newPath
+		si.files[newPath] = fe
+	}
+	si.mu.Unlock()
+	if ok {
+		_ = si.save()
+	}
 }
 
 // chunkText splits s into <=chunkRunes-rune chunks on rune boundaries, dropping
@@ -204,9 +302,44 @@ func chunkText(s string) []string {
 	return out
 }
 
-// freshKey returns the (mtime,size) pair that decides whether a file needs
-// re-embedding. A change in either re-embeds the file.
+// freshKey returns the (mtime,size) pair that is the cheap first half of the
+// change check. A change in either re-embeds the file without any read; the
+// content hash (contentHashFor) only disambiguates the case where both match.
 func freshKey(e Entry) (string, int64) { return e.ServerModified, e.Size }
+
+// contentHashFor returns a hex SHA-256 over the file's size and first
+// contentHashPrefixBytes bytes — the change key used to disambiguate a
+// same-mtime, same-size overwrite. A read error returns "" (the caller then
+// falls back to the (mtime,size) decision, i.e. treats it as unchanged), since
+// an unreadable file will be re-evaluated next pass anyway.
+func contentHashFor(ctx context.Context, store Store, path string, size int64) string {
+	rc, _, err := store.Open(ctx, path)
+	if err != nil {
+		return ""
+	}
+	defer func() { _ = rc.Close() }()
+	h := sha256.New()
+	// Bind the size into the hash so a truncation/extension that keeps the same
+	// prefix still changes the key.
+	fmt.Fprintf(h, "%d:", size)
+	if _, err := io.Copy(h, io.LimitReader(rc, contentHashPrefixBytes)); err != nil {
+		return ""
+	}
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+// contentHashOfBytes mirrors contentHashFor for already-in-memory bytes (the
+// embed path has the full file in hand, so it hashes the same prefix without a
+// second read).
+func contentHashOfBytes(data []byte, size int64) string {
+	h := sha256.New()
+	fmt.Fprintf(h, "%d:", size)
+	if len(data) > contentHashPrefixBytes {
+		data = data[:contentHashPrefixBytes]
+	}
+	h.Write(data)
+	return hex.EncodeToString(h.Sum(nil))
+}
 
 // Reindex brings the index up to date with the store: it embeds new/changed
 // files, drops entries for deleted files, and persists the result. It is
@@ -238,14 +371,25 @@ func (si *SemanticIndex) Reindex(ctx context.Context, store Store, extractFn Ext
 		stats.Scanned++
 	}
 
-	// Snapshot which paths are already current under the lock, then do the slow
-	// extract+embed work outside it.
+	// Snapshot which paths look current (cheap mtime+size match) under the lock,
+	// then verify the ambiguous ones by content hash and do the slow
+	// extract+embed work — all outside the lock.
 	si.mu.Lock()
 	var toEmbed []Entry
+	var verify []Entry // (mtime,size) matched — confirm with a content-prefix hash
+	prevContent := make(map[string]string)
 	for p, e := range live {
 		mtime, size := freshKey(e)
 		if cur, ok := si.files[p]; ok && cur.MTime == mtime && cur.Size == size {
-			continue // unchanged
+			// Looks unchanged by the cheap key. If we have a stored content hash,
+			// re-verify it (catches a same-second, same-size overwrite). An entry
+			// from before content hashing has Content=="" — treat it as current to
+			// avoid a one-time full re-embed of the whole store on upgrade.
+			if cur.Content != "" {
+				verify = append(verify, e)
+				prevContent[p] = cur.Content
+			}
+			continue
 		}
 		toEmbed = append(toEmbed, e)
 	}
@@ -259,6 +403,19 @@ func (si *SemanticIndex) Reindex(ctx context.Context, store Store, extractFn Ext
 	}
 	si.mu.Unlock()
 	stats.Removed = removed
+
+	// Content-hash the ambiguous set (lock-free reads). A changed hash promotes
+	// the file into toEmbed; an unreadable file (hash "") is left as-is.
+	for _, e := range verify {
+		if cerr := ctx.Err(); cerr != nil {
+			_ = si.persistIfMutated(removed > 0)
+			return stats, cerr
+		}
+		h := contentHashFor(ctx, store, e.PathDisplay, e.Size)
+		if h != "" && h != prevContent[e.PathDisplay] {
+			toEmbed = append(toEmbed, e)
+		}
+	}
 
 	// Stable order so a partial run (ctx cancel) is deterministic and resumable.
 	sort.Slice(toEmbed, func(a, b int) bool { return toEmbed[a].PathDisplay < toEmbed[b].PathDisplay })
@@ -290,14 +447,13 @@ func (si *SemanticIndex) Reindex(ctx context.Context, store Store, extractFn Ext
 }
 
 // persistIfMutated saves the index when something changed; a save error is
-// returned (warm-start cost only).
+// returned (warm-start cost only). save() snapshots under the lock and writes
+// outside it, so this must be called WITHOUT mu held.
 func (si *SemanticIndex) persistIfMutated(mutated bool) error {
 	if !mutated {
 		return nil
 	}
-	si.mu.Lock()
-	defer si.mu.Unlock()
-	return si.saveLocked()
+	return si.save()
 }
 
 // embedFile extracts, chunks, and embeds one file. Returns (entry, true) on
@@ -312,13 +468,14 @@ func (si *SemanticIndex) embedFile(ctx context.Context, store Store, extractFn E
 	if err != nil {
 		return nil, false // vanished/unreadable mid-walk
 	}
+	content := contentHashOfBytes(data, e.Size)
 	text := extractFn(ctx, data, e.Name)
 	chunks := chunkText(text)
 	if len(chunks) == 0 {
 		// No extractable text: record a fresh, empty entry so we don't re-extract
-		// this unchanged file every pass (the mtime/size key marks it current).
+		// this unchanged file every pass (the mtime/size/content key marks it current).
 		mtime, size := freshKey(e)
-		return &fileEntry{Path: e.PathDisplay, MTime: mtime, Size: size}, true
+		return &fileEntry{Path: e.PathDisplay, MTime: mtime, Size: size, Content: content}, true
 	}
 
 	out := make([]chunk, 0, len(chunks))
@@ -336,7 +493,7 @@ func (si *SemanticIndex) embedFile(ctx context.Context, store Store, extractFn E
 		}
 	}
 	mtime, size := freshKey(e)
-	return &fileEntry{Path: e.PathDisplay, MTime: mtime, Size: size, Chunks: out}, true
+	return &fileEntry{Path: e.PathDisplay, MTime: mtime, Size: size, Content: content, Chunks: out}, true
 }
 
 // Search embeds the query and returns up to max files ranked by the best cosine
@@ -365,7 +522,18 @@ func (si *SemanticIndex) Search(ctx context.Context, query string, max int, embe
 	}
 	qv := qvecs[0]
 
+	// Snapshot the entry pointers under the lock, then run the O(all chunks)
+	// cosine scan OUTSIDE it — the scan is pure CPU over immutable chunk vectors,
+	// so holding mu across it would needlessly block concurrent reindex writes.
+	// Entries are replaced wholesale (never mutated in place), so the retained
+	// pointers stay valid even if the map mutates after the snapshot.
 	si.mu.Lock()
+	entries := make([]*fileEntry, 0, len(si.files))
+	for _, fe := range si.files {
+		entries = append(entries, fe)
+	}
+	si.mu.Unlock()
+
 	type scored struct {
 		path    string
 		size    int64
@@ -373,8 +541,8 @@ func (si *SemanticIndex) Search(ctx context.Context, query string, max int, embe
 		score   float64
 		snippet string
 	}
-	hits := make([]scored, 0, len(si.files))
-	for p, fe := range si.files {
+	hits := make([]scored, 0, len(entries))
+	for _, fe := range entries {
 		best := -1.0
 		bestSnip := ""
 		for i := range fe.Chunks {
@@ -388,9 +556,8 @@ func (si *SemanticIndex) Search(ctx context.Context, query string, max int, embe
 			continue // below the cosine floor (empty entry, or only noise-level
 			// similarity) ⇒ not a semantic hit; the caller's lexical fallback handles it
 		}
-		hits = append(hits, scored{path: p, size: fe.Size, mtime: fe.MTime, score: best, snippet: bestSnip})
+		hits = append(hits, scored{path: fe.Path, size: fe.Size, mtime: fe.MTime, score: best, snippet: bestSnip})
 	}
-	si.mu.Unlock()
 
 	sort.Slice(hits, func(a, b int) bool {
 		if hits[a].score != hits[b].score {
