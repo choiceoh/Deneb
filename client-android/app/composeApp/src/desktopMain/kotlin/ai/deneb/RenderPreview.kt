@@ -13,8 +13,8 @@ import ai.deneb.deneb.CalendarMonthGrid
 import ai.deneb.deneb.ContactsList
 import ai.deneb.deneb.CronEditContent
 import ai.deneb.deneb.DashboardLanesContent
-import ai.deneb.deneb.DenebAppHubContent
 import ai.deneb.deneb.DenebBrowserChrome
+import ai.deneb.deneb.DenebMoreScreen
 import ai.deneb.deneb.DenebWebViewState
 import ai.deneb.deneb.FilesSearchMode
 import ai.deneb.deneb.FilesSearchModeRow
@@ -174,11 +174,11 @@ private fun renderBrowser(name: String, scheme: ColorScheme) {
     scene.close()
 }
 
-private fun renderAppHub(name: String, scheme: ColorScheme) {
-    val scene = ImageComposeScene(width = 824, height = 900, density = Density(2f)) {
+private fun renderMore(name: String, scheme: ColorScheme) {
+    val scene = ImageComposeScene(width = 824, height = 1500, density = Density(2f)) {
         MaterialTheme(colorScheme = scheme) {
             Surface(color = MaterialTheme.colorScheme.background) {
-                DenebAppHubContent(onOpen = {})
+                DenebMoreScreen(onBack = {}, onOpen = {})
             }
         }
     }
@@ -195,8 +195,8 @@ fun main() {
     renderScreen("mail_light.png", "mail", LightColorScheme, 840, 1100)
     renderBrowser("browser_dark.png", DarkColorScheme)
     renderBrowser("browser_light.png", LightColorScheme)
-    renderAppHub("app_hub_dark.png", DarkColorScheme)
-    renderAppHub("app_hub_light.png", LightColorScheme)
+    renderMore("more_dark.png", DarkColorScheme)
+    renderMore("more_light.png", LightColorScheme)
     renderMarkdown("markdown_dark.png", DarkColorScheme)
     renderScreen("scrub_active_dark.png", "scrub_active", DarkColorScheme, 824, 1100)
     renderScreen("scrub_active_light.png", "scrub_active", LightColorScheme, 824, 1100)
@@ -208,12 +208,13 @@ fun main() {
     renderCollapsedReport("mail_expanded_dark.png", DarkColorScheme, expanded = true)
     renderDesignRefresh("design_refresh_dark.png", DarkColorScheme)
     renderDesignRefresh("design_refresh_light.png", LightColorScheme)
-    // Five-slot bar: 피드·메일·자체앱·달력·설정. One shot per selectable screen tab
-    // (피드/자체앱) so the filled-vs-outlined active glyph is checked; 메일/달력/설정 are
+    // Five-slot bar: 피드·메일·채팅·달력·더보기. One shot per selectable screen tab
+    // (피드/채팅/더보기) so the filled-vs-outlined active glyph is checked; 메일/달력 are
     // navigate-actions (never selected) and show on every shot.
     renderBottomBar("bottombar_feed_dark.png", DarkColorScheme, "deneb_feed")
     renderBottomBar("bottombar_feed_light.png", LightColorScheme, "deneb_feed")
-    renderBottomBar("bottombar_apphub_dark.png", DarkColorScheme, "deneb_app_hub")
+    renderBottomBar("bottombar_chat_dark.png", DarkColorScheme, "home")
+    renderBottomBar("bottombar_more_dark.png", DarkColorScheme, "deneb_more")
     renderDesignSample("design_dark.png", DarkColorScheme)
     renderDesignSample("design_light.png", LightColorScheme)
     renderScreen("calendar_event_dark.png", "calendar_event", DarkColorScheme, 760, 1100)
@@ -835,7 +836,7 @@ private val cronAdvancedDraft = ScheduleDraft(SchedMode.ADVANCED, "09:00", empty
 private fun renderBottomBar(name: String, scheme: ColorScheme, route: String) {
     // Phone width (412dp = 824px @ density 2) so the bar matches the real device. The
     // navigate-action callbacks are no-ops here — this checks the icons/labels/selection
-    // only (피드·메일·자체앱·달력·설정).
+    // only (피드·메일·채팅·달력·더보기).
     val scene = ImageComposeScene(width = 824, height = 240, density = Density(2f)) {
         MaterialTheme(colorScheme = scheme) {
             Surface(color = MaterialTheme.colorScheme.background) {

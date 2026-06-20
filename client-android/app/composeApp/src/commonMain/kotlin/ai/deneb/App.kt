@@ -5,7 +5,6 @@ package ai.deneb
 import ai.deneb.data.AppSettings
 import ai.deneb.data.DataRepository
 import ai.deneb.data.ThemeMode
-import ai.deneb.deneb.DenebAppHubScreen
 import ai.deneb.deneb.DenebBrowserScreen
 import ai.deneb.deneb.DenebCalendarAddScreen
 import ai.deneb.deneb.DenebCalendarEventScreen
@@ -23,6 +22,7 @@ import ai.deneb.deneb.DenebFleetScreen
 import ai.deneb.deneb.DenebGatewayClient
 import ai.deneb.deneb.DenebMailDetailScreen
 import ai.deneb.deneb.DenebMailScreen
+import ai.deneb.deneb.DenebMoreScreen
 import ai.deneb.deneb.DenebNotebooksScreen
 import ai.deneb.deneb.DenebOrgChartScreen
 import ai.deneb.deneb.DenebPeopleScreen
@@ -181,12 +181,12 @@ data class DenebTodoEdit(val id: String)
 @SerialName("deneb_search")
 object DenebSearch
 
-// 자체앱 — Deneb's own mini-apps as a home-screen grid (bottom-bar center tab). Absorbed
-// the old 더보기 list (메일·달력·검색·할일·일기·조직도·파트별현황·카테고리·노트북·파일·
-// 설정) plus 채팅.
+// 더보기 — the section hub (bottom-bar tab). A grouped text list of the sections that are
+// not first-class bottom-bar tabs (파트별 업무 현황·조직도·검색·할일·일기·카테고리·전체 연락처·
+// 노트북·파일·브라우저·설정). 채팅·피드·메일·달력 are their own tabs. See DenebMoreScreen.
 @Serializable
-@SerialName("deneb_app_hub")
-object DenebAppHub
+@SerialName("deneb_more")
+object DenebMore
 
 @Serializable
 @SerialName("deneb_wiki")
@@ -623,8 +623,8 @@ private fun AppContent(
                                     )
                                 }
                             }
-                            composable<DenebAppHub> {
-                                DenebAppHubScreen(
+                            composable<DenebMore> {
+                                DenebMoreScreen(
                                     onBack = { navController.navigateUp() },
                                     onOpen = { dest -> navController.navigate(dest) },
                                     chatMode = navChatMode,
