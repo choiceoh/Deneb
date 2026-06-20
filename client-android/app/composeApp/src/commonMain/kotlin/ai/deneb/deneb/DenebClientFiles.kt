@@ -61,6 +61,23 @@ suspend fun DenebGatewayClient.filesSearch(query: String): List<FilesEntry>? = c
 suspend fun DenebGatewayClient.filesShare(path: String): String? = callRpc<FilesShareOut>("miniapp.files.share", buildJsonObject { put("path", path) })
     ?.url?.ifBlank { null }
 
+/** Delete a file or empty folder. Returns null on success, else the gateway's
+ *  error message (so the screen can show the exact reason, e.g. a non-empty folder). */
+suspend fun DenebGatewayClient.filesDelete(path: String): String? = rpcWrite("miniapp.files.delete", buildJsonObject { put("path", path) })
+
+/** Create a folder (parents included). Returns null on success, else the error message. */
+suspend fun DenebGatewayClient.filesMkdir(path: String): String? = rpcWrite("miniapp.files.mkdir", buildJsonObject { put("path", path) })
+
+/** Move/rename [src] to [dst] (a rename is a same-folder move; an existing target
+ *  is auto-renamed by the store). Returns null on success, else the error message. */
+suspend fun DenebGatewayClient.filesMove(src: String, dst: String): String? = rpcWrite(
+    "miniapp.files.move",
+    buildJsonObject {
+        put("src", src)
+        put("dst", dst)
+    },
+)
+
 /** Upload device bytes to [destPath] (current folder + filename). Returns the
  *  stored file's metadata (autorenamed on a name clash), or null on failure. */
 @OptIn(ExperimentalEncodingApi::class)

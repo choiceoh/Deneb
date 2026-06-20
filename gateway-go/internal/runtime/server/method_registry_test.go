@@ -128,6 +128,9 @@ var requiredMethods = []string{
 	"miniapp.files.search",
 	"miniapp.files.share",
 	"miniapp.files.upload",
+	"miniapp.files.delete",
+	"miniapp.files.mkdir",
+	"miniapp.files.move",
 	// miniapp.gmail.analyze and miniapp.gmail.analysis_cached are
 	// conditional on an LLM client being configured
 	// (modelRegistry.Client(RoleMain) returning non-nil) — not in the

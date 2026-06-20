@@ -373,6 +373,76 @@ func (s *LocalStore) Delete(ctx context.Context, p string) error {
 	return os.Remove(abs)
 }
 
+// Mkdir creates the folder at path (and any missing parents). An existing folder
+// is returned as-is — mkdir is idempotent — but the root is rejected and a
+// pre-existing *file* at the path is an error (os.MkdirAll surfaces it).
+func (s *LocalStore) Mkdir(ctx context.Context, p string) (*Entry, error) {
+	if cerr := ctx.Err(); cerr != nil {
+		return nil, cerr
+	}
+	abs, clean, err := s.resolve(p)
+	if err != nil {
+		return nil, err
+	}
+	if clean == "/" {
+		return nil, fmt.Errorf("filestore: cannot create root")
+	}
+	if err := os.MkdirAll(abs, 0o755); err != nil {
+		return nil, fmt.Errorf("filestore: mkdir %s: %w", clean, err)
+	}
+	fi, err := os.Stat(abs)
+	if err != nil {
+		return nil, err
+	}
+	e := entryFor(clean, fi)
+	return &e, nil
+}
+
+// Move renames/moves src to dst (a rename is a move within the same parent). The
+// source must exist; both ends are clamped inside root. When dst already exists
+// the target is auto-renamed via uniqueTarget — the same anti-clobber rule Put
+// uses, so a move never silently overwrites. Missing destination parents are
+// created. Moving the root, or onto the root, is rejected.
+func (s *LocalStore) Move(ctx context.Context, src, dst string) (*Entry, error) {
+	if cerr := ctx.Err(); cerr != nil {
+		return nil, cerr
+	}
+	srcAbs, srcClean, err := s.resolve(src)
+	if err != nil {
+		return nil, err
+	}
+	dstAbs, dstClean, err := s.resolve(dst)
+	if err != nil {
+		return nil, err
+	}
+	if srcClean == "/" {
+		return nil, fmt.Errorf("filestore: cannot move root")
+	}
+	if dstClean == "/" {
+		return nil, fmt.Errorf("filestore: cannot move onto root")
+	}
+	if !pathExists(srcAbs) {
+		return nil, os.ErrNotExist
+	}
+	// Resolving to the same path is a no-op rename; return the source as-is so a
+	// "rename to the same name" doesn't autorename into "name (1)".
+	if srcAbs != dstAbs {
+		dstAbs, dstClean = s.uniqueTarget(dstAbs, dstClean)
+	}
+	if err := os.MkdirAll(filepath.Dir(dstAbs), 0o755); err != nil {
+		return nil, fmt.Errorf("filestore: mkdir parent of %s: %w", dstClean, err)
+	}
+	if err := os.Rename(srcAbs, dstAbs); err != nil {
+		return nil, fmt.Errorf("filestore: move %s -> %s: %w", srcClean, dstClean, err)
+	}
+	fi, err := os.Stat(dstAbs)
+	if err != nil {
+		return nil, err
+	}
+	e := entryFor(dstClean, fi)
+	return &e, nil
+}
+
 // uniqueTarget returns the first non-existing "name (n).ext" variant of abs
 // (and the matching virtual path) when abs already exists, mirroring Dropbox's
 // add-mode autorename. Falls back to the original target after a sane cap.

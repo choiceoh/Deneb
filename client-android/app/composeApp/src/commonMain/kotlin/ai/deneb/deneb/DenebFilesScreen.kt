@@ -25,17 +25,23 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.DriveFileMove
 import androidx.compose.material.icons.automirrored.outlined.InsertDriveFile
 import androidx.compose.material.icons.outlined.CloudUpload
+import androidx.compose.material.icons.outlined.CreateNewFolder
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.DriveFileRenameOutline
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -103,6 +109,16 @@ fun DenebFilesScreen(
     // the value; a slower in-flight load that finds the token changed bails out
     // instead of overwriting a newer folder's contents (out-of-order RPC guard).
     var loadToken by remember { mutableStateOf(0) }
+
+    // CRUD dialog state. Each holds the target entry (rename/move/delete) or is a
+    // plain bool (new folder). actionBusy gates the dialog buttons while an RPC runs.
+    var renameTarget by remember { mutableStateOf<FilesEntry?>(null) }
+    var moveTarget by remember { mutableStateOf<FilesEntry?>(null) }
+    var deleteTarget by remember { mutableStateOf<FilesEntry?>(null) }
+    var showNewFolder by remember { mutableStateOf(false) }
+    var actionBusy by remember { mutableStateOf(false) }
+    // Transient error from a CRUD op, shown under the header (cleared on next nav).
+    var crudError by remember { mutableStateOf<String?>(null) }
 
     suspend fun loadCurrent() {
         val token = ++loadToken
@@ -217,7 +233,17 @@ fun DenebFilesScreen(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
             )
+            // New-folder + upload only while browsing — search results span folders,
+            // so "current folder" (the create/upload target) is undefined then.
             if (activeQuery == null) {
+                TextButton(onClick = {
+                    crudError = null
+                    showNewFolder = true
+                }) {
+                    Icon(Icons.Outlined.CreateNewFolder, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("새 폴더")
+                }
                 if (uploading) {
                     CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
                 } else {
@@ -230,6 +256,14 @@ fun DenebFilesScreen(
             }
         }
         uploadError?.let {
+            Text(
+                it,
+                style = DenebType.meta,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 2.dp),
+            )
+        }
+        crudError?.let {
             Text(
                 it,
                 style = DenebType.meta,
@@ -314,35 +348,173 @@ fun DenebFilesScreen(
                             haptics.tap()
                             actionTarget = it
                         },
+                        // Long-press any row (file or folder) opens the action sheet —
+                        // the only path to folder CRUD, since a folder tap descends.
+                        onEntryLongPress = {
+                            haptics.tap()
+                            actionTarget = it
+                        },
                     )
                 }
             }
         }
     }
 
-    // Per-file action sheet. Material control; Deneb-styled rows inside. Preview-able
-    // types (image / text·markdown) get a primary "미리보기" action that opens an in-app
-    // viewer; everything else (and the always-present 공유 링크) falls back to the signed
-    // download link opened in the browser.
+    // Per-entry action sheet. Material control; Deneb-styled rows inside. Files get
+    // preview (image / text·markdown opens an in-app viewer) + the always-present
+    // 공유 링크 (signed download link); folders get neither. Both get 이름 변경 /
+    // 이동 / 삭제 (the management actions). Each management action opens its own
+    // dialog (confirm for delete, text input for rename/move).
     actionTarget?.let { target ->
         ModalBottomSheet(onDismissRequest = { actionTarget = null }) {
             FilesActionSheetContent(
                 entry = target,
-                onPreview = previewKindOf(target.name)?.let { kind ->
-                    {
-                        actionTarget = null
-                        when (kind) {
-                            FilePreviewKind.IMAGE -> showFullScreenImage(client.filesDownloadUrl(target.pathLower))
-                            FilePreviewKind.TEXT -> textPreview = target
+                onPreview = if (target.isFolder) {
+                    null
+                } else {
+                    previewKindOf(target.name)?.let { kind ->
+                        {
+                            actionTarget = null
+                            when (kind) {
+                                FilePreviewKind.IMAGE -> showFullScreenImage(client.filesDownloadUrl(target.pathLower))
+                                FilePreviewKind.TEXT -> textPreview = target
+                            }
                         }
                     }
                 },
-                onShare = {
+                onShare = if (target.isFolder) {
+                    null
+                } else {
+                    {
+                        actionTarget = null
+                        scope.launch { client.filesShare(target.pathLower)?.let { uriHandler.openUri(it) } }
+                    }
+                },
+                onRename = {
                     actionTarget = null
-                    scope.launch { client.filesShare(target.pathLower)?.let { uriHandler.openUri(it) } }
+                    crudError = null
+                    renameTarget = target
+                },
+                onMove = {
+                    actionTarget = null
+                    crudError = null
+                    moveTarget = target
+                },
+                onDelete = {
+                    actionTarget = null
+                    crudError = null
+                    deleteTarget = target
                 },
             )
         }
+    }
+
+    // --- New folder: name input. Creates "<current folder>/<name>" then re-lists. ---
+    if (showNewFolder) {
+        FilesNameDialog(
+            title = "새 폴더",
+            label = "폴더 이름",
+            initial = "",
+            confirmLabel = "만들기",
+            busy = actionBusy,
+            onDismiss = { if (!actionBusy) showNewFolder = false },
+            onConfirm = { name ->
+                scope.launch {
+                    actionBusy = true
+                    val folder = pathStack.last().trimEnd('/')
+                    val err = client.filesMkdir("$folder/$name")
+                    actionBusy = false
+                    if (err == null) {
+                        showNewFolder = false
+                        loadCurrent()
+                    } else {
+                        showNewFolder = false
+                        crudError = err
+                    }
+                }
+            },
+        )
+    }
+
+    // --- Rename: new name in the same parent folder (a same-folder move). ---
+    renameTarget?.let { target ->
+        FilesNameDialog(
+            title = "이름 변경",
+            label = "새 이름",
+            initial = target.name,
+            confirmLabel = "변경",
+            busy = actionBusy,
+            onDismiss = { if (!actionBusy) renameTarget = null },
+            onConfirm = { name ->
+                scope.launch {
+                    actionBusy = true
+                    val parent = target.pathDisplay.substringBeforeLast('/', "").ifBlank { "" }
+                    val dst = "$parent/$name"
+                    val err = client.filesMove(target.pathDisplay, dst)
+                    actionBusy = false
+                    renameTarget = null
+                    if (err == null) reload() else crudError = err
+                }
+            },
+        )
+    }
+
+    // --- Move: destination folder path (the store creates missing parents). ---
+    moveTarget?.let { target ->
+        FilesNameDialog(
+            title = "이동",
+            label = "대상 폴더 경로 (예: /계약/완료)",
+            initial = target.pathDisplay.substringBeforeLast('/', "").ifBlank { "/" },
+            confirmLabel = "이동",
+            busy = actionBusy,
+            onDismiss = { if (!actionBusy) moveTarget = null },
+            onConfirm = { destFolder ->
+                scope.launch {
+                    actionBusy = true
+                    val folder = destFolder.trim().trimEnd('/').ifBlank { "" }
+                    val dst = "$folder/${target.name}"
+                    val err = client.filesMove(target.pathDisplay, dst)
+                    actionBusy = false
+                    moveTarget = null
+                    if (err == null) reload() else crudError = err
+                }
+            },
+        )
+    }
+
+    // --- Delete: confirm, then remove and re-list. ---
+    deleteTarget?.let { target ->
+        AlertDialog(
+            onDismissRequest = { if (!actionBusy) deleteTarget = null },
+            title = { Text(if (target.isFolder) "폴더 삭제" else "파일 삭제") },
+            text = {
+                Text(
+                    if (target.isFolder) {
+                        "${target.name} 폴더를 삭제합니다. 비어 있지 않으면 삭제되지 않습니다."
+                    } else {
+                        "${target.name} 파일을 삭제합니다. 되돌릴 수 없습니다."
+                    },
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !actionBusy,
+                    onClick = {
+                        haptics.reject()
+                        scope.launch {
+                            actionBusy = true
+                            val err = client.filesDelete(target.pathDisplay)
+                            actionBusy = false
+                            deleteTarget = null
+                            if (err == null) reload() else crudError = err
+                        }
+                    },
+                ) { Text("삭제", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(enabled = !actionBusy, onClick = { deleteTarget = null }) { Text("취소") }
+            },
+        )
     }
 
     // In-app text / markdown viewer (full screen). Fetches the body lazily; `.md`
@@ -368,22 +540,30 @@ internal fun FilesListContent(
     onOpenFolder: (FilesEntry) -> Unit,
     onFileAction: (FilesEntry) -> Unit,
     modifier: Modifier = Modifier,
+    // Long-press any row → entry action sheet (the only way to manage a folder,
+    // whose tap descends). Null in previews that don't exercise it.
+    onEntryLongPress: ((FilesEntry) -> Unit)? = null,
 ) {
     LazyColumn(modifier.fillMaxSize()) {
         items(entries, key = { it.id.ifBlank { it.pathLower.ifBlank { it.pathDisplay } } }) { e ->
-            FilesRow(entry = e, onClick = { if (e.isFolder) onOpenFolder(e) else onFileAction(e) })
+            FilesRow(
+                entry = e,
+                onClick = { if (e.isFolder) onOpenFolder(e) else onFileAction(e) },
+                onLongClick = onEntryLongPress?.let { { it(e) } },
+            )
             HorizontalDivider(color = denebHairline())
         }
     }
 }
 
-/** One file row: type icon, name, and (files) a size · modified meta line. */
+/** One file row: type icon, name, and (files) a size · modified meta line. A
+ *  long-press (when wired) opens the entry action sheet. */
 @Composable
-internal fun FilesRow(entry: FilesEntry, onClick: () -> Unit) {
+internal fun FilesRow(entry: FilesEntry, onClick: () -> Unit, onLongClick: (() -> Unit)? = null) {
     Row(
         Modifier
             .fillMaxWidth()
-            .denebPressable(onClick = onClick)
+            .denebPressable(onClick = onClick, onLongClick = onLongClick)
             .padding(horizontal = 24.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -412,15 +592,20 @@ internal fun FilesRow(entry: FilesEntry, onClick: () -> Unit) {
 }
 
 /**
- * Bottom-sheet actions for a single file. When [onPreview] is non-null (image /
- * text·markdown) it is the primary "미리보기" action; the signed download link
- * ([onShare]) is always offered as the fallback / share path.
+ * Bottom-sheet actions for a single entry (file or folder). For files, [onPreview]
+ * (when non-null: image / text·markdown) is the primary "미리보기" action and
+ * [onShare] (non-null) offers the signed download link; folders pass null for both.
+ * [onRename] / [onMove] / [onDelete] (the management actions) are always shown,
+ * with 삭제 last and tinted as destructive.
  */
 @Composable
 internal fun FilesActionSheetContent(
     entry: FilesEntry,
     onPreview: (() -> Unit)?,
-    onShare: () -> Unit,
+    onShare: (() -> Unit)?,
+    onRename: () -> Unit,
+    onMove: () -> Unit,
+    onDelete: () -> Unit,
 ) {
     Column(Modifier.fillMaxWidth().padding(bottom = 24.dp)) {
         Text(
@@ -433,27 +618,34 @@ internal fun FilesActionSheetContent(
         )
         HorizontalDivider(color = denebHairline())
         if (onPreview != null) {
-            FilesActionRow(
-                icon = Icons.Outlined.Visibility,
-                label = "미리보기",
-                onClick = onPreview,
-            )
+            FilesActionRow(icon = Icons.Outlined.Visibility, label = "미리보기", onClick = onPreview)
             HorizontalDivider(color = denebHairline())
         }
+        if (onShare != null) {
+            FilesActionRow(icon = Icons.Outlined.Link, label = "공유 링크", onClick = onShare)
+            HorizontalDivider(color = denebHairline())
+        }
+        FilesActionRow(icon = Icons.Outlined.DriveFileRenameOutline, label = "이름 변경", onClick = onRename)
+        HorizontalDivider(color = denebHairline())
+        FilesActionRow(icon = Icons.AutoMirrored.Outlined.DriveFileMove, label = "이동", onClick = onMove)
+        HorizontalDivider(color = denebHairline())
         FilesActionRow(
-            icon = Icons.Outlined.Link,
-            label = "공유 링크",
-            onClick = onShare,
+            icon = Icons.Outlined.Delete,
+            label = "삭제",
+            onClick = onDelete,
+            tint = MaterialTheme.colorScheme.error,
         )
     }
 }
 
-/** One tappable action row in the file action sheet (icon + label). */
+/** One tappable action row in the file action sheet (icon + label). [tint] colors
+ *  both the icon and label (defaults to primary; destructive rows pass error). */
 @Composable
 private fun FilesActionRow(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     label: String,
     onClick: () -> Unit,
+    tint: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.primary,
 ) {
     Row(
         Modifier
@@ -462,10 +654,52 @@ private fun FilesActionRow(
             .padding(horizontal = 24.dp, vertical = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
+        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(22.dp))
         Spacer(Modifier.width(16.dp))
-        Text(label, style = DenebType.rowTitle, color = MaterialTheme.colorScheme.onBackground)
+        Text(label, style = DenebType.rowTitle, color = tint)
     }
+}
+
+/**
+ * A single-field text-input dialog (Material AlertDialog) for the name/path entry
+ * shared by 새 폴더 / 이름 변경 / 이동. Confirm is disabled while [busy] or the
+ * field is blank. Controls are Material (OutlinedTextField + TextButton); only the
+ * copy is Deneb-Korean.
+ */
+@Composable
+private fun FilesNameDialog(
+    title: String,
+    label: String,
+    initial: String,
+    confirmLabel: String,
+    busy: Boolean,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit,
+) {
+    var value by remember { mutableStateOf(initial) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            OutlinedTextField(
+                value = value,
+                onValueChange = { value = it },
+                label = { Text(label) },
+                singleLine = true,
+                enabled = !busy,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        },
+        confirmButton = {
+            TextButton(
+                enabled = !busy && value.trim().isNotBlank(),
+                onClick = { onConfirm(value.trim()) },
+            ) { Text(confirmLabel) }
+        },
+        dismissButton = {
+            TextButton(enabled = !busy, onClick = onDismiss) { Text("취소") }
+        },
+    )
 }
 
 /** Size · modified meta for a file row; folders show none. */

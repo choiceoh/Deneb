@@ -296,6 +296,140 @@ func TestDefaultDir(t *testing.T) {
 	}
 }
 
+func TestLocalStore_Mkdir(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	e, err := s.Mkdir(ctx, "/계약/2026")
+	if err != nil {
+		t.Fatalf("Mkdir: %v", err)
+	}
+	if !e.IsFolder() || e.Name != "2026" || e.PathDisplay != "/계약/2026" {
+		t.Errorf("Mkdir entry = %+v, want folder 2026 at /계약/2026", e)
+	}
+	st, err := s.Stat(ctx, "/계약/2026")
+	if err != nil || !st.IsFolder() {
+		t.Errorf("Stat after Mkdir = %+v (err %v), want folder", st, err)
+	}
+
+	// Idempotent: creating an existing folder returns it, not an error.
+	if _, err := s.Mkdir(ctx, "/계약/2026"); err != nil {
+		t.Errorf("Mkdir on existing folder should be a no-op, got %v", err)
+	}
+
+	// A file already at the path is an error (MkdirAll cannot turn it into a dir).
+	mustPut(t, s, "/계약/note.txt", "x")
+	if _, err := s.Mkdir(ctx, "/계약/note.txt"); err == nil {
+		t.Error("Mkdir over an existing file should fail")
+	}
+
+	if _, err := s.Mkdir(ctx, "/"); err == nil {
+		t.Error("Mkdir root should be rejected")
+	}
+}
+
+func TestLocalStore_Move(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	mustPut(t, s, "/inbox/견적서.pdf", "v1")
+
+	// Rename within the same folder.
+	moved, err := s.Move(ctx, "/inbox/견적서.pdf", "/inbox/2026견적서.pdf")
+	if err != nil {
+		t.Fatalf("Move (rename): %v", err)
+	}
+	if moved.PathDisplay != "/inbox/2026견적서.pdf" {
+		t.Errorf("renamed PathDisplay = %q, want /inbox/2026견적서.pdf", moved.PathDisplay)
+	}
+	if _, err := s.Stat(ctx, "/inbox/견적서.pdf"); err == nil {
+		t.Error("source should be gone after rename")
+	}
+	got, _, err := s.Get(ctx, "/inbox/2026견적서.pdf")
+	if err != nil || string(got) != "v1" {
+		t.Errorf("renamed content = %q (err %v), want v1", got, err)
+	}
+
+	// Move into another folder, creating the parent.
+	moved2, err := s.Move(ctx, "/inbox/2026견적서.pdf", "/계약/완료/견적서.pdf")
+	if err != nil {
+		t.Fatalf("Move (cross-folder): %v", err)
+	}
+	if moved2.PathDisplay != "/계약/완료/견적서.pdf" {
+		t.Errorf("moved PathDisplay = %q, want /계약/완료/견적서.pdf", moved2.PathDisplay)
+	}
+}
+
+func TestLocalStore_MoveAutorename(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	mustPut(t, s, "/a/doc.pdf", "A")
+	mustPut(t, s, "/b/doc.pdf", "B")
+
+	// Moving /a/doc.pdf onto the existing /b/doc.pdf must autorename, not clobber.
+	moved, err := s.Move(ctx, "/a/doc.pdf", "/b/doc.pdf")
+	if err != nil {
+		t.Fatalf("Move onto existing: %v", err)
+	}
+	if moved.PathDisplay != "/b/doc (1).pdf" {
+		t.Errorf("autorename PathDisplay = %q, want /b/doc (1).pdf", moved.PathDisplay)
+	}
+	// The pre-existing target is untouched.
+	got, _, _ := s.Get(ctx, "/b/doc.pdf")
+	if string(got) != "B" {
+		t.Errorf("clobbered target: %q, want B", got)
+	}
+}
+
+func TestLocalStore_MoveErrors(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	if _, err := s.Move(ctx, "/missing.txt", "/dst.txt"); err == nil {
+		t.Error("Move of a missing source should fail")
+	}
+	mustPut(t, s, "/x.txt", "x")
+	if _, err := s.Move(ctx, "/", "/dst"); err == nil {
+		t.Error("Move from root should be rejected")
+	}
+	if _, err := s.Move(ctx, "/x.txt", "/"); err == nil {
+		t.Error("Move onto root should be rejected")
+	}
+}
+
+// TestLocalStore_MkdirMovePathEscape ensures the traversal guard covers the new
+// mutators too — neither Mkdir nor Move may create or land outside the root.
+func TestLocalStore_MkdirMovePathEscape(t *testing.T) {
+	root := t.TempDir()
+	s, err := NewLocalStore(root)
+	if err != nil {
+		t.Fatalf("NewLocalStore: %v", err)
+	}
+	ctx := context.Background()
+
+	// A traversal Mkdir clamps inside root (".." cannot climb above "/").
+	if _, err := s.Mkdir(ctx, "/../escaped-dir"); err != nil {
+		t.Fatalf("Mkdir traversal: %v", err)
+	}
+	if pathExists(filepath.Join(filepath.Dir(root), "escaped-dir")) {
+		t.Error("Mkdir escaped the root!")
+	}
+	if !pathExists(filepath.Join(root, "escaped-dir")) {
+		t.Error("clamped Mkdir not found inside root")
+	}
+
+	// A traversal Move destination must also land inside root.
+	mustPut(t, s, "/src.txt", "data")
+	if _, err := s.Move(ctx, "/src.txt", "/../escaped.txt"); err != nil {
+		t.Fatalf("Move traversal: %v", err)
+	}
+	if pathExists(filepath.Join(filepath.Dir(root), "escaped.txt")) {
+		t.Error("Move escaped the root!")
+	}
+	if !pathExists(filepath.Join(root, "escaped.txt")) {
+		t.Error("clamped Move not found inside root")
+	}
+}
+
 func mustPut(t *testing.T, s *LocalStore, path, content string) {
 	t.Helper()
 	if _, err := s.Put(context.Background(), path, []byte(content), true); err != nil {

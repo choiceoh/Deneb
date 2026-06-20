@@ -4,6 +4,9 @@
 //	miniapp.files.search  — search the store by name query
 //	miniapp.files.share   — mint a signed, TTL-bounded download link for a path
 //	miniapp.files.upload  — upload device bytes to a destination path
+//	miniapp.files.delete  — remove a file or empty folder
+//	miniapp.files.mkdir   — create a folder (parents included)
+//	miniapp.files.move    — move/rename a path (a rename is a same-folder move)
 //
 // The local-disk replacement for miniapp.dropbox.* (dropbox_browse.go): filestore.Entry
 // mirrors dropbox.Entry field-for-field, so this is the same browser shape over a
@@ -79,8 +82,9 @@ type FilesBrowseDeps struct {
 	Store filestore.Store
 }
 
-// FilesBrowseMethods returns the miniapp.files.{list,search,share,upload}
-// handler map, or nil when no store is wired.
+// FilesBrowseMethods returns the
+// miniapp.files.{list,search,share,upload,delete,mkdir,move} handler map, or nil
+// when no store is wired.
 func FilesBrowseMethods(deps FilesBrowseDeps) map[string]rpcutil.HandlerFunc {
 	if deps.Store == nil {
 		return nil
@@ -90,6 +94,9 @@ func FilesBrowseMethods(deps FilesBrowseDeps) map[string]rpcutil.HandlerFunc {
 		"miniapp.files.search": filesBrowseSearch(deps),
 		"miniapp.files.share":  filesBrowseShare(deps),
 		"miniapp.files.upload": filesBrowseUpload(deps),
+		"miniapp.files.delete": filesBrowseDelete(deps),
+		"miniapp.files.mkdir":  filesBrowseMkdir(deps),
+		"miniapp.files.move":   filesBrowseMove(deps),
 	}
 }
 
@@ -235,6 +242,97 @@ func filesBrowseUpload(deps FilesBrowseDeps) rpcutil.HandlerFunc {
 			entry = projectFilesEntry(*meta)
 		}
 		return rpcutil.RespondOK(req.ID, FilesUploadOut{Entry: entry})
+	}
+}
+
+// --- delete --------------------------------------------------------------
+
+func filesBrowseDelete(deps FilesBrowseDeps) rpcutil.HandlerFunc {
+	type params struct {
+		Path string `json:"path"`
+	}
+	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		if errResp := requireAuth(ctx, req.ID); errResp != nil {
+			return errResp
+		}
+		p, errResp := rpcutil.DecodeParams[params](req)
+		if errResp != nil {
+			return errResp
+		}
+		path := strings.TrimSpace(p.Path)
+		if path == "" {
+			return rpcerr.MissingParam("path").Response(req.ID)
+		}
+		if err := deps.Store.Delete(ctx, path); err != nil {
+			return mapFilesError(req.ID, "file delete failed", err)
+		}
+		// Empty OK envelope — the client refreshes the folder on success.
+		return rpcutil.RespondOK(req.ID, struct{}{})
+	}
+}
+
+// --- mkdir ---------------------------------------------------------------
+
+func filesBrowseMkdir(deps FilesBrowseDeps) rpcutil.HandlerFunc {
+	type params struct {
+		Path string `json:"path"`
+	}
+	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		if errResp := requireAuth(ctx, req.ID); errResp != nil {
+			return errResp
+		}
+		p, errResp := rpcutil.DecodeParams[params](req)
+		if errResp != nil {
+			return errResp
+		}
+		path := strings.TrimSpace(p.Path)
+		if path == "" {
+			return rpcerr.MissingParam("path").Response(req.ID)
+		}
+		meta, err := deps.Store.Mkdir(ctx, path)
+		if err != nil {
+			return mapFilesError(req.ID, "file mkdir failed", err)
+		}
+		var entry FilesEntryOut
+		if meta != nil {
+			entry = projectFilesEntry(*meta)
+		}
+		return rpcutil.RespondOK(req.ID, entry)
+	}
+}
+
+// --- move ----------------------------------------------------------------
+
+func filesBrowseMove(deps FilesBrowseDeps) rpcutil.HandlerFunc {
+	type params struct {
+		Src string `json:"src"`
+		Dst string `json:"dst"`
+	}
+	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		if errResp := requireAuth(ctx, req.ID); errResp != nil {
+			return errResp
+		}
+		p, errResp := rpcutil.DecodeParams[params](req)
+		if errResp != nil {
+			return errResp
+		}
+		src := strings.TrimSpace(p.Src)
+		dst := strings.TrimSpace(p.Dst)
+		if src == "" {
+			return rpcerr.MissingParam("src").Response(req.ID)
+		}
+		if dst == "" {
+			return rpcerr.MissingParam("dst").Response(req.ID)
+		}
+		meta, err := deps.Store.Move(ctx, src, dst)
+		if err != nil {
+			return mapFilesError(req.ID, "file move failed", err)
+		}
+		var entry FilesEntryOut
+		if meta != nil {
+			entry = projectFilesEntry(*meta)
+		}
+		return rpcutil.RespondOK(req.ID, entry)
 	}
 }
 
