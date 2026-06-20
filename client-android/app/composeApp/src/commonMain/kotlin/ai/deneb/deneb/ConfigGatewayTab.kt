@@ -4,12 +4,18 @@ import ai.deneb.Platform
 import ai.deneb.contacts.ContactsReader
 import ai.deneb.currentPlatform
 import ai.deneb.data.AppSettings
+import ai.deneb.sensing.applyGeofences
+import ai.deneb.sensing.decodeGeofences
+import ai.deneb.sensing.encodeGeofences
+import ai.deneb.sensing.parseLocationToGeofence
+import ai.deneb.sensing.readCurrentLocation
 import ai.deneb.tools.ContactsPermissionController
 import ai.deneb.tools.LocationPermissionController
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.settings.SettingsCard
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -161,7 +167,7 @@ internal fun GatewayTab(
         // Location sensing is Android-only (the FINE/COARSE permission is declared in the
         // foss flavor; readCurrentLocation gates on the grant at runtime).
         if (currentPlatform is Platform.Mobile.Android) {
-            LocationSensingCard(koinInject<LocationPermissionController>())
+            LocationSensingCard(koinInject<LocationPermissionController>(), appSettings)
         }
     }
 }
@@ -297,21 +303,52 @@ private fun ContactsSyncCard(
 // the gateway caches so phone_read("location") answers without an SSH round-trip. No
 // background tracking — the read happens only while the app is active.
 @Composable
-private fun LocationSensingCard(permission: LocationPermissionController) {
+private fun LocationSensingCard(permission: LocationPermissionController, appSettings: AppSettings) {
     val scope = rememberCoroutineScope()
     var working by remember { mutableStateOf(false) }
     var msg by remember { mutableStateOf<String?>(null) }
     val granted = permission.hasPermission()
+
+    // Pin the current location as 집/직장: ensure FINE, read a fix, save + (re)register the
+    // geofence set. Background delivery ("앱 꺼진 동안 도착 알림") additionally needs the user
+    // to set 위치 "항상 허용" in system settings — Android 11+ can't grant that in-app.
+    fun pin(id: String, label: String) {
+        scope.launch {
+            working = true
+            msg = null
+            if (!permission.requestPermission()) {
+                msg = "위치 권한이 필요합니다."
+                working = false
+                return@launch
+            }
+            val g = readCurrentLocation()?.let { parseLocationToGeofence(id, label, it) }
+            if (g == null) {
+                msg = "현재 위치를 읽지 못했습니다. 잠시 후 다시 시도해주세요."
+                working = false
+                return@launch
+            }
+            val all = decodeGeofences(appSettings.getGeofencesJson()).filterNot { it.id == id } + g
+            appSettings.setGeofencesJson(encodeGeofences(all))
+            val ok = applyGeofences(all)
+            msg = if (ok) {
+                "$label 위치를 저장했습니다. 앱이 꺼진 동안에도 도착 알림을 받으려면 설정에서 위치를 \"항상 허용\"으로 바꿔주세요."
+            } else {
+                "$label 위치는 저장했지만 지오펜스 등록에 실패했습니다 (위치 권한 확인)."
+            }
+            working = false
+        }
+    }
+
     SettingsCard {
         Text(
-            "위치 센싱",
+            "위치",
             style = DenebType.cardTitle,
             color = MaterialTheme.colorScheme.onBackground,
         )
         Spacer(Modifier.height(8.dp))
         Text(
-            "위치 권한을 허용하면 앱이 동기화할 때 현재 위치를 게이트웨이로 보고합니다. " +
-                "비서가 \"지금 어디?\"에 SSH 없이 답할 수 있습니다. 백그라운드 추적은 하지 않습니다.",
+            "위치 권한을 허용하면 비서가 \"지금 어디?\"에 답할 수 있고(동기화 시 보고), " +
+                "집·직장을 찍어두면 도착·출발 시 알려줍니다. 백그라운드 추적은 하지 않습니다.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -322,7 +359,7 @@ private fun LocationSensingCard(permission: LocationPermissionController) {
                     working = true
                     msg = null
                     val ok = permission.requestPermission()
-                    msg = if (ok) "위치 권한이 허용되었습니다. 동기화 시 위치를 보고합니다." else "위치 권한이 거부되었습니다."
+                    msg = if (ok) "위치 권한이 허용되었습니다." else "위치 권한이 거부되었습니다."
                     working = false
                 }
             },
@@ -331,13 +368,25 @@ private fun LocationSensingCard(permission: LocationPermissionController) {
         ) {
             Text(
                 if (granted) {
-                    "위치 센싱 켜짐"
+                    "위치 권한 허용됨"
                 } else if (working) {
                     "요청 중…"
                 } else {
-                    "위치 센싱 켜기"
+                    "위치 권한 허용"
                 },
             )
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            OutlinedButton(onClick = { pin("home", "집") }, enabled = !working, modifier = Modifier.weight(1f)) {
+                Text("현재 위치를 집으로")
+            }
+            OutlinedButton(onClick = { pin("work", "직장") }, enabled = !working, modifier = Modifier.weight(1f)) {
+                Text("현재 위치를 직장으로")
+            }
         }
         val m = msg
         if (m != null) {

@@ -23,15 +23,18 @@
     <uses-permission android:name="android.permission.READ_CONTACTS"/>
 
     <!--
-      Location sensing (FOSS-only): an on-demand FusedLocationProvider read, forwarded
+      Location sensing (FOSS-only). On-demand: a FusedLocationProvider read forwarded
       (throttled) to the gateway as a location_update so phone_read("location") answers
-      from cache without an SSH round-trip. FINE/COARSE only — no background location
-      (the read happens while the app is active, on sync). Declared in foss only so the
-      Play Store variant never requests it; readCurrentLocation gates at runtime on the
-      permission being granted.
+      from cache without an SSH round-trip (FINE/COARSE, read while the app is active).
+      Geofences (집/직장): GeofencingClient transitions → DenebGeofenceReceiver → gateway,
+      so 도착/출발 surfaces; BACKGROUND_LOCATION lets that fire while the app is closed
+      (the user grants "항상 허용" in settings — Android 11+ can't grant it in-app).
+      Declared in foss only so the Play Store variant never requests it; the runtime
+      readers gate on the grant.
     -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION"/>
 
     <!--
       Usage-rhythm sensing (FOSS-only): reads recent app-usage on-device, compresses
@@ -64,6 +67,11 @@
                 <action android:name="android.service.notification.NotificationListenerService" />
             </intent-filter>
         </service>
+        <!-- Geofence transition receiver (집/직장 도착·출발). The OS delivers ENTER/EXIT to
+             this via the GeofencingClient PendingIntent; it forwards to the gateway. -->
+        <receiver
+            android:name="ai.deneb.DenebGeofenceReceiver"
+            android:exported="false" />
     </application>
 
 </manifest>
