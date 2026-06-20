@@ -53,6 +53,7 @@ actual fun DenebWebView(
                     override fun onPageFinished(view: WebView, url: String) {
                         state.currentUrl = url
                         state.canGoBack = view.canGoBack()
+                        state.canGoForward = view.canGoForward()
                         injectTranslateScript(view)
                         // Re-apply the toggle: a fresh page starts untranslated.
                         view.evaluateJavascript(
@@ -86,6 +87,12 @@ actual fun DenebWebView(
     }
     LaunchedEffect(state.reloadTick) {
         if (state.reloadTick > 0) holder.web?.reload()
+    }
+    LaunchedEffect(state.goForwardTick) {
+        if (state.goForwardTick > 0) holder.web?.let { if (it.canGoForward()) it.goForward() }
+    }
+    LaunchedEffect(state.stopTick) {
+        if (state.stopTick > 0) holder.web?.stopLoading()
     }
     LaunchedEffect(state.translateEnabled) {
         holder.web?.evaluateJavascript(

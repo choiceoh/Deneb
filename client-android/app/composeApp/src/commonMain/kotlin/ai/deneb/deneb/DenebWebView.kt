@@ -27,6 +27,9 @@ class DenebWebViewState(initialUrl: String) {
     var canGoBack by mutableStateOf(false)
         internal set
 
+    var canGoForward by mutableStateOf(false)
+        internal set
+
     var loading by mutableStateOf(false)
         internal set
 
@@ -42,7 +45,11 @@ class DenebWebViewState(initialUrl: String) {
     // repeated tap (reload twice) still fires.
     internal var goBackTick by mutableStateOf(0)
         private set
+    internal var goForwardTick by mutableStateOf(0)
+        private set
     internal var reloadTick by mutableStateOf(0)
+        private set
+    internal var stopTick by mutableStateOf(0)
         private set
 
     fun load(newUrl: String) {
@@ -53,8 +60,16 @@ class DenebWebViewState(initialUrl: String) {
         goBackTick++
     }
 
+    fun goForward() {
+        goForwardTick++
+    }
+
     fun reload() {
         reloadTick++
+    }
+
+    fun stop() {
+        stopTick++
     }
 }
 

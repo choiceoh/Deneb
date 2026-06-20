@@ -7,6 +7,7 @@ import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
 import ai.deneb.ui.denebInsight
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -20,10 +21,15 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.ArrowForward
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Translate
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -39,7 +45,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -72,8 +80,8 @@ fun DenebBrowserScreen(
  * exercise the look with mock state. Safari-style: NO top header — the page fills the
  * screen and all chrome (editable address bar + actions) sits at the BOTTOM, above the
  * system nav bar. The address bar shows the real current URL (link safety) and is
- * editable (type/paste + Go); the back action pops page history then exits; the
- * open-external action escapes to the system browser.
+ * editable (type/paste + Go); there is no on-screen back button — system back pops page
+ * history then exits; the open-external action escapes to the system browser.
  *
  * Design system: Material IconButtons with functional icons, skinned with Deneb colors
  * — the translate toggle lights the warm insight accent when ON (translation is an AI
@@ -90,11 +98,13 @@ fun DenebBrowserChrome(
     val haptics = rememberHaptics()
     val focusManager = LocalFocusManager.current
 
-    // Back pops the page's own history first; at the root it exits the browser.
-    PlatformBackHandler(enabled = state.canGoBack) { state.goBack() }
+    // No on-screen back button — system back owns "back": page history first, then exit.
+    PlatformBackHandler(enabled = true) { if (state.canGoBack) state.goBack() else onBack() }
 
     // Editable address bar value, re-synced to the real URL as the page navigates.
     var field by remember(state.currentUrl) { mutableStateOf(state.currentUrl) }
+    var menuOpen by remember { mutableStateOf(false) }
+    val clipboard = LocalClipboardManager.current
 
     Surface(color = MaterialTheme.colorScheme.background, modifier = modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
@@ -104,8 +114,9 @@ fun DenebBrowserChrome(
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), progress = { state.progress / 100f })
             }
             HorizontalDivider(color = denebHairline())
-            // Bottom chrome: back · editable address bar · refresh · translate · open-external,
-            // lifted above the system navigation gesture bar.
+            // Bottom chrome (Safari-style): back · forward · editable address bar (omnibox) ·
+            // reload-or-stop · overflow (⋮), above the system gesture bar. Secondary actions
+            // (translate, copy, open-external) live in the ⋮ menu so the row scales as features grow.
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -116,11 +127,16 @@ fun DenebBrowserChrome(
                 IconButton(
                     onClick = {
                         haptics.tap()
-                        if (state.canGoBack) state.goBack() else onBack()
+                        state.goForward()
                     },
+                    enabled = state.canGoForward,
                     modifier = Modifier.size(40.dp),
                 ) {
-                    Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "뒤로", tint = denebHint())
+                    Icon(
+                        Icons.AutoMirrored.Outlined.ArrowForward,
+                        contentDescription = "앞으로",
+                        tint = if (state.canGoForward) denebHint() else denebHint().copy(alpha = 0.3f),
+                    )
                 }
                 BasicTextField(
                     value = field,
@@ -142,7 +158,7 @@ fun DenebBrowserChrome(
                     modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
                     decorationBox = { innerTextField ->
                         if (field.isEmpty()) {
-                            Text("주소 입력", style = DenebType.meta, color = denebHint(), maxLines = 1)
+                            Text("주소 또는 검색", style = DenebType.meta, color = denebHint(), maxLines = 1)
                         }
                         innerTextField()
                     },
@@ -150,11 +166,15 @@ fun DenebBrowserChrome(
                 IconButton(
                     onClick = {
                         haptics.tap()
-                        state.reload()
+                        if (state.loading) state.stop() else state.reload()
                     },
                     modifier = Modifier.size(40.dp),
                 ) {
-                    Icon(Icons.Outlined.Refresh, contentDescription = "새로고침", tint = denebHint())
+                    Icon(
+                        if (state.loading) Icons.Outlined.Close else Icons.Outlined.Refresh,
+                        contentDescription = if (state.loading) "정지" else "새로고침",
+                        tint = denebHint(),
+                    )
                 }
                 IconButton(
                     onClick = {
@@ -169,18 +189,36 @@ fun DenebBrowserChrome(
                         tint = if (state.translateEnabled) denebInsight() else denebHint(),
                     )
                 }
-                IconButton(
-                    onClick = {
-                        haptics.tap()
-                        openUrl(state.currentUrl)
-                    },
-                    modifier = Modifier.size(40.dp),
-                ) {
-                    Icon(
-                        Icons.AutoMirrored.Outlined.OpenInNew,
-                        contentDescription = "외부 브라우저로 열기",
-                        tint = denebHint(),
-                    )
+                Box {
+                    IconButton(
+                        onClick = {
+                            haptics.tap()
+                            menuOpen = true
+                        },
+                        modifier = Modifier.size(40.dp),
+                    ) {
+                        Icon(Icons.Outlined.MoreVert, contentDescription = "더보기", tint = denebHint())
+                    }
+                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                        DropdownMenuItem(
+                            text = { Text("URL 복사") },
+                            leadingIcon = { Icon(Icons.Outlined.ContentCopy, contentDescription = null, tint = denebHint()) },
+                            onClick = {
+                                haptics.tap()
+                                clipboard.setText(AnnotatedString(state.currentUrl))
+                                menuOpen = false
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("외부 브라우저로 열기") },
+                            leadingIcon = { Icon(Icons.AutoMirrored.Outlined.OpenInNew, contentDescription = null, tint = denebHint()) },
+                            onClick = {
+                                haptics.tap()
+                                openUrl(state.currentUrl)
+                                menuOpen = false
+                            },
+                        )
+                    }
                 }
             }
         }
@@ -188,16 +226,39 @@ fun DenebBrowserChrome(
 }
 
 /**
- * Turns address-bar input into a loadable URL: keeps an explicit http(s) scheme,
- * otherwise assumes https. Empty input stays empty (the blank "new tab" state, which
- * the WebView's blank-guard leaves unloaded).
+ * Omnibox: turns address-bar input into a loadable URL. Explicit http(s) → as-is; a
+ * bare host (no spaces, has a dot) → assume https; anything else → a web search. Empty
+ * stays empty (the blank "new tab" state, which the WebView's blank-guard leaves unloaded).
  */
 private fun normalizeUrl(input: String): String {
     val s = input.trim()
     if (s.isEmpty()) return ""
-    return if (s.startsWith("http://", ignoreCase = true) || s.startsWith("https://", ignoreCase = true)) {
-        s
-    } else {
+    if (s.startsWith("http://", ignoreCase = true) || s.startsWith("https://", ignoreCase = true)) return s
+    return if (!s.contains(' ') && s.contains('.')) {
         "https://$s"
+    } else {
+        "https://www.google.com/search?q=${encodeQuery(s)}"
     }
+}
+
+/** Percent-encodes a search query (UTF-8); space → '+'. KMP-safe (no java URLEncoder). */
+private fun encodeQuery(s: String): String {
+    val out = StringBuilder()
+    for (b in s.encodeToByteArray()) {
+        val v = b.toInt() and 0xFF
+        val ch = v.toChar()
+        when {
+            ch in 'A'..'Z' || ch in 'a'..'z' || ch in '0'..'9' ||
+                ch == '-' || ch == '_' || ch == '.' || ch == '~' -> out.append(ch)
+
+            v == 0x20 -> out.append('+')
+
+            else -> {
+                out.append('%')
+                out.append(((v shr 4) and 0xF).toString(16).uppercase())
+                out.append((v and 0xF).toString(16).uppercase())
+            }
+        }
+    }
+    return out.toString()
 }
