@@ -30,6 +30,8 @@ fun AppDrawerScreen(
         loaded = true
     }
     DenebScreenScaffold(title = "앱", onBack = onBack, tabBar = navigationTabBar) {
-        AppDrawer(apps = apps, onLaunch = { launcher.launch(it) }, loaded = loaded)
+        // Pull DOWN at the top of the list → exit back to 자체앱 (reverse of the
+        // swipe-UP that opened the drawer). Same target as the back arrow.
+        AppDrawer(apps = apps, onLaunch = { launcher.launch(it) }, loaded = loaded, onExit = onBack)
     }
 }
