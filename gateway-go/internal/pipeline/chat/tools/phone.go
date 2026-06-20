@@ -151,6 +151,11 @@ func ToolPhoneRead() ToolFunc {
 		}
 		switch strings.ToLower(strings.TrimSpace(p.What)) {
 		case "location":
+			// Prefer the native client's pushed location cache (no SSH round-trip); fall
+			// back to a live Termux read when there is no recent native report.
+			if cached, ok := readCachedPhoneLocation(phoneLocationMaxAge); ok {
+				return cached, nil
+			}
 			// network provider: fast + low battery. JSON {latitude, longitude, ...}.
 			return runPhone(ctx, "", "termux-location -p network")
 		case "clipboard":
