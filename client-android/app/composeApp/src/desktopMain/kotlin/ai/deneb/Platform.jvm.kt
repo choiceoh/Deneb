@@ -150,6 +150,14 @@ actual fun openUrl(url: String): Boolean = try {
 // No Android-package concept on desktop — the 카톡 tab is Android-only.
 actual fun launchKakaoTalk(): Boolean = false
 
+// No Samsung Internet on desktop; open a blank https page in the system browser so the
+// 인터넷 action still does something on the verification harness. Returns false — Samsung
+// Internet itself did not launch.
+actual fun launchSamsungBrowser(): Boolean {
+    openUrl("https://")
+    return false
+}
+
 actual fun decodeToImageBitmap(bytes: ByteArray): ImageBitmap? = try {
     org.jetbrains.skia.Image.makeFromEncoded(bytes).toComposeImageBitmap()
 } catch (_: Exception) {
