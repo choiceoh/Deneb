@@ -13,6 +13,7 @@ import ai.deneb.deneb.DenebCalendarScreen
 import ai.deneb.deneb.DenebCategoriesScreen
 import ai.deneb.deneb.DenebCategoryPagesScreen
 import ai.deneb.deneb.DenebConfigScreen
+import ai.deneb.deneb.DenebContactsScreen
 import ai.deneb.deneb.DenebCronEditScreen
 import ai.deneb.deneb.DenebCronScreen
 import ai.deneb.deneb.DenebDashboardScreen
@@ -208,6 +209,12 @@ object DenebPeople
 @Serializable
 @SerialName("deneb_person")
 data class DenebPerson(val sender: String)
+
+// Full address book (전체 연락처) — the raw contacts.json mirror, sectioned ㄱㄴㄷ.
+// Distinct from DenebPeople (Gmail counterparties + 인물 wiki, volume-ranked).
+@Serializable
+@SerialName("deneb_contacts")
+object DenebContacts
 
 @Serializable
 @SerialName("deneb_categories")
@@ -723,6 +730,15 @@ private fun AppContent(
                                         onBack = { navController.navigateUp() },
                                         onOpenPerson = { sender -> navController.navigate(DenebPerson(sender)) },
                                         onOpenWiki = { path -> navController.navigate(DenebWiki(path)) },
+                                        navigationTabBar = if (showTabBar) navigationTabBar else null,
+                                    )
+                                }
+                            }
+                            composable<DenebContacts> {
+                                denebClient?.let { client ->
+                                    DenebContactsScreen(
+                                        client = client,
+                                        onBack = { navController.navigateUp() },
                                         navigationTabBar = if (showTabBar) navigationTabBar else null,
                                     )
                                 }

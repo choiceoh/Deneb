@@ -10,6 +10,7 @@ import ai.deneb.deneb.CalendarEvent
 import ai.deneb.deneb.CalendarEventContent
 import ai.deneb.deneb.CalendarEventDetail
 import ai.deneb.deneb.CalendarMonthGrid
+import ai.deneb.deneb.ContactsList
 import ai.deneb.deneb.CronEditContent
 import ai.deneb.deneb.DashboardLanesContent
 import ai.deneb.deneb.DenebAppHubScreen
@@ -37,6 +38,7 @@ import ai.deneb.deneb.TodoAddContent
 import ai.deneb.deneb.TodoListContent
 import ai.deneb.deneb.buildMonthGrid
 import ai.deneb.deneb.eventDays
+import ai.deneb.deneb.generated.ContactRow
 import ai.deneb.deneb.generated.DashboardItem
 import ai.deneb.deneb.generated.LaneOut
 import ai.deneb.deneb.generated.MemberOut
@@ -197,6 +199,8 @@ fun main() {
     renderMarkdown("markdown_dark.png", DarkColorScheme)
     renderScreen("app_drawer_dark.png", "app_drawer", DarkColorScheme, 824, 1100)
     renderScreen("app_drawer_light.png", "app_drawer", LightColorScheme, 824, 1100)
+    renderScreen("contacts_dark.png", "contacts", DarkColorScheme, 824, 1100)
+    renderScreen("contacts_light.png", "contacts", LightColorScheme, 824, 1100)
     renderAnalysis("analysis_clip.png", DarkColorScheme)
     renderCollapsedReport("mail_collapsed_dark.png", DarkColorScheme, expanded = false)
     renderCollapsedReport("mail_collapsed_light.png", LightColorScheme, expanded = false)
@@ -626,6 +630,25 @@ internal val previewScreens: Map<String, @Composable (ColorScheme) -> Unit> = ma
             Surface(color = MaterialTheme.colorScheme.background) {
                 Box(Modifier.width(412.dp)) {
                     AppDrawer(apps = apps, onLaunch = {})
+                }
+            }
+        }
+    },
+    "contacts" to { scheme ->
+        val contacts = listOf(
+            Triple("김민준 부장", "탑솔라", listOf("010-1234-5678")),
+            Triple("나성호", "남도에코", listOf("010-2222-3333")),
+            Triple("이서연", "현대차 구매팀", emptyList()),
+            Triple("박지훈", "", listOf("010-9876-5432")),
+            Triple("최유나 과장", "LG전자", listOf("010-7777-8888")),
+            Triple("한도현", "", emptyList()),
+            Triple("James Park", "Google", listOf("010-1111-2222")),
+            Triple("Müller", "BMW", emptyList()),
+        ).map { ContactRow(name = it.first, org = it.second, phones = it.third) }
+        MaterialTheme(colorScheme = scheme) {
+            Surface(color = MaterialTheme.colorScheme.background) {
+                Box(Modifier.width(412.dp)) {
+                    ContactsList(contacts = contacts, onOpen = {})
                 }
             }
         }
