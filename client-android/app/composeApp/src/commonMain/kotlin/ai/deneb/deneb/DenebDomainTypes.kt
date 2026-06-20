@@ -192,6 +192,7 @@ data class WidgetSummary(
 /** An upcoming calendar event shown in the native calendar screen. `local` is
  *  true for gateway-stored events the user can edit/delete (vs read-only Google). */
 @Immutable
+@Serializable
 data class CalendarEvent(
     val id: String,
     val title: String,

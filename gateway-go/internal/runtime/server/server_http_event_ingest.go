@@ -31,6 +31,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/shortid"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/pilot"
 	"github.com/choiceoh/deneb/gateway-go/pkg/safego"
 )
 
@@ -204,6 +205,16 @@ func (s *Server) ingestPhoneEventAsync(eventType, source, text string) {
 		ctx, cancel := context.WithTimeout(s.ShutdownCtx(), phoneEventTurnDeadline)
 		defer cancel()
 
+		// Tiered triage: a cheap tiny-model gate before the expensive tool-calling
+		// judgment turn. For high-volume notification/sms events, skip the full turn
+		// when the tiny model says it's obvious noise (ads/OTP/promo/routine — which
+		// the full judgment would also NO_REPLY) without spending a main-model turn.
+		// Rare, intentional events (context/clipboard) skip the gate. Fail-open.
+		if notificationLikeEvent(eventType) && !worthFullJudgment(ctx, source, text) {
+			s.logger.Debug("phone-event tiny-gate dropped", "source", source, "type", eventType)
+			return
+		}
+
 		maxTok := phoneEventMaxTokens
 		sessionKey := phoneEventSessionPrefix + ":" + shortid.New("e")
 		result, err := s.chatHandler.SendSync(ctx, sessionKey, command, "", &chat.SyncOptions{
@@ -231,4 +242,31 @@ func (s *Server) ingestPhoneEventAsync(eventType, source, text string) {
 			"source", source, "type", eventType,
 			"delivered", delivered, "outputLen", len(output))
 	})
+}
+
+// notificationLikeEvent reports whether an event type uses the "worth surfacing?"
+// judgment (notification/sms/free labels), versus a different intent (context /
+// clipboard) that should always run the full judgment regardless of the tiny gate.
+func notificationLikeEvent(eventType string) bool {
+	switch strings.TrimSpace(strings.ToLower(eventType)) {
+	case "context", "clipboard":
+		return false
+	default:
+		return true
+	}
+}
+
+// worthFullJudgment is the tiered-triage first pass: a cheap tiny-model yes/no on
+// whether a notification deserves the full tool-calling judgment turn. It catches
+// the obvious noise (ads/promo/OTP/receipts/routine) the full judgment would also
+// NO_REPLY, but without spending a main-model turn. Fail-open — any tiny-model error
+// returns true so the full judgment still runs (never silently drop signal).
+func worthFullJudgment(ctx context.Context, source, text string) bool {
+	const system = "당신은 스마트폰 알림 분류기다. 사용자에게 즉시 알릴 가치가 있는 업무·일정·금전·중요 연락이면 YES, " +
+		"광고·프로모션·스팸·인증번호(OTP)·결제 영수증·배송/마케팅 알림·일상적 시스템/앱 알림이면 NO. YES 또는 NO 한 단어만 답하라."
+	out, err := pilot.CallTinyLLM(ctx, system, "앱: "+source+"\n알림 내용:\n"+text, 4, map[string]any{"temperature": 0})
+	if err != nil {
+		return true // fail-open: run the full judgment rather than drop on a gate error
+	}
+	return !strings.HasPrefix(strings.TrimSpace(strings.ToUpper(out)), "NO")
 }

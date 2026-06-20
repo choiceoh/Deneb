@@ -305,11 +305,13 @@ class DenebGatewayClient(
         get() = appSettings.settings.getString(KEY_TOKEN, "")
 
     init {
-        // Cache-then-network for the 업무 home: seed the feed from the last-known
-        // briefing so a cold start renders instantly and, when the gateway is
-        // unreachable (the offline-first launcher shell), the home isn't empty.
-        // refreshWorkFeed overwrites with the authoritative list when it succeeds.
+        // Cache-then-network: seed the feed and calendar from the last-known briefing
+        // so a cold start renders instantly and, when the gateway is unreachable (the
+        // offline-first launcher shell), the home/calendar aren't empty. The network
+        // refresh (refreshWorkFeed/refreshCalendar) overwrites with the authoritative
+        // lists when it succeeds.
         loadCachedWorkFeed()?.let { _denebWorkFeed.value = it }
+        loadCachedCalendar()?.let { _denebCalendar.value = it }
     }
 
     // In-process guard for the window AFTER [callRpc] returns a (still-valid) result

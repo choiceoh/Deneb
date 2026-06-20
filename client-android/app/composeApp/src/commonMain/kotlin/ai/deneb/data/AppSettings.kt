@@ -351,6 +351,15 @@ class AppSettings(internal val settings: Settings) {
         settings.putString(KEY_WORK_FEED_CACHE, json)
     }
 
+    // Upcoming-calendar cache (single key — the now-anchored look-ahead list, for an
+    // instant calendar render and an offline next-meeting glance on the launcher home).
+    // Owner-fingerprinted like the mail/feed caches.
+    fun getCachedCalendar(): String? = settings.getStringOrNull(KEY_CALENDAR_CACHE)
+
+    fun putCachedCalendar(json: String) {
+        settings.putString(KEY_CALENDAR_CACHE, json)
+    }
+
     /**
      * Purge ALL cached private content (every transcript + the inbox list). Called
      * when the gateway URL or client token changes: those cache keys are global, so
@@ -366,7 +375,7 @@ class AppSettings(internal val settings: Settings) {
     @OptIn(ExperimentalSettingsApi::class)
     fun clearCachedContent() {
         settings.keys
-            .filter { it.startsWith(KEY_TX_CACHE_PREFIX) || it == KEY_TX_CACHE_LRU || it == KEY_MAIL_CACHE || it == KEY_WORK_FEED_CACHE }
+            .filter { it.startsWith(KEY_TX_CACHE_PREFIX) || it == KEY_TX_CACHE_LRU || it == KEY_MAIL_CACHE || it == KEY_WORK_FEED_CACHE || it == KEY_CALENDAR_CACHE }
             .forEach { settings.remove(it) }
     }
 
@@ -420,6 +429,7 @@ class AppSettings(internal val settings: Settings) {
 
         const val KEY_MAIL_CACHE = "mail_list_cache"
         const val KEY_WORK_FEED_CACHE = "work_feed_cache"
+        const val KEY_CALENDAR_CACHE = "calendar_cache"
         const val KEY_TX_CACHE_PREFIX = "tx_cache:"
         const val KEY_TX_CACHE_LRU = "tx_cache_lru"
         const val TX_CACHE_MAX_SESSIONS = 12
