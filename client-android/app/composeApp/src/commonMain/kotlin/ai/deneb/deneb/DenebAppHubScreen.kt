@@ -19,7 +19,6 @@ import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebSectionLabel
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.rememberHaptics
-import ai.deneb.ui.denebHint
 import ai.deneb.ui.launcher.LauncherAppEntry
 import ai.deneb.ui.launcher.appInitial
 import ai.deneb.ui.launcher.createLauncherApps
@@ -172,12 +171,11 @@ fun DenebAppHubContent(
                 },
             )
         }
-        // 핀고정 — external phone apps pinned from the drawer. A full-width header spans
-        // the grid; the empty hint also teaches the (invisible) swipe-up + long-press.
-        item(span = { GridItemSpan(maxLineSpan) }) { DenebSectionLabel("핀고정") }
-        if (pinnedApps.isEmpty()) {
-            item(span = { GridItemSpan(maxLineSpan) }) { PinnedEmptyHint() }
-        } else {
+        // 핀고정 — external phone apps pinned from the drawer (swipe up here → drawer →
+        // long-press to pin). Only shown once something is pinned: an empty section with
+        // explanatory prose is clutter in a calm launcher, and it kept the grid taller.
+        if (pinnedApps.isNotEmpty()) {
+            item(span = { GridItemSpan(maxLineSpan) }) { DenebSectionLabel("핀고정") }
             items(pinnedApps, key = { it.packageName }) { app ->
                 MonogramTileItem(
                     label = app.label,
@@ -247,16 +245,4 @@ private fun TileFrame(label: String, onClick: () -> Unit, glyph: @Composable () 
             maxLines = 2,
         )
     }
-}
-
-/** Shown when nothing is pinned yet — and doubles as the discoverability hint for the
- *  (otherwise invisible) swipe-up and long-press-to-pin gestures. */
-@Composable
-private fun PinnedEmptyHint() {
-    Text(
-        "자주 쓰는 폰 앱을 여기에 모아두세요.\n위로 쓸어 전체 앱을 열고, 앱을 길게 눌러 핀고정합니다.",
-        style = DenebType.snippet,
-        color = denebHint(),
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 8.dp),
-    )
 }
