@@ -24,10 +24,12 @@ fun AppDrawerScreen(
 ) {
     val launcher = remember { createLauncherApps() }
     var apps by remember { mutableStateOf<List<LauncherAppEntry>>(emptyList()) }
+    var loaded by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
         apps = withContext(getBackgroundDispatcher()) { launcher.installed() }
+        loaded = true
     }
     DenebScreenScaffold(title = "앱", onBack = onBack, tabBar = navigationTabBar) {
-        AppDrawer(apps = apps, onLaunch = { launcher.launch(it) })
+        AppDrawer(apps = apps, onLaunch = { launcher.launch(it) }, loaded = loaded)
     }
 }

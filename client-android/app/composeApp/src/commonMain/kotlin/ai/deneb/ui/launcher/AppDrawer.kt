@@ -1,5 +1,7 @@
 package ai.deneb.ui.launcher
 
+import ai.deneb.deneb.DenebEmpty
+import ai.deneb.deneb.DenebLoading
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.DenebSearchField
 import ai.deneb.ui.denebHint
@@ -56,6 +58,7 @@ fun AppDrawer(
     apps: List<LauncherAppEntry>,
     onLaunch: (String) -> Unit,
     modifier: Modifier = Modifier,
+    loaded: Boolean = true,
 ) {
     var query by remember { mutableStateOf("") }
     val filtered = remember(apps, query) {
@@ -73,13 +76,18 @@ fun AppDrawer(
             placeholder = "앱 검색",
             clearContentDescription = "검색 지우기",
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            // Launcher idiom: when the query narrows to a single app, the keyboard's
+            // Search/Enter launches it directly — type a few letters, hit enter, gone.
+            onSearch = { filtered.singleOrNull()?.let { onLaunch(it.packageName) } },
         )
-        if (filtered.isEmpty()) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(if (apps.isEmpty()) "앱 없음" else "검색 결과 없음", style = DenebType.hint, color = denebHint())
-            }
-        } else {
-            LazyVerticalGrid(
+        when {
+            // Distinct loading vs empty: the provider loads off-thread, so without this
+            // the drawer flashed "앱 없음" on every open before the grid populated.
+            !loaded -> DenebLoading()
+
+            filtered.isEmpty() -> DenebEmpty(if (apps.isEmpty()) "앱이 없습니다" else "검색 결과 없음")
+
+            else -> LazyVerticalGrid(
                 columns = GridCells.Adaptive(minSize = 84.dp),
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
