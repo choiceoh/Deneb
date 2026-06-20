@@ -14,8 +14,9 @@
  *    translated once.
  *  - Debounce + a MutationObserver pick up dynamically loaded / infinite-scroll
  *    content without re-walking the whole DOM each time.
- *  - Toggle: applyBatch only mutates when translation is ON; turning OFF
- *    restores originals from the per-node saved text.
+ *  - Toggle: OFF by default — translation starts only when the native chrome
+ *    calls setEnabled(true). Turning OFF restores originals; turning ON again
+ *    re-applies cached translations + translates anything new (applyAll).
  *
  * The native bridge contract:
  *   window.DenebTranslateBridge.translate(requestId, jsonSegments)
@@ -31,7 +32,7 @@
   var cache = {};            // originalText -> translatedText
   var pending = {};          // requestId -> [tids]
   var nextRequestId = 1;
-  var enabled = true;
+  var enabled = false; // OFF by default — the native chrome calls setEnabled(true) per the toggle
   var debounceTimer = null;
   var HANGUL = /[가-힣]/;
   var SKIP_TAGS = { SCRIPT: 1, STYLE: 1, NOSCRIPT: 1, CODE: 1, PRE: 1, TEXTAREA: 1, KBD: 1, SAMP: 1 };
@@ -136,9 +137,27 @@
     debounceTimer = setTimeout(function () { scan(document.body); }, 400);
   }
 
+  // Re-apply translation to the whole page (used when turning the toggle ON):
+  // already-translated text returns instantly from cache, text reverted by a
+  // prior OFF is re-shipped, and brand-new nodes are collected by scan(). This is
+  // why re-enabling after a disable actually re-translates — collect() alone only
+  // returns never-seen nodes, so the old scan()-only path left the page in originals.
+  function applyAll() {
+    var known = [];
+    for (var tid in nodes) {
+      if (nodes.hasOwnProperty(tid)) known.push(tid);
+    }
+    if (known.length) dispatch(known);
+    scan(document.body);
+  }
+
   function setEnabled(on) {
+    if (!!on === enabled) return;
     enabled = !!on;
-    if (enabled) { scan(document.body); return; }
+    if (enabled) {
+      applyAll();
+      return;
+    }
     // Restore originals.
     for (var tid in nodes) {
       if (!nodes.hasOwnProperty(tid)) continue;
@@ -154,8 +173,9 @@
     applyBatch: applyBatch,
     setEnabled: setEnabled,
     start: function () {
-      enabled = true;
-      scan(document.body);
+      // Install the observer only; translation stays OFF until the native chrome
+      // calls setEnabled(true). So a page browsed with translation off never ships
+      // a translate request on load.
       try {
         observer.observe(document.documentElement || document.body, { childList: true, subtree: true, characterData: false });
       } catch (e) {}
