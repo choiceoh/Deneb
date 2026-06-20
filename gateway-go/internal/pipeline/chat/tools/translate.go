@@ -12,11 +12,16 @@ import (
 
 const (
 	// translateMaxSegmentsPerBatch bounds how many DOM text segments go to the
-	// model in one call so a long page is chunked instead of overflowing the
-	// prompt; each batch's count is verified independently.
-	translateMaxSegmentsPerBatch = 40
-	translateMaxTokens           = 4096
-	defaultTranslateTargetLang   = "Korean"
+	// model in one call. Kept small on purpose: a batch of long article paragraphs
+	// whose combined translation exceeds translateMaxTokens gets truncated → invalid
+	// JSON → parse fail → the whole batch falls back to originals (a real page came
+	// back ENTIRELY untranslated at 40). 10 keeps each batch's output well inside the
+	// budget; an oversized batch still self-heals via translateRange's split-retry.
+	translateMaxSegmentsPerBatch = 10
+	// translateMaxTokens is the per-batch output cap — headroom for ~10 long
+	// paragraphs of translated text so the JSON array isn't cut off mid-string.
+	translateMaxTokens         = 8192
+	defaultTranslateTargetLang = "Korean"
 )
 
 // TranslateSegments translates web-page text segments to targetLang for the
@@ -40,11 +45,30 @@ func TranslateSegments(ctx context.Context, segments []string, targetLang string
 	copy(out, segments) // safe default: originals, overwritten only on a clean batch
 	for start := 0; start < len(segments); start += translateMaxSegmentsPerBatch {
 		end := min(start+translateMaxSegmentsPerBatch, len(segments))
-		if translated, ok := translateBatch(ctx, segments[start:end], lang); ok {
-			copy(out[start:end], translated)
-		}
+		translateRange(ctx, segments, out, start, end, lang)
 	}
 	return out, nil
+}
+
+// translateRange translates segments[start:end] into out[start:end]. On a batch
+// failure (LLM error, bad JSON, or count mismatch — typically an output too long for
+// the token budget) it splits the range in half and retries each half, down to a
+// single segment. So one oversized/odd batch self-heals instead of leaving a whole
+// span untranslated; only a segment that fails even alone keeps its original.
+func translateRange(ctx context.Context, segments, out []string, start, end int, lang string) {
+	if start >= end {
+		return
+	}
+	if translated, ok := translateBatch(ctx, segments[start:end], lang); ok {
+		copy(out[start:end], translated)
+		return
+	}
+	if end-start <= 1 {
+		return // single segment failed → keep its original (already in out)
+	}
+	mid := start + (end-start)/2
+	translateRange(ctx, segments, out, start, mid, lang)
+	translateRange(ctx, segments, out, mid, end, lang)
 }
 
 func translateBatch(ctx context.Context, batch []string, lang string) ([]string, bool) {
