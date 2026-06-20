@@ -424,40 +424,49 @@ func rowScoreContaining(out, val string) float64 {
 // drift that overrides raw ground truth is visible and can inform the wiki↔diary
 // prior. The ONE hard failure is the drift completely suppressing the correct
 // value: then the user can never recover ground truth from recall at all.
-func TestRecallSynthesisDrift(t *testing.T) {
-	const (
-		correct = "1,950" // faithful raw diary value (as first observed)
-		drift   = "2,950" // dreamer mis-summarized the SAME deal into the wiki
-		query   = "에코프로 케이블 견적 미터 수 얼마였지?"
-	)
+// driftCorrect/driftDrift/driftQuery are the shared synthesis-drift fixture:
+// the diary holds the faithful figure, the wiki a drifted one, and the query
+// asks the figure. Reused by the adaptive-weighting measurement.
+const (
+	driftCorrect = "1,950" // faithful raw diary value (as first observed)
+	driftDrift   = "2,950" // dreamer mis-summarized the SAME deal into the wiki
+	driftQuery   = "에코프로 케이블 견적 미터 수 얼마였지?"
+)
+
+// seedDriftStore builds a store where the diary records the correct figure and
+// the wiki records a drifted one for the SAME fact.
+func seedDriftStore(t *testing.T) *wiki.Store {
+	t.Helper()
 	dir := t.TempDir()
 	diaryDir := filepath.Join(dir, "diary")
 	if err := os.MkdirAll(diaryDir, 0o755); err != nil {
 		t.Fatalf("diary mkdir: %v", err)
 	}
 	day := time.Now().AddDate(0, 0, -1)
-	section := fmt.Sprintf("\n## %s\n\n%s\n", day.Format("15:04"), "에코프로 케이블 "+correct+"m 견적 회신함.")
+	section := fmt.Sprintf("\n## %s\n\n%s\n", day.Format("15:04"), "에코프로 케이블 "+driftCorrect+"m 견적 회신함.")
 	if err := os.WriteFile(filepath.Join(diaryDir, "diary-"+day.Format("2006-01-02")+".md"), []byte(section), 0o644); err != nil {
 		t.Fatalf("write diary: %v", err)
 	}
-
 	store, err := wiki.NewStore(filepath.Join(dir, "wiki"), diaryDir)
 	if err != nil {
 		t.Fatalf("NewStore: %v", err)
 	}
 	t.Cleanup(func() { _ = store.Close() })
-
 	// The curated wiki carries the DRIFTED figure — title/summary/tags give it
 	// more match surface than the one raw diary line, plus an importance prior.
 	if err := store.WritePage("거래/ecopro-cable.md", &wiki.Page{
 		Meta: wiki.Frontmatter{ID: "ecopro", Title: "에코프로 케이블 견적", Category: "거래",
-			Summary: "에코프로 케이블 " + drift + "m 견적 회신", Tags: []string{"에코프로", "케이블", "견적"}, Importance: 0.8},
-		Body: "에코프로 케이블 " + drift + "m 견적 회신.",
+			Summary: "에코프로 케이블 " + driftDrift + "m 견적 회신", Tags: []string{"에코프로", "케이블", "견적"}, Importance: 0.8},
+		Body: "에코프로 케이블 " + driftDrift + "m 견적 회신.",
 	}); err != nil {
 		t.Fatalf("WritePage: %v", err)
 	}
+	return store
+}
 
-	out := recallOnce(store, query)
+func TestRecallSynthesisDrift(t *testing.T) {
+	correct, drift := driftCorrect, driftDrift
+	out := recallOnce(seedDriftStore(t), driftQuery)
 	driftScore := rowScoreContaining(out, drift)
 	correctScore := rowScoreContaining(out, correct)
 	driftPresent := strings.Contains(out, drift)
@@ -470,7 +479,7 @@ func TestRecallSynthesisDrift(t *testing.T) {
 	}
 	fmt.Printf("RECALL_DRIFT drift_score=%.2f correct_score=%.2f drift_present=%v correct_present=%v top=%s\n",
 		driftScore, correctScore, driftPresent, correctPresent, top)
-	t.Logf("query=%q  output:\n%s", query, out)
+	t.Logf("query=%q  output:\n%s", driftQuery, out)
 
 	// Hard failure: the drifted wiki value entirely suppressed the correct raw one
 	// — ground truth is then unrecoverable from recall.
