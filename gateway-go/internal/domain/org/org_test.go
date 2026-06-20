@@ -169,10 +169,11 @@ func TestDeriveRules(t *testing.T) {
 	if rules.KeywordToLane["루프탑"] != classification.Lane("team2") {
 		t.Errorf("루프탑 → %q, want team2", rules.KeywordToLane["루프탑"])
 	}
-	// In-code keyword defaults are seeded as a base (케이블 ships → namdo) even
-	// though no node enumerated it.
-	if rules.KeywordToLane["케이블"] != classification.LaneNamdo {
-		t.Errorf("default keyword 케이블 → %q, want namdo (seeded base)", rules.KeywordToLane["케이블"])
+	// ★ Chart mode does NOT seed the in-code keyword defaults: a default keyword
+	// no node enumerated (e.g. 케이블) must be absent, so items can't be routed to
+	// a constant lane the chart's columns don't contain (the silent-drop guard).
+	if lane, ok := rules.KeywordToLane["케이블"]; ok {
+		t.Errorf("default keyword 케이블 leaked → %q; chart-mode DeriveRules must not seed defaults", lane)
 	}
 
 	// End-to-end: the derived rules classify via the unchanged engine.
@@ -184,15 +185,67 @@ func TestDeriveRules(t *testing.T) {
 	}
 }
 
-func TestDeriveRules_NodeKeywordOverridesDefault(t *testing.T) {
-	// A lane node can reassign a default keyword. 루프탑 ships as team2; route it
-	// to a custom lane via the chart and the node value must win.
+func TestDeriveRules_NoDefaultKeywordSeedWhenLanes(t *testing.T) {
+	// ★ Regression guard (HIGH): when the chart defines lanes (keyed by node id,
+	// like the native editor), DeriveRules must NOT seed the in-code keyword
+	// defaults (keyed to the fixed team1/… constants). Seeding them routes items
+	// to constant lanes the chart's columns don't contain, and groupByLane then
+	// drops those items silently. So a default keyword the chart didn't enumerate
+	// must be absent from the derived rules.
 	tree := OrgTree{Nodes: []OrgNode{
-		{ID: "x", Name: "X", Type: NodeTypeTeam, Lane: "special", Keywords: []string{"루프탑"}},
+		{ID: "n100", Name: "영업", Type: NodeTypeTeam, Lane: "n100", Keywords: []string{"제안"}},
 	}}
 	rules := tree.DeriveRules()
-	if rules.KeywordToLane["루프탑"] != classification.Lane("special") {
-		t.Errorf("루프탑 → %q, want special (node overrides default)", rules.KeywordToLane["루프탑"])
+	// The node's own keyword is present, routed to the node-id lane.
+	if rules.KeywordToLane["제안"] != classification.Lane("n100") {
+		t.Errorf("제안 → %q, want n100 (node keyword)", rules.KeywordToLane["제안"])
+	}
+	// A default domain keyword the chart did NOT enumerate must not leak in (it
+	// would carry a constant lane like team1 that has no column → silent drop).
+	if lane, ok := rules.KeywordToLane["인허가"]; ok {
+		t.Errorf("default keyword 인허가 leaked → %q; chart-mode DeriveRules must not seed defaults", lane)
+	}
+}
+
+func TestDeriveRules_MoonlightingPicksMinLane(t *testing.T) {
+	// MED: a person/keyword/company that appears under TWO lane nodes (겸직 or a
+	// shared term) must resolve to the lexicographically smallest lane, matching
+	// the engine's pickLane tie-break — not collapse to whichever node came last
+	// in input order. The min lane ("team_a") is listed FIRST here on purpose: a
+	// naive last-writer-wins would overwrite it with "team_z" (processed last) and
+	// disagree with the engine, so this ordering makes the test discriminating.
+	tree := OrgTree{Nodes: []OrgNode{
+		{ID: "a", Name: "A", Type: NodeTypeTeam, Lane: "team_a",
+			Members:  []Member{{Name: "홍길동"}},
+			Keywords: []string{"공용키워드"}, Companies: []string{"공용상사"}},
+		{ID: "z", Name: "Z", Type: NodeTypeTeam, Lane: "team_z",
+			Members:  []Member{{Name: "홍길동"}},
+			Keywords: []string{"공용키워드"}, Companies: []string{"공용상사"}},
+	}}
+	rules := tree.DeriveRules()
+	if got := rules.PersonToLane["홍길동"]; got != classification.Lane("team_a") {
+		t.Errorf("겸직 person 홍길동 → %q, want team_a (min lane)", got)
+	}
+	if got := rules.KeywordToLane["공용키워드"]; got != classification.Lane("team_a") {
+		t.Errorf("shared keyword → %q, want team_a (min lane)", got)
+	}
+	if got := rules.CompanyToLane["공용상사"]; got != classification.Lane("team_a") {
+		t.Errorf("shared company → %q, want team_a (min lane)", got)
+	}
+	// And the derived map must agree with the engine's own resolution.
+	if lane, _ := rules.Classify(classification.Signals{People: []string{"홍길동"}}); lane != classification.Lane("team_a") {
+		t.Errorf("engine Classify 홍길동 → %q, want team_a (agrees with DeriveRules)", lane)
+	}
+}
+
+func TestValidate_RejectsReservedUnclassifiedLane(t *testing.T) {
+	// LOW: "unclassified" is the dashboard's reserved holding-lane key. A chart
+	// node claiming it would render a duplicate 미분류 column, so Validate rejects.
+	tree := OrgTree{Nodes: []OrgNode{
+		{ID: "a", Name: "A", Type: NodeTypeTeam, Lane: string(classification.LaneUnclassified)},
+	}}
+	if err := tree.Validate(); err == nil {
+		t.Fatal("reserved lane key 'unclassified': expected error, got nil")
 	}
 }
 

@@ -307,10 +307,34 @@ func resolveLanes(deps DashboardDeps) []org.LaneDef {
 // present (even empty) so the client renders the full part skeleton. Items
 // within a lane are sorted soonest-first (WhenMs ascending; 0/no-time sinks to
 // the bottom). The lane set comes from resolveLanes (org chart or legacy).
+//
+// Safety net: an item classified to a lane that is neither in `lanes` nor the
+// reserved 미분류 key (e.g. a rules/lanes mismatch where the ruleset routed to a
+// constant lane the chart's columns don't contain) would otherwise vanish — its
+// bucket is never read. To guarantee no item is ever silently dropped, any such
+// orphaned bucket is folded into the 미분류 column so the operator at least sees
+// it for triage instead of losing it.
 func groupByLane(items []classifiedItem, lanes []org.LaneDef) DashboardOut {
 	byLane := make(map[classification.Lane][]DashboardItem)
 	for _, ci := range items {
 		byLane[ci.lane] = append(byLane[ci.lane], ci.item)
+	}
+
+	// The set of lanes that have a real column this turn, so we can detect any
+	// classified bucket that has no home (and would otherwise be dropped).
+	known := make(map[classification.Lane]bool, len(lanes)+1)
+	for _, def := range lanes {
+		known[classification.Lane(def.Key)] = true
+	}
+	known[classification.LaneUnclassified] = true
+
+	// Absorb orphaned buckets (a classified lane with no matching column) into
+	// the 미분류 bucket before rendering, so nothing is lost.
+	for lane, bucket := range byLane {
+		if !known[lane] {
+			byLane[classification.LaneUnclassified] = append(byLane[classification.LaneUnclassified], bucket...)
+			delete(byLane, lane)
+		}
 	}
 
 	out := DashboardOut{}
@@ -323,8 +347,9 @@ func groupByLane(items []classifiedItem, lanes []org.LaneDef) DashboardOut {
 		})
 	}
 	// 미분류 last, and only when non-empty — it's a triage bucket, not a part, so
-	// don't show an empty one. (Chart-defined lanes never use this reserved key,
-	// so a derived part can't collide with it.)
+	// don't show an empty one. Holds both genuinely-unclassified items and any
+	// orphaned-lane items absorbed above. (Chart-defined lanes never use this
+	// reserved key — Validate rejects it — so a derived part can't collide.)
 	if unclassified := byLane[classification.LaneUnclassified]; len(unclassified) > 0 {
 		out.Lanes = append(out.Lanes, LaneOut{
 			Key:   string(classification.LaneUnclassified),

@@ -60,6 +60,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
+import kotlin.random.Random
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
@@ -306,10 +307,13 @@ private val leaderPositions = setOf("본부장", "실장", "팀장")
 internal fun nodeLeader(node: OrgNodeOut): MemberOut? = node.members.firstOrNull { it.position in leaderPositions }
 
 /** Build a fresh node with a unique id under [parentId]. New nodes default to 팀
- *  (the most common leaf the operator adds); type is editable in the sheet. */
+ *  (the most common leaf the operator adds); type is editable in the sheet. The
+ *  id carries a random suffix on top of the millisecond clock so two nodes added
+ *  within the same millisecond can't collide — a duplicate id makes the gateway
+ *  reject the whole save (Validate), which is opaque to fix. */
 @OptIn(ExperimentalTime::class)
 internal fun newNode(parentId: String): OrgNodeOut = OrgNodeOut(
-    id = "n${Clock.System.now().toEpochMilliseconds()}",
+    id = "n${Clock.System.now().toEpochMilliseconds()}-${Random.nextInt(0, 1_000_000)}",
     name = "",
     type = if (parentId.isEmpty()) "company" else "team",
     parentId = parentId,
@@ -603,10 +607,19 @@ internal fun OrgNodeEditor(
         // Dashboard-part (lane) toggle. A tagged node becomes a 파트별 업무 현황 column.
         // The lane *key* is an internal id (we seed it from the node id); the operator
         // only chooses on/off, so no raw key is ever shown.
+        //
+        // Toggling off clears the lane to ""; toggling back on must restore the SAME
+        // key it had, not re-seed from the node id — otherwise a hand-edited
+        // meaningful key (e.g. a chart authored off-app with lane "sales") is lost on
+        // an off→on round-trip. Remember the last non-blank lane (per node id) and
+        // prefer it when re-enabling, falling back to the node id only when there was
+        // never a prior key.
+        var lastLane by remember(node.id) { mutableStateOf(node.lane) }
+        if (node.lane.isNotBlank()) lastLane = node.lane
         OrgPartToggle(
             on = node.lane.isNotBlank(),
             onToggle = { on ->
-                onChange(node.copy(lane = if (on) node.lane.ifBlank { node.id } else ""))
+                onChange(node.copy(lane = if (on) lastLane.ifBlank { node.id } else ""))
             },
         )
         Spacer(Modifier.height(18.dp))
