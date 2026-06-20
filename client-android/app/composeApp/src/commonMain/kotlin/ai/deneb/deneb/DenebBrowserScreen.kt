@@ -84,11 +84,27 @@ fun DenebBrowserScreen(
 ) {
     val state = remember(url) { DenebWebViewState(url) }
     var showModelPicker by remember { mutableStateOf(false) }
+    // Resolve the model actually used for translation so the chrome shows it at a glance.
+    // A bound `translation` role wins; unbound falls back to `lightweight` (tagged 기본).
+    val roleModels by client.denebRoleModels.collectAsState()
+    val models by client.denebModels.collectAsState()
+    LaunchedEffect(Unit) { if (models.isEmpty()) client.refreshModels() }
+    val translateModelLabel = run {
+        val bound = roleModels["translation"]
+        val effId = bound ?: roleModels["lightweight"]
+        val disp = models.firstOrNull { it.id == effId }?.display ?: effId
+        when {
+            disp == null -> null
+            bound != null -> disp
+            else -> "$disp (기본)"
+        }
+    }
     DenebBrowserChrome(
         state = state,
         onBack = onBack,
         modifier = modifier,
         onTranslateModel = { showModelPicker = true },
+        currentTranslateModel = translateModelLabel,
     ) {
         DenebWebView(
             state = state,
@@ -122,6 +138,9 @@ fun DenebBrowserChrome(
     // Opens the 번역 모델 picker (wired by the stateful screen, which has the client).
     // Null in previews → the ⋮ entry is hidden.
     onTranslateModel: (() -> Unit)? = null,
+    // Display name of the model currently used for translation, shown under the ⋮ entry
+    // so the active model is visible at a glance. Null → no subtitle (previews / unknown).
+    currentTranslateModel: String? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val haptics = rememberHaptics()
@@ -234,7 +253,14 @@ fun DenebBrowserChrome(
                     DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                         if (onTranslateModel != null) {
                             DropdownMenuItem(
-                                text = { Text("번역 모델") },
+                                text = {
+                                    Column {
+                                        Text("번역 모델")
+                                        if (currentTranslateModel != null) {
+                                            Text(currentTranslateModel, style = DenebType.meta, color = denebHint())
+                                        }
+                                    }
+                                },
                                 leadingIcon = { Icon(Icons.Outlined.Translate, contentDescription = null, tint = denebInsight()) },
                                 onClick = {
                                     haptics.tap()
@@ -282,6 +308,9 @@ private fun TranslateModelSheet(client: DenebGatewayClient, onDismiss: () -> Uni
     val models by client.denebModels.collectAsState()
     val roleModels by client.denebRoleModels.collectAsState()
     val current = roleModels["translation"]
+    // Effective model shown in the header: the bound translation role, else the lightweight fallback.
+    val effId = current ?: roleModels["lightweight"]
+    val effDisp = models.firstOrNull { it.id == effId }?.display ?: effId
     var refreshing by remember { mutableStateOf(models.isEmpty()) }
     LaunchedEffect(Unit) {
         if (models.isEmpty()) client.refreshModels()
@@ -297,6 +326,14 @@ private fun TranslateModelSheet(client: DenebGatewayClient, onDismiss: () -> Uni
             Text("번역 모델", style = DenebType.subject, color = MaterialTheme.colorScheme.onSurface)
             Spacer(Modifier.height(2.dp))
             Text("웹페이지 번역(영어·러시아어 → 한국어)에 쓸 모델", style = DenebType.meta, color = denebHint())
+            if (effDisp != null) {
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "현재 적용: $effDisp" + if (current == null) " (기본값)" else "",
+                    style = DenebType.rowTitle,
+                    color = denebInsight(),
+                )
+            }
             Spacer(Modifier.height(12.dp))
             when {
                 refreshing && models.isEmpty() ->
