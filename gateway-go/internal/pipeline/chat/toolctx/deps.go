@@ -8,6 +8,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/filestore"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/notebook"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
@@ -61,6 +62,12 @@ type CoreToolDeps struct {
 	// same passthrough the native app uses). A nil BaseURL — or one returning ""
 	// — disables fleet management; the tool reports the integration is off.
 	Fleet FleetDeps
+
+	// FilesSemanticSearch powers the files tool's semantic (vector) search mode.
+	// The server owns the embedding client + index and injects this closure; nil
+	// degrades the files tool's semantic=true to a name/content search, so the
+	// feature is optional, not load-bearing.
+	FilesSemanticSearch func(ctx context.Context, query string, max int) ([]filestore.ScoredEntry, error)
 }
 
 // FleetDeps gives the fleet tool the SparkFleet base URL + optional API token.

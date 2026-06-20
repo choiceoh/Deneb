@@ -964,6 +964,7 @@
         "enum": [
           "list",
           "search",
+          "semantic_search",
           "download",
           "upload",
           "share",
@@ -1007,6 +1008,11 @@
       "content": {
         "type": "boolean",
         "description": "On search, also match inside extracted file contents (PDF/Word/Excel/PowerPoint/text), not just file names. Slower (reads and extracts each file). Default false (name-only).",
+        "default": false
+      },
+      "semantic": {
+        "type": "boolean",
+        "description": "On search, rank files by meaning (BGE-M3 vector similarity) instead of literal substring match — finds files about the query even when they phrase it differently. Equivalent to the semantic_search action. Falls back to name/content search when the embedding server is unavailable. Default false.",
         "default": false
       },
       "max": {

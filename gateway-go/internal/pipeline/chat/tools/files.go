@@ -24,15 +24,27 @@ type FilesParams struct {
 	Extract   bool   `json:"extract"`    // also extract text on download
 	Recursive bool   `json:"recursive"`  // recurse into subfolders on list
 	Content   bool   `json:"content"`    // search file contents too (not just names)
+	Semantic  bool   `json:"semantic"`   // meaning-based (vector) search instead of substring
 	Max       int    `json:"max"`        // max results (list/search)
 }
+
+// FilesSemanticSearchFunc ranks store files by meaning (BGE-M3 vectors) for the
+// search action's semantic=true mode. It is injected from the server (which owns
+// the embedding client + index), so the tool stays decoupled from that wiring.
+// A nil func — or an unavailable embedding server returning an empty slice —
+// falls back to name/content search, so semantic search is optional.
+type FilesSemanticSearchFunc func(ctx context.Context, query string, max int) ([]filestore.ScoredEntry, error)
 
 // ToolFiles implements the files tool over Deneb's local file store
 // (internal/domain/filestore) — the local-disk replacement for the former
 // Dropbox tool. No external API, no OAuth: the store lives under DENEB_FILES_DIR
 // (default ~/.deneb/files). Extracted text is returned for the agent to reason
 // over (the tool calls no LLM); share links are minted via internal/infra/fileshare.
-func ToolFiles() ToolFunc {
+//
+// semanticSearch (optional) powers the search action's semantic=true mode by
+// ranking files by meaning (BGE-M3 vectors). Nil disables semantic search
+// gracefully — a semantic query then falls back to name/content matching.
+func ToolFiles(semanticSearch FilesSemanticSearchFunc) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p FilesParams
 		if err := jsonutil.UnmarshalInto("files params", input, &p); err != nil {
@@ -46,8 +58,12 @@ func ToolFiles() ToolFunc {
 		switch p.Action {
 		case "list":
 			return filesList(ctx, store, p)
-		case "search":
-			return filesSearch(ctx, store, p)
+		case "search", "semantic_search":
+			// semantic_search is an alias for search with semantic=true.
+			if p.Action == "semantic_search" {
+				p.Semantic = true
+			}
+			return filesSearch(ctx, store, p, semanticSearch)
 		case "download":
 			return filesDownload(ctx, store, p)
 		case "upload", "save":
@@ -63,7 +79,7 @@ func ToolFiles() ToolFunc {
 		case "move", "rename":
 			return filesMove(ctx, store, p)
 		default:
-			return fmt.Sprintf("알 수 없는 files 액션: %q. 지원: list, search, download, upload, share, analyze, delete, mkdir, move", p.Action), nil
+			return fmt.Sprintf("알 수 없는 files 액션: %q. 지원: list, search, semantic_search, download, upload, share, analyze, delete, mkdir, move", p.Action), nil
 		}
 	}
 }
@@ -84,9 +100,19 @@ func filesList(ctx context.Context, store *filestore.LocalStore, p FilesParams) 
 
 // --- search ---
 
-func filesSearch(ctx context.Context, store *filestore.LocalStore, p FilesParams) (string, error) {
+func filesSearch(ctx context.Context, store *filestore.LocalStore, p FilesParams, semanticSearch FilesSemanticSearchFunc) (string, error) {
 	if strings.TrimSpace(p.Query) == "" {
 		return "", fmt.Errorf("query는 search 액션에 필수입니다")
+	}
+	// Semantic (meaning-based) search ranks files by vector similarity rather than
+	// literal overlap. It falls back to name/content search when the embedding
+	// server is down (nil func or an empty result), so it is never load-bearing.
+	if p.Semantic && semanticSearch != nil {
+		hits, serr := semanticSearch(ctx, p.Query, p.Max)
+		if serr == nil && len(hits) > 0 {
+			return formatSemanticHits(p.Query, hits), nil
+		}
+		// Empty or errored → fall through to lexical search (still useful offline).
 	}
 	// content=true widens the match to extracted file text (PDF/docx/xlsx/…),
 	// not just names. The extractor lives in this package, so we inject it as the
@@ -104,13 +130,34 @@ func filesSearch(ctx context.Context, store *filestore.LocalStore, p FilesParams
 		return "", err
 	}
 	scope := "이름"
-	if p.Content {
+	switch {
+	case p.Semantic:
+		scope = "이름 (시맨틱 폴백)" // requested semantic but embedding server unavailable
+	case p.Content:
 		scope = "이름+내용"
 	}
 	if len(entries) == 0 {
 		return fmt.Sprintf("검색 결과 없음 (%s): %q", scope, p.Query), nil
 	}
 	return fmt.Sprintf("## 🔍 파일 검색 (%s): %s\n\n%s", scope, p.Query, filestore.FormatEntries(entries)), nil
+}
+
+// formatSemanticHits renders semantic search results as a Markdown list with the
+// best-matching snippet under each file, so the agent sees why each file matched.
+func formatSemanticHits(query string, hits []filestore.ScoredEntry) string {
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "## 🧠 시맨틱 파일 검색: %s\n\n", query)
+	for _, h := range hits {
+		display := h.Entry.PathDisplay
+		if display == "" {
+			display = h.Entry.Name
+		}
+		fmt.Fprintf(&sb, "- 📄 %s  `%s`  (%s, 유사도 %.2f)\n", h.Entry.Name, display, filestore.HumanSize(h.Entry.Size), h.Score)
+		if s := strings.TrimSpace(h.Snippet); s != "" {
+			fmt.Fprintf(&sb, "  > %s\n", truncateRunes(s, 200))
+		}
+	}
+	return sb.String()
 }
 
 // --- download: resolve to an absolute path for send_file (no temp copy — the

@@ -84,9 +84,15 @@ type FilesUploadOut struct {
 // imported, because this handler package must never depend on pipeline/chat/tools
 // (a layer inversion). A nil ExtractText silently degrades content search to a
 // name-only search, so the feature is optional, not load-bearing.
+//
+// SemanticSearch ranks files by meaning (BGE-M3 vectors) for the search RPC's
+// semantic=true mode. The server owns the embedding client + index and injects
+// this closure; a nil func — or an empty result when the embedding server is
+// down — falls back to name/content search, so semantic search is optional.
 type FilesBrowseDeps struct {
-	Store       filestore.Store
-	ExtractText func(ctx context.Context, data []byte, name string) string
+	Store          filestore.Store
+	ExtractText    func(ctx context.Context, data []byte, name string) string
+	SemanticSearch func(ctx context.Context, query string, max int) ([]filestore.ScoredEntry, error)
 }
 
 // FilesBrowseMethods returns the
@@ -143,9 +149,10 @@ func filesBrowseList(deps FilesBrowseDeps) rpcutil.HandlerFunc {
 
 func filesBrowseSearch(deps FilesBrowseDeps) rpcutil.HandlerFunc {
 	type params struct {
-		Query   string `json:"query"`
-		Content bool   `json:"content,omitempty"`
-		Max     int    `json:"max,omitempty"`
+		Query    string `json:"query"`
+		Content  bool   `json:"content,omitempty"`
+		Semantic bool   `json:"semantic,omitempty"`
+		Max      int    `json:"max,omitempty"`
 	}
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		if errResp := requireAuth(ctx, req.ID); errResp != nil {
@@ -161,6 +168,18 @@ func filesBrowseSearch(deps FilesBrowseDeps) rpcutil.HandlerFunc {
 		max := p.Max
 		if max <= 0 {
 			max = defaultFilesSearchMax
+		}
+		// semantic=true ranks by meaning (vectors) when the index is wired. Empty
+		// results — embedding server down — fall through to lexical search so the
+		// request still returns useful hits offline (semantic is never required).
+		if p.Semantic && deps.SemanticSearch != nil {
+			if hits, serr := deps.SemanticSearch(ctx, p.Query, max); serr == nil && len(hits) > 0 {
+				entries := make([]filestore.Entry, 0, len(hits))
+				for _, h := range hits {
+					entries = append(entries, h.Entry)
+				}
+				return rpcutil.RespondOK(req.ID, FilesListOut{Entries: projectFilesEntries(entries)})
+			}
 		}
 		// content=true widens the match to extracted file text — but only when an
 		// extractor is wired; otherwise fall back to the name-only Search so the
