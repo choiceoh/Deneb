@@ -34,11 +34,12 @@ NA="$HERE/native-app.sh"
 # Resolved from `native-app.sh status` after boot (DENEB_INSTANCE-aware).
 LOG="" SHOTS="" PIDFILE=""
 
-# Bottom-bar tab pixel centers (phone 412x915, density 1 → px == dp). The labels
-# (피드/채팅/메일/달력) collide with screen titles (e.g. "메일" is inside "받은
-# 메일"), so the persistent bottom bar is pixel-tapped, not taptext'd.
+# Bottom-bar tab pixel centers (phone 412x915, density 1 → px == dp). Bar order is
+# 피드·메일·채팅·달력·더보기 (채팅 the center tab). The labels collide with screen titles
+# (e.g. "메일" is inside "받은 메일"), so the persistent bottom bar is pixel-tapped, not
+# taptext'd.
 BBAR_Y=858
-TAB_FEED_X=37 TAB_CHAT_X=118 TAB_MAIL_X=200 TAB_CAL_X=282 TAB_MORE_X=364
+TAB_FEED_X=37 TAB_MAIL_X=118 TAB_CHAT_X=200 TAB_CAL_X=282 TAB_MORE_X=364
 
 # Crash-class signals. Specific enough that handled/info logging doesn't false-
 # flag; "already used" is the exact #1959 Compose duplicate-key signature.

@@ -1,10 +1,10 @@
 package ai.deneb.ui.chat.composables
 
-import ai.deneb.DenebAppHub
 import ai.deneb.DenebCalendar
-import ai.deneb.DenebConfig
 import ai.deneb.DenebFeed
 import ai.deneb.DenebMail
+import ai.deneb.DenebMore
+import ai.deneb.Home
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
@@ -28,40 +28,36 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
-import androidx.compose.material.icons.automirrored.outlined.Chat as ChatBubbleOutlined
+import androidx.compose.material.icons.automirrored.filled.Chat as ChatFilled
+import androidx.compose.material.icons.automirrored.outlined.Chat as ChatOutlined
+import androidx.compose.material.icons.filled.MoreHoriz as MoreFilled
 import androidx.compose.material.icons.filled.Notifications as NotificationsFilled
-import androidx.compose.material.icons.filled.Widgets as WidgetsFilled
 import androidx.compose.material.icons.outlined.CalendarMonth as CalendarMonthOutlined
-import androidx.compose.material.icons.outlined.Call as CallOutlined
 import androidx.compose.material.icons.outlined.Email as EmailOutlined
-import androidx.compose.material.icons.outlined.Language as LanguageOutlined
+import androidx.compose.material.icons.outlined.MoreHoriz as MoreOutlined
 import androidx.compose.material.icons.outlined.Notifications as NotificationsOutlined
-import androidx.compose.material.icons.outlined.Settings as SettingsOutlined
-import androidx.compose.material.icons.outlined.Widgets as WidgetsOutlined
 
 /**
- * The phone's bottom tab bar — the super-app's launcher navigation (토스식 슈퍼앱).
+ * The phone's bottom tab bar — the assistant app's primary navigation.
  *
- * Final shape (user's call): five slots 피드 · 통화 · 자체앱 · 인터넷 · 카톡, with 자체앱
- * as the emphasized center (the launcher for Deneb's own mini-apps). Three of the five
- * are *action tabs*, not screens, and never carry a selection indicator:
- *   - **통화** fires the phone dialer (`tel:`).
- *   - **인터넷** launches Samsung Internet (the external browser, Android package intent).
- *   - **카톡** launches the KakaoTalk app (Android package intent).
- * Only the two screen tabs (피드 · 자체앱) can be selected. 인터넷 is now an *external*
- * browser, not the in-app DenebBrowser — that in-app translation browser moved into the
- * 자체앱 grid as the "브라우저" tile. 채팅 · 메일 · 달력 · 더보기 all live in the 자체앱 grid too.
+ * Five slots: 피드 · 메일 · 채팅 · 달력 · 더보기, with 채팅 the emphasized center (the core
+ * assistant conversation). Three are *screen tabs* that select + highlight when current
+ * (피드, 채팅, 더보기); 메일 and 달력 are *navigate-actions* that jump into their section —
+ * the section keeps the bar (it is a bottom-bar route, so you can tab-switch without
+ * backing out) but never carries a selection indicator. 더보기 opens the section hub
+ * ([DenebMore]) — a grouped text list of the remaining sections (파트별 업무 현황·조직도·
+ * 검색·할일·일기·카테고리·전체 연락처·노트북·파일·브라우저·설정).
  *
- * Doctrine (project_superapp_vision, native-design-system.md): the *structure* is
- * Material/Apple-practical — an M3 [NavigationBar] substrate (system insets, ripple,
- * Role.Tab a11y, haptics) with the Apple SF pattern of an outlined icon when idle and
- * a filled icon when active, label always shown. The *skin* is Deneb-calm — monochrome
- * (no colored tabs), a faint ink indicator instead of the bright M3 secondaryContainer
- * pill, a hairline top edge, and small [DenebType] labels.
+ * Doctrine (native-design-system.md): the *structure* is Material/Apple-practical — an
+ * M3 [NavigationBar] substrate (system insets, ripple, Role.Tab a11y, haptics) with the
+ * Apple SF pattern of an outlined icon when idle and a filled icon when active, label
+ * always shown. The *skin* is Deneb-calm — monochrome (no colored tabs), a faint ink
+ * indicator instead of the bright M3 secondaryContainer pill, a hairline top edge, and
+ * small [DenebType] labels.
  *
  * Stateless: the host (App.kt) owns navigation and passes [currentRoute] for
- * highlighting, plus the [onCall]/[onInternet]/[onKakao] action callbacks. The native
- * client is mobile-only, so this bar is the app's primary navigation surface.
+ * highlighting. The native client is mobile-only, so this bar is the app's primary
+ * navigation surface.
  */
 sealed interface DenebTabItem {
     val label: String
@@ -75,7 +71,7 @@ sealed interface DenebTabItem {
         val filled: ImageVector,
     ) : DenebTabItem
 
-    /** An action tab — fires a side effect (dialer / external app) and never selects. */
+    /** A navigate-action — jumps into a section (which keeps its own ← back) and never selects. */
     data class Action(
         override val label: String,
         val icon: ImageVector,
@@ -83,36 +79,52 @@ sealed interface DenebTabItem {
     ) : DenebTabItem
 }
 
-// Screen tab routes (used by App.kt to decide when to show the bar and which is active).
+// Screen-tab routes (used by App.kt to decide when to show the bar and which is active).
 const val ROUTE_FEED = "deneb_feed"
-const val ROUTE_APP_HUB = "deneb_app_hub"
+const val ROUTE_HOME = "home"
+const val ROUTE_MORE = "deneb_more"
 
-// The screen tabs (action tabs 통화/인터넷/카톡 are spliced in by [denebBottomTabs] since
-// they need host callbacks). 피드 leads (the work home), 자체앱 is the launcher center.
-// 인터넷 is no longer a screen tab — it became the external-browser action. 채팅·메일·
-// 달력·검색·할일·일기·…·브라우저·설정 all live in the 자체앱 grid.
-val denebScreenTabs: List<DenebTabItem.Screen> = listOf(
-    DenebTabItem.Screen("피드", ROUTE_FEED, DenebFeed, Icons.Outlined.NotificationsOutlined, Icons.Filled.NotificationsFilled),
-    DenebTabItem.Screen("자체앱", ROUTE_APP_HUB, DenebAppHub, Icons.Outlined.WidgetsOutlined, Icons.Filled.WidgetsFilled),
+// The three screen tabs. 피드 = the work briefing home; 채팅 = the assistant conversation
+// (center); 더보기 = the section hub list. 메일/달력 are spliced in as navigate-actions by
+// [denebBottomTabs] (they need the host's onNavigate callback).
+private val feedTab = DenebTabItem.Screen(
+    "피드",
+    ROUTE_FEED,
+    DenebFeed,
+    Icons.Outlined.NotificationsOutlined,
+    Icons.Filled.NotificationsFilled,
+)
+private val chatTab = DenebTabItem.Screen(
+    "채팅",
+    ROUTE_HOME,
+    Home,
+    Icons.AutoMirrored.Outlined.ChatOutlined,
+    Icons.AutoMirrored.Filled.ChatFilled,
+)
+private val moreTab = DenebTabItem.Screen(
+    "더보기",
+    ROUTE_MORE,
+    DenebMore,
+    Icons.Outlined.MoreOutlined,
+    Icons.Filled.MoreFilled,
 )
 
 /**
- * Build the five-slot tab list — 피드 · 메일 · 자체앱 · 달력 · 설정. 피드 and 자체앱 are the
- * two screen tabs (selectable, highlightable when current); 메일/달력/설정 are
- * navigate-actions that jump into the section (which hides the bar and keeps its own
- * back nav, like tapping the matching 자체앱 grid tile), so they never select.
+ * Build the five-slot tab list — 피드 · 메일 · 채팅 · 달력 · 더보기. 피드/채팅/더보기 are the
+ * screen tabs (selectable); 메일/달력 are navigate-actions that jump into the section
+ * (which keeps the bar and its own back nav), so they never select.
  */
 fun denebBottomTabs(onNavigate: (Any) -> Unit): List<DenebTabItem> = listOf(
-    denebScreenTabs[0], // 피드
+    feedTab,
     DenebTabItem.Action("메일", Icons.Outlined.EmailOutlined) { onNavigate(DenebMail) },
-    denebScreenTabs[1], // 자체앱 (center)
+    chatTab, // center
     DenebTabItem.Action("달력", Icons.Outlined.CalendarMonthOutlined) { onNavigate(DenebCalendar) },
-    DenebTabItem.Action("설정", Icons.Outlined.SettingsOutlined) { onNavigate(DenebConfig) },
+    moreTab,
 )
 
 // Routes that surface 업무 데이터 — used by App.kt to bounce a 챗봇-mode session back to
 // home if it ever lands on one (defensive — the 챗봇 workspace has no bottom bar). 피드 is
-// 업무-only (the work feed home), so it bounces; the 자체앱 grid filters its own 업무 tiles.
+// 업무-only (the work feed home), so it bounces; the 더보기 list filters its own 업무 entries.
 val denebWorkDataRoutes: Set<String> = setOf(
     "deneb_feed",
     "deneb_mail",
@@ -124,23 +136,23 @@ val denebWorkDataRoutes: Set<String> = setOf(
     "deneb_org",
 )
 
-// Routes that show the bottom bar. Per the user's call (toss-style persistent nav), the
-// bar stays on every 자체앱-grid SECTION — 메일·달력·검색·할일·일기·카테고리·조직도·현황·
-// 노트북·파일·브라우저·설정 — not just 피드·자체앱, so you can tab-switch without backing
-// out first. Excluded on purpose: deep DETAILS reached *from* a section (a specific
-// mail/event/wiki page/person, settings sub-screens like fleet/skill/cron, the app
-// drawer) — those are data-class/arg routes that drill down and keep their own ← back
-// nav. 채팅(home) is also out: its own bottom input would fight the bar. The 챗봇
-// workspace hides the bar separately (navChatMode in App.kt).
+// Routes that show the bottom bar. The bar stays on 채팅(home) and on every 더보기 SECTION
+// — 메일·달력·검색·할일·일기·카테고리·조직도·현황·연락처·노트북·파일·브라우저·설정 — so you can
+// tab-switch without backing out first. Excluded on purpose: deep DETAILS reached *from* a
+// section (a specific mail/event/wiki page/person, settings sub-screens like fleet/skill/
+// cron) — those are data-class/arg routes that drill down and keep their own ← back nav.
+// The 챗봇 workspace hides the bar separately (navChatMode in App.kt).
 val denebBottomBarRoutes: Set<String> = setOf(
     ROUTE_FEED,
-    ROUTE_APP_HUB,
+    ROUTE_HOME,
+    ROUTE_MORE,
     "deneb_mail",
     "deneb_calendar",
     "deneb_search",
     "deneb_todo",
     "deneb_diary",
     "deneb_categories",
+    "deneb_contacts",
     "deneb_org",
     "deneb_dashboard",
     "deneb_notebooks",
@@ -223,7 +235,7 @@ fun DenebBottomBar(
                 }
 
                 is DenebTabItem.Action -> {
-                    // Action tabs (통화·인터넷·카톡) fire a side effect and are never selected — the
+                    // Navigate-actions (메일·달력) jump into a section and are never selected — the
                     // outlined glyph stays at the unselected (hint) weight regardless of route.
                     NavigationBarItem(
                         selected = false,
