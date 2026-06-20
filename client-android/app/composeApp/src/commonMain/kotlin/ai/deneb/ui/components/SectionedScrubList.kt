@@ -110,8 +110,11 @@ private fun ScrubIndex(keys: List<String>, onScrub: (String) -> Unit, modifier: 
                         // A detent tick each time the drag crosses into a new initial —
                         // the scrub feels like notches under the thumb and confirms the
                         // jump landed without the user looking (Niagara/iOS index idiom).
-                        // Shared, so both the launcher and the 전체 연락처 scrubber get it.
-                        haptics.segmentTick()
+                        // FrequentTick (not SegmentTick): a fast flick crosses many
+                        // letters in <1s, and this variant stays crisp under rapid firing
+                        // instead of buzzing. Shared, so the launcher and the 전체 연락처
+                        // scrubber both get it.
+                        haptics.segmentFrequentTick()
                         onScrub(key)
                     }
                 }
