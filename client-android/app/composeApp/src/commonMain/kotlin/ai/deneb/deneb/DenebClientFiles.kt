@@ -123,9 +123,12 @@ suspend fun DenebGatewayClient.filesUpload(destPath: String, bytes: ByteArray, m
  * Coil fetches this directly for the in-app image viewer; it also supports Range,
  * so a large file resumes over a flaky link.
  */
-fun DenebGatewayClient.filesDownloadUrl(pathLower: String): String {
+fun DenebGatewayClient.filesDownloadUrl(path: String): String {
     fun e(s: String) = s.encodeURLParameter()
-    return "$gatewayUrl/api/v1/files/download?path=${e(pathLower)}&clientToken=${e(clientToken)}"
+    // [path] must be the exact-case display path: the gateway store resolves it
+    // verbatim on a case-sensitive FS, so a lowercased path would 404 on a file
+    // whose real name has uppercase letters (e.g. "Report.PDF").
+    return "$gatewayUrl/api/v1/files/download?path=${e(path)}&clientToken=${e(clientToken)}"
 }
 
 /**
@@ -134,10 +137,10 @@ fun DenebGatewayClient.filesDownloadUrl(pathLower: String): String {
  * marker appended). Null on any transport/HTTP failure — the caller then falls
  * back to the share link.
  */
-suspend fun DenebGatewayClient.filesDownloadText(pathLower: String, maxBytes: Int = 256 * 1024): String? {
+suspend fun DenebGatewayClient.filesDownloadText(path: String, maxBytes: Int = 256 * 1024): String? {
     if (clientToken.isEmpty() || gatewayUrl.isBlank()) return null
     return runCatching {
-        val resp = http.get(filesDownloadUrl(pathLower)) {
+        val resp = http.get(filesDownloadUrl(path)) {
             header(DenebGatewayClient.CLIENT_TOKEN_HEADER, clientToken)
         }
         if (!resp.status.isSuccess()) return@runCatching null

@@ -404,7 +404,7 @@ fun DenebFilesScreen(
                         {
                             actionTarget = null
                             when (kind) {
-                                FilePreviewKind.IMAGE -> showFullScreenImage(client.filesDownloadUrl(target.pathLower))
+                                FilePreviewKind.IMAGE -> showFullScreenImage(client.filesDownloadUrl(target.pathDisplay))
                                 FilePreviewKind.TEXT -> textPreview = target
                             }
                         }
@@ -415,7 +415,7 @@ fun DenebFilesScreen(
                 } else {
                     {
                         actionTarget = null
-                        scope.launch { client.filesShare(target.pathLower)?.let { uriHandler.openUri(it) } }
+                        scope.launch { client.filesShare(target.pathDisplay)?.let { uriHandler.openUri(it) } }
                     }
                 },
                 onRename = {
@@ -836,7 +836,7 @@ private fun FilesTextViewerHost(
     suspend fun load() {
         loadOk = null
         text = null
-        val res = client.filesDownloadText(entry.pathLower)
+        val res = client.filesDownloadText(entry.pathDisplay)
         text = res
         loadOk = res != null
     }
