@@ -169,8 +169,22 @@ func webFetchURL(ctx context.Context, cache *FetchCache, localAI *LocalAIExtract
 		}
 
 		content := processFetchedContent(ctx, rawContent, result.Data, result.ContentType, targetURL, localAI, &meta)
-
 		meta.ExtractChars = len(content)
+
+		// Escalation: a 200 OK that extracted almost nothing AND signaled
+		// js_required/empty_body is an unrendered SPA shell. Retry ONCE through a
+		// headless backend (Jina). shouldEscalateThinContent gates on the thin +
+		// signal combination so we never escalate a complete-but-short page, and
+		// escalateThinContent runs at most once and only adopts a strictly richer
+		// result — otherwise we keep this original. (Binary docs never carry these
+		// signals, so they're naturally excluded.)
+		if shouldEscalateThinContent(&meta) {
+			if escContent, ok := escalateThinContent(ctx, targetURL, maxBytes, localAI, &meta); ok {
+				content = escContent
+				// meta.ExtractChars/WordCount/Signals updated inside on success.
+			}
+		}
+
 		if origChars > 0 {
 			meta.Retention = fmt.Sprintf("%.1f%%", float64(meta.ExtractChars)/float64(origChars)*100)
 		} else {

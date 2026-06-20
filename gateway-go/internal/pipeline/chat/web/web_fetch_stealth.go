@@ -5,10 +5,14 @@
 //
 //	Stage 0: Standard browser profile (Chrome on macOS)
 //	Stage 1: Alternate profile (Firefox on Windows) + cookie jar
-//	Stage 2: Google cache fallback
+//	Stage 2: Jina Reader fallback (headless render — beats SPA / JS / bot walls)
 //
 // Each profile includes the full set of headers a real browser sends:
 // User-Agent, Accept, Accept-Language, Accept-Encoding, Sec-Fetch-*, etc.
+//
+// The Jina Reader stage is a *last-resort, external* fallback: it only runs
+// after both local browser-profile attempts fail/soft-block, honoring the
+// project's local-first principle while still recovering JS-required pages.
 package web
 
 import (
@@ -18,7 +22,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/cookiejar"
-	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -73,15 +77,15 @@ var firefoxProfile = browserProfile{
 //
 //	0: Chrome profile
 //	1: Firefox profile + cookie jar (handles cookie-gated blocks)
-//	2: Google webcache fallback (bypasses origin server entirely)
+//	2: Jina Reader fallback (headless render; recovers SPA/JS/bot-walled pages)
 //
 // Returns on first successful non-blocked response.
 func stealthFetch(ctx context.Context, targetURL string, maxBytes int64) (*media.FetchResult, error) {
 	stages := []struct {
-		profile  browserProfile
-		jar      bool
-		cacheURL bool
-		backoff  time.Duration
+		profile browserProfile
+		jar     bool
+		jina    bool
+		backoff time.Duration
 	}{
 		{chromeProfile, false, false, 0},
 		{firefoxProfile, true, false, 800 * time.Millisecond},
@@ -100,12 +104,15 @@ func stealthFetch(ctx context.Context, targetURL string, maxBytes int64) (*media
 
 		fetchURL := targetURL
 		headers := stage.profile.headers
-		if stage.cacheURL {
-			fetchURL = googleCacheURL(targetURL)
-			// Google cache uses a simpler header set.
+		if stage.jina {
+			// Jina Reader proxies a headless-rendered, plain-text view of the
+			// page. We send the bare target through r.jina.ai and ask for
+			// text/plain — no auth, no browser fingerprint games. This is the
+			// only stage that leaves the origin/local network.
+			fetchURL = jinaReaderURL(targetURL)
 			headers = map[string]string{
 				"User-Agent":      stage.profile.headers["User-Agent"],
-				"Accept":          stage.profile.headers["Accept"],
+				"Accept":          "text/plain",
 				"Accept-Language": stage.profile.headers["Accept-Language"],
 				"Accept-Encoding": "identity",
 			}
@@ -242,11 +249,25 @@ func isSoftBlock(result *media.FetchResult) bool {
 	return false
 }
 
-// googleCacheURL returns the Google webcache URL for a given page.
-// Google Cache serves a snapshot of the page without triggering the origin's
-// bot protection. Useful as a last-resort fallback.
-func googleCacheURL(originalURL string) string {
-	return "https://webcache.googleusercontent.com/search?q=cache:" + url.QueryEscape(originalURL)
+// jinaReaderBase is the default Jina Reader endpoint. Jina renders the target
+// page headlessly (executing JS) and returns clean text, which recovers SPA,
+// JS-required, and bot-walled pages that defeat our browser-profile attempts.
+const jinaReaderBase = "https://r.jina.ai"
+
+// jinaReaderURL builds the Jina Reader proxy URL for a target page:
+//
+//	https://r.jina.ai/https://example.com/path?q=1
+//
+// Jina expects the *raw* target URL appended to the base (NOT query-escaped) —
+// it parses everything after the base host as the URL to fetch. The base is
+// overridable via DENEB_JINA_URL (env override + sane default, per the sidecar
+// model convention) for tests or a self-hosted Reader.
+func jinaReaderURL(originalURL string) string {
+	base := strings.TrimRight(strings.TrimSpace(os.Getenv("DENEB_JINA_URL")), "/")
+	if base == "" {
+		base = jinaReaderBase
+	}
+	return base + "/" + originalURL
 }
 
 // newCookieClient creates an http.Client with a cookie jar backed by the shared

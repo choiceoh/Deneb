@@ -106,12 +106,26 @@ func TestIsBlockError(t *testing.T) {
 	}
 }
 
-func TestGoogleCacheURL(t *testing.T) {
-	got := googleCacheURL("https://example.com/page?q=test")
-	want := "https://webcache.googleusercontent.com/search?q=cache:https%3A%2F%2Fexample.com%2Fpage%3Fq%3Dtest"
-	if got != want {
-		t.Errorf("got %q, want %q", got, want)
-	}
+func TestJinaReaderURL(t *testing.T) {
+	const target = "https://example.com/page?q=test"
+
+	t.Run("default base appends raw url", func(t *testing.T) {
+		t.Setenv("DENEB_JINA_URL", "")
+		got := jinaReaderURL(target)
+		want := "https://r.jina.ai/" + target
+		if got != want {
+			t.Errorf("got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("env override with trailing slash trimmed", func(t *testing.T) {
+		t.Setenv("DENEB_JINA_URL", "http://127.0.0.1:9999/")
+		got := jinaReaderURL(target)
+		want := "http://127.0.0.1:9999/" + target
+		if got != want {
+			t.Errorf("got %q, want %q", got, want)
+		}
+	})
 }
 
 func TestBrowserProfiles(t *testing.T) {

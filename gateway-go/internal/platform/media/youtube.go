@@ -10,6 +10,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -17,6 +18,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/pkg/cliprobe"
 )
 
 // YouTubeResult holds the extracted transcript and metadata from a YouTube video.
@@ -64,10 +67,14 @@ func ExtractYouTubeURLs(text string) []string {
 // Requires yt-dlp to be installed (`pip install yt-dlp` or system package).
 // Returns an error if yt-dlp is not found.
 func ExtractYouTubeTranscript(ctx context.Context, videoURL string) (*YouTubeResult, error) {
-	// Check that yt-dlp is available.
-	ytdlpPath, err := exec.LookPath("yt-dlp")
+	// Probe that yt-dlp is not just present but actually runnable. A bare
+	// LookPath passes for a broken venv shim (the standard casualty of a system
+	// Python upgrade), which then explodes at the first real invocation with a
+	// confusing "metadata fetch" error. The probe classifies missing vs broken
+	// and surfaces an operator-actionable repair hint.
+	ytdlpPath, err := probeYtDlp(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("yt-dlp not found: install with `pip install yt-dlp`")
+		return nil, err
 	}
 
 	tmpDir, err := os.MkdirTemp("", "deneb-yt-*")
@@ -128,6 +135,32 @@ func ExtractYouTubeTranscript(ctx context.Context, videoURL string) (*YouTubeRes
 	result.Transcript = transcript
 	result.Language = lang
 	return result, nil
+}
+
+// ytDlpRepairHint is the remediation surfaced when yt-dlp is on PATH but won't
+// run (broken shim / missing interpreter). The pip reinstall is the usual fix
+// after a system Python upgrade orphans the entry-point script.
+const ytDlpRepairHint = "pip install --force-reinstall yt-dlp"
+
+// probeYtDlp verifies yt-dlp is present AND executable, returning its resolved
+// path. On a missing or broken tool it returns an error carrying the operator
+// repair hint (and logs at Error for a broken install, since the user's request
+// silently degrades to "no transcript"). This replaces a bare exec.LookPath,
+// which cannot tell a working install from a broken shim.
+func probeYtDlp(ctx context.Context) (string, error) {
+	r := cliprobe.Probe(ctx, "yt-dlp", ytDlpRepairHint)
+	switch r.Status {
+	case cliprobe.StatusOK:
+		return r.Path, nil
+	case cliprobe.StatusBroken:
+		// On PATH but unrunnable: the operator needs to know, because every
+		// YouTube fetch will otherwise fail opaquely.
+		slog.Error("yt-dlp is installed but not runnable",
+			"path", r.Path, "error", r.Err, "fix", r.Hint)
+		return "", fmt.Errorf("yt-dlp found but not runnable (%s): %w", r.Hint, r.Err)
+	default: // StatusMissing
+		return "", fmt.Errorf("yt-dlp not found: %s", r.Hint)
+	}
 }
 
 // AudioTranscriber, when set, transcribes a local audio file to text. It is the
