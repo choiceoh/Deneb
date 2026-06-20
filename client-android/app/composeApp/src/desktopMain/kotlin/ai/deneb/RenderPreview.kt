@@ -20,6 +20,8 @@ import ai.deneb.deneb.FilesTextViewerContent
 import ai.deneb.deneb.IntervalUnit
 import ai.deneb.deneb.MailMessage
 import ai.deneb.deneb.MailRow
+import ai.deneb.deneb.OrgNodeEditor
+import ai.deneb.deneb.OrgTreeContent
 import ai.deneb.deneb.PromptStyleEditor
 import ai.deneb.deneb.SchedMode
 import ai.deneb.deneb.ScheduleDraft
@@ -36,6 +38,8 @@ import ai.deneb.deneb.buildMonthGrid
 import ai.deneb.deneb.eventDays
 import ai.deneb.deneb.generated.DashboardItem
 import ai.deneb.deneb.generated.LaneOut
+import ai.deneb.deneb.generated.MemberOut
+import ai.deneb.deneb.generated.OrgNodeOut
 import ai.deneb.deneb.generated.SelfCorrectionCandidate
 import ai.deneb.deneb.generated.SelfImprovementCodingListResponse
 import ai.deneb.deneb.generated.SelfImprovementCodingStatusCount
@@ -211,6 +215,10 @@ fun main() {
     renderWorkFeed("workfeed_light.png", LightColorScheme)
     renderDashboard("dashboard_dark.png", DarkColorScheme)
     renderDashboard("dashboard_light.png", LightColorScheme)
+    renderOrgChart("org_chart_dark.png", DarkColorScheme)
+    renderOrgChart("org_chart_light.png", LightColorScheme)
+    renderOrgEditor("org_editor_dark.png", DarkColorScheme)
+    renderOrgEditor("org_editor_light.png", LightColorScheme)
     renderWidget("widget_loaded.png", "6/3 14:00 · 기획조정실 주간 회의 3분기 점검", "김민준 부장 · 회의 자료 검토 부탁드립니다", "미읽음 3")
     renderWidget("widget_loading.png", "불러오는 중…", "", "")
     renderSkeleton("skeleton_dark.png", DarkColorScheme)
@@ -1138,6 +1146,81 @@ private fun renderDashboard(name: String, scheme: ColorScheme) {
         MaterialTheme(colorScheme = scheme) {
             DenebScreenScaffold(title = "파트별 업무 현황", onBack = {}) {
                 DashboardLanesContent(sampleDashboard)
+            }
+        }
+    }
+    val image = scene.render()
+    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
+    File("/tmp/deneb-render").mkdirs()
+    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
+    scene.close()
+}
+
+// The org chart (조직도) tree: a small group → 실/회사 → 팀 hierarchy joined by
+// parentId, with two lane-tagged parts (the 파트 chip) and members carrying 직급/직책.
+// Fake names only (mirrors org.example.json) — exercises the indent tree, type
+// badges, lane chips, leader summary, and member lines. The bare 개인/기타 node (no
+// members) checks the empty-summary branch.
+private val sampleOrg = listOf(
+    OrgNodeOut(id = "group", name = "예시그룹", type = "group", parentId = "", members = listOf(MemberOut("홍길동", "회장", "회장"))),
+    OrgNodeOut(id = "planning", name = "기획조정실", type = "division", parentId = "group", members = listOf(MemberOut("김철수", "전무", "실장"))),
+    OrgNodeOut(
+        id = "team1",
+        name = "기획조정실 1팀",
+        type = "team",
+        parentId = "planning",
+        lane = "team1",
+        members = listOf(MemberOut("김철수", "전무", "팀장"), MemberOut("이몽룡", "과장", "팀원")),
+        keywords = listOf("인허가", "개발행위"),
+        companies = listOf("사아건설"),
+    ),
+    OrgNodeOut(
+        id = "team2",
+        name = "기획조정실 2팀",
+        type = "team",
+        parentId = "planning",
+        lane = "team2",
+        members = listOf(MemberOut("성춘향", "부장", "팀장"), MemberOut("변학도", "대리", "팀원")),
+        keywords = listOf("루프탑", "지붕"),
+    ),
+    OrgNodeOut(
+        id = "namdo",
+        name = "남도에코",
+        type = "company",
+        parentId = "group",
+        lane = "namdo",
+        members = listOf(MemberOut("장끼동", "상무", "대표"), MemberOut("까투리", "주임", "팀원")),
+        keywords = listOf("케이블", "전선"),
+        companies = listOf("가나에너지", "다라전기"),
+    ),
+    OrgNodeOut(id = "personal", name = "개인/기타", type = "team", parentId = "group"),
+)
+
+// The 조직도 tree view (read/expand) with the full sample chart.
+private fun renderOrgChart(name: String, scheme: ColorScheme) {
+    val scene = ImageComposeScene(width = 824, height = 1500, density = Density(2f)) {
+        MaterialTheme(colorScheme = scheme) {
+            DenebScreenScaffold(title = "조직도", onBack = {}) {
+                OrgTreeContent(nodes = sampleOrg, onEditNode = {}, onAddChild = {})
+            }
+        }
+    }
+    val image = scene.render()
+    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
+    File("/tmp/deneb-render").mkdirs()
+    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
+    scene.close()
+}
+
+// The node editor sheet body: name field, type/lane pickers, the dashboard-part
+// toggle (on), and a member with 직급/직책 dropdowns. Previews the edit surface a
+// ModalBottomSheet hosts at runtime (rendered bare here, sheet chrome is Material).
+private fun renderOrgEditor(name: String, scheme: ColorScheme) {
+    val node = sampleOrg.first { it.id == "team1" }
+    val scene = ImageComposeScene(width = 824, height = 1280, density = Density(2f)) {
+        MaterialTheme(colorScheme = scheme) {
+            Surface(color = MaterialTheme.colorScheme.background) {
+                OrgNodeEditor(node = node, onChange = {}, onDelete = {}, onDone = {})
             }
         }
     }
