@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.DriveFileMove
@@ -35,6 +36,7 @@ import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -56,6 +58,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -100,6 +103,11 @@ fun DenebFilesScreen(
     var searchText by remember { mutableStateOf("") }
     // The query the current list came from (null = browsing the folder, not searching).
     var activeQuery by remember { mutableStateOf<String?>(null) }
+    // When true, search matches inside extracted file contents (PDF/Word/Excel/…),
+    // not just names. Default off (name-only, faster). Captured per search so a
+    // refresh/retry re-runs in the same mode the results came from.
+    var searchContent by remember { mutableStateOf(false) }
+    var activeContent by remember { mutableStateOf(false) }
     var actionTarget by remember { mutableStateOf<FilesEntry?>(null) }
     // File currently open in the in-app text/markdown viewer (null = closed).
     var textPreview by remember { mutableStateOf<FilesEntry?>(null) }
@@ -139,7 +147,7 @@ fun DenebFilesScreen(
         }
         val token = ++loadToken
         loadOk = null
-        val res = client.filesSearch(q)
+        val res = client.filesSearch(q, activeContent)
         if (token != loadToken) return
         entries = res ?: emptyList()
         loadOk = res != null
@@ -173,8 +181,12 @@ fun DenebFilesScreen(
 
     fun runSearch(raw: String) {
         val q = raw.trim().ifBlank { null }
-        if (q == activeQuery) return
+        // Re-run when either the query or the content-scope toggle changed (so
+        // flipping 내용 포함 on the same query re-searches), but skip a redundant
+        // identical search.
+        if (q == activeQuery && searchContent == activeContent) return
         activeQuery = q
+        activeContent = searchContent
         scope.launch { reload() }
     }
 
@@ -285,6 +297,28 @@ fun DenebFilesScreen(
             modifier = Modifier.padding(horizontal = 16.dp),
         )
 
+        // "내용 포함" toggle: name-only by default, contents too when checked.
+        // Control is Material (Checkbox + toggleable Row a11y); label is Deneb. A
+        // flip while a query is active re-runs that search in the new scope.
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .toggleable(
+                    value = searchContent,
+                    role = Role.Checkbox,
+                    onValueChange = { on ->
+                        searchContent = on
+                        if (activeQuery != null) runSearch(searchText)
+                    },
+                )
+                .padding(start = 20.dp, end = 24.dp, top = 2.dp, bottom = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Checkbox(checked = searchContent, onCheckedChange = null)
+            Spacer(Modifier.width(4.dp))
+            Text("내용 포함", style = DenebType.rowSubtitle, color = denebHint())
+        }
+
         // "상위 폴더" affordance — phones hide the in-app ← (system back drives it),
         // so a visible up row keeps deep folders navigable by touch.
         if (activeQuery == null && pathStack.size > 1) {
@@ -330,7 +364,7 @@ fun DenebFilesScreen(
                             refreshing = true
                             val token = ++loadToken
                             val q = activeQuery
-                            val res = if (q != null) client.filesSearch(q) else client.filesList(pathStack.last())
+                            val res = if (q != null) client.filesSearch(q, activeContent) else client.filesList(pathStack.last())
                             // Drop a stale refresh result if the user navigated meanwhile.
                             if (token == loadToken) res?.let { entries = it }
                             refreshing = false

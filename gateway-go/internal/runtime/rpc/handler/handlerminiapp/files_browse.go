@@ -78,8 +78,15 @@ type FilesUploadOut struct {
 
 // FilesBrowseDeps wires the browser RPCs to the local file store. A nil Store
 // skips the whole domain (mirrors DropboxBrowseDeps' nil-client skip).
+//
+// ExtractText turns a file's bytes into searchable text for the search RPC's
+// content=true mode (the chat tools' document extractor). It is injected, not
+// imported, because this handler package must never depend on pipeline/chat/tools
+// (a layer inversion). A nil ExtractText silently degrades content search to a
+// name-only search, so the feature is optional, not load-bearing.
 type FilesBrowseDeps struct {
-	Store filestore.Store
+	Store       filestore.Store
+	ExtractText func(ctx context.Context, data []byte, name string) string
 }
 
 // FilesBrowseMethods returns the
@@ -136,8 +143,9 @@ func filesBrowseList(deps FilesBrowseDeps) rpcutil.HandlerFunc {
 
 func filesBrowseSearch(deps FilesBrowseDeps) rpcutil.HandlerFunc {
 	type params struct {
-		Query string `json:"query"`
-		Max   int    `json:"max,omitempty"`
+		Query   string `json:"query"`
+		Content bool   `json:"content,omitempty"`
+		Max     int    `json:"max,omitempty"`
 	}
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		if errResp := requireAuth(ctx, req.ID); errResp != nil {
@@ -154,7 +162,18 @@ func filesBrowseSearch(deps FilesBrowseDeps) rpcutil.HandlerFunc {
 		if max <= 0 {
 			max = defaultFilesSearchMax
 		}
-		entries, err := deps.Store.Search(ctx, p.Query, max)
+		// content=true widens the match to extracted file text — but only when an
+		// extractor is wired; otherwise fall back to the name-only Search so the
+		// request still succeeds (just narrower) rather than erroring.
+		var (
+			entries []filestore.Entry
+			err     error
+		)
+		if p.Content && deps.ExtractText != nil {
+			entries, err = deps.Store.SearchContent(ctx, p.Query, max, deps.ExtractText)
+		} else {
+			entries, err = deps.Store.Search(ctx, p.Query, max)
+		}
 		if err != nil {
 			return mapFilesError(req.ID, "file search failed", err)
 		}

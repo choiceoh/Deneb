@@ -979,7 +979,7 @@
       },
       "query": {
         "type": "string",
-        "description": "Search query matching file/folder names (for the search action)"
+        "description": "Search query (for the search action). Matches file/folder names by default; set content=true to also match inside extracted file text (PDF/Word/Excel/PowerPoint/text)."
       },
       "local_path": {
         "type": "string",
@@ -1002,6 +1002,11 @@
       "recursive": {
         "type": "boolean",
         "description": "Recurse into subfolders on list",
+        "default": false
+      },
+      "content": {
+        "type": "boolean",
+        "description": "On search, also match inside extracted file contents (PDF/Word/Excel/PowerPoint/text), not just file names. Slower (reads and extracts each file). Default false (name-only).",
         "default": false
       },
       "max": {

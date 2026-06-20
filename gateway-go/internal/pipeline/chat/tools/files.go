@@ -23,6 +23,7 @@ type FilesParams struct {
 	Overwrite bool   `json:"overwrite"`  // overwrite on upload (default: autorename)
 	Extract   bool   `json:"extract"`    // also extract text on download
 	Recursive bool   `json:"recursive"`  // recurse into subfolders on list
+	Content   bool   `json:"content"`    // search file contents too (not just names)
 	Max       int    `json:"max"`        // max results (list/search)
 }
 
@@ -87,14 +88,29 @@ func filesSearch(ctx context.Context, store *filestore.LocalStore, p FilesParams
 	if strings.TrimSpace(p.Query) == "" {
 		return "", fmt.Errorf("query는 search 액션에 필수입니다")
 	}
-	entries, err := store.Search(ctx, p.Query, p.Max)
+	// content=true widens the match to extracted file text (PDF/docx/xlsx/…),
+	// not just names. The extractor lives in this package, so we inject it as the
+	// callback the domain's SearchContent expects (it must not import tools).
+	var entries []filestore.Entry
+	var err error
+	if p.Content {
+		entries, err = store.SearchContent(ctx, p.Query, p.Max, func(ctx context.Context, data []byte, name string) string {
+			return extractFileText(ctx, name, data)
+		})
+	} else {
+		entries, err = store.Search(ctx, p.Query, p.Max)
+	}
 	if err != nil {
 		return "", err
 	}
-	if len(entries) == 0 {
-		return fmt.Sprintf("검색 결과 없음: %q", p.Query), nil
+	scope := "이름"
+	if p.Content {
+		scope = "이름+내용"
 	}
-	return fmt.Sprintf("## 🔍 파일 검색: %s\n\n%s", p.Query, filestore.FormatEntries(entries)), nil
+	if len(entries) == 0 {
+		return fmt.Sprintf("검색 결과 없음 (%s): %q", scope, p.Query), nil
+	}
+	return fmt.Sprintf("## 🔍 파일 검색 (%s): %s\n\n%s", scope, p.Query, filestore.FormatEntries(entries)), nil
 }
 
 // --- download: resolve to an absolute path for send_file (no temp copy — the
