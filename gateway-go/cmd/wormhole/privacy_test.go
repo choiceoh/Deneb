@@ -12,9 +12,13 @@ func TestIsLocalURL(t *testing.T) {
 	local := []string{
 		"http://127.0.0.1:8000/v1", "http://localhost:8000", "http://10.0.0.5:8000",
 		"http://192.168.1.10/v1", "http://172.16.3.4/v1", "http://[::1]:8000/v1",
+		"http://100.105.145.6:8101/v1", // tailnet (CGNAT 100.64/10) — fleet node srv1
+		"http://100.127.255.255/v1",    // top of the CGNAT range
 	}
 	cloud := []string{
 		"https://openrouter.ai/api/v1", "https://api.anthropic.com", "http://8.8.8.8/v1",
+		"http://100.0.0.1/v1",  // 100.x but below CGNAT (100.64/10) → public
+		"http://100.63.0.1/v1", // just under the CGNAT floor → public
 	}
 	for _, u := range local {
 		if !isLocalURL(u) {
