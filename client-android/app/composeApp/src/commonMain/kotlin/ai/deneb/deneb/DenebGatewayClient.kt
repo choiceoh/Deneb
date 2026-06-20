@@ -13,6 +13,7 @@ import ai.deneb.data.SmsDraftStore
 import ai.deneb.data.UiSubmission
 import ai.deneb.deneb.generated.SkillRow
 import ai.deneb.httpClient
+import ai.deneb.sensing.readWorkUsageDigest
 import ai.deneb.sms.SmsSendResult
 import ai.deneb.sms.SmsSender
 import ai.deneb.ui.chat.History
@@ -64,6 +65,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.put
 import kotlin.concurrent.Volatile
+import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
@@ -296,6 +298,13 @@ class DenebGatewayClient(
     // resume funnels through syncNativeState(); without this gate each one would re-fetch
     // calendar + mail. Written/read only on the sync coroutine (serialized), so no lock.
     private var lastHomeWarm: TimeSource.Monotonic.ValueTimeMark? = null
+
+    // Throttle for the app-usage digest forward (sensing, "read broad, surface narrow").
+    // syncNativeState fires often, but a usage digest only goes to the gateway every
+    // USAGE_FORWARD_INTERVAL — per-sync forwarding would spend a judgment turn on noise.
+    // Set even when the read returns null (no permission / no signal) so we don't probe
+    // UsageStats on every sync. Serialized on the sync coroutine, so no lock.
+    private var lastUsageForward: TimeSource.Monotonic.ValueTimeMark? = null
 
     // Restored to the last-open session of the persisted workspace (업무 ↔ 챗봇),
     // so a restart reopens the space the user left, not always client:main.
@@ -1045,6 +1054,7 @@ class DenebGatewayClient(
         // then rendered a days-old glance on the next cold open. Throttled so bursty SSE
         // frames don't storm; each refresh owner-fingerprints + persists its own cache.
         warmHomeCachesThrottled()
+        maybeForwardUsageDigest()
         return true
     }
 
@@ -1056,6 +1066,19 @@ class DenebGatewayClient(
         lastHomeWarm = TimeSource.Monotonic.markNow()
         refreshCalendar()
         refreshMail()
+    }
+
+    // Sensing: forward an on-device app-usage digest to the gateway, throttled to
+    // USAGE_FORWARD_INTERVAL so it costs a judgment turn only a few times a day (the
+    // gateway's "usage" guidance defaults to silence — only a genuine work signal
+    // surfaces). readWorkUsageDigest is a no-op (null) off Android or without Usage
+    // access; we still arm the throttle so we don't probe on every sync. Per-app
+    // switches are never sent — only this windowed, coarse digest.
+    private suspend fun maybeForwardUsageDigest() {
+        lastUsageForward?.let { if (it.elapsedNow() < USAGE_FORWARD_INTERVAL) return }
+        lastUsageForward = TimeSource.Monotonic.markNow()
+        val digest = readWorkUsageDigest() ?: return
+        ingestEvent("usage", "앱 사용 리듬", digest)
     }
 
     suspend fun refreshWorkFeed(sinceMs: Long = 0L, beforeMs: Long = 0L, merge: Boolean = false): Boolean {
@@ -1979,5 +2002,11 @@ class DenebGatewayClient(
         // the home trio on every proactive event. User-driven refreshes (screen entry,
         // pull-to-refresh) are independent and always immediate.
         val HOME_WARM_INTERVAL = 10.minutes
+
+        // Minimum gap between app-usage-digest forwards (see maybeForwardUsageDigest).
+        // A digest summarizes a multi-hour window, so forwarding more often would just
+        // spend judgment turns re-reporting the same rhythm; ~6h keeps the gateway's
+        // ambient work-context fresh without noise.
+        val USAGE_FORWARD_INTERVAL = 6.hours
     }
 }
