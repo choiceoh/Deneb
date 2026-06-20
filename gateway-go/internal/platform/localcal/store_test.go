@@ -271,3 +271,39 @@ func TestIsLocalID(t *testing.T) {
 		t.Error("google id should not be local")
 	}
 }
+
+// The change observer fires once per successful mutation with the event's ID, so
+// the server can mirror it onto native-sync. A failed mutation (not-found) must
+// not fire it.
+func TestChangeObserverFires(t *testing.T) {
+	s := newTestStore(t)
+	var got []string
+	s.SetChangeObserver(func(id string) { got = append(got, id) })
+
+	start := time.Date(2026, 6, 10, 14, 0, 0, 0, time.UTC)
+	ev, err := s.Create(CreateInput{Summary: "회의", Start: start})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if _, err := s.Update(ev.ID, CreateInput{Summary: "회의 (변경)", Start: start}); err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	if err := s.Delete(ev.ID); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+	// A missing-target mutation must NOT notify.
+	_ = s.Delete("local:nope")
+	if _, err := s.Update("local:nope", CreateInput{Summary: "x", Start: start}); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("Update missing = %v, want ErrNotFound", err)
+	}
+
+	want := []string{ev.ID, ev.ID, ev.ID}
+	if len(got) != len(want) {
+		t.Fatalf("observer fired %d times (%v), want %d (create/update/delete only)", len(got), got, len(want))
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("fire[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+}

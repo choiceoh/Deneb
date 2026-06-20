@@ -36,6 +36,17 @@ func TranscriptAppended(sessionKey, role, preview string, timestampMs int64) App
 	}
 }
 
+// CalendarChanged signals that a locally-stored calendar event was created,
+// edited, or deleted server-side (agent tool, mail-proposal accept, cron, or the
+// client's own RPC). The client refetches the calendar on this event, so it
+// carries no per-field payload — only the event ID for traceability.
+func CalendarChanged(eventID string) AppendInput {
+	return AppendInput{
+		Type:     TypeCalendarChanged,
+		EntityID: eventID,
+	}
+}
+
 func WorkFeedCreated(item workfeed.Item) AppendInput {
 	return workFeedItem(TypeWorkFeedCreated, item)
 }

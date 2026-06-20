@@ -125,6 +125,20 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 	s.workFeedStore = workfeed.NewStore(filepath.Join(denebDir, "workfeed.jsonl"))
 	nativeWorkFeed := s.nativeWorkFeedStore()
 
+	// Mirror local-calendar mutations onto the native-sync stream so the client
+	// refetches its calendar promptly instead of waiting out its background warm
+	// throttle. localcal.Store is the single choke point every mutation path funnels
+	// through (the client's RPC, the agent calendar tool, mail-proposal accept,
+	// cron), so one observer on the process-wide store covers them all. Set-once,
+	// nil-tolerant: a store-load failure just leaves the client on its warm cadence.
+	if calStore, err := localcal.Default(); err == nil && calStore != nil {
+		calStore.SetChangeObserver(func(eventID string) {
+			if _, err := s.nativeSyncStore.Append(nativesync.CalendarChanged(eventID)); err != nil {
+				s.logger.Error("native sync: calendar event append failed", "eventID", eventID, "error", err)
+			}
+		})
+	}
+
 	// FCM push fallback (proactive delivery when the app is fully closed / Doze
 	// and no live SSE client is connected). The device-token store is always
 	// created so registration RPCs work and tokens accumulate; the sender is

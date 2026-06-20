@@ -973,6 +973,11 @@ class DenebGatewayClient(
         val reloadSessions = linkedSetOf<String>()
         var pulled = false
         var eventCount = 0
+        // A server-side local-calendar mutation (agent tool, mail-proposal accept,
+        // cron, or another client) rides the sync stream as a calendar.changed event.
+        // It carries no payload — the client just refetches — so we collect it as a
+        // flag here and force the post-gate warm to refresh, bypassing the throttle.
+        var calendarChanged = false
         nativeSyncGate.withLock {
             var cursor = nativeSyncCursor
             var keepGoing = true
@@ -991,7 +996,10 @@ class DenebGatewayClient(
                 if (epoch != credEpoch) return false
                 pulled = true
                 eventCount += payload.events.size
-                payload.events.forEach { applyNativeSyncEvent(it, reloadSessions) }
+                payload.events.forEach { ev ->
+                    applyNativeSyncEvent(ev, reloadSessions)
+                    if (ev.type == "calendar.changed") calendarChanged = true
+                }
                 val nextCursor = payload.cursor.coerceAtLeast(cursor)
                 if (nextCursor > nativeSyncCursor) {
                     nativeSyncCursor = nextCursor
@@ -1026,6 +1034,10 @@ class DenebGatewayClient(
         if (eventCount == 0 && _denebWorkFeed.value.isEmpty()) {
             refreshWorkFeed()
         }
+        // A calendar.changed event arrived: clear the throttle so the warm below refreshes
+        // now rather than waiting out HOME_WARM_INTERVAL — the home calendar glance should
+        // reflect a just-created/edited event immediately.
+        if (calendarChanged) lastHomeWarm = null
         // Reaching here means the gateway answered the pull, so it's reachable: warm the
         // rest of the home so the offline shell stays RECENT, not just last-visited. The
         // feed is already current (incremental sync events + the cold-prime above), but
