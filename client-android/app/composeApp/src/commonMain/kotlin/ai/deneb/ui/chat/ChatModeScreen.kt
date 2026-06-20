@@ -5,8 +5,6 @@
 
 package ai.deneb.ui.chat
 
-import ai.deneb.Platform
-import ai.deneb.currentPlatform
 import ai.deneb.deneb.DenebLoading
 import ai.deneb.getBackgroundDispatcher
 import ai.deneb.onDragAndDropEventDropped
@@ -268,44 +266,29 @@ internal fun ChatModeScreen(
     val swipeMaxTravelPx = with(LocalDensity.current) { 110.dp.toPx() }
 
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+        // Vestigial outer drawer: the desktop product had a RIGHT session drawer here
+        // (opened by a toolbar button). The native client is mobile-only now, so this is
+        // inert — empty, gestures off, never opened. Kept as the layout wrapper so the
+        // screen body below doesn't have to re-indent; sessions live in the LEFT drawer.
         ModalNavigationDrawer(
             drawerState = sessionDrawerState,
-            // Desktop-only: the RIGHT session drawer (opened by the session button). On
-            // phone the session drawer is the LEFT one (below, hamburger + left swipe),
-            // so disable this right drawer's edge gestures there.
-            gesturesEnabled = currentPlatform is Platform.Desktop,
-            drawerContent = {
-                CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-                    DenebSessionDrawerSheet(
-                        conversations = filteredConversations,
-                        currentConversationId = uiState.currentConversationId,
-                        pendingConversationDeletion = uiState.pendingConversationDeletion,
-                        actions = uiState.actions,
-                        onClose = { drawerScope.launch { sessionDrawerState.close() } },
-                    )
-                }
-            },
+            gesturesEnabled = false,
+            drawerContent = {},
         ) {
             CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
                 ModalNavigationDrawer(
                     drawerState = drawerState,
-                    // Desktop uses the persistent DenebSidebar (App.kt) instead of this modal drawer;
-                    // empty content + gestures off makes the left drawer inert there. Mobile unchanged.
-                    gesturesEnabled = currentPlatform !is Platform.Desktop,
+                    // The LEFT drawer is the session history (GPT/Claude-style), opened by
+                    // the hamburger / left-edge swipe. Sections live on the bottom bar, so
+                    // this drawer is sessions only.
                     drawerContent = {
-                        // Phone: the LEFT drawer is the session history (GPT/Claude-style),
-                        // opened by the hamburger / left-edge swipe — sections moved to the
-                        // bottom bar, so the old left nav menu is gone. Desktop uses the
-                        // persistent DenebSidebar + the right session drawer, so this is empty.
-                        if (currentPlatform !is Platform.Desktop) {
-                            DenebSessionDrawerSheet(
-                                conversations = filteredConversations,
-                                currentConversationId = uiState.currentConversationId,
-                                pendingConversationDeletion = uiState.pendingConversationDeletion,
-                                actions = uiState.actions,
-                                onClose = { drawerScope.launch { drawerState.close() } },
-                            )
-                        }
+                        DenebSessionDrawerSheet(
+                            conversations = filteredConversations,
+                            currentConversationId = uiState.currentConversationId,
+                            pendingConversationDeletion = uiState.pendingConversationDeletion,
+                            actions = uiState.actions,
+                            onClose = { drawerScope.launch { drawerState.close() } },
+                        )
                     },
                 ) {
                     Box(
@@ -867,20 +850,12 @@ internal fun ChatModeScreen(
                                 actions = uiState.actions,
                                 isChatHistoryEmpty = uiState.history.isEmpty(),
                                 recallEnabled = uiState.recallEnabled,
-                                // Desktop has the persistent sidebar, so no hamburger (null → DrawerButton hides).
-                                onOpenDrawer = if (currentPlatform is Platform.Desktop) {
-                                    null
-                                } else {
-                                    { drawerScope.launch { drawerState.open() } }
-                                },
+                                // The hamburger opens the session history (left drawer).
+                                onOpenDrawer = { drawerScope.launch { drawerState.open() } },
                                 navigationTabBar = navigationTabBar,
-                                // Desktop opens sessions via this button (right drawer); on
-                                // phone the hamburger opens sessions (left drawer), so hide it.
-                                onOpenSessionDrawer = if (currentPlatform is Platform.Desktop) {
-                                    { drawerScope.launch { sessionDrawerState.open() } }
-                                } else {
-                                    null
-                                },
+                                // The desktop session button (right drawer) is gone — the
+                                // hamburger above is the only way into sessions now.
+                                onOpenSessionDrawer = null,
                             )
 
                             HeartbeatBanner(

@@ -1,7 +1,5 @@
 package ai.deneb.deneb
 
-import ai.deneb.Platform
-import ai.deneb.currentPlatform
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebSectionLabel
 import ai.deneb.ui.DenebType
@@ -222,8 +220,7 @@ fun DenebCalendarScreen(
             .sortedWith(compareBy({ it.done }, { it.due }))
     }
 
-    // Top-level section: on desktop the sidebar is the navigation, so no back arrow.
-    DenebScreenScaffold(title = "일정", onBack = onBack, tabBar = navigationTabBar, showBack = currentPlatform !is Platform.Desktop) {
+    DenebScreenScaffold(title = "일정", onBack = onBack, tabBar = navigationTabBar) {
         // Controls + weekday header stay pinned; the month grid pages horizontally,
         // and only the selected day's event list scrolls below it. The grid and the
         // list used to share one verticalScroll, so on a packed day the long list

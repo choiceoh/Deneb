@@ -1,7 +1,5 @@
 package ai.deneb.deneb
 
-import ai.deneb.Platform
-import ai.deneb.currentPlatform
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.rememberHaptics
@@ -67,13 +65,10 @@ fun DenebCategoriesScreen(
     }
     LaunchedEffect(Unit) { load() }
 
-    // Desktop: the persistent sidebar is the navigation — a back affordance on a
-    // top-level section is redundant there (showBack drops it).
     DenebScreenScaffold(
         title = "카테고리",
         onBack = onBack,
         tabBar = navigationTabBar,
-        showBack = currentPlatform !is Platform.Desktop,
     ) {
         Column(
             Modifier

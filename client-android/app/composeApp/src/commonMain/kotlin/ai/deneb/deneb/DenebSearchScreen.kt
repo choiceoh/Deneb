@@ -1,7 +1,5 @@
 package ai.deneb.deneb
 
-import ai.deneb.Platform
-import ai.deneb.currentPlatform
 import ai.deneb.ui.DenebRow
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebType
@@ -69,13 +67,10 @@ fun DenebSearchScreen(
         }
     }
 
-    // Desktop: the persistent sidebar is the navigation — a back affordance on a
-    // top-level section is redundant there (showBack drops it).
     DenebScreenScaffold(
         title = "검색",
         onBack = onBack,
         tabBar = navigationTabBar,
-        showBack = currentPlatform !is Platform.Desktop,
     ) {
         Column(
             // The scaffold's imePadding shrinks this weighted column above the soft

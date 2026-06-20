@@ -27,9 +27,11 @@ authenticated endpoint.
   interactive screen rather than plain text.
 - **Text-first.** The upstream text-to-speech was removed — the client is for reading
   and capturing, not narration.
-- **One codebase, three platforms.** The Kotlin Multiplatform project builds
-  for Android, iOS, and desktop (macOS / Windows MSI). The daily driver is a
-  Samsung Galaxy S26; the UI is Korean-first throughout.
+- **One codebase, two platforms.** The Kotlin Multiplatform project builds for
+  Android and iOS. The daily driver is a Samsung Galaxy S26; the UI is
+  Korean-first throughout. (Desktop is a separate app, Andromeda; the KMP project
+  keeps a JVM build target only as a headless verification harness, not a shipped
+  product.)
 
 <Info>
   The native client is a standalone APK that authenticates with a client token.

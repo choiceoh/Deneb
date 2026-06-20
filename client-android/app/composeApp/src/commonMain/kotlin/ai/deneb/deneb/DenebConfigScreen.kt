@@ -1,8 +1,6 @@
 package ai.deneb.deneb
 
-import ai.deneb.Platform
 import ai.deneb.PlatformBackHandler
-import ai.deneb.currentPlatform
 import ai.deneb.data.AppSettings
 import ai.deneb.ui.DenebGroup
 import ai.deneb.ui.DenebListRow
@@ -84,13 +82,11 @@ fun DenebConfigScreen(
 
     if (selected == null) {
         // Level 1 — the section list. Keeps the app navigation tab bar (this is a
-        // top-level destination); back exits settings (dropped on Desktop, where
-        // the persistent sidebar is the navigation).
+        // top-level destination); back exits settings.
         DenebScreenScaffold(
             title = "설정",
             onBack = onBack,
             tabBar = navigationTabBar,
-            showBack = currentPlatform !is Platform.Desktop,
         ) {
             ConfigSectionList(onOpen = {
                 // Fleet opens its own full screen (its own pager + scaffold);
