@@ -79,7 +79,7 @@ scripts/dev/native-app.sh stop
 | `NATIVE_APP_XMX` | `1024m` | 앱 JVM 힙 캡 |
 
 - **프로덕션 연결**(실데이터). 메일/일정/세션이 진짜로 보이고, **채팅을 보내면 실제 에이전트 턴이 돈다** — 입력 메커니즘만 볼 땐 Enter/전송 누르지 말 것.
-- ★**phone 프로파일 = 실제 모바일 UI**(2026-06-14 추가): 예전엔 항상 `Platform.Desktop`(phone 은 창 크기만)이라 폰 전용 분기를 못 봤는데, 이제 phone 프로파일이 `-Ddeneb.platform=phone` 으로 `currentPlatform=Mobile.Android` 를 강제하고 창을 프로파일 크기로 연다(`-Ddeneb.window.{width,height}` — Compose 가 1280 기본을 재적용해 좁은 레이아웃을 잘라먹던 클립 제거). 그래서 **하단 탭바·모달 드로어 등 폰 전용 분기를 헤드리스로 검증**할 수 있다. desktop 프로파일은 그대로 `Platform.Desktop`(좌측 레일). 구현: `Platform.jvm.kt` 가 `deneb.platform` 시스템 프로퍼티를, `main.kt` 가 `deneb.window.*` 를 인식(프로덕션 런치는 미설정). **단 실제 Android 인셋·소프트 키보드·엣지 제스처는 여전히 실기기 필요** — 이건 레이아웃·네비게이션 검증이지 OS 런타임 동작 검증이 아니다.
+- ★**phone 프로파일 = 실제 모바일 UI**(2026-06-14 추가): 예전엔 항상 `Platform.Desktop`(phone 은 창 크기만)이라 폰 전용 분기를 못 봤는데, 이제 phone 프로파일이 `-Ddeneb.platform=phone` 으로 `currentPlatform=Mobile.Android` 를 강제하고 창을 프로파일 크기로 연다(`-Ddeneb.window.{width,height}` — Compose 가 1280 기본을 재적용해 좁은 레이아웃을 잘라먹던 클립 제거). 그래서 **하단 탭바·모달 드로어 등 폰 전용 분기를 헤드리스로 검증**할 수 있다. desktop 프로파일은 `currentPlatform=Platform.Desktop` 을 세팅하지만, 데스크탑 제품 UI 가 제거돼(모바일 전용, Andromeda 가 데스크탑 소유) **이제 모바일 UI 를 넓은 1280 창에 렌더**한다 — 즉 phone 프로파일이 실제 검증용이고 desktop 은 잔존 빌드 타깃이다. 구현: `Platform.jvm.kt` 가 `deneb.platform` 시스템 프로퍼티를, `main.kt` 가 `deneb.window.*` 를 인식(프로덕션 런치는 미설정). **단 실제 Android 인셋·소프트 키보드·엣지 제스처는 여전히 실기기 필요** — 이건 레이아웃·네비게이션 검증이지 OS 런타임 동작 검증이 아니다.
 
 ## dev 게이트웨이 연결 (수정 빌드를 prod 배포 없이 검증)
 
@@ -133,12 +133,13 @@ sudo apt-get install -y xvfb x11vnc novnc websockify matchbox-window-manager \
 
 ## 배포 전 스모크 (`native-app-smoke.sh`)
 
-`scripts/dev/native-app-smoke.sh` 가 위 하네스를 자동으로 몰아 **핵심 화면을 한 바퀴** 돈다 — 채팅(업무 피드) → 메일 → 일정 → 검색 → 사람 → 카테고리 → 설정 4탭 → 세션 드로어 → **메일 상세**(13개) + **리스트 4종 스크롤 프로브**(work-feed·메일·사람·카테고리). `compileKotlinDesktop`·단위테스트가 못 잡는 **런타임 크래시**(예: 158/#1959 의 LazyColumn 중복키 `IllegalArgumentException` — 실데이터 렌더 때만 터짐)를 APK 게시 전에 차단하는 **수동 게이트**.
+`scripts/dev/native-app-smoke.sh` 가 위 하네스를 **phone 프로파일**로 몰아 **핵심 화면을 한 바퀴** 돈다 — 피드 → 채팅 → 메일 → 달력 → (더보기로) 검색 → 카테고리 → 사람 → 설정(+모델/크론/알림 탭) → 세션 드로어 → **메일 상세**(13개) + **리스트 5종 스크롤 프로브**(피드·메일·검색·카테고리·사람). 데스크탑 제품이 은퇴(Andromeda 가 소유)해 클라가 모바일 전용이므로 스모크도 **실제 모바일 UI**(하단 탭바·더보기 메뉴·햄버거 세션 드로어)를 검증한다. `compileKotlinDesktop`·단위테스트가 못 잡는 **런타임 크래시**(예: 158/#1959 의 LazyColumn 중복키 `IllegalArgumentException` — 실데이터 렌더 때만 터짐)를 APK 게시 전에 차단하는 **수동 게이트**.
 
 - **prod 데이터라 픽셀-골든 비교 안 함.** 화면마다 ①그 화면이 렌더되는 동안 앱 로그에 새 예외/크래시 라인(`Exception`/`Caused by:`/`already used`/`*Exception` …)이 없고 ②앱 JVM(`app_jvm.pid`)이 살아있고 ③**그 화면의 앵커 텍스트가 OCR로 실제 보이는지**(`native-app.sh assert` — wrong-screen/blank-render 차단; 크래시 없는 **nav 실패**까지 잡는다)를 검사. 스크린샷은 `shots/smoke-*.png` 로 보관(Read 로 육안 확인).
 - **읽기 전용**: tap + Escape 로만 이동, 전송/입력/액션 버튼 안 누름 → prod 게이트웨이에 안전.
 - **스크롤 프로브**(`scroll_probe`): 리스트 화면은 최상단 1뷰포트만 검사하면 #1959 같은 **below-the-fold 항목**의 렌더 크래시를 놓친다. work-feed·메일·사람·카테고리는 `scroll down` 3회로 하단 항목을 컴포즈시키며 매 스텝 로그·생존을 재검사(스크롤은 content를 옮겨 앵커가 흔들리므로 크래시/생존만, `*-scrolled.png` 로 보관). 리스트 "load more" 는 GET 이라 읽기 전용 원칙 유지.
-- **네비는 텍스트 주도**(`taptext`): 드로어 항목·설정 탭은 라벨로 탭하고 `wait-for` 로 정착을 기다린 뒤 앵커를 `assert` → 레이아웃이 흔들려도 안 깨진다. 콜드 첫 탭이 애니메이션 중 발사돼 빗나가면 **앵커 미도달 시 1회 재탭**(`retry_nav`)으로 자가치유. 아이콘 전용 컨트롤(햄버거 `25,37`·세션 `388,37`·데이터 의존 메일 행 `200,185`)만 픽셀 탭으로 남긴다.
+- **네비는 하단 탭바 픽셀 + 더보기 라벨 `taptext` 혼합**: 하단 탭(피드/채팅/메일/달력/더보기)은 라벨이 화면 제목과 충돌해(예: "메일"⊂"받은 메일") **고정 픽셀**(`y=858`, x=37/118/200/282/364)로 탭하고, 더보기 메뉴의 섹션 행·설정 알약 탭은 `taptext`(라벨) 후 `wait-for`→`assert` → 레이아웃이 흔들려도 안 깨진다. 콜드 첫 탭이 빗나가면 **앵커 미도달 시 1회 재탭**(`retry_nav`)으로 자가치유. 아이콘 전용/데이터 의존 컨트롤(햄버거 `25,37`·데이터 의존 메일 행 `200,185`)만 픽셀 탭. 폰엔 데스크탑의 우측 세션 버튼이 없다 — 세션은 햄버거 좌측 드로어로 연다.
+- **로드 실패 관용**: 스모크는 **크래시 게이트**라, 앵커가 없어도 화면이 `다시 시도`(prod fetch 실패 시의 graceful degradation)를 깔끔히 렌더했으면 ok 로 본다 — 헤드리스에서 메일·사람·모델 fetch 가 자주 빈손이라 데이터 부재로 게이트를 흔들면 안 된다. 진짜 wrong-screen 은 앵커도 `다시 시도`도 없어 여전히 실패.
 - **앵커 없는 화면**: 크론·토픽문서·알림은 고유 OCR 앵커가 없어(특히 알림의 "…알림 캡처를 지원하지 않습니다"는 `캡처를→BMS`로 오독, 유일 가독어 "알림"은 게이트웨이 탭에도 존재) **크래시/생존만** 검사. 앵커 후보는 반드시 라이브 `assert`로 가독성·고유성을 먼저 확인하고 추가.
 - alive 판정은 `status`(매번 윈도우 재탐색이라 tap 직후 flaky) 말고 `app_jvm.pid` `kill -0`.
 - **게시 게이트(자동 강제)**: `publish-apk.sh` 가 빌드 전에 이 스모크를 **자동 실행**한다 — 크래시/wrong-screen 감지 시 publish 중단(`smoke-*.png` 보고 수정), 하네스 기동 불가 시 warn+continue(인프라 갭은 코드 결함 아님), `DENEB_SKIP_SMOKE=1` 로 우회. 게이트와 무관히 수동 단독 실행도 가능(`scripts/dev/native-app-smoke.sh`). 158/#1959 가 게시된 건 이 게이트가 **문서에만 있고 강제되지 않아서**였다.
