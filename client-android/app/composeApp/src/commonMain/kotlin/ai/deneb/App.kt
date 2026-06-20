@@ -814,7 +814,10 @@ private fun AppContent(
                     if (showBar) {
                         DenebBottomBar(
                             currentRoute = route,
-                            onNavigate = { dest -> navigateToDenebSection(navController, dest) },
+                            // 더보기 always lands on the hub root — don't restore the last
+                            // section drilled into it (검색·할일·…), so pressing 더보기 from a
+                            // detail returns to 더보기, not back onto the detail.
+                            onNavigate = { dest -> navigateToDenebSection(navController, dest, restoreState = dest != DenebMore) },
                             feedUnread = feedUnread,
                         )
                     }

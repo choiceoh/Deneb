@@ -37,11 +37,16 @@ val denebSectionDestinations: List<Any> = listOf(
  * Switch to a top-level section without stacking destinations: state of the current
  * section is saved, the target's is restored, and repeated switches don't grow the back
  * stack. Shared by the bottom bar and the desktop harness keyboard shortcuts (Cmd/Ctrl+N).
+ *
+ * [restoreState] is true by default (each tab remembers where you were). Pass false for a
+ * tab that should always land on its ROOT — the 더보기 hub does this so that pressing 더보기
+ * from a section drilled into it (검색·할일·…) returns to the hub instead of dumping you
+ * back on the last section.
  */
-fun navigateToDenebSection(navController: NavHostController, dest: Any) {
+fun navigateToDenebSection(navController: NavHostController, dest: Any, restoreState: Boolean = true) {
     navController.navigate(dest) {
         popUpTo(navController.graph.startDestinationId) { saveState = true }
         launchSingleTop = true
-        restoreState = true
+        this.restoreState = restoreState
     }
 }
