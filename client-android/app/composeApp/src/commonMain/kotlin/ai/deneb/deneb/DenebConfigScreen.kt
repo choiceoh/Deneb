@@ -1,6 +1,8 @@
 package ai.deneb.deneb
 
+import ai.deneb.LauncherMode
 import ai.deneb.PlatformBackHandler
+import ai.deneb.createLauncherMode
 import ai.deneb.data.AppSettings
 import ai.deneb.ui.DenebGroup
 import ai.deneb.ui.DenebListRow
@@ -18,6 +20,7 @@ import androidx.compose.material.icons.outlined.Article
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.Dns
 import androidx.compose.material.icons.outlined.Extension
+import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Hub
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Memory
@@ -30,6 +33,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -79,6 +83,9 @@ fun DenebConfigScreen(
     // detail survives rotation / process death like any pushed screen.
     var selectedOrdinal by rememberSaveable { mutableStateOf(-1) }
     val selected = ConfigTab.entries.getOrNull(selectedOrdinal)
+    // Home-launcher mode is foss-Android-only; on every other target the section is
+    // hidden (the alias doesn't exist, so there's nothing to toggle).
+    val launcherMode = remember { createLauncherMode() }
 
     if (selected == null) {
         // Level 1 — the section list. Keeps the app navigation tab bar (this is a
@@ -88,11 +95,14 @@ fun DenebConfigScreen(
             onBack = onBack,
             tabBar = navigationTabBar,
         ) {
-            ConfigSectionList(onOpen = {
-                // Fleet opens its own full screen (its own pager + scaffold);
-                // every other section pushes into the in-place detail below.
-                if (it == ConfigTab.FLEET) onOpenFleet() else selectedOrdinal = it.ordinal
-            })
+            ConfigSectionList(
+                launcherSupported = launcherMode.supported,
+                onOpen = {
+                    // Fleet opens its own full screen (its own pager + scaffold);
+                    // every other section pushes into the in-place detail below.
+                    if (it == ConfigTab.FLEET) onOpenFleet() else selectedOrdinal = it.ordinal
+                },
+            )
         }
         return
     }
@@ -107,6 +117,8 @@ fun DenebConfigScreen(
     ) {
         when (selected) {
             ConfigTab.GATEWAY -> GatewayTab(appSettings, onBack, denebClient)
+
+            ConfigTab.LAUNCHER -> LauncherTab(launcherMode)
 
             ConfigTab.APPEARANCE -> AppearanceTab(appSettings)
 
@@ -138,6 +150,7 @@ fun DenebConfigScreen(
  *  a [DenebGroup]. */
 private val configGroups: List<Pair<String, List<ConfigTab>>> = listOf(
     "시스템" to listOf(ConfigTab.GATEWAY, ConfigTab.APPEARANCE, ConfigTab.MODEL),
+    "기기" to listOf(ConfigTab.LAUNCHER),
     "자동화 · 관찰" to listOf(ConfigTab.SKILLS, ConfigTab.SELF_IMPROVEMENT_CODING, ConfigTab.CRON, ConfigTab.PROMPTS, ConfigTab.OBSERVE),
     "라우팅 · 인프라" to listOf(ConfigTab.WORMHOLE, ConfigTab.FLEET),
     "정보" to listOf(ConfigTab.VERSION),
@@ -147,7 +160,7 @@ private val configGroups: List<Pair<String, List<ConfigTab>>> = listOf(
  *  [DenebListRow]): each [ConfigTab] is a row with its icon, label, and one-line
  *  summary. Tapping pushes into that section's detail. */
 @Composable
-private fun ConfigSectionList(onOpen: (ConfigTab) -> Unit) {
+private fun ConfigSectionList(launcherSupported: Boolean, onOpen: (ConfigTab) -> Unit) {
     Column(
         Modifier
             .fillMaxSize()
@@ -155,14 +168,18 @@ private fun ConfigSectionList(onOpen: (ConfigTab) -> Unit) {
             .padding(top = 4.dp, bottom = 24.dp),
     ) {
         configGroups.forEach { (label, tabs) ->
+            // The 런처 section only exists where Deneb can be a home app (foss Android);
+            // drop the row — and any group it empties — everywhere else.
+            val rows = tabs.filter { it != ConfigTab.LAUNCHER || launcherSupported }
+            if (rows.isEmpty()) return@forEach
             DenebGroup(label = label) {
-                tabs.forEachIndexed { i, tab ->
+                rows.forEachIndexed { i, tab ->
                     DenebListRow(
                         title = tab.label,
                         onClick = { onOpen(tab) },
                         icon = tab.icon,
                         subtitle = tab.desc,
-                        divider = i < tabs.lastIndex,
+                        divider = i < rows.lastIndex,
                     )
                 }
             }
@@ -201,4 +218,5 @@ private enum class ConfigTab(val label: String, val desc: String, val icon: Imag
     VERSION("버전", "현재 빌드, 패치노트, 업데이트", Icons.Outlined.Info),
     PROMPTS("프롬프트 코너", "자동 분석·도구 프롬프트, 토픽 배경 편집", Icons.Outlined.Article),
     SELF_IMPROVEMENT_CODING("자가개선 코딩", "코딩 수정 후보, 적용 대기열", Icons.Outlined.Code),
+    LAUNCHER("런처", "홈 화면으로 사용", Icons.Outlined.Home),
 }

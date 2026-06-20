@@ -68,6 +68,29 @@
                 <action android:name="android.service.notification.NotificationListenerService" />
             </intent-filter>
         </service>
+
+        <!--
+          Home-launcher mode (FOSS-only, opt-in). This alias makes Deneb eligible as a
+          HOME app, routing the Home button to MainActivity. android:enabled="false"
+          keeps it DORMANT by default — the launcher capability turns on only when the
+          user flips the in-app 런처 모드 toggle (PackageManager.setComponentEnabledSetting,
+          see LauncherMode), which then lets them pick Deneb as the default home in
+          system settings. Disabling the toggle removes Deneb from the home-app
+          candidates (the OS falls back to the previous launcher), so it is always
+          reversible. targetActivity resolves to the main activity after manifest merge.
+        -->
+        <activity-alias
+            android:name="ai.deneb.HomeAlias"
+            android:targetActivity="ai.deneb.MainActivity"
+            android:enabled="false"
+            android:exported="true"
+            android:label="@string/app_name">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.HOME" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity-alias>
     </application>
 
 </manifest>
