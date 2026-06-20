@@ -11,6 +11,7 @@ import ai.deneb.deneb.CalendarEventContent
 import ai.deneb.deneb.CalendarEventDetail
 import ai.deneb.deneb.CalendarMonthGrid
 import ai.deneb.deneb.CronEditContent
+import ai.deneb.deneb.DashboardLanesContent
 import ai.deneb.deneb.FilesTextViewerContent
 import ai.deneb.deneb.IntervalUnit
 import ai.deneb.deneb.MailMessage
@@ -29,6 +30,8 @@ import ai.deneb.deneb.TodoAddContent
 import ai.deneb.deneb.TodoListContent
 import ai.deneb.deneb.buildMonthGrid
 import ai.deneb.deneb.eventDays
+import ai.deneb.deneb.generated.DashboardItem
+import ai.deneb.deneb.generated.LaneOut
 import ai.deneb.deneb.generated.SelfCorrectionCandidate
 import ai.deneb.deneb.generated.SelfImprovementCodingListResponse
 import ai.deneb.deneb.generated.SelfImprovementCodingStatusCount
@@ -182,6 +185,8 @@ fun main() {
     renderChart("chart_light.png", LightColorScheme)
     renderWorkFeed("workfeed_dark.png", DarkColorScheme)
     renderWorkFeed("workfeed_light.png", LightColorScheme)
+    renderDashboard("dashboard_dark.png", DarkColorScheme)
+    renderDashboard("dashboard_light.png", LightColorScheme)
     renderWidget("widget_loaded.png", "6/3 14:00 · 기획조정실 주간 회의 3분기 점검", "김민준 부장 · 회의 자료 검토 부탁드립니다", "미읽음 3")
     renderWidget("widget_loading.png", "불러오는 중…", "", "")
     renderSkeleton("skeleton_dark.png", DarkColorScheme)
@@ -1029,6 +1034,65 @@ private fun renderWorkFeed(name: String, scheme: ColorScheme) {
                         onClose = {},
                     )
                 }
+            }
+        }
+    }
+    val image = scene.render()
+    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
+    File("/tmp/deneb-render").mkdirs()
+    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
+    scene.close()
+}
+
+// The part-grouped work dashboard (파트별 업무 현황): the five fixed 파트 lanes (one
+// empty to exercise the "지금 할 일이 없습니다" line) plus the muted 미분류 triage lane.
+// Mixed scheduled times (오늘/내일/dated) exercise dashboardTimeLabel; lane 2 is empty.
+private val sampleDashboard = listOf(
+    LaneOut(
+        key = "team1",
+        name = "기획조정실 1팀 (인허가)",
+        items = listOf(
+            DashboardItem("RE100 고객사 인허가 서류 제출", "본사 3층 · 김민준 부장", "calendar", "calendar", "e1", System.currentTimeMillis() + 2 * 3_600_000L),
+            DashboardItem("남도에코 모듈 입고 점검", "현장 — 1,950매 검수", "calendar", "calendar", "e2", System.currentTimeMillis() + 26 * 3_600_000L),
+        ),
+    ),
+    LaneOut(key = "team2", name = "기획조정실 2팀 (루프탑)", items = emptyList()),
+    LaneOut(
+        key = "team3",
+        name = "기획조정실 3팀 (모듈)",
+        items = listOf(
+            DashboardItem("📧 JOCA Cable 견적 회신 요청", "발신 fred@jocacable.com — 회신 기한 6/13(금)", "mail_report", "workfeed", "wf1", System.currentTimeMillis() - 40 * 60_000L),
+        ),
+    ),
+    LaneOut(
+        key = "namdo",
+        name = "남도에코에너지",
+        items = listOf(
+            DashboardItem("준공정산서 검토 — 남도에코", "₩19,500,000 · 결제 30일", "capture_image", "workfeed", "wf2", System.currentTimeMillis() + 3 * 3_600_000L),
+        ),
+    ),
+    LaneOut(
+        key = "personal",
+        name = "개인 / 기타",
+        items = listOf(
+            DashboardItem("법인카드 정산 (5월분)", "마감 임박", "proactive", "workfeed", "wf3", 0L),
+        ),
+    ),
+    LaneOut(
+        key = "unsorted",
+        name = "미분류",
+        items = listOf(
+            DashboardItem("무림 울산공장 풍력 검토안", "박종원 부장 — 담당 파트 미지정", "proactive", "workfeed", "wf4", System.currentTimeMillis() + 50 * 3_600_000L),
+        ),
+    ),
+)
+
+private fun renderDashboard(name: String, scheme: ColorScheme) {
+    // Tall enough to show all six lanes including the muted 미분류 triage bucket.
+    val scene = ImageComposeScene(width = 824, height = 1900, density = Density(2f)) {
+        MaterialTheme(colorScheme = scheme) {
+            DenebScreenScaffold(title = "파트별 업무 현황", onBack = {}) {
+                DashboardLanesContent(sampleDashboard)
             }
         }
     }

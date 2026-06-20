@@ -88,6 +88,7 @@ val denebWorkDataRoutes: Set<String> = setOf(
     "deneb_search",
     "deneb_categories",
     "deneb_fleet",
+    "deneb_dashboard",
 )
 
 // Top-level routes that show the bottom bar: the 4 tabs + the 더보기 screen and its
@@ -97,6 +98,7 @@ val denebWorkDataRoutes: Set<String> = setOf(
 val denebBottomBarRoutes: Set<String> = setOf(
     "deneb_feed", "home", "deneb_mail", "deneb_calendar", "deneb_config",
     "deneb_more", "deneb_search", "deneb_todo", "deneb_diary", "deneb_categories",
+    "deneb_dashboard",
 )
 
 // Routes where 더보기 is the active tab (the More screen itself, or a section opened
@@ -108,6 +110,7 @@ val denebMoreRoutes: Set<String> = setOf(
     "deneb_todo",
     "deneb_diary",
     "deneb_categories",
+    "deneb_dashboard",
 )
 
 // Content height of the bar (excludes the system navigation-bar inset, which is added

@@ -58,6 +58,23 @@ data class CalendarProposalOut(
 
 @Immutable
 @Serializable
+data class DashboardItem(
+    val title: String = "",
+    val subtitle: String = "",
+    val source: String = "",
+    val refType: String = "",
+    val refId: String = "",
+    val whenMs: Long = 0L,
+)
+
+@Immutable
+@Serializable
+data class DashboardOut(
+    val lanes: List<LaneOut> = emptyList(),
+)
+
+@Immutable
+@Serializable
 data class FilesEntryOut(
     val tag: String = "",
     val name: String = "",
@@ -85,6 +102,14 @@ data class FilesShareOut(
 @Serializable
 data class FilesUploadOut(
     val entry: FilesEntryOut = FilesEntryOut(),
+)
+
+@Immutable
+@Serializable
+data class LaneOut(
+    val key: String = "",
+    val name: String = "",
+    val items: List<DashboardItem> = emptyList(),
 )
 
 @Immutable

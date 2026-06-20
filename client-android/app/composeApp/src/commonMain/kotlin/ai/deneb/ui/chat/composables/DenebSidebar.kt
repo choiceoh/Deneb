@@ -3,6 +3,7 @@ package ai.deneb.ui.chat.composables
 import ai.deneb.DenebCalendar
 import ai.deneb.DenebCategories
 import ai.deneb.DenebConfig
+import ai.deneb.DenebDashboard
 import ai.deneb.DenebFeed
 import ai.deneb.DenebFleet
 import ai.deneb.DenebMail
@@ -46,6 +47,7 @@ import androidx.navigation.NavHostController
 import androidx.compose.material.icons.automirrored.filled.Chat as ChatFilled
 import androidx.compose.material.icons.automirrored.outlined.Chat as ChatOutlined
 import androidx.compose.material.icons.filled.CalendarMonth as CalFilled
+import androidx.compose.material.icons.filled.Dashboard as DashboardFilled
 import androidx.compose.material.icons.filled.Dns as DnsFilled
 import androidx.compose.material.icons.filled.Email as EmailFilled
 import androidx.compose.material.icons.filled.GridView as GridFilled
@@ -53,6 +55,7 @@ import androidx.compose.material.icons.filled.Notifications as NotificationsFill
 import androidx.compose.material.icons.filled.Search as SearchFilled
 import androidx.compose.material.icons.filled.Settings as SettingsFilled
 import androidx.compose.material.icons.outlined.CalendarMonth as CalOutlined
+import androidx.compose.material.icons.outlined.Dashboard as DashboardOutlined
 import androidx.compose.material.icons.outlined.Dns as DnsOutlined
 import androidx.compose.material.icons.outlined.Email as EmailOutlined
 import androidx.compose.material.icons.outlined.GridView as GridOutlined
@@ -89,6 +92,7 @@ private data class SidebarItem(
 // 인물 wiki) is reached through categories' pinned "사람" row.
 private val sidebarItems = listOf(
     SidebarItem("feed", "deneb_feed", DenebFeed, Icons.Outlined.NotificationsOutlined, Icons.Filled.NotificationsFilled, workData = true),
+    SidebarItem("dashboard", "deneb_dashboard", DenebDashboard, Icons.Outlined.DashboardOutlined, Icons.Filled.DashboardFilled, workData = true),
     SidebarItem("chat", "home", Home, Icons.AutoMirrored.Outlined.ChatOutlined, Icons.AutoMirrored.Filled.ChatFilled),
     SidebarItem("mail", "deneb_mail", DenebMail, Icons.Outlined.EmailOutlined, Icons.Filled.EmailFilled, workData = true),
     SidebarItem("calendar", "deneb_calendar", DenebCalendar, Icons.Outlined.CalOutlined, Icons.Filled.CalFilled, workData = true),

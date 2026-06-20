@@ -1,0 +1,22 @@
+{
+  "_comment": "Example part-classification rules for the 파트별 업무 현황 dashboard. Copy this to {stateDir}/classification_rules.json (default ~/.deneb/classification_rules.json) and replace the FAKE names below with the real roster. This file (the .example.json template) ships with fake data ONLY — never commit real person/company names. Lane keys: team1 | team2 | team3 | namdo | personal.",
+  "personToLane": {
+    "홍길동": "team1",
+    "김철수": "team1",
+    "이영희": "team2",
+    "임꺽정": "team3",
+    "최지우": "namdo"
+  },
+  "companyToLane": {
+    "가나에너지": "namdo",
+    "다라전기": "namdo",
+    "마바솔라": "team2",
+    "사아건설": "team1"
+  },
+  "keywordToLane": {
+    "루프탑": "team2",
+    "인허가": "team1",
+    "케이블": "namdo",
+    "발주": "team3"
+  }
+}
