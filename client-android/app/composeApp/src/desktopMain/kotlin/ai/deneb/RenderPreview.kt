@@ -206,14 +206,14 @@ fun main() {
     renderScreen("todo_list_light.png", "todo_list", LightColorScheme, 824, 760)
     renderScreen("todo_add_dark.png", "todo_add", DarkColorScheme, 824, 980)
     renderScreen("todo_add_light.png", "todo_add", LightColorScheme, 824, 980)
-    renderCronEdit("cron_edit_dark.png", DarkColorScheme, cronWeeklyDraft, "Asia/Seoul")
-    renderCronEdit("cron_edit_light.png", LightColorScheme, cronWeeklyDraft, "Asia/Seoul")
-    renderCronEdit("cron_edit_interval.png", DarkColorScheme, cronIntervalDraft, "")
-    renderCronEdit("cron_edit_advanced.png", DarkColorScheme, cronAdvancedDraft, "Asia/Seoul")
-    renderPromptEditor("prompt_editor_dark.png", DarkColorScheme)
-    renderPromptEditor("prompt_editor_light.png", LightColorScheme)
-    renderTopicDocEditor("topic_doc_editor_dark.png", DarkColorScheme)
-    renderTopicDocEditor("topic_doc_editor_light.png", LightColorScheme)
+    renderScreen("cron_edit_dark.png", "cron_edit", DarkColorScheme, 824, 1300)
+    renderScreen("cron_edit_light.png", "cron_edit", LightColorScheme, 824, 1300)
+    renderScreen("cron_edit_interval.png", "cron_edit_interval", DarkColorScheme, 824, 1300)
+    renderScreen("cron_edit_advanced.png", "cron_edit_advanced", DarkColorScheme, 824, 1300)
+    renderScreen("prompt_editor_dark.png", "prompt_editor", DarkColorScheme, 824, 980)
+    renderScreen("prompt_editor_light.png", "prompt_editor", LightColorScheme, 824, 980)
+    renderScreen("topic_doc_editor_dark.png", "topic_doc_editor", DarkColorScheme, 824, 980)
+    renderScreen("topic_doc_editor_light.png", "topic_doc_editor", LightColorScheme, 824, 980)
     renderChart("chart_dark.png", DarkColorScheme)
     renderChart("chart_light.png", LightColorScheme)
     renderWorkFeed("workfeed_dark.png", DarkColorScheme)
@@ -507,80 +507,23 @@ internal val previewScreens: Map<String, @Composable (ColorScheme) -> Unit> = ma
             }
         }
     },
-)
-
-// Render a registry screen to a PNG at [width]x[height]@[density] — the common
-// ImageComposeScene plumbing the per-screen render* functions used to repeat.
-private fun renderScreen(pngName: String, screen: String, scheme: ColorScheme, width: Int, height: Int, density: Float = 2f) {
-    val body = previewScreens[screen] ?: error("unknown preview screen '$screen'")
-    val scene = ImageComposeScene(width = width, height = height, density = Density(density)) { body(scheme) }
-    val image = scene.render()
-    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
-    File("/tmp/deneb-render").mkdirs()
-    File("/tmp/deneb-render/$pngName").writeBytes(data.bytes)
-    scene.close()
-}
-
-// Sample drafts for the cron edit previews — one per schedule mode so the segmented
-// control, weekday chips, interval row, and raw-cron fallback all get exercised.
-private val cronWeeklyDraft = ScheduleDraft(SchedMode.WEEKLY, "08:00", setOf(1, 3, 5), "30", IntervalUnit.MIN, LocalDate.parse("2026-06-13"), "")
-private val cronIntervalDraft = ScheduleDraft(SchedMode.INTERVAL, "09:00", emptySet(), "15", IntervalUnit.MIN, LocalDate.parse("2026-06-13"), "")
-private val cronAdvancedDraft = ScheduleDraft(SchedMode.ADVANCED, "09:00", emptySet(), "30", IntervalUnit.MIN, LocalDate.parse("2026-06-13"), "*/5 8-22 * * 1-6")
-
-// Validates the cron edit form: soft filled fields, the frequency segmented control,
-// and the per-mode inputs (weekday chips / time / interval / raw-cron) under Deneb
-// section labels. Driven per schedule mode via [draft].
-private fun renderCronEdit(name: String, scheme: ColorScheme, draft: ScheduleDraft, tz: String) {
-    val scene = ImageComposeScene(width = 824, height = 1300, density = Density(2f)) {
-        MaterialTheme(colorScheme = scheme) {
-            DenebScreenScaffold(title = "크론 편집", onBack = {}) {
-                Column(Modifier.padding(horizontal = 24.dp)) {
-                    CronEditContent(
-                        name = "주간 업무 보고",
-                        onName = {},
-                        draft = draft,
-                        onDraft = {},
-                        onceDateLabel = "2026년 6월 13일",
-                        onPickOnceDate = {},
-                        tz = tz,
-                        onTz = {},
-                        prompt = "이번 주 진행 상황과 미결 항목을 정리해 보고해 줘.",
-                        onPrompt = {},
-                        model = "",
-                        onModel = {},
-                        error = null,
-                        saving = false,
-                        onSave = {},
-                    )
-                }
-            }
-        }
-    }
-    val image = scene.render()
-    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
-    File("/tmp/deneb-render").mkdirs()
-    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
-    scene.close()
-}
-
-// Validates the prompts-corner editor (PromptStyleEditor) in its prompt form: header
-// (back + title + meta), description, monospace body, footer char count, and the
-// prompt-only trailing "복구" (reset-to-default) action beside save.
-private fun renderPromptEditor(name: String, scheme: ColorScheme) {
-    val body = """
-        다음 메일을 한국어로 심층 분석하라.
-        - 발신자/거래처 맥락을 위키에서 결합
-        - 마감·금액·의사결정 신호를 추출
-        - 중요도(긴급/주의/일반)로 분류
-    """.trimIndent()
-    val scene = ImageComposeScene(width = 824, height = 980, density = Density(2f)) {
+    "cron_edit" to { scheme -> cronEditBody(scheme, cronWeeklyDraft, "Asia/Seoul") },
+    "cron_edit_interval" to { scheme -> cronEditBody(scheme, cronIntervalDraft, "") },
+    "cron_edit_advanced" to { scheme -> cronEditBody(scheme, cronAdvancedDraft, "Asia/Seoul") },
+    "prompt_editor" to { scheme ->
+        val draft = """
+            다음 메일을 한국어로 심층 분석하라.
+            - 발신자/거래처 맥락을 위키에서 결합
+            - 마감·금액·의사결정 신호를 추출
+            - 중요도(긴급/주의/일반)로 분류
+        """.trimIndent()
         MaterialTheme(colorScheme = scheme) {
             DenebScreenScaffold(title = "프롬프트 코너", onBack = {}) {
                 PromptStyleEditor(
                     title = "자동 메일 분석",
                     meta = "productivity · 수정됨 · mail-analysis",
                     description = "새 메일 도착 시 자동 분석에 쓰이는 프롬프트입니다.",
-                    draft = body,
+                    draft = draft,
                     onDraft = {},
                     readOnly = false,
                     saving = false,
@@ -599,32 +542,22 @@ private fun renderPromptEditor(name: String, scheme: ColorScheme) {
                 )
             }
         }
-    }
-    val image = scene.render()
-    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
-    File("/tmp/deneb-render").mkdirs()
-    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
-    scene.close()
-}
+    },
+    "topic_doc_editor" to { scheme ->
+        val draft = """
+            # 탑솔라 업무 배경
 
-// Validates the same editor in its topic-background form: the byte-cap meta line and
-// the "즉시 적용" (apply-now) checkbox as the trailing action instead of 복구.
-private fun renderTopicDocEditor(name: String, scheme: ColorScheme) {
-    val body = """
-        # 탑솔라 업무 배경
-
-        - 사업: 태양광 EPC · 모듈 유통 · RE100 고객사
-        - 핵심 거래처: 남도에코에너지, 에코프로, JOCA Cable
-        - 의사결정: 견적 단가·납기는 김민준 부장 확인 후 회신
-    """.trimIndent()
-    val scene = ImageComposeScene(width = 824, height = 980, density = Density(2f)) {
+            - 사업: 태양광 EPC · 모듈 유통 · RE100 고객사
+            - 핵심 거래처: 남도에코에너지, 에코프로, JOCA Cable
+            - 의사결정: 견적 단가·납기는 김민준 부장 확인 후 회신
+        """.trimIndent()
         MaterialTheme(colorScheme = scheme) {
             DenebScreenScaffold(title = "프롬프트 코너", onBack = {}) {
                 PromptStyleEditor(
                     title = "업무.md",
-                    meta = "업무 · ${body.encodeToByteArray().size}/24000B",
+                    meta = "업무 · ${draft.encodeToByteArray().size}/24000B",
                     description = "시스템 프롬프트에 주입되는 이 토픽의 배경 지식입니다. 저장하면 다음 세션부터 반영됩니다.",
-                    draft = body,
+                    draft = draft,
                     onDraft = {},
                     readOnly = false,
                     saving = false,
@@ -642,13 +575,55 @@ private fun renderTopicDocEditor(name: String, scheme: ColorScheme) {
                 )
             }
         }
+    },
+)
+
+// Shared cron-edit body for the three schedule-mode variants (weekly / interval /
+// advanced), each driven by a different [draft]. Used by the previewScreens entries.
+@Composable
+private fun cronEditBody(scheme: ColorScheme, draft: ScheduleDraft, tz: String) {
+    MaterialTheme(colorScheme = scheme) {
+        DenebScreenScaffold(title = "크론 편집", onBack = {}) {
+            Column(Modifier.padding(horizontal = 24.dp)) {
+                CronEditContent(
+                    name = "주간 업무 보고",
+                    onName = {},
+                    draft = draft,
+                    onDraft = {},
+                    onceDateLabel = "2026년 6월 13일",
+                    onPickOnceDate = {},
+                    tz = tz,
+                    onTz = {},
+                    prompt = "이번 주 진행 상황과 미결 항목을 정리해 보고해 줘.",
+                    onPrompt = {},
+                    model = "",
+                    onModel = {},
+                    error = null,
+                    saving = false,
+                    onSave = {},
+                )
+            }
+        }
     }
+}
+
+// Render a registry screen to a PNG at [width]x[height]@[density] — the common
+// ImageComposeScene plumbing the per-screen render* functions used to repeat.
+private fun renderScreen(pngName: String, screen: String, scheme: ColorScheme, width: Int, height: Int, density: Float = 2f) {
+    val body = previewScreens[screen] ?: error("unknown preview screen '$screen'")
+    val scene = ImageComposeScene(width = width, height = height, density = Density(density)) { body(scheme) }
     val image = scene.render()
     val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
     File("/tmp/deneb-render").mkdirs()
-    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
+    File("/tmp/deneb-render/$pngName").writeBytes(data.bytes)
     scene.close()
 }
+
+// Sample drafts for the cron edit previews — one per schedule mode so the segmented
+// control, weekday chips, interval row, and raw-cron fallback all get exercised.
+private val cronWeeklyDraft = ScheduleDraft(SchedMode.WEEKLY, "08:00", setOf(1, 3, 5), "30", IntervalUnit.MIN, LocalDate.parse("2026-06-13"), "")
+private val cronIntervalDraft = ScheduleDraft(SchedMode.INTERVAL, "09:00", emptySet(), "15", IntervalUnit.MIN, LocalDate.parse("2026-06-13"), "")
+private val cronAdvancedDraft = ScheduleDraft(SchedMode.ADVANCED, "09:00", emptySet(), "30", IntervalUnit.MIN, LocalDate.parse("2026-06-13"), "*/5 8-22 * * 1-6")
 
 private fun renderBottomBar(name: String, scheme: ColorScheme, route: String, moreActive: Boolean = false) {
     // Phone width (412dp = 824px @ density 2) so the bar matches the real device.
