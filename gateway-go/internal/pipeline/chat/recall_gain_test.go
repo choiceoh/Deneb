@@ -21,8 +21,11 @@
 //  1. terminology normalization — the query paraphrases away from the raw
 //     diary's words but matches the curated title/summary/tags;
 //  2. stale-belief disambiguation — a fact was revised; raw diary keeps BOTH the
-//     old and new entries with no ordering signal, so it can surface the stale
-//     value as current. The wiki's supersede marker demotes/flags the old page.
+//     old and new entries with no ordering signal (it can even rank the stale one
+//     first), so a reader cannot tell which is current. The wiki ranks the
+//     corrected value first and flags the superseded page with a 대체됨 marker. It
+//     does NOT scrub the raw diary, so the old entry can still surface unmarked —
+//     curation adds a disambiguation signal, it does not rewrite history.
 //
 // Lexical path only (no embedder on CI) — so this measures the wiki's LEXICAL
 // gain (curated metadata as extra match surface) + the supersede guard. The
@@ -32,9 +35,11 @@ package chat
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 )
@@ -133,13 +138,28 @@ func recallGainCorpus() ([]gainFact, []gainQuery) {
 func buildGainStore(t *testing.T, mode string) *wiki.Store {
 	t.Helper()
 	dir := t.TempDir()
-	store, err := wiki.NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
+	wikiDir := filepath.Join(dir, "wiki")
+	diaryDir := filepath.Join(dir, "diary")
+
+	facts, _ := recallGainCorpus()
+	// Seed the diary FILES with distinct per-entry timestamps BEFORE NewStore,
+	// so its rebuildFromDir indexes each as an independent doc. Appending in a
+	// loop via Store.AppendDiary would stamp every entry with the same minute
+	// (time.Now HH:MM), and the diary index merges same-(file,header) entries
+	// into ONE doc — a single blob where a query matching any fact pulls in all
+	// the others, so an unrelated fact could satisfy a query's wantAll and skew
+	// the wiki-vs-diary gain. Distinct timestamps keep each fact independently
+	// retrievable, matching how real diary entries accrue over time.
+	if mode != "wikionly" {
+		seedDiaryFiles(t, diaryDir, facts)
+	}
+
+	store, err := wiki.NewStore(wikiDir, diaryDir)
 	if err != nil {
 		t.Fatalf("NewStore: %v", err)
 	}
 	t.Cleanup(func() { _ = store.Close() })
 
-	facts, _ := recallGainCorpus()
 	if mode != "diaryonly" {
 		for _, f := range facts {
 			if f.wikiPath != "" {
@@ -156,16 +176,37 @@ func buildGainStore(t *testing.T, mode string) *wiki.Store {
 			}
 		}
 	}
-	if mode != "wikionly" {
-		for _, f := range facts {
-			for _, d := range f.diary {
-				if err := store.AppendDiary(d); err != nil {
-					t.Fatalf("AppendDiary: %v", err)
-				}
+	return store
+}
+
+// seedDiaryFiles writes each fact's raw diary line(s) as a distinct dated diary
+// file with its own "## HH:MM" section, so wiki.NewStore's rebuildFromDir indexes
+// them as independent docs (a unique file+header doc ID each — never merged).
+// Earlier facts in the corpus get older dates, so a revised-away fact (acme-old,
+// before its replacement) is genuinely older than the value that supersedes it.
+func seedDiaryFiles(t *testing.T, diaryDir string, facts []gainFact) {
+	t.Helper()
+	if err := os.MkdirAll(diaryDir, 0o755); err != nil {
+		t.Fatalf("diary mkdir: %v", err)
+	}
+	base := time.Now()
+	for i, f := range facts {
+		day := base.AddDate(0, 0, -(len(facts) - i)) // earlier corpus index → older
+		file := filepath.Join(diaryDir, "diary-"+day.Format("2006-01-02")+".md")
+		for j, d := range f.diary {
+			ts := day.Add(time.Duration(j) * time.Minute) // distinct header per line
+			section := fmt.Sprintf("\n## %s\n\n%s\n", ts.Format("15:04"), d)
+			fh, err := os.OpenFile(file, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+			if err != nil {
+				t.Fatalf("diary open: %v", err)
 			}
+			if _, err := fh.WriteString(section); err != nil {
+				_ = fh.Close()
+				t.Fatalf("diary write: %v", err)
+			}
+			_ = fh.Close()
 		}
 	}
-	return store
 }
 
 func recallOnce(store *wiki.Store, question string) string {
@@ -221,11 +262,69 @@ func TestRecallWikiGain(t *testing.T) {
 	}
 }
 
-// TestRecallStaleBeliefGuard isolates the one thing raw retrieval provably cannot
-// do: when a fact is revised, the diary keeps BOTH entries with no ordering
-// signal, so diary-only recall can surface the stale value as current. The wiki
-// supersede marker should prevent that. This is the clearest, non-redundant
-// source of wiki gain (CL-Bench's #1 unsolved failure: discarding stale beliefs).
+const supersedeMarker = "대체됨"
+
+// recallRows splits a <recall-context> dump into per-evidence-row blocks: each
+// "- source=..." line plus its indented continuation. The leading preamble
+// (before the first source row) is its own block and carries no "- source=".
+func recallRows(out string) []string {
+	var rows []string
+	var cur strings.Builder
+	flush := func() {
+		if cur.Len() > 0 {
+			rows = append(rows, cur.String())
+			cur.Reset()
+		}
+	}
+	for _, ln := range strings.Split(out, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(ln), "- source=") {
+			flush()
+		}
+		cur.WriteString(ln)
+		cur.WriteByte('\n')
+	}
+	flush()
+	return rows
+}
+
+// unmarkedStaleRows counts evidence rows that present the stale value WITHOUT a
+// supersede marker on that SAME row. A global !contains(marker) check is fooled
+// when a separate wiki row carries the marker while a diary row still presents
+// the stale value unmarked — so the leak must be judged per row.
+func unmarkedStaleRows(out, stale, marker string) int {
+	n := 0
+	for _, row := range recallRows(out) {
+		if strings.Contains(row, "- source=") && strings.Contains(row, stale) && !strings.Contains(row, marker) {
+			n++
+		}
+	}
+	return n
+}
+
+// markerFlagsStale is true if some evidence row carries BOTH the stale value and
+// a supersede marker — i.e. the marker actually flags the stale value rather than
+// floating on an unrelated row.
+func markerFlagsStale(out, stale, marker string) bool {
+	for _, row := range recallRows(out) {
+		if strings.Contains(row, stale) && strings.Contains(row, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+// TestRecallStaleBeliefGuard measures what curation does for a revised fact
+// (CL-Bench's #1 unsolved failure: discarding stale beliefs). Honest framing,
+// per-row: the raw diary keeps the old observation with NO supersede signal, so
+// diary-only recall presents the stale value with nothing marking it outdated.
+// The wiki ADDS an explicit supersede marker that flags the stale value and
+// surfaces the corrected current one — a disambiguation signal diary-only lacks.
+//
+// What it does NOT claim: that curation scrubs the raw diary. The old diary entry
+// can still surface unmarked in BOTH modes; curation adds a signal to the context,
+// it does not rewrite history. So the guard asserts the wiki flags the stale value
+// and surfaces the new one, and that it never makes the unmarked-row count worse —
+// not that the stale mention disappears.
 func TestRecallStaleBeliefGuard(t *testing.T) {
 	_, queries := recallGainCorpus()
 	var stale gainQuery
@@ -238,23 +337,34 @@ func TestRecallStaleBeliefGuard(t *testing.T) {
 		t.Fatal("no stale-belief query in corpus")
 	}
 
-	// diary-only: the old entry is raw with no supersede signal — measure leak.
 	rawOut := recallOnce(buildGainStore(t, "diaryonly"), stale.question)
-	rawLeaks := strings.Contains(rawOut, stale.staleOld) && !strings.Contains(rawOut, "대체됨")
-
-	// both (wiki present): supersede marker should demote/flag the old value.
 	wikiOut := recallOnce(buildGainStore(t, "both"), stale.question)
-	wikiLeaks := strings.Contains(wikiOut, stale.staleOld) && !strings.Contains(wikiOut, "대체됨")
+
+	rawUnmarked := unmarkedStaleRows(rawOut, stale.staleOld, supersedeMarker)
+	wikiUnmarked := unmarkedStaleRows(wikiOut, stale.staleOld, supersedeMarker)
+	rawSignal := strings.Contains(rawOut, supersedeMarker)
+	wikiMarksOld := markerFlagsStale(wikiOut, stale.staleOld, supersedeMarker)
 	wikiSurfacesNew := strings.Contains(wikiOut, stale.wantAll[0])
 
-	fmt.Printf("RECALL_STALELEAK diaryonly=%v both=%v new_surfaced=%v\n", rawLeaks, wikiLeaks, wikiSurfacesNew)
+	fmt.Printf("RECALL_STALELEAK diary_unmarked=%d wiki_unmarked=%d diary_signal=%v wiki_marks_old=%v new_surfaced=%v\n",
+		rawUnmarked, wikiUnmarked, rawSignal, wikiMarksOld, wikiSurfacesNew)
 	t.Logf("stale-old=%q  diary-only output:\n%s", stale.staleOld, rawOut)
 	t.Logf("both output:\n%s", wikiOut)
 
-	if wikiLeaks {
-		t.Errorf("wiki path leaked the stale value %q as a current fact (supersede guard failed)", stale.staleOld)
+	// Diary-only provably carries no supersede signal — that is its structural gap.
+	if rawSignal {
+		t.Errorf("diary-only unexpectedly carried a %q signal (corpus drift?)", supersedeMarker)
+	}
+	// The wiki's value: it flags the stale value and surfaces the corrected one.
+	if !wikiMarksOld {
+		t.Errorf("wiki path did not flag the stale value %q with a %q marker on its own row", stale.staleOld, supersedeMarker)
 	}
 	if !wikiSurfacesNew {
 		t.Errorf("wiki path failed to surface the revised value %q", stale.wantAll[0])
+	}
+	// Honest limitation: curation adds a signal, it does not scrub the raw diary,
+	// so an unmarked stale row may persist — but the wiki must never make it worse.
+	if wikiUnmarked > rawUnmarked {
+		t.Errorf("wiki path increased unmarked stale rows (%d > %d): curation regressed the raw baseline", wikiUnmarked, rawUnmarked)
 	}
 }
