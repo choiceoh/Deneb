@@ -202,7 +202,7 @@ func (s *Server) setMiniappModel(ctx context.Context, role, requested string) (s
 	// "모델 전환에 실패했어요") because this case list wasn't updated alongside the
 	// picker. Keep all three lists in sync.
 	switch role {
-	case "main", "tiny", "lightweight", "analysis", "coding", "fallback", "chatbot", "vision":
+	case "main", "tiny", "lightweight", "analysis", "coding", "fallback", "chatbot", "vision", "translation":
 	default:
 		return "", rpcerr.InvalidRequest("unknown model role: " + role)
 	}
@@ -296,6 +296,12 @@ func (s *Server) roleMiniappModels() []handlerminiapp.RoleModel {
 	// picker shows "미설정" until an operator binds a multimodal model.
 	if v := s.modelRegistry.FullModelID(modelrole.RoleVision); v != "" {
 		out = append(out, handlerminiapp.RoleModel{Role: string(modelrole.RoleVision), Model: v})
+	}
+	// Translation role (web-page translation): opt-in like vision/chatbot — report
+	// it only when bound so the picker shows "미설정" until an operator (or the
+	// in-app browser's 번역 모델 picker) sets one.
+	if v := s.modelRegistry.FullModelID(modelrole.RoleTranslation); v != "" {
+		out = append(out, handlerminiapp.RoleModel{Role: string(modelrole.RoleTranslation), Model: v})
 	}
 	return out
 }
