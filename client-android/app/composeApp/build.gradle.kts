@@ -1,4 +1,3 @@
-import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.targets.js.webpack.KotlinWebpackConfig
@@ -164,60 +163,14 @@ kotlin {
 
 compose.desktop {
     application {
+        // The desktop JVM target is the headless mobile-UI verification substrate
+        // (renderPreviews + native-app.sh `:composeApp:run`), not a shipped product —
+        // the desktop workstation is a separate app (Andromeda). So only the run
+        // entrypoint is configured. The installer packaging (nativeDistributions:
+        // MSI/DMG/Deb/Rpm/AppImage) and its release-proguard (+ the BouncyCastle
+        // signed-jar restore that only mattered for that proguard pass) were removed
+        // with the desktop product.
         mainClass = "ai.deneb.MainKt"
-
-        buildTypes.release.proguard {
-            configurationFiles.from(
-                project.file("proguard-rules.pro"),
-                project.file("proguard-desktop.pro"),
-            )
-        }
-
-        nativeDistributions {
-            targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb, TargetFormat.Rpm, TargetFormat.AppImage)
-            packageName = "Deneb"
-            // versionName was removed; derive a semver-shaped package version from the build code.
-            // Honor the -PdenebVersionCode override (CI injects the git commit count) so each desktop
-            // build gets a unique, increasing MSI ProductVersion. Without this every installer shared
-            // 0.0.<floor> and Windows Installer silently skipped the upgrade (the build stayed pinned).
-            // Falls back to the libs floor for local/IDE builds that don't pass the property.
-            packageVersion = "0.0.${(project.findProperty("denebVersionCode") as? String) ?: libs.versions.android.versionCode
-                .get()}"
-
-            macOS {
-                iconFile.set(project.file("icon.icns"))
-            }
-            windows {
-                iconFile.set(project.file("icon.ico"))
-                menuGroup = "Deneb"
-            }
-            linux {
-                iconFile.set(project.file("icon.png"))
-                modules("jdk.security.auth")
-            }
-        }
-    }
-}
-
-// BouncyCastle is a cryptographically signed JCE provider jar. ProGuard rewrites
-// it and strips the META-INF signatures, causing "SHA-256 digest error" at
-// runtime. After ProGuard finishes, replace the processed jar with the original.
-afterEvaluate {
-    tasks.matching { it.name == "proguardReleaseJars" }.configureEach {
-        doLast {
-            val proguardDir =
-                layout.buildDirectory
-                    .dir("compose/tmp/main-release/proguard")
-                    .get()
-                    .asFile
-            val processedJar = proguardDir.listFiles()?.find { it.name.startsWith("bcprov") } ?: return@doLast
-            val originalJar =
-                configurations["desktopRuntimeClasspath"]
-                    .resolve()
-                    .find { it.name.startsWith("bcprov") } ?: return@doLast
-            originalJar.copyTo(processedJar, overwrite = true)
-            logger.lifecycle("Restored original signed BouncyCastle jar: ${processedJar.name}")
-        }
     }
 }
 
@@ -333,6 +286,11 @@ tasks.register<JavaExec>("renderPreviews") {
     classpath = files(desktopMain.output.allOutputs, desktopMain.runtimeDependencyFiles)
     mainClass.set("ai.deneb.RenderPreviewKt")
     systemProperty("java.awt.headless", "true")
+    // The desktop target is a mobile-UI verifier now: render the real mobile branch
+    // (Mobile.Android — bottom bar, mobile keyboard, system-back hides the in-app ←)
+    // like native-app.sh's phone profile, not the desktop default. The override returns
+    // early in Platform.jvm.kt (before any Platform.Desktop cast), so this is safe.
+    systemProperty("deneb.platform", "phone")
 }
 
 tasks.register<JavaExec>("benchScrollRender") {
@@ -346,4 +304,5 @@ tasks.register<JavaExec>("benchScrollRender") {
     classpath = files(desktopMain.output.allOutputs, desktopMain.runtimeDependencyFiles)
     mainClass.set("ai.deneb.ScrollRenderBenchKt")
     systemProperty("java.awt.headless", "true")
+    systemProperty("deneb.platform", "phone")
 }
