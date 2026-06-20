@@ -1,12 +1,13 @@
 package ai.deneb.deneb
 
-import ai.deneb.LauncherMode
 import ai.deneb.PlatformBackHandler
-import ai.deneb.createLauncherMode
 import ai.deneb.data.AppSettings
 import ai.deneb.ui.DenebGroup
 import ai.deneb.ui.DenebListRow
 import ai.deneb.ui.DenebScreenScaffold
+import ai.deneb.ui.launcher.LauncherMode
+import ai.deneb.ui.launcher.LauncherTab
+import ai.deneb.ui.launcher.createLauncherMode
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer

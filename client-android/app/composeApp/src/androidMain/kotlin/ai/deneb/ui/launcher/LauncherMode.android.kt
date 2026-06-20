@@ -1,4 +1,4 @@
-package ai.deneb
+package ai.deneb.ui.launcher
 
 import android.content.ComponentName
 import android.content.Context

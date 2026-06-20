@@ -1,6 +1,6 @@
-package ai.deneb
+package ai.deneb.ui.launcher
 
-// Desktop can't be an Android home app — launcher mode is unsupported here.
+// The web target can't be a home launcher — launcher mode is unsupported.
 actual fun createLauncherMode(): LauncherMode = object : LauncherMode {
     override val supported = false
     override fun isEnabled() = false

@@ -1,4 +1,4 @@
-package ai.deneb
+package ai.deneb.ui.launcher
 
 /**
  * Home-launcher mode for the work launcher (Phase 0) — lets Deneb act as the phone's

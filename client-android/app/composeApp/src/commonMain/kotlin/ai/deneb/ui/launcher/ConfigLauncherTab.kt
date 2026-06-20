@@ -1,6 +1,5 @@
-package ai.deneb.deneb
+package ai.deneb.ui.launcher
 
-import ai.deneb.LauncherMode
 import ai.deneb.ui.DenebGroup
 import ai.deneb.ui.DenebListRow
 import androidx.compose.foundation.layout.Column

@@ -1,6 +1,6 @@
-package ai.deneb
+package ai.deneb.ui.launcher
 
-// The web target can't be a home launcher — launcher mode is unsupported.
+// iOS has no third-party home-launcher capability — launcher mode is unsupported.
 actual fun createLauncherMode(): LauncherMode = object : LauncherMode {
     override val supported = false
     override fun isEnabled() = false

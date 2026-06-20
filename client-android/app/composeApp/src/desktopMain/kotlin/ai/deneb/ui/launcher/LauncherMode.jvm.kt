@@ -1,6 +1,6 @@
-package ai.deneb
+package ai.deneb.ui.launcher
 
-// iOS has no third-party home-launcher capability — launcher mode is unsupported.
+// Desktop can't be an Android home app — launcher mode is unsupported here.
 actual fun createLauncherMode(): LauncherMode = object : LauncherMode {
     override val supported = false
     override fun isEnabled() = false
