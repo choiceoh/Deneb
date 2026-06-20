@@ -152,9 +152,13 @@ var requiredMethods = []string{
 	"miniapp.skills.delete",
 	"miniapp.skills.lifecycle",
 	// Part-status dashboard — the classifier Rules loader is always non-nil
-	// (classification.Load falls back to keyword defaults), so this registers
-	// unconditionally even when no data source is wired in tests.
+	// (org.LoadRules falls back to the legacy classification path), so this
+	// registers unconditionally even when no data source is wired in tests.
 	"miniapp.dashboard.lanes",
+	// Org chart editor — Load/SavePath are always wired (org.Load / ResolvePath),
+	// so these register unconditionally.
+	"miniapp.org.get",
+	"miniapp.org.save",
 	// To-do domain — local store always resolves in tests (temp state dir),
 	// so these always register.
 	"miniapp.todo.list",

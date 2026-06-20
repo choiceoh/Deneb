@@ -404,6 +404,14 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		// absent feed degrades that lane only, not the whole dashboard.
 		handlerminiapp.DashboardMethods(s.dashboardDeps()),
 
+		// Mini App org chart editor (miniapp.org.{get,save}). The org chart
+		// ({stateDir}/org.json, operator data, never in the repo) is the MASTER
+		// source for the dashboard's part classification — its lane-tagged nodes
+		// define the dashboard columns and seed the classification rules. get
+		// returns the tree (missing file → empty); save validates (unique ids,
+		// existing parents, no cycles, unique lane keys) then atomically writes.
+		handlerminiapp.OrgMethods(s.orgDeps()),
+
 		// Mini App To-do domain (miniapp.todo.*). The task-list companion to
 		// the calendar, backed by a local store ({stateDir}/todos.json). No
 		// external provider — every method writes locally, so it works without

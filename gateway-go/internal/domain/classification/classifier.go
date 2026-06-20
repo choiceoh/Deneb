@@ -266,3 +266,20 @@ func pickLane(hits []Lane) (Lane, bool) {
 func normalizeCompany(s string) string {
 	return strings.ToLower(strings.Join(strings.Fields(s), ""))
 }
+
+// NormalizePersonName returns the person match-key form used by every rule
+// source (the loader's JSON merge and Classify's lookup): the shared wiki
+// normalization (honorific peel + space strip + lowercase). Exported so an
+// alternate rule producer — e.g. the org chart's DeriveRules — keys its
+// PersonToLane entries identically, instead of re-implementing (and drifting
+// from) the matcher's key form.
+func NormalizePersonName(s string) string {
+	return wiki.NormalizePersonName(s)
+}
+
+// NormalizeCompany returns the company match-key form (lowercase +
+// whitespace-stripped) used by CompanyToLane lookups. Exported for the same
+// single-source-of-truth reason as NormalizePersonName.
+func NormalizeCompany(s string) string {
+	return normalizeCompany(s)
+}

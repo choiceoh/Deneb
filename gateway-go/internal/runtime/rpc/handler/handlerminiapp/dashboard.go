@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/classification"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/org"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcerr"
@@ -56,9 +57,18 @@ const (
 
 // ClassifierRulesLoader resolves the current classification ruleset. Injected
 // (not called directly) so tests supply fixed fake rules and production wires
-// classification.Load (which reads the operator's JSON). Returning an error
-// degrades the dashboard to keyword-only defaults rather than failing the call.
+// org.LoadRules (org chart → derived rules, else the legacy classification
+// JSON). Returning an error degrades the dashboard to keyword-only defaults
+// rather than failing the call.
 type ClassifierRulesLoader func() (classification.Rules, error)
+
+// DashboardLanesLoader resolves the dashboard's lane definitions (column set +
+// order). Production wires org.LoadLanes: when the operator's org chart defines
+// parts, the columns come from the chart (the chart is master); otherwise it
+// returns nil and the dashboard falls back to the legacy hardcoded part set
+// (classification.AllLanes). nil loader or a nil/empty/errored result → legacy
+// lanes, so the dashboard always renders a part skeleton.
+type DashboardLanesLoader func() ([]org.LaneDef, error)
 
 // DashboardCalendarSource yields calendar events in [from, to). Mirrors the
 // CalendarClient/LocalCalendar split the calendar handler uses, but the
@@ -84,6 +94,7 @@ type DashboardWorkFeedSource interface {
 // laneSource in collectItems — the grouping/response code is source-agnostic.
 type DashboardDeps struct {
 	Rules    ClassifierRulesLoader
+	Lanes    DashboardLanesLoader // optional; nil → legacy hardcoded lanes
 	Calendar DashboardCalendarSource
 	WorkFeed DashboardWorkFeedSource
 }
@@ -162,8 +173,13 @@ func dashboardLanes(deps DashboardDeps) rpcutil.HandlerFunc {
 			rules = classification.DefaultRules()
 		}
 
+		// Resolve the column set: org chart lanes when defined, else the legacy
+		// hardcoded part set. An error/empty result falls back to legacy too, so
+		// the dashboard always shows a part skeleton.
+		lanes := resolveLanes(deps)
+
 		items := collectItems(ctx, deps, rules)
-		out := groupByLane(items)
+		out := groupByLane(items, lanes)
 		return rpcutil.RespondOK(req.ID, out)
 	}
 }
@@ -268,26 +284,47 @@ func projectWorkFeedItem(it workfeed.Item) (classification.Signals, DashboardIte
 	return sig, item
 }
 
-// groupByLane buckets classified items into the fixed lane order, then appends
-// the 미분류 holding lane only if it has items. Every real part lane is always
-// present (even empty) so the client renders all five parts. Items within a lane
-// are sorted soonest-first (WhenMs ascending; 0/no-time sinks to the bottom).
-func groupByLane(items []classifiedItem) DashboardOut {
+// resolveLanes resolves the dashboard's column set. When the org chart defines
+// parts (deps.Lanes returns them), those drive the columns — the chart is the
+// master. Otherwise (nil loader, error, or no lane nodes) it falls back to the
+// legacy hardcoded part set so every prior deployment renders unchanged.
+func resolveLanes(deps DashboardDeps) []org.LaneDef {
+	if deps.Lanes != nil {
+		if defs, err := deps.Lanes(); err == nil && len(defs) > 0 {
+			return defs
+		}
+	}
+	// Legacy fallback: the fixed classification lanes with their Korean labels.
+	defs := make([]org.LaneDef, 0, len(classification.AllLanes))
+	for _, lane := range classification.AllLanes {
+		defs = append(defs, org.LaneDef{Key: string(lane), Name: classification.DisplayName(lane)})
+	}
+	return defs
+}
+
+// groupByLane buckets classified items into the given lane order, then appends
+// the 미분류 holding lane only if it has items. Every defined part lane is always
+// present (even empty) so the client renders the full part skeleton. Items
+// within a lane are sorted soonest-first (WhenMs ascending; 0/no-time sinks to
+// the bottom). The lane set comes from resolveLanes (org chart or legacy).
+func groupByLane(items []classifiedItem, lanes []org.LaneDef) DashboardOut {
 	byLane := make(map[classification.Lane][]DashboardItem)
 	for _, ci := range items {
 		byLane[ci.lane] = append(byLane[ci.lane], ci.item)
 	}
 
 	out := DashboardOut{}
-	for _, lane := range classification.AllLanes {
+	for _, def := range lanes {
+		lane := classification.Lane(def.Key)
 		out.Lanes = append(out.Lanes, LaneOut{
-			Key:   string(lane),
-			Name:  classification.DisplayName(lane),
+			Key:   def.Key,
+			Name:  laneDisplayName(def),
 			Items: sortItems(byLane[lane]),
 		})
 	}
 	// 미분류 last, and only when non-empty — it's a triage bucket, not a part, so
-	// don't show an empty one.
+	// don't show an empty one. (Chart-defined lanes never use this reserved key,
+	// so a derived part can't collide with it.)
 	if unclassified := byLane[classification.LaneUnclassified]; len(unclassified) > 0 {
 		out.Lanes = append(out.Lanes, LaneOut{
 			Key:   string(classification.LaneUnclassified),
@@ -296,6 +333,16 @@ func groupByLane(items []classifiedItem) DashboardOut {
 		})
 	}
 	return out
+}
+
+// laneDisplayName returns a lane's column title: its defined Name, falling back
+// to the key if the chart left a lane node unnamed (defensive — Validate already
+// rejects empty names, so this only guards the legacy path's edge).
+func laneDisplayName(def org.LaneDef) string {
+	if n := strings.TrimSpace(def.Name); n != "" {
+		return n
+	}
+	return def.Key
 }
 
 // sortItems orders a lane's items soonest-first. Items with a time (WhenMs > 0)
