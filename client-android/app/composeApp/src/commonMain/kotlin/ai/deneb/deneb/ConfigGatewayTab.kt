@@ -1,8 +1,11 @@
 package ai.deneb.deneb
 
+import ai.deneb.Platform
 import ai.deneb.contacts.ContactsReader
+import ai.deneb.currentPlatform
 import ai.deneb.data.AppSettings
 import ai.deneb.tools.ContactsPermissionController
+import ai.deneb.tools.LocationPermissionController
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.settings.SettingsCard
 import androidx.compose.foundation.layout.Arrangement
@@ -155,6 +158,11 @@ internal fun GatewayTab(
         if (contactsReader.isSupported()) {
             ContactsSyncCard(denebClient, contactsPermission, contactsReader)
         }
+        // Location sensing is Android-only (the FINE/COARSE permission is declared in the
+        // foss flavor; readCurrentLocation gates on the grant at runtime).
+        if (currentPlatform is Platform.Mobile.Android) {
+            LocationSensingCard(koinInject<LocationPermissionController>())
+        }
     }
 }
 
@@ -277,6 +285,65 @@ private fun ContactsSyncCard(
             Spacer(Modifier.height(8.dp))
             Text(
                 msg,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+// Location-sensing opt-in (Android foss). Requesting the FINE permission activates the
+// on-demand location push (DenebGatewayClient.maybeForwardLocation, on each sync), which
+// the gateway caches so phone_read("location") answers without an SSH round-trip. No
+// background tracking — the read happens only while the app is active.
+@Composable
+private fun LocationSensingCard(permission: LocationPermissionController) {
+    val scope = rememberCoroutineScope()
+    var working by remember { mutableStateOf(false) }
+    var msg by remember { mutableStateOf<String?>(null) }
+    val granted = permission.hasPermission()
+    SettingsCard {
+        Text(
+            "위치 센싱",
+            style = DenebType.cardTitle,
+            color = MaterialTheme.colorScheme.onBackground,
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "위치 권한을 허용하면 앱이 동기화할 때 현재 위치를 게이트웨이로 보고합니다. " +
+                "비서가 \"지금 어디?\"에 SSH 없이 답할 수 있습니다. 백그라운드 추적은 하지 않습니다.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(16.dp))
+        Button(
+            onClick = {
+                scope.launch {
+                    working = true
+                    msg = null
+                    val ok = permission.requestPermission()
+                    msg = if (ok) "위치 권한이 허용되었습니다. 동기화 시 위치를 보고합니다." else "위치 권한이 거부되었습니다."
+                    working = false
+                }
+            },
+            enabled = !working && !granted,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(
+                if (granted) {
+                    "위치 센싱 켜짐"
+                } else if (working) {
+                    "요청 중…"
+                } else {
+                    "위치 센싱 켜기"
+                },
+            )
+        }
+        val m = msg
+        if (m != null) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                m,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
