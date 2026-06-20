@@ -10,6 +10,7 @@
 # Gates (each is the make target of the same name):
 #   Go      generate-check  go-fmt  go-vet  go-lint  go-test
 #   Kotlin  kotlin-spotless  kotlin-detekt  kotlin-desktop-smoke-test
+#           kotlin-android-compile
 #
 # The Go and Kotlin lanes run in parallel (gradle JVM startup is the long pole),
 # so wall-clock is roughly max(Go suite, Kotlin suite), not their sum.
@@ -51,7 +52,7 @@ BASE_REF="${CI_CHECK_BASE:-origin/main}"
 
 # --- Gate definitions (gate name == make target) -----------------------------
 GO_GATES=(generate-check go-fmt go-vet go-lint go-test)
-KOTLIN_GATES=(kotlin-spotless kotlin-detekt kotlin-desktop-smoke-test)
+KOTLIN_GATES=(kotlin-spotless kotlin-detekt kotlin-desktop-smoke-test kotlin-android-compile)
 
 # --- Args --------------------------------------------------------------------
 RUN_GO=true
@@ -227,6 +228,13 @@ offenders() {
       grep -E '\.kt:[0-9]+:[0-9]+:|Analysis failed with' "$log" ;;
     kotlin-desktop-smoke-test)
       grep -E '^(> Task .*FAILED|[[:space:]]*at |[[:space:]]*Caused by:|[[:space:]]*Suppressed:|FAILURE: Build failed with an exception\.|.*Test.*FAILED|.*> .* FAILED$)' "$log" ;;
+    kotlin-android-compile)
+      # kotlinc diagnostics ("e: file://...kt:line:col msg") + the failing task +
+      # the build-failure banner. Drop the linux-aarch64 Kotlin/Native host warning
+      # (a config-time "w:" line every aarch64 gradle run emits — irrelevant since
+      # Android compilation does not use Kotlin/Native).
+      grep -E '^(e: |w: .*\.kt:|> Task .*FAILED|FAILURE: Build failed with an exception\.|.*\.kt:[0-9]+:[0-9]+)' "$log" \
+        | grep -v 'host platform is not supported by Kotlin/Native' ;;
     generate-check)
       grep -E '^==> |^diff --git|^\+\+\+ |^--- |^@@ |generated file changed|out of date|not up to date' "$log" ;;
   esac
