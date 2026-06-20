@@ -16,9 +16,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 
 /** One launchable app for the work-launcher app drawer (label + package — the
@@ -35,6 +42,9 @@ data class LauncherAppEntry(
  * (Android = PackageManager; desktop/iOS = stub) and [onLaunch] fires the launch
  * intent. Offline-first shell: never touches the gateway, so the home can reach
  * other apps even with the server down.
+ *
+ * [onExit] is the reverse of the swipe-UP that opened this drawer: pulling DOWN at
+ * the very top of the list (overscroll) returns to 자체앱. See [exitOnTopOverscroll].
  */
 @Composable
 fun AppDrawer(
@@ -42,13 +52,14 @@ fun AppDrawer(
     onLaunch: (String) -> Unit,
     modifier: Modifier = Modifier,
     loaded: Boolean = true,
+    onExit: () -> Unit = {},
 ) {
     var query by remember { mutableStateOf("") }
     val filtered = remember(apps, query) {
         val q = query.trim()
         if (q.isEmpty()) apps else apps.filter { it.label.contains(q, ignoreCase = true) }
     }
-    Column(modifier.fillMaxSize()) {
+    Column(modifier.fillMaxSize().nestedScroll(exitOnTopOverscroll(onExit))) {
         DenebSearchField(
             query = query,
             onQueryChange = { query = it },
@@ -71,6 +82,55 @@ fun AppDrawer(
                 label = { it.label },
                 key = { it.packageName },
             ) { app -> AppRow(app, onLaunch) }
+        }
+    }
+}
+
+/**
+ * A [NestedScrollConnection] that fires [onExit] when the user pulls DOWN past a
+ * commit distance at the very top of the list — the mirror of the swipe-UP that
+ * opened the drawer, so the same flick reverses it.
+ *
+ * Why nested scroll and not a pointerInput wrapper: this only reacts to the
+ * downward delta the inner LazyColumn leaves *unconsumed* at the top (overscroll),
+ * so it never steals a normal scroll drag. And [onPostScroll] runs before the
+ * platform stretch-overscroll effect consumes that leftover (overscroll wraps the
+ * scroll+nested dispatch), so we both measure the pull and still let the stretch
+ * glow render as feedback — we return [Offset.Zero] and consume nothing. Fling
+ * momentum (source != [NestedScrollSource.UserInput]) is excluded, so flicking up
+ * to the top never accidentally triggers an exit.
+ */
+@Composable
+private fun exitOnTopOverscroll(onExit: () -> Unit): NestedScrollConnection {
+    val commitPx = with(LocalDensity.current) { 80.dp.toPx() }
+    val latestExit by rememberUpdatedState(onExit)
+    return remember(commitPx) {
+        object : NestedScrollConnection {
+            private var pulled = 0f
+
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                // Dragging back up means we're scrolling into the list — drop any pending pull.
+                if (available.y < 0f) pulled = 0f
+                return Offset.Zero
+            }
+
+            override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+                // available.y > 0 here = downward drag the list couldn't consume (at top).
+                if (source == NestedScrollSource.UserInput && available.y > 0f) {
+                    pulled += available.y
+                    if (pulled >= commitPx) {
+                        pulled = 0f
+                        latestExit()
+                    }
+                }
+                return Offset.Zero
+            }
+
+            override suspend fun onPreFling(available: Velocity): Velocity {
+                // Released without committing — reset so the next gesture starts clean.
+                pulled = 0f
+                return Velocity.Zero
+            }
         }
     }
 }
