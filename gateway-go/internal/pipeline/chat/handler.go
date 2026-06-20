@@ -107,6 +107,10 @@ type Handler struct {
 	// personaOverrideFn returns the operator-edited 업무 persona text (Settings
 	// prompt corner). Optional: nil → default persona always renders.
 	personaOverrideFn PersonaOverrideFunc
+
+	// fileRecallFn runs a hybrid semantic search over the file store for the
+	// recall preflight. Optional: nil disables the files recall source.
+	fileRecallFn FileRecallFunc
 }
 
 // TopicResolver maps a forum/topic threadID to a per-topic knowledge key
@@ -213,6 +217,13 @@ type HandlerConfig struct {
 	// prompt corner), or "" when unedited. Optional: nil → default persona.
 	PersonaOverrideFn PersonaOverrideFunc
 
+	// FileRecallFn runs a hybrid semantic search over the on-box file store for
+	// the recall preflight, so relevant uploaded files surface as recall evidence
+	// alongside wiki/diary/session. Optional: nil disables the files recall source
+	// (recall degrades to the other backends). Injected by the server closing over
+	// the shared file semantic index.
+	FileRecallFn FileRecallFunc
+
 	// RecordActivity is called for user-originating chat turns so the server
 	// can remember the latest active channel session for autonomous follow-ups.
 	// The server owns filtering; chat only reports the session key.
@@ -306,6 +317,7 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 		topicResolver:        cfg.TopicResolver,
 		calendarGlanceFn:     cfg.CalendarGlanceFn,
 		personaOverrideFn:    cfg.PersonaOverrideFn,
+		fileRecallFn:         cfg.FileRecallFn,
 		providerConfigs:      cloneProviderConfigs(cfg.ProviderConfigs),
 		embeddingClient:      cfg.EmbeddingClient,
 		wikiStore:            cfg.WikiStore,

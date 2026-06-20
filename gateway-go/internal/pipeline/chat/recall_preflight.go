@@ -199,6 +199,16 @@ func buildRecallPreflight(ctx context.Context, params RunParams, deps runDeps, l
 			return recallTranscriptEvidence(c, deps.transcript, params.SessionKey, message, queries)
 		}})
 	}
+	// On-box file store (hybrid semantic search). Runs under the same shared
+	// deadline; a down embedding server returns zero file evidence, so this never
+	// blocks the turn. The per-source quota (recallFileQuota) is enforced inside
+	// recallFilesEvidence so files cannot crowd out the other sources.
+	if deps.fileRecallFn != nil {
+		search := deps.fileRecallFn
+		sources = append(sources, recallSource{"file", func(c context.Context) []recallEvidence {
+			return recallFilesEvidence(c, search, queries)
+		}})
+	}
 
 	slots := make([][]recallEvidence, len(sources))
 	elapsed := make([]time.Duration, len(sources))

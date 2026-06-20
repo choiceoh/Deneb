@@ -168,6 +168,7 @@ func (h *Handler) buildRunDeps() runDeps {
 		topicResolver:      h.topicResolver,
 		calendarGlanceFn:   h.calendarGlanceFn,
 		personaOverrideFn:  h.personaOverrideFn,
+		fileRecallFn:       h.fileRecallFn,
 
 		// Atomic snapshot of channel callbacks (reply, media, typing, etc.).
 		callbacks: h.Snapshot(),

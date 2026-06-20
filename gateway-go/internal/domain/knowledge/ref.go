@@ -9,14 +9,15 @@ import (
 type Layer string
 
 const (
-	LayerWiki Layer = "w"
+	LayerWiki  Layer = "w"
+	LayerFiles Layer = "f"
 )
 
 // Ref is a unified handle to a piece of knowledge across layers. Prefix-based
 // (vs opaque) so refs are human-debuggable in logs, grep, and chat output.
 type Ref struct {
 	Layer Layer
-	ID    string // wiki: page relative path
+	ID    string // wiki: page relative path; files: store path display ("/메일/foo.pdf")
 }
 
 // String renders the ref in its canonical wire form (e.g. "w:인물/박부장").
@@ -44,7 +45,7 @@ func ParseRef(s string) (Ref, error) {
 		return Ref{}, fmt.Errorf("invalid ref %q: empty id", s)
 	}
 	switch layer {
-	case LayerWiki:
+	case LayerWiki, LayerFiles:
 		return Ref{Layer: layer, ID: id}, nil
 	default:
 		return Ref{}, fmt.Errorf("unknown layer %q in ref %q", layer, s)

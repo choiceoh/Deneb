@@ -228,13 +228,27 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 	chat.RegisterCoreTools(chatCfg.Tools, s.toolDeps)
 
 	// Knowledge: unified recall/read/record surface over the wiki knowledge
-	// base. Polaris (session-bound) and graphify (graph-traversal) stay
-	// separate because they have different paradigms. Skipped when the wiki
-	// store is unavailable (NewWikiAdapter returns nil → router has no layers).
+	// base and the on-box file store. Polaris (session-bound) and graphify
+	// (graph-traversal) stay separate because they have different paradigms.
+	// Each adapter constructor returns nil when its backend is unavailable
+	// (wiki store missing, or file index/embedding server down) → the router
+	// simply drops that layer (knowledge.New ignores nil adapters), so recall
+	// degrades gracefully to whatever backends are live.
+	filesAdapter := s.newFilesKnowledgeAdapter()
 	knowledgeRouter := knowledge.New(
 		knowledge.NewWikiAdapter(s.wikiStore),
+		filesAdapter,
 	)
 	toolreg.RegisterKnowledgeTool(chatCfg.Tools, knowledgeRouter)
+
+	// Recall preflight files source: surface relevant uploaded files as recall
+	// evidence (injected into the last user message tail like wiki/diary/session).
+	// nil when the file index/embedding server is unavailable → the preflight's
+	// files source contributes nothing (graceful, recall unaffected). Set on the
+	// config here (after initFileSemanticIndex) so NewHandler captures it.
+	if filesAdapter != nil {
+		chatCfg.FileRecallFn = s.fileRecallForPreflight
+	}
 
 	// Polaris: retrieval tools for compressed conversation history.
 	if bridge, ok := transcriptStore.(*polaris.Bridge); ok {

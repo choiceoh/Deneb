@@ -22,7 +22,9 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/autonomous"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/embedding"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/filestore"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/knowledge"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
 )
 
@@ -192,3 +194,77 @@ func (t *semindexTask) Run(ctx context.Context) error {
 
 // Compile-time interface compliance.
 var _ autonomous.PeriodicTask = (*semindexTask)(nil)
+
+// newFilesKnowledgeAdapter wraps the shared file semantic index as a
+// knowledge.Adapter so the unified knowledge(recall/read) tool federates over
+// uploaded files alongside the wiki. Returns nil when the index or embedding
+// client is unavailable (knowledge.NewFilesAdapter enforces this too), so the
+// Router drops the file layer and recall degrades to wiki-only. The injected
+// ReadFile closure backs knowledge(op="read", ref="f:<path>") by fetching the
+// file bytes; extraction reuses the same document extractor as the index.
+func (s *Server) newFilesKnowledgeAdapter() knowledge.Adapter {
+	if s.fileSemanticIndex == nil || s.embeddingClient == nil {
+		return nil
+	}
+	var readFile func(ctx context.Context, path string) ([]byte, string, error)
+	if s.fileStore != nil {
+		store := s.fileStore
+		readFile = func(ctx context.Context, path string) ([]byte, string, error) {
+			data, ent, err := store.Get(ctx, path)
+			if err != nil {
+				return nil, "", err
+			}
+			name := path
+			if ent != nil && ent.Name != "" {
+				name = ent.Name
+			}
+			return data, name, nil
+		}
+	}
+	return knowledge.NewFilesAdapter(knowledge.FilesAdapterDeps{
+		Index:     s.fileSemanticIndex,
+		Embed:     s.embeddingClient,
+		ExtractFn: fileSemindexExtract,
+		ReadFile:  readFile,
+	})
+}
+
+// fileRecallForPreflight adapts the file semantic search into the chat recall
+// preflight's transport-neutral FileRecallFunc. It reuses fileSemanticSearch
+// (hybrid search + live-store Stat validation + the query timeout), then maps
+// each hit to chat.FileRecallHit. Returns nil-safe empty on any degradation
+// (no index/embedding server, an embed error) so the preflight's files source
+// simply contributes nothing — never an error, never a stall. Wired into
+// HandlerConfig.FileRecallFn only when the index is enabled.
+func (s *Server) fileRecallForPreflight(ctx context.Context, query string, limit int) []chat.FileRecallHit {
+	if s.fileSemanticIndex == nil || s.embeddingClient == nil {
+		return nil
+	}
+	hits, err := s.fileSemanticSearch(ctx, query, limit)
+	if err != nil || len(hits) == 0 {
+		return nil
+	}
+	out := make([]chat.FileRecallHit, 0, len(hits))
+	for _, h := range hits {
+		out = append(out, chat.FileRecallHit{
+			Path:       h.Entry.PathDisplay,
+			Snippet:    h.Snippet,
+			Score:      h.Score,
+			ModifiedAt: fileServerModifiedMillis(h.Entry.ServerModified),
+		})
+	}
+	return out
+}
+
+// fileServerModifiedMillis converts an Entry.ServerModified RFC3339 string to
+// unix-milli, or 0 when empty/unparseable.
+func fileServerModifiedMillis(serverModified string) int64 {
+	if serverModified == "" {
+		return 0
+	}
+	t, err := time.Parse(time.RFC3339, serverModified)
+	if err != nil {
+		return 0
+	}
+	return t.UnixMilli()
+}
