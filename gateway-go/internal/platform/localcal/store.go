@@ -98,6 +98,33 @@ type Store struct {
 	path   string
 	events []storedEvent
 	seq    int64 // monotonic so two creates in the same nanosecond get distinct IDs
+
+	// onChange, when set via SetChangeObserver, is invoked (outside the store lock)
+	// after each successful Create/Update/Delete. The server wires it to the
+	// native-sync stream so the client's calendar cache refreshes promptly; the
+	// platform store itself stays free of any nativesync dependency.
+	onChange func(eventID string)
+}
+
+// SetChangeObserver registers a callback invoked once after each successful
+// mutation. Single-user, single-writer: set once at wiring time, before the store
+// is used concurrently.
+func (s *Store) SetChangeObserver(fn func(eventID string)) {
+	s.mu.Lock()
+	s.onChange = fn
+	s.mu.Unlock()
+}
+
+// notifyChange invokes the observer outside the store lock (callers release first)
+// so the callback — which appends to native-sync (its own lock + a file write) —
+// never runs under s.mu.
+func (s *Store) notifyChange(eventID string) {
+	s.mu.RLock()
+	fn := s.onChange
+	s.mu.RUnlock()
+	if fn != nil {
+		fn(eventID)
+	}
 }
 
 var (
@@ -184,13 +211,16 @@ func (s *Store) Create(in CreateInput) (calendar.Event, error) {
 		return calendar.Event{}, err
 	}
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	rec := s.newRecordLocked(in)
 	s.events = append(s.events, rec)
-	if err := s.persistLocked(); err != nil {
+	err := s.persistLocked()
+	s.mu.Unlock()
+	if err != nil {
 		return calendar.Event{}, err
 	}
-	return rec.toCalendar(), nil
+	ev := rec.toCalendar()
+	s.notifyChange(ev.ID)
+	return ev, nil
 }
 
 // Update replaces the event with id (preserving its Created stamp and Deneb
@@ -200,51 +230,68 @@ func (s *Store) Update(id string, in CreateInput) (*calendar.Event, error) {
 		return nil, err
 	}
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	idx := -1
 	for i := range s.events {
-		if s.events[i].ID != id {
-			continue
+		if s.events[i].ID == id {
+			idx = i
+			break
 		}
-		rec := buildRecord(id, in)
-		rec.Created = s.events[i].Created
-		// Preserve the origin link the editor didn't re-supply: a user editing the
-		// time/title of a proposal-accepted meeting must not lose which mail it came
-		// from (the update callers only carry summary/time/location, never these).
-		// An explicit value in `in` still overrides, per field.
-		if rec.Source == "" {
-			rec.Source = s.events[i].Source
-		}
-		if rec.SourceLabel == "" {
-			rec.SourceLabel = s.events[i].SourceLabel
-		}
-		if rec.Kind == "" {
-			rec.Kind = s.events[i].Kind
-		}
-		if len(rec.Docs) == 0 {
-			rec.Docs = s.events[i].Docs
-		}
-		s.events[i] = rec
-		if err := s.persistLocked(); err != nil {
-			return nil, err
-		}
-		ev := rec.toCalendar()
-		return &ev, nil
 	}
-	return nil, ErrNotFound
+	if idx < 0 {
+		s.mu.Unlock()
+		return nil, ErrNotFound
+	}
+	rec := buildRecord(id, in)
+	rec.Created = s.events[idx].Created
+	// Preserve the origin link the editor didn't re-supply: a user editing the
+	// time/title of a proposal-accepted meeting must not lose which mail it came
+	// from (the update callers only carry summary/time/location, never these).
+	// An explicit value in `in` still overrides, per field.
+	if rec.Source == "" {
+		rec.Source = s.events[idx].Source
+	}
+	if rec.SourceLabel == "" {
+		rec.SourceLabel = s.events[idx].SourceLabel
+	}
+	if rec.Kind == "" {
+		rec.Kind = s.events[idx].Kind
+	}
+	if len(rec.Docs) == 0 {
+		rec.Docs = s.events[idx].Docs
+	}
+	s.events[idx] = rec
+	err := s.persistLocked()
+	s.mu.Unlock()
+	if err != nil {
+		return nil, err
+	}
+	ev := rec.toCalendar()
+	s.notifyChange(ev.ID)
+	return &ev, nil
 }
 
 // Delete removes the event with id and persists.
 func (s *Store) Delete(id string) error {
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	idx := -1
 	for i := range s.events {
-		if s.events[i].ID != id {
-			continue
+		if s.events[i].ID == id {
+			idx = i
+			break
 		}
-		s.events = append(s.events[:i], s.events[i+1:]...)
-		return s.persistLocked()
 	}
-	return ErrNotFound
+	if idx < 0 {
+		s.mu.Unlock()
+		return ErrNotFound
+	}
+	s.events = append(s.events[:idx], s.events[idx+1:]...)
+	err := s.persistLocked()
+	s.mu.Unlock()
+	if err != nil {
+		return err
+	}
+	s.notifyChange(id)
+	return nil
 }
 
 func validate(in CreateInput) error {

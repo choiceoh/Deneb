@@ -16,6 +16,11 @@ const (
 	TypeWorkFeedCreated    = "workfeed.created"
 	TypeWorkFeedUpdated    = "workfeed.updated"
 	TypeWorkFeedActionRun  = "workfeed.action.run"
+	// TypeCalendarChanged signals a server-side local-calendar mutation (create/
+	// edit/delete) so the client refetches its calendar promptly instead of waiting
+	// out its background warm throttle. Carries only the event ID — the client
+	// refreshes the whole upcoming list, so no per-field payload is needed.
+	TypeCalendarChanged = "calendar.changed"
 )
 
 var ErrInvalidEvent = errors.New("native sync event type is required")
