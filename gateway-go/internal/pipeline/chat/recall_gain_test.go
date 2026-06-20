@@ -125,11 +125,32 @@ func recallGainCorpus() ([]gainFact, []gainQuery) {
 		{"ecopro", "에코프로 케이블 견적 몇 미터였지?", []string{"1,950"}, ""},
 		// paraphrased away from the raw diary wording — needs the curated wiki.
 		{"namdo-paraphrase", "RE100 루프탑 실사 일정 언제였지?", []string{"화요일"}, ""},
-		{"weekly-paraphrase", "주간보고 자동화 모닝레터 패턴으로 가기로 했었나?", []string{"모닝레터"}, ""},
+		// NB: the answer token ("모닝레터") must NOT appear in the question — the
+		// recall dump echoes the search query (query="..."), so an echoed token
+		// could satisfy the hit from metadata rather than recalled evidence.
+		// TestRecallGainCorpusInvariant enforces this for the whole corpus.
+		{"weekly-paraphrase", "주간보고 자동화 어떤 방식 재사용하기로 했지?", []string{"모닝레터"}, ""},
 		// revised fact — must surface the new value, must not present the old as current.
 		{"acme-revision", "에이콘 상사 지금 구매 담당자 누구지?", []string{"박수진"}, "이태호"},
 	}
 	return facts, queries
+}
+
+// TestRecallGainCorpusInvariant guards the measurement's integrity: no wantAll
+// token may appear in its own question. buildRecallPreflight echoes the search
+// query into the dump (query="..."), so a wanted token present in the question
+// could satisfy a hit from that echo rather than from recalled evidence —
+// silently inflating the measured wiki gain. Every hit must come from a note or
+// source, so answer tokens have to be absent from the prompt.
+func TestRecallGainCorpusInvariant(t *testing.T) {
+	_, queries := recallGainCorpus()
+	for _, q := range queries {
+		for _, w := range q.wantAll {
+			if strings.Contains(q.question, w) {
+				t.Errorf("query %q echoes its wanted token %q in the question — a hit could come from the query echo, not recalled evidence", q.name, w)
+			}
+		}
+	}
 }
 
 // buildGainStore seeds the corpus for one mode: "both" (wiki+diary), "diaryonly"
