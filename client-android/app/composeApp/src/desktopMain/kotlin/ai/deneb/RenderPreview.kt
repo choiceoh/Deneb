@@ -13,6 +13,7 @@ import ai.deneb.deneb.CalendarMonthGrid
 import ai.deneb.deneb.ContactsList
 import ai.deneb.deneb.CronEditContent
 import ai.deneb.deneb.DashboardLanesContent
+import ai.deneb.deneb.DenebAppHubContent
 import ai.deneb.deneb.DenebBrowserChrome
 import ai.deneb.deneb.DenebWebViewState
 import ai.deneb.deneb.FilesSearchMode
@@ -71,9 +72,6 @@ import ai.deneb.ui.denebInsight
 import ai.deneb.ui.denebInsightContainer
 import ai.deneb.ui.dynamicui.ChartNode
 import ai.deneb.ui.dynamicui.DenebUiRenderer
-import ai.deneb.ui.launcher.AppDrawer
-import ai.deneb.ui.launcher.DenebAppHubContent
-import ai.deneb.ui.launcher.LauncherAppEntry
 import ai.deneb.ui.markdown.MarkdownContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -176,11 +174,11 @@ private fun renderBrowser(name: String, scheme: ColorScheme) {
     scene.close()
 }
 
-private fun renderAppHub(name: String, scheme: ColorScheme, pins: List<LauncherAppEntry>) {
+private fun renderAppHub(name: String, scheme: ColorScheme) {
     val scene = ImageComposeScene(width = 824, height = 900, density = Density(2f)) {
         MaterialTheme(colorScheme = scheme) {
             Surface(color = MaterialTheme.colorScheme.background) {
-                DenebAppHubContent(onOpen = {}, onLaunch = {}, pinnedApps = pins)
+                DenebAppHubContent(onOpen = {})
             }
         }
     }
@@ -197,17 +195,9 @@ fun main() {
     renderScreen("mail_light.png", "mail", LightColorScheme, 840, 1100)
     renderBrowser("browser_dark.png", DarkColorScheme)
     renderBrowser("browser_light.png", LightColorScheme)
-    // Latin-brand pins demonstrate the Korean 초성 monogram (YouTube→ㅇ, Gmail→ㅈ,
-    // Strava→ㅅ, James→ㅈ) rather than a Latin Y/G/S/J.
-    val appHubPins = listOf("카카오톡", "YouTube", "은행", "Gmail", "Strava", "James")
-        .mapIndexed { i, l -> LauncherAppEntry(label = l, packageName = "pin.$i") }
-    renderAppHub("app_hub_dark.png", DarkColorScheme, appHubPins)
-    renderAppHub("app_hub_light.png", LightColorScheme, appHubPins)
-    // Empty-pins variant exercises the 핀고정 discoverability hint (swipe-up + long-press).
-    renderAppHub("app_hub_empty_dark.png", DarkColorScheme, emptyList())
+    renderAppHub("app_hub_dark.png", DarkColorScheme)
+    renderAppHub("app_hub_light.png", LightColorScheme)
     renderMarkdown("markdown_dark.png", DarkColorScheme)
-    renderScreen("app_drawer_dark.png", "app_drawer", DarkColorScheme, 824, 1100)
-    renderScreen("app_drawer_light.png", "app_drawer", LightColorScheme, 824, 1100)
     renderScreen("scrub_active_dark.png", "scrub_active", DarkColorScheme, 824, 1100)
     renderScreen("scrub_active_light.png", "scrub_active", LightColorScheme, 824, 1100)
     renderScreen("contacts_dark.png", "contacts", DarkColorScheme, 824, 1100)
@@ -218,15 +208,12 @@ fun main() {
     renderCollapsedReport("mail_expanded_dark.png", DarkColorScheme, expanded = true)
     renderDesignRefresh("design_refresh_dark.png", DarkColorScheme)
     renderDesignRefresh("design_refresh_light.png", LightColorScheme)
-    // Five-slot super-app bar: 피드·통화·자체앱·인터넷·카톡. One shot per selectable
-    // screen tab (피드/자체앱) so the filled-vs-outlined active glyph is checked; 통화/
-    // 인터넷/카톡 are action tabs (never selected) and show on every shot.
+    // Five-slot bar: 피드·메일·자체앱·달력·설정. One shot per selectable screen tab
+    // (피드/자체앱) so the filled-vs-outlined active glyph is checked; 메일/달력/설정 are
+    // navigate-actions (never selected) and show on every shot.
     renderBottomBar("bottombar_feed_dark.png", DarkColorScheme, "deneb_feed")
     renderBottomBar("bottombar_feed_light.png", LightColorScheme, "deneb_feed")
     renderBottomBar("bottombar_apphub_dark.png", DarkColorScheme, "deneb_app_hub")
-    // Launcher mode ON (통화·인터넷·카톡) vs OFF (메일·달력·설정).
-    renderBottomBar("bottombar_launcher_on.png", DarkColorScheme, "deneb_app_hub", launcherEnabled = true)
-    renderBottomBar("bottombar_launcher_off.png", DarkColorScheme, "deneb_app_hub", launcherEnabled = false)
     renderDesignSample("design_dark.png", DarkColorScheme)
     renderDesignSample("design_light.png", LightColorScheme)
     renderScreen("calendar_event_dark.png", "calendar_event", DarkColorScheme, 760, 1100)
@@ -637,24 +624,6 @@ internal val previewScreens: Map<String, @Composable (ColorScheme) -> Unit> = ma
             }
         }
     },
-    "app_drawer" to { scheme ->
-        // Mix of Korean labels and Latin-brand apps — the latter must file under their
-        // Korean reading (YouTube→ㅇ, Chrome→ㅋ, Gmail→ㅈ, Strava→ㅅ), so the scrub stays
-        // a unified ㄱㄴㄷ with no A–Z tail.
-        val apps = listOf(
-            "메일", "캘린더", "카카오톡", "전화", "탑솔라 ERP", "은행", "메시지",
-            "카메라", "설정", "지도", "사진", "YouTube", "Chrome", "Gmail",
-            "Instagram", "Strava",
-        ).mapIndexed { i, label -> LauncherAppEntry(label = label, packageName = "pkg.$i") }
-        MaterialTheme(colorScheme = scheme) {
-            Surface(color = MaterialTheme.colorScheme.background) {
-                Box(Modifier.width(412.dp)) {
-                    // Two pinned rows show the pin marker (카카오톡, YouTube).
-                    AppDrawer(apps = apps, onLaunch = {}, pinned = setOf("pkg.2", "pkg.11"))
-                }
-            }
-        }
-    },
     "scrub_active" to { scheme ->
         // The shared scrub list rendered MID-SCRUB (previewActiveKey) so the static
         // image shows the magnified bubble + active-letter highlight + wider strip.
@@ -863,11 +832,10 @@ private val cronWeeklyDraft = ScheduleDraft(SchedMode.WEEKLY, "08:00", setOf(1, 
 private val cronIntervalDraft = ScheduleDraft(SchedMode.INTERVAL, "09:00", emptySet(), "15", IntervalUnit.MIN, LocalDate.parse("2026-06-13"), "")
 private val cronAdvancedDraft = ScheduleDraft(SchedMode.ADVANCED, "09:00", emptySet(), "30", IntervalUnit.MIN, LocalDate.parse("2026-06-13"), "*/5 8-22 * * 1-6")
 
-private fun renderBottomBar(name: String, scheme: ColorScheme, route: String, launcherEnabled: Boolean = true) {
+private fun renderBottomBar(name: String, scheme: ColorScheme, route: String) {
     // Phone width (412dp = 824px @ density 2) so the bar matches the real device. The
-    // five-slot bar renders the same regardless of the action-tab callbacks, so they're
-    // no-ops here — this checks the icons/labels/selection only. launcherEnabled=false
-    // swaps the external 통화/인터넷/카톡 for the 메일/달력/설정 sections.
+    // navigate-action callbacks are no-ops here — this checks the icons/labels/selection
+    // only (피드·메일·자체앱·달력·설정).
     val scene = ImageComposeScene(width = 824, height = 240, density = Density(2f)) {
         MaterialTheme(colorScheme = scheme) {
             Surface(color = MaterialTheme.colorScheme.background) {
@@ -876,10 +844,6 @@ private fun renderBottomBar(name: String, scheme: ColorScheme, route: String, la
                     DenebBottomBar(
                         currentRoute = route,
                         onNavigate = {},
-                        onCall = {},
-                        onInternet = {},
-                        onKakao = {},
-                        launcherEnabled = launcherEnabled,
                     )
                 }
             }

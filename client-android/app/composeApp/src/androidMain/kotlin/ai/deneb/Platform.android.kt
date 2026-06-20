@@ -168,48 +168,6 @@ actual fun openUrl(url: String): Boolean = try {
     false
 }
 
-private const val kakaoTalkPackage = "com.kakao.talk"
-
-actual fun launchKakaoTalk(): Boolean = try {
-    val context: Context by inject(Context::class.java)
-    val launch = context.packageManager.getLaunchIntentForPackage(kakaoTalkPackage)
-    if (launch != null) {
-        launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        context.startActivity(launch)
-        true
-    } else {
-        // Not installed — best-effort open of its store page so the tap isn't a dead end.
-        val store = Intent(Intent.ACTION_VIEW, "market://details?id=$kakaoTalkPackage".toUri())
-            .apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
-        context.startActivity(store)
-        false
-    }
-} catch (_: Exception) {
-    false
-}
-
-private const val samsungBrowserPackage = "com.sec.android.app.sbrowser"
-
-actual fun launchSamsungBrowser(): Boolean = try {
-    val context: Context by inject(Context::class.java)
-    val launch = context.packageManager.getLaunchIntentForPackage(samsungBrowserPackage)
-    if (launch != null) {
-        launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        context.startActivity(launch)
-        true
-    } else {
-        // Not a Samsung device (Samsung Internet absent) — fall back to whatever browser
-        // the user does have. A blank https page lands on the default browser's start
-        // page/new tab, which is the right substitute for an external-browser action.
-        val browser = Intent(Intent.ACTION_VIEW, "https://".toUri())
-            .apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
-        context.startActivity(browser)
-        false
-    }
-} catch (_: Exception) {
-    false
-}
-
 // Cap on-screen image decode resolution. Inbound images (chat attachments,
 // inline mail images) are only ever drawn at phone-screen scale, so decoding a
 // 12MP photo at full res (~48MB ARGB_8888) just to show it in a ~400px bubble
