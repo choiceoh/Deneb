@@ -1136,7 +1136,7 @@ private val sampleDashboard = listOf(
         ),
     ),
     LaneOut(
-        key = "unsorted",
+        key = "unclassified",
         name = "미분류",
         items = listOf(
             DashboardItem("무림 울산공장 풍력 검토안", "박종원 부장 — 담당 파트 미지정", "proactive", "workfeed", "wf4", System.currentTimeMillis() + 50 * 3_600_000L),

@@ -132,7 +132,7 @@ internal fun DashboardLanesContent(lanes: List<LaneOut>) {
     val tz = remember { TimeZone.currentSystemDefault() }
     Column(Modifier.fillMaxWidth().padding(top = 4.dp)) {
         lanes.forEach { lane ->
-            val muted = lane.key == "unsorted"
+            val muted = lane.key == "unclassified"
             DashboardLane(lane = lane, tz = tz, muted = muted)
             Spacer(Modifier.height(18.dp))
         }
