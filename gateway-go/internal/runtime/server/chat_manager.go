@@ -4,6 +4,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/embedding"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/localai"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/filestore"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 )
 
@@ -15,6 +16,15 @@ type ChatManager struct {
 	modelRegistry   *modelrole.Registry
 	localAIHub      *localai.Hub
 	embeddingClient *embedding.Client
+
+	// fileStore is the one shared on-box file store (filestore) used by the
+	// miniapp.files.* RPCs, the chat files tool, and the semantic reindex task —
+	// a single instance so they all see the same root and the index stays in
+	// sync. nil when the store can't be opened (the features degrade).
+	fileStore filestore.Store
+	// fileSemanticIndex is the BGE-M3 vector index over fileStore, maintained by
+	// a background PeriodicTask (filestore_semindex.go). nil when disabled.
+	fileSemanticIndex *filestore.SemanticIndex
 
 	// proactiveRelay delivers agent-initiated messages (cron results,
 	// gmail poll summaries, wiki dreaming notifications) to the user's

@@ -353,6 +353,15 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 				t, _ := tools.ExtractDocumentText(ctx, d, n, "")
 				return t
 			},
+			// Semantic search (search semantic=true) ranks by meaning via the shared
+			// BGE-M3 file index. A lazy closure: the index + embedding client are
+			// created later in initToolsAndDeps (this wiring runs in the early phase),
+			// and requests arrive well after boot, so reading them at call time is
+			// safe. Returns empty (→ name/content fallback) when the index/embedding
+			// server is unavailable.
+			SemanticSearch: func(ctx context.Context, query string, max int) ([]filestore.ScoredEntry, error) {
+				return s.fileSemanticSearch(ctx, query, max)
+			},
 		}),
 
 		// Native mail domain. The RPC namespace stays miniapp.gmail.* for

@@ -613,6 +613,12 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 		}
 	}
 
+	// File semantic index: background reindex task (15 min, plus a first cycle
+	// shortly after boot via the service's initial-grace). Keeps the BGE-M3 vector
+	// index over the file store fresh so semantic file search finds new/changed
+	// files. No-op when the index/store/embedding client isn't wired.
+	s.registerFileSemindexTask()
+
 	// Propus: register autonomous tasks (services created in initGenesisServices).
 	s.registerGenesisAutonomousTasks(hub)
 

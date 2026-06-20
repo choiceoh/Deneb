@@ -218,6 +218,12 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 		s.initSpilloverLifecycle(spillStore)
 	}
 
+	// Semantic (vector) file search: opens the shared file store + BGE-M3 index
+	// and wires s.toolDeps.FilesSemanticSearch. Must run before RegisterCoreTools
+	// (the files tool captures the search closure at registration time). The
+	// background reindex task is registered later in registerWorkflowSideEffects.
+	s.initFileSemanticIndex()
+
 	// Core tools (file I/O, exec, process, sessions, gateway, cron, image).
 	chat.RegisterCoreTools(chatCfg.Tools, s.toolDeps)
 

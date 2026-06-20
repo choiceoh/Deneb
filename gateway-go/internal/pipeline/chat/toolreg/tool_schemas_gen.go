@@ -848,7 +848,7 @@ func filesToolSchema() map[string]any {
 			"action": map[string]any{
 				"type":        "string",
 				"description": "File store action to perform",
-				"enum":        []string{"list", "search", "download", "upload", "share", "analyze", "delete", "mkdir", "move"},
+				"enum":        []string{"list", "search", "semantic_search", "download", "upload", "share", "analyze", "delete", "mkdir", "move"},
 			},
 			"content": map[string]any{
 				"type":        "boolean",
@@ -891,6 +891,11 @@ func filesToolSchema() map[string]any {
 			"recursive": map[string]any{
 				"type":        "boolean",
 				"description": "Recurse into subfolders on list",
+				"default":     false,
+			},
+			"semantic": map[string]any{
+				"type":        "boolean",
+				"description": "On search, rank files by meaning (BGE-M3 vector similarity) instead of literal substring match — finds files about the query even when they phrase it differently. Equivalent to the semantic_search action. Falls back to name/content search when the embedding server is unavailable. Default false.",
 				"default":     false,
 			},
 		},

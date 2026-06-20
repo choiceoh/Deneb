@@ -30,7 +30,7 @@ func RegisterCoreTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDep
 		diaryDir = deps.Wiki.Store.DiaryDir()
 		wikiDir = deps.Wiki.Store.Dir()
 	}
-	RegisterRoutineTools(registry, &deps.Chrono, deps.LLMClient, deps.DefaultModel, diaryDir, wikiDir)
+	RegisterRoutineTools(registry, &deps.Chrono, deps.LLMClient, deps.DefaultModel, diaryDir, wikiDir, deps.FilesSemanticSearch)
 	RegisterPhoneTools(registry)
 
 	// Standing goal (Ralph loop). Eager: the agent must discover it to set a
@@ -335,7 +335,7 @@ func RegisterChronoTools(registry toolctx.ToolRegistrar) {
 // Typical trigger: cron scheduler, daily routines, periodic checks.
 // diaryDir is the wiki diary directory for morning letter logging; wikiDir is
 // the wiki root for its deadline scan (either empty = that part disabled).
-func RegisterRoutineTools(registry toolctx.ToolRegistrar, chrono *toolctx.ChronoDeps, llmClient *llm.Client, defaultModel, diaryDir, wikiDir string) {
+func RegisterRoutineTools(registry toolctx.ToolRegistrar, chrono *toolctx.ChronoDeps, llmClient *llm.Client, defaultModel, diaryDir, wikiDir string, filesSemanticSearch tools.FilesSemanticSearchFunc) {
 	// Deferred (prompt audit 2026-06-12): ~590 wire tokens — the second-largest
 	// eager tool — for 11 interactive uses in 14 days. The scheduler itself runs
 	// server-side; this tool only manages jobs, so a "매일 아침에 …" turn pays one
@@ -368,9 +368,9 @@ func RegisterRoutineTools(registry toolctx.ToolRegistrar, chrono *toolctx.Chrono
 
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "files",
-		Description: "파일 저장소 (로컬 디스크, 외부 클라우드 아님): list, search, download (extract=true로 텍스트 추출 — PDF/이미지 OCR·Excel/Word/PowerPoint), upload (로컬 파일을 저장소에 저장), share (7일 유효 공유 링크), analyze (문서 내용 추출). 저장 위치: DENEB_FILES_DIR (기본 ~/.deneb/files). 인증 불필요.",
+		Description: "파일 저장소 (로컬 디스크, 외부 클라우드 아님): list, search (이름·content=true로 내용, semantic=true로 의미 기반 벡터 검색), semantic_search (=search semantic=true), download (extract=true로 텍스트 추출 — PDF/이미지 OCR·Excel/Word/PowerPoint), upload (로컬 파일을 저장소에 저장), share (7일 유효 공유 링크), analyze (문서 내용 추출). 저장 위치: DENEB_FILES_DIR (기본 ~/.deneb/files). 인증 불필요.",
 		InputSchema: filesToolSchema(),
-		Fn:          tools.ToolFiles(),
+		Fn:          tools.ToolFiles(filesSemanticSearch),
 		Deferred:    true,
 	})
 	// Morning-letter data collection: six sections in parallel, raw JSON out;
