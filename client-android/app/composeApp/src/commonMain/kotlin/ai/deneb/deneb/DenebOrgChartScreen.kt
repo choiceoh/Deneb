@@ -2,7 +2,6 @@ package ai.deneb.deneb
 
 import ai.deneb.deneb.generated.MemberOut
 import ai.deneb.deneb.generated.OrgNodeOut
-import ai.deneb.ui.DenebGroup
 import ai.deneb.ui.DenebOutlinedTextField
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebType
@@ -12,7 +11,11 @@ import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
 import ai.deneb.ui.denebInsight
 import ai.deneb.ui.denebInsightContainer
+import ai.deneb.ui.denebPressable
+import ai.deneb.ui.handCursor
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,10 +32,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.MailOutline
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
@@ -55,10 +62,17 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlin.random.Random
 import kotlin.time.Clock
@@ -73,16 +87,30 @@ import kotlin.time.ExperimentalTime
  * *edits* it — add/rename/delete nodes, manage members (name + 직급/직책 picker),
  * and tag nodes as dashboard parts.
  *
+ * View model (v2): the structure is drawn as a real **org chart diagram** — node
+ * boxes joined by parent→child connector lines, top-down, with a per-node expand
+ * caret so a deep tree folds and a horizontal scroll so a wide level pans. A search
+ * bar finds people by name across the whole tree (겸직 = a name in several nodes is
+ * surfaced once per node) and pans to the match. (The old indented-list view is
+ * replaced; the editor + save path are unchanged.)
+ *
+ * Contacts: the gateway enriches each member on GET with phones/emails name-matched
+ * from the contacts store (read-only — never written back on save). Where members are
+ * shown (the editor's member rows and the search-result chips), a matched member gets
+ * call/email glyphs that dial/compose directly via the platform URI handler; unmatched
+ * members show nothing extra.
+ *
  * Editing model: the whole tree is one editable document. The shell holds the full
  * node list in state, all edits mutate that local list, and 저장 sends the whole
  * tree (`saveOrg`) which the gateway validates + persists wholesale. A discard guard
  * compares the working tree to the loaded baseline so a stray back can't lose edits.
  *
  * Design split (see .claude/rules/native-design-system.md): the frame + type are the
- * Deneb skin (DenebScreenScaffold + DenebType + grouped DenebGroup card + hairlines);
- * the controls (back, save button, member pickers, bottom sheet) are Material. The
- * tree itself is a stateless body ([OrgTreeContent]) the render harness previews with
- * mock data; this composable is the stateful shell (fetch + edit + save).
+ * Deneb skin (DenebScreenScaffold + DenebType + mono node boxes + hairline
+ * connectors); the controls (back, save button, search field, member pickers, bottom
+ * sheet) are Material. The chart itself is a stateless body ([OrgChartContent]) the
+ * render harness previews with mock data; this composable is the stateful shell
+ * (fetch + edit + save).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -167,23 +195,27 @@ fun DenebOrgChartScreen(
             },
             modifier = Modifier.fillMaxWidth().weight(1f),
         ) {
-            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-                when {
-                    loadOk == null && nodes.isEmpty() -> DenebLoading()
+            when {
+                loadOk == null && nodes.isEmpty() ->
+                    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) { DenebLoading() }
 
-                    loadOk == false && nodes.isEmpty() -> DenebError(
-                        "조직도를 불러오지 못했습니다.",
-                        onRetry = {
-                            scope.launch {
-                                loadOk = null
-                                load()
-                            }
-                        },
-                    )
+                loadOk == false && nodes.isEmpty() ->
+                    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+                        DenebError(
+                            "조직도를 불러오지 못했습니다.",
+                            onRetry = {
+                                scope.launch {
+                                    loadOk = null
+                                    load()
+                                }
+                            },
+                        )
+                    }
 
-                    nodes.isEmpty() -> {
-                        // An empty chart is a valid starting state (no org.json yet): guide
-                        // the operator to seed the first (root) node instead of looking broken.
+                nodes.isEmpty() ->
+                    // An empty chart is a valid starting state (no org.json yet): guide
+                    // the operator to seed the first (root) node instead of looking broken.
+                    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
                         DenebEmpty(
                             "아직 조직도가 없습니다.",
                             actionLabel = "최상위 조직 추가",
@@ -196,55 +228,30 @@ fun DenebOrgChartScreen(
                         )
                     }
 
-                    else -> {
-                        OrgTreeContent(
-                            nodes = nodes,
-                            onEditNode = { id ->
-                                haptics.tap()
-                                editingId = id
-                            },
-                            onAddChild = { parentId ->
-                                haptics.tap()
-                                val node = newNode(parentId = parentId)
-                                nodes = nodes + node
-                                editingId = node.id
-                            },
-                        )
-                        Spacer(Modifier.height(12.dp))
-                        // Add another root node (a second company/group under no parent).
-                        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
-                            OutlinedButton(onClick = {
-                                haptics.tap()
-                                val node = newNode(parentId = "")
-                                nodes = nodes + node
-                                editingId = node.id
-                            }) {
-                                Icon(Icons.Outlined.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Spacer(Modifier.width(6.dp))
-                                Text("최상위 조직 추가")
-                            }
-                        }
-                    }
-                }
-                // Save feedback toast-line: shown under the tree (a Snackbar would float
-                // over the bottom bar). Cleared on the next edit/save.
-                if (notice != null) {
-                    Text(
-                        notice!!,
-                        style = DenebType.meta,
-                        color = denebInsight(),
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+                else ->
+                    // The chart owns its own scroll (the diagram pans both ways), so it is
+                    // NOT wrapped in the outer verticalScroll the state cases use.
+                    OrgChartContent(
+                        nodes = nodes,
+                        notice = notice,
+                        error = error,
+                        onEditNode = { id ->
+                            haptics.tap()
+                            editingId = id
+                        },
+                        onAddChild = { parentId ->
+                            haptics.tap()
+                            val node = newNode(parentId = parentId)
+                            nodes = nodes + node
+                            editingId = node.id
+                        },
+                        onAddRoot = {
+                            haptics.tap()
+                            val node = newNode(parentId = "")
+                            nodes = nodes + node
+                            editingId = node.id
+                        },
                     )
-                }
-                if (error != null) {
-                    Text(
-                        error!!,
-                        style = DenebType.rowSubtitle,
-                        color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
-                    )
-                }
-                Spacer(Modifier.height(24.dp))
             }
         }
     }
@@ -339,171 +346,414 @@ internal fun removeSubtree(nodes: List<OrgNodeOut>, id: String): List<OrgNodeOut
     return nodes.filterNot { it.id in doomed }
 }
 
+// --- people search -----------------------------------------------------------
+
+/** One hit of a people search: the node carrying a matching member + the member. */
+internal data class OrgSearchHit(val node: OrgNodeOut, val member: MemberOut)
+
+/**
+ * Find every member whose name contains [query] (case/space-insensitive), across the
+ * whole tree. A 겸직 (the same name in several nodes) yields one hit per node, so the
+ * caller can show the count and let the operator pick which node to jump to. Blank
+ * query = no hits (search is idle, not "everyone").
+ */
+internal fun searchMembers(nodes: List<OrgNodeOut>, query: String): List<OrgSearchHit> {
+    val needle = query.trim().replace(" ", "")
+    if (needle.isEmpty()) return emptyList()
+    val hits = mutableListOf<OrgSearchHit>()
+    for (node in nodes) {
+        for (m in node.members) {
+            if (m.name.replace(" ", "").contains(needle, ignoreCase = true)) {
+                hits.add(OrgSearchHit(node, m))
+            }
+        }
+    }
+    return hits
+}
+
+// --- chart geometry ----------------------------------------------------------
+
+/** Fixed node-box width. Boxes are uniform so connector math stays simple and the
+ *  chart reads as a grid of equal cards; long names ellipsize. */
+private val OrgNodeWidth: Dp = 168.dp
+
+/** Horizontal gap between sibling subtrees. */
+private val OrgSiblingGap: Dp = 16.dp
+
+/** Vertical height of the connector band drawn between a node and its children. */
+private val OrgConnectorBand: Dp = 28.dp
+
 // --- stateless body (previewable) -------------------------------------------
 
 /**
- * The org chart tree: nodes laid out as an indented expand/collapse hierarchy joined
- * by parentId. Each node renders its name, a type badge, a lane (대시보드 파트) chip
- * if tagged, its leader + member count, and — when expanded — its member list. Tapping
- * a node opens its editor; a per-node ＋ adds a child. Roots (empty parentId) are the
- * top level. Pure presentation — the shell owns the tree state + edits.
+ * The org chart diagram + people search. The structure is drawn top-down as boxes
+ * joined by connector lines (not an indented list): each node renders its name, a
+ * type badge, a lane (파트) chip if tagged, and a member-count line; tapping a box
+ * opens its editor; a per-node ＋ adds a child; a caret folds its subtree. The whole
+ * diagram pans horizontally (wide levels) and vertically (deep trees). The search bar
+ * finds people by name and pans to / highlights the matching node(s). Roots (empty
+ * parentId) are the top level. Pure presentation — the shell owns the tree + edits.
  */
 @Composable
-internal fun OrgTreeContent(
+internal fun OrgChartContent(
     nodes: List<OrgNodeOut>,
+    notice: String?,
+    error: String?,
     onEditNode: (String) -> Unit,
     onAddChild: (String) -> Unit,
+    onAddRoot: () -> Unit,
+    initialQuery: String = "", // seeds the search box (for the render harness; "" at runtime)
 ) {
     // Group children by parent once so render is O(n) not O(n^2).
     val childrenOf = remember(nodes) { nodes.groupBy { it.parentId } }
-    // Expand/collapse state per node id; default expanded so the whole chart reads at
-    // a glance (a hand-maintained chart is small). Survives edits via the id key.
-    val collapsed = remember { mutableStateOf(setOf<String>()) }
-    Column(Modifier.fillMaxWidth().padding(top = 4.dp)) {
-        DenebGroup {
-            val roots = childrenOf[""].orEmpty()
-            roots.forEachIndexed { i, root ->
-                OrgNodeRows(
-                    node = root,
-                    depth = 0,
-                    childrenOf = childrenOf,
-                    collapsed = collapsed.value,
-                    onToggle = { id ->
-                        collapsed.value = if (id in collapsed.value) collapsed.value - id else collapsed.value + id
-                    },
-                    onEditNode = onEditNode,
-                    onAddChild = onAddChild,
-                    isLastRoot = i == roots.lastIndex,
-                )
+    // Collapse state per node id; default expanded so the whole chart reads at a glance
+    // (a hand-maintained chart is small). Survives edits via the id key.
+    var collapsed by remember { mutableStateOf(setOf<String>()) }
+
+    // People search. A non-blank query computes hits; the set of hit node ids drives
+    // box highlighting, and expanding the ancestors of a hit makes it visible even when
+    // its branch was folded.
+    var query by remember { mutableStateOf(initialQuery) }
+    val hits = remember(nodes, query) { searchMembers(nodes, query) }
+    val hitNodeIds = remember(hits) { hits.map { it.node.id }.toSet() }
+
+    // Jump-to-node request from a search result: clear the collapse on every ancestor so
+    // the target is rendered. (We can't auto-scroll without measured coords; expanding +
+    // highlighting is the reliable, layout-free affordance.)
+    fun revealNode(node: OrgNodeOut) {
+        val parentById = nodes.associateBy({ it.id }, { it.parentId })
+        val toOpen = mutableSetOf<String>()
+        var pid = node.parentId
+        var guard = 0
+        while (pid.isNotEmpty() && guard < nodes.size + 1) {
+            toOpen.add(pid)
+            pid = parentById[pid] ?: ""
+            guard++
+        }
+        collapsed = collapsed - toOpen
+    }
+
+    Column(Modifier.fillMaxSize()) {
+        // Search bar — finds people by name. A trailing clear (×) appears once typed.
+        OrgSearchBar(
+            query = query,
+            onQueryChange = { query = it },
+            hitCount = hits.size,
+        )
+        // Search results strip: each matching member as a tappable chip ("이름 · 노드").
+        // Tapping reveals (expands ancestors of) that node. 겸직 shows once per node.
+        if (query.isNotBlank()) {
+            OrgSearchResults(hits = hits, onPick = { hit -> revealNode(hit.node) })
+        }
+
+        // The diagram itself: pannable both ways. A roomy fixed padding gives the boxes
+        // breathing room and keeps the first root off the edges. The horizontal scroll
+        // starts centered: a parent is centered over its (often deep, left-heavy) subtree,
+        // which pushes the root toward the middle of the full width — so centering the
+        // initial pan lands the user on the top of the hierarchy instead of an edge.
+        val hScroll = rememberScrollState()
+        LaunchedEffect(Unit) {
+            // One-shot after first layout (maxValue is 0 until measured): wait for the
+            // first non-zero extent, then center the pan so the centered root subtree lands
+            // on screen. scrollTo clamps, so half the extent is always in range.
+            snapshotFlow { hScroll.maxValue }
+                .first { it > 0 }
+                .let { max -> hScroll.scrollTo(max / 2) }
+        }
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .verticalScroll(rememberScrollState()),
+        ) {
+            Row(
+                Modifier
+                    .horizontalScroll(hScroll)
+                    .padding(horizontal = 20.dp, vertical = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(OrgSiblingGap),
+            ) {
+                val roots = childrenOf[""].orEmpty()
+                roots.forEach { root ->
+                    OrgSubtree(
+                        node = root,
+                        childrenOf = childrenOf,
+                        collapsed = collapsed,
+                        onToggle = { id ->
+                            collapsed = if (id in collapsed) collapsed - id else collapsed + id
+                        },
+                        onEditNode = onEditNode,
+                        onAddChild = onAddChild,
+                        hitNodeIds = hitNodeIds,
+                    )
+                }
             }
         }
+
+        // Add another root node (a second company/group under no parent).
+        Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 4.dp)) {
+            OutlinedButton(onClick = onAddRoot) {
+                Icon(Icons.Outlined.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("최상위 조직 추가")
+            }
+        }
+        // Save feedback toast-line: shown under the chart (a Snackbar would float over the
+        // bottom bar). Cleared on the next edit/save.
+        if (notice != null) {
+            Text(
+                notice,
+                style = DenebType.meta,
+                color = denebInsight(),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+            )
+        }
+        if (error != null) {
+            Text(
+                error,
+                style = DenebType.rowSubtitle,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+            )
+        }
+        Spacer(Modifier.height(8.dp))
     }
 }
 
 /**
- * One node row plus (recursively) its descendants. Indentation encodes depth; an
- * expand caret shows only when the node has children. The row body is a single
- * hairline row inside the group card — leading caret/spacer, name + type badge, then
- * a trailing ＋ (add child) and ✎ (edit). Expanded nodes list their members beneath.
+ * One subtree, drawn top-down: the node box, then — when expanded and it has children —
+ * a connector band (parent stub + per-child elbow lines) and a row of child subtrees.
+ * Each subtree column centers its own node box over its children so the connectors line
+ * up. Recursion handles arbitrary depth; collapse prunes a branch.
  */
 @Composable
-private fun OrgNodeRows(
+private fun OrgSubtree(
     node: OrgNodeOut,
-    depth: Int,
     childrenOf: Map<String, List<OrgNodeOut>>,
     collapsed: Set<String>,
     onToggle: (String) -> Unit,
     onEditNode: (String) -> Unit,
     onAddChild: (String) -> Unit,
-    isLastRoot: Boolean,
+    hitNodeIds: Set<String>,
 ) {
     val kids = childrenOf[node.id].orEmpty()
     val isCollapsed = node.id in collapsed
-    val hairline = denebHairline()
-    val indent = (depth * 16).dp
+    val showKids = kids.isNotEmpty() && !isCollapsed
 
-    Column(Modifier.fillMaxWidth()) {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(start = 16.dp + indent, end = 8.dp, top = 12.dp, bottom = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            // Expand caret (only when there are children); otherwise a small spacer so
-            // names still align.
-            if (kids.isNotEmpty()) {
-                IconButton(onClick = { onToggle(node.id) }, modifier = Modifier.size(28.dp)) {
-                    Icon(
-                        imageVector = if (isCollapsed) Icons.AutoMirrored.Filled.KeyboardArrowRight else Icons.Filled.KeyboardArrowDown,
-                        contentDescription = if (isCollapsed) "펼치기" else "접기",
-                        tint = denebHint(),
-                        modifier = Modifier.size(20.dp),
-                    )
-                }
-                Spacer(Modifier.width(2.dp))
-            } else {
-                Spacer(Modifier.width(30.dp))
-            }
-            // Name + type badge + optional lane chip + leader/member summary.
-            Column(Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = node.name.ifBlank { "(이름 없음)" },
-                        style = DenebType.rowTitleStrong,
-                        color = if (node.name.isBlank()) denebHint() else MaterialTheme.colorScheme.onBackground,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false),
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    OrgTypeBadge(node.type)
-                    if (node.lane.isNotBlank()) {
-                        Spacer(Modifier.width(6.dp))
-                        OrgLaneChip()
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        OrgNodeBox(
+            node = node,
+            childCount = kids.size,
+            isCollapsed = isCollapsed,
+            highlighted = node.id in hitNodeIds,
+            onToggle = { onToggle(node.id) },
+            onEdit = { onEditNode(node.id) },
+            onAddChild = { onAddChild(node.id) },
+        )
+        if (showKids) {
+            // The connector band + the children row are laid out by one custom Layout that
+            // draws each elbow to the *measured* center of each child column (children with
+            // their own subtrees are wider than one box, so centers must be measured).
+            OrgChildrenWithConnectors(
+                children = {
+                    kids.forEach { kid ->
+                        OrgSubtree(
+                            node = kid,
+                            childrenOf = childrenOf,
+                            collapsed = collapsed,
+                            onToggle = onToggle,
+                            onEditNode = onEditNode,
+                            onAddChild = onAddChild,
+                            hitNodeIds = hitNodeIds,
+                        )
                     }
-                }
-                // When the node is expanded its members list right below, so the
-                // summary drops the people part (it'd just repeat) and keeps only the
-                // keyword/company counts. Collapsed, it shows the full glance.
-                val summary = nodeSummary(node, membersShown = !isCollapsed && node.members.isNotEmpty())
-                if (summary.isNotEmpty()) {
-                    Text(
-                        text = summary,
-                        style = DenebType.snippet,
-                        color = denebHint(),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(top = 3.dp),
-                    )
-                }
-            }
-            // Add-child + edit affordances.
-            IconButton(onClick = { onAddChild(node.id) }, modifier = Modifier.size(34.dp)) {
-                Icon(Icons.Outlined.Add, contentDescription = "하위 조직 추가", tint = denebHint(), modifier = Modifier.size(18.dp))
-            }
-            IconButton(onClick = { onEditNode(node.id) }, modifier = Modifier.size(34.dp)) {
-                Icon(Icons.Outlined.Edit, contentDescription = "편집", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
-            }
+                },
+            )
         }
-
-        // Member lines under an expanded node (indented past the name column).
-        if (!isCollapsed && node.members.isNotEmpty()) {
-            Column(Modifier.fillMaxWidth().padding(start = 16.dp + indent + 30.dp, end = 16.dp, bottom = 10.dp)) {
-                node.members.forEach { m ->
-                    Text(
-                        text = memberLine(m),
-                        style = DenebType.rowSubtitle,
-                        color = denebHint(),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(vertical = 1.dp),
-                    )
-                }
-            }
-        }
-
-        // Children, recursively, when expanded.
-        if (!isCollapsed) {
-            kids.forEach { kid ->
-                OrgNodeRows(
-                    node = kid,
-                    depth = depth + 1,
-                    childrenOf = childrenOf,
-                    collapsed = collapsed,
-                    onToggle = onToggle,
-                    onEditNode = onEditNode,
-                    onAddChild = onAddChild,
-                    isLastRoot = isLastRoot,
-                )
-            }
-        }
-    }
-    // Faint divider between top-level subtrees (not after the very last) so multiple
-    // roots/companies read as separated blocks inside the one group card.
-    if (depth == 0 && !isLastRoot) {
-        Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp).height(1.dp).background(hairline))
     }
 }
+
+/**
+ * A single node box: rounded mono card with the name, a type badge row, a member-count
+ * line, an optional 파트 chip, and (top-right) edit + add-child glyphs; a bottom caret
+ * toggles the subtree when the node has children. A search hit tints the border + a
+ * faint wash with the cool interactive accent. The whole card is tappable → edit.
+ */
+@Composable
+private fun OrgNodeBox(
+    node: OrgNodeOut,
+    childCount: Int,
+    isCollapsed: Boolean,
+    highlighted: Boolean,
+    onToggle: () -> Unit,
+    onEdit: () -> Unit,
+    onAddChild: () -> Unit,
+) {
+    val accent = MaterialTheme.colorScheme.primary
+    val baseFill = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.05f)
+    val fill = if (highlighted) accent.copy(alpha = 0.12f) else baseFill
+    val borderColor = if (highlighted) accent else denebHairline()
+    val shape = RoundedCornerShape(12.dp)
+
+    Column(
+        Modifier
+            .width(OrgNodeWidth)
+            .background(fill, shape)
+            .border(if (highlighted) 1.5.dp else 1.dp, borderColor, shape)
+            .denebPressable(onClick = onEdit)
+            .handCursor()
+            .padding(start = 12.dp, end = 6.dp, top = 8.dp, bottom = 6.dp),
+    ) {
+        // Header row: type badge + lane chip (left), edit + add affordances (right).
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            OrgTypeBadge(node.type)
+            if (node.lane.isNotBlank()) {
+                Spacer(Modifier.width(6.dp))
+                OrgLaneChip()
+            }
+            Spacer(Modifier.weight(1f))
+            IconButton(onClick = onAddChild, modifier = Modifier.size(28.dp)) {
+                Icon(Icons.Outlined.Add, contentDescription = "하위 조직 추가", tint = denebHint(), modifier = Modifier.size(16.dp))
+            }
+            IconButton(onClick = onEdit, modifier = Modifier.size(28.dp)) {
+                Icon(Icons.Outlined.Edit, contentDescription = "편집", tint = accent, modifier = Modifier.size(16.dp))
+            }
+        }
+        // Name.
+        Text(
+            text = node.name.ifBlank { "(이름 없음)" },
+            style = DenebType.rowTitleStrong,
+            color = if (node.name.isBlank()) denebHint() else MaterialTheme.colorScheme.onBackground,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = 2.dp, end = 6.dp),
+        )
+        // Leader / member-count summary (people only — keyword/company counts live in the
+        // editor, the box stays scannable).
+        val summary = nodeMemberSummary(node)
+        if (summary.isNotEmpty()) {
+            Text(
+                text = summary,
+                style = DenebType.snippet,
+                color = denebHint(),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 3.dp, end = 6.dp),
+            )
+        }
+        // Expand/collapse caret — only when there are children. Full-width tap row so it is
+        // an easy target under the card body. Collapsed, it labels how many direct children
+        // are hidden so a folded branch still advertises its depth.
+        if (childCount > 0) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp)
+                    .denebPressable(onClick = onToggle)
+                    .handCursor(),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    imageVector = if (isCollapsed) Icons.AutoMirrored.Filled.KeyboardArrowRight else Icons.Filled.KeyboardArrowDown,
+                    contentDescription = if (isCollapsed) "펼치기" else "접기",
+                    tint = denebHint(),
+                    modifier = Modifier.size(18.dp),
+                )
+                if (isCollapsed) {
+                    Spacer(Modifier.width(2.dp))
+                    Text("하위 $childCount", style = DenebType.sectionLabel, color = denebHint())
+                }
+            }
+        }
+    }
+}
+
+/** Connector geometry captured during layout, read back on the draw pass. The band
+ *  height + each child's center x are all the draw needs to render the elbows. */
+private data class OrgConnectorGeometry(
+    val width: Int = 0,
+    val band: Float = 0f,
+    val centers: List<Float> = emptyList(),
+)
+
+/**
+ * Lays out the child subtrees in a row and draws the connector lines above them. The
+ * shape is the classic org elbow: a short stub down from the parent's bottom center, a
+ * horizontal bus across the children span, and a drop from the bus to each child's top
+ * center. With a single child the bus collapses to a straight vertical line.
+ *
+ * The parent box sits directly above this composable (centered over the same span), so
+ * the stub starts at this layout's top-center — which is the parent's bottom-center.
+ *
+ * How the lines find each child's center: a [Layout] measures + places the child
+ * subtrees (uniform box width, but a child with its own subtree is wider, so centers
+ * must be measured) and captures each center x + the band height into [geometry];
+ * [Modifier.drawBehind] reads that geometry on the draw pass (which runs after layout)
+ * to stroke the elbows. This capture-then-draw split is the standard Compose idiom for
+ * "draw relative to measured child positions" — the placement scope has no DrawScope.
+ */
+@Composable
+private fun OrgChildrenWithConnectors(
+    children: @Composable () -> Unit,
+) {
+    val lineColor = denebHairline()
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val bandPx = with(density) { OrgConnectorBand.toPx() }
+    val gapPx = with(density) { OrgSiblingGap.toPx() }
+    val strokePx = with(density) { 1.dp.toPx() }
+
+    var geometry by remember { mutableStateOf(OrgConnectorGeometry()) }
+
+    Layout(
+        content = children,
+        modifier = Modifier.drawBehind {
+            val g = geometry
+            if (g.centers.isEmpty() || g.band <= 0f) return@drawBehind
+            val topY = 0f // parent bottom-center
+            val busY = g.band / 2f // horizontal bus midway down the band
+            val parentX = g.width / 2f
+            // 1) stub from the parent down to the bus.
+            drawLine(lineColor, Offset(parentX, topY), Offset(parentX, busY), strokeWidth = strokePx)
+            if (g.centers.size == 1) {
+                // Single child: one straight line parent → child (no bus).
+                drawLine(lineColor, Offset(parentX, busY), Offset(g.centers[0], g.band), strokeWidth = strokePx)
+            } else {
+                // 2) horizontal bus spanning the outermost children.
+                val left = g.centers.first()
+                val right = g.centers.last()
+                drawLine(lineColor, Offset(left, busY), Offset(right, busY), strokeWidth = strokePx)
+                // 3) a drop from the bus to each child's top center.
+                g.centers.forEach { cx ->
+                    drawLine(lineColor, Offset(cx, busY), Offset(cx, g.band), strokeWidth = strokePx)
+                }
+            }
+        },
+    ) { measurables, constraints ->
+        // Measure each child subtree with its own intrinsic width (no width constraint).
+        val childConstraints = constraints.copy(minWidth = 0, minHeight = 0)
+        val placeables = measurables.map { it.measure(childConstraints) }
+        val gapTotal = (gapPx * (placeables.size - 1).coerceAtLeast(0)).toInt()
+        val width = (placeables.sumOf { it.width } + gapTotal).coerceAtLeast(0)
+        val band = bandPx.toInt()
+        val childrenHeight = placeables.maxOfOrNull { it.height } ?: 0
+        val height = band + childrenHeight
+
+        // Capture centers as we place, then publish the geometry for the draw pass.
+        var x = 0
+        val centers = ArrayList<Float>(placeables.size)
+        layout(width, height) {
+            placeables.forEach { p ->
+                p.placeRelative(x, band)
+                centers.add(x + p.width / 2f)
+                x += p.width + gapPx.toInt()
+            }
+            val next = OrgConnectorGeometry(width = width, band = band.toFloat(), centers = centers)
+            if (next != geometry) geometry = next
+        }
+    }
+}
+
+// --- small node-box parts ----------------------------------------------------
 
 /** Type badge — a small tracked-caps label (그룹/회사/본부·실/팀) in hint color. */
 @Composable
@@ -529,42 +779,165 @@ private fun OrgLaneChip() {
     }
 }
 
-/**
- * One-line node summary: leader (부서장) / member count + keyword + company counts,
- * e.g. "김철수 외 1명 · 키워드 2 · 거래처 1". Blank for a bare node. When
- * [membersShown] (the node is expanded and its members are listed below), the people
- * part is dropped to avoid repeating the member lines — only the keyword/company
- * counts remain.
- */
-internal fun nodeSummary(node: OrgNodeOut, membersShown: Boolean = false): String {
-    val parts = mutableListOf<String>()
-    if (!membersShown) {
-        val leader = nodeLeader(node)
-        when {
-            leader != null && node.members.size > 1 -> parts.add("${leader.name} 외 ${node.members.size - 1}명")
-            leader != null -> parts.add(leader.name)
-            node.members.size == 1 -> parts.add(node.members.first().name)
-            node.members.size > 1 -> parts.add("${node.members.size}명")
-        }
+/** Box member-count line: leader (부서장) + count, e.g. "김철수 외 1명" / "3명" / "".
+ *  Blank for a bare node (the box just shows its name + type). Keyword/company counts
+ *  stay in the editor so the box stays scannable. */
+internal fun nodeMemberSummary(node: OrgNodeOut): String {
+    val leader = nodeLeader(node)
+    return when {
+        leader != null && node.members.size > 1 -> "${leader.name} 외 ${node.members.size - 1}명"
+        leader != null -> leader.name
+        node.members.size == 1 -> node.members.first().name
+        node.members.size > 1 -> "${node.members.size}명"
+        else -> ""
     }
-    if (node.keywords.isNotEmpty()) parts.add("키워드 ${node.keywords.size}")
-    if (node.companies.isNotEmpty()) parts.add("거래처 ${node.companies.size}")
-    return parts.joinToString(" · ")
 }
 
-/** Member display line: "이름 직급·직책" (omitting blanks), e.g. "김철수 전무·팀장". */
-internal fun memberLine(m: MemberOut): String {
-    val tail = listOf(m.rank, m.position).filter { it.isNotBlank() }.joinToString("·")
-    return if (tail.isEmpty()) m.name.ifBlank { "(이름 없음)" } else "${m.name.ifBlank { "(이름 없음)" }}  $tail"
+// --- people search UI --------------------------------------------------------
+
+/** The search bar above the chart — a Material text field (Deneb-skinned) with a
+ *  leading magnifier, a trailing clear (×) once typed, and a hit-count suffix. */
+@Composable
+private fun OrgSearchBar(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    hitCount: Int,
+) {
+    Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 4.dp)) {
+        DenebOutlinedTextField(
+            value = query,
+            onValueChange = onQueryChange,
+            placeholder = { Text("이름으로 사람 찾기") },
+            singleLine = true,
+            trailingIcon = {
+                if (query.isNotBlank()) {
+                    IconButton(onClick = { onQueryChange("") }) {
+                        Icon(Icons.Outlined.Close, contentDescription = "지우기", tint = denebHint(), modifier = Modifier.size(18.dp))
+                    }
+                } else {
+                    Icon(Icons.Outlined.Search, contentDescription = null, tint = denebHint(), modifier = Modifier.size(18.dp))
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+        )
+        if (query.isNotBlank()) {
+            Text(
+                text = if (hitCount == 0) "일치하는 사람이 없습니다." else "$hitCount 곳에서 찾음",
+                style = DenebType.meta,
+                color = denebHint(),
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        }
+    }
+}
+
+/**
+ * Search-results strip: each matching member rendered as a tappable chip ("이름 · 노드
+ * 이름") with inline call/email shortcuts when the gateway enriched that member with
+ * contact info. A 겸직 (same name in several nodes) yields one chip per node, so the
+ * operator picks which posting to jump to. Tapping the chip reveals (expands ancestors
+ * of) that node and highlights it; the phone/mail glyphs dial/compose directly.
+ * Horizontally scrollable so many hits don't wrap into a wall.
+ */
+@Composable
+private fun OrgSearchResults(
+    hits: List<OrgSearchHit>,
+    onPick: (OrgSearchHit) -> Unit,
+) {
+    if (hits.isEmpty()) return
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        hits.forEach { hit ->
+            // The chip (label → reveals the node) and the contact glyphs are SIBLINGS in
+            // this row, not nested: a glyph tap must fire tel:/mailto: only, never also the
+            // chip's reveal. Keeping them adjacent (not inside the clickable chip) gives each
+            // its own distinct, non-overlapping tap target.
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                DenebChip(onClick = { onPick(hit) }) {
+                    val rank = hit.member.rank.ifBlank { "" }
+                    val label = buildString {
+                        append(hit.member.name.ifBlank { "(이름 없음)" })
+                        if (rank.isNotBlank()) {
+                            append(" ")
+                            append(rank)
+                        }
+                        append(" · ")
+                        append(hit.node.name.ifBlank { "(이름 없음)" })
+                    }
+                    Text(label, style = DenebType.rowSubtitle, color = MaterialTheme.colorScheme.onBackground, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                // Inline call/email shortcuts when the gateway enriched this member with
+                // contact info — search is people-centric, so let the operator reach the
+                // person straight from the result (no need to open the editor first).
+                OrgContactActions(member = hit.member, glyphSize = 18.dp, leadingGap = 2.dp)
+            }
+        }
+    }
+}
+
+// --- member contact actions --------------------------------------------------
+
+/**
+ * Call/email shortcuts for a member, shown only when the gateway enriched them with
+ * contact info (phones/emails — read-only, name-matched against the contacts store;
+ * see the gateway's MemberOut). A member with neither renders nothing, so unmatched
+ * people stay clean. The first phone / first email get a glyph each; tapping fires the
+ * platform's dialer (`tel:`) or mail composer (`mailto:`) via [LocalUriHandler] — the
+ * same common-safe URI path the mail/files screens use (no new expect/actual). When a
+ * person has several numbers/addresses we wire the first (the contacts store lists the
+ * primary first); the rest live in the 사람 detail screen.
+ *
+ * Design (see .claude/rules/native-design-system.md): these are *functional* icons
+ * (phone/mail) — allowed; placed as small, restrained glyph buttons, not decoration.
+ */
+@Composable
+internal fun OrgContactActions(
+    member: MemberOut,
+    glyphSize: Dp,
+    leadingGap: Dp,
+) {
+    val phone = member.phones.firstOrNull { it.isNotBlank() }
+    val email = member.emails.firstOrNull { it.isNotBlank() }
+    if (phone == null && email == null) return
+
+    val uriHandler = LocalUriHandler.current
+    val accent = MaterialTheme.colorScheme.primary
+    val buttonSize = glyphSize + 14.dp // glyph + touch padding (keeps a ~comfortable target)
+
+    Spacer(Modifier.width(leadingGap))
+    if (phone != null) {
+        IconButton(
+            onClick = { uriHandler.openUri("tel:${phone.trim()}") },
+            modifier = Modifier.size(buttonSize),
+        ) {
+            Icon(Icons.Filled.Call, contentDescription = "전화 $phone", tint = accent, modifier = Modifier.size(glyphSize))
+        }
+    }
+    if (email != null) {
+        IconButton(
+            onClick = { uriHandler.openUri("mailto:${email.trim()}") },
+            modifier = Modifier.size(buttonSize),
+        ) {
+            Icon(Icons.Outlined.MailOutline, contentDescription = "메일 $email", tint = accent, modifier = Modifier.size(glyphSize))
+        }
+    }
 }
 
 // --- node editor (bottom sheet body) ----------------------------------------
 
 /**
  * The node editor: rename + type picker + dashboard-part (lane) toggle + member CRUD
- * (each with 직급/직책 dropdowns) + delete. Every control writes back through
+ * (each with 직급/직책 dropdowns, plus read-only call/email shortcuts when the member is
+ * matched in the contacts store) + delete. Every editable control writes back through
  * [onChange] with the updated node, so the parent's working tree stays the single
- * source of truth (no local mirror to desync). Stateless over its node — previewable.
+ * source of truth (no local mirror to desync); the contact shortcuts are display-only
+ * (numbers live in the contacts store, never in org.json). Stateless over its node —
+ * previewable.
  */
 @Composable
 internal fun OrgNodeEditor(
@@ -706,6 +1079,17 @@ private fun OrgMemberEditor(
                     allowClear = true,
                     onSelect = { onChange(member.copy(position = it)) },
                 )
+            }
+        }
+        // Contact row: call/email shortcuts from the gateway's read-only enrichment.
+        // Only renders for members the contacts store matched (phones/emails present),
+        // so the editor stays uncluttered for the rest. Labelled so its purpose is clear
+        // next to the editable name/직급/직책 fields above (which never store numbers).
+        if (member.phones.any { it.isNotBlank() } || member.emails.any { it.isNotBlank() }) {
+            Spacer(Modifier.height(6.dp))
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text("연락처", style = DenebType.sectionLabel, color = denebHint())
+                OrgContactActions(member = member, glyphSize = 18.dp, leadingGap = 6.dp)
             }
         }
     }
