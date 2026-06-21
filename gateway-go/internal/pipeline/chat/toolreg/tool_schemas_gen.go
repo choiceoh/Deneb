@@ -1059,7 +1059,7 @@ func notebookToolSchema() map[string]any {
 			},
 			"deal_ref": map[string]any{
 				"type":        "string",
-				"description": "딜/프로젝트 식별자 (for_deal/pin_to_deal, 또는 show/brief에서 id 대신). 메일 딜 추출·위키 딜 페이지와 같은 ref를 쓰면 raw 증거(노트북)와 정제 사실(위키)이 한 딜로 묶인다.",
+				"description": "딜/프로젝트 고유코드 (for_deal/pin_to_deal, 또는 show/brief에서 id 대신). 위키 프로젝트 페이지 frontmatter의 code(예: pl1-wdo-dev-001 — 부서-고객-거래타입-순번)를 쓴다. 코드는 페이지가 이동·재분류돼도 안 변하는 식별자라, raw 증거(노트북)와 정제 사실(위키)이 한 딜로 안정적으로 묶인다(둘 다 같은 코드).",
 			},
 			"description": map[string]any{
 				"type":        "string",
