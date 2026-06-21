@@ -101,7 +101,7 @@ fun DenebCalendarScreen(
     onBack: () -> Unit,
     onOpenEvent: (String) -> Unit = {},
     onAddEvent: (LocalDate) -> Unit = {},
-    onOpenTodos: () -> Unit = {},
+    onAddTodo: (LocalDate) -> Unit = {},
     onOpenTodo: (String) -> Unit = {},
     navigationTabBar: (@Composable () -> Unit)? = null,
 ) {
@@ -213,11 +213,18 @@ fun DenebCalendarScreen(
             .filter { selected in eventDays(it.start, it.end, it.allDay, tz) }
             .sortedWith(compareBy({ !it.allDay }, { it.start }))
     }
-    // To-dos due on the selected day, incomplete first.
-    val dayTodos = remember(todos, selected, tz) {
-        todos
-            .filter { it.due.isNotBlank() && eventLocalDate(it.due, tz) == selected }
-            .sortedWith(compareBy({ it.done }, { it.due }))
+    // To-dos due on the selected day, incomplete first. On today, overdue undone
+    // to-dos carry over (they'd otherwise hide on a past day no one revisits).
+    val dayTodos = remember(todos, selected, today, tz) {
+        val onDay = todos.filter { it.due.isNotBlank() && eventLocalDate(it.due, tz) == selected }
+        val carried = if (selected == today) {
+            todos.filter { t ->
+                !t.done && t.due.isNotBlank() && (eventLocalDate(t.due, tz)?.let { it < today } ?: false)
+            }
+        } else {
+            emptyList()
+        }
+        (carried + onDay).sortedWith(compareBy({ it.done }, { it.due }))
     }
 
     DenebScreenScaffold(title = "일정", onBack = onBack, tabBar = navigationTabBar) {
@@ -316,8 +323,8 @@ fun DenebCalendarScreen(
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.weight(1f),
                 )
-                TextButton(onClick = onOpenTodos, contentPadding = PaddingValues(horizontal = 8.dp)) {
-                    Text("할 일")
+                TextButton(onClick = { onAddTodo(selected) }, contentPadding = PaddingValues(horizontal = 8.dp)) {
+                    Text("+ 할 일")
                 }
             }
             Spacer(Modifier.height(4.dp))

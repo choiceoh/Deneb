@@ -27,7 +27,6 @@ class MoreTileVisibilityTest {
         assertFalse(visible.any { it.key == "deneb_search" })
         assertFalse(visible.any { it.key == "deneb_files" })
         // Untouched tiles remain.
-        assertTrue(visible.any { it.key == "deneb_todo" })
         assertTrue(visible.any { it.key == "deneb_notebooks" })
     }
 
@@ -56,8 +55,7 @@ class MoreTileVisibilityTest {
         assertFalse(visible.any { it.key == "deneb_files" })
         // user-hidden non-work tile gone via the hidden set.
         assertFalse(visible.any { it.key == "deneb_browser" })
-        // 할일 (not workData, not hidden) and 설정 (alwaysShown) survive both.
-        assertTrue(visible.any { it.key == "deneb_todo" })
+        // 설정 (alwaysShown) survives both gates.
         assertTrue(visible.any { it.key == "deneb_config" })
     }
 

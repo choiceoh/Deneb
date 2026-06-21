@@ -147,7 +147,6 @@ val denebBottomBarRoutes: Set<String> = setOf(
     "deneb_mail",
     "deneb_calendar",
     "deneb_search",
-    "deneb_todo",
     "deneb_diary",
     "deneb_categories",
     "deneb_contacts",
