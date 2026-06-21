@@ -373,26 +373,19 @@ internal fun searchMembers(nodes: List<OrgNodeOut>, query: String): List<OrgSear
 
 // --- chart geometry ----------------------------------------------------------
 
-/** Fixed node-box width. Boxes are uniform so connector math stays simple and the
- *  chart reads as a grid of equal cards; long names ellipsize. */
-private val OrgNodeWidth: Dp = 168.dp
-
-/** Horizontal gap between sibling subtrees. */
-private val OrgSiblingGap: Dp = 16.dp
-
-/** Vertical height of the connector band drawn between a node and its children. */
-private val OrgConnectorBand: Dp = 28.dp
+/** Indent applied per hierarchy depth. The list reads as a 그룹 → 회사 → 본부/실 → 팀 tree. */
+private val OrgIndentStep: Dp = 16.dp
 
 // --- stateless body (previewable) -------------------------------------------
 
 /**
- * The org chart diagram + people search. The structure is drawn top-down as boxes
- * joined by connector lines (not an indented list): each node renders its name, a
- * type badge, a lane (파트) chip if tagged, and a member-count line; tapping a box
- * opens its editor; a per-node ＋ adds a child; a caret folds its subtree. The whole
- * diagram pans horizontally (wide levels) and vertically (deep trees). The search bar
- * finds people by name and pans to / highlights the matching node(s). Roots (empty
- * parentId) are the top level. Pure presentation — the shell owns the tree + edits.
+ * The org chart as an indented list + people search. Each node is a row indented by its
+ * depth so the 그룹 → 회사 → 본부/실 → 팀 hierarchy reads top-down; the row shows the name, a
+ * type badge, a lane (파트) chip if tagged, and a member-count line. Tapping a row opens its
+ * editor; a per-node ＋ adds a child; a leading caret folds its subtree. The list scrolls
+ * vertically. The search bar finds people by name and highlights / expands the matching
+ * node(s). Roots (empty parentId) are the top level. Pure presentation — the shell owns the
+ * tree + edits.
  */
 @Composable
 internal fun OrgChartContent(
@@ -446,36 +439,21 @@ internal fun OrgChartContent(
             OrgSearchResults(hits = hits, onPick = { hit -> revealNode(hit.node) })
         }
 
-        // The diagram itself: pannable both ways. A roomy fixed padding gives the boxes
-        // breathing room and keeps the first root off the edges. The horizontal scroll
-        // starts centered: a parent is centered over its (often deep, left-heavy) subtree,
-        // which pushes the root toward the middle of the full width — so centering the
-        // initial pan lands the user on the top of the hierarchy instead of an edge.
-        val hScroll = rememberScrollState()
-        LaunchedEffect(Unit) {
-            // One-shot after first layout (maxValue is 0 until measured): wait for the
-            // first non-zero extent, then center the pan so the centered root subtree lands
-            // on screen. scrollTo clamps, so half the extent is always in range.
-            snapshotFlow { hScroll.maxValue }
-                .first { it > 0 }
-                .let { max -> hScroll.scrollTo(max / 2) }
-        }
+        // The chart as an indented list: each node is a row indented by its depth, so the
+        // 그룹 → 회사 → 본부/실 → 팀 hierarchy reads top-down. Vertical scroll only (no panning);
+        // a folded branch hides its descendants but advertises the hidden count.
         Box(
             Modifier
                 .fillMaxWidth()
                 .weight(1f)
                 .verticalScroll(rememberScrollState()),
         ) {
-            Row(
-                Modifier
-                    .horizontalScroll(hScroll)
-                    .padding(horizontal = 20.dp, vertical = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(OrgSiblingGap),
-            ) {
+            Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
                 val roots = childrenOf[""].orEmpty()
                 roots.forEach { root ->
-                    OrgSubtree(
+                    OrgListRows(
                         node = root,
+                        depth = 0,
                         childrenOf = childrenOf,
                         collapsed = collapsed,
                         onToggle = { id ->
@@ -520,14 +498,14 @@ internal fun OrgChartContent(
 }
 
 /**
- * One subtree, drawn top-down: the node box, then — when expanded and it has children —
- * a connector band (parent stub + per-child elbow lines) and a row of child subtrees.
- * Each subtree column centers its own node box over its children so the connectors line
- * up. Recursion handles arbitrary depth; collapse prunes a branch.
+ * One node and its subtree as indented rows: the node's own row, then — when expanded and it
+ * has children — each child subtree one indent level deeper. Recursion handles arbitrary
+ * depth; a collapsed node prunes its branch from the list.
  */
 @Composable
-private fun OrgSubtree(
+private fun OrgListRows(
     node: OrgNodeOut,
+    depth: Int,
     childrenOf: Map<String, List<OrgNodeOut>>,
     collapsed: Set<String>,
     onToggle: (String) -> Unit,
@@ -537,50 +515,42 @@ private fun OrgSubtree(
 ) {
     val kids = childrenOf[node.id].orEmpty()
     val isCollapsed = node.id in collapsed
-    val showKids = kids.isNotEmpty() && !isCollapsed
-
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        OrgNodeBox(
-            node = node,
-            childCount = kids.size,
-            isCollapsed = isCollapsed,
-            highlighted = node.id in hitNodeIds,
-            onToggle = { onToggle(node.id) },
-            onEdit = { onEditNode(node.id) },
-            onAddChild = { onAddChild(node.id) },
-        )
-        if (showKids) {
-            // The connector band + the children row are laid out by one custom Layout that
-            // draws each elbow to the *measured* center of each child column (children with
-            // their own subtrees are wider than one box, so centers must be measured).
-            OrgChildrenWithConnectors(
-                children = {
-                    kids.forEach { kid ->
-                        OrgSubtree(
-                            node = kid,
-                            childrenOf = childrenOf,
-                            collapsed = collapsed,
-                            onToggle = onToggle,
-                            onEditNode = onEditNode,
-                            onAddChild = onAddChild,
-                            hitNodeIds = hitNodeIds,
-                        )
-                    }
-                },
+    OrgNodeRow(
+        node = node,
+        depth = depth,
+        childCount = kids.size,
+        isCollapsed = isCollapsed,
+        highlighted = node.id in hitNodeIds,
+        onToggle = { onToggle(node.id) },
+        onEdit = { onEditNode(node.id) },
+        onAddChild = { onAddChild(node.id) },
+    )
+    if (kids.isNotEmpty() && !isCollapsed) {
+        kids.forEach { kid ->
+            OrgListRows(
+                node = kid,
+                depth = depth + 1,
+                childrenOf = childrenOf,
+                collapsed = collapsed,
+                onToggle = onToggle,
+                onEditNode = onEditNode,
+                onAddChild = onAddChild,
+                hitNodeIds = hitNodeIds,
             )
         }
     }
 }
 
 /**
- * A single node box: rounded mono card with the name, a type badge row, a member-count
- * line, an optional 파트 chip, and (top-right) edit + add-child glyphs; a bottom caret
- * toggles the subtree when the node has children. A search hit tints the border + a
- * faint wash with the cool interactive accent. The whole card is tappable → edit.
+ * A single node as an indented list row: a leading caret (or an aligning spacer) that folds
+ * the subtree, then the name, a type badge, an optional 파트 chip, and a member-count line;
+ * trailing add-child + edit glyphs. The whole row is tappable → edit, and a hairline underlines
+ * it. A search hit tints the row with the cool interactive accent.
  */
 @Composable
-private fun OrgNodeBox(
+private fun OrgNodeRow(
     node: OrgNodeOut,
+    depth: Int,
     childCount: Int,
     isCollapsed: Boolean,
     highlighted: Boolean,
@@ -589,28 +559,68 @@ private fun OrgNodeBox(
     onAddChild: () -> Unit,
 ) {
     val accent = MaterialTheme.colorScheme.primary
-    val baseFill = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.05f)
-    val fill = if (highlighted) accent.copy(alpha = 0.12f) else baseFill
-    val borderColor = if (highlighted) accent else denebHairline()
-    val shape = RoundedCornerShape(12.dp)
-
+    val rowBg = if (highlighted) Modifier.background(accent.copy(alpha = 0.10f)) else Modifier
+    val indent = 12.dp + OrgIndentStep * depth
     Column(
         Modifier
-            .width(OrgNodeWidth)
-            .background(fill, shape)
-            .border(if (highlighted) 1.5.dp else 1.dp, borderColor, shape)
+            .fillMaxWidth()
+            .then(rowBg)
             .denebPressable(onClick = onEdit)
-            .handCursor()
-            .padding(start = 12.dp, end = 6.dp, top = 8.dp, bottom = 6.dp),
+            .handCursor(),
     ) {
-        // Header row: type badge + lane chip (left), edit + add affordances (right).
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-            OrgTypeBadge(node.type)
-            if (node.lane.isNotBlank()) {
-                Spacer(Modifier.width(6.dp))
-                OrgLaneChip()
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = indent, end = 6.dp, top = 8.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // Leading caret folds the subtree; childless rows get an aligning spacer.
+            if (childCount > 0) {
+                Icon(
+                    imageVector = if (isCollapsed) Icons.AutoMirrored.Filled.KeyboardArrowRight else Icons.Filled.KeyboardArrowDown,
+                    contentDescription = if (isCollapsed) "펼치기" else "접기",
+                    tint = denebHint(),
+                    modifier = Modifier
+                        .size(20.dp)
+                        .denebPressable(onClick = onToggle)
+                        .handCursor(),
+                )
+            } else {
+                Spacer(Modifier.width(20.dp))
             }
-            Spacer(Modifier.weight(1f))
+            Spacer(Modifier.width(6.dp))
+            Column(Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = node.name.ifBlank { "(이름 없음)" },
+                        style = DenebType.rowTitleStrong,
+                        color = if (node.name.isBlank()) denebHint() else MaterialTheme.colorScheme.onBackground,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    OrgTypeBadge(node.type)
+                    if (node.lane.isNotBlank()) {
+                        Spacer(Modifier.width(6.dp))
+                        OrgLaneChip()
+                    }
+                    if (isCollapsed && childCount > 0) {
+                        Spacer(Modifier.width(6.dp))
+                        Text("하위 $childCount", style = DenebType.sectionLabel, color = denebHint())
+                    }
+                }
+                val summary = nodeMemberSummary(node)
+                if (summary.isNotEmpty()) {
+                    Text(
+                        text = summary,
+                        style = DenebType.snippet,
+                        color = denebHint(),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
+                }
+            }
             IconButton(onClick = onAddChild, modifier = Modifier.size(28.dp)) {
                 Icon(Icons.Outlined.Add, contentDescription = "하위 조직 추가", tint = denebHint(), modifier = Modifier.size(16.dp))
             }
@@ -618,138 +628,14 @@ private fun OrgNodeBox(
                 Icon(Icons.Outlined.Edit, contentDescription = "편집", tint = accent, modifier = Modifier.size(16.dp))
             }
         }
-        // Name.
-        Text(
-            text = node.name.ifBlank { "(이름 없음)" },
-            style = DenebType.rowTitleStrong,
-            color = if (node.name.isBlank()) denebHint() else MaterialTheme.colorScheme.onBackground,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(top = 2.dp, end = 6.dp),
+        // Row hairline, indented to align with the row content.
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .padding(start = indent)
+                .height(1.dp)
+                .background(denebHairline()),
         )
-        // Leader / member-count summary (people only — keyword/company counts live in the
-        // editor, the box stays scannable).
-        val summary = nodeMemberSummary(node)
-        if (summary.isNotEmpty()) {
-            Text(
-                text = summary,
-                style = DenebType.snippet,
-                color = denebHint(),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(top = 3.dp, end = 6.dp),
-            )
-        }
-        // Expand/collapse caret — only when there are children. Full-width tap row so it is
-        // an easy target under the card body. Collapsed, it labels how many direct children
-        // are hidden so a folded branch still advertises its depth.
-        if (childCount > 0) {
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(top = 4.dp)
-                    .denebPressable(onClick = onToggle)
-                    .handCursor(),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(
-                    imageVector = if (isCollapsed) Icons.AutoMirrored.Filled.KeyboardArrowRight else Icons.Filled.KeyboardArrowDown,
-                    contentDescription = if (isCollapsed) "펼치기" else "접기",
-                    tint = denebHint(),
-                    modifier = Modifier.size(18.dp),
-                )
-                if (isCollapsed) {
-                    Spacer(Modifier.width(2.dp))
-                    Text("하위 $childCount", style = DenebType.sectionLabel, color = denebHint())
-                }
-            }
-        }
-    }
-}
-
-/** Connector geometry captured during layout, read back on the draw pass. The band
- *  height + each child's center x are all the draw needs to render the elbows. */
-private data class OrgConnectorGeometry(
-    val width: Int = 0,
-    val band: Float = 0f,
-    val centers: List<Float> = emptyList(),
-)
-
-/**
- * Lays out the child subtrees in a row and draws the connector lines above them. The
- * shape is the classic org elbow: a short stub down from the parent's bottom center, a
- * horizontal bus across the children span, and a drop from the bus to each child's top
- * center. With a single child the bus collapses to a straight vertical line.
- *
- * The parent box sits directly above this composable (centered over the same span), so
- * the stub starts at this layout's top-center — which is the parent's bottom-center.
- *
- * How the lines find each child's center: a [Layout] measures + places the child
- * subtrees (uniform box width, but a child with its own subtree is wider, so centers
- * must be measured) and captures each center x + the band height into [geometry];
- * [Modifier.drawBehind] reads that geometry on the draw pass (which runs after layout)
- * to stroke the elbows. This capture-then-draw split is the standard Compose idiom for
- * "draw relative to measured child positions" — the placement scope has no DrawScope.
- */
-@Composable
-private fun OrgChildrenWithConnectors(
-    children: @Composable () -> Unit,
-) {
-    val lineColor = denebHairline()
-    val density = androidx.compose.ui.platform.LocalDensity.current
-    val bandPx = with(density) { OrgConnectorBand.toPx() }
-    val gapPx = with(density) { OrgSiblingGap.toPx() }
-    val strokePx = with(density) { 1.dp.toPx() }
-
-    var geometry by remember { mutableStateOf(OrgConnectorGeometry()) }
-
-    Layout(
-        content = children,
-        modifier = Modifier.drawBehind {
-            val g = geometry
-            if (g.centers.isEmpty() || g.band <= 0f) return@drawBehind
-            val topY = 0f // parent bottom-center
-            val busY = g.band / 2f // horizontal bus midway down the band
-            val parentX = g.width / 2f
-            // 1) stub from the parent down to the bus.
-            drawLine(lineColor, Offset(parentX, topY), Offset(parentX, busY), strokeWidth = strokePx)
-            if (g.centers.size == 1) {
-                // Single child: one straight line parent → child (no bus).
-                drawLine(lineColor, Offset(parentX, busY), Offset(g.centers[0], g.band), strokeWidth = strokePx)
-            } else {
-                // 2) horizontal bus spanning the outermost children.
-                val left = g.centers.first()
-                val right = g.centers.last()
-                drawLine(lineColor, Offset(left, busY), Offset(right, busY), strokeWidth = strokePx)
-                // 3) a drop from the bus to each child's top center.
-                g.centers.forEach { cx ->
-                    drawLine(lineColor, Offset(cx, busY), Offset(cx, g.band), strokeWidth = strokePx)
-                }
-            }
-        },
-    ) { measurables, constraints ->
-        // Measure each child subtree with its own intrinsic width (no width constraint).
-        val childConstraints = constraints.copy(minWidth = 0, minHeight = 0)
-        val placeables = measurables.map { it.measure(childConstraints) }
-        val gapTotal = (gapPx * (placeables.size - 1).coerceAtLeast(0)).toInt()
-        val width = (placeables.sumOf { it.width } + gapTotal).coerceAtLeast(0)
-        val band = bandPx.toInt()
-        val childrenHeight = placeables.maxOfOrNull { it.height } ?: 0
-        val height = band + childrenHeight
-
-        // Capture centers as we place, then publish the geometry for the draw pass.
-        var x = 0
-        val centers = ArrayList<Float>(placeables.size)
-        layout(width, height) {
-            placeables.forEach { p ->
-                p.placeRelative(x, band)
-                centers.add(x + p.width / 2f)
-                x += p.width + gapPx.toInt()
-            }
-            val next = OrgConnectorGeometry(width = width, band = band.toFloat(), centers = centers)
-            if (next != geometry) geometry = next
-        }
     }
 }
 
