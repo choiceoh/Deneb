@@ -41,6 +41,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.draganddrop.dragAndDropTarget
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -644,20 +645,23 @@ internal fun ChatModeScreen(
 
                                         // Keyboard follow-scroll: when the soft keyboard opens, the floating
                                         // input bar rises with it (imePadding), shrinking the list viewport from
-                                        // the bottom. Re-pin the newest message to the bottom as the keyboard
-                                        // animates up so it tracks the keyboard instead of hiding behind it —
-                                        // but only when already near the bottom (don't yank a user reading up).
-                                        // Bucketed (≈64px) like the streaming follow-scroll: a few snaps over the
-                                        // ~250ms animation, and derivedStateOf keeps it off the per-frame path.
+                                        // the bottom. Track the IME inset frame-by-frame and scroll the list by
+                                        // the exact delta so the newest message rides up (and back down) glued to
+                                        // the keyboard's own animation curve — smooth, not the stepped snaps a
+                                        // bucketed scrollToItem gives. snapshotFlow keeps this on the effect
+                                        // coroutine (no per-frame recomposition); near-bottom only, so a user
+                                        // scrolled up to re-read isn't yanked.
                                         val imeInsets = WindowInsets.ime
-                                        val imeBucket by remember {
-                                            derivedStateOf { imeInsets.getBottom(topOverlayDensity) / 64 }
-                                        }
-                                        LaunchedEffect(imeBucket) {
-                                            if (imeBucket > 0 && isNearBottom) {
-                                                val total = listState.layoutInfo.totalItemsCount
-                                                if (total > 0) listState.scrollToItem(total - 1, Int.MAX_VALUE)
-                                            }
+                                        LaunchedEffect(listState, imeInsets) {
+                                            var prev = imeInsets.getBottom(topOverlayDensity)
+                                            snapshotFlow { imeInsets.getBottom(topOverlayDensity) }
+                                                .collect { current ->
+                                                    val delta = current - prev
+                                                    prev = current
+                                                    if (delta != 0 && isNearBottom) {
+                                                        listState.scrollBy(delta.toFloat())
+                                                    }
+                                                }
                                         }
 
                                         Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
