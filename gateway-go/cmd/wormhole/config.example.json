@@ -6,6 +6,7 @@
   "models": [
     { "name": "dsv4", "url": "http://127.0.0.1:8000/v1", "toggleKwarg": "thinking" },
     { "name": "qwen", "fleet": true, "upstreamModel": "qwen3.6-35b-a3b", "toggleKwarg": "enable_thinking" },
+    { "name": "glm-5.2", "url": "https://api.z.ai/api/coding/paas/v4", "key": "${ZAI_API_KEY}", "upstreamModel": "glm-5.2", "reasoning": "glm" },
     {
       "name": "claude-or",
       "url": "https://openrouter.ai/api/v1",

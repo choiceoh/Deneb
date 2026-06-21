@@ -43,6 +43,17 @@ type modelEntry struct {
 	// Qwen3). Set it to enable effort-based thinking routing: wormhole turns
 	// thinking OFF for obviously-simple turns. Empty = no routing (pass through).
 	ToggleKwarg string `json:"toggleKwarg,omitempty"`
+	// Reasoning selects a cloud model's NATIVE reasoning dialect for effort
+	// routing — for backends that don't use vLLM's chat_template_kwargs toggle.
+	// Unlike ToggleKwarg, this runs even under X-Wormhole-No-Effort, because the
+	// Deneb gateway can't express these params itself (so wormhole is the only
+	// place the translation can happen — there's no double-routing to avoid).
+	// Currently one style:
+	//   "glm" — z.ai / GLM-5.x. Per-turn, like dsv4: an obviously-simple turn →
+	//   thinking:{"type":"disabled"} (off); otherwise reasoning_effort:"high"
+	//   (on). GLM honors only reasoning_effort high|max and resolves anything but
+	//   an explicit "high" to MAX, so on-mode pins "high" rather than leaking max.
+	Reasoning string `json:"reasoning,omitempty"`
 	// Local overrides the loopback/private-IP auto-detection (privacy.go). Set it
 	// false to mark an on-box endpoint as cloud (e.g. a local tunnel that egresses)
 	// or true for a public URL you trust as local. Nil = auto-detect from URL.

@@ -131,6 +131,14 @@ Hindsight(Hermes 계열 FastAPI+pgvector 장기기억 서비스)는 **2026-06-15
 - **이름 일치**: 엔트리 `name == upstreamModel == vLLM 서빙 모델명`, deneb.json 이 그 name 을 보냄 → `rewriteModel` 미발동 → 바이트 동일. (model 필드는 렌더 프롬프트에 안 들어가 rewrite 자체는 APC-safe 지만, 무변경이 가장 안전.)
 - 결론: **effort 라우팅은 Deneb 가 단독 수행**(튜닝됨·파이프라인 통합), wormhole 은 메인에 대해 dumb passthrough. (외부 클라용 effort 라우팅을 살리려면 별도 toggleKwarg 엔트리 또는 향후 per-request opt-out 헤더.)
 
+### ★ 클라우드 모델 추론 프로필 (`reasoning`, glm-5.2; 2026-06-21)
+> `toggleKwarg`(vLLM `chat_template_kwargs`)는 위 규칙대로 Deneb 엔트리에 금지(APC). 하지만 **클라우드 모델은 추론 제어 방언이 달라** 게이트웨이가 표현하지 못한다 — 그 번역은 wormhole 만 할 수 있다. 그래서 cloud 전용 필드 `reasoning` 을 둔다(`cmd/wormhole/effort.go:reasoningRoute`, `applyReasoning`).
+
+- **왜 필요한가**: GLM-5.2 는 `reasoning_effort` 를 `high|max` 만 인정하고 **명시적 `high` 가 아니면 전부 `max`(최심)로 해석**한다([z.ai 문서](https://docs.z.ai/guides/capabilities/thinking-mode)). Deneb 가 보내는 `reasoning_effort:"low"`(레벨 low)는 GLM 에선 도리어 **MAX** 가 된다(의도 정반대). 게이트웨이의 high-only 가드(`openai.go:reasoningEffortHighOnly`)는 `deepseek-v4` 만 매칭해 glm 을 놓친다.
+- **`reasoning:"glm"` 동작**: dsv4 처럼 **Ares 가 턴마다** 판정 — 간단한 턴 → `thinking:{"type":"disabled"}`(끄기, `reasoning_effort` strip), 그 외 → `reasoning_effort:"high"` + `thinking:{"type":"enabled"}`(켜기, 절대 max 안 보냄). 즉 **끄기 / high 두 모드**.
+- **no-effort 와의 관계**: `X-Wormhole-No-Effort` 는 **로컬 vLLM `toggleKwarg` 경로만** 억제한다(게이트웨이가 소유·APC). `reasoning` 클라우드 방언은 게이트웨이가 표현 못 하니 **헤더와 무관하게 적용**(이중화 아님). 따라서 toggleKwarg 금지 규칙과 충돌하지 않는다.
+- **호스트 적용**: `~/.wormhole/config.json` 의 glm-5.2 엔트리에 `"reasoning": "glm"` 추가 → `make wormhole` → wormhole 재시작. config 예시는 `cmd/wormhole/config.example.json`.
+
 ### ★ SPOF (핫패스가 된 wormhole)
 - 메인을 wormhole 로 태우면 **wormhole 다운 = 메인 다운**. **현재 운영(2026-06-14): main/lightweight/tiny + fallback/analysis(클라우드 glm-5.2) 전부 wormhole 경유** (사용자 "클라우드 호출 모아"). 즉 wormhole 이 모델 레이어의 단일 관문.
 - 핵심 구분: **흔한 실패(업스트림 모델 다운)는 여전히 커버됨** — main(dsv4@srv2) 죽으면 게이트웨이 서킷브레이커→fallback role→wormhole(살아있음)→다른 업스트림(zai). 안 커버되는 건 **wormhole 프로세스 자체 사망**뿐인데, 얇은 프록시 + `Restart=on-failure`(≈5s respawn) 로 자가치유. 더 강한 격리를 원하면 fallback 하나를 직결로 빼면 됨(그 경우 SPOF 0, 단 키 중복).
