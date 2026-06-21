@@ -80,9 +80,8 @@ func (s *Server) initMemorySubsystem(chatCfg *chat.HandlerConfig, regPtr **model
 				// Let dream cycles consume + curate the auto-recorded
 				// workspace MEMORY.md (distill to wiki, keep a bounded buffer).
 				s.wikiDreamer.SetWorkspaceDir(resolveWorkspaceDir())
-				// Prospective memory: extracted commitments land in the local
-				// to-do store (native list + heartbeat deadline signals).
-				s.wikiDreamer.SetOpenLoopSink(openLoopTodoSink(s.logger))
+				// Open loops are no longer auto-recorded as to-dos (operator approval
+				// first) — no open-loop sink is wired (the dreamer skips it when nil).
 				// Mention-driven 인물 seeding from the contacts mirror.
 				if cs := s.contactsStore; cs != nil {
 					s.wikiDreamer.SetPersonDirectory(func() []wiki.PersonSeed {

@@ -1,53 +1,9 @@
 package server
 
 import (
-	"strings"
 	"testing"
 	"time"
-
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmailpoll"
 )
-
-func TestTodosFromActionItems_HighPriorityOnly(t *testing.T) {
-	now := time.Date(2026, 6, 9, 10, 0, 0, 0, time.UTC)
-	items := []gmailpoll.ActionItem{
-		{Title: "계약서 검토", DueHint: "내일", Priority: "high"},
-		{Title: "참고만 하면 됨", DueHint: "", Priority: "low"},
-		{Title: "회신", DueHint: "3일 후", Priority: "medium"},
-		{Title: "  ", Priority: "high"},                 // empty title → skipped
-		{Title: "송금 승인", DueHint: "", Priority: "HIGH"}, // case-insensitive
-	}
-	got := todosFromActionItems("msg123", "6월 견적", "kim@example.com", items, now)
-	if len(got) != 2 {
-		t.Fatalf("expected 2 high-priority to-dos, got %d: %+v", len(got), got)
-	}
-	if got[0].Title != "계약서 검토" {
-		t.Errorf("first title = %q, want 계약서 검토", got[0].Title)
-	}
-	if got[0].Due.IsZero() {
-		t.Errorf("expected a due date resolved from 내일, got zero")
-	}
-	if !strings.Contains(got[0].Note, "6월 견적") || !strings.Contains(got[0].Note, "kim@example.com") {
-		t.Errorf("note missing mail back-reference: %q", got[0].Note)
-	}
-	if got[0].Source != "mail:msg123|계약서 검토" {
-		t.Errorf("source = %q, want mail:msg123|계약서 검토", got[0].Source)
-	}
-	if got[1].Title != "송금 승인" {
-		t.Errorf("second title = %q, want 송금 승인 (HIGH normalized)", got[1].Title)
-	}
-}
-
-func TestTodosFromActionItems_NoneWhenNoHigh(t *testing.T) {
-	now := time.Date(2026, 6, 9, 10, 0, 0, 0, time.UTC)
-	items := []gmailpoll.ActionItem{
-		{Title: "참고", Priority: "low"},
-		{Title: "검토", Priority: "medium"},
-	}
-	if got := todosFromActionItems("m", "s", "f", items, now); got != nil {
-		t.Errorf("expected nil (no high-priority), got %+v", got)
-	}
-}
 
 func TestParseDueHint_Relative(t *testing.T) {
 	now := time.Date(2026, 6, 9, 10, 0, 0, 0, time.UTC)
