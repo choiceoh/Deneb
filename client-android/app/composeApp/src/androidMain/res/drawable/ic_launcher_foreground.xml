@@ -5,21 +5,20 @@
     android:viewportHeight="512">
   <!-- Deneb mark (library-module copy; the application module's
        @drawable/ic_launcher is authoritative). Identical to androidApp's launcher
-       foreground so the two never drift: faceted 8-point star, lit top-left
-       (base mid-azure + bright-cyan highlight facets + deep-blue shadow facets)
-       on the white background. -->
-  <group android:scaleX="0.84"
-      android:scaleY="0.84"
-      android:translateX="40.96"
-      android:translateY="40.96">
+       foreground so the two never drift: softer/smaller faceted 8-point star
+       (primary radius 152, valley 76), lit top-left, on the white background. -->
+  <group android:scaleX="0.70"
+      android:scaleY="0.70"
+      android:translateX="76.8"
+      android:translateY="76.8">
     <path
-        android:pathData="M256,72 L272.07,217.2 L336.6,175.4 L294.8,239.93 L440,256 L294.8,272.07 L336.6,336.6 L272.07,294.8 L256,440 L239.93,294.8 L175.4,336.6 L217.2,272.07 L72,256 L217.2,239.93 L175.4,175.4 L239.93,217.2 Z"
+        android:pathData="M256,104 L285.08,185.79 L329.54,182.46 L326.21,226.92 L408,256 L326.21,285.08 L329.54,329.54 L285.08,326.21 L256,408 L226.92,326.21 L182.46,329.54 L185.79,285.08 L104,256 L185.79,226.92 L182.46,182.46 L226.92,185.79 Z"
         android:fillColor="#FF2C84C9"/>
     <path
-        android:pathData="M256,256 L256,72 L272.07,217.2 Z M256,256 L217.2,272.07 L72,256 Z M256,256 L72,256 L217.2,239.93 Z M256,256 L217.2,239.93 L175.4,175.4 Z M256,256 L175.4,175.4 L239.93,217.2 Z M256,256 L239.93,217.2 L256,72 Z"
+        android:pathData="M256,256 L256,104 L285.08,185.79 Z M256,256 L185.79,285.08 L104,256 Z M256,256 L104,256 L185.79,226.92 Z M256,256 L185.79,226.92 L182.46,182.46 Z M256,256 L182.46,182.46 L226.92,185.79 Z M256,256 L226.92,185.79 L256,104 Z"
         android:fillColor="#FF5BC8E8"/>
     <path
-        android:pathData="M256,256 L294.8,239.93 L440,256 Z M256,256 L440,256 L294.8,272.07 Z M256,256 L294.8,272.07 L336.6,336.6 Z M256,256 L336.6,336.6 L272.07,294.8 Z M256,256 L272.07,294.8 L256,440 Z M256,256 L256,440 L239.93,294.8 Z"
+        android:pathData="M256,256 L326.21,226.92 L408,256 Z M256,256 L408,256 L326.21,285.08 Z M256,256 L326.21,285.08 L329.54,329.54 Z M256,256 L329.54,329.54 L285.08,326.21 Z M256,256 L285.08,326.21 L256,408 Z M256,256 L256,408 L226.92,326.21 Z"
         android:fillColor="#FF154B86"/>
   </group>
 </vector>
