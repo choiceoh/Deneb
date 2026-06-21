@@ -2,31 +2,49 @@
     xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
-    android:viewportWidth="90"
-    android:viewportHeight="90">
-  <!-- Deneb mark: the 4-point sparkle (✦) with the cool blue-family hue gradient
-       (cyan -> sky -> indigo). Library-module copy of androidApp's launcher
-       foreground; the application module's @drawable/ic_launcher is authoritative,
-       this is kept in sync to avoid resource drift. Four N/E/S/W tips at radius 40
-       from centre (45,45), concave quadratic rays (control offset 12% of radius). -->
-  <group android:scaleX="0.59"
-      android:scaleY="0.59"
-      android:translateX="18.45"
-      android:translateY="18.45">
-    <path
-        android:pathData="M45,5 Q49.8,40.2 85,45 Q49.8,49.8 45,85 Q40.2,49.8 5,45 Q40.2,40.2 45,5 Z">
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+  <!-- Deneb mark (library-module copy; the application module's
+       @drawable/ic_launcher is authoritative). Identical to androidApp's
+       launcher foreground so the two never drift: soft white radial glow,
+       luminous elongated main sparkle, and an upper-right accent twinkle. -->
+  <group android:scaleX="0.84"
+      android:scaleY="0.84"
+      android:translateX="40.96"
+      android:translateY="40.96">
+
+    <path android:pathData="M51,256 a205,205 0 1,0 410,0 a205,205 0 1,0 -410,0 Z">
+      <aapt:attr name="android:fillColor">
+        <gradient
+            android:type="radial"
+            android:centerX="256"
+            android:centerY="256"
+            android:gradientRadius="205">
+          <item android:offset="0.0" android:color="#5CFFFFFF"/>
+          <item android:offset="0.5" android:color="#1FFFFFFF"/>
+          <item android:offset="1.0" android:color="#00FFFFFF"/>
+        </gradient>
+      </aapt:attr>
+    </path>
+
+    <path android:pathData="M256,74 Q274.3,236 422,256 Q274.3,276 256,438 Q237.7,276 90,256 Q237.7,236 256,74 Z">
       <aapt:attr name="android:fillColor">
         <gradient
             android:type="linear"
-            android:startX="5"
-            android:startY="5"
-            android:endX="85"
-            android:endY="85">
-          <item android:offset="0.0" android:color="#FF66D9E8"/>
-          <item android:offset="0.5" android:color="#FF7FA8D0"/>
+            android:startX="110"
+            android:startY="110"
+            android:endX="410"
+            android:endY="410">
+          <item android:offset="0.0" android:color="#FFBFEFFA"/>
+          <item android:offset="0.28" android:color="#FF66D9E8"/>
+          <item android:offset="0.62" android:color="#FF7FA8D0"/>
           <item android:offset="1.0" android:color="#FF9B8CE0"/>
         </gradient>
       </aapt:attr>
     </path>
+
+    <path
+        android:pathData="M368,120 Q371.3,146.7 398,150 Q371.3,153.3 368,180 Q364.7,153.3 338,150 Q364.7,146.7 368,120 Z"
+        android:fillColor="#FFCFEFF9"/>
   </group>
 </vector>

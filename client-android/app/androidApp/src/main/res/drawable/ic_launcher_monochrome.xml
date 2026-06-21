@@ -3,15 +3,18 @@
     android:height="108dp"
     android:viewportWidth="512"
     android:viewportHeight="512">
-  <!-- Deneb mark (monochrome): the same 4-point sparkle silhouette as
-       ic_launcher_foreground, but a single solid fill — the system tints it for
-       themed (monochrome) icons, so no gradient here. -->
+  <!-- Deneb mark (monochrome): the elongated main sparkle + accent twinkle as a
+       single solid fill — the system tints it for themed icons, so no glow or
+       gradient here (those need alpha/colour the tint would flatten). -->
   <group android:scaleX="0.84"
       android:scaleY="0.84"
       android:translateX="40.96"
       android:translateY="40.96">
     <path
-        android:pathData="M256,76 Q277.6,234.4 436,256 Q277.6,277.6 256,436 Q234.4,277.6 76,256 Q234.4,234.4 256,76 Z"
+        android:pathData="M256,74 Q274.3,236 422,256 Q274.3,276 256,438 Q237.7,276 90,256 Q237.7,236 256,74 Z"
+        android:fillColor="#FFFFFF"/>
+    <path
+        android:pathData="M368,120 Q371.3,146.7 398,150 Q371.3,153.3 368,180 Q364.7,153.3 338,150 Q364.7,146.7 368,120 Z"
         android:fillColor="#FFFFFF"/>
   </group>
 </vector>
