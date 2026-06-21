@@ -1,5 +1,6 @@
 package ai.deneb.ui.markdown
 
+import ai.deneb.ui.DenebOutlinedTextField
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.DenebChip
 import ai.deneb.ui.components.LocalShowFullScreenImageModel
@@ -31,6 +32,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.CheckBox
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.ExpandMore
@@ -39,6 +41,7 @@ import androidx.compose.material.icons.outlined.CheckBoxOutlineBlank
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -253,9 +256,10 @@ private fun BlockRenderer(
 }
 
 // Renders a ```choices fence as tappable chips: each non-empty line is one option,
-// and tapping sends it as a user message (onUiCallback "choice"). Lets a structured
-// skill (kb-interview) ask multiple-choice questions with one-tap answers instead of
-// free typing. Read-only history/preview renders the chips disabled.
+// and tapping sends it as a user message (onUiCallback "choice"). An always-present
+// "직접 입력" chip reveals an inline field for a free-text answer (Claude's "Other"
+// pattern), so a structured skill (kb-interview) can offer one-tap answers without
+// locking the user out of typing. Read-only history/preview renders the chips disabled.
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ChoiceChipsBlock(
@@ -272,25 +276,63 @@ private fun ChoiceChipsBlock(
     }
     if (options.isEmpty()) return
     val haptics = rememberHaptics()
-    FlowRow(
-        modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        for (label in options) {
-            DenebChip(
-                onClick = if (isInteractive) {
-                    {
-                        haptics.tap()
-                        onChoose(label)
-                    }
-                } else {
-                    null
-                },
-                enabled = isInteractive,
-            ) {
-                Text(label, style = DenebType.button)
+    var customOpen by remember(raw) { mutableStateOf(false) }
+    var customText by remember(raw) { mutableStateOf("") }
+    val submitCustom = {
+        val answer = customText.trim()
+        if (answer.isNotEmpty()) {
+            customText = ""
+            customOpen = false
+            onChoose(answer)
+        }
+    }
+    Column(modifier.fillMaxWidth()) {
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            for (label in options) {
+                DenebChip(
+                    onClick = if (isInteractive) {
+                        {
+                            haptics.tap()
+                            onChoose(label)
+                        }
+                    } else {
+                        null
+                    },
+                    enabled = isInteractive,
+                ) {
+                    Text(label, style = DenebType.button)
+                }
             }
+            if (isInteractive) {
+                DenebChip(
+                    selected = customOpen,
+                    onClick = {
+                        haptics.tap()
+                        customOpen = !customOpen
+                    },
+                ) {
+                    Text("✏️ 직접 입력", style = DenebType.button)
+                }
+            }
+        }
+        if (isInteractive && customOpen) {
+            DenebOutlinedTextField(
+                value = customText,
+                onValueChange = { customText = it },
+                singleLine = true,
+                placeholder = { Text("직접 입력…", style = DenebType.button) },
+                trailingIcon = {
+                    if (customText.isNotBlank()) {
+                        IconButton(onClick = submitCustom) {
+                            Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "전송")
+                        }
+                    }
+                },
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            )
         }
     }
 }
