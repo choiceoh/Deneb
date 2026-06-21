@@ -4,7 +4,7 @@ import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebSectionLabel
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.DenebChip
-import ai.deneb.ui.components.DenebSearchField
+import ai.deneb.ui.components.DenebUnderlineSearchField
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
@@ -267,7 +267,7 @@ fun DenebMailScreen(
                         if (!selecting) {
                             if (showSearchField) {
                                 item(key = "search") {
-                                    DenebSearchField(
+                                    DenebUnderlineSearchField(
                                         query = searchText,
                                         onQueryChange = {
                                             searchText = it
@@ -275,11 +275,11 @@ fun DenebMailScreen(
                                             if (it.isBlank() && activeQuery != null) runSearch("")
                                         },
                                         placeholder = "전체 메일 검색 (키워드, from:…)",
+                                        textStyle = DenebType.body,
                                         onSearch = { runSearch(searchText) },
-                                        clearContentDescription = "검색 지우기",
-                                        // Field carries its own 8dp inset; 16dp more aligns the pill with
-                                        // the screen's 24dp content margins.
-                                        modifier = Modifier.padding(horizontal = 16.dp),
+                                        clearable = true,
+                                        // Align with the screen's 24dp content margins.
+                                        modifier = Modifier.padding(horizontal = 24.dp),
                                     )
                                 }
                             }

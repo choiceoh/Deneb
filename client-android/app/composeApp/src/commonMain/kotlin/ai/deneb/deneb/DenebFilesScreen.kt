@@ -4,7 +4,7 @@ import ai.deneb.PlatformBackHandler
 import ai.deneb.openUrl
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebType
-import ai.deneb.ui.components.DenebSearchField
+import ai.deneb.ui.components.DenebUnderlineSearchField
 import ai.deneb.ui.components.LocalShowFullScreenImageModel
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
@@ -284,7 +284,7 @@ fun DenebFilesScreen(
             )
         }
 
-        DenebSearchField(
+        DenebUnderlineSearchField(
             query = searchText,
             onQueryChange = {
                 searchText = it
@@ -292,9 +292,10 @@ fun DenebFilesScreen(
                 if (it.isBlank() && activeQuery != null) runSearch("")
             },
             placeholder = "파일 검색",
+            textStyle = DenebType.body,
             onSearch = { runSearch(searchText) },
-            clearContentDescription = "검색 지우기",
-            modifier = Modifier.padding(horizontal = 16.dp),
+            clearable = true,
+            modifier = Modifier.padding(horizontal = 24.dp),
         )
 
         // Search scope: 이름 / 내용 / 의미. Material SingleChoiceSegmentedButton
