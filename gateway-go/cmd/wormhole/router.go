@@ -74,6 +74,12 @@ type router struct {
 	// by the watcher goroutine (the sole caller of refreshFleet), so it needs no
 	// lock; it exists to log discovery on transitions instead of every 15s poll.
 	fleetState string
+	// secretsPath is wormhole's own secrets file (secrets.go), watched alongside the
+	// config so a key edit hot-reloads with no restart. secretsMtime is the last-seen
+	// modtime; like fleetState it is touched ONLY by the watcher goroutine
+	// (reloadIfChanged), so it needs no lock.
+	secretsPath  string
+	secretsMtime int64
 	// windows caches each LOCAL model's max_model_len, probed from its backend's
 	// /v1/models by refreshWindows on the watch loop. Lock-free read in
 	// listModels/status; never nil after newRouter. Empty for cloud/anthropic
@@ -114,6 +120,8 @@ func newRouter(cfg config, path string, log *slog.Logger) *router {
 	rt.windows.Store(&emptyWindows)
 	emptyHealth := map[string]keyHealthState{}
 	rt.keyHealth.Store(&emptyHealth)
+	rt.secretsPath = secretsFileFor(path)
+	rt.secretsMtime = secretsMtimeNanos(rt.secretsPath)
 	return rt
 }
 
@@ -327,16 +335,36 @@ func (rt *router) clearFleet() {
 // parse error keeps the current snapshot (a half-written file never wedges us).
 func (rt *router) reloadIfChanged() bool {
 	st, err := os.Stat(rt.path)
-	if err != nil || !st.ModTime().After(rt.cur().mtime) {
+	if err != nil {
 		return false
 	}
-	nc, err := loadConfig(rt.path)
+	cfgChanged := st.ModTime().After(rt.cur().mtime)
+	secChanged := false
+	if m := secretsMtimeNanos(rt.secretsPath); m != rt.secretsMtime {
+		rt.secretsMtime = m
+		secChanged = true
+	}
+	if !cfgChanged && !secChanged {
+		return false
+	}
+	if secChanged {
+		// Re-read the secrets file into the process env so the ${VAR} re-expansion
+		// below picks up a rotated key — no service restart needed.
+		if n, err := loadSecretsEnv(rt.secretsPath); err != nil {
+			rt.log.Warn("secrets reload failed, keeping current env", "error", err)
+		} else {
+			rt.log.Info("secrets reloaded", "keys", n)
+		}
+	}
+	nc, err := loadConfig(rt.path) // re-expands ${VAR} against the current process env
 	if err != nil {
 		rt.log.Warn("config reload failed, keeping current", "error", err)
 		return false
 	}
 	rt.snap.Store(buildSnapshot(nc, st.ModTime()))
-	rt.log.Info("config reloaded", "models", len(nc.Models))
+	if cfgChanged {
+		rt.log.Info("config reloaded", "models", len(nc.Models))
+	}
 	logConfigWarnings(rt.log, nc) // surface a bad edit at reload, not on first request
 	return true
 }
