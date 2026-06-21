@@ -790,6 +790,7 @@ data class WormholeModelOut(
     val local: Boolean = false,
     val thinking: Boolean = false,
     val source: String = "",
+    val keyHealth: String = "",
 )
 
 @Immutable
