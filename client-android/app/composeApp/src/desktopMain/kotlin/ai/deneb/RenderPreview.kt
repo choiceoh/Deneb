@@ -25,9 +25,13 @@ import ai.deneb.deneb.MailMessage
 import ai.deneb.deneb.MailRow
 import ai.deneb.deneb.OrgChartContent
 import ai.deneb.deneb.OrgNodeEditor
+import ai.deneb.deneb.PersonHit
 import ai.deneb.deneb.PromptStyleEditor
 import ai.deneb.deneb.SchedMode
 import ai.deneb.deneb.ScheduleDraft
+import ai.deneb.deneb.SearchContent
+import ai.deneb.deneb.SearchHit
+import ai.deneb.deneb.SearchResults
 import ai.deneb.deneb.SelfImprovementCodingContent
 import ai.deneb.deneb.SkillDetailContent
 import ai.deneb.deneb.SkillLifecycleContent
@@ -291,6 +295,10 @@ fun main() {
     renderScreen("skills_lifecycle_light.png", "skills_lifecycle", LightColorScheme, 824, 700)
     renderScreen("skill_detail_dark.png", "skill_detail", DarkColorScheme, 824, 1400)
     renderScreen("skill_detail_light.png", "skill_detail", LightColorScheme, 824, 1400)
+    renderScreen("search_dark.png", "search", DarkColorScheme, 824, 900)
+    renderScreen("search_light.png", "search", LightColorScheme, 824, 900)
+    renderScreen("search_empty_dark.png", "search_empty", DarkColorScheme, 824, 380)
+    renderScreen("search_empty_light.png", "search_empty", LightColorScheme, 824, 380)
     renderScreen("files_text_markdown_dark.png", "files_text_markdown", DarkColorScheme, 824, 900)
     renderScreen("files_text_markdown_light.png", "files_text_markdown", LightColorScheme, 824, 900)
     renderScreen("files_text_plain_dark.png", "files_text_plain", DarkColorScheme, 824, 900)
@@ -425,7 +433,56 @@ private val sampleTodos = listOf(
 // under its theme; the caller supplies the surface + size. Screens migrate into this
 // map incrementally — entries here are inspectable, render-only previews below are not
 // yet. The body reuses the same mock data the old per-screen render* functions used.
+private val sampleSearch = SearchResults(
+    wiki = listOf(
+        SearchHit("wiki/projects/re100", "RE100 전환 로드맵", "사업장 재생에너지 100% 전환 단계별 계획과 PPA 검토 …", "프로젝트"),
+        SearchHit("wiki/people/kim-minjun", "김민준 부장", "에코프로 구매팀 · 모듈 단가 협상 담당", "인물"),
+    ),
+    people = listOf(
+        PersonHit("이서연 차장", "lee@example.com", 42, "6월 모듈 납기 일정 회신 부탁드립니다"),
+    ),
+    diary = listOf(
+        SearchHit("diary/2026-06-08", "2026-06-08", "남도에코 미팅 메모 — 케이블 물량 재확인, 준공 일정 당김 …", "일기"),
+    ),
+)
+
 internal val previewScreens: Map<String, @Composable (ColorScheme) -> Unit> = mapOf(
+    "search" to { scheme ->
+        MaterialTheme(colorScheme = scheme) {
+            DenebScreenScaffold(title = "검색", onBack = {}) {
+                SearchContent(
+                    modifier = Modifier.weight(1f),
+                    query = "RE100",
+                    onQueryChange = {},
+                    onSearch = {},
+                    searching = false,
+                    failed = false,
+                    results = sampleSearch,
+                    onOpenWiki = {},
+                    onOpenPerson = {},
+                    onOpenCategories = {},
+                )
+            }
+        }
+    },
+    "search_empty" to { scheme ->
+        MaterialTheme(colorScheme = scheme) {
+            DenebScreenScaffold(title = "검색", onBack = {}) {
+                SearchContent(
+                    modifier = Modifier.weight(1f),
+                    query = "",
+                    onQueryChange = {},
+                    onSearch = {},
+                    searching = false,
+                    failed = false,
+                    results = null,
+                    onOpenWiki = {},
+                    onOpenPerson = {},
+                    onOpenCategories = {},
+                )
+            }
+        }
+    },
     "calendar_event" to { scheme ->
         MaterialTheme(colorScheme = scheme) {
             DenebScreenScaffold(title = "일정", onBack = {}) {
