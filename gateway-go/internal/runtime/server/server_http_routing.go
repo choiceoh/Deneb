@@ -14,6 +14,9 @@ func (s *Server) buildMux() *http.ServeMux {
 	mux.HandleFunc("GET /readyz", s.handleReady)
 	mux.HandleFunc("POST /api/cron/run", s.handleCronRun)
 	mux.HandleFunc("POST /api/event/ingest", s.handleEventIngest)
+	// Production-fidelity extraction benchmark: run a real extractor against a named
+	// wormhole model. Client-token guarded. See server_http_eval.go.
+	mux.HandleFunc("POST /api/eval/extract", s.handleEvalExtract)
 	mux.HandleFunc("POST /api/v1/miniapp/rpc", s.handleMiniappRPC)
 	mux.HandleFunc("POST /api/v1/miniapp/chat/stream", s.handleMiniappChatStream)
 	mux.HandleFunc("GET /api/v1/miniapp/events", s.handleMiniappEvents)
