@@ -2,6 +2,7 @@
 
 package ai.deneb
 
+import ai.deneb.deneb.AppTilesContent
 import ai.deneb.deneb.CalMonth
 import ai.deneb.deneb.CalendarAddContent
 import ai.deneb.deneb.CalendarDayList
@@ -175,11 +176,28 @@ private fun renderBrowser(name: String, scheme: ColorScheme) {
     scene.close()
 }
 
-private fun renderMore(name: String, scheme: ColorScheme) {
+private fun renderMore(name: String, scheme: ColorScheme, hidden: Set<String> = emptySet()) {
     val scene = ImageComposeScene(width = 824, height = 1500, density = Density(2f)) {
         MaterialTheme(colorScheme = scheme) {
             Surface(color = MaterialTheme.colorScheme.background) {
-                DenebMoreScreen(onBack = {}, onOpen = {})
+                DenebMoreScreen(onBack = {}, onOpen = {}, hiddenTiles = hidden)
+            }
+        }
+    }
+    val image = scene.render()
+    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
+    File("/tmp/deneb-render").mkdirs()
+    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
+    scene.close()
+}
+
+// The 설정 → "더보기 표시 항목" toggle section (stateless body). Renders with two tiles
+// pre-hidden so the OFF (숨김) switch state is visible alongside the ON (표시) state.
+private fun renderAppTiles(name: String, scheme: ColorScheme) {
+    val scene = ImageComposeScene(width = 824, height = 1200, density = Density(2f)) {
+        MaterialTheme(colorScheme = scheme) {
+            Surface(color = MaterialTheme.colorScheme.background) {
+                AppTilesContent(hidden = setOf("deneb_search", "deneb_browser"), onToggle = { _, _ -> })
             }
         }
     }
@@ -198,6 +216,11 @@ fun main() {
     renderBrowser("browser_light.png", LightColorScheme)
     renderMore("more_dark.png", DarkColorScheme)
     renderMore("more_light.png", LightColorScheme)
+    // 더보기 숨김: the grid with two tiles hidden (검색·브라우저) — verify they drop out.
+    renderMore("more_hidden_dark.png", DarkColorScheme, hidden = setOf("deneb_search", "deneb_browser"))
+    // The 설정 toggle section that drives it.
+    renderAppTiles("app_tiles_dark.png", DarkColorScheme)
+    renderAppTiles("app_tiles_light.png", LightColorScheme)
     renderMarkdown("markdown_dark.png", DarkColorScheme)
     renderScreen("scrub_active_dark.png", "scrub_active", DarkColorScheme, 824, 1100)
     renderScreen("scrub_active_light.png", "scrub_active", LightColorScheme, 824, 1100)
