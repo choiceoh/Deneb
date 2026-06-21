@@ -1,50 +1,25 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="512"
     android:viewportHeight="512">
   <!-- Deneb mark (library-module copy; the application module's
-       @drawable/ic_launcher is authoritative). Identical to androidApp's
-       launcher foreground so the two never drift: soft white radial glow,
-       luminous elongated main sparkle, and an upper-right accent twinkle. -->
+       @drawable/ic_launcher is authoritative). Identical to androidApp's launcher
+       foreground so the two never drift: faceted 8-point star, lit top-left
+       (base mid-azure + bright-cyan highlight facets + deep-blue shadow facets)
+       on the white background. -->
   <group android:scaleX="0.84"
       android:scaleY="0.84"
       android:translateX="40.96"
       android:translateY="40.96">
-
-    <path android:pathData="M51,256 a205,205 0 1,0 410,0 a205,205 0 1,0 -410,0 Z">
-      <aapt:attr name="android:fillColor">
-        <gradient
-            android:type="radial"
-            android:centerX="256"
-            android:centerY="256"
-            android:gradientRadius="205">
-          <item android:offset="0.0" android:color="#5CFFFFFF"/>
-          <item android:offset="0.5" android:color="#1FFFFFFF"/>
-          <item android:offset="1.0" android:color="#00FFFFFF"/>
-        </gradient>
-      </aapt:attr>
-    </path>
-
-    <path android:pathData="M256,74 Q274.3,236 422,256 Q274.3,276 256,438 Q237.7,276 90,256 Q237.7,236 256,74 Z">
-      <aapt:attr name="android:fillColor">
-        <gradient
-            android:type="linear"
-            android:startX="110"
-            android:startY="110"
-            android:endX="410"
-            android:endY="410">
-          <item android:offset="0.0" android:color="#FFBFEFFA"/>
-          <item android:offset="0.28" android:color="#FF66D9E8"/>
-          <item android:offset="0.62" android:color="#FF7FA8D0"/>
-          <item android:offset="1.0" android:color="#FF9B8CE0"/>
-        </gradient>
-      </aapt:attr>
-    </path>
-
     <path
-        android:pathData="M368,120 Q371.3,146.7 398,150 Q371.3,153.3 368,180 Q364.7,153.3 338,150 Q364.7,146.7 368,120 Z"
-        android:fillColor="#FFCFEFF9"/>
+        android:pathData="M256,72 L272.07,217.2 L336.6,175.4 L294.8,239.93 L440,256 L294.8,272.07 L336.6,336.6 L272.07,294.8 L256,440 L239.93,294.8 L175.4,336.6 L217.2,272.07 L72,256 L217.2,239.93 L175.4,175.4 L239.93,217.2 Z"
+        android:fillColor="#FF2C84C9"/>
+    <path
+        android:pathData="M256,256 L256,72 L272.07,217.2 Z M256,256 L217.2,272.07 L72,256 Z M256,256 L72,256 L217.2,239.93 Z M256,256 L217.2,239.93 L175.4,175.4 Z M256,256 L175.4,175.4 L239.93,217.2 Z M256,256 L239.93,217.2 L256,72 Z"
+        android:fillColor="#FF5BC8E8"/>
+    <path
+        android:pathData="M256,256 L294.8,239.93 L440,256 Z M256,256 L440,256 L294.8,272.07 Z M256,256 L294.8,272.07 L336.6,336.6 Z M256,256 L336.6,336.6 L272.07,294.8 Z M256,256 L272.07,294.8 L256,440 Z M256,256 L256,440 L239.93,294.8 Z"
+        android:fillColor="#FF154B86"/>
   </group>
 </vector>

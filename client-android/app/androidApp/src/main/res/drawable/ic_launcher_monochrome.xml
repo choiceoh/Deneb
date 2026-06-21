@@ -3,18 +3,14 @@
     android:height="108dp"
     android:viewportWidth="512"
     android:viewportHeight="512">
-  <!-- Deneb mark (monochrome): the elongated main sparkle + accent twinkle as a
-       single solid fill — the system tints it for themed icons, so no glow or
-       gradient here (those need alpha/colour the tint would flatten). -->
+  <!-- Deneb mark (monochrome): the 8-point sparkle-star silhouette as a single
+       solid fill — the system tints it for themed icons. -->
   <group android:scaleX="0.84"
       android:scaleY="0.84"
       android:translateX="40.96"
       android:translateY="40.96">
     <path
-        android:pathData="M256,74 Q274.3,236 422,256 Q274.3,276 256,438 Q237.7,276 90,256 Q237.7,236 256,74 Z"
-        android:fillColor="#FFFFFF"/>
-    <path
-        android:pathData="M368,120 Q371.3,146.7 398,150 Q371.3,153.3 368,180 Q364.7,153.3 338,150 Q364.7,146.7 368,120 Z"
+        android:pathData="M256,72 L272.07,217.2 L336.6,175.4 L294.8,239.93 L440,256 L294.8,272.07 L336.6,336.6 L272.07,294.8 L256,440 L239.93,294.8 L175.4,336.6 L217.2,272.07 L72,256 L217.2,239.93 L175.4,175.4 L239.93,217.2 Z"
         android:fillColor="#FFFFFF"/>
   </group>
 </vector>
