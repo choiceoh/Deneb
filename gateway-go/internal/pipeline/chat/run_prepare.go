@@ -15,6 +15,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/tokenest"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/org"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/knowledge"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/prompt"
@@ -276,6 +277,28 @@ func prepareContextAndPrompt(
 		var ctxFiles []prompt.ContextFile
 		if !chatbot {
 			ctxFiles = prompt.LoadContextFiles(workspaceDir, prompt.WithSessionSnapshot(params.SessionKey))
+			// Inject the operator's org chart — the same one they maintain in the app's
+			// org-chart screen — so the assistant references the live org rather than a
+			// static doc that drifts. RenderText is deterministic, so the block is
+			// byte-stable across turns when org.json is unchanged (prefix cache holds); a
+			// mid-session edit costs one cache miss. Capped so a large chart cannot blow
+			// the context budget.
+			if tree, err := org.Load(); err == nil {
+				if txt := tree.RenderText(); txt != "" {
+					const orgContextMaxBytes = 12000
+					if len(txt) > orgContextMaxBytes {
+						cut := strings.LastIndex(txt[:orgContextMaxBytes], "\n")
+						if cut <= 0 {
+							cut = orgContextMaxBytes
+						}
+						txt = txt[:cut] + "\n… (조직도 일부 생략 — 앱에서 전체 확인)"
+					}
+					ctxFiles = append(ctxFiles, prompt.ContextFile{
+						Path:    "조직도 (앱 조직도 편집기에서 관리 — 사용자가 보는 것과 동일)",
+						Content: txt,
+					})
+				}
+			}
 		}
 
 		// Operator-edited 업무 persona (Settings prompt corner). Only the 업무 path
