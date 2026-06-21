@@ -99,10 +99,14 @@ func memoryGetPage(deps MemoryDeps) rpcutil.HandlerFunc {
 		Path string `json:"path"`
 	}
 	type out struct {
-		Path       string   `json:"path"`
-		Title      string   `json:"title,omitempty"`
-		Summary    string   `json:"summary,omitempty"`
-		Category   string   `json:"category,omitempty"`
+		Path     string `json:"path"`
+		Title    string `json:"title,omitempty"`
+		Summary  string `json:"summary,omitempty"`
+		Category string `json:"category,omitempty"`
+		// Frozen project code (e.g. pl1-wdo-dev-001): anchors the deal notebook
+		// (notebook.DealRef == code), so a project page can link to its raw-evidence
+		// notebook. Empty for non-project pages.
+		Code       string   `json:"code,omitempty"`
 		Tags       []string `json:"tags,omitempty"`
 		Related    []string `json:"related,omitempty"`
 		Created    string   `json:"created,omitempty"`
@@ -157,6 +161,7 @@ func memoryGetPage(deps MemoryDeps) rpcutil.HandlerFunc {
 			Title:      page.Meta.Title,
 			Summary:    page.Meta.Summary,
 			Category:   page.Meta.Category,
+			Code:       page.Meta.Code,
 			Tags:       page.Meta.Tags,
 			Related:    page.Meta.Related,
 			Created:    page.Meta.Created,
@@ -263,6 +268,13 @@ func pageToOut(rel string, page *wiki.Page) map[string]any {
 	}
 	if page.Meta.Category != "" {
 		out["category"] = page.Meta.Category
+	}
+	// Frozen project code (e.g. pl1-wdo-dev-001): the stable identity that also
+	// anchors the deal's notebook (notebook.DealRef). Surfacing it lets the native
+	// wiki page link to its raw-evidence notebook — curated facts ↔ raw evidence,
+	// joined by one code that survives page moves/reclassification.
+	if page.Meta.Code != "" {
+		out["code"] = page.Meta.Code
 	}
 	if len(page.Meta.Tags) > 0 {
 		out["tags"] = page.Meta.Tags

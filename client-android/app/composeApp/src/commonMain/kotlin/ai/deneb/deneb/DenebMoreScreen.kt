@@ -71,7 +71,7 @@ internal val moreGroups: List<Pair<String, List<MoreEntry>>> = listOf(
         MoreEntry("검색", DenebSearch, Icons.Outlined.Search, key = "deneb_search", workData = true),
         MoreEntry("카테고리", DenebCategories, Icons.Outlined.GridView, key = "deneb_categories", workData = true),
         MoreEntry("전체 연락처", DenebContacts, Icons.Outlined.Contacts, key = "deneb_contacts", workData = true),
-        MoreEntry("노트북", DenebNotebooks, Icons.Outlined.Book, key = "deneb_notebooks", workData = true),
+        MoreEntry("노트북", DenebNotebooks(), Icons.Outlined.Book, key = "deneb_notebooks", workData = true),
     ),
     TOOLS_GROUP to listOf(
         MoreEntry("할일", DenebTodo, Icons.Outlined.CheckCircle, key = "deneb_todo"),

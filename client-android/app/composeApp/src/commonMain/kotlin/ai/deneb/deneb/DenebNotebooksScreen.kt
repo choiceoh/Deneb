@@ -33,11 +33,15 @@ import kotlinx.coroutines.launch
 fun DenebNotebooksScreen(
     client: DenebGatewayClient,
     onBack: () -> Unit,
+    // Non-null deep-links straight into that notebook's detail (e.g. from a wiki
+    // project page's "이 딜 노트북" link); back returns to the list, which is
+    // loaded in the background regardless.
+    initialOpenId: String? = null,
     navigationTabBar: (@Composable () -> Unit)? = null,
 ) {
     var notebooks by remember { mutableStateOf<List<NotebookSummaryOut>?>(null) }
     var listFailed by remember { mutableStateOf(false) }
-    var openId by remember { mutableStateOf<String?>(null) }
+    var openId by remember { mutableStateOf(initialOpenId) }
     var detail by remember { mutableStateOf<NotebookOut?>(null) }
     var detailFailed by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -59,7 +63,10 @@ fun DenebNotebooksScreen(
         detailFailed = nb == null
     }
 
-    LaunchedEffect(Unit) { loadList() }
+    LaunchedEffect(Unit) {
+        loadList()
+        if (initialOpenId != null) loadDetail(initialOpenId)
+    }
 
     val current = openId
     if (current != null) {

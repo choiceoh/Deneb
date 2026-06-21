@@ -247,6 +247,7 @@ func TestMemoryGetPage_HappyPath(t *testing.T) {
 					Title:      "Alice",
 					Summary:    "Sales contact",
 					Category:   "사람",
+					Code:       "pl1-wdo-dev-001",
 					Tags:       []string{"client", "topworks"},
 					Related:    []string{"acme.md"},
 					Updated:    "2026-05-26",
@@ -264,6 +265,11 @@ func TestMemoryGetPage_HappyPath(t *testing.T) {
 	decode(t, resp, &got)
 	if got["title"] != "Alice" || got["category"] != "사람" {
 		t.Errorf("metadata wrong: %+v", got)
+	}
+	// The frozen project code must reach the native client so a project page can
+	// link to its deal notebook (notebook.DealRef == code).
+	if got["code"] != "pl1-wdo-dev-001" {
+		t.Errorf("code = %v, want pl1-wdo-dev-001", got["code"])
 	}
 	if got["body"] == "" || got["body"] == nil {
 		t.Errorf("body missing: %+v", got)

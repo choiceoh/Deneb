@@ -135,6 +135,7 @@ suspend fun DenebGatewayClient.fetchWikiPage(path: String): WikiPage? {
         tags = p.tags,
         updated = p.updated,
         body = p.body,
+        code = p.code,
     )
 }
 

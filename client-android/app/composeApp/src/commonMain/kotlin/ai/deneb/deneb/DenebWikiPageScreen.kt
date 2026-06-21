@@ -1,10 +1,12 @@
 package ai.deneb.deneb
 
+import ai.deneb.deneb.generated.NotebookSummaryOut
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
+import ai.deneb.ui.denebPressable
 import ai.deneb.ui.markdown.MarkdownContent
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -43,6 +45,7 @@ fun DenebWikiPageScreen(
     client: DenebGatewayClient,
     path: String,
     onBack: () -> Unit,
+    onOpenNotebook: (String) -> Unit = {}, // opens this deal's raw-evidence notebook (project pages)
     navigationTabBar: (@Composable () -> Unit)? = null,
 ) {
     val creating = path.isBlank()
@@ -56,6 +59,10 @@ fun DenebWikiPageScreen(
     var draftBody by remember(path) { mutableStateOf("") }
     var saving by remember(path) { mutableStateOf(false) }
     var status by remember(path) { mutableStateOf<String?>(null) }
+    // The deal notebook (raw evidence) for a project page: matched by the page's
+    // frozen code against notebooks' dealRef. null when this page has no code or
+    // no notebook exists yet.
+    var dealNotebook by remember(path) { mutableStateOf<NotebookSummaryOut?>(null) }
     val scope = rememberCoroutineScope()
     val haptics = rememberHaptics()
 
@@ -69,6 +76,17 @@ fun DenebWikiPageScreen(
         if (p != null) draftBody = p.body
     }
     LaunchedEffect(path) { loadPage() }
+    // Resolve the deal notebook once the page (and its code) is known. Re-runs when
+    // code goes blank → loaded. Curated facts (this page) ↔ raw evidence (notebook),
+    // joined by the shared project code.
+    LaunchedEffect(page?.code) {
+        val code = page?.code?.trim().orEmpty()
+        dealNotebook = if (code.isBlank()) {
+            null
+        } else {
+            client.fetchNotebooks()?.firstOrNull { it.dealRef.trim().equals(code, ignoreCase = true) }
+        }
+    }
 
     // Guard against losing in-progress wiki edits to a stray back: while editing,
     // snapshot the drafts (captured when edit mode opens) and confirm before leaving
@@ -156,6 +174,17 @@ fun DenebWikiPageScreen(
                         color = MaterialTheme.colorScheme.primary,
                     )
                 }
+                // Jump to this deal's raw-evidence notebook (project pages only).
+                // The page is the curated facts; the notebook is the pinned sources
+                // behind them — same project code, two faces.
+                val nb = dealNotebook
+                if (nb != null) {
+                    Spacer(Modifier.height(10.dp))
+                    DealNotebookLinkRow(sourceCount = nb.sourceCount) {
+                        haptics.tap()
+                        onOpenNotebook(nb.id)
+                    }
+                }
             }
 
             Spacer(Modifier.height(12.dp))
@@ -223,5 +252,29 @@ fun DenebWikiPageScreen(
             }
             Spacer(Modifier.height(24.dp))
         }
+    }
+}
+
+/**
+ * The "이 딜 노트북" link shown on a project wiki page — taps through to the deal's
+ * raw-evidence notebook. The page is the curated facts; the notebook is the pinned
+ * sources behind them, joined by the shared project code. Stateless (source count +
+ * click callback) so the render harness can show it; uses the flat "label + →" row
+ * idiom of the category browser's pinned entries.
+ */
+@Composable
+internal fun DealNotebookLinkRow(sourceCount: Int, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .denebPressable(onClick = onClick)
+            .padding(vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text("이 딜 노트북", style = DenebType.rowTitle, color = MaterialTheme.colorScheme.onSurface)
+            Text("자료 ${sourceCount}건 · raw 증거", style = DenebType.meta, color = denebHint())
+        }
+        Text("→", style = DenebType.meta, color = MaterialTheme.colorScheme.primary)
     }
 }
