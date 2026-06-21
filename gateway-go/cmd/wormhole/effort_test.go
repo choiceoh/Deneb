@@ -167,3 +167,54 @@ func TestThinkingRoute_AppliedOnForward(t *testing.T) {
 		t.Errorf("a simple request should reach the upstream with thinking:false; upstream saw: %s", gotBody)
 	}
 }
+
+func TestReasoningRoute_GLMOffOnSimpleTurn(t *testing.T) {
+	entry := modelEntry{Name: "glm-5.2", Reasoning: "glm"}
+	// A short conversational turn → route reasoning off. The gateway's stray
+	// reasoning_effort:"low" (which GLM would treat as MAX) must be stripped.
+	body := []byte(`{"model":"glm-5.2","messages":[{"role":"user","content":"안녕"}],"reasoning_effort":"low"}`)
+	out, _, off := reasoningRoute(body, entry)
+	if !off {
+		t.Fatal("a short conversational turn should route reasoning off")
+	}
+	var m map[string]any
+	if err := json.Unmarshal(out, &m); err != nil {
+		t.Fatalf("output not JSON: %v", err)
+	}
+	if think, _ := m["thinking"].(map[string]any); think["type"] != "disabled" {
+		t.Errorf("expected thinking.type=disabled, got %v", m["thinking"])
+	}
+	if _, ok := m["reasoning_effort"]; ok {
+		t.Errorf("reasoning_effort must be stripped when reasoning is off, got %v", m["reasoning_effort"])
+	}
+}
+
+func TestReasoningRoute_GLMHighOnHardTurn(t *testing.T) {
+	entry := modelEntry{Name: "glm-5.2", Reasoning: "glm"}
+	// "분석" is a hard signal in the Ares DefaultProfile → keep reasoning on, and
+	// pin "high" (GLM resolves anything but an explicit "high" to MAX).
+	body := []byte(`{"model":"glm-5.2","messages":[{"role":"user","content":"이 데이터를 심층 분석해줘"}],"reasoning_effort":"low"}`)
+	out, _, off := reasoningRoute(body, entry)
+	if off {
+		t.Fatal("a hard-signal turn should keep reasoning on")
+	}
+	var m map[string]any
+	if err := json.Unmarshal(out, &m); err != nil {
+		t.Fatalf("output not JSON: %v", err)
+	}
+	if m["reasoning_effort"] != "high" {
+		t.Errorf("expected reasoning_effort=high, got %v", m["reasoning_effort"])
+	}
+	if think, _ := m["thinking"].(map[string]any); think["type"] != "enabled" {
+		t.Errorf("expected thinking.type=enabled, got %v", m["thinking"])
+	}
+}
+
+func TestReasoningRoute_NoStyleIsNoOp(t *testing.T) {
+	entry := modelEntry{Name: "x"} // no Reasoning style
+	body := []byte(`{"model":"x","messages":[{"role":"user","content":"안녕"}]}`)
+	out, reason, off := reasoningRoute(body, entry)
+	if off || reason != "" || !bytes.Equal(out, body) {
+		t.Errorf("no reasoning style must be a no-op; off=%v reason=%q changed=%v", off, reason, !bytes.Equal(out, body))
+	}
+}

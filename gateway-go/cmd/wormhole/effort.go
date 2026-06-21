@@ -47,6 +47,50 @@ func (rt *router) applyThinking(entry modelEntry, body []byte) []byte {
 	return out
 }
 
+// reasoningStyleGLM is the z.ai / GLM-5.x native reasoning dialect (see modelEntry.Reasoning).
+const reasoningStyleGLM = "glm"
+
+// applyReasoning runs the cloud-dialect reasoning router for one resolved model.
+// Unlike applyThinking (vLLM chat_template_kwargs — owned by the Deneb gateway and
+// suppressed by X-Wormhole-No-Effort), this normalizes a cloud model's NATIVE
+// reasoning params: the gateway can't express them, so wormhole is the only place
+// the translation can happen and there is no double-routing to suppress. No-op
+// unless the entry declares a reasoning style.
+func (rt *router) applyReasoning(entry modelEntry, body []byte) []byte {
+	if entry.Reasoning == "" {
+		return body
+	}
+	out, reason, off := reasoningRoute(body, entry)
+	if off {
+		rt.log.Info("reasoning routed off", "model", entry.Name, "style", entry.Reasoning, "reason", reason)
+	}
+	return out
+}
+
+// reasoningRoute classifies the request's effort (same Ares Decide() as the
+// thinking toggle) and rewrites a cloud model's reasoning params in its own
+// dialect. Currently one style:
+//
+//	"glm": an obviously-simple turn → thinking:{"type":"disabled"} (and drop any
+//	reasoning_effort); otherwise reasoning_effort:"high" + thinking:{"type":"enabled"}.
+//	GLM honors only reasoning_effort high|max and treats anything but an explicit
+//	"high" as MAX, so the on-path must pin "high" — forwarding the gateway's "low"
+//	would silently run GLM at its deepest (max) reasoning.
+func reasoningRoute(body []byte, entry modelEntry) (out []byte, reason string, thinkingOff bool) {
+	if entry.Reasoning != reasoningStyleGLM {
+		return body, "", false // unknown/empty style → leave the body untouched
+	}
+	d := ares.Decide(ares.DefaultProfile(), effortRequest(body))
+	if d.ThinkingOff {
+		b := setBodyField(body, "thinking", map[string]string{"type": "disabled"})
+		b = deleteBodyField(b, "reasoning_effort")
+		return b, d.Reason, true
+	}
+	b := setBodyField(body, "thinking", map[string]string{"type": "enabled"})
+	b = setBodyField(b, "reasoning_effort", "high")
+	return b, d.Reason, false
+}
+
 // thinkingRoute classifies the request's effort and, for a model with a thinking
 // toggle, injects chat_template_kwargs to skip the thinking phase on a simple
 // turn. Returns the (possibly modified) body and a short reason tag for the log
@@ -84,6 +128,43 @@ func injectKwarg(body []byte, key string, val bool) []byte {
 		return body
 	}
 	fields["chat_template_kwargs"] = kwargsEnc
+	out, err := json.Marshal(fields)
+	if err != nil {
+		return body
+	}
+	return out
+}
+
+// setBodyField sets a top-level field to value, preserving every other field's raw
+// bytes. Returns the body unchanged if it isn't a JSON object or value won't marshal.
+func setBodyField(body []byte, key string, value any) []byte {
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(body, &fields) != nil {
+		return body
+	}
+	enc, err := json.Marshal(value)
+	if err != nil {
+		return body
+	}
+	fields[key] = enc
+	out, err := json.Marshal(fields)
+	if err != nil {
+		return body
+	}
+	return out
+}
+
+// deleteBodyField removes a top-level field, preserving the rest. No-op if absent
+// or the body isn't a JSON object.
+func deleteBodyField(body []byte, key string) []byte {
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(body, &fields) != nil {
+		return body
+	}
+	if _, ok := fields[key]; !ok {
+		return body
+	}
+	delete(fields, key)
 	out, err := json.Marshal(fields)
 	if err != nil {
 		return body
