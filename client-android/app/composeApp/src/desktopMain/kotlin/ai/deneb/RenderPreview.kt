@@ -70,6 +70,7 @@ import ai.deneb.ui.chat.composables.DenebBottomBar
 import ai.deneb.ui.chat.composables.EmptyState
 import ai.deneb.ui.chat.composables.WaitingResponseRow
 import ai.deneb.ui.chat.composables.WorkFeedPanel
+import ai.deneb.ui.components.DenebUnderlineSearchField
 import ai.deneb.ui.components.SectionedScrubList
 import ai.deneb.ui.components.SkeletonList
 import ai.deneb.ui.denebHairline
@@ -299,6 +300,8 @@ fun main() {
     renderScreen("search_light.png", "search", LightColorScheme, 824, 900)
     renderScreen("search_empty_dark.png", "search_empty", DarkColorScheme, 824, 380)
     renderScreen("search_empty_light.png", "search_empty", LightColorScheme, 824, 380)
+    renderScreen("search_field_dark.png", "search_field", DarkColorScheme, 824, 460)
+    renderScreen("search_field_light.png", "search_field", LightColorScheme, 824, 460)
     renderScreen("files_text_markdown_dark.png", "files_text_markdown", DarkColorScheme, 824, 900)
     renderScreen("files_text_markdown_light.png", "files_text_markdown", LightColorScheme, 824, 900)
     renderScreen("files_text_plain_dark.png", "files_text_plain", DarkColorScheme, 824, 900)
@@ -480,6 +483,31 @@ internal val previewScreens: Map<String, @Composable (ColorScheme) -> Unit> = ma
                     onOpenPerson = {},
                     onOpenCategories = {},
                 )
+            }
+        }
+    },
+    "search_field" to { scheme ->
+        MaterialTheme(colorScheme = scheme) {
+            DenebScreenScaffold(title = "검색 필드", onBack = {}) {
+                Column(Modifier.padding(horizontal = 24.dp)) {
+                    Spacer(Modifier.height(12.dp))
+                    DenebUnderlineSearchField(
+                        query = "",
+                        onQueryChange = {},
+                        placeholder = "위키 · 일기 · 사람",
+                        onSearch = {},
+                    )
+                    Spacer(Modifier.height(28.dp))
+                    DenebUnderlineSearchField(
+                        query = "qwen3",
+                        onQueryChange = {},
+                        placeholder = "HuggingFace 모델 검색",
+                        textStyle = DenebType.body,
+                        trailing = {
+                            Text("✕", style = DenebType.body, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        },
+                    )
+                }
             }
         }
     },

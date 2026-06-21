@@ -3,12 +3,10 @@ package ai.deneb.deneb
 import ai.deneb.ui.DenebRow
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebType
+import ai.deneb.ui.components.DenebUnderlineSearchField
 import ai.deneb.ui.components.rememberHaptics
-import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -17,9 +15,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -32,9 +27,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
@@ -116,11 +108,11 @@ fun SearchContent(
             .padding(horizontal = 24.dp),
     ) {
         Spacer(Modifier.height(8.dp))
-        UnderlineSearchField(
+        DenebUnderlineSearchField(
             query = query,
             onQueryChange = onQueryChange,
-            onSearch = onSearch,
             placeholder = "위키 · 일기 · 사람",
+            onSearch = onSearch,
         )
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
             TextButton(onClick = onOpenCategories) {
@@ -174,51 +166,6 @@ fun SearchContent(
                 Spacer(Modifier.height(24.dp))
             }
         }
-    }
-}
-
-/**
- * Flat underline search input — Deneb's text-field idiom: no box, no pill, no fill,
- * just the text over a single hairline that goes cool-primary (and a touch thicker)
- * on focus. Submits on the IME search action.
- */
-@Composable
-private fun UnderlineSearchField(
-    query: String,
-    onQueryChange: (String) -> Unit,
-    onSearch: () -> Unit,
-    placeholder: String,
-) {
-    var focused by remember { mutableStateOf(false) }
-    val line = if (focused) MaterialTheme.colorScheme.primary else denebHairline()
-    Column(Modifier.fillMaxWidth()) {
-        BasicTextField(
-            value = query,
-            onValueChange = onQueryChange,
-            singleLine = true,
-            textStyle = DenebType.subject.copy(color = MaterialTheme.colorScheme.onBackground),
-            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-            keyboardActions = KeyboardActions(onSearch = { onSearch() }),
-            modifier = Modifier
-                .fillMaxWidth()
-                .onFocusChanged { focused = it.isFocused }
-                .padding(vertical = 10.dp),
-            decorationBox = { inner ->
-                Box {
-                    if (query.isEmpty()) {
-                        Text(placeholder, style = DenebType.subject, color = denebHint())
-                    }
-                    inner()
-                }
-            },
-        )
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .height(if (focused) 1.5.dp else 1.dp)
-                .background(line),
-        )
     }
 }
 
