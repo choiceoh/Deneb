@@ -179,6 +179,7 @@ internal data class WikiPagePayload(
     val title: String = "",
     val summary: String = "",
     val category: String = "",
+    val code: String = "", // frozen project code (anchors the deal notebook); "" for non-project pages
     val tags: List<String> = emptyList(),
     val related: List<String> = emptyList(),
     val updated: String = "",

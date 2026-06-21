@@ -292,6 +292,7 @@ data class WikiPage(
     val tags: List<String>,
     val updated: String,
     val body: String,
+    val code: String = "", // frozen project code; non-blank → has a deal notebook to link to
 )
 
 /** A wiki category with its page count, for the category browser. */

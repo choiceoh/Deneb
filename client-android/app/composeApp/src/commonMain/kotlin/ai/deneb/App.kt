@@ -220,7 +220,9 @@ object DenebDiary
 
 @Serializable
 @SerialName("deneb_notebooks")
-object DenebNotebooks
+// openId deep-links straight into one notebook's detail (e.g. from a wiki project
+// page's "이 딜 노트북" link); null opens the notebook list.
+data class DenebNotebooks(val openId: String? = null)
 
 @Serializable
 @SerialName("deneb_dashboard")
@@ -637,11 +639,12 @@ private fun AppContent(
                                     hiddenTiles = appSettings.getHiddenMoreTiles(),
                                 )
                             }
-                            composable<DenebNotebooks> {
+                            composable<DenebNotebooks> { entry ->
                                 denebClient?.let { client ->
                                     DenebNotebooksScreen(
                                         client = client,
                                         onBack = { navController.navigateUp() },
+                                        initialOpenId = entry.toRoute<DenebNotebooks>().openId,
                                         navigationTabBar = if (showTabBar) navigationTabBar else null,
                                     )
                                 }
@@ -670,6 +673,7 @@ private fun AppContent(
                                         client = client,
                                         path = entry.toRoute<DenebWiki>().path,
                                         onBack = { navController.navigateUp() },
+                                        onOpenNotebook = { id -> navController.navigate(DenebNotebooks(openId = id)) },
                                         navigationTabBar = if (showTabBar) navigationTabBar else null,
                                     )
                                 }

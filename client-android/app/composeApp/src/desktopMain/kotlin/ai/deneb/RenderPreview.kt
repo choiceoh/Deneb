@@ -14,6 +14,7 @@ import ai.deneb.deneb.CalendarMonthGrid
 import ai.deneb.deneb.ContactsList
 import ai.deneb.deneb.CronEditContent
 import ai.deneb.deneb.DashboardLanesContent
+import ai.deneb.deneb.DealNotebookLinkRow
 import ai.deneb.deneb.DenebBrowserChrome
 import ai.deneb.deneb.DenebMoreScreen
 import ai.deneb.deneb.DenebWebViewState
@@ -280,6 +281,8 @@ fun main() {
     renderScreen("org_chart_dark.png", "org_chart", DarkColorScheme, 824, 1500)
     renderScreen("org_chart_light.png", "org_chart", LightColorScheme, 824, 1500)
     renderScreen("org_chart_edit_light.png", "org_chart_edit", LightColorScheme, 824, 1500)
+    renderScreen("wiki_notebook_link_light.png", "wiki_notebook_link", LightColorScheme, 824, 560)
+    renderScreen("wiki_notebook_link_dark.png", "wiki_notebook_link", DarkColorScheme, 824, 560)
     renderScreen("org_chart_search_dark.png", "org_chart_search", DarkColorScheme, 824, 1500)
     renderScreen("org_editor_dark.png", "org_editor", DarkColorScheme, 824, 1280)
     renderScreen("org_editor_light.png", "org_editor", LightColorScheme, 824, 1280)
@@ -730,6 +733,23 @@ internal val previewScreens: Map<String, @Composable (ColorScheme) -> Unit> = ma
     },
     "org_chart" to { scheme -> orgChartBody(scheme, "") },
     "org_chart_edit" to { scheme -> orgChartBody(scheme, "", editMode = true) },
+    // The "이 딜 노트북" link on a project wiki page, in a minimal page-header context.
+    "wiki_notebook_link" to { scheme ->
+        MaterialTheme(colorScheme = scheme) {
+            DenebScreenScaffold(title = "위키", onBack = {}) {
+                Column(Modifier.padding(horizontal = 24.dp)) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "영산고 태양광 발전소",
+                        style = DenebType.subject,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text("프로젝트  ·  2026-06-21", style = DenebType.meta)
+                    DealNotebookLinkRow(sourceCount = 7) {}
+                }
+            }
+        }
+    },
     "org_chart_search" to { scheme -> orgChartBody(scheme, "김철수") },
     "org_editor" to { scheme ->
         MaterialTheme(colorScheme = scheme) {
