@@ -20,6 +20,9 @@ type fakeWorkFeedStore struct {
 	runItemID   string
 	runActionID string
 	runErr      error
+	// runItem, when its Source is set, is returned as the RunAction result's Item
+	// (lets a test exercise deal-question answer routing).
+	runItem workfeed.Item
 }
 
 func (f *fakeWorkFeedStore) List(limit int, includeAcked bool) ([]workfeed.Item, int, error) {
@@ -75,6 +78,9 @@ func (f *fakeWorkFeedStore) RunAction(itemID, actionID string) (workfeed.ActionR
 		return workfeed.ActionResult{}, f.runErr
 	}
 	item := workfeed.Item{ID: itemID, SessionKey: "client:main"}
+	if f.runItem.Source != "" {
+		item = f.runItem
+	}
 	action := workfeed.Action{ID: actionID, Kind: actionID, Label: "Run"}
 	return workfeed.ActionResult{
 		Item:       item,
@@ -249,5 +255,65 @@ func TestWorkFeedActionRunMissingAction(t *testing.T) {
 	}
 	if resp.Error.Code != protocol.ErrNotFound {
 		t.Fatalf("code = %s, want %s", resp.Error.Code, protocol.ErrNotFound)
+	}
+}
+
+// A deal-question card's "dept:*" answer routes to OnAnswer with the settled item
+// (carrying RefID) and the tapped action — so the server can record the team onto
+// the deal wiki page.
+func TestWorkFeedActionRun_DealQuestionRoutesAnswer(t *testing.T) {
+	store := &fakeWorkFeedStore{runItem: workfeed.Item{
+		ID: "q1", Source: "deal_question", RefType: "wiki", RefID: "프로젝트/완도.md",
+	}}
+	var gotItem workfeed.Item
+	var gotAction string
+	calls := 0
+	deps := WorkFeedDeps{Store: store, OnAnswer: func(item workfeed.Item, actionID string) {
+		calls++
+		gotItem = item
+		gotAction = actionID
+	}}
+	resp := workFeedActionRun(deps)(authedCtx(), reqWith(t, "miniapp.workfeed.action.run", map[string]any{
+		"itemId": "q1", "actionId": "dept:pl1",
+	}))
+	if !resp.OK {
+		t.Fatalf("expected ok: %+v", resp.Error)
+	}
+	if calls != 1 {
+		t.Fatalf("OnAnswer called %d times, want 1", calls)
+	}
+	if gotAction != "dept:pl1" || gotItem.RefID != "프로젝트/완도.md" {
+		t.Errorf("OnAnswer args = action %q, refID %q", gotAction, gotItem.RefID)
+	}
+}
+
+// OnAnswer must NOT fire for an ordinary card, nor for a non-"dept:" action on a
+// deal-question card — only a real team answer records.
+func TestWorkFeedActionRun_NonAnswerSkipsOnAnswer(t *testing.T) {
+	cases := []struct {
+		name     string
+		item     workfeed.Item
+		actionID string
+	}{
+		{"ordinary card", workfeed.Item{ID: "m1", Source: "mail"}, "ack"},
+		{"deal question, non-dept action", workfeed.Item{ID: "q2", Source: "deal_question", RefID: "x.md"}, "trash"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			calls := 0
+			deps := WorkFeedDeps{
+				Store:    &fakeWorkFeedStore{runItem: tc.item},
+				OnAnswer: func(workfeed.Item, string) { calls++ },
+			}
+			resp := workFeedActionRun(deps)(authedCtx(), reqWith(t, "miniapp.workfeed.action.run", map[string]any{
+				"itemId": tc.item.ID, "actionId": tc.actionID,
+			}))
+			if !resp.OK {
+				t.Fatalf("expected ok: %+v", resp.Error)
+			}
+			if calls != 0 {
+				t.Errorf("OnAnswer fired %d times, want 0", calls)
+			}
+		})
 	}
 }

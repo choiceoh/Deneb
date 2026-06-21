@@ -301,6 +301,13 @@ func (s *Server) fileDealFromMail(msg *gmail.MessageDetail, deal *gmailpoll.Deal
 	// one identity). Same IsDeal gate as the wiki write — only recognized deal
 	// documents, not every email — so the notebook stays high-signal.
 	s.pinDealEvidenceToNotebook(msg, deal, relPath)
+
+	// A brand-new deal page (created) means Deneb doesn't yet know which team owns
+	// this deal — ask instead of guessing. created is true only at mint time, so
+	// the question fires exactly once per new deal. See deal_question.go.
+	if created {
+		s.appendDealQuestionCard(deal, relPath)
+	}
 }
 
 // pinDealEvidenceToNotebook auto-pins a deal email's extraction onto its deal

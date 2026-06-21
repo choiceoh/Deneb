@@ -351,6 +351,9 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		handlerminiapp.WormholeMethods(handlerminiapp.WormholeDeps{}),
 		handlerminiapp.WorkFeedMethods(handlerminiapp.WorkFeedDeps{
 			Store: nativeWorkFeed,
+			// Record a deal-question card's team answer onto the deal wiki page
+			// (불확실 → 질문 → 기록). See deal_question.go.
+			OnAnswer: s.recordDealQuestionAnswer,
 		}),
 		s.miniappModelMethods(),
 
