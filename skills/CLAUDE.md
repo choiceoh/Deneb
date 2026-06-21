@@ -34,6 +34,8 @@ description: One-line description of what skills belong in this category.
 | `devops` | System monitoring, terminal management, infrastructure | healthcheck, node-connect, remote-validation, tmux |
 | `security` | Security, secrets management, and credential handling | (none) |
 | `integration` | External service connectivity, API bridges | (none) |
+| `knowledge` | Interview-driven capture of proprietary business knowledge into the wiki | kb-interview |
+| `operations` | Institution-specific operating procedures (SOPs) the agent follows | (grown via kb-interview) |
 
 ## Skill vs Tool Decision
 

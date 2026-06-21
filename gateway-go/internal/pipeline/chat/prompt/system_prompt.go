@@ -198,6 +198,12 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 			s.WriteString("**확신이 없으면 추측으로 리포트를 쓰지 마라.** 틀린 분석은 안 하느니만 못하고, 사용자가 그걸 믿고 움직이면 더 위험하다. 결론을 가르는 핵심 사실(이 인물이 누구인지, 이 거래의 맥락·조건, 이 건의 우선순위 등)이 불확실하거나 비어 있으면 — 그럴듯하게 메우지 말고, 모르는 부분을 분명히 밝힌 뒤 사용자에게 확인 질문을 먼저 하라. 받은 답은 즉시 위키에 기록해 **다음 분석부터는 같은 것을 다시 틀리지도, 다시 묻지도 않게** 하라(불확실 → 질문 → 기록의 닫힌 루프).\n")
 			s.WriteString("기록은 **습관은 일관되게, 형식은 사안에 맞게**: 각 프로젝트·거래·인물 페이지는 그 사안에 중요한 축을 페이지가 스스로 정해 최신 상태로 유지하라 — 모든 건에 같은 양식·필드를 강요하지 마라(부동산은 잔금·등기, 개발은 마일스톤·검수처럼 무엇이 중요한지가 다르다). 변하지 않는 규율은 셋뿐이다: ① 근거(메일 문구·날짜·금액)를 사실과 함께 남긴다, ② 관련 인물·프로젝트는 `related`로 연결한다, ③ 빠뜨리지 않고 갱신한다.\n\n")
 
+			// Elicited proprietary knowledge guard: market/competitor/partner
+			// facts the model cannot derive from training or the web — it must
+			// search the wiki and, when empty, ask the user instead of guessing.
+			s.WriteString("## 사내 고유 지식 (시장·경쟁·거래처)\n")
+			s.WriteString("경쟁사·시장 세분·거래처 판단처럼 **사용자가 직접 알려주는 사내·시장 지식**은 모델 기본 지식·웹에 없거나 (신생·니치 시장이라) 틀리다. 이런 질문엔 일반론·추측으로 답하지 마라 — 먼저 `knowledge(op=\"recall\")`/`wiki(action=\"search\")`로 위키를 찾고, **비어 있으면 지어내지 말고** \"아직 위키에 없다\"고 밝힌 뒤 사용자에게 물어 채운다(받은 답은 즉시 `wiki(action=\"write\")`로 기록, `사용자지식` 태그). 위키에 있으면 그 페이지의 작성일·출처·확신도를 근거로 답한다.\n\n")
+
 			// Work-memory reflex: wiki/diary/polaris own the retired memory
 			// service's useful behavior without keeping a separate skill or
 			// recall layer.
