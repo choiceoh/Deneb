@@ -1,6 +1,7 @@
 package ai.deneb.deneb
 
 import ai.deneb.ui.DenebType
+import ai.deneb.ui.components.DenebUnderlineSearchField
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
 import ai.deneb.ui.handCursor
@@ -632,13 +633,14 @@ private fun FleetModelsPage(client: DenebGatewayClient, nodes: List<FleetNode>, 
                 Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                OutlinedTextField(
-                    value = query,
-                    onValueChange = { query = it },
-                    label = { Text("HuggingFace 모델 검색") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    trailingIcon = {
+                DenebUnderlineSearchField(
+                    query = query,
+                    onQueryChange = { query = it },
+                    placeholder = "HuggingFace 모델 검색",
+                    // Dense admin screen — smaller than the search screen's airy default.
+                    textStyle = DenebType.body,
+                    // Live, debounced as-you-type (see LaunchedEffect above) — no submit.
+                    trailing = {
                         when {
                             searching -> CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                             query.isNotBlank() -> TextButton(onClick = { query = "" }) { Text("✕") }
