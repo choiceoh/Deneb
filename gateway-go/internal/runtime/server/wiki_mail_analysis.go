@@ -206,9 +206,9 @@ func (s *Server) makeMailAnalysisSink() func(*gmail.MessageDetail, gmailpoll.Ana
 				errs = append(errs, err)
 			}
 		}
-		// Turn the analysis's high-priority follow-up actions into to-dos
-		// (best-effort, deduped per mail). See mail_todo.go.
-		todoCount := s.autoCreateTodosFromMail(msg, res.ActionItems)
+		// Mail no longer auto-creates to-dos (operator approval first): schedule-worthy
+		// follow-ups surface as calendar PROPOSALS (the bell) to accept — see below.
+		todoCount := 0
 		// File any extracted business document onto a 거래 wiki page (silent
 		// knowledge enrichment — no push).
 		s.fileDealFromMail(msg, res.Deal)

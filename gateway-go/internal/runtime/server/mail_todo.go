@@ -1,109 +1,16 @@
-// mail_todo.go — turns the high-priority follow-up actions of a mail analysis
-// into to-dos. Wired from the OnAnalyzed sink (wiki_mail_analysis.go).
+// mail_todo.go — Korean due-hint / date parsing for mail-derived items.
 //
-// Non-invasive by design ("능동적이되 침해적이지 않게"): only "high" priority
-// actions auto-create a to-do — medium/low stay as analysis context — and each
-// to-do is deduped by a stable per-mail Source key so re-analysis of the same
-// message never piles up duplicates. Every failure is logged, never fatal to
-// the sink.
+// Mail no longer auto-creates to-dos (operator approval first — schedule-worthy
+// follow-ups surface as calendar PROPOSALS via the bell, see mail_calendar.go).
+// What remains here is the shared due-hint parser those proposals use.
 package server
 
 import (
-	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmailpoll"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/localtodo"
 )
-
-// mailTodoSourcePrefix marks a to-do as auto-created from a mail analysis.
-const mailTodoSourcePrefix = "mail:"
-
-// autoCreateTodosFromMail creates to-dos for the high-priority follow-up
-// actions of a mail analysis. Best-effort: a missing store or a per-item
-// failure is logged and skipped, never disrupting the analysis sink.
-func (s *Server) autoCreateTodosFromMail(msg *gmail.MessageDetail, items []gmailpoll.ActionItem) int {
-	if msg == nil {
-		return 0
-	}
-	inputs := todosFromActionItems(msg.ID, msg.Subject, msg.From, items, time.Now())
-	if len(inputs) == 0 {
-		return 0
-	}
-	store, err := localtodo.Default()
-	if err != nil {
-		s.logger.Warn("mail→todo: store unavailable", "id", msg.ID, "error", err)
-		return len(inputs)
-	}
-	created := 0
-	for _, in := range inputs {
-		td, wasCreated, cerr := store.CreateIfAbsent(in)
-		if cerr != nil {
-			s.logger.Warn("mail→todo: create failed", "id", msg.ID, "title", in.Title, "error", cerr)
-			continue
-		}
-		if wasCreated {
-			created++
-			s.logger.Info("mail→todo: created to-do", "todoId", td.ID, "title", td.Title)
-		}
-	}
-	if created > 0 {
-		s.logger.Info("mail→todo: auto-created to-dos from analysis", "id", msg.ID, "count", created)
-	}
-	return len(inputs)
-}
-
-// todosFromActionItems is the pure decision: keep only high-priority actions
-// and build a localtodo.CreateInput for each, with a back-reference Note and a
-// stable Source dedup key. Returns nil when nothing qualifies. now is injected
-// so due-date resolution is deterministic in tests.
-func todosFromActionItems(msgID, subject, from string, items []gmailpoll.ActionItem, now time.Time) []localtodo.CreateInput {
-	var out []localtodo.CreateInput
-	for _, a := range items {
-		if !strings.EqualFold(strings.TrimSpace(a.Priority), "high") {
-			continue // only high-priority actions auto-create to-dos
-		}
-		title := strings.TrimSpace(a.Title)
-		if title == "" {
-			continue
-		}
-		due, allDay := parseDueHint(a.DueHint, now)
-		out = append(out, localtodo.CreateInput{
-			Title:     title,
-			Note:      mailTodoNote(subject, from),
-			Due:       due,
-			DueAllDay: allDay,
-			Source:    mailTodoSource(msgID, title),
-		})
-	}
-	return out
-}
-
-// mailTodoNote builds the to-do note linking back to the originating mail.
-func mailTodoNote(subject, from string) string {
-	subject = strings.TrimSpace(subject)
-	from = strings.TrimSpace(from)
-	switch {
-	case subject != "" && from != "":
-		return fmt.Sprintf("메일: %s · %s", subject, from)
-	case subject != "":
-		return "메일: " + subject
-	case from != "":
-		return "메일: " + from
-	default:
-		return "메일 분석에서 자동 생성"
-	}
-}
-
-// mailTodoSource is the dedup key: message id + normalized title, so the same
-// action from the same mail can't be created twice regardless of order.
-func mailTodoSource(msgID, title string) string {
-	return mailTodoSourcePrefix + strings.TrimSpace(msgID) + "|" + strings.ToLower(strings.TrimSpace(title))
-}
 
 // --- due-hint resolution -------------------------------------------------
 
