@@ -44,9 +44,11 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -635,6 +637,24 @@ internal fun ChatModeScreen(
                                         // and far less layout churn on the hot streaming path.
                                         LaunchedEffect(streamingLen / 48, uiState.isLoading) {
                                             if (uiState.isLoading && isNearBottom) {
+                                                val total = listState.layoutInfo.totalItemsCount
+                                                if (total > 0) listState.scrollToItem(total - 1, Int.MAX_VALUE)
+                                            }
+                                        }
+
+                                        // Keyboard follow-scroll: when the soft keyboard opens, the floating
+                                        // input bar rises with it (imePadding), shrinking the list viewport from
+                                        // the bottom. Re-pin the newest message to the bottom as the keyboard
+                                        // animates up so it tracks the keyboard instead of hiding behind it —
+                                        // but only when already near the bottom (don't yank a user reading up).
+                                        // Bucketed (≈64px) like the streaming follow-scroll: a few snaps over the
+                                        // ~250ms animation, and derivedStateOf keeps it off the per-frame path.
+                                        val imeInsets = WindowInsets.ime
+                                        val imeBucket by remember {
+                                            derivedStateOf { imeInsets.getBottom(topOverlayDensity) / 64 }
+                                        }
+                                        LaunchedEffect(imeBucket) {
+                                            if (imeBucket > 0 && isNearBottom) {
                                                 val total = listState.layoutInfo.totalItemsCount
                                                 if (total > 0) listState.scrollToItem(total - 1, Int.MAX_VALUE)
                                             }
