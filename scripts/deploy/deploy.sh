@@ -176,6 +176,17 @@ restart_remote() {
     fi
     echo "==> remote deploy → $remote:~/$dir/dist (build host $(hostname))"
     scp -q "$bin" "$remote:$dir/dist/deneb-gateway.new"
+    # Ship runtime-read repo files the gateway discovers from disk — the bundled
+    # skills/ catalog — which the binary alone does NOT carry. Without this the
+    # lean gateway host serves a frozen catalog: skills added after the host's
+    # last full sync never reach it, so they never appear in the native Settings
+    # tab (the symptom that exposed this gap on 2026-06-22 — 5 merged skills were
+    # invisible because only the binary was shipped). Mirror the repo's skills/
+    # so new skills are in place before the new binary starts and rediscovers the
+    # catalog. --delete keeps it a true mirror (agent-authored skills live under
+    # the state dir ~/.deneb, not here, so nothing local is at risk).
+    echo "    syncing skills/ → $remote:~/$dir/skills"
+    rsync -a --delete skills/ "$remote:$dir/skills/"
     ssh "$remote" "GATEWAY_SERVICE='$GATEWAY_SERVICE' PROD_PORT='$PROD_PORT' DIR='$dir' bash -s" <<'REMOTE'
 set -euo pipefail
 cd "$HOME/$DIR/dist"
