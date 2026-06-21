@@ -231,7 +231,7 @@ internal fun SkillDetailContent(
         Spacer(Modifier.height(8.dp))
         Text(
             skill.description,
-            style = MaterialTheme.typography.bodyLarge,
+            style = DenebType.body,
             color = MaterialTheme.colorScheme.onSurface,
         )
     }
@@ -240,7 +240,7 @@ internal fun SkillDetailContent(
     skillFactLines(skill = skill).forEach { line ->
         Text(
             line,
-            style = MaterialTheme.typography.bodySmall,
+            style = DenebType.meta,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
@@ -270,7 +270,7 @@ internal fun SkillDetailContent(
         Spacer(Modifier.height(8.dp))
         Text(
             actionMessage,
-            style = MaterialTheme.typography.bodySmall,
+            style = DenebType.hint,
             color = if (actionIsError) MaterialTheme.colorScheme.error else denebHint(),
         )
     }
@@ -282,7 +282,7 @@ internal fun SkillDetailContent(
             } else {
                 "SKILL.md 본문을 읽을 수 없어 수정할 수 없습니다."
             },
-            style = MaterialTheme.typography.bodySmall,
+            style = DenebType.hint,
             color = denebHint(),
         )
     }
@@ -290,7 +290,7 @@ internal fun SkillDetailContent(
     Spacer(Modifier.height(16.dp))
     HorizontalDivider(color = denebHairline())
     Spacer(Modifier.height(12.dp))
-    Text("문서", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+    Text("문서", style = DenebType.cardTitle, color = MaterialTheme.colorScheme.primary)
     Spacer(Modifier.height(8.dp))
     if (editMode) {
         OutlinedTextField(
@@ -298,29 +298,29 @@ internal fun SkillDetailContent(
             onValueChange = onDraftChange,
             enabled = !actionBusy,
             label = { Text("SKILL.md") },
-            textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+            textStyle = DenebType.snippet.copy(fontFamily = FontFamily.Monospace),
             modifier = Modifier.fillMaxWidth().heightIn(min = 360.dp),
         )
     } else {
         val body = stripFrontmatter(detail.body)
         if (body.isNotBlank()) {
-            MarkdownContent(body, baseStyle = MaterialTheme.typography.bodyMedium)
+            MarkdownContent(body, baseStyle = DenebType.body)
             if (detail.bodyTruncated) {
                 Spacer(Modifier.height(4.dp))
-                Text("(문서가 길어 일부만 표시합니다)", style = MaterialTheme.typography.bodySmall, color = denebHint())
+                Text("(문서가 길어 일부만 표시합니다)", style = DenebType.hint, color = denebHint())
             }
         } else {
-            Text("SKILL.md 본문을 읽을 수 없습니다.", style = MaterialTheme.typography.bodySmall, color = denebHint())
+            Text("SKILL.md 본문을 읽을 수 없습니다.", style = DenebType.hint, color = denebHint())
         }
     }
 
     Spacer(Modifier.height(16.dp))
     HorizontalDivider(color = denebHairline())
     Spacer(Modifier.height(12.dp))
-    Text("Propus 로그", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+    Text("Propus 로그", style = DenebType.cardTitle, color = MaterialTheme.colorScheme.primary)
     if (events.isEmpty()) {
         Spacer(Modifier.height(8.dp))
-        Text("이 스킬의 Propus 활동이 아직 없습니다.", style = MaterialTheme.typography.bodySmall, color = denebHint())
+        Text("이 스킬의 Propus 활동이 아직 없습니다.", style = DenebType.hint, color = denebHint())
     } else {
         events.forEachIndexed { idx, event ->
             SkillLifecycleRow(event, showSkillName = false, horizontalPadding = 0.dp)
@@ -330,7 +330,7 @@ internal fun SkillDetailContent(
 
     if (detail.path.isNotBlank()) {
         Spacer(Modifier.height(16.dp))
-        Text(detail.path, style = MaterialTheme.typography.labelSmall, color = denebHint())
+        Text(detail.path, style = DenebType.hint, color = denebHint())
     }
 }
 

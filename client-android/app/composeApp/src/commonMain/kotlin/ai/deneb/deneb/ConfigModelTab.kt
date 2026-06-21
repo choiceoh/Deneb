@@ -142,7 +142,7 @@ internal fun ModelTab(client: DenebGatewayClient) {
         ) {
             Text(
                 "역할별 모델",
-                style = MaterialTheme.typography.bodySmall,
+                style = DenebType.hint,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             TooltipBox(
@@ -164,7 +164,7 @@ internal fun ModelTab(client: DenebGatewayClient) {
                 ) {
                     Text(
                         "?",
-                        style = MaterialTheme.typography.labelSmall,
+                        style = DenebType.meta,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
@@ -233,7 +233,7 @@ internal fun ModelTab(client: DenebGatewayClient) {
                         advisories.forEach { line ->
                             Text(
                                 line,
-                                style = MaterialTheme.typography.bodySmall,
+                                style = DenebType.snippet,
                                 color = denebInsight().copy(alpha = 0.85f),
                             )
                         }
@@ -263,7 +263,7 @@ internal fun ModelTab(client: DenebGatewayClient) {
                 ) {
                     Text(
                         r.label,
-                        style = MaterialTheme.typography.labelLarge,
+                        style = DenebType.rowTitle,
                         fontWeight = if (isSel) FontWeight.SemiBold else FontWeight.Normal,
                         color = if (isSel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.width(56.dp),
@@ -271,7 +271,7 @@ internal fun ModelTab(client: DenebGatewayClient) {
                     Spacer(Modifier.width(8.dp))
                     Text(
                         assignedName,
-                        style = MaterialTheme.typography.bodySmall,
+                        style = DenebType.rowSubtitle,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -289,13 +289,13 @@ internal fun ModelTab(client: DenebGatewayClient) {
         if (switchFailed) {
             Text(
                 "모델 전환에 실패했어요. 다시 시도해 주세요.",
-                style = MaterialTheme.typography.bodySmall,
+                style = DenebType.hint,
                 color = MaterialTheme.colorScheme.error,
             )
         }
         Text(
             "'${role.label}' 역할에 사용할 모델",
-            style = MaterialTheme.typography.labelMedium,
+            style = DenebType.hint,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         // Model list grouped by provider (the id prefix before "/"), so local
@@ -306,8 +306,7 @@ internal fun ModelTab(client: DenebGatewayClient) {
             grouped.entries.forEachIndexed { gi, (provider, groupModels) ->
                 Text(
                     provider,
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.SemiBold,
+                    style = DenebType.sectionLabel,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(
                         start = 16.dp,
@@ -345,13 +344,13 @@ internal fun ModelTab(client: DenebGatewayClient) {
                                 // The marker stays always-visible (rare + important);
                                 // the stat detail hides behind the ⓘ toggle.
                                 if (model.unhealthy) model.display + " ⚠️연속실패" else model.display,
-                                style = MaterialTheme.typography.bodyLarge,
+                                style = DenebType.rowTitle,
                                 fontWeight = if (isCurrent) FontWeight.SemiBold else FontWeight.Normal,
                                 color = if (model.unhealthy) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
                             )
                             Text(
                                 model.id + ModelHealth.parse(model.health).suffix,
-                                style = MaterialTheme.typography.bodySmall,
+                                style = DenebType.rowSubtitle,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                             // Tuner stat line (24h runs, p95, cache hit, fallback/stall,
@@ -360,7 +359,7 @@ internal fun ModelTab(client: DenebGatewayClient) {
                             if (expandedInfoId == model.id && model.note.isNotBlank()) {
                                 Text(
                                     model.note,
-                                    style = MaterialTheme.typography.bodySmall,
+                                    style = DenebType.hint,
                                     color = denebHint(),
                                 )
                             }
@@ -383,7 +382,7 @@ internal fun ModelTab(client: DenebGatewayClient) {
                             ) {
                                 Text(
                                     "i",
-                                    style = MaterialTheme.typography.labelSmall,
+                                    style = DenebType.meta,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
@@ -423,7 +422,7 @@ internal fun ModelTab(client: DenebGatewayClient) {
             Spacer(Modifier.height(4.dp))
             Text(
                 "Base URL과 모델 이름으로 vLLM·LM Studio 같은 OpenAI 호환 엔드포인트를 추가합니다. 인증 키가 필요 없는 엔드포인트용입니다.",
-                style = MaterialTheme.typography.bodySmall,
+                style = DenebType.hint,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(12.dp))
@@ -456,7 +455,7 @@ internal fun ModelTab(client: DenebGatewayClient) {
             )
             addError?.let {
                 Spacer(Modifier.height(8.dp))
-                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                Text(it, style = DenebType.hint, color = MaterialTheme.colorScheme.error)
             }
             Spacer(Modifier.height(12.dp))
             Button(
@@ -525,7 +524,7 @@ private fun HealthLegendItem(health: ModelHealth, label: String) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(8.dp).clip(CircleShape).background(health.color))
         Spacer(Modifier.width(5.dp))
-        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(label, style = DenebType.meta, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

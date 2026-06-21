@@ -5,6 +5,7 @@ import ai.deneb.data.AppSettings
 import ai.deneb.ui.DenebGroup
 import ai.deneb.ui.DenebListRow
 import ai.deneb.ui.DenebScreenScaffold
+import ai.deneb.ui.DenebType
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -178,7 +179,7 @@ private fun ConfigSectionList(onOpen: (ConfigTab) -> Unit) {
 @Composable
 internal fun EmptyTab(text: String) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(text, style = DenebType.body, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

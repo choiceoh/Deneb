@@ -105,9 +105,8 @@ internal fun SelfImprovementCodingContent(
             Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
                 Text(
                     "자가개선 코딩",
-                    style = MaterialTheme.typography.titleSmall,
+                    style = DenebType.cardTitle,
                     color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.SemiBold,
                 )
                 Spacer(Modifier.height(2.dp))
                 Text("대기 ${pendingCount}건 · 전체 ${totalCount}건", style = DenebType.meta, color = denebHint())
@@ -164,7 +163,7 @@ private fun SelfImprovementCodingStatusFilters(
                 val count = countByStatus[filter.status] ?: 0
                 Text(
                     "${filter.label} $count",
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = DenebType.rowTitle,
                     fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
                     color = if (selected) MaterialTheme.colorScheme.primary else denebHint(),
                     modifier = Modifier
@@ -254,7 +253,7 @@ private fun SelfImprovementCodingStatusBadge(status: String) {
     }
     Text(
         selfImprovementCodingStatusLabel(status),
-        style = MaterialTheme.typography.labelSmall,
+        style = DenebType.meta,
         color = fg,
         modifier = Modifier
             .clip(RoundedCornerShape(4.dp))

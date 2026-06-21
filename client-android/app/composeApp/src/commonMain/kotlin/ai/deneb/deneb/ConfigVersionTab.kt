@@ -31,7 +31,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 
@@ -60,13 +59,13 @@ internal fun VersionTab(denebClient: DenebGatewayClient?) {
             Spacer(Modifier.height(8.dp))
             Text(
                 "현재 빌드 $DENEB_VERSION_CODE",
-                style = MaterialTheme.typography.bodyMedium,
+                style = DenebType.rowTitle,
                 color = MaterialTheme.colorScheme.onSurface,
             )
             Spacer(Modifier.height(4.dp))
             Text(
                 "패치노트 보기",
-                style = MaterialTheme.typography.bodyMedium,
+                style = DenebType.rowTitle,
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.handCursor().clickable { showPatchNotes = true },
             )
@@ -75,14 +74,13 @@ internal fun VersionTab(denebClient: DenebGatewayClient?) {
                 Spacer(Modifier.height(12.dp))
                 Text(
                     "새 빌드 ${info.buildLabel} 사용 가능",
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold,
+                    style = DenebType.rowTitleStrong,
                     color = MaterialTheme.colorScheme.primary,
                 )
                 if (info.notes.isNotBlank()) {
                     Text(
                         info.notes,
-                        style = MaterialTheme.typography.bodySmall,
+                        style = DenebType.rowSubtitle,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
@@ -100,7 +98,7 @@ internal fun VersionTab(denebClient: DenebGatewayClient?) {
                 Spacer(Modifier.height(8.dp))
                 Text(
                     "최신 버전입니다.",
-                    style = MaterialTheme.typography.bodySmall,
+                    style = DenebType.hint,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -152,7 +150,7 @@ private fun PatchNotesSheet(onDismiss: () -> Unit) {
                 Spacer(Modifier.height(4.dp))
                 Text(
                     "현재 빌드 $DENEB_VERSION_CODE",
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = DenebType.rowSubtitle,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -168,12 +166,12 @@ private fun PatchNotesSheet(onDismiss: () -> Unit) {
                         Row {
                             Text(
                                 "· ",
-                                style = MaterialTheme.typography.bodyMedium,
+                                style = DenebType.body,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                             Text(
                                 line,
-                                style = MaterialTheme.typography.bodyMedium,
+                                style = DenebType.body,
                                 color = MaterialTheme.colorScheme.onSurface,
                             )
                         }

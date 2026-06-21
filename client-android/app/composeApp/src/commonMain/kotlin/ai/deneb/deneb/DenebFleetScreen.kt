@@ -162,7 +162,7 @@ fun DenebFleetScreen(
                             text = entry.label,
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
                             color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                            style = MaterialTheme.typography.labelLarge,
+                            style = DenebType.rowTitle,
                             fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
                             maxLines = 1,
                         )
@@ -172,7 +172,7 @@ fun DenebFleetScreen(
             if (stale) {
                 Text(
                     "⚠ 플릿 연결 끊김 — 마지막으로 받은 데이터를 표시 중입니다",
-                    style = MaterialTheme.typography.bodySmall,
+                    style = DenebType.meta,
                     color = MaterialTheme.colorScheme.error,
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
                 )
@@ -180,7 +180,7 @@ fun DenebFleetScreen(
             notice?.let { n ->
                 Text(
                     n,
-                    style = MaterialTheme.typography.bodySmall,
+                    style = DenebType.meta,
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
                 )
@@ -242,7 +242,7 @@ fun DenebFleetScreen(
                     if (action == "launch" && rc.vllm != null) {
                         Text(
                             "이번 기동에만 적용되는 메모리 설정 (비우면 레시피 값)",
-                            style = MaterialTheme.typography.bodySmall,
+                            style = DenebType.hint,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         OutlinedTextField(
@@ -393,15 +393,15 @@ private fun FleetNodeRow(node: FleetNode) {
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FleetDot(node.reachable)
-            Text(node.name, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+            Text(node.name, style = DenebType.rowTitleStrong)
             if (node.role.isNotBlank()) {
-                Text(node.role, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(node.role, style = DenebType.rowSubtitle, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Spacer(Modifier.weight(1f))
             node.metrics.gpus.firstOrNull()?.let { g ->
                 Text(
                     "GPU ${g.utilPct ?: "—"}% · ${g.tempC ?: "—"}℃",
-                    style = MaterialTheme.typography.bodySmall,
+                    style = DenebType.meta,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -416,7 +416,7 @@ private fun FleetNodeRow(node: FleetNode) {
             Text(
                 "통합 메모리 ${gib(used)} / ${gib(m.totalKB)} GiB" +
                     (node.metrics.disks.firstOrNull()?.let { "  ·  디스크 ${it.usePct}%" } ?: ""),
-                style = MaterialTheme.typography.bodySmall,
+                style = DenebType.meta,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
@@ -424,14 +424,14 @@ private fun FleetNodeRow(node: FleetNode) {
         if (downServices.isNotEmpty()) {
             Text(
                 "다운: " + downServices.joinToString(", ") { it.name },
-                style = MaterialTheme.typography.bodySmall,
+                style = DenebType.meta,
                 color = MaterialTheme.colorScheme.error,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
         }
         node.error?.takeIf { it.isNotBlank() }?.let {
-            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(it, style = DenebType.meta, color = MaterialTheme.colorScheme.error, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
     HorizontalDivider(Modifier.padding(start = 16.dp), color = denebHairline())
@@ -443,14 +443,14 @@ private fun FleetRecipeRow(rc: FleetRecipe, onAction: (String) -> Unit) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FleetDot(rc.status.running)
             Column(Modifier.weight(1f)) {
-                Text(rc.name, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(rc.name, style = DenebType.rowTitleStrong, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(
                     listOfNotNull(
                         rc.status.node.ifBlank { rc.node }.takeIf { it.isNotBlank() },
                         rc.port.takeIf { it > 0 }?.let { ":$it" },
                         if (!rc.status.running && !rc.status.weightsPresent) "가중치 없음" else null,
                     ).joinToString(" · "),
-                    style = MaterialTheme.typography.bodySmall,
+                    style = DenebType.rowSubtitle,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -484,9 +484,9 @@ private fun FleetJobRow(job: FleetJob, expanded: Boolean, onToggle: () -> Unit, 
                 else -> "실패" to MaterialTheme.colorScheme.error
             }
             Surface(shape = RoundedCornerShape(50), color = color.copy(alpha = 0.15f)) {
-                Text(label, style = MaterialTheme.typography.labelSmall, color = color, modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp))
+                Text(label, style = DenebType.meta, color = color, modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp))
             }
-            Text(job.title, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            Text(job.title, style = DenebType.rowTitle, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
             if (job.state == "running") {
                 TextButton(onClick = onCancel) { Text("취소", color = MaterialTheme.colorScheme.error) }
             }
@@ -499,7 +499,7 @@ private fun FleetJobRow(job: FleetJob, expanded: Boolean, onToggle: () -> Unit, 
             ) {
                 Text(
                     job.log.takeLast(2000),
-                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                    style = DenebType.snippet.copy(fontFamily = FontFamily.Monospace),
                     modifier = Modifier.padding(8.dp),
                 )
             }
@@ -512,8 +512,7 @@ private fun FleetJobRow(job: FleetJob, expanded: Boolean, onToggle: () -> Unit, 
 private fun FleetSectionHeader(title: String) {
     Text(
         title,
-        style = MaterialTheme.typography.labelLarge,
-        fontWeight = FontWeight.SemiBold,
+        style = DenebType.sectionLabel,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 18.dp, bottom = 6.dp),
     )
@@ -523,7 +522,7 @@ private fun FleetSectionHeader(title: String) {
 private fun FleetMuted(text: String) {
     Text(
         text,
-        style = MaterialTheme.typography.bodySmall,
+        style = DenebType.meta,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
     )
@@ -659,7 +658,7 @@ private fun FleetModelsPage(client: DenebGatewayClient, nodes: List<FleetNode>, 
                             ) {
                                 Text(
                                     label,
-                                    style = MaterialTheme.typography.labelMedium,
+                                    style = DenebType.meta,
                                     color = if (sel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                                 )
@@ -682,13 +681,13 @@ private fun FleetModelsPage(client: DenebGatewayClient, nodes: List<FleetNode>, 
                     Column(Modifier.weight(1f)) {
                         Text(
                             m.id + if (m.gated) " 🔒" else "",
-                            style = MaterialTheme.typography.bodyMedium,
+                            style = DenebType.rowTitle,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
                         Text(
                             hfMeta(m),
-                            style = MaterialTheme.typography.bodySmall,
+                            style = DenebType.rowSubtitle,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
@@ -697,7 +696,7 @@ private fun FleetModelsPage(client: DenebGatewayClient, nodes: List<FleetNode>, 
                     Surface(shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)) {
                         Text(
                             fmtParamsK(m.params),
-                            style = MaterialTheme.typography.labelSmall,
+                            style = DenebType.meta,
                             color = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
                         )
@@ -713,8 +712,8 @@ private fun FleetModelsPage(client: DenebGatewayClient, nodes: List<FleetNode>, 
                     Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(m.name, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                    Text(fmtBytes(m.sizeBytes), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(m.name, style = DenebType.rowTitle, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                    Text(fmtBytes(m.sizeBytes), style = DenebType.meta, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
@@ -746,14 +745,14 @@ private fun FleetDownloadDialog(
         title = { Text("모델 다운로드") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(model.id, style = MaterialTheme.typography.bodyMedium)
+                Text(model.id, style = DenebType.rowTitle)
                 Text(
                     info?.let { "총 ${fmtBytes(it.sizeBytes)} · ${it.files} files" + (if (it.gated) " · 🔒 gated" else "") }
                         ?: "크기 조회 중…",
-                    style = MaterialTheme.typography.bodySmall,
+                    style = DenebType.meta,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                Text("다운로드할 노드", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("다운로드할 노드", style = DenebType.hint, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     nodes.forEach { n ->
                         val sel = target == n.name
@@ -764,7 +763,7 @@ private fun FleetDownloadDialog(
                         ) {
                             Text(
                                 n.name,
-                                style = MaterialTheme.typography.labelMedium,
+                                style = DenebType.meta,
                                 color = if (sel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                             )
@@ -782,12 +781,12 @@ private fun FleetDownloadDialog(
                         append(if (free < 0) "조회 불가" else fmtBytes(free))
                         if (!fits) append(" · ⚠ 공간 부족")
                     },
-                    style = MaterialTheme.typography.bodySmall,
+                    style = DenebType.meta,
                     color = if (!fits) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Text(
                     "진행 상황은 작업 탭에서 실시간으로 보입니다 · 재시작하면 이어받습니다",
-                    style = MaterialTheme.typography.bodySmall,
+                    style = DenebType.hint,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -848,7 +847,7 @@ private fun FleetLogsDialog(client: DenebGatewayClient, rc: FleetRecipe, onDismi
                         text.isBlank() -> "로그가 없습니다."
                         else -> text.takeLast(8000)
                     },
-                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                    style = DenebType.snippet.copy(fontFamily = FontFamily.Monospace),
                     modifier = Modifier.verticalScroll(scroll).padding(8.dp),
                 )
             }
@@ -887,46 +886,46 @@ private fun FleetDiagnoseDialog(client: DenebGatewayClient, rc: FleetRecipe, onD
                 val d = diag
                 val dr = drift
                 if (loading && d == null && dr == null) {
-                    Text("진단 중… (로컬 LLM 분석은 몇 초 걸릴 수 있습니다)", style = MaterialTheme.typography.bodySmall, color = muted)
+                    Text("진단 중… (로컬 LLM 분석은 몇 초 걸릴 수 있습니다)", style = DenebType.meta, color = muted)
                 } else {
                     // Crash triage (assist/logs). null after loading = THIS fetch failed —
                     // report it independently so a successful drift check below can't make
                     // the triage section read as clean ("설정 일치 ✓" with no findings).
                     if (!loading && d == null) {
-                        Text("크래시 진단을 불러오지 못했습니다 — '다시 진단'으로 재시도하세요.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                        Text("크래시 진단을 불러오지 못했습니다 — '다시 진단'으로 재시도하세요.", style = DenebType.meta, color = MaterialTheme.colorScheme.error)
                     }
                     d?.let {
                         if (it.state.isNotBlank()) {
-                            Text("상태: ${it.state}", style = MaterialTheme.typography.bodySmall, color = muted)
+                            Text("상태: ${it.state}", style = DenebType.meta, color = muted)
                         }
                         it.findings.forEach { f ->
                             Column {
-                                Text("• ${f.cause}", style = MaterialTheme.typography.bodyMedium)
+                                Text("• ${f.cause}", style = DenebType.rowTitle)
                                 if (f.fix.isNotBlank()) {
-                                    Text("  → ${f.fix}", style = MaterialTheme.typography.bodySmall, color = muted)
+                                    Text("  → ${f.fix}", style = DenebType.rowSubtitle, color = muted)
                                 }
                             }
                         }
                         if (it.llm.isNotBlank()) {
-                            Text("AI 분석", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, color = muted)
-                            Text(it.llm, style = MaterialTheme.typography.bodySmall)
+                            Text("AI 분석", style = DenebType.sectionLabel, color = muted)
+                            Text(it.llm, style = DenebType.body)
                         }
                         if (it.findings.isEmpty() && it.llm.isBlank()) {
-                            Text("알려진 실패 패턴이 없습니다.", style = MaterialTheme.typography.bodySmall, color = muted)
+                            Text("알려진 실패 패턴이 없습니다.", style = DenebType.meta, color = muted)
                         }
                     }
                     // Config drift (supplementary).
                     if (!loading && dr == null) {
                         HorizontalDivider(color = denebHairline())
-                        Text("설정 드리프트 확인을 불러오지 못했습니다.", style = MaterialTheme.typography.bodySmall, color = muted)
+                        Text("설정 드리프트 확인을 불러오지 못했습니다.", style = DenebType.meta, color = muted)
                     }
                     dr?.let {
                         HorizontalDivider(color = denebHairline())
                         if (!it.inSync && it.diffs.isNotEmpty()) {
-                            Text("⚠ 레시피 드리프트 — 컨테이너가 레시피와 다릅니다", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-                            it.diffs.forEach { diff -> Text("• $diff", style = MaterialTheme.typography.bodySmall, color = muted) }
+                            Text("⚠ 레시피 드리프트 — 컨테이너가 레시피와 다릅니다", style = DenebType.meta, color = MaterialTheme.colorScheme.error)
+                            it.diffs.forEach { diff -> Text("• $diff", style = DenebType.meta, color = muted) }
                         } else if (it.inSync) {
-                            Text("레시피와 컨테이너 설정 일치 ✓", style = MaterialTheme.typography.bodySmall, color = muted)
+                            Text("레시피와 컨테이너 설정 일치 ✓", style = DenebType.meta, color = muted)
                         }
                     }
                 }
@@ -1041,17 +1040,17 @@ private fun FleetBenchRow(rc: FleetRecipe, run: FleetEvalRun?, busy: Boolean, on
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Column(Modifier.weight(1f)) {
-                Text(rc.name, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(rc.name, style = DenebType.rowTitleStrong, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(
                     if (run != null) "${run.pass}/${run.total} 통과" else "측정 안 됨",
-                    style = MaterialTheme.typography.bodySmall,
+                    style = DenebType.meta,
                     color = muted,
                 )
             }
             run?.let {
                 Text(
                     "${it.score.toInt()}",
-                    style = MaterialTheme.typography.titleLarge,
+                    style = DenebType.subject,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.primary,
                 )
@@ -1063,14 +1062,14 @@ private fun FleetBenchRow(rc: FleetRecipe, run: FleetEvalRun?, busy: Boolean, on
         run?.categories?.takeIf { it.isNotEmpty() }?.let { cats ->
             Text(
                 benchCategoryLabels.mapNotNull { (k, lab) -> cats[k]?.let { "$lab ${it.toInt()}" } }.joinToString("  ·  "),
-                style = MaterialTheme.typography.bodySmall,
+                style = DenebType.meta,
                 color = muted,
             )
         }
         run?.speed?.let { sp ->
             Text(
                 "${sp.decodeTokPerSec.toInt()} tok/s · TTFT ${sp.ttftMs.toInt()}ms",
-                style = MaterialTheme.typography.bodySmall,
+                style = DenebType.meta,
                 color = muted,
             )
         }

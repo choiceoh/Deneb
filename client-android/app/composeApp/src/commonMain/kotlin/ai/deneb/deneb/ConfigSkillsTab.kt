@@ -147,7 +147,7 @@ internal fun SkillsViewSwitcher(showLifecycle: Boolean, onSelect: (Boolean) -> U
                 val selected = showLifecycle == lifecycle
                 Text(
                     label,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = DenebType.rowTitle,
                     fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
                     color = if (selected) MaterialTheme.colorScheme.primary else denebHint(),
                     modifier = Modifier
@@ -264,9 +264,8 @@ private fun PropusTimelineHeader(summary: PropusLifecycleSummary) {
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
         Text(
             summary.system.ifBlank { "Propus" },
-            style = MaterialTheme.typography.titleSmall,
+            style = DenebType.cardTitle,
             color = MaterialTheme.colorScheme.primary,
-            fontWeight = FontWeight.SemiBold,
         )
         val doctrineMeta = listOfNotNull(
             summary.doctrineVersion.takeIf { it.isNotBlank() },
@@ -472,7 +471,7 @@ internal fun SkillLifecycleRow(
                 Spacer(Modifier.height(6.dp))
                 Text(
                     "스킬 보기 →",
-                    style = MaterialTheme.typography.labelLarge,
+                    style = DenebType.button,
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier
                         .handCursor()
@@ -498,7 +497,7 @@ internal fun SkillOriginBadge(origin: String) {
     val fg = if (generated) denebInsight() else MaterialTheme.colorScheme.onSurfaceVariant
     Text(
         if (generated) "생성" else "최초",
-        style = MaterialTheme.typography.labelSmall,
+        style = DenebType.meta,
         color = fg,
         modifier = Modifier
             .clip(RoundedCornerShape(4.dp))
@@ -531,7 +530,7 @@ private fun LifecycleTypeBadge(type: String) {
     }
     Text(
         lifecycleTypeLabel(type),
-        style = MaterialTheme.typography.labelSmall,
+        style = DenebType.meta,
         color = fg,
         modifier = Modifier
             .clip(RoundedCornerShape(4.dp))
