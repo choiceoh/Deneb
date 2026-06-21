@@ -732,7 +732,7 @@ internal val previewScreens: Map<String, @Composable (ColorScheme) -> Unit> = ma
     "org_editor" to { scheme ->
         MaterialTheme(colorScheme = scheme) {
             Surface(color = MaterialTheme.colorScheme.background) {
-                OrgNodeEditor(node = sampleOrg.first { it.id == "team1" }, onChange = {}, onDelete = {}, onDone = {})
+                OrgNodeEditor(node = sampleOrg.first { it.id == "team1a" }, onChange = {}, onDelete = {}, onDone = {})
             }
         }
     },
@@ -1393,7 +1393,7 @@ private val sampleOrg = listOf(
         companies = listOf("사아건설"),
     ),
     // 4th level: two parts under 1팀 — exercises a deeper branch + the connector bus.
-    OrgNodeOut(id = "team1a", name = "인허가파트", type = "team", parentId = "team1", lane = "team1a", members = listOf(MemberOut("이몽룡", "과장", "팀장", emails = listOf("lee@example.test")))),
+    OrgNodeOut(id = "team1a", name = "인허가파트", type = "team", parentId = "team1", lane = "team1a", keywords = listOf("인허가", "개발행위허가", "발전사업허가"), companies = listOf("한국전력", "산업부"), members = listOf(MemberOut("이몽룡", "과장", "팀장", emails = listOf("lee@example.test")))),
     OrgNodeOut(id = "team1b", name = "개발행위파트", type = "team", parentId = "team1", members = listOf(MemberOut("방자", "대리", "팀원"))),
     OrgNodeOut(
         id = "team2",
