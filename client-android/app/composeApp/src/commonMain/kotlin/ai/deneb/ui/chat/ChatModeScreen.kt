@@ -719,7 +719,11 @@ internal fun ChatModeScreen(
                                                                         onRegenerate = if (isLastAssistant) actions.regenerate else null,
                                                                         isInteractive = isLastAssistant && !uiState.isLoading && frozen == null,
                                                                         onUiCallback = { event, data ->
-                                                                            actions.submitUiCallback(event, data)
+                                                                            if (event == "choice") {
+                                                                                data["text"]?.takeIf { it.isNotBlank() }?.let(actions.ask)
+                                                                            } else {
+                                                                                actions.submitUiCallback(event, data)
+                                                                            }
                                                                         },
                                                                         frozen = frozen,
                                                                         onResubmit = if (pairedUserId != null && !uiState.isLoading) {

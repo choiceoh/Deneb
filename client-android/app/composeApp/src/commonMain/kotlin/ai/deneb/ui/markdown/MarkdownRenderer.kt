@@ -1,7 +1,9 @@
 package ai.deneb.ui.markdown
 
 import ai.deneb.ui.DenebType
+import ai.deneb.ui.components.DenebChip
 import ai.deneb.ui.components.LocalShowFullScreenImageModel
+import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.dynamicui.DenebUiParser
 import ai.deneb.ui.dynamicui.DenebUiRenderer
 import ai.deneb.ui.dynamicui.FrozenSubmission
@@ -14,6 +16,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -197,7 +201,14 @@ private fun BlockRenderer(
         is Paragraph -> ParagraphBlock(block)
 
         is CodeFence -> {
-            if (block.code.isNotBlank() || !block.language.isNullOrBlank()) {
+            if (block.language?.trim()?.lowercase() == "choices") {
+                ChoiceChipsBlock(
+                    raw = block.code,
+                    isInteractive = isInteractive,
+                    onChoose = { onUiCallback("choice", mapOf("text" to it)) },
+                    modifier = Modifier.padding(vertical = 4.dp),
+                )
+            } else if (block.code.isNotBlank() || !block.language.isNullOrBlank()) {
                 CodeFenceBlock(
                     language = block.language,
                     code = block.code,
@@ -238,6 +249,49 @@ private fun BlockRenderer(
         )
 
         is DenebUiPending -> DenebUiPendingBlock(block, isInteractive, onUiCallback, frozen)
+    }
+}
+
+// Renders a ```choices fence as tappable chips: each non-empty line is one option,
+// and tapping sends it as a user message (onUiCallback "choice"). Lets a structured
+// skill (kb-interview) ask multiple-choice questions with one-tap answers instead of
+// free typing. Read-only history/preview renders the chips disabled.
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ChoiceChipsBlock(
+    raw: String,
+    isInteractive: Boolean,
+    onChoose: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val options = remember(raw) {
+        raw.lines()
+            .map { it.trim().removePrefix("-").removePrefix("*").trim() }
+            .filter { it.isNotEmpty() }
+            .distinct()
+    }
+    if (options.isEmpty()) return
+    val haptics = rememberHaptics()
+    FlowRow(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        for (label in options) {
+            DenebChip(
+                onClick = if (isInteractive) {
+                    {
+                        haptics.tap()
+                        onChoose(label)
+                    }
+                } else {
+                    null
+                },
+                enabled = isInteractive,
+            ) {
+                Text(label, style = DenebType.button)
+            }
+        }
     }
 }
 
