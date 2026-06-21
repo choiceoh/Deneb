@@ -5,10 +5,11 @@ package gmailpoll
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strings"
+
+	"github.com/choiceoh/deneb/gateway-go/pkg/jsonschema"
 )
 
 // --- wiki fact extraction (local AI) ---
@@ -95,10 +96,12 @@ JSON 응답 형식:
 ## 분석 결과
 %s`
 
-// WikiFactProposal is a single fact suggested for wiki write-back.
+// WikiFactProposal is a single fact suggested for wiki write-back. The `enum`
+// tag on Type is the single source of truth for both the json_schema (via
+// jsonschema.For) and the documented value set.
 type WikiFactProposal struct {
 	Entity string `json:"entity"`
-	Type   string `json:"type"`
+	Type   string `json:"type" enum:"person,org,project,deal,decision,deadline"`
 	Fact   string `json:"fact"`
 }
 
@@ -108,41 +111,21 @@ type wikiFactsBundle struct {
 	Facts []WikiFactProposal `json:"facts"`
 }
 
-// wikiFactsSchema is the strict json_schema for wikiFactsBundle — guided
-// decoding pins the fact `type` to the known set. Keep in sync with the structs.
-var wikiFactsSchema = json.RawMessage(`{
-  "name": "wiki_facts",
-  "strict": true,
-  "schema": {
-    "type": "object",
-    "properties": {
-      "facts": {
-        "type": "array",
-        "items": {
-          "type": "object",
-          "properties": {
-            "entity": {"type": "string"},
-            "type": {"type": "string", "enum": ["person", "org", "project", "deal", "decision", "deadline"]},
-            "fact": {"type": "string"}
-          },
-          "required": ["entity", "type", "fact"],
-          "additionalProperties": false
-        }
-      }
-    },
-    "required": ["facts"],
-    "additionalProperties": false
-  }
-}`)
+// wikiFactsSchema is the strict json_schema for wikiFactsBundle, derived from the
+// Go type (jsonschema.For) so the struct is the single source of truth — no
+// hand-written literal to drift. Guided decoding pins the fact `type` enum.
+var wikiFactsSchema = jsonschema.For[wikiFactsBundle]("wiki_facts")
 
 // ActionItem is a single follow-up the operator should take, extracted from a
 // mail analysis. Priority is "high"|"medium"|"low"; DueHint is a free-text
 // Korean/relative due cue ("내일", "3일 후", "6월 15일") the server resolves to
 // a date (empty when the mail gives no deadline).
 type ActionItem struct {
-	Title    string `json:"title"`
-	DueHint  string `json:"dueHint"`
-	Priority string `json:"priority"`
+	Title   string `json:"title"`
+	DueHint string `json:"dueHint"`
+	// Priority's `enum` tag is the single source of truth for the json_schema
+	// (jsonschema.For) that pins the value to high|medium|low at decode time.
+	Priority string `json:"priority" enum:"high,medium,low"`
 }
 
 // actionItemsBundle is the JSON-mode response wrapper (object root required).
@@ -150,35 +133,13 @@ type actionItemsBundle struct {
 	Actions []ActionItem `json:"actions"`
 }
 
-// actionItemsSchema is the strict json_schema for actionItemsBundle. The
-// headline win of guided decoding here: `priority` is pinned to high|medium|low,
+// actionItemsSchema is the strict json_schema for actionItemsBundle, derived from
+// the Go type (jsonschema.For). The headline win of guided decoding here:
+// `priority` is pinned to high|medium|low (via the ActionItem.Priority enum tag),
 // so the model can't emit "urgent"/"높음"/"긴급" and silently miss the downstream
 // high-priority calendar-proposal gate (normalizeActionPriority stays as a
-// belt-and-suspenders backstop). Keep in sync with the structs.
-var actionItemsSchema = json.RawMessage(`{
-  "name": "action_items",
-  "strict": true,
-  "schema": {
-    "type": "object",
-    "properties": {
-      "actions": {
-        "type": "array",
-        "items": {
-          "type": "object",
-          "properties": {
-            "title": {"type": "string"},
-            "dueHint": {"type": "string"},
-            "priority": {"type": "string", "enum": ["high", "medium", "low"]}
-          },
-          "required": ["title", "dueHint", "priority"],
-          "additionalProperties": false
-        }
-      }
-    },
-    "required": ["actions"],
-    "additionalProperties": false
-  }
-}`)
+// belt-and-suspenders backstop).
+var actionItemsSchema = jsonschema.For[actionItemsBundle]("action_items")
 
 // DealInfo is a structured business-document extraction (견적서/계약서/세금계산서
 // 등) from a mail attachment. All fields except Counterparty are optional.
