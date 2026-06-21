@@ -7,13 +7,16 @@
 package handlerminiapp
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -38,18 +41,20 @@ type WormholeStatusOut struct {
 }
 
 // WormholeModelOut is one routable model: name, wire protocol, whether it stays
-// on-box (local), whether it's effort-routable (has a thinking toggle), and its
-// source — "config" (declared in the file) or "fleet" (auto-discovered from
-// SparkFleet). Source is "config" when the live view is unavailable and we fall
-// back to the config file.
+// on-box (local), whether it's effort-routable (has a thinking toggle), its source
+// — "config" (declared in the file) or "fleet" (auto-discovered from SparkFleet) —
+// and KeyHealth: the last cloud-key auth probe ("ok" | "auth_failed" |
+// "rate_limited" | "unreachable" | "http_N" | "unchecked"; empty for local/keyless
+// models or when the live view is unavailable). Lets the picker flag a dead key.
 //
 //deneb:wire
 type WormholeModelOut struct {
-	Name     string `json:"name"`
-	Protocol string `json:"protocol"`
-	Local    bool   `json:"local"`
-	Thinking bool   `json:"thinking"`
-	Source   string `json:"source"`
+	Name      string `json:"name"`
+	Protocol  string `json:"protocol"`
+	Local     bool   `json:"local"`
+	Thinking  bool   `json:"thinking"`
+	Source    string `json:"source"`
+	KeyHealth string `json:"keyHealth,omitempty"`
 }
 
 // WormholeDeps is the wiring for the wormhole status/toggle handlers. Empty
@@ -81,6 +86,7 @@ func WormholeMethods(deps WormholeDeps) map[string]rpcutil.HandlerFunc {
 	return map[string]rpcutil.HandlerFunc{
 		"miniapp.wormhole.status":      wormholeStatus(deps),
 		"miniapp.wormhole.set_feature": wormholeSetFeature(deps),
+		"miniapp.wormhole.set_key":     wormholeSetKey(deps),
 	}
 }
 
@@ -138,11 +144,12 @@ func statusFromLive(live *whLiveStatus) WormholeStatusOut {
 			src = "config"
 		}
 		out.Models = append(out.Models, WormholeModelOut{
-			Name:     m.Name,
-			Protocol: proto,
-			Local:    m.Local,
-			Thinking: m.Thinking,
-			Source:   src,
+			Name:      m.Name,
+			Protocol:  proto,
+			Local:     m.Local,
+			Thinking:  m.Thinking,
+			Source:    src,
+			KeyHealth: m.KeyHealth,
 		})
 	}
 	return out
@@ -190,11 +197,12 @@ type whLiveStatus struct {
 	EffortRouting bool     `json:"effortRouting"`
 	Auto          []string `json:"auto"`
 	Models        []struct {
-		Name     string `json:"name"`
-		Protocol string `json:"protocol"`
-		Local    bool   `json:"local"`
-		Thinking bool   `json:"thinking"`
-		Source   string `json:"source"`
+		Name      string `json:"name"`
+		Protocol  string `json:"protocol"`
+		Local     bool   `json:"local"`
+		Thinking  bool   `json:"thinking"`
+		Source    string `json:"source"`
+		KeyHealth string `json:"keyHealth"`
 	} `json:"models"`
 }
 
@@ -295,6 +303,170 @@ func wormholeSetFeature(deps WormholeDeps) rpcutil.HandlerFunc {
 		}
 		return rpcutil.RespondOK(req.ID, map[string]any{"ok": true, "feature": p.Feature, "enabled": p.Enabled})
 	}
+}
+
+// wormholeSetKey rotates a cloud model's upstream key WITHOUT a restart. The model
+// keeps its config `key` as a ${VAR} ref; this writes the new value into wormhole's
+// secrets.env, which wormhole hot-reloads (cmd/wormhole/secrets.go) — so the secret
+// never lands in the config file and there is no secret-write endpoint on wormhole
+// itself (the already-authenticated gateway owns the file). After writing, it probes
+// the model through wormhole to give the UI an instant verdict.
+func wormholeSetKey(deps WormholeDeps) rpcutil.HandlerFunc {
+	type params struct {
+		Model string `json:"model"`
+		Key   string `json:"key"`
+	}
+	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		if errResp := requireAuth(ctx, req.ID); errResp != nil {
+			return errResp
+		}
+		var p params
+		if len(req.Params) > 0 {
+			if err := json.Unmarshal(req.Params, &p); err != nil {
+				return rpcerr.InvalidParams(err).Response(req.ID)
+			}
+		}
+		p.Model = strings.TrimSpace(p.Model)
+		p.Key = strings.TrimSpace(p.Key)
+		if p.Model == "" || p.Key == "" {
+			return rpcerr.InvalidRequest("model and key are required").Response(req.ID)
+		}
+		// Resolve the model's ${VAR} key ref so the new value lands in secrets.env,
+		// not as a literal in the config. The key field is read ONLY to extract the
+		// var name — its value is never returned or logged.
+		varName, err := wormholeModelKeyVar(deps.ConfigPath, p.Model)
+		if err != nil {
+			return rpcerr.InvalidRequest(err.Error()).Response(req.ID)
+		}
+		if err := upsertSecretLine(secretsPathFor(deps.ConfigPath), varName, p.Key); err != nil {
+			return rpcerr.WrapUnavailable("wormhole secrets write failed", err).Response(req.ID)
+		}
+		// Validate end-to-end: wait for wormhole to hot-reload secrets.env, then probe
+		// the model through it. Best-effort — the write already succeeded; the UI just
+		// won't get an instant verdict if the probe times out.
+		valid, status := validateModelKey(ctx, deps.BaseURL, wormholeToken(deps.ConfigPath), p.Model)
+		return rpcutil.RespondOK(req.ID, map[string]any{
+			"ok":       true,
+			"model":    p.Model,
+			"variable": varName,
+			"valid":    valid,
+			"status":   status,
+		})
+	}
+}
+
+// wormholeModelKeyVar reads a model's config `key` and returns the env var name it
+// references (e.g. "${MIMO_KEY}" → "MIMO_KEY"). Errors if the model is absent, has
+// no key, or pins a literal (not yet migrated to a ${VAR} ref). The key value is
+// only inspected to classify it — never returned in the error or anywhere else.
+func wormholeModelKeyVar(configPath, model string) (string, error) {
+	b, err := os.ReadFile(configPath)
+	if err != nil {
+		return "", fmt.Errorf("read wormhole config: %w", err)
+	}
+	var cfg struct {
+		Models []struct {
+			Name string `json:"name"`
+			Key  string `json:"key"`
+		} `json:"models"`
+	}
+	if err := json.Unmarshal(b, &cfg); err != nil {
+		return "", fmt.Errorf("parse wormhole config: %w", err)
+	}
+	for _, m := range cfg.Models {
+		if m.Name != model {
+			continue
+		}
+		v := strings.TrimSpace(m.Key)
+		switch {
+		case v == "":
+			return "", fmt.Errorf("model %q has no key (local/keyless — nothing to rotate)", model)
+		case strings.HasPrefix(v, "${") && strings.HasSuffix(v, "}"):
+			name := strings.TrimSpace(v[2 : len(v)-1])
+			if name == "" {
+				return "", fmt.Errorf("model %q key is an empty ${} reference", model)
+			}
+			return name, nil
+		default:
+			return "", fmt.Errorf("model %q key is a literal, not a ${VAR} ref — migrate it to secrets.env first", model)
+		}
+	}
+	return "", fmt.Errorf("model %q not found in wormhole config", model)
+}
+
+// secretsPathFor is the secrets file wormhole watches, sibling to its config
+// (mirrors cmd/wormhole/secrets.go:secretsFileFor).
+func secretsPathFor(configPath string) string {
+	return filepath.Join(filepath.Dir(configPath), "secrets.env")
+}
+
+// upsertSecretLine sets KEY=val in a dotenv file, replacing an existing KEY line or
+// appending one, preserving other lines (and comments). Atomic write at mode 0600.
+func upsertSecretLine(path, key, val string) error {
+	var lines []string
+	replaced := false
+	if b, err := os.ReadFile(path); err == nil {
+		for _, line := range strings.Split(strings.TrimRight(string(b), "\n"), "\n") {
+			if k, _, ok := strings.Cut(strings.TrimSpace(line), "="); ok && strings.TrimSpace(k) == key {
+				lines = append(lines, key+"="+val)
+				replaced = true
+			} else {
+				lines = append(lines, line)
+			}
+		}
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+	if !replaced {
+		lines = append(lines, key+"="+val)
+	}
+	content := strings.Join(lines, "\n") + "\n"
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, []byte(content), 0o600); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	return nil
+}
+
+// validateModelKey waits for wormhole to hot-reload the rotated secrets.env (its
+// config watcher ticks ~3s), then sends a 1-token completion through wormhole to the
+// model. Returns whether it authenticated (HTTP 200) and the status. Best-effort:
+// any transport error returns (false, 0).
+func validateModelKey(ctx context.Context, baseURL, token, model string) (bool, int) {
+	if baseURL == "" {
+		return false, 0
+	}
+	select {
+	case <-ctx.Done():
+		return false, 0
+	case <-time.After(4 * time.Second): // let wormhole's watcher pick up the new secret
+	}
+	body, _ := json.Marshal(map[string]any{
+		"model":      model,
+		"max_tokens": 1,
+		"messages":   []map[string]string{{"role": "user", "content": "ping"}},
+	})
+	probeCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+	reqr, err := http.NewRequestWithContext(probeCtx, http.MethodPost, strings.TrimRight(baseURL, "/")+"/v1/chat/completions", bytes.NewReader(body))
+	if err != nil {
+		return false, 0
+	}
+	reqr.Header.Set("Content-Type", "application/json")
+	if token != "" {
+		reqr.Header.Set("Authorization", "Bearer "+token)
+	}
+	resp, err := httputil.NewClient(20 * time.Second).Do(reqr)
+	if err != nil {
+		return false, 0
+	}
+	defer resp.Body.Close()
+	_, _ = io.Copy(io.Discard, resp.Body)
+	return resp.StatusCode == http.StatusOK, resp.StatusCode
 }
 
 // wormholeReachable probes the wormhole /health endpoint with a short timeout.

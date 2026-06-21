@@ -177,6 +177,82 @@ func TestModelIsLocal(t *testing.T) {
 	}
 }
 
+func TestWormholeModelKeyVar(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := dir + "/config.json"
+	writeWHConfig(t, cfgPath, `{"models":[
+		{"name":"glm","url":"https://api.z.ai/v1","key":"${ZAI_API_KEY}"},
+		{"name":"lit","url":"https://x/v1","key":"literal-secret-xyz"},
+		{"name":"local","url":"http://127.0.0.1:8000/v1"}
+	]}`)
+	if v, err := wormholeModelKeyVar(cfgPath, "glm"); err != nil || v != "ZAI_API_KEY" {
+		t.Errorf("glm: var=%q err=%v, want ZAI_API_KEY,nil", v, err)
+	}
+	if _, err := wormholeModelKeyVar(cfgPath, "lit"); err == nil {
+		t.Error("a literal key must be rejected (not rotatable via secrets.env)")
+	} else if strings.Contains(err.Error(), "literal-secret-xyz") {
+		t.Error("error message leaked the literal key value")
+	}
+	if _, err := wormholeModelKeyVar(cfgPath, "local"); err == nil {
+		t.Error("a keyless model must be rejected")
+	}
+	if _, err := wormholeModelKeyVar(cfgPath, "nope"); err == nil {
+		t.Error("a missing model must be rejected")
+	}
+}
+
+func TestUpsertSecretLine(t *testing.T) {
+	dir := t.TempDir()
+	p := dir + "/secrets.env"
+	if err := upsertSecretLine(p, "MIMO_KEY", "one"); err != nil {
+		t.Fatal(err)
+	}
+	cur, _ := os.ReadFile(p)
+	if err := os.WriteFile(p, []byte("# header\n"+string(cur)+"ZAI_API_KEY=keepme\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := upsertSecretLine(p, "MIMO_KEY", "two"); err != nil { // replace, preserve rest
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(p)
+	s := string(b)
+	if !strings.Contains(s, "MIMO_KEY=two") || strings.Contains(s, "MIMO_KEY=one") {
+		t.Errorf("MIMO_KEY not replaced: %q", s)
+	}
+	if !strings.Contains(s, "# header") || !strings.Contains(s, "ZAI_API_KEY=keepme") {
+		t.Errorf("other lines/comments not preserved: %q", s)
+	}
+	if info, _ := os.Stat(p); info.Mode().Perm() != 0o600 {
+		t.Errorf("mode = %v, want 0600", info.Mode().Perm())
+	}
+}
+
+func TestWormholeSetKey_ErrorPathsNeverLeakOrWrite(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := dir + "/config.json"
+	writeWHConfig(t, cfgPath, `{"models":[{"name":"lit","url":"https://x/v1","key":"literal-secret-xyz"}]}`)
+	h := WormholeMethods(WormholeDeps{ConfigPath: cfgPath})["miniapp.wormhole.set_key"]
+
+	// A literal-key model is rejected (error path — never reaches validation), and
+	// the old literal must not appear in the response.
+	resp := h(authedCtx(), reqWith(t, "miniapp.wormhole.set_key", map[string]any{"model": "lit", "key": "new"}))
+	if resp.OK {
+		t.Error("rotating a literal-key model must be rejected")
+	}
+	if raw, _ := json.Marshal(resp); strings.Contains(string(raw), "literal-secret-xyz") {
+		t.Error("error response leaked the literal key value")
+	}
+	if _, err := os.Stat(dir + "/secrets.env"); err == nil {
+		t.Error("secrets.env written despite a rejected rotation")
+	}
+	if h(authedCtx(), reqWith(t, "miniapp.wormhole.set_key", map[string]any{"model": "ghost", "key": "k"})).OK {
+		t.Error("a missing model must be rejected")
+	}
+	if h(authedCtx(), reqWith(t, "miniapp.wormhole.set_key", map[string]any{"model": "lit"})).OK {
+		t.Error("an empty key must be rejected")
+	}
+}
+
 func writeWHConfig(t *testing.T, path, content string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
