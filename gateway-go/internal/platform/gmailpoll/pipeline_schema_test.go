@@ -2,6 +2,7 @@ package gmailpoll
 
 import (
 	"encoding/json"
+	"reflect"
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
@@ -117,6 +118,49 @@ func TestActionPrioritySchema_Enum(t *testing.T) {
 		return items["properties"].(map[string]any)["priority"]
 	})
 	assertSameSet(t, "priority", got, []string{"high", "medium", "low"})
+}
+
+// TestActionItemsSchema_MatchesLiveVerifiedShape locks the reflection-generated
+// schema to the exact json_schema body that was confirmed working (HTTP 200 +
+// conforming output) against the production qwen vLLM during development. If the
+// generator or the ActionItem struct ever changes the wire shape, this fails —
+// proving the derived schema still equals the live-verified contract.
+func TestActionItemsSchema_MatchesLiveVerifiedShape(t *testing.T) {
+	const liveVerified = `{
+      "name": "action_items",
+      "strict": true,
+      "schema": {
+        "type": "object",
+        "properties": {
+          "actions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "title": {"type": "string"},
+                "dueHint": {"type": "string"},
+                "priority": {"type": "string", "enum": ["high", "medium", "low"]}
+              },
+              "required": ["title", "dueHint", "priority"],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": ["actions"],
+        "additionalProperties": false
+      }
+    }`
+	t.Logf("generated action_items schema:\n%s", actionItemsSchema)
+	var got, want any
+	if err := json.Unmarshal(actionItemsSchema, &got); err != nil {
+		t.Fatalf("generated schema invalid: %v", err)
+	}
+	if err := json.Unmarshal([]byte(liveVerified), &want); err != nil {
+		t.Fatalf("reference schema invalid: %v", err)
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("generated schema diverged from the live-verified shape\n got: %s\nwant: %s", actionItemsSchema, liveVerified)
+	}
 }
 
 func TestWikiFactTypeSchema_Enum(t *testing.T) {

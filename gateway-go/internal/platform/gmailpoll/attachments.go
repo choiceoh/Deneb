@@ -35,7 +35,6 @@ package gmailpoll
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -43,6 +42,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
+	"github.com/choiceoh/deneb/gateway-go/pkg/jsonschema"
 )
 
 const (
@@ -210,32 +210,10 @@ type attachGateItem struct {
 	Relevant bool `json:"relevant"`
 }
 
-// attachGateSchema is the strict json_schema for attachGateResult — guided
-// decoding guarantees a real integer index + boolean relevant per selection
-// (no "0"/"true" string drift). Keep in sync with the structs above.
-var attachGateSchema = json.RawMessage(`{
-  "name": "attachment_selections",
-  "strict": true,
-  "schema": {
-    "type": "object",
-    "properties": {
-      "selections": {
-        "type": "array",
-        "items": {
-          "type": "object",
-          "properties": {
-            "index": {"type": "integer"},
-            "relevant": {"type": "boolean"}
-          },
-          "required": ["index", "relevant"],
-          "additionalProperties": false
-        }
-      }
-    },
-    "required": ["selections"],
-    "additionalProperties": false
-  }
-}`)
+// attachGateSchema is the strict json_schema for attachGateResult, derived from
+// the Go type (jsonschema.For) — guided decoding guarantees a real integer index
+// + boolean relevant per selection (no "0"/"true" string drift).
+var attachGateSchema = jsonschema.For[attachGateResult]("attachment_selections")
 
 const attachGateSystem = "당신은 업무 메일 분석을 돕는 첨부 선별기입니다. " +
 	"메일 내용에 비추어, 분석에 본문으로 읽을 가치가 있는 첨부만 고릅니다. " +
