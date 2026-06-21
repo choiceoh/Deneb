@@ -87,12 +87,10 @@ import kotlin.time.ExperimentalTime
  * *edits* it — add/rename/delete nodes, manage members (name + 직급/직책 picker),
  * and tag nodes as dashboard parts.
  *
- * View model (v2): the structure is drawn as a real **org chart diagram** — node
- * boxes joined by parent→child connector lines, top-down, with a per-node expand
- * caret so a deep tree folds and a horizontal scroll so a wide level pans. A search
- * bar finds people by name across the whole tree (겸직 = a name in several nodes is
- * surfaced once per node) and pans to the match. (The old indented-list view is
- * replaced; the editor + save path are unchanged.)
+ * View model: the structure is an **indented list** — each node is a row indented by
+ * its depth (group → company → division → team), with a per-node expand caret to fold
+ * a branch. A search bar finds people by name across the whole tree (겸직 = a name in
+ * several nodes is surfaced once per node) and highlights/expands the match.
  *
  * Contacts: the gateway enriches each member on GET with phones/emails name-matched
  * from the contacts store (read-only — never written back on save). Where members are
@@ -106,8 +104,8 @@ import kotlin.time.ExperimentalTime
  * compares the working tree to the loaded baseline so a stray back can't lose edits.
  *
  * Design split (see .claude/rules/native-design-system.md): the frame + type are the
- * Deneb skin (DenebScreenScaffold + DenebType + mono node boxes + hairline
- * connectors); the controls (back, save button, search field, member pickers, bottom
+ * Deneb skin (DenebScreenScaffold + DenebType + indented rows + hairlines); the
+ * controls (back, save button, search field, member pickers, bottom
  * sheet) are Material. The chart itself is a stateless body ([OrgChartContent]) the
  * render harness previews with mock data; this composable is the stateful shell
  * (fetch + edit + save).
@@ -292,6 +290,10 @@ fun DenebOrgChartScreen(
 
 /** Node type tags (group|company|division|team) with Korean display labels. */
 internal val orgTypes = listOf("group", "company", "division", "team")
+
+/** Parse a comma-separated input into a trimmed, non-blank list — the editing
+ *  form for a 파트 node's keywords / 거래처 classification lists. */
+internal fun splitCsv(s: String): List<String> = s.split(",").map { it.trim() }.filter { it.isNotEmpty() }
 
 internal fun orgTypeLabel(type: String): String = when (type) {
     "group" -> "그룹"
@@ -882,6 +884,31 @@ internal fun OrgNodeEditor(
             },
         )
         Spacer(Modifier.height(18.dp))
+
+        // Classification rules — shown only for a 파트 node. Keywords (도메인 용어) and
+        // 거래처 (counterparty names) route work items to this part's dashboard column;
+        // member names are the strong signal, these are weak/medium. Edited as
+        // comma-separated lists so the operator never sees a raw key or array syntax.
+        if (node.lane.isNotBlank()) {
+            OrgFieldLabel("분류 키워드 (쉼표로 구분)")
+            DenebOutlinedTextField(
+                value = node.keywords.joinToString(", "),
+                onValueChange = { onChange(node.copy(keywords = splitCsv(it))) },
+                placeholder = { Text("예: 태양광, 모듈, 인버터") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(Modifier.height(12.dp))
+            OrgFieldLabel("분류 거래처 (쉼표로 구분)")
+            DenebOutlinedTextField(
+                value = node.companies.joinToString(", "),
+                onValueChange = { onChange(node.copy(companies = splitCsv(it))) },
+                placeholder = { Text("예: 트리나솔라, 한화") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(Modifier.height(18.dp))
+        }
 
         // Members.
         OrgFieldLabel("구성원")
