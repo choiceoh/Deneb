@@ -16,6 +16,11 @@ type statusModelRow struct {
 	Thinking    bool   `json:"thinking"`
 	Source      string `json:"source"`
 	MaxModelLen int    `json:"max_model_len,omitempty"` // backend vLLM context length (local only)
+	// KeyHealth is the last upstream-auth probe for a cloud model: "ok" |
+	// "auth_failed" (dead/invalid key) | "rate_limited" | "unreachable" | "http_N"
+	// | "unchecked". Empty for local (keyless) models. Lets the picker flag a dead
+	// key before a request 401s. See keyhealth.go.
+	KeyHealth string `json:"keyHealth,omitempty"`
 }
 
 // statusOut is wormhole's live operational readout (GET /status): the global
@@ -55,15 +60,23 @@ func (rt *router) status(w http.ResponseWriter, r *http.Request) {
 		}
 		return 0
 	}
+	health := rt.keyHealth.Load()
+	healthLabel := func(e modelEntry) string {
+		st := keyHealthState{}
+		if health != nil {
+			st = (*health)[e.Name]
+		}
+		return st.label(!e.isLocal())
+	}
 	for _, e := range s.cfg.Models {
-		out.Models = append(out.Models, statusRow(e, "config", window(e.Name)))
+		out.Models = append(out.Models, statusRow(e, "config", window(e.Name), healthLabel(e)))
 	}
 	if f := rt.fleet.Load(); f != nil {
 		for name, e := range *f {
 			if _, shadowed := s.models[name]; shadowed {
 				continue // a configured model of the same name already covers it
 			}
-			out.Models = append(out.Models, statusRow(e, "fleet", window(name)))
+			out.Models = append(out.Models, statusRow(e, "fleet", window(name), healthLabel(e)))
 		}
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -71,8 +84,9 @@ func (rt *router) status(w http.ResponseWriter, r *http.Request) {
 }
 
 // statusRow projects a modelEntry into a (keyless) status row tagged with its
-// source and the backend's discovered context window (0 = unknown / cloud).
-func statusRow(e modelEntry, source string, maxModelLen int) statusModelRow {
+// source, the backend's discovered context window (0 = unknown / cloud), and the
+// last cloud-key-health label ("" for local).
+func statusRow(e modelEntry, source string, maxModelLen int, keyHealth string) statusModelRow {
 	return statusModelRow{
 		Name:        e.Name,
 		Protocol:    e.protocol(),
@@ -80,5 +94,6 @@ func statusRow(e modelEntry, source string, maxModelLen int) statusModelRow {
 		Thinking:    e.ToggleKwarg != "",
 		Source:      source,
 		MaxModelLen: maxModelLen,
+		KeyHealth:   keyHealth,
 	}
 }
