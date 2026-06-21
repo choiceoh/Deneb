@@ -68,7 +68,7 @@ internal fun AppearanceTab(appSettings: AppSettings) {
             Spacer(Modifier.height(8.dp))
             Text(
                 "앱 전체 배색을 즉시 바꿉니다.",
-                style = MaterialTheme.typography.bodySmall,
+                style = DenebType.hint,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
@@ -99,13 +99,13 @@ internal fun AppearanceTab(appSettings: AppSettings) {
                     Column(Modifier.weight(1f)) {
                         Text(
                             label,
-                            style = MaterialTheme.typography.bodyLarge,
+                            style = DenebType.rowTitle,
                             fontWeight = if (isSel) FontWeight.SemiBold else FontWeight.Normal,
                             color = if (isSel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                         )
                         Text(
                             desc,
-                            style = MaterialTheme.typography.bodySmall,
+                            style = DenebType.hint,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
@@ -130,7 +130,7 @@ internal fun AppearanceTab(appSettings: AppSettings) {
             Spacer(Modifier.height(4.dp))
             Text(
                 "글자와 요소 크기를 조절합니다. (${(sliderValue * 100).roundToInt()}%)",
-                style = MaterialTheme.typography.bodySmall,
+                style = DenebType.hint,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(8.dp))

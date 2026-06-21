@@ -490,7 +490,7 @@ internal fun PromptStyleEditor(
             onValueChange = onDraft,
             readOnly = readOnly || saving,
             label = { Text("내용") },
-            textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+            textStyle = DenebType.snippet.copy(fontFamily = FontFamily.Monospace),
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = 360.dp),

@@ -97,7 +97,7 @@ internal fun GatewayTab(
                     TextButton(onClick = { tokenVisible = !tokenVisible }) {
                         Text(
                             if (tokenVisible) "숨기기" else "보기",
-                            style = MaterialTheme.typography.labelMedium,
+                            style = DenebType.hint,
                         )
                     }
                 },
@@ -106,7 +106,7 @@ internal fun GatewayTab(
             Spacer(Modifier.height(8.dp))
             Text(
                 "게이트웨이 호스트에서 deneb-client-token으로 생성한 값을 붙여넣으세요.",
-                style = MaterialTheme.typography.bodySmall,
+                style = DenebType.hint,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(16.dp))
@@ -189,20 +189,20 @@ private fun GatewayStatusCard(
         if (status == null) {
             Text(
                 "아직 확인되지 않았습니다.",
-                style = MaterialTheme.typography.bodySmall,
+                style = DenebType.hint,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         } else {
             Text(
                 "게이트웨이 v${status.version.ifBlank { "확인 불가" }} · 네이티브 API ${status.nativeApiVersion}",
-                style = MaterialTheme.typography.bodyMedium,
+                style = DenebType.rowTitle,
                 color = MaterialTheme.colorScheme.onSurface,
             )
             if (status.model.isNotBlank()) {
                 Spacer(Modifier.height(4.dp))
                 Text(
                     "현재 모델: ${status.model}",
-                    style = MaterialTheme.typography.bodySmall,
+                    style = DenebType.rowSubtitle,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -217,7 +217,7 @@ private fun GatewayStatusCard(
                 Spacer(Modifier.height(8.dp))
                 Text(
                     active,
-                    style = MaterialTheme.typography.bodySmall,
+                    style = DenebType.rowSubtitle,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -256,7 +256,7 @@ private fun ContactsSyncCard(
         Text(
             "이 기기 연락처 중 위키에 이미 등록된 인물의 전화·이메일·회사를 보강합니다. " +
                 "회의 전사 고유명사 교정과 인물 조회에 쓰입니다. 전체 주소록을 새로 저장하지는 않습니다.",
-            style = MaterialTheme.typography.bodySmall,
+            style = DenebType.hint,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.height(16.dp))
@@ -291,7 +291,7 @@ private fun ContactsSyncCard(
             Spacer(Modifier.height(8.dp))
             Text(
                 msg,
-                style = MaterialTheme.typography.bodySmall,
+                style = DenebType.hint,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
@@ -349,7 +349,7 @@ private fun LocationSensingCard(permission: LocationPermissionController, appSet
         Text(
             "위치 권한을 허용하면 비서가 \"지금 어디?\"에 답할 수 있고(동기화 시 보고), " +
                 "집·직장을 찍어두면 도착·출발 시 알려줍니다. 백그라운드 추적은 하지 않습니다.",
-            style = MaterialTheme.typography.bodySmall,
+            style = DenebType.hint,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.height(16.dp))
@@ -393,7 +393,7 @@ private fun LocationSensingCard(permission: LocationPermissionController, appSet
             Spacer(Modifier.height(8.dp))
             Text(
                 m,
-                style = MaterialTheme.typography.bodySmall,
+                style = DenebType.hint,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
