@@ -81,9 +81,14 @@ type router struct {
 	// a downstream client (the Deneb gateway, the native picker) discover a
 	// wormhole-fronted model's context window without probing the backend directly.
 	windows atomic.Pointer[map[string]int]
-	metrics *metrics // per-request counters, exposed at GET /metrics
-	client  *http.Client
-	log     *slog.Logger
+	// keyHealth caches each CLOUD model's last upstream-auth probe (keyhealth.go),
+	// refreshed by refreshKeyHealth on the watch loop. Lock-free read in status;
+	// never nil after newRouter. Empty for local (keyless) models. Surfacing it lets
+	// the gateway's model picker show a dead/invalid cloud key before a request 401s.
+	keyHealth atomic.Pointer[map[string]keyHealthState]
+	metrics   *metrics // per-request counters, exposed at GET /metrics
+	client    *http.Client
+	log       *slog.Logger
 }
 
 func newRouter(cfg config, path string, log *slog.Logger) *router {
@@ -107,6 +112,8 @@ func newRouter(cfg config, path string, log *slog.Logger) *router {
 	rt.fleet.Store(&empty)
 	emptyWindows := map[string]int{}
 	rt.windows.Store(&emptyWindows)
+	emptyHealth := map[string]keyHealthState{}
+	rt.keyHealth.Store(&emptyHealth)
 	return rt
 }
 
@@ -185,8 +192,9 @@ func (rt *router) watch(ctx context.Context) {
 	// config (it has local models whose max_model_len downstream wants).
 	rt.refreshFleet(ctx)
 	rt.refreshWindows(ctx)
+	rt.refreshKeyHealth(ctx) // seed cloud-key health at startup (even for a static config)
 	if rt.path == "" && rt.cur().cfg.Sparkfleet == nil {
-		return // nothing to poll: static config, no discovery (windows probed once above)
+		return // nothing to poll: static config, no discovery (windows + key health probed once above)
 	}
 	cfgTick := time.NewTicker(3 * time.Second)
 	defer cfgTick.Stop()
@@ -194,6 +202,8 @@ func (rt *router) watch(ctx context.Context) {
 	defer fleetTick.Stop()
 	windowTick := time.NewTicker(windowRefreshInterval)
 	defer windowTick.Stop()
+	keyHealthTick := time.NewTicker(keyHealthRefreshInterval)
+	defer keyHealthTick.Stop()
 	for {
 		select {
 		case <-ctx.Done():
@@ -204,6 +214,8 @@ func (rt *router) watch(ctx context.Context) {
 			rt.refreshFleet(ctx)
 		case <-windowTick.C:
 			rt.refreshWindows(ctx)
+		case <-keyHealthTick.C:
+			rt.refreshKeyHealth(ctx)
 		}
 	}
 }
