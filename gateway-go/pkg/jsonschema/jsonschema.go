@@ -13,7 +13,12 @@
 //     which vLLM guided decoding honors.
 //   - Field names follow the `json:"..."` tag exactly as encoding/json would (so
 //     the schema and the unmarshal agree); `json:"-"` fields are omitted, and
-//     anonymous embedded structs (without a json name) are flattened.
+//     anonymous embedded structs (without a json name) are flattened. The common
+//     embedding cases match encoding/json (untagged flatten, shallower-shadowing,
+//     tagged-embed-as-named); the one unsupported corner is two embedded structs
+//     at the SAME depth promoting the SAME json name, which encoding/json drops as
+//     ambiguous but this generator includes — avoid it in structured-output types
+//     (write explicit fields).
 //   - An `enum:"a,b,c"` struct tag constrains a string field to that set
 //     (comma-separated; members are taken verbatim, so a trailing comma keeps an
 //     intended empty member, e.g. `enum:"x,y,"` allows "").
@@ -27,12 +32,12 @@
 //
 // Fail-fast: For PANICS (at init time, since callers compute into package vars)
 // on a type it cannot faithfully represent — a non-struct root, a map/interface
-// field, a cyclic/self-referential type, or any type with a VALUE-receiver
-// json.Marshaler / encoding.TextMarshaler (e.g. time.Time, json.RawMessage),
-// whose output is opaque to reflection. A loud startup failure naming the field
-// is far safer than a silently-wrong schema that would constrain the model to
-// the wrong shape and lose data on unmarshal. Use a plain field (e.g. an RFC3339
-// string for a time) or extend the generator.
+// field, a cyclic/self-referential type, or any type with a custom JSON decoder
+// (json.Unmarshaler / encoding.TextUnmarshaler — e.g. time.Time, json.RawMessage,
+// big.Int), whose accepted shape is opaque to reflection. A loud startup failure
+// naming the field is far safer than a silently-wrong schema
+// that would constrain the model to the wrong shape and lose data on unmarshal.
+// Use a plain field (e.g. an RFC3339 string for a time) or extend the generator.
 package jsonschema
 
 import (
@@ -44,9 +49,9 @@ import (
 )
 
 var (
-	jsonMarshalerType = reflect.TypeFor[json.Marshaler]()
-	textMarshalerType = reflect.TypeFor[encoding.TextMarshaler]()
-	jsonNumberType    = reflect.TypeFor[json.Number]()
+	jsonUnmarshalerType = reflect.TypeFor[json.Unmarshaler]()
+	textUnmarshalerType = reflect.TypeFor[encoding.TextUnmarshaler]()
+	jsonNumberType      = reflect.TypeFor[json.Number]()
 )
 
 // For returns the OpenAI strict structured-output envelope for type T:
@@ -88,14 +93,13 @@ func schemaForType(t reflect.Type, path string, seen map[reflect.Type]bool) map[
 	if t == jsonNumberType {
 		return map[string]any{"type": "number"}
 	}
-	// Types that customize their own JSON encoding produce output reflection
-	// can't infer — refuse rather than emit a silently-wrong schema. Only
-	// value-receiver marshalers (time.Time, json.RawMessage, net.IP, …) are
-	// refused: a value field whose POINTER implements the marshaler is decoded
-	// structurally by encoding/json (the pointer method needs an addressable
-	// value), so reflecting its fields matches the round-trip.
-	if t.Implements(jsonMarshalerType) || t.Implements(textMarshalerType) {
-		panic(fmt.Sprintf("jsonschema: %s has type %s which customizes its JSON (json.Marshaler/encoding.TextMarshaler); its shape is opaque to reflection — use a plain field (e.g. an RFC3339 string for a time) or extend the generator", fieldDesc(path), t))
+	// A type with a custom JSON decoder accepts a shape reflection can't infer —
+	// refuse rather than emit a silently-wrong structural schema. The schema
+	// constrains the model's OUTPUT, which is unmarshaled into T, so the governing
+	// interface is json.Unmarshaler / encoding.TextUnmarshaler (NOT Marshaler).
+	// This catches time.Time, json.RawMessage, big.Int/Float/Rat, net.IP, uuid, etc.
+	if customizesJSON(t) {
+		panic(fmt.Sprintf("jsonschema: %s has type %s with a custom JSON decoder (json.Unmarshaler/encoding.TextUnmarshaler); its shape is opaque to reflection — use a plain field (e.g. an RFC3339 string for a time, a number for a big.Int) or extend the generator", fieldDesc(path), t))
 	}
 	switch t.Kind() {
 	case reflect.String:
@@ -173,7 +177,10 @@ func collectFields(t reflect.Type, path string, props map[string]any, required *
 				continue
 			}
 		}
-		if !f.IsExported() {
+		// A tagged anonymous field is a NAMED nested object (encoding/json marshals
+		// it under its tag name even when the embedded type is unexported), so it
+		// bypasses this gate; only a regular unexported field is dropped.
+		if !f.Anonymous && !f.IsExported() {
 			continue
 		}
 		if name == "" {
@@ -197,6 +204,19 @@ func enumValues(f reflect.StructField) []string {
 		return nil
 	}
 	return strings.Split(tag, ",")
+}
+
+// customizesJSON reports whether json.Unmarshal would use a custom decoder for t
+// (json.Unmarshaler or encoding.TextUnmarshaler) instead of decoding structurally
+// — making its accepted shape opaque to reflection. reflect.PointerTo(t) covers
+// pointer-receiver decoders (the stdlib idiom: time.Time, big.Int, net.IP), which
+// json.Unmarshal invokes because its target is addressable. Marshaler is
+// deliberately NOT checked: the schema constrains the model's output (unmarshaled
+// into t), never a value marshaled FROM t, so a marshal-only type is decoded
+// structurally and reflects faithfully.
+func customizesJSON(t reflect.Type) bool {
+	pt := reflect.PointerTo(t)
+	return pt.Implements(jsonUnmarshalerType) || pt.Implements(textUnmarshalerType)
 }
 
 // dedupStrings returns in with duplicate entries removed, preserving first-seen

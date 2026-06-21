@@ -2,6 +2,7 @@ package jsonschema
 
 import (
 	"encoding/json"
+	"math/big"
 	"reflect"
 	"testing"
 	"time"
@@ -260,13 +261,17 @@ func TestFor_FailsFastOnUnrepresentable(t *testing.T) {
 	type withIface struct {
 		V any `json:"v"` // interface — unconstrained
 	}
+	type withBig struct {
+		N big.Int `json:"n"` // pointer-receiver Marshaler/Unmarshaler → number, not object
+	}
 	cases := map[string]func(){
-		"time.Time":       func() { For[withTime]("a") },
-		"json.RawMessage": func() { For[withRaw]("a") },
-		"map":             func() { For[withMap]("a") },
-		"interface":       func() { For[withIface]("a") },
-		"non-struct root": func() { For[string]("a") },
-		"slice root":      func() { For[[]int]("a") },
+		"time.Time":          func() { For[withTime]("a") },
+		"json.RawMessage":    func() { For[withRaw]("a") },
+		"map":                func() { For[withMap]("a") },
+		"interface":          func() { For[withIface]("a") },
+		"non-struct root":    func() { For[string]("a") },
+		"slice root":         func() { For[[]int]("a") },
+		"big.Int (ptr recv)": func() { For[withBig]("a") },
 	}
 	for name, fn := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -377,6 +382,32 @@ type shadowBase struct {
 type shadowDerived struct {
 	shadowBase
 	Name int `json:"name"` // shallower field shadows shadowBase.Name (encoding/json rule)
+}
+
+func TestFor_TaggedEmbedOfUnexportedType(t *testing.T) {
+	// A tagged anonymous field is a NAMED nested object in encoding/json, even when
+	// the embedded type is unexported — it must NOT be dropped from the schema.
+	type inner struct {
+		X string `json:"x"`
+	}
+	type host struct {
+		inner `json:"inner"`
+		S     string `json:"s"`
+	}
+	p := props(t, schemaOf(t, For[host]("h")))
+	in, ok := p["inner"].(map[string]any)
+	if !ok {
+		t.Fatalf("tagged embed of unexported type was dropped; props = %v", p)
+	}
+	if in["type"] != "object" {
+		t.Errorf("inner type = %v, want object", in["type"])
+	}
+	if _, ok := in["properties"].(map[string]any)["x"]; !ok {
+		t.Errorf("inner.x missing: %v", in)
+	}
+	if _, ok := p["s"]; !ok {
+		t.Error("sibling field s missing")
+	}
 }
 
 func TestFor_ShadowedEmbeddedField(t *testing.T) {
