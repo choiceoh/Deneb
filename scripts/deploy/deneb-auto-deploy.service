@@ -1,0 +1,21 @@
+[Unit]
+Description=Deneb auto-deploy — pull origin/main, build, hot-swap the gateway
+Documentation=file:scripts/deploy/auto-deploy.sh
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# srv4 topology (2026-06-20): the gateway runs on a lean host with no Go
+# toolchain, so this build host (srv1) builds and ships the binary instead of
+# restarting in place. Unset DENEB_DEPLOY_REMOTE = legacy single-host in-place.
+Environment=DENEB_DEPLOY_REMOTE=srv4
+# systemd user services start with a minimal PATH; auto-deploy.sh → deploy.sh
+# need go (snap), git, ssh, scp, make, curl on PATH.
+Environment=PATH=/snap/bin:/usr/local/bin:/usr/bin:/bin:/home/choiceoh/go/bin
+WorkingDirectory=/home/choiceoh/deneb
+ExecStart=/home/choiceoh/deneb/scripts/deploy/auto-deploy.sh
+# auto-deploy.sh always exits 0 (it logs failures to /tmp/deneb-auto-deploy.log
+# rather than failing the unit — a red status historically got the timer
+# disabled). A build + remote cutover can take a couple of minutes.
+TimeoutStartSec=600
