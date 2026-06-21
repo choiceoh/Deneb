@@ -117,6 +117,17 @@ func ParseSlashCommand(text string) *SlashResult {
 			Command:  "restart",
 			Args:     args,
 		}
+	case "weekly", "주간보고", "주간업무보고":
+		// Deterministic 주간업무보고 generation (handled in slash_dispatch.go).
+		// Mirrors the Saturday cron path (cron_agent_adapter.go) so a manual
+		// trigger works too — previously only the cron payload "/weekly" (or
+		// "/주간보고") ran it, and typed input fell through to the LLM.
+		return &SlashResult{
+			Handled:  true,
+			Response: "",
+			Command:  "weekly",
+			Args:     args,
+		}
 	default:
 		// Not a recognized slash command; pass through to LLM.
 		return nil

@@ -111,6 +111,14 @@ type Handler struct {
 	// fileRecallFn runs a hybrid semantic search over the file store for the
 	// recall preflight. Optional: nil disables the files recall source.
 	fileRecallFn FileRecallFunc
+
+	// weeklyReportTextFn / weeklyFormDeliverFn back the interactive /weekly
+	// (/주간보고) slash command — the deterministic 주간업무보고 generators the
+	// Saturday cron uses, so a manual trigger produces the same form + text.
+	// Optional: nil → the command replies it is not wired. Injected by the
+	// server via SetWeeklyReport so chat stays free of the wiki/render infra.
+	weeklyReportTextFn  WeeklyReportTextFunc
+	weeklyFormDeliverFn WeeklyFormDeliverFunc
 }
 
 // TopicResolver maps a forum/topic threadID to a per-topic knowledge key
@@ -469,6 +477,22 @@ func (h *Handler) SetSkillNudger(n SkillNudger) {
 // to disable usage attribution. Safe to call before the first run starts.
 func (h *Handler) SetSkillUsageRecorder(r SkillUsageRecorder) {
 	h.skillUsageRecorder = r
+}
+
+// WeeklyReportTextFunc composes the deterministic 주간업무보고 text straight from
+// wiki data (no LLM turn, so the format never drifts).
+type WeeklyReportTextFunc func(ctx context.Context) (string, error)
+
+// WeeklyFormDeliverFunc renders the formal 주간업무보고 form image and posts it to
+// the native chat (best-effort; skipped when render is unavailable).
+type WeeklyFormDeliverFunc func(ctx context.Context) error
+
+// SetWeeklyReport wires the deterministic weekly-report generators so an
+// interactive /weekly (/주간보고) slash command produces the same form image +
+// text the Saturday cron does. nil fns leave the command gracefully unwired.
+func (h *Handler) SetWeeklyReport(textFn WeeklyReportTextFunc, formFn WeeklyFormDeliverFunc) {
+	h.weeklyReportTextFn = textFn
+	h.weeklyFormDeliverFn = formFn
 }
 
 // RegisterTool installs a runtime-bound tool after handler construction.

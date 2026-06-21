@@ -894,6 +894,12 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 			weeklyReportText:  weeklyTextFn,
 			weeklyFormDeliver: weeklyFormFn,
 		})
+		// Interactive /weekly (/주간보고) reuses the same deterministic generators
+		// so a manually typed command matches the Saturday cron output (this path
+		// was cron-only before — typed input fell through to the LLM).
+		if s.chatHandler != nil {
+			s.chatHandler.SetWeeklyReport(weeklyTextFn, weeklyFormFn)
+		}
 		if s.acpDeps != nil {
 			s.cronService.SetSubagentPoller(&acpSubagentPoller{
 				registry: s.acpDeps.Registry,

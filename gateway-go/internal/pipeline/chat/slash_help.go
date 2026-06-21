@@ -24,6 +24,7 @@ var slashBuiltinHelp = []slashHelpEntry{
 	{"/rollback", "변경 롤백 (`/롤백`)"},
 	{"/update [확인]", "풀·빌드·재시작 (`/업데이트`)"},
 	{"/restart", "게이트웨이 재시작 (`/재시작`)"},
+	{"/weekly", "주간업무보고 생성·전달 (`/주간보고`)"},
 }
 
 // slashHelpText renders the builtin command list as Markdown for /help.
