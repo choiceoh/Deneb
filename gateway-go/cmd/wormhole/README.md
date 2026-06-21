@@ -207,6 +207,14 @@ that token. wormhole logs an `INSECURE` error at boot if it binds a non-loopback
 address with no token (open to the network, cloud keys and all). Loopback +
 no-token is fine for a same-box gateway.
 
+**Secrets file (live key rotation).** `${ENV}` refs also resolve from a
+wormhole-owned `secrets.env` next to the config (`~/.wormhole/secrets.env`, mode
+`600`, `KEY=value` per line). wormhole loads it at boot **and watches it** — editing
+a key hot-reloads with no restart (the key-health probe then re-validates on its next
+cycle). Prefer this over the systemd unit's `EnvironmentFile` for upstream keys: that
+loads only at service start, so rotating a key there needs a restart. An absent
+`secrets.env` is a no-op (env-only / `EnvironmentFile` deploys are unchanged).
+
 ## Local-first egress guard
 
 A wormhole that fronts both local and cloud models is a place where one routing

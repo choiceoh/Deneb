@@ -142,6 +142,16 @@ func main() {
 
 	log := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
+	// Load wormhole's own secrets file (sibling of the config) into the process env
+	// BEFORE loadConfig expands ${VAR} refs. Absent file = no-op, so env-only /
+	// systemd-EnvironmentFiles deploys are unchanged. See secrets.go.
+	secretsPath := secretsFileFor(configPath)
+	if n, err := loadSecretsEnv(secretsPath); err != nil {
+		log.Warn("secrets file load failed", "path", secretsPath, "error", err)
+	} else if n > 0 {
+		log.Info("loaded wormhole secrets", "keys", n, "path", secretsPath)
+	}
+
 	cfg, err := loadConfig(configPath)
 	if err != nil {
 		log.Error("config load failed", "path", configPath, "error", err)
