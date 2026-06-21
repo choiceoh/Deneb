@@ -1,0 +1,14 @@
+[Unit]
+Description=Run Deneb auto-deploy every minute
+Documentation=file:scripts/deploy/deneb-auto-deploy.service
+
+[Timer]
+# First check shortly after boot, then once a minute. auto-deploy.sh no-ops
+# cheaply when origin/main is unchanged (git fetch + HEAD compare), so a
+# 1-minute cadence is inexpensive and gets merged PRs to prod within ~a minute.
+OnBootSec=2min
+OnUnitActiveSec=60s
+AccuracySec=20s
+
+[Install]
+WantedBy=timers.target

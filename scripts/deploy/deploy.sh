@@ -7,6 +7,13 @@ PROD_DIR="${DENEB_PROD_DIR:-$HOME/deneb}"
 PROD_PORT="${DENEB_GATEWAY_PORT:-18789}"
 GATEWAY_SERVICE="${DENEB_GATEWAY_SERVICE:-deneb-gateway.service}"
 RESTART_MODE="${DENEB_DEPLOY_RESTART_MODE:-auto}" # auto | systemd | nohup
+# Remote deploy: when set, build locally (this host has Go + the git repo) and
+# ship the binary to a gateway host that lacks a toolchain — instead of an
+# in-place restart. This is the srv4 topology (the gateway moved to a lean host
+# on 2026-06-20; building ON the gateway host risks OOM-ing prod under strict
+# overcommit, so srv1 builds and pushes). Empty = in-place restart (legacy).
+DEPLOY_REMOTE="${DENEB_DEPLOY_REMOTE:-}"            # e.g. "srv4" (ssh host)
+DEPLOY_REMOTE_DIR="${DENEB_DEPLOY_REMOTE_DIR:-deneb}" # remote $HOME-relative repo dir
 LOG_FILE="/tmp/deneb-gateway.log"
 LOG_ARCHIVE_DIR="/tmp/deneb-gateway-logs"
 LOG_ARCHIVE_KEEP=20   # keep last N pre-restart logs; older ones get pruned
@@ -154,6 +161,45 @@ restart_with_nohup() {
     fi
 }
 
+# restart_remote ships the locally-built binary to a remote gateway host and
+# hot-swaps it: back up the current binary, atomically replace it (the running
+# process keeps its old inode until it exits), then SIGUSR1 → the gateway exits
+# with code 75 → systemd `Restart=always` relaunches the new binary at the dist
+# path. RefuseManualStop only blocks `systemctl stop`, not signals, so this is
+# the supported cutover. Poll for a fresh MainPID + healthy /health before
+# declaring success.
+restart_remote() {
+    local remote="$DEPLOY_REMOTE" dir="$DEPLOY_REMOTE_DIR" bin="dist/deneb-gateway"
+    if [[ ! -x "$bin" ]]; then
+        echo "ERROR: built binary $bin missing" >&2
+        exit 1
+    fi
+    echo "==> remote deploy → $remote:~/$dir/dist (build host $(hostname))"
+    scp -q "$bin" "$remote:$dir/dist/deneb-gateway.new"
+    ssh "$remote" "GATEWAY_SERVICE='$GATEWAY_SERVICE' PROD_PORT='$PROD_PORT' DIR='$dir' bash -s" <<'REMOTE'
+set -euo pipefail
+cd "$HOME/$DIR/dist"
+cp -p deneb-gateway deneb-gateway.bak-prev 2>/dev/null || true
+mv deneb-gateway.new deneb-gateway
+oldpid=$(systemctl --user show "$GATEWAY_SERVICE" -p MainPID --value 2>/dev/null || true)
+[ -z "${oldpid:-}" ] && oldpid=$(pgrep -f 'dist/deneb-gateway' | head -1 || true)
+[ -z "${oldpid:-}" ] && { echo "ERROR: no running gateway to cut over" >&2; exit 1; }
+echo "    SIGUSR1 → pid $oldpid (cutover)"
+kill -USR1 "$oldpid"
+for i in $(seq 1 45); do
+    pid=$(systemctl --user show "$GATEWAY_SERVICE" -p MainPID --value 2>/dev/null || true)
+    [ -z "${pid:-}" ] && pid=$(pgrep -f 'dist/deneb-gateway' | head -1 || true)
+    if [ -n "${pid:-}" ] && [ "$pid" != "$oldpid" ] && curl -sf -o /dev/null "http://127.0.0.1:$PROD_PORT/health"; then
+        echo "    remote deploy OK: new pid $pid after ${i}s"
+        exit 0
+    fi
+    sleep 1
+done
+echo "ERROR: remote gateway unhealthy after cutover (rollback: mv deneb-gateway.bak-prev deneb-gateway && kill -USR1)" >&2
+exit 1
+REMOTE
+}
+
 cd "$PROD_DIR"
 
 # Ensure we're on main
@@ -177,6 +223,13 @@ make gateway-prod
 
 if [[ "${1:-}" == "--build-only" ]]; then
     echo "==> build done (--build-only, skipping restart)"
+    exit 0
+fi
+
+# Remote topology (srv4): built here, ship + hot-swap there. Bypasses the
+# in-place restart modes below.
+if [[ -n "$DEPLOY_REMOTE" ]]; then
+    restart_remote
     exit 0
 fi
 
