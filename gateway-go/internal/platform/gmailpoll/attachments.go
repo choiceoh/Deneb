@@ -35,6 +35,7 @@ package gmailpoll
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -209,6 +210,33 @@ type attachGateItem struct {
 	Relevant bool `json:"relevant"`
 }
 
+// attachGateSchema is the strict json_schema for attachGateResult — guided
+// decoding guarantees a real integer index + boolean relevant per selection
+// (no "0"/"true" string drift). Keep in sync with the structs above.
+var attachGateSchema = json.RawMessage(`{
+  "name": "attachment_selections",
+  "strict": true,
+  "schema": {
+    "type": "object",
+    "properties": {
+      "selections": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "index": {"type": "integer"},
+            "relevant": {"type": "boolean"}
+          },
+          "required": ["index", "relevant"],
+          "additionalProperties": false
+        }
+      }
+    },
+    "required": ["selections"],
+    "additionalProperties": false
+  }
+}`)
+
 const attachGateSystem = "당신은 업무 메일 분석을 돕는 첨부 선별기입니다. " +
 	"메일 내용에 비추어, 분석에 본문으로 읽을 가치가 있는 첨부만 고릅니다. " +
 	"견적서·계약서·세금계산서·거래명세서·발주서·제안서·사양서처럼 업무 판단에 필요한 문서는 relevant=true. " +
@@ -243,7 +271,7 @@ func judgeAttachments(ctx context.Context, deps PipelineDeps, msg *gmail.Message
 	prompt := fmt.Sprintf(attachGatePrompt,
 		msg.Subject, msg.From, clipChars(msg.Body, 1200), strings.TrimSpace(sb.String()))
 
-	res, err := callLocalLLMJSON[attachGateResult](ctx, deps.LocalClient, deps.LocalModel, attachGateSystem, prompt, stage1MaxTokens)
+	res, err := callLocalLLMJSON[attachGateResult](ctx, deps.LocalClient, deps.LocalModel, attachGateSystem, prompt, stage1MaxTokens, attachGateSchema)
 	if err != nil {
 		// Judge unavailable — include all extracted candidates rather than drop
 		// them. They already cleared the heuristic pre-filter.

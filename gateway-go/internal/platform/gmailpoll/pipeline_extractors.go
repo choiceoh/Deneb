@@ -5,6 +5,7 @@ package gmailpoll
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -107,6 +108,33 @@ type wikiFactsBundle struct {
 	Facts []WikiFactProposal `json:"facts"`
 }
 
+// wikiFactsSchema is the strict json_schema for wikiFactsBundle — guided
+// decoding pins the fact `type` to the known set. Keep in sync with the structs.
+var wikiFactsSchema = json.RawMessage(`{
+  "name": "wiki_facts",
+  "strict": true,
+  "schema": {
+    "type": "object",
+    "properties": {
+      "facts": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "entity": {"type": "string"},
+            "type": {"type": "string", "enum": ["person", "org", "project", "deal", "decision", "deadline"]},
+            "fact": {"type": "string"}
+          },
+          "required": ["entity", "type", "fact"],
+          "additionalProperties": false
+        }
+      }
+    },
+    "required": ["facts"],
+    "additionalProperties": false
+  }
+}`)
+
 // ActionItem is a single follow-up the operator should take, extracted from a
 // mail analysis. Priority is "high"|"medium"|"low"; DueHint is a free-text
 // Korean/relative due cue ("내일", "3일 후", "6월 15일") the server resolves to
@@ -121,6 +149,36 @@ type ActionItem struct {
 type actionItemsBundle struct {
 	Actions []ActionItem `json:"actions"`
 }
+
+// actionItemsSchema is the strict json_schema for actionItemsBundle. The
+// headline win of guided decoding here: `priority` is pinned to high|medium|low,
+// so the model can't emit "urgent"/"높음"/"긴급" and silently miss the downstream
+// high-priority calendar-proposal gate (normalizeActionPriority stays as a
+// belt-and-suspenders backstop). Keep in sync with the structs.
+var actionItemsSchema = json.RawMessage(`{
+  "name": "action_items",
+  "strict": true,
+  "schema": {
+    "type": "object",
+    "properties": {
+      "actions": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "title": {"type": "string"},
+            "dueHint": {"type": "string"},
+            "priority": {"type": "string", "enum": ["high", "medium", "low"]}
+          },
+          "required": ["title", "dueHint", "priority"],
+          "additionalProperties": false
+        }
+      }
+    },
+    "required": ["actions"],
+    "additionalProperties": false
+  }
+}`)
 
 // DealInfo is a structured business-document extraction (견적서/계약서/세금계산서
 // 등) from a mail attachment. All fields except Counterparty are optional.
@@ -137,6 +195,15 @@ type DealInfo struct {
 // dealExtract is the local-LLM JSON-mode response. IsDeal lets the model say
 // "this attachment is not a business document" without us guessing from empty
 // fields.
+//
+// Stays on plain json_object (no strict json_schema, unlike the facts/actions
+// extractors): its eight free-text string fields are the worst case for vLLM
+// xgrammar's whitespace-explosion bug under strict guided decoding — the model
+// degenerates into an unbounded space run as a string value and truncates the
+// JSON (~⅓ of the time in live probing; maxLength/disable_any_whitespace don't
+// bound it on this build). json_object is explosion-free here, and docType's
+// only consumer is a wiki label (low value), so the enum guarantee isn't worth
+// the regression.
 type dealExtract struct {
 	IsDeal       bool     `json:"isDeal"`
 	Counterparty string   `json:"counterparty"`
@@ -167,7 +234,7 @@ func extractFactsForWiki(ctx context.Context, deps PipelineDeps, analysisText st
 	defer cancel()
 
 	prompt := fmt.Sprintf(factExtractorPrompt, analysisText)
-	bundle, err := callLocalLLMJSON[wikiFactsBundle](extractCtx, deps.LocalClient, deps.LocalModel, factExtractorSystem, prompt, stage1MaxTokens)
+	bundle, err := callLocalLLMJSON[wikiFactsBundle](extractCtx, deps.LocalClient, deps.LocalModel, factExtractorSystem, prompt, stage1MaxTokens, wikiFactsSchema)
 	if err != nil || len(bundle.Facts) == 0 {
 		return ""
 	}
@@ -217,7 +284,7 @@ func extractActionItems(ctx context.Context, deps PipelineDeps, analysisText str
 	defer cancel()
 
 	prompt := fmt.Sprintf(actionExtractorPrompt, analysisText)
-	bundle, err := callLocalLLMJSON[actionItemsBundle](extractCtx, deps.LocalClient, deps.LocalModel, actionExtractorSystem, prompt, stage1MaxTokens)
+	bundle, err := callLocalLLMJSON[actionItemsBundle](extractCtx, deps.LocalClient, deps.LocalModel, actionExtractorSystem, prompt, stage1MaxTokens, actionItemsSchema)
 	if err != nil {
 		return nil
 	}
@@ -283,7 +350,9 @@ func extractDealInfo(ctx context.Context, deps PipelineDeps, analysisText string
 	defer cancel()
 
 	prompt := fmt.Sprintf(dealExtractorPrompt, analysisText)
-	ext, err := callLocalLLMJSON[dealExtract](extractCtx, deps.LocalClient, deps.LocalModel, dealExtractorSystem, prompt, stage1MaxTokens)
+	// json_object (schema=nil): the deal schema is wide free-text and triggers the
+	// xgrammar whitespace explosion under strict mode — see the dealExtract doc.
+	ext, err := callLocalLLMJSON[dealExtract](extractCtx, deps.LocalClient, deps.LocalModel, dealExtractorSystem, prompt, stage1MaxTokens, nil)
 	if err != nil {
 		return nil
 	}

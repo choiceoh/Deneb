@@ -170,7 +170,10 @@ type ThreadSource interface {
 	RelatedMessages(ctx context.Context, msg *gmail.MessageDetail) ([]*gmail.MessageDetail, error)
 }
 
-// ThreadContext holds extracted context from email thread history.
+// ThreadContext holds extracted context from email thread history. Stays on
+// plain json_object (no strict json_schema): no enum to enforce, and its long
+// free-text fields are explosion-prone under strict guided decoding (see
+// callLocalLLMJSON), so strict would add latency-tax risk for no shape benefit.
 type ThreadContext struct {
 	ThreadSummary  string   `json:"thread_summary"`
 	PriorExchanges string   `json:"prior_exchanges"`
@@ -321,40 +324,61 @@ func AnalyzeEmailPipeline(ctx context.Context, deps PipelineDeps, msg *gmail.Mes
 // --- batch analysis ---
 // --- helpers ---
 
-// callLocalLLMJSON calls the local AI model with JSON mode and unmarshals the result.
-func callLocalLLMJSON[T any](ctx context.Context, client *llm.Client, model, system, user string, maxTokens int) (T, error) {
+// callLocalLLMJSON calls the local AI model with structured-output mode and
+// unmarshals the result. A non-nil schema requests strict json_schema: vLLM
+// constrains generation to the schema via guided decoding, so enum fields (action
+// priority, fact type) and the object shape can't silently drift — the failure
+// mode plain json_object allows, where a stray "urgent"/"높음" priority would slip
+// past the downstream high-priority calendar gate. A nil schema requests plain
+// json_object (used for the wide free-text extractors — deal, thread — where
+// strict guided decoding triggers the explosion below for no enum benefit).
+//
+// Fallback: if a json_schema attempt errors OR the guided output is unparseable,
+// it retries once in plain json_object. This covers two cases — an endpoint that
+// doesn't support guided decoding, and vLLM xgrammar's whitespace-explosion bug
+// (the model degenerates into an unbounded space run as a string value and
+// truncates the JSON; rare on the narrow schemas we send strict, but real). The
+// json_object retry is explosion-free in live probing, so extraction still lands.
+func callLocalLLMJSON[T any](ctx context.Context, client *llm.Client, model, system, user string, maxTokens int, schema json.RawMessage) (T, error) {
 	var zero T
 
+	useSchema := len(schema) > 0
 	for attempt := range 2 {
+		format := &llm.ResponseFormat{Type: "json_object"}
+		if useSchema {
+			format = &llm.ResponseFormat{Type: "json_schema", JSONSchema: schema}
+		}
+
 		events, err := client.StreamChat(ctx, llm.ChatRequest{
 			Model:          model,
 			Messages:       []llm.Message{llm.NewTextMessage("user", user)},
 			System:         llm.SystemString(system),
 			MaxTokens:      maxTokens,
 			Stream:         true,
-			ResponseFormat: &llm.ResponseFormat{Type: "json_object"},
+			ResponseFormat: format,
 			// Reasoning OFF — chain-of-thought streamed into the body corrupts the
 			// JSON this helper parses. See anthropic.go's disabled handling.
 			Thinking: &llm.ThinkingConfig{Type: "disabled"},
 		})
-		if err != nil {
-			return zero, err
-		}
-
-		raw, err := collectStreamText(ctx, events)
-		if err != nil {
-			return zero, err
-		}
-
-		result, err := jsonutil.UnmarshalLLM[T](raw)
 		if err == nil {
-			return result, nil
+			var raw string
+			raw, err = collectStreamText(ctx, events)
+			if err == nil {
+				result, perr := jsonutil.UnmarshalLLM[T](raw)
+				if perr == nil {
+					return result, nil
+				}
+				err = fmt.Errorf("JSON parse failed: %s", jsonutil.Truncate(raw, 200))
+			}
 		}
 
+		// err != nil here. Retry once on the first attempt, dropping json_schema if
+		// that was the mode so an endpoint rejecting guided decoding still extracts.
 		if attempt == 0 {
+			useSchema = false
 			continue
 		}
-		return zero, fmt.Errorf("JSON parse failed after retry: %s", jsonutil.Truncate(raw, 200))
+		return zero, err
 	}
 
 	return zero, fmt.Errorf("unreachable")

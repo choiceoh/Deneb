@@ -43,7 +43,9 @@ func extractThreadContext(ctx context.Context, deps PipelineDeps, msg *gmail.Mes
 
 	userPrompt := fmt.Sprintf(threadExtractorPrompt, currentEmail, relatedText)
 
-	result, err := callLocalLLMJSON[ThreadContext](ctx, deps.LocalClient, deps.LocalModel, threadExtractorSystem, userPrompt, stage1MaxTokens)
+	// json_object (schema=nil): no enum to pin, and long free-text fields are
+	// explosion-prone under strict guided decoding — see callLocalLLMJSON.
+	result, err := callLocalLLMJSON[ThreadContext](ctx, deps.LocalClient, deps.LocalModel, threadExtractorSystem, userPrompt, stage1MaxTokens, nil)
 	if err != nil {
 		return zero, fmt.Errorf("thread context extraction failed: %w", err)
 	}
