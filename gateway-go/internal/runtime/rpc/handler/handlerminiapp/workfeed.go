@@ -24,6 +24,11 @@ type rangedWorkFeedStore interface {
 
 type WorkFeedDeps struct {
 	Store WorkFeedStore
+	// OnAnswer, if set, records a deal-question card's answer (team → deal wiki
+	// page) after the action settles. Best-effort, fire-and-forget; nil disables.
+	// item is the settled card (carries Source + RefID); actionID is the tapped
+	// answer (e.g. "dept:pl1").
+	OnAnswer func(item workfeed.Item, actionID string)
 }
 
 const (
@@ -159,6 +164,13 @@ func workFeedActionRun(deps WorkFeedDeps) rpcutil.HandlerFunc {
 			default:
 				return rpcerr.WrapUnavailable("work feed unavailable", err).Response(req.ID)
 			}
+		}
+		// Record a deal-question card's answer (team → deal wiki page) now that the
+		// card has settled. Best-effort: never block or fail the action response.
+		if deps.OnAnswer != nil &&
+			result.Item.Source == "deal_question" &&
+			strings.HasPrefix(actionID, "dept:") {
+			deps.OnAnswer(result.Item, actionID)
 		}
 		return rpcutil.RespondOK(req.ID, map[string]any{
 			"ok":             true,
