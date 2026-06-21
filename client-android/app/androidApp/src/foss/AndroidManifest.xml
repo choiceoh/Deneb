@@ -35,6 +35,7 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION"/>
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
 
     <!--
       Usage-rhythm sensing (FOSS-only): reads recent app-usage on-device, compresses
@@ -72,6 +73,18 @@
         <receiver
             android:name="ai.deneb.DenebGeofenceReceiver"
             android:exported="false" />
+        <!-- Android clears geofences across reboot, so restore saved 집/직장 pins as soon as
+             the device finishes booting (or the package is replaced / user unlocks). -->
+        <receiver
+            android:name="ai.deneb.DenebBootReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.USER_UNLOCKED" />
+            </intent-filter>
+        </receiver>
     </application>
 
 </manifest>

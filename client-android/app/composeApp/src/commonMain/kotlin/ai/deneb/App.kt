@@ -318,9 +318,9 @@ private fun AppContent(
     val locationPermissionController = koinInject<LocationPermissionController>()
     SetupLocationPermissionHandler(locationPermissionController)
 
-    // Re-register saved geofences (집/직장) on launch — the OS clears geofences on reboot
-    // and there's no boot receiver, so app start is when they come back. No-op off Android
-    // or when none are pinned.
+    // Re-register saved geofences (집/직장) on launch too. A boot receiver restores them
+    // after reboot, but launch remains a cheap repair path if the OS/app has cleared them.
+    // No-op off Android or when none are pinned.
     LaunchedEffect(Unit) {
         val saved = decodeGeofences(appSettings.getGeofencesJson())
         if (saved.isNotEmpty()) applyGeofences(saved)
