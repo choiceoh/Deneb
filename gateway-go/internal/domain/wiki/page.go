@@ -62,7 +62,14 @@ type Page struct {
 
 // Frontmatter is the YAML metadata at the top of a wiki page.
 type Frontmatter struct {
-	ID         string // short identifier (e.g., "dgx-spark", "gemma4-switch")
+	ID string // short identifier (e.g., "dgx-spark", "gemma4-switch")
+	// Code is the frozen composite project identity:
+	// [부서]-[고객]-[거래타입]-[순번], all 3-char (e.g. "pl3-tri-mod-001").
+	// Unlike the path/folder/title (mutable views), the code never changes once
+	// minted, so cross-references that point at the code survive renames and
+	// reclassification. Resolved by graph_query's byCode index. Empty for
+	// non-project pages (인물/시스템/업무/…).
+	Code       string
 	Title      string
 	Summary    string // one-line description for index-level filtering (~80 chars)
 	Category   string
@@ -110,6 +117,9 @@ func (p *Page) Render() []byte {
 	buf.WriteString("---\n")
 	if p.Meta.ID != "" {
 		buf.WriteString("id: " + p.Meta.ID + "\n")
+	}
+	if p.Meta.Code != "" {
+		buf.WriteString("code: " + p.Meta.Code + "\n")
 	}
 	buf.WriteString("title: " + p.Meta.Title + "\n")
 	if p.Meta.Summary != "" {
@@ -419,6 +429,8 @@ func parseFrontmatterFields(raw string) Frontmatter {
 		switch key {
 		case "id":
 			fm.ID = val
+		case "code":
+			fm.Code = normalizeProjectCode(val)
 		case "title":
 			fm.Title = val
 		case "summary":

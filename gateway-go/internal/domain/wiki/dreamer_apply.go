@@ -63,6 +63,7 @@ type wikiUpdate struct {
 	Path       string         `json:"path"`   // e.g., "업무/dgx-spark.md"
 	Title      string         `json:"title"`
 	ID         string         `json:"id"`      // short kebab-case identifier (e.g., "dgx-spark")
+	Code       string         `json:"code"`    // optional dept-client-dtype stem for a NEW project; Go assigns the 순번
 	Summary    string         `json:"summary"` // one-line description (~80 chars)
 	Category   string         `json:"category"`
 	Tags       flexStringList `json:"tags"`
@@ -204,6 +205,7 @@ func buildWikiSynthesisPrompt(indexContent, processedHistory, polarisSection, di
 - due: 임박한 결제기한·마감일 (YYYY-MM-DD). 프로젝트의 거래성 건에서만 사용, 없으면 생략
 - supersedes: 새 일지 내용이 기존 페이지의 사실과 **모순되거나 그것을 대체**할 때, 대체되는 기존 페이지 경로 (인덱스에서 선택). 단순 추가 정보면 생략 — 사실이 바뀐 경우에만 (예: 단가 변경, 담당자 교체, 정책 폐기)
 - id: 짧은 kebab-case 식별자 (예: "dgx-spark", "gemma4-switch", "peter-kim")
+- code: **새 프로젝트(거래)** 페이지를 처음 만들 때만, 고정코드 줄기 "[부서]-[고객]-[거래타입]" 을 제안 (순번은 시스템이 부여). 부서=pl0(실장 직할·오선택 직접)·pl1(1팀 사업개발)·pl2(2팀 루프탑·자가소비)·pl3(3팀 모듈·인버터)·nde(남도에코 케이블)·etc(타부서)·com(다부서). 거래타입=dev(개발)·epc(시공)·mod(모듈)·inv(인버터)·cbl(케이블)·bes(BESS)·wnd(풍력). 고객=거래상대 3자 약어 (트리나→tri, 기아→kia). 전 세그먼트 3자 고정. 기존 프로젝트의 하위 메일/이력 페이지는 code 생략 — 폴더에서 자동 상속됨
 - summary: 한 줄 요약 (~80자, 한국어)
 - related: 의미적으로 관련된 기존 위키 페이지 경로 목록 (인덱스에서 선택)
 - 업데이트가 불필요하면 빈 배열 [] 반환
@@ -215,6 +217,9 @@ JSON 배열만 반환하세요. 다른 텍스트 없이.`, indexContent, process
 // Returns (created, updated) counts and paths of oversized pages.
 func (wd *WikiDreamer) applyUpdates(_ context.Context, updates []wikiUpdate) (created, updated int, oversized []string) {
 	maxBytes := wd.config.MaxPageBytes
+	// Snapshot existing codes once so filings inherit their project's frozen code
+	// (and new-project mints stay collision-free across this batch).
+	codeIdx := wd.buildCodeIndex()
 
 	for _, u := range updates {
 		if u.Path == "" || u.Title == "" {
@@ -259,9 +264,16 @@ func (wd *WikiDreamer) applyUpdates(_ context.Context, updates []wikiUpdate) (cr
 			}
 		}
 
+		// Stamp the project's frozen code: a child filing inherits the folder's
+		// code; a new project mints one from the LLM stem (Go assigns the 순번).
+		code := codeIdx.resolveCode(u)
+
 		switch u.Action {
 		case "create":
 			page := NewPage(u.Title, u.Category, u.Tags)
+			if code != "" {
+				page.Meta.Code = code
+			}
 			if u.Importance > 0 {
 				page.Meta.Importance = u.Importance
 			}
@@ -307,6 +319,9 @@ func (wd *WikiDreamer) applyUpdates(_ context.Context, updates []wikiUpdate) (cr
 			if err != nil {
 				// Page doesn't exist — create it instead.
 				page := NewPage(u.Title, u.Category, u.Tags)
+				if code != "" {
+					page.Meta.Code = code
+				}
 				if u.Importance > 0 {
 					page.Meta.Importance = u.Importance
 				}
@@ -337,7 +352,11 @@ func (wd *WikiDreamer) applyUpdates(_ context.Context, updates []wikiUpdate) (cr
 				continue
 			}
 
-			// Append content to existing page.
+			// Append content to existing page. Stamp the code only when the page
+			// lacks one — a frozen code is never overwritten.
+			if code != "" && existing.Meta.Code == "" {
+				existing.Meta.Code = code
+			}
 			if u.Content != "" {
 				existing.Body += "\n\n" + u.Content
 			}
