@@ -4,32 +4,31 @@
     android:viewportWidth="512"
     android:viewportHeight="512">
   <!-- Deneb mark: an 8-point sparkle-star on a WHITE adaptive-icon background,
-       FACETED for depth. Eight tips (four long N/E/S/W at radius 184, four short
-       diagonals at radius 114, inner valleys at radius 42) fan into 16 triangles
-       from the centre. We fake a 3D folded surface lit from the top-left without
-       any blur (VectorDrawable has no blur/shadow filter):
-         - base layer = the full star filled mid azure (also fills the facets that
-           face sideways to the light, and prevents anti-alias seams between facets)
-         - highlight facets (top-left-facing) painted bright cyan on top
-         - shadow facets (bottom-right-facing) painted deep blue on top
-       Saturated cyan -> deep blue (no violet) to echo Deneb the blue-white star and
-       stay distinct from a flat 4-point AI sparkle. Group scale 0.84 keeps the long
-       tips inside the adaptive-icon safe zone. -->
-  <group android:scaleX="0.84"
-      android:scaleY="0.84"
-      android:translateX="40.96"
-      android:translateY="40.96">
-    <!-- base / mid-tone facets (full star, seam-free underlay) -->
+       FACETED for depth. Softer/smaller revision: primary rays at radius 152 (was
+       184) and inner valleys at radius 76 (was 42, i.e. valley/tip ~0.5) so the
+       rays read full rather than thin spikes, and the whole mark leaves more white
+       margin. Four long primary rays (N/E/S/W) + four short secondary rays
+       (diagonals at radius 104); 16 triangles fan from the centre.
+       Faceted 3-tone lit from the top-left, no blur (VectorDrawable has no blur
+       filter): base = full star in mid azure (also the seam-free underlay),
+       highlight facets bright cyan, shadow facets deep blue. Cyan -> deep blue (no
+       violet) echoes Deneb the blue-white star. Group scale 0.70 (was 0.84) makes
+       the mark smaller with generous white margin (final tip radius ~106). -->
+  <group android:scaleX="0.70"
+      android:scaleY="0.70"
+      android:translateX="76.8"
+      android:translateY="76.8">
+    <!-- base / mid-tone (full star, seam-free underlay) -->
     <path
-        android:pathData="M256,72 L272.07,217.2 L336.6,175.4 L294.8,239.93 L440,256 L294.8,272.07 L336.6,336.6 L272.07,294.8 L256,440 L239.93,294.8 L175.4,336.6 L217.2,272.07 L72,256 L217.2,239.93 L175.4,175.4 L239.93,217.2 Z"
+        android:pathData="M256,104 L285.08,185.79 L329.54,182.46 L326.21,226.92 L408,256 L326.21,285.08 L329.54,329.54 L285.08,326.21 L256,408 L226.92,326.21 L182.46,329.54 L185.79,285.08 L104,256 L185.79,226.92 L182.46,182.46 L226.92,185.79 Z"
         android:fillColor="#FF2C84C9"/>
     <!-- highlight facets (lit, top-left) -->
     <path
-        android:pathData="M256,256 L256,72 L272.07,217.2 Z M256,256 L217.2,272.07 L72,256 Z M256,256 L72,256 L217.2,239.93 Z M256,256 L217.2,239.93 L175.4,175.4 Z M256,256 L175.4,175.4 L239.93,217.2 Z M256,256 L239.93,217.2 L256,72 Z"
+        android:pathData="M256,256 L256,104 L285.08,185.79 Z M256,256 L185.79,285.08 L104,256 Z M256,256 L104,256 L185.79,226.92 Z M256,256 L185.79,226.92 L182.46,182.46 Z M256,256 L182.46,182.46 L226.92,185.79 Z M256,256 L226.92,185.79 L256,104 Z"
         android:fillColor="#FF5BC8E8"/>
     <!-- shadow facets (bottom-right) -->
     <path
-        android:pathData="M256,256 L294.8,239.93 L440,256 Z M256,256 L440,256 L294.8,272.07 Z M256,256 L294.8,272.07 L336.6,336.6 Z M256,256 L336.6,336.6 L272.07,294.8 Z M256,256 L272.07,294.8 L256,440 Z M256,256 L256,440 L239.93,294.8 Z"
+        android:pathData="M256,256 L326.21,226.92 L408,256 Z M256,256 L408,256 L326.21,285.08 Z M256,256 L326.21,285.08 L329.54,329.54 Z M256,256 L329.54,329.54 L285.08,326.21 Z M256,256 L285.08,326.21 L256,408 Z M256,256 L256,408 L226.92,326.21 Z"
         android:fillColor="#FF154B86"/>
   </group>
 </vector>
