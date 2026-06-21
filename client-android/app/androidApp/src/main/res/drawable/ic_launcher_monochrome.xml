@@ -3,14 +3,14 @@
     android:height="108dp"
     android:viewportWidth="512"
     android:viewportHeight="512">
-  <!-- Deneb mark (monochrome): the softer/smaller 8-point star silhouette as a
-       single solid fill — the system tints it for themed icons. -->
+  <!-- Deneb mark (monochrome): the 8-point star silhouette (valleys at radius 58)
+       as a single solid fill — the system tints it for themed icons. -->
   <group android:scaleX="0.70"
       android:scaleY="0.70"
       android:translateX="76.8"
       android:translateY="76.8">
     <path
-        android:pathData="M256,104 L285.08,185.79 L329.54,182.46 L326.21,226.92 L408,256 L326.21,285.08 L329.54,329.54 L285.08,326.21 L256,408 L226.92,326.21 L182.46,329.54 L185.79,285.08 L104,256 L185.79,226.92 L182.46,182.46 L226.92,185.79 Z"
+        android:pathData="M256,104 L278.2,202.42 L329.54,182.46 L309.59,233.81 L408,256 L309.59,278.2 L329.54,329.54 L278.2,309.59 L256,408 L233.81,309.59 L182.46,329.54 L202.42,278.2 L104,256 L202.42,233.81 L182.46,182.46 L233.81,202.42 Z"
         android:fillColor="#FFFFFF"/>
   </group>
 </vector>
