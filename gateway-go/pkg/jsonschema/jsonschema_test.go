@@ -359,6 +359,15 @@ type ptrMarshaler struct {
 
 func (p *ptrMarshaler) MarshalJSON() ([]byte, error) { return []byte(`{"x":0}`), nil }
 
+// valMarshaler implements json.Marshaler with a VALUE receiver but has NO custom
+// Unmarshaler, so json.Unmarshal decodes it structurally — the generator must
+// reflect it, not refuse it (the customizesJSON Unmarshaler-only rule).
+type valMarshaler struct {
+	X int `json:"x"`
+}
+
+func (v valMarshaler) MarshalJSON() ([]byte, error) { return []byte(`{"x":0}`), nil }
+
 func TestFor_PointerReceiverMarshalerIsStructural(t *testing.T) {
 	type host struct {
 		M ptrMarshaler `json:"m"`
@@ -407,6 +416,51 @@ func TestFor_TaggedEmbedOfUnexportedType(t *testing.T) {
 	}
 	if _, ok := p["s"]; !ok {
 		t.Error("sibling field s missing")
+	}
+}
+
+func TestFor_UntaggedScalarEmbed(t *testing.T) {
+	// encoding/json promotes an anonymous NON-struct field only when it is exported.
+	// An untagged embedded UNEXPORTED scalar is dropped; an EXPORTED one is promoted
+	// under its type name. The schema must match both.
+	type lo int //nolint:unused // read via reflection in For[host]; the linter can't see it
+	type Hi int
+	type host struct {
+		lo        //nolint:unused // untagged embedded unexported scalar → dropped by encoding/json
+		Hi        // untagged embedded exported scalar → promoted as "Hi"
+		S  string `json:"s"`
+	}
+	p := props(t, schemaOf(t, For[host]("h")))
+	if _, ok := p["lo"]; ok {
+		t.Errorf("untagged embedded UNEXPORTED scalar must be dropped (matches encoding/json); props=%v", p)
+	}
+	if _, ok := p["Hi"]; !ok {
+		t.Error("untagged embedded EXPORTED scalar should be promoted as a field (matches encoding/json)")
+	}
+	if _, ok := p["s"]; !ok {
+		t.Error("sibling field s missing")
+	}
+}
+
+func TestFor_ValueMarshalerOnlyIsStructural(t *testing.T) {
+	// A value-receiver MarshalJSON-only type has NO custom decoder, so json.Unmarshal
+	// decodes it structurally — the schema must reflect its fields, not refuse it.
+	// (The old Marshaler-based gate wrongly refused this; the Unmarshaler-only gate
+	// fixes it.)
+	type host struct {
+		M valMarshaler `json:"m"`
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			t.Errorf("value-receiver marshal-only type should reflect structurally, but For panicked: %v", r)
+		}
+	}()
+	m := props(t, schemaOf(t, For[host]("h")))["m"].(map[string]any)
+	if m["type"] != "object" {
+		t.Errorf("value-receiver marshal-only field should be a structural object, got %v", m)
+	}
+	if _, ok := m["properties"].(map[string]any)["x"]; !ok {
+		t.Errorf("structural object should expose field x, got %v", m)
 	}
 }
 

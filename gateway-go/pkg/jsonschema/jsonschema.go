@@ -179,8 +179,12 @@ func collectFields(t reflect.Type, path string, props map[string]any, required *
 		}
 		// A tagged anonymous field is a NAMED nested object (encoding/json marshals
 		// it under its tag name even when the embedded type is unexported), so it
-		// bypasses this gate; only a regular unexported field is dropped.
-		if !f.Anonymous && !f.IsExported() {
+		// bypasses this gate. Everything else — a regular field OR an untagged
+		// anonymous non-struct (the struct case already flattened above) — obeys the
+		// export rule: encoding/json promotes an anonymous non-struct field only when
+		// it is exported.
+		taggedEmbed := f.Anonymous && name != ""
+		if !taggedEmbed && !f.IsExported() {
 			continue
 		}
 		if name == "" {
