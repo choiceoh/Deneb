@@ -30,7 +30,6 @@ import ai.deneb.deneb.DenebPersonScreen
 import ai.deneb.deneb.DenebSearchScreen
 import ai.deneb.deneb.DenebSkillScreen
 import ai.deneb.deneb.DenebTodoAddScreen
-import ai.deneb.deneb.DenebTodoScreen
 import ai.deneb.deneb.DenebWikiPageScreen
 import ai.deneb.sensing.applyGeofences
 import ai.deneb.sensing.decodeGeofences
@@ -170,12 +169,8 @@ data class DenebCalendarAdd(val dateIso: String)
 data class DenebCalendarEdit(val id: String)
 
 @Serializable
-@SerialName("deneb_todo")
-object DenebTodo
-
-@Serializable
 @SerialName("deneb_todo_add")
-object DenebTodoAdd
+data class DenebTodoAdd(val dueIso: String? = null)
 
 @Serializable
 @SerialName("deneb_todo_edit")
@@ -537,27 +532,17 @@ private fun AppContent(
                                         onBack = { navController.navigateUp() },
                                         onOpenEvent = { id -> navController.navigate(DenebCalendarEvent(id)) },
                                         onAddEvent = { date -> navController.navigate(DenebCalendarAdd(date.toString())) },
-                                        onOpenTodos = { navController.navigate(DenebTodo) },
+                                        onAddTodo = { date -> navController.navigate(DenebTodoAdd(date.toString())) },
                                         onOpenTodo = { id -> navController.navigate(DenebTodoEdit(id)) },
                                         navigationTabBar = if (showTabBar) navigationTabBar else null,
                                     )
                                 }
                             }
-                            composable<DenebTodo> {
-                                denebClient?.let { client ->
-                                    DenebTodoScreen(
-                                        client = client,
-                                        onBack = { navController.navigateUp() },
-                                        onAddTodo = { navController.navigate(DenebTodoAdd) },
-                                        onOpenTodo = { id -> navController.navigate(DenebTodoEdit(id)) },
-                                        navigationTabBar = if (showTabBar) navigationTabBar else null,
-                                    )
-                                }
-                            }
-                            composable<DenebTodoAdd> {
+                            composable<DenebTodoAdd> { entry ->
                                 denebClient?.let { client ->
                                     DenebTodoAddScreen(
                                         client = client,
+                                        prefillDueIso = entry.toRoute<DenebTodoAdd>().dueIso,
                                         onBack = { navController.navigateUp() },
                                         onSaved = { navController.navigateUp() },
                                         navigationTabBar = if (showTabBar) navigationTabBar else null,

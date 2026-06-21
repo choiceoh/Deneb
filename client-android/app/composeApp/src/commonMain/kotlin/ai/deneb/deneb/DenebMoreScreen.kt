@@ -9,7 +9,6 @@ import ai.deneb.DenebFiles
 import ai.deneb.DenebNotebooks
 import ai.deneb.DenebOrgChart
 import ai.deneb.DenebSearch
-import ai.deneb.DenebTodo
 import ai.deneb.ui.DenebGroup
 import ai.deneb.ui.DenebListRow
 import ai.deneb.ui.DenebScreenScaffold
@@ -24,7 +23,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AccountTree
 import androidx.compose.material.icons.outlined.Book
-import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Contacts
 import androidx.compose.material.icons.outlined.Dashboard
 import androidx.compose.material.icons.outlined.GridView
@@ -46,7 +44,7 @@ internal data class MoreEntry(
     // destination's @SerialName route. Used to persist which tiles the user hid (settings
     // store the keys, never the labels) and to mark a tile as 항상 표시 (alwaysShown).
     val key: String,
-    // 업무 데이터 entry: hidden in the 챗봇 workspace. 할일·브라우저·설정 stay in both.
+    // 업무 데이터 entry: hidden in the 챗봇 workspace. 브라우저·설정 stay in both.
     val workData: Boolean = false,
     // Cannot be hidden via 설정. 설정 itself (hiding it would lock out the un-hide control)
     // — and 채팅, the assistant core, is a bottom-bar tab so it never appears here anyway.
@@ -54,7 +52,7 @@ internal data class MoreEntry(
 )
 
 // Voice dictation (Android-only input action) tails this group.
-private const val TOOLS_GROUP = "할일 · 도구"
+private const val TOOLS_GROUP = "도구"
 
 // The secondary sections, grouped into labeled inset cards — the same idiom as the
 // settings hub (DenebConfigScreen.configGroups), so 더보기 and 설정 read identically.
@@ -74,7 +72,6 @@ internal val moreGroups: List<Pair<String, List<MoreEntry>>> = listOf(
         MoreEntry("노트북", DenebNotebooks(), Icons.Outlined.Book, key = "deneb_notebooks", workData = true),
     ),
     TOOLS_GROUP to listOf(
-        MoreEntry("할일", DenebTodo, Icons.Outlined.CheckCircle, key = "deneb_todo"),
         MoreEntry("파일", DenebFiles, Icons.Outlined.Storage, key = "deneb_files", workData = true),
         MoreEntry("브라우저", DenebBrowser(""), Icons.Outlined.Public, key = "deneb_browser"),
     ),

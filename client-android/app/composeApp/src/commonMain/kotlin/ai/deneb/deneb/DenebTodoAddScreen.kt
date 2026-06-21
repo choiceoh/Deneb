@@ -65,6 +65,8 @@ fun DenebTodoAddScreen(
     onBack: () -> Unit,
     onSaved: () -> Unit,
     editTodoId: String? = null,
+    // Pre-selected due date (ISO yyyy-MM-dd) when adding from the calendar's "+ 할일".
+    prefillDueIso: String? = null,
     navigationTabBar: (@Composable () -> Unit)? = null,
 ) {
     val isEdit = editTodoId != null
@@ -74,9 +76,13 @@ fun DenebTodoAddScreen(
 
     var title by remember { mutableStateOf("") }
     var note by remember { mutableStateOf("") }
-    var hasDue by remember { mutableStateOf(false) }
+    // To-dos are always dated (a to-do is a calendar item): a NEW to-do defaults to
+    // having a due date (the prefilled day, else today). Editing loads the stored value.
+    var hasDue by remember { mutableStateOf(!isEdit) }
     var allDay by remember { mutableStateOf(true) }
-    var dueDate by remember { mutableStateOf(now.date) }
+    var dueDate by remember {
+        mutableStateOf(prefillDueIso?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: now.date)
+    }
     var dueTime by remember { mutableStateOf(LocalTime(startHour, 0)) }
 
     var showDatePicker by remember { mutableStateOf(false) }
