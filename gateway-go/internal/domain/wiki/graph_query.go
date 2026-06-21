@@ -39,6 +39,7 @@ type graphRec struct {
 	title     string
 	normTitle string
 	id        string
+	code      string // frozen composite project code (move-stable identity)
 	summary   string
 	category  string
 	due       string
@@ -143,6 +144,7 @@ func (s *Store) graphScoreMap(ctx context.Context, query string, includeMentions
 	recs := make([]graphRec, 0, len(relPaths))
 	byNorm := make(map[string]int, len(relPaths)) // normTitle -> idx
 	byID := make(map[string]int, len(relPaths))   // frontmatter id -> idx
+	byCode := make(map[string]int, len(relPaths)) // frozen project code -> idx
 	byPath := make(map[string]int, len(relPaths)) // relPath (with + without .md) -> idx
 	for _, rp := range relPaths {
 		if ctx.Err() != nil {
@@ -168,6 +170,7 @@ func (s *Store) graphScoreMap(ctx context.Context, query string, includeMentions
 			title:     title,
 			normTitle: strings.ToLower(strings.TrimSpace(title)),
 			id:        page.Meta.ID,
+			code:      page.Meta.Code,
 			summary:   page.Meta.Summary,
 			category:  page.Meta.Category,
 			due:       page.Meta.Due,
@@ -179,6 +182,9 @@ func (s *Store) graphScoreMap(ctx context.Context, query string, includeMentions
 		byNorm[recs[idx].normTitle] = idx
 		if recs[idx].id != "" {
 			byID[recs[idx].id] = idx
+		}
+		if recs[idx].code != "" {
+			byCode[recs[idx].code] = idx
 		}
 		byPath[rp] = idx
 		byPath[strings.TrimSuffix(rp, ".md")] = idx
@@ -195,7 +201,7 @@ func (s *Store) graphScoreMap(ctx context.Context, query string, includeMentions
 			seed = i
 		}
 	} else {
-		seed = findSeed(recs, byNorm, byID, q)
+		seed = findSeed(recs, byNorm, byID, byCode, q)
 	}
 	if seed < 0 {
 		return recs, -1, nil, nil
@@ -234,6 +240,11 @@ func (s *Store) graphScoreMap(ctx context.Context, query string, includeMentions
 			return i
 		}
 		if i, ok := byPath[strings.TrimSuffix(rel, ".md")]; ok {
+			return i
+		}
+		// Code first among the identifier maps: it's the frozen, move-stable
+		// identity, so a code ref keeps resolving after the target page moves.
+		if i, ok := byCode[normalizeProjectCode(rel)]; ok {
 			return i
 		}
 		if i, ok := byID[rel]; ok {
@@ -379,7 +390,10 @@ func (s *Store) applyEmbeddingRerank(ctx context.Context, recs []graphRec, seed 
 // findSeed picks the page that best matches the query: exact normalized title,
 // then frontmatter id, then a title that contains the query or is contained by
 // it (longest such title wins, so "탑솔라 거래" beats a bare substring hit).
-func findSeed(recs []graphRec, byNorm, byID map[string]int, q string) int {
+func findSeed(recs []graphRec, byNorm, byID, byCode map[string]int, q string) int {
+	if i, ok := byCode[normalizeProjectCode(q)]; ok {
+		return i
+	}
 	if i, ok := byNorm[q]; ok {
 		return i
 	}
