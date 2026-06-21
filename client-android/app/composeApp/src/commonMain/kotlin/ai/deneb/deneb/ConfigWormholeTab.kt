@@ -1,5 +1,6 @@
 package ai.deneb.deneb
 
+import ai.deneb.deneb.generated.WormholeModelOut
 import ai.deneb.deneb.generated.WormholeStatusOut
 import ai.deneb.ui.DenebGroup
 import ai.deneb.ui.DenebListRow
@@ -7,13 +8,16 @@ import ai.deneb.ui.DenebSectionLabel
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
+import ai.deneb.ui.denebInsight
 import ai.deneb.ui.settings.SettingsCard
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -22,9 +26,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material.icons.outlined.CloudOff
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -42,21 +49,23 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 
 // Settings hub "Wormhole" tab: the wormhole model router's live status
-// (miniapp.wormhole.status) + its global feature toggles. Read-mostly — a
-// router dashboard plus two on/off switches; the gateway writes the toggle to
-// the wormhole config, which hot-reloads it. Editing models/keys stays in chat
-// (the agentic-actions pattern). Hosted by [DenebConfigScreen]'s pager.
+// (miniapp.wormhole.status) + its global feature toggles, plus per-cloud-model
+// KEY HEALTH and one-tap KEY ROTATION. A dead/invalid upstream key surfaces as a
+// warm "인증 실패" mark; tapping a cloud model opens a paste-a-new-key dialog that
+// writes wormhole's secrets.env (gateway-side) and hot-reloads with no restart.
+// Editing models still stays in chat (the agentic-actions pattern).
 //
 // Design refresh (2026-06): the settings grouped-card idiom — toggles in a
-// [DenebGroup]/[DenebListRow] block, the model list in a [SettingsCard], and the
-// restrained cool accent (`primary`) only on the live-state marks (router up,
-// locally-served models).
+// [DenebGroup]/[DenebListRow] block, the model list in a [SettingsCard], the cool
+// accent (`primary`) on live-state marks and the warm accent ([denebInsight]) on
+// key-health problems (the two-accent doctrine).
 @Composable
 internal fun WormholeTab(client: DenebGatewayClient) {
     var status by remember { mutableStateOf<WormholeStatusOut?>(null) }
     var loading by remember { mutableStateOf(true) }
     var failed by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
+    var rotating by remember { mutableStateOf<WormholeModelOut?>(null) }
     val scope = rememberCoroutineScope()
 
     suspend fun load() {
@@ -149,6 +158,10 @@ internal fun WormholeTab(client: DenebGatewayClient) {
                                             if (m.thinking) append(" · thinking 토글")
                                             if (m.source == "fleet") append(" · 자동발견")
                                         },
+                                        keyHealth = m.keyHealth,
+                                        // Cloud models carry an upstream key → tappable to rotate it.
+                                        // Local models have none.
+                                        onClick = if (!m.local) ({ if (!busy) rotating = m }) else null,
                                         divider = i < s.models.lastIndex,
                                     )
                                 }
@@ -166,6 +179,18 @@ internal fun WormholeTab(client: DenebGatewayClient) {
                     }
                 }
             }
+        }
+
+        rotating?.let { m ->
+            WormholeRotateDialog(
+                modelName = m.name,
+                onDismiss = { rotating = null },
+                onRotate = { key ->
+                    val r = client.setWormholeKey(m.name, key)
+                    if (r?.valid == true) load() // refresh keyHealth — now "ok"
+                    r
+                },
+            )
         }
     }
 }
@@ -187,17 +212,31 @@ private fun WormholeStatusHeader(s: WormholeStatusOut) {
     }
 }
 
-/** A read-only model row inside the model [SettingsCard]: a small live-state dot
- *  (cool accent when served locally, muted otherwise), the model name, and its
- *  protocol/source metadata. Not tappable — editing models stays in chat. */
+/** A model row inside the model [SettingsCard]: a live-state dot (warm accent on a
+ *  key-health problem, cool accent when served locally, else muted), the model
+ *  name, its protocol/source metadata, and — for cloud models — a key-health label
+ *  and a chevron marking it tappable to rotate the key. */
 @Composable
-private fun WormholeModelRow(name: String, local: Boolean, meta: String, divider: Boolean) {
+private fun WormholeModelRow(
+    name: String,
+    local: Boolean,
+    meta: String,
+    keyHealth: String,
+    onClick: (() -> Unit)?,
+    divider: Boolean,
+) {
     val hairline = denebHairline()
-    val dot = if (local) MaterialTheme.colorScheme.primary else denebHint()
+    val problem = keyHealthIsProblem(keyHealth)
+    val dot = when {
+        problem -> denebInsight()
+        local -> MaterialTheme.colorScheme.primary
+        else -> denebHint()
+    }
     val insetPx = with(LocalDensity.current) { 48.dp.toPx() }
     Row(
         Modifier
             .fillMaxWidth()
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
             .drawBehind {
                 if (divider) {
                     val stroke = 1.dp.toPx()
@@ -214,5 +253,96 @@ private fun WormholeModelRow(name: String, local: Boolean, meta: String, divider
             Text(name, style = DenebType.rowTitleStrong, color = MaterialTheme.colorScheme.onBackground)
             Text(meta, style = DenebType.rowSubtitle, color = denebHint())
         }
+        val kh = keyHealthKo(keyHealth)
+        if (kh.isNotEmpty()) {
+            Spacer(Modifier.width(8.dp))
+            Text(kh, style = DenebType.meta, color = if (problem) denebInsight() else denebHint())
+        }
+        if (onClick != null) {
+            Spacer(Modifier.width(10.dp))
+            Text("›", style = DenebType.rowTitle, color = denebHint())
+        }
     }
+}
+
+/** Paste-a-new-key dialog. Writes wormhole's secrets.env via the gateway (no
+ *  restart) and reports the post-write validation probe: closes on a verified key,
+ *  stays open with an explanation otherwise. */
+@Composable
+private fun WormholeRotateDialog(
+    modelName: String,
+    onDismiss: () -> Unit,
+    onRotate: suspend (String) -> WormholeKeyResult?,
+) {
+    var key by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    var result by remember { mutableStateOf<String?>(null) }
+    var resultProblem by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    AlertDialog(
+        onDismissRequest = { if (!busy) onDismiss() },
+        title = { Text("키 회전 · $modelName", style = DenebType.subject) },
+        text = {
+            Column {
+                Text("새 API 키를 붙여넣으면 재시작 없이 적용됩니다.", style = DenebType.body, color = denebHint())
+                Spacer(Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = key,
+                    onValueChange = { key = it },
+                    singleLine = true,
+                    enabled = !busy,
+                    label = { Text("새 API 키") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                result?.let {
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        it,
+                        style = DenebType.meta,
+                        color = if (resultProblem) denebInsight() else MaterialTheme.colorScheme.primary,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = !busy && key.isNotBlank(),
+                onClick = {
+                    scope.launch {
+                        busy = true
+                        result = null
+                        val r = onRotate(key.trim())
+                        when {
+                            r == null -> {
+                                result = "회전 실패 — 거부되었거나 wormhole에 닿지 못했습니다."
+                                resultProblem = true
+                            }
+
+                            r.valid -> onDismiss()
+
+                            // verified: keyHealth refreshed, close
+                            else -> {
+                                result = "키는 적용됐으나 인증 실패 (HTTP ${r.status}). 키를 확인하세요."
+                                resultProblem = true
+                            }
+                        }
+                        busy = false
+                    }
+                },
+            ) { Text(if (busy) "적용 중…" else "회전") }
+        },
+        dismissButton = { TextButton(enabled = !busy, onClick = onDismiss) { Text("취소") } },
+    )
+}
+
+private fun keyHealthIsProblem(kh: String): Boolean = kh == "auth_failed" || kh == "rate_limited" || kh == "unreachable" || kh.startsWith("http_")
+
+private fun keyHealthKo(kh: String): String = when (kh) {
+    "" -> ""
+    "ok" -> "키 정상"
+    "auth_failed" -> "인증 실패"
+    "rate_limited" -> "쿼터 초과"
+    "unreachable" -> "연결 불가"
+    "unchecked" -> "확인 전"
+    else -> kh
 }
