@@ -129,7 +129,9 @@ func summarizeWatchTranscript(ctx context.Context, p *WatchParams, result *media
 	}
 	fmt.Fprintf(&b, "\n자막/전사(%s):\n%s\n", result.Language, t)
 
-	out, err := pilot.CallLocalLLM(ctx, watchTextSystemPrompt, b.String(), watchAnalysisMaxTokens)
+	// Free-text transcript analysis on the non-reasoning lightweight model →
+	// append the reflective self-check to cut errors/omissions (arXiv:2507.02778).
+	out, err := pilot.CallLocalLLM(ctx, watchTextSystemPrompt+"\n"+pilot.ReflectionDirective, b.String(), watchAnalysisMaxTokens)
 	if err != nil {
 		return ""
 	}
