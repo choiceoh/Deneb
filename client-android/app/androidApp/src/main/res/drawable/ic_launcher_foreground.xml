@@ -4,31 +4,30 @@
     android:viewportWidth="512"
     android:viewportHeight="512">
   <!-- Deneb mark: an 8-point sparkle-star on a WHITE adaptive-icon background,
-       FACETED for depth. Softer/smaller revision: primary rays at radius 152 (was
-       184) and inner valleys at radius 76 (was 42, i.e. valley/tip ~0.5) so the
-       rays read full rather than thin spikes, and the whole mark leaves more white
-       margin. Four long primary rays (N/E/S/W) + four short secondary rays
-       (diagonals at radius 104); 16 triangles fan from the centre.
+       FACETED for depth. Primary rays at radius 152, four short secondary rays at
+       radius 104, inner valleys at radius 58 (valley/tip ~0.38) — the middle
+       between the original sharp spikes (0.23) and the over-rounded 0.50, so the
+       points read crisp without being thin spikes. 16 triangles fan from centre.
        Faceted 3-tone lit from the top-left, no blur (VectorDrawable has no blur
-       filter): base = full star in mid azure (also the seam-free underlay),
-       highlight facets bright cyan, shadow facets deep blue. Cyan -> deep blue (no
-       violet) echoes Deneb the blue-white star. Group scale 0.70 (was 0.84) makes
-       the mark smaller with generous white margin (final tip radius ~106). -->
+       filter): base = full star in mid azure (seam-free underlay), highlight
+       facets bright cyan, shadow facets deep blue. Cyan -> deep blue (no violet),
+       echoing Deneb the blue-white star. Group scale 0.70 keeps the mark small
+       with generous white margin (final tip radius ~106). -->
   <group android:scaleX="0.70"
       android:scaleY="0.70"
       android:translateX="76.8"
       android:translateY="76.8">
     <!-- base / mid-tone (full star, seam-free underlay) -->
     <path
-        android:pathData="M256,104 L285.08,185.79 L329.54,182.46 L326.21,226.92 L408,256 L326.21,285.08 L329.54,329.54 L285.08,326.21 L256,408 L226.92,326.21 L182.46,329.54 L185.79,285.08 L104,256 L185.79,226.92 L182.46,182.46 L226.92,185.79 Z"
+        android:pathData="M256,104 L278.2,202.42 L329.54,182.46 L309.59,233.81 L408,256 L309.59,278.2 L329.54,329.54 L278.2,309.59 L256,408 L233.81,309.59 L182.46,329.54 L202.42,278.2 L104,256 L202.42,233.81 L182.46,182.46 L233.81,202.42 Z"
         android:fillColor="#FF2C84C9"/>
     <!-- highlight facets (lit, top-left) -->
     <path
-        android:pathData="M256,256 L256,104 L285.08,185.79 Z M256,256 L185.79,285.08 L104,256 Z M256,256 L104,256 L185.79,226.92 Z M256,256 L185.79,226.92 L182.46,182.46 Z M256,256 L182.46,182.46 L226.92,185.79 Z M256,256 L226.92,185.79 L256,104 Z"
+        android:pathData="M256,256 L256,104 L278.2,202.42 Z M256,256 L202.42,278.2 L104,256 Z M256,256 L104,256 L202.42,233.81 Z M256,256 L202.42,233.81 L182.46,182.46 Z M256,256 L182.46,182.46 L233.81,202.42 Z M256,256 L233.81,202.42 L256,104 Z"
         android:fillColor="#FF5BC8E8"/>
     <!-- shadow facets (bottom-right) -->
     <path
-        android:pathData="M256,256 L326.21,226.92 L408,256 Z M256,256 L408,256 L326.21,285.08 Z M256,256 L326.21,285.08 L329.54,329.54 Z M256,256 L329.54,329.54 L285.08,326.21 Z M256,256 L285.08,326.21 L256,408 Z M256,256 L256,408 L226.92,326.21 Z"
+        android:pathData="M256,256 L309.59,233.81 L408,256 Z M256,256 L408,256 L309.59,278.2 Z M256,256 L309.59,278.2 L329.54,329.54 Z M256,256 L329.54,329.54 L278.2,309.59 Z M256,256 L278.2,309.59 L256,408 Z M256,256 L256,408 L233.81,309.59 Z"
         android:fillColor="#FF154B86"/>
   </group>
 </vector>
