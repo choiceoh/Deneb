@@ -101,6 +101,19 @@ func LoadContextFiles(workspaceDir string, opts ...LoadContextOption) []ContextF
 		Cache.SetContextFiles(workspaceDir, files, resolved)
 	}
 
+	// Append session-specific extra context (e.g. the operator's org chart),
+	// rendered once here on the build path. The frozen-snapshot short-circuit
+	// above returns before reaching this on every later turn, so each source runs
+	// once per session — not per turn. Copy first so the shared workspaceDir
+	// cache is never mutated with session-specific entries.
+	if len(cfg.extraSources) > 0 {
+		combined := append([]ContextFile(nil), files...)
+		for _, src := range cfg.extraSources {
+			combined = append(combined, src()...)
+		}
+		files = combined
+	}
+
 	// Freeze for this session.
 	if cfg.sessionKey != "" {
 		Cache.SetSessionSnapshot(cfg.sessionKey, files)
@@ -111,11 +124,24 @@ func LoadContextFiles(workspaceDir string, opts ...LoadContextOption) []ContextF
 
 // loadContextConfig holds options for LoadContextFiles.
 type loadContextConfig struct {
-	sessionKey string // non-empty → use/populate frozen session snapshot
+	sessionKey   string                 // non-empty → use/populate frozen session snapshot
+	extraSources []func() []ContextFile // lazy session-specific context, run once per session
 }
 
 // LoadContextOption configures LoadContextFiles behavior.
 type LoadContextOption func(*loadContextConfig)
+
+// WithExtraSource adds a lazily-rendered context source folded into the frozen
+// session snapshot. The function runs once per session (on the snapshot-build
+// path), so per-turn calls reuse the frozen result instead of re-rendering.
+// Used for generated context (the org chart) that is not a file on disk.
+func WithExtraSource(fn func() []ContextFile) LoadContextOption {
+	return func(c *loadContextConfig) {
+		if fn != nil {
+			c.extraSources = append(c.extraSources, fn)
+		}
+	}
+}
 
 // WithSessionSnapshot enables the frozen snapshot pattern: on first call
 // for a given session key the loaded context files are cached and returned

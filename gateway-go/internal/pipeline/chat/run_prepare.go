@@ -276,29 +276,13 @@ func prepareContextAndPrompt(
 		// or private work context.
 		var ctxFiles []prompt.ContextFile
 		if !chatbot {
-			ctxFiles = prompt.LoadContextFiles(workspaceDir, prompt.WithSessionSnapshot(params.SessionKey))
-			// Inject the operator's org chart — the same one they maintain in the app's
-			// org-chart screen — so the assistant references the live org rather than a
-			// static doc that drifts. RenderText is deterministic, so the block is
-			// byte-stable across turns when org.json is unchanged (prefix cache holds); a
-			// mid-session edit costs one cache miss. Capped so a large chart cannot blow
-			// the context budget.
-			if tree, err := org.Load(); err == nil {
-				if txt := tree.RenderText(); txt != "" {
-					const orgContextMaxBytes = 12000
-					if len(txt) > orgContextMaxBytes {
-						cut := strings.LastIndex(txt[:orgContextMaxBytes], "\n")
-						if cut <= 0 {
-							cut = orgContextMaxBytes
-						}
-						txt = txt[:cut] + "\n… (조직도 일부 생략 — 앱에서 전체 확인)"
-					}
-					ctxFiles = append(ctxFiles, prompt.ContextFile{
-						Path:    "조직도 (앱 조직도 편집기에서 관리 — 사용자가 보는 것과 동일)",
-						Content: txt,
-					})
-				}
-			}
+			// The operator's org chart (org.json) is folded into the frozen context
+			// snapshot via WithExtraSource, so it renders once per session (not per
+			// turn) and stays byte-stable for the prefix cache; a new session re-reads.
+			ctxFiles = prompt.LoadContextFiles(workspaceDir,
+				prompt.WithSessionSnapshot(params.SessionKey),
+				prompt.WithExtraSource(orgChartContextSource),
+			)
 		}
 
 		// Operator-edited 업무 persona (Settings prompt corner). Only the 업무 path
@@ -370,6 +354,35 @@ type compactionHooks struct {
 // MaxHistoryTokens=1. A single protected turn already exceeds such a budget,
 // so compaction cannot succeed by construction.
 const minCompactionBudget = 1024
+
+// orgChartContextSource renders the operator's app org chart (org.json) as a
+// context block so the assistant references the live org the user maintains in
+// the native org-chart editor — not a static doc that drifts. Returns nil when
+// there is no chart. Folded into the frozen context snapshot via
+// prompt.WithExtraSource, so it runs once per session, not per turn. Capped so a
+// large chart cannot blow the context budget.
+func orgChartContextSource() []prompt.ContextFile {
+	tree, err := org.Load()
+	if err != nil {
+		return nil
+	}
+	txt := tree.RenderText()
+	if txt == "" {
+		return nil
+	}
+	const orgContextMaxBytes = 12000
+	if len(txt) > orgContextMaxBytes {
+		cut := strings.LastIndex(txt[:orgContextMaxBytes], "\n")
+		if cut <= 0 {
+			cut = orgContextMaxBytes
+		}
+		txt = txt[:cut] + "\n… (조직도 일부 생략 — 앱에서 전체 확인)"
+	}
+	return []prompt.ContextFile{{
+		Path:    "조직도 (앱 조직도 편집기에서 관리 — 사용자가 보는 것과 동일)",
+		Content: txt,
+	}}
+}
 
 // skipCompactionBudget reports whether the effective context budget is a
 // deliberate history-suppression sentinel, in which case Polaris compaction
