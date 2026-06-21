@@ -4,7 +4,7 @@ import ai.deneb.deneb.generated.ContactRow
 import ai.deneb.openUrl
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebType
-import ai.deneb.ui.components.DenebSearchField
+import ai.deneb.ui.components.DenebUnderlineSearchField
 import ai.deneb.ui.components.SectionedScrubList
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHint
@@ -94,12 +94,13 @@ internal fun ContactsList(
     // Dedup so duplicate address-book entries can't collide LazyColumn keys.
     val unique = remember(filtered) { filtered.distinctBy { contactKey(it) } }
     Column(Modifier.fillMaxSize()) {
-        DenebSearchField(
+        DenebUnderlineSearchField(
             query = query,
             onQueryChange = { query = it },
             placeholder = "이름·번호·이메일 검색",
-            clearContentDescription = "검색 지우기",
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            textStyle = DenebType.body,
+            clearable = true,
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
         )
         if (unique.isEmpty()) {
             DenebEmpty("검색 결과 없음")

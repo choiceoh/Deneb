@@ -503,9 +503,7 @@ internal val previewScreens: Map<String, @Composable (ColorScheme) -> Unit> = ma
                         onQueryChange = {},
                         placeholder = "HuggingFace 모델 검색",
                         textStyle = DenebType.body,
-                        trailing = {
-                            Text("✕", style = DenebType.body, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        },
+                        clearable = true,
                     )
                 }
             }
