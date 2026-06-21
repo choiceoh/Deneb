@@ -279,3 +279,125 @@ func TestFor_FailsFastOnUnrepresentable(t *testing.T) {
 		})
 	}
 }
+
+func TestFor_ByteArrayIsArrayNotString(t *testing.T) {
+	// encoding/json base64-encodes a byte SLICE but encodes a byte ARRAY as a
+	// JSON array of numbers — the schema must distinguish them.
+	type withByteArray struct {
+		A [4]byte `json:"a"`
+	}
+	a := props(t, schemaOf(t, For[withByteArray]("a")))["a"].(map[string]any)
+	if a["type"] != "array" {
+		t.Errorf("[N]byte type = %v, want array (not base64 string)", a["type"])
+	}
+	if a["items"].(map[string]any)["type"] != "integer" {
+		t.Errorf("[N]byte items = %v, want integer", a["items"])
+	}
+}
+
+func TestFor_JSONNumberIsNumber(t *testing.T) {
+	// json.Number is a string-kind type but encoding/json emits a bare number.
+	type withNum struct {
+		N json.Number `json:"n"`
+	}
+	if got := props(t, schemaOf(t, For[withNum]("n")))["n"].(map[string]any)["type"]; got != "number" {
+		t.Errorf("json.Number field type = %v, want number", got)
+	}
+}
+
+func TestFor_UintptrIsInteger(t *testing.T) {
+	type withUintptr struct {
+		P uintptr `json:"p"`
+	}
+	if got := props(t, schemaOf(t, For[withUintptr]("p")))["p"].(map[string]any)["type"]; got != "integer" {
+		t.Errorf("uintptr field type = %v, want integer (encoding/json emits a number)", got)
+	}
+}
+
+// cyclicNode and the mut* pair exercise the cycle guard. Methods/recursion need
+// package-level types.
+type cyclicNode struct {
+	Next *cyclicNode `json:"next"`
+}
+type mutA struct {
+	B *mutB `json:"b"`
+}
+type mutB struct {
+	A *mutA `json:"a"`
+}
+
+func TestFor_CyclicTypePanics(t *testing.T) {
+	// A self-referential type must FAIL FAST (catchable panic), not recurse into
+	// an unrecoverable stack/heap exhaustion.
+	cases := map[string]func(){
+		"direct self-reference": func() { For[cyclicNode]("a") },
+		"mutual recursion":      func() { For[mutA]("a") },
+	}
+	for name, fn := range cases {
+		t.Run(name, func(t *testing.T) {
+			defer func() {
+				if recover() == nil {
+					t.Errorf("For with %s: expected panic, got none", name)
+				}
+			}()
+			fn()
+		})
+	}
+}
+
+// ptrMarshaler implements json.Marshaler with a POINTER receiver. As a value
+// field, encoding/json decodes it structurally, so the generator must NOT refuse
+// it (the value-receiver-only rule).
+type ptrMarshaler struct {
+	X int `json:"x"`
+}
+
+func (p *ptrMarshaler) MarshalJSON() ([]byte, error) { return []byte(`{"x":0}`), nil }
+
+func TestFor_PointerReceiverMarshalerIsStructural(t *testing.T) {
+	type host struct {
+		M ptrMarshaler `json:"m"`
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			t.Errorf("value field with a pointer-receiver marshaler should be reflected structurally, but For panicked: %v", r)
+		}
+	}()
+	m := props(t, schemaOf(t, For[host]("h")))["m"].(map[string]any)
+	if m["type"] != "object" {
+		t.Errorf("pointer-receiver-marshaler value field type = %v, want object (structural)", m["type"])
+	}
+}
+
+// shadowBase/shadowDerived exercise field shadowing across an embedded struct.
+type shadowBase struct {
+	Name string `json:"name"`
+	Only string `json:"only"`
+}
+type shadowDerived struct {
+	shadowBase
+	Name int `json:"name"` // shallower field shadows shadowBase.Name (encoding/json rule)
+}
+
+func TestFor_ShadowedEmbeddedField(t *testing.T) {
+	s := schemaOf(t, For[shadowDerived]("d"))
+	p := props(t, s)
+	// Shallower (outer) Name wins → integer, and it appears exactly once.
+	if p["name"].(map[string]any)["type"] != "integer" {
+		t.Errorf("shadowed name should be the outer (integer) field, got %v", p["name"])
+	}
+	req := requiredSet(t, s)
+	if !req["name"] || !req["only"] {
+		t.Errorf("required missing fields: %v", req)
+	}
+	// No duplicate "name" in required (dedupStrings).
+	var count int
+	for _, r := range s["required"].([]any) {
+		if r == "name" {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Errorf("name appears %d times in required, want 1 (dedup)", count)
+	}
+}
