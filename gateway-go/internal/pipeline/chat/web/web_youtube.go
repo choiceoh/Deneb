@@ -88,7 +88,9 @@ func summarizeTranscript(ctx context.Context, r *media.YouTubeResult) (string, e
 		transcript = string([]rune(transcript)[:youtubeSummaryInputMaxChars])
 	}
 	prompt := fmt.Sprintf("제목: %s\n채널: %s\n\n자막:\n%s", r.Title, r.Channel, transcript)
-	return pilot.CallLocalLLM(sctx, youtubeSummarySystemPrompt, prompt, youtubeSummaryMaxTokens)
+	// Free-text summary on the non-reasoning lightweight model → append the
+	// reflective self-check to cut factual errors/omissions (arXiv:2507.02778).
+	return pilot.CallLocalLLM(sctx, youtubeSummarySystemPrompt+"\n"+pilot.ReflectionDirective, prompt, youtubeSummaryMaxTokens)
 }
 
 // storeYouTubeTranscript writes the full formatted result to spillover and

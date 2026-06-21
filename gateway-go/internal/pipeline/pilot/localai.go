@@ -176,6 +176,15 @@ func CallRoleLLM(ctx context.Context, role modelrole.Role, system, userMessage s
 	return text, nil
 }
 
+// ReflectionDirective is an optional one-line self-check to append to the SYSTEM
+// prompt of FREE-TEXT summary/analysis calls on the non-reasoning lightweight
+// model. Non-reasoning models miss most of their own errors (arXiv:2507.02778);
+// a reflective trigger sharply reduces that. Append ONLY at free-text sites —
+// never on strict json_schema, single-token, or latency-critical (STW) calls,
+// where a trailing instruction would corrupt the constrained output or blow a
+// hard deadline.
+const ReflectionDirective = "최종 출력 전에, 원문에 비추어 사실 오류나 빠뜨린 핵심이 없는지 한 번 더 점검한 뒤 최종 결과만 제시하라."
+
 // CallLocalLLM invokes the lightweight model role — the original single local-AI
 // tier, hub-managed when wired. Back-compat wrapper over CallRoleLLM.
 func CallLocalLLM(ctx context.Context, system, userMessage string, maxTokens int, extraBody ...map[string]any) (string, error) {
