@@ -631,6 +631,10 @@ private fun AppContent(
                                     onBack = { navController.navigateUp() },
                                     onOpen = { dest -> navController.navigate(dest) },
                                     chatMode = navChatMode,
+                                    // Read fresh on entry: returning here after toggling tiles in
+                                    // 설정 re-executes this composable, so the grid reflects the
+                                    // latest hidden set without an observable flow.
+                                    hiddenTiles = appSettings.getHiddenMoreTiles(),
                                 )
                             }
                             composable<DenebNotebooks> {

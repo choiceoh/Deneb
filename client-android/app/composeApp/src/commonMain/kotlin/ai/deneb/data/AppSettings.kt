@@ -57,6 +57,24 @@ class AppSettings(internal val settings: Settings) {
         settings.putString(KEY_FEED_SEEN_IDS, bounded.joinToString(","))
     }
 
+    // Hidden 더보기 ("자체앱") tiles — the stable tile keys (destination @SerialName) the user
+    // chose to hide in 설정 → "자체앱 표시 항목", persisted as a comma-joined string (keys never
+    // contain commas). Stored in the plain settings store like every other UI preference
+    // (theme, recall): a visibility preference, unlike the gateway token, is non-critical, so
+    // the DurableMirrorSettings whitelist would be overkill — at worst an Android OTA prefs
+    // wipe resets tiles to "all shown", a harmless reappearance the user can redo.
+    fun getHiddenMoreTiles(): Set<String> = settings.getStringOrNull(KEY_HIDDEN_MORE_TILES)
+        ?.split(',')
+        ?.filterTo(LinkedHashSet()) { it.isNotBlank() }
+        ?: emptySet()
+
+    fun setMoreTileHidden(key: String, hidden: Boolean) {
+        if (key.isBlank()) return
+        val next = LinkedHashSet(getHiddenMoreTiles())
+        if (hidden) next.add(key) else next.remove(key)
+        settings.putString(KEY_HIDDEN_MORE_TILES, next.joinToString(","))
+    }
+
     fun getCurrentConversationId(): String? = settings.getStringOrNull(KEY_CURRENT_CONVERSATION_ID)
 
     fun setCurrentConversationId(id: String?) {
@@ -391,6 +409,7 @@ class AppSettings(internal val settings: Settings) {
         const val KEY_APP_OPENS = "app_opens"
 
         const val KEY_FEED_SEEN_IDS = "feed_seen_ids"
+        const val KEY_HIDDEN_MORE_TILES = "hidden_more_tiles"
         const val KEY_CONVERSATIONS = "conversations_json"
         const val KEY_CURRENT_CONVERSATION_ID = "current_conversation_id"
         const val KEY_CURRENT_CONVERSATION_MIGRATED = "current_conversation_migrated"
