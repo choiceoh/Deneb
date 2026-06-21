@@ -129,6 +129,9 @@ fun DenebOrgChartScreen(
     var error by remember { mutableStateOf<String?>(null) }
     // The node being edited in the bottom sheet (its id), or null when closed.
     var editingId by remember { mutableStateOf<String?>(null) }
+    // View-first: the chart opens read-only (tap a row to fold, no edit affordances).
+    // 편집 in the header flips this on to reveal the +/pencil glyphs + add-root + tap-to-edit.
+    var editMode by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val haptics = rememberHaptics()
 
@@ -168,6 +171,13 @@ fun DenebOrgChartScreen(
         onBack = requestBack,
         tabBar = navigationTabBar,
         actions = {
+            // 편집/완료 flips edit mode. The chart defaults to a clean read-only view so
+            // casually opening it never lands in an editable state.
+            if (loadOk == true) {
+                TextButton(onClick = { editMode = !editMode }) {
+                    Text(if (editMode) "완료" else "편집")
+                }
+            }
             // Save is only meaningful with pending edits; a saving spinner reads as the
             // label going quiet. Kept in the scaffold header so it is reachable on both
             // phone and desktop without a floating button.
@@ -233,6 +243,7 @@ fun DenebOrgChartScreen(
                         nodes = nodes,
                         notice = notice,
                         error = error,
+                        editMode = editMode,
                         onEditNode = { id ->
                             haptics.tap()
                             editingId = id
@@ -397,6 +408,7 @@ internal fun OrgChartContent(
     onEditNode: (String) -> Unit,
     onAddChild: (String) -> Unit,
     onAddRoot: () -> Unit,
+    editMode: Boolean = false, // false = read-only view (default); true reveals edit affordances
     initialQuery: String = "", // seeds the search box (for the render harness; "" at runtime)
 ) {
     // Group children by parent once so render is O(n) not O(n^2).
@@ -458,6 +470,7 @@ internal fun OrgChartContent(
                         depth = 0,
                         childrenOf = childrenOf,
                         collapsed = collapsed,
+                        editMode = editMode,
                         onToggle = { id ->
                             collapsed = if (id in collapsed) collapsed - id else collapsed + id
                         },
@@ -469,12 +482,14 @@ internal fun OrgChartContent(
             }
         }
 
-        // Add another root node (a second company/group under no parent).
-        Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 4.dp)) {
-            OutlinedButton(onClick = onAddRoot) {
-                Icon(Icons.Outlined.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(6.dp))
-                Text("최상위 조직 추가")
+        // Add another root node — edit mode only (a clean view has no add affordances).
+        if (editMode) {
+            Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 4.dp)) {
+                OutlinedButton(onClick = onAddRoot) {
+                    Icon(Icons.Outlined.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("최상위 조직 추가")
+                }
             }
         }
         // Save feedback toast-line: shown under the chart (a Snackbar would float over the
@@ -510,6 +525,7 @@ private fun OrgListRows(
     depth: Int,
     childrenOf: Map<String, List<OrgNodeOut>>,
     collapsed: Set<String>,
+    editMode: Boolean,
     onToggle: (String) -> Unit,
     onEditNode: (String) -> Unit,
     onAddChild: (String) -> Unit,
@@ -523,6 +539,7 @@ private fun OrgListRows(
         childCount = kids.size,
         isCollapsed = isCollapsed,
         highlighted = node.id in hitNodeIds,
+        editMode = editMode,
         onToggle = { onToggle(node.id) },
         onEdit = { onEditNode(node.id) },
         onAddChild = { onAddChild(node.id) },
@@ -534,6 +551,7 @@ private fun OrgListRows(
                 depth = depth + 1,
                 childrenOf = childrenOf,
                 collapsed = collapsed,
+                editMode = editMode,
                 onToggle = onToggle,
                 onEditNode = onEditNode,
                 onAddChild = onAddChild,
@@ -546,8 +564,9 @@ private fun OrgListRows(
 /**
  * A single node as an indented list row: a leading caret (or an aligning spacer) that folds
  * the subtree, then the name, a type badge, an optional 파트 chip, and a member-count line;
- * trailing add-child + edit glyphs. The whole row is tappable → edit, and a hairline underlines
- * it. A search hit tints the row with the cool interactive accent.
+ * the add-child + edit glyphs appear in edit mode only. A row tap folds/expands in view mode or
+ * opens the editor in edit mode (so just browsing never edits); a hairline underlines it. A
+ * search hit tints the row with the cool interactive accent.
  */
 @Composable
 private fun OrgNodeRow(
@@ -556,6 +575,7 @@ private fun OrgNodeRow(
     childCount: Int,
     isCollapsed: Boolean,
     highlighted: Boolean,
+    editMode: Boolean,
     onToggle: () -> Unit,
     onEdit: () -> Unit,
     onAddChild: () -> Unit,
@@ -563,12 +583,18 @@ private fun OrgNodeRow(
     val accent = MaterialTheme.colorScheme.primary
     val rowBg = if (highlighted) Modifier.background(accent.copy(alpha = 0.10f)) else Modifier
     val indent = 12.dp + OrgIndentStep * depth
+    // View mode: a row tap folds/expands (childless rows do nothing) — it never edits. Edit
+    // mode: a row tap opens the editor.
+    val rowTap = when {
+        editMode -> Modifier.denebPressable(onClick = onEdit).handCursor()
+        childCount > 0 -> Modifier.denebPressable(onClick = onToggle).handCursor()
+        else -> Modifier
+    }
     Column(
         Modifier
             .fillMaxWidth()
             .then(rowBg)
-            .denebPressable(onClick = onEdit)
-            .handCursor(),
+            .then(rowTap),
     ) {
         Row(
             modifier = Modifier
@@ -623,11 +649,14 @@ private fun OrgNodeRow(
                     )
                 }
             }
-            IconButton(onClick = onAddChild, modifier = Modifier.size(28.dp)) {
-                Icon(Icons.Outlined.Add, contentDescription = "하위 조직 추가", tint = denebHint(), modifier = Modifier.size(16.dp))
-            }
-            IconButton(onClick = onEdit, modifier = Modifier.size(28.dp)) {
-                Icon(Icons.Outlined.Edit, contentDescription = "편집", tint = accent, modifier = Modifier.size(16.dp))
+            // Edit affordances — edit mode only; a read-only view stays clean.
+            if (editMode) {
+                IconButton(onClick = onAddChild, modifier = Modifier.size(28.dp)) {
+                    Icon(Icons.Outlined.Add, contentDescription = "하위 조직 추가", tint = denebHint(), modifier = Modifier.size(16.dp))
+                }
+                IconButton(onClick = onEdit, modifier = Modifier.size(28.dp)) {
+                    Icon(Icons.Outlined.Edit, contentDescription = "편집", tint = accent, modifier = Modifier.size(16.dp))
+                }
             }
         }
         // Row hairline, indented to align with the row content.

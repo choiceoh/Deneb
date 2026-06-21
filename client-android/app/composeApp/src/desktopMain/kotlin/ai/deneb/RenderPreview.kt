@@ -279,6 +279,7 @@ fun main() {
     renderScreen("dashboard_light.png", "dashboard", LightColorScheme, 824, 1900)
     renderScreen("org_chart_dark.png", "org_chart", DarkColorScheme, 824, 1500)
     renderScreen("org_chart_light.png", "org_chart", LightColorScheme, 824, 1500)
+    renderScreen("org_chart_edit_light.png", "org_chart_edit", LightColorScheme, 824, 1500)
     renderScreen("org_chart_search_dark.png", "org_chart_search", DarkColorScheme, 824, 1500)
     renderScreen("org_editor_dark.png", "org_editor", DarkColorScheme, 824, 1280)
     renderScreen("org_editor_light.png", "org_editor", LightColorScheme, 824, 1280)
@@ -728,6 +729,7 @@ internal val previewScreens: Map<String, @Composable (ColorScheme) -> Unit> = ma
         }
     },
     "org_chart" to { scheme -> orgChartBody(scheme, "") },
+    "org_chart_edit" to { scheme -> orgChartBody(scheme, "", editMode = true) },
     "org_chart_search" to { scheme -> orgChartBody(scheme, "김철수") },
     "org_editor" to { scheme ->
         MaterialTheme(colorScheme = scheme) {
@@ -879,13 +881,14 @@ internal val previewScreens: Map<String, @Composable (ColorScheme) -> Unit> = ma
 // Org chart body (diagram + people search). A non-blank [query] seeds the search box so
 // the search-active state (hit highlight + results strip) is previewable.
 @Composable
-private fun orgChartBody(scheme: ColorScheme, query: String) {
+private fun orgChartBody(scheme: ColorScheme, query: String, editMode: Boolean = false) {
     MaterialTheme(colorScheme = scheme) {
         DenebScreenScaffold(title = "조직도", onBack = {}) {
             OrgChartContent(
                 nodes = sampleOrg,
                 notice = null,
                 error = null,
+                editMode = editMode,
                 onEditNode = {},
                 onAddChild = {},
                 onAddRoot = {},
