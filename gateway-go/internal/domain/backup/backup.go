@@ -31,6 +31,7 @@ import (
 // memory. Missing entries are skipped (not every deployment has all stores).
 var DefaultTargets = []string{
 	"wiki",
+	"knowledge", // topic/org knowledge docs (org charts, etc.) — not git-tracked like wiki
 	"memory",
 	"transcripts",
 	"polaris",
