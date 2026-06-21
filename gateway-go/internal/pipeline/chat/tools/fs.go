@@ -14,6 +14,7 @@ import (
 	"go/parser"
 	"go/token"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -90,6 +91,52 @@ func listDirForRead(absPath, displayPath string) (string, error) {
 	return b.String(), nil
 }
 
+// trySkillRootFallback resolves the bundled-skill path collision. The skill
+// catalog spans several roots (managed ~/.deneb/skills, bundled ~/deneb/skills,
+// personal ~/.agents/skills); a skill lives under exactly one. The model, asked
+// to read a skill, often points at the wrong root — most commonly it reads a
+// bundled skill at ~/.deneb/skills/<rel> because every other Deneb path is under
+// ~/.deneb, so the lone ~/deneb (repo) bundled path gets "corrected". That path
+// is an allowed root but holds the managed set, so os.ReadFile 404s.
+//
+// When the missing path is under one skill root, this retries the same
+// skills-relative remainder under every OTHER root and returns the first hit. It
+// only runs after a failed read, only across the roots already passed to the read
+// tool (so it cannot escape the allowed catalog), and the relative remainder is
+// rejected if it escapes its root (".."), so it adds no reach and no hot-path cost.
+func trySkillRootFallback(path string, skillRoots []string) (string, []byte, bool) {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return "", nil, false
+	}
+	for _, root := range skillRoots {
+		root = strings.TrimSpace(root)
+		if root == "" {
+			continue
+		}
+		absRoot, err := filepath.Abs(root)
+		if err != nil {
+			continue
+		}
+		rel, err := filepath.Rel(absRoot, abs)
+		if err != nil || rel == "." || strings.HasPrefix(rel, "..") {
+			continue // path is not under this root
+		}
+		for _, other := range skillRoots {
+			other = strings.TrimSpace(other)
+			if other == "" || other == root {
+				continue
+			}
+			cand := filepath.Join(other, rel)
+			if data, e := os.ReadFile(cand); e == nil {
+				return cand, data, true
+			}
+		}
+		return "", nil, false // under this root but absent elsewhere
+	}
+	return "", nil, false
+}
+
 // ToolRead returns the file-read tool. extraReadRoots are directories outside
 // the workspace that reads may reach (read-only; currently the skills catalog —
 // the system prompt directs the model to read SKILL.md at those locations).
@@ -129,6 +176,20 @@ func ToolRead(defaultDir string, extraReadRoots ...string) ToolFunc {
 		}
 
 		data, err := os.ReadFile(path)
+		if err != nil {
+			// Cross-skill-root fallback: a bundled skill loads from ~/deneb/skills
+			// (the repo) and is advertised there, but the model — primed by the
+			// pervasive ~/.deneb/ convention everywhere else — frequently reads it at
+			// ~/.deneb/skills/<rel>, an allowed root that holds a DIFFERENT (managed)
+			// skill set, so the read 404s (this silently broke the 8am morning-letter
+			// cron: it could not load its bundled SKILL.md). When the path is under
+			// one skill root and missing, try the same skills-relative remainder under
+			// the other roots so the bundled skill resolves regardless of which root
+			// the model picked. Scoped to the already-allowed catalog roots.
+			if altPath, altData, ok := trySkillRootFallback(path, extraReadRoots); ok {
+				path, data, err = altPath, altData, nil
+			}
+		}
 		if err != nil {
 			// A read on a directory is a common, benign LLM move (exploring, or a
 			// path that turned out to be a dir). Return the listing instead of a

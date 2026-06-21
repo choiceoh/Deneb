@@ -166,14 +166,6 @@ func executeOneTool(
 	if toolErr != nil {
 		block.Content = fmt.Sprintf("Error: %s", toolErr.Error())
 		block.IsError = true
-		// Harness-as-tutor: append a recovery hint for recognizable raw errors so
-		// the model fixes the cause instead of re-emitting the same failing call
-		// (executor_tool_hint.go — upstream of ToolLoopDetector's repeat guard).
-		// Append-only keeps the raw error for grounding; deterministic so the
-		// loop detector's no-progress hashing and APC stay byte-stable.
-		if hint := toolErrorHint(toolErr.Error()); hint != "" {
-			block.Content += "\n\n" + hint
-		}
 	} else {
 		block.Content = fenceUntrustedToolOutput(tc.Name, toolOutput, logger)
 	}
