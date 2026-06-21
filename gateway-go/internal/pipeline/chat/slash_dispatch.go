@@ -127,6 +127,50 @@ func (h *Handler) handleSlashCommand(
 		// manage it. Synchronous (store ops only) — handled in goal_command.go.
 		h.handleGoalCommand(sessionKey, cmd.Args, respond)
 
+	case "weekly":
+		// /weekly (/주간보고) — deterministic 주간업무보고: post the formal form
+		// image (best-effort, async) and reply with the exact-form text. Mirrors
+		// the Saturday cron path (cron_agent_adapter.go) so a manual trigger
+		// produces the same output. No agent loop — the text is built straight
+		// from wiki data (RenderWeeklyReportText) so the format never drifts.
+		if h.weeklyReportTextFn == nil {
+			respond("주간업무보고 생성이 이 게이트웨이에 배선되지 않았습니다.")
+			break
+		}
+		// Form image → native chat (best-effort; render may be skipped on low
+		// memory/disk, in which case the text report below still lands).
+		if h.weeklyFormDeliverFn != nil {
+			formFn := h.weeklyFormDeliverFn
+			formLogger := h.logger
+			go func() {
+				defer func() {
+					if r := recover(); r != nil && formLogger != nil {
+						formLogger.Error("panic in /weekly form delivery", "panic", r)
+					}
+				}()
+				// Bounded background ctx: the chromium render takes a few seconds
+				// and is an independent side delivery from the text reply.
+				fctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+				defer cancel()
+				if err := formFn(fctx); err != nil && formLogger != nil {
+					formLogger.Error("weekly form image delivery failed", "error", err)
+				}
+			}()
+		}
+		// Deterministic text — fast wiki read, returned synchronously so the sync
+		// native RPC carries it as the command's reply.
+		tctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		txt, terr := h.weeklyReportTextFn(tctx)
+		cancel()
+		if terr != nil || strings.TrimSpace(txt) == "" {
+			if h.logger != nil {
+				h.logger.Error("weekly report text generation failed", "error", terr)
+			}
+			respond("주간업무보고를 생성하지 못했습니다. 위키 프로젝트 페이지에 `소관:` 태그가 있는지 확인해주세요.")
+			break
+		}
+		respond(txt)
+
 	}
 
 	return protocol.MustResponseOK(reqID, map[string]any{
