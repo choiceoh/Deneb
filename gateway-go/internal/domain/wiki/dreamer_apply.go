@@ -439,34 +439,12 @@ func (wd *WikiDreamer) applyUpdates(_ context.Context, updates []wikiUpdate) (cr
 	return created, updated, oversized
 }
 
-// rebuildIndex scans all wiki pages and rebuilds the master index.
+// rebuildIndex scans all wiki pages and rebuilds the master index. It delegates
+// to Store.RebuildIndex, which holds writeMu so the disk scan + index swap is a
+// consistent snapshot — a page write completing concurrently (wiki-research
+// turn, mail analysis) can't have its index entry dropped by the wholesale swap.
 func (wd *WikiDreamer) rebuildIndex() error {
-	pages, err := wd.store.ListPages("")
-	if err != nil {
-		return fmt.Errorf("list pages: %w", err)
-	}
-
-	idx := wd.store.Index()
-	// Preserve LastProcessed from the old index.
-	lastProcessed := idx.LastProcessed
-
-	newIdx := NewIndex()
-	newIdx.LastProcessed = lastProcessed
-
-	for _, relPath := range pages {
-		page, err := wd.store.ReadPage(relPath)
-		if err != nil {
-			continue
-		}
-		newIdx.UpdateEntry(relPath, page)
-	}
-
-	wd.store.mu.Lock()
-	wd.store.index = newIdx
-	err = newIdx.Save(filepath.Join(wd.store.Dir(), "index.md"))
-	wd.store.mu.Unlock()
-
-	return err
+	return wd.store.RebuildIndex()
 }
 
 // findExistingPage checks if a similar page already exists by ID match,

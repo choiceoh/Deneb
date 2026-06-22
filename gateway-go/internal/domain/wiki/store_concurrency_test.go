@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
@@ -135,5 +136,151 @@ func TestStore_ConcurrentWritePage_IndexMatchesDisk(t *testing.T) {
 	}
 	if entry.Importance != onDisk.Meta.Importance {
 		t.Errorf("index importance %v != disk importance %v", entry.Importance, onDisk.Meta.Importance)
+	}
+}
+
+// TestStore_RebuildIndex_SerializesAgainstWriters is the deterministic guard for
+// the fix: RebuildIndex must hold writeMu across its disk scan + index swap so a
+// concurrent page write can't land between them and have its index entry dropped
+// by the wholesale swap. We simulate an in-flight writer by holding writeMu, then
+// assert RebuildIndex BLOCKS until we release it. Without the writeMu acquisition
+// (the pre-fix racy rebuild) RebuildIndex returns immediately while a writer
+// "holds" the lock — exactly the window that drops a just-written entry — and
+// this test fails. The transient drop itself is hard to catch in a fuzz test
+// because a later rebuild re-scans the full disk and self-heals it; this asserts
+// the structural invariant instead.
+func TestStore_RebuildIndex_SerializesAgainstWriters(t *testing.T) {
+	dir := t.TempDir()
+	store := testutil.Must(NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
+	defer store.Close()
+
+	p := NewPage("Seed", "프로젝트", nil)
+	p.Body = "# Seed\n\nbody"
+	if err := store.WritePage("프로젝트/seed.md", p); err != nil {
+		t.Fatalf("seed WritePage: %v", err)
+	}
+
+	// Stand in for a writer mid-flight: hold writeMu, the lock every page write
+	// serializes on.
+	store.writeMu.Lock()
+
+	done := make(chan error, 1)
+	go func() { done <- store.RebuildIndex() }()
+
+	select {
+	case <-done:
+		// RebuildIndex finished while "a writer" held writeMu — it does not
+		// serialize against writers, so a concurrent write's index update can be
+		// clobbered by the swap.
+		store.writeMu.Unlock()
+		t.Fatal("RebuildIndex completed while writeMu was held; it must block on writeMu to snapshot disk consistently")
+	case <-time.After(200 * time.Millisecond):
+		// Expected: blocked on writeMu.
+	}
+
+	store.writeMu.Unlock()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("RebuildIndex: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("RebuildIndex did not complete after writeMu was released")
+	}
+}
+
+// TestStore_RebuildIndexConcurrentWithWrites_IndexMatchesDisk hammers a full
+// index rebuild against a writer creating brand-new pages and concurrent index
+// readers — the dreamer's Phase-4 rebuild overlapping a wiki-research/mail-
+// analysis write. This is -race coverage for the scan/swap boundary (s.mu) plus
+// an eventual-consistency check: once every goroutine quiesces the last writeMu
+// holder (a write or the final rebuild) leaves the cached index agreeing with
+// disk in both directions — every on-disk page indexed, no ghost entries. (It
+// does not deterministically reproduce the transient mid-flight drop — a later
+// rebuild self-heals it; TestStore_RebuildIndex_SerializesAgainstWriters guards
+// the invariant directly.) Run with -race.
+func TestStore_RebuildIndexConcurrentWithWrites_IndexMatchesDisk(t *testing.T) {
+	dir := t.TempDir()
+	store := testutil.Must(NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
+	defer store.Close()
+
+	// Seed pages so each rebuild has real disk reads to do, widening the
+	// scan→swap window a concurrent create could slip through.
+	const seeds = 30
+	for i := 0; i < seeds; i++ {
+		p := NewPage(fmt.Sprintf("Seed %d", i), "프로젝트", nil)
+		p.Body = fmt.Sprintf("# Seed %d\n\nbody", i)
+		if err := store.WritePage(fmt.Sprintf("프로젝트/seed-%d.md", i), p); err != nil {
+			t.Fatalf("seed WritePage: %v", err)
+		}
+	}
+
+	const newPages = 40
+	var wg sync.WaitGroup
+
+	// Writer: creates brand-new pages, each of which updates the cached index.
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < newPages; i++ {
+			p := NewPage(fmt.Sprintf("New %d", i), "프로젝트", nil)
+			p.Body = fmt.Sprintf("# New %d\n\nbody", i)
+			if err := store.WritePage(fmt.Sprintf("프로젝트/new-%d.md", i), p); err != nil {
+				t.Errorf("WritePage: %v", err)
+				return
+			}
+		}
+	}()
+
+	// Rebuilder: rebuilds the master index repeatedly, racing the writer.
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < newPages; i++ {
+			if err := store.RebuildIndex(); err != nil {
+				t.Errorf("RebuildIndex: %v", err)
+				return
+			}
+		}
+	}()
+
+	// Readers stress the s.mu read/swap boundary for the race detector.
+	for r := 0; r < 2; r++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := 0; i < newPages; i++ {
+				_ = store.Index().Entries
+			}
+		}()
+	}
+	wg.Wait()
+
+	// Every page on disk must have a matching index entry: a dropped create (the
+	// race) shows up as a page present on disk but missing from the cached index.
+	onDisk := testutil.Must(store.ListPages(""))
+	idx := store.Index()
+	diskSet := make(map[string]bool, len(onDisk))
+	for _, relPath := range onDisk {
+		diskSet[relPath] = true
+		entry, ok := idx.Entries[relPath]
+		if !ok {
+			t.Errorf("page %q on disk but missing from index", relPath)
+			continue
+		}
+		page := testutil.Must(store.ReadPage(relPath))
+		if entry.Title != page.Meta.Title {
+			t.Errorf("index title %q != disk title %q for %q", entry.Title, page.Meta.Title, relPath)
+		}
+	}
+	// And no index entry may reference a page that isn't on disk.
+	for relPath := range idx.Entries {
+		if !diskSet[relPath] {
+			t.Errorf("index has ghost entry %q with no page on disk", relPath)
+		}
+	}
+	// Sanity: all seeds + all new pages actually landed.
+	if len(onDisk) != seeds+newPages {
+		t.Errorf("page count on disk = %d, want %d", len(onDisk), seeds+newPages)
 	}
 }
