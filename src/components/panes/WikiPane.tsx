@@ -24,8 +24,12 @@ export function WikiPane() {
     if (!connected) return;
     setStatus("검색 중…");
     try {
-      const res = await callRpc<WikiPage[] | { pages?: WikiPage[] }>(cfg, MEMORY_RPC.search, { query: q.trim() });
-      const list = Array.isArray(res) ? res : (res?.pages ?? []);
+      // Gateway memory.search wraps hits as { results: [...] } (memory.go);
+      // tolerate a bare array / legacy { pages } too so we never silently drop rows.
+      const res = await callRpc<WikiPage[] | { results?: WikiPage[]; pages?: WikiPage[] }>(cfg, MEMORY_RPC.search, {
+        query: q.trim(),
+      });
+      const list = Array.isArray(res) ? res : (res?.results ?? res?.pages ?? []);
       setPages(list);
       setStatus(list.length ? "" : "결과 없음");
     } catch (e) {
@@ -38,9 +42,11 @@ export function WikiPane() {
     if (!key) return;
     setStatus("불러오는 중…");
     try {
-      const page = await callRpc<{ content?: string } | string>(cfg, MEMORY_RPC.getPage, { path: key });
+      // get_page returns the page body under `body` (memory.go out struct),
+      // not `content`. Keep string/`content` fallbacks for robustness.
+      const page = await callRpc<{ body?: string; content?: string } | string>(cfg, MEMORY_RPC.getPage, { path: key });
       setPath(key);
-      setContent(typeof page === "string" ? page : (page?.content ?? ""));
+      setContent(typeof page === "string" ? page : (page?.body ?? page?.content ?? ""));
       setStatus("");
     } catch (e) {
       setStatus(`오류: ${errText(e)}`);
@@ -51,7 +57,9 @@ export function WikiPane() {
     if (!path) return;
     setStatus("저장 중…");
     try {
-      await callRpc(cfg, MEMORY_RPC.writePage, { path, content });
+      // write_page reads the body from `body` (memory_write.go). Sending it as
+      // `content` left body empty server-side and CLOBBERED the page to blank.
+      await callRpc(cfg, MEMORY_RPC.writePage, { path, body: content });
       setStatus("저장됨");
     } catch (e) {
       setStatus(`오류: ${errText(e)}`);

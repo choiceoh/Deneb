@@ -64,6 +64,10 @@ export interface WikiPage {
   path?: string;
   title?: string;
   category?: string;
+  // memory.search hit extras (path is the stable key; no id server-side).
+  summary?: string;
+  snippet?: string;
+  score?: number;
 }
 
 export interface SearchHit {

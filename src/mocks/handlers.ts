@@ -37,9 +37,16 @@ const RPC: Record<string, (p: Record<string, any>) => unknown> = {
   "miniapp.crons.list": () => ({ jobs: fx.crons, total: fx.crons.length }),
   "miniapp.workfeed.list": () => ({ count: fx.workfeed.length, items: fx.workfeed, total: fx.workfeed.length }),
 
-  "miniapp.memory.search": () => fx.pages,
-  "miniapp.memory.get_page": (p) => ({ path: p.path, content: `# ${p.path}\n\n목 위키 내용입니다.` }),
-  "miniapp.memory.write_page": () => ({ ok: true }),
+  // memory.search wraps hits as { results }; get_page/write_page carry the body
+  // under `body` — mirror the real gateway (handlerminiapp/memory*.go) so the mock
+  // can't mask the field-name shape the wiki pane depends on.
+  "miniapp.memory.search": () => ({ results: fx.pages }),
+  "miniapp.memory.get_page": (p) => ({
+    path: p.path,
+    title: String(p.path),
+    body: `# ${p.path}\n\n목 위키 내용입니다.`,
+  }),
+  "miniapp.memory.write_page": (p) => ({ path: p.path, body: p.body }),
 
   "miniapp.search.all": (p) => fx.searchHits(typeof p.query === "string" ? p.query : ""),
 };

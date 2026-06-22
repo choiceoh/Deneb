@@ -47,9 +47,11 @@ export const workfeed: WorkItem[] = [
   { id: "w2", title: "미답장 메일 3건", summary: "24시간 이상 경과", kind: "followup", ts: "2026-06-17T08:00:00Z" },
 ];
 
+// memory.search hits — keyed by path (no server-side id), with snippet/score
+// like the real gateway response.
 export const pages: WikiPage[] = [
-  { id: "wk1", path: "projects/andromeda", title: "Andromeda 설계 노트" },
-  { id: "wk2", path: "team/onboarding", title: "팀 온보딩 가이드" },
+  { path: "projects/andromeda", title: "Andromeda 설계 노트", snippet: "3분할 워크스테이션 설계…", score: 0.91 },
+  { path: "team/onboarding", title: "팀 온보딩 가이드", snippet: "신규 입사자 안내…", score: 0.74 },
 ];
 
 export function searchHits(query: string): SearchHit[] {
