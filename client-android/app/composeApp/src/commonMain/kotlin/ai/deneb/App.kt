@@ -76,6 +76,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -86,6 +89,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
@@ -475,25 +479,36 @@ private fun AppContent(
                                 )
                             }
                             composable<DenebFeed> {
-                                FeedScreen(
-                                    items = feedState.workFeed,
-                                    loaded = feedState.workFeedLoaded,
-                                    seenIds = feedSeenIds,
-                                    onMarkSeen = { id ->
-                                        appSettings.markFeedSeen(id)
-                                        feedSeenIds = appSettings.getFeedSeenIds()
-                                    },
-                                    onLoadDateRange = feedState.actions.refreshWorkFeedRange,
-                                    onRunAction = feedState.actions.runWorkFeedAction,
-                                    onSubmitFeedback = feedState.actions.submitWorkFeedFeedback,
-                                    onRewrite = feedState.actions.rewriteWorkFeedCard,
-                                    // 해당 피드 질문: open the card's dedicated chat (context injected)
-                                    // and jump to the chat screen so the user can ask there.
-                                    onAsk = { id ->
-                                        feedState.actions.openWorkFeedItem(id)
-                                        navigateToDenebSection(navController, Home)
-                                    },
-                                )
+                                Box(Modifier.fillMaxSize()) {
+                                    FeedScreen(
+                                        items = feedState.workFeed,
+                                        loaded = feedState.workFeedLoaded,
+                                        seenIds = feedSeenIds,
+                                        onMarkSeen = { id ->
+                                            appSettings.markFeedSeen(id)
+                                            feedSeenIds = appSettings.getFeedSeenIds()
+                                        },
+                                        onLoadDateRange = feedState.actions.refreshWorkFeedRange,
+                                        onRunAction = feedState.actions.runWorkFeedAction,
+                                        onSubmitFeedback = feedState.actions.submitWorkFeedFeedback,
+                                        onRewrite = feedState.actions.rewriteWorkFeedCard,
+                                        // 해당 피드 질문: open the card's dedicated chat (context injected)
+                                        // and jump to the chat screen so the user can ask there.
+                                        onAsk = { id ->
+                                            feedState.actions.openWorkFeedItem(id)
+                                            navigateToDenebSection(navController, Home)
+                                        },
+                                    )
+                                    // Feed-card 정정 피드백은 위키를 고치는 ephemeral 에이전트 턴을 돌린다.
+                                    // 시트는 낙관적으로 먼저 닫히므로, 돌아온 1~3줄 보고를 여기 스낵바로 띄운다.
+                                    val feedbackSnackbar = remember { SnackbarHostState() }
+                                    LaunchedEffect(feedState.feedbackResultText) {
+                                        val msg = feedState.feedbackResultText ?: return@LaunchedEffect
+                                        feedState.actions.clearFeedbackResult()
+                                        feedbackSnackbar.showSnackbar(msg, duration = SnackbarDuration.Long)
+                                    }
+                                    SnackbarHost(feedbackSnackbar, Modifier.align(Alignment.BottomCenter))
+                                }
                             }
                             composable<DenebConfig> {
                                 DenebConfigScreen(

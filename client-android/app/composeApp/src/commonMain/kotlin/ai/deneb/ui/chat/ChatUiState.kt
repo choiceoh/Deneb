@@ -88,6 +88,9 @@ data class ChatUiState(
     val pendingScrollToMessageId: String? = null,
     val smsDrafts: ImmutableList<SmsDraft> = persistentListOf(),
     val snackbarMessage: StringResource? = null,
+    // Free-text agent report from a feed-card feedback turn (gateway returns "what I
+    // updated in the wiki"); shown as a snackbar on the feed, then cleared.
+    val feedbackResultText: String? = null,
     val pendingConversationDeletion: String? = null,
     val fallbackStatus: FallbackStatus? = null,
     val isRestoring: Boolean = true,

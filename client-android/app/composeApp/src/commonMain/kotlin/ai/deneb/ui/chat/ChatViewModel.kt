@@ -78,6 +78,7 @@ class ChatViewModel(
         submitWorkFeedFeedback = ::submitWorkFeedFeedback,
         rewriteWorkFeedCard = ::rewriteWorkFeedCard,
         clearSnackbar = ::clearSnackbar,
+        clearFeedbackResult = ::clearFeedbackResult,
         undoDeleteConversation = ::undoDeleteConversation,
         submitUiCallback = ::submitUiCallback,
         resubmit = ::resubmit,
@@ -514,8 +515,16 @@ class ChatViewModel(
     private fun submitWorkFeedFeedback(itemId: String, feedback: String) {
         if (itemId.isBlank() || feedback.isBlank()) return
         viewModelScope.launch(backgroundDispatcher) {
-            (dataRepository as? DenebGatewayClient)?.sendWorkFeedFeedback(itemId, feedback)
+            val report = (dataRepository as? DenebGatewayClient)?.sendWorkFeedFeedback(itemId, feedback)
+            if (!report.isNullOrBlank()) {
+                _state.update { it.copy(feedbackResultText = report) }
+            }
         }
+    }
+
+    // Clears the feed-card feedback report after the snackbar has shown it.
+    private fun clearFeedbackResult() {
+        _state.update { it.copy(feedbackResultText = null) }
     }
 
     // Fire-and-forget a card rewrite from the feed long-press sheet. The gateway runs

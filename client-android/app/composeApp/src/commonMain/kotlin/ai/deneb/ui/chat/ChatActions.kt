@@ -33,6 +33,8 @@ data class ChatActions(
     // Long-press a feed card → 다시 작성: regenerate the card's analysis in place. (itemId)
     val rewriteWorkFeedCard: (String) -> Unit,
     val clearSnackbar: () -> Unit,
+    // Clears ChatUiState.feedbackResultText after the feed shows the agent's report.
+    val clearFeedbackResult: () -> Unit,
     val undoDeleteConversation: () -> Unit,
     val submitUiCallback: (event: String, data: Map<String, String>) -> Unit,
     val resubmit: (messageId: String, event: String, data: Map<String, String>) -> Unit,
