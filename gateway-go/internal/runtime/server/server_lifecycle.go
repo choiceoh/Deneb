@@ -54,7 +54,9 @@ func (s *Server) initAndListen(ctx context.Context) (net.Listener, error) {
 	}
 
 	s.httpServer = &http.Server{
-		Handler:           mux,
+		// withCORS lets the browser-based workstation (Andromeda) reach the
+		// miniapp.* surface; it's a no-op for Origin-less native clients.
+		Handler:           withCORS(mux),
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       120 * time.Second,
 		// WriteTimeout is a DoS backstop: a peer that opens a connection and then
