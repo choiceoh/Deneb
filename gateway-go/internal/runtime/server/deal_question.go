@@ -58,14 +58,15 @@ func (s *Server) appendDealQuestionCard(deal *gmailpoll.DealInfo, dealPagePath s
 		})
 	}
 	if _, err := nf.Append(workfeed.Item{
-		Source:  dealQuestionSource,
-		Title:   "새 거래: " + strings.TrimSpace(deal.Counterparty),
-		Summary: "어느 팀이 담당할까요?",
-		Body:    dealQuestionBody(deal),
-		RefType: "wiki",
-		RefID:   dealPagePath, // the deal page the answer gets recorded onto
-		Status:  "unread",
-		Actions: actions,
+		Source:   dealQuestionSource,
+		Title:    "새 거래: " + strings.TrimSpace(deal.Counterparty),
+		Summary:  "어느 팀이 담당할까요?",
+		Body:     dealQuestionBody(deal),
+		RefType:  "wiki",
+		RefID:    dealPagePath, // the deal page the answer gets recorded onto
+		Status:   "unread",
+		Question: true, // render with inline answer chips (the dept options below)
+		Actions:  actions,
 	}); err != nil {
 		s.logger.Warn("deal question 카드 생성 실패", "counterparty", deal.Counterparty, "error", err)
 	}

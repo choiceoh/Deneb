@@ -71,6 +71,7 @@ internal fun FeedScreen(
     onMarkSeen: (String) -> Unit,
     onLoadDateRange: (Long, Long) -> Unit,
     onRunAction: (String, String) -> Unit,
+    onAnswer: (WorkFeedItem, String, String?) -> Unit,
     onSubmitFeedback: (String, String) -> Unit,
     onRewrite: (String) -> Unit,
     onAsk: (String) -> Unit,
@@ -130,12 +131,12 @@ internal fun FeedScreen(
         } else {
             LazyColumn(Modifier.fillMaxWidth().weight(1f)) {
                 items(unread.size) { i ->
-                    FeedRowWithBody(unread[i], expandedId == unread[i].id, open, onRunAction) { actionItem = it }
+                    FeedRowWithBody(unread[i], expandedId == unread[i].id, open, onRunAction, onAnswer) { actionItem = it }
                 }
                 if (read.isNotEmpty()) {
                     item { DenebSectionLabel("읽음", Modifier.padding(start = 12.dp)) }
                     items(read.size) { i ->
-                        FeedRowWithBody(read[i], expandedId == read[i].id, open, onRunAction) { actionItem = it }
+                        FeedRowWithBody(read[i], expandedId == read[i].id, open, onRunAction, onAnswer) { actionItem = it }
                     }
                 }
             }
@@ -280,6 +281,7 @@ private fun FeedRowWithBody(
     expanded: Boolean,
     onOpen: (String) -> Unit,
     onRunAction: (String, String) -> Unit,
+    onAnswer: (WorkFeedItem, String, String?) -> Unit,
     onLongAction: (WorkFeedItem) -> Unit,
 ) {
     WorkFeedRow(item = item, onOpen = onOpen, onRunAction = onRunAction, expanded = expanded, onLongAction = onLongAction)
@@ -296,5 +298,9 @@ private fun FeedRowWithBody(
                     .padding(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 12.dp),
             )
         }
+    }
+    // A question card the agent is waiting on: inline answer chips / reply field.
+    if (expanded && item.question) {
+        WorkFeedAnswerBlock(item = item, onAnswer = onAnswer)
     }
 }

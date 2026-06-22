@@ -63,6 +63,7 @@ import ai.deneb.ui.DenebGroup
 import ai.deneb.ui.DenebListRow
 import ai.deneb.ui.DenebRow
 import ai.deneb.ui.DenebScreenScaffold
+import ai.deneb.ui.DenebSectionLabel
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.LightColorScheme
 import ai.deneb.ui.chat.WorkFeedAction
@@ -70,6 +71,7 @@ import ai.deneb.ui.chat.WorkFeedItem
 import ai.deneb.ui.chat.composables.DenebBottomBar
 import ai.deneb.ui.chat.composables.EmptyState
 import ai.deneb.ui.chat.composables.WaitingResponseRow
+import ai.deneb.ui.chat.composables.WorkFeedAnswerBlock
 import ai.deneb.ui.chat.composables.WorkFeedPanel
 import ai.deneb.ui.components.DenebUnderlineSearchField
 import ai.deneb.ui.components.SectionedScrubList
@@ -82,6 +84,7 @@ import ai.deneb.ui.dynamicui.ChartNode
 import ai.deneb.ui.dynamicui.DenebUiRenderer
 import ai.deneb.ui.markdown.MarkdownContent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -276,6 +279,8 @@ fun main() {
     renderChart("chart_light.png", LightColorScheme)
     renderScreen("workfeed_dark.png", "workfeed", DarkColorScheme, 824, 1100)
     renderScreen("workfeed_light.png", "workfeed", LightColorScheme, 824, 1100)
+    renderScreen("workfeed_answer_dark.png", "workfeed_answer", DarkColorScheme, 480, 720)
+    renderScreen("workfeed_answer_light.png", "workfeed_answer", LightColorScheme, 480, 720)
     renderScreen("dashboard_dark.png", "dashboard", DarkColorScheme, 824, 1900)
     renderScreen("dashboard_light.png", "dashboard", LightColorScheme, 824, 1900)
     renderScreen("org_chart_dark.png", "org_chart", DarkColorScheme, 824, 1500)
@@ -720,6 +725,44 @@ internal val previewScreens: Map<String, @Composable (ColorScheme) -> Unit> = ma
             Surface(color = MaterialTheme.colorScheme.background) {
                 Box(Modifier.width(412.dp)) {
                     WorkFeedPanel(items = sampleFeed, onOpen = {}, onRunAction = { _, _ -> }, onClose = {})
+                }
+            }
+        }
+    },
+    "workfeed_answer" to { scheme ->
+        MaterialTheme(colorScheme = scheme) {
+            Surface(color = MaterialTheme.colorScheme.background) {
+                Column(
+                    Modifier.width(412.dp).padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(20.dp),
+                ) {
+                    DenebSectionLabel("선택형 질문 — 답변 칩")
+                    WorkFeedAnswerBlock(
+                        item = WorkFeedItem(
+                            id = "q1",
+                            title = "새 거래: 한빛에너지",
+                            summary = "어느 팀이 담당할까요?",
+                            question = true,
+                            actions = listOf(
+                                WorkFeedAction(id = "dept:pl1", label = "1팀"),
+                                WorkFeedAction(id = "dept:pl2", label = "2팀"),
+                                WorkFeedAction(id = "dept:pl3", label = "3팀"),
+                                WorkFeedAction(id = "dept:nde", label = "남도에코"),
+                                WorkFeedAction(id = "dept:none", label = "딜 아님"),
+                            ),
+                        ),
+                        onAnswer = { _, _, _ -> },
+                    )
+                    DenebSectionLabel("자유 답변 — 입력란")
+                    WorkFeedAnswerBlock(
+                        item = WorkFeedItem(
+                            id = "q2",
+                            title = "회신 필요",
+                            summary = "내일 미팅 시간을 몇 시로 잡을까요?",
+                            question = true,
+                        ),
+                        onAnswer = { _, _, _ -> },
+                    )
                 }
             }
         }

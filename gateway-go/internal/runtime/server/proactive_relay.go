@@ -306,11 +306,20 @@ func (d proactiveRelayDeps) relayNativeToOptions(sessionKey, content string, opt
 		}
 	}
 	if d.workFeed != nil && target == nativeWorkSessionKey {
+		// Answerable question card: a ```choices fence becomes inline answer chips
+		// and a trailing "?" (no fence) flags a free-text question, so the agent's
+		// questions get a reply path instead of dead-ending in the feed. The fence
+		// is stripped from the card body (cardSrc/cardBody); the transcript mirror
+		// above keeps the original so the chat still renders the chips inline.
+		cardSrc, choices := splitChoicesFence(content)
+		cardBody, _ := splitChoicesFence(deliverBody)
+		qActions := choiceAnswerActions(choices)
+		isQuestion := len(choices) > 0 || endsWithQuestionMark(cardSrc)
 		// Derive a human title + summary from the body rather than the fixed
 		// "업무 리포트" + first-line slice that leaked markdown markers ("### …",
 		// "---") into every card. An empty title falls back to the store's
 		// defaultTitle ("업무 리포트"). See workfeed_extract.go.
-		title, titleLine := extractCardTitle(content)
+		title, titleLine := extractCardTitle(cardSrc)
 		source := strings.TrimSpace(opts.workFeedSource)
 		if source == "" {
 			source = workfeed.SourceProactive
@@ -318,7 +327,7 @@ func (d proactiveRelayDeps) relayNativeToOptions(sessionKey, content string, opt
 		// Mail reports get the envelope card icon (SourceMailReport). Prefer the
 		// explicit source from Gmail/LMTP delivery; fall back to body-shape detection
 		// for older callers and tests.
-		isMail := source == workfeed.SourceMailReport || isMailReportBody(content)
+		isMail := source == workfeed.SourceMailReport || isMailReportBody(cardSrc)
 		if isMail {
 			source = workfeed.SourceMailReport
 		}
@@ -327,9 +336,9 @@ func (d proactiveRelayDeps) relayNativeToOptions(sessionKey, content string, opt
 		// name it from the email's real subject) OR any proactive body that opens with
 		// a prose sentence (the heuristic then grabbed a whole narration line). The
 		// deterministic extractCardTitle result stays as the fallback.
-		summary := extractCardSummary(content, titleLine)
+		summary := extractCardSummary(cardSrc, titleLine)
 		if d.cardTitler != nil && (isMail || isWeakCardTitle(title, titleLine)) {
-			if t, s := d.cardTitler(content); t != "" || s != "" {
+			if t, s := d.cardTitler(cardSrc); t != "" || s != "" {
 				if t != "" {
 					title = t
 				}
@@ -345,8 +354,10 @@ func (d proactiveRelayDeps) relayNativeToOptions(sessionKey, content string, opt
 			Source:     source,
 			Title:      title,
 			Summary:    summary,
-			Body:       deliverBody,
+			Body:       cardBody,
 			SessionKey: target,
+			Question:   isQuestion,
+			Actions:    qActions,
 		}); err != nil && d.logger != nil {
 			d.logger.Error("proactive native relay: work feed append failed",
 				"sessionKey", target, "error", err)

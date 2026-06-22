@@ -1227,6 +1227,33 @@ class DenebGatewayClient(
     }
 
     /**
+     * Free-text answer to a question card: settles the card and routes the typed
+     * answer to the card's asking session (so the agent reacts to it). Mirrors
+     * [runWorkFeedAction]'s adopt-session + return-prompt shape. Returns the answer
+     * to deliver as a turn, or null on failure. Choice answers use runWorkFeedAction
+     * instead (the chips are work-feed actions).
+     */
+    suspend fun answerWorkFeedItem(itemId: String, answer: String): String? {
+        if (itemId.isBlank() || answer.isBlank()) return null
+        val payload = callRpc<WorkFeedActionRunPayload>(
+            "miniapp.workfeed.answer",
+            buildJsonObject {
+                put("itemId", itemId)
+                put("answer", answer)
+            },
+        ) ?: return null
+        if (payload.removeFromFeed) {
+            _denebWorkFeed.update { items -> items.filterNot { it.id == itemId } }
+        }
+        val target = payload.sessionKey.ifBlank { payload.item.sessionKey }
+        if (target.isNotBlank()) {
+            switchSession(target)
+            loadTranscriptGuarded(target, replacing = true)
+        }
+        return payload.prompt.ifBlank { null }
+    }
+
+    /**
      * Sends a user correction on a work-feed card (long-press → 정정·피드백). The
      * gateway annotates the card in place with the correction and runs one agent
      * turn to fix the durable wiki knowledge. The returned (annotated) item is

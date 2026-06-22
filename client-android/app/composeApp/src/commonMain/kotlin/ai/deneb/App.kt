@@ -490,6 +490,7 @@ private fun AppContent(
                                         },
                                         onLoadDateRange = feedState.actions.refreshWorkFeedRange,
                                         onRunAction = feedState.actions.runWorkFeedAction,
+                                        onAnswer = feedState.actions.answerWorkFeed,
                                         onSubmitFeedback = feedState.actions.submitWorkFeedFeedback,
                                         onRewrite = feedState.actions.rewriteWorkFeedCard,
                                         // 해당 피드 질문: open the card's dedicated chat (context injected)

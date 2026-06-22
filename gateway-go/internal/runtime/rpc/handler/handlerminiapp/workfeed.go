@@ -44,6 +44,51 @@ func WorkFeedMethods(deps WorkFeedDeps) map[string]rpcutil.HandlerFunc {
 		"miniapp.workfeed.list":       workFeedList(deps),
 		"miniapp.workfeed.ack":        workFeedAck(deps),
 		"miniapp.workfeed.action.run": workFeedActionRun(deps),
+		"miniapp.workfeed.answer":     workFeedAnswer(deps),
+	}
+}
+
+// workFeedAnswer settles a question card and returns its asking SessionKey so the
+// native can deliver the user's free-text answer there (the agent then reacts).
+// Choice answers go through action.run instead (ActionAnswer/ActionAck chips);
+// this is the free-text reply path for question cards without fixed options.
+func workFeedAnswer(deps WorkFeedDeps) rpcutil.HandlerFunc {
+	type params struct {
+		ItemID string `json:"itemId"`
+		Answer string `json:"answer"`
+	}
+	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		if errResp := requireAuth(ctx, req.ID); errResp != nil {
+			return errResp
+		}
+		var p params
+		if len(req.Params) > 0 {
+			if err := json.Unmarshal(req.Params, &p); err != nil {
+				return rpcerr.InvalidParams(err).Response(req.ID)
+			}
+		}
+		itemID := strings.TrimSpace(p.ItemID)
+		answer := strings.TrimSpace(p.Answer)
+		if itemID == "" {
+			return rpcerr.MissingParam("itemId").Response(req.ID)
+		}
+		if answer == "" {
+			return rpcerr.MissingParam("answer").Response(req.ID)
+		}
+		// Ack settles the card and returns it (carrying the asking SessionKey).
+		item, err := deps.Store.Ack(itemID)
+		if err != nil {
+			if errors.Is(err, workfeed.ErrNotFound) {
+				return rpcerr.NotFound("work feed item").Response(req.ID)
+			}
+			return rpcerr.WrapUnavailable("work feed unavailable", err).Response(req.ID)
+		}
+		return rpcutil.RespondOK(req.ID, map[string]any{
+			"ok":             true,
+			"sessionKey":     item.SessionKey,
+			"prompt":         answer,
+			"removeFromFeed": true,
+		})
 	}
 }
 
