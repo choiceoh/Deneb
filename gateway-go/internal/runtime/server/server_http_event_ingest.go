@@ -221,6 +221,19 @@ func (s *Server) ingestPhoneEventAsync(eventType, source, text string) {
 		recordPhoneLocation(s.logger, text)
 		return
 	}
+	// Gmail notifications are dropped before the judgment turn: the gateway's own
+	// gmail-poll pipeline already analyzes that inbox and posts the authoritative
+	// mail_report work-feed card, so a phone-driven judgment turn over the same mail
+	// only produced duplicate, near-identical cards. Scope is Gmail ONLY (the polled
+	// account) — other mail apps have no poll coverage, so their notification is the
+	// sole proactive surface and must still run. Covers both phone paths: Termux
+	// (/api/event/ingest) and the native NotificationListener (miniapp.event.ingest)
+	// both funnel through here.
+	if isPolledGmailNotification(eventType, source) {
+		s.logger.Info("phone-event: Gmail notification skipped (gmail-poll covers this inbox)",
+			"source", strings.TrimSpace(source))
+		return
+	}
 	source = strings.TrimSpace(source)
 	if source == "" {
 		source = "(미상)"
@@ -270,6 +283,29 @@ func (s *Server) ingestPhoneEventAsync(eventType, source, text string) {
 			"source", source, "type", eventType,
 			"delivered", delivered, "outputLen", len(output))
 	})
+}
+
+// isPolledGmailNotification reports whether a phone event is a Gmail app
+// notification. These are suppressed before the judgment turn because gmail-poll
+// already analyzes that inbox and posts the mail_report card; a second, phone-
+// driven judgment over the same email only duplicated it in the work feed.
+//
+// Scope is Gmail ONLY (the polled account). Other mail apps (Outlook, Samsung
+// Email, a non-polled account) are deliberately NOT matched: gmail-poll never sees
+// them, so their phone notification is the only proactive surface they have.
+//
+// source is the package name forwarded by deneb-notification-watch
+// ("com.google.android.gm", and the ".gm.lite" variant), or a "Gmail" display
+// label if a capture path forwards one instead of the package. Only notification
+// events qualify (empty type defaults to notification); other types pass through.
+func isPolledGmailNotification(eventType, source string) bool {
+	switch strings.TrimSpace(strings.ToLower(eventType)) {
+	case "notification", "":
+	default:
+		return false
+	}
+	s := strings.ToLower(strings.TrimSpace(source))
+	return strings.Contains(s, "com.google.android.gm") || s == "gmail"
 }
 
 // notificationLikeEvent reports whether an event type uses the "worth surfacing?"
