@@ -40,6 +40,9 @@ fn token_get(account: String) -> Result<Option<String>, String> {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_process::init())
+        // Native HTTP (reqwest) so gateway requests bypass the webview's CORS and
+        // macOS WKWebView ATS (which blocks plain-HTTP gateways). See src/gateway.ts.
+        .plugin(tauri_plugin_http::init())
         .setup(|app| {
             // Updater is desktop-only; the frontend drives the check (see src/updater.ts).
             #[cfg(desktop)]

@@ -5,9 +5,27 @@
 // todo, memory …) flow into grids/forms automatically.
 import { readSSE } from "./sse";
 import { log } from "./log";
+import { isTauri } from "./tauri";
 
 const rpcLog = log.child("rpc");
 const chatLog = log.child("chat");
+
+// In a packaged desktop app the webview's fetch is subject to CORS *and* macOS
+// WKWebView's ATS (which blocks plain-HTTP gateways) — so a perfectly reachable
+// gateway still fails from the UI. Route gateway calls through Tauri's native HTTP
+// plugin (Rust reqwest), which bypasses both. On web/dev we fall back to the
+// browser fetch. The import is dynamic so the web bundle never pulls the plugin.
+let nativeFetch: typeof globalThis.fetch | null = null;
+export async function gatewayFetch(input: string, init?: RequestInit): Promise<Response> {
+  if (isTauri()) {
+    if (!nativeFetch) {
+      const mod = await import("@tauri-apps/plugin-http");
+      nativeFetch = mod.fetch as typeof globalThis.fetch;
+    }
+    return nativeFetch(input, init);
+  }
+  return globalThis.fetch(input, init);
+}
 
 export const TOKEN_HEADER = "X-Deneb-Client-Token";
 const STORAGE_KEY = "andromeda.gateway";
@@ -62,7 +80,7 @@ export async function callRpc<T>(cfg: GatewayConfig, method: string, params: Rec
   const body: RpcRequest = { id: crypto.randomUUID(), method, params };
   rpcLog.debug(`→ ${method}`, params);
   try {
-    const res = await fetch(`${base(cfg.url)}/api/v1/miniapp/rpc`, {
+    const res = await gatewayFetch(`${base(cfg.url)}/api/v1/miniapp/rpc`, {
       method: "POST",
       headers: { "Content-Type": "application/json", [TOKEN_HEADER]: cfg.token },
       body: JSON.stringify(body),
@@ -124,7 +142,7 @@ export async function chatStream(
     ? `[작업 영역 — 현재 내용]\n${workspaceContext}\n\n[요청]\n${message}`
     : message;
   chatLog.debug(`→ stream (session ${sessionKey}, +context ${Boolean(workspaceContext?.trim())})`);
-  const res = await fetch(`${base(cfg.url)}/api/v1/miniapp/chat/stream`, {
+  const res = await gatewayFetch(`${base(cfg.url)}/api/v1/miniapp/chat/stream`, {
     method: "POST",
     headers: { "Content-Type": "application/json", [TOKEN_HEADER]: cfg.token },
     body: JSON.stringify({ message: composed, sessionKey }),

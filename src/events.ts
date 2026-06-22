@@ -4,7 +4,7 @@
 //
 // EventSource can't set the X-Deneb-Client-Token header, so we read the SSE stream
 // off fetch() with an AbortSignal (same approach as chatStream).
-import { type GatewayConfig, TOKEN_HEADER, base } from "./gateway";
+import { type GatewayConfig, TOKEN_HEADER, base, gatewayFetch } from "./gateway";
 import { readSSE } from "./sse";
 import { log } from "./log";
 
@@ -46,7 +46,7 @@ export async function subscribeEvents(
   handlers: EventHandlers,
   signal?: AbortSignal,
 ): Promise<void> {
-  const res = await fetch(`${base(cfg.url)}/api/v1/miniapp/events`, {
+  const res = await gatewayFetch(`${base(cfg.url)}/api/v1/miniapp/events`, {
     headers: { [TOKEN_HEADER]: cfg.token },
     signal,
   });
