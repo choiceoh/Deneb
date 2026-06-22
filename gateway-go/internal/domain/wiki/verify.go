@@ -88,12 +88,26 @@ func (wd *WikiDreamer) enrichRelatedLinks(ctx context.Context) int {
 		if len(sugg) == 0 {
 			continue
 		}
-		page.Meta.Related = sugg
-		if werr := wd.store.WritePage(rp, page); werr != nil {
+		// Apply via UpdatePage so a concurrent writer of rp can't be clobbered by
+		// this Related-only edit. SuggestRelated (an embedding query) ran above,
+		// outside the write lock. Re-check Related under the lock: another writer
+		// may have filled it since the read, in which case skip (additive-only).
+		written := false
+		werr := wd.store.UpdatePage(rp, func(cur *Page) (*Page, error) {
+			if cur == nil || len(cur.Meta.Related) > 0 {
+				return nil, nil
+			}
+			cur.Meta.Related = sugg
+			written = true
+			return cur, nil
+		})
+		if werr != nil {
 			wd.logger.Warn("wiki-dream: enrich write failed", "path", rp, "error", werr)
 			continue
 		}
-		added += len(sugg)
+		if written {
+			added += len(sugg)
+		}
 	}
 	return added
 }

@@ -315,82 +315,88 @@ func (wd *WikiDreamer) applyUpdates(_ context.Context, updates []wikiUpdate) (cr
 			created++
 
 		case "update":
-			existing, err := wd.store.ReadPage(u.Path)
-			if err != nil {
-				// Page doesn't exist — create it instead.
-				page := NewPage(u.Title, u.Category, u.Tags)
-				if code != "" {
-					page.Meta.Code = code
+			// Read-modify-write through UpdatePage so the append can't be clobbered
+			// by a concurrent writer of the same page (the wiki-research turn and
+			// mail analysis both target 프로젝트 pages). createdThis distinguishes the
+			// create-on-missing fallback from a true append for the counters.
+			createdThis := false
+			err := wd.store.UpdatePage(u.Path, func(existing *Page) (*Page, error) {
+				if existing == nil {
+					// Page doesn't exist — create it instead.
+					page := NewPage(u.Title, u.Category, u.Tags)
+					if code != "" {
+						page.Meta.Code = code
+					}
+					if u.Importance > 0 {
+						page.Meta.Importance = u.Importance
+					}
+					if u.ID != "" {
+						page.Meta.ID = u.ID
+					}
+					if u.Summary != "" {
+						page.Meta.Summary = u.Summary
+					}
+					if len(u.Related) > 0 {
+						page.Meta.Related = u.Related
+					}
+					if u.Type != "" {
+						page.Meta.Type = u.Type
+					}
+					if u.Confidence != "" {
+						page.Meta.Confidence = u.Confidence
+					}
+					if u.Due != "" {
+						page.Meta.Due = u.Due
+					}
+					page.Body = u.Content
+					createdThis = true
+					return page, nil
 				}
-				if u.Importance > 0 {
-					page.Meta.Importance = u.Importance
+
+				// Append content to existing page. Stamp the code only when the page
+				// lacks one — a frozen code is never overwritten.
+				if code != "" && existing.Meta.Code == "" {
+					existing.Meta.Code = code
+				}
+				if u.Content != "" {
+					existing.Body += "\n\n" + u.Content
+				}
+				if len(u.Tags) > 0 {
+					existing.Meta.Tags = mergeTags(existing.Meta.Tags, u.Tags)
+				}
+				if u.Importance > existing.Meta.Importance {
+					existing.Meta.Importance = u.Importance
 				}
 				if u.ID != "" {
-					page.Meta.ID = u.ID
+					existing.Meta.ID = u.ID
 				}
 				if u.Summary != "" {
-					page.Meta.Summary = u.Summary
+					existing.Meta.Summary = u.Summary
 				}
 				if len(u.Related) > 0 {
-					page.Meta.Related = u.Related
+					existing.Meta.Related = mergeRelated(existing.Meta.Related, u.Related)
 				}
 				if u.Type != "" {
-					page.Meta.Type = u.Type
+					existing.Meta.Type = u.Type
 				}
 				if u.Confidence != "" {
-					page.Meta.Confidence = u.Confidence
+					existing.Meta.Confidence = u.Confidence
 				}
 				if u.Due != "" {
-					page.Meta.Due = u.Due
+					existing.Meta.Due = u.Due
 				}
-				page.Body = u.Content
-				if err := wd.store.WritePage(u.Path, page); err != nil {
-					wd.logger.Warn("wiki-dream: create-on-update failed", "path", u.Path, "error", err)
-					continue
-				}
-				created++
-				continue
-			}
-
-			// Append content to existing page. Stamp the code only when the page
-			// lacks one — a frozen code is never overwritten.
-			if code != "" && existing.Meta.Code == "" {
-				existing.Meta.Code = code
-			}
-			if u.Content != "" {
-				existing.Body += "\n\n" + u.Content
-			}
-			if len(u.Tags) > 0 {
-				existing.Meta.Tags = mergeTags(existing.Meta.Tags, u.Tags)
-			}
-			if u.Importance > existing.Meta.Importance {
-				existing.Meta.Importance = u.Importance
-			}
-			if u.ID != "" {
-				existing.Meta.ID = u.ID
-			}
-			if u.Summary != "" {
-				existing.Meta.Summary = u.Summary
-			}
-			if len(u.Related) > 0 {
-				existing.Meta.Related = mergeRelated(existing.Meta.Related, u.Related)
-			}
-			if u.Type != "" {
-				existing.Meta.Type = u.Type
-			}
-			if u.Confidence != "" {
-				existing.Meta.Confidence = u.Confidence
-			}
-			if u.Due != "" {
-				existing.Meta.Due = u.Due
-			}
-			existing.Meta.Updated = time.Now().Format("2006-01-02")
-
-			if err := wd.store.WritePage(u.Path, existing); err != nil {
+				existing.Meta.Updated = time.Now().Format("2006-01-02")
+				return existing, nil
+			})
+			if err != nil {
 				wd.logger.Warn("wiki-dream: update page failed", "path", u.Path, "error", err)
 				continue
 			}
-			updated++
+			if createdThis {
+				created++
+			} else {
+				updated++
+			}
 		}
 
 		// Contradiction handling: when the LLM flagged this update as REPLACING

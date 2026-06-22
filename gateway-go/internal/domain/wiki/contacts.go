@@ -240,44 +240,66 @@ func (s *Store) createPersonPage(title string, c *Contact) (path string, created
 		return "", false, false, fmt.Errorf("wiki: empty person title")
 	}
 	relPath := "인물/" + slug + ".md"
-	if existing, _ := s.ReadPage(relPath); existing != nil {
-		ch, err := s.enrichPersonPage(relPath, c)
-		return relPath, false, ch, err
-	}
-	page := NewPage(title, "인물", nil)
-	body := fmt.Sprintf("# %s\n\n## 요약\n\n_위키 링크에서 자동 생성됨_\n", title)
-	if section := renderContactSection(c); section != "" {
-		body += "\n## " + contactSectionHeading + "\n\n" + section + "\n"
-	}
-	page.Body = body
-	if err := s.WritePage(relPath, page); err != nil {
+	// One atomic read-modify-write so a concurrent enrich/write of the same person
+	// page can't be clobbered. The existing-page branch enriches in place inline
+	// rather than calling enrichPersonPage — that would re-enter UpdatePage and
+	// deadlock on the (non-reentrant) writeMu we hold inside this closure.
+	err = s.UpdatePage(relPath, func(existing *Page) (*Page, error) {
+		if existing != nil {
+			section := renderContactSection(c)
+			if section == "" {
+				return nil, nil // nothing worth writing
+			}
+			newBody := upsertSection(existing.Body, contactSectionHeading, section)
+			if strings.TrimSpace(newBody) == strings.TrimSpace(existing.Body) {
+				return nil, nil // identical section → no-op
+			}
+			existing.Body = newBody
+			existing.Meta.Updated = dentime.Now().Format("2006-01-02")
+			changed = true
+			return existing, nil
+		}
+		page := NewPage(title, "인물", nil)
+		body := fmt.Sprintf("# %s\n\n## 요약\n\n_위키 링크에서 자동 생성됨_\n", title)
+		if section := renderContactSection(c); section != "" {
+			body += "\n## " + contactSectionHeading + "\n\n" + section + "\n"
+		}
+		page.Body = body
+		created, changed = true, true
+		return page, nil
+	})
+	if err != nil {
 		return "", false, false, err
 	}
-	return relPath, true, true, nil
+	return relPath, created, changed, nil
 }
 
 // enrichPersonPage writes a contact's phone/email/org into relPath's "## 연락처"
 // section. Returns whether the page content actually changed (an identical
 // section is a no-op so re-syncing doesn't bump the Updated date).
+//
+// The read-modify-write runs under UpdatePage so a concurrent writer of the same
+// person page can't clobber the enrichment (or vice versa).
 func (s *Store) enrichPersonPage(relPath string, c *Contact) (bool, error) {
-	page, err := s.ReadPage(relPath)
-	if err != nil {
-		return false, err
-	}
 	section := renderContactSection(c)
 	if section == "" {
 		return false, nil // nothing worth writing (no phone/email/org)
 	}
-	newBody := upsertSection(page.Body, contactSectionHeading, section)
-	if strings.TrimSpace(newBody) == strings.TrimSpace(page.Body) {
-		return false, nil
-	}
-	page.Body = newBody
-	page.Meta.Updated = dentime.Now().Format("2006-01-02")
-	if err := s.WritePage(relPath, page); err != nil {
-		return false, err
-	}
-	return true, nil
+	changed := false
+	err := s.UpdatePage(relPath, func(page *Page) (*Page, error) {
+		if page == nil {
+			return nil, fmt.Errorf("wiki: enrich person: %s not found", relPath)
+		}
+		newBody := upsertSection(page.Body, contactSectionHeading, section)
+		if strings.TrimSpace(newBody) == strings.TrimSpace(page.Body) {
+			return nil, nil // identical section → no-op
+		}
+		page.Body = newBody
+		page.Meta.Updated = dentime.Now().Format("2006-01-02")
+		changed = true
+		return page, nil
+	})
+	return changed, err
 }
 
 const contactSectionHeading = "연락처"

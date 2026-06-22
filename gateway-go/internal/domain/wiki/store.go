@@ -46,9 +46,28 @@ func ValidateCategory(cat string) bool {
 }
 
 // Store manages a wiki directory on disk.
+//
+// Lock hierarchy (acquire in this order; never reverse):
+//
+//	Store.writeMu  →  Store.mu
+//	searchDB.mu (s.fts / s.diaryFTS) is an independent leaf, taken on its own.
+//
+// writeMu serializes the read-modify-write of a page body (read file → mutate →
+// atomic temp+rename) together with its index update, so two writers on the same
+// page can't interleave (read,read,write,write) and clobber each other's edit —
+// the last-writer-wins lost update this guards against. It is acquired exactly
+// once at each public write boundary (WritePage, UpdatePage, DeletePage,
+// MarkSuperseded, MergePage, SplitPage, UpsertDealPage, EnrichPeople's person-page
+// helpers). The internal *Locked helpers and writePageInternal / maintainBacklinks
+// assume it is already held and never re-acquire it (Go mutexes are non-reentrant).
+// mu independently guards the in-memory index/backlink maps so pure readers
+// (Index, Tier1Pages, Search) never block behind a write's disk I/O.
 type Store struct {
 	dir      string
 	diaryDir string
+
+	// writeMu serializes page-body writers; see the type doc for the hierarchy.
+	writeMu sync.Mutex
 
 	mu       sync.RWMutex
 	index    *Index // cached master index
@@ -132,7 +151,21 @@ func (s *Store) ReadPage(relPath string) (*Page, error) {
 
 // WritePage writes a page to the wiki. Creates parent directories if needed.
 // Updates the master index entry and maintains bidirectional backlinks.
+//
+// Holds writeMu for the whole write so it can't interleave with a concurrent
+// UpdatePage/WritePage on the same path. WritePage takes a fully-formed page and
+// overwrites the body wholesale — for a read-modify-write (append to an existing
+// body, merge fields) use UpdatePage so the read and write are one atomic step;
+// a bare ReadPage→WritePage pair from a caller is still racy because the read
+// happens outside this lock.
 func (s *Store) WritePage(relPath string, page *Page) error {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+	return s.writePageLocked(relPath, page)
+}
+
+// writePageLocked is WritePage's body; the caller must hold writeMu.
+func (s *Store) writePageLocked(relPath string, page *Page) error {
 	relPath = normalizePagePath(relPath)
 	// Defend every write path (dreamer, wiki tool, RPC, miniapp merge) against
 	// content that arrives with its own frontmatter prepended — storing it as a
@@ -152,6 +185,36 @@ func (s *Store) WritePage(relPath string, page *Page) error {
 	return nil
 }
 
+// UpdatePage atomically reads the page at relPath, hands it to mutate, and writes
+// back whatever mutate returns — all under writeMu, so a concurrent
+// UpdatePage/WritePage on the same path can't interleave and lose an update.
+//
+// This is the read-modify-write primitive every appending/merging writer should
+// use (deal upserts, the dreamer's update branch, the wiki tool, contact
+// enrichment): doing the read and the write as two separate Store calls leaves a
+// window where another writer's rename clobbers the just-read content.
+//
+// mutate receives the current page, or nil when the page does not exist yet
+// (mirroring the existing "read error ⇒ treat as create" behavior), and returns
+// the page to persist. Returning a nil page with a nil error skips the write —
+// use it for a no-op update (idempotent re-file, unchanged section) so the Updated
+// date and the index don't churn. Backlinks, the index, and the audit log are
+// maintained exactly as WritePage does.
+func (s *Store) UpdatePage(relPath string, mutate func(current *Page) (*Page, error)) error {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+	current, _ := s.ReadPage(relPath) // nil when absent/unreadable — same as the create path
+	next, err := mutate(current)
+	if err != nil || next == nil {
+		return err
+	}
+	return s.writePageLocked(relPath, next)
+}
+
+// writePageInternal writes the page file, updates the search + master index, and
+// (unless skipBacklinks) maintains bidirectional backlinks. The caller must hold
+// writeMu — every path that reaches here (writePageLocked, deletePageLocked,
+// MarkSuperseded, MergePage, repointReference, backlink maintenance) holds it.
 func (s *Store) writePageInternal(relPath string, page *Page, skipBacklinks bool) error {
 	relPath = normalizePagePath(relPath)
 	abs := filepath.Join(s.dir, relPath)
@@ -189,8 +252,17 @@ func (s *Store) writePageInternal(relPath string, page *Page, skipBacklinks bool
 }
 
 // DeletePage removes a page and its index entry.
-// Cleans up backlinks from related pages.
+// Cleans up backlinks from related pages. Serialized against page writes via
+// writeMu so a delete can't interleave with a concurrent write of the same page.
 func (s *Store) DeletePage(relPath string) error {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+	return s.deletePageLocked(relPath)
+}
+
+// deletePageLocked is DeletePage's body; the caller must hold writeMu (MergePage
+// deletes the merge source while already holding it).
+func (s *Store) deletePageLocked(relPath string) error {
 	relPath = normalizePagePath(relPath)
 	// Read page before deleting to get its related list.
 	var oldRelated []string
@@ -226,7 +298,10 @@ func (s *Store) DeletePage(relPath string) error {
 
 // maintainBacklinks ensures bidirectional Related links.
 // It compares oldRelated (previous state) with newRelated (current state)
-// and updates target pages accordingly.
+// and updates target pages accordingly. The caller holds writeMu, so the target
+// pages it rewrites (addBacklink/removeBacklink → writePageInternal) are part of
+// the same serialized write — a single global lock means no cross-page ordering
+// deadlock between two writers maintaining each other's backlinks.
 func (s *Store) maintainBacklinks(relPath string, oldRelated, newRelated []string) {
 	oldSet := toSet(oldRelated)
 	newSet := toSet(newRelated)
