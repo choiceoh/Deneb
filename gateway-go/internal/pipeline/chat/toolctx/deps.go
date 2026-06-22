@@ -68,6 +68,24 @@ type CoreToolDeps struct {
 	// degrades the files tool's semantic=true to a name/content search, so the
 	// feature is optional, not load-bearing.
 	FilesSemanticSearch func(ctx context.Context, query string, max int) ([]filestore.ScoredEntry, error)
+
+	// ConsultPanel fans a single prompt out to the healthy models the wormhole
+	// router serves, in parallel, returning each model's answer — the engine
+	// behind the research_panel tool / deep-research skill. The server owns the
+	// model registry + wormhole client and injects this closure; nil disables
+	// the research_panel tool.
+	ConsultPanel func(ctx context.Context, system, prompt string, models []string) []PanelAnswer
+}
+
+// PanelAnswer is one model's answer in a research-panel fan-out (research_panel
+// tool / deep-research skill). A non-empty Err (with empty Answer) means that
+// model errored or timed out and was dropped from synthesis.
+type PanelAnswer struct {
+	Model  string // served model name (as the wormhole router routes it)
+	Family string // coarse provider family, for cross-family agreement weighting
+	Answer string // the model's answer; empty when Err is set
+	Ms     int64  // wall-clock ms for this model's call
+	Err    string // non-empty when the model errored / timed out
 }
 
 // FleetDeps gives the fleet tool the SparkFleet base URL + optional API token.

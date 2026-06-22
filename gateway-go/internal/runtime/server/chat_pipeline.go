@@ -185,6 +185,9 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 		},
 		LLMClient:    reg.Client(modelrole.RoleLightweight),
 		DefaultModel: reg.Model(modelrole.RoleLightweight),
+		// Deep-research panel fan-out: one prompt → every healthy wormhole-served
+		// model in parallel (research_panel tool). nil-safe — the tool checks it.
+		ConsultPanel: s.consultModelPanel,
 		AgentLog:     agentLogWriter,
 		LogCapture:   s.logCapture,
 		WorkFeed:     s.workFeedStore,
