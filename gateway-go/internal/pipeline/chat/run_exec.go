@@ -16,6 +16,8 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/metrics"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/prompt"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/streaming"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 	"github.com/choiceoh/deneb/gateway-go/pkg/dentime"
@@ -186,7 +188,22 @@ func executeAgentRun(
 	// history reload stays byte-identical to this turn's cached prefix. The
 	// degenerate no-user-message case falls back to the legacy system
 	// placement so evidence is never dropped. See run_tail_inject.go.
-	tailAdds := buildTailAdditions(params, prep.RecallMemory)
+	// Notebook grounding: when this session has an active notebook (opened via
+	// the notebook tool's open action), inject its pinned sources as a wire-only
+	// tail block so the turn is grounded primarily in those sources. Broad recall
+	// is suppressed for bound sessions in prepareContextAndPrompt — the notebook
+	// is the explicit scope — so this fills the reference slot instead. Like
+	// recall it rides the last user message (APC-safe; see run_tail_inject.go).
+	notebookGrounding := ""
+	if nbID, updated, ok := activeGroundingNotebook(deps, params.SessionKey); ok {
+		if g, hit := cachedNotebookGrounding(params.SessionKey, nbID, updated); hit {
+			notebookGrounding = g
+		} else if g, gok := tools.BuildNotebookGrounding(&toolctx.NotebookDeps{Store: deps.notebookStore, Wiki: deps.wikiStore}, nbID); gok {
+			notebookGrounding = g
+			storeNotebookGrounding(params.SessionKey, nbID, updated, g)
+		}
+	}
+	tailAdds := buildTailAdditions(params, prep.RecallMemory, notebookGrounding)
 	messages, tailInjected := injectTailAdditions(messages, tailAdds)
 	tailForSystem := ""
 	if !tailInjected {
@@ -442,6 +459,28 @@ func emitPhase(deps runDeps, params RunParams, phase string, at time.Time) {
 		"phase": phase,
 		"ts":    at.UnixMilli(),
 	})
+}
+
+// activeGroundingNotebook reports the notebook a session is grounded in and its
+// Updated stamp, but ONLY when the notebook exists and has at least one source.
+// An empty/missing notebook (or nil store) returns ok=false so that recall
+// suppression (run_prepare.go) and grounding injection stay symmetric — a
+// bound-but-contentless turn keeps broad recall instead of running with
+// neither. The Updated stamp is the grounding cache's content version: any
+// pin/unpin/mode change bumps it (notebook.Store), invalidating the snapshot.
+func activeGroundingNotebook(deps runDeps, sessionKey string) (id string, updated int64, ok bool) {
+	if deps.notebookStore == nil {
+		return "", 0, false
+	}
+	id = toolctx.ActiveNotebook(sessionKey)
+	if id == "" {
+		return "", 0, false
+	}
+	nb, found := deps.notebookStore.Get(id)
+	if !found || len(nb.Sources) == 0 {
+		return "", 0, false
+	}
+	return id, nb.Updated, true
 }
 
 func formatToolHist(counts map[string]int) string {

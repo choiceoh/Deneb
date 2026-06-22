@@ -116,6 +116,16 @@ func prepareContextAndPrompt(
 		if params.EphemeralUser || params.SkipRecall || chatbot {
 			return
 		}
+		// A notebook with real sources bound to this session is the explicit
+		// scope, so suppress broad recall — the pinned sources are tail-injected
+		// as grounding instead (run_exec.go), and running whole-corpus recall
+		// alongside would dilute that focus and compete for the input budget. An
+		// empty/missing notebook does NOT suppress recall, so a contentless bound
+		// turn is never left with neither (the gates stay symmetric). The wiki/
+		// recall TOOLS stay available if the model needs wider memory.
+		if _, _, ok := activeGroundingNotebook(deps, params.SessionKey); ok {
+			return
+		}
 		fingerprint := recallCueFingerprint(params.Message)
 		hasCue := fingerprint != ""
 		// Hermes-style auto_recall: run the preflight every turn, not just cue turns.

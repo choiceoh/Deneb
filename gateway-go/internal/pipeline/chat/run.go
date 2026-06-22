@@ -13,6 +13,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/provider"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/notebook"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/streaming"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
@@ -166,6 +167,7 @@ type runDeps struct {
 
 	embeddingClient      compact.Embedder          // optional; BGE-M3 for MMR compaction fallback
 	wikiStore            *wiki.Store               // optional; wiki knowledge base
+	notebookStore        *notebook.Store           // optional; notebook session-grounding source store
 	dreamTurnFn          func(ctx context.Context) // optional; increments dream turn via autonomous
 	agentLog             *agentlog.Writer          // optional; enables agent detail logging
 	registry             *modelrole.Registry       // centralized model role registry

@@ -1235,9 +1235,12 @@
           "add_source",
           "remove_source",
           "delete",
-          "brief"
+          "brief",
+          "open",
+          "close",
+          "mode"
         ],
-        "description": "create: 노트북 생성. for_deal: 딜/프로젝트의 노트북 보기(없으면 생성, deal_ref). pin_to_deal: 딜 노트북에 자료 한 번에 저장(없으면 생성; deal_ref+kind+ref/text). list: 노트북 목록. show: 핀된 자료 보기(id 또는 deal_ref). add_source: 자료 핀. remove_source: 자료 제거. delete: 노트북 삭제. brief: 핀된 자료에만 근거한 인용([S1]) 포함 브리핑 데이터 생성(모델이 종합; id 또는 deal_ref)."
+        "description": "create: 노트북 생성. for_deal: 딜/프로젝트의 노트북 보기(없으면 생성, deal_ref). pin_to_deal: 딜 노트북에 자료 한 번에 저장(없으면 생성; deal_ref+kind+ref/text). list: 노트북 목록. show: 핀된 자료 보기(id 또는 deal_ref). add_source: 자료 핀. remove_source: 자료 제거. delete: 노트북 삭제. brief: 핀된 자료 근거 인용([S1]) 1회 브리핑 데이터(모델 종합; id 또는 deal_ref). open: 이 세션을 노트북에 묶어 이후 모든 답을 그 자료 위주로(id 또는 deal_ref). close: 노트북 닫고 일반 모드 복귀. mode: 그라운딩 강도 전환(id+mode=soft|strict)."
       },
       "deal_ref": {
         "type": "string",
@@ -1263,13 +1266,17 @@
         "type": "string",
         "enum": [
           "wiki",
-          "note"
+          "note",
+          "file",
+          "url",
+          "mail",
+          "diary"
         ],
-        "description": "자료 유형 (add_source): wiki=위키 페이지(ref에 경로, brief 시 현행 내용을 라이브로 읽음), note=붙여넣기 텍스트(text에 내용)."
+        "description": "자료 유형 (add_source): wiki=위키 페이지(ref=경로, 라이브). note=붙여넣기 텍스트(text). file=파일 경로(ref=경로; PDF·이미지 OCR, 그 외 텍스트). url=웹페이지(ref=URL, 본문 추출). mail=Gmail 스레드(ref=스레드/메시지 id). diary=일기 항목(ref=날짜/id). file·url·mail·diary는 추가 시점에 본문을 스냅샷."
       },
       "ref": {
         "type": "string",
-        "description": "위키 페이지 경로 (kind=wiki) — 예: '프로젝트/topsolar.md' 또는 'w:프로젝트/topsolar'."
+        "description": "자료 위치 (kind별): wiki=페이지 경로('프로젝트/topsolar.md'/'w:프로젝트/topsolar'), file=파일 경로(PDF·이미지·텍스트), url=웹 주소(https://…), mail=Gmail 스레드/메시지 id, diary=일기 날짜/id."
       },
       "title": {
         "type": "string",
@@ -1286,6 +1293,14 @@
       "focus": {
         "type": "string",
         "description": "브리핑 초점 (brief, 선택) — 예: '계약 조건과 리스크 위주로'."
+      },
+      "mode": {
+        "type": "string",
+        "enum": [
+          "soft",
+          "strict"
+        ],
+        "description": "그라운딩 강도 (mode 액션): soft=자료 우선이되 부족하면 일반 지식으로 보충하고 (자료 밖) 표시(기본), strict=자료에만 근거하고 없으면 '자료에 없음'."
       }
     },
     "required": [
