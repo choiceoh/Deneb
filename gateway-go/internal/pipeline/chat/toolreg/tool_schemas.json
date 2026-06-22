@@ -37,6 +37,25 @@
     ]
   },
   {
+    "name": "research_panel",
+    "properties": {
+      "question": {
+        "type": "string",
+        "description": "The research question / sub-question to put to every healthy model in parallel. Phrase it as one self-contained prompt (the models do not see the conversation)."
+      },
+      "models": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "Optional: restrict the panel to these served model names. Empty/omitted = all currently-healthy models the router serves (the default — fan out to everything that is up)."
+      }
+    },
+    "required": [
+      "question"
+    ]
+  },
+  {
     "name": "read_spillover",
     "properties": {
       "spill_id": {

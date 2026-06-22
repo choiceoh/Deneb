@@ -42,6 +42,26 @@ func readToolSchema() map[string]any {
 	}
 }
 
+func researchPanelToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"models": map[string]any{
+				"type":        "array",
+				"description": "Optional: restrict the panel to these served model names. Empty/omitted = all currently-healthy models the router serves (the default — fan out to everything that is up).",
+				"items": map[string]any{
+					"type": "string",
+				},
+			},
+			"question": map[string]any{
+				"type":        "string",
+				"description": "The research question / sub-question to put to every healthy model in parallel. Phrase it as one self-contained prompt (the models do not see the conversation).",
+			},
+		},
+		"required": []string{"question"},
+	}
+}
+
 func readSpilloverToolSchema() map[string]any {
 	return map[string]any{
 		"type": "object",

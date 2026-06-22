@@ -58,6 +58,20 @@ func RegisterCoreTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDep
 		Deferred: true,
 	})
 
+	// Research panel: fan a question out to every healthy model in parallel
+	// (deep-research skill). Deferred — only deliberate deep research needs it,
+	// so interactive turns don't pay for the schema. nil ConsultPanel (no model
+	// registry / router wired) leaves the tool unregistered.
+	if deps.ConsultPanel != nil {
+		registry.RegisterTool(toolctx.ToolDef{
+			Name:        "research_panel",
+			Description: "하나의 질문을 현재 가동 중(헬시)인 모든 모델에게 병렬로 던져 모델별 답을 모아 온다(이종 모델 패널 팬아웃). 딥리서치·고위험 의사결정처럼 여러 관점과 교차검증이 가치 있을 때 사용. 반환된 모델별 답을 당신이 직접 종합하라 — 서로 다른 계열이 합의하면 강한 신뢰, 모순은 명시하고, 자신만만한 답에 닻 내리지 말 것. 단순 사실질문엔 쓰지 마라(비용이 모델 수만큼 N배). models로 특정 모델만 지정 가능, 비우면 전체.",
+			InputSchema: researchPanelToolSchema(),
+			Fn:          tools.ToolResearchPanel(deps.ConsultPanel),
+			Deferred:    true,
+		})
+	}
+
 	// NOTE: Pilot tool is registered separately by chat.RegisterCoreTools
 	// because it depends on local AI hooks that live in the chat package.
 	// NOTE: fetch_tools is registered by chat.RegisterCoreTools because it
