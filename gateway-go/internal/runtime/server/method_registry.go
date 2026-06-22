@@ -815,9 +815,14 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 		// runs without any provider configured, the call returns
 		// UNAVAILABLE rather than crashing the gateway.
 		handlerminiapp.GmailAnalyzeMethods(handlerminiapp.GmailAnalyzeDeps{
-			Client: func() (handlerminiapp.GmailClient, error) {
-				return gmail.DefaultClient()
-			},
+			// Archive-first client — the same factory the native mail list/detail
+			// surface uses. Mail now arrives via LMTP and lives in the on-box
+			// archive keyed by RFC822 Message-ID. The old gmail.DefaultClient()
+			// fetched by Gmail-API message id, so "🔄 다시 분석" on an archived mail
+			// handed an archive id (…@amazonses.com) to the Gmail API → HTTP 400
+			// "Invalid id value". The repository resolves the archive first and only
+			// falls back to Gmail for legacy/disabled setups.
+			Client: s.miniappMailClientFactory(s.denebDir),
 			Pipeline: func() (handlerminiapp.AnalyzePipeline, error) {
 				// Role selection is shared with the autonomous poller via
 				// mailAnalysisModels (stage-2 = analysis role, stage-1 = tiny
