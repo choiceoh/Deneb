@@ -67,6 +67,38 @@ func TestAllowedTools_Researcher(t *testing.T) {
 	}
 }
 
+func TestAllowedTools_WikiResearch(t *testing.T) {
+	allowed := AllowedTools(PresetWikiResearch)
+	if allowed == nil {
+		t.Fatal("wiki-research preset should return non-nil allowed set")
+	}
+	// Internal context-gathering surfaces (the researcher set minus web).
+	for _, name := range []string{
+		"read", "grep", "read_spillover",
+		"wiki", "knowledge", "polaris",
+		"mail_archive", "contacts", "graphify", "fetch_tools",
+	} {
+		if _, ok := allowed[name]; !ok {
+			t.Errorf("wiki-research preset should include %q", name)
+		}
+	}
+	// Web is the whole point of this preset's divergence from researcher: the
+	// autonomous wiki refresh is internal deep research, never external lookup.
+	if _, ok := allowed["web"]; ok {
+		t.Error("wiki-research preset must NOT include web (internal sources only)")
+	}
+	// No shell, writes-to-disk, escalation, or user-messaging surfaces.
+	for _, name := range []string{
+		"write", "edit", "exec", "process",
+		"message", "send_file", "cron", "gateway",
+		"sessions_spawn", "subagents", "gmail",
+	} {
+		if _, ok := allowed[name]; ok {
+			t.Errorf("wiki-research preset should NOT include %q", name)
+		}
+	}
+}
+
 func TestAllowedTools_Implementer(t *testing.T) {
 	allowed := AllowedTools(PresetImplementer)
 	if allowed == nil {
@@ -146,8 +178,8 @@ func TestIsValid(t *testing.T) {
 
 func TestKnownPresets(t *testing.T) {
 	presets := KnownPresets()
-	if len(presets) != 6 {
-		t.Errorf("got %d, want 6 known presets", len(presets))
+	if len(presets) != 7 {
+		t.Errorf("got %d, want 7 known presets", len(presets))
 	}
 	for _, p := range presets {
 		if AllowedTools(p) == nil {

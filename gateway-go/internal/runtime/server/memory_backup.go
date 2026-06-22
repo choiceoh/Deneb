@@ -23,14 +23,24 @@ import (
 // with DENEB_BACKUP_SSH_HOST; set DENEB_BACKUP_DISABLE=1 to turn backups off.
 const defaultBackupSSHHost = "spark4tb"
 
+// productionStateDir reports the resolved state dir and whether this process
+// owns the production state dir (homeDir/.deneb). Autonomous tasks that mutate
+// or ship shared state (offsite backup, wiki research) gate on this so a
+// dev/live-test instance (DENEB_STATE_DIR=/tmp/...) never touches production
+// data. Single source for that safety invariant.
+func (s *Server) productionStateDir(homeDir string) (string, bool) {
+	stateDir := config.ResolveStateDir()
+	return stateDir, homeDir != "" && stateDir == filepath.Join(homeDir, config.DefaultStateDirname)
+}
+
 // registerMemoryBackupTask wires the daily backup into the autonomous service.
 func (s *Server) registerMemoryBackupTask(homeDir string) {
 	if os.Getenv("DENEB_BACKUP_DISABLE") == "1" {
 		s.logger.Info("memory backup disabled via DENEB_BACKUP_DISABLE")
 		return
 	}
-	stateDir := config.ResolveStateDir()
-	if homeDir == "" || stateDir != filepath.Join(homeDir, config.DefaultStateDirname) {
+	stateDir, ok := s.productionStateDir(homeDir)
+	if !ok {
 		// Non-production state dir (dev live-test) — never ship backups.
 		return
 	}
