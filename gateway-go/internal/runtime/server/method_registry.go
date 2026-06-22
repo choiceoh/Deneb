@@ -426,6 +426,16 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		// absent feed degrades that lane only, not the whole dashboard.
 		handlerminiapp.DashboardMethods(s.dashboardDeps()),
 
+		// Mini App project digests (miniapp.project.digests). Each active
+		// project's latest-progress roll-up (headline + bullets + any imminent
+		// due) for the "프로젝트 진행상황" 모아보기 screen. Digests are produced
+		// offline by the wiki dream cycle (project_digest.go) and read here from
+		// disk — no LLM on the read path, so the screen loads instantly. Same dir
+		// the dream sink writes to (projectDigestsDir, chat_pipeline.go).
+		handlerminiapp.ProjectMethods(handlerminiapp.ProjectDeps{
+			Store: handlerminiapp.NewProjectDigestStore(projectDigestsDir()),
+		}),
+
 		// Mini App org chart editor (miniapp.org.{get,save}). The org chart
 		// ({stateDir}/org.json, operator data, never in the repo) is the MASTER
 		// source for the dashboard's part classification — its lane-tagged nodes

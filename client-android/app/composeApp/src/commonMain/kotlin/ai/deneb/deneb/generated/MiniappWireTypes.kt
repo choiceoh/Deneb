@@ -460,6 +460,22 @@ data class PersonRow(
 
 @Immutable
 @Serializable
+data class ProjectDigestRow(
+    val project: String = "",
+    val headline: String = "",
+    val bullets: List<String> = emptyList(),
+    val due: String = "",
+    val updatedAtMs: Long = 0L,
+)
+
+@Immutable
+@Serializable
+data class ProjectDigestsOut(
+    val digests: List<ProjectDigestRow> = emptyList(),
+)
+
+@Immutable
+@Serializable
 data class ProjectRef(
     val path: String = "",
     val title: String = "",

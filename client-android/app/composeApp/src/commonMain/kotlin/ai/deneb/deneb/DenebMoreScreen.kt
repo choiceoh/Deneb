@@ -8,6 +8,7 @@ import ai.deneb.DenebDashboard
 import ai.deneb.DenebFiles
 import ai.deneb.DenebNotebooks
 import ai.deneb.DenebOrgChart
+import ai.deneb.DenebProjectDigests
 import ai.deneb.DenebSearch
 import ai.deneb.ui.DenebGroup
 import ai.deneb.ui.DenebListRow
@@ -26,6 +27,7 @@ import androidx.compose.material.icons.outlined.Book
 import androidx.compose.material.icons.outlined.Contacts
 import androidx.compose.material.icons.outlined.Dashboard
 import androidx.compose.material.icons.outlined.GridView
+import androidx.compose.material.icons.outlined.Insights
 import androidx.compose.material.icons.outlined.KeyboardVoice
 import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.Search
@@ -65,6 +67,7 @@ private const val TOOLS_GROUP = "도구"
 internal val moreGroups: List<Pair<String, List<MoreEntry>>> = listOf(
     "업무 · 지식" to listOf(
         MoreEntry("파트별 업무 현황", DenebDashboard, Icons.Outlined.Dashboard, key = "deneb_dashboard", workData = true),
+        MoreEntry("프로젝트 진행상황", DenebProjectDigests, Icons.Outlined.Insights, key = "deneb_project_digests", workData = true),
         MoreEntry("조직도", DenebOrgChart, Icons.Outlined.AccountTree, key = "deneb_org", workData = true),
         MoreEntry("검색", DenebSearch, Icons.Outlined.Search, key = "deneb_search", workData = true),
         MoreEntry("카테고리", DenebCategories, Icons.Outlined.GridView, key = "deneb_categories", workData = true),

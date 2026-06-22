@@ -155,6 +155,10 @@ var requiredMethods = []string{
 	// (org.LoadRules falls back to the legacy classification path), so this
 	// registers unconditionally even when no data source is wired in tests.
 	"miniapp.dashboard.lanes",
+	// Project digests — the store is a stateless dir wrapper (always non-nil),
+	// so the read handler registers unconditionally (empty until the dream
+	// cycle writes the first digest).
+	"miniapp.project.digests",
 	// Org chart editor — Load/SavePath are always wired (org.Load / ResolvePath),
 	// so these register unconditionally.
 	"miniapp.org.get",

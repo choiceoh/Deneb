@@ -27,6 +27,7 @@ import ai.deneb.deneb.DenebNotebooksScreen
 import ai.deneb.deneb.DenebOrgChartScreen
 import ai.deneb.deneb.DenebPeopleScreen
 import ai.deneb.deneb.DenebPersonScreen
+import ai.deneb.deneb.DenebProjectDigestScreen
 import ai.deneb.deneb.DenebSearchScreen
 import ai.deneb.deneb.DenebSkillScreen
 import ai.deneb.deneb.DenebTodoAddScreen
@@ -226,6 +227,10 @@ data class DenebNotebooks(val openId: String? = null)
 @Serializable
 @SerialName("deneb_dashboard")
 object DenebDashboard
+
+@Serializable
+@SerialName("deneb_project_digests")
+object DenebProjectDigests
 
 @Serializable
 @SerialName("deneb_org")
@@ -655,6 +660,17 @@ private fun AppContent(
                                     DenebDashboardScreen(
                                         client = client,
                                         onBack = { navController.navigateUp() },
+                                        navigationTabBar = if (showTabBar) navigationTabBar else null,
+                                    )
+                                }
+                            }
+                            composable<DenebProjectDigests> {
+                                denebClient?.let { client ->
+                                    DenebProjectDigestScreen(
+                                        client = client,
+                                        onBack = { navController.navigateUp() },
+                                        // Tap a project → open its pages (the 프로젝트/<name> wiki bucket).
+                                        onOpenProject = { proj -> navController.navigate(DenebCategoryPages("프로젝트/$proj")) },
                                         navigationTabBar = if (showTabBar) navigationTabBar else null,
                                     )
                                 }
