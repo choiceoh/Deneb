@@ -113,20 +113,18 @@ func buildAgentConfig(
 		maxTokens = *params.MaxTokens
 	}
 
-	// Mode-aware agent config: Chat mode gets reduced limits for quick
-	// conversational replies; other modes use the default agent capabilities.
-	// Cron runs get the most generous budget — they can (a) deliver the
-	// primary message, (b) post one or two short progress updates via
-	// message.send so the user is not silently waiting, and (c) still update
-	// wikis / projects without truncating. 50 turns is the current ceiling;
-	// keep this high only while the cron-side progress-reporting rule in the
-	// job prompts stays active, otherwise the user perceives the run as hung.
-	maxTurns := defaultMaxTurns         // 25
+	// Mode-aware agent config: Chat (챗봇) mode gets reduced limits for quick
+	// conversational replies; the default (업무 chat + sub-agents) and cron share
+	// the full 50-turn budget so multi-step work — deep research, mail/project
+	// synthesis, cron progress-reporting + wiki updates — runs without truncating.
+	// The 60-min agentTimeout co-bounds wall-clock and the in-turn loop guard
+	// stops a stuck agent, so the turn cap is headroom, not the safety mechanism.
+	maxTurns := defaultMaxTurns         // 50
 	agentTimeout := defaultAgentTimeout // 60min
 	if cachedSession != nil {
 		switch {
 		case cachedSession.Mode == session.ModeChat:
-			maxTurns = 10
+			maxTurns = 20
 			agentTimeout = 10 * time.Minute
 		case cachedSession.SpawnedBy != "":
 			// Sub-agents are scoped delegations, not open-ended sessions: a
