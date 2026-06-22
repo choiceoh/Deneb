@@ -188,43 +188,49 @@ func wikiWrite(store *wiki.Store, contactsStore *contacts.Store, path, title, id
 		path += ".md"
 	}
 
-	// Check if page already exists (update vs create).
-	existing, _ := store.ReadPage(path)
-
+	// Read-modify-write through UpdatePage so a concurrent writer of the same page
+	// (the dreamer, the wiki-research turn, mail analysis) can't clobber this edit,
+	// and so a content-less "update" preserves the body that's actually on disk at
+	// write time rather than a copy read in a separate, earlier call. page/existed
+	// are captured for the post-write people enrichment and the result message.
 	var page *wiki.Page
-	if existing != nil {
-		// Update existing page.
-		page = existing
-		page.Meta.Title = title
-		if id != "" {
-			page.Meta.ID = id
+	existed := false
+	err := store.UpdatePage(path, func(existing *wiki.Page) (*wiki.Page, error) {
+		if existing != nil {
+			// Update existing page.
+			existed = true
+			page = existing
+			page.Meta.Title = title
+			if id != "" {
+				page.Meta.ID = id
+			}
+			if summary != "" {
+				page.Meta.Summary = summary
+			}
+			if len(tags) > 0 {
+				page.Meta.Tags = tags
+			}
+			if len(related) > 0 {
+				page.Meta.Related = related
+			}
+			if importance > 0 {
+				page.Meta.Importance = importance
+			}
+			if pageType != "" {
+				page.Meta.Type = pageType
+			}
+			if confidence != "" {
+				page.Meta.Confidence = confidence
+			}
+			if due != "" {
+				page.Meta.Due = due
+			}
+			page.Meta.Updated = time.Now().Format("2006-01-02")
+			if content != "" {
+				page.Body = content
+			}
+			return page, nil
 		}
-		if summary != "" {
-			page.Meta.Summary = summary
-		}
-		if len(tags) > 0 {
-			page.Meta.Tags = tags
-		}
-		if len(related) > 0 {
-			page.Meta.Related = related
-		}
-		if importance > 0 {
-			page.Meta.Importance = importance
-		}
-		if pageType != "" {
-			page.Meta.Type = pageType
-		}
-		if confidence != "" {
-			page.Meta.Confidence = confidence
-		}
-		if due != "" {
-			page.Meta.Due = due
-		}
-		page.Meta.Updated = time.Now().Format("2006-01-02")
-		if content != "" {
-			page.Body = content
-		}
-	} else {
 		// Create new page.
 		page = wiki.NewPage(title, category, tags)
 		page.Meta.ID = id
@@ -244,15 +250,15 @@ func wikiWrite(store *wiki.Store, contactsStore *contacts.Store, path, title, id
 			page.Body = fmt.Sprintf("# %s\n\n## 요약\n\n\n## 핵심 사실\n\n\n## 변경 이력\n- %s: 페이지 생성\n",
 				title, time.Now().Format("2006-01-02"))
 		}
-	}
-
-	if err := store.WritePage(path, page); err != nil {
+		return page, nil
+	})
+	if err != nil {
 		return fmt.Sprintf("위키 페이지 쓰기 실패: %v", err), nil
 	}
 	marked, failed := markSupersededPages(store, supersedes, path)
 
 	action := "생성"
-	if existing != nil {
+	if existed {
 		action = "업데이트"
 	}
 	note := autoRecordPeople(store, contactsStore, page, category)
@@ -288,9 +294,10 @@ func markSupersededPages(store *wiki.Store, oldPaths []string, newPath string) (
 // (2) creates/enriches 인물 pages for every inline [[link]] target that matches
 // a contact. Returns a short Korean suffix for the write confirmation, or "".
 //
-// Runs after WritePage released its lock; the wiki Store methods it calls take
-// the lock themselves, so there is no nested locking. Best-effort: a nil/empty
-// address book or any enrichment error degrades to no note, never a failed write.
+// Runs after UpdatePage released writeMu; the wiki Store methods it calls
+// (EnrichPeople → enrich/createPersonPage → UpdatePage) take writeMu themselves,
+// so there is no nested locking. Best-effort: a nil/empty address book or any
+// enrichment error degrades to no note, never a failed write.
 func autoRecordPeople(store *wiki.Store, contactsStore *contacts.Store, page *wiki.Page, category string) string {
 	if store == nil || contactsStore == nil || contactsStore.Count() == 0 || page == nil {
 		return ""

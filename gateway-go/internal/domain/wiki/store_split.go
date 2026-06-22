@@ -16,6 +16,13 @@ import (
 // Sub-pages inherit the parent's metadata.
 // Returns the paths of created sub-pages, or nil if splitting was not needed.
 func (s *Store) SplitPage(relPath string, maxBytes int) ([]string, error) {
+	// Hold writeMu across the read + the sub-page/parent rewrites so the split
+	// (which reads the oversized body, then overwrites the parent as a TOC) can't
+	// race a concurrent writer of the same page. Sub-page and parent writes below
+	// go through writePageLocked, not WritePage, because we already hold the lock.
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+
 	page, err := s.ReadPage(relPath)
 	if err != nil {
 		return nil, fmt.Errorf("read page: %w", err)
@@ -95,7 +102,7 @@ func (s *Store) SplitPage(relPath string, maxBytes int) ([]string, error) {
 		}
 		sub.Body = strings.TrimSpace(body.String())
 
-		if err := s.WritePage(sp.path, sub); err != nil {
+		if err := s.writePageLocked(sp.path, sub); err != nil {
 			return createdPaths, fmt.Errorf("write sub-page %s: %w", sp.path, err)
 		}
 		createdPaths = append(createdPaths, sp.path)
@@ -116,7 +123,7 @@ func (s *Store) SplitPage(relPath string, maxBytes int) ([]string, error) {
 	page.Body = parentBody.String()
 	page.Meta.Related = append(page.Meta.Related, createdPaths...)
 
-	if err := s.WritePage(relPath, page); err != nil {
+	if err := s.writePageLocked(relPath, page); err != nil {
 		return createdPaths, fmt.Errorf("rewrite parent: %w", err)
 	}
 

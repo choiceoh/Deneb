@@ -53,47 +53,50 @@ func (s *Store) UpsertDealPage(in DealPageInput, now time.Time) (relPath string,
 	today := now.Format("2006-01-02")
 	entry := dealEntryLine(in, today)
 
-	existing, _ := s.ReadPage(relPath)
-	if existing != nil {
-		// Already filed this exact document → no-op (keeps Updated stable so a
-		// re-analysis doesn't churn the index).
-		if ref := strings.TrimSpace(in.SourceRef); ref != "" && strings.Contains(existing.Body, dealRefMarker(ref)) {
-			return relPath, false, nil
+	// UpdatePage serializes the read-modify-write so two mail analyses filing
+	// documents onto the same counterparty's page can't lose each other's entry
+	// (the last rename would otherwise clobber the earlier append wholesale).
+	err = s.UpdatePage(relPath, func(existing *Page) (*Page, error) {
+		if existing != nil {
+			// Already filed this exact document → no-op (keeps Updated stable so a
+			// re-analysis doesn't churn the index). Returning nil skips the write.
+			if ref := strings.TrimSpace(in.SourceRef); ref != "" && strings.Contains(existing.Body, dealRefMarker(ref)) {
+				return nil, nil
+			}
+			existing.Body = appendToSection(existing.Body, dealDocsHeading, entry)
+			existing.Meta.Updated = today
+			if d := strings.TrimSpace(in.DueDate); d != "" {
+				existing.Meta.Due = d // latest known due wins
+			}
+			return existing, nil
 		}
-		existing.Body = appendToSection(existing.Body, dealDocsHeading, entry)
-		existing.Meta.Updated = today
-		if d := strings.TrimSpace(in.DueDate); d != "" {
-			existing.Meta.Due = d // latest known due wins
-		}
-		if err := s.WritePage(relPath, existing); err != nil {
-			return "", false, err
-		}
-		return relPath, false, nil
-	}
 
-	page := NewPage(counterparty, "프로젝트", nil)
-	page.Meta.Type = "deal"
-	page.Meta.Updated = today
-	if d := strings.TrimSpace(in.DueDate); d != "" {
-		page.Meta.Due = d
-	}
-	if sum := strings.TrimSpace(in.Summary); sum != "" {
-		page.Meta.Summary = sum
-	}
-	var b strings.Builder
-	fmt.Fprintf(&b, "# %s\n\n## 요약\n\n", counterparty)
-	if sum := strings.TrimSpace(in.Summary); sum != "" {
-		b.WriteString(sum + "\n")
-	} else {
-		b.WriteString("_메일 첨부 문서에서 자동 생성됨_\n")
-	}
-	b.WriteString("\n## " + dealDocsHeading + "\n\n")
-	b.WriteString(entry + "\n")
-	page.Body = b.String()
-	if err := s.WritePage(relPath, page); err != nil {
+		page := NewPage(counterparty, "프로젝트", nil)
+		page.Meta.Type = "deal"
+		page.Meta.Updated = today
+		if d := strings.TrimSpace(in.DueDate); d != "" {
+			page.Meta.Due = d
+		}
+		if sum := strings.TrimSpace(in.Summary); sum != "" {
+			page.Meta.Summary = sum
+		}
+		var b strings.Builder
+		fmt.Fprintf(&b, "# %s\n\n## 요약\n\n", counterparty)
+		if sum := strings.TrimSpace(in.Summary); sum != "" {
+			b.WriteString(sum + "\n")
+		} else {
+			b.WriteString("_메일 첨부 문서에서 자동 생성됨_\n")
+		}
+		b.WriteString("\n## " + dealDocsHeading + "\n\n")
+		b.WriteString(entry + "\n")
+		page.Body = b.String()
+		created = true
+		return page, nil
+	})
+	if err != nil {
 		return "", false, err
 	}
-	return relPath, true, nil
+	return relPath, created, nil
 }
 
 // dealEntryLine renders one document as a Markdown list item for the 거래 문서

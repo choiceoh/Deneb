@@ -67,20 +67,24 @@ func (wd *WikiDreamer) applyVerifyFixes(findings []VerifyFinding) int {
 // and the folded page is deleted. Crude but safe — no LLM synthesis — which is
 // the right tradeoff for an automatic merge of EXACT duplicates.
 func (wd *WikiDreamer) mergeDuplicate(keep, fold string) error {
-	keepPage, err := wd.store.ReadPage(keep)
-	if err != nil || keepPage == nil {
-		return fmt.Errorf("read keep %q: %w", keep, err)
-	}
 	foldPage, err := wd.store.ReadPage(fold)
 	if err != nil || foldPage == nil {
 		return fmt.Errorf("read fold %q: %w", fold, err)
 	}
-	keepPage.Body = strings.TrimRight(keepPage.Body, "\n") +
-		"\n\n## 병합된 중복 문서 (" + fold + ")\n\n" + foldPage.Body
-	keepPage.Meta.Related = mergeRelated(keepPage.Meta.Related, foldPage.Meta.Related)
-	keepPage.Meta.Tags = mergeTags(keepPage.Meta.Tags, foldPage.Meta.Tags)
-	keepPage.Meta.Updated = time.Now().Format("2006-01-02")
-	if err := wd.store.WritePage(keep, keepPage); err != nil {
+	// Apply the fold onto keep via UpdatePage so a concurrent writer of keep can't
+	// be clobbered by this append. fold (read above) is about to be deleted, so a
+	// stale read of it is harmless.
+	if err := wd.store.UpdatePage(keep, func(keepPage *Page) (*Page, error) {
+		if keepPage == nil {
+			return nil, fmt.Errorf("read keep %q: not found", keep)
+		}
+		keepPage.Body = strings.TrimRight(keepPage.Body, "\n") +
+			"\n\n## 병합된 중복 문서 (" + fold + ")\n\n" + foldPage.Body
+		keepPage.Meta.Related = mergeRelated(keepPage.Meta.Related, foldPage.Meta.Related)
+		keepPage.Meta.Tags = mergeTags(keepPage.Meta.Tags, foldPage.Meta.Tags)
+		keepPage.Meta.Updated = time.Now().Format("2006-01-02")
+		return keepPage, nil
+	}); err != nil {
 		return fmt.Errorf("write merged %q: %w", keep, err)
 	}
 	if err := wd.store.DeletePage(fold); err != nil {

@@ -13,12 +13,17 @@ import (
 // MarkSuperseded stamps oldPath as replaced by newPath: the page stays
 // readable (history is memory too) but search demotes it so the stale fact
 // stops surfacing as current. Idempotent; refuses self-supersession.
+//
+// Holds writeMu so the read-modify-write of oldPath's frontmatter is atomic
+// against a concurrent writer of the same page.
 func (s *Store) MarkSuperseded(oldPath, newPath string) error {
 	oldPath = normalizePagePath(oldPath)
 	newPath = normalizePagePath(newPath)
 	if oldPath == "" || newPath == "" || oldPath == newPath {
 		return nil
 	}
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
 	page, err := s.ReadPage(oldPath)
 	if err != nil {
 		return fmt.Errorf("wiki: mark superseded: %w", err)
@@ -79,6 +84,13 @@ func (s *Store) MergePage(targetPath, sourcePath, mergedBody string, _ MergeOpti
 		return MergeResult{}, fmt.Errorf("wiki: cannot merge a page into itself")
 	}
 
+	// Hold writeMu across the whole merge (read both pages, write target, repoint
+	// references, delete source) so no concurrent writer slips an edit into either
+	// page mid-merge. The internal helpers below (writePageInternal,
+	// repointReference, deletePageLocked) all assume the lock is held.
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+
 	target, err := s.ReadPage(targetPath)
 	if err != nil {
 		return MergeResult{}, fmt.Errorf("wiki: read merge target %q: %w", targetPath, err)
@@ -133,8 +145,9 @@ func (s *Store) MergePage(targetPath, sourcePath, mergedBody string, _ MergeOpti
 	}
 
 	// 6. Delete source last. Its neighbors were already repointed above, so
-	//    DeletePage's own backlink cleanup is a harmless no-op.
-	if err := s.DeletePage(sourcePath); err != nil {
+	//    the backlink cleanup is a harmless no-op. deletePageLocked (not the
+	//    public DeletePage) because we already hold writeMu.
+	if err := s.deletePageLocked(sourcePath); err != nil {
 		return MergeResult{TargetPath: targetPath, MergedTitle: target.Meta.Title, RewriteCount: rewrites},
 			fmt.Errorf("wiki: delete merge source: %w", err)
 	}

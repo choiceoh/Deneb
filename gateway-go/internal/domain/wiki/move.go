@@ -26,6 +26,12 @@ func (s *Store) MovePage(from, to string) error {
 	if from == to {
 		return nil
 	}
+	// Serialize the whole move (read source, collision-check target, write target,
+	// delete source) under writeMu so it can't interleave with a concurrent writer
+	// of either page. The writes below go through the *Locked helpers because we
+	// already hold the lock.
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
 	src, err := s.ReadPage(from)
 	if err != nil {
 		return fmt.Errorf("wiki: move: read source %q: %w", from, err)
@@ -41,10 +47,10 @@ func (s *Store) MovePage(from, to string) error {
 	if cat, _, ok := strings.Cut(to, "/"); ok {
 		src.Meta.Category = cat
 	}
-	if err := s.WritePage(to, src); err != nil {
+	if err := s.writePageLocked(to, src); err != nil {
 		return fmt.Errorf("wiki: move: write target %q: %w", to, err)
 	}
-	if err := s.DeletePage(from); err != nil {
+	if err := s.deletePageLocked(from); err != nil {
 		return fmt.Errorf("wiki: move: delete source %q after write: %w", from, err)
 	}
 	return nil
