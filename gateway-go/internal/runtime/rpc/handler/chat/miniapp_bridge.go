@@ -211,12 +211,6 @@ func handleMiniappCaptureImage(deps Deps) rpcutil.HandlerFunc {
 		if savedPath != "" {
 			message += "\n\n(원문 보관: memory/" + savedPath + ")"
 		}
-		// Bound concurrent interactive turns (unified-memory OOM guard).
-		release, aerr := deps.Chat.AcquireInteractiveTurn(ctx)
-		if aerr != nil {
-			return rpcerr.Unavailable("gateway busy: too many concurrent turns").Response(req.ID)
-		}
-		defer release()
 		res, err := deps.Chat.SendSync(ctx, sessionKey, message, "", &chatpkg.SyncOptions{
 			Delivery:            &chatpkg.DeliveryContext{Channel: NativeClientChannel, To: sessionKey},
 			AutoDeliveredOutput: true,
@@ -308,12 +302,6 @@ func handleMiniappCaptureDocument(deps Deps) rpcutil.HandlerFunc {
 		if savedPath != "" {
 			message += "\n\n(원문 보관: memory/" + savedPath + ")"
 		}
-		// Bound concurrent interactive turns (unified-memory OOM guard).
-		release, aerr := deps.Chat.AcquireInteractiveTurn(ctx)
-		if aerr != nil {
-			return rpcerr.Unavailable("gateway busy: too many concurrent turns").Response(req.ID)
-		}
-		defer release()
 		res, err := deps.Chat.SendSync(ctx, sessionKey, message, "", &chatpkg.SyncOptions{
 			Delivery:            &chatpkg.DeliveryContext{Channel: NativeClientChannel, To: sessionKey},
 			AutoDeliveredOutput: true,
@@ -441,12 +429,6 @@ func handleMiniappCaptureAudio(deps Deps) rpcutil.HandlerFunc {
 		if savedPath != "" {
 			message += "\n\n(전사 원문 보관: memory/" + savedPath + " — 회의록에 이 경로를 출처로 남겨라)"
 		}
-		// Bound concurrent interactive turns (unified-memory OOM guard).
-		release, aerr := deps.Chat.AcquireInteractiveTurn(ctx)
-		if aerr != nil {
-			return rpcerr.Unavailable("gateway busy: too many concurrent turns").Response(req.ID)
-		}
-		defer release()
 		res, err := deps.Chat.SendSync(ctx, sessionKey, message, "", &chatpkg.SyncOptions{
 			Delivery:            &chatpkg.DeliveryContext{Channel: NativeClientChannel, To: sessionKey},
 			AutoDeliveredOutput: true,
@@ -639,11 +621,6 @@ func handleMiniappWorkfeedFeedback(deps Deps) rpcutil.HandlerFunc {
 		sessionKey := DefaultSessionKey(card.SessionKey)
 		// 2) One agent turn updates the durable knowledge (wiki) from the correction.
 		message := buildWorkfeedFeedbackMessage(card, feedback)
-		release, aerr := deps.Chat.AcquireInteractiveTurn(ctx)
-		if aerr != nil {
-			return rpcerr.Unavailable("gateway busy: too many concurrent turns").Response(req.ID)
-		}
-		defer release()
 		res, serr := deps.Chat.SendSync(ctx, sessionKey, message, "", &chatpkg.SyncOptions{
 			Delivery:            &chatpkg.DeliveryContext{Channel: NativeClientChannel, To: sessionKey},
 			AutoDeliveredOutput: true,
@@ -744,11 +721,6 @@ func handleMiniappWorkfeedRewrite(deps Deps) rpcutil.HandlerFunc {
 		}
 		sessionKey := DefaultSessionKey(card.SessionKey)
 		message := buildWorkfeedRewriteMessage(card)
-		release, aerr := deps.Chat.AcquireInteractiveTurn(ctx)
-		if aerr != nil {
-			return rpcerr.Unavailable("gateway busy: too many concurrent turns").Response(req.ID)
-		}
-		defer release()
 		res, serr := deps.Chat.SendSync(ctx, sessionKey, message, "", &chatpkg.SyncOptions{
 			Delivery:            &chatpkg.DeliveryContext{Channel: NativeClientChannel, To: sessionKey},
 			AutoDeliveredOutput: true,
@@ -856,13 +828,6 @@ func handleMiniappChatSend(deps Deps) rpcutil.HandlerFunc {
 			return rpcerr.MissingParam("message").Response(req.ID)
 		}
 		sessionKey := DefaultSessionKey(p.SessionKey)
-
-		// Bound concurrent interactive turns (unified-memory OOM guard).
-		release, aerr := deps.Chat.AcquireInteractiveTurn(ctx)
-		if aerr != nil {
-			return rpcerr.Unavailable("gateway busy: too many concurrent turns").Response(req.ID)
-		}
-		defer release()
 
 		// 업무 turns (recall on) carry today's work feed as wire-only context — this
 		// is what makes a 업무 chat aware of the day's proactive reports/captures,

@@ -137,16 +137,6 @@ func (s *Server) handleMiniappChatStream(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Bound concurrent interactive turns (unified-memory OOM guard). Acquired
-	// before any SSE byte so an over-limit caller still gets a clean JSON 503.
-	// Held for the whole turn via the deferred release.
-	release, err := s.chatHandler.AcquireInteractiveTurn(r.Context())
-	if err != nil {
-		s.writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "gateway busy: too many concurrent turns"})
-		return
-	}
-	defer release()
-
 	// From here on the response is SSE — no more writeJSON.
 	ctx := clientauth.WithContext(r.Context(), identity)
 	runner := func(ctx context.Context, sinks chatStreamSinks) (*chatStreamResult, error) {
