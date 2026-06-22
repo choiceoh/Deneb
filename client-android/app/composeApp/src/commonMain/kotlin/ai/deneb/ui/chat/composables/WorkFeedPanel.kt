@@ -11,6 +11,8 @@ import ai.deneb.ui.denebPressable
 import ai.deneb.ui.handCursor
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -23,6 +25,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Person
@@ -32,6 +35,7 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.MailOutline
 import androidx.compose.material.icons.outlined.QuestionAnswer
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -217,6 +221,66 @@ internal fun WorkFeedRow(
                             onRunAction(item.id, "trash")
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Inline answer affordance for a question card (Toss-style). Renders the card's
+ * options as tappable chips, or — when there are no fixed options — a free-text
+ * reply field. Both route the answer back to the asking agent via [onAnswer]
+ * (item, answerText, actionId?): a chip passes its actionId; the reply passes null.
+ * Shown under the expanded body of a card whose [WorkFeedItem.question] is true.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun WorkFeedAnswerBlock(
+    item: WorkFeedItem,
+    onAnswer: (WorkFeedItem, String, String?) -> Unit,
+) {
+    val haptics = rememberHaptics()
+    Column(modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, bottom = 12.dp)) {
+        if (item.actions.isNotEmpty()) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                item.actions.forEach { action ->
+                    AssistChip(
+                        onClick = {
+                            haptics.confirm()
+                            onAnswer(item, action.label, action.id)
+                        },
+                        label = { Text(action.label, style = DenebType.button) },
+                        modifier = Modifier.handCursor(),
+                    )
+                }
+            }
+        } else {
+            // free-text question (no fixed options): a reply field routed to the session.
+            var text by remember(item.id) { mutableStateOf("") }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    placeholder = { Text("답장…", style = DenebType.hint) },
+                    modifier = Modifier.weight(1f),
+                    minLines = 1,
+                )
+                Spacer(Modifier.width(8.dp))
+                IconButton(
+                    modifier = Modifier.handCursor(),
+                    enabled = text.isNotBlank(),
+                    onClick = {
+                        haptics.confirm()
+                        onAnswer(item, text.trim(), null)
+                        text = ""
+                    },
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.Send,
+                        contentDescription = "답장 보내기",
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
                 }
             }
         }

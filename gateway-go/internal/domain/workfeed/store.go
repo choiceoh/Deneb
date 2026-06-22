@@ -28,6 +28,11 @@ const (
 	ActionFollowUp = "followup"
 	ActionSnooze   = "snooze"
 	ActionAck      = "ack"
+	// ActionAnswer settles a question card AND returns the chosen option as a
+	// prompt the native sends to the asking session — the chip path for proactive
+	// choice questions. (deal_question keeps ActionAck: it records server-side via
+	// OnAnswer and wants no extra chat turn.)
+	ActionAnswer = "answer"
 	// ActionTrash permanently deletes a card. It is a UNIVERSAL action handled in
 	// RunAction before the per-item action lookup, so it works on every card —
 	// including legacy items and captures whose stored action list predates it —
@@ -64,16 +69,22 @@ type Action struct {
 }
 
 type Item struct {
-	ID          string   `json:"id"`
-	Source      string   `json:"source"`
-	Title       string   `json:"title"`
-	Summary     string   `json:"summary,omitempty"`
-	Body        string   `json:"body,omitempty"`
-	SessionKey  string   `json:"sessionKey,omitempty"`
-	RefType     string   `json:"refType,omitempty"`
-	RefID       string   `json:"refId,omitempty"`
-	Status      string   `json:"status"`
-	Priority    int      `json:"priority,omitempty"`
+	ID         string `json:"id"`
+	Source     string `json:"source"`
+	Title      string `json:"title"`
+	Summary    string `json:"summary,omitempty"`
+	Body       string `json:"body,omitempty"`
+	SessionKey string `json:"sessionKey,omitempty"`
+	RefType    string `json:"refType,omitempty"`
+	RefID      string `json:"refId,omitempty"`
+	Status     string `json:"status"`
+	Priority   int    `json:"priority,omitempty"`
+	// Question marks a card the agent is asking the user to answer (a deal-team
+	// question, or a proactive turn that posed a question / offered ```choices).
+	// The native renders such a card with inline answer chips (from Actions) plus a
+	// free-text reply: chips run as work-feed actions (ActionAnswer/ActionAck); the
+	// reply field sends to the card's SessionKey and acks the card.
+	Question    bool     `json:"question,omitempty"`
 	Actions     []Action `json:"actions,omitempty"`
 	CreatedAtMs int64    `json:"createdAtMs"`
 	UpdatedAtMs int64    `json:"updatedAtMs"`
@@ -524,6 +535,21 @@ func (s *Store) RunAction(itemID, actionID string) (ActionResult, error) {
 		}
 		result.Item = items[first]
 		result.Message = "acked"
+		result.RemoveFromFeed = true
+	case ActionAnswer:
+		// Settle the card like ack, but also surface the chosen option as a prompt
+		// the native sends to the asking session so the agent reacts to the answer.
+		for i := range items {
+			if items[i].ID != itemID {
+				continue
+			}
+			items[i].Status = StatusAcked
+			items[i].UpdatedAtMs = now
+			markActionDone(&items[i], action.ID)
+		}
+		result.Item = items[first]
+		result.Prompt = actionPrompt(action, "")
+		result.Message = "answered"
 		result.RemoveFromFeed = true
 	default:
 		return ActionResult{}, ErrActionNotFound

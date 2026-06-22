@@ -28,6 +28,10 @@ data class ChatActions(
     // Clears ChatUiState.pendingScrollToMessageId after the chat list lands on it.
     val consumePendingScroll: () -> Unit,
     val runWorkFeedAction: (String, String) -> Unit,
+    // Answer a question card inline: a choice chip (actionId set) runs that action;
+    // a free-text reply (actionId null) sends the answer to the card's session. Both
+    // route the answer to the asking agent and settle the card. (item, answer, actionId?)
+    val answerWorkFeed: (WorkFeedItem, String, String?) -> Unit,
     // Long-press a feed card → 정정·피드백: teach/correct the agent. (itemId, feedback)
     val submitWorkFeedFeedback: (String, String) -> Unit,
     // Long-press a feed card → 다시 작성: regenerate the card's analysis in place. (itemId)

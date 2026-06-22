@@ -75,6 +75,7 @@ class ChatViewModel(
         refreshWorkFeedRange = ::refreshWorkFeedRange,
         consumePendingScroll = ::consumePendingScroll,
         runWorkFeedAction = ::runWorkFeedAction,
+        answerWorkFeed = ::answerWorkFeed,
         submitWorkFeedFeedback = ::submitWorkFeedFeedback,
         rewriteWorkFeedCard = ::rewriteWorkFeedCard,
         clearSnackbar = ::clearSnackbar,
@@ -505,6 +506,24 @@ class ChatViewModel(
             if (!prompt.isNullOrBlank()) {
                 askInternal(prompt, null)
             }
+        }
+    }
+
+    // Answer a question card inline (Toss-style). A choice chip (actionId set) runs
+    // that action — settles the card, records deal-team answers server-side, and for
+    // ActionAnswer returns the choice as a prompt. A free-text reply (actionId null)
+    // acks the card and routes the typed answer to the card's asking session. Either
+    // way the returned prompt is delivered as a turn so the agent reacts to it.
+    private fun answerWorkFeed(item: WorkFeedItem, answer: String, actionId: String?) {
+        viewModelScope.launch(backgroundDispatcher) {
+            val gw = dataRepository as? DenebGatewayClient ?: return@launch
+            val prompt = if (actionId != null) {
+                gw.runWorkFeedAction(item.id, actionId) // adoptSession=true → routes to the asking session
+            } else {
+                if (answer.isBlank()) return@launch
+                gw.answerWorkFeedItem(item.id, answer)
+            }
+            if (!prompt.isNullOrBlank()) askInternal(prompt, null)
         }
     }
 

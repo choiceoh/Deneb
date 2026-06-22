@@ -47,6 +47,10 @@ data class WorkFeedItem(
     val status: String = "",
     val priority: Int = 0,
     val actions: List<WorkFeedAction> = emptyList(),
+    // Question = the agent is asking the user to answer (a deal-team question, or a
+    // proactive turn that posed a question / offered choices). The feed renders an
+    // inline answer affordance: the actions as chips, or a free-text reply field.
+    val question: Boolean = false,
     val createdAtMs: Long = 0,
 )
 
