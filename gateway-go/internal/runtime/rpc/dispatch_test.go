@@ -251,3 +251,48 @@ func TestDispatchTimeoutCancelsHandler(t *testing.T) {
 		t.Error("handler did not observe context cancellation after timeout")
 	}
 }
+
+func TestDispatchQueuedRequestHonorsDeadline(t *testing.T) {
+	d := NewDispatcher(rpctest.NewLogger())
+	d.SetWorkerPool(NewWorkerPool(1))
+
+	var calls atomic.Int64
+	firstStarted := make(chan struct{})
+	release := make(chan struct{})
+
+	d.Register("queued.deadline", func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		if calls.Add(1) == 1 {
+			close(firstStarted)
+			<-release
+		} else {
+			<-ctx.Done()
+		}
+		resp, _ := protocol.NewResponseOK(req.ID, nil)
+		return resp
+	})
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		d.Dispatch(context.Background(), &protocol.RequestFrame{ID: "queued-1", Method: "queued.deadline"})
+	}()
+	<-firstStarted
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	resp := d.Dispatch(ctx, &protocol.RequestFrame{ID: "queued-2", Method: "queued.deadline"})
+	if elapsed := time.Since(start); elapsed > 100*time.Millisecond {
+		t.Fatalf("queued dispatch ignored deadline for %v", elapsed)
+	}
+	if resp.Error == nil || resp.Error.Code != protocol.ErrAgentTimeout {
+		t.Fatalf("expected AGENT_TIMEOUT for queued request, got %+v", resp.Error)
+	}
+	if calls.Load() != 1 {
+		t.Fatalf("queued request entered handler while worker pool was saturated; calls=%d", calls.Load())
+	}
+
+	close(release)
+	<-done
+}

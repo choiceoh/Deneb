@@ -1,6 +1,7 @@
 package rpc
 
 import (
+	"context"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -79,4 +80,28 @@ func TestWorkerPoolStats(t *testing.T) {
 	if stats.Active != 0 {
 		t.Errorf("got %d, want 0 active after completion", stats.Active)
 	}
+}
+
+func TestWorkerPoolSubmitContextCanceledWhileQueued(t *testing.T) {
+	pool := NewWorkerPool(1)
+	blocked := make(chan struct{})
+	release := make(chan struct{})
+	pool.Submit(func() {
+		close(blocked)
+		<-release
+	})
+	<-blocked
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	if ok := pool.SubmitContext(ctx, func() {}); ok {
+		t.Fatal("expected queued submit to fail after context cancellation")
+	}
+	if elapsed := time.Since(start); elapsed > 100*time.Millisecond {
+		t.Fatalf("queued submit ignored cancellation for %v", elapsed)
+	}
+
+	close(release)
 }

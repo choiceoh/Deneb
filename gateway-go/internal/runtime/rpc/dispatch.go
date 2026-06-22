@@ -222,7 +222,11 @@ func (d *Dispatcher) safeCall(ctx context.Context, req *protocol.RequestFrame, h
 	}
 
 	if pool := d.pool.Load(); pool != nil {
-		pool.Submit(run)
+		if !pool.SubmitContext(ctx, run) {
+			handlerCancel()
+			d.logger.Warn("handler timeout", "method", req.Method)
+			return rpcerr.Newf(protocol.ErrAgentTimeout, "handler %q did not complete within deadline", req.Method).Response(req.ID)
+		}
 	} else {
 		go run()
 	}
