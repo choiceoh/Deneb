@@ -57,17 +57,6 @@ type Handler struct {
 	subagent    *SubagentNotifier
 	steer       *SteerQueue // mid-run /steer notes for the main agent
 
-	// interactiveTurnSem bounds concurrent user-initiated (native-client) turns.
-	// On the DGX, GPU memory IS system RAM, so a burst of requests from the single
-	// token holder fanning out into many simultaneous agent runs can exhaust
-	// unified memory and take the host down. Acquired only by the external native
-	// transports (chat stream/send, capture image/audio) via AcquireInteractiveTurn
-	// — never inside SendSync, because some tools dispatch a nested SendSync (BTW,
-	// skill-review fork, dropbox analysis) that would deadlock against a small
-	// semaphore. Background turns (cron, heartbeat, goal, boot) are internally
-	// paced and not gated here. Buffered to maxInteractiveTurns; nil disables.
-	interactiveTurnSem chan struct{}
-
 	// checkpointRoot is the directory where per-session file-edit snapshots
 	// are stored (e.g. "~/.deneb/checkpoints"). When non-empty, each agent
 	// run lazily constructs a checkpoint.Manager scoped to its SessionKey
@@ -263,31 +252,6 @@ type StatusDeps struct {
 }
 
 // NewHandler creates a new chat handler.
-// maxInteractiveTurns bounds how many user-initiated native-client turns may run
-// at once (see Handler.interactiveTurnSem). The deployment is single-user, so 2
-// covers the rare legitimate overlap (a chat turn plus a shared capture) while
-// preventing a request burst from fanning out into a host-OOMing pile of runs.
-const maxInteractiveTurns = 2
-
-// AcquireInteractiveTurn blocks until a concurrency slot frees up or ctx is done,
-// gating user-initiated native-client turns against the unified-memory OOM that a
-// burst of concurrent runs would cause. It returns a release func — always call
-// it (it is idempotent) — and a non-nil error if ctx fired before a slot opened.
-// Only the external native transports call this; SendSync itself does not, so a
-// tool that dispatches a nested SendSync cannot deadlock against the semaphore.
-func (h *Handler) AcquireInteractiveTurn(ctx context.Context) (release func(), err error) {
-	if h == nil || h.interactiveTurnSem == nil {
-		return func() {}, nil
-	}
-	select {
-	case h.interactiveTurnSem <- struct{}{}:
-		var once sync.Once
-		return func() { once.Do(func() { <-h.interactiveTurnSem }) }, nil
-	case <-ctx.Done():
-		return func() {}, ctx.Err()
-	}
-}
-
 func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog.Logger, cfg HandlerConfig) *Handler {
 	if logger == nil {
 		logger = slog.Default()
@@ -341,7 +305,6 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 		pending:              NewPendingQueue(),
 		mergeWindow:          NewMergeWindowTracker(),
 		steer:                NewSteerQueue(),
-		interactiveTurnSem:   make(chan struct{}, maxInteractiveTurns),
 		maxHistoryBytes:      cfg.MaxHistoryBytes,
 		maxHistoryCount:      cfg.MaxHistoryCount,
 		maxMessageBytes:      cfg.MaxMessageBytes,
