@@ -54,6 +54,7 @@ globs: gateway-go/internal/ai/modelrole/**, gateway-go/internal/pipeline/pilot/*
 | 구현자 서브에이전트 | `sessions_spawn(tool_preset=implementer)` | **coding** when configured, else subagent/default | 파일 쓰기·exec를 할 수 있는 코드 수정 위임. 코딩 전용 모델은 네이티브 설정의 `agents.codingModel`로 opt-in |
 | 스킬 진화 패치 생성 | `init_genesis.go` → `genesis.Evolver` | **coding** when configured, else lightweight | SKILL.md 실제 수정 후보를 만드는 경로. 코딩 전용 모델 설정 시 main teacher rewrite를 끄고 coding 역할이 패치 생성을 담당 |
 | 스킬 진화 behavioral replay (도구호출 회귀 검증) | `domain/skills/genesis/validation_executor.go` (executor) + `init_genesis.go` 배선 | **lightweight** | 후보 SKILL.md를 부작용 없이 시뮬레이션해 도구호출 plan을 뽑고, original↔candidate 행동 회귀를 채점하는 검증 게이트. 로컬·바운드. **왜 lightweight인가**: main은 챗 핫패스와 GPU 경합 + 과비용이고, 게이트는 두 본문을 **같은 모델**로 비교하므로 절대 충실도보다 일관된 판별력이 중요(executor 편향은 델타에서 상쇄). `DENEB_SKILL_EVOLVE_REPLAY`로 opt-in, fail-open |
+| 프로젝트별 최신 근황 digest | `domain/wiki/project_digest.go` (드림 사이클 Phase 3d) → `miniapp.project.digests` (모아보기 화면) | **lightweight** | 드림 사이클이 소비하는 그 일지/메모 입력을 프로젝트별로 롤업(헤드라인+불릿 2~3)하는 내부 배경 요약. open_loops와 동형의 격리된 1콜, fail-open. **왜 lightweight인가**: 컴팩션·youtube와 같은 내부 배경 요약 도그마(로컬·바운드) — analysis(클라우드)로 둘 이유 없음. 화면은 저장본만 읽어 LLM 핫패스 아님 |
 
 | 웹페이지 인앱 번역 (인플레이스, en/ru→ko) | `chat/tools/translate.go` → `miniapp.web.translate` 브리지 | **translation** (신설, 미설정 시 lightweight 폴백) | 인앱 브라우저가 보낸 DOM 텍스트 세그먼트 배치를 번역. 바운드 로컬 변환이라 기본 lightweight, `agents.translationModel` 로 번역 특화 모델 opt-in. **개수 보존**(LLM 응답이 입력 개수와 불일치하면 그 배치는 원문 유지 — 텍스트 드롭/재정렬 금지) |
 
