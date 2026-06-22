@@ -58,7 +58,7 @@ func ValidateCategory(cat string) bool {
 // the last-writer-wins lost update this guards against. It is acquired exactly
 // once at each public write boundary (WritePage, UpdatePage, DeletePage,
 // MarkSuperseded, MergePage, SplitPage, UpsertDealPage, EnrichPeople's person-page
-// helpers). The internal *Locked helpers and writePageInternal / maintainBacklinks
+// helpers, RebuildIndex). The internal *Locked helpers and writePageInternal / maintainBacklinks
 // assume it is already held and never re-acquire it (Go mutexes are non-reentrant).
 // mu independently guards the in-memory index/backlink maps so pure readers
 // (Index, Tier1Pages, Search) never block behind a write's disk I/O.
@@ -401,6 +401,52 @@ func (s *Store) Index() *Index {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.index
+}
+
+// RebuildIndex rescans every page from disk and replaces the cached master index
+// with a fresh one built from that scan, preserving LastProcessed.
+//
+// It holds writeMu across the whole scan + swap. That makes the disk state it
+// reads a consistent snapshot: because every page writer
+// (WritePage/UpdatePage/DeletePage/MarkSuperseded/MergePage/SplitPage/...)
+// serializes on writeMu, none can land a file-write + index-update in the window
+// between this scan and its swap. Without the lock, a write completing mid-scan
+// would have its index entry silently dropped by the wholesale swap — the
+// on-disk page stays correct, but the cached index goes transiently stale until
+// the next write/rebuild self-heals it. That is the same "index agrees with
+// disk" invariant writeMu exists to hold.
+//
+// The critical section spans reading all pages from disk, so it blocks other
+// writers for the rebuild's duration. That tradeoff is acceptable here: the wiki
+// is a single-user store of at most a few hundred small pages (tens of ms to
+// parse), and RebuildIndex runs only from the background dream cycle, never the
+// chat hot path. (The pre-existing swap already blocked all index readers under
+// s.mu for the same instant; this only extends serialization to the rarer
+// writers, and only while a background dream is mid-rebuild.)
+func (s *Store) RebuildIndex() error {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+
+	pages, err := s.ListPages("")
+	if err != nil {
+		return fmt.Errorf("list pages: %w", err)
+	}
+
+	newIdx := NewIndex()
+	for _, relPath := range pages {
+		page, err := s.ReadPage(relPath)
+		if err != nil {
+			continue // unreadable/parse error: skip, leave it out of the index
+		}
+		newIdx.UpdateEntry(relPath, page)
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	// Carry forward the diary high-water cursor from the index being replaced.
+	newIdx.LastProcessed = s.index.LastProcessed
+	s.index = newIdx
+	return newIdx.Save(filepath.Join(s.dir, "index.md"))
 }
 
 // Tier1Pages returns all non-archived pages with importance >= minImportance,
