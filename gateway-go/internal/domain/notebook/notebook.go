@@ -32,8 +32,22 @@ import (
 
 // Source kinds supported in Phase 1.
 const (
-	KindWiki = "wiki" // Ref = wiki page path (e.g. "프로젝트/topsolar.md"); content read live at brief time.
-	KindNote = "note" // Text = pasted inline content (email body, quote, meeting note); self-contained.
+	KindWiki  = "wiki"  // Ref = wiki page path (e.g. "프로젝트/topsolar.md"); content read live at brief time.
+	KindNote  = "note"  // Text = pasted inline content (email body, quote, meeting note); self-contained.
+	KindFile  = "file"  // Text = extracted content of a file (PDF/image OCR'd, or text read), Ref = source path; ingested at add time.
+	KindURL   = "url"   // Text = readable text fetched from Ref (a URL); snapshot at add time.
+	KindMail  = "mail"  // Text = a Gmail thread/message read at Ref (id); snapshot at add time.
+	KindDiary = "diary" // Text = a diary entry read at Ref (date/id); snapshot at add time.
+)
+
+// Grounding modes control how strictly a brief — or a session bound to the
+// notebook ("이 자료 위주로" mode) — stays within the pinned sources. Soft (the
+// default, empty string) keeps the sources primary but lets the agent
+// supplement from general knowledge, marking those parts "(자료 밖)"; Strict
+// answers only from the sources and says "자료에 없음" otherwise.
+const (
+	ModeSoft   = ""       // default: sources first, general knowledge allowed but marked
+	ModeStrict = "strict" // answer ONLY from pinned sources
 )
 
 // ErrNotFound is returned when a notebook id does not exist.
@@ -64,6 +78,7 @@ type Notebook struct {
 	Name        string   `json:"name"`
 	Description string   `json:"description,omitempty"`
 	DealRef     string   `json:"dealRef,omitempty"`
+	Mode        string   `json:"mode,omitempty"` // "" soft (default) / "strict" — grounding strictness
 	Sources     []Source `json:"sources"`
 	Created     int64    `json:"created"` // unix millis
 	Updated     int64    `json:"updated"` // unix millis
@@ -379,6 +394,37 @@ func (s *Store) RemoveSource(id, cite string) error {
 	return nil
 }
 
+// SetMode sets a notebook's grounding strictness. Accepts "" / "soft" (soft) or
+// "strict"; any other value errors. Soft is the default for new notebooks.
+func (s *Store) SetMode(id, mode string) error {
+	var resolved string
+	switch strings.TrimSpace(mode) {
+	case "", "soft":
+		resolved = ModeSoft
+	case "strict":
+		resolved = ModeStrict
+	default:
+		return fmt.Errorf("notebook: invalid mode %q (use \"soft\" or \"strict\")", mode)
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	nb, ok := s.nbs[id]
+	if !ok {
+		return ErrNotFound
+	}
+	if nb.Mode == resolved {
+		return nil // no change — skip the disk write and stamp
+	}
+	prev := nb.Mode
+	nb.Mode = resolved
+	nb.Updated = s.stampLocked()
+	if err := s.saveLocked(nb); err != nil {
+		nb.Mode = prev // roll back to keep memory consistent with disk
+		return err
+	}
+	return nil
+}
+
 // validateSource checks kind-specific required fields before mutation.
 func validateSource(src Source) error {
 	switch src.Kind {
@@ -386,12 +432,15 @@ func validateSource(src Source) error {
 		if strings.TrimSpace(src.Ref) == "" {
 			return errors.New("notebook: wiki source requires ref (page path)")
 		}
-	case KindNote:
+	case KindNote, KindFile, KindURL, KindMail, KindDiary:
+		// Everything but wiki is ingested into Text at add time (file = read/OCR,
+		// url/mail/diary = fetched), so by the time it reaches the store it is
+		// self-contained like a note.
 		if strings.TrimSpace(src.Text) == "" {
-			return errors.New("notebook: note source requires text")
+			return errors.New("notebook: this source kind requires ingested text")
 		}
 	default:
-		return fmt.Errorf("notebook: unsupported source kind %q (supported: wiki, note)", src.Kind)
+		return fmt.Errorf("notebook: unsupported source kind %q (supported: wiki, note, file, url, mail, diary)", src.Kind)
 	}
 	return nil
 }

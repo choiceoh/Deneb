@@ -164,6 +164,11 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 		s.logger.Info("notebook store enabled", "dir", notebookDir)
 	}
 	notebookStore := s.notebookStore
+	// Thread the notebook store into the chat handler (not just CoreToolDeps) so
+	// the run pipeline can build the session-grounding tail block for a bound
+	// session. NewHandler (server_rpc_session.go) is built after this from the
+	// same chatCfg, so setting it here is captured.
+	chatCfg.NotebookStore = notebookStore
 
 	s.toolDeps = &chat.CoreToolDeps{
 		WorkspaceDir:      workspaceDir,
@@ -200,6 +205,14 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 			// Pinned wiki-page sources are read live from the same store at
 			// brief time, so a notebook briefing reflects the current page.
 			Wiki: chatCfg.WikiStore,
+			// External source ingesters (url/mail/diary) — snapshot to text at
+			// add time (notebook_sources.go). file (PDF/image OCR, text) is
+			// handled in-package by the tool and needs no reader here.
+			FetchURL: notebookFetchURL,
+			ReadMail: notebookReadMail,
+			ReadDiary: func(ctx context.Context, ref string) (string, error) {
+				return notebookReadDiary(chatCfg.WikiStore, ref)
+			},
 		},
 		Contacts: chat.ContactsDeps{
 			// Created during registerEarlyMethods (no chat dep), so it's already

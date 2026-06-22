@@ -10,6 +10,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/metrics"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/prompt"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -43,7 +44,9 @@ func (h *Handler) handleSlashCommand(
 		prompt.ClearSessionSnapshot(sessionKey)
 		clearRecallMemory(sessionKey)
 		clearTier1Wiki(sessionKey)
-		forgetPromptSnapshot(sessionKey) // drop the persisted copy too, not just memory
+		toolctx.ClearActiveNotebook(sessionKey) // unbind any active notebook-grounding session
+		clearNotebookGrounding(sessionKey)      // drop the frozen grounding snapshot too
+		forgetPromptSnapshot(sessionKey)        // drop the persisted copy too, not just memory
 		// Stop any standing goal bound to this session so /reset is a clean slate.
 		if gs := goals.Default(); gs != nil {
 			gs.Clear(sessionKey)

@@ -119,7 +119,7 @@ func TestInjectTailAdditions_NothingToAdd(t *testing.T) {
 
 func TestBuildTailAdditions(t *testing.T) {
 	// Interactive turn with recall: recall first, then the directive.
-	adds := buildTailAdditions(RunParams{AutoDeliveredOutput: true}, "recall-블록")
+	adds := buildTailAdditions(RunParams{AutoDeliveredOutput: true}, "recall-블록", "")
 	if len(adds) != 2 || adds[0] != "recall-블록" ||
 		!strings.Contains(adds[1], "전달 정책") || !strings.Contains(adds[1], "message") {
 		t.Fatalf("unexpected additions: %#v", adds)
@@ -130,22 +130,36 @@ func TestBuildTailAdditions(t *testing.T) {
 		t.Fatalf("directive still carries cron-only framing: %q", adds[1])
 	}
 	// Heartbeat shape: no recall (EphemeralUser skips it), no auto-delivery.
-	if adds := buildTailAdditions(RunParams{}, ""); len(adds) != 0 {
+	if adds := buildTailAdditions(RunParams{}, "", ""); len(adds) != 0 {
 		t.Fatalf("expected no additions, got %#v", adds)
+	}
+}
+
+func TestBuildTailAdditions_NotebookGrounding(t *testing.T) {
+	// A notebook-grounded turn withholds BOTH recall and the 업무 feed digest —
+	// the pinned sources are the explicit scope. Only grounding + delivery ride.
+	adds := buildTailAdditions(RunParams{AutoDeliveredOutput: true, FeedContext: "feed"}, "recall-블록", "노트북-그라운딩")
+	if len(adds) != 2 || adds[0] != "노트북-그라운딩" || !strings.Contains(adds[1], "전달 정책") {
+		t.Fatalf("grounded turn should be [grounding, delivery] (no recall/feed), got %#v", adds)
+	}
+	// Not grounded: recall + feed flow as reference material.
+	adds = buildTailAdditions(RunParams{FeedContext: "feed"}, "recall-블록", "")
+	if len(adds) != 2 || adds[0] != "recall-블록" || adds[1] != "feed" {
+		t.Fatalf("ungrounded turn should be [recall, feed], got %#v", adds)
 	}
 }
 
 func TestBuildTailAdditions_ChatbotTone(t *testing.T) {
 	// 챗봇 workspace (chat: session): the tone directive is injected — between
 	// recall and the delivery directive — so the 챗봇 reads as light general chat.
-	adds := buildTailAdditions(RunParams{SessionKey: "chat:main", AutoDeliveredOutput: true}, "")
+	adds := buildTailAdditions(RunParams{SessionKey: "chat:main", AutoDeliveredOutput: true}, "", "")
 	if len(adds) != 2 || adds[0] != chatbotToneDirective || !strings.Contains(adds[1], "전달 정책") {
 		t.Fatalf("expected [chatbot-tone, delivery] for chat: session, got %#v", adds)
 	}
 	// 업무 workspace (client:main): no tone directive — the system prompt's
 	// chief-of-staff persona stands.
 	for _, key := range []string{"client:main", "client:main:wf-x", "cron:mail:1", ""} {
-		adds := buildTailAdditions(RunParams{SessionKey: key, AutoDeliveredOutput: true}, "")
+		adds := buildTailAdditions(RunParams{SessionKey: key, AutoDeliveredOutput: true}, "", "")
 		for _, a := range adds {
 			if a == chatbotToneDirective {
 				t.Fatalf("chatbot tone leaked into non-chat session %q", key)

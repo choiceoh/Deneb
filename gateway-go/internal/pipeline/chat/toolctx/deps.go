@@ -151,7 +151,19 @@ type ContactsDeps struct {
 type NotebookDeps struct {
 	Store *notebook.Store
 	Wiki  *wiki.Store
+	// Optional ingesters for external source kinds (snapshot to text at add
+	// time); nil disables that kind (the tool reports it is unwired). Wired by
+	// the server from web/gmail/diary infra. The file kind (PDF/image OCR, text
+	// read) is handled in-package and needs no reader here.
+	FetchURL  SourceReader // kind=url   — fetch + extract readable web text
+	ReadMail  SourceReader // kind=mail  — read a Gmail thread/message by id
+	ReadDiary SourceReader // kind=diary — read a diary entry by date/id
 }
+
+// SourceReader ingests an external notebook source (url/mail/diary) into text
+// at add time, returning the readable text or an error. A nil reader on
+// NotebookDeps disables that source kind.
+type SourceReader func(ctx context.Context, ref string) (string, error)
 
 // CalendarReader is the read-only slice of the Google calendar client the agent
 // calendar tool uses. Mirrors the miniapp handler's CalendarClient — Google
