@@ -5,13 +5,14 @@ package toolpreset
 type Preset string
 
 const (
-	PresetNone         Preset = ""             // no restriction — all tools available
-	PresetConversation Preset = "conversation" // chat + web tools only (대화모드)
-	PresetBoot         Preset = "boot"         // minimal tools for startup/daily check
-	PresetSelfReview   Preset = "self-review"  // background Propus skill review only
-	PresetResearcher   Preset = "researcher"   // spawn preset: read-focused context gathering
-	PresetImplementer  Preset = "implementer"  // spawn preset: researcher + file mutation + shell
-	PresetVerifier     Preset = "verifier"     // spawn preset: read + build/test execution
+	PresetNone         Preset = ""              // no restriction — all tools available
+	PresetConversation Preset = "conversation"  // chat + web tools only (대화모드)
+	PresetBoot         Preset = "boot"          // minimal tools for startup/daily check
+	PresetSelfReview   Preset = "self-review"   // background Propus skill review only
+	PresetResearcher   Preset = "researcher"    // spawn preset: read-focused context gathering
+	PresetImplementer  Preset = "implementer"   // spawn preset: researcher + file mutation + shell
+	PresetVerifier     Preset = "verifier"      // spawn preset: read + build/test execution
+	PresetWikiResearch Preset = "wiki-research" // autonomous wiki refresh: researcher minus web (internal sources only)
 )
 
 // conversationTools are minimal tools for conversation mode (대화모드).
@@ -72,6 +73,15 @@ var researcherTools = toSet(
 	"fetch_tools",
 )
 
+// wikiResearchTools backs the autonomous wiki-refresh task (wiki_research_task.go):
+// the researcher surface with web access removed. Derived from researcherTools so
+// the two stay in sync by construction — add an internal-research source to
+// researcher and this task picks it up automatically. Web is intentionally
+// dropped: this is internal deep research, not external lookup, so no external
+// API is called and no web-sourced text can pollute the curated memory. wiki
+// keeps its write sub-action so the turn can persist the refresh.
+var wikiResearchTools = without(researcherTools, "web")
+
 // implementerTools: researcher + file mutation + shell — the "do the work"
 // preset for delegated changes that end in artifacts, not just findings.
 var implementerTools = union(researcherTools, toSet(
@@ -106,6 +116,8 @@ func AllowedTools(preset Preset) map[string]struct{} {
 		return implementerTools
 	case PresetVerifier:
 		return verifierTools
+	case PresetWikiResearch:
+		return wikiResearchTools
 	default:
 		return nil
 	}
@@ -115,7 +127,7 @@ func AllowedTools(preset Preset) map[string]struct{} {
 func IsValid(preset Preset) bool {
 	switch preset {
 	case PresetNone, PresetConversation, PresetBoot, PresetSelfReview,
-		PresetResearcher, PresetImplementer, PresetVerifier:
+		PresetResearcher, PresetImplementer, PresetVerifier, PresetWikiResearch:
 		return true
 	default:
 		return false
@@ -126,7 +138,7 @@ func IsValid(preset Preset) bool {
 func KnownPresets() []Preset {
 	return []Preset{
 		PresetConversation, PresetBoot, PresetSelfReview,
-		PresetResearcher, PresetImplementer, PresetVerifier,
+		PresetResearcher, PresetImplementer, PresetVerifier, PresetWikiResearch,
 	}
 }
 
@@ -150,6 +162,19 @@ func union(sets ...map[string]struct{}) map[string]struct{} {
 		for k := range s {
 			m[k] = struct{}{}
 		}
+	}
+	return m
+}
+
+// without returns a copy of set with the named keys removed. Symmetric to union;
+// used to derive one preset from another (e.g. researcher minus web).
+func without(set map[string]struct{}, names ...string) map[string]struct{} {
+	m := make(map[string]struct{}, len(set))
+	for k := range set {
+		m[k] = struct{}{}
+	}
+	for _, n := range names {
+		delete(m, n)
 	}
 	return m
 }

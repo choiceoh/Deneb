@@ -560,6 +560,14 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 		// instances (DENEB_STATE_DIR=/tmp/...) must not ship archives.
 		s.registerMemoryBackupTask(homeDir)
 
+		// Project-wiki deep research: every 6h, pick one 프로젝트 page and run an
+		// agent turn that re-investigates it from Deneb's own internal sources
+		// (mail archive, polaris recall, knowledge graph, contacts, linked wiki
+		// pages) and updates it in place. Internal-only (no web), silent, and
+		// round-robin across project pages. Production state dir only — see
+		// registerWikiResearchTask.
+		s.registerWikiResearchTask(homeDir)
+
 		// Model tuner: every 6h, aggregate the last 24h of agent logs by
 		// model, auto-apply the bounded output-token floor for models that
 		// keep hitting the ceiling, and calibrate newly served vLLM models.

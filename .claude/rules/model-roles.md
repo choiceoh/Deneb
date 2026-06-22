@@ -41,6 +41,7 @@ globs: gateway-go/internal/ai/modelrole/**, gateway-go/internal/pipeline/pilot/*
 | 임무 | 위치 | 역할 | 근거 |
 |---|---|---|---|
 | 일간/모닝레터 합성 | `tools/morning_letter.go`(데이터 수집만) + 크론 에이전트 턴 | **main** | 사용자 일일 브리핑 — 품질·로컬. 도구는 JSON만 반환, 합성은 main 턴 |
+| 프로젝트 위키 딥리서치 갱신 (6h) | `runtime/server/wiki_research_task.go` | **main** | 도구무거운 에이전트 턴(내부 소스 재조사→위키 본문 갱신·supersede). boot/heartbeat/goal과 동형의 에이전트 턴이라 main, 헬퍼 요약 콜 아님. wiki-research 프리셋(웹 제외)으로 내부 소스 한정, 로컬 |
 | 메일 리포트 종합 (stage2) | `mailAnalysisModels()` | **analysis** | 사용자가 읽는 리포트, 품질 최우선 — **의도적 클라우드 OK** |
 | 메일 추출 (stage1) · gmail facts/actions/deal | `mailAnalysisModels()`, `platform/gmailpoll/pipeline_extractors.go` | **tiny** | 단순 구조화 JSON 추출 |
 | 세션 자동 제목 | `chat/session_autotitle.go` | **tiny** | 짧은 명사구 제목 |
