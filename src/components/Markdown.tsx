@@ -1,41 +1,140 @@
-// Dependency-free, XSS-safe Markdown → React renderer for Deneb's chat replies.
+// Dependency-free, XSS-safe Markdown → React renderer for Deneb's chat replies,
+// mail bodies, and wiki/doc previews. Covers GFM at the level the native client
+// renders: ATX headings, bold/italic/strikethrough, inline + fenced code (with a
+// language label + copy), links/images/autolinks (http/https/mailto only),
+// nested ordered/unordered lists, task-list checkboxes, blockquotes (with block
+// content), aligned GFM tables, hard line breaks, backslash escapes, and rules.
 //
-// Covers the subset the gateway actually emits: ATX headings, bold/italic,
-// inline + fenced code, links (http/https/mailto only), ordered/unordered lists,
-// blockquotes, GFM tables, and horizontal rules. Output is React elements
-// (never dangerouslySetInnerHTML) so every text node is auto-escaped — no HTML
-// sanitizer needed. Matches the repo's "dependency-free Icon set" idiom rather
-// than pulling react-markdown + remark (and its build-script supply-chain gate).
-import { type ReactNode, useState } from "react";
+// Output is React elements (never dangerouslySetInnerHTML) so every text node is
+// auto-escaped — no HTML sanitizer needed. Matches the repo's "dependency-free
+// Icon set" idiom rather than pulling react-markdown + remark and its
+// build-script supply-chain gate. (KaTeX math is the one deliberate gap — true
+// math layout needs a dependency; see DESIGN follow-up.)
+import { type CSSProperties, type ReactNode, useState } from "react";
 import { Icon } from "./Icon";
+
+type Align = "left" | "center" | "right" | undefined;
+
+interface ListItem {
+  task?: boolean; // a GFM task-list item ("- [ ] …")
+  checked?: boolean;
+  children: Block[]; // item body as blocks → supports nested lists / multi-paragraph
+}
 
 type Block =
   | { type: "heading"; level: number; text: string }
   | { type: "code"; lang: string; text: string }
-  | { type: "list"; ordered: boolean; items: string[] }
-  | { type: "quote"; text: string }
-  | { type: "table"; header: string[]; rows: string[][] }
+  | { type: "list"; ordered: boolean; start?: number; items: ListItem[] }
+  | { type: "quote"; children: Block[] }
+  | { type: "table"; header: string[]; align: Align[]; rows: string[][] }
   | { type: "hr" }
   | { type: "para"; text: string };
 
-const FENCE = /^```(.*)$/;
-const HEADING = /^(#{1,6})\s+(.*)$/;
-const HR = /^(?:---+|\*\*\*+|___+)\s*$/;
-const QUOTE = /^>\s?(.*)$/;
-const LIST_ITEM = /^\s*(?:[-*+]|\d+\.)\s+(.*)$/;
-const TABLE_SEP = /^\s*\|?[\s:|-]*-[\s:|-]*\|?\s*$/;
+const FENCE = /^ {0,3}(?:```|~~~)(.*)$/;
+const HEADING = /^ {0,3}(#{1,6})\s+(.*?)\s*#*\s*$/;
+const HR = /^ {0,3}([-*_])(?:[ \t]*\1){2,}[ \t]*$/;
+const QUOTE = /^ {0,3}>\s?(.*)$/;
+const LIST_ITEM = /^(\s*)([-*+]|\d{1,9}[.)])(\s+)(.*)$/;
+const TABLE_SEP = /^\s*\|?(?:\s*:?-+:?\s*\|)+(?:\s*:?-+:?\s*)?\|?\s*$/;
 
-// Split a GFM table row into trimmed cells, dropping the outer pipes.
+// Visual width of a line's leading whitespace (tabs → 4) for nesting decisions.
+function indentWidth(line: string): number {
+  const m = /^[ \t]*/.exec(line);
+  return m ? m[0].replace(/\t/g, "    ").length : 0;
+}
+
+function isOrdered(marker: string): boolean {
+  return /\d/.test(marker);
+}
+
+// Split a GFM table row into trimmed cells, dropping the outer pipes. Escaped
+// pipes (\|) are kept literal so a cell can contain one.
 function splitRow(line: string): string[] {
   return line
     .replace(/^\s*\|/, "")
     .replace(/\|\s*$/, "")
-    .split("|")
-    .map((c) => c.trim());
+    .split(/(?<!\\)\|/)
+    .map((c) => c.trim().replace(/\\\|/g, "|"));
 }
 
-// Line-based block parser. Blank lines separate paragraphs; fences, lists,
-// quotes, and tables consume their own runs of consecutive lines.
+function cellAlign(spec: string): Align {
+  const s = spec.trim();
+  const left = s.startsWith(":");
+  const right = s.endsWith(":");
+  if (left && right) return "center";
+  if (right) return "right";
+  if (left) return "left";
+  return undefined;
+}
+
+// Consume one list (and its nested children) starting at lines[start]. Returns
+// the parsed block plus the index of the first line past it. Items collect their
+// own indented continuation/child lines, which are dedented and parsed as blocks
+// — so a deeper-indented list becomes a nested <ul>/<ol> via recursion.
+function parseList(lines: string[], start: number): { block: Block; next: number } {
+  const m0 = LIST_ITEM.exec(lines[start]) as RegExpExecArray;
+  const baseIndent = m0[1].length;
+  const ordered = isOrdered(m0[2]);
+  const startNum = ordered ? parseInt(m0[2], 10) : undefined;
+  const items: ListItem[] = [];
+  let i = start;
+
+  while (i < lines.length) {
+    if (lines[i].trim() === "") {
+      // Blank line: keep the list open only if the next non-blank line is a
+      // sibling item or an indented child; otherwise the list ends.
+      let j = i + 1;
+      while (j < lines.length && lines[j].trim() === "") j++;
+      if (j >= lines.length) break;
+      const mn = LIST_ITEM.exec(lines[j]);
+      const sibling = mn && mn[1].length === baseIndent && isOrdered(mn[2]) === ordered;
+      if (!sibling && indentWidth(lines[j]) <= baseIndent) break;
+      i = j;
+      continue;
+    }
+    const m = LIST_ITEM.exec(lines[i]);
+    if (!m || m[1].length < baseIndent || m[1].length > baseIndent || isOrdered(m[2]) !== ordered) break;
+
+    const contentCol = m[1].length + m[2].length + m[3].length;
+    const itemLines: string[] = [m[4]];
+    i++;
+    // Gather continuation + child lines (indented to the item's content column).
+    while (i < lines.length) {
+      if (lines[i].trim() === "") {
+        let j = i + 1;
+        while (j < lines.length && lines[j].trim() === "") j++;
+        if (j < lines.length && indentWidth(lines[j]) >= contentCol) {
+          itemLines.push("");
+          i = j;
+          continue;
+        }
+        break;
+      }
+      if (indentWidth(lines[i]) >= contentCol) {
+        itemLines.push(lines[i].slice(contentCol));
+        i++;
+      } else {
+        break;
+      }
+    }
+    while (itemLines.length && itemLines[itemLines.length - 1] === "") itemLines.pop();
+
+    let task: boolean | undefined;
+    let checked: boolean | undefined;
+    const tm = /^\[([ xX])\]\s+(.*)$/.exec(itemLines[0] ?? "");
+    if (tm) {
+      task = true;
+      checked = tm[1].toLowerCase() === "x";
+      itemLines[0] = tm[2];
+    }
+    items.push({ task, checked, children: parseBlocks(itemLines.join("\n")) });
+  }
+
+  return { block: { type: "list", ordered, start: startNum, items }, next: i };
+}
+
+// Line-based block parser. Blank lines separate blocks; fences, lists, quotes,
+// and tables consume their own runs of consecutive lines.
 function parseBlocks(src: string): Block[] {
   const lines = src.replace(/\r\n?/g, "\n").split("\n");
   const blocks: Block[] = [];
@@ -51,14 +150,14 @@ function parseBlocks(src: string): Block[] {
       const lang = fence[1].trim();
       const body: string[] = [];
       i++;
-      while (i < lines.length && !/^```/.test(lines[i])) body.push(lines[i++]);
+      while (i < lines.length && !/^ {0,3}(?:```|~~~)\s*$/.test(lines[i])) body.push(lines[i++]);
       i++; // skip closing fence (or run off the end)
       blocks.push({ type: "code", lang, text: body.join("\n") });
       continue;
     }
     const heading = HEADING.exec(line);
     if (heading) {
-      blocks.push({ type: "heading", level: heading[1].length, text: heading[2].trim() });
+      blocks.push({ type: "heading", level: heading[1].length, text: heading[2] });
       i++;
       continue;
     }
@@ -67,26 +166,26 @@ function parseBlocks(src: string): Block[] {
       i++;
       continue;
     }
-    // Table: a pipe row immediately followed by a |---|---| separator.
+    // Table: a pipe row immediately followed by a |:--|--:| separator.
     if (line.includes("|") && i + 1 < lines.length && TABLE_SEP.test(lines[i + 1]) && lines[i + 1].includes("-")) {
       const header = splitRow(line);
+      const align = splitRow(lines[i + 1]).map(cellAlign);
       i += 2;
       const rows: string[][] = [];
       while (i < lines.length && lines[i].includes("|") && lines[i].trim() !== "") rows.push(splitRow(lines[i++]));
-      blocks.push({ type: "table", header, rows });
+      blocks.push({ type: "table", header, align, rows });
       continue;
     }
     if (QUOTE.test(line)) {
-      const body: string[] = [];
-      while (i < lines.length && QUOTE.test(lines[i])) body.push(lines[i++].replace(QUOTE, "$1"));
-      blocks.push({ type: "quote", text: body.join("\n") });
+      const inner: string[] = [];
+      while (i < lines.length && /^ {0,3}>/.test(lines[i])) inner.push(lines[i++].replace(QUOTE, "$1"));
+      blocks.push({ type: "quote", children: parseBlocks(inner.join("\n")) });
       continue;
     }
     if (LIST_ITEM.test(line)) {
-      const ordered = /^\s*\d+\.\s/.test(line);
-      const items: string[] = [];
-      while (i < lines.length && LIST_ITEM.test(lines[i])) items.push(lines[i++].replace(LIST_ITEM, "$1"));
-      blocks.push({ type: "list", ordered, items });
+      const { block, next } = parseList(lines, i);
+      blocks.push(block);
+      i = next;
       continue;
     }
     // Paragraph: consume until a blank line or the start of another block.
@@ -107,20 +206,28 @@ function parseBlocks(src: string): Block[] {
   return blocks;
 }
 
-// Only these schemes are rendered as live links; anything else stays plain text
-// so a `javascript:`/`data:` URL can never become a clickable element.
+// Only these schemes render as live links/images; anything else stays plain text
+// so a `javascript:`/`data:` URL can never become a clickable or fetchable node.
 function safeHref(url: string): string | null {
-  return /^(https?:\/\/|mailto:)/i.test(url.trim()) ? url.trim() : null;
+  const u = url.trim();
+  return /^(https?:\/\/|mailto:)/i.test(u) ? u : null;
 }
 
-// The earliest-match inline tokenizer: at each step find whichever of code /
-// link / bold / italic opens first and emit the text before it, then recurse.
-const INLINE = [
+// Earliest-match inline tokenizer. At each step the pattern that OPENS first wins
+// (ties broken by array order), so escapes and images beat the weaker emphasis
+// markers. Each alternative captures its inner text for recursive rendering.
+const INLINE: { kind: string; re: RegExp }[] = [
+  { kind: "esc", re: /\\([\\`*_{}[\]()#+\-.!~>|"'$])/ },
+  { kind: "br", re: /\n/ },
+  { kind: "image", re: /!\[([^\]]*)\]\(([^)\s]+)\)/ },
   { kind: "code", re: /`([^`]+)`/ },
+  { kind: "autolinkAngle", re: /<((?:https?:\/\/|mailto:)[^>\s]+)>/ },
   { kind: "link", re: /\[([^\]]+)\]\(([^)\s]+)\)/ },
+  { kind: "strike", re: /~~([^~]+)~~/ },
   { kind: "bold", re: /\*\*([^*]+)\*\*|__([^_]+)__/ },
-  { kind: "italic", re: /\*([^*\n]+)\*|_([^_\n]+)_/ },
-] as const;
+  { kind: "italic", re: /\*([^*\n]+)\*|\b_([^_\n]+)_\b/ },
+  { kind: "autolink", re: /(https?:\/\/[^\s<>)\]]+)/ },
+];
 
 function renderInline(text: string, key: string): ReactNode[] {
   const out: ReactNode[] = [];
@@ -136,37 +243,72 @@ function renderInline(text: string, key: string): ReactNode[] {
       out.push(rest);
       break;
     }
-    if (best.idx > 0) out.push(rest.slice(0, best.idx));
     const k = `${key}-${n++}`;
-    if (best.kind === "code") {
+    const { kind, m } = best;
+    // Text before the token. For a line break, strip the trailing hard-break
+    // marker (2+ spaces or a backslash) so it doesn't render as literal space.
+    let before = rest.slice(0, best.idx);
+    if (kind === "br") before = before.replace(/[ \t]+$|\\$/, "");
+    if (before) out.push(before);
+
+    if (kind === "esc") {
+      out.push(m[1]);
+    } else if (kind === "br") {
+      out.push(<br key={k} />);
+    } else if (kind === "image") {
+      const src = safeHref(m[2]);
+      out.push(src ? <img key={k} className="md-img" src={src} alt={m[1]} loading="lazy" /> : m[1]);
+    } else if (kind === "code") {
       out.push(
         <code key={k} className="md-code">
-          {best.m[1]}
+          {m[1]}
         </code>,
       );
-    } else if (best.kind === "link") {
-      const href = safeHref(best.m[2]);
+    } else if (kind === "autolinkAngle" || kind === "autolink") {
+      let url = m[1];
+      let trail = "";
+      if (kind === "autolink") {
+        const t = /[.,;:!?)\]}'"]+$/.exec(url);
+        if (t) {
+          trail = t[0];
+          url = url.slice(0, -trail.length);
+        }
+      }
+      const href = safeHref(url);
       out.push(
         href ? (
           <a key={k} href={href} target="_blank" rel="noreferrer noopener">
-            {best.m[1]}
+            {url}
           </a>
         ) : (
-          best.m[1]
+          url
         ),
       );
-    } else if (best.kind === "bold") {
-      out.push(<strong key={k}>{renderInline(best.m[1] ?? best.m[2], k)}</strong>);
+      if (trail) out.push(trail);
+    } else if (kind === "link") {
+      const href = safeHref(m[2]);
+      out.push(
+        href ? (
+          <a key={k} href={href} target="_blank" rel="noreferrer noopener">
+            {renderInline(m[1], k)}
+          </a>
+        ) : (
+          renderInline(m[1], k)
+        ),
+      );
+    } else if (kind === "strike") {
+      out.push(<del key={k}>{renderInline(m[1], k)}</del>);
+    } else if (kind === "bold") {
+      out.push(<strong key={k}>{renderInline(m[1] ?? m[2], k)}</strong>);
     } else {
-      out.push(<em key={k}>{renderInline(best.m[1] ?? best.m[2], k)}</em>);
+      out.push(<em key={k}>{renderInline(m[1] ?? m[2], k)}</em>);
     }
     rest = rest.slice(best.idx + best.len);
   }
   return out;
 }
 
-// A fenced code block with a copy affordance — the native client's code blocks
-// are copyable, the single most-used chat action for shared snippets.
+// A fenced code block: language label + copy affordance over a monospaced pre.
 function CodeBlock({ lang, text }: { lang: string; text: string }) {
   const [copied, setCopied] = useState(false);
   async function copy() {
@@ -180,14 +322,51 @@ function CodeBlock({ lang, text }: { lang: string; text: string }) {
   }
   return (
     <div className="md-codeblock">
-      <button type="button" className="md-copy" onClick={copy} aria-label="코드 복사">
-        <Icon name="copy" size={13} />
-        {copied ? "복사됨" : "복사"}
-      </button>
+      <div className="md-codebar">
+        {lang ? <span className="md-codelang">{lang}</span> : <span />}
+        <button type="button" className="md-copy" onClick={copy} aria-label="코드 복사">
+          <Icon name="copy" size={12} />
+          {copied ? "복사됨" : "복사"}
+        </button>
+      </div>
       <pre>
         <code data-lang={lang || undefined}>{text}</code>
       </pre>
     </div>
+  );
+}
+
+function renderItemBody(item: ListItem, key: string): ReactNode {
+  // Tight item (single paragraph) renders inline so list rows stay compact;
+  // a multi-block item (nested list, multiple paragraphs) renders its blocks.
+  if (item.children.length === 1 && item.children[0].type === "para") {
+    return renderInline(item.children[0].text, key);
+  }
+  return item.children.map((b, j) => renderBlock(b, `${key}-${j}`));
+}
+
+function renderList(b: Extract<Block, { type: "list" }>, key: string): ReactNode {
+  const hasTask = b.items.some((it) => it.task);
+  const children = b.items.map((it, j) => {
+    const body = renderItemBody(it, `${key}-${j}`);
+    return it.task ? (
+      <li key={j} className="md-task">
+        <input type="checkbox" checked={!!it.checked} disabled readOnly />
+        <span>{body}</span>
+      </li>
+    ) : (
+      <li key={j}>{body}</li>
+    );
+  });
+  const cls = hasTask ? "md-tasklist" : undefined;
+  return b.ordered ? (
+    <ol key={key} className={cls} start={b.start && b.start !== 1 ? b.start : undefined}>
+      {children}
+    </ol>
+  ) : (
+    <ul key={key} className={cls}>
+      {children}
+    </ul>
   );
 }
 
@@ -202,28 +381,18 @@ function renderBlock(b: Block, key: string): ReactNode {
     case "hr":
       return <hr key={key} />;
     case "quote":
-      return <blockquote key={key}>{renderInline(b.text, key)}</blockquote>;
+      return <blockquote key={key}>{b.children.map((c, j) => renderBlock(c, `${key}-${j}`))}</blockquote>;
     case "list":
-      return b.ordered ? (
-        <ol key={key}>
-          {b.items.map((it, j) => (
-            <li key={j}>{renderInline(it, `${key}-${j}`)}</li>
-          ))}
-        </ol>
-      ) : (
-        <ul key={key}>
-          {b.items.map((it, j) => (
-            <li key={j}>{renderInline(it, `${key}-${j}`)}</li>
-          ))}
-        </ul>
-      );
+      return renderList(b, key);
     case "table":
       return (
         <table key={key} className="md-table">
           <thead>
             <tr>
               {b.header.map((h, j) => (
-                <th key={j}>{renderInline(h, `${key}-h${j}`)}</th>
+                <th key={j} style={alignStyle(b.align[j])}>
+                  {renderInline(h, `${key}-h${j}`)}
+                </th>
               ))}
             </tr>
           </thead>
@@ -231,7 +400,9 @@ function renderBlock(b: Block, key: string): ReactNode {
             {b.rows.map((row, r) => (
               <tr key={r}>
                 {row.map((c, j) => (
-                  <td key={j}>{renderInline(c, `${key}-${r}-${j}`)}</td>
+                  <td key={j} style={alignStyle(b.align[j])}>
+                    {renderInline(c, `${key}-${r}-${j}`)}
+                  </td>
                 ))}
               </tr>
             ))}
@@ -243,8 +414,12 @@ function renderBlock(b: Block, key: string): ReactNode {
   }
 }
 
-// Render assistant Markdown text as safe React nodes. Plain text with no Markdown
-// renders as a single <p>, so a bare reply stays a clean paragraph.
+function alignStyle(a: Align): CSSProperties | undefined {
+  return a ? { textAlign: a } : undefined;
+}
+
+// Render Markdown text as safe React nodes. Plain text with no Markdown renders
+// as a single <p>, so a bare reply stays a clean paragraph.
 export function Markdown({ text }: { text: string }) {
   const blocks = parseBlocks(text);
   return <div className="md">{blocks.map((b, i) => renderBlock(b, `b${i}`))}</div>;

@@ -660,14 +660,29 @@ textarea {
   font-weight: 600;
 }
 .md-codeblock {
-  position: relative;
+  overflow: hidden;
+  background: #faf8f6;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-ctl);
+}
+.md-codebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 5px 2px 10px;
+  background: var(--panel-sunken);
+  border-bottom: 1px solid var(--line-2);
+}
+.md-codelang {
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted-2);
 }
 .md-codeblock pre {
   margin: 0;
   padding: 10px 11px;
-  background: #faf8f6;
-  border: 1px solid var(--line-2);
-  border-radius: var(--radius-ctl);
   overflow-x: auto;
 }
 .md-codeblock code {
@@ -678,27 +693,58 @@ textarea {
   white-space: pre;
 }
 .md-copy {
-  position: absolute;
-  top: 6px;
-  right: 6px;
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  padding: 2px 6px;
+  padding: 3px 7px;
   font-size: 11px;
   color: var(--muted);
-  background: var(--panel);
-  border: 1px solid var(--line-2);
+  background: transparent;
+  border: none;
   border-radius: 6px;
   cursor: pointer;
-  opacity: 0;
-  transition: opacity 0.12s ease;
-}
-.md-codeblock:hover .md-copy {
-  opacity: 1;
+  transition:
+    color 0.12s ease,
+    background 0.12s ease;
 }
 .md-copy:hover {
   color: var(--ink);
+  background: rgba(0, 0, 0, 0.05);
+}
+
+/* GFM extras: strikethrough, images, task lists, nested-list spacing */
+.md del {
+  color: var(--muted);
+}
+.md img.md-img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 2px 0;
+  border-radius: var(--radius-ctl);
+}
+.md-tasklist {
+  list-style: none;
+  padding-left: 2px;
+}
+.md-task {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+}
+.md-task > input[type="checkbox"] {
+  margin: 2px 0 0;
+  flex: 0 0 auto;
+  accent-color: var(--accent);
+}
+.md-task > span {
+  min-width: 0;
+}
+.md ul ul,
+.md ul ol,
+.md ol ul,
+.md ol ol {
+  margin-top: 3px;
 }
 .btn {
   border: 1px solid var(--line-2);
