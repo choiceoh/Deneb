@@ -26,6 +26,11 @@ interface WorkspaceCtx {
   aiText: string;
   activeResource?: string;
   registerPane: (resource: string | undefined, text: string) => void;
+  // Cross-pane "open this wiki page" channel: 인물 카드·검색 결과가 위키 경로를 넘기면
+  // 위키 pane으로 전환하고 해당 페이지를 연다. WikiPane이 마운트되어 소비(consume)한다.
+  wikiTarget: string | null;
+  openWiki: (path: string) => void;
+  consumeWikiTarget: () => void;
 }
 
 const Ctx = createContext<WorkspaceCtx | null>(null);
@@ -43,14 +48,36 @@ export function WorkspaceProvider({
   const [doc, setDoc] = useState("");
   const [aiText, setAiText] = useState("");
   const [activeResource, setActiveResource] = useState<string | undefined>(undefined);
+  const [wikiTarget, setWikiTarget] = useState<string | null>(null);
 
   const registerPane = (resource: string | undefined, t: string) => {
     setActiveResource(resource);
     setAiText(t);
   };
 
+  const openWiki = (path: string) => {
+    setWikiTarget(path);
+    setView("wiki");
+  };
+  const consumeWikiTarget = () => setWikiTarget(null);
+
   return (
-    <Ctx.Provider value={{ connected, cfg, view, setView, doc, setDoc, aiText, activeResource, registerPane }}>
+    <Ctx.Provider
+      value={{
+        connected,
+        cfg,
+        view,
+        setView,
+        doc,
+        setDoc,
+        aiText,
+        activeResource,
+        registerPane,
+        wikiTarget,
+        openWiki,
+        consumeWikiTarget,
+      }}
+    >
       {children}
     </Ctx.Provider>
   );

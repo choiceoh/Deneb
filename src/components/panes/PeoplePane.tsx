@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useList } from "@refinedev/core";
 import type { Person } from "@/types";
 import { serializeList } from "@/aiText";
@@ -5,6 +6,7 @@ import { fmtDate } from "@/format";
 import { ellipsis } from "@/theme";
 import { useRegisterPane, useWorkspace } from "@/workspaceContext";
 import { Column, Grid, GridNotice } from "@/components/Grid";
+import { Detail, Modal } from "@/components/Modal";
 
 // people.list merges recent Gmail counterparties (ranked by volume) with 인물 wiki
 // pages — so a row may have a messageCount, a wikiSummary, or both.
@@ -12,6 +14,7 @@ export function PeoplePane() {
   const { connected } = useWorkspace();
   const { result, query } = useList<Person>({ resource: "people", queryOptions: { enabled: connected } });
   const people = result?.data ?? [];
+  const [selected, setSelected] = useState<Person | null>(null);
 
   const aiText = serializeList(
     "연락처",
@@ -55,8 +58,51 @@ export function PeoplePane() {
     <>
       <h2 style={{ marginTop: 2 }}>연락처</h2>
       <GridNotice query={query} count={people.length} empty="연락처가 없습니다.">
-        <Grid columns={columns} rows={people} getKey={(p) => p.email || String(p.id ?? "")} maxWidth={820} />
+        <Grid
+          columns={columns}
+          rows={people}
+          getKey={(p) => p.email || String(p.id ?? "")}
+          maxWidth={820}
+          onRowClick={(p) => setSelected(p)}
+        />
       </GridNotice>
+      {selected && <PersonCard person={selected} onClose={() => setSelected(null)} />}
     </>
+  );
+}
+
+// Person detail card. Surfaces the merged Gmail/wiki facts and, when the person has
+// a 인물 wiki page, jumps to it via the shared openWiki channel (workspaceContext).
+function PersonCard({ person, onClose }: { person: Person; onClose: () => void }) {
+  const { openWiki } = useWorkspace();
+  const openPage = () => {
+    if (person.wikiPath) {
+      openWiki(person.wikiPath);
+      onClose();
+    }
+  };
+  return (
+    <Modal
+      title={person.name ?? person.email}
+      onClose={onClose}
+      footer={
+        <>
+          {person.wikiPath && (
+            <button className="btn btn-accent" onClick={openPage} style={{ marginRight: "auto" }}>
+              위키 열기
+            </button>
+          )}
+          <button className="btn" onClick={onClose}>
+            닫기
+          </button>
+        </>
+      }
+    >
+      {person.email && <Detail label="이메일" value={person.email} />}
+      {person.messageCount != null && <Detail label="주고받은 메일" value={`${person.messageCount}건`} />}
+      {person.lastSeen && <Detail label="최근 연락" value={fmtDate(person.lastSeen)} />}
+      {person.lastSubject && <Detail label="최근 제목" value={person.lastSubject} />}
+      {person.wikiSummary && <Detail label="위키 메모" value={person.wikiSummary} multiline />}
+    </Modal>
   );
 }

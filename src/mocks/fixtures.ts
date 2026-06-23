@@ -42,7 +42,14 @@ export const events: CalEvent[] = [
     location: "회의실 A",
     local: true,
   },
-  { id: "e2", summary: "연차", start: { date: "2026-06-22" }, end: { date: "2026-06-23" }, allDay: true },
+  {
+    id: "e2",
+    summary: "연차",
+    description: "여름 휴가 — 자리 비움",
+    start: { date: "2026-06-22" },
+    end: { date: "2026-06-23" },
+    allDay: true,
+  },
 ];
 
 export const people: Person[] = [
@@ -71,9 +78,21 @@ export const crons: Cron[] = [
     schedule: "매일 08:00",
     enabled: true,
     payloadKind: "agentTurn",
+    payloadPreview: "오늘 일정·메일 요약을 작성하고 알림",
     nextRunAtMs: 1782201600000,
   },
   { id: "c2", name: "주간 요약", schedule: "매주 금 18:00", enabled: false, payloadKind: "agentTurn" },
+  {
+    id: "c3",
+    name: "환율 수집",
+    schedule: "15분마다",
+    enabled: true,
+    payloadKind: "httpFetch",
+    payloadPreview: "GET https://api.example/fx",
+    nextRunAtMs: 1782102600000,
+    consecutiveErrors: 3,
+    lastError: "타임아웃: 응답이 10초를 초과했습니다",
+  },
 ];
 
 export const workfeed: WorkItem[] = [

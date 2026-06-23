@@ -428,6 +428,23 @@ textarea {
   cursor: default;
 }
 
+/* clickable unified-search result (jumps to the wiki/diary/person page) */
+.search-hit {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 8px 8px 9px;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--ink);
+  transition: background 0.12s ease;
+}
+.search-hit:hover {
+  background: var(--panel-sunken);
+}
+
 /* mail reader split view */
 .mail-split {
   display: grid;
@@ -624,6 +641,48 @@ textarea {
 }
 .fade-up {
   animation: fadeUp 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+/* floating overlay — detail views & edit forms (Modal.tsx) */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 64px 24px 24px;
+  background: rgba(31, 33, 40, 0.28);
+  backdrop-filter: blur(2px);
+  animation: fadeIn 0.15s ease both;
+}
+.modal-panel {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 96px);
+  animation: modalIn 0.18s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+.modal-panel > div {
+  /* the scrollable body region grows but never pushes header/footer off-screen */
+  min-height: 0;
+}
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes modalIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 @media (max-width: 1040px) {

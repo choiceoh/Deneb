@@ -1,20 +1,24 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { callRpc } from "@/gateway";
 import { MEMORY_RPC } from "@/resources";
 import type { WikiPage } from "@/types";
 import { errText } from "@/format";
 import { color, field, font, line, muted } from "@/theme";
 import { useRegisterPane, useWorkspace } from "@/workspaceContext";
+import { Field, Modal } from "@/components/Modal";
 
-// Wiki editor over memory.* — search pages, open one into the editor, save back.
-// Query-driven (memory.search/get_page/write_page), so it calls RPCs directly.
+// Wiki editor over memory.* — search pages, open one into the editor, save back,
+// and create new pages. Query-driven (memory.search/get_page/write_page/create_page),
+// so it calls RPCs directly. Also consumes the shared openWiki target so 인물 카드 ·
+// 검색 결과 can jump straight to a page.
 export function WikiPane() {
-  const { connected, cfg } = useWorkspace();
+  const { connected, cfg, wikiTarget, consumeWikiTarget } = useWorkspace();
   const [q, setQ] = useState("");
   const [pages, setPages] = useState<WikiPage[]>([]);
   const [path, setPath] = useState<string | null>(null);
   const [content, setContent] = useState("");
   const [status, setStatus] = useState("");
+  const [creating, setCreating] = useState(false);
 
   useRegisterPane(undefined, content.trim() ? `[위키${path ? ` ${path}` : ""}]\n${content}` : "");
 
@@ -37,8 +41,7 @@ export function WikiPane() {
     }
   }
 
-  async function open(p: WikiPage) {
-    const key = keyOf(p);
+  async function openPath(key: string) {
     if (!key) return;
     setStatus("불러오는 중…");
     try {
@@ -53,6 +56,14 @@ export function WikiPane() {
     }
   }
 
+  // 인물 카드 / 검색 결과에서 넘어온 위키 경로를 열고 채널을 비운다.
+  useEffect(() => {
+    if (!connected || !wikiTarget) return;
+    void openPath(wikiTarget);
+    consumeWikiTarget();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wikiTarget, connected]);
+
   async function save() {
     if (!path) return;
     setStatus("저장 중…");
@@ -61,6 +72,19 @@ export function WikiPane() {
       // `content` left body empty server-side and CLOBBERED the page to blank.
       await callRpc(cfg, MEMORY_RPC.writePage, { path, body: content });
       setStatus("저장됨");
+    } catch (e) {
+      setStatus(`오류: ${errText(e)}`);
+    }
+  }
+
+  async function createNewPage(newPath: string) {
+    const p = newPath.trim();
+    if (!p) return;
+    setStatus("생성 중…");
+    try {
+      await callRpc(cfg, MEMORY_RPC.createPage, { path: p });
+      setCreating(false);
+      await openPath(p);
     } catch (e) {
       setStatus(`오류: ${errText(e)}`);
     }
@@ -79,6 +103,14 @@ export function WikiPane() {
             if (e.key === "Enter") void search();
           }}
         />
+        <button
+          className="btn"
+          onClick={() => setCreating(true)}
+          disabled={!connected}
+          style={{ width: "100%", marginBottom: 10, fontSize: 12, padding: "6px 0" }}
+        >
+          + 새 페이지
+        </button>
         {!connected ? (
           <p style={muted}>게이트웨이에 연결하세요.</p>
         ) : pages.length === 0 ? (
@@ -87,7 +119,7 @@ export function WikiPane() {
           pages.map((p, i) => (
             <button
               key={keyOf(p) || i}
-              onClick={() => void open(p)}
+              onClick={() => void openPath(keyOf(p))}
               style={{
                 display: "block",
                 width: "100%",
@@ -129,6 +161,46 @@ export function WikiPane() {
           }}
         />
       </div>
+      {creating && <NewPageModal onClose={() => setCreating(false)} onCreate={(p) => void createNewPage(p)} />}
     </div>
+  );
+}
+
+// Prompt for a new page path (e.g. "projects/andromeda" or "인물/홍길동"), then
+// create it via memory.create_page and open it in the editor.
+function NewPageModal({ onClose, onCreate }: { onClose: () => void; onCreate: (path: string) => void }) {
+  const [path, setPath] = useState("");
+  return (
+    <Modal
+      title="새 위키 페이지"
+      onClose={onClose}
+      width={440}
+      footer={
+        <>
+          <button className="btn" onClick={onClose}>
+            취소
+          </button>
+          <button className="btn btn-accent" onClick={() => onCreate(path)} disabled={!path.trim()}>
+            생성
+          </button>
+        </>
+      }
+    >
+      <Field label="경로">
+        <input
+          className="field"
+          value={path}
+          onChange={(e) => setPath(e.target.value)}
+          placeholder="예: projects/andromeda"
+          autoFocus
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && path.trim()) onCreate(path);
+          }}
+        />
+      </Field>
+      <p style={{ fontSize: 12, color: "var(--muted-2)", margin: 0 }}>
+        슬래시로 분류를 나눕니다. 생성 후 바로 편집할 수 있습니다.
+      </p>
+    </Modal>
   );
 }

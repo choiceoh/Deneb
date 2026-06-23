@@ -28,7 +28,7 @@ function flatten(res: SearchAllResult | SearchHit[] | null): SearchHit[] {
 }
 
 export function SearchPane() {
-  const { connected, cfg } = useWorkspace();
+  const { connected, cfg, openWiki } = useWorkspace();
   const [q, setQ] = useState("");
   const [hits, setHits] = useState<SearchHit[]>([]);
   const [status, setStatus] = useState("");
@@ -81,13 +81,33 @@ export function SearchPane() {
       </div>
       {status && <p style={muted}>{status}</p>}
       <div style={{ display: "grid", gap: 8, maxWidth: 760 }}>
-        {hits.map((h, i) => (
-          <div key={(h.path ?? h.id ?? i) + String(i)} style={{ borderTop: line, paddingTop: 8 }}>
-            {h.type && <div style={{ fontSize: 11, color: "var(--accent)", letterSpacing: "0.02em" }}>{h.type}</div>}
-            <div style={{ fontWeight: 600 }}>{h.title ?? "(제목 없음)"}</div>
-            {h.snippet && <div style={{ opacity: 0.7, fontSize: 13 }}>{h.snippet}</div>}
-          </div>
-        ))}
+        {hits.map((h, i) => {
+          // Every bucket (위키/다이어리/인물) carries a memory page path → openable.
+          const openable = Boolean(h.path);
+          const body = (
+            <>
+              {h.type && <div style={{ fontSize: 11, color: "var(--accent)", letterSpacing: "0.02em" }}>{h.type}</div>}
+              <div style={{ fontWeight: 600 }}>{h.title ?? "(제목 없음)"}</div>
+              {h.snippet && <div style={{ opacity: 0.7, fontSize: 13 }}>{h.snippet}</div>}
+            </>
+          );
+          const key = (h.path ?? h.id ?? i) + String(i);
+          return openable ? (
+            <button
+              key={key}
+              className="search-hit"
+              onClick={() => openWiki(h.path as string)}
+              title="페이지 열기"
+              style={{ borderTop: line }}
+            >
+              {body}
+            </button>
+          ) : (
+            <div key={key} style={{ borderTop: line, paddingTop: 8 }}>
+              {body}
+            </div>
+          );
+        })}
       </div>
     </>
   );

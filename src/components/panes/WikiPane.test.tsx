@@ -5,11 +5,13 @@ import * as fx from "@/mocks/fixtures";
 import { renderWithProviders } from "@/test/util";
 import { WikiPane } from "./WikiPane";
 
-// Params of the last write_page RPC, captured so we can assert the body field.
+// Params of the last write_page / create_page RPC, captured for field assertions.
 let writeParams: Record<string, unknown> | null;
+let createParams: Record<string, unknown> | null;
 
 beforeEach(() => {
   writeParams = null;
+  createParams = null;
   if (!globalThis.crypto?.randomUUID) {
     vi.stubGlobal("crypto", { randomUUID: () => "test-uuid" });
   }
@@ -33,6 +35,9 @@ beforeEach(() => {
         case "miniapp.memory.write_page":
           writeParams = params;
           return reply({ path: params.path, body: params.body });
+        case "miniapp.memory.create_page":
+          createParams = params;
+          return reply({ path: params.path, title: params.path, body: "" });
         default:
           return reply({});
       }
@@ -65,5 +70,17 @@ describe("WikiPane", () => {
     expect(writeParams).toMatchObject({ path: "projects/andromeda" });
     expect(String(writeParams?.body)).toContain("본문 내용입니다");
     expect(writeParams).not.toHaveProperty("content");
+  });
+
+  it("creates a new page and opens it in the editor", async () => {
+    renderWithProviders(<WikiPane />, { connected: true });
+
+    await userEvent.click(screen.getByRole("button", { name: /새 페이지/ }));
+    await userEvent.type(screen.getByPlaceholderText(/projects\/andromeda/), "projects/new");
+    await userEvent.click(screen.getByRole("button", { name: "생성" }));
+
+    // create_page carries the path; then the editor opens that page (h2 shows it).
+    expect(await screen.findByRole("heading", { name: "projects/new" })).toBeInTheDocument();
+    expect(createParams).toMatchObject({ path: "projects/new" });
   });
 });

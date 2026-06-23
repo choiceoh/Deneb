@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useList } from "@refinedev/core";
 import type { WorkItem } from "@/types";
 import { serializeList } from "@/aiText";
@@ -6,6 +7,10 @@ import { fmtDate } from "@/format";
 import { useAction } from "@/useAction";
 import { useRegisterPane, useWorkspace } from "@/workspaceContext";
 import { Column, Grid, GridNotice, RowBtn } from "@/components/Grid";
+
+// Items sourced from a question expect a free-text reply (workfeed.answer), not
+// just an ack — surface an inline answer box for them.
+const isQuestion = (w: WorkItem) => (w.source ?? "").includes("question");
 
 export function WorkfeedPane() {
   const { connected } = useWorkspace();
@@ -47,6 +52,10 @@ export function WorkfeedPane() {
               ))}
             </div>
           )}
+          {isQuestion(w) && (
+            // answer params best-effort vs the live gateway (mirrors action.run's itemId).
+            <AnswerBox busy={busy} onSubmit={(text) => run(WORKFEED_RPC.answer, { itemId: w.id, text })} />
+          )}
         </>
       ),
     },
@@ -76,5 +85,35 @@ export function WorkfeedPane() {
         <Grid columns={columns} rows={items} getKey={(w) => String(w.id)} />
       </GridNotice>
     </>
+  );
+}
+
+// Inline free-text reply for a question item. Clears on submit; the parent's
+// useAction refetches the feed (an answered item typically drops off).
+function AnswerBox({ busy, onSubmit }: { busy: boolean; onSubmit: (text: string) => void }) {
+  const [text, setText] = useState("");
+  const submit = () => {
+    const t = text.trim();
+    if (!t) return;
+    setText("");
+    onSubmit(t);
+  };
+  return (
+    <div style={{ display: "flex", gap: 5, marginTop: 6, maxWidth: 460 }}>
+      <input
+        className="field"
+        style={{ flex: 1, fontSize: 12, padding: "5px 8px" }}
+        placeholder="답변 입력…"
+        value={text}
+        disabled={busy}
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") submit();
+        }}
+      />
+      <button className="chip" onClick={submit} disabled={busy || !text.trim()}>
+        답변
+      </button>
+    </div>
   );
 }

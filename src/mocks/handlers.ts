@@ -50,6 +50,7 @@ const RPC: Record<string, (p: Record<string, any>) => unknown> = {
   "miniapp.workfeed.list": () => ({ count: fx.workfeed.length, items: fx.workfeed, total: fx.workfeed.length }),
   "miniapp.workfeed.ack": (p) => ({ ok: true, item: fx.workfeed.find((w) => String(w.id) === String(p.id)) ?? null }),
   "miniapp.workfeed.action.run": () => ({ ok: true, removeFromFeed: true }),
+  "miniapp.workfeed.answer": (p) => ({ ok: true, itemId: p.itemId, removeFromFeed: true }),
 
   // memory.search wraps hits as { results }; get_page/write_page carry the body
   // under `body` — mirror the real gateway (handlerminiapp/memory*.go) so the mock
@@ -61,6 +62,7 @@ const RPC: Record<string, (p: Record<string, any>) => unknown> = {
     body: `# ${p.path}\n\n목 위키 내용입니다.`,
   }),
   "miniapp.memory.write_page": (p) => ({ path: p.path, body: p.body }),
+  "miniapp.memory.create_page": (p) => ({ path: p.path, title: p.path, body: "" }),
 
   "miniapp.search.all": (p) => fx.searchAll(typeof p.query === "string" ? p.query : ""),
 };
