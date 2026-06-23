@@ -116,4 +116,20 @@ describe("Markdown", () => {
     expect(screen.getByText("python")).toBeInTheDocument();
     expect(screen.getByText("x = 1").tagName).toBe("CODE");
   });
+
+  it("renders inline math with KaTeX", () => {
+    const { container } = render(<Markdown text={"질량-에너지 $E=mc^2$ 등가."} />);
+    expect(container.querySelector(".katex")).not.toBeNull();
+  });
+
+  it("renders display math as a KaTeX block", () => {
+    const { container } = render(<Markdown text={"$$\\int_0^1 x\\,dx = \\tfrac12$$"} />);
+    expect(container.querySelector(".katex-display")).not.toBeNull();
+  });
+
+  it("leaves currency amounts as plain text, not math", () => {
+    const { container } = render(<Markdown text={"비용은 $5 이고 추가로 $10 입니다."} />);
+    expect(container.querySelector(".katex")).toBeNull();
+    expect(screen.getByText(/비용은 \$5 이고 추가로 \$10 입니다\./)).toBeInTheDocument();
+  });
 });

@@ -746,6 +746,20 @@ textarea {
 .md ol ol {
   margin-top: 3px;
 }
+
+/* KaTeX math — inline sits with the text; a block display centers and scrolls
+ * if it overflows the narrow chat column. KaTeX's own CSS does the glyph layout. */
+.md-math-block {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 2px 0;
+}
+.md-math-block .katex-display {
+  margin: 0;
+}
+.md .katex {
+  font-size: 1.04em;
+}
 .btn {
   border: 1px solid var(--line-2);
   background: var(--panel);
