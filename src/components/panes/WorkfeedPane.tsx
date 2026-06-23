@@ -8,9 +8,11 @@ import { useAction } from "@/useAction";
 import { useRegisterPane, useWorkspace } from "@/workspaceContext";
 import { Column, Grid, GridNotice, RowBtn } from "@/components/Grid";
 
-// Items sourced from a question expect a free-text reply (workfeed.answer), not
-// just an ack — surface an inline answer box for them.
+// Items sourced from a question expect a free-text reply, surfaced as an inline
+// box (sent via workfeed.feedback — the gateway records it and runs a turn).
 const isQuestion = (w: WorkItem) => (w.source ?? "").includes("question");
+
+type RunFn = (method: string, params?: Record<string, unknown>) => void;
 
 export function WorkfeedPane() {
   const { connected, consumePaneTarget, paneTarget } = useWorkspace();
@@ -45,24 +47,7 @@ export function WorkfeedPane() {
         <>
           <div style={{ fontWeight: 500 }}>{w.title ?? "(항목)"}</div>
           {w.body && <div style={{ fontSize: 12, color: "var(--muted-2)", lineHeight: 1.45 }}>{w.body}</div>}
-          {w.actions && w.actions.length > 0 && (
-            <div style={{ display: "flex", gap: 5, marginTop: 6, flexWrap: "wrap" }}>
-              {w.actions.map((a) => (
-                <button
-                  key={a.id}
-                  className="chip"
-                  disabled={busy}
-                  onClick={() => run(WORKFEED_RPC.actionRun, { itemId: w.id, actionId: a.id })}
-                >
-                  {a.label}
-                </button>
-              ))}
-            </div>
-          )}
-          {isQuestion(w) && (
-            // answer params best-effort vs the live gateway (mirrors action.run's itemId).
-            <AnswerBox busy={busy} onSubmit={(text) => run(WORKFEED_RPC.answer, { itemId: w.id, text })} />
-          )}
+          <WorkItemActions w={w} busy={busy} run={run} />
         </>
       ),
     },
@@ -100,32 +85,61 @@ export function WorkfeedPane() {
   );
 }
 
-// Inline free-text reply for a question item. Clears on submit; the parent's
-// useAction refetches the feed (an answered item typically drops off).
-function AnswerBox({ busy, onSubmit }: { busy: boolean; onSubmit: (text: string) => void }) {
+// Per-item actions: the card's own action chips (action.run), regenerate the
+// card (rewrite), and a free-text feedback/answer box (feedback). Question items
+// show the box by default; other cards reveal it behind a 정정 toggle.
+function WorkItemActions({ w, busy, run }: { w: WorkItem; busy: boolean; run: RunFn }) {
+  const question = isQuestion(w);
+  const [open, setOpen] = useState(question);
   const [text, setText] = useState("");
+
   const submit = () => {
     const t = text.trim();
     if (!t) return;
     setText("");
-    onSubmit(t);
+    run(WORKFEED_RPC.feedback, { itemId: w.id, feedback: t });
   };
+
   return (
-    <div style={{ display: "flex", gap: 5, marginTop: 6, maxWidth: 460 }}>
-      <input
-        className="field"
-        style={{ flex: 1, fontSize: 12, padding: "5px 8px" }}
-        placeholder="답변 입력…"
-        value={text}
-        disabled={busy}
-        onChange={(e) => setText(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") submit();
-        }}
-      />
-      <button className="chip" onClick={submit} disabled={busy || !text.trim()}>
-        답변
-      </button>
-    </div>
+    <>
+      <div style={{ display: "flex", gap: 5, marginTop: 6, flexWrap: "wrap" }}>
+        {w.actions?.map((a) => (
+          <button
+            key={a.id}
+            className="chip"
+            disabled={busy}
+            onClick={() => run(WORKFEED_RPC.actionRun, { itemId: w.id, actionId: a.id })}
+          >
+            {a.label}
+          </button>
+        ))}
+        <RowBtn onClick={() => run(WORKFEED_RPC.rewrite, { itemId: w.id })} disabled={busy} title="카드 다시 작성">
+          다시 작성
+        </RowBtn>
+        {!question && (
+          <RowBtn onClick={() => setOpen((o) => !o)} disabled={busy} title="정정·피드백 남기기">
+            정정
+          </RowBtn>
+        )}
+      </div>
+      {open && (
+        <div style={{ display: "flex", gap: 5, marginTop: 6, maxWidth: 460 }}>
+          <input
+            className="field"
+            style={{ flex: 1, fontSize: 12, padding: "5px 8px" }}
+            placeholder={question ? "답변 입력…" : "정정·피드백 입력…"}
+            value={text}
+            disabled={busy}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") submit();
+            }}
+          />
+          <button className="chip" onClick={submit} disabled={busy || !text.trim()}>
+            {question ? "답변" : "보내기"}
+          </button>
+        </div>
+      )}
+    </>
   );
 }
