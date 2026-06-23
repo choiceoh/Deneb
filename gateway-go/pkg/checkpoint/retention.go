@@ -96,8 +96,11 @@ func (m *Manager) pruneLocked() error {
 		return nil
 	}
 
-	// Best-effort: delete blob files (and their atomicfile .lock sidecar)
-	// first, then rewrite index.
+	// Rewrite the index before deleting blobs so an interrupted prune cannot
+	// leave live index entries pointing at missing snapshot content.
+	if err := rewriteIndex(m.indexPath(), remaining); err != nil {
+		return err
+	}
 	var firstBlobErr error
 	for _, s := range removed {
 		if s.BlobPath == "" {
@@ -108,9 +111,6 @@ func (m *Manager) pruneLocked() error {
 		}
 		// Silently best-effort: remove the sidecar lock file left by atomicfile.
 		_ = os.Remove(s.BlobPath + ".lock")
-	}
-	if err := rewriteIndex(m.indexPath(), remaining); err != nil {
-		return err
 	}
 	return firstBlobErr
 }

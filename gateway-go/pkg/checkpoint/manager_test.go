@@ -206,6 +206,40 @@ func TestRetentionMaxBytes(t *testing.T) {
 	}
 }
 
+func TestPruneRewriteFailureKeepsReferencedBlobs(t *testing.T) {
+	m := newTestManager(t, "session-prune-fail", WithRetentionN(1), WithGzip(false))
+	target := filepath.Join(t.TempDir(), "retained.txt")
+
+	writeFile(t, target, "version one")
+	s1, err := m.Snapshot(context.Background(), target, "fs_write")
+	if err != nil {
+		t.Fatalf("snapshot 1: %v", err)
+	}
+
+	// Force rewriteIndex to fail during prune. The first snapshot must remain
+	// restorable because the old index still references its blob.
+	if err := os.MkdirAll(m.indexPath()+".rewrite.tmp", 0o755); err != nil {
+		t.Fatalf("mkdir rewrite tmp blocker: %v", err)
+	}
+
+	writeFile(t, target, "version two")
+	if _, err := m.Snapshot(context.Background(), target, "fs_write"); err == nil {
+		t.Fatal("expected prune rewrite failure")
+	}
+
+	if _, err := os.Stat(s1.BlobPath); err != nil {
+		t.Fatalf("pruned blob removed despite failed index rewrite: %v", err)
+	}
+
+	list, err := m.List(target, 0)
+	if err != nil {
+		t.Fatalf("list after failed prune: %v", err)
+	}
+	if len(list) != 2 {
+		t.Fatalf("expected both snapshots to remain indexed after failed prune, got %d", len(list))
+	}
+}
+
 func TestConcurrentSnapshotSameFile(t *testing.T) {
 	m := newTestManager(t, "session-race")
 	target := filepath.Join(t.TempDir(), "racy.txt")
