@@ -15,10 +15,11 @@ export function useSessions(
   connected: boolean,
   busy: boolean,
   chat: { clear: () => void; setTurns: (turns: ChatTurn[]) => void },
-  opts?: { mainKey?: string; filter?: string },
+  opts?: { mainKey?: string; filter?: string; newKey?: () => string },
 ) {
-  // mainKey = the "새 대화" / default session; filter scopes the recent list to a
-  // namespace so the 비업무 채팅 탭(chat:*) and the work panel(client:main) don't mix.
+  // mainKey = the default session; newKey (if given) mints a *fresh* key per "새 대화"
+  // so the 채팅 탭이 여러 chat:* 대화를 가질 수 있다(work panel은 client:main 하나).
+  // filter scopes the recent list to a namespace so the two don't mix.
   const mainKey = opts?.mainKey ?? MAIN_SESSION;
   const filter = opts?.filter;
   const keep = (s: SessionRow[]) => (filter ? s.filter((r) => r.key.startsWith(filter)) : s);
@@ -62,7 +63,9 @@ export function useSessions(
   function newChat() {
     if (busy) return;
     setSessionsOpen(false);
-    setSessionKey(mainKey);
+    // mint a fresh key when the caller provides one (채팅 탭 → 새 대화마다 새 chat:<id>),
+    // else reuse the single main session (work panel → client:main).
+    setSessionKey(opts?.newKey ? opts.newKey() : mainKey);
     chat.clear();
   }
 
@@ -97,5 +100,15 @@ export function useSessions(
     }
   }
 
-  return { sessions, sessionKey, sessionsOpen, sessionErr, toggleSessions, selectSession, removeSession, newChat };
+  return {
+    sessions,
+    sessionKey,
+    sessionsOpen,
+    sessionErr,
+    toggleSessions,
+    refreshSessions,
+    selectSession,
+    removeSession,
+    newChat,
+  };
 }

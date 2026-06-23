@@ -24,12 +24,17 @@ export function ChatView({ cfg, hidden = false }: { cfg: GatewayConfig; hidden?:
   const [models, setModels] = useState<ModelsList | null>(null);
   const [model, setModel] = useState("");
   // chat:* 네임스페이스로 스코프 — 업무 패널의 client:main 세션과 섞이지 않는다.
-  const { sessions, sessionKey, sessionErr, selectSession, removeSession, newChat } = useSessions(
+  const { sessions, sessionKey, sessionErr, selectSession, removeSession, newChat, refreshSessions } = useSessions(
     cfg,
     connected,
     busy,
     { clear, setTurns },
-    { mainKey: "chat:main", filter: "chat:" },
+    {
+      mainKey: "chat:main",
+      filter: "chat:",
+      // 새 대화 → 고유 chat:<id> 발급(비업무 대화를 여러 개 유지). Date.now/random은 앱 런타임이라 사용 가능.
+      newKey: () => `chat:${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+    },
   );
   const { ref: transcriptRef, onScroll, pin } = useStickyScroll([turns, thinking]);
 
@@ -52,12 +57,19 @@ export function ChatView({ cfg, hidden = false }: { cfg: GatewayConfig; hidden?:
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connected, cfg.url, cfg.token]);
 
+  // Re-measure on reveal too: the tab stays mounted while hidden (display:none → the
+  // textarea measures 0 height), so without `hidden` here it would open collapsed.
   useEffect(() => {
     const el = composeRef.current;
-    if (!el) return;
+    if (!el || hidden) return;
     el.style.height = "auto";
     el.style.height = `${el.scrollHeight}px`;
-  }, [input]);
+  }, [input, hidden]);
+
+  // Focus the composer when the tab is revealed, so you can type right away.
+  useEffect(() => {
+    if (!hidden) composeRef.current?.focus();
+  }, [hidden]);
 
   // Non-work: no workspaceContext / activeResource — a pure conversation, scoped to
   // its own chat:* session.
@@ -66,7 +78,9 @@ export function ChatView({ cfg, hidden = false }: { cfg: GatewayConfig; hidden?:
     if (!msg || busy || !connected) return;
     setInput("");
     pin();
-    void send(msg, { model: model || undefined, sessionKey });
+    // refresh the history once the turn finishes — the gateway may have created or
+    // relabelled this chat:* session.
+    void send(msg, { model: model || undefined, sessionKey }).then(() => void refreshSessions());
   }
 
   const last = turns.at(-1);

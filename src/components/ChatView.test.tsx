@@ -35,4 +35,9 @@ describe("ChatView (비업무 채팅 탭)", () => {
     renderWithProviders(<ChatView cfg={{ url: "", token: "" }} />, { connected: false });
     expect(screen.getByText("게이트웨이 연결 대기 중")).toBeInTheDocument();
   });
+
+  it("focuses the composer when shown so you can type right away", () => {
+    renderWithProviders(<ChatView cfg={{ url: "http://test", token: "tok" }} />, { connected: true });
+    expect(screen.getByRole("textbox", { name: "Deneb에게 메시지" })).toHaveFocus();
+  });
 });
