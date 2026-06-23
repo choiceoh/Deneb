@@ -1,8 +1,8 @@
 import { useMemo, useState } from "react";
-import { useList } from "@refinedev/core";
 
 import type { CalEvent } from "@/types";
 import { serializeList } from "@/aiText";
+import { useCachedList } from "@/cachedList";
 import { calSpan, dayKey, eventDayKeys, eventTitle } from "@/format";
 import { useAction } from "@/useAction";
 import { useRegisterPane, useWorkspace } from "@/workspaceContext";
@@ -11,7 +11,7 @@ import { MonthGrid } from "@/components/MonthGrid";
 
 export function CalendarPane() {
   const { connected } = useWorkspace();
-  const { result, query } = useList<CalEvent>({ resource: "calendar", queryOptions: { enabled: connected } });
+  const { result, query } = useCachedList<CalEvent>("calendar", connected);
   // Stable reference so the day-map memo below only recomputes when data changes.
   const events = useMemo(() => result?.data ?? [], [result?.data]);
   const { run, error, busy } = useAction(() => void query.refetch());

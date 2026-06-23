@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { useList, useOne } from "@refinedev/core";
+import { useOne } from "@refinedev/core";
 import type { Mail } from "@/types";
 import { serializeList } from "@/aiText";
+import { useCachedList } from "@/cachedList";
 import { MAIL_RPC } from "@/resources";
 import { color, ellipsis } from "@/theme";
 import { fmtDate, text } from "@/format";
@@ -11,7 +12,7 @@ import { Column, Grid, GridNotice, RowBtn } from "@/components/Grid";
 
 export function MailPane() {
   const { connected } = useWorkspace();
-  const { result, query } = useList<Mail>({ resource: "mail", queryOptions: { enabled: connected } });
+  const { result, query } = useCachedList<Mail>("mail", connected);
   const mails = result?.data ?? [];
   const [selectedId, setSelectedId] = useState<string | number | undefined>();
   const selectedPreview = mails.find((m) => String(m.id) === String(selectedId));
