@@ -55,6 +55,10 @@
   --rail-w: 100px;
   --ai-w: 352px;
   --gap: 12px;
+  /* calendar columns — shared by .cal-layout (top) and .calendar-workspace
+   * (bottom) so the grid/agenda split and the panels below stay aligned. */
+  --cal-col-w: 360px;
+  --cal-gutter: 28px;
 
   /* motion — the signature ease-out, shared by entrances and the Zen tab lift */
   --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
@@ -1491,13 +1495,13 @@ textarea {
 .cal-layout {
   display: flex;
   align-items: flex-start;
-  gap: 28px;
+  gap: var(--cal-gutter);
   margin-top: 14px;
   flex-wrap: wrap;
 }
 .cal-cal {
   flex: 0 0 auto;
-  width: 360px;
+  width: var(--cal-col-w);
   max-width: 100%;
 }
 .cal-agenda-col {
@@ -1667,10 +1671,11 @@ textarea {
 }
 .calendar-workspace {
   display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(260px, 0.9fr);
-  gap: 14px;
+  /* Mirror .cal-layout above (same column width + gutter, no cap) so the panels
+   * line up under the month grid (좌상단) and agenda (우상단) columns. */
+  grid-template-columns: var(--cal-col-w) minmax(260px, 1fr);
+  gap: var(--cal-gutter);
   margin-top: 16px;
-  max-width: 980px;
 }
 .calendar-workspace-panel {
   min-width: 0;
@@ -1743,7 +1748,6 @@ textarea {
 @media (max-width: 860px) {
   .calendar-workspace {
     grid-template-columns: 1fr;
-    max-width: 780px;
   }
 }
 
