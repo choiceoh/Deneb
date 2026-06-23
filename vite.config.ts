@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { defineConfig } from "vitest/config";
+import { configDefaults, defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 
 // Surface the package version to the app (settings → 정보) as a build-time constant.
@@ -17,5 +17,8 @@ export default defineConfig({
     globals: true,
     setupFiles: ["./src/test/setup.ts"],
     css: false,
+    // Ephemeral git worktrees (Claude Code sessions) live under .claude/ and carry
+    // their own copies of these test files — don't double-run them from the root.
+    exclude: [...configDefaults.exclude, "**/.claude/**"],
   },
 });

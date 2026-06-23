@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import type { CalEvent, Cron, Mail, Person, ProjectDigest, Todo, View, WorkItem } from "@/types";
 import { useCachedList } from "@/cachedList";
 import { calSpan, eventDayKeys, fmtDate, senderName } from "@/format";
+import { moveItem } from "@/listReorder";
 import { getJSON, setJSON } from "@/storage";
 import { Icon, type IconName } from "@/components/Icon";
 import { GridNotice } from "@/components/Grid";
@@ -102,12 +103,7 @@ export function TodayPane() {
     setHidden((p) => (p.includes(k) ? p.filter((x) => x !== k) : [...p, k]));
   }
   function move(k: SectionKey, dir: -1 | 1) {
-    const i = order.indexOf(k);
-    const j = i + dir;
-    if (j < 0 || j >= order.length) return;
-    const next = [...order];
-    [next[i], next[j]] = [next[j], next[i]];
-    setOrder(next);
+    setOrder((p) => moveItem(p, k, dir));
   }
 
   const cal = useCachedList<CalEvent>("calendar", connected);

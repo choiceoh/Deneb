@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { SEARCH_RPC } from "@/resources";
+import { projectList } from "@/aiText";
 import type { SearchHit } from "@/types";
 import { useCachedRpc } from "@/useCachedRpc";
 import { line } from "@/theme";
@@ -35,12 +36,11 @@ export function SearchPane() {
   const [searched, setSearched] = useState(false);
   const { callCached, status, setStatus } = useCachedRpc(cfg, SEARCH_RESOURCE);
 
-  const aiText = hits.length
-    ? `[검색 "${q}" — ${hits.length}건]\n` +
-      hits
-        .map((h) => `- ${h.type ? `[${h.type}] ` : ""}${h.title ?? ""}${h.snippet ? ` — ${h.snippet}` : ""}`)
-        .join("\n")
-    : "";
+  const aiText = projectList(
+    `[검색 "${q}" — ${hits.length}건]`,
+    hits,
+    (h) => `- ${h.type ? `[${h.type}] ` : ""}${h.title ?? ""}${h.snippet ? ` — ${h.snippet}` : ""}`,
+  );
   useRegisterPane(SEARCH_RESOURCE, aiText);
 
   async function run() {

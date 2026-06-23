@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { NOTEBOOK_RPC } from "@/resources";
+import { projectList } from "@/aiText";
 import type { Notebook, NotebookSource, NotebookSummary } from "@/types";
 import { fmtDate } from "@/format";
 import { useCachedRpc } from "@/useCachedRpc";
@@ -85,14 +86,16 @@ export function NotebookPane() {
   const aiText = active
     ? `[노트북 ${active.name}]\n` +
       (active.sources ?? [])
-        .map(
-          (s) => `- [${s.cite ?? "?"}] ${s.title ?? ""}${s.kind ? ` (${s.kind})` : ""}${s.text ? `\n  ${s.text}` : ""}`,
-        )
+        .map((s) => {
+          const head = `- [${s.cite ?? "?"}] ${s.title ?? ""}${s.kind ? ` (${s.kind})` : ""}`;
+          return s.text ? `${head}\n  ${s.text}` : head;
+        })
         .join("\n")
-    : notebooks.length
-      ? `[노트북 ${notebooks.length}개]\n` +
-        notebooks.map((n) => `- ${n.name}${n.sourceCount ? ` · 자료 ${n.sourceCount}` : ""}`).join("\n")
-      : "";
+    : projectList(
+        `[노트북 ${notebooks.length}개]`,
+        notebooks,
+        (n) => `- ${n.name}${n.sourceCount ? ` · 자료 ${n.sourceCount}` : ""}`,
+      );
   useRegisterPane(NOTEBOOK_RESOURCE, aiText);
 
   return (

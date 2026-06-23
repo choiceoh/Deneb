@@ -5,6 +5,9 @@ src-tauri/target
 src-tauri/Cargo.lock
 public/mockServiceWorker.js
 
+# Ephemeral git worktrees from Claude Code sessions — not source to format.
+.claude
+
 # Owned by release-please — its format isn't Prettier's, so don't fight it.
 # (release-please re-serializes tauri.conf.json on version bump, re-expanding
 # JSON arrays multi-line that Prettier wants single-line → format:check fails.)

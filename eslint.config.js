@@ -9,7 +9,7 @@ import globals from "globals";
 // focuses on correctness (hooks rules) and consistency. `any` is allowed at the
 // dynamic RPC boundary (see dataProvider.ts).
 export default tseslint.config(
-  { ignores: ["dist", "node_modules", "src-tauri", "coverage"] },
+  { ignores: ["dist", "node_modules", "src-tauri", "coverage", ".claude"] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {

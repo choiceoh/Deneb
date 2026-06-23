@@ -17,6 +17,7 @@ import {
 import type { Mail, MailAttachment } from "@/types";
 import { errText, firstString, fmtMailDate, senderName, text } from "@/format";
 import { stripMailChrome } from "@/mailChrome";
+import { formatBytes } from "@/components/panes/fileHelpers";
 import { useWorkspace } from "@/workspaceContext";
 import { Markdown } from "@/components/Markdown";
 
@@ -173,13 +174,6 @@ function AttachmentCard({
 function formatAttachmentMeta(att: MailAttachment): string {
   const bits = [att.mimeType, formatBytes(att.size)].filter(Boolean);
   return bits.join(" · ");
-}
-
-function formatBytes(size?: number): string {
-  if (typeof size !== "number" || !Number.isFinite(size) || size <= 0) return "";
-  if (size < 1024) return `${size} B`;
-  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
-  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 // Sender context: recent volume in the last N days + the operator's curated wiki

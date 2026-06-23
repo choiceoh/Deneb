@@ -1,6 +1,7 @@
 import { useState, type KeyboardEvent, type ReactNode } from "react";
 import { saveConfig } from "@/gateway";
 import { setString } from "@/storage";
+import { moveItem } from "@/listReorder";
 import { useGatewayStatus } from "@/hooks";
 import { type LogLevel, getLogLevel, setLogLevel } from "@/log";
 import { checkForUpdates } from "@/updater";
@@ -100,12 +101,7 @@ export function SettingsPane() {
   // Reorderable rail list (non-settings panes); ▲▼ swap a pane with its neighbour.
   const railOrder = orderedViews(viewOrder);
   function moveView(key: View, dir: -1 | 1) {
-    const i = railOrder.indexOf(key);
-    const j = i + dir;
-    if (j < 0 || j >= railOrder.length) return;
-    const next = [...railOrder];
-    [next[i], next[j]] = [next[j], next[i]];
-    setViewOrder(next);
+    setViewOrder(moveItem(railOrder, key, dir));
   }
 
   return (
