@@ -33,6 +33,7 @@ const RPC: Record<string, (p: Record<string, any>) => unknown> = {
   "miniapp.gmail.trash": (p) => ({ id: p.id, ok: true }),
 
   "miniapp.calendar.list_upcoming": () => ({ events: fx.events }),
+  "miniapp.calendar.list_range": (p) => ({ events: fx.eventsInRange(String(p.from ?? ""), String(p.to ?? "")) }),
   "miniapp.calendar.get": (p) => fx.events.find((e) => String(e.id) === String(p.id)) ?? null,
   "miniapp.calendar.create": (p) => ({ id: `e${Date.now()}`, local: true, ...p }),
   "miniapp.calendar.update": (p) => ({ ...p }),

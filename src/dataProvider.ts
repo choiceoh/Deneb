@@ -17,6 +17,12 @@ function unwrapRows(payload: unknown, listKey?: string): any[] {
   return [];
 }
 
+function rpcParams(meta: unknown): Record<string, unknown> {
+  if (!meta || typeof meta !== "object") return {};
+  const params = (meta as { rpcParams?: unknown }).rpcParams;
+  return params && typeof params === "object" && !Array.isArray(params) ? (params as Record<string, unknown>) : {};
+}
+
 // Deneb-backed Refine data provider. Resource↔RPC wiring lives in resources.ts;
 // this file is just the generic glue from Refine's CRUD contract to callRpc().
 //
@@ -27,12 +33,12 @@ export function denebDataProvider(cfg: GatewayConfig): DataProvider {
   return {
     getApiUrl: () => cfg.url,
 
-    getList: async ({ resource }) => {
+    getList: async ({ resource, meta }) => {
       const def = resourceDef(resource);
-      const payload = await callRpc<unknown>(cfg, def.list, {});
+      const payload = await callRpc<unknown>(cfg, def.list, rpcParams(meta));
       const data = unwrapRows(payload, def.listKey);
-      const meta = payload as Record<string, unknown> | null;
-      const total = meta && typeof meta.total === "number" ? meta.total : data.length;
+      const payloadMeta = payload as Record<string, unknown> | null;
+      const total = payloadMeta && typeof payloadMeta.total === "number" ? payloadMeta.total : data.length;
       return { data, total };
     },
 

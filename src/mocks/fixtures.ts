@@ -4,6 +4,7 @@
 // an agent (or a screenshot) sees when running against the mock.
 import type { ModelsList, SessionRow, TranscriptMsg } from "@/gateway";
 import type { CalEvent, Cron, Mail, Person, ProjectDigest, SearchHit, Todo, WikiPage, WorkItem } from "@/types";
+import { calStamp } from "@/format";
 
 export const todos: Todo[] = [
   { id: "t1", title: "분기 보고서 초안 작성", done: false, due: "2026-06-20T00:00:00Z" },
@@ -52,6 +53,30 @@ export const events: CalEvent[] = [
     allDay: true,
   },
 ];
+
+function calTimeMs(stamp: ReturnType<typeof calStamp>): number {
+  if (!stamp.iso) return Number.NaN;
+  if (stamp.allDay) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(stamp.iso);
+    if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])).getTime();
+  }
+  return new Date(stamp.iso).getTime();
+}
+
+export function eventsInRange(fromIso: string, toIso: string): CalEvent[] {
+  const from = new Date(fromIso).getTime();
+  const to = new Date(toIso).getTime();
+  if (!Number.isFinite(from) || !Number.isFinite(to) || to <= from) return [];
+  return events.filter((ev) => {
+    const start = calStamp(ev.start);
+    if (!start.iso) return false;
+    const startMs = calTimeMs(start);
+    const end = calStamp(ev.end);
+    const endMs = end.iso ? calTimeMs(end) : startMs + (start.allDay ? 86_400_000 : 1);
+    if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) return false;
+    return startMs < to && Math.max(endMs, startMs + 1) > from;
+  });
+}
 
 export const people: Person[] = [
   {

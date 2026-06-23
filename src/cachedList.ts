@@ -76,10 +76,16 @@ function writeCachedOne<T>(resource: string, id: BaseKey, data: T): void {
   }
 }
 
-export function useCachedList<T extends BaseRecord>(resource: string, enabled: boolean) {
-  const snapshot = useMemo(() => readCachedList<T>(resource), [resource]);
+export function useCachedList<T extends BaseRecord>(
+  resource: string,
+  enabled: boolean,
+  options: { cacheKey?: string; meta?: Record<string, unknown> } = {},
+) {
+  const cacheKey = options.cacheKey ?? resource;
+  const snapshot = useMemo(() => readCachedList<T>(cacheKey), [cacheKey]);
   const list = useList<T>({
     resource,
+    meta: options.meta,
     queryOptions: {
       enabled,
       initialData: snapshot ? { data: snapshot.data, total: snapshot.total } : undefined,
@@ -92,12 +98,12 @@ export function useCachedList<T extends BaseRecord>(resource: string, enabled: b
 
   useEffect(() => {
     if (!enabled || !list.query.isSuccess) return;
-    writeCachedList(resource, list.result.data, list.result.total);
-  }, [enabled, resource, list.query.dataUpdatedAt, list.query.isSuccess, list.result.data, list.result.total]);
+    writeCachedList(cacheKey, list.result.data, list.result.total);
+  }, [cacheKey, enabled, list.query.dataUpdatedAt, list.query.isSuccess, list.result.data, list.result.total]);
 
   return {
     ...list,
-    cache: { hasSnapshot: Boolean(snapshot), savedAt: snapshot?.savedAt },
+    cache: { hasSnapshot: Boolean(snapshot), savedAt: snapshot?.savedAt, key: cacheKey },
   };
 }
 

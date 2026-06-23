@@ -7,6 +7,7 @@
 // is mounted (Workstation renders one at a time), so whoever is mounted owns the
 // AI context and names the resource the AI's tool calls should invalidate.
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { DOC_STORAGE_KEY, readStoredDoc } from "./docStorage";
 import type { GatewayConfig } from "./gateway";
 import type { View } from "./types";
 
@@ -50,7 +51,7 @@ export function WorkspaceProvider({
   children: ReactNode;
 }) {
   const [view, setView] = useState<View>("today"); // land on the 오늘 dashboard
-  const [doc, setDoc] = useState("");
+  const [doc, setDoc] = useState(readStoredDoc);
   const [aiText, setAiText] = useState("");
   const [activeResource, setActiveResource] = useState<string | undefined>(undefined);
   const [wikiTarget, setWikiTarget] = useState<string | null>(null);
@@ -65,6 +66,15 @@ export function WorkspaceProvider({
     setView("wiki");
   };
   const consumeWikiTarget = () => setWikiTarget(null);
+
+  useEffect(() => {
+    try {
+      if (doc) localStorage.setItem(DOC_STORAGE_KEY, doc);
+      else localStorage.removeItem(DOC_STORAGE_KEY);
+    } catch {
+      /* ignore storage quota / private mode failures */
+    }
+  }, [doc]);
 
   return (
     <Ctx.Provider

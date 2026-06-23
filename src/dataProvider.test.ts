@@ -49,4 +49,24 @@ describe("denebDataProvider getList — payload unwrapping", () => {
     expect(data).toEqual([]);
     expect(total).toBe(0);
   });
+
+  it("passes explicit RPC params from Refine meta", async () => {
+    let seen: unknown;
+    server.use(
+      http.post("*/api/v1/miniapp/rpc", async ({ request }) => {
+        seen = await request.json();
+        return HttpResponse.json({ ok: true, payload: { events: [] } });
+      }),
+    );
+
+    await provider.getList({
+      resource: "calendar-range",
+      meta: { rpcParams: { from: "2026-06-01T00:00:00Z", to: "2026-07-01T00:00:00Z" } },
+    });
+
+    expect(seen).toMatchObject({
+      method: "miniapp.calendar.list_range",
+      params: { from: "2026-06-01T00:00:00Z", to: "2026-07-01T00:00:00Z" },
+    });
+  });
 });

@@ -1,10 +1,10 @@
 import { useMemo, useState } from "react";
-import { useCreate, useUpdate } from "@refinedev/core";
+import { useCreate, useInvalidate, useUpdate } from "@refinedev/core";
 
 import type { CalEvent } from "@/types";
 import { serializeList } from "@/aiText";
 import { useCachedList } from "@/cachedList";
-import { calSpan, calStamp, dayKey, errText, eventDayKeys, eventTitle } from "@/format";
+import { calSpan, calStamp, dayKey, errText, eventDayKeys, eventTitle, monthLabel, monthMatrix } from "@/format";
 import { useAction } from "@/useAction";
 import { useRegisterPane, useWorkspace } from "@/workspaceContext";
 import { Column, Grid, GridNotice, RowBtn } from "@/components/Grid";
@@ -20,20 +20,49 @@ function toLocalInput(iso?: string): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+function visibleRangeForMonth(year: number, month0: number) {
+  const weeks = monthMatrix(year, month0);
+  const first = weeks[0][0];
+  const lastWeek = weeks[weeks.length - 1];
+  const last = lastWeek[lastWeek.length - 1];
+  const to = new Date(last);
+  to.setDate(to.getDate() + 1);
+  const from = first.toISOString();
+  const toIso = to.toISOString();
+  return {
+    from,
+    to: toIso,
+    cacheKey: `calendar-range.${from}.${toIso}`,
+    label: monthLabel(year, month0),
+  };
+}
+
 export function CalendarPane() {
   const { connected } = useWorkspace();
-  const { result, query } = useCachedList<CalEvent>("calendar", connected);
-  // Stable reference so the day-map memo below only recomputes when data changes.
-  const events = useMemo(() => result?.data ?? [], [result?.data]);
-  const { run, error, busy } = useAction(() => void query.refetch());
-  // null = closed · {} = create · { ev } = open existing (editable when ev.local).
-  const [edit, setEdit] = useState<{ ev?: CalEvent } | null>(null);
-
   const now = new Date();
   const todayKey = dayKey(now);
   const [cursor, setCursor] = useState({ y: now.getFullYear(), m: now.getMonth() });
-  // A clicked day in the grid (dayKey) — filters the list below to that date. null = upcoming.
+  // A clicked day in the grid (dayKey) filters the list below to that date. null = visible month.
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  const visibleRange = useMemo(() => visibleRangeForMonth(cursor.y, cursor.m), [cursor.y, cursor.m]);
+  const rangeMeta = useMemo(
+    () => ({ rpcParams: { from: visibleRange.from, to: visibleRange.to } }),
+    [visibleRange.from, visibleRange.to],
+  );
+  const { result, query } = useCachedList<CalEvent>("calendar-range", connected, {
+    cacheKey: visibleRange.cacheKey,
+    meta: rangeMeta,
+  });
+  const invalidate = useInvalidate();
+  const refreshCalendarData = () => {
+    void query.refetch();
+    void invalidate({ resource: "calendar", invalidates: ["list"] });
+  };
+  // Stable reference so the day-map memo below only recomputes when data changes.
+  const events = useMemo(() => result?.data ?? [], [result?.data]);
+  const { run, error, busy } = useAction(refreshCalendarData);
+  // null = closed · {} = create · { ev } = open existing (editable when ev.local).
+  const [edit, setEdit] = useState<{ ev?: CalEvent } | null>(null);
 
   // Place each event on every day it spans, so the month grid can look a day up.
   const eventsByDay = useMemo(() => {
@@ -52,7 +81,7 @@ export function CalendarPane() {
     const span = calSpan(ev.start, ev.end);
     return `- ${eventTitle(ev)}${span ? ` (${span})` : ""}${ev.location ? ` @${ev.location}` : ""}`;
   });
-  useRegisterPane("calendar", aiText);
+  useRegisterPane("calendar-range", aiText);
 
   const columns: Column<CalEvent>[] = [
     {
@@ -88,11 +117,11 @@ export function CalendarPane() {
     });
   };
 
-  // The list below shows the selected day's events, or all upcoming events.
+  // The list below shows the selected day's events, or the full visible month range.
   const listEvents = selectedDay ? (eventsByDay.get(selectedDay) ?? []) : events;
   const listLabel = selectedDay
     ? `${selectedDay.split("-")[1]}월 ${selectedDay.split("-")[2]}일 일정`
-    : "다가오는 일정";
+    : `${visibleRange.label} 일정`;
 
   return (
     <>
@@ -128,14 +157,14 @@ export function CalendarPane() {
         <h3 style={{ margin: 0, color: "var(--muted)" }}>{listLabel}</h3>
         {selectedDay && (
           <button className="row-btn" onClick={() => setSelectedDay(null)}>
-            ← 다가오는 일정
+            ← 월 전체
           </button>
         )}
       </div>
       <GridNotice
         query={query}
         count={listEvents.length}
-        empty={selectedDay ? "이 날 일정이 없습니다." : "다가오는 일정이 없습니다."}
+        empty={selectedDay ? "이 날 일정이 없습니다." : "이 달 일정이 없습니다."}
       >
         <Grid
           columns={columns}
@@ -146,7 +175,7 @@ export function CalendarPane() {
         />
       </GridNotice>
 
-      {edit && <EventModal event={edit.ev} onClose={() => setEdit(null)} onSaved={() => void query.refetch()} />}
+      {edit && <EventModal event={edit.ev} onClose={() => setEdit(null)} onSaved={refreshCalendarData} />}
     </>
   );
 }

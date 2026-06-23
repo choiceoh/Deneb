@@ -48,6 +48,12 @@ export const RESOURCE_DEFS: ResourceDef[] = [
     update: "miniapp.calendar.update",
     remove: "miniapp.calendar.delete",
   },
+  {
+    name: "calendar-range",
+    label: "일정 범위",
+    list: "miniapp.calendar.list_range",
+    listKey: "events",
+  },
   // Read-mostly resources — parameterless lists flow straight into a grid.
   { name: "people", label: "연락처", list: "miniapp.people.list", listKey: "people" },
   {
