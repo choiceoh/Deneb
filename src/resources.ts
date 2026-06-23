@@ -80,6 +80,8 @@ export const MEMORY_RPC = {
   getPage: "miniapp.memory.get_page",
   writePage: "miniapp.memory.write_page",
   createPage: "miniapp.memory.create_page",
+  categories: "miniapp.memory.categories",
+  listInCategory: "miniapp.memory.list_in_category",
 } as const;
 
 export const SEARCH_RPC = "miniapp.search.all";

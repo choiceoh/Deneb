@@ -7,14 +7,23 @@ import { useRegisterPane, useWorkspace } from "@/workspaceContext";
 import { Field, Modal } from "@/components/Modal";
 import { Markdown } from "@/components/Markdown";
 
-// Wiki editor over memory.* — search pages, open one into the editor, save back,
-// and create new pages. Query-driven (memory.search/get_page/write_page/create_page),
-// so it calls RPCs directly. Also consumes the shared openWiki target so 인물 카드 ·
-// 검색 결과 can jump straight to a page.
+interface Category {
+  name: string;
+  pageCount?: number;
+}
+
+// Wiki editor over memory.* — browse pages by category, search, open one into the
+// editor, save back, and create new pages. Query-driven (memory.*), so it calls
+// RPCs directly. Opens on a category browse list (no search needed) so the wiki is
+// usable immediately; search and the openWiki deeplink layer on top.
 export function WikiPane() {
   const { connected, cfg, wikiTarget, consumeWikiTarget } = useWorkspace();
   const [q, setQ] = useState("");
-  const [pages, setPages] = useState<WikiPage[]>([]);
+  const [pages, setPages] = useState<WikiPage[]>([]); // search results
+  const [searched, setSearched] = useState(false);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [browseCat, setBrowseCat] = useState<string | null>(null);
+  const [catPages, setCatPages] = useState<WikiPage[]>([]);
   const [path, setPath] = useState<string | null>(null);
   const [content, setContent] = useState("");
   const { call, status, setStatus } = useRpc(cfg);
@@ -25,19 +34,62 @@ export function WikiPane() {
 
   const keyOf = (p: WikiPage) => p.path ?? String(p.id ?? "");
 
+  // Load the category list once connected — the default browse view, so the wiki
+  // shows its pages immediately instead of an empty "search first" panel.
+  useEffect(() => {
+    if (!connected) return;
+    let cancelled = false;
+    void call<{ categories?: Category[] }>(MEMORY_RPC.categories, {}).then((r) => {
+      if (!cancelled && r.ok) setCategories(r.data?.categories ?? []);
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connected, cfg.url, cfg.token]);
+
   async function search() {
     if (!connected) return;
-    // Gateway memory.search wraps hits as { results: [...] } (memory.go);
-    // tolerate a bare array / legacy { pages } too so we never silently drop rows.
+    const query = q.trim();
+    // The gateway rejects an empty query ("query is required") — fall back to the
+    // browse list instead of firing a doomed RPC.
+    if (!query) {
+      setSearched(false);
+      setPages([]);
+      setStatus("");
+      return;
+    }
+    // Gateway memory.search wraps hits as { results: [...] } (memory.go); tolerate a
+    // bare array / legacy { pages } too so we never silently drop rows.
     const r = await call<WikiPage[] | { results?: WikiPage[]; pages?: WikiPage[] }>(
       MEMORY_RPC.search,
-      { query: q.trim() },
+      { query },
       "검색 중…",
     );
     if (!r.ok) return;
     const list = Array.isArray(r.data) ? r.data : (r.data.results ?? r.data.pages ?? []);
     setPages(list);
-    setStatus(list.length ? "" : "결과 없음");
+    setSearched(true);
+    setStatus(list.length ? "" : "검색 결과 없음");
+  }
+
+  function clearSearch() {
+    setSearched(false);
+    setPages([]);
+    setQ("");
+    setStatus("");
+  }
+
+  async function openCategory(name: string) {
+    setBrowseCat(name);
+    const r = await call<{ pages?: WikiPage[] }>(
+      MEMORY_RPC.listInCategory,
+      { category: name, limit: 200 },
+      "불러오는 중…",
+    );
+    if (!r.ok) return;
+    setCatPages(r.data?.pages ?? []);
+    setStatus("");
   }
 
   async function openPath(key: string) {
@@ -81,6 +133,28 @@ export function WikiPane() {
     await openPath(p);
   }
 
+  // A single clickable page row, reused by search results and category listings.
+  const renderPage = (p: WikiPage) => (
+    <button
+      key={keyOf(p) || (p.title ?? "")}
+      onClick={() => void openPath(keyOf(p))}
+      style={{
+        display: "block",
+        width: "100%",
+        textAlign: "left",
+        background: keyOf(p) === path ? color.active : "transparent",
+        color: color.text,
+        border: "none",
+        borderRadius: 4,
+        padding: "6px 8px",
+        cursor: "pointer",
+        fontSize: 13,
+      }}
+    >
+      {p.title ?? p.path ?? "(제목 없음)"}
+    </button>
+  );
+
   return (
     <div style={{ display: "grid", gridTemplateColumns: "240px 1fr", gap: 12, height: "100%" }}>
       <div style={{ borderRight: line, paddingRight: 12, overflow: "auto" }}>
@@ -105,18 +179,41 @@ export function WikiPane() {
         </button>
         {!connected ? (
           <p style={muted}>게이트웨이에 연결하세요.</p>
-        ) : pages.length === 0 ? (
-          <p style={muted}>검색해 페이지를 찾으세요.</p>
-        ) : (
-          pages.map((p, i) => (
+        ) : searched ? (
+          <>
+            <button className="row-btn" onClick={clearSearch} style={{ marginBottom: 6, padding: "3px 6px" }}>
+              ← 목록으로
+            </button>
+            {pages.length === 0 ? <p style={muted}>검색 결과 없음</p> : pages.map(renderPage)}
+          </>
+        ) : browseCat ? (
+          <>
             <button
-              key={keyOf(p) || i}
-              onClick={() => void openPath(keyOf(p))}
+              className="row-btn"
+              onClick={() => setBrowseCat(null)}
+              style={{ marginBottom: 4, padding: "3px 6px" }}
+            >
+              ← 카테고리
+            </button>
+            <div className="micro" style={{ margin: "0 0 6px 2px" }}>
+              {browseCat}
+            </div>
+            {catPages.length === 0 ? <p style={muted}>페이지가 없습니다.</p> : catPages.map(renderPage)}
+          </>
+        ) : categories.length === 0 ? (
+          <p style={muted}>위키 페이지가 없습니다.</p>
+        ) : (
+          categories.map((c) => (
+            <button
+              key={c.name}
+              onClick={() => void openCategory(c.name)}
               style={{
-                display: "block",
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
                 width: "100%",
                 textAlign: "left",
-                background: keyOf(p) === path ? color.active : "transparent",
+                background: "transparent",
                 color: color.text,
                 border: "none",
                 borderRadius: 4,
@@ -125,7 +222,12 @@ export function WikiPane() {
                 fontSize: 13,
               }}
             >
-              {p.title ?? p.path ?? "(제목 없음)"}
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.name}</span>
+              {c.pageCount != null && (
+                <span style={{ marginLeft: "auto", flex: "0 0 auto", fontSize: 11, color: "var(--muted-2)" }}>
+                  {c.pageCount}
+                </span>
+              )}
             </button>
           ))
         )}

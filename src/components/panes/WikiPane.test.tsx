@@ -38,6 +38,15 @@ beforeEach(() => {
         case "miniapp.memory.create_page":
           createParams = params;
           return reply({ path: params.path, title: params.path, body: "" });
+        case "miniapp.memory.categories":
+          return reply({
+            categories: [
+              { name: "인물", pageCount: 2 },
+              { name: "프로젝트", pageCount: 1 },
+            ],
+          });
+        case "miniapp.memory.list_in_category":
+          return reply({ category: params.category, pages: [{ path: "인물/김노영.md", title: "김노영" }], total: 1 });
         default:
           return reply({});
       }
@@ -82,6 +91,16 @@ describe("WikiPane", () => {
     // create_page carries the path; then the editor opens that page (heading shows it).
     expect(await screen.findByRole("heading", { name: "projects/new" })).toBeInTheDocument();
     expect(createParams).toMatchObject({ path: "projects/new" });
+  });
+
+  it("opens on a category browse list and drills into a page without searching", async () => {
+    renderWithProviders(<WikiPane />, { connected: true });
+    // The category list shows immediately — no search needed (the bug: the pane
+    // used to show nothing until you searched, and an empty search errored).
+    await userEvent.click(await screen.findByRole("button", { name: /인물/ }));
+    // Its pages load; clicking one opens it in the editor.
+    await userEvent.click(await screen.findByRole("button", { name: "김노영" }));
+    expect(await screen.findByDisplayValue(/본문 내용입니다/)).toBeInTheDocument();
   });
 
   it("toggles a Markdown preview of the page body", async () => {
