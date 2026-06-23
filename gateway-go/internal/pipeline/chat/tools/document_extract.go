@@ -128,9 +128,9 @@ func extractDocument(ctx context.Context, data []byte, filename, mimeType string
 // ExtractDocumentText extracts text from a document's raw bytes for callers
 // outside the attachment flow (web fetch, the attachment classifier). It runs the
 // canonical extractDocument dispatcher and promotes only true document formats —
-// PDF (with a scanned-PDF OCR fallback), Excel, Word, PowerPoint, CSV — to a
-// successful (text, true). Images and plain text are not "documents" here, so
-// they yield ("", false), as does any unsupported type or empty extraction.
+// PDF (with a scanned-PDF OCR fallback), Excel, Word, PowerPoint, CSV, Markdown —
+// to a successful (text, true). Images and raw plain text (.txt/.json/…) are not
+// "documents" here, so they yield ("", false), as does any unsupported type.
 func ExtractDocumentText(ctx context.Context, data []byte, filename, mimeType string) (string, bool) {
 	r := extractDocument(ctx, data, filename, mimeType)
 	switch r.kind {
@@ -138,8 +138,14 @@ func ExtractDocumentText(ctx context.Context, data []byte, filename, mimeType st
 		if r.err == nil && strings.TrimSpace(r.text) != "" {
 			return r.text, true
 		}
+	case docText:
+		// Markdown is a real document worth extracting (like CSV, already promoted);
+		// raw .txt/.json/.log/etc. stay declined as non-documents.
+		if isMarkdownExt(strings.ToLower(filename)) && strings.TrimSpace(r.text) != "" {
+			return r.text, true
+		}
 	default:
-		// docImage, docText, docUnsupported are not "documents" for this facade.
+		// docImage, docUnsupported are not "documents" for this facade.
 	}
 	return "", false
 }
@@ -163,8 +169,15 @@ func IsExtractableDocument(mimeType, filename string) bool {
 		return true
 	case strings.Contains(mime, "csv") || strings.HasSuffix(lower, ".csv"):
 		return true
+	case strings.Contains(mime, "markdown") || isMarkdownExt(lower):
+		return true
 	}
 	return false
+}
+
+// isMarkdownExt reports whether a (lowercased) filename is a Markdown document.
+func isMarkdownExt(lowerName string) bool {
+	return strings.HasSuffix(lowerName, ".md") || strings.HasSuffix(lowerName, ".markdown")
 }
 
 // pdfToTextStructured extracts a digital PDF's text with pdftotext, then upgrades

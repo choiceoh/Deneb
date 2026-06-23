@@ -60,6 +60,21 @@ func TestExtractDocumentText_Unsupported(t *testing.T) {
 	}
 }
 
+func TestExtractDocumentText_Markdown(t *testing.T) {
+	md := []byte("# 분기 리뷰\n\n매출 1.2억, 마감 6/25.\n")
+	text, ok := ExtractDocumentText(context.Background(), md, "review.md", "")
+	if !ok {
+		t.Fatal("expected markdown extraction to succeed")
+	}
+	if !strings.Contains(text, "매출 1.2억") {
+		t.Errorf("markdown body not returned:\n%s", text)
+	}
+	// The same bytes named .txt must still be declined — only Markdown is promoted.
+	if _, ok := ExtractDocumentText(context.Background(), md, "review.txt", ""); ok {
+		t.Error("raw .txt should stay declined")
+	}
+}
+
 func TestIsExtractableDocument(t *testing.T) {
 	yes := []struct{ mime, name string }{
 		{"application/pdf", ""},
@@ -68,6 +83,8 @@ func TestIsExtractableDocument(t *testing.T) {
 		{"application/vnd.oasis.opendocument.text", ""},
 		{"text/csv", ""},
 		{"", "data.csv"},
+		{"", "readme.md"},
+		{"text/markdown", ""},
 	}
 	for _, c := range yes {
 		if !IsExtractableDocument(c.mime, c.name) {
