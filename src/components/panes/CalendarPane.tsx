@@ -4,7 +4,17 @@ import { useCreate, useInvalidate, useUpdate } from "@refinedev/core";
 import type { CalEvent } from "@/types";
 import { serializeList } from "@/aiText";
 import { useCachedList } from "@/cachedList";
-import { calSpan, calStamp, dayKey, errText, eventDayKeys, eventTitle, monthLabel, monthMatrix } from "@/format";
+import {
+  calSpan,
+  calStamp,
+  dayKey,
+  errText,
+  eventDayKeys,
+  eventEndMs,
+  eventTitle,
+  monthLabel,
+  monthMatrix,
+} from "@/format";
 import { useAction } from "@/useAction";
 import { useRegisterPane, useWorkspace } from "@/workspaceContext";
 import { Column, Grid, GridNotice, RowBtn } from "@/components/Grid";
@@ -138,8 +148,18 @@ export function CalendarPane() {
     });
   };
 
-  // The list below shows the selected day's events, or the full visible month range.
-  const listEvents = selectedDay ? (eventsByDay.get(selectedDay) ?? []) : events;
+  // The list below shows the selected day's events, or the visible month. For the
+  // CURRENT month, already-ended events are dropped so the list reads as "upcoming";
+  // other months keep their full history, and a clicked day shows that day in full.
+  // (The month grid above still renders every event as a chip.)
+  const isCurrentMonth = cursor.y === now.getFullYear() && cursor.m === now.getMonth();
+  const upcoming = isCurrentMonth
+    ? events.filter((ev) => {
+        const endMs = eventEndMs(ev.start, ev.end);
+        return endMs === null || endMs > now.getTime();
+      })
+    : events;
+  const listEvents = selectedDay ? (eventsByDay.get(selectedDay) ?? []) : upcoming;
   const listLabel = selectedDay
     ? `${selectedDay.split("-")[1]}월 ${selectedDay.split("-")[2]}일 일정`
     : `${visibleRange.label} 일정`;

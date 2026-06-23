@@ -57,6 +57,22 @@ describe("CalendarPane (일정 달력)", () => {
     expect(await screen.findByTitle("삭제")).toBeInTheDocument();
   });
 
+  it("hides already-ended events from the current month's upcoming list", async () => {
+    const mixed = [
+      { id: "past", summary: "지난 회의", start: "2026-06-10T05:00:00Z", end: "2026-06-10T06:00:00Z" },
+      { id: "soon", summary: "앞으로 회의", start: "2026-06-20T05:00:00Z", end: "2026-06-20T06:00:00Z" },
+    ];
+    renderWithProviders(<CalendarPane />, {
+      connected: true,
+      dataProvider: fakeProvider({ "calendar-range": mixed }),
+    });
+    const table = await screen.findByRole("table");
+    expect(within(table).getByText("앞으로 회의")).toBeInTheDocument();
+    // June 10 ended before the frozen "now" (June 15) → dropped from the list,
+    // though it still appears as a chip in the grid above.
+    expect(within(table).queryByText("지난 회의")).not.toBeInTheDocument();
+  });
+
   it("shows a connect notice and no calendar when disconnected", () => {
     renderWithProviders(<CalendarPane />, { connected: false });
     expect(screen.getByText(/게이트웨이에 연결하면/)).toBeInTheDocument();

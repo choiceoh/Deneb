@@ -121,6 +121,29 @@ export function eventDayKeys(start: CalTimestamp | undefined, end: CalTimestamp 
   return keys;
 }
 
+// The local instant (epoch ms) an event is OVER, or null if it carries no usable
+// time. Lets the calendar drop already-ended events from the upcoming list.
+// All-day end.date is exclusive (Google) so it already marks the over-instant; an
+// all-day event with only a start is over at the next local midnight.
+export function eventEndMs(start: CalTimestamp | undefined, end: CalTimestamp | undefined): number | null {
+  const e = calStamp(end);
+  if (e.iso) {
+    if (e.allDay) return dayStart(e.iso, true).getTime();
+    const t = new Date(e.iso).getTime();
+    if (!Number.isNaN(t)) return t;
+  }
+  const s = calStamp(start);
+  if (s.iso) {
+    if (s.allDay) {
+      const d = dayStart(s.iso, true);
+      return new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1).getTime();
+    }
+    const t = new Date(s.iso).getTime();
+    if (!Number.isNaN(t)) return t;
+  }
+  return null;
+}
+
 // Sunday-first weeks of Date cells covering month0/year, with the leading and
 // trailing days needed to fill whole weeks (4–6 rows). month0 is 0-based.
 export function monthMatrix(year: number, month0: number): Date[][] {

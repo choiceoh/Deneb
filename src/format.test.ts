@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calSpan, calStamp, dayKey, errText, eventDayKeys, fmtDate, monthMatrix, text } from "./format";
+import { calSpan, calStamp, dayKey, errText, eventDayKeys, eventEndMs, fmtDate, monthMatrix, text } from "./format";
 
 describe("text", () => {
   it("returns strings as-is", () => {
@@ -80,6 +80,21 @@ describe("eventDayKeys", () => {
   });
   it("is empty when the start is missing", () => {
     expect(eventDayKeys(undefined, undefined)).toEqual([]);
+  });
+});
+
+describe("eventEndMs", () => {
+  it("returns the end instant for a timed event", () => {
+    expect(eventEndMs("2026-06-17T10:00:00Z", "2026-06-17T11:00:00Z")).toBe(Date.parse("2026-06-17T11:00:00Z"));
+  });
+  it("treats the exclusive all-day end.date as the over-instant (local midnight)", () => {
+    expect(eventEndMs({ date: "2026-06-22" }, { date: "2026-06-23" })).toBe(new Date(2026, 5, 23).getTime());
+  });
+  it("ends an all-day event with no end at the next local midnight", () => {
+    expect(eventEndMs({ date: "2026-06-22" }, undefined)).toBe(new Date(2026, 5, 23).getTime());
+  });
+  it("is null when there is no usable time", () => {
+    expect(eventEndMs(undefined, undefined)).toBeNull();
   });
 });
 
