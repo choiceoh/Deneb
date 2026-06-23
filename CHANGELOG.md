@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.0.10](https://github.com/choiceoh/andromeda/compare/andromeda-v0.0.9...andromeda-v0.0.10) (2026-06-23)
+
+
+### Features
+
+* AI 패널 퀵액션 칩 제거 (우선순위/요약/후속조치) ([#59](https://github.com/choiceoh/andromeda/issues/59)) ([4fc24bd](https://github.com/choiceoh/andromeda/commit/4fc24bd8f2ad769723cd6e3be9ea3c9cb3992402))
+* compact calendar markers and inline analysis ([#57](https://github.com/choiceoh/andromeda/issues/57)) ([ffbdaab](https://github.com/choiceoh/andromeda/commit/ffbdaabb052ee28de30ad442f73c618ffa678734))
+* 오늘 대시보드 가독성·배치 개선 ([#54](https://github.com/choiceoh/andromeda/issues/54)) ([c625778](https://github.com/choiceoh/andromeda/commit/c625778310b1199e12db928ea47be228bd955ed8))
+
 ## [0.0.9](https://github.com/choiceoh/andromeda/compare/andromeda-v0.0.8...andromeda-v0.0.9) (2026-06-23)
 
 
