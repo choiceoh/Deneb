@@ -29,12 +29,22 @@ export function clearCachedRpcResource(resource: string): void {
   }
 }
 
-export function readCachedRpc<T>(resource: string, key: string): CachedRpcSnapshot<T> | undefined {
+export function isCachedRpcFresh(snapshot: CachedRpcSnapshot<unknown>, staleTimeMs: number): boolean {
+  return staleTimeMs < 0 || Date.now() - snapshot.savedAt <= staleTimeMs;
+}
+
+export function readCachedRpc<T>(
+  resource: string,
+  key: string,
+  options: { staleTimeMs?: number } = {},
+): CachedRpcSnapshot<T> | undefined {
   const parsed = getJSON<Partial<CachedRpcSnapshot<T>>>(cachedRpcStorageKey(resource, key));
   if (!parsed || typeof parsed.savedAt !== "number" || !Object.prototype.hasOwnProperty.call(parsed, "data")) {
     return undefined;
   }
-  return { data: parsed.data as T, savedAt: parsed.savedAt };
+  const snapshot = { data: parsed.data as T, savedAt: parsed.savedAt };
+  if (options.staleTimeMs !== undefined && !isCachedRpcFresh(snapshot, options.staleTimeMs)) return undefined;
+  return snapshot;
 }
 
 export function writeCachedRpc<T>(resource: string, key: string, data: T): void {

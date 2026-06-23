@@ -1,9 +1,8 @@
 import { useEffect, useState } from "react";
 import { NOTEBOOK_RPC } from "@/resources";
-import { readCachedRpc, rpcCacheKey, writeCachedRpc } from "@/rpcCache";
 import type { Notebook, NotebookSource, NotebookSummary } from "@/types";
 import { fmtDate } from "@/format";
-import { useRpc } from "@/useRpc";
+import { useCachedRpc } from "@/useCachedRpc";
 import { color, line, muted } from "@/theme";
 import { useRegisterPane, useWorkspace } from "@/workspaceContext";
 import { Icon } from "@/components/Icon";
@@ -16,8 +15,8 @@ import { Markdown } from "@/components/Markdown";
 // style). You can also create a notebook and pin (add) a citation source.
 export function NotebookPane() {
   const { connected, cfg, openWiki } = useWorkspace();
-  const { call, status } = useRpc(cfg);
-  const listSnapshot = readCachedRpc<NotebookListResponse>(NOTEBOOK_RESOURCE, notebookListCacheKey());
+  const { call, callCached, readCache, status } = useCachedRpc(cfg, NOTEBOOK_RESOURCE);
+  const [listSnapshot] = useState(() => readCache<NotebookListResponse>(NOTEBOOK_RPC.list));
   const [notebooks, setNotebooks] = useState<NotebookSummary[]>(listSnapshot?.data.notebooks ?? []);
   const [active, setActive] = useState<Notebook | null>(null);
   const [creating, setCreating] = useState(false);
@@ -26,40 +25,34 @@ export function NotebookPane() {
   // Reload the list and refresh its cache — used after create/add_source so the
   // left rail (and the cached snapshot it paints from) stays current.
   async function loadNotebooks() {
-    const r = await call<NotebookListResponse>(NOTEBOOK_RPC.list, {});
-    if (r.ok) {
-      setNotebooks(r.data?.notebooks ?? []);
-      writeCachedRpc(NOTEBOOK_RESOURCE, notebookListCacheKey(), r.data);
-    }
+    await callCached<NotebookListResponse>(
+      NOTEBOOK_RPC.list,
+      {},
+      {
+        scope: "notebook:list",
+        apply: (data) => setNotebooks(data?.notebooks ?? []),
+      },
+    );
   }
 
   // Load the notebook list on connect — the left rail, shown immediately. A cached
   // snapshot paints first; the live list overwrites it (and refreshes the cache).
   useEffect(() => {
     if (!connected) return;
-    let cancelled = false;
-    const snapshot = readCachedRpc<NotebookListResponse>(NOTEBOOK_RESOURCE, notebookListCacheKey());
-    if (snapshot) setNotebooks(snapshot.data.notebooks ?? []);
-    void call<NotebookListResponse>(NOTEBOOK_RPC.list, {}).then((r) => {
-      if (!cancelled && r.ok) {
-        setNotebooks(r.data?.notebooks ?? []);
-        writeCachedRpc(NOTEBOOK_RESOURCE, notebookListCacheKey(), r.data);
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
+    void loadNotebooks();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connected, cfg.url, cfg.token]);
 
   async function openNotebook(id: string) {
-    const key = notebookDetailCacheKey(id);
-    const snapshot = readCachedRpc<Notebook>(NOTEBOOK_RESOURCE, key);
-    if (snapshot) setActive(snapshot.data);
-    const r = await call<Notebook>(NOTEBOOK_RPC.get, { id }, "불러오는 중…");
-    if (!r.ok) return;
-    setActive(r.data);
-    writeCachedRpc(NOTEBOOK_RESOURCE, key, r.data);
+    await callCached<Notebook>(
+      NOTEBOOK_RPC.get,
+      { id },
+      {
+        pending: "불러오는 중…",
+        scope: "notebook:detail",
+        apply: setActive,
+      },
+    );
   }
 
   async function createNotebook(name: string, description: string) {
@@ -224,14 +217,6 @@ const NOTEBOOK_RESOURCE = "notebook";
 
 interface NotebookListResponse {
   notebooks?: NotebookSummary[];
-}
-
-function notebookListCacheKey(): string {
-  return rpcCacheKey(NOTEBOOK_RPC.list);
-}
-
-function notebookDetailCacheKey(id: string): string {
-  return rpcCacheKey(NOTEBOOK_RPC.get, { id });
 }
 
 // One cited source inside a notebook: a citation badge + title + kind, then the

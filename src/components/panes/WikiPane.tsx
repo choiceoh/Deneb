@@ -1,9 +1,8 @@
 import { useEffect, useState } from "react";
 import { clearCachedResource } from "@/cachedList";
 import { MEMORY_RPC } from "@/resources";
-import { readCachedRpc, rpcCacheKey, writeCachedRpc } from "@/rpcCache";
 import type { WikiCategory, WikiDiaryEntry, WikiPage } from "@/types";
-import { useRpc } from "@/useRpc";
+import { useCachedRpc } from "@/useCachedRpc";
 import { color, line, muted } from "@/theme";
 import { useRegisterPane, useWorkspace } from "@/workspaceContext";
 import { Field, Modal } from "@/components/Modal";
@@ -23,7 +22,8 @@ interface NewPageDraft {
 // open one into the editor, save back, and perform page-level maintenance.
 export function WikiPane() {
   const { connected, cfg, wikiTarget, consumeWikiTarget } = useWorkspace();
-  const categoriesSnapshot = readCachedRpc<WikiCategoriesResponse>(WIKI_RESOURCE, wikiCategoriesCacheKey());
+  const { call, callCached, readCache, writeCache, status, setStatus } = useCachedRpc(cfg, WIKI_RESOURCE);
+  const [categoriesSnapshot] = useState(() => readCache<WikiCategoriesResponse>(MEMORY_RPC.categories));
   const [mode, setMode] = useState<BrowseMode>("categories");
   const [q, setQ] = useState("");
   const [pages, setPages] = useState<WikiPage[]>([]);
@@ -33,7 +33,6 @@ export function WikiPane() {
   const [diary, setDiary] = useState<WikiDiaryEntry[]>([]);
   const [path, setPath] = useState<string | null>(null);
   const [content, setContent] = useState("");
-  const { call, status, setStatus } = useRpc(cfg);
   const [creating, setCreating] = useState(false);
   const [moving, setMoving] = useState(false);
   const [merging, setMerging] = useState(false);
@@ -57,13 +56,14 @@ export function WikiPane() {
   }, [wikiTarget, connected]);
 
   async function loadCategories() {
-    const key = wikiCategoriesCacheKey();
-    const snapshot = readCachedRpc<WikiCategoriesResponse>(WIKI_RESOURCE, key);
-    if (snapshot) setCategories(snapshot.data.categories ?? []);
-    const r = await call<WikiCategoriesResponse>(MEMORY_RPC.categories, {});
-    if (!r.ok) return;
-    setCategories(r.data?.categories ?? []);
-    writeCachedRpc(WIKI_RESOURCE, key, r.data);
+    await callCached<WikiCategoriesResponse>(
+      MEMORY_RPC.categories,
+      {},
+      {
+        scope: "wiki:categories",
+        apply: (data) => setCategories(data?.categories ?? []),
+      },
+    );
   }
 
   async function search() {
@@ -73,13 +73,15 @@ export function WikiPane() {
       showCategories();
       return;
     }
-    const key = wikiSearchCacheKey(query);
-    const snapshot = readCachedRpc<WikiSearchResponse>(WIKI_RESOURCE, key);
-    if (snapshot) applySearchResult(snapshot.data);
-    const r = await call<WikiSearchResponse>(MEMORY_RPC.search, { query }, "검색 중...");
-    if (!r.ok) return;
-    applySearchResult(r.data);
-    writeCachedRpc(WIKI_RESOURCE, key, r.data);
+    await callCached<WikiSearchResponse>(
+      MEMORY_RPC.search,
+      { query },
+      {
+        pending: "검색 중...",
+        scope: "wiki:browse",
+        apply: applySearchResult,
+      },
+    );
   }
 
   function applySearchResult(data: WikiSearchResponse) {
@@ -101,45 +103,47 @@ export function WikiPane() {
   async function openCategory(name: string) {
     setBrowseCat(name);
     setMode("categories");
-    const key = wikiCategoryCacheKey(name);
-    const snapshot = readCachedRpc<WikiCategoryPagesResponse>(WIKI_RESOURCE, key);
-    if (snapshot) setCatPages(snapshot.data.pages ?? []);
-    else setCatPages([]);
-    const r = await call<WikiCategoryPagesResponse>(
+    setCatPages([]);
+    const r = await callCached<WikiCategoryPagesResponse>(
       MEMORY_RPC.listInCategory,
       { category: name, limit: 200 },
-      "불러오는 중...",
+      {
+        pending: "불러오는 중...",
+        scope: "wiki:browse",
+        apply: (data) => setCatPages(data?.pages ?? []),
+      },
     );
-    if (!r.ok) return;
-    setCatPages(r.data?.pages ?? []);
-    writeCachedRpc(WIKI_RESOURCE, key, r.data);
-    setStatus("");
+    if (r.ok && r.applied) setStatus("");
   }
 
   async function loadDiary() {
     setMode("diary");
     setBrowseCat(null);
-    const key = wikiDiaryCacheKey();
-    const snapshot = readCachedRpc<WikiDiaryResponse>(WIKI_RESOURCE, key);
-    if (snapshot) setDiary(snapshot.data.entries ?? []);
-    else setDiary([]);
-    const r = await call<WikiDiaryResponse>(MEMORY_RPC.diaryRecent, { limit: 40 }, "불러오는 중...");
-    if (!r.ok) return;
-    setDiary(r.data?.entries ?? []);
-    writeCachedRpc(WIKI_RESOURCE, key, r.data);
-    setStatus((r.data?.entries ?? []).length ? "" : "최근 일지 없음");
+    setDiary([]);
+    const r = await callCached<WikiDiaryResponse>(
+      MEMORY_RPC.diaryRecent,
+      { limit: 40 },
+      {
+        pending: "불러오는 중...",
+        scope: "wiki:browse",
+        apply: (data) => setDiary(data?.entries ?? []),
+      },
+    );
+    if (r.ok && r.applied) setStatus((r.data?.entries ?? []).length ? "" : "최근 일지 없음");
   }
 
   async function openPath(key: string) {
     if (!key) return;
-    const cacheKey = wikiPageCacheKey(key);
-    const snapshot = readCachedRpc<WikiPageResponse>(WIKI_RESOURCE, cacheKey);
-    if (snapshot) applyPage(key, snapshot.data);
-    const r = await call<WikiPageResponse>(MEMORY_RPC.getPage, { path: key }, "불러오는 중...");
-    if (!r.ok) return;
-    applyPage(key, r.data);
-    writeCachedRpc(WIKI_RESOURCE, cacheKey, r.data);
-    setStatus("");
+    const r = await callCached<WikiPageResponse>(
+      MEMORY_RPC.getPage,
+      { path: key },
+      {
+        pending: "불러오는 중...",
+        scope: "wiki:page",
+        apply: (data) => applyPage(key, data),
+      },
+    );
+    if (r.ok && r.applied) setStatus("");
   }
 
   function applyPage(key: string, page: WikiPageResponse) {
@@ -152,7 +156,7 @@ export function WikiPane() {
     const r = await call(MEMORY_RPC.writePage, { path, body: content }, "저장 중...");
     if (!r.ok) return;
     clearCachedResource(WIKI_RESOURCE);
-    writeCachedRpc<WikiPageResponse>(WIKI_RESOURCE, wikiPageCacheKey(path), { body: content });
+    writeCache<WikiPageResponse>(MEMORY_RPC.getPage, { path }, { body: content });
     setStatus("저장됨");
   }
 
@@ -414,26 +418,6 @@ interface WikiDiaryResponse {
 }
 
 type WikiPageResponse = { body?: string; content?: string } | string;
-
-function wikiCategoriesCacheKey(): string {
-  return rpcCacheKey(MEMORY_RPC.categories);
-}
-
-function wikiSearchCacheKey(query: string): string {
-  return rpcCacheKey(MEMORY_RPC.search, { query });
-}
-
-function wikiCategoryCacheKey(category: string): string {
-  return rpcCacheKey(MEMORY_RPC.listInCategory, { category, limit: 200 });
-}
-
-function wikiDiaryCacheKey(): string {
-  return rpcCacheKey(MEMORY_RPC.diaryRecent, { limit: 40 });
-}
-
-function wikiPageCacheKey(path: string): string {
-  return rpcCacheKey(MEMORY_RPC.getPage, { path });
-}
 
 function keyOf(p: WikiPage): string {
   return p.path ?? String(p.id ?? "");

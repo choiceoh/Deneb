@@ -1,8 +1,7 @@
 import { useState } from "react";
 import { SEARCH_RPC } from "@/resources";
-import { readCachedRpc, rpcCacheKey, writeCachedRpc } from "@/rpcCache";
 import type { SearchHit } from "@/types";
-import { useRpc } from "@/useRpc";
+import { useCachedRpc } from "@/useCachedRpc";
 import { line } from "@/theme";
 import { useRegisterPane, useWorkspace } from "@/workspaceContext";
 
@@ -34,7 +33,7 @@ export function SearchPane() {
   // Google-style: the box sits centered until the first search, then rises to
   // the top. Sticky once set (switching panes remounts and re-centers).
   const [searched, setSearched] = useState(false);
-  const { call, status, setStatus } = useRpc(cfg);
+  const { callCached, status, setStatus } = useCachedRpc(cfg, SEARCH_RESOURCE);
 
   const aiText = hits.length
     ? `[검색 "${q}" — ${hits.length}건]\n` +
@@ -48,16 +47,19 @@ export function SearchPane() {
     const query = q.trim();
     if (!query || !connected) return;
     setSearched(true);
-    const key = searchCacheKey(query);
-    const snapshot = readCachedRpc<SearchCacheResponse>(SEARCH_RESOURCE, key);
-    if (snapshot) applySearch(snapshot.data);
-    const r = await call<SearchCacheResponse>(SEARCH_RPC, { query }, "검색 중…");
+    const r = await callCached<SearchCacheResponse>(
+      SEARCH_RPC,
+      { query },
+      {
+        pending: "검색 중…",
+        scope: "search:results",
+        apply: applySearch,
+      },
+    );
     if (!r.ok) {
       setHits([]);
       return;
     }
-    applySearch(r.data);
-    writeCachedRpc(SEARCH_RESOURCE, key, r.data);
   }
 
   function applySearch(data: SearchCacheResponse) {
@@ -129,7 +131,3 @@ export function SearchPane() {
 const SEARCH_RESOURCE = "search";
 
 type SearchCacheResponse = SearchAllResult | SearchHit[];
-
-function searchCacheKey(query: string): string {
-  return rpcCacheKey(SEARCH_RPC, { query });
-}

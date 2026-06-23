@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { clearCachedResource } from "@/cachedList";
 import { FILES_RPC } from "@/resources";
-import { readCachedRpc, rpcCacheKey, writeCachedRpc } from "@/rpcCache";
 import type { FileEntry } from "@/types";
-import { useRpc } from "@/useRpc";
+import { useCachedRpc } from "@/useCachedRpc";
 import { color, ellipsis } from "@/theme";
 import { fmtDate } from "@/format";
 import { useRegisterPane, useWorkspace } from "@/workspaceContext";
@@ -13,8 +12,8 @@ import { entryPath, formatBytes, isFolder, joinPath, parentPath } from "./fileHe
 
 export function FilesPane() {
   const { connected, cfg } = useWorkspace();
-  const { call, status, setStatus, busy } = useRpc(cfg);
-  const rootSnapshot = readCachedRpc<FilesListResponse>(FILES_RESOURCE, filesListCacheKey(""));
+  const { call, callCached, readCache, status, setStatus, busy } = useCachedRpc(cfg, FILES_RESOURCE);
+  const [rootSnapshot] = useState(() => readCache<FilesListResponse>(FILES_RPC.list, filesListParams("")));
   const [path, setPath] = useState(rootSnapshot?.data.path ?? "");
   const [entries, setEntries] = useState<FileEntry[]>(rootSnapshot?.data.entries ?? []);
   const [query, setQuery] = useState("");
@@ -44,14 +43,12 @@ export function FilesPane() {
   }, [connected, cfg.url, cfg.token]);
 
   async function list(nextPath = path) {
-    const key = filesListCacheKey(nextPath);
-    const snapshot = readCachedRpc<FilesListResponse>(FILES_RESOURCE, key);
-    if (snapshot) applyList(snapshot.data, nextPath);
-    const r = await call<FilesListResponse>(FILES_RPC.list, { path: nextPath, limit: 300 }, "불러오는 중...");
-    if (!r.ok) return;
-    applyList(r.data, nextPath);
-    writeCachedRpc(FILES_RESOURCE, key, r.data);
-    setStatus("");
+    const r = await callCached<FilesListResponse>(FILES_RPC.list, filesListParams(nextPath), {
+      pending: "불러오는 중...",
+      scope: "files:entries",
+      apply: (data) => applyList(data, nextPath),
+    });
+    if (r.ok && r.applied) setStatus("");
   }
 
   async function search() {
@@ -60,16 +57,16 @@ export function FilesPane() {
       await list(path);
       return;
     }
-    const params = { query: q, content: searchContent, semantic: searchSemantic, max: 80 };
-    const key = rpcCacheKey(FILES_RPC.search, params);
-    const snapshot = readCachedRpc<FilesSearchResponse>(FILES_RESOURCE, key);
-    if (snapshot) applySearch(snapshot.data.entries ?? []);
-    const r = await call<FilesSearchResponse>(FILES_RPC.search, params, "검색 중...");
-    if (!r.ok) return;
-    const results = r.data?.entries ?? [];
-    applySearch(results);
-    writeCachedRpc(FILES_RESOURCE, key, { entries: results });
-    setStatus((r.data?.entries ?? []).length ? "" : "검색 결과 없음");
+    const r = await callCached<FilesSearchResponse>(
+      FILES_RPC.search,
+      filesSearchParams(q, searchContent, searchSemantic),
+      {
+        pending: "검색 중...",
+        scope: "files:entries",
+        apply: (data) => applySearch(data.entries ?? []),
+      },
+    );
+    if (r.ok && r.applied) setStatus((r.data?.entries ?? []).length ? "" : "검색 결과 없음");
   }
 
   function applyList(data: FilesListResponse, fallbackPath: string) {
@@ -321,8 +318,12 @@ interface FilesSearchResponse {
   entries?: FileEntry[];
 }
 
-function filesListCacheKey(path: string): string {
-  return rpcCacheKey(FILES_RPC.list, { path, limit: 300 });
+function filesListParams(path: string): Record<string, unknown> {
+  return { path, limit: 300 };
+}
+
+function filesSearchParams(query: string, content: boolean, semantic: boolean): Record<string, unknown> {
+  return { query, content, semantic, max: 80 };
 }
 
 function fileToBase64(file: File): Promise<string> {
