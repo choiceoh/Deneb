@@ -6,5 +6,8 @@ src-tauri/Cargo.lock
 public/mockServiceWorker.js
 
 # Owned by release-please — its format isn't Prettier's, so don't fight it.
+# (release-please re-serializes tauri.conf.json on version bump, re-expanding
+# JSON arrays multi-line that Prettier wants single-line → format:check fails.)
 CHANGELOG.md
 .release-please-manifest.json
+src-tauri/tauri.conf.json
