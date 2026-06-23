@@ -15,6 +15,9 @@ interface WorkspaceCtx {
   // The gateway config, exposed so query-driven panes (wiki/search) can call
   // non-CRUD RPCs directly (DESIGN §9) instead of going through the data provider.
   cfg: GatewayConfig;
+  // Update the gateway config (lifted to App). The settings pane edits URL/token
+  // through this; App persists + rebuilds the data/auth providers.
+  setCfg: (c: GatewayConfig) => void;
   view: View;
   setView: (v: View) => void;
   // `doc` lives here (not in the pane) so the scratch document survives pane
@@ -38,10 +41,12 @@ const Ctx = createContext<WorkspaceCtx | null>(null);
 export function WorkspaceProvider({
   connected,
   cfg,
+  setCfg,
   children,
 }: {
   connected: boolean;
   cfg: GatewayConfig;
+  setCfg: (c: GatewayConfig) => void;
   children: ReactNode;
 }) {
   const [view, setView] = useState<View>("today"); // land on the 오늘 dashboard
@@ -66,6 +71,7 @@ export function WorkspaceProvider({
       value={{
         connected,
         cfg,
+        setCfg,
         view,
         setView,
         doc,

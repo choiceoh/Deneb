@@ -15,6 +15,7 @@ import { PeoplePane } from "./PeoplePane";
 import { CronsPane } from "./CronsPane";
 import { WorkfeedPane } from "./WorkfeedPane";
 import { TodayPane } from "./TodayPane";
+import { SettingsPane } from "./SettingsPane";
 
 export interface PaneDef {
   key: View;
@@ -36,6 +37,8 @@ export const PANES: PaneDef[] = [
   { key: "people", label: "연락처", shortcut: "7", Component: PeoplePane },
   { key: "crons", label: "크론", shortcut: "8", Component: CronsPane },
   { key: "workfeed", label: "작업피드", shortcut: "9", Component: WorkfeedPane },
+  // App settings live at the bottom of the rail; ⌘, mirrors the OS settings shortcut.
+  { key: "settings", label: "설정", shortcut: ",", Component: SettingsPane },
 ];
 
 export const paneLabel = (key: View): string => PANES.find((p) => p.key === key)?.label ?? key;

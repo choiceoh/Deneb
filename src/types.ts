@@ -148,4 +148,5 @@ export type View =
   | "search"
   | "people"
   | "crons"
-  | "workfeed";
+  | "workfeed"
+  | "settings";

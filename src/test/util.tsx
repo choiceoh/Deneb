@@ -27,7 +27,12 @@ export function fakeProvider(fixtures: Record<string, any[]> = {}): DataProvider
 
 export function renderWithProviders(
   ui: ReactElement,
-  opts: { connected?: boolean; dataProvider?: DataProvider; cfg?: GatewayConfig } = {},
+  opts: {
+    connected?: boolean;
+    dataProvider?: DataProvider;
+    cfg?: GatewayConfig;
+    setCfg?: (c: GatewayConfig) => void;
+  } = {},
 ) {
   const connected = opts.connected ?? false;
   const cfg: GatewayConfig = opts.cfg ?? (connected ? { url: "http://test", token: "tok" } : { url: "", token: "" });
@@ -38,7 +43,7 @@ export function renderWithProviders(
       resources={refineResources}
       options={{ disableTelemetry: true }}
     >
-      <WorkspaceProvider connected={connected} cfg={cfg}>
+      <WorkspaceProvider connected={connected} cfg={cfg} setCfg={opts.setCfg ?? (() => {})}>
         {ui}
       </WorkspaceProvider>
     </Refine>,
