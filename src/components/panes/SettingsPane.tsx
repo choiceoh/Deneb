@@ -9,6 +9,7 @@ import { errText } from "@/format";
 import { line, muted } from "@/theme";
 import { useRegisterPane, useWorkspace } from "@/workspaceContext";
 import { LiveDot } from "@/components/LiveDot";
+import { PANES } from "@/components/panes";
 
 // 설정 — a full-screen settings section (not a modal). Promotes the gateway
 // connection form out of the sidebar popover and adds log-level + about. Edits the
@@ -31,7 +32,7 @@ const fieldLabel = {
 } as const;
 
 export function SettingsPane() {
-  const { connected, cfg, setCfg } = useWorkspace();
+  const { connected, cfg, setCfg, hiddenViews, toggleViewHidden } = useWorkspace();
   const { status, check } = useGatewayStatus(cfg);
   const [level, setLevel] = useState<LogLevel>(getLogLevel());
   const [updateMsg, setUpdateMsg] = useState("");
@@ -127,6 +128,28 @@ export function SettingsPane() {
               </button>
             );
           })}
+        </div>
+      </Section>
+
+      <Section title="좌측 탭" desc="좌측 레일에 표시할 화면을 고르세요. 설정은 항상 표시됩니다.">
+        <div style={{ display: "grid", gap: 1 }}>
+          {PANES.filter((p) => p.key !== "settings").map((p) => (
+            <label
+              key={p.key}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 9,
+                padding: "6px 4px",
+                fontSize: 13,
+                color: "var(--ink-2)",
+                cursor: "pointer",
+              }}
+            >
+              <input type="checkbox" checked={!hiddenViews.includes(p.key)} onChange={() => toggleViewHidden(p.key)} />
+              {p.label}
+            </label>
+          ))}
         </div>
       </Section>
 

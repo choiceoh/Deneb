@@ -12,7 +12,9 @@ import { PANES } from "./panes";
 // off the status dot so the rail stays narrow — on the real host it auto-connects
 // from the keychain anyway, so the form is rarely needed.
 export function Sidebar({ cfg, setCfg }: { cfg: GatewayConfig; setCfg: (c: GatewayConfig) => void }) {
-  const { connected, view, setView } = useWorkspace();
+  const { connected, view, setView, hiddenViews } = useWorkspace();
+  // Rail tabs the user chose to show (settings is never hideable — see SettingsPane).
+  const visiblePanes = PANES.filter((p) => p.key === "settings" || !hiddenViews.includes(p.key));
   const { status, check } = useGatewayStatus(cfg);
   const [open, setOpen] = useState(false);
   const popRef = useRef<HTMLDivElement>(null);
@@ -58,7 +60,7 @@ export function Sidebar({ cfg, setCfg }: { cfg: GatewayConfig; setCfg: (c: Gatew
       }}
     >
       <WindowControls />
-      {PANES.map((p, i) => (
+      {visiblePanes.map((p, i) => (
         <button
           key={p.key}
           className={"nav-item fade-up" + (view === p.key ? " active" : "")}
