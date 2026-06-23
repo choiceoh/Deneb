@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.0.7](https://github.com/choiceoh/andromeda/compare/andromeda-v0.0.6...andromeda-v0.0.7) (2026-06-23)
+
+
+### Features
+
+* expand mail detail inline ([#33](https://github.com/choiceoh/andromeda/issues/33)) ([6faaefa](https://github.com/choiceoh/andromeda/commit/6faaefa6ab9aa180881b87f4d135163b81b2933e))
+* 설정 화면 추가 (게이트웨이·로그 레벨·버전) ([#31](https://github.com/choiceoh/andromeda/issues/31)) ([6ccbd0c](https://github.com/choiceoh/andromeda/commit/6ccbd0cb089c7bb97f46ea2d400ea1b969d670a7))
+
+
+### Bug Fixes
+
+* 스크롤바를 warm Zen에 맞게 — hover 시 등장 + 창 스크롤바 제거 ([#34](https://github.com/choiceoh/andromeda/issues/34)) ([2e803f4](https://github.com/choiceoh/andromeda/commit/2e803f463dd32bff2a488c00f10464b49645c38e))
+
 ## [0.0.6](https://github.com/choiceoh/andromeda/compare/andromeda-v0.0.5...andromeda-v0.0.6) (2026-06-23)
 
 
