@@ -1,31 +1,28 @@
-import { useState } from "react";
 import type { Person } from "@/types";
-import { serializeList } from "@/aiText";
-import { useCachedList } from "@/cachedList";
 import { fmtDate } from "@/format";
 import { ellipsis } from "@/theme";
-import { useRegisterPane, useWorkspace } from "@/workspaceContext";
+import { useListPane } from "@/useListPane";
+import { useWorkspace } from "@/workspaceContext";
 import { Column, Grid, GridNotice } from "@/components/Grid";
 import { Detail, Modal } from "@/components/Modal";
 
 // people.list merges recent Gmail counterparties (ranked by volume) with 인물 wiki
 // pages — so a row may have a messageCount, a wikiSummary, or both.
 export function PeoplePane() {
-  const { connected } = useWorkspace();
-  const { result, query } = useCachedList<Person>("people", connected);
-  const people = result?.data ?? [];
-  const [selected, setSelected] = useState<Person | null>(null);
-
-  const aiText = serializeList(
+  const {
+    rows: people,
+    query,
+    selected,
+    setSelected,
+  } = useListPane<Person>(
+    "people",
     "연락처",
-    people,
     (p) =>
       `- ${p.name ?? p.email}${p.email && p.name ? ` <${p.email}>` : ""}` +
       `${p.wikiSummary ? ` · ${p.wikiSummary}` : ""}` +
       `${p.lastSubject ? ` · 최근: ${p.lastSubject}` : ""}`,
     "명",
   );
-  useRegisterPane("people", aiText);
 
   const columns: Column<Person>[] = [
     { header: "이름", width: 120, cell: (p) => p.name ?? "—" },

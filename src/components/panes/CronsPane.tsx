@@ -1,32 +1,28 @@
-import { useState } from "react";
 import type { Cron } from "@/types";
-import { serializeList } from "@/aiText";
-import { useCachedList } from "@/cachedList";
 import { CRON_RPC } from "@/resources";
 import { color, ellipsis } from "@/theme";
 import { fmtDate } from "@/format";
 import { useAction } from "@/useAction";
-import { useRegisterPane, useWorkspace } from "@/workspaceContext";
+import { useListPane } from "@/useListPane";
 import { Column, Grid, GridNotice, RowBtn } from "@/components/Grid";
 import { Detail, Modal } from "@/components/Modal";
 
 const hasError = (c: Cron) => Boolean(c.lastError) || (c.consecutiveErrors ?? 0) > 0;
 
 export function CronsPane() {
-  const { connected } = useWorkspace();
-  const { result, query } = useCachedList<Cron>("crons", connected);
-  const crons = result?.data ?? [];
-  const { run, error, busy } = useAction(() => void query.refetch());
-  const [selected, setSelected] = useState<Cron | null>(null);
-
-  const aiText = serializeList(
+  const {
+    rows: crons,
+    query,
+    selected,
+    setSelected,
+  } = useListPane<Cron>(
+    "crons",
     "크론",
-    crons,
     (c) =>
       `- ${c.name ?? "(이름 없음)"}${c.schedule ? ` (${c.schedule})` : ""}${c.enabled === false ? " [중지]" : ""}` +
       `${hasError(c) ? ` [오류${c.consecutiveErrors ? ` ${c.consecutiveErrors}회` : ""}${c.lastError ? `: ${c.lastError}` : ""}]` : ""}`,
   );
-  useRegisterPane("crons", aiText);
+  const { run, error, busy } = useAction(() => void query.refetch());
 
   const columns: Column<Cron>[] = [
     {
