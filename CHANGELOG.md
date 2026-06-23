@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.0.8](https://github.com/choiceoh/andromeda/compare/andromeda-v0.0.7...andromeda-v0.0.8) (2026-06-23)
+
+
+### Features
+
+* AI 챗 패널 네이티브화 + 마크다운 렌더러 공용화 ([#37](https://github.com/choiceoh/andromeda/issues/37)) ([71cd687](https://github.com/choiceoh/andromeda/commit/71cd68703ca41a5f11254ac4e660e92f7cd51391))
+* load calendar ranges and persist docs ([#40](https://github.com/choiceoh/andromeda/issues/40)) ([5a7e699](https://github.com/choiceoh/andromeda/commit/5a7e699cffc39be3ecc1c60477931897bc9ce7de))
+* 달력 높이 축소 + 날짜 클릭으로 해당 날 일정 필터 ([#38](https://github.com/choiceoh/andromeda/issues/38)) ([bea8ed5](https://github.com/choiceoh/andromeda/commit/bea8ed588d71bd127ef23f993f2108b9d1373c45))
+
 ## [0.0.7](https://github.com/choiceoh/andromeda/compare/andromeda-v0.0.6...andromeda-v0.0.7) (2026-06-23)
 
 
