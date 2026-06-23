@@ -1,8 +1,7 @@
 import { useState } from "react";
-import { useOne } from "@refinedev/core";
 import type { Mail } from "@/types";
 import { serializeList } from "@/aiText";
-import { useCachedList } from "@/cachedList";
+import { useCachedList, useCachedOne } from "@/cachedList";
 import { MAIL_RPC } from "@/resources";
 import { color, ellipsis } from "@/theme";
 import { fmtDate, text } from "@/format";
@@ -16,11 +15,7 @@ export function MailPane() {
   const mails = result?.data ?? [];
   const [selectedId, setSelectedId] = useState<string | number | undefined>();
   const selectedPreview = mails.find((m) => String(m.id) === String(selectedId));
-  const detail = useOne<Mail>({
-    resource: "mail",
-    id: selectedId,
-    queryOptions: { enabled: connected && selectedId !== undefined },
-  });
+  const detail = useCachedOne<Mail>("mail", selectedId, connected && selectedId !== undefined);
   const selectedMail = detail.result ?? selectedPreview;
   const { run, error, busy } = useAction(() => void query.refetch());
 
