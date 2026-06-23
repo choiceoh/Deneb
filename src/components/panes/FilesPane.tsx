@@ -4,11 +4,11 @@ import { FILES_RPC } from "@/resources";
 import { readCachedRpc, rpcCacheKey, writeCachedRpc } from "@/rpcCache";
 import type { FileEntry } from "@/types";
 import { useRpc } from "@/useRpc";
-import { color, ellipsis, muted } from "@/theme";
+import { color, ellipsis } from "@/theme";
 import { fmtDate } from "@/format";
 import { useRegisterPane, useWorkspace } from "@/workspaceContext";
 import { Column, Grid, GridNotice, RowBtn } from "@/components/Grid";
-import { Field, Modal } from "@/components/Modal";
+import { DeleteModal, OneFieldModal } from "./commonModals";
 
 export function FilesPane() {
   const { connected, cfg } = useWorkspace();
@@ -299,6 +299,7 @@ export function FilesPane() {
       )}
       {deleting && (
         <DeleteModal
+          title="파일 삭제"
           path={entryPath(deleting)}
           onClose={() => setDeleting(null)}
           onDelete={() => void deleteEntry(deleting)}
@@ -362,65 +363,4 @@ function fileToBase64(file: File): Promise<string> {
     };
     reader.readAsDataURL(file);
   });
-}
-
-function OneFieldModal({
-  title,
-  label,
-  initialValue = "",
-  action,
-  onClose,
-  onSubmit,
-}: {
-  title: string;
-  label: string;
-  initialValue?: string;
-  action: string;
-  onClose: () => void;
-  onSubmit: (value: string) => void;
-}) {
-  const [value, setValue] = useState(initialValue);
-  return (
-    <Modal
-      title={title}
-      onClose={onClose}
-      width={440}
-      footer={
-        <>
-          <button className="btn" onClick={onClose}>
-            취소
-          </button>
-          <button className="btn btn-accent" onClick={() => onSubmit(value)} disabled={!value.trim()}>
-            {action}
-          </button>
-        </>
-      }
-    >
-      <Field label={label}>
-        <input className="field" value={value} onChange={(e) => setValue(e.target.value)} autoFocus />
-      </Field>
-    </Modal>
-  );
-}
-
-function DeleteModal({ path, onClose, onDelete }: { path: string; onClose: () => void; onDelete: () => void }) {
-  return (
-    <Modal
-      title="파일 삭제"
-      onClose={onClose}
-      width={420}
-      footer={
-        <>
-          <button className="btn" onClick={onClose}>
-            취소
-          </button>
-          <button className="btn btn-accent" onClick={onDelete}>
-            삭제
-          </button>
-        </>
-      }
-    >
-      <p style={{ ...muted, margin: 0 }}>{path}</p>
-    </Modal>
-  );
 }

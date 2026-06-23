@@ -8,6 +8,7 @@ import { color, line, muted } from "@/theme";
 import { useRegisterPane, useWorkspace } from "@/workspaceContext";
 import { Field, Modal } from "@/components/Modal";
 import { MarkdownEditor } from "@/components/MarkdownEditor";
+import { DeleteModal, OneFieldModal } from "./commonModals";
 
 type BrowseMode = "categories" | "search" | "diary";
 
@@ -385,7 +386,12 @@ export function WikiPane() {
         />
       )}
       {deleting && path && (
-        <DeleteModal path={path} onClose={() => setDeleting(false)} onDelete={() => void deletePage()} />
+        <DeleteModal
+          title="페이지 삭제"
+          path={path}
+          onClose={() => setDeleting(false)}
+          onDelete={() => void deletePage()}
+        />
       )}
     </div>
   );
@@ -490,67 +496,6 @@ function NewPageModal({ onClose, onCreate }: { onClose: () => void; onCreate: (d
           style={{ resize: "vertical" }}
         />
       </Field>
-    </Modal>
-  );
-}
-
-function OneFieldModal({
-  title,
-  label,
-  initialValue = "",
-  action,
-  onClose,
-  onSubmit,
-}: {
-  title: string;
-  label: string;
-  initialValue?: string;
-  action: string;
-  onClose: () => void;
-  onSubmit: (value: string) => void;
-}) {
-  const [value, setValue] = useState(initialValue);
-  return (
-    <Modal
-      title={title}
-      onClose={onClose}
-      width={460}
-      footer={
-        <>
-          <button className="btn" onClick={onClose}>
-            취소
-          </button>
-          <button className="btn btn-accent" onClick={() => onSubmit(value)} disabled={!value.trim()}>
-            {action}
-          </button>
-        </>
-      }
-    >
-      <Field label={label}>
-        <input className="field" value={value} onChange={(e) => setValue(e.target.value)} autoFocus />
-      </Field>
-    </Modal>
-  );
-}
-
-function DeleteModal({ path, onClose, onDelete }: { path: string; onClose: () => void; onDelete: () => void }) {
-  return (
-    <Modal
-      title="페이지 삭제"
-      onClose={onClose}
-      width={420}
-      footer={
-        <>
-          <button className="btn" onClick={onClose}>
-            취소
-          </button>
-          <button className="btn btn-accent" onClick={onDelete}>
-            삭제
-          </button>
-        </>
-      }
-    >
-      <p style={{ ...muted, margin: 0 }}>{path}</p>
     </Modal>
   );
 }
