@@ -33,4 +33,14 @@ describe("App against the mock gateway (real stack)", () => {
     await userEvent.click(within(screen.getByRole("navigation")).getByRole("button", { name: /메일/ }));
     expect(await screen.findByText("분기 리뷰 일정 확정")).toBeInTheDocument();
   });
+
+  it("opens a mail row and reads the message body", async () => {
+    render(<App />);
+    await userEvent.click(within(screen.getByRole("navigation")).getByRole("button", { name: /메일/ }));
+    await userEvent.click(await screen.findByText("분기 리뷰 일정 확정"));
+
+    const detail = screen.getByLabelText("메일 상세");
+    expect(await within(detail).findByText(/분기 리뷰 일정을 확정합니다/)).toBeInTheDocument();
+    expect(within(detail).getByText(/회의 전까지 초안 자료를 공유/)).toBeInTheDocument();
+  });
 });

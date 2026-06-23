@@ -19,12 +19,18 @@ export function Grid<T>({
   getKey,
   maxWidth,
   rowStyle,
+  onRowClick,
+  isRowSelected,
+  rowTitle,
 }: {
   columns: Column<T>[];
   rows: T[];
   getKey: (row: T) => string;
   maxWidth?: number;
   rowStyle?: (row: T) => CSSProperties;
+  onRowClick?: (row: T) => void;
+  isRowSelected?: (row: T) => boolean;
+  rowTitle?: (row: T) => string;
 }) {
   return (
     <table className="dgrid" style={{ maxWidth }}>
@@ -38,15 +44,37 @@ export function Grid<T>({
         </tr>
       </thead>
       <tbody>
-        {rows.map((row) => (
-          <tr key={getKey(row)} style={rowStyle?.(row)}>
-            {columns.map((c, i) => (
-              <td key={i} style={c.tdStyle}>
-                {c.cell(row)}
-              </td>
-            ))}
-          </tr>
-        ))}
+        {rows.map((row) => {
+          const interactive = Boolean(onRowClick);
+          const selected = Boolean(isRowSelected?.(row));
+          const className = [interactive ? "clickable" : "", selected ? "selected" : ""].filter(Boolean).join(" ");
+          return (
+            <tr
+              key={getKey(row)}
+              className={className || undefined}
+              style={rowStyle?.(row)}
+              tabIndex={interactive ? 0 : undefined}
+              aria-selected={interactive ? selected : undefined}
+              title={rowTitle?.(row)}
+              onClick={onRowClick ? () => onRowClick(row) : undefined}
+              onKeyDown={
+                onRowClick
+                  ? (e) => {
+                      if (e.key !== "Enter" && e.key !== " ") return;
+                      e.preventDefault();
+                      onRowClick(row);
+                    }
+                  : undefined
+              }
+            >
+              {columns.map((c, i) => (
+                <td key={i} style={c.tdStyle}>
+                  {c.cell(row)}
+                </td>
+              ))}
+            </tr>
+          );
+        })}
       </tbody>
     </table>
   );
@@ -92,7 +120,10 @@ export function RowBtn({
   return (
     <button
       className="row-btn"
-      onClick={onClick}
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
       disabled={disabled}
       title={title}
       style={danger ? { color: "var(--due)" } : undefined}

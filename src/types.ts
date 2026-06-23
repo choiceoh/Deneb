@@ -19,8 +19,15 @@ export interface Mail {
   id: string | number;
   threadId?: string;
   from?: unknown; // "Name <addr@host>" string (tolerate legacy { name, email })
+  to?: unknown;
   subject?: string;
   snippet?: string;
+  body?: string;
+  text?: string;
+  plain?: string;
+  plainText?: string;
+  bodyText?: string;
+  html?: string;
   date?: string; // RFC3339
   isUnread?: boolean;
   labels?: string[];

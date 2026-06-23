@@ -18,6 +18,7 @@ export const mail: Mail[] = [
     from: "김리드 <lead@corp.example>",
     date: "2026-06-17T09:12:00Z",
     snippet: "다음 주 화요일 오후 2시로 확정합니다. 자료 미리…",
+    body: "다음 주 화요일 오후 2시로 분기 리뷰 일정을 확정합니다.\n\n회의 전까지 초안 자료를 공유해 주세요.",
     isUnread: true,
     priority: "attention",
     priorityHint: "마감 표현",

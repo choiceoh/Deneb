@@ -376,6 +376,13 @@ textarea {
 .dgrid tbody tr:hover {
   background: #faf9f8;
 }
+.dgrid tbody tr.clickable {
+  cursor: pointer;
+}
+.dgrid tbody tr.selected,
+.dgrid tbody tr.selected:hover {
+  background: var(--accent-soft);
+}
 
 /* compact row-action button (mail/cron/workfeed actions) */
 .row-btn {
@@ -417,6 +424,73 @@ textarea {
   cursor: default;
 }
 
+/* mail reader split view */
+.mail-split {
+  display: grid;
+  grid-template-columns: minmax(380px, 1fr) minmax(280px, 38%);
+  gap: 22px;
+  align-items: start;
+}
+.mail-list {
+  min-width: 0;
+  overflow: auto;
+}
+.mail-detail {
+  min-width: 0;
+  border-left: 1px solid var(--line);
+  padding-left: 20px;
+}
+.mail-detail-empty,
+.mail-detail-status {
+  color: var(--muted-2);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.mail-detail-status {
+  margin-bottom: 9px;
+}
+.mail-detail-status.error {
+  color: var(--due);
+}
+.mail-detail-head {
+  display: grid;
+  gap: 7px;
+  padding-bottom: 13px;
+  border-bottom: 1px solid var(--line);
+}
+.mail-detail-subject {
+  color: var(--ink);
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+.mail-detail-meta {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.mail-labels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.mail-label {
+  color: var(--accent-deep);
+  background: var(--accent-soft);
+  border-radius: var(--radius-pill);
+  padding: 2px 7px;
+  font-size: 11px;
+}
+.mail-body {
+  margin: 13px 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--ink-2);
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
 /* today section header */
 .sec-head {
   display: flex;
@@ -448,6 +522,18 @@ textarea {
 }
 .fade-up {
   animation: fadeUp 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+@media (max-width: 1040px) {
+  .mail-split {
+    grid-template-columns: 1fr;
+  }
+  .mail-detail {
+    border-left: none;
+    border-top: 1px solid var(--line);
+    padding-left: 0;
+    padding-top: 16px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
