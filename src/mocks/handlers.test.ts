@@ -24,4 +24,12 @@ describe("mock gateway handlers", () => {
   it("surfaces unknown methods as an envelope error", async () => {
     await expect(callRpc(cfg, "miniapp.nope")).rejects.toThrow(/unknown method/);
   });
+
+  it("answers wiki browse and file browse RPCs", async () => {
+    const categories = await callRpc<{ categories: { name: string }[] }>(cfg, "miniapp.memory.categories");
+    expect(categories.categories[0]).toHaveProperty("name");
+
+    const files = await callRpc<{ entries: { name: string }[] }>(cfg, "miniapp.files.list", { path: "" });
+    expect(files.entries.some((entry) => entry.name === "projects")).toBe(true);
+  });
 });

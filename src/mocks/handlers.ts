@@ -13,6 +13,34 @@ interface RpcBody {
 const ok = (payload: unknown) => HttpResponse.json({ ok: true, payload });
 const fail = (message: string) => HttpResponse.json({ ok: false, error: { code: "mock", message } });
 
+function normPath(path: unknown): string {
+  return String(path ?? "").replace(/^\/+|\/+$/g, "");
+}
+
+function parentPath(path: string): string {
+  const parts = normPath(path).split("/").filter(Boolean);
+  parts.pop();
+  return parts.join("/");
+}
+
+function filesInPath(path: unknown) {
+  const base = normPath(path);
+  return fx.files.filter((entry) => parentPath(entry.pathDisplay ?? entry.pathLower ?? entry.name ?? "") === base);
+}
+
+function filePath(entry: { pathDisplay?: string; pathLower?: string; name?: string }) {
+  return entry.pathDisplay ?? entry.pathLower ?? entry.name ?? "";
+}
+
+function wikiPathFromCreate(p: Record<string, any>): string {
+  const slug = String(p.title ?? "untitled")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9가-힣]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return `${normPath(p.category)}/${slug || "untitled"}.md`;
+}
+
 // method → (params) → payload
 const RPC: Record<string, (p: Record<string, any>) => unknown> = {
   "miniapp.ping": () => ({ ok: true, version: "mock", model: "mock-model", tsMs: Date.now() }),
@@ -93,7 +121,49 @@ const RPC: Record<string, (p: Record<string, any>) => unknown> = {
     body: `# ${p.path}\n\n목 위키 내용입니다.`,
   }),
   "miniapp.memory.write_page": (p) => ({ path: p.path, body: p.body }),
-  "miniapp.memory.create_page": (p) => ({ path: p.path, title: p.path, body: "" }),
+  "miniapp.memory.create_page": (p) => ({ path: wikiPathFromCreate(p), title: p.title, body: p.body ?? "" }),
+  "miniapp.memory.categories": () => ({ categories: fx.wikiCategories, totalPages: fx.pages.length }),
+  "miniapp.memory.list_in_category": (p) => {
+    const category = normPath(p.category);
+    const pages = fx.pages.filter((page) => !category || normPath(page.path).startsWith(`${category}/`));
+    return { category, pages, total: pages.length };
+  },
+  "miniapp.memory.diary_recent": () => ({ entries: fx.diaryEntries }),
+  "miniapp.memory.move_page": (p) => ({ ok: true, from: p.from, to: p.to }),
+  "miniapp.memory.merge": (p) => ({ ok: true, started: true, targetPath: p.targetPath, mergedTitle: "목 병합" }),
+  "miniapp.memory.delete_pages": (p) => ({ ok: true, deleted: Array.isArray(p.paths) ? p.paths.length : 0 }),
+
+  "miniapp.files.list": (p) => ({ entries: filesInPath(p.path), path: normPath(p.path) }),
+  "miniapp.files.search": (p) => {
+    const q = String(p.query ?? "").toLowerCase();
+    return {
+      entries: fx.files.filter((entry) => filePath(entry).toLowerCase().includes(q) || (entry.name ?? "").includes(q)),
+    };
+  },
+  "miniapp.files.share": (p) => ({ url: `https://files.example/${encodeURIComponent(normPath(p.path))}` }),
+  "miniapp.files.upload": (p) => ({
+    entry: {
+      tag: "file",
+      name: normPath(p.path).split("/").pop(),
+      pathDisplay: normPath(p.path),
+      pathLower: normPath(p.path).toLowerCase(),
+      size: 128,
+      serverModified: "2026-06-17T10:00:00Z",
+    },
+  }),
+  "miniapp.files.delete": () => ({}),
+  "miniapp.files.mkdir": (p) => ({
+    tag: "folder",
+    name: normPath(p.path).split("/").pop(),
+    pathDisplay: normPath(p.path),
+    pathLower: normPath(p.path).toLowerCase(),
+  }),
+  "miniapp.files.move": (p) => ({
+    tag: "file",
+    name: normPath(p.dst).split("/").pop(),
+    pathDisplay: normPath(p.dst),
+    pathLower: normPath(p.dst).toLowerCase(),
+  }),
 
   "miniapp.search.all": (p) => fx.searchAll(typeof p.query === "string" ? p.query : ""),
 
@@ -137,5 +207,10 @@ export const handlers = [
 
   http.get("*/api/v1/miniapp/events", () =>
     sse(['event: nudge\ndata: {"id":"n1","title":"목 알림","body":"events SSE 모킹이 동작 중입니다."}\n']),
+  ),
+
+  http.get(
+    "*/api/v1/miniapp/gmail/attachment",
+    () => new HttpResponse("mock attachment", { headers: { "Content-Type": "text/plain" } }),
   ),
 ];

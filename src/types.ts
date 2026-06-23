@@ -34,8 +34,18 @@ export interface Mail {
   mailbox?: string;
   hasAttachment?: boolean;
   attachmentCount?: number;
+  attachments?: MailAttachment[];
   priority?: string; // "urgent" | "attention"
   priorityHint?: string; // Korean hint, e.g. "낙찰 · 마감 표현"
+}
+
+export interface MailAttachment {
+  id?: string;
+  attachmentId?: string;
+  filename?: string;
+  name?: string;
+  mimeType?: string;
+  size?: number;
 }
 
 // Calendar timestamps arrive as RFC3339 strings; tolerate Google's nested
@@ -123,6 +133,34 @@ export interface WikiPage {
   body?: string; // present on get_page
 }
 
+export interface WikiCategory {
+  category?: string;
+  name?: string;
+  pageCount?: number;
+  count?: number;
+  pages?: number;
+  totalBytes?: number;
+}
+
+export interface WikiDiaryEntry {
+  file?: string;
+  path?: string;
+  header?: string;
+  title?: string;
+  content?: string;
+  at?: string;
+}
+
+export interface FileEntry {
+  tag?: string; // "file" | "folder"
+  name?: string;
+  pathDisplay?: string;
+  pathLower?: string;
+  id?: string;
+  size?: number;
+  serverModified?: string;
+}
+
 export interface SearchHit {
   id?: string;
   type?: string; // client-applied bucket label: "위키" | "다이어리" | "인물"
@@ -168,6 +206,7 @@ export type View =
   | "mail"
   | "calendar"
   | "wiki"
+  | "files"
   | "search"
   | "people"
   | "crons"

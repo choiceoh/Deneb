@@ -82,6 +82,20 @@ export const MEMORY_RPC = {
   createPage: "miniapp.memory.create_page",
   categories: "miniapp.memory.categories",
   listInCategory: "miniapp.memory.list_in_category",
+  diaryRecent: "miniapp.memory.diary_recent",
+  movePage: "miniapp.memory.move_page",
+  merge: "miniapp.memory.merge",
+  deletePages: "miniapp.memory.delete_pages",
+} as const;
+
+export const FILES_RPC = {
+  list: "miniapp.files.list",
+  search: "miniapp.files.search",
+  share: "miniapp.files.share",
+  upload: "miniapp.files.upload",
+  delete: "miniapp.files.delete",
+  mkdir: "miniapp.files.mkdir",
+  move: "miniapp.files.move",
 } as const;
 
 export const SEARCH_RPC = "miniapp.search.all";

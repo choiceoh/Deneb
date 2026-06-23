@@ -5,19 +5,17 @@ import * as fx from "@/mocks/fixtures";
 import { renderWithProviders } from "@/test/util";
 import { WikiPane } from "./WikiPane";
 
-// Params of the last write_page / create_page RPC, captured for field assertions.
 let writeParams: Record<string, unknown> | null;
 let createParams: Record<string, unknown> | null;
+let moveParams: Record<string, unknown> | null;
 
 beforeEach(() => {
   writeParams = null;
   createParams = null;
+  moveParams = null;
   if (!globalThis.crypto?.randomUUID) {
     vi.stubGlobal("crypto", { randomUUID: () => "test-uuid" });
   }
-  // Stand in for the Deneb gateway, replying with the REAL envelope + payload
-  // shapes (search → { results }, get_page/write_page → { body }) so this test
-  // pins the field-name contract the wiki pane regressed on.
   vi.stubGlobal(
     "fetch",
     vi.fn(async (_url: string, init?: RequestInit) => {
@@ -28,6 +26,16 @@ beforeEach(() => {
       const reply = (payload: unknown) =>
         ({ ok: true, json: async () => ({ ok: true, payload }) }) as unknown as Response;
       switch (method) {
+        case "miniapp.memory.categories":
+          return reply({ categories: fx.wikiCategories, totalPages: fx.pages.length });
+        case "miniapp.memory.list_in_category":
+          return reply({
+            category: params.category,
+            pages: fx.pages.filter((p) => String(p.path ?? "").startsWith(`${params.category}/`)),
+            total: 1,
+          });
+        case "miniapp.memory.diary_recent":
+          return reply({ entries: fx.diaryEntries });
         case "miniapp.memory.search":
           return reply({ results: fx.pages });
         case "miniapp.memory.get_page":
@@ -37,22 +45,17 @@ beforeEach(() => {
           return reply({ path: params.path, body: params.body });
         case "miniapp.memory.create_page":
           createParams = params;
-          return reply({ path: params.path, title: params.path, body: "" });
-        case "miniapp.memory.categories":
-          return reply({
-            categories: [
-              { name: "인물", pageCount: 2 },
-              { name: "프로젝트", pageCount: 1 },
-            ],
-          });
-        case "miniapp.memory.list_in_category":
-          return reply({ category: params.category, pages: [{ path: "인물/김노영.md", title: "김노영" }], total: 1 });
+          return reply({ path: "projects/new-page.md", title: params.title, body: params.body ?? "" });
+        case "miniapp.memory.move_page":
+          moveParams = params;
+          return reply({ ok: true, from: params.from, to: params.to });
         default:
           return reply({});
       }
     }),
   );
 });
+
 afterEach(() => {
   vi.unstubAllGlobals();
 });
@@ -61,18 +64,11 @@ describe("WikiPane", () => {
   it("unwraps search { results }, opens the body, and saves under `body`", async () => {
     renderWithProviders(<WikiPane />, { connected: true });
 
-    // Search → results render. Regression: it read `.pages`, so { results } left
-    // the list empty and the pane only ever showed "결과 없음".
-    await userEvent.type(screen.getByPlaceholderText("위키 검색…"), "설계{enter}");
+    await userEvent.type(screen.getByPlaceholderText("위키 검색..."), "설계{enter}");
     const hit = await screen.findByRole("button", { name: /Andromeda 설계 노트/ });
-
-    // Open → editor shows the page body. Regression: it read `.content`, so the
-    // editor opened blank against a gateway that returns `body`.
     await userEvent.click(hit);
     const editor = await screen.findByDisplayValue(/본문 내용입니다/);
 
-    // Edit + save → write_page must carry the text under `body`. Regression:
-    // sending it as `content` left body empty server-side, clobbering the page.
     await userEvent.type(editor, " 추가됨");
     await userEvent.click(screen.getByRole("button", { name: "저장" }));
     expect(await screen.findByText("저장됨")).toBeInTheDocument();
@@ -81,38 +77,56 @@ describe("WikiPane", () => {
     expect(writeParams).not.toHaveProperty("content");
   });
 
-  it("creates a new page and opens it in the editor", async () => {
+  it("creates a new page through title/category and opens it in the editor", async () => {
     renderWithProviders(<WikiPane />, { connected: true });
 
     await userEvent.click(screen.getByRole("button", { name: /새 페이지/ }));
-    await userEvent.type(screen.getByPlaceholderText(/projects\/andromeda/), "projects/new");
+    await userEvent.type(screen.getByPlaceholderText(/Andromeda 개선 노트/), "새 페이지");
+    await userEvent.type(screen.getByPlaceholderText(/projects/), "projects");
     await userEvent.click(screen.getByRole("button", { name: "생성" }));
 
-    // create_page carries the path; then the editor opens that page (heading shows it).
-    expect(await screen.findByRole("heading", { name: "projects/new" })).toBeInTheDocument();
-    expect(createParams).toMatchObject({ path: "projects/new" });
+    expect(await screen.findByRole("heading", { name: "projects/new-page.md" })).toBeInTheDocument();
+    expect(createParams).toMatchObject({ title: "새 페이지", category: "projects" });
+    expect(createParams).not.toHaveProperty("path");
   });
 
-  it("opens on a category browse list and drills into a page without searching", async () => {
+  it("opens on category browse and can switch to recent diary", async () => {
     renderWithProviders(<WikiPane />, { connected: true });
-    // The category list shows immediately — no search needed (the bug: the pane
-    // used to show nothing until you searched, and an empty search errored).
-    await userEvent.click(await screen.findByRole("button", { name: /인물/ }));
-    // Its pages load; clicking one opens it in the editor.
-    await userEvent.click(await screen.findByRole("button", { name: "김노영" }));
-    expect(await screen.findByDisplayValue(/본문 내용입니다/)).toBeInTheDocument();
+
+    await userEvent.click(await screen.findByRole("button", { name: /projects/ }));
+    expect(await screen.findByRole("button", { name: /Andromeda 설계 노트/ })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "최근 일지" }));
+    expect(await screen.findByRole("button", { name: /2026-06-17/ })).toBeInTheDocument();
+  });
+
+  it("moves the selected page through memory.move_page", async () => {
+    renderWithProviders(<WikiPane />, { connected: true });
+
+    await userEvent.type(screen.getByPlaceholderText("위키 검색..."), "설계{enter}");
+    await userEvent.click(await screen.findByRole("button", { name: /Andromeda 설계 노트/ }));
+    await userEvent.click(await screen.findByRole("button", { name: "이동" }));
+
+    const input = screen.getByLabelText("새 경로");
+    await userEvent.clear(input);
+    await userEvent.type(input, "projects/renamed.md");
+    await userEvent.click(
+      within(screen.getByRole("dialog", { name: "페이지 이동" })).getByRole("button", { name: "이동" }),
+    );
+
+    expect(await screen.findByText("이동됨")).toBeInTheDocument();
+    expect(moveParams).toMatchObject({ from: "projects/andromeda", to: "projects/renamed.md" });
   });
 
   it("toggles a Markdown preview of the page body", async () => {
     renderWithProviders(<WikiPane />, { connected: true });
 
-    await userEvent.type(screen.getByPlaceholderText("위키 검색…"), "설계{enter}");
+    await userEvent.type(screen.getByPlaceholderText("위키 검색..."), "설계{enter}");
     await userEvent.click(await screen.findByRole("button", { name: /Andromeda 설계 노트/ }));
-    await screen.findByDisplayValue(/본문 내용입니다/); // editor visible by default (edit mode)
+    await screen.findByDisplayValue(/본문 내용입니다/);
 
     await userEvent.click(screen.getByRole("button", { name: "미리보기" }));
     const preview = screen.getByLabelText("위키 미리보기");
-    // body "# 설계\n\n본문 내용입니다." renders as a heading + paragraph
     expect(within(preview).getByRole("heading", { name: "설계" })).toBeInTheDocument();
     expect(within(preview).getByText(/본문 내용입니다/)).toBeInTheDocument();
   });

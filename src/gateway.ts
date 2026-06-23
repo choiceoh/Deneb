@@ -8,6 +8,7 @@ import { readJsonSSE } from "./sse";
 import { log } from "./log";
 import { getJSON, setJSON } from "./storage";
 import { isTauri } from "./tauri";
+import type { MailAttachment } from "./types";
 
 const rpcLog = log.child("rpc");
 const chatLog = log.child("chat");
@@ -70,6 +71,17 @@ interface RpcEnvelope<T> {
 }
 
 export const base = (url: string) => url.replace(/\/$/, "");
+
+export function mailAttachmentUrl(cfg: GatewayConfig, messageId: string, attachment: MailAttachment): string {
+  const q = new URLSearchParams({
+    messageId,
+    attachmentId: String(attachment.attachmentId ?? attachment.id ?? ""),
+    filename: attachment.filename ?? attachment.name ?? "attachment",
+    mimeType: attachment.mimeType ?? "application/octet-stream",
+    clientToken: cfg.token,
+  });
+  return `${base(cfg.url)}/api/v1/miniapp/gmail/attachment?${q.toString()}`;
+}
 
 // One JSON-RPC call against POST /api/v1/miniapp/rpc.
 export async function callRpc<T>(cfg: GatewayConfig, method: string, params: Record<string, unknown> = {}): Promise<T> {

@@ -3,7 +3,20 @@
 // (isUnread, due, nextRunAtMs, workfeed body/source/createdAtMs, …) — they're what
 // an agent (or a screenshot) sees when running against the mock.
 import type { ModelsList, SessionRow, TranscriptMsg } from "@/gateway";
-import type { CalEvent, Cron, Mail, Person, ProjectDigest, SearchHit, Todo, WikiPage, WorkItem } from "@/types";
+import type {
+  CalEvent,
+  Cron,
+  FileEntry,
+  Mail,
+  Person,
+  ProjectDigest,
+  SearchHit,
+  Todo,
+  WikiCategory,
+  WikiDiaryEntry,
+  WikiPage,
+  WorkItem,
+} from "@/types";
 import { calStamp } from "@/format";
 
 export const todos: Todo[] = [
@@ -22,6 +35,9 @@ export const mail: Mail[] = [
     snippet: "다음 주 화요일 오후 2시로 확정합니다. 자료 미리…",
     body: "다음 주 화요일 오후 2시로 분기 리뷰 일정을 확정합니다.\n\n회의 전까지 초안 자료를 공유해 주세요.",
     isUnread: true,
+    hasAttachment: true,
+    attachmentCount: 1,
+    attachments: [{ id: "att1", filename: "quarter-review.pdf", mimeType: "application/pdf", size: 245_760 }],
     priority: "attention",
     priorityHint: "마감 표현",
   },
@@ -178,6 +194,38 @@ export const pages: WikiPage[] = [
     summary: "신규 입사자 안내",
     snippet: "신규 입사자 안내…",
     score: 0.74,
+  },
+];
+
+export const wikiCategories: WikiCategory[] = [
+  { name: "projects", pageCount: 1 },
+  { name: "team", pageCount: 1 },
+];
+
+export const diaryEntries: WikiDiaryEntry[] = [
+  {
+    file: "diary/2026-06-17.md",
+    header: "2026-06-17",
+    content: "Andromeda 파일 브라우저 후보를 메모했습니다.",
+    at: "2026-06-17T08:30:00Z",
+  },
+];
+
+export const files: FileEntry[] = [
+  {
+    tag: "folder",
+    name: "projects",
+    pathDisplay: "projects",
+    pathLower: "projects",
+    serverModified: "2026-06-17T08:00:00Z",
+  },
+  {
+    tag: "file",
+    name: "quarter-review.pdf",
+    pathDisplay: "projects/quarter-review.pdf",
+    pathLower: "projects/quarter-review.pdf",
+    size: 245_760,
+    serverModified: "2026-06-17T09:00:00Z",
   },
 ];
 

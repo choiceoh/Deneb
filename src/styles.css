@@ -991,6 +991,37 @@ textarea {
 .mail-card-line.error {
   color: var(--due);
 }
+.mail-attachments {
+  display: grid;
+  gap: 6px;
+}
+.mail-attachment {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  min-height: 30px;
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-ctl);
+  background: var(--panel);
+  color: var(--ink-2);
+  text-decoration: none;
+  font-size: 12px;
+}
+.mail-attachment:hover {
+  border-color: var(--line-2);
+}
+.mail-attachment span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mail-attachment span:last-child {
+  color: var(--muted);
+  font-size: 11px;
+}
 .mail-card-facts {
   margin-top: 6px;
   font-size: 12px;
@@ -1056,6 +1087,112 @@ textarea {
 .mail-ask .btn {
   padding: 6px 12px;
   font-size: 12px;
+}
+
+/* wiki browse rows */
+.wiki-list-row,
+.wiki-category-row {
+  width: 100%;
+  text-align: left;
+  border: none;
+  border-radius: var(--radius-ctl);
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+.wiki-list-row {
+  display: grid;
+  gap: 3px;
+  padding: 7px 8px;
+  font-size: 13px;
+}
+.wiki-list-row:hover,
+.wiki-category-row:hover {
+  background: var(--panel-sunken);
+}
+.wiki-list-row span,
+.wiki-category-row span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wiki-list-row small {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wiki-category-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 7px 8px;
+  font-size: 13px;
+}
+.wiki-category-row small {
+  color: var(--muted-2);
+  font-size: 11px;
+}
+
+/* files browser */
+.files-toolbar,
+.files-search {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 10px;
+}
+.files-toolbar .field {
+  flex: 1 1 260px;
+  min-width: 160px;
+  font-size: 12px;
+}
+.files-toolbar .btn,
+.files-search .btn {
+  padding: 6px 11px;
+  font-size: 12px;
+}
+.files-search .field {
+  flex: 1 1 240px;
+  min-width: 160px;
+  font-size: 12px;
+}
+.files-search label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.files-share {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  width: min(980px, 100%);
+  box-sizing: border-box;
+  margin: 0 0 10px;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-ctl);
+  background: var(--panel-sunken);
+  font-size: 12px;
+}
+.files-share span,
+.files-share a {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.files-share span {
+  color: var(--muted);
 }
 
 /* today section header */

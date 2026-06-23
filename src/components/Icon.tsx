@@ -10,6 +10,7 @@ export type IconName =
   | "mail"
   | "calendar"
   | "wiki"
+  | "files"
   | "search"
   | "people"
   | "crons"
@@ -65,6 +66,12 @@ const PATHS: Record<IconName, ReactNode> = {
     <>
       <path d="M5 4.5h9a2.5 2.5 0 0 1 2.5 2.5v12.5H7.5A2.5 2.5 0 0 1 5 19V4.5z" />
       <path d="M16.5 19.5H7.5A2.5 2.5 0 0 0 5 22M8.5 8.5h5M8.5 12h5" />
+    </>
+  ),
+  files: (
+    <>
+      <path d="M3.5 7.5A2.5 2.5 0 0 1 6 5h4l2 2h6A2.5 2.5 0 0 1 20.5 9.5v7A2.5 2.5 0 0 1 18 19H6a2.5 2.5 0 0 1-2.5-2.5z" />
+      <path d="M3.7 10h16.6" />
     </>
   ),
   search: (

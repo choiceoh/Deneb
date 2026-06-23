@@ -126,6 +126,31 @@ describe("MailPane", () => {
     expect(screen.queryByText(/kim@corp\.com/)).not.toBeInTheDocument();
   });
 
+  it("shows attachment download links in the expanded detail", async () => {
+    const dataProvider = fakeProvider({
+      mail: [
+        {
+          id: "m1",
+          subject: "첨부 메일",
+          from: "a@b.com",
+          body: "본문",
+          attachmentCount: 1,
+          attachments: [{ id: "att1", filename: "quote.pdf", mimeType: "application/pdf", size: 2048 }],
+        },
+      ],
+    });
+    renderWithProviders(<MailPane />, { connected: true, dataProvider, cfg: { url: "http://gateway", token: "tok" } });
+
+    await userEvent.click(await screen.findByText("첨부 메일"));
+    const detail = screen.getByLabelText("메일 상세");
+    const link = within(detail).getByRole("link", { name: /quote.pdf/ });
+
+    expect(within(detail).getByText("첨부파일")).toBeInTheDocument();
+    expect(link).toHaveAttribute("href", expect.stringContaining("/api/v1/miniapp/gmail/attachment"));
+    expect(link).toHaveAttribute("href", expect.stringContaining("messageId=m1"));
+    expect(link).toHaveAttribute("href", expect.stringContaining("attachmentId=att1"));
+  });
+
   it("shows no inline action buttons on rows; delete lives in the detail view", async () => {
     const dataProvider = fakeProvider({
       mail: [{ id: "m1", subject: "정리 대상", from: "kim@corp.com", isUnread: true }],

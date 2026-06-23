@@ -10,6 +10,7 @@ import { NotebookPane } from "./NotebookPane";
 import { MailPane } from "./MailPane";
 import { CalendarPane } from "./CalendarPane";
 import { WikiPane } from "./WikiPane";
+import { FilesPane } from "./FilesPane";
 import { SearchPane } from "./SearchPane";
 import { PeoplePane } from "./PeoplePane";
 import { CronsPane } from "./CronsPane";
@@ -33,6 +34,7 @@ export const PANES: PaneDef[] = [
   { key: "mail", label: "메일", shortcut: "3", Component: MailPane },
   { key: "calendar", label: "일정", shortcut: "4", Component: CalendarPane },
   { key: "wiki", label: "위키", shortcut: "5", Component: WikiPane },
+  { key: "files", label: "파일", shortcut: "f", Component: FilesPane },
   { key: "search", label: "검색", shortcut: "6", Component: SearchPane },
   { key: "people", label: "연락처", shortcut: "7", Component: PeoplePane },
   { key: "crons", label: "크론", shortcut: "8", Component: CronsPane },

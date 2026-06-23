@@ -11,9 +11,10 @@ import {
   analyzeMail,
   askMail,
   cachedMailAnalysis,
+  mailAttachmentUrl,
   senderContext,
 } from "@/gateway";
-import type { Mail } from "@/types";
+import type { Mail, MailAttachment } from "@/types";
 import { errText, firstString, fmtMailDate, senderName, text } from "@/format";
 import { useWorkspace } from "@/workspaceContext";
 import { Markdown } from "@/components/Markdown";
@@ -111,11 +112,73 @@ export function MailDetail({
         <div className="mail-body mail-detail-empty">본문 없음</div>
       )}
 
+      <AttachmentCard mailId={id} attachments={mail.attachments} count={mail.attachmentCount} />
       <SenderCard sender={senderRaw} />
       <AnalysisCard mailId={id} />
       <AskBox mailId={id} />
     </section>
   );
+}
+
+function AttachmentCard({
+  mailId,
+  attachments,
+  count,
+}: {
+  mailId: string;
+  attachments?: MailAttachment[];
+  count?: number;
+}) {
+  const { cfg } = useWorkspace();
+  const list = attachments ?? [];
+  const knownCount = count ?? list.length;
+  if (knownCount <= 0 && list.length === 0) return null;
+
+  return (
+    <div className="mail-card">
+      <div className="mail-card-title">첨부파일</div>
+      {list.length === 0 ? (
+        <div className="mail-card-line">첨부파일 {knownCount}개</div>
+      ) : (
+        <div className="mail-attachments">
+          {list.map((att, i) => {
+            const id = att.attachmentId ?? att.id ?? String(i);
+            const name = att.filename ?? att.name ?? `attachment-${i + 1}`;
+            const canOpen = Boolean(att.attachmentId ?? att.id);
+            return canOpen ? (
+              <a
+                key={id}
+                className="mail-attachment"
+                href={mailAttachmentUrl(cfg, mailId, att)}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <span>{name}</span>
+                <span>{formatAttachmentMeta(att)}</span>
+              </a>
+            ) : (
+              <div key={id} className="mail-attachment" aria-disabled="true">
+                <span>{name}</span>
+                <span>{formatAttachmentMeta(att)}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function formatAttachmentMeta(att: MailAttachment): string {
+  const bits = [att.mimeType, formatBytes(att.size)].filter(Boolean);
+  return bits.join(" · ");
+}
+
+function formatBytes(size?: number): string {
+  if (typeof size !== "number" || !Number.isFinite(size) || size <= 0) return "";
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 // Sender context: recent volume in the last N days + the operator's curated wiki
