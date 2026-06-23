@@ -285,12 +285,69 @@ textarea {
   font-size: 12px;
   color: var(--muted);
 }
+.ai-composer {
+  display: flex;
+  align-items: flex-end;
+  gap: 7px;
+  margin-top: 12px;
+  padding: 7px 7px 7px 12px;
+  background: var(--panel);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-ctl);
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.ai-composer:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
 .ai-compose {
   flex: 1;
-  min-height: 68px;
-  max-height: 150px;
+  min-width: 0;
+  box-sizing: border-box;
+  border: none;
+  outline: none;
+  background: transparent;
+  resize: none;
+  overflow-y: auto;
+  max-height: 140px;
+  padding: 5px 0;
+  font-family: inherit;
+  font-size: 13px;
   line-height: 1.45;
-  resize: vertical;
+  color: var(--ink);
+}
+.ai-compose::placeholder {
+  color: var(--muted-2);
+}
+.ai-send {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.ai-send:hover:not(:disabled) {
+  background: var(--accent-deep);
+}
+.ai-send:disabled {
+  background: var(--line-2);
+  color: var(--faint);
+  cursor: default;
+}
+.ai-send-stop {
+  background: var(--due);
+}
+.ai-send-stop:hover:not(:disabled) {
+  background: var(--due);
 }
 .ai-transcript {
   flex: 1;
@@ -390,14 +447,6 @@ textarea {
   margin-top: 2px;
   font-size: 11px;
 }
-.ai-stop {
-  color: var(--due);
-  border-color: var(--due-soft);
-}
-.ai-stop:hover:not(:disabled) {
-  background: var(--due-soft);
-}
-
 /* conversation history drawer */
 .session-drawer {
   border: 1px solid var(--line-2);

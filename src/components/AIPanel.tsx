@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { type GatewayConfig, type ModelsList, listModels } from "@/gateway";
 import { type ChatTurn, useChat } from "@/hooks";
 import { useSessions } from "@/useSessions";
@@ -41,6 +41,7 @@ export function AIPanel({ cfg }: { cfg: GatewayConfig }) {
   const { aiText, activeResource, connected } = useWorkspace();
   const { thinking, busy, turns, send, stop, regenerate, clear, setTurns } = useChat(cfg);
   const [input, setInput] = useState("");
+  const composeRef = useRef<HTMLTextAreaElement>(null);
   const [models, setModels] = useState<ModelsList | null>(null);
   const [model, setModel] = useState(""); // selected override id ("" → gateway main)
   const { sessions, sessionKey, sessionsOpen, sessionErr, toggleSessions, selectSession, removeSession, newChat } =
@@ -68,6 +69,14 @@ export function AIPanel({ cfg }: { cfg: GatewayConfig }) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connected, cfg.url, cfg.token]);
+
+  // Grow the composer from one line up to its CSS max-height, then it scrolls.
+  useEffect(() => {
+    const el = composeRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [input]);
 
   function submit(message = input) {
     const msg = message.trim();
@@ -147,17 +156,18 @@ export function AIPanel({ cfg }: { cfg: GatewayConfig }) {
       </div>
 
       <form
-        style={{ display: "flex", gap: 7, marginTop: 12, alignItems: "flex-end" }}
+        className="ai-composer"
         onSubmit={(e) => {
           e.preventDefault();
           submit();
         }}
       >
         <textarea
-          className="field ai-compose"
+          ref={composeRef}
+          className="ai-compose"
           aria-label="Deneb에게 메시지"
           placeholder={busy ? "응답 중…" : "메시지…"}
-          rows={3}
+          rows={1}
           value={input}
           disabled={busy}
           onChange={(e) => setInput(e.target.value)}
@@ -168,25 +178,17 @@ export function AIPanel({ cfg }: { cfg: GatewayConfig }) {
           }}
         />
         {busy ? (
-          <button
-            type="button"
-            className="btn ai-stop"
-            onClick={stop}
-            aria-label="중단"
-            title="응답 중단"
-            style={{ width: 38, padding: 0, display: "inline-flex", alignItems: "center", justifyContent: "center" }}
-          >
+          <button type="button" className="ai-send ai-send-stop" onClick={stop} aria-label="중단" title="응답 중단">
             <Icon name="stop" size={15} />
           </button>
         ) : (
           <button
             type="submit"
-            className="btn btn-accent"
+            className="ai-send"
             disabled={!connected || input.trim().length === 0}
             aria-label="전송"
-            style={{ width: 38, padding: 0, display: "inline-flex", alignItems: "center", justifyContent: "center" }}
           >
-            <Icon name="send" size={17} />
+            <Icon name="send" size={16} />
           </button>
         )}
       </form>
