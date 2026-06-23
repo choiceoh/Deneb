@@ -1,9 +1,11 @@
-// Package media — YouTube transcript extraction and metadata via yt-dlp.
+// Package media — YouTube transcript extraction and metadata.
 //
-// Uses yt-dlp to download subtitles/auto-captions and video metadata from
-// YouTube URLs. Designed for the single-user Telegram workflow: when a
-// YouTube link is detected, the transcript and metadata are extracted and
-// fed to the LLM for analysis.
+// The primary path is native (youtube_native.go): it calls YouTube's internal
+// innertube API directly over HTTP for captions + metadata, so the common
+// "summarize this link" case needs no external tooling. yt-dlp remains the
+// fallback for caption-less videos (audio→ASR) and for the audio/video download
+// paths (signature deciphering is left to yt-dlp). When a YouTube link is
+// detected, the transcript and metadata are extracted and fed to the LLM.
 package media
 
 import (
@@ -61,12 +63,22 @@ func ExtractYouTubeURLs(text string) []string {
 	return urls
 }
 
-// ExtractYouTubeTranscript uses yt-dlp to download subtitles and metadata.
+// ExtractYouTubeTranscript extracts subtitles and metadata for a YouTube video.
 // Prefers manual subtitles in ko/en; falls back to auto-generated captions.
 //
-// Requires yt-dlp to be installed (`pip install yt-dlp` or system package).
-// Returns an error if yt-dlp is not found.
+// It tries the native innertube path first (no external dependency; see
+// youtube_native.go) and only short-circuits when that yields an actual
+// transcript. Otherwise it falls back to yt-dlp, which adds the audio→ASR
+// fallback for caption-less videos. As a result, caption videos work even when
+// yt-dlp is absent or broken; only the ASR path strictly needs yt-dlp.
 func ExtractYouTubeTranscript(ctx context.Context, videoURL string) (*YouTubeResult, error) {
+	// Native-first: direct innertube API. Strictly faster (no Python subprocess)
+	// and dependency-free for the common "summarize this link" case.
+	native := extractTranscriptNative(ctx, videoURL)
+	if native != nil && native.HasTranscript() {
+		return native, nil
+	}
+
 	// Probe that yt-dlp is not just present but actually runnable. A bare
 	// LookPath passes for a broken venv shim (the standard casualty of a system
 	// Python upgrade), which then explodes at the first real invocation with a
@@ -74,6 +86,15 @@ func ExtractYouTubeTranscript(ctx context.Context, videoURL string) (*YouTubeRes
 	// and surfaces an operator-actionable repair hint.
 	ytdlpPath, err := probeYtDlp(ctx)
 	if err != nil {
+		// yt-dlp unavailable. If the native path at least retrieved metadata,
+		// return that (transcript marked missing) instead of failing outright —
+		// a caption-less video still yields a useful info card with no tooling.
+		if native != nil {
+			if native.Transcript == "" {
+				native.Transcript = noTranscriptMarker
+			}
+			return native, nil
+		}
 		return nil, err
 	}
 
