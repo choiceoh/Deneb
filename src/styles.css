@@ -1700,6 +1700,59 @@ textarea {
   }
 }
 
+/* 설정 — section tabs: a segmented control using the Zen lift metaphor
+   (sunken track, active tab rises with white bg + --shadow-pill). */
+.settings-tabs {
+  display: inline-flex;
+  gap: 4px;
+  margin: 16px 0 6px;
+  padding: 3px;
+  background: var(--panel-sunken);
+  border-radius: var(--radius-ctl);
+}
+.settings-tab {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  padding: 6px 16px;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.settings-tab:hover:not(.active) {
+  color: var(--ink-2);
+}
+.settings-tab.active {
+  background: var(--panel);
+  color: var(--ink);
+  box-shadow: var(--shadow-pill);
+}
+
+/* 설정 — sections within a tab. A divider only between consecutive sections,
+   so a tab's first (or only) section never carries a stray top rule. */
+.settings-section {
+  margin-top: 18px;
+}
+.settings-section:first-of-type {
+  margin-top: 10px;
+}
+.settings-section + .settings-section {
+  border-top: 1px solid var(--line);
+  padding-top: 16px;
+}
+
+/* 설정 — connection fields fill the work-area width as a responsive 2-up grid
+   (no fixed cap), so they spread into columns instead of a lone narrow stack. */
+.settings-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 0 18px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

@@ -6,14 +6,14 @@ import { type LogLevel, getLogLevel, setLogLevel } from "@/log";
 import { isTauri } from "@/tauri";
 import { checkForUpdates } from "@/updater";
 import { errText } from "@/format";
-import { line, muted } from "@/theme";
+import { muted } from "@/theme";
 import { useRegisterPane, useWorkspace } from "@/workspaceContext";
 import type { View } from "@/types";
 import { LiveDot } from "@/components/LiveDot";
 import { PANES, orderedViews } from "@/components/panes";
 
-// 설정 — a full-screen settings section (not a modal). Promotes the gateway
-// connection form out of the sidebar popover and adds log-level + about. Edits the
+// 설정 — a full-screen settings section (not a modal), split into tabs:
+// 연결(gateway) · 일반(좌측 탭 + 로그 레벨) · 정보(version/update). Edits the
 // app-owned config via useWorkspace().setCfg (App persists + rebuilds providers).
 const LOG_LEVELS: LogLevel[] = ["debug", "info", "warn", "error", "silent"];
 const LOG_LABEL: Record<LogLevel, string> = {
@@ -23,6 +23,13 @@ const LOG_LABEL: Record<LogLevel, string> = {
   error: "오류",
   silent: "끄기",
 };
+
+type TabKey = "connection" | "general" | "about";
+const TABS: { key: TabKey; label: string }[] = [
+  { key: "connection", label: "연결" },
+  { key: "general", label: "일반" },
+  { key: "about", label: "정보" },
+];
 
 const fieldLabel = {
   display: "grid",
@@ -37,6 +44,7 @@ export function SettingsPane() {
   const { status, check } = useGatewayStatus(cfg);
   const [level, setLevel] = useState<LogLevel>(getLogLevel());
   const [updateMsg, setUpdateMsg] = useState("");
+  const [tab, setTab] = useState<TabKey>("connection");
 
   useRegisterPane(
     undefined,
@@ -73,143 +81,175 @@ export function SettingsPane() {
   }
 
   return (
-    <div style={{ maxWidth: 480 }}>
+    <div>
       <h2 style={{ marginTop: 2 }}>설정</h2>
 
-      <Section
-        title="게이트웨이 연결"
-        desc="Deneb 게이트웨이 주소와 클라이언트 토큰. 실제 호스트에서는 키체인에서 자동 연결됩니다."
-      >
-        <label style={fieldLabel}>
-          URL
-          <input
-            className="field"
-            placeholder="https://gateway.example"
-            value={cfg.url}
-            onChange={(e) => setCfg({ ...cfg, url: e.target.value })}
-          />
-        </label>
-        <label style={fieldLabel}>
-          클라이언트 토큰
-          <input
-            className="field"
-            type="password"
-            placeholder="토큰"
-            value={cfg.token}
-            onChange={(e) => setCfg({ ...cfg, token: e.target.value })}
-          />
-        </label>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 2 }}>
+      <div className="settings-tabs" role="tablist" aria-label="설정 섹션">
+        {TABS.map((t) => (
           <button
-            className="btn btn-accent"
-            onClick={() => {
-              saveConfig(cfg);
-              void check();
-            }}
+            key={t.key}
+            type="button"
+            role="tab"
+            id={`settings-tab-${t.key}`}
+            aria-selected={tab === t.key}
+            aria-controls="settings-panel"
+            className={"settings-tab" + (tab === t.key ? " active" : "")}
+            onClick={() => setTab(t.key)}
           >
-            연결 / 저장
+            {t.label}
           </button>
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--muted)" }}>
-            <LiveDot connected={connected} />
-            {status || (connected ? "연결됨" : "미연결")}
-          </span>
-        </div>
-        {isError && <p style={{ fontSize: 12, color: "var(--due)", margin: "2px 0 0" }}>{status}</p>}
-      </Section>
+        ))}
+      </div>
 
-      <Section title="로그 레벨" desc="">
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-          {LOG_LEVELS.map((l) => {
-            const active = l === level;
-            return (
+      {/* key={tab} remounts the panel so it re-runs the fade on each switch */}
+      <div key={tab} id="settings-panel" role="tabpanel" aria-labelledby={`settings-tab-${tab}`} className="fade-up">
+        {tab === "connection" && (
+          <Section title="게이트웨이 연결">
+            <div className="settings-fields">
+              <label style={fieldLabel}>
+                URL
+                <input
+                  className="field"
+                  placeholder="https://gateway.example"
+                  value={cfg.url}
+                  onChange={(e) => setCfg({ ...cfg, url: e.target.value })}
+                />
+              </label>
+              <label style={fieldLabel}>
+                클라이언트 토큰
+                <input
+                  className="field"
+                  type="password"
+                  placeholder="토큰"
+                  value={cfg.token}
+                  onChange={(e) => setCfg({ ...cfg, token: e.target.value })}
+                />
+              </label>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 2 }}>
               <button
-                key={l}
-                onClick={() => applyLevel(l)}
-                aria-pressed={active}
-                style={{
-                  padding: "6px 12px",
-                  fontSize: 13,
-                  borderRadius: "var(--radius-ctl)",
-                  cursor: "pointer",
-                  border: active ? "1px solid var(--accent)" : "1px solid var(--line-2)",
-                  background: active ? "var(--accent-soft)" : "var(--panel)",
-                  color: active ? "var(--accent-deep)" : "var(--ink-2)",
+                className="btn btn-accent"
+                onClick={() => {
+                  saveConfig(cfg);
+                  void check();
                 }}
               >
-                {LOG_LABEL[l]}
+                연결 / 저장
               </button>
-            );
-          })}
-        </div>
-      </Section>
-
-      <Section title="좌측 탭" desc="표시할 화면과 순서를 정하세요. 설정은 항상 맨 아래에 표시됩니다.">
-        <div style={{ display: "grid", gap: 1 }}>
-          {railOrder.map((key, idx) => {
-            const p = PANES.find((x) => x.key === key);
-            if (!p) return null;
-            return (
-              <div
-                key={key}
-                style={{ display: "flex", alignItems: "center", gap: 9, padding: "3px 4px", fontSize: 13 }}
+              <span
+                style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--muted)" }}
               >
-                <label
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 9,
-                    flex: 1,
-                    cursor: "pointer",
-                    color: "var(--ink-2)",
-                  }}
-                >
-                  <input type="checkbox" checked={!hiddenViews.includes(key)} onChange={() => toggleViewHidden(key)} />
-                  {p.label}
-                </label>
-                <button
-                  className="row-btn"
-                  onClick={() => moveView(key, -1)}
-                  disabled={idx === 0}
-                  title="위로"
-                  aria-label={`${p.label} 위로`}
-                >
-                  ↑
-                </button>
-                <button
-                  className="row-btn"
-                  onClick={() => moveView(key, 1)}
-                  disabled={idx === railOrder.length - 1}
-                  title="아래로"
-                  aria-label={`${p.label} 아래로`}
-                >
-                  ↓
-                </button>
-              </div>
-            );
-          })}
-        </div>
-      </Section>
+                <LiveDot connected={connected} />
+                {status || (connected ? "연결됨" : "미연결")}
+              </span>
+            </div>
+            {isError && <p style={{ fontSize: 12, color: "var(--due)", margin: "2px 0 0" }}>{status}</p>}
+          </Section>
+        )}
 
-      <Section title="정보" desc="">
-        <div style={{ fontSize: 13, color: "var(--ink-2)" }}>
-          Andromeda 버전 <b style={{ fontWeight: 600 }}>v{__APP_VERSION__}</b>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10 }}>
-          <button className="btn" onClick={() => void runUpdateCheck()}>
-            업데이트 확인
-          </button>
-          {updateMsg && <span style={{ fontSize: 12, ...muted }}>{updateMsg}</span>}
-        </div>
-      </Section>
+        {tab === "general" && (
+          <>
+            <Section title="좌측 탭">
+              <div style={{ display: "grid", gap: 1 }}>
+                {railOrder.map((key, idx) => {
+                  const p = PANES.find((x) => x.key === key);
+                  if (!p) return null;
+                  return (
+                    <div
+                      key={key}
+                      style={{ display: "flex", alignItems: "center", gap: 9, padding: "3px 4px", fontSize: 13 }}
+                    >
+                      <label
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 9,
+                          flex: 1,
+                          cursor: "pointer",
+                          color: "var(--ink-2)",
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={!hiddenViews.includes(key)}
+                          onChange={() => toggleViewHidden(key)}
+                        />
+                        {p.label}
+                      </label>
+                      <button
+                        className="row-btn"
+                        onClick={() => moveView(key, -1)}
+                        disabled={idx === 0}
+                        title="위로"
+                        aria-label={`${p.label} 위로`}
+                      >
+                        ↑
+                      </button>
+                      <button
+                        className="row-btn"
+                        onClick={() => moveView(key, 1)}
+                        disabled={idx === railOrder.length - 1}
+                        title="아래로"
+                        aria-label={`${p.label} 아래로`}
+                      >
+                        ↓
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </Section>
+
+            <Section title="로그 레벨">
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {LOG_LEVELS.map((l) => {
+                  const active = l === level;
+                  return (
+                    <button
+                      key={l}
+                      onClick={() => applyLevel(l)}
+                      aria-pressed={active}
+                      style={{
+                        padding: "6px 12px",
+                        fontSize: 13,
+                        borderRadius: "var(--radius-ctl)",
+                        cursor: "pointer",
+                        border: active ? "1px solid var(--accent)" : "1px solid var(--line-2)",
+                        background: active ? "var(--accent-soft)" : "var(--panel)",
+                        color: active ? "var(--accent-deep)" : "var(--ink-2)",
+                      }}
+                    >
+                      {LOG_LABEL[l]}
+                    </button>
+                  );
+                })}
+              </div>
+            </Section>
+          </>
+        )}
+
+        {tab === "about" && (
+          <Section title="정보">
+            <div style={{ fontSize: 13, color: "var(--ink-2)" }}>
+              Andromeda 버전 <b style={{ fontWeight: 600 }}>v{__APP_VERSION__}</b>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10 }}>
+              <button className="btn" onClick={() => void runUpdateCheck()}>
+                업데이트 확인
+              </button>
+              {updateMsg && <span style={{ fontSize: 12, ...muted }}>{updateMsg}</span>}
+            </div>
+          </Section>
+        )}
+      </div>
     </div>
   );
 }
 
-function Section({ title, desc, children }: { title: string; desc: string; children: ReactNode }) {
+function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section style={{ borderTop: line, paddingTop: 16, marginTop: 18 }}>
-      <h3 style={{ marginBottom: desc ? 4 : 12 }}>{title}</h3>
-      {desc && <p style={{ fontSize: 12, ...muted, margin: "0 0 12px", lineHeight: 1.5 }}>{desc}</p>}
+    <section className="settings-section">
+      <h3 style={{ marginBottom: 12 }}>{title}</h3>
       {children}
     </section>
   );
