@@ -1,20 +1,27 @@
 name: Release
 
-# Build & publish Windows + macOS desktop bundles (Tauri) to a GitHub Release.
+# release-please drives versioning + releases from Conventional Commits.
 #
-# Trigger: push a version tag like `v0.1.0`, or run manually (workflow_dispatch,
-# pick a tag in the "Run workflow" dropdown for correct naming).
+# Flow:
+#   1. On every push to main, the `release-please` job maintains a single "release PR"
+#      that bumps the version in all three places Tauri reads it from — package.json,
+#      src-tauri/tauri.conf.json, src-tauri/Cargo.toml — and updates CHANGELOG.md.
+#      (Keeping the three in lockstep is what stops the classic "the .exe says 0.0.1
+#      but the tag is v0.0.2" drift.)
+#   2. Merging that release PR makes release-please create the git tag `vX.Y.Z` and a
+#      GitHub Release, and sets release_created=true.
+#   3. The `build` job then builds the Windows + macOS Tauri bundles, signs them and
+#      latest.json with the updater key, and uploads them to that release.
 #
-# Before tagging, bump the version in all three places so bundle filenames match
-# the tag (Tauri stamps versions from tauri.conf.json). Use `pnpm bump <version>`
-# to write all three at once:
-#   - package.json            "version"
-#   - src-tauri/tauri.conf.json "version"
-#   - src-tauri/Cargo.toml     [package] version
+# No tag-push trigger and no PAT: the build runs in the SAME workflow run as the
+# release, so the "a GITHUB_TOKEN action can't trigger another workflow" limitation
+# never bites (a tag-triggered build would silently never fire).
+#
+# Versioning (pre-1.0, see release-please-config.json): feat & fix → patch (0.0.x),
+# a `!` / BREAKING CHANGE → minor (0.x.0). Past 1.0 this becomes the usual semver.
 #
 # Auto-update REQUIRES two repo secrets (TAURI_SIGNING_PRIVATE_KEY[_PASSWORD]) — the
-# minisign key that signs the bundles + latest.json. They're already set; see the
-# `env:` block below.
+# minisign key that signs the bundles + latest.json. They're already set.
 #
 # Builds are NOT OS-code-signed (no Authenticode / Apple notarization), so first-launch
 # warnings remain:
@@ -24,16 +31,32 @@ name: Release
 
 on:
   push:
-    tags:
-      - "v*"
+    branches: [main]
   workflow_dispatch:
 
-# tauri-action creates the GitHub Release and uploads assets, so the job needs write.
+# release-please needs to open PRs and create releases/tags; tauri-action uploads assets.
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
-  release:
+  release-please:
+    runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      release_id: ${{ steps.release.outputs.id }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - name: Run release-please
+        id: release
+        uses: googleapis/release-please-action@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  build:
+    # Only after a release PR is merged (release-please created the release + tag).
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
     strategy:
       fail-fast: false
       matrix:
@@ -75,7 +98,7 @@ jobs:
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build and release
+      - name: Build bundles and upload to the release
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -92,21 +115,7 @@ jobs:
           # APPLE_ID: ${{ secrets.APPLE_ID }}
           # APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           # APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          # --- Windows signing (optional) ---
-          # Configure tauri.conf.json > bundle.windows.certificateThumbprint (cert in
-          # the runner's store) or an Azure/external signer; no env var needed here.
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: "Andromeda ${{ github.ref_name }}"
-          releaseBody: |
-            Andromeda 데스크탑 빌드 (Windows · macOS).
-
-            서명되지 않은 빌드라 첫 실행 시 OS 경고가 날 수 있습니다.
-            - macOS: 우클릭 → 열기, 또는 `xattr -dr com.apple.quarantine /Applications/Andromeda.app`
-            - Windows: SmartScreen → 추가 정보 → 실행
-          # Publish immediately (not a draft): the updater endpoint
-          # releases/latest/download/latest.json only resolves for a published,
-          # non-prerelease "latest" release.
-          releaseDraft: false
-          prerelease: false
+          # Upload into the release release-please just created (don't create a new one).
+          releaseId: ${{ needs.release-please.outputs.release_id }}
           args: ${{ matrix.args }}

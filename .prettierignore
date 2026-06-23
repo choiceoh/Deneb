@@ -4,3 +4,7 @@ pnpm-lock.yaml
 src-tauri/target
 src-tauri/Cargo.lock
 public/mockServiceWorker.js
+
+# Owned by release-please — its format isn't Prettier's, so don't fight it.
+CHANGELOG.md
+.release-please-manifest.json

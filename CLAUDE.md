@@ -148,6 +148,22 @@ sidebar status / `[andromeda:rpc]` logs.
   build scripts and fails `install` until each is approved in `pnpm-workspace.yaml`
   (`allowBuilds:`). esbuild is already approved there. Add new ones the same way.
 
+## Releasing (release-please)
+
+Releases are automated from Conventional Commits — no manual version bumping.
+
+- Land work on `main` with `feat:` / `fix:` / `chore:` … commits (squash-merge keeps the
+  PR title as the commit, so write the PR title in that form).
+- `release-please` (in `.github/workflows/release.yml`) keeps a single open **release
+  PR** that bumps the version + writes `CHANGELOG.md`. **Merging that PR** is what cuts a
+  release: it tags `vX.Y.Z`, creates the GitHub Release, then the same workflow builds &
+  signs the Win/macOS bundles + `latest.json` and uploads them (auto-updater endpoint).
+- Version lives in three files kept in lockstep by release-please via
+  `release-please-config.json` (`package.json`, `src-tauri/tauri.conf.json`,
+  `src-tauri/Cargo.toml`). Don't hand-edit versions. `pnpm bump <v>` remains only as a
+  manual fallback.
+- Pre-1.0 bumping: `feat`/`fix` → patch (`0.0.x`), `!`/`BREAKING CHANGE` → minor (`0.x.0`).
+
 ## Roadmap (DESIGN §8)
 
 Phase 0–1 done (connection, workstation MVP, mail/calendar/todo grids, two-way AI).
