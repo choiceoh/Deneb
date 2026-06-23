@@ -1826,6 +1826,272 @@ textarea {
   gap: 0 18px;
 }
 
+/* deneb-ui — agent-drawn interactive UI inside a chat reply */
+.dui {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.dui-col {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.dui-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.dui-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 11px 13px;
+  background: var(--panel-sunken);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-ctl);
+}
+.dui-divider {
+  margin: 2px 0;
+  border: none;
+  border-top: 1px solid var(--line);
+}
+.dui-accordion-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.dui-accordion-caret {
+  color: var(--muted-2);
+}
+.dui-list {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.dui-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--line);
+}
+.dui-tab {
+  padding: 5px 10px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.dui-tab.active {
+  color: var(--accent-deep);
+  border-bottom-color: var(--accent);
+}
+.dui-code {
+  margin: 0;
+  padding: 9px 11px;
+  overflow-x: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  color: var(--ink);
+  background: #faf8f6;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-ctl);
+}
+.dui-quote {
+  margin: 0;
+  padding: 2px 0 2px 10px;
+  border-left: 2px solid var(--line-2);
+  color: var(--muted);
+  font-size: 13px;
+}
+.dui-quote-src {
+  margin-top: 3px;
+  font-size: 11px;
+  color: var(--muted-2);
+}
+.dui-badge {
+  display: inline-block;
+  padding: 1px 8px;
+  font-size: 11px;
+  color: var(--accent-deep);
+  background: var(--accent-soft);
+  border-radius: 999px;
+}
+.dui-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.dui-stat-value {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+.dui-stat-label {
+  font-size: 11px;
+  color: var(--muted-2);
+}
+.dui-stat-desc {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.dui-image {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--radius-ctl);
+}
+.dui-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent-deep);
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+}
+.dui-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.dui-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.dui-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.dui-bar-label {
+  flex: 0 0 88px;
+  color: var(--ink-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dui-bar-track {
+  flex: 1;
+  height: 8px;
+  background: var(--panel-sunken);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.dui-bar-fill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  border-radius: 999px;
+}
+.dui-bar-val {
+  flex: 0 0 auto;
+  color: var(--muted-2);
+}
+.dui-alert {
+  padding: 9px 11px;
+  border-radius: var(--radius-ctl);
+  font-size: 12.5px;
+  line-height: 1.5;
+  border: 1px solid var(--line-2);
+  background: var(--panel-sunken);
+  color: var(--ink-2);
+}
+.dui-alert-title {
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+.dui-alert.success {
+  background: rgba(107, 155, 128, 0.12);
+  border-color: transparent;
+  color: #3f6b54;
+}
+.dui-alert.warning {
+  background: rgba(186, 130, 40, 0.13);
+  border-color: transparent;
+  color: #8a5a14;
+}
+.dui-alert.error {
+  background: var(--due-soft);
+  border-color: transparent;
+  color: var(--due);
+}
+.dui-progress {
+  display: block;
+  height: 8px;
+  background: var(--panel-sunken);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.dui-progress-fill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+.dui-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.dui-field .field {
+  width: 100%;
+  box-sizing: border-box;
+}
+.dui-label {
+  font-size: 12px;
+  color: var(--muted);
+}
+.dui-check {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.dui-check input {
+  accent-color: var(--accent);
+}
+.dui-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.chip.on {
+  background: var(--accent);
+  color: #fff;
+}
+.dui-pending {
+  padding: 8px 0;
+  font-size: 12px;
+  font-style: italic;
+  color: var(--muted-2);
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

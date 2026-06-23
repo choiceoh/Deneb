@@ -4,30 +4,43 @@ import { type ChatTurn, useChat } from "@/hooks";
 import { useSessions } from "@/useSessions";
 import { useStickyScroll } from "@/useStickyScroll";
 import { useWorkspace } from "@/workspaceContext";
+import { AssistantText } from "./DenebUi";
 import { Icon } from "./Icon";
 import { LiveDot } from "./LiveDot";
-import { Markdown } from "./Markdown";
 import { ModelPicker } from "./ModelPicker";
 import { ProactivePanel } from "./ProactivePanel";
 import { SessionDrawer } from "./SessionDrawer";
 import { ToolChip } from "./ToolChip";
 
-// One assistant reply: ordered text (Markdown) and tool chips, or — for a
-// transcript-loaded / pre-stream turn with no parts — the plain body as Markdown.
-function AssistantBody({ turn }: { turn: ChatTurn }) {
+// One assistant reply: ordered text and tool chips. Each text span renders as
+// Markdown, with any ```deneb-ui block drawn as interactive UI (AssistantText);
+// transcript-loaded / pre-stream turns with no parts use the plain body.
+function AssistantBody({
+  turn,
+  onUiSubmit,
+  busy,
+}: {
+  turn: ChatTurn;
+  onUiSubmit: (msg: string) => void;
+  busy: boolean;
+}) {
   const parts = turn.parts;
   if (!parts || parts.length === 0) {
     if (turn.status === "streaming") return <div className="ai-turn-body streaming">응답 대기 중…</div>;
     return (
       <div className="ai-turn-body">
-        <Markdown text={turn.text || ""} />
+        <AssistantText text={turn.text || ""} onUiSubmit={onUiSubmit} busy={busy} />
       </div>
     );
   }
   return (
     <div className="ai-turn-body">
       {parts.map((p, i) =>
-        p.kind === "text" ? <Markdown key={i} text={p.text} /> : <ToolChip key={p.id || i} part={p} />,
+        p.kind === "text" ? (
+          <AssistantText key={i} text={p.text} onUiSubmit={onUiSubmit} busy={busy} />
+        ) : (
+          <ToolChip key={p.id || i} part={p} />
+        ),
       )}
     </div>
   );
@@ -138,7 +151,11 @@ export function AIPanel({ cfg }: { cfg: GatewayConfig }) {
           turns.map((turn) => (
             <div key={turn.id} className={`ai-turn ${turn.role} ${turn.status}`}>
               <div className="ai-turn-label">{turn.role === "user" ? "나" : "Deneb"}</div>
-              {turn.role === "user" ? <div className="ai-turn-body">{turn.text}</div> : <AssistantBody turn={turn} />}
+              {turn.role === "user" ? (
+                <div className="ai-turn-body">{turn.text}</div>
+              ) : (
+                <AssistantBody turn={turn} onUiSubmit={submit} busy={busy} />
+              )}
               {/* Regenerate only the last streamed reply (transcript-loaded turns have no parts). */}
               {turn.role === "assistant" &&
                 turn.id === lastId &&
