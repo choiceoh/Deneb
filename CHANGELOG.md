@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.0.14](https://github.com/choiceoh/andromeda/compare/andromeda-v0.0.13...andromeda-v0.0.14) (2026-06-23)
+
+
+### Features
+
+* 데네브 별 "응답 중" 인디케이터 — 네이티브 StarIndicator 포팅 ([#94](https://github.com/choiceoh/andromeda/issues/94)) ([37ec100](https://github.com/choiceoh/andromeda/commit/37ec100beb713704e8db333620109807e6bac934))
+
+
+### Bug Fixes
+
+* 업데이터 결과를 구분해 설정 UI에 정확한 메시지 표시 ([#96](https://github.com/choiceoh/andromeda/issues/96)) ([5a9e303](https://github.com/choiceoh/andromeda/commit/5a9e303f119da18749e84a0fefee69565cbc5440))
+* 프레임리스 창 모서리 라운딩 (투명창 + macOSPrivateApi) ([#97](https://github.com/choiceoh/andromeda/issues/97)) ([4f87929](https://github.com/choiceoh/andromeda/commit/4f87929dcf27fc8f148dd1db285c09d81b09844b))
+
 ## [0.0.13](https://github.com/choiceoh/andromeda/compare/andromeda-v0.0.12...andromeda-v0.0.13) (2026-06-23)
 
 
