@@ -29,12 +29,18 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("SearchPane", () => {
-  it("renders results with a path as clickable (openable) hits", async () => {
+  it("centers the box until a search, then rises and shows clickable hits", async () => {
     renderWithProviders(<SearchPane />, { connected: true });
-    await userEvent.type(screen.getByPlaceholderText(/통합 검색/), "설계{enter}");
+
+    // Centered (pre-search) state: the big hero title is shown, no results yet.
+    expect(screen.getByText("통합 검색")).toBeInTheDocument();
+
+    await userEvent.type(screen.getByPlaceholderText(/검색/), "설계{enter}");
 
     const hit = await screen.findByRole("button", { name: /Andromeda 설계 노트/ });
     expect(hit).toHaveAttribute("title", "페이지 열기");
+    // After searching, the centered hero title is gone (the box rose to the top).
+    expect(screen.queryByText("통합 검색")).not.toBeInTheDocument();
     // Clicking routes to the wiki page via openWiki — should not throw.
     await userEvent.click(hit);
   });

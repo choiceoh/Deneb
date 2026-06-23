@@ -30,6 +30,9 @@ export function SearchPane() {
   const { connected, cfg, openWiki } = useWorkspace();
   const [q, setQ] = useState("");
   const [hits, setHits] = useState<SearchHit[]>([]);
+  // Google-style: the box sits centered until the first search, then rises to
+  // the top. Sticky once set (switching panes remounts and re-centers).
+  const [searched, setSearched] = useState(false);
   const { call, status, setStatus } = useRpc(cfg);
 
   const aiText = hits.length
@@ -43,6 +46,7 @@ export function SearchPane() {
   async function run() {
     const query = q.trim();
     if (!query || !connected) return;
+    setSearched(true);
     const r = await call<SearchAllResult | SearchHit[]>(SEARCH_RPC, { query }, "검색 중…");
     if (!r.ok) {
       setHits([]);
@@ -54,59 +58,61 @@ export function SearchPane() {
   }
 
   return (
-    <>
-      <h2 style={{ marginTop: 2 }}>통합 검색</h2>
-      <div style={{ display: "flex", gap: 6, marginBottom: 12, maxWidth: 640 }}>
-        <input
-          className="field"
-          style={{ flex: 1 }}
-          placeholder={connected ? "위키·다이어리·연락처 통합 검색…" : "먼저 게이트웨이에 연결하세요"}
-          value={q}
-          disabled={!connected}
-          onChange={(e) => setQ(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") void run();
-          }}
-        />
-        <button
-          className="btn btn-accent"
-          onClick={() => void run()}
-          disabled={!connected}
-          style={{ padding: "8px 14px" }}
-        >
-          검색
-        </button>
+    <div className={"search-pane" + (searched ? " searched" : "")}>
+      <div className="search-hero">
+        {!searched && <div className="search-hero-title">통합 검색</div>}
+        <div className="search-box">
+          <input
+            className="field"
+            placeholder={connected ? "위키 · 다이어리 · 연락처 검색…" : "먼저 게이트웨이에 연결하세요"}
+            value={q}
+            disabled={!connected}
+            autoFocus
+            onChange={(e) => setQ(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") void run();
+            }}
+          />
+          <button className="btn btn-accent" onClick={() => void run()} disabled={!connected}>
+            검색
+          </button>
+        </div>
+        {status && <p className="pane-status">{status}</p>}
       </div>
-      {status && <p className="pane-status">{status}</p>}
-      <div style={{ display: "grid", gap: 8 }}>
-        {hits.map((h, i) => {
-          // Every bucket (위키/다이어리/인물) carries a memory page path → openable.
-          const openable = Boolean(h.path);
-          const body = (
-            <>
-              {h.type && <div style={{ fontSize: 11, color: "var(--accent)", letterSpacing: "0.02em" }}>{h.type}</div>}
-              <div style={{ fontWeight: 600 }}>{h.title ?? "(제목 없음)"}</div>
-              {h.snippet && <div style={{ opacity: 0.7, fontSize: 13 }}>{h.snippet}</div>}
-            </>
-          );
-          const key = `${h.type ?? ""}:${h.path ?? h.title ?? i}`;
-          return openable ? (
-            <button
-              key={key}
-              className="search-hit"
-              onClick={() => openWiki(h.path as string)}
-              title="페이지 열기"
-              style={{ borderTop: line }}
-            >
-              {body}
-            </button>
-          ) : (
-            <div key={key} style={{ borderTop: line, paddingTop: 8 }}>
-              {body}
-            </div>
-          );
-        })}
-      </div>
-    </>
+
+      {searched && (
+        <div className="search-results">
+          {hits.map((h, i) => {
+            // Every bucket (위키/다이어리/인물) carries a memory page path → openable.
+            const openable = Boolean(h.path);
+            const body = (
+              <>
+                {h.type && (
+                  <div style={{ fontSize: 11, color: "var(--accent)", letterSpacing: "0.02em" }}>{h.type}</div>
+                )}
+                <div style={{ fontWeight: 600 }}>{h.title ?? "(제목 없음)"}</div>
+                {h.snippet && <div style={{ opacity: 0.7, fontSize: 13 }}>{h.snippet}</div>}
+              </>
+            );
+            const key = `${h.type ?? ""}:${h.path ?? h.title ?? i}`;
+            return openable ? (
+              <button
+                key={key}
+                className="search-hit"
+                onClick={() => openWiki(h.path as string)}
+                title="페이지 열기"
+                style={{ borderTop: line }}
+              >
+                {body}
+              </button>
+            ) : (
+              <div key={key} style={{ borderTop: line, paddingTop: 8 }}>
+                {body}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }

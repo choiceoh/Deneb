@@ -867,6 +867,53 @@ textarea {
   cursor: default;
 }
 
+/* 통합 검색 — Google-style: the box is centered until the first search, then
+ * rises to the top (only the vertical offset animates; it stays horizontally
+ * centered). Reduced-motion users get the snap via the global motion override. */
+.search-pane {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+.search-hero {
+  width: 100%;
+  max-width: 620px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 24vh;
+  transition: padding-top 0.42s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.search-pane.searched .search-hero {
+  padding-top: 2px;
+}
+.search-hero-title {
+  margin-bottom: 6px;
+  text-align: center;
+  font-size: 27px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+.search-box {
+  display: flex;
+  gap: 6px;
+}
+.search-box .field {
+  flex: 1;
+}
+.search-box .btn {
+  padding: 8px 14px;
+}
+.search-results {
+  width: 100%;
+  max-width: 760px;
+  margin: 18px auto 0;
+  display: grid;
+  gap: 8px;
+}
+
 /* clickable unified-search result (jumps to the wiki/diary/person page) */
 .search-hit {
   display: block;
