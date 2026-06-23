@@ -60,6 +60,10 @@ export const RESOURCE_DEFS: ResourceDef[] = [
     remove: "miniapp.crons.remove",
   },
   { name: "workfeed", label: "작업피드", list: "miniapp.workfeed.list", listKey: "items" },
+  // Project progress digests (Deneb #2834) — a parameterless read, so it flows
+  // straight into a grid/card pane like people/workfeed. Rows carry no id; the
+  // pane keys on `path`/`project`.
+  { name: "progress", label: "진행", list: "miniapp.project.digests", listKey: "digests" },
 ];
 
 // memory(위키) and search are NOT in the CRUD registry: their reads are

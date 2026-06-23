@@ -4,6 +4,7 @@
 // all follow automatically.
 import type { ComponentType } from "react";
 import type { View } from "@/types";
+import { ProgressPane } from "./ProgressPane";
 import { TodoPane } from "./TodoPane";
 import { DocPane } from "./DocPane";
 import { MailPane } from "./MailPane";
@@ -24,6 +25,8 @@ export interface PaneDef {
 
 export const PANES: PaneDef[] = [
   { key: "today", label: "오늘", shortcut: "0", Component: TodayPane },
+  // Digits 0–9 are taken; this dashboard-style overview gets a letter shortcut (⌘P).
+  { key: "progress", label: "진행", shortcut: "p", Component: ProgressPane },
   { key: "todo", label: "할일", shortcut: "1", Component: TodoPane },
   { key: "doc", label: "문서", shortcut: "2", Component: DocPane },
   { key: "mail", label: "메일", shortcut: "3", Component: MailPane },

@@ -40,6 +40,8 @@ const RPC: Record<string, (p: Record<string, any>) => unknown> = {
 
   "miniapp.people.list": () => ({ people: fx.people, windowDays: 30, scannedCount: fx.people.length }),
 
+  "miniapp.project.digests": () => ({ digests: fx.digests }),
+
   "miniapp.crons.list": () => ({ jobs: fx.crons, total: fx.crons.length }),
   "miniapp.crons.update": (p) => ({ ...p }),
   "miniapp.crons.run": () => ({ enqueued: true }),

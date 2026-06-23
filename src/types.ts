@@ -97,6 +97,18 @@ export interface WorkItem {
   ackedAtMs?: number;
 }
 
+// One project's latest-progress digest (miniapp.project.digests, Deneb #2834):
+// the gateway distills each active project's 대표페이지 "## 현재 상태" into a
+// headline + bullets, newest-first. `project` is the only guaranteed field.
+export interface ProjectDigest {
+  project: string;
+  headline?: string;
+  bullets?: string[];
+  due?: string; // free-form deadline string from the wiki page (not always RFC3339)
+  updatedAtMs?: number; // page last-updated epoch millis
+  path?: string; // wiki path to the project page
+}
+
 // Wiki (memory.*) and unified search are query-driven, handled by custom panes
 // calling RPCs directly rather than the CRUD data provider.
 export interface WikiPage {
@@ -125,4 +137,15 @@ export interface SearchHit {
 // resource (see resources.ts); `today` is a read-only dashboard aggregating
 // several resources; `doc` is a client-only scratch pane; `wiki` and `search`
 // are query-driven custom panes.
-export type View = "today" | "todo" | "doc" | "mail" | "calendar" | "wiki" | "search" | "people" | "crons" | "workfeed";
+export type View =
+  | "today"
+  | "progress"
+  | "todo"
+  | "doc"
+  | "mail"
+  | "calendar"
+  | "wiki"
+  | "search"
+  | "people"
+  | "crons"
+  | "workfeed";

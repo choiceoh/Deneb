@@ -2,7 +2,7 @@
 // stay honest as the types evolve. Field names mirror the gateway WIRE contract
 // (isUnread, due, nextRunAtMs, workfeed body/source/createdAtMs, …) — they're what
 // an agent (or a screenshot) sees when running against the mock.
-import type { CalEvent, Cron, Mail, Person, SearchHit, Todo, WikiPage, WorkItem } from "@/types";
+import type { CalEvent, Cron, Mail, Person, ProjectDigest, SearchHit, Todo, WikiPage, WorkItem } from "@/types";
 
 export const todos: Todo[] = [
   { id: "t1", title: "분기 보고서 초안 작성", done: false, due: "2026-06-20T00:00:00Z" },
@@ -94,6 +94,26 @@ export const workfeed: WorkItem[] = [
     title: "미답장 메일 3건",
     body: "24시간 이상 경과한 메일이 있습니다.",
     createdAtMs: 1782090000000,
+  },
+];
+
+// project.digests — each active project's distilled latest-progress card
+// (headline + bullets + optional due), newest-first, keyed by wiki path.
+export const digests: ProjectDigest[] = [
+  {
+    project: "Andromeda 워크스테이션",
+    headline: "진행상황 패널 추가 — 게이트웨이 계약 정합 중",
+    bullets: ["project.digests RPC 연동", "카드 레이아웃 + AI 컨텍스트 투영"],
+    due: "이번 주",
+    updatedAtMs: 1782180000000,
+    path: "projects/andromeda",
+  },
+  {
+    project: "데네브 게이트웨이",
+    headline: "CORS 허용으로 브라우저 워크스테이션 연결 복구",
+    bullets: ["Tauri 네이티브 HTTP 우회 제거 검토"],
+    updatedAtMs: 1782090000000,
+    path: "projects/deneb",
   },
 ];
 

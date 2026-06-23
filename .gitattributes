@@ -1,0 +1,4 @@
+# Normalize line endings: store text as LF and check out LF on every platform.
+# Keeps the working tree consistent with Prettier (endOfLine: lf) so Windows
+# checkouts don't show phantom CRLF↔LF diffs under core.autocrlf.
+* text=auto eol=lf

@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 // Used by the nav rail and chrome. Inherits color from the parent; size via prop.
 export type IconName =
   | "today"
+  | "progress"
   | "todo"
   | "doc"
   | "mail"
@@ -75,6 +76,12 @@ const PATHS: Record<IconName, ReactNode> = {
     </>
   ),
   workfeed: <path d="M3 12h3.5l2.2 6 4-13 2.4 9 1.8-2h4" />,
+  progress: (
+    <>
+      <path d="M3.5 20.5h17" />
+      <path d="M6.5 20.5V14M12 20.5V8M17.5 20.5V4.5" />
+    </>
+  ),
   send: <path d="M12 19V6M6.5 11.5L12 5.8l5.5 5.7" />,
   bell: (
     <>
