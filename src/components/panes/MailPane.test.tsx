@@ -116,15 +116,31 @@ describe("MailPane", () => {
     expect(link).toHaveAttribute("href", "https://example.com");
   });
 
-  it("keeps only the inline delete action on each row", async () => {
+  it("shows only the sender name in the list, dropping the address", async () => {
+    const dataProvider = fakeProvider({
+      mail: [{ id: "m1", subject: "이름만 표시", from: "김철수 <kim@corp.com>" }],
+    });
+    renderWithProviders(<MailPane />, { connected: true, dataProvider });
+
+    expect(await screen.findByText("김철수")).toBeInTheDocument();
+    expect(screen.queryByText(/kim@corp\.com/)).not.toBeInTheDocument();
+  });
+
+  it("shows no inline action buttons on rows; delete lives in the detail view", async () => {
     const dataProvider = fakeProvider({
       mail: [{ id: "m1", subject: "정리 대상", from: "kim@corp.com", isUnread: true }],
     });
     renderWithProviders(<MailPane />, { connected: true, dataProvider });
 
     expect(await screen.findByText("정리 대상")).toBeInTheDocument();
+    // The list carries no per-row actions — not even delete.
+    expect(screen.queryByRole("button", { name: "삭제" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "읽음" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "보관" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "삭제" })).toBeInTheDocument();
+
+    // Opening the message surfaces delete (and the other actions) in the detail.
+    await userEvent.click(screen.getByText("정리 대상"));
+    const detail = screen.getByLabelText("메일 상세");
+    expect(within(detail).getByRole("button", { name: "삭제" })).toBeInTheDocument();
   });
 });

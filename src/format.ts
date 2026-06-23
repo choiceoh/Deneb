@@ -28,6 +28,21 @@ export function text(v: unknown): string {
   return String(v);
 }
 
+// A mail sender's display NAME with the address dropped — "홍길동 <a@b.com>" → "홍길동".
+// Accepts the gateway's "Name <addr>" string or the legacy { name, email } object.
+// When there's no display name, falls back to the bare address (matching Gmail) so a
+// nameless sender still renders something rather than an empty cell.
+export function senderName(v: unknown): string {
+  if (v && typeof v === "object") return firstString(v, ["name", "email", "title"]);
+  const raw = text(v).trim();
+  const m = /^(.*)<([^>]*)>\s*$/.exec(raw); // "Name <addr>" → [name, addr]
+  const name = (m ? m[1] : raw)
+    .trim()
+    .replace(/^"(.*)"$/, "$1")
+    .trim(); // unquote "Last, First"
+  return name || (m ? m[2].trim() : raw);
+}
+
 // Render a timestamp compactly. Accepts an ISO-ish string OR epoch milliseconds
 // (the gateway uses both: RFC3339 for dates, `*AtMs` numbers for cron/workfeed).
 // Passes through anything unparseable.

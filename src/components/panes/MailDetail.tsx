@@ -14,7 +14,7 @@ import {
   senderContext,
 } from "@/gateway";
 import type { Mail } from "@/types";
-import { errText, firstString, fmtMailDate, text } from "@/format";
+import { errText, firstString, fmtMailDate, senderName, text } from "@/format";
 import { useWorkspace } from "@/workspaceContext";
 import { Markdown } from "@/components/Markdown";
 
@@ -59,10 +59,10 @@ export function MailDetail({
   if (!mail) return null;
 
   const body = mailBody(mail);
-  const who = text(mail.from);
+  const who = senderName(mail.from);
   const to = text(mail.to);
   // sender_context wants the raw "Name <email>" header when we have it.
-  const senderRaw = typeof mail.from === "string" ? mail.from : who;
+  const senderRaw = typeof mail.from === "string" ? mail.from : text(mail.from);
   const id = String(mail.id);
 
   return (

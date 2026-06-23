@@ -1,6 +1,6 @@
 import type { CalEvent, Mail, Todo, View, WorkItem } from "@/types";
 import { useCachedList } from "@/cachedList";
-import { calSpan, eventDayKeys, fmtDate, text } from "@/format";
+import { calSpan, eventDayKeys, fmtDate, senderName } from "@/format";
 import { Icon, type IconName } from "@/components/Icon";
 import { GridNotice } from "@/components/Grid";
 import { type PaneTarget, useRegisterPane, useWorkspace } from "@/workspaceContext";
@@ -89,7 +89,7 @@ export function TodayPane() {
       total: mails.length,
       lines: mails.slice(0, MAX).map((m) => ({
         title: m.subject ?? "(제목 없음)",
-        meta: text(m.from) || undefined,
+        meta: senderName(m.from) || undefined,
         unread: Boolean(m.isUnread),
         target: { view: "mail", id: m.id },
       })),

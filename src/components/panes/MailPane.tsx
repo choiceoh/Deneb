@@ -4,10 +4,10 @@ import { serializeList } from "@/aiText";
 import { useCachedList, useCachedOne } from "@/cachedList";
 import { MAIL_RPC } from "@/resources";
 import { color, ellipsis } from "@/theme";
-import { fmtMailDate, text } from "@/format";
+import { fmtMailDate, senderName } from "@/format";
 import { useAction } from "@/useAction";
 import { useRegisterPane, useWorkspace } from "@/workspaceContext";
-import { Column, Grid, GridNotice, RowBtn } from "@/components/Grid";
+import { Column, Grid, GridNotice } from "@/components/Grid";
 import { MailDetail, mailBody } from "./MailDetail";
 
 export function MailPane() {
@@ -28,14 +28,14 @@ export function MailPane() {
 
   // Mirror the grid (subject · sender · date) so the AI sees what the user sees.
   const listText = serializeList("메일", mails, (m) => {
-    const who = text(m.from);
+    const who = senderName(m.from);
     return `- ${m.isUnread ? "● " : ""}${m.subject ?? "(제목 없음)"}${who ? ` · ${who}` : ""}${
       m.date ? ` · ${fmtMailDate(m.date)}` : ""
     }`;
   });
   const detailBody = mailBody(selectedMail);
   const detailText = selectedMail
-    ? `[선택한 메일]\n제목: ${selectedMail.subject ?? "(제목 없음)"}\n보낸이: ${text(selectedMail.from) || "—"}${
+    ? `[선택한 메일]\n제목: ${selectedMail.subject ?? "(제목 없음)"}\n보낸이: ${senderName(selectedMail.from) || "—"}${
         selectedMail.date ? `\n날짜: ${fmtMailDate(selectedMail.date)}` : ""
       }\n\n${detailBody}`
     : "";
@@ -58,7 +58,7 @@ export function MailPane() {
       width: 170,
       tdStyle: { fontSize: 13, opacity: 0.85, ...ellipsis(170) },
       cell: (m) => {
-        const who = text(m.from);
+        const who = senderName(m.from);
         return (
           <>
             {m.isUnread && <span style={{ color: color.accent, marginRight: 5 }}>●</span>}
@@ -76,18 +76,6 @@ export function MailPane() {
       width: 116,
       tdStyle: { fontSize: 13, opacity: 0.7, whiteSpace: "nowrap" },
       cell: (m) => fmtMailDate(m.date),
-    },
-    {
-      header: "",
-      width: 58,
-      tdStyle: { whiteSpace: "nowrap", textAlign: "right" },
-      cell: (m) => (
-        <span style={{ display: "inline-flex", gap: 2, justifyContent: "flex-end" }}>
-          <RowBtn onClick={() => run(MAIL_RPC.trash, { id: m.id })} disabled={busy} danger title="삭제">
-            삭제
-          </RowBtn>
-        </span>
-      ),
     },
   ];
 

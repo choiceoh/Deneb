@@ -9,6 +9,7 @@ import {
   fmtDate,
   fmtMailDate,
   monthMatrix,
+  senderName,
   text,
 } from "./format";
 
@@ -25,6 +26,28 @@ describe("text", () => {
   it("is empty for null/empty objects", () => {
     expect(text(null)).toBe("");
     expect(text({})).toBe("");
+  });
+});
+
+describe("senderName", () => {
+  it('drops the address from a "Name <addr>" header', () => {
+    expect(senderName("홍길동 <hong@x.com>")).toBe("홍길동");
+    expect(senderName("Andromeda Team <team@andromeda.io>")).toBe("Andromeda Team");
+  });
+  it("unquotes a quoted display name", () => {
+    expect(senderName('"Doe, John" <j@x.com>')).toBe("Doe, John");
+  });
+  it("falls back to the address when there is no display name", () => {
+    expect(senderName("hong@x.com")).toBe("hong@x.com");
+    expect(senderName("<hong@x.com>")).toBe("hong@x.com");
+  });
+  it("handles the legacy { name, email } object (name, else email)", () => {
+    expect(senderName({ name: "Kim", email: "k@e.com" })).toBe("Kim");
+    expect(senderName({ name: "", email: "k@e.com" })).toBe("k@e.com");
+  });
+  it("is empty for null/empty input", () => {
+    expect(senderName(null)).toBe("");
+    expect(senderName("")).toBe("");
   });
 });
 
