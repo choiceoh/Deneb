@@ -420,6 +420,88 @@ textarea {
   color: var(--muted);
 }
 
+/* Deneb "응답 중" sparkle — the StarIndicator port (see DenebStar.tsx). The burst
+ * (scale + opacity) and glow run on CSS keyframes, so prefers-reduced-motion calms
+ * them; the clay-derived fill keeps the single warm accent. */
+.deneb-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+}
+.deneb-status-text {
+  font-size: 13px;
+  color: var(--muted);
+  animation: fadeIn 0.3s var(--ease) both;
+}
+.deneb-status-summary {
+  font-size: 13px;
+  color: var(--muted-2);
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.deneb-star {
+  display: inline-flex;
+  line-height: 0;
+  flex: 0 0 auto;
+}
+.deneb-star svg {
+  overflow: visible;
+}
+.deneb-star-core,
+.deneb-star-glow {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.deneb-star-core {
+  animation: denebTwinkle 1.3s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+.deneb-star-glow {
+  animation: denebGlow 1.3s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+/* dim+small at rest → quick bright swollen pop → settle, mirroring the native
+ * keyframes (pop ~20%, settle ~58%, rest by ~85% of the 1.3s period). */
+@keyframes denebTwinkle {
+  0% {
+    opacity: 0.6;
+    transform: scale(0.85);
+  }
+  20% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+  58% {
+    opacity: 0.65;
+    transform: scale(0.88);
+  }
+  85%,
+  100% {
+    opacity: 0.6;
+    transform: scale(0.85);
+  }
+}
+@keyframes denebGlow {
+  0% {
+    opacity: 0.42;
+    transform: scale(0.8);
+  }
+  20% {
+    opacity: 0.82;
+    transform: scale(1.08);
+  }
+  58% {
+    opacity: 0.47;
+    transform: scale(0.83);
+  }
+  85%,
+  100% {
+    opacity: 0.42;
+    transform: scale(0.8);
+  }
+}
+
 /* AI panel header: label · model picker · history · status dot */
 .ai-head {
   display: flex;

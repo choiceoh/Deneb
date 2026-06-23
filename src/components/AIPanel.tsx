@@ -4,6 +4,7 @@ import { type ChatTurn, useChat } from "@/hooks";
 import { useSessions } from "@/useSessions";
 import { useStickyScroll } from "@/useStickyScroll";
 import { useWorkspace } from "@/workspaceContext";
+import { DenebStatus } from "./DenebStatus";
 import { AssistantText } from "./DenebUi";
 import { Icon } from "./Icon";
 import { LiveDot } from "./LiveDot";
@@ -17,16 +18,20 @@ import { ToolChip } from "./ToolChip";
 // transcript-loaded / pre-stream turns with no parts use the plain body.
 function AssistantBody({
   turn,
+  thinking,
   onUiSubmit,
   busy,
 }: {
   turn: ChatTurn;
+  thinking?: string;
   onUiSubmit: (msg: string) => void;
   busy: boolean;
 }) {
   const parts = turn.parts;
   if (!parts || parts.length === 0) {
-    if (turn.status === "streaming") return <div className="ai-turn-body streaming">응답 대기 중…</div>;
+    // Pre-content stream → Deneb's "응답 중" sparkle, with the gateway's thinking
+    // preview as its inline summary (mirrors the native PulsingStatusIndicator).
+    if (turn.status === "streaming") return <DenebStatus summary={thinking?.trim() ? thinking : undefined} />;
     return (
       <div className="ai-turn-body">
         <AssistantText text={turn.text || ""} onUiSubmit={onUiSubmit} busy={busy} />
@@ -99,7 +104,8 @@ export function AIPanel({ cfg }: { cfg: GatewayConfig }) {
     void send(msg, { workspaceContext: aiText, activeResource, model: model || undefined, sessionKey });
   }
 
-  const lastId = turns.at(-1)?.id;
+  const last = turns.at(-1);
+  const lastId = last?.id;
 
   return (
     <aside
@@ -154,7 +160,7 @@ export function AIPanel({ cfg }: { cfg: GatewayConfig }) {
               {turn.role === "user" ? (
                 <div className="ai-turn-body">{turn.text}</div>
               ) : (
-                <AssistantBody turn={turn} onUiSubmit={submit} busy={busy} />
+                <AssistantBody turn={turn} thinking={thinking} onUiSubmit={submit} busy={busy} />
               )}
               {/* Regenerate only the last streamed reply (transcript-loaded turns have no parts). */}
               {turn.role === "assistant" &&
@@ -169,7 +175,11 @@ export function AIPanel({ cfg }: { cfg: GatewayConfig }) {
             </div>
           ))
         )}
-        {thinking && <div className="ai-thinking">{thinking}…</div>}
+        {/* Once content has started streaming, a mid-turn thinking burst (between
+            tools) shows here; before the first token it rides in the sparkle above. */}
+        {thinking && last?.role === "assistant" && last.status === "streaming" && (last.parts?.length ?? 0) > 0 && (
+          <div className="ai-thinking">{thinking}…</div>
+        )}
       </div>
 
       <form
