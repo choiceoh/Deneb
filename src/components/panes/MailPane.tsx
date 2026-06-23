@@ -85,20 +85,16 @@ export function MailPane() {
       <h2 style={{ marginTop: 2 }}>메일</h2>
       {error && <p style={{ color: "var(--due)", fontSize: 12, margin: "0 0 8px" }}>오류: {error}</p>}
       <GridNotice query={query} count={mails.length} empty="메일이 없습니다.">
-        <div className="mail-split">
-          <div className="mail-list">
-            <Grid
-              columns={columns}
-              rows={mails}
-              getKey={(m) => String(m.id)}
-              rowStyle={(m) => ({ fontWeight: m.isUnread ? 600 : 400 })}
-              onRowClick={(m) => setSelectedId(m.id)}
-              isRowSelected={(m) => String(m.id) === String(selectedId)}
-              rowTitle={(m) => `${m.subject ?? "(제목 없음)"} 읽기`}
-            />
-          </div>
-          <MailDetail mail={selectedMail} query={detail.query} />
-        </div>
+        <Grid
+          columns={columns}
+          rows={mails}
+          getKey={(m) => String(m.id)}
+          rowStyle={(m) => ({ fontWeight: m.isUnread ? 600 : 400 })}
+          onRowClick={(m) => setSelectedId((current) => (String(current) === String(m.id) ? undefined : m.id))}
+          isRowSelected={(m) => String(m.id) === String(selectedId)}
+          rowTitle={(m) => `${m.subject ?? "(제목 없음)"} 읽기`}
+          renderExpandedRow={() => <MailDetail mail={selectedMail} query={detail.query} />}
+        />
       </GridNotice>
     </>
   );
@@ -139,20 +135,14 @@ function MailDetail({
   mail?: Mail;
   query: { isLoading: boolean; isError?: boolean; error?: unknown };
 }) {
-  if (!mail) {
-    return (
-      <aside className="mail-detail" aria-label="메일 상세">
-        <div className="mail-detail-empty">선택된 메일 없음</div>
-      </aside>
-    );
-  }
+  if (!mail) return null;
 
   const body = mailBody(mail);
   const who = text(mail.from);
   const to = text(mail.to);
 
   return (
-    <aside className="mail-detail" aria-label="메일 상세">
+    <section className="mail-detail" aria-label="메일 상세">
       {query.isLoading && <div className="mail-detail-status">본문 불러오는 중…</div>}
       {query.isError && <div className="mail-detail-status error">본문 불러오기 실패</div>}
       <div className="mail-detail-head">
@@ -173,6 +163,6 @@ function MailDetail({
         )}
       </div>
       <pre className="mail-body">{body || "본문 없음"}</pre>
-    </aside>
+    </section>
   );
 }

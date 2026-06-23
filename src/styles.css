@@ -423,6 +423,13 @@ textarea {
 .dgrid tbody tr.selected:hover {
   background: var(--accent-soft);
 }
+.dgrid tbody tr.dgrid-expanded-row,
+.dgrid tbody tr.dgrid-expanded-row:hover {
+  background: var(--panel-sunken);
+}
+.dgrid tbody tr.dgrid-expanded-row > td {
+  padding: 0 10px 14px;
+}
 
 /* compact row-action button (mail/cron/workfeed actions) */
 .row-btn {
@@ -481,21 +488,14 @@ textarea {
   background: var(--panel-sunken);
 }
 
-/* mail reader split view */
-.mail-split {
-  display: grid;
-  grid-template-columns: minmax(380px, 1fr) minmax(280px, 38%);
-  gap: 22px;
-  align-items: start;
-}
-.mail-list {
-  min-width: 0;
-  overflow: auto;
-}
+/* mail reader inline expansion */
 .mail-detail {
   min-width: 0;
-  border-left: 1px solid var(--line);
-  padding-left: 20px;
+  padding: 12px 14px 14px;
+  border: 1px solid var(--line);
+  border-top: 0;
+  border-radius: 0 0 8px 8px;
+  background: var(--panel);
 }
 .mail-detail-empty,
 .mail-detail-status {
@@ -718,18 +718,6 @@ textarea {
   to {
     opacity: 1;
     transform: none;
-  }
-}
-
-@media (max-width: 1040px) {
-  .mail-split {
-    grid-template-columns: 1fr;
-  }
-  .mail-detail {
-    border-left: none;
-    border-top: 1px solid var(--line);
-    padding-left: 0;
-    padding-top: 16px;
   }
 }
 

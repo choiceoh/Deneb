@@ -60,6 +60,8 @@ describe("MailPane", () => {
     await userEvent.click(screen.getByText("캐시 본문 메일"));
 
     const detail = screen.getByLabelText("메일 상세");
+    expect(detail.closest("tr")?.className).toContain("dgrid-expanded-row");
+    expect(detail.closest(".mail-split")).toBeNull();
     expect(await within(detail).findByText("캐시된 상세 본문입니다.")).toBeInTheDocument();
   });
 

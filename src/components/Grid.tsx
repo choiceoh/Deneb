@@ -1,7 +1,7 @@
 // Generic dense data grid + the shared disconnected/error/loading/empty notice.
 // Panes describe their columns declaratively; the table chrome (header, row
 // hairlines, hover) lives in the .dgrid class in styles.css.
-import type { CSSProperties, ReactNode } from "react";
+import { Fragment, type CSSProperties, type ReactNode } from "react";
 import { color, muted } from "@/theme";
 import { errText } from "@/format";
 import { useWorkspace } from "@/workspaceContext";
@@ -22,6 +22,7 @@ export function Grid<T>({
   onRowClick,
   isRowSelected,
   rowTitle,
+  renderExpandedRow,
 }: {
   columns: Column<T>[];
   rows: T[];
@@ -31,6 +32,7 @@ export function Grid<T>({
   onRowClick?: (row: T) => void;
   isRowSelected?: (row: T) => boolean;
   rowTitle?: (row: T) => string;
+  renderExpandedRow?: (row: T) => ReactNode;
 }) {
   return (
     <table className="dgrid" style={{ maxWidth }}>
@@ -48,31 +50,38 @@ export function Grid<T>({
           const interactive = Boolean(onRowClick);
           const selected = Boolean(isRowSelected?.(row));
           const className = [interactive ? "clickable" : "", selected ? "selected" : ""].filter(Boolean).join(" ");
+          const expanded = selected ? renderExpandedRow?.(row) : null;
           return (
-            <tr
-              key={getKey(row)}
-              className={className || undefined}
-              style={rowStyle?.(row)}
-              tabIndex={interactive ? 0 : undefined}
-              aria-selected={interactive ? selected : undefined}
-              title={rowTitle?.(row)}
-              onClick={onRowClick ? () => onRowClick(row) : undefined}
-              onKeyDown={
-                onRowClick
-                  ? (e) => {
-                      if (e.key !== "Enter" && e.key !== " ") return;
-                      e.preventDefault();
-                      onRowClick(row);
-                    }
-                  : undefined
-              }
-            >
-              {columns.map((c, i) => (
-                <td key={i} style={c.tdStyle}>
-                  {c.cell(row)}
-                </td>
-              ))}
-            </tr>
+            <Fragment key={getKey(row)}>
+              <tr
+                className={className || undefined}
+                style={rowStyle?.(row)}
+                tabIndex={interactive ? 0 : undefined}
+                aria-selected={interactive ? selected : undefined}
+                title={rowTitle?.(row)}
+                onClick={onRowClick ? () => onRowClick(row) : undefined}
+                onKeyDown={
+                  onRowClick
+                    ? (e) => {
+                        if (e.key !== "Enter" && e.key !== " ") return;
+                        e.preventDefault();
+                        onRowClick(row);
+                      }
+                    : undefined
+                }
+              >
+                {columns.map((c, i) => (
+                  <td key={i} style={c.tdStyle}>
+                    {c.cell(row)}
+                  </td>
+                ))}
+              </tr>
+              {expanded && (
+                <tr className="dgrid-expanded-row">
+                  <td colSpan={columns.length}>{expanded}</td>
+                </tr>
+              )}
+            </Fragment>
           );
         })}
       </tbody>
