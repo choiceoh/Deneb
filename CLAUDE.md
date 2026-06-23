@@ -14,6 +14,7 @@ Deneb gateway over `miniapp.*` RPC, `chat/stream` (SSE), and `events` (SSE).
 Stack: **Tauri 2** (Rust desktop shell) + **React 18** + **Refine** (headless
 admin framework) + **Vite**. Design rationale (why/what): [`docs/DESIGN.md`](docs/DESIGN.md).
 UI·UX design system (how it looks/behaves — tokens, components, patterns): [`docs/UI-UX.md`](docs/UI-UX.md).
+Design philosophy (the beliefs behind the system + how to judge a design): [`docs/DESIGN-PHILOSOPHY.md`](docs/DESIGN-PHILOSOPHY.md).
 
 ## Commands
 
