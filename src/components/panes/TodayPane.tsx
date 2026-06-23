@@ -1,6 +1,9 @@
+import { useEffect, useState } from "react";
+
 import type { CalEvent, Mail, Todo, View, WorkItem } from "@/types";
 import { useCachedList } from "@/cachedList";
 import { calSpan, eventDayKeys, fmtDate, senderName } from "@/format";
+import { getJSON, setJSON } from "@/storage";
 import { Icon, type IconName } from "@/components/Icon";
 import { GridNotice } from "@/components/Grid";
 import { type PaneTarget, useRegisterPane, useWorkspace } from "@/workspaceContext";
@@ -10,8 +13,35 @@ import { type PaneTarget, useRegisterPane, useWorkspace } from "@/workspaceConte
 // through the data provider, shows the top items per section as compact briefings,
 // and serializes the whole briefing to the AI panel via useRegisterPane.
 // Prioritizing ("오늘 뭐부터?") is delegated to Deneb through that text projection.
+//
+// The dashboard is user-customizable: each section can be hidden and reordered
+// from the inline "편집" editor; the choice persists to localStorage (per device).
 
 const MAX = 6; // a briefing is a glance; the full list lives in each resource's own pane.
+
+// Stable section keys (== each brief's `view`), the customization axis.
+const SECTIONS = ["calendar", "mail", "todo", "workfeed"] as const;
+type SectionKey = (typeof SECTIONS)[number];
+const SECTION_LABEL: Record<SectionKey, string> = {
+  calendar: "일정",
+  mail: "메일",
+  todo: "할일",
+  workfeed: "작업피드",
+};
+const TODAY_ORDER_KEY = "andromeda.todayOrder";
+const TODAY_HIDDEN_KEY = "andromeda.todayHidden";
+
+function validKeys(raw: unknown): SectionKey[] {
+  return Array.isArray(raw) ? raw.filter((k): k is SectionKey => SECTIONS.includes(k as SectionKey)) : [];
+}
+// Saved order, with any new/missing sections appended in registry order.
+function readOrder(): SectionKey[] {
+  const saved = validKeys(getJSON<unknown[]>(TODAY_ORDER_KEY));
+  return [...saved, ...SECTIONS.filter((k) => !saved.includes(k))];
+}
+function readHidden(): SectionKey[] {
+  return validKeys(getJSON<unknown[]>(TODAY_HIDDEN_KEY));
+}
 
 interface Brief {
   label: string;
@@ -46,6 +76,29 @@ function sectionText(b: Brief): string {
 
 export function TodayPane() {
   const { connected, openPane, setView } = useWorkspace();
+  const [order, setOrder] = useState<SectionKey[]>(readOrder);
+  const [hidden, setHidden] = useState<SectionKey[]>(readHidden);
+  const [editing, setEditing] = useState(false);
+
+  useEffect(() => {
+    setJSON(TODAY_ORDER_KEY, order);
+  }, [order]);
+  useEffect(() => {
+    setJSON(TODAY_HIDDEN_KEY, hidden);
+  }, [hidden]);
+
+  function toggleHidden(k: SectionKey) {
+    setHidden((p) => (p.includes(k) ? p.filter((x) => x !== k) : [...p, k]));
+  }
+  function move(k: SectionKey, dir: -1 | 1) {
+    const i = order.indexOf(k);
+    const j = i + dir;
+    if (j < 0 || j >= order.length) return;
+    const next = [...order];
+    [next[i], next[j]] = [next[j], next[i]];
+    setOrder(next);
+  }
+
   const cal = useCachedList<CalEvent>("calendar", connected);
   const mail = useCachedList<Mail>("mail", connected);
   const todo = useCachedList<Todo>("todo", connected);
@@ -126,24 +179,81 @@ export function TodayPane() {
     },
   ];
 
-  // The full briefing the AI panel reads — exactly what's on screen, as text.
-  const body = briefs.map(sectionText).filter(Boolean).join("\n\n");
+  // Apply the user's customization: order the sections and drop hidden ones.
+  const byKey: Record<string, Brief> = {};
+  for (const b of briefs) byKey[b.view] = b;
+  const shown = order
+    .filter((k) => !hidden.includes(k))
+    .map((k) => byKey[k])
+    .filter((b): b is Brief => Boolean(b));
+
+  // The full briefing the AI panel reads — exactly what's on screen (customized), as text.
+  const body = shown.map(sectionText).filter(Boolean).join("\n\n");
   useRegisterPane(undefined, body ? `[오늘 브리핑]\n${body}` : "");
 
   const today = new Date().toLocaleDateString(undefined, { month: "long", day: "numeric", weekday: "short" });
 
   return (
     <>
-      <h2 style={{ marginTop: 2 }}>
-        오늘 <span className="today-date">{today}</span>
-      </h2>
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <h2 style={{ marginTop: 2 }}>
+          오늘 <span className="today-date">{today}</span>
+        </h2>
+        {connected && (
+          <button
+            className={"row-btn" + (editing ? " active" : "")}
+            style={{ marginLeft: "auto" }}
+            onClick={() => setEditing((e) => !e)}
+            aria-pressed={editing}
+          >
+            {editing ? "완료" : "편집"}
+          </button>
+        )}
+      </div>
+
+      {connected && editing && (
+        <div className="today-editor">
+          <div className="today-editor-hint">표시할 섹션과 순서를 정하세요.</div>
+          {order.map((k, idx) => (
+            <div key={k} className="today-editor-row">
+              <label className="today-editor-label">
+                <input type="checkbox" checked={!hidden.includes(k)} onChange={() => toggleHidden(k)} />
+                {SECTION_LABEL[k]}
+              </label>
+              <button
+                className="row-btn"
+                onClick={() => move(k, -1)}
+                disabled={idx === 0}
+                title="위로"
+                aria-label={`${SECTION_LABEL[k]} 위로`}
+              >
+                ↑
+              </button>
+              <button
+                className="row-btn"
+                onClick={() => move(k, 1)}
+                disabled={idx === order.length - 1}
+                title="아래로"
+                aria-label={`${SECTION_LABEL[k]} 아래로`}
+              >
+                ↓
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
       {!connected ? (
         <p style={{ color: "var(--muted-2)", fontSize: 13 }}>미연결</p>
+      ) : shown.length === 0 ? (
+        <p style={{ color: "var(--muted-2)", fontSize: 13, marginTop: 14 }}>
+          표시할 섹션이 없습니다 — 편집에서 켜세요.
+        </p>
       ) : (
         <div className="today-grid">
-          {briefs.map((b, i) => (
+          {shown.map((b, i) => (
             <Section
-              key={b.label}
+              key={b.view}
               brief={b}
               index={i}
               onNav={() => setView(b.view)}

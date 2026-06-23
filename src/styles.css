@@ -1433,6 +1433,38 @@ textarea {
   color: var(--muted-2);
 }
 
+/* inline dashboard editor — show/hide + reorder the 오늘 sections */
+.today-editor {
+  margin: 14px 0 4px;
+  padding: 10px 12px;
+  max-width: 360px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-ctl);
+  background: var(--panel-sunken);
+  display: grid;
+  gap: 2px;
+}
+.today-editor-hint {
+  font-size: 11px;
+  color: var(--muted-2);
+  margin-bottom: 4px;
+}
+.today-editor-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+  font-size: 13px;
+}
+.today-editor-label {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex: 1;
+  cursor: pointer;
+  color: var(--ink-2);
+}
+
 /* month calendar (일정 pane) — compact grid with event presence markers */
 .cal-nav-btn {
   display: inline-flex;

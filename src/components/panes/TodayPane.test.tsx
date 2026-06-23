@@ -104,4 +104,23 @@ describe("TodayPane (오늘 대시보드)", () => {
     renderWithProviders(<TodayPane />, { connected: false });
     expect(screen.getAllByText(/미연결/)).toHaveLength(1);
   });
+
+  it("hides a section via the inline editor and persists the choice", async () => {
+    const dataProvider = fakeProvider({
+      calendar: [{ id: "c1", title: "스탠드업", start: { dateTime: "2026-06-18T09:00:00" } }],
+      mail: [{ id: "m1", subject: "예산 검토", from: "kim@corp.com" }],
+    });
+    renderWithProviders(<TodayPane />, { connected: true, dataProvider });
+    expect(await screen.findByText(/예산 검토/)).toBeInTheDocument(); // mail section visible by default
+
+    // Open the inline editor and uncheck 메일.
+    await userEvent.click(screen.getByRole("button", { name: "편집" }));
+    const mailToggle = screen.getByRole("checkbox", { name: "메일" });
+    expect(mailToggle).toBeChecked();
+    await userEvent.click(mailToggle);
+
+    // The 메일 section drops out of the dashboard, and the choice persists.
+    expect(screen.queryByText(/예산 검토/)).not.toBeInTheDocument();
+    expect(JSON.parse(localStorage.getItem("andromeda.todayHidden") ?? "[]")).toContain("mail");
+  });
 });
