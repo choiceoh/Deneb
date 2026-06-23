@@ -1,26 +1,26 @@
-// project_digest.go — per-project "latest progress" digests.
+// project_digest.go — the dream cycle's per-project latest-progress roll-up.
 //
 // The wiki holds project STATE (a page's summary describes the whole page;
-// `updated` is just the last-touched date). Neither answers "what actually
-// moved on this project recently" — the chief-of-staff's glance question.
-// This extraction pass reads the same fresh diary/MEMORY input the synthesis
-// pass consumes and asks the LLM to roll it up BY PROJECT: a one-line headline
-// plus the two or three concrete developments, only for projects that actually
-// saw activity this cycle. The wired sink persists them (the native client
-// renders a "프로젝트 진행상황" 모아보기 screen).
+// `updated` is just the last-touched date). Neither answers "what actually moved
+// on this project recently" — the chief-of-staff's glance question. Each dream
+// cycle reads the same fresh diary/MEMORY input the synthesis pass consumes and
+// asks the LLM to roll it up BY PROJECT, then writes each roll-up into that
+// project's 대표페이지 "## 현재 상태" section (see project_status.go). The 모아보기
+// screen reads those sections; mail analysis keeps them fresh between cycles by
+// appending dated bullets (the server's mail sink → AppendProjectStatusLine).
 //
 // Like open_loops.go this is a separate, focused LLM call on purpose: the
 // wiki-synthesis JSON contract has a history of drift-induced parse failures,
 // and a failed digest pass must never cost a wiki consolidation cycle (and vice
-// versa). Best-effort, fail-open — a bad pass logs and is skipped.
+// versa). Best-effort, fail-open — a bad pass logs and is skipped. The roll-up is
+// anchored to the real 프로젝트/ taxonomy: a project label the LLM invents that
+// isn't a real page is dropped, so it can't write a stray page or a dead card.
 package wiki
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"path/filepath"
-	"sort"
 	"strings"
 	"time"
 
@@ -29,16 +29,19 @@ import (
 )
 
 // projectCategoryPrefix is the top-level wiki category that holds project pages
-// (프로젝트/<name>/…). Digests are anchored to the <name> segment so a digest's
+// (프로젝트/<name>.md). Digests are anchored to these direct pages so a digest's
 // project label always names a real, navigable bucket — not free LLM text.
 const projectCategoryPrefix = "프로젝트"
 
-// ProjectDigest is one project's latest-progress roll-up for the cycle.
+// ProjectDigest is one project's latest-progress roll-up for the cycle. Path is
+// resolved from the digest's project label against the real taxonomy (not from
+// the LLM) and names the 대표페이지 the roll-up is written to.
 type ProjectDigest struct {
-	Project  string   `json:"project"`       // project name (the 프로젝트/<name> bucket, e.g. "영산고")
+	Project  string   `json:"project"`       // project name (must match a known 프로젝트/<name> page)
 	Headline string   `json:"headline"`      // one-line current status (Korean)
 	Bullets  []string `json:"bullets"`       // 2-3 concrete recent developments
 	Due      string   `json:"due,omitempty"` // YYYY-MM-DD imminent deadline when stated, else ""
+	Path     string   `json:"-"`             // resolved 대표페이지 path (filled by extractProjectDigests)
 }
 
 // projectDigestMaxPerCycle caps extraction output; a cycle that "finds" dozens
@@ -56,66 +59,24 @@ const projectDigestMaxTokens = 2048
 // the digest pass, not the remaining dream-cycle budget.
 const projectDigestTimeout = 2 * time.Minute
 
-// SetProjectDigestSink wires the destination for per-project digests. The sink
-// returns how many digests it wrote (an upsert per project; the store keeps no
-// new-vs-existing distinction). nil disables the digest pass entirely.
-func (wd *WikiDreamer) SetProjectDigestSink(fn func(ctx context.Context, digests []ProjectDigest) (int, error)) {
-	wd.projectDigestSink = fn
-}
-
-// knownProjectNames returns the distinct project names under the 프로젝트/ wiki
-// category — the first path segment below it (a project kept as a single page,
-// 프로젝트/<name>.md, contributes <name> too). Anchoring digests to this set keeps
-// the LLM's project label aligned with the real navigable taxonomy: names the
-// client can open (프로젝트/<name>) and stable store keys that don't accrete a
-// zombie file per misspelling. Empty when the store is unset or has no project
-// pages. Runs once per cycle (offline), so the filesystem walk is cheap.
-func (wd *WikiDreamer) knownProjectNames() []string {
-	if wd.store == nil {
-		return nil
-	}
-	paths, err := wd.store.ListPages(projectCategoryPrefix)
-	if err != nil {
-		return nil
-	}
-	prefix := projectCategoryPrefix + "/"
-	seen := make(map[string]struct{})
-	var names []string
-	for _, rel := range paths {
-		rel = filepath.ToSlash(rel) // Walk yields OS separators; normalize to "/"
-		if !strings.HasPrefix(rel, prefix) {
-			continue
-		}
-		seg := strings.SplitN(strings.TrimPrefix(rel, prefix), "/", 2)[0]
-		seg = strings.TrimSpace(strings.TrimSuffix(seg, ".md"))
-		if seg == "" {
-			continue
-		}
-		if _, ok := seen[seg]; ok {
-			continue
-		}
-		seen[seg] = struct{}{}
-		names = append(names, seg)
-	}
-	sort.Strings(names)
-	return names
-}
-
 // extractProjectDigests runs the focused per-project roll-up over the cycle
 // input, anchored to the real 프로젝트/ taxonomy so a hallucinated or misspelled
-// project label can't produce a dead drill-down or a zombie store file.
+// project label can't produce a dead drill-down or a stray page. Each kept
+// digest carries the resolved 대표페이지 Path.
 func (wd *WikiDreamer) extractProjectDigests(ctx context.Context, content string) ([]ProjectDigest, error) {
-	if wd.client == nil || strings.TrimSpace(content) == "" {
+	if wd.client == nil || wd.store == nil || strings.TrimSpace(content) == "" {
 		return nil, nil
 	}
-	// No known projects → nothing to anchor a digest to; skip the LLM call.
-	known := wd.knownProjectNames()
+	// Anchor to the real project pages; no projects → nothing to digest.
+	known := wd.store.knownProjects()
 	if len(known) == 0 {
 		return nil, nil
 	}
-	knownSet := make(map[string]struct{}, len(known))
-	for _, n := range known {
-		knownSet[n] = struct{}{}
+	byName := make(map[string]string, len(known)) // name → 대표페이지 path
+	names := make([]string, 0, len(known))
+	for _, r := range known {
+		byName[r.Name] = r.Path
+		names = append(names, r.Name)
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, projectDigestTimeout)
@@ -138,7 +99,7 @@ func (wd *WikiDreamer) extractProjectDigests(ctx context.Context, content string
 근황이 없으면 [] 를 반환하세요.
 
 ## 일지/메모
-%s`, formatProjectList(known), projectDigestMaxPerCycle, content)
+%s`, formatProjectList(names), projectDigestMaxPerCycle, content)
 
 	systemJSON, _ := json.Marshal("You summarize the latest progress per project. Respond only with a JSON array.")
 	resp, err := wd.client.Complete(ctx, llm.ChatRequest{
@@ -154,19 +115,52 @@ func (wd *WikiDreamer) extractProjectDigests(ctx context.Context, content string
 	if err != nil {
 		return nil, err
 	}
-	// Hard guard: keep only digests whose project is a real bucket, regardless of
-	// what the model emitted — the prompt constraint is advisory, this is the
-	// enforcement that prevents dead drill-downs and zombie files.
+	// Hard guard: keep only digests whose project is a real page, regardless of
+	// what the model emitted, and attach its resolved path.
 	kept := make([]ProjectDigest, 0, len(digests))
 	for _, d := range digests {
-		if _, ok := knownSet[strings.TrimSpace(d.Project)]; ok {
-			kept = append(kept, d)
+		path, ok := byName[strings.TrimSpace(d.Project)]
+		if !ok {
+			continue
 		}
+		d.Path = path
+		kept = append(kept, d)
 	}
 	if dropped := len(digests) - len(kept); dropped > 0 {
 		wd.logger.Debug("wiki-dream: dropped digests for unknown projects", "dropped", dropped)
 	}
 	return kept, nil
+}
+
+// applyProjectDigests writes each roll-up into its project's 현재 상태 section
+// (headline first, then bullets). Returns how many pages were updated. now is
+// injected for deterministic tests. Best-effort: a per-page write failure logs
+// and is skipped, never aborting the others.
+func (wd *WikiDreamer) applyProjectDigests(digests []ProjectDigest, now time.Time) int {
+	wrote := 0
+	for _, d := range digests {
+		if d.Path == "" {
+			continue
+		}
+		lines := make([]string, 0, len(d.Bullets)+1)
+		if h := strings.TrimSpace(d.Headline); h != "" {
+			lines = append(lines, h)
+		}
+		for _, b := range d.Bullets {
+			if b = strings.TrimSpace(b); b != "" {
+				lines = append(lines, b)
+			}
+		}
+		if len(lines) == 0 {
+			continue
+		}
+		if err := wd.store.SetProjectStatus(d.Path, lines, d.Due, now); err != nil {
+			wd.logger.Warn("wiki-dream: project status write failed", "path", d.Path, "error", err)
+			continue
+		}
+		wrote++
+	}
+	return wrote
 }
 
 // formatProjectList renders the known project names as a bulleted list for the

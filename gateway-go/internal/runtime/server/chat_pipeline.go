@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agentlog"
@@ -24,16 +23,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/pilot"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/polaris"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp"
 )
-
-// projectDigestsDir is the single source of truth for where per-project
-// latest-progress digests live: the wiki-dream sink writes here and the
-// miniapp.project.digests handler reads here (both must agree, or digests are
-// written but never surfaced). Under the gateway state dir.
-func projectDigestsDir() string {
-	return filepath.Join(config.ResolveStateDir(), "project_digests")
-}
 
 // initMemorySubsystem initializes model registry, session memory, and wiki.
 // All results are set on chatCfg and s.
@@ -92,29 +82,10 @@ func (s *Server) initMemorySubsystem(chatCfg *chat.HandlerConfig, regPtr **model
 				s.wikiDreamer.SetWorkspaceDir(resolveWorkspaceDir())
 				// Open loops are no longer auto-recorded as to-dos (operator approval
 				// first) — no open-loop sink is wired (the dreamer skips it when nil).
-				// Per-project latest-progress digests: each cycle's roll-up upserts
-				// into the project digest store, which the native "프로젝트 진행상황"
-				// screen reads (miniapp.project.digests). Stateless dir wrapper over
-				// the same dir the handler reads; a save failure is surfaced to the
-				// dreamer's phase-error log, never fails the cycle.
-				digestStore := handlerminiapp.NewProjectDigestStore(projectDigestsDir())
-				s.wikiDreamer.SetProjectDigestSink(func(_ context.Context, digests []wiki.ProjectDigest) (int, error) {
-					now := time.Now()
-					saved := 0
-					for _, d := range digests {
-						if err := digestStore.SaveDigest(handlerminiapp.ProjectDigestInput{
-							Project:   d.Project,
-							Headline:  d.Headline,
-							Bullets:   d.Bullets,
-							Due:       d.Due,
-							UpdatedAt: now,
-						}); err != nil {
-							return saved, err
-						}
-						saved++
-					}
-					return saved, nil
-				})
+				// Per-project latest-progress digests are written directly into each
+				// project 대표페이지's "## 현재 상태" section by the dream cycle itself
+				// (no sink — the dreamer owns the wiki store; see project_digest.go),
+				// and kept fresh between cycles by the mail-analysis sink.
 				// Mention-driven 인물 seeding from the contacts mirror.
 				if cs := s.contactsStore; cs != nil {
 					s.wikiDreamer.SetPersonDirectory(func() []wiki.PersonSeed {

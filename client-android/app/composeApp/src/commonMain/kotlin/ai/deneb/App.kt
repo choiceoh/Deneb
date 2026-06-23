@@ -669,8 +669,8 @@ private fun AppContent(
                                     DenebProjectDigestScreen(
                                         client = client,
                                         onBack = { navController.navigateUp() },
-                                        // Tap a project → open its pages (the 프로젝트/<name> wiki bucket).
-                                        onOpenProject = { proj -> navController.navigate(DenebCategoryPages("프로젝트/$proj")) },
+                                        // Tap a project → open its 대표페이지 (the wiki page the digest lives on).
+                                        onOpenProject = { path -> navController.navigate(DenebWiki(path)) },
                                         navigationTabBar = if (showTabBar) navigationTabBar else null,
                                     )
                                 }

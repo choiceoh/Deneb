@@ -205,6 +205,12 @@ func (s *Server) makeMailAnalysisSink() func(*gmail.MessageDetail, gmailpoll.Ana
 				s.logger.Warn("mail analysis 위키 저장 실패", "id", msg.ID, "error", err)
 				errs = append(errs, err)
 			}
+			// Event-driven freshness: prepend a dated bullet onto each linked
+			// project 대표페이지's "## 현재 상태" section so the 모아보기 reflects this
+			// mail without waiting for the next dream cycle. No LLM — deterministic
+			// line, idempotent by mail id. Best-effort: failures log, never fail
+			// the analysis.
+			s.appendMailStatusToProjects(msg, res)
 		}
 		// Mail no longer auto-creates to-dos (operator approval first): schedule-worthy
 		// follow-ups surface as calendar PROPOSALS (the bell) to accept — see below.
@@ -367,4 +373,56 @@ func dealEvidenceText(deal *gmailpoll.DealInfo, msg *gmail.MessageDetail) string
 	writeField("요약", deal.Summary)
 	writeField("메일 제목", msg.Subject)
 	return strings.TrimSpace(b.String())
+}
+
+// appendMailStatusToProjects prepends a dated status bullet onto every project
+// 대표페이지 the analyzer linked, so the 모아보기 reflects a freshly-analyzed mail
+// between dream cycles. Only direct project pages (프로젝트/<name>.md, count of
+// "/" == 1) are touched — the raw-data sub-folders (mail-analyses/, 거래/) are
+// skipped, mirroring projectCandidatesFn. Idempotent by mail id; best-effort
+// (a failure logs, never fails the analysis).
+func (s *Server) appendMailStatusToProjects(msg *gmail.MessageDetail, res gmailpoll.AnalysisResult) {
+	if s.wikiStore == nil || msg == nil {
+		return
+	}
+	line := mailStatusLine(msg, res)
+	if line == "" {
+		return
+	}
+	ref := "mail:" + msg.ID
+	now := time.Now()
+	prefix := wikiProjectCategory + "/"
+	seen := make(map[string]bool, len(res.RelatedProjects))
+	for _, r := range res.RelatedProjects {
+		r = strings.TrimSpace(r)
+		if !strings.HasPrefix(r, prefix) || strings.Count(r, "/") != 1 {
+			continue // direct project page only (skips mail-analyses/, 거래/, deeper)
+		}
+		if seen[r] {
+			continue
+		}
+		seen[r] = true
+		if err := s.wikiStore.AppendProjectStatusLine(r, line, ref, now); err != nil {
+			s.logger.Warn("mail→project 현재 상태 갱신 실패", "id", msg.ID, "path", r, "error", err)
+		}
+	}
+}
+
+// mailStatusLine renders the one-line status entry for a project from an analyzed
+// mail: the deal title when it's a recognized business document ("견적서 · 탑솔라
+// 수신"), else the sender + subject. Empty when there's nothing to say.
+func mailStatusLine(msg *gmail.MessageDetail, res gmailpoll.AnalysisResult) string {
+	if d := res.Deal; d != nil {
+		if t := strings.TrimSpace(dealEvidenceTitle(d)); t != "" && t != "거래 문서" {
+			return t + " 수신"
+		}
+	}
+	subj := strings.TrimSpace(msg.Subject)
+	if subj == "" {
+		return ""
+	}
+	if sender := strings.TrimSpace(senderShortLabel(msg.From)); sender != "" {
+		return sender + ": " + clipRunes(subj, 60)
+	}
+	return clipRunes(subj, 60)
 }

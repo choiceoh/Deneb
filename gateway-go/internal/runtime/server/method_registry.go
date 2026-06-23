@@ -427,13 +427,20 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		handlerminiapp.DashboardMethods(s.dashboardDeps()),
 
 		// Mini App project digests (miniapp.project.digests). Each active
-		// project's latest-progress roll-up (headline + bullets + any imminent
-		// due) for the "프로젝트 진행상황" 모아보기 screen. Digests are produced
-		// offline by the wiki dream cycle (project_digest.go) and read here from
-		// disk — no LLM on the read path, so the screen loads instantly. Same dir
-		// the dream sink writes to (projectDigestsDir, chat_pipeline.go).
+		// project's latest-progress digest lives ON its 대표페이지 (프로젝트/<name>.md)
+		// "## 현재 상태" section — written by the dream cycle (LLM roll-up) and kept
+		// fresh by mail analysis (dated bullets). This reads those sections from the
+		// wiki store; no LLM on the read path, so the screen loads instantly. Lazy
+		// factory (wiki is late-bound in the session phase) — UNAVAILABLE when wiki
+		// is disabled, exactly like the memory factory.
 		handlerminiapp.ProjectMethods(handlerminiapp.ProjectDeps{
-			Store: handlerminiapp.NewProjectDigestStore(projectDigestsDir()),
+			Wiki: func() (handlerminiapp.ProjectStatusSource, error) {
+				store := hub.WikiStore()
+				if store == nil {
+					return nil, errWikiDisabled
+				}
+				return store, nil
+			},
 		}),
 
 		// Mini App org chart editor (miniapp.org.{get,save}). The org chart
