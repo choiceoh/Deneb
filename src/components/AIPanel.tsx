@@ -1,15 +1,8 @@
-import { useEffect, useRef, useState } from "react";
-import {
-  type GatewayConfig,
-  type ModelsList,
-  type SessionRow,
-  deleteSession,
-  listModels,
-  recentSessions,
-  sessionTranscript,
-} from "@/gateway";
+import { useEffect, useState } from "react";
+import { type GatewayConfig, type ModelsList, listModels } from "@/gateway";
 import { type ChatTurn, useChat } from "@/hooks";
-import { errText } from "@/format";
+import { useSessions } from "@/useSessions";
+import { useStickyScroll } from "@/useStickyScroll";
 import { useWorkspace } from "@/workspaceContext";
 import { Icon } from "./Icon";
 import { LiveDot } from "./LiveDot";
@@ -18,8 +11,6 @@ import { ModelPicker } from "./ModelPicker";
 import { ProactivePanel } from "./ProactivePanel";
 import { SessionDrawer } from "./SessionDrawer";
 import { ToolChip } from "./ToolChip";
-
-const MAIN_SESSION = "client:main";
 
 // One assistant reply: ordered text (Markdown) and tool chips, or — for a
 // transcript-loaded / pre-stream turn with no parts — the plain body as Markdown.
@@ -52,25 +43,16 @@ export function AIPanel({ cfg }: { cfg: GatewayConfig }) {
   const [input, setInput] = useState("");
   const [models, setModels] = useState<ModelsList | null>(null);
   const [model, setModel] = useState(""); // selected override id ("" → gateway main)
-  const [sessionKey, setSessionKey] = useState(MAIN_SESSION);
-  const [sessions, setSessions] = useState<SessionRow[]>([]);
-  const [sessionsOpen, setSessionsOpen] = useState(false);
-  const [sessionErr, setSessionErr] = useState("");
-  const transcriptRef = useRef<HTMLDivElement>(null);
-  // Follow the newest message while it streams, but don't yank the view back down
-  // if the user has scrolled up to read earlier turns.
-  const pinnedRef = useRef(true);
-  useEffect(() => {
-    const el = transcriptRef.current;
-    if (el && pinnedRef.current) el.scrollTop = el.scrollHeight;
-  }, [turns, thinking]);
+  const { sessions, sessionKey, sessionsOpen, sessionErr, toggleSessions, selectSession, removeSession, newChat } =
+    useSessions(cfg, connected, busy, { clear, setTurns });
+  // Follow the newest message while it streams, unless the user scrolled up to read.
+  const { ref: transcriptRef, onScroll, pin } = useStickyScroll([turns, thinking]);
 
-  // Load the model registry + recent sessions once connected; both are
-  // best-effort (an older gateway or the offline test path just leaves them empty).
+  // Load the model registry once connected; best-effort (older gateway / the offline
+  // test path just leaves it empty).
   useEffect(() => {
     if (!connected) {
       setModels(null);
-      setSessions([]);
       return;
     }
     let cancelled = false;
@@ -80,9 +62,6 @@ export function AIPanel({ cfg }: { cfg: GatewayConfig }) {
         setModels(m);
         setModel((prev) => prev || m.current || "");
       })
-      .catch(() => {});
-    void recentSessions(cfg, 20)
-      .then((s) => !cancelled && setSessions(s))
       .catch(() => {});
     return () => {
       cancelled = true;
@@ -94,61 +73,8 @@ export function AIPanel({ cfg }: { cfg: GatewayConfig }) {
     const msg = message.trim();
     if (!msg || busy || !connected) return;
     setInput("");
-    pinnedRef.current = true; // a fresh send always rides down to the latest
+    pin(); // a fresh send always rides down to the latest
     void send(msg, { workspaceContext: aiText, activeResource, model: model || undefined, sessionKey });
-  }
-
-  async function refreshSessions() {
-    try {
-      setSessions(await recentSessions(cfg, 20));
-      setSessionErr("");
-    } catch (e) {
-      setSessionErr(errText(e));
-    }
-  }
-
-  function toggleSessions() {
-    const next = !sessionsOpen;
-    setSessionsOpen(next);
-    if (next) void refreshSessions();
-  }
-
-  function newChat() {
-    if (busy) return;
-    setSessionsOpen(false);
-    setSessionKey(MAIN_SESSION);
-    clear();
-  }
-
-  // Switch conversations: load the picked session's transcript and continue it.
-  async function selectSession(key: string) {
-    if (busy) return;
-    setSessionsOpen(false);
-    setSessionKey(key);
-    try {
-      const msgs = await sessionTranscript(cfg, key);
-      setTurns(
-        msgs.map((m, i) => ({
-          id: m.id || `tr-${key}-${i}`,
-          role: m.role === "user" ? "user" : "assistant",
-          text: m.content,
-          status: "done" as const,
-        })),
-      );
-      setSessionErr("");
-    } catch (e) {
-      setSessionErr(errText(e));
-    }
-  }
-
-  async function removeSession(key: string) {
-    try {
-      await deleteSession(cfg, key);
-      setSessions((prev) => prev.filter((s) => s.key !== key));
-      if (key === sessionKey) newChat();
-    } catch (e) {
-      setSessionErr(errText(e));
-    }
   }
 
   const lastId = turns.at(-1)?.id;
@@ -193,10 +119,7 @@ export function AIPanel({ cfg }: { cfg: GatewayConfig }) {
         aria-live="polite"
         aria-label="Deneb 대화"
         ref={transcriptRef}
-        onScroll={() => {
-          const el = transcriptRef.current;
-          if (el) pinnedRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
-        }}
+        onScroll={onScroll}
       >
         {turns.length === 0 ? (
           connected ? null : (
