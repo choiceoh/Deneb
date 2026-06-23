@@ -50,7 +50,9 @@ export function Workstation({ cfg }: { cfg: GatewayConfig }) {
       <div className="drag-strip" data-tauri-drag-region />
       <Sidebar />
       <main className="panel" style={{ flex: 1, minWidth: 0, overflow: "auto", padding: "20px 22px" }}>
-        <Active />
+        <div key={view} className="pane-enter">
+          <Active />
+        </div>
       </main>
       <AIPanel cfg={cfg} />
     </div>

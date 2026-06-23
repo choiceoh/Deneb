@@ -56,6 +56,9 @@
   --ai-w: 352px;
   --gap: 12px;
 
+  /* motion — the signature ease-out, shared by entrances and the Zen tab lift */
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+
   --font: "Pretendard Variable", Pretendard, system-ui, "Segoe UI", "Malgun Gothic", sans-serif;
 }
 
@@ -227,15 +230,15 @@ textarea {
   cursor: pointer;
   text-align: left;
   transition:
-    background 0.15s ease,
-    color 0.15s ease,
-    box-shadow 0.15s ease;
+    background 0.15s var(--ease),
+    color 0.15s var(--ease),
+    box-shadow 0.2s var(--ease);
 }
 .nav-item .ico {
   flex: 0 0 auto;
   display: inline-flex;
   color: var(--muted-2);
-  transition: color 0.15s ease;
+  transition: color 0.15s var(--ease);
 }
 .nav-item:hover {
   background: rgba(255, 255, 255, 0.6);
@@ -367,6 +370,7 @@ textarea {
   display: grid;
   gap: 4px;
   max-width: 94%;
+  animation: fadeUp 0.3s var(--ease) both;
 }
 .ai-turn.user {
   align-self: flex-end;
@@ -543,6 +547,7 @@ textarea {
   background: var(--panel);
   border: 1px solid var(--line-2);
   border-radius: var(--radius-pill);
+  animation: chipIn 0.22s var(--ease) both;
 }
 .tool-chip-ico {
   display: inline-flex;
@@ -1728,7 +1733,35 @@ textarea {
   }
 }
 .fade-up {
-  animation: fadeUp 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  animation: fadeUp 0.45s var(--ease) both;
+}
+
+/* work-area pane switch — the incoming pane settles in. Opacity only, so it never
+ * fights a pane's own staggered .fade-up sections; height:100% so full-height
+ * panes (위키·파일) still resolve their percentage layout. */
+@keyframes paneIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.pane-enter {
+  height: 100%;
+  animation: paneIn 0.24s var(--ease) both;
+}
+
+/* a tool chip popping into a streaming reply */
+@keyframes chipIn {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 /* floating overlay — detail views & edit forms (Modal.tsx) */
@@ -1792,9 +1825,9 @@ textarea {
   border-radius: var(--radius-pill);
   cursor: pointer;
   transition:
-    background 0.15s ease,
-    color 0.15s ease,
-    box-shadow 0.15s ease;
+    background 0.15s var(--ease),
+    color 0.15s var(--ease),
+    box-shadow 0.2s var(--ease);
 }
 .settings-tab:hover:not(.active) {
   color: var(--ink-2);
