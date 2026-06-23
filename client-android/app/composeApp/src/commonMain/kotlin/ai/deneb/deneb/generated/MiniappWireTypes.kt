@@ -466,6 +466,7 @@ data class ProjectDigestRow(
     val bullets: List<String> = emptyList(),
     val due: String = "",
     val updatedAtMs: Long = 0L,
+    val path: String = "",
 )
 
 @Immutable

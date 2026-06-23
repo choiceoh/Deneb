@@ -134,10 +134,6 @@ type WikiDreamer struct {
 	// (see open_loops.go). nil disables the extraction pass.
 	openLoopSink func(ctx context.Context, loops []OpenLoop) (int, error)
 
-	// projectDigestSink receives per-project latest-progress digests extracted
-	// each cycle (see project_digest.go). nil disables the digest pass.
-	projectDigestSink func(ctx context.Context, digests []ProjectDigest) (int, error)
-
 	// personDirectory supplies the address-book snapshot for mention-driven
 	// 인물 page seeding (see person_seed.go). nil disables seeding.
 	personDirectory func() []PersonSeed
@@ -318,22 +314,14 @@ func (wd *WikiDreamer) RunDream(ctx context.Context) (*autonomous.DreamReport, e
 	}
 
 	// Phase 3d: project digests — roll up per-project latest progress from the
-	// same input and hand them to the wired sink (the native client renders a
-	// "프로젝트 진행상황" 모아보기 screen). Best-effort: a failed digest pass never
-	// costs the consolidation cycle.
-	if wd.projectDigestSink != nil {
-		digests, derr := wd.extractProjectDigests(ctx, synthInput)
-		switch {
-		case derr != nil:
-			phaseErrors = append(phaseErrors, fmt.Sprintf("project-digests: %v", derr))
-		case len(digests) > 0:
-			if added, serr := wd.projectDigestSink(ctx, digests); serr != nil {
-				phaseErrors = append(phaseErrors, fmt.Sprintf("project-digests-sink: %v", serr))
-			} else if added > 0 {
-				// "written", not "new": SaveDigest upserts, so this is the count of
-				// digests persisted this cycle, not newly-discovered projects.
-				wd.logger.Info("wiki-dream: project digests updated", "written", added)
-			}
+	// same input and write each into its project 대표페이지's "## 현재 상태" section
+	// (the native "프로젝트 진행상황" 모아보기 screen reads those sections). Best-effort:
+	// a failed digest pass never costs the consolidation cycle.
+	if digests, derr := wd.extractProjectDigests(ctx, synthInput); derr != nil {
+		phaseErrors = append(phaseErrors, fmt.Sprintf("project-digests: %v", derr))
+	} else if len(digests) > 0 {
+		if written := wd.applyProjectDigests(digests, time.Now()); written > 0 {
+			wd.logger.Info("wiki-dream: project status updated", "written", written)
 		}
 	}
 

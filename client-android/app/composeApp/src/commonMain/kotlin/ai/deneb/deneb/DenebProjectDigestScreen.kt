@@ -43,8 +43,9 @@ import kotlin.time.Instant
  * the full state), this is the chief-of-staff's glance: one card per project with
  * the current one-line headline + the two or three things that actually moved
  * recently, newest-active project first. The digests are written offline by the
- * wiki dream cycle, so the screen loads instantly from disk; pull to refresh just
- * re-reads. Tapping a card opens that project's pages (프로젝트/<name> category).
+ * wiki dream cycle and kept fresh by mail analysis, so the screen loads instantly
+ * from disk; pull to refresh just re-reads. Tapping a card opens that project's
+ * 대표페이지 (the wiki page the 현재 상태 digest lives on).
  *
  * Design split (see .claude/rules/native-design-system.md): frame + type are the
  * Deneb skin (DenebScreenScaffold + DenebType + grouped DenebGroup cards); the
@@ -127,7 +128,9 @@ internal fun ProjectDigestContent(digests: List<ProjectDigestRow>, onOpenProject
     val tz = remember { TimeZone.currentSystemDefault() }
     Column(Modifier.fillMaxWidth().padding(top = 4.dp)) {
         digests.forEach { d ->
-            ProjectDigestCard(d = d, tz = tz, onOpen = { onOpenProject(d.project) })
+            // Tap opens the project 대표페이지 by its wiki path; guard a blank path
+            // (a degenerate digest) so the row just doesn't navigate.
+            ProjectDigestCard(d = d, tz = tz, onOpen = { if (d.path.isNotBlank()) onOpenProject(d.path) })
             Spacer(Modifier.height(18.dp))
         }
     }
