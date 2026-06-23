@@ -25,15 +25,41 @@ function capturing(fixtures: Record<string, unknown[]>, sink: Record<string, unk
   };
 }
 
+function sseResponse(body = ""): Response {
+  const enc = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      if (body) controller.enqueue(enc.encode(body));
+      controller.close();
+    },
+  });
+  return new Response(stream, { status: 200, headers: { "Content-Type": "text/event-stream" } });
+}
+
+function fetchCalls(): Array<[RequestInfo | URL, RequestInit?]> {
+  return (globalThis.fetch as unknown as { mock: { calls: Array<[RequestInfo | URL, RequestInit?]> } }).mock.calls;
+}
+
 describe("CalendarPane (일정 달력)", () => {
   beforeEach(() => {
     // useCachedList persists to localStorage with a 60s staleTime; with Date frozen
     // the cache always reads "fresh", so clear it per test to fetch each fixture anew.
     localStorage.clear();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        sseResponse(
+          'event: delta\ndata: {"delta":"AI가 채운 일정 분석입니다."}\n\nevent: done\ndata: {"text":"AI가 채운 일정 분석입니다."}\n\n',
+        ),
+      ),
+    );
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-06-15T09:00:00Z"));
   });
-  afterEach(() => vi.useRealTimers());
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
 
   it("renders a month calendar with weekday headers and the month's events", async () => {
     renderWithProviders(<CalendarPane />, {
@@ -43,9 +69,12 @@ describe("CalendarPane (일정 달력)", () => {
     // weekday header row (한국어)
     expect(screen.getByText("일")).toBeInTheDocument();
     expect(screen.getByText("토")).toBeInTheDocument();
-    // events show up (a chip in the grid + a row in the list → at least one match each)
-    expect((await screen.findAllByText(/기획 리뷰/)).length).toBeGreaterThan(0);
-    expect((await screen.findAllByText(/연차/)).length).toBeGreaterThan(0);
+    // Event titles stay in the list; the calendar grid itself only shows markers.
+    expect(await screen.findByText(/기획 리뷰/)).toBeInTheDocument();
+    expect(await screen.findByText(/연차/)).toBeInTheDocument();
+    const june18 = screen.getByRole("button", { name: /6월 18일, 일정 1건/ });
+    expect(within(june18).queryByText(/기획 리뷰/)).not.toBeInTheDocument();
+    expect(within(june18).getByTitle("일정 1건")).toBeInTheDocument();
   });
 
   it("keeps the visible-range list with a delete action for local events", async () => {
@@ -69,7 +98,7 @@ describe("CalendarPane (일정 달력)", () => {
     const table = await screen.findByRole("table");
     expect(within(table).getByText("앞으로 회의")).toBeInTheDocument();
     // June 10 ended before the frozen "now" (June 15) → dropped from the list,
-    // though it still appears as a chip in the grid above.
+    // while the grid still marks that day as having an event.
     expect(within(table).queryByText("지난 회의")).not.toBeInTheDocument();
   });
 
@@ -139,8 +168,57 @@ describe("CalendarPane (일정 달력)", () => {
 
     const copies = await screen.findAllByText("외부 회의");
     await userEvent.click(copies[copies.length - 1]);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "일정 상세" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "AI 분석" })).toBeInTheDocument();
+    expect(screen.getByText(/시간이 정해진 일정입니다/)).toBeInTheDocument();
+    expect(fetchCalls().filter(([url]) => String(url).includes("/api/v1/miniapp/chat/stream"))).toHaveLength(0);
     expect(await screen.findByText(/외부\(구글\) 일정은 여기서 수정할 수 없습니다/)).toBeInTheDocument();
     // No editable form → no 저장 button in the read-only detail.
     expect(screen.queryByRole("button", { name: "저장" })).not.toBeInTheDocument();
+  });
+
+  it("opens a selected local event without auto-running AI when it has no description", async () => {
+    renderWithProviders(<CalendarPane />, {
+      connected: true,
+      dataProvider: fakeProvider({ "calendar-range": events }),
+    });
+
+    await userEvent.click(await screen.findByText("연차"));
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "일정 편집" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "AI 분석" })).toBeInTheDocument();
+    expect(screen.getByLabelText("제목")).toHaveValue("연차");
+    expect(screen.getByText(/종일 일정입니다/)).toBeInTheDocument();
+    expect(fetchCalls().filter(([url]) => String(url).includes("/api/v1/miniapp/chat/stream"))).toHaveLength(0);
+  });
+
+  it("auto-fills the bottom-right analysis when a selected event has both title and description", async () => {
+    const described = [
+      {
+        id: "d1",
+        summary: "분기 리뷰",
+        description: "초안 자료와 지표를 함께 점검합니다.",
+        start: "2026-06-20T05:00:00Z",
+        end: "2026-06-20T06:00:00Z",
+      },
+    ];
+    renderWithProviders(<CalendarPane />, {
+      connected: true,
+      dataProvider: fakeProvider({ "calendar-range": described }),
+    });
+
+    await userEvent.click(await screen.findByText("분기 리뷰"));
+
+    expect(await screen.findByText("AI가 채운 일정 분석입니다.")).toBeInTheDocument();
+
+    const chatCalls = fetchCalls().filter(([url]) => String(url).includes("/api/v1/miniapp/chat/stream"));
+    expect(chatCalls).toHaveLength(1);
+    const body = JSON.parse(String(chatCalls[0][1]?.body)) as { message: string; sessionKey: string };
+    expect(body.sessionKey).toBe("calendar:inline:d1");
+    expect(body.message).toContain("[선택한 일정]");
+    expect(body.message).toContain("분기 리뷰");
+    expect(body.message).toContain("초안 자료와 지표");
   });
 });

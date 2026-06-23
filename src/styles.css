@@ -1223,13 +1223,13 @@ textarea {
   color: var(--muted-2);
 }
 
-/* month calendar (일정 pane) — flat grid lines drawn by per-cell borders */
+/* month calendar (일정 pane) — compact grid with event presence markers */
 .cal-nav-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   border: 1px solid var(--line-2);
   background: var(--panel);
   color: var(--muted);
@@ -1253,7 +1253,7 @@ textarea {
   background: var(--panel);
 }
 .cal-dow {
-  padding: 7px 8px;
+  padding: 5px 7px;
   font-size: 11px;
   font-weight: 500;
   color: var(--muted-2);
@@ -1264,9 +1264,9 @@ textarea {
 .cal-cell {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  min-height: 64px;
-  padding: 4px 6px 6px;
+  gap: 4px;
+  min-height: 44px;
+  padding: 3px 5px 5px;
   border-right: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
   overflow: hidden;
@@ -1293,9 +1293,9 @@ textarea {
 }
 .cal-daynum {
   align-self: flex-start;
-  min-width: 19px;
-  height: 19px;
-  line-height: 19px;
+  min-width: 18px;
+  height: 18px;
+  line-height: 18px;
   font-size: 12px;
   text-align: center;
   color: var(--ink-2);
@@ -1310,32 +1310,124 @@ textarea {
   background: var(--accent);
   border-radius: 999px;
 }
-.cal-chip {
-  padding: 1px 6px;
-  font-size: 11px;
-  line-height: 1.45;
-  border-radius: 5px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.cal-markers {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 3px;
+  min-height: 8px;
+  margin-top: auto;
 }
-.cal-chip.mine {
-  background: var(--accent-soft);
-  color: var(--accent-deep);
+.cal-cell.out .cal-markers {
+  opacity: 0.45;
 }
-.cal-chip.deadline {
-  background: var(--due-soft);
-  color: var(--due);
+.cal-marker {
+  display: inline-block;
+  flex: 0 0 auto;
+  border-radius: 999px;
 }
-.cal-chip.others {
-  background: var(--panel-sunken);
-  color: var(--muted);
+.cal-marker.dot {
+  width: 5px;
+  height: 5px;
+}
+.cal-marker.line {
+  width: 16px;
+  height: 4px;
+}
+.cal-marker.mine {
+  background: var(--accent);
+}
+.cal-marker.deadline {
+  background: var(--due);
+}
+.cal-marker.others {
+  background: var(--muted-2);
+}
+.cal-marker.overflow {
+  width: 8px;
+  height: 3px;
+  background: var(--line-2);
+}
+.calendar-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(260px, 0.9fr);
+  gap: 14px;
+  margin-top: 16px;
+  max-width: 980px;
+}
+.calendar-workspace-panel {
+  min-width: 0;
   border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  padding: 14px;
 }
-.cal-more {
-  padding-left: 2px;
-  font-size: 11px;
-  color: var(--muted-2);
+.calendar-workspace-panel.analysis {
+  background: var(--panel-sunken);
+}
+.calendar-workspace-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.calendar-workspace-head h3 {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.calendar-form-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+}
+.calendar-analysis-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.calendar-analysis-time {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.calendar-analysis-status {
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.calendar-analysis-answer {
+  margin-top: 12px;
+  color: var(--ink-2);
+  font-size: 13px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+.calendar-analysis-answer.streaming {
+  color: var(--ink);
+}
+.calendar-analysis-answer p,
+.calendar-analysis-answer ul,
+.calendar-analysis-answer ol {
+  margin-top: 0;
+  margin-bottom: 9px;
+}
+.calendar-analysis-answer :last-child {
+  margin-bottom: 0;
+}
+
+@media (max-width: 860px) {
+  .calendar-workspace {
+    grid-template-columns: 1fr;
+    max-width: 780px;
+  }
 }
 
 /* micro label (tracked uppercase, for latin labels like DENEB AI) */

@@ -1,19 +1,18 @@
-// Month calendar grid for the 일정 pane — a Sunday-first month view that places
-// each event as a colored chip on every day it spans. Presentational only: the
-// pane owns the data (events→day map) and month navigation; this just renders.
+// Month calendar grid for the 일정 pane — a Sunday-first month view. The grid
+// only marks that a day has events; the list below owns event titles/details.
 import type { CalEvent } from "@/types";
-import { dayKey, eventTitle, hhmm, monthLabel, monthMatrix } from "@/format";
+import { dayKey, eventDayKeys, monthLabel, monthMatrix } from "@/format";
 import { Icon } from "@/components/Icon";
 
 const DOW = ["일", "월", "화", "수", "목", "금", "토"];
-const MAX_CHIPS = 2; // beyond this a "+N" overflow note keeps cells short
+const MAX_MARKERS = 4;
 
-// Category → chip tint (semantic, via theme tokens). Most upcoming events are the
+// Category → marker tint (semantic, via theme tokens). Most upcoming events are the
 // user's own, so an absent category styles as "mine".
-function chipClass(ev: CalEvent): string {
-  if (ev.category === "deadline") return "cal-chip deadline";
-  if (ev.category === "others") return "cal-chip others";
-  return "cal-chip mine";
+function markerClass(ev: CalEvent): string {
+  const kind = eventDayKeys(ev.start, ev.end).length > 1 || ev.allDay ? "line" : "dot";
+  const category = ev.category === "deadline" ? "deadline" : ev.category === "others" ? "others" : "mine";
+  return `cal-marker ${kind} ${category}`;
 }
 
 export function MonthGrid({
@@ -50,7 +49,7 @@ export function MonthGrid({
         <button className="cal-nav-btn" onClick={onNext} aria-label="다음 달" title="다음 달">
           <Icon name="arrow-right" size={15} />
         </button>
-        <span style={{ fontSize: 15, fontWeight: 600, letterSpacing: "-0.01em", marginLeft: 2 }}>
+        <span style={{ fontSize: 15, fontWeight: 600, letterSpacing: 0, marginLeft: 2 }}>
           {monthLabel(year, month0)}
         </span>
         <button className="btn" style={{ marginLeft: "auto", padding: "5px 12px", fontSize: 12 }} onClick={onToday}>
@@ -68,7 +67,7 @@ export function MonthGrid({
           const key = dayKey(date);
           const inMonth = date.getMonth() === month0;
           const dayEvents = eventsByDay.get(key) ?? [];
-          const shown = dayEvents.slice(0, MAX_CHIPS);
+          const shown = dayEvents.slice(0, MAX_MARKERS);
           const selected = inMonth && key === selectedKey;
           const cls = [
             "cal-cell",
@@ -104,17 +103,14 @@ export function MonthGrid({
               }
             >
               <span className="cal-daynum">{date.getDate()}</span>
-              {shown.map((ev, i) => {
-                const t = hhmm(ev.start);
-                const name = eventTitle(ev);
-                return (
-                  <span key={i} className={chipClass(ev)} title={t ? `${t} ${name}` : name}>
-                    {t ? `${t} ` : ""}
-                    {name}
-                  </span>
-                );
-              })}
-              {dayEvents.length > shown.length && <span className="cal-more">+{dayEvents.length - shown.length}</span>}
+              {dayEvents.length > 0 && (
+                <span className="cal-markers" aria-hidden="true" title={`일정 ${dayEvents.length}건`}>
+                  {shown.map((ev, i) => (
+                    <span key={`${ev.id ?? i}-${i}`} className={markerClass(ev)} />
+                  ))}
+                  {dayEvents.length > shown.length && <span className="cal-marker overflow" />}
+                </span>
+              )}
             </div>
           );
         })}

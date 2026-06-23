@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useCreate, useInvalidate, useUpdate } from "@refinedev/core";
 
 import type { CalEvent } from "@/types";
 import { serializeList } from "@/aiText";
 import { useCachedList } from "@/cachedList";
+import { chatStream, type GatewayConfig } from "@/gateway";
 import {
   calSpan,
   calStamp,
@@ -20,6 +21,7 @@ import { useRegisterPane, useWorkspace } from "@/workspaceContext";
 import { Column, Grid, GridNotice, RowBtn } from "@/components/Grid";
 import { MonthGrid } from "@/components/MonthGrid";
 import { Detail, Field, Modal } from "@/components/Modal";
+import { Markdown } from "@/components/Markdown";
 
 // RFC3339 → <input type="datetime-local"> value (local wall-clock, minute precision).
 function toLocalInput(iso?: string): string {
@@ -54,7 +56,7 @@ function parseDayKey(key?: string): Date | null {
 }
 
 export function CalendarPane() {
-  const { connected, consumePaneTarget, paneTarget } = useWorkspace();
+  const { connected, cfg, consumePaneTarget, paneTarget } = useWorkspace();
   const now = new Date();
   const todayKey = dayKey(now);
   const [cursor, setCursor] = useState({ y: now.getFullYear(), m: now.getMonth() });
@@ -77,8 +79,12 @@ export function CalendarPane() {
   // Stable reference so the day-map memo below only recomputes when data changes.
   const events = useMemo(() => result?.data ?? [], [result?.data]);
   const { run, error, busy } = useAction(refreshCalendarData);
-  // null = closed · {} = create · { ev } = open existing (editable when ev.local).
-  const [edit, setEdit] = useState<{ ev?: CalEvent } | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
+  const selectedEvent = useMemo(
+    () => events.find((ev) => String(ev.id) === selectedEventId) ?? null,
+    [events, selectedEventId],
+  );
 
   useEffect(() => {
     if (paneTarget?.view !== "calendar") return;
@@ -89,6 +95,7 @@ export function CalendarPane() {
     if (matchedKey && targetDate) {
       setCursor({ y: targetDate.getFullYear(), m: targetDate.getMonth() });
       setSelectedDay(matchedKey);
+      setSelectedEventId(matchedEvent ? String(matchedEvent.id) : null);
       consumePaneTarget();
     } else if (!query.isLoading) {
       consumePaneTarget();
@@ -131,7 +138,15 @@ export function CalendarPane() {
       // RowBtn stops click propagation itself, so it won't also open the row's modal.
       cell: (ev) =>
         ev.local ? (
-          <RowBtn onClick={() => run("miniapp.calendar.delete", { id: ev.id })} disabled={busy} danger title="삭제">
+          <RowBtn
+            onClick={() => {
+              if (selectedEventId === String(ev.id)) setSelectedEventId(null);
+              run("miniapp.calendar.delete", { id: ev.id });
+            }}
+            disabled={busy}
+            danger
+            title="삭제"
+          >
             삭제
           </RowBtn>
         ) : null,
@@ -142,6 +157,7 @@ export function CalendarPane() {
   // Clear any day selection — the picked day isn't in the new month's view.
   const step = (delta: number) => {
     setSelectedDay(null);
+    setSelectedEventId(null);
     setCursor((c) => {
       const d = new Date(c.y, c.m + delta, 1);
       return { y: d.getFullYear(), m: d.getMonth() };
@@ -151,7 +167,7 @@ export function CalendarPane() {
   // The list below shows the selected day's events, or the visible month. For the
   // CURRENT month, already-ended events are dropped so the list reads as "upcoming";
   // other months keep their full history, and a clicked day shows that day in full.
-  // (The month grid above still renders every event as a chip.)
+  // (The month grid above still marks every event.)
   const isCurrentMonth = cursor.y === now.getFullYear() && cursor.m === now.getMonth();
   const upcoming = isCurrentMonth
     ? events.filter((ev) => {
@@ -168,7 +184,7 @@ export function CalendarPane() {
     <>
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
         <h2 style={{ margin: 0 }}>일정</h2>
-        <button className="btn" onClick={() => setEdit({})} disabled={!connected} style={{ marginLeft: "auto" }}>
+        <button className="btn" onClick={() => setCreating(true)} disabled={!connected} style={{ marginLeft: "auto" }}>
           새 일정
         </button>
       </div>
@@ -182,11 +198,15 @@ export function CalendarPane() {
             eventsByDay={eventsByDay}
             todayKey={todayKey}
             selectedKey={selectedDay}
-            onSelectDay={(k) => setSelectedDay((p) => (p === k ? null : k))}
+            onSelectDay={(k) => {
+              setSelectedEventId(null);
+              setSelectedDay((p) => (p === k ? null : k));
+            }}
             onPrev={() => step(-1)}
             onNext={() => step(1)}
             onToday={() => {
               setSelectedDay(null);
+              setSelectedEventId(null);
               const t = new Date();
               setCursor({ y: t.getFullYear(), m: t.getMonth() });
             }}
@@ -197,7 +217,13 @@ export function CalendarPane() {
       <div style={{ display: "flex", alignItems: "baseline", gap: 10, margin: "22px 0 10px" }}>
         <h3 style={{ margin: 0, color: "var(--muted)" }}>{listLabel}</h3>
         {selectedDay && (
-          <button className="row-btn" onClick={() => setSelectedDay(null)}>
+          <button
+            className="row-btn"
+            onClick={() => {
+              setSelectedEventId(null);
+              setSelectedDay(null);
+            }}
+          >
             ← 월 전체
           </button>
         )}
@@ -212,18 +238,71 @@ export function CalendarPane() {
           rows={listEvents}
           getKey={(ev) => String(ev.id)}
           maxWidth={780}
-          onRowClick={(ev) => setEdit({ ev })}
+          onRowClick={(ev) => setSelectedEventId((id) => (id === String(ev.id) ? null : String(ev.id)))}
+          isRowSelected={(ev) => selectedEventId === String(ev.id)}
         />
       </GridNotice>
 
-      {edit && <EventModal event={edit.ev} onClose={() => setEdit(null)} onSaved={refreshCalendarData} />}
+      {selectedEvent && (
+        <SelectedEventWorkspace
+          key={String(selectedEvent.id)}
+          event={selectedEvent}
+          connected={connected}
+          cfg={cfg}
+          onClose={() => setSelectedEventId(null)}
+          onSaved={refreshCalendarData}
+        />
+      )}
+      {creating && <EventModal onClose={() => setCreating(false)} onSaved={refreshCalendarData} />}
     </>
   );
 }
 
-// Create (no event), edit (local event), or read-only detail (Google event) — one
-// modal. Write paths use the already-wired calendar.create / calendar.update RPCs.
+function SelectedEventWorkspace({
+  event,
+  connected,
+  cfg,
+  onClose,
+  onSaved,
+}: {
+  event: CalEvent;
+  connected: boolean;
+  cfg: GatewayConfig;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  return (
+    <section className="calendar-workspace" aria-label="선택한 일정">
+      <div className="calendar-workspace-panel">
+        <EventForm event={event} onClose={onClose} onSaved={onSaved} stayOpenOnSave />
+      </div>
+      <div className="calendar-workspace-panel analysis">
+        <EventAnalysis event={event} connected={connected} cfg={cfg} />
+      </div>
+    </section>
+  );
+}
+
+// New events still use the focused modal. Existing rows open inline below the list.
 function EventModal({ event, onClose, onSaved }: { event?: CalEvent; onClose: () => void; onSaved: () => void }) {
+  return (
+    <Modal title={event ? "일정 수정" : "새 일정"} onClose={onClose} width={560}>
+      <EventForm event={event} onClose={onClose} onSaved={onSaved} />
+    </Modal>
+  );
+}
+
+function EventForm({
+  event,
+  onClose,
+  onSaved,
+  stayOpenOnSave = false,
+}: {
+  event?: CalEvent;
+  onClose: () => void;
+  onSaved: () => void;
+  stayOpenOnSave?: boolean;
+}) {
   const isNew = !event;
   const editable = isNew || event.local === true;
 
@@ -258,7 +337,8 @@ function EventModal({ event, onClose, onSaved }: { event?: CalEvent; onClose: ()
     const opts = {
       onSuccess: () => {
         onSaved();
-        onClose();
+        setStatus("저장됨");
+        if (!stayOpenOnSave) onClose();
       },
       onError: (err: unknown) => setStatus(`오류: ${errText(err)}`),
     };
@@ -267,47 +347,36 @@ function EventModal({ event, onClose, onSaved }: { event?: CalEvent; onClose: ()
   }
 
   // Read-only detail for Google-sourced events (not editable here).
-  if (!editable) {
+  if (!editable && event) {
     return (
-      <Modal
-        title={eventTitle(event)}
-        onClose={onClose}
-        footer={
-          <button className="btn" onClick={onClose}>
+      <>
+        <div className="calendar-workspace-head">
+          <h3>일정 상세</h3>
+          <button className="row-btn" onClick={onClose}>
             닫기
           </button>
-        }
-      >
+        </div>
+        <Detail label="제목" value={eventTitle(event)} />
         <Detail label="시간" value={calSpan(event.start, event.end) || "—"} />
         {event.location && <Detail label="장소" value={event.location} />}
         {event.description && <Detail label="설명" value={event.description} multiline />}
         <p style={{ fontSize: 12, color: "var(--muted-2)", marginTop: 4 }}>
           외부(구글) 일정은 여기서 수정할 수 없습니다.
         </p>
-      </Modal>
+      </>
     );
   }
 
   return (
-    <Modal
-      title={isNew ? "새 일정" : "일정 수정"}
-      onClose={onClose}
-      footer={
-        <>
-          {status && (
-            <span className="pane-status" style={{ marginRight: "auto" }}>
-              {status}
-            </span>
-          )}
-          <button className="btn" onClick={onClose}>
-            취소
+    <>
+      {!isNew && (
+        <div className="calendar-workspace-head">
+          <h3>일정 편집</h3>
+          <button className="row-btn" onClick={onClose}>
+            닫기
           </button>
-          <button className="btn btn-accent" onClick={save}>
-            저장
-          </button>
-        </>
-      }
-    >
+        </div>
+      )}
       <Field label="제목">
         <input className="field" value={summary} onChange={(ev) => setSummary(ev.target.value)} autoFocus />
       </Field>
@@ -353,6 +422,159 @@ function EventModal({ event, onClose, onSaved }: { event?: CalEvent; onClose: ()
           style={{ resize: "vertical", fontFamily: "inherit", lineHeight: 1.5 }}
         />
       </Field>
-    </Modal>
+      <div className="calendar-form-actions">
+        {status && (
+          <span className="pane-status" style={{ marginRight: "auto" }}>
+            {status}
+          </span>
+        )}
+        <button className="btn" onClick={onClose}>
+          {isNew ? "취소" : "닫기"}
+        </button>
+        <button className="btn btn-accent" onClick={save}>
+          저장
+        </button>
+      </div>
+    </>
+  );
+}
+
+function eventContext(event: CalEvent): string {
+  return [
+    `제목: ${eventTitle(event)}`,
+    `시간: ${calSpan(event.start, event.end) || "미정"}`,
+    event.location ? `장소: ${event.location}` : "",
+    event.description ? `설명:\n${event.description}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function fallbackAnalysis(event: CalEvent): string {
+  const title = eventTitle(event);
+  const span = calSpan(event.start, event.end);
+  const days = eventDayKeys(event.start, event.end);
+  const endMs = eventEndMs(event.start, event.end);
+  const now = Date.now();
+  const text = `${title} ${event.description ?? ""}`.toLowerCase();
+  const meeting = /회의|미팅|리뷰|싱크|면담|콜|세션/.test(text);
+  const deadline = /마감|제출|deadline|due/.test(text);
+  const past = endMs !== null && endMs <= now;
+  const timing = past
+    ? "이미 끝난 일정입니다."
+    : days.length > 1
+      ? `${days.length}일에 걸친 일정입니다.`
+      : event.allDay
+        ? "종일 일정입니다."
+        : "시간이 정해진 일정입니다.";
+  const prep = deadline
+    ? "마감 산출물과 제출 경로를 먼저 확인하세요."
+    : meeting
+      ? "안건, 결정할 항목, 공유 자료를 미리 정리하세요."
+      : event.location
+        ? "장소와 이동 시간을 먼저 확인하세요."
+        : "참석자와 필요한 자료를 확인하세요.";
+  const risk = past
+    ? "후속 기록이나 액션 아이템만 남기면 됩니다."
+    : event.location
+      ? "앞뒤 일정과 이동 시간이 겹치지 않는지 확인하세요."
+      : "장소 정보가 없으면 직전에 확인 비용이 생길 수 있습니다.";
+  const next = meeting
+    ? "회의 후 결정사항과 담당자를 남기는 것이 좋습니다."
+    : deadline
+      ? "완료 여부를 체크하고 관련 할일을 닫으세요."
+      : "필요하면 이 일정에서 파생되는 할일을 하나로 분리하세요.";
+
+  return [
+    `**${title}**${span ? `  \n${span}` : ""}`,
+    "",
+    `- **시간**: ${timing}`,
+    `- **준비**: ${prep}`,
+    `- **주의**: ${risk}`,
+    `- **후속**: ${next}`,
+  ].join("\n");
+}
+
+function EventAnalysis({ event, connected, cfg }: { event: CalEvent; connected: boolean; cfg: GatewayConfig }) {
+  const title = eventTitle(event);
+  const span = calSpan(event.start, event.end);
+  const fallback = useMemo(() => fallbackAnalysis(event), [event]);
+  const hasAutoAnalysisInput = Boolean(title.trim() && event.description?.trim());
+  const [answer, setAnswer] = useState("");
+  const [status, setStatus] = useState("");
+  const [busy, setBusy] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
+
+  async function analyze() {
+    if (!connected) {
+      setStatus("게이트웨이에 연결하면 AI 분석을 갱신합니다.");
+      return;
+    }
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setAnswer("");
+    setBusy(true);
+    setStatus("AI 분석 중…");
+    let streamed = "";
+    let streamError = "";
+    try {
+      await chatStream(
+        cfg,
+        "이 일정 하나만 보고 준비할 것, 충돌 가능성, 바로 할 후속 조치를 한국어로 짧게 정리해줘. 답은 4줄 이내로.",
+        {
+          onDelta: (delta) => {
+            streamed += delta;
+            setAnswer(streamed);
+          },
+          onDone: (final) => {
+            if (!streamed.trim() && final.text.trim()) setAnswer(final.text);
+          },
+          onError: (err) => {
+            streamError = err;
+          },
+        },
+        {
+          sessionKey: `calendar:inline:${event.id ?? title}`,
+          workspaceContext: `[선택한 일정]\n${eventContext(event)}`,
+          signal: controller.signal,
+        },
+      );
+      if (streamError) throw new Error(streamError);
+      if (!controller.signal.aborted) setStatus("");
+    } catch (err) {
+      if (!controller.signal.aborted) setStatus(`AI 분석 실패: ${errText(err)}`);
+    } finally {
+      if (abortRef.current === controller) {
+        abortRef.current = null;
+        setBusy(false);
+      }
+    }
+  }
+
+  useEffect(() => {
+    setAnswer("");
+    setStatus("");
+    if (hasAutoAnalysisInput) void analyze();
+    return () => abortRef.current?.abort();
+    // Re-run only when the chosen event changes or connectivity/config changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connected, cfg.url, cfg.token, event, hasAutoAnalysisInput]);
+
+  return (
+    <>
+      <div className="calendar-workspace-head">
+        <h3>AI 분석</h3>
+        <button className="row-btn" onClick={() => void analyze()} disabled={!connected || busy}>
+          {answer || busy ? "다시 분석" : "AI 분석"}
+        </button>
+      </div>
+      <div className="calendar-analysis-title">{title}</div>
+      {span && <div className="calendar-analysis-time">{span}</div>}
+      {status && <div className="calendar-analysis-status">{status}</div>}
+      <div className={"calendar-analysis-answer" + (busy ? " streaming" : "")}>
+        <Markdown text={answer.trim() ? answer : fallback} />
+      </div>
+    </>
   );
 }
