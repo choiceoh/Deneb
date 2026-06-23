@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { saveConfig } from "@/gateway";
+import { setString } from "@/storage";
 import { useGatewayStatus } from "@/hooks";
 import { type LogLevel, getLogLevel, setLogLevel } from "@/log";
 import { isTauri } from "@/tauri";
@@ -42,11 +43,7 @@ export function SettingsPane() {
   function applyLevel(next: LogLevel) {
     setLevel(next);
     setLogLevel(next);
-    try {
-      localStorage.setItem("andromeda.logLevel", next);
-    } catch {
-      /* localStorage unavailable */
-    }
+    setString("andromeda.logLevel", next);
   }
 
   async function runUpdateCheck() {

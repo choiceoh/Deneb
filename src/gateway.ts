@@ -3,8 +3,10 @@
 // Phase 0 (this file): raw RPC envelope + token auth + ping + chat SSE stream.
 // Phase 1: wrap callRpc() in a Refine data provider so resources (mail, calendar,
 // todo, memory …) flow into grids/forms automatically.
-import { readSSE } from "./sse";
+import { asBool, asStr } from "./format";
+import { readJsonSSE } from "./sse";
 import { log } from "./log";
+import { getJSON, setJSON } from "./storage";
 import { isTauri } from "./tauri";
 
 const rpcLog = log.child("rpc");
@@ -46,19 +48,13 @@ function configFromEnv(): Partial<GatewayConfig> {
 // falling back to env defaults. Desktop also hydrates the token from the OS
 // keychain / token file at startup (see tauri.readDesktopToken + App bootstrap).
 export function loadConfig(): GatewayConfig {
-  let saved: Partial<GatewayConfig> = {};
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) saved = JSON.parse(raw) as GatewayConfig;
-  } catch {
-    /* ignore corrupt storage */
-  }
+  const saved = getJSON<Partial<GatewayConfig>>(STORAGE_KEY) ?? {};
   const env = configFromEnv();
   return { url: saved.url || env.url || "", token: saved.token || env.token || "" };
 }
 
 export function saveConfig(cfg: GatewayConfig): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(cfg));
+  setJSON(STORAGE_KEY, cfg);
 }
 
 interface RpcRequest {
@@ -279,6 +275,23 @@ export interface ChatStreamOpts {
   signal?: AbortSignal;
 }
 
+// Open an SSE stream against a miniapp endpoint: build the URL, inject the client
+// token header, return the response body (throwing on a bad status / missing body).
+// Shared by chatStream + subscribeEvents so the fetch-and-validate preamble lives once.
+export async function streamFetch(
+  cfg: GatewayConfig,
+  path: string,
+  init: RequestInit = {},
+): Promise<ReadableStream<Uint8Array>> {
+  const res = await gatewayFetch(`${base(cfg.url)}/api/v1/miniapp/${path}`, {
+    ...init,
+    headers: { [TOKEN_HEADER]: cfg.token, ...init.headers },
+  });
+  if (!res.ok) throw new Error(`${path}: HTTP ${res.status}`);
+  if (!res.body) throw new Error(`${path}: empty response body`);
+  return res.body;
+}
+
 // Minimal SSE parser matching the gateway frame format:
 //   event: delta|tool|thinking|done|error
 //   data:  {...}
@@ -308,52 +321,48 @@ export async function chatStream(
   chatLog.debug(
     `→ stream (session ${sessionKey}, model ${model || "main"}, +context ${Boolean(workspaceContext?.trim())})`,
   );
-  const res = await gatewayFetch(`${base(cfg.url)}/api/v1/miniapp/chat/stream`, {
+  const body = await streamFetch(cfg, "chat/stream", {
     method: "POST",
-    headers: { "Content-Type": "application/json", [TOKEN_HEADER]: cfg.token },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(model ? { message: composed, sessionKey, model } : { message: composed, sessionKey }),
     signal,
   });
-  if (!res.ok) {
-    chatLog.error(`✗ stream: HTTP ${res.status}`);
-    throw new Error(`chat stream: HTTP ${res.status}`);
-  }
-  if (!res.body) throw new Error("chat stream: empty response body");
 
-  await readSSE(res.body, ({ event, data }) => {
-    try {
-      const obj = JSON.parse(data) as Record<string, unknown>;
-      switch (event) {
-        case "delta":
-          if (typeof obj.delta === "string") handlers.onDelta?.(obj.delta);
-          break;
-        case "tool":
-          if (typeof obj.tool === "string" && obj.tool) {
-            handlers.onTool?.({
-              state: typeof obj.state === "string" ? obj.state : "",
-              tool: obj.tool,
-              toolUseId: typeof obj.toolUseId === "string" ? obj.toolUseId : "",
-              detail: typeof obj.detail === "string" ? obj.detail : undefined,
-              isError: obj.isError === true,
-            });
-          }
-          break;
-        case "thinking":
-          if (typeof obj.preview === "string") handlers.onThinking?.(obj.preview);
-          break;
-        case "done":
-          handlers.onDone?.({
-            text: typeof obj.text === "string" ? obj.text : "",
-            model: typeof obj.model === "string" ? obj.model : undefined,
-            fellBack: obj.fellBack === true,
-          });
-          break;
-        case "error":
-          handlers.onError?.(typeof obj.error === "string" ? obj.error : "unknown error");
-          break;
+  await readJsonSSE(body, (event, obj) => {
+    switch (event) {
+      case "delta": {
+        const delta = asStr(obj.delta);
+        if (delta !== undefined) handlers.onDelta?.(delta);
+        break;
       }
-    } catch {
-      /* ignore malformed frame */
+      case "tool": {
+        const tool = asStr(obj.tool);
+        if (tool) {
+          handlers.onTool?.({
+            state: asStr(obj.state) ?? "",
+            tool,
+            toolUseId: asStr(obj.toolUseId) ?? "",
+            detail: asStr(obj.detail),
+            isError: asBool(obj.isError),
+          });
+        }
+        break;
+      }
+      case "thinking": {
+        const preview = asStr(obj.preview);
+        if (preview !== undefined) handlers.onThinking?.(preview);
+        break;
+      }
+      case "done":
+        handlers.onDone?.({
+          text: asStr(obj.text) ?? "",
+          model: asStr(obj.model),
+          fellBack: asBool(obj.fellBack),
+        });
+        break;
+      case "error":
+        handlers.onError?.(asStr(obj.error) ?? "unknown error");
+        break;
     }
   });
 }

@@ -2,20 +2,29 @@
 // both the grids and the AI context projection. No React here.
 import type { CalEvent, CalTimestamp } from "./types";
 
-// Coerce a possibly-structured field (e.g. mail `from`) to a short label. `??`
-// would keep an empty-string `name` and hide a present email — so pick the first
-// NON-empty field, letting `{ name: "", email }` still surface the email.
+// Narrow loose gateway JSON to a primitive (or undefined) — shared so callers
+// stop re-inlining `typeof v === "string" ? v : undefined` per field.
+export const asStr = (v: unknown): string | undefined => (typeof v === "string" ? v : undefined);
+export const asNum = (v: unknown): number | undefined => (typeof v === "number" ? v : undefined);
+export const asBool = (v: unknown): boolean => v === true;
+
+// First NON-empty (trimmed) string among `keys` of an object; "" if none. Picking
+// the first non-empty field (not `??`) lets `{ name: "", email }` surface the email.
+export function firstString(obj: unknown, keys: string[]): string {
+  if (!obj || typeof obj !== "object") return "";
+  const o = obj as Record<string, unknown>;
+  for (const k of keys) {
+    const v = o[k];
+    if (typeof v === "string" && v.trim()) return v;
+  }
+  return "";
+}
+
+// Coerce a possibly-structured field (e.g. mail `from`) to a short label.
 export function text(v: unknown): string {
   if (v == null) return "";
   if (typeof v === "string") return v;
-  if (typeof v === "object") {
-    const o = v as Record<string, unknown>;
-    for (const k of ["name", "email", "title"]) {
-      const s = o[k];
-      if (typeof s === "string" && s.trim()) return s;
-    }
-    return "";
-  }
+  if (typeof v === "object") return firstString(v, ["name", "email", "title"]);
   return String(v);
 }
 

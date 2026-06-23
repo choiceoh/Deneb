@@ -4,8 +4,9 @@
 //
 // EventSource can't set the X-Deneb-Client-Token header, so we read the SSE stream
 // off fetch() with an AbortSignal (same approach as chatStream).
-import { type GatewayConfig, TOKEN_HEADER, base, gatewayFetch } from "./gateway";
-import { readSSE } from "./sse";
+import { asNum, asStr } from "./format";
+import { type GatewayConfig, streamFetch } from "./gateway";
+import { readJsonSSE } from "./sse";
 import { log } from "./log";
 
 const evLog = log.child("events");
@@ -28,14 +29,12 @@ export interface EventHandlers {
 // Map a raw SSE frame (event name + parsed data object) to a ProactiveEvent,
 // tolerating whatever field names the gateway uses.
 function toEvent(eventName: string, data: Record<string, unknown>): ProactiveEvent {
-  const str = (v: unknown) => (typeof v === "string" ? v : undefined);
-  const num = (v: unknown) => (typeof v === "number" ? v : undefined);
   return {
-    id: str(data.id) ?? crypto.randomUUID(),
-    kind: str(data.kind) ?? str(data.type) ?? (eventName && eventName !== "message" ? eventName : undefined),
-    title: str(data.title) ?? str(data.subject),
-    body: str(data.body) ?? str(data.text) ?? str(data.message),
-    ts: num(data.ts) ?? num(data.tsMs),
+    id: asStr(data.id) ?? crypto.randomUUID(),
+    kind: asStr(data.kind) ?? asStr(data.type) ?? (eventName && eventName !== "message" ? eventName : undefined),
+    title: asStr(data.title) ?? asStr(data.subject),
+    body: asStr(data.body) ?? asStr(data.text) ?? asStr(data.message),
+    ts: asNum(data.ts) ?? asNum(data.tsMs),
     raw: data,
   };
 }
@@ -46,26 +45,13 @@ export async function subscribeEvents(
   handlers: EventHandlers,
   signal?: AbortSignal,
 ): Promise<void> {
-  const res = await gatewayFetch(`${base(cfg.url)}/api/v1/miniapp/events`, {
-    headers: { [TOKEN_HEADER]: cfg.token },
-    signal,
-  });
-  if (!res.ok) {
-    evLog.error(`✗ subscribe: HTTP ${res.status}`);
-    throw new Error(`events: HTTP ${res.status}`);
-  }
-  if (!res.body) throw new Error("events: empty response body");
+  const body = await streamFetch(cfg, "events", { signal });
   evLog.info("stream open");
   handlers.onOpen?.();
 
-  await readSSE(res.body, ({ event, data }) => {
-    try {
-      const obj = JSON.parse(data) as Record<string, unknown>;
-      const ev = toEvent(event, obj);
-      evLog.debug(`event ${ev.kind ?? "?"}`, ev.title ?? "");
-      handlers.onEvent?.(ev);
-    } catch {
-      /* ignore malformed frame */
-    }
+  await readJsonSSE(body, (event, obj) => {
+    const ev = toEvent(event, obj);
+    evLog.debug(`event ${ev.kind ?? "?"}`, ev.title ?? "");
+    handlers.onEvent?.(ev);
   });
 }

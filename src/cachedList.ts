@@ -1,6 +1,8 @@
 import { useEffect, useMemo } from "react";
 import { type BaseKey, type BaseRecord, useList, useOne } from "@refinedev/core";
 
+import { getJSON, setJSON } from "./storage";
+
 export const CACHED_LIST_STALE_MS = 60_000;
 export const CACHED_LIST_GC_MS = 10 * 60_000;
 export const CACHED_ONE_STALE_MS = 5 * 60_000;
@@ -43,54 +45,30 @@ export function clearCachedResource(resource: string): void {
 }
 
 function readCachedList<T>(resource: string): CachedListSnapshot<T> | undefined {
-  try {
-    const raw = localStorage.getItem(cachedListStorageKey(resource));
-    if (!raw) return undefined;
-    const parsed = JSON.parse(raw) as Partial<CachedListSnapshot<T>>;
-    if (!Array.isArray(parsed.data) || typeof parsed.savedAt !== "number") return undefined;
-    return {
-      data: parsed.data,
-      total: typeof parsed.total === "number" ? parsed.total : parsed.data.length,
-      savedAt: parsed.savedAt,
-    };
-  } catch {
-    return undefined;
-  }
+  const parsed = getJSON<Partial<CachedListSnapshot<T>>>(cachedListStorageKey(resource));
+  if (!parsed || !Array.isArray(parsed.data) || typeof parsed.savedAt !== "number") return undefined;
+  return {
+    data: parsed.data,
+    total: typeof parsed.total === "number" ? parsed.total : parsed.data.length,
+    savedAt: parsed.savedAt,
+  };
 }
 
 function writeCachedList<T>(resource: string, data: T[], total?: number): void {
-  try {
-    const snapshot: CachedListSnapshot<T> = {
-      data,
-      total: total ?? data.length,
-      savedAt: Date.now(),
-    };
-    localStorage.setItem(cachedListStorageKey(resource), JSON.stringify(snapshot));
-  } catch {
-    /* ignore storage quota / private mode failures */
-  }
+  const snapshot: CachedListSnapshot<T> = { data, total: total ?? data.length, savedAt: Date.now() };
+  setJSON(cachedListStorageKey(resource), snapshot);
 }
 
 function readCachedOne<T>(resource: string, id: BaseKey | undefined): CachedOneSnapshot<T> | undefined {
   if (id === undefined) return undefined;
-  try {
-    const raw = localStorage.getItem(cachedOneStorageKey(resource, id));
-    if (!raw) return undefined;
-    const parsed = JSON.parse(raw) as Partial<CachedOneSnapshot<T>>;
-    if (!parsed.data || typeof parsed.savedAt !== "number") return undefined;
-    return { data: parsed.data, savedAt: parsed.savedAt };
-  } catch {
-    return undefined;
-  }
+  const parsed = getJSON<Partial<CachedOneSnapshot<T>>>(cachedOneStorageKey(resource, id));
+  if (!parsed || !parsed.data || typeof parsed.savedAt !== "number") return undefined;
+  return { data: parsed.data, savedAt: parsed.savedAt };
 }
 
 function writeCachedOne<T>(resource: string, id: BaseKey, data: T): void {
-  try {
-    const snapshot: CachedOneSnapshot<T> = { data, savedAt: Date.now() };
-    localStorage.setItem(cachedOneStorageKey(resource, id), JSON.stringify(snapshot));
-  } catch {
-    /* ignore storage quota / private mode failures */
-  }
+  const snapshot: CachedOneSnapshot<T> = { data, savedAt: Date.now() };
+  setJSON(cachedOneStorageKey(resource, id), snapshot);
 }
 
 export function useCachedList<T extends BaseRecord>(

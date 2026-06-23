@@ -9,6 +9,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { DOC_STORAGE_KEY, readStoredDoc } from "./docStorage";
 import type { GatewayConfig } from "./gateway";
+import { remove, setString } from "./storage";
 import type { View } from "./types";
 
 export interface PaneTarget {
@@ -84,12 +85,8 @@ export function WorkspaceProvider({
   const consumePaneTarget = () => setPaneTarget(null);
 
   useEffect(() => {
-    try {
-      if (doc) localStorage.setItem(DOC_STORAGE_KEY, doc);
-      else localStorage.removeItem(DOC_STORAGE_KEY);
-    } catch {
-      /* ignore storage quota / private mode failures */
-    }
+    if (doc) setString(DOC_STORAGE_KEY, doc);
+    else remove(DOC_STORAGE_KEY);
   }, [doc]);
 
   return (

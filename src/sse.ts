@@ -34,3 +34,21 @@ export async function readSSE(body: ReadableStream<Uint8Array>, onFrame: (frame:
     }
   }
 }
+
+// readSSE + per-frame JSON.parse, with malformed frames silently skipped. Both
+// consumers (chat/stream and the events channel) want the parsed object; only the
+// per-event handling differs, so they share this and just switch on `event`.
+export async function readJsonSSE(
+  body: ReadableStream<Uint8Array>,
+  onObj: (event: string, obj: Record<string, unknown>) => void,
+): Promise<void> {
+  await readSSE(body, ({ event, data }) => {
+    let obj: Record<string, unknown>;
+    try {
+      obj = JSON.parse(data) as Record<string, unknown>;
+    } catch {
+      return; // ignore malformed frame
+    }
+    onObj(event, obj);
+  });
+}

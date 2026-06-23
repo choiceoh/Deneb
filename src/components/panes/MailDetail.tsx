@@ -14,7 +14,7 @@ import {
   senderContext,
 } from "@/gateway";
 import type { Mail } from "@/types";
-import { errText, fmtDate, text } from "@/format";
+import { errText, firstString, fmtDate, text } from "@/format";
 import { useWorkspace } from "@/workspaceContext";
 import { Markdown } from "@/components/Markdown";
 
@@ -27,15 +27,6 @@ export function mailBody(mail?: Mail): string {
   if (mail.snippet) return mail.snippet;
   const html = firstString(mail, ["html"]);
   return html ? htmlToText(html) : "";
-}
-
-function firstString(mail: Mail, keys: string[]): string {
-  const record = mail as unknown as Record<string, unknown>;
-  for (const key of keys) {
-    const value = record[key];
-    if (typeof value === "string" && value.trim()) return value;
-  }
-  return "";
 }
 
 function htmlToText(html: string): string {
