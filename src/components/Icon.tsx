@@ -6,7 +6,7 @@ export type IconName =
   | "today"
   | "progress"
   | "todo"
-  | "doc"
+  | "notebook"
   | "mail"
   | "calendar"
   | "wiki"
@@ -43,10 +43,10 @@ const PATHS: Record<IconName, ReactNode> = {
       <path d="M8.5 12.2l2.4 2.4 4.6-4.9" />
     </>
   ),
-  doc: (
+  notebook: (
     <>
-      <path d="M6 3.5h7l5 5v12a1.5 1.5 0 0 1-1.5 1.5h-10A1.5 1.5 0 0 1 5 20.5v-15A1.5 1.5 0 0 1 6.5 3.5z" />
-      <path d="M13 3.5V8a1 1 0 0 0 1 1h4M8.5 13h7M8.5 16.5h5" />
+      <path d="M6 3.5h12a1 1 0 0 1 1 1v15a1 1 0 0 1-1 1H6A1.5 1.5 0 0 1 4.5 19V5A1.5 1.5 0 0 1 6 3.5z" />
+      <path d="M9 3.5v17M12 8.5h4M12 12h4" />
     </>
   ),
   mail: (

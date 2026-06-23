@@ -133,15 +133,38 @@ export interface SearchHit {
   snippet?: string;
 }
 
+// Notebook (노트북) — read-only deal collections (miniapp.notebook.list/get). Each
+// notebook is a 거래 with cited source materials; opening one feeds its sources to
+// the AI panel for grounded Q&A (NotebookLM-style).
+export interface NotebookSummary {
+  id: string;
+  name: string;
+  dealRef?: string; // wiki path of the deal page ("프로젝트/거래/…md")
+  sourceCount?: number;
+  updated?: number; // epoch millis
+}
+
+export interface NotebookSource {
+  cite?: string; // "S1", "S2" …
+  kind?: string; // "note" | "mail" | …
+  ref?: string;
+  title?: string;
+  text?: string;
+}
+
+export interface Notebook extends NotebookSummary {
+  sources?: NotebookSource[];
+}
+
 // Every navigable pane. Resource-backed panes share their key with a Refine
 // resource (see resources.ts); `today` is a read-only dashboard aggregating
-// several resources; `doc` is a client-only scratch pane; `wiki` and `search`
-// are query-driven custom panes.
+// several resources; `notebook` browses Deneb's deal notebooks; `wiki` and
+// `search` are query-driven custom panes.
 export type View =
   | "today"
   | "progress"
   | "todo"
-  | "doc"
+  | "notebook"
   | "mail"
   | "calendar"
   | "wiki"

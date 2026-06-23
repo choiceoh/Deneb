@@ -7,9 +7,8 @@
 // is mounted (Workstation renders one at a time), so whoever is mounted owns the
 // AI context and names the resource the AI's tool calls should invalidate.
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { DOC_STORAGE_KEY, readStoredDoc } from "./docStorage";
 import type { GatewayConfig } from "./gateway";
-import { getJSON, remove, setJSON, setString } from "./storage";
+import { getJSON, setJSON } from "./storage";
 import type { View } from "./types";
 
 export interface PaneTarget {
@@ -21,8 +20,8 @@ export interface PaneTarget {
 
 interface WorkspaceCtx {
   connected: boolean;
-  // The gateway config, exposed so query-driven panes (wiki/search) can call
-  // non-CRUD RPCs directly (DESIGN §9) instead of going through the data provider.
+  // The gateway config, exposed so query-driven panes (wiki/search/notebook) can
+  // call non-CRUD RPCs directly (DESIGN §9) instead of going through the provider.
   cfg: GatewayConfig;
   // Update the gateway config (lifted to App). The settings pane edits URL/token
   // through this; App persists + rebuilds the data/auth providers.
@@ -32,17 +31,13 @@ interface WorkspaceCtx {
   paneTarget: PaneTarget | null;
   openPane: (view: View, target?: Omit<PaneTarget, "view">) => void;
   consumePaneTarget: () => void;
-  // `doc` lives here (not in the pane) so the scratch document survives pane
-  // switches even though the DocPane unmounts.
-  doc: string;
-  setDoc: (s: string) => void;
   // Pushed by the active pane: its content serialized for the AI, and the Refine
   // resource (if any) backing it — used to refresh after the AI mutates data.
   aiText: string;
   activeResource?: string;
   registerPane: (resource: string | undefined, text: string) => void;
-  // Cross-pane "open this wiki page" channel: 인물 카드·검색 결과가 위키 경로를 넘기면
-  // 위키 pane으로 전환하고 해당 페이지를 연다. WikiPane이 마운트되어 소비(consume)한다.
+  // Cross-pane "open this wiki page" channel: 인물 카드·검색 결과·노트북이 위키 경로를
+  // 넘기면 위키 pane으로 전환하고 해당 페이지를 연다. WikiPane이 마운트되어 소비한다.
   wikiTarget: string | null;
   openWiki: (path: string) => void;
   consumeWikiTarget: () => void;
@@ -74,7 +69,6 @@ export function WorkspaceProvider({
   children: ReactNode;
 }) {
   const [view, setView] = useState<View>("today"); // land on the 오늘 dashboard
-  const [doc, setDoc] = useState(readStoredDoc);
   const [aiText, setAiText] = useState("");
   const [activeResource, setActiveResource] = useState<string | undefined>(undefined);
   const [wikiTarget, setWikiTarget] = useState<string | null>(null);
@@ -103,11 +97,6 @@ export function WorkspaceProvider({
   const consumePaneTarget = () => setPaneTarget(null);
 
   useEffect(() => {
-    if (doc) setString(DOC_STORAGE_KEY, doc);
-    else remove(DOC_STORAGE_KEY);
-  }, [doc]);
-
-  useEffect(() => {
     setJSON(HIDDEN_VIEWS_KEY, hiddenViews);
   }, [hiddenViews]);
 
@@ -122,8 +111,6 @@ export function WorkspaceProvider({
         paneTarget,
         openPane,
         consumePaneTarget,
-        doc,
-        setDoc,
         aiText,
         activeResource,
         registerPane,

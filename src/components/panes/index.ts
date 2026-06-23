@@ -6,7 +6,7 @@ import type { ComponentType } from "react";
 import type { View } from "@/types";
 import { ProgressPane } from "./ProgressPane";
 import { TodoPane } from "./TodoPane";
-import { DocPane } from "./DocPane";
+import { NotebookPane } from "./NotebookPane";
 import { MailPane } from "./MailPane";
 import { CalendarPane } from "./CalendarPane";
 import { WikiPane } from "./WikiPane";
@@ -29,7 +29,7 @@ export const PANES: PaneDef[] = [
   // Digits 0–9 are taken; this dashboard-style overview gets a letter shortcut (⌘P).
   { key: "progress", label: "진행", shortcut: "p", Component: ProgressPane },
   { key: "todo", label: "할일", shortcut: "1", Component: TodoPane },
-  { key: "doc", label: "문서", shortcut: "2", Component: DocPane },
+  { key: "notebook", label: "노트북", shortcut: "2", Component: NotebookPane },
   { key: "mail", label: "메일", shortcut: "3", Component: MailPane },
   { key: "calendar", label: "일정", shortcut: "4", Component: CalendarPane },
   { key: "wiki", label: "위키", shortcut: "5", Component: WikiPane },

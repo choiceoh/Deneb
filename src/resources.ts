@@ -86,6 +86,12 @@ export const MEMORY_RPC = {
 
 export const SEARCH_RPC = "miniapp.search.all";
 
+// Read-only deal notebooks (Deneb 노트북) — the NotebookPane browses these directly.
+export const NOTEBOOK_RPC = {
+  list: "miniapp.notebook.list",
+  get: "miniapp.notebook.get",
+} as const;
+
 // Action RPCs that don't fit generic CRUD (no id+fields update / delete shape).
 // Panes call these directly via useAction → callRpc, mirroring the native client.
 export const MAIL_RPC = {

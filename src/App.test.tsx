@@ -33,7 +33,7 @@ describe("App (disconnected)", () => {
   it("renders the workstation shell with registry-driven nav", () => {
     renderWithProviders(<App />);
     expect(screen.getByRole("navigation")).toBeInTheDocument();
-    for (const label of ["할일", "문서", "메일", "일정"]) {
+    for (const label of ["할일", "노트북", "메일", "일정"]) {
       expect(screen.getByRole("button", { name: new RegExp(label) })).toBeInTheDocument();
     }
     expect(screen.getByText(/미연결/)).toBeInTheDocument();
