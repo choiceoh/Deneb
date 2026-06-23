@@ -76,6 +76,13 @@ body,
   height: 100%;
 }
 
+/* Frameless window rounding: with app.transparent + macOSPrivateApi the window
+ * has no native chrome, so we round the gradient body and let the corners fall
+ * through to the transparent backing — macOS/Windows then show soft corners. */
+html {
+  background: transparent;
+}
+
 body {
   margin: 0;
   font-family: var(--font);
@@ -83,6 +90,7 @@ body {
   color: var(--ink);
   background: var(--grad) fixed;
   overflow: hidden;
+  border-radius: 12px;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   font-feature-settings:
