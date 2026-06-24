@@ -17,16 +17,17 @@ import { DeleteModal } from "./commonModals";
 // style). You can also create a notebook and pin (add) a citation source.
 export function NotebookPane() {
   const { connected, cfg, openWiki } = useWorkspace();
-  const { call, callCached, readCache, status } = useCachedRpc(cfg, NOTEBOOK_RESOURCE);
+  const { call, callCached, readCache, writeCache, status } = useCachedRpc(cfg, NOTEBOOK_RESOURCE);
   const [listSnapshot] = useState(() => readCache<NotebookListResponse>(NOTEBOOK_RPC.list));
   const [notebooks, setNotebooks] = useState<NotebookSummary[]>(listSnapshot?.data.notebooks ?? []);
   const [active, setActive] = useState<Notebook | null>(null);
   const [creating, setCreating] = useState(false);
   const [addingSource, setAddingSource] = useState(false);
   const [deleting, setDeleting] = useState<Notebook | null>(null);
+  const [deletingSource, setDeletingSource] = useState<NotebookSource | null>(null);
 
-  // Reload the list and refresh its cache — used after create/add_source so the
-  // left rail (and the cached snapshot it paints from) stays current.
+  // Reload the list and refresh its cache — used after writes so the left rail
+  // (and the cached snapshot it paints from) stays current.
   async function loadNotebooks() {
     await callCached<NotebookListResponse>(
       NOTEBOOK_RPC.list,
@@ -81,6 +82,28 @@ export function NotebookPane() {
     setAddingSource(false);
     await openNotebook(active.id); // reload to show the new source
     void loadNotebooks(); // refresh the list's source count
+  }
+
+  async function removeSource() {
+    if (!active || !deletingSource?.cite) return;
+    const id = active.id;
+    const r = await call<Notebook>(NOTEBOOK_RPC.removeSource, { id, cite: deletingSource.cite }, "삭제 중…");
+    if (!r.ok) return;
+    setDeletingSource(null);
+    setActive(r.data);
+    writeCache(NOTEBOOK_RPC.get, { id }, r.data);
+    setNotebooks((current) =>
+      current.map((notebook) =>
+        notebook.id === id
+          ? {
+              ...notebook,
+              sourceCount: r.data.sources?.length ?? 0,
+              updated: r.data.updated ?? notebook.updated,
+            }
+          : notebook,
+      ),
+    );
+    void loadNotebooks();
   }
 
   async function deleteNotebook() {
@@ -219,7 +242,11 @@ export function NotebookPane() {
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: 820 }}>
                 {(active.sources ?? []).map((s, i) => (
-                  <SourceCard key={s.cite || s.ref || i} source={s} />
+                  <SourceCard
+                    key={s.cite || s.ref || i}
+                    source={s}
+                    onDelete={s.cite ? () => setDeletingSource(s) : undefined}
+                  />
                 ))}
               </div>
             )}
@@ -248,25 +275,52 @@ export function NotebookPane() {
           onDelete={() => void deleteNotebook()}
         />
       )}
+      {deletingSource && (
+        <DeleteModal
+          title="인용자료 삭제"
+          path={sourceLabel(deletingSource)}
+          onClose={() => setDeletingSource(null)}
+          onDelete={() => void removeSource()}
+        />
+      )}
     </div>
   );
 }
 
 const NOTEBOOK_RESOURCE = "notebook";
 
-// A notebook source to pin: a pasted "note" (text) or a "wiki" page (ref = path).
-// Mirrors the gateway's notebook source kinds (KindNote / KindWiki).
-type NewSource = { kind: "note" | "wiki"; title: string; text?: string; ref?: string };
+const SOURCE_KIND_OPTIONS = [
+  {
+    kind: "note",
+    label: "노트",
+    refLabel: "내용",
+    placeholder: "메일 본문·견적·메모 등 인용할 텍스트를 붙여넣으세요.",
+  },
+  { kind: "wiki", label: "위키", refLabel: "위키 경로", placeholder: "예: 프로젝트/topsolar.md" },
+  { kind: "file", label: "파일", refLabel: "파일 경로", placeholder: "예: 계약서/topsolar.pdf" },
+  { kind: "url", label: "URL", refLabel: "URL", placeholder: "https://example.com/article" },
+  { kind: "mail", label: "메일", refLabel: "메일 ID", placeholder: "스레드 또는 메시지 ID" },
+  { kind: "diary", label: "일기", refLabel: "일기 날짜/ID", placeholder: "예: 2026-06-24" },
+] as const;
 
-const KIND_LABEL: Record<string, string> = { note: "노트", wiki: "위키" };
+type SourceKind = (typeof SOURCE_KIND_OPTIONS)[number]["kind"];
+type NewSource = { kind: SourceKind; title: string; text?: string; ref?: string };
+
+const KIND_LABEL: Record<SourceKind, string> = Object.fromEntries(
+  SOURCE_KIND_OPTIONS.map((option) => [option.kind, option.label]),
+) as Record<SourceKind, string>;
 
 interface NotebookListResponse {
   notebooks?: NotebookSummary[];
 }
 
+function sourceLabel(source: NotebookSource) {
+  return [source.cite, source.title || source.ref || "(제목 없음)"].filter(Boolean).join(" · ");
+}
+
 // One cited source inside a notebook: a citation badge + title + kind, then the
 // source text rendered as Markdown.
-function SourceCard({ source }: { source: NotebookSource }) {
+function SourceCard({ source, onDelete }: { source: NotebookSource; onDelete?: () => void }) {
   return (
     <section style={{ border: "1px solid var(--line)", borderRadius: "var(--radius-ctl)", padding: "12px 14px" }}>
       <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: source.text ? 7 : 0 }}>
@@ -285,14 +339,42 @@ function SourceCard({ source }: { source: NotebookSource }) {
             {source.cite}
           </span>
         )}
-        <span style={{ fontWeight: 600, fontSize: 14, minWidth: 0 }}>
+        <span
+          style={{
+            fontWeight: 600,
+            fontSize: 14,
+            minWidth: 0,
+            flex: "1 1 auto",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
           {source.title || source.ref || "(제목 없음)"}
         </span>
-        {source.kind && (
-          <span style={{ marginLeft: "auto", flex: "0 0 auto", fontSize: 11, color: "var(--muted-2)" }}>
-            {KIND_LABEL[source.kind] ?? source.kind}
-          </span>
-        )}
+        <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6, flex: "0 0 auto" }}>
+          {source.kind && (
+            <span style={{ fontSize: 11, color: "var(--muted-2)" }}>
+              {KIND_LABEL[source.kind as SourceKind] ?? source.kind}
+            </span>
+          )}
+          {onDelete && (
+            <button
+              className="row-btn"
+              onClick={onDelete}
+              aria-label={`인용자료 삭제 ${source.cite}`}
+              title="인용자료 삭제"
+              style={{
+                padding: 3,
+                display: "inline-flex",
+                alignItems: "center",
+                color: color.danger,
+              }}
+            >
+              <Icon name="trash" size={12} />
+            </button>
+          )}
+        </span>
       </div>
       {source.text && (
         <div style={{ fontSize: 13, color: "var(--ink-2)", lineHeight: 1.6 }}>
@@ -351,14 +433,19 @@ function AddSourceModal({
   onClose: () => void;
   onAdd: (src: NewSource) => void;
 }) {
-  const [kind, setKind] = useState<"note" | "wiki">("note");
+  const [kind, setKind] = useState<SourceKind>("note");
   const [title, setTitle] = useState("");
   const [text, setText] = useState("");
   const [ref, setRef] = useState("");
+  const kindOption = SOURCE_KIND_OPTIONS.find((option) => option.kind === kind) ?? SOURCE_KIND_OPTIONS[0];
   const canAdd = kind === "note" ? text.trim().length > 0 : ref.trim().length > 0;
   const add = () => {
     if (!canAdd) return;
-    onAdd(kind === "note" ? { kind, title: title.trim(), text } : { kind, title: title.trim(), ref: ref.trim() });
+    onAdd(
+      kind === "note"
+        ? { kind, title: title.trim(), text: text.trim() }
+        : { kind, title: title.trim(), ref: ref.trim() },
+    );
   };
   return (
     <Modal
@@ -367,14 +454,14 @@ function AddSourceModal({
       width={560}
       footer={<ModalFooter action="추가" canSubmit={canAdd} onClose={onClose} onSubmit={add} />}
     >
-      <Field label="종류">
-        <div style={{ display: "flex", gap: 6 }}>
-          {(
-            [
-              ["note", "노트"],
-              ["wiki", "위키 페이지"],
-            ] as const
-          ).map(([k, label]) => (
+      <div style={{ marginBottom: 12 }}>
+        <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 5 }}>종류</div>
+        <div
+          role="group"
+          aria-label="종류"
+          style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 6 }}
+        >
+          {SOURCE_KIND_OPTIONS.map(({ kind: k, label }) => (
             <button
               key={k}
               type="button"
@@ -386,28 +473,28 @@ function AddSourceModal({
             </button>
           ))}
         </div>
-      </Field>
+      </div>
       <Field label="제목 (선택)">
         <input className="field" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus />
       </Field>
       {kind === "note" ? (
-        <Field label="내용">
+        <Field label={kindOption.refLabel}>
           <textarea
             className="field"
             value={text}
             onChange={(e) => setText(e.target.value)}
             rows={8}
-            placeholder="메일 본문·견적·메모 등 인용할 텍스트를 붙여넣으세요."
+            placeholder={kindOption.placeholder}
             style={{ resize: "vertical", fontFamily: "inherit", lineHeight: 1.5 }}
           />
         </Field>
       ) : (
-        <Field label="위키 경로">
+        <Field label={kindOption.refLabel}>
           <input
             className="field"
             value={ref}
             onChange={(e) => setRef(e.target.value)}
-            placeholder="예: 프로젝트/topsolar.md"
+            placeholder={kindOption.placeholder}
             onKeyDown={(e) => {
               if (e.key === "Enter") add();
             }}

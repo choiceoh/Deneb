@@ -45,6 +45,7 @@ describe("resource registry", () => {
       create: "miniapp.notebook.create",
       delete: "miniapp.notebook.delete",
       addSource: "miniapp.notebook.add_source",
+      removeSource: "miniapp.notebook.remove_source",
     });
   });
 });

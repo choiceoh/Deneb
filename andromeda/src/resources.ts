@@ -101,13 +101,14 @@ export const FILES_RPC = {
 export const SEARCH_RPC = "miniapp.search.all";
 
 // Deneb 노트북 — the NotebookPane browses (list/get) and writes (create/delete a
-// notebook, pin a citation source) directly via these miniapp RPCs.
+// notebook, pin/unpin a citation source) directly via these miniapp RPCs.
 export const NOTEBOOK_RPC = {
   list: "miniapp.notebook.list",
   get: "miniapp.notebook.get",
   create: "miniapp.notebook.create",
   delete: "miniapp.notebook.delete",
   addSource: "miniapp.notebook.add_source",
+  removeSource: "miniapp.notebook.remove_source",
 } as const;
 
 // Action RPCs that don't fit generic CRUD (no id+fields update / delete shape).
