@@ -445,6 +445,16 @@ func (s *Service) IngestMessage(ctx context.Context, msg *gmail.MessageDetail, a
 	s.mu.Lock()
 	gmailClient := s.gmailClient
 	s.mu.Unlock()
+
+	// 대용량첨부: resolve large-file download links in the HTML body into real
+	// attachment bytes BEFORE the attachment gate/closure below, so they are OCR'd
+	// into the analysis and archived exactly like inline attachments. The poll
+	// path (Gmail API) never sets LargeAttachments, so this is a no-op there.
+	if attBytes == nil {
+		attBytes = map[string][]byte{}
+	}
+	s.fetchLargeAttachmentsInto(ctx, msg, attBytes)
+
 	deps := s.pipelineDeps(gmailClient)
 	// LMTP attachments arrive inline (no Gmail fetch): always serve the attachment
 	// gate from these bytes so 견적서/계약서 PDFs are OCR'd into the analysis exactly
