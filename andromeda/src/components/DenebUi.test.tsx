@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { AssistantText, DenebUi, parseDenebUi, splitDenebUi } from "./DenebUi";
+import { parseDenebUi, splitDenebUi } from "@/markdown/denebUiParse";
+import { AssistantText, DenebUi } from "./DenebUi";
 
 describe("deneb-ui parsing", () => {
   it("parses an object, wraps a bare array as a column, and accepts NDJSON", () => {

@@ -8,6 +8,8 @@ import { renderWithProviders } from "@/test/util";
 import { FilesPane } from "./FilesPane";
 
 const rootEntries: FileEntry[] = [{ tag: "folder", name: "projects", pathDisplay: "projects" }];
+let rpcCalls: Array<{ method: string; params: Record<string, unknown> }> = [];
+
 const projectEntries: FileEntry[] = [
   {
     tag: "file",
@@ -20,6 +22,7 @@ const projectEntries: FileEntry[] = [
 
 beforeEach(() => {
   localStorage.clear();
+  rpcCalls = [];
   if (!globalThis.crypto?.randomUUID) {
     vi.stubGlobal("crypto", { randomUUID: () => "test-uuid" });
   }
@@ -30,6 +33,7 @@ beforeEach(() => {
         method: string;
         params: Record<string, unknown>;
       };
+      rpcCalls.push({ method, params });
       const reply = (payload: unknown) =>
         ({ ok: true, json: async () => ({ ok: true, payload }) }) as unknown as Response;
       switch (method) {
@@ -77,6 +81,22 @@ describe("FilesPane", () => {
 
     expect(await screen.findByText("quarter-review.pdf")).toBeInTheDocument();
     expect(screen.getByLabelText("파일 경로")).toHaveValue("projects");
+  });
+
+  it("uploads files with an inferred MIME type when File.type is empty", async () => {
+    renderWithProviders(<FilesPane />, { connected: true });
+
+    await screen.findAllByText("projects");
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    await userEvent.upload(input, new File(["fake pdf"], "contract.pdf", { type: "" }));
+
+    await screen.findByText("업로드됨");
+    const upload = rpcCalls.find((c) => c.method === FILES_RPC.upload);
+    expect(upload?.params).toMatchObject({
+      path: "contract.pdf",
+      mimeType: "application/pdf",
+      dataBase64: "ZmFrZSBwZGY=",
+    });
   });
 
   it("searches files and shows a share link", async () => {
