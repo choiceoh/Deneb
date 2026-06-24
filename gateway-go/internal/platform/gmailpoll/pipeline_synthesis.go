@@ -344,21 +344,20 @@ func synthesizeAnalysis(ctx context.Context, deps PipelineDeps, msg *gmail.Messa
 	clean, projects := parseRelatedProjects(analysis, candidates)
 	clean, importance := parseImportance(clean)
 
-	// Extract the operator's follow-up actions from the analysis prose — before
-	// the facts block is appended below, so the extractor sees only the analysis
-	// and not the "위키 갱신 제안" addendum. Best-effort; the server sink turns
-	// high-priority items into to-dos.
+	// Extract the operator's follow-up actions from the analysis prose.
+	// Best-effort; the server sink turns high-priority items into to-dos.
 	actions := extractActionItems(ctx, deps, clean)
 
-	// Local-AI fact extraction for wiki write-back. The system prompt's
-	// "분석 → 위키 갱신" section asks the agent to record new facts after
-	// analyzing; this attaches a structured proposal block so the agent has
-	// concrete `wiki(action="write")` inputs rather than having to derive
-	// them from prose. Best-effort — empty when local AI is unavailable or
-	// yields nothing to record.
-	if factsBlock := extractFactsForWiki(ctx, deps, clean); factsBlock != "" {
-		clean = clean + "\n\n" + factsBlock
-	}
+	// NOTE: we deliberately do NOT append a "위키 갱신 제안" facts block here.
+	// It was scaffolding meant for an agent to consume as wiki(action="write")
+	// inputs, but no wired path actually reads it — the agent's gmail tool runs
+	// the single-call pipeline (no LocalClient, so no extraction), and the
+	// poll/Mini App paths only show or archive the text. So the block only
+	// surfaced as noise in the operator's analysis card, push notifications, and
+	// the archived analysis page. The extractor (extractFactsForWiki) is retained
+	// for the eval harness; production analysis output stays clean. Legacy cached
+	// analyses that still carry the block are scrubbed at the Mini App boundary
+	// via StripWikiFactsBlock.
 
 	// Deal-document extraction is gated on attachments: business documents
 	// (견적서/계약서/세금계산서) arrive as files, so this avoids an extra local

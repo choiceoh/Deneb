@@ -307,6 +307,53 @@ func TestGmailAnalyze_CacheHit_SkipsLLMAndWiki(t *testing.T) {
 	}
 }
 
+// A legacy cached analysis — stored back when the pipeline still appended a
+// "위키 갱신 제안" block — must render without it. Both Mini App read paths scrub
+// the block (gmailpoll.StripWikiFactsBlock) so the operator's card stays clean
+// without forcing a re-analysis. Fresh analyses no longer carry the block at all.
+func TestGmailAnalyze_StripsLegacyWikiFactsBlockFromCache(t *testing.T) {
+	const prose = "## 저장된 분석\n핵심 요청은 견적 회신."
+	legacy := prose + "\n\n📝 위키 갱신 제안 (자동 추출):\n- **ABC상사** (deal): NDA 70%"
+
+	cache := NewAnalysisStore(t.TempDir())
+	if err := cache.save(&analysisRecord{
+		MsgID:         "m1",
+		Subject:       "s",
+		Analysis:      legacy,
+		PromptVersion: AnalysisPromptVersion,
+	}); err != nil {
+		t.Fatalf("seed cache: %v", err)
+	}
+	deps := GmailAnalyzeDeps{
+		Client:   func() (GmailClient, error) { t.Fatal("client must not run on cache hit"); return nil, nil },
+		Pipeline: func() (AnalyzePipeline, error) { t.Fatal("pipeline must not run on cache hit"); return nil, nil },
+		Cache:    cache,
+	}
+
+	assertClean := func(t *testing.T, resp *protocol.ResponseFrame) {
+		t.Helper()
+		if !resp.OK {
+			t.Fatalf("expected OK, got error %+v", resp.Error)
+		}
+		var got map[string]any
+		decode(t, resp, &got)
+		analysis, _ := got["analysis"].(string)
+		if strings.Contains(analysis, "위키 갱신 제안") {
+			t.Errorf("analysis still carries the facts block:\n%s", analysis)
+		}
+		if !strings.Contains(analysis, "핵심 요청은 견적 회신.") {
+			t.Errorf("prose was lost during strip:\n%s", analysis)
+		}
+	}
+
+	t.Run("analyze cache hit", func(t *testing.T) {
+		assertClean(t, gmailAnalyze(deps)(authedCtx(), reqWith(t, "miniapp.gmail.analyze", map[string]any{"id": "m1"})))
+	})
+	t.Run("analysis_cached", func(t *testing.T) {
+		assertClean(t, gmailAnalysisCached(deps)(authedCtx(), reqWith(t, "miniapp.gmail.analysis_cached", map[string]any{"id": "m1"})))
+	})
+}
+
 // Cache miss → LLM runs → result persisted to both cache and wiki.
 func TestGmailAnalyze_CacheMiss_RunsLLMAndPersists(t *testing.T) {
 	cache := NewAnalysisStore(t.TempDir())

@@ -202,12 +202,22 @@ func extractFactsForWiki(ctx context.Context, deps PipelineDeps, analysisText st
 	return renderFactsBlock(bundle.Facts)
 }
 
-// renderFactsBlock formats a slice of WikiFactProposal as the Markdown block
-// appended to the analyze output. Returns "" when no fact has both an entity
-// and a fact (so the analyze output stays clean if extraction yields noise).
+// wikiFactsBlockMarker prefixes the auto-extracted "위키 갱신 제안" block that
+// renderFactsBlock produces. Production analysis no longer appends this block —
+// it had no wired consumer and only surfaced as noise in the operator's analysis
+// card, push notifications, and the archived analysis page (see synthesizeAnalysis).
+// StripWikiFactsBlock keys on this prefix to scrub the block from legacy cached
+// analyses that were stored back when it was still appended. Keep in sync with the
+// header written below.
+const wikiFactsBlockMarker = "📝 위키 갱신 제안"
+
+// renderFactsBlock formats a slice of WikiFactProposal as a Markdown block.
+// Returns "" when no fact has both an entity and a fact (so the output stays clean
+// if extraction yields noise). Retained for the local-extractor eval harness
+// (eval_extract.go); production analysis output no longer embeds it.
 func renderFactsBlock(facts []WikiFactProposal) string {
 	var sb strings.Builder
-	sb.WriteString("📝 위키 갱신 제안 (자동 추출):\n")
+	sb.WriteString(wikiFactsBlockMarker + " (자동 추출):\n")
 	rendered := 0
 	for _, f := range facts {
 		entity := strings.TrimSpace(f.Entity)
@@ -227,6 +237,35 @@ func renderFactsBlock(facts []WikiFactProposal) string {
 		return ""
 	}
 	return strings.TrimSpace(sb.String())
+}
+
+// StripWikiFactsBlock removes a "위키 갱신 제안" proposal block from an analysis
+// text, preserving the surrounding prose and any later note (e.g. the 📎 attachment
+// truncation line that synthesizeAnalysis appends after it). The block is a single
+// paragraph — its header followed by bullet lines — so it ends at the next blank
+// line or end of text. Returns text unchanged when no block is present.
+//
+// The Mini App calls this so legacy cached analyses — stored back when
+// synthesizeAnalysis still appended the block — render clean without forcing a
+// re-analysis. Fresh analyses no longer carry the block at all.
+func StripWikiFactsBlock(text string) string {
+	idx := strings.Index(text, wikiFactsBlockMarker)
+	if idx < 0 {
+		return text
+	}
+	head := strings.TrimRight(text[:idx], " \n")
+	rest := ""
+	if nl := strings.Index(text[idx:], "\n\n"); nl >= 0 {
+		rest = strings.TrimLeft(text[idx+nl:], "\n")
+	}
+	switch {
+	case head == "":
+		return rest
+	case rest == "":
+		return head
+	default:
+		return head + "\n\n" + rest
+	}
 }
 
 // extractActionItems runs the local-AI extractor over the final analysis text
