@@ -6,6 +6,7 @@ export type IconName =
   | "today"
   | "chat"
   | "attach"
+  | "projects"
   | "progress"
   | "todo"
   | "notebook"
@@ -46,6 +47,12 @@ const PATHS: Record<IconName, ReactNode> = {
   ),
   attach: (
     <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 0 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+  ),
+  projects: (
+    <>
+      <path d="M4.5 19.5V6.8A2.3 2.3 0 0 1 6.8 4.5h4.1l1.9 2.2h4.4a2.3 2.3 0 0 1 2.3 2.3v10.5" />
+      <path d="M4.5 19.5h15M8 11h8M8 14.5h5.5" />
+    </>
   ),
   todo: (
     <>

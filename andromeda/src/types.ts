@@ -201,6 +201,7 @@ export interface Notebook extends NotebookSummary {
 export type View =
   | "today"
   | "chat"
+  | "projects"
   | "progress"
   | "todo"
   | "notebook"
