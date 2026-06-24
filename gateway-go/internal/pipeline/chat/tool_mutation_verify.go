@@ -13,10 +13,10 @@ import (
 // failure mode: agents identify the right context but fail to translate it into a
 // successful action, and report buried failures as done).
 //
-// Several mutation tools return failures *in-band* — as result text with a nil Go
-// error (e.g. gmail send returns `"발송 실패: …", nil`). Because the error slot is
-// nil, the agent loop marks the tool result isError=false, so a failure can be
-// silently mistaken for success and reported to the user as completed. This file
+// Several mutation tools return failures *in-band* — as result text with a nil
+// Go error. Because the error slot is nil, the agent loop marks the tool result
+// isError=false, so a failure can be silently mistaken for success and reported
+// to the user as completed. This file
 // detects those buried failures and prepends a loud, standardized banner so the
 // model treats them as failures (retry or tell the user) rather than success.
 //
@@ -38,7 +38,6 @@ const mutationFailureBanner = "⚠️ 실행 실패 — 이 작업은 완료되�
 // it emits (verified against the tool implementations in tools/). When any marker
 // is present in the output, the action failed despite the nil error slot.
 var mutationFailureMarkers = map[string][]string{
-	"gmail":    {"발송 실패", "답장 실패", "라벨 추가 실패", "라벨 제거 실패"},
 	"wiki":     {"위키 페이지 쓰기 실패", "일지 쓰기 실패"},
 	"notebook": {"노트북 생성 실패", "자료 추가 실패", "자료 제거 실패", "노트북 삭제 실패"},
 	"cron":     {"실행 실패"},

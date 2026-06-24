@@ -779,88 +779,6 @@ func diagramToolSchema() map[string]any {
 	}
 }
 
-func gmailToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"action": map[string]any{
-				"type":        "string",
-				"description": "Gmail OAuth2 fallback/account action. Use mail_archive first for received-mail lookup, project history, and archive-backed analysis prep; use this only for send/reply/label/OAuth or Gmail-only fallback.",
-				"enum":        []string{"inbox", "search", "read", "thread", "attachment", "send", "reply", "label", "analyze"},
-			},
-			"attachment": map[string]any{
-				"type":        "string",
-				"description": "Attachment selector for the attachment action: a filename (or substring) or 1-based index. Omit to list all attachments of the message. PDFs are extracted to text (OCR fallback for scans). Office docs are extracted via stdlib OOXML readers: Excel (.xlsx), Word (.docx), PowerPoint (.pptx). Image attachments go through OCR. Text files returned directly.",
-			},
-			"bcc": map[string]any{
-				"type":        "string",
-				"description": "BCC recipient(s), comma-separated",
-			},
-			"body": map[string]any{
-				"type":        "string",
-				"description": "Email body text (plain text or HTML if html=true)",
-			},
-			"cc": map[string]any{
-				"type":        "string",
-				"description": "CC recipient(s), comma-separated",
-			},
-			"download": map[string]any{
-				"type":        "boolean",
-				"description": "For the attachment action: when true, save the selected attachment to a local file and return its path instead of extracting text. Pass that path to the send_file tool to forward the file to the user.",
-			},
-			"html": map[string]any{
-				"type":        "boolean",
-				"description": "Send body as HTML (default: false)",
-				"default":     false,
-			},
-			"label_action": map[string]any{
-				"type":        "string",
-				"description": "Label sub-action (for label action)",
-				"enum":        []string{"list", "add", "remove"},
-			},
-			"label_name": map[string]any{
-				"type":        "string",
-				"description": "Label name (for label add/remove)",
-			},
-			"max": map[string]any{
-				"type":        "number",
-				"description": "Maximum results (for inbox/search, or messages kept for thread; default: 10, max: 50)",
-				"default":     10,
-				"minimum":     1,
-				"maximum":     50,
-			},
-			"message_id": map[string]any{
-				"type":        "string",
-				"description": "Gmail message ID (for read, reply, label, attachment actions; for thread action, resolves the containing thread). Copy it EXACTLY from a Gmail result's 'ID:' field — never construct or guess one. For read, you may omit it and pass query instead.",
-			},
-			"query": map[string]any{
-				"type":        "string",
-				"description": "Gmail search query (supports Gmail operators like from:, to:, subject:, newer_than:, is:unread, has:attachment, etc.). Prefer mail_archive for normal received-mail searches; use this only for Gmail-only fallback.",
-			},
-			"subject": map[string]any{
-				"type":        "string",
-				"description": "Email subject line",
-			},
-			"thread_id": map[string]any{
-				"type":        "string",
-				"description": "Gmail thread ID (for thread action; if omitted, message_id resolves the thread)",
-			},
-			"timeout": map[string]any{
-				"type":        "number",
-				"description": "Timeout in seconds (default: 30, max: 60)",
-				"default":     30,
-				"minimum":     1,
-				"maximum":     60,
-			},
-			"to": map[string]any{
-				"type":        "string",
-				"description": "Recipient email or contact alias (auto-resolved from KV store gmail.contacts.<alias>). Use 'self' (or me/나/본인) to send to your own tracked mailbox.",
-			},
-		},
-		"required": []string{"action"},
-	}
-}
-
 func filesToolSchema() map[string]any {
 	return map[string]any{
 		"type": "object",
@@ -1095,7 +1013,7 @@ func notebookToolSchema() map[string]any {
 			},
 			"kind": map[string]any{
 				"type":        "string",
-				"description": "자료 유형 (add_source): wiki=위키 페이지(ref=경로, 라이브). note=붙여넣기 텍스트(text). file=파일 경로(ref=경로; PDF·이미지 OCR, 그 외 텍스트). url=웹페이지(ref=URL, 본문 추출). mail=Gmail 스레드(ref=스레드/메시지 id). diary=일기 항목(ref=날짜/id). file·url·mail·diary는 추가 시점에 본문을 스냅샷.",
+				"description": "자료 유형 (add_source): wiki=위키 페이지(ref=경로, 라이브). note=붙여넣기 텍스트(text). file=파일 경로(ref=경로; PDF·이미지 OCR, 그 외 텍스트). url=웹페이지(ref=URL, 본문 추출). mail=메일 스레드(ref=스레드/메시지 id). diary=일기 항목(ref=날짜/id). file·url·mail·diary는 추가 시점에 본문을 스냅샷.",
 				"enum":        []string{"wiki", "note", "file", "url", "mail", "diary"},
 			},
 			"mode": map[string]any{
@@ -1109,7 +1027,7 @@ func notebookToolSchema() map[string]any {
 			},
 			"ref": map[string]any{
 				"type":        "string",
-				"description": "자료 위치 (kind별): wiki=페이지 경로('프로젝트/topsolar.md'/'w:프로젝트/topsolar'), file=파일 경로(PDF·이미지·텍스트), url=웹 주소(https://…), mail=Gmail 스레드/메시지 id, diary=일기 날짜/id.",
+				"description": "자료 위치 (kind별): wiki=페이지 경로('프로젝트/topsolar.md'/'w:프로젝트/topsolar'), file=파일 경로(PDF·이미지·텍스트), url=웹 주소(https://…), mail=메일 스레드/메시지 id, diary=일기 날짜/id.",
 			},
 			"source": map[string]any{
 				"type":        "string",

@@ -4,13 +4,11 @@ import (
 	"context"
 	"strings"
 	"testing"
-
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
 )
 
 // TestExtractDocument_ConsistentAcrossCallers is the regression guard for the
-// dispatcher unification: the Gmail attachment path, the exported
-// ExtractDocumentText facade, and the Dropbox path now all funnel through the
+// dispatcher unification: the mail attachment path, the exported
+// ExtractDocumentText facade, and the files path now all funnel through the
 // single extractDocument switch, so for a real document they must extract the
 // *same* bytes — only the surrounding presentation differs.
 func TestExtractDocument_ConsistentAcrossCallers(t *testing.T) {
@@ -34,20 +32,19 @@ func TestExtractDocument_ConsistentAcrossCallers(t *testing.T) {
 		t.Errorf("files store extract diverged:\n got=%q\nwant=%q", fs, r.text)
 	}
 
-	// Gmail path embeds the identical text under its own Korean header.
-	att := &gmail.AttachmentInfo{Filename: "report.xlsx", Size: len(xlsx)}
-	gm := extractAttachmentText(ctx, att, xlsx)
+	// Mail attachment path embeds the identical text under its own Korean header.
+	gm := extractMailAttachmentText(ctx, "report.xlsx", "", len(xlsx), xlsx)
 	if !strings.HasPrefix(gm, "## 📎 report.xlsx (Excel)\n\n") {
-		t.Errorf("gmail xlsx header missing:\n%s", gm)
+		t.Errorf("mail attachment xlsx header missing:\n%s", gm)
 	}
 	if !strings.Contains(gm, r.text) {
-		t.Errorf("gmail xlsx body diverged from canonical text:\n%s", gm)
+		t.Errorf("mail attachment xlsx body diverged from canonical text:\n%s", gm)
 	}
 }
 
 // TestExtractDocument_CallerDivergences locks in the *intended* differences
 // between the callers so a future "simplification" can't quietly erase them:
-//   - plain text is a readable document for Gmail/Dropbox but ExtractDocumentText
+//   - plain text is a readable document for mail/files but ExtractDocumentText
 //     declines it (web fetch handles text/HTML on its own path),
 //   - an unsupported binary yields nothing on every path.
 func TestExtractDocument_CallerDivergences(t *testing.T) {
@@ -62,11 +59,10 @@ func TestExtractDocument_CallerDivergences(t *testing.T) {
 		t.Error("ExtractDocumentText must decline plain text")
 	}
 	if got := extractFileText(ctx, "note.txt", txt); got != "hello world" {
-		t.Errorf("dropbox text = %q, want raw passthrough", got)
+		t.Errorf("files text = %q, want raw passthrough", got)
 	}
-	att := &gmail.AttachmentInfo{Filename: "note.txt", Size: len(txt)}
-	if gm := extractAttachmentText(ctx, att, txt); gm != "## 📎 note.txt\n\nhello world" {
-		t.Errorf("gmail text = %q", gm)
+	if gm := extractMailAttachmentText(ctx, "note.txt", "", len(txt), txt); gm != "## 📎 note.txt\n\nhello world" {
+		t.Errorf("mail attachment text = %q", gm)
 	}
 
 	// Unsupported binary.
@@ -78,20 +74,19 @@ func TestExtractDocument_CallerDivergences(t *testing.T) {
 		t.Error("ExtractDocumentText must decline unknown binary")
 	}
 	if got := extractFileText(ctx, "blob.bin", bin); got != "" {
-		t.Errorf("dropbox unsupported = %q, want empty", got)
+		t.Errorf("files unsupported = %q, want empty", got)
 	}
 }
 
-// TestExtractAttachmentText_ErrorFormatting pins the Gmail-facing error string for
+// TestExtractAttachmentText_ErrorFormatting pins the mail-facing error string for
 // a corrupt document: a parser failure must surface as the metadata + Korean
 // "읽기 실패" line, not a header with empty body. Deterministic — non-zip bytes
 // always fail xlsxToText.
 func TestExtractAttachmentText_ErrorFormatting(t *testing.T) {
 	ctx := context.Background()
 	bad := []byte("this is not a zip archive")
-	att := &gmail.AttachmentInfo{Filename: "broken.xlsx", MimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", Size: len(bad)}
 
-	got := extractAttachmentText(ctx, att, bad)
+	got := extractMailAttachmentText(ctx, "broken.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", len(bad), bad)
 	if !strings.HasPrefix(got, "📎 broken.xlsx (Excel, ") {
 		t.Errorf("missing Excel error preamble:\n%s", got)
 	}

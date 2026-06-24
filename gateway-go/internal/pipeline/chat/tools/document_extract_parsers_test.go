@@ -3,12 +3,8 @@ package tools
 import (
 	"archive/zip"
 	"bytes"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
 )
 
 // makeTestXLSX builds a minimal valid .xlsx workbook in memory.
@@ -53,25 +49,6 @@ func TestXLSXToText(t *testing.T) {
 func TestXLSXToText_Invalid(t *testing.T) {
 	if _, err := xlsxToText([]byte("this is not a zip archive")); err == nil {
 		t.Error("expected an error for non-zip data")
-	}
-}
-
-func TestResolveAttachment(t *testing.T) {
-	atts := []gmail.AttachmentInfo{
-		{Filename: "contract.pdf", AttachmentID: "a1"},
-		{Filename: "invoice_2026.xlsx", AttachmentID: "a2"},
-	}
-	if got := resolveAttachment(atts, "2"); got == nil || got.AttachmentID != "a2" {
-		t.Errorf("index select = %+v", got)
-	}
-	if got := resolveAttachment(atts, "contract.pdf"); got == nil || got.AttachmentID != "a1" {
-		t.Errorf("exact-name select = %+v", got)
-	}
-	if got := resolveAttachment(atts, "invoice"); got == nil || got.AttachmentID != "a2" {
-		t.Errorf("substring select = %+v", got)
-	}
-	if got := resolveAttachment(atts, "nonexistent"); got != nil {
-		t.Errorf("no match should return nil, got %+v", got)
 	}
 }
 
@@ -139,23 +116,6 @@ func TestPPTXToText(t *testing.T) {
 		if !strings.Contains(text, want) {
 			t.Errorf("missing %q in:\n%s", want, text)
 		}
-	}
-}
-
-func TestSaveAttachmentToDisk(t *testing.T) {
-	// A traversal-style filename must be sanitized to its base component.
-	path, err := saveAttachmentToDisk("../../etc/evil.pdf", []byte("hello"))
-	if err != nil {
-		t.Fatalf("saveAttachmentToDisk: %v", err)
-	}
-	defer os.Remove(path)
-
-	if filepath.Base(path) != "evil.pdf" {
-		t.Errorf("path traversal not sanitized: %s", path)
-	}
-	got, err := os.ReadFile(path)
-	if err != nil || string(got) != "hello" {
-		t.Errorf("readback = %q, %v", got, err)
 	}
 }
 

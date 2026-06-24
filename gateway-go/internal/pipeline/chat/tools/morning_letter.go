@@ -17,7 +17,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailarchive"
 	"github.com/choiceoh/deneb/gateway-go/pkg/httputil"
 )
 
@@ -418,12 +418,23 @@ func fetchCalendar(ctx context.Context) any {
 }
 
 func fetchEmail(ctx context.Context) any {
-	client, err := gmail.DefaultClient()
-	if err != nil {
-		return emailData{Error: "no credentials"}
+	configuredMailboxes := mailarchive.ParseMailboxList(os.Getenv("DENEB_ARCHIVE_IMAP_MAILBOXES"))
+	mailboxes := mailarchive.SelectMailboxes("INBOX", configuredMailboxes)
+	cfg := mailarchive.Config{
+		Addr:      mailArchiveAddr(),
+		User:      strings.TrimSpace(os.Getenv("DENEB_ARCHIVE_IMAP_USER")),
+		Pass:      strings.TrimSpace(os.Getenv("DENEB_ARCHIVE_IMAP_PASS")),
+		Mailboxes: mailboxes,
+	}
+	if cfg.User == "" || cfg.Pass == "" {
+		return emailData{Error: "mail archive not configured"}
 	}
 
-	msgs, err := client.Search(ctx, "newer_than:1d", 10)
+	msgs, err := mailarchive.ListContextMessages(ctx, cfg, time.Now().AddDate(0, 0, -1), mailarchive.ContextOptions{
+		Mailboxes: mailboxes,
+		Limit:     10,
+		BodyRunes: 0,
+	})
 	if err != nil {
 		return emailData{Error: err.Error()}
 	}

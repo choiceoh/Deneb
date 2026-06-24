@@ -153,10 +153,10 @@ type NotebookDeps struct {
 	Wiki  *wiki.Store
 	// Optional ingesters for external source kinds (snapshot to text at add
 	// time); nil disables that kind (the tool reports it is unwired). Wired by
-	// the server from web/gmail/diary infra. The file kind (PDF/image OCR, text
+	// the server from web/mail/diary infra. The file kind (PDF/image OCR, text
 	// read) is handled in-package and needs no reader here.
 	FetchURL  SourceReader // kind=url   — fetch + extract readable web text
-	ReadMail  SourceReader // kind=mail  — read a Gmail thread/message by id
+	ReadMail  SourceReader // kind=mail  — read a mail thread/message by id
 	ReadDiary SourceReader // kind=diary — read a diary entry by date/id
 }
 

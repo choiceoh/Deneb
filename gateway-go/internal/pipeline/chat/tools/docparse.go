@@ -18,10 +18,10 @@ import (
 
 // docparse is the shared, local document-parser library: per-format extractors
 // (PDF, Excel, Word, PowerPoint, images via OCR) plus the markdown-table and
-// format-detection helpers they share. It has no Gmail/Dropbox/web coupling —
+// format-detection helpers they share. It has no mail/files/web coupling —
 // those callers route raw bytes through the dispatchers in document_extract.go,
-// which in turn call these parsers. Keeping the library here lets gmail_attachment.go
-// stay focused on Gmail fetch/list/save orchestration.
+// which in turn call these parsers. Keeping the library here lets mail
+// attachment, files, and fetch callers stay focused on their own orchestration.
 //
 // Everything here uses only the standard library (OOXML is a zip of XML parts)
 // and the local `pdftotext`/`pdftoppm`/`tesseract` CLIs, so extraction is fully

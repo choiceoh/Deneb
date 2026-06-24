@@ -46,8 +46,7 @@ var selfReviewTools = toSet(
 
 // Spawn presets back the sandbox the sessions_spawn schema promises
 // (tool_preset enum: researcher/implementer/verifier). Mail research uses the
-// local archive; Gmail OAuth surfaces stay out of coding agents unless the
-// unrestricted parent explicitly calls them.
+// local archive; Gmail OAuth surfaces are not exposed to coding agents.
 //
 // Like bootTools, deferred tools (mail_archive/contacts/graphify/edit/process) must
 // be listed by name: the allow-list gates the eager prompt listing, the
@@ -62,9 +61,8 @@ var selfReviewTools = toSet(
 
 // researcherTools: read-focused context gathering — files, web, mail,
 // wiki/knowledge/graph, contacts, session recall. wiki·knowledge keep their
-// write sub-actions ("분석 → 위키 갱신" doctrine). Gmail is intentionally absent:
-// coding agents should read received mail through mail_archive and leave
-// account-level Gmail actions to the unrestricted parent.
+// write sub-actions ("분석 → 위키 갱신" doctrine). Received mail always flows
+// through mail_archive; direct Gmail OAuth access is intentionally absent.
 var researcherTools = toSet(
 	"mail_archive", "contacts", "graphify", // deferred — loaded via fetch_tools
 	"read", "grep", "read_spillover", // file inspection

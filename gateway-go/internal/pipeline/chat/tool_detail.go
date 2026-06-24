@@ -49,19 +49,19 @@ const maxToolDetailRunes = 48
 // (operator plumbing), heartbeat_update, polaris, skills, watch, cron
 // (no single arg reads as a useful hint).
 var toolDetailKeys = map[string][]string{
-	"calendar":  {"summary"},
-	"contacts":  {"query"},
-	"edit":      {"file_path"},
-	"exec":      {"command"},
-	"files":     {"query", "path"},
-	"gmail":     {"query"},
-	"graphify":  {"question", "node"},
-	"grep":      {"pattern"},
-	"knowledge": {"query", "title"},
-	"read":      {"file_path"},
-	"web":       {"query", "url"},
-	"wiki":      {"query", "title"},
-	"write":     {"file_path"},
+	"calendar":     {"summary"},
+	"contacts":     {"query"},
+	"edit":         {"file_path"},
+	"exec":         {"command"},
+	"files":        {"query", "path"},
+	"graphify":     {"question", "node"},
+	"grep":         {"pattern"},
+	"knowledge":    {"query", "title"},
+	"mail_archive": {"query", "message_id"},
+	"read":         {"file_path"},
+	"web":          {"query", "url"},
+	"wiki":         {"query", "title"},
+	"write":        {"file_path"},
 }
 
 // truncateDetail caps s to maxRunes runes, appending an ellipsis when cut.

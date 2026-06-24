@@ -51,10 +51,10 @@ func TestCodeActionAllow(t *testing.T) {
 		{"mail_archive", "search", true},
 		{"mail_archive", "list", true},
 		{"mail_archive", "project_history", true},
-		{"gmail", "search", false},     // Gmail OAuth/account surface — top-level only
+		{"gmail", "search", false},     // Gmail OAuth/account surface — not exposed
 		{"gmail", "send", false},       // outbound — never on the bridge
 		{"gmail", "reply", false},      // outbound
-		{"gmail", "label", false},      // Gmail-account mutation — top-level only
+		{"gmail", "label", false},      // Gmail-account mutation — not exposed
 		{"gmail", "attachment", false}, // attachment download may write outside the bridge
 		{"calendar", "list", true},
 		{"calendar", "free_slots", true},

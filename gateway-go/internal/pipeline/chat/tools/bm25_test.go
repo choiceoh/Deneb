@@ -39,12 +39,12 @@ func TestExtractParamNames(t *testing.T) {
 
 func TestBM25Rank_OrdersByRelevance(t *testing.T) {
 	docs := []searchDoc{
-		{name: "gmail", tokens: tokenize("gmail email email inbox")},
+		{name: "mail_archive", tokens: tokenize("mail archive email email inbox")},
 		{name: "calendar", tokens: tokenize("calendar email events")},
 		{name: "process", tokens: tokenize("manage background exec sessions")},
 	}
 	got := bm25Rank("email", docs)
-	want := []string{"gmail", "calendar"} // gmail has higher term frequency
+	want := []string{"mail_archive", "calendar"} // mail_archive has higher term frequency
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("bm25Rank = %v, want %v", got, want)
 	}
@@ -52,7 +52,7 @@ func TestBM25Rank_OrdersByRelevance(t *testing.T) {
 
 func TestBM25Rank_NoTokenMatch_ReturnsNil(t *testing.T) {
 	docs := []searchDoc{
-		{name: "gmail", tokens: tokenize("send and read email")},
+		{name: "mail_archive", tokens: tokenize("search and read email")},
 	}
 	if got := bm25Rank("nonexistent", docs); got != nil {
 		t.Fatalf("bm25Rank = %v, want nil (no token match)", got)

@@ -162,7 +162,7 @@ func TestPromptSnapshot_Forget(t *testing.T) {
 }
 
 // TestPromptSnapshot_GateRejectsNonRestorable ensures only client:main(:id)
-// sessions are written, so cron/system/gmail keys never bloat the file.
+// sessions are written, so cron/system keys never bloat the file.
 func TestPromptSnapshot_GateRejectsNonRestorable(t *testing.T) {
 	dir := t.TempDir()
 	p := &promptSnapshotPersister{dir: dir, logger: discardLogger()}

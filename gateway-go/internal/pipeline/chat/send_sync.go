@@ -142,9 +142,10 @@ type SyncOptions struct {
 	// nothing readable accumulated yet).
 	OnThinking func(preview string)
 
-	// GateUntrustedTools enables the untrusted-origin tool gate (block exec /
-	// gmail send when promptware enters the turn). Set by the interactive
-	// native-client transports. Propagated to RunParams.GateUntrustedTools.
+	// GateUntrustedTools enables the untrusted-origin tool gate (blocking
+	// irreversible tools when promptware enters the turn). Set by the
+	// interactive native-client transports. Propagated to
+	// RunParams.GateUntrustedTools.
 	GateUntrustedTools bool
 }
 

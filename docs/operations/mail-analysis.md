@@ -1,19 +1,19 @@
 ---
 title: "Mail Analysis"
-summary: "How Deneb analyzes Gmail: the two-stage pipeline, automatic polling, persistence, and the analyze tool."
+summary: "How Deneb analyzes mail: the two-stage pipeline, automatic polling, persistence, and native-client access."
 read_when:
   - You want to understand how Deneb analyzes and summarizes mail
-  - You are tuning the Gmail poll interval, query, or model
+  - You are tuning the mail poll interval, query, or model
   - You are debugging why a message was or was not analyzed
 ---
 
 # Mail Analysis
 
-Deneb turns a Gmail message into a structured read — summary, stakeholders,
+Deneb turns a mail message into a structured read — summary, stakeholders,
 importance, risks and deadlines, next steps. One pipeline serves two entry
 points: an automatic background poller, and on-demand analysis from the Mini
-App or the agent's `gmail` tool. Both share the same analysis engine, so the
-output is consistent wherever it is triggered.
+App/local archive path. Direct agent Gmail tooling has been retired; received
+mail context now flows through `mail_archive` and the native mail store.
 
 ## How Analysis Works
 
@@ -98,30 +98,14 @@ Two safety gates prevent over-stripping: very short bodies are left untouched
 (to protect one-line replies and OTP codes), and if chrome stripping would
 remove more than three quarters of the body it rolls back to the original.
 
-## The analyze Tool
+## Agent Access
 
-The agent can analyze mail directly with the `gmail` tool:
-
-```text
-gmail(action="analyze", query="is:unread newer_than:1h", max=5)
-gmail(action="analyze", message_id="<id>")
-```
-
-- `message_id` analyzes one specific message.
-- `query` is used when `message_id` is absent; it defaults to
-  `is:unread newer_than:1h`.
-- `max` caps how many search results are analyzed (default 5, clamped to
-  1–50).
-
-The tool folds attachment text into the body before analyzing and returns the
-per-message analyses as Markdown.
-
-<Warning>
-  The `gmail` tool path does not wire up the project candidate list, so
-  analyses run through the tool do **not** include related-project citations.
-  The native client and the background poller do. If citations matter, prefer those
-  paths.
-</Warning>
+The agent no longer exposes a direct `gmail` tool. For received mail, it reads
+the local archive with `mail_archive` (`search`, `read`, `thread`,
+`project_history`, `attachment`) and lets the native client/background poller
+own analysis caching, citations, and delivery. This keeps mail reads on the
+same local-store path Andromeda uses instead of re-entering Gmail OAuth from
+the agent surface.
 
 ## Configuration
 

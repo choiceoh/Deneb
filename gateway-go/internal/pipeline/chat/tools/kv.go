@@ -9,8 +9,8 @@ import (
 )
 
 // kvStore is an in-memory key-value store backed by a JSON file used by
-// internal helpers (e.g. gmail contact alias cache). The user-facing kv agent
-// tool has been removed; the store is kept as a package-internal singleton.
+// internal helpers. The user-facing kv agent tool has been removed; the store
+// is kept as a package-internal singleton.
 type kvStore struct {
 	mu   sync.RWMutex
 	data map[string]string

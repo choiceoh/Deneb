@@ -27,10 +27,10 @@ import (
 
 func TestDeferredActivation_activate(t *testing.T) {
 	da := NewDeferredActivation()
-	da.Activate([]string{"gmail", "calendar"})
+	da.Activate([]string{"mail_archive", "calendar"})
 	got := da.ActivatedNames()
 	sort.Strings(got)
-	want := []string{"calendar", "gmail"}
+	want := []string{"calendar", "mail_archive"}
 	if !reflect.DeepEqual(want, got) {
 		t.Errorf("ActivatedNames mismatch:\n  want: %v\n   got: %v", want, got)
 	}
@@ -38,12 +38,12 @@ func TestDeferredActivation_activate(t *testing.T) {
 
 func TestDeferredActivation_multipleMerge(t *testing.T) {
 	da := NewDeferredActivation()
-	da.Activate([]string{"gmail"})
-	da.Activate([]string{"calendar", "gmail"}) // duplicate
+	da.Activate([]string{"mail_archive"})
+	da.Activate([]string{"calendar", "mail_archive"}) // duplicate
 	da.Activate([]string{"exec"})
 	got := da.ActivatedNames()
 	sort.Strings(got)
-	want := []string{"calendar", "exec", "gmail"}
+	want := []string{"calendar", "exec", "mail_archive"}
 	if !reflect.DeepEqual(want, got) {
 		t.Errorf("ActivatedNames mismatch:\n  want: %v\n   got: %v", want, got)
 	}
