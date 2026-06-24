@@ -3428,6 +3428,17 @@ textarea {
   flex: 1;
   min-width: 0;
 }
+/* a nudge with a deep-link target — the whole content area is the open affordance */
+.proactive-nudge-link {
+  padding: 0;
+  border: none;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+.proactive-nudge-link:hover .proactive-nudge-title {
+  color: var(--accent-deep);
+}
 .proactive-nudge-title {
   font-size: 12px;
   font-weight: 500;

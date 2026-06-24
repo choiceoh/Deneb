@@ -14,6 +14,9 @@ const evLog = log.child("events");
 export interface ProactiveEvent {
   id: string;
   kind?: string;
+  // Deep-link target: kind is a pane key, ref the resource id (or wiki path) the
+  // nudge opens. Both set by the gateway push payload; absent → not navigable.
+  ref?: string;
   title?: string;
   body?: string;
   ts?: number;
@@ -32,6 +35,7 @@ function toEvent(eventName: string, data: Record<string, unknown>): ProactiveEve
   return {
     id: asStr(data.id) ?? crypto.randomUUID(),
     kind: asStr(data.kind) ?? asStr(data.type) ?? (eventName && eventName !== "message" ? eventName : undefined),
+    ref: asStr(data.ref),
     title: asStr(data.title) ?? asStr(data.subject),
     body: asStr(data.body) ?? asStr(data.text) ?? asStr(data.message),
     ts: asNum(data.ts) ?? asNum(data.tsMs),
