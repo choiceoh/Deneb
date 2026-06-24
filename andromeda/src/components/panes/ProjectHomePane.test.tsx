@@ -69,8 +69,21 @@ const provider = fakeProvider({
       snippet: "프로젝트 홈의 관련 항목 묶음을 확인합니다.",
       date: "2026-06-23T09:00:00Z",
       isUnread: true,
+      relatedProjects: [{ path: "projects/andromeda", title: "Andromeda 워크스테이션" }],
     },
-    { id: "m2", subject: "게이트웨이 릴레이 확인", snippet: "deneb RPC 릴레이", date: "2026-06-22T09:00:00Z" },
+    {
+      id: "m2",
+      subject: "게이트웨이 릴레이 확인",
+      snippet: "deneb RPC 릴레이",
+      date: "2026-06-22T09:00:00Z",
+      relatedProjects: [{ path: "projects/deneb", title: "데네브 게이트웨이" }],
+    },
+    {
+      id: "m3",
+      subject: "Andromeda 이름만 들어간 메일",
+      snippet: "프로젝트 참조는 없는 공용 장비 점검",
+      date: "2026-06-21T09:00:00Z",
+    },
   ],
   calendar: [
     {
@@ -79,16 +92,33 @@ const provider = fakeProvider({
       description: "프로젝트 홈 화면 점검",
       start: "2026-06-24T05:00:00Z",
       end: "2026-06-24T06:00:00Z",
+      projectPath: "projects/andromeda",
     },
   ],
-  todo: [{ id: "t1", title: "Andromeda 관련 메일 정리", note: "프로젝트 홈 검수", due: "2026-06-25T00:00:00Z" }],
+  todo: [
+    {
+      id: "t1",
+      title: "Andromeda 관련 메일 정리",
+      note: "프로젝트 홈 검수",
+      due: "2026-06-25T00:00:00Z",
+      projectPath: "projects/andromeda",
+    },
+  ],
   workfeed: [
     {
       id: "w1",
       source: "review",
+      refId: "projects/andromeda",
       title: "Andromeda 홈 피드백",
       body: "관련 데이터 묶음 확인",
       createdAtMs: 1782190313958,
+    },
+    {
+      id: "w2",
+      source: "notice",
+      title: "Andromeda 일반 점검",
+      body: "공용 장비 알림",
+      createdAtMs: 1782180313958,
     },
   ],
 });
@@ -104,6 +134,8 @@ describe("ProjectHomePane", () => {
     expect(screen.getAllByText("Andromeda 홈 리뷰").length).toBeGreaterThan(0);
     expect(screen.getByText("Andromeda 관련 메일 정리")).toBeInTheDocument();
     expect(screen.getByText("Andromeda 홈 피드백")).toBeInTheDocument();
+    expect(screen.queryByText("Andromeda 이름만 들어간 메일")).not.toBeInTheDocument();
+    expect(screen.queryByText("Andromeda 일반 점검")).not.toBeInTheDocument();
     expect(await screen.findByText("Andromeda 설계 노트북")).toBeInTheDocument();
   });
 

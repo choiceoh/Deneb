@@ -35,20 +35,9 @@ interface RelatedSection {
   loading?: boolean;
 }
 
-const STOP_TERMS = new Set([
-  "project",
-  "projects",
-  "프로젝트",
-  "진행",
-  "상태",
-  "현황",
-  "이번",
-  "이번주",
-  "작업",
-  "패널",
-  "연동",
-  "검토",
-]);
+interface ProjectIdentity {
+  keys: Set<string>;
+}
 
 export function ProjectHomePane() {
   const { connected, cfg, openPane, openWiki } = useWorkspace();
@@ -81,13 +70,11 @@ export function ProjectHomePane() {
     return digests.find((digest) => digestKey(digest) === selectedKey) ?? digests[0];
   }, [digests, selectedKey]);
 
-  const terms = useMemo(() => (selected ? projectTerms(selected) : []), [selected]);
+  const project = useMemo(() => (selected ? projectIdentity(selected) : emptyProjectIdentity()), [selected]);
   const sections = useMemo<RelatedSection[]>(() => {
     if (!selected) return [];
     const mails = (mail.result?.data ?? [])
-      .filter((m) =>
-        matchesTerms(terms, m.subject, m.from, m.snippet, m.body, m.text, m.plain, m.plainText, m.bodyText),
-      )
+      .filter((m) => isLinkedToProject(project, m))
       .sort((a, b) => timeValue(b.date) - timeValue(a.date))
       .slice(0, MAX_ROWS)
       .map((m) => ({
@@ -100,7 +87,7 @@ export function ProjectHomePane() {
       }));
 
     const events = (calendar.result?.data ?? [])
-      .filter((event) => matchesTerms(terms, event.summary, event.title, event.description, event.location))
+      .filter((event) => isLinkedToProject(project, event))
       .sort((a, b) => eventStartMs(a) - eventStartMs(b))
       .slice(0, MAX_ROWS)
       .map((event) => ({
@@ -113,7 +100,7 @@ export function ProjectHomePane() {
       }));
 
     const todos = (todo.result?.data ?? [])
-      .filter((t) => !t.done && matchesTerms(terms, t.title, t.note, t.due))
+      .filter((t) => !t.done && isLinkedToProject(project, t))
       .sort((a, b) => timeValue(a.due) - timeValue(b.due))
       .slice(0, MAX_ROWS)
       .map((t) => ({
@@ -125,7 +112,7 @@ export function ProjectHomePane() {
       }));
 
     const work = (workfeed.result?.data ?? [])
-      .filter((item) => matchesTerms(terms, item.title, item.body, item.source, item.refId, item.sessionKey))
+      .filter((item) => isLinkedToProject(project, item))
       .sort((a, b) => (b.createdAtMs ?? 0) - (a.createdAtMs ?? 0))
       .slice(0, MAX_ROWS)
       .map((item) => ({
@@ -137,7 +124,7 @@ export function ProjectHomePane() {
       }));
 
     const relatedNotebooks = notebooks
-      .filter((notebook) => matchesTerms(terms, notebook.name, notebook.dealRef))
+      .filter((notebook) => isLinkedToProject(project, notebook))
       .sort((a, b) => (b.updated ?? 0) - (a.updated ?? 0))
       .slice(0, MAX_ROWS)
       .map((notebook) => ({
@@ -199,8 +186,8 @@ export function ProjectHomePane() {
     mail.query.isLoading,
     notebooks,
     notebooksBusy,
+    project,
     selected,
-    terms,
     todo.result?.data,
     todo.query.isLoading,
     workfeed.result?.data,
@@ -378,47 +365,103 @@ function digestKey(digest: ProjectDigest): string {
   return digest.path || digest.project;
 }
 
-function projectTerms(digest: ProjectDigest): string[] {
-  const slug = digest.path?.split("/").filter(Boolean).at(-1) ?? "";
-  const raw = [digest.project, digest.path, slug];
-  const terms = new Set<string>();
-  for (const value of raw) {
-    for (const term of tokens(value)) {
-      if (STOP_TERMS.has(term)) continue;
-      terms.add(term);
+const PROJECT_REF_KEYS = new Set([
+  "dealref",
+  "path",
+  "project",
+  "projectid",
+  "projectpath",
+  "projectpaths",
+  "projectref",
+  "projectrefid",
+  "projectrefs",
+  "refid",
+  "refs",
+  "relatedproject",
+  "relatedprojects",
+  "wikipath",
+]);
+
+const PROJECT_OBJECT_VALUE_KEYS = new Set([
+  "dealref",
+  "id",
+  "key",
+  "path",
+  "project",
+  "projectid",
+  "projectpath",
+  "projectref",
+  "projectrefid",
+  "ref",
+  "refid",
+  "wikipath",
+]);
+
+function emptyProjectIdentity(): ProjectIdentity {
+  return { keys: new Set() };
+}
+
+function projectIdentity(digest: ProjectDigest): ProjectIdentity {
+  const keys = new Set<string>();
+  addProjectKeys(keys, digest.project);
+  addProjectKeys(keys, digest.path);
+  return { keys };
+}
+
+function isLinkedToProject(project: ProjectIdentity, row: unknown): boolean {
+  if (project.keys.size === 0) return false;
+  for (const ref of collectProjectRefs(row)) {
+    const keys = new Set<string>();
+    addProjectKeys(keys, ref);
+    if ([...keys].some((key) => project.keys.has(key))) return true;
+  }
+  return false;
+}
+
+function collectProjectRefs(value: unknown, depth = 0, insideProjectRef = false): string[] {
+  if (value == null || depth > 5) return [];
+  if (typeof value === "string" || typeof value === "number") return insideProjectRef ? [String(value)] : [];
+  if (typeof value === "boolean") return [];
+  if (Array.isArray(value)) return value.flatMap((item) => collectProjectRefs(item, depth + 1, insideProjectRef));
+  if (typeof value !== "object") return [];
+
+  const refs: string[] = [];
+  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    const normalizedKey = normalizeFieldKey(key);
+    if (PROJECT_REF_KEYS.has(normalizedKey)) {
+      refs.push(...collectProjectRefs(child, depth + 1, true));
+      continue;
+    }
+    if (insideProjectRef && PROJECT_OBJECT_VALUE_KEYS.has(normalizedKey)) {
+      refs.push(...collectProjectRefs(child, depth + 1, true));
     }
   }
-  return [...terms];
+  return refs;
 }
 
-function tokens(value: unknown): string[] {
-  return (
-    collectText(value)
-      .toLowerCase()
-      .match(/[a-z0-9가-힣]+/g)
-      ?.filter((term) => term.length >= 2) ?? []
-  );
+function normalizeFieldKey(key: string): string {
+  return key.toLowerCase().replace(/[_-]/g, "");
 }
 
-function collectText(value: unknown, depth = 0): string {
-  if (value == null || depth > 3) return "";
-  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return String(value);
-  if (Array.isArray(value)) return value.map((item) => collectText(item, depth + 1)).join(" ");
-  if (typeof value === "object") {
-    return Object.values(value as Record<string, unknown>)
-      .map((item) => collectText(item, depth + 1))
-      .join(" ");
-  }
-  return "";
+function addProjectKeys(keys: Set<string>, value: unknown): void {
+  const key = normalizeProjectKey(value);
+  if (!key) return;
+  keys.add(key);
+
+  const parts = key.split("/").filter(Boolean);
+  const leaf = parts.at(-1);
+  if (leaf) keys.add(leaf);
 }
 
-function matchesTerms(terms: string[], ...values: unknown[]): boolean {
-  if (terms.length === 0) return false;
-  const haystack = values
-    .map((value) => collectText(value))
-    .join(" ")
-    .toLowerCase();
-  return terms.some((term) => haystack.includes(term));
+function normalizeProjectKey(value: unknown): string {
+  if (typeof value !== "string" && typeof value !== "number") return "";
+  return String(value)
+    .trim()
+    .toLowerCase()
+    .replace(/\\/g, "/")
+    .replace(/^\/+|\/+$/g, "")
+    .replace(/\.md$/i, "")
+    .replace(/\s+/g, " ");
 }
 
 function timeValue(value?: string | number): number {

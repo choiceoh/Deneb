@@ -176,6 +176,7 @@ data class MailMessageOut(
     val calendarProposalCount: Int = 0,
     val todoCount: Int = 0,
     val workStateHint: String = "",
+    val relatedProjects: List<ProjectRef> = emptyList(),
 )
 
 @Immutable
@@ -250,6 +251,7 @@ data class MailRowOut(
     val calendarProposalCount: Int = 0,
     val todoCount: Int = 0,
     val workStateHint: String = "",
+    val relatedProjects: List<ProjectRef> = emptyList(),
 )
 
 @Immutable
