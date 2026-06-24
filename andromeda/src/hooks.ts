@@ -22,7 +22,19 @@ export interface ToolPart {
   detail?: string;
   isError?: boolean;
 }
-export type AssistantPart = TextPart | ToolPart;
+export type CaptureKind = "image" | "audio" | "document";
+export interface AttachmentPart {
+  kind: "attachment";
+  id: string;
+  filename: string;
+  mimeType: string;
+  captureKind: CaptureKind;
+  caption?: string;
+  text: string;
+  state: "completed" | "error";
+  isError?: boolean;
+}
+export type AssistantPart = TextPart | ToolPart | AttachmentPart;
 
 export interface ChatTurn {
   id: string;
@@ -33,6 +45,7 @@ export interface ChatTurn {
   parts?: AssistantPart[]; // assistant turns only; live-streamed segments
   status: "done" | "streaming" | "error" | "stopped";
   model?: string;
+  canRegenerate?: boolean;
 }
 
 export interface SendOpts {
@@ -102,7 +115,15 @@ export function useChat(cfg: GatewayConfig): ChatState {
     setTurns((prev) => [
       ...prev,
       { id: chatTurnId(), role: "user", text: msg, status: "done" },
-      { id: assistantId, role: "assistant", text: "", parts: [], status: "streaming", model: opts.model },
+      {
+        id: assistantId,
+        role: "assistant",
+        text: "",
+        parts: [],
+        status: "streaming",
+        model: opts.model,
+        canRegenerate: true,
+      },
     ]);
     setBusy(true);
     const controller = new AbortController();
@@ -201,21 +222,31 @@ export function useChat(cfg: GatewayConfig): ChatState {
   // final text), so it appends a user label and fills the assistant reply.
   async function capture(file: { name: string; mimeType: string; base64: string }, opts: SendOpts = {}) {
     if (busy || !file.base64) return;
-    const kind = file.mimeType.startsWith("image/")
+    const mimeType = file.mimeType || "application/octet-stream";
+    const kind: CaptureKind = mimeType.startsWith("image/")
       ? "image"
-      : file.mimeType.startsWith("audio/")
+      : mimeType.startsWith("audio/")
         ? "audio"
         : "document";
     const caption = opts.caption?.trim();
-    const baseLabel =
-      kind === "image" ? `📷 이미지 — ${file.name}` : kind === "audio" ? `🎙️ 녹음 — ${file.name}` : `📄 ${file.name}`;
+    const kindLabel = kind === "image" ? "이미지" : kind === "audio" ? "녹음" : "문서";
+    const baseLabel = `${kindLabel} 첨부: ${file.name}`;
     const label = caption && kind !== "audio" ? `${baseLabel}\n${caption}` : baseLabel;
     const assistantId = chatTurnId();
+    const attachmentId = chatTurnId();
     setThinking("");
     setTurns((prev) => [
       ...prev,
       { id: chatTurnId(), role: "user", text: label, status: "done" },
-      { id: assistantId, role: "assistant", text: "", parts: [], status: "streaming", model: opts.model },
+      {
+        id: assistantId,
+        role: "assistant",
+        text: "",
+        parts: [],
+        status: "streaming",
+        model: opts.model,
+        canRegenerate: false,
+      },
     ]);
     setBusy(true);
     const patch = (update: (turn: ChatTurn) => ChatTurn) =>
@@ -223,19 +254,52 @@ export function useChat(cfg: GatewayConfig): ChatState {
     try {
       const params: Record<string, unknown> = {
         [kind]: file.base64,
-        mimeType: file.mimeType,
+        mimeType,
         sessionKey: opts.sessionKey,
       };
       if (kind === "document") params.filename = file.name;
       if (caption && kind !== "audio") params.caption = caption;
       const res = await callRpc<{ text?: string }>(cfg, `miniapp.capture.${kind}`, params);
       const text = res?.text?.trim() || "첨부에서 내용을 추출하지 못했거나 분석에 실패했습니다.";
-      patch((turn) => ({ ...turn, parts: [{ kind: "text", text }], text, status: "done" }));
+      patch((turn) => ({
+        ...turn,
+        parts: [
+          {
+            kind: "attachment",
+            id: attachmentId,
+            filename: file.name,
+            mimeType,
+            captureKind: kind,
+            caption: caption && kind !== "audio" ? caption : undefined,
+            text,
+            state: "completed",
+          },
+        ],
+        text,
+        status: "done",
+      }));
       for (const resource of ["workfeed", "wiki", "search"]) clearCachedResource(resource);
       invalidate({ resource: "workfeed", invalidates: ["list"] });
     } catch (e) {
       const line = `[오류] ${(e as Error)?.message ?? "첨부 실패"}`;
-      patch((turn) => ({ ...turn, parts: [{ kind: "text", text: line }], text: line, status: "error" }));
+      patch((turn) => ({
+        ...turn,
+        parts: [
+          {
+            kind: "attachment",
+            id: attachmentId,
+            filename: file.name,
+            mimeType,
+            captureKind: kind,
+            caption: caption && kind !== "audio" ? caption : undefined,
+            text: line,
+            state: "error",
+            isError: true,
+          },
+        ],
+        text: line,
+        status: "error",
+      }));
     } finally {
       setBusy(false);
     }

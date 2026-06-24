@@ -85,7 +85,9 @@ describe("AssistantText", () => {
     const text =
       '**요약**\n\n```deneb-ui\n{"type":"button","label":"승인","action":{"type":"callback","event":"approve"}}\n```';
     const { container } = render(<AssistantText text={text} onUiSubmit={() => {}} />);
-    expect(container.querySelector(".assistant-text")).toBeInTheDocument();
+    expect(container.querySelector(".assistant-text.mixed")).toBeInTheDocument();
+    expect(container.querySelector(".assistant-segment-md")).toBeInTheDocument();
+    expect(container.querySelector(".assistant-segment-ui")).toBeInTheDocument();
     expect(screen.getByText("요약").tagName).toBe("STRONG"); // markdown span
     expect(screen.getByRole("button", { name: "승인" })).toBeInTheDocument(); // drawn UI
   });

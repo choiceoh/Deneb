@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { ChatView } from "./ChatView";
@@ -90,6 +90,13 @@ describe("ChatView (비업무 채팅 탭)", () => {
     });
     expect(typeof capture?.params.image).toBe("string");
     expect(composer).toHaveValue("");
-    expect(await screen.findByText("분석 완료")).toBeInTheDocument();
+    const result = await screen.findByRole("group", { name: "첨부 분석 결과" });
+    expect(result).toBeInTheDocument();
+    expect(within(result).getByText("이미지 분석")).toBeInTheDocument();
+    expect(within(result).getByText("quote.png")).toBeInTheDocument();
+    expect(within(result).getByText("image/png")).toBeInTheDocument();
+    expect(within(result).getByText("이 이미지에서 금액만 찾아줘")).toBeInTheDocument();
+    expect(within(result).getByText("분석 완료")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "다시 생성" })).not.toBeInTheDocument();
   });
 });

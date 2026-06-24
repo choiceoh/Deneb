@@ -150,6 +150,7 @@ export function ChatView({ cfg, hidden = false }: { cfg: GatewayConfig; hidden?:
                 {turn.role === "assistant" &&
                   turn.id === lastId &&
                   turn.parts &&
+                  turn.canRegenerate !== false &&
                   !busy &&
                   turn.status !== "streaming" && (
                     <button className="row-btn ai-regen" onClick={regenerate} title="다시 생성">
