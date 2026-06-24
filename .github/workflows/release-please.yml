@@ -19,9 +19,15 @@ jobs:
   release-please:
     runs-on: ubuntu-24.04-arm
     outputs:
-      release-created: ${{ steps.release.outputs.release_created }}
-      tag: ${{ steps.release.outputs.tag_name }}
-      version: ${{ steps.release.outputs.version }}
+      # 멀티패키지(manifest)에선 출력이 패키지 경로로 prefix됨(`.--*`, `andromeda--*`).
+      # 게이트웨이(`.`)는 prefix 우선 + 단일 시절 bare 출력 폴백 — release-please는 패키지별
+      # release_created를 'true'/'false'로 명시 출력하므로 andromeda-only 릴리즈엔 오발화 안 함.
+      release-created: ${{ steps.release.outputs['.--release_created'] || steps.release.outputs.release_created }}
+      tag: ${{ steps.release.outputs['.--tag_name'] || steps.release.outputs.tag_name }}
+      version: ${{ steps.release.outputs['.--version'] || steps.release.outputs.version }}
+      andromeda-release-created: ${{ steps.release.outputs['andromeda--release_created'] }}
+      andromeda-tag: ${{ steps.release.outputs['andromeda--tag_name'] }}
+      andromeda-release-id: ${{ steps.release.outputs['andromeda--id'] }}
     steps:
       - uses: googleapis/release-please-action@v5
         id: release
@@ -29,6 +35,12 @@ jobs:
           config-file: .release-please-config.json
           manifest-file: .release-please-manifest.json
           token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
+      # 첫 릴리즈에서 실제 출력키를 로그로 확인(멀티패키지 prefix 검증). env 경유 = injection 안전.
+      - name: Debug release-please outputs
+        if: always()
+        env:
+          OUTPUTS: ${{ toJSON(steps.release.outputs) }}
+        run: echo "$OUTPUTS"
 
   post-release:
     needs: release-please
@@ -120,3 +132,64 @@ jobs:
           deneb gateway restart
           \`\`\`
           EOF
+
+  andromeda-build:
+    # andromeda 컴포넌트 릴리즈가 생성될 때만 — 데스크탑 번들을 빌드·서명해 그 릴리즈에 업로드.
+    # ⚠️ 시크릿 TAURI_SIGNING_PRIVATE_KEY[_PASSWORD] 필요 (andromeda와 동일 minisign 키).
+    needs: release-please
+    if: needs.release-please.outputs.andromeda-release-created == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest # Apple Silicon
+            args: "--target aarch64-apple-darwin"
+            rust_target: aarch64-apple-darwin
+          - platform: macos-latest # Intel
+            args: "--target x86_64-apple-darwin"
+            rust_target: x86_64-apple-darwin
+          - platform: windows-latest
+            args: ""
+            rust_target: ""
+    runs-on: ${{ matrix.platform }}
+    defaults:
+      run:
+        working-directory: andromeda
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          package_json_file: andromeda/package.json
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: andromeda/pnpm-lock.yaml
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_target }}
+
+      - name: Cache Rust build
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: andromeda/src-tauri -> target
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build, sign, and upload bundles
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: andromeda
+          releaseId: ${{ needs.release-please.outputs.andromeda-release-id }}
+          args: ${{ matrix.args }}
