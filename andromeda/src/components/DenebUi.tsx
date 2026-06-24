@@ -448,23 +448,33 @@ export function AssistantText({
   busy?: boolean;
 }) {
   const segments = splitDenebUi(text);
+  const cls = "assistant-text" + (segments.length > 1 ? " mixed" : "");
   return (
-    <div className="assistant-text">
+    <div className={cls}>
       {segments.map((seg, i) => {
-        if (seg.kind === "md") return <Markdown key={i} text={seg.text} />;
+        if (seg.kind === "md")
+          return (
+            <div key={i} className="assistant-segment assistant-segment-md">
+              <Markdown text={seg.text} />
+            </div>
+          );
         if (seg.kind === "ui-pending")
           return (
-            <div key={i} className="dui-pending">
-              UI 생성 중…
+            <div key={i} className="assistant-segment assistant-segment-pending">
+              <div className="dui-pending">UI 생성 중…</div>
             </div>
           );
         const spec = parseDenebUi(seg.body);
         return spec ? (
-          <DenebUi key={i} spec={spec} onSubmit={onUiSubmit} busy={busy} />
+          <div key={i} className="assistant-segment assistant-segment-ui">
+            <DenebUi spec={spec} onSubmit={onUiSubmit} busy={busy} />
+          </div>
         ) : (
-          <pre key={i} className="dui-code">
-            <code>{seg.body}</code>
-          </pre>
+          <div key={i} className="assistant-segment assistant-segment-code">
+            <pre className="dui-code">
+              <code>{seg.body}</code>
+            </pre>
+          </div>
         );
       })}
     </div>

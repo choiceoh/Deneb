@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { type GatewayConfig, type ModelsList, listModels } from "@/gateway";
-import { type ChatTurn, useChat } from "@/hooks";
+import { type AttachmentPart, type ChatTurn, useChat } from "@/hooks";
 import { useSessions } from "@/useSessions";
 import { useStickyScroll } from "@/useStickyScroll";
 import { useWorkspace } from "@/workspaceContext";
@@ -12,6 +12,51 @@ import { ModelPicker } from "./ModelPicker";
 import { ProactivePanel } from "./ProactivePanel";
 import { SessionDrawer } from "./SessionDrawer";
 import { ToolChip } from "./ToolChip";
+
+function attachmentKindLabel(kind: AttachmentPart["captureKind"]) {
+  if (kind === "image") return "이미지 분석";
+  if (kind === "audio") return "녹음 전사";
+  return "문서 추출";
+}
+
+function AttachmentResult({
+  part,
+  onUiSubmit,
+  busy,
+}: {
+  part: AttachmentPart;
+  onUiSubmit: (msg: string) => void;
+  busy: boolean;
+}) {
+  const stateText = part.isError ? "실패" : "완료";
+  return (
+    <section className={"attachment-result" + (part.isError ? " error" : "")} role="group" aria-label="첨부 분석 결과">
+      <div className="attachment-result-head">
+        <span className="attachment-result-icon" aria-hidden="true">
+          <Icon name="attach" size={15} />
+        </span>
+        <div className="attachment-result-title">
+          <span>{attachmentKindLabel(part.captureKind)}</span>
+          <strong>{part.filename}</strong>
+        </div>
+        <span className="attachment-result-state">{stateText}</span>
+      </div>
+      <div className="attachment-result-meta">
+        <span>형식</span>
+        <b>{part.mimeType}</b>
+        {part.caption ? (
+          <>
+            <span>설명</span>
+            <b>{part.caption}</b>
+          </>
+        ) : null}
+      </div>
+      <div className="attachment-result-content">
+        <AssistantText text={part.text} onUiSubmit={onUiSubmit} busy={busy} />
+      </div>
+    </section>
+  );
+}
 
 // One assistant reply: ordered text and tool chips. Each text span renders as
 // Markdown, with any ```deneb-ui block drawn as interactive UI (AssistantText);
@@ -43,6 +88,8 @@ export function AssistantBody({
       {parts.map((p, i) =>
         p.kind === "text" ? (
           <AssistantText key={i} text={p.text} onUiSubmit={onUiSubmit} busy={busy} />
+        ) : p.kind === "attachment" ? (
+          <AttachmentResult key={p.id || i} part={p} onUiSubmit={onUiSubmit} busy={busy} />
         ) : (
           <ToolChip key={p.id || i} part={p} />
         ),
@@ -172,6 +219,7 @@ export function AIPanel({ cfg, hidden = false }: { cfg: GatewayConfig; hidden?: 
               {turn.role === "assistant" &&
                 turn.id === lastId &&
                 turn.parts &&
+                turn.canRegenerate !== false &&
                 !busy &&
                 turn.status !== "streaming" && (
                   <button className="row-btn ai-regen" onClick={regenerate} title="다시 생성">

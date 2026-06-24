@@ -413,8 +413,9 @@ textarea {
 .ai-turn.assistant .ai-turn-body {
   white-space: normal;
   overflow-wrap: break-word;
-  background: var(--panel);
-  border-color: var(--line);
+  padding: 2px 1px;
+  background: transparent;
+  border-color: transparent;
 }
 .assistant-text {
   display: flex;
@@ -422,6 +423,23 @@ textarea {
   flex-direction: column;
   gap: 10px;
   white-space: normal;
+}
+.assistant-text.mixed {
+  gap: 12px;
+}
+.assistant-segment {
+  min-width: 0;
+}
+.assistant-text.mixed .assistant-segment + .assistant-segment-ui::before,
+.assistant-text.mixed .assistant-segment + .assistant-segment-code::before {
+  content: "";
+  display: block;
+  height: 1px;
+  margin: 0 0 10px;
+  background: var(--line);
+}
+.assistant-text .assistant-segment-md:first-child .md > p:first-child {
+  color: var(--ink);
 }
 .ai-turn.user .ai-turn-body {
   background: var(--accent-soft);
@@ -485,8 +503,8 @@ textarea {
   line-height: 1.66;
 }
 .chat-transcript .ai-turn.assistant .ai-turn-body {
-  padding: 12px 14px;
-  border-radius: 14px;
+  padding: 4px 2px 8px;
+  border-radius: 0;
 }
 .chat-transcript .ai-turn.user .ai-turn-label {
   display: none;
@@ -836,6 +854,93 @@ textarea {
   to {
     transform: rotate(360deg);
   }
+}
+
+/* attachment analysis result (image OCR, audio transcript, document extraction) */
+.attachment-result {
+  display: flex;
+  min-width: 0;
+  max-width: 100%;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  background: var(--panel);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-ctl);
+  animation: chipIn 0.22s var(--ease) both;
+}
+.attachment-result.error {
+  border-color: var(--due-soft);
+}
+.attachment-result-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+}
+.attachment-result-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  color: var(--accent-deep);
+  background: var(--accent-soft);
+  border-radius: var(--radius-ctl);
+}
+.attachment-result-title {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+.attachment-result-title span {
+  font-size: 11px;
+  color: var(--muted-2);
+}
+.attachment-result-title strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.attachment-result-state {
+  padding: 2px 8px;
+  color: var(--accent-deep);
+  background: var(--accent-soft);
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  font-weight: 600;
+}
+.attachment-result.error .attachment-result-state {
+  color: var(--due);
+  background: var(--due-soft);
+}
+.attachment-result-meta {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 5px 9px;
+  font-size: 11.5px;
+}
+.attachment-result-meta span {
+  color: var(--muted-2);
+}
+.attachment-result-meta b {
+  min-width: 0;
+  color: var(--ink-2);
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.attachment-result-content {
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  color: var(--ink-2);
+}
+.attachment-result-content .assistant-text {
+  gap: 8px;
 }
 
 /* Markdown — shared by the AI reply, mail body, and wiki/doc preview. Type sizes
