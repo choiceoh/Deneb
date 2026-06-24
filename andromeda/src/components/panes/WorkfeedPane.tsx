@@ -3,7 +3,7 @@ import type { WorkItem } from "@/types";
 import { useCachedList } from "@/cachedList";
 import { chatStream } from "@/gateway";
 import { WORKFEED_RPC } from "@/resources";
-import { dayKey, dayLabel, fmtDate, fmtTime } from "@/format";
+import { dayLabel, fmtDate, fmtTime, startOfDay } from "@/format";
 import { usePaneTarget } from "@/usePaneTarget";
 import { useAction } from "@/useAction";
 import { useRegisterPane, useWorkspace, type PaneTarget } from "@/workspaceContext";
@@ -50,42 +50,16 @@ function previewText(text?: string, max = 120) {
   return compact.length > max ? `${compact.slice(0, max - 1)}…` : compact;
 }
 
-interface WorkfeedDay {
-  key: string;
-  label: string;
-  items: WorkItem[];
-}
-
-// One line per item — shared by the AI text projection so each day's rows read the
-// same as the old flat list, just nested under a day heading.
+// One line per item — shared by the AI text projection so the day's rows read the
+// same as the on-screen list.
 function itemLine(w: WorkItem): string {
   return `- ${w.title ?? "(항목)"}${w.source ? ` [${w.source}]` : ""}${w.body ? `\n    ${w.body}` : ""}`;
 }
 
-// Group feed items into local-day sections, newest day first and newest item first
-// within a day. Items with no timestamp collect into a trailing "날짜 미정" group so
-// they don't all fall onto the epoch day. `now` flows to dayLabel for the 오늘/어제
-// relative headings (injectable for tests).
-function groupByDay(items: WorkItem[], now = Date.now()): WorkfeedDay[] {
-  const dated = items.filter((w) => typeof w.createdAtMs === "number");
-  const undated = items.filter((w) => typeof w.createdAtMs !== "number");
-  dated.sort((a, b) => (b.createdAtMs ?? 0) - (a.createdAtMs ?? 0));
-
-  const groups: WorkfeedDay[] = [];
-  const byKey = new Map<string, WorkfeedDay>();
-  for (const w of dated) {
-    const ms = w.createdAtMs as number;
-    const key = dayKey(new Date(ms));
-    let group = byKey.get(key);
-    if (!group) {
-      group = { key, label: dayLabel(ms, now), items: [] };
-      byKey.set(key, group);
-      groups.push(group);
-    }
-    group.items.push(w);
-  }
-  if (undated.length) groups.push({ key: "no-date", label: "날짜 미정", items: undated });
-  return groups;
+// Effective timestamp for day-bucketing: an item without a createdAtMs falls onto the
+// current day (`now`) so a missing stamp never makes it unreachable in the day-pager.
+function effectiveMs(w: WorkItem, now: number): number {
+  return typeof w.createdAtMs === "number" ? w.createdAtMs : now;
 }
 
 type RunFn = (method: string, params?: Record<string, unknown>) => Promise<unknown>;
@@ -100,6 +74,8 @@ export function WorkfeedPane() {
   const { result, query } = useCachedList<WorkItem>("workfeed", connected);
   const items = result?.data ?? [];
   const [selectedId, setSelectedId] = useState<string | number | undefined>();
+  // The day currently in view (local midnight). Lands on today; prev/next step it.
+  const [dayMs, setDayMs] = useState<number>(() => startOfDay());
   const { run, error, busy } = useAction(() => void query.refetch(), {
     onResult: async (data) => {
       const turn = data as WorkfeedTurn;
@@ -129,12 +105,33 @@ export function WorkfeedPane() {
   }, []);
   usePaneTarget("workfeed", openTargetedItem);
 
-  const groups = groupByDay(items);
-  const aiText = groups.length
-    ? `[작업피드 ${items.length}건]\n` +
-      groups.map((g) => `## ${g.label} (${g.items.length}건)\n${g.items.map(itemLine).join("\n")}`).join("\n\n")
-    : "";
+  const nowMs = Date.now();
+  const todayMs = startOfDay(nowMs);
+  // Navigation is bounded to the span actually worth visiting: from the earliest item
+  // day (or today) to the latest item day (or today). Beyond that there is nothing to
+  // see, so the prev/next buttons disable at the edges.
+  const itemDays = items.map((w) => startOfDay(effectiveMs(w, nowMs)));
+  const minDayMs = Math.min(todayMs, ...itemDays);
+  const maxDayMs = Math.max(todayMs, ...itemDays);
+
+  const dayItems = items
+    .filter((w) => startOfDay(effectiveMs(w, nowMs)) === dayMs)
+    .sort((a, b) => effectiveMs(b, nowMs) - effectiveMs(a, nowMs));
+
+  const aiText =
+    `[작업피드 · ${dayLabel(dayMs, nowMs)}]\n` +
+    (dayItems.length ? dayItems.map(itemLine).join("\n") : "(이 날짜에는 항목이 없습니다)");
   useRegisterPane("workfeed", aiText);
+
+  function goToDay(nextDayMs: number) {
+    setDayMs(nextDayMs);
+    setSelectedId(undefined); // the selected item likely isn't on the new day
+  }
+
+  function stepDay(delta: number) {
+    const d = new Date(dayMs);
+    goToDay(new Date(d.getFullYear(), d.getMonth(), d.getDate() + delta).getTime());
+  }
 
   function toggleSelected(w: WorkItem) {
     setSelectedId((current) => (String(current) === String(w.id) ? undefined : w.id));
@@ -165,7 +162,7 @@ export function WorkfeedPane() {
       header: "시각",
       width: 76,
       tdStyle: { verticalAlign: "top" },
-      // Day is shown by the section header, so the row keeps only the time.
+      // Day is shown by the navigator above, so the row keeps only the time.
       cell: (w) => <span className="workfeed-row-time">{fmtTime(w.createdAtMs)}</span>,
     },
   ];
@@ -175,34 +172,46 @@ export function WorkfeedPane() {
       <h2 style={{ marginTop: 2 }}>작업피드</h2>
       {error && <p className="pane-error">오류: {error}</p>}
       <GridNotice query={query} count={items.length} empty="작업피드가 비어 있습니다.">
-        <div className="workfeed-days">
-          {groups.map((g) => (
-            <section key={g.key} className="workfeed-day-group" aria-label={g.label}>
-              <h3 className="workfeed-day">
-                {g.label}
-                <span className="workfeed-day-count">{g.items.length}</span>
-              </h3>
-              <Grid
-                columns={columns}
-                rows={g.items}
-                getKey={(w) => String(w.id)}
-                hideHeader
-                onRowClick={toggleSelected}
-                isRowSelected={(w) => String(w.id) === String(selectedId)}
-                rowTitle={(w) => `${w.title ?? "(항목)"} 상세`}
-                renderExpandedRow={(w) => (
-                  <WorkItemDetail
-                    w={w}
-                    busy={busy}
-                    run={run}
-                    onAck={() => void ackItem(w)}
-                    onClose={() => setSelectedId(undefined)}
-                  />
-                )}
-              />
-            </section>
-          ))}
+        <div className="workfeed-daynav">
+          <button className="row-btn" onClick={() => stepDay(-1)} disabled={dayMs <= minDayMs} aria-label="이전 날">
+            ‹ 이전
+          </button>
+          <div className="workfeed-daynav-label" aria-live="polite">
+            <span className="workfeed-daynav-day">{dayLabel(dayMs, nowMs)}</span>
+            <span className="workfeed-daynav-count">{dayItems.length}건</span>
+          </div>
+          <button className="row-btn" onClick={() => stepDay(1)} disabled={dayMs >= maxDayMs} aria-label="다음 날">
+            다음 ›
+          </button>
+          <div className="workfeed-daynav-spacer" />
+          {dayMs !== todayMs && (
+            <button className="row-btn" onClick={() => goToDay(todayMs)}>
+              오늘로
+            </button>
+          )}
         </div>
+        {dayItems.length ? (
+          <Grid
+            columns={columns}
+            rows={dayItems}
+            getKey={(w) => String(w.id)}
+            hideHeader
+            onRowClick={toggleSelected}
+            isRowSelected={(w) => String(w.id) === String(selectedId)}
+            rowTitle={(w) => `${w.title ?? "(항목)"} 상세`}
+            renderExpandedRow={(w) => (
+              <WorkItemDetail
+                w={w}
+                busy={busy}
+                run={run}
+                onAck={() => void ackItem(w)}
+                onClose={() => setSelectedId(undefined)}
+              />
+            )}
+          />
+        ) : (
+          <p className="workfeed-empty-day">이 날짜에는 항목이 없습니다.</p>
+        )}
       </GridNotice>
     </>
   );

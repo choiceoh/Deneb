@@ -148,9 +148,9 @@ export function dayKey(d: Date): string {
   return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
 }
 
-// Day heading for date-grouped lists (작업피드): "오늘"/"어제" for the current and
-// previous local day, otherwise an absolute "월 일 (요일)". `now` is injectable so
-// the relative labels are testable. Empty string for an unparseable stamp.
+// Day heading for the 작업피드 day-pager: "어제"/"오늘"/"내일" for the adjacent local
+// days, otherwise an absolute "월 일 (요일)". `now` is injectable so the relative
+// labels are testable. Empty string for an unparseable stamp.
 export function dayLabel(v: string | number, now = Date.now()): string {
   const d = new Date(v);
   if (Number.isNaN(d.getTime())) return "";
@@ -158,7 +158,17 @@ export function dayLabel(v: string | number, now = Date.now()): string {
   if (dayKey(d) === dayKey(today)) return "오늘";
   const yesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
   if (dayKey(d) === dayKey(yesterday)) return "어제";
+  const tomorrow = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+  if (dayKey(d) === dayKey(tomorrow)) return "내일";
   return d.toLocaleDateString(undefined, { month: "long", day: "numeric", weekday: "short" });
+}
+
+// Local midnight (epoch ms) for a stamp, defaulting to now. The 작업피드 day-pager
+// anchors each day to this so stepping ±1 day and matching items to a day stays
+// DST-safe (component-wise, never UTC arithmetic).
+export function startOfDay(v?: number): number {
+  const d = v == null ? new Date() : new Date(v);
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
 }
 
 // A Date at local midnight from a calendar stamp. All-day YYYY-MM-DD is parsed

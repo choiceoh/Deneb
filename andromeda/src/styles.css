@@ -1820,31 +1820,40 @@ textarea {
   cursor: default;
 }
 
-/* workfeed date grouping — a day heading above each day's rows */
-.workfeed-days {
+/* workfeed day-pager — a date navigator (prev · day label · next) above the day's rows */
+.workfeed-daynav {
   display: flex;
-  flex-direction: column;
-  gap: 18px;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
 }
-.workfeed-day-group {
-  min-width: 0;
-}
-.workfeed-day {
+.workfeed-daynav-label {
   display: flex;
   align-items: baseline;
   gap: 8px;
-  margin: 0 0 6px;
-  padding-bottom: 5px;
-  border-bottom: 1px solid var(--line);
-  color: var(--ink);
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.01em;
+  min-width: 0;
+  padding: 0 2px;
 }
-.workfeed-day-count {
+.workfeed-daynav-day {
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 600;
+}
+.workfeed-daynav-count {
   color: var(--muted);
   font-size: 12px;
-  font-weight: 500;
+  white-space: nowrap;
+}
+.workfeed-daynav-spacer {
+  flex: 1;
+}
+.workfeed-empty-day {
+  margin: 4px 0;
+  padding: 18px 2px;
+  color: var(--muted);
+  font-size: 13px;
 }
 
 /* workfeed selected item expansion */
