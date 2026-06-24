@@ -300,6 +300,86 @@ textarea {
   font-size: 12px;
   color: var(--muted);
 }
+
+.fleet-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 2px 0 12px;
+}
+.fleet-head .btn {
+  margin-left: auto;
+}
+.fleet-tabs {
+  margin-bottom: 12px;
+}
+.fleet-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.fleet-metric {
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-ctl);
+  background: var(--panel-sunken);
+}
+.fleet-metric span {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+}
+.fleet-metric strong {
+  display: block;
+  margin-top: 3px;
+  color: var(--ink);
+  font-size: 18px;
+  font-weight: 650;
+}
+.fleet-title-cell {
+  display: inline-flex;
+  align-items: flex-start;
+  min-width: 0;
+  gap: 8px;
+}
+.fleet-dot {
+  width: 8px;
+  height: 8px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: var(--online);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--online) 15%, transparent);
+}
+.fleet-dot.off {
+  background: var(--due);
+  box-shadow: 0 0 0 3px var(--due-soft);
+}
+.fleet-sub {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+.fleet-sub.danger {
+  color: var(--due);
+}
+.fleet-log {
+  margin: 0;
+  max-height: 220px;
+  overflow: auto;
+  white-space: pre-wrap;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-ctl);
+  background: var(--panel-sunken);
+  color: var(--ink-2);
+  padding: 10px 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.45;
+}
 .ai-composer {
   display: flex;
   align-items: flex-end;
@@ -602,7 +682,7 @@ textarea {
 
 /* Deneb "응답 중" sparkle — the StarIndicator port (see DenebStar.tsx). The burst
  * (scale + opacity) and glow run on CSS keyframes, so prefers-reduced-motion calms
- * them; the clay-derived fill keeps the single warm accent. */
+ * them; the fill is Deneb's own blue-white — the one cool note in the warm palette. */
 .deneb-status {
   display: inline-flex;
   align-items: center;
@@ -636,49 +716,66 @@ textarea {
   transform-origin: center;
 }
 .deneb-star-core {
-  animation: denebTwinkle 1.3s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  animation: denebTwinkle 4.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
 }
 .deneb-star-glow {
-  animation: denebGlow 1.3s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  animation: denebGlow 4.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
 }
-/* dim+small at rest → quick bright swollen pop → settle, mirroring the native
- * keyframes (pop ~20%, settle ~58%, rest by ~85% of the 1.3s period). */
+/* A calm scintillation, not a metronome: the core fires a quick bright burst, then a
+ * softer secondary glint, then rests (~1.8s) before looping over 4.5s. The halo (glow) is
+ * synced to the flash — it blooms only as the star brightens and fades to nothing at rest,
+ * so between twinkles you see the bare glint, no standing circle. The sheen rotates on 11s
+ * (DenebStar.tsx) for a slow shimmer that never lines up the same way twice. */
 @keyframes denebTwinkle {
   0% {
     opacity: 0.6;
-    transform: scale(0.85);
+    transform: scale(0.9);
   }
-  20% {
+  11% {
     opacity: 1;
-    transform: scale(1.1);
+    transform: scale(1.09);
   }
-  58% {
-    opacity: 0.65;
-    transform: scale(0.88);
+  27% {
+    opacity: 0.66;
+    transform: scale(0.92);
   }
-  85%,
+  45% {
+    opacity: 0.85;
+    transform: scale(0.99);
+  }
+  61% {
+    opacity: 0.62;
+    transform: scale(0.9);
+  }
   100% {
     opacity: 0.6;
-    transform: scale(0.85);
+    transform: scale(0.9);
   }
 }
 @keyframes denebGlow {
   0% {
-    opacity: 0.42;
+    opacity: 0;
+    transform: scale(0.7);
+  }
+  11% {
+    opacity: 0.55;
+    transform: scale(1.05);
+  }
+  27% {
+    opacity: 0.08;
     transform: scale(0.8);
   }
-  20% {
-    opacity: 0.82;
-    transform: scale(1.08);
+  45% {
+    opacity: 0.32;
+    transform: scale(0.95);
   }
-  58% {
-    opacity: 0.47;
-    transform: scale(0.83);
+  61% {
+    opacity: 0.04;
+    transform: scale(0.78);
   }
-  85%,
   100% {
-    opacity: 0.42;
-    transform: scale(0.8);
+    opacity: 0;
+    transform: scale(0.7);
   }
 }
 

@@ -5,7 +5,7 @@ import { serializeList } from "@/aiText";
 import { useCachedList } from "@/cachedList";
 import { errText, fmtDate } from "@/format";
 import { usePaneTarget } from "@/usePaneTarget";
-import { useRegisterPane, useWorkspace } from "@/workspaceContext";
+import { useRegisterPane, useWorkspace, type PaneTarget } from "@/workspaceContext";
 import { Column, Grid, GridNotice, RowBtn } from "@/components/Grid";
 import { Field, Modal, ModalFooter } from "@/components/Modal";
 
@@ -19,14 +19,17 @@ export function TodoPane() {
   const { mutate: deleteTodo } = useDelete();
 
   // Deep-link: open the matching todo's edit modal when another pane targets it.
+  // While the list is still loading, keep the target pending (return false) so it
+  // retries once the rows arrive instead of being dropped.
   const openTargetedTodo = useCallback(
-    (id: string | number | undefined) => {
-      const match = todos.find((t) => String(t.id) === String(id));
-      if (match) setModal(match);
+    (t: PaneTarget) => {
+      const match = todos.find((x) => String(x.id) === String(t.id));
+      if (!match) return query.isLoading ? false : undefined;
+      setModal(match);
     },
-    [todos],
+    [todos, query.isLoading],
   );
-  usePaneTarget("todo", openTargetedTodo, query.isLoading);
+  usePaneTarget("todo", openTargetedTodo);
 
   // Serialize the grid to text so Deneb's AI reads exactly what's on screen.
   const aiText = serializeList(

@@ -1,4 +1,5 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { fleetState } from "@/fleet";
 import { callRpc, ping } from "@/gateway";
 import { server } from "./server";
 
@@ -65,5 +66,10 @@ describe("mock gateway handlers", () => {
       id: "mail.analysis",
       overridden: false,
     });
+  });
+
+  it("answers fleet passthrough reads", async () => {
+    const state = await fleetState(cfg);
+    expect(state.nodes?.some((node) => node.name === "srv1")).toBe(true);
   });
 });

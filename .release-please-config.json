@@ -21,16 +21,16 @@
       "component": "andromeda",
       "bump-minor-pre-major": true,
       "bump-patch-for-minor-pre-major": true,
-      "changelog-path": "andromeda/CHANGELOG.md",
+      "changelog-path": "CHANGELOG.md",
       "extra-files": [
         {
           "type": "json",
-          "path": "andromeda/src-tauri/tauri.conf.json",
+          "path": "src-tauri/tauri.conf.json",
           "jsonpath": "$.version"
         },
         {
           "type": "toml",
-          "path": "andromeda/src-tauri/Cargo.toml",
+          "path": "src-tauri/Cargo.toml",
           "jsonpath": "$.package.version"
         }
       ]

@@ -3,6 +3,7 @@
 // (isUnread, due, nextRunAtMs, workfeed body/source/createdAtMs, …) — they're what
 // an agent (or a screenshot) sees when running against the mock.
 import type { CalendarProposal, ModelsList, SessionRow, TranscriptMsg } from "@/gateway";
+import type { FleetJob, FleetRecipe, FleetState } from "@/fleet";
 import type {
   CalEvent,
   Cron,
@@ -342,6 +343,73 @@ export const transcript: Record<string, TranscriptMsg[]> = {
     },
   ],
 };
+
+export const fleetState: FleetState = {
+  nodes: [
+    {
+      name: "srv1",
+      role: "controller",
+      reachable: true,
+      metrics: {
+        gpus: [{ index: 0, utilPct: 72, tempC: 64 }],
+        memory: { totalKB: 64_000_000, availableKB: 18_500_000 },
+        disks: [{ path: "/models", totalKB: 2_000_000_000, usedKB: 1_180_000_000, usePct: 59 }],
+        services: [
+          { name: "sparkfleet", ok: true },
+          { name: "vllm-qwen36", ok: true },
+        ],
+      },
+      models: [{ name: "Qwen3-30B-A3B", sizeBytes: 68_000_000_000 }],
+    },
+    {
+      name: "srv3",
+      role: "worker",
+      reachable: false,
+      error: "ssh unreachable",
+      metrics: { gpus: null, services: null },
+      models: [],
+    },
+  ],
+};
+
+export const fleetRecipes: FleetRecipe[] = [
+  {
+    name: "qwen36",
+    description: "문서/코딩 보조 기본 로컬 모델",
+    node: "srv1",
+    container: "vllm-qwen36",
+    port: 8000,
+    vllm: { gpuMemoryUtilization: 0.78, maxModelLen: 32768, maxNumSeqs: 8 },
+    status: { running: true, weightsPresent: true, node: "srv1" },
+  },
+  {
+    name: "deepseek-v4-flash",
+    description: "고속 추론 후보",
+    node: "srv3",
+    container: "vllm-dsv4",
+    port: 8001,
+    vllm: { gpuMemoryUtilization: 0.72, maxModelLen: 65536, maxNumSeqs: 4 },
+    status: { running: false, weightsPresent: true, node: "srv3" },
+  },
+];
+
+export const fleetJobs: FleetJob[] = [
+  {
+    id: "job-17",
+    title: "qwen36 restart",
+    state: "running",
+    log: "pull image\nrestart container\nwaiting for health",
+    startedAt: "2026-06-23T14:40:00Z",
+  },
+  {
+    id: "job-16",
+    title: "deepseek weights sync",
+    state: "done",
+    log: "download complete\nchecksum ok",
+    startedAt: "2026-06-23T13:20:00Z",
+    endedAt: "2026-06-23T13:42:00Z",
+  },
+];
 
 // search.all fans out to wiki / diary / people buckets (the gateway shape).
 export function searchAll(query: string): { wiki: SearchHit[]; diary: SearchHit[]; people: SearchHit[] } {

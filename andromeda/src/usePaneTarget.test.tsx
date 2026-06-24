@@ -17,11 +17,11 @@ afterEach(() => {
 });
 
 describe("usePaneTarget", () => {
-  it("runs apply with (id, target) and consumes when the view matches", () => {
+  it("runs apply with the whole target and consumes it when handled (view matches)", () => {
     ws.paneTarget = { view: "mail", id: "m1" };
-    const apply = vi.fn();
+    const apply = vi.fn(() => undefined); // void return = handled
     renderHook(() => usePaneTarget("mail", apply));
-    expect(apply).toHaveBeenCalledWith("m1", { view: "mail", id: "m1" });
+    expect(apply).toHaveBeenCalledWith({ view: "mail", id: "m1" });
     expect(ws.consumePaneTarget).toHaveBeenCalledTimes(1);
   });
 
@@ -33,19 +33,19 @@ describe("usePaneTarget", () => {
     expect(ws.consumePaneTarget).not.toHaveBeenCalled();
   });
 
-  it("applies but does NOT consume while the pane's query is still loading", () => {
+  it("does NOT consume when apply returns false (not ready / unhandled)", () => {
     ws.paneTarget = { view: "todo", id: "t1" };
-    const apply = vi.fn();
-    renderHook(() => usePaneTarget("todo", apply, true));
-    expect(apply).toHaveBeenCalledWith("t1", { view: "todo", id: "t1" });
+    const apply = vi.fn(() => false); // e.g. row not loaded yet
+    renderHook(() => usePaneTarget("todo", apply));
+    expect(apply).toHaveBeenCalledWith({ view: "todo", id: "t1" });
     expect(ws.consumePaneTarget).not.toHaveBeenCalled();
   });
 
-  it("fires for a dayKey-only target with no id (e.g. calendar)", () => {
+  it("passes a dayKey-only target (no id) through to apply", () => {
     ws.paneTarget = { view: "calendar", dayKey: "2026-6-7" };
-    const apply = vi.fn();
+    const apply = vi.fn(() => undefined);
     renderHook(() => usePaneTarget("calendar", apply));
-    expect(apply).toHaveBeenCalledWith(undefined, { view: "calendar", dayKey: "2026-6-7" });
+    expect(apply).toHaveBeenCalledWith({ view: "calendar", dayKey: "2026-6-7" });
     expect(ws.consumePaneTarget).toHaveBeenCalledTimes(1);
   });
 });
