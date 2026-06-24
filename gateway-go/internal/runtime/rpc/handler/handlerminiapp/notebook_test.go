@@ -85,3 +85,45 @@ func TestNotebookAddSourceRejections(t *testing.T) {
 		t.Error("create without a name should fail")
 	}
 }
+
+func TestNotebookRemoveSource(t *testing.T) {
+	m := notebookTestMethods(t)
+	created := decodePayload(t, callNotebook(t, m, "miniapp.notebook.create", map[string]any{"name": "딜"}))
+	id, _ := created["id"].(string)
+	for _, txt := range []string{"첫째", "둘째"} {
+		decodePayload(t, callNotebook(t, m, "miniapp.notebook.add_source",
+			map[string]any{"id": id, "kind": "note", "text": txt}))
+	}
+
+	// Remove S1 → the updated notebook keeps only S2 (cites are stable; gaps OK).
+	out := decodePayload(t, callNotebook(t, m, "miniapp.notebook.remove_source", map[string]any{"id": id, "cite": "S1"}))
+	srcs, _ := out["sources"].([]any)
+	if len(srcs) != 1 {
+		t.Fatalf("after remove, %d sources, want 1", len(srcs))
+	}
+	if first, _ := srcs[0].(map[string]any); first["cite"] != "S2" {
+		t.Errorf("remaining cite = %v, want S2", srcs[0])
+	}
+	if resp := callNotebook(t, m, "miniapp.notebook.remove_source", map[string]any{"id": id, "cite": "S9"}); resp.OK {
+		t.Error("removing an unknown cite should fail")
+	}
+}
+
+func TestNotebookDelete(t *testing.T) {
+	m := notebookTestMethods(t)
+	a := decodePayload(t, callNotebook(t, m, "miniapp.notebook.create", map[string]any{"name": "A"}))
+	decodePayload(t, callNotebook(t, m, "miniapp.notebook.create", map[string]any{"name": "B"}))
+	idA, _ := a["id"].(string)
+
+	// Delete A → the returned list has just B left.
+	out := decodePayload(t, callNotebook(t, m, "miniapp.notebook.delete", map[string]any{"id": idA}))
+	if nbs, _ := out["notebooks"].([]any); len(nbs) != 1 {
+		t.Fatalf("after delete, %d notebooks, want 1", len(nbs))
+	}
+	if resp := callNotebook(t, m, "miniapp.notebook.get", map[string]any{"id": idA}); resp.OK {
+		t.Error("get on a deleted notebook should fail")
+	}
+	if resp := callNotebook(t, m, "miniapp.notebook.delete", map[string]any{"id": "nope"}); resp.OK {
+		t.Error("deleting an unknown notebook should fail")
+	}
+}
