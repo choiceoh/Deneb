@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import type { WorkItem } from "@/types";
 import { serializeList } from "@/aiText";
 import { useCachedList } from "@/cachedList";
@@ -7,7 +7,7 @@ import { WORKFEED_RPC } from "@/resources";
 import { fmtDate } from "@/format";
 import { usePaneTarget } from "@/usePaneTarget";
 import { useAction } from "@/useAction";
-import { useRegisterPane, useWorkspace } from "@/workspaceContext";
+import { useRegisterPane, useWorkspace, type PaneTarget } from "@/workspaceContext";
 import { Column, Grid, GridNotice } from "@/components/Grid";
 import { AssistantText } from "@/components/DenebUi";
 
@@ -84,7 +84,13 @@ export function WorkfeedPane() {
     },
   });
 
-  usePaneTarget("workfeed", setSelectedId);
+  // An id-less workfeed target is meaningless — keep it pending rather than
+  // clearing the current selection.
+  const openTargetedItem = useCallback((t: PaneTarget) => {
+    if (t.id === undefined) return false;
+    setSelectedId(t.id);
+  }, []);
+  usePaneTarget("workfeed", openTargetedItem);
 
   const aiText = serializeList(
     "작업피드",

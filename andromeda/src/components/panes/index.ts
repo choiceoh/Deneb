@@ -15,6 +15,7 @@ import { FilesPane } from "./FilesPane";
 import { SearchPane } from "./SearchPane";
 import { PeoplePane } from "./PeoplePane";
 import { CronsPane } from "./CronsPane";
+import { FleetPane } from "./FleetPane";
 import { WorkfeedPane } from "./WorkfeedPane";
 import { TodayPane } from "./TodayPane";
 import { SettingsPane } from "./SettingsPane";
@@ -43,6 +44,7 @@ export const PANES: PaneDef[] = [
   { key: "search", label: "검색", shortcut: "6", Component: SearchPane },
   { key: "people", label: "연락처", shortcut: "7", Component: PeoplePane },
   { key: "crons", label: "크론", shortcut: "8", Component: CronsPane },
+  { key: "fleet", label: "플릿", shortcut: "l", Component: FleetPane },
   { key: "workfeed", label: "작업피드", shortcut: "9", Component: WorkfeedPane },
   // App settings live at the bottom of the rail; ⌘, mirrors the OS settings shortcut.
   { key: "settings", label: "설정", shortcut: ",", Component: SettingsPane },

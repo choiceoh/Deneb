@@ -16,6 +16,7 @@ export type IconName =
   | "search"
   | "people"
   | "crons"
+  | "fleet"
   | "workfeed"
   | "send"
   | "bell"
@@ -99,6 +100,14 @@ const PATHS: Record<IconName, ReactNode> = {
     <>
       <circle cx="12" cy="12" r="8.2" />
       <path d="M12 7.5V12l3 2" />
+    </>
+  ),
+  fleet: (
+    <>
+      <circle cx="6.5" cy="7" r="2.4" />
+      <circle cx="17.5" cy="7" r="2.4" />
+      <circle cx="12" cy="17" r="2.4" />
+      <path d="M8.7 8.7l2.1 5.9M15.3 8.7l-2.1 5.9M8.9 7h6.2" />
     </>
   ),
   workfeed: <path d="M3 12h3.5l2.2 6 4-13 2.4 9 1.8-2h4" />,

@@ -95,21 +95,25 @@ export function CalendarPane() {
   }, [connected, cfg.url, cfg.token]);
 
   // Deep-link: focus the targeted day/event when another pane opens the calendar.
-  // Passing query.isLoading lets it wait for events to load so an id can match its
-  // event (and pick the event's day) before the target is consumed.
+  // When a dayKey is present (the common case) we resolve the day immediately and
+  // set selectedEventId from the id — the selectedEvent memo binds the event once
+  // events load — so the target is consumed at once and never re-applies over the
+  // user's later navigation. An id WITHOUT a dayKey needs its event to find the
+  // day, so we keep the target pending (return false) while events are loading.
   const applyTarget = useCallback(
-    (id: string | number | undefined, target: PaneTarget) => {
-      const matchedEvent = id !== undefined ? events.find((ev) => String(ev.id) === String(id)) : undefined;
-      const matchedKey = target.dayKey ?? (matchedEvent ? eventDayKeys(matchedEvent.start, matchedEvent.end)[0] : "");
+    (t: PaneTarget) => {
+      const matchedEvent = t.id !== undefined ? events.find((ev) => String(ev.id) === String(t.id)) : undefined;
+      const matchedKey = t.dayKey ?? (matchedEvent ? eventDayKeys(matchedEvent.start, matchedEvent.end)[0] : "");
+      if (!matchedKey) return t.id !== undefined && query.isLoading ? false : undefined;
       const targetDate = parseDayKey(matchedKey);
-      if (!matchedKey || !targetDate) return;
+      if (!targetDate) return;
       setCursor({ y: targetDate.getFullYear(), m: targetDate.getMonth() });
       setSelectedDay(matchedKey);
-      setSelectedEventId(matchedEvent ? String(matchedEvent.id) : null);
+      setSelectedEventId(t.id !== undefined ? String(t.id) : null);
     },
-    [events],
+    [events, query.isLoading],
   );
-  usePaneTarget("calendar", applyTarget, query.isLoading);
+  usePaneTarget("calendar", applyTarget);
 
   // Place each event on every day it spans, so the month grid can look a day up.
   const eventsByDay = useMemo(() => {

@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.0.18](https://github.com/choiceoh/andromeda/compare/andromeda-v0.0.17...andromeda-v0.0.18) (2026-06-24)
+
+
+### Features
+
+* improve chat attachment rendering ([#135](https://github.com/choiceoh/andromeda/issues/135)) ([7858ddd](https://github.com/choiceoh/andromeda/commit/7858ddd9e7c7e0825a52f6ed940e2a4fefd88fae))
+
+
+### Bug Fixes
+
+* Deneb 응답중 별을 데네브 청백색 반짝임으로 다듬기 ([#133](https://github.com/choiceoh/andromeda/issues/133)) ([14159b1](https://github.com/choiceoh/andromeda/commit/14159b1b398ffe503e6b6de030cd49b0423724e8))
+* 메일 AI분석 에러가 재연결/설정변경 시 안 지워지던 회귀 수정 ([#130](https://github.com/choiceoh/andromeda/issues/130)) ([05b5e4a](https://github.com/choiceoh/andromeda/commit/05b5e4a3359fb80c403348c712ab56b521eead94))
+
 ## [0.0.17](https://github.com/choiceoh/andromeda/compare/andromeda-v0.0.16...andromeda-v0.0.17) (2026-06-24)
 
 

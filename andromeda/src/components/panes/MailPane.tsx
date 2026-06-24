@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import type { Mail } from "@/types";
 import { serializeList } from "@/aiText";
 import { useCachedList, useCachedOne } from "@/cachedList";
@@ -7,7 +7,7 @@ import { color, ellipsis } from "@/theme";
 import { fmtMailDate, senderName } from "@/format";
 import { usePaneTarget } from "@/usePaneTarget";
 import { useAction } from "@/useAction";
-import { useRegisterPane, useWorkspace } from "@/workspaceContext";
+import { useRegisterPane, useWorkspace, type PaneTarget } from "@/workspaceContext";
 import { Column, Grid, GridNotice } from "@/components/Grid";
 import { MailDetail, mailBody } from "./MailDetail";
 
@@ -21,7 +21,13 @@ export function MailPane() {
   const selectedMail = detail.result ?? selectedPreview;
   const { run, error, busy } = useAction(() => void query.refetch());
 
-  usePaneTarget("mail", setSelectedId);
+  // An id-less mail target is meaningless — keep it pending instead of clearing the
+  // current selection. (The detail fetches by id, so no need to wait for the list.)
+  const openTargetedMail = useCallback((t: PaneTarget) => {
+    if (t.id === undefined) return false;
+    setSelectedId(t.id);
+  }, []);
+  usePaneTarget("mail", openTargetedMail);
 
   // Mirror the grid (subject · sender · date) so the AI sees what the user sees.
   const listText = serializeList("메일", mails, (m) => {

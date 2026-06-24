@@ -196,7 +196,8 @@ export interface Notebook extends NotebookSummary {
 // Every navigable pane. Resource-backed panes share their key with a Refine
 // resource (see resources.ts); `today` is a read-only dashboard aggregating
 // several resources; `notebook` browses Deneb's deal notebooks; `wiki` and
-// `search` are query-driven custom panes.
+// `search` are query-driven custom panes; `fleet` talks to the gateway's
+// SparkFleet passthrough.
 export type View =
   | "today"
   | "chat"
@@ -210,6 +211,7 @@ export type View =
   | "search"
   | "people"
   | "crons"
+  | "fleet"
   | "workfeed"
   | "settings";
 
