@@ -17,6 +17,8 @@ type fakeWorkFeedStore struct {
 	lastBefore  int64
 	ackID       string
 	ackErr      error
+	readID      string
+	readErr     error
 	runItemID   string
 	runActionID string
 	runErr      error
@@ -66,6 +68,20 @@ func (f *fakeWorkFeedStore) Ack(id string) (workfeed.Item, error) {
 		if item.ID == id {
 			item.Status = workfeed.StatusAcked
 			return item, nil
+		}
+	}
+	return workfeed.Item{}, workfeed.ErrNotFound
+}
+
+func (f *fakeWorkFeedStore) MarkRead(id string) (workfeed.Item, error) {
+	f.readID = id
+	if f.readErr != nil {
+		return workfeed.Item{}, f.readErr
+	}
+	for i := range f.items {
+		if f.items[i].ID == id {
+			f.items[i].ReadAtMs = 1
+			return f.items[i], nil
 		}
 	}
 	return workfeed.Item{}, workfeed.ErrNotFound
@@ -216,6 +232,48 @@ func TestWorkFeedAckUnavailable(t *testing.T) {
 	}
 	if resp.Error.Code != protocol.ErrUnavailable {
 		t.Fatalf("code = %s, want %s", resp.Error.Code, protocol.ErrUnavailable)
+	}
+}
+
+func TestWorkFeedRead(t *testing.T) {
+	store := &fakeWorkFeedStore{items: []workfeed.Item{{ID: "a", Title: "A", Status: workfeed.StatusUnread}}}
+	h := workFeedRead(WorkFeedDeps{Store: store})
+	resp := h(authedCtx(), reqWith(t, "miniapp.workfeed.read", map[string]any{"itemId": "a"}))
+
+	var got struct {
+		OK   bool          `json:"ok"`
+		Item workfeed.Item `json:"item"`
+	}
+	decode(t, resp, &got)
+	if store.readID != "a" || !got.OK || got.Item.ReadAtMs == 0 {
+		t.Fatalf("read result store=%q got=%+v", store.readID, got)
+	}
+	// Reading is softer than ack — the card must stay unread (still in the feed).
+	if got.Item.Status != workfeed.StatusUnread {
+		t.Fatalf("status = %q, want unread (read must not settle)", got.Item.Status)
+	}
+}
+
+func TestWorkFeedReadMissingItemID(t *testing.T) {
+	h := workFeedRead(WorkFeedDeps{Store: &fakeWorkFeedStore{}})
+	resp := h(authedCtx(), reqWith(t, "miniapp.workfeed.read", map[string]any{}))
+	if resp.OK {
+		t.Fatalf("expected missing param")
+	}
+	if resp.Error.Code != protocol.ErrMissingParam {
+		t.Fatalf("code = %s, want %s", resp.Error.Code, protocol.ErrMissingParam)
+	}
+}
+
+func TestWorkFeedReadNotFound(t *testing.T) {
+	store := &fakeWorkFeedStore{readErr: workfeed.ErrNotFound}
+	h := workFeedRead(WorkFeedDeps{Store: store})
+	resp := h(authedCtx(), reqWith(t, "miniapp.workfeed.read", map[string]any{"itemId": "missing"}))
+	if resp.OK {
+		t.Fatalf("expected not found")
+	}
+	if resp.Error.Code != protocol.ErrNotFound {
+		t.Fatalf("code = %s, want %s", resp.Error.Code, protocol.ErrNotFound)
 	}
 }
 

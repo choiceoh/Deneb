@@ -131,6 +131,7 @@ export const CRON_RPC = {
 
 export const WORKFEED_RPC = {
   ack: "miniapp.workfeed.ack",
+  read: "miniapp.workfeed.read",
   actionRun: "miniapp.workfeed.action.run",
   answer: "miniapp.workfeed.answer",
   feedback: "miniapp.workfeed.feedback",

@@ -90,6 +90,10 @@ type Item struct {
 	UpdatedAtMs int64    `json:"updatedAtMs"`
 	// SnoozedUntilMs, when set, is the wall-clock time a snoozed item re-surfaces.
 	SnoozedUntilMs int64 `json:"snoozedUntilMs,omitempty"`
+	// ReadAtMs, when set, is when the user first opened (read) the card. Read is a
+	// SOFTER signal than 완료(Ack): the card stays in the feed (Status unchanged) but
+	// the clients render it de-emphasized. 0 = unread.
+	ReadAtMs int64 `json:"readAtMs,omitempty"`
 }
 
 type ActionResult struct {
@@ -339,6 +343,51 @@ func (s *Store) Ack(id string) (Item, error) {
 	}
 	if err := jsonlstore.Snapshot(s.path, items); err != nil {
 		return Item{}, err
+	}
+	return out, nil
+}
+
+// MarkRead stamps the card identified by id as read (ReadAtMs) WITHOUT settling it:
+// the card stays in the feed and keeps its Status (unread), so "read" is a softer
+// signal than 완료(Ack). Idempotent — once stamped, the first-read time is kept and
+// the file is not rewritten on a repeat read. Applies to every item sharing the id
+// (legacy twins), mirroring Ack. ReadAtMs flows to the clients (List + native sync),
+// which render read cards de-emphasized.
+func (s *Store) MarkRead(id string) (Item, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return Item{}, ErrNotFound
+	}
+	items, err := jsonlstore.Load[Item](s.path)
+	if err != nil {
+		return Item{}, err
+	}
+	now := time.Now().UnixMilli()
+	var out Item
+	found := false
+	changed := false
+	for i := range items {
+		items[i] = normalizeExisting(items[i])
+		if items[i].ID == id {
+			if items[i].ReadAtMs == 0 {
+				items[i].ReadAtMs = now
+				changed = true
+			}
+			out = items[i]
+			found = true
+		}
+	}
+	if !found {
+		return Item{}, ErrNotFound
+	}
+	// Already-read repeat: nothing to persist, just echo the stored card.
+	if changed {
+		if err := jsonlstore.Snapshot(s.path, items); err != nil {
+			return Item{}, err
+		}
 	}
 	return out, nil
 }

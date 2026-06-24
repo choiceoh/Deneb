@@ -142,6 +142,10 @@ const RPC: Record<string, (p: Record<string, any>) => unknown> = {
 
   "miniapp.workfeed.list": () => ({ count: fx.workfeed.length, items: fx.workfeed, total: fx.workfeed.length }),
   "miniapp.workfeed.ack": (p) => ({ ok: true, item: fx.workfeed.find((w) => String(w.id) === String(p.id)) ?? null }),
+  "miniapp.workfeed.read": (p) => {
+    const item = fx.workfeed.find((w) => String(w.id) === String(p.itemId));
+    return { ok: true, item: item ? { ...item, readAtMs: Date.now() } : null };
+  },
   "miniapp.workfeed.action.run": (p) => ({
     ok: true,
     itemId: p.itemId,

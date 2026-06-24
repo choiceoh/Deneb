@@ -65,6 +65,45 @@ func TestStoreAppendListAck(t *testing.T) {
 	}
 }
 
+func TestStoreMarkRead(t *testing.T) {
+	store := NewStore(filepath.Join(t.TempDir(), "workfeed.jsonl"))
+	if _, err := store.Append(Item{ID: "r1", Source: SourceProactive, Title: "Read me", CreatedAtMs: 1_000}); err != nil {
+		t.Fatalf("append: %v", err)
+	}
+
+	read, err := store.MarkRead("r1")
+	if err != nil {
+		t.Fatalf("mark read: %v", err)
+	}
+	if read.ReadAtMs == 0 {
+		t.Fatalf("ReadAtMs not stamped: %+v", read)
+	}
+	// Read is softer than ack: the card keeps its unread status and stays in the feed.
+	if read.Status != StatusUnread {
+		t.Fatalf("status = %q, want %q (read must not settle)", read.Status, StatusUnread)
+	}
+	items, _, err := store.List(10, false)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(items) != 1 || items[0].ID != "r1" || items[0].ReadAtMs == 0 {
+		t.Fatalf("read item must remain in feed with ReadAtMs set: %+v", items)
+	}
+
+	// Idempotent: a repeat read keeps the first-read timestamp.
+	again, err := store.MarkRead("r1")
+	if err != nil {
+		t.Fatalf("mark read again: %v", err)
+	}
+	if again.ReadAtMs != read.ReadAtMs {
+		t.Fatalf("repeat read changed timestamp %d -> %d", read.ReadAtMs, again.ReadAtMs)
+	}
+
+	if _, err := store.MarkRead("missing"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("mark read missing = %v, want ErrNotFound", err)
+	}
+}
+
 func TestStoreCorrect(t *testing.T) {
 	store := NewStore(filepath.Join(t.TempDir(), "workfeed.jsonl"))
 

@@ -197,4 +197,23 @@ describe("WorkfeedPane", () => {
     expect(await screen.findByText("오늘 항목")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "다음 날" })).toBeDisabled();
   });
+
+  it("marks an item read on open and de-emphasizes its row", async () => {
+    const dataProvider = fakeProvider({
+      workfeed: [{ id: "w1", source: "alert", title: "읽을 항목", body: "본문" }],
+    });
+    renderWithProviders(<WorkfeedPane />, { connected: true, dataProvider });
+
+    // The row title node is reused across re-render, so its className reflects the update.
+    const title = await screen.findByText("읽을 항목");
+    expect(title.className).not.toContain("workfeed-row-read");
+
+    await userEvent.click(title);
+
+    // Opening fires the read RPC with the item id…
+    await waitFor(() => expect(rpcCalls.some((c) => c.method === "miniapp.workfeed.read")).toBe(true));
+    expect(rpcCalls.find((c) => c.method === "miniapp.workfeed.read")?.params).toMatchObject({ itemId: "w1" });
+    // …and the row is now de-emphasized (read).
+    await waitFor(() => expect(title.className).toContain("workfeed-row-read"));
+  });
 });
