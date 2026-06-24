@@ -1,6 +1,9 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { useAsyncOnOpen } from "./useAsyncOnOpen";
+import { setLogSink } from "./log";
+
+afterEach(() => setLogSink());
 
 describe("useAsyncOnOpen", () => {
   it("loads data on open when enabled", async () => {
@@ -21,6 +24,15 @@ describe("useAsyncOnOpen", () => {
     const { result } = renderHook(() => useAsyncOnOpen(() => Promise.reject(new Error("boom")), [], { onError }));
     await waitFor(() => expect(onError).toHaveBeenCalledTimes(1));
     expect(result.current[0]).toBeNull();
+  });
+
+  it("logs a warning by default when no onError is given (no silent failure)", async () => {
+    const sink = vi.fn();
+    setLogSink(sink);
+    renderHook(() => useAsyncOnOpen(() => Promise.reject(new Error("boom")), []));
+    await waitFor(() =>
+      expect(sink.mock.calls.some(([level, ns]) => level === "warn" && String(ns).includes("asyncOnOpen"))).toBe(true),
+    );
   });
 
   it("exposes setData for imperative updates", async () => {

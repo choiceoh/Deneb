@@ -1,12 +1,18 @@
 import { useEffect, useState, type DependencyList, type Dispatch, type SetStateAction } from "react";
 
+import { log } from "./log";
+
+const asyncLog = log.child("asyncOnOpen");
+
 // Run an async `load` when the component opens and whenever `deps` change, with a
 // cancellation guard so a result from a superseded (or unmounted) load never lands.
 // Data resets to null at the start of each enabled load — i.e. the consumer flashes
 // to its empty state on every dep change rather than keeping the previous value
 // visible during a refetch. That suits the small enrichment cards here; a pane that
 // needs "keep previous data" should use the cache-backed useCachedRpc instead.
-// Errors are swallowed by default — pass `onError` to surface them.
+// Load failures are logged at warn by default, so a silently-empty enrichment card
+// is visible in the console; pass `onError` to handle them yourself (which replaces
+// the default log — pass `() => {}` to intentionally stay quiet).
 //
 // Returns [data, setData]; the setter lets a caller also update the value
 // imperatively (e.g. a manual re-run that reuses the same state) without a second
@@ -29,7 +35,9 @@ export function useAsyncOnOpen<T>(
         if (!cancelled) setData(r);
       })
       .catch((e) => {
-        if (!cancelled) onError?.(e);
+        if (cancelled) return;
+        if (onError) onError(e);
+        else asyncLog.warn("load failed", e);
       });
     return () => {
       cancelled = true;
