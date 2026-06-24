@@ -97,6 +97,48 @@ describe("MailPane", () => {
     expect(within(detail).getByText("상세 본문 대신 스니펫을 표시합니다.")).toBeInTheDocument();
   });
 
+  it("keeps the read overlay after remount while the cached list is still unread", () => {
+    localStorage.setItem(
+      cachedListStorageKey("mail"),
+      JSON.stringify({
+        data: [{ id: "m1", subject: "이미 읽은 메일", from: "kim@corp.com", isUnread: true }],
+        total: 1,
+        savedAt: Date.now(),
+      }),
+    );
+    localStorage.setItem("andromeda.mail.locallyReadIds", JSON.stringify([{ id: "m1", at: Date.now() }]));
+    const dataProvider = {
+      ...fakeProvider(),
+      getList: async () => new Promise<never>(() => {}),
+    };
+
+    renderWithProviders(<MailPane />, { connected: true, dataProvider });
+
+    expect(screen.getByText("이미 읽은 메일")).toBeInTheDocument();
+    expect(screen.queryByText("●")).not.toBeInTheDocument();
+  });
+
+  it("expires the read overlay so a later unread state can surface", () => {
+    localStorage.setItem(
+      cachedListStorageKey("mail"),
+      JSON.stringify({
+        data: [{ id: "m1", subject: "다시 안읽은 메일", from: "kim@corp.com", isUnread: true }],
+        total: 1,
+        savedAt: Date.now(),
+      }),
+    );
+    localStorage.setItem("andromeda.mail.locallyReadIds", JSON.stringify([{ id: "m1", at: Date.now() - 10 * 60_000 }]));
+    const dataProvider = {
+      ...fakeProvider(),
+      getList: async () => new Promise<never>(() => {}),
+    };
+
+    renderWithProviders(<MailPane />, { connected: true, dataProvider });
+
+    expect(screen.getByText("다시 안읽은 메일")).toBeInTheDocument();
+    expect(screen.getByText("●")).toBeInTheDocument();
+  });
+
   it("marks an unread message read when opened and clears the unread dot optimistically", async () => {
     const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
       const body = JSON.parse(String(init?.body ?? "{}")) as { method?: string };

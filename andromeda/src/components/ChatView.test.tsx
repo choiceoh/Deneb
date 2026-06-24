@@ -47,6 +47,90 @@ describe("ChatView (비업무 채팅 탭)", () => {
     expect(screen.getByRole("button", { name: "파일 첨부" })).toBeInTheDocument();
   });
 
+  it("infers document MIME type when the browser omits File.type", async () => {
+    const rpcCalls: Array<{ method: string; params: Record<string, unknown> }> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init?: RequestInit) => {
+        const body = JSON.parse(String(init?.body ?? "{}")) as {
+          method?: string;
+          params?: Record<string, unknown>;
+        };
+        const method = String(body.method ?? "");
+        const params = body.params ?? {};
+        rpcCalls.push({ method, params });
+        const payload =
+          method === "miniapp.models.list"
+            ? { current: "", sections: [] }
+            : method === "miniapp.sessions.recent"
+              ? { sessions: [], count: 0 }
+              : method === "miniapp.capture.document"
+                ? { text: "ok" }
+                : {};
+        return new Response(JSON.stringify({ ok: true, payload }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }),
+    );
+
+    renderWithProviders(<ChatView cfg={{ url: "http://test", token: "tok" }} />, { connected: true });
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    await userEvent.upload(input, new File(["fake pdf"], "contract.pdf", { type: "" }));
+
+    await waitFor(() => expect(rpcCalls.some((c) => c.method === "miniapp.capture.document")).toBe(true));
+    const capture = rpcCalls.find((c) => c.method === "miniapp.capture.document");
+    expect(capture?.params).toMatchObject({
+      filename: "contract.pdf",
+      mimeType: "application/pdf",
+      sessionKey: "chat:main",
+    });
+  });
+
+  it("routes extension-inferred audio attachments without sending typed text as a caption", async () => {
+    const rpcCalls: Array<{ method: string; params: Record<string, unknown> }> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init?: RequestInit) => {
+        const body = JSON.parse(String(init?.body ?? "{}")) as {
+          method?: string;
+          params?: Record<string, unknown>;
+        };
+        const method = String(body.method ?? "");
+        const params = body.params ?? {};
+        rpcCalls.push({ method, params });
+        const payload =
+          method === "miniapp.models.list"
+            ? { current: "", sections: [] }
+            : method === "miniapp.sessions.recent"
+              ? { sessions: [], count: 0 }
+              : method === "miniapp.capture.audio"
+                ? { text: "전사 완료" }
+                : {};
+        return new Response(JSON.stringify({ ok: true, payload }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }),
+    );
+
+    renderWithProviders(<ChatView cfg={{ url: "http://test", token: "tok" }} />, { connected: true });
+    const user = userEvent.setup();
+    const composer = screen.getByRole("textbox", { name: "Deneb에게 메시지" });
+    await user.type(composer, "이 녹음 요약해줘");
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    await user.upload(input, new File(["fake audio"], "meeting.mp3", { type: "" }));
+
+    await waitFor(() => expect(rpcCalls.some((c) => c.method === "miniapp.capture.audio")).toBe(true));
+    const capture = rpcCalls.find((c) => c.method === "miniapp.capture.audio");
+    expect(capture?.params).toMatchObject({
+      mimeType: "audio/mpeg",
+      sessionKey: "chat:main",
+    });
+    expect(capture?.params).not.toHaveProperty("caption");
+    expect(composer).toHaveValue("이 녹음 요약해줘");
+  });
+
   it("sends the typed composer text as the image attachment caption", async () => {
     const rpcCalls: Array<{ method: string; params: Record<string, unknown> }> = [];
     vi.stubGlobal(

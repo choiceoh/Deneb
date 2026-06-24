@@ -16,7 +16,7 @@ export function MailPane() {
   const { result, query } = useCachedList<Mail>("mail", connected);
   const fetchedMails = result?.data;
   const [selectedId, setSelectedId] = useState<string | number | undefined>();
-  const [locallyReadIds, setLocallyReadIds] = useState<Set<string>>(() => new Set());
+  const [locallyReadIds, setLocallyReadIds] = useState<Set<string>>(readLocallyReadIds);
   const markingReadIdsRef = useRef(new Set<string>());
   const { run, error, busy } = useAction(() => void query.refetch());
   const mails = useMemo(
@@ -34,6 +34,7 @@ export function MailPane() {
         if (prev.has(key)) return prev;
         const next = new Set(prev);
         next.add(key);
+        writeLocallyReadIds(next);
         return next;
       });
       if (markingReadIdsRef.current.has(key)) return;
@@ -45,6 +46,7 @@ export function MailPane() {
             if (!prev.has(key)) return prev;
             const next = new Set(prev);
             next.delete(key);
+            writeLocallyReadIds(next);
             return next;
           });
         })
@@ -152,4 +154,41 @@ export function MailPane() {
 function applyLocalRead(mail: Mail, locallyReadIds: Set<string>): Mail {
   if (!locallyReadIds.has(String(mail.id)) || mail.isUnread !== true) return mail;
   return { ...mail, isUnread: false };
+}
+
+const LOCALLY_READ_STORAGE_KEY = "andromeda.mail.locallyReadIds";
+const LOCALLY_READ_TTL_MS = 5 * 60_000;
+
+interface LocallyReadEntry {
+  id: string;
+  at: number;
+}
+
+function readLocallyReadIds(now = Date.now()): Set<string> {
+  try {
+    const raw = localStorage.getItem(LOCALLY_READ_STORAGE_KEY);
+    const parsed = raw ? (JSON.parse(raw) as unknown) : [];
+    if (!Array.isArray(parsed)) return new Set();
+    return new Set(parsed.flatMap((entry) => locallyReadIdFromEntry(entry, now)));
+  } catch {
+    return new Set();
+  }
+}
+
+function locallyReadIdFromEntry(entry: unknown, now: number): string[] {
+  // Backward-compatible with the first persisted shape: ["gmail-id", ...].
+  if (typeof entry === "string") return [entry];
+  if (!entry || typeof entry !== "object") return [];
+  const { id, at } = entry as Partial<LocallyReadEntry>;
+  if (typeof id !== "string" || typeof at !== "number") return [];
+  return now - at <= LOCALLY_READ_TTL_MS ? [id] : [];
+}
+
+function writeLocallyReadIds(ids: Set<string>): void {
+  try {
+    const at = Date.now();
+    localStorage.setItem(LOCALLY_READ_STORAGE_KEY, JSON.stringify([...ids].map((id) => ({ id, at }))));
+  } catch {
+    // Ignore private-mode/quota failures; the in-memory optimistic state still applies.
+  }
 }

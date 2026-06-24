@@ -1,5 +1,6 @@
 import { type ChangeEvent, useEffect, useRef, useState } from "react";
 
+import { inferAttachmentMimeType } from "@/attachmentMime";
 import { type GatewayConfig, type ModelsList, listModels } from "@/gateway";
 import { useChat } from "@/hooks";
 import { useSessions } from "@/useSessions";
@@ -89,15 +90,14 @@ export function ChatView({ cfg, hidden = false }: { cfg: GatewayConfig; hidden?:
     const file = e.target.files?.[0];
     e.target.value = ""; // let the same file be picked again later
     if (!file || busy || !connected) return;
-    const caption = file.type.startsWith("audio/") ? "" : input.trim();
+    const mimeType = inferAttachmentMimeType(file.name, file.type);
+    const caption = mimeType.startsWith("audio/") ? "" : input.trim();
     if (caption) setInput("");
     const reader = new FileReader();
     reader.onload = () => {
       const base64 = String(reader.result).split(",")[1] ?? "";
       pin();
-      void capture({ name: file.name, mimeType: file.type, base64 }, { sessionKey, caption }).then(
-        () => void refreshSessions(),
-      );
+      void capture({ name: file.name, mimeType, base64 }, { sessionKey, caption }).then(() => void refreshSessions());
     };
     reader.readAsDataURL(file);
   }
@@ -183,7 +183,7 @@ export function ChatView({ cfg, hidden = false }: { cfg: GatewayConfig; hidden?:
           <input
             ref={fileRef}
             type="file"
-            accept="image/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt"
+            accept="image/*,audio/*,.png,.jpg,.jpeg,.webp,.gif,.mp3,.m4a,.wav,.ogg,.webm,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt"
             hidden
             onChange={onPick}
           />

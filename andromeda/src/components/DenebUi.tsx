@@ -11,12 +11,6 @@ import { type ReactNode, useMemo, useState } from "react";
 import { type Node, coerce, collectInputs, parseDenebUi, splitDenebUi, TEXT_STYLE } from "@/markdown/denebUiParse";
 import { Markdown } from "./Markdown";
 
-export type { Node } from "@/markdown/denebUiParse";
-export type { UiSegment } from "@/markdown/denebUiParse";
-// Re-export the pure parser/helpers so existing imports from "./DenebUi" keep
-// working (tests, etc.). Their real home is markdown/denebUiParse.ts.
-export { coerce, collectInputs, parseDenebUi, splitDenebUi } from "@/markdown/denebUiParse";
-
 // Render one agent-drawn UI block. Owns form + accordion-toggle state so a
 // callback's collectFrom can gather live input values.
 export function DenebUi({ spec, onSubmit, busy }: { spec: Node; onSubmit: (msg: string) => void; busy?: boolean }) {

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { inferAttachmentMimeType } from "@/attachmentMime";
 import { clearCachedResource } from "@/cachedList";
 import { projectList } from "@/aiText";
 import { FILES_RPC } from "@/resources";
@@ -130,7 +131,7 @@ export function FilesPane() {
     const dataBase64 = await fileToBase64(file);
     const r = await call(
       FILES_RPC.upload,
-      { path: joinPath(path, file.name), mimeType: file.type, dataBase64 },
+      { path: joinPath(path, file.name), mimeType: inferAttachmentMimeType(file.name, file.type), dataBase64 },
       "업로드 중...",
     );
     if (!r.ok) return;
