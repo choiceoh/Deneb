@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Mail } from "@/types";
 import { serializeList } from "@/aiText";
 import { useCachedList, useCachedOne } from "@/cachedList";
@@ -14,12 +14,51 @@ import { MailDetail, mailBody } from "./MailDetail";
 export function MailPane() {
   const { connected } = useWorkspace();
   const { result, query } = useCachedList<Mail>("mail", connected);
-  const mails = result?.data ?? [];
+  const fetchedMails = result?.data;
   const [selectedId, setSelectedId] = useState<string | number | undefined>();
+  const [locallyReadIds, setLocallyReadIds] = useState<Set<string>>(() => new Set());
+  const markingReadIdsRef = useRef(new Set<string>());
+  const { run, error, busy } = useAction(() => void query.refetch());
+  const mails = useMemo(
+    () => (fetchedMails ?? []).map((mail) => applyLocalRead(mail, locallyReadIds)),
+    [fetchedMails, locallyReadIds],
+  );
   const selectedPreview = mails.find((m) => String(m.id) === String(selectedId));
   const detail = useCachedOne<Mail>("mail", selectedId, connected && selectedId !== undefined);
-  const selectedMail = detail.result ?? selectedPreview;
-  const { run, error, busy } = useAction(() => void query.refetch());
+  const selectedMail = detail.result ? applyLocalRead(detail.result, locallyReadIds) : selectedPreview;
+
+  const markMailRead = useCallback(
+    (id: string | number) => {
+      const key = String(id);
+      setLocallyReadIds((prev) => {
+        if (prev.has(key)) return prev;
+        const next = new Set(prev);
+        next.add(key);
+        return next;
+      });
+      if (markingReadIdsRef.current.has(key)) return;
+      markingReadIdsRef.current.add(key);
+      void run(MAIL_RPC.markRead, { id })
+        .then((result) => {
+          if (result !== undefined) return;
+          setLocallyReadIds((prev) => {
+            if (!prev.has(key)) return prev;
+            const next = new Set(prev);
+            next.delete(key);
+            return next;
+          });
+        })
+        .finally(() => {
+          markingReadIdsRef.current.delete(key);
+        });
+    },
+    [run],
+  );
+
+  useEffect(() => {
+    if (selectedId === undefined || selectedMail?.isUnread !== true) return;
+    markMailRead(selectedId);
+  }, [markMailRead, selectedId, selectedMail?.isUnread]);
 
   // An id-less mail target is meaningless — keep it pending instead of clearing the
   // current selection. (The detail fetches by id, so no need to wait for the list.)
@@ -46,9 +85,6 @@ export function MailPane() {
   useRegisterPane("mail", aiText);
 
   // Detail actions. Archive/trash drop the now-gone selection so the row collapses.
-  const act = (method: string) => {
-    if (selectedId !== undefined) void run(method, { id: selectedId });
-  };
   const closeAfter = (method: string) => {
     if (selectedId === undefined) return;
     void run(method, { id: selectedId });
@@ -100,7 +136,9 @@ export function MailPane() {
               mail={selectedMail}
               query={detail.query}
               busy={busy}
-              onMarkRead={() => act(MAIL_RPC.markRead)}
+              onMarkRead={() => {
+                if (selectedId !== undefined) markMailRead(selectedId);
+              }}
               onArchive={() => closeAfter(MAIL_RPC.archive)}
               onTrash={() => closeAfter(MAIL_RPC.trash)}
             />
@@ -109,4 +147,9 @@ export function MailPane() {
       </GridNotice>
     </>
   );
+}
+
+function applyLocalRead(mail: Mail, locallyReadIds: Set<string>): Mail {
+  if (!locallyReadIds.has(String(mail.id)) || mail.isUnread !== true) return mail;
+  return { ...mail, isUnread: false };
 }
