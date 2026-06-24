@@ -2681,11 +2681,11 @@ textarea {
  * gathered from the existing mail/calendar/todo/workfeed/notebook data. */
 .project-home {
   display: grid;
-  grid-template-columns: minmax(210px, 270px) minmax(0, 1fr);
+  grid-template-columns: minmax(232px, 260px) minmax(0, 1fr);
   gap: 16px;
+  width: 100%;
   height: calc(100% - 40px);
   min-height: 0;
-  max-width: 1080px;
   margin-top: 12px;
 }
 .project-home-list {
@@ -2737,11 +2737,16 @@ textarea {
   white-space: nowrap;
 }
 .project-home-main {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  align-content: start;
   min-width: 0;
   overflow: auto;
   padding-right: 2px;
 }
 .project-home-hero {
+  grid-column: 1 / -1;
   padding-bottom: 13px;
   border-bottom: 1px solid var(--line);
 }
@@ -2795,9 +2800,9 @@ textarea {
 }
 .project-home-split {
   display: grid;
-  grid-template-columns: minmax(0, 1.3fr) minmax(210px, 0.7fr);
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
-  margin-top: 14px;
 }
 .project-home-status,
 .project-home-focus,
@@ -2858,9 +2863,13 @@ textarea {
 }
 .project-home-sections {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
-  margin-top: 12px;
+  align-items: start;
+}
+.project-home-section:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
 }
 .project-home-rows {
   display: grid;

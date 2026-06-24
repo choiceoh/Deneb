@@ -172,12 +172,13 @@ type mailRowOut struct {
 	Priority     string `json:"priority,omitempty"`
 	PriorityHint string `json:"priorityHint,omitempty"`
 
-	AnalysisStatus        string `json:"analysisStatus,omitempty"`
-	AnalysisQuality       string `json:"analysisQuality,omitempty"`
-	FeedStatus            string `json:"feedStatus,omitempty"`
-	CalendarProposalCount int    `json:"calendarProposalCount,omitempty"`
-	TodoCount             int    `json:"todoCount,omitempty"`
-	WorkStateHint         string `json:"workStateHint,omitempty"`
+	AnalysisStatus        string       `json:"analysisStatus,omitempty"`
+	AnalysisQuality       string       `json:"analysisQuality,omitempty"`
+	FeedStatus            string       `json:"feedStatus,omitempty"`
+	CalendarProposalCount int          `json:"calendarProposalCount,omitempty"`
+	TodoCount             int          `json:"todoCount,omitempty"`
+	WorkStateHint         string       `json:"workStateHint,omitempty"`
+	RelatedProjects       []ProjectRef `json:"relatedProjects,omitempty"`
 }
 
 type mailAttachmentOut struct {
@@ -207,12 +208,13 @@ type mailMessageOut struct {
 	Labels               []string            `json:"labels"`
 	Attachments          []mailAttachmentOut `json:"attachments"`
 
-	AnalysisStatus        string `json:"analysisStatus,omitempty"`
-	AnalysisQuality       string `json:"analysisQuality,omitempty"`
-	FeedStatus            string `json:"feedStatus,omitempty"`
-	CalendarProposalCount int    `json:"calendarProposalCount,omitempty"`
-	TodoCount             int    `json:"todoCount,omitempty"`
-	WorkStateHint         string `json:"workStateHint,omitempty"`
+	AnalysisStatus        string       `json:"analysisStatus,omitempty"`
+	AnalysisQuality       string       `json:"analysisQuality,omitempty"`
+	FeedStatus            string       `json:"feedStatus,omitempty"`
+	CalendarProposalCount int          `json:"calendarProposalCount,omitempty"`
+	TodoCount             int          `json:"todoCount,omitempty"`
+	WorkStateHint         string       `json:"workStateHint,omitempty"`
+	RelatedProjects       []ProjectRef `json:"relatedProjects,omitempty"`
 }
 
 //deneb:wire
@@ -530,6 +532,25 @@ func applyMailWorkMessage(out *mailMessageOut, st mailwork.MessageState) {
 	out.WorkStateHint = st.LastError
 }
 
+func mailRelatedProjects(deps GmailDeps, msgID string) []ProjectRef {
+	if deps.AnalysisCache == nil {
+		return nil
+	}
+	rec, err := deps.AnalysisCache.load(msgID)
+	if err != nil || rec == nil || len(rec.RelatedProjects) == 0 {
+		return nil
+	}
+	refs := make([]ProjectRef, 0, len(rec.RelatedProjects))
+	for _, path := range rec.RelatedProjects {
+		path = strings.TrimSpace(path)
+		if path == "" {
+			continue
+		}
+		refs = append(refs, ProjectRef{Path: path})
+	}
+	return refs
+}
+
 func appendMailRows(out []mailRowOut, deps GmailDeps, results []gmail.MessageSummary, workFilter mailWorkFilter, limit int) []mailRowOut {
 	for _, m := range results {
 		state := mailWorkStateForSummary(deps, m)
@@ -549,6 +570,7 @@ func appendMailRows(out []mailRowOut, deps GmailDeps, results []gmail.MessageSum
 			Mailbox:         m.Mailbox,
 			HasAttachment:   m.HasAttachment || m.AttachmentCount > 0,
 			AttachmentCount: m.AttachmentCount,
+			RelatedProjects: mailRelatedProjects(deps, m.ID),
 		}
 		row.Priority, row.PriorityHint = rowPriority(deps, m.ID, m.From, m.Subject, snippet)
 		applyMailWorkRow(&row, state)
@@ -727,6 +749,7 @@ func gmailGet(deps GmailDeps) rpcutil.HandlerFunc {
 			BodyHiddenLineCount:  mailHiddenLineCount(cleaned.HiddenBlocks),
 			Labels:               nonNilLabels(msg.Labels),
 			Attachments:          atts,
+			RelatedProjects:      mailRelatedProjects(deps, msg.ID),
 		}
 		applyMailWorkMessage(&out, mailWorkStateForDetail(deps, msg))
 		return rpcutil.RespondOK(req.ID, out)

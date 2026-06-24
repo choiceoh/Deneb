@@ -258,13 +258,18 @@ func TestGmailListRecent_PriorityFields(t *testing.T) {
 // heuristic that would otherwise mark, and a cache miss falls back.
 func TestGmailListRecent_AnalysisVerdictLayering(t *testing.T) {
 	store := NewAnalysisStore(t.TempDir())
-	mustSave := func(id, importance string) {
+	mustSave := func(id, importance string, projects ...string) {
 		t.Helper()
-		if err := store.SaveAnalysis(CachedAnalysis{MsgID: id, Analysis: "분석", Importance: importance}); err != nil {
+		if err := store.SaveAnalysis(CachedAnalysis{
+			MsgID:           id,
+			Analysis:        "분석",
+			Importance:      importance,
+			RelatedProjects: projects,
+		}); err != nil {
 			t.Fatal(err)
 		}
 	}
-	mustSave("m-urgent", "urgent")
+	mustSave("m-urgent", "urgent", "projects/andromeda")
 	mustSave("m-routine", "routine") // body-aware FYI verdict
 	mustSave("m-blank", "")          // v2 record without parseable tag
 
@@ -313,6 +318,17 @@ func TestGmailListRecent_AnalysisVerdictLayering(t *testing.T) {
 	}
 	if byID["m-miss"]["priority"] != "attention" || byID["m-miss"]["priorityHint"] != "회의" {
 		t.Errorf("cache miss must fall back to heuristic: %+v", byID["m-miss"])
+	}
+	projects, ok := byID["m-urgent"]["relatedProjects"].([]any)
+	if !ok || len(projects) != 1 {
+		t.Fatalf("cached related projects = %v, want one project", byID["m-urgent"]["relatedProjects"])
+	}
+	first, ok := projects[0].(map[string]any)
+	if !ok || first["path"] != "projects/andromeda" {
+		t.Fatalf("cached related project = %+v, want projects/andromeda", projects[0])
+	}
+	if _, ok := byID["m-miss"]["relatedProjects"]; ok {
+		t.Errorf("cache miss must omit relatedProjects: %+v", byID["m-miss"])
 	}
 }
 

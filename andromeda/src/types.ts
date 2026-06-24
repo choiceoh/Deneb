@@ -37,6 +37,7 @@ export interface Mail {
   attachments?: MailAttachment[];
   priority?: string; // "urgent" | "attention"
   priorityHint?: string; // Korean hint, e.g. "낙찰 · 마감 표현"
+  relatedProjects?: { path?: string; title?: string; summary?: string }[];
 }
 
 export interface MailAttachment {

@@ -143,6 +143,7 @@ export interface MailMessageOut {
   calendarProposalCount?: number
   todoCount?: number
   workStateHint?: string
+  relatedProjects?: ProjectRef[]
 }
 
 export interface MailNativeMailboxOut {
@@ -207,6 +208,7 @@ export interface MailRowOut {
   calendarProposalCount?: number
   todoCount?: number
   workStateHint?: string
+  relatedProjects?: ProjectRef[]
 }
 
 export interface MemberOut {
