@@ -139,4 +139,32 @@ describe("WorkfeedPane", () => {
     expect(rpcCalls.find((c) => c.method === "miniapp.workfeed.ack")?.params).toMatchObject({ id: "w3" });
     await waitFor(() => expect(screen.queryByLabelText("작업피드 상세")).not.toBeInTheDocument());
   });
+
+  it("reuses the assistant renderer for tables and deneb-ui charts in the detail body", async () => {
+    const body = [
+      "| 항목 | 값 |",
+      "| --- | ---: |",
+      "| 입찰가 | 120 |",
+      "",
+      "```deneb-ui",
+      '{"type":"chart","label":"입찰 비교","labels":["A","B"],"values":[120,95]}',
+      "```",
+    ].join("\n");
+    const dataProvider = fakeProvider({
+      workfeed: [{ id: "w4", source: "alert", title: "도표 확인", body }],
+    });
+    renderWithProviders(<WorkfeedPane />, { connected: true, dataProvider });
+
+    await screen.findByText("도표 확인");
+    expect(screen.getByText("표/도표 포함")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByText("도표 확인"));
+    const detail = screen.getByLabelText("작업피드 상세");
+
+    expect(within(detail).getByRole("table")).toBeInTheDocument();
+    expect(within(detail).getByText("입찰가")).toBeInTheDocument();
+    expect(within(detail).getByText("입찰 비교")).toBeInTheDocument();
+    expect(within(detail).getByText("A")).toBeInTheDocument();
+    expect(within(detail).getAllByText("120")).toHaveLength(2);
+  });
 });

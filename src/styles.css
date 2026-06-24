@@ -1152,9 +1152,44 @@ textarea {
 }
 
 /* workfeed selected item expansion */
+.workfeed-kind {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: var(--panel-sunken);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.workfeed-row-main {
+  min-width: 0;
+}
+.workfeed-row-title {
+  color: var(--ink);
+  font-weight: 600;
+  line-height: 1.35;
+}
+.workfeed-row-preview {
+  display: -webkit-box;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+  overflow: hidden;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.workfeed-row-time {
+  color: var(--muted);
+  font-size: 13px;
+  white-space: nowrap;
+}
 .workfeed-detail {
   min-width: 0;
-  padding: 12px 14px 14px;
+  padding: 14px;
   border: 1px solid var(--line);
   border-top: 0;
   border-radius: 0 0 8px 8px;
@@ -1163,10 +1198,11 @@ textarea {
 .workfeed-detail-head {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 10px;
+  gap: 12px;
   align-items: start;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--line);
+}
+.workfeed-detail-heading {
+  min-width: 0;
 }
 .workfeed-detail-title {
   color: var(--ink);
@@ -1175,7 +1211,7 @@ textarea {
   line-height: 1.35;
 }
 .workfeed-detail-meta {
-  margin-top: 4px;
+  margin-bottom: 4px;
   color: var(--muted);
   font-size: 12px;
   line-height: 1.5;
@@ -1190,22 +1226,52 @@ textarea {
   padding: 5px 12px;
   font-size: 12px;
 }
+.workfeed-detail-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 280px);
+  gap: 13px;
+  margin-top: 13px;
+  padding-top: 13px;
+  border-top: 1px solid var(--line);
+}
 .workfeed-detail-body {
-  margin-top: 12px;
+  min-width: 0;
+  max-height: min(56vh, 620px);
+  overflow: auto;
+  padding: 12px 13px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-ctl);
+  background: var(--panel);
   color: var(--ink-2);
   font-size: 13px;
-  line-height: 1.65;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
+  line-height: 1.6;
 }
-.workfeed-card {
-  margin-top: 12px;
-  padding: 10px 12px;
+.workfeed-detail-body .md-table,
+.workfeed-detail-body .dui,
+.workfeed-detail-body .dui-code {
+  max-width: 100%;
+}
+.workfeed-detail-body .dui-chart {
+  min-width: min(420px, 100%);
+}
+.workfeed-empty-body {
+  margin: 0;
+  color: var(--muted);
+}
+.workfeed-tools {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 9px;
+}
+.workfeed-tool {
+  min-width: 0;
+  padding: 10px 11px;
   border: 1px solid var(--line);
   border-radius: var(--radius-ctl);
   background: var(--panel-sunken);
 }
-.workfeed-card-title {
+.workfeed-tool-title {
   margin-bottom: 7px;
   color: var(--muted-2);
   font-size: 11px;
@@ -1218,14 +1284,27 @@ textarea {
   gap: 6px;
 }
 .workfeed-form {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
   gap: 6px;
 }
 .workfeed-form .field {
   flex: 1;
   min-width: 0;
-  padding: 5px 8px;
+  padding: 7px 8px;
   font-size: 12px;
+  line-height: 1.45;
+  resize: vertical;
+}
+@media (max-width: 760px) {
+  .workfeed-detail-head,
+  .workfeed-detail-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .workfeed-detail-actions {
+    justify-content: flex-start;
+  }
 }
 
 /* 통합 검색 — Google-style: the box is centered until the first search, then

@@ -9,10 +9,47 @@ import { usePaneTarget } from "@/usePaneTarget";
 import { useAction } from "@/useAction";
 import { useRegisterPane, useWorkspace } from "@/workspaceContext";
 import { Column, Grid, GridNotice } from "@/components/Grid";
+import { AssistantText } from "@/components/DenebUi";
 
 // Items sourced from a question expect a free-text reply. The gateway settles the
 // card via workfeed.answer/action.run, then returns a sessionKey+prompt to deliver.
 const isQuestion = (w: WorkItem) => (w.source ?? "").includes("question");
+const ignoreUiSubmit = () => {};
+
+const SOURCE_LABELS: Record<string, string> = {
+  alert: "알림",
+  deal_question: "질문",
+  followup: "후속",
+  proactive: "제안",
+};
+
+function sourceLabel(source?: string) {
+  const key = source?.trim();
+  if (!key) return "피드";
+  return SOURCE_LABELS[key] ?? key.replace(/[_-]+/g, " ");
+}
+
+function previewText(text?: string, max = 120) {
+  const raw = (text ?? "").trim();
+  if (!raw) return "";
+  const hasStructuredBody = /```deneb-ui/i.test(raw) || /^\s*\|.+\|\s*$/m.test(raw);
+  const withoutUi = raw.replace(/```deneb-ui[\s\S]*?```/gi, "");
+  const line =
+    withoutUi
+      .split(/\r?\n/)
+      .map((part) => part.trim())
+      .find((part) => part && !/^\|.*\|$/.test(part) && !/^[-:|\s]+$/.test(part) && !/^```/.test(part)) ?? "";
+  const compact = (line || (hasStructuredBody ? "표/도표 포함" : withoutUi))
+    .replace(/^\s{0,3}#{1,6}\s+/, "")
+    .replace(/^\s*[-*+]\s+/, "")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!compact) return "";
+  return compact.length > max ? `${compact.slice(0, max - 1)}…` : compact;
+}
 
 type RunFn = (method: string, params?: Record<string, unknown>) => Promise<unknown>;
 
@@ -67,25 +104,25 @@ export function WorkfeedPane() {
 
   const columns: Column<WorkItem>[] = [
     {
-      header: "출처",
-      width: 100,
-      tdStyle: { fontSize: 12, opacity: 0.6, whiteSpace: "nowrap" },
-      cell: (w) => w.source ?? "",
+      header: "유형",
+      width: 92,
+      tdStyle: { verticalAlign: "top" },
+      cell: (w) => <span className="workfeed-kind">{sourceLabel(w.source)}</span>,
     },
     {
       header: "항목",
       cell: (w) => (
-        <>
-          <div style={{ fontWeight: 500 }}>{w.title ?? "(항목)"}</div>
-          {w.body && <div style={{ fontSize: 12, color: "var(--muted-2)", lineHeight: 1.45 }}>{w.body}</div>}
-        </>
+        <div className="workfeed-row-main">
+          <div className="workfeed-row-title">{w.title ?? "(항목)"}</div>
+          {w.body && <div className="workfeed-row-preview">{previewText(w.body)}</div>}
+        </div>
       ),
     },
     {
       header: "시각",
       width: 120,
-      tdStyle: { fontSize: 13, opacity: 0.7, whiteSpace: "nowrap" },
-      cell: (w) => fmtDate(w.createdAtMs),
+      tdStyle: { verticalAlign: "top" },
+      cell: (w) => <span className="workfeed-row-time">{fmtDate(w.createdAtMs)}</span>,
     },
   ];
 
@@ -135,6 +172,7 @@ function WorkItemDetail({
   const [feedback, setFeedback] = useState("");
   const hasActions = (w.actions?.length ?? 0) > 0;
   const created = fmtDate(w.createdAtMs);
+  const meta = [sourceLabel(w.source), created, w.refId ? `ref ${w.refId}` : ""].filter(Boolean).join(" · ");
 
   const submit = () => {
     const t = text.trim();
@@ -153,11 +191,9 @@ function WorkItemDetail({
   return (
     <section className="workfeed-detail" aria-label="작업피드 상세">
       <div className="workfeed-detail-head">
-        <div>
+        <div className="workfeed-detail-heading">
+          <div className="workfeed-detail-meta">{meta}</div>
           <div className="workfeed-detail-title">{w.title ?? "(항목)"}</div>
-          <div className="workfeed-detail-meta">
-            {[w.source, created, w.refId ? `ref ${w.refId}` : ""].filter(Boolean).join(" · ")}
-          </div>
         </div>
         <div className="workfeed-detail-actions">
           <button className="row-btn" onClick={onClose} disabled={busy}>
@@ -171,60 +207,66 @@ function WorkItemDetail({
           </button>
         </div>
       </div>
-      {w.body && <div className="workfeed-detail-body">{w.body}</div>}
-      {hasActions && (
-        <div className="workfeed-card">
-          <div className="workfeed-card-title">액션</div>
-          <div className="workfeed-chips">
-            {w.actions?.map((a) => (
-              <button
-                key={a.id}
-                className="chip"
+      <div className="workfeed-detail-layout">
+        <div className="workfeed-detail-body">
+          {w.body ? (
+            <AssistantText text={w.body} onUiSubmit={ignoreUiSubmit} busy />
+          ) : (
+            <p className="workfeed-empty-body">본문 없음</p>
+          )}
+        </div>
+        <div className="workfeed-tools">
+          {hasActions && (
+            <section className="workfeed-tool">
+              <div className="workfeed-tool-title">액션</div>
+              <div className="workfeed-chips">
+                {w.actions?.map((a) => (
+                  <button
+                    key={a.id}
+                    className="chip"
+                    disabled={busy}
+                    onClick={() => void run(WORKFEED_RPC.actionRun, { itemId: w.id, actionId: a.id })}
+                  >
+                    {a.label}
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
+          {question && (
+            <section className="workfeed-tool">
+              <div className="workfeed-tool-title">답변</div>
+              <div className="workfeed-form">
+                <textarea
+                  className="field"
+                  placeholder="답변 입력…"
+                  rows={3}
+                  value={text}
+                  disabled={busy}
+                  onChange={(e) => setText(e.target.value)}
+                />
+                <button className="chip" onClick={submit} disabled={busy || !text.trim()}>
+                  답변
+                </button>
+              </div>
+            </section>
+          )}
+          <section className="workfeed-tool">
+            <div className="workfeed-tool-title">정정</div>
+            <div className="workfeed-form">
+              <textarea
+                className="field"
+                placeholder="정정·피드백 입력…"
+                rows={3}
+                value={feedback}
                 disabled={busy}
-                onClick={() => void run(WORKFEED_RPC.actionRun, { itemId: w.id, actionId: a.id })}
-              >
-                {a.label}
+                onChange={(e) => setFeedback(e.target.value)}
+              />
+              <button className="chip" onClick={submitFeedback} disabled={busy || !feedback.trim()}>
+                정정
               </button>
-            ))}
-          </div>
-        </div>
-      )}
-      {question && (
-        <div className="workfeed-card">
-          <div className="workfeed-card-title">답변</div>
-          <div className="workfeed-form">
-            <input
-              className="field"
-              placeholder="답변 입력…"
-              value={text}
-              disabled={busy}
-              onChange={(e) => setText(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") submit();
-              }}
-            />
-            <button className="chip" onClick={submit} disabled={busy || !text.trim()}>
-              답변
-            </button>
-          </div>
-        </div>
-      )}
-      <div className="workfeed-card">
-        <div className="workfeed-card-title">정정</div>
-        <div className="workfeed-form">
-          <input
-            className="field"
-            placeholder="정정·피드백 입력…"
-            value={feedback}
-            disabled={busy}
-            onChange={(e) => setFeedback(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") submitFeedback();
-            }}
-          />
-          <button className="chip" onClick={submitFeedback} disabled={busy || !feedback.trim()}>
-            정정
-          </button>
+            </div>
+          </section>
         </div>
       </div>
     </section>
