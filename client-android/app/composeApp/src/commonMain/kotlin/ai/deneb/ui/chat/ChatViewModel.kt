@@ -72,6 +72,7 @@ class ChatViewModel(
         clearUnreadWorkReport = ::clearUnreadWorkReport,
         openWorkReport = ::openWorkReport,
         openWorkFeedItem = ::openWorkFeedItem,
+        markWorkFeedRead = ::markWorkFeedRead,
         refreshWorkFeedRange = ::refreshWorkFeedRange,
         consumePendingScroll = ::consumePendingScroll,
         runWorkFeedAction = ::runWorkFeedAction,
@@ -479,6 +480,15 @@ class ChatViewModel(
             if (!prompt.isNullOrBlank()) {
                 askInternal(prompt, null)
             }
+        }
+    }
+
+    // Opening a card reads it: tell the gateway so the read state is durable and shows
+    // read on the desktop too. The local seen-set drives the immediate in-feed dim.
+    private fun markWorkFeedRead(id: String) {
+        if (id.isBlank()) return
+        viewModelScope.launch(backgroundDispatcher) {
+            (dataRepository as? DenebGatewayClient)?.markWorkFeedRead(id)
         }
     }
 

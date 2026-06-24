@@ -24,6 +24,8 @@ data class ChatActions(
     val clearUnreadWorkReport: () -> Unit,
     val openWorkReport: () -> Unit,
     val openWorkFeedItem: (String) -> Unit,
+    // Stamp a feed card read on the gateway (durable + cross-device) when it's opened.
+    val markWorkFeedRead: (String) -> Unit,
     val refreshWorkFeedRange: (Long, Long) -> Unit,
     // Clears ChatUiState.pendingScrollToMessageId after the chat list lands on it.
     val consumePendingScroll: () -> Unit,

@@ -52,6 +52,10 @@ data class WorkFeedItem(
     // inline answer affordance: the actions as chips, or a free-text reply field.
     val question: Boolean = false,
     val createdAtMs: Long = 0,
+    // Set once the card is opened (read) on any device; 0 = unread. Softer than the
+    // server ack — the card stays in the feed, just de-emphasized. Shared via the
+    // gateway so reading on the desktop shows read here too.
+    val readAtMs: Long = 0,
 )
 
 /**
