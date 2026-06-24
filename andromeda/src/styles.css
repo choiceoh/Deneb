@@ -1399,6 +1399,33 @@ textarea {
   cursor: default;
 }
 
+/* workfeed date grouping — a day heading above each day's rows */
+.workfeed-days {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.workfeed-day-group {
+  min-width: 0;
+}
+.workfeed-day {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 0 6px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+.workfeed-day-count {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
 /* workfeed selected item expansion */
 .workfeed-kind {
   display: inline-flex;

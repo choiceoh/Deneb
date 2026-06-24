@@ -198,13 +198,23 @@ export const promptDetails: Record<string, PromptDetailOut> = {
   },
 };
 
+// Spread across a few days so the date-grouped feed (오늘 / 어제 / older day headers)
+// is actually visible in mock-mode screenshots. These are relative to now — unlike the
+// static fixtures above — so the relative day headings stay meaningful whenever the mock
+// runs. No test asserts on these timestamps.
+const atDaysAgo = (days: number, hour: number, min = 0): number => {
+  const d = new Date(Date.now() - days * 86_400_000);
+  d.setHours(hour, min, 0, 0);
+  return d.getTime();
+};
+
 export const workfeed: WorkItem[] = [
   {
     id: "w1",
     source: "deal_question",
     title: "분기 리뷰 자료 검토 요청",
     body: "검토 후 승인 여부를 알려주세요.",
-    createdAtMs: 1782100800000,
+    createdAtMs: atDaysAgo(0, 9, 15),
     actions: [
       { id: "approve", label: "승인" },
       { id: "hold", label: "보류" },
@@ -215,7 +225,14 @@ export const workfeed: WorkItem[] = [
     source: "followup",
     title: "미답장 메일 3건",
     body: "24시간 이상 경과한 메일이 있습니다.",
-    createdAtMs: 1782090000000,
+    createdAtMs: atDaysAgo(1, 16, 40),
+  },
+  {
+    id: "w3",
+    source: "proactive",
+    title: "내일 오전 일정이 비어 있습니다",
+    body: "집중 작업 블록을 잡아둘까요?",
+    createdAtMs: atDaysAgo(3, 11),
   },
 ];
 

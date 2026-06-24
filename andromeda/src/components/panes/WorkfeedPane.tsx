@@ -1,10 +1,9 @@
 import { useCallback, useState } from "react";
 import type { WorkItem } from "@/types";
-import { serializeList } from "@/aiText";
 import { useCachedList } from "@/cachedList";
 import { chatStream } from "@/gateway";
 import { WORKFEED_RPC } from "@/resources";
-import { fmtDate } from "@/format";
+import { dayKey, dayLabel, fmtDate, fmtTime } from "@/format";
 import { usePaneTarget } from "@/usePaneTarget";
 import { useAction } from "@/useAction";
 import { useRegisterPane, useWorkspace, type PaneTarget } from "@/workspaceContext";
@@ -51,6 +50,44 @@ function previewText(text?: string, max = 120) {
   return compact.length > max ? `${compact.slice(0, max - 1)}…` : compact;
 }
 
+interface WorkfeedDay {
+  key: string;
+  label: string;
+  items: WorkItem[];
+}
+
+// One line per item — shared by the AI text projection so each day's rows read the
+// same as the old flat list, just nested under a day heading.
+function itemLine(w: WorkItem): string {
+  return `- ${w.title ?? "(항목)"}${w.source ? ` [${w.source}]` : ""}${w.body ? `\n    ${w.body}` : ""}`;
+}
+
+// Group feed items into local-day sections, newest day first and newest item first
+// within a day. Items with no timestamp collect into a trailing "날짜 미정" group so
+// they don't all fall onto the epoch day. `now` flows to dayLabel for the 오늘/어제
+// relative headings (injectable for tests).
+function groupByDay(items: WorkItem[], now = Date.now()): WorkfeedDay[] {
+  const dated = items.filter((w) => typeof w.createdAtMs === "number");
+  const undated = items.filter((w) => typeof w.createdAtMs !== "number");
+  dated.sort((a, b) => (b.createdAtMs ?? 0) - (a.createdAtMs ?? 0));
+
+  const groups: WorkfeedDay[] = [];
+  const byKey = new Map<string, WorkfeedDay>();
+  for (const w of dated) {
+    const ms = w.createdAtMs as number;
+    const key = dayKey(new Date(ms));
+    let group = byKey.get(key);
+    if (!group) {
+      group = { key, label: dayLabel(ms, now), items: [] };
+      byKey.set(key, group);
+      groups.push(group);
+    }
+    group.items.push(w);
+  }
+  if (undated.length) groups.push({ key: "no-date", label: "날짜 미정", items: undated });
+  return groups;
+}
+
 type RunFn = (method: string, params?: Record<string, unknown>) => Promise<unknown>;
 
 interface WorkfeedTurn {
@@ -92,11 +129,11 @@ export function WorkfeedPane() {
   }, []);
   usePaneTarget("workfeed", openTargetedItem);
 
-  const aiText = serializeList(
-    "작업피드",
-    items,
-    (w) => `- ${w.title ?? "(항목)"}${w.source ? ` [${w.source}]` : ""}${w.body ? `\n    ${w.body}` : ""}`,
-  );
+  const groups = groupByDay(items);
+  const aiText = groups.length
+    ? `[작업피드 ${items.length}건]\n` +
+      groups.map((g) => `## ${g.label} (${g.items.length}건)\n${g.items.map(itemLine).join("\n")}`).join("\n\n")
+    : "";
   useRegisterPane("workfeed", aiText);
 
   function toggleSelected(w: WorkItem) {
@@ -126,9 +163,10 @@ export function WorkfeedPane() {
     },
     {
       header: "시각",
-      width: 120,
+      width: 76,
       tdStyle: { verticalAlign: "top" },
-      cell: (w) => <span className="workfeed-row-time">{fmtDate(w.createdAtMs)}</span>,
+      // Day is shown by the section header, so the row keeps only the time.
+      cell: (w) => <span className="workfeed-row-time">{fmtTime(w.createdAtMs)}</span>,
     },
   ];
 
@@ -137,23 +175,34 @@ export function WorkfeedPane() {
       <h2 style={{ marginTop: 2 }}>작업피드</h2>
       {error && <p className="pane-error">오류: {error}</p>}
       <GridNotice query={query} count={items.length} empty="작업피드가 비어 있습니다.">
-        <Grid
-          columns={columns}
-          rows={items}
-          getKey={(w) => String(w.id)}
-          onRowClick={toggleSelected}
-          isRowSelected={(w) => String(w.id) === String(selectedId)}
-          rowTitle={(w) => `${w.title ?? "(항목)"} 상세`}
-          renderExpandedRow={(w) => (
-            <WorkItemDetail
-              w={w}
-              busy={busy}
-              run={run}
-              onAck={() => void ackItem(w)}
-              onClose={() => setSelectedId(undefined)}
-            />
-          )}
-        />
+        <div className="workfeed-days">
+          {groups.map((g) => (
+            <section key={g.key} className="workfeed-day-group" aria-label={g.label}>
+              <h3 className="workfeed-day">
+                {g.label}
+                <span className="workfeed-day-count">{g.items.length}</span>
+              </h3>
+              <Grid
+                columns={columns}
+                rows={g.items}
+                getKey={(w) => String(w.id)}
+                hideHeader
+                onRowClick={toggleSelected}
+                isRowSelected={(w) => String(w.id) === String(selectedId)}
+                rowTitle={(w) => `${w.title ?? "(항목)"} 상세`}
+                renderExpandedRow={(w) => (
+                  <WorkItemDetail
+                    w={w}
+                    busy={busy}
+                    run={run}
+                    onAck={() => void ackItem(w)}
+                    onClose={() => setSelectedId(undefined)}
+                  />
+                )}
+              />
+            </section>
+          ))}
+        </div>
       </GridNotice>
     </>
   );

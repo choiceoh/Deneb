@@ -167,4 +167,28 @@ describe("WorkfeedPane", () => {
     expect(within(detail).getByText("A")).toBeInTheDocument();
     expect(within(detail).getAllByText("120")).toHaveLength(2);
   });
+
+  it("groups the feed into day sections, newest day first, with undated items last", async () => {
+    const older = new Date(2026, 0, 10, 9, 0).getTime();
+    const newer = new Date(2026, 0, 12, 14, 0).getTime();
+    const dataProvider = fakeProvider({
+      workfeed: [
+        { id: "old", source: "alert", title: "오래된 항목", createdAtMs: older },
+        { id: "new", source: "followup", title: "최신 항목", createdAtMs: newer },
+        { id: "nodate", source: "proactive", title: "날짜 없는 항목" },
+      ],
+    });
+    renderWithProviders(<WorkfeedPane />, { connected: true, dataProvider });
+
+    await screen.findByText("최신 항목");
+
+    // Each day is its own accessible region; the only regions on screen are the
+    // day groups (the detail region appears only when a row is expanded).
+    const sections = screen.getAllByRole("region");
+    expect(sections).toHaveLength(3);
+    expect(within(sections[0]).getByText("최신 항목")).toBeInTheDocument(); // newest day first
+    expect(within(sections[1]).getByText("오래된 항목")).toBeInTheDocument();
+    expect(within(sections[2]).getByText("날짜 없는 항목")).toBeInTheDocument();
+    expect(within(sections[2]).getByRole("heading", { level: 3 })).toHaveTextContent("날짜 미정");
+  });
 });
