@@ -34,10 +34,12 @@ func NotebookMethods(deps NotebookDeps) map[string]rpcutil.HandlerFunc {
 		return nil
 	}
 	return map[string]rpcutil.HandlerFunc{
-		"miniapp.notebook.list":       notebookListRPC(deps),
-		"miniapp.notebook.get":        notebookGetRPC(deps),
-		"miniapp.notebook.create":     notebookCreateRPC(deps),
-		"miniapp.notebook.add_source": notebookAddSourceRPC(deps),
+		"miniapp.notebook.list":          notebookListRPC(deps),
+		"miniapp.notebook.get":           notebookGetRPC(deps),
+		"miniapp.notebook.create":        notebookCreateRPC(deps),
+		"miniapp.notebook.add_source":    notebookAddSourceRPC(deps),
+		"miniapp.notebook.delete":        notebookDeleteRPC(deps),
+		"miniapp.notebook.remove_source": notebookRemoveSourceRPC(deps),
 	}
 }
 
@@ -93,19 +95,7 @@ func notebookListRPC(deps NotebookDeps) rpcutil.HandlerFunc {
 		if err != nil {
 			return rpcerr.WrapUnavailable("notebook store unavailable", err).Response(req.ID)
 		}
-		nbs := store.List()
-		out := NotebookListOut{Notebooks: make([]NotebookSummaryOut, 0, len(nbs))}
-		for _, nb := range nbs {
-			out.Notebooks = append(out.Notebooks, NotebookSummaryOut{
-				ID:          nb.ID,
-				Name:        nb.Name,
-				Description: nb.Description,
-				DealRef:     nb.DealRef,
-				SourceCount: len(nb.Sources),
-				Updated:     nb.Updated,
-			})
-		}
-		return rpcutil.RespondOK(req.ID, out)
+		return rpcutil.RespondOK(req.ID, notebookListPayload(store))
 	}
 }
 
@@ -147,24 +137,7 @@ func notebookGetRPC(deps NotebookDeps) rpcutil.HandlerFunc {
 			return rpcerr.NotFound("notebook").Response(req.ID)
 		}
 
-		out := NotebookOut{
-			ID:          nb.ID,
-			Name:        nb.Name,
-			Description: nb.Description,
-			DealRef:     nb.DealRef,
-			Updated:     nb.Updated,
-			Sources:     make([]NotebookSourceOut, 0, len(nb.Sources)),
-		}
-		for _, src := range nb.Sources {
-			out.Sources = append(out.Sources, NotebookSourceOut{
-				Cite:  src.Cite,
-				Kind:  src.Kind,
-				Ref:   src.Ref,
-				Title: src.Title,
-				Text:  truncateNotebookSourceText(src.Text),
-			})
-		}
-		return rpcutil.RespondOK(req.ID, out)
+		return rpcutil.RespondOK(req.ID, notebookOutFrom(nb))
 	}
 }
 
@@ -261,6 +234,123 @@ func notebookAddSourceRPC(deps NotebookDeps) rpcutil.HandlerFunc {
 			Text:  truncateNotebookSourceText(src.Text),
 		})
 	}
+}
+
+// notebookDeleteRPC deletes a notebook and returns the updated list so the client
+// can refresh its rail without a second round-trip.
+func notebookDeleteRPC(deps NotebookDeps) rpcutil.HandlerFunc {
+	type params struct {
+		ID string `json:"id"`
+	}
+	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		if errResp := requireAuth(ctx, req.ID); errResp != nil {
+			return errResp
+		}
+		var p params
+		if len(req.Params) > 0 {
+			if err := json.Unmarshal(req.Params, &p); err != nil {
+				return rpcerr.InvalidParams(err).Response(req.ID)
+			}
+		}
+		id := strings.TrimSpace(p.ID)
+		if id == "" {
+			return rpcerr.MissingParam("id").Response(req.ID)
+		}
+		store, err := deps.Store()
+		if err != nil {
+			return rpcerr.WrapUnavailable("notebook store unavailable", err).Response(req.ID)
+		}
+		if err := store.Delete(id); err != nil {
+			if errors.Is(err, notebook.ErrNotFound) {
+				return rpcerr.NotFound("notebook").Response(req.ID)
+			}
+			return rpcerr.InvalidRequest(err.Error()).Response(req.ID)
+		}
+		return rpcutil.RespondOK(req.ID, notebookListPayload(store))
+	}
+}
+
+// notebookRemoveSourceRPC unpins a source by its cite tag and returns the updated
+// notebook so the client can repaint without a second get.
+func notebookRemoveSourceRPC(deps NotebookDeps) rpcutil.HandlerFunc {
+	type params struct {
+		ID   string `json:"id"`
+		Cite string `json:"cite"`
+	}
+	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		if errResp := requireAuth(ctx, req.ID); errResp != nil {
+			return errResp
+		}
+		var p params
+		if len(req.Params) > 0 {
+			if err := json.Unmarshal(req.Params, &p); err != nil {
+				return rpcerr.InvalidParams(err).Response(req.ID)
+			}
+		}
+		id := strings.TrimSpace(p.ID)
+		if id == "" {
+			return rpcerr.MissingParam("id").Response(req.ID)
+		}
+		if strings.TrimSpace(p.Cite) == "" {
+			return rpcerr.MissingParam("cite").Response(req.ID)
+		}
+		store, err := deps.Store()
+		if err != nil {
+			return rpcerr.WrapUnavailable("notebook store unavailable", err).Response(req.ID)
+		}
+		if err := store.RemoveSource(id, p.Cite); err != nil {
+			if errors.Is(err, notebook.ErrNotFound) {
+				return rpcerr.NotFound("notebook").Response(req.ID)
+			}
+			return rpcerr.InvalidRequest(err.Error()).Response(req.ID)
+		}
+		nb, ok := store.Get(id)
+		if !ok {
+			return rpcerr.NotFound("notebook").Response(req.ID)
+		}
+		return rpcutil.RespondOK(req.ID, notebookOutFrom(nb))
+	}
+}
+
+// notebookListPayload builds the list-summaries payload from the store's current
+// state — shared by list and the post-delete refresh.
+func notebookListPayload(store *notebook.Store) NotebookListOut {
+	nbs := store.List()
+	out := NotebookListOut{Notebooks: make([]NotebookSummaryOut, 0, len(nbs))}
+	for _, nb := range nbs {
+		out.Notebooks = append(out.Notebooks, NotebookSummaryOut{
+			ID:          nb.ID,
+			Name:        nb.Name,
+			Description: nb.Description,
+			DealRef:     nb.DealRef,
+			SourceCount: len(nb.Sources),
+			Updated:     nb.Updated,
+		})
+	}
+	return out
+}
+
+// notebookOutFrom builds the full detail payload from a notebook — shared by get
+// and the post-remove_source refresh.
+func notebookOutFrom(nb *notebook.Notebook) NotebookOut {
+	out := NotebookOut{
+		ID:          nb.ID,
+		Name:        nb.Name,
+		Description: nb.Description,
+		DealRef:     nb.DealRef,
+		Updated:     nb.Updated,
+		Sources:     make([]NotebookSourceOut, 0, len(nb.Sources)),
+	}
+	for _, src := range nb.Sources {
+		out.Sources = append(out.Sources, NotebookSourceOut{
+			Cite:  src.Cite,
+			Kind:  src.Kind,
+			Ref:   src.Ref,
+			Title: src.Title,
+			Text:  truncateNotebookSourceText(src.Text),
+		})
+	}
+	return out
 }
 
 // truncateNotebookSourceText caps a source body to a mobile-friendly length on a
