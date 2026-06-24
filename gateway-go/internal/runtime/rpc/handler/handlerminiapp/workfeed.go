@@ -15,6 +15,7 @@ import (
 type WorkFeedStore interface {
 	List(limit int, includeAcked bool) ([]workfeed.Item, int, error)
 	Ack(id string) (workfeed.Item, error)
+	MarkRead(id string) (workfeed.Item, error)
 	RunAction(itemID, actionID string) (workfeed.ActionResult, error)
 }
 
@@ -43,8 +44,44 @@ func WorkFeedMethods(deps WorkFeedDeps) map[string]rpcutil.HandlerFunc {
 	return map[string]rpcutil.HandlerFunc{
 		"miniapp.workfeed.list":       workFeedList(deps),
 		"miniapp.workfeed.ack":        workFeedAck(deps),
+		"miniapp.workfeed.read":       workFeedRead(deps),
 		"miniapp.workfeed.action.run": workFeedActionRun(deps),
 		"miniapp.workfeed.answer":     workFeedAnswer(deps),
+	}
+}
+
+// workFeedRead stamps a card as read (the user opened it) without settling it: the
+// card stays in the feed, just de-emphasized client-side. Idempotent. Softer than
+// ack — reading is not 완료.
+func workFeedRead(deps WorkFeedDeps) rpcutil.HandlerFunc {
+	type params struct {
+		ItemID string `json:"itemId"`
+	}
+	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		if errResp := requireAuth(ctx, req.ID); errResp != nil {
+			return errResp
+		}
+		var p params
+		if len(req.Params) > 0 {
+			if err := json.Unmarshal(req.Params, &p); err != nil {
+				return rpcerr.InvalidParams(err).Response(req.ID)
+			}
+		}
+		itemID := strings.TrimSpace(p.ItemID)
+		if itemID == "" {
+			return rpcerr.MissingParam("itemId").Response(req.ID)
+		}
+		item, err := deps.Store.MarkRead(itemID)
+		if err != nil {
+			if errors.Is(err, workfeed.ErrNotFound) {
+				return rpcerr.NotFound("work feed item").Response(req.ID)
+			}
+			return rpcerr.WrapUnavailable("work feed unavailable", err).Response(req.ID)
+		}
+		return rpcutil.RespondOK(req.ID, map[string]any{
+			"ok":   true,
+			"item": item,
+		})
 	}
 }
 

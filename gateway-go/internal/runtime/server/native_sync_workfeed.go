@@ -52,6 +52,17 @@ func (s *nativeWorkFeedStore) Ack(id string) (workfeed.Item, error) {
 	return item, nil
 }
 
+func (s *nativeWorkFeedStore) MarkRead(id string) (workfeed.Item, error) {
+	item, err := s.store.MarkRead(id)
+	if err != nil {
+		return workfeed.Item{}, err
+	}
+	// Mirror the read stamp to the native stream so the phone de-emphasizes the
+	// card too (cross-surface read state). Reuses the generic updated event.
+	s.record(nativesync.WorkFeedUpdated(item))
+	return item, nil
+}
+
 func (s *nativeWorkFeedStore) Correct(id, note string) (workfeed.Item, error) {
 	item, err := s.store.Correct(id, note)
 	if err != nil {
