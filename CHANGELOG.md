@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.34.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.33.0...deneb-v4.34.0) (2026-06-24)
+
+
+### ✨ Features
+
+* **native:** 작업피드 읽음 기기 간 동기화 ([#2870](https://github.com/choiceoh/Deneb/issues/2870)) ([ca27a67](https://github.com/choiceoh/Deneb/commit/ca27a678a05e125f65d7419e76fc8b3c14d60fcb))
+* **push:** proactive 알림 딥링크 타깃(kind+ref) + 데스크탑 클릭스루 ([#2869](https://github.com/choiceoh/Deneb/issues/2869)) ([4406432](https://github.com/choiceoh/Deneb/commit/44064326ca3f578503d743da475daf698613dec3))
+
 ## [4.33.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.32.0...deneb-v4.33.0) (2026-06-24)
 
 

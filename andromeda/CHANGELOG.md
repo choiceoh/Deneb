@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.23](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.22...andromeda-v0.0.23) (2026-06-24)
+
+
+### ✨ Features
+
+* **push:** proactive 알림 딥링크 타깃(kind+ref) + 데스크탑 클릭스루 ([#2869](https://github.com/choiceoh/Deneb/issues/2869)) ([4406432](https://github.com/choiceoh/Deneb/commit/44064326ca3f578503d743da475daf698613dec3))
+
 ## [0.0.22](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.21...andromeda-v0.0.22) (2026-06-24)
 
 
