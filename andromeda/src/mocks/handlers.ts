@@ -120,6 +120,12 @@ const RPC: Record<string, (p: Record<string, any>) => unknown> = {
   "miniapp.notebook.create": (p) => ({ id: `nb${Date.now()}`, name: p.name, description: p.description }),
   "miniapp.notebook.delete": (p) => ({ deleted: true, id: p.id }),
   "miniapp.notebook.add_source": (p) => ({ cite: "S2", ...p }),
+  "miniapp.notebook.remove_source": (p) => {
+    const detail = fx.notebookDetails[String(p.id)];
+    if (!detail) return null;
+    const sources = (detail.sources ?? []).filter((source) => source.cite !== p.cite);
+    return { ...detail, sources, sourceCount: sources.length, updated: Date.now() };
+  },
 
   "miniapp.prompts.list": () => ({ prompts: fx.prompts, count: fx.prompts.length }),
   "miniapp.prompts.get": (p) => fx.promptDetails[String(p.id)] ?? null,

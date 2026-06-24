@@ -5,14 +5,16 @@ import { renderWithProviders } from "@/test/util";
 import { NotebookPane } from "./NotebookPane";
 
 // Stateful stand-in for the Deneb gateway notebook surface: create assigns an id,
-// add_source pins to an in-test list, and get reflects what's been added so the
-// write round-trip (create → add_source → get) shows up in the UI.
+// add_source/remove_source mutate in-test source lists, and get reflects the
+// latest notebook so write round-trips show up in the UI.
 let added: { cite: string; kind: string; title: string; text: string; ref: string }[];
+let zttSources: { cite: string; kind: string; title: string; text: string; ref: string }[];
 let createdName: string;
 let notebookRows: { id: string; name: string; sourceCount: number; updated: number }[];
 
 beforeEach(() => {
   added = [];
+  zttSources = [{ cite: "S1", kind: "note", title: "잔금 안내", text: "최종 5% 잔금 $401K, 마감 6/25.", ref: "" }];
   createdName = "";
   notebookRows = [{ id: "ztt", name: "ZTT", sourceCount: 1, updated: 1782190313958 }];
   localStorage.clear();
@@ -47,7 +49,31 @@ beforeEach(() => {
             ref: String(params.ref ?? ""),
           };
           added.push(s);
+          notebookRows = notebookRows.map((notebook) =>
+            notebook.id === params.id ? { ...notebook, sourceCount: added.length, updated: 3 } : notebook,
+          );
           return reply(s);
+        }
+        case "miniapp.notebook.remove_source": {
+          const cite = String(params.cite ?? "");
+          if (params.id === "ztt") {
+            zttSources = zttSources.filter((source) => source.cite !== cite);
+            notebookRows = notebookRows.map((notebook) =>
+              notebook.id === "ztt" ? { ...notebook, sourceCount: zttSources.length, updated: 4 } : notebook,
+            );
+            return reply({
+              id: "ztt",
+              name: "ZTT",
+              dealRef: "프로젝트/거래/ztt.md",
+              sources: zttSources,
+              updated: 4,
+            });
+          }
+          added = added.filter((source) => source.cite !== cite);
+          notebookRows = notebookRows.map((notebook) =>
+            notebook.id === params.id ? { ...notebook, sourceCount: added.length, updated: 4 } : notebook,
+          );
+          return reply({ id: params.id, name: createdName || String(params.id), sources: added, updated: 4 });
         }
         case "miniapp.notebook.get":
           if (params.id === "ztt")
@@ -55,7 +81,7 @@ beforeEach(() => {
               id: "ztt",
               name: "ZTT",
               dealRef: "프로젝트/거래/ztt.md",
-              sources: [{ cite: "S1", kind: "note", title: "잔금 안내", text: "최종 5% 잔금 $401K, 마감 6/25." }],
+              sources: zttSources,
             });
           return reply({ id: params.id, name: createdName || String(params.id), sources: added });
         default:
@@ -104,7 +130,7 @@ describe("NotebookPane", () => {
 
     // + 인용자료 → switch the kind to 위키 → a path field replaces the note textarea.
     await userEvent.click(screen.getByRole("button", { name: "인용자료 추가" }));
-    await userEvent.click(screen.getByRole("button", { name: "위키 페이지" }));
+    await userEvent.click(screen.getByRole("button", { name: "위키" }));
     await userEvent.type(screen.getByLabelText("제목 (선택)"), "탑솔라");
     await userEvent.type(screen.getByLabelText("위키 경로"), "프로젝트/topsolar.md");
     await userEvent.click(screen.getByRole("button", { name: "추가" }));
@@ -112,6 +138,39 @@ describe("NotebookPane", () => {
     // add_source carried kind=wiki + ref (a wiki page), not a pasted note.
     expect(added.at(-1)).toMatchObject({ kind: "wiki", ref: "프로젝트/topsolar.md", title: "탑솔라" });
     expect(await screen.findByText("탑솔라")).toBeInTheDocument();
+  });
+
+  it("pins gateway-ingested source kinds by ref", async () => {
+    renderWithProviders(<NotebookPane />, { connected: true });
+
+    await userEvent.click(await screen.findByRole("button", { name: "새 노트북" }));
+    await userEvent.type(screen.getByLabelText("이름"), "파일 딜");
+    await userEvent.click(screen.getByRole("button", { name: "생성" }));
+    expect(await screen.findByRole("heading", { name: "파일 딜" })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "인용자료 추가" }));
+    await userEvent.click(screen.getByRole("button", { name: "파일" }));
+    await userEvent.type(screen.getByLabelText("제목 (선택)"), "계약서");
+    await userEvent.type(screen.getByLabelText("파일 경로"), "contracts/topsolar.pdf");
+    await userEvent.click(screen.getByRole("button", { name: "추가" }));
+
+    expect(added.at(-1)).toMatchObject({ kind: "file", ref: "contracts/topsolar.pdf", title: "계약서" });
+    expect(await screen.findByText("계약서")).toBeInTheDocument();
+  });
+
+  it("removes a source from the open notebook", async () => {
+    renderWithProviders(<NotebookPane />, { connected: true });
+
+    await userEvent.click(await screen.findByRole("button", { name: /ZTT/ }));
+    expect(await screen.findByText("잔금 안내")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "인용자료 삭제 S1" }));
+    expect(screen.getByRole("dialog", { name: "인용자료 삭제" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "삭제" }));
+
+    await waitFor(() => expect(screen.queryByText("잔금 안내")).not.toBeInTheDocument());
+    expect(await screen.findByText(/아직 자료가 없습니다/)).toBeInTheDocument();
+    expect(notebookRows[0].sourceCount).toBe(0);
   });
 
   it("deletes the open notebook after confirmation", async () => {
