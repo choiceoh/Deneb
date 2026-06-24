@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MailPane } from "./MailPane";
 import { cachedListStorageKey, cachedOneStorageKey } from "@/cachedList";
+import { MAIL_RPC } from "@/resources";
 import { fakeProvider, renderWithProviders } from "@/test/util";
 
 beforeEach(() => {
@@ -94,6 +95,39 @@ describe("MailPane", () => {
     const detail = screen.getByLabelText("메일 상세");
     expect(within(detail).getByText("본문 없는 메일")).toBeInTheDocument();
     expect(within(detail).getByText("상세 본문 대신 스니펫을 표시합니다.")).toBeInTheDocument();
+  });
+
+  it("marks an unread message read when opened and clears the unread dot optimistically", async () => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body ?? "{}")) as { method?: string };
+      if (body.method === MAIL_RPC.markRead) {
+        return new Response(JSON.stringify({ ok: true, payload: { ok: true } }), {
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      return Promise.reject(new Error("offline test"));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const dataProvider = fakeProvider({
+      mail: [{ id: "m1", subject: "안읽은 메일", from: "kim@corp.com", body: "본문", isUnread: true }],
+    });
+    renderWithProviders(<MailPane />, { connected: true, dataProvider });
+
+    expect(await screen.findByText("●")).toBeInTheDocument();
+    await userEvent.click(await screen.findByText("안읽은 메일"));
+
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(([, init]) => {
+          const body = JSON.parse(String((init as RequestInit | undefined)?.body ?? "{}")) as { method?: string };
+          return body.method === MAIL_RPC.markRead;
+        }),
+      ).toBe(true),
+    );
+    const detail = screen.getByLabelText("메일 상세");
+    await waitFor(() => expect(within(detail).queryByRole("button", { name: "읽음" })).not.toBeInTheDocument());
+    expect(screen.queryByText("●")).not.toBeInTheDocument();
   });
 
   it("renders the message body as Markdown (links become anchors)", async () => {
