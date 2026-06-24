@@ -15,6 +15,25 @@
           "jsonpath": "$.version"
         }
       ]
+    },
+    "andromeda": {
+      "release-type": "node",
+      "component": "andromeda",
+      "bump-minor-pre-major": true,
+      "bump-patch-for-minor-pre-major": true,
+      "changelog-path": "andromeda/CHANGELOG.md",
+      "extra-files": [
+        {
+          "type": "json",
+          "path": "andromeda/src-tauri/tauri.conf.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "toml",
+          "path": "andromeda/src-tauri/Cargo.toml",
+          "jsonpath": "$.package.version"
+        }
+      ]
     }
   },
   "changelog-sections": [
