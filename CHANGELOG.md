@@ -1,5 +1,18 @@
 # Changelog
 
+## [4.32.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.31.0...deneb-v4.32.0) (2026-06-24)
+
+
+### ✨ Features
+
+* **andromeda:** 작업피드를 날짜별 페이저로 (전날/다음날 이동) ([#2861](https://github.com/choiceoh/Deneb/issues/2861)) ([71f3d27](https://github.com/choiceoh/Deneb/commit/71f3d272f8710988c214735dbe8c2c4beaf3afa2))
+
+
+### 🐛 Bug Fixes
+
+* **andromeda:** clear mail unread state on open ([#2864](https://github.com/choiceoh/Deneb/issues/2864)) ([006e45c](https://github.com/choiceoh/Deneb/commit/006e45cafe3ec712a6b80c91fd953d31674f78e7))
+* **andromeda:** require explicit project links on project home ([c2b3eee](https://github.com/choiceoh/Deneb/commit/c2b3eee0a6425b2b377bae09a89190f6dccfee71))
+
 ## [4.31.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.30.0...deneb-v4.31.0) (2026-06-24)
 
 
