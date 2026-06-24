@@ -303,7 +303,7 @@ func webToolSchema() map[string]any {
 			},
 			"url": map[string]any{
 				"type":        "string",
-				"description": "URL to fetch (HTML extraction + bot evasion)",
+				"description": "URL to fetch (HTML extraction + bot evasion). YouTube links return the video's transcript (split into chapter sections with [m:ss] timestamps) plus metadata (title/channel/views/tags/chapters) — use this to summarize or analyze a YouTube video from its captions without watching it. Reach for the watch tool only when you need to SEE the frames.",
 			},
 		},
 	}
@@ -1450,7 +1450,7 @@ func watchToolSchema() map[string]any {
 			},
 			"source": map[string]any{
 				"type":        "string",
-				"description": "YouTube URL or local video file path to watch (extract frames + subtitles, then analyze with the vision model)",
+				"description": "YouTube URL or local video file path. Extracts representative frames + the subtitle transcript (with chapter sections) and analyzes them with the vision model — the model SEES the screen, not just the captions. For transcript/chapter summarization without needing the visuals, the web tool on the YouTube URL is lighter and faster.",
 			},
 			"start": map[string]any{
 				"type":        "number",
