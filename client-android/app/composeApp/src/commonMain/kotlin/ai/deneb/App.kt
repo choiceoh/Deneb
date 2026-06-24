@@ -443,7 +443,9 @@ private fun AppContent(
                 // longer "unread"); the local seen-set is an optimistic overlay for items
                 // opened on this device (FeedScreen marks seen client-side, not a server
                 // ack). Counting both keeps the badge from drifting.
-                val feedUnread = feedState.workFeed.count { it.status == "unread" && it.id !in feedSeenIds }
+                val feedUnread = feedState.workFeed.count {
+                    it.status == "unread" && it.id !in feedSeenIds && it.readAtMs == 0L
+                }
 
                 // 업무 launches into the 피드 home (work feed as the main screen); 챗봇
                 // launches into the chat. Captured once — NavHost reads startDestination
@@ -492,6 +494,9 @@ private fun AppContent(
                                         onMarkSeen = { id ->
                                             appSettings.markFeedSeen(id)
                                             feedSeenIds = appSettings.getFeedSeenIds()
+                                            // Also stamp it read on the gateway so the
+                                            // desktop and a reinstall see it as read.
+                                            feedState.actions.markWorkFeedRead(id)
                                         },
                                         onLoadDateRange = feedState.actions.refreshWorkFeedRange,
                                         onRunAction = feedState.actions.runWorkFeedAction,

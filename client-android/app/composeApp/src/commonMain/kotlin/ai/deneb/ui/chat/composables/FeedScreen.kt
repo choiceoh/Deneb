@@ -116,8 +116,11 @@ internal fun FeedScreen(
         // items re-sort into 읽음 the next time the feed's data reloads.
         val seenSnapshot = remember(items) { seenIds }
         val dayItems = items.filter { localDateOf(it.createdAtMs) == selectedDate }
-        val unread = dayItems.filterNot { seenSnapshot.contains(it.id) }
-        val read = dayItems.filter { seenSnapshot.contains(it.id) }
+        // Read = opened on this device (seen-set) OR on any device (gateway readAtMs,
+        // arrives via List/sync) — so a card read on the desktop reads here too. The
+        // seen-set stays snapshotted so the just-tapped row doesn't yank mid-tap.
+        val unread = dayItems.filterNot { seenSnapshot.contains(it.id) || it.readAtMs > 0L }
+        val read = dayItems.filter { seenSnapshot.contains(it.id) || it.readAtMs > 0L }
         var actionItem by remember { mutableStateOf<WorkFeedItem?>(null) }
         var feedbackItem by remember { mutableStateOf<WorkFeedItem?>(null) }
 

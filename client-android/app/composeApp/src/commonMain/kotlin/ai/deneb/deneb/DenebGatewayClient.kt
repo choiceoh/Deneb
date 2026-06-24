@@ -1301,6 +1301,23 @@ class DenebGatewayClient(
     }
 
     /**
+     * Marks a work-feed card read on the gateway (the user opened it). Softer than
+     * ack — the card stays in the feed; this flips its readAtMs so the read state is
+     * durable and shared across devices. The per-device seen-set drives the immediate
+     * in-feed dim; the durable readAtMs lands on the next feed reload, and on other
+     * devices via native sync. Fire-and-forget: returns true once the gateway accepted.
+     */
+    suspend fun markWorkFeedRead(itemId: String): Boolean {
+        if (itemId.isBlank()) return false
+        return callRpc<JsonObject>(
+            "miniapp.workfeed.read",
+            buildJsonObject {
+                put("itemId", itemId)
+            },
+        ) != null
+    }
+
+    /**
      * Forwards a captured phone event (the native NotificationListener's broad
      * notification capture) to the gateway's proactive judgment via
      * miniapp.event.ingest. The gateway triages — OTP/spam/routine stay silent,
