@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-// --- shared document extraction (Gmail, Dropbox, and web fetch) ---
+// --- shared document extraction (mail attachments, files, and web fetch) ---
 //
 // extractDocument below is the single canonical MIME/extension dispatcher: it
 // maps a document's type to the right per-format parser in docparse.go (PDF with
@@ -17,7 +17,7 @@ import (
 // Every caller funnels through it instead of carrying its own copy of the switch:
 //   - ExtractDocumentText — the exported (text, ok) facade used by web fetch and
 //     the attachment-classifier; declines images/plain-text (not "documents").
-//   - extractAttachmentText (gmail_attachment.go) — adds Gmail Korean headers/errors.
+//   - extractMailAttachmentText (mail_attachment_extract.go) — adds mail attachment Korean headers/errors.
 // One switch, two thin formatters — so the paths can never drift apart again.
 
 // csvToMarkdown parses CSV bytes and renders them as a markdown table so the
@@ -84,10 +84,10 @@ type docResult struct {
 // extractDocument is the single canonical dispatcher: it classifies a payload by
 // MIME type / filename extension and runs the matching parser from docparse.go.
 // The classification predicates and their order are the one shared definition —
-// every caller (ExtractDocumentText, the Gmail attachment path, the Dropbox path)
-// funnels through here, so the supported-format set can never drift between them.
-// Dropbox passes an empty MIME type, which naturally degrades to filename-only
-// classification.
+// every caller (ExtractDocumentText, the mail attachment path, the files path)
+// funnels through here, so the supported-format set can never drift between
+// them. File-store extraction passes an empty MIME type, which naturally
+// degrades to filename-only classification.
 func extractDocument(ctx context.Context, data []byte, filename, mimeType string) docResult {
 	lower := strings.ToLower(filename)
 	mime := strings.ToLower(mimeType)

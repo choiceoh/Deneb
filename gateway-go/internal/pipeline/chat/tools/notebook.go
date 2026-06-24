@@ -221,7 +221,7 @@ func notebookAddSource(ctx context.Context, d *toolctx.NotebookDeps, id, kind, r
 			title = strings.TrimSpace(ref)
 		}
 	case notebook.KindMail:
-		ingested, msg := ingestViaReader(ctx, d.ReadMail, ref, "메일", "Gmail")
+		ingested, msg := ingestViaReader(ctx, d.ReadMail, ref, "메일", "메일 아카이브")
 		if msg != "" {
 			return msg, nil
 		}

@@ -13,10 +13,6 @@ func TestMutationOutcomeIsFailure(t *testing.T) {
 		output string
 		want   bool
 	}{
-		{"gmail send failure", "gmail", "발송 실패: 550 mailbox unavailable", true},
-		{"gmail reply failure", "gmail", "답장 실패: timeout", true},
-		{"gmail label add failure", "gmail", "라벨 추가 실패: not found", true},
-		{"gmail success not flagged", "gmail", "✉️ 메일 발송 완료 → a@b.com (ID: 123)", false},
 		{"wiki write failure", "wiki", "위키 페이지 쓰기 실패: disk full", true},
 		{"wiki diary failure", "wiki", "일지 쓰기 실패: permission denied", true},
 		{"wiki read success not flagged", "wiki", "# 문서 제목\n본문...", false},
@@ -26,7 +22,7 @@ func TestMutationOutcomeIsFailure(t *testing.T) {
 		{"gateway restart failure", "gateway", "재시작 신호 전송 실패: no pid", true},
 		{"unknown tool never flagged", "exec", "발송 실패: whatever", false},
 		{"read tool with 실패 not in table", "polaris", "검색 실패: x", false},
-		{"empty output", "gmail", "", false},
+		{"empty output", "wiki", "", false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -38,18 +34,18 @@ func TestMutationOutcomeIsFailure(t *testing.T) {
 }
 
 func TestMutationFailureAnnotator_PrependsBannerOnFailure(t *testing.T) {
-	out := MutationFailureAnnotator(context.Background(), "gmail", "발송 실패: boom")
+	out := MutationFailureAnnotator(context.Background(), "wiki", "위키 페이지 쓰기 실패: boom")
 	if !strings.HasPrefix(out, mutationFailureBanner) {
 		t.Fatalf("expected banner prefix, got: %q", out)
 	}
-	if !strings.Contains(out, "발송 실패: boom") {
+	if !strings.Contains(out, "위키 페이지 쓰기 실패: boom") {
 		t.Fatalf("original output must be preserved, got: %q", out)
 	}
 }
 
 func TestMutationFailureAnnotator_NoOpOnSuccess(t *testing.T) {
-	in := "✉️ 메일 발송 완료 → a@b.com (ID: 123)"
-	if got := MutationFailureAnnotator(context.Background(), "gmail", in); got != in {
+	in := "# 문서 제목\n본문..."
+	if got := MutationFailureAnnotator(context.Background(), "wiki", in); got != in {
 		t.Fatalf("success output must be unchanged, got: %q", got)
 	}
 }
@@ -78,19 +74,19 @@ func TestMutationFailureAnnotator_WiredViaRegistry(t *testing.T) {
 	reg := NewToolRegistry()
 	RegisterDefaultPostProcessors(reg)
 
-	out := reg.postProcess.Apply(context.Background(), "gmail", "발송 실패: 550")
+	out := reg.postProcess.Apply(context.Background(), "wiki", "위키 페이지 쓰기 실패: 550")
 	if !strings.Contains(out, mutationFailureBanner) {
-		t.Fatalf("registry-applied gmail failure should carry banner, got: %q", out)
+		t.Fatalf("registry-applied wiki failure should carry banner, got: %q", out)
 	}
 
-	ok := reg.postProcess.Apply(context.Background(), "gmail", "✉️ 메일 발송 완료")
+	ok := reg.postProcess.Apply(context.Background(), "wiki", "# 문서 제목\n본문...")
 	if strings.Contains(ok, mutationFailureBanner) {
-		t.Fatalf("registry-applied gmail success must not carry banner, got: %q", ok)
+		t.Fatalf("registry-applied wiki success must not carry banner, got: %q", ok)
 	}
 }
 
 func TestIsMutationFailureResult(t *testing.T) {
-	annotated := MutationFailureAnnotator(context.Background(), "gmail", "발송 실패: boom")
+	annotated := MutationFailureAnnotator(context.Background(), "wiki", "위키 페이지 쓰기 실패: boom")
 	if !isMutationFailureResult(annotated) {
 		t.Fatal("annotated failure result must be detected for escalation")
 	}
@@ -103,8 +99,8 @@ func TestIsMutationFailureResult(t *testing.T) {
 }
 
 func TestMutationFailureError_StripsBanner(t *testing.T) {
-	annotated := MutationFailureAnnotator(context.Background(), "gmail", "발송 실패: boom")
-	if got := mutationFailureError(annotated); got != "발송 실패: boom" {
+	annotated := MutationFailureAnnotator(context.Background(), "wiki", "위키 페이지 쓰기 실패: boom")
+	if got := mutationFailureError(annotated); got != "위키 페이지 쓰기 실패: boom" {
 		t.Fatalf("got %q, want underlying failure", got)
 	}
 	if got := mutationFailureError("plain success"); got == "" {
@@ -114,7 +110,7 @@ func TestMutationFailureError_StripsBanner(t *testing.T) {
 
 func TestMutationVerifyTools_Deterministic(t *testing.T) {
 	got := mutationVerifyTools()
-	want := []string{"cron", "gateway", "gmail", "notebook", "wiki"}
+	want := []string{"cron", "gateway", "notebook", "wiki"}
 	if len(got) != len(want) {
 		t.Fatalf("got %v, want %v", got, want)
 	}

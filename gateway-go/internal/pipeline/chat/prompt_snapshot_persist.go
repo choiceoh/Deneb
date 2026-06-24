@@ -54,9 +54,9 @@ const promptSnapshotFileName = "prompt_snapshots.json"
 
 // nativeMainSessionKey is the native client's home session. Only it and its
 // explicit sub-conversations (client:main:<id>) survive a restart — see the
-// server's isRestorableNativeSessionKey. Persisting anything else (cron/system/
-// gmail keys) would only bloat the file with entries that are pruned at the next
-// load, so record() gates on this set. Keep in sync with that server predicate.
+// server's isRestorableNativeSessionKey. Persisting anything else (cron/system
+// keys) would only bloat the file with entries that are pruned at the next load,
+// so record() gates on this set. Keep in sync with that server predicate.
 const nativeMainSessionKey = "client:main"
 
 // isRestorablePromptSnapshotSession reports whether a session is one the startup

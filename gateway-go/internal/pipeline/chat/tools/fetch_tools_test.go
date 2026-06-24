@@ -62,22 +62,22 @@ func assertActivated(t *testing.T, out, name string) {
 func TestFetchTools_ByName(t *testing.T) {
 	reg := &fakeFetchRegistry{
 		defs: map[string]toolctx.ToolDef{
-			"gmail": {Name: "gmail", Description: "Gmail access", Deferred: true},
+			"mail_archive": {Name: "mail_archive", Description: "Read local mail archive", Deferred: true},
 		},
 	}
 	fn := ToolFetchTools(reg)
-	out, err := fn(context.Background(), mustJSON(t, map[string]any{"names": []string{"gmail"}}))
+	out, err := fn(context.Background(), mustJSON(t, map[string]any{"names": []string{"mail_archive"}}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	assertActivated(t, out, "gmail")
+	assertActivated(t, out, "mail_archive")
 }
 
 func TestFetchTools_ByQuery(t *testing.T) {
 	reg := &fakeFetchRegistry{
 		defs: map[string]toolctx.ToolDef{
-			"gmail":   {Name: "gmail", Description: "Send and read email", Deferred: true},
-			"storage": {Name: "storage", Description: "Object storage", Deferred: true},
+			"mail_archive": {Name: "mail_archive", Description: "Read email from the local archive", Deferred: true},
+			"storage":      {Name: "storage", Description: "Object storage", Deferred: true},
 		},
 	}
 	fn := ToolFetchTools(reg)
@@ -85,7 +85,7 @@ func TestFetchTools_ByQuery(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	assertActivated(t, out, "gmail")
+	assertActivated(t, out, "mail_archive")
 	if strings.Contains(out, "## storage") {
 		t.Fatalf("did not expect storage for email query, got: %s", out)
 	}
@@ -116,37 +116,37 @@ func TestFetchTools_ByQuery_ParamName(t *testing.T) {
 	assertActivated(t, out, "storage")
 }
 
-// Substring fallback fires when no whole token matches (e.g. "mail" -> "gmail").
+// Substring fallback fires when no whole token matches.
 func TestFetchTools_ByQuery_SubstringFallback(t *testing.T) {
 	reg := &fakeFetchRegistry{
 		defs: map[string]toolctx.ToolDef{
-			"gmail": {Name: "gmail", Description: "Send and read email", Deferred: true},
+			"notebook": {Name: "notebook", Description: "Deal notes", Deferred: true},
 		},
 	}
 	fn := ToolFetchTools(reg)
-	out, err := fn(context.Background(), mustJSON(t, map[string]any{"query": "mail"}))
+	out, err := fn(context.Background(), mustJSON(t, map[string]any{"query": "book"}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	assertActivated(t, out, "gmail")
+	assertActivated(t, out, "notebook")
 }
 
 // A whole-token BM25 hit and a substring-only match are both surfaced (recall
-// floor preserved): query "mail" should activate both a "mail" tool and "gmail".
+// floor preserved).
 func TestFetchTools_ByQuery_UnionBM25AndSubstring(t *testing.T) {
 	reg := &fakeFetchRegistry{
 		defs: map[string]toolctx.ToolDef{
-			"mail":  {Name: "mail", Description: "mail tool", Deferred: true},
-			"gmail": {Name: "gmail", Description: "google account", Deferred: true},
+			"book":     {Name: "book", Description: "book tool", Deferred: true},
+			"notebook": {Name: "notebook", Description: "notes", Deferred: true},
 		},
 	}
 	fn := ToolFetchTools(reg)
-	out, err := fn(context.Background(), mustJSON(t, map[string]any{"query": "mail"}))
+	out, err := fn(context.Background(), mustJSON(t, map[string]any{"query": "book"}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	assertActivated(t, out, "mail")  // exact-token BM25 hit
-	assertActivated(t, out, "gmail") // substring-only match, unioned in
+	assertActivated(t, out, "book")     // exact-token BM25 hit
+	assertActivated(t, out, "notebook") // substring-only match, unioned in
 }
 
 // A whitespace-only query is rejected just like an empty one.
@@ -183,22 +183,22 @@ func TestFetchTools_PresetBlocksDisallowedName(t *testing.T) {
 	reg := &fakeFetchRegistry{
 		defs: map[string]toolctx.ToolDef{
 			"cron":         {Name: "cron", Description: "Schedule recurring jobs", Deferred: true},
-			"gmail":        {Name: "gmail", Description: "Send and read email", Deferred: true},
 			"mail_archive": {Name: "mail_archive", Description: "Read local mail archive", Deferred: true},
+			"send_file":    {Name: "send_file", Description: "Send a file to the user", Deferred: true},
 		},
 	}
 	fn := ToolFetchTools(reg)
 	ctx := toolctx.WithToolPreset(context.Background(), "researcher")
 
-	out, err := fn(ctx, mustJSON(t, map[string]any{"names": []string{"cron", "gmail", "mail_archive"}}))
+	out, err := fn(ctx, mustJSON(t, map[string]any{"names": []string{"cron", "send_file", "mail_archive"}}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if !strings.Contains(out, "- cron: not available under the current tool preset") {
 		t.Fatalf("expected cron blocked under researcher preset, got: %s", out)
 	}
-	if !strings.Contains(out, "- gmail: not available under the current tool preset") {
-		t.Fatalf("expected gmail blocked under researcher preset, got: %s", out)
+	if !strings.Contains(out, "- send_file: not available under the current tool preset") {
+		t.Fatalf("expected send_file blocked under researcher preset, got: %s", out)
 	}
 	// mail_archive IS in the researcher allow-list — must still activate.
 	assertActivated(t, out, "mail_archive")

@@ -8,7 +8,6 @@ package toolreg
 
 import (
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agent"
-	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/knowledge"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
@@ -30,7 +29,7 @@ func RegisterCoreTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDep
 		diaryDir = deps.Wiki.Store.DiaryDir()
 		wikiDir = deps.Wiki.Store.Dir()
 	}
-	RegisterRoutineTools(registry, &deps.Chrono, deps.LLMClient, deps.DefaultModel, diaryDir, wikiDir, deps.FilesSemanticSearch)
+	RegisterRoutineTools(registry, &deps.Chrono, diaryDir, wikiDir, deps.FilesSemanticSearch)
 	RegisterPhoneTools(registry)
 
 	// Standing goal (Ralph loop). Eager: the agent must discover it to set a
@@ -349,7 +348,7 @@ func RegisterChronoTools(registry toolctx.ToolRegistrar) {
 // Typical trigger: cron scheduler, daily routines, periodic checks.
 // diaryDir is the wiki diary directory for morning letter logging; wikiDir is
 // the wiki root for its deadline scan (either empty = that part disabled).
-func RegisterRoutineTools(registry toolctx.ToolRegistrar, chrono *toolctx.ChronoDeps, llmClient *llm.Client, defaultModel, diaryDir, wikiDir string, filesSemanticSearch tools.FilesSemanticSearchFunc) {
+func RegisterRoutineTools(registry toolctx.ToolRegistrar, chrono *toolctx.ChronoDeps, diaryDir, wikiDir string, filesSemanticSearch tools.FilesSemanticSearchFunc) {
 	// Deferred (prompt audit 2026-06-12): ~590 wire tokens — the second-largest
 	// eager tool — for 11 interactive uses in 14 days. The scheduler itself runs
 	// server-side; this tool only manages jobs, so a "매일 아침에 …" turn pays one
@@ -361,22 +360,6 @@ func RegisterRoutineTools(registry toolctx.ToolRegistrar, chrono *toolctx.Chrono
 		Description: "Schedule recurring jobs (cron expressions). Actions: status, list, add, update, remove, run, get, runs, wake",
 		InputSchema: cronToolSchema(),
 		Fn:          tools.ToolCron(chrono),
-		Deferred:    true,
-	})
-
-	// Build gmail pipeline deps from available subsystems.
-	gmailPipelineDeps := tools.GmailPipelineDeps{
-		LLMClient:    llmClient,
-		DefaultModel: defaultModel,
-	}
-	registry.RegisterTool(toolctx.ToolDef{
-		Name: "gmail",
-		Description: "Gmail OAuth2 레거시/계정 작업: send, reply, label, Gmail-only search/read/thread/attachment/analyze fallback. 받은 메일 조회·프로젝트 히스토리·일반 분석 준비는 먼저 mail_archive를 사용하고, Gmail API가 꼭 필요한 발송/답장/라벨/OAuth/아카이브 미수집 메일에만 이 도구를 가져온다. " +
-			"Gmail analyze를 쓸 때도 결과로 알게 된 금액·기한·역할 변경은 '분석 → 위키 갱신' 원칙대로 기록하라. " +
-			"첨부 파일을 사용자에게 전달하라는 요청(\"그 PDF 보내줘\")이면 한 턴에서 chain하라: ① attachment(message_id=..., attachment=\"파일명 또는 번호\", download=true)로 디스크 저장 → ② 반환된 경로를 send_file(file_path=...)에 넘기고 \"전송했습니다\"만 답하라. " +
-			"Auth: ~/.deneb/credentials/gmail_client.json + gmail_token.json",
-		InputSchema: gmailToolSchema(),
-		Fn:          tools.ToolGmail(gmailPipelineDeps),
 		Deferred:    true,
 	})
 

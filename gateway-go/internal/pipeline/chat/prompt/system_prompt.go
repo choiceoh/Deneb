@@ -21,7 +21,7 @@ var toolCategories = []struct {
 	{"Web", []string{"web"}},
 	{"Memory", []string{"wiki", "polaris"}},
 	{"System", []string{"message", "gateway"}},
-	{"Routine", []string{"cron", "gmail"}},
+	{"Routine", []string{"cron"}},
 	{"Schedule", []string{"calendar"}},
 	{"Sessions", []string{"sessions", "sessions_spawn", "subagents"}},
 	{"Media", []string{"send_file"}},
@@ -229,7 +229,7 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		// Tool Usage (compressed: first-class, CLI, pilot, chaining).
 		s.WriteString("## Tool Usage\n")
 		s.WriteString("- Act immediately: call tools one at a time in order, never ask confirmation for reversible ops, never ask the user to do what you can do yourself.\n")
-		s.WriteString("- Use first-class tools directly: grep not exec+grep, edit not exec+sed, mail_archive for received mail, gmail only for Gmail OAuth/account actions. `grep`/`find`/`tree` are fast; prefer them over shelling out.\n")
+		s.WriteString("- Use first-class tools directly: grep not exec+grep, edit not exec+sed, mail_archive for received mail. Gmail OAuth/account actions are not exposed to the agent surface. `grep`/`find`/`tree` are fast; prefer them over shelling out.\n")
 		s.WriteString("- When shelling out, prefer: `rg`/`fd` (search), `jq`/`yq` (JSON/YAML), `bat` (read), `duckdb` (SQL over CSV/Parquet/xlsx/json), `pandoc` (md↔docx↔pdf↔html), `convert` (ImageMagick), `qpdf`/`pdftotext` (PDF), `ffmpeg`/`yt-dlp` (media), `gh` (GitHub).\n")
 		s.WriteString("- Prefer edit over write for partial changes (smaller token footprint).\n")
 		s.WriteString("- Any tool input accepts optional \"compress\": true — large output auto-summarized by local AI, saving context tokens.\n")
@@ -238,11 +238,11 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		s.WriteString("- find/tree results are cached within a run. Avoid re-calling with the same pattern unless you've modified files.\n")
 		s.WriteString("- For future follow-ups or reminders, use cron. Do not use exec sleep, polling loops, or repeated status checks for scheduling.\n")
 		s.WriteString("- Deneb CLI: `deneb gateway {status|start|stop|restart}`. Do not invent subcommands.\n")
-		// Trigger lines only — the HOW (status payload, approval envelope, gmail
-		// attachment/analyze flows) ships in the deferred tools' descriptions at
+		// Trigger lines only — the HOW (status payload, approval envelope,
+		// mail-archive attachment/thread flows) ships in the deferred tools' descriptions at
 		// fetch_tools time (graphify pattern; prompt audit 2026-06-12).
 		s.WriteString("- 유저가 게이트웨이 자체의 '상태'·'재시작'·'업데이트'·'설정 변경'을 말하면 `gateway` 도구가 1순위다 (`top`/`nvidia-smi` 같은 OS 레벨 세부는 명시 요청 시에만 추가).\n")
-		s.WriteString("- 메일 관련 요청(분석·요약·첨부 전달·검색·발송)은 `gmail` 도구로 처리하라.\n")
+		s.WriteString("- 메일 관련 요청(분석·요약·첨부 확인·검색)은 `mail_archive` 도구로 처리하라. Gmail 발송·회신·라벨 같은 계정 조작은 에이전트 도구 표면에 없다.\n")
 		s.WriteString("- **Never output tool call syntax or shell commands as text to the user.** Always use structured tool calls. Report results, not the commands you ran.\n\n")
 
 		built := s.String()
@@ -394,7 +394,7 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		d.WriteString("- 조회: `calendar(action=\"list\")` (기본 48시간; 범위는 from/to RFC3339 또는 hours_ahead). 상세는 `calendar(action=\"get\", id=\"...\")`.\n")
 		d.WriteString("- 추가·수정·삭제: `calendar(action=\"create\"|\"update\"|\"delete\", ...)`. start/end는 RFC3339 +09:00(KST), 현재 시각은 사용자 메시지의 타임스탬프 기준. 수정·삭제는 로컬 일정(id가 `local:`)만 — 구글 일정은 읽기 전용.\n")
 		d.WriteString("- 위 `다가오는 일정`은 배경 스냅샷이라 하루 단위로만 갱신된다 — 정확·최신 정보가 필요하면 도구로 조회하라.\n")
-		d.WriteString("- **미팅 준비** 요청 시 한 응답으로 브리핑을 조립한다: ①`calendar(get)`로 시간·장소·참석자·안건(메모)·Meet 확보 → ②참석자별 `contacts(search)`(소속·연락처)와 `knowledge(recall)`(과거 맥락·결정·이전 회의), 필요하면 `gmail`로 최근 메일 확인 → ③안건/목표·참석자별 핵심 컨텍스트와 오픈 이슈·내가 준비할 것·결정 필요사항·시간/장소/Meet를 종합해 제시한다.\n\n")
+		d.WriteString("- **미팅 준비** 요청 시 한 응답으로 브리핑을 조립한다: ①`calendar(get)`로 시간·장소·참석자·안건(메모)·Meet 확보 → ②참석자별 `contacts(search)`(소속·연락처)와 `knowledge(recall)`(과거 맥락·결정·이전 회의), 필요하면 `mail_archive`로 최근 메일 확인 → ③안건/목표·참석자별 핵심 컨텍스트와 오픈 이슈·내가 준비할 것·결정 필요사항·시간/장소/Meet를 종합해 제시한다.\n\n")
 	}
 
 	// Sub-agent delegation guidance (conditional).

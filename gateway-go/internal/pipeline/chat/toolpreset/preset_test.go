@@ -59,7 +59,7 @@ func TestAllowedTools_Researcher(t *testing.T) {
 	for _, name := range []string{
 		"write", "edit", "exec", "process",
 		"message", "send_file", "cron", "gateway",
-		"sessions_spawn", "subagents", "sessions", "skills", "gmail",
+		"sessions_spawn", "subagents", "sessions", "skills",
 	} {
 		if _, ok := allowed[name]; ok {
 			t.Errorf("researcher preset should NOT include %q", name)
@@ -91,7 +91,7 @@ func TestAllowedTools_WikiResearch(t *testing.T) {
 	for _, name := range []string{
 		"write", "edit", "exec", "process",
 		"message", "send_file", "cron", "gateway",
-		"sessions_spawn", "subagents", "gmail",
+		"sessions_spawn", "subagents",
 	} {
 		if _, ok := allowed[name]; ok {
 			t.Errorf("wiki-research preset should NOT include %q", name)
@@ -136,7 +136,7 @@ func TestAllowedTools_Verifier(t *testing.T) {
 	// No write surface (a verifier that patches what it judges defeats the
 	// role) and no research/messaging surfaces.
 	for _, name := range []string{
-		"write", "edit", "web", "gmail", "wiki", "knowledge",
+		"write", "edit", "web", "wiki", "knowledge",
 		"message", "send_file", "cron", "gateway", "sessions_spawn", "subagents",
 	} {
 		if _, ok := allowed[name]; ok {

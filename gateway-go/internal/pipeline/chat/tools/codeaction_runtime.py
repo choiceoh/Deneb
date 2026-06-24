@@ -157,8 +157,8 @@ class _Deneb:
       deneb.edit(file_path, old_string, new_string)
           workspace files (paths clamped to the workspace; system files and
           secrets are unreachable).
-    Writes here are internal and recoverable. Gmail OAuth/account actions
-    are top-level only; use mail_archive for received-mail reads."""
+    Writes here are internal and recoverable. Gmail OAuth/account actions are
+    not exposed to the agent surface; use mail_archive for received-mail reads."""
 
     def _call(self, tool, args, as_json=False):
         body = json.dumps({"tool": tool, "args": args, "json": as_json}).encode("utf-8")
@@ -178,7 +178,7 @@ class _Deneb:
     def gmail(self, action, **kw):
         raise RuntimeError(
             "deneb.gmail is not available in code_action. "
-            "Use deneb.mail_archive(...) for received mail; use a top-level Gmail tool call for OAuth/account actions."
+            "Use deneb.mail_archive(...) for received mail; Gmail OAuth/account actions are not exposed."
         )
 
     def mail_archive(self, action, as_json=False, **kw):

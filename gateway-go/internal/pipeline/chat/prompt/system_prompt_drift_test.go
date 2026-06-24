@@ -47,7 +47,7 @@ func TestToolCategoriesMatchRegistry(t *testing.T) {
 //   - Dynamic block: memory, context, runtime. Rebuilt per request.
 func TestStaticCacheKeyIgnoresSkills(t *testing.T) {
 	tools := []ToolDef{{Name: "read"}, {Name: "exec"}, {Name: "wiki"}}
-	deferred := []DeferredToolInfo{{Name: "gmail", Description: "Gmail"}}
+	deferred := []DeferredToolInfo{{Name: "mail_archive", Description: "Local mail archive"}}
 
 	keyNoSkills := buildStaticCacheKey(tools, deferred, "", "", false)
 
@@ -132,7 +132,7 @@ func TestSkillsInjectedOnlyInSemiStatic(t *testing.T) {
 // (b) an edited topic file would keep serving stale cached knowledge.
 func TestStaticCacheKeyVariesByTopic(t *testing.T) {
 	tools := []ToolDef{{Name: "read"}, {Name: "exec"}}
-	deferred := []DeferredToolInfo{{Name: "gmail", Description: "Gmail"}}
+	deferred := []DeferredToolInfo{{Name: "mail_archive", Description: "Local mail archive"}}
 
 	base := buildStaticCacheKey(tools, deferred, "", "", false)
 	coding := buildStaticCacheKey(tools, deferred, "coding:hashA", "", false)
@@ -155,7 +155,7 @@ func TestStaticCacheKeyVariesByTopic(t *testing.T) {
 // existing Static cache entry (zero regression for the common case).
 func TestStaticCacheKeyTopicEmptyEqualsLegacy(t *testing.T) {
 	tools := []ToolDef{{Name: "read"}, {Name: "wiki"}}
-	deferred := []DeferredToolInfo{{Name: "gmail", Description: "Gmail"}}
+	deferred := []DeferredToolInfo{{Name: "mail_archive", Description: "Local mail archive"}}
 
 	withEmpty := buildStaticCacheKey(tools, deferred, "", "", false)
 	if strings.Contains(withEmpty, "|topic=") {

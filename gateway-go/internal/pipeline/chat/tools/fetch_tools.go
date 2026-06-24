@@ -58,8 +58,8 @@ func ToolFetchTools(registry FetchToolsRegistry) toolctx.ToolFunc {
 		// If query is provided, search deferred tools by keyword. Rank with
 		// BM25 over name + description + parameter names so the most relevant
 		// tools come first, then union in any literal substring matches so the
-		// recall floor of the old substring search is preserved (e.g. query
-		// "mail" still surfaces "gmail", which BM25's whole-token match misses).
+		// recall floor of the old substring search is preserved (e.g. "book"
+		// still surfaces "notebook" when BM25's whole-token match misses).
 		if p.Query != "" && len(p.Names) == 0 {
 			summaries := registry.DeferredSummaries()
 			docs := make([]searchDoc, 0, len(summaries))

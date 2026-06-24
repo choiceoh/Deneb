@@ -7,7 +7,7 @@
 | 경로 | 역할 | 의존 규칙 |
 |---|---|---|
 | `toolctx/` | 리프 패키지. 공유 타입(`ToolFunc`/`ToolDef`/`ToolRegistrar`/`ToolExecutor`), `TurnContext`/`RunCache`, dep 구조체(`CoreToolDeps`/`ProcessDeps`/`SessionDeps`/`ChronoDeps`), display 새니타이저(`display.go`) | chat 내부 import 0 |
-| `tools/` | 순수 도구 구현 107파일(fs/exec/git/gmail/calendar/wiki/web/asr/paddleocr/sessions/…). `toolctx/` 타입만 의존 | chat/ import 금지 |
+| `tools/` | 순수 도구 구현(fs/exec/git/mail_archive/calendar/wiki/web/asr/paddleocr/sessions/…). `toolctx/` 타입만 의존 | chat/ import 금지 |
 | `toolreg/` | 도구 등록 허브. `core.go`의 `Register*Tools(...)`가 구현(tools/)+스키마(`tool_schemas_gen.go`)를 `ToolRegistrar`에 배선. `tool_schemas_gen.go`는 **생성물** | chat/ import 금지 |
 | `prompt/` | 시스템 프롬프트 조립(`system_prompt.go`), 컨텍스트 파일 로더(`context_files.go`), `prompt_cache.go`, 토픽지식(`topic_knowledge.go`), 예산(`budget.go`) | — |
 | `web/` | `web` 도구 백엔드: fetch/HTML 전처리/youtube/검색 escalate/stealth, singleflight+캐시 | — |

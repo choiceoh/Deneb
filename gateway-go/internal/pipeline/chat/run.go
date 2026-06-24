@@ -121,9 +121,9 @@ type RunParams struct {
 
 	// GateUntrustedTools enables the untrusted-origin tool gate for this run: if
 	// a prompt-injection signature has entered the turn (flagged tool output,
-	// the inbound message, or recalled memory), irreversible tools (exec, gmail
-	// send/reply) are blocked. Set only by the interactive native-client
-	// transports. Per-run, never persisted — prompt-cache neutral. See
+	// the inbound message, or recalled memory), irreversible tools (currently
+	// exec) are blocked. Set only by the interactive native-client transports.
+	// Per-run, never persisted — prompt-cache neutral. See
 	// untrusted_tool_gate.go.
 	GateUntrustedTools bool
 }
