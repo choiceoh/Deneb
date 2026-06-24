@@ -221,6 +221,44 @@ func TestFormatTimestampedTranscript(t *testing.T) {
 	}
 }
 
+func TestFormatChapteredTranscript(t *testing.T) {
+	chapters := []YouTubeChapter{
+		{StartSec: 0, Title: "Intro"},
+		{StartSec: 60, Title: "Main"},
+		{StartSec: 120, Title: "Outro"},
+	}
+	segs := []TranscriptSegment{
+		{StartSec: 0, Text: "hello"},
+		{StartSec: 30, Text: "welcome"},
+		{StartSec: 65, Text: "main point"},
+		{StartSec: 95, Text: "more detail"},
+		{StartSec: 125, Text: "thanks"},
+	}
+	got := formatChapteredTranscript(chapters, segs)
+	want := "#### [0:00] Intro\n[0:00] hello\n[0:30] welcome\n\n" +
+		"#### [1:00] Main\n[1:05] main point\n[1:35] more detail\n\n" +
+		"#### [2:00] Outro\n[2:05] thanks"
+	if got != want {
+		t.Errorf("formatChapteredTranscript() =\n%q\nwant\n%q", got, want)
+	}
+
+	// Empty when no chapters or no segments.
+	if formatChapteredTranscript(nil, segs) != "" {
+		t.Errorf("expected empty for no chapters")
+	}
+	if formatChapteredTranscript(chapters, nil) != "" {
+		t.Errorf("expected empty for no segments")
+	}
+
+	// A chapter with no segments in its span is skipped (no empty header).
+	sparse := []TranscriptSegment{{StartSec: 0, Text: "only intro"}, {StartSec: 125, Text: "only outro"}}
+	gotSparse := formatChapteredTranscript(chapters, sparse)
+	want2 := "#### [0:00] Intro\n[0:00] only intro\n\n#### [2:00] Outro\n[2:05] only outro"
+	if gotSparse != want2 {
+		t.Errorf("sparse =\n%q\nwant\n%q", gotSparse, want2)
+	}
+}
+
 func TestAvailableCaptionLabels(t *testing.T) {
 	tracks := []captionTrack{
 		{LanguageCode: "ko"},

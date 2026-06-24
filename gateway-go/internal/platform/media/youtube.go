@@ -488,9 +488,12 @@ func FormatYouTubeResult(r *YouTubeResult) string {
 			lang = "unknown"
 		}
 		body := r.Transcript
-		// Prefer the timestamped rendering when caption cues are available — it
-		// lets the model cite "at mm:ss …" and anchor quotes precisely.
-		if ts := formatTimestampedTranscript(r.Segments); ts != "" {
+		// Prefer the richest rendering the data supports: chapter-segmented (when
+		// the video has chapters) > flat timestamped (caption cues) > plain text.
+		// Both timestamped forms let the model cite "at mm:ss …" precisely.
+		if ch := formatChapteredTranscript(r.Chapters, r.Segments); ch != "" {
+			body = ch
+		} else if ts := formatTimestampedTranscript(r.Segments); ts != "" {
 			body = ts
 		}
 		fmt.Fprintf(&b, "\n### 자막 (%s)\n\n%s\n", lang, body)
@@ -541,6 +544,46 @@ func formatTimestampedTranscript(segs []TranscriptSegment) string {
 	}
 	flush()
 	return strings.Join(lines, "\n")
+}
+
+// formatChapteredTranscript groups caption cues under their chapter headers, so
+// the transcript reads as "#### [m:ss] Chapter\n<timestamped lines>" per section.
+// A segment belongs to the latest chapter whose start is <= the segment start.
+// Segments are assumed chronological (timedtext document order) and chapters
+// sorted (parseChaptersFromDescription guarantees non-decreasing starts). Returns
+// "" when there are no chapters or no segments. Bounded overall to avoid bloat.
+func formatChapteredTranscript(chapters []YouTubeChapter, segs []TranscriptSegment) string {
+	if len(chapters) == 0 || len(segs) == 0 {
+		return ""
+	}
+	const maxTotalChars = 80000
+
+	// Bucket each segment into its chapter in a single pass (both lists sorted).
+	buckets := make([][]TranscriptSegment, len(chapters))
+	ci := 0
+	for _, s := range segs {
+		for ci+1 < len(chapters) && s.StartSec >= chapters[ci+1].StartSec {
+			ci++
+		}
+		buckets[ci] = append(buckets[ci], s)
+	}
+
+	var b strings.Builder
+	for i, ch := range chapters {
+		body := formatTimestampedTranscript(buckets[i])
+		if body == "" {
+			continue
+		}
+		if b.Len() > 0 {
+			b.WriteString("\n\n")
+		}
+		fmt.Fprintf(&b, "#### [%s] %s\n%s", formatClock(ch.StartSec), ch.Title, body)
+		if b.Len() > maxTotalChars {
+			b.WriteString("\n\n[...자막이 잘렸습니다]")
+			break
+		}
+	}
+	return b.String()
 }
 
 // formatClock renders seconds as "m:ss" or "h:mm:ss". Unlike formatDuration it
