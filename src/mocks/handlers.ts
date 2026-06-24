@@ -121,6 +121,19 @@ const RPC: Record<string, (p: Record<string, any>) => unknown> = {
   "miniapp.notebook.delete": (p) => ({ deleted: true, id: p.id }),
   "miniapp.notebook.add_source": (p) => ({ cite: "S2", ...p }),
 
+  "miniapp.prompts.list": () => ({ prompts: fx.prompts, count: fx.prompts.length }),
+  "miniapp.prompts.get": (p) => fx.promptDetails[String(p.id)] ?? null,
+  "miniapp.prompts.update": (p) => {
+    const id = String(p.id);
+    const base = fx.promptDetails[id] ?? { id, title: id, defaultText: "" };
+    return { ...base, text: String(p.text ?? ""), overridden: true, updatedAtMs: Date.now() };
+  },
+  "miniapp.prompts.reset": (p) => {
+    const id = String(p.id);
+    const base = fx.promptDetails[id] ?? { id, title: id, defaultText: "" };
+    return { ...base, text: String(base.defaultText ?? ""), overridden: false, updatedAtMs: Date.now() };
+  },
+
   "miniapp.workfeed.list": () => ({ count: fx.workfeed.length, items: fx.workfeed, total: fx.workfeed.length }),
   "miniapp.workfeed.ack": (p) => ({ ok: true, item: fx.workfeed.find((w) => String(w.id) === String(p.id)) ?? null }),
   "miniapp.workfeed.action.run": (p) => ({

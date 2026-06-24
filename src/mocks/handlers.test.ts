@@ -45,4 +45,25 @@ describe("mock gateway handlers", () => {
       id: "nb1",
     });
   });
+
+  it("answers prompt list, detail, update, and reset RPCs", async () => {
+    const list = await callRpc<{ prompts: { id: string; title: string }[] }>(cfg, "miniapp.prompts.list");
+    expect(list.prompts[0]).toMatchObject({ id: "mail.analysis", title: "메일 분석" });
+
+    const detail = await callRpc<{ text?: string }>(cfg, "miniapp.prompts.get", { id: "mail.analysis" });
+    expect(detail.text).toMatch(/메일 본문/);
+
+    await expect(
+      callRpc(cfg, "miniapp.prompts.update", { id: "mail.analysis", text: "새 지시" }),
+    ).resolves.toMatchObject({
+      id: "mail.analysis",
+      text: "새 지시",
+      overridden: true,
+    });
+
+    await expect(callRpc(cfg, "miniapp.prompts.reset", { id: "mail.analysis" })).resolves.toMatchObject({
+      id: "mail.analysis",
+      overridden: false,
+    });
+  });
 });

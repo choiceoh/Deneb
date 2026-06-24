@@ -1,14 +1,14 @@
-import { useState, type KeyboardEvent, type ReactNode } from "react";
-import { saveConfig } from "@/gateway";
+import { useEffect, useState, type KeyboardEvent, type ReactNode } from "react";
+import { getPrompt, listPrompts, resetPrompt, saveConfig, updatePrompt } from "@/gateway";
 import { setString } from "@/storage";
 import { moveItem } from "@/listReorder";
 import { useGatewayStatus } from "@/hooks";
 import { type LogLevel, getLogLevel, setLogLevel } from "@/log";
 import { checkForUpdates } from "@/updater";
-import { errText } from "@/format";
+import { errText, fmtDate } from "@/format";
 import { muted } from "@/theme";
 import { useRegisterPane, useWorkspace } from "@/workspaceContext";
-import type { View } from "@/types";
+import type { PromptDetailOut, PromptRow, View } from "@/types";
 import { LiveDot } from "@/components/LiveDot";
 import { PANES, orderedViews } from "@/components/panes";
 
@@ -24,10 +24,11 @@ const LOG_LABEL: Record<LogLevel, string> = {
   silent: "끄기",
 };
 
-type TabKey = "connection" | "general" | "about";
+type TabKey = "connection" | "general" | "prompts" | "about";
 const TABS: { key: TabKey; label: string }[] = [
   { key: "connection", label: "연결" },
   { key: "general", label: "일반" },
+  { key: "prompts", label: "프롬프트" },
   { key: "about", label: "정보" },
 ];
 
@@ -241,6 +242,8 @@ export function SettingsPane() {
           </>
         )}
 
+        {tab === "prompts" && <PromptSettings />}
+
         {tab === "about" && (
           <Section title="정보">
             <div style={{ fontSize: 13, color: "var(--ink-2)" }}>
@@ -256,6 +259,205 @@ export function SettingsPane() {
         )}
       </div>
     </div>
+  );
+}
+
+function PromptSettings() {
+  const { connected, cfg } = useWorkspace();
+  const [prompts, setPrompts] = useState<PromptRow[]>([]);
+  const [selectedId, setSelectedId] = useState("");
+  const [detail, setDetail] = useState<PromptDetailOut | null>(null);
+  const [draft, setDraft] = useState("");
+  const [loadingList, setLoadingList] = useState(false);
+  const [loadingDetail, setLoadingDetail] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [status, setStatus] = useState("");
+  const [error, setError] = useState("");
+
+  const originalText = detail?.text ?? "";
+  const dirty = Boolean(detail) && draft !== originalText;
+  const editable = detail?.editable !== false;
+
+  useEffect(() => {
+    setPrompts([]);
+    setSelectedId("");
+    setDetail(null);
+    setDraft("");
+    setStatus("");
+    setError("");
+    if (connected) void refreshPrompts(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connected, cfg.url, cfg.token]);
+
+  async function refreshPrompts(openFirst = false) {
+    if (!connected) return;
+    setLoadingList(true);
+    setError("");
+    try {
+      const rows = await listPrompts(cfg);
+      setPrompts(rows);
+      if (openFirst) {
+        const first = rows.find((p) => p.id)?.id;
+        if (first) void openPrompt(first, true);
+      }
+    } catch (e) {
+      setError(`프롬프트 목록을 불러오지 못했습니다: ${errText(e)}`);
+    } finally {
+      setLoadingList(false);
+    }
+  }
+
+  async function openPrompt(id: string, force = false) {
+    if (!force && dirty && !window.confirm("저장하지 않은 변경을 버리고 다른 프롬프트를 열까요?")) return;
+    setSelectedId(id);
+    setLoadingDetail(true);
+    setStatus("");
+    setError("");
+    try {
+      const next = await getPrompt(cfg, id);
+      setDetail(next);
+      setDraft(next.text ?? "");
+    } catch (e) {
+      setDetail(null);
+      setDraft("");
+      setError(`프롬프트를 불러오지 못했습니다: ${errText(e)}`);
+    } finally {
+      setLoadingDetail(false);
+    }
+  }
+
+  async function savePrompt() {
+    if (!detail?.id || !editable || !dirty) return;
+    setSaving(true);
+    setStatus("저장 중...");
+    setError("");
+    try {
+      const saved = await updatePrompt(cfg, detail.id, draft);
+      setDetail(saved);
+      setDraft(saved.text ?? "");
+      setStatus("저장됨");
+      void refreshPrompts(false);
+    } catch (e) {
+      setStatus("");
+      setError(`저장 실패: ${errText(e)}`);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function restorePrompt() {
+    if (!detail?.id) return;
+    setSaving(true);
+    setStatus("초기화 중...");
+    setError("");
+    try {
+      const restored = await resetPrompt(cfg, detail.id);
+      setDetail(restored);
+      setDraft(restored.text ?? "");
+      setStatus("기본값으로 초기화됨");
+      void refreshPrompts(false);
+    } catch (e) {
+      setStatus("");
+      setError(`초기화 실패: ${errText(e)}`);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (!connected) {
+    return (
+      <Section title="프롬프트">
+        <p style={{ ...muted, margin: 0 }}>게이트웨이에 연결하면 프롬프트를 볼 수 있습니다.</p>
+      </Section>
+    );
+  }
+
+  return (
+    <Section title="프롬프트">
+      <div className="prompt-settings">
+        <aside className="prompt-list" aria-label="프롬프트 목록">
+          <div className="prompt-list-head">
+            <span>{loadingList ? "불러오는 중..." : `${prompts.length}개`}</span>
+            <button className="row-btn" onClick={() => void refreshPrompts(false)} disabled={loadingList || saving}>
+              새로고침
+            </button>
+          </div>
+          {prompts.length === 0 && !loadingList ? (
+            <p style={{ ...muted, margin: "8px 0" }}>편집할 프롬프트가 없습니다.</p>
+          ) : (
+            prompts.map((prompt) => {
+              const id = prompt.id ?? "";
+              const active = id && id === selectedId;
+              return (
+                <button
+                  key={id || prompt.title}
+                  type="button"
+                  className={"prompt-row" + (active ? " active" : "")}
+                  onClick={() => id && void openPrompt(id)}
+                  disabled={!id || loadingDetail || saving}
+                >
+                  <span>{prompt.title || id || "(이름 없음)"}</span>
+                  <small>
+                    {[
+                      prompt.category,
+                      prompt.overridden ? "수정됨" : "기본",
+                      prompt.editable === false ? "읽기 전용" : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </small>
+                </button>
+              );
+            })
+          )}
+        </aside>
+
+        <div className="prompt-editor">
+          {!detail ? (
+            <p style={{ ...muted, margin: 0 }}>
+              {loadingDetail ? "프롬프트를 불러오는 중..." : "프롬프트를 선택하세요."}
+            </p>
+          ) : (
+            <>
+              <div className="prompt-editor-head">
+                <div>
+                  <h4>{detail.title || detail.id}</h4>
+                  <div className="prompt-meta">
+                    {[detail.category, detail.overridden ? "수정됨" : "기본값", fmtDate(detail.updatedAtMs)]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </div>
+                </div>
+                <div className="prompt-actions">
+                  <button className="btn" onClick={() => void restorePrompt()} disabled={saving || !detail.overridden}>
+                    초기화
+                  </button>
+                  <button
+                    className="btn btn-accent"
+                    onClick={() => void savePrompt()}
+                    disabled={saving || !editable || !dirty}
+                  >
+                    저장
+                  </button>
+                </div>
+              </div>
+              {detail.description && <p className="prompt-description">{detail.description}</p>}
+              <label style={fieldLabel}>
+                프롬프트 본문
+                <textarea
+                  className="field prompt-textarea"
+                  value={draft}
+                  readOnly={!editable}
+                  onChange={(e) => setDraft(e.target.value)}
+                />
+              </label>
+              {!editable && <p style={{ ...muted, margin: 0 }}>이 프롬프트는 읽기 전용입니다.</p>}
+              {(status || error) && <p className={error ? "pane-error" : "pane-status"}>{error || status}</p>}
+            </>
+          )}
+        </div>
+      </div>
+    </Section>
   );
 }
 

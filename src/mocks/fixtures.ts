@@ -12,6 +12,8 @@ import type {
   NotebookSummary,
   Person,
   ProjectDigest,
+  PromptDetailOut,
+  PromptRow,
   SearchHit,
   Todo,
   WikiCategory,
@@ -158,6 +160,40 @@ export const notebookDetails: Record<string, Notebook> = {
   nb1: {
     ...notebooks[0],
     sources: [{ cite: "S1", kind: "note", title: "잔금 안내", text: "최종 5% 잔금 $401K, 마감 6/25." }],
+  },
+};
+
+export const prompts: PromptRow[] = [
+  {
+    id: "mail.analysis",
+    title: "메일 분석",
+    description: "메일 본문을 업무 후보로 분석합니다.",
+    category: "mail",
+    editable: true,
+    overridden: false,
+    updatedAtMs: 1782190313958,
+  },
+  {
+    id: "calendar.proposal",
+    title: "일정 제안",
+    description: "메일에서 일정 후보를 추출합니다.",
+    category: "calendar",
+    editable: true,
+    overridden: true,
+    updatedAtMs: 1782191313958,
+  },
+];
+
+export const promptDetails: Record<string, PromptDetailOut> = {
+  "mail.analysis": {
+    ...prompts[0],
+    text: "메일 본문을 읽고 핵심 요청, 마감, 후속 작업을 한국어로 요약하세요.",
+    defaultText: "메일 본문을 읽고 핵심 요청과 후속 작업을 요약하세요.",
+  },
+  "calendar.proposal": {
+    ...prompts[1],
+    text: "일정 표현이 있으면 제목, 시작 시간, 참석자를 추출하세요.",
+    defaultText: "일정 후보를 추출하세요.",
   },
 };
 

@@ -8,7 +8,7 @@ import { readJsonSSE } from "./sse";
 import { log } from "./log";
 import { getJSON, setJSON } from "./storage";
 import { isTauri } from "./tauri";
-import type { MailAttachment } from "./types";
+import type { MailAttachment, PromptDetailOut, PromptListResponse, PromptRow } from "./types";
 
 const rpcLog = log.child("rpc");
 const chatLog = log.child("chat");
@@ -153,6 +153,20 @@ export const listModels = (cfg: GatewayConfig) => callRpc<ModelsList>(cfg, "mini
 // Bind a model to a role (default main) — persists the picker choice gateway-side.
 export const setModel = (cfg: GatewayConfig, id: string, role = "main") =>
   callRpc<{ ok: boolean; role: string; current: string }>(cfg, "miniapp.models.set", { id, role });
+
+// --- Prompt templates (miniapp.prompts.*) ---
+
+export const listPrompts = (cfg: GatewayConfig): Promise<PromptRow[]> =>
+  callRpc<PromptListResponse>(cfg, "miniapp.prompts.list").then((r) => r.prompts ?? []);
+
+export const getPrompt = (cfg: GatewayConfig, id: string) =>
+  callRpc<PromptDetailOut>(cfg, "miniapp.prompts.get", { id });
+
+export const updatePrompt = (cfg: GatewayConfig, id: string, text: string) =>
+  callRpc<PromptDetailOut>(cfg, "miniapp.prompts.update", { id, text });
+
+export const resetPrompt = (cfg: GatewayConfig, id: string) =>
+  callRpc<PromptDetailOut>(cfg, "miniapp.prompts.reset", { id });
 
 // --- Sessions (miniapp.sessions.*) — conversation history drawer ---
 

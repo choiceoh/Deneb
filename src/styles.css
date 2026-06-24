@@ -2457,6 +2457,123 @@ textarea {
   color: var(--ink-2);
 }
 
+/* 설정 — prompt templates. A narrow selectable rail plus a full editor keeps the
+   potentially long system text readable without turning settings into a modal. */
+.prompt-settings {
+  display: grid;
+  grid-template-columns: minmax(210px, 280px) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+.prompt-list {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding-right: 12px;
+  border-right: 1px solid var(--line);
+}
+.prompt-list-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.prompt-list-head .row-btn {
+  margin-left: auto;
+}
+.prompt-row {
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  padding: 8px 9px;
+  border: none;
+  border-radius: var(--radius-ctl);
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s var(--ease);
+}
+.prompt-row:hover:not(:disabled) {
+  background: var(--panel-sunken);
+}
+.prompt-row.active {
+  background: var(--active);
+}
+.prompt-row span,
+.prompt-row small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.prompt-row span {
+  font-size: 13px;
+  font-weight: 600;
+}
+.prompt-row small {
+  color: var(--muted-2);
+  font-size: 11px;
+}
+.prompt-editor {
+  min-width: 0;
+}
+.prompt-editor-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.prompt-editor-head h4 {
+  margin: 0;
+  font-size: 16px;
+}
+.prompt-meta,
+.prompt-description {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.prompt-description {
+  margin: 0 0 12px;
+  max-width: 760px;
+}
+.prompt-actions {
+  display: inline-flex;
+  gap: 6px;
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+.prompt-textarea {
+  min-height: 360px;
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+@media (max-width: 900px) {
+  .prompt-settings {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .prompt-list {
+    max-height: 220px;
+    overflow: auto;
+    padding-right: 0;
+    padding-bottom: 10px;
+    border-right: none;
+    border-bottom: 1px solid var(--line);
+  }
+  .prompt-editor-head {
+    display: grid;
+  }
+  .prompt-actions {
+    margin-left: 0;
+  }
+}
+
 /* single-choice pill (로그 레벨) — outlined at rest, accent when chosen. Distinct
    from the segmented section tabs above, and (unlike the old inline version) it
    now responds to hover. */
