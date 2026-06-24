@@ -47,3 +47,47 @@ func TestExtractFactsForWiki_RenderingFormat(t *testing.T) {
 		t.Errorf("rendering should skip entries with empty Entity, got:\n%s", rendered)
 	}
 }
+
+func TestStripWikiFactsBlock(t *testing.T) {
+	block := renderFactsBlock([]WikiFactProposal{
+		{Entity: "ABC상사", Type: "deal", Fact: "NDA 진행 70%"},
+		{Entity: "박부장", Type: "person", Fact: "결정권자"},
+	})
+	if block == "" {
+		t.Fatal("precondition: renderFactsBlock returned empty")
+	}
+	// Prose deliberately contains a blank line so the stripper can't just split
+	// on the first "\n\n". The 📎 note mirrors the attachment-truncation line
+	// synthesizeAnalysis appends after the (now-removed) facts block.
+	prose := "**핵심**: 다음 주 화요일 회의.\n\n- 초안 공유 필요"
+	note := "📎 분량이 커 일부만 반영된 첨부: 계약서.pdf"
+
+	t.Run("block at tail is removed", func(t *testing.T) {
+		if got := StripWikiFactsBlock(prose + "\n\n" + block); got != prose {
+			t.Errorf("want prose only:\n%q\ngot:\n%q", prose, got)
+		}
+	})
+
+	t.Run("block between prose and note keeps both", func(t *testing.T) {
+		got := StripWikiFactsBlock(prose + "\n\n" + block + "\n\n" + note)
+		want := prose + "\n\n" + note
+		if got != want {
+			t.Errorf("want prose+note:\n%q\ngot:\n%q", want, got)
+		}
+		if strings.Contains(got, wikiFactsBlockMarker) {
+			t.Errorf("marker should be gone, got:\n%q", got)
+		}
+	})
+
+	t.Run("text without block is unchanged", func(t *testing.T) {
+		if got := StripWikiFactsBlock(prose); got != prose {
+			t.Errorf("want unchanged:\n%q\ngot:\n%q", prose, got)
+		}
+	})
+
+	t.Run("block-only input becomes empty", func(t *testing.T) {
+		if got := StripWikiFactsBlock(block); got != "" {
+			t.Errorf("want empty, got:\n%q", got)
+		}
+	})
+}

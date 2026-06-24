@@ -168,7 +168,7 @@ func gmailAnalyze(deps GmailAnalyzeDeps) rpcutil.HandlerFunc {
 					Subject:         rec.Subject,
 					From:            rec.From,
 					Date:            rec.Date,
-					Analysis:        rec.Analysis,
+					Analysis:        gmailpoll.StripWikiFactsBlock(rec.Analysis), // drop legacy 위키 갱신 제안 block (no longer emitted)
 					RelatedProjects: enrichProjects(deps, rec.RelatedProjects),
 					DurationMs:      rec.DurationMs,
 					Cached:          true,
@@ -379,7 +379,7 @@ func gmailAnalysisCached(deps GmailAnalyzeDeps) rpcutil.HandlerFunc {
 		}
 		payload := out{
 			ID:              rec.MsgID,
-			Analysis:        rec.Analysis,
+			Analysis:        gmailpoll.StripWikiFactsBlock(rec.Analysis), // drop legacy 위키 갱신 제안 block (no longer emitted)
 			RelatedProjects: enrichProjects(deps, rec.RelatedProjects),
 			Cached:          true,
 			CreatedAt:       rec.CreatedAt,
