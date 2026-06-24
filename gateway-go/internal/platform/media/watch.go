@@ -27,17 +27,18 @@ import (
 // WatchResult holds the frames and transcript extracted from a video for
 // multimodal analysis.
 type WatchResult struct {
-	Title       string    // video title (YouTube) or file name (local)
-	Channel     string    // uploader (YouTube only)
-	DurationSec int       // total video length in seconds
-	Source      string    // original URL or file path
-	IsYouTube   bool      // true when extracted from a YouTube URL
-	Frames      [][]byte  // JPEG-encoded frames, in timestamp order
-	Timestamps  []float64 // wall-clock second of each frame (parallel to Frames)
-	Transcript  string    // subtitle text (may be empty)
-	Language    string    // subtitle language code
-	StartSec    float64   // analyzed window start (0 = from beginning)
-	EndSec      float64   // analyzed window end (0 = to end)
+	Title       string           // video title (YouTube) or file name (local)
+	Channel     string           // uploader (YouTube only)
+	DurationSec int              // total video length in seconds
+	Source      string           // original URL or file path
+	IsYouTube   bool             // true when extracted from a YouTube URL
+	Frames      [][]byte         // JPEG-encoded frames, in timestamp order
+	Timestamps  []float64        // wall-clock second of each frame (parallel to Frames)
+	Transcript  string           // subtitle text (may be empty)
+	Language    string           // subtitle language code
+	Chapters    []YouTubeChapter // section markers (native YouTube extraction only)
+	StartSec    float64          // analyzed window start (0 = from beginning)
+	EndSec      float64          // analyzed window end (0 = to end)
 }
 
 // WatchOptions configures a WatchVideo call.
@@ -127,7 +128,14 @@ func watchYouTube(ctx context.Context, url string, opts WatchOptions) (*WatchRes
 	// frames are sampled from StartSec onward in that case).
 	windowed := opts.StartSec > 0 || opts.EndSec > 0
 	if !windowed {
-		if transcript, lang, subErr := downloadSubtitles(ctx, ytdlpPath, url, tmpDir); subErr == nil {
+		// Prefer the native innertube extraction so watch's transcript carries the
+		// same chapter sections + timestamps as the web path (no subprocess). Fall
+		// back to the yt-dlp caption downloader when native yields nothing.
+		if yt := extractTranscriptNative(ctx, url); yt != nil && yt.HasTranscript() {
+			result.Transcript = yt.Transcript
+			result.Language = yt.Language
+			result.Chapters = yt.Chapters
+		} else if transcript, lang, subErr := downloadSubtitles(ctx, ytdlpPath, url, tmpDir); subErr == nil {
 			result.Transcript = transcript
 			result.Language = lang
 		}
