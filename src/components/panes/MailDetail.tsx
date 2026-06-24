@@ -215,8 +215,10 @@ function AnalysisCard({ mailId }: { mailId: string }) {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
 
-  // Drop a stale manual-analysis error when switching messages.
-  useEffect(() => setErr(""), [mailId]);
+  // Drop a stale manual-analysis error whenever the cached load re-runs (message
+  // switch, reconnect, or config change) — matches the same triggers that reset
+  // `data`, so a transient analyze failure can't strand the error after reconnect.
+  useEffect(() => setErr(""), [cfg, connected, mailId]);
 
   async function run(force = false) {
     setLoading(true);
