@@ -127,6 +127,7 @@ func summarizeWatchTranscript(ctx context.Context, p *WatchParams, result *media
 	if result.Channel != "" {
 		fmt.Fprintf(&b, "채널: %s\n", result.Channel)
 	}
+	b.WriteString(watchChaptersBlock(result.Chapters))
 	fmt.Fprintf(&b, "\n자막/전사(%s):\n%s\n", result.Language, t)
 
 	// Free-text transcript analysis on the non-reasoning lightweight model →
@@ -180,6 +181,20 @@ func analyzeWatch(ctx context.Context, p *WatchParams, result *media.WatchResult
 
 // buildWatchPrompt assembles the per-call prompt: task + metadata + (clipped)
 // transcript. The frames follow as image blocks (added by CallVisionLLM).
+// watchChaptersBlock renders a compact chapter list for the analysis prompt so
+// the model can structure its analysis by section. Empty when no chapters.
+func watchChaptersBlock(chapters []media.YouTubeChapter) string {
+	if len(chapters) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("\n챕터:\n")
+	for _, c := range chapters {
+		fmt.Fprintf(&b, "- %s %s\n", formatWatchDuration(c.StartSec), c.Title)
+	}
+	return b.String()
+}
+
 func buildWatchPrompt(p *WatchParams, result *media.WatchResult) string {
 	var b strings.Builder
 	task := strings.TrimSpace(p.Task)
@@ -201,6 +216,7 @@ func buildWatchPrompt(p *WatchParams, result *media.WatchResult) string {
 		fmt.Fprintf(&b, "분석 구간: %.0fs ~ %.0fs\n", result.StartSec, result.EndSec)
 	}
 	fmt.Fprintf(&b, "프레임: %d장 (시간순)\n", len(result.Frames))
+	b.WriteString(watchChaptersBlock(result.Chapters))
 
 	if t := strings.TrimSpace(result.Transcript); t != "" {
 		if len(t) > watchMaxTranscriptChars {

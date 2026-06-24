@@ -128,13 +128,20 @@ func enrichMessageWithLinks(ctx context.Context, text string, fetchFn fetchFunc,
 	return formatLinkSummary(links)
 }
 
+// youtubeExtract is the YouTube enrichment extractor: native-only (innertube
+// captions + chapters + metadata, no yt-dlp/ASR) so it stays light enough for
+// the synchronous send path. A package var so tests can stub it without network.
+var youtubeExtract = media.ExtractYouTubeTranscriptNative
+
 // fetchAndConvert fetches a single URL and converts the content.
 func fetchAndConvert(ctx context.Context, url string, fetchFn fetchFunc, logger *slog.Logger) linkContent {
-	// YouTube URLs are skipped: plain HTTP fetches return JavaScript-heavy
-	// pages with no useful transcript content, so the agent's web_fetch tool
-	// (which runs the yt-dlp transcript extractor) handles them instead.
+	// YouTube URLs can't be understood from a plain HTTP fetch (JS-heavy page, no
+	// transcript). Extract captions + chapters + metadata natively so a pasted
+	// link is summarizable immediately without an explicit web-tool turn. The
+	// native path is HTTP-only (no subprocess); when it can't serve the video the
+	// agent's web tool still covers the heavy fallback (yt-dlp + ASR).
 	if media.IsYouTubeURL(url) {
-		return linkContent{URL: url, Err: "skipped (YouTube handled by web_fetch)"}
+		return enrichYouTube(ctx, url, logger)
 	}
 
 	fetchCtx, fetchCancel := context.WithTimeout(ctx, linkFetchTimeout)
@@ -167,6 +174,32 @@ func fetchAndConvert(ctx context.Context, url string, fetchFn fetchFunc, logger 
 		URL:     url,
 		Title:   title,
 		Content: content,
+	}
+}
+
+// enrichYouTube extracts a YouTube link's transcript + chapters + metadata via
+// the native path and renders it as link content. Bounded by linkFetchTimeout
+// and the shared per-link char budget. Returns an error-marked entry (which the
+// summary skips) when the native path yields nothing, leaving the heavy fallback
+// to the agent's web tool.
+func enrichYouTube(ctx context.Context, url string, logger *slog.Logger) linkContent {
+	yctx, cancel := context.WithTimeout(ctx, linkFetchTimeout)
+	defer cancel()
+
+	res := youtubeExtract(yctx, url)
+	if res == nil {
+		logger.Debug("youtube enrichment unavailable (native)", "url", url)
+		return linkContent{URL: url, Err: "skipped (native extraction unavailable; use web tool)"}
+	}
+
+	title := res.Title
+	if title == "" {
+		title = url
+	}
+	return linkContent{
+		URL:     url,
+		Title:   title,
+		Content: truncateContent(media.FormatYouTubeResult(res), maxCharsPerLink),
 	}
 }
 

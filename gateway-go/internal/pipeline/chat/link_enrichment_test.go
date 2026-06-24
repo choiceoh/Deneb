@@ -9,7 +9,54 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/media"
 )
+
+// withStubYouTube temporarily replaces the YouTube enrichment extractor and
+// restores it on cleanup.
+func withStubYouTube(t *testing.T, fn func(context.Context, string) *media.YouTubeResult) {
+	t.Helper()
+	prev := youtubeExtract
+	youtubeExtract = fn
+	t.Cleanup(func() { youtubeExtract = prev })
+}
+
+func TestEnrichMessageWithLinks_YouTubeNative(t *testing.T) {
+	logger := slog.Default()
+	withStubYouTube(t, func(_ context.Context, url string) *media.YouTubeResult {
+		return &media.YouTubeResult{
+			Title:      "테스트 영상",
+			Channel:    "테스트 채널",
+			Transcript: "안녕하세요 영상 내용입니다",
+			Language:   "ko",
+			URL:        url,
+			Chapters:   []media.YouTubeChapter{{StartSec: 0, Title: "인트로"}},
+		}
+	})
+
+	result := enrichMessageWithLinks(context.Background(), "이거 봐 https://youtu.be/dQw4w9WgXcQ", nil, logger)
+
+	if !strings.Contains(result, toolctx.LinkEnrichmentHeader) {
+		t.Fatal("expected link summary header")
+	}
+	for _, want := range []string{"테스트 영상", "테스트 채널", "인트로", "안녕하세요 영상 내용입니다"} {
+		if !strings.Contains(result, want) {
+			t.Errorf("expected %q in enriched output", want)
+		}
+	}
+}
+
+func TestEnrichMessageWithLinks_YouTubeNativeUnavailable(t *testing.T) {
+	logger := slog.Default()
+	withStubYouTube(t, func(_ context.Context, _ string) *media.YouTubeResult {
+		return nil // native path can't serve it → skipped, no enrichment block
+	})
+
+	result := enrichMessageWithLinks(context.Background(), "https://youtu.be/dQw4w9WgXcQ", nil, logger)
+	if result != "" {
+		t.Fatalf("expected empty enrichment when native extraction unavailable, got: %q", result)
+	}
+}
 
 // stubFetcher returns a fetchFunc that serves canned responses keyed by URL.
 func stubFetcher(responses map[string]struct {
