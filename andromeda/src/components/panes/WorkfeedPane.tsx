@@ -10,8 +10,8 @@ import { useRegisterPane, useWorkspace, type PaneTarget } from "@/workspaceConte
 import { Column, Grid, GridNotice } from "@/components/Grid";
 import { AssistantText } from "@/components/DenebUi";
 
-// Items sourced from a question expect a free-text reply. The gateway settles the
-// card via workfeed.answer/action.run, then returns a sessionKey+prompt to deliver.
+// Items sourced from a question expect a free-text reply. Some work-feed actions
+// return a sessionKey+prompt for the client to deliver as a follow-up turn.
 const isQuestion = (w: WorkItem) => (w.source ?? "").includes("question");
 const ignoreUiSubmit = () => {};
 

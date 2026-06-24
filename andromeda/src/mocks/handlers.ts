@@ -154,7 +154,7 @@ const RPC: Record<string, (p: Record<string, any>) => unknown> = {
     ok: true,
     itemId: p.itemId,
     sessionKey: "client:main",
-    prompt: p.answer,
+    text: "답변을 전달했어요.",
     removeFromFeed: true,
   }),
   "miniapp.workfeed.feedback": (p) => ({

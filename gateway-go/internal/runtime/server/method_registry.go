@@ -354,6 +354,21 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 			// Record a deal-question card's team answer onto the deal wiki page
 			// (불확실 → 질문 → 기록). See deal_question.go.
 			OnAnswer: s.recordDealQuestionAnswer,
+			DeliverAnswer: func(ctx context.Context, sessionKey, answer string) (string, string, error) {
+				if s.chatHandler == nil {
+					return "", "", errors.New("chat handler not initialized")
+				}
+				target := handlerchat.DefaultSessionKey(sessionKey)
+				res, err := s.chatHandler.SendSync(ctx, target, answer, "", &chat.SyncOptions{
+					Delivery:            &chat.DeliveryContext{Channel: handlerchat.NativeClientChannel, To: target},
+					AutoDeliveredOutput: true,
+					GateUntrustedTools:  true,
+				})
+				if err != nil {
+					return "", "", err
+				}
+				return res.BestText(), res.Model, nil
+			},
 		}),
 		s.miniappModelMethods(),
 

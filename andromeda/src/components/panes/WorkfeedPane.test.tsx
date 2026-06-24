@@ -43,7 +43,7 @@ beforeEach(() => {
       rpcCalls.push({ method: String(body.method ?? ""), params });
       const payload =
         body.method === "miniapp.workfeed.answer"
-          ? { ok: true, sessionKey: "client:main", prompt: params.answer, removeFromFeed: true }
+          ? { ok: true, sessionKey: "client:main", text: "답변을 전달했어요.", removeFromFeed: true }
           : body.method === "miniapp.workfeed.action.run"
             ? { ok: true, sessionKey: "client:main", prompt: "후속 액션 실행", removeFromFeed: true }
             : { ok: true };
@@ -60,7 +60,7 @@ afterEach(() => {
 });
 
 describe("WorkfeedPane", () => {
-  it("answers a question item via workfeed.answer and delivers the returned prompt", async () => {
+  it("answers a question item without issuing a second chat stream request", async () => {
     const dataProvider = fakeProvider({
       workfeed: [{ id: "w1", source: "deal_question", title: "검토 요청", body: "승인 여부를 알려주세요." }],
     });
@@ -75,8 +75,7 @@ describe("WorkfeedPane", () => {
     await waitFor(() => expect(rpcCalls.some((c) => c.method === "miniapp.workfeed.answer")).toBe(true));
     const answer = rpcCalls.find((c) => c.method === "miniapp.workfeed.answer");
     expect(answer?.params).toMatchObject({ itemId: "w1", answer: "승인합니다" });
-    await waitFor(() => expect(chatCalls).toHaveLength(1));
-    expect(chatCalls[0]).toMatchObject({ message: "승인합니다", sessionKey: "client:main" });
+    await waitFor(() => expect(chatCalls).toHaveLength(0));
   });
 
   it("runs fixed action chips via action.run and delivers the returned prompt", async () => {

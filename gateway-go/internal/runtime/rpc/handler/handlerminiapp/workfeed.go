@@ -29,6 +29,11 @@ type WorkFeedDeps struct {
 	// item is the settled card (carries Source + RefID); actionID is the tapped
 	// answer (e.g. "dept:pl1").
 	OnAnswer func(item workfeed.Item, actionID string)
+	// DeliverAnswer, when set, durably sends a free-text answer into the asking
+	// session before the card is settled. This prevents the answer from being lost
+	// if a second, client-side delivery request fails after the card is acked.
+	// Returns the surfaced reply text/model from the run when available.
+	DeliverAnswer func(ctx context.Context, sessionKey, answer string) (text, model string, err error)
 }
 
 const (
@@ -48,8 +53,10 @@ func WorkFeedMethods(deps WorkFeedDeps) map[string]rpcutil.HandlerFunc {
 	}
 }
 
-// workFeedAnswer settles a question card and returns its asking SessionKey so the
-// native can deliver the user's free-text answer there (the agent then reacts).
+// workFeedAnswer routes a free-text reply for a question card into the asking
+// session, then settles the card. DeliverAnswer, when wired, makes that reply
+// durable server-side before the card can disappear from the feed, closing the
+// loss window where the client acked the card but failed to forward the answer.
 // Choice answers go through action.run instead (ActionAnswer/ActionAck chips);
 // this is the free-text reply path for question cards without fixed options.
 func workFeedAnswer(deps WorkFeedDeps) rpcutil.HandlerFunc {
@@ -75,7 +82,48 @@ func workFeedAnswer(deps WorkFeedDeps) rpcutil.HandlerFunc {
 		if answer == "" {
 			return rpcerr.MissingParam("answer").Response(req.ID)
 		}
-		// Ack settles the card and returns it (carrying the asking SessionKey).
+		var sessionKey string
+		if deps.DeliverAnswer != nil {
+			// Resolve the asking session before settling the card so a delivery
+			// failure leaves the card retryable instead of losing the user's reply.
+			items, _, err := deps.Store.List(0, true)
+			if err != nil {
+				return rpcerr.WrapUnavailable("work feed unavailable", err).Response(req.ID)
+			}
+			found := false
+			for _, item := range items {
+				if item.ID != itemID {
+					continue
+				}
+				sessionKey = item.SessionKey
+				found = true
+				break
+			}
+			if !found {
+				return rpcerr.NotFound("work feed item").Response(req.ID)
+			}
+			text, model, err := deps.DeliverAnswer(ctx, sessionKey, answer)
+			if err != nil {
+				return rpcerr.WrapDependencyFailed("work feed answer delivery failed", err).Response(req.ID)
+			}
+			item, err := deps.Store.Ack(itemID)
+			if err != nil {
+				if errors.Is(err, workfeed.ErrNotFound) {
+					return rpcerr.NotFound("work feed item").Response(req.ID)
+				}
+				return rpcerr.WrapUnavailable("work feed unavailable", err).Response(req.ID)
+			}
+			return rpcutil.RespondOK(req.ID, map[string]any{
+				"ok":             true,
+				"item":           item,
+				"sessionKey":     sessionKey,
+				"text":           text,
+				"model":          model,
+				"removeFromFeed": true,
+			})
+		}
+		// Legacy fallback: ack the card and let the client deliver the answer as a
+		// second step. Kept for tests/embedders that haven't wired DeliverAnswer.
 		item, err := deps.Store.Ack(itemID)
 		if err != nil {
 			if errors.Is(err, workfeed.ErrNotFound) {

@@ -11,6 +11,7 @@ import (
 
 type fakeWorkFeedStore struct {
 	items       []workfeed.Item
+	listErr     error
 	lastLimit   int
 	lastInclude bool
 	lastSince   int64
@@ -28,6 +29,9 @@ type fakeWorkFeedStore struct {
 func (f *fakeWorkFeedStore) List(limit int, includeAcked bool) ([]workfeed.Item, int, error) {
 	f.lastLimit = limit
 	f.lastInclude = includeAcked
+	if f.listErr != nil {
+		return nil, 0, f.listErr
+	}
 	out := f.items
 	if limit > 0 && len(out) > limit {
 		out = out[:limit]
@@ -216,6 +220,72 @@ func TestWorkFeedAckUnavailable(t *testing.T) {
 	}
 	if resp.Error.Code != protocol.ErrUnavailable {
 		t.Fatalf("code = %s, want %s", resp.Error.Code, protocol.ErrUnavailable)
+	}
+}
+
+func TestWorkFeedAnswerDeliversBeforeAck(t *testing.T) {
+	store := &fakeWorkFeedStore{items: []workfeed.Item{{ID: "q1", SessionKey: "client:main:deal"}}}
+	var gotSession, gotAnswer string
+	h := workFeedAnswer(WorkFeedDeps{
+		Store: store,
+		DeliverAnswer: func(_ context.Context, sessionKey, answer string) (string, string, error) {
+			gotSession = sessionKey
+			gotAnswer = answer
+			return "답변을 전달했습니다.", "main-model", nil
+		},
+	})
+	resp := h(authedCtx(), reqWith(t, "miniapp.workfeed.answer", map[string]any{
+		"itemId": "q1",
+		"answer": "승인합니다",
+	}))
+
+	var got struct {
+		OK             bool          `json:"ok"`
+		Item           workfeed.Item `json:"item"`
+		SessionKey     string        `json:"sessionKey"`
+		Prompt         string        `json:"prompt"`
+		Text           string        `json:"text"`
+		Model          string        `json:"model"`
+		RemoveFromFeed bool          `json:"removeFromFeed"`
+	}
+	decode(t, resp, &got)
+	if !got.OK {
+		t.Fatalf("expected ok: %+v", resp.Error)
+	}
+	if gotSession != "client:main:deal" || gotAnswer != "승인합니다" {
+		t.Fatalf("deliver args = %q / %q", gotSession, gotAnswer)
+	}
+	if store.ackID != "q1" {
+		t.Fatalf("ack id = %q, want q1", store.ackID)
+	}
+	if got.Prompt != "" {
+		t.Fatalf("prompt = %q, want empty when server delivered the answer", got.Prompt)
+	}
+	if got.Text != "답변을 전달했습니다." || got.Model != "main-model" || !got.RemoveFromFeed {
+		t.Fatalf("payload = %+v", got)
+	}
+}
+
+func TestWorkFeedAnswerDeliveryFailureDoesNotAck(t *testing.T) {
+	store := &fakeWorkFeedStore{items: []workfeed.Item{{ID: "q1", SessionKey: "client:main"}}}
+	h := workFeedAnswer(WorkFeedDeps{
+		Store: store,
+		DeliverAnswer: func(context.Context, string, string) (string, string, error) {
+			return "", "", errors.New("stream down")
+		},
+	})
+	resp := h(authedCtx(), reqWith(t, "miniapp.workfeed.answer", map[string]any{
+		"itemId": "q1",
+		"answer": "승인합니다",
+	}))
+	if resp.OK {
+		t.Fatalf("expected dependency failure")
+	}
+	if resp.Error.Code != protocol.ErrDependencyFailed {
+		t.Fatalf("code = %s, want %s", resp.Error.Code, protocol.ErrDependencyFailed)
+	}
+	if store.ackID != "" {
+		t.Fatalf("ack id = %q, want empty on delivery failure", store.ackID)
 	}
 }
 
