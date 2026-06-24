@@ -12,6 +12,7 @@ import {
   fmtTime,
   monthMatrix,
   senderName,
+  startOfDay,
   text,
 } from "./format";
 
@@ -85,14 +86,33 @@ describe("dayLabel", () => {
   it("labels the previous local day 어제", () => {
     expect(dayLabel(new Date(2026, 5, 23, 23, 0).getTime(), now)).toBe("어제");
   });
-  it("gives an absolute label (with the day number) for older days", () => {
+  it("labels the next local day 내일", () => {
+    expect(dayLabel(new Date(2026, 5, 25, 1, 0).getTime(), now)).toBe("내일");
+  });
+  it("gives an absolute label (with the day number) for other days", () => {
     const out = dayLabel(new Date(2026, 5, 20, 10, 0).getTime(), now);
     expect(out).not.toBe("오늘");
     expect(out).not.toBe("어제");
+    expect(out).not.toBe("내일");
     expect(out).toContain("20");
   });
   it("is empty for an unparseable stamp", () => {
     expect(dayLabel("not a date", now)).toBe("");
+  });
+});
+
+describe("startOfDay", () => {
+  it("floors a timed stamp to local midnight", () => {
+    const ms = new Date(2026, 5, 24, 15, 30, 45).getTime();
+    expect(startOfDay(ms)).toBe(new Date(2026, 5, 24, 0, 0, 0, 0).getTime());
+  });
+  it("is idempotent on an already-midnight stamp", () => {
+    const midnight = new Date(2026, 5, 24).getTime();
+    expect(startOfDay(midnight)).toBe(midnight);
+  });
+  it("defaults to today's local midnight", () => {
+    const n = new Date();
+    expect(startOfDay()).toBe(new Date(n.getFullYear(), n.getMonth(), n.getDate()).getTime());
   });
 });
 

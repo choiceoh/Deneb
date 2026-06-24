@@ -168,27 +168,33 @@ describe("WorkfeedPane", () => {
     expect(within(detail).getAllByText("120")).toHaveLength(2);
   });
 
-  it("groups the feed into day sections, newest day first, with undated items last", async () => {
-    const older = new Date(2026, 0, 10, 9, 0).getTime();
-    const newer = new Date(2026, 0, 12, 14, 0).getTime();
+  it("lands on today and flips to the previous / next day", async () => {
+    // Anchor the fixtures to the real clock so the component's "today" matches.
+    const t = new Date();
+    const at = (daysAgo: number, hour: number) =>
+      new Date(t.getFullYear(), t.getMonth(), t.getDate() - daysAgo, hour).getTime();
     const dataProvider = fakeProvider({
       workfeed: [
-        { id: "old", source: "alert", title: "오래된 항목", createdAtMs: older },
-        { id: "new", source: "followup", title: "최신 항목", createdAtMs: newer },
-        { id: "nodate", source: "proactive", title: "날짜 없는 항목" },
+        { id: "y", source: "followup", title: "어제 항목", createdAtMs: at(1, 14) },
+        { id: "t", source: "alert", title: "오늘 항목", createdAtMs: at(0, 9) },
       ],
     });
     renderWithProviders(<WorkfeedPane />, { connected: true, dataProvider });
 
-    await screen.findByText("최신 항목");
+    // Lands on today.
+    expect(await screen.findByText("오늘 항목")).toBeInTheDocument();
+    expect(screen.queryByText("어제 항목")).not.toBeInTheDocument();
+    expect(screen.getByText("오늘")).toBeInTheDocument();
 
-    // Each day is its own accessible region; the only regions on screen are the
-    // day groups (the detail region appears only when a row is expanded).
-    const sections = screen.getAllByRole("region");
-    expect(sections).toHaveLength(3);
-    expect(within(sections[0]).getByText("최신 항목")).toBeInTheDocument(); // newest day first
-    expect(within(sections[1]).getByText("오래된 항목")).toBeInTheDocument();
-    expect(within(sections[2]).getByText("날짜 없는 항목")).toBeInTheDocument();
-    expect(within(sections[2]).getByRole("heading", { level: 3 })).toHaveTextContent("날짜 미정");
+    // Flip to the previous day → 어제.
+    await userEvent.click(screen.getByRole("button", { name: "이전 날" }));
+    expect(await screen.findByText("어제 항목")).toBeInTheDocument();
+    expect(screen.queryByText("오늘 항목")).not.toBeInTheDocument();
+    expect(screen.getByText("어제")).toBeInTheDocument();
+
+    // 'next' returns to today; nothing is newer than today, so it then disables.
+    await userEvent.click(screen.getByRole("button", { name: "다음 날" }));
+    expect(await screen.findByText("오늘 항목")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "다음 날" })).toBeDisabled();
   });
 });
