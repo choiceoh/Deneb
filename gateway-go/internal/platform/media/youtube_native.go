@@ -134,6 +134,17 @@ type captionTrack struct {
 	Kind         string `json:"kind"` // "asr" for auto-generated, empty for manual
 }
 
+// ExtractYouTubeTranscriptNative runs ONLY the native innertube extraction
+// (captions + chapters + metadata) — no yt-dlp subprocess and no audio→ASR. It
+// is the lightweight primitive for inbound link enrichment, where spawning
+// yt-dlp/ASR on every pasted link would be far too heavy for the synchronous
+// send path. Returns nil when the native path can't serve the video (not
+// playable, network/parse error); callers that need the full path (caption-less
+// videos via ASR, alternate player clients) use ExtractYouTubeTranscript.
+func ExtractYouTubeTranscriptNative(ctx context.Context, videoURL string) *YouTubeResult {
+	return extractTranscriptNative(ctx, videoURL)
+}
+
 // extractTranscriptNative attempts metadata + caption extraction via YouTube's
 // innertube API. Returns a populated *YouTubeResult on success (Transcript may be
 // "" when the video genuinely has no captions), or nil when the native path
