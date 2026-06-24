@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.0.22](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.21...andromeda-v0.0.22) (2026-06-24)
+
+
+### ✨ Features
+
+* **andromeda:** 능동 알림 패널 개선 + 로드 실패 가시화 ([#2867](https://github.com/choiceoh/Deneb/issues/2867)) ([eb945da](https://github.com/choiceoh/Deneb/commit/eb945dac33fbeec2367c882c595afb4b5fc5a6f3))
+* **workfeed:** 작업피드 읽음 상태 — 게이트웨이 read RPC + andromeda 표시 ([#2865](https://github.com/choiceoh/Deneb/issues/2865)) ([4ac67cd](https://github.com/choiceoh/Deneb/commit/4ac67cd0634edef341d26f3efe0fe0835663dbb1))
+
 ## [0.0.21](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.20...andromeda-v0.0.21) (2026-06-24)
 
 
