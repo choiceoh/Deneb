@@ -26,7 +26,20 @@ import (
 type clientPushEvent struct {
 	Title string `json:"title"`
 	Body  string `json:"body"`
+	// Optional deep-link target for the desktop proactive panel: Kind is a pane
+	// key and Ref the resource id (or wiki path) the nudge opens. Empty when the
+	// event has no navigable target (informational — e.g. an error or image push).
+	Kind string `json:"kind,omitempty"`
+	Ref  string `json:"ref,omitempty"`
 }
+
+// Push deep-link kinds — these strings MUST match the andromeda View pane keys
+// (andromeda/src/types.ts) so the desktop ProactivePanel can route a nudge to a
+// pane. Add a kind only when the publish site has a real target for it.
+const (
+	pushKindWorkfeed = "workfeed"
+	pushKindFleet    = "fleet"
+)
 
 // clientPushHub is a tiny in-memory pub/sub: native client SSE connections
 // subscribe, proactive delivery publishes. Buffered per-subscriber channels

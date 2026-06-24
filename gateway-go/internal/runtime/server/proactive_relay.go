@@ -305,6 +305,9 @@ func (d proactiveRelayDeps) relayNativeToOptions(sessionKey, content string, opt
 			}
 		}
 	}
+	// Deep-link target for the desktop proactive nudge — set when this delivery
+	// also creates a work-feed card (below); empty otherwise (informational push).
+	var pushKind, pushRef string
 	if d.workFeed != nil && target == nativeWorkSessionKey {
 		// Answerable question card: a ```choices fence becomes inline answer chips
 		// and a trailing "?" (no fence) flags a free-text question, so the agent's
@@ -350,7 +353,7 @@ func (d proactiveRelayDeps) relayNativeToOptions(sessionKey, content string, opt
 				}
 			}
 		}
-		if _, err := d.workFeed.Append(workfeed.Item{
+		appended, err := d.workFeed.Append(workfeed.Item{
 			Source:     source,
 			Title:      title,
 			Summary:    summary,
@@ -358,15 +361,23 @@ func (d proactiveRelayDeps) relayNativeToOptions(sessionKey, content string, opt
 			SessionKey: target,
 			Question:   isQuestion,
 			Actions:    qActions,
-		}); err != nil && d.logger != nil {
-			d.logger.Error("proactive native relay: work feed append failed",
-				"sessionKey", target, "error", err)
+		})
+		if err != nil {
+			if d.logger != nil {
+				d.logger.Error("proactive native relay: work feed append failed",
+					"sessionKey", target, "error", err)
+			}
+		} else {
+			// The desktop nudge deep-links to the work-feed card it just created.
+			pushKind, pushRef = pushKindWorkfeed, appended.ID
 		}
 	}
 	if d.pushHub != nil {
 		d.pushHub.publish(clientPushEvent{
 			Title: "Deneb",
 			Body:  pushPreview(content),
+			Kind:  pushKind,
+			Ref:   pushRef,
 		})
 		// Fallback: when no client holds a live SSE connection, the frame above
 		// reached nobody (app fully closed or in Android Doze). Push via FCM so

@@ -157,6 +157,9 @@ func TestFleetHook(t *testing.T) {
 		if !strings.Contains(ev.Title, "플릿") || !strings.Contains(ev.Title, "node down: srv3") || ev.Body != "ssh unreachable" {
 			t.Errorf("unexpected push frame: %+v", ev)
 		}
+		if ev.Kind != pushKindFleet {
+			t.Errorf("fleet push Kind = %q, want %q", ev.Kind, pushKindFleet)
+		}
 	default:
 		t.Fatal("no push frame published")
 	}
