@@ -100,6 +100,12 @@ func parseMessage(raw []byte, fallbackID string) (*Message, error) {
 	}
 	detail.Body = clampRunes(strings.TrimSpace(text), maxBodyRunes)
 	detail.Attachments = acc.atts
+	// Large attachments (대용량첨부) are download links in the HTML part, not MIME
+	// bytes. extractBody throws the HTML away when a text/plain part exists (it
+	// does here — the plain part holds the filename/size metadata), so pull the
+	// links from acc.html before they're lost; the ingest path fetches the
+	// allowlisted ones into real attachment bytes.
+	detail.LargeAttachments = extractLargeAttachmentLinks(acc.html)
 	return &Message{Detail: detail, AttachmentBytes: acc.attBytes, DedupKey: key}, nil
 }
 
