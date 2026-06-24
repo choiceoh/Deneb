@@ -3,9 +3,9 @@ import { clearCachedResource } from "@/cachedList";
 import { MEMORY_RPC } from "@/resources";
 import type { WikiCategory, WikiDiaryEntry, WikiPage } from "@/types";
 import { useCachedRpc } from "@/useCachedRpc";
-import { color, muted } from "@/theme";
+import { color, line, muted } from "@/theme";
 import { useRegisterPane, useWorkspace } from "@/workspaceContext";
-import { Field, Modal } from "@/components/Modal";
+import { Field, Modal, ModalFooter } from "@/components/Modal";
 import { MarkdownEditor } from "@/components/MarkdownEditor";
 import { DeleteModal, OneFieldModal } from "./commonModals";
 
@@ -427,11 +427,9 @@ export function WikiPane() {
       </div>
       {creating && <NewPageModal onClose={() => setCreating(false)} onCreate={(p) => void createNewPage(p)} />}
       {moving && path && (
-        <OneFieldModal
-          title="페이지 이동"
-          label="새 경로"
-          initialValue={path}
-          action="이동"
+        <MovePageModal
+          path={path}
+          categories={categories}
           onClose={() => setMoving(false)}
           onSubmit={(v) => void movePage(v)}
         />
@@ -494,6 +492,102 @@ function categoryName(c: WikiCategory): string {
 
 function categoryCount(c: WikiCategory): number | undefined {
   return c.pageCount ?? c.count ?? c.pages;
+}
+
+// Split a page path into its directory and filename so each is editable on its own.
+function dirOf(path: string): string {
+  const i = path.lastIndexOf("/");
+  return i < 0 ? "" : path.slice(0, i);
+}
+function baseOf(path: string): string {
+  const i = path.lastIndexOf("/");
+  return i < 0 ? path : path.slice(i + 1);
+}
+function joinPath(dir: string, name: string): string {
+  const d = dir.trim().replace(/^\/+|\/+$/g, "");
+  const n = name.trim().replace(/^\/+|\/+$/g, "");
+  return d ? `${d}/${n}` : n;
+}
+
+// Move a page to another folder. The destination 분류 is picked by clicking an
+// existing category (or 최상위 / + 새 분류); the page keeps its filename. The
+// resulting path is shown before applying.
+function MovePageModal({
+  path,
+  categories,
+  onClose,
+  onSubmit,
+}: {
+  path: string;
+  categories: WikiCategory[];
+  onClose: () => void;
+  onSubmit: (to: string) => void;
+}) {
+  const [dir, setDir] = useState(() => dirOf(path));
+  const [addingCat, setAddingCat] = useState(false);
+  const [newCat, setNewCat] = useState("");
+
+  const name = baseOf(path);
+  // Existing categories + the page's current directory, deduped — so the source
+  // category is always offered even if the registry hasn't surfaced it.
+  const options = Array.from(
+    new Set([dirOf(path), ...categories.map(categoryName)].filter((c) => c && c !== "(root)")),
+  ).sort((a, b) => a.localeCompare(b, "ko"));
+
+  const effectiveDir = addingCat ? newCat : dir;
+  const to = joinPath(effectiveDir, name);
+  const ready = to !== path && (!addingCat || Boolean(newCat.trim()));
+
+  const catRow = (label: string, selected: boolean, onClick: () => void) => (
+    <button
+      key={label}
+      className="wiki-category-row"
+      onClick={onClick}
+      style={{ background: selected ? color.active : "transparent" }}
+    >
+      <span>{label}</span>
+    </button>
+  );
+
+  return (
+    <Modal
+      title="페이지 이동"
+      onClose={onClose}
+      width={460}
+      footer={<ModalFooter action="이동" canSubmit={ready} onClose={onClose} onSubmit={() => onSubmit(to)} />}
+    >
+      <div style={{ fontSize: 12, color: color.muted, marginBottom: 5 }}>분류</div>
+      <div
+        style={{ display: "grid", gap: 2, maxHeight: 240, overflow: "auto", border: line, borderRadius: 8, padding: 4 }}
+      >
+        {catRow("최상위", !addingCat && dir === "", () => {
+          setAddingCat(false);
+          setDir("");
+        })}
+        {options.map((c) =>
+          catRow(c, !addingCat && dir === c, () => {
+            setAddingCat(false);
+            setDir(c);
+          }),
+        )}
+        {catRow("+ 새 분류", addingCat, () => {
+          setAddingCat(true);
+          setNewCat("");
+        })}
+      </div>
+      {addingCat && (
+        <input
+          className="field"
+          value={newCat}
+          onChange={(e) => setNewCat(e.target.value)}
+          placeholder="새 분류 이름"
+          autoFocus
+          style={{ marginTop: 6 }}
+        />
+      )}
+      <p style={{ ...muted, margin: "8px 0 0", fontSize: 12, wordBreak: "break-all" }}>→ {to || "—"}</p>
+    </Modal>
+  );
 }
 
 function NewPageModal({ onClose, onCreate }: { onClose: () => void; onCreate: (draft: NewPageDraft) => void }) {

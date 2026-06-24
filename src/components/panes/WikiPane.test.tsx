@@ -104,22 +104,20 @@ describe("WikiPane", () => {
     expect(await screen.findByRole("button", { name: /2026-06-17/ })).toBeInTheDocument();
   });
 
-  it("moves the selected page through memory.move_page", async () => {
+  it("moves the selected page by clicking a destination category", async () => {
     renderWithProviders(<WikiPane />, { connected: true });
 
     await userEvent.type(screen.getByPlaceholderText("위키 검색..."), "설계{enter}");
     await userEvent.click(await screen.findByRole("button", { name: /Andromeda 설계 노트/ }));
     await userEvent.click(await screen.findByRole("button", { name: "이동" }));
 
-    const input = screen.getByLabelText("새 경로");
-    await userEvent.clear(input);
-    await userEvent.type(input, "projects/renamed.md");
-    await userEvent.click(
-      within(screen.getByRole("dialog", { name: "페이지 이동" })).getByRole("button", { name: "이동" }),
-    );
+    // Pick the destination folder by clicking it; the page keeps its name.
+    const dialog = screen.getByRole("dialog", { name: "페이지 이동" });
+    await userEvent.click(within(dialog).getByRole("button", { name: "team" }));
+    await userEvent.click(within(dialog).getByRole("button", { name: "이동" }));
 
     expect(await screen.findByText("이동됨")).toBeInTheDocument();
-    expect(moveParams).toMatchObject({ from: "projects/andromeda", to: "projects/renamed.md" });
+    expect(moveParams).toMatchObject({ from: "projects/andromeda", to: "team/andromeda" });
   });
 
   it("guards unsaved edits before opening another wiki page", async () => {
