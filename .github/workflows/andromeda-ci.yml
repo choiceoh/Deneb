@@ -1,0 +1,62 @@
+name: Andromeda CI
+
+# Desktop client (andromeda/) verify + wire-drift, in the monorepo.
+# - verify runs on andromeda changes; wire-drift also runs on gateway-go changes
+#   (a gateway contract change must re-check the committed TS wire types).
+# - wire-drift needs no Deneb clone / DENEB_DIR: gen-wire auto-detects ../gateway-go
+#   from andromeda/ (scripts/gen-wire.mjs). paths is workflow-level, so verify also
+#   fires on gateway-only changes; split into two workflows if that waste matters.
+
+on:
+  push:
+    branches: [main]
+    paths: ["andromeda/**", "gateway-go/**"]
+  pull_request:
+    paths: ["andromeda/**", "gateway-go/**"]
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: andromeda
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          package_json_file: andromeda/package.json
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: andromeda/pnpm-lock.yaml
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run typecheck
+      - run: pnpm run lint
+      - run: pnpm run format:check
+      - run: pnpm run test
+      - run: pnpm run build
+
+  wire-drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache-dependency-path: gateway-go/go.sum
+
+      # gen-wire는 node 빌트인만 사용 → pnpm install 불필요. ../gateway-go 자동 감지.
+      - name: Verify wire types are up to date
+        run: node scripts/gen-wire.mjs --check
