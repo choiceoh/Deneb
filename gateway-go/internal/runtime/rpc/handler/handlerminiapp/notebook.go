@@ -1,12 +1,13 @@
-// notebook.go — miniapp.notebook.* RPC surface: read access to the deal-anchored
-// notebook collections (list + get) for the native client. NotebookLM-style
-// scoped source collections; the brief synthesis stays in the chat/agent path
-// (the `notebook` tool), this surface just exposes the pinned evidence.
+// notebook.go — miniapp.notebook.* RPC surface for the desktop client: read
+// (list/get) plus the create + add_source writes the notebook pane uses to pin
+// evidence. NotebookLM-style scoped source collections; the grounded brief
+// synthesis still lives in the chat/agent path (the `notebook` tool).
 package handlerminiapp
 
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/notebook"
@@ -33,8 +34,10 @@ func NotebookMethods(deps NotebookDeps) map[string]rpcutil.HandlerFunc {
 		return nil
 	}
 	return map[string]rpcutil.HandlerFunc{
-		"miniapp.notebook.list": notebookListRPC(deps),
-		"miniapp.notebook.get":  notebookGetRPC(deps),
+		"miniapp.notebook.list":       notebookListRPC(deps),
+		"miniapp.notebook.get":        notebookGetRPC(deps),
+		"miniapp.notebook.create":     notebookCreateRPC(deps),
+		"miniapp.notebook.add_source": notebookAddSourceRPC(deps),
 	}
 }
 
@@ -162,6 +165,101 @@ func notebookGetRPC(deps NotebookDeps) rpcutil.HandlerFunc {
 			})
 		}
 		return rpcutil.RespondOK(req.ID, out)
+	}
+}
+
+// notebookCreateRPC creates a new (unanchored) notebook and returns its summary
+// so the client can open it and start pinning sources.
+func notebookCreateRPC(deps NotebookDeps) rpcutil.HandlerFunc {
+	type params struct {
+		Name        string `json:"name"`
+		Description string `json:"description"`
+	}
+	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		if errResp := requireAuth(ctx, req.ID); errResp != nil {
+			return errResp
+		}
+		var p params
+		if len(req.Params) > 0 {
+			if err := json.Unmarshal(req.Params, &p); err != nil {
+				return rpcerr.InvalidParams(err).Response(req.ID)
+			}
+		}
+		if strings.TrimSpace(p.Name) == "" {
+			return rpcerr.MissingParam("name").Response(req.ID)
+		}
+		store, err := deps.Store()
+		if err != nil {
+			return rpcerr.WrapUnavailable("notebook store unavailable", err).Response(req.ID)
+		}
+		nb, err := store.Create(p.Name, p.Description)
+		if err != nil {
+			return rpcerr.InvalidRequest(err.Error()).Response(req.ID)
+		}
+		return rpcutil.RespondOK(req.ID, NotebookSummaryOut{
+			ID:          nb.ID,
+			Name:        nb.Name,
+			Description: nb.Description,
+			DealRef:     nb.DealRef,
+			SourceCount: len(nb.Sources),
+			Updated:     nb.Updated,
+		})
+	}
+}
+
+// notebookAddSourceRPC pins a source — a pasted note (Text) or a wiki page (Ref) —
+// to a notebook. kind defaults to "wiki" when only a ref is given, else "note".
+// (The ingested kinds — file/url/mail, which the gateway reads server-side — are
+// added in a follow-up that wires the source readers into this surface.)
+func notebookAddSourceRPC(deps NotebookDeps) rpcutil.HandlerFunc {
+	type params struct {
+		ID    string `json:"id"`
+		Kind  string `json:"kind"`
+		Ref   string `json:"ref"`
+		Title string `json:"title"`
+		Text  string `json:"text"`
+	}
+	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		if errResp := requireAuth(ctx, req.ID); errResp != nil {
+			return errResp
+		}
+		var p params
+		if len(req.Params) > 0 {
+			if err := json.Unmarshal(req.Params, &p); err != nil {
+				return rpcerr.InvalidParams(err).Response(req.ID)
+			}
+		}
+		id := strings.TrimSpace(p.ID)
+		if id == "" {
+			return rpcerr.MissingParam("id").Response(req.ID)
+		}
+		kind := strings.TrimSpace(p.Kind)
+		if kind == "" {
+			if strings.TrimSpace(p.Ref) != "" {
+				kind = notebook.KindWiki
+			} else {
+				kind = notebook.KindNote
+			}
+		}
+		store, err := deps.Store()
+		if err != nil {
+			return rpcerr.WrapUnavailable("notebook store unavailable", err).Response(req.ID)
+		}
+		src, err := store.AddSource(id, notebook.Source{Kind: kind, Ref: p.Ref, Title: p.Title, Text: p.Text})
+		if err != nil {
+			if errors.Is(err, notebook.ErrNotFound) {
+				return rpcerr.NotFound("notebook").Response(req.ID)
+			}
+			// Validation errors (bad kind, missing text/ref) are the caller's fault.
+			return rpcerr.InvalidRequest(err.Error()).Response(req.ID)
+		}
+		return rpcutil.RespondOK(req.ID, NotebookSourceOut{
+			Cite:  src.Cite,
+			Kind:  src.Kind,
+			Ref:   src.Ref,
+			Title: src.Title,
+			Text:  truncateNotebookSourceText(src.Text),
+		})
 	}
 }
 
