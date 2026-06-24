@@ -1,0 +1,21 @@
+<svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <!-- Deneb mark: faceted 8-point sparkle-star, ported from the native app's
+       adaptive-icon foreground (ic_launcher_foreground.xml). No white tile — just
+       the symbol on transparent. Scaled 1.35× about centre to fill the canvas
+       (the native's white-margin group scale isn't needed without the tile).
+       Lit top-left: mid azure base, cyan highlight facets, deep-blue shadow facets. -->
+  <g transform="translate(256 256) scale(1.35) translate(-256 -256)">
+    <!-- base / mid-tone (full star, seam-free underlay) -->
+    <path
+      d="M256,104 L278.2,202.42 L329.54,182.46 L309.59,233.81 L408,256 L309.59,278.2 L329.54,329.54 L278.2,309.59 L256,408 L233.81,309.59 L182.46,329.54 L202.42,278.2 L104,256 L202.42,233.81 L182.46,182.46 L233.81,202.42 Z"
+      fill="#2C84C9" />
+    <!-- highlight facets (lit, top-left) -->
+    <path
+      d="M256,256 L256,104 L278.2,202.42 Z M256,256 L202.42,278.2 L104,256 Z M256,256 L104,256 L202.42,233.81 Z M256,256 L202.42,233.81 L182.46,182.46 Z M256,256 L182.46,182.46 L233.81,202.42 Z M256,256 L233.81,202.42 L256,104 Z"
+      fill="#5BC8E8" />
+    <!-- shadow facets (bottom-right) -->
+    <path
+      d="M256,256 L309.59,233.81 L408,256 Z M256,256 L408,256 L309.59,278.2 Z M256,256 L309.59,278.2 L329.54,329.54 Z M256,256 L329.54,329.54 L278.2,309.59 Z M256,256 L278.2,309.59 L256,408 Z M256,256 L256,408 L233.81,309.59 Z"
+      fill="#154B86" />
+  </g>
+</svg>

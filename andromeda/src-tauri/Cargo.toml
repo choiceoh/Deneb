@@ -1,0 +1,26 @@
+[package]
+name = "andromeda"
+version = "0.0.17"
+description = "Andromeda — Deneb 데스크탑 워크스테이션"
+edition = "2021"
+rust-version = "1.77"
+
+[lib]
+name = "andromeda_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-process = "2"
+tauri-plugin-http = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+keyring = "3"
+dirs = "5"
+
+# Updater is desktop-only — guard the dependency so mobile targets don't pull it.
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+tauri-plugin-updater = "2"
