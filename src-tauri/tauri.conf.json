@@ -41,6 +41,7 @@
   "plugins": {
     "updater": {
       "endpoints": [
+        "https://github.com/choiceoh/Deneb/releases/latest/download/latest.json",
         "https://github.com/choiceoh/andromeda/releases/latest/download/latest.json"
       ],
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDg0MkMyRjQ2QUE5RjhCMEQKUldRTmk1K3FSaThzaEJLUS91VkZwZUxyMnlqelppbU42VmlsRFI1azN3cnl5T3Bya3NERThBb3QK"
