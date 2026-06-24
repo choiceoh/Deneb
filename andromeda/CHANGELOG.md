@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.0.19](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.18...andromeda-v0.0.19) (2026-06-24)
+
+
+### ✨ Features
+
+* **andromeda:** improve chat attachment rendering ([#2851](https://github.com/choiceoh/Deneb/issues/2851)) ([210c98c](https://github.com/choiceoh/Deneb/commit/210c98c940e20e2e65d7576b281d8a721105febb))
+* cache direct rpc panes ([fc91966](https://github.com/choiceoh/Deneb/commit/fc9196688c78858cd5fbd6ee30d44084168cbed7))
+
 ## [0.0.18](https://github.com/choiceoh/andromeda/compare/andromeda-v0.0.17...andromeda-v0.0.18) (2026-06-24)
 
 
