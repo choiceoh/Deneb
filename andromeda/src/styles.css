@@ -2216,6 +2216,256 @@ textarea {
   color: var(--muted-2);
 }
 
+/* 프로젝트 홈 — one selected project, with a compact side list and related work
+ * gathered from the existing mail/calendar/todo/workfeed/notebook data. */
+.project-home {
+  display: grid;
+  grid-template-columns: minmax(210px, 270px) minmax(0, 1fr);
+  gap: 16px;
+  height: calc(100% - 40px);
+  min-height: 0;
+  max-width: 1080px;
+  margin-top: 12px;
+}
+.project-home-list {
+  min-width: 0;
+  overflow: auto;
+  padding-right: 10px;
+  border-right: 1px solid var(--line);
+}
+.project-home-project {
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  padding: 9px 10px;
+  margin-bottom: 4px;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-ctl);
+  text-align: left;
+  font-family: inherit;
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
+}
+.project-home-project:hover,
+.project-home-project.active {
+  background: var(--panel-sunken);
+}
+.project-home-project.active .project-home-project-name {
+  color: var(--accent-deep);
+}
+.project-home-project-name {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.project-home-project-meta {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted-2);
+  font-size: 11.5px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.project-home-main {
+  min-width: 0;
+  overflow: auto;
+  padding-right: 2px;
+}
+.project-home-hero {
+  padding-bottom: 13px;
+  border-bottom: 1px solid var(--line);
+}
+.project-home-titleline {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.project-home-titleline h3 {
+  margin: 2px 0 0;
+  color: var(--ink);
+  font-size: 23px;
+  line-height: 1.22;
+  letter-spacing: 0;
+}
+.project-home-titleline .row-btn {
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+.project-home-headline {
+  max-width: 760px;
+  margin: 9px 0 0;
+  color: var(--ink-2);
+  font-size: 14px;
+  line-height: 1.55;
+}
+.project-home-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+.project-home-facts span,
+.project-home-focus-list span,
+.project-home-count,
+.project-home-badge {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  min-height: 20px;
+  padding: 2px 8px;
+  overflow: hidden;
+  color: var(--muted);
+  background: var(--panel-sunken);
+  border: 1px solid var(--line-2);
+  border-radius: 999px;
+  font-size: 11.5px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.project-home-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(210px, 0.7fr);
+  gap: 12px;
+  margin-top: 14px;
+}
+.project-home-status,
+.project-home-focus,
+.project-home-section {
+  min-width: 0;
+  padding: 12px 13px;
+  background: var(--panel-sunken);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-ctl);
+}
+.project-home-section-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 9px;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+.project-home-section-head svg {
+  color: var(--muted-2);
+}
+.project-home-count {
+  min-height: 18px;
+  padding: 1px 7px;
+  margin-left: auto;
+  background: var(--panel);
+}
+.project-home-status ul {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.project-home-status li {
+  position: relative;
+  padding-left: 13px;
+  color: var(--ink-2);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.project-home-status li::before {
+  position: absolute;
+  left: 0;
+  color: var(--accent);
+  content: "•";
+}
+.project-home-focus-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.project-home-focus-list span {
+  color: var(--accent-deep);
+  background: var(--accent-soft);
+  border-color: transparent;
+}
+.project-home-sections {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+.project-home-rows {
+  display: grid;
+  gap: 3px;
+}
+.project-home-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  padding: 7px 8px;
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  text-align: left;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+.project-home-row:hover {
+  background: rgba(255, 255, 255, 0.72);
+}
+.project-home-row-main {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.project-home-row-title,
+.project-home-row-meta,
+.project-home-row-body {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.project-home-row-title {
+  color: var(--ink-2);
+  font-size: 13px;
+  line-height: 1.4;
+}
+.project-home-row-meta {
+  color: var(--muted-2);
+  font-size: 11.5px;
+  line-height: 1.35;
+}
+.project-home-row-body {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.project-home-badge {
+  flex: 0 0 auto;
+  min-height: 18px;
+  padding: 1px 7px;
+  color: var(--accent-deep);
+  background: var(--accent-soft);
+  border-color: transparent;
+}
+.project-home-empty {
+  margin: 0;
+  color: var(--muted-2);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
 /* inline dashboard editor — show/hide + reorder the 오늘 sections */
 .today-editor {
   margin: 14px 0 4px;
@@ -3245,6 +3495,34 @@ textarea {
   font-size: 12px;
   font-style: italic;
   color: var(--muted-2);
+}
+
+@media (max-width: 860px) {
+  .project-home {
+    grid-template-columns: 1fr;
+    height: auto;
+  }
+  .project-home-list {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    padding: 0 0 9px;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .project-home-project {
+    flex: 0 0 min(260px, 80vw);
+    margin-bottom: 0;
+  }
+  .project-home-split {
+    grid-template-columns: 1fr;
+  }
+  .project-home-titleline {
+    align-items: flex-start;
+  }
+  .project-home-sections {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

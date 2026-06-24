@@ -5,6 +5,7 @@
 import type { ComponentType } from "react";
 import type { View } from "@/types";
 import { orderedItems } from "@/listReorder";
+import { ProjectHomePane } from "./ProjectHomePane";
 import { ProgressPane } from "./ProgressPane";
 import { TodoPane } from "./TodoPane";
 import { NotebookPane } from "./NotebookPane";
@@ -33,6 +34,7 @@ export const PANES: PaneDef[] = [
   // 우측 세션)를 그리므로, 여기 Component는 렌더되지 않는 placeholder다. 레일 버튼·⌘T 단축키만
   // 레지스트리에서 파생된다.
   { key: "chat", label: "채팅", shortcut: "t", Component: () => null },
+  { key: "projects", label: "프로젝트", shortcut: "j", Component: ProjectHomePane },
   // Digits 0–9 are taken; this dashboard-style overview gets a letter shortcut (⌘P).
   { key: "progress", label: "진행", shortcut: "p", Component: ProgressPane },
   { key: "todo", label: "할일", shortcut: "1", Component: TodoPane },
