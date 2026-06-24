@@ -332,6 +332,7 @@ export interface EventsState {
   events: ProactiveEvent[];
   status: string;
   dismiss: (id: string) => void;
+  clearAll: () => void;
 }
 
 // Subscribes to the proactive event stream while connected, keeping the most
@@ -351,7 +352,9 @@ export function useEvents(cfg: GatewayConfig, connected: boolean): EventsState {
       cfg,
       {
         onOpen: () => setStatus("수신 중"),
-        onEvent: (ev) => setEvents((prev) => [ev, ...prev].slice(0, 50)),
+        // The gateway's push payload is title+body only (no ts), so stamp the
+        // arrival time here — the panel renders it as a relative "N분 전".
+        onEvent: (ev) => setEvents((prev) => [{ ...ev, ts: ev.ts ?? Date.now() }, ...prev].slice(0, 50)),
         onError: (e) => setStatus(`오류: ${e}`),
       },
       controller.signal,
@@ -364,5 +367,6 @@ export function useEvents(cfg: GatewayConfig, connected: boolean): EventsState {
   }, [cfg.url, cfg.token, connected]);
 
   const dismiss = (id: string) => setEvents((prev) => prev.filter((e) => e.id !== id));
-  return { events, status, dismiss };
+  const clearAll = () => setEvents([]);
+  return { events, status, dismiss, clearAll };
 }

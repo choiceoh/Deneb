@@ -3386,8 +3386,76 @@ textarea {
     transform: none;
   }
 }
+.proactive-panel {
+  display: grid;
+  gap: 7px;
+  max-height: 200px;
+  overflow: auto;
+  margin-bottom: 13px;
+}
+.proactive-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.proactive-head-label {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--muted-2);
+}
+.proactive-clear {
+  background: none;
+  border: none;
+  padding: 2px 5px;
+  border-radius: 5px;
+  font-size: 11px;
+  color: var(--muted-2);
+  cursor: pointer;
+}
+.proactive-clear:hover {
+  color: var(--ink);
+  background: var(--panel-sunken);
+}
 .proactive-nudge {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  border-left: 2px solid var(--accent);
+  padding: 1px 0 1px 10px;
   animation: nudgeIn 0.3s var(--ease) both;
+}
+.proactive-nudge-main {
+  flex: 1;
+  min-width: 0;
+}
+.proactive-nudge-title {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-2);
+}
+.proactive-nudge-body {
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+.proactive-nudge-time {
+  margin-top: 2px;
+  font-size: 10px;
+  color: var(--muted-2);
+}
+.proactive-nudge-dismiss {
+  flex: none;
+  display: inline-flex;
+  padding: 2px;
+  border: none;
+  border-radius: 5px;
+  background: none;
+  color: var(--muted-2);
+  cursor: pointer;
+}
+.proactive-nudge-dismiss:hover {
+  color: var(--ink);
+  background: var(--panel-sunken);
 }
 
 /* the "생각 중…" indicator gently breathing while Deneb thinks */
