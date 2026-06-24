@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.0.16](https://github.com/choiceoh/andromeda/compare/andromeda-v0.0.15...andromeda-v0.0.16) (2026-06-24)
+
+
+### Features
+
+* improve capture and workfeed bridge actions ([#115](https://github.com/choiceoh/andromeda/issues/115)) ([d0c2a8a](https://github.com/choiceoh/andromeda/commit/d0c2a8af0474f4e7ec2edf661cc98d5cb4c82453))
+* 게이트웨이 계약 codegen — //deneb:wire → src/gen/miniappWire.ts ([#116](https://github.com/choiceoh/andromeda/issues/116)) ([434761f](https://github.com/choiceoh/andromeda/commit/434761fdcade4b1c1bb232da4e148ab895c1cf13))
+* 노트북 인용자료에 위키 페이지 소스 추가 (note + wiki) ([#110](https://github.com/choiceoh/andromeda/issues/110)) ([846bc4c](https://github.com/choiceoh/andromeda/commit/846bc4c6b3a4b0452e5499c2749e8f36a85400bc))
+* 채팅 탭 개선 — 컴포저 높이 버그·여러 대화·목록 갱신·자동 포커스 ([#109](https://github.com/choiceoh/andromeda/issues/109)) ([3854d23](https://github.com/choiceoh/andromeda/commit/3854d23b2c828cfc8d97bc1bfabd7162e3023c9e))
+* 채팅 탭 파일 첨부 — 이미지 OCR·음성 전사·문서 추출 (miniapp.capture.*) ([#111](https://github.com/choiceoh/andromeda/issues/111)) ([bc38531](https://github.com/choiceoh/andromeda/commit/bc38531b5a19c3f63ff0abf63ecebcdde04a7238))
+* 채팅 탭 폴리싱 — 스크롤-투-바텀·방향성 등장·인사말·포커스 글로우 ([#113](https://github.com/choiceoh/andromeda/issues/113)) ([10aab1d](https://github.com/choiceoh/andromeda/commit/10aab1d951ed96d315c6f0b512e3639fa4efd55f))
+* 채팅 탭 항상 마운트 — 탭 전환에도 대화 유지 ([#106](https://github.com/choiceoh/andromeda/issues/106)) ([7506025](https://github.com/choiceoh/andromeda/commit/7506025ae3db96a695ae49fb082d9619fc799534))
+
+
+### Bug Fixes
+
+* align implemented panes with gateway contracts ([#112](https://github.com/choiceoh/andromeda/issues/112)) ([24c0114](https://github.com/choiceoh/andromeda/commit/24c01146a702cf3a61f03849682baccb154ab06e))
+
 ## [0.0.15](https://github.com/choiceoh/andromeda/compare/andromeda-v0.0.14...andromeda-v0.0.15) (2026-06-23)
 
 
