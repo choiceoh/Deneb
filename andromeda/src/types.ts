@@ -106,6 +106,7 @@ export interface WorkItem {
   actions?: WorkAction[];
   createdAtMs?: number;
   ackedAtMs?: number;
+  readAtMs?: number; // set once the user opens (reads) the card; 0/undefined = unread
 }
 
 // One project's latest-progress digest (miniapp.project.digests, Deneb #2834):

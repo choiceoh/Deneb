@@ -1877,6 +1877,11 @@ textarea {
   font-weight: 600;
   line-height: 1.35;
 }
+/* read (opened) card: de-emphasized like a read email — normal weight, muted ink */
+.workfeed-row-title.workfeed-row-read {
+  color: var(--muted);
+  font-weight: 400;
+}
 .workfeed-row-preview {
   display: -webkit-box;
   margin-top: 4px;

@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react";
 import type { WorkItem } from "@/types";
 import { useCachedList } from "@/cachedList";
-import { chatStream } from "@/gateway";
+import { callRpc, chatStream } from "@/gateway";
 import { WORKFEED_RPC } from "@/resources";
 import { dayLabel, fmtDate, fmtTime, startOfDay } from "@/format";
 import { usePaneTarget } from "@/usePaneTarget";
@@ -76,6 +76,9 @@ export function WorkfeedPane() {
   const [selectedId, setSelectedId] = useState<string | number | undefined>();
   // The day currently in view (local midnight). Lands on today; prev/next step it.
   const [dayMs, setDayMs] = useState<number>(() => startOfDay());
+  // Optimistically-read ids so a row dims the instant it's opened, before the gateway
+  // round-trip lands readAtMs in the cached list on the next refresh.
+  const [readIds, setReadIds] = useState<ReadonlySet<string>>(() => new Set());
   const { run, error, busy } = useAction(() => void query.refetch(), {
     onResult: async (data) => {
       const turn = data as WorkfeedTurn;
@@ -133,8 +136,19 @@ export function WorkfeedPane() {
     goToDay(new Date(d.getFullYear(), d.getMonth(), d.getDate() + delta).getTime());
   }
 
+  const isRead = (w: WorkItem) => Boolean(w.readAtMs) || readIds.has(String(w.id));
+
+  function markRead(w: WorkItem) {
+    if (isRead(w)) return; // already read — no RPC, no re-dim
+    setReadIds((prev) => new Set(prev).add(String(w.id)));
+    // Durable read state lives in the gateway; fire-and-forget (dimming is optimistic).
+    void callRpc(cfg, WORKFEED_RPC.read, { itemId: w.id }).catch(() => {});
+  }
+
   function toggleSelected(w: WorkItem) {
-    setSelectedId((current) => (String(current) === String(w.id) ? undefined : w.id));
+    const opening = String(selectedId) !== String(w.id);
+    setSelectedId(opening ? w.id : undefined);
+    if (opening) markRead(w); // opening a card reads it
   }
 
   async function ackItem(w: WorkItem) {
@@ -153,7 +167,9 @@ export function WorkfeedPane() {
       header: "항목",
       cell: (w) => (
         <div className="workfeed-row-main">
-          <div className="workfeed-row-title">{w.title ?? "(항목)"}</div>
+          <div className={isRead(w) ? "workfeed-row-title workfeed-row-read" : "workfeed-row-title"}>
+            {w.title ?? "(항목)"}
+          </div>
           {w.body && <div className="workfeed-row-preview">{previewText(w.body)}</div>}
         </div>
       ),
