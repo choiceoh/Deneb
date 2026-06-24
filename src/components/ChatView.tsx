@@ -37,7 +37,7 @@ export function ChatView({ cfg, hidden = false }: { cfg: GatewayConfig; hidden?:
       newKey: () => `chat:${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
     },
   );
-  const { ref: transcriptRef, onScroll, pin } = useStickyScroll([turns, thinking]);
+  const { ref: transcriptRef, onScroll, pin, atBottom, scrollToBottom } = useStickyScroll([turns, thinking]);
 
   useEffect(() => {
     if (!connected) {
@@ -132,6 +132,9 @@ export function ChatView({ cfg, hidden = false }: { cfg: GatewayConfig; hidden?:
             <div className="chat-greeting">
               <DenebStar size={40} />
               <p>{connected ? "안녕하세요? 무슨 대화를 할까요?" : "게이트웨이 연결 대기 중"}</p>
+              {connected && (
+                <span className="chat-greeting-sub">무엇이든 편하게 물어보세요 · 파일을 첨부해도 좋아요</span>
+              )}
             </div>
           ) : (
             turns.map((turn) => (
@@ -156,6 +159,17 @@ export function ChatView({ cfg, hidden = false }: { cfg: GatewayConfig; hidden?:
           )}
         </div>
 
+        {!atBottom && turns.length > 0 && (
+          <button
+            type="button"
+            className="chat-scroll-bottom"
+            onClick={scrollToBottom}
+            aria-label="맨 아래로"
+            title="맨 아래로"
+          >
+            <Icon name="chevron-down" size={18} />
+          </button>
+        )}
         <form
           className="ai-composer"
           onSubmit={(e) => {

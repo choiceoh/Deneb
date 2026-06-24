@@ -437,6 +437,7 @@ textarea {
   gap: var(--gap);
 }
 .chat-main {
+  position: relative;
   flex: 1;
   min-width: 0;
   display: flex;
@@ -481,19 +482,84 @@ textarea {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 14px;
+  gap: 12px;
   color: var(--muted);
   text-align: center;
+  animation: fadeUp 0.4s var(--ease) both;
 }
 .chat-greeting p {
   font-size: 16px;
   color: var(--ink-2);
+}
+.chat-greeting-sub {
+  font-size: 13px;
+  color: var(--muted-2);
 }
 /* composer matches the centered message column */
 .chat-main .ai-composer {
   width: 100%;
   max-width: 760px;
   margin-inline: auto;
+}
+/* a soft accent ring when typing — the composer lifts to meet you */
+.chat-main .ai-composer:focus-within {
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+/* messages arrive from their side — user from the right, Deneb from the left */
+@keyframes chatInRight {
+  from {
+    opacity: 0;
+    transform: translateX(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes chatInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.chat-transcript .ai-turn.user {
+  animation: chatInRight 0.3s var(--ease) both;
+}
+.chat-transcript .ai-turn.assistant {
+  animation: chatInLeft 0.3s var(--ease) both;
+}
+
+/* scroll-to-bottom — floats above the composer once you've scrolled up to read */
+.chat-scroll-bottom {
+  position: absolute;
+  left: 50%;
+  bottom: 74px;
+  transform: translateX(-50%);
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid var(--line-2);
+  background: var(--panel);
+  color: var(--muted);
+  box-shadow: var(--shadow-pill);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 3;
+  animation: fadeUp 0.2s var(--ease) both;
+  transition:
+    color 0.15s var(--ease),
+    transform 0.15s var(--ease);
+}
+.chat-scroll-bottom:hover {
+  color: var(--ink-2);
+  transform: translateX(-50%) translateY(-1px);
 }
 
 /* Deneb "응답 중" sparkle — the StarIndicator port (see DenebStar.tsx). The burst
