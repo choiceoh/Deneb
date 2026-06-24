@@ -1,8 +1,8 @@
-// The expanded mail reader — native-quality detail. Beyond subject/body it shows
-// an action bar (읽음/보관/삭제), an AI-analysis card (cached on open, or analyze
-// on demand), a sender-context card (recent volume + curated wiki pages), and a
-// grounded Q&A box. The enrichment cards each own their fetch/loading/error state
-// and degrade silently on an older gateway that lacks the method.
+// The expanded mail reader — native-quality detail. The AI-analysis card leads
+// (above the body) so the synthesis comes first; then the body, attachments, a
+// collapsed-by-default sender-context card (recent volume + curated wiki pages),
+// and a grounded Q&A box. The enrichment cards each own their fetch/loading/error
+// state and degrade silently on an older gateway that lacks the method.
 import { useEffect, useState } from "react";
 import { type QATurn, analyzeMail, askMail, cachedMailAnalysis, mailAttachmentUrl, senderContext } from "@/gateway";
 import type { Mail, MailAttachment } from "@/types";
@@ -96,6 +96,10 @@ export function MailDetail({
         </button>
       </div>
 
+      {/* AI 분석 leads, above the body: the synthesis (왜 지금 중요한가) comes first,
+          the raw body follows for the full text. */}
+      <AnalysisCard mailId={id} />
+
       {body ? (
         // The gateway returns the body HTML-converted to Markdown — render it so
         // links are clickable and lists/quotes keep structure.
@@ -108,7 +112,6 @@ export function MailDetail({
 
       <AttachmentCard mailId={id} attachments={mail.attachments} count={mail.attachmentCount} />
       <SenderCard sender={senderRaw} />
-      <AnalysisCard mailId={id} />
       <AskBox mailId={id} />
     </section>
   );
@@ -170,36 +173,60 @@ function formatAttachmentMeta(att: MailAttachment): string {
 
 // Sender context: recent volume in the last N days + the operator's curated wiki
 // pages about this person/company. Renders nothing until something useful loads.
+// Collapsed by default behind a disclosure header — the sender dossier is reference,
+// not the main read, so it stays folded with a one-line teaser; tap to expand.
 function SenderCard({ sender }: { sender: string }) {
   const { cfg, connected, openWiki } = useWorkspace();
   const [data] = useAsyncOnOpen(() => senderContext(cfg, sender), [cfg, sender], {
     enabled: connected && !!sender.trim(),
   });
+  const [open, setOpen] = useState(false);
 
   const recent = data?.recent;
   const hits = data?.wikiHits ?? [];
   if (!recent && hits.length === 0 && !data?.wikiFacts) return null;
 
+  // Collapsed teaser: recent volume if known, else the count of cited wiki pages —
+  // enough signal to decide whether to expand without unfolding the whole card.
+  const teaser = recent
+    ? `최근 ${recent.windowDays}일 ${recent.count}${recent.truncated ? "+" : ""}건`
+    : hits.length > 0
+      ? `위키 ${hits.length}건`
+      : "";
+
   return (
     <div className="mail-card">
-      <div className="mail-card-title">발신자</div>
-      {recent && (
-        <div className="mail-card-line">
-          최근 {recent.windowDays}일 {recent.count}
-          {recent.truncated ? "+" : ""}건
-          {recent.lastReceivedAt ? ` · 마지막 ${fmtMailDate(recent.lastReceivedAt)}` : ""}
-        </div>
+      <button
+        className={"mail-card-disclosure" + (open ? " open" : "")}
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        title={open ? "발신자 접기" : "발신자 펼치기"}
+      >
+        <span className="mail-card-title">발신자</span>
+        {!open && teaser && <span className="mail-card-teaser">{teaser}</span>}
+        <span className="mail-card-caret">{open ? "▾" : "▸"}</span>
+      </button>
+      {open && (
+        <>
+          {recent && (
+            <div className="mail-card-line">
+              최근 {recent.windowDays}일 {recent.count}
+              {recent.truncated ? "+" : ""}건
+              {recent.lastReceivedAt ? ` · 마지막 ${fmtMailDate(recent.lastReceivedAt)}` : ""}
+            </div>
+          )}
+          {hits.length > 0 && (
+            <div className="mail-chips">
+              {hits.map((h) => (
+                <button key={h.path} className="mail-chip" onClick={() => openWiki(h.path)} title={h.summary || h.path}>
+                  {h.title || h.path}
+                </button>
+              ))}
+            </div>
+          )}
+          {data?.wikiFacts && <div className="mail-card-facts">{data.wikiFacts}</div>}
+        </>
       )}
-      {hits.length > 0 && (
-        <div className="mail-chips">
-          {hits.map((h) => (
-            <button key={h.path} className="mail-chip" onClick={() => openWiki(h.path)} title={h.summary || h.path}>
-              {h.title || h.path}
-            </button>
-          ))}
-        </div>
-      )}
-      {data?.wikiFacts && <div className="mail-card-facts">{data.wikiFacts}</div>}
     </div>
   );
 }
