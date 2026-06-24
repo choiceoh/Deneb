@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.0.20](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.19...andromeda-v0.0.20) (2026-06-24)
+
+
+### ✨ Features
+
+* **andromeda:** add project home pane ([#2858](https://github.com/choiceoh/Deneb/issues/2858)) ([5f8e64e](https://github.com/choiceoh/Deneb/commit/5f8e64ee69cefe8f0ab84f71753f1f0305b07f05))
+* **andromeda:** complete notebook source management ([c0f58b3](https://github.com/choiceoh/Deneb/commit/c0f58b31debb11ef2a5523655e79a28909843e39))
+* **andromeda:** improve fleet usability ([#2859](https://github.com/choiceoh/Deneb/issues/2859)) ([387991e](https://github.com/choiceoh/Deneb/commit/387991e18458d23729b6681b6f0c0b43e25aaad0))
+* **andromeda:** 메일 상세 — 발신자 카드 기본 접힘 + AI 분석 본문 위로 ([#2857](https://github.com/choiceoh/Deneb/issues/2857)) ([f045681](https://github.com/choiceoh/Deneb/commit/f04568132552cdd224f6441db9429edb65098d9c))
+* **andromeda:** 작업피드를 날짜별 그룹으로 표시 ([#2856](https://github.com/choiceoh/Deneb/issues/2856)) ([b6453a9](https://github.com/choiceoh/Deneb/commit/b6453a9a6578143088f54663157ace7ed4397b48))
+
 ## [0.0.19](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.18...andromeda-v0.0.19) (2026-06-24)
 
 
