@@ -213,3 +213,11 @@ export type View =
   | "crons"
   | "workfeed"
   | "settings";
+
+// Gateway wire types — generated from the gateway's //deneb:wire Go structs (the
+// single source of truth, shared with the native client's Kotlin models). The
+// gateway omits empty JSON fields, so every property is optional. Regenerate with
+// `pnpm gen:wire`; CI's wire-drift job fails if this falls behind the gateway.
+// Prefer these for new RPC-facing code; the hand-written domain rows above are
+// being progressively replaced by them.
+export type * from "./gen/miniappWire";

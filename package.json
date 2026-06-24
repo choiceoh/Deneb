@@ -9,6 +9,7 @@
     "dev": "vite",
     "dev:mock": "vite --mode mock",
     "build": "tsc && vite build",
+    "gen:wire": "node scripts/gen-wire.mjs",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",

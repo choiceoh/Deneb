@@ -26,11 +26,20 @@ pnpm typecheck     # tsc --noEmit
 pnpm lint          # eslint .
 pnpm format        # prettier --write .   (format:check to verify only)
 pnpm build         # tsc && vite build (web bundle → dist/)
+pnpm gen:wire      # regen src/gen/miniappWire.ts from the gateway's //deneb:wire structs (needs Go + sibling ../Deneb)
 pnpm tauri:dev     # run the desktop shell (needs Rust + system GUI libs)
 ```
 
 **Always run `pnpm verify` before pushing.** CI (`.github/workflows/ci.yml`) runs
 the same steps on every PR.
+
+**Wire types are generated, not hand-written.** `src/gen/miniappWire.ts` is produced
+from the gateway's `//deneb:wire` Go structs — the same single source the native
+client's Kotlin models come from (`gateway-go/cmd/ts-models-gen`, mirroring
+`kotlin-models-gen`) — and re-exported via `@/types`. Don't edit it; run `pnpm gen:wire`
+after the gateway contract changes. CI's `wire-drift` job regenerates from the Deneb
+source and fails if the committed file fell behind, so the desktop client can't
+silently drift from the gateway.
 
 ## Architecture & data flow
 

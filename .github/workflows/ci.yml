@@ -37,3 +37,25 @@ jobs:
 
       - name: Build
         run: pnpm run build
+
+  wire-drift:
+    # The generated wire types (src/gen/miniappWire.ts) must stay in sync with the
+    # gateway's //deneb:wire structs. Regenerate from the Deneb source and diff —
+    # fails if the gateway contract changed but the committed types weren't updated.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Checkout Deneb (gateway contract source)
+        uses: actions/checkout@v4
+        with:
+          repository: choiceoh/Deneb
+          path: .deneb-src
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: Verify wire types are up to date
+        run: DENEB_DIR="$GITHUB_WORKSPACE/.deneb-src" node scripts/gen-wire.mjs --check
