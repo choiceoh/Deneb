@@ -59,6 +59,16 @@ export function fmtDate(v?: string | number): string {
   });
 }
 
+// Time-only HH:MM (24h) for an ISO-ish string or epoch millis. Used where the day
+// is already shown as a section header (작업피드 날짜 그룹) so each row needs only
+// the time. Passes through anything unparseable, like fmtDate.
+export function fmtTime(v?: string | number): string {
+  if (v == null || v === "") return "";
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime())) return String(v);
+  return d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", hour12: false });
+}
+
 // Mail timestamps within the last 6 hours read relatively ("3시간 전" / "45분 전" /
 // "방금"); older or future ones fall back to the absolute fmtDate. `now` is injectable
 // for deterministic tests.
@@ -136,6 +146,19 @@ export function monthLabel(year: number, month0: number): string {
 // Canonical local day key ("YYYY-M-D", not zero-padded) for map lookups — never shown.
 export function dayKey(d: Date): string {
   return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+}
+
+// Day heading for date-grouped lists (작업피드): "오늘"/"어제" for the current and
+// previous local day, otherwise an absolute "월 일 (요일)". `now` is injectable so
+// the relative labels are testable. Empty string for an unparseable stamp.
+export function dayLabel(v: string | number, now = Date.now()): string {
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime())) return "";
+  const today = new Date(now);
+  if (dayKey(d) === dayKey(today)) return "오늘";
+  const yesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
+  if (dayKey(d) === dayKey(yesterday)) return "어제";
+  return d.toLocaleDateString(undefined, { month: "long", day: "numeric", weekday: "short" });
 }
 
 // A Date at local midnight from a calendar stamp. All-day YYYY-MM-DD is parsed

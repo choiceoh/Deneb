@@ -23,6 +23,7 @@ export function Grid<T>({
   isRowSelected,
   rowTitle,
   renderExpandedRow,
+  hideHeader,
 }: {
   columns: Column<T>[];
   rows: T[];
@@ -33,18 +34,30 @@ export function Grid<T>({
   isRowSelected?: (row: T) => boolean;
   rowTitle?: (row: T) => string;
   renderExpandedRow?: (row: T) => ReactNode;
+  // Omit the column header row — used when several grids stack under shared section
+  // headings (e.g. the 작업피드 date groups) and one header per group would be noise.
+  // A zero-width <colgroup> still pins the fixed column widths so stacked grids align.
+  hideHeader?: boolean;
 }) {
   return (
     <table className="dgrid" style={{ maxWidth }}>
-      <thead>
-        <tr>
+      {hideHeader ? (
+        <colgroup>
           {columns.map((c, i) => (
-            <th key={i} style={c.width ? { width: c.width } : undefined}>
-              {c.header}
-            </th>
+            <col key={i} style={c.width ? { width: c.width } : undefined} />
           ))}
-        </tr>
-      </thead>
+        </colgroup>
+      ) : (
+        <thead>
+          <tr>
+            {columns.map((c, i) => (
+              <th key={i} style={c.width ? { width: c.width } : undefined}>
+                {c.header}
+              </th>
+            ))}
+          </tr>
+        </thead>
+      )}
       <tbody>
         {rows.map((row) => {
           const interactive = Boolean(onRowClick);

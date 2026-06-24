@@ -3,11 +3,13 @@ import {
   calSpan,
   calStamp,
   dayKey,
+  dayLabel,
   errText,
   eventDayKeys,
   eventEndMs,
   fmtDate,
   fmtMailDate,
+  fmtTime,
   monthMatrix,
   senderName,
   text,
@@ -57,6 +59,40 @@ describe("fmtDate", () => {
   });
   it("passes through unparseable input", () => {
     expect(fmtDate("not a date")).toBe("not a date");
+  });
+});
+
+describe("fmtTime", () => {
+  it("is empty for undefined/empty", () => {
+    expect(fmtTime(undefined)).toBe("");
+    expect(fmtTime("")).toBe("");
+  });
+  it("passes through unparseable input", () => {
+    expect(fmtTime("not a date")).toBe("not a date");
+  });
+  it("renders a 24h HH:MM with no date part", () => {
+    // Local-time stamp so the output is timezone-independent.
+    const ms = new Date(2026, 5, 24, 9, 5).getTime();
+    expect(fmtTime(ms)).toBe("09:05");
+  });
+});
+
+describe("dayLabel", () => {
+  const now = new Date(2026, 5, 24, 15, 0).getTime(); // local 2026-06-24 15:00
+  it("labels the current local day 오늘", () => {
+    expect(dayLabel(new Date(2026, 5, 24, 8, 0).getTime(), now)).toBe("오늘");
+  });
+  it("labels the previous local day 어제", () => {
+    expect(dayLabel(new Date(2026, 5, 23, 23, 0).getTime(), now)).toBe("어제");
+  });
+  it("gives an absolute label (with the day number) for older days", () => {
+    const out = dayLabel(new Date(2026, 5, 20, 10, 0).getTime(), now);
+    expect(out).not.toBe("오늘");
+    expect(out).not.toBe("어제");
+    expect(out).toContain("20");
+  });
+  it("is empty for an unparseable stamp", () => {
+    expect(dayLabel("not a date", now)).toBe("");
   });
 });
 
