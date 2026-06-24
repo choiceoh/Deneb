@@ -1,0 +1,363 @@
+import { useEffect, useState } from "react";
+
+import type { CalEvent, Cron, Mail, Person, ProjectDigest, Todo, View, WorkItem } from "@/types";
+import { useCachedList } from "@/cachedList";
+import { calSpan, eventDayKeys, fmtDate, senderName } from "@/format";
+import { moveItem, orderedItems } from "@/listReorder";
+import { getJSON, setJSON } from "@/storage";
+import { Icon, type IconName } from "@/components/Icon";
+import { GridNotice } from "@/components/Grid";
+import { type PaneTarget, useRegisterPane, useWorkspace } from "@/workspaceContext";
+
+// "오늘" dashboard — the workstation's landing pane. It adds NO new gateway
+// plumbing: it fans out the existing list resources (calendar/mail/todo/workfeed)
+// through the data provider, shows the top items per section as compact briefings,
+// and serializes the whole briefing to the AI panel via useRegisterPane.
+// Prioritizing ("오늘 뭐부터?") is delegated to Deneb through that text projection.
+//
+// The dashboard is user-customizable: each section can be hidden and reordered
+// from the inline "편집" editor; the choice persists to localStorage (per device).
+
+const MAX = 6; // a briefing is a glance; the full list lives in each resource's own pane.
+
+// The catalog of sections the dashboard can show (== each brief's `view`). Users
+// pick WHICH appear (and in what order) from the inline editor; the original four
+// show by default, the rest are opt-in.
+const SECTIONS = ["calendar", "mail", "todo", "workfeed", "progress", "people", "crons"] as const;
+type SectionKey = (typeof SECTIONS)[number];
+const SECTION_LABEL: Record<SectionKey, string> = {
+  calendar: "일정",
+  mail: "메일",
+  todo: "할일",
+  workfeed: "작업피드",
+  progress: "진행",
+  people: "연락처",
+  crons: "크론",
+};
+const DEFAULT_VISIBLE: SectionKey[] = ["calendar", "mail", "todo", "workfeed"];
+const TODAY_ORDER_KEY = "andromeda.todayOrder";
+const TODAY_HIDDEN_KEY = "andromeda.todayHidden";
+
+function validKeys(raw: unknown): SectionKey[] {
+  return Array.isArray(raw) ? raw.filter((k): k is SectionKey => SECTIONS.includes(k as SectionKey)) : [];
+}
+// Saved order, with any new/missing sections appended in catalog order.
+function readOrder(): SectionKey[] {
+  return orderedItems(validKeys(getJSON<unknown[]>(TODAY_ORDER_KEY)), SECTIONS);
+}
+function readHidden(): SectionKey[] {
+  const savedOrder = validKeys(getJSON<unknown[]>(TODAY_ORDER_KEY));
+  const savedHidden = validKeys(getJSON<unknown[]>(TODAY_HIDDEN_KEY));
+  // Sections never configured before (absent from the saved order) that aren't in
+  // the default-visible four start hidden — opt-in additions to the dashboard.
+  const fresh = SECTIONS.filter((k) => !savedOrder.includes(k) && !DEFAULT_VISIBLE.includes(k));
+  return [...new Set([...savedHidden, ...fresh])];
+}
+
+interface Brief {
+  label: string;
+  icon: IconName;
+  view: View;
+  empty: string;
+  total: number; // relevant items before the cap — shown in the header and AI projection
+  lines: BriefLine[]; // up to MAX compact rows (what the AI reads === what's on screen)
+  query: { isLoading: boolean; isError?: boolean; error?: unknown };
+}
+
+// A briefing row carries its fields STRUCTURED (title + muted meta) so the human
+// view can show a clean two-tier row while the AI projection still gets one line.
+interface BriefLine {
+  title: string;
+  meta?: string; // secondary: time / sender / due — muted, on its own line
+  unread?: boolean;
+  accent?: boolean; // emphasize (e.g. an overdue todo)
+  target?: PaneTarget;
+}
+
+function lineText(l: BriefLine): string {
+  return `${l.unread ? "● " : ""}${l.title}${l.meta ? ` · ${l.meta}` : ""}`;
+}
+
+// One briefing section as text: counted header + capped lines + overflow note.
+function sectionText(b: Brief): string {
+  if (b.total === 0) return "";
+  const more = b.total > b.lines.length ? `\n- …외 ${b.total - b.lines.length}건` : "";
+  return `[${b.label} ${b.total}건]\n` + b.lines.map((l) => `- ${lineText(l)}`).join("\n") + more;
+}
+
+export function TodayPane() {
+  const { connected, openPane, setView } = useWorkspace();
+  const [order, setOrder] = useState<SectionKey[]>(readOrder);
+  const [hidden, setHidden] = useState<SectionKey[]>(readHidden);
+  const [editing, setEditing] = useState(false);
+
+  useEffect(() => {
+    setJSON(TODAY_ORDER_KEY, order);
+  }, [order]);
+  useEffect(() => {
+    setJSON(TODAY_HIDDEN_KEY, hidden);
+  }, [hidden]);
+
+  function toggleHidden(k: SectionKey) {
+    setHidden((p) => (p.includes(k) ? p.filter((x) => x !== k) : [...p, k]));
+  }
+  function move(k: SectionKey, dir: -1 | 1) {
+    setOrder((p) => moveItem(p, k, dir));
+  }
+
+  const cal = useCachedList<CalEvent>("calendar", connected);
+  const mail = useCachedList<Mail>("mail", connected);
+  const todo = useCachedList<Todo>("todo", connected);
+  const work = useCachedList<WorkItem>("workfeed", connected);
+  // Opt-in sections fetch only while shown — hidden ones stay idle.
+  const visible = (k: SectionKey) => !hidden.includes(k);
+  const prog = useCachedList<ProjectDigest>("progress", connected && visible("progress"));
+  const ppl = useCachedList<Person>("people", connected && visible("people"));
+  const cron = useCachedList<Cron>("crons", connected && visible("crons"));
+
+  const events = cal.result?.data ?? [];
+  // Recent mail, unread first — robust if `isUnread` is absent (order is just preserved).
+  const mails = [...(mail.result?.data ?? [])].sort(
+    (a, b) => Number(Boolean(b.isUnread)) - Number(Boolean(a.isUnread)),
+  );
+  // Open todos, soonest due first; missing/unparseable due dates sink to the bottom.
+  const due = (s?: string) => {
+    if (!s) return Infinity;
+    const t = new Date(s).getTime();
+    return Number.isNaN(t) ? Infinity : t;
+  };
+  const todos = (todo.result?.data ?? []).filter((t) => !t.done).sort((a, b) => due(a.due) - due(b.due));
+  const items = work.result?.data ?? [];
+  const digests = prog.result?.data ?? [];
+  const people = ppl.result?.data ?? [];
+  const crons = cron.result?.data ?? [];
+  const now = Date.now();
+
+  const briefs: Brief[] = [
+    {
+      label: "일정",
+      icon: "calendar",
+      view: "calendar",
+      empty: "다가오는 일정 없음",
+      query: cal.query,
+      total: events.length,
+      lines: events.slice(0, MAX).map((ev) => ({
+        title: ev.summary ?? ev.title ?? "(제목 없음)",
+        meta: calSpan(ev.start, ev.end) || undefined,
+        target: { view: "calendar", id: ev.id, dayKey: eventDayKeys(ev.start, ev.end)[0] },
+      })),
+    },
+    {
+      label: "메일",
+      icon: "mail",
+      view: "mail",
+      empty: "메일 없음",
+      query: mail.query,
+      total: mails.length,
+      lines: mails.slice(0, MAX).map((m) => ({
+        title: m.subject ?? "(제목 없음)",
+        meta: senderName(m.from) || undefined,
+        unread: Boolean(m.isUnread),
+        target: { view: "mail", id: m.id },
+      })),
+    },
+    {
+      label: "할일",
+      icon: "todo",
+      view: "todo",
+      empty: "할일 없음",
+      query: todo.query,
+      total: todos.length,
+      lines: todos.slice(0, MAX).map((t) => {
+        const ts = due(t.due);
+        return {
+          title: t.title,
+          meta: t.due ? `마감 ${fmtDate(t.due)}` : undefined,
+          accent: Number.isFinite(ts) && ts < now, // overdue
+          target: { view: "todo", id: t.id },
+        };
+      }),
+    },
+    {
+      label: "작업피드",
+      icon: "workfeed",
+      view: "workfeed",
+      empty: "작업피드 비어 있음",
+      query: work.query,
+      total: items.length,
+      lines: items.slice(0, MAX).map((w) => ({
+        title: w.title ?? "(항목)",
+        meta: w.source || undefined,
+        target: { view: "workfeed", id: w.id },
+      })),
+    },
+    {
+      label: "진행",
+      icon: "progress",
+      view: "progress",
+      empty: "진행 중인 프로젝트 없음",
+      query: prog.query,
+      total: digests.length,
+      lines: digests.slice(0, MAX).map((d) => ({
+        title: d.project,
+        meta: d.headline || (d.due ? `마감 ${d.due}` : undefined),
+      })),
+    },
+    {
+      label: "연락처",
+      icon: "people",
+      view: "people",
+      empty: "연락처 없음",
+      query: ppl.query,
+      total: people.length,
+      lines: people.slice(0, MAX).map((p) => ({
+        title: p.name || p.email,
+        meta: p.lastSubject || p.wikiSummary || undefined,
+      })),
+    },
+    {
+      label: "크론",
+      icon: "crons",
+      view: "crons",
+      empty: "예약 작업 없음",
+      query: cron.query,
+      total: crons.length,
+      lines: crons.slice(0, MAX).map((c) => ({
+        title: c.name || "(작업)",
+        meta: c.schedule || undefined,
+      })),
+    },
+  ];
+
+  // Apply the user's customization: order the sections and drop hidden ones.
+  const byKey: Record<string, Brief> = {};
+  for (const b of briefs) byKey[b.view] = b;
+  const shown = order
+    .filter((k) => !hidden.includes(k))
+    .map((k) => byKey[k])
+    .filter((b): b is Brief => Boolean(b));
+
+  // The full briefing the AI panel reads — exactly what's on screen (customized), as text.
+  const body = shown.map(sectionText).filter(Boolean).join("\n\n");
+  useRegisterPane(undefined, body ? `[오늘 브리핑]\n${body}` : "");
+
+  const today = new Date().toLocaleDateString(undefined, { month: "long", day: "numeric", weekday: "short" });
+
+  return (
+    <>
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <h2 style={{ marginTop: 2 }}>
+          오늘 <span className="today-date">{today}</span>
+        </h2>
+        {connected && (
+          <button
+            className={"row-btn" + (editing ? " active" : "")}
+            style={{ marginLeft: "auto" }}
+            onClick={() => setEditing((e) => !e)}
+            aria-pressed={editing}
+          >
+            {editing ? "완료" : "편집"}
+          </button>
+        )}
+      </div>
+
+      {connected && editing && (
+        <div className="today-editor">
+          <div className="today-editor-hint">표시할 섹션과 순서를 정하세요.</div>
+          {order.map((k, idx) => (
+            <div key={k} className="today-editor-row">
+              <label className="today-editor-label">
+                <input type="checkbox" checked={!hidden.includes(k)} onChange={() => toggleHidden(k)} />
+                {SECTION_LABEL[k]}
+              </label>
+              <button
+                className="row-btn"
+                onClick={() => move(k, -1)}
+                disabled={idx === 0}
+                title="위로"
+                aria-label={`${SECTION_LABEL[k]} 위로`}
+              >
+                ↑
+              </button>
+              <button
+                className="row-btn"
+                onClick={() => move(k, 1)}
+                disabled={idx === order.length - 1}
+                title="아래로"
+                aria-label={`${SECTION_LABEL[k]} 아래로`}
+              >
+                ↓
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {!connected ? (
+        <p style={{ color: "var(--muted-2)", fontSize: 13 }}>미연결</p>
+      ) : shown.length === 0 ? (
+        <p style={{ color: "var(--muted-2)", fontSize: 13, marginTop: 14 }}>
+          표시할 섹션이 없습니다 — 편집에서 켜세요.
+        </p>
+      ) : (
+        <div className="today-grid">
+          {shown.map((b, i) => (
+            <Section
+              key={b.view}
+              brief={b}
+              index={i}
+              onNav={() => setView(b.view)}
+              onOpenLine={(target) => openPane(target.view, target)}
+            />
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
+function Section({
+  brief,
+  index,
+  onNav,
+  onOpenLine,
+}: {
+  brief: Brief;
+  index: number;
+  onNav: () => void;
+  onOpenLine: (target: PaneTarget) => void;
+}) {
+  const { label, icon, total, lines, empty, query } = brief;
+  return (
+    <section className="today-card fade-up" style={{ animationDelay: `${index * 60}ms` }}>
+      <button className="today-head" onClick={onNav} aria-label={`${label} 열기`} title={`${label} 열기`}>
+        <Icon name={icon} size={15} className="ico" />
+        <span className="today-head-label">{label}</span>
+        {total > 0 && <span className="today-count">{total}</span>}
+        <span className="today-arrow">
+          <Icon name="arrow-right" size={14} />
+        </span>
+      </button>
+      <GridNotice query={query} count={lines.length} empty={empty}>
+        <div className="today-rows">
+          {lines.map((line, i) => (
+            <button
+              key={i}
+              type="button"
+              className={"today-row" + (line.accent ? " accent" : "")}
+              onClick={() => (line.target ? onOpenLine(line.target) : onNav())}
+              title={`${label}에서 열기`}
+            >
+              {line.unread && <span className="today-dot" aria-hidden="true" />}
+              <span className="today-row-main">
+                <span className="today-row-title">{line.title}</span>
+                {line.meta && <span className="today-row-meta">{line.meta}</span>}
+              </span>
+            </button>
+          ))}
+          {total > lines.length && <div className="today-more">…외 {total - lines.length}건</div>}
+        </div>
+      </GridNotice>
+    </section>
+  );
+}

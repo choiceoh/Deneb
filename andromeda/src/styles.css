@@ -1,0 +1,3028 @@
+/* Andromeda design layer — the "warm Zen" light theme.
+ *
+ * Single source of color/elevation/typography truth for things inline styles
+ * can't express (hover/focus/scrollbars/keyframes/translucency). theme.ts mirrors
+ * these tokens for inline use. Components reference tokens/classes — never raw hex.
+ *
+ * Aesthetic: floating rounded panels on a soft warm-cool gradient, a slim
+ * translucent nav rail whose active tab "lifts" like a Zen browser tab, one warm
+ * clay accent, restrained motion. */
+
+:root {
+  /* window background — soft warm glow over a cool neutral gradient.
+   * Deepened a touch so the white panels read as clearly floating above it. */
+  --grad:
+    radial-gradient(130% 90% at 12% 2%, #f4e3d6 0%, rgba(244, 227, 214, 0) 50%),
+    linear-gradient(157deg, #e3e5ee 0%, #dcdee8 52%, #e6e0df 100%);
+
+  /* surfaces */
+  --panel: #ffffff;
+  --panel-sunken: #f7f7f9;
+
+  /* ink / text tiers */
+  --ink: #1f2128;
+  --ink-2: #3e434c;
+  --muted: #6f747e;
+  --muted-2: #9a9ea7;
+  --faint: #bcbfc6;
+
+  /* lines */
+  --line: #ececef;
+  --line-2: #e2e3e6;
+
+  /* warm clay accent (the single point color) */
+  --accent: #c17a5b;
+  --accent-deep: #a85f43;
+  --accent-soft: rgba(193, 122, 91, 0.13);
+
+  /* semantic */
+  --online: #6b9b80;
+  --due: #a85038;
+  --due-soft: rgba(168, 80, 56, 0.12);
+
+  /* shape */
+  --radius-panel: 14px;
+  --radius-ctl: 9px;
+  --radius-pill: 8px;
+
+  /* elevation — layered "floating" shadows: a crisp contact layer, a mid lift,
+   * and a deep diffuse ambient layer that does most of the floating. */
+  --shadow-panel:
+    0 1px 2px rgba(33, 38, 66, 0.05), 0 10px 24px -10px rgba(33, 38, 66, 0.2), 0 30px 64px -22px rgba(33, 38, 66, 0.34);
+  --shadow-pill: 0 1px 2px rgba(40, 45, 70, 0.1), 0 8px 18px -5px rgba(40, 45, 70, 0.24);
+
+  /* layout */
+  --rail-w: 100px;
+  --ai-w: 352px;
+  --gap: 12px;
+  /* calendar columns — shared by .cal-layout (top) and .calendar-workspace
+   * (bottom) so the grid/agenda split and the panels below stay aligned. */
+  --cal-col-w: 360px;
+  --cal-gutter: 28px;
+
+  /* motion — the signature ease-out, shared by entrances and the Zen tab lift */
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+
+  --font: "Pretendard Variable", Pretendard, system-ui, "Segoe UI", "Malgun Gothic", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+/* Frameless window rounding: with app.transparent + macOSPrivateApi the window
+ * has no native chrome, so we round the gradient body and let the corners fall
+ * through to the transparent backing — macOS/Windows then show soft corners. */
+html {
+  background: transparent;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font);
+  font-size: 14px;
+  color: var(--ink);
+  background: var(--grad) fixed;
+  overflow: hidden;
+  border-radius: 12px;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  font-feature-settings:
+    "tnum" 1,
+    "cv11" 1;
+}
+
+h1,
+h2,
+h3 {
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+h2 {
+  font-size: 23px;
+  margin: 0;
+}
+h3 {
+  font-size: 15px;
+  margin: 0;
+}
+p {
+  margin: 0;
+}
+
+button,
+input,
+textarea {
+  font-family: inherit;
+}
+
+/* scrollbars — invisible at rest, a quiet warm-taupe thumb that fades in only
+ * while you're over the scrolling area, so they never clash with the warm-Zen
+ * surfaces. (The window itself never scrolls — body has overflow:hidden — only
+ * the panes do.) Warm neutral, not the clay accent: the accent stays singular. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+*:hover {
+  scrollbar-color: rgba(149, 137, 125, 0.5) transparent;
+}
+*::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+*:hover::-webkit-scrollbar-thumb {
+  background: rgba(149, 137, 125, 0.5);
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(118, 106, 95, 0.75);
+  background-clip: content-box;
+}
+
+::selection {
+  background: rgba(193, 122, 91, 0.18);
+}
+::placeholder {
+  color: var(--muted-2);
+}
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-radius: 5px;
+}
+
+/* floating panel */
+.panel {
+  background: var(--panel);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-panel);
+}
+
+/* frameless window — no titlebar band at all. The min/max/close cluster tucks
+ * into the very top of the nav rail; the rail itself is the drag handle (see
+ * data-tauri-drag-region in Sidebar), so the work + AI panels rise to the
+ * window's top edge and nothing reads as a title bar. */
+.win-ctls {
+  display: flex;
+  gap: 1px;
+  margin-bottom: 6px;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.win-ctl {
+  width: 28px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--muted-2);
+  border-radius: 6px;
+  cursor: default;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
+}
+.win-ctl:hover {
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--ink-2);
+}
+.win-ctl.close:hover {
+  background: var(--due-soft);
+  color: var(--due);
+}
+
+/* top-edge drag handle for the frameless window — a transparent strip in the
+ * window's top padding band, so the very top of the window is grabbable to move
+ * it. It sits in the gradient band above the panels; the top-left controls start
+ * below the band, so it overlaps nothing clickable. */
+.drag-strip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 22px;
+  z-index: 2;
+}
+
+/* nav rail item — the lifting Zen tab */
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 8px 9px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  text-align: left;
+  transition:
+    background 0.15s var(--ease),
+    color 0.15s var(--ease),
+    box-shadow 0.2s var(--ease);
+}
+.nav-item .ico {
+  flex: 0 0 auto;
+  display: inline-flex;
+  color: var(--muted-2);
+  transition: color 0.15s var(--ease);
+}
+.nav-item:hover {
+  background: rgba(255, 255, 255, 0.6);
+  color: var(--ink-2);
+}
+.nav-item:hover .ico {
+  color: var(--muted);
+}
+.nav-item.active {
+  background: var(--panel);
+  color: var(--ink);
+  box-shadow: var(--shadow-pill);
+}
+.nav-item.active .ico {
+  color: var(--accent);
+}
+
+/* form controls */
+.field {
+  background: var(--panel);
+  color: var(--ink);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-ctl);
+  padding: 8px 11px;
+  font-size: 13px;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.field:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.field:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* pane-level action feedback — error & status lines (mail/calendar/cron/workfeed/search/wiki) */
+.pane-error {
+  color: var(--due);
+  font-size: 12px;
+  margin: 0 0 8px;
+}
+.pane-status {
+  font-size: 12px;
+  color: var(--muted);
+}
+.ai-composer {
+  display: flex;
+  align-items: flex-end;
+  gap: 7px;
+  margin-top: 12px;
+  padding: 7px 7px 7px 12px;
+  background: var(--panel);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-ctl);
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.ai-composer:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.ai-compose {
+  flex: 1;
+  min-width: 0;
+  box-sizing: border-box;
+  border: none;
+  outline: none;
+  background: transparent;
+  resize: none;
+  overflow-y: auto;
+  max-height: 140px;
+  padding: 5px 0;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--ink);
+}
+.ai-compose::placeholder {
+  color: var(--muted-2);
+}
+.ai-send {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.ai-send:hover:not(:disabled) {
+  background: var(--accent-deep);
+}
+.ai-send:disabled {
+  background: var(--line-2);
+  color: var(--faint);
+  cursor: default;
+}
+.ai-send-stop {
+  background: var(--due);
+}
+.ai-send-stop:hover:not(:disabled) {
+  background: var(--due);
+}
+.ai-transcript {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 2px 1px;
+}
+.ai-empty {
+  color: var(--muted-2);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.ai-turn {
+  display: grid;
+  gap: 5px;
+  max-width: 94%;
+  animation: fadeUp 0.3s var(--ease) both;
+}
+.ai-turn.user {
+  align-self: flex-end;
+}
+.ai-turn.assistant {
+  align-self: flex-start;
+  width: 100%;
+  max-width: 100%;
+}
+.ai-turn-label {
+  font-size: 10px;
+  color: var(--muted-2);
+}
+.ai-turn.user .ai-turn-label {
+  text-align: right;
+}
+.ai-turn-body {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  border-radius: var(--radius-ctl);
+  padding: 9px 11px;
+  font-size: 13px;
+  line-height: 1.62;
+  color: var(--ink-2);
+  background: var(--panel-sunken);
+  border: 1px solid transparent;
+}
+.ai-turn.assistant .ai-turn-body {
+  white-space: normal;
+  overflow-wrap: break-word;
+  background: var(--panel);
+  border-color: var(--line);
+}
+.assistant-text {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 10px;
+  white-space: normal;
+}
+.ai-turn.user .ai-turn-body {
+  background: var(--accent-soft);
+  color: var(--ink);
+}
+.ai-turn.error .ai-turn-body {
+  color: var(--due);
+}
+.ai-turn.streaming .ai-turn-body {
+  color: var(--muted);
+}
+.ai-thinking {
+  color: var(--muted);
+  font-size: 12px;
+  font-style: italic;
+  line-height: 1.5;
+  animation: breathe 1.7s ease-in-out infinite;
+}
+.ai-turn-body.streaming {
+  color: var(--muted);
+}
+
+/* 채팅 탭 (비업무 전용 대화) — 좌측 "채팅" 탭 → 중앙 채팅 컬럼 + 우측 세션 목록. 측면
+ * 데네브 패널(업무·client:main)과 독립된 자체 대화(chat:*) surface. */
+.chat-view {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  gap: var(--gap);
+}
+.chat-main {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 16px 20px;
+}
+.chat-sessions {
+  width: 240px;
+  flex: 0 0 auto;
+  padding: 14px 12px;
+  overflow: auto;
+}
+/* the history fills the right column rather than the compact in-panel drawer */
+.chat-sessions .session-drawer {
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  max-height: none;
+}
+/* center the conversation in a readable column; user/assistant still hug right/left
+ * within it via the existing .ai-turn align-self. */
+.chat-transcript {
+  padding-inline: max(16px, calc((100% - 760px) / 2));
+}
+/* a touch larger conversational text + a rounder user bubble in the dedicated tab */
+.chat-transcript .ai-turn-body {
+  font-size: 14px;
+  line-height: 1.66;
+}
+.chat-transcript .ai-turn.assistant .ai-turn-body {
+  padding: 12px 14px;
+  border-radius: 14px;
+}
+.chat-transcript .ai-turn.user .ai-turn-label {
+  display: none;
+}
+.chat-transcript .ai-turn.user .ai-turn-body {
+  border-radius: 16px 16px 5px 16px;
+  padding: 9px 13px;
+}
+/* greeting empty state — the Deneb sparkle + a casual prompt, centered */
+.chat-greeting {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: var(--muted);
+  text-align: center;
+  animation: fadeUp 0.4s var(--ease) both;
+}
+.chat-greeting p {
+  font-size: 16px;
+  color: var(--ink-2);
+}
+.chat-greeting-sub {
+  font-size: 13px;
+  color: var(--muted-2);
+}
+/* composer matches the centered message column */
+.chat-main .ai-composer {
+  width: 100%;
+  max-width: 760px;
+  margin-inline: auto;
+}
+/* a soft accent ring when typing — the composer lifts to meet you */
+.chat-main .ai-composer:focus-within {
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+/* messages arrive from their side — user from the right, Deneb from the left */
+@keyframes chatInRight {
+  from {
+    opacity: 0;
+    transform: translateX(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes chatInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.chat-transcript .ai-turn.user {
+  animation: chatInRight 0.3s var(--ease) both;
+}
+.chat-transcript .ai-turn.assistant {
+  animation: chatInLeft 0.3s var(--ease) both;
+}
+
+/* scroll-to-bottom — floats above the composer once you've scrolled up to read */
+.chat-scroll-bottom {
+  position: absolute;
+  left: 50%;
+  bottom: 74px;
+  transform: translateX(-50%);
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid var(--line-2);
+  background: var(--panel);
+  color: var(--muted);
+  box-shadow: var(--shadow-pill);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 3;
+  animation: fadeUp 0.2s var(--ease) both;
+  transition:
+    color 0.15s var(--ease),
+    transform 0.15s var(--ease);
+}
+.chat-scroll-bottom:hover {
+  color: var(--ink-2);
+  transform: translateX(-50%) translateY(-1px);
+}
+
+/* Deneb "응답 중" sparkle — the StarIndicator port (see DenebStar.tsx). The burst
+ * (scale + opacity) and glow run on CSS keyframes, so prefers-reduced-motion calms
+ * them; the clay-derived fill keeps the single warm accent. */
+.deneb-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+}
+.deneb-status-text {
+  font-size: 13px;
+  color: var(--muted);
+  animation: fadeIn 0.3s var(--ease) both;
+}
+.deneb-status-summary {
+  font-size: 13px;
+  color: var(--muted-2);
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.deneb-star {
+  display: inline-flex;
+  line-height: 0;
+  flex: 0 0 auto;
+}
+.deneb-star svg {
+  overflow: visible;
+}
+.deneb-star-core,
+.deneb-star-glow {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.deneb-star-core {
+  animation: denebTwinkle 1.3s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+.deneb-star-glow {
+  animation: denebGlow 1.3s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+/* dim+small at rest → quick bright swollen pop → settle, mirroring the native
+ * keyframes (pop ~20%, settle ~58%, rest by ~85% of the 1.3s period). */
+@keyframes denebTwinkle {
+  0% {
+    opacity: 0.6;
+    transform: scale(0.85);
+  }
+  20% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+  58% {
+    opacity: 0.65;
+    transform: scale(0.88);
+  }
+  85%,
+  100% {
+    opacity: 0.6;
+    transform: scale(0.85);
+  }
+}
+@keyframes denebGlow {
+  0% {
+    opacity: 0.42;
+    transform: scale(0.8);
+  }
+  20% {
+    opacity: 0.82;
+    transform: scale(1.08);
+  }
+  58% {
+    opacity: 0.47;
+    transform: scale(0.83);
+  }
+  85%,
+  100% {
+    opacity: 0.42;
+    transform: scale(0.8);
+  }
+}
+
+/* AI panel header: label · model picker · history · status dot */
+.ai-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 12px;
+}
+.ai-head .micro {
+  flex: 0 0 auto;
+}
+.model-picker {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 8px;
+  font-size: 12px;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.model-picker:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.row-btn.active {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+/* regenerate / stop affordances */
+.ai-regen {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 2px;
+  font-size: 11px;
+}
+/* conversation history drawer */
+.session-drawer {
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-ctl);
+  background: var(--panel-sunken);
+  padding: 8px;
+  margin-bottom: 11px;
+  max-height: 232px;
+  overflow: auto;
+  animation: fadeUp 0.22s var(--ease) both;
+}
+.session-drawer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.session-drawer-head .row-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+}
+.session-drawer-status {
+  color: var(--muted-2);
+  font-size: 12px;
+  padding: 4px 2px;
+}
+.session-drawer-status.error {
+  color: var(--due);
+}
+.session-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.session-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: var(--radius-pill);
+}
+.session-row.active {
+  background: var(--accent-soft);
+}
+.session-row-main {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+  text-align: left;
+  border: none;
+  background: none;
+  cursor: pointer;
+  padding: 5px 7px;
+  border-radius: var(--radius-pill);
+}
+.session-row-main:hover {
+  background: rgba(255, 255, 255, 0.6);
+}
+.session-row.active .session-row-main:hover {
+  background: transparent;
+}
+.session-row-title {
+  font-size: 13px;
+  color: var(--ink-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.session-row-meta {
+  font-size: 11px;
+  color: var(--muted-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.session-row-del {
+  flex: 0 0 auto;
+}
+
+/* tool-call chip (inline in the assistant reply) */
+.tool-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  max-width: 100%;
+  padding: 3px 9px;
+  font-size: 11.5px;
+  color: var(--muted);
+  background: var(--panel);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-pill);
+  animation: chipIn 0.22s var(--ease) both;
+}
+.tool-chip-ico {
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+.tool-chip.done .tool-chip-ico {
+  color: var(--online);
+}
+.tool-chip.error {
+  color: var(--due);
+  border-color: var(--due-soft);
+}
+.tool-chip.error .tool-chip-ico {
+  color: var(--due);
+}
+.tool-chip-name {
+  font-weight: 500;
+  color: var(--ink-2);
+}
+.tool-chip-detail {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted-2);
+}
+.tool-spin {
+  width: 11px;
+  height: 11px;
+  display: inline-block;
+  border: 1.6px solid var(--line-2);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Markdown — shared by the AI reply, mail body, and wiki/doc preview. Type sizes
+ * are em-based so headings/code scale with each context's base font-size. */
+.md {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 0.72em;
+}
+/* read surface for wiki/doc preview: a bordered, scrollable rendered page */
+.md-surface {
+  padding: 14px 16px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--ink-2);
+  background: var(--panel);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-ctl);
+}
+.md-surface .md {
+  gap: 10px;
+}
+.md p {
+  margin: 0;
+  line-height: 1.68;
+}
+.md h3,
+.md h4,
+.md h5,
+.md h6 {
+  margin: 0.1em 0 0;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--ink);
+}
+.md h3 {
+  font-size: 1.22em;
+}
+.md h4 {
+  font-size: 1.08em;
+}
+.md h5,
+.md h6 {
+  font-size: 1em;
+  color: var(--ink-2);
+}
+.md ul,
+.md ol {
+  margin: 0;
+  padding-left: 1.45em;
+  display: flex;
+  flex-direction: column;
+  gap: 0.28em;
+}
+.md li {
+  line-height: 1.6;
+}
+.md li::marker {
+  color: var(--muted-2);
+}
+.md a {
+  color: var(--accent-deep);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.md a:hover {
+  color: var(--accent);
+}
+.md blockquote {
+  margin: 0;
+  padding: 8px 10px;
+  border-left: 3px solid var(--accent);
+  border-radius: 0 var(--radius-ctl) var(--radius-ctl) 0;
+  background: var(--panel-sunken);
+  color: var(--ink-2);
+}
+.md hr {
+  border: none;
+  border-top: 1px solid var(--line);
+  margin: 2px 0;
+}
+.md code.md-code {
+  padding: 1px 5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.88em;
+  color: var(--accent-deep);
+  background: var(--panel-sunken);
+  border: 1px solid var(--line-2);
+  border-radius: 5px;
+}
+.md-table {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-ctl);
+  border-spacing: 0;
+  font-size: 0.92em;
+}
+.md-table th,
+.md-table td {
+  padding: 7px 9px;
+  border: none;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  white-space: nowrap;
+}
+.md-table th:last-child,
+.md-table td:last-child {
+  border-right: none;
+}
+.md-table tbody tr:last-child td {
+  border-bottom: none;
+}
+.md-table th {
+  background: var(--panel-sunken);
+  font-weight: 600;
+  color: var(--ink);
+}
+.md-table tbody tr:nth-child(even) td {
+  background: var(--panel-sunken);
+}
+.md-codeblock {
+  overflow: hidden;
+  background: var(--panel);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-ctl);
+}
+.md-codebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 5px 4px 10px;
+  background: var(--panel-sunken);
+  border-bottom: 1px solid var(--line-2);
+}
+.md-codelang {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted-2);
+}
+.md-codeblock pre {
+  margin: 0;
+  padding: 11px 12px;
+  overflow-x: auto;
+}
+.md-codeblock code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.86em;
+  line-height: 1.58;
+  color: var(--ink);
+  white-space: pre;
+}
+.md-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 7px;
+  font-size: 11px;
+  color: var(--muted);
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition:
+    color 0.12s ease,
+    background 0.12s ease;
+}
+.md-copy:hover {
+  color: var(--ink);
+  background: rgba(0, 0, 0, 0.05);
+}
+
+/* GFM extras: strikethrough, images, task lists, nested-list spacing */
+.md del {
+  color: var(--muted);
+}
+.md img.md-img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 2px 0;
+  border-radius: var(--radius-ctl);
+}
+.md-tasklist {
+  list-style: none;
+  padding-left: 2px;
+}
+.md-task {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+}
+.md-task > input[type="checkbox"] {
+  margin: 2px 0 0;
+  flex: 0 0 auto;
+  accent-color: var(--accent);
+}
+.md-task > span {
+  min-width: 0;
+}
+.md ul ul,
+.md ul ol,
+.md ol ul,
+.md ol ol {
+  margin-top: 3px;
+}
+
+/* KaTeX math — inline sits with the text; a block display centers and scrolls
+ * if it overflows the narrow chat column. KaTeX's own CSS does the glyph layout. */
+.md-math-block {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 2px 0;
+}
+.md-math-block .katex-display {
+  margin: 0;
+}
+.md .katex {
+  font-size: 1.04em;
+}
+.btn {
+  border: 1px solid var(--line-2);
+  background: var(--panel);
+  color: var(--ink);
+  border-radius: var(--radius-ctl);
+  padding: 8px 13px;
+  font-size: 13px;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    transform 0.05s ease;
+}
+.btn:hover:not(:disabled) {
+  background: #f5f5f7;
+}
+.btn:active:not(:disabled) {
+  transform: scale(0.98);
+}
+.btn-accent {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.btn-accent:hover:not(:disabled) {
+  background: var(--accent-deep);
+  border-color: var(--accent-deep);
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* live status dot */
+.live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  display: inline-block;
+  flex: 0 0 auto;
+}
+.live-dot.pulse {
+  animation: pulse 2.4s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+/* dense data grid */
+.dgrid {
+  width: 100%;
+  border-collapse: collapse;
+}
+.dgrid thead th {
+  text-align: left;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--muted-2);
+  padding: 4px 10px 8px;
+  border-bottom: 1px solid var(--line);
+}
+.dgrid tbody td {
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.dgrid tbody tr {
+  transition: background 0.12s ease;
+}
+.dgrid tbody tr:hover {
+  background: #faf9f8;
+}
+.dgrid tbody tr.clickable {
+  cursor: pointer;
+}
+.dgrid tbody tr.selected,
+.dgrid tbody tr.selected:hover {
+  background: var(--accent-soft);
+}
+.dgrid tbody tr.dgrid-expanded-row,
+.dgrid tbody tr.dgrid-expanded-row:hover {
+  background: var(--panel-sunken);
+}
+.dgrid tbody tr.dgrid-expanded-row > td {
+  padding: 0 10px 14px;
+}
+
+/* compact row-action button (mail/cron/workfeed actions) */
+.row-btn {
+  background: none;
+  border: none;
+  padding: 3px 7px;
+  border-radius: 5px;
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
+}
+.row-btn:hover:not(:disabled) {
+  background: var(--panel-sunken);
+  color: var(--ink);
+}
+.row-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+/* small accent chip (workfeed action choices) */
+.chip {
+  background: var(--accent-soft);
+  border: none;
+  color: var(--accent-deep);
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: filter 0.12s ease;
+}
+.chip:hover:not(:disabled) {
+  filter: brightness(0.96);
+}
+.chip:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* workfeed selected item expansion */
+.workfeed-kind {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: var(--panel-sunken);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.workfeed-row-main {
+  min-width: 0;
+}
+.workfeed-row-title {
+  color: var(--ink);
+  font-weight: 600;
+  line-height: 1.35;
+}
+.workfeed-row-preview {
+  display: -webkit-box;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+  overflow: hidden;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.workfeed-row-time {
+  color: var(--muted);
+  font-size: 13px;
+  white-space: nowrap;
+}
+.workfeed-detail {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-top: 0;
+  border-radius: 0 0 8px 8px;
+  background: var(--panel);
+}
+.workfeed-detail-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+}
+.workfeed-detail-heading {
+  min-width: 0;
+}
+.workfeed-detail-title {
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+.workfeed-detail-meta {
+  margin-bottom: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.workfeed-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+.workfeed-detail-actions .btn {
+  padding: 5px 12px;
+  font-size: 12px;
+}
+.workfeed-detail-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 280px);
+  gap: 13px;
+  margin-top: 13px;
+  padding-top: 13px;
+  border-top: 1px solid var(--line);
+}
+.workfeed-detail-body {
+  min-width: 0;
+  max-height: min(56vh, 620px);
+  overflow: auto;
+  padding: 12px 13px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-ctl);
+  background: var(--panel);
+  color: var(--ink-2);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.workfeed-detail-body .md-table,
+.workfeed-detail-body .dui,
+.workfeed-detail-body .dui-code {
+  max-width: 100%;
+}
+.workfeed-detail-body .dui-chart {
+  min-width: min(420px, 100%);
+}
+.workfeed-empty-body {
+  margin: 0;
+  color: var(--muted);
+}
+.workfeed-tools {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 9px;
+}
+.workfeed-tool {
+  min-width: 0;
+  padding: 10px 11px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-ctl);
+  background: var(--panel-sunken);
+}
+.workfeed-tool-title {
+  margin-bottom: 7px;
+  color: var(--muted-2);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.workfeed-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.workfeed-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 6px;
+}
+.workfeed-form .field {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 8px;
+  font-size: 12px;
+  line-height: 1.45;
+  resize: vertical;
+}
+@media (max-width: 760px) {
+  .workfeed-detail-head,
+  .workfeed-detail-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .workfeed-detail-actions {
+    justify-content: flex-start;
+  }
+}
+
+/* 통합 검색 — Google-style: the box is centered until the first search, then
+ * rises to the top (only the vertical offset animates; it stays horizontally
+ * centered). Reduced-motion users get the snap via the global motion override. */
+.search-pane {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+.search-hero {
+  width: 100%;
+  max-width: 620px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 24vh;
+  transition: padding-top 0.42s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.search-pane.searched .search-hero {
+  padding-top: 2px;
+}
+.search-hero-title {
+  margin-bottom: 6px;
+  text-align: center;
+  font-size: 27px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+.search-box {
+  display: flex;
+  gap: 6px;
+}
+.search-box .field {
+  flex: 1;
+}
+.search-box .btn {
+  padding: 8px 14px;
+}
+.search-results {
+  width: 100%;
+  max-width: 760px;
+  margin: 18px auto 0;
+  display: grid;
+  gap: 8px;
+}
+
+/* clickable unified-search result (jumps to the wiki/diary/person page) */
+.search-hit {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 8px 8px 9px;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--ink);
+  transition: background 0.12s ease;
+}
+.search-hit:hover {
+  background: var(--panel-sunken);
+}
+
+/* mail reader inline expansion */
+.mail-detail {
+  min-width: 0;
+  padding: 12px 14px 14px;
+  border: 1px solid var(--line);
+  border-top: 0;
+  border-radius: 0 0 8px 8px;
+  background: var(--panel);
+}
+.mail-detail-empty,
+.mail-detail-status {
+  color: var(--muted-2);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.mail-detail-status {
+  margin-bottom: 9px;
+}
+.mail-detail-status.error {
+  color: var(--due);
+}
+.mail-detail-head {
+  display: grid;
+  gap: 7px;
+  padding-bottom: 13px;
+  border-bottom: 1px solid var(--line);
+}
+.mail-detail-subject {
+  color: var(--ink);
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+.mail-detail-meta {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.mail-labels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.mail-label {
+  color: var(--accent-deep);
+  background: var(--accent-soft);
+  border-radius: var(--radius-pill);
+  padding: 2px 7px;
+  font-size: 11px;
+}
+.mail-body {
+  margin: 13px 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--ink-2);
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+/* mail detail: action bar + enrichment cards (분석 · 발신자 · 질문) */
+.mail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 12px 0 4px;
+}
+.mail-actions .btn {
+  padding: 5px 12px;
+  font-size: 12px;
+}
+.mail-card {
+  margin-top: 13px;
+  padding: 11px 13px;
+  background: var(--panel-sunken);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-ctl);
+}
+.mail-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 7px;
+}
+.mail-card-title {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted-2);
+}
+/* standalone titles (발신자 · 질문) sit on their own line above the card body;
+ * the AI-분석 title lives inside .mail-card-head and stays inline with the badge */
+.mail-card > .mail-card-title {
+  margin-bottom: 7px;
+}
+.mail-card-head .row-btn {
+  margin-left: auto;
+  font-size: 11px;
+}
+.mail-card-line {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.mail-card-line.error {
+  color: var(--due);
+}
+.mail-attachments {
+  display: grid;
+  gap: 6px;
+}
+.mail-attachment {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  min-height: 30px;
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-ctl);
+  background: var(--panel);
+  color: var(--ink-2);
+  text-decoration: none;
+  font-size: 12px;
+}
+.mail-attachment:hover {
+  border-color: var(--line-2);
+}
+.mail-attachment span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mail-attachment span:last-child {
+  color: var(--muted);
+  font-size: 11px;
+}
+.mail-card-facts {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--ink-2);
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+.mail-badge {
+  padding: 1px 8px;
+  font-size: 11px;
+  border-radius: 999px;
+  color: var(--muted);
+  background: var(--panel);
+  border: 1px solid var(--line-2);
+}
+.mail-badge.hot {
+  color: var(--due);
+  background: var(--due-soft);
+  border-color: transparent;
+}
+.mail-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 8px;
+}
+.mail-chip {
+  padding: 3px 9px;
+  font-size: 12px;
+  color: var(--accent-deep);
+  background: var(--accent-soft);
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: filter 0.12s ease;
+}
+.mail-chip:hover {
+  filter: brightness(0.96);
+}
+.mail-qa {
+  margin-bottom: 9px;
+}
+.mail-qa-q {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink);
+  margin-bottom: 3px;
+}
+.mail-qa-a {
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.mail-ask {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+.mail-ask .field {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+}
+.mail-ask .btn {
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
+/* wiki browse rows */
+.wiki-shell {
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+  gap: 12px;
+  height: 100%;
+  min-height: 0;
+}
+.wiki-rail {
+  min-width: 0;
+  padding-right: 12px;
+  border-right: 1px solid var(--line);
+  overflow: auto;
+}
+.wiki-editor {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.wiki-editor-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, auto);
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+  min-width: 0;
+}
+.wiki-title-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.wiki-title-line h3 {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wiki-save-state {
+  flex: 0 0 auto;
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1;
+}
+.wiki-save-state.dirty {
+  border-color: transparent;
+  background: var(--accent-soft);
+  color: var(--accent-deep);
+}
+.wiki-mode-tabs {
+  display: inline-flex;
+  gap: 3px;
+  padding: 2px;
+  border-radius: var(--radius-ctl);
+  background: var(--panel-sunken);
+}
+.wiki-mode-tab {
+  border: none;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 5px 10px;
+  transition:
+    background 0.15s var(--ease),
+    color 0.15s var(--ease),
+    box-shadow 0.18s var(--ease);
+}
+.wiki-mode-tab:hover:not(:disabled):not(.active) {
+  color: var(--ink-2);
+}
+.wiki-mode-tab.active {
+  background: var(--panel);
+  color: var(--ink);
+  box-shadow: var(--shadow-pill);
+}
+.wiki-mode-tab:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+.wiki-editor-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+.wiki-editor-actions .btn {
+  padding: 5px 12px;
+  font-size: 12px;
+}
+.wiki-list-row,
+.wiki-category-row {
+  width: 100%;
+  text-align: left;
+  border: none;
+  border-radius: var(--radius-ctl);
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+.wiki-list-row {
+  display: grid;
+  gap: 3px;
+  padding: 7px 8px;
+  font-size: 13px;
+}
+.wiki-list-row:hover,
+.wiki-category-row:hover {
+  background: var(--panel-sunken);
+}
+.wiki-list-row span,
+.wiki-category-row span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wiki-list-row small {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wiki-category-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 7px 8px;
+  font-size: 13px;
+}
+.wiki-category-row small {
+  color: var(--muted-2);
+  font-size: 11px;
+}
+
+@media (max-width: 900px) {
+  .wiki-shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .wiki-rail {
+    max-height: 220px;
+    padding-right: 0;
+    padding-bottom: 10px;
+    border-right: none;
+    border-bottom: 1px solid var(--line);
+  }
+  .wiki-editor-head {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+  }
+  .wiki-mode-tabs,
+  .wiki-editor-actions {
+    justify-self: start;
+  }
+  .wiki-editor-actions {
+    justify-content: flex-start;
+  }
+}
+
+/* files browser */
+.files-toolbar,
+.files-search {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 10px;
+}
+.files-toolbar .field {
+  flex: 1 1 260px;
+  min-width: 160px;
+  font-size: 12px;
+}
+.files-toolbar .btn,
+.files-search .btn {
+  padding: 6px 11px;
+  font-size: 12px;
+}
+.files-search .field {
+  flex: 1 1 240px;
+  min-width: 160px;
+  font-size: 12px;
+}
+.files-search label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.files-share {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  width: min(980px, 100%);
+  box-sizing: border-box;
+  margin: 0 0 10px;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-ctl);
+  background: var(--panel-sunken);
+  font-size: 12px;
+}
+.files-share span,
+.files-share a {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.files-share span {
+  color: var(--muted);
+}
+
+/* today section header */
+.sec-head {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 7px;
+  margin-bottom: 8px;
+}
+
+/* 오늘 dashboard — 2-up tiles, each a sunken card with an icon header and
+ * two-tier rows (title + muted meta) so nothing important gets clipped. */
+.today-date {
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: 0;
+  color: var(--muted-2);
+}
+.today-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 14px;
+  max-width: 920px;
+  margin-top: 16px;
+}
+.today-card {
+  min-width: 0;
+  padding: 13px 15px 9px;
+  background: var(--panel-sunken);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-ctl);
+}
+.today-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 0 0 8px;
+  margin: 0 0 6px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink);
+  cursor: pointer;
+}
+.today-head .ico {
+  color: var(--muted-2);
+  transition: color 0.12s ease;
+}
+.today-head-label {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  transition: color 0.12s ease;
+}
+.today-head:hover .ico,
+.today-head:hover .today-head-label {
+  color: var(--accent-deep);
+}
+.today-count {
+  padding: 0 7px;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--muted-2);
+  background: var(--panel);
+  border: 1px solid var(--line-2);
+  border-radius: 999px;
+}
+.today-arrow {
+  margin-left: auto;
+  display: inline-flex;
+  color: var(--faint);
+  transition: color 0.12s ease;
+}
+.today-head:hover .today-arrow {
+  color: var(--accent);
+}
+.today-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.today-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 7px;
+  background: none;
+  border: 0;
+  border-radius: 6px;
+  text-align: left;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+.today-row:hover {
+  background: rgba(255, 255, 255, 0.7);
+}
+.today-dot {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.today-row-main {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+.today-row-title {
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--ink-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.today-row-meta {
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--muted-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.today-row.accent .today-row-meta {
+  color: var(--due);
+}
+.today-more {
+  padding: 5px 7px 2px;
+  font-size: 12px;
+  color: var(--muted-2);
+}
+
+/* inline dashboard editor — show/hide + reorder the 오늘 sections */
+.today-editor {
+  margin: 14px 0 4px;
+  padding: 10px 12px;
+  max-width: 360px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-ctl);
+  background: var(--panel-sunken);
+  display: grid;
+  gap: 2px;
+}
+.today-editor-hint {
+  font-size: 11px;
+  color: var(--muted-2);
+  margin-bottom: 4px;
+}
+.today-editor-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+  font-size: 13px;
+}
+.today-editor-label {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex: 1;
+  cursor: pointer;
+  color: var(--ink-2);
+}
+
+/* month calendar (일정 pane) — compact grid with event presence markers */
+.cal-nav-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--line-2);
+  background: var(--panel);
+  color: var(--muted);
+  border-radius: var(--radius-ctl);
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
+}
+.cal-nav-btn:hover {
+  background: #f5f5f7;
+  color: var(--ink);
+}
+/* two-column 일정 layout: compact calendar (left) + agenda (right) */
+.cal-layout {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--cal-gutter);
+  margin-top: 14px;
+  flex-wrap: wrap;
+}
+.cal-cal {
+  flex: 0 0 auto;
+  width: var(--cal-col-w);
+  max-width: 100%;
+}
+.cal-agenda-col {
+  flex: 1 1 280px;
+  min-width: 260px;
+}
+.cal-proposals {
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+.cal-proposals-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 7px;
+}
+.cal-proposals-head h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.cal-proposals-head span {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 11px;
+  line-height: 20px;
+  text-align: center;
+}
+.cal-proposal-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.cal-proposal {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+.cal-proposal-body {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.cal-proposal-title {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cal-proposal-meta {
+  overflow: hidden;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cal-proposal-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 5px;
+}
+.cal-proposal-status {
+  margin-top: 7px;
+}
+
+/* month grid — borderless and airy; today/selected highlights and the event dots
+ * carry the structure instead of a heavy ruled grid */
+.cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+.cal-dow {
+  padding: 4px 0 8px;
+  font-size: 11px;
+  font-weight: 500;
+  text-align: center;
+  color: var(--muted-2);
+  border-bottom: 1px solid var(--line);
+}
+.cal-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-height: 48px;
+  padding: 5px 2px 6px;
+  border-radius: var(--radius-ctl);
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    box-shadow 0.12s ease;
+}
+.cal-cell:hover {
+  background: var(--panel-sunken);
+}
+/* Out-of-month days are non-interactive context, not selectable targets. */
+.cal-cell.out {
+  cursor: default;
+}
+.cal-cell.out:hover {
+  background: transparent;
+}
+.cal-cell.cal-selected,
+.cal-cell.cal-selected:hover {
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+.cal-daynum {
+  width: 22px;
+  height: 22px;
+  line-height: 22px;
+  font-size: 12.5px;
+  text-align: center;
+  color: var(--ink-2);
+  border-radius: 999px;
+}
+.cal-cell.out .cal-daynum {
+  color: var(--faint);
+}
+.cal-today .cal-daynum {
+  font-weight: 600;
+  color: #fff;
+  background: var(--accent);
+}
+.cal-markers {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 3px;
+  min-height: 6px;
+}
+.cal-cell.out .cal-markers {
+  opacity: 0.45;
+}
+.cal-marker {
+  display: inline-block;
+  flex: 0 0 auto;
+  border-radius: 999px;
+}
+.cal-marker.dot {
+  width: 5px;
+  height: 5px;
+}
+.cal-marker.line {
+  width: 14px;
+  height: 4px;
+}
+.cal-marker.mine {
+  background: var(--accent);
+}
+.cal-marker.deadline {
+  background: var(--due);
+}
+.cal-marker.others {
+  background: var(--muted-2);
+}
+.cal-marker.overflow {
+  width: 8px;
+  height: 3px;
+  background: var(--line-2);
+}
+
+/* agenda list (right column) — compact event rows replacing the wide table */
+.cal-agenda {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.cal-agenda-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-ctl);
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+.cal-agenda-item:hover {
+  background: var(--panel-sunken);
+}
+.cal-agenda-item.selected {
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+.cal-agenda-dot {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  margin-top: 6px;
+  border-radius: 999px;
+}
+.cal-agenda-dot.mine {
+  background: var(--accent);
+}
+.cal-agenda-dot.deadline {
+  background: var(--due);
+}
+.cal-agenda-dot.others {
+  background: var(--muted-2);
+}
+.cal-agenda-body {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.cal-agenda-title {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cal-agenda-meta {
+  margin-top: 1px;
+  font-size: 12px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.calendar-workspace {
+  display: grid;
+  /* Mirror .cal-layout above (same column width + gutter, no cap) so the panels
+   * line up under the month grid (좌상단) and agenda (우상단) columns. */
+  grid-template-columns: var(--cal-col-w) minmax(260px, 1fr);
+  gap: var(--cal-gutter);
+  margin-top: 16px;
+}
+.calendar-workspace-panel {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  padding: 14px;
+}
+.calendar-workspace-panel.analysis {
+  background: var(--panel-sunken);
+}
+.calendar-workspace-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.calendar-workspace-head h3 {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.calendar-form-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+}
+.calendar-analysis-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.calendar-analysis-time {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.calendar-analysis-status {
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.calendar-analysis-answer {
+  margin-top: 12px;
+  color: var(--ink-2);
+  font-size: 13px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+.calendar-analysis-answer.streaming {
+  color: var(--ink);
+}
+.calendar-analysis-answer p,
+.calendar-analysis-answer ul,
+.calendar-analysis-answer ol {
+  margin-top: 0;
+  margin-bottom: 9px;
+}
+.calendar-analysis-answer :last-child {
+  margin-bottom: 0;
+}
+
+@media (max-width: 860px) {
+  .calendar-workspace {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* micro label (tracked uppercase, for latin labels like DENEB AI) */
+.micro {
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted-2);
+}
+
+/* one-time staggered entrance */
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.fade-up {
+  animation: fadeUp 0.45s var(--ease) both;
+}
+
+/* work-area pane switch — the incoming pane settles in with a small rise.
+ * height:100% so full-height panes (위키·파일) still resolve their percentage layout. */
+@keyframes paneIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.pane-enter {
+  height: 100%;
+  animation: paneIn 0.28s var(--ease) both;
+}
+
+/* a tool chip popping into a streaming reply */
+@keyframes chipIn {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* a proactive nudge sliding in from the panel edge */
+@keyframes nudgeIn {
+  from {
+    opacity: 0;
+    transform: translateX(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.proactive-nudge {
+  animation: nudgeIn 0.3s var(--ease) both;
+}
+
+/* the "생각 중…" indicator gently breathing while Deneb thinks */
+@keyframes breathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+/* floating overlay — detail views & edit forms (Modal.tsx) */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 64px 24px 24px;
+  background: rgba(31, 33, 40, 0.28);
+  backdrop-filter: blur(2px);
+  animation: fadeIn 0.15s ease both;
+}
+.modal-panel {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 96px);
+  animation: modalIn 0.18s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+.modal-panel > div {
+  /* the scrollable body region grows but never pushes header/footer off-screen */
+  min-height: 0;
+}
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes modalIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* 설정 — section tabs: a segmented control using the Zen lift metaphor
+   (sunken track, active tab rises with white bg + --shadow-pill). */
+.settings-tabs {
+  display: inline-flex;
+  gap: 4px;
+  margin: 16px 0 6px;
+  padding: 3px;
+  background: var(--panel-sunken);
+  border-radius: var(--radius-ctl);
+}
+.settings-tab {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  padding: 6px 16px;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition:
+    background 0.15s var(--ease),
+    color 0.15s var(--ease),
+    box-shadow 0.2s var(--ease);
+}
+.settings-tab:hover:not(.active) {
+  color: var(--ink-2);
+}
+.settings-tab.active {
+  background: var(--panel);
+  color: var(--ink);
+  box-shadow: var(--shadow-pill);
+}
+
+/* 설정 — sections within a tab. A divider only between consecutive sections,
+   so a tab's first (or only) section never carries a stray top rule. */
+.settings-section {
+  margin-top: 18px;
+}
+.settings-section:first-of-type {
+  margin-top: 10px;
+}
+.settings-section + .settings-section {
+  border-top: 1px solid var(--line);
+  padding-top: 16px;
+}
+
+/* 설정 — connection fields fill the work-area width as a responsive 2-up grid
+   (no fixed cap), so they spread into columns instead of a lone narrow stack. */
+.settings-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 0 18px;
+}
+
+/* 설정 — the active tab's panel: a quick, restrained fade-in on switch (snappier
+   than the 0.45s .fade-up entrance, which feels sluggish for a tab toggle). */
+.settings-panel {
+  animation: settingsIn 0.18s var(--ease) both;
+}
+@keyframes settingsIn {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* 설정 — a reorderable rail row (좌측 탭). The whole row lights up on hover so the
+   checkbox + ▲▼ read as one interactive unit. */
+.settings-rail-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  border-radius: var(--radius-pill);
+  font-size: 13px;
+  transition: background 0.12s var(--ease);
+}
+.settings-rail-row:hover {
+  background: var(--panel-sunken);
+}
+.settings-rail-row > label {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+  color: var(--ink-2);
+}
+
+/* 설정 — prompt templates. A narrow selectable rail plus a full editor keeps the
+   potentially long system text readable without turning settings into a modal. */
+.prompt-settings {
+  display: grid;
+  grid-template-columns: minmax(210px, 280px) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+.prompt-list {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding-right: 12px;
+  border-right: 1px solid var(--line);
+}
+.prompt-list-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.prompt-list-head .row-btn {
+  margin-left: auto;
+}
+.prompt-row {
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  padding: 8px 9px;
+  border: none;
+  border-radius: var(--radius-ctl);
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s var(--ease);
+}
+.prompt-row:hover:not(:disabled) {
+  background: var(--panel-sunken);
+}
+.prompt-row.active {
+  background: var(--active);
+}
+.prompt-row span,
+.prompt-row small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.prompt-row span {
+  font-size: 13px;
+  font-weight: 600;
+}
+.prompt-row small {
+  color: var(--muted-2);
+  font-size: 11px;
+}
+.prompt-editor {
+  min-width: 0;
+}
+.prompt-editor-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.prompt-editor-head h4 {
+  margin: 0;
+  font-size: 16px;
+}
+.prompt-meta,
+.prompt-description {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.prompt-description {
+  margin: 0 0 12px;
+  max-width: 760px;
+}
+.prompt-actions {
+  display: inline-flex;
+  gap: 6px;
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+.prompt-textarea {
+  min-height: 360px;
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+@media (max-width: 900px) {
+  .prompt-settings {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .prompt-list {
+    max-height: 220px;
+    overflow: auto;
+    padding-right: 0;
+    padding-bottom: 10px;
+    border-right: none;
+    border-bottom: 1px solid var(--line);
+  }
+  .prompt-editor-head {
+    display: grid;
+  }
+  .prompt-actions {
+    margin-left: 0;
+  }
+}
+
+/* single-choice pill (로그 레벨) — outlined at rest, accent when chosen. Distinct
+   from the segmented section tabs above, and (unlike the old inline version) it
+   now responds to hover. */
+.opt {
+  border: 1px solid var(--line-2);
+  background: var(--panel);
+  color: var(--ink-2);
+  font-size: 13px;
+  padding: 6px 12px;
+  border-radius: var(--radius-ctl);
+  cursor: pointer;
+  transition:
+    background 0.13s var(--ease),
+    border-color 0.13s var(--ease),
+    color 0.13s var(--ease);
+}
+.opt:hover:not(.active) {
+  background: var(--panel-sunken);
+  border-color: var(--muted-2);
+}
+.opt.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-deep);
+}
+
+/* deneb-ui — agent-drawn interactive UI inside a chat reply */
+.dui {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 10px;
+  line-height: 1.56;
+}
+.dui-col {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 9px;
+}
+.dui-row {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 9px;
+}
+.dui-card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 9px;
+  padding: 12px 13px;
+  background: var(--panel);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-ctl);
+}
+.dui-divider {
+  margin: 2px 0;
+  border: none;
+  border-top: 1px solid var(--line);
+}
+.dui-accordion-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.dui-accordion-caret {
+  color: var(--muted-2);
+}
+.dui-list {
+  margin: 0;
+  padding-left: 1.45em;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3em;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.dui-list li {
+  line-height: 1.58;
+}
+.dui-list li::marker {
+  color: var(--muted-2);
+}
+.dui-tabs {
+  display: flex;
+  gap: 5px;
+  border-bottom: 1px solid var(--line);
+}
+.dui-tab {
+  padding: 5px 10px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  border-radius: 7px 7px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.dui-tab.active {
+  color: var(--accent-deep);
+  background: var(--accent-soft);
+  border-bottom-color: var(--accent);
+}
+.dui-code {
+  margin: 0;
+  padding: 10px 12px;
+  overflow-x: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.56;
+  color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-ctl);
+}
+.dui-quote {
+  margin: 0;
+  padding: 8px 10px;
+  border-left: 3px solid var(--accent);
+  border-radius: 0 var(--radius-ctl) var(--radius-ctl) 0;
+  background: var(--panel-sunken);
+  color: var(--ink-2);
+  font-size: 13px;
+}
+.dui-quote-src {
+  margin-top: 3px;
+  font-size: 11px;
+  color: var(--muted-2);
+}
+.dui-badge {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 2px 8px;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--accent-deep);
+  background: var(--accent-soft);
+  border-radius: 999px;
+}
+.dui-stat {
+  display: flex;
+  min-width: 112px;
+  flex-direction: column;
+  gap: 2px;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-ctl);
+  background: var(--panel);
+}
+.dui-stat-value {
+  font-size: 21px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.dui-stat-label {
+  font-size: 11px;
+  color: var(--muted-2);
+}
+.dui-stat-desc {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.dui-image {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--radius-ctl);
+}
+.dui-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent-deep);
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+}
+.dui-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.dui-chart {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 7px;
+  padding: 3px 0;
+}
+.dui-bar-row {
+  display: grid;
+  grid-template-columns: minmax(64px, 88px) minmax(80px, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.dui-bar-label {
+  min-width: 0;
+  color: var(--ink-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dui-bar-track {
+  min-width: 0;
+  height: 10px;
+  background: var(--panel-sunken);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.dui-bar-fill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  border-radius: 999px;
+}
+.dui-bar-val {
+  color: var(--muted-2);
+  font-variant-numeric: tabular-nums;
+}
+.dui-alert {
+  padding: 10px 12px;
+  border-radius: var(--radius-ctl);
+  font-size: 12.5px;
+  line-height: 1.55;
+  border: 1px solid var(--line-2);
+  background: var(--panel);
+  color: var(--ink-2);
+}
+.dui-alert-title {
+  font-weight: 600;
+  margin-bottom: 3px;
+  color: var(--ink);
+}
+.dui-alert.success {
+  background: rgba(107, 155, 128, 0.12);
+  border-color: transparent;
+  color: #3f6b54;
+}
+.dui-alert.warning {
+  background: rgba(186, 130, 40, 0.13);
+  border-color: transparent;
+  color: #8a5a14;
+}
+.dui-alert.error {
+  background: var(--due-soft);
+  border-color: transparent;
+  color: var(--due);
+}
+.dui-progress {
+  display: block;
+  height: 10px;
+  background: var(--panel-sunken);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.dui-progress-fill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+.dui-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.dui-field .field {
+  width: 100%;
+  box-sizing: border-box;
+}
+.dui-label {
+  font-size: 12px;
+  color: var(--muted);
+}
+.dui-check {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.dui-check input {
+  accent-color: var(--accent);
+}
+.dui-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.chip.on {
+  background: var(--accent);
+  color: #fff;
+}
+.dui-pending {
+  padding: 8px 0;
+  font-size: 12px;
+  font-style: italic;
+  color: var(--muted-2);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
