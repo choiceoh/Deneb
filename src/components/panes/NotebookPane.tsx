@@ -68,11 +68,11 @@ export function NotebookPane() {
     void openNotebook(r.data.id); // open the fresh notebook so the user can pin sources
   }
 
-  async function addSource(title: string, text: string) {
+  async function addSource(src: NewSource) {
     if (!active) return;
     const r = await call(
       NOTEBOOK_RPC.addSource,
-      { id: active.id, kind: "note", title: title.trim(), text },
+      { id: active.id, kind: src.kind, title: src.title, text: src.text, ref: src.ref },
       "추가 중…",
     );
     if (!r.ok) return;
@@ -209,7 +209,7 @@ export function NotebookPane() {
         <AddSourceModal
           notebook={active.name}
           onClose={() => setAddingSource(false)}
-          onAdd={(title, text) => void addSource(title, text)}
+          onAdd={(src) => void addSource(src)}
         />
       )}
     </div>
@@ -217,6 +217,12 @@ export function NotebookPane() {
 }
 
 const NOTEBOOK_RESOURCE = "notebook";
+
+// A notebook source to pin: a pasted "note" (text) or a "wiki" page (ref = path).
+// Mirrors the gateway's notebook source kinds (KindNote / KindWiki).
+type NewSource = { kind: "note" | "wiki"; title: string; text?: string; ref?: string };
+
+const KIND_LABEL: Record<string, string> = { note: "노트", wiki: "위키" };
 
 interface NotebookListResponse {
   notebooks?: NotebookSummary[];
@@ -243,10 +249,12 @@ function SourceCard({ source }: { source: NotebookSource }) {
             {source.cite}
           </span>
         )}
-        <span style={{ fontWeight: 600, fontSize: 14, minWidth: 0 }}>{source.title ?? "(제목 없음)"}</span>
+        <span style={{ fontWeight: 600, fontSize: 14, minWidth: 0 }}>
+          {source.title || source.ref || "(제목 없음)"}
+        </span>
         {source.kind && (
           <span style={{ marginLeft: "auto", flex: "0 0 auto", fontSize: 11, color: "var(--muted-2)" }}>
-            {source.kind}
+            {KIND_LABEL[source.kind] ?? source.kind}
           </span>
         )}
       </div>
@@ -296,7 +304,8 @@ function CreateNotebookModal({
   );
 }
 
-// Pin a pasted note as a citation source via miniapp.notebook.add_source.
+// Pin a citation source via miniapp.notebook.add_source — a pasted note (text) or
+// a wiki page (ref = path); the kind picker switches the input below.
 function AddSourceModal({
   notebook,
   onClose,
@@ -304,31 +313,71 @@ function AddSourceModal({
 }: {
   notebook: string;
   onClose: () => void;
-  onAdd: (title: string, text: string) => void;
+  onAdd: (src: NewSource) => void;
 }) {
+  const [kind, setKind] = useState<"note" | "wiki">("note");
   const [title, setTitle] = useState("");
   const [text, setText] = useState("");
-  const add = () => text.trim() && onAdd(title, text);
+  const [ref, setRef] = useState("");
+  const canAdd = kind === "note" ? text.trim().length > 0 : ref.trim().length > 0;
+  const add = () => {
+    if (!canAdd) return;
+    onAdd(kind === "note" ? { kind, title: title.trim(), text } : { kind, title: title.trim(), ref: ref.trim() });
+  };
   return (
     <Modal
       title={`인용자료 추가 — ${notebook}`}
       onClose={onClose}
       width={560}
-      footer={<ModalFooter action="추가" canSubmit={Boolean(text.trim())} onClose={onClose} onSubmit={add} />}
+      footer={<ModalFooter action="추가" canSubmit={canAdd} onClose={onClose} onSubmit={add} />}
     >
+      <Field label="종류">
+        <div style={{ display: "flex", gap: 6 }}>
+          {(
+            [
+              ["note", "노트"],
+              ["wiki", "위키 페이지"],
+            ] as const
+          ).map(([k, label]) => (
+            <button
+              key={k}
+              type="button"
+              className={"btn" + (kind === k ? " btn-accent" : "")}
+              onClick={() => setKind(k)}
+              style={{ flex: 1 }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </Field>
       <Field label="제목 (선택)">
         <input className="field" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus />
       </Field>
-      <Field label="내용">
-        <textarea
-          className="field"
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          rows={8}
-          placeholder="메일 본문·견적·메모 등 인용할 텍스트를 붙여넣으세요."
-          style={{ resize: "vertical", fontFamily: "inherit", lineHeight: 1.5 }}
-        />
-      </Field>
+      {kind === "note" ? (
+        <Field label="내용">
+          <textarea
+            className="field"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            rows={8}
+            placeholder="메일 본문·견적·메모 등 인용할 텍스트를 붙여넣으세요."
+            style={{ resize: "vertical", fontFamily: "inherit", lineHeight: 1.5 }}
+          />
+        </Field>
+      ) : (
+        <Field label="위키 경로">
+          <input
+            className="field"
+            value={ref}
+            onChange={(e) => setRef(e.target.value)}
+            placeholder="예: 프로젝트/topsolar.md"
+            onKeyDown={(e) => {
+              if (e.key === "Enter") add();
+            }}
+          />
+        </Field>
+      )}
     </Modal>
   );
 }

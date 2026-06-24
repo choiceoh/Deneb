@@ -7,7 +7,7 @@ import { NotebookPane } from "./NotebookPane";
 // Stateful stand-in for the Deneb gateway notebook surface: create assigns an id,
 // add_source pins to an in-test list, and get reflects what's been added so the
 // write round-trip (create → add_source → get) shows up in the UI.
-let added: { cite: string; kind: string; title: string; text: string }[];
+let added: { cite: string; kind: string; title: string; text: string; ref: string }[];
 let createdName: string;
 
 beforeEach(() => {
@@ -35,9 +35,10 @@ beforeEach(() => {
         case "miniapp.notebook.add_source": {
           const s = {
             cite: `S${added.length + 1}`,
-            kind: "note",
+            kind: String(params.kind ?? "note"),
             title: String(params.title ?? ""),
             text: String(params.text ?? ""),
+            ref: String(params.ref ?? ""),
           };
           added.push(s);
           return reply(s);
@@ -85,5 +86,25 @@ describe("NotebookPane", () => {
     await userEvent.type(screen.getByLabelText("내용"), "잔금 6/25 마감.");
     await userEvent.click(screen.getByRole("button", { name: "추가" }));
     expect(await screen.findByText(/잔금 6\/25/)).toBeInTheDocument();
+  });
+
+  it("pins a wiki page as a source — expands the supported source kinds", async () => {
+    renderWithProviders(<NotebookPane />, { connected: true });
+
+    await userEvent.click(await screen.findByRole("button", { name: "새 노트북" }));
+    await userEvent.type(screen.getByLabelText("이름"), "위키 딜");
+    await userEvent.click(screen.getByRole("button", { name: "생성" }));
+    expect(await screen.findByRole("heading", { name: "위키 딜" })).toBeInTheDocument();
+
+    // + 인용자료 → switch the kind to 위키 → a path field replaces the note textarea.
+    await userEvent.click(screen.getByRole("button", { name: "인용자료 추가" }));
+    await userEvent.click(screen.getByRole("button", { name: "위키 페이지" }));
+    await userEvent.type(screen.getByLabelText("제목 (선택)"), "탑솔라");
+    await userEvent.type(screen.getByLabelText("위키 경로"), "프로젝트/topsolar.md");
+    await userEvent.click(screen.getByRole("button", { name: "추가" }));
+
+    // add_source carried kind=wiki + ref (a wiki page), not a pasted note.
+    expect(added.at(-1)).toMatchObject({ kind: "wiki", ref: "프로젝트/topsolar.md", title: "탑솔라" });
+    expect(await screen.findByText("탑솔라")).toBeInTheDocument();
   });
 });
