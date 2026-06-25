@@ -1,6 +1,9 @@
 package tools
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestCheckDestructiveCommand(t *testing.T) {
 	tests := []struct {
@@ -36,6 +39,74 @@ func TestCheckDestructiveCommand(t *testing.T) {
 				t.Errorf("unexpected warning: %v", checks[0].Description)
 			}
 		})
+	}
+}
+
+func TestCheckCatastrophicCommand(t *testing.T) {
+	tests := []struct {
+		command string
+		block   bool
+	}{
+		// Catastrophic — must block.
+		{"rm -rf /", true},
+		{"rm -rf /*", true},
+		{"rm -rf / ", true},
+		{"rm -rf --no-preserve-root /", true},
+		{"rm -rf ~", true},
+		{"rm -rf ~/", true},
+		{"rm -rf $HOME", true},
+		{"rm -rf ${HOME}", true},
+		{"rm -rf /etc", true},
+		{"rm -rf /usr/*", true},
+		{"rm -rf /home", true},
+		{"sudo rm -rf /", true},
+		{"chmod -R 777 /", true},
+		{"chmod -R 755 /etc", true},
+		{"chown -R user:user /usr", true},
+		{"dd if=/dev/zero of=/dev/sda", true},
+		{"mkfs.ext4 /dev/sdb1", true},
+		{"echo boom > /dev/sda", true},
+		{":(){ :|:& };:", true},
+
+		// Legitimate or recoverable — must NOT block (warn-only at most).
+		{"rm -rf ./build", false},
+		{"rm -fr /tmp/build", false},
+		{"rm -rf ~/project/node_modules", false},
+		{"rm -rf /etc/nginx", false}, // a subdir, not all of /etc
+		{"rm -rf /home/choiceoh/scratch", false},
+		{"rm file.txt", false},
+		{"chmod -R 777 ./mydir", false},
+		{"dd if=/dev/sda of=backup.img", false}, // reading a disk to a file is fine
+		{"dd if=disk.img of=out.img", false},
+		{"echo ok > /dev/null", false},
+		{"git reset --hard HEAD~1", false},
+		{"cat /etc/hostname", false},
+		{"ls /etc", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.command, func(t *testing.T) {
+			blocked := CheckCatastrophicCommand(tt.command)
+			if tt.block && len(blocked) == 0 {
+				t.Errorf("expected %q to be blocked", tt.command)
+			}
+			if !tt.block && len(blocked) > 0 {
+				t.Errorf("unexpected block of %q: %v", tt.command, blocked[0].Description)
+			}
+		})
+	}
+}
+
+func TestFormatCatastrophicRefusal(t *testing.T) {
+	if FormatCatastrophicRefusal(nil) != "" {
+		t.Error("expected empty string for no checks")
+	}
+	s := FormatCatastrophicRefusal(CheckCatastrophicCommand("rm -rf /"))
+	if s == "" {
+		t.Fatal("expected a non-empty refusal message")
+	}
+	if !strings.Contains(s, "실행 거부") {
+		t.Errorf("refusal message missing the Korean refusal marker: %q", s)
 	}
 }
 

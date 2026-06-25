@@ -47,6 +47,17 @@ var sensitiveReadTargets = regexp.MustCompile(
 		`)`,
 )
 
+// severityBlock marks a check whose match exec REFUSES to run (vs the warn-only
+// "warning"/"danger" levels, where the command still executes with the warning
+// prepended). Reserved for the small, high-precision catastrophicPatterns set.
+const severityBlock = "block"
+
+// rmForceRecursivePattern matches an `rm` carrying both the recursive and force
+// flags, in either order and combined or separate (-rf, -fr, -r -f, -f -r). It is
+// shared by the warn list (ANY rm -rf is worth a warning) and the catastrophic
+// block check (rm -rf whose TARGET is the root / home / a system directory).
+var rmForceRecursivePattern = regexp.MustCompile(`\brm\s+(-[a-zA-Z]*r[a-zA-Z]*f[a-zA-Z]*|(-[a-zA-Z]*f[a-zA-Z]*r[a-zA-Z]*)|-[a-zA-Z]*r\s+-[a-zA-Z]*f|-[a-zA-Z]*f\s+-[a-zA-Z]*r)\b`)
+
 // destructivePatterns detects commands that could cause data loss.
 var destructivePatterns = []DestructiveCheck{
 	{
@@ -55,7 +66,7 @@ var destructivePatterns = []DestructiveCheck{
 		Severity:    "warning",
 	},
 	{
-		Pattern:     regexp.MustCompile(`\brm\s+(-[a-zA-Z]*r[a-zA-Z]*f[a-zA-Z]*|(-[a-zA-Z]*f[a-zA-Z]*r[a-zA-Z]*)|-[a-zA-Z]*r\s+-[a-zA-Z]*f|-[a-zA-Z]*f\s+-[a-zA-Z]*r)\b`),
+		Pattern:     rmForceRecursivePattern,
 		Description: "recursive force delete (rm -rf)",
 		Severity:    "danger",
 	},
@@ -132,6 +143,97 @@ func FormatDestructiveWarnings(checks []DestructiveCheck) string {
 		sb.WriteString(c.Severity)
 		sb.WriteString("]\n")
 	}
+	return sb.String()
+}
+
+// catastrophicRootTarget matches an argument that names the filesystem root, the
+// home directory itself, or a whole top-level system directory — the targets that
+// turn a recursive delete / chmod / chown into an unrecoverable system wipe. It
+// is deliberately narrow: deeper paths (rm -rf /tmp/x, ./build, ~/project/x,
+// /etc/nginx) do NOT match and stay warn-only, so legitimate cleanup is never
+// blocked. Only "/", "/*", "~", "$HOME", and a bare system dir (or "<dir>/*")
+// trip it.
+var catastrophicRootTarget = regexp.MustCompile(
+	`(?i)(?:` +
+		`--no-preserve-root\b|` + // explicit "yes, wipe root" opt-in
+		`(?:^|\s)/\*?(?:\s|$)|` + // "/" or "/*" as a whole target (root)
+		`(?:^|\s)(?:~|\$\{?home\}?)(?:/)?(?:\s|$|\*)|` + // ~ or $HOME (home root, not ~/sub)
+		`(?:^|\s)/(?:etc|usr|bin|sbin|lib|lib64|var|boot|sys|proc|dev|root|home)(?:/\*)?(?:\s|$)` + // /etc, /etc/* …
+		`)`,
+)
+
+// chmodChownRecursivePattern matches a recursive chmod/chown (-R or --recursive).
+var chmodChownRecursivePattern = regexp.MustCompile(`\b(?:chmod|chown)\s+(?:-[a-zA-Z]*R[a-zA-Z]*|--recursive)\b`)
+
+// diskDestroyPattern matches an overwrite/format of a raw block device: a
+// redirect onto /dev/sdX, `dd of=/dev/sdX`, or `mkfs … /dev/sdX`. These wipe an
+// entire disk and have no plausible automated use.
+var diskDestroyPattern = regexp.MustCompile(
+	`(?i)(?:` +
+		`>\s*/dev/(?:sd[a-z]|hd[a-z]|vd[a-z]|nvme\d+n\d+)|` +
+		`\bdd\b[^|;&]*\bof=/dev/(?:sd[a-z]|hd[a-z]|vd[a-z]|nvme\d+n\d+)|` +
+		`\bmkfs(?:\.[a-z0-9]+)?\b[^|;&]*/dev/(?:sd[a-z]|hd[a-z]|vd[a-z]|nvme\d+n\d+)` +
+		`)`,
+)
+
+// forkBombPattern matches the classic `:(){ :|:& };:` shell fork bomb (with
+// flexible whitespace). The shape is unique enough that a match is never a false
+// positive.
+var forkBombPattern = regexp.MustCompile(`:\s*\(\s*\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:`)
+
+// CheckCatastrophicCommand returns block-severity matches for commands that are
+// unrecoverable AND have no plausible legitimate use in an automated agent
+// context: wiping the filesystem root / home / a whole system directory,
+// overwriting a raw block device, formatting a disk, or a fork bomb. exec refuses
+// to run any command that matches (see exec.go). This is the BLOCK tier above the
+// warn-only destructivePatterns — kept small and high-precision so legitimate
+// operations (rm -rf ./build, git reset --hard, dd of=backup.img) are never
+// blocked. Returns nil if the command is not catastrophic.
+func CheckCatastrophicCommand(command string) []DestructiveCheck {
+	var matches []DestructiveCheck
+	if rmForceRecursivePattern.MatchString(command) && catastrophicRootTarget.MatchString(command) {
+		matches = append(matches, DestructiveCheck{
+			Description: "재귀 강제 삭제(rm -rf)가 루트(/)·홈(~/$HOME)·시스템 디렉터리를 대상으로 함 — 복구 불가",
+			Severity:    severityBlock,
+		})
+	}
+	if chmodChownRecursivePattern.MatchString(command) && catastrophicRootTarget.MatchString(command) {
+		matches = append(matches, DestructiveCheck{
+			Description: "재귀 chmod/chown이 루트·시스템 디렉터리를 대상으로 함 — 시스템 권한 파괴",
+			Severity:    severityBlock,
+		})
+	}
+	if diskDestroyPattern.MatchString(command) {
+		matches = append(matches, DestructiveCheck{
+			Description: "원시 블록 디바이스(/dev/sd*, nvme*) 덮어쓰기 또는 디스크 포맷(dd/mkfs) — 디스크 전체 파괴",
+			Severity:    severityBlock,
+		})
+	}
+	if forkBombPattern.MatchString(command) {
+		matches = append(matches, DestructiveCheck{
+			Description: "fork bomb — 시스템 자원 고갈로 호스트 마비",
+			Severity:    severityBlock,
+		})
+	}
+	return matches
+}
+
+// FormatCatastrophicRefusal renders the message exec returns IN PLACE OF running
+// a blocked command — a clear Korean refusal naming each reason, so the model
+// adjusts (narrow the target) rather than retries blindly. The operator can still
+// run the command directly on the host.
+func FormatCatastrophicRefusal(checks []DestructiveCheck) string {
+	if len(checks) == 0 {
+		return ""
+	}
+	var sb strings.Builder
+	sb.WriteString("⛔ 실행 거부 — 복구 불가능한 시스템 파괴 위험으로 이 명령을 실행하지 않았습니다:\n")
+	for _, c := range checks {
+		sb.WriteString("  - ")
+		sb.WriteString(c.Description)
+		sb.WriteString("\n")
+	}
+	sb.WriteString("정말 필요하면 운영자가 호스트에서 직접 실행하세요. 의도와 다르면 대상 경로를 좁혀(루트·시스템 경로 대신 구체 경로) 다시 시도하세요.")
 	return sb.String()
 }
 

@@ -70,6 +70,17 @@ func ToolExec(procMgr *process.Manager, defaultDir string) ToolFunc {
 			return "", fmt.Errorf("command is required")
 		}
 
+		// Hard block: catastrophic, unrecoverable commands (root/home/system wipe,
+		// raw block-device overwrite, disk format, fork bomb) are REFUSED outright
+		// rather than run with a warning. Unlike the warn list below — which
+		// includes legitimate-in-context operations like `rm -rf ./build` or
+		// `git reset --hard` — these have no plausible automated use; the operator
+		// can still run them directly on the host. Checked before workdir/exec so it
+		// covers both the process-manager and fallback execution paths.
+		if blocked := CheckCatastrophicCommand(p.Command); len(blocked) > 0 {
+			return FormatCatastrophicRefusal(blocked), nil
+		}
+
 		// Safety check: warn about destructive commands.
 		// The warning is prepended to the output so the LLM sees it.
 		var destructiveWarning string
