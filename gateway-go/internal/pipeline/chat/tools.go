@@ -111,6 +111,18 @@ func (r *ToolRegistry) Execute(ctx context.Context, name string, input json.RawM
 		}
 	}
 
+	// Repair common malformed-JSON argument patterns from open-weight models
+	// (markdown fences, Python literals, trailing commas) before any input
+	// parsing. Only invalid JSON is touched, and only when the repair makes it
+	// valid; otherwise the original bytes fall through to the tool's own
+	// fail-fast parse error (the loop detector remains the backstop). The Warn
+	// is the measurement signal for how often the main model emits malformed
+	// calls — no argument content is logged (it may be sensitive).
+	if repaired, didRepair := repairToolArguments(input); didRepair {
+		slog.Warn("repaired malformed tool-call arguments", "tool", name, "bytes", len(input))
+		input = repaired
+	}
+
 	// Check for compress flag before executing (avoids re-parsing in every tool).
 	wantCompress := extractCompressFlag(input)
 
