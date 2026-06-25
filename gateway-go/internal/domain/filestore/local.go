@@ -46,6 +46,9 @@ func NewLocalStore(dir string) (*LocalStore, error) {
 	if err := os.MkdirAll(abs, 0o755); err != nil {
 		return nil, fmt.Errorf("filestore: mkdir root: %w", err)
 	}
+	if real, err := filepath.EvalSymlinks(abs); err == nil {
+		abs = real
+	}
 	return &LocalStore{root: abs}, nil
 }
 
@@ -93,10 +96,30 @@ func vpath(p string) string {
 func (s *LocalStore) resolve(virt string) (abs, clean string, err error) {
 	clean = vpath(virt)
 	abs = filepath.Join(s.root, filepath.FromSlash(clean))
-	if abs != s.root && !strings.HasPrefix(abs, s.root+string(filepath.Separator)) {
+	if !s.withinRoot(abs) {
 		return "", "", ErrPathEscape
 	}
 	return abs, clean, nil
+}
+
+func (s *LocalStore) withinRoot(abs string) bool {
+	abs = filepath.Clean(abs)
+	return abs == s.root || strings.HasPrefix(abs, s.root+string(filepath.Separator))
+}
+
+func (s *LocalStore) resolveRealPath(virt string) (real, clean string, err error) {
+	abs, clean, err := s.resolve(virt)
+	if err != nil {
+		return "", "", err
+	}
+	real, err = filepath.EvalSymlinks(abs)
+	if err != nil {
+		return "", "", err
+	}
+	if !s.withinRoot(real) {
+		return "", "", ErrPathEscape
+	}
+	return real, clean, nil
 }
 
 // entryFor builds an Entry from a normalized virtual path and FileInfo.
@@ -314,18 +337,18 @@ func (s *LocalStore) Get(ctx context.Context, p string) ([]byte, *Entry, error) 
 	if cerr := ctx.Err(); cerr != nil {
 		return nil, nil, cerr
 	}
-	abs, clean, err := s.resolve(p)
+	real, clean, err := s.resolveRealPath(p)
 	if err != nil {
 		return nil, nil, err
 	}
-	fi, err := os.Stat(abs)
+	fi, err := os.Stat(real)
 	if err != nil {
 		return nil, nil, err
 	}
 	if fi.IsDir() {
 		return nil, nil, fmt.Errorf("filestore: is a directory: %s", clean)
 	}
-	data, err := os.ReadFile(abs) //nolint:gosec // G304 — abs is clamped inside root by resolve()
+	data, err := os.ReadFile(real) //nolint:gosec // G304 — real is resolved then re-checked under root
 	if err != nil {
 		return nil, nil, err
 	}
@@ -339,11 +362,11 @@ func (s *LocalStore) Open(ctx context.Context, p string) (io.ReadSeekCloser, *En
 	if cerr := ctx.Err(); cerr != nil {
 		return nil, nil, cerr
 	}
-	abs, clean, err := s.resolve(p)
+	real, clean, err := s.resolveRealPath(p)
 	if err != nil {
 		return nil, nil, err
 	}
-	f, err := os.Open(abs) //nolint:gosec // G304 — abs is clamped inside root by resolve()
+	f, err := os.Open(real) //nolint:gosec // G304 — real is resolved then re-checked under root
 	if err != nil {
 		return nil, nil, err
 	}
@@ -366,7 +389,7 @@ func (s *LocalStore) Open(ctx context.Context, p string) (io.ReadSeekCloser, *En
 // LocalStore-only escape hatch (absolute paths are a local-FS concept), kept off
 // the Store interface.
 func (s *LocalStore) AbsPath(virt string) (string, error) {
-	abs, _, err := s.resolve(virt)
+	abs, _, err := s.resolveRealPath(virt)
 	if err != nil {
 		return "", err
 	}
@@ -407,7 +430,7 @@ func (s *LocalStore) Stat(ctx context.Context, p string) (*Entry, error) {
 	if cerr := ctx.Err(); cerr != nil {
 		return nil, cerr
 	}
-	abs, clean, err := s.resolve(p)
+	abs, clean, err := s.resolveRealPath(p)
 	if err != nil {
 		return nil, err
 	}

@@ -58,7 +58,7 @@ func latestPublishedApk(dir string) (appUpdateManifest, bool) {
 	}
 	best := appUpdateManifest{Code: -1}
 	for _, e := range entries {
-		if e.IsDir() {
+		if e.IsDir() || e.Type()&os.ModeSymlink != 0 {
 			continue
 		}
 		groups := apkFilePattern.FindStringSubmatch(e.Name())
@@ -78,6 +78,27 @@ func latestPublishedApk(dir string) (appUpdateManifest, bool) {
 	}
 	best.Notes = apkReleaseNotesForCode(dir, best.Code)
 	return best, true
+}
+
+func openPublishedApk(dir, name string) (*os.File, os.FileInfo, error) {
+	full := filepath.Join(dir, name)
+	info, err := os.Lstat(full)
+	if err != nil || info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		return nil, nil, os.ErrNotExist
+	}
+	f, err := os.Open(full) //nolint:gosec // full stays inside the configured APK dir
+	if err != nil {
+		return nil, nil, err
+	}
+	stat, err := f.Stat()
+	if err != nil || stat.IsDir() {
+		_ = f.Close()
+		if err != nil {
+			return nil, nil, err
+		}
+		return nil, nil, os.ErrNotExist
+	}
+	return f, stat, nil
 }
 
 // apkReleaseNotesForCode pulls the optional "notes" string from version.json,
@@ -138,18 +159,12 @@ func (s *Server) handleAppUpdateDownload(w http.ResponseWriter, r *http.Request)
 		s.writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid file"})
 		return
 	}
-	full := filepath.Join(denebApkDir(), name)
-	f, err := os.Open(full) //nolint:gosec // name is filepath.Base'd and .apk-suffixed; confined to the serve dir
+	f, info, err := openPublishedApk(denebApkDir(), name)
 	if err != nil {
 		s.writeJSON(w, http.StatusNotFound, map[string]any{"error": "apk not found"})
 		return
 	}
 	defer func() { _ = f.Close() }()
-	info, err := f.Stat()
-	if err != nil || info.IsDir() {
-		s.writeJSON(w, http.StatusNotFound, map[string]any{"error": "apk not found"})
-		return
-	}
 	w.Header().Set("Content-Type", "application/vnd.android.package-archive")
 	w.Header().Set("Content-Disposition", `attachment; filename="`+name+`"`)
 	w.Header().Set("Cache-Control", "no-store")

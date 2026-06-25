@@ -327,6 +327,35 @@ func TestLocalStore_Open(t *testing.T) {
 	}
 }
 
+func TestLocalStore_RejectsSymlinkEscape(t *testing.T) {
+	root := t.TempDir()
+	s, err := NewLocalStore(root)
+	if err != nil {
+		t.Fatalf("NewLocalStore: %v", err)
+	}
+	ctx := context.Background()
+
+	secret := filepath.Join(filepath.Dir(root), "secret.txt")
+	if err := os.WriteFile(secret, []byte("TOPSECRET"), 0o600); err != nil {
+		t.Fatalf("plant secret: %v", err)
+	}
+	link := filepath.Join(root, "leak.txt")
+	if err := os.Symlink(secret, link); err != nil {
+		t.Skipf("symlink unsupported: %v", err)
+	}
+
+	if data, _, err := s.Get(ctx, "/leak.txt"); err == nil || string(data) == "TOPSECRET" {
+		t.Fatalf("Get followed escaping symlink: data=%q err=%v", data, err)
+	}
+	if f, _, err := s.Open(ctx, "/leak.txt"); err == nil {
+		_ = f.Close()
+		t.Fatal("Open followed escaping symlink")
+	}
+	if abs, err := s.AbsPath("/leak.txt"); err == nil || abs == secret {
+		t.Fatalf("AbsPath exposed escaping symlink target: path=%q err=%v", abs, err)
+	}
+}
+
 func TestVPath(t *testing.T) {
 	cases := map[string]string{
 		"":            "/",

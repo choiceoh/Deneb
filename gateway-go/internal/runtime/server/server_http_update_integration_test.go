@@ -117,3 +117,27 @@ func TestAppUpdateDownload_Integration(t *testing.T) {
 		t.Errorf("apk traversal must resolve to base name and 404, got %d", rec.Code)
 	}
 }
+
+func TestAppUpdateDownload_RejectsSymlink(t *testing.T) {
+	dir := t.TempDir()
+	secret := filepath.Join(t.TempDir(), "secret.txt")
+	if err := os.WriteFile(secret, []byte("secret"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	apk := "deneb-9-evil-fossDebug.apk"
+	if err := os.Symlink(secret, filepath.Join(dir, apk)); err != nil {
+		t.Skipf("symlink unsupported: %v", err)
+	}
+	t.Setenv("DENEB_APK_DIR", dir)
+	t.Setenv("DENEB_STATE_DIR", t.TempDir())
+	token, err := clientauth.Generate()
+	if err != nil {
+		t.Fatalf("generate token: %v", err)
+	}
+	s := newTestServer(t)
+
+	rec := getAppUpdate(t, s, "/api/v1/app/update/download", url.Values{"file": {apk}, "clientToken": {token}}, "")
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("symlinked apk must be rejected, got %d: %s", rec.Code, rec.Body.String())
+	}
+}

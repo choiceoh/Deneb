@@ -77,6 +77,28 @@ func TestLatestPublishedApkNoCandidates(t *testing.T) {
 	}
 }
 
+func TestLatestPublishedApkIgnoresSymlink(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "deneb-153-good-fossDebug.apk"), []byte("apk"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	secret := filepath.Join(t.TempDir(), "secret.txt")
+	if err := os.WriteFile(secret, []byte("secret"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(secret, filepath.Join(dir, "deneb-999-evil-fossDebug.apk")); err != nil {
+		t.Skipf("symlink unsupported: %v", err)
+	}
+
+	m, ok := latestPublishedApk(dir)
+	if !ok {
+		t.Fatal("expected a published apk")
+	}
+	if m.Code != 153 || m.File != "deneb-153-good-fossDebug.apk" {
+		t.Fatalf("symlink candidate must be ignored, got code=%d file=%q", m.Code, m.File)
+	}
+}
+
 func TestDenebApkDirEnvOverride(t *testing.T) {
 	t.Setenv("DENEB_APK_DIR", "/tmp/custom-apk")
 	if got := denebApkDir(); got != "/tmp/custom-apk" {
