@@ -69,12 +69,18 @@ type Frontmatter struct {
 	// minted, so cross-references that point at the code survive renames and
 	// reclassification. Resolved by graph_query's byCode index. Empty for
 	// non-project pages (인물/시스템/업무/…).
-	Code       string
-	Title      string
-	Summary    string // one-line description for index-level filtering (~80 chars)
-	Category   string
-	Tags       []string
-	Related    []string
+	Code     string
+	Title    string
+	Summary  string // one-line description for index-level filtering (~80 chars)
+	Category string
+	Tags     []string
+	Related  []string
+	// Resource is a stable URI/identifier for the concept's underlying asset
+	// (e.g. a gmail thread, deal ref, calendar event, file path) — Google OKF's
+	// `resource` field. It lets the agent jump from a wiki concept straight to
+	// its live source instead of re-deriving it; empty for abstract concepts
+	// with no backing asset.
+	Resource   string
 	Created    string  // YYYY-MM-DD
 	Updated    string  // YYYY-MM-DD
 	Due        string  // YYYY-MM-DD — upcoming deadline (payment due, delivery, milestone); empty if none
@@ -133,6 +139,9 @@ func (p *Page) Render() []byte {
 	}
 	if len(p.Meta.Related) > 0 {
 		buf.WriteString("related: [" + strings.Join(p.Meta.Related, ", ") + "]\n")
+	}
+	if p.Meta.Resource != "" {
+		buf.WriteString("resource: " + p.Meta.Resource + "\n")
 	}
 	if p.Meta.Created != "" {
 		buf.WriteString("created: " + p.Meta.Created + "\n")
@@ -209,7 +218,8 @@ func writeFileSync(path string, data []byte, perm os.FileMode) error {
 // No-op when redaction is disabled. Title and Summary are user-visible strings
 // that the Dreamer populates from LLM output; Body is the main leak surface.
 // Other frontmatter fields (Category, Tags, dates, Importance, Archived, Type,
-// Confidence) are structural and unaffected.
+// Confidence, Resource) are structural and unaffected — Resource is an asset
+// identifier/URI, not free-text prose, so redacting it would corrupt the ref.
 func redactPage(p *Page) {
 	if p == nil || !redact.Enabled() {
 		return
@@ -441,6 +451,8 @@ func parseFrontmatterFields(raw string) Frontmatter {
 			fm.Tags = parseFlowArray(val)
 		case "related":
 			fm.Related = parseFlowArray(val)
+		case "resource":
+			fm.Resource = val
 		case "created":
 			fm.Created = val
 		case "updated":

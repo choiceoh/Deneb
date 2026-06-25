@@ -17,6 +17,7 @@ summary: 128GB 통합 메모리 로컬 AI 서버
 category: 기술
 tags: [하드웨어, NVIDIA]
 related: [deneb]
+resource: file:///home/choiceoh/.deneb/specs/dgx-spark.md
 created: 2025-11-15
 updated: 2026-04-06
 importance: 0.9
@@ -42,6 +43,9 @@ NVIDIA DGX Spark.
 	}
 	if page.Meta.Summary != "128GB 통합 메모리 로컬 AI 서버" {
 		t.Errorf("summary = %q", page.Meta.Summary)
+	}
+	if page.Meta.Resource != "file:///home/choiceoh/.deneb/specs/dgx-spark.md" {
+		t.Errorf("resource = %q", page.Meta.Resource)
 	}
 	if page.Meta.Category != "기술" {
 		t.Errorf("category = %q, want %q", page.Meta.Category, "기술")
@@ -123,6 +127,7 @@ func TestPage_RenderRoundtrip(t *testing.T) {
 	page := NewPage("테스트", "기술", []string{"Go", "테스트"})
 	page.Meta.ID = "test-page"
 	page.Meta.Summary = "테스트용 페이지"
+	page.Meta.Resource = "gmail:thread/abc123"
 	page.Body = "# 테스트\n\n## 요약\n테스트 내용."
 
 	rendered := page.Render()
@@ -136,6 +141,9 @@ func TestPage_RenderRoundtrip(t *testing.T) {
 	}
 	if parsed.Meta.Summary != "테스트용 페이지" {
 		t.Errorf("summary roundtrip: got %q", parsed.Meta.Summary)
+	}
+	if parsed.Meta.Resource != "gmail:thread/abc123" {
+		t.Errorf("resource roundtrip: got %q", parsed.Meta.Resource)
 	}
 	if parsed.Meta.Category != "기술" {
 		t.Errorf("category roundtrip: got %q", parsed.Meta.Category)
