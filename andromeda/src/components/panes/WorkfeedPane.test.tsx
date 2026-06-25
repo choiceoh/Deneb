@@ -79,22 +79,22 @@ describe("WorkfeedPane", () => {
     expect(chatCalls[0]).toMatchObject({ message: "승인합니다", sessionKey: "client:main" });
   });
 
-  it("runs fixed action chips via action.run and delivers the returned prompt", async () => {
+  it("no longer surfaces action chips even when the item carries actions", async () => {
     const dataProvider = fakeProvider({
       workfeed: [{ id: "w2", source: "followup", title: "미답장 메일 3건", actions: [{ id: "reply", label: "답장" }] }],
     });
     renderWithProviders(<WorkfeedPane />, { connected: true, dataProvider });
 
-    expect(await screen.findByText("미답장 메일 3건")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "답장" })).not.toBeInTheDocument();
-    await userEvent.click(screen.getByText("미답장 메일 3건"));
+    await userEvent.click(await screen.findByText("미답장 메일 3건"));
     const detail = screen.getByLabelText("작업피드 상세");
-    await userEvent.click(within(detail).getByRole("button", { name: "답장" }));
 
-    await waitFor(() => expect(rpcCalls.some((c) => c.method === "miniapp.workfeed.action.run")).toBe(true));
-    const action = rpcCalls.find((c) => c.method === "miniapp.workfeed.action.run");
-    expect(action?.params).toMatchObject({ itemId: "w2", actionId: "reply" });
-    await waitFor(() => expect(chatCalls[0]).toMatchObject({ message: "후속 액션 실행", sessionKey: "client:main" }));
+    // 액션 섹션은 제거됨 — 본문을 와이드하게. 액션 칩도, action.run 도 없다.
+    expect(within(detail).queryByText("액션")).not.toBeInTheDocument();
+    expect(within(detail).queryByRole("button", { name: "답장" })).not.toBeInTheDocument();
+    expect(rpcCalls.some((c) => c.method === "miniapp.workfeed.action.run")).toBe(false);
+
+    // 정정은 본문 하단에 그대로 남는다.
+    expect(within(detail).getByPlaceholderText("정정·피드백 입력…")).toBeInTheDocument();
   });
 
   it("corrects and rewrites any workfeed card through the bridge RPCs", async () => {

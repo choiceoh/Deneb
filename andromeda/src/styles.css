@@ -1936,9 +1936,10 @@ textarea {
   padding: 5px 12px;
   font-size: 12px;
 }
+/* Single column: the body spans full width; 답변·정정 sit in a footer below it. */
 .workfeed-detail-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(220px, 280px);
+  display: flex;
+  flex-direction: column;
   gap: 13px;
   margin-top: 13px;
   padding-top: 13px;
@@ -1968,10 +1969,11 @@ textarea {
   margin: 0;
   color: var(--muted);
 }
+/* Full-width footer below the body. A lone 정정 fills the row; with a question the
+ * 답변·정정 cards sit side by side, wrapping to stacked when the pane is narrow. */
 .workfeed-tools {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
   gap: 9px;
 }
 .workfeed-tool {
@@ -1988,11 +1990,6 @@ textarea {
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
-.workfeed-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
 .workfeed-form {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -2008,8 +2005,7 @@ textarea {
   resize: vertical;
 }
 @media (max-width: 760px) {
-  .workfeed-detail-head,
-  .workfeed-detail-layout {
+  .workfeed-detail-head {
     grid-template-columns: minmax(0, 1fr);
   }
   .workfeed-detail-actions {
