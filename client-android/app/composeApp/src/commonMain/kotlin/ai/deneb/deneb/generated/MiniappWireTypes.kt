@@ -396,6 +396,7 @@ data class NotebookOut(
     val name: String = "",
     val description: String = "",
     val dealRef: String = "",
+    val mode: String = "",
     val sources: List<NotebookSourceOut> = emptyList(),
     val updated: Long = 0L,
 )

@@ -329,6 +329,7 @@ export interface NotebookOut {
   name?: string
   description?: string
   dealRef?: string
+  mode?: string
   sources?: NotebookSourceOut[]
   updated?: number
 }
