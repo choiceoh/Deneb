@@ -1,7 +1,9 @@
 // notebook.go — miniapp.notebook.* RPC surface for the desktop client: read
-// (list/get) plus the create + add_source writes the notebook pane uses to pin
-// evidence. NotebookLM-style scoped source collections; the grounded brief
-// synthesis still lives in the chat/agent path (the `notebook` tool).
+// (list/get), the create / add_source / remove_source / delete writes the
+// notebook pane uses to pin evidence, and set_mode to toggle grounding
+// strictness (soft/strict). NotebookLM-style scoped source collections; the
+// grounded brief synthesis still lives in the chat/agent path (the `notebook`
+// tool), reached by opening a "notebook:<id>" chat session.
 package handlerminiapp
 
 import (
@@ -40,6 +42,7 @@ func NotebookMethods(deps NotebookDeps) map[string]rpcutil.HandlerFunc {
 		"miniapp.notebook.add_source":    notebookAddSourceRPC(deps),
 		"miniapp.notebook.delete":        notebookDeleteRPC(deps),
 		"miniapp.notebook.remove_source": notebookRemoveSourceRPC(deps),
+		"miniapp.notebook.set_mode":      notebookSetModeRPC(deps),
 	}
 }
 
@@ -81,6 +84,7 @@ type NotebookOut struct {
 	Name        string              `json:"name"`
 	Description string              `json:"description,omitempty"`
 	DealRef     string              `json:"dealRef,omitempty"`
+	Mode        string              `json:"mode,omitempty"` // "" soft (default) / "strict" — grounding strictness; omitted when soft
 	Sources     []NotebookSourceOut `json:"sources"`
 	Updated     int64               `json:"updated"`
 }
@@ -312,6 +316,49 @@ func notebookRemoveSourceRPC(deps NotebookDeps) rpcutil.HandlerFunc {
 	}
 }
 
+// notebookSetModeRPC toggles a notebook's grounding strictness (soft/strict) and
+// returns the updated notebook so the client repaints its mode control without a
+// second get. This is the native-UI analogue of the chat `notebook` tool's
+// "mode" action: before this, the only way to switch a notebook into strict
+// ("이 자료 위주로만, 없으면 '자료에 없음'") grounding was to ask the agent in chat.
+func notebookSetModeRPC(deps NotebookDeps) rpcutil.HandlerFunc {
+	type params struct {
+		ID   string `json:"id"`
+		Mode string `json:"mode"`
+	}
+	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		if errResp := requireAuth(ctx, req.ID); errResp != nil {
+			return errResp
+		}
+		var p params
+		if len(req.Params) > 0 {
+			if err := json.Unmarshal(req.Params, &p); err != nil {
+				return rpcerr.InvalidParams(err).Response(req.ID)
+			}
+		}
+		id := strings.TrimSpace(p.ID)
+		if id == "" {
+			return rpcerr.MissingParam("id").Response(req.ID)
+		}
+		store, err := deps.Store()
+		if err != nil {
+			return rpcerr.WrapUnavailable("notebook store unavailable", err).Response(req.ID)
+		}
+		if err := store.SetMode(id, p.Mode); err != nil {
+			if errors.Is(err, notebook.ErrNotFound) {
+				return rpcerr.NotFound("notebook").Response(req.ID)
+			}
+			// An unrecognized mode value ("use soft or strict") is the caller's fault.
+			return rpcerr.InvalidRequest(err.Error()).Response(req.ID)
+		}
+		nb, ok := store.Get(id)
+		if !ok {
+			return rpcerr.NotFound("notebook").Response(req.ID)
+		}
+		return rpcutil.RespondOK(req.ID, notebookOutFrom(nb))
+	}
+}
+
 // notebookListPayload builds the list-summaries payload from the store's current
 // state — shared by list and the post-delete refresh.
 func notebookListPayload(store *notebook.Store) NotebookListOut {
@@ -338,6 +385,7 @@ func notebookOutFrom(nb *notebook.Notebook) NotebookOut {
 		Name:        nb.Name,
 		Description: nb.Description,
 		DealRef:     nb.DealRef,
+		Mode:        nb.Mode,
 		Updated:     nb.Updated,
 		Sources:     make([]NotebookSourceOut, 0, len(nb.Sources)),
 	}

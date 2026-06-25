@@ -109,6 +109,46 @@ func TestNotebookRemoveSource(t *testing.T) {
 	}
 }
 
+// TestNotebookSetMode exercises the grounding-strictness toggle the desktop
+// notebook pane drives: new notebooks are soft (mode omitted), set_mode switches
+// to strict and back, and bad mode / unknown id / missing id are rejected.
+func TestNotebookSetMode(t *testing.T) {
+	m := notebookTestMethods(t)
+	created := decodePayload(t, callNotebook(t, m, "miniapp.notebook.create", map[string]any{"name": "딜"}))
+	id, _ := created["id"].(string)
+	if id == "" {
+		t.Fatalf("create returned no id: %v", created)
+	}
+
+	// New notebooks default to soft, so mode is omitted (omitempty) from get.
+	got := decodePayload(t, callNotebook(t, m, "miniapp.notebook.get", map[string]any{"id": id}))
+	if mode, ok := got["mode"]; ok && mode != "" {
+		t.Errorf("new notebook mode = %v, want soft (omitted)", mode)
+	}
+
+	// Toggle to strict → the returned notebook reflects it immediately.
+	out := decodePayload(t, callNotebook(t, m, "miniapp.notebook.set_mode", map[string]any{"id": id, "mode": "strict"}))
+	if out["mode"] != "strict" {
+		t.Errorf("after set_mode strict, mode = %v, want strict", out["mode"])
+	}
+
+	// Back to soft → mode omitted again.
+	out = decodePayload(t, callNotebook(t, m, "miniapp.notebook.set_mode", map[string]any{"id": id, "mode": "soft"}))
+	if mode, ok := out["mode"]; ok && mode != "" {
+		t.Errorf("after set_mode soft, mode = %v, want soft (omitted)", mode)
+	}
+
+	if resp := callNotebook(t, m, "miniapp.notebook.set_mode", map[string]any{"id": id, "mode": "bogus"}); resp.OK {
+		t.Error("set_mode with an invalid mode should fail")
+	}
+	if resp := callNotebook(t, m, "miniapp.notebook.set_mode", map[string]any{"id": "nope", "mode": "strict"}); resp.OK {
+		t.Error("set_mode on an unknown notebook should fail")
+	}
+	if resp := callNotebook(t, m, "miniapp.notebook.set_mode", map[string]any{"mode": "strict"}); resp.OK {
+		t.Error("set_mode without id should fail")
+	}
+}
+
 func TestNotebookDelete(t *testing.T) {
 	m := notebookTestMethods(t)
 	a := decodePayload(t, callNotebook(t, m, "miniapp.notebook.create", map[string]any{"name": "A"}))
