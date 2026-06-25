@@ -325,6 +325,20 @@ func (wd *WikiDreamer) RunDream(ctx context.Context) (*autonomous.DreamReport, e
 		}
 	}
 
+	// Phase 3e: procedural memory — promote the active 사용자 (user-preference)
+	// pages into USER.md's managed "행동 지침" section so standing directives are
+	// *applied* every turn (prompt context file) instead of only recalled. The
+	// dreamer's existing 사용자 synthesis is the distiller; supersede is the
+	// consolidation. Opt-in (DENEB_USER_DIRECTIVES) and best-effort: a failed
+	// pass never costs the consolidation cycle (see user_directives.go).
+	if userDirectivesEnabled() {
+		if n, derr := wd.distillUserDirectives(); derr != nil {
+			phaseErrors = append(phaseErrors, fmt.Sprintf("user-directives: %v", derr))
+		} else if n > 0 {
+			wd.logger.Info("wiki-dream: user directives applied", "directives", n)
+		}
+	}
+
 	// Phase 4: Rebuild index.
 	if err := wd.rebuildIndex(); err != nil {
 		phaseErrors = append(phaseErrors, fmt.Sprintf("index-rebuild: %v", err))
