@@ -250,7 +250,6 @@ function WorkItemDetail({
   const question = isQuestion(w);
   const [text, setText] = useState("");
   const [feedback, setFeedback] = useState("");
-  const hasActions = (w.actions?.length ?? 0) > 0;
   const created = fmtDate(w.createdAtMs);
   const meta = [sourceLabel(w.source), created, w.refId ? `ref ${w.refId}` : ""].filter(Boolean).join(" · ");
 
@@ -295,24 +294,8 @@ function WorkItemDetail({
             <p className="workfeed-empty-body">본문 없음</p>
           )}
         </div>
+        {/* 본문 하단 풀폭 푸터: 액션 칩은 제거하고 답변(질문 한정)·정정만 남겨 본문을 와이드하게. */}
         <div className="workfeed-tools">
-          {hasActions && (
-            <section className="workfeed-tool">
-              <div className="workfeed-tool-title">액션</div>
-              <div className="workfeed-chips">
-                {w.actions?.map((a) => (
-                  <button
-                    key={a.id}
-                    className="chip"
-                    disabled={busy}
-                    onClick={() => void run(WORKFEED_RPC.actionRun, { itemId: w.id, actionId: a.id })}
-                  >
-                    {a.label}
-                  </button>
-                ))}
-              </div>
-            </section>
-          )}
           {question && (
             <section className="workfeed-tool">
               <div className="workfeed-tool-title">답변</div>
