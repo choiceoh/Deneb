@@ -1,5 +1,25 @@
 # Changelog
 
+## [4.35.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.34.0...deneb-v4.35.0) (2026-06-26)
+
+
+### ✨ Features
+
+* **andromeda:** 작업피드 액션 제거·정정 하단 이동으로 본문 와이드화 ([#2875](https://github.com/choiceoh/Deneb/issues/2875)) ([5b8aba4](https://github.com/choiceoh/Deneb/commit/5b8aba411315b872fe9293b624ad53951782ac8c))
+* **chat:** validate-then-repair malformed tool-call arguments ([#2877](https://github.com/choiceoh/Deneb/issues/2877)) ([e0641b2](https://github.com/choiceoh/Deneb/commit/e0641b275a83a0ab5046d8c07b8045ba9e567e24))
+* **exec:** 파괴적 명령 차단 (rm -rf /·디스크 포맷·fork bomb) + 노트북 set_mode RPC ([#2876](https://github.com/choiceoh/Deneb/issues/2876)) ([8d38778](https://github.com/choiceoh/Deneb/commit/8d38778e198032d37e526b066e20b8f56428f6e8))
+* **harness:** genesis evolve-loop fixes + runtime hardening from HarnessX deep-dive ([#2885](https://github.com/choiceoh/Deneb/issues/2885)) ([ce3181c](https://github.com/choiceoh/Deneb/commit/ce3181c6173a938aca4ed50eaf1bda3909cbcb40))
+* **skills:** normalize auto-generated skill descriptions ([#2880](https://github.com/choiceoh/Deneb/issues/2880)) ([fbe3aa5](https://github.com/choiceoh/Deneb/commit/fbe3aa54c41da2f9983e1086f18409b64d1a8b28))
+* **wiki:** OKF resource URI field on page frontmatter ([#2873](https://github.com/choiceoh/Deneb/issues/2873)) ([2cc71c3](https://github.com/choiceoh/Deneb/commit/2cc71c35de4a2a93d6a0f0453e1beb65b56bd717))
+* **wiki:** procedural memory — apply 사용자 preferences into USER.md ([#2878](https://github.com/choiceoh/Deneb/issues/2878)) ([26f8d68](https://github.com/choiceoh/Deneb/commit/26f8d68c3d172d1cf61ce83b35a7767233b877a7))
+* 코드-as-harness 리서치 도입 3건 (exec 체크포인트 · research_panel 종합 · autoresearch 규율) ([#2884](https://github.com/choiceoh/Deneb/issues/2884)) ([1671cb4](https://github.com/choiceoh/Deneb/commit/1671cb4ee8180060febaae258936a547fa2433dd))
+
+
+### 🐛 Bug Fixes
+
+* **skills:** drive skill-review fork with tool-capable coding role ([#2886](https://github.com/choiceoh/Deneb/issues/2886)) ([117019c](https://github.com/choiceoh/Deneb/commit/117019cbeeb921370d13181dc0b86fa8eff0dba6))
+* **skills:** pre-load skill_lifecycle active in the self-review preset ([#2888](https://github.com/choiceoh/Deneb/issues/2888)) ([ae10098](https://github.com/choiceoh/Deneb/commit/ae1009892d6016bcf0dd09331cfc751cd041b3f9))
+
 ## [4.34.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.33.0...deneb-v4.34.0) (2026-06-24)
 
 
