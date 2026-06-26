@@ -801,7 +801,7 @@ func (t *Tracker) LogEvolutionProposal(record EvolutionProposalRecord) error {
 // records every committed or rejected evolve — including ones on user-authored
 // skills — so the native client can render a complete evolution timeline.
 type evolveLogEntry struct {
-	Type             string            `json:"type"` // "evolved" | "evolve_rejected" | "evolve_rolled_back" | "evolve_confirmed"
+	Type             string            `json:"type"` // "evolved" | "evolve_rejected" | "evolve_rolled_back" | "evolve_confirmed" | "cross_skill_regression"
 	SkillName        string            `json:"skillName"`
 	NewVersion       string            `json:"newVersion,omitempty"`
 	Description      string            `json:"description,omitempty"`
@@ -919,6 +919,25 @@ func (t *Tracker) LogEvolveRejectedWithAudit(skillName, reason string, audit Har
 	}
 	t.recordOptimizerMemoryLocked(skillName, "rejected", reason, now)
 	return nil
+}
+
+// LogCrossSkillRegression records that a committed evolve of sourceSkill made a
+// similar NEIGHBOR skill regress the evolved skill's held-out forbidden/required
+// assertions (#4 cross-skill regression detection). It is an observation only:
+// the evolve is NOT rolled back — a shared-tag/description neighbor failing the
+// evolved skill's contract is a coupling signal worth surfacing, not proof the
+// edit is wrong (the neighbor was never under that contract). neighborSkill is
+// the skill that regressed; sourceSkill is the evolve that triggered the check.
+func (t *Tracker) LogCrossSkillRegression(sourceSkill, neighborSkill, reason string) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return jsonlstore.Append(t.logPath, evolveLogEntry{
+		Type:        "cross_skill_regression",
+		SkillName:   neighborSkill,
+		Description: "evolve of " + sourceSkill + " surfaced a regression in neighbor " + neighborSkill,
+		Reason:      reason,
+		CreatedAt:   time.Now().UnixMilli(),
+	})
 }
 
 // RecentLifecycleLog returns recent genesis/proposal events, newest first.

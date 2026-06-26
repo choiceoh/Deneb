@@ -269,3 +269,46 @@ func TestSkillValidationEngineDoesNotScoreFixtureOutputAsCandidateBehavior(t *te
 		t.Fatalf("fixture output must not satisfy candidate observation assertions, got %+v", result)
 	}
 }
+
+// TestCrossSkillRegressionFlagsForbiddenViolation covers #4's deterministic
+// scorer: a neighbor body that still relies on something the evolved skill now
+// forbids (here `eval`) fails the evolved skill's held-out assertions.
+func TestCrossSkillRegressionFlagsForbiddenViolation(t *testing.T) {
+	cases := []SkillValidationCaseRecord{{
+		SkillName:           "topsolar-db",
+		ID:                  "safe-wrapper",
+		ForbiddenSubstrings: []string{"eval"},
+		RequiredSubstrings:  []string{"단일 bash block"},
+	}}
+	neighbor := "# Sibling\n\n## Procedure\n- 단일 bash block 사용\n- eval 로 동적 실행\n"
+
+	result := CrossSkillRegression("topsolar-restore", neighbor, cases)
+	if !result.Failed {
+		t.Fatalf("expected neighbor relying on forbidden eval to fail, got %+v", result)
+	}
+	if result.NeighborSkill != "topsolar-restore" || result.Passed >= result.Total {
+		t.Fatalf("expected partial pass with neighbor name, got %+v", result)
+	}
+	if len(result.Failures) == 0 || !strings.Contains(strings.Join(result.Failures, "; "), "forbidden") {
+		t.Fatalf("expected a forbidden-substring failure, got %+v", result.Failures)
+	}
+}
+
+// TestCrossSkillRegressionPassesCompliantNeighbor verifies a neighbor that
+// honors the evolved skill's assertions is not flagged, and that an empty case
+// set is a no-op (Failed=false, Total=0).
+func TestCrossSkillRegressionPassesCompliantNeighbor(t *testing.T) {
+	cases := []SkillValidationCaseRecord{{
+		SkillName:           "topsolar-db",
+		ForbiddenSubstrings: []string{"eval"},
+		RequiredSubstrings:  []string{"단일 bash block"},
+	}}
+	neighbor := "# Sibling\n\n## Procedure\n- 단일 bash block 으로만 실행\n"
+	if result := CrossSkillRegression("topsolar-restore", neighbor, cases); result.Failed {
+		t.Fatalf("expected compliant neighbor to pass, got %+v", result)
+	}
+
+	if result := CrossSkillRegression("topsolar-restore", neighbor, nil); result.Failed || result.Total != 0 {
+		t.Fatalf("expected no-op for empty case set, got %+v", result)
+	}
+}
