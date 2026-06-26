@@ -854,6 +854,13 @@ const (
 	skillFailurePatternLimit          = 4
 )
 
+// skillUncoveredJudgeMinScoreDelta is the judge score margin required to accept
+// an evolve of a skill that has NO held-out validation cases (#5). It is larger
+// than the covered margin (skillJudgeMinScoreDelta) because the held-out gate
+// fails open with zero cases, leaving the judge verdict as the only behavioral
+// check — so an uncovered skill must be harder, not easier, to rewrite.
+const skillUncoveredJudgeMinScoreDelta = 6.0
+
 func hasSufficientEvolutionEvidence(stats *UsageStats, reviewFinding string) bool {
 	if strings.TrimSpace(reviewFinding) != "" {
 		return true
@@ -1656,7 +1663,8 @@ func (e *Evolver) judgeCandidate(ctx context.Context, skillName string, client *
 	if client == nil {
 		return false, "", fmt.Errorf("judge: nil client")
 	}
-	validationSection := formatValidationCasesForPrompt(e.validationCasesForPrompt(skillName))
+	cases := e.validationCasesForPrompt(skillName)
+	validationSection := formatValidationCasesForPrompt(cases)
 	failurePatternSection := formatFailurePatternsForPrompt(stats)
 	userPrompt := fmt.Sprintf(`## 원본 SKILL.md
 %s
@@ -1697,6 +1705,18 @@ func (e *Evolver) judgeCandidate(ctx context.Context, skillName string, client *
 		return false, "", fmt.Errorf("judge: parse verdict: %w", err)
 	}
 	pass, reason = acceptJudgeVerdict(resp)
+	if pass && len(cases) == 0 {
+		// No held-out validation cases cover this skill, so the held-out gate
+		// failed open and the judge verdict is the only behavioral check. Require a
+		// larger score margin before accepting such a blind evolve (#5). Scores are
+		// guaranteed non-nil here because acceptJudgeVerdict only passes with both
+		// present.
+		if resp.OriginalScore != nil && resp.CandidateScore != nil &&
+			*resp.CandidateScore-*resp.OriginalScore < skillUncoveredJudgeMinScoreDelta {
+			return false, fmt.Sprintf("uncovered skill (no validation cases): candidate margin %.1f below the %.1f required without held-out coverage: %s",
+				*resp.CandidateScore-*resp.OriginalScore, skillUncoveredJudgeMinScoreDelta, reason), nil
+		}
+	}
 	return pass, reason, nil
 }
 
