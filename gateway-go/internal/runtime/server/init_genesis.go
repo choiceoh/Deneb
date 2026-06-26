@@ -173,6 +173,19 @@ func (s *Server) configureGenesisEvolverModels(evolver *genesis.Evolver) (modelr
 	} else {
 		evolver.SetTeacher(nil, "")
 	}
+
+	// Judge (B1): wire main as the independent candidate judge regardless of who
+	// owns rewrites. Decoupled from the teacher so the coding-model path (teacher
+	// nil above) still grades with a non-producer model — otherwise
+	// pickCandidateJudge fell back to the coding model judging its own rewrite
+	// (same-family self-preference bias, arXiv:2508.02994). When main is the
+	// producer or unavailable the judge stays unset and pickCandidateJudge logs
+	// the self-judge fallback.
+	if mainClient != nil && mainModel != "" && mainModel != evolverModel {
+		evolver.SetJudge(mainClient, mainModel)
+	} else {
+		evolver.SetJudge(nil, "")
+	}
 	evolver.SetThinkingKwargs(s.genesisThinkingKwargs())
 
 	// Behavioral-replay executor (DENEB_SKILL_EVOLVE_REPLAY, off by default).

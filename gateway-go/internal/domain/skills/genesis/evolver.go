@@ -81,10 +81,20 @@ type Evolver struct {
 	// judged before being committed (a bad "improvement" is worse than none).
 	selfTest bool
 	// teacherClient/teacherModel are an optional stronger (main) model used to
-	// judge and re-attempt when the lightweight rewrite fails self-test (#4
-	// teacher-escalation). nil → no escalation.
+	// re-attempt a rewrite that fails self-test (#4 teacher-escalation). nil → no
+	// escalation. It no longer doubles as the judge — see judgeClient.
 	teacherClient *llm.Client
 	teacherModel  string
+
+	// judgeClient/judgeModel are an optional independent model (typically
+	// modelrole main) that grades a candidate rewrite. Kept separate from the
+	// producer (primary) and the teacher so the verdict is never self-judged:
+	// same-family self-preference bias skews a self-judge toward accepting
+	// (arXiv:2508.02994). When a dedicated coding model owns rewrites the teacher
+	// is nil, but this stays wired so pickCandidateJudge still resolves to a
+	// non-producer judge. nil → fall back to teacher, then self-judge (logged).
+	judgeClient *llm.Client
+	judgeModel  string
 
 	// thinkingKwargs maps a bare model name to its chat_template_kwargs toggle
 	// that truly disables the thinking phase (e.g. "thinking" for DeepSeek V4).
@@ -135,6 +145,18 @@ func (e *Evolver) SetTeacher(client *llm.Client, model string) {
 	defer e.configMu.Unlock()
 	e.teacherClient = client
 	e.teacherModel = strings.TrimSpace(model)
+}
+
+// SetJudge wires an optional independent judge model (typically modelrole main)
+// used to grade a candidate rewrite. Decoupled from SetTeacher so that even when
+// a dedicated coding model owns the rewrite path (teacher nil), the candidate is
+// still judged by a non-producer model (pickCandidateJudge). Safe to call with
+// nil (judge then falls back to teacher, then a logged self-judge).
+func (e *Evolver) SetJudge(client *llm.Client, model string) {
+	e.configMu.Lock()
+	defer e.configMu.Unlock()
+	e.judgeClient = client
+	e.judgeModel = strings.TrimSpace(model)
 }
 
 // SetReplayExecutor wires the behavioral-replay executor model used by the
@@ -579,6 +601,12 @@ func (e *Evolver) teacherModelSnapshot() (*llm.Client, string) {
 	e.configMu.RLock()
 	defer e.configMu.RUnlock()
 	return e.teacherClient, e.teacherModel
+}
+
+func (e *Evolver) judgeModelSnapshot() (*llm.Client, string) {
+	e.configMu.RLock()
+	defer e.configMu.RUnlock()
+	return e.judgeClient, e.judgeModel
 }
 
 // stripEchoedFrontmatter removes any leading YAML frontmatter block(s) an LLM
@@ -1587,12 +1615,24 @@ func (e *Evolver) RollbackSkill(skillName string) {
 }
 
 // pickCandidateJudge returns the client/model that should judge a
-// lightweight-produced candidate: the teacher when wired (keeping judge !=
-// producer to avoid same-family self-preference bias, arXiv:2508.02994), else
-// the lightweight model itself (self-judge is unavoidable with no teacher).
+// producer-generated candidate. It prefers an independent judge (SetJudge,
+// typically modelrole main), then the teacher, and never the producing model
+// itself — same-family self-preference bias skews a self-judge toward accepting
+// (arXiv:2508.02994). When a dedicated coding model owns rewrites the teacher is
+// nil, so without the explicit judge the old logic silently self-judged; the
+// judge wire closes that. Falls back to self-judge only when nothing else is
+// wired, logging the degraded mode so the misconfig is observable.
 func (e *Evolver) pickCandidateJudge() (*llm.Client, string) {
-	if client, model := e.teacherModelSnapshot(); client != nil && model != "" {
+	_, producer := e.primaryModel()
+	if client, model := e.judgeModelSnapshot(); client != nil && model != "" && model != producer {
 		return client, model
+	}
+	if client, model := e.teacherModelSnapshot(); client != nil && model != "" && model != producer {
+		return client, model
+	}
+	if e.logger != nil {
+		e.logger.Warn("evolver: no independent judge wired, candidate is self-judged (self-preference bias risk)",
+			"producer", producer)
 	}
 	return e.primaryModel()
 }
