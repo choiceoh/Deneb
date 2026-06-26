@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -95,6 +96,23 @@ func ToolExec(procMgr *process.Manager, defaultDir string) ToolFunc {
 
 		if err := validateWorkdir(workDir); err != nil {
 			return "", err
+		}
+
+		// Pre-exec checkpoint: an in-place file edit run via exec (sed -i, '>'
+		// redirect) bypasses the rollback net the fs Write/Edit tools have.
+		// Snapshot the target files that already exist so this edit is
+		// /rollback-recoverable too. Best-effort + nil-safe (no Checkpointer wired →
+		// no-op); only existing regular files are snapshotted, so over-inclusive
+		// candidates (a misparsed sed script) harmlessly drop out, and the command
+		// itself is never blocked or modified.
+		for _, t := range InPlaceFileTargets(p.Command) {
+			abs := t
+			if !filepath.IsAbs(abs) {
+				abs = filepath.Join(workDir, t)
+			}
+			if fi, err := os.Stat(abs); err == nil && fi.Mode().IsRegular() {
+				snapshotBeforeWrite(ctx, abs, "exec")
+			}
 		}
 
 		timeoutMs := int64(60000)
