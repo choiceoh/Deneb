@@ -478,10 +478,23 @@ func (t *Tracker) maybeFireRollbackLocked(r UsageRecord) {
 		return
 	}
 	// Proven out: the evolve survived the observation window below the failure
-	// threshold, so stop watching (later failures are fair game for a fresh
-	// evolve, not this one's rollback).
+	// threshold. Close the loop with a positive confirmation (#1) — the watch
+	// used to be dropped silently here, so a shipped evolve only ever produced a
+	// rollback event, never an "it held up" event. Now every shipped evolve ends
+	// in either evolve_rolled_back or evolve_confirmed.
 	if w.postUses >= t.rollbackWindowLocked() {
+		uses, fails, recurred := w.postUses, w.postFails, w.recurred
+		audit := w.audit
+		skill := r.SkillName
 		delete(t.postEvolve, r.SkillName)
+		go func() {
+			defer func() {
+				if rec := recover(); rec != nil && t.logger != nil {
+					t.logger.Error("genesis: confirm callback panic", "panic", rec)
+				}
+			}()
+			t.confirmEvolve(skill, audit, uses, fails, recurred)
+		}()
 	}
 }
 
@@ -788,7 +801,7 @@ func (t *Tracker) LogEvolutionProposal(record EvolutionProposalRecord) error {
 // records every committed or rejected evolve — including ones on user-authored
 // skills — so the native client can render a complete evolution timeline.
 type evolveLogEntry struct {
-	Type             string            `json:"type"` // "evolved" | "evolve_rejected" | "evolve_rolled_back"
+	Type             string            `json:"type"` // "evolved" | "evolve_rejected" | "evolve_rolled_back" | "evolve_confirmed"
 	SkillName        string            `json:"skillName"`
 	NewVersion       string            `json:"newVersion,omitempty"`
 	Description      string            `json:"description,omitempty"`
@@ -842,6 +855,45 @@ func (t *Tracker) LogEvolveRolledBack(skillName string) error {
 	}
 	t.recordOptimizerMemoryLocked(skillName, "rolled_back", evolveRollbackReason, now)
 	return nil
+}
+
+// confirmEvolve records that an evolve survived its post-evolve observation
+// window below the rollback threshold (#1 falsification closure). It runs
+// lock-free off the tracker (LogEvolveConfirmed re-enters t.mu). A clean
+// confirmation means the target failure signature never recurred and the skill
+// logged no failures within the window; otherwise it is partial (held up
+// overall, but the targeted mechanism still surfaced below threshold).
+func (t *Tracker) confirmEvolve(skillName string, audit HarnessEditAudit, uses, fails, recurred int) {
+	clean := fails == 0 && recurred == 0
+	if t.logger != nil {
+		t.logger.Info("genesis: post-evolve window cleared, evolve confirmed",
+			"skill", skillName, "uses", uses, "fails", fails, "targetRecurrences", recurred,
+			"clean", clean, "expectedBehaviorChange", audit.ExpectedBehaviorChange)
+	}
+	if err := t.LogEvolveConfirmed(skillName, audit, clean); err != nil && t.logger != nil {
+		t.logger.Warn("genesis: confirm lifecycle log failed", "skill", skillName, "error", err)
+	}
+}
+
+// LogEvolveConfirmed records that an evolution proved out over its post-evolve
+// observation window (#1). It is the positive counterpart to LogEvolveRolledBack,
+// so the lifecycle log now carries the outcome of every shipped evolve. clean
+// reports whether the target failure signature never recurred and no failures
+// occurred within the window.
+func (t *Tracker) LogEvolveConfirmed(skillName string, audit HarnessEditAudit, clean bool) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	reason := "partial: held up but target signature recurred below threshold"
+	if clean {
+		reason = "clean: target signature did not recur within the window"
+	}
+	return jsonlstore.Append(t.logPath, evolveLogEntry{
+		Type:             "evolve_confirmed",
+		SkillName:        skillName,
+		Reason:           reason,
+		CreatedAt:        time.Now().UnixMilli(),
+		SelfHarnessAudit: audit.ptr(),
+	})
 }
 
 // LogEvolveRejected records an evolve attempt whose rewrite the self-test
