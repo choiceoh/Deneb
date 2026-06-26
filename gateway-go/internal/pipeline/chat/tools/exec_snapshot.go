@@ -35,7 +35,7 @@ import (
 // positionally. Redirection (`>`) and `sed -i` are detected separately, so a
 // command can be mutating without its base being in this set.
 var mutatingBaseCmd = map[string]bool{
-	"mv": true, "cp": true, "rm": true, "tee": true, "sed": true,
+	"mv": true, "cp": true, "rm": true, "tee": true,
 }
 
 // looksFileMutating is a cheap pre-filter so exec doesn't run the full target
@@ -55,7 +55,7 @@ func looksFileMutating(command string) bool {
 		return true
 	}
 	for _, seg := range segmentSplit.Split(command, -1) {
-		fields := strings.Fields(seg)
+		fields := stripCmdPrefixes(shellFields(seg))
 		if len(fields) == 0 {
 			continue
 		}
@@ -173,21 +173,7 @@ func execMutationTargets(command string) []execTarget {
 			add(t, false)
 		}
 
-		fields := strings.Fields(seg)
-		// Strip leading env assignments (FOO=bar) and benign prefixes so the
-		// base command lines up — same normalisation as extractBaseCommand.
-		for len(fields) > 0 {
-			f := fields[0]
-			if strings.Contains(f, "=") && !strings.HasPrefix(f, "-") {
-				fields = fields[1:]
-				continue
-			}
-			if f == "sudo" || f == "env" || f == "nice" || f == "nohup" || f == "time" {
-				fields = fields[1:]
-				continue
-			}
-			break
-		}
+		fields := stripCmdPrefixes(shellFields(seg))
 		if len(fields) == 0 {
 			continue
 		}
@@ -292,4 +278,68 @@ func unquote(s string) string {
 // isDevNull reports whether tok is a /dev/* sink we must never snapshot.
 func isDevNull(tok string) bool {
 	return tok == "/dev/null" || strings.HasPrefix(tok, "/dev/")
+}
+
+// stripCmdPrefixes drops leading env assignments (FOO=bar) and benign wrapper
+// commands (sudo/env/nice/nohup/time) so the real base command surfaces.
+// looksFileMutating and execMutationTargets MUST agree on this normalisation,
+// else the cheap pre-filter skips a command (`sudo rm x`, `FOO=bar rm x`) the
+// parser would otherwise snapshot — a silent rollback-coverage gap.
+func stripCmdPrefixes(fields []string) []string {
+	for len(fields) > 0 {
+		f := fields[0]
+		if strings.Contains(f, "=") && !strings.HasPrefix(f, "-") {
+			fields = fields[1:]
+			continue
+		}
+		switch f {
+		case "sudo", "env", "nice", "nohup", "time":
+			fields = fields[1:]
+		default:
+			return fields
+		}
+	}
+	return fields
+}
+
+// shellFields splits a command segment into fields, honouring single and double
+// quotes so a quoted path with spaces ("my file.txt") stays one field rather
+// than being torn apart by strings.Fields. It does NOT handle escapes, nested,
+// or adjacent mixed quotes — full shell lexing is out of scope; this only needs
+// to keep simple quoted filenames intact. The quote characters are retained in
+// the token (unquote strips a surrounding pair later).
+func shellFields(s string) []string {
+	var (
+		fields  []string
+		cur     strings.Builder
+		quote   rune
+		inField bool
+	)
+	flush := func() {
+		if inField {
+			fields = append(fields, cur.String())
+			cur.Reset()
+			inField = false
+		}
+	}
+	for _, r := range s {
+		switch {
+		case quote != 0:
+			cur.WriteRune(r)
+			if r == quote {
+				quote = 0
+			}
+		case r == '\'' || r == '"':
+			quote = r
+			cur.WriteRune(r)
+			inField = true
+		case r == ' ' || r == '\t' || r == '\n' || r == '\r':
+			flush()
+		default:
+			cur.WriteRune(r)
+			inField = true
+		}
+	}
+	flush()
+	return fields
 }
