@@ -12,6 +12,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/core/coremedia"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/filestore"
+	"github.com/choiceoh/deneb/gateway-go/internal/infra/fileshare"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
@@ -79,6 +80,12 @@ func ToolSendFile() ToolFunc {
 		result := fmt.Sprintf("File sent: %s (%s, %d bytes)", filepath.Base(p.FilePath), mediaType, info.Size())
 		if vpath := archiveSentFile(ctx, p.FilePath, info.Size()); vpath != "" {
 			result += fmt.Sprintf("; 파일 저장소 보관: %s", vpath)
+			// Mint a durable, path-scoped share link so the delivered file is
+			// reachable as a persistent URL, not only the one-shot channel upload.
+			// Empty when no public base URL / client token is configured (skip).
+			if link := fileshare.Link(vpath); link != "" {
+				result += fmt.Sprintf("; 공유 링크(7일): %s", link)
+			}
 		}
 		return result, nil
 	}
