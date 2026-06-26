@@ -320,3 +320,74 @@ func TestSlugify(t *testing.T) {
 		}
 	}
 }
+
+func TestStampProjectRefs(t *testing.T) {
+	dir := t.TempDir()
+	s, err := NewStore(dir)
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	dealRef := "프로젝트/거래/한빛전기.md" // counterparty-keyed; differs from the project name
+	if _, err := s.EnsureForDeal(dealRef, "한빛전기 딜", ""); err != nil {
+		t.Fatalf("EnsureForDeal: %v", err)
+	}
+	before, _ := s.GetByDealRef(dealRef)
+
+	// First stamp records the resolved project page.
+	added, err := s.StampProjectRefs(dealRef, []string{"프로젝트/영산고.md"})
+	if err != nil || !added {
+		t.Fatalf("StampProjectRefs first = (%v, %v), want (true, nil)", added, err)
+	}
+	got, _ := s.GetByDealRef(dealRef)
+	if len(got.ProjectRefs) != 1 || got.ProjectRefs[0] != "프로젝트/영산고.md" {
+		t.Fatalf("ProjectRefs = %v, want [프로젝트/영산고.md]", got.ProjectRefs)
+	}
+	// Stamping is metadata enrichment, not activity — Updated must stay stable so a
+	// re-analysis doesn't churn the list order.
+	if got.Updated != before.Updated {
+		t.Fatalf("Updated changed on stamp: %d → %d", before.Updated, got.Updated)
+	}
+
+	// Re-stamping the same ref is an idempotent no-op.
+	added, err = s.StampProjectRefs(dealRef, []string{"프로젝트/영산고.md"})
+	if err != nil || added {
+		t.Fatalf("StampProjectRefs dup = (%v, %v), want (false, nil)", added, err)
+	}
+	got, _ = s.GetByDealRef(dealRef)
+	if len(got.ProjectRefs) != 1 {
+		t.Fatalf("dup stamp grew ProjectRefs to %v", got.ProjectRefs)
+	}
+
+	// A new ref unions in; an already-present one in the same call is skipped.
+	added, err = s.StampProjectRefs(dealRef, []string{"프로젝트/영산고.md", "프로젝트/제2발전소.md", "  "})
+	if err != nil || !added {
+		t.Fatalf("StampProjectRefs union = (%v, %v), want (true, nil)", added, err)
+	}
+	got, _ = s.GetByDealRef(dealRef)
+	if len(got.ProjectRefs) != 2 {
+		t.Fatalf("ProjectRefs = %v, want 2 unique", got.ProjectRefs)
+	}
+
+	// Stamping a dealRef with no notebook is a no-op (the pin creates it first).
+	added, err = s.StampProjectRefs("프로젝트/거래/없는딜.md", []string{"프로젝트/영산고.md"})
+	if err != nil || added {
+		t.Fatalf("StampProjectRefs unknown = (%v, %v), want (false, nil)", added, err)
+	}
+	// Empty inputs are no-ops, not errors.
+	if added, err := s.StampProjectRefs("", []string{"x"}); err != nil || added {
+		t.Fatalf("empty dealRef = (%v, %v), want (false, nil)", added, err)
+	}
+	if added, err := s.StampProjectRefs(dealRef, nil); err != nil || added {
+		t.Fatalf("nil refs = (%v, %v), want (false, nil)", added, err)
+	}
+
+	// Refs survive a reload from disk.
+	s2, err := NewStore(dir)
+	if err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	reloaded, ok := s2.GetByDealRef(dealRef)
+	if !ok || len(reloaded.ProjectRefs) != 2 {
+		t.Fatalf("after reload ProjectRefs = %v (ok=%v), want 2", reloaded.ProjectRefs, ok)
+	}
+}

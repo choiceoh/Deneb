@@ -216,8 +216,10 @@ func (s *Server) makeMailAnalysisSink() func(*gmail.MessageDetail, gmailpoll.Ana
 		// follow-ups surface as calendar PROPOSALS (the bell) to accept — see below.
 		todoCount := 0
 		// File any extracted business document onto a 거래 wiki page (silent
-		// knowledge enrichment — no push).
-		s.fileDealFromMail(msg, res.Deal)
+		// knowledge enrichment — no push). RelatedProjects is the analyzer's
+		// resolved project linkage, stamped onto the deal notebook for exact
+		// client-side project matching.
+		s.fileDealFromMail(msg, res.Deal, res.RelatedProjects)
 		// Propose schedule-worthy items (meetings, deadlines) as calendar
 		// proposals the operator accepts from the calendar bell. See
 		// mail_calendar.go. No push — bell badge only.
@@ -282,7 +284,7 @@ func (s *Server) makeMailAnalysisFailureSink() func(*gmail.MessageDetail, error)
 // fileDealFromMail files a structured business-document extraction onto its
 // counterparty's 거래 wiki page. Silent and best-effort: no push, deduped by
 // the mail id, failures logged only. nil deal (non-deal mail) is a no-op.
-func (s *Server) fileDealFromMail(msg *gmail.MessageDetail, deal *gmailpoll.DealInfo) {
+func (s *Server) fileDealFromMail(msg *gmail.MessageDetail, deal *gmailpoll.DealInfo, relatedProjects []string) {
 	if deal == nil || msg == nil || s.wikiStore == nil {
 		return
 	}
@@ -306,7 +308,7 @@ func (s *Server) fileDealFromMail(msg *gmail.MessageDetail, deal *gmailpoll.Deal
 	// page path, so curated facts (wiki) and citable evidence (notebook) share
 	// one identity). Same IsDeal gate as the wiki write — only recognized deal
 	// documents, not every email — so the notebook stays high-signal.
-	s.pinDealEvidenceToNotebook(msg, deal, relPath)
+	s.pinDealEvidenceToNotebook(msg, deal, relPath, relatedProjects)
 
 	// A brand-new deal page (created) means Deneb doesn't yet know which team owns
 	// this deal — ask instead of guessing. created is true only at mint time, so
@@ -319,7 +321,7 @@ func (s *Server) fileDealFromMail(msg *gmail.MessageDetail, deal *gmailpoll.Deal
 // pinDealEvidenceToNotebook auto-pins a deal email's extraction onto its deal
 // notebook. Silent, best-effort, deduped by mail id (PinUnique): re-analysis of
 // the same email never double-pins. Mirrors fileDealFromMail's silent behavior.
-func (s *Server) pinDealEvidenceToNotebook(msg *gmail.MessageDetail, deal *gmailpoll.DealInfo, dealRef string) {
+func (s *Server) pinDealEvidenceToNotebook(msg *gmail.MessageDetail, deal *gmailpoll.DealInfo, dealRef string, relatedProjects []string) {
 	if s.notebookStore == nil || dealRef == "" {
 		return
 	}
@@ -336,6 +338,39 @@ func (s *Server) pinDealEvidenceToNotebook(msg *gmail.MessageDetail, deal *gmail
 	if added {
 		s.logger.Info("mail→notebook: 딜 증거 핀", "id", msg.ID, "deal", dealRef)
 	}
+
+	// Stamp the analyzer's resolved project linkage onto the deal notebook (각인):
+	// the dealRef is keyed by counterparty, which can differ from the project name,
+	// so without this the project corner can't link the notebook to its project.
+	// Idempotent and best-effort — a failure logs, never fails the analysis.
+	if refs := directProjectPages(relatedProjects); len(refs) > 0 {
+		if _, serr := s.notebookStore.StampProjectRefs(dealRef, refs); serr != nil {
+			s.logger.Warn("mail→notebook: 프로젝트 각인 실패", "id", msg.ID, "deal", dealRef, "error", serr)
+		}
+	}
+}
+
+// directProjectPages filters a related-project list to direct project 대표페이지
+// paths (프로젝트/<name>.md, count of "/" == 1), dropping the raw-data sub-folders
+// (mail-analyses/, 거래/) and any non-프로젝트 entry, deduped in order. This is the
+// reliable project signal the analyzer computed; the same filter gates both the
+// 현재 상태 status update and notebook 각인 so they link to the same canonical pages.
+func directProjectPages(related []string) []string {
+	prefix := wikiProjectCategory + "/"
+	out := make([]string, 0, len(related))
+	seen := make(map[string]bool, len(related))
+	for _, r := range related {
+		r = strings.TrimSpace(r)
+		if !strings.HasPrefix(r, prefix) || strings.Count(r, "/") != 1 {
+			continue
+		}
+		if seen[r] {
+			continue
+		}
+		seen[r] = true
+		out = append(out, r)
+	}
+	return out
 }
 
 // dealEvidenceTitle is the human label for a pinned deal source ("견적서 · 탑솔라").
@@ -391,17 +426,7 @@ func (s *Server) appendMailStatusToProjects(msg *gmail.MessageDetail, res gmailp
 	}
 	ref := "mail:" + msg.ID
 	now := time.Now()
-	prefix := wikiProjectCategory + "/"
-	seen := make(map[string]bool, len(res.RelatedProjects))
-	for _, r := range res.RelatedProjects {
-		r = strings.TrimSpace(r)
-		if !strings.HasPrefix(r, prefix) || strings.Count(r, "/") != 1 {
-			continue // direct project page only (skips mail-analyses/, 거래/, deeper)
-		}
-		if seen[r] {
-			continue
-		}
-		seen[r] = true
+	for _, r := range directProjectPages(res.RelatedProjects) {
 		if err := s.wikiStore.AppendProjectStatusLine(r, line, ref, now); err != nil {
 			s.logger.Warn("mail→project 현재 상태 갱신 실패", "id", msg.ID, "path", r, "error", err)
 		}

@@ -180,6 +180,7 @@ export interface NotebookSummary {
   id: string;
   name: string;
   dealRef?: string; // wiki path of the deal page ("프로젝트/거래/…md")
+  projectRefs?: string[]; // canonical project page paths (각인 at ingestion); ProjectHomePane matches on these
   sourceCount?: number;
   updated?: number; // epoch millis
 }
