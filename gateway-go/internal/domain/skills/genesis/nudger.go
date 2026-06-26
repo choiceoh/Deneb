@@ -62,6 +62,12 @@ type Nudger struct {
 	counts   map[string]int       // sessionKey -> tool invocations since last fire
 	inflight map[string]time.Time // sessionKey -> fire started (guards against dupes)
 	fires    map[string]int       // sessionKey -> reviews already fired (drives backoff)
+
+	// shutdownCtx is the base context background review forks derive their
+	// bounded timeout from, so an in-flight genesis review is cancelled on
+	// graceful server shutdown rather than orphaned (concurrency.md rule 7).
+	// nil → context.Background() (the prior behavior). Set once at startup.
+	shutdownCtx context.Context
 }
 
 // NudgerConfig configures a Nudger.
@@ -238,6 +244,32 @@ func (n *Nudger) clearInflight(sessionKey string) {
 	n.mu.Unlock()
 }
 
+// SetShutdownContext sets the base context that background review forks derive
+// their bounded timeout from, so an in-flight genesis review is cancelled on
+// graceful server shutdown instead of running on an orphaned goroutine
+// (concurrency.md rule 7). The fork still outlives the user-facing turn — it is
+// the SERVER shutdown context, not the request context. Call once at startup;
+// nil keeps the prior context.Background() behavior.
+func (n *Nudger) SetShutdownContext(ctx context.Context) {
+	if n == nil {
+		return
+	}
+	n.mu.Lock()
+	n.shutdownCtx = ctx
+	n.mu.Unlock()
+}
+
+// baseContext returns the configured shutdown context, or context.Background()
+// when none was wired (tests, or a server without graceful-shutdown plumbing).
+func (n *Nudger) baseContext() context.Context {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	if n.shutdownCtx != nil {
+		return n.shutdownCtx
+	}
+	return context.Background()
+}
+
 // fire spawns a background goroutine that runs the genesis evaluation
 // and (if skill-worthy) persists a new skill. All errors are logged;
 // none propagate to the caller's turn. pkg/safego adds panic recovery.
@@ -262,7 +294,7 @@ func (n *Nudger) runReviewOnce(sessionKey string, snapshot SessionContext) (bool
 	if !n.Enabled() || n.reviewer == nil {
 		return false, nil
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), nudgeGenerationTimeout)
+	ctx, cancel := context.WithTimeout(n.baseContext(), nudgeGenerationTimeout)
 	defer cancel()
 	if n.tracker != nil {
 		n.tracker.RecordEvolutionActivity(SkillActivityReviewAttempt, true, "")
@@ -297,7 +329,7 @@ func (n *Nudger) runOnce(sessionKey string, snapshot SessionContext) (bool, erro
 	if !n.Enabled() {
 		return false, nil
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), nudgeGenerationTimeout)
+	ctx, cancel := context.WithTimeout(n.baseContext(), nudgeGenerationTimeout)
 	defer cancel()
 	// Evaluate with the Service so cooldown/daily-cap logic stays in
 	// one place. When Evaluate returns false, skip silently — that's
