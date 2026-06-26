@@ -66,7 +66,39 @@ func (w *Writer) AggregateEffort(sinceMs int64) EffortStat {
 	}
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	w.scanEffort(sinceMs, func(_ string, d RunEndData) {
+		accumulateEffort(&stat, d)
+	})
+	return stat
+}
 
+// AggregateEffortByModel buckets the same run.end effort decisions as
+// AggregateEffort, keyed by the model that produced the run (RunEndData.Model).
+// This is the per-model calibration view the adaptive-effort nudge keys on:
+// EscalationRate/RoutedShare are router-gate signals that must be judged per
+// model, since each model carries its own MaxSimpleRunes gate. Runs whose
+// run.end carries no Model are bucketed under "" (and skipped by the nudge).
+func (w *Writer) AggregateEffortByModel(sinceMs int64) map[string]EffortStat {
+	out := map[string]EffortStat{}
+	if w == nil {
+		return out
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.scanEffort(sinceMs, func(model string, d RunEndData) {
+		stat, ok := out[model]
+		if !ok {
+			stat = EffortStat{KeptReasons: map[string]int{}}
+		}
+		accumulateEffort(&stat, d)
+		out[model] = stat
+	})
+	return out
+}
+
+// scanEffort walks every router-active run.end under baseDir (within sinceMs)
+// and invokes fn with the run's model and decoded data. Callers must hold w.mu.
+func (w *Writer) scanEffort(sinceMs int64, fn func(model string, d RunEndData)) {
 	paths, _ := filepath.Glob(filepath.Join(w.baseDir, "*.jsonl"))
 	for _, path := range paths {
 		for _, e := range readAllEntries(path) {
@@ -80,27 +112,32 @@ func (w *Writer) AggregateEffort(sinceMs int64) EffortStat {
 			if json.Unmarshal(e.Data, &d) != nil || d.EffortDecision == "" {
 				continue
 			}
-			switch {
-			case strings.HasPrefix(d.EffortDecision, "routed:"):
-				stat.RoutedRuns++
-				stat.RoutedOutputTokens += int64(d.OutputTokens)
-				if d.EffortEscalated {
-					stat.EscalatedRuns++
-				}
-				switch d.StopReason {
-				case "end_turn":
-					stat.RoutedEndTurn++
-				case "timeout":
-					stat.RoutedTimeout++
-				}
-			case strings.HasPrefix(d.EffortDecision, "kept:"):
-				stat.KeptRuns++
-				stat.KeptOutputTokens += int64(d.OutputTokens)
-				stat.KeptReasons[effortReasonCategory(d.EffortDecision)]++
-			}
+			fn(d.Model, d)
 		}
 	}
-	return stat
+}
+
+// accumulateEffort folds one router-active run.end into stat. Shared by the
+// global and per-model aggregators so they count identically.
+func accumulateEffort(stat *EffortStat, d RunEndData) {
+	switch {
+	case strings.HasPrefix(d.EffortDecision, "routed:"):
+		stat.RoutedRuns++
+		stat.RoutedOutputTokens += int64(d.OutputTokens)
+		if d.EffortEscalated {
+			stat.EscalatedRuns++
+		}
+		switch d.StopReason {
+		case "end_turn":
+			stat.RoutedEndTurn++
+		case "timeout":
+			stat.RoutedTimeout++
+		}
+	case strings.HasPrefix(d.EffortDecision, "kept:"):
+		stat.KeptRuns++
+		stat.KeptOutputTokens += int64(d.OutputTokens)
+		stat.KeptReasons[effortReasonCategory(d.EffortDecision)]++
+	}
 }
 
 // effortReasonCategory pulls the gate category out of a "kept:<category>[:detail]"

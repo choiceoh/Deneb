@@ -54,6 +54,72 @@ func TestAggregateEffort_EmptyAndNilSafe(t *testing.T) {
 	}
 }
 
+func TestAggregateEffortByModel(t *testing.T) {
+	w := NewWriter(t.TempDir())
+
+	// model A: 2 routed (1 escalated) + 1 kept.
+	appendEntry(t, w, "s1", "r1", TypeRunEnd, RunEndData{
+		Model: "deepseek-v4-flash", StopReason: "end_turn",
+		EffortDecision: "routed:short-conversational", OutputTokens: 100,
+	})
+	appendEntry(t, w, "s1", "r2", TypeRunEnd, RunEndData{
+		Model: "deepseek-v4-flash", StopReason: "timeout",
+		EffortDecision: "routed:short-conversational", EffortEscalated: true, OutputTokens: 300,
+	})
+	appendEntry(t, w, "s1", "r3", TypeRunEnd, RunEndData{
+		Model: "deepseek-v4-flash", StopReason: "end_turn",
+		EffortDecision: "kept:hard-signal:분석", OutputTokens: 800,
+	})
+	// model B: 1 kept only.
+	appendEntry(t, w, "s2", "r4", TypeRunEnd, RunEndData{
+		Model: "qwen3.6-35b", StopReason: "end_turn",
+		EffortDecision: "kept:context-heavy", OutputTokens: 600,
+	})
+	// router-inactive run (no decision) — excluded from every bucket.
+	appendEntry(t, w, "s2", "r5", TypeRunEnd, RunEndData{Model: "qwen3.6-35b", StopReason: "end_turn"})
+
+	byModel := w.AggregateEffortByModel(0)
+
+	a := byModel["deepseek-v4-flash"]
+	if a.RoutedRuns != 2 || a.KeptRuns != 1 || a.EscalatedRuns != 1 {
+		t.Fatalf("model A: routed=%d kept=%d escalated=%d, want 2/1/1", a.RoutedRuns, a.KeptRuns, a.EscalatedRuns)
+	}
+	if a.RoutedTimeout != 1 || a.RoutedEndTurn != 1 {
+		t.Fatalf("model A outcomes: endTurn=%d timeout=%d, want 1/1", a.RoutedEndTurn, a.RoutedTimeout)
+	}
+	if got := a.EscalationRate(); got != 0.5 {
+		t.Fatalf("model A escalation rate=%.2f, want 0.50", got)
+	}
+	if a.KeptReasons["hard-signal"] != 1 {
+		t.Fatalf("model A kept reasons wrong: %v", a.KeptReasons)
+	}
+
+	b := byModel["qwen3.6-35b"]
+	if b.RoutedRuns != 0 || b.KeptRuns != 1 {
+		t.Fatalf("model B: routed=%d kept=%d, want 0/1", b.RoutedRuns, b.KeptRuns)
+	}
+	if len(byModel) != 2 {
+		t.Fatalf("want 2 model buckets, got %d: %v", len(byModel), byModel)
+	}
+
+	// Per-model and global must agree on the totals.
+	global := w.AggregateEffort(0)
+	if a.RoutedRuns+b.RoutedRuns != global.RoutedRuns || a.KeptRuns+b.KeptRuns != global.KeptRuns {
+		t.Fatalf("per-model totals diverge from global: per-model routed=%d kept=%d, global routed=%d kept=%d",
+			a.RoutedRuns+b.RoutedRuns, a.KeptRuns+b.KeptRuns, global.RoutedRuns, global.KeptRuns)
+	}
+}
+
+func TestAggregateEffortByModel_EmptyAndNilSafe(t *testing.T) {
+	if got := (*Writer)(nil).AggregateEffortByModel(0); got == nil || len(got) != 0 {
+		t.Fatalf("nil writer must return an empty non-nil map, got %v", got)
+	}
+	w := NewWriter(t.TempDir())
+	if got := w.AggregateEffortByModel(0); len(got) != 0 {
+		t.Fatalf("empty log must yield no buckets, got %v", got)
+	}
+}
+
 func TestEffortReasonCategory(t *testing.T) {
 	cases := map[string]string{
 		"kept:hard-signal:분석": "hard-signal",

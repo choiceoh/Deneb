@@ -10,10 +10,16 @@ import "github.com/choiceoh/deneb/gateway-go/internal/ai/router"
 //     CapabilityForModel): a non-empty kwarg enables routing by default, so a
 //     dual-mode model works out of the box and any other model stays inert.
 //  3. deneb.json models.providers.<id>.routing overrides — operator tuning.
+//  4. The adaptive-effort nudge's tuned MaxSimpleRunes (tunedMaxSimpleRunes),
+//     when set — the runtime-writable gate the background nudge moves within a
+//     tight band from the effort scorecard. Layered last so it is the live word
+//     on the volume gate; off by default (the nudge is opt-in), so an unconfig-
+//     ured deployment is unaffected.
 //
-// The current main model has no routing override, so it resolves to
-// DefaultProfile() + its capability toggle: identical to the pre-config
-// behavior. A model with no toggle and no override resolves Enabled=false.
+// The current main model has no routing override and no tuned gate, so it
+// resolves to DefaultProfile() + its capability toggle: identical to the
+// pre-config behavior. A model with no toggle and no override resolves
+// Enabled=false.
 func (r *Registry) RoutingProfileForModel(providerID, model string) router.Profile {
 	p := router.DefaultProfile()
 	p.ToggleKwarg = r.CapabilityForModel(providerID, model).ThinkingToggleKwarg
@@ -21,9 +27,13 @@ func (r *Registry) RoutingProfileForModel(providerID, model string) router.Profi
 
 	r.mu.RLock()
 	pr, ok := r.providers[providerID]
+	tunedRunes := r.tunedMaxSimpleRunes[model]
 	r.mu.RUnlock()
 	if ok && pr.Routing != nil {
 		applyRoutingOverride(&p, pr.Routing)
+	}
+	if tunedRunes > 0 {
+		p.MaxSimpleRunes = tunedRunes
 	}
 	return p
 }
