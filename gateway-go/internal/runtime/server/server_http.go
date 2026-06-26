@@ -34,18 +34,6 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 		cronTasks = s.cronService.Status().TaskCount
 	}
 
-	// Channel health summary.
-	channelHealthSummary := map[string]int{"healthy": 0, "unhealthy": 0}
-	if s.channelHealth != nil {
-		for _, ch := range s.channelHealth.HealthSnapshot() {
-			if ch.Healthy {
-				channelHealthSummary["healthy"]++
-			} else {
-				channelHealthSummary["unhealthy"]++
-			}
-		}
-	}
-
 	// Current model.
 	currentModel := ""
 	if s.chatHandler != nil {
@@ -100,7 +88,6 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 		"uptime_ms":  uptime.Milliseconds(),
 		"subsystems": subsystems,
 		"sessions":   s.sessions.Count(),
-		"channels":   channelHealthSummary,
 		"workers": map[string]int{
 			"processes": activeProcesses,
 			"cron":      cronTasks,

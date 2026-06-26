@@ -11,20 +11,17 @@ import (
 // after applying CLI overrides, environment variables, and validation constraints.
 // This mirrors src/gateway/server-runtime-config.ts GatewayRuntimeConfig.
 type GatewayRuntimeConfig struct {
-	BindHost                      string
-	Port                          int
-	ControlUIEnabled              bool
-	ControlUIBasePath             string
-	ControlUIRoot                 string
-	ResolvedAuth                  ResolvedGatewayAuth
-	AuthMode                      string
-	TailscaleConfig               GatewayTailscaleConfig
-	TailscaleMode                 string // "off" | "serve" | "funnel"
-	TrustedProxies                []string
-	ChannelHealthCheckMinutes     int
-	ChannelStaleEventThresholdMin int
-	ChannelMaxRestartsPerHour     int
-	ReloadConfig                  GatewayReloadConfig
+	BindHost          string
+	Port              int
+	ControlUIEnabled  bool
+	ControlUIBasePath string
+	ControlUIRoot     string
+	ResolvedAuth      ResolvedGatewayAuth
+	AuthMode          string
+	TailscaleConfig   GatewayTailscaleConfig
+	TailscaleMode     string // "off" | "serve" | "funnel"
+	TrustedProxies    []string
+	ReloadConfig      GatewayReloadConfig
 }
 
 // RuntimeConfigParams are the inputs for resolving the runtime config.
@@ -181,20 +178,6 @@ func ResolveGatewayRuntimeConfig(params RuntimeConfigParams) (*GatewayRuntimeCon
 		}
 	}
 
-	// Channel health defaults.
-	channelHealthCheck := DefaultChannelHealthCheckMinutes
-	if gw.ChannelHealthCheckMinutes != nil {
-		channelHealthCheck = *gw.ChannelHealthCheckMinutes
-	}
-	channelStale := DefaultChannelStaleThresholdMinutes
-	if gw.ChannelStaleEventThresholdMinutes != nil {
-		channelStale = *gw.ChannelStaleEventThresholdMinutes
-	}
-	channelMaxRestarts := DefaultChannelMaxRestartsPerHour
-	if gw.ChannelMaxRestartsPerHour != nil {
-		channelMaxRestarts = *gw.ChannelMaxRestartsPerHour
-	}
-
 	// Reload config (always populated with defaults by loader).
 	reloadCfg := GatewayReloadConfig{Mode: ReloadHybrid}
 	if gw.Reload != nil {
@@ -202,20 +185,17 @@ func ResolveGatewayRuntimeConfig(params RuntimeConfigParams) (*GatewayRuntimeCon
 	}
 
 	return &GatewayRuntimeConfig{
-		BindHost:                      bindHost,
-		Port:                          params.Port,
-		ControlUIEnabled:              controlUIEnabled,
-		ControlUIBasePath:             controlUIBasePath,
-		ControlUIRoot:                 controlUIRoot,
-		ResolvedAuth:                  resolvedAuth,
-		AuthMode:                      authMode,
-		TailscaleConfig:               tailscaleCfg,
-		TailscaleMode:                 tailscaleMode,
-		TrustedProxies:                trustedProxies,
-		ChannelHealthCheckMinutes:     channelHealthCheck,
-		ChannelStaleEventThresholdMin: channelStale,
-		ChannelMaxRestartsPerHour:     channelMaxRestarts,
-		ReloadConfig:                  reloadCfg,
+		BindHost:          bindHost,
+		Port:              params.Port,
+		ControlUIEnabled:  controlUIEnabled,
+		ControlUIBasePath: controlUIBasePath,
+		ControlUIRoot:     controlUIRoot,
+		ResolvedAuth:      resolvedAuth,
+		AuthMode:          authMode,
+		TailscaleConfig:   tailscaleCfg,
+		TailscaleMode:     tailscaleMode,
+		TrustedProxies:    trustedProxies,
+		ReloadConfig:      reloadCfg,
 	}, nil
 }
 

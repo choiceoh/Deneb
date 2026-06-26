@@ -64,15 +64,12 @@ const (
 // ── Default values ───────────────────────────────────────────────────────────
 
 const (
-	DefaultChannelHealthCheckMinutes    = 5
-	DefaultChannelStaleThresholdMinutes = 30
-	DefaultChannelMaxRestartsPerHour    = 10
-	DefaultReloadDebounceMs             = 300
-	DefaultReloadDeferralTimeoutMs      = 300_000
-	DefaultAgentMaxConcurrent           = 8
-	DefaultSubagentMaxConcurrent        = 2
-	DefaultLogRedactSensitive           = "tools"
-	DefaultMaxHookTimeoutMs             = 300_000 // 5 minutes
+	DefaultReloadDebounceMs        = 300
+	DefaultReloadDeferralTimeoutMs = 300_000
+	DefaultAgentMaxConcurrent      = 8
+	DefaultSubagentMaxConcurrent   = 2
+	DefaultLogRedactSensitive      = "tools"
+	DefaultMaxHookTimeoutMs        = 300_000 // 5 minutes
 )
 
 // DenebConfig is the top-level configuration object read from deneb.json.
@@ -103,18 +100,15 @@ type MetaConfig struct {
 
 // GatewayConfig holds all gateway server settings.
 type GatewayConfig struct {
-	Port                              *int                    `json:"port,omitempty"`
-	Bind                              string                  `json:"bind,omitempty"` // GatewayBindMode
-	CustomBindHost                    string                  `json:"customBindHost,omitempty"`
-	ControlUI                         *GatewayControlUIConfig `json:"controlUi,omitempty"`
-	Auth                              *GatewayAuthConfig      `json:"auth,omitempty"`
-	Tailscale                         *GatewayTailscaleConfig `json:"tailscale,omitempty"`
-	Reload                            *GatewayReloadConfig    `json:"reload,omitempty"`
-	TrustedProxies                    []string                `json:"trustedProxies,omitempty"`
-	AllowRealIPFallback               *bool                   `json:"allowRealIpFallback,omitempty"`
-	ChannelHealthCheckMinutes         *int                    `json:"channelHealthCheckMinutes,omitempty"`
-	ChannelStaleEventThresholdMinutes *int                    `json:"channelStaleEventThresholdMinutes,omitempty"`
-	ChannelMaxRestartsPerHour         *int                    `json:"channelMaxRestartsPerHour,omitempty"`
+	Port                *int                    `json:"port,omitempty"`
+	Bind                string                  `json:"bind,omitempty"` // GatewayBindMode
+	CustomBindHost      string                  `json:"customBindHost,omitempty"`
+	ControlUI           *GatewayControlUIConfig `json:"controlUi,omitempty"`
+	Auth                *GatewayAuthConfig      `json:"auth,omitempty"`
+	Tailscale           *GatewayTailscaleConfig `json:"tailscale,omitempty"`
+	Reload              *GatewayReloadConfig    `json:"reload,omitempty"`
+	TrustedProxies      []string                `json:"trustedProxies,omitempty"`
+	AllowRealIPFallback *bool                   `json:"allowRealIpFallback,omitempty"`
 }
 
 // GatewayControlUIConfig controls the Control UI serving.
