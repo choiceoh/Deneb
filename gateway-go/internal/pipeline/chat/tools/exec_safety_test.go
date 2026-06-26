@@ -126,6 +126,44 @@ func TestFormatDestructiveWarnings(t *testing.T) {
 	})
 }
 
+func TestInPlaceFileTargets(t *testing.T) {
+	contains := func(xs []string, s string) bool {
+		for _, x := range xs {
+			if x == s {
+				return true
+			}
+		}
+		return false
+	}
+	cases := []struct {
+		command string
+		must    []string // targets that MUST be captured (so they get checkpointed)
+		mustNot []string // tokens that must NOT appear (avoid spurious/cross-segment)
+	}{
+		{"sed -i 's/a/b/' main.go", []string{"main.go"}, nil},
+		{"sed -i.bak 's/x/y/' config.yaml", []string{"config.yaml"}, []string{"-i.bak"}},
+		{"sed --in-place 's/x/y/' a.go b.go", []string{"a.go", "b.go"}, nil},
+		{"echo hi > out.txt", []string{"out.txt"}, nil},
+		{"cat a | sed -i 's/x/y/' b.go", []string{"b.go"}, []string{"a"}}, // cross-segment isolation
+		{"cat x >> log.txt", nil, []string{"log.txt"}},                    // append (>>) is not an in-place overwrite
+		{"ls -la", nil, []string{"-la"}},                                  // no sed/redirect → nothing
+		{"grep foo file.go", nil, []string{"file.go"}},                    // read-only → not a target
+	}
+	for _, tc := range cases {
+		got := InPlaceFileTargets(tc.command)
+		for _, m := range tc.must {
+			if !contains(got, m) {
+				t.Errorf("%q: expected target %q in %v", tc.command, m, got)
+			}
+		}
+		for _, n := range tc.mustNot {
+			if contains(got, n) {
+				t.Errorf("%q: did not expect %q in %v", tc.command, n, got)
+			}
+		}
+	}
+}
+
 func TestDetectFileModification(t *testing.T) {
 	tests := []struct {
 		command string

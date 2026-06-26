@@ -60,6 +60,13 @@ iteration 번호에 따라 전략을 전환한다:
 - 특정 방향이 **계속 실패하면 그 방향을 멈춰라.**
 - keep된 변경이 **왜** 효과 있었는지 이해한 후에 다음을 결정.
 
+### 인과 진단 & 반증가능 예측 (raw-trace + prediction)
+
+> 스칼라 metric만 보고 keep/revert 하면 **운빨 개선**(엉뚱한 이유로 점수가 오른 변경)을 붙들게 된다. 두 규율로 막는다. 근거: Meta-Harness(원시 트레이스 기반 인과 진단, arXiv:2603.28052), Agentic Harness Engineering(편집마다 반증가능 예측, arXiv:2604.25850).
+
+- **원시 트레이스로 진단하라, 점수로만 판단하지 마라.** 변경이 퇴보/실패하면 `metric=N`만 읽지 말고 `iterate.sh`가 뱉는 `DENEB_TEST_JSON`의 `diagnostics`와 실제 실패 트랜스크립트(`live-test.sh logs-errors`, 실패 체크 본문)를 **직접 열어** *왜* 그랬는지 인과를 짚어라. "점수가 내려갔다"가 아니라 "X 때문에 Y가 깨졌다"가 keep/revert 근거다.
+- **변경마다 반증가능한 예측을 먼저 선언하라.** Edit 전에 *"이 변경은 metric을 +N, latency를 ±M 만큼 바꿀 것이다 — 왜냐하면 …"*를 결과 테이블에 적고, 실행 후 **예측이 맞았는지** 대조하라. metric은 올랐는데 **예측한 이유와 다르게** 올랐다면 그 keep은 의심하라(spurious) — 원인을 규명하기 전엔 다음 단계의 토대로 삼지 마라.
+
 ### Stuck Recovery (연속 실패)
 
 | 연속 실패 | 대응 |
@@ -82,15 +89,15 @@ scripts/dev/iterate.sh
 ### 2. 반복
 
 ```
-가설 → Edit → dev-iterate.sh → ITERATE_RESULT 파싱 → keep/revert → 기록 → 반복
+가설+예측 → Edit → dev-iterate.sh → ITERATE_RESULT 파싱 → 예측검증(틀리면 raw-trace 진단) → keep/revert → 기록 → 반복
 ```
 
 ### 3. 결과 테이블
 
-| # | 상수 | 값 | metric | keep | latency | 가설 |
-|---|------|-----|--------|------|---------|------|
-| 0 | baseline | - | 2 | - | 1773ms | baseline |
-| 1 | ... | ... | ... | ✓/✗ | ... | ... |
+| # | 상수 | 값 | 예측 | 실제 metric | 예측적중 | keep | latency | 가설/원인 |
+|---|------|-----|------|--------|---------|------|---------|------|
+| 0 | baseline | - | - | 2 | - | - | 1773ms | baseline |
+| 1 | ... | ... | +1 | ... | ✓/✗ | ✓/✗ | ... | ... |
 
 ### 4. 최종
 
