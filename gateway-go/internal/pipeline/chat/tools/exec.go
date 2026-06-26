@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -97,17 +98,21 @@ func ToolExec(procMgr *process.Manager, defaultDir string) ToolFunc {
 			return "", err
 		}
 
-		// Rollback coverage for exec-driven file mutations. Before running a
-		// command that looks file-mutating (sed -i, mv, cp, rm, tee, `> file`),
-		// best-effort snapshot the likely-affected paths via the same checkpoint
-		// manager the write/edit tools use, so /rollback can undo them. Best-
-		// effort and non-fatal: unparseable targets are skipped and snapshot
-		// failures are logged (not surfaced) — see snapshotExecTargets. Background
-		// commands are covered too; the snapshot is of pre-launch state. Note this
-		// is file-content only: a command's other side effects (sent messages,
-		// network calls, spawned processes) are not rolled back.
-		if looksFileMutating(p.Command) {
-			snapshotExecTargets(ctx, p.Command, workDir)
+		// Pre-exec checkpoint: an in-place file edit run via exec (sed -i, '>'
+		// redirect) bypasses the rollback net the fs Write/Edit tools have.
+		// Snapshot the target files that already exist so this edit is
+		// /rollback-recoverable too. Best-effort + nil-safe (no Checkpointer wired →
+		// no-op); only existing regular files are snapshotted, so over-inclusive
+		// candidates (a misparsed sed script) harmlessly drop out, and the command
+		// itself is never blocked or modified.
+		for _, t := range InPlaceFileTargets(p.Command) {
+			abs := t
+			if !filepath.IsAbs(abs) {
+				abs = filepath.Join(workDir, t)
+			}
+			if fi, err := os.Stat(abs); err == nil && fi.Mode().IsRegular() {
+				snapshotBeforeWrite(ctx, abs, "exec")
+			}
 		}
 
 		timeoutMs := int64(60000)

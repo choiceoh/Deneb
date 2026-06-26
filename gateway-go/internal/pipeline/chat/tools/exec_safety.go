@@ -267,3 +267,54 @@ var (
 	redirectPattern = regexp.MustCompile(`[^|>]>\s*[^/&>]`) // > file (not >> and not > /dev/null)
 	teePattern      = regexp.MustCompile(`\btee\s+[^|]`)
 )
+
+// shellSegmentSplit splits a command on shell separators so an in-place edit in
+// one segment doesn't pull tokens from another (sed -i a.go && cat b.go).
+var shellSegmentSplit = regexp.MustCompile(`\|\||&&|[|;&\n]`)
+
+// redirectTargetPattern captures the target of a single '>' redirect (not '>>').
+var redirectTargetPattern = regexp.MustCompile(`(?:^|[^>])>\s*([^\s|&>;]+)`)
+
+// InPlaceFileTargets returns candidate file paths a command modifies IN PLACE —
+// sed -i targets and single-'>' redirect targets — so exec can checkpoint them
+// before running, giving exec's destructive file edits the same /rollback net the
+// fs Write/Edit tools already have.
+//
+// It is deliberately OVER-inclusive and pure (no filesystem touch): the caller
+// resolves each candidate against the workdir and snapshots only those that exist
+// as regular files. So a misparsed sed script fragment or flag simply fails the
+// existence check and drops out — false candidates are harmless (snapshots dedupe
+// by SHA), and the only failure mode worth avoiding is missing the REAL target,
+// which over-inclusion prevents. Globs / here-docs / exotic quoting yield extra or
+// no candidates and fall through unsnapshotted — no worse than before this guard.
+func InPlaceFileTargets(command string) []string {
+	var out []string
+	seen := map[string]struct{}{}
+	add := func(tok string) {
+		tok = strings.Trim(tok, "'\"")
+		if tok == "" {
+			return
+		}
+		if _, ok := seen[tok]; ok {
+			return
+		}
+		seen[tok] = struct{}{}
+		out = append(out, tok)
+	}
+	for _, seg := range shellSegmentSplit.Split(command, -1) {
+		// sed -i / --in-place: every trailing non-flag bareword is a candidate.
+		if sedInPlacePattern.MatchString(seg) {
+			for i, f := range strings.Fields(seg) {
+				if i == 0 || strings.HasPrefix(f, "-") {
+					continue // command word + flags (incl. -i.bak)
+				}
+				add(f)
+			}
+		}
+		// single '>' redirect (not '>>'): the token after '>' is the target.
+		if m := redirectTargetPattern.FindStringSubmatch(seg); m != nil {
+			add(m[1])
+		}
+	}
+	return out
+}
