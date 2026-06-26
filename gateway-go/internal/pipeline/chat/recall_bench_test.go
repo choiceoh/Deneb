@@ -221,6 +221,89 @@ func TestRecallSourceAttribution(t *testing.T) {
 	}
 }
 
+// buildRecallHardStore extends the bench corpus with a lexical distractor for the
+// harder "necessary-but-dissimilar" set below. Reuses the main corpus unchanged
+// (so TestRecallQuality's gated store is untouched) and adds one look-alike page.
+func buildRecallHardStore(t *testing.T) *wiki.Store {
+	t.Helper()
+	store := buildRecallBenchStore(t)
+	// Distractor: SAME entity (현대차) + SAME attribute word (결제기한) as the ulsan
+	// deal, but a different plant/person/date. A query for the ulsan deadline must
+	// still surface ulsan, not be satisfied only by this look-alike — the
+	// drop-the-similar-but-wrong half of functional-sufficiency selection.
+	if err := store.WritePage("거래/hyundai-asan.md", &wiki.Page{
+		Meta: wiki.Frontmatter{ID: "hyundai-asan", Title: "현대차 아산공장 ESS 견적", Category: "거래",
+			Summary: "현대차 아산공장 ESS 견적 건, 결제기한 7월 말", Tags: []string{"현대차", "아산", "ESS"}, Importance: 0.85},
+		Body: "ESS 2MWh 견적 발송. 결제기한은 7월 말. 담당은 박지훈 차장.",
+	}); err != nil {
+		t.Fatalf("WritePage distractor: %v", err)
+	}
+	return store
+}
+
+// recallHardCases is the "necessary-but-dissimilar" set: the answer lives in a
+// page whose TITLE/topic differs from the query, reachable only by an entity/tag
+// bridge or a cross-source convergence — the lexically-achievable analog of
+// functional-sufficiency selection (SWEzze arXiv:2603.28119: keep evidence that is
+// necessary even when it does not lexically resemble the query, drop the similar
+// look-alike). True *semantic* paraphrase dissimilarity needs the embedder and is
+// covered by the wiki semantic tests; this set pressures the no-embedder
+// lexical+entity path that the recall bench actually exercises.
+func recallHardCases() []recallBenchCase {
+	return []recallBenchCase{
+		// Answer (회신 빠름) is on the PERSON page, not the deal page; bridged by 현대차.
+		{name: "entity-attr-bridge", question: "현대차 쪽 담당자 회신 빠른 편이었나?", wantAll: []string{"인물/kim-minjun.md"}},
+		// ulsan must surface despite the asan look-alike sharing 현대차+결제기한.
+		{name: "plant-disambiguation", question: "현대차 울산 모듈 결제기한 언제까지였지?", wantAll: []string{"거래/hyundai-ulsan.md"}},
+		// Answer lives in the diary, bridged by 탑솔라/RE100 — not in any wiki title.
+		{name: "cross-source-converge", question: "탑솔라 RE100 실사 어디랑 하기로 했지?", wantAll: []string{"남도에코"}},
+		// Backup target lives in the body, not the title/topic word.
+		{name: "attr-not-in-title", question: "백업 데이터 어느 스토리지 노드로 보낸다고 했지?", wantAll: []string{"spark4tb"}},
+	}
+}
+
+// TestRecallHardSet measures the harder entity-bridge / cross-source recall set.
+// INFORMATIONAL (no hit-rate floor): the no-embedder bench cannot guarantee these
+// pass, and the goal is to pressure + measure the "necessary-but-dissimilar"
+// weakness for the iterate.sh tuning loop (RECALL_HARD_METRIC), not to gate CI —
+// a flapping regression gate would be worse than the signal. It errors only if
+// recall is wholly dead (empty output for every case), mirroring
+// TestRecallSourceAttribution. Once the host confirms a stable pass rate, a floor
+// can be added.
+func TestRecallHardSet(t *testing.T) {
+	store := buildRecallHardStore(t)
+	cases := recallHardCases()
+	hits, produced := 0, 0
+	for _, c := range cases {
+		out, _ := buildRecallPreflight(context.Background(),
+			RunParams{SessionKey: "client:main", Message: c.question},
+			runDeps{wikiStore: store}, nil)
+		if strings.TrimSpace(out) != "" {
+			produced++
+		}
+		ok := true
+		for _, want := range c.wantAll {
+			if !strings.Contains(out, want) {
+				ok = false
+				t.Logf("HARD-MISS %-22s want %q", c.name, want)
+			}
+		}
+		if ok {
+			hits++
+			t.Logf("HARD-HIT  %-22s", c.name)
+		}
+	}
+	pct := 0
+	if len(cases) > 0 {
+		pct = hits * 100 / len(cases)
+	}
+	// Stable, grep-able line — a second tuning signal alongside RECALL_METRIC.
+	fmt.Printf("RECALL_HARD_METRIC hits=%d total=%d pct=%d\n", hits, len(cases), pct)
+	if produced == 0 {
+		t.Error("recall produced no output for any hard case — recall path appears dead")
+	}
+}
+
 // TestRecallFactRevisionSupersession exercises the "selective forgetting"
 // competency (MemoryAgentBench arXiv:2507.05257): when a stored fact is revised,
 // recall must surface the new value and must never present the old value as a
