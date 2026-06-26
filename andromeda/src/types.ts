@@ -119,6 +119,7 @@ export interface ProjectDigest {
   due?: string; // free-form deadline string from the wiki page (not always RFC3339)
   updatedAtMs?: number; // page last-updated epoch millis
   path?: string; // wiki path to the project page
+  code?: string; // frozen composite project identity (Meta.Code); used to match items that ref a project by code
 }
 
 // Wiki (memory.*) and unified search are query-driven, handled by custom panes

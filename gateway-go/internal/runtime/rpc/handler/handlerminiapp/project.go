@@ -36,8 +36,10 @@ type ProjectDeps struct {
 
 // ProjectDigestRow is one project's latest-progress card for the native client.
 // Path is the project 대표페이지's wiki path so a tap opens it; UpdatedAtMs is the
-// page's last-updated date in epoch millis (0 when unknown). Marked //deneb:wire
-// so the Kotlin type is generated from this one source of truth.
+// page's last-updated date in epoch millis (0 when unknown). Code is the page's
+// frozen composite project identity (Meta.Code), shipped so clients can match
+// items that reference a project by its code, not just its name/path. Marked
+// //deneb:wire so the Kotlin/TS types are generated from this one source of truth.
 //
 //deneb:wire
 type ProjectDigestRow struct {
@@ -47,6 +49,7 @@ type ProjectDigestRow struct {
 	Due         string   `json:"due,omitempty"`
 	UpdatedAtMs int64    `json:"updatedAtMs,omitempty"`
 	Path        string   `json:"path,omitempty"`
+	Code        string   `json:"code,omitempty"`
 }
 
 // ProjectDigestsOut is the miniapp.project.digests response: every project that
@@ -90,6 +93,7 @@ func projectDigests(deps ProjectDeps) rpcutil.HandlerFunc {
 				Due:         st.Due,
 				UpdatedAtMs: st.UpdatedMs,
 				Path:        st.Path,
+				Code:        st.Code,
 			})
 		}
 		return rpcutil.RespondOK(req.ID, ProjectDigestsOut{Digests: rows})
