@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.0.24](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.23...andromeda-v0.0.24) (2026-06-26)
+
+
+### ✨ Features
+
+* **andromeda:** 작업피드 액션 제거·정정 하단 이동으로 본문 와이드화 ([#2875](https://github.com/choiceoh/Deneb/issues/2875)) ([5b8aba4](https://github.com/choiceoh/Deneb/commit/5b8aba411315b872fe9293b624ad53951782ac8c))
+* **exec:** 파괴적 명령 차단 (rm -rf /·디스크 포맷·fork bomb) + 노트북 set_mode RPC ([#2876](https://github.com/choiceoh/Deneb/issues/2876)) ([8d38778](https://github.com/choiceoh/Deneb/commit/8d38778e198032d37e526b066e20b8f56428f6e8))
+
 ## [0.0.23](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.22...andromeda-v0.0.23) (2026-06-24)
 
 
