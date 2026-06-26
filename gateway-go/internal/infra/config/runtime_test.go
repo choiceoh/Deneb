@@ -35,9 +35,6 @@ func TestResolveGatewayRuntimeConfigDefaults(t *testing.T) {
 	if rtCfg.TailscaleMode != "off" {
 		t.Errorf("got %q, want tailscale mode=off", rtCfg.TailscaleMode)
 	}
-	if rtCfg.ChannelHealthCheckMinutes != 5 {
-		t.Errorf("got %d, want health check=5", rtCfg.ChannelHealthCheckMinutes)
-	}
 }
 
 func TestResolveGatewayRuntimeConfigBindOverride(t *testing.T) {

@@ -243,18 +243,6 @@ func applyDefaults(cfg *DenebConfig) {
 	if cfg.Gateway.Tailscale.Mode == "" {
 		cfg.Gateway.Tailscale.Mode = TailscaleOff
 	}
-	if cfg.Gateway.ChannelHealthCheckMinutes == nil {
-		v := DefaultChannelHealthCheckMinutes
-		cfg.Gateway.ChannelHealthCheckMinutes = &v
-	}
-	if cfg.Gateway.ChannelStaleEventThresholdMinutes == nil {
-		v := DefaultChannelStaleThresholdMinutes
-		cfg.Gateway.ChannelStaleEventThresholdMinutes = &v
-	}
-	if cfg.Gateway.ChannelMaxRestartsPerHour == nil {
-		v := DefaultChannelMaxRestartsPerHour
-		cfg.Gateway.ChannelMaxRestartsPerHour = &v
-	}
 	if cfg.Gateway.Reload == nil {
 		cfg.Gateway.Reload = &GatewayReloadConfig{}
 	}

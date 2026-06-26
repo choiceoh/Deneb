@@ -83,12 +83,10 @@ type ServerRPC struct {
 
 // ServerRuntime owns long-running runtime health/activity trackers.
 type ServerRuntime struct {
-	ready         atomic.Bool
-	shutdownOnce  sync.Once
-	gatewaySubs   *events.GatewayEventSubscriptions
-	channelHealth *monitoring.ChannelHealthMonitor
-	activity      *monitoring.ActivityTracker
-	channelEvents *monitoring.ChannelEventTracker
+	ready        atomic.Bool
+	shutdownOnce sync.Once
+	gatewaySubs  *events.GatewayEventSubscriptions
+	activity     *monitoring.ActivityTracker
 	// Auto-resume state: the marker store persists "run active at T"
 	// records across gateway restarts. See auto_resume.go for the
 	// resume policy and file layout. resumeMu guards markerStore's
@@ -358,7 +356,6 @@ func New(addr string, opts ...Option) (*Server, error) {
 		}
 	}
 	s.activity = monitoring.NewActivityTracker()
-	s.channelEvents = monitoring.NewChannelEventTracker()
 
 	// Provider auth manager and runtime resolver.
 	if s.providers != nil {
