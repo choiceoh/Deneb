@@ -148,6 +148,78 @@ func TestEscalatableEffortFailure(t *testing.T) {
 	}
 }
 
+// TestComposeEffortModulator pins the unified policy (#9): the reasoning
+// sandwich's boost wins on boost turns (boost returns non-nil), and the effort
+// router's per-step policy governs every other turn (boost returns nil). A nil
+// boost returns the router policy unwrapped.
+func TestComposeEffortModulator(t *testing.T) {
+	boostCfg := &llm.ThinkingConfig{Type: "enabled", BudgetTokens: 32768}
+	routerCfg := &llm.ThinkingConfig{Type: "disabled", TemplateKwarg: "thinking"}
+
+	// Sandwich boosts only on turn 0 and turn 7 (stand-ins for planning/verify),
+	// returns nil (no opinion) elsewhere.
+	boost := func(turn int, _ []agent.ToolActivity) *llm.ThinkingConfig {
+		if turn == 0 || turn == 7 {
+			return boostCfg
+		}
+		return nil
+	}
+	// Router always lowers (a stand-in disabled policy).
+	routerMod := func(int, []agent.ToolActivity) *llm.ThinkingConfig { return routerCfg }
+
+	composed := composeEffortModulator(boost, routerMod)
+	if got := composed(0, nil); got != boostCfg {
+		t.Errorf("turn 0: boost must win over the router lower, got %+v", got)
+	}
+	if got := composed(7, nil); got != boostCfg {
+		t.Errorf("turn 7 (verify): boost must win, got %+v", got)
+	}
+	if got := composed(3, nil); got != routerCfg {
+		t.Errorf("a non-boost turn must defer to the router, got %+v", got)
+	}
+
+	// Nil boost (sandwich off) → the router policy is returned unwrapped.
+	if composeEffortModulator(nil, routerMod)(0, nil) != routerCfg {
+		t.Error("nil boost must yield the router policy unchanged")
+	}
+}
+
+// TestApplyEffortRouter_ComposesSandwich verifies the router COMPOSES the
+// pre-installed sandwich modulator instead of clobbering it: the sandwich's
+// boost turn keeps its boost even after routing, while the router governs the
+// rest. (Before #9 the router overwrote cfg.ThinkingModulator outright.)
+func TestApplyEffortRouter_ComposesSandwich(t *testing.T) {
+	t.Setenv("DENEB_ADAPTIVE_EFFORT", "1")
+	boostCfg := &llm.ThinkingConfig{Type: "enabled", BudgetTokens: 32768}
+	// A sandwich-shaped modulator: boost on turn 0, nil otherwise.
+	sandwich := func(turn int, _ []agent.ToolActivity) *llm.ThinkingConfig {
+		if turn == 0 {
+			return boostCfg
+		}
+		return nil
+	}
+	cfg := agent.AgentConfig{Model: "deepseek-v4-flash", ThinkingModulator: sandwich}
+
+	route, decision := applyEffortRouter(&cfg, RunParams{Message: "안녕"}, nil, enabledProfile(), nil)
+	if route == nil || decision != "routed:short-conversational" {
+		t.Fatalf("simple message must route (decision=%q)", decision)
+	}
+	// Boost turn survives composition (sandwich wins over the router's turn-0
+	// disable — boosts beat lowers on boost turns).
+	if got := cfg.ThinkingModulator(0, nil); got != boostCfg {
+		t.Fatalf("turn 0 must keep the sandwich boost after routing, got %+v", got)
+	}
+	// A later, light turn falls through to the router's disabled policy.
+	if got := cfg.ThinkingModulator(1, nil); got == nil || got.Type != "disabled" {
+		t.Fatalf("a light later turn must defer to the router (disabled), got %+v", got)
+	}
+	// restore puts the ORIGINAL sandwich modulator back (pre-composition).
+	restoreEffort(&cfg, route)
+	if got := cfg.ThinkingModulator(1, nil); got != nil {
+		t.Fatalf("restore must reinstate the bare sandwich (nil on turn 1), got %+v", got)
+	}
+}
+
 // TestEffortMode checks the env mode parsing (off / adaptive / force).
 func TestEffortMode(t *testing.T) {
 	for v, want := range map[string]string{

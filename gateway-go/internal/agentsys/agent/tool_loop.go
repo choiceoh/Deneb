@@ -5,12 +5,19 @@
 //   - poll_no_progress: polling tool with identical outcomes (no progress)
 //   - ping_pong: alternating A→B→A→B pattern with no progress
 //
-// Plus a global circuit breaker as a catch-all safety net.
+// Plus a global circuit breaker as a catch-all safety net, and a per-path
+// edit-count breaker (RecordFileMutation) for the file-thrash case the hash-based
+// detectors miss: 10 DIFFERENT edits to the SAME file (a fresh old_string each
+// time) never match name+args, so generic_repeat stays silent. We count
+// successful file mutations per resolved absolute path and fire a one-shot,
+// non-blocking nudge once a path crosses the threshold. (LangChain's
+// LoopDetectionMiddleware case.)
 package agent
 
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -35,6 +42,15 @@ func DefaultToolLoopConfig() ToolLoopConfig {
 		GlobalCircuitBreakerThreshold: 30,
 	}
 }
+
+// samePathEditNudgeThreshold is the per-path successful-mutation count at which
+// RecordFileMutation fires its one-shot nudge. The hash-based detectors above
+// only fire on IDENTICAL name+args, so repeated DIFFERENT edits to one file
+// (classic thrash) never trip them; this is the independent backstop for that.
+// Kept a const (not configurable) — it is a coarse warning, not a hard block,
+// and 6 distinct edits to a single file in one run is already past the point
+// where the model should reconsider its approach.
+const samePathEditNudgeThreshold = 6
 
 // ToolLoopLevel indicates the severity of a detected loop.
 type ToolLoopLevel int
@@ -67,6 +83,15 @@ type ToolLoopDetector struct {
 	cfg     ToolLoopConfig
 	history []toolCallRecord
 	logger  *slog.Logger
+
+	// Per-path edit accounting for the file-thrash breaker. editCounts tallies
+	// successful file mutations by resolved absolute path; nudgedPaths records
+	// which paths have already emitted their one-shot nudge so it fires exactly
+	// once per path per run. Both are guarded by mu and scoped to this detector
+	// instance — i.e. one agent run, since the chat layer builds a fresh
+	// detector per run (see DefaultToolLoopConfig usage at the call site).
+	editCounts  map[string]int
+	nudgedPaths map[string]struct{}
 }
 
 // NewToolLoopDetector creates a detector with the given config.
@@ -87,9 +112,11 @@ func NewToolLoopDetector(cfg ToolLoopConfig, logger *slog.Logger) *ToolLoopDetec
 		cfg.GlobalCircuitBreakerThreshold = 30
 	}
 	return &ToolLoopDetector{
-		cfg:     cfg,
-		history: make([]toolCallRecord, 0, cfg.HistorySize),
-		logger:  logger,
+		cfg:         cfg,
+		history:     make([]toolCallRecord, 0, cfg.HistorySize),
+		logger:      logger,
+		editCounts:  make(map[string]int),
+		nudgedPaths: make(map[string]struct{}),
 	}
 }
 
@@ -215,6 +242,58 @@ func (d *ToolLoopDetector) RecordResult(name, result string, isError bool) {
 			break
 		}
 	}
+}
+
+// RecordFileMutation accounts for a SUCCESSFUL file-mutating tool call and
+// returns a one-shot, non-blocking nudge when a single file has been mutated
+// samePathEditNudgeThreshold times within this run. Call this AFTER execution,
+// only when the tool did not error — a failed edit shouldn't count toward thrash.
+//
+// It resolves the target path the same way provenance does (toolFileEffectPaths:
+// root-confined, cleaned, absolute), so the counter keys on the canonical path
+// regardless of how the model spelled it (relative, ~/, trailing slash). Tools
+// that are not file mutators (no entry in mutatingToolPathKeys) resolve to no
+// paths and are ignored. Returns "" when nothing crossed the threshold — the
+// common case — so the caller appends a nudge only when one is produced.
+//
+// The nudge fires at most once per path per run; subsequent edits to an
+// already-nudged path keep counting (so the activity stays visible in
+// editCounts for diagnostics) but emit nothing further.
+func (d *ToolLoopDetector) RecordFileMutation(provenanceRoot, name string, argsJSON []byte) string {
+	if !d.cfg.Enabled {
+		return ""
+	}
+	paths := toolFileEffectPaths(provenanceRoot, name, json.RawMessage(argsJSON))
+	if len(paths) == 0 {
+		return ""
+	}
+
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	for _, p := range paths {
+		d.editCounts[p.AbsPath]++
+		count := d.editCounts[p.AbsPath]
+		if count < samePathEditNudgeThreshold {
+			continue
+		}
+		if _, already := d.nudgedPaths[p.AbsPath]; already {
+			continue
+		}
+		d.nudgedPaths[p.AbsPath] = struct{}{}
+		if d.logger != nil {
+			d.logger.Warn("same-file edit thrash",
+				"path", p.AbsPath, "displayPath", p.DisplayPath, "count", count)
+		}
+		// Warning-style nudge (not a block). Reference the display path — the
+		// root-relative, home-collapsed form provenance already sanitizes — so
+		// the message is legible without leaking absolute layout.
+		return fmt.Sprintf(
+			"[System: 같은 파일을 %d회째 수정 중 — 접근을 재고하세요: %s. "+
+				"반복 수정이 실제로 진전을 내고 있는지, 한 번에 끝낼 더 큰 수정이나 다른 접근이 필요한지 점검하세요.]",
+			count, p.DisplayPath)
+	}
+	return ""
 }
 
 // countIdentical counts how many times tool+argsHash appears in history.

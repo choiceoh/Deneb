@@ -413,12 +413,43 @@ func RunAgent(
 			continue
 		}
 
+		// A finish attempt (clean end_turn or a turn with no tool calls) may be
+		// held by the verification gate below. Persist the finishing assistant
+		// turn HERE, before consulting the gate, for two reasons: (1) the chat
+		// wiring's persister also feeds the gate this turn's text (so an explicit
+		// "verification not applicable" opt-out is recognized on the SAME turn
+		// the model tries to end, never nagged after a valid reason); (2) whether
+		// the gate then holds or lets the finish through, the turn is recorded
+		// exactly once — finishPersisted guards the terminal block from a second
+		// persist. Non-finish turns persist via the normal path further down.
+		finishAttempt := turnRes.stopReason == "end_turn" || len(turnRes.toolCalls) == 0
+		finishPersisted := false
+		if finishAttempt && cfg.OnMessagePersist != nil && turnRes.text != "" {
+			cfg.OnMessagePersist(llm.NewBlockMessage("assistant", turnRes.contentBlocks))
+			result.TurnsPersisted++
+			finishPersisted = true
+		}
+
 		// --- Verification gate: hold a finish that skipped verification ---
 		// Mirrors the max_tokens recovery shape: append what the model said,
-		// inject a user-role demand, keep looping. FinalizeGate self-limits,
-		// so the next finish attempt passes through.
-		if (turnRes.stopReason == "end_turn" || len(turnRes.toolCalls) == 0) && cfg.FinalizeGate != nil {
-			if gatePrompt := cfg.FinalizeGate(turn); gatePrompt != "" {
+		// inject a user-role demand, keep looping. Unlike the max_tokens
+		// recovery, the gate may escalate and HARD-BLOCK — it can keep returning
+		// a demand across finish attempts until the run verifies or explicitly
+		// opts out, so only the loop's own budget (max_turns) bounds it. The
+		// gate inspects this finishing turn's text (e.g. for an explicit opt-out
+		// line) via the OnMessagePersist feed above, so it decides on the SAME
+		// turn the model tries to end.
+		//
+		// EXCEPTION — the grace turn: when we are already in the single grace
+		// iteration past max_turns (BudgetGraceCall), there is no budget left to
+		// run a verification, and holding here would keep the grace flag alive
+		// and loop forever. So on the grace turn we do NOT hold; we probe the
+		// gate with the terminal sentinel (-1) so a still-armed escape is still
+		// logged, then let the finish through.
+		if finishAttempt && cfg.FinalizeGate != nil {
+			if result.BudgetGraceCall {
+				_ = cfg.FinalizeGate(-1) // log-only; never hold past the grace turn
+			} else if gatePrompt := cfg.FinalizeGate(turn); gatePrompt != "" {
 				logger.Info("finalize gate: holding finish for verification", "turn", turn)
 				messages = append(messages, llm.NewBlockMessage("assistant", turnRes.contentBlocks))
 				messages = append(messages, llm.NewTextMessage("user", gatePrompt))
@@ -427,10 +458,11 @@ func RunAgent(
 		}
 
 		// --- Check stop reason ---
-		if turnRes.stopReason == "end_turn" || len(turnRes.toolCalls) == 0 {
+		if finishAttempt {
 			// Persist the terminal assistant message (not appended to messages
 			// since the loop is ending, but must be in transcript for next run).
-			if cfg.OnMessagePersist != nil && turnRes.text != "" {
+			// Skipped when the finish-attempt persist above already recorded it.
+			if !finishPersisted && cfg.OnMessagePersist != nil && turnRes.text != "" {
 				cfg.OnMessagePersist(llm.NewBlockMessage("assistant", turnRes.contentBlocks))
 				result.TurnsPersisted++
 			}
@@ -478,14 +510,31 @@ func RunAgent(
 		// Parallel tool execution has been removed — tools always run one at
 		// a time so cross-tool side effects are predictable.
 		var toolResults []llm.ContentBlock
+		// Per-path edit-thrash nudges produced this turn. The hash-based loop
+		// detector only catches identical name+args repeats; a run that issues
+		// many DIFFERENT edits to one file slips past it, so RecordFileMutation
+		// counts successful mutations by resolved path and hands back a one-shot
+		// nudge per path. Collected here and appended below as user-role text
+		// blocks, the same channel buildTurnBudgetWarning uses (non-blocking).
+		var editThrashNudges []string
 		if len(turnRes.toolCalls) > 0 {
 			turnReason := extractThinkingText(turnRes.contentBlocks)
+			provenanceRoot := toolProvenanceRoot(tools)
 			toolResults = make([]llm.ContentBlock, len(turnRes.toolCalls))
 			for i, tc := range turnRes.toolCalls {
 				if ctx.Err() != nil {
 					break
 				}
 				toolResults[i] = executeOneTool(ctx, tc, tools, hooks, turnReason, turn, logger, runLog, cfg.ToolLoopDetector)
+
+				// Count this mutation toward the per-path thrash breaker, but
+				// only on success — a failed edit is not progress and must not
+				// push a file toward the nudge threshold.
+				if cfg.ToolLoopDetector != nil && !toolResults[i].IsError {
+					if nudge := cfg.ToolLoopDetector.RecordFileMutation(provenanceRoot, tc.Name, tc.Input); nudge != "" {
+						editThrashNudges = append(editThrashNudges, nudge)
+					}
+				}
 			}
 
 			// Check context cancellation after tool execution.
@@ -519,6 +568,17 @@ func RunAgent(
 		// tool calls so subscribers can track turn progression.
 		if cfg.OnToolTurn != nil {
 			cfg.OnToolTurn(turn+1, turnActivities)
+		}
+
+		// Per-path edit-thrash nudges: surface any one-shot "you keep editing the
+		// same file" warnings produced during this turn's tool execution. These
+		// ride the same user-role tool_result message as the budget warning and
+		// never block — they only ask the model to reconsider its approach.
+		for _, nudge := range editThrashNudges {
+			toolResults = append(toolResults, llm.ContentBlock{
+				Type: "text",
+				Text: nudge,
+			})
 		}
 
 		// When the turn budget is almost spent and sub-agents are running, nudge
@@ -577,6 +637,18 @@ func RunAgent(
 			logger.Warn("agent turn budget exhausted; issuing grace wrap-up call",
 				"maxTurns", cfg.MaxTurns, "turn", turn)
 		}
+	}
+
+	// Terminal gate probe: the loop fell through to max_turns (not a clean,
+	// gate-cleared end_turn), so the finish gate was never given the last word.
+	// A still-armed gate at this point is a silent escape — a run that mutated
+	// files, never verified, and ran out of budget. Consult the gate one final
+	// time with a sentinel turn (-1 = "terminal probe, do not inject") purely
+	// for its side-effect logging; the returned prompt is discarded because the
+	// loop is over. Gate-agnostic by construction: any FinalizeGate that ignores
+	// the sentinel simply returns a prompt we drop.
+	if cfg.FinalizeGate != nil {
+		_ = cfg.FinalizeGate(-1)
 	}
 
 	if result.BudgetExhaustedInjected {

@@ -251,25 +251,44 @@ func buildAgentConfig(
 		ToolLoopDetector:            agent.NewToolLoopDetector(agent.DefaultToolLoopConfig(), logger),
 		// Per-turn message persistence: persist each assistant and tool_result
 		// message immediately to transcript so intermediate findings survive
-		// across runs (fixes the "short-term memory loss" bug).
-		OnMessagePersist: buildMessagePersister(deps, params, logger),
+		// across runs (fixes the "short-term memory loss" bug). Wrapped below so
+		// the verification gate also observes each finishing assistant turn's
+		// text (for the explicit "검증 불필요:" opt-out) on the same turn the
+		// model tries to end.
+		OnMessagePersist: verifyGateObservingPersister(buildMessagePersister(deps, params, logger), verifyGate),
 	}
 
 	// Reasoning sandwich (docs/research/ideal-agent-environment-harness.md §11):
-	// when enabled, boost the planning (turn 0) thinking budget and keep later
-	// turns at baseline. Opt-in via DENEB_REASONING_SANDWICH and only when the
-	// session already has thinking enabled, so default behavior is unchanged.
-	// Thinking is a request-level param, so per-turn variation is cache-safe.
+	// when enabled, boost the planning (turn 0) thinking budget AND re-boost the
+	// verify/finish turn (the back half — the gate's armed-and-finishing turn is
+	// where a fix plan must form), keeping middle tool-execution turns at
+	// baseline. Opt-in via DENEB_REASONING_SANDWICH and only when the session
+	// already has thinking enabled, so default behavior is unchanged. The
+	// modulator returns nil on no-opinion turns so it composes cleanly with the
+	// effort router (see effortStepModulator). Thinking is a request-level param,
+	// so per-turn variation is cache-safe.
 	if thinkingCfg != nil && thinkingCfg.Type == "enabled" && reasoningSandwichEnabled() {
-		cfg.ThinkingModulator = planningSandwichThinking(thinkingCfg, cfg.MaxTokens)
+		cfg.ThinkingModulator = reasoningSandwichThinking(thinkingCfg, cfg.MaxTokens, verifyGate)
 	}
 
 	// Verification gate (docs/research/ideal-agent-environment-harness.md §10):
 	// a run that wrote/edited files must run a verification command before its
-	// finish is accepted; the gate injects one demand prompt, then yields.
-	// Default ON (inert for non-mutating runs); DENEB_VERIFY_GATE=0 disables.
+	// finish is accepted. The gate escalates across two injections and then
+	// HARD-BLOCKS — refusing finish until a verify command runs or the model
+	// emits an explicit "검증 불필요: <이유>" opt-out (observed via the wrapped
+	// persister). A still-armed run that escapes only via max_turns is logged by
+	// the sentinel terminal probe (turn < 0). Default ON (inert for non-mutating
+	// runs); DENEB_VERIFY_GATE=0 disables.
 	if verifyGateEnabled() {
-		cfg.FinalizeGate = func(int) string { return verifyGate.finalizePrompt() }
+		cfg.FinalizeGate = func(turn int) string {
+			if turn < 0 {
+				// Terminal probe from the executor's max_turns path: the gate
+				// never got the last word, so log a silent escape if still armed.
+				verifyGate.logFinishedWhileArmed(logger)
+				return ""
+			}
+			return verifyGate.finalizePrompt(logger)
+		}
 	}
 
 	return cfg, spawnFlag
@@ -377,37 +396,53 @@ func boostThinkingBudget(b int) int {
 // rejected request.
 const minThinkingResponseHeadroom = 4096
 
-// planningSandwichThinking returns a per-turn thinking selector that boosts the
-// first (planning) turn one budget tier above the session baseline and uses the
-// baseline for every later turn — the "front of the reasoning sandwich" (§11).
-// Planning is where extra reasoning pays off most, while keeping middle
-// tool-execution turns at baseline avoids the timeout cost of max-everywhere
-// reasoning.
+// reasoningSandwichThinking returns the full "reasoning sandwich" (§11) per-turn
+// selector: it boosts the FRONT (turn 0, planning) and the BACK (the
+// verify/finish turn the verification gate is actively blocking — gate ==
+// awaitingVerify) one budget tier above the session baseline, while leaving the
+// middle tool-execution turns untouched. The front is where the plan forms; the
+// back is where a fix/verify plan must form after the gate refuses an
+// unverified finish — both pay off from extra reasoning, the middle does not (it
+// would just add timeout cost).
 //
 // The boost is applied only when the larger budget still leaves response
-// headroom under maxTokens; otherwise the planning turn falls back to the
-// baseline so it is never more likely to be rejected than a normal turn
-// (Anthropic requires budget_tokens < max_tokens). maxTokens <= 0 means
-// "unknown" and keeps the boost. Returns nil when base is nil so the caller
-// leaves Thinking as-is.
-func planningSandwichThinking(base *llm.ThinkingConfig, maxTokens int) func(turn int, acts []agent.ToolActivity) *llm.ThinkingConfig {
+// headroom under maxTokens; otherwise it falls back so a boosted turn is never
+// more likely to be rejected than a normal one (Anthropic requires
+// budget_tokens < max_tokens). maxTokens <= 0 means "unknown" and keeps the
+// boost.
+//
+// IMPORTANT — composition contract: this selector returns nil on every
+// non-boost turn (the executor then falls back to cfg.Thinking, and the effort
+// router can layer its lowering policy underneath; see effortStepModulator).
+// It returns the boost ONLY on the two boost turns. So when both the sandwich
+// and the router are enabled, the boost turns win (sandwich returns non-nil)
+// and the router governs the rest (sandwich returns nil → router's output).
+// Returns nil when base is nil so the caller leaves Thinking as-is. gate may be
+// nil (no verification gate) — then only the front boost fires.
+func reasoningSandwichThinking(base *llm.ThinkingConfig, maxTokens int, gate *verifyGateState) func(turn int, acts []agent.ToolActivity) *llm.ThinkingConfig {
 	if base == nil {
 		return nil
 	}
 	boostedBudget := boostThinkingBudget(base.BudgetTokens)
-	boosted := base
+	var boosted *llm.ThinkingConfig
 	if boostedBudget > base.BudgetTokens && (maxTokens <= 0 || boostedBudget <= maxTokens-minThinkingResponseHeadroom) {
 		boosted = &llm.ThinkingConfig{
 			Type:         base.Type,
 			BudgetTokens: boostedBudget,
 			Interleaved:  base.Interleaved,
 		}
+	} else {
+		// No headroom to boost: the boost turns still want MORE than the middle,
+		// so pin them to the baseline explicitly (non-nil) rather than the
+		// router's possibly-lowered output — the front/back never reason LESS
+		// than a plain turn even when the tier can't grow.
+		boosted = base
 	}
 	return func(turn int, _ []agent.ToolActivity) *llm.ThinkingConfig {
-		if turn == 0 {
+		if turn == 0 || gate.awaitingVerify() {
 			return boosted
 		}
-		return base
+		return nil // no opinion: fall back to cfg.Thinking, or compose under the router
 	}
 }
 
@@ -456,6 +491,31 @@ func buildMessagePersister(
 		if err := deps.transcript.Append(params.SessionKey, chatMsg); err != nil {
 			logger.Error("per-turn message persist failed", "role", msg.Role, "error", err)
 		}
+	}
+}
+
+// verifyGateObservingPersister wraps the per-turn persister so the verification
+// gate observes each persisted assistant turn's text — recognizing an explicit
+// "검증 불필요:" opt-out the moment the executor records a finishing turn (the
+// executor persists the finishing assistant turn just BEFORE consulting the
+// gate), so the model is never nagged after giving a valid reason.
+//
+// It deliberately returns nil whenever the inner persister is nil
+// (EphemeralAssistant / no transcript): a non-nil callback would make the
+// executor count phantom persists (result.TurnsPersisted) and suppress the
+// aggregate transcript write. Those runs (heartbeats, tests) therefore do not
+// honor the opt-out line and the gate simply hard-blocks toward verification —
+// the safe asymmetry (a false-hard wastes a turn; a false-easy ships unverified
+// code). gate may be nil, in which case the inner persister is returned as-is.
+func verifyGateObservingPersister(inner func(msg llm.Message), gate *verifyGateState) func(msg llm.Message) {
+	if inner == nil || gate == nil {
+		return inner
+	}
+	return func(msg llm.Message) {
+		if msg.Role == "assistant" {
+			gate.observeFinishText(extractTextFromMessage(msg))
+		}
+		inner(msg)
 	}
 }
 
