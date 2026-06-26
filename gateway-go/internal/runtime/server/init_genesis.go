@@ -94,7 +94,18 @@ func (s *Server) initGenesisServices() {
 	// ("no LLM client available, provider=\"\""), silently killing every nudger review and leaving
 	// the whole Propus loop dead. Generate() uses lwClient directly, so the bare name
 	// is fine there; only this SendSync path needs the prefix.
-	reviewModel := s.modelRegistry.FullModelID(modelrole.RoleLightweight)
+	//
+	// Role: the review must CALL skill_lifecycle (action=propose) — it is a tool-calling task, not a
+	// text one. The lightweight role is a text model (summaries/titles/JSON; it never tool-calls
+	// elsewhere in Deneb) and emits prose with ZERO tool calls, so every review no-ops and the whole
+	// Propus loop produces nothing (verified on the host: review turns log toolCount=0). Use the
+	// coding role — the same tool-capable model the evolver already drives (model-roles dogma #7:
+	// tool-heavy roles need a measured tool-caller). Fall back to lightweight when coding is
+	// unconfigured, so a host without a coding model keeps the prior behavior instead of an empty id.
+	reviewModel := s.modelRegistry.FullModelID(modelrole.RoleCoding)
+	if reviewModel == "" {
+		reviewModel = s.modelRegistry.FullModelID(modelrole.RoleLightweight)
+	}
 	reviewFork := newSkillReviewFork(s.chatHandler, s.genesisTranscripts, s.genesisTracker, reviewModel, s.logger)
 	s.genesisNudger = genesis.NewNudgerFromEnvWithTrackerAndReviewer(
 		s.genesisSvc,
