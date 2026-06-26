@@ -9,7 +9,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelcaps"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/provider"
-	"github.com/choiceoh/deneb/gateway-go/internal/infra/secretref"
 )
 
 // resolveClient creates an LLM client from provider configs, auth manager,
@@ -22,7 +21,7 @@ func resolveClient(deps runDeps, providerID string, logger *slog.Logger) *llm.Cl
 			if baseURL == "" {
 				baseURL = resolveDefaultBaseURL(providerID)
 			}
-			apiKey := resolveProviderAPIKey(context.Background(), providerID, cfg, logger)
+			apiKey := resolveProviderAPIKey(providerID, cfg, logger)
 
 			// Apply provider runtime auth override (e.g., token exchange).
 			if deps.providerRuntime != nil && providerID != "" {
@@ -152,23 +151,11 @@ func resolveClient(deps runDeps, providerID string, logger *slog.Logger) *llm.Cl
 	return deps.llmClient
 }
 
-func resolveProviderAPIKey(ctx context.Context, providerID string, cfg ProviderConfig, logger *slog.Logger) string {
-	apiKey := strings.TrimSpace(provider.ExpandEnvVars(cfg.APIKey))
-	apiKeyRef := strings.TrimSpace(provider.ExpandEnvVars(cfg.APIKeyRef))
-	if apiKeyRef == "" {
-		return apiKey
+func resolveProviderAPIKey(providerID string, cfg ProviderConfig, logger *slog.Logger) string {
+	if strings.TrimSpace(cfg.APIKeyRef) != "" {
+		logger.Warn("provider apiKeyRef ignored: 1Password secret refs are no longer supported; use a plain key or env var", "provider", providerID)
 	}
-
-	resolved, err := secretref.ResolveRequired(ctx, apiKeyRef)
-	if err != nil {
-		logger.Warn("provider API key reference resolution failed",
-			"provider", providerID,
-			"error", err,
-		)
-		return ""
-	}
-	logger.Info("resolved provider API key reference", "provider", providerID)
-	return strings.TrimSpace(resolved)
+	return strings.TrimSpace(provider.ExpandEnvVars(cfg.APIKey))
 }
 
 // Default base URLs for known providers (used when config doesn't specify one).

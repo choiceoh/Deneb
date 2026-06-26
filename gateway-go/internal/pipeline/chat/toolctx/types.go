@@ -67,8 +67,12 @@ type DraftEditFunc func(ctx context.Context, delivery *DeliveryContext, msgID st
 
 // ProviderConfig holds credentials and endpoint for an LLM provider.
 type ProviderConfig struct {
-	APIKey    string `json:"apiKey"`
-	APIKeyRef string `json:"apiKeyRef,omitempty"` // e.g. op://Vault/Item/field
+	APIKey string `json:"apiKey"`
+	// APIKeyRef is deprecated and inert: 1Password secret-reference resolution
+	// has been removed. The field is retained only so a stale apiKeyRef in
+	// deneb.json can be detected and a one-time warning emitted (see
+	// resolveProviderAPIKey). Use a plain apiKey or an env var instead.
+	APIKeyRef string `json:"apiKeyRef,omitempty"`
 	BaseURL   string `json:"baseUrl"`
 	API       string `json:"api"` // "openai" (default)
 
