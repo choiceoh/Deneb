@@ -289,14 +289,15 @@ func (s *Server) fileDealFromMail(msg *gmail.MessageDetail, deal *gmailpoll.Deal
 		return
 	}
 	relPath, created, err := s.wikiStore.UpsertDealPage(wiki.DealPageInput{
-		Counterparty: deal.Counterparty,
-		DocType:      deal.DocType,
-		Amount:       deal.Amount,
-		Date:         deal.Date,
-		DueDate:      deal.DueDate,
-		Items:        deal.Items,
-		Summary:      deal.Summary,
-		SourceRef:    "mail:" + msg.ID,
+		Counterparty:    deal.Counterparty,
+		DocType:         deal.DocType,
+		Amount:          deal.Amount,
+		Date:            deal.Date,
+		DueDate:         deal.DueDate,
+		Items:           deal.Items,
+		Summary:         deal.Summary,
+		SourceRef:       "mail:" + msg.ID,
+		RelatedProjects: directProjectPages(relatedProjects), // deal→project graph edge
 	}, time.Now())
 	if err != nil {
 		s.logger.Warn("mail→deal: 거래 페이지 저장 실패", "id", msg.ID, "counterparty", deal.Counterparty, "error", err)
