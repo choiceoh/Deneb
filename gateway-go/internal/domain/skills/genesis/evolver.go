@@ -285,6 +285,7 @@ func (e *Evolver) EvolveSkill(ctx context.Context, skillName, reviewFinding stri
 	}
 	rejectedSection := formatRejectedSkillEdits(rejected)
 	memorySection := formatOptimizerMemory(optimizerMemory)
+	leverSection := e.formatLowYieldLevers()
 	validationSection := formatValidationCasesForPrompt(validationCases)
 	failurePatternSection := formatFailurePatternsForPrompt(stats)
 	userPrompt := fmt.Sprintf(`## 현재 SKILL.md
@@ -294,7 +295,7 @@ func (e *Evolver) EvolveSkill(ctx context.Context, skillName, reviewFinding stri
 - 총 사용: %d회
 - 성공: %d회 (%.0f%%)
 - 실패: %d회
-- 최근 에러: %s%s%s%s%s%s`,
+- 최근 에러: %s%s%s%s%s%s%s`,
 		string(currentContent),
 		stats.TotalUses, stats.SuccessCount, stats.SuccessRate*100,
 		stats.FailureCount,
@@ -302,6 +303,7 @@ func (e *Evolver) EvolveSkill(ctx context.Context, skillName, reviewFinding stri
 		failurePatternSection,
 		rejectedSection,
 		memorySection,
+		leverSection,
 		validationSection,
 		findingSection)
 
@@ -310,6 +312,36 @@ func (e *Evolver) EvolveSkill(ctx context.Context, skillName, reviewFinding stri
 	}
 
 	return e.generateSelectAndApply(ctx, userPrompt, entry, string(currentContent), stats, reviewFinding)
+}
+
+const (
+	skillLeverYieldScanLimit      = 300 // lifecycle entries scanned for lever yield
+	skillLeverYieldMinShips       = 3   // only flag levers shipped at least this often
+	skillLeverYieldMaxConfirmRate = 0.4 // ...that confirm at or below this rate
+)
+
+// formatLowYieldLevers surfaces (target-signature × edited-surface) edit
+// strategies that have shipped repeatedly yet rarely held up, so the evolver
+// stops re-proposing fleet-wide dead ends (#2 lever-yield, finally wired into the
+// prompt — previously computed but unread). Empty when no lever clears the bar.
+func (e *Evolver) formatLowYieldLevers() string {
+	if e == nil || e.tracker == nil {
+		return ""
+	}
+	levers, err := e.tracker.LowYieldLevers(skillLeverYieldScanLimit, skillLeverYieldMinShips, skillLeverYieldMaxConfirmRate)
+	if err != nil || len(levers) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("\n\n## 저수율 lever (반복 ship됐지만 실제로 안 버팀 — 이 방향 피하라)\n")
+	for _, l := range levers {
+		surface := l.Surface
+		if surface == "" {
+			surface = "(unspecified)"
+		}
+		fmt.Fprintf(&b, "- %s → %s: %d ship, confirm %.0f%%\n", l.Signature, surface, l.Committed, l.ConfirmRate*100)
+	}
+	return b.String()
 }
 
 // generateSelectAndApply runs the K-candidate generate-and-select loop (#3): it
