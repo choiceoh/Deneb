@@ -470,6 +470,7 @@ data class ProjectDigestRow(
     val due: String = "",
     val updatedAtMs: Long = 0L,
     val path: String = "",
+    val code: String = "",
 )
 
 @Immutable
