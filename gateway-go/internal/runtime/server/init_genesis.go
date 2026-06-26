@@ -102,6 +102,11 @@ func (s *Server) initGenesisServices() {
 		reviewFork,
 		s.logger,
 	)
+	// Derive the background skill-review forks from the server shutdown context
+	// so an in-flight genesis review is cancelled on graceful shutdown instead
+	// of orphaning the goroutine (concurrency.md rule 7); the fork still outlives
+	// the user-facing turn — this is the shutdown context, not the request one.
+	s.genesisNudger.SetShutdownContext(s.ShutdownCtx())
 
 	// Install an adapter so the chat handler can invoke the nudger
 	// without importing the genesis package (dependency inversion).
