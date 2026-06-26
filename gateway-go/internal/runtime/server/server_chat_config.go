@@ -503,6 +503,31 @@ func resolveDefaultModel(logger *slog.Logger) string {
 	return "" // empty: registry will provide the default
 }
 
+// resolveProactiveEscalateThreshold reads agents.proactiveEscalateThreshold from
+// deneb.json — the operator's proactive-cadence dial. Returns 0 (= "unset", keep
+// the calibrated default) when the config is absent, invalid, or non-positive.
+// Mirrors resolveDefaultModel's load-on-read pattern.
+func resolveProactiveEscalateThreshold(logger *slog.Logger) int {
+	snapshot, err := config.LoadConfigFromDefaultPath()
+	if err != nil || snapshot == nil || !snapshot.Valid || snapshot.Raw == "" {
+		return 0
+	}
+	var root struct {
+		Agents struct {
+			ProactiveEscalateThreshold *int `json:"proactiveEscalateThreshold"`
+		} `json:"agents"`
+	}
+	if err := json.Unmarshal([]byte(snapshot.Raw), &root); err != nil {
+		logger.Warn("failed to parse agents config for proactive threshold", "error", err)
+		return 0
+	}
+	if t := root.Agents.ProactiveEscalateThreshold; t != nil && *t > 0 {
+		logger.Info("proactive escalate threshold overridden from config", "threshold", *t)
+		return *t
+	}
+	return 0
+}
+
 // resolveLocalVllmModel reads models.providers.vllm.models[0].id from deneb.json
 // to determine the model name the local vLLM server is serving. Returns empty
 // string if unconfigured — NewRegistry will fall back to the const default.

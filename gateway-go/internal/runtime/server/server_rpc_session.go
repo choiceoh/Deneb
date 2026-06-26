@@ -524,7 +524,7 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 				newCalendarSignalCollector(resolveBriefingCalendarClient),
 				newTodoDeadlineCollector(),
 			),
-			signalConfig: autonomous.DefaultSignalConfig(),
+			signalConfig: autonomous.SignalConfigForThreshold(resolveProactiveEscalateThreshold(s.logger)),
 		})
 
 		// Register the goal loop (Ralph loop): advances active standing goals

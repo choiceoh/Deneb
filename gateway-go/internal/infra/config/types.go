@@ -202,7 +202,13 @@ type AgentsConfig struct {
 	FallbackModel    string                `json:"fallbackModel,omitempty"`
 	DefaultSystem    string                `json:"defaultSystem,omitempty"`
 	Defaults         *AgentsDefaultsConfig `json:"defaults,omitempty"`
-	List             []AgentEntryConfig    `json:"list,omitempty"`
+	// ProactiveEscalateThreshold tunes the heartbeat's proactive intervention
+	// cadence — the minimum signal score before the agent speaks up unprompted
+	// ("능동적이되 침해적이지 않게"). Unset/<=0 keeps the calibrated default (40).
+	// Lower = more proactive (interrupts on a weaker signal); higher = quieter.
+	// Consumed by autonomous.SignalConfigForThreshold.
+	ProactiveEscalateThreshold *int               `json:"proactiveEscalateThreshold,omitempty"`
+	List                       []AgentEntryConfig `json:"list,omitempty"`
 }
 
 // AgentsDefaultsConfig holds nested agents.defaults.* fields.
