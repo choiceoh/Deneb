@@ -715,11 +715,13 @@ func parseGenesisResponse(text string) (*GeneratedSkill, error) {
 		if skill.Name == "" {
 			return nil, nil
 		}
+		skill.Description = normalizeSkillDescription(skill.Description)
 		return &skill, nil
 	}
 	if resp.Skip || resp.Skill == nil {
 		return nil, nil
 	}
+	resp.Skill.Description = normalizeSkillDescription(resp.Skill.Description)
 	return resp.Skill, nil
 }
 
@@ -750,6 +752,38 @@ func buildSkillMD(name string, skill *GeneratedSkill) string {
 	sb.WriteString(skill.Body)
 	sb.WriteString("\n")
 	return sb.String()
+}
+
+// maxSkillDescriptionRunes bounds an auto-generated skill description. The
+// description lands in the skills compact-index that the system prompt loads
+// every turn (semi-static cache), so a runaway or multi-line description bloats
+// that budget and reads poorly in the picker. Hermes' house standard is ≤60
+// chars; Deneb keeps a more generous bound because Korean "Use when" triggers
+// run longer, and clamps at a word boundary rather than rejecting — a clean
+// one-liner beats forcing a regeneration.
+const maxSkillDescriptionRunes = 120
+
+// normalizeSkillDescription flattens a generated description to a single line
+// (collapsing any newlines / runs of whitespace the model emitted) and clamps
+// it to maxSkillDescriptionRunes, backing up to a word boundary when possible.
+// The "Use when" trigger sits at the front, so clamping the tail preserves it.
+func normalizeSkillDescription(desc string) string {
+	desc = strings.Join(strings.Fields(desc), " ")
+	r := []rune(desc)
+	if len(r) <= maxSkillDescriptionRunes {
+		return desc
+	}
+	cut := r[:maxSkillDescriptionRunes]
+	lastSpace := -1
+	for i, c := range cut {
+		if c == ' ' {
+			lastSpace = i
+		}
+	}
+	if lastSpace > maxSkillDescriptionRunes/2 {
+		cut = cut[:lastSpace]
+	}
+	return strings.TrimRight(string(cut), " ,;·-") + "…"
 }
 
 // sanitizeSkillName normalizes a skill name to lowercase with hyphens.
