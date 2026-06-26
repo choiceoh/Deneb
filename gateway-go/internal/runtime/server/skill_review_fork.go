@@ -176,7 +176,7 @@ Record exactly one lifecycle decision with skill_lifecycle action=propose:
 - route=genesis with sessionKey=%s when the target transcript should generate a new skill.
 - route=create only when skill_lifecycle cannot execute the creation path but a class-level skill is clearly needed.
 
-If skill_lifecycle is deferred or not visible, load it with fetch_tools first.
+skill_lifecycle is already loaded and directly callable in this review — call action=propose now. Do NOT end the turn with only a prose verdict: a decision that is not written through the tool is lost and the review counts as a failure.
 Set execute=true only when the route is clear and reusable. When unsure, record no-op with the reason.
 If route=evolve/genesis/create is based on a concrete replayable failure or user correction, also call skill_lifecycle action=validation_case_from_session with skillName, sessionKey=%s, and a short description. Add replay.requiredActions or replay.requiredObservations only when the transcript proves the invariant; the tool will extract ordered tool calls and fixture outputs from the target session.
 

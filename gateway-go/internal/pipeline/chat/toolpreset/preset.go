@@ -44,6 +44,23 @@ var selfReviewTools = toSet(
 	"skill_lifecycle",
 )
 
+// preloadedDeferred lists the deferred tools a preset wants ACTIVE from turn 1,
+// skipping the fetch_tools dance. The self-review preset's whole job is to call
+// skill_lifecycle (action=propose), and its narrow 3-tool surface has no cache
+// reason to defer it — leaving it deferred made the review model do a
+// fetch_tools -> call 2-step it routinely skipped, emitting a prose verdict with
+// zero tool calls and no-oping every review. Pre-loading makes the review's one
+// required tool directly callable.
+var preloadedDeferred = map[Preset][]string{
+	PresetSelfReview: {"skill_lifecycle"},
+}
+
+// PreloadedDeferredTools returns the deferred tools to load as active (callable
+// from turn 1) for a preset, or nil to keep the normal fetch-on-demand behavior.
+func PreloadedDeferredTools(preset Preset) []string {
+	return preloadedDeferred[preset]
+}
+
 // Spawn presets back the sandbox the sessions_spawn schema promises
 // (tool_preset enum: researcher/implementer/verifier). Mail research uses the
 // local archive; Gmail OAuth surfaces are not exposed to coding agents.
