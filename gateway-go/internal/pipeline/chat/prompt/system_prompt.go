@@ -379,6 +379,17 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		d.WriteString("\n\n")
 	}
 
+	// Ambient goal awareness: when this session has an active standing goal,
+	// surface it so the agent can answer "어떻게 돼가" without a tool round-trip
+	// and notice when a new request conflicts with the goal it is driving.
+	// Dynamic (uncached) block — never perturbs the static cache prefix.
+	if strings.TrimSpace(params.GoalGlance) != "" {
+		d.WriteString("## 진행 중인 목표 (자율 루프)\n")
+		d.WriteString("이 세션에서 추진 중인 standing goal이다. 진행 상황을 물으면 도구 없이 이 맥락으로 답하고, 새 요청이 목표와 어긋나면 짚어줘라.\n\n")
+		d.WriteString(params.GoalGlance)
+		d.WriteString("\n")
+	}
+
 	// Web tool guidance (conditional).
 	if _, hasWeb := toolSet["web"]; hasWeb {
 		d.WriteString("## Web\n")

@@ -115,6 +115,13 @@ type SystemPromptParams struct {
 	// authoritative source; this is background context only.
 	CalendarGlance string
 
+	// GoalGlance is a compact, pre-formatted snapshot of this session's active
+	// standing goal (goals.Store) for ambient awareness. Empty = no active goal.
+	// Dynamic (uncached) block — like CalendarGlance it is intentionally kept out
+	// of the static cache key so it never perturbs the cached prefix. The live
+	// `goal` tool / autonomous loop remain authoritative; this is context only.
+	GoalGlance string
+
 	// TopicKnowledge is per-forum-topic background knowledge merged into the
 	// Static (cached) block. Empty = no topic section. It is byte-stable for
 	// the session (frozen snapshot in LoadTopicKnowledge) so the Static cache

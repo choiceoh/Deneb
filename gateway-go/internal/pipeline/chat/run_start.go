@@ -168,6 +168,7 @@ func (h *Handler) buildRunDeps() runDeps {
 		skillUsageRecorder: h.skillUsageRecorder,
 		topicResolver:      h.topicResolver,
 		calendarGlanceFn:   h.calendarGlanceFn,
+		goalGlanceFn:       h.goalGlanceFn,
 		personaOverrideFn:  h.personaOverrideFn,
 		fileRecallFn:       h.fileRecallFn,
 
