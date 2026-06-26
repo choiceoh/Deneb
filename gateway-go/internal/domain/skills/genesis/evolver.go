@@ -631,15 +631,27 @@ func stripEchoedFrontmatter(body string) string {
 	}
 }
 
-// bumpPatchVersion increments the patch segment of a semver string.
+// bumpPatchVersion increments the patch segment of a semver string. It preserves
+// the major.minor lineage even for a loosely-semver version (a 2-part "1.0" or a
+// non-numeric patch): a missing/unparseable patch is treated as 0 and bumped to
+// 1. Only a version with no usable major.minor falls back to the genesis seed
+// "0.1.1" — the old code reset every non-3-part version to "0.1.1", silently
+// dropping a skill's version lineage on its first evolve (#12).
 func bumpPatchVersion(version string) string {
+	version = strings.TrimSpace(version)
 	parts := strings.Split(version, ".")
-	if len(parts) != 3 {
+	if len(parts) < 2 || strings.TrimSpace(parts[0]) == "" || strings.TrimSpace(parts[1]) == "" {
 		return "0.1.1"
 	}
-	var patch int
-	fmt.Sscanf(parts[2], "%d", &patch) //nolint:errcheck // partial parse ok
-	return fmt.Sprintf("%s.%s.%d", parts[0], parts[1], patch+1)
+	patch := 0
+	if len(parts) >= 3 {
+		// A non-numeric patch (e.g. a "-rc1" suffix) leaves patch at 0 → bumps to
+		// 1, keeping major.minor rather than discarding the whole version.
+		if _, err := fmt.Sscanf(strings.TrimSpace(parts[2]), "%d", &patch); err != nil {
+			patch = 0
+		}
+	}
+	return fmt.Sprintf("%s.%s.%d", strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1]), patch+1)
 }
 
 func formatRecentErrors(errors []string) string {
