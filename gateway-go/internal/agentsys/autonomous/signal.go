@@ -124,6 +124,23 @@ func DefaultSignalConfig() SignalConfig {
 	}
 }
 
+// SignalConfigForThreshold returns DefaultSignalConfig with the escalation
+// threshold overridden by an operator-supplied value — the single first-class
+// "cadence" dial exposed in deneb.json (agents.proactiveEscalateThreshold).
+//
+// A threshold <= 0 means "unset" and keeps the calibrated default (40), so the
+// proactive cadence is byte-identical to before unless the operator deliberately
+// tunes it. Lower = more proactive (the heartbeat interrupts on a weaker signal);
+// higher = quieter (more must accumulate before it speaks up). Only the
+// threshold is operator-tunable; the per-signal weights stay calibrated.
+func SignalConfigForThreshold(threshold int) SignalConfig {
+	cfg := DefaultSignalConfig()
+	if threshold > 0 {
+		cfg.EscalateThreshold = threshold
+	}
+	return cfg
+}
+
 // Signal is one detected noteworthy item with a Korean, human-readable reason.
 type Signal struct {
 	Kind   SignalKind
