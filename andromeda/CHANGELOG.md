@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.25](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.24...andromeda-v0.0.25) (2026-06-26)
+
+
+### ✨ Features
+
+* **project:** ship frozen code in digest so 프로젝트 코너 matches items by code ([#2894](https://github.com/choiceoh/Deneb/issues/2894)) ([8e147e4](https://github.com/choiceoh/Deneb/commit/8e147e400037f34240cd837d3554a324a38862d1))
+
 ## [0.0.24](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.23...andromeda-v0.0.24) (2026-06-26)
 
 

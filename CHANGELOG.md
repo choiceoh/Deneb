@@ -1,5 +1,14 @@
 # Changelog
 
+## [4.36.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.35.0...deneb-v4.36.0) (2026-06-26)
+
+
+### ✨ Features
+
+* **agent:** declarative + singleton-safe BeforeAPICall hook chain (typed-processor algebra borrow) ([#2890](https://github.com/choiceoh/Deneb/issues/2890)) ([d6ef97a](https://github.com/choiceoh/Deneb/commit/d6ef97a05e1a788d8987ade7ac3c90d223bc1819))
+* **project:** ship frozen code in digest so 프로젝트 코너 matches items by code ([#2894](https://github.com/choiceoh/Deneb/issues/2894)) ([8e147e4](https://github.com/choiceoh/Deneb/commit/8e147e400037f34240cd837d3554a324a38862d1))
+* **wiki:** dreamer 선호 학습 강화 — 행동 추상화 + fact-level 갱신 ([#2892](https://github.com/choiceoh/Deneb/issues/2892)) ([9480493](https://github.com/choiceoh/Deneb/commit/9480493563ae577bd16284d236e631c268305593))
+
 ## [4.35.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.34.0...deneb-v4.35.0) (2026-06-26)
 
 
