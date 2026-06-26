@@ -4,7 +4,7 @@
 
 .PHONY: all \
        go go-run go-dev go-test go-vet go-fmt go-lint go-clean go-bench go-binary gateway-prod wormhole \
-       test clean check check-go fmt generate generate-check \
+       test clean check check-go fmt generate generate-check quality-gate \
        tool-schemas tool-schemas-check \
        data-gen data-gen-check \
        kotlin-models kotlin-models-check \
@@ -147,13 +147,22 @@ clean: go-clean
 
 check-go: go-fmt go-vet go-lint go-test
 
-# Full check: generate-check first (sequential), then Go checks.
-check: generate-check check-go
+# Full check: generate-check first (sequential), then Go checks, then the
+# (opt-in, skip-by-default) Korean-quality regression gate.
+check: generate-check check-go quality-gate
 	@echo "All checks passed"
 
 # Fast check: format + vet + lint only (no tests). Good for pre-commit gate.
 check/fast: go-fmt go-vet go-lint
 	@echo "Fast checks passed (fmt + vet + lint, no tests)"
+
+# Korean-response quality regression gate. Unit tests pass even when Korean
+# output quality silently regresses; only the live quality test catches that.
+# OPT-IN: set DENEB_QUALITY_GATE=1 on a live DGX gateway to arm it. Unset (the
+# default) → skips cleanly and exits 0, so `make check` is unaffected off-DGX.
+# See scripts/dev/quality-gate.sh (baseline: scripts/dev/baseline.sh save).
+quality-gate:
+	@bash scripts/dev/quality-gate.sh
 
 # Run all code generation pipelines in dependency order.
 generate: tool-schemas data-gen kotlin-models

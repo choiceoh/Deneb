@@ -134,16 +134,16 @@
 
 ---
 
-### 2.4 한국어 응답 품질 회귀 → CI gate — **P1 / M**
+### 2.4 한국어 응답 품질 회귀 → CI gate — ✅ **구현됨 (opt-in)**
 
-**현황.** `scripts/dev/live-test.sh quality` 가 100점 만점 metric. 베이스라인 저장은 있으나 CI 자동 gate 가 없음.
+**현황.** `make check` 가 이제 `quality-gate` 를 마지막 단계로 포함한다(`scripts/dev/quality-gate.sh`). 기본은 skip(exit 0) — off-DGX 에서 `make check` 를 깨지 않는다. DGX 라이브 게이트웨이에서 `DENEB_QUALITY_GATE=1` 로 무장하면 `iterate.sh quality` → `baseline.sh compare` 를 돌려 per-branch baseline 회귀 시 빌드를 fail 한다.
 
-**제안.**
-- `make check` 의존성에 quality test 추가 (DGX Spark 환경에서만)
-- baseline 대비 -10pt 회귀 시 빌드 fail
-- 브랜치별 baseline 자동 저장 (이미 `baseline save` 명령 존재)
+**구현.**
+- `make check` 의존성에 `quality-gate` 추가 (opt-in env 로 DGX 에서만 무장)
+- 회귀 판정은 기존 `baseline.sh compare`(quality component -5 / metric 하락 / latency +20%)를 재사용 — exit 1 전파
+- 브랜치별 baseline 은 기존 `scripts/dev/baseline.sh save` 로 저장(첫 실행 시 NO_BASELINE → exit 0)
 
-**왜.** "테스트는 통과하는데 한국어 응답이 망가졌다" 는 가장 흔한 회귀. 단위 테스트는 catch 못함. live-test 가 catch 하지만 사람이 실행해야 함.
+**왜.** "테스트는 통과하는데 한국어 응답이 망가졌다" 는 가장 흔한 회귀. 단위 테스트는 catch 못함. live-test 가 catch 하지만 사람이 실행해야 했음 — 이제 무장 시 자동.
 
 ---
 
