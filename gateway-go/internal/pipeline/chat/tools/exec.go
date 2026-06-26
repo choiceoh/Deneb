@@ -97,6 +97,19 @@ func ToolExec(procMgr *process.Manager, defaultDir string) ToolFunc {
 			return "", err
 		}
 
+		// Rollback coverage for exec-driven file mutations. Before running a
+		// command that looks file-mutating (sed -i, mv, cp, rm, tee, `> file`),
+		// best-effort snapshot the likely-affected paths via the same checkpoint
+		// manager the write/edit tools use, so /rollback can undo them. Best-
+		// effort and non-fatal: unparseable targets are skipped and snapshot
+		// failures are logged (not surfaced) — see snapshotExecTargets. Background
+		// commands are covered too; the snapshot is of pre-launch state. Note this
+		// is file-content only: a command's other side effects (sent messages,
+		// network calls, spawned processes) are not rolled back.
+		if looksFileMutating(p.Command) {
+			snapshotExecTargets(ctx, p.Command, workDir)
+		}
+
 		timeoutMs := int64(60000)
 		if p.Timeout > 0 {
 			timeoutMs = int64(p.Timeout * 1000)

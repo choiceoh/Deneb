@@ -2,6 +2,17 @@
 // can roll back arbitrary prior edits within a session, independent of the
 // working tree's git state.
 //
+// Scope — FILE CONTENT ONLY. A snapshot records a single file's bytes (Path +
+// SHA256 + on-disk blob, or a tombstone for a not-yet-existing file); see
+// types.Snapshot. Restoring rewrites that file's content. It does NOT capture or
+// roll back anything else an operation did: the conversation transcript, already-
+// sent messages, network calls, spawned processes, or other external side
+// effects are out of scope and are not reversible via Restore. Callers fire a
+// snapshot before a mutation (the write/edit fs tools, and exec for file-
+// mutating shell commands — see internal/pipeline/chat/tools), so coverage is
+// only as good as those call sites: a file mutated by a path no caller models
+// (e.g. an unrecognised shell form) is not snapshotted and cannot be rolled back.
+//
 // Storage layout:
 //
 //	<root>/<sessionID>/<filePathHash>/<seq>-<unixNanos>.<ext>(.gz)
