@@ -1,6 +1,11 @@
 package regressionwatch
 
-import "math"
+import (
+	"fmt"
+	"math"
+	"sort"
+	"strings"
+)
 
 // Thresholds decides when a signal's drift counts as a regression. A drift must
 // clear BOTH the relative and absolute floor so a tiny baseline doesn't trip on
@@ -32,6 +37,13 @@ type BaselineEntry struct {
 type Baseline struct {
 	GeneratedAtMs int64                    `json:"generatedAtMs"`
 	Entries       map[string]BaselineEntry `json:"entries"`
+	// NotifiedFingerprint is the set of regressed keys behind the last operator
+	// notification (see Fingerprint). It is the notification de-dup: a sustained
+	// regression keeps tripping the detector every cycle (its key is held out of
+	// the EMA), but the operator is pinged only when the regressed SET changes,
+	// not every 6h. Persisted so a gateway restart doesn't re-ping a standing
+	// regression.
+	NotifiedFingerprint string `json:"notifiedFingerprint,omitempty"`
 }
 
 // Regression is one detected deterioration of a signal versus its baseline.
@@ -111,6 +123,37 @@ func relDelta(base, cur float64) float64 {
 		return 0
 	}
 	return (cur - base) / math.Abs(base)
+}
+
+// formatNotification builds the Korean operator message for a regression set,
+// listing each regressed signal's key, its baseline → current values, and the
+// signed percentage delta. Direction (HigherWorse) is folded into the sign so
+// the reader sees "+38%" for a rising error rate and "-22%" for a falling cache
+// hit rate — both regressions, opposite signs.
+func formatNotification(regs []Regression) string {
+	var sb strings.Builder
+	sb.WriteString("⚠️ 회귀 감지: 운영 텔레메트리에서 기준선 대비 악화가 감지되었습니다.\n")
+	for _, r := range regs {
+		fmt.Fprintf(&sb, "- %s: %.4g → %.4g (%+d%%)\n",
+			r.Key, r.Baseline, r.Value, int(r.DeltaPct*100))
+	}
+	sb.WriteString("상세: ~/.deneb/regression-baseline.json")
+	return sb.String()
+}
+
+// Fingerprint identifies a regression SET by its keys so the watcher pushes an
+// operator notification only when the set changes (over-notification 금지). The
+// delta magnitudes are excluded on purpose — the same signal drifting a little
+// further between cycles is the same standing regression, not a new event.
+// detect already returns regressions sorted by key, but sort defensively in
+// case a caller passes an unsorted slice.
+func Fingerprint(regs []Regression) string {
+	keys := make([]string, 0, len(regs))
+	for _, r := range regs {
+		keys = append(keys, r.Key)
+	}
+	sort.Strings(keys)
+	return strings.Join(keys, ",")
 }
 
 // updateBaseline folds the current cycle into the baseline with an EMA so it
