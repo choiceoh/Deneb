@@ -1075,9 +1075,9 @@ func TestCrossSkillNeighborsPicksSharedTagAndTokenSkills(t *testing.T) {
 		cat.Register(entry)
 	}
 	mk("topsolar-db", "topsolar database backup and restore", []string{"database", "topsolar"})
-	mk("topsolar-restore", "topsolar database restore helper", []string{"database"})  // shares tag + tokens
-	mk("topsolar-report", "topsolar database reporting weekly", nil)                  // token overlap only
-	mk("unrelated-email", "summarize an email thread for triage", []string{"inbox"})  // neither
+	mk("topsolar-restore", "topsolar database restore helper", []string{"database"}) // shares tag + tokens
+	mk("topsolar-report", "topsolar database reporting weekly", nil)                 // token overlap only
+	mk("unrelated-email", "summarize an email thread for triage", []string{"inbox"}) // neither
 
 	e := &Evolver{logger: slog.New(slog.NewTextHandler(io.Discard, nil)), catalog: cat}
 	neighbors := e.crossSkillNeighbors("topsolar-db")

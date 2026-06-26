@@ -460,6 +460,7 @@ func (t *Tracker) maybeFireRollbackLocked(r UsageRecord) {
 	// Regression: threshold failures within the window — fire the rollback.
 	if w.postFails >= t.rollbackThreshold {
 		recurred := w.recurred
+		threshold := t.rollbackThreshold // capture under the lock; the goroutine must not read t.* fields
 		delete(t.postEvolve, r.SkillName)
 		fn := t.rollback
 		skill := r.SkillName
@@ -471,7 +472,7 @@ func (t *Tracker) maybeFireRollbackLocked(r UsageRecord) {
 			}()
 			if t.logger != nil {
 				t.logger.Info("genesis: post-evolve regression window tripped, rolling back",
-					"skill", skill, "fails", t.rollbackThreshold, "targetRecurrences", recurred)
+					"skill", skill, "fails", threshold, "targetRecurrences", recurred)
 			}
 			fn(skill)
 		}()

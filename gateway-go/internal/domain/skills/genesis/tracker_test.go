@@ -79,7 +79,11 @@ func TestPostEvolveRollback_FiresOnInterleavedFailures(t *testing.T) {
 		t.Fatalf("LogEvolve: %v", err)
 	}
 	rec := func(ok bool) {
-		if err := tr.RecordUsage(UsageRecord{SkillName: "deploy-helper", Success: ok}); err != nil {
+		r := UsageRecord{SkillName: "deploy-helper", Success: ok}
+		if !ok {
+			r.ErrorMsg = "boom" // a real failure, not an unactionable info-less legacy one
+		}
+		if err := tr.RecordUsage(r); err != nil {
 			t.Fatalf("RecordUsage: %v", err)
 		}
 	}
@@ -116,7 +120,11 @@ func TestPostEvolveRollback_ProvenSkillStopsWatch(t *testing.T) {
 		t.Fatalf("LogEvolve: %v", err)
 	}
 	rec := func(ok bool) {
-		if err := tr.RecordUsage(UsageRecord{SkillName: "deploy-helper", Success: ok}); err != nil {
+		r := UsageRecord{SkillName: "deploy-helper", Success: ok}
+		if !ok {
+			r.ErrorMsg = "boom" // a real failure, not an unactionable info-less legacy one
+		}
+		if err := tr.RecordUsage(r); err != nil {
 			t.Fatalf("RecordUsage: %v", err)
 		}
 	}

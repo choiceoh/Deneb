@@ -83,9 +83,13 @@ func (t *Tracker) LeverYields(limit int) ([]LeverYield, error) {
 	}
 	out := make([]LeverYield, 0, len(agg))
 	for _, y := range agg {
-		if y.Committed > 0 {
-			y.ConfirmRate = float64(y.Confirmed) / float64(y.Committed)
+		if y.Committed == 0 {
+			// Orphaned confirm/rollback whose 'evolved' entry fell outside the
+			// limit window — no shipped lever to attribute it to; skip the phantom
+			// (empty-signature, Committed==0) bucket rather than emit it.
+			continue
 		}
+		y.ConfirmRate = float64(y.Confirmed) / float64(y.Committed)
 		out = append(out, *y)
 	}
 	// Stable, deterministic order: most-shipped levers first.
