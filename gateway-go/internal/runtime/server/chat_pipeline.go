@@ -220,6 +220,7 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 	// dynamic system-prompt block, built over the same hybrid calendar source as
 	// the calendar tool. nil when no calendar source is wired (feature off).
 	chatCfg.CalendarGlanceFn = chat.NewCalendarGlanceFunc(&s.toolDeps.Calendar)
+	chatCfg.GoalGlanceFn = chat.NewGoalGlanceFunc()
 
 	// Operator-edited 업무 persona (Settings prompt corner → prompt store). Returns
 	// "" when unedited so the chat pipeline renders the default persona. Reading
