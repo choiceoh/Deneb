@@ -12,7 +12,7 @@ import (
 )
 
 // handleHealth responds with gateway health status including subsystem state.
-func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
+func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	providerCount := 0
 	if s.providers != nil {
 		providerCount = len(s.providers.List())
@@ -253,7 +253,43 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 		health["fleet"] = s.fleet.HealthReport()
 	}
 
+	// Prefix-cache hit-rate (ops surface for the prompt-cache doctrine). Reuses
+	// the existing engine /metrics scrape; absent on non-vLLM hosts.
+	if sec, ok := s.cacheHealth.observe(r.Context(), s.vllmBaseURLs()); ok {
+		health["cache"] = sec
+	}
+
+	// DGX Spark GPU telemetry. Omitted entirely when nvidia-smi is absent so
+	// /health stays green on non-GPU hosts.
+	if stats, present := s.gpuHealth.observe(r.Context(), nil); present {
+		health["gpu"] = stats
+	}
+
 	s.writeJSON(w, http.StatusOK, health)
+}
+
+// vllmBaseURLs returns the configured vLLM ".../v1" base URLs, or nil when the
+// model registry isn't wired yet (early startup, tests) — nil-safe so the
+// health probe never panics before the session phase populates the registry.
+func (s *Server) vllmBaseURLs() []string {
+	if s.modelRegistry == nil {
+		return nil
+	}
+	return s.modelRegistry.VllmBaseURLs()
+}
+
+// handleHealthGPU serves GET /health/gpu — the GPU telemetry section as a
+// standalone endpoint for operators who want just the box's utilization / VRAM
+// / temperature without the full /health payload. Returns
+// {"gpu": null, "present": false} on a host without an NVIDIA GPU (200, not an
+// error: "no GPU here" is a valid, queryable answer).
+func (s *Server) handleHealthGPU(w http.ResponseWriter, r *http.Request) {
+	stats, present := s.gpuHealth.observe(r.Context(), nil)
+	out := map[string]any{"present": present}
+	if present {
+		out["gpu"] = stats
+	}
+	s.writeJSON(w, http.StatusOK, out)
 }
 
 // handleReady responds with readiness status.

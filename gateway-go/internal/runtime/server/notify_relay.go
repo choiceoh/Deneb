@@ -102,6 +102,13 @@ type notifyService struct {
 	// only "what was the last assistant text".
 	activityMu sync.Mutex
 	activity   map[string]*activityEntry
+
+	// cacheSummary returns the last one-line vLLM prefix-cache hit-rate status
+	// (see health_cache.go), appended to the status snapshot as a passive
+	// prompt-cache regression alarm. Function-typed and optional: nil (or a
+	// closure returning "") simply omits the line. Reads a cached string — never
+	// scrapes on the status-render path.
+	cacheSummary func() string
 }
 
 // notifyEvent is the worker's inbound message envelope.
