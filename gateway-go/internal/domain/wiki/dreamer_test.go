@@ -238,6 +238,26 @@ func TestBuildWikiSynthesisPromptIncludesCompoundingRules(t *testing.T) {
 	}
 }
 
+// TestBuildWikiSynthesisPromptIncludesPreferenceRules pins the two user-preference
+// learning directives ported from the agent-memory papers: behavioral-pattern
+// abstraction (Evo-Memory/ReMem arXiv:2511.20857 — derive working-style from
+// recurring behavior, not just stated preferences) and fact-level preference
+// replacement (Mem0 arXiv:2504.19413 — update the value in place so a 사용자 page
+// is a current policy, not an accumulating log). The recurrence gate and the
+// confidence split keep inferred rules conservative + operator-reviewable.
+func TestBuildWikiSynthesisPromptIncludesPreferenceRules(t *testing.T) {
+	prompt := buildWikiSynthesisPrompt("index", "history", "", "diary")
+	for _, want := range []string{
+		"working-style 추론", // behavioral abstraction directive present
+		"2회 이상 반복",         // recurrence gate (no single-shot / speculative inference)
+		"현행 정책",            // fact-level replacement: 사용자 page is current policy, not a log
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Errorf("synthesis prompt missing preference rule %q", want)
+		}
+	}
+}
+
 func scanContent(scan *diaryScanResult) string {
 	if scan == nil {
 		return ""

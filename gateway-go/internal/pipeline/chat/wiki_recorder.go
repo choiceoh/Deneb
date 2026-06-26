@@ -131,8 +131,20 @@ func recordDiary(store *wiki.Store, logger *slog.Logger, userMsg string, toolNam
 func classifyDiarySignal(userMsg string, toolNames []string, assistantText string) diarySignal {
 	userMsg = strings.TrimSpace(userMsg)
 	assistantText = strings.TrimSpace(assistantText)
+	// A standing preference / style correction is the behavioral signal the
+	// dreamer abstracts into 사용자 working-style rules. Tag it explicitly ("선호")
+	// so the dreamer aggregates a clear cue instead of inferring it from raw text,
+	// and force-record it (durable) even when the message is short.
+	pref := isPreferenceDirective(userMsg)
 	if len(toolNames) > 0 {
-		return diarySignal{Level: "action", Reason: "tools"}
+		reason := "tools"
+		if pref {
+			reason = "tools,선호"
+		}
+		return diarySignal{Level: "action", Reason: reason}
+	}
+	if pref {
+		return diarySignal{Level: "durable", Reason: "선호"}
 	}
 	if containsDurableDiaryTerm(userMsg) || containsDurableDiaryTerm(assistantText) {
 		return diarySignal{Level: "durable", Reason: "keyword"}
@@ -150,6 +162,31 @@ func containsDurableDiaryTerm(text string) bool {
 	lower := strings.ToLower(text)
 	for _, term := range durableDiaryTerms {
 		if strings.Contains(lower, term) {
+			return true
+		}
+	}
+	return false
+}
+
+// preferenceDiaryTerms flag a user turn that voices a STANDING preference or a
+// style/format correction — the behavioral signal the dreamer abstracts into
+// 사용자 (user) working-style rules. High-precision phrasing: standing directives,
+// replacement/negation, and style corrections, not one-off task words. A mis-tag
+// is low-harm — the dreamer's 2+-recurrence gate ignores a one-off — so the list
+// favors catching genuine preference cues over avoiding the odd false positive.
+var preferenceDiaryTerms = []string{
+	"앞으로", "항상", "매번", // standing directives
+	"그만", "하지 마", "하지마", "말고", "대신", // negation / replacement
+	"산문으로", "불릿", "간결", "짧게", "자세히", "줄여", // style / format
+	"선호", "취향", "스타일로", // explicit preference
+}
+
+// isPreferenceDirective reports whether a user message voices a standing
+// preference or a style/format correction (see preferenceDiaryTerms).
+func isPreferenceDirective(userMsg string) bool {
+	lower := strings.ToLower(strings.TrimSpace(userMsg))
+	for _, t := range preferenceDiaryTerms {
+		if strings.Contains(lower, t) {
 			return true
 		}
 	}
