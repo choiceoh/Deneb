@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.0.26](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.25...andromeda-v0.0.26) (2026-06-26)
+
+
+### ✨ Features
+
+* **notebook:** stamp resolved project refs at mail ingestion (각인) ([#2895](https://github.com/choiceoh/Deneb/issues/2895)) ([e4f36a2](https://github.com/choiceoh/Deneb/commit/e4f36a2022b945c8bea9917a32339c49ef2f2801))
+* **project:** resolve owned pages server-side via the wiki graph (③ 서버측 매칭) ([#2899](https://github.com/choiceoh/Deneb/issues/2899)) ([b626c08](https://github.com/choiceoh/Deneb/commit/b626c0864b832bd2256471787dfaebf9a3a2e2ea))
+
 ## [0.0.25](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.24...andromeda-v0.0.25) (2026-06-26)
 
 
