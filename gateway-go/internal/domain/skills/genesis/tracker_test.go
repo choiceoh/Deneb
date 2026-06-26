@@ -31,10 +31,10 @@ func newTestTracker(t *testing.T) *Tracker {
 	}
 }
 
-// TestPostEvolveRollback_FiresAfterConsecutiveFailures verifies the post-evolve
-// watch reverts an evolution after the configured number of consecutive
-// failures, and only then.
-func TestPostEvolveRollback_FiresAfterConsecutiveFailures(t *testing.T) {
+// TestPostEvolveRollback_FiresWhenFailuresReachThreshold verifies the post-evolve
+// watch reverts an evolution once failures reach the configured threshold within
+// the observation window, and only then.
+func TestPostEvolveRollback_FiresWhenFailuresReachThreshold(t *testing.T) {
 	tr := newTestTracker(t)
 	fired := make(chan string, 1)
 	tr.SetRollback(func(s string) { fired <- s }, 3)
@@ -62,14 +62,15 @@ func TestPostEvolveRollback_FiresAfterConsecutiveFailures(t *testing.T) {
 			t.Fatalf("rollback fired for %q, want deploy-helper", got)
 		}
 	case <-time.After(2 * time.Second):
-		t.Fatal("rollback did not fire after 3 consecutive post-evolve failures")
+		t.Fatal("rollback did not fire after 3 post-evolve failures")
 	}
 }
 
-// TestPostEvolveRollback_SuccessClearsWatch verifies a single success between
-// failures validates the evolution and stops the watch, so later failures of an
-// already-accepted skill do not trigger a spurious rollback.
-func TestPostEvolveRollback_SuccessClearsWatch(t *testing.T) {
+// TestPostEvolveRollback_FiresOnInterleavedFailures verifies that a success no
+// longer clears the watch: a regression that alternates pass/fail still
+// accumulates to a rollback. The old strict-consecutive counter let this
+// sub-threshold regression slip through (HarnessX §6.6).
+func TestPostEvolveRollback_FiresOnInterleavedFailures(t *testing.T) {
 	tr := newTestTracker(t)
 	fired := make(chan string, 1)
 	tr.SetRollback(func(s string) { fired <- s }, 3)
@@ -82,16 +83,57 @@ func TestPostEvolveRollback_SuccessClearsWatch(t *testing.T) {
 			t.Fatalf("RecordUsage: %v", err)
 		}
 	}
-	rec(false) // 1 fail
-	rec(false) // 2 fail
-	rec(true)  // success → watch cleared
-	rec(false) // these can't accumulate to a rollback anymore
+	rec(false) // fail 1
+	rec(true)  // success — does NOT clear the watch anymore
+	rec(false) // fail 2
+	rec(true)  // success
+	select {
+	case got := <-fired:
+		t.Fatalf("rollback fired (%q) before reaching the failure threshold", got)
+	default:
+	}
+	rec(false) // fail 3 within the window → revert
+
+	select {
+	case got := <-fired:
+		if got != "deploy-helper" {
+			t.Fatalf("rollback fired for %q, want deploy-helper", got)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("rollback did not fire after 3 interleaved post-evolve failures")
+	}
+}
+
+// TestPostEvolveRollback_ProvenSkillStopsWatch verifies that an evolve which
+// survives the observation window below the failure threshold is no longer
+// watched, so a later failure burst does not spuriously revert it.
+func TestPostEvolveRollback_ProvenSkillStopsWatch(t *testing.T) {
+	tr := newTestTracker(t)
+	fired := make(chan string, 1)
+	tr.SetRollback(func(s string) { fired <- s }, 3)
+
+	if err := tr.LogEvolve("deploy-helper", "1.0.1", "tighten steps"); err != nil {
+		t.Fatalf("LogEvolve: %v", err)
+	}
+	rec := func(ok bool) {
+		if err := tr.RecordUsage(UsageRecord{SkillName: "deploy-helper", Success: ok}); err != nil {
+			t.Fatalf("RecordUsage: %v", err)
+		}
+	}
+	// One failure, then enough successes to fill the window (threshold*2 = 6
+	// uses) without reaching 3 failures — the watch proves out and clears.
+	rec(false)
+	for i := 0; i < 5; i++ {
+		rec(true)
+	}
+	// Watch is cleared now; a later failure burst must not roll back.
+	rec(false)
 	rec(false)
 	rec(false)
 
 	select {
 	case got := <-fired:
-		t.Fatalf("rollback fired (%q) after a success cleared the watch", got)
+		t.Fatalf("rollback fired (%q) for a skill that proved out", got)
 	case <-time.After(300 * time.Millisecond):
 	}
 }

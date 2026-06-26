@@ -132,10 +132,11 @@ type Tracker struct {
 	triggerInflight bool
 
 	// Post-evolve rollback watch (set via SetRollback). After a skill is
-	// evolved (LogEvolve), its next uses are watched; rollbackThreshold
-	// consecutive failures fire `rollback` to revert the evolution. Guarded by
-	// mu. postEvolve is empty at startup (populated only by runtime LogEvolve),
-	// so replaying usage history never triggers a rollback.
+	// evolved (LogEvolve), its next uses are watched; rollbackThreshold failures
+	// within the observation window fire `rollback` to revert the evolution
+	// (windowed, not strict-consecutive, so an alternating pass/fail regression
+	// still trips it). Guarded by mu. postEvolve is empty at startup (populated
+	// only by runtime LogEvolve), so replaying usage history never rolls back.
 	rollback          func(skillName string)
 	rollbackThreshold int
 	postEvolve        map[string]*evolveWatch
@@ -148,10 +149,14 @@ type Tracker struct {
 
 // evolveWatch tracks consecutive failures of a skill since its last evolve.
 type evolveWatch struct {
-	version           string
-	consecutiveFails  int
-	audit             HarnessEditAudit
-	targetRecurrences int
+	version string
+	audit   HarnessEditAudit
+	// postUses counts real uses observed since the evolve shipped (the rollback
+	// window); postFails counts failures among them; recurred counts failures
+	// matching the evolve's target signature (surfaced in the rollback log).
+	postUses  int
+	postFails int
+	recurred  int
 }
 
 // usageAgg holds running aggregates per skill.
@@ -427,10 +432,12 @@ func (t *Tracker) RecordUsage(record UsageRecord) error {
 	return nil
 }
 
-// maybeFireRollbackLocked advances the post-evolve watch for the used skill: a
-// success validates the evolution (watch cleared), and rollbackThreshold
-// consecutive failures fire the rollback in the background. Caller holds t.mu;
-// the callback runs lock-free in a recovered goroutine (it re-enters the
+// maybeFireRollbackLocked advances the post-evolve watch for the used skill and
+// reverts the evolution when failures reach rollbackThreshold within the
+// observation window. Windowed rather than strict-consecutive: a single success
+// no longer clears the watch, so a regression that alternates pass/fail (the
+// sub-threshold coupling HarnessX §6.6 documents) still rolls back. Caller holds
+// t.mu; the callback runs lock-free in a recovered goroutine (it re-enters the
 // tracker via LogEvolveRolledBack, so it must not run under the lock).
 func (t *Tracker) maybeFireRollbackLocked(r UsageRecord) {
 	w := t.postEvolve[r.SkillName]
@@ -438,33 +445,55 @@ func (t *Tracker) maybeFireRollbackLocked(r UsageRecord) {
 		return
 	}
 	// Only real use is fair evidence for or against a fresh evolve: a review-fork
-	// record or a consult-infra failure must neither advance the rollback counter
-	// (reverting a good evolve) nor clear the watch (rubber-stamping a bad one).
+	// record or a consult-infra failure must neither advance the failure count
+	// (reverting a good evolve) nor count toward proving it out.
 	if !isRealUsageRecord(r) {
 		return
 	}
-	if r.Success {
+	w.postUses++
+	if !r.Success {
+		w.postFails++
+		if selfHarnessTargetRecurred(w.audit, r) {
+			w.recurred++
+		}
+	}
+	// Regression: threshold failures within the window — fire the rollback.
+	if w.postFails >= t.rollbackThreshold {
+		recurred := w.recurred
 		delete(t.postEvolve, r.SkillName)
-		return
-	}
-	if selfHarnessTargetRecurred(w.audit, r) {
-		w.targetRecurrences++
-	}
-	w.consecutiveFails++
-	if w.consecutiveFails < t.rollbackThreshold {
-		return
-	}
-	delete(t.postEvolve, r.SkillName)
-	fn := t.rollback
-	skill := r.SkillName
-	go func() {
-		defer func() {
-			if rec := recover(); rec != nil && t.logger != nil {
-				t.logger.Error("genesis: rollback callback panic", "panic", rec)
+		fn := t.rollback
+		skill := r.SkillName
+		go func() {
+			defer func() {
+				if rec := recover(); rec != nil && t.logger != nil {
+					t.logger.Error("genesis: rollback callback panic", "panic", rec)
+				}
+			}()
+			if t.logger != nil {
+				t.logger.Info("genesis: post-evolve regression window tripped, rolling back",
+					"skill", skill, "fails", t.rollbackThreshold, "targetRecurrences", recurred)
 			}
+			fn(skill)
 		}()
-		fn(skill)
-	}()
+		return
+	}
+	// Proven out: the evolve survived the observation window below the failure
+	// threshold, so stop watching (later failures are fair game for a fresh
+	// evolve, not this one's rollback).
+	if w.postUses >= t.rollbackWindowLocked() {
+		delete(t.postEvolve, r.SkillName)
+	}
+}
+
+// rollbackWindowLocked is the number of post-evolve real uses observed before an
+// evolve that has not hit the failure threshold is considered proven and its
+// watch cleared. Twice the threshold, so reaching the threshold means at least a
+// ~50% failure rate over the window. Caller holds t.mu.
+func (t *Tracker) rollbackWindowLocked() int {
+	if t.rollbackThreshold <= 0 {
+		return 0
+	}
+	return t.rollbackThreshold * 2
 }
 
 func selfHarnessTargetRecurred(audit HarnessEditAudit, r UsageRecord) bool {
@@ -798,7 +827,7 @@ func (t *Tracker) LogEvolveWithAudit(skillName, newVersion, description string, 
 }
 
 // LogEvolveRolledBack records that an evolution was reverted after it regressed
-// (rollbackThreshold consecutive post-evolve failures).
+// (rollbackThreshold post-evolve failures within the observation window).
 func (t *Tracker) LogEvolveRolledBack(skillName string) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -1075,8 +1104,9 @@ func (t *Tracker) SetEvolveTrigger(fn func(), threshold int, minGap time.Duratio
 }
 
 // SetRollback wires the post-evolve rollback. After a skill is evolved, its
-// next uses are watched; `threshold` consecutive failures fire `fn` to revert
-// the evolution. threshold<=0 disables the watch.
+// next uses are watched; `threshold` failures within the observation window
+// (windowed, not strict-consecutive) fire `fn` to revert the evolution.
+// threshold<=0 disables the watch.
 func (t *Tracker) SetRollback(fn func(skillName string), threshold int) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
