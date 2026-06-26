@@ -273,7 +273,7 @@ type GmailPollConfig struct {
 }
 
 // MailLMTPConfig configures the LMTP (RFC 2033) mail-ingest server. When enabled,
-// an on-box mail server (e.g. a Docker mail service running Postfix) PUSHES new
+// an on-box mail server (e.g. Maddy running in Docker) PUSHES new
 // mail to Deneb over LMTP instead of Deneb polling IMAP — each received message is
 // analyzed through the same pipeline as a polled one (cache + per-message wiki +
 // proactive 업무 chat). The listener trusts its peer (no SMTP AUTH), so bind it to
@@ -281,7 +281,7 @@ type GmailPollConfig struct {
 type MailLMTPConfig struct {
 	Enabled *bool `json:"enabled,omitempty"`
 	// ListenAddr is "host:port" / "tcp:host:port" / "unix:/path.sock".
-	// Default "127.0.0.1:10024". For a Docker mail server, bind the host's
+	// Default "127.0.0.1:10024". For a containerized mail server, bind the host's
 	// docker-bridge address (or share a unix socket via a volume) so the
 	// container can reach it; never expose it to the public internet.
 	ListenAddr string `json:"listenAddr,omitempty"`

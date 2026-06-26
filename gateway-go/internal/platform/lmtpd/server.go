@@ -23,7 +23,7 @@ import (
 type Handler func(ctx context.Context, msg *Message) error
 
 const (
-	// maxMessageBytes bounds a single DATA payload. A docker-mailserver delivery
+	// maxMessageBytes bounds a single DATA payload. A Maddy LMTP delivery
 	// is one message; 100 MiB covers larger business-document bundles while still
 	// bounding untrusted local input.
 	maxMessageBytes = 100 << 20
@@ -40,7 +40,7 @@ const (
 var errTooBig = errors.New("lmtp: message exceeds size limit")
 
 // Server is a minimal LMTP (RFC 2033) receiver. It is meant for a TRUSTED local
-// sender (the on-box Docker mail server) — bind it to loopback or a unix socket,
+// sender (the on-box Maddy mail server) — bind it to loopback or a unix socket,
 // never the public internet; there is no SMTP AUTH (LMTP assumes a trusted path).
 type Server struct {
 	addr     string
