@@ -251,14 +251,16 @@ func executeAgentRun(
 	// runAgentWithFallback, which needs the route to restore the original.
 	effortRt, effortDecision := applyEffortRouter(&cfg, params, messages, routingProfileForRun(deps, providerID, model), logger)
 
-	// BeforeAPICall hook chain: composed via agent.ComposeBeforeAPICall so
-	// features can register additional pre-LLM transforms without clobbering
-	// each other. ComposeBeforeAPICall filters nil entries and returns nil
-	// when every slot is empty, so assignment is safe.
+	// BeforeAPICall hook chain: assembled via agent.BeforeAPICallChain, which
+	// composes hooks by declared stage (PRE/NORMAL/POST) and rejects duplicate
+	// names — so "the trailing cache hook runs last" is a property it declares
+	// (HookStagePost), not a consequence of argument order, and a double
+	// registration is a logged conflict rather than a silent clobber. Nil hooks
+	// (disabled features) are skipped; an all-nil chain builds to nil.
 	//
-	//  - steer: drains SteerQueue notes into the last tool_result before the
-	//    call. No-op when the queue is nil (sub-agents, tests).
-	//  - trailingCache: attaches ephemeral cache_control to the last 2
+	//  - steer (NORMAL): drains SteerQueue notes into the last tool_result before
+	//    the call. No-op when the queue is nil (sub-agents, tests).
+	//  - trailingCache (POST): attaches ephemeral cache_control to the last 2
 	//    non-system messages (Hermes Agent's "system_and_3" pattern, scaled
 	//    to fit Anthropic's 4-breakpoint limit alongside our 2 system
 	//    markers). No-op for non-Anthropic providers.
@@ -275,10 +277,10 @@ func executeAgentRun(
 		cfg.System = stripCacheControlMarkers(cfg.System)
 		trailingCache = nil
 	}
-	cfg.BeforeAPICall = agent.ComposeBeforeAPICall(
-		buildSteerHookIfEnabled(deps.steerQueue, params.SessionKey, logger),
-		trailingCache,
-	)
+	var apc agent.BeforeAPICallChain
+	apc.Add("steer", agent.HookStageNormal, buildSteerHookIfEnabled(deps.steerQueue, params.SessionKey, logger))
+	apc.Add("trailing-cache", agent.HookStagePost, trailingCache)
+	cfg.BeforeAPICall = apc.Build(logger)
 
 	// Set up stream hooks via compositor: fan-out dispatch for each hook type.
 	var hc agent.HookCompositor
