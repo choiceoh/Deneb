@@ -190,7 +190,7 @@ func (s *Server) mailAnalysisAgentSynthesis(ctx context.Context, prompt string) 
 }
 
 // initLMTPServer starts the LMTP (RFC 2033) mail-ingest server when enabled. An
-// on-box mail server (e.g. a Docker mail service) PUSHES new mail over LMTP, which
+// on-box mail server (e.g. Maddy in Docker) PUSHES new mail over LMTP, which
 // replaces IMAP polling for that source: each message is parsed and analyzed
 // through the same pipeline as a polled one (Mini App cache + per-message wiki +
 // proactive 업무 chat). A dedicated gmailpoll.Service — built with the same analysis

@@ -1,5 +1,5 @@
 // Package lmtpd is a minimal LMTP (RFC 2033) server that lets a local mail
-// server (e.g. a Docker mail service running Postfix) PUSH email into Deneb,
+// server (e.g. Maddy running in Docker) PUSH email into Deneb,
 // replacing the previous IMAP poll. A received message is parsed into the same
 // gmail.MessageDetail the Gmail poller produces, so the existing analysis +
 // delivery pipeline (AnalyzeEmailPipeline → cache/wiki → proactive chat) is reused
