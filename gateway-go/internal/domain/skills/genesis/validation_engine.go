@@ -251,6 +251,37 @@ func (v *SkillValidationEngine) ValidateCandidate(skillName, originalContent, ca
 	return result, nil
 }
 
+// SkillCrossRegressionResult reports a neighbor skill scored against the evolved
+// skill's held-out forbidden/required assertions (#4). Failed is true when the
+// neighbor body violates at least one of those assertions — a coupling signal
+// surfaced for observability, never a rollback trigger.
+type SkillCrossRegressionResult struct {
+	NeighborSkill string   `json:"neighborSkill"`
+	Failed        bool     `json:"failed"`
+	Passed        int      `json:"passed"`
+	Total         int      `json:"total"`
+	Failures      []string `json:"failures,omitempty"`
+}
+
+// CrossSkillRegression scores a neighbor skill's body against the evolved skill's
+// held-out validation cases (#4 cross-skill regression detection). It is the
+// deterministic, non-LLM scorer behind the post-commit neighbor sweep: the same
+// forbidden-substring / forbidden-tool / required-assertion contract distilled
+// from the evolved skill's real failures is replayed against a similar neighbor,
+// so an edit that, say, newly forbids `eval` can flag a neighbor that still
+// relies on it. Pure function of (cases, neighborBody) — caller owns neighbor
+// selection and the no-cases / no-neighbors no-op.
+func CrossSkillRegression(neighborSkill, neighborBody string, cases []SkillValidationCaseRecord) SkillCrossRegressionResult {
+	score := scoreSkillValidationCases(skillBodyOnly(neighborBody), cases)
+	return SkillCrossRegressionResult{
+		NeighborSkill: neighborSkill,
+		Failed:        score.Total > 0 && score.Passed < score.Total,
+		Passed:        score.Passed,
+		Total:         score.Total,
+		Failures:      score.Failures,
+	}
+}
+
 type validationCaseScore struct {
 	Passed   int
 	Total    int

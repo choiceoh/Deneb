@@ -81,10 +81,20 @@ type Evolver struct {
 	// judged before being committed (a bad "improvement" is worse than none).
 	selfTest bool
 	// teacherClient/teacherModel are an optional stronger (main) model used to
-	// judge and re-attempt when the lightweight rewrite fails self-test (#4
-	// teacher-escalation). nil → no escalation.
+	// re-attempt a rewrite that fails self-test (#4 teacher-escalation). nil → no
+	// escalation. It no longer doubles as the judge — see judgeClient.
 	teacherClient *llm.Client
 	teacherModel  string
+
+	// judgeClient/judgeModel are an optional independent model (typically
+	// modelrole main) that grades a candidate rewrite. Kept separate from the
+	// producer (primary) and the teacher so the verdict is never self-judged:
+	// same-family self-preference bias skews a self-judge toward accepting
+	// (arXiv:2508.02994). When a dedicated coding model owns rewrites the teacher
+	// is nil, but this stays wired so pickCandidateJudge still resolves to a
+	// non-producer judge. nil → fall back to teacher, then self-judge (logged).
+	judgeClient *llm.Client
+	judgeModel  string
 
 	// thinkingKwargs maps a bare model name to its chat_template_kwargs toggle
 	// that truly disables the thinking phase (e.g. "thinking" for DeepSeek V4).
@@ -135,6 +145,18 @@ func (e *Evolver) SetTeacher(client *llm.Client, model string) {
 	defer e.configMu.Unlock()
 	e.teacherClient = client
 	e.teacherModel = strings.TrimSpace(model)
+}
+
+// SetJudge wires an optional independent judge model (typically modelrole main)
+// used to grade a candidate rewrite. Decoupled from SetTeacher so that even when
+// a dedicated coding model owns the rewrite path (teacher nil), the candidate is
+// still judged by a non-producer model (pickCandidateJudge). Safe to call with
+// nil (judge then falls back to teacher, then a logged self-judge).
+func (e *Evolver) SetJudge(client *llm.Client, model string) {
+	e.configMu.Lock()
+	defer e.configMu.Unlock()
+	e.judgeClient = client
+	e.judgeModel = strings.TrimSpace(model)
 }
 
 // SetReplayExecutor wires the behavioral-replay executor model used by the
@@ -283,13 +305,110 @@ func (e *Evolver) EvolveSkill(ctx context.Context, skillName, reviewFinding stri
 		validationSection,
 		findingSection)
 
+	if primaryClient, _ := e.primaryModel(); primaryClient == nil {
+		return nil, fmt.Errorf("evolver: primary client not configured")
+	}
+
+	return e.generateSelectAndApply(ctx, userPrompt, entry, string(currentContent), stats, reviewFinding)
+}
+
+// generateSelectAndApply runs the K-candidate generate-and-select loop (#3): it
+// streams up to skillEvolveCandidateCount candidate bodies from the producer
+// (each after the first nudged to differ), evaluates every candidate through the
+// full pre-commit gate stack without committing, and commits the best
+// non-regressive one (ranked by held-out score margin). When K==1, or only one
+// candidate survives, this is behaviorally identical to the old single-candidate
+// parseAndApply path — including the self-test's own teacher escalation. If no
+// candidate is committable, the last evaluated rejection/skip result is returned
+// so the lifecycle log and reason match the prior single-candidate behavior.
+func (e *Evolver) generateSelectAndApply(ctx context.Context, userPrompt string, entry *skills.SkillEntry, originalContent string, stats *UsageStats, reviewFinding string) (*EvolveResult, error) {
+	k := skillEvolveCandidateCount
+	if k < 1 {
+		k = 1
+	}
+
+	var best *evaluatedCandidate
+	var lastResult *EvolveResult
+	var firstGenErr error
+	generated := 0
+	for attempt := 0; attempt < k; attempt++ {
+		if ctx.Err() != nil {
+			break
+		}
+		text, genErr := e.generateCandidateText(ctx, userPrompt, attempt)
+		if genErr != nil {
+			// A producer call failing on the first attempt is fatal (no candidate
+			// at all); later attempts are best-effort — keep any candidate already
+			// in hand rather than discarding the whole cycle for one flaky stream.
+			if attempt == 0 {
+				firstGenErr = genErr
+			} else if e.logger != nil {
+				e.logger.Warn("evolver: candidate generation failed, continuing with earlier candidates",
+					"skill", entry.Skill.Name, "attempt", attempt, "error", genErr)
+			}
+			continue
+		}
+		generated++
+		eval, err := e.evaluateCandidateText(ctx, text, entry, originalContent, stats, reviewFinding)
+		if err != nil {
+			if attempt == 0 {
+				return nil, err
+			}
+			if e.logger != nil {
+				e.logger.Warn("evolver: candidate evaluation failed, continuing",
+					"skill", entry.Skill.Name, "attempt", attempt, "error", err)
+			}
+			continue
+		}
+		if eval.result != nil {
+			// Skip or gate rejection (already lifecycle-logged). Remember it so a
+			// fully-failing cycle still returns a faithful reason.
+			lastResult = eval.result
+			continue
+		}
+		// Committable (non-regressive: it cleared every gate). Keep the highest
+		// held-out margin; ties resolve to the earlier candidate (stable).
+		if best == nil || eval.margin > best.margin {
+			winner := eval
+			best = &winner
+		}
+	}
+
+	if best != nil {
+		if generated > 1 && e.logger != nil {
+			e.logger.Info("evolver: selected best candidate",
+				"skill", entry.Skill.Name, "candidates", generated, "heldOutMargin", best.margin)
+		}
+		return e.commitEvaluatedCandidate(entry, originalContent, *best)
+	}
+	if lastResult != nil {
+		return lastResult, nil
+	}
+	if firstGenErr != nil {
+		return nil, firstGenErr
+	}
+	// No candidate generated and no per-candidate result (e.g. context cancelled
+	// before the first stream completed) — surface a non-evolve rather than nil.
+	return &EvolveResult{SkillName: entry.Skill.Name, Evolved: false, Reason: "no candidate generated"}, nil
+}
+
+// generateCandidateText streams one rewrite candidate body from the producer
+// model and returns its raw assistant text. attempt 0 uses the base rewrite
+// prompt unchanged (so K=1 is byte-identical to the old path); later attempts
+// append a small variation note so the K candidates differ without changing the
+// rewrite contract.
+func (e *Evolver) generateCandidateText(ctx context.Context, userPrompt string, attempt int) (string, error) {
 	primaryClient, primaryModel := e.primaryModel()
 	if primaryClient == nil {
-		return nil, fmt.Errorf("evolver: primary client not configured")
+		return "", fmt.Errorf("evolver: primary client not configured")
+	}
+	prompt := userPrompt
+	if attempt > 0 {
+		prompt = userPrompt + candidateVariationNote(attempt)
 	}
 	events, err := primaryClient.StreamChat(ctx, llm.ChatRequest{
 		Model:          primaryModel,
-		Messages:       []llm.Message{llm.NewTextMessage("user", userPrompt)},
+		Messages:       []llm.Message{llm.NewTextMessage("user", prompt)},
 		System:         llm.SystemString(evolveSystemPrompt),
 		MaxTokens:      4096,
 		Stream:         true,
@@ -297,27 +416,22 @@ func (e *Evolver) EvolveSkill(ctx context.Context, skillName, reviewFinding stri
 		ResponseFormat: &llm.ResponseFormat{Type: "json_object"},
 	})
 	if err != nil {
-		return nil, fmt.Errorf("evolver LLM call: %w", err)
+		return "", fmt.Errorf("evolver LLM call: %w", err)
 	}
 	if events == nil {
-		return nil, fmt.Errorf("evolver LLM: nil event channel")
+		return "", fmt.Errorf("evolver LLM: nil event channel")
 	}
+	return drainStreamText(events), nil
+}
 
-	var sb strings.Builder
-	for ev := range events {
-		if ev.Type == "content_block_delta" {
-			var delta struct {
-				Delta struct {
-					Text string `json:"text"`
-				} `json:"delta"`
-			}
-			if json.Unmarshal(ev.Payload, &delta) == nil && delta.Delta.Text != "" {
-				sb.WriteString(delta.Delta.Text)
-			}
-		}
-	}
-
-	return e.parseAndApply(ctx, sb.String(), entry, string(currentContent), stats, reviewFinding)
+// candidateVariationNote nudges the producer toward a distinct rewrite on the
+// nth (>0) candidate without loosening the rewrite contract. It is inert
+// instruction text appended to the user prompt; the gates judge the result, so a
+// candidate that drifts is simply rejected.
+func candidateVariationNote(attempt int) string {
+	return fmt.Sprintf(
+		"\n\n## 후보 다양화 지시 (candidate #%d)\n동일한 검증 기준을 모두 만족하되, 직전 후보와는 다른 접근(다른 섹션을 손보거나 다른 메커니즘을 강조)으로 본문을 작성하세요. 검증 계약(필수/금지 항목, 구조 보존, 실제 도구만)은 그대로 지키세요.",
+		attempt+1)
 }
 
 // evolutionSuppressed reports whether an automated evolve of skillName should be
@@ -398,23 +512,57 @@ func (e *Evolver) EvolveUnderperformers(ctx context.Context) ([]EvolveResult, er
 }
 
 func (e *Evolver) parseAndApply(ctx context.Context, text string, entry *skills.SkillEntry, originalContent string, stats *UsageStats, reviewFinding string) (*EvolveResult, error) {
+	eval, err := e.evaluateCandidateText(ctx, text, entry, originalContent, stats, reviewFinding)
+	if err != nil {
+		return nil, err
+	}
+	if eval.result != nil {
+		// Skip / rejection (already lifecycle-logged) — no commit.
+		return eval.result, nil
+	}
+	return e.commitEvaluatedCandidate(entry, originalContent, eval)
+}
+
+// evaluatedCandidate is the outcome of running a single candidate body through
+// the behavioral + selection + self-test gates WITHOUT committing it. Exactly
+// one of result / committable carries the answer: result is set for a skip or a
+// gate rejection (already lifecycle-logged), otherwise the candidate is
+// committable and the body/version/metadata fields are populated, with margin
+// scoring the candidate for the K-candidate selector (#3).
+type evaluatedCandidate struct {
+	result *EvolveResult // non-nil → skip or rejection, do not commit
+
+	body        string
+	newVersion  string
+	description string
+	audit       HarnessEditAudit
+	margin      float64 // held-out score margin (candidate - original); selection rank
+}
+
+// evaluateCandidateText parses one producer/teacher response and runs the full
+// pre-commit gate stack (behavioral replay → deterministic selection → self-test
+// + teacher escalation), returning an evaluatedCandidate. It is the gate half of
+// the old parseAndApply, split out so the K-candidate selector (#3) can score
+// several candidates before any single one is committed. Behavior for one
+// candidate is identical to the previous inline path.
+func (e *Evolver) evaluateCandidateText(ctx context.Context, text string, entry *skills.SkillEntry, originalContent string, stats *UsageStats, reviewFinding string) (evaluatedCandidate, error) {
 	resp, err := jsonutil.UnmarshalLLM[evolveResp](text)
 	if err != nil {
-		return nil, fmt.Errorf("evolver: parse response: %w", err)
+		return evaluatedCandidate{}, fmt.Errorf("evolver: parse response: %w", err)
 	}
 
 	if resp.Skip || resp.Changes == nil {
-		return &EvolveResult{
+		return evaluatedCandidate{result: &EvolveResult{
 			SkillName: entry.Skill.Name,
 			Evolved:   false,
 			Reason:    resp.Reason,
-		}, nil
+		}}, nil
 	}
 
 	// Reconstruct SKILL.md with updated body.
 	header, bodyOffset := skills.ExtractFrontmatterBlock(originalContent)
 	if bodyOffset == 0 || header == "" {
-		return nil, fmt.Errorf("evolver: skill %q has no valid frontmatter", entry.Skill.Name)
+		return evaluatedCandidate{}, fmt.Errorf("evolver: skill %q has no valid frontmatter", entry.Skill.Name)
 	}
 
 	// Update version in frontmatter. An empty or unchanged version from the
@@ -451,11 +599,11 @@ func (e *Evolver) parseAndApply(ctx context.Context, text string, entry *skills.
 			}
 		}
 		e.recordRejectedSkillEdit(entry.Skill.Name, candidateBody, behavior.Reason, "behavioral-replay", audit)
-		return &EvolveResult{
+		return evaluatedCandidate{result: &EvolveResult{
 			SkillName: entry.Skill.Name,
 			Evolved:   false,
 			Reason:    "behavioral replay rejected: " + behavior.Reason,
-		}, nil
+		}}, nil
 	}
 
 	// Deterministic selector gates are not optional: even when LLM self-testing
@@ -470,11 +618,11 @@ func (e *Evolver) parseAndApply(ctx context.Context, text string, entry *skills.
 				}
 			}
 			e.recordRejectedSkillEdit(entry.Skill.Name, candidateBody, reason, "preflight", audit)
-			return &EvolveResult{
+			return evaluatedCandidate{result: &EvolveResult{
 				SkillName: entry.Skill.Name,
 				Evolved:   false,
 				Reason:    "selection rejected: " + reason,
-			}, nil
+			}}, nil
 		}
 	}
 
@@ -493,11 +641,11 @@ func (e *Evolver) parseAndApply(ctx context.Context, text string, entry *skills.
 				}
 			}
 			e.recordRejectedSkillEdit(entry.Skill.Name, candidateBody, reason, "self-test", audit)
-			return &EvolveResult{
+			return evaluatedCandidate{result: &EvolveResult{
 				SkillName: entry.Skill.Name,
 				Evolved:   false,
 				Reason:    "self-test rejected: " + reason,
-			}, nil
+			}}, nil
 		}
 		candidateBody = accepted.Body
 		if strings.TrimSpace(accepted.Description) != "" {
@@ -507,6 +655,31 @@ func (e *Evolver) parseAndApply(ctx context.Context, text string, entry *skills.
 			committedAudit = accepted.Audit
 		}
 	}
+
+	// margin ranks committable candidates in the K-selector (#3). The held-out
+	// validation score delta is the deterministic, judge-independent signal; it is
+	// computed on the final body (which may be a teacher rewrite) so the rank
+	// matches what would actually be committed. It stays 0 when a skill has no
+	// held-out cases — all such candidates then tie and fall back to
+	// first-committable order, preserving single-candidate behavior.
+	return evaluatedCandidate{
+		body:        candidateBody,
+		newVersion:  newVersion,
+		description: committedDescription,
+		audit:       committedAudit,
+		margin:      e.heldOutSelectionMargin(entry.Skill.Name, originalContent, candidateBody),
+	}, nil
+}
+
+// commitEvaluatedCandidate writes an already-gated candidate to disk and records
+// the lifecycle/observability tail. It is the commit half of the old
+// parseAndApply, unchanged in behavior.
+func (e *Evolver) commitEvaluatedCandidate(entry *skills.SkillEntry, originalContent string, eval evaluatedCandidate) (*EvolveResult, error) {
+	header, _ := skills.ExtractFrontmatterBlock(originalContent)
+	newVersion := eval.newVersion
+	candidateBody := eval.body
+	committedDescription := eval.description
+	committedAudit := eval.audit
 
 	// Guard the empty-version case: strings.Replace with an empty "old"
 	// would prepend newVersion to the header instead of replacing anything.
@@ -551,6 +724,12 @@ func (e *Evolver) parseAndApply(ctx context.Context, text string, entry *skills.
 		}
 	}
 
+	// Cross-skill regression sweep (#4). Replays the just-evolved skill's held-out
+	// assertions against its most similar neighbors and surfaces any neighbor that
+	// now violates the new forbidden/required contract. Best-effort and
+	// non-blocking: it never rolls back or fails the evolve, only observes.
+	e.detectCrossSkillRegression(entry.Skill.Name)
+
 	return &EvolveResult{
 		SkillName:   entry.Skill.Name,
 		Evolved:     true,
@@ -581,6 +760,12 @@ func (e *Evolver) teacherModelSnapshot() (*llm.Client, string) {
 	return e.teacherClient, e.teacherModel
 }
 
+func (e *Evolver) judgeModelSnapshot() (*llm.Client, string) {
+	e.configMu.RLock()
+	defer e.configMu.RUnlock()
+	return e.judgeClient, e.judgeModel
+}
+
 // stripEchoedFrontmatter removes any leading YAML frontmatter block(s) an LLM
 // echoed into a rewritten skill body. The evolve prompt asks for the body
 // only, but lightweight models often return the whole SKILL.md; blindly
@@ -603,15 +788,27 @@ func stripEchoedFrontmatter(body string) string {
 	}
 }
 
-// bumpPatchVersion increments the patch segment of a semver string.
+// bumpPatchVersion increments the patch segment of a semver string. It preserves
+// the major.minor lineage even for a loosely-semver version (a 2-part "1.0" or a
+// non-numeric patch): a missing/unparseable patch is treated as 0 and bumped to
+// 1. Only a version with no usable major.minor falls back to the genesis seed
+// "0.1.1" — the old code reset every non-3-part version to "0.1.1", silently
+// dropping a skill's version lineage on its first evolve (#12).
 func bumpPatchVersion(version string) string {
+	version = strings.TrimSpace(version)
 	parts := strings.Split(version, ".")
-	if len(parts) != 3 {
+	if len(parts) < 2 || strings.TrimSpace(parts[0]) == "" || strings.TrimSpace(parts[1]) == "" {
 		return "0.1.1"
 	}
-	var patch int
-	fmt.Sscanf(parts[2], "%d", &patch) //nolint:errcheck // partial parse ok
-	return fmt.Sprintf("%s.%s.%d", parts[0], parts[1], patch+1)
+	patch := 0
+	if len(parts) >= 3 {
+		// A non-numeric patch (e.g. a "-rc1" suffix) leaves patch at 0 → bumps to
+		// 1, keeping major.minor rather than discarding the whole version.
+		if _, err := fmt.Sscanf(strings.TrimSpace(parts[2]), "%d", &patch); err != nil {
+			patch = 0
+		}
+	}
+	return fmt.Sprintf("%s.%s.%d", strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1]), patch+1)
 }
 
 func formatRecentErrors(errors []string) string {
@@ -813,6 +1010,21 @@ const (
 	skillEvolutionPromptCaseLimit     = 5
 	skillFailurePatternLimit          = 4
 )
+
+// skillEvolveCandidateCount is K for the multi-candidate generate-and-select
+// path (#3): the evolver streams this many candidate bodies from the producer
+// (each after the first nudged by a small variation note so they differ), runs
+// the full per-candidate gate stack on each, and commits the best non-regressive
+// one. K=1 preserves the original single-candidate behavior exactly. Kept small
+// so a background evolve cycle's LLM-call budget grows only linearly.
+const skillEvolveCandidateCount = 3
+
+// skillUncoveredJudgeMinScoreDelta is the judge score margin required to accept
+// an evolve of a skill that has NO held-out validation cases (#5). It is larger
+// than the covered margin (skillJudgeMinScoreDelta) because the held-out gate
+// fails open with zero cases, leaving the judge verdict as the only behavioral
+// check — so an uncovered skill must be harder, not easier, to rewrite.
+const skillUncoveredJudgeMinScoreDelta = 6.0
 
 func hasSufficientEvolutionEvidence(stats *UsageStats, reviewFinding string) bool {
 	if strings.TrimSpace(reviewFinding) != "" {
@@ -1522,6 +1734,32 @@ func (e *Evolver) skillValidationEngine() *SkillValidationEngine {
 	return NewSkillValidationEngine(e.tracker, e.logger)
 }
 
+// heldOutSelectionMargin scores a candidate body's held-out validation
+// improvement over the original (candidate score - original score) for the
+// K-candidate selector's ranking (#3). It is the deterministic, judge-free
+// margin: a candidate that satisfies more held-out forbidden/required assertions
+// ranks higher. Returns 0 when there is no engine, no cases, or the gate could
+// not evaluate — so uncovered skills tie and fall back to first-committable
+// order. Never blocks: an engine error is logged and treated as a 0 margin.
+func (e *Evolver) heldOutSelectionMargin(skillName, originalContent, candidateBody string) float64 {
+	engine := e.skillValidationEngine()
+	if engine == nil {
+		return 0
+	}
+	result, err := engine.ValidateCandidate(skillName, originalContent, candidateBody)
+	if err != nil {
+		if e.logger != nil {
+			e.logger.Warn("evolver: held-out selection margin unavailable",
+				"skill", skillName, "error", err)
+		}
+		return 0
+	}
+	if !result.Evaluated {
+		return 0
+	}
+	return result.CandidateScore - result.OriginalScore
+}
+
 func (e *Evolver) validationCasesForPrompt(skillName string) []SkillValidationCaseRecord {
 	if e == nil || e.tracker == nil {
 		return nil
@@ -1535,6 +1773,163 @@ func (e *Evolver) validationCasesForPrompt(skillName string) []SkillValidationCa
 		return nil
 	}
 	return cases
+}
+
+const (
+	// skillCrossRegressionMaxNeighbors caps how many similar neighbor skills the
+	// post-commit cross-skill regression sweep (#4) scores, so a large catalog
+	// never turns one evolve into an unbounded file-read fan-out.
+	skillCrossRegressionMaxNeighbors = 3
+	// skillCrossRegressionMinSimilarity is the name+description Jaccard floor for
+	// treating a skill as a neighbor. Deliberately well below the near-duplicate
+	// skillDedupThreshold (0.82): the sweep wants related-but-distinct skills that
+	// could share a hazard, not just clones. A shared tag also qualifies.
+	skillCrossRegressionMinSimilarity = 0.18
+	skillCrossRegressionCaseLimit     = 20
+)
+
+// detectCrossSkillRegression runs the just-evolved skill's held-out validation
+// cases against its most similar neighbor skills and emits a
+// cross_skill_regression observation for any neighbor that now violates the
+// evolved skill's forbidden/required assertions (#4). It is best-effort and
+// NON-BLOCKING: the evolve is already committed, this never rolls back, and any
+// missing piece (no tracker, no catalog, no cases, no neighbors) is a silent
+// no-op. The neighbor was never under the evolved skill's contract, so a hit is
+// a coupling signal to surface — not proof the edit was wrong.
+func (e *Evolver) detectCrossSkillRegression(skillName string) {
+	if e == nil || e.tracker == nil || e.catalog == nil {
+		return
+	}
+	cases, err := e.tracker.RecentSkillValidationCases(skillName, skillCrossRegressionCaseLimit)
+	if err != nil {
+		if e.logger != nil {
+			e.logger.Warn("evolver: cross-skill regression skipped, validation cases unavailable",
+				"skill", skillName, "error", err)
+		}
+		return
+	}
+	if len(cases) == 0 {
+		return
+	}
+	neighbors := e.crossSkillNeighbors(skillName)
+	if len(neighbors) == 0 {
+		return
+	}
+	for _, neighbor := range neighbors {
+		body, rerr := os.ReadFile(neighbor.Skill.FilePath)
+		if rerr != nil {
+			if e.logger != nil {
+				e.logger.Warn("evolver: cross-skill regression skipped neighbor, read failed",
+					"skill", skillName, "neighbor", neighbor.Skill.Name, "error", rerr)
+			}
+			continue
+		}
+		result := CrossSkillRegression(neighbor.Skill.Name, string(body), cases)
+		if !result.Failed {
+			continue
+		}
+		reason := fmt.Sprintf("neighbor %q regressed %d/%d of evolved skill %q's held-out assertions: %s",
+			neighbor.Skill.Name, result.Total-result.Passed, result.Total, skillName,
+			formatValidationFailures(result.Failures))
+		if e.logger != nil {
+			e.logger.Warn("evolver: cross-skill regression detected",
+				"skill", skillName, "neighbor", neighbor.Skill.Name,
+				"failedAssertions", result.Total-result.Passed, "totalAssertions", result.Total)
+		}
+		if logErr := e.tracker.LogCrossSkillRegression(skillName, neighbor.Skill.Name, reason); logErr != nil && e.logger != nil {
+			e.logger.Warn("evolver: cross-skill regression lifecycle log write failed",
+				"skill", skillName, "neighbor", neighbor.Skill.Name, "error", logErr)
+		}
+	}
+}
+
+// crossSkillNeighbors returns up to skillCrossRegressionMaxNeighbors catalog
+// skills most similar to skillName, ranked by name+description token Jaccard with
+// a shared-tag boost. The evolved skill itself and skills with no resolvable file
+// are excluded. Neighbors below skillCrossRegressionMinSimilarity that also share
+// no tag are dropped, so an unrelated catalog never produces spurious neighbors.
+func (e *Evolver) crossSkillNeighbors(skillName string) []skills.SkillEntry {
+	if e == nil || e.catalog == nil {
+		return nil
+	}
+	self, ok := e.catalog.Get(skillName)
+	if !ok {
+		return nil
+	}
+	selfTokens := skillDedupTokens(self.Skill.Name, self.Skill.Description)
+	selfTags := skillTagSet(*self)
+	if len(selfTokens) == 0 && len(selfTags) == 0 {
+		return nil
+	}
+
+	type scoredNeighbor struct {
+		entry skills.SkillEntry
+		score float64
+	}
+	var scored []scoredNeighbor
+	for _, candidate := range e.catalog.List() {
+		if candidate.Skill.Name == skillName || strings.TrimSpace(candidate.Skill.FilePath) == "" {
+			continue
+		}
+		similarity := jaccardSimilarity(selfTokens, skillDedupTokens(candidate.Skill.Name, candidate.Skill.Description))
+		sharesTag := tagSetsOverlap(selfTags, skillTagSet(candidate))
+		if similarity < skillCrossRegressionMinSimilarity && !sharesTag {
+			continue
+		}
+		// A shared tag is a strong coupling hint, so it floors the rank above any
+		// purely token-similar neighbor while still letting similarity break ties.
+		score := similarity
+		if sharesTag {
+			score += 1
+		}
+		scored = append(scored, scoredNeighbor{entry: candidate, score: score})
+	}
+	sort.Slice(scored, func(i, j int) bool {
+		if scored[i].score != scored[j].score {
+			return scored[i].score > scored[j].score
+		}
+		return scored[i].entry.Skill.Name < scored[j].entry.Skill.Name
+	})
+	if len(scored) > skillCrossRegressionMaxNeighbors {
+		scored = scored[:skillCrossRegressionMaxNeighbors]
+	}
+	out := make([]skills.SkillEntry, 0, len(scored))
+	for _, n := range scored {
+		out = append(out, n.entry)
+	}
+	return out
+}
+
+// skillTagSet returns the lowercased frontmatter tag set for an entry, or nil
+// when the skill carries no metadata tags.
+func skillTagSet(entry skills.SkillEntry) map[string]struct{} {
+	if entry.Metadata == nil || len(entry.Metadata.Tags) == 0 {
+		return nil
+	}
+	set := make(map[string]struct{}, len(entry.Metadata.Tags))
+	for _, tag := range entry.Metadata.Tags {
+		tag = strings.ToLower(strings.TrimSpace(tag))
+		if tag != "" {
+			set[tag] = struct{}{}
+		}
+	}
+	return set
+}
+
+func tagSetsOverlap(a, b map[string]struct{}) bool {
+	if len(a) == 0 || len(b) == 0 {
+		return false
+	}
+	// Iterate the smaller set so the lookup cost is bounded by min(|a|,|b|).
+	if len(b) < len(a) {
+		a, b = b, a
+	}
+	for tag := range a {
+		if _, ok := b[tag]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 // skillBackupPath returns the rollback backup path for a skill file. The
@@ -1587,12 +1982,24 @@ func (e *Evolver) RollbackSkill(skillName string) {
 }
 
 // pickCandidateJudge returns the client/model that should judge a
-// lightweight-produced candidate: the teacher when wired (keeping judge !=
-// producer to avoid same-family self-preference bias, arXiv:2508.02994), else
-// the lightweight model itself (self-judge is unavoidable with no teacher).
+// producer-generated candidate. It prefers an independent judge (SetJudge,
+// typically modelrole main), then the teacher, and never the producing model
+// itself — same-family self-preference bias skews a self-judge toward accepting
+// (arXiv:2508.02994). When a dedicated coding model owns rewrites the teacher is
+// nil, so without the explicit judge the old logic silently self-judged; the
+// judge wire closes that. Falls back to self-judge only when nothing else is
+// wired, logging the degraded mode so the misconfig is observable.
 func (e *Evolver) pickCandidateJudge() (*llm.Client, string) {
-	if client, model := e.teacherModelSnapshot(); client != nil && model != "" {
+	_, producer := e.primaryModel()
+	if client, model := e.judgeModelSnapshot(); client != nil && model != "" && model != producer {
 		return client, model
+	}
+	if client, model := e.teacherModelSnapshot(); client != nil && model != "" && model != producer {
+		return client, model
+	}
+	if e.logger != nil {
+		e.logger.Warn("evolver: no independent judge wired, candidate is self-judged (self-preference bias risk)",
+			"producer", producer)
 	}
 	return e.primaryModel()
 }
@@ -1604,7 +2011,8 @@ func (e *Evolver) judgeCandidate(ctx context.Context, skillName string, client *
 	if client == nil {
 		return false, "", fmt.Errorf("judge: nil client")
 	}
-	validationSection := formatValidationCasesForPrompt(e.validationCasesForPrompt(skillName))
+	cases := e.validationCasesForPrompt(skillName)
+	validationSection := formatValidationCasesForPrompt(cases)
 	failurePatternSection := formatFailurePatternsForPrompt(stats)
 	userPrompt := fmt.Sprintf(`## 원본 SKILL.md
 %s
@@ -1645,6 +2053,18 @@ func (e *Evolver) judgeCandidate(ctx context.Context, skillName string, client *
 		return false, "", fmt.Errorf("judge: parse verdict: %w", err)
 	}
 	pass, reason = acceptJudgeVerdict(resp)
+	if pass && len(cases) == 0 {
+		// No held-out validation cases cover this skill, so the held-out gate
+		// failed open and the judge verdict is the only behavioral check. Require a
+		// larger score margin before accepting such a blind evolve (#5). Scores are
+		// guaranteed non-nil here because acceptJudgeVerdict only passes with both
+		// present.
+		if resp.OriginalScore != nil && resp.CandidateScore != nil &&
+			*resp.CandidateScore-*resp.OriginalScore < skillUncoveredJudgeMinScoreDelta {
+			return false, fmt.Sprintf("uncovered skill (no validation cases): candidate margin %.1f below the %.1f required without held-out coverage: %s",
+				*resp.CandidateScore-*resp.OriginalScore, skillUncoveredJudgeMinScoreDelta, reason), nil
+		}
+	}
 	return pass, reason, nil
 }
 

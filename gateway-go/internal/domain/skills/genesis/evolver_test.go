@@ -1045,3 +1045,234 @@ func TestEvolveSkill_SuppressesThrashingSkillBeforeLLM(t *testing.T) {
 		t.Fatalf("expected an evolve_rejected lifecycle entry for the suppressed evolve, got %+v", recent)
 	}
 }
+
+// writeTestSkill writes a SKILL.md and returns its path, for the cross-skill /
+// multi-candidate tests that need real files behind catalog entries.
+func writeTestSkill(t *testing.T, dir, name, body string) string {
+	t.Helper()
+	path := filepath.Join(dir, name+".SKILL.md")
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatalf("write %s: %v", name, err)
+	}
+	return path
+}
+
+// TestCrossSkillNeighborsPicksSharedTagAndTokenSkills verifies neighbor
+// selection (#4): a shared frontmatter tag floors a skill above purely
+// token-similar ones, an unrelated skill is excluded, and the cap is honored.
+func TestCrossSkillNeighborsPicksSharedTagAndTokenSkills(t *testing.T) {
+	dir := t.TempDir()
+	cat := skills.NewCatalog(slog.New(slog.NewTextHandler(io.Discard, nil)))
+	mk := func(name, desc string, tags []string) {
+		entry := skills.SkillEntry{Skill: skills.Skill{
+			Name:        name,
+			Description: desc,
+			FilePath:    writeTestSkill(t, dir, name, "---\nname: "+name+"\n---\n\n# "+name+"\n"),
+		}}
+		if len(tags) > 0 {
+			entry.Metadata = &skills.DenebSkillMetadata{Tags: tags}
+		}
+		cat.Register(entry)
+	}
+	mk("topsolar-db", "topsolar database backup and restore", []string{"database", "topsolar"})
+	mk("topsolar-restore", "topsolar database restore helper", []string{"database"}) // shares tag + tokens
+	mk("topsolar-report", "topsolar database reporting weekly", nil)                 // token overlap only
+	mk("unrelated-email", "summarize an email thread for triage", []string{"inbox"}) // neither
+
+	e := &Evolver{logger: slog.New(slog.NewTextHandler(io.Discard, nil)), catalog: cat}
+	neighbors := e.crossSkillNeighbors("topsolar-db")
+	if len(neighbors) == 0 || len(neighbors) > skillCrossRegressionMaxNeighbors {
+		t.Fatalf("expected 1..%d neighbors, got %d: %+v", skillCrossRegressionMaxNeighbors, len(neighbors), neighbors)
+	}
+	if neighbors[0].Skill.Name != "topsolar-restore" {
+		t.Fatalf("expected shared-tag neighbor ranked first, got %q", neighbors[0].Skill.Name)
+	}
+	for _, n := range neighbors {
+		if n.Skill.Name == "topsolar-db" {
+			t.Fatalf("self must never be a neighbor")
+		}
+		if n.Skill.Name == "unrelated-email" {
+			t.Fatalf("unrelated skill should be excluded, got %+v", neighbors)
+		}
+	}
+}
+
+// TestDetectCrossSkillRegressionLogsNeighborViolation drives the post-commit
+// sweep (#4) end to end: the evolved skill's held-out forbidden assertion is
+// replayed against a tag-neighbor whose body violates it, producing a
+// cross_skill_regression lifecycle entry. It must not roll back or error.
+func TestDetectCrossSkillRegressionLogsNeighborViolation(t *testing.T) {
+	dir := t.TempDir()
+	tracker := newTestTracker(t)
+	if err := tracker.RecordSkillValidationCase(SkillValidationCaseRecord{
+		SkillName:           "topsolar-db",
+		ID:                  "no-eval",
+		ForbiddenSubstrings: []string{"eval"},
+	}); err != nil {
+		t.Fatalf("RecordSkillValidationCase: %v", err)
+	}
+	cat := skills.NewCatalog(slog.New(slog.NewTextHandler(io.Discard, nil)))
+	cat.Register(skills.SkillEntry{
+		Skill:    skills.Skill{Name: "topsolar-db", Description: "topsolar database ops", FilePath: writeTestSkill(t, dir, "topsolar-db", "---\nname: topsolar-db\n---\n\n# DB\n\n## Procedure\n- safe wrapper only\n")},
+		Metadata: &skills.DenebSkillMetadata{Tags: []string{"database"}},
+	})
+	cat.Register(skills.SkillEntry{
+		Skill:    skills.Skill{Name: "topsolar-restore", Description: "topsolar database restore", FilePath: writeTestSkill(t, dir, "topsolar-restore", "---\nname: topsolar-restore\n---\n\n# Restore\n\n## Procedure\n- eval the dump inline\n")},
+		Metadata: &skills.DenebSkillMetadata{Tags: []string{"database"}},
+	})
+
+	e := &Evolver{logger: slog.New(slog.NewTextHandler(io.Discard, nil)), catalog: cat, tracker: tracker}
+	e.detectCrossSkillRegression("topsolar-db") // best-effort; must not panic or roll back
+
+	recent, err := tracker.RecentLifecycleLog(10)
+	if err != nil {
+		t.Fatalf("RecentLifecycleLog: %v", err)
+	}
+	found := false
+	for _, ent := range recent {
+		if ent.Type == "cross_skill_regression" && ent.SkillName == "topsolar-restore" &&
+			strings.Contains(ent.Reason, "topsolar-db") && strings.Contains(ent.Reason, "forbidden") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected cross_skill_regression entry naming the neighbor and source, got %+v", recent)
+	}
+
+	// No cases or no neighbors → no-op (no new cross_skill_regression entries).
+	emptyTracker := newTestTracker(t)
+	e2 := &Evolver{logger: slog.New(slog.NewTextHandler(io.Discard, nil)), catalog: cat, tracker: emptyTracker}
+	e2.detectCrossSkillRegression("topsolar-db")
+	recent2, err := emptyTracker.RecentLifecycleLog(10)
+	if err != nil {
+		t.Fatalf("RecentLifecycleLog: %v", err)
+	}
+	for _, ent := range recent2 {
+		if ent.Type == "cross_skill_regression" {
+			t.Fatalf("expected no-op with no validation cases, got %+v", ent)
+		}
+	}
+}
+
+// TestGenerateSelectAndApplyCommitsBestNonRegressiveCandidate covers #3: with
+// self-test off (deterministic gates only), the producer returns K bodies of
+// differing held-out quality and the evolver must commit the one with the
+// largest held-out margin. The held-out case has two required substrings; the
+// second candidate satisfies both (2/2) while the others satisfy one (1/2), so
+// it must win on margin regardless of generation order.
+func TestGenerateSelectAndApplyCommitsBestNonRegressiveCandidate(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "SKILL.md")
+	original := "---\nname: deploy-helper\nversion: \"1.0.0\"\n---\n\n# Deploy Helper\n\n## Procedure\n- Deploy the service.\n"
+	if err := os.WriteFile(path, []byte(original), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tracker := newTestTracker(t)
+	// Two required substrings so several candidates can be non-regressive with
+	// DIFFERENT held-out margins, exercising the margin ranking (not just a
+	// single survivor). Original satisfies neither (0/2 baseline).
+	if err := tracker.RecordSkillValidationCase(SkillValidationCaseRecord{
+		SkillName:          "deploy-helper",
+		ID:                 "verify-required",
+		RequiredSubstrings: []string{"verify health", "rollback plan"},
+	}); err != nil {
+		t.Fatalf("RecordSkillValidationCase: %v", err)
+	}
+
+	// bodies[0],[2] satisfy 1/2 required substrings (+50 margin); bodies[1]
+	// satisfies 2/2 (+100 margin) and must be the committed winner.
+	bodies := []string{
+		"# Deploy Helper\n\n## Procedure\n- Deploy the service.\n- Then verify health endpoint.",
+		"# Deploy Helper\n\n## Procedure\n- Deploy the service.\n- Then verify health endpoint.\n- Keep a rollback plan ready.",
+		"# Deploy Helper\n\n## Procedure\n- Deploy the service.\n- Afterwards verify health endpoint.",
+	}
+	// All candidates carry a complete Self-Harness audit so they clear the
+	// deterministic preflight; only the held-out margin differentiates them.
+	const auditFields = `"target_signature":"terminal=other|mechanism=verification","edited_surface":"Procedure","expected_behavior_change":"adds a verification step","regression_risk":"none, additive"`
+	call := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		idx := call
+		if idx >= len(bodies) {
+			idx = len(bodies) - 1
+		}
+		call++
+		w.Header().Set("Content-Type", "text/event-stream")
+		payload := fmt.Sprintf(`{"skip":false,"changes":{"description":"c%d","new_version":"1.0.1",%s,"body":%q}}`, idx, auditFields, bodies[idx])
+		writeTestSSEJSON(t, w, payload)
+	}))
+	defer server.Close()
+
+	cat := skills.NewCatalog(slog.New(slog.NewTextHandler(io.Discard, nil)))
+	cat.Register(skills.SkillEntry{Skill: skills.Skill{Name: "deploy-helper", Version: "1.0.0", FilePath: path}})
+	e := NewEvolver(llm.NewClient(server.URL, "test-key"), cat, tracker, "lightweight", slog.New(slog.NewTextHandler(io.Discard, nil)))
+	e.selfTest = false // exercise the deterministic margin selector without a judge
+
+	entry := &skills.SkillEntry{Skill: skills.Skill{Name: "deploy-helper", Version: "1.0.0", FilePath: path}}
+	userPrompt := "## 현재 SKILL.md\n" + original
+	result, err := e.generateSelectAndApply(context.Background(), userPrompt, entry, original, &UsageStats{SkillName: "deploy-helper"}, "make deploy verified")
+	if err != nil {
+		t.Fatalf("generateSelectAndApply: %v", err)
+	}
+	if call != skillEvolveCandidateCount {
+		t.Fatalf("expected %d producer calls, got %d", skillEvolveCandidateCount, call)
+	}
+	if !result.Evolved {
+		t.Fatalf("expected an evolve, got %+v", result)
+	}
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(got), "rollback plan") {
+		t.Fatalf("expected the highest-margin candidate (2/2 with rollback plan) committed, got:\n%s", got)
+	}
+}
+
+// TestGenerateSelectAndApplyFallsBackWhenAllCandidatesRegress covers #3's
+// all-fail path: every candidate regresses the held-out gate, so nothing is
+// committed, the original is preserved, and a rejection reason is returned.
+func TestGenerateSelectAndApplyFallsBackWhenAllCandidatesRegress(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "SKILL.md")
+	original := "---\nname: deploy-helper\nversion: \"1.0.0\"\n---\n\n# Deploy Helper\n\n## Procedure\n- Deploy and verify health endpoint before finishing.\n"
+	if err := os.WriteFile(path, []byte(original), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tracker := newTestTracker(t)
+	if err := tracker.RecordSkillValidationCase(SkillValidationCaseRecord{
+		SkillName:          "deploy-helper",
+		ID:                 "verify-required",
+		RequiredSubstrings: []string{"verify health"},
+	}); err != nil {
+		t.Fatalf("RecordSkillValidationCase: %v", err)
+	}
+	// Every candidate drops "verify health" → all regress the held-out gate.
+	regressing := "# Deploy Helper\n\n## Procedure\n- Deploy and move on quickly."
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		writeTestSSEJSON(t, w, fmt.Sprintf(`{"skip":false,"changes":{"description":"d","new_version":"1.0.1","body":%q}}`, regressing))
+	}))
+	defer server.Close()
+
+	cat := skills.NewCatalog(slog.New(slog.NewTextHandler(io.Discard, nil)))
+	cat.Register(skills.SkillEntry{Skill: skills.Skill{Name: "deploy-helper", Version: "1.0.0", FilePath: path}})
+	e := NewEvolver(llm.NewClient(server.URL, "test-key"), cat, tracker, "lightweight", slog.New(slog.NewTextHandler(io.Discard, nil)))
+	e.selfTest = false
+
+	entry := &skills.SkillEntry{Skill: skills.Skill{Name: "deploy-helper", Version: "1.0.0", FilePath: path}}
+	userPrompt := "## 현재 SKILL.md\n" + original
+	result, err := e.generateSelectAndApply(context.Background(), userPrompt, entry, original, &UsageStats{SkillName: "deploy-helper"}, "make deploy verified")
+	if err != nil {
+		t.Fatalf("generateSelectAndApply: %v", err)
+	}
+	if result.Evolved || !strings.Contains(result.Reason, "selection rejected") {
+		t.Fatalf("expected a selection rejection when all candidates regress, got %+v", result)
+	}
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != original {
+		t.Fatalf("original must be preserved when all candidates fail, got:\n%s", got)
+	}
+}

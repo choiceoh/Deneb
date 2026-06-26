@@ -139,12 +139,42 @@ func applyEffortRouter(cfg *agent.AgentConfig, params RunParams, messages []llm.
 	}
 	disabled := &llm.ThinkingConfig{Type: "disabled", TemplateKwarg: profile.ToggleKwarg}
 	cfg.Thinking = disabled
-	cfg.ThinkingModulator = effortStepModulator(profile, disabled, route.origThinking)
+	// Compose, don't clobber: the reasoning sandwich (if DENEB_REASONING_SANDWICH
+	// installed origModulator before this) raises reasoning on its boost turns
+	// (planning turn 0, the verify/finish turn), while the router lowers it on
+	// easy early turns. composeEffortModulator layers them so the BOOST WINS on
+	// the boost turns (origModulator returns non-nil there) and the router's
+	// per-step policy governs every other turn (origModulator returns nil). With
+	// the sandwich off, origModulator is nil and this is exactly the router-only
+	// policy as before. restoreEffort puts origModulator back on escalation, so
+	// the un-routed retry runs the pure sandwich.
+	cfg.ThinkingModulator = composeEffortModulator(route.origModulator, effortStepModulator(profile, disabled, route.origThinking))
 	if logger != nil {
 		logger.Info("effort router: thinking off for this run",
 			"reason", reason, "model", cfg.Model, "ceilingTurn", profile.StepCeilingTurn)
 	}
 	return route, "routed:" + reason
+}
+
+// composeEffortModulator unifies the reasoning-sandwich boost policy with the
+// effort router's per-step lowering policy into one ThinkingModulator. The
+// sandwich (boost) is consulted first: a non-nil return is a deliberate boost
+// turn (planning / verification) and WINS — this is the documented precedence,
+// boosts beat lowers on the boost turns. A nil return means "no opinion" and
+// the router's step policy decides (lower on easy-early turns, revert on heavy
+// or late ones). boost may be nil (sandwich disabled), in which case the step
+// policy is returned unwrapped. step is always non-nil here. (The step param is
+// named to avoid shadowing the imported router package.)
+func composeEffortModulator(boost, step func(turn int, acts []agent.ToolActivity) *llm.ThinkingConfig) func(turn int, acts []agent.ToolActivity) *llm.ThinkingConfig {
+	if boost == nil {
+		return step
+	}
+	return func(turn int, acts []agent.ToolActivity) *llm.ThinkingConfig {
+		if b := boost(turn, acts); b != nil {
+			return b
+		}
+		return step(turn, acts)
+	}
 }
 
 // effortStepModulator builds the per-turn policy for a routed run on the given

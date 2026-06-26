@@ -2,6 +2,7 @@ package agent
 
 import (
 	"log/slog"
+	"strings"
 	"testing"
 )
 
@@ -183,5 +184,88 @@ func TestToolLoopDetector_HistoryWindowSlides(t *testing.T) {
 	r := d.RecordAndCheck("read", args)
 	if r.Stuck {
 		t.Fatal("old history should have been evicted")
+	}
+}
+
+func TestToolLoopDetector_RecordFileMutation_SamePathThrash(t *testing.T) {
+	d := NewToolLoopDetector(DefaultToolLoopConfig(), slog.Default())
+	root := t.TempDir()
+
+	// Each call carries a DIFFERENT old_string/new_string — the exact case the
+	// hash-based detectors miss — but targets the SAME file. The per-path
+	// breaker keys on the resolved path, not name+args, so it still counts.
+	edit := func(i int) string {
+		args := []byte(`{"file_path": "pkg/foo.go", "old_string": "v` +
+			string(rune('0'+i)) + `", "new_string": "w` + string(rune('0'+i)) + `"}`)
+		return d.RecordFileMutation(root, "edit", args)
+	}
+
+	// First samePathEditNudgeThreshold-1 edits: silent.
+	for i := 0; i < samePathEditNudgeThreshold-1; i++ {
+		if nudge := edit(i); nudge != "" {
+			t.Fatalf("unexpected nudge at edit %d: %q", i+1, nudge)
+		}
+	}
+
+	// The threshold-th edit fires the one-shot nudge, naming the display path.
+	nudge := edit(samePathEditNudgeThreshold - 1)
+	if nudge == "" {
+		t.Fatalf("expected nudge at edit %d", samePathEditNudgeThreshold)
+	}
+	if !strings.Contains(nudge, "pkg/foo.go") {
+		t.Fatalf("nudge should name the file path, got %q", nudge)
+	}
+
+	// Further edits to the same path keep counting but must NOT re-fire.
+	if again := edit(samePathEditNudgeThreshold); again != "" {
+		t.Fatalf("nudge should fire once per path, got repeat: %q", again)
+	}
+}
+
+func TestToolLoopDetector_RecordFileMutation_DistinctPathsIndependent(t *testing.T) {
+	d := NewToolLoopDetector(DefaultToolLoopConfig(), slog.Default())
+	root := t.TempDir()
+
+	// Editing many DIFFERENT files (normal multi-file work) never nudges, even
+	// well past the per-file threshold in aggregate.
+	for i := 0; i < samePathEditNudgeThreshold*2; i++ {
+		args := []byte(`{"file_path": "file` + string(rune('a'+i)) + `.go"}`)
+		if nudge := d.RecordFileMutation(root, "write", args); nudge != "" {
+			t.Fatalf("distinct paths must not nudge, got %q at %d", nudge, i+1)
+		}
+	}
+}
+
+func TestToolLoopDetector_RecordFileMutation_NonMutatingAndNoRoot(t *testing.T) {
+	d := NewToolLoopDetector(DefaultToolLoopConfig(), slog.Default())
+	root := t.TempDir()
+
+	// A non-file-mutating tool resolves to no path and is ignored, no matter
+	// how often it is called.
+	for i := 0; i < samePathEditNudgeThreshold*2; i++ {
+		if nudge := d.RecordFileMutation(root, "read", []byte(`{"file_path": "foo.go"}`)); nudge != "" {
+			t.Fatalf("non-mutating tool must not nudge, got %q", nudge)
+		}
+	}
+
+	// With no provenance root, paths cannot be resolved (root-confinement is
+	// unavailable), so the breaker stays silent rather than guessing.
+	for i := 0; i < samePathEditNudgeThreshold*2; i++ {
+		if nudge := d.RecordFileMutation("", "edit", []byte(`{"file_path": "foo.go"}`)); nudge != "" {
+			t.Fatalf("empty root must not nudge, got %q", nudge)
+		}
+	}
+}
+
+func TestToolLoopDetector_RecordFileMutation_Disabled(t *testing.T) {
+	cfg := DefaultToolLoopConfig()
+	cfg.Enabled = false
+	d := NewToolLoopDetector(cfg, slog.Default())
+	root := t.TempDir()
+
+	for i := 0; i < samePathEditNudgeThreshold*2; i++ {
+		if nudge := d.RecordFileMutation(root, "edit", []byte(`{"file_path": "foo.go"}`)); nudge != "" {
+			t.Fatalf("disabled detector must not nudge, got %q", nudge)
+		}
 	}
 }

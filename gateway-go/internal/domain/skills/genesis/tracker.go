@@ -132,10 +132,11 @@ type Tracker struct {
 	triggerInflight bool
 
 	// Post-evolve rollback watch (set via SetRollback). After a skill is
-	// evolved (LogEvolve), its next uses are watched; rollbackThreshold
-	// consecutive failures fire `rollback` to revert the evolution. Guarded by
-	// mu. postEvolve is empty at startup (populated only by runtime LogEvolve),
-	// so replaying usage history never triggers a rollback.
+	// evolved (LogEvolve), its next uses are watched; rollbackThreshold failures
+	// within the observation window fire `rollback` to revert the evolution
+	// (windowed, not strict-consecutive, so an alternating pass/fail regression
+	// still trips it). Guarded by mu. postEvolve is empty at startup (populated
+	// only by runtime LogEvolve), so replaying usage history never rolls back.
 	rollback          func(skillName string)
 	rollbackThreshold int
 	postEvolve        map[string]*evolveWatch
@@ -148,10 +149,14 @@ type Tracker struct {
 
 // evolveWatch tracks consecutive failures of a skill since its last evolve.
 type evolveWatch struct {
-	version           string
-	consecutiveFails  int
-	audit             HarnessEditAudit
-	targetRecurrences int
+	version string
+	audit   HarnessEditAudit
+	// postUses counts real uses observed since the evolve shipped (the rollback
+	// window); postFails counts failures among them; recurred counts failures
+	// matching the evolve's target signature (surfaced in the rollback log).
+	postUses  int
+	postFails int
+	recurred  int
 }
 
 // usageAgg holds running aggregates per skill.
@@ -427,10 +432,12 @@ func (t *Tracker) RecordUsage(record UsageRecord) error {
 	return nil
 }
 
-// maybeFireRollbackLocked advances the post-evolve watch for the used skill: a
-// success validates the evolution (watch cleared), and rollbackThreshold
-// consecutive failures fire the rollback in the background. Caller holds t.mu;
-// the callback runs lock-free in a recovered goroutine (it re-enters the
+// maybeFireRollbackLocked advances the post-evolve watch for the used skill and
+// reverts the evolution when failures reach rollbackThreshold within the
+// observation window. Windowed rather than strict-consecutive: a single success
+// no longer clears the watch, so a regression that alternates pass/fail (the
+// sub-threshold coupling HarnessX §6.6 documents) still rolls back. Caller holds
+// t.mu; the callback runs lock-free in a recovered goroutine (it re-enters the
 // tracker via LogEvolveRolledBack, so it must not run under the lock).
 func (t *Tracker) maybeFireRollbackLocked(r UsageRecord) {
 	w := t.postEvolve[r.SkillName]
@@ -438,33 +445,69 @@ func (t *Tracker) maybeFireRollbackLocked(r UsageRecord) {
 		return
 	}
 	// Only real use is fair evidence for or against a fresh evolve: a review-fork
-	// record or a consult-infra failure must neither advance the rollback counter
-	// (reverting a good evolve) nor clear the watch (rubber-stamping a bad one).
+	// record or a consult-infra failure must neither advance the failure count
+	// (reverting a good evolve) nor count toward proving it out.
 	if !isRealUsageRecord(r) {
 		return
 	}
-	if r.Success {
+	w.postUses++
+	if !r.Success {
+		w.postFails++
+		if selfHarnessTargetRecurred(w.audit, r) {
+			w.recurred++
+		}
+	}
+	// Regression: threshold failures within the window — fire the rollback.
+	if w.postFails >= t.rollbackThreshold {
+		recurred := w.recurred
+		threshold := t.rollbackThreshold // capture under the lock; the goroutine must not read t.* fields
 		delete(t.postEvolve, r.SkillName)
-		return
-	}
-	if selfHarnessTargetRecurred(w.audit, r) {
-		w.targetRecurrences++
-	}
-	w.consecutiveFails++
-	if w.consecutiveFails < t.rollbackThreshold {
-		return
-	}
-	delete(t.postEvolve, r.SkillName)
-	fn := t.rollback
-	skill := r.SkillName
-	go func() {
-		defer func() {
-			if rec := recover(); rec != nil && t.logger != nil {
-				t.logger.Error("genesis: rollback callback panic", "panic", rec)
+		fn := t.rollback
+		skill := r.SkillName
+		go func() {
+			defer func() {
+				if rec := recover(); rec != nil && t.logger != nil {
+					t.logger.Error("genesis: rollback callback panic", "panic", rec)
+				}
+			}()
+			if t.logger != nil {
+				t.logger.Info("genesis: post-evolve regression window tripped, rolling back",
+					"skill", skill, "fails", threshold, "targetRecurrences", recurred)
 			}
+			fn(skill)
 		}()
-		fn(skill)
-	}()
+		return
+	}
+	// Proven out: the evolve survived the observation window below the failure
+	// threshold. Close the loop with a positive confirmation (#1) — the watch
+	// used to be dropped silently here, so a shipped evolve only ever produced a
+	// rollback event, never an "it held up" event. Now every shipped evolve ends
+	// in either evolve_rolled_back or evolve_confirmed.
+	if w.postUses >= t.rollbackWindowLocked() {
+		uses, fails, recurred := w.postUses, w.postFails, w.recurred
+		audit := w.audit
+		skill := r.SkillName
+		delete(t.postEvolve, r.SkillName)
+		go func() {
+			defer func() {
+				if rec := recover(); rec != nil && t.logger != nil {
+					t.logger.Error("genesis: confirm callback panic", "panic", rec)
+				}
+			}()
+			t.confirmEvolve(skill, audit, uses, fails, recurred)
+		}()
+	}
+}
+
+// rollbackWindowLocked is the number of post-evolve real uses observed before an
+// evolve that has not hit the failure threshold is considered proven and its
+// watch cleared. Twice the threshold, so reaching the threshold means at least a
+// ~50% failure rate over the window. Caller holds t.mu.
+func (t *Tracker) rollbackWindowLocked() int {
+	if t.rollbackThreshold <= 0 {
+		return 0
+	}
+	return t.rollbackThreshold * 2
 }
 
 func selfHarnessTargetRecurred(audit HarnessEditAudit, r UsageRecord) bool {
@@ -759,7 +802,7 @@ func (t *Tracker) LogEvolutionProposal(record EvolutionProposalRecord) error {
 // records every committed or rejected evolve — including ones on user-authored
 // skills — so the native client can render a complete evolution timeline.
 type evolveLogEntry struct {
-	Type             string            `json:"type"` // "evolved" | "evolve_rejected" | "evolve_rolled_back"
+	Type             string            `json:"type"` // "evolved" | "evolve_rejected" | "evolve_rolled_back" | "evolve_confirmed" | "cross_skill_regression"
 	SkillName        string            `json:"skillName"`
 	NewVersion       string            `json:"newVersion,omitempty"`
 	Description      string            `json:"description,omitempty"`
@@ -798,7 +841,7 @@ func (t *Tracker) LogEvolveWithAudit(skillName, newVersion, description string, 
 }
 
 // LogEvolveRolledBack records that an evolution was reverted after it regressed
-// (rollbackThreshold consecutive post-evolve failures).
+// (rollbackThreshold post-evolve failures within the observation window).
 func (t *Tracker) LogEvolveRolledBack(skillName string) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -813,6 +856,45 @@ func (t *Tracker) LogEvolveRolledBack(skillName string) error {
 	}
 	t.recordOptimizerMemoryLocked(skillName, "rolled_back", evolveRollbackReason, now)
 	return nil
+}
+
+// confirmEvolve records that an evolve survived its post-evolve observation
+// window below the rollback threshold (#1 falsification closure). It runs
+// lock-free off the tracker (LogEvolveConfirmed re-enters t.mu). A clean
+// confirmation means the target failure signature never recurred and the skill
+// logged no failures within the window; otherwise it is partial (held up
+// overall, but the targeted mechanism still surfaced below threshold).
+func (t *Tracker) confirmEvolve(skillName string, audit HarnessEditAudit, uses, fails, recurred int) {
+	clean := fails == 0 && recurred == 0
+	if t.logger != nil {
+		t.logger.Info("genesis: post-evolve window cleared, evolve confirmed",
+			"skill", skillName, "uses", uses, "fails", fails, "targetRecurrences", recurred,
+			"clean", clean, "expectedBehaviorChange", audit.ExpectedBehaviorChange)
+	}
+	if err := t.LogEvolveConfirmed(skillName, audit, clean); err != nil && t.logger != nil {
+		t.logger.Warn("genesis: confirm lifecycle log failed", "skill", skillName, "error", err)
+	}
+}
+
+// LogEvolveConfirmed records that an evolution proved out over its post-evolve
+// observation window (#1). It is the positive counterpart to LogEvolveRolledBack,
+// so the lifecycle log now carries the outcome of every shipped evolve. clean
+// reports whether the target failure signature never recurred and no failures
+// occurred within the window.
+func (t *Tracker) LogEvolveConfirmed(skillName string, audit HarnessEditAudit, clean bool) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	reason := "partial: held up but target signature recurred below threshold"
+	if clean {
+		reason = "clean: target signature did not recur within the window"
+	}
+	return jsonlstore.Append(t.logPath, evolveLogEntry{
+		Type:             "evolve_confirmed",
+		SkillName:        skillName,
+		Reason:           reason,
+		CreatedAt:        time.Now().UnixMilli(),
+		SelfHarnessAudit: audit.ptr(),
+	})
 }
 
 // LogEvolveRejected records an evolve attempt whose rewrite the self-test
@@ -838,6 +920,25 @@ func (t *Tracker) LogEvolveRejectedWithAudit(skillName, reason string, audit Har
 	}
 	t.recordOptimizerMemoryLocked(skillName, "rejected", reason, now)
 	return nil
+}
+
+// LogCrossSkillRegression records that a committed evolve of sourceSkill made a
+// similar NEIGHBOR skill regress the evolved skill's held-out forbidden/required
+// assertions (#4 cross-skill regression detection). It is an observation only:
+// the evolve is NOT rolled back — a shared-tag/description neighbor failing the
+// evolved skill's contract is a coupling signal worth surfacing, not proof the
+// edit is wrong (the neighbor was never under that contract). neighborSkill is
+// the skill that regressed; sourceSkill is the evolve that triggered the check.
+func (t *Tracker) LogCrossSkillRegression(sourceSkill, neighborSkill, reason string) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return jsonlstore.Append(t.logPath, evolveLogEntry{
+		Type:        "cross_skill_regression",
+		SkillName:   neighborSkill,
+		Description: "evolve of " + sourceSkill + " surfaced a regression in neighbor " + neighborSkill,
+		Reason:      reason,
+		CreatedAt:   time.Now().UnixMilli(),
+	})
 }
 
 // RecentLifecycleLog returns recent genesis/proposal events, newest first.
@@ -1075,8 +1176,9 @@ func (t *Tracker) SetEvolveTrigger(fn func(), threshold int, minGap time.Duratio
 }
 
 // SetRollback wires the post-evolve rollback. After a skill is evolved, its
-// next uses are watched; `threshold` consecutive failures fire `fn` to revert
-// the evolution. threshold<=0 disables the watch.
+// next uses are watched; `threshold` failures within the observation window
+// (windowed, not strict-consecutive) fire `fn` to revert the evolution.
+// threshold<=0 disables the watch.
 func (t *Tracker) SetRollback(fn func(skillName string), threshold int) {
 	t.mu.Lock()
 	defer t.mu.Unlock()

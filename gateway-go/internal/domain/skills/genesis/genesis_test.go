@@ -231,6 +231,11 @@ func TestBumpPatchVersion(t *testing.T) {
 		{"1.2.3", "1.2.4"},
 		{"0.0.0", "0.0.1"},
 		{"bad", "0.1.1"},
+		// #12: loosely-semver versions keep their major.minor lineage instead of
+		// resetting to the genesis seed.
+		{"1.0", "1.0.1"},
+		{"2.3.x", "2.3.1"},
+		{"  4.5.6  ", "4.5.7"},
 	}
 	for _, tt := range tests {
 		got := bumpPatchVersion(tt.input)
