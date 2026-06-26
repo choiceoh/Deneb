@@ -73,12 +73,20 @@ type Source struct {
 // gmail pipeline's deal extraction and wiki.UpsertDealPage use), so a deal's
 // raw evidence (notebook) and its curated facts (wiki page) hang off one
 // identity. At most one notebook per DealRef (EnsureForDeal enforces this).
+//
+// ProjectRefs are the canonical project 대표페이지 paths this notebook belongs to,
+// resolved once at ingestion (the mail analyzer's RelatedProjects) and stamped
+// here — so a deal notebook keyed by a 거래 page (counterparty) still links to its
+// project even when the counterparty name differs from the project name. Clients
+// match items to a project by exact ref, not read-time heuristics. See
+// StampProjectRefs.
 type Notebook struct {
 	ID          string   `json:"id"`
 	Name        string   `json:"name"`
 	Description string   `json:"description,omitempty"`
 	DealRef     string   `json:"dealRef,omitempty"`
-	Mode        string   `json:"mode,omitempty"` // "" soft (default) / "strict" — grounding strictness
+	ProjectRefs []string `json:"projectRefs,omitempty"` // resolved project 대표페이지 paths (각인)
+	Mode        string   `json:"mode,omitempty"`        // "" soft (default) / "strict" — grounding strictness
 	Sources     []Source `json:"sources"`
 	Created     int64    `json:"created"` // unix millis
 	Updated     int64    `json:"updated"` // unix millis
@@ -361,6 +369,48 @@ func (s *Store) PinUnique(dealRef, name string, src Source) (bool, error) {
 	return true, nil
 }
 
+// StampProjectRefs records the canonical project pages a deal notebook belongs to
+// (각인), merging refs into the notebook anchored to dealRef. Idempotent: refs
+// already present are skipped, so re-analysis of the same deal never duplicates
+// or churns Updated. A no-op (returns false) when no notebook is anchored to
+// dealRef (stamping is meaningless without the notebook the pin created) or when
+// every ref is already recorded. This is the ingestion-time resolution that lets
+// clients link a deal notebook to its project by exact ref instead of guessing
+// from the counterparty-keyed dealRef at read time.
+func (s *Store) StampProjectRefs(dealRef string, refs []string) (bool, error) {
+	dealRef = strings.TrimSpace(dealRef)
+	if dealRef == "" || len(refs) == 0 {
+		return false, nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	nb := s.byDealRefLocked(dealRef)
+	if nb == nil {
+		return false, nil // nothing to stamp onto — the pin creates the notebook first
+	}
+	have := make(map[string]bool, len(nb.ProjectRefs))
+	for _, r := range nb.ProjectRefs {
+		have[r] = true
+	}
+	origLen := len(nb.ProjectRefs)
+	for _, r := range refs {
+		r = strings.TrimSpace(r)
+		if r == "" || have[r] {
+			continue
+		}
+		have[r] = true
+		nb.ProjectRefs = append(nb.ProjectRefs, r)
+	}
+	if len(nb.ProjectRefs) == origLen {
+		return false, nil // all refs already recorded — keep Updated stable
+	}
+	if err := s.saveLocked(nb); err != nil {
+		nb.ProjectRefs = nb.ProjectRefs[:origLen] // roll back every append so memory matches disk
+		return false, err
+	}
+	return true, nil
+}
+
 // RemoveSource unpins the source with the given cite tag. The remaining cites
 // are left untouched (gaps are fine — cites are stable, not contiguous).
 func (s *Store) RemoveSource(id, cite string) error {
@@ -504,6 +554,9 @@ func clone(nb *Notebook) *Notebook {
 	cp := *nb
 	if len(nb.Sources) > 0 {
 		cp.Sources = append([]Source(nil), nb.Sources...)
+	}
+	if len(nb.ProjectRefs) > 0 {
+		cp.ProjectRefs = append([]string(nil), nb.ProjectRefs...)
 	}
 	return &cp
 }

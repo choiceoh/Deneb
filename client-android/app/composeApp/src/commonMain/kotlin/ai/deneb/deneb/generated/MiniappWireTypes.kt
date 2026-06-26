@@ -418,6 +418,7 @@ data class NotebookSummaryOut(
     val name: String = "",
     val description: String = "",
     val dealRef: String = "",
+    val projectRefs: List<String> = emptyList(),
     val sourceCount: Int = 0,
     val updated: Long = 0L,
 )

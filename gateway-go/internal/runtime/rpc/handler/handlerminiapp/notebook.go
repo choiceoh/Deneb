@@ -46,16 +46,20 @@ func NotebookMethods(deps NotebookDeps) map[string]rpcutil.HandlerFunc {
 	}
 }
 
-// NotebookSummaryOut is one notebook in the list payload.
+// NotebookSummaryOut is one notebook in the list payload. ProjectRefs are the
+// canonical project 대표페이지 paths the notebook belongs to (resolved at ingestion
+// and stamped on the notebook), so the project corner can link a deal notebook to
+// its project by exact ref even when the deal's counterparty name differs.
 //
 //deneb:wire
 type NotebookSummaryOut struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Description string `json:"description,omitempty"`
-	DealRef     string `json:"dealRef,omitempty"`
-	SourceCount int    `json:"sourceCount"`
-	Updated     int64  `json:"updated"`
+	ID          string   `json:"id"`
+	Name        string   `json:"name"`
+	Description string   `json:"description,omitempty"`
+	DealRef     string   `json:"dealRef,omitempty"`
+	ProjectRefs []string `json:"projectRefs,omitempty"`
+	SourceCount int      `json:"sourceCount"`
+	Updated     int64    `json:"updated"`
 }
 
 // NotebookListOut wraps the notebook summaries for miniapp.notebook.list.
@@ -178,6 +182,7 @@ func notebookCreateRPC(deps NotebookDeps) rpcutil.HandlerFunc {
 			Name:        nb.Name,
 			Description: nb.Description,
 			DealRef:     nb.DealRef,
+			ProjectRefs: nb.ProjectRefs,
 			SourceCount: len(nb.Sources),
 			Updated:     nb.Updated,
 		})
@@ -370,6 +375,7 @@ func notebookListPayload(store *notebook.Store) NotebookListOut {
 			Name:        nb.Name,
 			Description: nb.Description,
 			DealRef:     nb.DealRef,
+			ProjectRefs: nb.ProjectRefs,
 			SourceCount: len(nb.Sources),
 			Updated:     nb.Updated,
 		})

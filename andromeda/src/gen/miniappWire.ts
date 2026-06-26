@@ -347,6 +347,7 @@ export interface NotebookSummaryOut {
   name?: string
   description?: string
   dealRef?: string
+  projectRefs?: string[]
   sourceCount?: number
   updated?: number
 }
