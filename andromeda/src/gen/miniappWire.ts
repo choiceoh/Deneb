@@ -389,6 +389,7 @@ export interface ProjectDigestRow {
   due?: string
   updatedAtMs?: number
   path?: string
+  code?: string
 }
 
 export interface ProjectDigestsOut {

@@ -405,6 +405,7 @@ function projectIdentity(digest: ProjectDigest): ProjectIdentity {
   const keys = new Set<string>();
   addProjectKeys(keys, digest.project);
   addProjectKeys(keys, digest.path);
+  addProjectKeys(keys, digest.code);
   return { keys };
 }
 

@@ -74,6 +74,7 @@ func (s *Store) knownProjects() []ProjectRef {
 type ProjectStatus struct {
 	Name      string
 	Path      string
+	Code      string   // page Meta.Code — frozen composite project identity, "" if unset
 	Summary   string   // page Meta.Summary — the stable one-line description
 	Due       string   // page Meta.Due — imminent deadline, "" if none
 	Bullets   []string // the "## 현재 상태" lines, newest first
@@ -99,6 +100,7 @@ func (s *Store) ProjectStatuses() ([]ProjectStatus, error) {
 		out = append(out, ProjectStatus{
 			Name:      ref.Name,
 			Path:      ref.Path,
+			Code:      strings.TrimSpace(page.Meta.Code),
 			Summary:   strings.TrimSpace(page.Meta.Summary),
 			Due:       strings.TrimSpace(page.Meta.Due),
 			Bullets:   bullets,
