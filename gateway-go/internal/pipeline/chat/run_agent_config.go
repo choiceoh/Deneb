@@ -51,6 +51,13 @@ func buildAgentConfig(
 	if acd.Tools != nil {
 		allowed := toolpreset.AllowedTools(toolpreset.Preset(sessionToolPreset))
 		rawTools := acd.Tools.FilteredLLMTools(allowed)
+		// Pre-load deferred tools the preset wants active from turn 1 (e.g. the
+		// self-review's skill_lifecycle) so the model can call them directly
+		// instead of doing a fetch_tools dance it routinely skips. Gated by
+		// preset — nil for main chat, so its toolset (and cache) is unchanged.
+		if preload := toolpreset.PreloadedDeferredTools(toolpreset.Preset(sessionToolPreset)); len(preload) > 0 {
+			rawTools = append(rawTools, acd.Tools.DeferredLLMTools(preload)...)
+		}
 
 		// Cache-stable ordering: built-in tools form a sorted prefix,
 		// dynamic tools (plugins, MCP) are sorted separately and appended.

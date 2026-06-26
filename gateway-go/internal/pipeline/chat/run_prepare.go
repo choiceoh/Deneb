@@ -226,11 +226,21 @@ func prepareContextAndPrompt(
 		toolDefs := toPromptToolDefs(deps.tools.FilteredDefinitions(allowed))
 
 		// Deferred tool summaries for system prompt listing.
+		preloaded := make(map[string]struct{})
+		for _, n := range toolpreset.PreloadedDeferredTools(toolpreset.Preset(sessionToolPreset)) {
+			preloaded[n] = struct{}{}
+		}
 		deferredSummaries := deps.tools.DeferredSummaries()
 		var deferredToolInfos []prompt.DeferredToolInfo
 		for _, ds := range deferredSummaries {
 			// Skip deferred tools not in the allowed preset (if preset is active).
 			if _, ok := allowed[ds.Name]; len(allowed) > 0 && !ok {
+				continue
+			}
+			// Skip tools pre-loaded as active for this preset — they're directly
+			// callable, so listing them as deferred would be wrong (and tell the
+			// model to fetch_tools something it already has).
+			if _, ok := preloaded[ds.Name]; ok {
 				continue
 			}
 			deferredToolInfos = append(deferredToolInfos, prompt.DeferredToolInfo{
