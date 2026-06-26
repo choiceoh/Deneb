@@ -33,6 +33,31 @@ func TestRecordDiaryIncludesOutcomeForShortPrompt(t *testing.T) {
 	}
 }
 
+// TestClassifyDiarySignalTagsPreference pins the behavioral-signal capture: a user
+// turn voicing a standing preference or style correction is tagged "선호" (and
+// force-recorded as durable), so the dreamer aggregates an explicit cue for its
+// working-style abstraction instead of inferring it from raw text.
+func TestClassifyDiarySignalTagsPreference(t *testing.T) {
+	cases := []struct {
+		msg     string
+		wantTag bool
+	}{
+		{"앞으로 답변은 간결하게 해줘", true},   // standing directive + style
+		{"불릿 말고 산문으로 정리해줘", true},   // replacement + style correction
+		{"그 표현 그만 쓰고 다르게", true},    // negation directive
+		{"항상 숫자 근거를 같이 줘", true},    // standing directive
+		{"현대차 울산 결제기한 언제야?", false}, // factual question, not a preference
+		{"이 버그 고쳐줘", false},         // task (durable keyword, not a preference cue)
+	}
+	for _, c := range cases {
+		sig := classifyDiarySignal(c.msg, nil, "ok")
+		got := strings.Contains(sig.Reason, "선호")
+		if got != c.wantTag {
+			t.Errorf("classifyDiarySignal(%q).Reason=%q → 선호-tag=%v, want %v", c.msg, sig.Reason, got, c.wantTag)
+		}
+	}
+}
+
 func TestRecordDiarySkipsShortPromptWithoutOutcome(t *testing.T) {
 	dir := t.TempDir()
 	store := testutil.Must(wiki.NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
