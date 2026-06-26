@@ -188,14 +188,16 @@ func (s *Server) configureGenesisEvolverModels(evolver *genesis.Evolver) (modelr
 	}
 	evolver.SetThinkingKwargs(s.genesisThinkingKwargs())
 
-	// Behavioral-replay executor (DENEB_SKILL_EVOLVE_REPLAY, off by default).
-	// A lightweight, LOCAL model simulates the production agent following a
-	// skill so the held-out gate can score tool-call behavior and reject a
-	// rewrite that regresses it. Lightweight (not main) is the right role: a
-	// consistent, cheap discriminator for the original-vs-candidate delta that
-	// avoids chat contention — the gate scores both bodies with the SAME model,
-	// so any executor bias cancels (.claude/rules/model-roles.md). Off until the
-	// replay-case corpus is fed; turning it on with an empty corpus is a no-op.
+	// Behavioral-replay executor (DENEB_SKILL_EVOLVE_REPLAY, on by default; set
+	// =0 to force off). A lightweight, LOCAL model simulates the production agent
+	// following a skill so the held-out gate can score tool-call behavior and
+	// reject a rewrite that regresses it. Lightweight (not main) is the right
+	// role: a consistent, cheap discriminator for the original-vs-candidate delta
+	// that avoids chat contention — the gate scores both bodies with the SAME
+	// model, so any executor bias cancels (.claude/rules/model-roles.md). It is
+	// the strongest "did it break what worked" gate (#6); the engine no-ops when
+	// the replay-case corpus is empty, so defaulting on only adds cost once cases
+	// exist.
 	if replayExecutorEnabled() {
 		evolver.SetReplayExecutor(
 			s.modelRegistry.Client(modelrole.RoleLightweight),
@@ -208,14 +210,16 @@ func (s *Server) configureGenesisEvolverModels(evolver *genesis.Evolver) (modelr
 }
 
 // replayExecutorEnabled reports whether the behavioral-replay validation gate is
-// switched on via DENEB_SKILL_EVOLVE_REPLAY. It is opt-in because each evaluated
-// case spends two extra (local) LLM calls per evolve.
+// switched on via DENEB_SKILL_EVOLVE_REPLAY. On by default (#6): it is the
+// strongest regression gate and no-ops without a replay corpus, so it only
+// spends its two-extra-local-LLM-calls-per-case once cases exist. Set
+// DENEB_SKILL_EVOLVE_REPLAY=0 (or false/no/off) to force it off.
 func replayExecutorEnabled() bool {
 	switch strings.TrimSpace(strings.ToLower(os.Getenv("DENEB_SKILL_EVOLVE_REPLAY"))) {
-	case "1", "true", "yes", "on":
-		return true
-	default:
+	case "0", "false", "no", "off":
 		return false
+	default:
+		return true
 	}
 }
 
