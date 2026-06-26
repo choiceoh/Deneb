@@ -120,6 +120,7 @@ export interface ProjectDigest {
   updatedAtMs?: number; // page last-updated epoch millis
   path?: string; // wiki path to the project page
   code?: string; // frozen composite project identity (Meta.Code); used to match items that ref a project by code
+  refs?: string[]; // graph-resolved owned page paths (code-shared sub-pages + linked pages); extra match keys
 }
 
 // Wiki (memory.*) and unified search are query-driven, handled by custom panes

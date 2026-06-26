@@ -50,6 +50,10 @@ type ProjectDigestRow struct {
 	UpdatedAtMs int64    `json:"updatedAtMs,omitempty"`
 	Path        string   `json:"path,omitempty"`
 	Code        string   `json:"code,omitempty"`
+	// Refs are wiki page paths owned by this project (code-shared sub-pages and
+	// explicitly-linked pages), resolved server-side from the wiki graph so the
+	// client can link items that reference an owned page, not just the 대표페이지.
+	Refs []string `json:"refs,omitempty"`
 }
 
 // ProjectDigestsOut is the miniapp.project.digests response: every project that
@@ -94,6 +98,7 @@ func projectDigests(deps ProjectDeps) rpcutil.HandlerFunc {
 				UpdatedAtMs: st.UpdatedMs,
 				Path:        st.Path,
 				Code:        st.Code,
+				Refs:        st.Refs,
 			})
 		}
 		return rpcutil.RespondOK(req.ID, ProjectDigestsOut{Digests: rows})

@@ -406,6 +406,7 @@ function projectIdentity(digest: ProjectDigest): ProjectIdentity {
   addProjectKeys(keys, digest.project);
   addProjectKeys(keys, digest.path);
   addProjectKeys(keys, digest.code);
+  for (const ref of digest.refs ?? []) addProjectKeys(keys, ref);
   return { keys };
 }
 

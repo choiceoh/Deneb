@@ -75,6 +75,7 @@ type ProjectStatus struct {
 	Name      string
 	Path      string
 	Code      string   // page Meta.Code — frozen composite project identity, "" if unset
+	Refs      []string // graph-resolved owned page paths (code-shared sub-pages + explicitly-linked pages); see projectOwnedRefs
 	Summary   string   // page Meta.Summary — the stable one-line description
 	Due       string   // page Meta.Due — imminent deadline, "" if none
 	Bullets   []string // the "## 현재 상태" lines, newest first
@@ -113,6 +114,13 @@ func (s *Store) ProjectStatuses() ([]ProjectStatus, error) {
 		}
 		return out[i].Name < out[j].Name
 	})
+	// Resolve each project's owned pages from the live wiki graph (one corpus
+	// pass) so the client can link items that reference a sub/deal page, not just
+	// the 대표페이지 itself. Not a hot path — the digest is cached client-side.
+	owned := s.projectOwnedRefs(out)
+	for i := range out {
+		out[i].Refs = owned[out[i].Path]
+	}
 	return out, nil
 }
 
