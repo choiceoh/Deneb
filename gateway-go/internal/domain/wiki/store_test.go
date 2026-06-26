@@ -2,6 +2,7 @@ package wiki
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -365,5 +366,65 @@ func TestStore_AppendLog_RedactsSecret(t *testing.T) {
 	body := string(data)
 	if strings.Contains(body, token) {
 		t.Fatalf("log.md contains raw token: %q", body)
+	}
+}
+
+// TestStore_AppendLog_RotatesWhenOversized verifies the size-capped rotation:
+// once log.md exceeds wikiLogMaxBytes, the next AppendLog rolls off the oldest
+// entries, keeps the newest ~wikiLogKeepBytes, and the freshly appended entry
+// survives. Pre-seeds an oversized file so the test stays fast (no 2MB of
+// real appends).
+func TestStore_AppendLog_RotatesWhenOversized(t *testing.T) {
+	dir := t.TempDir()
+	store := testutil.Must(NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
+	defer store.Close()
+
+	logPath := filepath.Join(dir, "wiki", "log.md")
+
+	// Build an oversized log of distinct numbered sections. The first is the
+	// oldest (must be rolled off); a known marker section sits near the end
+	// (must survive). Each section is a complete "## [...] op\ndetails\n\n" block.
+	var sb strings.Builder
+	const sectionBody = "some redacted-free details line padding the entry out a bit\n\n"
+	i := 0
+	for sb.Len() <= wikiLogMaxBytes+50_000 {
+		fmt.Fprintf(&sb, "## [2026-06-25 00:00] op-%06d\n%s", i, sectionBody)
+		i++
+	}
+	oldestMarker := "op-000000"
+	if err := os.WriteFile(logPath, []byte(sb.String()), 0o644); err != nil {
+		t.Fatalf("seed log: %v", err)
+	}
+	seededSize := sb.Len()
+
+	// One append crosses (already over) the cap and triggers rotation.
+	if err := store.AppendLog("create", "프로젝트/freshest — 최신 항목"); err != nil {
+		t.Fatalf("AppendLog: %v", err)
+	}
+
+	after := string(testutil.Must(os.ReadFile(logPath)))
+	if len(after) >= seededSize {
+		t.Fatalf("log not rotated: before=%d after=%d", seededSize, len(after))
+	}
+	// Rotated tail should be bounded around wikiLogKeepBytes (allow slack for
+	// the section-boundary snap plus the just-appended entry).
+	if len(after) > wikiLogKeepBytes+10_000 {
+		t.Errorf("rotated log too large: %d bytes (keep target %d)", len(after), wikiLogKeepBytes)
+	}
+	// The freshly appended entry must survive.
+	if !strings.Contains(after, "프로젝트/freshest") {
+		t.Error("newest entry was lost during rotation")
+	}
+	// The oldest entry must be gone.
+	if strings.Contains(after, oldestMarker) {
+		t.Error("oldest entry survived rotation; tail was not trimmed")
+	}
+	// Rotated file must start at a clean section header, not mid-block.
+	if !strings.HasPrefix(after, "## ") {
+		t.Errorf("rotated log does not start at a section boundary: %.40q", after)
+	}
+	// No leftover temp file.
+	if _, err := os.Stat(logPath + ".tmp"); !os.IsNotExist(err) {
+		t.Error("rotation left an orphaned .tmp file")
 	}
 }
