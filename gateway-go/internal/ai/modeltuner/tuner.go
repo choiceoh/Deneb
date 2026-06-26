@@ -36,9 +36,12 @@ const (
 	calibrationPrompt    = "안녕하세요. 한 문장으로 자기소개해 주세요."
 )
 
-// statsSource abstracts agentlog.Writer for tests.
+// statsSource abstracts agentlog.Writer for tests. AggregateEffortByModel feeds
+// the adaptive effort-router nudge (effort.go); AggregateByModel feeds the
+// output-token / latency / cache rules (rules.go).
 type statsSource interface {
 	AggregateByModel(sinceMs int64) []agentlog.ModelStat
+	AggregateEffortByModel(sinceMs int64) map[string]agentlog.EffortStat
 }
 
 // Calibration records the one-shot probe result for a locally served model.
@@ -129,6 +132,16 @@ func (t *Task) Run(ctx context.Context) error {
 				t.deps.Registry.SetTunedMaxTokens(r.Model, 0)
 			}
 		}
+	}
+
+	// Adaptive effort-router nudge (opt-in, DENEB_ADAPTIVE_EFFORT_TUNE): the
+	// second bounded auto-applied adjustment. It reads the per-model effort
+	// scorecard and steps each model's MaxSimpleRunes gate within a tight band
+	// from the escalation-rate / routed-share verdict the scorecard already
+	// computes — closing the loop the EffortStat doc describes. Off by default;
+	// a no-op without the flag, so this is inert in the current deployment.
+	if nudged := t.applyEffortNudge(t.deps.Logs.AggregateEffortByModel(since)); nudged > 0 {
+		t.deps.Logger.Info("modeltuner: effort gates nudged", "models", nudged)
 	}
 
 	calibs := t.calibrate(ctx, prev.Calibrations)

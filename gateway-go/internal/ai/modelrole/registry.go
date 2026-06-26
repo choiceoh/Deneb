@@ -163,6 +163,12 @@ type Registry struct {
 	// tunedMaxTokens holds per-model output-token floors written by the
 	// background model tuner (tuning.go).
 	tunedMaxTokens map[string]int
+	// tunedMaxSimpleRunes holds per-model effort-router MaxSimpleRunes gate
+	// overrides written by the background adaptive-effort nudge (tuning.go),
+	// layered over the resolved routing profile by RoutingProfileForModel. Zero
+	// entries are absent. In-memory only — re-derived from the agent-log effort
+	// scorecard each tuner cycle, so a restart loses at most one interval.
+	tunedMaxSimpleRunes map[string]int
 	// health tracks per-model failure streaks for the circuit breaker
 	// (health.go). Guarded by its own mutex, independent of mu.
 	health healthState
@@ -334,14 +340,15 @@ func NewRegistryWithOptions(logger *slog.Logger, opts RegistryOptions) *Registry
 	harvestVllmWindows(logger, opts.Providers, vllmWindows, probedVllmURLs)
 
 	r := &Registry{
-		models:         models,
-		clients:        make(map[Role]*clientEntry),
-		providers:      opts.Providers,
-		vllmWindows:    vllmWindows,
-		vllmProbedAt:   make(map[Role]time.Time),
-		tunedMaxTokens: make(map[string]int),
-		health:         healthState{models: make(map[string]*modelHealth)},
-		logger:         logger,
+		models:              models,
+		clients:             make(map[Role]*clientEntry),
+		providers:           opts.Providers,
+		vllmWindows:         vllmWindows,
+		vllmProbedAt:        make(map[Role]time.Time),
+		tunedMaxTokens:      make(map[string]int),
+		tunedMaxSimpleRunes: make(map[string]int),
+		health:              healthState{models: make(map[string]*modelHealth)},
+		logger:              logger,
 	}
 
 	// Pre-create client entries for lazy initialization.

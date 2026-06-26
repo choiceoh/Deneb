@@ -28,3 +28,30 @@ func (r *Registry) TunedMaxTokens(model string) int {
 	defer r.mu.RUnlock()
 	return r.tunedMaxTokens[model]
 }
+
+// SetTunedMaxSimpleRunes records a tuned effort-router MaxSimpleRunes gate for a
+// model, written by the background adaptive-effort nudge (DENEB_ADAPTIVE_EFFORT_
+// TUNE). It is the runtime-writable counterpart to the static profile constant:
+// RoutingProfileForModel layers it on top of the resolved routing profile.
+// Zero or negative clears the entry (gate falls back to the profile value).
+// The nudge clamps to a sane band before calling here; this only stores.
+func (r *Registry) SetTunedMaxSimpleRunes(model string, runes int) {
+	if model == "" {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if runes <= 0 {
+		delete(r.tunedMaxSimpleRunes, model)
+		return
+	}
+	r.tunedMaxSimpleRunes[model] = runes
+}
+
+// TunedMaxSimpleRunes returns the tuned effort-router MaxSimpleRunes gate for a
+// model, or 0 when none is set (the profile value stands).
+func (r *Registry) TunedMaxSimpleRunes(model string) int {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.tunedMaxSimpleRunes[model]
+}

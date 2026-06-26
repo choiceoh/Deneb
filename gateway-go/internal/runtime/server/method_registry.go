@@ -164,6 +164,10 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 	// Monitoring notify service (error mirrors + status snapshots → native push).
 	s.notify = newNotifyService(hub.Sessions(), hub.Logger(), s.pushHub, s.BoundAddr)
 	if s.notify != nil {
+		// Echo the last vLLM prefix-cache hit-rate into the status snapshot as a
+		// passive prompt-cache regression alarm. Reads a string cached by the
+		// /health probe; never scrapes on the status-render path.
+		s.notify.cacheSummary = s.cacheHealth.summary
 		s.broadcaster.RegisterTap(s.notify.tap)
 		s.notify.start(s.ShutdownCtx())
 	}

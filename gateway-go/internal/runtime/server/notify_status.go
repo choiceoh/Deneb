@@ -37,6 +37,7 @@ func (n *notifyService) buildStatusReport(now time.Time) string {
 	b.WriteString("\n")
 	if len(running) == 0 {
 		b.WriteString("실행 중인 세션 없음. (대기 상태)")
+		n.appendCacheLine(&b)
 		return b.String()
 	}
 
@@ -68,7 +69,21 @@ func (n *notifyService) buildStatusReport(now time.Time) string {
 			fmt.Fprintf(&b, "  최근 응답: %s\n", truncate(s.LastOutput, 120))
 		}
 	}
+	n.appendCacheLine(&b)
 	return strings.TrimRight(b.String(), "\n")
+}
+
+// appendCacheLine writes the one-line vLLM prefix-cache hit-rate status into the
+// status snapshot, when available. No-op when the cacheSummary accessor is unset
+// or has nothing yet (non-vLLM host, or no /health probe has scraped) — the
+// snapshot stays unchanged on deployments where the signal does not apply.
+func (n *notifyService) appendCacheLine(b *strings.Builder) {
+	if n.cacheSummary == nil {
+		return
+	}
+	if line := n.cacheSummary(); line != "" {
+		fmt.Fprintf(b, "\n🧠 %s", line)
+	}
 }
 
 // activityLineKO renders the per-session in-flight tool activity as a

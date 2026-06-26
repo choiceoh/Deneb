@@ -10,6 +10,7 @@ func (s *Server) buildMux() *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", s.handleHealth)
 	mux.HandleFunc("GET /healthz", s.handleHealth)
+	mux.HandleFunc("GET /health/gpu", s.handleHealthGPU)
 	mux.HandleFunc("GET /ready", s.handleReady)
 	mux.HandleFunc("GET /readyz", s.handleReady)
 	mux.HandleFunc("POST /api/cron/run", s.handleCronRun)
@@ -49,6 +50,7 @@ func (s *Server) buildMux() *http.ServeMux {
 	}
 	mux.HandleFunc("/health", methodNotAllowed)
 	mux.HandleFunc("/healthz", methodNotAllowed)
+	mux.HandleFunc("/health/gpu", methodNotAllowed)
 	mux.HandleFunc("/ready", methodNotAllowed)
 	mux.HandleFunc("/readyz", methodNotAllowed)
 	mux.HandleFunc("/api/cron/run", methodNotAllowed)

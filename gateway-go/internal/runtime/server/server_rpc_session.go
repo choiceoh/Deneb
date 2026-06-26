@@ -571,29 +571,46 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 		// Model tuner: every 6h, aggregate the last 24h of agent logs by
 		// model, auto-apply the bounded output-token floor for models that
 		// keep hitting the ceiling, and calibrate newly served vLLM models.
-		// Recommendations (stalls / cache breaks / slow tails) are not pushed
-		// as a notification — they surface under the native model picker
-		// (miniapp_models AdvisoryLines/NoteFor, read from the scorecard), so
-		// the tuner runs silently. Scorecard: ~/.deneb/model-stats.json.
+		// The 5 advise-only verdicts (stall / cache_break / latency / fallback
+		// / tool_errors) also continue to surface under the native model picker
+		// (miniapp_models AdvisoryLines/NoteFor, read from the scorecard); the
+		// scorecard remains the durable record. Notify pushes a proactive
+		// operator message via the SAME native relay cron/gmail-poll use, bound
+		// to client:main — but only when the recommendation set changes and is
+		// non-empty (Fingerprint dedup in Run), so a steady state stays quiet
+		// instead of pinging every cycle. Scorecard: ~/.deneb/model-stats.json.
 		if s.modelRegistry != nil && s.agentLogWriter != nil {
+			var tunerNotify func(ctx context.Context, msg string) error
+			if n := s.proactiveRelay.notifierForSession(nativeWorkSessionKey); n != nil {
+				tunerNotify = n.Notify
+			}
 			s.autonomousSvc.RegisterTask(modeltuner.NewTask(modeltuner.Deps{
 				Logs:     s.agentLogWriter,
 				Registry: s.modelRegistry,
 				// DENEB_STATE_DIR-aware so a dev gateway's tuner never writes
 				// into the production ~/.deneb scorecard.
 				StatePath: modeltuner.DefaultStatePath(),
+				Notify:    tunerNotify,
 				Logger:    s.logger,
 			}))
 
-			// Regression watch (Stage 1 of the autoresearch cold-start trigger,
-			// OBSERVE-ONLY): every 6h, sample operational telemetry (agentlog rates,
-			// model-health circuit, error-log spikes — see regressionSources),
-			// compare to a rolling baseline, and log regressions. It does NOT create
-			// optimization goals yet — that path is gated until these thresholds are
-			// validated against real traffic. Baseline: ~/.deneb/regression-baseline.json.
+			// Regression watch (Stage 1 of the autoresearch cold-start trigger):
+			// every 6h, sample operational telemetry (agentlog rates, model-health
+			// circuit, error-log spikes — see regressionSources), compare to a
+			// rolling baseline, and log regressions. The optimize-GOAL path is still
+			// gated until these thresholds are validated against real traffic, but a
+			// detected regression now also pushes a proactive operator notification
+			// (regressed signal names + deltas) via the SAME native relay, bound to
+			// client:main and de-duped per regression set so a standing regression
+			// pings once, not every cycle. Baseline: ~/.deneb/regression-baseline.json.
+			var regressionNotify func(ctx context.Context, msg string) error
+			if n := s.proactiveRelay.notifierForSession(nativeWorkSessionKey); n != nil {
+				regressionNotify = n.Notify
+			}
 			s.autonomousSvc.RegisterTask(regressionwatch.NewTask(regressionwatch.Deps{
 				Sources:   s.regressionSources(),
 				StatePath: regressionwatch.DefaultStatePath(),
+				Notify:    regressionNotify,
 				Logger:    s.logger,
 			}))
 

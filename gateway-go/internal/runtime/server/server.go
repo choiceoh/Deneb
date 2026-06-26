@@ -95,6 +95,14 @@ type ServerRuntime struct {
 	resumeMu       sync.Mutex
 	markerStore    *session.RunMarkerStore
 	runMarkerUnsub func()
+
+	// cacheHealth holds the rolling vLLM prefix-cache hit-ratio samples surfaced
+	// on /health and /status. gpuHealth caches the latest nvidia-smi reading for
+	// the /health gpu section and /health/gpu route. Both zero values are
+	// ready-to-use (no constructor) and degrade silently on hosts without a vLLM
+	// role or NVIDIA GPU. See health_cache.go and health_gpu.go.
+	cacheHealth cacheHealth
+	gpuHealth   gpuHealth
 }
 
 // Server is the main gateway server.

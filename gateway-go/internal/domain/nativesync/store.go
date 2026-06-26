@@ -3,12 +3,24 @@ package nativesync
 import (
 	"encoding/json"
 	"errors"
+	"log/slog"
+	"os"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonlstore"
+)
+
+// Prune caps for native_sync.jsonl. This is the hottest append file (~1 line
+// per assistant turn) and Pull re-reads + sorts the whole file on every client
+// poll, so an uncapped file is both unbounded growth and O(n) per poll. Mirror
+// agentlog's pruneIfNeeded thresholds (5 MB / last 3000 events): when the file
+// exceeds maxLogBytes, rewrite it keeping only the last keepEvents.
+const (
+	maxLogBytes = 5_000_000 // 5 MB before a prune is triggered
+	keepEvents  = 3_000     // events retained after a prune
 )
 
 const (
@@ -92,7 +104,34 @@ func (s *Store) Append(in AppendInput) (Event, error) {
 		return Event{}, err
 	}
 	s.nextSeq = ev.Seq + 1
+	s.pruneIfNeededLocked()
 	return ev, nil
+}
+
+// pruneIfNeededLocked rewrites native_sync.jsonl keeping only the last
+// keepEvents when the file grows past maxLogBytes. Caller must hold s.mu.
+//
+// Mirrors agentlog.pruneIfNeeded: a cheap os.Stat gate so the common append
+// path stays O_APPEND-only, then an atomic rewrite (jsonlstore.Snapshot does
+// the temp-write + rename) on the rare overflow. Prune failures are best-effort
+// — a logged warning, never a failed Append: a file we couldn't shrink is still
+// fully readable, so correctness is preserved even if growth isn't capped this
+// round. Seq monotonicity is unaffected; nextSeq already advanced above and the
+// retained tail keeps the highest seqs, so loadSortedLocked stays consistent.
+func (s *Store) pruneIfNeededLocked() {
+	stat, err := os.Stat(s.path)
+	if err != nil || stat.Size() <= int64(maxLogBytes) {
+		return
+	}
+	events, err := s.loadSortedLocked()
+	if err != nil || len(events) <= keepEvents {
+		return
+	}
+	kept := events[len(events)-keepEvents:]
+	if err := jsonlstore.Snapshot(s.path, kept); err != nil {
+		slog.Warn("nativesync: prune snapshot failed — file not rotated",
+			"path", s.path, "error", err)
+	}
 }
 
 func (s *Store) Pull(afterSeq int64, limit int) (PullResult, error) {
