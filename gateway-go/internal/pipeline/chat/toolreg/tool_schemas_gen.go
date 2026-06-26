@@ -392,6 +392,12 @@ func morningLetterToolSchema() map[string]any {
 	}
 }
 
+func eveningLetterToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+	}
+}
+
 func messageToolSchema() map[string]any {
 	return map[string]any{
 		"type": "object",

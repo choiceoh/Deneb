@@ -380,6 +380,16 @@ func RegisterRoutineTools(registry toolctx.ToolRegistrar, chrono *toolctx.Chrono
 		Fn:          tools.ToolMorningLetter(nil, tools.MorningLetterOpts{DiaryDir: diaryDir, WikiDir: wikiDir}),
 		Deferred:    true,
 	})
+	// Evening-letter data collection: the end-of-day counterpart to
+	// morning_letter — forward-looking sections (calendar, email, deadlines),
+	// the morning-only market data omitted. Deferred like the other routine tools.
+	registry.RegisterTool(toolctx.ToolDef{
+		Name:        "evening_letter",
+		Description: "이브닝레터 데이터 수집: 일정(오늘+내일)·미처리 메일·임박 마감을 병렬 수집해 raw JSON 반환. 모닝레터의 저녁 짝 — 시장데이터(날씨·환율·구리)는 제외. 편지 작성(회고·내일 준비·우선순위)은 에이전트 몫. No parameters",
+		InputSchema: eveningLetterToolSchema(),
+		Fn:          tools.ToolEveningLetter(nil, tools.EveningLetterOpts{DiaryDir: diaryDir, WikiDir: wikiDir}),
+		Deferred:    true,
+	})
 }
 
 // RegisterSkillsTools registers the unified skills tool

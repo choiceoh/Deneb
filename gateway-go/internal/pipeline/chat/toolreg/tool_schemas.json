@@ -414,6 +414,12 @@
     "required": []
   },
   {
+    "name": "evening_letter",
+    "description": "Collect the evening-letter data sections in parallel — calendar (today + tomorrow), unhandled email, approaching wiki deadlines — and return raw JSON. The end-of-day counterpart to morning_letter; the morning-only market sections (weather, FX, copper) are omitted. The agent composes the letter (reflection, tomorrow prep, priorities). No parameters.",
+    "properties": {},
+    "required": []
+  },
+  {
     "name": "message",
     "properties": {
       "action": {
