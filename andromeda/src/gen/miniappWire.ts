@@ -391,6 +391,7 @@ export interface ProjectDigestRow {
   updatedAtMs?: number
   path?: string
   code?: string
+  refs?: string[]
 }
 
 export interface ProjectDigestsOut {
