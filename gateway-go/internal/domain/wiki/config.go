@@ -21,8 +21,25 @@ type Config struct {
 	Dir string
 	// DiaryDir is the diary directory for raw daily logs (default: ~/.deneb/memory/diary).
 	DiaryDir string
-	// MaxPageBytes is the maximum page size before the dreaming cycle
-	// triggers a split (default: 50 KB).
+	// MaxPageBytes is the maximum page size before the dreaming cycle splits a
+	// page into H2 sub-pages (store_split.go). Default 32 KB.
+	//
+	// Lowered 50->32 KB on the Infini Memory finding (arXiv:2606.10677, Table 3):
+	// retrieval over topic documents peaks near ~5000 tokens and the curve is
+	// ASYMMETRIC — too-large hurts more (-5.3 pts at 1.4x optimal) than too-small
+	// (-2.0 pts at 0.2x). Deneb's old 50 KB cap (~7-12K tokens for mixed
+	// Korean+Latin markdown) sat on the costly too-large side; 32 KB (~5.5-7K
+	// tokens) moves toward the measured optimum without over-fragmenting curated
+	// project pages.
+	//
+	// Falsifiable prediction: this does not regress overall wiki recall and
+	// improves retrieval precision on the largest (most-split) pages, because a
+	// focused sub-page is a larger fraction of the matched terms than the same
+	// fact buried in a multi-topic page (BM25 length normalization). Verify with
+	// the split-sensitivity sweep (search_split_sweep_test.go, the Deneb-stack
+	// version of the paper's Table 3) + DGX recall-metric; if recall regresses,
+	// revert via DENEB_WIKI_MAX_PAGE_BYTES (Deneb's stack/corpus optimum differs,
+	// or splitting fragmented a coherent page).
 	MaxPageBytes int
 	// Tier1MinImportance is the minimum importance for Tier-1 auto-injection
 	// into the system prompt (default: 0.85).
@@ -50,7 +67,7 @@ func ConfigFromEnv() Config {
 			Enabled:            envBool("DENEB_WIKI_ENABLED", true),
 			Dir:                envStr("DENEB_WIKI_DIR", defaultDir),
 			DiaryDir:           envStr("DENEB_WIKI_DIARY_DIR", defaultDiary),
-			MaxPageBytes:       envInt("DENEB_WIKI_MAX_PAGE_BYTES", 50*1024),
+			MaxPageBytes:       envInt("DENEB_WIKI_MAX_PAGE_BYTES", 32*1024),
 			Tier1MinImportance: envFloat("DENEB_WIKI_TIER1_MIN_IMPORTANCE", 0.85),
 		}
 	})
