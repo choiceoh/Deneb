@@ -444,6 +444,36 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 				}
 				return store, nil
 			},
+			// Item snapshots for miniapp.project.linked (server-side matching).
+			// Read at call time so the late-set notebook store is picked up; a nil
+			// store simply contributes no matches. Mail needs no provider — it is
+			// resolved from the project's graph refs inside the handler.
+			Notebooks: func() []handlerminiapp.ProjectLinkedNotebook {
+				if s.notebookStore == nil {
+					return nil
+				}
+				nbs := s.notebookStore.List()
+				out := make([]handlerminiapp.ProjectLinkedNotebook, 0, len(nbs))
+				for _, nb := range nbs {
+					out = append(out, handlerminiapp.ProjectLinkedNotebook{ID: nb.ID, DealRef: nb.DealRef, ProjectRefs: nb.ProjectRefs})
+				}
+				return out
+			},
+			WorkItems: func() []handlerminiapp.ProjectLinkedWorkItem {
+				nf := s.nativeWorkFeedStore()
+				if nf == nil {
+					return nil
+				}
+				items, _, err := nf.List(1000, true) // superset; the client filters to its own list
+				if err != nil {
+					return nil
+				}
+				out := make([]handlerminiapp.ProjectLinkedWorkItem, 0, len(items))
+				for _, it := range items {
+					out = append(out, handlerminiapp.ProjectLinkedWorkItem{ID: it.ID, RefID: it.RefID})
+				}
+				return out
+			},
 		}),
 
 		// Mini App org chart editor (miniapp.org.{get,save}). The org chart

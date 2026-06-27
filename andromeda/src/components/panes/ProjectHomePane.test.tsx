@@ -14,21 +14,31 @@ beforeEach(() => {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (_url: string, init?: RequestInit) => {
-      const { method } = JSON.parse(String(init?.body ?? "{}")) as { method: string };
-      const payload =
-        method === "miniapp.notebook.list"
-          ? {
-              notebooks: [
-                {
-                  id: "nb-andromeda",
-                  name: "Andromeda 설계 노트북",
-                  dealRef: "projects/andromeda",
-                  sourceCount: 3,
-                  updated: 1782190313958,
-                },
-              ],
-            }
-          : {};
+      const { method, params } = JSON.parse(String(init?.body ?? "{}")) as {
+        method: string;
+        params?: { path?: string };
+      };
+      let payload: unknown = {};
+      if (method === "miniapp.notebook.list") {
+        payload = {
+          notebooks: [
+            {
+              id: "nb-andromeda",
+              name: "Andromeda 설계 노트북",
+              dealRef: "projects/andromeda",
+              sourceCount: 3,
+              updated: 1782190313958,
+            },
+          ],
+        };
+      } else if (method === "miniapp.project.linked") {
+        // The gateway resolves linkage now; this stubs its per-project ID sets so
+        // the pane's job under test is purely "filter the cached lists by these IDs".
+        payload =
+          params?.path === "projects/deneb"
+            ? { mail: ["m2"], calendar: [], todo: [], workfeed: [], notebook: [] }
+            : { mail: ["m1"], calendar: ["e1"], todo: ["t1"], workfeed: ["w1"], notebook: ["nb-andromeda"] };
+      }
       return { ok: true, json: async () => ({ ok: true, payload }) } as unknown as Response;
     }),
   );

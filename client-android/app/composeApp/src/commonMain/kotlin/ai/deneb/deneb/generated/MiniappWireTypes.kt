@@ -483,6 +483,16 @@ data class ProjectDigestsOut(
 
 @Immutable
 @Serializable
+data class ProjectLinkedOut(
+    val mail: List<String> = emptyList(),
+    val calendar: List<String> = emptyList(),
+    val todo: List<String> = emptyList(),
+    val workfeed: List<String> = emptyList(),
+    val notebook: List<String> = emptyList(),
+)
+
+@Immutable
+@Serializable
 data class ProjectRef(
     val path: String = "",
     val title: String = "",

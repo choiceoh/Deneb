@@ -13,6 +13,8 @@ package handlerminiapp
 
 import (
 	"context"
+	"encoding/json"
+	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcerr"
@@ -26,12 +28,31 @@ type ProjectStatusSource interface {
 	ProjectStatuses() ([]wiki.ProjectStatus, error)
 }
 
-// ProjectDeps wires the project handler's read source. Wiki is a lazy factory
+// ProjectLinkedNotebook / ProjectLinkedWorkItem are the minimal item projections
+// the linked handler matches on — just an ID plus the item's project-ref fields.
+// The store types are mapped to these in method_registry.go so the handler stays
+// decoupled from the domain stores (and nil sources simply yield no matches).
+type ProjectLinkedNotebook struct {
+	ID          string
+	DealRef     string
+	ProjectRefs []string
+}
+
+type ProjectLinkedWorkItem struct {
+	ID    string
+	RefID string
+}
+
+// ProjectDeps wires the project handler's read sources. Wiki is a lazy factory
 // (the wiki store is created in the late phase, so the lookup defers to
 // per-request); a nil factory skips registration, and a factory that returns an
-// error surfaces UNAVAILABLE.
+// error surfaces UNAVAILABLE. Notebooks/WorkItems are optional snapshot providers
+// for miniapp.project.linked — a nil provider just contributes no matches of that
+// type (mail linkage needs no provider: it is read from the project's graph refs).
 type ProjectDeps struct {
-	Wiki func() (ProjectStatusSource, error)
+	Wiki      func() (ProjectStatusSource, error)
+	Notebooks func() []ProjectLinkedNotebook
+	WorkItems func() []ProjectLinkedWorkItem
 }
 
 // ProjectDigestRow is one project's latest-progress card for the native client.
@@ -64,6 +85,22 @@ type ProjectDigestsOut struct {
 	Digests []ProjectDigestRow `json:"digests"`
 }
 
+// ProjectLinkedOut is the miniapp.project.linked response: the IDs of items
+// linked to one project, grouped by type, resolved server-side. Clients filter
+// their already-fetched lists by these IDs instead of running a local heuristic.
+// Calendar and Todo are always empty for now — those items carry no project
+// linkage in the data yet — but are kept in the contract so a client reads every
+// section uniformly and they light up when their linkage lands.
+//
+//deneb:wire
+type ProjectLinkedOut struct {
+	Mail     []string `json:"mail"`
+	Calendar []string `json:"calendar"`
+	Todo     []string `json:"todo"`
+	Workfeed []string `json:"workfeed"`
+	Notebook []string `json:"notebook"`
+}
+
 // ProjectMethods returns the miniapp.project.* handler map. Returns nil when no
 // wiki factory is wired so method_registry.go can skip registration cleanly.
 func ProjectMethods(deps ProjectDeps) map[string]rpcutil.HandlerFunc {
@@ -72,6 +109,74 @@ func ProjectMethods(deps ProjectDeps) map[string]rpcutil.HandlerFunc {
 	}
 	return map[string]rpcutil.HandlerFunc{
 		"miniapp.project.digests": projectDigests(deps),
+		"miniapp.project.linked":  projectLinked(deps),
+	}
+}
+
+// projectLinked resolves which items (mail/work-feed/notebook) are linked to one
+// project, server-side, from the project's identity (name + path + frozen code +
+// graph-resolved owned refs — the same the digest ships). Mail IDs come straight
+// from the owned refs (mail analysis pages land there via their Related[] edge);
+// notebooks and work-feed items are matched against the identity keys. The client
+// passes the project 대표페이지 path and filters its already-fetched lists by the
+// returned IDs, so the fragile client-side ref-collection heuristic retires.
+func projectLinked(deps ProjectDeps) rpcutil.HandlerFunc {
+	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		if errResp := requireAuth(ctx, req.ID); errResp != nil {
+			return errResp
+		}
+		var p struct {
+			Path string `json:"path"`
+		}
+		if len(req.Params) > 0 {
+			if err := json.Unmarshal(req.Params, &p); err != nil {
+				return rpcerr.InvalidParams(err).Response(req.ID)
+			}
+		}
+		if strings.TrimSpace(p.Path) == "" {
+			return rpcerr.MissingParam("path").Response(req.ID)
+		}
+		src, err := deps.Wiki()
+		if err != nil {
+			return rpcerr.WrapUnavailable("project linked unavailable", err).Response(req.ID)
+		}
+		statuses, err := src.ProjectStatuses()
+		if err != nil {
+			return rpcerr.WrapUnavailable("project linked unavailable", err).Response(req.ID)
+		}
+
+		// Empty (not error) for an unknown project: the corner just shows no items.
+		out := ProjectLinkedOut{Mail: []string{}, Calendar: []string{}, Todo: []string{}, Workfeed: []string{}, Notebook: []string{}}
+		wantKey := normalizeMatchKey(p.Path)
+		var st *wiki.ProjectStatus
+		for i := range statuses {
+			if normalizeMatchKey(statuses[i].Path) == wantKey {
+				st = &statuses[i]
+				break
+			}
+		}
+		if st == nil {
+			return rpcutil.RespondOK(req.ID, out)
+		}
+
+		keys := projectMatchKeys(st.Name, st.Path, st.Code, st.Refs)
+		out.Mail = mailIDsFromRefs(st.Refs)
+		if deps.Notebooks != nil {
+			for _, nb := range deps.Notebooks() {
+				refs := append([]string{nb.DealRef}, nb.ProjectRefs...)
+				if itemLinkedToProject(keys, refs...) {
+					out.Notebook = append(out.Notebook, nb.ID)
+				}
+			}
+		}
+		if deps.WorkItems != nil {
+			for _, w := range deps.WorkItems() {
+				if itemLinkedToProject(keys, w.RefID) {
+					out.Workfeed = append(out.Workfeed, w.ID)
+				}
+			}
+		}
+		return rpcutil.RespondOK(req.ID, out)
 	}
 }
 
