@@ -105,20 +105,48 @@ func (t *Tracker) LeverYields(limit int) ([]LeverYield, error) {
 	return out, nil
 }
 
-// LowYieldLevers returns levers that shipped at least minShips times yet confirm
-// at or below maxConfirmRate — combinations the evolver should stop proposing.
-// Intended to feed the evolve prompt's avoid-directions so a signature×surface
-// pair that historically does not hold up is deprioritized (HarnessX Appendix D).
-func (t *Tracker) LowYieldLevers(limit, minShips int, maxConfirmRate float64) ([]LeverYield, error) {
+// LowYieldLevers returns levers the evolver should stop proposing: a
+// (signature×surface) pair whose RESOLVED evolves confirm at or below
+// maxConfirmRate. It feeds the evolve prompt's avoid-directions (HarnessX
+// Appendix D).
+//
+// Two refinements over a raw Committed-denominator point estimate — the data
+// regime is sparse, so the rule must use every signal yet still decide early:
+//
+//   - Resolved denominator (Confirmed+RolledBack): pending, not-yet-confirmed
+//     evolves are excluded, so a lever with confirms-plus-pending isn't falsely
+//     avoided (raw Confirmed/Committed counts a pending evolve like a failure).
+//     Reverts — the strongest negative signal, ignored by Confirmed/Committed —
+//     count directly.
+//   - Laplace smoothing (Beta(1,1) posterior mean): (Confirmed+1)/(resolved+2)
+//     shrinks a 0/3 toward 0.2 and a 1/3 toward 0.4 so one or two resolved
+//     outcomes can't slam the rate to 0/1. This is the decisive point-estimate
+//     use of the posterior; a credible-interval variant was prototyped and
+//     rejected (at single-user volumes it needs ~60 resolved to flag a
+//     borderline lever, so it would never fire — uncertainty paralysis).
+//
+// minResolved gates on resolved outcomes (confirm+revert), not bare ships.
+func (t *Tracker) LowYieldLevers(limit, minResolved int, maxConfirmRate float64) ([]LeverYield, error) {
 	all, err := t.LeverYields(limit)
 	if err != nil {
 		return nil, err
 	}
+	return filterLowYieldLevers(all, minResolved, maxConfirmRate), nil
+}
+
+// filterLowYieldLevers is the pure avoid-decision (resolved denominator + Laplace
+// smoothing), split out for testability.
+func filterLowYieldLevers(levers []LeverYield, minResolved int, maxConfirmRate float64) []LeverYield {
 	var low []LeverYield
-	for _, y := range all {
-		if y.Committed >= minShips && y.ConfirmRate <= maxConfirmRate {
+	for _, y := range levers {
+		resolved := y.Confirmed + y.RolledBack
+		if resolved < minResolved {
+			continue // not enough resolved evidence to avoid the direction yet
+		}
+		smoothed := float64(y.Confirmed+1) / float64(resolved+2)
+		if smoothed <= maxConfirmRate {
 			low = append(low, y)
 		}
 	}
-	return low, nil
+	return low
 }
