@@ -463,7 +463,8 @@ func (e *Evolver) generateCandidateText(ctx context.Context, userPrompt string, 
 func candidateVariationNote(attempt int) string {
 	return fmt.Sprintf(
 		"\n\n## 후보 다양화 지시 (candidate #%d)\n동일한 검증 기준을 모두 만족하되, 직전 후보와는 다른 접근(다른 섹션을 손보거나 다른 메커니즘을 강조)으로 본문을 작성하세요. 검증 계약(필수/금지 항목, 구조 보존, 실제 도구만)은 그대로 지키세요.",
-		attempt+1)
+		attempt+1,
+	)
 }
 
 // evolutionSuppressed reports whether an automated evolve of skillName should be
@@ -489,14 +490,16 @@ func (e *Evolver) evolutionSuppressed(skillName string, now time.Time) (bool, st
 		h.ThrashCooldownUntil > now.UnixMilli() {
 		return true, fmt.Sprintf(
 			"thrash cooldown: %q evolved %d times in 7d without converging; paused until %s",
-			skillName, h.TopEvolvedCount, time.UnixMilli(h.ThrashCooldownUntil).Format(time.RFC3339))
+			skillName, h.TopEvolvedCount, time.UnixMilli(h.ThrashCooldownUntil).Format(time.RFC3339),
+		)
 	}
 	if window := skillEvolutionEvidenceWindow(); window > 0 {
 		if stats, err := e.tracker.Stats(skillName); err == nil && stats.LastUsed > 0 &&
 			stats.LastUsed < now.Add(-window).UnixMilli() {
 			return true, fmt.Sprintf(
 				"recency gate: %q last really used %s, older than the %d-day evidence window; no fresh signal to evolve on",
-				skillName, time.UnixMilli(stats.LastUsed).Format("2006-01-02"), int(window/(24*time.Hour)))
+				skillName, time.UnixMilli(stats.LastUsed).Format("2006-01-02"), int(window/(24*time.Hour)),
+			)
 		}
 	}
 	return false, ""
@@ -740,7 +743,8 @@ func (e *Evolver) commitEvaluatedCandidate(entry *skills.SkillEntry, originalCon
 		e.catalog.Register(updated)
 	}
 
-	e.logger.Info("evolver: skill evolved",
+	e.logger.Info(
+		"evolver: skill evolved",
 		"skill", entry.Skill.Name,
 		"version", newVersion,
 		"description", committedDescription,

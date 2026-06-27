@@ -87,7 +87,8 @@ func (c *Client) completeViaStream(ctx context.Context, req ChatRequest) (string
 		// via the OpenAI path; same trap here).
 		return "", fmt.Errorf(
 			"empty content (stop_reason=%s, thinking_chars=%d): reasoning consumed the output budget — raise MaxTokens or disable thinking",
-			stopReason, thinkingChars)
+			stopReason, thinkingChars,
+		)
 	}
 	return out, nil
 }
@@ -192,7 +193,8 @@ func (c *Client) completeOpenAI(ctx context.Context, req ChatRequest) (string, e
 		if reasoning := strings.TrimSpace(msg.Reasoning + msg.ReasoningContent); reasoning != "" || choice.FinishReason == "length" {
 			return "", fmt.Errorf(
 				"empty content (finish_reason=%s, reasoning_chars=%d): reasoning consumed the output budget — raise MaxTokens or disable thinking",
-				choice.FinishReason, len(reasoning))
+				choice.FinishReason, len(reasoning),
+			)
 		}
 	}
 	// Strip reasoning model artifacts (<think> tags, "Thinking Process:" preamble)

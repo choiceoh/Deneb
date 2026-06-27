@@ -253,7 +253,8 @@ func (g *GatewayEventSubscriptions) runDropLogger(logger *slog.Logger) {
 			lifecycle := g.lifecycleDrops.Swap(0)
 			total := agent + transcript + lifecycle
 			if total > 0 {
-				logger.Warn("gateway event subscriptions dropped events",
+				logger.Warn(
+					"gateway event subscriptions dropped events",
 					"agent", agent,
 					"transcript", transcript,
 					"lifecycle", lifecycle,

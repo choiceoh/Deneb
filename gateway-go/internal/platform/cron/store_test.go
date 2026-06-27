@@ -98,8 +98,10 @@ func TestStorePersistence(t *testing.T) {
 
 	// Write with one store instance.
 	s1 := NewStore(storePath)
-	s1.AddJob(StoreJob{ID: "persist", Name: "Persistent", Enabled: true,
-		Payload: StorePayload{Kind: "agentTurn", Message: "hi"}})
+	s1.AddJob(StoreJob{
+		ID: "persist", Name: "Persistent", Enabled: true,
+		Payload: StorePayload{Kind: "agentTurn", Message: "hi"},
+	})
 
 	// Read with a fresh instance.
 	s2 := NewStore(storePath)

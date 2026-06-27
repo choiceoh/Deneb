@@ -60,7 +60,8 @@ func TestTopicDocsWriteCurrent_CreatesDirAndReadsBack(t *testing.T) {
 
 	wOut := decodePayload(t, methods["miniapp.topicdocs.write_current"](
 		authedCtx(), reqWith(t, "miniapp.topicdocs.write_current",
-			map[string]any{"content": body})))
+			map[string]any{"content": body}),
+	))
 	if wOut["name"] != "업무.md" {
 		t.Errorf("write name = %v, want 업무.md", wOut["name"])
 	}
@@ -77,7 +78,8 @@ func TestTopicDocsWriteCurrent_CreatesDirAndReadsBack(t *testing.T) {
 	}
 
 	rOut := decodePayload(t, methods["miniapp.topicdocs.read_current"](
-		authedCtx(), reqWith(t, "miniapp.topicdocs.read_current", map[string]any{})))
+		authedCtx(), reqWith(t, "miniapp.topicdocs.read_current", map[string]any{}),
+	))
 	if rOut["content"] != body {
 		t.Errorf("content roundtrip mismatch: got %q want %q", rOut["content"], body)
 	}

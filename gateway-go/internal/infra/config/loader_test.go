@@ -34,7 +34,7 @@ func TestResolveStateDirOverride(t *testing.T) {
 func TestResolveConfigPathOverride(t *testing.T) {
 	tmp := t.TempDir()
 	cfgPath := filepath.Join(tmp, "custom.json")
-	if err := os.WriteFile(cfgPath, []byte("{}"), 0644); err != nil {
+	if err := os.WriteFile(cfgPath, []byte("{}"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("DENEB_CONFIG_PATH", cfgPath)
@@ -87,7 +87,7 @@ func TestLoadConfigValid(t *testing.T) {
 		},
 	}
 	data, _ := json.Marshal(cfg)
-	if err := os.WriteFile(cfgPath, data, 0644); err != nil {
+	if err := os.WriteFile(cfgPath, data, 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -115,7 +115,7 @@ func TestLoadConfigValid(t *testing.T) {
 func TestLoadConfigInvalidJSON(t *testing.T) {
 	tmp := t.TempDir()
 	cfgPath := filepath.Join(tmp, "deneb.json")
-	if err := os.WriteFile(cfgPath, []byte("{invalid json}"), 0644); err != nil {
+	if err := os.WriteFile(cfgPath, []byte("{invalid json}"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -137,7 +137,7 @@ func TestLoadConfigInvalidBindMode(t *testing.T) {
 		},
 	}
 	data, _ := json.Marshal(cfg)
-	if err := os.WriteFile(cfgPath, data, 0644); err != nil {
+	if err := os.WriteFile(cfgPath, data, 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -160,7 +160,7 @@ func TestLoadConfigBindIPAliases(t *testing.T) {
 				"gateway": map[string]any{"bind": alias},
 			}
 			data, _ := json.Marshal(cfg)
-			if err := os.WriteFile(cfgPath, data, 0644); err != nil {
+			if err := os.WriteFile(cfgPath, data, 0o644); err != nil {
 				t.Fatal(err)
 			}
 			snap := testutil.Must(LoadConfig(cfgPath))

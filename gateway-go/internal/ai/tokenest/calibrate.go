@@ -165,7 +165,8 @@ func LoadCalibration(dataDir string) {
 			globalCal.entries[i] = e
 		}
 	}
-	slog.Info("tokenest: loaded calibration",
+	slog.Info(
+		"tokenest: loaded calibration",
 		"path", path,
 		"claude", globalCal.entries[FamilyClaude].Factor,
 		"openai", globalCal.entries[FamilyOpenAI].Factor,

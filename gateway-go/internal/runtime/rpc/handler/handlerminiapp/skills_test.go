@@ -21,17 +21,19 @@ func testSkillsDeps() SkillsDeps {
 	return SkillsDeps{
 		List: func() []skills.SkillEntry {
 			return []skills.SkillEntry{
-				{Skill: skills.Skill{
-					Name: "email-analysis", Version: "1.1.0", Source: skills.SourceManaged,
-					FilePath: "/home/u/.deneb/skills/email-analysis/SKILL.md",
-				},
+				{
+					Skill: skills.Skill{
+						Name: "email-analysis", Version: "1.1.0", Source: skills.SourceManaged,
+						FilePath: "/home/u/.deneb/skills/email-analysis/SKILL.md",
+					},
 					Frontmatter: skills.ParsedFrontmatter{"homepage": "https://deneb.local/skills/email-analysis"},
 					Metadata: &skills.DenebSkillMetadata{
 						Tags:          []string{"mail", "analysis"},
 						RelatedSkills: []string{"meeting-minutes"},
 						Requires:      &skills.SkillRequires{Bins: []string{"gh"}, Env: []string{"GMAIL_TOKEN"}},
 						Install:       []skills.SkillInstallSpec{{Kind: "brew", Formula: "gh", Label: "Install GitHub CLI"}},
-					}},
+					},
+				},
 				{Skill: skills.Skill{
 					Name: "morning-letter", Version: "0.1.0", Source: skills.SourceManaged,
 					FilePath: "/home/u/.deneb/skills/genesis/productivity/morning-letter/SKILL.md",

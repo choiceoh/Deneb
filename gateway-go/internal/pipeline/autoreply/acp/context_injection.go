@@ -83,13 +83,15 @@ func StartSubagentResultInjection(deps ResultInjectionDeps) func() {
 
 		note := fmt.Sprintf("[Subagent completed] %s", text)
 		if err := deps.Transcript.AppendSystemNote(parentKey, note); err != nil {
-			logger.Warn("failed to inject subagent result into parent transcript",
+			logger.Warn(
+				"failed to inject subagent result into parent transcript",
 				"parentSession", parentKey,
 				"subagentSession", event.Key,
 				"error", err,
 			)
 		} else {
-			logger.Info("injected subagent result into parent transcript",
+			logger.Info(
+				"injected subagent result into parent transcript",
 				"parentSession", parentKey,
 				"agentId", agentID,
 				"outputLen", len(text),

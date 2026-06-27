@@ -101,8 +101,10 @@ type UsageStats struct {
 	RecentFailureTraces []UsageFailureTrace `json:"recentFailureTraces,omitempty"`
 }
 
-const defaultSkillEvolutionEvidenceWindowDays = 7
-const evolveRollbackReason = "post-evolve rollback fired"
+const (
+	defaultSkillEvolutionEvidenceWindowDays = 7
+	evolveRollbackReason                    = "post-evolve rollback fired"
+)
 
 // Tracker records and queries skill usage for evolution decisions.
 type Tracker struct {

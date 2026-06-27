@@ -331,7 +331,8 @@ func (s *Service) runDreamingAsync() {
 			if r := recover(); r != nil {
 				buf := make([]byte, 4096)
 				n := runtime.Stack(buf, false)
-				s.logger.Error("aurora-dream: panic recovered",
+				s.logger.Error(
+					"aurora-dream: panic recovered",
 					"panic", r,
 					"stack", string(buf[:n]),
 				)
@@ -352,7 +353,8 @@ func (s *Service) runDreamingAsync() {
 			return
 		}
 
-		s.logger.Info("aurora-dream: cycle finished",
+		s.logger.Info(
+			"aurora-dream: cycle finished",
 			"verified", report.FactsVerified,
 			"merged", report.FactsMerged,
 			"expired", report.FactsExpired,

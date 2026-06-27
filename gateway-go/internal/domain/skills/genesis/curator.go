@@ -569,7 +569,8 @@ func (t *SkillCuratorTask) Run(ctx context.Context) error {
 	// transition-gated log made "ran, no changes" indistinguishable from
 	// "never ran", hiding whether the weekly task fires at all.
 	if t.Logger != nil {
-		t.Logger.Info("skill-curator: cycle complete",
+		t.Logger.Info(
+			"skill-curator: cycle complete",
 			"checked", summary.Checked,
 			"transitions", len(summary.Transitions),
 			"stale", summary.MarkedStale,

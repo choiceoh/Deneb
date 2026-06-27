@@ -21,6 +21,7 @@ func (s *fakePushStore) Register(token, platform string) (int, error) {
 	s.count++
 	return s.count, nil
 }
+
 func (s *fakePushStore) Unregister(token string) (int, error) {
 	s.removed = append(s.removed, token)
 	if s.count > 0 {

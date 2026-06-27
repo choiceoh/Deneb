@@ -114,7 +114,8 @@ func (idx *Index) Render() string {
 				imp = fmt.Sprintf("%.2f", e.entry.Importance)
 			}
 			bl := backlinkCount[e.path]
-			sb.WriteString(fmt.Sprintf("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%d\n",
+			sb.WriteString(fmt.Sprintf(
+				"%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%d\n",
 				sanitizeTSV(e.entry.ID),
 				e.path,
 				sanitizeTSV(e.entry.Title),

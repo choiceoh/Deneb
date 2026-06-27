@@ -15,8 +15,10 @@ var jsonToolCallRe = regexp.MustCompile(`(?s)\{"(?:name|type)":\s*"(?:function|t
 var pipeFunctionRe = regexp.MustCompile(`<\|(?:python_tag|function|tool_call)\|>[^\n]*(?:\n|$)`)
 
 // bracketToolCallRe matches [tool:NAME(ARGS)] patterns.
-var bracketToolCallRe = regexp.MustCompile(`(?ms)^\[tool:[a-z_]+\(.*\)\]\s*$`)
-var bracketResultRe = regexp.MustCompile(`(?m)^\[result → .*\]\s*$`)
+var (
+	bracketToolCallRe = regexp.MustCompile(`(?ms)^\[tool:[a-z_]+\(.*\)\]\s*$`)
+	bracketResultRe   = regexp.MustCompile(`(?m)^\[result → .*\]\s*$`)
+)
 
 // bracketToolCallUnterminatedRe catches truncated tool calls.
 var bracketToolCallUnterminatedRe = regexp.MustCompile(`(?s)\[tool:[a-z_]+\(.*`)

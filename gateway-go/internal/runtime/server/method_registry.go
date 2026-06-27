@@ -751,7 +751,8 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 
 	// Conditional: provider methods.
 	if s.providers != nil {
-		domains = append(domains,
+		domains = append(
+			domains,
 			handlerprovider.Methods(handlerprovider.Deps{
 				Providers:   s.providers,
 				AuthManager: s.authManager,

@@ -16,7 +16,8 @@ import (
 func TestResolveDeliveryTarget_ThreadID(t *testing.T) {
 	target, err := ResolveDeliveryTarget(
 		&JobDeliveryConfig{Channel: "telegram", To: "-1001234567890", ThreadID: "42"},
-		"telegram", "fallback-chat")
+		"telegram", "fallback-chat",
+	)
 	if err != nil {
 		t.Fatalf("ResolveDeliveryTarget: %v", err)
 	}
@@ -31,7 +32,8 @@ func TestResolveDeliveryTarget_ThreadID(t *testing.T) {
 func TestResolveDeliveryTarget_NoThreadID(t *testing.T) {
 	target, err := ResolveDeliveryTarget(
 		&JobDeliveryConfig{Channel: "telegram", To: "7074071666"},
-		"telegram", "fallback-chat")
+		"telegram", "fallback-chat",
+	)
 	if err != nil {
 		t.Fatalf("ResolveDeliveryTarget: %v", err)
 	}

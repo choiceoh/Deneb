@@ -140,7 +140,8 @@ func (d *SubagentInfraDeps) SpawnSubagent(ctx context.Context, params SpawnSubag
 			ToolPreset: params.ToolPreset,
 		}
 		if err := d.SaveSession(sess); err != nil {
-			d.logger().Warn("failed to save subagent session",
+			d.logger().Warn(
+				"failed to save subagent session",
 				"agentId", agentID,
 				"error", err,
 			)

@@ -31,6 +31,7 @@ func (s *recordingTranscriptStore) Append(sessionKey string, msg toolctx.ChatMes
 	s.appends[sessionKey] = append(s.appends[sessionKey], msg)
 	return nil
 }
+
 func (s *recordingTranscriptStore) Load(string, int) ([]toolctx.ChatMessage, int, error) {
 	return nil, 0, nil
 }
@@ -107,7 +108,6 @@ func TestRelay_SuppressesContentless(t *testing.T) {
 
 		d := proactiveRelayDeps{transcriptStore: store, pushHub: hub, workFeed: feed}
 		delivered, err := d.relay(context.Background(), "ignored-session-key", body)
-
 		if err != nil {
 			t.Fatalf("relay(%q): %v", body, err)
 		}

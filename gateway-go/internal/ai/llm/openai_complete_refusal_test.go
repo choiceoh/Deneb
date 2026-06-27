@@ -67,13 +67,21 @@ func TestCompleteOpenAI_NormalContent(t *testing.T) {
 func TestStreamChat_MissingToolCallID_Synthesized(t *testing.T) {
 	chunks := []map[string]any{
 		{"id": "c", "model": "m", "choices": []map[string]any{{"index": 0, "delta": map[string]any{
-			"tool_calls": []map[string]any{{"index": 0, "type": "function",
-				"function": map[string]string{"name": "read", "arguments": `{"path":"f.go"}`}}}}}}},
+			"tool_calls": []map[string]any{{
+				"index": 0, "type": "function",
+				"function": map[string]string{"name": "read", "arguments": `{"path":"f.go"}`},
+			}},
+		}}}},
 		{"id": "c", "model": "m", "choices": []map[string]any{{"index": 0, "delta": map[string]any{
-			"tool_calls": []map[string]any{{"index": 1, "type": "function",
-				"function": map[string]string{"name": "grep", "arguments": `{"pattern":"x"}`}}}}}}},
-		{"id": "c", "model": "m", "choices": []map[string]any{{"index": 0,
-			"delta": map[string]string{}, "finish_reason": "tool_calls"}}},
+			"tool_calls": []map[string]any{{
+				"index": 1, "type": "function",
+				"function": map[string]string{"name": "grep", "arguments": `{"pattern":"x"}`},
+			}},
+		}}}},
+		{"id": "c", "model": "m", "choices": []map[string]any{{
+			"index": 0,
+			"delta": map[string]string{}, "finish_reason": "tool_calls",
+		}}},
 	}
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

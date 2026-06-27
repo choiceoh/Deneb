@@ -23,6 +23,7 @@ func (m *mockAdapter) Layer() Layer { return m.layer }
 func (m *mockAdapter) Recall(_ context.Context, _ string, _ int) ([]Result, error) {
 	return m.results, m.recErr
 }
+
 func (m *mockAdapter) Read(_ context.Context, _ string) (*Document, error) {
 	return m.doc, m.readErr
 }

@@ -56,7 +56,8 @@ func CheckProtectedPath(path, op string) error {
 	if protectedPathPatterns.MatchString(filepath.ToSlash(abs)) {
 		return fmt.Errorf(
 			"access denied: %s is a protected credential/control-plane path and cannot be %sed through agent tools "+
-				"(prompt-injection safeguard)", path, op)
+				"(prompt-injection safeguard)", path, op,
+		)
 	}
 	return nil
 }

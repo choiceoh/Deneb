@@ -73,7 +73,8 @@ func (s *Server) registerSessionRPCMethods() {
 	var polarisStoreForSweep *polaris.Store
 	if transcriptDir != "" {
 		cached := chat.NewCachedTranscriptStore(
-			chat.NewFileTranscriptStore(transcriptDir), 0)
+			chat.NewFileTranscriptStore(transcriptDir), 0,
+		)
 
 		// Wrap with Polaris dual-write bridge (required for summary-based assembly).
 		home, err := os.UserHomeDir()

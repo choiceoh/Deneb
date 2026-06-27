@@ -47,17 +47,25 @@ func streamChunks(t *testing.T, userMsg string, chunks []map[string]any) []Conte
 func TestStreamChat_ContentBeforeReasoning_AssembleViaSingleBlock(t *testing.T) {
 	chunks := []map[string]any{
 		// Content arrives FIRST, before any reasoning.
-		{"id": "c", "model": "m", "choices": []map[string]any{{"index": 0,
-			"delta": map[string]any{"role": "assistant", "content": "Answer A. "}}}},
+		{"id": "c", "model": "m", "choices": []map[string]any{{
+			"index": 0,
+			"delta": map[string]any{"role": "assistant", "content": "Answer A. "},
+		}}},
 		// Reasoning arrives after content.
-		{"id": "c", "model": "m", "choices": []map[string]any{{"index": 0,
-			"delta": map[string]any{"reasoning": "thinking it through"}}}},
+		{"id": "c", "model": "m", "choices": []map[string]any{{
+			"index": 0,
+			"delta": map[string]any{"reasoning": "thinking it through"},
+		}}},
 		// More content after reasoning.
-		{"id": "c", "model": "m", "choices": []map[string]any{{"index": 0,
-			"delta": map[string]any{"content": "Answer B."}}}},
+		{"id": "c", "model": "m", "choices": []map[string]any{{
+			"index": 0,
+			"delta": map[string]any{"content": "Answer B."},
+		}}},
 		// Finish.
-		{"id": "c", "model": "m", "choices": []map[string]any{{"index": 0,
-			"delta": map[string]string{}, "finish_reason": "stop"}}},
+		{"id": "c", "model": "m", "choices": []map[string]any{{
+			"index": 0,
+			"delta": map[string]string{}, "finish_reason": "stop",
+		}}},
 	}
 
 	var text, thinking string
@@ -88,12 +96,18 @@ func TestStreamChat_ContentBeforeReasoning_AssembleViaSingleBlock(t *testing.T) 
 // same way as content.
 func TestStreamChat_RefusalSurfacedAsText(t *testing.T) {
 	chunks := []map[string]any{
-		{"id": "c", "model": "m", "choices": []map[string]any{{"index": 0,
-			"delta": map[string]any{"role": "assistant", "refusal": "I can't help "}}}},
-		{"id": "c", "model": "m", "choices": []map[string]any{{"index": 0,
-			"delta": map[string]any{"refusal": "with that."}}}},
-		{"id": "c", "model": "m", "choices": []map[string]any{{"index": 0,
-			"delta": map[string]string{}, "finish_reason": "stop"}}},
+		{"id": "c", "model": "m", "choices": []map[string]any{{
+			"index": 0,
+			"delta": map[string]any{"role": "assistant", "refusal": "I can't help "},
+		}}},
+		{"id": "c", "model": "m", "choices": []map[string]any{{
+			"index": 0,
+			"delta": map[string]any{"refusal": "with that."},
+		}}},
+		{"id": "c", "model": "m", "choices": []map[string]any{{
+			"index": 0,
+			"delta": map[string]string{}, "finish_reason": "stop",
+		}}},
 	}
 
 	var text string

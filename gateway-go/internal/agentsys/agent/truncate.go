@@ -47,7 +47,8 @@ func TruncateHeadTail(content string, maxChars int, spillID string) string {
 	if spillID != "" {
 		marker = fmt.Sprintf(
 			"\n\n... [%d lines truncated — use read_spillover(%q) for full content] ...\n\n",
-			truncatedLines, spillID)
+			truncatedLines, spillID,
+		)
 	} else {
 		marker = fmt.Sprintf("\n\n... [%d lines truncated] ...\n\n", truncatedLines)
 	}

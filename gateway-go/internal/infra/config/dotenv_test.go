@@ -30,7 +30,7 @@ EMPTY_VAL=
 NOEQUALSSIGN
 `
 	tmp := filepath.Join(t.TempDir(), ".env")
-	if err := os.WriteFile(tmp, []byte(content), 0600); err != nil {
+	if err := os.WriteFile(tmp, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -65,7 +65,7 @@ func TestLoadDotenvFilesNoOverride(t *testing.T) {
 
 	dir := t.TempDir()
 	envFile := filepath.Join(dir, ".env")
-	if err := os.WriteFile(envFile, []byte(key+"=replaced\n"), 0600); err != nil {
+	if err := os.WriteFile(envFile, []byte(key+"=replaced\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 

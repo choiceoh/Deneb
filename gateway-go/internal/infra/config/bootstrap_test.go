@@ -46,7 +46,7 @@ func TestBootstrapGatewayConfigWithToken(t *testing.T) {
 		},
 	}
 	data, _ := json.Marshal(cfg)
-	os.WriteFile(cfgPath, data, 0644)
+	os.WriteFile(cfgPath, data, 0o644)
 
 	result, err := BootstrapGatewayConfig(BootstrapOptions{
 		ConfigPath: cfgPath,
@@ -65,7 +65,7 @@ func TestBootstrapGatewayConfigTokenFromEnv(t *testing.T) {
 	tmp := t.TempDir()
 	cfgPath := filepath.Join(tmp, "deneb.json")
 	t.Setenv("DENEB_GATEWAY_TOKEN", "")
-	os.WriteFile(cfgPath, []byte("{}"), 0644)
+	os.WriteFile(cfgPath, []byte("{}"), 0o644)
 	t.Setenv("DENEB_GATEWAY_TOKEN", "env-token-123")
 
 	result, err := BootstrapGatewayConfig(BootstrapOptions{
@@ -94,7 +94,7 @@ func TestBootstrapGatewayConfigPasswordMode(t *testing.T) {
 		},
 	}
 	data, _ := json.Marshal(cfg)
-	os.WriteFile(cfgPath, data, 0644)
+	os.WriteFile(cfgPath, data, 0o644)
 
 	result, err := BootstrapGatewayConfig(BootstrapOptions{
 		ConfigPath: cfgPath,
@@ -121,7 +121,7 @@ func TestBootstrapGatewayConfigPasswordModeNoPassword(t *testing.T) {
 		},
 	}
 	data, _ := json.Marshal(cfg)
-	os.WriteFile(cfgPath, data, 0644)
+	os.WriteFile(cfgPath, data, 0o644)
 	t.Setenv("DENEB_GATEWAY_PASSWORD", "")
 
 	_, err := BootstrapGatewayConfig(BootstrapOptions{
@@ -176,7 +176,7 @@ func TestBootstrapAuthOverride(t *testing.T) {
 	tmp := t.TempDir()
 	cfgPath := filepath.Join(tmp, "deneb.json")
 	t.Setenv("DENEB_GATEWAY_TOKEN", "")
-	os.WriteFile(cfgPath, []byte("{}"), 0644)
+	os.WriteFile(cfgPath, []byte("{}"), 0o644)
 	t.Setenv("DENEB_GATEWAY_TOKEN", "")
 
 	result, err := BootstrapGatewayConfig(BootstrapOptions{
@@ -206,7 +206,7 @@ func TestPersistDefaultModel(t *testing.T) {
 			},
 		}
 		data, _ := json.Marshal(existing)
-		os.WriteFile(cfgPath, data, 0644)
+		os.WriteFile(cfgPath, data, 0o644)
 
 		if err := PersistDefaultModel(cfgPath, "zai/glm-5.1", logger); err != nil {
 			t.Fatal(err)
@@ -334,7 +334,7 @@ func TestPersistCustomProviderModel(t *testing.T) {
 			},
 		}
 		data, _ := json.Marshal(existing)
-		os.WriteFile(cfgPath, data, 0644)
+		os.WriteFile(cfgPath, data, 0o644)
 
 		result, err := PersistCustomProviderModel(cfgPath, "http://127.0.0.1:8000/v1", "new-model", CustomModelMeta{}, logger)
 		if err != nil {

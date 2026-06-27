@@ -44,7 +44,7 @@ func TestStateDirPolicyPrecedence(t *testing.T) {
 			t.Setenv("DENEB_STATE_DIR", tc.envDeneb)
 
 			if tc.newDirExists {
-				if err := os.MkdirAll(filepath.Join(home, ".deneb"), 0755); err != nil {
+				if err := os.MkdirAll(filepath.Join(home, ".deneb"), 0o755); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -96,7 +96,7 @@ func TestConfigPathPolicyPrecedence(t *testing.T) {
 			t.Setenv("DENEB_CONFIG_PATH", tc.envDeneb)
 
 			for _, name := range tc.existingFiles {
-				if err := os.WriteFile(filepath.Join(stateDir, name), []byte("{}"), 0644); err != nil {
+				if err := os.WriteFile(filepath.Join(stateDir, name), []byte("{}"), 0o644); err != nil {
 					t.Fatal(err)
 				}
 			}

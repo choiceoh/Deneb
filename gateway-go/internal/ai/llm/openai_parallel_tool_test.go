@@ -67,23 +67,37 @@ func TestStreamChat_ParallelToolCalls_AssembleViaSingleBlock(t *testing.T) {
 	chunks := []map[string]any{
 		// Tool 0 (read) starts.
 		{"id": "c", "model": "m", "choices": []map[string]any{{"index": 0, "delta": map[string]any{
-			"tool_calls": []map[string]any{{"index": 0, "id": "call_1", "type": "function",
-				"function": map[string]string{"name": "read", "arguments": `{"pa`}}}}}}},
+			"tool_calls": []map[string]any{{
+				"index": 0, "id": "call_1", "type": "function",
+				"function": map[string]string{"name": "read", "arguments": `{"pa`},
+			}},
+		}}}},
 		// Tool 1 (grep) starts — before tool 0's args finish.
 		{"id": "c", "model": "m", "choices": []map[string]any{{"index": 0, "delta": map[string]any{
-			"tool_calls": []map[string]any{{"index": 1, "id": "call_2", "type": "function",
-				"function": map[string]string{"name": "grep", "arguments": `{"pat`}}}}}}},
+			"tool_calls": []map[string]any{{
+				"index": 1, "id": "call_2", "type": "function",
+				"function": map[string]string{"name": "grep", "arguments": `{"pat`},
+			}},
+		}}}},
 		// More args for tool 0 (interleaved).
 		{"id": "c", "model": "m", "choices": []map[string]any{{"index": 0, "delta": map[string]any{
-			"tool_calls": []map[string]any{{"index": 0,
-				"function": map[string]string{"arguments": `th":"f.go"}`}}}}}}},
+			"tool_calls": []map[string]any{{
+				"index":    0,
+				"function": map[string]string{"arguments": `th":"f.go"}`},
+			}},
+		}}}},
 		// More args for tool 1.
 		{"id": "c", "model": "m", "choices": []map[string]any{{"index": 0, "delta": map[string]any{
-			"tool_calls": []map[string]any{{"index": 1,
-				"function": map[string]string{"arguments": `tern":"foo"}`}}}}}}},
+			"tool_calls": []map[string]any{{
+				"index":    1,
+				"function": map[string]string{"arguments": `tern":"foo"}`},
+			}},
+		}}}},
 		// Finish.
-		{"id": "c", "model": "m", "choices": []map[string]any{{"index": 0,
-			"delta": map[string]string{}, "finish_reason": "tool_calls"}}},
+		{"id": "c", "model": "m", "choices": []map[string]any{{
+			"index": 0,
+			"delta": map[string]string{}, "finish_reason": "tool_calls",
+		}}},
 	}
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

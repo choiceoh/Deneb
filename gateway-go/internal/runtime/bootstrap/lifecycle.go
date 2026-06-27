@@ -130,7 +130,8 @@ func RunDaemon(flags Flags, cfg ConfigResult, svc Services, log LoggingResult) i
 	d := daemon.NewDaemon(pidPath, cfg.Port, flags.Version, log.Logger)
 
 	if existing := d.CheckExistingDaemon(); existing != nil {
-		log.Logger.Error("another daemon is already running",
+		log.Logger.Error(
+			"another daemon is already running",
 			"pid", existing.PID,
 			"port", existing.Port,
 			"version", existing.Version,

@@ -356,7 +356,8 @@ func NewRegistryWithOptions(logger *slog.Logger, opts RegistryOptions) *Registry
 		r.clients[role] = &clientEntry{}
 	}
 
-	logger.Info("modelrole: registry initialized",
+	logger.Info(
+		"modelrole: registry initialized",
 		"main", logModelAlias(models[RoleMain]),
 		"tiny", logModelAlias(models[RoleTiny]),
 		"lightweight", logModelAlias(models[RoleLightweight]),

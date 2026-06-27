@@ -267,7 +267,8 @@ func weeklyRenderImage(ctx context.Context, htmlPath, pngPath string) error {
 	defer os.RemoveAll(udd)
 	rctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(rctx, bin,
+	cmd := exec.CommandContext(
+		rctx, bin,
 		"--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage", "--hide-scrollbars",
 		// 2x device scale = retina-density output: --window-size is CSS px, so the
 		// 1600-wide form renders to a 3200px PNG. Text and hairlines are crisp when
@@ -565,7 +566,8 @@ func weeklyRenderPDF(ctx context.Context, htmlPath, pdfPath string) error {
 	defer os.RemoveAll(udd)
 	rctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(rctx, bin,
+	cmd := exec.CommandContext(
+		rctx, bin,
 		"--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage", "--hide-scrollbars",
 		"--no-pdf-header-footer", "--virtual-time-budget=4000",
 		"--user-data-dir="+udd, "--crash-dumps-dir="+udd,

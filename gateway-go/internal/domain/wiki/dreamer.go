@@ -459,7 +459,8 @@ func (wd *WikiDreamer) RunDream(ctx context.Context) (*autonomous.DreamReport, e
 	// LLM cycle becomes a visible, revertible event instead of silent drift.
 	if hash := wd.store.SnapshotGit(ctx, fmt.Sprintf("dream: +%d페이지 생성, %d페이지 수정", created, updated)); hash != "" {
 		report.WikiChangeSummary = formatWikiChangeSummary(
-			hash, wd.store.GitSnapshotStat(ctx, hash), wd.store.Dir(), updatePaths(updates))
+			hash, wd.store.GitSnapshotStat(ctx, hash), wd.store.Dir(), updatePaths(updates),
+		)
 	}
 
 	wd.logger.Info("wiki-dream: cycle complete",

@@ -300,6 +300,7 @@ func TestFindBlockEnd_simpleBraces(t *testing.T) {
 		t.Errorf("got %d, want 2", end)
 	}
 }
+
 func TestFindBlockEnd_nested(t *testing.T) {
 	lines := []string{
 		"func foo() {",

@@ -40,7 +40,8 @@ func (s AgentLogSource) Sample() []Signal {
 		if total == 0 {
 			continue
 		}
-		out = append(out,
+		out = append(
+			out,
 			Signal{Key: "agentlog.error_rate", Scope: m.Model, Value: rate(m.Errors, total), Sample: total, HigherWorse: true, Kind: KindRate},
 			Signal{Key: "agentlog.timeout_rate", Scope: m.Model, Value: rate(m.TimeoutRuns, m.Runs), Sample: m.Runs, HigherWorse: true, Kind: KindRate},
 			Signal{Key: "agentlog.max_tokens_rate", Scope: m.Model, Value: rate(m.MaxTokensRecoveries, m.Runs), Sample: m.Runs, HigherWorse: true, Kind: KindRate},

@@ -91,7 +91,8 @@ func compressToolOutput(ctx context.Context, toolName, output string, logger *sl
 		return output
 	}
 
-	logger.Info("compressed tool output",
+	logger.Info(
+		"compressed tool output",
 		"tool", toolName,
 		"original", len(output),
 		"compressed", len(compressed),

@@ -183,7 +183,8 @@ func (h *Handler) updateExecute(reqID, sessionKey string, delivery *DeliveryCont
 
 	startMsg := fmt.Sprintf(
 		"🔄 업데이트를 시작합니다 (커밋 %d개). 최신 코드를 받고 빌드하는 중입니다 — 1~2분 정도 걸립니다...",
-		countLines(commits))
+		countLines(commits),
+	)
 	if outcome.StashUntracked {
 		startMsg += "\n📦 untracked 파일은 임시 보관 후 자동 복구합니다."
 	}
@@ -198,7 +199,8 @@ func (h *Handler) updateExecute(reqID, sessionKey string, delivery *DeliveryCont
 			h.logger.Error("update: stash failed", "error", err, "output", out)
 			h.deliverSlashResponse(delivery, fmt.Sprintf(
 				"❌ untracked 변경을 임시 보관(stash)하지 못했습니다. 게이트웨이는 그대로 유지됩니다.\n\n```\n%s\n```",
-				truncateUpdateOutput(out)))
+				truncateUpdateOutput(out),
+			))
 			return
 		}
 		didStash = true
@@ -212,7 +214,8 @@ func (h *Handler) updateExecute(reqID, sessionKey string, delivery *DeliveryCont
 		h.logger.Error("update: git pull failed", "error", err, "output", out)
 		h.deliverSlashResponse(delivery, fmt.Sprintf(
 			"❌ 코드 받기에 실패했습니다. 게이트웨이는 그대로 유지됩니다.\n\n```\n%s\n```",
-			truncateUpdateOutput(out)))
+			truncateUpdateOutput(out),
+		))
 		h.restoreUpdateStash(ctx, root, didStash, delivery)
 		return
 	}
@@ -225,7 +228,8 @@ func (h *Handler) updateExecute(reqID, sessionKey string, delivery *DeliveryCont
 		h.logger.Error("update: build failed", "error", err, "output", out)
 		h.deliverSlashResponse(delivery, fmt.Sprintf(
 			"❌ 빌드에 실패했습니다. 코드는 받았지만 재시작하지 않습니다.\n\n```\n%s\n```",
-			truncateUpdateOutput(out)))
+			truncateUpdateOutput(out),
+		))
 		h.restoreUpdateStash(ctx, root, didStash, delivery)
 		return
 	}
@@ -257,7 +261,8 @@ func (h *Handler) restoreUpdateStash(ctx context.Context, root string, didStash 
 		h.logger.Error("update: stash pop failed", "error", err, "output", out)
 		h.deliverSlashResponse(delivery, fmt.Sprintf(
 			"⚠️ 임시 보관한 untracked 변경 복구에 실패했습니다. `git stash list` 에서 `deneb-update` 항목을 확인하세요.\n\n```\n%s\n```",
-			truncateUpdateOutput(out)))
+			truncateUpdateOutput(out),
+		))
 	}
 }
 

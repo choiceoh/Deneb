@@ -349,7 +349,8 @@ func handleRunSuccess(
 		}()
 	}
 
-	logger.Info("agent run completed",
+	logger.Info(
+		"agent run completed",
 		"stopReason", result.StopReason,
 		"turns", result.Turns,
 		"inputTokens", result.Usage.InputTokens,

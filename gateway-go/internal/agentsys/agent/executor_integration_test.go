@@ -240,13 +240,15 @@ func contentBlockStartToolUseEvent(index int, id, name string) llm.StreamEvent {
 func buildToolUseTurnEventsWithNames(tools []toolUseSpec, inputTokens, outputTokens int) []llm.StreamEvent {
 	events := []llm.StreamEvent{messageStartEvent(inputTokens)}
 	for i, t := range tools {
-		events = append(events,
+		events = append(
+			events,
 			contentBlockStartToolUseEvent(i, t.id, t.name),
 			toolInputDeltaEvent(i, t.name, t.inputJSON),
 			contentBlockStopEvent(i),
 		)
 	}
-	events = append(events,
+	events = append(
+		events,
 		messageDeltaEvent("tool_use", outputTokens),
 		llm.StreamEvent{Type: "message_stop"},
 	)

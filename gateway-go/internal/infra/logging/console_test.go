@@ -24,7 +24,8 @@ func TestConsoleHandler_BasicFormat(t *testing.T) {
 	var buf bytes.Buffer
 	h := NewConsoleHandler(&buf, &ConsoleOptions{Level: slog.LevelDebug, Color: false})
 
-	r := newTestRecord(slog.LevelInfo, "server started",
+	r := newTestRecord(
+		slog.LevelInfo, "server started",
 		slog.String("addr", "127.0.0.1:8080"),
 		slog.Int("port", 8080),
 	)
@@ -65,7 +66,8 @@ func TestConsoleHandler_ValueQuoting(t *testing.T) {
 	var buf bytes.Buffer
 	h := NewConsoleHandler(&buf, &ConsoleOptions{Level: slog.LevelDebug, Color: false})
 
-	r := newTestRecord(slog.LevelInfo, "test",
+	r := newTestRecord(
+		slog.LevelInfo, "test",
 		slog.String("plain", "hello"),
 		slog.String("spaces", "hello world"),
 		slog.String("empty", ""),
@@ -199,7 +201,8 @@ func TestConsoleHandler_ErrorAttrHighlight(t *testing.T) {
 	var buf bytes.Buffer
 	h := NewConsoleHandler(&buf, &ConsoleOptions{Level: slog.LevelDebug, Color: true})
 
-	r := newTestRecord(slog.LevelError, "failed",
+	r := newTestRecord(
+		slog.LevelError, "failed",
 		slog.String("id", "abc"),
 		slog.String("error", "connection refused"),
 	)
@@ -224,7 +227,8 @@ func TestConsoleHandler_BoolAttr(t *testing.T) {
 	var buf bytes.Buffer
 	h := NewConsoleHandler(&buf, &ConsoleOptions{Level: slog.LevelDebug, Color: false})
 
-	r := newTestRecord(slog.LevelDebug, "rpc",
+	r := newTestRecord(
+		slog.LevelDebug, "rpc",
 		slog.String("method", "health"),
 		slog.Bool("ok", true),
 		slog.Int64("ms", 5),
@@ -296,7 +300,8 @@ func TestConsoleHandler_PkgTagInline(t *testing.T) {
 	var buf bytes.Buffer
 	h := NewConsoleHandler(&buf, &ConsoleOptions{Level: slog.LevelDebug, Color: false})
 
-	r := newTestRecord(slog.LevelInfo, "request",
+	r := newTestRecord(
+		slog.LevelInfo, "request",
 		slog.String("pkg", "media"),
 		slog.Int("status", 200),
 	)

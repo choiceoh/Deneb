@@ -114,7 +114,8 @@ func systemPresence(deps Deps) rpcutil.HandlerFunc {
 			}
 			if err := json.Unmarshal(req.Params, &p); err != nil {
 				return protocol.NewResponseError(req.ID, protocol.NewError(
-					protocol.ErrInvalidRequest, "invalid params"))
+					protocol.ErrInvalidRequest, "invalid params",
+				))
 			}
 			payload = p.Payload
 		}
@@ -130,7 +131,8 @@ func systemEvent(deps Deps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		if len(req.Params) == 0 {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrMissingParam, "event is required"))
+				protocol.ErrMissingParam, "event is required",
+			))
 		}
 		var p struct {
 			Event   string `json:"event"`
@@ -138,7 +140,8 @@ func systemEvent(deps Deps) rpcutil.HandlerFunc {
 		}
 		if err := json.Unmarshal(req.Params, &p); err != nil || p.Event == "" {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrMissingParam, "event is required"))
+				protocol.ErrMissingParam, "event is required",
+			))
 		}
 		if deps.Broadcast == nil {
 			return rpcutil.RespondOK(req.ID, map[string]int{"sent": 0})
