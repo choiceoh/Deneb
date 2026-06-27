@@ -18,6 +18,7 @@
 package wiki
 
 import (
+	"fmt"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -27,6 +28,40 @@ import (
 // projectStatusHeading is the H2 section on a project page holding its latest
 // progress. parseable by SplitByH2.
 const projectStatusHeading = "현재 상태"
+
+// Project lifecycle status values (frontmatter `status`). Empty == active.
+// Decoupled from Archived: a 완료 project's facts stay fully findable (no
+// validityFactor demotion); status only changes foregrounding (모아보기 order,
+// digest priority). Operator-set — the dream cycle preserves but never sets it.
+const (
+	ProjectStatusActive = "진행중"
+	ProjectStatusDone   = "완료"
+	ProjectStatusOnHold = "보류"
+)
+
+// validProjectStatus reports whether s is a settable lifecycle value. Empty is
+// valid — it clears the field back to the active default.
+func validProjectStatus(s string) bool {
+	switch strings.TrimSpace(s) {
+	case "", ProjectStatusActive, ProjectStatusDone, ProjectStatusOnHold:
+		return true
+	default:
+		return false
+	}
+}
+
+// projectStatusRank orders projects for the glance: active (or unset) first,
+// on-hold next, completed last. Within a rank, recency breaks ties.
+func projectStatusRank(s string) int {
+	switch strings.TrimSpace(s) {
+	case ProjectStatusDone:
+		return 2
+	case ProjectStatusOnHold:
+		return 1
+	default: // 진행중 or empty
+		return 0
+	}
+}
 
 // maxProjectStatusBullets caps the section so event-driven mail appends can't
 // grow it without bound between dream-cycle compactions.
@@ -78,6 +113,7 @@ type ProjectStatus struct {
 	Refs      []string // graph-resolved owned page paths (code-shared sub-pages + explicitly-linked pages); see projectOwnedRefs
 	Summary   string   // page Meta.Summary — the stable one-line description
 	Due       string   // page Meta.Due — imminent deadline, "" if none
+	Status    string   // page Meta.Status — "진행중"(default)/"완료"/"보류"; drives glance order
 	Bullets   []string // the "## 현재 상태" lines, newest first
 	UpdatedMs int64    // page Meta.Updated (YYYY-MM-DD) as epoch millis, 0 if unparseable
 }
@@ -104,11 +140,18 @@ func (s *Store) ProjectStatuses() ([]ProjectStatus, error) {
 			Code:      strings.TrimSpace(page.Meta.Code),
 			Summary:   strings.TrimSpace(page.Meta.Summary),
 			Due:       strings.TrimSpace(page.Meta.Due),
+			Status:    strings.TrimSpace(page.Meta.Status),
 			Bullets:   bullets,
 			UpdatedMs: dateToMillis(page.Meta.Updated),
 		})
 	}
+	// Foreground active work: rank (active → on-hold → completed) first, then
+	// recency within a rank. A 완료 project with a recent closeout bullet thus
+	// sinks below every active project instead of floating to the top.
 	sort.SliceStable(out, func(i, j int) bool {
+		if ri, rj := projectStatusRank(out[i].Status), projectStatusRank(out[j].Status); ri != rj {
+			return ri < rj
+		}
 		if out[i].UpdatedMs != out[j].UpdatedMs {
 			return out[i].UpdatedMs > out[j].UpdatedMs // newest first
 		}
@@ -170,6 +213,26 @@ func (s *Store) AppendProjectStatusLine(relPath, line, ref string, now time.Time
 		}
 		bullet := "- " + now.Format("1월 2일") + " " + line + marker
 		page.Body = prependStatusBullet(page.Body, bullet)
+		page.Meta.Updated = now.Format("2006-01-02")
+		return page, nil
+	})
+}
+
+// SetProjectLifecycleStatus sets a project page's lifecycle status (frontmatter
+// `status`). Operator-driven: the dream cycle preserves but never sets this, so
+// a quiet project is never auto-hidden — only an explicit operator action flips
+// it. Empty clears it back to the active default. A 완료 project is NOT archived:
+// its facts stay findable; only foregrounding (모아보기 order, digest priority)
+// changes. Returns an error for an unknown value.
+func (s *Store) SetProjectLifecycleStatus(relPath, status string, now time.Time) error {
+	status = strings.TrimSpace(status)
+	if !validProjectStatus(status) {
+		return fmt.Errorf("wiki: invalid project status %q (use %s/%s/%s or empty)",
+			status, ProjectStatusActive, ProjectStatusDone, ProjectStatusOnHold)
+	}
+	return s.UpdatePage(relPath, func(existing *Page) (*Page, error) {
+		page := ensureProjectPage(existing, relPath)
+		page.Meta.Status = status
 		page.Meta.Updated = now.Format("2006-01-02")
 		return page, nil
 	})

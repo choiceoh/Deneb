@@ -34,6 +34,7 @@ func ToolWiki(d *toolctx.WikiDeps, workspaceDir string) toolctx.ToolFunc {
 			Confidence string   `json:"confidence"`
 			Due        string   `json:"due"`
 			Section    string   `json:"section"`
+			Status     string   `json:"status"`
 			Limit      int      `json:"limit"`
 		}
 		if err := json.Unmarshal(input, &p); err != nil {
@@ -59,8 +60,10 @@ func ToolWiki(d *toolctx.WikiDeps, workspaceDir string) toolctx.ToolFunc {
 			return wikiDaily(d.Store.DiaryDir(), p.Limit)
 		case "status":
 			return wikiStatus(d.Store), nil
+		case "set_status":
+			return wikiSetStatus(d.Store, p.Query, p.Status)
 		default:
-			return fmt.Sprintf("알 수 없는 액션: %s. 사용 가능: search, read, index, write, log, daily, status", p.Action), nil
+			return fmt.Sprintf("알 수 없는 액션: %s. 사용 가능: search, read, index, write, log, daily, status, set_status", p.Action), nil
 		}
 	}
 }
@@ -166,6 +169,28 @@ func wikiIndex(store *wiki.Store, category string) (string, error) {
 		fmt.Fprintf(&sb, "- [[%s]] — %s%s\n", p, page.Meta.Title, tags)
 	}
 	return sb.String(), nil
+}
+
+// wikiSetStatus sets a project page's lifecycle status (진행중/완료/보류, or empty
+// to clear). Operator-driven only — invoke this when the operator explicitly asks
+// to change a project's state, never autonomously. The dream cycle preserves the
+// field but never sets it, so a quiet project is not auto-hidden.
+func wikiSetStatus(store *wiki.Store, path, status string) (string, error) {
+	path = strings.TrimPrefix(strings.TrimSpace(path), RefWiki)
+	if path == "" {
+		return "query에 프로젝트 페이지 경로를 지정하세요 (예: 프로젝트/탑솔라.md).", nil
+	}
+	if !strings.HasSuffix(path, ".md") {
+		path += ".md"
+	}
+	if err := store.SetProjectLifecycleStatus(path, status, time.Now()); err != nil {
+		return fmt.Sprintf("상태 변경 실패: %v", err), nil
+	}
+	label := strings.TrimSpace(status)
+	if label == "" {
+		label = wiki.ProjectStatusActive + " (기본값으로 초기화)"
+	}
+	return fmt.Sprintf("프로젝트 상태를 '%s'(으)로 설정했습니다: %s", label, path), nil
 }
 
 func wikiWrite(store *wiki.Store, contactsStore *contacts.Store, path, title, id, summary, category, content string, tags, related, supersedes []string, importance float64, pageType, confidence, due string) (string, error) {
