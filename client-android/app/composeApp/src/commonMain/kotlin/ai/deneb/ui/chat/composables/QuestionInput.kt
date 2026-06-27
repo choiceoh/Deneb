@@ -57,6 +57,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
@@ -97,6 +98,7 @@ fun QuestionInput(
 ) {
     Column(modifier = modifier) {
         val haptics = rememberHaptics()
+        val keyboardController = LocalSoftwareKeyboardController.current
         if (files.isNotEmpty()) {
             FlowRow(
                 modifier = Modifier
@@ -141,6 +143,9 @@ fun QuestionInput(
                 haptics.confirm()
                 ask(text.trim())
                 onTextStateChange(TextFieldValue(""))
+                // Drop the soft keyboard after a send so it doesn't cover the
+                // reply. No-op on desktop, where keyboardController is null.
+                keyboardController?.hide()
             }
         }
 
