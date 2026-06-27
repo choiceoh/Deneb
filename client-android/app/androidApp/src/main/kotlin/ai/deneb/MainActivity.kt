@@ -102,11 +102,15 @@ class MainActivity : ComponentActivity() {
             val lightScheme: ColorScheme = if (dynamicColor) dynamicLightColorScheme(context) else LightColorScheme
             val darkScheme: ColorScheme = if (dynamicColor) dynamicDarkColorScheme(context) else DarkColorScheme
             val navController = rememberNavController()
-            // Defer TTS initialization until after the first frame
+            // Defer TTS initialization until after the first frame.
+            // SystemDefault (not Google): use whatever TTS engine the device ships —
+            // Samsung TTS on a Galaxy, Google TTS elsewhere. Pinning Google made
+            // rememberTextToSpeechOrNull return null (no 읽어주기 button) on any device
+            // without Google TTS installed/active. iOS already uses SystemDefault.
             var ttsReady by remember { mutableStateOf(false) }
             LaunchedEffect(Unit) { ttsReady = true }
             val textToSpeech = if (ttsReady) {
-                rememberTextToSpeechOrNull(TextToSpeechEngine.Google)
+                rememberTextToSpeechOrNull(TextToSpeechEngine.SystemDefault)
             } else {
                 null
             }
