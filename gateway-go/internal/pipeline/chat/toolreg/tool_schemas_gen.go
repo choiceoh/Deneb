@@ -904,8 +904,8 @@ func wikiToolSchema() map[string]any {
 		"properties": map[string]any{
 			"action": map[string]any{
 				"type":        "string",
-				"description": "Action: search (ripgrep full-text search), read (read wiki page), index (read master/category index), write (create/update page), log (append diary entry), daily (read recent diary), status (wiki stats)",
-				"enum":        []string{"search", "read", "index", "write", "log", "daily", "status"},
+				"description": "Action: search (ripgrep full-text search), read (read wiki page), index (read master/category index), write (create/update page), log (append diary entry), daily (read recent diary), status (wiki stats), set_status (set a project's lifecycle 진행중/완료/보류 — ONLY when the operator explicitly asks to change project state; query=project page path, status=value)",
+				"enum":        []string{"search", "read", "index", "write", "log", "daily", "status", "set_status"},
 			},
 			"category": map[string]any{
 				"type":        "string",
@@ -955,6 +955,11 @@ func wikiToolSchema() map[string]any {
 			"section": map[string]any{
 				"type":        "string",
 				"description": "Read a specific section from the page (read action)",
+			},
+			"status": map[string]any{
+				"type":        "string",
+				"description": "Project lifecycle value for set_status: 진행중(active, default)/완료(done)/보류(on hold), or \"\" to clear back to active. A 완료 project's facts stay searchable; only its glance ordering changes.",
+				"enum":        []string{"진행중", "완료", "보류", ""},
 			},
 			"summary": map[string]any{
 				"type":        "string",
