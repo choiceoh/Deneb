@@ -153,6 +153,12 @@ class _Deneb:
           read: search, read, index, daily, status. write: write, log.
           as_json=True returns {path, snippet, score} hits (search), a
           {path, title, summary, body} page (read), or page paths (index).
+      deneb.deals(action="list", counterparty=..., currency=...)
+          Typed 거래/deal records (computable, always structured): each is
+          {counterparty, docType, amountRaw, amountValue (number), currency,
+          amountParsed (False -> exclude from sums), date, dueDate, items,
+          summary, sourceRef, recordedAt}. Sum/count/group in Python, summing
+          per-currency over amountParsed records only. Optional filters.
       deneb.read(file_path) / deneb.write(file_path, content)
       deneb.edit(file_path, old_string, new_string)
           workspace files (paths clamped to the workspace; system files and
@@ -199,6 +205,11 @@ class _Deneb:
     def wiki(self, action, as_json=False, **kw):
         kw["action"] = action
         return self._call("wiki", kw, as_json=as_json)
+
+    def deals(self, action="list", **kw):
+        # Typed deal-record ledger; structured-only (no text form), so always json.
+        kw["action"] = action
+        return self._call("deals", kw, as_json=True)
 
     def read(self, file_path, **kw):
         kw["file_path"] = file_path
