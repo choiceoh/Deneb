@@ -543,7 +543,48 @@ func (e *Evolver) EvolveUnderperformers(ctx context.Context) ([]EvolveResult, er
 			results = append(results, *result)
 		}
 	}
+
+	// De-risk-first measurement for corpus-level skill seeding (Skill-DisCo):
+	// before spending any LLM budget turning recurring tool structure into a
+	// skill, log what actually recurs across the operator's successful sessions.
+	// Single-user trace volume is sparse, so this answers "is there structure to
+	// seed from?" first. Opt-in + fail-open; never affects the evolve results.
+	e.observeProceduralMining()
+
 	return results, nil //nolint:nilerr // individual skill errors collected in results, not propagated
+}
+
+// observeProceduralMining mines the procedural-trace corpus for recurring tool
+// sequences and logs the top candidates. It is gated by DENEB_SKILL_PROCEDURAL_MINE
+// (observe|seed) and disabled by default, so the standing behavior is unchanged:
+// the corpus fills passively (the Nudger records it), and an operator flips this
+// on to MEASURE whether recurring structure exists before the seeding consumer
+// (a follow-up) is wired. Best-effort and fail-open — any error is swallowed.
+func (e *Evolver) observeProceduralMining() {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("DENEB_SKILL_PROCEDURAL_MINE"))) {
+	case "observe", "seed":
+	default:
+		return
+	}
+	if e.tracker == nil {
+		return
+	}
+	candidates, err := e.tracker.MineProceduralSkillCandidates(DefaultProceduralMineOptions())
+	if err != nil {
+		e.logger.Debug("evolver: procedural mining failed", "error", err)
+		return
+	}
+	if len(candidates) == 0 {
+		e.logger.Info("evolver: procedural mining found no recurring tool structure (corpus sparse or no repeats)")
+		return
+	}
+	for _, c := range candidates {
+		e.logger.Info("evolver: recurring procedural structure",
+			"tools", strings.Join(c.Tools, "→"),
+			"sessions", c.Sessions,
+			"occurrences", c.Occurrences,
+			"score", c.Score)
+	}
 }
 
 func (e *Evolver) parseAndApply(ctx context.Context, text string, entry *skills.SkillEntry, originalContent string, stats *UsageStats, reviewFinding string) (*EvolveResult, error) {

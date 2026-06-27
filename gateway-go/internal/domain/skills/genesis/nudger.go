@@ -21,6 +21,7 @@ import (
 	"log/slog"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -308,6 +309,10 @@ func (n *Nudger) runReviewOnce(sessionKey string, snapshot SessionContext) (bool
 		}
 		return false, nil
 	}
+	// The session cleared the skill-worthiness gate, so its successful tool
+	// sequence is worth adding to the corpus mined for recurring procedural
+	// structure (corpus-level seeding, vs. this path's per-session induction).
+	n.recordProceduralTrace(sessionKey, snapshot)
 	err := n.reviewer.RunSkillReview(ctx, sessionKey, snapshot)
 	// Record the liveness heartbeat whether or not the review succeeded — the
 	// whole point is to make a silently-dying review fork visible on /health.
@@ -341,6 +346,7 @@ func (n *Nudger) runOnce(sessionKey string, snapshot SessionContext) (bool, erro
 			"tools", len(snapshot.ToolActivities))
 		return false, nil
 	}
+	n.recordProceduralTrace(sessionKey, snapshot)
 	skill, err := n.svc.Generate(ctx, snapshot)
 	if err != nil {
 		n.logger.Warn("skill nudger: generate failed",
@@ -367,4 +373,41 @@ func (n *Nudger) runOnce(sessionKey string, snapshot SessionContext) (bool, erro
 	n.logger.Info("skill nudger: created mid-session skill",
 		"session", sessionKey, "skill", skill.Name, "category", skill.Category)
 	return true, nil
+}
+
+// recordProceduralTrace persists the snapshot's successful tool-call sequence to
+// the corpus mined for recurring procedural structure (corpus-level seeding,
+// Skill-DisCo). Best-effort and background-only: a nil tracker, too-short
+// sequence, or write error never blocks the review — the worst case is one
+// missing corpus row. Called only after the session cleared the skill-worthiness
+// gate, so the pool holds non-trivial sessions, not idle chatter.
+func (n *Nudger) recordProceduralTrace(sessionKey string, snapshot SessionContext) {
+	if n.tracker == nil {
+		return
+	}
+	tools := successfulToolNames(snapshot.ToolActivities)
+	if len(tools) < proceduralTraceMinTools {
+		return
+	}
+	if err := n.tracker.RecordProceduralTrace(sessionKey, tools); err != nil {
+		n.logger.Debug("skill nudger: procedural trace record failed",
+			"session", sessionKey, "error", err)
+	}
+}
+
+// successfulToolNames extracts the ordered names of the non-error tool calls in
+// a session snapshot. Failed calls are dropped: a recurring SUCCESSFUL shape is
+// the procedure worth reusing, and the distillation corpus must not learn a
+// pattern from steps that errored.
+func successfulToolNames(activities []ToolActivity) []string {
+	out := make([]string, 0, len(activities))
+	for _, a := range activities {
+		if a.IsError {
+			continue
+		}
+		if name := strings.TrimSpace(a.Name); name != "" {
+			out = append(out, name)
+		}
+	}
+	return out
 }

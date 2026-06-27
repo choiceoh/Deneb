@@ -24,6 +24,7 @@ func newTestTracker(t *testing.T) *Tracker {
 		optimizerMemoryPath: filepath.Join(dir, "skill_optimizer_memory.json"),
 		validationPath:      filepath.Join(dir, "skill_validation_cases.jsonl"),
 		selfCorrectionPath:  filepath.Join(dir, "self_correction_candidates.jsonl"),
+		proceduralPath:      filepath.Join(dir, "skill_procedural_traces.jsonl"),
 		stats:               make(map[string]*usageAgg),
 		recentErrors:        make(map[string][]string),
 		recentFailureTraces: make(map[string][]UsageFailureTrace),
