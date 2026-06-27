@@ -11,10 +11,7 @@
 // value or by path leaf — exactly as the client did.
 package handlerminiapp
 
-import (
-	"path/filepath"
-	"strings"
-)
+import "strings"
 
 // projectMatchKeys builds a project's identity key set from the same inputs the
 // digest ships. Each value contributes its normalized form plus its path leaf,
@@ -93,11 +90,16 @@ func mailIDsFromRefs(refs []string) []string {
 	out := []string{}
 	seen := make(map[string]struct{})
 	for _, r := range refs {
-		slash := filepath.ToSlash(r)
+		// Normalize backslashes universally (not filepath.ToSlash, which is a no-op
+		// off Windows) so a ref keyed with either separator resolves the same.
+		slash := strings.ReplaceAll(r, "\\", "/")
 		if !strings.Contains(slash, "/mail-analyses/") {
 			continue
 		}
-		id := strings.TrimSuffix(filepath.Base(slash), ".md")
+		id := strings.TrimSuffix(slash, ".md")
+		if i := strings.LastIndex(id, "/"); i >= 0 {
+			id = id[i+1:]
+		}
 		if id == "" {
 			continue
 		}
