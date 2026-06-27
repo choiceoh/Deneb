@@ -105,7 +105,7 @@ go-vet:
 	cd gateway-go && $(GO_ENV) go vet -p $(GO_PAR) ./...
 
 go-fmt:
-	@cd gateway-go && test -z "$$(gofmt -l .)" || (echo "Go files need formatting:"; gofmt -l .; exit 1)
+	@cd gateway-go && test -z "$$(go run mvdan.cc/gofumpt@v0.10.0 -l .)" || (echo "Go files need formatting (gofumpt -w .):"; go run mvdan.cc/gofumpt@v0.10.0 -l .; exit 1)
 
 # Lint only new/changed Go code (safe for CI gate on existing codebases).
 go-lint:
@@ -171,7 +171,7 @@ generate-check:
 	@echo "All generation checks passed"
 
 fmt:
-	cd gateway-go && gofmt -w .
+	cd gateway-go && go run mvdan.cc/gofumpt@v0.10.0 -w .
 
 # --- Tool schema code generation ---
 
