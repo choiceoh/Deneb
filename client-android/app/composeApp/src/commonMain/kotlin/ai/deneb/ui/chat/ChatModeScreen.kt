@@ -45,6 +45,7 @@ import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -407,6 +408,19 @@ internal fun ChatModeScreen(
                                             cacheWindow = LazyLayoutCacheWindow(ahead = 500.dp, behind = 300.dp),
                                         )
                                         val componentScope = rememberCoroutineScope()
+
+                                        // Drop the soft keyboard when the user drags the conversation — the
+                                        // standard "scroll to read → keyboard out of the way" gesture, paired
+                                        // with the dismiss-on-send in QuestionInput. collectIsDraggedAsState
+                                        // fires only on a USER drag (not the programmatic scroll-to-bottom
+                                        // below, so the two never fight) and observes drag state rather than
+                                        // intercepting pointer events, so it can't break taps, text selection,
+                                        // links, or scrolling.
+                                        val listDragged = listState.interactionSource.collectIsDraggedAsState()
+                                        LaunchedEffect(listDragged.value) {
+                                            if (listDragged.value) keyboardController?.hide()
+                                        }
+
                                         // Stable handle hoisted out of the volatile uiState: every streaming
                                         // token emits a new uiState, so a lambda that captures `uiState` gets a
                                         // fresh identity each token and defeats strong-skipping — every visible
