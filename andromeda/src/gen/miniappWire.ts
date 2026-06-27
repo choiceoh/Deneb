@@ -398,6 +398,14 @@ export interface ProjectDigestsOut {
   digests?: ProjectDigestRow[]
 }
 
+export interface ProjectLinkedOut {
+  mail?: string[]
+  calendar?: string[]
+  todo?: string[]
+  workfeed?: string[]
+  notebook?: string[]
+}
+
 export interface ProjectRef {
   path?: string
   title?: string

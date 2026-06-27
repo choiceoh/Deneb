@@ -100,6 +100,11 @@ export const FILES_RPC = {
 
 export const SEARCH_RPC = "miniapp.search.all";
 
+// Server-side project↔item matching: given a project 대표페이지 path, returns the
+// IDs of linked items per type. The ProjectHomePane filters its already-fetched
+// lists by these IDs instead of running a local heuristic.
+export const PROJECT_LINKED_RPC = "miniapp.project.linked";
+
 // Deneb 노트북 — the NotebookPane browses (list/get) and writes (create/delete a
 // notebook, pin/unpin a citation source) directly via these miniapp RPCs.
 export const NOTEBOOK_RPC = {

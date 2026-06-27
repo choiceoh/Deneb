@@ -159,6 +159,9 @@ var requiredMethods = []string{
 	// so the read handler registers unconditionally (empty until the dream
 	// cycle writes the first digest).
 	"miniapp.project.digests",
+	// Server-side project↔item matching (linked mail/work-feed/notebook IDs);
+	// registers with project.digests under the same wiki factory.
+	"miniapp.project.linked",
 	// Org chart editor — Load/SavePath are always wired (org.Load / ResolvePath),
 	// so these register unconditionally.
 	"miniapp.org.get",
