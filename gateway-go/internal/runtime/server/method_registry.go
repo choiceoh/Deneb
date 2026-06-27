@@ -474,6 +474,22 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 				}
 				return out
 			},
+			Calendar: func() []handlerminiapp.ProjectLinkedCalEvent {
+				store, err := localcal.Default()
+				if err != nil || store == nil {
+					return nil
+				}
+				now := time.Now()
+				events := store.ListRange(now.AddDate(-1, 0, 0), now.AddDate(1, 0, 0)) // wide superset
+				out := make([]handlerminiapp.ProjectLinkedCalEvent, 0, len(events))
+				for _, ev := range events {
+					if ev.Source == "" {
+						continue // only Deneb-sourced (mail-proposal) events carry a project link
+					}
+					out = append(out, handlerminiapp.ProjectLinkedCalEvent{ID: ev.ID, Source: ev.Source})
+				}
+				return out
+			},
 		}),
 
 		// Mini App org chart editor (miniapp.org.{get,save}). The org chart

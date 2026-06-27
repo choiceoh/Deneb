@@ -79,6 +79,22 @@ func itemLinkedToProject(keys map[string]struct{}, refs ...string) bool {
 	return false
 }
 
+// mailMsgIDFromSource pulls the message ID out of a Deneb event Source provenance
+// string ("mail:<msgID>", or a legacy "mail:<msgID>|<title>" form). Returns "" when
+// the source isn't a mail link, so a hand-added calendar event never matches.
+func mailMsgIDFromSource(source string) string {
+	const prefix = "mail:"
+	source = strings.TrimSpace(source)
+	if !strings.HasPrefix(source, prefix) {
+		return ""
+	}
+	id := source[len(prefix):]
+	if i := strings.IndexByte(id, '|'); i >= 0 {
+		id = id[:i]
+	}
+	return strings.TrimSpace(id)
+}
+
 // mailIDsFromRefs extracts linked mail message IDs from a project's owned-page
 // refs. A mail analysis page lives at 프로젝트/mail-analyses/<project>/<msgID>.md and
 // lands in the project's refs through its Related[] edge (§③ projectOwnedRefs), so

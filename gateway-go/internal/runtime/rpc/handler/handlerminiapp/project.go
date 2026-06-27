@@ -43,6 +43,15 @@ type ProjectLinkedWorkItem struct {
 	RefID string
 }
 
+// ProjectLinkedCalEvent is a calendar event projection for linked-matching: its ID
+// plus its Deneb provenance Source ("mail:<msgID>"), set when the event was
+// generated from a mail proposal. A mail-sourced event links to the same projects
+// its originating mail does — no separate calendar↔project stamp needed.
+type ProjectLinkedCalEvent struct {
+	ID     string
+	Source string
+}
+
 // ProjectDeps wires the project handler's read sources. Wiki is a lazy factory
 // (the wiki store is created in the late phase, so the lookup defers to
 // per-request); a nil factory skips registration, and a factory that returns an
@@ -53,6 +62,7 @@ type ProjectDeps struct {
 	Wiki      func() (ProjectStatusSource, error)
 	Notebooks func() []ProjectLinkedNotebook
 	WorkItems func() []ProjectLinkedWorkItem
+	Calendar  func() []ProjectLinkedCalEvent
 }
 
 // ProjectDigestRow is one project's latest-progress card for the native client.
@@ -161,6 +171,21 @@ func projectLinked(deps ProjectDeps) rpcutil.HandlerFunc {
 
 		keys := projectMatchKeys(st.Name, st.Path, st.Code, st.Refs)
 		out.Mail = mailIDsFromRefs(st.Refs)
+		// Calendar: a mail-sourced event links to the same projects its originating
+		// mail does, so match its Source msgID against this project's mail IDs.
+		if deps.Calendar != nil {
+			mailIDs := make(map[string]struct{}, len(out.Mail))
+			for _, id := range out.Mail {
+				mailIDs[id] = struct{}{}
+			}
+			for _, ev := range deps.Calendar() {
+				if mid := mailMsgIDFromSource(ev.Source); mid != "" {
+					if _, ok := mailIDs[mid]; ok {
+						out.Calendar = append(out.Calendar, ev.ID)
+					}
+				}
+			}
+		}
 		if deps.Notebooks != nil {
 			for _, nb := range deps.Notebooks() {
 				refs := append([]string{nb.DealRef}, nb.ProjectRefs...)
