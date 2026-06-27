@@ -101,6 +101,7 @@ var codeActionAllowed = map[string]map[string]bool{
 	"calendar":     {"list": true, "get": true, "free_slots": true, "create": true, "update": true, "delete": true},
 	"contacts":     {"lookup": true, "search": true},
 	"wiki":         {"search": true, "read": true, "index": true, "daily": true, "status": true, "write": true, "log": true},
+	"deals":        {"list": true},
 }
 
 // codeActionAllow returns nil if (tool, args.action) is a permitted call, or a
@@ -227,6 +228,11 @@ func (b *codeActionBridge) structuredResult(tool string, args map[string]any) (a
 			return nil, fmt.Errorf("wiki is unavailable for structured output")
 		}
 		return wikiStructured(b.ctx, b.wiki, args)
+	case "deals":
+		if b.wiki == nil {
+			return nil, fmt.Errorf("deals ledger is unavailable for structured output")
+		}
+		return dealsStructured(b.wiki, args)
 	case "mail_archive":
 		if b.invoker == nil {
 			return nil, fmt.Errorf("mail_archive invoker is unavailable for structured output")
@@ -426,6 +432,36 @@ func intArg(args map[string]any, key string) int {
 // contactsStructured answers a read-only contacts call with []contacts.Contact
 // (json-tagged) instead of formatted text. Always returns a non-nil slice so
 // the Python side decodes to a list, never None.
+// dealsStructured returns the typed deal-record ledger (deal_records.go) so model
+// code can sum/count/group business documents deterministically rather than
+// eyeballing prose pages. action "list"; optional counterparty (substring, case-
+// insensitive) and currency (exact) filters. Records carry amountValue + currency
+// + amountParsed so Python sums correctly per-currency, excluding unparsed amounts.
+func dealsStructured(store *wiki.Store, args map[string]any) (any, error) {
+	recs, err := store.ListDealRecords()
+	if err != nil {
+		return nil, err
+	}
+	cpRaw, _ := args["counterparty"].(string)
+	cp := strings.ToLower(strings.TrimSpace(cpRaw))
+	curRaw, _ := args["currency"].(string)
+	cur := strings.TrimSpace(curRaw)
+	if cp == "" && cur == "" {
+		return recs, nil
+	}
+	out := make([]wiki.DealRecord, 0, len(recs))
+	for _, r := range recs {
+		if cp != "" && !strings.Contains(strings.ToLower(r.Counterparty), cp) {
+			continue
+		}
+		if cur != "" && !strings.EqualFold(r.Currency, cur) {
+			continue
+		}
+		out = append(out, r)
+	}
+	return out, nil
+}
+
 func contactsStructured(store *contacts.Store, args map[string]any) (any, error) {
 	action, _ := args["action"].(string)
 	query, _ := args["query"].(string)
@@ -707,7 +743,7 @@ func CodeActionSchema() map[string]any {
 		"properties": map[string]any{
 			"code": map[string]any{
 				"type":        "string",
-				"description": "Python 3 source. A preloaded `deneb` object exposes Deneb tools: deneb.mail_archive(action, query=…, message_id=…, limit=…, as_json=True) [list|search|read|thread|project_history over the native archive], deneb.calendar(action, **kw) [list|get|free_slots; create|update|delete on the local calendar], deneb.contacts(action, query) [lookup|search], deneb.wiki(action, query=…, **kw) [search|read|index|daily|status; write|log], and workspace files deneb.read(file_path) / deneb.write(file_path, content) / deneb.edit(file_path, old_string, new_string). Pass as_json=True for parsed objects instead of text — deneb.mail_archive (messages/history with locators, ranking, related_wiki, related_events), deneb.contacts (list of {name,phones,emails,org}), deneb.calendar list/get (events {id,title,start,end,location,all_day,attendees}), deneb.wiki search/read/index ({path,snippet,score} / {path,title,summary,body} / list of page paths) — ideal for filtering, counting, joining. Writes are internal and recoverable; Gmail OAuth/account actions are not exposed to the agent surface; received mail goes through mail_archive. Use print() to return data — only stdout and any traceback come back. Sandbox: no network except the bridge, no subprocess, no raw file writes outside the scratch dir (use deneb.write for workspace files).",
+				"description": "Python 3 source. A preloaded `deneb` object exposes Deneb tools: deneb.mail_archive(action, query=…, message_id=…, limit=…, as_json=True) [list|search|read|thread|project_history over the native archive], deneb.calendar(action, **kw) [list|get|free_slots; create|update|delete on the local calendar], deneb.contacts(action, query) [lookup|search], deneb.wiki(action, query=…, **kw) [search|read|index|daily|status; write|log], deneb.deals(action=\"list\", counterparty=…, currency=…) [typed 거래 records for deterministic sum/count/group], and workspace files deneb.read(file_path) / deneb.write(file_path, content) / deneb.edit(file_path, old_string, new_string). Pass as_json=True for parsed objects instead of text — deneb.mail_archive (messages/history with locators, ranking, related_wiki, related_events), deneb.contacts (list of {name,phones,emails,org}), deneb.calendar list/get (events {id,title,start,end,location,all_day,attendees}), deneb.wiki search/read/index ({path,snippet,score} / {path,title,summary,body} / list of page paths), deneb.deals (typed 거래 records {counterparty,docType,amountValue,currency,amountParsed,date,dueDate,items,summary} — sum/count per-currency over amountParsed only) — ideal for filtering, counting, joining. Writes are internal and recoverable; Gmail OAuth/account actions are not exposed to the agent surface; received mail goes through mail_archive. Use print() to return data — only stdout and any traceback come back. Sandbox: no network except the bridge, no subprocess, no raw file writes outside the scratch dir (use deneb.write for workspace files).",
 			},
 			"timeout": map[string]any{
 				"type":        "number",
