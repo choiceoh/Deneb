@@ -58,3 +58,20 @@ func TestMailIDsFromRefs(t *testing.T) {
 		t.Error("mailIDsFromRefs(nil) should be empty")
 	}
 }
+
+func TestMailMsgIDFromSource(t *testing.T) {
+	cases := map[string]string{
+		"mail:abc123":             "abc123",       // clean form (proposalEventSource strips |title)
+		"mail:abc123|회의 제목":       "abc123",       // legacy form with a title suffix
+		"  mail:abc123  ":         "abc123",       // surrounding whitespace
+		"deal:xyz":                "",             // not a mail source
+		"":                        "",             // empty
+		"manual hand-added":       "",             // a plain user event has no Deneb source
+		"mail:<5c2.x@host>|견적 마감": "<5c2.x@host>", // RFC 5322 Message-ID survives intact
+	}
+	for src, want := range cases {
+		if got := mailMsgIDFromSource(src); got != want {
+			t.Errorf("mailMsgIDFromSource(%q) = %q, want %q", src, got, want)
+		}
+	}
+}
