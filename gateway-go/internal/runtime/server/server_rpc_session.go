@@ -523,6 +523,7 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 			collectSignals: combineSignalCollectors(
 				newCalendarSignalCollector(resolveBriefingCalendarClient),
 				newTodoDeadlineCollector(),
+				newDealDeadlineSignalCollector(func() *wiki.Store { return s.wikiStore }),
 			),
 			signalConfig: autonomous.DefaultSignalConfig(),
 		})
