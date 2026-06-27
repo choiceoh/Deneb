@@ -1,5 +1,16 @@
 # Changelog
 
+## [4.38.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.37.0...deneb-v4.38.0) (2026-06-27)
+
+
+### ✨ Features
+
+* **project:** link mail-sourced calendar events to their project ([#2907](https://github.com/choiceoh/Deneb/issues/2907)) ([7d11a5d](https://github.com/choiceoh/Deneb/commit/7d11a5df641834e67986406cb3d6ad96601e7ffe))
+* **project:** server-side project↔item matching via miniapp.project.linked ([#2905](https://github.com/choiceoh/Deneb/issues/2905)) ([278c768](https://github.com/choiceoh/Deneb/commit/278c768d55e60672597148b8a5ec3703b96f016e))
+* **recall:** scope evidence to a query's temporal frame (RaMem context-collapse slice) ([#2910](https://github.com/choiceoh/Deneb/issues/2910)) ([277360a](https://github.com/choiceoh/Deneb/commit/277360aa0f2cc4cf954194e0b211dff4fa9f369e))
+* typed deal records + sandbox compute + deadline alerts (User-as-Code slice) ([#2912](https://github.com/choiceoh/Deneb/issues/2912)) ([5ac6e65](https://github.com/choiceoh/Deneb/commit/5ac6e65129ec4988decf14fddc93f33bc7f981c0))
+* **wiki:** lower page-split default toward Infini Memory optimum + sweep instrument ([#2914](https://github.com/choiceoh/Deneb/issues/2914)) ([b22cf72](https://github.com/choiceoh/Deneb/commit/b22cf72fc8803501b5f108ddca1fb97fc0c1586c))
+
 ## [4.37.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.36.0...deneb-v4.37.0) (2026-06-26)
 
 

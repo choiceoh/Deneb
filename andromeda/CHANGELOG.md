@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.27](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.26...andromeda-v0.0.27) (2026-06-27)
+
+
+### ✨ Features
+
+* **project:** server-side project↔item matching via miniapp.project.linked ([#2905](https://github.com/choiceoh/Deneb/issues/2905)) ([278c768](https://github.com/choiceoh/Deneb/commit/278c768d55e60672597148b8a5ec3703b96f016e))
+
 ## [0.0.26](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.25...andromeda-v0.0.26) (2026-06-26)
 
 
