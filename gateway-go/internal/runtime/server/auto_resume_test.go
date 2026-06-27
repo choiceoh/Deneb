@@ -228,7 +228,8 @@ func TestAutoResume_ResumesInterruptedNativeClientTurn(t *testing.T) {
 	srv := newAutoResumeTestServer(t, tmpHome)
 
 	sessionKey := "client:main:fresh-chat"
-	writeTranscriptLine(t, tmpHome, sessionKey,
+	writeTranscriptLine(
+		t, tmpHome, sessionKey,
 		`{"role":"user","content":"이어 해줘","timestamp":1700000001000}`,
 	)
 	store := srv.runMarkerStore()
@@ -272,7 +273,8 @@ func TestAutoResume_SkipsCleanEnd(t *testing.T) {
 	tmpHome := t.TempDir()
 	srv := newAutoResumeTestServer(t, tmpHome)
 
-	writeTranscriptLine(t, tmpHome, "client:7",
+	writeTranscriptLine(
+		t, tmpHome, "client:7",
 		`{"role":"user","content":"hi","timestamp":1700000001000}`,
 		`{"role":"assistant","content":[{"type":"text","text":"hello"}],"timestamp":1700000001500}`,
 	)
@@ -307,7 +309,8 @@ func TestAutoResume_DiscardsStaleMarker(t *testing.T) {
 	tmpHome := t.TempDir()
 	srv := newAutoResumeTestServer(t, tmpHome)
 
-	writeTranscriptLine(t, tmpHome, "client:stale",
+	writeTranscriptLine(
+		t, tmpHome, "client:stale",
 		`{"role":"user","content":"old","timestamp":1}`,
 	)
 	store := srv.runMarkerStore()
@@ -340,7 +343,8 @@ func TestAutoResume_RespectsAttemptLimit(t *testing.T) {
 	tmpHome := t.TempDir()
 	srv := newAutoResumeTestServer(t, tmpHome)
 
-	writeTranscriptLine(t, tmpHome, "client:loop",
+	writeTranscriptLine(
+		t, tmpHome, "client:loop",
 		`{"role":"user","content":"retry bait","timestamp":1}`,
 	)
 	store := srv.runMarkerStore()
@@ -372,7 +376,8 @@ func TestAutoResume_DisabledDrainsMarkers(t *testing.T) {
 	tmpHome := t.TempDir()
 	srv := newAutoResumeTestServer(t, tmpHome)
 
-	writeTranscriptLine(t, tmpHome, "client:1",
+	writeTranscriptLine(
+		t, tmpHome, "client:1",
 		`{"role":"user","content":"a","timestamp":1}`,
 	)
 	store := srv.runMarkerStore()

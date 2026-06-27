@@ -79,8 +79,11 @@ func TestEvaluate_MinTurns(t *testing.T) {
 	}
 	sctx := SessionContext{
 		ToolActivities: []ToolActivity{
-			{Name: "read"}, {Name: "exec"}, {Name: "write"},
-			{Name: "read"}, {Name: "exec"},
+			{Name: "read"},
+			{Name: "exec"},
+			{Name: "write"},
+			{Name: "read"},
+			{Name: "exec"},
 		},
 		Turns: 1,
 	}
@@ -97,8 +100,11 @@ func TestEvaluate_MinToolDiversity(t *testing.T) {
 	// 5 calls but only 1 distinct tool.
 	sctx := SessionContext{
 		ToolActivities: []ToolActivity{
-			{Name: "read"}, {Name: "read"}, {Name: "read"},
-			{Name: "read"}, {Name: "read"},
+			{Name: "read"},
+			{Name: "read"},
+			{Name: "read"},
+			{Name: "read"},
+			{Name: "read"},
 		},
 		Turns: 5,
 	}
@@ -114,8 +120,11 @@ func TestEvaluate_Pass(t *testing.T) {
 	}
 	sctx := SessionContext{
 		ToolActivities: []ToolActivity{
-			{Name: "read"}, {Name: "exec"}, {Name: "write"},
-			{Name: "grep"}, {Name: "read"},
+			{Name: "read"},
+			{Name: "exec"},
+			{Name: "write"},
+			{Name: "grep"},
+			{Name: "read"},
 		},
 		Turns: 5,
 	}

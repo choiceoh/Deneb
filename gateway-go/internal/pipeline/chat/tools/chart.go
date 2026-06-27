@@ -332,7 +332,8 @@ func legendCfg(show bool) map[string]any {
 	}
 }
 
-func tickFont() map[string]any   { return map[string]any{"family": "'Noto Sans CJK KR'", "size": 13} }
+func tickFont() map[string]any { return map[string]any{"family": "'Noto Sans CJK KR'", "size": 13} }
+
 func legendFont() map[string]any { return map[string]any{"family": "'Noto Sans CJK KR'", "size": 14} }
 
 func anySeriesNamed(series []chartSeries) bool {

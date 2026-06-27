@@ -181,7 +181,8 @@ func buildRecallPreflight(ctx context.Context, params RunParams, deps runDeps, l
 	var sources []recallSource
 	if deps.wikiStore != nil {
 		store := deps.wikiStore
-		sources = append(sources,
+		sources = append(
+			sources,
 			recallSource{"wiki", func(c context.Context) []recallEvidence {
 				return recallWikiEvidence(c, store, queries)
 			}},

@@ -63,7 +63,8 @@ func stubFetcher(responses map[string]struct {
 	data        []byte
 	contentType string
 	err         error
-}) fetchFunc {
+},
+) fetchFunc {
 	return func(_ context.Context, url string) ([]byte, string, error) {
 		resp, ok := responses[url]
 		if !ok {

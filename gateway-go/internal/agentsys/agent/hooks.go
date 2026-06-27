@@ -40,12 +40,15 @@ func (c *HookCompositor) OnThinking(fn func(string))  { c.thinking = append(c.th
 func (c *HookCompositor) OnToolStart(fn func(string, string, []byte)) {
 	c.toolStart = append(c.toolStart, fn)
 }
+
 func (c *HookCompositor) OnToolEmit(fn func(string, string, []byte)) {
 	c.toolEmit = append(c.toolEmit, fn)
 }
+
 func (c *HookCompositor) OnToolResult(fn func(string, string, string, bool)) {
 	c.toolResult = append(c.toolResult, fn)
 }
+
 func (c *HookCompositor) OnToolProgress(fn func(string, string, int)) {
 	c.toolProgress = append(c.toolProgress, fn)
 }

@@ -153,8 +153,10 @@ func classifyFetchError(err error, url string) webFetchErr {
 		}
 	}
 	if errors.Is(err, context.DeadlineExceeded) {
-		return webFetchErr{Code: "timeout", Message: "request timed out", URL: url, Retryable: true,
-			Hint: "Timed out. Retry or try a different source"}
+		return webFetchErr{
+			Code: "timeout", Message: "request timed out", URL: url, Retryable: true,
+			Hint: "Timed out. Retry or try a different source",
+		}
 	}
 	if errors.Is(err, context.Canceled) {
 		return webFetchErr{Code: "canceled", Message: "request canceled", URL: url, Retryable: false}

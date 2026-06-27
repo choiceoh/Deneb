@@ -56,6 +56,7 @@ func (s skillLifecycleTranscriptStore) ListKeys() ([]string, error) {
 	}
 	return keys, nil
 }
+
 func (s skillLifecycleTranscriptStore) Search(string, int) ([]toolctx.SearchResult, error) {
 	return nil, nil
 }

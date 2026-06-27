@@ -185,7 +185,8 @@ func (v *SkillValidationEngine) EvaluateBehavior(ctx context.Context, skillName,
 		result.Pass = false
 		result.Reason = fmt.Sprintf(
 			"behavioral replay regressed: candidate matched %d/%d tool-call assertions vs original %d/%d: %s",
-			cand.Passed, cand.Total, orig.Passed, orig.Total, formatValidationFailures(cand.Failures))
+			cand.Passed, cand.Total, orig.Passed, orig.Total, formatValidationFailures(cand.Failures),
+		)
 	}
 	return result, nil
 }

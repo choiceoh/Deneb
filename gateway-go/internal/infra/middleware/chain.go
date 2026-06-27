@@ -39,7 +39,8 @@ func Logging(logger *slog.Logger) Middleware {
 				level = slog.LevelWarn
 			}
 
-			logger.Log(ctx, level, "rpc",
+			logger.Log(
+				ctx, level, "rpc",
 				"method", req.Method,
 				"id", req.ID,
 				"ok", resp.OK,

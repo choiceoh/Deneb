@@ -40,7 +40,8 @@ func renderHTMLToPNG(ctx context.Context, htmlPath, pngPath, window string, virt
 	defer os.RemoveAll(udd) //nolint:errcheck // best-effort scratch cleanup
 	rctx, cancel := context.WithTimeout(ctx, 45*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(rctx, bin,
+	cmd := exec.CommandContext(
+		rctx, bin,
 		"--headless", "--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage", "--hide-scrollbars",
 		fmt.Sprintf("--virtual-time-budget=%d", virtualTimeMs),
 		"--force-device-scale-factor=2",

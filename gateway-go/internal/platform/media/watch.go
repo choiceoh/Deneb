@@ -201,7 +201,8 @@ func downloadYouTubeVideo(ctx context.Context, ytdlpPath, url, tmpDir string) (s
 	defer cancel()
 
 	outTemplate := filepath.Join(tmpDir, "video.%(ext)s")
-	cmd := exec.CommandContext(dlCtx, ytdlpPath,
+	cmd := exec.CommandContext(
+		dlCtx, ytdlpPath,
 		"--no-warnings",
 		"--no-playlist",
 		// Prefer a progressive/merged MP4 at <=720p; fall back to best available.
@@ -354,7 +355,8 @@ func probeDurationSec(ctx context.Context, path string) int {
 	}
 	probeCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(probeCtx, ffprobe,
+	cmd := exec.CommandContext(
+		probeCtx, ffprobe,
 		"-v", "error",
 		"-show_entries", "format=duration",
 		"-of", "default=noprint_wrappers=1:nokey=1",

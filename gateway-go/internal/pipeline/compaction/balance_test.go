@@ -11,9 +11,11 @@ import (
 func tbToolUse(id, name string) llm.ContentBlock {
 	return llm.ContentBlock{Type: "tool_use", ID: id, Name: name, Input: json.RawMessage(`{}`)}
 }
+
 func tbToolResult(id, content string) llm.ContentBlock {
 	return llm.ContentBlock{Type: "tool_result", ToolUseID: id, Content: content}
 }
+
 func tbText(s string) llm.ContentBlock {
 	return llm.ContentBlock{Type: "text", Text: s}
 }

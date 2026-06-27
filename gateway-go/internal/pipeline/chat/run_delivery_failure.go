@@ -126,7 +126,6 @@ func persistInterruptedContext(deps runDeps, sessionKey string, result *agent.Ag
 			"tools", result.InterruptedToolNames,
 			"turns", result.Turns)
 	}
-
 }
 
 func hasFailedExternalDeliveryTool(toolActivities []agent.ToolActivity) bool {

@@ -291,7 +291,8 @@ func (d *ToolLoopDetector) RecordFileMutation(provenanceRoot, name string, argsJ
 		return fmt.Sprintf(
 			"[System: 같은 파일을 %d회째 수정 중 — 접근을 재고하세요: %s. "+
 				"반복 수정이 실제로 진전을 내고 있는지, 한 번에 끝낼 더 큰 수정이나 다른 접근이 필요한지 점검하세요.]",
-			count, p.DisplayPath)
+			count, p.DisplayPath,
+		)
 	}
 	return ""
 }

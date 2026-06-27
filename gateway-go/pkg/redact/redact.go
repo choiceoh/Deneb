@@ -160,7 +160,8 @@ func AttrReplacer(prev func([]string, slog.Attr) slog.Attr) func([]string, slog.
 // security bug. Any new pattern added to patterns.go must either embed one
 // of these substrings or extend this filter.
 func mightContainSecret(s string) bool {
-	return containsAny(s,
+	return containsAny(
+		s,
 		// Vendor prefixes (contiguous, high-signal)
 		"sk-", "sk_", "ghp_", "gho_", "ghu_", "ghs_", "ghr_", "github_pat_",
 		"xox", "AIza", "pplx-", "xai-", "nvapi-", "fal_", "fc-", "bb_live_",

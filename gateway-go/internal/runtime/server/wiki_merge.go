@@ -137,7 +137,8 @@ func concatMergeBody(target, source *wiki.Page) string {
 	return strings.TrimSpace(
 		strings.TrimSpace(target.Body) +
 			"\n\n---\n\n## (병합: " + srcTitle + ")\n\n" +
-			strings.TrimSpace(source.Body))
+			strings.TrimSpace(source.Body),
+	)
 }
 
 // notifyMergeResult delivers a completion notice to the active home chat via

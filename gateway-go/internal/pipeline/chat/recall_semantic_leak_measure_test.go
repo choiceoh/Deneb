@@ -198,18 +198,34 @@ func TestRecallSemanticLeak_NoOffTopicInjection(t *testing.T) {
 	// Four pages, NONE about the query topic (화성 이주 / travel), none sharing a
 	// query token (so BM25 finds nothing → the floorless semantic-only path).
 	pages := map[string]*wiki.Page{
-		"거래/hyundai-ulsan.md": {Meta: wiki.Frontmatter{ID: "hyundai-ulsan", Title: "현대차 울산공장 모듈 납품", Category: "거래",
-			Summary: "현대차 울산공장 태양광 550W 모듈 2000장 납품, 결제 6월 말", Tags: []string{"태양광", "모듈"}, Importance: 0.9},
-			Body: "현대차 울산공장 태양광 550W 모듈 2000장 납품 결제. 셀 단가 협의."},
-		"운영시스템/gateway.md": {Meta: wiki.Frontmatter{ID: "gateway", Title: "DGX 게이트웨이", Category: "운영시스템",
-			Summary: "GPU 추론 게이트웨이 운영, vLLM 서버", Tags: []string{"gpu", "추론"}, Importance: 0.8},
-			Body: "GPU 추론 서버 게이트웨이 vLLM 운영."},
-		"인물/hr-notice.md": {Meta: wiki.Frontmatter{ID: "hr-notice", Title: "인사 발령 명단", Category: "인물",
-			Summary: "인사 발령 조직개편 신규 인선 명단", Tags: []string{"인사", "조직개편"}, Importance: 0.7},
-			Body: "인사 발령 조직개편 신규 인선 명단 공지."},
-		"업무/finance.md": {Meta: wiki.Frontmatter{ID: "finance", Title: "분기 결산 보고", Category: "업무",
-			Summary: "회계 결산 원가 마진 분기 보고", Tags: []string{"회계", "원가"}, Importance: 0.7},
-			Body: "회계 결산 원가 마진 분기 보고 작성."},
+		"거래/hyundai-ulsan.md": {
+			Meta: wiki.Frontmatter{
+				ID: "hyundai-ulsan", Title: "현대차 울산공장 모듈 납품", Category: "거래",
+				Summary: "현대차 울산공장 태양광 550W 모듈 2000장 납품, 결제 6월 말", Tags: []string{"태양광", "모듈"}, Importance: 0.9,
+			},
+			Body: "현대차 울산공장 태양광 550W 모듈 2000장 납품 결제. 셀 단가 협의.",
+		},
+		"운영시스템/gateway.md": {
+			Meta: wiki.Frontmatter{
+				ID: "gateway", Title: "DGX 게이트웨이", Category: "운영시스템",
+				Summary: "GPU 추론 게이트웨이 운영, vLLM 서버", Tags: []string{"gpu", "추론"}, Importance: 0.8,
+			},
+			Body: "GPU 추론 서버 게이트웨이 vLLM 운영.",
+		},
+		"인물/hr-notice.md": {
+			Meta: wiki.Frontmatter{
+				ID: "hr-notice", Title: "인사 발령 명단", Category: "인물",
+				Summary: "인사 발령 조직개편 신규 인선 명단", Tags: []string{"인사", "조직개편"}, Importance: 0.7,
+			},
+			Body: "인사 발령 조직개편 신규 인선 명단 공지.",
+		},
+		"업무/finance.md": {
+			Meta: wiki.Frontmatter{
+				ID: "finance", Title: "분기 결산 보고", Category: "업무",
+				Summary: "회계 결산 원가 마진 분기 보고", Tags: []string{"회계", "원가"}, Importance: 0.7,
+			},
+			Body: "회계 결산 원가 마진 분기 보고 작성.",
+		},
 	}
 	for p, pg := range pages {
 		if err := store.WritePage(p, pg); err != nil {
@@ -240,7 +256,8 @@ func TestRecallSemanticLeak_NoOffTopicInjection(t *testing.T) {
 	}
 
 	// Stage 3-4: full recall preflight — no off-topic wiki row, honest notice.
-	out, _ := buildRecallPreflight(context.Background(),
+	out, _ := buildRecallPreflight(
+		context.Background(),
 		RunParams{SessionKey: "client:main", Message: query},
 		runDeps{wikiStore: store},
 		nil,
@@ -280,12 +297,18 @@ func TestRecallSemanticLeak_OnTopicStillSurfaces(t *testing.T) {
 		// with "납품 결제기한 거래" verbatim except via meaning — exercises the
 		// semantic branch, not BM25. (It does share 모듈/태양광, enough for BM25 too;
 		// the point is it is genuinely relevant and must survive.)
-		"거래/hyundai.md": {Meta: wiki.Frontmatter{ID: "h", Title: "현대차 울산 태양광 모듈 납품", Category: "거래",
-			Summary: "태양광 550W 모듈 2000장 납품 결제 6월 말"}, Body: "태양광 모듈 셀 납품 결제."},
-		"운영시스템/gw.md": {Meta: wiki.Frontmatter{ID: "g", Title: "GPU 게이트웨이", Category: "운영시스템",
-			Summary: "GPU 추론 서버 vLLM"}, Body: "GPU 추론 서버."},
-		"인물/hr.md": {Meta: wiki.Frontmatter{ID: "p", Title: "인사 발령 명단", Category: "인물",
-			Summary: "인사 발령 조직개편 인선"}, Body: "인사 발령 조직개편."},
+		"거래/hyundai.md": {Meta: wiki.Frontmatter{
+			ID: "h", Title: "현대차 울산 태양광 모듈 납품", Category: "거래",
+			Summary: "태양광 550W 모듈 2000장 납품 결제 6월 말",
+		}, Body: "태양광 모듈 셀 납품 결제."},
+		"운영시스템/gw.md": {Meta: wiki.Frontmatter{
+			ID: "g", Title: "GPU 게이트웨이", Category: "운영시스템",
+			Summary: "GPU 추론 서버 vLLM",
+		}, Body: "GPU 추론 서버."},
+		"인물/hr.md": {Meta: wiki.Frontmatter{
+			ID: "p", Title: "인사 발령 명단", Category: "인물",
+			Summary: "인사 발령 조직개편 인선",
+		}, Body: "인사 발령 조직개편."},
 	}
 	for p, pg := range pages {
 		if err := store.WritePage(p, pg); err != nil {

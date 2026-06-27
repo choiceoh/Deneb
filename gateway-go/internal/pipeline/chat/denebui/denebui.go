@@ -192,8 +192,10 @@ func validateObject(m map[string]any, path string) []Issue {
 		if raw, present := m[field]; present {
 			s, _ := raw.(string)
 			if !contains(allowed, s) {
-				issues = append(issues, Issue{path + "." + field,
-					fmt.Sprintf("invalid %s %q (allowed: %s)", field, s, strings.Join(allowed, ", "))})
+				issues = append(issues, Issue{
+					path + "." + field,
+					fmt.Sprintf("invalid %s %q (allowed: %s)", field, s, strings.Join(allowed, ", ")),
+				})
 			}
 		}
 	}

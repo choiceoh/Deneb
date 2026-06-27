@@ -204,7 +204,8 @@ func (am *AuthManager) refreshExpiring(ctx context.Context) {
 	for _, cred := range expiring {
 		refreshCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		if err := am.RefreshIfNeeded(refreshCtx, cred.ProviderID, cred.ProfileID); err != nil {
-			am.logger.Warn("credential refresh failed",
+			am.logger.Warn(
+				"credential refresh failed",
 				"provider", cred.ProviderID,
 				"profile", cred.ProfileID,
 				"error", err,

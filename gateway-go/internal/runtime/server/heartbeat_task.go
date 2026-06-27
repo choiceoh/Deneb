@@ -170,7 +170,8 @@ func (t *heartbeatTask) Run(ctx context.Context) error {
 		return fmt.Errorf("heartbeat: agent turn failed: %w", err)
 	}
 
-	t.logger.Info("heartbeat completed",
+	t.logger.Info(
+		"heartbeat completed",
 		"output_len", len(result.Text),
 		"session", sessionKey,
 	)

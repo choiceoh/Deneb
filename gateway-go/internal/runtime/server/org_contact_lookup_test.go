@@ -96,7 +96,8 @@ func TestOrgContactLookup_BlankNameEmpty(t *testing.T) {
 func TestOrgContactLookup_HomonymsUnionAndDedup(t *testing.T) {
 	// Two contacts normalize to the same name ("김철수" and "김철수 부장"): their
 	// phones/emails are unioned, and a value shared across both appears once.
-	store := newContactStore(t,
+	store := newContactStore(
+		t,
 		contacts.Contact{Name: "김철수", Phones: []string{"010-1111-2222"}, Emails: []string{"shared@example.test"}},
 		contacts.Contact{Name: "김철수 부장", Phones: []string{"010-1111-2222", "010-7777-8888"}, Emails: []string{"shared@example.test"}},
 	)

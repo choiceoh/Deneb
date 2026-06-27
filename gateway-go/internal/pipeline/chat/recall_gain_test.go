@@ -449,8 +449,10 @@ func TestRecallSynthesisDrift(t *testing.T) {
 	// The curated wiki carries the DRIFTED figure — title/summary/tags give it
 	// more match surface than the one raw diary line, plus an importance prior.
 	if err := store.WritePage("거래/ecopro-cable.md", &wiki.Page{
-		Meta: wiki.Frontmatter{ID: "ecopro", Title: "에코프로 케이블 견적", Category: "거래",
-			Summary: "에코프로 케이블 " + drift + "m 견적 회신", Tags: []string{"에코프로", "케이블", "견적"}, Importance: 0.8},
+		Meta: wiki.Frontmatter{
+			ID: "ecopro", Title: "에코프로 케이블 견적", Category: "거래",
+			Summary: "에코프로 케이블 " + drift + "m 견적 회신", Tags: []string{"에코프로", "케이블", "견적"}, Importance: 0.8,
+		},
 		Body: "에코프로 케이블 " + drift + "m 견적 회신.",
 	}); err != nil {
 		t.Fatalf("WritePage: %v", err)

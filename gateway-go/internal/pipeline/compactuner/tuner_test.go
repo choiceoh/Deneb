@@ -128,7 +128,8 @@ func TestRun_IgnoresCondensedNodes(t *testing.T) {
 	// Level-2 (condensed) nodes are filtered out; only 3 leaves remain (< min).
 	src := fakeSummaries{nodes: []polaris.SummaryNode{
 		leaf("a"), leaf("b"), leaf("c"),
-		{Level: 2, Content: "condensed"}, {Level: 2, Content: "condensed2"},
+		{Level: 2, Content: "condensed"},
+		{Level: 2, Content: "condensed2"},
 	}}
 	llmc := &fakeLLM{reply: `{"guidelines": ["x를 보존하라"]}`}
 	task, _ := newTask(t, src, llmc)

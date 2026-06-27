@@ -459,10 +459,14 @@ func TestPromptEval_DeterministicScorers(t *testing.T) {
 	}
 
 	// composite ordering: a full-recall judged variant must beat a poor one.
-	hi := variantResult{name: "hi", factRecall: 1.0, sectionFrac: 1.0, judged: true,
-		faithfulness: 95, coverage: 95, resumability: 95}
-	lo := variantResult{name: "lo", factRecall: 0.3, sectionFrac: 0.5, judged: true,
-		faithfulness: 60, coverage: 40, resumability: 40, halluCount: 2}
+	hi := variantResult{
+		name: "hi", factRecall: 1.0, sectionFrac: 1.0, judged: true,
+		faithfulness: 95, coverage: 95, resumability: 95,
+	}
+	lo := variantResult{
+		name: "lo", factRecall: 0.3, sectionFrac: 0.5, judged: true,
+		faithfulness: 60, coverage: 40, resumability: 40, halluCount: 2,
+	}
 	if hi.composite() <= lo.composite() {
 		t.Errorf("composite ordering wrong: hi=%.1f lo=%.1f", hi.composite(), lo.composite())
 	}

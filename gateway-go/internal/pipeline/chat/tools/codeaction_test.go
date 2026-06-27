@@ -459,9 +459,11 @@ func (f *fakeLocalCal) Get(id string) *calendar.Event {
 	}
 	return nil
 }
+
 func (f *fakeLocalCal) Create(localcal.CreateInput) (calendar.Event, error) {
 	return calendar.Event{}, nil
 }
+
 func (f *fakeLocalCal) Update(string, localcal.CreateInput) (*calendar.Event, error) {
 	return nil, nil
 }

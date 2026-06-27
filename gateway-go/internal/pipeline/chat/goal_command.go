@@ -60,7 +60,8 @@ func (h *Handler) handleGoalCommand(sessionKey, args string, respond func(text s
 		st := store.Set(sessionKey, goalText, 0)
 		respond(fmt.Sprintf(
 			"🎯 표준 목표를 설정했습니다 (최대 %d단계). 자리를 비우면(유휴) 자동으로 한 단계씩 진행합니다.\n목표: %s\n상태 확인 `/goal status` · 중단 `/goal stop`",
-			st.MaxTurns, st.Goal))
+			st.MaxTurns, st.Goal,
+		))
 	}
 }
 

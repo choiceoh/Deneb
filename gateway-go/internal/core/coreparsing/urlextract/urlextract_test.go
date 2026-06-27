@@ -41,6 +41,7 @@ func TestExtractLinks_MaxLimit(t *testing.T) {
 		t.Fatalf("got %d, want 2 URLs", len(urls))
 	}
 }
+
 func TestExtractLinks_SSRFBlocked(t *testing.T) {
 	text := "https://example.com http://127.0.0.1/admin http://169.254.169.254/metadata"
 	urls := ExtractLinks(text, 5)
@@ -51,6 +52,7 @@ func TestExtractLinks_SSRFBlocked(t *testing.T) {
 		t.Errorf("got %s, want https://example.com", urls[0])
 	}
 }
+
 func TestStripURLTail_TrailingPunctuation(t *testing.T) {
 	tests := []struct {
 		input string
@@ -85,6 +87,7 @@ func TestStripURLTail_UnbalancedClosingParen(t *testing.T) {
 		t.Errorf("got %v, want unbalanced paren stripped", urls)
 	}
 }
+
 func TestExtractLinks_JSONArray(t *testing.T) {
 	input := `["https://github.com/choiceoh/deneb/releases/latest/download/latest.json"],`
 	urls := ExtractLinks(input, 5)
@@ -127,6 +130,7 @@ func TestStripURLTail_BalancedSquareBrackets(t *testing.T) {
 		t.Errorf("got %s, want balanced [] preserved", got)
 	}
 }
+
 func TestStripURLTail_BalancedCurlyBraces(t *testing.T) {
 	url := "https://example.com/path{id}"
 	got := stripURLTail(url)

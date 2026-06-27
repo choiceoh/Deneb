@@ -18,17 +18,27 @@ import (
 // both g and plan is the 겸직 case, expressed structurally.
 func fakeTree() OrgTree {
 	return OrgTree{Nodes: []OrgNode{
-		{ID: "g", Name: "예시그룹", Type: NodeTypeGroup,
-			Members: []Member{{Name: "홍길동", Rank: RankChairman, Position: PositionChairman}}},
-		{ID: "plan", Name: "기획조정실", Type: NodeTypeDivision, ParentID: "g",
-			Members: []Member{{Name: "홍길동", Rank: RankExecVP, Position: PositionOfficeHd}}},
-		{ID: "t1", Name: "1팀", Type: NodeTypeTeam, ParentID: "plan", Lane: "team1",
+		{
+			ID: "g", Name: "예시그룹", Type: NodeTypeGroup,
+			Members: []Member{{Name: "홍길동", Rank: RankChairman, Position: PositionChairman}},
+		},
+		{
+			ID: "plan", Name: "기획조정실", Type: NodeTypeDivision, ParentID: "g",
+			Members: []Member{{Name: "홍길동", Rank: RankExecVP, Position: PositionOfficeHd}},
+		},
+		{
+			ID: "t1", Name: "1팀", Type: NodeTypeTeam, ParentID: "plan", Lane: "team1",
 			Members:  []Member{{Name: "김철수", Rank: RankExecVP, Position: PositionTeamLead}, {Name: "박영수 부장", Rank: RankGeneralMgr, Position: PositionTeamMem}},
-			Keywords: []string{"인허가"}, Companies: []string{"사아건설"}},
-		{ID: "t2", Name: "2팀", Type: NodeTypeTeam, ParentID: "plan", Lane: "team2",
-			Members: []Member{{Name: "이몽룡", Position: PositionTeamLead}}, Keywords: []string{"루프탑"}},
-		{ID: "nd", Name: "남도에코", Type: NodeTypeCompany, ParentID: "g", Lane: "namdo",
-			Members: []Member{{Name: "성춘향", Rank: RankSeniorVP, Position: PositionCEO}}, Companies: []string{"가나에너지"}},
+			Keywords: []string{"인허가"}, Companies: []string{"사아건설"},
+		},
+		{
+			ID: "t2", Name: "2팀", Type: NodeTypeTeam, ParentID: "plan", Lane: "team2",
+			Members: []Member{{Name: "이몽룡", Position: PositionTeamLead}}, Keywords: []string{"루프탑"},
+		},
+		{
+			ID: "nd", Name: "남도에코", Type: NodeTypeCompany, ParentID: "g", Lane: "namdo",
+			Members: []Member{{Name: "성춘향", Rank: RankSeniorVP, Position: PositionCEO}}, Companies: []string{"가나에너지"},
+		},
 	}}
 }
 
@@ -215,12 +225,16 @@ func TestDeriveRules_MoonlightingPicksMinLane(t *testing.T) {
 	// naive last-writer-wins would overwrite it with "team_z" (processed last) and
 	// disagree with the engine, so this ordering makes the test discriminating.
 	tree := OrgTree{Nodes: []OrgNode{
-		{ID: "a", Name: "A", Type: NodeTypeTeam, Lane: "team_a",
+		{
+			ID: "a", Name: "A", Type: NodeTypeTeam, Lane: "team_a",
 			Members:  []Member{{Name: "홍길동"}},
-			Keywords: []string{"공용키워드"}, Companies: []string{"공용상사"}},
-		{ID: "z", Name: "Z", Type: NodeTypeTeam, Lane: "team_z",
+			Keywords: []string{"공용키워드"}, Companies: []string{"공용상사"},
+		},
+		{
+			ID: "z", Name: "Z", Type: NodeTypeTeam, Lane: "team_z",
 			Members:  []Member{{Name: "홍길동"}},
-			Keywords: []string{"공용키워드"}, Companies: []string{"공용상사"}},
+			Keywords: []string{"공용키워드"}, Companies: []string{"공용상사"},
+		},
 	}}
 	rules := tree.DeriveRules()
 	if got := rules.PersonToLane["홍길동"]; got != classification.Lane("team_a") {

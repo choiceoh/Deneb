@@ -169,7 +169,8 @@ func warnOnce(name string, err error) {
 	}
 	warned[name] = struct{}{}
 	warnedMu.Unlock()
-	slog.Default().Warn("dentime: invalid timezone, falling back",
+	slog.Default().Warn(
+		"dentime: invalid timezone, falling back",
 		"timezone", name,
 		"error", err,
 	)

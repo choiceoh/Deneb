@@ -206,7 +206,8 @@ func reconcileFallbackCacheMarkers(agentCfg *agent.AgentConfig, deps runDeps, or
 		!modelCapability(deps, origProviderID, origModel).RejectsCacheControl
 	if fbClient.APIMode() == llm.APIModeAnthropic && !hookInstalled {
 		agentCfg.BeforeAPICall = agent.ComposeBeforeAPICall(
-			agentCfg.BeforeAPICall, buildTrailingCacheHook(llm.APIModeAnthropic))
+			agentCfg.BeforeAPICall, buildTrailingCacheHook(llm.APIModeAnthropic),
+		)
 	}
 }
 

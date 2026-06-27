@@ -41,12 +41,20 @@ func TestSearch_DemotesSupersededPages(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = store.Close() })
 
-	old := &Page{Meta: Frontmatter{ID: "port-old", Title: "게이트웨이 포트 정책 (구)", Category: "운영시스템",
-		Summary: "게이트웨이 포트는 18789", Importance: 0.8},
-		Body: "게이트웨이 포트는 18789를 사용한다."}
-	cur := &Page{Meta: Frontmatter{ID: "port-new", Title: "게이트웨이 포트 정책", Category: "운영시스템",
-		Summary: "게이트웨이 포트는 19000으로 변경", Importance: 0.8},
-		Body: "게이트웨이 포트는 19000으로 변경되었다."}
+	old := &Page{
+		Meta: Frontmatter{
+			ID: "port-old", Title: "게이트웨이 포트 정책 (구)", Category: "운영시스템",
+			Summary: "게이트웨이 포트는 18789", Importance: 0.8,
+		},
+		Body: "게이트웨이 포트는 18789를 사용한다.",
+	}
+	cur := &Page{
+		Meta: Frontmatter{
+			ID: "port-new", Title: "게이트웨이 포트 정책", Category: "운영시스템",
+			Summary: "게이트웨이 포트는 19000으로 변경", Importance: 0.8,
+		},
+		Body: "게이트웨이 포트는 19000으로 변경되었다.",
+	}
 	if err := store.WritePage("운영시스템/port-old.md", old); err != nil {
 		t.Fatal(err)
 	}

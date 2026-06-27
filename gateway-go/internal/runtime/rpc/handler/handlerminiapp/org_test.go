@@ -35,9 +35,11 @@ func fakeOrgDeps(t *testing.T) (OrgDeps, string) {
 func validWireTree() OrgTreeOut {
 	return OrgTreeOut{Nodes: []OrgNodeOut{
 		{ID: "g", Name: "예시그룹", Type: org.NodeTypeGroup},
-		{ID: "t1", Name: "1팀", Type: org.NodeTypeTeam, ParentID: "g", Lane: "team1",
+		{
+			ID: "t1", Name: "1팀", Type: org.NodeTypeTeam, ParentID: "g", Lane: "team1",
 			Members:  []MemberOut{{Name: "김철수", Rank: org.RankExecVP, Position: org.PositionTeamLead}},
-			Keywords: []string{"인허가"}},
+			Keywords: []string{"인허가"},
+		},
 	}}
 }
 
@@ -239,8 +241,10 @@ func enrichedDeps(t *testing.T, book fakeContactBook) (OrgDeps, string) {
 func memberTree(memberName string) OrgTreeOut {
 	return OrgTreeOut{Nodes: []OrgNodeOut{
 		{ID: "g", Name: "예시그룹", Type: org.NodeTypeGroup},
-		{ID: "t1", Name: "1팀", Type: org.NodeTypeTeam, ParentID: "g", Lane: "team1",
-			Members: []MemberOut{{Name: memberName, Rank: org.RankExecVP, Position: org.PositionTeamLead}}},
+		{
+			ID: "t1", Name: "1팀", Type: org.NodeTypeTeam, ParentID: "g", Lane: "team1",
+			Members: []MemberOut{{Name: memberName, Rank: org.RankExecVP, Position: org.PositionTeamLead}},
+		},
 	}}
 }
 

@@ -25,8 +25,10 @@ const (
 type ToolExecutor = agent.ToolExecutor
 
 // Type aliases — canonical definitions are in toolctx/.
-type ToolFunc = toolctx.ToolFunc
-type ToolDef = toolctx.ToolDef
+type (
+	ToolFunc = toolctx.ToolFunc
+	ToolDef  = toolctx.ToolDef
+)
 
 // Compile-time interface compliance.
 var (

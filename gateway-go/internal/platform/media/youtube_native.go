@@ -226,7 +226,8 @@ func bestThumbnail(thumbs []struct {
 	URL    string `json:"url"`
 	Width  int    `json:"width"`
 	Height int    `json:"height"`
-}) string {
+},
+) string {
 	best, bestArea := "", -1
 	for _, t := range thumbs {
 		if area := t.Width * t.Height; area > bestArea && t.URL != "" {

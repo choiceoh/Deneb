@@ -507,7 +507,8 @@ func assembleMessages(
 			if deferEligible {
 				engine.CompactInBackground(
 					deps.callbacks.shutdownCtx, params.SessionKey, summarizer, contextBudget,
-					deps.embeddingClient, buildAnchorKeywords(deps.wikiStore), buildLearnedGuidelines())
+					deps.embeddingClient, buildAnchorKeywords(deps.wikiStore), buildLearnedGuidelines(),
+				)
 				// Belt-and-suspenders: never ship an orphan tool pair at the
 				// assembly's coverage boundary (e.g. a prior chunk-boundary
 				// leftover). No-op — byte-identical, APC-stable — when already
