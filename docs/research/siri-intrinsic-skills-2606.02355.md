@@ -1,6 +1,6 @@
 # SIRI (Self-Internalizing RL with Intrinsic Skills) × Deneb 검토
 
-> **출처**: Zhongyu He, Yuanfan Li, Fei Huang 외, *"SIRI: Self-Internalizing Reinforcement Learning with Intrinsic Skills for LLM Agent Training"* ([arXiv:2606.02355v1](https://arxiv.org/abs/2606.02355v1)). arxiv 직접 fetch 는 조직 egress 정책(403)으로 차단 → 공개 요약([HF/arXiv listing](https://arxiv.org/abs/2606.02355), [ResearchGate](https://www.researchgate.net/publication/405685374)) 기반 검토.
+> **출처**: Zhongyu He, Yuanfan Li, Fei Huang 외, *"SIRI: Self-Internalizing Reinforcement Learning with Intrinsic Skills for LLM Agent Training"* ([arXiv:2606.02355v1](https://arxiv.org/abs/2606.02355v1)). arxiv 직접 fetch 는 조직 egress 정책(403)으로 차단 → 공개 요약([arXiv listing](https://arxiv.org/abs/2606.02355), ResearchGate 미러 publication/405685374) 기반 검토.
 > **방법**: 논문 핵심 추출 → Deneb 스킬 시스템(인덱스 `prompt/`, 진화 `domain/skills/genesis/`)과 대조 → 채택/스킵 판정.
 > **일시**: 2026-06-27
 > **한 줄 결론**: SIRI 의 코어는 **RL 로 스킬을 *정책 가중치에 내재화*하는 학습 기법**이다. Deneb 는 **파인튜닝/RL 을 하지 않는** 단일 사용자 기성-모델 배포라 그 코어는 **범위 밖**. 다만 SIRI 가 RL credit 으로 푸는 두 하위 문제 — (1) "스킬이 *실제로* 도움 되는지 paired 검증", (2) "naive 정책에서 스킬 캐면 노이즈(-10.2%)" — 는 Deneb 의 genesis 진화 루프가 **이미 inference-time 으로 근사**한다(`validation_executor.go` original↔candidate 행동 델타 게이트 + usage-quality/daily-cap 게이팅). 그리고 SIRI 가 internalization 의 동기로 드는 "inference-time 스킬뱅크가 컨텍스트·레이턴시를 늘린다"는 비판에 Deneb 는 **가중치 내재화가 아니라 compact 스킬-인덱스+지연로드**로 답한다. 순수 신규 채택거리는 **없음**, 검증할 가치 있는 점검 1건(warmup 게이트 엄격성).
