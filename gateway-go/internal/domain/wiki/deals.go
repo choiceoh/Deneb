@@ -56,6 +56,7 @@ func (s *Store) UpsertDealPage(in DealPageInput, now time.Time) (relPath string,
 	// UpdatePage serializes the read-modify-write so two mail analyses filing
 	// documents onto the same counterparty's page can't lose each other's entry
 	// (the last rename would otherwise clobber the earlier append wholesale).
+	var filed bool
 	err = s.UpdatePage(relPath, func(existing *Page) (*Page, error) {
 		if existing != nil {
 			// Already filed this exact document → no-op (keeps Updated stable so a
@@ -68,6 +69,7 @@ func (s *Store) UpsertDealPage(in DealPageInput, now time.Time) (relPath string,
 			if d := strings.TrimSpace(in.DueDate); d != "" {
 				existing.Meta.Due = d // latest known due wins
 			}
+			filed = true
 			return existing, nil
 		}
 
@@ -91,10 +93,18 @@ func (s *Store) UpsertDealPage(in DealPageInput, now time.Time) (relPath string,
 		b.WriteString(entry + "\n")
 		page.Body = b.String()
 		created = true
+		filed = true
 		return page, nil
 	})
 	if err != nil {
 		return "", false, err
+	}
+	// Tee a typed record only when a real entry was filed (not the SourceRef
+	// no-op), so the ledger stays 1:1 with the page's 거래 문서 log. Best-effort:
+	// the prose page is the source of truth, so a ledger write failure must not
+	// fail the committed page write (the ledger is a rebuildable derived view).
+	if filed {
+		_ = s.appendDealRecord(dealRecordFrom(in, now))
 	}
 	return relPath, created, nil
 }

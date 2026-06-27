@@ -69,6 +69,10 @@ type Store struct {
 	// writeMu serializes page-body writers; see the type doc for the hierarchy.
 	writeMu sync.Mutex
 
+	// dealMu serializes appends/reads of the typed deal-record ledger
+	// (.deals.jsonl), independent of page writes. See deal_records.go.
+	dealMu sync.Mutex
+
 	mu       sync.RWMutex
 	index    *Index // cached master index
 	fts      *searchDB
