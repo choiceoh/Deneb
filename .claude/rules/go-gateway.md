@@ -41,4 +41,4 @@ Primary runtime — HTTP + SSE gateway server.
 
 - `cd gateway-go && go build ./...` or `make go`.
 - `cd gateway-go && go test ./...` or `make go-test`.
-- Follow standard `gofmt`/`go vet` conventions. Run `go vet ./...` before commits.
+- Follow `gofumpt` (stricter gofmt superset) / `go vet` conventions — `make fmt` applies gofumpt, golangci-lint enforces it. Run `go vet ./...` before commits.

@@ -145,7 +145,8 @@ func (t *wikiResearchTask) Run(ctx context.Context) error {
 	// no wiki change.
 	t.wikiStore.SnapshotGit(ctx, fmt.Sprintf("wiki-research: %s", target.path))
 
-	t.logger.Info("wiki-research cycle completed",
+	t.logger.Info(
+		"wiki-research cycle completed",
 		"page", target.path,
 		"title", target.title,
 		"output_len", len(result.Text),

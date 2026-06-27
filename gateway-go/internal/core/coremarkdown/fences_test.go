@@ -57,6 +57,7 @@ func TestDetectFences_TooMuchIndent(t *testing.T) {
 		t.Errorf("4-space indent should not match, got %d spans", len(spans))
 	}
 }
+
 func TestDetectFences_MultipleFences(t *testing.T) {
 	spans := DetectFences("```\na\n```\n\n```\nb\n```")
 	if len(spans) != 2 {
@@ -82,6 +83,7 @@ func TestDetectFences_ClosingNeedsEnoughMarkers(t *testing.T) {
 		t.Fatalf("got %d, want 1 span", len(spans))
 	}
 }
+
 func TestDetectFences_JSON(t *testing.T) {
 	spans := DetectFences("```python\nprint('hi')\n```")
 	data := testutil.Must(json.Marshal(spans))

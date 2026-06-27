@@ -63,7 +63,7 @@ func consumeStreamInto(ctx context.Context, events <-chan llm.StreamEvent, hooks
 		jsonBuf []byte // accumulator for input_json_delta
 	}
 	var currentBlock *blockBuilder
-	var blockIndex = -1
+	blockIndex := -1
 
 	// finalizePending appends the in-flight block to the result, applying the
 	// same field finalization content_block_stop performs (tool args, the

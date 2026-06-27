@@ -391,10 +391,19 @@ export interface ProjectDigestRow {
   updatedAtMs?: number
   path?: string
   code?: string
+  refs?: string[]
 }
 
 export interface ProjectDigestsOut {
   digests?: ProjectDigestRow[]
+}
+
+export interface ProjectLinkedOut {
+  mail?: string[]
+  calendar?: string[]
+  todo?: string[]
+  workfeed?: string[]
+  notebook?: string[]
 }
 
 export interface ProjectRef {

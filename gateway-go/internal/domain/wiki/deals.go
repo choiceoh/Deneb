@@ -26,14 +26,15 @@ const dealCategoryDir = "프로젝트/거래"
 // page. Counterparty is required (it keys the page); every other field is
 // optional and omitted from the rendered entry when empty.
 type DealPageInput struct {
-	Counterparty string   // 거래처/회사명 — page key (required)
-	DocType      string   // 견적서·계약서·세금계산서·거래명세서 등
-	Amount       string   // 금액 (free-text: "5,000,000원", "$1,200")
-	Date         string   // 문서 일자 (free-text or YYYY-MM-DD)
-	DueDate      string   // 납기·결제 기한 (YYYY-MM-DD when known) → page Due
-	Items        []string // 주요 품목/항목
-	Summary      string   // 한 줄 요약
-	SourceRef    string   // provenance/dedup key (e.g. "mail:<id>")
+	Counterparty    string   // 거래처/회사명 — page key (required)
+	DocType         string   // 견적서·계약서·세금계산서·거래명세서 등
+	Amount          string   // 금액 (free-text: "5,000,000원", "$1,200")
+	Date            string   // 문서 일자 (free-text or YYYY-MM-DD)
+	DueDate         string   // 납기·결제 기한 (YYYY-MM-DD when known) → page Due
+	Items           []string // 주요 품목/항목
+	Summary         string   // 한 줄 요약
+	SourceRef       string   // provenance/dedup key (e.g. "mail:<id>")
+	RelatedProjects []string // resolved project 대표페이지 paths → page Related (deal→project graph edge)
 }
 
 // UpsertDealPage files a business document onto its counterparty's deal page,
@@ -69,6 +70,12 @@ func (s *Store) UpsertDealPage(in DealPageInput, now time.Time) (relPath string,
 			if d := strings.TrimSpace(in.DueDate); d != "" {
 				existing.Meta.Due = d // latest known due wins
 			}
+			// Union in any newly-resolved project links (a later mail can place a
+			// deal the first one couldn't). dedupeStrings keeps it idempotent.
+			if len(in.RelatedProjects) > 0 {
+				merged := append(append([]string(nil), existing.Meta.Related...), in.RelatedProjects...)
+				existing.Meta.Related = dedupeStrings(merged)
+			}
 			filed = true
 			return existing, nil
 		}
@@ -76,6 +83,9 @@ func (s *Store) UpsertDealPage(in DealPageInput, now time.Time) (relPath string,
 		page := NewPage(counterparty, "프로젝트", nil)
 		page.Meta.Type = "deal"
 		page.Meta.Updated = today
+		if rel := dedupeStrings(in.RelatedProjects); len(rel) > 0 {
+			page.Meta.Related = rel // deal→project graph edge: the analyzer's resolved projects
+		}
 		if d := strings.TrimSpace(in.DueDate); d != "" {
 			page.Meta.Due = d
 		}

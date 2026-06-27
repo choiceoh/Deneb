@@ -5,11 +5,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/core/coremedia"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/filestore"
+	"github.com/choiceoh/deneb/gateway-go/internal/infra/fileshare"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
@@ -74,8 +77,51 @@ func ToolSendFile() ToolFunc {
 			return "", fmt.Errorf("file delivery failed and was not confirmed; do not claim the file is visible anywhere: %w", err)
 		}
 
-		return fmt.Sprintf("File sent: %s (%s, %d bytes)", filepath.Base(p.FilePath), mediaType, info.Size()), nil
+		result := fmt.Sprintf("File sent: %s (%s, %d bytes)", filepath.Base(p.FilePath), mediaType, info.Size())
+		if vpath := archiveSentFile(ctx, p.FilePath, info.Size()); vpath != "" {
+			result += fmt.Sprintf("; 파일 저장소 보관: %s", vpath)
+			// Mint a durable, path-scoped share link so the delivered file is
+			// reachable as a persistent URL, not only the one-shot channel upload.
+			// Empty when no public base URL / client token is configured (skip).
+			if link := fileshare.Link(vpath); link != "" {
+				result += fmt.Sprintf("; 공유 링크(7일): %s", link)
+			}
+		}
+		return result, nil
 	}
+}
+
+// sentFileArchiveMaxBytes caps the size of a sent file copied into the user file
+// store. Channel uploads can be larger, but archiving very large files would
+// bloat the store; an oversized send is delivered but not archived.
+const sentFileArchiveMaxBytes = 25 * 1024 * 1024
+
+// archiveSentFile best-effort saves a copy of a just-delivered file into the
+// user file store (/전송/<date>/<name>) so files the agent sends are durable and
+// browsable later, not a one-shot channel upload. Non-fatal by design: the send
+// already succeeded, so any failure (no store, read error, oversized) returns ""
+// and is simply not reported. Disable with DENEB_ARCHIVE_SENT_FILES=0.
+func archiveSentFile(ctx context.Context, filePath string, size int64) string {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("DENEB_ARCHIVE_SENT_FILES"))) {
+	case "0", "false", "no", "off":
+		return ""
+	}
+	if size <= 0 || size > sentFileArchiveMaxBytes {
+		return ""
+	}
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return ""
+	}
+	store, err := filestore.DefaultLocalStore()
+	if err != nil || store == nil {
+		return ""
+	}
+	vpath := path.Join("/전송", time.Now().Format("2006-01-02"), filepath.Base(filePath))
+	if _, err := store.Put(ctx, vpath, data, true); err != nil {
+		return ""
+	}
+	return vpath
 }
 
 // DetectMediaType infers the media type from the file's MIME type.

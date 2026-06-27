@@ -2,8 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 
 import { useCachedList } from "@/cachedList";
 import { serializeList } from "@/aiText";
-import { NOTEBOOK_RPC } from "@/resources";
-import type { CalEvent, Mail, NotebookSummary, ProjectDigest, Todo, WorkItem } from "@/types";
+import { NOTEBOOK_RPC, PROJECT_LINKED_RPC } from "@/resources";
+import type { CalEvent, Mail, NotebookSummary, ProjectDigest, ProjectLinkedOut, Todo, WorkItem } from "@/types";
 import { calSpan, calStamp, fmtDate, fmtMailDate, senderName } from "@/format";
 import { useCachedRpc } from "@/useCachedRpc";
 import { useRegisterPane, useWorkspace, type PaneTarget } from "@/workspaceContext";
@@ -35,8 +35,28 @@ interface RelatedSection {
   loading?: boolean;
 }
 
-interface ProjectIdentity {
-  keys: Set<string>;
+// LinkedSets is the per-type ID membership the gateway resolved for the selected
+// project (miniapp.project.linked). The pane filters its already-fetched lists by
+// these instead of running a local ref-matching heuristic — matching lives on the
+// server now, where the wiki graph does.
+interface LinkedSets {
+  mail: Set<string>;
+  calendar: Set<string>;
+  todo: Set<string>;
+  workfeed: Set<string>;
+  notebook: Set<string>;
+}
+
+const EMPTY_LINKED: ProjectLinkedOut = {};
+
+function toLinkedSets(linked: ProjectLinkedOut): LinkedSets {
+  return {
+    mail: new Set(linked.mail ?? []),
+    calendar: new Set(linked.calendar ?? []),
+    todo: new Set(linked.todo ?? []),
+    workfeed: new Set(linked.workfeed ?? []),
+    notebook: new Set(linked.notebook ?? []),
+  };
 }
 
 export function ProjectHomePane() {
@@ -50,6 +70,7 @@ export function ProjectHomePane() {
   const [notebookSnapshot] = useState(() => readCache<NotebookListResponse>(NOTEBOOK_RPC.list));
   const [notebooks, setNotebooks] = useState<NotebookSummary[]>(notebookSnapshot?.data.notebooks ?? []);
   const [selectedKey, setSelectedKey] = useState("");
+  const [linked, setLinked] = useState<ProjectLinkedOut>(EMPTY_LINKED);
 
   useEffect(() => {
     if (!connected) return;
@@ -70,11 +91,28 @@ export function ProjectHomePane() {
     return digests.find((digest) => digestKey(digest) === selectedKey) ?? digests[0];
   }, [digests, selectedKey]);
 
-  const project = useMemo(() => (selected ? projectIdentity(selected) : emptyProjectIdentity()), [selected]);
+  // Resolve the selected project's linked-item IDs server-side. Clear the stale
+  // set first so a project switch never briefly shows the previous project's items.
+  const selectedPath = selected?.path ?? "";
+  useEffect(() => {
+    setLinked(EMPTY_LINKED);
+    if (!connected || !selectedPath) return;
+    void callCached<ProjectLinkedOut>(
+      PROJECT_LINKED_RPC,
+      { path: selectedPath },
+      {
+        scope: `project-home:linked:${selectedPath}`,
+        apply: (data) => setLinked(data),
+      },
+    );
+  }, [callCached, connected, selectedPath]);
+
+  const linkedSets = useMemo(() => toLinkedSets(linked), [linked]);
+
   const sections = useMemo<RelatedSection[]>(() => {
     if (!selected) return [];
     const mails = (mail.result?.data ?? [])
-      .filter((m) => isLinkedToProject(project, m))
+      .filter((m) => linkedSets.mail.has(String(m.id)))
       .sort((a, b) => timeValue(b.date) - timeValue(a.date))
       .slice(0, MAX_ROWS)
       .map((m) => ({
@@ -87,7 +125,7 @@ export function ProjectHomePane() {
       }));
 
     const events = (calendar.result?.data ?? [])
-      .filter((event) => isLinkedToProject(project, event))
+      .filter((event) => linkedSets.calendar.has(String(event.id)))
       .sort((a, b) => eventStartMs(a) - eventStartMs(b))
       .slice(0, MAX_ROWS)
       .map((event) => ({
@@ -100,7 +138,7 @@ export function ProjectHomePane() {
       }));
 
     const todos = (todo.result?.data ?? [])
-      .filter((t) => !t.done && isLinkedToProject(project, t))
+      .filter((t) => !t.done && linkedSets.todo.has(String(t.id)))
       .sort((a, b) => timeValue(a.due) - timeValue(b.due))
       .slice(0, MAX_ROWS)
       .map((t) => ({
@@ -112,7 +150,7 @@ export function ProjectHomePane() {
       }));
 
     const work = (workfeed.result?.data ?? [])
-      .filter((item) => isLinkedToProject(project, item))
+      .filter((item) => linkedSets.workfeed.has(String(item.id)))
       .sort((a, b) => (b.createdAtMs ?? 0) - (a.createdAtMs ?? 0))
       .slice(0, MAX_ROWS)
       .map((item) => ({
@@ -124,7 +162,7 @@ export function ProjectHomePane() {
       }));
 
     const relatedNotebooks = notebooks
-      .filter((notebook) => isLinkedToProject(project, notebook))
+      .filter((notebook) => linkedSets.notebook.has(notebook.id))
       .sort((a, b) => (b.updated ?? 0) - (a.updated ?? 0))
       .slice(0, MAX_ROWS)
       .map((notebook) => ({
@@ -182,11 +220,11 @@ export function ProjectHomePane() {
   }, [
     calendar.result?.data,
     calendar.query.isLoading,
+    linkedSets,
     mail.result?.data,
     mail.query.isLoading,
     notebooks,
     notebooksBusy,
-    project,
     selected,
     todo.result?.data,
     todo.query.isLoading,
@@ -363,106 +401,6 @@ function ProjectSection({ section, onOpen }: { section: RelatedSection; onOpen: 
 
 function digestKey(digest: ProjectDigest): string {
   return digest.path || digest.project;
-}
-
-const PROJECT_REF_KEYS = new Set([
-  "dealref",
-  "path",
-  "project",
-  "projectid",
-  "projectpath",
-  "projectpaths",
-  "projectref",
-  "projectrefid",
-  "projectrefs",
-  "refid",
-  "refs",
-  "relatedproject",
-  "relatedprojects",
-  "wikipath",
-]);
-
-const PROJECT_OBJECT_VALUE_KEYS = new Set([
-  "dealref",
-  "id",
-  "key",
-  "path",
-  "project",
-  "projectid",
-  "projectpath",
-  "projectref",
-  "projectrefid",
-  "ref",
-  "refid",
-  "wikipath",
-]);
-
-function emptyProjectIdentity(): ProjectIdentity {
-  return { keys: new Set() };
-}
-
-function projectIdentity(digest: ProjectDigest): ProjectIdentity {
-  const keys = new Set<string>();
-  addProjectKeys(keys, digest.project);
-  addProjectKeys(keys, digest.path);
-  addProjectKeys(keys, digest.code);
-  return { keys };
-}
-
-function isLinkedToProject(project: ProjectIdentity, row: unknown): boolean {
-  if (project.keys.size === 0) return false;
-  for (const ref of collectProjectRefs(row)) {
-    const keys = new Set<string>();
-    addProjectKeys(keys, ref);
-    if ([...keys].some((key) => project.keys.has(key))) return true;
-  }
-  return false;
-}
-
-function collectProjectRefs(value: unknown, depth = 0, insideProjectRef = false): string[] {
-  if (value == null || depth > 5) return [];
-  if (typeof value === "string" || typeof value === "number") return insideProjectRef ? [String(value)] : [];
-  if (typeof value === "boolean") return [];
-  if (Array.isArray(value)) return value.flatMap((item) => collectProjectRefs(item, depth + 1, insideProjectRef));
-  if (typeof value !== "object") return [];
-
-  const refs: string[] = [];
-  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
-    const normalizedKey = normalizeFieldKey(key);
-    if (PROJECT_REF_KEYS.has(normalizedKey)) {
-      refs.push(...collectProjectRefs(child, depth + 1, true));
-      continue;
-    }
-    if (insideProjectRef && PROJECT_OBJECT_VALUE_KEYS.has(normalizedKey)) {
-      refs.push(...collectProjectRefs(child, depth + 1, true));
-    }
-  }
-  return refs;
-}
-
-function normalizeFieldKey(key: string): string {
-  return key.toLowerCase().replace(/[_-]/g, "");
-}
-
-function addProjectKeys(keys: Set<string>, value: unknown): void {
-  const key = normalizeProjectKey(value);
-  if (!key) return;
-  keys.add(key);
-
-  const parts = key.split("/").filter(Boolean);
-  const leaf = parts.at(-1);
-  if (leaf) keys.add(leaf);
-}
-
-function normalizeProjectKey(value: unknown): string {
-  if (typeof value !== "string" && typeof value !== "number") return "";
-  return String(value)
-    .trim()
-    .toLowerCase()
-    .replace(/\\/g, "/")
-    .replace(/^\/+|\/+$/g, "")
-    .replace(/\.md$/i, "")
-    .replace(/\s+/g, " ");
 }
 
 function timeValue(value?: string | number): number {

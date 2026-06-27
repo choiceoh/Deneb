@@ -17,10 +17,12 @@ import (
 	chattools "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
 )
 
-const skillLifecycleTimeout = 90 * time.Second
-const skillLifecycleMaxStatusLogEntries = 50
-const skillLifecycleMaxProposalResultBytes = 4096
-const skillLifecycleMaxValidationBackfillSessions = 50
+const (
+	skillLifecycleTimeout                       = 90 * time.Second
+	skillLifecycleMaxStatusLogEntries           = 50
+	skillLifecycleMaxProposalResultBytes        = 4096
+	skillLifecycleMaxValidationBackfillSessions = 50
+)
 
 type skillLifecycleBackend struct {
 	genesis     *genesis.Service

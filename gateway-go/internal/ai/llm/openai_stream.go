@@ -418,7 +418,8 @@ func (c *Client) translateOpenAIStream(ctx context.Context, rawEvents <-chan Str
 		Type: "premature_end",
 		Message: fmt.Sprintf(
 			"provider stream ended without finish_reason or [DONE] after %d chunks — connection cut mid-response",
-			chunkCount),
+			chunkCount,
+		),
 	})
 	emit(ctx, out, StreamEvent{Type: "error", Payload: errPayload})
 }

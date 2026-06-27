@@ -54,7 +54,8 @@ func (s *Service) Start(ctx context.Context) error {
 		}
 		nrm := job.State.NextRunAtMs
 		overdue := nrm > 0 && nrm <= nowMs
-		s.logger.Info("cron boot job status",
+		s.logger.Info(
+			"cron boot job status",
 			"id", job.ID,
 			"nextRunAtMs", nrm,
 			"overdue", overdue,

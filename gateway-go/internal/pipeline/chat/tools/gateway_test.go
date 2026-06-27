@@ -324,8 +324,10 @@ func TestGatewayUpdateConfirmedHappyPath(t *testing.T) {
 		{match: matcherFor("make", "go"), output: []byte("built\n")},
 	}}
 	sig := &fakeSignaller{}
-	tool := ToolGatewayWithDeps("/tmp", GatewayDeps{Runner: runner, Signaller: sig,
-		Now: func() time.Time { return time.Unix(1, 0) }})
+	tool := ToolGatewayWithDeps("/tmp", GatewayDeps{
+		Runner: runner, Signaller: sig,
+		Now: func() time.Time { return time.Unix(1, 0) },
+	})
 	out := mustCallTool(t, tool, map[string]any{"action": "update.confirmed"})
 	if !strings.Contains(out, "업데이트 완료") {
 		t.Errorf("expected success Korean message: %s", out)

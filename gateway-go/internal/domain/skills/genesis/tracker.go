@@ -101,8 +101,10 @@ type UsageStats struct {
 	RecentFailureTraces []UsageFailureTrace `json:"recentFailureTraces,omitempty"`
 }
 
-const defaultSkillEvolutionEvidenceWindowDays = 7
-const evolveRollbackReason = "post-evolve rollback fired"
+const (
+	defaultSkillEvolutionEvidenceWindowDays = 7
+	evolveRollbackReason                    = "post-evolve rollback fired"
+)
 
 // Tracker records and queries skill usage for evolution decisions.
 type Tracker struct {
@@ -607,17 +609,20 @@ const (
 // silent thrash (the loop burning its budget re-evolving one skill) is visible
 // without log spelunking — the failure mode behind every past silent death.
 type EvolutionHealthSummary struct {
-	Evolves7d               int    `json:"evolves7d"`
-	EvolveRejected7d        int    `json:"evolveRejected7d"`
-	EvolveRolledBack7d      int    `json:"evolveRolledBack7d"`
-	Genesis7d               int    `json:"genesis7d"`
-	DistinctSkillsEvolved7d int    `json:"distinctSkillsEvolved7d"`
-	TopEvolvedSkill         string `json:"topEvolvedSkill,omitempty"`
-	TopEvolvedCount         int    `json:"topEvolvedCount,omitempty"`
-	LastRejectedSkill       string `json:"lastRejectedSkill,omitempty"`
-	LastRejectedReason      string `json:"lastRejectedReason,omitempty"`
-	Thrash                  bool   `json:"thrash"`
-	ThrashCooldownUntil     int64  `json:"thrashCooldownUntil,omitempty"`
+	Evolves7d               int     `json:"evolves7d"`
+	EvolveRejected7d        int     `json:"evolveRejected7d"`
+	EvolveRolledBack7d      int     `json:"evolveRolledBack7d"`
+	EvolveConfirmed7d       int     `json:"evolveConfirmed7d"`
+	CrossSkillRegressions7d int     `json:"crossSkillRegressions7d"`
+	ConfirmRate             float64 `json:"confirmRate"`
+	Genesis7d               int     `json:"genesis7d"`
+	DistinctSkillsEvolved7d int     `json:"distinctSkillsEvolved7d"`
+	TopEvolvedSkill         string  `json:"topEvolvedSkill,omitempty"`
+	TopEvolvedCount         int     `json:"topEvolvedCount,omitempty"`
+	LastRejectedSkill       string  `json:"lastRejectedSkill,omitempty"`
+	LastRejectedReason      string  `json:"lastRejectedReason,omitempty"`
+	Thrash                  bool    `json:"thrash"`
+	ThrashCooldownUntil     int64   `json:"thrashCooldownUntil,omitempty"`
 }
 
 // EvolutionHealth summarizes evolve/genesis activity over the last 7 days from
@@ -662,11 +667,21 @@ func (t *Tracker) computeEvolutionHealthLocked(now time.Time) EvolutionHealthSum
 			}
 		case "evolve_rolled_back":
 			s.EvolveRolledBack7d++
+		case "evolve_confirmed":
+			s.EvolveConfirmed7d++
+		case "cross_skill_regression":
+			s.CrossSkillRegressions7d++
 		case "genesis", "": // legacy genesis entries have no Type
 			s.Genesis7d++
 		}
 	}
 	s.DistinctSkillsEvolved7d = len(perSkill)
+	if resolved := s.EvolveConfirmed7d + s.EvolveRolledBack7d; resolved > 0 {
+		// Confirm rate = of the evolves that resolved (held up vs reverted), the
+		// fraction that confirmed — the headline success metric of the loop, now
+		// visible on /health instead of only living in the lifecycle log.
+		s.ConfirmRate = float64(s.EvolveConfirmed7d) / float64(resolved)
+	}
 	for name, n := range perSkill {
 		if n > s.TopEvolvedCount {
 			s.TopEvolvedCount, s.TopEvolvedSkill = n, name

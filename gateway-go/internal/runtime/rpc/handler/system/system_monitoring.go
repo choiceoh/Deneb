@@ -5,7 +5,6 @@ import (
 	"context"
 	"sort"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/monitoring"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/metrics"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
@@ -18,8 +17,7 @@ type MethodLister interface {
 
 // MonitoringDeps holds the dependencies for monitoring RPC methods.
 type MonitoringDeps struct {
-	ChannelHealth *monitoring.ChannelHealthMonitor
-	Dispatcher    MethodLister // for rpc_zero_calls
+	Dispatcher MethodLister // for rpc_zero_calls
 }
 
 // MonitoringMethods returns the monitoring.channel_health and
@@ -27,13 +25,10 @@ type MonitoringDeps struct {
 func MonitoringMethods(deps MonitoringDeps) map[string]rpcutil.HandlerFunc {
 	return map[string]rpcutil.HandlerFunc{
 		"monitoring.channel_health": func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-			if deps.ChannelHealth == nil {
-				resp := rpcutil.RespondOK(req.ID, map[string]any{"channels": []any{}})
-				return resp
-			}
-			snapshot := deps.ChannelHealth.HealthSnapshot()
-			resp := rpcutil.RespondOK(req.ID, map[string]any{"channels": snapshot})
-			return resp
+			// Channel plugins were removed (PR #1922); the native client is the
+			// sole surface and has no restartable channels. Kept as a stable,
+			// always-empty response so existing clients don't hit a missing method.
+			return rpcutil.RespondOK(req.ID, map[string]any{"channels": []any{}})
 		},
 
 		"monitoring.rpc_zero_calls": func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {

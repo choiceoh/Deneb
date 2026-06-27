@@ -56,12 +56,14 @@ func (s *fakeStore) Tokens() []DeviceToken {
 	defer s.mu.Unlock()
 	return append([]DeviceToken(nil), s.tokens...)
 }
+
 func (s *fakeStore) Prune(tokens []string) (int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.pruned = append(s.pruned, tokens...)
 	return len(tokens), nil
 }
+
 func (s *fakeStore) prunedTokens() []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()

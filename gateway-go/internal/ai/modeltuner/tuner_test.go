@@ -10,11 +10,19 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/router"
 )
 
-type fakeStats struct{ stats []agentlog.ModelStat }
+type fakeStats struct {
+	stats  []agentlog.ModelStat
+	effort map[string]agentlog.EffortStat
+}
 
 func (f *fakeStats) AggregateByModel(int64) []agentlog.ModelStat { return f.stats }
+
+func (f *fakeStats) AggregateEffortByModel(int64) map[string]agentlog.EffortStat {
+	return f.effort
+}
 
 // tunerRegistry builds a registry with non-vllm roles only, so neither the
 // constructor nor the calibration pass performs any network probe.
@@ -137,6 +145,59 @@ func TestTask_Run_AppliesAndClearsTunedFloor(t *testing.T) {
 	sc := LoadScorecard(statePath)
 	if sc.GeneratedAtMs == 0 || len(sc.Models) != 1 {
 		t.Fatalf("scorecard not persisted: %+v", sc)
+	}
+}
+
+func TestApplyEffortNudge_OptInAndApply(t *testing.T) {
+	reg := tunerRegistry()
+	task := &Task{deps: Deps{Registry: reg, Logger: slog.New(slog.NewTextHandler(io.Discard, nil))}}
+
+	// A high-escalation signal over a sufficient sample for the served model:
+	// 5/20 routed-off runs restored thinking (0.25 > 0.15), 30 total runs.
+	stats := map[string]agentlog.EffortStat{
+		"glm-5-turbo": {RoutedRuns: 20, KeptRuns: 10, EscalatedRuns: 5},
+		// An empty-model bucket must be skipped (can't be attributed to a gate).
+		"": {RoutedRuns: 50, KeptRuns: 50, EscalatedRuns: 40},
+	}
+	base := reg.RoutingProfileForModel("zai", "glm-5-turbo").MaxSimpleRunes
+
+	// Flag off (default): no-op, gate untouched.
+	t.Setenv("DENEB_ADAPTIVE_EFFORT_TUNE", "")
+	if n := task.applyEffortNudge(stats); n != 0 {
+		t.Fatalf("flag off must nudge nothing, got %d", n)
+	}
+	if reg.TunedMaxSimpleRunes("glm-5-turbo") != 0 {
+		t.Fatalf("flag off must not write a tuned gate, got %d", reg.TunedMaxSimpleRunes("glm-5-turbo"))
+	}
+
+	// Flag on: the high-escalation gate steps DOWN by one step (stricter).
+	t.Setenv("DENEB_ADAPTIVE_EFFORT_TUNE", "1")
+	if n := task.applyEffortNudge(stats); n != 1 {
+		t.Fatalf("flag on must nudge exactly the one attributable model, got %d", n)
+	}
+	want := base - router.EffortNudgeStep
+	if got := reg.TunedMaxSimpleRunes("glm-5-turbo"); got != want {
+		t.Fatalf("tuned gate = %d, want %d (one step below %d)", got, want, base)
+	}
+	// The empty-model bucket left no tuned gate behind.
+	if got := reg.TunedMaxSimpleRunes(""); got != 0 {
+		t.Fatalf("empty-model bucket must not be tuned, got %d", got)
+	}
+
+	// The live read path now reflects the nudged gate.
+	if got := reg.RoutingProfileForModel("zai", "glm-5-turbo").MaxSimpleRunes; got != want {
+		t.Fatalf("resolved gate after nudge = %d, want %d", got, want)
+	}
+
+	// A second cycle with a now-healthy signal must not move the gate.
+	healthy := map[string]agentlog.EffortStat{
+		"glm-5-turbo": {RoutedRuns: 12, KeptRuns: 18, EscalatedRuns: 1},
+	}
+	if n := task.applyEffortNudge(healthy); n != 0 {
+		t.Fatalf("healthy signal must not nudge, got %d", n)
+	}
+	if got := reg.TunedMaxSimpleRunes("glm-5-turbo"); got != want {
+		t.Fatalf("healthy cycle moved the gate to %d, want it to stay %d", got, want)
 	}
 }
 

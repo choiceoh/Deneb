@@ -18,7 +18,7 @@ import (
 func writeJSON(t *testing.T, path string, v any) {
 	t.Helper()
 	data := testutil.Must(json.MarshalIndent(v, "", "  "))
-	if err := os.WriteFile(path, data, 0600); err != nil {
+	if err := os.WriteFile(path, data, 0o600); err != nil {
 		t.Fatalf("write %s: %v", path, err)
 	}
 }
@@ -145,7 +145,7 @@ func TestNewClientFromDir_MissingClientID(t *testing.T) {
 func TestNewClientFromDir_InvalidJSON(t *testing.T) {
 	dir := t.TempDir()
 
-	os.WriteFile(filepath.Join(dir, "gmail_client.json"), []byte("{bad json"), 0600)
+	os.WriteFile(filepath.Join(dir, "gmail_client.json"), []byte("{bad json"), 0o600)
 	writeJSON(t, filepath.Join(dir, "gmail_token.json"), map[string]string{
 		"refresh_token": "1//x",
 	})
@@ -312,7 +312,7 @@ func TestPersistToken(t *testing.T) {
 
 	// Verify file permissions.
 	info, _ := os.Stat(tokenPath)
-	if perm := info.Mode().Perm(); perm != 0600 {
+	if perm := info.Mode().Perm(); perm != 0o600 {
 		t.Errorf("token file perm = %o, want 0600", perm)
 	}
 }

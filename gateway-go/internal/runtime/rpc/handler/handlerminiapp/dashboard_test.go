@@ -101,11 +101,15 @@ func TestDashboardLanes_GroupsByPartFromAllSources(t *testing.T) {
 		Rules: fakeRulesLoader(),
 		Calendar: fakeDashboardCalendar{events: []calendar.Event{
 			// Organizer 홍길동 → team1 (person, strong).
-			{ID: "ev1", Summary: "1팀 협의", Start: now.Add(2 * time.Hour),
-				Organizer: calendar.Attendee{DisplayName: "홍길동 부장"}},
+			{
+				ID: "ev1", Summary: "1팀 협의", Start: now.Add(2 * time.Hour),
+				Organizer: calendar.Attendee{DisplayName: "홍길동 부장"},
+			},
 			// Attendee 이영희 → team2.
-			{ID: "ev2", Summary: "지붕 검토", Start: now.Add(time.Hour),
-				Attendees: []calendar.Attendee{{DisplayName: "이영희"}}},
+			{
+				ID: "ev2", Summary: "지붕 검토", Start: now.Add(time.Hour),
+				Attendees: []calendar.Attendee{{DisplayName: "이영희"}},
+			},
 			// No known person/keyword → unclassified.
 			{ID: "ev3", Summary: "일반 회의", Start: now.Add(3 * time.Hour)},
 		}},

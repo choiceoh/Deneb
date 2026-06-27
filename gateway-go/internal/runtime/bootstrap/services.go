@@ -15,7 +15,8 @@ type Services struct {
 
 // WireServices assembles the gateway server with all backing services.
 func WireServices(addr string, rtCfg *config.GatewayRuntimeConfig, logger *slog.Logger, version string, useColor bool) (Services, error) {
-	srv, err := server.New(addr,
+	srv, err := server.New(
+		addr,
 		server.WithLogger(logger),
 		server.WithVersion(version),
 		server.WithConfig(rtCfg),

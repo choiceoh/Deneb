@@ -55,23 +55,31 @@ func buildRecallBenchStore(t *testing.T) *wiki.Store {
 		page *wiki.Page
 	}{
 		{"거래/hyundai-ulsan.md", &wiki.Page{
-			Meta: wiki.Frontmatter{ID: "hyundai-ulsan", Title: "현대차 울산공장 모듈 납품", Category: "거래",
-				Summary: "현대차 울산공장 태양광 모듈 납품 건, 결제기한 6월 말", Tags: []string{"현대차", "울산", "모듈"}, Importance: 0.9},
+			Meta: wiki.Frontmatter{
+				ID: "hyundai-ulsan", Title: "현대차 울산공장 모듈 납품", Category: "거래",
+				Summary: "현대차 울산공장 태양광 모듈 납품 건, 결제기한 6월 말", Tags: []string{"현대차", "울산", "모듈"}, Importance: 0.9,
+			},
 			Body: "550W 모듈 2,000장 견적 발송 완료. 결제기한은 6월 말. 담당은 김민준 부장.",
 		}},
 		{"인물/kim-minjun.md", &wiki.Page{
-			Meta: wiki.Frontmatter{ID: "kim-minjun", Title: "김민준 부장", Category: "인물",
-				Summary: "현대차 울산공장 구매팀 부장, 모듈 납품 창구", Tags: []string{"현대차", "구매팀"}, Importance: 0.8},
+			Meta: wiki.Frontmatter{
+				ID: "kim-minjun", Title: "김민준 부장", Category: "인물",
+				Summary: "현대차 울산공장 구매팀 부장, 모듈 납품 창구", Tags: []string{"현대차", "구매팀"}, Importance: 0.8,
+			},
 			Body: "현대차 울산공장 구매팀. 연락은 주로 메일, 회신이 빠른 편.",
 		}},
 		{"프로젝트/dgx-spark.md", &wiki.Page{
-			Meta: wiki.Frontmatter{ID: "dgx-spark", Title: "DGX Spark 게이트웨이", Category: "프로젝트",
-				Summary: "로컬 추론 게이트웨이 운영, step3p7 메인 모델", Tags: []string{"dgx", "게이트웨이"}, Importance: 0.9},
+			Meta: wiki.Frontmatter{
+				ID: "dgx-spark", Title: "DGX Spark 게이트웨이", Category: "프로젝트",
+				Summary: "로컬 추론 게이트웨이 운영, step3p7 메인 모델", Tags: []string{"dgx", "게이트웨이"}, Importance: 0.9,
+			},
 			Body: "메인 모델은 step3p7. 게이트웨이 포트는 18789. 모든 추론은 로컬에서 수행한다.",
 		}},
 		{"운영시스템/backup.md", &wiki.Page{
-			Meta: wiki.Frontmatter{ID: "memory-backup", Title: "기억 백업 체계", Category: "운영시스템",
-				Summary: "spark4tb로 일일 메모리 백업, 보존 30일", Tags: []string{"백업", "spark4tb"}, Importance: 0.7},
+			Meta: wiki.Frontmatter{
+				ID: "memory-backup", Title: "기억 백업 체계", Category: "운영시스템",
+				Summary: "spark4tb로 일일 메모리 백업, 보존 30일", Tags: []string{"백업", "spark4tb"}, Importance: 0.7,
+			},
 			Body: "매일 자정 무렵 spark4tb 스토리지 노드로 tar.gz 전송. 보존 기간은 30일.",
 		}},
 	}
@@ -144,7 +152,8 @@ func runRecallBench(t *testing.T, verbose bool) (int, int) {
 	cases := recallBenchCases()
 	hits := 0
 	for _, c := range cases {
-		out, _ := buildRecallPreflight(context.Background(),
+		out, _ := buildRecallPreflight(
+			context.Background(),
 			RunParams{SessionKey: "client:main", Message: c.question},
 			runDeps{wikiStore: store},
 			nil,
@@ -196,7 +205,8 @@ func TestRecallSourceAttribution(t *testing.T) {
 	store := buildRecallBenchStore(t)
 	agg := map[string]int{}
 	for _, c := range recallBenchCases() {
-		out, _ := buildRecallPreflight(context.Background(),
+		out, _ := buildRecallPreflight(
+			context.Background(),
 			RunParams{SessionKey: "client:main", Message: c.question},
 			runDeps{wikiStore: store},
 			nil,
@@ -232,8 +242,10 @@ func buildRecallHardStore(t *testing.T) *wiki.Store {
 	// still surface ulsan, not be satisfied only by this look-alike — the
 	// drop-the-similar-but-wrong half of functional-sufficiency selection.
 	if err := store.WritePage("거래/hyundai-asan.md", &wiki.Page{
-		Meta: wiki.Frontmatter{ID: "hyundai-asan", Title: "현대차 아산공장 ESS 견적", Category: "거래",
-			Summary: "현대차 아산공장 ESS 견적 건, 결제기한 7월 말", Tags: []string{"현대차", "아산", "ESS"}, Importance: 0.85},
+		Meta: wiki.Frontmatter{
+			ID: "hyundai-asan", Title: "현대차 아산공장 ESS 견적", Category: "거래",
+			Summary: "현대차 아산공장 ESS 견적 건, 결제기한 7월 말", Tags: []string{"현대차", "아산", "ESS"}, Importance: 0.85,
+		},
 		Body: "ESS 2MWh 견적 발송. 결제기한은 7월 말. 담당은 박지훈 차장.",
 	}); err != nil {
 		t.Fatalf("WritePage distractor: %v", err)
@@ -329,8 +341,10 @@ func TestRecallFactRevisionSupersession(t *testing.T) {
 
 	// Phase 1 — seed the original fact and confirm it surfaces cleanly.
 	if err := store.WritePage(oldPath, &wiki.Page{
-		Meta: wiki.Frontmatter{ID: "acme", Title: "에이콘 상사 담당자", Category: "거래",
-			Summary: "에이콘 상사 구매 담당자 정보", Tags: []string{"에이콘"}, Importance: 0.8},
+		Meta: wiki.Frontmatter{
+			ID: "acme", Title: "에이콘 상사 담당자", Category: "거래",
+			Summary: "에이콘 상사 구매 담당자 정보", Tags: []string{"에이콘"}, Importance: 0.8,
+		},
 		Body: "에이콘 상사 구매 담당자는 김민준 부장이다.",
 	}); err != nil {
 		t.Fatalf("WritePage old: %v", err)
@@ -346,8 +360,10 @@ func TestRecallFactRevisionSupersession(t *testing.T) {
 	// Phase 2 — the fact changes: write the new page and supersede the old one
 	// (the dreamer's MarkSuperseded path).
 	if err := store.WritePage(newPath, &wiki.Page{
-		Meta: wiki.Frontmatter{ID: "acme-v2", Title: "에이콘 상사 담당자 (갱신)", Category: "거래",
-			Summary: "에이콘 상사 구매 담당자 갱신", Tags: []string{"에이콘"}, Importance: 0.9},
+		Meta: wiki.Frontmatter{
+			ID: "acme-v2", Title: "에이콘 상사 담당자 (갱신)", Category: "거래",
+			Summary: "에이콘 상사 구매 담당자 갱신", Tags: []string{"에이콘"}, Importance: 0.9,
+		},
 		Body: "에이콘 상사 구매 담당자는 박수진 과장으로 교체되었다.",
 	}); err != nil {
 		t.Fatalf("WritePage new: %v", err)

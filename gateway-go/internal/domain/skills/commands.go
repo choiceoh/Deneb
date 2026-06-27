@@ -16,9 +16,11 @@ const (
 	skillCommandDescriptionMaxLength = 100
 )
 
-var nonAlphanumericPattern = regexp.MustCompile(`[^a-z0-9_]+`)
-var multiUnderscorePattern = regexp.MustCompile(`_+`)
-var leadingTrailingUnderscore = regexp.MustCompile(`^_+|_+$`)
+var (
+	nonAlphanumericPattern    = regexp.MustCompile(`[^a-z0-9_]+`)
+	multiUnderscorePattern    = regexp.MustCompile(`_+`)
+	leadingTrailingUnderscore = regexp.MustCompile(`^_+|_+$`)
+)
 
 // SkillCommandSpec represents a slash command derived from a skill.
 type SkillCommandSpec struct {

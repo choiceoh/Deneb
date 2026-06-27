@@ -197,7 +197,8 @@ func TestEmergencyCompact_NoDoubleCountOfTriggerInput(t *testing.T) {
 		msgs = append(msgs, textMsg("assistant", strings.Repeat("y", 2000)))
 	}
 	// Recent tail ends with the huge trigger input (~35K tokens).
-	msgs = append(msgs,
+	msgs = append(
+		msgs,
 		textMsg("user", "q"),
 		textMsg("assistant", "a"),
 		textMsg("user", strings.Repeat("z", 70000)),

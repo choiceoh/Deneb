@@ -15,9 +15,11 @@ import (
 )
 
 // Type aliases — canonical interface and result types are in toolctx/.
-type SearchResult = toolctx.SearchResult
-type MatchedMsg = toolctx.MatchedMsg
-type TranscriptStore = toolctx.TranscriptStore
+type (
+	SearchResult    = toolctx.SearchResult
+	MatchedMsg      = toolctx.MatchedMsg
+	TranscriptStore = toolctx.TranscriptStore
+)
 
 // Compile-time interface compliance.
 var (

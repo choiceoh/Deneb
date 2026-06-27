@@ -89,7 +89,8 @@ func (h *Handler) Send(_ context.Context, req *protocol.RequestFrame) *protocol.
 		// the new run sees both turns and produces a single combined reply.
 		if !p.SkipMerge && !prevTs.IsZero() && time.Since(prevTs) <= mergeWindowDuration {
 			deltaMs := time.Since(prevTs).Milliseconds()
-			h.logger.Info("merging consecutive message into new run",
+			h.logger.Info(
+				"merging consecutive message into new run",
 				"sessionKey", p.SessionKey,
 				"deltaMs", deltaMs,
 			)

@@ -318,8 +318,10 @@ func TestCalendarGlance(t *testing.T) {
 
 	google := &fakeCalReader{
 		upcoming: []calendar.Event{
-			{ID: "g-1", Summary: "주간회의", Start: now.Add(2 * time.Hour),
-				Conference: &calendar.ConferenceInfo{URI: "https://meet.example/x"}},
+			{
+				ID: "g-1", Summary: "주간회의", Start: now.Add(2 * time.Hour),
+				Conference: &calendar.ConferenceInfo{URI: "https://meet.example/x"},
+			},
 		},
 	}
 	local := newTestLocalCal(t)

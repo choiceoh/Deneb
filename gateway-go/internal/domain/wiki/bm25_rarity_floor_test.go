@@ -44,17 +44,24 @@ func buildRarityCorpus(t *testing.T) (*Store, int) {
 			body += " 월간 보고 정리 보고 라인 점검"
 		}
 		if err := store.WritePage(fmt.Sprintf("업무/f%03d.md", n), &Page{
-			Meta: Frontmatter{ID: fmt.Sprintf("f%03d", n), Title: fmt.Sprintf("문서 %d", n),
-				Summary: "업무 문서 요약"}, Body: body}); err != nil {
+			Meta: Frontmatter{
+				ID: fmt.Sprintf("f%03d", n), Title: fmt.Sprintf("문서 %d", n),
+				Summary: "업무 문서 요약",
+			}, Body: body,
+		}); err != nil {
 			t.Fatalf("WritePage: %v", err)
 		}
 	}
 	// Rare proper-noun pages (df=1 each) — legitimate single-term recall targets.
 	for path, pg := range map[string]*Page{
-		"거래/mabasolar.md": {Meta: Frontmatter{ID: "mabasolar", Title: "마바솔라 거래 메모", Category: "거래",
-			Summary: "마바솔라 루프탑 RE100 거래"}, Body: "마바솔라 루프탑 RE100 거래 진행."},
-		"거래/ganae.md": {Meta: Frontmatter{ID: "ganae", Title: "가나에너지 협업", Category: "거래",
-			Summary: "가나에너지 케이블 협업"}, Body: "가나에너지 케이블 협업 진행."},
+		"거래/mabasolar.md": {Meta: Frontmatter{
+			ID: "mabasolar", Title: "마바솔라 거래 메모", Category: "거래",
+			Summary: "마바솔라 루프탑 RE100 거래",
+		}, Body: "마바솔라 루프탑 RE100 거래 진행."},
+		"거래/ganae.md": {Meta: Frontmatter{
+			ID: "ganae", Title: "가나에너지 협업", Category: "거래",
+			Summary: "가나에너지 케이블 협업",
+		}, Body: "가나에너지 케이블 협업 진행."},
 	} {
 		n++
 		if err := store.WritePage(path, pg); err != nil {
@@ -145,10 +152,14 @@ func TestBM25RarityFloor_SmallCorpusGateOff(t *testing.T) {
 	// 2 pages both about the same common terms — rarity is ~0.26 (sub-floor), but
 	// N=2 < gate min so the gate is OFF and both still surface.
 	for p, pg := range map[string]*Page{
-		"운영시스템/p1.md": {Meta: Frontmatter{ID: "p1", Title: "게이트웨이 포트 정책", Summary: "게이트웨이 포트는 18789"},
-			Body: "게이트웨이 포트는 18789를 사용한다."},
-		"운영시스템/p2.md": {Meta: Frontmatter{ID: "p2", Title: "게이트웨이 포트 변경", Summary: "게이트웨이 포트는 19000"},
-			Body: "게이트웨이 포트는 19000으로 변경되었다."},
+		"운영시스템/p1.md": {
+			Meta: Frontmatter{ID: "p1", Title: "게이트웨이 포트 정책", Summary: "게이트웨이 포트는 18789"},
+			Body: "게이트웨이 포트는 18789를 사용한다.",
+		},
+		"운영시스템/p2.md": {
+			Meta: Frontmatter{ID: "p2", Title: "게이트웨이 포트 변경", Summary: "게이트웨이 포트는 19000"},
+			Body: "게이트웨이 포트는 19000으로 변경되었다.",
+		},
 	} {
 		if err := store.WritePage(p, pg); err != nil {
 			t.Fatalf("WritePage: %v", err)

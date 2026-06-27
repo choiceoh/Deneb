@@ -78,6 +78,7 @@ func TestHealthCheck(t *testing.T) {
 		t.Errorf("got %v, want runtime=go", payload["runtime"])
 	}
 }
+
 func TestRPCSmokeFrequentMethods(t *testing.T) {
 	d := testDispatcher()
 	tests := []struct {

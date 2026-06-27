@@ -20,6 +20,7 @@ func callGrep(t *testing.T, defaultDir string, params map[string]any) (string, e
 	raw, _ := json.Marshal(params)
 	return ToolGrep(defaultDir)(context.Background(), json.RawMessage(raw))
 }
+
 func TestToolGrep_findsMatch(t *testing.T) {
 	requireRg(t)
 	tmp := t.TempDir()

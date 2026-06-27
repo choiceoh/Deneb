@@ -164,6 +164,10 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 	// Monitoring notify service (error mirrors + status snapshots → native push).
 	s.notify = newNotifyService(hub.Sessions(), hub.Logger(), s.pushHub, s.BoundAddr)
 	if s.notify != nil {
+		// Echo the last vLLM prefix-cache hit-rate into the status snapshot as a
+		// passive prompt-cache regression alarm. Reads a string cached by the
+		// /health probe; never scrapes on the status-render path.
+		s.notify.cacheSummary = s.cacheHealth.summary
 		s.broadcaster.RegisterTap(s.notify.tap)
 		s.notify.start(s.ShutdownCtx())
 	}
@@ -248,8 +252,7 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		// --- System ---
 		handlersystem.IdentityMethods(hub.Version()),
 		handlersystem.MonitoringMethods(handlersystem.MonitoringDeps{
-			ChannelHealth: s.channelHealth,
-			Dispatcher:    s.dispatcher,
+			Dispatcher: s.dispatcher,
 		}),
 		handlersystem.ConfigAdvancedMethods(handlersystem.ConfigAdvancedDeps{
 			Broadcaster: hub.Broadcast,
@@ -440,6 +443,52 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 					return nil, errWikiDisabled
 				}
 				return store, nil
+			},
+			// Item snapshots for miniapp.project.linked (server-side matching).
+			// Read at call time so the late-set notebook store is picked up; a nil
+			// store simply contributes no matches. Mail needs no provider — it is
+			// resolved from the project's graph refs inside the handler.
+			Notebooks: func() []handlerminiapp.ProjectLinkedNotebook {
+				if s.notebookStore == nil {
+					return nil
+				}
+				nbs := s.notebookStore.List()
+				out := make([]handlerminiapp.ProjectLinkedNotebook, 0, len(nbs))
+				for _, nb := range nbs {
+					out = append(out, handlerminiapp.ProjectLinkedNotebook{ID: nb.ID, DealRef: nb.DealRef, ProjectRefs: nb.ProjectRefs})
+				}
+				return out
+			},
+			WorkItems: func() []handlerminiapp.ProjectLinkedWorkItem {
+				nf := s.nativeWorkFeedStore()
+				if nf == nil {
+					return nil
+				}
+				items, _, err := nf.List(1000, true) // superset; the client filters to its own list
+				if err != nil {
+					return nil
+				}
+				out := make([]handlerminiapp.ProjectLinkedWorkItem, 0, len(items))
+				for _, it := range items {
+					out = append(out, handlerminiapp.ProjectLinkedWorkItem{ID: it.ID, RefID: it.RefID})
+				}
+				return out
+			},
+			Calendar: func() []handlerminiapp.ProjectLinkedCalEvent {
+				store, err := localcal.Default()
+				if err != nil || store == nil {
+					return nil
+				}
+				now := time.Now()
+				events := store.ListRange(now.AddDate(-1, 0, 0), now.AddDate(1, 0, 0)) // wide superset
+				out := make([]handlerminiapp.ProjectLinkedCalEvent, 0, len(events))
+				for _, ev := range events {
+					if ev.Source == "" {
+						continue // only Deneb-sourced (mail-proposal) events carry a project link
+					}
+					out = append(out, handlerminiapp.ProjectLinkedCalEvent{ID: ev.ID, Source: ev.Source})
+				}
+				return out
 			},
 		}),
 
@@ -702,7 +751,8 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 
 	// Conditional: provider methods.
 	if s.providers != nil {
-		domains = append(domains,
+		domains = append(
+			domains,
 			handlerprovider.Methods(handlerprovider.Deps{
 				Providers:   s.providers,
 				AuthManager: s.authManager,

@@ -1,6 +1,7 @@
 package wiki
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"log/slog"
@@ -72,6 +73,12 @@ type Store struct {
 	// dealMu serializes appends/reads of the typed deal-record ledger
 	// (.deals.jsonl), independent of page writes. See deal_records.go.
 	dealMu sync.Mutex
+
+	// logMu serializes AppendLog's append+rotate of log.md. Every current
+	// caller already holds writeMu, but the audit log is a self-contained
+	// side file: guarding it independently keeps the size-capped rotation
+	// atomic even if a future caller appends without writeMu.
+	logMu sync.Mutex
 
 	mu       sync.RWMutex
 	index    *Index // cached master index
@@ -592,24 +599,91 @@ func AppendDiaryTo(diaryDir, content string) error {
 	return err
 }
 
+const (
+	// wikiLogMaxBytes caps log.md before rotation. The audit log is pure
+	// O_APPEND on every WritePage/DeletePage/MergePage/MarkSuperseded, so it
+	// grows without bound; mirror the cron run log's 2MB ceiling.
+	wikiLogMaxBytes = 2_000_000
+	// wikiLogKeepBytes is the target size of the rotated tail. Keeping a
+	// fraction of the cap (not the cap itself) means rotation is rare —
+	// roughly once per (cap-keep) bytes — rather than on nearly every append
+	// once the file first crosses the cap.
+	wikiLogKeepBytes = 1_000_000
+)
+
 // AppendLog appends a timestamped operation entry to log.md in the wiki root.
 // Tracks all wiki mutations for temporal awareness (Karpathy wiki concept).
 //
 // The details string often echoes page titles or user-provided content, so it
 // is redacted before persistence for the same reason WritePageFile redacts the
 // page body.
+//
+// log.md is size-capped: once it exceeds wikiLogMaxBytes the oldest entries are
+// rolled off, keeping the newest ~wikiLogKeepBytes worth of complete sections.
 func (s *Store) AppendLog(operation, details string) error {
+	s.logMu.Lock()
+	defer s.logMu.Unlock()
+
 	details = redact.String(details)
 	logPath := filepath.Join(s.dir, "log.md")
 	f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 	if err != nil {
 		return fmt.Errorf("wiki: open log: %w", err)
 	}
-	defer f.Close()
 	ts := time.Now().Format("2006-01-02 15:04")
 	entry := fmt.Sprintf("## [%s] %s\n%s\n\n", ts, operation, details)
-	_, err = f.WriteString(entry)
-	return err
+	if _, err := f.WriteString(entry); err != nil {
+		f.Close()
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+
+	s.rotateLogIfNeeded(logPath)
+	return nil
+}
+
+// rotateLogIfNeeded truncates log.md to its newest entries once it exceeds
+// wikiLogMaxBytes. Best-effort: a rotation failure leaves the (oversized but
+// valid) log in place and is logged, never returned — the audit log is
+// non-critical and must not fail a page write.
+//
+// The tail is snapped forward to the next "## " section header so the rotated
+// file starts at a clean entry boundary instead of mid-block. Rewrite is atomic
+// (tmp+rename) to mirror the cron run log prune.
+func (s *Store) rotateLogIfNeeded(logPath string) {
+	stat, err := os.Stat(logPath)
+	if err != nil || stat.Size() <= int64(wikiLogMaxBytes) {
+		return
+	}
+	data, err := os.ReadFile(logPath)
+	if err != nil {
+		slog.Warn("wiki: read log for rotation failed", "path", logPath, "error", err)
+		return
+	}
+	if len(data) <= wikiLogKeepBytes {
+		return
+	}
+
+	tail := data[len(data)-wikiLogKeepBytes:]
+	// Snap forward to the start of the first complete "## " section so the
+	// rotated file does not begin in the middle of a prior entry's body.
+	if idx := bytes.Index(tail, []byte("\n## ")); idx >= 0 {
+		tail = tail[idx+1:]
+	} else if idx := bytes.Index(tail, []byte("## ")); idx > 0 {
+		tail = tail[idx:]
+	}
+
+	tmp := logPath + ".tmp"
+	if err := os.WriteFile(tmp, tail, 0o644); err != nil { //nolint:gosec // G306 — world-readable matches the log file
+		slog.Warn("wiki: write rotated log failed", "path", tmp, "error", err)
+		return
+	}
+	if err := os.Rename(tmp, logPath); err != nil {
+		slog.Warn("wiki: rename rotated log failed", "from", tmp, "to", logPath, "error", err)
+		_ = os.Remove(tmp)
+	}
 }
 
 // Close stops the background semantic refresh (waiting for any in-flight

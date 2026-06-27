@@ -42,6 +42,16 @@ const (
 	// memoryKeepDays: timestamped sections younger than this are always kept
 	// in MEMORY.md, consumed or not — they are the "hot" working memory.
 	memoryKeepDays = 14
+	// memoryDiskMaxBytes is the HARD on-disk ceiling for MEMORY.md, enforced
+	// independently of the dream cycle. curateWorkspaceMemory only runs when a
+	// dream cycle consumed sections, so a disabled or lagging dreamer let the
+	// file grow unbounded (176KB observed) even though the prompt reads at most
+	// maxMemoryFileChars (32KB) of it. This cap is double the read budget so a
+	// healthy file is never touched, but a runaway one is bounded regardless of
+	// dreaming health. The prompt loader reads head+tail, so enforcement keeps
+	// the preamble + category sections (head) and the newest timestamped
+	// sections (tail), dropping the oldest timestamped sections in between.
+	memoryDiskMaxBytes = 64_000
 )
 
 // memoryStampRe matches timestamped section headers like
@@ -206,5 +216,115 @@ func (wd *WikiDreamer) curateWorkspaceMemory(scan *memoryScanResult) (int, error
 	}
 	slog.Info("memory-curation: MEMORY.md rewritten",
 		"droppedSections", dropped, "beforeBytes", len(data), "afterBytes", out.Len())
+	return dropped, nil
+}
+
+// enforceMemoryDiskCap bounds MEMORY.md on disk to memoryDiskMaxBytes,
+// independently of the dream cycle. It is a safety net for when dreaming is
+// disabled or lagging: curateWorkspaceMemory only fires after synthesis
+// consumes sections, so without this the file grows without bound.
+//
+// Unlike curation (which drops only consumed+aged sections), this is a pure
+// size guard: the preamble and all non-timestamped category sections are kept
+// verbatim (they are the curated head the prompt loader reads), and the OLDEST
+// timestamped sections are dropped — oldest first, in file order — until the
+// result fits the cap. The newest timestamped sections (the tail the loader
+// also reads) are preserved. Dropped content is appended to MEMORY.md.bak so it
+// stays recoverable, and the rewrite is atomic (tmp+rename via writeFileSync).
+//
+// Returns the number of timestamped sections dropped. A no-op (file absent,
+// under cap, or nothing droppable) returns 0.
+func (wd *WikiDreamer) enforceMemoryDiskCap() (int, error) {
+	if wd.workspaceDir == "" {
+		return 0, nil
+	}
+	path := filepath.Join(wd.workspaceDir, memoryFileName)
+	info, err := os.Stat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return 0, nil
+		}
+		return 0, err
+	}
+	if info.Size() <= memoryDiskMaxBytes {
+		return 0, nil
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return 0, err
+	}
+	if len(data) <= memoryDiskMaxBytes {
+		return 0, nil
+	}
+	preamble, sections := parseMemorySections(string(data))
+
+	// Fixed cost: preamble + every non-timestamped (category) section is always
+	// kept. Timestamped sections are the droppable budget.
+	fixed := len(preamble)
+	for _, sec := range sections {
+		if sec.stamp == "" {
+			fixed += len(sec.raw)
+		}
+	}
+
+	// Walk timestamped sections oldest-first (file order is chronological),
+	// dropping until the projected total fits the cap. Stop as soon as it fits
+	// so the maximum number of newest sections survives.
+	total := len(data)
+	drop := make(map[int]bool)
+	dropped := 0
+	var droppedRaw strings.Builder
+	for i, sec := range sections {
+		if total <= memoryDiskMaxBytes {
+			break
+		}
+		if sec.stamp == "" {
+			continue // never drop category sections
+		}
+		drop[i] = true
+		droppedRaw.WriteString(sec.raw)
+		total -= len(sec.raw)
+		dropped++
+	}
+	if dropped == 0 {
+		// Over the cap but nothing droppable (all content is category sections
+		// or the timestamped tail alone already exceeds the cap). Leave the file
+		// intact rather than corrupt the curated head; surface it for the operator.
+		slog.Warn("memory-curation: MEMORY.md over disk cap but no droppable sections",
+			"sizeBytes", len(data), "capBytes", memoryDiskMaxBytes, "fixedBytes", fixed)
+		return 0, nil
+	}
+
+	var out strings.Builder
+	out.WriteString(preamble)
+	for i, sec := range sections {
+		if drop[i] {
+			continue
+		}
+		out.WriteString(sec.raw)
+	}
+
+	// Append the dropped sections to the backup so nothing is lost on disk. Use
+	// O_APPEND because curateWorkspaceMemory may also write MEMORY.md.bak; both
+	// are recovery aids, and appending keeps the older rotated content too.
+	if bak, ferr := os.OpenFile(path+".bak", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644); ferr == nil { //nolint:gosec // G304/G302 — path is workspaceDir/MEMORY.md.bak, wired at startup
+		_, _ = bak.WriteString(droppedRaw.String())
+		_ = bak.Close()
+	} else {
+		// Backup is best-effort, but if we cannot preserve the dropped content
+		// at all, do not destroy it — abort the rewrite.
+		return 0, fmt.Errorf("memory-curation: disk-cap backup write: %w", ferr)
+	}
+
+	tmp := path + ".diskcap.tmp"
+	if err := writeFileSync(tmp, []byte(out.String()), 0o644); err != nil {
+		return 0, fmt.Errorf("memory-curation: disk-cap write tmp: %w", err)
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		os.Remove(tmp)
+		return 0, fmt.Errorf("memory-curation: disk-cap rename: %w", err)
+	}
+	slog.Info("memory-curation: MEMORY.md disk-capped",
+		"droppedSections", dropped, "beforeBytes", len(data), "afterBytes", out.Len(), "capBytes", memoryDiskMaxBytes)
 	return dropped, nil
 }

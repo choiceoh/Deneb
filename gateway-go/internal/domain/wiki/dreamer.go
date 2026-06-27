@@ -228,6 +228,17 @@ func (wd *WikiDreamer) RunDream(ctx context.Context) (*autonomous.DreamReport, e
 	}
 	diaryContent := scan.Content
 
+	// Phase 1a: hard on-disk cap for MEMORY.md, enforced unconditionally before
+	// any early return below. Phase 4b curation only runs when synthesis
+	// consumes sections, so a disabled/lagging dreamer (no diary bytes, no LLM
+	// client) would otherwise let the file grow without bound. This bounds it
+	// regardless of dreaming health.
+	if n, derr := wd.enforceMemoryDiskCap(); derr != nil {
+		phaseErrors = append(phaseErrors, fmt.Sprintf("memory-disk-cap: %v", derr))
+	} else if n > 0 {
+		wd.logger.Info("wiki-dream: MEMORY.md disk-capped", "droppedSections", n)
+	}
+
 	// Phase 1b: unconsumed workspace MEMORY.md sections join the synthesis
 	// input — same distillation as diaries; the file is curated in Phase 4b.
 	memScan := wd.scanWorkspaceMemory(scan.State.MemoryConsumedThrough)
@@ -448,7 +459,8 @@ func (wd *WikiDreamer) RunDream(ctx context.Context) (*autonomous.DreamReport, e
 	// LLM cycle becomes a visible, revertible event instead of silent drift.
 	if hash := wd.store.SnapshotGit(ctx, fmt.Sprintf("dream: +%d페이지 생성, %d페이지 수정", created, updated)); hash != "" {
 		report.WikiChangeSummary = formatWikiChangeSummary(
-			hash, wd.store.GitSnapshotStat(ctx, hash), wd.store.Dir(), updatePaths(updates))
+			hash, wd.store.GitSnapshotStat(ctx, hash), wd.store.Dir(), updatePaths(updates),
+		)
 	}
 
 	wd.logger.Info("wiki-dream: cycle complete",

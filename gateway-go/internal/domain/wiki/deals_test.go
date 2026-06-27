@@ -129,3 +129,50 @@ func TestDealSlug(t *testing.T) {
 		}
 	}
 }
+
+func TestUpsertDealPage_StampsRelatedProjects(t *testing.T) {
+	s := newDealStore(t)
+	now := time.Date(2026, 6, 9, 0, 0, 0, 0, time.UTC)
+
+	// Create: the analyzer's resolved project lands in frontmatter Related (deduped),
+	// giving the orphaned counterparty page a deal→project graph edge.
+	if _, _, err := s.UpsertDealPage(DealPageInput{
+		Counterparty:    "한빛전기",
+		DocType:         "견적서",
+		SourceRef:       "mail:m1",
+		RelatedProjects: []string{"프로젝트/영산고.md", "프로젝트/영산고.md"}, // dup → one
+	}, now); err != nil {
+		t.Fatalf("UpsertDealPage create: %v", err)
+	}
+	page, _ := s.ReadPage("프로젝트/거래/한빛전기.md")
+	if got := page.Meta.Related; len(got) != 1 || got[0] != "프로젝트/영산고.md" {
+		t.Fatalf("Related after create = %v, want [프로젝트/영산고.md]", page.Meta.Related)
+	}
+
+	// A later document for the same deal links a second project → unioned, not replaced.
+	if _, _, err := s.UpsertDealPage(DealPageInput{
+		Counterparty:    "한빛전기",
+		DocType:         "계약서",
+		SourceRef:       "mail:m2",
+		RelatedProjects: []string{"프로젝트/영산고.md", "프로젝트/남도풍력.md"},
+	}, now.AddDate(0, 0, 1)); err != nil {
+		t.Fatalf("UpsertDealPage append: %v", err)
+	}
+	page, _ = s.ReadPage("프로젝트/거래/한빛전기.md")
+	if got := page.Meta.Related; len(got) != 2 || got[0] != "프로젝트/영산고.md" || got[1] != "프로젝트/남도풍력.md" {
+		t.Fatalf("Related after union = %v, want [영산고, 남도풍력]", page.Meta.Related)
+	}
+
+	// A deal whose mail linked no project gets no Related — and doesn't crash.
+	if _, _, err := s.UpsertDealPage(DealPageInput{
+		Counterparty: "무명상사",
+		DocType:      "견적서",
+		SourceRef:    "mail:m3",
+	}, now); err != nil {
+		t.Fatalf("UpsertDealPage no-related: %v", err)
+	}
+	page, _ = s.ReadPage("프로젝트/거래/무명상사.md")
+	if len(page.Meta.Related) != 0 {
+		t.Fatalf("Related = %v, want empty for a project-less deal", page.Meta.Related)
+	}
+}

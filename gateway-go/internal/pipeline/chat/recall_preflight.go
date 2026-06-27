@@ -181,7 +181,8 @@ func buildRecallPreflight(ctx context.Context, params RunParams, deps runDeps, l
 	var sources []recallSource
 	if deps.wikiStore != nil {
 		store := deps.wikiStore
-		sources = append(sources,
+		sources = append(
+			sources,
 			recallSource{"wiki", func(c context.Context) []recallEvidence {
 				return recallWikiEvidence(c, store, queries)
 			}},
@@ -304,6 +305,20 @@ func buildRecallPreflight(ctx context.Context, params RunParams, deps runDeps, l
 	// rank a drifted value first. Type-aware + entity-scoped — see
 	// recall_provenance.go. Must run before the sort (it adjusts scores).
 	applyProvenancePenalty(evidence)
+
+	// RaMem-style temporal scoping (arXiv 2606.22844): when the query names a
+	// concrete past frame ("지난달", "6월"), softly boost evidence whose timestamp
+	// falls inside it so the right-episode memory outranks a content-similar row
+	// from another episode ("context collapse"). Cue-gated + soft (boost, not
+	// filter): a frameless query is untouched and a strong out-of-frame row can
+	// still surface. See recall_temporal.go.
+	if tr := parseRecallTemporalRange(message); tr.ok {
+		for i := range evidence {
+			if at := evidence[i].At; at > 0 && at >= tr.From && at <= tr.To {
+				evidence[i].Score *= recallTemporalBoost
+			}
+		}
+	}
 
 	sort.SliceStable(evidence, func(i, j int) bool {
 		if evidence[i].Score == evidence[j].Score {

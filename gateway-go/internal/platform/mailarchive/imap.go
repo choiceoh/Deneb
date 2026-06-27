@@ -224,8 +224,10 @@ func (c *imapConn) uidFetchBodies(uidSet string) ([][]byte, error) {
 	return bodies, nil
 }
 
-var anyLiteralRe = regexp.MustCompile(`\{(\d+)\}\r?\n`)
-var fetchUIDRe = regexp.MustCompile(`(?i)\bUID\s+(\d+)\b`)
+var (
+	anyLiteralRe = regexp.MustCompile(`\{(\d+)\}\r?\n`)
+	fetchUIDRe   = regexp.MustCompile(`(?i)\bUID\s+(\d+)\b`)
+)
 
 // extractLiteralPayload pulls the first literal's raw bytes out of a folded FETCH
 // entry produced by exec (which appended the literal bytes right after "{n}\r\n").

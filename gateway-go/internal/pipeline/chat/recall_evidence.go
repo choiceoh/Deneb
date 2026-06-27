@@ -404,7 +404,8 @@ func formatRecallEvidence(evidence []recallEvidence) string {
 		source := sanitizeRecallContextText(ev.Source)
 		query := sanitizeRecallContextText(ev.Query)
 		note := neutralizeRecalledThreats(sanitizeRecallContextText(ev.Note))
-		entry := fmt.Sprintf("- source=%s ref=%q confidence=%s age=%s score=%.2f",
+		entry := fmt.Sprintf(
+			"- source=%s ref=%q confidence=%s age=%s score=%.2f",
 			kind,
 			source,
 			recallConfidence(ev),

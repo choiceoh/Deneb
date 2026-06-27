@@ -141,7 +141,8 @@ func BundledSkillsDir() string {
 	var candidates []string
 	if exe, err := os.Executable(); err == nil {
 		exeDir := filepath.Dir(exe)
-		candidates = append(candidates,
+		candidates = append(
+			candidates,
 			filepath.Join(exeDir, "skills"),
 			filepath.Join(exeDir, "..", "skills"),
 		)

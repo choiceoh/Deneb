@@ -131,7 +131,9 @@ func executeAgentRun(
 		ThinkingLevel: thinkingLevel,
 	})
 
-	// 3. Resolve LLM client (no IO — reads in-memory config/auth store).
+	// 3. Resolve LLM client from in-memory config/auth store. May perform
+	// provider-runtime auth (e.g. token exchange) but no longer resolves
+	// external secret references on the chat path.
 	client := resolveClient(deps, providerID, logger)
 	if client == nil {
 		err := fmt.Errorf("no LLM client available (provider=%q, model=%q)", providerID, model)

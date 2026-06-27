@@ -290,6 +290,14 @@ func prepareContextAndPrompt(
 			calendarGlance = deps.calendarGlanceFn(ctx, params.SessionKey, tz)
 		}
 
+		// Ambient goal glance for the dynamic block: this session's active
+		// standing goal, read live from the process store. "" when no active
+		// goal or goals are not wired. 챗봇 persona stays neutral (no goals).
+		var goalGlance string
+		if deps.goalGlanceFn != nil && !chatbot {
+			goalGlance = deps.goalGlanceFn(ctx, params.SessionKey)
+		}
+
 		// 챗봇: withhold the workspace context files (SOUL.md/IDENTITY.md/USER.md/
 		// MEMORY.md/…) so the clean general-assistant prompt carries no Nev persona
 		// or private work context.
@@ -323,6 +331,7 @@ func prepareContextAndPrompt(
 			CompactionFired:    compactionFired,
 			Chatbot:            chatbot,
 			CalendarGlance:     calendarGlance,
+			GoalGlance:         goalGlance,
 			TopicKnowledge:     topicKnowledge,
 			TopicCacheKey:      topicCacheKey,
 			TopicKnowledgePath: topicKnowledgePath,
@@ -498,7 +507,8 @@ func assembleMessages(
 			if deferEligible {
 				engine.CompactInBackground(
 					deps.callbacks.shutdownCtx, params.SessionKey, summarizer, contextBudget,
-					deps.embeddingClient, buildAnchorKeywords(deps.wikiStore), buildLearnedGuidelines())
+					deps.embeddingClient, buildAnchorKeywords(deps.wikiStore), buildLearnedGuidelines(),
+				)
 				// Belt-and-suspenders: never ship an orphan tool pair at the
 				// assembly's coverage boundary (e.g. a prior chunk-boundary
 				// leftover). No-op — byte-identical, APC-stable — when already

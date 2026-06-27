@@ -15,18 +15,24 @@ func TestSnoozeReSurfacesWhenWindowElapses(t *testing.T) {
 	now := time.Now().UnixMilli()
 
 	// Elapsed snooze (created long ago) — should re-surface near the top.
-	if _, err := store.Append(Item{ID: "elapsed", Source: SourceProactive, Title: "Elapsed",
-		Status: StatusSnoozed, SnoozedUntilMs: now - 1_000, CreatedAtMs: now - 100_000}); err != nil {
+	if _, err := store.Append(Item{
+		ID: "elapsed", Source: SourceProactive, Title: "Elapsed",
+		Status: StatusSnoozed, SnoozedUntilMs: now - 1_000, CreatedAtMs: now - 100_000,
+	}); err != nil {
 		t.Fatal(err)
 	}
 	// Snooze still pending — stays hidden.
-	if _, err := store.Append(Item{ID: "pending", Source: SourceProactive, Title: "Pending",
-		Status: StatusSnoozed, SnoozedUntilMs: now + 1_000_000, CreatedAtMs: now}); err != nil {
+	if _, err := store.Append(Item{
+		ID: "pending", Source: SourceProactive, Title: "Pending",
+		Status: StatusSnoozed, SnoozedUntilMs: now + 1_000_000, CreatedAtMs: now,
+	}); err != nil {
 		t.Fatal(err)
 	}
 	// A normal item created between the two timestamps.
-	if _, err := store.Append(Item{ID: "normal", Source: SourceProactive, Title: "Normal",
-		CreatedAtMs: now - 50_000}); err != nil {
+	if _, err := store.Append(Item{
+		ID: "normal", Source: SourceProactive, Title: "Normal",
+		CreatedAtMs: now - 50_000,
+	}); err != nil {
 		t.Fatal(err)
 	}
 

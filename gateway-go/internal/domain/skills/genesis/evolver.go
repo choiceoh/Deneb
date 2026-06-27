@@ -285,6 +285,7 @@ func (e *Evolver) EvolveSkill(ctx context.Context, skillName, reviewFinding stri
 	}
 	rejectedSection := formatRejectedSkillEdits(rejected)
 	memorySection := formatOptimizerMemory(optimizerMemory)
+	leverSection := e.formatLowYieldLevers()
 	validationSection := formatValidationCasesForPrompt(validationCases)
 	failurePatternSection := formatFailurePatternsForPrompt(stats)
 	userPrompt := fmt.Sprintf(`## 현재 SKILL.md
@@ -294,7 +295,7 @@ func (e *Evolver) EvolveSkill(ctx context.Context, skillName, reviewFinding stri
 - 총 사용: %d회
 - 성공: %d회 (%.0f%%)
 - 실패: %d회
-- 최근 에러: %s%s%s%s%s%s`,
+- 최근 에러: %s%s%s%s%s%s%s`,
 		string(currentContent),
 		stats.TotalUses, stats.SuccessCount, stats.SuccessRate*100,
 		stats.FailureCount,
@@ -302,6 +303,7 @@ func (e *Evolver) EvolveSkill(ctx context.Context, skillName, reviewFinding stri
 		failurePatternSection,
 		rejectedSection,
 		memorySection,
+		leverSection,
 		validationSection,
 		findingSection)
 
@@ -310,6 +312,36 @@ func (e *Evolver) EvolveSkill(ctx context.Context, skillName, reviewFinding stri
 	}
 
 	return e.generateSelectAndApply(ctx, userPrompt, entry, string(currentContent), stats, reviewFinding)
+}
+
+const (
+	skillLeverYieldScanLimit      = 300 // lifecycle entries scanned for lever yield
+	skillLeverYieldMinShips       = 3   // only flag levers shipped at least this often
+	skillLeverYieldMaxConfirmRate = 0.4 // ...that confirm at or below this rate
+)
+
+// formatLowYieldLevers surfaces (target-signature × edited-surface) edit
+// strategies that have shipped repeatedly yet rarely held up, so the evolver
+// stops re-proposing fleet-wide dead ends (#2 lever-yield, finally wired into the
+// prompt — previously computed but unread). Empty when no lever clears the bar.
+func (e *Evolver) formatLowYieldLevers() string {
+	if e == nil || e.tracker == nil {
+		return ""
+	}
+	levers, err := e.tracker.LowYieldLevers(skillLeverYieldScanLimit, skillLeverYieldMinShips, skillLeverYieldMaxConfirmRate)
+	if err != nil || len(levers) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("\n\n## 저수율 lever (반복 ship됐지만 실제로 안 버팀 — 이 방향 피하라)\n")
+	for _, l := range levers {
+		surface := l.Surface
+		if surface == "" {
+			surface = "(unspecified)"
+		}
+		fmt.Fprintf(&b, "- %s → %s: %d ship, confirm %.0f%%\n", l.Signature, surface, l.Committed, l.ConfirmRate*100)
+	}
+	return b.String()
 }
 
 // generateSelectAndApply runs the K-candidate generate-and-select loop (#3): it
@@ -431,7 +463,8 @@ func (e *Evolver) generateCandidateText(ctx context.Context, userPrompt string, 
 func candidateVariationNote(attempt int) string {
 	return fmt.Sprintf(
 		"\n\n## 후보 다양화 지시 (candidate #%d)\n동일한 검증 기준을 모두 만족하되, 직전 후보와는 다른 접근(다른 섹션을 손보거나 다른 메커니즘을 강조)으로 본문을 작성하세요. 검증 계약(필수/금지 항목, 구조 보존, 실제 도구만)은 그대로 지키세요.",
-		attempt+1)
+		attempt+1,
+	)
 }
 
 // evolutionSuppressed reports whether an automated evolve of skillName should be
@@ -457,14 +490,16 @@ func (e *Evolver) evolutionSuppressed(skillName string, now time.Time) (bool, st
 		h.ThrashCooldownUntil > now.UnixMilli() {
 		return true, fmt.Sprintf(
 			"thrash cooldown: %q evolved %d times in 7d without converging; paused until %s",
-			skillName, h.TopEvolvedCount, time.UnixMilli(h.ThrashCooldownUntil).Format(time.RFC3339))
+			skillName, h.TopEvolvedCount, time.UnixMilli(h.ThrashCooldownUntil).Format(time.RFC3339),
+		)
 	}
 	if window := skillEvolutionEvidenceWindow(); window > 0 {
 		if stats, err := e.tracker.Stats(skillName); err == nil && stats.LastUsed > 0 &&
 			stats.LastUsed < now.Add(-window).UnixMilli() {
 			return true, fmt.Sprintf(
 				"recency gate: %q last really used %s, older than the %d-day evidence window; no fresh signal to evolve on",
-				skillName, time.UnixMilli(stats.LastUsed).Format("2006-01-02"), int(window/(24*time.Hour)))
+				skillName, time.UnixMilli(stats.LastUsed).Format("2006-01-02"), int(window/(24*time.Hour)),
+			)
 		}
 	}
 	return false, ""
@@ -708,7 +743,8 @@ func (e *Evolver) commitEvaluatedCandidate(entry *skills.SkillEntry, originalCon
 		e.catalog.Register(updated)
 	}
 
-	e.logger.Info("evolver: skill evolved",
+	e.logger.Info(
+		"evolver: skill evolved",
 		"skill", entry.Skill.Name,
 		"version", newVersion,
 		"description", committedDescription,

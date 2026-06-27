@@ -472,12 +472,23 @@ data class ProjectDigestRow(
     val updatedAtMs: Long = 0L,
     val path: String = "",
     val code: String = "",
+    val refs: List<String> = emptyList(),
 )
 
 @Immutable
 @Serializable
 data class ProjectDigestsOut(
     val digests: List<ProjectDigestRow> = emptyList(),
+)
+
+@Immutable
+@Serializable
+data class ProjectLinkedOut(
+    val mail: List<String> = emptyList(),
+    val calendar: List<String> = emptyList(),
+    val todo: List<String> = emptyList(),
+    val workfeed: List<String> = emptyList(),
+    val notebook: List<String> = emptyList(),
 )
 
 @Immutable

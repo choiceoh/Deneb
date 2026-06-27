@@ -244,7 +244,8 @@ func (b *Broadcaster) BroadcastWithOpts(event string, payload any, opts Broadcas
 		// Slow consumer detection.
 		if opts.DropIfSlow && entry.sub.BufferedAmount() > maxBufferedBytes {
 			if b.logger != nil {
-				b.logger.Warn("dropping slow consumer",
+				b.logger.Warn(
+					"dropping slow consumer",
 					"connId", entry.sub.ID(),
 					"buffered", entry.sub.BufferedAmount(),
 					"event", event,
@@ -283,7 +284,8 @@ func (b *Broadcaster) BroadcastRaw(event string, data []byte) (sent int) {
 		// Slow consumer detection: skip subscribers with excessive buffered data.
 		if entry.sub.BufferedAmount() > maxBufferedBytes {
 			if b.logger != nil {
-				b.logger.Warn("dropping slow consumer (raw broadcast)",
+				b.logger.Warn(
+					"dropping slow consumer (raw broadcast)",
 					"connId", entry.sub.ID(),
 					"buffered", entry.sub.BufferedAmount(),
 					"event", event,

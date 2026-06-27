@@ -213,6 +213,10 @@ type runDeps struct {
 	// system-prompt block. nil disables ambient calendar awareness.
 	calendarGlanceFn CalendarGlanceFunc
 
+	// goalGlanceFn builds the ambient active-goal glance for the dynamic
+	// system-prompt block. nil disables ambient goal awareness.
+	goalGlanceFn GoalGlanceFunc
+
 	// personaOverrideFn returns the operator-edited 업무 persona text (Settings
 	// prompt corner), or "" when unedited. nil disables the override (the
 	// default persona renders). Read per turn — byte-stable between rare edits,

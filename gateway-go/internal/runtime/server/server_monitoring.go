@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"os"
 	"runtime"
@@ -11,7 +10,6 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/daemon"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/monitoring"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
 )
 
@@ -30,24 +28,12 @@ func (s *Server) Publisher() *events.Publisher {
 }
 
 func (s *Server) StartMonitoring(ctx context.Context) {
-	// Note: Gateway self-watchdog removed — it caused frequent false-positive
-	// restarts in a single-user deployment. Channel health monitor below is
-	// sufficient: it restarts individual stale channels without killing the
-	// entire gateway process.
-
-	// Channel health monitor — native client only; no channel plugin to restart.
-	s.channelHealth = monitoring.NewChannelHealthMonitor(monitoring.ChannelHealthDeps{
-		GetChannelStatus: func() string { return "running" },
-		GetChannelLastEventAt: func() int64 {
-			if s.channelEvents != nil {
-				return s.channelEvents.LastEventAt()
-			}
-			return 0
-		},
-		GetChannelStartedAt: func() int64 { return 0 },
-		RestartChannel:      func() error { return fmt.Errorf("no channel plugin to restart") },
-	}, monitoring.DefaultChannelHealthConfig(), s.logger)
-	s.safeGo("channel-health-monitor", func() { s.channelHealth.Run(ctx) })
+	// No gateway self-watchdog and no channel health monitor: both were
+	// false-positive prone in a single-user native deployment. The self-watchdog
+	// caused frequent spurious restarts, and the channel health monitor became
+	// vestigial once channel plugins were removed (PR #1922) — the native client
+	// is the sole surface, has nothing to "restart", and silence is normal user
+	// idle, not a fault. Liveness is reported on demand via /health instead.
 
 	// Memory pressure monitor — tick every 30s, emit a compact snapshot when
 	// the Go heap is large or Linux PSI memory indicates host-level pressure.

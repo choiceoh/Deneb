@@ -83,12 +83,10 @@ type ServerRPC struct {
 
 // ServerRuntime owns long-running runtime health/activity trackers.
 type ServerRuntime struct {
-	ready         atomic.Bool
-	shutdownOnce  sync.Once
-	gatewaySubs   *events.GatewayEventSubscriptions
-	channelHealth *monitoring.ChannelHealthMonitor
-	activity      *monitoring.ActivityTracker
-	channelEvents *monitoring.ChannelEventTracker
+	ready        atomic.Bool
+	shutdownOnce sync.Once
+	gatewaySubs  *events.GatewayEventSubscriptions
+	activity     *monitoring.ActivityTracker
 	// Auto-resume state: the marker store persists "run active at T"
 	// records across gateway restarts. See auto_resume.go for the
 	// resume policy and file layout. resumeMu guards markerStore's
@@ -97,6 +95,14 @@ type ServerRuntime struct {
 	resumeMu       sync.Mutex
 	markerStore    *session.RunMarkerStore
 	runMarkerUnsub func()
+
+	// cacheHealth holds the rolling vLLM prefix-cache hit-ratio samples surfaced
+	// on /health and /status. gpuHealth caches the latest nvidia-smi reading for
+	// the /health gpu section and /health/gpu route. Both zero values are
+	// ready-to-use (no constructor) and degrade silently on hosts without a vLLM
+	// role or NVIDIA GPU. See health_cache.go and health_gpu.go.
+	cacheHealth cacheHealth
+	gpuHealth   gpuHealth
 }
 
 // Server is the main gateway server.
@@ -358,7 +364,6 @@ func New(addr string, opts ...Option) (*Server, error) {
 		}
 	}
 	s.activity = monitoring.NewActivityTracker()
-	s.channelEvents = monitoring.NewChannelEventTracker()
 
 	// Provider auth manager and runtime resolver.
 	if s.providers != nil {

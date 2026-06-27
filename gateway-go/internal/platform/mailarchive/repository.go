@@ -111,10 +111,6 @@ func NewRepository(cfg Config, opts RepositoryOptions) *Repository {
 	}
 }
 
-func defaultMailboxes() []string {
-	return DefaultMailboxes()
-}
-
 func (r *Repository) Search(ctx context.Context, query string, maxResults int) ([]gmail.MessageSummary, error) {
 	rows, _, err := r.SearchPage(ctx, query, "", maxResults)
 	return rows, err

@@ -104,6 +104,20 @@ func enrichMessageWithLinks(ctx context.Context, text string, fetchFn fetchFunc,
 		wg.Add(1)
 		go func(idx int, target string) {
 			defer wg.Done()
+			// Per-goroutine recovery: this fan-out runs on the synchronous
+			// native-client send path, and the outer caller cannot see a
+			// goroutine panic — fetchAndConvert (HTML→markdown / JSON / YouTube
+			// parsing) panicking must cost only this link's slot, not crash the
+			// whole gateway process (concurrency rule 4). Record an error result
+			// for this index so the budget loop below treats it as a failed link.
+			defer func() {
+				if r := recover(); r != nil {
+					results[idx] = linkContent{URL: target, Err: fmt.Sprintf("panic: %v", r)}
+					if logger != nil {
+						logger.Error("panic in link enrichment fetch", "url", target, "panic", r)
+					}
+				}
+			}()
 			results[idx] = fetchAndConvert(enrichCtx, target, fetchFn, logger)
 		}(i, u)
 	}

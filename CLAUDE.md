@@ -117,7 +117,7 @@
 ## Code Style Essentials
 
 - Language: Go (`gateway-go/`).
-- Go: `gofmt`/`go vet`.
+- Go: `gofumpt` (stricter gofmt superset; `make fmt` applies it, golangci-lint enforces it) / `go vet`.
 - Naming: **Deneb** for product/app/docs headings; `deneb` for CLI/package/binary/paths/config.
 - American English in code, comments, docs, UI strings.
 - Keep files under ~700 LOC; split/refactor when it improves clarity.

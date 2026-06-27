@@ -46,15 +46,21 @@ func buildBM25LeakStore(t *testing.T) *wiki.Store {
 			body += " 월간 보고 정리 보고 라인 점검 일정 공유"
 		}
 		if err := store.WritePage(fmt.Sprintf("업무/f%03d.md", n), &wiki.Page{
-			Meta: wiki.Frontmatter{ID: fmt.Sprintf("f%03d", n), Title: fmt.Sprintf("업무 문서 %d", n),
-				Summary: "업무 문서 요약"}, Body: body}); err != nil {
+			Meta: wiki.Frontmatter{
+				ID: fmt.Sprintf("f%03d", n), Title: fmt.Sprintf("업무 문서 %d", n),
+				Summary: "업무 문서 요약",
+			}, Body: body,
+		}); err != nil {
 			t.Fatalf("WritePage: %v", err)
 		}
 	}
 	// Rare proper-noun page (df=1) — a legitimate one-term recall target.
 	if err := store.WritePage("거래/mabasolar.md", &wiki.Page{
-		Meta: wiki.Frontmatter{ID: "mabasolar", Title: "마바솔라 거래 메모", Category: "거래",
-			Summary: "마바솔라 루프탑 RE100 거래"}, Body: "마바솔라 루프탑 RE100 거래 진행. 결제 6월 말."}); err != nil {
+		Meta: wiki.Frontmatter{
+			ID: "mabasolar", Title: "마바솔라 거래 메모", Category: "거래",
+			Summary: "마바솔라 루프탑 RE100 거래",
+		}, Body: "마바솔라 루프탑 RE100 거래 진행. 결제 6월 말.",
+	}); err != nil {
 		t.Fatalf("WritePage mabasolar: %v", err)
 	}
 	return store

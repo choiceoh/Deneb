@@ -39,7 +39,8 @@ func Run(compiledVersion string) int {
 	slog.SetDefault(log.Logger)
 
 	if cfg.Bootstrap.GeneratedToken != "" {
-		log.Logger.Info("gateway auth token auto-generated",
+		log.Logger.Info(
+			"gateway auth token auto-generated",
 			"persisted", cfg.Bootstrap.PersistedGeneratedToken,
 			"configPath", cfg.Bootstrap.Snapshot.Path,
 		)

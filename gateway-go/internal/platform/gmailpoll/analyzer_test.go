@@ -20,7 +20,7 @@ func TestLoadPrompt_CustomFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "custom-prompt.md")
 	custom := "커스텀 분석 프롬프트입니다."
-	if err := os.WriteFile(path, []byte(custom), 0600); err != nil {
+	if err := os.WriteFile(path, []byte(custom), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -33,7 +33,7 @@ func TestLoadPrompt_CustomFile(t *testing.T) {
 func TestServiceAnalysisPromptPrefersNativeOverride(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "custom-prompt.md")
-	if err := os.WriteFile(path, []byte("file prompt"), 0600); err != nil {
+	if err := os.WriteFile(path, []byte("file prompt"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	svc := NewService(Config{
@@ -53,7 +53,7 @@ func TestServiceAnalysisPromptPrefersNativeOverride(t *testing.T) {
 func TestServiceAnalysisPromptFallsBackToPromptFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "custom-prompt.md")
-	if err := os.WriteFile(path, []byte("file prompt"), 0600); err != nil {
+	if err := os.WriteFile(path, []byte("file prompt"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	svc := NewService(Config{

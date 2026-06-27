@@ -131,8 +131,11 @@ func TestNudger_RunOnce_RespectsEvaluateRejection(t *testing.T) {
 	sctx := SessionContext{
 		Turns: 1,
 		ToolActivities: []ToolActivity{
-			{Name: "read"}, {Name: "exec"}, {Name: "write"},
-			{Name: "grep"}, {Name: "read"},
+			{Name: "read"},
+			{Name: "exec"},
+			{Name: "write"},
+			{Name: "grep"},
+			{Name: "read"},
 		},
 	}
 	persisted, err := n.runOnce("s", sctx)
@@ -154,8 +157,11 @@ func TestNudger_RunReviewOnce_UsesFencedReviewerAfterEvaluate(t *testing.T) {
 	sctx := SessionContext{
 		Turns: 3,
 		ToolActivities: []ToolActivity{
-			{Name: "read"}, {Name: "exec"}, {Name: "write"},
-			{Name: "web"}, {Name: "skills"},
+			{Name: "read"},
+			{Name: "exec"},
+			{Name: "write"},
+			{Name: "web"},
+			{Name: "skills"},
 		},
 	}
 	ran, err := n.runReviewOnce("s", sctx)

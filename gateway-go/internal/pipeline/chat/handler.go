@@ -95,6 +95,10 @@ type Handler struct {
 	// awareness (the live `calendar` tool is unaffected).
 	calendarGlanceFn CalendarGlanceFunc
 
+	// goalGlanceFn builds the ambient active-goal glance injected into the
+	// dynamic system-prompt block. Optional: nil disables ambient goal awareness.
+	goalGlanceFn GoalGlanceFunc
+
 	// personaOverrideFn returns the operator-edited 업무 persona text (Settings
 	// prompt corner). Optional: nil → default persona always renders.
 	personaOverrideFn PersonaOverrideFunc
@@ -213,6 +217,10 @@ type HandlerConfig struct {
 	// system-prompt block. Optional: nil disables ambient calendar awareness.
 	CalendarGlanceFn CalendarGlanceFunc
 
+	// GoalGlanceFn builds the ambient active-goal glance for the dynamic
+	// system-prompt block. Optional: nil disables ambient goal awareness.
+	GoalGlanceFn GoalGlanceFunc
+
 	// PersonaOverrideFn returns the operator-edited 업무 persona text (Settings
 	// prompt corner), or "" when unedited. Optional: nil → default persona.
 	PersonaOverrideFn PersonaOverrideFunc
@@ -291,6 +299,7 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 		jobTracker:           cfg.JobTracker,
 		topicResolver:        cfg.TopicResolver,
 		calendarGlanceFn:     cfg.CalendarGlanceFn,
+		goalGlanceFn:         cfg.GoalGlanceFn,
 		personaOverrideFn:    cfg.PersonaOverrideFn,
 		fileRecallFn:         cfg.FileRecallFn,
 		providerConfigs:      cloneProviderConfigs(cfg.ProviderConfigs),

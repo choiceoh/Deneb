@@ -94,7 +94,8 @@ func (t *bootTask) Run(ctx context.Context) error {
 	if isFirstBoot {
 		kind = "first-boot"
 	}
-	t.logger.Info("boot task completed",
+	t.logger.Info(
+		"boot task completed",
 		"kind", kind,
 		"output_len", len(result.Text),
 	)

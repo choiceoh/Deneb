@@ -1,5 +1,24 @@
 # Changelog
 
+## [4.37.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.36.0...deneb-v4.37.0) (2026-06-26)
+
+
+### ✨ Features
+
+* **autonomous:** expose proactive intervention threshold as operator config ([#2903](https://github.com/choiceoh/Deneb/issues/2903)) ([810a063](https://github.com/choiceoh/Deneb/commit/810a063d1e12290779275fbf02d8dd5c9f9ac751))
+* **filestore:** leverage the file store — archive sent/fetched files + share links ([#2893](https://github.com/choiceoh/Deneb/issues/2893)) ([af2e968](https://github.com/choiceoh/Deneb/commit/af2e968e0359c1613d71b8931aed29c0f54ed040))
+* **notebook:** stamp resolved project refs at mail ingestion (각인) ([#2895](https://github.com/choiceoh/Deneb/issues/2895)) ([e4f36a2](https://github.com/choiceoh/Deneb/commit/e4f36a2022b945c8bea9917a32339c49ef2f2801))
+* **productivity:** add evening_letter tool + skill (end-of-day counterpart) ([#2902](https://github.com/choiceoh/Deneb/issues/2902)) ([31932ab](https://github.com/choiceoh/Deneb/commit/31932ab90edb4d6b4d3e9d5a33f1273c507244ed))
+* **project:** resolve owned pages server-side via the wiki graph (③ 서버측 매칭) ([#2899](https://github.com/choiceoh/Deneb/issues/2899)) ([b626c08](https://github.com/choiceoh/Deneb/commit/b626c0864b832bd2256471787dfaebf9a3a2e2ea))
+* **prompt:** surface this session's active goal in the dynamic block ([#2898](https://github.com/choiceoh/Deneb/issues/2898)) ([2c00779](https://github.com/choiceoh/Deneb/commit/2c00779d08258ee90269077477475f8ed57cd134))
+* **sweep:** bug fixes + close read-side loops + observability + hygiene ([#2897](https://github.com/choiceoh/Deneb/issues/2897)) ([2bd823e](https://github.com/choiceoh/Deneb/commit/2bd823ecd7458e719ee49c8f44be9c44d7bc2fa6))
+* **wiki:** stamp deal pages with their project (deal→project graph edge) ([#2900](https://github.com/choiceoh/Deneb/issues/2900)) ([35be823](https://github.com/choiceoh/Deneb/commit/35be82358a33f7d81ec4268c32d81151a172e00f))
+
+
+### 🔧 Internal
+
+* **monitoring:** retire vestigial channel health supervisor + dead restart config ([#2901](https://github.com/choiceoh/Deneb/issues/2901)) ([5e5128f](https://github.com/choiceoh/Deneb/commit/5e5128f3258340241e2705a86c915df108cd55a7))
+
 ## [4.36.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.35.0...deneb-v4.36.0) (2026-06-26)
 
 

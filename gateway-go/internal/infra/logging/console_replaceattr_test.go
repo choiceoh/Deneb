@@ -17,7 +17,8 @@ func TestConsoleHandler_NilReplaceAttr_ByteIdentical(t *testing.T) {
 	var buf bytes.Buffer
 	h := NewConsoleHandler(&buf, &ConsoleOptions{Level: slog.LevelDebug, Color: false})
 
-	r := newTestRecord(slog.LevelInfo, "server started",
+	r := newTestRecord(
+		slog.LevelInfo, "server started",
 		slog.String("addr", "127.0.0.1:8080"),
 		slog.Int("port", 8080),
 	)
@@ -48,7 +49,8 @@ func TestConsoleHandler_ReplaceAttr_MasksStringValues(t *testing.T) {
 		ReplaceAttr: mask,
 	})
 
-	r := newTestRecord(slog.LevelInfo, "request",
+	r := newTestRecord(
+		slog.LevelInfo, "request",
 		slog.String("token", "secret-xyz"),
 		slog.Int("port", 8080),
 	)
@@ -82,7 +84,8 @@ func TestConsoleHandler_ReplaceAttr_DropsZero(t *testing.T) {
 		ReplaceAttr: drop,
 	})
 
-	r := newTestRecord(slog.LevelInfo, "event",
+	r := newTestRecord(
+		slog.LevelInfo, "event",
 		slog.String("keep", "yes"),
 		slog.String("drop_me", "secret"),
 		slog.Int("port", 8080),
@@ -125,8 +128,10 @@ func TestConsoleHandler_ReplaceAttr_GroupsThreaded(t *testing.T) {
 		ReplaceAttr: capture,
 	})
 
-	r := newTestRecord(slog.LevelInfo, "event",
-		slog.Group("outer",
+	r := newTestRecord(
+		slog.LevelInfo, "event",
+		slog.Group(
+			"outer",
 			slog.String("nested", "value"),
 		),
 	)
@@ -160,9 +165,12 @@ func TestConsoleHandler_ReplaceAttr_NestedGroups(t *testing.T) {
 		ReplaceAttr: capture,
 	})
 
-	r := newTestRecord(slog.LevelInfo, "event",
-		slog.Group("outer",
-			slog.Group("inner",
+	r := newTestRecord(
+		slog.LevelInfo, "event",
+		slog.Group(
+			"outer",
+			slog.Group(
+				"inner",
 				slog.String("leaf", "hi"),
 			),
 		),
@@ -227,7 +235,8 @@ func TestConsoleHandler_ReplaceAttr_RedactIntegration(t *testing.T) {
 		ReplaceAttr: redact.AttrReplacer(nil),
 	})
 
-	r := newTestRecord(slog.LevelInfo, "auth",
+	r := newTestRecord(
+		slog.LevelInfo, "auth",
 		slog.String("api_key", token),
 	)
 	h.Handle(context.TODO(), r)
@@ -274,7 +283,8 @@ func TestConsoleHandler_ReplaceAttr_PriorReplacerChain(t *testing.T) {
 		ReplaceAttr: composed,
 	})
 
-	r := newTestRecord(slog.LevelInfo, "pipeline",
+	r := newTestRecord(
+		slog.LevelInfo, "pipeline",
 		slog.String("stage", "start"),
 	)
 	h.Handle(context.TODO(), r)
@@ -301,8 +311,10 @@ func TestConsoleHandler_ReplaceAttr_GroupAttrNotPassed(t *testing.T) {
 		ReplaceAttr: capture,
 	})
 
-	r := newTestRecord(slog.LevelInfo, "event",
-		slog.Group("grp",
+	r := newTestRecord(
+		slog.LevelInfo, "event",
+		slog.Group(
+			"grp",
 			slog.String("child", "v"),
 		),
 	)

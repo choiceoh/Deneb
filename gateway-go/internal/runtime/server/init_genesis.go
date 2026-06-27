@@ -637,5 +637,4 @@ func (s *Server) registerGenesisAutonomousTasks(_ *rpcutil.GatewayHub) {
 		// evolve loop — generate -> gate -> cross-model judge -> watch -> revert.
 		s.genesisTracker.SetRollback(s.genesisEvolver.RollbackSkill, genesis.DefaultRollbackThreshold)
 	}
-
 }

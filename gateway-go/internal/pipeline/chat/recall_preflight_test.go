@@ -128,7 +128,8 @@ func TestBuildRecallPreflightInjectsWikiEvidence(t *testing.T) {
 		t.Fatalf("WritePage: %v", err)
 	}
 
-	out, truncated := buildRecallPreflight(context.Background(),
+	out, truncated := buildRecallPreflight(
+		context.Background(),
 		RunParams{SessionKey: "telegram:1", Message: "전에 Deneb 회상 개선 얘기했던 거 계속해줘"},
 		runDeps{wikiStore: store},
 		nil,
@@ -210,7 +211,8 @@ func TestBuildRecallPreflightUsesRecentDiaryForTopiclessRecall(t *testing.T) {
 		t.Fatalf("AppendDiary: %v", err)
 	}
 
-	out, _ := buildRecallPreflight(context.Background(),
+	out, _ := buildRecallPreflight(
+		context.Background(),
 		RunParams{SessionKey: "telegram:1", Message: "아까 뭐였지?"},
 		runDeps{wikiStore: store},
 		nil,
@@ -229,7 +231,8 @@ func TestBuildRecallPreflightSearchesTranscript(t *testing.T) {
 		t.Fatalf("Append current: %v", err)
 	}
 
-	out, _ := buildRecallPreflight(context.Background(),
+	out, _ := buildRecallPreflight(
+		context.Background(),
 		RunParams{SessionKey: "telegram:1", Message: "전에 alpha 결정 기억나?"},
 		runDeps{transcript: transcript},
 		nil,
@@ -240,7 +243,8 @@ func TestBuildRecallPreflightSearchesTranscript(t *testing.T) {
 }
 
 func TestBuildRecallPreflightNoTrigger(t *testing.T) {
-	out, _ := buildRecallPreflight(context.Background(),
+	out, _ := buildRecallPreflight(
+		context.Background(),
 		RunParams{SessionKey: "telegram:1", Message: "새 기능 설계해줘"},
 		runDeps{},
 		nil,
@@ -251,7 +255,8 @@ func TestBuildRecallPreflightNoTrigger(t *testing.T) {
 }
 
 func TestBuildRecallPreflightSkipsEphemeralUser(t *testing.T) {
-	out, _ := buildRecallPreflight(context.Background(),
+	out, _ := buildRecallPreflight(
+		context.Background(),
 		RunParams{SessionKey: "telegram:1", Message: "전에 alpha 결정 기억나?", EphemeralUser: true},
 		runDeps{},
 		nil,
@@ -270,7 +275,8 @@ func TestBuildRecallPreflightSkipsWhenSkipRecall(t *testing.T) {
 	if err := transcript.Append("telegram:1", NewTextChatMessage("user", "alpha 결정은 서버 preflight로 하기로 했다", 1000)); err != nil {
 		t.Fatalf("Append: %v", err)
 	}
-	out, _ := buildRecallPreflight(context.Background(),
+	out, _ := buildRecallPreflight(
+		context.Background(),
 		RunParams{SessionKey: "telegram:1", Message: "전에 alpha 결정 기억나?", SkipRecall: true},
 		runDeps{transcript: transcript},
 		nil,
@@ -360,7 +366,8 @@ func TestBuildRecallPreflightFlagsDeadlineTruncation(t *testing.T) {
 	// the snapshot as truncated so it is never frozen into the recall cache.
 	ctx, cancel := context.WithTimeout(context.Background(), 80*time.Millisecond)
 	defer cancel()
-	out, truncated := buildRecallPreflight(ctx,
+	out, truncated := buildRecallPreflight(
+		ctx,
 		RunParams{SessionKey: "client:main", Message: "전에 Deneb 회상 개선 얘기했던 거 계속해줘"},
 		runDeps{wikiStore: store, transcript: slowTranscriptStore{delay: 300 * time.Millisecond}},
 		nil,
@@ -385,7 +392,8 @@ func TestBuildRecallPreflightSurvivesPanickingSource(t *testing.T) {
 		t.Fatalf("WritePage: %v", err)
 	}
 
-	out, _ := buildRecallPreflight(context.Background(),
+	out, _ := buildRecallPreflight(
+		context.Background(),
 		RunParams{SessionKey: "client:main", Message: "전에 Deneb 회상 개선 얘기했던 거 계속해줘"},
 		runDeps{wikiStore: store, transcript: panickyTranscriptStore{}},
 		nil,
