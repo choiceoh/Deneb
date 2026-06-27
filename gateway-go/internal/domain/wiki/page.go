@@ -88,6 +88,12 @@ type Frontmatter struct {
 	Archived   bool
 	Type       string // concept, entity, source, comparison, log
 	Confidence string // high, medium, low
+	// Status is a project page's lifecycle: "진행중" (default when empty), "완료",
+	// or "보류". Operator-set — never flipped autonomously by the dream cycle, which
+	// only preserves it on rewrite. Decoupled from Archived: a 완료 project's facts
+	// stay fully findable (no validityFactor demotion); status only changes
+	// foregrounding (모아보기 order, digest priority). Empty on non-project pages.
+	Status string
 	// SupersededBy points at the page that replaced this one's facts. Set by
 	// the dreamer when new information contradicts/replaces an old page;
 	// search demotes superseded pages so stale facts stop surfacing as
@@ -163,6 +169,9 @@ func (p *Page) Render() []byte {
 	}
 	if p.Meta.Confidence != "" {
 		buf.WriteString("confidence: " + p.Meta.Confidence + "\n")
+	}
+	if p.Meta.Status != "" {
+		buf.WriteString("status: " + p.Meta.Status + "\n")
 	}
 	if p.Meta.SupersededBy != "" {
 		buf.WriteString("superseded_by: " + p.Meta.SupersededBy + "\n")
@@ -467,6 +476,8 @@ func parseFrontmatterFields(raw string) Frontmatter {
 			fm.Type = val
 		case "confidence":
 			fm.Confidence = val
+		case "status":
+			fm.Status = val
 		case "superseded_by":
 			fm.SupersededBy = val
 		}
