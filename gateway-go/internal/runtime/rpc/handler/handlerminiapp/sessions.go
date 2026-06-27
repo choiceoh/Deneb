@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	handlerchat "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
@@ -138,9 +139,12 @@ func sessionsTranscript(deps SessionsDeps) rpcutil.HandlerFunc {
 				return rpcerr.InvalidParams(err).Response(req.ID)
 			}
 		}
-		key := strings.TrimSpace(p.SessionKey)
-		if key == "" {
+		if strings.TrimSpace(p.SessionKey) == "" {
 			return rpcerr.MissingParam("sessionKey").Response(req.ID)
+		}
+		key, err := handlerchat.NormalizeMiniappSessionKey(p.SessionKey)
+		if err != nil {
+			return rpcerr.InvalidParams(err).Response(req.ID)
 		}
 		limit := p.Limit
 		if limit <= 0 {
@@ -270,10 +274,17 @@ func sessionsRecent(deps SessionsDeps) rpcutil.HandlerFunc {
 		}
 
 		sessions := deps.Manager.List()
+		filtered := sessions[:0]
+		for _, s := range sessions {
+			if _, err := handlerchat.NormalizeMiniappSessionKey(s.Key); err == nil {
+				filtered = append(filtered, s)
+			}
+		}
+		sessions = filtered
 
 		// Filter by channel if requested.
 		if p.Channel != "" {
-			filtered := sessions[:0]
+			filtered = sessions[:0]
 			for _, s := range sessions {
 				if s.Channel == p.Channel {
 					filtered = append(filtered, s)
@@ -342,9 +353,12 @@ func sessionsDelete(deps SessionsDeps) rpcutil.HandlerFunc {
 				return rpcerr.InvalidParams(err).Response(req.ID)
 			}
 		}
-		key := strings.TrimSpace(p.SessionKey)
-		if key == "" {
+		if strings.TrimSpace(p.SessionKey) == "" {
 			return rpcerr.MissingParam("sessionKey").Response(req.ID)
+		}
+		key, err := handlerchat.NormalizeMiniappSessionKey(p.SessionKey)
+		if err != nil {
+			return rpcerr.InvalidParams(err).Response(req.ID)
 		}
 
 		if s := deps.Manager.Get(key); s != nil && s.Status == session.StatusRunning && !p.Force {

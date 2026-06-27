@@ -192,6 +192,15 @@ func TestHandleMiniappChatStream_GuardPaths(t *testing.T) {
 		t.Errorf("empty message: code = %d, want 400", rec.Code)
 	}
 
+	// Invalid session namespace must be rejected before the stream starts.
+	rec = postMiniappChatStream(t, s, token, map[string]any{"sessionKey": "system:boot", "message": "hi"})
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("invalid session key: code = %d, want 400", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "sessionKey must be") {
+		t.Errorf("invalid session key: body = %q, want validation error", rec.Body.String())
+	}
+
 	// Valid request but chat handler not wired → 503 (not a stream). Null it
 	// explicitly so the guard is exercised without driving a real LLM turn.
 	s.chatHandler = nil

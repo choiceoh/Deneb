@@ -53,9 +53,9 @@ func sample(key string, updatedAt int64, channel string) *session.Session {
 func TestSessionsRecent_SortsNewestFirst(t *testing.T) {
 	mgr := &fakeSessionsLister{
 		out: []*session.Session{
-			sample("old", 1_000, "telegram"),
-			sample("new", 9_000, "telegram"),
-			sample("mid", 5_000, "telegram"),
+			sample("client:main:old", 1_000, "client"),
+			sample("client:main:new", 9_000, "client"),
+			sample("client:main:mid", 5_000, "client"),
 		},
 	}
 	h := sessionsRecent(SessionsDeps{Manager: mgr})
@@ -73,7 +73,7 @@ func TestSessionsRecent_SortsNewestFirst(t *testing.T) {
 	for _, s := range got.Sessions {
 		keys = append(keys, s["key"].(string))
 	}
-	want := []string{"new", "mid", "old"}
+	want := []string{"client:main:new", "client:main:mid", "client:main:old"}
 	for i, k := range want {
 		if keys[i] != k {
 			t.Errorf("position %d: key = %q, want %q (full=%v)", i, keys[i], k, keys)
@@ -84,7 +84,7 @@ func TestSessionsRecent_SortsNewestFirst(t *testing.T) {
 func TestSessionsRecent_Limit(t *testing.T) {
 	out := make([]*session.Session, 0, 30)
 	for i := range 30 {
-		out = append(out, sample("s", int64(i), "telegram"))
+		out = append(out, sample("client:main:s", int64(i), "client"))
 	}
 	h := sessionsRecent(SessionsDeps{Manager: &fakeSessionsLister{out: out}})
 	resp := h(authedCtx(), reqWith(t, "miniapp.sessions.recent", map[string]any{"limit": 5}))
@@ -102,7 +102,7 @@ func TestSessionsRecent_Limit(t *testing.T) {
 func TestSessionsRecent_LimitClamp(t *testing.T) {
 	out := make([]*session.Session, 0, 200)
 	for i := range 200 {
-		out = append(out, sample("s", int64(i), "telegram"))
+		out = append(out, sample("client:main:s", int64(i), "client"))
 	}
 	h := sessionsRecent(SessionsDeps{Manager: &fakeSessionsLister{out: out}})
 	resp := h(authedCtx(), reqWith(t, "miniapp.sessions.recent", map[string]any{"limit": 5000}))
@@ -119,13 +119,13 @@ func TestSessionsRecent_LimitClamp(t *testing.T) {
 func TestSessionsRecent_ChannelFilter(t *testing.T) {
 	mgr := &fakeSessionsLister{
 		out: []*session.Session{
-			sample("a", 100, "telegram"),
-			sample("b", 200, "openai"),
-			sample("c", 300, "telegram"),
+			sample("client:main:a", 100, "client"),
+			sample("client:main:b", 200, "openai"),
+			sample("client:main:c", 300, "client"),
 		},
 	}
 	h := sessionsRecent(SessionsDeps{Manager: mgr})
-	resp := h(authedCtx(), reqWith(t, "miniapp.sessions.recent", map[string]any{"channel": "telegram"}))
+	resp := h(authedCtx(), reqWith(t, "miniapp.sessions.recent", map[string]any{"channel": "client"}))
 
 	var got struct {
 		Sessions []map[string]any `json:"sessions"`
@@ -136,8 +136,42 @@ func TestSessionsRecent_ChannelFilter(t *testing.T) {
 		t.Fatalf("count = %d, want 2 (filtered)", got.Count)
 	}
 	for _, s := range got.Sessions {
-		if s["channel"] != "telegram" {
+		if s["channel"] != "client" {
 			t.Errorf("unfiltered row: %+v", s)
+		}
+	}
+}
+
+func TestSessionsRecent_FiltersToMiniappNamespaces(t *testing.T) {
+	mgr := &fakeSessionsLister{
+		out: []*session.Session{
+			sample("client:main", 400, "client"),
+			sample("client:main:abc", 300, "client"),
+			sample("chat:xyz", 200, "client"),
+			sample("system:boot", 500, "system"),
+			sample("cron:daily:1", 100, "cron"),
+			sample("client:topic:mail", 50, "client"),
+		},
+	}
+	h := sessionsRecent(SessionsDeps{Manager: mgr})
+	resp := h(authedCtx(), reqWith(t, "miniapp.sessions.recent", nil))
+
+	var got struct {
+		Sessions []map[string]any `json:"sessions"`
+		Count    int              `json:"count"`
+	}
+	decode(t, resp, &got)
+	if got.Count != 3 {
+		t.Fatalf("count = %d, want 3", got.Count)
+	}
+	keys := []string{}
+	for _, s := range got.Sessions {
+		keys = append(keys, s["key"].(string))
+	}
+	want := []string{"client:main", "client:main:abc", "chat:xyz"}
+	for i, k := range want {
+		if keys[i] != k {
+			t.Fatalf("keys[%d] = %q, want %q (full=%v)", i, keys[i], k, keys)
 		}
 	}
 }
@@ -253,7 +287,7 @@ func TestSessionsDelete_ForceDeletesRunning(t *testing.T) {
 func TestSessionsDelete_NonexistentReturnsFalse(t *testing.T) {
 	mgr := &fakeSessionsLister{out: nil}
 	resp := sessionsDelete(SessionsDeps{Manager: mgr})(authedCtx(), reqWith(t, "miniapp.sessions.delete", map[string]any{
-		"sessionKey": "ghost",
+		"sessionKey": "client:main:ghost",
 	}))
 
 	var got struct {
@@ -272,6 +306,22 @@ func TestSessionsDelete_MissingKey(t *testing.T) {
 	}
 	if resp.Error.Code != protocol.ErrMissingParam {
 		t.Errorf("code = %s, want MISSING_PARAM", resp.Error.Code)
+	}
+}
+
+func TestSessionsDelete_InvalidSessionKey(t *testing.T) {
+	mgr := &fakeSessionsLister{out: []*session.Session{terminalSample("client:main")}}
+	resp := sessionsDelete(SessionsDeps{Manager: mgr})(authedCtx(), reqWith(t, "miniapp.sessions.delete", map[string]any{
+		"sessionKey": "system:boot",
+	}))
+	if resp.OK {
+		t.Fatalf("expected error")
+	}
+	if resp.Error.Code != protocol.ErrInvalidRequest {
+		t.Fatalf("code = %s, want INVALID_REQUEST", resp.Error.Code)
+	}
+	if len(mgr.deleted) != 0 {
+		t.Fatalf("manager.Delete called for invalid session key: %v", mgr.deleted)
 	}
 }
 
@@ -347,7 +397,7 @@ func transcriptDeps(loader TranscriptLoader) SessionsDeps {
 func TestSessionsTranscript_HappyPath(t *testing.T) {
 	loader := &fakeTranscriptLoader{
 		loadFn: func(key string, limit int) ([]toolctx.ChatMessage, int, error) {
-			if key != "telegram:123" {
+			if key != "client:main:123" {
 				t.Errorf("key = %q", key)
 			}
 			if limit != defaultTranscriptLimit {
@@ -363,7 +413,7 @@ func TestSessionsTranscript_HappyPath(t *testing.T) {
 	}
 	h := sessionsTranscript(transcriptDeps(loader))
 	resp := h(authedCtx(), reqWith(t, "miniapp.sessions.transcript", map[string]any{
-		"sessionKey": "telegram:123",
+		"sessionKey": "client:main:123",
 	}))
 
 	var got struct {
@@ -377,7 +427,7 @@ func TestSessionsTranscript_HappyPath(t *testing.T) {
 		Total int `json:"total"`
 	}
 	decode(t, resp, &got)
-	if got.SessionKey != "telegram:123" || got.Total != 42 {
+	if got.SessionKey != "client:main:123" || got.Total != 42 {
 		t.Errorf("payload header wrong: %+v", got)
 	}
 	if len(got.Messages) != 2 || got.Messages[0].Content != "안녕" {
@@ -385,6 +435,24 @@ func TestSessionsTranscript_HappyPath(t *testing.T) {
 	}
 	if got.Messages[1].Role != "assistant" {
 		t.Errorf("role wrong: %+v", got.Messages[1])
+	}
+}
+
+func TestSessionsTranscript_InvalidSessionKey(t *testing.T) {
+	loader := &fakeTranscriptLoader{
+		loadFn: func(key string, limit int) ([]toolctx.ChatMessage, int, error) {
+			t.Fatalf("Load must not run for invalid session keys")
+			return nil, 0, nil
+		},
+	}
+	resp := sessionsTranscript(transcriptDeps(loader))(authedCtx(), reqWith(t, "miniapp.sessions.transcript", map[string]any{
+		"sessionKey": "system:boot",
+	}))
+	if resp.OK {
+		t.Fatalf("expected error")
+	}
+	if resp.Error.Code != protocol.ErrInvalidRequest {
+		t.Fatalf("code = %s, want INVALID_REQUEST", resp.Error.Code)
 	}
 }
 
@@ -404,7 +472,7 @@ func TestSessionsTranscript_DecodesBlocks(t *testing.T) {
 	}
 	h := sessionsTranscript(transcriptDeps(loader))
 	resp := h(authedCtx(), reqWith(t, "miniapp.sessions.transcript", map[string]any{
-		"sessionKey": "k",
+		"sessionKey": "client:main:k",
 	}))
 	var got struct {
 		Messages []struct {
@@ -449,7 +517,7 @@ func TestSessionsTranscript_HidesToolMachineryAndEnrichment(t *testing.T) {
 	}
 	h := sessionsTranscript(transcriptDeps(loader))
 	resp := h(authedCtx(), reqWith(t, "miniapp.sessions.transcript", map[string]any{
-		"sessionKey": "k",
+		"sessionKey": "client:main:k",
 	}))
 	var got struct {
 		Messages []struct {
@@ -485,7 +553,7 @@ func TestSessionsTranscript_LimitClamp(t *testing.T) {
 	}
 	h := sessionsTranscript(transcriptDeps(loader))
 	h(authedCtx(), reqWith(t, "miniapp.sessions.transcript", map[string]any{
-		"sessionKey": "k", "limit": 9999,
+		"sessionKey": "client:main:k", "limit": 9999,
 	}))
 	if seenLimit != maxTranscriptLimit {
 		t.Errorf("limit = %d, want clamped to %d", seenLimit, maxTranscriptLimit)
@@ -506,7 +574,7 @@ func TestSessionsTranscript_MissingKey(t *testing.T) {
 func TestSessionsTranscript_RequiresAuth(t *testing.T) {
 	h := sessionsTranscript(transcriptDeps(&fakeTranscriptLoader{}))
 	resp := h(context.Background(), reqWith(t, "miniapp.sessions.transcript", map[string]any{
-		"sessionKey": "k",
+		"sessionKey": "client:main:k",
 	}))
 	if resp.OK {
 		t.Fatalf("expected unauthorized")
@@ -523,7 +591,7 @@ func TestSessionsTranscript_LoaderError(t *testing.T) {
 		},
 	}
 	h := sessionsTranscript(transcriptDeps(loader))
-	resp := h(authedCtx(), reqWith(t, "miniapp.sessions.transcript", map[string]any{"sessionKey": "k"}))
+	resp := h(authedCtx(), reqWith(t, "miniapp.sessions.transcript", map[string]any{"sessionKey": "client:main:k"}))
 	if resp.OK {
 		t.Fatalf("expected error")
 	}

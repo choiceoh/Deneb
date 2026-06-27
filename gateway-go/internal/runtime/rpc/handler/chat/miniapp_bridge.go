@@ -23,14 +23,33 @@ import (
 // prompts the model to emit them — see PR removing the deneb-ui instructions.)
 const NativeClientChannel = "client"
 
+const nativeWorkSessionKey = NativeClientChannel + ":main"
+
 // DefaultSessionKey normalizes the native client's optional session key onto the
 // shared default conversation so the blocking and streaming bridges cannot drift.
 func DefaultSessionKey(sessionKey string) string {
 	sessionKey = strings.TrimSpace(sessionKey)
 	if sessionKey == "" {
-		return NativeClientChannel + ":main"
+		return nativeWorkSessionKey
 	}
 	return sessionKey
+}
+
+// NormalizeMiniappSessionKey restricts remote native-client traffic to the
+// current client-owned session namespaces. This prevents the miniapp HTTP/RPC
+// surface from reading or mutating internal cron/system/background sessions.
+func NormalizeMiniappSessionKey(sessionKey string) (string, error) {
+	sessionKey = DefaultSessionKey(sessionKey)
+	switch {
+	case sessionKey == nativeWorkSessionKey:
+		return sessionKey, nil
+	case strings.HasPrefix(sessionKey, nativeWorkSessionKey+":"):
+		return sessionKey, nil
+	case strings.HasPrefix(sessionKey, "chat:") && strings.TrimPrefix(sessionKey, "chat:") != "":
+		return sessionKey, nil
+	default:
+		return "", fmt.Errorf("sessionKey must be %q, %q, or %q", nativeWorkSessionKey, nativeWorkSessionKey+":<id>", "chat:<id>")
+	}
 }
 
 // Work-feed digest bounds: read at most maxFeedDigestItems rows, keep at most
@@ -104,7 +123,7 @@ func MiniappMethods(deps Deps) map[string]rpcutil.HandlerFunc {
 	}
 	m := map[string]rpcutil.HandlerFunc{
 		"miniapp.chat.send":    handleMiniappChatSend(deps),
-		"miniapp.chat.history": handleHistory(deps),
+		"miniapp.chat.history": handleMiniappHistory(deps),
 	}
 	// Image capture (share a photo/screenshot to Deneb) needs the OCR sidecar
 	// wired; skip the method cleanly when it isn't.
@@ -192,7 +211,10 @@ func handleMiniappCaptureImage(deps Deps) rpcutil.HandlerFunc {
 		if strings.TrimSpace(text) == "" {
 			return rpcerr.Unavailable("no text found in image").Response(req.ID)
 		}
-		sessionKey := DefaultSessionKey(p.SessionKey)
+		sessionKey, err := NormalizeMiniappSessionKey(p.SessionKey)
+		if err != nil {
+			return rpcerr.InvalidParams(err).Response(req.ID)
+		}
 		var savedPath string
 		if deps.SaveCapture != nil {
 			if rel, serr := deps.SaveCapture("image", p.Caption, text); serr != nil {
@@ -278,7 +300,10 @@ func handleMiniappCaptureDocument(deps Deps) rpcutil.HandlerFunc {
 		if strings.TrimSpace(text) == "" {
 			return rpcerr.Unavailable("no text could be extracted from the document").Response(req.ID)
 		}
-		sessionKey := DefaultSessionKey(p.SessionKey)
+		sessionKey, err := NormalizeMiniappSessionKey(p.SessionKey)
+		if err != nil {
+			return rpcerr.InvalidParams(err).Response(req.ID)
+		}
 		// Persist the raw extracted text before the turn: the agent only
 		// summarizes, and the original must outlive the chat transcript.
 		var savedPath string
@@ -405,7 +430,10 @@ func handleMiniappCaptureAudio(deps Deps) rpcutil.HandlerFunc {
 		if strings.TrimSpace(transcript) == "" {
 			return rpcerr.Unavailable("no speech found in audio").Response(req.ID)
 		}
-		sessionKey := DefaultSessionKey(p.SessionKey)
+		sessionKey, err := NormalizeMiniappSessionKey(p.SessionKey)
+		if err != nil {
+			return rpcerr.InvalidParams(err).Response(req.ID)
+		}
 		// Persist the full diarized transcript before the turn: minutes are a
 		// summary, and the one number the summary dropped lives only here.
 		var savedPath string
@@ -477,6 +505,10 @@ func handleMiniappCaptureContacts(deps Deps) rpcutil.HandlerFunc {
 		if len(p.Contacts) == 0 {
 			return rpcerr.MissingParam("contacts").Response(req.ID)
 		}
+		sessionKey, err := NormalizeMiniappSessionKey(p.SessionKey)
+		if err != nil {
+			return rpcerr.InvalidParams(err).Response(req.ID)
+		}
 		// Re-wrap the array into the {"contacts": ...} envelope both SaveContacts
 		// and EnrichContacts parse.
 		payload := make([]byte, 0, len(p.Contacts)+13)
@@ -502,7 +534,6 @@ func handleMiniappCaptureContacts(deps Deps) rpcutil.HandlerFunc {
 				enrich = res
 			}
 		}
-		sessionKey := DefaultSessionKey(p.SessionKey)
 		text := contactsSummary(saved, enrich)
 		recordWorkFeed(deps, workfeed.Item{
 			Source:     workfeed.SourceCaptureContacts,
@@ -519,6 +550,38 @@ func handleMiniappCaptureContacts(deps Deps) rpcutil.HandlerFunc {
 			"matched":  enrich.Matched,
 			"total":    enrich.Total,
 		})
+	}
+}
+
+func handleMiniappHistory(deps Deps) rpcutil.HandlerFunc {
+	type params struct {
+		SessionKey string `json:"sessionKey"`
+		Limit      int    `json:"limit,omitempty"`
+	}
+	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		var p params
+		if len(req.Params) > 0 {
+			if err := json.Unmarshal(req.Params, &p); err != nil {
+				return rpcerr.InvalidParams(err).Response(req.ID)
+			}
+		}
+		if strings.TrimSpace(p.SessionKey) == "" {
+			return rpcerr.MissingParam("sessionKey").Response(req.ID)
+		}
+		sessionKey, err := NormalizeMiniappSessionKey(p.SessionKey)
+		if err != nil {
+			return rpcerr.InvalidParams(err).Response(req.ID)
+		}
+		paramsJSON, err := json.Marshal(map[string]any{
+			"sessionKey": sessionKey,
+			"limit":      p.Limit,
+		})
+		if err != nil {
+			return rpcerr.InvalidParams(err).Response(req.ID)
+		}
+		reqCopy := *req
+		reqCopy.Params = paramsJSON
+		return deps.Chat.History(ctx, &reqCopy)
 	}
 }
 
@@ -827,7 +890,10 @@ func handleMiniappChatSend(deps Deps) rpcutil.HandlerFunc {
 		if strings.TrimSpace(p.Message) == "" {
 			return rpcerr.MissingParam("message").Response(req.ID)
 		}
-		sessionKey := DefaultSessionKey(p.SessionKey)
+		sessionKey, err := NormalizeMiniappSessionKey(p.SessionKey)
+		if err != nil {
+			return rpcerr.InvalidParams(err).Response(req.ID)
+		}
 
 		// 업무 turns (recall on) carry today's work feed as wire-only context — this
 		// is what makes a 업무 chat aware of the day's proactive reports/captures,

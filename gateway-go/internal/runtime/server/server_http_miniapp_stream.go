@@ -131,7 +131,11 @@ func (s *Server) handleMiniappChatStream(w http.ResponseWriter, r *http.Request)
 		s.writeJSON(w, http.StatusBadRequest, map[string]any{"error": "missing message"})
 		return
 	}
-	sessionKey := handlerchat.DefaultSessionKey(reqBody.SessionKey)
+	sessionKey, err := handlerchat.NormalizeMiniappSessionKey(reqBody.SessionKey)
+	if err != nil {
+		s.writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid body: " + err.Error()})
+		return
+	}
 	if s.chatHandler == nil {
 		s.writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "chat handler not ready"})
 		return

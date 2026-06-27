@@ -11,6 +11,44 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
+func TestNormalizeMiniappSessionKey(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		input   string
+		want    string
+		wantErr bool
+	}{
+		{name: "blank defaults to main", input: "", want: "client:main"},
+		{name: "main allowed", input: "client:main", want: "client:main"},
+		{name: "work sub session allowed", input: "client:main:abc", want: "client:main:abc"},
+		{name: "chat workspace allowed", input: "chat:123", want: "chat:123"},
+		{name: "system denied", input: "system:boot", wantErr: true},
+		{name: "cron denied", input: "cron:job:1", wantErr: true},
+		{name: "legacy client denied", input: "client:123", wantErr: true},
+		{name: "topic session denied", input: "client:topic:mail", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := NormalizeMiniappSessionKey(tt.input)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("NormalizeMiniappSessionKey(%q) unexpectedly succeeded with %q", tt.input, got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("NormalizeMiniappSessionKey(%q) error = %v", tt.input, err)
+			}
+			if got != tt.want {
+				t.Fatalf("NormalizeMiniappSessionKey(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestMiniappCaptureContacts_Success(t *testing.T) {
 	var savedPayload, enrichPayload []byte
 	deps := Deps{
@@ -107,6 +145,47 @@ func TestMiniappCaptureContacts_MissingParam(t *testing.T) {
 	}
 	if called {
 		t.Error("SaveContacts must not run when contacts param is missing")
+	}
+}
+
+func TestMiniappCaptureContacts_InvalidSessionKey(t *testing.T) {
+	called := false
+	deps := Deps{
+		SaveContacts: func([]byte) (int, error) {
+			called = true
+			return 1, nil
+		},
+	}
+	handler := handleMiniappCaptureContacts(deps)
+
+	req := &protocol.RequestFrame{
+		ID:     "c-invalid-session",
+		Params: json.RawMessage(`{"contacts":[{"name":"X"}],"sessionKey":"system:boot"}`),
+	}
+	resp := handler(context.Background(), req)
+	if resp.OK {
+		t.Fatal("expected error for invalid session key")
+	}
+	if resp.Error == nil || resp.Error.Code != protocol.ErrInvalidRequest {
+		t.Fatalf("got %+v, want INVALID_REQUEST", resp.Error)
+	}
+	if called {
+		t.Fatal("SaveContacts must not run when sessionKey is invalid")
+	}
+}
+
+func TestMiniappHistory_InvalidSessionKey(t *testing.T) {
+	handler := handleMiniappHistory(Deps{})
+	req := &protocol.RequestFrame{
+		ID:     "h-invalid-session",
+		Params: json.RawMessage(`{"sessionKey":"system:boot"}`),
+	}
+	resp := handler(context.Background(), req)
+	if resp.OK {
+		t.Fatal("expected error for invalid session key")
+	}
+	if resp.Error == nil || resp.Error.Code != protocol.ErrInvalidRequest {
+		t.Fatalf("got %+v, want INVALID_REQUEST", resp.Error)
 	}
 }
 
