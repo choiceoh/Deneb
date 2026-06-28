@@ -1,8 +1,8 @@
 # 네이티브 앱 배터리 최적화 개선방안 (client-android)
 
 > **방법**: `client-android/` (KMP, Android/iOS/desktop) 의 배터리 소모원을 코드로 매핑 → Android 표준 전력 패턴과 대조 → 개선안 우선순위화. 단일 사용자 daily-driver = Galaxy S26.
-> **일시**: 2026-06-27
-> **한 줄 결론**: 지배적 standby 소모원은 **`dataSync` 포그라운드 서비스가 SSE 연결을 24/7 살려두며 프로세스를 Doze 에서 제외**하는 것(`DaemonService` + `TaskScheduler.startPushSubscription`)이다. 그런데 이건 **이미 동작하는 FCM 폴백과 대부분 중복**이다 — 게이트웨이는 "라이브 SSE 클라이언트가 없을 때" FCM 으로 프로액티브 리포트를 보내도록 이미 설계돼 있다(`FcmService.kt`). **본안 = 백그라운드에선 SSE/포그라운드서비스를 내리고 FCM 에 위임, 포그라운드 복귀 시 재연결+커서 드레인.** 표준 Android 아키텍처이자 최대 standby 절감. 단 **FCM 가용성(`google-services.json` 빌드타임 게이팅)**에 따라 graceful degrade 필요.
+> **일시**: 2026-06-27 (2026-06-28 adversarial 리뷰 반영 정정)
+> **한 줄 결론**: 지배적 standby 소모원은 **`dataSync` 포그라운드 서비스가 SSE 연결을 24/7 살려두며 프로세스를 Doze 에서 제외**하는 것(`DaemonService` + `TaskScheduler.startPushSubscription`)이다. 가장 큰 standby 절감은 **백그라운드에서 SSE/FGS 를 내려 Doze 진입**(M1)이지만, "FCM 이 백그라운드 전달을 인수"는 **현 게이트웨이로는 부분적으로만 참** — 이미지 리포트·에러/플릿 알림은 FCM 폴백이 없고(`pushHub.publish` 직접), FCM 게이트가 *전역* `subscriberCount()==0`(데스크톱 구독 시 폰 억제)이며 서버 크리덴셜이 별도다(§3.1, 코드 검증). 따라서 **client-only M1 은 알림 소실**. **즉시 안전한 건 M2(연결성 인지 재연결)·M3(backoff 튜닝)** 이고, **M1/M4 는 §3.1 게이트웨이 선결조건 + device(S26) 검증 후**. (※이 환경엔 Android SDK·실기기가 없어 네이티브 코드의 컴파일/lint/동작 검증은 PR CI[`kotlin-lint`/`android-compile`] + 호스트 S26 에서 수행.)
 
 ---
 
@@ -45,13 +45,26 @@
 ### M1 — SSE/포그라운드서비스를 포그라운드 게이팅, 백그라운드는 FCM 위임 ★본안
 
 - **무엇**: 앱이 백그라운드로 가면(`ProcessLifecycleOwner` `onStop`) SSE 구독을 끊고 `DaemonService` 를 `stopForeground`/stop → 프로세스가 Doze 진입. 포그라운드 복귀(`onStart`)에 SSE 재연결 + `syncNativeState` 커서 드레인.
-- **왜 안전한가**:
-  - **커서 기반 sync** 라 끊겨도 무손실 — `syncNativeState`(`:987-1067`)가 persisted 커서를 재생해 백그라운드 동안 쌓인 이벤트를 복귀 시 한 번에 당긴다.
-  - **프로액티브 전달은 FCM 이 인수** — 게이트웨이가 SSE 부재를 감지해 FCM 발사(이미 구현된 폴백 경로). 사용자는 트레이 알림을 그대로 받는다.
-  - `appInForeground` 플래그(`TaskScheduler`)가 **이미 존재** — 지금은 트레이 vs in-app 알림 분기에만 쓰는 걸, **연결 라이프사이클 게이트로 확장**.
+- **부분적으로만 안전하다 (★ adversarial 리뷰로 정정, §3.1)**:
+  - `appInForeground` 플래그(`TaskScheduler`)가 **이미 존재** — 지금은 트레이 vs in-app 알림 분기에만 쓰는 걸 **연결 라이프사이클 게이트로 확장**.
+  - 커서 기반 sync 가 복귀 시 catch-up 의 *기반*이지만 **무손실은 조건부** — 현재 `syncNativeState`(`DenebGatewayClient.kt:1001-1026`)는 `limit=100` 으로 당기다 `pages < 4` 에서 멈춰 `hasMore` 여도 **최대 400 이벤트만** 드레인한다. 긴 백그라운드 후 복귀 1회로는 누락 가능 → **`hasMore==false` 까지 루프/후속 pull 필요**(선결).
+  - "FCM 이 프로액티브를 인수"는 **현 게이트웨이로는 부분적으로만 참** — §3.1 의 게이트웨이 측 갭(이미지 리포트·에러/플릿 알림 미폴백, 글로벌 subscriber 게이트, 서버 크리덴셜)이 메워지기 전엔 백그라운드 SSE 차단이 **여러 알림을 조용히 떨군다**.
 - **이득**: 화면 꺼진 동안 Doze 진입 → standby drain 대폭↓(영속 소켓 + 30s keepalive + Doze 면제가 한꺼번에 사라짐). Android 표준 패턴.
-- **트레이드오프**: 백그라운드 프로액티브가 SSE(즉시) → FCM(Doze 배칭, 약간 지연)로. 프로액티브 비서엔 high-priority FCM 이 표준이고 게이트웨이가 이미 그 길을 가지므로 회귀 아님.
-- **★제약 (M4 와 연동 필수)**: FCM 은 **`google-services.json` 빌드타임 게이팅**(`build.gradle.kts:16` — 없으면 no-push degrade). daily-driver 호스트 빌드는 FCM 있음 → 안전. **FCM 없는 빌드(공개 CI/FOSS)에서는 백그라운드 SSE 차단 시 프로액티브 0** → 그땐 M3(저비용 영속 연결)로 폴백. 즉 **빌드의 FCM 가용성에 따라 분기**: FCM 가용 → M1, 비가용 → M3.
+- **★제약 1 — FCM 가용성은 클라+서버 둘 다**: 클라 `google-services.json`(`build.gradle.kts:16`)은 **토큰 등록만** 켠다. 실제 발송은 게이트웨이 `DENEB_FCM_CREDENTIALS_FILE`(`push/config.go:Enabled()`)이 있어야 살아난다 — 없으면 `pushFCM==nil` 이라 `DeliverFallback` 스킵(`proactive_relay.go:388`). **M1 의 "FCM 가용" 게이트 = 클라 토큰 + 서버 크리덴셜 둘 다 충족** 일 때만. 어느 쪽이라도 없으면 백그라운드 SSE 유지(M3).
+- **★제약 2 — 활성 전송 예외**: 사용자가 긴 에이전트 턴을 보낸 직후 백그라운드/잠금하면, FGS 즉시 종료가 in-flight `chat/stream` POST 의 프로세스/네트워크 keepalive 를 끊는다(FCM 은 프로액티브만 커버, user-initiated 스트림은 아님). **활성 스트림 중에는 FGS 를 내리지 말 것**(짧은 grace 또는 전송완료까지 유예).
+
+### 3.1 M1 선결 조건 (게이트웨이 측 — adversarial 리뷰로 발견, 코드 검증 완료)
+
+> M1 의 "FCM 이 백그라운드 전달을 인수"는 **현 게이트웨이로는 성립하지 않는** 경로가 다수다. 백그라운드 SSE 를 끄기 전에 아래가 선행돼야 사용자 알림이 안 샌다. 모두 소스 대조로 확인.
+
+| 갭 | 근거 | 영향 | 선결 |
+|---|---|---|---|
+| **이미지 프로액티브 미폴백** | `deliverNativeImage` 는 `pushHub.publish` 만, `DeliverFallback` 없음(`proactive_relay.go:727-755`); 주간보고 크론이 그 경로(`method_registry.go:953-958`) | 주간업무보고 *이미지* 알림이 백그라운드에서 소실 | 이 경로에도 FCM 폴백 추가 |
+| **글로벌 subscriber 게이트** | FCM 은 `pushHub.subscriberCount()==0` 일 때만(`proactive_relay.go:388`) — 전역 카운트. 데스크톱 Andromeda 가 같은 `/events` 구독(`andromeda/src/hooks.ts:351`) | 데스크톱이 떠 있으면 폰 SSE 를 꺼도 카운트>0 → 폰 FCM 억제 → 폰 알림 0 | **per-device(모바일) subscriber 추적** 또는 폴백 술어 변경 |
+| **비-리포트 pushHub 발행 미폴백** | 게이트웨이 에러 이벤트(`notify_relay.go:283-290`)·플릿 알림(`server_http_fleet_hook.go:103-106`)이 `pushHub.publish` 직접 호출, FCM·커서sync 어디에도 없음 | 에러/플릿 알림이 백그라운드에서 소실 | 이 발행들에 FCM 폴백 추가 또는 SSE 경로 유지 |
+| **서버 크리덴셜 게이트** | `push.Config.Enabled()` 는 `CredentialsFile` 필요(`push/config.go:37-52`) | 클라 google-services 있어도 서버 크리덴셜 없으면 발송 0 | M1 게이트에 서버 크리덴셜 포함(제약 1) |
+| **sync 페이지 캡** | `pages < 4` × `limit=100`(`DenebGatewayClient.kt:1001-1026`) | >400 백로그면 복귀 1회로 미드레인 | `hasMore` 까지 루프(클라) |
+| **활성 chat 스트림** | FGS 종료가 in-flight 스트림 keepalive 절단(`ChatViewModel.kt`, `DenebGatewayClient.kt:451-463`) | 잠금 시 진행 중 답변 중단 | 활성 전송 예외(제약 2) |
 
 ### M2 — 연결성 인지 재연결 (NetworkCallback) ★저위험 보완
 
@@ -81,13 +94,15 @@
 
 | 방법 | 영향 | 위험 | 판정 |
 |---|---|---|---|
-| **M1** SSE 포그라운드 게이팅 + FCM 백그라운드 | 🔥 최대 (standby drain 대부분) | 중 (FCM 가용성 분기 필요) | 🟢 **본안** — FCM 가용 빌드부터 |
-| **M2** NetworkCallback 재연결 | 중 | 낮음 | 🟢 **즉시 채택 권장** (M1 무관 단독 가치) |
-| **M4** Doze/세이버 인지 | 중 | 낮음 | 🟢 M1 과 묶어서 |
-| **M3** keepalive/backoff 튜닝 | 소~중 | 낮음 | 🟡 FCM-less 빌드 폴백으로만 |
+| **M2** NetworkCallback 재연결 | 중 | 낮음 | 🟢 **즉시 채택 권장** — FCM 핸드오프 무관, 클라 국소 변경 |
+| **M3** keepalive/backoff 튜닝 | 소~중 | 낮음 | 🟢 **즉시 채택 가능** (backoff 지터/캡은 클라 단독; 서버 keepalive 변경은 별도) |
+| **M1** SSE 포그라운드 게이팅 + FCM 백그라운드 | 🔥 최대 (standby drain 대부분) | **높음** (§3.1 게이트웨이 선결 + 클라 catch-up/스트림 예외 + device 검증) | 🟡 **선결조건 충족 전 보류** — client-only 로 하면 알림 소실 |
+| **M4** Doze/세이버 인지 | 중 | 중 (M1 과 동일 핸드오프 의존) | 🟡 M1 과 묶어서, 같은 선결조건 |
 | **M5** 위젯/알림 | 소 | 낮음 | ⛔ 후순위 |
 
-**착수 순서 제안**: **M2(저위험 단독)** → **M1+M4(FCM 가용 빌드 한정, degrade 경로 포함)**. M3 는 FCM 불가 빌드의 폴백으로만.
+**착수 순서 (정정)**: **M2 + M3(저위험·클라 단독, FCM 핸드오프 무관) 먼저** → 그 다음 **§3.1 게이트웨이 선결조건**(이미지/에러/플릿 FCM 폴백 + per-mobile subscriber 추적 + 서버 크리덴셜 게이트) → 클라 catch-up 루프 + 활성-스트림 예외 → **마지막에 M1/M4 를 device(S26) 검증과 함께**. M1 은 standby 절감 최대치지만 **선결 없이는 알림 신뢰성 회귀**라 순서를 거스르면 안 된다.
+
+> **★ 검토 변경 이력**: 이 §3.1·우선순위는 PR #2922 의 adversarial 리뷰(Codex)가 짚은 6개 갭을 **소스 대조로 검증한 뒤** 반영했다. 초판은 M1 을 "FCM 가용 빌드부터 본안"으로 과신했으나, FCM 핸드오프가 *현 게이트웨이로는* 이미지 리포트·에러/플릿 알림·멀티-구독·서버 크리덴셜에서 성립하지 않아 **client-only M1 은 알림 소실**임이 확인됐다.
 
 ---
 
