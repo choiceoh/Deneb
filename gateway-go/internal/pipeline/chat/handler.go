@@ -107,6 +107,10 @@ type Handler struct {
 	// recall preflight. Optional: nil disables the files recall source.
 	fileRecallFn FileRecallFunc
 
+	// codingTurnEndFn fires after a coding-session turn to checkpoint + verify
+	// the worktree. Optional: nil disables the coding turn-end hook.
+	codingTurnEndFn CodingTurnEndFunc
+
 	// weeklyReportTextFn / weeklyFormDeliverFn back the interactive /weekly
 	// (/주간보고) slash command — the deterministic 주간업무보고 generators the
 	// Saturday cron uses, so a manual trigger produces the same form + text.
@@ -232,6 +236,12 @@ type HandlerConfig struct {
 	// the shared file semantic index.
 	FileRecallFn FileRecallFunc
 
+	// CodingTurnEndFn fires after a coding-session turn completes: it checkpoints
+	// the worktree edits and verifies build/tests, flipping the rail status.
+	// Optional: nil disables the hook. Injected by the server over the shared
+	// code Manager + session store (server/chat_pipeline.go).
+	CodingTurnEndFn CodingTurnEndFunc
+
 	// RecordActivity is called for user-originating chat turns so the server
 	// can remember the latest active channel session for autonomous follow-ups.
 	// The server owns filtering; chat only reports the session key.
@@ -302,6 +312,7 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 		goalGlanceFn:         cfg.GoalGlanceFn,
 		personaOverrideFn:    cfg.PersonaOverrideFn,
 		fileRecallFn:         cfg.FileRecallFn,
+		codingTurnEndFn:      cfg.CodingTurnEndFn,
 		providerConfigs:      cloneProviderConfigs(cfg.ProviderConfigs),
 		embeddingClient:      cfg.EmbeddingClient,
 		wikiStore:            cfg.WikiStore,

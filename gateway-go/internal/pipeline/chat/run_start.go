@@ -171,6 +171,7 @@ func (h *Handler) buildRunDeps() runDeps {
 		goalGlanceFn:       h.goalGlanceFn,
 		personaOverrideFn:  h.personaOverrideFn,
 		fileRecallFn:       h.fileRecallFn,
+		codingTurnEndFn:    h.codingTurnEndFn,
 
 		// Atomic snapshot of channel callbacks (reply, media, typing, etc.).
 		callbacks: h.Snapshot(),

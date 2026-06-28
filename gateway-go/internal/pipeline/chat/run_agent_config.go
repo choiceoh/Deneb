@@ -143,6 +143,13 @@ func buildAgentConfig(
 		}
 	}
 
+	// Coding sessions bind fs/exec to their git worktree (applied in OnTurnInit so
+	// the SendSync/native-client path picks it up too).
+	var codingWorkspace string
+	if cachedSession != nil && cachedSession.Mode == session.ModeCode {
+		codingWorkspace = cachedSession.WorkspaceDir
+	}
+
 	maxOutputRecovery := 1
 	maxOutputScaleFactors := []float64{1.5}
 
@@ -229,6 +236,7 @@ func buildAgentConfig(
 			ctx = WithSkillConsultLog(ctx, skillConsults)
 			ctx = WithFileCache(ctx, fileCache)
 			ctx = WithToolPreset(ctx, sessionToolPreset)
+			ctx = WithWorkspaceOverride(ctx, codingWorkspace)
 			ctx = WithDeferredActivation(ctx, deferredActivation)
 			ctx = WithSpawnFlag(ctx, spawnFlag)
 			ctx = WithVerifyGate(ctx, verifyGate)

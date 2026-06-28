@@ -156,7 +156,11 @@ func ToolRead(defaultDir string, extraReadRoots ...string) ToolFunc {
 			return "", fmt.Errorf("file_path is required")
 		}
 
-		path := ResolvePathWithRoots(p.FilePath, defaultDir, extraReadRoots)
+		dir := defaultDir
+		if w := toolctx.WorkspaceOverrideFromContext(ctx); w != "" {
+			dir = w
+		}
+		path := ResolvePathWithRoots(p.FilePath, dir, extraReadRoots)
 		if err := CheckProtectedPath(path, "read"); err != nil {
 			return "", err
 		}
@@ -426,7 +430,11 @@ func ToolWrite(defaultDir string) ToolFunc {
 			return "", fmt.Errorf("file_path is required")
 		}
 
-		path := ResolvePath(p.FilePath, defaultDir)
+		dir := defaultDir
+		if w := toolctx.WorkspaceOverrideFromContext(ctx); w != "" {
+			dir = w
+		}
+		path := ResolvePath(p.FilePath, dir)
 		// A directory target yields a confusing "rename: is a directory" error
 		// from atomicfile below; reject it up front with a clear message.
 		if info, statErr := os.Stat(path); statErr == nil && info.IsDir() {
@@ -478,7 +486,11 @@ func ToolEdit(defaultDir string) ToolFunc {
 			return "", fmt.Errorf("old_string is required (or use anchor= for a content-hash anchored edit)")
 		}
 
-		path := ResolvePath(p.FilePath, defaultDir)
+		dir := defaultDir
+		if w := toolctx.WorkspaceOverrideFromContext(ctx); w != "" {
+			dir = w
+		}
+		path := ResolvePath(p.FilePath, dir)
 		if err := CheckProtectedPath(path, "edit"); err != nil {
 			return "", err
 		}
