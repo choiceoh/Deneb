@@ -25,7 +25,7 @@ interface RepoOption {
 }
 
 export function CodePane() {
-  const { connected, cfg, bumpCodeSessions } = useWorkspace();
+  const { connected, cfg, bumpCodeSessions, openCodeChat } = useWorkspace();
   const [sessions, setSessions] = useState<CodeSession[]>([]);
   const [repos, setRepos] = useState<RepoOption[]>([]);
   const [status, setStatus] = useState("");
@@ -72,10 +72,13 @@ export function CodePane() {
     }
     setBusy(true);
     try {
-      await codeStart(cfg, owner.trim(), repo.trim(), taskId.trim(), title.trim() || undefined);
+      const sess = await codeStart(cfg, owner.trim(), repo.trim(), taskId.trim(), title.trim() || undefined);
       setTaskId("");
       setTitle("");
       await refresh();
+      // Jump straight into the new task's chat: the next thing the user does is tell
+      // Deneb what to build, and that's where the work actually happens.
+      openCodeChat(sess.chatSessionKey || "code:" + sess.id);
     } catch (e) {
       setStatus(errText(e));
     } finally {
@@ -124,6 +127,11 @@ export function CodePane() {
 
   return (
     <div className="code-pane">
+      <p style={{ opacity: 0.7, fontSize: 13, margin: "0 0 12px", lineHeight: 1.5 }}>
+        레포와 작업 ID로 <b>새 작업</b>을 만들면 격리된 git 워크트리가 생깁니다. 작업을 클릭하면 오른쪽 Deneb 채팅이 그
+        작업에 연결되고, 거기서 코드를 시키면 됩니다. 턴마다 빌드·테스트 검증 + 되돌리기 지점이 자동으로 남고, 끝나면{" "}
+        <b>올리기</b>로 GitHub 브랜치에 푸시하세요.
+      </p>
       <div
         className="code-new"
         style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}
@@ -210,7 +218,22 @@ export function CodePane() {
               key={s.id}
               style={{ display: "flex", alignItems: "center", gap: 8, borderTop: line, padding: "8px 0" }}
             >
-              <div style={{ flex: 1, minWidth: 0 }}>
+              <button
+                onClick={() => openCodeChat(s.chatSessionKey || "code:" + s.id)}
+                disabled={missing}
+                title={missing ? "워크트리가 없어 대화할 수 없습니다" : "이 작업과 대화 — Deneb에게 코드를 시키세요"}
+                style={{
+                  flex: 1,
+                  minWidth: 0,
+                  textAlign: "left",
+                  background: "none",
+                  border: "none",
+                  padding: 0,
+                  font: "inherit",
+                  color: "inherit",
+                  cursor: missing ? "default" : "pointer",
+                }}
+              >
                 <div style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {s.title || s.id}
                 </div>
@@ -218,7 +241,7 @@ export function CodePane() {
                   {(s.repo?.owner ?? "?") + "/" + (s.repo?.name ?? "?")} ·{" "}
                   {STATUS_LABEL[s.status ?? ""] ?? s.status ?? ""}
                 </div>
-              </div>
+              </button>
               <button className="btn" onClick={() => void verify(s.id)} disabled={busy || missing}>
                 검증
               </button>
