@@ -10,7 +10,7 @@
 
 - **앱 코드 변경 거의 없음** — deneb-ui 렌더러는 이미 출하됨(`ui/dynamicui/DenebUiRenderer.kt`). 주 작업은 **SKILL.md가 평문 대신 카드 JSON을 emit**하게 바꾸는 것.
 - **시각 검증 가능** — `RenderPreview.kt`(desktopMain)가 이미 `DenebUiRenderer`를 호출(line 1200/1212). 샘플 레터 JSON을 `./gradlew :composeApp:renderPreviews`로 PNG 렌더 → Read로 확인. "실기기 못 봄" 리스크 해소.
-- **크로스채널** — 서버 flatten 부재 → **평문 요약(floor) + 카드(enrichment)** 이중 구조로 graceful degrade.
+- **채널** — 안드로이드 앱 + PC 프로그램 둘뿐이고 **둘 다 동일 Compose Multiplatform 네이티브 클라이언트**(deneb-ui 렌더러 `commonMain` 공유) → 양쪽 다 카드 렌더. 텍스트 전용 채널 없음 → **Design A 확정**. 평문 floor 한 줄은 *파싱실패 안전망*으로만 남김.
 
 ## 1. 배경 · 문제
 
@@ -125,8 +125,8 @@
 
 **Design B — 채널 패리티.** 현행 평문 레터 전체를 유지(모든 채널) + 카드 fence를 덧붙임. 텍스트채널=full 평문(strip), 네이티브=평문+카드. **네이티브 중복** 발생 → 카드 있을 때 평문 데이터 숨기는 작은 앱 수정 필요.
 
-**권장: Design A.** 이 앱은 단일 사용자·네이티브가 주 표면이고(최근 키보드/스크롤/레터 미관 등 네이티브 폴리시 작업 흐름), floor 한 줄이 파싱실패·텍스트채널 양쪽의 안전망이 된다.
-**선결 확인 1건:** 크론 레터가 실제로 전달되는 기본 채널이 네이티브 앱인가(텔레그램 평문이 주 소비처가 아닌가). 네이티브 주면 A 확정.
+**결정: Design A 확정 (2026-06).** 채널은 **안드로이드 앱 + PC 프로그램 둘뿐**이고, 둘 다 동일 Compose Multiplatform 네이티브 클라이언트다 — deneb-ui 렌더러(`ui/dynamicui/`)가 `commonMain`에 있어 **양쪽 타깃이 같은 카드 렌더 코드를 공유**(`RenderPreview.kt`가 desktop 타깃의 `DenebUiRenderer` 호출인 점이 desktop 렌더를 직접 증명). **텍스트 전용 채널이 존재하지 않으므로 카드가 raw로 노출될 표면이 없다.**
+→ floor 한 줄은 더 이상 크로스채널 안전망이 아니라 **카드 JSON 파싱실패 대비 보험**으로만 의미를 갖는다(저렴하니 유지). Design B(평문 패리티)는 불필요 — 폐기.
 
 ## 7. 에이전트가 카드를 emit하는 법
 
@@ -170,7 +170,7 @@ deneb-ui 카탈로그는 **클라이언트(`data/ChatSystemPromptBuilder.kt`)가
 
 ## 13. 리스크 · 오픈 질문
 
-1. **(선결) 크론 레터의 기본 전달 채널** = 네이티브? → Design A/B 결정(§6).
+1. ~~(선결) 크론 레터의 기본 전달 채널~~ — **해결**: 채널=안드로이드+PC 네이티브뿐, 둘 다 카드 렌더 → **Design A 확정**(§6).
 2. 에이전트가 매일 **유효 JSON**을 안정적으로 — SKILL.md literal 스켈레톤 + Validate + floor fallback로 완화. 한국어 escaping 주의.
 3. **렌더러 타이포 정합도** — deneb-ui 카드가 hand-built Deneb 화면만큼 정제됐나? PNG로 판정. 부족하면 렌더러 보정은 P1 범위 밖(scope creep).
 4. **stat 가로 밀도** — 380dp에서 stat 3개 wrap 여부, PNG 확인.
@@ -178,7 +178,7 @@ deneb-ui 카탈로그는 **클라이언트(`data/ChatSystemPromptBuilder.kt`)가
 
 ## 14. 구현 체크리스트 (P1)
 
-- [ ] §6 선결 질문 확정(전달 채널) → A/B 픽스
+- [x] §6 전달 채널 확정 — 안드로이드+PC 네이티브뿐 → **Design A**
 - [ ] `RenderPreview.kt`에 모닝/이브닝 샘플 JSON 프리뷰 추가 → PNG 렌더 → 모양 확정
 - [ ] `skills/productivity/morning-letter/SKILL.md` 템플릿을 카드 스켈레톤+조율규칙으로 교체
 - [ ] `skills/productivity/evening-letter/SKILL.md` 동일
