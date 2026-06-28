@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/process"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
@@ -92,6 +93,9 @@ func ToolExec(procMgr *process.Manager, defaultDir string) ToolFunc {
 		workDir := p.Workdir
 		if workDir == "" {
 			workDir = defaultDir
+			if w := toolctx.WorkspaceOverrideFromContext(ctx); w != "" {
+				workDir = w
+			}
 		}
 
 		if err := validateWorkdir(workDir); err != nil {

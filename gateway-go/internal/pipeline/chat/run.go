@@ -232,6 +232,12 @@ type runDeps struct {
 	// the shared file semantic index.
 	fileRecallFn FileRecallFunc
 
+	// codingTurnEndFn fires after a coding-session turn: it checkpoints the
+	// worktree edits and verifies build/tests, flipping the rail status. nil
+	// disables it; non-coding turns never invoke it regardless. Wired in
+	// server/chat_pipeline.go over the shared code Manager + session store.
+	codingTurnEndFn CodingTurnEndFunc
+
 	// chatport holds injected adapters that decouple chat from autoreply.
 	chatport chatportAdapters
 }

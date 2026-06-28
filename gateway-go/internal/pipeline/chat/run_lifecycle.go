@@ -12,6 +12,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/llmerr"
+	"github.com/choiceoh/deneb/gateway-go/pkg/safego"
 )
 
 // handleRunSuccess processes a successful agent run completion.
@@ -316,6 +317,29 @@ func handleRunSuccess(
 	finishRun(deps, params, session.PhaseEnd, "completed", "done", "", now)
 	emitJobEvent(deps, params.ClientRunID, "end", false, "", now)
 
+	// Coding mode: after the turn, snapshot the worktree edits as a checkpoint and
+	// verify build/tests, flipping the rail status. Runs detached on the server
+	// lifecycle ctx (verify can take minutes — well past this turn's deadline) and
+	// only for Mode==code sessions, so ordinary turns are entirely unaffected.
+	if deps.codingTurnEndFn != nil {
+		if sess := deps.sessions.Get(params.SessionKey); sess != nil && sess.Mode == session.ModeCode {
+			fn := deps.codingTurnEndFn
+			// Prefer the server lifecycle ctx so the background verify is cancelled
+			// on shutdown; fall back to Background (still bounded below) if unset.
+			bgCtx := deps.callbacks.shutdownCtx
+			if bgCtx == nil {
+				bgCtx = context.Background()
+			}
+			sessionKey := params.SessionKey
+			summary := summarizeForCheckpoint(params.Message)
+			safego.GoWithSlog(logger, "coding-turn-end", func() {
+				hookCtx, cancel := context.WithTimeout(bgCtx, 6*time.Minute)
+				defer cancel()
+				fn(hookCtx, sessionKey, summary)
+			})
+		}
+	}
+
 	// Diary recording: append raw conversation turn to today's diary.
 	// Wiki page curation is handled by the main LLM via system prompt.
 	if deps.wikiStore != nil && shouldRecordRunDiary(params) {
@@ -517,4 +541,30 @@ func emitJobEvent(deps runDeps, runID, phase string, aborted bool, errMsg string
 		Error:   errMsg,
 		Ts:      ts,
 	})
+}
+
+// CodingTurnEndFunc fires after a coding-session turn completes. It checkpoints
+// the worktree edits and verifies build/tests, updating the rail status. The
+// concrete implementation lives in the server package (closing over the shared
+// code Manager + session store); the chat package stays free of the domain/code
+// import by talking through this closure. sessionKey is the coding chat session
+// key ("code:<taskID>"); summary is the turn's user message (the checkpoint label).
+type CodingTurnEndFunc func(ctx context.Context, sessionKey, summary string)
+
+// summarizeForCheckpoint turns the turn's user message into a short Korean commit
+// summary for the coding checkpoint. The user's own words are the most faithful
+// label — no LLM call needed (and none of the analysis-role cloud cost).
+func summarizeForCheckpoint(msg string) string {
+	msg = strings.TrimSpace(msg)
+	if msg == "" {
+		return "변경 저장"
+	}
+	if i := strings.IndexByte(msg, '\n'); i >= 0 {
+		msg = strings.TrimSpace(msg[:i])
+	}
+	r := []rune(msg)
+	if len(r) > 80 {
+		return strings.TrimSpace(string(r[:80])) + "…"
+	}
+	return msg
 }

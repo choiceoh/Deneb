@@ -97,6 +97,11 @@ func WithToolPreset(ctx context.Context, preset string) context.Context {
 	return toolctx.WithToolPreset(ctx, preset)
 }
 
+// WithWorkspaceOverride binds the run's fs/exec tools to a coding worktree dir.
+func WithWorkspaceOverride(ctx context.Context, dir string) context.Context {
+	return toolctx.WithWorkspaceOverride(ctx, dir)
+}
+
 // SpawnFlag is a re-export of toolctx.SpawnFlag.
 type SpawnFlag = toolctx.SpawnFlag
 

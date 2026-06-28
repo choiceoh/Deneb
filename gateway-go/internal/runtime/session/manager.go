@@ -44,6 +44,9 @@ const (
 	ModeNormal SessionMode = ""
 	// ModeChat restricts tools to conversation-only (web search, etc.).
 	ModeChat SessionMode = "chat"
+	// ModeCode is a coding session: fs/exec tools bind to a git worktree
+	// (Session.WorkspaceDir) and the turn runs with the implementer tool preset.
+	ModeCode SessionMode = "code"
 )
 
 // IsInternal returns true for session kinds that are system-internal
@@ -117,6 +120,7 @@ type Session struct {
 	Status         RunStatus   `json:"status,omitempty"`
 	Channel        string      `json:"channel,omitempty"`
 	Model          string      `json:"model,omitempty"`
+	WorkspaceDir   string      `json:"workspaceDir,omitempty"` // coding sessions: git worktree fs/exec bind to
 	UpdatedAt      int64       `json:"updatedAt,omitempty"`
 	StartedAt      *int64      `json:"startedAt,omitempty"`
 	EndedAt        *int64      `json:"endedAt,omitempty"`

@@ -427,6 +427,16 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		d.WriteString("파일이나 명령어 실행이 필요한 작업은 이 모드에서는 지원되지 않습니다.\n\n")
 	}
 
+	// Coding mode (conditional): fs/exec are bound to a git worktree; frame the
+	// agent as a coder working there and leave git/verify to the orchestration.
+	if params.ToolPreset == "implementer" {
+		d.WriteString("## 현재 모드: 코딩\n")
+		d.WriteString("read/write/edit/exec 도구가 동작하는 디렉토리가 지금 작업 중인 git 프로젝트입니다.\n")
+		d.WriteString("- 먼저 그 디렉토리의 AGENTS.md / CLAUDE.md / README와 관련 파일을 읽고 코드 관례를 파악하세요.\n")
+		d.WriteString("- 작고 집중된 변경을 하세요. 변경 후 빌드/테스트 검증은 시스템이 자동 실행합니다.\n")
+		d.WriteString("- git 커밋·브랜치·push는 시스템이 대행합니다. 직접 git 명령을 돌리지 말고 코드 변경에 집중하세요.\n\n")
+	}
+
 	// Messaging (merged: Reply Tags + Messaging + Silent Replies).
 	d.WriteString("## Messaging\n")
 	d.WriteString("- **턴 완결 원칙: 사용자 메시지에 대응하는 턴은 반드시 사용자용 텍스트 응답으로 끝낸다.** 도구 호출만 하고 텍스트를 비우면 사용자는 아무것도 못 받는다. \"도구 호출 = 답변했다\"가 아니다.\n")
