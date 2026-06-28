@@ -427,14 +427,20 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		d.WriteString("파일이나 명령어 실행이 필요한 작업은 이 모드에서는 지원되지 않습니다.\n\n")
 	}
 
-	// Coding mode (conditional): fs/exec are bound to a git worktree; frame the
-	// agent as a coder working there and leave git/verify to the orchestration.
+	// Coding mode (conditional): fs/exec are bound to a git worktree. The agent owns
+	// the full lifecycle autonomously — it codes, self-verifies, and opens the PR
+	// itself when done (never merging to main). Per-turn checkpoints + verify are
+	// still automatic; the agent commits only when it ships.
 	if params.ToolPreset == "implementer" {
 		d.WriteString("## 현재 모드: 코딩\n")
-		d.WriteString("read/write/edit/exec 도구가 동작하는 디렉토리가 지금 작업 중인 git 프로젝트입니다.\n")
+		d.WriteString("read/write/edit/exec 도구가 동작하는 디렉토리가 지금 작업 중인 git 프로젝트(격리된 워크트리)입니다.\n")
 		d.WriteString("- 먼저 그 디렉토리의 AGENTS.md / CLAUDE.md / README와 관련 파일을 읽고 코드 관례를 파악하세요.\n")
-		d.WriteString("- 작고 집중된 변경을 하세요. 변경 후 빌드/테스트 검증은 시스템이 자동 실행합니다.\n")
-		d.WriteString("- git 커밋·브랜치·push는 시스템이 대행합니다. 직접 git 명령을 돌리지 말고 코드 변경에 집중하세요.\n\n")
+		d.WriteString("- 작고 집중된 변경을 하세요. 매 턴 되돌리기 체크포인트(커밋)와 빌드/테스트 검증은 시스템이 자동으로 남깁니다 — 평소엔 직접 커밋하지 마세요.\n")
+		d.WriteString("- 라이프사이클은 사용자가 시키지 않아도 당신이 알아서 운영합니다:\n")
+		d.WriteString("  - **완료 시 PR 자동**: 요청을 다 끝냈다고 판단되면, 빌드/테스트를 직접 돌려 통과를 확인한 뒤 변경을 커밋하고 `git push -u origin HEAD` → `gh pr create --fill` 로 PR을 엽니다(이미 있으면 push만으로 갱신). PR 링크를 사용자에게 알려주세요.\n")
+		d.WriteString("  - **main에 직접 머지하지 마세요** — PR 브랜치까지만. 머지는 사용자가 검토 후 결정합니다.\n")
+		d.WriteString("  - **잘못된 변경**은 `git reset`/`git checkout -- <file>` 등으로 직접 되돌립니다.\n")
+		d.WriteString("  - 미완성이거나 빌드가 깨진 상태로는 push하지 마세요. 고친 뒤 PR을 엽니다.\n\n")
 	}
 
 	// Messaging (merged: Reply Tags + Messaging + Silent Replies).

@@ -1,16 +1,16 @@
 import { useEffect, useState } from "react";
-import { codeDiscard, codePush, codeRepos, codeSessions, codeStart, codeUndo } from "@/gateway";
+import { codeRepos, codeSessions, codeStart } from "@/gateway";
 import { projectList } from "@/aiText";
 import { errText } from "@/format";
 import { line } from "@/theme";
 import type { CodeSession } from "@/types";
 import { useRegisterPane, useWorkspace } from "@/workspaceContext";
 
-// CodePane (코드) — 코드 모드 우측 보조 패널: 새 워크트리 작업 생성, 세션 목록(클릭 → 가운데
-// 채팅이 그 작업에 연결), 세션별 올리기(push)·되돌리기(undo)·삭제(discard). 검증은 게이트웨이가
-// 턴마다 자동으로 돌려 상태 배지로 보여주므로 수동 버튼은 두지 않는다. Query-driven
-// (miniapp.code.* 직접 호출). 레포는 GitHub picker(code.repos); gh 미인증이면 비어서 owner/repo
-// 직접 입력으로 폴백.
+// CodePane (코드) — 코드 모드 우측 보조 패널. 새 워크트리 작업 생성 + 세션 목록(클릭 → 가운데
+// 채팅이 그 작업에 연결)만 한다. 검증·체크포인트·PR(올리기)·되돌리기는 전부 에이전트가 채팅으로
+// 알아서 처리하므로(완료 시 빌드 확인 후 자동 PR) 조작 버튼은 두지 않는다 — 이 패널은 목록·상태
+// 표시 전용. Query-driven(miniapp.code.* 직접 호출). 레포는 GitHub picker(code.repos); gh 미인증이면
+// 비어서 owner/repo 직접 입력으로 폴백.
 const STATUS_LABEL: Record<string, string> = {
   working: "작업중",
   passed: "통과",
@@ -84,27 +84,13 @@ export function CodePane() {
     }
   }
 
-  // act runs a per-session action and refreshes the list, surfacing failures.
-  async function act(label: string, run: () => Promise<unknown>) {
-    if (!connected || busy) return;
-    setBusy(true);
-    try {
-      await run();
-      await refresh();
-    } catch (e) {
-      setStatus(`${label} 실패: ${errText(e)}`);
-    } finally {
-      setBusy(false);
-    }
-  }
-
   const hasRepos = repos.length > 0;
 
   return (
     <div className="code-pane">
       <p style={{ opacity: 0.7, fontSize: 12.5, margin: "0 0 10px", lineHeight: 1.5 }}>
-        새 작업을 만들면 격리된 워크트리가 생기고, 가운데 채팅이 그 작업에 연결됩니다. 채팅으로 코드를 시키면 턴마다
-        검증·체크포인트가 자동으로 남습니다.
+        새 작업을 만들면 격리된 워크트리가 생기고, 가운데 채팅이 그 작업에 연결됩니다. 코드를 시키면 Deneb가 워크트리를
+        편집하고, 끝나면 빌드 확인 후 <b>알아서 PR까지</b> 올립니다. (이 패널은 목록·상태만 — 조작은 채팅으로.)
       </p>
 
       {/* 새 작업 — 좁은 패널이라 세로로 쌓는다 */}
@@ -181,9 +167,8 @@ export function CodePane() {
           </p>
         )}
         {sessions.map((s) => {
-          // A worktree that vanished (reconciled to "missing") can only be deleted.
           const missing = s.status === "missing";
-          const noCheckpoints = (s.checkpoints?.length ?? 0) === 0;
+          const checkpoints = s.checkpoints?.length ?? 0;
           const key = s.chatSessionKey || "code:" + s.id;
           const active = key === activeCodeKey;
           return (
@@ -200,7 +185,7 @@ export function CodePane() {
               <button
                 onClick={() => openCodeChat(key)}
                 disabled={missing}
-                title={missing ? "워크트리가 없어 대화할 수 없습니다" : "이 작업과 대화 — Deneb에게 코드를 시키세요"}
+                title={missing ? "워크트리가 없습니다" : "이 작업과 대화"}
                 style={{
                   width: "100%",
                   textAlign: "left",
@@ -218,37 +203,9 @@ export function CodePane() {
                 <div style={{ opacity: 0.7, fontSize: 12.5 }}>
                   {(s.repo?.owner ?? "?") + "/" + (s.repo?.name ?? "?")} ·{" "}
                   {STATUS_LABEL[s.status ?? ""] ?? s.status ?? ""}
+                  {checkpoints > 0 ? ` · 체크포인트 ${checkpoints}` : ""}
                 </div>
               </button>
-              {/* 보조 동작 — 검증은 턴마다 자동(상태 배지로 표시)이라 뺐다. 올리기/되돌리기/삭제만. */}
-              <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
-                <button
-                  className="btn"
-                  style={{ flex: 1 }}
-                  onClick={() => void act("올리기", () => codePush(cfg, s.id))}
-                  disabled={busy || missing || noCheckpoints}
-                  title={noCheckpoints ? "저장된 변경이 없습니다" : "GitHub 브랜치에 올리기 (PR용)"}
-                >
-                  올리기
-                </button>
-                <button
-                  className="btn"
-                  style={{ flex: 1 }}
-                  onClick={() => void act("되돌리기", () => codeUndo(cfg, s.id))}
-                  disabled={busy || missing}
-                  title="한 단계 되돌리기"
-                >
-                  되돌리기
-                </button>
-                <button
-                  className="btn"
-                  onClick={() => void act("삭제", () => codeDiscard(cfg, s.id))}
-                  disabled={busy}
-                  title="작업 삭제"
-                >
-                  삭제
-                </button>
-              </div>
             </div>
           );
         })}
