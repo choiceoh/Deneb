@@ -7,24 +7,20 @@ import (
 )
 
 // initSpilloverLifecycle subscribes to session lifecycle events so that any
-// disk-backed tool-result spill files belonging to a session are deleted the
-// moment the session ends — terminal run status, explicit /reset, or full
-// session eviction.
+// disk-backed tool-result spill files belonging to a session are deleted on
+// explicit reset or full session eviction.
 //
-// Without this hook, spill files linger until the 30-minute TTL sweep in
-// SpilloverStore.StartCleanup (see spillover.go). That window is fine for
-// active agents but wastes disk when a user kills a long chain of large
-// `exec` / `read` outputs and never returns to the session. We already call
-// CleanSession from finishRun for the common path, but an event-driven hook
-// also catches GC-evicted sessions and any future lifecycle paths that
-// bypass finishRun.
+// Ordinary completed turns already clean their spillover in finishRun; this
+// hook exists to catch reset/delete paths and any future lifecycle flows that
+// bypass finishRun. Restricting the subscriber to those teardown paths avoids
+// treating non-reset EventStatusChanged emissions (for example sessions.patch)
+// as a destructive cleanup signal.
 //
 // The removal is fire-and-forget in a safego goroutine:
 //   - Disk I/O is not worth blocking the event dispatcher for.
 //   - Failure is non-user-facing (just wasted disk), per logging.md: Warn.
 //   - Concurrency is safe: each session's files are independent, and
-//     RemoveSession is idempotent — concurrent CleanSession from finishRun
-//     is harmless.
+//     RemoveSession is idempotent — concurrent cleanup remains harmless.
 //
 // Called from registerSessionRPCMethods after the spillover store is wired on
 // s.toolDeps (see chat_pipeline.go); the returned unsubscribe handle is
@@ -51,18 +47,15 @@ func (s *Server) initSpilloverLifecycle(store *agent.SpilloverStore) {
 	})
 }
 
-// shouldReleaseSpillover mirrors shouldReleaseCheckpoints: only terminal
-// status transitions, /reset (empty NewStatus), or full session deletion
-// trigger cleanup. See server_checkpoint_lifecycle.go for the full rationale.
+// shouldReleaseSpillover mirrors shouldReleaseCheckpoints: only explicit reset
+// (non-empty OldStatus -> empty NewStatus) or full session deletion trigger
+// event-driven cleanup. Normal turn completion is handled in finishRun.
 func shouldReleaseSpillover(e session.Event) bool {
 	switch e.Kind {
 	case session.EventDeleted:
 		return true
 	case session.EventStatusChanged:
-		if e.NewStatus == "" {
-			return true
-		}
-		return session.IsTerminal(e.NewStatus)
+		return e.OldStatus != "" && e.NewStatus == ""
 	case session.EventCreated:
 		return false
 	}

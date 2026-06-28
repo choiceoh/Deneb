@@ -24,11 +24,12 @@ func TestShouldReleaseCheckpoints(t *testing.T) {
 		want  bool
 	}{
 		{"delete always releases", session.Event{Kind: session.EventDeleted, Key: "k"}, true},
-		{"status → done releases", session.Event{Kind: session.EventStatusChanged, NewStatus: session.StatusDone}, true},
-		{"status → failed releases", session.Event{Kind: session.EventStatusChanged, NewStatus: session.StatusFailed}, true},
-		{"status → killed releases", session.Event{Kind: session.EventStatusChanged, NewStatus: session.StatusKilled}, true},
-		{"status → timeout releases", session.Event{Kind: session.EventStatusChanged, NewStatus: session.StatusTimeout}, true},
-		{"reset (empty status) releases", session.Event{Kind: session.EventStatusChanged, NewStatus: ""}, true},
+		{"reset (empty status) releases", session.Event{Kind: session.EventStatusChanged, OldStatus: session.StatusDone, NewStatus: ""}, true},
+		{"empty status without old status does NOT release", session.Event{Kind: session.EventStatusChanged, NewStatus: ""}, false},
+		{"status → done does NOT release", session.Event{Kind: session.EventStatusChanged, OldStatus: session.StatusRunning, NewStatus: session.StatusDone}, false},
+		{"status → failed does NOT release", session.Event{Kind: session.EventStatusChanged, OldStatus: session.StatusRunning, NewStatus: session.StatusFailed}, false},
+		{"status → killed does NOT release", session.Event{Kind: session.EventStatusChanged, OldStatus: session.StatusRunning, NewStatus: session.StatusKilled}, false},
+		{"status → timeout does NOT release", session.Event{Kind: session.EventStatusChanged, OldStatus: session.StatusRunning, NewStatus: session.StatusTimeout}, false},
 		{"status → running does NOT release", session.Event{Kind: session.EventStatusChanged, NewStatus: session.StatusRunning}, false},
 		{"create does NOT release", session.Event{Kind: session.EventCreated}, false},
 	}
@@ -41,13 +42,12 @@ func TestShouldReleaseCheckpoints(t *testing.T) {
 	}
 }
 
-// TestCheckpointLifecycle_RemovesOnTerminal builds the minimum wiring needed
+// TestCheckpointLifecycle_PreservesOnTerminal builds the minimum wiring needed
 // to exercise the real subscription path: a session.Manager, a real
 // checkpoint Manager, and the subscriber installed via initCheckpointLifecycle.
-// When the session transitions to a terminal phase, the checkpoint directory
-// must be removed within a short timeout — proving the hook fires and the
-// removal runs end to end.
-func TestCheckpointLifecycle_RemovesOnTerminal(t *testing.T) {
+// A normal completed turn must keep its checkpoint directory so /rollback can
+// inspect and restore snapshots on subsequent turns in the same session.
+func TestCheckpointLifecycle_PreservesOnTerminal(t *testing.T) {
 	root := t.TempDir()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
@@ -85,12 +85,14 @@ func TestCheckpointLifecycle_RemovesOnTerminal(t *testing.T) {
 	}
 
 	// Drive the session through start → end. The End event fires
-	// EventStatusChanged with NewStatus=done, which must trigger removal.
+	// EventStatusChanged with NewStatus=done, which must NOT trigger removal.
 	s.sessions.ApplyLifecycleEvent(sessionKey, session.LifecycleEvent{Phase: session.PhaseStart, Ts: 1})
 	s.sessions.ApplyLifecycleEvent(sessionKey, session.LifecycleEvent{Phase: session.PhaseEnd, Ts: 2})
 
-	if !waitForMissing(sessionDir, 2*time.Second) {
-		t.Fatalf("checkpoint dir %s still exists after terminal transition", sessionDir)
+	// Give the async dispatcher a reasonable window to misfire.
+	time.Sleep(300 * time.Millisecond)
+	if _, err := os.Stat(sessionDir); err != nil {
+		t.Fatalf("checkpoint dir should persist after terminal transition: %v", err)
 	}
 }
 
@@ -183,6 +185,47 @@ func TestCheckpointLifecycle_IgnoresRunningTransition(t *testing.T) {
 	time.Sleep(300 * time.Millisecond)
 	if _, err := os.Stat(sessionDir); err != nil {
 		t.Fatalf("dir should persist while session is running, stat err=%v", err)
+	}
+}
+
+// TestCheckpointLifecycle_IgnoresPatchEvents verifies non-reset status-change
+// emissions from sessions.patch/configureCoding do not wipe rollback history.
+func TestCheckpointLifecycle_IgnoresPatchEvents(t *testing.T) {
+	root := t.TempDir()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	s := &Server{
+		ServerTransport: &ServerTransport{},
+		ServerRPC:       &ServerRPC{},
+		ServerRuntime:   &ServerRuntime{},
+		SessionManager:  &SessionManager{sessions: session.NewManager()},
+		ChatManager:     &ChatManager{},
+		HookManager:     &HookManager{},
+		logger:          logger,
+	}
+	s.initCheckpointLifecycle(root)
+	t.Cleanup(func() {
+		if s.checkpointLifecycleUnsub != nil {
+			s.checkpointLifecycleUnsub()
+		}
+	})
+
+	const sessionKey = "sess-patch"
+	cpm := checkpoint.New(root, sessionKey)
+	target := filepath.Join(t.TempDir(), "file.txt")
+	if err := os.WriteFile(target, []byte("hi"), 0o600); err != nil {
+		t.Fatalf("write target: %v", err)
+	}
+	if _, err := cpm.Snapshot(context.Background(), target, "fs_write"); err != nil {
+		t.Fatalf("snapshot: %v", err)
+	}
+	sessionDir := cpm.SessionDir()
+
+	label := "patched"
+	s.sessions.Patch(sessionKey, session.PatchFields{Label: &label})
+
+	time.Sleep(300 * time.Millisecond)
+	if _, err := os.Stat(sessionDir); err != nil {
+		t.Fatalf("checkpoint dir should persist after patch event: %v", err)
 	}
 }
 
