@@ -47,7 +47,7 @@ func (s *recordingTranscriptStore) CloneRecent(string, string, int) error { retu
 func TestRelay(t *testing.T) {
 	store := newRecordingTranscriptStore()
 	hub := newClientPushHub()
-	events, unsub := hub.subscribe()
+	events, unsub := hub.subscribe(kindMobile)
 	defer unsub()
 
 	d := proactiveRelayDeps{
@@ -104,7 +104,7 @@ func TestRelay_SuppressesContentless(t *testing.T) {
 		store := newRecordingTranscriptStore()
 		feed := &recordingWorkFeed{}
 		hub := newClientPushHub()
-		events, unsub := hub.subscribe()
+		events, unsub := hub.subscribe(kindMobile)
 
 		d := proactiveRelayDeps{transcriptStore: store, pushHub: hub, workFeed: feed}
 		delivered, err := d.relay(context.Background(), "ignored-session-key", body)
@@ -140,7 +140,7 @@ func TestRelay_SuppressesSilentToken(t *testing.T) {
 		store := newRecordingTranscriptStore()
 		feed := &recordingWorkFeed{}
 		hub := newClientPushHub()
-		events, unsub := hub.subscribe()
+		events, unsub := hub.subscribe(kindMobile)
 
 		d := proactiveRelayDeps{transcriptStore: store, pushHub: hub, workFeed: feed}
 		delivered, err := d.relay(context.Background(), "ignored-session-key", body)
@@ -506,7 +506,7 @@ func TestRelayCollapsed(t *testing.T) {
 		store := newRecordingTranscriptStore()
 		feed := &recordingWorkFeed{}
 		hub := newClientPushHub()
-		events, unsub := hub.subscribe()
+		events, unsub := hub.subscribe(kindMobile)
 		defer unsub()
 		d := proactiveRelayDeps{transcriptStore: store, workFeed: feed, pushHub: hub}
 

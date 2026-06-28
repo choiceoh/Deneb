@@ -101,9 +101,8 @@ func (s *Server) handleFleetHook(w http.ResponseWriter, r *http.Request) {
 		badge = "⚠️"
 	}
 	title := strings.TrimSpace(badge + " 플릿 · " + ev.Title)
-	if s.pushHub != nil {
-		s.pushHub.publish(clientPushEvent{Title: title, Body: ev.Message, Kind: pushKindFleet})
-	}
+	// Live-push + FCM fallback so fleet alerts reach a backgrounded/closed phone.
+	publishProactive(s.pushHub, s.pushNotifier, clientPushEvent{Title: title, Body: ev.Message, Kind: pushKindFleet})
 	s.logger.Info("fleet alert relayed to clients", "level", ev.Level, "title", ev.Title)
 	s.writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
