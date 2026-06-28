@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.0.29](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.28...andromeda-v0.0.29) (2026-06-28)
+
+
+### ✨ Features
+
+* **andromeda:** coding mode center-chat layout (중앙 코딩 채팅) ([#2935](https://github.com/choiceoh/Deneb/issues/2935)) ([0df3259](https://github.com/choiceoh/Deneb/commit/0df325993785e978234873d67ad69a3f55cd5ad7))
+* **andromeda:** wire the chat to coding sessions (코딩 모드 연결) ([#2934](https://github.com/choiceoh/Deneb/issues/2934)) ([5a14437](https://github.com/choiceoh/Deneb/commit/5a14437afcccf02cca7cb539c0fd367586478c41))
+* **code:** coding mode autonomous lifecycle — 완전 자동 (no manual buttons) ([#2936](https://github.com/choiceoh/Deneb/issues/2936)) ([df2fe5c](https://github.com/choiceoh/Deneb/commit/df2fe5cf790ef33442e5b7969663d984d7aed6dc))
+
 ## [0.0.28](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.27...andromeda-v0.0.28) (2026-06-28)
 
 
