@@ -111,7 +111,7 @@ func ToolMorningLetter(_ toolctx.ToolExecutor, opts ...MorningLetterOpts) ToolFu
 // formatMorningDiarySummary builds a concise diary entry from morning letter data.
 func formatMorningDiarySummary(dateStr string, results []any) string {
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "🌅 모닝레터 수집 (%s)\n\n", dateStr)
+	fmt.Fprintf(&sb, "모닝레터 수집 (%s)\n\n", dateStr)
 
 	if w, ok := results[0].(weatherData); ok && w.OK {
 		fmt.Fprintf(&sb, "- 날씨: %s°C (체감 %s°C), %s, 습도 %s%%", w.TempC, w.FeelsLikeC, w.Condition, w.Humidity)
