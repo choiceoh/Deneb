@@ -57,6 +57,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
@@ -100,6 +101,7 @@ fun QuestionInput(
     Column(modifier = modifier) {
         val haptics = rememberHaptics()
         val keyboardController = LocalSoftwareKeyboardController.current
+        val focusManager = LocalFocusManager.current
         if (files.isNotEmpty()) {
             FlowRow(
                 modifier = Modifier
@@ -147,6 +149,13 @@ fun QuestionInput(
                 // Drop the soft keyboard after a send so it doesn't cover the
                 // reply. No-op on desktop, where keyboardController is null.
                 keyboardController?.hide()
+                // Rest the input while the agent replies: clearing focus removes
+                // the blinking caret (and IME) so the empty composer isn't visual
+                // noise over the streaming response — tap to resume typing. Mobile
+                // only; desktop keeps focus so hardware-keyboard rapid-send works.
+                if (currentPlatform is Platform.Mobile) {
+                    focusManager.clearFocus()
+                }
             }
         }
 
