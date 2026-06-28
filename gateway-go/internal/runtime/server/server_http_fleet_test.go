@@ -141,7 +141,7 @@ func TestFleetPathAllowedJobCancel(t *testing.T) {
 // loopback-only.
 func TestFleetHook(t *testing.T) {
 	s := &Server{logger: slog.Default(), pushHub: newClientPushHub()}
-	ch, unsub := s.pushHub.subscribe()
+	ch, unsub := s.pushHub.subscribe(kindMobile)
 	defer unsub()
 
 	req := httptest.NewRequest(http.MethodPost, "/api/hooks/fleet",

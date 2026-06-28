@@ -44,7 +44,7 @@ func (b *syncBuffer) String() string {
 // the stream.
 func TestStreamPushEvents_PublishReachesSSE(t *testing.T) {
 	hub := newClientPushHub()
-	events, unsub := hub.subscribe()
+	events, unsub := hub.subscribe(kindMobile)
 	defer unsub()
 
 	out := &syncBuffer{}
@@ -82,7 +82,7 @@ func TestStreamPushEvents_PublishReachesSSE(t *testing.T) {
 // shutdown context fires even with no client activity.
 func TestStreamPushEvents_ShutdownStops(t *testing.T) {
 	hub := newClientPushHub()
-	events, unsub := hub.subscribe()
+	events, unsub := hub.subscribe(kindMobile)
 	defer unsub()
 
 	rec := httptest.NewRecorder()

@@ -1683,6 +1683,7 @@ class DenebGatewayClient(
             try {
                 http.prepareGet("$gatewayUrl/api/v1/miniapp/events") {
                     header(CLIENT_TOKEN_HEADER, clientToken)
+                    header(CLIENT_KIND_HEADER, "mobile")
                     header("Accept", "text/event-stream")
                     timeout {
                         // Long-lived: no overall cap. The 30s server keepalive
@@ -1732,10 +1733,11 @@ class DenebGatewayClient(
             } catch (cancel: CancellationException) {
                 throw cancel
             } catch (_: Throwable) {
-                // Drop/refused/timeout — back off and retry. Capped so a long
-                // outage doesn't busy-loop but recovery stays reasonably quick.
+                // Drop/refused/timeout — back off and retry. Capped (raised
+                // 60s→120s, M3) so a long outage on a backgrounded phone retries
+                // less often — fewer radio wakeups — while recovery stays quick.
                 delay(backoffMs)
-                backoffMs = (backoffMs * 2).coerceAtMost(60_000L)
+                backoffMs = (backoffMs * 2).coerceAtMost(120_000L)
             }
         }
     }
@@ -2026,6 +2028,11 @@ class DenebGatewayClient(
 
     internal companion object {
         const val CLIENT_TOKEN_HEADER = "X-Deneb-Client-Token"
+
+        // Device class for the gateway's per-mobile FCM-fallback predicate
+        // (server clientKindFromHeader). "mobile" so a connected desktop never
+        // suppresses this phone's background push.
+        const val CLIENT_KIND_HEADER = "X-Deneb-Client-Kind"
         const val KEY_URL = "deneb.gatewayUrl"
         const val KEY_TOKEN = "deneb.clientToken"
         const val KEY_SYNC_CURSOR = "deneb.nativeSyncCursor"

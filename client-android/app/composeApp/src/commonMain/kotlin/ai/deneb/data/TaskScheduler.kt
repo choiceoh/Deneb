@@ -113,4 +113,20 @@ class TaskScheduler(
         startPushSubscription()
         startProactiveNotifications()
     }
+
+    /**
+     * Cancels the gateway event subscriptions, dropping the SSE connection so a
+     * backgrounded process can enter Doze (battery M1) and so a dead-network
+     * reconnect loop stops waking the radio (M2). Idempotent — [start]
+     * re-establishes the jobs on foreground/connectivity return. The long-lived
+     * scope itself is preserved (reused by the next start); only its child jobs
+     * are cancelled. Must be driven from a single thread (the coordinator posts
+     * to the main thread) since the job fields are not synchronized.
+     */
+    fun stop() {
+        pushJob?.cancel()
+        pushJob = null
+        proactiveJob?.cancel()
+        proactiveJob = null
+    }
 }

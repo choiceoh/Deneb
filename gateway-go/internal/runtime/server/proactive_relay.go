@@ -385,7 +385,7 @@ func (d proactiveRelayDeps) relayNativeToOptions(sessionKey, content string, opt
 		// credentials are configured) and skipped while a client is connected —
 		// the live frame already delivered. Fire-and-forget; the report is in the
 		// 업무 feed (or, for feed-less sessions, the transcript) regardless.
-		if d.pushFCM != nil && d.pushHub.subscriberCount() == 0 {
+		if d.pushFCM != nil && d.pushHub.mobileSubscriberCount() == 0 {
 			d.pushFCM.DeliverFallback("Deneb", pushPreview(content))
 		}
 	}
@@ -750,9 +750,9 @@ func (d proactiveRelayDeps) deliverNativeImage(caption string, pngBytes []byte) 
 		return false, err
 	}
 	d.markSessionVisible(nativeWorkSessionKey, msg.Timestamp)
-	if d.pushHub != nil {
-		d.pushHub.publish(clientPushEvent{Title: "Deneb", Body: caption})
-	}
+	// Live-push + FCM fallback so a backgrounded/closed phone still gets the
+	// weekly-report image notification (the image itself is in the 업무 chat).
+	publishProactive(d.pushHub, d.pushFCM, clientPushEvent{Title: "Deneb", Body: caption})
 	return true, nil
 }
 

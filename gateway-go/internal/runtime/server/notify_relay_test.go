@@ -143,7 +143,7 @@ func TestFormatErrorEvent_ToolFailedPayload(t *testing.T) {
 // Test newNotifyService nil-safety: missing plugin or zero ChatID returns
 // nil so callers can short-circuit registration.
 func TestNewNotifyService_NilWhenDisabled(t *testing.T) {
-	if got := newNotifyService(nil, nil, nil, nil); got != nil {
+	if got := newNotifyService(nil, nil, nil, nil, nil); got != nil {
 		t.Error("expected nil notify service when plugin is nil")
 	}
 }

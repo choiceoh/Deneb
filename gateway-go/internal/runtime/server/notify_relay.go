@@ -37,6 +37,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/push"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 )
 
@@ -75,7 +76,10 @@ var mirroredEvents = map[string]struct{}{
 //
 // The two mutexes are never held simultaneously.
 type notifyService struct {
-	pushHub  *clientPushHub
+	pushHub *clientPushHub
+	// pushFCM mirrors error events to FCM when no mobile client holds a live SSE
+	// (backgrounded/closed phone). Nil-safe (dormant until FCM is configured).
+	pushFCM  *push.Notifier
 	sessions *session.Manager
 	logger   *slog.Logger
 
@@ -119,12 +123,13 @@ type notifyEvent struct {
 
 // newNotifyService builds the service. Returns nil only when sessions is nil
 // (nothing useful to monitor). boundAddr is invoked on each heartbeat self-poll.
-func newNotifyService(sessions *session.Manager, logger *slog.Logger, pushHub *clientPushHub, boundAddr func() string) *notifyService {
+func newNotifyService(sessions *session.Manager, logger *slog.Logger, pushHub *clientPushHub, pushFCM *push.Notifier, boundAddr func() string) *notifyService {
 	if sessions == nil {
 		return nil
 	}
 	return &notifyService{
 		pushHub:   pushHub,
+		pushFCM:   pushFCM,
 		sessions:  sessions,
 		logger:    logger,
 		boundAddr: boundAddr,
@@ -280,12 +285,11 @@ func (n *notifyService) deliver(_ context.Context, ev notifyEvent) {
 	if body == "" {
 		return
 	}
-	// Log the error and push a preview to connected native clients.
+	// Log the error and push a preview to connected native clients, with an FCM
+	// fallback so a backgrounded/closed phone still sees user-impacting failures.
 	n.logger.Error("gateway error event", "event", ev.name, "body", body)
-	if n.pushHub != nil {
-		n.pushHub.publish(clientPushEvent{
-			Title: "⚠️ Deneb 오류",
-			Body:  truncate(body, 120),
-		})
-	}
+	publishProactive(n.pushHub, n.pushFCM, clientPushEvent{
+		Title: "⚠️ Deneb 오류",
+		Body:  truncate(body, 120),
+	})
 }

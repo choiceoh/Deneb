@@ -53,7 +53,8 @@ func (s *Server) handleMiniappEvents(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	flusher.Flush()
 
-	events, unsubscribe := s.pushHub.subscribe()
+	kind := clientKindFromHeader(r.Header.Get("X-Deneb-Client-Kind"))
+	events, unsubscribe := s.pushHub.subscribe(kind)
 	defer unsubscribe()
 	if s.logger != nil {
 		s.logger.Info("native client events stream opened", "subscribers", s.pushHub.subscriberCount())
