@@ -30,6 +30,8 @@ func (s *Server) buildMux() *http.ServeMux {
 	mux.HandleFunc("/api/v1/fleet/", s.handleFleetProxy)
 	// SparkFleet webhook → native push (loopback-only, like /api/event/ingest).
 	mux.HandleFunc("POST /api/hooks/fleet", s.handleFleetHook)
+	// Self-improvement telemetry digest for an agent/puppeteer (loopback-only).
+	mux.HandleFunc("GET /api/observatory", s.handleObservatory)
 
 	// /debug/pprof/* — runtime profiling + goroutine dumps for live diagnosis.
 	// Safe to expose because the gateway binds loopback by default in

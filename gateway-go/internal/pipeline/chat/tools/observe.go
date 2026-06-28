@@ -9,7 +9,9 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agentlog"
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/observatory"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
+	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/observe"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
@@ -130,8 +132,14 @@ func ToolObserve(lc *observe.LogCapture, alog *agentlog.Writer, wf *workfeed.Sto
 			})
 			return formatObserveProvenance(events), nil
 
+		case "health":
+			// Self-improvement machinery digest: are my own loops alive, and
+			// where are the silent failures / the no-op frontier. The same data
+			// the loopback /api/observatory serves, readable mid-reasoning.
+			return observatory.Snapshot(config.ResolveStateDir(), time.Now()).Markdown(), nil
+
 		default:
-			return "", fmt.Errorf("observe: unknown action %q — use turn | logs | behavior | effort | proactive | provenance", p.Action)
+			return "", fmt.Errorf("observe: unknown action %q — use turn | logs | behavior | effort | proactive | provenance | health", p.Action)
 		}
 	}
 }
