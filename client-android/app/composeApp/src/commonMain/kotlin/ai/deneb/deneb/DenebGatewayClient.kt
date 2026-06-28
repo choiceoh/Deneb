@@ -2028,6 +2028,7 @@ class DenebGatewayClient(
 
     internal companion object {
         const val CLIENT_TOKEN_HEADER = "X-Deneb-Client-Token"
+
         // Device class for the gateway's per-mobile FCM-fallback predicate
         // (server clientKindFromHeader). "mobile" so a connected desktop never
         // suppresses this phone's background push.

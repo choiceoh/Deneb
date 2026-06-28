@@ -47,7 +47,8 @@ class BackgroundConnectionPolicy(
     private val mainHandler = Handler(Looper.getMainLooper())
     private val connectivity = context.getSystemService(ConnectivityManager::class.java)
 
-    @Volatile
+    // Only ever read/written on the main thread (lifecycle callbacks and the
+    // main-posted connectivity reconcile), so no synchronization is needed.
     private var foreground = false
 
     /** Registers the lifecycle and connectivity observers. Call once, from onCreate. */
