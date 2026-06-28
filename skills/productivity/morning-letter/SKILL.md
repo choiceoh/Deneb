@@ -7,7 +7,7 @@ metadata:
   {
     "deneb":
       {
-        "emoji": "🌅",
+        "emoji": "☼",
         "tags": ["briefing", "daily", "morning", "summary"],
         "related_skills": ["summarize"],
       },
