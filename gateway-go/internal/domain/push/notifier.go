@@ -71,6 +71,25 @@ func NewNotifier(deps NotifierDeps) *Notifier {
 // complete failure to reach any device is logged Error + broadcast, since a
 // user-observable proactive notification was dropped (see .claude/rules/logging.md).
 func (n *Notifier) DeliverFallback(title, body string) {
+	n.deliver(title, body, map[string]string{"kind": "proactive"})
+}
+
+// DeliverPhoneAction pushes a phone-action command to all registered devices via
+// FCM when no live SSE subscriber is present (app closed / Doze). The message
+// carries a notification block (so the system tray shows it even with no app code
+// running) plus data — kind=phone_action, the action, and its args. Tapping the
+// notification launches the app, which then executes the Intent: a user-initiated
+// activity start, the only OS-sanctioned way to run a phone Intent from the
+// background. Same fire-and-forget + prune + report path as DeliverFallback.
+func (n *Notifier) DeliverPhoneAction(title, body string, data map[string]string) {
+	n.deliver(title, body, data)
+}
+
+// deliver is the shared FCM fan-out behind DeliverFallback / DeliverPhoneAction:
+// snapshot tokens, async-send {title, body, data} to each, prune dead tokens,
+// report the outcome. data is the message's structured payload (kind plus any
+// command fields the app reads on receipt or tap). Fire-and-forget and nil-safe.
+func (n *Notifier) deliver(title, body string, data map[string]string) {
 	if n == nil {
 		return
 	}
@@ -96,7 +115,7 @@ func (n *Notifier) DeliverFallback(title, body string) {
 			lastErr   error
 		)
 		for _, t := range tokens {
-			res := n.sender.Send(ctx, t.Token, title, body, map[string]string{"kind": "proactive"})
+			res := n.sender.Send(ctx, t.Token, title, body, data)
 			switch {
 			case res.OK:
 				delivered++

@@ -29,6 +29,15 @@ class FcmService : FirebaseMessagingService() {
     }
 
     override fun onMessageReceived(message: RemoteMessage) {
+        // Foreground phone action (rare — the gateway normally finds the live SSE
+        // subscriber and never falls back to FCM while the app is open). Execute it
+        // directly, matching the SSE/P1 semantic: the user is already in the app and
+        // just issued the request, so no tap-to-confirm is needed.
+        if (message.data["kind"] == "phone_action") {
+            val action = message.data["action"].orEmpty()
+            if (action.isNotBlank()) executePhoneAction(action, message.data)
+            return
+        }
         val title = message.notification?.title ?: message.data["title"] ?: "Deneb"
         val body = message.notification?.body ?: message.data["body"] ?: return
         // Reuses the shared proactive-notification path (channel, deep-link to the

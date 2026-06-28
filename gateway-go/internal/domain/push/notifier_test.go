@@ -82,9 +82,50 @@ func (f fakeSender) Send(_ context.Context, deviceToken, _, _ string, _ map[stri
 	return SendResult{OK: true}
 }
 
+// capturingSender records the data map of the last Send so a test can assert the
+// structured payload that reached FCM.
+type capturingSender struct {
+	mu   sync.Mutex
+	data map[string]string
+}
+
+func (c *capturingSender) Send(_ context.Context, _, _, _ string, data map[string]string) SendResult {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.data = data
+	return SendResult{OK: true}
+}
+
+func (c *capturingSender) lastData() map[string]string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.data
+}
+
 func TestNotifier_NilSafe(t *testing.T) {
 	var n *Notifier
-	n.DeliverFallback("t", "b") // must not panic
+	n.DeliverFallback("t", "b")         // must not panic
+	n.DeliverPhoneAction("t", "b", nil) // must not panic
+}
+
+// DeliverPhoneAction must forward its caller-supplied data (kind=phone_action +
+// the command) to Send, not the hardcoded proactive map DeliverFallback uses.
+func TestNotifier_DeliverPhoneActionForwardsData(t *testing.T) {
+	logger, ch := recordingLogger()
+	cs := &capturingSender{}
+	n := NewNotifier(NotifierDeps{
+		Store:  &fakeStore{tokens: []DeviceToken{{Token: "a"}}},
+		Sender: cs,
+		Logger: logger,
+	})
+	n.DeliverPhoneAction("전화 걸기", "010-1234-5678", map[string]string{
+		"kind": "phone_action", "action": "dial", "number": "010-1234-5678",
+	})
+	waitForLog(t, ch, "push fallback delivered")
+	got := cs.lastData()
+	if got["kind"] != "phone_action" || got["action"] != "dial" || got["number"] != "010-1234-5678" {
+		t.Fatalf("phone-action data not forwarded to Send: %v", got)
+	}
 }
 
 func TestNotifier_NoTokensIsNoop(t *testing.T) {

@@ -292,7 +292,25 @@ class MainActivity : ComponentActivity() {
             dataRepository.requestOpenWorkTopic()
             intent.removeExtra(EXTRA_OPEN_WORK_TOPIC)
         }
+        // FCM phone-action fallback: the gateway pushed a phone_write Intent command
+        // when no live SSE app was connected. The system rendered a tray notification;
+        // tapping it launched here with the command as extras. Executing now is a
+        // user-initiated activity start, so the downstream Intent is allowed even
+        // though we arrived from the background — and the tap is the user's consent.
+        if (intent?.getStringExtra("kind") == "phone_action") {
+            val action = intent.getStringExtra("action").orEmpty()
+            if (action.isNotBlank()) executePhoneAction(action, phoneActionArgsFromExtras(intent))
+            intent.removeExtra("kind")
+            intent.removeExtra("action")
+        }
     }
+
+    // Pulls the known phone-action arg keys (the gateway's phoneActionData fields)
+    // out of an FCM-launched intent's extras into the Map executePhoneAction reads.
+    private fun phoneActionArgsFromExtras(intent: Intent): Map<String, String> =
+        listOf("url", "package", "text", "to", "number")
+            .mapNotNull { key -> intent.getStringExtra(key)?.let { key to it } }
+            .toMap()
 
     // Share-sheet capture: text shared from any app (a KakaoTalk message, a URL,
     // an article excerpt) goes straight into the Deneb chat for triage. Home is
