@@ -12,6 +12,7 @@ type fakeWorktrees struct{}
 func (fakeWorktrees) StartTask(_ context.Context, r code.Repo, id string) (code.Task, error) {
 	return code.Task{ID: id, Repo: r, Branch: "deneb/" + id, Dir: "/wt/" + id}, nil
 }
+
 func (fakeWorktrees) ListRepos(context.Context) ([]code.Repo, error) {
 	return []code.Repo{{Owner: "acme", Name: "app"}}, nil
 }
