@@ -2,7 +2,6 @@ package ai.deneb.ui.chat.composables
 
 import ai.deneb.data.Attachment
 import ai.deneb.getBackgroundDispatcher
-import ai.deneb.ui.DenebMotion
 import ai.deneb.ui.components.LocalShowFullScreenImage
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebExpandIn
@@ -16,11 +15,6 @@ import ai.deneb.ui.markdown.MarkdownDocument
 import ai.deneb.ui.markdown.parseMarkdown
 import ai.deneb.ui.markdown.parseMarkdownCached
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -62,7 +56,6 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -230,9 +223,6 @@ internal fun BotMessage(
                     }
                 }
             }
-            if (isStreaming) {
-                StreamingCaret()
-            }
         }
         if (frozen != null && onResubmit != null) {
             Box(
@@ -315,28 +305,6 @@ internal fun BotMessage(
         }
         Spacer(Modifier.weight(1f))
     }
-}
-
-/** Blinking caret shown at the end of a reply while it streams in. */
-@Composable
-private fun StreamingCaret() {
-    val transition = rememberInfiniteTransition(label = "caret")
-    val caretAlpha by transition.animateFloat(
-        initialValue = 1f,
-        targetValue = 0f,
-        animationSpec = infiniteRepeatable(tween(720, easing = DenebMotion.emphasized), RepeatMode.Reverse),
-        label = "caret-alpha",
-    )
-    // A thin rounded cursor bar reads cleaner than the "▍" glyph, which sits
-    // chunky and slightly off the text baseline.
-    Box(
-        modifier = Modifier
-            .padding(start = 16.dp, bottom = 10.dp)
-            .alpha(caretAlpha)
-            .size(width = 2.dp, height = 17.dp)
-            .clip(RoundedCornerShape(1.dp))
-            .background(MaterialTheme.colorScheme.primary),
-    )
 }
 
 @Composable
