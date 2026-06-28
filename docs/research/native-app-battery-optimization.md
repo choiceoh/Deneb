@@ -2,7 +2,7 @@
 
 > **방법**: `client-android/` (KMP, Android/iOS/desktop) 의 배터리 소모원을 코드로 매핑 → Android 표준 전력 패턴과 대조 → 개선안 우선순위화. 단일 사용자 daily-driver = Galaxy S26.
 > **일시**: 2026-06-27 (2026-06-28 adversarial 리뷰 반영 정정)
-> **한 줄 결론**: 지배적 standby 소모원은 **`dataSync` 포그라운드 서비스가 SSE 연결을 24/7 살려두며 프로세스를 Doze 에서 제외**하는 것(`DaemonService` + `TaskScheduler.startPushSubscription`)이다. 가장 큰 standby 절감은 **백그라운드에서 SSE/FGS 를 내려 Doze 진입**(M1)이지만, "FCM 이 백그라운드 전달을 인수"는 **현 게이트웨이로는 부분적으로만 참** — 이미지 리포트·에러/플릿 알림은 FCM 폴백이 없고(`pushHub.publish` 직접), FCM 게이트가 *전역* `subscriberCount()==0`(데스크톱 구독 시 폰 억제)이며 서버 크리덴셜이 별도다(§3.1, 코드 검증). 따라서 **client-only M1 은 알림 소실**. **즉시 안전한 건 M2(연결성 인지 재연결)·M3(backoff 튜닝)** 이고, **M1/M4 는 §3.1 게이트웨이 선결조건 + device(S26) 검증 후**. (※이 환경엔 Android SDK·실기기가 없어 네이티브 코드의 컴파일/lint/동작 검증은 PR CI[`kotlin-lint`/`android-compile`] + 호스트 S26 에서 수행.)
+> **한 줄 결론**: 지배적 standby 소모원은 **`dataSync` 포그라운드 서비스가 SSE 연결을 24/7 살려두며 프로세스를 Doze 에서 제외**하는 것(`DaemonService` + `TaskScheduler.startPushSubscription`)이다. 가장 큰 standby 절감은 **백그라운드에서 SSE/FGS 를 내려 Doze 진입**(M1)이지만, "FCM 이 백그라운드 전달을 인수"는 **현 게이트웨이로는 부분적으로만 참** — 이미지 리포트·에러/플릿 알림은 FCM 폴백이 없고(`pushHub.publish` 직접), FCM 게이트가 *전역* `subscriberCount()==0`(데스크톱 구독 시 폰 억제)이며 서버 크리덴셜이 별도다(§3.1, 코드 검증). 따라서 **client-only M1 은 알림 소실**. **즉시 안전한 건 M2(연결성 인지 재연결)·M3(backoff 튜닝)** 이고, **M1/M4 는 §3.1 게이트웨이 선결조건 + device(S26) 검증 후**. **이 PR 구현 상태(§6)**: A(게이트웨이 FCM 폴백, 로컬 검증 완료) + M2/M3 + M1/M4 스캐폴딩(`BACKGROUND_DOZE_ENABLED=false`). (※이 환경엔 Android SDK·실기기가 없어 네이티브 코드의 컴파일/lint/동작 검증은 PR CI[`kotlin-lint`/`android-compile`] + 호스트 S26 에서 수행.)
 
 ---
 
@@ -53,18 +53,22 @@
 - **★제약 1 — FCM 가용성은 클라+서버 둘 다**: 클라 `google-services.json`(`build.gradle.kts:16`)은 **토큰 등록만** 켠다. 실제 발송은 게이트웨이 `DENEB_FCM_CREDENTIALS_FILE`(`push/config.go:Enabled()`)이 있어야 살아난다 — 없으면 `pushFCM==nil` 이라 `DeliverFallback` 스킵(`proactive_relay.go:388`). **M1 의 "FCM 가용" 게이트 = 클라 토큰 + 서버 크리덴셜 둘 다 충족** 일 때만. 어느 쪽이라도 없으면 백그라운드 SSE 유지(M3).
 - **★제약 2 — 활성 전송 예외**: 사용자가 긴 에이전트 턴을 보낸 직후 백그라운드/잠금하면, FGS 즉시 종료가 in-flight `chat/stream` POST 의 프로세스/네트워크 keepalive 를 끊는다(FCM 은 프로액티브만 커버, user-initiated 스트림은 아님). **활성 스트림 중에는 FGS 를 내리지 말 것**(짧은 grace 또는 전송완료까지 유예).
 
-### 3.1 M1 선결 조건 (게이트웨이 측 — adversarial 리뷰로 발견, 코드 검증 완료)
+### 3.1 M1 선결 조건 (adversarial 리뷰로 발견, 코드 검증 완료 — 일부 구현됨)
 
-> M1 의 "FCM 이 백그라운드 전달을 인수"는 **현 게이트웨이로는 성립하지 않는** 경로가 다수다. 백그라운드 SSE 를 끄기 전에 아래가 선행돼야 사용자 알림이 안 샌다. 모두 소스 대조로 확인.
+> M1 의 "FCM 이 백그라운드 전달을 인수"는 **현 게이트웨이로는 성립하지 않는** 경로가 다수다. 백그라운드 SSE(M1)를 *활성화*하기 전에 아래가 선행돼야 사용자 알림이 안 샌다. 모두 소스 대조로 확인. **✅=이 PR 에서 구현, 🔲=미구현(M1 활성화 전 필수).**
 
-| 갭 | 근거 | 영향 | 선결 |
+| 상태 | 갭 | 근거 | 영향 / 선결 |
 |---|---|---|---|
-| **이미지 프로액티브 미폴백** | `deliverNativeImage` 는 `pushHub.publish` 만, `DeliverFallback` 없음(`proactive_relay.go:727-755`); 주간보고 크론이 그 경로(`method_registry.go:953-958`) | 주간업무보고 *이미지* 알림이 백그라운드에서 소실 | 이 경로에도 FCM 폴백 추가 |
-| **글로벌 subscriber 게이트** | FCM 은 `pushHub.subscriberCount()==0` 일 때만(`proactive_relay.go:388`) — 전역 카운트. 데스크톱 Andromeda 가 같은 `/events` 구독(`andromeda/src/hooks.ts:351`) | 데스크톱이 떠 있으면 폰 SSE 를 꺼도 카운트>0 → 폰 FCM 억제 → 폰 알림 0 | **per-device(모바일) subscriber 추적** 또는 폴백 술어 변경 |
-| **비-리포트 pushHub 발행 미폴백** | 게이트웨이 에러 이벤트(`notify_relay.go:283-290`)·플릿 알림(`server_http_fleet_hook.go:103-106`)이 `pushHub.publish` 직접 호출, FCM·커서sync 어디에도 없음 | 에러/플릿 알림이 백그라운드에서 소실 | 이 발행들에 FCM 폴백 추가 또는 SSE 경로 유지 |
-| **서버 크리덴셜 게이트** | `push.Config.Enabled()` 는 `CredentialsFile` 필요(`push/config.go:37-52`) | 클라 google-services 있어도 서버 크리덴셜 없으면 발송 0 | M1 게이트에 서버 크리덴셜 포함(제약 1) |
-| **sync 페이지 캡** | `pages < 4` × `limit=100`(`DenebGatewayClient.kt:1001-1026`) | >400 백로그면 복귀 1회로 미드레인 | `hasMore` 까지 루프(클라) |
-| **활성 chat 스트림** | FGS 종료가 in-flight 스트림 keepalive 절단(`ChatViewModel.kt`, `DenebGatewayClient.kt:451-463`) | 잠금 시 진행 중 답변 중단 | 활성 전송 예외(제약 2) |
+| ✅ | **이미지 프로액티브 미폴백** | `deliverNativeImage` 가 `pushHub.publish` 만(`proactive_relay.go`) | → `publishProactive` 로 FCM 폴백 추가 (이 PR) |
+| ✅ | **글로벌 subscriber 게이트** | FCM 이 전역 `subscriberCount()==0`(`proactive_relay.go:388`); 데스크톱 Andromeda 가 같은 `/events` 구독 | → `mobileSubscriberCount()` 술어 + 클라 `X-Deneb-Client-Kind: mobile` 헤더 (이 PR) |
+| ✅ | **비-리포트 pushHub 발행 미폴백** | 에러(`notify_relay.go`)·플릿(`server_http_fleet_hook.go`) `pushHub.publish` 직접 | → 둘 다 `publishProactive` 경유로 FCM 폴백 (이 PR) |
+| ✅ | **스케줄러 취소 누락** | FGS 종료만으론 SSE 안 끊김 — `TaskScheduler` 가 process-lifetime scope+pushJob 소유, `ChatViewModel` 도 `start()` 호출 | → `TaskScheduler.stop()` + `BackgroundConnectionPolicy` 가 단일 소유 (이 PR) |
+| 🔲 | **서버 크리덴셜 게이트** | `push.Config.Enabled()` 는 `CredentialsFile` 필요(`push/config.go`) | 클라 google-services 있어도 서버 크리덴셜 없으면 발송 0 → M1 게이트에 서버 크리덴셜 확인 포함 |
+| 🔲 | **acked 토큰 게이트** | `FcmRegistration` 은 best-effort·실패 삼킴, `Notifier.DeliverFallback` 은 토큰 store 비면 early-return(`notifier.go:79-86`) | 토큰 등록이 조용히 실패하면 폴백 타깃 0 → M1 게이트는 **확인된 등록 토큰**(또는 test push 성공) 요구 |
+| 🔲 | **sync 페이지 캡** | `pages < 4` × `limit=100`(`DenebGatewayClient.kt:1001-1026`) | >400 백로그면 복귀 1회로 미드레인 → `hasMore` 까지 루프 |
+| 🔲 | **네이티브-sync 보존 한도** | 서버가 `native_sync.jsonl` 5MB 초과 시 최근 3,000 이벤트만 유지(`nativesync/store.go:16-24,121-131`); 커서가 잘린 tail 밑이면 `Pull` 이 못 돌려줌 | 며칠/바쁜 구간 백그라운드면 stale 커서가 이벤트 영구 누락 → 보존 확대 또는 **snapshot/full-refresh** 경로 |
+| 🔲 | **활성 chat 스트림** | FGS 종료가 in-flight 스트림 keepalive 절단(`ChatViewModel.kt`, `DenebGatewayClient.kt:451-463`) | 잠금 시 진행 중 답변 중단 → 활성 전송 예외 |
+| 🔲 | **FCM 알림 탭 라우팅** | killed/백그라운드 시 notification payload 는 `onMessageReceived` 안 탐 → `sendProactiveReportNotification`(=`EXTRA_OPEN_WORK_TOPIC` 부여) 우회; `handleDeepLinkIntent` 는 그 extra 만 반응, FCM `data["kind"]` 무시 | FCM 알림 탭이 업무토픽 대신 기본 런처 열림 → FCM click-action/data-intent 딥링크 핸들러 |
 
 ### M2 — 연결성 인지 재연결 (NetworkCallback) ★저위험 보완
 
@@ -115,7 +119,19 @@
 
 ---
 
-## 6. 관련 문서
+## 6. 구현 상태 (이 PR)
+
+**A — 게이트웨이 FCM 폴백 완성 (Go, 로컬 검증 완료 ✅)**: 이미지/에러/플릿 발행을 `publishProactive` 로 통일해 FCM 폴백 추가, 술어를 `mobileSubscriberCount()` 로 전환(데스크톱이 폰 폴백 안 막음). `go build`·`go vet`·서버 패키지 테스트(+신규 `mobileSubscriberCount`/`clientKindFromHeader` 테스트) 통과. **오늘도 존재하던 killed-phone 알림 소실 버그를 함께 수정.**
+
+**B — M2+M3 (Kotlin, CI 게이트)**: M3=backoff 캡 60s→120s. M2=`BackgroundConnectionPolicy` 가 `ConnectivityManager` 기본망 콜백으로 무신호 시 SSE 취소(`TaskScheduler.stop`)·복귀 시 재개. `ACCESS_NETWORK_STATE` 추가. 클라가 `X-Deneb-Client-Kind: mobile` 전송(A 의 술어 짝).
+
+**C — M1/M4 (Kotlin, 스캐폴딩·기본 OFF)**: 같은 policy 가 백그라운드 시 SSE+FGS 를 내려 Doze 진입시키는 경로를 가지되 **`BACKGROUND_DOZE_ENABLED=false`** 로 게이트. §3.1 의 🔲 6건(서버 크리덴셜·acked 토큰·sync 페이지 루프·보존 full-refresh·활성 스트림 예외·FCM 탭 딥링크)이 충족되고 **S26 실기기 검증**이 끝나면 켠다. `TaskScheduler.stop()`·foreground observer 단일화는 그 토대.
+
+> ⚠️ **검증 한계**: 이 환경엔 Android SDK·실기기가 없어 Kotlin(B/C)은 로컬 컴파일/lint/동작검증 불가 → PR CI(`kotlin-lint`/`android-compile`)가 컴파일·lint 게이트, 실제 배터리/Doze/FCM 동작은 S26 에서 검증 필요. M1 활성화(플래그 ON)는 그 검증 *후*.
+
+---
+
+## 7. 관련 문서
 
 - 네이티브 라이브 검증(실기기 한계 포함): `.claude/rules/native-live-app.md`
 - 코드: `DenebGatewayClient.kt`(SSE/sync), `DaemonService.kt`(포그라운드 서비스), `FcmService.kt`/`FcmRegistration.kt`(푸시), `DenebApplication.kt`(`ProcessLifecycleOwner`), `androidApp/build.gradle.kts:16`(FCM 빌드 게이팅)
