@@ -198,6 +198,28 @@ export interface Notebook extends NotebookSummary {
   sources?: NotebookSource[];
 }
 
+// Coding mode (miniapp.code.*) — one session per git worktree/branch. Mirrors
+// gateway code.Session (internal/domain/code/session.go). Hand-written until the
+// miniapp.code.* //deneb:wire types are generated.
+export interface CodeCheckpoint {
+  sha?: string;
+  summary?: string; // 한국어 요약
+  at?: string;
+}
+
+export interface CodeSession {
+  id: string;
+  repo?: { owner?: string; name?: string };
+  title?: string;
+  status?: string; // working | passed | failed | missing
+  branch?: string;
+  dir?: string;
+  chatSessionKey?: string;
+  checkpoints?: CodeCheckpoint[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 // Every navigable pane. Resource-backed panes share their key with a Refine
 // resource (see resources.ts); `today` is a read-only dashboard aggregating
 // several resources; `notebook` browses Deneb's deal notebooks; `wiki` and
@@ -219,6 +241,7 @@ export type View =
   | "crons"
   | "fleet"
   | "workfeed"
+  | "code"
   | "settings";
 
 // Gateway wire types — generated from the gateway's //deneb:wire Go structs (the

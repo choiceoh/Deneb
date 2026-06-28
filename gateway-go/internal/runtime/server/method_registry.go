@@ -21,6 +21,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/code"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/filestore"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/mailpriority"
@@ -419,6 +420,14 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 			},
 			Local:     resolveLocalCalendar(s.logger),
 			Proposals: resolveCalendarProposals(s.logger),
+		}),
+
+		// --- Coding mode: git worktrees + sessions (miniapp.code.*) ---
+		// Worktrees isolate each task; the session store backs the rail. The
+		// handler skips (nil) when the store can't load or denebDir is empty.
+		handlerminiapp.CodeMethods(handlerminiapp.CodeDeps{
+			Worktrees: code.NewManager(filepath.Join(denebDir, "code")),
+			Sessions:  resolveCodeStore(denebDir, s.logger),
 		}),
 
 		// Mini App part-status dashboard (miniapp.dashboard.lanes). Groups work
@@ -1021,6 +1030,23 @@ func resolveLocalCalendar(logger *slog.Logger) handlerminiapp.LocalCalendar {
 	if err != nil {
 		if logger != nil {
 			logger.Error("local calendar store unavailable — add/edit/delete disabled", "error", err)
+		}
+		return nil
+	}
+	return store
+}
+
+// resolveCodeStore returns the coding-mode session store, or a nil interface
+// (so CodeMethods skips registration) when denebDir is empty or the store file
+// can't be read. Mirrors resolveLocalCalendar.
+func resolveCodeStore(denebDir string, logger *slog.Logger) handlerminiapp.CodeSessions {
+	if denebDir == "" {
+		return nil
+	}
+	store, err := code.NewStore(filepath.Join(denebDir, "code"))
+	if err != nil {
+		if logger != nil {
+			logger.Error("coding-mode session store unavailable — coding mode disabled", "error", err)
 		}
 		return nil
 	}

@@ -19,6 +19,7 @@ export type IconName =
   | "crons"
   | "fleet"
   | "workfeed"
+  | "code"
   | "send"
   | "bell"
   | "arrow-right"
@@ -118,6 +119,7 @@ const PATHS: Record<IconName, ReactNode> = {
     </>
   ),
   workfeed: <path d="M3 12h3.5l2.2 6 4-13 2.4 9 1.8-2h4" />,
+  code: <path d="M8.5 8l-4 4 4 4M15.5 8l4 4-4 4" />,
   progress: (
     <>
       <path d="M3.5 20.5h17" />

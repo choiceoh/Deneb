@@ -49,6 +49,14 @@ interface WorkspaceCtx {
   // pinned last). Persisted. SettingsPane reorders; Sidebar renders in this order.
   viewOrder: View[];
   setViewOrder: (order: View[]) => void;
+  // Coding mode: when on, the left rail shows coding sessions instead of panes
+  // (the work area is the 코드 pane). Persisted to localStorage.
+  codeMode: boolean;
+  setCodeMode: (on: boolean) => void;
+  // Bumped after a coding-mode mutation (start/discard/verify) so the Sidebar
+  // session rail refetches in sync with the CodePane work area.
+  codeSessionsRev: number;
+  bumpCodeSessions: () => void;
 }
 
 const HIDDEN_VIEWS_KEY = "andromeda.hiddenPanes";
@@ -66,6 +74,12 @@ function readViewOrder(): View[] {
   return Array.isArray(arr) ? arr.filter((v): v is View => typeof v === "string") : [];
 }
 
+const CODE_MODE_KEY = "andromeda.codeMode";
+
+function readCodeMode(): boolean {
+  return getJSON<boolean>(CODE_MODE_KEY) === true;
+}
+
 const Ctx = createContext<WorkspaceCtx | null>(null);
 
 export function WorkspaceProvider({
@@ -79,13 +93,18 @@ export function WorkspaceProvider({
   setCfg: (c: GatewayConfig) => void;
   children: ReactNode;
 }) {
-  const [view, setView] = useState<View>("today"); // land on the 오늘 dashboard
+  // Land on the 오늘 dashboard — unless coding mode is persisted on, where the rail
+  // shows sessions and the work area must match (the 코드 pane), not Today.
+  const [view, setView] = useState<View>(readCodeMode() ? "code" : "today");
   const [aiText, setAiText] = useState("");
   const [activeResource, setActiveResource] = useState<string | undefined>(undefined);
   const [wikiTarget, setWikiTarget] = useState<string | null>(null);
   const [paneTarget, setPaneTarget] = useState<PaneTarget | null>(null);
   const [hiddenViews, setHiddenViews] = useState<View[]>(readHiddenViews);
   const [viewOrder, setViewOrder] = useState<View[]>(readViewOrder);
+  const [codeMode, setCodeMode] = useState<boolean>(readCodeMode);
+  const [codeSessionsRev, setCodeSessionsRev] = useState(0);
+  const bumpCodeSessions = () => setCodeSessionsRev((n) => n + 1);
 
   const toggleViewHidden = (v: View) => {
     if (v === "settings") return; // settings stays — it's the way back to this screen
@@ -116,6 +135,10 @@ export function WorkspaceProvider({
     setJSON(VIEW_ORDER_KEY, viewOrder);
   }, [viewOrder]);
 
+  useEffect(() => {
+    setJSON(CODE_MODE_KEY, codeMode);
+  }, [codeMode]);
+
   return (
     <Ctx.Provider
       value={{
@@ -137,6 +160,10 @@ export function WorkspaceProvider({
         toggleViewHidden,
         viewOrder,
         setViewOrder,
+        codeMode,
+        setCodeMode,
+        codeSessionsRev,
+        bumpCodeSessions,
       }}
     >
       {children}
