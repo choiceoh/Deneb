@@ -114,6 +114,31 @@ func (m *Manager) Patch(key string, patch PatchFields) *Session {
 	return &cp
 }
 
+// ConfigureCoding marks a session as a coding session bound to a git worktree:
+// its turns run with the implementer tool preset and fs/exec scoped to
+// workspaceDir. Creates the session if it doesn't exist (mirrors Patch).
+func (m *Manager) ConfigureCoding(key, workspaceDir string) {
+	if key == "" {
+		return
+	}
+	m.lazyInit()
+	m.mutateAndEmit(func() []Event {
+		m.mu.Lock()
+		s := m.sessions[key]
+		if s == nil {
+			s = &Session{Key: key, Kind: KindDirect, CreatedAt: time.Now()}
+			m.applySessionDefaults(s)
+			m.sessions[key] = s
+		}
+		s.Mode = ModeCode
+		s.ToolPreset = "implementer" // toolpreset.PresetImplementer
+		s.WorkspaceDir = workspaceDir
+		s.UpdatedAt = time.Now().UnixMilli()
+		m.mu.Unlock()
+		return []Event{{Kind: EventStatusChanged, Key: key}}
+	})
+}
+
 // ResetSession resets a session's runtime state to initial values.
 // Returns a snapshot copy of the reset session, or nil if not found.
 func (m *Manager) ResetSession(key string) *Session {
