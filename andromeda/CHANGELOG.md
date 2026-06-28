@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.28](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.27...andromeda-v0.0.28) (2026-06-28)
+
+
+### ✨ Features
+
+* **code:** git-worktree 바이브코딩 모드 — 게이트웨이 엔진 + Andromeda UI ([#2930](https://github.com/choiceoh/Deneb/issues/2930)) ([e0d25d0](https://github.com/choiceoh/Deneb/commit/e0d25d074882315f7aa73d8d4ed4a6b5b55021f6))
+
 ## [0.0.27](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.26...andromeda-v0.0.27) (2026-06-27)
 
 

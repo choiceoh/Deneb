@@ -1,5 +1,27 @@
 # Changelog
 
+## [4.39.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.38.0...deneb-v4.39.0) (2026-06-28)
+
+
+### ✨ Features
+
+* **chat:** pace streamed tokens so network-coalesced bursts render smoothly ([#2924](https://github.com/choiceoh/Deneb/issues/2924)) ([92b291f](https://github.com/choiceoh/Deneb/commit/92b291f4a775ed7814cff7260b100104b44b9d80))
+* **client:** dismiss soft keyboard after sending a chat message ([#2918](https://github.com/choiceoh/Deneb/issues/2918)) ([819f324](https://github.com/choiceoh/Deneb/commit/819f32412f5244ecdede22f5efeb321e6bb00cf4))
+* **client:** dismiss soft keyboard when the conversation is scrolled ([#2919](https://github.com/choiceoh/Deneb/issues/2919)) ([66235c4](https://github.com/choiceoh/Deneb/commit/66235c468d8bc317333d380f1e797c96d622e07f))
+* **code:** git-worktree 바이브코딩 모드 — 게이트웨이 엔진 + Andromeda UI ([#2930](https://github.com/choiceoh/Deneb/issues/2930)) ([e0d25d0](https://github.com/choiceoh/Deneb/commit/e0d25d074882315f7aa73d8d4ed4a6b5b55021f6))
+* **genesis:** refine low-yield lever filter — resolved denominator + Laplace smoothing ([#2915](https://github.com/choiceoh/Deneb/issues/2915)) ([e34f044](https://github.com/choiceoh/Deneb/commit/e34f04428c490aac34fb7676df1d060f8ee7fb3a))
+* **letter:** 모닝/이브닝레터를 deneb-ui 카드로 (P1 표시 카드) ([#2925](https://github.com/choiceoh/Deneb/issues/2925)) ([031dccc](https://github.com/choiceoh/Deneb/commit/031dccc29d7dc7a1bfdf128161aa19992a48c81a))
+* **native:** battery optimization — gateway FCM fallback + client M2/M3 + M1/M4 scaffolding ([#2922](https://github.com/choiceoh/Deneb/issues/2922)) ([a0b8f82](https://github.com/choiceoh/Deneb/commit/a0b8f8255b89d250cc315c0406af12a47e9a3291))
+* **observatory:** AI 가독 자기개선 텔레메트리 — digest + 툴 + watchdog ([#2928](https://github.com/choiceoh/Deneb/issues/2928)) ([cdf0ea4](https://github.com/choiceoh/Deneb/commit/cdf0ea423e673075d8e4189b754d18c2db5d5dd2))
+* **phone:** 폰 액션 SSH/Termux → 인앱 Intent (RFC + P1 전체) ([#2929](https://github.com/choiceoh/Deneb/issues/2929)) ([fae701b](https://github.com/choiceoh/Deneb/commit/fae701b6566c2c55b42160f78eb7674c5b4c3111))
+
+
+### 🐛 Bug Fixes
+
+* **chat:** remove streaming caret below replies + composer caret polish ([#2920](https://github.com/choiceoh/Deneb/issues/2920)) ([8b810a1](https://github.com/choiceoh/Deneb/commit/8b810a1d3ee6fa9654b0fc889b23802fe8561d1d))
+* **letter:** 구리시세를 Yahoo COMEX(HG=F)로 — MetalpriceAPI 무료 XCU 불가 ([#2926](https://github.com/choiceoh/Deneb/issues/2926)) ([3b1bf6a](https://github.com/choiceoh/Deneb/commit/3b1bf6a8f4ad81527727b4df9bfa7f4bebc02752))
+* **tools:** files 툴 max 파라미터를 flexInt로 (문자열 "10" 허용) ([#2927](https://github.com/choiceoh/Deneb/issues/2927)) ([fc39037](https://github.com/choiceoh/Deneb/commit/fc390379cd9fd69fed6b5c2abd244e8cbb44e432))
+
 ## [4.38.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.37.0...deneb-v4.38.0) (2026-06-27)
 
 
