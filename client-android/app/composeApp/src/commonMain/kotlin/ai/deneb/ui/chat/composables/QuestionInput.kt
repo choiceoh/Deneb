@@ -57,10 +57,12 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import deneb.composeapp.generated.resources.Res
 import deneb.composeapp.generated.resources.ic_attach
@@ -99,6 +101,7 @@ fun QuestionInput(
     Column(modifier = modifier) {
         val haptics = rememberHaptics()
         val keyboardController = LocalSoftwareKeyboardController.current
+        val focusManager = LocalFocusManager.current
         if (files.isNotEmpty()) {
             FlowRow(
                 modifier = Modifier
@@ -146,6 +149,13 @@ fun QuestionInput(
                 // Drop the soft keyboard after a send so it doesn't cover the
                 // reply. No-op on desktop, where keyboardController is null.
                 keyboardController?.hide()
+                // Rest the input while the agent replies: clearing focus removes
+                // the blinking caret (and IME) so the empty composer isn't visual
+                // noise over the streaming response — tap to resume typing. Mobile
+                // only; desktop keeps focus so hardware-keyboard rapid-send works.
+                if (currentPlatform is Platform.Mobile) {
+                    focusManager.clearFocus()
+                }
             }
         }
 
@@ -190,6 +200,12 @@ fun QuestionInput(
         TextField(
             value = textState,
             onValueChange = onTextStateChange,
+            // Caret alignment fix: bodyLarge carries lineHeight 22sp for 15sp text
+            // (Type.kt) — generous leading meant for reading message bodies. In the
+            // composer that tall line box drops the caret below the glyph on Android
+            // (the cursor appears a line under the text). Reset to the font's natural
+            // line height for the input only; message bodies keep bodyLarge's leading.
+            textStyle = MaterialTheme.typography.bodyLarge.copy(lineHeight = TextUnit.Unspecified),
             modifier = Modifier
                 .onFocusChanged { isFocused = it.isFocused }
                 // Tighter than the old uniform 16dp so the bar is more compact and the
