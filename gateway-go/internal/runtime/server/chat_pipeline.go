@@ -273,6 +273,13 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 		chatCfg.FileRecallFn = s.fileRecallForPreflight
 	}
 
+	// Coding mode: after a coding-session turn, checkpoint the worktree edits and
+	// verify build/tests (method_registry.go codingTurnEnd). nil when coding mode
+	// is disabled (no denebDir / store) → the chat hook is simply never armed.
+	if mgr, store := s.codingBackends(); mgr != nil && store != nil {
+		chatCfg.CodingTurnEndFn = s.codingTurnEnd
+	}
+
 	// Polaris: retrieval tools for compressed conversation history.
 	if bridge, ok := transcriptStore.(*polaris.Bridge); ok {
 		var localAI tools.LocalAIFunc

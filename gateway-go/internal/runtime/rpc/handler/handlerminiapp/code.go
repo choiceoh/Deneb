@@ -52,6 +52,10 @@ type CodeSessions interface {
 type CodeDeps struct {
 	Worktrees CodeWorktrees
 	Sessions  CodeSessions
+	// ConfigureCodingSession binds the chat session (key) to the worktree dir +
+	// implementer preset so its turns edit there. Nil = skip (the RPC surface
+	// still works; the agent just isn't auto-scoped to the worktree).
+	ConfigureCodingSession func(chatSessionKey, workspaceDir string)
 }
 
 // codeOpTimeout bounds the git/exec a handler may run (clone, npm install, build)
@@ -134,7 +138,8 @@ func codeStart(deps CodeDeps) rpcutil.HandlerFunc {
 		if title == "" {
 			title = task.ID
 		}
-		sess := code.NewSession(task, title, "")
+		chatSessionKey := "code:" + task.ID
+		sess := code.NewSession(task, title, chatSessionKey)
 		if err := deps.Sessions.Add(sess); err != nil {
 			// The worktree exists but we couldn't record the session — leaving it
 			// would strand an un-discardable worktree, so roll it back on a fresh
@@ -143,6 +148,11 @@ func codeStart(deps CodeDeps) rpcutil.HandlerFunc {
 			defer cleanupCancel()
 			_ = deps.Worktrees.Discard(cleanupCtx, task)
 			return rpcerr.WrapUnavailable("session save failed", err).Response(req.ID)
+		}
+		// Bind the linked chat session to this worktree + coding preset so its turns
+		// edit here (the agent's fs/exec follow WorkspaceDir; see chat run_agent_config).
+		if deps.ConfigureCodingSession != nil {
+			deps.ConfigureCodingSession(chatSessionKey, task.Dir)
 		}
 		return rpcutil.RespondOK(req.ID, map[string]any{"session": sess})
 	}

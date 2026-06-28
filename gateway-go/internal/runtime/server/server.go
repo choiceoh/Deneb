@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/provider"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/code"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/daemon"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/monitoring"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/prompts"
@@ -196,6 +197,15 @@ type Server struct {
 	// wiring (checkpoint root, log dir, etc.) reads this instead of
 	// re-resolving — single source of truth.
 	denebDir string
+
+	// Coding-mode backends (miniapp.code.* + the chat turn-end hook). Built once
+	// via codingBackends() and shared by both so the session store has a single
+	// writer. codeTaskMu serializes the per-task turn-end verify (which outlives
+	// the turn) against back-to-back turns in the same worktree.
+	codeManager *code.Manager
+	codeStore   *code.Store
+	codeOnce    sync.Once
+	codeTaskMu  sync.Map
 
 	// promptStore persists operator-editable prompt overrides surfaced in the
 	// native Settings prompt corner. nil only if initialization is skipped in tests.

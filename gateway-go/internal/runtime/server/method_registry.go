@@ -17,6 +17,7 @@ import (
 	"log/slog"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agentlog"
@@ -426,8 +427,9 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		// Worktrees isolate each task; the session store backs the rail. The
 		// handler skips (nil) when the store can't load or denebDir is empty.
 		handlerminiapp.CodeMethods(handlerminiapp.CodeDeps{
-			Worktrees: code.NewManager(filepath.Join(denebDir, "code")),
-			Sessions:  resolveCodeStore(denebDir, s.logger),
+			Worktrees:              s.codeWorktrees(),
+			Sessions:               s.codeSessions(),
+			ConfigureCodingSession: hub.Sessions().ConfigureCoding,
 		}),
 
 		// Mini App part-status dashboard (miniapp.dashboard.lanes). Groups work
@@ -1036,21 +1038,74 @@ func resolveLocalCalendar(logger *slog.Logger) handlerminiapp.LocalCalendar {
 	return store
 }
 
-// resolveCodeStore returns the coding-mode session store, or a nil interface
-// (so CodeMethods skips registration) when denebDir is empty or the store file
-// can't be read. Mirrors resolveLocalCalendar.
-func resolveCodeStore(denebDir string, logger *slog.Logger) handlerminiapp.CodeSessions {
-	if denebDir == "" {
-		return nil
-	}
-	store, err := code.NewStore(filepath.Join(denebDir, "code"))
-	if err != nil {
-		if logger != nil {
-			logger.Error("coding-mode session store unavailable — coding mode disabled", "error", err)
+// codingBackends lazily builds the coding-mode worktree manager + session store,
+// shared by the miniapp.code.* handlers and the chat turn-end hook so the
+// sessions.json has a single writer. Both are nil when denebDir is empty or the
+// store file can't be read → coding mode is disabled. sync.Once makes it safe to
+// call from both the Early RPC phase and chat-pipeline init, in any order.
+func (s *Server) codingBackends() (*code.Manager, *code.Store) {
+	s.codeOnce.Do(func() {
+		if s.denebDir == "" {
+			return
 		}
-		return nil
+		root := filepath.Join(s.denebDir, "code")
+		s.codeManager = code.NewManager(root)
+		store, err := code.NewStore(root)
+		if err != nil {
+			if s.logger != nil {
+				s.logger.Error("coding-mode session store unavailable — coding mode disabled", "error", err)
+			}
+			return
+		}
+		s.codeStore = store
+	})
+	return s.codeManager, s.codeStore
+}
+
+// codeWorktrees / codeSessions return the handler interfaces, or a nil interface
+// (not a typed-nil) when coding mode is disabled so CodeMethods skips registration.
+func (s *Server) codeWorktrees() handlerminiapp.CodeWorktrees {
+	if mgr, _ := s.codingBackends(); mgr != nil {
+		return mgr
 	}
-	return store
+	return nil
+}
+
+func (s *Server) codeSessions() handlerminiapp.CodeSessions {
+	if _, store := s.codingBackends(); store != nil {
+		return store
+	}
+	return nil
+}
+
+// codingTurnEnd is the chat turn-end hook (wired as HandlerConfig.CodingTurnEndFn):
+// for a coding session it checkpoints the worktree edits and verifies build/tests,
+// flipping the rail status. sessionKey is "code:<taskID>"; summary is the turn's
+// user message. Serialized per task because the verify outlives the turn, so
+// back-to-back turns in one worktree must not run two commits + builds at once.
+func (s *Server) codingTurnEnd(ctx context.Context, sessionKey, summary string) {
+	mgr, store := s.codingBackends()
+	if mgr == nil || store == nil {
+		return
+	}
+	taskID := strings.TrimPrefix(sessionKey, "code:")
+	if taskID == "" || taskID == sessionKey {
+		return // not a coding-session key
+	}
+	mu := s.codeTaskLock(taskID)
+	mu.Lock()
+	defer mu.Unlock()
+	code.AfterTurn(ctx, mgr, store, taskID, summary, s.logger)
+	// Nudge the rail: the status may have flipped working → passed/failed.
+	if s.broadcaster != nil {
+		s.broadcaster.Broadcast("code.sessions.changed", map[string]any{"sessionKey": sessionKey})
+	}
+}
+
+func (s *Server) codeTaskLock(taskID string) *sync.Mutex {
+	v, _ := s.codeTaskMu.LoadOrStore(taskID, &sync.Mutex{})
+	mu, _ := v.(*sync.Mutex) // always a *sync.Mutex (only value ever stored)
+	return mu
 }
 
 // resolveCalendarProposals returns the process-wide calendar-proposal store
