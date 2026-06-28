@@ -57,6 +57,13 @@ interface WorkspaceCtx {
   // session rail refetches in sync with the CodePane work area.
   codeSessionsRev: number;
   bumpCodeSessions: () => void;
+  // Cross-pane "open this coding session's chat" channel: the coding rail / CodePane
+  // hand the AI panel a coding session key ("code:<id>") so chatting there drives
+  // that worktree's turns (each turn edits the worktree, then verifies + checkpoints).
+  // Mirrors openWiki; AIPanel consumes it by switching its session to that key.
+  codeChatTarget: string | null;
+  openCodeChat: (key: string) => void;
+  consumeCodeChatTarget: () => void;
 }
 
 const HIDDEN_VIEWS_KEY = "andromeda.hiddenPanes";
@@ -105,6 +112,9 @@ export function WorkspaceProvider({
   const [codeMode, setCodeMode] = useState<boolean>(readCodeMode);
   const [codeSessionsRev, setCodeSessionsRev] = useState(0);
   const bumpCodeSessions = () => setCodeSessionsRev((n) => n + 1);
+  const [codeChatTarget, setCodeChatTarget] = useState<string | null>(null);
+  const openCodeChat = (key: string) => setCodeChatTarget(key);
+  const consumeCodeChatTarget = () => setCodeChatTarget(null);
 
   const toggleViewHidden = (v: View) => {
     if (v === "settings") return; // settings stays — it's the way back to this screen
@@ -164,6 +174,9 @@ export function WorkspaceProvider({
         setCodeMode,
         codeSessionsRev,
         bumpCodeSessions,
+        codeChatTarget,
+        openCodeChat,
+        consumeCodeChatTarget,
       }}
     >
       {children}

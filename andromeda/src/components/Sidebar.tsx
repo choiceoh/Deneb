@@ -13,8 +13,18 @@ const labelStyle = { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "
 // replaced by the coding-session list — the toggle sits just above 설정, and the
 // work area is the 코드 pane. The toggle persists, so the rail stays where you left it.
 export function Sidebar() {
-  const { view, setView, hiddenViews, viewOrder, codeMode, setCodeMode, connected, cfg, codeSessionsRev } =
-    useWorkspace();
+  const {
+    view,
+    setView,
+    hiddenViews,
+    viewOrder,
+    codeMode,
+    setCodeMode,
+    connected,
+    cfg,
+    codeSessionsRev,
+    openCodeChat,
+  } = useWorkspace();
   const visiblePanes = orderedViews(viewOrder)
     .filter((k) => !hiddenViews.includes(k))
     .map((k) => PANES.find((p) => p.key === k)!);
@@ -71,8 +81,13 @@ export function Sidebar() {
               key={s.id}
               className="nav-item fade-up"
               style={{ animationDelay: `${i * 26}ms` }}
-              onClick={() => setView("code")}
-              title={s.title || s.id}
+              onClick={() => {
+                // Open this session's chat on the right + show the work area. Now
+                // chatting drives this worktree's turns (edit → verify → checkpoint).
+                openCodeChat(s.chatSessionKey || "code:" + s.id);
+                setView("code");
+              }}
+              title={`${s.title || s.id} — 대화 열기`}
             >
               <span className="ico">
                 <Icon name="code" />
