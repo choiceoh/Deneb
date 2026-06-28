@@ -100,3 +100,14 @@ expect fun sendHeartbeatNotification(title: String, body: String)
  * the same way as a heartbeat notification.
  */
 expect fun sendProactiveReportNotification(title: String, body: String)
+
+/**
+ * Executes a phone Intent action the gateway's phone_write tool dispatched over
+ * the events stream (kind=phone_action). [action] is one of open_url / open_app /
+ * share / message / dial / photo; [args] carries that action's parameters as the
+ * gateway built them — url, package, number, text, to. Returns true when the
+ * intent was launched. Best-effort and platform-subset: Android wires real
+ * Intents; desktop/web/iOS cover what they can (open_url, dial/message via URI
+ * scheme) and no-op the rest, returning false.
+ */
+expect fun executePhoneAction(action: String, args: Map<String, String>): Boolean

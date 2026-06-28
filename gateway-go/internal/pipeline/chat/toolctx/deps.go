@@ -24,6 +24,10 @@ import (
 // It composes focused dep structs for each tool group.
 type CoreToolDeps struct {
 	WorkspaceDir string
+	// PhoneActionSender delivers a validated phone action to the native app for
+	// in-app Intent execution (the phone_write Intent ops). nil = no app channel
+	// wired, so those actions report unavailable instead of dropping silently.
+	PhoneActionSender func(ctx context.Context, action string, args map[string]string) error
 	// SkillsCatalogDirs are the skill catalog roots that live outside the
 	// workspace (managed ~/.deneb/skills, personal ~/.agents/skills). The
 	// read tool accepts them as extra allowed roots so the SKILL.md

@@ -33,6 +33,10 @@ type clientPushEvent struct {
 	// event has no navigable target (informational — e.g. an error or image push).
 	Kind string `json:"kind,omitempty"`
 	Ref  string `json:"ref,omitempty"`
+	// Data carries a structured command for non-notification frames — e.g. a
+	// phone action (Kind=pushKindPhoneAction) the app executes as an Intent
+	// rather than rendering as a notification.
+	Data map[string]string `json:"data,omitempty"`
 }
 
 // Push deep-link kinds — these strings MUST match the andromeda View pane keys
@@ -41,6 +45,10 @@ type clientPushEvent struct {
 const (
 	pushKindWorkfeed = "workfeed"
 	pushKindFleet    = "fleet"
+	// pushKindPhoneAction marks a frame the app executes as an Android Intent
+	// (open_url/share/…) rather than rendering as a notification — Data carries
+	// the action + args.
+	pushKindPhoneAction = "phone_action"
 )
 
 // clientKind identifies the device class behind an /events subscription so the

@@ -210,6 +210,9 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 		WorkFeed:     s.workFeedStore,
 		// Engine-level prefix-cache scrape targets for the observe tool.
 		VllmBaseURLs: reg.VllmBaseURLs,
+		// Deliver phone_write Intent actions (open_url/share/…) to the native app
+		// over SSE for in-app execution — the SSH/Termux-free path.
+		PhoneActionSender: s.dispatchPhoneAction,
 		// Fleet management: the agent's twin of the /api/v1/fleet passthrough —
 		// reaches the same SparkFleet control plane via s.fleet's accessors, so
 		// "is the fleet ok / restart qwen36" works from chat. "" base = off.

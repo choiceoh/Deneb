@@ -1678,16 +1678,26 @@
     "properties": {
       "to": {
         "type": "string",
-        "description": "작용 대상: notification(알림 띄우기) | tts(음성으로 읽어주기) | clipboard(클립보드에 넣기)",
+        "description": "작용. SSH(Termux): notification|tts|clipboard (text 필수). 인앱 Intent(앱 연결 시): open_url(target=URL)|open_app(target=패키지/앱명)|share(text)|message(target=수신자,text)|dial(target=전화번호)|photo(카메라)",
         "enum": [
           "notification",
           "tts",
-          "clipboard"
+          "clipboard",
+          "open_url",
+          "open_app",
+          "share",
+          "message",
+          "dial",
+          "photo"
         ]
+      },
+      "target": {
+        "type": "string",
+        "description": "액션 대상: open_url=URL, open_app=패키지/앱명, message=수신자, dial=전화번호"
       },
       "text": {
         "type": "string",
-        "description": "보낼/읽을/넣을 텍스트 내용"
+        "description": "보낼/읽을/넣을 텍스트 (notification/tts/clipboard/share/message)"
       },
       "title": {
         "type": "string",
@@ -1695,8 +1705,7 @@
       }
     },
     "required": [
-      "to",
-      "text"
+      "to"
     ]
   },
   {
