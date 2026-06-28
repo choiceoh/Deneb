@@ -79,7 +79,7 @@ metadata:
       { "type": "row", "children": [
         { "type": "stat", "value": "1,386", "label": "USD/KRW" },
         { "type": "stat", "value": "1,498", "label": "EUR/KRW" } ] },
-      { "type": "stat", "value": "$9,540 /t", "label": "COMEX 구리" } ] },
+      { "type": "stat", "value": "$9,540/톤", "label": "COMEX 구리" } ] },
 
     { "type": "card", "children": [
       { "type": "row", "children": [
@@ -112,7 +112,7 @@ metadata:
 
 - **카드 헤더**: 각 카드 첫 `row`는 `icon` + `text(caption)`. 아이콘 이름 **고정** — 날씨 `sunny`(흐림 `cloud`, 비 `water_drop`), 환율·구리 `payments`, 일정 `calendar`, 메일 `mail`, 마감 `alarm`.
 - **날씨**: 기온 `text(headline)` + 체감 `text(caption)`를 한 `row`에. 그 아래 `최고 N° · 최저 N° · 강수 N%`를 `text(caption)` 한 줄. 마지막에 맥락 한마디 `text(body)`(강수 30%↑면 우산, 한파면 방한). **`stat`을 가로로 3개 늘어놓지 마라 — 폰 폭에서 깨진다.**
-- **환율·구리**: USD/KRW·EUR/KRW를 `stat` 2개로 한 `row`(2칸). 구리는 그 아래 `stat` 1개, `value`는 `"$9,540 /t"` 꼴, `label`은 `"COMEX 구리"`. 환율 숫자는 천단위 콤마. `date` 필드가 오늘이 아니면 구리 `value`에 `"(X월 X일)"` 덧붙임.
+- **환율·구리**: USD/KRW·EUR/KRW를 `stat` 2개로 한 `row`(2칸). 구리는 그 아래 `stat` 1개, `value`는 `"$9,540/톤"` 꼴, `label`은 `"COMEX 구리"`. 환율 숫자는 천단위 콤마. `date` 필드가 오늘이 아니면 구리 `value`에 `"(X월 X일)"` 덧붙임.
 - **일정**: `list`, 각 항목 `text` `"HH:MM — 제목"`, 시간순 최대 8건. 없으면 `list` 대신 `text` `"일정 없음"`.
 - **메일**: `list`, 각 항목 `text` `"발신자 — 제목 요약"`, 중요도순 상위 5건(길면 3건). 발신자는 이름만(`"이름 <메일>"` → `"이름"`). 없으면 `text` `"수신 메일 없음"`.
 - **임박 마감**: 마감마다 `row`에 `text(body)` 제목 + `badge` `"D-N"`. `days_left`로 D-N(0=`"D-day"`, 음수=`"기한 초과"`), 오름차순. 결제기한·납기 누락 금지. **`items`가 비면 이 카드 전체를 생략한다.**

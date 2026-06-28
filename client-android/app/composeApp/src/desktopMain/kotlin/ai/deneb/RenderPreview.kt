@@ -1296,7 +1296,7 @@ private fun morningLetterNode(): DenebUiNode = ColumnNode(
                 StatNode(value = "1,386", label = "USD/KRW"),
                 StatNode(value = "1,498", label = "EUR/KRW"),
             )),
-            StatNode(value = "\$9,540 /t", label = "COMEX 구리"),
+            StatNode(value = "\$9,540/톤", label = "COMEX 구리"),
         )),
         CardNode(children = persistentListOf(
             RowNode(children = persistentListOf(

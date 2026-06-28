@@ -29,7 +29,7 @@ const morningLetterCard = `{
       { "type": "row", "children": [
         { "type": "stat", "value": "1,386", "label": "USD/KRW" },
         { "type": "stat", "value": "1,498", "label": "EUR/KRW" } ] },
-      { "type": "stat", "value": "$9,540 /t", "label": "COMEX 구리" } ] },
+      { "type": "stat", "value": "$9,540/톤", "label": "COMEX 구리" } ] },
 
     { "type": "card", "children": [
       { "type": "row", "children": [
