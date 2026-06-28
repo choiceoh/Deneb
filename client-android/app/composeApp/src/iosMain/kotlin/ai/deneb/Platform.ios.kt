@@ -126,6 +126,19 @@ actual fun openUrl(url: String): Boolean = try {
     false
 }
 
+// iOS executes the phone actions expressible as a URL scheme — open_url, plus
+// dial (tel:) and message (sms:) — by reusing [openUrl]. open_app/share/photo
+// need UIKit surfaces out of P1 scope (which targets Android), so they no-op.
+actual fun executePhoneAction(action: String, args: Map<String, String>): Boolean {
+    val urlString = when (action) {
+        "open_url" -> args["url"].orEmpty()
+        "dial" -> "tel:${args["number"].orEmpty()}"
+        "message" -> "sms:${args["to"].orEmpty()}"
+        else -> return false
+    }
+    return openUrl(urlString)
+}
+
 // The 카톡 tab launches the Android package; iOS has no equivalent here — no-op.
 
 actual fun decodeToImageBitmap(bytes: ByteArray): ImageBitmap? = try {

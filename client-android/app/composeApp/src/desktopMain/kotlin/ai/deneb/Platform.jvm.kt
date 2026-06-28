@@ -149,6 +149,11 @@ actual fun openUrl(url: String): Boolean = try {
 
 // No Android-package concept on desktop — the 카톡 tab is Android-only.
 
+// Desktop has no telephony/SMS/camera and no package launcher — only open_url is
+// meaningful (reuses the browser launch above); every other phone action no-ops.
+actual fun executePhoneAction(action: String, args: Map<String, String>): Boolean =
+    if (action == "open_url") openUrl(args["url"].orEmpty()) else false
+
 actual fun decodeToImageBitmap(bytes: ByteArray): ImageBitmap? = try {
     org.jetbrains.skia.Image.makeFromEncoded(bytes).toComposeImageBitmap()
 } catch (_: Exception) {

@@ -168,6 +168,52 @@ actual fun openUrl(url: String): Boolean = try {
     false
 }
 
+// Executes a phone_write Intent action the gateway dispatched over the events
+// stream (kind=phone_action). Each branch maps to a plain system Intent — no
+// Accessibility tap-loop — launched from the application Context, so every one
+// needs FLAG_ACTIVITY_NEW_TASK. Best-effort: any failure (bad uri, no handler,
+// package hidden) is swallowed to false so a malformed command can't crash the
+// daemon. The gateway already validated the action + its required args.
+actual fun executePhoneAction(action: String, args: Map<String, String>): Boolean = try {
+    val context: Context by inject(Context::class.java)
+    val intent: Intent = when (action) {
+        "open_url" -> Intent(Intent.ACTION_VIEW, args["url"].orEmpty().toUri())
+        "open_app" -> launchAppIntent(context, args["package"].orEmpty()) ?: return false
+        "share" -> Intent.createChooser(
+            Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_TEXT, args["text"].orEmpty())
+            },
+            null,
+        )
+        "message" -> Intent(Intent.ACTION_SENDTO, "smsto:${args["to"].orEmpty()}".toUri()).apply {
+            putExtra("sms_body", args["text"].orEmpty())
+        }
+        "dial" -> Intent(Intent.ACTION_DIAL, "tel:${args["number"].orEmpty()}".toUri())
+        "photo" -> Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE)
+        else -> return false
+    }
+    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    context.startActivity(intent)
+    true
+} catch (_: Exception) {
+    false
+}
+
+// Resolves a launch Intent for open_app: an exact package id first, then a
+// case-insensitive match on a visible app's label. Null when nothing matches (or
+// Android 11+ package-visibility hides it), so the action no-ops instead of
+// crashing.
+private fun launchAppIntent(context: Context, target: String): Intent? {
+    if (target.isBlank()) return null
+    val pm = context.packageManager
+    pm.getLaunchIntentForPackage(target)?.let { return it }
+    val match = pm.getInstalledApplications(0).firstOrNull {
+        pm.getApplicationLabel(it).toString().equals(target, ignoreCase = true)
+    } ?: return null
+    return pm.getLaunchIntentForPackage(match.packageName)
+}
+
 // Cap on-screen image decode resolution. Inbound images (chat attachments,
 // inline mail images) are only ever drawn at phone-screen scale, so decoding a
 // 12MP photo at full res (~48MB ARGB_8888) just to show it in a ~400px bubble

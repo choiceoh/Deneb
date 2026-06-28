@@ -30,7 +30,7 @@ func RegisterCoreTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDep
 		wikiDir = deps.Wiki.Store.Dir()
 	}
 	RegisterRoutineTools(registry, &deps.Chrono, diaryDir, wikiDir, deps.FilesSemanticSearch)
-	RegisterPhoneTools(registry)
+	RegisterPhoneTools(registry, deps.PhoneActionSender)
 
 	// Standing goal (Ralph loop). Eager: the agent must discover it to set a
 	// goal on a multi-step request. Once set, the server's goalTask advances it
@@ -81,16 +81,19 @@ func RegisterCoreTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDep
 func FetchToolsSchema() map[string]any { return fetchToolsToolSchema() }
 
 // RegisterPhoneTools registers the phone bridge tools — phone_read (location/
-// clipboard/battery) and phone_write (notification/tts/clipboard) — which reach
-// the user's phone over reverse SSH. No deps: the ssh target resolves from the
-// "phone" ~/.ssh/config alias (or DENEB_PHONE_SSH).
+// clipboard/battery) and phone_write. phone_write has two delivery paths: the
+// SSH/Termux ops (notification/tts/clipboard) resolve from the "phone"
+// ~/.ssh/config alias (or DENEB_PHONE_SSH); the in-app Intent actions
+// (open_url/open_app/share/message/dial/photo) travel through send — the
+// PhoneActionFunc the server backs with its native-app SSE push. A nil send
+// leaves the Intent actions reporting unavailable (SSH ops still work).
 //
 // Deferred (prompt audit 2026-06-12): together ~1,050 wire tokens for 17 uses
 // in 14 days, nearly all on phone-event turns. The one name-directing prompt
 // (server_http_event_ingest.go) now teaches the fetch_tools step, and those
 // turns are background — a fetch round-trip there is cheap, while every
 // interactive turn stops paying for the schemas.
-func RegisterPhoneTools(registry toolctx.ToolRegistrar) {
+func RegisterPhoneTools(registry toolctx.ToolRegistrar, send tools.PhoneActionFunc) {
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "phone_read",
 		Description: "사용자 스마트폰을 조회한다(reverse SSH→Termux). what=location(현재 GPS 좌표) | clipboard(방금 복사한 내용) | battery(배터리·충전 상태) | calllog(최근 통화기록 20건) | contacts(폰 주소록 — 특정 인물 검색은 `contacts` 도구가 더 낫다). '지금 어디', '방금 복사한 거', '최근 통화 누구랑' 같은 질문이나, 능동 판단 시 맥락 보강에 사용.",
@@ -100,14 +103,10 @@ func RegisterPhoneTools(registry toolctx.ToolRegistrar) {
 	})
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "phone_write",
-		Description: "사용자 스마트폰에 직접 작용한다(reverse SSH→Termux). to=notification(알림 띄우기) | tts(음성으로 읽어주기) | clipboard(클립보드에 넣기). text 필수, notification은 title 선택. 운전 중 음성 안내나, 작성한 답을 폰 클립보드에 바로 꽂을 때.",
+		Description: "사용자 스마트폰에 직접 작용한다. to로 선택 — SSH(Termux): notification(알림) | tts(음성) | clipboard(클립보드), text 필수. 인앱 Intent 액션(앱 연결 시): open_url(target=URL) | open_app(target=패키지/앱명) | share(text) | message(target=수신자,text) | dial(target=전화번호) | photo(카메라). 운전 중 음성, 답을 클립보드에 꽂기, 링크/앱 열기, 메시지·전화·사진.",
 		InputSchema: phoneWriteToolSchema(),
-		// nil PhoneActionFunc: the Intent-backed P1 actions (open_url/share/…)
-		// are validated + tested but dormant until the SSE/FCM delivery + app
-		// dispatcher land (device-gated). The SSH notification/tts/clipboard ops
-		// work today. Not advertised in the description yet.
-		Fn:       tools.ToolPhoneWrite(nil),
-		Deferred: true,
+		Fn:          tools.ToolPhoneWrite(send),
+		Deferred:    true,
 	})
 }
 

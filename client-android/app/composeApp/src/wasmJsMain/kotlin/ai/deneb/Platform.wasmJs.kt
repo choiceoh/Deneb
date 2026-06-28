@@ -61,6 +61,11 @@ actual fun openUrl(url: String): Boolean = try {
 
 // The 카톡 tab launches the Android package; web has no equivalent — no-op.
 
+// Web can only open a URL in a new tab; telephony/SMS/camera/app-launch have no
+// browser equivalent, so every non-open_url phone action no-ops.
+actual fun executePhoneAction(action: String, args: Map<String, String>): Boolean =
+    if (action == "open_url") openUrl(args["url"].orEmpty()) else false
+
 actual fun decodeToImageBitmap(bytes: ByteArray): ImageBitmap? = try {
     org.jetbrains.skia.Image.makeFromEncoded(bytes).toComposeImageBitmap()
 } catch (_: Exception) {

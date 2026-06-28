@@ -12,6 +12,7 @@ import ai.deneb.data.SmsDraftStatus
 import ai.deneb.data.SmsDraftStore
 import ai.deneb.data.UiSubmission
 import ai.deneb.deneb.generated.SkillRow
+import ai.deneb.executePhoneAction
 import ai.deneb.httpClient
 import ai.deneb.sensing.readCurrentLocation
 import ai.deneb.sensing.readWorkUsageDigest
@@ -1717,7 +1718,15 @@ class DenebGatewayClient(
                                     runCatching {
                                         jsonCodec.decodeFromString(PushEvent.serializer(), data.toString())
                                     }.getOrNull()?.let { p ->
-                                        if (p.body.isNotBlank()) {
+                                        // kind=phone_action: run the gateway's Intent command in-app
+                                        // (open_url/open_app/share/message/dial/photo) instead of
+                                        // raising a notification. data["action"] + its args.
+                                        if (p.kind == "phone_action") {
+                                            val action = p.data["action"].orEmpty()
+                                            if (action.isNotBlank()) {
+                                                runCatching { executePhoneAction(action, p.data) }
+                                            }
+                                        } else if (p.body.isNotBlank()) {
                                             syncNativeStateAsync()
                                             onPush(p.title.ifBlank { "Deneb" }, p.body)
                                         }
@@ -1914,8 +1923,17 @@ class DenebGatewayClient(
     @Serializable
     private data class ErrorEvent(val error: String = "")
 
+    // A proactive frame off the events stream. kind="phone_action" marks a command
+    // the gateway's phone_write tool dispatched (server: pushKindPhoneAction) for
+    // in-app Intent execution — data carries "action" plus its args (url/package/
+    // number/text/to) — rather than a {title, body} notification to surface.
     @Serializable
-    private data class PushEvent(val title: String = "", val body: String = "")
+    private data class PushEvent(
+        val title: String = "",
+        val body: String = "",
+        val kind: String = "",
+        val data: Map<String, String> = emptyMap(),
+    )
 
     // RpcReq / RpcEnv are internal (not private) because the inline [callRpc]
     // references them from extension call sites.
