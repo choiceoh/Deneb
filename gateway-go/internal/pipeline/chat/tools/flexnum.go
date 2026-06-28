@@ -40,3 +40,39 @@ func (f *flexInt) UnmarshalJSON(b []byte) error {
 	*f = flexInt(n)
 	return nil
 }
+
+// flexBool is a bool that also accepts a JSON string ("true"/"false"/"1"/"0").
+// Same rationale as flexInt: LLMs sometimes quote booleans, and a plain `bool`
+// field then fails the ENTIRE tool call — observed in prod on skill_lifecycle's
+// `"execute":"true"`, which silently dropped the self-improvement decision (a
+// review that records no decision counts as a failed review). Empty string →
+// false.
+type flexBool bool
+
+// Bool returns the underlying bool for use at call sites.
+func (f flexBool) Bool() bool { return bool(f) }
+
+func (f *flexBool) UnmarshalJSON(b []byte) error {
+	// Fast path: a real JSON bool.
+	var v bool
+	if err := json.Unmarshal(b, &v); err == nil {
+		*f = flexBool(v)
+		return nil
+	}
+	// Tolerate a quoted bool ("true"/"false"/"1"/"0") or empty string.
+	var s string
+	if err := json.Unmarshal(b, &s); err != nil {
+		return err
+	}
+	s = strings.TrimSpace(s)
+	if s == "" {
+		*f = false
+		return nil
+	}
+	v, err := strconv.ParseBool(s)
+	if err != nil {
+		return err
+	}
+	*f = flexBool(v)
+	return nil
+}

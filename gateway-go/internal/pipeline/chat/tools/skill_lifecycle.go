@@ -186,7 +186,7 @@ func ToolSkillLifecycle(backend SkillLifecycleBackend) ToolFunc {
 			DreamSummary        string                 `json:"dreamSummary"`
 			SkillName           string                 `json:"skillName"`
 			Finding             string                 `json:"finding"`
-			Execute             bool                   `json:"execute"`
+			Execute             flexBool               `json:"execute"`
 			Limit               int                    `json:"limit"`
 			Scope               string                 `json:"scope"`
 			Title               string                 `json:"title"`
@@ -223,7 +223,7 @@ func ToolSkillLifecycle(backend SkillLifecycleBackend) ToolFunc {
 				SessionKey:   p.SessionKey,
 				DreamSummary: p.DreamSummary,
 				SkillName:    p.SkillName,
-				Execute:      p.Execute,
+				Execute:      p.Execute.Bool(),
 			})
 		case "genesis":
 			result, err = backend.RunSkillGenesis(ctx, SkillGenesisRequest{
