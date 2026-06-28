@@ -103,7 +103,7 @@ export function AssistantBody({
 // chips; a model picker drives the per-turn model and a history drawer switches
 // conversations. Tool calls that mutate data refresh the active grid (useChat).
 export function AIPanel({ cfg, hidden = false }: { cfg: GatewayConfig; hidden?: boolean }) {
-  const { aiText, activeResource, connected, codeChatTarget, consumeCodeChatTarget } = useWorkspace();
+  const { aiText, activeResource, connected } = useWorkspace();
   const { thinking, busy, turns, send, stop, regenerate, clear, setTurns } = useChat(cfg);
   const [input, setInput] = useState("");
   const composeRef = useRef<HTMLTextAreaElement>(null);
@@ -113,17 +113,6 @@ export function AIPanel({ cfg, hidden = false }: { cfg: GatewayConfig; hidden?: 
     useSessions(cfg, connected, busy, { clear, setTurns });
   // Follow the newest message while it streams, unless the user scrolled up to read.
   const { ref: transcriptRef, onScroll, pin } = useStickyScroll([turns, thinking]);
-
-  // Coding rail / CodePane → open a coding session's chat here: switching loads its
-  // transcript so chatting continues that worktree's session (driving the gateway's
-  // per-turn verify + checkpoint). Deferred while a turn streams — selectSession
-  // no-ops on busy, so we wait for it to settle before consuming the request.
-  useEffect(() => {
-    if (!codeChatTarget || busy) return;
-    void selectSession(codeChatTarget);
-    consumeCodeChatTarget();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [codeChatTarget, busy]);
 
   // Load the model registry once connected; best-effort (older gateway / the offline
   // test path just leaves it empty).
@@ -164,9 +153,6 @@ export function AIPanel({ cfg, hidden = false }: { cfg: GatewayConfig; hidden?: 
 
   const last = turns.at(-1);
   const lastId = last?.id;
-  // When the active chat is a coding session ("code:<id>"), tell the user this chat
-  // is wired to that worktree — closes the "어떻게 일하지?" gap (code goes there).
-  const codingTask = sessionKey.startsWith("code:") ? sessionKey.slice(5) : null;
 
   return (
     <aside
@@ -207,16 +193,6 @@ export function AIPanel({ cfg, hidden = false }: { cfg: GatewayConfig; hidden?: 
       )}
 
       <ProactivePanel cfg={cfg} />
-
-      {codingTask && (
-        <div
-          style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, opacity: 0.75, padding: "2px 2px 8px" }}
-          title="이 채팅은 코딩 작업의 워크트리에 연결돼 있습니다 — 코드를 시키면 거기서 편집되고, 턴마다 자동 검증·체크포인트가 남습니다"
-        >
-          <Icon name="code" size={13} />
-          코딩 세션 · {codingTask}
-        </div>
-      )}
 
       <div
         className="ai-transcript"
