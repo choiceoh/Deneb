@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -17,6 +16,8 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/localcal"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailarchive"
 	"github.com/choiceoh/deneb/gateway-go/pkg/httputil"
 )
@@ -398,35 +399,37 @@ func parseYahooCopper(body []byte) copperData {
 	return out
 }
 
-func fetchCalendar(ctx context.Context) any {
-	if _, err := exec.LookPath("gcalcli"); err != nil {
-		return calendarData{Error: "gcalcli not installed"}
-	}
-
-	cmd := exec.CommandContext(ctx, "gcalcli", "agenda", "today", "tomorrow",
-		"--nostarted", "--details", "length")
-	out, err := cmd.CombinedOutput()
+// fetchCalendar reads today + tomorrow from the native local calendar store —
+// the same store the calendar tool writes — replacing the old gcalcli shell-out
+// that was never installed on the host (every letter logged "gcalcli not
+// installed").
+func fetchCalendar(_ context.Context) any {
+	store, err := localcal.Default()
 	if err != nil {
-		return calendarData{Error: "gcalcli failed"}
+		return calendarData{Error: "calendar unavailable"}
 	}
+	now := time.Now().In(kstLocation)
+	from := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, kstLocation)
+	to := from.Add(48 * time.Hour) // today + tomorrow
+	return calendarData{OK: true, Events: formatLetterCalendar(store.ListRange(from, to), 10)}
+}
 
-	text := strings.TrimSpace(string(out))
-	if text == "" || strings.Contains(text, "No Events Found") {
-		return calendarData{OK: true}
-	}
-
-	lines := strings.Split(text, "\n")
-	if len(lines) > 10 {
-		lines = lines[:10]
-	}
-	var events []string
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line != "" {
-			events = append(events, line)
+// formatLetterCalendar renders calendar events as "MM/DD HH:MM — 제목 [@장소]"
+// lines (chronological, capped at max). Split out so it is unit-testable without
+// a live store.
+func formatLetterCalendar(events []calendar.Event, max int) []string {
+	out := make([]string, 0, len(events))
+	for _, e := range events {
+		if len(out) >= max {
+			break
 		}
+		line := e.Start.In(kstLocation).Format("01/02 15:04") + " — " + e.Summary
+		if strings.TrimSpace(e.Location) != "" {
+			line += " @" + e.Location
+		}
+		out = append(out, line)
 	}
-	return calendarData{OK: true, Events: events}
+	return out
 }
 
 func fetchEmail(ctx context.Context) any {
