@@ -332,58 +332,70 @@ func fetchExchangeRates(ctx context.Context) any {
 	return d
 }
 
-// fetchCopper fetches copper price from MetalpriceAPI (USD per metric ton).
-// Requires METALPRICEAPI_KEY environment variable.
-// API returns price per troy ounce; we convert to per metric ton (* 32150.747).
+// fetchCopper fetches the COMEX copper futures price (HG=F) from Yahoo Finance
+// and returns it as USD per metric ton. Keyless and free: MetalpriceAPI's XCU
+// symbol requires a paid plan ("XCU query requires a paid plan"), so we read the
+// publicly available COMEX quote instead. COMEX copper tracks LME closely; the
+// exchange basis is immaterial for a daily brief.
 func fetchCopper(ctx context.Context) any {
-	apiKey := os.Getenv("METALPRICEAPI_KEY")
-	if apiKey == "" {
-		return copperData{Error: "METALPRICEAPI_KEY not set"}
-	}
-
-	url := fmt.Sprintf("https://api.metalpriceapi.com/v1/latest?api_key=%s&base=USD&currencies=XCU", apiKey)
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	const yahooURL = "https://query1.finance.yahoo.com/v8/finance/chart/HG=F?interval=1d&range=5d"
+	req, err := http.NewRequestWithContext(ctx, "GET", yahooURL, nil)
 	if err != nil {
 		return copperData{Error: "request build failed"}
 	}
+	// Yahoo rejects the default Go user agent; present a browser-like UA.
+	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; Deneb/1.0)")
+
 	resp, err := httputil.NewClient(30 * time.Second).Do(req)
 	if err != nil {
 		return copperData{Error: "network error"}
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 50*1024))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 256*1024))
 	if err != nil {
 		return copperData{Error: "read error"}
 	}
+	return parseYahooCopper(body)
+}
 
+// parseYahooCopper extracts the latest price from a Yahoo Finance chart response
+// for HG=F (COMEX copper, quoted in USD per pound) and converts it to USD per
+// metric ton. Split from the HTTP call so the unit conversion is testable.
+func parseYahooCopper(body []byte) copperData {
 	var raw struct {
-		Success bool               `json:"success"`
-		Date    string             `json:"date"`
-		Rates   map[string]float64 `json:"rates"`
+		Chart struct {
+			Result []struct {
+				Meta struct {
+					RegularMarketPrice float64 `json:"regularMarketPrice"`
+					Currency           string  `json:"currency"`
+					RegularMarketTime  int64   `json:"regularMarketTime"`
+				} `json:"meta"`
+			} `json:"result"`
+			Error any `json:"error"`
+		} `json:"chart"`
 	}
-	if err := json.Unmarshal(body, &raw); err != nil || !raw.Success {
-		return copperData{Error: "parse error or API failure"}
+	if err := json.Unmarshal(body, &raw); err != nil {
+		return copperData{Error: "parse error"}
+	}
+	if raw.Chart.Error != nil || len(raw.Chart.Result) == 0 {
+		return copperData{Error: "no copper data"}
+	}
+	meta := raw.Chart.Result[0].Meta
+	if meta.RegularMarketPrice <= 0 {
+		return copperData{Error: "copper price unavailable"}
 	}
 
-	// The API returns copper price per troy ounce (USDXCU = USD per ounce).
-	// Convert to USD per metric ton: 1 metric ton = 32,150.747 troy ounces.
-	const troyOuncesPerTon = 32150.747
-	pricePerOz, ok := raw.Rates["USDXCU"]
-	if !ok {
-		// Fallback: try XCU (inverse rate: 1 USD = X ounces of copper).
-		if xcuRate, ok2 := raw.Rates["XCU"]; ok2 && xcuRate > 0 {
-			pricePerOz = 1.0 / xcuRate
-		} else {
-			return copperData{Error: "XCU rate not found"}
-		}
-	}
-
-	return copperData{
+	// HG=F is quoted in USD per pound; 1 metric ton = 2,204.6226 pounds.
+	const poundsPerTon = 2204.6226
+	out := copperData{
 		OK:          true,
-		PricePerTon: pricePerOz * troyOuncesPerTon,
-		Date:        raw.Date,
+		PricePerTon: meta.RegularMarketPrice * poundsPerTon,
 	}
+	if meta.RegularMarketTime > 0 {
+		out.Date = time.Unix(meta.RegularMarketTime, 0).In(kstLocation).Format("2006-01-02")
+	}
+	return out
 }
 
 func fetchCalendar(ctx context.Context) any {
