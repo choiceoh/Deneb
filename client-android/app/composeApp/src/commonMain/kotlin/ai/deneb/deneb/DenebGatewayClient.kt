@@ -57,6 +57,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -432,33 +433,58 @@ class DenebGatewayClient(
             }
         }
 
-        // Coalesce streaming updates. The gateway streams tokens faster than the
-        // screen needs to repaint and faster than the 60-120Hz display; pushing every
-        // token into _chatHistory re-runs the whole chat pipeline per token (the VM
-        // combine, ChatScreen recomposition, the O(n) list copy in replaceAssistant,
-        // the scroll-follow) and competes with scroll frames. Emit at most ~20/s — the
-        // first token shows immediately, and the finalize block below always writes the
-        // complete text, so nothing is dropped. Tuned toward smoothness over liveness:
-        // the screen repaints in slightly larger chunks so scroll keeps more headroom.
-        val streamEmitInterval = 50.milliseconds
-        var lastStreamEmit = TimeSource.Monotonic.markNow()
-        var streamEmitted = false
+        // Token pacer. The gateway emits a delta per token (~65/s, smooth at the
+        // source — measured directly), but the network coalesces those tiny frames
+        // into ~170ms bursts over a relay/Wi-Fi link, so painting arrivals as-is
+        // looks like "one char → stall → burst". Instead we REVEAL the accumulated
+        // text at a steady cadence: a ticker advances a `revealed` cursor toward
+        // accumulated.length, draining a proportional slice each tick so a burst
+        // crawls out smoothly and a small constant buffer (~one tick of lag) absorbs
+        // the next one. The finalize block below always writes the full canonical
+        // text, so the trailing buffer is never lost. Cost stays bounded — the VM
+        // samples chatHistory (64ms) and BotMessage re-parses (96ms) downstream, so
+        // these steady reveals coalesce there.
+        //
+        // Thread-safety: ask() runs on a background (multi-thread) dispatcher, so a
+        // pacer launched there could race onDelta on `accumulated`. We pin just this
+        // streaming section to Dispatchers.Main via withContext, serializing onDelta
+        // and the pacer on the single UI thread — they interleave only at suspension
+        // points and share `accumulated`/`revealed` without a lock. The pacer's only
+        // suspension is delay(); its tick body never yields, so accumulated is stable
+        // while it is read. The per-delta work pinned here is light (a StringBuilder
+        // append + a small StateFlow update); the turn's heavy work stays off Main.
+        val revealTickMs = 33L
+        val revealDrainDivisor = 4
+        val revealMinChars = 2
+        var revealed = 0
         // Live progress: the gateway's tool/thinking SSE frames become transient
         // TOOL_EXECUTING rows so the waiting chip narrates what the agent is
         // doing ("메일 확인 중") instead of cycling generic spinner text.
         val progress = TurnProgress()
         val reply = try {
-            sendStreaming(
-                sendText,
-                onTool = progress::onTool,
-                onThinking = progress::onThinking,
-            ) { delta ->
-                progress.onDelta()
-                accumulated.append(delta)
-                if (!streamEmitted || lastStreamEmit.elapsedNow() >= streamEmitInterval) {
-                    replaceAssistant(accumulated.toString(), null)
-                    lastStreamEmit = TimeSource.Monotonic.markNow()
-                    streamEmitted = true
+            withContext(Dispatchers.Main) {
+                val pacer = launch {
+                    while (isActive) {
+                        if (revealed < accumulated.length) {
+                            val backlog = accumulated.length - revealed
+                            val step = maxOf(revealMinChars, backlog / revealDrainDivisor)
+                            revealed = minOf(accumulated.length, revealed + step)
+                            replaceAssistant(accumulated.toString().take(revealed), null)
+                        }
+                        delay(revealTickMs)
+                    }
+                }
+                try {
+                    sendStreaming(
+                        sendText,
+                        onTool = progress::onTool,
+                        onThinking = progress::onThinking,
+                    ) { delta ->
+                        progress.onDelta()
+                        accumulated.append(delta)
+                    }
+                } finally {
+                    pacer.cancel()
                 }
             }
         } catch (cancel: CancellationException) {
