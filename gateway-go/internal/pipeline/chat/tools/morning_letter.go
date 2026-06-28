@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -17,6 +16,8 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/localcal"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailarchive"
 	"github.com/choiceoh/deneb/gateway-go/pkg/httputil"
 )
@@ -332,89 +333,103 @@ func fetchExchangeRates(ctx context.Context) any {
 	return d
 }
 
-// fetchCopper fetches copper price from MetalpriceAPI (USD per metric ton).
-// Requires METALPRICEAPI_KEY environment variable.
-// API returns price per troy ounce; we convert to per metric ton (* 32150.747).
+// fetchCopper fetches the COMEX copper futures price (HG=F) from Yahoo Finance
+// and returns it as USD per metric ton. Keyless and free: MetalpriceAPI's XCU
+// symbol requires a paid plan ("XCU query requires a paid plan"), so we read the
+// publicly available COMEX quote instead. COMEX copper tracks LME closely; the
+// exchange basis is immaterial for a daily brief.
 func fetchCopper(ctx context.Context) any {
-	apiKey := os.Getenv("METALPRICEAPI_KEY")
-	if apiKey == "" {
-		return copperData{Error: "METALPRICEAPI_KEY not set"}
-	}
-
-	url := fmt.Sprintf("https://api.metalpriceapi.com/v1/latest?api_key=%s&base=USD&currencies=XCU", apiKey)
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	const yahooURL = "https://query1.finance.yahoo.com/v8/finance/chart/HG=F?interval=1d&range=5d"
+	req, err := http.NewRequestWithContext(ctx, "GET", yahooURL, nil)
 	if err != nil {
 		return copperData{Error: "request build failed"}
 	}
+	// Yahoo rejects the default Go user agent; present a browser-like UA.
+	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; Deneb/1.0)")
+
 	resp, err := httputil.NewClient(30 * time.Second).Do(req)
 	if err != nil {
 		return copperData{Error: "network error"}
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 50*1024))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 256*1024))
 	if err != nil {
 		return copperData{Error: "read error"}
 	}
-
-	var raw struct {
-		Success bool               `json:"success"`
-		Date    string             `json:"date"`
-		Rates   map[string]float64 `json:"rates"`
-	}
-	if err := json.Unmarshal(body, &raw); err != nil || !raw.Success {
-		return copperData{Error: "parse error or API failure"}
-	}
-
-	// The API returns copper price per troy ounce (USDXCU = USD per ounce).
-	// Convert to USD per metric ton: 1 metric ton = 32,150.747 troy ounces.
-	const troyOuncesPerTon = 32150.747
-	pricePerOz, ok := raw.Rates["USDXCU"]
-	if !ok {
-		// Fallback: try XCU (inverse rate: 1 USD = X ounces of copper).
-		if xcuRate, ok2 := raw.Rates["XCU"]; ok2 && xcuRate > 0 {
-			pricePerOz = 1.0 / xcuRate
-		} else {
-			return copperData{Error: "XCU rate not found"}
-		}
-	}
-
-	return copperData{
-		OK:          true,
-		PricePerTon: pricePerOz * troyOuncesPerTon,
-		Date:        raw.Date,
-	}
+	return parseYahooCopper(body)
 }
 
-func fetchCalendar(ctx context.Context) any {
-	if _, err := exec.LookPath("gcalcli"); err != nil {
-		return calendarData{Error: "gcalcli not installed"}
+// parseYahooCopper extracts the latest price from a Yahoo Finance chart response
+// for HG=F (COMEX copper, quoted in USD per pound) and converts it to USD per
+// metric ton. Split from the HTTP call so the unit conversion is testable.
+func parseYahooCopper(body []byte) copperData {
+	var raw struct {
+		Chart struct {
+			Result []struct {
+				Meta struct {
+					RegularMarketPrice float64 `json:"regularMarketPrice"`
+					Currency           string  `json:"currency"`
+					RegularMarketTime  int64   `json:"regularMarketTime"`
+				} `json:"meta"`
+			} `json:"result"`
+			Error any `json:"error"`
+		} `json:"chart"`
+	}
+	if err := json.Unmarshal(body, &raw); err != nil {
+		return copperData{Error: "parse error"}
+	}
+	if raw.Chart.Error != nil || len(raw.Chart.Result) == 0 {
+		return copperData{Error: "no copper data"}
+	}
+	meta := raw.Chart.Result[0].Meta
+	if meta.RegularMarketPrice <= 0 {
+		return copperData{Error: "copper price unavailable"}
 	}
 
-	cmd := exec.CommandContext(ctx, "gcalcli", "agenda", "today", "tomorrow",
-		"--nostarted", "--details", "length")
-	out, err := cmd.CombinedOutput()
+	// HG=F is quoted in USD per pound; 1 metric ton = 2,204.6226 pounds.
+	const poundsPerTon = 2204.6226
+	out := copperData{
+		OK:          true,
+		PricePerTon: meta.RegularMarketPrice * poundsPerTon,
+	}
+	if meta.RegularMarketTime > 0 {
+		out.Date = time.Unix(meta.RegularMarketTime, 0).In(kstLocation).Format("2006-01-02")
+	}
+	return out
+}
+
+// fetchCalendar reads today + tomorrow from the native local calendar store —
+// the same store the calendar tool writes — replacing the old gcalcli shell-out
+// that was never installed on the host (every letter logged "gcalcli not
+// installed").
+func fetchCalendar(_ context.Context) any {
+	store, err := localcal.Default()
 	if err != nil {
-		return calendarData{Error: "gcalcli failed"}
+		return calendarData{Error: "calendar unavailable"}
 	}
+	now := time.Now().In(kstLocation)
+	from := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, kstLocation)
+	to := from.Add(48 * time.Hour) // today + tomorrow
+	return calendarData{OK: true, Events: formatLetterCalendar(store.ListRange(from, to), 10)}
+}
 
-	text := strings.TrimSpace(string(out))
-	if text == "" || strings.Contains(text, "No Events Found") {
-		return calendarData{OK: true}
-	}
-
-	lines := strings.Split(text, "\n")
-	if len(lines) > 10 {
-		lines = lines[:10]
-	}
-	var events []string
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line != "" {
-			events = append(events, line)
+// formatLetterCalendar renders calendar events as "MM/DD HH:MM — 제목 [@장소]"
+// lines (chronological, capped at max). Split out so it is unit-testable without
+// a live store.
+func formatLetterCalendar(events []calendar.Event, max int) []string {
+	out := make([]string, 0, len(events))
+	for _, e := range events {
+		if len(out) >= max {
+			break
 		}
+		line := e.Start.In(kstLocation).Format("01/02 15:04") + " — " + e.Summary
+		if strings.TrimSpace(e.Location) != "" {
+			line += " @" + e.Location
+		}
+		out = append(out, line)
 	}
-	return calendarData{OK: true, Events: events}
+	return out
 }
 
 func fetchEmail(ctx context.Context) any {
