@@ -15,17 +15,17 @@ import (
 
 // FilesParams holds parsed input for the files tool.
 type FilesParams struct {
-	Action    string `json:"action"`
-	Path      string `json:"path"`       // store path (list/download/share/analyze)
-	Query     string `json:"query"`      // search query
-	LocalPath string `json:"local_path"` // local file to save into the store (upload)
-	DestPath  string `json:"dest_path"`  // store destination for upload
-	Overwrite bool   `json:"overwrite"`  // overwrite on upload (default: autorename)
-	Extract   bool   `json:"extract"`    // also extract text on download
-	Recursive bool   `json:"recursive"`  // recurse into subfolders on list
-	Content   bool   `json:"content"`    // search file contents too (not just names)
-	Semantic  bool   `json:"semantic"`   // meaning-based (vector) search instead of substring
-	Max       int    `json:"max"`        // max results (list/search)
+	Action    string  `json:"action"`
+	Path      string  `json:"path"`       // store path (list/download/share/analyze)
+	Query     string  `json:"query"`      // search query
+	LocalPath string  `json:"local_path"` // local file to save into the store (upload)
+	DestPath  string  `json:"dest_path"`  // store destination for upload
+	Overwrite bool    `json:"overwrite"`  // overwrite on upload (default: autorename)
+	Extract   bool    `json:"extract"`    // also extract text on download
+	Recursive bool    `json:"recursive"`  // recurse into subfolders on list
+	Content   bool    `json:"content"`    // search file contents too (not just names)
+	Semantic  bool    `json:"semantic"`   // meaning-based (vector) search instead of substring
+	Max       flexInt `json:"max"`        // max results (list/search); accepts "10" or 10
 }
 
 // FilesSemanticSearchFunc ranks store files by meaning (BGE-M3 vectors) for the
@@ -87,7 +87,7 @@ func ToolFiles(semanticSearch FilesSemanticSearchFunc) ToolFunc {
 // --- list ---
 
 func filesList(ctx context.Context, store *filestore.LocalStore, p FilesParams) (string, error) {
-	entries, err := store.List(ctx, p.Path, p.Recursive, p.Max)
+	entries, err := store.List(ctx, p.Path, p.Recursive, p.Max.Int())
 	if err != nil {
 		return "", err
 	}
@@ -108,7 +108,7 @@ func filesSearch(ctx context.Context, store *filestore.LocalStore, p FilesParams
 	// literal overlap. It falls back to name/content search when the embedding
 	// server is down (nil func or an empty result), so it is never load-bearing.
 	if p.Semantic && semanticSearch != nil {
-		hits, serr := semanticSearch(ctx, p.Query, p.Max)
+		hits, serr := semanticSearch(ctx, p.Query, p.Max.Int())
 		if serr == nil && len(hits) > 0 {
 			return formatSemanticHits(p.Query, hits), nil
 		}
@@ -120,11 +120,11 @@ func filesSearch(ctx context.Context, store *filestore.LocalStore, p FilesParams
 	var entries []filestore.Entry
 	var err error
 	if p.Content {
-		entries, err = store.SearchContent(ctx, p.Query, p.Max, func(ctx context.Context, data []byte, name string) string {
+		entries, err = store.SearchContent(ctx, p.Query, p.Max.Int(), func(ctx context.Context, data []byte, name string) string {
 			return extractFileText(ctx, name, data)
 		})
 	} else {
-		entries, err = store.Search(ctx, p.Query, p.Max)
+		entries, err = store.Search(ctx, p.Query, p.Max.Int())
 	}
 	if err != nil {
 		return "", err
