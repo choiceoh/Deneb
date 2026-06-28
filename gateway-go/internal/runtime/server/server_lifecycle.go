@@ -129,6 +129,11 @@ func (s *Server) initAndListen(ctx context.Context) (net.Listener, error) {
 		s.autonomousSvc.Start()
 	}
 
+	// Watch our OWN improvement loops for silent death — the dreamer/skill-
+	// curator/config-audit rot nobody noticed. Same gated push path as the fleet
+	// hook; stops with ctx.
+	go s.runObservatoryWatchdog(ctx)
+
 	// Gmail polling is managed by the autonomous service (registered in initGmailPoll).
 
 	return ln, nil
