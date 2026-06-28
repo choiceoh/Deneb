@@ -16,19 +16,40 @@ package observatory
 import (
 	"bufio"
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 )
 
 // Report is the aggregated self-status snapshot.
 type Report struct {
-	GeneratedAt time.Time    `json:"generatedAt"`
-	Liveness    []LoopStatus `json:"liveness"`
-	Skill       SkillSummary `json:"skill"`
-	Memory      MemoryStatus `json:"memory"`
-	Models      ModelSummary `json:"models"`
+	GeneratedAt time.Time      `json:"generatedAt"`
+	Liveness    []LoopStatus   `json:"liveness"`
+	Skill       SkillSummary   `json:"skill"`
+	Frontier    []FrontierItem `json:"frontier,omitempty"`
+	Memory      MemoryStatus   `json:"memory"`
+	Models      ModelSummary   `json:"models"`
+	Failures    []FailureCount `json:"failures,omitempty"`
+}
+
+// FrontierItem is a recurring no-op skill — a workflow the agent keeps seeing
+// and confirming an existing skill covers. The no-op stream is otherwise a
+// one-bit decision; aggregated, the top entries are a free map of "what the
+// user actually does on repeat" and where the next-skill frontier sits.
+type FrontierItem struct {
+	Skill string `json:"skill"`
+	NoOps int    `json:"noOps"`
+}
+
+// FailureCount is how many times a silent-failure pattern appeared in the recent
+// agent logs. These fail by evaporating (a dropped tool call, an unrecorded
+// decision) rather than erroring loudly, so surfacing the count is the point.
+type FailureCount struct {
+	Pattern string `json:"pattern"`
+	Count   int    `json:"count"`
 }
 
 // LoopStatus is the freshness of one improvement loop, derived from when its
@@ -83,9 +104,10 @@ func Snapshot(stateDir string, now time.Time) Report {
 	} {
 		r.Liveness = append(r.Liveness, loopStatus(stateDir, sp, now))
 	}
-	r.Skill = skillSummary(filepath.Join(stateDir, "data", "skill_genesis_log.jsonl"))
+	r.Skill, r.Frontier = skillAndFrontier(filepath.Join(stateDir, "data", "skill_genesis_log.jsonl"))
 	r.Memory = memoryStatus(stateDir, now)
 	r.Models = modelSummary(stateDir)
+	r.Failures = recentFailures(filepath.Join(stateDir, "agent-logs"), now)
 	return r
 }
 
@@ -103,18 +125,22 @@ func loopStatus(stateDir string, sp loopSpec, now time.Time) LoopStatus {
 	return LoopStatus{Name: sp.name, AgeHours: age, Fresh: age <= sp.thresh}
 }
 
-func skillSummary(path string) SkillSummary {
+// skillAndFrontier reads the genesis log once: the decision mix plus the
+// no-op-by-skill tally that surfaces the recurring-workflow frontier.
+func skillAndFrontier(path string) (SkillSummary, []FrontierItem) {
 	var s SkillSummary
+	noopBySkill := map[string]int{}
 	f, err := os.Open(path)
 	if err != nil {
-		return s
+		return s, nil
 	}
 	defer f.Close()
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
 	for sc.Scan() {
 		var rec struct {
-			Route string `json:"route"`
+			Route     string `json:"route"`
+			SkillName string `json:"skillName"`
 		}
 		if json.Unmarshal(sc.Bytes(), &rec) != nil {
 			continue
@@ -122,6 +148,11 @@ func skillSummary(path string) SkillSummary {
 		switch strings.ToLower(strings.TrimSpace(rec.Route)) {
 		case "no-op", "noop":
 			s.NoOp++
+			name := strings.TrimSpace(rec.SkillName)
+			if name == "" {
+				name = "(unmatched)"
+			}
+			noopBySkill[name]++
 		case "evolve":
 			s.Evolve++
 		case "genesis":
@@ -129,7 +160,76 @@ func skillSummary(path string) SkillSummary {
 		}
 	}
 	s.Total = s.NoOp + s.Evolve + s.Genesis
-	return s
+	return s, topFrontier(noopBySkill, 5)
+}
+
+// topFrontier returns the n most-confirmed skills by no-op count, descending.
+func topFrontier(m map[string]int, n int) []FrontierItem {
+	items := make([]FrontierItem, 0, len(m))
+	for k, v := range m {
+		items = append(items, FrontierItem{Skill: k, NoOps: v})
+	}
+	sort.Slice(items, func(i, j int) bool {
+		if items[i].NoOps != items[j].NoOps {
+			return items[i].NoOps > items[j].NoOps
+		}
+		return items[i].Skill < items[j].Skill
+	})
+	if len(items) > n {
+		items = items[:n]
+	}
+	return items
+}
+
+// recentFailures scans agent logs modified in the last 24h for silent-failure
+// signatures — failures that evaporate rather than erroring loudly. Bounded
+// (file count + bytes per file) so the on-demand digest stays cheap against
+// thousands of log files.
+func recentFailures(dir string, now time.Time) []FailureCount {
+	patterns := []struct{ label, needle string }{
+		{"type-coercion drop", "cannot unmarshal string into"},
+		{"empty-args parse fail", "unexpected end of JSON input"},
+		{"unknown tool", "unknown tool"},
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+	cutoff := now.Add(-24 * time.Hour)
+	counts := make([]int, len(patterns))
+	const maxFiles, maxBytes = 500, 256 * 1024
+	scanned := 0
+	for _, e := range entries {
+		if scanned >= maxFiles {
+			break
+		}
+		info, err := e.Info()
+		if err != nil || e.IsDir() || info.ModTime().Before(cutoff) {
+			continue
+		}
+		scanned++
+		s := string(readCapped(filepath.Join(dir, e.Name()), maxBytes))
+		for i, p := range patterns {
+			counts[i] += strings.Count(s, p.needle)
+		}
+	}
+	var out []FailureCount
+	for i, p := range patterns {
+		if counts[i] > 0 {
+			out = append(out, FailureCount{Pattern: p.label, Count: counts[i]})
+		}
+	}
+	return out
+}
+
+func readCapped(path string, max int64) []byte {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil
+	}
+	defer f.Close()
+	data, _ := io.ReadAll(io.LimitReader(f, max))
+	return data
 }
 
 func memoryStatus(stateDir string, now time.Time) MemoryStatus {

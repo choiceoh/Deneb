@@ -1584,13 +1584,15 @@
     "properties": {
       "action": {
         "type": "string",
-        "description": "What to observe about your own runtime: turn | logs | behavior | effort | proactive",
+        "description": "What to observe about your own runtime: turn | logs | behavior | effort | proactive | provenance | health (self-improvement machinery: loop liveness, no-op frontier, silent failures)",
         "enum": [
           "turn",
           "logs",
           "behavior",
           "effort",
-          "proactive"
+          "proactive",
+          "provenance",
+          "health"
         ]
       },
       "runId": {

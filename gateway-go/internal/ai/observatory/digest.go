@@ -44,6 +44,24 @@ func (r Report) Markdown() string {
 	}
 	b.WriteString("\n")
 
+	if len(r.Frontier) > 0 {
+		parts := make([]string, 0, len(r.Frontier))
+		for _, fi := range r.Frontier {
+			parts = append(parts, fmt.Sprintf("%s×%d", fi.Skill, fi.NoOps))
+		}
+		fmt.Fprintf(&b, "FRONTIER  %s\n", strings.Join(parts, " · "))
+	}
+
+	if len(r.Failures) > 0 {
+		parts := make([]string, 0, len(r.Failures))
+		for _, fc := range r.Failures {
+			parts = append(parts, fmt.Sprintf("%s×%d", fc.Pattern, fc.Count))
+		}
+		fmt.Fprintf(&b, "FAILURES  %s (24h)\n", strings.Join(parts, " · "))
+	} else {
+		b.WriteString("FAILURES  none (24h)\n")
+	}
+
 	return b.String()
 }
 
