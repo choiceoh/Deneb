@@ -102,8 +102,12 @@ func RegisterPhoneTools(registry toolctx.ToolRegistrar) {
 		Name:        "phone_write",
 		Description: "사용자 스마트폰에 직접 작용한다(reverse SSH→Termux). to=notification(알림 띄우기) | tts(음성으로 읽어주기) | clipboard(클립보드에 넣기). text 필수, notification은 title 선택. 운전 중 음성 안내나, 작성한 답을 폰 클립보드에 바로 꽂을 때.",
 		InputSchema: phoneWriteToolSchema(),
-		Fn:          tools.ToolPhoneWrite(),
-		Deferred:    true,
+		// nil PhoneActionFunc: the Intent-backed P1 actions (open_url/share/…)
+		// are validated + tested but dormant until the SSE/FCM delivery + app
+		// dispatcher land (device-gated). The SSH notification/tts/clipboard ops
+		// work today. Not advertised in the description yet.
+		Fn:       tools.ToolPhoneWrite(nil),
+		Deferred: true,
 	})
 }
 

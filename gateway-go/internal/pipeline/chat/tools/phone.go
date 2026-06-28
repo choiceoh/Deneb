@@ -179,15 +179,16 @@ func ToolPhoneRead() ToolFunc {
 }
 
 // ToolPhoneWrite acts on the phone: to = notification | tts | clipboard.
-func ToolPhoneWrite() ToolFunc {
+func ToolPhoneWrite(send PhoneActionFunc) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
-		var p struct {
-			To    string `json:"to"`
-			Text  string `json:"text"`
-			Title string `json:"title"`
-		}
+		var p phoneWriteParams
 		if err := jsonutil.UnmarshalInto("phone_write params", input, &p); err != nil {
 			return "", err
+		}
+		// Intent-backed P1 actions route to the native app (SSH/Termux-free);
+		// the legacy notification/tts/clipboard ops still go over SSH below.
+		if isPhoneAction(p.To) {
+			return dispatchPhoneAction(ctx, send, p)
 		}
 		text := strings.TrimSpace(p.Text)
 		if text == "" {
@@ -217,7 +218,7 @@ func ToolPhoneWrite() ToolFunc {
 			}
 			return "phone clipboard set", nil
 		default:
-			return "", fmt.Errorf("phone_write: unknown to=%q (use notification|tts|clipboard)", p.To)
+			return "", fmt.Errorf("phone_write: unknown to=%q (notification|tts|clipboard | open_url|open_app|share|message|dial|photo)", p.To)
 		}
 	}
 }
