@@ -22,18 +22,17 @@ import androidx.lifecycle.ProcessLifecycleOwner
  * network, cancel the SSE subscription so its reconnect/backoff loop stops
  * waking the radio against a dead network; resume when connectivity returns.
  *
- * M1/M4 (background SSE + foreground-service teardown → Doze, FLAG-GATED OFF):
- * dropping the SSE and the foreground service when the app is backgrounded lets
- * the process enter Doze — the large standby-battery win — delegating background
- * proactive delivery to FCM. This is gated OFF ([BACKGROUND_DOZE_ENABLED]=false)
- * until the gateway/client FCM-handoff prerequisites land AND the behavior is
- * validated on a real device (Galaxy S26). See
- * docs/research/native-app-battery-optimization.md §3.1 for the prerequisite
- * list (image/error/fleet FCM fallback — done; per-mobile predicate — done;
- * acknowledged token gate, native-sync retention/full-refresh, FCM
- * notification-tap deep link, active chat-stream exception — pending). With the
- * flag off, backgrounding keeps today's behavior (the daemon stays up) and only
- * the connectivity gate (M2) is active.
+ * M1/M4 (background SSE + foreground-service teardown → Doze, ON): dropping the
+ * SSE and the foreground service when the app is backgrounded lets the process
+ * enter Doze — the large standby-battery win — delegating background proactive
+ * delivery to FCM. Enabled ([BACKGROUND_DOZE_ENABLED]=true) by operator decision
+ * (battery first). The gateway-side FCM-handoff fixes that make this safe are in
+ * place (image/error/fleet FCM fallback + per-mobile predicate); the remaining
+ * known edge cases (acknowledged-token gate, native-sync retention/full-refresh,
+ * FCM notification-tap deep link, active chat-stream exception — see
+ * docs/research/native-app-battery-optimization.md §3.1) are fixed as they
+ * surface rather than blocking the battery win. Flip the flag to false to revert
+ * to always-connected; the connectivity gate (M2) stays active either way.
  *
  * The single owner of the foreground-state observer: [DenebApplication]
  * installs this instead of its own observer so [TaskScheduler.appInForeground]
@@ -109,10 +108,12 @@ class BackgroundConnectionPolicy(
     }
 
     private companion object {
-        // M1/M4 background SSE + foreground-service teardown. OFF until the FCM
-        // handoff prerequisites land and the behavior is validated on a real
-        // device (see the class doc and the §3.1 prerequisite list). With it off
-        // this class still performs M2 (connectivity-gated reconnect) safely.
-        const val BACKGROUND_DOZE_ENABLED = false
+        // M1/M4 background SSE + foreground-service teardown. ON by operator
+        // decision (battery first; accept that background-delivery edge cases —
+        // §3.1 🔲 — get fixed as they surface). Flip to false to revert to the
+        // prior always-connected behavior (M2 connectivity gating stays either
+        // way). Watch: background proactive delivery now rides FCM, so if the
+        // gateway lacks FCM credentials it goes silent until reopen — see §3.1.
+        const val BACKGROUND_DOZE_ENABLED = true
     }
 }

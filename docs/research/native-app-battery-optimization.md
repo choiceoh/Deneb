@@ -2,7 +2,7 @@
 
 > **방법**: `client-android/` (KMP, Android/iOS/desktop) 의 배터리 소모원을 코드로 매핑 → Android 표준 전력 패턴과 대조 → 개선안 우선순위화. 단일 사용자 daily-driver = Galaxy S26.
 > **일시**: 2026-06-27 (2026-06-28 adversarial 리뷰 반영 정정)
-> **한 줄 결론**: 지배적 standby 소모원은 **`dataSync` 포그라운드 서비스가 SSE 연결을 24/7 살려두며 프로세스를 Doze 에서 제외**하는 것(`DaemonService` + `TaskScheduler.startPushSubscription`)이다. 가장 큰 standby 절감은 **백그라운드에서 SSE/FGS 를 내려 Doze 진입**(M1)이지만, "FCM 이 백그라운드 전달을 인수"는 **현 게이트웨이로는 부분적으로만 참** — 이미지 리포트·에러/플릿 알림은 FCM 폴백이 없고(`pushHub.publish` 직접), FCM 게이트가 *전역* `subscriberCount()==0`(데스크톱 구독 시 폰 억제)이며 서버 크리덴셜이 별도다(§3.1, 코드 검증). 따라서 **client-only M1 은 알림 소실**. **즉시 안전한 건 M2(연결성 인지 재연결)·M3(backoff 튜닝)** 이고, **M1/M4 는 §3.1 게이트웨이 선결조건 + device(S26) 검증 후**. **이 PR 구현 상태(§6)**: A(게이트웨이 FCM 폴백, 로컬 검증 완료) + M2/M3 + M1/M4 스캐폴딩(`BACKGROUND_DOZE_ENABLED=false`). (※이 환경엔 Android SDK·실기기가 없어 네이티브 코드의 컴파일/lint/동작 검증은 PR CI[`kotlin-lint`/`android-compile`] + 호스트 S26 에서 수행.)
+> **한 줄 결론**: 지배적 standby 소모원은 **`dataSync` 포그라운드 서비스가 SSE 연결을 24/7 살려두며 프로세스를 Doze 에서 제외**하는 것(`DaemonService` + `TaskScheduler.startPushSubscription`)이다. 가장 큰 standby 절감은 **백그라운드에서 SSE/FGS 를 내려 Doze 진입**(M1)이지만, "FCM 이 백그라운드 전달을 인수"는 **현 게이트웨이로는 부분적으로만 참** — 이미지 리포트·에러/플릿 알림은 FCM 폴백이 없고(`pushHub.publish` 직접), FCM 게이트가 *전역* `subscriberCount()==0`(데스크톱 구독 시 폰 억제)이며 서버 크리덴셜이 별도다(§3.1, 코드 검증). 따라서 **client-only M1 은 알림 소실**. **즉시 안전한 건 M2(연결성 인지 재연결)·M3(backoff 튜닝)** 이고, **M1/M4 는 §3.1 게이트웨이 선결조건 + device(S26) 검증 후**. **이 PR 구현 상태(§6)**: A(게이트웨이 FCM 폴백, 로컬 검증 완료) + M2/M3 + **M1/M4 ON**(`BACKGROUND_DOZE_ENABLED=true`, 운영자 결정 — 배터리 우선, 잔여 엣지케이스는 fix-as-surfaces). (※이 환경엔 Android SDK·실기기가 없어 네이티브 코드의 컴파일/lint/동작 검증은 PR CI[`kotlin-lint`/`android-compile`] + 호스트 S26 에서 수행.)
 
 ---
 
@@ -100,11 +100,11 @@
 |---|---|---|---|
 | **M2** NetworkCallback 재연결 | 중 | 낮음 | 🟢 **즉시 채택 권장** — FCM 핸드오프 무관, 클라 국소 변경 |
 | **M3** keepalive/backoff 튜닝 | 소~중 | 낮음 | 🟢 **즉시 채택 가능** (backoff 지터/캡은 클라 단독; 서버 keepalive 변경은 별도) |
-| **M1** SSE 포그라운드 게이팅 + FCM 백그라운드 | 🔥 최대 (standby drain 대부분) | **높음** (§3.1 게이트웨이 선결 + 클라 catch-up/스트림 예외 + device 검증) | 🟡 **선결조건 충족 전 보류** — client-only 로 하면 알림 소실 |
-| **M4** Doze/세이버 인지 | 중 | 중 (M1 과 동일 핸드오프 의존) | 🟡 M1 과 묶어서, 같은 선결조건 |
+| **M1** SSE 포그라운드 게이팅 + FCM 백그라운드 | 🔥 최대 (standby drain 대부분) | **높음** (§3.1 🔲 잔여 + device 검증 미완) | 🟢 **ON (운영자 결정)** — A 로 게이트웨이 측 갭은 닫음; 잔여 엣지케이스는 fix-as-surfaces |
+| **M4** Doze/세이버 인지 | 중 | 중 (M1 과 동일 핸드오프 의존) | 🟢 M1 과 함께 ON |
 | **M5** 위젯/알림 | 소 | 낮음 | ⛔ 후순위 |
 
-**착수 순서 (정정)**: **M2 + M3(저위험·클라 단독, FCM 핸드오프 무관) 먼저** → 그 다음 **§3.1 게이트웨이 선결조건**(이미지/에러/플릿 FCM 폴백 + per-mobile subscriber 추적 + 서버 크리덴셜 게이트) → 클라 catch-up 루프 + 활성-스트림 예외 → **마지막에 M1/M4 를 device(S26) 검증과 함께**. M1 은 standby 절감 최대치지만 **선결 없이는 알림 신뢰성 회귀**라 순서를 거스르면 안 된다.
+**착수 순서 (실제)**: **A(게이트웨이 FCM 폴백)+M2+M3 먼저** → A 로 §3.1 핵심 갭(이미지/에러/플릿 폴백·per-mobile 술어·스케줄러 취소) 해소 → **M1/M4 를 ON**(운영자 결정: 배터리 우선, §3.1 🔲 잔여는 발생 시 수정). ⚠️ **`BACKGROUND_DOZE_ENABLED=true`** 로 활성화됨 — 되돌리려면 false 한 줄. 잔여 위험(acked-토큰·sync 보존/페이지·FCM 탭 딥링크·활성 스트림)은 §3.1 참조, 증상 보이면 fast-follow.
 
 > **★ 검토 변경 이력**: 이 §3.1·우선순위는 PR #2922 의 adversarial 리뷰(Codex)가 짚은 6개 갭을 **소스 대조로 검증한 뒤** 반영했다. 초판은 M1 을 "FCM 가용 빌드부터 본안"으로 과신했으나, FCM 핸드오프가 *현 게이트웨이로는* 이미지 리포트·에러/플릿 알림·멀티-구독·서버 크리덴셜에서 성립하지 않아 **client-only M1 은 알림 소실**임이 확인됐다.
 
@@ -125,9 +125,9 @@
 
 **B — M2+M3 (Kotlin, CI 게이트)**: M3=backoff 캡 60s→120s. M2=`BackgroundConnectionPolicy` 가 `ConnectivityManager` 기본망 콜백으로 무신호 시 SSE 취소(`TaskScheduler.stop`)·복귀 시 재개. `ACCESS_NETWORK_STATE` 추가. 클라가 `X-Deneb-Client-Kind: mobile` 전송(A 의 술어 짝).
 
-**C — M1/M4 (Kotlin, 스캐폴딩·기본 OFF)**: 같은 policy 가 백그라운드 시 SSE+FGS 를 내려 Doze 진입시키는 경로를 가지되 **`BACKGROUND_DOZE_ENABLED=false`** 로 게이트. §3.1 의 🔲 6건(서버 크리덴셜·acked 토큰·sync 페이지 루프·보존 full-refresh·활성 스트림 예외·FCM 탭 딥링크)이 충족되고 **S26 실기기 검증**이 끝나면 켠다. `TaskScheduler.stop()`·foreground observer 단일화는 그 토대.
+**C — M1/M4 (Kotlin, ★ON — `BACKGROUND_DOZE_ENABLED=true`)**: 같은 policy 가 백그라운드 시 SSE+FGS 를 내려 Doze 진입시키고 백그라운드 전달을 FCM 에 위임. **운영자 결정으로 활성화**(배터리 우선; §3.1 🔲 잔여 엣지케이스는 증상 발생 시 수정). A 로 게이트웨이 측 핵심 갭(이미지/에러/플릿 폴백·per-mobile 술어·스케줄러 취소)은 이미 닫혔다. 되돌리려면 플래그 false 한 줄(M2 는 그대로 유지).
 
-> ⚠️ **검증 한계**: 이 환경엔 Android SDK·실기기가 없어 Kotlin(B/C)은 로컬 컴파일/lint/동작검증 불가 → PR CI(`kotlin-lint`/`android-compile`)가 컴파일·lint 게이트, 실제 배터리/Doze/FCM 동작은 S26 에서 검증 필요. M1 활성화(플래그 ON)는 그 검증 *후*.
+> ⚠️ **검증 한계 + 잔여 위험**: 이 환경엔 Android SDK·실기기가 없어 Kotlin(B/C)은 로컬 컴파일/lint/동작검증 불가 → PR CI(`kotlin-lint`/`android-compile`)가 컴파일·lint 게이트. **실제 배터리/Doze/FCM 동작은 S26 에서 확인 권장**. M1-ON 의 잔여 위험(§3.1 🔲): ①게이트웨이에 FCM 크리덴셜 없으면 백그라운드 알림 0(가장 먼저 확인) ②며칠+busy 백그라운드면 sync 누락(보존/페이지) ③FCM 알림 탭이 업무토픽 대신 런처 ④백그라운드 진입 중 진행 중 채팅 스트림 라이브뷰 끊김(결과는 서버 transcript 에 남아 복귀 시 노출). 증상 보이면 해당 fast-follow.
 
 ---
 
