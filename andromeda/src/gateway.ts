@@ -208,6 +208,36 @@ export const sessionTranscript = (cfg: GatewayConfig, sessionKey: string, limit 
 export const deleteSession = (cfg: GatewayConfig, sessionKey: string) =>
   callRpc<{ deleted: boolean }>(cfg, "miniapp.sessions.delete", { sessionKey }).then((r) => Boolean(r.deleted));
 
+// --- Native durable sync (miniapp.sync.pull) — catch-up for missed proactive
+// events. The live `events` SSE push is best-effort, so a work-feed card created
+// while the stream was dropped (reconnect, machine asleep) would otherwise never
+// reach the feed until its 60s list cache expired — the "알림은 왔는데 작업 피드엔
+// 안 뜸" symptom. This cursor-based log lets the desktop reconcile like the native
+// client. Mirrors nativesync.Event / handlerminiapp.syncPull (sync.go).
+export interface SyncEvent {
+  seq: number;
+  // workfeed.created | workfeed.updated | workfeed.action.run | transcript.appended | calendar.changed
+  type: string;
+  entityId?: string;
+  sessionKey?: string;
+  workFeedItemId?: string;
+  timestampMs?: number;
+  payload?: Record<string, unknown>;
+}
+
+export interface SyncPullResult {
+  events: SyncEvent[];
+  cursor: number; // last event's seq in this batch — pass back as the next pull's cursor
+  latestSeq: number; // highest seq ever stored (baseline jump target)
+  hasMore: boolean;
+  count: number;
+  serverTimeMs?: number;
+}
+
+// Pull events with seq > cursor (0 = from the start). limit is server-capped at 500.
+export const syncPull = (cfg: GatewayConfig, cursor = 0, limit = 100) =>
+  callRpc<SyncPullResult>(cfg, "miniapp.sync.pull", { cursor, limit });
+
 // --- Coding mode (miniapp.code.*) — git-worktree coding sessions ---
 
 // List sessions for the rail (most-recently-updated first, gateway-sorted).
