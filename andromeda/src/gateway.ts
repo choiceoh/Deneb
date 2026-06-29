@@ -256,6 +256,11 @@ export const codeStart = (cfg: GatewayConfig, owner: string, name: string, taskI
 export const codeStatus = (cfg: GatewayConfig, id: string) =>
   callRpc<{ session: CodeSession }>(cfg, "miniapp.code.status", { id }).then((r) => r.session);
 
+// The pull-request URL for a session's branch, or "" when none exists yet (or gh
+// is unauthenticated). Read-only lookup so the UI can show a "결과 보기" link.
+export const codePr = (cfg: GatewayConfig, id: string) =>
+  callRpc<{ url?: string }>(cfg, "miniapp.code.pr", { id }).then((r) => r.url ?? "");
+
 // Discard the worktree + session record ("작업 삭제").
 export const codeDiscard = (cfg: GatewayConfig, id: string) =>
   callRpc<{ ok?: boolean }>(cfg, "miniapp.code.discard", { id }).then((r) => Boolean(r.ok));

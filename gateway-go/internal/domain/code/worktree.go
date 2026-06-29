@@ -194,6 +194,23 @@ func (m *Manager) Push(ctx context.Context, t Task) error {
 	return nil
 }
 
+// PRURL returns the URL of the pull request for this task's branch, or "" if no
+// PR exists yet. The autonomous flow opens the PR via `gh pr create` from chat;
+// this is a read-only lookup so the UI can surface a "결과 보기" link. It targets
+// the repo by -R owner/repo (not the worktree dir) so the link still resolves
+// after the worktree is discarded. gh owns auth — if gh is unauthenticated or
+// unavailable the call errors and the caller degrades to no link.
+func (m *Manager) PRURL(ctx context.Context, t Task) (string, error) {
+	repoArg := t.Repo.Owner + "/" + t.Repo.Name
+	out, err := m.Runner.Run(ctx, "", "gh", "pr", "list",
+		"-R", repoArg, "--head", t.Branch, "--state", "all",
+		"--json", "url", "--jq", `.[0].url // ""`)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
 // Discard removes the worktree and deletes its branch — the total "되돌리기".
 // The base clone and main checkout are left untouched.
 func (m *Manager) Discard(ctx context.Context, t Task) error {

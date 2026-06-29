@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
-import { type CodeVerifyResult, type GatewayConfig, codeVerify } from "@/gateway";
+import { type CodeVerifyResult, type GatewayConfig, codePr, codeVerify } from "@/gateway";
 import { codeStatusColor, codeStatusLabel } from "@/codeStatus";
 import { errText, fmtMailDate } from "@/format";
 import type { CodeSession } from "@/types";
@@ -21,6 +21,21 @@ export function CodeTaskDetail({
   const [verifying, setVerifying] = useState(false);
   const [result, setResult] = useState<CodeVerifyResult | null>(null);
   const [err, setErr] = useState("");
+  const [prUrl, setPrUrl] = useState("");
+
+  // Look up the branch's PR link (empty until the autonomous flow opens one, or
+  // when gh is unauthenticated). Re-runs when the session updates (a turn may have
+  // just pushed + opened the PR).
+  useEffect(() => {
+    let alive = true;
+    codePr(cfg, session.id)
+      .then((url) => alive && setPrUrl(url))
+      .catch(() => alive && setPrUrl(""));
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session.id, session.updatedAt, cfg.url, cfg.token]);
 
   async function runVerify() {
     setVerifying(true);
@@ -57,10 +72,22 @@ export function CodeTaskDetail({
           {session.title || session.id}
         </span>
       </div>
-      <p style={{ margin: "4px 0 16px", fontSize: 12.5, color: "var(--muted)" }}>
+      <p style={{ margin: "4px 0 14px", fontSize: 12.5, color: "var(--muted)" }}>
         {codeStatusLabel(session.status)} · {repoLabel}
         {session.branch ? ` · ${session.branch}` : ""}
       </p>
+
+      {prUrl && (
+        <a
+          href={prUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="btn btn-accent"
+          style={{ display: "inline-flex", textDecoration: "none", marginBottom: 16 }}
+        >
+          GitHub에서 결과 보기 ↗
+        </a>
+      )}
 
       <div style={{ fontSize: 11.5, letterSpacing: "0.04em", color: "var(--muted-2)", marginBottom: 8 }}>진행 기록</div>
       {checkpoints.length === 0 ? (

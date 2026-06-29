@@ -33,6 +33,7 @@ type CodeWorktrees interface {
 	HeadSHA(ctx context.Context, t code.Task) (string, error)
 	Undo(ctx context.Context, t code.Task) (bool, error)
 	Push(ctx context.Context, t code.Task) error
+	PRURL(ctx context.Context, t code.Task) (string, error)
 	Discard(ctx context.Context, t code.Task) error
 }
 
@@ -72,6 +73,7 @@ func CodeMethods(deps CodeDeps) map[string]rpcutil.HandlerFunc {
 		"miniapp.code.repos":      codeRepos(deps),
 		"miniapp.code.start":      codeStart(deps),
 		"miniapp.code.status":     codeStatus(deps),
+		"miniapp.code.pr":         codePR(deps),
 		"miniapp.code.verify":     codeVerify(deps),
 		"miniapp.code.checkpoint": codeCheckpoint(deps),
 		"miniapp.code.undo":       codeUndo(deps),
@@ -180,6 +182,37 @@ func codeStatus(deps CodeDeps) rpcutil.HandlerFunc {
 			return rpcerr.InvalidParams(fmt.Errorf("session %q not found", strings.TrimSpace(p.ID))).Response(req.ID)
 		}
 		return rpcutil.RespondOK(req.ID, map[string]any{"session": sess})
+	}
+}
+
+// codePR returns the pull-request URL for a session's branch (empty when none
+// exists yet, or when gh is unauthenticated). It's a read-only lookup so the UI
+// can show a "결과 보기" link — never an error to the user, since "no PR yet" is a
+// normal state.
+func codePR(deps CodeDeps) rpcutil.HandlerFunc {
+	type params struct {
+		ID string `json:"id"`
+	}
+	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		if errResp := requireAuth(ctx, req.ID); errResp != nil {
+			return errResp
+		}
+		p, errResp := rpcutil.DecodeParams[params](req)
+		if errResp != nil {
+			return errResp
+		}
+		sess, ok := deps.Sessions.Get(strings.TrimSpace(p.ID))
+		if !ok {
+			return rpcerr.InvalidParams(fmt.Errorf("session %q not found", strings.TrimSpace(p.ID))).Response(req.ID)
+		}
+		ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+		defer cancel()
+		url, err := deps.Worktrees.PRURL(ctx, taskFromSession(sess))
+		if err != nil {
+			// gh unauthenticated / unavailable → no link (not an error to the UI).
+			return rpcutil.RespondOK(req.ID, map[string]any{"url": ""})
+		}
+		return rpcutil.RespondOK(req.ID, map[string]any{"url": url})
 	}
 }
 
