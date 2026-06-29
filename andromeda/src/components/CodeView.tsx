@@ -168,7 +168,7 @@ export function CodeView({ cfg, hidden = false }: { cfg: GatewayConfig; hidden?:
             aria-label="Deneb에게 코딩 작업 지시"
             placeholder={
               !activeCodeKey
-                ? "먼저 우측에서 작업을 선택하세요"
+                ? "먼저 왼쪽에서 작업을 선택하세요"
                 : busy
                   ? "응답 중…"
                   : "무엇을 만들까요? (예: 로그인 폼 추가)"
