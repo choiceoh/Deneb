@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.0.30](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.29...andromeda-v0.0.30) (2026-06-29)
+
+
+### ✨ Features
+
+* **code:** 코딩 모드 새 작업에서 작업 ID·제목 자동 생성 (입력 칸 제거) ([#2937](https://github.com/choiceoh/Deneb/issues/2937)) ([cc486e1](https://github.com/choiceoh/Deneb/commit/cc486e18ddab6c37f4b501ff61680d308c11113f))
+
+
+### 🔧 Internal
+
+* **code:** 코드 모드 우측 패널에서 중복 세션 목록 제거 ([#2939](https://github.com/choiceoh/Deneb/issues/2939)) ([a4fd8ba](https://github.com/choiceoh/Deneb/commit/a4fd8ba3c5dee6ce5d1dbb84659be3253c71cfe1))
+
 ## [0.0.29](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.28...andromeda-v0.0.29) (2026-06-28)
 
 
