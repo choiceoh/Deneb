@@ -39,6 +39,7 @@
   --online: #6b9b80;
   --due: #a85038;
   --due-soft: rgba(168, 80, 56, 0.12);
+  --danger: #c8453f; /* 문제/실패 상태 — 코드 세션 상태 점 등 */
 
   /* shape */
   --radius-panel: 14px;
@@ -266,6 +267,21 @@ textarea {
 }
 .nav-item.active .ico {
   color: var(--accent);
+}
+
+/* code-session status dot — overlaid on the rail icon (no extra row width on the
+   100px rail). Color = session status: 진행중 초록, 멈춤(완료) 검정, 문제 빨강. */
+.nav-item .ico.code-ico {
+  position: relative;
+}
+.code-dot {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1.5px var(--panel); /* ring separates the dot from the icon */
 }
 
 /* form controls */
