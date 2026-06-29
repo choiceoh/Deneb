@@ -8,6 +8,11 @@
 * **code:** 코딩 모드 새 작업에서 작업 ID·제목 자동 생성 (입력 칸 제거) ([#2937](https://github.com/choiceoh/Deneb/issues/2937)) ([cc486e1](https://github.com/choiceoh/Deneb/commit/cc486e18ddab6c37f4b501ff61680d308c11113f))
 
 
+### 🐛 Bug Fixes
+
+* **andromeda:** sync work feed on proactive nudges + durable catch-up (작업 피드 동기화) ([#2940](https://github.com/choiceoh/Deneb/issues/2940)) ([4150e3c](https://github.com/choiceoh/Deneb/commit/4150e3c81fa44871a6384de075c9ba6ba947be8d))
+
+
 ### 🔧 Internal
 
 * **code:** 코드 모드 우측 패널에서 중복 세션 목록 제거 ([#2939](https://github.com/choiceoh/Deneb/issues/2939)) ([a4fd8ba](https://github.com/choiceoh/Deneb/commit/a4fd8ba3c5dee6ce5d1dbb84659be3253c71cfe1))
