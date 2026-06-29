@@ -182,6 +182,35 @@ func TestRepoCloneURL(t *testing.T) {
 	}
 }
 
+func TestPRURL(t *testing.T) {
+	fake := &fakeRunner{out: map[string][]byte{"pr": []byte("https://github.com/acme/app/pull/7\n")}}
+	m := &Manager{Runner: fake}
+	url, err := m.PRURL(context.Background(), Task{Repo: Repo{"acme", "app"}, Branch: "deneb/fix"})
+	if err != nil {
+		t.Fatalf("PRURL: %v", err)
+	}
+	if url != "https://github.com/acme/app/pull/7" {
+		t.Errorf("url = %q, want the trimmed PR url", url)
+	}
+	// Targets the repo by -R owner/repo + the task branch, across all PR states.
+	cmd := fake.joined()[0]
+	for _, want := range []string{"gh pr list", "-R acme/app", "--head deneb/fix", "--state all"} {
+		if !strings.Contains(cmd, want) {
+			t.Errorf("PRURL cmd %q missing %q", cmd, want)
+		}
+	}
+}
+
+func TestPRURL_NoPR(t *testing.T) {
+	// gh's --jq yields empty output when no PR matches the branch → "" (no link).
+	fake := &fakeRunner{out: map[string][]byte{"pr": []byte("\n")}}
+	m := &Manager{Runner: fake}
+	url, err := m.PRURL(context.Background(), Task{Repo: Repo{"acme", "app"}, Branch: "deneb/x"})
+	if err != nil || url != "" {
+		t.Errorf("PRURL no-pr = (%q, %v), want empty string and no error", url, err)
+	}
+}
+
 func TestUndo_DirtyDiscardsToCheckpoint(t *testing.T) {
 	// status --porcelain returns changes → dirty → reset HEAD + clean untracked.
 	fake := &fakeRunner{out: map[string][]byte{"status": []byte(" M main.go\n")}}

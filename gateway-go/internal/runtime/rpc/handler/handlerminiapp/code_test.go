@@ -24,6 +24,9 @@ func (fakeWorktrees) Commit(context.Context, code.Task, string) error    { retur
 func (fakeWorktrees) HeadSHA(context.Context, code.Task) (string, error) { return "sha", nil }
 func (fakeWorktrees) Undo(context.Context, code.Task) (bool, error)      { return true, nil }
 func (fakeWorktrees) Push(context.Context, code.Task) error              { return nil }
+func (fakeWorktrees) PRURL(context.Context, code.Task) (string, error) {
+	return "https://github.com/acme/app/pull/1", nil
+}
 
 type fakeSessions struct{}
 
@@ -52,6 +55,7 @@ func TestCodeMethods_Keys(t *testing.T) {
 		"miniapp.code.repos",
 		"miniapp.code.start",
 		"miniapp.code.status",
+		"miniapp.code.pr",
 		"miniapp.code.verify",
 		"miniapp.code.checkpoint",
 		"miniapp.code.undo",
