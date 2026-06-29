@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.43.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.42.0...deneb-v4.43.0) (2026-06-29)
+
+
+### ✨ Features
+
+* **code:** 작업 상세에 PR 결과 링크 (miniapp.code.pr) ([#2947](https://github.com/choiceoh/Deneb/issues/2947)) ([f11db78](https://github.com/choiceoh/Deneb/commit/f11db78cdce62002aa8d9ea2c89102da804e320f))
+* **code:** 코드 모드 우측에 작업 상세 패널 (진행 기록·검증) ([#2945](https://github.com/choiceoh/Deneb/issues/2945)) ([cc37428](https://github.com/choiceoh/Deneb/commit/cc3742818b0e6e28d9e65db3d1d69b9ef1374671))
+
 ## [4.42.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.41.0...deneb-v4.42.0) (2026-06-29)
 
 
