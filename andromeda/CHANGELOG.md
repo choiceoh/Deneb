@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.31](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.30...andromeda-v0.0.31) (2026-06-29)
+
+
+### ✨ Features
+
+* **code:** 코드 모드 세션 상태 점 (진행중 초록/멈춤 검정/문제 빨강) ([#2942](https://github.com/choiceoh/Deneb/issues/2942)) ([bd79441](https://github.com/choiceoh/Deneb/commit/bd794412ea106e61dcdba9f86a2b660de152745e))
+
 ## [0.0.30](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.29...andromeda-v0.0.30) (2026-06-29)
 
 

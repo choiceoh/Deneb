@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.42.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.41.0...deneb-v4.42.0) (2026-06-29)
+
+
+### ✨ Features
+
+* **code:** 코드 모드 세션 상태 점 (진행중 초록/멈춤 검정/문제 빨강) ([#2942](https://github.com/choiceoh/Deneb/issues/2942)) ([bd79441](https://github.com/choiceoh/Deneb/commit/bd794412ea106e61dcdba9f86a2b660de152745e))
+
 ## [4.41.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.40.0...deneb-v4.41.0) (2026-06-29)
 
 
