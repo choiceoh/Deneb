@@ -49,6 +49,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          # Build the gateway from the released tag (same reason as andromeda-build):
+          # release creation can land in a neighboring run, and building github.sha
+          # would compile a stale tree under the new version label. fetch-depth: 0
+          # preserves full history for the version/changelog tooling.
+          ref: ${{ needs.release-please.outputs.tag }}
           fetch-depth: 0
       - uses: actions/setup-go@v5
         with:
@@ -157,6 +162,14 @@ jobs:
         working-directory: andromeda
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Build from the released tag, not github.sha (the commit that triggered
+          # this run). release-please can create the release in a NEIGHBORING push's
+          # run (interleaved merges / its one-push lag), so github.sha may still be
+          # the pre-bump tree — that bakes the old version into the bundle (e.g.
+          # 0.0.29 files were uploaded to the andromeda-v0.0.30 release). The tag
+          # always carries the bumped version, keeping bundle version == release.
+          ref: ${{ needs.release-please.outputs.andromeda-tag }}
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
