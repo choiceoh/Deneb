@@ -19,6 +19,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // Runner abstracts git execution so tests inject fakes instead of shelling out.
@@ -93,6 +94,24 @@ func NewManager(root string) *Manager {
 const branchPrefix = "deneb/"
 
 func branchName(taskID string) string { return branchPrefix + taskID }
+
+// NewTaskID returns an auto-generated, slug-safe task id for when the user
+// leaves the "작업 ID" field blank — the id is just a tag that names the branch
+// and worktree dir, so a non-coder shouldn't have to invent one. Format
+// "task-MMDD-HHMMSS": lowercase letters, digits, and dashes only, so it always
+// passes validateTaskID, and the seconds make it effectively unique for this
+// single-user deployment (no two manual clicks land in the same second).
+func NewTaskID() string {
+	return "task-" + time.Now().Format("0102-150405")
+}
+
+// NewTaskTitle is the default rail label when the user doesn't name a task. The
+// id slug ("task-0629-153012") works but reads like a machine string; this gives
+// a human, Korean date-time label instead. It's display-only (the branch/dir use
+// the id), so it needn't be slug-safe.
+func NewTaskTitle() string {
+	return "새 작업 " + time.Now().Format("01/02 15:04")
+}
 
 func (m *Manager) defaultBranch() string {
 	if m.DefaultBranch == "" {

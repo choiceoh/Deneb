@@ -123,9 +123,14 @@ func codeStart(deps CodeDeps) rpcutil.HandlerFunc {
 			return errResp
 		}
 		repo := code.Repo{Owner: strings.TrimSpace(p.Owner), Name: strings.TrimSpace(p.Name)}
+		if repo.Owner == "" || repo.Name == "" {
+			return rpcerr.InvalidParams(fmt.Errorf("owner and name are required")).Response(req.ID)
+		}
+		// taskId is just a tag (names the branch + worktree dir). Blank → auto-generate
+		// so a non-coder never has to invent a slug; the real work is given in chat.
 		taskID := strings.TrimSpace(p.TaskID)
-		if repo.Owner == "" || repo.Name == "" || taskID == "" {
-			return rpcerr.InvalidParams(fmt.Errorf("owner, name, and taskId are required")).Response(req.ID)
+		if taskID == "" {
+			taskID = code.NewTaskID()
 		}
 
 		ctx, cancel := context.WithTimeout(ctx, codeOpTimeout)
@@ -136,7 +141,7 @@ func codeStart(deps CodeDeps) rpcutil.HandlerFunc {
 		}
 		title := strings.TrimSpace(p.Title)
 		if title == "" {
-			title = task.ID
+			title = code.NewTaskTitle()
 		}
 		chatSessionKey := "code:" + task.ID
 		sess := code.NewSession(task, title, chatSessionKey)
