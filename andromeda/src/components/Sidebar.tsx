@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { codeSessions } from "@/gateway";
+import { codeStatusColor, codeStatusGlance } from "@/codeStatus";
 import type { CodeSession } from "@/types";
 import { useWorkspace } from "@/workspaceContext";
 import { Icon } from "./Icon";
@@ -7,34 +8,6 @@ import { WindowControls } from "./WindowControls";
 import { orderedViews, PANES } from "./panes";
 
 const labelStyle = { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } as const;
-
-// Code-session status → rail dot color (사용자 요청 매핑):
-//   working(작업중)  → 진행중  → 초록 (--online)
-//   failed/missing   → 문제    → 빨강 (--danger)
-//   passed/그 외     → 멈춤(완료) → 검정 (--ink)
-function codeDotColor(status?: string): string {
-  switch (status) {
-    case "working":
-      return "var(--online)";
-    case "failed":
-    case "missing":
-      return "var(--danger)";
-    default:
-      return "var(--ink)";
-  }
-}
-function codeDotLabel(status?: string): string {
-  switch (status) {
-    case "working":
-      return "진행중";
-    case "failed":
-      return "문제";
-    case "missing":
-      return "문제 (워크트리 없음)";
-    default:
-      return "멈춤";
-  }
-}
 
 // Slim nav rail. Normally registry-driven pane tabs (the active one lifts like a Zen
 // tab) in the user's order, with 설정 pinned bottom-left. In 코드 모드 the pane list is
@@ -115,15 +88,15 @@ export function Sidebar() {
                 openCodeChat(s.chatSessionKey || "code:" + s.id);
                 setView("code");
               }}
-              title={`${s.title || s.id} · ${codeDotLabel(s.status)} — 대화 열기`}
+              title={`${s.title || s.id} · ${codeStatusGlance(s.status)} — 대화 열기`}
             >
               <span className="ico code-ico">
                 <Icon name="code" />
                 <span
                   className="code-dot"
-                  style={{ background: codeDotColor(s.status) }}
+                  style={{ background: codeStatusColor(s.status) }}
                   role="img"
-                  aria-label={codeDotLabel(s.status)}
+                  aria-label={codeStatusGlance(s.status)}
                 />
               </span>
               <span style={labelStyle}>{s.title || s.id}</span>

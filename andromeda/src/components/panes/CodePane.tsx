@@ -4,6 +4,7 @@ import { projectList } from "@/aiText";
 import { errText } from "@/format";
 import type { CodeSession } from "@/types";
 import { useRegisterPane, useWorkspace } from "@/workspaceContext";
+import { CodeTaskDetail } from "./CodeTaskDetail";
 
 // CodePane (코드) — 코드 모드 우측 보조 패널. 새 워크트리 작업 *생성*만 담당한다(레포 선택 →
 // 새 작업). 세션 목록은 왼쪽 레일(Sidebar)이 보여주므로 여기서 중복 표시하지 않는다. 검증·
@@ -23,7 +24,7 @@ interface RepoOption {
 }
 
 export function CodePane() {
-  const { connected, cfg, bumpCodeSessions, openCodeChat } = useWorkspace();
+  const { connected, cfg, bumpCodeSessions, openCodeChat, activeCodeKey } = useWorkspace();
   const [sessions, setSessions] = useState<CodeSession[]>([]);
   const [repos, setRepos] = useState<RepoOption[]>([]);
   const [status, setStatus] = useState("");
@@ -82,64 +83,74 @@ export function CodePane() {
   }
 
   const hasRepos = repos.length > 0;
+  // A selected task → show its detail (진행 기록·검증). Otherwise, the new-task form.
+  const activeSession = activeCodeKey
+    ? sessions.find((s) => (s.chatSessionKey || "code:" + s.id) === activeCodeKey)
+    : undefined;
 
   return (
     <div className="code-pane">
-      <p style={{ opacity: 0.7, fontSize: 12.5, margin: "0 0 10px", lineHeight: 1.5 }}>
-        레포를 고르고 새 작업을 만들면 격리된 워크트리가 생기고, 가운데 채팅이 그 작업에 연결됩니다. 코드를 시키면
-        Deneb가 워크트리를 편집하고, 끝나면 빌드 확인 후 <b>알아서 PR까지</b> 올립니다. (만든 작업은 왼쪽 목록에서 골라
-        이어집니다.)
-      </p>
+      {activeSession ? (
+        <CodeTaskDetail session={activeSession} cfg={cfg} onChange={refresh} />
+      ) : (
+        <>
+          <p style={{ opacity: 0.7, fontSize: 12.5, margin: "0 0 10px", lineHeight: 1.5 }}>
+            레포를 고르고 새 작업을 만들면 격리된 워크트리가 생기고, 가운데 채팅이 그 작업에 연결됩니다. 코드를 시키면
+            Deneb가 워크트리를 편집하고, 끝나면 빌드 확인 후 <b>알아서 PR까지</b> 올립니다. (만든 작업은 왼쪽 목록에서
+            골라 이어집니다.)
+          </p>
 
-      {/* 새 작업 — 좁은 패널이라 세로로 쌓는다 */}
-      <div className="code-new" style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 14 }}>
-        {hasRepos ? (
-          <select
-            className="field"
-            disabled={!connected}
-            value={owner && repo ? `${owner}/${repo}` : ""}
-            onChange={(e) => {
-              const [o, n] = e.target.value.split("/");
-              setOwner(o ?? "");
-              setRepo(n ?? "");
-            }}
-          >
-            <option value="">레포 선택…</option>
-            {repos.map((r) => {
-              const v = `${r.owner ?? ""}/${r.name ?? ""}`;
-              return (
-                <option key={v} value={v}>
-                  {v}
-                </option>
-              );
-            })}
-          </select>
-        ) : (
-          <div style={{ display: "flex", gap: 6 }}>
-            <input
-              className="field"
-              style={{ flex: 1, minWidth: 0 }}
-              placeholder="owner"
-              value={owner}
-              disabled={!connected}
-              onChange={(e) => setOwner(e.target.value)}
-            />
-            <input
-              className="field"
-              style={{ flex: 1, minWidth: 0 }}
-              placeholder="repo"
-              value={repo}
-              disabled={!connected}
-              onChange={(e) => setRepo(e.target.value)}
-            />
+          {/* 새 작업 — 좁은 패널이라 세로로 쌓는다 */}
+          <div className="code-new" style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 14 }}>
+            {hasRepos ? (
+              <select
+                className="field"
+                disabled={!connected}
+                value={owner && repo ? `${owner}/${repo}` : ""}
+                onChange={(e) => {
+                  const [o, n] = e.target.value.split("/");
+                  setOwner(o ?? "");
+                  setRepo(n ?? "");
+                }}
+              >
+                <option value="">레포 선택…</option>
+                {repos.map((r) => {
+                  const v = `${r.owner ?? ""}/${r.name ?? ""}`;
+                  return (
+                    <option key={v} value={v}>
+                      {v}
+                    </option>
+                  );
+                })}
+              </select>
+            ) : (
+              <div style={{ display: "flex", gap: 6 }}>
+                <input
+                  className="field"
+                  style={{ flex: 1, minWidth: 0 }}
+                  placeholder="owner"
+                  value={owner}
+                  disabled={!connected}
+                  onChange={(e) => setOwner(e.target.value)}
+                />
+                <input
+                  className="field"
+                  style={{ flex: 1, minWidth: 0 }}
+                  placeholder="repo"
+                  value={repo}
+                  disabled={!connected}
+                  onChange={(e) => setRepo(e.target.value)}
+                />
+              </div>
+            )}
+            <button className="btn btn-accent" onClick={() => void start()} disabled={!connected || busy}>
+              + 새 작업
+            </button>
           </div>
-        )}
-        <button className="btn btn-accent" onClick={() => void start()} disabled={!connected || busy}>
-          + 새 작업
-        </button>
-      </div>
 
-      {status && <p className="pane-status">{status}</p>}
+          {status && <p className="pane-status">{status}</p>}
+        </>
+      )}
     </div>
   );
 }
