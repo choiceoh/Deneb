@@ -147,6 +147,35 @@ func TestStartTask_RejectsBadInput(t *testing.T) {
 	}
 }
 
+func TestNewTaskID_IsSlugSafe(t *testing.T) {
+	// The auto-generated id (used when the user leaves 작업 ID blank) must pass the
+	// same validation a hand-typed id does, or StartTask would reject it.
+	id := NewTaskID()
+	if !strings.HasPrefix(id, "task-") {
+		t.Errorf("NewTaskID = %q, want a task- prefix", id)
+	}
+	if err := validateTaskID(id); err != nil {
+		t.Errorf("NewTaskID %q failed validateTaskID: %v", id, err)
+	}
+	// And it must actually drive a StartTask end-to-end (branch + worktree named off it).
+	m := &Manager{Root: t.TempDir(), DefaultBranch: "main", Runner: &fakeRunner{}}
+	task, err := m.StartTask(context.Background(), Repo{Owner: "acme", Name: "app"}, id)
+	if err != nil {
+		t.Fatalf("StartTask with auto id %q: %v", id, err)
+	}
+	if task.Branch != "deneb/"+id {
+		t.Errorf("branch = %q, want deneb/%s", task.Branch, id)
+	}
+}
+
+func TestNewTaskTitle_HumanLabel(t *testing.T) {
+	// Display-only fallback when the user names nothing — should read as a label,
+	// not a slug.
+	if got := NewTaskTitle(); !strings.HasPrefix(got, "새 작업 ") {
+		t.Errorf("NewTaskTitle = %q, want a 새 작업 prefix", got)
+	}
+}
+
 func TestRepoCloneURL(t *testing.T) {
 	if got := (Repo{Owner: "acme", Name: "app"}).CloneURL(); got != "https://github.com/acme/app.git" {
 		t.Errorf("CloneURL = %q", got)

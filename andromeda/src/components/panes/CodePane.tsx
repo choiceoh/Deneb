@@ -31,8 +31,6 @@ export function CodePane() {
   const [busy, setBusy] = useState(false);
   const [owner, setOwner] = useState("");
   const [repo, setRepo] = useState("");
-  const [taskId, setTaskId] = useState("");
-  const [title, setTitle] = useState("");
 
   const aiText = projectList(
     `[코딩 세션 — ${sessions.length}개]`,
@@ -65,15 +63,15 @@ export function CodePane() {
 
   async function start() {
     if (!connected || busy) return;
-    if (!owner.trim() || !repo.trim() || !taskId.trim()) {
-      setStatus("레포와 작업 ID를 입력하세요");
+    if (!owner.trim() || !repo.trim()) {
+      setStatus("레포를 선택하세요");
       return;
     }
     setBusy(true);
     try {
-      const sess = await codeStart(cfg, owner.trim(), repo.trim(), taskId.trim(), title.trim() || undefined);
-      setTaskId("");
-      setTitle("");
+      // taskId + title are auto-generated server-side when blank — the user just
+      // picks a repo. The real work is given afterward in chat.
+      const sess = await codeStart(cfg, owner.trim(), repo.trim(), "");
       await refresh();
       // Open the new task's chat right away → start giving instructions in the center.
       openCodeChat(sess.chatSessionKey || "code:" + sess.id);
@@ -136,23 +134,6 @@ export function CodePane() {
             />
           </div>
         )}
-        <input
-          className="field"
-          placeholder="작업 ID (예: fix-login)"
-          value={taskId}
-          disabled={!connected}
-          onChange={(e) => setTaskId(e.target.value)}
-        />
-        <input
-          className="field"
-          placeholder="제목 (선택)"
-          value={title}
-          disabled={!connected}
-          onChange={(e) => setTitle(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") void start();
-          }}
-        />
         <button className="btn btn-accent" onClick={() => void start()} disabled={!connected || busy}>
           + 새 작업
         </button>
