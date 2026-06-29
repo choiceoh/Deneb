@@ -74,13 +74,33 @@ func NewService(logger *slog.Logger) *Service {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	svcCtx, svcCancel := context.WithCancel(context.Background())
-	return &Service{
+	svc := &Service{
 		logger:     logger.With("pkg", "autonomous"),
-		svcCtx:     svcCtx,
-		svcCancel:  svcCancel,
 		taskStatus: make(map[string]*TaskStatus),
 	}
+	svc.ensureServiceContextLocked()
+	return svc
+}
+
+// ensureServiceContextLocked recreates the shared service context after Stop()
+// so a subsequent Start() does not hand already-canceled contexts to task loops
+// and background dream work.
+func (s *Service) ensureServiceContextLocked() {
+	if s.svcCtx != nil && s.svcCtx.Err() == nil {
+		return
+	}
+	s.svcCtx, s.svcCancel = context.WithCancel(context.Background())
+}
+
+// startDreamTimerLocked arms the independent dreaming timer when a dreamer is
+// configured and the service has a live root context. Caller must hold s.mu.
+func (s *Service) startDreamTimerLocked() {
+	if s.dreamer == nil || s.dreamTimerCancel != nil || s.svcCtx == nil {
+		return
+	}
+	ctx, cancel := context.WithCancel(s.svcCtx)
+	s.dreamTimerCancel = cancel
+	go s.dreamTimerLoop(ctx)
 }
 
 // RegisterTask adds a periodic task. Must be called before Start().
@@ -181,14 +201,17 @@ func (s *Service) TaskStatus(name string) *TaskStatus {
 // Dreaming timer is started when SetDreamer is called.
 func (s *Service) Start() {
 	s.mu.Lock()
+	s.ensureServiceContextLocked()
 	s.started = true
 	s.loadStateLocked() // restore LastRunAt so intervals survive restarts
+	s.startDreamTimerLocked()
+	svcCtx := s.svcCtx
 	tasks := make([]PeriodicTask, len(s.tasks))
 	copy(tasks, s.tasks)
 	s.mu.Unlock()
 
 	for _, task := range tasks {
-		ctx, cancel := context.WithCancel(s.svcCtx) //nolint:gosec // G118 — cancel stored in s.taskCancels
+		ctx, cancel := context.WithCancel(svcCtx) //nolint:gosec // G118 — cancel stored in s.taskCancels
 		s.mu.Lock()
 		s.taskCancels = append(s.taskCancels, cancel)
 		s.mu.Unlock()
@@ -244,11 +267,7 @@ func (s *Service) SetDreamer(d Dreamer) {
 	s.dreamer = d
 
 	// Start independent dreaming check timer if not already running.
-	if d != nil && s.dreamTimerCancel == nil && s.svcCtx != nil {
-		ctx, cancel := context.WithCancel(s.svcCtx)
-		s.dreamTimerCancel = cancel
-		go s.dreamTimerLoop(ctx)
-	}
+	s.startDreamTimerLocked()
 }
 
 // dreamTimerLoop periodically checks dreaming conditions independently of

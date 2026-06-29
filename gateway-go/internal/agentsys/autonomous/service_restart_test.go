@@ -5,6 +5,62 @@ import (
 	"time"
 )
 
+// TestServiceRestartRecreatesContexts covers the config.reload path, which
+// calls Stop() followed by Start() on the same service instance.
+func TestServiceRestartRecreatesContexts(t *testing.T) {
+	svc := NewService(nil)
+	svc.RegisterTask(newFakeTask("alpha", time.Hour))
+	svc.SetDreamer(&fakeDreamer{})
+
+	svc.Start()
+
+	svc.mu.Lock()
+	firstCtx := svc.svcCtx
+	firstCancel := svc.dreamTimerCancel
+	firstTaskCancelCount := len(svc.taskCancels)
+	svc.mu.Unlock()
+
+	if firstCtx == nil || firstCtx.Err() != nil {
+		t.Fatal("expected initial service context to be live")
+	}
+	if firstCancel == nil {
+		t.Fatal("expected dream timer to be armed after initial start")
+	}
+	if firstTaskCancelCount != 1 {
+		t.Fatalf("got %d task cancels, want 1", firstTaskCancelCount)
+	}
+
+	svc.Stop()
+	if firstCtx.Err() == nil {
+		t.Fatal("expected Stop to cancel the prior service context")
+	}
+
+	svc.Start()
+	defer svc.Stop()
+
+	svc.mu.Lock()
+	restartedCtx := svc.svcCtx
+	restartedCancel := svc.dreamTimerCancel
+	restartedTaskCancelCount := len(svc.taskCancels)
+	svc.mu.Unlock()
+
+	if restartedCtx == nil {
+		t.Fatal("expected restarted service context")
+	}
+	if restartedCtx == firstCtx {
+		t.Fatal("expected Start after Stop to recreate the service context")
+	}
+	if restartedCtx.Err() != nil {
+		t.Fatalf("expected restarted service context to be live, got %v", restartedCtx.Err())
+	}
+	if restartedCancel == nil {
+		t.Fatal("expected dream timer to be re-armed after restart")
+	}
+	if restartedTaskCancelCount != 1 {
+		t.Fatalf("got %d restarted task cancels, want 1", restartedTaskCancelCount)
+	}
+}
+
 // TestComputeInitialDelay covers the restart catch-up math: a recently-run task
 // waits out only the remainder of its interval, while a never-run or overdue
 // task uses the grace period.
