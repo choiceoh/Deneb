@@ -1,5 +1,6 @@
 import { useEffect, useMemo } from "react";
 import type { GatewayConfig } from "@/gateway";
+import { useNativeSync } from "@/sync";
 import type { View } from "@/types";
 import { useWorkspace } from "@/workspaceContext";
 import { AIPanel } from "./AIPanel";
@@ -13,7 +14,11 @@ import { PANES } from "./panes";
 // active pane; ⌘/Ctrl+0–9 shortcuts are derived from the pane registry (the labels
 // are hidden in the rail, but the keys still work).
 export function Workstation({ cfg }: { cfg: GatewayConfig }) {
-  const { view, setView, codeMode } = useWorkspace();
+  const { view, setView, codeMode, connected } = useWorkspace();
+
+  // Durable catch-up sync, session-scoped (Workstation is always mounted): keeps
+  // the work feed / calendar reconciled even when a live proactive push is missed.
+  useNativeSync(cfg, connected);
 
   const shortcuts = useMemo(() => {
     const m: Record<string, View> = {};

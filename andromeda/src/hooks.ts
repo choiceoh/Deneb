@@ -340,6 +340,7 @@ export interface EventsState {
 export function useEvents(cfg: GatewayConfig, connected: boolean): EventsState {
   const [events, setEvents] = useState<ProactiveEvent[]>([]);
   const [status, setStatus] = useState("");
+  const invalidate = useInvalidate();
 
   useEffect(() => {
     if (!connected) {
@@ -354,7 +355,19 @@ export function useEvents(cfg: GatewayConfig, connected: boolean): EventsState {
         onOpen: () => setStatus("수신 중"),
         // The gateway's push payload is title+body only (no ts), so stamp the
         // arrival time here — the panel renders it as a relative "N분 전".
-        onEvent: (ev) => setEvents((prev) => [{ ...ev, ts: ev.ts ?? Date.now() }, ...prev].slice(0, 50)),
+        onEvent: (ev) => {
+          setEvents((prev) => [{ ...ev, ts: ev.ts ?? Date.now() }, ...prev].slice(0, 50));
+          // A nudge means its backing data just changed server-side. Refresh the
+          // affected resource list(s) now so the feed/grid updates with the
+          // notification instead of waiting out the 60s list cache — the instant
+          // counterpart to useNativeSync's catch-up poll (sync.ts). The event
+          // kind is a pane key (workfeed/mail/calendar/…); non-resource kinds
+          // (push fallback, errors) map to nothing and no-op.
+          for (const resource of relatedResourcesForResource(ev.kind)) {
+            clearCachedResource(resource);
+            invalidate({ resource, invalidates: ["list"] });
+          }
+        },
         onError: (e) => setStatus(`오류: ${e}`),
       },
       controller.signal,
