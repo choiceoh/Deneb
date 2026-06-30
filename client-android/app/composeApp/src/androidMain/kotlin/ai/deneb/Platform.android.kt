@@ -178,7 +178,9 @@ actual fun executePhoneAction(action: String, args: Map<String, String>): Boolea
     val context: Context by inject(Context::class.java)
     val intent: Intent = when (action) {
         "open_url" -> Intent(Intent.ACTION_VIEW, args["url"].orEmpty().toUri())
+
         "open_app" -> launchAppIntent(context, args["package"].orEmpty()) ?: return false
+
         "share" -> Intent.createChooser(
             Intent(Intent.ACTION_SEND).apply {
                 type = "text/plain"
@@ -186,11 +188,15 @@ actual fun executePhoneAction(action: String, args: Map<String, String>): Boolea
             },
             null,
         )
+
         "message" -> Intent(Intent.ACTION_SENDTO, "smsto:${args["to"].orEmpty()}".toUri()).apply {
             putExtra("sms_body", args["text"].orEmpty())
         }
+
         "dial" -> Intent(Intent.ACTION_DIAL, "tel:${args["number"].orEmpty()}".toUri())
+
         "photo" -> Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE)
+
         else -> return false
     }
     intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
