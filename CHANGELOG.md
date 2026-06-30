@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.49.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.48.0...deneb-v4.49.0) (2026-06-30)
+
+
+### ✨ Features
+
+* **andromeda:** split the notebook top into a source list + detail pane ([#2989](https://github.com/choiceoh/Deneb/issues/2989)) ([e66e395](https://github.com/choiceoh/Deneb/commit/e66e39554f71cf4bcd9fb60c2989c11a3b1be633))
+* **workfeed:** widen the mail-report card title to ~20 chars, drop the hard clamp ([#2991](https://github.com/choiceoh/Deneb/issues/2991)) ([ea8e61e](https://github.com/choiceoh/Deneb/commit/ea8e61e6c3541a9f77262c0673503a2268c7af64))
+
 ## [4.48.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.47.1...deneb-v4.48.0) (2026-06-30)
 
 
