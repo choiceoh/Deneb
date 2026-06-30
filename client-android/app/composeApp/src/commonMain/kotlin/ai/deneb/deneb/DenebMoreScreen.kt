@@ -2,6 +2,7 @@ package ai.deneb.deneb
 
 import ai.deneb.DenebBrowser
 import ai.deneb.DenebCategories
+import ai.deneb.DenebCodeMode
 import ai.deneb.DenebConfig
 import ai.deneb.DenebContacts
 import ai.deneb.DenebDashboard
@@ -24,6 +25,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AccountTree
 import androidx.compose.material.icons.outlined.Book
+import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.Contacts
 import androidx.compose.material.icons.outlined.Dashboard
 import androidx.compose.material.icons.outlined.GridView
@@ -75,6 +77,7 @@ internal val moreGroups: List<Pair<String, List<MoreEntry>>> = listOf(
         MoreEntry("노트북", DenebNotebooks(), Icons.Outlined.Book, key = "deneb_notebooks", workData = true),
     ),
     TOOLS_GROUP to listOf(
+        MoreEntry("코드모드", DenebCodeMode, Icons.Outlined.Code, key = "deneb_codemode", workData = true),
         MoreEntry("파일", DenebFiles, Icons.Outlined.Storage, key = "deneb_files", workData = true),
         MoreEntry("브라우저", DenebBrowser(""), Icons.Outlined.Public, key = "deneb_browser"),
     ),
