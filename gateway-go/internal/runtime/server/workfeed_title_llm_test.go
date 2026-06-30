@@ -10,15 +10,15 @@ import (
 
 func TestCleanLLMCardTitle(t *testing.T) {
 	cases := map[string]string{
-		"현대차 울산 가견적서 재송부":         "현대차 울산 가견적서 재송부",     // 15 runes, kept as-is (within the 16 limit)
-		"\"무림 과업지시서\"":            "무림 과업지시서",            // surrounding quotes
-		"## 📬 무림 지시서":             "📬 무림 지시서",            // markdown heading
-		"제목: 케이블 발주\n부가 설명은 무시한다": "제목: 케이블 발주",          // first line only
-		"  \t 「JOCA 가격 확인」  ":     "JOCA 가격 확인",          // CJK quotes + whitespace
-		"메일제목이아주아주많이길어서넘쳐버림":      "메일제목이아주아주많이길어서넘쳐...", // >16 runes → clamped to 16 + "..."
-		"메일 분석 리포트":               "",                    // generic echo → reject (fallback)
-		"음":                       "",                    // too short → reject
-		"":                        "",                    // empty
+		"현대차 울산 가견적서 재송부":         "현대차 울산 가견적서 재송부",    // kept as-is (no hard length clamp)
+		"\"무림 과업지시서\"":            "무림 과업지시서",           // surrounding quotes
+		"## 📬 무림 지시서":             "📬 무림 지시서",           // markdown heading
+		"제목: 케이블 발주\n부가 설명은 무시한다": "제목: 케이블 발주",         // first line only
+		"  \t 「JOCA 가격 확인」  ":     "JOCA 가격 확인",         // CJK quotes + whitespace
+		"메일제목이아주아주많이길어서넘쳐버림":      "메일제목이아주아주많이길어서넘쳐버림", // long title kept intact (no clamp)
+		"메일 분석 리포트":               "",                   // generic echo → reject (fallback)
+		"음":                       "",                   // too short → reject
+		"":                        "",                   // empty
 	}
 	for in, want := range cases {
 		if got := cleanLLMCardTitle(in); got != want {

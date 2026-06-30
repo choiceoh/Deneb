@@ -481,8 +481,8 @@ func clipRunes(s string, maxRunes int) string {
 
 // mailSubjectMaxRunes is the heuristic mail-subject fallback's clamp. Tighter than
 // the generic-heading workFeedTitleMaxRunes (40) — a raw email subject should read
-// as a short topic — but a touch looser than the LLM titler's cardTitleMaxRunes
-// (16), since this path keeps the real subject wording rather than a reworded gist.
+// as a short topic. (The LLM titler itself is now unclamped; its prompt targets
+// ≤20 chars, and this fallback keeps the real subject wording, not a reworded gist.)
 const mailSubjectMaxRunes = 20
 
 // tightenMailSubject strips reply/forward prefixes and trailing Korean business-
