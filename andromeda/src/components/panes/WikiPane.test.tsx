@@ -69,6 +69,9 @@ describe("WikiPane", () => {
     await userEvent.type(screen.getByPlaceholderText("위키 검색..."), "설계{enter}");
     const hit = await screen.findByRole("button", { name: /Andromeda 설계 노트/ });
     await userEvent.click(hit);
+    // Pages open in preview by default now; switch to 편집 to get the textarea.
+    await screen.findByLabelText("위키 미리보기");
+    await userEvent.click(screen.getByRole("button", { name: "편집" }));
     const editor = await screen.findByDisplayValue(/본문 내용입니다/);
     expect(screen.getByText("저장됨")).toBeInTheDocument();
 
@@ -125,6 +128,8 @@ describe("WikiPane", () => {
 
     await userEvent.type(screen.getByPlaceholderText("위키 검색..."), "설계{enter}");
     await userEvent.click(await screen.findByRole("button", { name: /Andromeda 설계 노트/ }));
+    await screen.findByLabelText("위키 미리보기");
+    await userEvent.click(screen.getByRole("button", { name: "편집" }));
     const editor = await screen.findByDisplayValue(/본문 내용입니다/);
     await userEvent.type(editor, " 임시 수정");
 
@@ -148,16 +153,20 @@ describe("WikiPane", () => {
     expect(screen.queryByDisplayValue(/임시 수정/)).not.toBeInTheDocument();
   });
 
-  it("toggles a Markdown preview of the page body", async () => {
+  it("opens a page in preview by default and toggles to edit", async () => {
     renderWithProviders(<WikiPane />, { connected: true });
 
     await userEvent.type(screen.getByPlaceholderText("위키 검색..."), "설계{enter}");
     await userEvent.click(await screen.findByRole("button", { name: /Andromeda 설계 노트/ }));
-    await screen.findByDisplayValue(/본문 내용입니다/);
 
-    await userEvent.click(screen.getByRole("button", { name: "미리보기" }));
-    const preview = screen.getByLabelText("위키 미리보기");
+    // Preview is the default — the rendered body shows, not the edit textarea.
+    const preview = await screen.findByLabelText("위키 미리보기");
     expect(within(preview).getByRole("heading", { name: "설계" })).toBeInTheDocument();
     expect(within(preview).getByText(/본문 내용입니다/)).toBeInTheDocument();
+    expect(screen.queryByDisplayValue(/본문 내용입니다/)).not.toBeInTheDocument();
+
+    // Switch to 편집 → the textarea appears with the body.
+    await userEvent.click(screen.getByRole("button", { name: "편집" }));
+    expect(await screen.findByDisplayValue(/본문 내용입니다/)).toBeInTheDocument();
   });
 });
