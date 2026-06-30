@@ -276,9 +276,11 @@ describe("CalendarPane (일정 달력)", () => {
   });
 
   it("opens a read-only detail for Google (non-local) events", async () => {
-    // A July event can appear in June's trailing grid cells; click the list copy.
-    const july = [{ id: "g1", summary: "외부 회의", start: "2026-07-02T05:00:00Z", end: "2026-07-02T06:00:00Z" }];
-    renderWithProviders(<CalendarPane />, { connected: true, dataProvider: fakeProvider({ "calendar-range": july }) });
+    // A non-local (Google) event in the visible month lists as read-only; clicking
+    // it opens the detail. (Uses a June date so it legitimately shows in the June
+    // agenda — adjacent-month grid spill no longer leaks into the month list.)
+    const google = [{ id: "g1", summary: "외부 회의", start: "2026-06-20T05:00:00Z", end: "2026-06-20T06:00:00Z" }];
+    renderWithProviders(<CalendarPane />, { connected: true, dataProvider: fakeProvider({ "calendar-range": google }) });
 
     const copies = await screen.findAllByText("외부 회의");
     await userEvent.click(copies[copies.length - 1]);

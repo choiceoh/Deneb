@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { parseDayKey, toLocalInput, visibleRangeForMonth } from "./calendarHelpers";
+
+import type { CalEvent } from "@/types";
+import { eventInMonth, parseDayKey, toLocalInput, visibleRangeForMonth } from "./calendarHelpers";
 
 describe("toLocalInput", () => {
   it("is empty for missing or unparseable input", () => {
@@ -24,6 +26,31 @@ describe("parseDayKey", () => {
     expect(parseDayKey()).toBeNull();
     expect(parseDayKey("2026-06")).toBeNull();
     expect(parseDayKey("garbage")).toBeNull();
+  });
+});
+
+describe("eventInMonth", () => {
+  // Build instants from LOCAL components so day-keying is timezone-independent.
+  const ev = (start: Date, end?: Date) =>
+    ({ start: start.toISOString(), end: end?.toISOString() }) as unknown as CalEvent;
+
+  it("keeps a July 1 event out of June and in July", () => {
+    // The reported bug: 7월 1일 16:00~22:00 showing under the June list.
+    const july1 = ev(new Date(2026, 6, 1, 16, 0), new Date(2026, 6, 1, 22, 0));
+    expect(eventInMonth(july1, 2026, 5)).toBe(false); // June (0-based 5)
+    expect(eventInMonth(july1, 2026, 6)).toBe(true); // July
+  });
+
+  it("includes a plain June event in June only", () => {
+    const june30 = ev(new Date(2026, 5, 30, 9, 0), new Date(2026, 5, 30, 10, 0));
+    expect(eventInMonth(june30, 2026, 5)).toBe(true);
+    expect(eventInMonth(june30, 2026, 6)).toBe(false);
+  });
+
+  it("includes a month-spanning event in both months", () => {
+    const span = ev(new Date(2026, 5, 30, 9, 0), new Date(2026, 6, 1, 10, 0));
+    expect(eventInMonth(span, 2026, 5)).toBe(true);
+    expect(eventInMonth(span, 2026, 6)).toBe(true);
   });
 });
 
