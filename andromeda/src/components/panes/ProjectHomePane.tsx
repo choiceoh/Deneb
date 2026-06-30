@@ -202,9 +202,9 @@ export function ProjectHomePane() {
       },
       {
         key: "workfeed",
-        label: "관련 작업피드",
+        label: "관련 피드",
         icon: "workfeed",
-        empty: "연결된 작업피드 없음",
+        empty: "연결된 피드 없음",
         rows: work,
         loading: workfeed.query.isLoading,
       },

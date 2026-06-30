@@ -147,7 +147,7 @@ export function WorkfeedPane() {
     .sort((a, b) => effectiveMs(b, nowMs) - effectiveMs(a, nowMs));
 
   const aiText =
-    `[작업피드 · ${dayLabel(dayMs, nowMs)}]\n` +
+    `[피드 · ${dayLabel(dayMs, nowMs)}]\n` +
     (dayItems.length ? dayItems.map(itemLine).join("\n") : "(이 날짜에는 항목이 없습니다)");
   useRegisterPane("workfeed", aiText);
 
@@ -209,7 +209,7 @@ export function WorkfeedPane() {
 
   return (
     <>
-      <h2 style={{ marginTop: 2 }}>작업피드</h2>
+      <h2 style={{ marginTop: 2 }}>피드</h2>
       {error && <p className="pane-error">오류: {error}</p>}
       {/* Day nav lives ABOVE the grid notice so it stays put while a day loads or comes
           back empty — GridNotice swaps its children for a loading/empty notice, and
@@ -295,7 +295,7 @@ function WorkItemDetail({
   };
 
   return (
-    <section className="workfeed-detail" aria-label="작업피드 상세">
+    <section className="workfeed-detail" aria-label="피드 상세">
       <div className="workfeed-detail-head">
         <div className="workfeed-detail-heading">
           <div className="workfeed-detail-meta">{meta}</div>
