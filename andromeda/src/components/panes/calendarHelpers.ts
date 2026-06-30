@@ -49,3 +49,44 @@ export function eventInMonth(ev: CalEvent, year: number, month0: number): boolea
     return Number(y) === year && Number(m) === month0 + 1;
   });
 }
+
+// ── Event-form date/time helpers ──────────────────────────────────────────────
+// The form stores start/end as one "YYYY-MM-DDTHH:MM" datetime-local string each,
+// but edits them through a separate 날짜 input and 시간 input. These split/rejoin
+// that string so the two inputs drive one value.
+
+const pad2 = (n: number): string => String(n).padStart(2, "0");
+
+// The date ("YYYY-MM-DD") and time ("HH:MM") parts of a datetime-local string.
+export function dtDate(dt: string): string {
+  return dt.slice(0, 10);
+}
+export function dtTime(dt: string): string {
+  return dt.length >= 16 ? dt.slice(11, 16) : "";
+}
+// Replace just the date part (keeping the time; a fresh value defaults to 09:00).
+export function withDatePart(dt: string, date: string): string {
+  if (!date) return dt;
+  return `${date}T${dtTime(dt) || "09:00"}`;
+}
+// Replace just the time part (keeping the date; falls back to today if unset).
+export function withTimePart(dt: string, time: string, now = new Date()): string {
+  const date = dtDate(dt) || `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
+  return `${date}T${time || "00:00"}`;
+}
+// dt shifted by `mins` minutes, as a local datetime-local string ("" if unparseable).
+export function addMinutesDt(dt: string, mins: number): string {
+  const d = new Date(dt);
+  if (Number.isNaN(d.getTime())) return "";
+  d.setMinutes(d.getMinutes() + mins);
+  return toLocalInput(d.toISOString());
+}
+// Sensible default start for a NEW event: the given day (or today) at the next full
+// hour when it's today, else 09:00 — so the form opens pre-filled instead of blank.
+export function defaultStartDt(dayKey: string | null, now = new Date()): string {
+  const base = (dayKey && parseDayKey(dayKey)) || now;
+  const isToday =
+    base.getFullYear() === now.getFullYear() && base.getMonth() === now.getMonth() && base.getDate() === now.getDate();
+  const hour = isToday ? now.getHours() + 1 : 9;
+  return toLocalInput(new Date(base.getFullYear(), base.getMonth(), base.getDate(), hour, 0, 0, 0).toISOString());
+}
