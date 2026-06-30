@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 
-import { type CodeVerifyResult, type GatewayConfig, codePr, codeVerify } from "@/gateway";
+import { type CodeVerifyResult, type GatewayConfig, codeClose, codePr, codeVerify } from "@/gateway";
 import { codeStatusColor, codeStatusLabel } from "@/codeStatus";
 import { errText, fmtMailDate } from "@/format";
 import type { CodeSession } from "@/types";
+import { useWorkspace } from "@/workspaceContext";
 
 // CodeTaskDetail — 코드 모드 우측 패널에서 *선택된 작업*의 상세. 새 작업 폼 대신 이게 뜬다.
 // 보여주는 것: 상태 헤더 + 진행 기록(체크포인트 타임라인, Deneb가 한 일) + 검증(빌드·테스트).
@@ -22,6 +23,8 @@ export function CodeTaskDetail({
   const [result, setResult] = useState<CodeVerifyResult | null>(null);
   const [err, setErr] = useState("");
   const [prUrl, setPrUrl] = useState("");
+  const [closing, setClosing] = useState(false);
+  const { setActiveCodeKey } = useWorkspace();
 
   // Look up the branch's PR link (empty until the autonomous flow opens one, or
   // when gh is unauthenticated). Re-runs when the session updates (a turn may have
@@ -49,6 +52,22 @@ export function CodeTaskDetail({
       setErr(errText(e));
     } finally {
       setVerifying(false);
+    }
+  }
+
+  // 세션 닫기: archive off the rail, keep the worktree/branch/PR. On success the
+  // rail refetch (onChange) drops it and clearing activeCodeKey resets the center,
+  // so this component unmounts — only reset `closing` on error.
+  async function closeSession() {
+    setClosing(true);
+    setErr("");
+    try {
+      await codeClose(cfg, session.id);
+      setActiveCodeKey(null);
+      onChange();
+    } catch (e) {
+      setErr(errText(e));
+      setClosing(false);
     }
   }
 
@@ -137,6 +156,16 @@ export function CodeTaskDetail({
             ))}
           </ul>
         ))}
+
+      <button
+        className="btn"
+        onClick={() => void closeSession()}
+        disabled={closing || session.status === "missing"}
+        title="목록에서 치웁니다. 워크트리·브랜치·PR은 그대로 보존됩니다."
+        style={{ marginTop: 18, opacity: 0.85 }}
+      >
+        {closing ? "닫는 중…" : "세션 닫기"}
+      </button>
     </div>
   );
 }

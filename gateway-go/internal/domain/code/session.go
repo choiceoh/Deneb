@@ -29,6 +29,7 @@ const (
 	StatusPassed  = "passed"  // last verify build/test passed
 	StatusFailed  = "failed"  // last verify failed
 	StatusMissing = "missing" // worktree directory is gone (reconcile)
+	StatusClosed  = "closed"  // archived by the operator — worktree/branch KEPT, hidden from the rail
 )
 
 // Checkpoint is one accepted change ("좋아요") — a commit on the task branch with

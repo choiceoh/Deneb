@@ -265,6 +265,12 @@ export const codePr = (cfg: GatewayConfig, id: string) =>
 export const codeDiscard = (cfg: GatewayConfig, id: string) =>
   callRpc<{ ok?: boolean }>(cfg, "miniapp.code.discard", { id }).then((r) => Boolean(r.ok));
 
+// Archive a session ("세션 닫기") — hides it from the rail but KEEPS the worktree,
+// branch, and PR (unlike discard, which deletes the worktree). For clearing
+// finished work off the list without losing it.
+export const codeClose = (cfg: GatewayConfig, id: string) =>
+  callRpc<{ ok?: boolean }>(cfg, "miniapp.code.close", { id }).then((r) => Boolean(r.ok));
+
 export interface CodeVerifyStep {
   label?: string;
   cmd?: string;
