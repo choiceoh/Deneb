@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { screen } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { fakeProvider, renderWithProviders } from "@/test/util";
@@ -157,6 +157,25 @@ describe("ProjectHomePane", () => {
     expect(screen.getByRole("heading", { name: "데네브 게이트웨이" })).toBeInTheDocument();
     expect(screen.getByText("게이트웨이 릴레이 확인")).toBeInTheDocument();
     expect(screen.queryByText("Andromeda 관련 메일 정리")).not.toBeInTheDocument();
+  });
+
+  it("orders the project list by most-recently-updated (newest first)", async () => {
+    const p = fakeProvider({
+      progress: [
+        { project: "오래된 프로젝트", updatedAtMs: 1000, path: "projects/old" },
+        { project: "최신 프로젝트", updatedAtMs: 9000, path: "projects/new" },
+        { project: "중간 프로젝트", updatedAtMs: 5000, path: "projects/mid" },
+        { project: "시간없는 프로젝트", path: "projects/none" }, // no updatedAtMs → sinks to bottom
+      ],
+    });
+    renderWithProviders(<ProjectHomePane />, { connected: true, dataProvider: p });
+    await screen.findByRole("heading", { name: "프로젝트 홈" });
+
+    const list = screen.getByLabelText("프로젝트 목록");
+    const names = within(list)
+      .getAllByRole("button")
+      .map((b) => b.querySelector(".project-home-project-name")?.textContent);
+    expect(names).toEqual(["최신 프로젝트", "중간 프로젝트", "오래된 프로젝트", "시간없는 프로젝트"]);
   });
 
   it("opens the selected project's wiki page", async () => {

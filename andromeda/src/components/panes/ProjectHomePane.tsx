@@ -85,7 +85,13 @@ export function ProjectHomePane() {
   }, [callCached, connected]);
 
   const digestData = progress.result?.data;
-  const digests = useMemo(() => digestData ?? [], [digestData]);
+  // Most-recently-updated first (updatedAtMs = the project page's last-update time);
+  // digests with no timestamp sink to the bottom. This also makes the default
+  // selection (digests[0]) the freshest project.
+  const digests = useMemo(
+    () => [...(digestData ?? [])].sort((a, b) => (b.updatedAtMs ?? 0) - (a.updatedAtMs ?? 0)),
+    [digestData],
+  );
   const selected = useMemo(() => {
     if (digests.length === 0) return undefined;
     return digests.find((digest) => digestKey(digest) === selectedKey) ?? digests[0];
