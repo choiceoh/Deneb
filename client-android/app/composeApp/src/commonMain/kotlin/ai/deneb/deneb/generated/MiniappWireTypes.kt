@@ -161,6 +161,7 @@ data class MailMessageOut(
     val cc: String = "",
     val subject: String = "",
     val date: String = "",
+    val isUnread: Boolean = false,
     val body: String = "",
     val bodyTotal: Int = 0,
     val rawBody: String = "",
