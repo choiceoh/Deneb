@@ -15,16 +15,19 @@ export function useSessions(
   connected: boolean,
   busy: boolean,
   chat: { clear: () => void; setTurns: (turns: ChatTurn[]) => void },
-  opts?: { mainKey?: string; filter?: string; newKey?: () => string },
+  opts?: { mainKey?: string; filter?: string; newKey?: () => string; boundKey?: string },
 ) {
-  // mainKey = the default session; newKey (if given) mints a *fresh* key per "새 대화"
-  // so the 채팅 탭이 여러 chat:* 대화를 가질 수 있다(work panel은 client:main 하나).
-  // filter scopes the recent list to a namespace so the two don't mix.
+  // mainKey = the default session; newKey (if given) mints a *fresh* key per "새 대화".
+  // boundKey (if given) ties the active conversation to an external selector — the work
+  // panel passes the per-pane key so each work area (메일·일정·…) keeps its own thread;
+  // when it changes, the bound session's transcript is loaded automatically below.
+  // filter scopes the recent list to a namespace so namespaces don't mix.
   const mainKey = opts?.mainKey ?? MAIN_SESSION;
+  const boundKey = opts?.boundKey;
   const filter = opts?.filter;
   const keep = (s: SessionRow[]) => (filter ? s.filter((r) => r.key.startsWith(filter)) : s);
   const [sessions, setSessions] = useState<SessionRow[]>([]);
-  const [sessionKey, setSessionKey] = useState(mainKey);
+  const [sessionKey, setSessionKey] = useState(boundKey ?? mainKey);
   const [sessionsOpen, setSessionsOpen] = useState(false);
   const [sessionErr, setSessionErr] = useState("");
 
@@ -44,6 +47,42 @@ export function useSessions(
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connected, cfg.url, cfg.token]);
+
+  // Pane binding: when the work panel's active pane changes, switch to that pane's
+  // session and load its transcript so the conversation resumes where it left off.
+  // The composer is disabled while busy, so this never races a live send; switching
+  // panes mid-stream simply resumes the new pane (the in-flight reply still completes
+  // server-side and reappears when that pane is reopened). No-op when unbound (채팅 탭).
+  useEffect(() => {
+    if (!boundKey) return;
+    setSessionsOpen(false);
+    setSessionKey(boundKey);
+    if (!connected) {
+      chat.setTurns([]);
+      return;
+    }
+    let cancelled = false;
+    void sessionTranscript(cfg, boundKey)
+      .then((msgs) => {
+        if (cancelled) return;
+        chat.setTurns(
+          msgs.map((m, i) => ({
+            id: m.id || `tr-${boundKey}-${i}`,
+            role: m.role === "user" ? "user" : "assistant",
+            text: m.content,
+            status: "done" as const,
+          })),
+        );
+      })
+      // A pane with no prior conversation has no transcript yet — start clean, no error.
+      .catch(() => !cancelled && chat.setTurns([]));
+    return () => {
+      cancelled = true;
+    };
+    // chat.setTurns is the stable useState setter; re-run only when the bound pane,
+    // connection, or gateway target changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [boundKey, connected, cfg.url, cfg.token]);
 
   async function refreshSessions() {
     try {

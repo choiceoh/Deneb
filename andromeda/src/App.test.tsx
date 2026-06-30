@@ -83,6 +83,45 @@ describe("Workstation (connected, fixtures)", () => {
     expect(await screen.findByRole("button", { name: /새 할일/ })).toBeInTheDocument();
   });
 
+  it("binds a separate Deneb session per active work pane", async () => {
+    const user = userEvent.setup();
+    const bodies: { sessionKey?: string }[] = [];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/api/v1/miniapp/chat/stream")) {
+        bodies.push(JSON.parse(String(init?.body ?? "{}")));
+        return sseResponse('event: done\ndata: {"text":"네"}\n\n');
+      }
+      // Any RPC (sessions.recent/transcript, models.list) → an empty-but-ok envelope.
+      // `sections: []` keeps ModelPicker happy; sessions/transcript read their own
+      // (absent → []) fields, so one shape serves all three.
+      return new Response(JSON.stringify({ ok: true, payload: { sections: [] } }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderWithProviders(<Workstation cfg={{ url: "http://test", token: "tok" }} />, {
+      connected: true,
+      dataProvider,
+    });
+
+    // 오늘(대시보드) = 메인 업무 피드 → client:main (게이트웨이 능동 리포트가 도착하는 곳).
+    const composer = screen.getByRole("textbox", { name: "Deneb에게 메시지" });
+    await user.type(composer, "안녕");
+    await user.keyboard("{Enter}");
+    await waitFor(() => expect(bodies.at(-1)?.sessionKey).toBe("client:main"));
+
+    // 메일 화면으로 전환 → 그 화면 전용 세션 client:mail.
+    await user.click(within(screen.getByRole("navigation")).getByRole("button", { name: /메일/ }));
+    const mailComposer = screen.getByRole("textbox", { name: "Deneb에게 메시지" });
+    await waitFor(() => expect(mailComposer).not.toBeDisabled());
+    await user.type(mailComposer, "정리해줘");
+    await user.keyboard("{Enter}");
+    await waitFor(() => expect(bodies.at(-1)?.sessionKey).toBe("client:mail"));
+  });
+
   it("opens the 비업무 채팅 탭 from the rail (center chat greets)", async () => {
     renderWithProviders(<Workstation cfg={{ url: "http://test", token: "tok" }} />, {
       connected: true,

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { type GatewayConfig, type ModelsList, listModels } from "@/gateway";
 import { type AttachmentPart, type ChatTurn, useChat } from "@/hooks";
+import type { View } from "@/types";
 import { useSessions } from "@/useSessions";
 import { useStickyScroll } from "@/useStickyScroll";
 import { useWorkspace } from "@/workspaceContext";
@@ -12,6 +13,16 @@ import { ModelPicker } from "./ModelPicker";
 import { ProactivePanel } from "./ProactivePanel";
 import { SessionDrawer } from "./SessionDrawer";
 import { ToolChip } from "./ToolChip";
+
+// The work panel binds one Deneb conversation per active pane, so each work area
+// keeps its own thread. The 오늘 dashboard stays on client:main — the gateway's
+// proactive feed (mail analysis, work-feed cards, briefings) lands there, so the
+// home view shows that running conversation. Every other pane gets its own
+// native-topic session (client:<view>), which the gateway already recognises and
+// restores across restarts.
+function paneSessionKey(view: View): string {
+  return view === "today" ? "client:main" : `client:${view}`;
+}
 
 function attachmentKindLabel(kind: AttachmentPart["captureKind"]) {
   if (kind === "image") return "이미지 분석";
@@ -115,14 +126,29 @@ export function AIPanel({
   expanded?: boolean;
   onToggleExpand?: () => void;
 }) {
-  const { aiText, activeResource, connected } = useWorkspace();
+  const { aiText, activeResource, connected, view } = useWorkspace();
   const { thinking, busy, turns, send, stop, regenerate, clear, setTurns } = useChat(cfg);
   const [input, setInput] = useState("");
   const composeRef = useRef<HTMLTextAreaElement>(null);
   const [models, setModels] = useState<ModelsList | null>(null);
   const [model, setModel] = useState(""); // selected override id ("" → gateway main)
+  // 활성 화면(pane)별로 대화 세션을 귀속 — 화면을 다시 열면 그 화면 대화가 이어진다.
+  const sessionBaseKey = paneSessionKey(view);
   const { sessions, sessionKey, sessionsOpen, sessionErr, toggleSessions, selectSession, removeSession, newChat } =
-    useSessions(cfg, connected, busy, { clear, setTurns });
+    useSessions(
+      cfg,
+      connected,
+      busy,
+      { clear, setTurns },
+      {
+        boundKey: sessionBaseKey,
+        // Scope the history drawer to work sessions (client:*), keeping 채팅(chat:*)·코드(code:*) out.
+        filter: "client:",
+        // "새 대화" → fresh sub-session of the current pane (client:<view>:<id>) — restorable,
+        // and listed under this pane's history. Date.now/random are app-runtime, allowed.
+        newKey: () => `${sessionBaseKey}:${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+      },
+    );
   // Follow the newest message while it streams, unless the user scrolled up to read.
   const { ref: transcriptRef, onScroll, pin } = useStickyScroll([turns, thinking]);
 
