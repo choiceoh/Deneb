@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.0.42](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.41...andromeda-v0.0.42) (2026-06-30)
+
+
+### ✨ Features
+
+* **andromeda:** wiki opens pages in preview by default (edit on toggle) ([#2999](https://github.com/choiceoh/Deneb/issues/2999)) ([0d5c6c3](https://github.com/choiceoh/Deneb/commit/0d5c6c304f47a52bfb47cb16455eda331c0dcbb5))
+
+
+### 🐛 Bug Fixes
+
+* **andromeda:** repair auto-updater endpoint via rolling andromeda-latest manifest ([#2997](https://github.com/choiceoh/Deneb/issues/2997)) ([57d99f9](https://github.com/choiceoh/Deneb/commit/57d99f9fd2fae643261b0fd9af1c6c00dee3f45f))
+* **andromeda:** 메일 AI 분석 카드를 흰색으로 — 회색 배경에 표·내용이 묻히던 문제 ([#3000](https://github.com/choiceoh/Deneb/issues/3000)) ([51cda8a](https://github.com/choiceoh/Deneb/commit/51cda8a1b8647b4eea82ff7f3dcea8d2a58b8c81))
+
 ## [0.0.41](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.40...andromeda-v0.0.41) (2026-06-30)
 
 
