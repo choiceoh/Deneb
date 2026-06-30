@@ -206,17 +206,10 @@ export function NotebookPane() {
             {status && <span className="pane-status">{status}</span>}
           </div>
 
-          {/* The AI lives in the right Deneb panel and is already grounded in these
-              sources (useRegisterPane below) — point the user there to ask. */}
-          <div className="notebook-hint">
-            이 노트북 자료 {(active.sources ?? []).length}건이 오른쪽 Deneb에 연결돼 있어요 — 오른쪽 패널에서 바로
-            질문하세요.
-          </div>
-
           <div className="notebook-sources-head">
             <span className="micro">자료 {(active.sources ?? []).length}건</span>
-            <button className="btn btn-accent notebook-add" onClick={() => setAddingSource(true)} title="인용자료 추가">
-              <Icon name="plus" size={13} /> 자료 추가
+            <button className="row-btn notebook-add" onClick={() => setAddingSource(true)} title="인용자료 추가">
+              <Icon name="plus" size={12} /> 자료 추가
             </button>
           </div>
 

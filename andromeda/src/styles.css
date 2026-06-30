@@ -215,6 +215,39 @@ textarea {
   color: var(--due);
 }
 
+/* The shell: nav rail + work area + Deneb panel. Default is a horizontal row
+ * (rail | work | side chat). */
+.workstation-shell {
+  position: relative;
+  display: flex;
+  gap: var(--gap);
+  height: 100vh;
+  padding: 22px var(--gap) var(--gap);
+  box-sizing: border-box;
+}
+/* 노트북 등 하단-채팅 모드 — 세로 분할: 위=작업(자료), 아래=데네브 채팅(전 폭). 같은
+ * AIPanel 엘리먼트를 그리드 하단 셀에 재배치하므로 리마운트/대화 손실이 없다. 숨김 패널
+ * (CodeView/ChatView=display:none)·드래그 스트립(absolute)은 그리드 흐름에서 빠진다. */
+.workstation-shell.ws-bottom-chat {
+  display: grid;
+  grid-template-columns: var(--rail-w) minmax(0, 1fr);
+  grid-template-rows: minmax(120px, 3fr) minmax(300px, 7fr); /* 자료 30% : 채팅 70% */
+}
+.ws-bottom-chat > nav {
+  grid-column: 1;
+  grid-row: 1 / 3;
+}
+.ws-bottom-chat > .ws-main {
+  grid-column: 2;
+  grid-row: 1;
+  min-height: 0;
+}
+.ws-bottom-chat > .ai-bottom {
+  grid-column: 2;
+  grid-row: 2;
+  min-height: 0;
+}
+
 /* top-edge drag handle for the frameless window — a transparent strip in the
  * window's top padding band, so the very top of the window is grabbable to move
  * it. It sits in the gradient band above the panels; the top-left controls start
@@ -890,16 +923,25 @@ textarea {
   gap: 12px;
   padding: 2px 1px;
 }
-/* 확대 모드 — 전 폭으로 넓어진 데네브 패널의 머리·알림·대화·입력을 가독 폭으로 가운데 정렬.
-   (좁은 기본 폭에선 max-width가 폭보다 커서 영향이 없다.) */
+/* 확대 모드(우측 전폭) · 하단 도킹(노트북) — 넓어진 데네브 패널의 머리·알림·대화·입력을
+   가독 폭으로 가운데 정렬. (좁은 기본 폭에선 max-width가 폭보다 커서 영향이 없다.) */
 .ai-expanded .ai-head,
 .ai-expanded .session-drawer,
 .ai-expanded .proactive-panel,
 .ai-expanded .ai-transcript,
-.ai-expanded .ai-composer {
+.ai-expanded .ai-composer,
+.ai-bottom .ai-head,
+.ai-bottom .session-drawer,
+.ai-bottom .proactive-panel,
+.ai-bottom .ai-transcript,
+.ai-bottom .ai-composer {
   width: 100%;
   max-width: 860px;
   margin-inline: auto;
+}
+/* 하단 도킹 시 패널 높이는 그리드 셀이 정하고, 내부 transcript가 스크롤한다. */
+.ai-bottom {
+  overflow: hidden;
 }
 .ai-empty {
   color: var(--muted-2);
@@ -4222,15 +4264,6 @@ textarea {
 }
 .notebook-danger {
   color: var(--danger);
-}
-/* AI-connection banner — the right Deneb panel is already grounded in these sources. */
-.notebook-hint {
-  font-size: 12.5px;
-  line-height: 1.5;
-  color: var(--accent-deep);
-  background: var(--accent-soft);
-  border-radius: var(--radius-ctl);
-  padding: 8px 11px;
 }
 .notebook-sources-head {
   display: flex;
