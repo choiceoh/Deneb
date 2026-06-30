@@ -37,7 +37,8 @@ import io.ktor.http.contentType
 import io.ktor.http.encodeURLParameter
 import io.ktor.http.isSuccess
 import io.ktor.serialization.kotlinx.json.json
-import io.ktor.utils.io.readUTF8Line
+import io.ktor.utils.io.ByteReadChannel
+import io.ktor.utils.io.readByte
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -75,6 +76,34 @@ import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeSource
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
+
+// SSE lines, UTF-8-safe. Ktor 3.x readUTF8Line decoded multibyte characters per internal
+// network segment, so a 3-byte Korean character split across the buffer boundary surfaced
+// as `�` on the native client (both the streamed chat reply and proactive-push text; the
+// browser/CIO paths were unaffected). Accumulating raw bytes until the ASCII newline —
+// which never falls inside a multibyte UTF-8 sequence — then decoding the whole line fixes
+// it. readByte() is per-byte, which is fine for SSE's low frame volume. An exception thrown
+// by [onLine] (e.g. the gateway "error" event) propagates; only readByte's EOF/close is
+// swallowed so a normal stream end isn't an error.
+internal suspend fun readSseLines(channel: ByteReadChannel, onLine: (String) -> Unit) {
+    val line = ArrayList<Byte>(256)
+    fun emit() {
+        val text = line.toByteArray().decodeToString()
+        line.clear()
+        onLine(if (text.endsWith('\r')) text.dropLast(1) else text)
+    }
+    while (!channel.isClosedForRead) {
+        val b = try {
+            channel.readByte()
+        } catch (c: CancellationException) {
+            throw c
+        } catch (_: Exception) {
+            break
+        }
+        if (b.toInt() == 10) emit() else line.add(b)
+    }
+    if (line.isNotEmpty()) emit()
+}
 
 /**
  * A [DataRepository] backed by the Deneb gateway — the sole production implementation.
@@ -1622,8 +1651,7 @@ class DenebGatewayClient(
             val channel = response.bodyAsChannel()
             var event = ""
             val data = StringBuilder()
-            while (!channel.isClosedForRead) {
-                val line = channel.readUTF8Line() ?: break
+            readSseLines(channel) { line ->
                 when {
                     line.startsWith(":") -> Unit
 
@@ -1727,8 +1755,7 @@ class DenebGatewayClient(
                     val channel = response.bodyAsChannel()
                     var event = ""
                     val data = StringBuilder()
-                    while (!channel.isClosedForRead) {
-                        val line = channel.readUTF8Line() ?: break
+                    readSseLines(channel) { line ->
                         when {
                             line.startsWith(":") -> Unit
 
