@@ -45,26 +45,26 @@ export function Workstation({ cfg }: { cfg: GatewayConfig }) {
 
   const Active = PANES.find((p) => p.key === view)?.Component ?? PANES[0].Component;
 
+  // 노트북 화면에서는 데네브 채팅을 우측이 아니라 하단 전 폭으로 도킹한다 — 노트북의 메인
+  // 작업이 자료를 근거로 AI에게 질문하는 것이라, 좁은 측면 패널보다 넓은 하단이 맞다. CSS
+  // 그리드로 같은 AIPanel 엘리먼트를 하단 셀에 배치만 바꾸므로(리마운트 없음) 대화는 유지된다.
+  const bottomChat = view === "notebook" && !codeMode;
+  // 작업 pane은 비채팅·비코드 탭에서 렌더. 데네브 패널 확대(maximize) 시엔 숨기지만, 노트북
+  // 하단 채팅 모드에서는 위쪽 셀(자료)로 항상 함께 렌더한다.
+  const showMain = view !== "chat" && !codeMode && (bottomChat || !aiExpanded);
+
   return (
-    <div
-      style={{
-        position: "relative",
-        display: "flex",
-        gap: "var(--gap)",
-        height: "100vh",
-        padding: "22px var(--gap) var(--gap)",
-        boxSizing: "border-box",
-      }}
-    >
+    <div className={"workstation-shell" + (bottomChat ? " ws-bottom-chat" : "")}>
       {/* Transparent top-edge drag handle — grab the very top of the frameless
           window to move it. Lives in the top padding band, clear of the panels
           and the top-left controls. */}
       <div className="drag-strip" data-tauri-drag-region />
       <Sidebar />
-      {/* 작업 pane은 비채팅 탭에서만 렌더(채팅 탭은 ChatView가 중앙+우측을 차지).
-          데네브 패널이 확대(maximize)되면 작업 pane을 숨겨 AIPanel이 그 자리를 차지한다. */}
-      {view !== "chat" && !codeMode && !aiExpanded && (
-        <main className="panel" style={{ flex: 1, minWidth: 0, overflow: "auto", padding: "20px 22px" }}>
+      {showMain && (
+        <main
+          className={"panel" + (bottomChat ? " ws-main" : "")}
+          style={{ flex: 1, minWidth: 0, overflow: "auto", padding: "20px 22px" }}
+        >
           <div key={view} className="pane-enter">
             <Active />
           </div>
@@ -77,8 +77,9 @@ export function Workstation({ cfg }: { cfg: GatewayConfig }) {
       <AIPanel
         cfg={cfg}
         hidden={view === "chat" || codeMode}
-        expanded={aiExpanded}
-        onToggleExpand={() => setAiExpanded((v) => !v)}
+        placement={bottomChat ? "bottom" : "side"}
+        expanded={!bottomChat && aiExpanded}
+        onToggleExpand={bottomChat ? undefined : () => setAiExpanded((v) => !v)}
       />
     </div>
   );

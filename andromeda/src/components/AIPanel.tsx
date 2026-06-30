@@ -107,6 +107,7 @@ export function AIPanel({
   hidden = false,
   expanded = false,
   onToggleExpand,
+  placement = "side",
 }: {
   cfg: GatewayConfig;
   hidden?: boolean;
@@ -114,6 +115,9 @@ export function AIPanel({
   // 이 패널이 사이드바를 제외한 전 폭을 차지한다.
   expanded?: boolean;
   onToggleExpand?: () => void;
+  // "side"(기본, 우측 고정폭) | "bottom"(노트북 등에서 하단 도킹). bottom일 땐 크기를 그리드
+  // 셀이 정하므로 width/flex를 지정하지 않고, 넓어진 만큼 대화 폭을 가독성 있게 가운데 정렬한다.
+  placement?: "side" | "bottom";
 }) {
   const { aiText, activeResource, connected } = useWorkspace();
   const { thinking, busy, turns, send, stop, regenerate, clear, setTurns } = useChat(cfg);
@@ -166,18 +170,30 @@ export function AIPanel({
   const last = turns.at(-1);
   const lastId = last?.id;
 
+  const bottom = placement === "bottom";
   return (
     <aside
-      className={"panel" + (expanded ? " ai-expanded" : "")}
-      style={{
-        // 확대 시 사이드바를 제외한 전 폭(flex:1), 평시엔 고정 폭(--ai-w).
-        width: expanded ? "auto" : "var(--ai-w)",
-        flex: expanded ? "1 1 auto" : "0 0 auto",
-        minWidth: 0,
-        display: hidden ? "none" : "flex",
-        flexDirection: "column",
-        padding: "16px 16px",
-      }}
+      className={"panel" + (expanded ? " ai-expanded" : "") + (bottom ? " ai-bottom" : "")}
+      style={
+        bottom
+          ? // 하단 도킹: 크기는 그리드 셀이 결정. width/flex 미지정, 높이 넘침은 내부 transcript가 스크롤.
+            {
+              minWidth: 0,
+              minHeight: 0,
+              display: hidden ? "none" : "flex",
+              flexDirection: "column",
+              padding: "12px 16px",
+            }
+          : {
+              // 확대 시 사이드바를 제외한 전 폭(flex:1), 평시엔 고정 폭(--ai-w).
+              width: expanded ? "auto" : "var(--ai-w)",
+              flex: expanded ? "1 1 auto" : "0 0 auto",
+              minWidth: 0,
+              display: hidden ? "none" : "flex",
+              flexDirection: "column",
+              padding: "16px 16px",
+            }
+      }
     >
       <div className="ai-head">
         <span className="micro">Deneb AI</span>
