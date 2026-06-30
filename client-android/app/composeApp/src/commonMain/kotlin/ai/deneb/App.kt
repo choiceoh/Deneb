@@ -121,8 +121,13 @@ import coil3.svg.SvgDecoder
 import deneb.composeapp.generated.resources.Res
 import deneb.composeapp.generated.resources.tab_chat
 import deneb.composeapp.generated.resources.tab_settings
+import kotlin.time.Clock
+import kotlin.time.Instant
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
+import kotlinx.datetime.todayIn
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import nl.marc_apps.tts.TextToSpeechInstance
@@ -442,9 +447,16 @@ private fun AppContent(
                 // Server status is the source of truth (an item acked on any device is no
                 // longer "unread"); the local seen-set is an optimistic overlay for items
                 // opened on this device (FeedScreen marks seen client-side, not a server
-                // ack). Counting both keeps the badge from drifting.
+                // ack). Counting both keeps the badge from drifting. Scoped to TODAY's items
+                // (당일 피드) by createdAtMs so the badge tracks "오늘 새로 온 것", not the
+                // all-time backlog — matching the day-grouped 피드 screen.
+                val feedTz = TimeZone.currentSystemDefault()
+                val feedToday = Clock.System.todayIn(feedTz)
                 val feedUnread = feedState.workFeed.count {
-                    it.status == "unread" && it.id !in feedSeenIds && it.readAtMs == 0L
+                    it.status == "unread" &&
+                        it.id !in feedSeenIds &&
+                        it.readAtMs == 0L &&
+                        Instant.fromEpochMilliseconds(it.createdAtMs).toLocalDateTime(feedTz).date == feedToday
                 }
 
                 // 업무 launches into the 피드 home (work feed as the main screen); 챗봇
