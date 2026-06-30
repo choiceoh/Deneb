@@ -1,5 +1,15 @@
 # Changelog
 
+## [4.44.2](https://github.com/choiceoh/Deneb/compare/deneb-v4.44.1...deneb-v4.44.2) (2026-06-30)
+
+
+### 🐛 Bug Fixes
+
+* **andromeda:** deneb-ui 카드가 text 필드·문자열 list 항목도 렌더 — 모닝레터 깨짐 수정 ([#2961](https://github.com/choiceoh/Deneb/issues/2961)) ([64cbdb1](https://github.com/choiceoh/Deneb/commit/64cbdb180f2e5d621d66c709fb5db2b0f7d2db6d))
+* **mail:** 상세 응답에 isUnread 추가 — 리스트 밖에서 연 메일도 자동 읽음 처리 ([#2963](https://github.com/choiceoh/Deneb/issues/2963)) ([abb4611](https://github.com/choiceoh/Deneb/commit/abb461123babe1d62ec013d77dd73b78299901de))
+* **native:** deneb-ui text/badge 노드가 text 필드도 읽도록 — 모닝레터 깨짐 (폰) ([#2964](https://github.com/choiceoh/Deneb/issues/2964)) ([d30bef9](https://github.com/choiceoh/Deneb/commit/d30bef9488186844eb2634424e3f383eb4bf86d5))
+* **project:** 프로젝트 화면 단일 열 레이아웃 + 가독성 개선 ([#2965](https://github.com/choiceoh/Deneb/issues/2965)) ([344d4a4](https://github.com/choiceoh/Deneb/commit/344d4a47d93e25a31558b6f952c210b8018bb89e))
+
 ## [4.44.1](https://github.com/choiceoh/Deneb/compare/deneb-v4.44.0...deneb-v4.44.1) (2026-06-30)
 
 
