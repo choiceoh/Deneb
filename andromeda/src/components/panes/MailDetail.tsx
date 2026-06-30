@@ -51,6 +51,10 @@ export function MailDetail({
   onArchive: () => void;
   onTrash: () => void;
 }) {
+  // 분석 ↔ 본문 토글. 분석이 기본값 — "왜 지금 중요한가"(합성)를 본문보다 먼저 보여준다.
+  // (Hook before the early return below — rules-of-hooks.)
+  const [mailView, setMailView] = useState<"analysis" | "body">("analysis");
+
   if (!mail) return null;
 
   const body = mailBody(mail);
@@ -96,11 +100,28 @@ export function MailDetail({
         </button>
       </div>
 
-      {/* AI 분석 leads, above the body: the synthesis (왜 지금 중요한가) comes first,
-          the raw body follows for the full text. */}
-      <AnalysisCard mailId={id} />
+      {/* 분석 ↔ 본문 토글 (분석 기본): the synthesis (왜 지금 중요한가) leads; switch to
+          본문 for the full raw text. */}
+      <div className="mail-view-tabs" role="group" aria-label="메일 보기 방식">
+        <button
+          className={"mail-view-tab" + (mailView === "analysis" ? " active" : "")}
+          aria-pressed={mailView === "analysis"}
+          onClick={() => setMailView("analysis")}
+        >
+          분석
+        </button>
+        <button
+          className={"mail-view-tab" + (mailView === "body" ? " active" : "")}
+          aria-pressed={mailView === "body"}
+          onClick={() => setMailView("body")}
+        >
+          본문
+        </button>
+      </div>
 
-      {body ? (
+      {mailView === "analysis" ? (
+        <AnalysisCard mailId={id} />
+      ) : body ? (
         // The gateway returns the body HTML-converted to Markdown — render it so
         // links are clickable and lists/quotes keep structure.
         <div className="mail-body">
@@ -241,8 +262,6 @@ function AnalysisCard({ mailId }: { mailId: string }) {
   });
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
-  // AI 분석 카드 접기/펼치기 (기본 펼침 — 분석이 본문 위 리드라 우선 노출, 길면 접는다).
-  const [open, setOpen] = useState(true);
 
   // Drop a stale manual-analysis error whenever the cached load re-runs (message
   // switch, reconnect, or config change) — matches the same triggers that reset
@@ -266,61 +285,49 @@ function AnalysisCard({ mailId }: { mailId: string }) {
 
   return (
     <div className="mail-card">
-      <div className="mail-card-head">
-        <button
-          type="button"
-          className="mail-card-toggle"
-          onClick={() => setOpen((v) => !v)}
-          aria-expanded={open}
-          title={open ? "분석 접기" : "분석 펼치기"}
-        >
-          <span className="mail-card-caret">{open ? "▾" : "▸"}</span>
-          <span className="mail-card-title">AI 분석</span>
+      {/* The 분석/본문 toggle in MailDetail owns show/hide now, so this card has no
+          collapse of its own — just the importance badge + a 다시 분석 re-run. */}
+      {(importance || (analysis && !loading)) && (
+        <div className="mail-card-head">
+          {importance && (
+            <span className={"mail-badge" + (HOT_IMPORTANCE.test(importance) ? " hot" : "")}>{importance}</span>
+          )}
+          {analysis && !loading && (
+            <button className="row-btn" onClick={() => void run(true)} disabled={!connected} title="다시 분석">
+              다시 분석
+            </button>
+          )}
+        </div>
+      )}
+      {loading ? (
+        <div className="mail-card-line">분석 중… (수십 초 걸릴 수 있어요)</div>
+      ) : analysis ? (
+        <>
+          <Markdown text={analysis} />
+          {(data?.relatedProjects?.length ?? 0) > 0 && (
+            <div className="mail-chips">
+              {data!.relatedProjects!.map((p) => (
+                <button key={p.path} className="mail-chip" onClick={() => openWiki(p.path)} title={p.summary || p.path}>
+                  {p.title || p.path}
+                </button>
+              ))}
+            </div>
+          )}
+          {((data?.calendarProposalCount ?? 0) > 0 || (data?.todoCount ?? 0) > 0) && (
+            <div className="mail-card-line">
+              {(data?.calendarProposalCount ?? 0) > 0 && `일정 제안 ${data!.calendarProposalCount}`}
+              {(data?.calendarProposalCount ?? 0) > 0 && (data?.todoCount ?? 0) > 0 && " · "}
+              {(data?.todoCount ?? 0) > 0 && `할일 후보 ${data!.todoCount}`}
+            </div>
+          )}
+        </>
+      ) : err ? (
+        <div className="mail-card-line error">{err}</div>
+      ) : (
+        <button className="btn" onClick={() => void run()} disabled={!connected}>
+          🔍 이 메일 분석
         </button>
-        {importance && (
-          <span className={"mail-badge" + (HOT_IMPORTANCE.test(importance) ? " hot" : "")}>{importance}</span>
-        )}
-        {open && analysis && !loading && (
-          <button className="row-btn" onClick={() => void run(true)} disabled={!connected} title="다시 분석">
-            다시 분석
-          </button>
-        )}
-      </div>
-      {open &&
-        (loading ? (
-          <div className="mail-card-line">분석 중… (수십 초 걸릴 수 있어요)</div>
-        ) : analysis ? (
-          <>
-            <Markdown text={analysis} />
-            {(data?.relatedProjects?.length ?? 0) > 0 && (
-              <div className="mail-chips">
-                {data!.relatedProjects!.map((p) => (
-                  <button
-                    key={p.path}
-                    className="mail-chip"
-                    onClick={() => openWiki(p.path)}
-                    title={p.summary || p.path}
-                  >
-                    {p.title || p.path}
-                  </button>
-                ))}
-              </div>
-            )}
-            {((data?.calendarProposalCount ?? 0) > 0 || (data?.todoCount ?? 0) > 0) && (
-              <div className="mail-card-line">
-                {(data?.calendarProposalCount ?? 0) > 0 && `일정 제안 ${data!.calendarProposalCount}`}
-                {(data?.calendarProposalCount ?? 0) > 0 && (data?.todoCount ?? 0) > 0 && " · "}
-                {(data?.todoCount ?? 0) > 0 && `할일 후보 ${data!.todoCount}`}
-              </div>
-            )}
-          </>
-        ) : err ? (
-          <div className="mail-card-line error">{err}</div>
-        ) : (
-          <button className="btn" onClick={() => void run()} disabled={!connected}>
-            🔍 이 메일 분석
-          </button>
-        ))}
+      )}
     </div>
   );
 }
