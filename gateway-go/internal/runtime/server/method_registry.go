@@ -26,6 +26,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/filestore"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/mailpriority"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/market"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/nativesync"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/notebook"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/push"
@@ -189,6 +190,11 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		},
 		Logger: hub.Logger(),
 	}
+
+	// 시장(market) card data for the 오늘 dashboard — a keyless Yahoo Finance fetch
+	// cached for 10m. No config/hub service needed; the cache is owned by this
+	// registration closure (captured by the Fetch func below). Created once at boot.
+	marketCache := market.NewCache()
 
 	// Table-driven domain registration: one slice, one loop.
 	// Deps assembled inline from hub accessors — no adapter layer.
@@ -659,6 +665,13 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 				}
 				return cs, nil
 			},
+		}),
+
+		// 시장 시세 (miniapp.market.summary): 원/달러·코스피·WTI 유가·구리 for the 오늘
+		// dashboard's opt-in 시장 card. Keyless Yahoo Finance, 10m cache, serves a
+		// stale snapshot on upstream failure rather than erroring the dashboard.
+		handlerminiapp.MarketMethods(handlerminiapp.MarketDeps{
+			Fetch: marketCache.Summary,
 		}),
 
 		// Mini App skills list/detail/write surface + Propus feed

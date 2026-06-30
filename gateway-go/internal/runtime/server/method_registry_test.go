@@ -176,6 +176,8 @@ var requiredMethods = []string{
 	// Full address-book list (miniapp.contacts.list) — the contacts store
 	// resolves in tests (temp state dir), so this always registers.
 	"miniapp.contacts.list",
+	// 시장 시세 (miniapp.market.summary) — keyless cache fetcher is always wired.
+	"miniapp.market.summary",
 	// Single-topic background editor — registers whenever topics resolve
 	// (the test harness loads the real deneb.json topics map {"0":"업무"}).
 	"miniapp.topicdocs.read_current",

@@ -2600,6 +2600,10 @@ textarea {
   border: 1px solid var(--line);
   border-radius: var(--radius-ctl);
 }
+/* 넓게 — span two grid columns. Clamps to one when only one column fits. */
+.today-card.wide {
+  grid-column: span 2;
+}
 .today-head {
   display: flex;
   align-items: center;
@@ -2612,6 +2616,10 @@ textarea {
   border-bottom: 1px solid var(--line);
   color: var(--ink);
   cursor: pointer;
+}
+/* Static header (info-only cards like 시장) — no nav, so no pointer/hover. */
+.today-head-static {
+  cursor: default;
 }
 .today-head .ico {
   color: var(--muted-2);
@@ -2698,6 +2706,20 @@ textarea {
 }
 .today-row.accent .today-row-meta {
   color: var(--due);
+}
+/* 시장 카드 등락 색 — 상승은 그린, 하락은 due(레드클레이). 등락 수치가 곧 meta다. */
+.today-row-meta.up {
+  color: var(--online);
+}
+.today-row-meta.down {
+  color: var(--due);
+}
+/* Info-only rows (시장) don't navigate — drop the pointer + hover affordance. */
+.today-row.static {
+  cursor: default;
+}
+.today-row.static:hover {
+  background: none;
 }
 .today-more {
   padding: 5px 7px 2px;
@@ -2999,6 +3021,15 @@ textarea {
   flex: 1;
   cursor: pointer;
   color: var(--ink-2);
+}
+.today-editor-wide {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 12px;
 }
 
 /* month calendar (일정 pane) — compact grid with event presence markers */

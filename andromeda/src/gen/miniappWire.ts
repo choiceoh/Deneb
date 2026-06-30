@@ -212,6 +212,21 @@ export interface MailRowOut {
   relatedProjects?: ProjectRef[]
 }
 
+export interface MarketQuote {
+  symbol?: string
+  label?: string
+  price?: number
+  prevClose?: number
+  changePct?: number
+  currency?: string
+}
+
+export interface MarketSummary {
+  quotes?: MarketQuote[]
+  asOf?: number
+  stale?: boolean
+}
+
 export interface MemberOut {
   name?: string
   rank?: string
