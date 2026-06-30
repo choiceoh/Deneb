@@ -376,9 +376,9 @@ func TestRepositoryFallsBackForUnsupportedQuery(t *testing.T) {
 // and dropped the per-mail AI analyses keyed by archive Message-IDs.
 func TestParseArchiveQueryDateRange(t *testing.T) {
 	now := time.Date(2026, 7, 2, 9, 0, 0, 0, time.UTC)
-	spec, err := parseArchiveQuery("in:inbox after:2026/6/30 before:2026/7/1", now)
-	if err != nil {
-		t.Fatalf("parseArchiveQuery errored (would fall back to Gmail): %v", err)
+	spec := parseArchiveQuery("in:inbox after:2026/6/30 before:2026/7/1", now)
+	if spec.Degraded != "" {
+		t.Fatalf("date-range query degraded unexpectedly: %q", spec.Degraded)
 	}
 	if !strings.Contains(spec.Criteria, "SINCE 30-Jun-2026") {
 		t.Errorf("criteria %q missing SINCE 30-Jun-2026", spec.Criteria)
@@ -388,6 +388,34 @@ func TestParseArchiveQueryDateRange(t *testing.T) {
 	}
 	if !spec.InboxOnly {
 		t.Errorf("expected InboxOnly for an in:inbox query")
+	}
+}
+
+// older_than:Nd is the upper-bound twin of newer_than — it must parse into BEFORE,
+// not be rejected as an unsupported operator.
+func TestParseArchiveQueryOlderThan(t *testing.T) {
+	now := time.Date(2026, 7, 10, 9, 0, 0, 0, time.UTC)
+	spec := parseArchiveQuery("older_than:3d", now)
+	if spec.Degraded != "" {
+		t.Fatalf("older_than degraded unexpectedly: %q", spec.Degraded)
+	}
+	// now - 3d = 2026-07-07.
+	if !strings.Contains(spec.Criteria, "BEFORE 07-Jul-2026") {
+		t.Errorf("criteria %q missing BEFORE 07-Jul-2026", spec.Criteria)
+	}
+}
+
+// With the Gmail fallback gone, a query that is ONLY an unknown operator must NOT
+// error/blank — it degrades to a bounded recent view (and flags Degraded so the
+// caller can log it).
+func TestParseArchiveQueryGracefulDegrade(t *testing.T) {
+	now := time.Date(2026, 7, 10, 9, 0, 0, 0, time.UTC)
+	spec := parseArchiveQuery("label:work", now)
+	if spec.Degraded == "" {
+		t.Errorf("expected Degraded reason for a pure unsupported operator")
+	}
+	if !strings.HasPrefix(spec.Criteria, "SINCE ") {
+		t.Errorf("expected a bounded recent view (SINCE …), got %q", spec.Criteria)
 	}
 }
 

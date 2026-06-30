@@ -144,7 +144,7 @@ func requireAuth(ctx context.Context, reqID string) *protocol.ResponseFrame {
 func gmailClientOrErr(deps GmailDeps, reqID string) (GmailClient, *protocol.ResponseFrame) {
 	client, err := deps.Client()
 	if err != nil {
-		return nil, rpcerr.WrapUnavailable("gmail client unavailable", err).Response(reqID)
+		return nil, rpcerr.WrapUnavailable("mail client unavailable", err).Response(reqID)
 	}
 	return client, nil
 }
@@ -644,7 +644,7 @@ func gmailListRecent(deps GmailDeps, cache *listCache) rpcutil.HandlerFunc {
 			// missing) and 404 stay distinguishable from transient
 			// outages — the client can surface different remediation
 			// hints. Matches get/mark_read/archive's behavior.
-			return mapGmailError(req.ID, "gmail search failed", err)
+			return mapGmailError(req.ID, "mail search failed", err)
 		}
 		// Absorb the "empty page + token" case server-side: Gmail can
 		// legitimately return 0 messages with a non-empty
@@ -655,7 +655,7 @@ func gmailListRecent(deps GmailDeps, cache *listCache) rpcutil.HandlerFunc {
 		for hops := 0; hops < maxEmptyPageHops && len(results) == 0 && nextPageToken != ""; hops++ {
 			results, nextPageToken, err = client.SearchPage(ctx, query, nextPageToken, searchLimit)
 			if err != nil {
-				return mapGmailError(req.ID, "gmail search failed", err)
+				return mapGmailError(req.ID, "mail search failed", err)
 			}
 		}
 
@@ -663,7 +663,7 @@ func gmailListRecent(deps GmailDeps, cache *listCache) rpcutil.HandlerFunc {
 		for hops := 0; workFilter != "" && len(out) < limit && nextPageToken != "" && hops < maxWorkFilterPageHops; hops++ {
 			results, nextPageToken, err = client.SearchPage(ctx, query, nextPageToken, searchLimit)
 			if err != nil {
-				return mapGmailError(req.ID, "gmail search failed", err)
+				return mapGmailError(req.ID, "mail search failed", err)
 			}
 			out = appendMailRows(out, deps, results, workFilter, limit)
 		}
@@ -705,7 +705,7 @@ func gmailGet(deps GmailDeps) rpcutil.HandlerFunc {
 		}
 		msg, err := client.GetMessage(ctx, p.ID)
 		if err != nil {
-			return mapGmailError(req.ID, "gmail get failed", err)
+			return mapGmailError(req.ID, "mail get failed", err)
 		}
 		if msg == nil {
 			return rpcerr.NotFound("message " + rpcutil.TruncateForError(p.ID)).Response(req.ID)
@@ -808,7 +808,7 @@ func gmailTrash(deps GmailDeps, cache *listCache) rpcutil.HandlerFunc {
 			return errResp
 		}
 		if err := client.Trash(ctx, p.ID); err != nil {
-			return mapGmailError(req.ID, "gmail trash failed", err)
+			return mapGmailError(req.ID, "mail trash failed", err)
 		}
 		// Trashing removes the message from the inbox — drop the cached
 		// list so the next fetch no longer includes it.
@@ -846,7 +846,7 @@ func modifyLabelsHandler(deps GmailDeps, cache *listCache, removeLabels []string
 			return errResp
 		}
 		if err := client.ModifyLabels(ctx, p.ID, nil, removeLabels); err != nil {
-			return mapGmailError(req.ID, "gmail modify labels failed", err)
+			return mapGmailError(req.ID, "mail modify labels failed", err)
 		}
 		// Invalidate when this action changes inbox membership (archive
 		// passes a cache; mark_read passes nil, a no-op).

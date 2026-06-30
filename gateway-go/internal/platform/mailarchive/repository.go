@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/mail"
 	"net/url"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
@@ -90,6 +92,13 @@ type Repository struct {
 	state    *StateStore
 	fallback FallbackClient
 	now      func() time.Time
+
+	// connMu guards a single pooled IMAP connection reused across list searches so the
+	// day-pager doesn't pay a TCP+login round-trip on every day it visits. The lock is
+	// held for the duration of a search (one connection can't multiplex IMAP commands)
+	// — this is the only mutex in Repository, so there is no lock-ordering concern.
+	connMu sync.Mutex
+	pooled *imapConn
 }
 
 func NewRepository(cfg Config, opts RepositoryOptions) *Repository {
@@ -123,18 +132,18 @@ func (r *Repository) SearchPage(ctx context.Context, query, pageToken string, ma
 	if strings.TrimSpace(pageToken) != "" && !strings.HasPrefix(pageToken, archivePageTokenPrefix) {
 		return r.fallbackSearchPage(ctx, query, pageToken, maxResults)
 	}
-	spec, err := parseArchiveQuery(query, r.now())
-	if err != nil {
-		if r.fallback != nil {
-			return r.fallback.SearchPage(ctx, query, pageToken, maxResults)
-		}
-		return nil, "", err
+	spec := parseArchiveQuery(query, r.now())
+	if spec.Degraded != "" {
+		slog.Warn("mailarchive: query degraded to recent view", "query", query, "reason", spec.Degraded)
 	}
 	rows, next, err := r.searchArchive(ctx, spec, pageToken, maxResults)
 	if err != nil {
 		if r.fallback != nil {
 			return r.fallback.SearchPage(ctx, query, pageToken, maxResults)
 		}
+		// No Gmail fallback anymore — surface the failure to the operator so a wedged
+		// archive (IMAP down) doesn't just look like an empty inbox to the user.
+		slog.Warn("mailarchive: search failed (native-only)", "query", query, "error", err)
 		return nil, "", err
 	}
 	return rows, next, nil
@@ -217,7 +226,9 @@ func (r *Repository) GetAttachment(ctx context.Context, messageID, attachmentID 
 
 func (r *Repository) NativeStatus(ctx context.Context) (NativeStatus, error) {
 	if r == nil || !r.archiveEnabled() {
-		return NativeStatus{Source: "gmail", Available: r != nil && r.fallback != nil}, nil
+		// Native-archive-only now (Gmail fallback removed): an unconfigured/disabled
+		// archive is simply unavailable, not a Gmail-backed surface.
+		return NativeStatus{Source: "unavailable", Available: false}, nil
 	}
 	status := NativeStatus{
 		Source:         "archive",
@@ -312,9 +323,17 @@ type archiveQuery struct {
 	DefaultView   bool
 	HasAttachment bool
 	InboxOnly     bool
+	// Degraded is a non-empty reason when an unparseable operator was dropped and the
+	// query fell back to a bounded recent view (instead of erroring). The caller logs
+	// it — there is no Gmail fallback to silently absorb the mismatch anymore.
+	Degraded string
 }
 
-func parseArchiveQuery(query string, now time.Time) (archiveQuery, error) {
+// parseArchiveQuery maps a Gmail-style query into an IMAP search spec. It never
+// errors: an operator the archive can't honor is dropped and the query degrades to a
+// bounded recent view (spec.Degraded names the reason). With the Gmail fallback gone,
+// hard-failing here would blank the inbox on an unfamiliar token — degrade instead.
+func parseArchiveQuery(query string, now time.Time) archiveQuery {
 	q := strings.TrimSpace(query)
 	defaultView := isDefaultArchiveViewQuery(q)
 	inboxOnly := inInboxRe.MatchString(q) && !defaultView
@@ -325,34 +344,29 @@ func parseArchiveQuery(query string, now time.Time) (archiveQuery, error) {
 	if defaultView {
 		since = now.Add(-defaultNativeLookback)
 	}
+	// newer_than:Nd → SINCE now-N (lower bound). A malformed amount is ignored.
 	if m := newerThanRe.FindStringSubmatch(q); m != nil {
-		n, _ := strconv.Atoi(m[1])
-		if n <= 0 {
-			return archiveQuery{}, ErrArchiveUnsupportedQuery
-		}
-		switch strings.ToLower(m[2]) {
-		case "d":
-			since = now.Add(-time.Duration(n) * 24 * time.Hour)
-		case "m":
-			since = now.AddDate(0, -n, 0)
-		case "y":
-			since = now.AddDate(-n, 0, 0)
-		default:
-			return archiveQuery{}, ErrArchiveUnsupportedQuery
+		if d := relativeShift(now, m[1], m[2]); !d.IsZero() {
+			since = d
 		}
 	}
-
-	// Date-range scoping for the day-pager (after:YYYY/M/D before:YYYY/M/D) → IMAP
-	// SINCE/BEFORE. after: lower-bounds (inclusive), before: upper-bounds (exclusive),
-	// matching Gmail's operators so a per-day [after:D before:D+1] window = exactly D.
+	// older_than:Nd → BEFORE now-N (upper bound), symmetric with newer_than.
+	until := time.Time{}
+	if m := olderThanRe.FindStringSubmatch(q); m != nil {
+		if d := relativeShift(now, m[1], m[2]); !d.IsZero() {
+			until = d
+		}
+	}
+	// Absolute date-range scoping for the day-pager (after:YYYY/M/D before:YYYY/M/D)
+	// → IMAP SINCE/BEFORE. after: lower-bounds (inclusive), before: upper-bounds
+	// (exclusive), matching Gmail so a per-day [after:D before:D+1] window = exactly D.
 	if m := afterDateRe.FindStringSubmatch(q); m != nil {
 		if d, ok := parseArchiveQueryDate(m[1], m[2], m[3], now.Location()); ok && (since.IsZero() || d.After(since)) {
 			since = d
 		}
 	}
-	until := time.Time{}
 	if m := beforeDateRe.FindStringSubmatch(q); m != nil {
-		if d, ok := parseArchiveQueryDate(m[1], m[2], m[3], now.Location()); ok {
+		if d, ok := parseArchiveQueryDate(m[1], m[2], m[3], now.Location()); ok && (until.IsZero() || d.Before(until)) {
 			until = d
 		}
 	}
@@ -360,11 +374,17 @@ func parseArchiveQuery(query string, now time.Time) (archiveQuery, error) {
 	hasAttachment := hasAttachmentRe.MatchString(q)
 	from := extractFromQuery(q)
 	text := normalizeArchiveTextQuery(q)
-	hasUnsupportedOnly := unsupportedOperatorRe.MatchString(text)
+	hasUnsupported := unsupportedOperatorRe.MatchString(text)
 	text = unsupportedOperatorRe.ReplaceAllString(text, " ")
 	text = strings.TrimSpace(strings.Join(strings.Fields(text), " "))
-	if hasUnsupportedOnly && from == "" && text == "" && !defaultView {
-		return archiveQuery{}, ErrArchiveUnsupportedQuery
+
+	// Graceful degradation: if the query is ONLY an operator we don't understand (no
+	// usable date bound, sender, or free text), drop it and serve a bounded recent
+	// view rather than an empty/errored list.
+	degraded := ""
+	if hasUnsupported && from == "" && text == "" && since.IsZero() && until.IsZero() && !defaultView {
+		since = now.Add(-defaultNativeLookback)
+		degraded = "unsupported operator dropped; showing recent"
 	}
 
 	var parts []string
@@ -385,7 +405,31 @@ func parseArchiveQuery(query string, now time.Time) (archiveQuery, error) {
 	if len(parts) == 0 {
 		parts = append(parts, "ALL")
 	}
-	return archiveQuery{Criteria: strings.Join(parts, " "), DefaultView: defaultView, HasAttachment: hasAttachment, InboxOnly: inboxOnly}, nil
+	return archiveQuery{
+		Criteria:      strings.Join(parts, " "),
+		DefaultView:   defaultView,
+		HasAttachment: hasAttachment,
+		InboxOnly:     inboxOnly,
+		Degraded:      degraded,
+	}
+}
+
+// relativeShift returns now shifted back by N d/m/y, or the zero time for a
+// malformed amount/unit (the caller then leaves that bound unset).
+func relativeShift(now time.Time, nStr, unit string) time.Time {
+	n, err := strconv.Atoi(nStr)
+	if err != nil || n <= 0 {
+		return time.Time{}
+	}
+	switch strings.ToLower(unit) {
+	case "d":
+		return now.Add(-time.Duration(n) * 24 * time.Hour)
+	case "m":
+		return now.AddDate(0, -n, 0)
+	case "y":
+		return now.AddDate(-n, 0, 0)
+	}
+	return time.Time{}
 }
 
 func isDefaultArchiveViewQuery(q string) bool {
@@ -399,15 +443,17 @@ func isDefaultArchiveViewQuery(q string) bool {
 
 var (
 	newerThanRe        = regexp.MustCompile(`(?i)\bnewer_than:(\d+)([dmy])\b`)
+	olderThanRe        = regexp.MustCompile(`(?i)\bolder_than:(\d+)([dmy])\b`)
 	fromQueryRe        = regexp.MustCompile(`(?i)\bfrom:(?:"([^"]+)"|([^\s}]+))`)
 	hasAttachmentRe    = regexp.MustCompile(`(?i)\bhas:attachment\b`)
 	inInboxRe          = regexp.MustCompile(`(?i)\bin:inbox\b`)
 	inAnywhereRe       = regexp.MustCompile(`(?i)\bin:anywhere\b`)
 	afterDateRe        = regexp.MustCompile(`(?i)\bafter:(\d{4})/(\d{1,2})/(\d{1,2})\b`)
 	beforeDateRe       = regexp.MustCompile(`(?i)\bbefore:(\d{4})/(\d{1,2})/(\d{1,2})\b`)
-	stripQuerySyntaxRe = regexp.MustCompile(`(?i)[{}]|\bin:(?:inbox|anywhere)\b|\bis:unread\b|\bnewer_than:\d+[dmy]\b|\b(?:after|before):\d{4}/\d{1,2}/\d{1,2}\b|\bhas:attachment\b|\bfrom:(?:"[^"]+"|[^\s}]+)`)
-	// after:/before: are parsed into SINCE/BEFORE above, so they are NOT unsupported.
-	unsupportedOperatorRe = regexp.MustCompile(`(?i)\b(?:is|in|label|has|category|older_than):[^\s}]+`)
+	stripQuerySyntaxRe = regexp.MustCompile(`(?i)[{}]|\bin:(?:inbox|anywhere)\b|\bis:unread\b|\b(?:newer|older)_than:\d+[dmy]\b|\b(?:after|before):\d{4}/\d{1,2}/\d{1,2}\b|\bhas:attachment\b|\bfrom:(?:"[^"]+"|[^\s}]+)`)
+	// newer_than/older_than and after:/before: are parsed into SINCE/BEFORE above, so
+	// they are NOT unsupported. What remains are operators with no archive mapping.
+	unsupportedOperatorRe = regexp.MustCompile(`(?i)\b(?:is|in|label|has|category):[^\s}]+`)
 )
 
 // parseArchiveQueryDate parses a Gmail-style YYYY/M/D token into a local-midnight
@@ -457,6 +503,46 @@ type archiveRow struct {
 	uid     int
 }
 
+// withIMAP runs fn against a logged-in IMAP connection, reusing one pooled connection
+// across list searches so the day-pager doesn't pay a fresh TCP+login round-trip on
+// every day it visits (the gateway's 30s list cache absorbs revisits of the same day).
+//
+// Safe by construction: a pooled connection is validated with a NOOP before reuse and
+// dropped on any failure, so a stale/dead connection is redialed — reuse is never
+// worse than a fresh dial. connMu serializes access since one IMAP connection can't
+// multiplex commands. Only the list path pools; detail/mutation reads still dial fresh.
+func (r *Repository) withIMAP(ctx context.Context, fn func(*imapConn) error) error {
+	r.connMu.Lock()
+	defer r.connMu.Unlock()
+
+	// Drop a pooled connection that no longer answers a NOOP (idle-dropped by the server).
+	if r.pooled != nil {
+		if _, _, err := r.pooled.exec("NOOP"); err != nil {
+			r.pooled.close()
+			r.pooled = nil
+		}
+	}
+	if r.pooled == nil {
+		c, err := dialIMAP(ctx, r.cfg.Addr, r.cfg.Timeout)
+		if err != nil {
+			return err
+		}
+		if err := c.login(r.cfg.User, r.cfg.Pass); err != nil {
+			c.close()
+			return err
+		}
+		r.pooled = c
+	}
+	if err := fn(r.pooled); err != nil {
+		// A failed command can leave the connection in an unknown state — discard it
+		// so the next search redials a clean one.
+		r.pooled.close()
+		r.pooled = nil
+		return err
+	}
+	return nil
+}
+
 func (r *Repository) searchArchive(ctx context.Context, spec archiveQuery, pageToken string, maxResults int) ([]gmail.MessageSummary, string, error) {
 	if maxResults <= 0 {
 		maxResults = 25
@@ -473,69 +559,73 @@ func (r *Repository) searchArchive(ctx context.Context, spec archiveQuery, pageT
 		fetchPerBox = maxArchiveFetchPerBox
 	}
 
-	c, err := dialIMAP(ctx, r.cfg.Addr, r.cfg.Timeout)
-	if err != nil {
-		return nil, "", err
-	}
-	defer c.close()
-	if err := c.login(r.cfg.User, r.cfg.Pass); err != nil {
-		return nil, "", err
-	}
-	defer c.logout()
-
 	var all []archiveRow
 	seen := map[string]bool{}
-	for _, mailbox := range archiveSearchMailboxes(r.cfg.Mailboxes, spec) {
-		mailbox = strings.TrimSpace(mailbox)
-		if mailbox == "" {
-			continue
-		}
-		if err := c.examine(mailbox); err != nil {
-			continue
-		}
-		uids, err := c.uidSearch(spec.Criteria)
-		if err != nil {
-			continue
-		}
-		uids = tailStrings(uids, fetchPerBox)
-		reverseStrings(uids)
-		msgs, err := c.uidFetchMessages(strings.Join(uids, ","))
-		if err != nil {
-			continue
-		}
-		for _, msg := range msgs {
-			uid := strings.TrimSpace(msg.UID)
-			if uid == "" {
+	if err := r.withIMAP(ctx, func(c *imapConn) error {
+		boxes := archiveSearchMailboxes(r.cfg.Mailboxes, spec)
+		examined := 0
+		for _, mailbox := range boxes {
+			mailbox = strings.TrimSpace(mailbox)
+			if mailbox == "" {
 				continue
 			}
-			parsed, err := lmtpd.ParseMessage(msg.Raw, archiveLocator(mailbox, uid))
-			if err != nil || parsed == nil || parsed.Detail == nil {
+			if err := c.examine(mailbox); err != nil {
 				continue
 			}
-			detail := parsed.Detail
-			id := strings.TrimSpace(detail.ID)
-			if id == "" {
-				id = archiveLocator(mailbox, uid)
-			}
-			if seen[id] {
+			examined++
+			uids, err := c.uidSearch(spec.Criteria)
+			if err != nil {
 				continue
 			}
-			seen[id] = true
-			_ = r.state.RememberLocator(id, mailbox, uid)
-			st := r.state.Get(id)
-			if st.Trashed || (spec.InboxOnly && st.Archived) || (spec.DefaultView && st.Archived) {
+			uids = tailStrings(uids, fetchPerBox)
+			reverseStrings(uids)
+			msgs, err := c.uidFetchMessages(strings.Join(uids, ","))
+			if err != nil {
 				continue
 			}
-			if spec.HasAttachment && len(detail.Attachments) == 0 {
-				continue
+			for _, msg := range msgs {
+				uid := strings.TrimSpace(msg.UID)
+				if uid == "" {
+					continue
+				}
+				parsed, err := lmtpd.ParseMessage(msg.Raw, archiveLocator(mailbox, uid))
+				if err != nil || parsed == nil || parsed.Detail == nil {
+					continue
+				}
+				detail := parsed.Detail
+				id := strings.TrimSpace(detail.ID)
+				if id == "" {
+					id = archiveLocator(mailbox, uid)
+				}
+				if seen[id] {
+					continue
+				}
+				seen[id] = true
+				_ = r.state.RememberLocator(id, mailbox, uid)
+				st := r.state.Get(id)
+				if st.Trashed || (spec.InboxOnly && st.Archived) || (spec.DefaultView && st.Archived) {
+					continue
+				}
+				if spec.HasAttachment && len(detail.Attachments) == 0 {
+					continue
+				}
+				row := detailToSummary(detail, mailbox, st)
+				all = append(all, archiveRow{
+					summary: row,
+					when:    parseMailDate(detail.Date),
+					uid:     parseUID(uid),
+				})
 			}
-			row := detailToSummary(detail, mailbox, st)
-			all = append(all, archiveRow{
-				summary: row,
-				when:    parseMailDate(detail.Date),
-				uid:     parseUID(uid),
-			})
 		}
+		// If boxes were configured but none could be examined, the (possibly reused)
+		// connection is likely dead — return an error so withIMAP drops it and the
+		// caller logs a real failure instead of serving a silently empty inbox.
+		if examined == 0 && len(boxes) > 0 {
+			return errors.New("no mailbox could be examined")
+		}
+		return nil
+	}); err != nil {
+		return nil, "", err
 	}
 
 	sort.SliceStable(all, func(i, j int) bool {
