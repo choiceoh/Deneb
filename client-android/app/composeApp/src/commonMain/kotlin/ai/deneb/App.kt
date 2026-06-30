@@ -57,7 +57,6 @@ import ai.deneb.ui.chat.composables.DenebBottomBar
 import ai.deneb.ui.chat.composables.FeedScreen
 import ai.deneb.ui.chat.composables.LocalCaptureActions
 import ai.deneb.ui.chat.composables.denebBottomBarRoutes
-import ai.deneb.ui.chat.composables.denebWorkDataRoutes
 import ai.deneb.ui.chat.composables.navigateToDenebSection
 import ai.deneb.ui.components.FullScreenImageHost
 import ai.deneb.ui.handCursor
@@ -392,22 +391,16 @@ private fun AppContent(
                 val currentBackStackEntry by navController.currentBackStackEntryAsState()
                 val isHome = currentBackStackEntry?.destination?.route == "home"
 
-                // 챗봇 ↔ 업무 workspace, reactive. 챗봇 hides 업무 데이터 sections from
-                // every navigation surface (bottom bar, desktop rail, 더보기). Work is the
-                // default when there is no gateway client (previews / other repos).
+                // 챗봇 ↔ 업무 workspace, reactive. The toggle changes chat recall (and which
+                // 업무 entries the 더보기 hub lists), NOT the bottom-bar navigation — both
+                // workspaces keep the same 5 tabs. The no-client fallback (previews / other
+                // repos) is 업무; the real default is the persisted recall setting (now off →
+                // 챗봇 launches first).
                 val workspaceWorkFlow = remember(denebClient) {
                     denebClient?.workspaceWork ?: MutableStateFlow(true)
                 }
                 val isWorkMode by workspaceWorkFlow.collectAsStateWithLifecycle()
                 val navChatMode = !isWorkMode
-                // Switching into 챗봇 while parked on a now-hidden 업무 데이터 screen would
-                // strand the user there with no active tab — bounce them back to home.
-                val activeRoute = currentBackStackEntry?.destination?.route
-                LaunchedEffect(navChatMode, activeRoute) {
-                    if (navChatMode && activeRoute != null && activeRoute in denebWorkDataRoutes) {
-                        navigateToDenebSection(navController, Home)
-                    }
-                }
 
                 val navigationTabBar: @Composable () -> Unit = {
                     val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
@@ -871,9 +864,11 @@ private fun AppContent(
                 // navigationBarsPadding doesn't double up.
                 val route = currentBackStackEntry?.destination?.route
                 val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
-                // 챗봇 workspace is a clean focus-chat space: no bottom tab bar at all
-                // (the top 챗봇/업무 pill is the only way in/out). 업무 keeps the super-app bar.
-                val showBar = route in denebBottomBarRoutes && !imeVisible && !navChatMode
+                // The bottom tab bar is the app's primary navigation in BOTH workspaces —
+                // the 업무/챗봇 toggle changes chat recall, not navigation, so 챗봇 keeps the
+                // same 5 tabs. Hidden only on non-tab routes (deep details) and while the
+                // keyboard is up.
+                val showBar = route in denebBottomBarRoutes && !imeVisible
                 Column(Modifier.fillMaxSize()) {
                     Box(
                         Modifier

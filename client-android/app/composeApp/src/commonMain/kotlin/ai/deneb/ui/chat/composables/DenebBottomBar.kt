@@ -120,26 +120,12 @@ private val moreTab = DenebTabItem(
 // highlight when current; 메일/달력 jump into their section, which keeps the bar.
 val denebBottomTabs: List<DenebTabItem> = listOf(feedTab, mailTab, chatTab, calendarTab, moreTab)
 
-// Routes that surface 업무 데이터 — used by App.kt to bounce a 챗봇-mode session back to
-// home if it ever lands on one (defensive — the 챗봇 workspace has no bottom bar). 피드 is
-// 업무-only (the work feed home), so it bounces; the 더보기 list filters its own 업무 entries.
-val denebWorkDataRoutes: Set<String> = setOf(
-    "deneb_feed",
-    "deneb_mail",
-    "deneb_calendar",
-    "deneb_search",
-    "deneb_categories",
-    "deneb_fleet",
-    "deneb_dashboard",
-    "deneb_org",
-)
-
 // Routes that show the bottom bar. The bar stays on 채팅(home) and on every 더보기 SECTION
 // — 메일·달력·검색·할일·일기·카테고리·조직도·현황·연락처·노트북·파일·브라우저·설정 — so you can
 // tab-switch without backing out first. Excluded on purpose: deep DETAILS reached *from* a
 // section (a specific mail/event/wiki page/person, settings sub-screens like fleet/skill/
 // cron) — those are data-class/arg routes that drill down and keep their own ← back nav.
-// The 챗봇 workspace hides the bar separately (navChatMode in App.kt).
+// Shown in BOTH workspaces — the 업무/챗봇 toggle changes chat recall, not navigation.
 val denebBottomBarRoutes: Set<String> = setOf(
     ROUTE_FEED,
     ROUTE_HOME,
