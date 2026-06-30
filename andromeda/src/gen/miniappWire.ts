@@ -128,6 +128,7 @@ export interface MailMessageOut {
   cc?: string
   subject?: string
   date?: string
+  isUnread?: boolean
   body?: string
   bodyTotal?: number
   rawBody?: string
