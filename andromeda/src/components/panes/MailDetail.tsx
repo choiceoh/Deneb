@@ -241,6 +241,8 @@ function AnalysisCard({ mailId }: { mailId: string }) {
   });
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
+  // AI 분석 카드 접기/펼치기 (기본 펼침 — 분석이 본문 위 리드라 우선 노출, 길면 접는다).
+  const [open, setOpen] = useState(true);
 
   // Drop a stale manual-analysis error whenever the cached load re-runs (message
   // switch, reconnect, or config change) — matches the same triggers that reset
@@ -265,45 +267,60 @@ function AnalysisCard({ mailId }: { mailId: string }) {
   return (
     <div className="mail-card">
       <div className="mail-card-head">
-        <span className="mail-card-title">AI 분석</span>
+        <button
+          type="button"
+          className="mail-card-toggle"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          title={open ? "분석 접기" : "분석 펼치기"}
+        >
+          <span className="mail-card-caret">{open ? "▾" : "▸"}</span>
+          <span className="mail-card-title">AI 분석</span>
+        </button>
         {importance && (
           <span className={"mail-badge" + (HOT_IMPORTANCE.test(importance) ? " hot" : "")}>{importance}</span>
         )}
-        {analysis && !loading && (
+        {open && analysis && !loading && (
           <button className="row-btn" onClick={() => void run(true)} disabled={!connected} title="다시 분석">
             다시 분석
           </button>
         )}
       </div>
-      {loading ? (
-        <div className="mail-card-line">분석 중… (수십 초 걸릴 수 있어요)</div>
-      ) : analysis ? (
-        <>
-          <Markdown text={analysis} />
-          {(data?.relatedProjects?.length ?? 0) > 0 && (
-            <div className="mail-chips">
-              {data!.relatedProjects!.map((p) => (
-                <button key={p.path} className="mail-chip" onClick={() => openWiki(p.path)} title={p.summary || p.path}>
-                  {p.title || p.path}
-                </button>
-              ))}
-            </div>
-          )}
-          {((data?.calendarProposalCount ?? 0) > 0 || (data?.todoCount ?? 0) > 0) && (
-            <div className="mail-card-line">
-              {(data?.calendarProposalCount ?? 0) > 0 && `일정 제안 ${data!.calendarProposalCount}`}
-              {(data?.calendarProposalCount ?? 0) > 0 && (data?.todoCount ?? 0) > 0 && " · "}
-              {(data?.todoCount ?? 0) > 0 && `할일 후보 ${data!.todoCount}`}
-            </div>
-          )}
-        </>
-      ) : err ? (
-        <div className="mail-card-line error">{err}</div>
-      ) : (
-        <button className="btn" onClick={() => void run()} disabled={!connected}>
-          🔍 이 메일 분석
-        </button>
-      )}
+      {open &&
+        (loading ? (
+          <div className="mail-card-line">분석 중… (수십 초 걸릴 수 있어요)</div>
+        ) : analysis ? (
+          <>
+            <Markdown text={analysis} />
+            {(data?.relatedProjects?.length ?? 0) > 0 && (
+              <div className="mail-chips">
+                {data!.relatedProjects!.map((p) => (
+                  <button
+                    key={p.path}
+                    className="mail-chip"
+                    onClick={() => openWiki(p.path)}
+                    title={p.summary || p.path}
+                  >
+                    {p.title || p.path}
+                  </button>
+                ))}
+              </div>
+            )}
+            {((data?.calendarProposalCount ?? 0) > 0 || (data?.todoCount ?? 0) > 0) && (
+              <div className="mail-card-line">
+                {(data?.calendarProposalCount ?? 0) > 0 && `일정 제안 ${data!.calendarProposalCount}`}
+                {(data?.calendarProposalCount ?? 0) > 0 && (data?.todoCount ?? 0) > 0 && " · "}
+                {(data?.todoCount ?? 0) > 0 && `할일 후보 ${data!.todoCount}`}
+              </div>
+            )}
+          </>
+        ) : err ? (
+          <div className="mail-card-line error">{err}</div>
+        ) : (
+          <button className="btn" onClick={() => void run()} disabled={!connected}>
+            🔍 이 메일 분석
+          </button>
+        ))}
     </div>
   );
 }
