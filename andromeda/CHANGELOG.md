@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.39](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.38...andromeda-v0.0.39) (2026-06-30)
+
+
+### ✨ Features
+
+* **andromeda:** dock the Deneb chat at the bottom on the notebook view ([#2986](https://github.com/choiceoh/Deneb/issues/2986)) ([7b1c707](https://github.com/choiceoh/Deneb/commit/7b1c707ba5a41abc9d24a9de7278649db0ecd705))
+
 ## [0.0.38](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.37...andromeda-v0.0.38) (2026-06-30)
 
 

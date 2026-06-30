@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.48.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.47.1...deneb-v4.48.0) (2026-06-30)
+
+
+### ✨ Features
+
+* **andromeda:** dock the Deneb chat at the bottom on the notebook view ([#2986](https://github.com/choiceoh/Deneb/issues/2986)) ([7b1c707](https://github.com/choiceoh/Deneb/commit/7b1c707ba5a41abc9d24a9de7278649db0ecd705))
+
 ## [4.47.1](https://github.com/choiceoh/Deneb/compare/deneb-v4.47.0...deneb-v4.47.1) (2026-06-30)
 
 
