@@ -10,7 +10,7 @@ import { callRpc } from "@/gateway";
 import { SKILLS_RPC } from "@/resources";
 import { useCachedList } from "@/cachedList";
 import { serializeList } from "@/aiText";
-import { errText, fmtDate } from "@/format";
+import { errText, fmtDate, relativeTime } from "@/format";
 import { color } from "@/theme";
 import { useRegisterPane, useWorkspace } from "@/workspaceContext";
 import { Column, Grid, GridNotice } from "@/components/Grid";
@@ -42,13 +42,13 @@ function sourceLabel(source?: string): string {
 }
 
 const LIFECYCLE_TYPES: Record<string, { label: string; bg: string; fg: string }> = {
-  genesis: { label: "생성", bg: "var(--accent-soft)", fg: "var(--accent)" },
-  evolved: { label: "진화", bg: "var(--accent-soft)", fg: "var(--accent)" },
-  evolve_rejected: { label: "기각", bg: "var(--accent-soft)", fg: "var(--due)" },
-  evolve_rolled_back: { label: "롤백", bg: "var(--accent-soft)", fg: "var(--ink-2)" },
+  genesis: { label: "생성", bg: color.active, fg: color.accent },
+  evolved: { label: "진화", bg: color.active, fg: color.accent },
+  evolve_rejected: { label: "기각", bg: color.active, fg: color.danger },
+  evolve_rolled_back: { label: "롤백", bg: color.active, fg: color.text2 },
 };
 function lifecycleType(type?: string): { label: string; bg: string; fg: string } {
-  return LIFECYCLE_TYPES[(type ?? "").trim()] ?? { label: "리뷰", bg: "var(--panel)", fg: "var(--muted)" };
+  return LIFECYCLE_TYPES[(type ?? "").trim()] ?? { label: "리뷰", bg: color.field, fg: color.muted };
 }
 
 function routeLabel(route?: string): string {
@@ -78,18 +78,6 @@ const PROPUS_STATES: Record<string, string> = {
 };
 function propusStateLabel(state?: string): string {
   return PROPUS_STATES[(state ?? "").trim()] ?? "정상 관찰 중";
-}
-
-// Live relative stamp: 방금 / N분 전 / N시간 전 / N일 전. Blank for absent/zero.
-function relativeTime(ms?: number): string {
-  if (!ms || ms <= 0) return "";
-  const diff = Date.now() - ms;
-  if (diff < 60_000) return "방금";
-  const min = Math.floor(diff / 60_000);
-  if (min < 60) return `${min}분 전`;
-  const hr = Math.floor(min / 60);
-  if (hr < 24) return `${hr}시간 전`;
-  return `${Math.floor(hr / 24)}일 전`;
 }
 
 // Drop a leading YAML frontmatter fence so the detail renders prose. Mirrors the
@@ -479,10 +467,14 @@ function SkillFacts({ skill, path }: { skill: SkillRow; path?: string }) {
     (skill.curatorState ?? "").trim()
   ];
   if (curator) facts.push(curator);
-  if ((skill.totalUses ?? 0) > 0)
-    facts.push(`사용 ${skill.totalUses}회 · 마지막 사용 ${relativeTime(skill.lastUsedAt)}`);
-  if ((skill.evolveCount ?? 0) > 0)
-    facts.push(`진화 ${skill.evolveCount}회 · 마지막 진화 ${relativeTime(skill.lastEvolvedAt)}`);
+  if ((skill.totalUses ?? 0) > 0) {
+    const last = relativeTime(skill.lastUsedAt);
+    facts.push(`사용 ${skill.totalUses}회${last ? ` · 마지막 사용 ${last}` : ""}`);
+  }
+  if ((skill.evolveCount ?? 0) > 0) {
+    const last = relativeTime(skill.lastEvolvedAt);
+    facts.push(`진화 ${skill.evolveCount}회${last ? ` · 마지막 진화 ${last}` : ""}`);
+  }
   if (path?.trim()) facts.push(path.trim());
 
   return (

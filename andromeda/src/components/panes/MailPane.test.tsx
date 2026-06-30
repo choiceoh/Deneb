@@ -4,7 +4,12 @@ import userEvent from "@testing-library/user-event";
 import { MailPane } from "./MailPane";
 import { cachedListStorageKey, cachedOneStorageKey } from "@/cachedList";
 import { MAIL_RPC } from "@/resources";
+import { startOfDay } from "@/format";
 import { fakeProvider, renderWithProviders } from "@/test/util";
+
+// MailPane now browses one day at a time, so its list cache is keyed per local day.
+// Seed today's bucket so the cached-render tests match what the pane reads on mount.
+const mailListCacheKey = cachedListStorageKey(`mail.${startOfDay()}`);
 
 beforeEach(() => {
   // The detail's enrichment cards (분석·발신자) call gateway RPCs on open; keep
@@ -23,7 +28,7 @@ afterEach(() => {
 describe("MailPane", () => {
   it("renders the cached mail list immediately while the gateway refresh is still pending", () => {
     localStorage.setItem(
-      cachedListStorageKey("mail"),
+      mailListCacheKey,
       JSON.stringify({
         data: [{ id: "cached-1", subject: "캐시된 메일", from: "cache@corp.com", snippet: "먼저 보이는 내용" }],
         total: 1,
@@ -44,7 +49,7 @@ describe("MailPane", () => {
 
   it("renders a cached mail body immediately while the detail refresh is still pending", async () => {
     localStorage.setItem(
-      cachedListStorageKey("mail"),
+      mailListCacheKey,
       JSON.stringify({
         data: [{ id: "cached-1", subject: "캐시 본문 메일", from: "cache@corp.com", snippet: "목록 스니펫" }],
         total: 1,
@@ -99,7 +104,7 @@ describe("MailPane", () => {
 
   it("keeps the read overlay after remount while the cached list is still unread", () => {
     localStorage.setItem(
-      cachedListStorageKey("mail"),
+      mailListCacheKey,
       JSON.stringify({
         data: [{ id: "m1", subject: "이미 읽은 메일", from: "kim@corp.com", isUnread: true }],
         total: 1,
@@ -120,7 +125,7 @@ describe("MailPane", () => {
 
   it("expires the read overlay so a later unread state can surface", () => {
     localStorage.setItem(
-      cachedListStorageKey("mail"),
+      mailListCacheKey,
       JSON.stringify({
         data: [{ id: "m1", subject: "다시 안읽은 메일", from: "kim@corp.com", isUnread: true }],
         total: 1,
