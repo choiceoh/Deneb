@@ -70,6 +70,9 @@ export const RESOURCE_DEFS: ResourceDef[] = [
   // straight into a grid/card pane like people/workfeed. Rows carry no id; the
   // pane keys on `path`/`project`.
   { name: "progress", label: "진행", list: "miniapp.project.digests", listKey: "digests" },
+  // Skill catalog (miniapp.skills.list) — a parameterless list of the skills the
+  // agent can use. detail/lifecycle/update/delete are query-driven actions below.
+  { name: "skills", label: "스킬", list: "miniapp.skills.list", listKey: "skills" },
 ];
 
 // memory(위키) and search are NOT in the CRUD registry: their reads are
@@ -132,6 +135,16 @@ export const CRON_RPC = {
   run: "miniapp.crons.run",
   update: "miniapp.crons.update",
   remove: "miniapp.crons.remove",
+} as const;
+
+// Skill detail/lifecycle reads + guarded local-skill mutations. The list flows
+// through the resource registry (parameterless); these take params, so the pane
+// calls them directly via callRpc — mirroring the native skills tab.
+export const SKILLS_RPC = {
+  detail: "miniapp.skills.detail",
+  lifecycle: "miniapp.skills.lifecycle",
+  update: "miniapp.skills.update",
+  delete: "miniapp.skills.delete",
 } as const;
 
 export const WORKFEED_RPC = {

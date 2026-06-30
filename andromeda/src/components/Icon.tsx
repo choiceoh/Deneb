@@ -19,6 +19,7 @@ export type IconName =
   | "crons"
   | "fleet"
   | "workfeed"
+  | "skills"
   | "code"
   | "send"
   | "bell"
@@ -121,6 +122,13 @@ const PATHS: Record<IconName, ReactNode> = {
     </>
   ),
   workfeed: <path d="M3 12h3.5l2.2 6 4-13 2.4 9 1.8-2h4" />,
+  // Sparkle — reads as a skill/capability the agent can wield.
+  skills: (
+    <>
+      <path d="M12 3.5l1.7 4.8 4.8 1.7-4.8 1.7L12 16.5l-1.7-4.8L5.5 10l4.8-1.7z" />
+      <path d="M18.5 16l.7 2 2 .7-2 .7-.7 2-.7-2-2-.7 2-.7z" />
+    </>
+  ),
   code: <path d="M8.5 8l-4 4 4 4M15.5 8l4 4-4 4" />,
   progress: (
     <>

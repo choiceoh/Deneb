@@ -241,6 +241,7 @@ export type View =
   | "crons"
   | "fleet"
   | "workfeed"
+  | "skills"
   | "code"
   | "settings";
 
