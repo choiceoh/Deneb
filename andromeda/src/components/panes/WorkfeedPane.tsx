@@ -42,28 +42,6 @@ function sourceLabel(source?: string) {
   return SOURCE_LABELS[key] ?? key.replace(/[_-]+/g, " ");
 }
 
-function previewText(text?: string, max = 120) {
-  const raw = (text ?? "").trim();
-  if (!raw) return "";
-  const hasStructuredBody = /```deneb-ui/i.test(raw) || /^\s*\|.+\|\s*$/m.test(raw);
-  const withoutUi = raw.replace(/```deneb-ui[\s\S]*?```/gi, "");
-  const line =
-    withoutUi
-      .split(/\r?\n/)
-      .map((part) => part.trim())
-      .find((part) => part && !/^\|.*\|$/.test(part) && !/^[-:|\s]+$/.test(part) && !/^```/.test(part)) ?? "";
-  const compact = (line || (hasStructuredBody ? "표/도표 포함" : withoutUi))
-    .replace(/^\s{0,3}#{1,6}\s+/, "")
-    .replace(/^\s*[-*+]\s+/, "")
-    .replace(/`([^`]+)`/g, "$1")
-    .replace(/\*\*([^*]+)\*\*/g, "$1")
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
-    .replace(/\s+/g, " ")
-    .trim();
-  if (!compact) return "";
-  return compact.length > max ? `${compact.slice(0, max - 1)}…` : compact;
-}
-
 // One line per item — shared by the AI text projection so the day's rows read the
 // same as the on-screen list.
 function itemLine(w: WorkItem): string {
@@ -194,7 +172,6 @@ export function WorkfeedPane() {
           <div className={isRead(w) ? "workfeed-row-title workfeed-row-read" : "workfeed-row-title"}>
             {w.title ?? "(항목)"}
           </div>
-          {w.body && <div className="workfeed-row-preview">{previewText(w.body)}</div>}
         </div>
       ),
     },
