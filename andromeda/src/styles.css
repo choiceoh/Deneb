@@ -2341,6 +2341,16 @@ textarea {
 }
 
 /* wiki browse rows */
+/* A size container around the wiki's rail+editor split ONLY — so the split collapses
+   on the work-area width (see the @container block below), not the viewport. It must
+   NOT wrap the wiki modals: container-type makes an element the containing block for
+   position:fixed descendants, which would trap the inline-rendered modal backdrops
+   inside the pane. The modals are rendered as siblings, outside this wrapper. */
+.wiki-split {
+  height: 100%;
+  min-height: 0;
+  container-type: inline-size;
+}
 .wiki-shell {
   display: grid;
   grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
@@ -2488,7 +2498,10 @@ textarea {
   font-size: 11px;
 }
 
-@media (max-width: 900px) {
+/* Collapse on the wiki's own container width (work area), not the viewport: when an
+   open AI panel narrows the work area, the rail stacks above so the editor keeps the
+   full width instead of being split down to an unreadable column. */
+@container (max-width: 760px) {
   .wiki-shell {
     grid-template-columns: minmax(0, 1fr);
   }
