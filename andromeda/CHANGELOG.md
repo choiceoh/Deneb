@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.40](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.39...andromeda-v0.0.40) (2026-06-30)
+
+
+### ✨ Features
+
+* **andromeda:** split the notebook top into a source list + detail pane ([#2989](https://github.com/choiceoh/Deneb/issues/2989)) ([e66e395](https://github.com/choiceoh/Deneb/commit/e66e39554f71cf4bcd9fb60c2989c11a3b1be633))
+
 ## [0.0.39](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.38...andromeda-v0.0.39) (2026-06-30)
 
 
