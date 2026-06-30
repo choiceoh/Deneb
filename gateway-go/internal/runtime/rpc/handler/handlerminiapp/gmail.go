@@ -191,13 +191,18 @@ type mailAttachmentOut struct {
 
 //deneb:wire
 type mailMessageOut struct {
-	ID                   string              `json:"id"`
-	ThreadID             string              `json:"threadId"`
-	From                 string              `json:"from"`
-	To                   string              `json:"to"`
-	CC                   string              `json:"cc,omitempty"`
-	Subject              string              `json:"subject"`
-	Date                 string              `json:"date"`
+	ID       string `json:"id"`
+	ThreadID string `json:"threadId"`
+	From     string `json:"from"`
+	To       string `json:"to"`
+	CC       string `json:"cc,omitempty"`
+	Subject  string `json:"subject"`
+	Date     string `json:"date"`
+	// IsUnread mirrors the list row's flag (derived from the UNREAD label) so the
+	// detail view is self-sufficient: clients auto-mark-read off this when a mail is
+	// opened directly (search, work feed, notification) with no inbox list row to
+	// read it from. Without it, only inbox-list opens marked read.
+	IsUnread             bool                `json:"isUnread"`
 	Body                 string              `json:"body"`
 	BodyTotal            int                 `json:"bodyTotal"`
 	RawBody              string              `json:"rawBody,omitempty"`
@@ -740,6 +745,7 @@ func gmailGet(deps GmailDeps) rpcutil.HandlerFunc {
 			CC:                   msg.CC,
 			Subject:              msg.Subject,
 			Date:                 normalizeDate(msg.Date),
+			IsUnread:             hasUnreadLabel(msg.Labels),
 			Body:                 body,
 			BodyTotal:            total,
 			RawBody:              rawBody,

@@ -653,6 +653,29 @@ func TestGmailGet_HappyPath(t *testing.T) {
 	if att["filename"] != "doc.pdf" || att["id"] != "att1" {
 		t.Errorf("attachment shape: %+v", att)
 	}
+	// A read mail (no UNREAD label) reports isUnread=false.
+	if got["isUnread"] != false {
+		t.Errorf("isUnread = %v, want false", got["isUnread"])
+	}
+}
+
+// The detail view must carry isUnread (derived from the UNREAD label) so a client
+// can auto-mark-read when a mail is opened directly — with no inbox list row to read
+// the flag from. Without this, only inbox-list opens marked read.
+func TestGmailGet_ReportsUnreadFromLabels(t *testing.T) {
+	client := &fakeGmailClient{
+		getMessageFn: func(_ context.Context, _ string) (*gmail.MessageDetail, error) {
+			return &gmail.MessageDetail{ID: "m1", Body: "hi", Labels: []string{"INBOX", "UNREAD"}}, nil
+		},
+	}
+	h := gmailGet(depsFor(client))
+	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.get", map[string]any{"id": "m1"}))
+
+	var got map[string]any
+	decode(t, resp, &got)
+	if got["isUnread"] != true {
+		t.Errorf("isUnread = %v, want true (UNREAD label present)", got["isUnread"])
+	}
 }
 
 func TestGmailGet_ReturnsCleanDisplayBodyAndRawBody(t *testing.T) {
