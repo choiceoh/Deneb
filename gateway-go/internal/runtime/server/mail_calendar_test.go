@@ -19,7 +19,7 @@ func TestCalendarProposalsFromMail(t *testing.T) {
 	}
 	deal := &gmailpoll.DealInfo{Counterparty: "탑솔라", DocType: "세금계산서", DueDate: "2026-06-30"}
 
-	got := calendarProposalsFromMail("m1", "FW: 미팅", "boss@example.com", []string{"견적서.pdf"}, items, deal, now)
+	got := calendarProposalsFromMail("m1", "FW: 미팅", "boss@example.com", []string{"견적서.pdf"}, items, deal, "attention", now)
 
 	if len(got) != 2 {
 		t.Fatalf("got %d proposals, want 2: %+v", len(got), got)
@@ -72,7 +72,7 @@ func TestCalendarProposalsFromMail_NoneWhenNothingQualifies(t *testing.T) {
 		{Title: "막연한 후속", DueHint: "", Priority: "high"}, // no date
 		{Title: "낮은 우선순위", DueHint: "내일", Priority: "low"},
 	}
-	if got := calendarProposalsFromMail("m2", "s", "f", nil, items, nil, now); len(got) != 0 {
+	if got := calendarProposalsFromMail("m2", "s", "f", nil, items, nil, "attention", now); len(got) != 0 {
 		t.Fatalf("want 0 proposals, got %d: %+v", len(got), got)
 	}
 }
@@ -129,7 +129,7 @@ func TestCalendarProposalsFromMail_TimedMeeting(t *testing.T) {
 		// and as a timed (not all-day) event.
 		{Title: "주간 회의 참석", DueHint: "6월 18일 14:00", Priority: "medium"},
 	}
-	got := calendarProposalsFromMail("m1", "회의", "boss@example.com", nil, items, nil, now)
+	got := calendarProposalsFromMail("m1", "회의", "boss@example.com", nil, items, nil, "attention", now)
 	if len(got) != 1 {
 		t.Fatalf("want 1 proposal, got %d: %+v", len(got), got)
 	}
@@ -139,5 +139,25 @@ func TestCalendarProposalsFromMail_TimedMeeting(t *testing.T) {
 	// Start is RFC3339 with the 14:00 time.
 	if !strings.Contains(got[0].Start, "T14:00") {
 		t.Errorf("expected 14:00 in start, got %q", got[0].Start)
+	}
+}
+
+// Executive preference: routine/FYI mail proposes no schedules, however date-rich.
+func TestCalendarProposalsFromMail_RoutineImportanceSuppressed(t *testing.T) {
+	now := time.Date(2026, 6, 17, 10, 0, 0, 0, time.Local)
+	// Items that WOULD normally propose (high-priority dated + timed meeting + deal).
+	items := []gmailpoll.ActionItem{
+		{Title: "킥오프 미팅 참석", DueHint: "6월 30일", Priority: "high"},
+		{Title: "주간 회의 참석", DueHint: "6월 18일 14:00", Priority: "medium"},
+	}
+	deal := &gmailpoll.DealInfo{Counterparty: "탑솔라", DocType: "세금계산서", DueDate: "2026-06-30"}
+
+	// routine (FYI/자동발신) mail → nothing proposed.
+	if got := calendarProposalsFromMail("m9", "뉴스레터", "noreply@x.com", nil, items, deal, "routine", now); len(got) != 0 {
+		t.Fatalf("routine mail must propose 0, got %d: %+v", len(got), got)
+	}
+	// Empty/unknown tier is conservative — still proposes (a missing tag must not drop a real schedule).
+	if got := calendarProposalsFromMail("m9", "회의", "boss@x.com", nil, items, deal, "", now); len(got) == 0 {
+		t.Fatal("unknown importance tier must still propose, got 0")
 	}
 }
