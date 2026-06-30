@@ -2709,7 +2709,7 @@ textarea {
  * gathered from the existing mail/calendar/todo/workfeed/notebook data. */
 .project-home {
   display: grid;
-  grid-template-columns: minmax(232px, 260px) minmax(0, 1fr);
+  grid-template-columns: minmax(176px, 200px) minmax(0, 1fr);
   gap: 16px;
   width: 100%;
   height: calc(100% - 40px);
@@ -2758,15 +2758,15 @@ textarea {
 .project-home-project-meta {
   min-width: 0;
   overflow: hidden;
-  color: var(--muted-2);
-  font-size: 11.5px;
+  color: var(--muted);
+  font-size: 12px;
   line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .project-home-main {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
   align-content: start;
   min-width: 0;
@@ -2821,15 +2821,20 @@ textarea {
   background: var(--panel-sunken);
   border: 1px solid var(--line-2);
   border-radius: 999px;
-  font-size: 11.5px;
+  font-size: 12px;
   line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Hero facts (마감·업데이트·경로) read darker than the quiet count pills so the
+ * deadline isn't lost in faint gray. */
+.project-home-facts span {
+  color: var(--ink-2);
+}
 .project-home-split {
   display: grid;
   grid-column: 1 / -1;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
 }
 .project-home-status,
@@ -2845,7 +2850,7 @@ textarea {
   display: flex;
   align-items: center;
   gap: 7px;
-  margin-bottom: 9px;
+  margin-bottom: 11px;
   color: var(--ink);
   font-size: 13px;
   font-weight: 600;
@@ -2892,7 +2897,7 @@ textarea {
 .project-home-sections {
   display: grid;
   grid-column: 1 / -1;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
   align-items: start;
 }
@@ -2901,7 +2906,7 @@ textarea {
 }
 .project-home-rows {
   display: grid;
-  gap: 3px;
+  gap: 6px;
 }
 .project-home-row {
   display: flex;
@@ -2909,7 +2914,7 @@ textarea {
   gap: 8px;
   width: 100%;
   min-width: 0;
-  padding: 7px 8px;
+  padding: 8px 9px;
   background: transparent;
   border: 0;
   border-radius: 7px;
@@ -2940,8 +2945,8 @@ textarea {
   line-height: 1.4;
 }
 .project-home-row-meta {
-  color: var(--muted-2);
-  font-size: 11.5px;
+  color: var(--muted);
+  font-size: 12px;
   line-height: 1.35;
 }
 .project-home-row-body {
