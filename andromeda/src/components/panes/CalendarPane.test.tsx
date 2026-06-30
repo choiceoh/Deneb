@@ -160,8 +160,10 @@ describe("CalendarPane (일정 달력)", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "새 일정" }));
     await userEvent.type(await screen.findByLabelText("제목"), "신규 미팅");
-    fireEvent.change(screen.getByLabelText("시작"), { target: { value: "2026-07-01T10:00" } });
-    fireEvent.change(screen.getByLabelText("종료"), { target: { value: "2026-07-01T11:00" } });
+    fireEvent.change(screen.getByLabelText("시작 날짜"), { target: { value: "2026-07-01" } });
+    fireEvent.change(screen.getByLabelText("시작 시간"), { target: { value: "10:00" } });
+    fireEvent.change(screen.getByLabelText("종료 날짜"), { target: { value: "2026-07-01" } });
+    fireEvent.change(screen.getByLabelText("종료 시간"), { target: { value: "11:00" } });
     await userEvent.type(screen.getByLabelText("장소"), "회의실 B");
     await userEvent.click(screen.getByRole("button", { name: "저장" }));
 
@@ -184,8 +186,8 @@ describe("CalendarPane (일정 달력)", () => {
     await userEvent.click(screen.getByRole("button", { name: "새 일정" }));
     await userEvent.type(await screen.findByLabelText("제목"), "종일 워크숍");
     await userEvent.click(screen.getByLabelText("종일"));
-    fireEvent.change(screen.getByLabelText("시작"), { target: { value: "2026-07-03" } });
-    fireEvent.change(screen.getByLabelText("종료"), { target: { value: "2026-07-04" } });
+    fireEvent.change(screen.getByLabelText("시작 날짜"), { target: { value: "2026-07-03" } });
+    fireEvent.change(screen.getByLabelText("종료 날짜"), { target: { value: "2026-07-04" } });
     await userEvent.click(screen.getByRole("button", { name: "저장" }));
 
     const created = calls.find((c) => c.resource === "calendar");

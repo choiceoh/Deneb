@@ -1,7 +1,18 @@
 import { describe, expect, it } from "vitest";
 
 import type { CalEvent } from "@/types";
-import { eventInMonth, parseDayKey, toLocalInput, visibleRangeForMonth } from "./calendarHelpers";
+import {
+  addMinutesDt,
+  defaultStartDt,
+  dtDate,
+  dtTime,
+  eventInMonth,
+  parseDayKey,
+  toLocalInput,
+  visibleRangeForMonth,
+  withDatePart,
+  withTimePart,
+} from "./calendarHelpers";
 
 describe("toLocalInput", () => {
   it("is empty for missing or unparseable input", () => {
@@ -51,6 +62,29 @@ describe("eventInMonth", () => {
     const span = ev(new Date(2026, 5, 30, 9, 0), new Date(2026, 6, 1, 10, 0));
     expect(eventInMonth(span, 2026, 5)).toBe(true);
     expect(eventInMonth(span, 2026, 6)).toBe(true);
+  });
+});
+
+describe("event-form date/time helpers", () => {
+  it("splits and rejoins datetime-local parts", () => {
+    expect(dtDate("2026-07-01T10:00")).toBe("2026-07-01");
+    expect(dtTime("2026-07-01T10:00")).toBe("10:00");
+    expect(dtTime("2026-07-01")).toBe(""); // date-only (all-day) → no time slice
+    expect(withDatePart("2026-07-01T10:00", "2026-08-15")).toBe("2026-08-15T10:00");
+    expect(withTimePart("2026-07-01T10:00", "14:30")).toBe("2026-07-01T14:30");
+  });
+
+  it("adds minutes, returning a local datetime-local string", () => {
+    expect(addMinutesDt("2026-07-01T10:00", 60)).toBe("2026-07-01T11:00");
+    expect(addMinutesDt("2026-07-01T10:00", 30)).toBe("2026-07-01T10:30");
+    expect(addMinutesDt("", 60)).toBe(""); // unparseable → empty
+  });
+
+  it("defaults a new event to the next full hour today, else 09:00 on the picked day", () => {
+    const now = new Date(2026, 5, 30, 9, 15); // 2026-06-30 09:15 local
+    expect(defaultStartDt(null, now)).toBe("2026-06-30T10:00"); // no day → today, next hour
+    expect(defaultStartDt("2026-6-30", now)).toBe("2026-06-30T10:00"); // today picked → same
+    expect(defaultStartDt("2026-8-15", now)).toBe("2026-08-15T09:00"); // other day → 09:00
   });
 });
 

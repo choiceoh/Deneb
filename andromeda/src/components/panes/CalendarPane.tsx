@@ -19,7 +19,18 @@ import { GridNotice, RowBtn } from "@/components/Grid";
 import { MonthGrid } from "@/components/MonthGrid";
 import { Detail, Field, Modal } from "@/components/Modal";
 import { EventAnalysis } from "./EventAnalysis";
-import { eventInMonth, parseDayKey, toLocalInput, visibleRangeForMonth } from "./calendarHelpers";
+import {
+  addMinutesDt,
+  defaultStartDt,
+  dtDate,
+  dtTime,
+  eventInMonth,
+  parseDayKey,
+  toLocalInput,
+  visibleRangeForMonth,
+  withDatePart,
+  withTimePart,
+} from "./calendarHelpers";
 
 export function CalendarPane() {
   const { connected, cfg } = useWorkspace();
@@ -302,7 +313,13 @@ export function CalendarPane() {
           onSaved={refreshCalendarData}
         />
       )}
-      {creating && <EventModal onClose={() => setCreating(false)} onSaved={refreshCalendarData} />}
+      {creating && (
+        <EventModal
+          defaultDate={selectedDay ?? undefined}
+          onClose={() => setCreating(false)}
+          onSaved={refreshCalendarData}
+        />
+      )}
     </>
   );
 }
@@ -403,21 +420,33 @@ function SelectedEventWorkspace({
 }
 
 // New events still use the focused modal. Existing rows open inline below the list.
-function EventModal({ event, onClose, onSaved }: { event?: CalEvent; onClose: () => void; onSaved: () => void }) {
+function EventModal({
+  event,
+  defaultDate,
+  onClose,
+  onSaved,
+}: {
+  event?: CalEvent;
+  defaultDate?: string;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
   return (
     <Modal title={event ? "일정 수정" : "새 일정"} onClose={onClose} width={560}>
-      <EventForm event={event} onClose={onClose} onSaved={onSaved} />
+      <EventForm event={event} defaultDate={defaultDate} onClose={onClose} onSaved={onSaved} />
     </Modal>
   );
 }
 
 function EventForm({
   event,
+  defaultDate,
   onClose,
   onSaved,
   stayOpenOnSave = false,
 }: {
   event?: CalEvent;
+  defaultDate?: string;
   onClose: () => void;
   onSaved: () => void;
   stayOpenOnSave?: boolean;
@@ -428,16 +457,43 @@ function EventForm({
   const s = calStamp(event?.start);
   const e = calStamp(event?.end);
   const initAllDay = Boolean(event?.allDay || s.allDay);
+  // New events open pre-filled — start at the viewed day's next full hour, end +1h —
+  // so you just type a 제목 and save instead of picking both times from scratch.
+  const seedStart = isNew ? defaultStartDt(defaultDate ?? null) : "";
   const [summary, setSummary] = useState(event?.summary ?? event?.title ?? "");
   const [allDay, setAllDay] = useState(initAllDay);
-  // Stored as datetime-local strings; the date input binds to the YYYY-MM-DD slice.
-  const [start, setStart] = useState(initAllDay ? (s.iso ? `${s.iso.slice(0, 10)}T00:00` : "") : toLocalInput(s.iso));
-  const [end, setEnd] = useState(initAllDay ? (e.iso ? `${e.iso.slice(0, 10)}T00:00` : "") : toLocalInput(e.iso));
+  // Stored as datetime-local strings; the date and time inputs each edit one slice.
+  const [start, setStart] = useState(
+    s.iso ? (initAllDay ? `${s.iso.slice(0, 10)}T00:00` : toLocalInput(s.iso)) : seedStart,
+  );
+  const [end, setEnd] = useState(
+    e.iso
+      ? initAllDay
+        ? `${e.iso.slice(0, 10)}T00:00`
+        : toLocalInput(e.iso)
+      : seedStart
+        ? addMinutesDt(seedStart, 60)
+        : "",
+  );
   const [location, setLocation] = useState(event?.location ?? "");
   const [description, setDescription] = useState(event?.description ?? "");
   const [status, setStatus] = useState("");
   const { mutate: createEvent } = useCreate();
   const { mutate: updateEvent } = useUpdate();
+
+  // Moving the start drags the end to keep the same length (timed events), so you
+  // set the start once and the end follows instead of re-picking both.
+  function changeStart(next: string) {
+    setStart(next);
+    if (allDay || !next) return;
+    const prevMs = start && end ? new Date(end).getTime() - new Date(start).getTime() : 0;
+    const dur = prevMs > 0 ? prevMs : 60 * 60 * 1000;
+    setEnd(toLocalInput(new Date(new Date(next).getTime() + dur).toISOString()));
+  }
+  // Quick-length chip → end = start + N minutes.
+  function setDuration(mins: number) {
+    if (start) setEnd(addMinutesDt(start, mins));
+  }
 
   function save() {
     const sum = summary.trim();
@@ -502,32 +558,83 @@ function EventForm({
         <input type="checkbox" checked={allDay} onChange={(ev) => setAllDay(ev.target.checked)} />
         종일
       </label>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-        <Field label="시작">
-          {allDay ? (
+      {allDay ? (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <Field label="시작">
             <input
               type="date"
               className="field"
-              value={start.slice(0, 10)}
-              onChange={(ev) => setStart(`${ev.target.value}T00:00`)}
+              aria-label="시작 날짜"
+              value={dtDate(start)}
+              onChange={(ev) => changeStart(`${ev.target.value}T00:00`)}
             />
-          ) : (
-            <input type="datetime-local" className="field" value={start} onChange={(ev) => setStart(ev.target.value)} />
-          )}
-        </Field>
-        <Field label="종료">
-          {allDay ? (
+          </Field>
+          <Field label="종료">
             <input
               type="date"
               className="field"
-              value={end.slice(0, 10)}
+              aria-label="종료 날짜"
+              value={dtDate(end)}
               onChange={(ev) => setEnd(`${ev.target.value}T00:00`)}
             />
-          ) : (
-            <input type="datetime-local" className="field" value={end} onChange={(ev) => setEnd(ev.target.value)} />
-          )}
-        </Field>
-      </div>
+          </Field>
+        </div>
+      ) : (
+        <>
+          <Field label="시작">
+            <div style={{ display: "flex", gap: 6 }}>
+              <input
+                type="date"
+                className="field"
+                style={{ flex: 1, minWidth: 0 }}
+                aria-label="시작 날짜"
+                value={dtDate(start)}
+                onChange={(ev) => changeStart(withDatePart(start, ev.target.value))}
+              />
+              <input
+                type="time"
+                className="field"
+                aria-label="시작 시간"
+                value={dtTime(start)}
+                onChange={(ev) => changeStart(withTimePart(start, ev.target.value))}
+              />
+            </div>
+          </Field>
+          <Field label="종료">
+            <div style={{ display: "flex", gap: 6 }}>
+              <input
+                type="date"
+                className="field"
+                style={{ flex: 1, minWidth: 0 }}
+                aria-label="종료 날짜"
+                value={dtDate(end)}
+                onChange={(ev) => setEnd(withDatePart(end, ev.target.value))}
+              />
+              <input
+                type="time"
+                className="field"
+                aria-label="종료 시간"
+                value={dtTime(end)}
+                onChange={(ev) => setEnd(withTimePart(end, ev.target.value))}
+              />
+            </div>
+          </Field>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
+            <span style={{ fontSize: 12, color: "var(--muted)" }}>길이</span>
+            {(
+              [
+                ["30분", 30],
+                ["1시간", 60],
+                ["2시간", 120],
+              ] as const
+            ).map(([dlabel, mins]) => (
+              <button key={mins} type="button" className="chip" onClick={() => setDuration(mins)} disabled={!start}>
+                {dlabel}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
       <Field label="장소">
         <input className="field" value={location} onChange={(ev) => setLocation(ev.target.value)} />
       </Field>
