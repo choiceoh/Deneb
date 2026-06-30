@@ -1974,8 +1974,8 @@ textarea {
 }
 .workfeed-detail-body {
   min-width: 0;
-  max-height: min(56vh, 620px);
-  overflow: auto;
+  /* No scroll cap: the AI 분석 본문 expands to full height by default; the 분석 접기
+   * toggle in the detail actions folds it away instead of an inner scrollbox. */
   padding: 12px 13px;
   border: 1px solid var(--line-2);
   border-radius: var(--radius-ctl);

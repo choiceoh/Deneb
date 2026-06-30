@@ -275,6 +275,8 @@ function WorkItemDetail({
   const question = isQuestion(w);
   const [text, setText] = useState("");
   const [feedback, setFeedback] = useState("");
+  // AI 분석 본문은 기본 전체 펼침; 길면 "분석 접기"로 접는다 (스크롤 박스 대신 토글).
+  const [bodyOpen, setBodyOpen] = useState(true);
   const created = fmtDate(w.createdAtMs);
   const meta = [sourceLabel(w.source), created, w.refId ? `ref ${w.refId}` : ""].filter(Boolean).join(" · ");
 
@@ -300,6 +302,11 @@ function WorkItemDetail({
           <div className="workfeed-detail-title">{w.title ?? "(항목)"}</div>
         </div>
         <div className="workfeed-detail-actions">
+          {w.body && (
+            <button className="row-btn" onClick={() => setBodyOpen((o) => !o)} aria-expanded={bodyOpen}>
+              {bodyOpen ? "분석 접기" : "분석 펼치기"}
+            </button>
+          )}
           <button className="row-btn" onClick={onClose} disabled={busy}>
             닫기
           </button>
@@ -312,13 +319,17 @@ function WorkItemDetail({
         </div>
       </div>
       <div className="workfeed-detail-layout">
-        <div className="workfeed-detail-body">
-          {w.body ? (
-            <AssistantText text={w.body} onUiSubmit={ignoreUiSubmit} busy />
-          ) : (
+        {w.body ? (
+          bodyOpen && (
+            <div className="workfeed-detail-body">
+              <AssistantText text={w.body} onUiSubmit={ignoreUiSubmit} busy />
+            </div>
+          )
+        ) : (
+          <div className="workfeed-detail-body">
             <p className="workfeed-empty-body">본문 없음</p>
-          )}
-        </div>
+          </div>
+        )}
         {/* 본문 하단 풀폭 푸터: 액션 칩은 제거하고 답변(질문 한정)·정정만 남겨 본문을 와이드하게. */}
         <div className="workfeed-tools">
           {question && (
