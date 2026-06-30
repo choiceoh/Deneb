@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.53.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.52.0...deneb-v4.53.0) (2026-06-30)
+
+
+### ✨ Features
+
+* **market:** copper in USD/tonne + big tiled 시장 card on the 오늘 dashboard ([#3003](https://github.com/choiceoh/Deneb/issues/3003)) ([1d35097](https://github.com/choiceoh/Deneb/commit/1d350973197be4ca188c3ea802d79c950426c3f0))
+* **native:** 챗봇 모드에도 하단 5탭 + 기본 모드를 챗봇으로 ([#3001](https://github.com/choiceoh/Deneb/issues/3001)) ([d469403](https://github.com/choiceoh/Deneb/commit/d4694030ba353bb57231929a7b75aa962a96117d))
+
 ## [4.52.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.51.0...deneb-v4.52.0) (2026-06-30)
 
 

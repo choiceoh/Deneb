@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.43](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.42...andromeda-v0.0.43) (2026-06-30)
+
+
+### ✨ Features
+
+* **market:** copper in USD/tonne + big tiled 시장 card on the 오늘 dashboard ([#3003](https://github.com/choiceoh/Deneb/issues/3003)) ([1d35097](https://github.com/choiceoh/Deneb/commit/1d350973197be4ca188c3ea802d79c950426c3f0))
+
 ## [0.0.42](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.41...andromeda-v0.0.42) (2026-06-30)
 
 
