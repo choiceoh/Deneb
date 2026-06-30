@@ -102,12 +102,15 @@ export function DenebUi({ spec, onSubmit, busy }: { spec: Node; onSubmit: (msg: 
         );
       }
       case "list": {
-        const items: Node[] = Array.isArray(n.items) ? n.items : [];
+        // items may be deneb-ui nodes OR plain strings (a common model shorthand,
+        // e.g. "items": ["a","b"]). Render strings as text so list rows never come
+        // out as empty bullets when the model skips the {type:"text",...} wrapper.
+        const items: unknown[] = Array.isArray(n.items) ? n.items : [];
         const Tag = n.ordered ? "ol" : "ul";
         return (
           <Tag key={key} className="dui-list">
             {items.map((it, i) => (
-              <li key={i}>{render(it, `${key}.${i}`)}</li>
+              <li key={i}>{typeof it === "string" ? it : render(it as Node, `${key}.${i}`)}</li>
             ))}
           </Tag>
         );
@@ -148,11 +151,11 @@ export function DenebUi({ spec, onSubmit, busy }: { spec: Node; onSubmit: (msg: 
               lineHeight: 1.5,
             }}
           >
-            {String(n.value || "")}
+            {String(n.value || n.text || "")}
           </div>
         );
       case "markdown":
-        return <Markdown key={key} text={String(n.value || "")} />;
+        return <Markdown key={key} text={String(n.value || n.text || "")} />;
       case "code":
         return (
           <pre key={key} className="dui-code">
@@ -169,7 +172,7 @@ export function DenebUi({ spec, onSubmit, busy }: { spec: Node; onSubmit: (msg: 
       case "badge":
         return (
           <span key={key} className="dui-badge">
-            {String(n.value || "")}
+            {String(n.value || n.text || "")}
           </span>
         );
       case "stat":
