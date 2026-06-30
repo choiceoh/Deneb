@@ -351,16 +351,21 @@ export function TodayPane() {
         </p>
       ) : (
         <div className="today-grid">
-          {shown.map((b, i) => (
-            <Section
-              key={b.key}
-              brief={b}
-              index={i}
-              wide={wide.includes(b.key)}
-              onNav={b.view ? () => setView(b.view as View) : undefined}
-              onOpenLine={(target) => openPane(target.view, target)}
-            />
-          ))}
+          {shown.map((b, i) =>
+            b.key === "market" ? (
+              // 시장은 일반 행 대신 큼직한 시세 타일 카드로 — 값을 크게, 등락을 색으로.
+              <MarketCard key={b.key} quotes={quotes} query={market.query} index={i} />
+            ) : (
+              <Section
+                key={b.key}
+                brief={b}
+                index={i}
+                wide={wide.includes(b.key)}
+                onNav={b.view ? () => setView(b.view as View) : undefined}
+                onOpenLine={(target) => openPane(target.view, target)}
+              />
+            ),
+          )}
         </div>
       )}
     </>
@@ -433,6 +438,47 @@ function Section({
             );
           })}
           {total > lines.length && <div className="today-more">…외 {total - lines.length}건</div>}
+        </div>
+      </GridNotice>
+    </section>
+  );
+}
+
+// 시장 카드 — 시세를 큼직한 타일로(값 크게, 등락은 ▲초록/▼빨강). 일반 섹션과 달리 전 폭을
+// 차지하는 스트립이라, 4개 지표가 한 줄에 시원하게 펼쳐진다.
+function MarketCard({
+  quotes,
+  query,
+  index,
+}: {
+  quotes: MarketQuote[];
+  query: { isLoading: boolean; isError?: boolean; error?: unknown };
+  index: number;
+}) {
+  return (
+    <section className="today-card market-card fade-up" style={{ animationDelay: `${index * 60}ms` }}>
+      <div className="today-head today-head-static">
+        <Icon name="progress" size={15} className="ico" />
+        <span className="today-head-label">시장</span>
+      </div>
+      <GridNotice query={query} count={quotes.length} empty="시세 없음">
+        <div className="market-tiles">
+          {quotes.map((q) => {
+            const pct = q.changePct ?? 0;
+            const tone = pct > 0 ? "up" : pct < 0 ? "down" : "flat";
+            const arrow = pct > 0 ? "▲" : pct < 0 ? "▼" : "·";
+            return (
+              <div key={q.symbol || q.label} className={"market-tile " + tone}>
+                <div className="market-tile-label">{q.label}</div>
+                <div className="market-tile-price">
+                  {(q.price ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                </div>
+                <div className="market-tile-change">
+                  {arrow} {Math.abs(pct).toFixed(2)}%
+                </div>
+              </div>
+            );
+          })}
         </div>
       </GridNotice>
     </section>

@@ -139,9 +139,11 @@ describe("TodayPane (오늘 대시보드)", () => {
     await userEvent.click(screen.getByRole("checkbox", { name: "시장" }));
 
     expect(await screen.findByText("원/달러")).toBeInTheDocument();
-    // Up move → ▲ + green (.up); down move → ▼ + red (.down).
-    expect(screen.getByText(/▲0\.37%/)).toHaveClass("up");
-    expect(screen.getByText(/▼2\.89%/)).toHaveClass("down");
+    // Big price tiles render the value, and the tile is tinted by move direction:
+    // up → green (.up), down → red (.down).
+    expect(screen.getByText("1,546.3")).toBeInTheDocument();
+    expect(screen.getByText(/▲ 0\.37%/).closest(".market-tile")).toHaveClass("up");
+    expect(screen.getByText(/▼ 2\.89%/).closest(".market-tile")).toHaveClass("down");
   });
 
   it("toggles a section to wide and persists it", async () => {

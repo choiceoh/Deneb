@@ -2685,6 +2685,55 @@ textarea {
 .today-card.wide {
   grid-column: span 2;
 }
+/* 시장 카드 — 전 폭 스트립으로 시세 타일을 시원하게 펼친다. */
+.market-card {
+  grid-column: 1 / -1;
+}
+.market-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  gap: 10px;
+  margin-top: 4px;
+}
+.market-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 13px 15px;
+  border-radius: var(--radius-ctl);
+  background: var(--panel-sunken);
+  border: 1px solid var(--line);
+}
+.market-tile.up {
+  background: rgba(107, 155, 128, 0.12);
+  border-color: rgba(107, 155, 128, 0.42);
+}
+.market-tile.down {
+  background: var(--due-soft);
+  border-color: rgba(168, 80, 56, 0.42);
+}
+.market-tile-label {
+  font-size: 12px;
+  color: var(--muted);
+}
+.market-tile-price {
+  font-size: 23px;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+.market-tile-change {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--muted-2);
+}
+.market-tile.up .market-tile-change {
+  color: var(--online);
+}
+.market-tile.down .market-tile-change {
+  color: var(--due);
+}
 .today-head {
   display: flex;
   align-items: center;

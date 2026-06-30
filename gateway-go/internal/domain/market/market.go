@@ -32,13 +32,21 @@ type Quote struct {
 	AsOf      int64   // quote time, epoch millis (0 when unknown)
 }
 
+// poundsPerTonne converts COMEX copper (HG=F, quoted USD/lb) into USD per metric
+// tonne — the standard basis people read copper in.
+const poundsPerTonne = 2204.6226
+
 // catalog is the fixed instrument set the 시장 card shows. Order is the display
-// order. Kept server-side (not client-configurable) — opinionated defaults.
-var catalog = []struct{ symbol, label string }{
-	{"KRW=X", "원/달러"},
-	{"^KS11", "코스피"},
-	{"CL=F", "WTI 유가"},
-	{"HG=F", "구리"},
+// order. Kept server-side (not client-configurable) — opinionated defaults. scale
+// multiplies the raw Yahoo price into the display unit (1 = as quoted).
+var catalog = []struct {
+	symbol, label string
+	scale         float64
+}{
+	{"KRW=X", "원/달러", 1},
+	{"^KS11", "코스피", 1},
+	{"CL=F", "WTI 유가", 1},
+	{"HG=F", "구리", poundsPerTonne}, // USD/lb → USD/tonne
 }
 
 const (
@@ -99,7 +107,7 @@ func fetchAll(ctx context.Context, client *http.Client) ([]Quote, error) {
 	out := make([]Quote, 0, len(catalog))
 	var lastErr error
 	for _, item := range catalog {
-		q, err := fetchOne(ctx, client, item.symbol, item.label)
+		q, err := fetchOne(ctx, client, item.symbol, item.label, item.scale)
 		if err != nil {
 			lastErr = err
 			continue
@@ -115,7 +123,7 @@ func fetchAll(ctx context.Context, client *http.Client) ([]Quote, error) {
 	return out, nil
 }
 
-func fetchOne(ctx context.Context, client *http.Client, symbol, label string) (Quote, error) {
+func fetchOne(ctx context.Context, client *http.Client, symbol, label string, scale float64) (Quote, error) {
 	u := yahooBase + url.PathEscape(symbol) + "?interval=1d&range=1d"
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
@@ -135,12 +143,13 @@ func fetchOne(ctx context.Context, client *http.Client, symbol, label string) (Q
 	if err != nil {
 		return Quote{}, err
 	}
-	return parseChart(body, symbol, label)
+	return parseChart(body, symbol, label, scale)
 }
 
 // parseChart extracts the latest price + previous close from a Yahoo chart
-// response. Split out from the HTTP path so it is unit-testable without network.
-func parseChart(body []byte, symbol, label string) (Quote, error) {
+// response, applying scale to convert into the display unit. Split out from the HTTP
+// path so it is unit-testable without network.
+func parseChart(body []byte, symbol, label string, scale float64) (Quote, error) {
 	var parsed struct {
 		Chart struct {
 			Result []struct {
@@ -168,12 +177,15 @@ func parseChart(body []byte, symbol, label string) (Quote, error) {
 	if prev == 0 {
 		prev = m.PreviousClose
 	}
+	if scale <= 0 {
+		scale = 1
+	}
 	return Quote{
 		Symbol:    symbol,
 		Label:     label,
 		Currency:  m.Currency,
-		Price:     m.RegularMarketPrice,
-		PrevClose: prev,
+		Price:     m.RegularMarketPrice * scale,
+		PrevClose: prev * scale,
 		AsOf:      m.RegularMarketTime * 1000,
 	}, nil
 }
