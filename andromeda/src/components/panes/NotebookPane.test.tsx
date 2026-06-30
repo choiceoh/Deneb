@@ -96,12 +96,15 @@ afterEach(() => {
 });
 
 describe("NotebookPane", () => {
-  it("lists deal notebooks and opens one to show its cited sources", async () => {
+  it("auto-opens the latest notebook and expands a source on click", async () => {
     renderWithProviders(<NotebookPane />, { connected: true });
-    // The notebook list shows immediately — click one to load its sources.
-    await userEvent.click(await screen.findByRole("button", { name: /ZTT/ }));
-    expect(await screen.findByText("잔금 안내")).toBeInTheDocument();
-    expect(screen.getByText(/최종 5% 잔금/)).toBeInTheDocument();
+    // Picking is once-per-task → the freshest notebook (ZTT) auto-opens, no manual click.
+    expect(await screen.findByRole("heading", { name: "ZTT" })).toBeInTheDocument();
+    // Source rows are compact: the title shows, the full text is collapsed until clicked.
+    const title = await screen.findByText("잔금 안내");
+    expect(screen.queryByText(/최종 5% 잔금/)).not.toBeInTheDocument();
+    await userEvent.click(title);
+    expect(await screen.findByText(/최종 5% 잔금/)).toBeInTheDocument();
   });
 
   it("creates a notebook and pins a citation source", async () => {
@@ -114,7 +117,7 @@ describe("NotebookPane", () => {
     expect(await screen.findByRole("heading", { name: "신규 딜" })).toBeInTheDocument();
 
     // + 인용자료 → pin a pasted note → it renders as a source card.
-    await userEvent.click(screen.getByRole("button", { name: "인용자료 추가" }));
+    await userEvent.click(screen.getByRole("button", { name: "자료 추가" }));
     await userEvent.type(screen.getByLabelText("내용"), "잔금 6/25 마감.");
     await userEvent.click(screen.getByRole("button", { name: "추가" }));
     expect(await screen.findByText(/잔금 6\/25/)).toBeInTheDocument();
@@ -129,7 +132,7 @@ describe("NotebookPane", () => {
     expect(await screen.findByRole("heading", { name: "위키 딜" })).toBeInTheDocument();
 
     // + 인용자료 → switch the kind to 위키 → a path field replaces the note textarea.
-    await userEvent.click(screen.getByRole("button", { name: "인용자료 추가" }));
+    await userEvent.click(screen.getByRole("button", { name: "자료 추가" }));
     await userEvent.click(screen.getByRole("button", { name: "위키" }));
     await userEvent.type(screen.getByLabelText("제목 (선택)"), "탑솔라");
     await userEvent.type(screen.getByLabelText("위키 경로"), "프로젝트/topsolar.md");
@@ -148,7 +151,7 @@ describe("NotebookPane", () => {
     await userEvent.click(screen.getByRole("button", { name: "생성" }));
     expect(await screen.findByRole("heading", { name: "파일 딜" })).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: "인용자료 추가" }));
+    await userEvent.click(screen.getByRole("button", { name: "자료 추가" }));
     await userEvent.click(screen.getByRole("button", { name: "파일" }));
     await userEvent.type(screen.getByLabelText("제목 (선택)"), "계약서");
     await userEvent.type(screen.getByLabelText("파일 경로"), "contracts/topsolar.pdf");
@@ -161,7 +164,7 @@ describe("NotebookPane", () => {
   it("removes a source from the open notebook", async () => {
     renderWithProviders(<NotebookPane />, { connected: true });
 
-    await userEvent.click(await screen.findByRole("button", { name: /ZTT/ }));
+    // ZTT auto-opens; its source row is visible without expanding (delete lives in the head).
     expect(await screen.findByText("잔금 안내")).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "인용자료 삭제 S1" }));
@@ -176,7 +179,7 @@ describe("NotebookPane", () => {
   it("deletes the open notebook after confirmation", async () => {
     renderWithProviders(<NotebookPane />, { connected: true });
 
-    await userEvent.click(await screen.findByRole("button", { name: /ZTT/ }));
+    // ZTT auto-opens.
     expect(await screen.findByRole("heading", { name: "ZTT" })).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "노트북 삭제" }));

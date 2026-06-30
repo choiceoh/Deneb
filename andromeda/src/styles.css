@@ -4159,3 +4159,140 @@ textarea {
     transition-duration: 0.001ms !important;
   }
 }
+
+/* 노트북 (NotebookPane) — picking a notebook is once-per-task, so the picker is a
+ * compact top dropdown and the width goes to the work: source list + AI (right panel). */
+.notebook-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: 100%;
+  min-width: 0;
+  overflow: auto;
+}
+.notebook-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.notebook-select {
+  max-width: 320px;
+}
+.notebook-new {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.notebook-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.notebook-head h2 {
+  margin: 0;
+  font-size: 20px;
+  min-width: 0;
+  margin-right: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.notebook-head .row-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex: 0 0 auto;
+}
+.notebook-danger {
+  color: var(--danger);
+}
+/* AI-connection banner — the right Deneb panel is already grounded in these sources. */
+.notebook-hint {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--accent-deep);
+  background: var(--accent-soft);
+  border-radius: var(--radius-ctl);
+  padding: 8px 11px;
+}
+.notebook-sources-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+}
+.notebook-sources-head .micro {
+  margin-right: auto;
+}
+.notebook-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+.notebook-sources {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 880px;
+}
+.notebook-source {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-ctl);
+  background: var(--panel-sunken);
+}
+.notebook-source-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+}
+.notebook-source-head.expandable {
+  cursor: pointer;
+}
+.notebook-cite {
+  flex: 0 0 auto;
+  background: var(--accent-soft);
+  color: var(--accent-deep);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: var(--radius-pill);
+}
+.notebook-source-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.notebook-source-kind {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: var(--muted-2);
+}
+.notebook-caret {
+  flex: 0 0 auto;
+  color: var(--muted-2);
+  transition: transform 0.15s ease;
+}
+.notebook-caret.open {
+  transform: rotate(180deg);
+}
+.notebook-source-body {
+  padding: 10px 12px 11px;
+  border-top: 1px solid var(--line);
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ink-2);
+}
+.notebook-empty {
+  color: var(--muted-2);
+  font-size: 13px;
+  line-height: 1.6;
+  margin-top: 2px;
+}

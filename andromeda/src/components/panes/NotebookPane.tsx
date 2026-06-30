@@ -1,10 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { NOTEBOOK_RPC } from "@/resources";
 import { projectList } from "@/aiText";
 import type { Notebook, NotebookSource, NotebookSummary } from "@/types";
-import { fmtDate } from "@/format";
 import { useCachedRpc } from "@/useCachedRpc";
-import { color, line, muted } from "@/theme";
 import { useRegisterPane, useWorkspace } from "@/workspaceContext";
 import { Icon } from "@/components/Icon";
 import { Field, Modal, ModalFooter } from "@/components/Modal";
@@ -26,7 +24,7 @@ export function NotebookPane() {
   const [deleting, setDeleting] = useState<Notebook | null>(null);
   const [deletingSource, setDeletingSource] = useState<NotebookSource | null>(null);
 
-  // Reload the list and refresh its cache — used after writes so the left rail
+  // Reload the list and refresh its cache — used after writes so the top picker
   // (and the cached snapshot it paints from) stays current.
   async function loadNotebooks() {
     await callCached<NotebookListResponse>(
@@ -39,13 +37,28 @@ export function NotebookPane() {
     );
   }
 
-  // Load the notebook list on connect — the left rail, shown immediately. A cached
-  // snapshot paints first; the live list overwrites it (and refreshes the cache).
+  // Load the notebook list on connect — feeds the top picker. A cached snapshot
+  // paints first; the live list overwrites it (and refreshes the cache).
   useEffect(() => {
     if (!connected) return;
     void loadNotebooks();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connected, cfg.url, cfg.token]);
+
+  // Most-recently-updated first — drives the top picker and the auto-open default.
+  const sortedNotebooks = useMemo(
+    () => [...notebooks].sort((a, b) => (b.updated ?? 0) - (a.updated ?? 0)),
+    [notebooks],
+  );
+
+  // Pick once: auto-open the freshest notebook so the pane lands ready to work. The
+  // user rarely switches mid-task; the top dropdown handles the occasional change.
+  // Re-runs if the active notebook is deleted (active → null), opening the next one.
+  useEffect(() => {
+    if (!connected || active || sortedNotebooks.length === 0) return;
+    void openNotebook(sortedNotebooks[0].id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sortedNotebooks, connected, active]);
 
   async function openNotebook(id: string) {
     await callCached<Notebook>(
@@ -135,124 +148,93 @@ export function NotebookPane() {
   useRegisterPane(NOTEBOOK_RESOURCE, aiText);
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "260px 1fr", gap: 12, height: "100%" }}>
-      <div style={{ borderRight: line, paddingRight: 12, overflow: "auto" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 6, margin: "2px 0 8px 2px" }}>
-          <span className="micro">노트북</span>
-          <button
-            className="row-btn"
-            onClick={() => setCreating(true)}
-            disabled={!connected}
-            aria-label="새 노트북"
-            title="새 노트북"
-            style={{ marginLeft: "auto", padding: "2px 7px", display: "inline-flex", alignItems: "center", gap: 3 }}
+    <div className="notebook-pane">
+      {/* Picking a notebook is a once-per-task action — a compact top dropdown, not a
+          permanent rail. The whole width then goes to the actual work: sources + AI. */}
+      <div className="notebook-bar">
+        <span className="micro">노트북</span>
+        {connected && sortedNotebooks.length > 0 && (
+          <select
+            className="field notebook-select"
+            aria-label="노트북 선택"
+            value={active?.id ?? ""}
+            onChange={(e) => void openNotebook(e.target.value)}
           >
-            <Icon name="plus" size={12} /> 노트북
-          </button>
-        </div>
-        {!connected ? (
-          <p style={muted}>게이트웨이에 연결하세요.</p>
-        ) : notebooks.length === 0 ? (
-          <p style={muted}>노트북이 없습니다. “＋ 노트북”으로 만드세요.</p>
-        ) : (
-          notebooks.map((n) => (
-            <button
-              key={n.id}
-              onClick={() => void openNotebook(n.id)}
-              style={{
-                display: "block",
-                width: "100%",
-                textAlign: "left",
-                background: active?.id === n.id ? color.active : "transparent",
-                border: "none",
-                borderRadius: 5,
-                padding: "7px 8px",
-                cursor: "pointer",
-              }}
-            >
-              <div
-                style={{
-                  fontSize: 13,
-                  color: color.text,
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                }}
-              >
+            {!active && <option value="">노트북 선택…</option>}
+            {sortedNotebooks.map((n) => (
+              <option key={n.id} value={n.id}>
                 {n.name}
-              </div>
-              <div style={{ fontSize: 11, color: "var(--muted-2)", marginTop: 1 }}>
-                {[n.sourceCount ? `자료 ${n.sourceCount}` : "", fmtDate(n.updated)].filter(Boolean).join(" · ")}
-              </div>
-            </button>
-          ))
+                {n.sourceCount ? ` · 자료 ${n.sourceCount}` : ""}
+              </option>
+            ))}
+          </select>
         )}
+        <button
+          className="row-btn notebook-new"
+          onClick={() => setCreating(true)}
+          disabled={!connected}
+          aria-label="새 노트북"
+          title="새 노트북"
+        >
+          <Icon name="plus" size={12} /> 새 노트북
+        </button>
       </div>
 
-      <div style={{ overflow: "auto", minWidth: 0 }}>
-        {!active ? (
-          <p style={{ ...muted, fontSize: 13, marginTop: 2, lineHeight: 1.6 }}>
-            {connected ? "왼쪽에서 노트북을 선택하면 자료가 여기에 표시됩니다." : "게이트웨이 연결 대기 중"}
-          </p>
-        ) : (
-          <>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-              <h2 style={{ margin: 0, fontSize: 21 }}>{active.name}</h2>
-              <button
-                className="row-btn"
-                onClick={() => setAddingSource(true)}
-                aria-label="인용자료 추가"
-                title="인용자료 추가"
-                style={{ marginLeft: "auto", padding: "3px 8px", display: "inline-flex", alignItems: "center", gap: 3 }}
-              >
-                <Icon name="plus" size={12} /> 인용자료
+      {!connected ? (
+        <p className="notebook-empty">게이트웨이에 연결하세요.</p>
+      ) : notebooks.length === 0 ? (
+        <p className="notebook-empty">노트북이 없습니다. “＋ 새 노트북”으로 만드세요.</p>
+      ) : !active ? (
+        <p className="notebook-empty">위에서 노트북을 선택하세요.</p>
+      ) : (
+        <>
+          <div className="notebook-head">
+            <h2>{active.name}</h2>
+            {active.dealRef && (
+              <button className="row-btn" onClick={() => openWiki(active.dealRef as string)} title="딜 페이지 열기">
+                딜 페이지 →
               </button>
-              <button
-                className="row-btn"
-                onClick={() => setDeleting(active)}
-                aria-label="노트북 삭제"
-                title="노트북 삭제"
-                style={{
-                  padding: "3px 8px",
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 3,
-                  color: color.danger,
-                }}
-              >
-                <Icon name="trash" size={12} /> 삭제
-              </button>
-              {active.dealRef && (
-                <button
-                  className="row-btn"
-                  onClick={() => openWiki(active.dealRef as string)}
-                  title="딜 페이지 열기"
-                  style={{ padding: "3px 8px" }}
-                >
-                  딜 페이지 →
-                </button>
-              )}
-              {status && <span className="pane-status">{status}</span>}
-            </div>
-            <div style={{ fontSize: 12, color: "var(--muted-2)", marginBottom: 14 }}>
-              자료 {(active.sources ?? []).length}건{active.updated ? ` · ${fmtDate(active.updated)}` : ""}
-            </div>
-            {(active.sources ?? []).length === 0 ? (
-              <p style={muted}>아직 자료가 없습니다. “＋ 인용자료”로 추가하세요.</p>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: 820 }}>
-                {(active.sources ?? []).map((s, i) => (
-                  <SourceCard
-                    key={s.cite || s.ref || i}
-                    source={s}
-                    onDelete={s.cite ? () => setDeletingSource(s) : undefined}
-                  />
-                ))}
-              </div>
             )}
-          </>
-        )}
-      </div>
+            <button
+              className="row-btn notebook-danger"
+              onClick={() => setDeleting(active)}
+              aria-label="노트북 삭제"
+              title="노트북 삭제"
+            >
+              <Icon name="trash" size={12} /> 삭제
+            </button>
+            {status && <span className="pane-status">{status}</span>}
+          </div>
+
+          {/* The AI lives in the right Deneb panel and is already grounded in these
+              sources (useRegisterPane below) — point the user there to ask. */}
+          <div className="notebook-hint">
+            이 노트북 자료 {(active.sources ?? []).length}건이 오른쪽 Deneb에 연결돼 있어요 — 오른쪽 패널에서 바로
+            질문하세요.
+          </div>
+
+          <div className="notebook-sources-head">
+            <span className="micro">자료 {(active.sources ?? []).length}건</span>
+            <button className="btn btn-accent notebook-add" onClick={() => setAddingSource(true)} title="인용자료 추가">
+              <Icon name="plus" size={13} /> 자료 추가
+            </button>
+          </div>
+
+          {(active.sources ?? []).length === 0 ? (
+            <p className="notebook-empty">아직 자료가 없습니다. “＋ 자료 추가”로 메일·견적·메모·위키 등을 담으세요.</p>
+          ) : (
+            <div className="notebook-sources">
+              {(active.sources ?? []).map((s, i) => (
+                <NotebookSourceRow
+                  key={s.cite || s.ref || i}
+                  source={s}
+                  onDelete={s.cite ? () => setDeletingSource(s) : undefined}
+                />
+              ))}
+            </div>
+          )}
+        </>
+      )}
 
       {creating && (
         <CreateNotebookModal
@@ -318,67 +300,60 @@ function sourceLabel(source: NotebookSource) {
   return [source.cite, source.title || source.ref || "(제목 없음)"].filter(Boolean).join(" · ");
 }
 
-// One cited source inside a notebook: a citation badge + title + kind, then the
-// source text rendered as Markdown.
-function SourceCard({ source, onDelete }: { source: NotebookSource; onDelete?: () => void }) {
+// One cited source as a compact row: citation badge + title + kind. The full text
+// (when present) is collapsed behind a click — you mostly need to know WHAT sources
+// exist, not read them in full (the AI reads them for you on the right).
+function NotebookSourceRow({ source, onDelete }: { source: NotebookSource; onDelete?: () => void }) {
+  const [open, setOpen] = useState(false);
+  const hasText = Boolean(source.text);
+  const toggle = () => hasText && setOpen((o) => !o);
+  // A pasted note often has no title — show a one-line snippet of its text instead of
+  // "(제목 없음)" so the row is still meaningful at a glance.
+  const title =
+    source.title?.trim() || source.ref?.trim() || source.text?.split("\n")[0]?.slice(0, 80).trim() || "(제목 없음)";
   return (
-    <section style={{ border: "1px solid var(--line)", borderRadius: "var(--radius-ctl)", padding: "12px 14px" }}>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: source.text ? 7 : 0 }}>
-        {source.cite && (
-          <span
-            style={{
-              flex: "0 0 auto",
-              background: "var(--accent-soft)",
-              color: "var(--accent-deep)",
-              fontSize: 11,
-              fontWeight: 600,
-              padding: "1px 7px",
-              borderRadius: "var(--radius-pill)",
-            }}
-          >
-            {source.cite}
-          </span>
+    <section className="notebook-source">
+      <div
+        className={"notebook-source-head" + (hasText ? " expandable" : "")}
+        onClick={hasText ? toggle : undefined}
+        role={hasText ? "button" : undefined}
+        tabIndex={hasText ? 0 : undefined}
+        aria-expanded={hasText ? open : undefined}
+        onKeyDown={
+          hasText
+            ? (e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  toggle();
+                }
+              }
+            : undefined
+        }
+      >
+        {source.cite && <span className="notebook-cite">{source.cite}</span>}
+        <span className="notebook-source-title">{title}</span>
+        {source.kind && (
+          <span className="notebook-source-kind">{KIND_LABEL[source.kind as SourceKind] ?? source.kind}</span>
         )}
-        <span
-          style={{
-            fontWeight: 600,
-            fontSize: 14,
-            minWidth: 0,
-            flex: "1 1 auto",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {source.title || source.ref || "(제목 없음)"}
-        </span>
-        <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6, flex: "0 0 auto" }}>
-          {source.kind && (
-            <span style={{ fontSize: 11, color: "var(--muted-2)" }}>
-              {KIND_LABEL[source.kind as SourceKind] ?? source.kind}
-            </span>
-          )}
-          {onDelete && (
-            <button
-              className="row-btn"
-              onClick={onDelete}
-              aria-label={`인용자료 삭제 ${source.cite}`}
-              title="인용자료 삭제"
-              style={{
-                padding: 3,
-                display: "inline-flex",
-                alignItems: "center",
-                color: color.danger,
-              }}
-            >
-              <Icon name="trash" size={12} />
-            </button>
-          )}
-        </span>
+        {hasText && <Icon name="chevron-down" size={13} className={"notebook-caret" + (open ? " open" : "")} />}
+        {onDelete && (
+          <button
+            className="row-btn notebook-danger"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete();
+            }}
+            aria-label={`인용자료 삭제 ${source.cite}`}
+            title="인용자료 삭제"
+            style={{ padding: 3 }}
+          >
+            <Icon name="trash" size={12} />
+          </button>
+        )}
       </div>
-      {source.text && (
-        <div style={{ fontSize: 13, color: "var(--ink-2)", lineHeight: 1.6 }}>
-          <Markdown text={source.text} />
+      {hasText && open && (
+        <div className="notebook-source-body">
+          <Markdown text={source.text as string} />
         </div>
       )}
     </section>
