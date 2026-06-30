@@ -2248,8 +2248,13 @@ textarea {
 .mail-card {
   margin-top: 13px;
   padding: 11px 13px;
-  background: var(--panel-sunken);
-  border: 1px solid var(--line);
+  /* White (not --panel-sunken): the markdown content inside (table header/zebra, inline
+     code, blockquote, chips) reuses --panel-sunken, so a sunken card made them vanish into
+     it — notably 도표 in the AI 분석 card. On white they read as their intended light gray.
+     The mail-detail page is also white, so the border is bumped --line → --line-2 to keep
+     the card boundary legible. */
+  background: var(--panel);
+  border: 1px solid var(--line-2);
   border-radius: var(--radius-ctl);
 }
 .mail-card-head {
