@@ -155,6 +155,7 @@ val denebBottomBarRoutes: Set<String> = setOf(
     "deneb_notebooks",
     "deneb_files",
     "deneb_browser",
+    "deneb_codemode",
     "deneb_config",
 )
 
