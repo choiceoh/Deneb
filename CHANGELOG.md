@@ -1,5 +1,19 @@
 # Changelog
 
+## [4.46.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.45.0...deneb-v4.46.0) (2026-06-30)
+
+
+### ✨ Features
+
+* **andromeda:** order the project list by most-recently-updated ([#2976](https://github.com/choiceoh/Deneb/issues/2976)) ([5e258df](https://github.com/choiceoh/Deneb/commit/5e258df7d28c466de9496d1cd0ed4a5fc053c0a9))
+* **andromeda:** 메일 받은편지함 날짜 페이저 (+ 공유 DayPager, 스킬 패널 리뷰 수정) ([#2975](https://github.com/choiceoh/Deneb/issues/2975)) ([dc42427](https://github.com/choiceoh/Deneb/commit/dc42427a6444d471149330ead7f53821e5f5b2bb))
+* **market:** add 시장 card (FX/index/commodities) to the 오늘 dashboard ([#2971](https://github.com/choiceoh/Deneb/issues/2971)) ([0895f29](https://github.com/choiceoh/Deneb/commit/0895f29edb3dc3fb94ff8c09c8e0d5c77b868dd2))
+
+
+### 🔧 Internal
+
+* **workfeed:** 데스크톱 "작업피드" 표시 라벨을 "피드"로 변경 ([#2974](https://github.com/choiceoh/Deneb/issues/2974)) ([017b9d6](https://github.com/choiceoh/Deneb/commit/017b9d629a64c60daba52fcd28128166a845c5c8))
+
 ## [4.45.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.44.2...deneb-v4.45.0) (2026-06-30)
 
 
