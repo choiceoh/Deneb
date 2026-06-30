@@ -1,5 +1,14 @@
 # Changelog
 
+## [4.45.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.44.2...deneb-v4.45.0) (2026-06-30)
+
+
+### ✨ Features
+
+* **andromeda:** 데스크탑에 스킬 패널 추가 (목록·상세·Propus 로그) ([#2966](https://github.com/choiceoh/Deneb/issues/2966)) ([cf52556](https://github.com/choiceoh/Deneb/commit/cf52556eaf52b7c529ca8ebb3f3ab2f0da6af069))
+* **feed:** 피드 안읽음 배지를 당일 피드만 집계 (네이티브) ([#2968](https://github.com/choiceoh/Deneb/issues/2968)) ([dd17f7a](https://github.com/choiceoh/Deneb/commit/dd17f7a539b52440df9c8bec1fcebb02c4ab42a7))
+* **workfeed:** 작업피드 AI 분석 본문 기본 전체 펼침 + 접기 토글 ([#2970](https://github.com/choiceoh/Deneb/issues/2970)) ([7c25f50](https://github.com/choiceoh/Deneb/commit/7c25f50682ef4d2c4cd120953aee6d8a9597273b))
+
 ## [4.44.2](https://github.com/choiceoh/Deneb/compare/deneb-v4.44.1...deneb-v4.44.2) (2026-06-30)
 
 
