@@ -40,6 +40,8 @@ describe("App against the mock gateway (real stack)", () => {
     await userEvent.click(await screen.findByText("분기 리뷰 일정 확정"));
 
     const detail = screen.getByLabelText("메일 상세");
+    // The body lives behind the 본문 tab now (분석 is the default view).
+    await userEvent.click(within(detail).getByRole("button", { name: "본문" }));
     expect(await within(detail).findByText(/분기 리뷰 일정을 확정합니다/)).toBeInTheDocument();
     expect(within(detail).getByText(/회의 전까지 초안 자료를 공유/)).toBeInTheDocument();
   });

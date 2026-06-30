@@ -79,6 +79,8 @@ describe("MailPane", () => {
     const detail = screen.getByLabelText("메일 상세");
     expect(detail.closest("tr")?.className).toContain("dgrid-expanded-row");
     expect(detail.closest(".mail-split")).toBeNull();
+    // The body lives behind the 본문 tab now (분석 is the default view).
+    await userEvent.click(within(detail).getByRole("button", { name: "본문" }));
     expect(await within(detail).findByText("캐시된 상세 본문입니다.")).toBeInTheDocument();
   });
 
@@ -99,6 +101,8 @@ describe("MailPane", () => {
 
     const detail = screen.getByLabelText("메일 상세");
     expect(within(detail).getByText("본문 없는 메일")).toBeInTheDocument();
+    // The snippet stands in for the body — behind the 본문 tab.
+    await userEvent.click(within(detail).getByRole("button", { name: "본문" }));
     expect(within(detail).getByText("상세 본문 대신 스니펫을 표시합니다.")).toBeInTheDocument();
   });
 
@@ -192,6 +196,8 @@ describe("MailPane", () => {
 
     await userEvent.click(await screen.findByText("링크 메일"));
     const detail = screen.getByLabelText("메일 상세");
+    // The body (Markdown) lives behind the 본문 tab now.
+    await userEvent.click(within(detail).getByRole("button", { name: "본문" }));
     expect(within(detail).getByRole("heading", { name: "안내" })).toBeInTheDocument();
     const link = within(detail).getByRole("link", { name: "문서" });
     expect(link).toHaveAttribute("href", "https://example.com");

@@ -126,7 +126,10 @@ describe("Workstation (connected, fixtures)", () => {
     await userEvent.click(await screen.findByRole("button", { name: /분기 보고서/ }));
 
     expect(await screen.findByRole("heading", { name: "메일" })).toBeInTheDocument();
-    expect(await within(screen.getByLabelText("메일 상세")).findByText("본문까지 바로 열립니다.")).toBeInTheDocument();
+    const detail = await screen.findByLabelText("메일 상세");
+    // The body lives behind the 본문 tab now (분석 is the default view).
+    await userEvent.click(within(detail).getByRole("button", { name: "본문" }));
+    expect(await within(detail).findByText("본문까지 바로 열립니다.")).toBeInTheDocument();
   });
 
   it("supports multiline AI prompts while plain Enter sends", async () => {

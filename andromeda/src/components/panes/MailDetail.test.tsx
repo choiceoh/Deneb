@@ -44,14 +44,18 @@ function renderDetail() {
 }
 
 describe("MailDetail layout", () => {
-  it("renders the AI 분석 card above the message body", async () => {
+  it("defaults to the 분석 view and toggles to 본문", async () => {
     renderDetail();
     // Let the sender fetch settle so the enrichment cards' state lands inside act().
     await screen.findByText("최근 30일 5건");
-    const analysis = screen.getByText("AI 분석");
-    const body = screen.getByText("이것은 본문입니다.");
-    // body must follow the analysis card in document order.
-    expect(analysis.compareDocumentPosition(body) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // 분석 is the default: the AI-analysis card shows (idle 분석 button, cached=null)
+    // and the raw body is hidden behind the 본문 tab.
+    expect(screen.getByRole("button", { name: /이 메일 분석/ })).toBeInTheDocument();
+    expect(screen.queryByText("이것은 본문입니다.")).not.toBeInTheDocument();
+    // Switch to 본문 → the body appears and the analysis card is hidden.
+    await userEvent.click(screen.getByRole("button", { name: "본문" }));
+    expect(screen.getByText("이것은 본문입니다.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /이 메일 분석/ })).not.toBeInTheDocument();
   });
 
   it("collapses the 발신자 card by default and expands it on click", async () => {

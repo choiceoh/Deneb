@@ -2245,6 +2245,36 @@ textarea {
   padding: 5px 12px;
   font-size: 12px;
 }
+/* 분석 ↔ 본문 segmented toggle in the mail detail (mirrors .wiki-mode-tabs). */
+.mail-view-tabs {
+  display: inline-flex;
+  gap: 3px;
+  margin: 12px 0 4px;
+  padding: 2px;
+  border-radius: var(--radius-ctl);
+  background: var(--panel-sunken);
+}
+.mail-view-tab {
+  border: none;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 5px 14px;
+  transition:
+    background 0.15s var(--ease),
+    color 0.15s var(--ease),
+    box-shadow 0.18s var(--ease);
+}
+.mail-view-tab:hover:not(.active) {
+  color: var(--ink-2);
+}
+.mail-view-tab.active {
+  background: var(--panel);
+  color: var(--ink);
+  box-shadow: var(--shadow-pill);
+}
 .mail-card {
   margin-top: 13px;
   padding: 11px 13px;
