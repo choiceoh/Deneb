@@ -124,9 +124,11 @@ class AppSettings(internal val settings: Settings) {
     }
 
     // Recall: the gateway's long-term-memory recall (hindsight/wiki/diary). The
-    // "focused chat / memory off" top-bar toggle. On (default) = full recall;
-    // off = the gateway skips recall AND retain for the turn. Persona unchanged.
-    fun isRecallEnabled(): Boolean = settings.getBoolean(KEY_RECALL_ENABLED, true)
+    // "focused chat / memory off" top-bar toggle. On = full recall; off (default) =
+    // the gateway skips recall AND retain for the turn. Persona unchanged. This also
+    // seeds the workspace mode (recall on = 업무 ↔ off = 챗봇), so default-off launches
+    // the app in 챗봇.
+    fun isRecallEnabled(): Boolean = settings.getBoolean(KEY_RECALL_ENABLED, false)
 
     fun setRecallEnabled(enabled: Boolean) {
         settings.putBoolean(KEY_RECALL_ENABLED, enabled)

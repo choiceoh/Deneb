@@ -286,9 +286,9 @@ class DenebGatewayClient(
     // disk; this mirror exists so flows can react to a switch.
     private val _workspaceWork = MutableStateFlow(appSettings.isRecallEnabled())
 
-    /** Active workspace (업무 true ↔ 챗봇 false), republished by [setWorkspace]. The app
-     *  shell reads this to adapt navigation per mode — 챗봇 hides 업무 데이터 sections
-     *  (mail/calendar/search/categories/fleet). */
+    /** Active workspace (업무 true ↔ 챗봇 false), republished by [setWorkspace]. Drives chat
+     *  recall and the mode-scoped work feed, and the 더보기 hub still hides 업무 entries in
+     *  챗봇 — but the bottom-bar navigation (the 5 tabs) is the same in both workspaces. */
     val workspaceWork: StateFlow<Boolean> = _workspaceWork
 
     // 업무 and 챗봇 keep SEPARATE notification histories. The work feed (= the 업무
