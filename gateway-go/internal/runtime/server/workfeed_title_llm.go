@@ -36,12 +36,11 @@ const (
 	// cardTitleTimeout bounds the lightweight call so a stalled model never holds
 	// up proactive delivery.
 	cardTitleTimeout = 8 * time.Second
-	// cardTitleMaxRunes hard-caps the LLM card title (the mail-report titler) at a
-	// short, glanceable length. The prompt asks for ≤16 Korean characters; this is
-	// the safety clamp if the model overshoots. Kept separate from the heuristic
-	// fallback's workFeedTitleMaxRunes (40), which clips raw subjects / daily-summary
-	// headings that are legitimately longer.
-	cardTitleMaxRunes = 16
+	// No hard length clamp on the LLM title: the prompt asks for ≤20 Korean
+	// characters and we trust it, so a good title isn't chopped mid-word. (The
+	// desktop work-feed card has room for the fuller title; the native client
+	// wraps/elides as needed.) The heuristic fallback still bounds raw subjects at
+	// workFeedTitleMaxRunes (40).
 )
 
 // llmTitleLabelRe / llmSummaryLabelRe match the "제목:" / "요약:" labels the model is
@@ -58,7 +57,7 @@ const cardTitleSystemPrompt = `너는 업무 알림 카드의 제목과 짧은 �
 요약: <무엇에 관한 것이고 왜 중요한지>
 
 규칙:
-- 제목은 한글 16자 이내. "메일 분석", "리포트", "보고" 같은 군더더기 단어를 붙이지 마라.
+- 제목은 한글 20자 이내. "메일 분석", "리포트", "보고" 같은 군더더기 단어를 붙이지 마라.
 - 요약은 카드 미리보기용으로 2문장(약 80자) 이내. 제목을 그대로 반복하지 말고 핵심 내용과 이유를 담는다.
 - 따옴표·마크다운·머리기호·이모지 금지. 위 두 줄 외에 다른 설명·접두어를 출력하지 마라.`
 
@@ -118,9 +117,10 @@ func parseLLMTitleSummary(raw string) (title, summary string) {
 }
 
 // cleanLLMCardTitle normalizes a raw lightweight-model title into a card-ready
-// string: first line, markdown/quotes stripped, clipped. Returns "" when the
-// model declined or echoed a generic "메일 분석 리포트" label, so the caller falls
-// back to the heuristic subject.
+// string: first line, markdown/quotes stripped. Returns "" when the model declined
+// or echoed a generic "메일 분석 리포트" label, so the caller falls back to the
+// heuristic subject. No length clamp — the prompt asks for ≤20 chars and we keep
+// the model's title intact rather than chopping it mid-word.
 func cleanLLMCardTitle(raw string) string {
 	line := strings.TrimSpace(raw)
 	if i := strings.IndexByte(line, '\n'); i >= 0 {
@@ -132,7 +132,7 @@ func cleanLLMCardTitle(raw string) string {
 	if len([]rune(line)) < 3 || isGenericMailReportTitle(line) {
 		return ""
 	}
-	return clipRunes(line, cardTitleMaxRunes)
+	return line
 }
 
 // cleanLLMCardSummary normalizes a raw model summary into a one-paragraph card
