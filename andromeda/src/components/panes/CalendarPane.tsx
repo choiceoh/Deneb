@@ -19,7 +19,7 @@ import { GridNotice, RowBtn } from "@/components/Grid";
 import { MonthGrid } from "@/components/MonthGrid";
 import { Detail, Field, Modal } from "@/components/Modal";
 import { EventAnalysis } from "./EventAnalysis";
-import { parseDayKey, toLocalInput, visibleRangeForMonth } from "./calendarHelpers";
+import { eventInMonth, parseDayKey, toLocalInput, visibleRangeForMonth } from "./calendarHelpers";
 
 export function CalendarPane() {
   const { connected, cfg } = useWorkspace();
@@ -158,17 +158,21 @@ export function CalendarPane() {
     });
   };
 
-  // The list below shows the selected day's events, or the visible month. For the
-  // CURRENT month, already-ended events are dropped so the list reads as "upcoming";
+  // The list below shows the selected day's events, or the visible month. `events`
+  // covers the whole grid range (visibleRangeForMonth), whose leading/trailing cells
+  // spill into the adjacent months — so scope the month list to the cursor month, or
+  // a July-1 event in June's trailing week shows under "6월 일정". For the CURRENT
+  // month, already-ended events are also dropped so the list reads as "upcoming";
   // other months keep their full history, and a clicked day shows that day in full.
-  // (The month grid above still marks every event.)
+  // (The month grid above still marks every event, spill-days included.)
+  const monthEvents = events.filter((ev) => eventInMonth(ev, cursor.y, cursor.m));
   const isCurrentMonth = cursor.y === now.getFullYear() && cursor.m === now.getMonth();
   const upcoming = isCurrentMonth
-    ? events.filter((ev) => {
+    ? monthEvents.filter((ev) => {
         const endMs = eventEndMs(ev.start, ev.end);
         return endMs === null || endMs > now.getTime();
       })
-    : events;
+    : monthEvents;
   const listEvents = selectedDay ? (eventsByDay.get(selectedDay) ?? []) : upcoming;
   const listLabel = selectedDay
     ? `${selectedDay.split("-")[1]}월 ${selectedDay.split("-")[2]}일 일정`
