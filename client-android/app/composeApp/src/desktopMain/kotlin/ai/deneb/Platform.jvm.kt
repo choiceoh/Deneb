@@ -151,8 +151,7 @@ actual fun openUrl(url: String): Boolean = try {
 
 // Desktop has no telephony/SMS/camera and no package launcher — only open_url is
 // meaningful (reuses the browser launch above); every other phone action no-ops.
-actual fun executePhoneAction(action: String, args: Map<String, String>): Boolean =
-    if (action == "open_url") openUrl(args["url"].orEmpty()) else false
+actual fun executePhoneAction(action: String, args: Map<String, String>): Boolean = if (action == "open_url") openUrl(args["url"].orEmpty()) else false
 
 actual fun decodeToImageBitmap(bytes: ByteArray): ImageBitmap? = try {
     org.jetbrains.skia.Image.makeFromEncoded(bytes).toComposeImageBitmap()

@@ -1275,94 +1275,142 @@ private fun renderLetterCard(name: String, scheme: ColorScheme, node: DenebUiNod
 // is a 2-up stat row + full-width copper — tuned for phone width.
 private fun morningLetterNode(): DenebUiNode = ColumnNode(
     children = persistentListOf(
-        CardNode(children = persistentListOf(
-            RowNode(children = persistentListOf(
-                IconNode(name = "sunny", size = 16),
-                TextNode(value = "날씨 · 광주", style = TextNodeStyle.CAPTION),
-            )),
-            RowNode(children = persistentListOf(
-                TextNode(value = "18°", style = TextNodeStyle.HEADLINE),
-                TextNode(value = "체감 16°", style = TextNodeStyle.CAPTION),
-            )),
-            TextNode(value = "최고 24° · 최저 14° · 강수 30%", style = TextNodeStyle.CAPTION),
-            TextNode(value = "오후 소나기 가능 — 우산 챙기세요", style = TextNodeStyle.BODY),
-        )),
-        CardNode(children = persistentListOf(
-            RowNode(children = persistentListOf(
-                IconNode(name = "payments", size = 16),
-                TextNode(value = "환율 · 구리", style = TextNodeStyle.CAPTION),
-            )),
-            RowNode(children = persistentListOf(
-                StatNode(value = "1,386", label = "USD/KRW"),
-                StatNode(value = "1,498", label = "EUR/KRW"),
-            )),
-            StatNode(value = "\$9,540 /t", label = "LME 구리"),
-        )),
-        CardNode(children = persistentListOf(
-            RowNode(children = persistentListOf(
-                IconNode(name = "calendar", size = 16),
-                TextNode(value = "오늘 일정", style = TextNodeStyle.CAPTION),
-            )),
-            ListNode(items = persistentListOf(
-                TextNode(value = "09:00 — 팀 스탠드업"),
-                TextNode(value = "14:00 — 거래처 미팅"),
-            )),
-        )),
-        CardNode(children = persistentListOf(
-            RowNode(children = persistentListOf(
-                IconNode(name = "mail", size = 16),
-                TextNode(value = "전일 메일", style = TextNodeStyle.CAPTION),
-            )),
-            ListNode(items = persistentListOf(
-                TextNode(value = "김부장 — 견적서 회신 요청"),
-                TextNode(value = "세무서 — 부가세 신고 안내"),
-            )),
-        )),
-        CardNode(children = persistentListOf(
-            RowNode(children = persistentListOf(
-                IconNode(name = "alarm", size = 16),
-                TextNode(value = "임박 마감", style = TextNodeStyle.CAPTION),
-            )),
-            RowNode(children = persistentListOf(
-                TextNode(value = "부가세 신고", style = TextNodeStyle.BODY),
-                BadgeNode(value = "D-2"),
-            )),
-        )),
+        CardNode(
+            children = persistentListOf(
+                RowNode(
+                    children = persistentListOf(
+                        IconNode(name = "sunny", size = 16),
+                        TextNode(value = "날씨 · 광주", style = TextNodeStyle.CAPTION),
+                    ),
+                ),
+                RowNode(
+                    children = persistentListOf(
+                        TextNode(value = "18°", style = TextNodeStyle.HEADLINE),
+                        TextNode(value = "체감 16°", style = TextNodeStyle.CAPTION),
+                    ),
+                ),
+                TextNode(value = "최고 24° · 최저 14° · 강수 30%", style = TextNodeStyle.CAPTION),
+                TextNode(value = "오후 소나기 가능 — 우산 챙기세요", style = TextNodeStyle.BODY),
+            ),
+        ),
+        CardNode(
+            children = persistentListOf(
+                RowNode(
+                    children = persistentListOf(
+                        IconNode(name = "payments", size = 16),
+                        TextNode(value = "환율 · 구리", style = TextNodeStyle.CAPTION),
+                    ),
+                ),
+                RowNode(
+                    children = persistentListOf(
+                        StatNode(value = "1,386", label = "USD/KRW"),
+                        StatNode(value = "1,498", label = "EUR/KRW"),
+                    ),
+                ),
+                StatNode(value = "\$9,540 /t", label = "LME 구리"),
+            ),
+        ),
+        CardNode(
+            children = persistentListOf(
+                RowNode(
+                    children = persistentListOf(
+                        IconNode(name = "calendar", size = 16),
+                        TextNode(value = "오늘 일정", style = TextNodeStyle.CAPTION),
+                    ),
+                ),
+                ListNode(
+                    items = persistentListOf(
+                        TextNode(value = "09:00 — 팀 스탠드업"),
+                        TextNode(value = "14:00 — 거래처 미팅"),
+                    ),
+                ),
+            ),
+        ),
+        CardNode(
+            children = persistentListOf(
+                RowNode(
+                    children = persistentListOf(
+                        IconNode(name = "mail", size = 16),
+                        TextNode(value = "전일 메일", style = TextNodeStyle.CAPTION),
+                    ),
+                ),
+                ListNode(
+                    items = persistentListOf(
+                        TextNode(value = "김부장 — 견적서 회신 요청"),
+                        TextNode(value = "세무서 — 부가세 신고 안내"),
+                    ),
+                ),
+            ),
+        ),
+        CardNode(
+            children = persistentListOf(
+                RowNode(
+                    children = persistentListOf(
+                        IconNode(name = "alarm", size = 16),
+                        TextNode(value = "임박 마감", style = TextNodeStyle.CAPTION),
+                    ),
+                ),
+                RowNode(
+                    children = persistentListOf(
+                        TextNode(value = "부가세 신고", style = TextNodeStyle.BODY),
+                        BadgeNode(value = "D-2"),
+                    ),
+                ),
+            ),
+        ),
     ),
 )
 
 // Forward-looking 3-card view (tomorrow / mail / deadlines); no market section.
 private fun eveningLetterNode(): DenebUiNode = ColumnNode(
     children = persistentListOf(
-        CardNode(children = persistentListOf(
-            RowNode(children = persistentListOf(
-                IconNode(name = "calendar", size = 16),
-                TextNode(value = "내일 일정", style = TextNodeStyle.CAPTION),
-            )),
-            ListNode(items = persistentListOf(
-                TextNode(value = "10:00 — 분기 리뷰"),
-                TextNode(value = "15:00 — 거래처 콜"),
-            )),
-        )),
-        CardNode(children = persistentListOf(
-            RowNode(children = persistentListOf(
-                IconNode(name = "mail", size = 16),
-                TextNode(value = "챙길 메일", style = TextNodeStyle.CAPTION),
-            )),
-            ListNode(items = persistentListOf(
-                TextNode(value = "이대리 — 내일 회의자료 공유"),
-            )),
-        )),
-        CardNode(children = persistentListOf(
-            RowNode(children = persistentListOf(
-                IconNode(name = "alarm", size = 16),
-                TextNode(value = "임박 마감", style = TextNodeStyle.CAPTION),
-            )),
-            RowNode(children = persistentListOf(
-                TextNode(value = "부가세 신고", style = TextNodeStyle.BODY),
-                BadgeNode(value = "D-2"),
-            )),
-        )),
+        CardNode(
+            children = persistentListOf(
+                RowNode(
+                    children = persistentListOf(
+                        IconNode(name = "calendar", size = 16),
+                        TextNode(value = "내일 일정", style = TextNodeStyle.CAPTION),
+                    ),
+                ),
+                ListNode(
+                    items = persistentListOf(
+                        TextNode(value = "10:00 — 분기 리뷰"),
+                        TextNode(value = "15:00 — 거래처 콜"),
+                    ),
+                ),
+            ),
+        ),
+        CardNode(
+            children = persistentListOf(
+                RowNode(
+                    children = persistentListOf(
+                        IconNode(name = "mail", size = 16),
+                        TextNode(value = "챙길 메일", style = TextNodeStyle.CAPTION),
+                    ),
+                ),
+                ListNode(
+                    items = persistentListOf(
+                        TextNode(value = "이대리 — 내일 회의자료 공유"),
+                    ),
+                ),
+            ),
+        ),
+        CardNode(
+            children = persistentListOf(
+                RowNode(
+                    children = persistentListOf(
+                        IconNode(name = "alarm", size = 16),
+                        TextNode(value = "임박 마감", style = TextNodeStyle.CAPTION),
+                    ),
+                ),
+                RowNode(
+                    children = persistentListOf(
+                        TextNode(value = "부가세 신고", style = TextNodeStyle.BODY),
+                        BadgeNode(value = "D-2"),
+                    ),
+                ),
+            ),
+        ),
     ),
 )
 
