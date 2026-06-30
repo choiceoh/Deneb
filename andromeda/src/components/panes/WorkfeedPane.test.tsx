@@ -69,7 +69,7 @@ describe("WorkfeedPane", () => {
     renderWithProviders(<WorkfeedPane />, { connected: true, dataProvider });
 
     await userEvent.click(await screen.findByText("검토 요청"));
-    const detail = screen.getByLabelText("작업피드 상세");
+    const detail = screen.getByLabelText("피드 상세");
     const box = within(detail).getByPlaceholderText("답변 입력…");
     await userEvent.type(box, "승인합니다");
     await userEvent.click(within(detail).getByRole("button", { name: "답변" }));
@@ -88,7 +88,7 @@ describe("WorkfeedPane", () => {
     renderWithProviders(<WorkfeedPane />, { connected: true, dataProvider });
 
     await userEvent.click(await screen.findByText("미답장 메일 3건"));
-    const detail = screen.getByLabelText("작업피드 상세");
+    const detail = screen.getByLabelText("피드 상세");
 
     // 액션 섹션은 제거됨 — 본문을 와이드하게. 액션 칩도, action.run 도 없다.
     expect(within(detail).queryByText("액션")).not.toBeInTheDocument();
@@ -110,7 +110,7 @@ describe("WorkfeedPane", () => {
     expect(screen.queryByRole("button", { name: "다시 작성" })).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByText("미답장 메일 3건"));
-    const detail = screen.getByLabelText("작업피드 상세");
+    const detail = screen.getByLabelText("피드 상세");
     await userEvent.click(within(detail).getByRole("button", { name: "다시 작성" }));
     await waitFor(() => expect(rpcCalls.some((c) => c.method === "miniapp.workfeed.rewrite")).toBe(true));
     expect(rpcCalls.find((c) => c.method === "miniapp.workfeed.rewrite")?.params).toMatchObject({ itemId: "w2" });
@@ -132,14 +132,14 @@ describe("WorkfeedPane", () => {
     renderWithProviders(<WorkfeedPane />, { connected: true, dataProvider });
 
     await userEvent.click(await screen.findByText("일정 충돌 감지"));
-    const detail = screen.getByLabelText("작업피드 상세");
+    const detail = screen.getByLabelText("피드 상세");
     expect(within(detail).getByText("오전 회의가 겹칩니다.")).toBeInTheDocument();
 
     await userEvent.click(within(detail).getByRole("button", { name: "처리" }));
 
     await waitFor(() => expect(rpcCalls.some((c) => c.method === "miniapp.workfeed.ack")).toBe(true));
     expect(rpcCalls.find((c) => c.method === "miniapp.workfeed.ack")?.params).toMatchObject({ id: "w3" });
-    await waitFor(() => expect(screen.queryByLabelText("작업피드 상세")).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByLabelText("피드 상세")).not.toBeInTheDocument());
   });
 
   it("reuses the assistant renderer for tables and deneb-ui charts in the detail body", async () => {
@@ -161,7 +161,7 @@ describe("WorkfeedPane", () => {
     expect(screen.getByText("표/도표 포함")).toBeInTheDocument();
 
     await userEvent.click(screen.getByText("도표 확인"));
-    const detail = screen.getByLabelText("작업피드 상세");
+    const detail = screen.getByLabelText("피드 상세");
 
     expect(within(detail).getByRole("table")).toBeInTheDocument();
     expect(within(detail).getByText("입찰가")).toBeInTheDocument();

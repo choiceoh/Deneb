@@ -65,7 +65,7 @@ export const RESOURCE_DEFS: ResourceDef[] = [
     update: "miniapp.crons.update",
     remove: "miniapp.crons.remove",
   },
-  { name: "workfeed", label: "작업피드", list: "miniapp.workfeed.list", listKey: "items" },
+  { name: "workfeed", label: "피드", list: "miniapp.workfeed.list", listKey: "items" },
   // Project progress digests (Deneb #2834) — a parameterless read, so it flows
   // straight into a grid/card pane like people/workfeed. Rows carry no id; the
   // pane keys on `path`/`project`.

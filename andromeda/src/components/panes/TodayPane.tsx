@@ -29,7 +29,7 @@ const SECTION_LABEL: Record<SectionKey, string> = {
   calendar: "일정",
   mail: "메일",
   todo: "할일",
-  workfeed: "작업피드",
+  workfeed: "피드",
   progress: "진행",
   people: "연락처",
   crons: "크론",
@@ -212,10 +212,10 @@ export function TodayPane() {
     },
     {
       key: "workfeed",
-      label: "작업피드",
+      label: "피드",
       icon: "workfeed",
       view: "workfeed",
-      empty: "작업피드 비어 있음",
+      empty: "피드 비어 있음",
       query: work.query,
       total: items.length,
       lines: items.slice(0, MAX).map((w) => ({
