@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.0.36](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.35...andromeda-v0.0.36) (2026-06-30)
+
+
+### ✨ Features
+
+* **andromeda:** 데스크탑에 스킬 패널 추가 (목록·상세·Propus 로그) ([#2966](https://github.com/choiceoh/Deneb/issues/2966)) ([cf52556](https://github.com/choiceoh/Deneb/commit/cf52556eaf52b7c529ca8ebb3f3ab2f0da6af069))
+* **workfeed:** 작업피드 AI 분석 본문 기본 전체 펼침 + 접기 토글 ([#2970](https://github.com/choiceoh/Deneb/issues/2970)) ([7c25f50](https://github.com/choiceoh/Deneb/commit/7c25f50682ef4d2c4cd120953aee6d8a9597273b))
+
 ## [0.0.35](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.34...andromeda-v0.0.35) (2026-06-30)
 
 
