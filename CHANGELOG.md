@@ -1,5 +1,17 @@
 # Changelog
 
+## [4.44.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.43.0...deneb-v4.44.0) (2026-06-30)
+
+
+### ✨ Features
+
+* **code:** 코딩 세션 닫기(보관) — 워크트리 보존하며 목록에서 치움 ([#2955](https://github.com/choiceoh/Deneb/issues/2955)) ([670213f](https://github.com/choiceoh/Deneb/commit/670213f24145028959308d1da78a9a06c48b6338))
+
+
+### 🔧 Internal
+
+* **code:** 새 작업을 우측 폼에서 왼쪽 버튼 모달로 이동 ([#2953](https://github.com/choiceoh/Deneb/issues/2953)) ([25dacec](https://github.com/choiceoh/Deneb/commit/25dacece01fee8610d2cb0a96a1cacbd9feaf31e))
+
 ## [4.43.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.42.0...deneb-v4.43.0) (2026-06-29)
 
 
