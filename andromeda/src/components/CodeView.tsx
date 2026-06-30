@@ -122,7 +122,7 @@ export function CodeView({ cfg, hidden = false }: { cfg: GatewayConfig; hidden?:
               <DenebStar size={40} />
               <p>{connected ? "작업을 선택하거나 새로 만드세요" : "게이트웨이 연결 대기 중"}</p>
               {connected && (
-                <span className="chat-greeting-sub">우측에서 새 작업을 만들면 여기서 코드를 시킬 수 있습니다</span>
+                <span className="chat-greeting-sub">왼쪽 “새 작업”으로 시작하거나, 목록에서 작업을 고르세요</span>
               )}
             </div>
           ) : turns.length === 0 ? (

@@ -1,16 +1,16 @@
 import { useEffect, useState } from "react";
-import { codeRepos, codeSessions, codeStart } from "@/gateway";
+
+import { codeSessions } from "@/gateway";
 import { projectList } from "@/aiText";
 import { errText } from "@/format";
 import type { CodeSession } from "@/types";
 import { useRegisterPane, useWorkspace } from "@/workspaceContext";
 import { CodeTaskDetail } from "./CodeTaskDetail";
 
-// CodePane (코드) — 코드 모드 우측 보조 패널. 새 워크트리 작업 *생성*만 담당한다(레포 선택 →
-// 새 작업). 세션 목록은 왼쪽 레일(Sidebar)이 보여주므로 여기서 중복 표시하지 않는다. 검증·
-// 체크포인트·PR(올리기)·되돌리기는 전부 에이전트가 채팅으로 알아서 처리한다(완료 시 빌드 확인 후
-// 자동 PR). Query-driven(miniapp.code.* 직접 호출). 레포는 GitHub picker(code.repos); gh 미인증이면
-// 비어서 owner/repo 직접 입력으로 폴백. 세션 목록은 AI 컨텍스트용으로만 projectList 에 남긴다.
+// CodePane (코드) — 코드 모드 우측 보조 패널. 작업을 고르면 그 작업의 *상세*(상태·진행 기록·검증·
+// PR 링크)를 보여준다. 새 작업 *생성*은 왼쪽 레일 "새 작업" 버튼이 띄우는 모달(CodeNewTaskModal)이
+// 담당하므로 여기엔 생성 폼이 없다. 세션 목록은 왼쪽 레일이 보여주고, 여기선 AI 컨텍스트용
+// projectList 에만 남긴다.
 const STATUS_LABEL: Record<string, string> = {
   working: "작업중",
   passed: "통과",
@@ -18,19 +18,10 @@ const STATUS_LABEL: Record<string, string> = {
   missing: "없음",
 };
 
-interface RepoOption {
-  owner?: string;
-  name?: string;
-}
-
 export function CodePane() {
-  const { connected, cfg, bumpCodeSessions, openCodeChat, activeCodeKey } = useWorkspace();
+  const { connected, cfg, codeSessionsRev, bumpCodeSessions, activeCodeKey } = useWorkspace();
   const [sessions, setSessions] = useState<CodeSession[]>([]);
-  const [repos, setRepos] = useState<RepoOption[]>([]);
   const [status, setStatus] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [owner, setOwner] = useState("");
-  const [repo, setRepo] = useState("");
 
   const aiText = projectList(
     `[코딩 세션 — ${sessions.length}개]`,
@@ -40,50 +31,25 @@ export function CodePane() {
   );
   useRegisterPane("code", aiText);
 
-  async function refresh() {
-    if (!connected) return;
-    try {
-      setSessions(await codeSessions(cfg));
-      setStatus("");
-    } catch (e) {
-      setStatus(errText(e));
-    }
-    // Keep the Sidebar rail in sync after any change.
-    bumpCodeSessions();
-  }
-
+  // Reload on connect or whenever the session set changes (new task from the modal,
+  // a verify status flip). bumpCodeSessions() drives codeSessionsRev — and this
+  // effect only reads (never bumps), so the rail and panel stay in sync with no loop.
   useEffect(() => {
-    void refresh();
-    if (connected)
-      codeRepos(cfg)
-        .then(setRepos)
-        .catch(() => setRepos([]));
+    if (!connected) return;
+    let alive = true;
+    codeSessions(cfg)
+      .then((s) => {
+        if (!alive) return;
+        setSessions(s);
+        setStatus("");
+      })
+      .catch((e) => alive && setStatus(errText(e)));
+    return () => {
+      alive = false;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [connected]);
+  }, [connected, codeSessionsRev]);
 
-  async function start() {
-    if (!connected || busy) return;
-    if (!owner.trim() || !repo.trim()) {
-      setStatus("레포를 선택하세요");
-      return;
-    }
-    setBusy(true);
-    try {
-      // taskId + title are auto-generated server-side when blank — the user just
-      // picks a repo. The real work is given afterward in chat.
-      const sess = await codeStart(cfg, owner.trim(), repo.trim(), "");
-      await refresh();
-      // Open the new task's chat right away → start giving instructions in the center.
-      openCodeChat(sess.chatSessionKey || "code:" + sess.id);
-    } catch (e) {
-      setStatus(errText(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  const hasRepos = repos.length > 0;
-  // A selected task → show its detail (진행 기록·검증). Otherwise, the new-task form.
   const activeSession = activeCodeKey
     ? sessions.find((s) => (s.chatSessionKey || "code:" + s.id) === activeCodeKey)
     : undefined;
@@ -91,65 +57,15 @@ export function CodePane() {
   return (
     <div className="code-pane">
       {activeSession ? (
-        <CodeTaskDetail session={activeSession} cfg={cfg} onChange={refresh} />
+        <CodeTaskDetail session={activeSession} cfg={cfg} onChange={bumpCodeSessions} />
       ) : (
-        <>
-          <p style={{ opacity: 0.7, fontSize: 12.5, margin: "0 0 10px", lineHeight: 1.5 }}>
-            레포를 고르고 새 작업을 만들면 격리된 워크트리가 생기고, 가운데 채팅이 그 작업에 연결됩니다. 코드를 시키면
-            Deneb가 워크트리를 편집하고, 끝나면 빌드 확인 후 <b>알아서 PR까지</b> 올립니다. (만든 작업은 왼쪽 목록에서
-            골라 이어집니다.)
-          </p>
-
-          {/* 새 작업 — 좁은 패널이라 세로로 쌓는다 */}
-          <div className="code-new" style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 14 }}>
-            {hasRepos ? (
-              <select
-                className="field"
-                disabled={!connected}
-                value={owner && repo ? `${owner}/${repo}` : ""}
-                onChange={(e) => {
-                  const [o, n] = e.target.value.split("/");
-                  setOwner(o ?? "");
-                  setRepo(n ?? "");
-                }}
-              >
-                <option value="">레포 선택…</option>
-                {repos.map((r) => {
-                  const v = `${r.owner ?? ""}/${r.name ?? ""}`;
-                  return (
-                    <option key={v} value={v}>
-                      {v}
-                    </option>
-                  );
-                })}
-              </select>
-            ) : (
-              <div style={{ display: "flex", gap: 6 }}>
-                <input
-                  className="field"
-                  style={{ flex: 1, minWidth: 0 }}
-                  placeholder="owner"
-                  value={owner}
-                  disabled={!connected}
-                  onChange={(e) => setOwner(e.target.value)}
-                />
-                <input
-                  className="field"
-                  style={{ flex: 1, minWidth: 0 }}
-                  placeholder="repo"
-                  value={repo}
-                  disabled={!connected}
-                  onChange={(e) => setRepo(e.target.value)}
-                />
-              </div>
-            )}
-            <button className="btn btn-accent" onClick={() => void start()} disabled={!connected || busy}>
-              + 새 작업
-            </button>
-          </div>
-
-          {status && <p className="pane-status">{status}</p>}
-        </>
+        <p style={{ opacity: 0.6, fontSize: 13, lineHeight: 1.6, margin: "8px 4px" }}>
+          {status
+            ? status
+            : connected
+              ? "왼쪽에서 작업을 고르면 진행 기록·검증·결과가 여기에 표시됩니다. 새로 시작하려면 왼쪽 “새 작업”을 누르세요."
+              : "먼저 게이트웨이에 연결하세요."}
+        </p>
       )}
     </div>
   );
