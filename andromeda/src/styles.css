@@ -2234,6 +2234,22 @@ textarea {
   color: var(--muted-2);
   font-size: 11px;
 }
+/* AI 분석 head: a bare title+caret toggle (badge / 다시 분석 stay beside it) so the
+ * analysis can fold without nesting buttons. Leading caret — not the disclosure's
+ * right-aligned one — so the auto margin is overridden. */
+.mail-card-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+}
+.mail-card-toggle .mail-card-caret {
+  margin-left: 0;
+}
 .mail-card-line {
   font-size: 12px;
   color: var(--muted);
