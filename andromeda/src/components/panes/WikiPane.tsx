@@ -266,6 +266,8 @@ export function WikiPane() {
     setStatus("삭제됨");
   }
 
+  // Left-rail rows show the title only — the summary under it is dropped so the list
+  // stays compact and the rail can be narrower (the body/AI carry the detail).
   const renderPage = (p: WikiPage) => (
     <button
       key={keyOf(p) || (p.title ?? "")}
@@ -274,7 +276,6 @@ export function WikiPane() {
       style={{ background: keyOf(p) === path ? color.active : "transparent" }}
     >
       <span>{p.title ?? p.path ?? "(제목 없음)"}</span>
-      {p.summary && <small>{p.summary}</small>}
     </button>
   );
 

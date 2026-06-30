@@ -248,6 +248,34 @@ textarea {
   min-height: 0;
 }
 
+/* Re-open tab for the collapsed Deneb panel — a slim button hugging the work area's
+ * right edge; click to bring the side panel back. */
+.ai-reopen {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 56px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-right: none;
+  border-radius: var(--radius-ctl) 0 0 var(--radius-ctl);
+  background: var(--panel);
+  color: var(--muted);
+  cursor: pointer;
+  box-shadow: var(--shadow-pill);
+  transition:
+    color 0.12s ease,
+    background 0.12s ease;
+}
+.ai-reopen:hover {
+  color: var(--ink);
+}
+
 /* top-edge drag handle for the frameless window — a transparent strip in the
  * window's top padding band, so the very top of the window is grabbable to move
  * it. It sits in the gradient band above the panels; the top-left controls start
@@ -2411,7 +2439,7 @@ textarea {
 }
 .wiki-shell {
   display: grid;
-  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+  grid-template-columns: minmax(176px, 212px) minmax(0, 1fr);
   gap: 12px;
   height: 100%;
   min-height: 0;
@@ -2556,32 +2584,9 @@ textarea {
   font-size: 11px;
 }
 
-/* Collapse on the wiki's own container width (work area), not the viewport: when an
-   open AI panel narrows the work area, the rail stacks above so the editor keeps the
-   full width instead of being split down to an unreadable column. */
-@container (max-width: 760px) {
-  .wiki-shell {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .wiki-rail {
-    max-height: 220px;
-    padding-right: 0;
-    padding-bottom: 10px;
-    border-right: none;
-    border-bottom: 1px solid var(--line);
-  }
-  .wiki-editor-head {
-    grid-template-columns: minmax(0, 1fr);
-    align-items: stretch;
-  }
-  .wiki-mode-tabs,
-  .wiki-editor-actions {
-    justify-self: start;
-  }
-  .wiki-editor-actions {
-    justify-content: flex-start;
-  }
-}
+/* Wiki stays left/right (rail | editor) at every width — never stacks. Collapsing the
+   right Deneb panel (Workstation) gives the work area room; a very narrow pane just
+   gets a tighter side-by-side rather than a stacked top/bottom. */
 
 /* files browser */
 .files-toolbar,
