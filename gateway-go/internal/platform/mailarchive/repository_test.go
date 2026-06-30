@@ -380,11 +380,14 @@ func TestParseArchiveQueryDateRange(t *testing.T) {
 	if spec.Degraded != "" {
 		t.Fatalf("date-range query degraded unexpectedly: %q", spec.Degraded)
 	}
-	if !strings.Contains(spec.Criteria, "SINCE 30-Jun-2026") {
-		t.Errorf("criteria %q missing SINCE 30-Jun-2026", spec.Criteria)
+	// after:/before: must scope by the SENT date (Date header), not INTERNALDATE —
+	// otherwise a bulk-imported archive (delivery clustered on one day) returns nothing
+	// per day. SENTSINCE/SENTBEFORE match the Date header the client buckets by.
+	if !strings.Contains(spec.Criteria, "SENTSINCE 30-Jun-2026") {
+		t.Errorf("criteria %q missing SENTSINCE 30-Jun-2026", spec.Criteria)
 	}
-	if !strings.Contains(spec.Criteria, "BEFORE 01-Jul-2026") {
-		t.Errorf("criteria %q missing BEFORE 01-Jul-2026", spec.Criteria)
+	if !strings.Contains(spec.Criteria, "SENTBEFORE 01-Jul-2026") {
+		t.Errorf("criteria %q missing SENTBEFORE 01-Jul-2026", spec.Criteria)
 	}
 	if !spec.InboxOnly {
 		t.Errorf("expected InboxOnly for an in:inbox query")

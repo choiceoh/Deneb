@@ -11,7 +11,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
@@ -92,13 +91,6 @@ type Repository struct {
 	state    *StateStore
 	fallback FallbackClient
 	now      func() time.Time
-
-	// connMu guards a single pooled IMAP connection reused across list searches so the
-	// day-pager doesn't pay a TCP+login round-trip on every day it visits. The lock is
-	// held for the duration of a search (one connection can't multiplex IMAP commands)
-	// — this is the only mutex in Repository, so there is no lock-ordering concern.
-	connMu sync.Mutex
-	pooled *imapConn
 }
 
 func NewRepository(cfg Config, opts RepositoryOptions) *Repository {
@@ -357,17 +349,23 @@ func parseArchiveQuery(query string, now time.Time) archiveQuery {
 			until = d
 		}
 	}
-	// Absolute date-range scoping for the day-pager (after:YYYY/M/D before:YYYY/M/D)
-	// → IMAP SINCE/BEFORE. after: lower-bounds (inclusive), before: upper-bounds
-	// (exclusive), matching Gmail so a per-day [after:D before:D+1] window = exactly D.
+	// Absolute date-range scoping for the day-pager (after:YYYY/M/D before:YYYY/M/D).
+	// These bound the message's SENT date (Date: header), not its IMAP INTERNALDATE
+	// (delivery time): the client buckets mail by the Date header, while INTERNALDATE
+	// can cluster on one day (a bulk import delivers many sent-days at once), so
+	// SINCE/BEFORE on INTERNALDATE matched nothing per day. SENTSINCE/SENTBEFORE match
+	// the Date header. after: lower-bounds (inclusive), before: upper-bounds
+	// (exclusive), so a per-day [after:D before:D+1] window = exactly D.
+	sentSince := time.Time{}
 	if m := afterDateRe.FindStringSubmatch(q); m != nil {
-		if d, ok := parseArchiveQueryDate(m[1], m[2], m[3], now.Location()); ok && (since.IsZero() || d.After(since)) {
-			since = d
+		if d, ok := parseArchiveQueryDate(m[1], m[2], m[3], now.Location()); ok {
+			sentSince = d
 		}
 	}
+	sentBefore := time.Time{}
 	if m := beforeDateRe.FindStringSubmatch(q); m != nil {
-		if d, ok := parseArchiveQueryDate(m[1], m[2], m[3], now.Location()); ok && (until.IsZero() || d.Before(until)) {
-			until = d
+		if d, ok := parseArchiveQueryDate(m[1], m[2], m[3], now.Location()); ok {
+			sentBefore = d
 		}
 	}
 
@@ -382,7 +380,7 @@ func parseArchiveQuery(query string, now time.Time) archiveQuery {
 	// usable date bound, sender, or free text), drop it and serve a bounded recent
 	// view rather than an empty/errored list.
 	degraded := ""
-	if hasUnsupported && from == "" && text == "" && since.IsZero() && until.IsZero() && !defaultView {
+	if hasUnsupported && from == "" && text == "" && since.IsZero() && until.IsZero() && sentSince.IsZero() && sentBefore.IsZero() && !defaultView {
 		since = now.Add(-defaultNativeLookback)
 		degraded = "unsupported operator dropped; showing recent"
 	}
@@ -393,6 +391,12 @@ func parseArchiveQuery(query string, now time.Time) archiveQuery {
 	}
 	if !until.IsZero() {
 		parts = append(parts, "BEFORE "+imapSinceDate(until))
+	}
+	if !sentSince.IsZero() {
+		parts = append(parts, "SENTSINCE "+imapSinceDate(sentSince))
+	}
+	if !sentBefore.IsZero() {
+		parts = append(parts, "SENTBEFORE "+imapSinceDate(sentBefore))
 	}
 	switch {
 	case from != "" && text != "":
@@ -503,46 +507,6 @@ type archiveRow struct {
 	uid     int
 }
 
-// withIMAP runs fn against a logged-in IMAP connection, reusing one pooled connection
-// across list searches so the day-pager doesn't pay a fresh TCP+login round-trip on
-// every day it visits (the gateway's 30s list cache absorbs revisits of the same day).
-//
-// Safe by construction: a pooled connection is validated with a NOOP before reuse and
-// dropped on any failure, so a stale/dead connection is redialed — reuse is never
-// worse than a fresh dial. connMu serializes access since one IMAP connection can't
-// multiplex commands. Only the list path pools; detail/mutation reads still dial fresh.
-func (r *Repository) withIMAP(ctx context.Context, fn func(*imapConn) error) error {
-	r.connMu.Lock()
-	defer r.connMu.Unlock()
-
-	// Drop a pooled connection that no longer answers a NOOP (idle-dropped by the server).
-	if r.pooled != nil {
-		if _, _, err := r.pooled.exec("NOOP"); err != nil {
-			r.pooled.close()
-			r.pooled = nil
-		}
-	}
-	if r.pooled == nil {
-		c, err := dialIMAP(ctx, r.cfg.Addr, r.cfg.Timeout)
-		if err != nil {
-			return err
-		}
-		if err := c.login(r.cfg.User, r.cfg.Pass); err != nil {
-			c.close()
-			return err
-		}
-		r.pooled = c
-	}
-	if err := fn(r.pooled); err != nil {
-		// A failed command can leave the connection in an unknown state — discard it
-		// so the next search redials a clean one.
-		r.pooled.close()
-		r.pooled = nil
-		return err
-	}
-	return nil
-}
-
 func (r *Repository) searchArchive(ctx context.Context, spec archiveQuery, pageToken string, maxResults int) ([]gmail.MessageSummary, string, error) {
 	if maxResults <= 0 {
 		maxResults = 25
@@ -559,73 +523,69 @@ func (r *Repository) searchArchive(ctx context.Context, spec archiveQuery, pageT
 		fetchPerBox = maxArchiveFetchPerBox
 	}
 
+	c, err := dialIMAP(ctx, r.cfg.Addr, r.cfg.Timeout)
+	if err != nil {
+		return nil, "", err
+	}
+	defer c.close()
+	if err := c.login(r.cfg.User, r.cfg.Pass); err != nil {
+		return nil, "", err
+	}
+	defer c.logout()
+
 	var all []archiveRow
 	seen := map[string]bool{}
-	if err := r.withIMAP(ctx, func(c *imapConn) error {
-		boxes := archiveSearchMailboxes(r.cfg.Mailboxes, spec)
-		examined := 0
-		for _, mailbox := range boxes {
-			mailbox = strings.TrimSpace(mailbox)
-			if mailbox == "" {
-				continue
-			}
-			if err := c.examine(mailbox); err != nil {
-				continue
-			}
-			examined++
-			uids, err := c.uidSearch(spec.Criteria)
-			if err != nil {
-				continue
-			}
-			uids = tailStrings(uids, fetchPerBox)
-			reverseStrings(uids)
-			msgs, err := c.uidFetchMessages(strings.Join(uids, ","))
-			if err != nil {
-				continue
-			}
-			for _, msg := range msgs {
-				uid := strings.TrimSpace(msg.UID)
-				if uid == "" {
-					continue
-				}
-				parsed, err := lmtpd.ParseMessage(msg.Raw, archiveLocator(mailbox, uid))
-				if err != nil || parsed == nil || parsed.Detail == nil {
-					continue
-				}
-				detail := parsed.Detail
-				id := strings.TrimSpace(detail.ID)
-				if id == "" {
-					id = archiveLocator(mailbox, uid)
-				}
-				if seen[id] {
-					continue
-				}
-				seen[id] = true
-				_ = r.state.RememberLocator(id, mailbox, uid)
-				st := r.state.Get(id)
-				if st.Trashed || (spec.InboxOnly && st.Archived) || (spec.DefaultView && st.Archived) {
-					continue
-				}
-				if spec.HasAttachment && len(detail.Attachments) == 0 {
-					continue
-				}
-				row := detailToSummary(detail, mailbox, st)
-				all = append(all, archiveRow{
-					summary: row,
-					when:    parseMailDate(detail.Date),
-					uid:     parseUID(uid),
-				})
-			}
+	for _, mailbox := range archiveSearchMailboxes(r.cfg.Mailboxes, spec) {
+		mailbox = strings.TrimSpace(mailbox)
+		if mailbox == "" {
+			continue
 		}
-		// If boxes were configured but none could be examined, the (possibly reused)
-		// connection is likely dead — return an error so withIMAP drops it and the
-		// caller logs a real failure instead of serving a silently empty inbox.
-		if examined == 0 && len(boxes) > 0 {
-			return errors.New("no mailbox could be examined")
+		if err := c.examine(mailbox); err != nil {
+			continue
 		}
-		return nil
-	}); err != nil {
-		return nil, "", err
+		uids, err := c.uidSearch(spec.Criteria)
+		if err != nil {
+			continue
+		}
+		uids = tailStrings(uids, fetchPerBox)
+		reverseStrings(uids)
+		msgs, err := c.uidFetchMessages(strings.Join(uids, ","))
+		if err != nil {
+			continue
+		}
+		for _, msg := range msgs {
+			uid := strings.TrimSpace(msg.UID)
+			if uid == "" {
+				continue
+			}
+			parsed, err := lmtpd.ParseMessage(msg.Raw, archiveLocator(mailbox, uid))
+			if err != nil || parsed == nil || parsed.Detail == nil {
+				continue
+			}
+			detail := parsed.Detail
+			id := strings.TrimSpace(detail.ID)
+			if id == "" {
+				id = archiveLocator(mailbox, uid)
+			}
+			if seen[id] {
+				continue
+			}
+			seen[id] = true
+			_ = r.state.RememberLocator(id, mailbox, uid)
+			st := r.state.Get(id)
+			if st.Trashed || (spec.InboxOnly && st.Archived) || (spec.DefaultView && st.Archived) {
+				continue
+			}
+			if spec.HasAttachment && len(detail.Attachments) == 0 {
+				continue
+			}
+			row := detailToSummary(detail, mailbox, st)
+			all = append(all, archiveRow{
+				summary: row,
+				when:    parseMailDate(detail.Date),
+				uid:     parseUID(uid),
+			})
+		}
 	}
 
 	sort.SliceStable(all, func(i, j int) bool {
