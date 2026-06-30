@@ -79,7 +79,22 @@ func CodeMethods(deps CodeDeps) map[string]rpcutil.HandlerFunc {
 		"miniapp.code.undo":       codeUndo(deps),
 		"miniapp.code.push":       codePush(deps),
 		"miniapp.code.discard":    codeDiscard(deps),
+		"miniapp.code.close":      codeClose(deps),
 	}
+}
+
+// activeSessions drops archived (closed) sessions so the rail shows only live work.
+// A closed session's worktree/branch is kept on disk (see codeClose) — it is just
+// hidden from the list; discard is the destructive removal.
+func activeSessions(list []code.Session) []code.Session {
+	out := make([]code.Session, 0, len(list))
+	for _, s := range list {
+		if s.Status == code.StatusClosed {
+			continue
+		}
+		out = append(out, s)
+	}
+	return out
 }
 
 func codeSessions(deps CodeDeps) rpcutil.HandlerFunc {
@@ -90,7 +105,7 @@ func codeSessions(deps CodeDeps) rpcutil.HandlerFunc {
 		// Mark sessions whose worktree vanished (manual cleanup, crash) as missing
 		// so the rail reflects reality and stale rows don't fail every action.
 		_ = deps.Sessions.Reconcile(nil)
-		return rpcutil.RespondOK(req.ID, map[string]any{"sessions": deps.Sessions.List()})
+		return rpcutil.RespondOK(req.ID, map[string]any{"sessions": activeSessions(deps.Sessions.List())})
 	}
 }
 
@@ -238,6 +253,32 @@ func codeDiscard(deps CodeDeps) rpcutil.HandlerFunc {
 		}
 		if err := deps.Sessions.Delete(id); err != nil {
 			return rpcerr.WrapUnavailable("session delete failed", err).Response(req.ID)
+		}
+		return rpcutil.RespondOK(req.ID, map[string]any{"ok": true})
+	}
+}
+
+// codeClose archives a session: it marks the session "closed" so the rail hides
+// it, but KEEPS the worktree + branch (unlike discard, which deletes both). The
+// operator uses this to clear finished work off the list without losing the code/PR.
+func codeClose(deps CodeDeps) rpcutil.HandlerFunc {
+	type params struct {
+		ID string `json:"id"`
+	}
+	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		if errResp := requireAuth(ctx, req.ID); errResp != nil {
+			return errResp
+		}
+		p, errResp := rpcutil.DecodeParams[params](req)
+		if errResp != nil {
+			return errResp
+		}
+		id := strings.TrimSpace(p.ID)
+		if _, ok := deps.Sessions.Get(id); !ok {
+			return rpcerr.InvalidParams(fmt.Errorf("session %q not found", id)).Response(req.ID)
+		}
+		if err := deps.Sessions.SetStatus(id, code.StatusClosed); err != nil {
+			return rpcerr.WrapUnavailable("session close failed", err).Response(req.ID)
 		}
 		return rpcutil.RespondOK(req.ID, map[string]any{"ok": true})
 	}

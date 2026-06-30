@@ -61,9 +61,28 @@ func TestCodeMethods_Keys(t *testing.T) {
 		"miniapp.code.undo",
 		"miniapp.code.push",
 		"miniapp.code.discard",
+		"miniapp.code.close",
 	} {
 		if _, ok := m[k]; !ok {
 			t.Errorf("missing method %q", k)
+		}
+	}
+}
+
+func TestActiveSessions_DropsClosed(t *testing.T) {
+	in := []code.Session{
+		{ID: "a", Status: code.StatusWorking},
+		{ID: "b", Status: code.StatusClosed},
+		{ID: "c", Status: code.StatusPassed},
+		{ID: "d", Status: code.StatusClosed},
+	}
+	got := activeSessions(in)
+	if len(got) != 2 {
+		t.Fatalf("want 2 active sessions, got %d: %+v", len(got), got)
+	}
+	for _, s := range got {
+		if s.Status == code.StatusClosed {
+			t.Errorf("closed session %q leaked into the active rail list", s.ID)
 		}
 	}
 }
