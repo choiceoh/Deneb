@@ -4,16 +4,42 @@ import { serializeList } from "@/aiText";
 import { useCachedList, useCachedOne } from "@/cachedList";
 import { MAIL_RPC } from "@/resources";
 import { color, ellipsis } from "@/theme";
-import { fmtMailDate, senderName } from "@/format";
+import { addDays, dayLabel, fmtMailDate, senderName, startOfDay } from "@/format";
 import { usePaneTarget } from "@/usePaneTarget";
 import { useAction } from "@/useAction";
 import { useRegisterPane, useWorkspace, type PaneTarget } from "@/workspaceContext";
 import { Column, Grid, GridNotice } from "@/components/Grid";
+import { DayPager } from "@/components/DayPager";
 import { MailDetail, mailBody } from "./MailDetail";
+
+// How far back the day-pager can step before the ‹이전 arrow stops (matches the
+// work feed's lookback so a quiet stretch never traps you on today).
+const MAIL_LOOKBACK_DAYS = 31;
+
+// Gmail query date token (YYYY/M/D) for after:/before: day scoping. Built from the
+// client-local calendar day; Gmail evaluates after:/before: in the account's own
+// timezone. On this single-machine deployment the client and Gmail account share
+// one timezone, so the day lines up; a cross-timezone setup would be off by a day.
+function gmailDay(dayMs: number): string {
+  const d = new Date(dayMs);
+  return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
+}
 
 export function MailPane() {
   const { connected } = useWorkspace();
-  const { result, query } = useCachedList<Mail>("mail", connected);
+  // The day currently in view (local midnight). Lands on today; ← / → step it. The
+  // inbox is browsed one day at a time (like the work feed) rather than one flat
+  // unread list: each day fetches that day's inbox (read + unread) via a Gmail
+  // after:/before: query, refetched on day change. Per-day cacheKey snapshots each
+  // day separately; the resource stays "mail" so sync/useEvents invalidation still
+  // refetches the visible day when new mail lands.
+  const [dayMs, setDayMs] = useState<number>(() => startOfDay());
+  const { result, query } = useCachedList<Mail>("mail", connected, {
+    cacheKey: `mail.${dayMs}`,
+    meta: {
+      rpcParams: { query: `in:inbox after:${gmailDay(dayMs)} before:${gmailDay(addDays(dayMs, 1))}`, limit: 100 },
+    },
+  });
   const fetchedMails = result?.data;
   const [selectedId, setSelectedId] = useState<string | number | undefined>();
   const [locallyReadIds, setLocallyReadIds] = useState<Set<string>>(readLocallyReadIds);
@@ -62,6 +88,20 @@ export function MailPane() {
     markMailRead(selectedId);
   }, [markMailRead, selectedId, selectedMail?.isUnread]);
 
+  const nowMs = Date.now();
+  const todayMs = startOfDay(nowMs);
+  // Step back freely across the lookback window (forward stops at today). A deep-
+  // linked mail older than the window extends the floor so you can keep stepping
+  // back from where it landed.
+  const minDayMs = Math.min(addDays(todayMs, -MAIL_LOOKBACK_DAYS), dayMs);
+  function goToDay(next: number) {
+    setDayMs(next);
+    setSelectedId(undefined); // the selection likely isn't on the new day
+  }
+  function stepDay(delta: number) {
+    goToDay(addDays(dayMs, delta));
+  }
+
   // An id-less mail target is meaningless — keep it pending instead of clearing the
   // current selection. (The detail fetches by id, so no need to wait for the list.)
   const openTargetedMail = useCallback((t: PaneTarget) => {
@@ -69,6 +109,17 @@ export function MailPane() {
     setSelectedId(t.id);
   }, []);
   usePaneTarget("mail", openTargetedMail);
+
+  // A mail opened by id (work feed / search / notification deep-link) may belong to
+  // another day than the one in view — there'd be no row to expand. Once its detail
+  // lands, jump the pager to that mail's day so the row appears. Same-day row clicks
+  // are a no-op (the day already matches).
+  const selectedDateMs = selectedMail?.date ? new Date(selectedMail.date).getTime() : NaN;
+  useEffect(() => {
+    if (selectedId === undefined || Number.isNaN(selectedDateMs)) return;
+    const md = startOfDay(selectedDateMs);
+    if (md !== dayMs) setDayMs(md);
+  }, [selectedId, selectedDateMs, dayMs]);
 
   // Mirror the grid (subject · sender · date) so the AI sees what the user sees.
   const listText = serializeList("메일", mails, (m) => {
@@ -124,7 +175,19 @@ export function MailPane() {
     <>
       <h2 style={{ marginTop: 2 }}>메일</h2>
       {error && <p className="pane-error">오류: {error}</p>}
-      <GridNotice query={query} count={mails.length} empty="메일이 없습니다.">
+      {connected && (
+        <DayPager
+          label={dayLabel(dayMs, nowMs)}
+          count={mails.length}
+          canPrev={dayMs > minDayMs}
+          canNext={dayMs < todayMs}
+          atToday={dayMs === todayMs}
+          onPrev={() => stepDay(-1)}
+          onNext={() => stepDay(1)}
+          onToday={() => goToDay(todayMs)}
+        />
+      )}
+      <GridNotice query={query} count={mails.length} empty="이 날짜에는 메일이 없습니다.">
         <Grid
           columns={columns}
           rows={mails}

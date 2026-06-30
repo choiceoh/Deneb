@@ -171,6 +171,26 @@ export function startOfDay(v?: number): number {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
 }
 
+// Local-midnight epoch `delta` days from `dayMs`, component-wise so day math stays
+// DST-safe (never UTC arithmetic). Shared by every day-pager (work feed, mail).
+export function addDays(dayMs: number, delta: number): number {
+  const d = new Date(dayMs);
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate() + delta).getTime();
+}
+
+// Live relative stamp from an epoch-ms timestamp: 방금 / N분 전 / N시간 전 / N일 전.
+// Blank for a missing, zero, or unparseable value (callers omit the clause entirely).
+export function relativeTime(ms?: number): string {
+  if (typeof ms !== "number" || !Number.isFinite(ms) || ms <= 0) return "";
+  const diff = Date.now() - ms;
+  if (diff < 60_000) return "방금";
+  const min = Math.floor(diff / 60_000);
+  if (min < 60) return `${min}분 전`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}시간 전`;
+  return `${Math.floor(hr / 24)}일 전`;
+}
+
 // A Date at local midnight from a calendar stamp. All-day YYYY-MM-DD is parsed
 // component-wise (no UTC shift, matching fmtDay); timed values floor to their local day.
 function dayStart(iso: string, allDay: boolean): Date {
