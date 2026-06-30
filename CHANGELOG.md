@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.44.1](https://github.com/choiceoh/Deneb/compare/deneb-v4.44.0...deneb-v4.44.1) (2026-06-30)
+
+
+### 🐛 Bug Fixes
+
+* **calendar:** 인접월 일정이 월 목록에 새는 문제 (7월 일정이 6월 목록에 표시) ([#2958](https://github.com/choiceoh/Deneb/issues/2958)) ([b3dd4eb](https://github.com/choiceoh/Deneb/commit/b3dd4eb17486b36b8362f18734f1d0ab80e2d0ec))
+
 ## [4.44.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.43.0...deneb-v4.44.0) (2026-06-30)
 
 

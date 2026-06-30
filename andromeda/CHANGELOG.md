@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.34](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.33...andromeda-v0.0.34) (2026-06-30)
+
+
+### 🐛 Bug Fixes
+
+* **calendar:** 인접월 일정이 월 목록에 새는 문제 (7월 일정이 6월 목록에 표시) ([#2958](https://github.com/choiceoh/Deneb/issues/2958)) ([b3dd4eb](https://github.com/choiceoh/Deneb/commit/b3dd4eb17486b36b8362f18734f1d0ab80e2d0ec))
+
 ## [0.0.33](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.32...andromeda-v0.0.33) (2026-06-30)
 
 
