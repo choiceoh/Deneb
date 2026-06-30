@@ -84,14 +84,12 @@ private data class CodePrEnvelope(val url: String = "")
 
 /** All live coding sessions (the rail); closed ones are filtered server-side.
  *  Null on a fetch failure. */
-suspend fun DenebGatewayClient.fetchCodeSessions(): List<CodeSession>? =
-    callRpc<CodeSessionsEnvelope>("miniapp.code.sessions", buildJsonObject {})?.sessions
+suspend fun DenebGatewayClient.fetchCodeSessions(): List<CodeSession>? = callRpc<CodeSessionsEnvelope>("miniapp.code.sessions", buildJsonObject {})?.sessions
 
 /** The operator's GitHub repos for the start picker. Empty (not null) when gh is
  *  unauthenticated — the form falls back to manual owner/repo entry. Null only on
  *  a transport failure. */
-suspend fun DenebGatewayClient.fetchCodeRepos(): List<CodeRepo>? =
-    callRpc<CodeReposEnvelope>("miniapp.code.repos", buildJsonObject {})?.repos
+suspend fun DenebGatewayClient.fetchCodeRepos(): List<CodeRepo>? = callRpc<CodeReposEnvelope>("miniapp.code.repos", buildJsonObject {})?.repos
 
 /** Start a worktree + session for [owner]/[name]. A blank [taskId]/[title] is
  *  auto-generated server-side. Returns the new session (its `chatSessionKey`
@@ -112,44 +110,36 @@ suspend fun DenebGatewayClient.startCodeSession(
 )?.session
 
 /** One session's current state by id. Null on miss/failure. */
-suspend fun DenebGatewayClient.fetchCodeStatus(id: String): CodeSession? =
-    callRpc<CodeSessionEnvelope>("miniapp.code.status", buildJsonObject { put("id", id) })?.session
+suspend fun DenebGatewayClient.fetchCodeStatus(id: String): CodeSession? = callRpc<CodeSessionEnvelope>("miniapp.code.status", buildJsonObject { put("id", id) })?.session
 
 /** The pull-request URL for a session's branch, or "" when none exists yet (a
  *  normal state, never an error). Null only on a transport failure. */
-suspend fun DenebGatewayClient.fetchCodePrUrl(id: String): String? =
-    callRpc<CodePrEnvelope>("miniapp.code.pr", buildJsonObject { put("id", id) })?.url
+suspend fun DenebGatewayClient.fetchCodePrUrl(id: String): String? = callRpc<CodePrEnvelope>("miniapp.code.pr", buildJsonObject { put("id", id) })?.url
 
 /** Run the worktree's build/test and flip the session status. Returns the
  *  updated session + step-by-step result, or null on failure. */
-suspend fun DenebGatewayClient.verifyCodeSession(id: String): CodeVerify? =
-    callRpc<CodeVerify>("miniapp.code.verify", buildJsonObject { put("id", id) })
+suspend fun DenebGatewayClient.verifyCodeSession(id: String): CodeVerify? = callRpc<CodeVerify>("miniapp.code.verify", buildJsonObject { put("id", id) })
 
 /** Commit the worktree's current changes as a checkpoint with a Korean summary.
  *  Returns the updated session, or null on failure. */
-suspend fun DenebGatewayClient.checkpointCodeSession(id: String, summary: String? = null): CodeSession? =
-    callRpc<CodeSessionEnvelope>(
-        "miniapp.code.checkpoint",
-        buildJsonObject {
-            put("id", id)
-            if (!summary.isNullOrBlank()) put("summary", summary)
-        },
-    )?.session
+suspend fun DenebGatewayClient.checkpointCodeSession(id: String, summary: String? = null): CodeSession? = callRpc<CodeSessionEnvelope>(
+    "miniapp.code.checkpoint",
+    buildJsonObject {
+        put("id", id)
+        if (!summary.isNullOrBlank()) put("summary", summary)
+    },
+)?.session
 
 /** Step back one checkpoint (or discard uncommitted edits). Returns the updated
  *  session, or null on failure. */
-suspend fun DenebGatewayClient.undoCodeSession(id: String): CodeSession? =
-    callRpc<CodeSessionEnvelope>("miniapp.code.undo", buildJsonObject { put("id", id) })?.session
+suspend fun DenebGatewayClient.undoCodeSession(id: String): CodeSession? = callRpc<CodeSessionEnvelope>("miniapp.code.undo", buildJsonObject { put("id", id) })?.session
 
 /** Push the session's branch to GitHub. Null on success, a Korean error on failure. */
-suspend fun DenebGatewayClient.pushCodeSession(id: String): String? =
-    rpcWrite("miniapp.code.push", buildJsonObject { put("id", id) })
+suspend fun DenebGatewayClient.pushCodeSession(id: String): String? = rpcWrite("miniapp.code.push", buildJsonObject { put("id", id) })
 
 /** Delete the worktree + branch (destructive). Null on success, a Korean error on failure. */
-suspend fun DenebGatewayClient.discardCodeSession(id: String): String? =
-    rpcWrite("miniapp.code.discard", buildJsonObject { put("id", id) })
+suspend fun DenebGatewayClient.discardCodeSession(id: String): String? = rpcWrite("miniapp.code.discard", buildJsonObject { put("id", id) })
 
 /** Archive the session (hide from the rail; keep the worktree/branch + any PR).
  *  Null on success, a Korean error on failure. */
-suspend fun DenebGatewayClient.closeCodeSession(id: String): String? =
-    rpcWrite("miniapp.code.close", buildJsonObject { put("id", id) })
+suspend fun DenebGatewayClient.closeCodeSession(id: String): String? = rpcWrite("miniapp.code.close", buildJsonObject { put("id", id) })
