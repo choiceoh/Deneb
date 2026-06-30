@@ -107,6 +107,7 @@ export function AIPanel({
   hidden = false,
   expanded = false,
   onToggleExpand,
+  onCollapse,
   placement = "side",
 }: {
   cfg: GatewayConfig;
@@ -115,6 +116,9 @@ export function AIPanel({
   // 이 패널이 사이드바를 제외한 전 폭을 차지한다.
   expanded?: boolean;
   onToggleExpand?: () => void;
+  // 패널 접기(완전히 숨김) — 위키처럼 본문을 넓게 보고 싶을 때. Workstation이 우측 가장자리에
+  // 다시-열기 탭을 그린다. 노트북 하단 모드에선 넘기지 않는다.
+  onCollapse?: () => void;
   // "side"(기본, 우측 고정폭) | "bottom"(노트북 등에서 하단 도킹). bottom일 땐 크기를 그리드
   // 셀이 정하므로 width/flex를 지정하지 않고, 넓어진 만큼 대화 폭을 가독성 있게 가운데 정렬한다.
   placement?: "side" | "bottom";
@@ -208,6 +212,17 @@ export function AIPanel({
             style={{ padding: 4, display: "inline-flex" }}
           >
             <Icon name={expanded ? "collapse-panel" : "expand-panel"} size={15} />
+          </button>
+        )}
+        {onCollapse && !expanded && (
+          <button
+            className="row-btn"
+            onClick={onCollapse}
+            title="패널 접기"
+            aria-label="Deneb 패널 접기"
+            style={{ padding: 4, display: "inline-flex" }}
+          >
+            <Icon name="collapse-panel" size={15} />
           </button>
         )}
         <button

@@ -83,6 +83,25 @@ describe("Workstation (connected, fixtures)", () => {
     expect(await screen.findByRole("button", { name: /새 할일/ })).toBeInTheDocument();
   });
 
+  it("collapses the Deneb panel and reopens it from the edge tab", async () => {
+    renderWithProviders(<Workstation cfg={{ url: "http://test", token: "tok" }} />, {
+      connected: true,
+      dataProvider,
+    });
+    const nav = screen.getByRole("navigation");
+    await userEvent.click(within(nav).getByRole("button", { name: /할일/ }));
+
+    // The side panel is visible → collapse it; its expand toggle disappears and a
+    // reopen tab takes its place.
+    await userEvent.click(await screen.findByRole("button", { name: "Deneb 패널 접기" }));
+    expect(screen.queryByRole("button", { name: "패널 넓히기" })).not.toBeInTheDocument();
+
+    // Reopen from the edge tab → the panel (its expand toggle) returns.
+    await userEvent.click(screen.getByRole("button", { name: "Deneb 패널 열기" }));
+    expect(await screen.findByRole("button", { name: "패널 넓히기" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Deneb 패널 열기" })).not.toBeInTheDocument();
+  });
+
   it("opens the 비업무 채팅 탭 from the rail (center chat greets)", async () => {
     renderWithProviders(<Workstation cfg={{ url: "http://test", token: "tok" }} />, {
       connected: true,
