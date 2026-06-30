@@ -6,6 +6,7 @@ import { useWorkspace } from "@/workspaceContext";
 import { Icon } from "./Icon";
 import { WindowControls } from "./WindowControls";
 import { orderedViews, PANES } from "./panes";
+import { CodeNewTaskModal } from "./panes/CodeNewTaskModal";
 
 const labelStyle = { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } as const;
 
@@ -24,8 +25,10 @@ export function Sidebar() {
     connected,
     cfg,
     codeSessionsRev,
+    bumpCodeSessions,
     openCodeChat,
   } = useWorkspace();
+  const [showNew, setShowNew] = useState(false);
   const visiblePanes = orderedViews(viewOrder)
     .filter((k) => !hiddenViews.includes(k))
     .map((k) => PANES.find((p) => p.key === k)!);
@@ -71,7 +74,7 @@ export function Sidebar() {
 
       {codeMode ? (
         <>
-          <button className="nav-item" onClick={() => setView("code")} title="새 작업">
+          <button className="nav-item" onClick={() => setShowNew(true)} title="새 작업">
             <span className="ico">
               <Icon name="plus" />
             </span>
@@ -149,6 +152,20 @@ export function Sidebar() {
         </span>
         <span style={labelStyle}>{settings.label}</span>
       </button>
+
+      {showNew && (
+        <CodeNewTaskModal
+          cfg={cfg}
+          onClose={() => setShowNew(false)}
+          onCreated={(sess) => {
+            setShowNew(false);
+            bumpCodeSessions();
+            // Attach the center chat to the new task and show the work area.
+            openCodeChat(sess.chatSessionKey || "code:" + sess.id);
+            setView("code");
+          }}
+        />
+      )}
     </nav>
   );
 }
