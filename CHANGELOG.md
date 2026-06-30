@@ -1,5 +1,21 @@
 # Changelog
 
+## [4.47.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.46.0...deneb-v4.47.0) (2026-06-30)
+
+
+### ✨ Features
+
+* **andromeda:** rework the notebook pane around its actual workflow ([#2979](https://github.com/choiceoh/Deneb/issues/2979)) ([db21253](https://github.com/choiceoh/Deneb/commit/db212534528c13ade24e3783b43a0535475c6184))
+* **andromeda:** 작업피드 행을 제목만 표기 (미리보기 줄 제거) ([#2981](https://github.com/choiceoh/Deneb/issues/2981)) ([14f2f56](https://github.com/choiceoh/Deneb/commit/14f2f567dad0c77cabba69ffc0e3885469eedd11))
+* **calendar:** 일정 날짜·시간 입력 개선 (기본값·종료자동·칸분리·길이버튼) ([#2980](https://github.com/choiceoh/Deneb/issues/2980)) ([ca7db1d](https://github.com/choiceoh/Deneb/commit/ca7db1d099d412614cef2d595f8c82be8c9aad4f))
+* **mail:** 메일 AI 분석 카드 접기/펼치기 토글 ([#2983](https://github.com/choiceoh/Deneb/issues/2983)) ([dbff334](https://github.com/choiceoh/Deneb/commit/dbff3344e6bc38e17705664fc3027fabc12a06aa))
+
+
+### 🐛 Bug Fixes
+
+* **andromeda:** 위키 내용 폭 — 접힘 기준을 뷰포트→워크영역(컨테이너)으로 ([#2977](https://github.com/choiceoh/Deneb/issues/2977)) ([2995c57](https://github.com/choiceoh/Deneb/commit/2995c579ed67f40c652e7c5c08b111042571cddd))
+* **mail:** 네이티브 아카이브가 날짜범위(after/before) 쿼리를 직접 처리 + Gmail 폴백 제거 ([#2982](https://github.com/choiceoh/Deneb/issues/2982)) ([0091967](https://github.com/choiceoh/Deneb/commit/0091967be88b4d72119a672512866572c5f0a005))
+
 ## [4.46.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.45.0...deneb-v4.46.0) (2026-06-30)
 
 
