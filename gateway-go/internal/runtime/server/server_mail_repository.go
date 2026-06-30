@@ -1,15 +1,22 @@
 package server
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailarchive"
 	handlerminiapp "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp"
 )
+
+// errNativeMailUnconfigured surfaces when the on-box mail archive isn't configured.
+// The Gmail fallback was removed (operator decision): the miniapp mail surface is
+// native-archive-only, so a missing archive is a clear "configure DENEB_ARCHIVE_IMAP_*"
+// error rather than a silent switch to Gmail (which served wrong-source rows and
+// dropped the per-mail AI analyses keyed by archive Message-IDs).
+var errNativeMailUnconfigured = errors.New("native mail archive not configured (set DENEB_ARCHIVE_IMAP_ADDR/USER/PASS)")
 
 func (s *Server) miniappMailClientFactory(denebDir string) func() (handlerminiapp.GmailClient, error) {
 	return func() (handlerminiapp.GmailClient, error) {
@@ -22,33 +29,18 @@ func (s *Server) miniappMailClientFactory(denebDir string) func() (handlerminiap
 }
 
 func (s *Server) newMiniappMailClient(denebDir string) (handlerminiapp.GmailClient, error) {
-	fallback, gmailErr := gmail.DefaultClient()
-	var fallbackClient mailarchive.FallbackClient
-	if gmailErr == nil && fallback != nil {
-		fallbackClient = fallback
-	}
-	if repo := s.newArchiveMailRepository(denebDir, fallbackClient); repo != nil {
+	// Native-archive-only — no Gmail fallback (see errNativeMailUnconfigured).
+	if repo := s.newArchiveMailRepository(denebDir, nil); repo != nil {
 		return repo, nil
 	}
-	if gmailErr != nil {
-		return nil, gmailErr
-	}
-	return fallback, nil
+	return nil, errNativeMailUnconfigured
 }
 
 func (s *Server) newMiniappMailAttachmentClient() (miniappMailAttachmentClient, error) {
-	fallback, gmailErr := gmail.DefaultClient()
-	var fallbackClient mailarchive.FallbackClient
-	if gmailErr == nil && fallback != nil {
-		fallbackClient = fallback
-	}
-	if repo := s.newArchiveMailRepository(s.denebDir, fallbackClient); repo != nil {
+	if repo := s.newArchiveMailRepository(s.denebDir, nil); repo != nil {
 		return repo, nil
 	}
-	if gmailErr != nil {
-		return nil, gmailErr
-	}
-	return fallback, nil
+	return nil, errNativeMailUnconfigured
 }
 
 func (s *Server) newArchiveMailRepository(denebDir string, fallback mailarchive.FallbackClient) *mailarchive.Repository {

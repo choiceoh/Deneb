@@ -911,8 +911,8 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 			// archive keyed by RFC822 Message-ID. The old gmail.DefaultClient()
 			// fetched by Gmail-API message id, so "🔄 다시 분석" on an archived mail
 			// handed an archive id (…@amazonses.com) to the Gmail API → HTTP 400
-			// "Invalid id value". The repository resolves the archive first and only
-			// falls back to Gmail for legacy/disabled setups.
+			// "Invalid id value". The miniapp mail surface is now native-archive-only
+			// (the Gmail fallback was removed — see server_mail_repository.go).
 			Client: s.miniappMailClientFactory(s.denebDir),
 			Pipeline: func() (handlerminiapp.AnalyzePipeline, error) {
 				// Role selection is shared with the autonomous poller via

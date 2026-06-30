@@ -342,6 +342,21 @@ func parseArchiveQuery(query string, now time.Time) (archiveQuery, error) {
 		}
 	}
 
+	// Date-range scoping for the day-pager (after:YYYY/M/D before:YYYY/M/D) → IMAP
+	// SINCE/BEFORE. after: lower-bounds (inclusive), before: upper-bounds (exclusive),
+	// matching Gmail's operators so a per-day [after:D before:D+1] window = exactly D.
+	if m := afterDateRe.FindStringSubmatch(q); m != nil {
+		if d, ok := parseArchiveQueryDate(m[1], m[2], m[3], now.Location()); ok && (since.IsZero() || d.After(since)) {
+			since = d
+		}
+	}
+	until := time.Time{}
+	if m := beforeDateRe.FindStringSubmatch(q); m != nil {
+		if d, ok := parseArchiveQueryDate(m[1], m[2], m[3], now.Location()); ok {
+			until = d
+		}
+	}
+
 	hasAttachment := hasAttachmentRe.MatchString(q)
 	from := extractFromQuery(q)
 	text := normalizeArchiveTextQuery(q)
@@ -355,6 +370,9 @@ func parseArchiveQuery(query string, now time.Time) (archiveQuery, error) {
 	var parts []string
 	if !since.IsZero() {
 		parts = append(parts, "SINCE "+imapSinceDate(since))
+	}
+	if !until.IsZero() {
+		parts = append(parts, "BEFORE "+imapSinceDate(until))
 	}
 	switch {
 	case from != "" && text != "":
@@ -380,14 +398,29 @@ func isDefaultArchiveViewQuery(q string) bool {
 }
 
 var (
-	newerThanRe           = regexp.MustCompile(`(?i)\bnewer_than:(\d+)([dmy])\b`)
-	fromQueryRe           = regexp.MustCompile(`(?i)\bfrom:(?:"([^"]+)"|([^\s}]+))`)
-	hasAttachmentRe       = regexp.MustCompile(`(?i)\bhas:attachment\b`)
-	inInboxRe             = regexp.MustCompile(`(?i)\bin:inbox\b`)
-	inAnywhereRe          = regexp.MustCompile(`(?i)\bin:anywhere\b`)
-	stripQuerySyntaxRe    = regexp.MustCompile(`(?i)[{}]|\bin:(?:inbox|anywhere)\b|\bis:unread\b|\bnewer_than:\d+[dmy]\b|\bhas:attachment\b|\bfrom:(?:"[^"]+"|[^\s}]+)`)
-	unsupportedOperatorRe = regexp.MustCompile(`(?i)\b(?:is|in|label|has|category|after|before|older_than):[^\s}]+`)
+	newerThanRe        = regexp.MustCompile(`(?i)\bnewer_than:(\d+)([dmy])\b`)
+	fromQueryRe        = regexp.MustCompile(`(?i)\bfrom:(?:"([^"]+)"|([^\s}]+))`)
+	hasAttachmentRe    = regexp.MustCompile(`(?i)\bhas:attachment\b`)
+	inInboxRe          = regexp.MustCompile(`(?i)\bin:inbox\b`)
+	inAnywhereRe       = regexp.MustCompile(`(?i)\bin:anywhere\b`)
+	afterDateRe        = regexp.MustCompile(`(?i)\bafter:(\d{4})/(\d{1,2})/(\d{1,2})\b`)
+	beforeDateRe       = regexp.MustCompile(`(?i)\bbefore:(\d{4})/(\d{1,2})/(\d{1,2})\b`)
+	stripQuerySyntaxRe = regexp.MustCompile(`(?i)[{}]|\bin:(?:inbox|anywhere)\b|\bis:unread\b|\bnewer_than:\d+[dmy]\b|\b(?:after|before):\d{4}/\d{1,2}/\d{1,2}\b|\bhas:attachment\b|\bfrom:(?:"[^"]+"|[^\s}]+)`)
+	// after:/before: are parsed into SINCE/BEFORE above, so they are NOT unsupported.
+	unsupportedOperatorRe = regexp.MustCompile(`(?i)\b(?:is|in|label|has|category|older_than):[^\s}]+`)
 )
+
+// parseArchiveQueryDate parses a Gmail-style YYYY/M/D token into a local-midnight
+// time. ok=false for a malformed date — the caller then leaves that bound unset.
+func parseArchiveQueryDate(yy, mm, dd string, loc *time.Location) (time.Time, bool) {
+	y, err1 := strconv.Atoi(yy)
+	mo, err2 := strconv.Atoi(mm)
+	d, err3 := strconv.Atoi(dd)
+	if err1 != nil || err2 != nil || err3 != nil || mo < 1 || mo > 12 || d < 1 || d > 31 {
+		return time.Time{}, false
+	}
+	return time.Date(y, time.Month(mo), d, 0, 0, 0, 0, loc), true
+}
 
 func extractFromQuery(query string) string {
 	m := fromQueryRe.FindStringSubmatch(query)

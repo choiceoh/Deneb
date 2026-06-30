@@ -370,6 +370,27 @@ func TestRepositoryFallsBackForUnsupportedQuery(t *testing.T) {
 	}
 }
 
+// The mail day-pager sends `in:inbox after:D before:D+1`. That must parse natively
+// into IMAP SINCE/BEFORE (scoping to exactly that day) instead of being rejected as
+// unsupported and falling through to Gmail — the regression that surfaced Gmail rows
+// and dropped the per-mail AI analyses keyed by archive Message-IDs.
+func TestParseArchiveQueryDateRange(t *testing.T) {
+	now := time.Date(2026, 7, 2, 9, 0, 0, 0, time.UTC)
+	spec, err := parseArchiveQuery("in:inbox after:2026/6/30 before:2026/7/1", now)
+	if err != nil {
+		t.Fatalf("parseArchiveQuery errored (would fall back to Gmail): %v", err)
+	}
+	if !strings.Contains(spec.Criteria, "SINCE 30-Jun-2026") {
+		t.Errorf("criteria %q missing SINCE 30-Jun-2026", spec.Criteria)
+	}
+	if !strings.Contains(spec.Criteria, "BEFORE 01-Jul-2026") {
+		t.Errorf("criteria %q missing BEFORE 01-Jul-2026", spec.Criteria)
+	}
+	if !spec.InboxOnly {
+		t.Errorf("expected InboxOnly for an in:inbox query")
+	}
+}
+
 type fakeRepositoryFallback struct {
 	rows             []gmail.MessageSummary
 	searchPageCalled bool
