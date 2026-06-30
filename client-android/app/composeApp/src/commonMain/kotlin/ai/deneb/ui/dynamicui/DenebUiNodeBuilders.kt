@@ -423,7 +423,9 @@ private fun parseDividerNode(obj: JsonObject): DividerNode = DividerNode(id = ob
 
 private fun parseTextNode(obj: JsonObject): TextNode = TextNode(
     id = obj.readId(),
-    value = obj.readString("value"),
+    // Spec uses `value`, but models often emit `text` instead (e.g. the morning
+    // letter's {"type":"text","text":"…"}). Fall back so the text isn't dropped.
+    value = obj.readString("value").ifEmpty { obj.readString("text") },
     style = parseTextStyle(obj.readNullableString("style")),
     bold = obj.readNullableBoolean("bold"),
     italic = obj.readNullableBoolean("italic"),
@@ -432,7 +434,7 @@ private fun parseTextNode(obj: JsonObject): TextNode = TextNode(
 
 private fun parseMarkdownNode(obj: JsonObject): MarkdownNode = MarkdownNode(
     id = obj.readId(),
-    value = obj.readString("value"),
+    value = obj.readString("value").ifEmpty { obj.readString("text") },
 )
 
 private fun parseImageNode(obj: JsonObject): ImageNode = ImageNode(
@@ -584,7 +586,7 @@ private fun parseCountdownNode(obj: JsonObject): CountdownNode = CountdownNode(
 
 private fun parseBadgeNode(obj: JsonObject): BadgeNode = BadgeNode(
     id = obj.readId(),
-    value = obj.readString("value"),
+    value = obj.readString("value").ifEmpty { obj.readString("text") },
     color = obj.readNullableString("color"),
 )
 

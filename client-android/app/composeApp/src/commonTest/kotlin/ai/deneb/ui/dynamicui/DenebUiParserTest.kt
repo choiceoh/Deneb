@@ -48,6 +48,33 @@ class DenebUiParserTest {
     }
 
     @Test
+    fun `text and badge tolerate text field, list tolerates string items`() {
+        // The morning letter (and other model-drawn cards) often emit the `text` field
+        // instead of the spec's `value`, plus lists as plain-string arrays. The parser
+        // must not drop that content — otherwise text/badge render empty (the
+        // broken-on-desktop morning letter; list items already worked on native).
+        val json = """
+            {
+              "type": "column",
+              "children": [
+                {"type": "text", "text": "날씨 조회 실패", "style": "caption"},
+                {"type": "badge", "text": "D-day"},
+                {"type": "list", "items": ["첫째 항목", "둘째 항목"]},
+                {"type": "text", "value": "스펙대로 value"}
+              ]
+            }
+        """.trimIndent()
+        val col = assertIs<ColumnNode>(parseUi(json))
+        assertEquals("날씨 조회 실패", assertIs<TextNode>(col.children[0]).value)
+        assertEquals("D-day", assertIs<BadgeNode>(col.children[1]).value)
+        val list = assertIs<ListNode>(col.children[2])
+        assertEquals("첫째 항목", assertIs<TextNode>(list.items[0]).value)
+        assertEquals("둘째 항목", assertIs<TextNode>(list.items[1]).value)
+        // Spec-compliant `value` still works (no regression).
+        assertEquals("스펙대로 value", assertIs<TextNode>(col.children[3]).value)
+    }
+
+    @Test
     fun `parses collapsed markdown report accordion`() {
         // Shape the gateway emits for a collapsed mail-analysis delivery:
         // accordion(title) wrapping a markdown body (denebui.CollapsedReportFence).
