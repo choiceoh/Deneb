@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.51.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.50.0...deneb-v4.51.0) (2026-06-30)
+
+
+### ✨ Features
+
+* **miniapp:** 코드모드 모바일 네이티브 화면 추가 ([#2995](https://github.com/choiceoh/Deneb/issues/2995)) ([94b31eb](https://github.com/choiceoh/Deneb/commit/94b31ebdaf7eaea33d6617895ef9a5792a89feee))
+
 ## [4.50.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.49.0...deneb-v4.50.0) (2026-06-30)
 
 
