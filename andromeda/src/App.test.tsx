@@ -63,6 +63,26 @@ describe("Workstation (connected, fixtures)", () => {
     expect(await screen.findByRole("button", { name: /새 할일/ })).toBeInTheDocument();
   });
 
+  it("expands the Deneb panel over the work pane and collapses back", async () => {
+    renderWithProviders(<Workstation cfg={{ url: "http://test", token: "tok" }} />, {
+      connected: true,
+      dataProvider,
+    });
+
+    // Move to the 할일 pane so its "+ 새 할일" control proves the work pane is mounted.
+    const nav = screen.getByRole("navigation");
+    await userEvent.click(within(nav).getByRole("button", { name: /할일/ }));
+    expect(await screen.findByRole("button", { name: /새 할일/ })).toBeInTheDocument();
+
+    // Widen the Deneb panel → the center work pane is unmounted.
+    await userEvent.click(screen.getByRole("button", { name: "패널 넓히기" }));
+    expect(screen.queryByRole("button", { name: /새 할일/ })).not.toBeInTheDocument();
+
+    // Collapse back → the work pane returns.
+    await userEvent.click(screen.getByRole("button", { name: "패널 좁히기" }));
+    expect(await screen.findByRole("button", { name: /새 할일/ })).toBeInTheDocument();
+  });
+
   it("opens the 비업무 채팅 탭 from the rail (center chat greets)", async () => {
     renderWithProviders(<Workstation cfg={{ url: "http://test", token: "tok" }} />, {
       connected: true,

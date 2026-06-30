@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { GatewayConfig } from "@/gateway";
 import { useNativeSync } from "@/sync";
 import type { View } from "@/types";
@@ -15,6 +15,11 @@ import { PANES } from "./panes";
 // are hidden in the rail, but the keys still work).
 export function Workstation({ cfg }: { cfg: GatewayConfig }) {
   const { view, setView, codeMode, connected } = useWorkspace();
+
+  // 우측 데네브 패널을 중앙 작업 영역까지 넓히는 토글(maximize). 활성화되면 작업 pane을
+  // 숨기고 AIPanel이 사이드바를 제외한 전 폭을 차지한다. 채팅·코드 탭에선 ChatView/CodeView가
+  // 중앙+우측을 이미 점유하므로 의미 없다(AIPanel 자체가 숨겨짐).
+  const [aiExpanded, setAiExpanded] = useState(false);
 
   // Durable catch-up sync, session-scoped (Workstation is always mounted): keeps
   // the work feed / calendar reconciled even when a live proactive push is missed.
@@ -56,8 +61,9 @@ export function Workstation({ cfg }: { cfg: GatewayConfig }) {
           and the top-left controls. */}
       <div className="drag-strip" data-tauri-drag-region />
       <Sidebar />
-      {/* 작업 pane은 비채팅 탭에서만 렌더(채팅 탭은 ChatView가 중앙+우측을 차지). */}
-      {view !== "chat" && !codeMode && (
+      {/* 작업 pane은 비채팅 탭에서만 렌더(채팅 탭은 ChatView가 중앙+우측을 차지).
+          데네브 패널이 확대(maximize)되면 작업 pane을 숨겨 AIPanel이 그 자리를 차지한다. */}
+      {view !== "chat" && !codeMode && !aiExpanded && (
         <main className="panel" style={{ flex: 1, minWidth: 0, overflow: "auto", padding: "20px 22px" }}>
           <div key={view} className="pane-enter">
             <Active />
@@ -68,7 +74,12 @@ export function Workstation({ cfg }: { cfg: GatewayConfig }) {
       <CodeView cfg={cfg} hidden={!codeMode} />
       {/* 채팅 탭(비업무)·측면 데네브 패널 모두 항상 마운트(각자 대화 유지) — 비활성 탭에선 숨긴다. */}
       <ChatView cfg={cfg} hidden={view !== "chat" || codeMode} />
-      <AIPanel cfg={cfg} hidden={view === "chat" || codeMode} />
+      <AIPanel
+        cfg={cfg}
+        hidden={view === "chat" || codeMode}
+        expanded={aiExpanded}
+        onToggleExpand={() => setAiExpanded((v) => !v)}
+      />
     </div>
   );
 }
