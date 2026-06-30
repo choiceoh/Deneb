@@ -39,7 +39,7 @@ export function WikiPane() {
   const [moving, setMoving] = useState(false);
   const [merging, setMerging] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [preview, setPreview] = useState(false);
+  const [preview, setPreview] = useState(true);
   const dirty = Boolean(path && content !== savedContent);
 
   useRegisterPane(WIKI_RESOURCE, content.trim() ? `[위키${path ? ` ${path}` : ""}]\n${content}` : "");
@@ -163,7 +163,7 @@ export function WikiPane() {
     setPath(key);
     setContent(body);
     setSavedContent(body);
-    setPreview(false);
+    setPreview(true); // 페이지를 열면 미리보기가 기본 — 편집은 "편집" 탭으로 전환
   }
 
   function editContent(next: string) {
@@ -218,6 +218,7 @@ export function WikiPane() {
     await loadCategories();
     const newPath = r.data?.path ?? `${category}/${title}`;
     await openPath(newPath);
+    setPreview(false); // a freshly created page opens in edit — you just made it to write
   }
 
   async function movePage(to: string) {
