@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.41](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.40...andromeda-v0.0.41) (2026-06-30)
+
+
+### ✨ Features
+
+* **andromeda:** wiki — compact rail, no stacking, and a collapsible Deneb panel ([#2992](https://github.com/choiceoh/Deneb/issues/2992)) ([0dcf730](https://github.com/choiceoh/Deneb/commit/0dcf7305706aba3525722b3bf142090c6aef5291))
+
 ## [0.0.40](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.39...andromeda-v0.0.40) (2026-06-30)
 
 

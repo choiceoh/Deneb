@@ -1,5 +1,17 @@
 # Changelog
 
+## [4.50.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.49.0...deneb-v4.50.0) (2026-06-30)
+
+
+### ✨ Features
+
+* **andromeda:** wiki — compact rail, no stacking, and a collapsible Deneb panel ([#2992](https://github.com/choiceoh/Deneb/issues/2992)) ([0dcf730](https://github.com/choiceoh/Deneb/commit/0dcf7305706aba3525722b3bf142090c6aef5291))
+
+
+### 🐛 Bug Fixes
+
+* **native:** SSE 응답 한글 깨짐(�) — 멀티바이트 UTF-8 안전 디코드 ([#2994](https://github.com/choiceoh/Deneb/issues/2994)) ([dbd2cc5](https://github.com/choiceoh/Deneb/commit/dbd2cc582f82758511128b83a2e3a089f804b22c))
+
 ## [4.49.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.48.0...deneb-v4.49.0) (2026-06-30)
 
 
