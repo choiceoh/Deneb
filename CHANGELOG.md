@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.47.1](https://github.com/choiceoh/Deneb/compare/deneb-v4.47.0...deneb-v4.47.1) (2026-06-30)
+
+
+### 🐛 Bug Fixes
+
+* **mail:** 네이티브 메일 아카이브 견고화 (관측성·older_than·graceful degrade·IMAP 재사용) ([#2984](https://github.com/choiceoh/Deneb/issues/2984)) ([bd63804](https://github.com/choiceoh/Deneb/commit/bd63804e18ff2c85082194e61aeea5b23c6d4bc6))
+
 ## [4.47.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.46.0...deneb-v4.47.0) (2026-06-30)
 
 
