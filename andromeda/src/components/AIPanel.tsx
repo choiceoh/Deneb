@@ -102,7 +102,19 @@ export function AssistantBody({
 // text from the workspace context and streams a reply with Markdown + tool
 // chips; a model picker drives the per-turn model and a history drawer switches
 // conversations. Tool calls that mutate data refresh the active grid (useChat).
-export function AIPanel({ cfg, hidden = false }: { cfg: GatewayConfig; hidden?: boolean }) {
+export function AIPanel({
+  cfg,
+  hidden = false,
+  expanded = false,
+  onToggleExpand,
+}: {
+  cfg: GatewayConfig;
+  hidden?: boolean;
+  // 중앙 작업 영역까지 패널을 넓힌 상태인지(Workstation이 소유). true면 작업 pane이 숨겨지고
+  // 이 패널이 사이드바를 제외한 전 폭을 차지한다.
+  expanded?: boolean;
+  onToggleExpand?: () => void;
+}) {
   const { aiText, activeResource, connected } = useWorkspace();
   const { thinking, busy, turns, send, stop, regenerate, clear, setTurns } = useChat(cfg);
   const [input, setInput] = useState("");
@@ -156,10 +168,12 @@ export function AIPanel({ cfg, hidden = false }: { cfg: GatewayConfig; hidden?: 
 
   return (
     <aside
-      className="panel"
+      className={"panel" + (expanded ? " ai-expanded" : "")}
       style={{
-        width: "var(--ai-w)",
-        flex: "0 0 auto",
+        // 확대 시 사이드바를 제외한 전 폭(flex:1), 평시엔 고정 폭(--ai-w).
+        width: expanded ? "auto" : "var(--ai-w)",
+        flex: expanded ? "1 1 auto" : "0 0 auto",
+        minWidth: 0,
         display: hidden ? "none" : "flex",
         flexDirection: "column",
         padding: "16px 16px",
@@ -168,6 +182,18 @@ export function AIPanel({ cfg, hidden = false }: { cfg: GatewayConfig; hidden?: 
       <div className="ai-head">
         <span className="micro">Deneb AI</span>
         <ModelPicker models={models} value={model} onChange={setModel} disabled={busy} />
+        {onToggleExpand && (
+          <button
+            className={"row-btn" + (expanded ? " active" : "")}
+            onClick={onToggleExpand}
+            title={expanded ? "패널 좁히기" : "패널 넓히기"}
+            aria-label={expanded ? "패널 좁히기" : "패널 넓히기"}
+            aria-pressed={expanded}
+            style={{ padding: 4, display: "inline-flex" }}
+          >
+            <Icon name={expanded ? "collapse-panel" : "expand-panel"} size={15} />
+          </button>
+        )}
         <button
           className={"row-btn" + (sessionsOpen ? " active" : "")}
           onClick={toggleSessions}

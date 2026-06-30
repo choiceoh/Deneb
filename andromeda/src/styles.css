@@ -890,6 +890,17 @@ textarea {
   gap: 12px;
   padding: 2px 1px;
 }
+/* 확대 모드 — 전 폭으로 넓어진 데네브 패널의 머리·알림·대화·입력을 가독 폭으로 가운데 정렬.
+   (좁은 기본 폭에선 max-width가 폭보다 커서 영향이 없다.) */
+.ai-expanded .ai-head,
+.ai-expanded .session-drawer,
+.ai-expanded .proactive-panel,
+.ai-expanded .ai-transcript,
+.ai-expanded .ai-composer {
+  width: 100%;
+  max-width: 860px;
+  margin-inline: auto;
+}
 .ai-empty {
   color: var(--muted-2);
   font-size: 13px;
