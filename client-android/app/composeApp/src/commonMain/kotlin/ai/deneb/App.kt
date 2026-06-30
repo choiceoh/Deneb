@@ -121,8 +121,6 @@ import coil3.svg.SvgDecoder
 import deneb.composeapp.generated.resources.Res
 import deneb.composeapp.generated.resources.tab_chat
 import deneb.composeapp.generated.resources.tab_settings
-import kotlin.time.Clock
-import kotlin.time.Instant
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.datetime.TimeZone
@@ -137,6 +135,8 @@ import org.koin.compose.KoinApplication
 import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.dsl.koinConfiguration
+import kotlin.time.Clock
+import kotlin.time.Instant
 
 @Serializable
 @SerialName("home")
