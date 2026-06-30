@@ -257,6 +257,25 @@ data class MailRowOut(
 
 @Immutable
 @Serializable
+data class MarketQuote(
+    val symbol: String = "",
+    val label: String = "",
+    val price: Double = 0.0,
+    val prevClose: Double = 0.0,
+    val changePct: Double = 0.0,
+    val currency: String = "",
+)
+
+@Immutable
+@Serializable
+data class MarketSummary(
+    val quotes: List<MarketQuote> = emptyList(),
+    val asOf: Long = 0L,
+    val stale: Boolean = false,
+)
+
+@Immutable
+@Serializable
 data class MemberOut(
     val name: String = "",
     val rank: String = "",

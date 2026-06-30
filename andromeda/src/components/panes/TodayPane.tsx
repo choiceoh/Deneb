@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import type { CalEvent, Cron, Mail, Person, ProjectDigest, Todo, View, WorkItem } from "@/types";
+import type { CalEvent, Cron, Mail, MarketQuote, Person, ProjectDigest, Todo, View, WorkItem } from "@/types";
 import { useCachedList } from "@/cachedList";
 import { calSpan, eventDayKeys, fmtDate, senderName } from "@/format";
 import { moveItem, orderedItems } from "@/listReorder";
@@ -23,7 +23,7 @@ const MAX = 6; // a briefing is a glance; the full list lives in each resource's
 // The catalog of sections the dashboard can show (== each brief's `view`). Users
 // pick WHICH appear (and in what order) from the inline editor; the original four
 // show by default, the rest are opt-in.
-const SECTIONS = ["calendar", "mail", "todo", "workfeed", "progress", "people", "crons"] as const;
+const SECTIONS = ["calendar", "mail", "todo", "workfeed", "progress", "people", "crons", "market"] as const;
 type SectionKey = (typeof SECTIONS)[number];
 const SECTION_LABEL: Record<SectionKey, string> = {
   calendar: "일정",
@@ -33,10 +33,13 @@ const SECTION_LABEL: Record<SectionKey, string> = {
   progress: "진행",
   people: "연락처",
   crons: "크론",
+  market: "시장",
 };
 const DEFAULT_VISIBLE: SectionKey[] = ["calendar", "mail", "todo", "workfeed"];
 const TODAY_ORDER_KEY = "andromeda.todayOrder";
 const TODAY_HIDDEN_KEY = "andromeda.todayHidden";
+// Sections the user has set to span two columns (a wider card). Per device.
+const TODAY_WIDE_KEY = "andromeda.todayWide";
 
 function validKeys(raw: unknown): SectionKey[] {
   return Array.isArray(raw) ? raw.filter((k): k is SectionKey => SECTIONS.includes(k as SectionKey)) : [];
@@ -53,11 +56,15 @@ function readHidden(): SectionKey[] {
   const fresh = SECTIONS.filter((k) => !savedOrder.includes(k) && !DEFAULT_VISIBLE.includes(k));
   return [...new Set([...savedHidden, ...fresh])];
 }
+function readWide(): SectionKey[] {
+  return validKeys(getJSON<unknown[]>(TODAY_WIDE_KEY));
+}
 
 interface Brief {
+  key: SectionKey; // catalog key (== order/hidden key); may differ from the nav view
   label: string;
   icon: IconName;
-  view: View;
+  view?: View; // pane this section opens; omit for info-only sections (e.g. 시장)
   empty: string;
   total: number; // relevant items before the cap — shown in the header and AI projection
   lines: BriefLine[]; // up to MAX compact rows (what the AI reads === what's on screen)
@@ -71,7 +78,20 @@ interface BriefLine {
   meta?: string; // secondary: time / sender / due — muted, on its own line
   unread?: boolean;
   accent?: boolean; // emphasize (e.g. an overdue todo)
+  tone?: "up" | "down"; // color the meta (시장 카드: 상승/하락)
   target?: PaneTarget;
+}
+
+// 시장 카드 한 줄: 가격 + 전일대비 등락(▲/▼ %). The AI reads the same text via lineText.
+function marketLine(q: MarketQuote): BriefLine {
+  const price = (q.price ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 });
+  const pct = q.changePct ?? 0;
+  const arrow = pct > 0 ? "▲" : pct < 0 ? "▼" : "·";
+  return {
+    title: q.label || q.symbol || "",
+    meta: `${price}  ${arrow}${Math.abs(pct).toFixed(2)}%`,
+    tone: pct > 0 ? "up" : pct < 0 ? "down" : undefined,
+  };
 }
 
 function lineText(l: BriefLine): string {
@@ -89,6 +109,7 @@ export function TodayPane() {
   const { connected, openPane, setView } = useWorkspace();
   const [order, setOrder] = useState<SectionKey[]>(readOrder);
   const [hidden, setHidden] = useState<SectionKey[]>(readHidden);
+  const [wide, setWide] = useState<SectionKey[]>(readWide);
   const [editing, setEditing] = useState(false);
 
   useEffect(() => {
@@ -97,9 +118,15 @@ export function TodayPane() {
   useEffect(() => {
     setJSON(TODAY_HIDDEN_KEY, hidden);
   }, [hidden]);
+  useEffect(() => {
+    setJSON(TODAY_WIDE_KEY, wide);
+  }, [wide]);
 
   function toggleHidden(k: SectionKey) {
     setHidden((p) => (p.includes(k) ? p.filter((x) => x !== k) : [...p, k]));
+  }
+  function toggleWide(k: SectionKey) {
+    setWide((p) => (p.includes(k) ? p.filter((x) => x !== k) : [...p, k]));
   }
   function move(k: SectionKey, dir: -1 | 1) {
     setOrder((p) => moveItem(p, k, dir));
@@ -114,6 +141,7 @@ export function TodayPane() {
   const prog = useCachedList<ProjectDigest>("progress", connected && visible("progress"));
   const ppl = useCachedList<Person>("people", connected && visible("people"));
   const cron = useCachedList<Cron>("crons", connected && visible("crons"));
+  const market = useCachedList<MarketQuote>("market", connected && visible("market"));
 
   const events = cal.result?.data ?? [];
   // Recent mail, unread first — robust if `isUnread` is absent (order is just preserved).
@@ -131,10 +159,12 @@ export function TodayPane() {
   const digests = prog.result?.data ?? [];
   const people = ppl.result?.data ?? [];
   const crons = cron.result?.data ?? [];
+  const quotes = market.result?.data ?? [];
   const now = Date.now();
 
   const briefs: Brief[] = [
     {
+      key: "calendar",
       label: "일정",
       icon: "calendar",
       view: "calendar",
@@ -148,6 +178,7 @@ export function TodayPane() {
       })),
     },
     {
+      key: "mail",
       label: "메일",
       icon: "mail",
       view: "mail",
@@ -162,6 +193,7 @@ export function TodayPane() {
       })),
     },
     {
+      key: "todo",
       label: "할일",
       icon: "todo",
       view: "todo",
@@ -179,6 +211,7 @@ export function TodayPane() {
       }),
     },
     {
+      key: "workfeed",
       label: "작업피드",
       icon: "workfeed",
       view: "workfeed",
@@ -192,6 +225,7 @@ export function TodayPane() {
       })),
     },
     {
+      key: "progress",
       label: "진행",
       icon: "progress",
       view: "progress",
@@ -204,6 +238,7 @@ export function TodayPane() {
       })),
     },
     {
+      key: "people",
       label: "연락처",
       icon: "people",
       view: "people",
@@ -216,6 +251,7 @@ export function TodayPane() {
       })),
     },
     {
+      key: "crons",
       label: "크론",
       icon: "crons",
       view: "crons",
@@ -227,11 +263,21 @@ export function TodayPane() {
         meta: c.schedule || undefined,
       })),
     },
+    {
+      // Info-only card — no pane to open (view omitted), so the header/rows are static.
+      key: "market",
+      label: "시장",
+      icon: "progress",
+      empty: "시세 없음",
+      query: market.query,
+      total: quotes.length,
+      lines: quotes.map(marketLine), // small fixed set — show all (no MAX cap)
+    },
   ];
 
   // Apply the user's customization: order the sections and drop hidden ones.
   const byKey: Record<string, Brief> = {};
-  for (const b of briefs) byKey[b.view] = b;
+  for (const b of briefs) byKey[b.key] = b;
   const shown = order
     .filter((k) => !hidden.includes(k))
     .map((k) => byKey[k])
@@ -263,12 +309,16 @@ export function TodayPane() {
 
       {connected && editing && (
         <div className="today-editor">
-          <div className="today-editor-hint">표시할 섹션과 순서를 정하세요.</div>
+          <div className="today-editor-hint">표시할 섹션과 순서, 너비를 정하세요.</div>
           {order.map((k, idx) => (
             <div key={k} className="today-editor-row">
               <label className="today-editor-label">
                 <input type="checkbox" checked={!hidden.includes(k)} onChange={() => toggleHidden(k)} />
                 {SECTION_LABEL[k]}
+              </label>
+              <label className="today-editor-wide" title="넓게 (2열 차지)">
+                <input type="checkbox" checked={wide.includes(k)} onChange={() => toggleWide(k)} />
+                넓게
               </label>
               <button
                 className="row-btn"
@@ -303,10 +353,11 @@ export function TodayPane() {
         <div className="today-grid">
           {shown.map((b, i) => (
             <Section
-              key={b.view}
+              key={b.key}
               brief={b}
               index={i}
-              onNav={() => setView(b.view)}
+              wide={wide.includes(b.key)}
+              onNav={b.view ? () => setView(b.view as View) : undefined}
               onOpenLine={(target) => openPane(target.view, target)}
             />
           ))}
@@ -319,42 +370,68 @@ export function TodayPane() {
 function Section({
   brief,
   index,
+  wide,
   onNav,
   onOpenLine,
 }: {
   brief: Brief;
   index: number;
-  onNav: () => void;
+  wide?: boolean;
+  // omitted for info-only cards (e.g. 시장) — the header/rows render static.
+  onNav?: () => void;
   onOpenLine: (target: PaneTarget) => void;
 }) {
   const { label, icon, total, lines, empty, query } = brief;
   return (
-    <section className="today-card fade-up" style={{ animationDelay: `${index * 60}ms` }}>
-      <button className="today-head" onClick={onNav} aria-label={`${label} 열기`} title={`${label} 열기`}>
-        <Icon name={icon} size={15} className="ico" />
-        <span className="today-head-label">{label}</span>
-        {total > 0 && <span className="today-count">{total}</span>}
-        <span className="today-arrow">
-          <Icon name="arrow-right" size={14} />
-        </span>
-      </button>
+    <section className={"today-card fade-up" + (wide ? " wide" : "")} style={{ animationDelay: `${index * 60}ms` }}>
+      {onNav ? (
+        <button className="today-head" onClick={onNav} aria-label={`${label} 열기`} title={`${label} 열기`}>
+          <Icon name={icon} size={15} className="ico" />
+          <span className="today-head-label">{label}</span>
+          {total > 0 && <span className="today-count">{total}</span>}
+          <span className="today-arrow">
+            <Icon name="arrow-right" size={14} />
+          </span>
+        </button>
+      ) : (
+        <div className="today-head today-head-static">
+          <Icon name={icon} size={15} className="ico" />
+          <span className="today-head-label">{label}</span>
+          {total > 0 && <span className="today-count">{total}</span>}
+        </div>
+      )}
       <GridNotice query={query} count={lines.length} empty={empty}>
         <div className="today-rows">
-          {lines.map((line, i) => (
-            <button
-              key={i}
-              type="button"
-              className={"today-row" + (line.accent ? " accent" : "")}
-              onClick={() => (line.target ? onOpenLine(line.target) : onNav())}
-              title={`${label}에서 열기`}
-            >
-              {line.unread && <span className="today-dot" aria-hidden="true" />}
-              <span className="today-row-main">
-                <span className="today-row-title">{line.title}</span>
-                {line.meta && <span className="today-row-meta">{line.meta}</span>}
-              </span>
-            </button>
-          ))}
+          {lines.map((line, i) => {
+            const interactive = Boolean(line.target || onNav);
+            const cls = "today-row" + (line.accent ? " accent" : "") + (interactive ? "" : " static");
+            const inner = (
+              <>
+                {line.unread && <span className="today-dot" aria-hidden="true" />}
+                <span className="today-row-main">
+                  <span className="today-row-title">{line.title}</span>
+                  {line.meta && (
+                    <span className={"today-row-meta" + (line.tone ? " " + line.tone : "")}>{line.meta}</span>
+                  )}
+                </span>
+              </>
+            );
+            return interactive ? (
+              <button
+                key={i}
+                type="button"
+                className={cls}
+                onClick={() => (line.target ? onOpenLine(line.target) : onNav?.())}
+                title={`${label}에서 열기`}
+              >
+                {inner}
+              </button>
+            ) : (
+              <div key={i} className={cls}>
+                {inner}
+              </div>
+            );
+          })}
           {total > lines.length && <div className="today-more">…외 {total - lines.length}건</div>}
         </div>
       </GridNotice>

@@ -124,6 +124,40 @@ describe("TodayPane (오늘 대시보드)", () => {
     expect(JSON.parse(localStorage.getItem("andromeda.todayHidden") ?? "[]")).toContain("mail");
   });
 
+  it("adds the 시장 card from the editor with up/down colored changes", async () => {
+    const dataProvider = fakeProvider({
+      market: [
+        { symbol: "KRW=X", label: "원/달러", price: 1546.3, prevClose: 1540.65, changePct: 0.37, currency: "KRW" },
+        { symbol: "^KS11", label: "코스피", price: 8642.85, prevClose: 8900, changePct: -2.89, currency: "KRW" },
+      ],
+    });
+    renderWithProviders(<TodayPane />, { connected: true, dataProvider });
+
+    // 시장 is opt-in — hidden until chosen.
+    expect(screen.queryByText("원/달러")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "편집" }));
+    await userEvent.click(screen.getByRole("checkbox", { name: "시장" }));
+
+    expect(await screen.findByText("원/달러")).toBeInTheDocument();
+    // Up move → ▲ + green (.up); down move → ▼ + red (.down).
+    expect(screen.getByText(/▲0\.37%/)).toHaveClass("up");
+    expect(screen.getByText(/▼2\.89%/)).toHaveClass("down");
+  });
+
+  it("toggles a section to wide and persists it", async () => {
+    const dataProvider = fakeProvider({ mail: [{ id: "m1", subject: "예산 검토", from: "kim@corp.com" }] });
+    const { container } = renderWithProviders(<TodayPane />, { connected: true, dataProvider });
+    await screen.findByText(/예산 검토/);
+
+    await userEvent.click(screen.getByRole("button", { name: "편집" }));
+    // Default editor order == catalog order; index 1 is 메일.
+    const wideToggles = screen.getAllByRole("checkbox", { name: "넓게" });
+    await userEvent.click(wideToggles[1]);
+
+    expect(JSON.parse(localStorage.getItem("andromeda.todayWide") ?? "[]")).toContain("mail");
+    expect(container.querySelector(".today-card.wide")).toBeTruthy();
+  });
+
   it("treats extra sections as opt-in — hidden until chosen in the editor", async () => {
     const dataProvider = fakeProvider({
       calendar: [{ id: "c1", title: "스탠드업", start: { dateTime: "2026-06-18T09:00:00" } }],

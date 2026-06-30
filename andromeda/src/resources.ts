@@ -73,6 +73,9 @@ export const RESOURCE_DEFS: ResourceDef[] = [
   // Skill catalog (miniapp.skills.list) — a parameterless list of the skills the
   // agent can use. detail/lifecycle/update/delete are query-driven actions below.
   { name: "skills", label: "스킬", list: "miniapp.skills.list", listKey: "skills" },
+  // 시장 시세 (Deneb market.summary) — 원/달러·코스피·WTI 유가·구리, a parameterless
+  // read for the 오늘 dashboard's opt-in 시장 card. Rows carry no id (keyed by symbol).
+  { name: "market", label: "시장", list: "miniapp.market.summary", listKey: "quotes" },
 ];
 
 // memory(위키) and search are NOT in the CRUD registry: their reads are
