@@ -10,6 +10,20 @@ import { useRegisterPane, useWorkspace, type PaneTarget } from "@/workspaceConte
 import { Column, Grid, GridNotice } from "@/components/Grid";
 import { AssistantText } from "@/components/DenebUi";
 
+// The gateway clamps workfeed.list to 100 (maxWorkFeedLimit); a single day fits well
+// under that, so request the full page and let the day-range scope it.
+const WORKFEED_DAY_LIMIT = 100;
+// How far back the day-pager can step into (possibly empty) days before ‹이전 stops.
+// Mirrors the native feed's lookback so a quiet stretch never traps you on today.
+const FEED_LOOKBACK_DAYS = 31;
+
+// Local-midnight epoch `delta` days from `dayMs`, computed component-wise so day math
+// stays DST-safe (never UTC arithmetic) — same rule as format.startOfDay.
+function addDays(dayMs: number, delta: number): number {
+  const d = new Date(dayMs);
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate() + delta).getTime();
+}
+
 // Items sourced from a question expect a free-text reply. The gateway settles the
 // card via workfeed.answer/action.run, then returns a sessionKey+prompt to deliver.
 const isQuestion = (w: WorkItem) => (w.source ?? "").includes("question");
@@ -71,11 +85,21 @@ interface WorkfeedTurn {
 
 export function WorkfeedPane() {
   const { connected, cfg } = useWorkspace();
-  const { result, query } = useCachedList<WorkItem>("workfeed", connected);
-  const items = result?.data ?? [];
-  const [selectedId, setSelectedId] = useState<string | number | undefined>();
   // The day currently in view (local midnight). Lands on today; prev/next step it.
   const [dayMs, setDayMs] = useState<number>(() => startOfDay());
+  // Fetch ONLY the selected day's items, server-side ranged (sinceMs..beforeMs) at the
+  // gateway's max page, refetched whenever the day changes. The old flat default fetch
+  // (limit 20, server order — not newest-first) silently dropped a busy day's later
+  // cards past position 20: a 6-mail morning showed just 2 here while the phone (which
+  // already ranges by day) showed all of them. The per-day cacheKey snapshots each day
+  // separately; the resource stays "workfeed" so sync.ts / useEvents invalidation still
+  // refetches the visible day when new cards land.
+  const { result, query } = useCachedList<WorkItem>("workfeed", connected, {
+    cacheKey: `workfeed.${dayMs}`,
+    meta: { rpcParams: { limit: WORKFEED_DAY_LIMIT, sinceMs: dayMs, beforeMs: addDays(dayMs, 1) } },
+  });
+  const items = result?.data ?? [];
+  const [selectedId, setSelectedId] = useState<string | number | undefined>();
   // Optimistically-read ids so a row dims the instant it's opened, before the gateway
   // round-trip lands readAtMs in the cached list on the next refresh.
   const [readIds, setReadIds] = useState<ReadonlySet<string>>(() => new Set());
@@ -110,11 +134,12 @@ export function WorkfeedPane() {
 
   const nowMs = Date.now();
   const todayMs = startOfDay(nowMs);
-  // Navigation is bounded to the span actually worth visiting: from the earliest item
-  // day (or today) to the latest item day (or today). Beyond that there is nothing to
-  // see, so the prev/next buttons disable at the edges.
+  // Navigation mirrors the native feed: freely steppable back across the lookback
+  // window — even into days the current per-day fetch returned empty — so an empty day
+  // never traps the user on today. Loaded items only EXTEND the range when they predate
+  // the window. Forward stops at today (nothing is newer).
   const itemDays = items.map((w) => startOfDay(effectiveMs(w, nowMs)));
-  const minDayMs = Math.min(todayMs, ...itemDays);
+  const minDayMs = Math.min(addDays(todayMs, -FEED_LOOKBACK_DAYS), ...itemDays);
   const maxDayMs = Math.max(todayMs, ...itemDays);
 
   const dayItems = items
@@ -132,8 +157,7 @@ export function WorkfeedPane() {
   }
 
   function stepDay(delta: number) {
-    const d = new Date(dayMs);
-    goToDay(new Date(d.getFullYear(), d.getMonth(), d.getDate() + delta).getTime());
+    goToDay(addDays(dayMs, delta));
   }
 
   const isRead = (w: WorkItem) => Boolean(w.readAtMs) || readIds.has(String(w.id));
@@ -187,7 +211,10 @@ export function WorkfeedPane() {
     <>
       <h2 style={{ marginTop: 2 }}>작업피드</h2>
       {error && <p className="pane-error">오류: {error}</p>}
-      <GridNotice query={query} count={items.length} empty="작업피드가 비어 있습니다.">
+      {/* Day nav lives ABOVE the grid notice so it stays put while a day loads or comes
+          back empty — GridNotice swaps its children for a loading/empty notice, and
+          burying the pager inside it would strand the user on an empty day with no arrows. */}
+      {connected && (
         <div className="workfeed-daynav">
           <button className="row-btn" onClick={() => stepDay(-1)} disabled={dayMs <= minDayMs} aria-label="이전 날">
             ‹ 이전
@@ -206,28 +233,26 @@ export function WorkfeedPane() {
             </button>
           )}
         </div>
-        {dayItems.length ? (
-          <Grid
-            columns={columns}
-            rows={dayItems}
-            getKey={(w) => String(w.id)}
-            hideHeader
-            onRowClick={toggleSelected}
-            isRowSelected={(w) => String(w.id) === String(selectedId)}
-            rowTitle={(w) => `${w.title ?? "(항목)"} 상세`}
-            renderExpandedRow={(w) => (
-              <WorkItemDetail
-                w={w}
-                busy={busy}
-                run={run}
-                onAck={() => void ackItem(w)}
-                onClose={() => setSelectedId(undefined)}
-              />
-            )}
-          />
-        ) : (
-          <p className="workfeed-empty-day">이 날짜에는 항목이 없습니다.</p>
-        )}
+      )}
+      <GridNotice query={query} count={dayItems.length} empty="이 날짜에는 항목이 없습니다.">
+        <Grid
+          columns={columns}
+          rows={dayItems}
+          getKey={(w) => String(w.id)}
+          hideHeader
+          onRowClick={toggleSelected}
+          isRowSelected={(w) => String(w.id) === String(selectedId)}
+          rowTitle={(w) => `${w.title ?? "(항목)"} 상세`}
+          renderExpandedRow={(w) => (
+            <WorkItemDetail
+              w={w}
+              busy={busy}
+              run={run}
+              onAck={() => void ackItem(w)}
+              onClose={() => setSelectedId(undefined)}
+            />
+          )}
+        />
       </GridNotice>
     </>
   );

@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { DataProvider } from "@refinedev/core";
 import { fakeProvider, renderWithProviders } from "@/test/util";
+import { startOfDay } from "@/format";
 import { WorkfeedPane } from "./WorkfeedPane";
 
 // The list flows through the (fake) data provider; the action RPCs go straight to
@@ -196,6 +198,49 @@ describe("WorkfeedPane", () => {
     await userEvent.click(screen.getByRole("button", { name: "다음 날" }));
     expect(await screen.findByText("오늘 항목")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "다음 날" })).toBeDisabled();
+  });
+
+  it("fetches the selected day's server-side range and refetches when the day changes", async () => {
+    // The old flat default fetch (limit 20, unordered) dropped a busy day's later cards
+    // past position 20. Each day now fetches its own [sinceMs, beforeMs) window at the
+    // gateway max (100); this asserts the params AND that changing the day refetches.
+    const ranges: Array<Record<string, unknown>> = [];
+    const t = new Date();
+    const midnight = (daysAgo: number) => new Date(t.getFullYear(), t.getMonth(), t.getDate() - daysAgo).getTime();
+    const at = (daysAgo: number, hour: number) =>
+      new Date(t.getFullYear(), t.getMonth(), t.getDate() - daysAgo, hour).getTime();
+    // Return both days regardless of range; the client buckets to the selected day.
+    const dayFixtures = [
+      { id: "y", source: "followup", title: "어제 항목", createdAtMs: at(1, 14) },
+      { id: "t", source: "alert", title: "오늘 항목", createdAtMs: at(0, 9) },
+    ];
+    const recordingProvider: DataProvider = {
+      getApiUrl: () => "http://test",
+      getList: async ({ meta }) => {
+        ranges.push((meta as { rpcParams?: Record<string, unknown> } | undefined)?.rpcParams ?? {});
+        return { data: dayFixtures as never[], total: dayFixtures.length };
+      },
+      getOne: async ({ id }) => ({ data: { id } as never }),
+      create: async ({ variables }) => ({ data: { id: "new", ...(variables as object) } as never }),
+      update: async ({ id, variables }) => ({ data: { id, ...(variables as object) } as never }),
+      deleteOne: async ({ id }) => ({ data: { id } as never }),
+    };
+    renderWithProviders(<WorkfeedPane />, { connected: true, dataProvider: recordingProvider });
+
+    // Today's fetch ranges [today 00:00, tomorrow 00:00) at the gateway max page.
+    await screen.findByText("오늘 항목");
+    await waitFor(() => expect(ranges.some((r) => r.sinceMs === startOfDay())).toBe(true));
+    expect(ranges.find((r) => r.sinceMs === startOfDay())).toMatchObject({
+      limit: 100,
+      sinceMs: midnight(0),
+      beforeMs: midnight(-1),
+    });
+
+    // Stepping a day back issues a fresh fetch for yesterday's window.
+    await userEvent.click(screen.getByRole("button", { name: "이전 날" }));
+    await screen.findByText("어제 항목");
+    await waitFor(() => expect(ranges.some((r) => r.sinceMs === midnight(1))).toBe(true));
+    expect(ranges.find((r) => r.sinceMs === midnight(1))).toMatchObject({ beforeMs: midnight(0) });
   });
 
   it("marks an item read on open and de-emphasizes its row", async () => {
