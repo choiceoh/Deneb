@@ -279,151 +279,160 @@ export function WikiPane() {
   );
 
   return (
-    <div className="wiki-shell">
-      <div className="wiki-rail">
-        <input
-          className="field"
-          style={{ width: "100%", boxSizing: "border-box", fontSize: 12, marginBottom: 8 }}
-          placeholder="위키 검색..."
-          value={q}
-          disabled={!connected}
-          onChange={(e) => setQ(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") void search();
-          }}
-        />
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 8 }}>
-          <button
-            className="btn"
-            onClick={() => setCreating(true)}
-            disabled={!connected || dirty}
-            title={dirty ? "먼저 저장하거나 되돌리세요" : "새 페이지"}
-            style={{ fontSize: 12, padding: "6px 0" }}
-          >
-            새 페이지
-          </button>
-          <button
-            className="btn"
-            onClick={() => void loadDiary()}
-            disabled={!connected}
-            style={{ fontSize: 12, padding: "6px 0" }}
-          >
-            최근 일지
-          </button>
-        </div>
-        {!connected ? (
-          <p style={muted}>게이트웨이에 연결하세요.</p>
-        ) : mode === "search" ? (
-          <>
-            <button className="row-btn" onClick={showCategories} style={{ marginBottom: 6, padding: "3px 6px" }}>
-              목록으로
-            </button>
-            {pages.length === 0 ? <p style={muted}>검색 결과 없음</p> : pages.map(renderPage)}
-          </>
-        ) : mode === "diary" ? (
-          <>
-            <button className="row-btn" onClick={showCategories} style={{ marginBottom: 6, padding: "3px 6px" }}>
-              카테고리
-            </button>
-            {diary.length === 0 ? (
-              <p style={muted}>최근 일지 없음</p>
-            ) : (
-              diary.map((entry, i) => (
-                <button
-                  key={entry.file ?? entry.path ?? i}
-                  className="wiki-list-row"
-                  onClick={() => requestOpenPath(entry.file ?? entry.path ?? "")}
-                >
-                  <span>{entry.header ?? entry.title ?? entry.file ?? entry.path ?? "일지"}</span>
-                  {entry.content && <small>{entry.content}</small>}
-                </button>
-              ))
-            )}
-          </>
-        ) : browseCat ? (
-          <>
-            <button
-              className="row-btn"
-              onClick={() => setBrowseCat(null)}
-              style={{ marginBottom: 4, padding: "3px 6px" }}
-            >
-              카테고리
-            </button>
-            <div className="micro" style={{ margin: "0 0 6px 2px" }}>
-              {browseCat}
-            </div>
-            {catPages.length === 0 ? <p style={muted}>페이지가 없습니다.</p> : catPages.map(renderPage)}
-          </>
-        ) : categories.length === 0 ? (
-          <p style={muted}>위키 페이지가 없습니다.</p>
-        ) : (
-          categories.map((c) => {
-            const name = categoryName(c);
-            return (
-              <button key={name} onClick={() => void openCategory(name)} className="wiki-category-row">
-                <span>{name}</span>
-                {categoryCount(c) != null && <small>{categoryCount(c)}</small>}
+    <>
+      {/* The rail+editor split lives in its own size container so it collapses on the
+          work-area width, not the viewport. Modals stay OUTSIDE it — a container is a
+          containing block for position:fixed, which would trap the modal backdrops. */}
+      <div className="wiki-split">
+        <div className="wiki-shell">
+          <div className="wiki-rail">
+            <input
+              className="field"
+              style={{ width: "100%", boxSizing: "border-box", fontSize: 12, marginBottom: 8 }}
+              placeholder="위키 검색..."
+              value={q}
+              disabled={!connected}
+              onChange={(e) => setQ(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void search();
+              }}
+            />
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 8 }}>
+              <button
+                className="btn"
+                onClick={() => setCreating(true)}
+                disabled={!connected || dirty}
+                title={dirty ? "먼저 저장하거나 되돌리세요" : "새 페이지"}
+                style={{ fontSize: 12, padding: "6px 0" }}
+              >
+                새 페이지
               </button>
-            );
-          })
-        )}
-      </div>
-      <div className="wiki-editor">
-        <div className="wiki-editor-head">
-          <div className="wiki-title-line">
-            <h3>{path ?? "위키"}</h3>
-            {path && <span className={"wiki-save-state" + (dirty ? " dirty" : "")}>{dirty ? "수정됨" : "저장됨"}</span>}
+              <button
+                className="btn"
+                onClick={() => void loadDiary()}
+                disabled={!connected}
+                style={{ fontSize: 12, padding: "6px 0" }}
+              >
+                최근 일지
+              </button>
+            </div>
+            {!connected ? (
+              <p style={muted}>게이트웨이에 연결하세요.</p>
+            ) : mode === "search" ? (
+              <>
+                <button className="row-btn" onClick={showCategories} style={{ marginBottom: 6, padding: "3px 6px" }}>
+                  목록으로
+                </button>
+                {pages.length === 0 ? <p style={muted}>검색 결과 없음</p> : pages.map(renderPage)}
+              </>
+            ) : mode === "diary" ? (
+              <>
+                <button className="row-btn" onClick={showCategories} style={{ marginBottom: 6, padding: "3px 6px" }}>
+                  카테고리
+                </button>
+                {diary.length === 0 ? (
+                  <p style={muted}>최근 일지 없음</p>
+                ) : (
+                  diary.map((entry, i) => (
+                    <button
+                      key={entry.file ?? entry.path ?? i}
+                      className="wiki-list-row"
+                      onClick={() => requestOpenPath(entry.file ?? entry.path ?? "")}
+                    >
+                      <span>{entry.header ?? entry.title ?? entry.file ?? entry.path ?? "일지"}</span>
+                      {entry.content && <small>{entry.content}</small>}
+                    </button>
+                  ))
+                )}
+              </>
+            ) : browseCat ? (
+              <>
+                <button
+                  className="row-btn"
+                  onClick={() => setBrowseCat(null)}
+                  style={{ marginBottom: 4, padding: "3px 6px" }}
+                >
+                  카테고리
+                </button>
+                <div className="micro" style={{ margin: "0 0 6px 2px" }}>
+                  {browseCat}
+                </div>
+                {catPages.length === 0 ? <p style={muted}>페이지가 없습니다.</p> : catPages.map(renderPage)}
+              </>
+            ) : categories.length === 0 ? (
+              <p style={muted}>위키 페이지가 없습니다.</p>
+            ) : (
+              categories.map((c) => {
+                const name = categoryName(c);
+                return (
+                  <button key={name} onClick={() => void openCategory(name)} className="wiki-category-row">
+                    <span>{name}</span>
+                    {categoryCount(c) != null && <small>{categoryCount(c)}</small>}
+                  </button>
+                );
+              })
+            )}
           </div>
-          <div className="wiki-mode-tabs" role="group" aria-label="위키 보기 방식">
-            <button
-              className={"wiki-mode-tab" + (!preview ? " active" : "")}
-              onClick={() => setPreview(false)}
+          <div className="wiki-editor">
+            <div className="wiki-editor-head">
+              <div className="wiki-title-line">
+                <h3>{path ?? "위키"}</h3>
+                {path && (
+                  <span className={"wiki-save-state" + (dirty ? " dirty" : "")}>{dirty ? "수정됨" : "저장됨"}</span>
+                )}
+              </div>
+              <div className="wiki-mode-tabs" role="group" aria-label="위키 보기 방식">
+                <button
+                  className={"wiki-mode-tab" + (!preview ? " active" : "")}
+                  onClick={() => setPreview(false)}
+                  disabled={!path}
+                  aria-pressed={!preview}
+                >
+                  편집
+                </button>
+                <button
+                  className={"wiki-mode-tab" + (preview ? " active" : "")}
+                  onClick={() => setPreview(true)}
+                  disabled={!path}
+                  aria-pressed={preview}
+                >
+                  미리보기
+                </button>
+              </div>
+              <div className="wiki-editor-actions">
+                <button className="btn btn-accent" onClick={() => void save()} disabled={!path || !dirty}>
+                  저장
+                </button>
+                <button className="row-btn" onClick={() => editContent(savedContent)} disabled={!dirty}>
+                  되돌리기
+                </button>
+                <button className="row-btn" onClick={() => setMoving(true)} disabled={!path || dirty}>
+                  이동
+                </button>
+                <button className="row-btn" onClick={() => setMerging(true)} disabled={!path || dirty}>
+                  병합
+                </button>
+                <button
+                  className="row-btn"
+                  onClick={() => setDeleting(true)}
+                  disabled={!path || dirty}
+                  style={{ color: color.danger }}
+                >
+                  삭제
+                </button>
+                {status && <span className="pane-status">{status}</span>}
+              </div>
+            </div>
+            <MarkdownEditor
+              value={content}
+              onChange={editContent}
+              preview={preview}
               disabled={!path}
-              aria-pressed={!preview}
-            >
-              편집
-            </button>
-            <button
-              className={"wiki-mode-tab" + (preview ? " active" : "")}
-              onClick={() => setPreview(true)}
-              disabled={!path}
-              aria-pressed={preview}
-            >
-              미리보기
-            </button>
-          </div>
-          <div className="wiki-editor-actions">
-            <button className="btn btn-accent" onClick={() => void save()} disabled={!path || !dirty}>
-              저장
-            </button>
-            <button className="row-btn" onClick={() => editContent(savedContent)} disabled={!dirty}>
-              되돌리기
-            </button>
-            <button className="row-btn" onClick={() => setMoving(true)} disabled={!path || dirty}>
-              이동
-            </button>
-            <button className="row-btn" onClick={() => setMerging(true)} disabled={!path || dirty}>
-              병합
-            </button>
-            <button
-              className="row-btn"
-              onClick={() => setDeleting(true)}
-              disabled={!path || dirty}
-              style={{ color: color.danger }}
-            >
-              삭제
-            </button>
-            {status && <span className="pane-status">{status}</span>}
+              fill
+              ariaLabel="위키 미리보기"
+            />
           </div>
         </div>
-        <MarkdownEditor
-          value={content}
-          onChange={editContent}
-          preview={preview}
-          disabled={!path}
-          fill
-          ariaLabel="위키 미리보기"
-        />
       </div>
       {creating && <NewPageModal onClose={() => setCreating(false)} onCreate={(p) => void createNewPage(p)} />}
       {moving && path && (
@@ -460,7 +469,7 @@ export function WikiPane() {
           onSave={() => void saveThenOpenPending()}
         />
       )}
-    </div>
+    </>
   );
 }
 
