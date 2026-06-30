@@ -10,6 +10,10 @@
 //     today; if it ever yields a specific time — a meeting — that qualifies too,
 //     hence the allDay guard below.)
 //   - a deal document's due date (납기·결제 기한) is proposed as a deadline.
+//   - and ONLY when the mail itself is important (analysis tier urgent/attention).
+//     Routine/FYI mail (참고·자동발신·뉴스레터) proposes nothing, however date-rich —
+//     the operator is an executive who wants only core schedules on the bell, so
+//     this tier gate is the main throttle against an over-frequent proposal bell.
 //
 // Each proposal is deduped by a stable per-mail Source key, so re-analysis of
 // the same message never piles up duplicates.
@@ -28,11 +32,11 @@ import (
 
 // autoProposeCalendarFromMail creates calendar proposals from a mail analysis.
 // Best-effort: a missing store or a per-item failure is logged and skipped.
-func (s *Server) autoProposeCalendarFromMail(msg *gmail.MessageDetail, items []gmailpoll.ActionItem, deal *gmailpoll.DealInfo) int {
+func (s *Server) autoProposeCalendarFromMail(msg *gmail.MessageDetail, items []gmailpoll.ActionItem, deal *gmailpoll.DealInfo, importance string) int {
 	if msg == nil {
 		return 0
 	}
-	inputs := calendarProposalsFromMail(msg.ID, msg.Subject, msg.From, documentAttachmentNames(msg.Attachments), items, deal, time.Now())
+	inputs := calendarProposalsFromMail(msg.ID, msg.Subject, msg.From, documentAttachmentNames(msg.Attachments), items, deal, importance, time.Now())
 	if len(inputs) == 0 {
 		return 0
 	}
@@ -60,7 +64,16 @@ func (s *Server) autoProposeCalendarFromMail(msg *gmail.MessageDetail, items []g
 
 // calendarProposalsFromMail is the pure decision: pick the schedule-worthy items
 // and build a calprop.CreateInput for each. Exposed for unit testing.
-func calendarProposalsFromMail(msgID, subject, from string, docs []string, items []gmailpoll.ActionItem, deal *gmailpoll.DealInfo, now time.Time) []calprop.CreateInput {
+//
+// importance is the mail-analysis tier ("urgent"/"attention"/"routine"/""). The
+// operator is an executive who only wants core schedules on the bell, so routine
+// (FYI·자동발신·뉴스레터) mail proposes nothing at all — the single biggest cut to an
+// over-frequent proposal bell. urgent/attention still propose; an empty/unknown
+// tier is treated as proposable so a missing tag never silently drops a real one.
+func calendarProposalsFromMail(msgID, subject, from string, docs []string, items []gmailpoll.ActionItem, deal *gmailpoll.DealInfo, importance string, now time.Time) []calprop.CreateInput {
+	if strings.EqualFold(strings.TrimSpace(importance), "routine") {
+		return nil
+	}
 	var out []calprop.CreateInput
 
 	for _, it := range items {

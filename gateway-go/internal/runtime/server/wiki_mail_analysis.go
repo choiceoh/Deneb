@@ -223,7 +223,7 @@ func (s *Server) makeMailAnalysisSink() func(*gmail.MessageDetail, gmailpoll.Ana
 		// Propose schedule-worthy items (meetings, deadlines) as calendar
 		// proposals the operator accepts from the calendar bell. See
 		// mail_calendar.go. No push — bell badge only.
-		calendarCount := s.autoProposeCalendarFromMail(msg, res.ActionItems, res.Deal)
+		calendarCount := s.autoProposeCalendarFromMail(msg, res.ActionItems, res.Deal, res.Importance)
 		if _, err := workStore.MarkAnalysisDone(mailwork.AnalysisInput{
 			MessageInput: mailwork.MessageInput{
 				ID:              msg.ID,
