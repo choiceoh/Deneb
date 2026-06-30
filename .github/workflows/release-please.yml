@@ -206,3 +206,34 @@ jobs:
           projectPath: andromeda
           releaseId: ${{ needs.release-please.outputs.andromeda-release-id }}
           args: ${{ matrix.args }}
+
+  andromeda-update-manifest:
+    # Point the Tauri auto-updater at a STABLE url. The updater endpoint can't be
+    # /releases/latest — that's repo-wide (the gateway's release, which carries no
+    # andromeda latest.json), so a 0.0.x desktop build never sees a newer andromeda
+    # manifest and reports "up to date". Fix: mirror the just-built manifest onto a
+    # fixed, non-"Latest" rolling release tagged `andromeda-latest`, and the app
+    # polls https://github.com/choiceoh/Deneb/releases/download/andromeda-latest/latest.json.
+    # Runs once, after every platform bundle + the merged latest.json are on the tag.
+    needs: [release-please, andromeda-build]
+    if: needs.release-please.outputs.andromeda-release-created == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mirror latest.json to the rolling andromeda-latest release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ needs.release-please.outputs.andromeda-tag }}
+        run: |
+          set -euo pipefail
+          # The version tag's latest.json has all platforms merged by tauri-action.
+          gh release download "$TAG" --repo "$REPO" --pattern latest.json --dir . --clobber
+          # Create the fixed rolling release once — prerelease + --latest=false so it
+          # never steals the repo "Latest" marker from the gateway — then overwrite it.
+          if ! gh release view andromeda-latest --repo "$REPO" >/dev/null 2>&1; then
+            gh release create andromeda-latest --repo "$REPO" \
+              --title "Andromeda updater manifest (rolling)" \
+              --notes "Always holds the newest andromeda latest.json for the Tauri auto-updater. Managed by release-please.yml — do not delete." \
+              --prerelease --latest=false
+          fi
+          gh release upload andromeda-latest latest.json --repo "$REPO" --clobber
