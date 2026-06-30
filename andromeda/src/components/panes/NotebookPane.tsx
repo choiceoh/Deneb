@@ -23,6 +23,9 @@ export function NotebookPane() {
   const [addingSource, setAddingSource] = useState(false);
   const [deleting, setDeleting] = useState<Notebook | null>(null);
   const [deletingSource, setDeletingSource] = useState<NotebookSource | null>(null);
+  // Which source is shown in the right detail pane (by its stable key). When stale
+  // (notebook switched / source deleted) the render falls back to the first source.
+  const [selectedKey, setSelectedKey] = useState("");
 
   // Reload the list and refresh its cache — used after writes so the top picker
   // (and the cached snapshot it paints from) stays current.
@@ -147,6 +150,12 @@ export function NotebookPane() {
       );
   useRegisterPane(NOTEBOOK_RESOURCE, aiText);
 
+  // Master-detail: the left list selects which source shows on the right. Falls back
+  // to the first source when the selection is stale (notebook switch / deletion).
+  const sources = active?.sources ?? [];
+  const selected = sources.find((s) => srcKey(s) === selectedKey) ?? sources[0];
+  const selKey = selected ? srcKey(selected) : "";
+
   return (
     <div className="notebook-pane">
       {/* Picking a notebook is a once-per-task action — a compact top dropdown, not a
@@ -207,23 +216,31 @@ export function NotebookPane() {
           </div>
 
           <div className="notebook-sources-head">
-            <span className="micro">자료 {(active.sources ?? []).length}건</span>
+            <span className="micro">자료 {sources.length}건</span>
             <button className="row-btn notebook-add" onClick={() => setAddingSource(true)} title="인용자료 추가">
               <Icon name="plus" size={12} /> 자료 추가
             </button>
           </div>
 
-          {(active.sources ?? []).length === 0 ? (
+          {sources.length === 0 ? (
             <p className="notebook-empty">아직 자료가 없습니다. “＋ 자료 추가”로 메일·견적·메모·위키 등을 담으세요.</p>
           ) : (
-            <div className="notebook-sources">
-              {(active.sources ?? []).map((s, i) => (
-                <NotebookSourceRow
-                  key={s.cite || s.ref || i}
-                  source={s}
-                  onDelete={s.cite ? () => setDeletingSource(s) : undefined}
-                />
-              ))}
+            // 마스터-디테일: 왼쪽 목록에서 자료를 고르면 오른쪽에 그 내용이 펼쳐진다.
+            <div className="notebook-body">
+              <div className="notebook-list" aria-label="자료 목록">
+                {sources.map((s, i) => (
+                  <NotebookSourceItem
+                    key={srcKey(s) || i}
+                    source={s}
+                    active={srcKey(s) === selKey}
+                    onSelect={() => setSelectedKey(srcKey(s))}
+                    onDelete={s.cite ? () => setDeletingSource(s) : undefined}
+                  />
+                ))}
+              </div>
+              <div className="notebook-detail" role="group" aria-label="자료 내용">
+                <NotebookSourceDetail source={selected} />
+              </div>
             </div>
           )}
         </>
@@ -293,63 +310,92 @@ function sourceLabel(source: NotebookSource) {
   return [source.cite, source.title || source.ref || "(제목 없음)"].filter(Boolean).join(" · ");
 }
 
-// One cited source as a compact row: citation badge + title + kind. The full text
-// (when present) is collapsed behind a click — you mostly need to know WHAT sources
-// exist, not read them in full (the AI reads them for you on the right).
-function NotebookSourceRow({ source, onDelete }: { source: NotebookSource; onDelete?: () => void }) {
-  const [open, setOpen] = useState(false);
-  const hasText = Boolean(source.text);
-  const toggle = () => hasText && setOpen((o) => !o);
-  // A pasted note often has no title — show a one-line snippet of its text instead of
-  // "(제목 없음)" so the row is still meaningful at a glance.
-  const title =
-    source.title?.trim() || source.ref?.trim() || source.text?.split("\n")[0]?.slice(0, 80).trim() || "(제목 없음)";
+// A source's stable key for selection. Pinned sources always carry a cite (S1…);
+// ref/title are fallbacks for robustness.
+function srcKey(s: NotebookSource): string {
+  return s.cite || s.ref || s.title || "";
+}
+
+// A pasted note often has no title — show a one-line snippet of its text instead of
+// "(제목 없음)" so the row/header is still meaningful at a glance.
+function sourceTitle(s: NotebookSource): string {
+  return s.title?.trim() || s.ref?.trim() || s.text?.split("\n")[0]?.slice(0, 80).trim() || "(제목 없음)";
+}
+
+// One cited source as a selectable list row (left column): citation badge + title +
+// kind. Clicking selects it; the full content opens in the detail pane on the right.
+function NotebookSourceItem({
+  source,
+  active,
+  onSelect,
+  onDelete,
+}: {
+  source: NotebookSource;
+  active: boolean;
+  onSelect: () => void;
+  onDelete?: () => void;
+}) {
   return (
-    <section className="notebook-source">
-      <div
-        className={"notebook-source-head" + (hasText ? " expandable" : "")}
-        onClick={hasText ? toggle : undefined}
-        role={hasText ? "button" : undefined}
-        tabIndex={hasText ? 0 : undefined}
-        aria-expanded={hasText ? open : undefined}
-        onKeyDown={
-          hasText
-            ? (e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  toggle();
-                }
-              }
-            : undefined
+    <div
+      className={"notebook-item" + (active ? " active" : "")}
+      role="button"
+      tabIndex={0}
+      aria-pressed={active}
+      onClick={onSelect}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onSelect();
         }
-      >
-        {source.cite && <span className="notebook-cite">{source.cite}</span>}
-        <span className="notebook-source-title">{title}</span>
-        {source.kind && (
-          <span className="notebook-source-kind">{KIND_LABEL[source.kind as SourceKind] ?? source.kind}</span>
-        )}
-        {hasText && <Icon name="chevron-down" size={13} className={"notebook-caret" + (open ? " open" : "")} />}
-        {onDelete && (
-          <button
-            className="row-btn notebook-danger"
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete();
-            }}
-            aria-label={`인용자료 삭제 ${source.cite}`}
-            title="인용자료 삭제"
-            style={{ padding: 3 }}
-          >
-            <Icon name="trash" size={12} />
-          </button>
-        )}
-      </div>
-      {hasText && open && (
-        <div className="notebook-source-body">
-          <Markdown text={source.text as string} />
-        </div>
+      }}
+    >
+      {source.cite && <span className="notebook-cite">{source.cite}</span>}
+      <span className="notebook-source-title">{sourceTitle(source)}</span>
+      {source.kind && (
+        <span className="notebook-source-kind">{KIND_LABEL[source.kind as SourceKind] ?? source.kind}</span>
       )}
-    </section>
+      {onDelete && (
+        <button
+          className="row-btn notebook-danger"
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete();
+          }}
+          aria-label={`인용자료 삭제 ${source.cite}`}
+          title="인용자료 삭제"
+          style={{ padding: 3 }}
+        >
+          <Icon name="trash" size={12} />
+        </button>
+      )}
+    </div>
+  );
+}
+
+// The detail pane (right column): the selected source's title/kind + full content
+// (markdown text, a ref for ingested sources, or empty when nothing is selected).
+function NotebookSourceDetail({ source }: { source?: NotebookSource }) {
+  if (!source) {
+    return <p className="notebook-empty">왼쪽에서 자료를 선택하면 내용이 여기에 표시됩니다.</p>;
+  }
+  const kindLabel = source.kind ? (KIND_LABEL[source.kind as SourceKind] ?? source.kind) : "";
+  return (
+    <>
+      <div className="notebook-detail-head">
+        {source.cite && <span className="notebook-cite">{source.cite}</span>}
+        <span className="notebook-detail-title">{sourceTitle(source)}</span>
+        {kindLabel && <span className="notebook-source-kind">{kindLabel}</span>}
+      </div>
+      {source.text ? (
+        <div className="notebook-detail-body">
+          <Markdown text={source.text} />
+        </div>
+      ) : source.ref ? (
+        <div className="notebook-detail-ref">{source.ref}</div>
+      ) : (
+        <p className="notebook-empty">표시할 내용이 없습니다.</p>
+      )}
+    </>
   );
 }
 
