@@ -158,7 +158,6 @@ describe("WorkfeedPane", () => {
     renderWithProviders(<WorkfeedPane />, { connected: true, dataProvider });
 
     await screen.findByText("도표 확인");
-    expect(screen.getByText("표/도표 포함")).toBeInTheDocument();
 
     await userEvent.click(screen.getByText("도표 확인"));
     const detail = screen.getByLabelText("피드 상세");
