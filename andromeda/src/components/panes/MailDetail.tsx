@@ -51,9 +51,15 @@ export function MailDetail({
   onArchive: () => void;
   onTrash: () => void;
 }) {
+  const { connected } = useWorkspace();
+  const mailId = mail ? String(mail.id) : "";
+  const defaultMailView: "analysis" | "body" = connected ? "analysis" : "body";
   // 분석 ↔ 본문 토글. 분석이 기본값 — "왜 지금 중요한가"(합성)를 본문보다 먼저 보여준다.
   // (Hook before the early return below — rules-of-hooks.)
-  const [mailView, setMailView] = useState<"analysis" | "body">("analysis");
+  const [mailView, setMailView] = useState<"analysis" | "body">(defaultMailView);
+  useEffect(() => {
+    setMailView(defaultMailView);
+  }, [defaultMailView, mailId]);
 
   if (!mail) return null;
 
@@ -62,7 +68,7 @@ export function MailDetail({
   const to = text(mail.to);
   // sender_context wants the raw "Name <email>" header when we have it.
   const senderRaw = typeof mail.from === "string" ? mail.from : text(mail.from);
-  const id = String(mail.id);
+  const id = mailId;
 
   return (
     <section className="mail-detail" aria-label="메일 상세">

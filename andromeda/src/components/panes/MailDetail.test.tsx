@@ -58,6 +58,23 @@ describe("MailDetail layout", () => {
     expect(screen.queryByRole("button", { name: /이 메일 분석/ })).not.toBeInTheDocument();
   });
 
+  it("defaults to the 본문 view while disconnected", () => {
+    renderWithProviders(
+      <MailDetail
+        mail={mail}
+        query={{ isLoading: false }}
+        busy={false}
+        onMarkRead={() => {}}
+        onArchive={() => {}}
+        onTrash={() => {}}
+      />,
+      { connected: false },
+    );
+
+    expect(screen.getByText("이것은 본문입니다.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /이 메일 분석/ })).not.toBeInTheDocument();
+  });
+
   it("collapses the 발신자 card by default and expands it on click", async () => {
     renderDetail();
     // Wait for the sender context to load — the collapsed header carries a teaser.
