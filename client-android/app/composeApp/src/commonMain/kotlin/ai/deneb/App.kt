@@ -391,16 +391,18 @@ private fun AppContent(
                 val currentBackStackEntry by navController.currentBackStackEntryAsState()
                 val isHome = currentBackStackEntry?.destination?.route == "home"
 
-                // 챗봇 ↔ 업무 workspace, reactive. The toggle changes chat recall (and which
-                // 업무 entries the 더보기 hub lists), NOT the bottom-bar navigation — both
-                // workspaces keep the same 5 tabs. The no-client fallback (previews / other
-                // repos) is 업무; the real default is the persisted recall setting (now off →
-                // 챗봇 launches first).
+                // 챗봇 ↔ 업무 workspace, reactive. The toggle changes chat recall (업무 =
+                // memory-active) and the 챗봇 chat text scale, NOT navigation — both workspaces
+                // keep the same 5 tabs AND the same 더보기 hub. Gating the 더보기 sections by
+                // workspace was a leftover from when 챗봇 hid the whole bottom bar; now the bar
+                // exposes 메일·달력 (업무 데이터) in both modes, so hiding the 더보기 sections was
+                // inconsistent and — since 챗봇 is the launch default — left 더보기 nearly empty.
+                // The no-client fallback (previews / other repos) is 업무; the real default is the
+                // persisted recall setting (now off → 챗봇 launches first).
                 val workspaceWorkFlow = remember(denebClient) {
                     denebClient?.workspaceWork ?: MutableStateFlow(true)
                 }
                 val isWorkMode by workspaceWorkFlow.collectAsStateWithLifecycle()
-                val navChatMode = !isWorkMode
 
                 val navigationTabBar: @Composable () -> Unit = {
                     val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
@@ -653,7 +655,6 @@ private fun AppContent(
                                 DenebMoreScreen(
                                     onBack = { navController.navigateUp() },
                                     onOpen = { dest -> navController.navigate(dest) },
-                                    chatMode = navChatMode,
                                     // Read fresh on entry: returning here after toggling tiles in
                                     // 설정 re-executes this composable, so the grid reflects the
                                     // latest hidden set without an observable flow.
