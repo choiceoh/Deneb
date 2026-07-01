@@ -1,5 +1,19 @@
 # Changelog
 
+## [4.54.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.53.0...deneb-v4.54.0) (2026-07-01)
+
+
+### ✨ Features
+
+* **andromeda:** 메일 상세에 분석/본문 토글 (분석 기본) ([#3004](https://github.com/choiceoh/Deneb/issues/3004)) ([1d6dded](https://github.com/choiceoh/Deneb/commit/1d6dded1e92686d76cc0bfcacfbccd001ae02d4e))
+* **skills:** genesis 능동 캡처 전환 + 도구 부정단정 가드레일 ([#3006](https://github.com/choiceoh/Deneb/issues/3006)) ([fd9f914](https://github.com/choiceoh/Deneb/commit/fd9f91473a1f5d37489b176e7a618996c1b75547))
+* **skills:** proactive evolve 활성화 — 최초 스킬 최적화 유도 ([#3007](https://github.com/choiceoh/Deneb/issues/3007)) ([f665db9](https://github.com/choiceoh/Deneb/commit/f665db93bf42b271b6187c8629f8ac136c59e18d))
+
+
+### 🐛 Bug Fixes
+
+* **native:** 챗봇 모드에서도 더보기에 모든 섹션 표시 ([#3008](https://github.com/choiceoh/Deneb/issues/3008)) ([c313b3f](https://github.com/choiceoh/Deneb/commit/c313b3faa9ca554d0338504bc7910a108183e299))
+
 ## [4.53.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.52.0...deneb-v4.53.0) (2026-06-30)
 
 

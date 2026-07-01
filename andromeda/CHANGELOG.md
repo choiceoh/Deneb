@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.44](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.43...andromeda-v0.0.44) (2026-07-01)
+
+
+### ✨ Features
+
+* **andromeda:** 메일 상세에 분석/본문 토글 (분석 기본) ([#3004](https://github.com/choiceoh/Deneb/issues/3004)) ([1d6dded](https://github.com/choiceoh/Deneb/commit/1d6dded1e92686d76cc0bfcacfbccd001ae02d4e))
+
 ## [0.0.43](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.42...andromeda-v0.0.43) (2026-06-30)
 
 

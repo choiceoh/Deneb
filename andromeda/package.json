@@ -1,7 +1,7 @@
 {
   "name": "andromeda",
   "private": true,
-  "version": "0.0.43",
+  "version": "0.0.44",
   "type": "module",
   "description": "Personal AI work-command workstation — Deneb desktop client",
   "packageManager": "pnpm@11.7.0",
