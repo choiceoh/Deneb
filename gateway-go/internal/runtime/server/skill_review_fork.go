@@ -172,13 +172,13 @@ Tool summary: %s
 ## Required Action
 
 Record exactly one lifecycle decision with skill_lifecycle action=propose:
-- route=no-op when there is no durable reusable workflow. If the session followed an existing skill, set skillName to that skill so it is recorded as used (a no-op verdict counts as a success for that skill).
-- route=evolve with skillName when an existing skill should be improved.
+- route=no-op when there is no durable reusable workflow AND no improvement to an existing skill. If the session followed an existing skill and it worked well with nothing to refine, set skillName to that skill so it is recorded as used (a no-op verdict counts as a success for that skill).
+- route=evolve with skillName when an existing skill should be improved — including PROACTIVE refinement. A skill that worked is not necessarily optimal: if the session used an existing skill and you can see a concrete, safe improvement (a step that was ambiguous, a pitfall you watched matter, a missing verification, a stale command or path), route=evolve with that skillName and the specific refinement instead of no-op. Refining the foundational skills the user relies on daily — from real successful use, not only from failures — is the highest-value background work here; the edit is patch-sized, self-tested before commit, and auto-rolled-back if it regresses, so proactive evolve is low-risk.
 - route=genesis with sessionKey=%s when the target transcript should generate a new skill.
 - route=create only when skill_lifecycle cannot execute the creation path but a class-level skill is clearly needed.
 
 skill_lifecycle is already loaded and directly callable in this review — call action=propose now. Do NOT end the turn with only a prose verdict: a decision that is not written through the tool is lost and the review counts as a failure.
-Set execute=true when the route is clear and reusable. When a workflow looks reusable but you are not fully certain, prefer proposing it (route=genesis or evolve, execute=true) as a low-confidence candidate over no-op — a downstream quality judge, real usage, and the curator prune weak skills, so a borderline proposal is cheap while a missed one is lost. Record no-op only for sessions that followed an existing skill or have no durable reusable procedure at all.
+Set execute=true when the route is clear and reusable. When a workflow looks reusable but you are not fully certain, prefer proposing it (route=genesis or evolve, execute=true) as a low-confidence candidate over no-op — a downstream quality judge, real usage, and the curator prune weak skills, so a borderline proposal is cheap while a missed one is lost. Record no-op only for sessions that followed an existing skill with nothing to refine, or that have no durable reusable procedure at all.
 If route=evolve/genesis/create is based on a concrete replayable failure or user correction, also call skill_lifecycle action=validation_case_from_session with skillName, sessionKey=%s, and a short description. Add replay.requiredActions or replay.requiredObservations only when the transcript proves the invariant; the tool will extract ordered tool calls and fixture outputs from the target session.
 
 ## Recent Opportunity Backlog

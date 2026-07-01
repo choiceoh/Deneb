@@ -1040,7 +1040,7 @@ const (
 	skillEditBudgetMaxGrowthMultiple  = 2
 	skillHermesMaxSkillBytes          = 15 * 1024
 	skillHermesMaxChangedSections     = 3
-	skillJudgeMinScoreDelta           = 3.0
+	skillJudgeMinScoreDelta           = 2.0
 	skillEvolutionMinEvidenceUses     = 2
 	skillEvolutionMinEvidenceFailures = 2
 	skillEvolutionPromptCaseLimit     = 5
@@ -1056,11 +1056,16 @@ const (
 const skillEvolveCandidateCount = 3
 
 // skillUncoveredJudgeMinScoreDelta is the judge score margin required to accept
-// an evolve of a skill that has NO held-out validation cases (#5). It is larger
-// than the covered margin (skillJudgeMinScoreDelta) because the held-out gate
-// fails open with zero cases, leaving the judge verdict as the only behavioral
-// check — so an uncovered skill must be harder, not easier, to rewrite.
-const skillUncoveredJudgeMinScoreDelta = 6.0
+// an evolve of a skill that has NO held-out validation cases (#5). It stays
+// larger than the covered margin (skillJudgeMinScoreDelta) because the held-out
+// gate fails open with zero cases, leaving the judge verdict as the only
+// behavioral check — an uncovered skill is still harder to rewrite. It was
+// lowered from 6.0 to 3.0 (aggressive proactive-refinement mode): in production
+// NO skill has validation cases, so 6.0 froze every foundational skill at its
+// v1. The other nets (backup, auto-rollback after 3 consecutive failures, thrash
+// cooldown, and the qualitative judge rules that catch invented tools / safety
+// regressions / non-patch rewrites) bound the risk of the lower margin.
+const skillUncoveredJudgeMinScoreDelta = 3.0
 
 func hasSufficientEvolutionEvidence(stats *UsageStats, reviewFinding string) bool {
 	if strings.TrimSpace(reviewFinding) != "" {
