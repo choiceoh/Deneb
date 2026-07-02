@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { type ChangeEvent, useEffect, useRef, useState } from "react";
+import { inferAttachmentMimeType } from "@/attachmentMime";
 import { type GatewayConfig, type ModelsList, listModels } from "@/gateway";
 import { type AttachmentPart, type ChatTurn, useChat } from "@/hooks";
 import { useSessions } from "@/useSessions";
@@ -102,6 +103,8 @@ export function AssistantBody({
 // text from the workspace context and streams a reply with Markdown + tool
 // chips; a model picker drives the per-turn model and a history drawer switches
 // conversations. Tool calls that mutate data refresh the active grid (useChat).
+// Files attach via the same capture path as the chat tab (image OCR · audio
+// transcription · document extraction), landing in this panel's session.
 export function AIPanel({
   cfg,
   hidden = false,
@@ -124,13 +127,14 @@ export function AIPanel({
   placement?: "side" | "bottom";
 }) {
   const { aiText, activeResource, connected, noteSink } = useWorkspace();
-  const { thinking, busy, turns, send, stop, regenerate, clear, setTurns } = useChat(cfg);
+  const { thinking, busy, turns, send, capture, stop, regenerate, clear, setTurns } = useChat(cfg);
   const [input, setInput] = useState("");
   // Answers already saved into the open notebook this session (turn ids) — flips
   // the per-answer 노트에 저장 button to a done state so a double-click can't pin
   // the same answer twice.
   const [savedNoteIds, setSavedNoteIds] = useState<ReadonlySet<string>>(new Set());
   const composeRef = useRef<HTMLTextAreaElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
   const [models, setModels] = useState<ModelsList | null>(null);
   const [model, setModel] = useState(""); // selected override id ("" → gateway main)
   const { sessions, sessionKey, sessionsOpen, sessionErr, toggleSessions, selectSession, removeSession, newChat } =
@@ -173,6 +177,24 @@ export function AIPanel({
     setInput("");
     pin(); // a fresh send always rides down to the latest
     void send(msg, { workspaceContext: aiText, activeResource, model: model || undefined, sessionKey });
+  }
+
+  // 첨부: 파일을 base64로 읽어 capture(이미지 OCR·음성 전사·문서 추출)로 보낸다 — 채팅 탭과
+  // 같은 경로, 이 패널의 세션(client:main)에 한 턴으로 남는다.
+  function onPick(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // let the same file be picked again later
+    if (!file || busy || !connected) return;
+    const mimeType = inferAttachmentMimeType(file.name, file.type);
+    const caption = mimeType.startsWith("audio/") ? "" : input.trim();
+    if (caption) setInput("");
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = String(reader.result).split(",")[1] ?? "";
+      pin();
+      void capture({ name: file.name, mimeType, base64 }, { sessionKey, caption });
+    };
+    reader.readAsDataURL(file);
   }
 
   const last = turns.at(-1);
@@ -320,6 +342,24 @@ export function AIPanel({
           submit();
         }}
       >
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*,audio/*,.png,.jpg,.jpeg,.webp,.gif,.mp3,.m4a,.wav,.ogg,.webm,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt"
+          hidden
+          onChange={onPick}
+        />
+        <button
+          type="button"
+          className="row-btn"
+          onClick={() => fileRef.current?.click()}
+          disabled={busy || !connected}
+          title="파일 첨부 (이미지·문서·녹음)"
+          aria-label="파일 첨부"
+          style={{ padding: 5, alignSelf: "flex-end" }}
+        >
+          <Icon name="attach" size={18} />
+        </button>
         <textarea
           ref={composeRef}
           className="ai-compose"
