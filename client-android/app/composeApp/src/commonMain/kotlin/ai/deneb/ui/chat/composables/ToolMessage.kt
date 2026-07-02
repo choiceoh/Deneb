@@ -45,7 +45,6 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import deneb.composeapp.generated.resources.Res
@@ -176,12 +175,17 @@ internal fun PulsingStatusIndicator(
         // side, so a tighter spacer keeps the visual gap to the text the same.
         Spacer(Modifier.width(6.dp))
         if (isStatusOnly && toolSummary != null) {
+            // One line, start-aligned — exactly like the rotating "생각 중…" and the
+            // " · tool" suffix. This used to be textAlign=Center with maxLines=2: a
+            // long status wrapping to two lines suddenly re-centered the text and
+            // grew the row (the star dropping between the lines) — the reported
+            // "생각 중 vs 긴 상태 정렬이 달라짐". A waiting status is glanceable
+            // transient info; a single ellipsized line loses nothing.
             Text(
                 text = toolSummary,
                 color = textColor,
                 style = textStyle,
-                textAlign = TextAlign.Center,
-                maxLines = 2,
+                maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
         } else {

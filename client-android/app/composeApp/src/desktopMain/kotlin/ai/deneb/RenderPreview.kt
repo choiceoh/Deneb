@@ -353,6 +353,10 @@ private fun renderWaitingChip(name: String, scheme: ColorScheme) {
             Surface(color = scheme.background) {
                 Column(Modifier.fillMaxSize().padding(8.dp)) {
                     WaitingResponseRow(executingTools = persistentListOf())
+                    // The live A↔B pair the user actually sees while a tool runs:
+                    // rotating generic text vs the same text + " · tool label"
+                    // (isStatusOnly = false) — these two must align identically.
+                    WaitingResponseRow(executingTools = persistentListOf("t1" to "메일 확인 중"))
                     WaitingResponseRow(
                         executingTools = persistentListOf("t1" to "메일 확인 중"),
                         isStatusOnly = true,
@@ -369,6 +373,14 @@ private fun renderWaitingChip(name: String, scheme: ColorScheme) {
                     )
                     WaitingResponseRow(
                         executingTools = persistentListOf("t1" to "깊이 생각 중…"),
+                        isStatusOnly = true,
+                    )
+                    // A LONG status — must stay ONE start-aligned ellipsized line, same
+                    // row height as above (the centered two-line-wrap misalignment fix).
+                    WaitingResponseRow(
+                        executingTools = persistentListOf(
+                            "t1" to "웹 검색 중: 아르고에너지 NDA 표준 조항 비교 — 국내 EPC 계약 관례와 손해배상 상한 조사",
+                        ),
                         isStatusOnly = true,
                     )
                 }
