@@ -3,6 +3,7 @@ import { type ChangeEvent, useEffect, useRef, useState } from "react";
 import { inferAttachmentMimeType } from "@/attachmentMime";
 import { type GatewayConfig, type ModelsList, listModels } from "@/gateway";
 import { useChat } from "@/hooks";
+import { useFileDrop } from "@/useFileDrop";
 import { useSessions } from "@/useSessions";
 import { useStickyScroll } from "@/useStickyScroll";
 import { useWorkspace } from "@/workspaceContext";
@@ -86,10 +87,9 @@ export function ChatView({ cfg, hidden = false }: { cfg: GatewayConfig; hidden?:
   }
 
   // 첨부: 파일을 base64로 읽어 capture(이미지 OCR·음성 전사·문서 추출)로 보낸다.
-  function onPick(e: ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    e.target.value = ""; // let the same file be picked again later
-    if (!file || busy || !connected) return;
+  // 클립 버튼과 드롭 공용.
+  function attachFile(file: File) {
+    if (busy || !connected) return;
     const mimeType = inferAttachmentMimeType(file.name, file.type);
     const caption = mimeType.startsWith("audio/") ? "" : input.trim();
     if (caption) setInput("");
@@ -102,12 +102,21 @@ export function ChatView({ cfg, hidden = false }: { cfg: GatewayConfig; hidden?:
     reader.readAsDataURL(file);
   }
 
+  function onPick(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // let the same file be picked again later
+    if (file) attachFile(file);
+  }
+
+  // 채팅 컬럼 전체가 무표시 드롭존 — 파일 드래그가 위에 있을 때만 살짝 표시(.drop-over).
+  const { over: dropOver, dropProps } = useFileDrop(!busy && connected, attachFile);
+
   const last = turns.at(-1);
   const lastId = last?.id;
 
   return (
     <section className="chat-view" style={{ display: hidden ? "none" : "flex" }}>
-      <main className="panel chat-main">
+      <main className={"panel chat-main" + (dropOver ? " drop-over" : "")} {...dropProps}>
         <div className="ai-head">
           <span className="micro">Deneb · 채팅</span>
           <ModelPicker models={models} value={model} onChange={setModel} disabled={busy} />

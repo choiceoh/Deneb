@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { App } from "./App";
 import { AIPanel } from "./components/AIPanel";
@@ -247,5 +247,57 @@ describe("Workstation (connected, fixtures)", () => {
     const result = await screen.findByRole("group", { name: "첨부 분석 결과" });
     expect(within(result).getByText("quote.png")).toBeInTheDocument();
     expect(within(result).getByText("견적 금액은 1,200만원")).toBeInTheDocument();
+  });
+
+  it("drops a file anywhere on the panel — subtle ring only while a drag is over it", async () => {
+    const rpcCalls: Array<{ method: string; params: Record<string, unknown> }> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init?: RequestInit) => {
+        const body = JSON.parse(String(init?.body ?? "{}")) as {
+          method?: string;
+          params?: Record<string, unknown>;
+        };
+        const method = String(body.method ?? "");
+        rpcCalls.push({ method, params: body.params ?? {} });
+        const payload =
+          method === "miniapp.models.list"
+            ? { current: "", sections: [] }
+            : method === "miniapp.sessions.recent"
+              ? { sessions: [], count: 0 }
+              : method === "miniapp.capture.image"
+                ? { text: "현장 사진 분석" }
+                : {};
+        return new Response(JSON.stringify({ ok: true, payload }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }),
+    );
+
+    renderWithProviders(<AIPanel cfg={{ url: "http://test", token: "tok" }} />, { connected: true });
+
+    // The whole aside is the drop zone; at rest it shows no drop chrome at all.
+    const panel = screen.getByRole("complementary");
+    const dt = { files: [new File(["fake image"], "site.png", { type: "image/png" })], types: ["Files"] };
+    expect(panel).not.toHaveClass("drop-over");
+
+    // The subtle ring appears only while a file drag is over the zone…
+    fireEvent.dragEnter(panel, { dataTransfer: dt });
+    expect(panel).toHaveClass("drop-over");
+    fireEvent.dragLeave(panel, { dataTransfer: dt });
+    expect(panel).not.toHaveClass("drop-over");
+
+    // …and dropping attaches through the same capture path as the clip button.
+    fireEvent.dragEnter(panel, { dataTransfer: dt });
+    fireEvent.drop(panel, { dataTransfer: dt });
+    expect(panel).not.toHaveClass("drop-over");
+
+    await waitFor(() => expect(rpcCalls.some((c) => c.method === "miniapp.capture.image")).toBe(true));
+    expect(rpcCalls.find((c) => c.method === "miniapp.capture.image")?.params).toMatchObject({
+      mimeType: "image/png",
+      sessionKey: "client:main",
+    });
+    expect(await screen.findByRole("group", { name: "첨부 분석 결과" })).toBeInTheDocument();
   });
 });
