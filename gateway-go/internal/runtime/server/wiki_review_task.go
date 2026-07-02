@@ -161,6 +161,11 @@ func (t *wikiReviewTask) Run(ctx context.Context) error {
 		t.logger.Info("wiki-review: dead links pruned",
 			"pages", prune.PagesChanged, "repointed", prune.Repointed, "removed", prune.Removed)
 	}
+	// Retroactive mail filing: unlinked analyses whose project has since become
+	// known move into that project's 메일분석 slot (deterministic signals only).
+	for _, m := range t.wikiStore.ReclassifyUnlinkedMailAnalyses(time.Now(), 10) {
+		t.logger.Info("wiki-review: unlinked mail re-filed", "from", m.From, "project", m.Project)
+	}
 	t.logger.Info("wiki-review cycle completed",
 		"touched", len(touched), "suspects", len(suspects), "merged", merged,
 		"autoMerge", t.autoMerge, "logSectionsRotated", rotated, "dormantFlagged", len(dormant))

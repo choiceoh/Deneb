@@ -102,12 +102,35 @@ func formatRecallFileNote(path, snippet string) string {
 	return truncateRecallText("file: "+path+" | match: "+snippet, 420)
 }
 
+// recallProjectAnchorScore ranks a named project's 대표페이지 above any BM25 hit
+// (wiki hits score 0.80+BM25, BM25 topping out ≈1.0 in practice) — when the
+// user names a project, its curated 현재 상태 IS the answer surface, even while
+// keyword search prefers detail pages (or the 대표 is a fresh skeleton).
+const recallProjectAnchorScore = 2.2
+
 func recallWikiEvidence(ctx context.Context, store *wiki.Store, queries []string) []recallEvidence {
 	if store == nil || len(queries) == 0 {
 		return nil
 	}
 	seen := make(map[string]struct{})
 	var evidence []recallEvidence
+
+	// Structure-aware anchor: a query naming a known project pins that
+	// project's 대표페이지 into the evidence regardless of keyword ranking.
+	for _, ref := range store.MatchProjectsInText(strings.Join(queries, " "), 2) {
+		if _, ok := seen[ref.Path]; ok {
+			continue
+		}
+		seen[ref.Path] = struct{}{}
+		evidence = append(evidence, recallEvidence{
+			Kind:   "wiki",
+			Source: ref.Path,
+			Query:  "project-anchor",
+			Note:   formatRecallProjectAnchorNote(store, ref),
+			Score:  recallProjectAnchorScore,
+		})
+	}
+
 	for _, q := range queries {
 		if ctx.Err() != nil {
 			return evidence
@@ -131,6 +154,21 @@ func recallWikiEvidence(ctx context.Context, store *wiki.Store, queries []string
 		}
 	}
 	return evidence
+}
+
+// formatRecallProjectAnchorNote renders an anchored 대표페이지: title, summary,
+// and the 현재 상태 bullets — the freshest curated state of the named project.
+func formatRecallProjectAnchorNote(store *wiki.Store, ref wiki.ProjectRef) string {
+	parts := []string{"프로젝트 대표페이지: " + ref.Name}
+	if page, err := store.ReadPage(ref.Path); err == nil && page != nil {
+		if s := strings.TrimSpace(page.Meta.Summary); s != "" {
+			parts = append(parts, "summary: "+s)
+		}
+		if status := strings.TrimSpace(page.Section("현재 상태")); status != "" {
+			parts = append(parts, "현재 상태: "+status)
+		}
+	}
+	return truncateRecallText(strings.Join(parts, " | "), 420)
 }
 
 func formatRecallWikiNote(store *wiki.Store, result wiki.SearchResult) string {
