@@ -109,6 +109,64 @@ func TestWikiRead_AcceptsNamespacedRef(t *testing.T) {
 	}
 }
 
+// TestWikiReadBatch_ReadsSeveralPagesInOneCall covers the batched read that
+// collapses the per-page LLM round-trips: every requested page lands under its
+// own numbered header, a missing page fills its slot without failing the
+// batch, and blank entries are dropped.
+func TestWikiReadBatch_ReadsSeveralPagesInOneCall(t *testing.T) {
+	store := newTestWikiStore(t)
+	out, err := wikiReadBatch(context.Background(), store, []string{
+		"w:phase-2-summary",
+		" ",
+		"deneb-architecture",
+		"no-such-page",
+	}, "")
+	if err != nil {
+		t.Fatalf("wikiReadBatch: %v", err)
+	}
+	if !strings.Contains(out, "[1/3] w:phase-2-summary") || !strings.Contains(out, "Phase 2") {
+		t.Errorf("expected first page under numbered header, got: %q", out)
+	}
+	if !strings.Contains(out, "[2/3] deneb-architecture") || !strings.Contains(out, "Deneb Architecture") {
+		t.Errorf("expected second page content, got: %q", out)
+	}
+	if !strings.Contains(out, "[3/3] no-such-page") || !strings.Contains(out, "없음") {
+		t.Errorf("missing page should fill its slot with the not-found notice, got: %q", out)
+	}
+}
+
+// TestWikiReadBatch_CapsAtMaxPages keeps one call from blowing the tool-output
+// budget: past the cap the batch truncates and says so.
+func TestWikiReadBatch_CapsAtMaxPages(t *testing.T) {
+	store := newTestWikiStore(t)
+	paths := make([]string, 0, wikiReadBatchMaxPages+3)
+	for range wikiReadBatchMaxPages + 3 {
+		paths = append(paths, "phase-2-summary")
+	}
+	out, err := wikiReadBatch(context.Background(), store, paths, "")
+	if err != nil {
+		t.Fatalf("wikiReadBatch: %v", err)
+	}
+	head := fmt.Sprintf("[1/%d]", wikiReadBatchMaxPages)
+	if !strings.Contains(out, head) {
+		t.Errorf("expected batch capped to %d pages (%s), got: %q", wikiReadBatchMaxPages, head, out[:200])
+	}
+	if !strings.Contains(out, "앞 8개만 읽음") {
+		t.Errorf("expected truncation notice, got tail: %q", out[len(out)-160:])
+	}
+}
+
+func TestWikiReadBatch_EmptyPathsReturnsGuidance(t *testing.T) {
+	store := newTestWikiStore(t)
+	out, err := wikiReadBatch(context.Background(), store, []string{"", "  "}, "")
+	if err != nil {
+		t.Fatalf("wikiReadBatch: %v", err)
+	}
+	if !strings.Contains(out, "paths가 비어") {
+		t.Errorf("expected guidance for empty paths, got: %q", out)
+	}
+}
+
 func TestWikiWrite_MarksSupersededPages(t *testing.T) {
 	store := newTestWikiStore(t)
 	old := wiki.NewPage("Old fact", "프로젝트", nil)
