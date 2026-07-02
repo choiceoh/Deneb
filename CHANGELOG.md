@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.58.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.57.0...deneb-v4.58.0) (2026-07-02)
+
+
+### ✨ Features
+
+* **code:** 코드모드 행동 분리 — 구현자 프롬프트 프로파일·코딩 프리셋 + 바인딩/체크포인트 수리 ([#3034](https://github.com/choiceoh/Deneb/issues/3034)) ([939e3a0](https://github.com/choiceoh/Deneb/commit/939e3a001606a1a293760f64e2d533ae2d1b0559))
+* **wiki:** 구조 후속 — 깊이 가드·미분류 메일 재분류·회상 프로젝트 앵커 ([#3032](https://github.com/choiceoh/Deneb/issues/3032)) ([ad382e3](https://github.com/choiceoh/Deneb/commit/ad382e3a1fdcaac263285be2bddb8f607ecbbcd4))
+
 ## [4.57.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.56.0...deneb-v4.57.0) (2026-07-02)
 
 
