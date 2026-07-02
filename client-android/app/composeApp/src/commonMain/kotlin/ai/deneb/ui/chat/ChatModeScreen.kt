@@ -462,6 +462,17 @@ internal fun ChatModeScreen(
                                                     // bar like every chat. Matches the streaming autoscroll and the
                                                     // scroll-to-bottom button.
                                                     listState.scrollToItem(history.lastIndex, Int.MAX_VALUE)
+                                                    // The list carries trailing NON-history rows below the last
+                                                    // message — the "loading" waiting row while a reply is pending,
+                                                    // the "error" row — so right after a send, history.lastIndex is
+                                                    // not the list's last row and the waiting row stays cut off
+                                                    // under the input bar ("완전히 밑까지 안 내려옴"). The first snap
+                                                    // has composed/measured the tail; re-snap to the true last row,
+                                                    // same as the streaming follow and the scroll-to-bottom button.
+                                                    val lastRow = listState.layoutInfo.totalItemsCount - 1
+                                                    if (lastRow > history.lastIndex) {
+                                                        listState.scrollToItem(lastRow, Int.MAX_VALUE)
+                                                    }
                                                 }
                                                 val lastMessage = history.last()
                                                 if (uiState.isSpeechOutputEnabled && lastMessage.role == History.Role.ASSISTANT) {
