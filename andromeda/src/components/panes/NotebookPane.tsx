@@ -14,7 +14,7 @@ import { DeleteModal } from "./commonModals";
 // sources to the AI panel so Deneb answers grounded in that deal (NotebookLM-
 // style). You can also create a notebook and pin (add) a citation source.
 export function NotebookPane() {
-  const { connected, cfg, openWiki } = useWorkspace();
+  const { connected, cfg, openWiki, setNoteSink } = useWorkspace();
   const { call, callCached, readCache, writeCache, status } = useCachedRpc(cfg, NOTEBOOK_RESOURCE);
   const [listSnapshot] = useState(() => readCache<NotebookListResponse>(NOTEBOOK_RPC.list));
   const [notebooks, setNotebooks] = useState<NotebookSummary[]>(listSnapshot?.data.notebooks ?? []);
@@ -23,9 +23,11 @@ export function NotebookPane() {
   const [addingSource, setAddingSource] = useState(false);
   const [deleting, setDeleting] = useState<Notebook | null>(null);
   const [deletingSource, setDeletingSource] = useState<NotebookSource | null>(null);
-  // Which source is shown in the right detail pane (by its stable key). When stale
-  // (notebook switched / source deleted) the render falls back to the first source.
-  const [selectedKey, setSelectedKey] = useState("");
+  // Which source chip is expanded into the preview below (by its stable key).
+  // "" = all chips folded — the default, so the sources read as a light strip and
+  // the pane's height stays with the actual work (the chat below). Goes stale
+  // harmlessly on notebook switch / source deletion (preview just closes).
+  const [previewKey, setPreviewKey] = useState("");
 
   // Reload the list and refresh its cache — used after writes so the top picker
   // (and the cached snapshot it paints from) stays current.
@@ -64,6 +66,7 @@ export function NotebookPane() {
   }, [sortedNotebooks, connected, active]);
 
   async function openNotebook(id: string) {
+    setPreviewKey(""); // a different notebook's preview key is meaningless
     await callCached<Notebook>(
       NOTEBOOK_RPC.get,
       { id },
@@ -74,6 +77,29 @@ export function NotebookPane() {
       },
     );
   }
+
+  // AI-answer → note sink: while a notebook is open, register a save function so
+  // the docked AI panel can offer 노트에 저장 on every finished answer. Saving pins
+  // the answer as a kind=note source (title falls back to a first-line snippet) —
+  // the notebook's OUTPUT loop: material made with the AI stays in the notebook
+  // instead of scrolling away in the chat.
+  useEffect(() => {
+    if (!connected || !active) {
+      setNoteSink(null);
+      return;
+    }
+    const id = active.id;
+    setNoteSink((text: string) => {
+      void (async () => {
+        const r = await call(NOTEBOOK_RPC.addSource, { id, kind: "note", title: "", text }, "노트 저장 중…");
+        if (!r.ok) return;
+        await openNotebook(id);
+        void loadNotebooks();
+      })();
+    });
+    return () => setNoteSink(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connected, active?.id]);
 
   async function createNotebook(name: string, description: string) {
     const r = await call<NotebookSummary>(
@@ -128,9 +154,12 @@ export function NotebookPane() {
     const r = await call<{ deleted?: boolean; id?: string }>(NOTEBOOK_RPC.delete, { id }, "삭제 중…");
     if (!r.ok) return;
     setDeleting(null);
-    setActive((current) => (current?.id === id ? null : current));
+    // Refresh the list BEFORE clearing the active notebook: the auto-open effect
+    // fires on active → null, and if the list still holds the deleted notebook at
+    // that commit (the await boundary splits React's batching) it would reopen it.
     await loadNotebooks();
     setNotebooks((current) => current.filter((notebook) => notebook.id !== id));
+    setActive((current) => (current?.id === id ? null : current));
   }
 
   // Project the open notebook's sources (or the list) to the AI — ask Deneb about
@@ -150,19 +179,37 @@ export function NotebookPane() {
       );
   useRegisterPane(NOTEBOOK_RESOURCE, aiText);
 
-  // Master-detail: the left list selects which source shows on the right. Falls back
-  // to the first source when the selection is stale (notebook switch / deletion).
+  // Sources render as a light chip strip; clicking a chip expands (or folds) its
+  // preview below. A stale key (notebook switch / deletion) simply closes the preview.
   const sources = active?.sources ?? [];
-  const selected = sources.find((s) => srcKey(s) === selectedKey) ?? sources[0];
-  const selKey = selected ? srcKey(selected) : "";
+  const preview = previewKey ? sources.find((s) => srcKey(s) === previewKey) : undefined;
 
   return (
     <div className="notebook-pane">
-      {/* Picking a notebook is a once-per-task action — a compact top dropdown, not a
-          permanent rail. The whole width then goes to the actual work: sources + AI. */}
+      {/* One-line header — the pane shares its cell with the docked chat below, so
+          the chrome is pressed flat: name + deal jump + delete on the left, the
+          once-per-task notebook switcher (only when there is something to switch
+          to) + create on the right. The remaining height belongs to the sources. */}
       <div className="notebook-bar">
-        <span className="micro">노트북</span>
-        {connected && sortedNotebooks.length > 0 && (
+        {active ? <h2 className="notebook-title">{active.name}</h2> : <span className="micro">노트북</span>}
+        {active?.dealRef && (
+          <button className="row-btn" onClick={() => openWiki(active.dealRef as string)} title="딜 페이지 열기">
+            딜 페이지 →
+          </button>
+        )}
+        {active && (
+          <button
+            className="row-btn notebook-danger"
+            onClick={() => setDeleting(active)}
+            aria-label="노트북 삭제"
+            title="노트북 삭제"
+          >
+            <Icon name="trash" size={12} />
+          </button>
+        )}
+        {status && <span className="pane-status">{status}</span>}
+        <span className="notebook-bar-spring" />
+        {connected && sortedNotebooks.length > 1 && (
           <select
             className="field notebook-select"
             aria-label="노트북 선택"
@@ -197,50 +244,35 @@ export function NotebookPane() {
         <p className="notebook-empty">위에서 노트북을 선택하세요.</p>
       ) : (
         <>
-          <div className="notebook-head">
-            <h2>{active.name}</h2>
-            {active.dealRef && (
-              <button className="row-btn" onClick={() => openWiki(active.dealRef as string)} title="딜 페이지 열기">
-                딜 페이지 →
-              </button>
-            )}
+          {/* The sources as a wrapping chip strip: enough to SEE what material is in
+              the notebook and add more, without spending the pane on reading it —
+              the main work happens in the chat below (ask → answer → 노트에 저장).
+              Click a chip to peek at that source; click again (or ×) to fold it. */}
+          <div className="notebook-strip" role="list" aria-label="자료 목록">
+            {sources.map((s, i) => (
+              <NotebookSourceChip
+                key={srcKey(s) || i}
+                source={s}
+                open={srcKey(s) === previewKey}
+                onToggle={() => setPreviewKey((k) => (k === srcKey(s) ? "" : srcKey(s)))}
+                onDelete={s.cite ? () => setDeletingSource(s) : undefined}
+              />
+            ))}
             <button
-              className="row-btn notebook-danger"
-              onClick={() => setDeleting(active)}
-              aria-label="노트북 삭제"
-              title="노트북 삭제"
+              className="row-btn notebook-add"
+              onClick={() => setAddingSource(true)}
+              title="인용자료 추가"
+              aria-label="자료 추가"
             >
-              <Icon name="trash" size={12} /> 삭제
-            </button>
-            {status && <span className="pane-status">{status}</span>}
-          </div>
-
-          <div className="notebook-sources-head">
-            <span className="micro">자료 {sources.length}건</span>
-            <button className="row-btn notebook-add" onClick={() => setAddingSource(true)} title="인용자료 추가">
-              <Icon name="plus" size={12} /> 자료 추가
+              <Icon name="plus" size={12} /> 자료
             </button>
           </div>
-
-          {sources.length === 0 ? (
-            <p className="notebook-empty">아직 자료가 없습니다. “＋ 자료 추가”로 메일·견적·메모·위키 등을 담으세요.</p>
-          ) : (
-            // 마스터-디테일: 왼쪽 목록에서 자료를 고르면 오른쪽에 그 내용이 펼쳐진다.
-            <div className="notebook-body">
-              <div className="notebook-list" aria-label="자료 목록">
-                {sources.map((s, i) => (
-                  <NotebookSourceItem
-                    key={srcKey(s) || i}
-                    source={s}
-                    active={srcKey(s) === selKey}
-                    onSelect={() => setSelectedKey(srcKey(s))}
-                    onDelete={s.cite ? () => setDeletingSource(s) : undefined}
-                  />
-                ))}
-              </div>
-              <div className="notebook-detail" role="group" aria-label="자료 내용">
-                <NotebookSourceDetail source={selected} />
-              </div>
+          {sources.length === 0 && (
+            <p className="notebook-empty">아직 자료가 없습니다. “＋ 자료”로 메일·견적·메모·위키 등을 담으세요.</p>
+          )}
+          {preview && (
+            <div className="notebook-preview" role="group" aria-label="자료 내용">
+              <NotebookSourceDetail source={preview} onClose={() => setPreviewKey("")} />
             </div>
           )}
         </>
@@ -322,62 +354,54 @@ function sourceTitle(s: NotebookSource): string {
   return s.title?.trim() || s.ref?.trim() || s.text?.split("\n")[0]?.slice(0, 80).trim() || "(제목 없음)";
 }
 
-// One cited source as a selectable list row (left column): citation badge + title +
-// kind. Clicking selects it; the full content opens in the detail pane on the right.
-function NotebookSourceItem({
+// One cited source as a compact chip: citation badge + title + kind, with an ×
+// to unpin. Clicking the chip body expands its content in the preview below;
+// clicking again folds it. Light on purpose — the strip answers "what material
+// is in here", not "read it all".
+function NotebookSourceChip({
   source,
-  active,
-  onSelect,
+  open,
+  onToggle,
   onDelete,
 }: {
   source: NotebookSource;
-  active: boolean;
-  onSelect: () => void;
+  open: boolean;
+  onToggle: () => void;
   onDelete?: () => void;
 }) {
   return (
-    <div
-      className={"notebook-item" + (active ? " active" : "")}
-      role="button"
-      tabIndex={0}
-      aria-pressed={active}
-      onClick={onSelect}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onSelect();
-        }
-      }}
-    >
-      {source.cite && <span className="notebook-cite">{source.cite}</span>}
-      <span className="notebook-source-title">{sourceTitle(source)}</span>
-      {source.kind && (
-        <span className="notebook-source-kind">{KIND_LABEL[source.kind as SourceKind] ?? source.kind}</span>
-      )}
+    <div className={"notebook-chip" + (open ? " active" : "")} role="listitem">
+      <button
+        type="button"
+        className="notebook-chip-main"
+        onClick={onToggle}
+        aria-pressed={open}
+        title={sourceTitle(source)}
+      >
+        {source.cite && <span className="notebook-cite">{source.cite}</span>}
+        <span className="notebook-chip-title">{sourceTitle(source)}</span>
+        {source.kind && (
+          <span className="notebook-source-kind">{KIND_LABEL[source.kind as SourceKind] ?? source.kind}</span>
+        )}
+      </button>
       {onDelete && (
         <button
-          className="row-btn notebook-danger"
-          onClick={(e) => {
-            e.stopPropagation();
-            onDelete();
-          }}
+          type="button"
+          className="notebook-chip-x"
+          onClick={onDelete}
           aria-label={`인용자료 삭제 ${source.cite}`}
           title="인용자료 삭제"
-          style={{ padding: 3 }}
         >
-          <Icon name="trash" size={12} />
+          <Icon name="close" size={10} />
         </button>
       )}
     </div>
   );
 }
 
-// The detail pane (right column): the selected source's title/kind + full content
-// (markdown text, a ref for ingested sources, or empty when nothing is selected).
-function NotebookSourceDetail({ source }: { source?: NotebookSource }) {
-  if (!source) {
-    return <p className="notebook-empty">왼쪽에서 자료를 선택하면 내용이 여기에 표시됩니다.</p>;
-  }
+// The expanded preview under the chip strip: the chosen source's title/kind +
+// full content (markdown text, or a ref line for gateway-ingested sources).
+function NotebookSourceDetail({ source, onClose }: { source: NotebookSource; onClose: () => void }) {
   const kindLabel = source.kind ? (KIND_LABEL[source.kind as SourceKind] ?? source.kind) : "";
   return (
     <>
@@ -385,6 +409,15 @@ function NotebookSourceDetail({ source }: { source?: NotebookSource }) {
         {source.cite && <span className="notebook-cite">{source.cite}</span>}
         <span className="notebook-detail-title">{sourceTitle(source)}</span>
         {kindLabel && <span className="notebook-source-kind">{kindLabel}</span>}
+        <button
+          type="button"
+          className="row-btn notebook-preview-close"
+          onClick={onClose}
+          aria-label="미리보기 닫기"
+          title="미리보기 닫기"
+        >
+          <Icon name="close" size={12} />
+        </button>
       </div>
       {source.text ? (
         <div className="notebook-detail-body">

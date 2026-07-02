@@ -1324,14 +1324,19 @@ textarea {
   background: var(--accent-soft);
 }
 
-/* regenerate / stop affordances */
-.ai-regen {
+/* regenerate / save-note affordances under an answer */
+.ai-regen,
+.ai-save-note {
   align-self: flex-start;
   display: inline-flex;
   align-items: center;
   gap: 4px;
   margin-top: 2px;
   font-size: 11px;
+}
+.ai-save-note:disabled {
+  opacity: 0.55;
+  cursor: default;
 }
 /* conversation history drawer */
 .session-drawer {
@@ -4317,35 +4322,30 @@ textarea {
   min-width: 0;
   overflow: auto;
 }
+/* One-line header: title + deal jump + delete on the left, switcher + create on
+ * the right (the spring pushes them apart). Pressed flat — the pane shares its
+ * grid cell with the docked chat below. */
 .notebook-bar {
   display: flex;
   align-items: center;
   gap: 8px;
-}
-.notebook-select {
-  max-width: 320px;
-}
-.notebook-new {
-  margin-left: auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-}
-.notebook-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.notebook-head h2 {
-  margin: 0;
-  font-size: 20px;
   min-width: 0;
-  margin-right: auto;
+}
+.notebook-title {
+  margin: 0;
+  font-size: 18px;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.notebook-head .row-btn {
+.notebook-bar-spring {
+  flex: 1 1 auto;
+}
+.notebook-select {
+  max-width: 260px;
+}
+.notebook-bar .row-btn {
   display: inline-flex;
   align-items: center;
   gap: 3px;
@@ -4354,59 +4354,89 @@ textarea {
 .notebook-danger {
   color: var(--danger);
 }
-.notebook-sources-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 2px;
-}
-.notebook-sources-head .micro {
-  margin-right: auto;
-}
 .notebook-add {
   display: inline-flex;
   align-items: center;
   gap: 4px;
   flex: 0 0 auto;
 }
-/* Master-detail: source list (left) + selected source content (right). Fills the
- * remaining height; each column scrolls on its own. */
-.notebook-body {
+/* The sources as a wrapping chip strip — light enough to scan what's in the
+ * notebook without spending the pane on reading it. The main work is the docked
+ * chat below; a clicked chip expands into .notebook-preview. */
+.notebook-strip {
   display: flex;
-  gap: 14px;
-  flex: 1;
-  min-height: 0;
-}
-.notebook-list {
-  flex: 0 0 300px;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  overflow: auto;
-  padding-right: 2px;
-}
-.notebook-item {
-  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  width: 100%;
-  text-align: left;
-  padding: 8px 10px;
+  gap: 6px;
+  flex: 0 0 auto;
+  max-height: 96px;
+  overflow-y: auto;
+}
+.notebook-chip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 320px;
   background: var(--panel-sunken);
   border: 1px solid var(--line);
-  border-radius: var(--radius-ctl);
-  cursor: pointer;
+  border-radius: var(--radius-pill);
   transition:
     border-color 0.12s ease,
     background 0.12s ease;
 }
-.notebook-item:hover {
+.notebook-chip:hover {
   border-color: var(--line-2);
 }
-.notebook-item.active {
+.notebook-chip.active {
   border-color: var(--accent);
   background: var(--accent-soft);
+}
+.notebook-chip-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 4px 4px 4px 6px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+.notebook-chip-title {
+  min-width: 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.notebook-chip-x {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 6px 4px 2px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--muted-2);
+}
+.notebook-chip-x:hover {
+  color: var(--danger);
+}
+/* The expanded source preview under the strip — takes the remaining height and
+ * scrolls; closed by default so the strip stays the whole story. */
+.notebook-preview {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+.notebook-preview-close {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
 }
 .notebook-cite {
   flex: 0 0 auto;
@@ -4431,13 +4461,6 @@ textarea {
   flex: 0 0 auto;
   font-size: 11px;
   color: var(--muted-2);
-}
-.notebook-detail {
-  flex: 1;
-  min-width: 0;
-  overflow: auto;
-  border-left: 1px solid var(--line);
-  padding-left: 16px;
 }
 .notebook-detail-head {
   display: flex;
