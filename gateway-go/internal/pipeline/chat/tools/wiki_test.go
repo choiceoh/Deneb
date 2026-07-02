@@ -198,9 +198,14 @@ func TestWikiWrite_MarksSupersededPages(t *testing.T) {
 	if !strings.Contains(out, "대체 표시 1건") {
 		t.Fatalf("expected superseded note, got: %s", out)
 	}
+	// The write path routes a flat 프로젝트/<name>.md onto the in-folder 대표.md
+	// slot (project layout), so the superseded marker points at the slot.
 	got := testutil.Must(store.ReadPage("프로젝트/old-fact.md"))
-	if got.Meta.SupersededBy != "프로젝트/new-fact.md" {
-		t.Fatalf("SupersededBy = %q, want 프로젝트/new-fact.md", got.Meta.SupersededBy)
+	if got.Meta.SupersededBy != "프로젝트/new-fact/대표.md" {
+		t.Fatalf("SupersededBy = %q, want 프로젝트/new-fact/대표.md", got.Meta.SupersededBy)
+	}
+	if _, err := store.ReadPage("프로젝트/new-fact/대표.md"); err != nil {
+		t.Fatalf("normalized write target missing: %v", err)
 	}
 }
 
