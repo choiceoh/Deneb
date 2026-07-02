@@ -41,10 +41,10 @@ func (wd *WikiDreamer) buildCodeIndex() codeIndex {
 			continue
 		}
 		code := page.Meta.Code
-		dir := path.Dir(rp)
-		// Prefer an entity page's code when a folder carries several; otherwise
-		// first-seen wins.
-		if _, ok := ci.folderCode[dir]; !ok || page.Meta.Type == "entity" {
+		dir := codeFolderKey(rp)
+		// Prefer the 대표페이지's code when a folder carries several (entity kept as
+		// the legacy signal); otherwise first-seen wins.
+		if _, ok := ci.folderCode[dir]; !ok || page.Meta.Type == "entity" || IsProjectRepPage(rp) {
 			ci.folderCode[dir] = code
 		}
 		if stem, seq, ok := splitCode(code); ok {
@@ -56,6 +56,16 @@ func (wd *WikiDreamer) buildCodeIndex() codeIndex {
 	return ci
 }
 
+// codeFolderKey is the folder-inheritance key for a page path: the owning
+// project folder (프로젝트/<name>) so pages in nested slots (메일분석/, 기자재/)
+// inherit the same code as the 대표페이지; plain path.Dir elsewhere.
+func codeFolderKey(rp string) string {
+	if folder, ok := ProjectFolderOf(rp); ok {
+		return folder
+	}
+	return path.Dir(rp)
+}
+
 // resolveCode returns the code a filing should carry, and records any mint in the
 // index so later filings in the same batch stay collision-free. Only project
 // pages (filed under 프로젝트/) are coded; everything else returns "".
@@ -63,7 +73,7 @@ func (ci *codeIndex) resolveCode(u wikiUpdate) string {
 	if !strings.HasPrefix(u.Path, "프로젝트/") {
 		return ""
 	}
-	dir := path.Dir(u.Path)
+	dir := codeFolderKey(u.Path)
 	// 1. Inherit from the project folder.
 	if code, ok := ci.folderCode[dir]; ok {
 		return code

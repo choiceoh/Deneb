@@ -950,7 +950,7 @@ func wikiToolSchema() map[string]any {
 			},
 			"query": map[string]any{
 				"type":        "string",
-				"description": "Search query (search), page path (read/write — to read SEVERAL pages use paths instead), category name (index), or diary entry body (log)",
+				"description": "Search query (search), page path (read/write — to read SEVERAL pages use paths instead), category name (index), or diary entry body (log). 프로젝트 write paths follow the fixed layout: 프로젝트/<이름>/대표.md (대표페이지), 프로젝트/<이름>/로그.md (진행 로그 — 사건·소식은 여기에 append), 프로젝트/<이름>/기자재/<문서>.md",
 			},
 			"related": map[string]any{
 				"type":        "array",

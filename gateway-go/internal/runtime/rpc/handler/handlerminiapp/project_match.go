@@ -96,12 +96,13 @@ func mailMsgIDFromSource(source string) string {
 }
 
 // mailIDsFromRefs extracts linked mail message IDs from a project's owned-page
-// refs. A mail analysis page lives at 프로젝트/mail-analyses/<project>/<msgID>.md and
-// lands in the project's refs through its Related[] edge (§③ projectOwnedRefs), so
-// the page basename is the linked msgID. This reuses the graph resolution already
-// in the digest — no mail store read — and a mail Related to several projects is in
-// each project's refs, so it resolves for every project it cites (no regression
-// versus the client's relatedProjects match).
+// refs. A mail analysis page lives at 프로젝트/<project>/메일분석/<msgID>.md (legacy:
+// 프로젝트/mail-analyses/<project>/<msgID>.md) and lands in the project's refs
+// through its Related[] edge (§③ projectOwnedRefs), so the page basename is the
+// linked msgID. This reuses the graph resolution already in the digest — no mail
+// store read — and a mail Related to several projects is in each project's refs,
+// so it resolves for every project it cites (no regression versus the client's
+// relatedProjects match).
 func mailIDsFromRefs(refs []string) []string {
 	out := []string{}
 	seen := make(map[string]struct{})
@@ -109,7 +110,7 @@ func mailIDsFromRefs(refs []string) []string {
 		// Normalize backslashes universally (not filepath.ToSlash, which is a no-op
 		// off Windows) so a ref keyed with either separator resolves the same.
 		slash := strings.ReplaceAll(r, "\\", "/")
-		if !strings.Contains(slash, "/mail-analyses/") {
+		if !strings.Contains(slash, "/메일분석/") && !strings.Contains(slash, "/mail-analyses/") {
 			continue
 		}
 		id := strings.TrimSuffix(slash, ".md")

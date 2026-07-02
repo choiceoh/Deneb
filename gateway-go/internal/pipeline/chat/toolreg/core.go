@@ -500,7 +500,7 @@ func RegisterWikiTools(registry toolctx.ToolRegistrar, wikiDeps *toolctx.WikiDep
 	if wikiDeps.Store != nil {
 		registry.RegisterTool(toolctx.ToolDef{
 			Name:        "wiki",
-			Description: "LLM 위키 지식베이스: search (검색), read (페이지 읽기), index (목차), write (작성/수정), log (일지), daily (최근 일지), status (통계). 과거 결정/맥락/인물/프로젝트 등 장기 지식을 마크다운 위키로 관리. write 시 related/[[wikilink]]로 연결하고, 새 사실이 기존 페이지를 대체하면 supersedes로 stale 페이지를 표시한다. 본문에서 인물을 [[이름]]으로 링크하면 주소록에 있는 사람은 인물 페이지가 자동 생성·연락처 기록된다(인물 페이지를 직접 쓰면 그 사람 연락처도 자동 채워짐)",
+			Description: "LLM 위키 지식베이스: search (검색), read (페이지 읽기), index (목차), write (작성/수정), log (일지), daily (최근 일지), status (통계). 과거 결정/맥락/인물/프로젝트 등 장기 지식을 마크다운 위키로 관리. write 시 related/[[wikilink]]로 연결하고, 새 사실이 기존 페이지를 대체하면 supersedes로 stale 페이지를 표시한다. 본문에서 인물을 [[이름]]으로 링크하면 주소록에 있는 사람은 인물 페이지가 자동 생성·연락처 기록된다(인물 페이지를 직접 쓰면 그 사람 연락처도 자동 채워짐). ★프로젝트 문서 구조(고정): 프로젝트/<이름>/대표.md(대표페이지)·로그.md(진행 로그)·기자재/(자재 문서)·메일분석/(자동 생성). 사건·회의·결재 소식은 새 페이지를 만들지 말고 해당 프로젝트 로그.md에 날짜와 함께 append하고, 항상 write 전에 search로 기존 문서를 확인한다",
 			InputSchema: wikiToolSchema(),
 			Fn:          tools.ToolWiki(wikiDeps, workspaceDir),
 		})

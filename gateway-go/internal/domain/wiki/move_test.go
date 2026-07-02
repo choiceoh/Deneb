@@ -59,6 +59,42 @@ func TestMovePage_RejectsExistingTarget(t *testing.T) {
 	}
 }
 
+// TestMovePage_RepointsInboundReferences: pages whose Related pointed at the
+// old path follow the move — the graph edge survives instead of dangling.
+func TestMovePage_RepointsInboundReferences(t *testing.T) {
+	s := newMoveStore(t)
+	target := NewPage("탑솔라", "프로젝트", nil)
+	if err := s.WritePage("프로젝트/탑솔라.md", target); err != nil {
+		t.Fatal(err)
+	}
+	referrer := NewPage("견적 메일", "프로젝트", nil)
+	referrer.Meta.Related = []string{"프로젝트/탑솔라.md"}
+	if err := s.WritePage("프로젝트/메일분석/abc.md", referrer); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := s.MovePage("프로젝트/탑솔라.md", "프로젝트/탑솔라/대표.md"); err != nil {
+		t.Fatalf("MovePage: %v", err)
+	}
+
+	got, err := s.ReadPage("프로젝트/메일분석/abc.md")
+	if err != nil {
+		t.Fatalf("read referrer: %v", err)
+	}
+	var hasNew, hasOld bool
+	for _, r := range got.Meta.Related {
+		if r == "프로젝트/탑솔라/대표.md" {
+			hasNew = true
+		}
+		if r == "프로젝트/탑솔라.md" {
+			hasOld = true
+		}
+	}
+	if !hasNew || hasOld {
+		t.Errorf("related = %v, want old path repointed to the new one", got.Meta.Related)
+	}
+}
+
 func TestMovePage_SourceNotFound(t *testing.T) {
 	s := newMoveStore(t)
 	if err := s.MovePage("프로젝트/missing.md", "인물/missing.md"); err == nil {

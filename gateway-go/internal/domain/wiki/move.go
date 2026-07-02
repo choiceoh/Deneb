@@ -15,10 +15,11 @@ import (
 // bucket). It never overwrites: an existing target is an error (the caller
 // should merge instead). A no-op when from and to normalize to the same path.
 //
-// Single-operator, last-write-wins. The move is Write-then-Delete, so a crash
-// between the two leaves a recoverable duplicate (git history) rather than a
-// lost page. Inbound [[wikilinks]] that referenced the old path are not
-// rewritten here — the dream cycle re-resolves the graph — but the page's own
+// Single-operator, last-write-wins. The move is Write-then-Repoint-then-Delete,
+// so a crash partway leaves a recoverable duplicate (git history) rather than a
+// lost page. Every other page whose Related referenced the old path is
+// repointed to the new one (same machinery as MergePage), so graph edges — the
+// project corner's owned-refs among them — survive the move; the page's own
 // backlinks are maintained by the underlying WritePage/DeletePage.
 func (s *Store) MovePage(from, to string) error {
 	from = normalizePagePath(from)
@@ -27,9 +28,9 @@ func (s *Store) MovePage(from, to string) error {
 		return nil
 	}
 	// Serialize the whole move (read source, collision-check target, write target,
-	// delete source) under writeMu so it can't interleave with a concurrent writer
-	// of either page. The writes below go through the *Locked helpers because we
-	// already hold the lock.
+	// repoint references, delete source) under writeMu so it can't interleave with
+	// a concurrent writer of either page. The writes below go through the *Locked
+	// helpers because we already hold the lock.
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
 	src, err := s.ReadPage(from)
@@ -50,8 +51,15 @@ func (s *Store) MovePage(from, to string) error {
 	if err := s.writePageLocked(to, src); err != nil {
 		return fmt.Errorf("wiki: move: write target %q: %w", to, err)
 	}
+	// Repoint inbound Related references old→new before deleting the source, so
+	// deletePageLocked's backlink cleanup finds nothing left to drop and no other
+	// page is left holding a dangling path.
+	for _, p := range s.findPagesReferencingPath(from) {
+		s.repointReference(p, from, to)
+	}
 	if err := s.deletePageLocked(from); err != nil {
 		return fmt.Errorf("wiki: move: delete source %q after write: %w", from, err)
 	}
+	_ = s.AppendLog("move", from+" → "+to) // best-effort: audit log is non-critical
 	return nil
 }

@@ -14,16 +14,23 @@ func newProjectTestStore(t *testing.T) *Store {
 	return testutil.Must(NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
 }
 
-// TestKnownProjects: only direct 프로젝트/<name>.md pages are projects; the
-// raw-data sub-folders (mail-analyses/, 거래/) and other categories are excluded.
+// TestKnownProjects: a project is its 대표페이지 — the in-folder 프로젝트/<name>/대표.md
+// form or the legacy flat 프로젝트/<name>.md form (folder form wins when both
+// exist); raw-data buckets (메일분석/, mail-analyses/, 거래/), sub-pages, and other
+// categories are excluded.
 func TestKnownProjects(t *testing.T) {
 	store := newProjectTestStore(t)
 	defer store.Close()
 
 	for _, p := range []struct{ path, title, cat string }{
-		{"프로젝트/영산고.md", "영산고", "프로젝트"},
-		{"프로젝트/남도풍력.md", "남도풍력", "프로젝트"},
+		{"프로젝트/영산고.md", "영산고", "프로젝트"},              // legacy flat 대표페이지
+		{"프로젝트/남도풍력/대표.md", "남도풍력", "프로젝트"},         // in-folder 대표페이지
+		{"프로젝트/남도풍력/로그.md", "남도풍력 진행 로그", "프로젝트"},   // sub-page → excluded
+		{"프로젝트/부산8호.md", "부산8호", "프로젝트"},            // legacy flat…
+		{"프로젝트/부산8호/대표.md", "부산8호", "프로젝트"},         // …and in-folder → folder form wins
 		{"프로젝트/mail-analyses/abc.md", "메일", "프로젝트"}, // raw data → excluded
+		{"프로젝트/메일분석/def.md", "메일", "프로젝트"},          // raw data → excluded
+		{"프로젝트/남도풍력/메일분석/ghi.md", "메일", "프로젝트"},     // per-project raw data → excluded
 		{"프로젝트/거래/탑솔라.md", "탑솔라", "프로젝트"},           // raw data → excluded
 		{"인물/김민준.md", "김민준", "인물"},                  // not a project
 	} {
@@ -35,15 +42,31 @@ func TestKnownProjects(t *testing.T) {
 	}
 
 	got := store.knownProjects()
-	if len(got) != 2 {
-		t.Fatalf("knownProjects() = %d entries (%+v), want 2", len(got), got)
+	if len(got) != 3 {
+		t.Fatalf("knownProjects() = %d entries (%+v), want 3", len(got), got)
 	}
 	// Sorted by name.
-	if got[0].Name != "남도풍력" || got[0].Path != "프로젝트/남도풍력.md" {
-		t.Errorf("got[0] = %+v, want 남도풍력 / 프로젝트/남도풍력.md", got[0])
+	if got[0].Name != "남도풍력" || got[0].Path != "프로젝트/남도풍력/대표.md" {
+		t.Errorf("got[0] = %+v, want 남도풍력 / 프로젝트/남도풍력/대표.md", got[0])
 	}
-	if got[1].Name != "영산고" || got[1].Path != "프로젝트/영산고.md" {
-		t.Errorf("got[1] = %+v, want 영산고 / 프로젝트/영산고.md", got[1])
+	if got[1].Name != "부산8호" || got[1].Path != "프로젝트/부산8호/대표.md" {
+		t.Errorf("got[1] = %+v, want 부산8호 folder form to win over the legacy flat page", got[1])
+	}
+	if got[2].Name != "영산고" || got[2].Path != "프로젝트/영산고.md" {
+		t.Errorf("got[2] = %+v, want 영산고 / 프로젝트/영산고.md", got[2])
+	}
+}
+
+// TestEnsureProjectPage_RepPageTitle: a missing in-folder 대표페이지 is minted with
+// the project's name, not the literal "대표".
+func TestEnsureProjectPage_RepPageTitle(t *testing.T) {
+	page := ensureProjectPage(nil, "프로젝트/영산고/대표.md")
+	if page.Meta.Title != "영산고" {
+		t.Errorf("Title = %q, want 영산고", page.Meta.Title)
+	}
+	legacy := ensureProjectPage(nil, "프로젝트/부산8호.md")
+	if legacy.Meta.Title != "부산8호" {
+		t.Errorf("legacy Title = %q, want 부산8호", legacy.Meta.Title)
 	}
 }
 

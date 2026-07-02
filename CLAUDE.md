@@ -47,6 +47,7 @@
 | `model-roles.md` | 역할(main/tiny/lightweight/analysis/…)별 임무 배치 단일 진실원 (analysis=클라우드 드리프트 주의) | `gateway-go/internal/ai/modelrole/**`, `gateway-go/internal/pipeline/pilot/**`, `gateway-go/internal/runtime/server/server_chat_config.go` |
 | `native-design-system.md` | 네이티브 클라 디자인 경계 (컨트롤=Material, 외형=Deneb 타이포) | `client-android/app/composeApp/src/**/*.kt` |
 | `native-live-app.md` | 서버에서 실제 네이티브 앱 라이브 검증 (Xvfb+matchbox+Compose Desktop, 프로덕션) | `client-android/**`, `scripts/dev/native-app.sh` |
+| `wiki-layout.md` | 위키 프로젝트 문서 레이아웃 규약 (프로젝트당 폴더 + 고정 슬롯, project_layout.go가 단일 진실원) | `gateway-go/internal/domain/wiki/**`, `gateway-go/internal/runtime/server/wiki_*.go` |
 
 ---
 

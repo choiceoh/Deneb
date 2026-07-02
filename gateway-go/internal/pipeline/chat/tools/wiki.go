@@ -232,6 +232,12 @@ func wikiWrite(store *wiki.Store, contactsStore *contacts.Store, path, title, id
 	if !strings.HasSuffix(path, ".md") {
 		path += ".md"
 	}
+	// Project layout: a flat 프로젝트/<name>.md is the legacy 대표페이지 form — route
+	// it onto the in-folder slot (프로젝트/<name>/대표.md) so agent writes can't
+	// resurrect flat pages after the layout migration (see wiki/project_layout.go).
+	if np := wiki.NormalizeProjectPagePath(path); np != path {
+		path = np
+	}
 
 	// Read-modify-write through UpdatePage so a concurrent writer of the same page
 	// (the dreamer, the wiki-research turn, mail analysis) can't clobber this edit,

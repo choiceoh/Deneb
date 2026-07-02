@@ -32,37 +32,52 @@ const projectStatusHeading = "현재 상태"
 // grow it without bound between dream-cycle compactions.
 const maxProjectStatusBullets = 8
 
-// ProjectRef names a real project bucket: a direct 프로젝트/<name>.md page.
+// ProjectRef names a real project bucket via its 대표페이지.
 type ProjectRef struct {
-	Name string // display name (page Title, else the file basename)
-	Path string // relative page path, e.g. "프로젝트/영산고.md"
+	Name    string // display name (page Title, else the project folder name)
+	Path    string // 대표페이지 path, e.g. "프로젝트/영산고/대표.md" (legacy: "프로젝트/영산고.md")
+	Summary string // page Meta.Summary — one-line description for pickers
 }
 
-// knownProjects lists the real project pages — direct children of 프로젝트/ only
-// (count of "/" == 1), excluding the raw-data sub-folders (mail-analyses/, 거래/)
-// exactly as projectCandidatesFn does. Sorted by name. This is the anchor set
-// for digests: a project label that isn't here can't be navigated to, so it's
+// KnownProjects lists the real projects by their 대표페이지 (see project_layout.go;
+// legacy flat pages count during the migration transition). Sorted by name. This
+// is the anchor set for digests and the mail analyzer's related-project
+// candidates: a project label that isn't here can't be navigated to, so it's
 // never persisted.
+func (s *Store) KnownProjects() []ProjectRef { return s.knownProjects() }
+
 func (s *Store) knownProjects() []ProjectRef {
 	paths, err := s.ListPages(projectCategoryPrefix)
 	if err != nil {
 		return nil
 	}
-	refs := make([]ProjectRef, 0, len(paths))
+	// Collect rep pages keyed by project name; when a project has both the
+	// in-folder 대표.md and a leftover legacy flat page, the folder form wins.
+	repByName := make(map[string]string, len(paths))
 	for _, p := range paths {
 		p = filepath.ToSlash(p)
-		if strings.Count(p, "/") != 1 { // skip nested raw-data sub-folders
+		if !IsProjectRepPage(p) {
 			continue
 		}
-		name := strings.TrimSuffix(filepath.Base(p), ".md")
-		if name == "" {
+		name, ok := ProjectNameOf(p)
+		if !ok {
 			continue
 		}
+		if prev, dup := repByName[name]; dup {
+			if strings.HasSuffix(prev, "/"+RepPageFile) {
+				continue // keep the in-folder form
+			}
+		}
+		repByName[name] = p
+	}
+	refs := make([]ProjectRef, 0, len(repByName))
+	for name, p := range repByName {
 		ref := ProjectRef{Name: name, Path: p}
 		if page, perr := s.ReadPage(p); perr == nil && page != nil {
 			if t := strings.TrimSpace(page.Meta.Title); t != "" {
 				ref.Name = t
 			}
+			ref.Summary = strings.TrimSpace(page.Meta.Summary)
 		}
 		refs = append(refs, ref)
 	}
@@ -175,14 +190,18 @@ func (s *Store) AppendProjectStatusLine(relPath, line, ref string, now time.Time
 	})
 }
 
-// ensureProjectPage returns existing, or a minimal new project page keyed by the
-// path's basename when absent (defensive — the mail/dream paths anchor to pages
+// ensureProjectPage returns existing, or a minimal new project page named after
+// its project when absent (defensive — the mail/dream paths anchor to pages
 // that already exist, but a project the analyzer linked could have been deleted).
 func ensureProjectPage(existing *Page, relPath string) *Page {
 	if existing != nil {
 		return existing
 	}
-	name := strings.TrimSuffix(filepath.Base(filepath.ToSlash(relPath)), ".md")
+	// 프로젝트/<name>/대표.md must be titled by the project, not "대표".
+	name, ok := ProjectNameOf(relPath)
+	if !ok {
+		name = strings.TrimSuffix(filepath.Base(filepath.ToSlash(relPath)), ".md")
+	}
 	page := NewPage(name, projectCategoryPrefix, nil)
 	page.Meta.Type = "project"
 	return page
