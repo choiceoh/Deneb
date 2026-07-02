@@ -84,3 +84,58 @@ func TestDetectStaleSuperseded_ArchiveFlow(t *testing.T) {
 		t.Errorf("archived page re-flagged: %+v", again)
 	}
 }
+
+// TestDetectStaleMailAnalyses_RetentionFlow: mail-analysis pages older than
+// the retention window get an archive fix; fresh ones and non-mail pages don't.
+func TestDetectStaleMailAnalyses_RetentionFlow(t *testing.T) {
+	dir := t.TempDir()
+	store, err := NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	defer store.Close()
+
+	old := time.Now().AddDate(0, 0, -(mailAnalysisArchiveAfterDays + 5)).Format("2006-01-02")
+	fresh := time.Now().AddDate(0, 0, -5).Format("2006-01-02")
+
+	mustWrite(t, store, "프로젝트/영산고/메일분석/19e8717314b5c914.md", &Page{
+		Meta: Frontmatter{Title: "RE: 견적", Category: "프로젝트", Type: "log", Updated: old},
+		Body: "> Message ID: `19e8717314b5c914`\n분석",
+	})
+	mustWrite(t, store, "프로젝트/메일분석/19e8717314b5c915.md", &Page{
+		Meta: Frontmatter{Title: "FW: 계약", Category: "프로젝트", Type: "log", Updated: fresh},
+		Body: "> Message ID: `19e8717314b5c915`\n분석",
+	})
+	mustWrite(t, store, "프로젝트/영산고/대표.md", &Page{
+		Meta: Frontmatter{Title: "영산고", Category: "프로젝트", Updated: old},
+		Body: "# 영산고", // old but NOT a mail page → untouched
+	})
+
+	wd := NewWikiDreamer(store, nil, "", Config{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	findings := wd.detectStaleMailAnalyses()
+	if len(findings) != 1 || findings[0].PageA != "프로젝트/영산고/메일분석/19e8717314b5c914.md" {
+		t.Fatalf("findings = %+v, want exactly the old mail page", findings)
+	}
+	if findings[0].Fix == nil || findings[0].Fix.Kind != "archive" {
+		t.Fatalf("expected archive fix, got %+v", findings[0].Fix)
+	}
+	if applied := wd.applyVerifyFixes(findings); applied != 1 {
+		t.Fatalf("applied = %d, want 1", applied)
+	}
+	got := testMustRead(t, store, "프로젝트/영산고/메일분석/19e8717314b5c914.md")
+	if !got.Meta.Archived {
+		t.Error("old mail page should be archived")
+	}
+	if again := wd.detectStaleMailAnalyses(); len(again) != 0 {
+		t.Errorf("archived mail page re-flagged: %+v", again)
+	}
+}
+
+func testMustRead(t *testing.T, s *Store, path string) *Page {
+	t.Helper()
+	p, err := s.ReadPage(path)
+	if err != nil {
+		t.Fatalf("ReadPage(%s): %v", path, err)
+	}
+	return p
+}

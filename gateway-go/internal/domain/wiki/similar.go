@@ -13,6 +13,7 @@ import (
 type SimilarQuery struct {
 	Path     string // proposed page path (used for slug comparison; may be "")
 	ID       string // proposed frontmatter ID (exact match signal)
+	Code     string // frozen project code (pl3-kia-mod-001) — same code = same project
 	Title    string // proposed title (FTS signal)
 	Category string // taxonomy category to bound FTS matches ("" = any)
 }
@@ -61,6 +62,18 @@ func (s *Store) FindSimilarPages(ctx context.Context, q SimilarQuery, limit int)
 	if id := strings.TrimSpace(q.ID); id != "" {
 		for path, entry := range idx.Entries {
 			if entry.ID == id && add(path, "id") {
+				return hits
+			}
+		}
+	}
+
+	// 1.5. Frozen project code: two 대표페이지 sharing a code ARE the same project
+	// no matter how differently they're named — the move-stable identity is
+	// exactly what survives title/path splintering. Rep pages only (children
+	// inherit the code by folder, so matching them would flag every sub-page).
+	if code := normalizeProjectCode(q.Code); code != "" {
+		for _, ref := range s.knownProjects() {
+			if normalizeProjectCode(ref.Code) == code && add(ref.Path, "code") {
 				return hits
 			}
 		}

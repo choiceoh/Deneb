@@ -13,9 +13,15 @@
 //
 // Deliberately NOT an agent turn: the skill-review lesson (#3006 area) is that
 // text-role models never make tool calls, so this is a bounded pipeline —
-// deterministic gather → one lightweight JSON verdict → deterministic apply.
-// Model role: lightweight (internal background judgment; see
-// .claude/rules/model-roles.md). Fail-open: any error logs and skips the cycle.
+// deterministic gather → one JSON verdict call → deterministic apply.
+// Model role: analysis (operator's explicit 2026-07-02 call — a wrong "high"
+// verdict merges two real pages, so judgment quality beats the local-first
+// default; volume is tiny: at most one call per 2h cycle, zero when no
+// candidates). Fail-open: any error logs and skips the cycle.
+//
+// Rollout safety: auto-merge starts OFF (observe mode) — verdicts are logged
+// and recorded in the state file so the operator can audit judgment quality,
+// then flip DENEB_WIKI_REVIEW_AUTOMERGE=1 to arm the merges.
 package server
 
 import (
@@ -58,7 +64,14 @@ const (
 type wikiReviewState struct {
 	Version      int   `json:"version"`
 	LastReviewMs int64 `json:"lastReviewMs"`
+	// Observed accumulates would-merge verdicts made while auto-merge is off
+	// (observe mode), newest last, capped — the operator's audit trail for
+	// deciding when to arm DENEB_WIKI_REVIEW_AUTOMERGE=1.
+	Observed []string `json:"observed,omitempty"`
 }
+
+// wikiReviewObservedCap bounds the observe-mode audit trail in the state file.
+const wikiReviewObservedCap = 100
 
 // wikiReviewTask implements autonomous.PeriodicTask.
 type wikiReviewTask struct {
@@ -66,8 +79,11 @@ type wikiReviewTask struct {
 	activity  *monitoring.ActivityTracker
 	logger    *slog.Logger
 	statePath string
-	// llm is the verdict call, injectable for tests. Defaults to the lightweight
-	// local role (pilot.CallLocalLLM) — bounded JSON judgment, no tool calls.
+	// autoMerge arms the destructive step. Default false = observe mode:
+	// verdicts are logged + recorded, nothing is merged.
+	autoMerge bool
+	// llm is the verdict call, injectable for tests. Defaults to the analysis
+	// role (pilot.CallAnalysisLLM) — bounded JSON judgment, no tool calls.
 	llm func(ctx context.Context, system, user string, maxTokens int) (string, error)
 }
 
@@ -130,10 +146,32 @@ func (t *wikiReviewTask) Run(ctx context.Context) error {
 		t.logger.Warn("wiki-review: verdict call failed (skipping cycle)", "error", err)
 		return nil // fail-open
 	}
-	merged := t.applyVerdicts(ctx, suspects, verdicts)
+	merged := t.applyVerdicts(ctx, suspects, verdicts, state)
+	rotated := t.rotateProjectLogs()
 	t.logger.Info("wiki-review cycle completed",
-		"touched", len(touched), "suspects", len(suspects), "merged", merged)
+		"touched", len(touched), "suspects", len(suspects), "merged", merged,
+		"autoMerge", t.autoMerge, "logSectionsRotated", rotated)
 	return nil
+}
+
+// rotateProjectLogs keeps every project's 로그.md bounded: sections beyond the
+// newest wiki.LogKeepSections move to the project's 로그-보관.md (archived, so
+// search demotes it). Deterministic, no LLM. Returns sections moved.
+func (t *wikiReviewTask) rotateProjectLogs() int {
+	moved := 0
+	for _, ref := range t.wikiStore.KnownProjects() {
+		name, ok := wiki.ProjectNameOf(ref.Path)
+		if !ok {
+			continue
+		}
+		n, err := t.wikiStore.RotateProjectLog(name)
+		if err != nil {
+			t.logger.Warn("wiki-review: log rotation failed", "project", name, "error", err)
+			continue
+		}
+		moved += n
+	}
+	return moved
 }
 
 // wikiLogEntryRe matches an audit-log section header: "## [2026-07-02 15:04] op".
@@ -175,7 +213,7 @@ func (t *wikiReviewTask) recentlyTouchedPages(since time.Time) []string {
 		if path == "" || !strings.HasSuffix(path, ".md") {
 			continue
 		}
-		if wiki.IsProjectRawDataPath(path) || wiki.IsMailAnalysisPath(path) {
+		if wiki.IsProjectRawDataPath(path) || wiki.IsMailAnalysisPath(path) || wiki.IsProjectLogPage(path) {
 			continue
 		}
 		entries = append(entries, entry{ts: ts, path: path})
@@ -215,6 +253,7 @@ func (t *wikiReviewTask) gatherSuspects(ctx context.Context, touched []string) [
 		hits := t.wikiStore.FindSimilarPages(ctx, wiki.SimilarQuery{
 			Path:     p,
 			ID:       page.Meta.ID,
+			Code:     page.Meta.Code,
 			Title:    page.Meta.Title,
 			Category: category,
 		}, 3)
@@ -276,10 +315,13 @@ func (t *wikiReviewTask) judge(ctx context.Context, suspects []wikiReviewSuspect
 	return verdicts, nil
 }
 
-// applyVerdicts folds high-confidence duplicates, capped, with a git snapshot
-// before the first destructive action. A verdict may only name a candidate the
-// gather step actually offered — anything else is ignored (LLM hallucination).
-func (t *wikiReviewTask) applyVerdicts(ctx context.Context, suspects []wikiReviewSuspect, verdicts []wikiReviewVerdict) int {
+// applyVerdicts acts on high-confidence duplicate verdicts. In observe mode
+// (autoMerge off — the rollout default) each would-merge is logged and recorded
+// in the state file's audit trail; when armed, duplicates are folded, capped,
+// with a git snapshot before the first destructive action. A verdict may only
+// name a candidate the gather step actually offered — anything else is ignored
+// (LLM hallucination).
+func (t *wikiReviewTask) applyVerdicts(ctx context.Context, suspects []wikiReviewSuspect, verdicts []wikiReviewVerdict, state *wikiReviewState) int {
 	offered := make(map[string]map[string]bool, len(suspects))
 	for _, s := range suspects {
 		set := make(map[string]bool, len(s.candidates))
@@ -290,6 +332,7 @@ func (t *wikiReviewTask) applyVerdicts(ctx context.Context, suspects []wikiRevie
 	}
 
 	merged := 0
+	observed := 0
 	snapshotted := false
 	for _, v := range verdicts {
 		if merged >= wikiReviewMaxMerges {
@@ -303,6 +346,15 @@ func (t *wikiReviewTask) applyVerdicts(ctx context.Context, suspects []wikiRevie
 		}
 		if set, ok := offered[page]; !ok || !set[dup] {
 			continue // not a pair we offered — never act on invented paths
+		}
+		if !t.autoMerge {
+			// Observe mode: record the would-merge for the operator's audit.
+			t.logger.Info("wiki-review: duplicate confirmed (observe mode — no merge)",
+				"page", page, "duplicateOf", dup)
+			state.Observed = append(state.Observed,
+				fmt.Sprintf("%s | %s ≒ %s", time.Now().Format("2006-01-02 15:04"), page, dup))
+			observed++
+			continue
 		}
 		if !snapshotted {
 			t.wikiStore.SnapshotGit(ctx, "wiki-review: pre-merge snapshot")
@@ -318,6 +370,14 @@ func (t *wikiReviewTask) applyVerdicts(ctx context.Context, suspects []wikiRevie
 	}
 	if merged > 0 {
 		t.wikiStore.SnapshotGit(ctx, fmt.Sprintf("wiki-review: %d duplicate(s) merged", merged))
+	}
+	if observed > 0 {
+		if over := len(state.Observed) - wikiReviewObservedCap; over > 0 {
+			state.Observed = state.Observed[over:]
+		}
+		if err := t.saveState(state); err != nil {
+			t.logger.Warn("wiki-review: failed to persist observed verdicts", "error", err)
+		}
 	}
 	return merged
 }
@@ -358,14 +418,17 @@ func (s *Server) registerWikiReviewTask(homeDir string) {
 	if !ok {
 		return
 	}
+	autoMerge := os.Getenv("DENEB_WIKI_REVIEW_AUTOMERGE") == "1"
 	s.autonomousSvc.RegisterTask(&wikiReviewTask{
 		wikiStore: s.wikiStore,
 		activity:  s.activity,
 		logger:    s.logger,
 		statePath: filepath.Join(stateDir, wikiReviewStateFile),
+		autoMerge: autoMerge,
 		llm: func(ctx context.Context, system, user string, maxTokens int) (string, error) {
-			return pilot.CallLocalLLM(ctx, system, user, maxTokens, map[string]any{"temperature": 0})
+			return pilot.CallAnalysisLLM(ctx, system, user, maxTokens, map[string]any{"temperature": 0})
 		},
 	})
-	s.logger.Info("wiki-review task registered", "interval", wikiReviewInterval.String())
+	s.logger.Info("wiki-review task registered",
+		"interval", wikiReviewInterval.String(), "autoMerge", autoMerge)
 }

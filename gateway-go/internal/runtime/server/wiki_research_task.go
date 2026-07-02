@@ -55,6 +55,11 @@ const (
 	// own turn deadline may cap it shorter; this is the outer bound so a stuck
 	// turn never wedges the cycle.
 	wikiResearchTurnTimeout = 6 * time.Minute
+	// wikiResearchMaxBackfill is how many SKELETON 대표페이지 (layout-migration
+	// mints, wiki.RepSkeletonMarker) one cycle may fill. Normal cycles stay at
+	// one page; the burst applies only while empty rep pages remain, so the
+	// post-migration fleet (~39) fills in days instead of weeks.
+	wikiResearchMaxBackfill = 3
 	// wikiResearchStateFile holds the per-page last-refreshed timestamps used
 	// for round-robin selection.
 	wikiResearchStateFile = "wiki-research-state.json"
@@ -87,6 +92,25 @@ func (t *wikiResearchTask) Run(ctx context.Context) error {
 		return fmt.Errorf("wiki-research: chat handler or wiki store not available")
 	}
 
+	// One page per normal cycle; while layout-migration SKELETON rep pages
+	// remain, keep going up to the backfill burst so the empty fleet fills in
+	// days. The user-activity gate re-checks between turns.
+	var firstErr error
+	for i := 0; i < wikiResearchMaxBackfill; i++ {
+		target, ranSkeleton, err := t.runOne(ctx)
+		if err != nil && firstErr == nil {
+			firstErr = err
+		}
+		if target == "" || !ranSkeleton {
+			break
+		}
+	}
+	return firstErr
+}
+
+// runOne selects and researches a single page. Returns the target path ("" when
+// nothing ran), whether the target was a skeleton 대표페이지, and the turn error.
+func (t *wikiResearchTask) runOne(ctx context.Context) (string, bool, error) {
 	// Defer to the user: a research turn runs the main model and reads the
 	// memory stores, competing with interactive turns for the local GPU. If the
 	// user is active, skip this cycle — round-robin still advances next time.
@@ -94,7 +118,7 @@ func (t *wikiResearchTask) Run(ctx context.Context) error {
 		idle := time.Duration(time.Now().UnixMilli()-t.activity.LastActivityAt()) * time.Millisecond
 		if idle < 5*time.Minute {
 			t.logger.Info("wiki-research: skipped, user active", "idle", idle.Round(time.Second))
-			return nil
+			return "", false, nil
 		}
 	}
 
@@ -102,7 +126,7 @@ func (t *wikiResearchTask) Run(ctx context.Context) error {
 	target := t.selectTarget(state)
 	if target == nil {
 		t.logger.Debug("wiki-research: no eligible project pages")
-		return nil
+		return "", false, nil
 	}
 
 	runCtx, cancel := context.WithTimeout(ctx, wikiResearchTurnTimeout)
@@ -136,7 +160,7 @@ func (t *wikiResearchTask) Run(ctx context.Context) error {
 	}
 
 	if err != nil {
-		return fmt.Errorf("wiki-research: agent turn failed for %s: %w", target.path, err)
+		return target.path, target.skeleton, fmt.Errorf("wiki-research: agent turn failed for %s: %w", target.path, err)
 	}
 
 	// Commit the wiki dir so this cycle's write (if any) is an isolated,
@@ -149,9 +173,10 @@ func (t *wikiResearchTask) Run(ctx context.Context) error {
 		"wiki-research cycle completed",
 		"page", target.path,
 		"title", target.title,
+		"skeleton", target.skeleton,
 		"output_len", len(result.Text),
 	)
-	return nil
+	return target.path, target.skeleton, nil
 }
 
 // wikiResearchCandidate is a project page eligible for refresh.
@@ -162,6 +187,7 @@ type wikiResearchCandidate struct {
 	updated    string // YYYY-MM-DD, the page's last content update
 	importance float64
 	lastRun    int64 // unix millis this task last refreshed it; 0 = never
+	skeleton   bool  // layout-migration mint (wiki.RepSkeletonMarker) awaiting backfill
 }
 
 // selectTarget picks the project page most overdue for a refresh: never-refreshed
@@ -199,6 +225,7 @@ func (t *wikiResearchTask) selectTarget(state *wikiResearchState) *wikiResearchC
 			updated:    page.Meta.Updated,
 			importance: page.Meta.Importance,
 			lastRun:    state.Researched[p],
+			skeleton:   strings.Contains(page.Body, wiki.RepSkeletonMarker),
 		})
 	}
 	if len(cands) == 0 {
@@ -206,6 +233,9 @@ func (t *wikiResearchTask) selectTarget(state *wikiResearchState) *wikiResearchC
 	}
 
 	sort.Slice(cands, func(i, j int) bool {
+		if cands[i].skeleton != cands[j].skeleton {
+			return cands[i].skeleton // empty migration mints first — they carry no facts yet
+		}
 		if cands[i].lastRun != cands[j].lastRun {
 			return cands[i].lastRun < cands[j].lastRun // never/least-recently refreshed first
 		}
@@ -230,6 +260,9 @@ func (t *wikiResearchTask) buildPrompt(c *wikiResearchCandidate) string {
 	}
 	if c.updated != "" {
 		b.WriteString(fmt.Sprintf("마지막 갱신일: %s\n", c.updated))
+	}
+	if c.skeleton {
+		b.WriteString("주의: 이 페이지는 레이아웃 이관으로 만든 빈 스켈레톤입니다. 같은 폴더의 하위 문서(로그·메일분석·상세)와 내부 소스를 종합해 요약·핵심 사실을 처음부터 채우세요.\n")
 	}
 	b.WriteString(`
 이 페이지의 주제에 대해 내부 소스만으로 심층 리서치를 수행해 페이지를 최신화하세요. 외부 웹 검색은 하지 않습니다 (도구에 없음).

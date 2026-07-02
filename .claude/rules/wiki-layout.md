@@ -52,14 +52,18 @@ globs:
 - 페이지 이동은 `Store.MovePage` (인바운드 related 재지향 포함), 병합은
   `Store.MergePage`. 파일을 직접 mv/rm 하지 말 것.
 
-## 중복 방어 3겹 (모두 `FindSimilarPages` 공유)
+## 중복 방어 3겹 (모두 `FindSimilarPages` 공유 — ID·코드·슬러그·FTS 제목 신호)
 
 1. **쓰기 전 가드** — 위키 도구 write가 신규 생성 시 유사 문서를 찾으면 생성을
    거부하고 기존 경로를 안내 (`force=true`로만 강행). 드리머의 create-dedup도
    같은 프리미티브.
 2. **위키 리뷰어** (`runtime/server/wiki_review_task.go`, 2h) — 최근 쓰인 문서의
-   근사중복을 lightweight JSON 판정으로 사후 검수, high-confidence만
-   `FoldDuplicate`로 병합 (사이클당 3건, git 스냅샷 선행). 같은 프로젝트 폴더의
-   대표/로그/상세는 후보에서 제외(슬롯이지 중복이 아님).
+   근사중복을 analysis 역할 단일 JSON 판정으로 사후 검수. **기본은 관찰 모드**
+   (판정만 state 파일 `observed`에 기록) — 판정 품질 확인 후
+   `DENEB_WIKI_REVIEW_AUTOMERGE=1`로 자동 병합을 무장한다 (사이클당 3건, git
+   스냅샷 선행). 같은 프로젝트 폴더의 대표/로그/상세와 로그 슬롯은 후보 제외.
+   로그 회전(`RotateProjectLog`: 로그.md 최신 20섹션 유지, 초과분 → 로그-보관.md
+   archived)도 이 태스크가 수행.
 3. **드림 verify** (`verify.go` Phase 5) — 정규화 제목 일치 자동 병합, 유사 제목
-   advisory, 30일 방치 superseded 자동 아카이브. 사이클당 fix 15건 상한.
+   advisory, 30일 방치 superseded 자동 아카이브, **90일 지난 메일분석 자동
+   아카이브**(보존 정책). 사이클당 fix 15건 상한.

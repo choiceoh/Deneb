@@ -56,11 +56,40 @@ func TestWikiReview_RecentlyTouchedPages(t *testing.T) {
 	}
 }
 
-// TestWikiReview_RunMergesHighConfidenceDuplicate: end-to-end — two same-title
-// pages, a fake lightweight verdict, and the duplicate is folded (reversibly)
-// while an invented path in the verdict is ignored.
+// TestWikiReview_ObserveModeRecordsWithoutMerging: the rollout default — a
+// high-confidence verdict is recorded in the state audit trail, nothing merges.
+func TestWikiReview_ObserveModeRecordsWithoutMerging(t *testing.T) {
+	task, store := newReviewFixture(t) // autoMerge stays false
+	writeReviewPage(t, store, "업무/탑솔라-공급계약.md", "탑솔라 공급 계약")
+	writeReviewPage(t, store, "업무/탑솔라-공급-계약.md", "탑솔라 공급 계약")
+
+	task.llm = func(_ context.Context, _, _ string, _ int) (string, error) {
+		return `[{"page":"업무/탑솔라-공급-계약.md","duplicate_of":"업무/탑솔라-공급계약.md","confidence":"high"}]`, nil
+	}
+	if err := task.Run(context.Background()); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	// Both pages survive.
+	if _, err := store.ReadPage("업무/탑솔라-공급계약.md"); err != nil {
+		t.Errorf("observe mode must not merge: %v", err)
+	}
+	if _, err := store.ReadPage("업무/탑솔라-공급-계약.md"); err != nil {
+		t.Errorf("observe mode must not merge: %v", err)
+	}
+	// The would-merge landed in the audit trail.
+	st := task.loadState()
+	if len(st.Observed) != 1 || !strings.Contains(st.Observed[0], "업무/탑솔라-공급-계약.md") {
+		t.Errorf("observed audit trail = %v, want the recorded pair", st.Observed)
+	}
+}
+
+// TestWikiReview_RunMergesHighConfidenceDuplicate: end-to-end with auto-merge
+// armed — two same-title pages, a fake verdict, and the duplicate is folded
+// (reversibly) while an invented path in the verdict is ignored.
 func TestWikiReview_RunMergesHighConfidenceDuplicate(t *testing.T) {
 	task, store := newReviewFixture(t)
+	task.autoMerge = true
 	writeReviewPage(t, store, "업무/탑솔라-공급계약.md", "탑솔라 공급 계약")
 	writeReviewPage(t, store, "업무/탑솔라-공급-계약.md", "탑솔라 공급 계약")
 

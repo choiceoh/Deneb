@@ -68,6 +68,11 @@ func (wd *WikiDreamer) verifyPages(ctx context.Context) []VerifyFinding {
 	// forever (they were a third of the 2026-07 duplicate mess's long tail).
 	findings = append(findings, wd.detectStaleSuperseded()...)
 
+	// 5e: Mail-analysis retention (pure computation). One page per mail means
+	// the 메일분석 buckets grow forever; past the retention window they are
+	// archive material, not working memory.
+	findings = append(findings, wd.detectStaleMailAnalyses()...)
+
 	return findings
 }
 
@@ -191,6 +196,48 @@ func (wd *WikiDreamer) detectStaleSuperseded() []VerifyFinding {
 				last, page.Meta.SupersededBy),
 			PageA: rp,
 			Fix:   &VerifyFix{Kind: "archive"},
+		})
+	}
+	return findings
+}
+
+// mailAnalysisArchiveAfterDays is the retention window for per-mail analysis
+// pages: past it they get archived (kept on disk + git, demoted in search,
+// dropped from Tier-1/research) so the raw-mail long tail can't re-pollute
+// recall the way the 2026-07 duplicate pile did.
+const mailAnalysisArchiveAfterDays = 90
+
+// detectStaleMailAnalyses flags mail-analysis pages older than the retention
+// window with an auto-archive fix. Date basis: Updated (set once at creation —
+// the mail sink never rewrites these), falling back to Created.
+func (wd *WikiDreamer) detectStaleMailAnalyses() []VerifyFinding {
+	relPaths, err := wd.store.ListPages("")
+	if err != nil {
+		return nil
+	}
+	cutoff := time.Now().AddDate(0, 0, -mailAnalysisArchiveAfterDays).Format("2006-01-02")
+	var findings []VerifyFinding
+	for _, rp := range relPaths {
+		rp = filepath.ToSlash(rp)
+		if !IsMailAnalysisPath(rp) {
+			continue
+		}
+		page, err := wd.store.ReadPage(rp)
+		if err != nil || page == nil || page.Meta.Archived {
+			continue
+		}
+		last := strings.TrimSpace(page.Meta.Updated)
+		if last == "" {
+			last = strings.TrimSpace(page.Meta.Created)
+		}
+		if last == "" || last >= cutoff { // ISO dates compare lexicographically
+			continue
+		}
+		findings = append(findings, VerifyFinding{
+			Type:   "stale_mail_analysis",
+			Detail: fmt.Sprintf("보존 기한(%d일) 지난 메일분석 (%s) — 아카이브", mailAnalysisArchiveAfterDays, last),
+			PageA:  rp,
+			Fix:    &VerifyFix{Kind: "archive"},
 		})
 	}
 	return findings
