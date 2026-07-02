@@ -353,6 +353,10 @@ private fun renderWaitingChip(name: String, scheme: ColorScheme) {
             Surface(color = scheme.background) {
                 Column(Modifier.fillMaxSize().padding(8.dp)) {
                     WaitingResponseRow(executingTools = persistentListOf())
+                    // The live A↔B pair the user actually sees while a tool runs:
+                    // rotating generic text vs the same text + " · tool label"
+                    // (isStatusOnly = false) — these two must align identically.
+                    WaitingResponseRow(executingTools = persistentListOf("t1" to "메일 확인 중"))
                     WaitingResponseRow(
                         executingTools = persistentListOf("t1" to "메일 확인 중"),
                         isStatusOnly = true,
