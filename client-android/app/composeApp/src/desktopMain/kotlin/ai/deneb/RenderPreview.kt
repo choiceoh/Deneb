@@ -375,6 +375,14 @@ private fun renderWaitingChip(name: String, scheme: ColorScheme) {
                         executingTools = persistentListOf("t1" to "깊이 생각 중…"),
                         isStatusOnly = true,
                     )
+                    // A LONG status that wraps to two lines — must stay left-aligned
+                    // with the rows above (the centered-wrap misalignment report).
+                    WaitingResponseRow(
+                        executingTools = persistentListOf(
+                            "t1" to "웹 검색 중: 아르고에너지 NDA 표준 조항 비교 — 국내 EPC 계약 관례와 손해배상 상한 조사",
+                        ),
+                        isStatusOnly = true,
+                    )
                 }
             }
         }
