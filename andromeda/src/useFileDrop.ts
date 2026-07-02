@@ -1,12 +1,12 @@
 import { type DragEvent as ReactDragEvent, useEffect, useRef, useState } from "react";
 
 // 채팅 영역 전체를 무표시 드롭존으로 만든다: 평소엔 아무 표시 없고, 파일 드래그가 실제로
-// 존 위에 있을 때만 `over`가 켜져 살짝 표시(스타일은 caller — `.drop-over`), 놓으면 onFile로
-// 넘긴다. dragenter/leave는 자식 요소마다 쌍으로 발화하므로 depth 카운터로 깜빡임 없이
-// 유지한다. 파일이 아닌 드래그(텍스트 선택 등)는 건드리지 않아 평소 동작 그대로다.
+// 존 위에 있을 때만 `over`가 켜져 살짝 표시(스타일은 caller — `.drop-over`), 놓으면 onFiles로
+// 넘긴다(여러 개 가능). dragenter/leave는 자식 요소마다 쌍으로 발화하므로 depth 카운터로
+// 깜빡임 없이 유지한다. 파일이 아닌 드래그(텍스트 선택 등)는 건드리지 않아 평소 동작 그대로다.
 // Tauri 창에서는 dragDropEnabled:false(src-tauri/tauri.conf.json)가 전제 — 그래야 OS 파일
 // 드래그가 웹뷰 HTML5 DnD 이벤트(File 객체)로 그대로 들어온다.
-export function useFileDrop(enabled: boolean, onFile: (file: File) => void) {
+export function useFileDrop(enabled: boolean, onFiles: (files: File[]) => void) {
   const depth = useRef(0);
   const [over, setOver] = useState(false);
 
@@ -50,8 +50,8 @@ export function useFileDrop(enabled: boolean, onFile: (file: File) => void) {
         e.preventDefault();
         depth.current = 0;
         setOver(false);
-        const file = e.dataTransfer?.files?.[0];
-        if (enabled && file) onFile(file);
+        const files = Array.from(e.dataTransfer?.files ?? []);
+        if (enabled && files.length > 0) onFiles(files);
       },
     },
   };

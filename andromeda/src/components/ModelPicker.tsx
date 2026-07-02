@@ -15,7 +15,9 @@ export function ModelPicker({
   onChange: (id: string) => void;
   disabled?: boolean;
 }) {
-  if (!models || models.sections.length === 0) return null;
+  // sections?.: a malformed/older gateway payload ({} 등) shouldn't crash the whole
+  // workstation render — the picker just stays hidden, same as "not loaded yet".
+  if (!models?.sections?.length) return null;
 
   // Surface the active id even if it isn't in a section (custom/older models),
   // so the <select> never renders blank.

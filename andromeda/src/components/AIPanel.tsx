@@ -1,5 +1,6 @@
 import { type ChangeEvent, useEffect, useRef, useState } from "react";
 import { inferAttachmentMimeType } from "@/attachmentMime";
+import { readFileBase64, splitAttachable } from "@/attachments";
 import { type GatewayConfig, type ModelsList, listModels } from "@/gateway";
 import { type AttachmentPart, type ChatTurn, useChat } from "@/hooks";
 import { useFileDrop } from "@/useFileDrop";
@@ -128,7 +129,7 @@ export function AIPanel({
   placement?: "side" | "bottom";
 }) {
   const { aiText, activeResource, connected, noteSink } = useWorkspace();
-  const { thinking, busy, turns, send, capture, stop, regenerate, clear, setTurns } = useChat(cfg);
+  const { thinking, busy, stoppable, turns, send, capture, stop, regenerate, clear, setTurns } = useChat(cfg);
   const [input, setInput] = useState("");
   // Answers already saved into the open notebook this session (turn ids) — flips
   // the per-answer 노트에 저장 button to a done state so a double-click can't pin
@@ -141,7 +142,7 @@ export function AIPanel({
   const { sessions, sessionKey, sessionsOpen, sessionErr, toggleSessions, selectSession, removeSession, newChat } =
     useSessions(cfg, connected, busy, { clear, setTurns });
   // Follow the newest message while it streams, unless the user scrolled up to read.
-  const { ref: transcriptRef, onScroll, pin } = useStickyScroll([turns, thinking]);
+  const { ref: transcriptRef, onScroll, pin, atBottom, scrollToBottom } = useStickyScroll([turns, thinking]);
 
   // Load the model registry once connected; best-effort (older gateway / the offline
   // test path just leaves it empty).
@@ -172,6 +173,14 @@ export function AIPanel({
     el.style.height = `${el.scrollHeight}px`;
   }, [input]);
 
+  // 응답/첨부 분석이 끝나면 입력창 포커스를 복구한다 — busy 동안 textarea가 disabled 되며
+  // 포커스를 잃어, 이게 없으면 매 턴 입력창을 다시 클릭해야 한다.
+  const wasBusy = useRef(false);
+  useEffect(() => {
+    if (wasBusy.current && !busy && !hidden) composeRef.current?.focus();
+    wasBusy.current = busy;
+  }, [busy, hidden]);
+
   function submit(message = input) {
     const msg = message.trim();
     if (!msg || busy || !connected) return;
@@ -180,30 +189,55 @@ export function AIPanel({
     void send(msg, { workspaceContext: aiText, activeResource, model: model || undefined, sessionKey });
   }
 
-  // 첨부: 파일을 base64로 읽어 capture(이미지 OCR·음성 전사·문서 추출)로 보낸다 — 채팅 탭과
-  // 같은 경로, 이 패널의 세션(client:main)에 한 턴으로 남는다. 클립 버튼과 드롭 공용.
-  function attachFile(file: File) {
-    if (busy || !connected) return;
-    const mimeType = inferAttachmentMimeType(file.name, file.type);
-    const caption = mimeType.startsWith("audio/") ? "" : input.trim();
+  // 첨부 인입에서 건너뛴 파일 안내(미지원 형식·크기 초과) — 컴포저 위에 잠깐 떴다 사라진다.
+  const [attachNote, setAttachNote] = useState("");
+  const noteTimer = useRef<number | null>(null);
+  useEffect(
+    () => () => {
+      if (noteTimer.current !== null) window.clearTimeout(noteTimer.current);
+    },
+    [],
+  );
+  function showAttachNote(lines: string[]) {
+    if (lines.length === 0) return;
+    setAttachNote(lines.join(" · "));
+    if (noteTimer.current !== null) window.clearTimeout(noteTimer.current);
+    noteTimer.current = window.setTimeout(() => setAttachNote(""), 6000);
+  }
+
+  // 첨부 인입(클립 버튼·드롭·붙여넣기 공용): 형식·크기를 거른 뒤(splitAttachable) 한 파일씩
+  // 순서대로 capture(이미지 OCR·음성 전사·문서 추출)에 보낸다 — 채팅 탭과 같은 경로, 이
+  // 패널의 세션(client:main)에 턴으로 남는다. 입력창의 텍스트는 첫 비-음성 파일의 캡션으로.
+  async function attachFiles(files: File[]) {
+    if (busy || !connected || files.length === 0) return;
+    const { ok, skipped } = splitAttachable(files);
+    showAttachNote(skipped);
+    const captionTarget = ok.find((f) => !inferAttachmentMimeType(f.name, f.type).startsWith("audio/"));
+    const caption = captionTarget ? input.trim() : "";
     if (caption) setInput("");
-    const reader = new FileReader();
-    reader.onload = () => {
-      const base64 = String(reader.result).split(",")[1] ?? "";
-      pin();
-      void capture({ name: file.name, mimeType, base64 }, { sessionKey, caption });
-    };
-    reader.readAsDataURL(file);
+    for (const file of ok) {
+      const mimeType = inferAttachmentMimeType(file.name, file.type);
+      try {
+        const base64 = await readFileBase64(file);
+        pin();
+        await capture(
+          { name: file.name, mimeType, base64 },
+          { sessionKey, caption: file === captionTarget ? caption : "" },
+        );
+      } catch {
+        showAttachNote([`${file.name} — 읽기 실패라 건너뜀`]);
+      }
+    }
   }
 
   function onPick(e: ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    e.target.value = ""; // let the same file be picked again later
-    if (file) attachFile(file);
+    const files = Array.from(e.target.files ?? []);
+    e.target.value = ""; // let the same selection be picked again later
+    void attachFiles(files);
   }
 
   // 패널 전체가 무표시 드롭존 — 파일 드래그가 위에 있을 때만 살짝 표시(.drop-over).
-  const { over: dropOver, dropProps } = useFileDrop(!busy && connected, attachFile);
+  const { over: dropOver, dropProps } = useFileDrop(!busy && connected, (files) => void attachFiles(files));
 
   const last = turns.at(-1);
   const lastId = last?.id;
@@ -219,6 +253,7 @@ export function AIPanel({
         bottom
           ? // 하단 도킹: 크기는 그리드 셀이 결정. width/flex 미지정, 높이 넘침은 내부 transcript가 스크롤.
             {
+              position: "relative", // 맨 아래로 버튼(.chat-scroll-bottom)의 앵커
               minWidth: 0,
               minHeight: 0,
               display: hidden ? "none" : "flex",
@@ -227,6 +262,7 @@ export function AIPanel({
             }
           : {
               // 확대 시 사이드바를 제외한 전 폭(flex:1), 평시엔 고정 폭(--ai-w).
+              position: "relative", // 맨 아래로 버튼(.chat-scroll-bottom)의 앵커
               width: expanded ? "auto" : "var(--ai-w)",
               flex: expanded ? "1 1 auto" : "0 0 auto",
               minWidth: 0,
@@ -346,6 +382,25 @@ export function AIPanel({
         )}
       </div>
 
+      {/* 위로 스크롤해 읽는 중일 때만 — 최신으로 복귀 (채팅 탭과 동일 부품) */}
+      {!atBottom && turns.length > 0 && (
+        <button
+          type="button"
+          className="chat-scroll-bottom"
+          onClick={scrollToBottom}
+          aria-label="맨 아래로"
+          title="맨 아래로"
+        >
+          <Icon name="chevron-down" size={18} />
+        </button>
+      )}
+
+      {attachNote && (
+        <div className="attach-notice" role="status">
+          {attachNote}
+        </div>
+      )}
+
       <form
         className="ai-composer"
         onSubmit={(e) => {
@@ -357,6 +412,7 @@ export function AIPanel({
           ref={fileRef}
           type="file"
           accept="image/*,audio/*,.png,.jpg,.jpeg,.webp,.gif,.mp3,.m4a,.wav,.ogg,.webm,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt"
+          multiple
           hidden
           onChange={onPick}
         />
@@ -385,11 +441,31 @@ export function AIPanel({
             e.preventDefault();
             submit();
           }}
+          onPaste={(e) => {
+            // 클립보드에 파일(스크린샷·복사한 이미지)이 있으면 첨부로 — 텍스트 붙여넣기는 그대로.
+            const files = Array.from(e.clipboardData?.files ?? []);
+            if (files.length === 0) return;
+            e.preventDefault();
+            void attachFiles(files);
+          }}
         />
         {busy ? (
-          <button type="button" className="ai-send ai-send-stop" onClick={stop} aria-label="중단" title="응답 중단">
-            <Icon name="stop" size={15} />
-          </button>
+          stoppable ? (
+            <button type="button" className="ai-send ai-send-stop" onClick={stop} aria-label="중단" title="응답 중단">
+              <Icon name="stop" size={15} />
+            </button>
+          ) : (
+            // 첨부 분석(capture)은 중간에 끊을 수 없다 — 되는 척하는 중단 버튼 대신 정직한 표시.
+            <button
+              type="button"
+              className="ai-send"
+              disabled
+              aria-label="첨부 분석 중"
+              title="첨부 분석 중에는 중단할 수 없습니다"
+            >
+              <Icon name="attach" size={15} />
+            </button>
+          )
         ) : (
           <button
             type="submit"
