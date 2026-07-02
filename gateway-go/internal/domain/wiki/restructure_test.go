@@ -30,8 +30,11 @@ func newRestructureStore(t *testing.T) *Store {
 
 	// Legacy flat 대표페이지 (heavily referenced by mail pages).
 	write("프로젝트/영산고.md", "영산고", "# 영산고\n본문", nil)
-	// Duplicate topic page to be merged by the plan.
+	// Duplicate topic pages to be merged by the plan — TWO into the same target,
+	// locking the chained-merge invariant (an earlier merge must survive a later
+	// one into the same page).
 	write("프로젝트/영산고-태양광.md", "영산고 태양광", "# 영산고 태양광\n중복 본문", nil)
+	write("프로젝트/영산고-발전사업.md", "영산고 발전사업", "# 영산고 발전사업\n두번째 중복 본문", nil)
 	// Mail-ID page inside the project folder (analyzer-written, old scheme).
 	write("프로젝트/영산고/19e8717314b5c914.md", "RE: 견적", "> From: kim@x.com\n> Message ID: `19e8717314b5c914`\n\n분석",
 		[]string{"프로젝트/영산고.md"})
@@ -75,6 +78,7 @@ func TestRestructure_Apply(t *testing.T) {
 
 	plan := []RestructureOp{
 		{Op: "merge", Source: "프로젝트/영산고-태양광.md", Target: "프로젝트/영산고.md", Note: "같은 프로젝트 중복"},
+		{Op: "merge", Source: "프로젝트/영산고-발전사업.md", Target: "프로젝트/영산고.md", Note: "같은 프로젝트 중복 2"},
 		{Op: "fold-log", Source: "프로젝트/영산고-계약-법무검토-(2026-06-30).md", Target: "영산고", Note: "사건 → 로그"},
 	}
 	rep, err := RestructureProjectLayout(store, plan, true)
@@ -92,6 +96,10 @@ func TestRestructure_Apply(t *testing.T) {
 	}
 	if !strings.Contains(repPage.Body, "중복 본문") || !strings.Contains(repPage.Body, "## 병합: 영산고 태양광") {
 		t.Errorf("merged duplicate body missing from 대표.md:\n%s", repPage.Body)
+	}
+	// Chained merge: BOTH duplicates must survive in the final body.
+	if !strings.Contains(repPage.Body, "두번째 중복 본문") || !strings.Contains(repPage.Body, "## 병합: 영산고 발전사업") {
+		t.Errorf("second chained merge clobbered the first:\n%s", repPage.Body)
 	}
 	if _, err := store.ReadPage("프로젝트/영산고.md"); err == nil {
 		t.Error("legacy flat page should be gone")

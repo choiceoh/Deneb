@@ -120,11 +120,16 @@ func RestructureProjectLayout(store *Store, plan []RestructureOp, apply bool) (*
 				rep.Skipped = append(rep.Skipped, fmt.Sprintf("plan[%d] merge: target missing: %s", i, op.Target))
 				continue
 			}
+			body := mergedBodyFor(pages[dst], pages[src])
 			actions = append(actions, restructureAction{
 				kind: "merge", source: src, target: dst,
-				mergedBody: mergedBodyFor(pages[dst], pages[src]),
+				mergedBody: body,
 				reason:     planReason(op),
 			})
+			// Keep the simulated target body in sync so a LATER merge into the
+			// same target chains on top of this one instead of clobbering it
+			// (each merge action carries the full body MergePage will write).
+			pages[dst].Body = body
 			simDelete(src)
 		case "move":
 			dst := normalizePagePath(strings.TrimSpace(op.Target))
