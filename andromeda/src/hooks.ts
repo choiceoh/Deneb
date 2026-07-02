@@ -59,6 +59,9 @@ export interface SendOpts {
 export interface ChatState {
   thinking: string;
   busy: boolean;
+  // True while the current busy turn can actually be aborted (a streamed send).
+  // capture RPCs are not abortable, so composers show an honest non-stop state.
+  stoppable: boolean;
   turns: ChatTurn[];
   send: (message: string, opts?: SendOpts) => Promise<void>;
   capture: (file: { name: string; mimeType: string; base64: string }, opts?: SendOpts) => Promise<void>;
@@ -305,7 +308,18 @@ export function useChat(cfg: GatewayConfig): ChatState {
     }
   }
 
-  return { thinking, busy, turns, send, capture, stop, regenerate, clear, setTurns };
+  return {
+    thinking,
+    busy,
+    stoppable: busy && abortRef.current !== null,
+    turns,
+    send,
+    capture,
+    stop,
+    regenerate,
+    clear,
+    setTurns,
+  };
 }
 
 export interface GatewayStatus {

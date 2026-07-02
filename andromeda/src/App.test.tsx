@@ -300,4 +300,152 @@ describe("Workstation (connected, fixtures)", () => {
     });
     expect(await screen.findByRole("group", { name: "첨부 분석 결과" })).toBeInTheDocument();
   });
+
+  it("pastes a clipboard image into the composer as an attachment", async () => {
+    const rpcCalls: Array<{ method: string; params: Record<string, unknown> }> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init?: RequestInit) => {
+        const body = JSON.parse(String(init?.body ?? "{}")) as {
+          method?: string;
+          params?: Record<string, unknown>;
+        };
+        const method = String(body.method ?? "");
+        rpcCalls.push({ method, params: body.params ?? {} });
+        const payload =
+          method === "miniapp.models.list"
+            ? { current: "", sections: [] }
+            : method === "miniapp.sessions.recent"
+              ? { sessions: [], count: 0 }
+              : method === "miniapp.capture.image"
+                ? { text: "붙여넣기 분석" }
+                : {};
+        return new Response(JSON.stringify({ ok: true, payload }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }),
+    );
+
+    renderWithProviders(<AIPanel cfg={{ url: "http://test", token: "tok" }} />, { connected: true });
+
+    const composer = screen.getByRole("textbox", { name: "Deneb에게 메시지" });
+    fireEvent.paste(composer, {
+      clipboardData: { files: [new File(["img"], "screenshot.png", { type: "image/png" })] },
+    });
+
+    await waitFor(() => expect(rpcCalls.some((c) => c.method === "miniapp.capture.image")).toBe(true));
+    expect(rpcCalls.find((c) => c.method === "miniapp.capture.image")?.params).toMatchObject({
+      mimeType: "image/png",
+      sessionKey: "client:main",
+    });
+  });
+
+  it("attaches multiple dropped files in order — caption on the first, unsupported skipped with a notice", async () => {
+    const rpcCalls: Array<{ method: string; params: Record<string, unknown> }> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init?: RequestInit) => {
+        const body = JSON.parse(String(init?.body ?? "{}")) as {
+          method?: string;
+          params?: Record<string, unknown>;
+        };
+        const method = String(body.method ?? "");
+        rpcCalls.push({ method, params: body.params ?? {} });
+        const payload =
+          method === "miniapp.models.list"
+            ? { current: "", sections: [] }
+            : method === "miniapp.sessions.recent"
+              ? { sessions: [], count: 0 }
+              : method === "miniapp.capture.image"
+                ? { text: "이미지 ok" }
+                : method === "miniapp.capture.document"
+                  ? { text: "문서 ok" }
+                  : {};
+        return new Response(JSON.stringify({ ok: true, payload }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }),
+    );
+
+    const user = userEvent.setup();
+    renderWithProviders(<AIPanel cfg={{ url: "http://test", token: "tok" }} />, { connected: true });
+
+    const composer = screen.getByRole("textbox", { name: "Deneb에게 메시지" });
+    await user.type(composer, "둘 다 검토해줘");
+    const panel = screen.getByRole("complementary");
+    const files = [
+      new File(["i"], "quote.png", { type: "image/png" }),
+      new File(["p"], "contract.pdf", { type: "application/pdf" }),
+      new File(["v"], "clip.mp4", { type: "video/mp4" }),
+    ];
+    fireEvent.drop(panel, { dataTransfer: { files, types: ["Files"] } });
+
+    // the unsupported file is skipped with a transient notice, not a silent drop
+    expect(await screen.findByRole("status")).toHaveTextContent("clip.mp4");
+
+    await waitFor(() => expect(rpcCalls.filter((c) => c.method.startsWith("miniapp.capture.")).length).toBe(2));
+    const captures = rpcCalls.filter((c) => c.method.startsWith("miniapp.capture."));
+    expect(captures.map((c) => c.method)).toEqual(["miniapp.capture.image", "miniapp.capture.document"]);
+    // the typed text rides as the caption of the first attachable file only
+    expect(captures[0].params).toMatchObject({ caption: "둘 다 검토해줘" });
+    expect(captures[1].params).not.toHaveProperty("caption");
+    expect(composer).toHaveValue("");
+  });
+
+  it("returns focus to the composer once the reply finishes", async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/api/v1/miniapp/chat/stream")) {
+        return sseResponse('event: delta\ndata: {"delta":"완료"}\n\nevent: done\ndata: {"text":"완료"}\n\n');
+      }
+      return sseResponse();
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderWithProviders(<AIPanel cfg={{ url: "http://test", token: "tok" }} />, { connected: true });
+
+    const composer = screen.getByRole("textbox", { name: "Deneb에게 메시지" });
+    await user.type(composer, "안녕");
+    await user.keyboard("{Enter}");
+
+    // busy 동안 disabled로 포커스를 잃지만, 턴이 끝나면 자동 복구되어 바로 이어서 칠 수 있다
+    await screen.findByText("완료");
+    await waitFor(() => expect(composer).toHaveFocus());
+    expect(composer).not.toBeDisabled();
+  });
+
+  it("shows a non-stop state while an attachment is being analyzed (capture is not abortable)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init?: RequestInit) => {
+        const body = JSON.parse(String(init?.body ?? "{}")) as { method?: string };
+        const method = String(body.method ?? "");
+        if (method === "miniapp.capture.image") return new Promise<Response>(() => {}); // still in flight
+        const payload =
+          method === "miniapp.models.list"
+            ? { current: "", sections: [] }
+            : method === "miniapp.sessions.recent"
+              ? { sessions: [], count: 0 }
+              : {};
+        return new Response(JSON.stringify({ ok: true, payload }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }),
+    );
+
+    renderWithProviders(<AIPanel cfg={{ url: "http://test", token: "tok" }} />, { connected: true });
+
+    const panel = screen.getByRole("complementary");
+    fireEvent.drop(panel, {
+      dataTransfer: { files: [new File(["i"], "a.png", { type: "image/png" })], types: ["Files"] },
+    });
+
+    const pending = await screen.findByRole("button", { name: "첨부 분석 중" });
+    expect(pending).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "중단" })).not.toBeInTheDocument();
+  });
 });

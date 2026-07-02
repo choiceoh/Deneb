@@ -888,6 +888,13 @@ textarea {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+/* 첨부 인입에서 건너뛴 파일 안내(미지원 형식·크기 초과) — 컴포저 위 한 줄, 몇 초 뒤 사라짐 */
+.attach-notice {
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted-2);
+}
 .ai-composer {
   display: flex;
   align-items: flex-end;

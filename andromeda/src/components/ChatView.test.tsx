@@ -132,6 +132,46 @@ describe("ChatView (비업무 채팅 탭)", () => {
     });
   });
 
+  it("pastes a clipboard image as an attachment (chat:main)", async () => {
+    const rpcCalls: Array<{ method: string; params: Record<string, unknown> }> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init?: RequestInit) => {
+        const body = JSON.parse(String(init?.body ?? "{}")) as {
+          method?: string;
+          params?: Record<string, unknown>;
+        };
+        const method = String(body.method ?? "");
+        rpcCalls.push({ method, params: body.params ?? {} });
+        const payload =
+          method === "miniapp.models.list"
+            ? { current: "", sections: [] }
+            : method === "miniapp.sessions.recent"
+              ? { sessions: [], count: 0 }
+              : method === "miniapp.capture.image"
+                ? { text: "ok" }
+                : {};
+        return new Response(JSON.stringify({ ok: true, payload }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }),
+    );
+
+    renderWithProviders(<ChatView cfg={{ url: "http://test", token: "tok" }} />, { connected: true });
+
+    const composer = screen.getByRole("textbox", { name: "Deneb에게 메시지" });
+    fireEvent.paste(composer, {
+      clipboardData: { files: [new File(["x"], "shot.png", { type: "image/png" })] },
+    });
+
+    await waitFor(() => expect(rpcCalls.some((c) => c.method === "miniapp.capture.image")).toBe(true));
+    expect(rpcCalls.find((c) => c.method === "miniapp.capture.image")?.params).toMatchObject({
+      mimeType: "image/png",
+      sessionKey: "chat:main",
+    });
+  });
+
   it("routes extension-inferred audio attachments without sending typed text as a caption", async () => {
     const rpcCalls: Array<{ method: string; params: Record<string, unknown> }> = [];
     vi.stubGlobal(
