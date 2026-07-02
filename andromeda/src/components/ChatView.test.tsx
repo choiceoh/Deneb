@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { ChatView } from "./ChatView";
@@ -81,6 +81,51 @@ describe("ChatView (비업무 채팅 탭)", () => {
     await waitFor(() => expect(rpcCalls.some((c) => c.method === "miniapp.capture.document")).toBe(true));
     const capture = rpcCalls.find((c) => c.method === "miniapp.capture.document");
     expect(capture?.params).toMatchObject({
+      filename: "contract.pdf",
+      mimeType: "application/pdf",
+      sessionKey: "chat:main",
+    });
+  });
+
+  it("drops a file anywhere on the chat column to attach", async () => {
+    const rpcCalls: Array<{ method: string; params: Record<string, unknown> }> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init?: RequestInit) => {
+        const body = JSON.parse(String(init?.body ?? "{}")) as {
+          method?: string;
+          params?: Record<string, unknown>;
+        };
+        const method = String(body.method ?? "");
+        rpcCalls.push({ method, params: body.params ?? {} });
+        const payload =
+          method === "miniapp.models.list"
+            ? { current: "", sections: [] }
+            : method === "miniapp.sessions.recent"
+              ? { sessions: [], count: 0 }
+              : method === "miniapp.capture.document"
+                ? { text: "ok" }
+                : {};
+        return new Response(JSON.stringify({ ok: true, payload }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }),
+    );
+
+    renderWithProviders(<ChatView cfg={{ url: "http://test", token: "tok" }} />, { connected: true });
+
+    // The whole chat column is the drop zone; the ring shows only mid-drag.
+    const zone = screen.getByRole("main");
+    const dt = { files: [new File(["fake pdf"], "contract.pdf", { type: "application/pdf" })], types: ["Files"] };
+    expect(zone).not.toHaveClass("drop-over");
+    fireEvent.dragEnter(zone, { dataTransfer: dt });
+    expect(zone).toHaveClass("drop-over");
+    fireEvent.drop(zone, { dataTransfer: dt });
+    expect(zone).not.toHaveClass("drop-over");
+
+    await waitFor(() => expect(rpcCalls.some((c) => c.method === "miniapp.capture.document")).toBe(true));
+    expect(rpcCalls.find((c) => c.method === "miniapp.capture.document")?.params).toMatchObject({
       filename: "contract.pdf",
       mimeType: "application/pdf",
       sessionKey: "chat:main",

@@ -179,6 +179,16 @@ textarea {
   box-shadow: var(--shadow-panel);
 }
 
+/* 채팅 영역(우측 Deneb 패널·채팅 탭)은 평소 무표시 드롭존 — 파일 드래그가 그 위에 있을
+ * 때만 살짝 안쪽 링 + 은은한 워시로 알린다 (useFileDrop). Tauri 창은 dragDropEnabled:false
+ * (src-tauri/tauri.conf.json)라서 OS 파일 드래그가 HTML5 DnD로 웹뷰에 그대로 들어온다. */
+.panel.drop-over {
+  box-shadow:
+    var(--shadow-panel),
+    inset 0 0 0 1.5px var(--accent),
+    inset 0 0 28px var(--accent-soft);
+}
+
 /* frameless window — no titlebar band at all. The min/max/close cluster tucks
  * into the very top of the nav rail; the rail itself is the drag handle (see
  * data-tauri-drag-region in Sidebar), so the work + AI panels rise to the
