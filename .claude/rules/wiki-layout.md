@@ -78,7 +78,9 @@ globs:
    `DENEB_WIKI_REVIEW_AUTOMERGE=1`로 자동 병합을 무장한다 (사이클당 3건, git
    스냅샷 선행). 같은 프로젝트 폴더의 대표/로그/상세와 로그 슬롯은 후보 제외.
    로그 회전(`RotateProjectLog`: 로그.md 최신 20섹션 유지, 초과분 → 로그-보관.md
-   archived)도 이 태스크가 수행.
+   archived)과 죽은 링크 정리(`PruneDeadRelatedLinks`: related의 죽은 참조를
+   결정적으로 복구{정확경로→레거시flat→유일 basename→유일 제목→유일 ID} 또는
+   제거, 모호하면 추측 없이 제거, Updated 미갱신)도 이 태스크가 수행.
 3. **드림 verify** (`verify.go` Phase 5) — 정규화 제목 일치 자동 병합, 유사 제목
    advisory, 30일 방치 superseded 자동 아카이브, **90일 지난 메일분석 자동
    아카이브**(보존 정책). 사이클당 fix 15건 상한.
