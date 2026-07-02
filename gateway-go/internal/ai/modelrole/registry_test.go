@@ -166,6 +166,38 @@ func TestNewRegistryWithOptions_PerRoleAndCatalog(t *testing.T) {
 	}
 }
 
+// TestNewRegistryWithOptions_KimiBehindWormhole pins the config-only contract
+// that lets the anthropic-only Kimi endpoint ride the wormhole /v1/messages
+// front (sidecar-models.md § 클라우드 호출 통합): the deneb.json provider keeps
+// the builtin id "kimi" — so RejectsCacheControl marker-stripping and the
+// builtin anthropic API mode keep working — while the catalog overrides only
+// the endpoint (local wormhole, no /v1: the anthropic client appends
+// /v1/messages itself) and the key (wormhole token). If catalog resolution
+// ever stops layering over builtin defaults this way, the runbook breaks here
+// first.
+func TestNewRegistryWithOptions_KimiBehindWormhole(t *testing.T) {
+	reg := NewRegistryWithOptions(slog.Default(), RegistryOptions{
+		MainModel:   "zai/main-model",
+		CodingModel: "kimi/kimi-for-coding",
+		Providers: map[string]ProviderResolved{
+			"kimi": {BaseURL: "http://127.0.0.1:18800", APIKey: "wormhole-token"},
+		},
+	})
+	cfg := reg.Config(RoleCoding)
+	if cfg.ProviderID != "kimi" || cfg.Model != "kimi-for-coding" {
+		t.Fatalf("coding = %s/%s, want kimi/kimi-for-coding", cfg.ProviderID, cfg.Model)
+	}
+	if cfg.BaseURL != "http://127.0.0.1:18800" {
+		t.Errorf("baseURL = %q, want the wormhole front (catalog override)", cfg.BaseURL)
+	}
+	if cfg.APIKey != "wormhole-token" {
+		t.Errorf("apiKey = %q, want the wormhole token (catalog override)", cfg.APIKey)
+	}
+	if cfg.APIMode != llm.APIModeAnthropic {
+		t.Errorf("apiMode = %q, want the builtin anthropic default to survive a catalog entry without an explicit api field", cfg.APIMode)
+	}
+}
+
 func TestNewRegistryWithOptions_UnsetRolesDefaultToVllm(t *testing.T) {
 	reg := NewRegistryWithOptions(slog.Default(), RegistryOptions{
 		MainModel:      "zai/main-model",
