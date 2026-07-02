@@ -3,6 +3,7 @@ package server
 import (
 	"net/http"
 	"net/http/pprof"
+	"os"
 )
 
 // buildMux configures HTTP routing for health, RPC/WS, API, hooks, and plugin routes.
@@ -22,6 +23,12 @@ func (s *Server) buildMux() *http.ServeMux {
 	mux.HandleFunc("POST /api/v1/miniapp/chat/stream", s.handleMiniappChatStream)
 	mux.HandleFunc("GET /api/v1/miniapp/events", s.handleMiniappEvents)
 	mux.HandleFunc("GET /api/v1/miniapp/gmail/attachment", s.handleMiniappGmailAttachment)
+	// MCP gateway — read-only Deneb memory (wiki/projects/diary/calendar/search)
+	// as Model Context Protocol tools for external AI clients (Claude Code 등).
+	// Same client-token auth as the miniapp surface. See server_http_mcp.go.
+	if os.Getenv("DENEB_MCP_DISABLE") != "1" {
+		mux.HandleFunc("/mcp", s.handleMCP)
+	}
 	mux.HandleFunc("GET /api/v1/app/update/manifest", s.handleAppUpdateManifest)
 	mux.HandleFunc("GET /api/v1/app/update/download", s.handleAppUpdateDownload)
 	mux.HandleFunc("GET /api/v1/files/download", s.handleFilesDownload)
