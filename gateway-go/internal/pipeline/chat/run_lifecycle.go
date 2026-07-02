@@ -318,27 +318,8 @@ func handleRunSuccess(
 	emitJobEvent(deps, params.ClientRunID, "end", false, "", now)
 
 	// Coding mode: after the turn, snapshot the worktree edits as a checkpoint and
-	// verify build/tests, flipping the rail status. Runs detached on the server
-	// lifecycle ctx (verify can take minutes — well past this turn's deadline) and
-	// only for Mode==code sessions, so ordinary turns are entirely unaffected.
-	if deps.codingTurnEndFn != nil {
-		if sess := deps.sessions.Get(params.SessionKey); sess != nil && sess.Mode == session.ModeCode {
-			fn := deps.codingTurnEndFn
-			// Prefer the server lifecycle ctx so the background verify is cancelled
-			// on shutdown; fall back to Background (still bounded below) if unset.
-			bgCtx := deps.callbacks.shutdownCtx
-			if bgCtx == nil {
-				bgCtx = context.Background()
-			}
-			sessionKey := params.SessionKey
-			summary := summarizeForCheckpoint(params.Message)
-			safego.GoWithSlog(logger, "coding-turn-end", func() {
-				hookCtx, cancel := context.WithTimeout(bgCtx, 6*time.Minute)
-				defer cancel()
-				fn(hookCtx, sessionKey, summary)
-			})
-		}
-	}
+	// verify build/tests, flipping the rail status.
+	maybeCodingTurnEnd(deps, params, logger)
 
 	// Diary recording: append raw conversation turn to today's diary.
 	// Wiki page curation is handled by the main LLM via system prompt.
@@ -550,6 +531,47 @@ func emitJobEvent(deps runDeps, runID, phase string, aborted bool, errMsg string
 // import by talking through this closure. sessionKey is the coding chat session
 // key ("code:<taskID>"); summary is the turn's user message (the checkpoint label).
 type CodingTurnEndFunc func(ctx context.Context, sessionKey, summary string)
+
+// maybeCodingTurnEnd fires the coding checkpoint + verify hook after a
+// successful run of a Mode==code session; a no-op for every other session.
+// Runs detached on the server lifecycle ctx (verify can take minutes — well
+// past the turn's deadline). Shared by the async lifecycle (handleRunSuccess)
+// and the synchronous SendSync/SendSyncStream paths: the native client's
+// miniapp.chat.send is SendSync, so hooking only the async path left the
+// per-turn checkpoint/verify dead on the real 코드모드 surface (rail stuck on
+// "working", empty checkpoint list, nothing for undo to pop).
+func maybeCodingTurnEnd(deps runDeps, params RunParams, logger *slog.Logger) {
+	if deps.codingTurnEndFn == nil || deps.sessions == nil {
+		return
+	}
+	sess := deps.sessions.Get(params.SessionKey)
+	if sess == nil || sess.Mode != session.ModeCode {
+		return
+	}
+	fn := deps.codingTurnEndFn
+	// Prefer the server lifecycle ctx so the background verify is cancelled
+	// on shutdown; fall back to Background (still bounded below) if unset.
+	bgCtx := deps.callbacks.shutdownCtx
+	if bgCtx == nil {
+		bgCtx = context.Background()
+	}
+	sessionKey := params.SessionKey
+	summary := summarizeForCheckpoint(params.Message)
+	safego.GoWithSlog(logger, "coding-turn-end", func() {
+		hookCtx, cancel := context.WithTimeout(bgCtx, 6*time.Minute)
+		defer cancel()
+		fn(hookCtx, sessionKey, summary)
+	})
+}
+
+// CodingRebindFunc re-establishes a coding session's worktree binding
+// (Mode/ToolPreset/WorkspaceDir in the session manager) from the durable code
+// store before a turn runs. The in-memory binding is lost on session-manager GC
+// (terminal direct sessions expire after 1h) and on every restart; without the
+// rebind a code: turn silently runs unscoped — full 업무 toolset, fs/exec in
+// the default workspace — and skips the turn-end checkpoint/verify. Must be
+// idempotent and cheap: it is called at the start of every coding turn.
+type CodingRebindFunc func(sessionKey string)
 
 // summarizeForCheckpoint turns the turn's user message into a short Korean commit
 // summary for the coding checkpoint. The user's own words are the most faithful

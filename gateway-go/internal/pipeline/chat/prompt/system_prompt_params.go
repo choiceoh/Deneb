@@ -98,6 +98,24 @@ type SystemPromptParams struct {
 	// before (업무 prompt unchanged).
 	Chatbot bool
 
+	// Coding selects the implementer prompt profile for 코드모드 (code:
+	// sessions): CodingPersona replaces the Nev chief-of-staff identity, the
+	// 업무 work-loop sections are dropped, and the target repo's root rule
+	// docs (CodingRepoContext) are injected instead. Like Chatbot, the 업무
+	// context inputs (ContextFiles, TopicKnowledge, CalendarGlance, GoalGlance,
+	// tier-1 wiki, skills) are withheld upstream (run_prepare). Folds into the
+	// Static cache key so coding sessions live in their own prefix family.
+	Coding bool
+
+	// CodingRepoContext is the worktree root's CLAUDE.md/AGENTS.md content
+	// (rendered sections, frozen per session — see LoadCodingRepoContext).
+	// Empty = no root docs found; the prompt then coaches on-demand reads only.
+	CodingRepoContext string
+	// CodingRepoCacheKey is the content hash of CodingRepoContext, folded into
+	// buildStaticCacheKey so different repos/doc versions never share a coding
+	// Static entry. Empty when CodingRepoContext is empty.
+	CodingRepoCacheKey string
+
 	// CompactionFired triggers a one-time-per-session reminder appended
 	// to the dynamic block: tells the model that prior turns have been
 	// compacted into summaries so summary messages should be treated as

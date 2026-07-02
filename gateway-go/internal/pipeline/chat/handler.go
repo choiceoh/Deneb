@@ -111,6 +111,11 @@ type Handler struct {
 	// the worktree. Optional: nil disables the coding turn-end hook.
 	codingTurnEndFn CodingTurnEndFunc
 
+	// codingRebindFn re-establishes a coding session's worktree binding from
+	// the durable code store before a turn runs (survives session GC/restart).
+	// Optional: nil disables the lazy rebind.
+	codingRebindFn CodingRebindFunc
+
 	// weeklyReportTextFn / weeklyFormDeliverFn back the interactive /weekly
 	// (/주간보고) slash command — the deterministic 주간업무보고 generators the
 	// Saturday cron uses, so a manual trigger produces the same form + text.
@@ -242,6 +247,12 @@ type HandlerConfig struct {
 	// code Manager + session store (server/chat_pipeline.go).
 	CodingTurnEndFn CodingTurnEndFunc
 
+	// CodingRebindFn re-establishes a coding session's worktree binding from the
+	// durable code store before a turn runs, so the binding survives session
+	// GC and gateway restarts. Optional: nil disables the lazy rebind. Injected
+	// by the server over the same code session store (server/chat_pipeline.go).
+	CodingRebindFn CodingRebindFunc
+
 	// RecordActivity is called for user-originating chat turns so the server
 	// can remember the latest active channel session for autonomous follow-ups.
 	// The server owns filtering; chat only reports the session key.
@@ -313,6 +324,7 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 		personaOverrideFn:    cfg.PersonaOverrideFn,
 		fileRecallFn:         cfg.FileRecallFn,
 		codingTurnEndFn:      cfg.CodingTurnEndFn,
+		codingRebindFn:       cfg.CodingRebindFn,
 		providerConfigs:      cloneProviderConfigs(cfg.ProviderConfigs),
 		embeddingClient:      cfg.EmbeddingClient,
 		wikiStore:            cfg.WikiStore,

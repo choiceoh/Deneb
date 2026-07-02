@@ -40,9 +40,10 @@ type PromptCache struct {
 	ctxCachedAt  time.Time
 
 	// --- Session snapshots (frozen context files per session) ---
-	sessMu         sync.Mutex
-	sessStore      map[string][]ContextFile
-	sessTopicStore map[string]TopicKnowledge // frozen per-topic knowledge per session
+	sessMu          sync.Mutex
+	sessStore       map[string][]ContextFile
+	sessTopicStore  map[string]TopicKnowledge    // frozen per-topic knowledge per session
+	sessCodingStore map[string]CodingRepoContext // frozen coding repo docs per code: session
 
 	// --- One-time values (resolved at startup) ---
 	timezoneOnce sync.Once
@@ -158,12 +159,35 @@ func (c *PromptCache) SetTopicSnapshot(key string, tk TopicKnowledge) {
 	c.sessTopicStore[key] = tk
 }
 
-// ClearSession removes the frozen context files and topic knowledge for a session.
+// CodingRepoSnapshot returns the frozen coding repo docs for a session.
+func (c *PromptCache) CodingRepoSnapshot(key string) (CodingRepoContext, bool) {
+	c.sessMu.Lock()
+	defer c.sessMu.Unlock()
+	if c.sessCodingStore == nil {
+		return CodingRepoContext{}, false
+	}
+	rc, ok := c.sessCodingStore[key]
+	return rc, ok
+}
+
+// SetCodingRepoSnapshot stores frozen coding repo docs for a session.
+func (c *PromptCache) SetCodingRepoSnapshot(key string, rc CodingRepoContext) {
+	c.sessMu.Lock()
+	defer c.sessMu.Unlock()
+	if c.sessCodingStore == nil {
+		c.sessCodingStore = make(map[string]CodingRepoContext)
+	}
+	c.sessCodingStore[key] = rc
+}
+
+// ClearSession removes the frozen context files, topic knowledge, and coding
+// repo docs for a session.
 func (c *PromptCache) ClearSession(key string) {
 	c.sessMu.Lock()
 	defer c.sessMu.Unlock()
 	delete(c.sessStore, key)
 	delete(c.sessTopicStore, key)
+	delete(c.sessCodingStore, key)
 }
 
 // ClearAllTopicSnapshots drops every session's frozen per-topic knowledge so the
@@ -236,5 +260,6 @@ func (c *PromptCache) Reset() {
 	c.sessMu.Lock()
 	c.sessStore = nil
 	c.sessTopicStore = nil
+	c.sessCodingStore = nil
 	c.sessMu.Unlock()
 }

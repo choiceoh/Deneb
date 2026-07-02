@@ -115,8 +115,11 @@ func (m *Manager) Patch(key string, patch PatchFields) *Session {
 }
 
 // ConfigureCoding marks a session as a coding session bound to a git worktree:
-// its turns run with the implementer tool preset and fs/exec scoped to
-// workspaceDir. Creates the session if it doesn't exist (mirrors Patch).
+// its turns run with the coding tool preset (worktree tools only — no 업무
+// memory/personal-data surfaces) and fs/exec scoped to workspaceDir. Creates
+// the session if it doesn't exist (mirrors Patch). Idempotent when the session
+// already carries the same binding — no event is emitted, so the lazy per-turn
+// rebind (run_exec → server rebindCodingSession) stays silent.
 func (m *Manager) ConfigureCoding(key, workspaceDir string) {
 	if key == "" {
 		return
@@ -130,8 +133,12 @@ func (m *Manager) ConfigureCoding(key, workspaceDir string) {
 			m.applySessionDefaults(s)
 			m.sessions[key] = s
 		}
+		if s.Mode == ModeCode && s.ToolPreset == "coding" && s.WorkspaceDir == workspaceDir {
+			m.mu.Unlock()
+			return nil
+		}
 		s.Mode = ModeCode
-		s.ToolPreset = "implementer" // toolpreset.PresetImplementer
+		s.ToolPreset = "coding" // toolpreset.PresetCoding
 		s.WorkspaceDir = workspaceDir
 		s.UpdatedAt = time.Now().UnixMilli()
 		m.mu.Unlock()

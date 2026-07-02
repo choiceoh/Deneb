@@ -238,6 +238,11 @@ type runDeps struct {
 	// server/chat_pipeline.go over the shared code Manager + session store.
 	codingTurnEndFn CodingTurnEndFunc
 
+	// codingRebindFn re-establishes a coding session's worktree binding from
+	// the durable code store at the start of a code: turn — the in-memory
+	// binding does not survive session GC or restarts. nil disables the rebind.
+	codingRebindFn CodingRebindFunc
+
 	// chatport holds injected adapters that decouple chat from autoreply.
 	chatport chatportAdapters
 }
@@ -277,6 +282,15 @@ func isSystemSession(key string) bool {
 // assigned a separate chatbot model (see resolveModel).
 func isChatbotSessionKey(key string) bool {
 	return strings.HasPrefix(key, "chat:")
+}
+
+// isCodingSessionKey reports whether key is a 코드모드 session ("code:<taskID>",
+// minted by miniapp.code.start). The key — not session-manager state — is the
+// authoritative signal for the coding prompt profile and model routing: the
+// manager forgets terminal sessions after its GC window and everything on
+// restart, while the key is stable for the session's whole life.
+func isCodingSessionKey(key string) bool {
+	return strings.HasPrefix(key, "code:")
 }
 
 // isMainSession reports whether key is a top-level direct session (e.g. "client:main").

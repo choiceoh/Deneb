@@ -66,6 +66,13 @@ func prepareContextAndPrompt(
 	// so the prompt builder's empty-input guards skip them, and flag the builder
 	// (spp.Chatbot) to swap the identity + drop the work-loop sections.
 	chatbot := isChatbotSessionKey(params.SessionKey)
+	// 코드모드 (code: sessions) is the third profile: same full withhold as 챗봇
+	// (an external repo worktree has no use for the personal work context, and a
+	// thin byte-stable prompt keeps the coding prefix family lean), plus the
+	// implementer identity and the target repo's root rule docs (spp.Coding).
+	// Keyed on the session key — not session state — so the profile survives
+	// session-manager GC and restarts.
+	coding := isCodingSessionKey(params.SessionKey)
 
 	// Tier-1 wiki auto-injection (parallel). Frozen per session (tier1_cache.go):
 	// FormatTier1 reads the live store, and mid-session wiki writes would
@@ -75,7 +82,7 @@ func prepareContextAndPrompt(
 	safego.GoWithSlog(logger, "prep-tier1-wiki", func() {
 		defer prepWg.Done()
 		var tier1 string
-		if deps.wikiStore != nil && !chatbot {
+		if deps.wikiStore != nil && !chatbot && !coding {
 			if cached, ok := cachedTier1Wiki(params.SessionKey); ok {
 				tier1 = cached
 			} else {
@@ -113,7 +120,9 @@ func prepareContextAndPrompt(
 		// message, so without this gate a chat: turn could still receive private
 		// work memory even when the per-turn SkipRecall flag is unset (session
 		// key vs flag divergence). The session key is the authoritative signal.
-		if params.EphemeralUser || params.SkipRecall || chatbot {
+		// coding (code: session) skips for the same reason: work memories are
+		// noise inside an external repo worktree.
+		if params.EphemeralUser || params.SkipRecall || chatbot || coding {
 			return
 		}
 		// A notebook with real sources bound to this session is the explicit
@@ -269,7 +278,7 @@ func prepareContextAndPrompt(
 		// key change → topic-less Static cache stays shared).
 		var topicKnowledge, topicCacheKey, topicKnowledgePath string
 		var frozenTopic *prompt.TopicKnowledge
-		if deps.topicResolver != nil && params.Delivery != nil && !chatbot {
+		if deps.topicResolver != nil && params.Delivery != nil && !chatbot && !coding {
 			if key := deps.topicResolver.TopicKey(params.Delivery.ThreadID); key != "" {
 				tk := prompt.LoadTopicKnowledge(workspaceDir, deps.topicResolver.Dir(), key, params.SessionKey)
 				if tk.Content != "" {
@@ -286,7 +295,7 @@ func prepareContextAndPrompt(
 		// it per day, so this is a cheap cache hit on all but the first turn of
 		// the day; "" when no calendar source or no upcoming events.
 		var calendarGlance string
-		if deps.calendarGlanceFn != nil && !chatbot {
+		if deps.calendarGlanceFn != nil && !chatbot && !coding {
 			calendarGlance = deps.calendarGlanceFn(ctx, params.SessionKey, tz)
 		}
 
@@ -294,42 +303,66 @@ func prepareContextAndPrompt(
 		// standing goal, read live from the process store. "" when no active
 		// goal or goals are not wired. 챗봇 persona stays neutral (no goals).
 		var goalGlance string
-		if deps.goalGlanceFn != nil && !chatbot {
+		if deps.goalGlanceFn != nil && !chatbot && !coding {
 			goalGlance = deps.goalGlanceFn(ctx, params.SessionKey)
 		}
 
-		// 챗봇: withhold the workspace context files (SOUL.md/IDENTITY.md/USER.md/
-		// MEMORY.md/…) so the clean general-assistant prompt carries no Nev persona
-		// or private work context.
+		// 챗봇/코드모드: withhold the workspace context files (SOUL.md/IDENTITY.md/
+		// USER.md/MEMORY.md/…) so neither profile carries the Nev persona or
+		// private work context.
 		var ctxFiles []prompt.ContextFile
-		if !chatbot {
+		if !chatbot && !coding {
 			ctxFiles = prompt.LoadContextFiles(workspaceDir, prompt.WithSessionSnapshot(params.SessionKey))
 		}
 
 		// Operator-edited 업무 persona (Settings prompt corner). Only the 업무 path
-		// uses it (챗봇 keeps its neutral identity); "" override → default persona
-		// renders, byte-identical to before. PersonaCacheKey (content hash) keys
-		// the Static cache per persona so an edit invalidates only its own entry.
+		// uses it (챗봇/코드모드 keep their own identities); "" override → default
+		// persona renders, byte-identical to before. PersonaCacheKey (content hash)
+		// keys the Static cache per persona so an edit invalidates only its own entry.
 		var personaText, personaCacheKey string
-		if deps.personaOverrideFn != nil && !chatbot {
+		if deps.personaOverrideFn != nil && !chatbot && !coding {
 			if ov := strings.TrimSpace(deps.personaOverrideFn()); ov != "" {
 				personaText = ov
 				personaCacheKey = prompt.PersonaCacheKeyFor(ov)
 			}
 		}
 
+		// 코드모드: resolve the worktree (the session's bound workspace) and load
+		// the repo's root rule docs, frozen per session. The worktree also
+		// replaces the prompt's Workspace line — the Deneb workspace path would
+		// be misleading inside a coding session. A missing binding (a turn racing
+		// the lazy rebind) degrades to no injection, never an error.
+		var codingRepo prompt.CodingRepoContext
+		promptWorkspaceDir := workspaceDir
+		if coding && deps.sessions != nil {
+			if sess := deps.sessions.Get(params.SessionKey); sess != nil && sess.WorkspaceDir != "" {
+				promptWorkspaceDir = sess.WorkspaceDir
+				codingRepo = prompt.LoadCodingRepoContext(sess.WorkspaceDir, params.SessionKey)
+			}
+		}
+
+		// 코드모드 carries no Deneb skills index — 업무 절차서 are noise inside an
+		// external repo, and the coding preset lacks the skills tool anyway.
+		skillsPrompt := ""
+		if !coding {
+			skillsPrompt = loadCachedSkillsPrompt(workspaceDir, availableToolNames(deps.tools))
+		}
+
 		spp := prompt.SystemPromptParams{
-			WorkspaceDir:       workspaceDir,
+			WorkspaceDir:       promptWorkspaceDir,
 			ToolDefs:           toolDefs,
 			DeferredTools:      deferredToolInfos,
 			UserTimezone:       tz,
 			ContextFiles:       ctxFiles,
 			RuntimeInfo:        prompt.BuildDefaultRuntimeInfo(params.Model, deps.callbacks.defaultModel),
 			Channel:            ch,
-			SkillsPrompt:       loadCachedSkillsPrompt(workspaceDir, availableToolNames(deps.tools)),
+			SkillsPrompt:       skillsPrompt,
 			ToolPreset:         sessionToolPreset,
 			CompactionFired:    compactionFired,
 			Chatbot:            chatbot,
+			Coding:             coding,
+			CodingRepoContext:  codingRepo.Content,
+			CodingRepoCacheKey: codingRepo.Hash,
 			CalendarGlance:     calendarGlance,
 			GoalGlance:         goalGlance,
 			TopicKnowledge:     topicKnowledge,

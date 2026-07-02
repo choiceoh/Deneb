@@ -259,3 +259,47 @@ func TestManagerClearTokens(t *testing.T) {
 		m.ClearTokens("nonexistent")
 	})
 }
+
+func TestConfigureCoding(t *testing.T) {
+	t.Run("binds mode, preset, and worktree (auto-creating)", func(t *testing.T) {
+		m := NewManager()
+		m.ConfigureCoding("code:task-1", "/data/code/acme/api/wt/task-1")
+		s := m.Get("code:task-1")
+		if s == nil {
+			t.Fatal("session should be auto-created")
+		}
+		if s.Mode != ModeCode {
+			t.Errorf("mode = %q, want %q", s.Mode, ModeCode)
+		}
+		if s.ToolPreset != "coding" {
+			t.Errorf("toolPreset = %q, want coding", s.ToolPreset)
+		}
+		if s.WorkspaceDir != "/data/code/acme/api/wt/task-1" {
+			t.Errorf("workspaceDir = %q", s.WorkspaceDir)
+		}
+		if s.Kind != KindDirect {
+			t.Errorf("kind = %q, want %q", s.Kind, KindDirect)
+		}
+	})
+
+	t.Run("idempotent when already bound (lazy per-turn rebind)", func(t *testing.T) {
+		m := NewManager()
+		m.ConfigureCoding("code:task-1", "/wt/task-1")
+		first := m.Get("code:task-1").UpdatedAt
+		m.ConfigureCoding("code:task-1", "/wt/task-1")
+		if got := m.Get("code:task-1").UpdatedAt; got != first {
+			t.Errorf("re-bind with identical values must be a no-op, UpdatedAt %d → %d", first, got)
+		}
+	})
+
+	t.Run("migrates a stale binding (old preset or moved worktree)", func(t *testing.T) {
+		m := NewManager()
+		m.ConfigureCoding("code:task-1", "/wt/task-1")
+		s := m.Get("code:task-1")
+		s.ToolPreset = "implementer" // pre-PresetCoding deployments used implementer
+		m.ConfigureCoding("code:task-1", "/wt/task-1")
+		if got := m.Get("code:task-1").ToolPreset; got != "coding" {
+			t.Errorf("toolPreset = %q, want coding after migration", got)
+		}
+	})
+}
