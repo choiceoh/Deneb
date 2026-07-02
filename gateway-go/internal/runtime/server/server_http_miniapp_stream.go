@@ -137,8 +137,10 @@ func (s *Server) handleMiniappChatStream(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// From here on the response is SSE — no more writeJSON.
-	ctx := clientauth.WithContext(r.Context(), identity)
+	// From here on the response is SSE — no more writeJSON. Stop the turn when
+	// either the client disconnects or the server begins shutting down.
+	ctx, cancel := newMiniappStreamContext(r.Context(), s.ShutdownCtx(), identity)
+	defer cancel()
 	runner := func(ctx context.Context, sinks chatStreamSinks) (*chatStreamResult, error) {
 		res, err := s.chatHandler.SendSyncStream(ctx, sessionKey, reqBody.Message, strings.TrimSpace(reqBody.Model), &chat.SyncOptions{
 			Delivery: &chat.DeliveryContext{Channel: handlerchat.NativeClientChannel, To: sessionKey},
@@ -161,6 +163,18 @@ func (s *Server) handleMiniappChatStream(w http.ResponseWriter, r *http.Request)
 		return &chatStreamResult{Text: res.BestText(), Model: res.Model, FellBack: res.FellBack}, nil
 	}
 	writeChatStreamSSE(ctx, w, sessionKey, runner, s.logger)
+}
+
+func newMiniappStreamContext(requestCtx, shutdownCtx context.Context, identity *clientauth.Identity) (context.Context, context.CancelFunc) {
+	ctx, cancel := context.WithCancel(clientauth.WithContext(requestCtx, identity))
+	if shutdownCtx == nil || shutdownCtx.Done() == nil {
+		return ctx, cancel
+	}
+	stop := context.AfterFunc(shutdownCtx, cancel)
+	return ctx, func() {
+		stop()
+		cancel()
+	}
 }
 
 // writeChatStreamSSE drives one chat turn and serializes its output as SSE.

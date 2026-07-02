@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/clientauth"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
@@ -201,5 +202,24 @@ func TestHandleMiniappChatStream_GuardPaths(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), "chat handler not ready") {
 		t.Errorf("nil chat handler: body = %q, want 'chat handler not ready'", rec.Body.String())
+	}
+}
+
+func TestNewMiniappStreamContext_CancelsOnShutdown(t *testing.T) {
+	shutdownCtx, shutdown := context.WithCancel(context.Background())
+	ctx, cancel := newMiniappStreamContext(context.Background(), shutdownCtx, &clientauth.Identity{
+		User: &clientauth.User{Username: "operator"},
+	})
+	defer cancel()
+
+	if got := clientauth.FromContext(ctx); got == nil || got.User == nil || got.User.Username != "operator" {
+		t.Fatalf("identity not preserved on stream context: %+v", got)
+	}
+
+	shutdown()
+	select {
+	case <-ctx.Done():
+	case <-time.After(2 * time.Second):
+		t.Fatal("stream context did not cancel after shutdown")
 	}
 }

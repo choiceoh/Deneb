@@ -223,6 +223,60 @@ func TestDispatchWithWorkerPool(t *testing.T) {
 	}
 }
 
+func TestDispatchCanceledContextDoesNotBlockOnFullWorkerPool(t *testing.T) {
+	d := NewDispatcher(rpctest.NewLogger())
+	pool := NewWorkerPool(1)
+	d.SetWorkerPool(pool)
+
+	started := make(chan struct{})
+	release := make(chan struct{})
+	d.Register("slow.work", func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		select {
+		case started <- struct{}{}:
+		default:
+		}
+		select {
+		case <-release:
+		case <-ctx.Done():
+		}
+		resp, _ := protocol.NewResponseOK(req.ID, nil)
+		return resp
+	})
+
+	firstDone := make(chan struct{})
+	go func() {
+		defer close(firstDone)
+		req := &protocol.RequestFrame{ID: "wp-busy", Method: "slow.work"}
+		_ = d.Dispatch(context.Background(), req)
+	}()
+
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("first request did not start")
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	req := &protocol.RequestFrame{ID: "wp-cancelled", Method: "slow.work"}
+	begin := time.Now()
+	resp := d.Dispatch(ctx, req)
+	if resp.Error == nil || resp.Error.Code != protocol.ErrAgentTimeout {
+		t.Fatalf("expected AGENT_TIMEOUT, got %+v", resp.Error)
+	}
+	if elapsed := time.Since(begin); elapsed > 100*time.Millisecond {
+		t.Fatalf("dispatch took %v waiting on a full pool; want fast cancellation", elapsed)
+	}
+
+	close(release)
+	select {
+	case <-firstDone:
+	case <-time.After(time.Second):
+		t.Fatal("first request did not finish after release")
+	}
+}
+
 func TestDispatchTimeoutCancelsHandler(t *testing.T) {
 	d := NewDispatcher(rpctest.NewLogger())
 

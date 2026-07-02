@@ -208,6 +208,7 @@ func (d *Dispatcher) safeCall(ctx context.Context, req *protocol.RequestFrame, h
 	// Derive a cancellable context so we can signal the handler to stop
 	// when the caller's deadline fires and we return a timeout response.
 	handlerCtx, handlerCancel := context.WithCancel(ctx)
+	defer handlerCancel()
 
 	run := func() {
 		defer handlerCancel()
@@ -222,7 +223,10 @@ func (d *Dispatcher) safeCall(ctx context.Context, req *protocol.RequestFrame, h
 	}
 
 	if pool := d.pool.Load(); pool != nil {
-		pool.Submit(run)
+		if !pool.SubmitContext(ctx, run) {
+			d.logger.Warn("handler timeout", "method", req.Method)
+			return rpcerr.Newf(protocol.ErrAgentTimeout, "handler %q did not complete within deadline", req.Method).Response(req.ID)
+		}
 	} else {
 		go run()
 	}
