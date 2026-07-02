@@ -1,6 +1,7 @@
 package wiki
 
 import (
+	"fmt"
 	"io"
 	"log/slog"
 	"strings"
@@ -100,9 +101,13 @@ func TestApplyVerifyFixes_SkipsAdvisoryAndCaps(t *testing.T) {
 	advisory := VerifyFinding{Type: "misclassified", PageA: "기타/keep.md", Detail: "low-confidence"}
 	writePageT(t, s, "기타/keep.md", "keep", "기타", "stays put")
 
-	// Six high-confidence moves — the cap (5) must hold, leaving exactly one behind.
+	// Cap+1 high-confidence moves — the cap must hold, leaving exactly one behind.
+	var names []string
+	for i := 0; i <= maxAutoVerifyFixes; i++ {
+		names = append(names, fmt.Sprintf("p%02d", i))
+	}
 	var findings []VerifyFinding
-	for _, name := range []string{"p0", "p1", "p2", "p3", "p4", "p5"} {
+	for _, name := range names {
 		writePageT(t, s, "기타/"+name+".md", name, "기타", "move me")
 		findings = append(findings, VerifyFinding{
 			Type:  "misclassified",
@@ -120,15 +125,15 @@ func TestApplyVerifyFixes_SkipsAdvisoryAndCaps(t *testing.T) {
 	if p, _ := s.ReadPage("기타/keep.md"); p == nil {
 		t.Error("advisory (no-Fix) page was wrongly touched")
 	}
-	// Exactly one of the six move-sources remains (cap left it behind).
+	// Exactly one of the move-sources remains (cap left it behind).
 	remaining := 0
-	for _, name := range []string{"p0", "p1", "p2", "p3", "p4", "p5"} {
+	for _, name := range names {
 		if p, _ := s.ReadPage("기타/" + name + ".md"); p != nil {
 			remaining++
 		}
 	}
 	if remaining != 1 {
-		t.Errorf("remaining un-moved sources = %d, want 1 (6 - cap 5)", remaining)
+		t.Errorf("remaining un-moved sources = %d, want 1 (cap+1 - cap)", remaining)
 	}
 }
 
