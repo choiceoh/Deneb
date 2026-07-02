@@ -1,5 +1,24 @@
 # Changelog
 
+## [4.55.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.54.0...deneb-v4.55.0) (2026-07-02)
+
+
+### ✨ Features
+
+* **andromeda:** 노트북을 AI 작업대로 재구성 — 칩 자료 + 답변을 노트로 저장 ([#3016](https://github.com/choiceoh/Deneb/issues/3016)) ([937d15f](https://github.com/choiceoh/Deneb/commit/937d15f5b2775a234db331d421d9a7594234eae2))
+* **andromeda:** 우측 Deneb 패널에 파일 첨부 (이미지 OCR·문서·녹음) ([#3018](https://github.com/choiceoh/Deneb/issues/3018)) ([27e4167](https://github.com/choiceoh/Deneb/commit/27e4167fdbfe2a4cf8e13b1791094e20ea472d4c))
+* **andromeda:** 채팅 영역 전체를 무표시 드롭존으로 — 드래그 중일 때만 살짝 표시 ([#3019](https://github.com/choiceoh/Deneb/issues/3019)) ([fb150d8](https://github.com/choiceoh/Deneb/commit/fb150d8ba71600537370e93d14cd6d60239bb324))
+* **wiki:** read 액션에 paths 묶음 조회 — 위키 왕복을 한 호출로 ([#3015](https://github.com/choiceoh/Deneb/issues/3015)) ([39f0a53](https://github.com/choiceoh/Deneb/commit/39f0a53eaee6f597c0cca7f270dc0080af901dc8))
+
+
+### 🐛 Bug Fixes
+
+* **chat:** 대기 상태 텍스트 정렬 통일 — 길어도 중앙정렬/2줄로 안 튀게 ([#3020](https://github.com/choiceoh/Deneb/issues/3020)) ([0454e17](https://github.com/choiceoh/Deneb/commit/0454e17fe737590171777c791e8dd20440d1be76))
+* **chat:** 읽는 중 새 메시지 도착 시 바닥으로 안 끌려가게 (네이티브) ([#3014](https://github.com/choiceoh/Deneb/issues/3014)) ([9b1b6d8](https://github.com/choiceoh/Deneb/commit/9b1b6d83a6feb3966797dfddce4b063526934dfc))
+* **chat:** 전송 직후 응답 대기 행까지 완전히 스크롤 (네이티브) ([#3017](https://github.com/choiceoh/Deneb/issues/3017)) ([eaf964c](https://github.com/choiceoh/Deneb/commit/eaf964c434a4638e95c5160699f804eafbbcf1da))
+* **chat:** 전송 후 대화가 맨 아래까지 스크롤되도록 (네이티브) ([#3013](https://github.com/choiceoh/Deneb/issues/3013)) ([c37bb82](https://github.com/choiceoh/Deneb/commit/c37bb821dd0806455e7068f2fea80c1572009fd4))
+* **chat:** 전송 후 입력창 안 비워지는 회귀 수정 (한글 IME) ([#3011](https://github.com/choiceoh/Deneb/issues/3011)) ([392cc5a](https://github.com/choiceoh/Deneb/commit/392cc5a92872b1efd894c01ed7936bca48636772))
+
 ## [4.54.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.53.0...deneb-v4.54.0) (2026-07-01)
 
 
