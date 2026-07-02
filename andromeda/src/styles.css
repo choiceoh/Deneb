@@ -2640,6 +2640,45 @@ textarea {
   color: var(--muted-2);
   font-size: 11px;
 }
+/* Wiki folder tree: caret + name + count for folders, name only for files.
+   Indent depth comes inline (padding-left) from the renderer. */
+.wiki-tree-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: center;
+  width: 100%;
+  text-align: left;
+  border: none;
+  border-radius: var(--radius-ctl);
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  transition: background 0.12s ease;
+  padding: 5px 8px;
+  font-size: 13px;
+}
+.wiki-tree-row:hover {
+  background: var(--panel-sunken);
+}
+.wiki-tree-row span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wiki-tree-row small {
+  color: var(--muted-2);
+  font-size: 11px;
+}
+.wiki-tree-row.wiki-tree-file {
+  grid-template-columns: minmax(0, 1fr);
+}
+.wiki-tree-caret {
+  color: var(--muted-2);
+  font-size: 10px;
+  width: 11px;
+}
 
 /* Wiki stays left/right (rail | editor) at every width — never stacks. Collapsing the
    right Deneb panel (Workstation) gives the work area room; a very narrow pane just

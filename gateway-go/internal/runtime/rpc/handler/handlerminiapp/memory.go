@@ -61,10 +61,12 @@ const (
 	maxMemorySnippetChars    = 240
 
 	// Caps for the new listing endpoints. The Mini App is mobile-first
-	// so default page sizes stay small; ceilings protect the gateway
-	// from a misbehaving client asking for "everything".
+	// so default page sizes stay small; the ceiling still bounds a
+	// misbehaving client but admits the whole wiki in one call — the
+	// desktop (Andromeda) folder tree renders the full corpus (~450
+	// pages today, tiny rows) from a single list_in_category request.
 	defaultMemoryListLimit = 50
-	maxMemoryListLimit     = 200
+	maxMemoryListLimit     = 2000
 	defaultDiaryRecent     = 20
 	maxDiaryRecent         = 100
 	maxDiarySnippetChars   = 200

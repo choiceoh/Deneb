@@ -887,9 +887,12 @@ func TestMemoryListInCategory_PathTraversalRejected(t *testing.T) {
 }
 
 func TestMemoryListInCategory_LimitClampedAndTotalReflectsAll(t *testing.T) {
+	// Fixture sized relative to the cap so the clamp actually engages even as
+	// the ceiling moves (it was raised for the desktop wiki tree).
+	fixture := maxMemoryListLimit + 100
 	store := &fakeMemoryStore{
 		listPagesFn: func(_ string) ([]string, error) {
-			paths := make([]string, 300)
+			paths := make([]string, fixture)
 			for i := range paths {
 				paths[i] = "p" + string([]byte{byte('a' + i%26)}) + ".md"
 			}
@@ -898,14 +901,14 @@ func TestMemoryListInCategory_LimitClampedAndTotalReflectsAll(t *testing.T) {
 		readPageFn: func(_ string) (*wiki.Page, error) { return &wiki.Page{}, nil },
 	}
 	h := memoryListInCategory(memoryDepsFor(store))
-	resp := h(authedCtx(), reqWith(t, "miniapp.memory.list_in_category", map[string]any{"limit": 9999}))
+	resp := h(authedCtx(), reqWith(t, "miniapp.memory.list_in_category", map[string]any{"limit": fixture * 2}))
 	var got struct {
 		Pages []map[string]any `json:"pages"`
 		Total int              `json:"total"`
 	}
 	decode(t, resp, &got)
-	if got.Total != 300 {
-		t.Errorf("total = %d, want 300 (full set)", got.Total)
+	if got.Total != fixture {
+		t.Errorf("total = %d, want %d (full set)", got.Total, fixture)
 	}
 	if len(got.Pages) != maxMemoryListLimit {
 		t.Errorf("len(pages) = %d, want clamped to %d", len(got.Pages), maxMemoryListLimit)
