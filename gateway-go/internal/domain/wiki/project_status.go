@@ -75,6 +75,9 @@ func (s *Store) knownProjects() []ProjectRef {
 	for name, p := range repByName {
 		ref := ProjectRef{Name: name, Path: p}
 		if page, perr := s.ReadPage(p); perr == nil && page != nil {
+			if page.Meta.Archived {
+				continue // 종결된 프로젝트 — 활성 무대(후보·모아보기·리서치·리뷰어)에서 제외
+			}
 			if t := strings.TrimSpace(page.Meta.Title); t != "" {
 				ref.Name = t
 			}

@@ -52,6 +52,21 @@ globs:
 - 페이지 이동은 `Store.MovePage` (인바운드 related 재지향 포함), 병합은
   `Store.MergePage`. 파일을 직접 mv/rm 하지 말 것.
 
+## 프로젝트 생애주기 (종결/재개)
+
+- **종결** = `Store.CloseProject` (도구: `wiki(action="close", query=이름, content=결과)`).
+  대표페이지 `## 종결` 섹션에 날짜·결과 기록 + **폴더 전체 Archived 플래그**.
+  파일 이동·삭제 없음(경로 안정성). `knownProjects`가 archived 대표를 건너뛰므로
+  **한 플래그로 활성 무대 전체**(메일 연결 후보·모아보기·리서치·리뷰어 코드신호)에서
+  동시 퇴장. 검색은 뒷순위로만 밀림. stale-deadline 감지도 archived를 건너뜀.
+- **재개** = `Store.ReopenProject` (`action="reopen"`) — 폴더 전체 복원, 종결 이력은
+  섹션에 남음.
+- **졸음 감지** = `Store.FlagDormantProjects` (wiki-review 태스크가 사이클당 최대 2건):
+  120일(`DormantAfterDays`) 무활동 활성 프로젝트의 대표페이지 현재 상태에 "종결 검토
+  제안" 불릿 1개 (분기당 1회 멱등, ref=`dormant:YYYYQn`). **자동 종결은 절대 없음.**
+- 주의: 종결된 프로젝트로 오는 새 메일은 자동 연결되지 않는다(미분류 버킷행) —
+  뒤늦은 정산 메일이 예상되면 종결을 늦추거나 재개로 되살린다.
+
 ## 중복 방어 3겹 (모두 `FindSimilarPages` 공유 — ID·코드·슬러그·FTS 제목 신호)
 
 1. **쓰기 전 가드** — 위키 도구 write가 신규 생성 시 유사 문서를 찾으면 생성을

@@ -904,8 +904,8 @@ func wikiToolSchema() map[string]any {
 		"properties": map[string]any{
 			"action": map[string]any{
 				"type":        "string",
-				"description": "Action: search (ripgrep full-text search), read (read wiki page(s) — one via query, several at once via paths), index (read master/category index), write (create/update page), log (append diary entry), daily (read recent diary), status (wiki stats)",
-				"enum":        []string{"search", "read", "index", "write", "log", "daily", "status"},
+				"description": "Action: search (ripgrep full-text search), read (read wiki page(s) — one via query, several at once via paths), index (read master/category index), write (create/update page), log (append diary entry), daily (read recent diary), status (wiki stats), close (프로젝트 종결 — query=프로젝트명, content=결과·사유 한 줄; 폴더 전체 보관+활성 목록 제외, 삭제 아님), reopen (종결 프로젝트 재개 — query=프로젝트명)",
+				"enum":        []string{"search", "read", "index", "write", "log", "daily", "status", "close", "reopen"},
 			},
 			"category": map[string]any{
 				"type":        "string",
