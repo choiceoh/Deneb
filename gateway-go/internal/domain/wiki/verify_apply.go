@@ -22,7 +22,10 @@ import (
 
 // maxAutoVerifyFixes caps how many auto-corrections one dream cycle applies, so
 // a bad LLM pass (or a sudden pile of dups) can't churn the whole wiki at once.
-const maxAutoVerifyFixes = 5
+// Raised 5→15 with the 2026-07 layout cleanup: exact/normalized duplicate merges
+// and stale-supersede archivals are cheap, reversible (git snapshot), and a
+// backlog that outpaces the cap is precisely how the duplicate pile formed.
+const maxAutoVerifyFixes = 15
 
 // applyVerifyFixes auto-applies the high-confidence findings (those carrying a
 // Fix) and returns the count applied. Findings without a Fix are ignored here —
@@ -49,32 +52,40 @@ func (wd *WikiDreamer) applyVerifyFixes(findings []VerifyFinding) int {
 				"from", f.PageA, "to", f.Fix.NewPath)
 			applied++
 		case "merge":
-			if err := wd.mergeDuplicate(f.PageA, f.PageB); err != nil {
+			if err := wd.store.FoldDuplicate(f.PageA, f.PageB); err != nil {
 				wd.logger.Warn("wiki-verify: auto-merge failed",
 					"keep", f.PageA, "fold", f.PageB, "error", err)
 				continue
 			}
-			wd.logger.Info("wiki-verify: auto-merged exact duplicate",
+			wd.logger.Info("wiki-verify: auto-merged duplicate",
 				"keep", f.PageA, "fold", f.PageB)
+			applied++
+		case "archive":
+			if err := wd.store.archivePage(f.PageA); err != nil {
+				wd.logger.Warn("wiki-verify: auto-archive failed", "path", f.PageA, "error", err)
+				continue
+			}
+			wd.logger.Info("wiki-verify: archived long-superseded page", "path", f.PageA)
 			applied++
 		}
 	}
 	return applied
 }
 
-// mergeDuplicate folds the `fold` page into `keep`: the folded body is appended
+// FoldDuplicate folds the `fold` page into `keep`: the folded body is appended
 // under a "병합된 중복 문서" marker (so nothing is lost), related/tags are unioned,
 // and the folded page is deleted. Crude but safe — no LLM synthesis — which is
-// the right tradeoff for an automatic merge of EXACT duplicates.
-func (wd *WikiDreamer) mergeDuplicate(keep, fold string) error {
-	foldPage, err := wd.store.ReadPage(fold)
+// the right tradeoff for an automatic duplicate merge. Shared by the dream
+// cycle's verify pass and the background wiki reviewer.
+func (s *Store) FoldDuplicate(keep, fold string) error {
+	foldPage, err := s.ReadPage(fold)
 	if err != nil || foldPage == nil {
 		return fmt.Errorf("read fold %q: %w", fold, err)
 	}
 	// Apply the fold onto keep via UpdatePage so a concurrent writer of keep can't
 	// be clobbered by this append. fold (read above) is about to be deleted, so a
 	// stale read of it is harmless.
-	if err := wd.store.UpdatePage(keep, func(keepPage *Page) (*Page, error) {
+	if err := s.UpdatePage(keep, func(keepPage *Page) (*Page, error) {
 		if keepPage == nil {
 			return nil, fmt.Errorf("read keep %q: not found", keep)
 		}
@@ -87,10 +98,27 @@ func (wd *WikiDreamer) mergeDuplicate(keep, fold string) error {
 	}); err != nil {
 		return fmt.Errorf("write merged %q: %w", keep, err)
 	}
-	if err := wd.store.DeletePage(fold); err != nil {
+	if err := s.DeletePage(fold); err != nil {
 		return fmt.Errorf("delete folded %q: %w", fold, err)
 	}
 	return nil
+}
+
+// archivePage sets a page's Archived flag in place (no move, no delete) — the
+// soft retirement used for long-superseded pages. Archived pages drop out of
+// Tier-1 injection and research selection and are heavily demoted in search.
+func (s *Store) archivePage(relPath string) error {
+	return s.UpdatePage(relPath, func(cur *Page) (*Page, error) {
+		if cur == nil {
+			return nil, fmt.Errorf("archive %q: not found", relPath)
+		}
+		if cur.Meta.Archived {
+			return nil, nil // already archived — no-op
+		}
+		cur.Meta.Archived = true
+		cur.Meta.Updated = time.Now().Format("2006-01-02")
+		return cur, nil
+	})
 }
 
 // exactDupFinding builds a high-confidence duplicate finding with a merge Fix,

@@ -51,3 +51,15 @@ globs:
 - 사건·이벤트는 페이지 증식이 아니라 해당 프로젝트 `로그.md`에 append.
 - 페이지 이동은 `Store.MovePage` (인바운드 related 재지향 포함), 병합은
   `Store.MergePage`. 파일을 직접 mv/rm 하지 말 것.
+
+## 중복 방어 3겹 (모두 `FindSimilarPages` 공유)
+
+1. **쓰기 전 가드** — 위키 도구 write가 신규 생성 시 유사 문서를 찾으면 생성을
+   거부하고 기존 경로를 안내 (`force=true`로만 강행). 드리머의 create-dedup도
+   같은 프리미티브.
+2. **위키 리뷰어** (`runtime/server/wiki_review_task.go`, 2h) — 최근 쓰인 문서의
+   근사중복을 lightweight JSON 판정으로 사후 검수, high-confidence만
+   `FoldDuplicate`로 병합 (사이클당 3건, git 스냅샷 선행). 같은 프로젝트 폴더의
+   대표/로그/상세는 후보에서 제외(슬롯이지 중복이 아님).
+3. **드림 verify** (`verify.go` Phase 5) — 정규화 제목 일치 자동 병합, 유사 제목
+   advisory, 30일 방치 superseded 자동 아카이브. 사이클당 fix 15건 상한.

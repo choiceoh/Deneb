@@ -1093,6 +1093,11 @@
         },
         "description": "Existing wiki page paths this write replaces because the new fact contradicts or supersedes them. Marking them demotes stale pages in recall/search."
       },
+      "force": {
+        "type": "boolean",
+        "description": "write action: 새 문서 생성 시 유사 문서가 발견되면 기본적으로 생성이 거부되고 기존 경로가 안내된다. 안내된 문서가 정말 별개 주제일 때만 force=true로 생성을 강행",
+        "default": false
+      },
       "importance": {
         "type": "number",
         "description": "Page importance 0.0-1.0 (write action, default: 0.5)",

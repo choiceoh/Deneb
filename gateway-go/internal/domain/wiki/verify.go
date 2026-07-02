@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
@@ -61,6 +62,11 @@ func (wd *WikiDreamer) verifyPages(ctx context.Context) []VerifyFinding {
 
 	// 5c: Stale-deadline detection (pure computation).
 	findings = append(findings, wd.detectStaleDeadlines()...)
+
+	// 5d: Long-superseded pages get archived (pure computation). Supersession is
+	// a soft flag — without this, superseded zombies pile up in search/index
+	// forever (they were a third of the 2026-07 duplicate mess's long tail).
+	findings = append(findings, wd.detectStaleSuperseded()...)
 
 	return findings
 }
@@ -152,6 +158,44 @@ func (wd *WikiDreamer) detectStaleDeadlines() []VerifyFinding {
 	return findings
 }
 
+// staleSupersededAfterDays is how long a superseded page stays merely demoted
+// before the verify pass archives it outright.
+const staleSupersededAfterDays = 30
+
+// detectStaleSuperseded flags pages that have carried a SupersededBy marker for
+// over staleSupersededAfterDays without being touched — attach an auto-archive
+// fix (reversible: the flag flips back, git keeps history).
+func (wd *WikiDreamer) detectStaleSuperseded() []VerifyFinding {
+	relPaths, err := wd.store.ListPages("")
+	if err != nil {
+		return nil
+	}
+	cutoff := time.Now().AddDate(0, 0, -staleSupersededAfterDays).Format("2006-01-02")
+	var findings []VerifyFinding
+	for _, rp := range relPaths {
+		rp = filepath.ToSlash(rp) // ListPages walks with the OS separator
+		page, err := wd.store.ReadPage(rp)
+		if err != nil || page == nil || page.Meta.Archived || page.Meta.SupersededBy == "" {
+			continue
+		}
+		last := strings.TrimSpace(page.Meta.Updated)
+		if last == "" {
+			last = strings.TrimSpace(page.Meta.Created)
+		}
+		if last == "" || last >= cutoff { // ISO dates compare lexicographically
+			continue
+		}
+		findings = append(findings, VerifyFinding{
+			Type: "stale_superseded",
+			Detail: fmt.Sprintf("%s 이후 방치된 superseded 페이지 (→ %s) — 아카이브",
+				last, page.Meta.SupersededBy),
+			PageA: rp,
+			Fix:   &VerifyFix{Kind: "archive"},
+		})
+	}
+	return findings
+}
+
 type pageRef struct {
 	path  string
 	title string
@@ -177,21 +221,27 @@ func detectDuplicates(idx *Index) []VerifyFinding {
 				continue
 			}
 
-			// Compare titles.
-			if a.title != "" && b.title != "" && isSimilar(a.title, b.title) {
-				dist := levenshtein(a.title, b.title)
-				if dist == 0 {
+			// Compare titles. Normalized-key equality ("영산고 태양광" vs
+			// "영산고-태양광" vs "영산고태양광") is as safe to auto-merge as an exact
+			// match — punctuation/spacing variants are exactly how the same topic
+			// splinters across agent writes.
+			if a.title != "" && b.title != "" {
+				if norm := normalizeTitleKey(a.title); norm != "" && norm == normalizeTitleKey(b.title) {
 					findings = append(findings, exactDupFinding(idx, a.path, b.path,
-						fmt.Sprintf("동일한 제목: \"%s\"", a.title)))
-				} else {
-					findings = append(findings, VerifyFinding{
-						Type:   "duplicate",
-						Detail: fmt.Sprintf("유사한 제목: \"%s\" ~ \"%s\" (거리 %d)", a.title, b.title, dist),
-						PageA:  a.path, PageB: b.path,
-					})
+						fmt.Sprintf("동일한 제목(정규화): \"%s\" ~ \"%s\"", a.title, b.title)))
+					seen[key] = struct{}{}
+					continue
 				}
-				seen[key] = struct{}{}
-				continue
+				if isSimilar(a.title, b.title) {
+					findings = append(findings, VerifyFinding{
+						Type: "duplicate",
+						Detail: fmt.Sprintf("유사한 제목: \"%s\" ~ \"%s\" (거리 %d)",
+							a.title, b.title, levenshtein(a.title, b.title)),
+						PageA: a.path, PageB: b.path,
+					})
+					seen[key] = struct{}{}
+					continue
+				}
 			}
 
 			// Compare IDs.
@@ -213,6 +263,19 @@ func detectDuplicates(idx *Index) []VerifyFinding {
 	}
 
 	return findings
+}
+
+// normalizeTitleKey reduces a title to a comparison key: lowercase, keeping
+// only letters and digits (spaces, hyphens, punctuation, brackets dropped).
+// Two titles sharing a key are the same name spelled differently.
+func normalizeTitleKey(s string) string {
+	var sb strings.Builder
+	for _, r := range strings.ToLower(s) {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			sb.WriteRune(r)
+		}
+	}
+	return sb.String()
 }
 
 // isSimilar checks if two strings are similar enough to be potential duplicates.
