@@ -21,6 +21,7 @@ func ToolWiki(d *toolctx.WikiDeps, workspaceDir string) toolctx.ToolFunc {
 		var p struct {
 			Action     string   `json:"action"`
 			Query      string   `json:"query"`
+			Paths      []string `json:"paths"`
 			Title      string   `json:"title"`
 			ID         string   `json:"id"`
 			Summary    string   `json:"summary"`
@@ -48,6 +49,9 @@ func ToolWiki(d *toolctx.WikiDeps, workspaceDir string) toolctx.ToolFunc {
 		case "search":
 			return wikiSearch(ctx, d.Store, p.Query, p.Limit)
 		case "read":
+			if len(p.Paths) > 0 {
+				return wikiReadBatch(ctx, d.Store, p.Paths, p.Section)
+			}
 			return wikiRead(ctx, d.Store, p.Query, p.Section)
 		case "index":
 			return wikiIndex(d.Store, p.Category)
@@ -88,7 +92,7 @@ func wikiSearch(ctx context.Context, store *wiki.Store, query string, limit int)
 		meta := fmt.Sprintf("L%d · 관련도 %.2f", r.Line, r.Score)
 		sb.WriteString(recallRow(i+1, ref, meta, r.Content))
 	}
-	sb.WriteString("자세한 내용은 `wiki(action=\"read\", query=\"w:...\")` (knowledge read와 동일 ref).")
+	sb.WriteString("자세한 내용은 `wiki(action=\"read\", query=\"w:...\")` (knowledge read와 동일 ref). 여러 페이지가 필요하면 read 한 번에 `paths=[\"...\", \"...\"]`로 묶어 호출하세요 — 페이지마다 따로 부르지 말 것.")
 	return sb.String(), nil
 }
 
@@ -133,6 +137,47 @@ func wikiRead(ctx context.Context, store *wiki.Store, path, section string) (str
 		out += "\n\n---\n연결된 항목: " + conns
 	}
 	return out, nil
+}
+
+// wikiReadBatchMaxPages bounds one batched read. Big enough for "every hit of
+// a search" (search defaults to 10 rows, of which a handful matter), small
+// enough that one call can't blow the tool-output budget with whole pages.
+const wikiReadBatchMaxPages = 8
+
+// wikiReadBatch reads several pages in ONE tool call. Interactive turns were
+// dominated by wiki round-trips (3-6 single-page reads per turn, each costing
+// a full LLM round on the cloud main model), so read accepts a paths batch:
+// per-page output identical to a single read, joined under numbered page
+// headers. A missing page fills its own slot instead of failing the batch.
+func wikiReadBatch(ctx context.Context, store *wiki.Store, paths []string, section string) (string, error) {
+	trimmed := make([]string, 0, len(paths))
+	for _, p := range paths {
+		if s := strings.TrimSpace(p); s != "" {
+			trimmed = append(trimmed, s)
+		}
+	}
+	if len(trimmed) == 0 {
+		return "paths가 비어 있습니다. 읽을 페이지 경로 목록을 지정하세요.", nil
+	}
+	note := ""
+	if len(trimmed) > wikiReadBatchMaxPages {
+		note = fmt.Sprintf("\n\n(요청 %d개 중 앞 %d개만 읽음 — 나머지는 다음 read 호출로 이어서)",
+			len(trimmed), wikiReadBatchMaxPages)
+		trimmed = trimmed[:wikiReadBatchMaxPages]
+	}
+	var sb strings.Builder
+	for i, path := range trimmed {
+		out, err := wikiRead(ctx, store, path, section)
+		if err != nil {
+			out = fmt.Sprintf("페이지 읽기 실패: %v", err)
+		}
+		if i > 0 {
+			sb.WriteString("\n\n")
+		}
+		fmt.Fprintf(&sb, "===== [%d/%d] %s =====\n%s", i+1, len(trimmed), path, out)
+	}
+	sb.WriteString(note)
+	return sb.String(), nil
 }
 
 func wikiIndex(store *wiki.Store, category string) (string, error) {
