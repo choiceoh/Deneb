@@ -821,7 +821,7 @@ func TestAcceptJudgeVerdictRequiresStrictScoreImprovement(t *testing.T) {
 	}{
 		{
 			name: "small score delta rejected",
-			in:   judgeVerdict{Pass: true, OriginalScore: score(72), CandidateScore: score(74), Reason: "only slightly better"},
+			in:   judgeVerdict{Pass: true, OriginalScore: score(72), CandidateScore: score(73), Reason: "only slightly better"},
 			want: "improvement margin",
 		},
 		{
