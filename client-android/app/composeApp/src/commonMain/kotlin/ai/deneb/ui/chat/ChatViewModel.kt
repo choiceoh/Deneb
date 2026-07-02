@@ -311,8 +311,7 @@ class ChatViewModel(
 
     // Joins the failed text and any queued messages into one input-restore blob
     // (blank → null so the restore effect stays quiet).
-    private fun foldIntoInput(restoreText: String?, queued: List<String>): String? =
-        (listOfNotNull(restoreText) + queued).joinToString("\n\n").ifBlank { null }
+    private fun foldIntoInput(restoreText: String?, queued: List<String>): String? = (listOfNotNull(restoreText) + queued).joinToString("\n\n").ifBlank { null }
 
     private fun clearHistory() {
         dataRepository.clearHistory()
