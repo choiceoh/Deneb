@@ -123,9 +123,13 @@ export function AIPanel({
   // 셀이 정하므로 width/flex를 지정하지 않고, 넓어진 만큼 대화 폭을 가독성 있게 가운데 정렬한다.
   placement?: "side" | "bottom";
 }) {
-  const { aiText, activeResource, connected } = useWorkspace();
+  const { aiText, activeResource, connected, noteSink } = useWorkspace();
   const { thinking, busy, turns, send, stop, regenerate, clear, setTurns } = useChat(cfg);
   const [input, setInput] = useState("");
+  // Answers already saved into the open notebook this session (turn ids) — flips
+  // the per-answer 노트에 저장 button to a done state so a double-click can't pin
+  // the same answer twice.
+  const [savedNoteIds, setSavedNoteIds] = useState<ReadonlySet<string>>(new Set());
   const composeRef = useRef<HTMLTextAreaElement>(null);
   const [models, setModels] = useState<ModelsList | null>(null);
   const [model, setModel] = useState(""); // selected override id ("" → gateway main)
@@ -283,6 +287,22 @@ export function AIPanel({
                     <Icon name="refresh" size={12} /> 다시 생성
                   </button>
                 )}
+              {/* Save this answer into the open notebook as a cited note — shown only
+                  while a notebook pane has registered a sink (the notebook's output
+                  loop: material made with the AI stays with the deal). */}
+              {noteSink && turn.role === "assistant" && turn.status === "done" && turn.text.trim() && (
+                <button
+                  className="row-btn ai-save-note"
+                  disabled={savedNoteIds.has(turn.id)}
+                  onClick={() => {
+                    noteSink(turn.text);
+                    setSavedNoteIds((prev) => new Set(prev).add(turn.id));
+                  }}
+                  title="이 답변을 노트북에 인용자료(노트)로 저장"
+                >
+                  <Icon name="plus" size={12} /> {savedNoteIds.has(turn.id) ? "노트로 저장됨" : "노트에 저장"}
+                </button>
+              )}
             </div>
           ))
         )}

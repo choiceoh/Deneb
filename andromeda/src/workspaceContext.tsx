@@ -41,6 +41,13 @@ interface WorkspaceCtx {
   wikiTarget: string | null;
   openWiki: (path: string) => void;
   consumeWikiTarget: () => void;
+  // Cross-pane "save this AI answer into the open notebook" channel: NotebookPane
+  // registers a sink while a notebook is open (and clears it on unmount/close);
+  // the AI panel shows a per-answer 노트에 저장 button only while a sink exists.
+  // This is the notebook's output loop — an answer worth keeping becomes a cited
+  // note source instead of scrolling away in the chat.
+  noteSink: ((text: string) => void) | null;
+  setNoteSink: (sink: ((text: string) => void) | null) => void;
   // Nav-rail customization: pane keys the user has hidden from the left rail
   // (settings is never hideable — it's the way back). Persisted to localStorage.
   hiddenViews: View[];
@@ -106,6 +113,10 @@ export function WorkspaceProvider({
   const [activeResource, setActiveResource] = useState<string | undefined>(undefined);
   const [wikiTarget, setWikiTarget] = useState<string | null>(null);
   const [paneTarget, setPaneTarget] = useState<PaneTarget | null>(null);
+  // Stored via the updater form: the sink IS a function, and setState would
+  // otherwise call it as an updater.
+  const [noteSink, setNoteSinkState] = useState<((text: string) => void) | null>(null);
+  const setNoteSink = (sink: ((text: string) => void) | null) => setNoteSinkState(() => sink);
   const [hiddenViews, setHiddenViews] = useState<View[]>(readHiddenViews);
   const [viewOrder, setViewOrder] = useState<View[]>(readViewOrder);
   const [codeMode, setCodeMode] = useState<boolean>(readCodeMode);
@@ -164,6 +175,8 @@ export function WorkspaceProvider({
         wikiTarget,
         openWiki,
         consumeWikiTarget,
+        noteSink,
+        setNoteSink,
         hiddenViews,
         toggleViewHidden,
         viewOrder,

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "@/test/util";
+import { useWorkspace } from "@/workspaceContext";
 import { NotebookPane } from "./NotebookPane";
 
 // Stateful stand-in for the Deneb gateway notebook surface: create assigns an id,
@@ -96,13 +97,45 @@ afterEach(() => {
 });
 
 describe("NotebookPane", () => {
-  it("auto-opens the latest notebook and shows the first source in the detail pane", async () => {
+  it("auto-opens the latest notebook; a source chip expands into the preview on click", async () => {
     renderWithProviders(<NotebookPane />, { connected: true });
     // Picking is once-per-task → the freshest notebook (ZTT) auto-opens, no manual click.
     expect(await screen.findByRole("heading", { name: "ZTT" })).toBeInTheDocument();
-    // Master-detail: the first source auto-selects, so its content shows on the right.
+    // The sources read as a light chip strip — no content preview until asked.
+    expect(screen.getByText("잔금 안내")).toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "자료 내용" })).not.toBeInTheDocument();
+    // Click the chip → its full content expands below; close (×) folds it again.
+    await userEvent.click(screen.getByRole("button", { name: /잔금 안내/ }));
     const detail = await screen.findByRole("group", { name: "자료 내용" });
     expect(within(detail).getByText(/최종 5% 잔금/)).toBeInTheDocument();
+    await userEvent.click(within(detail).getByRole("button", { name: "미리보기 닫기" }));
+    expect(screen.queryByRole("group", { name: "자료 내용" })).not.toBeInTheDocument();
+  });
+
+  it("registers a note sink while a notebook is open — saving an AI answer pins a note source", async () => {
+    // Consume the workspace channel the way AIPanel does: while NotebookPane has a
+    // notebook open it registers a sink; feeding it an answer pins a kind=note source.
+    let sink: ((text: string) => void) | null = null;
+    function SinkProbe() {
+      sink = useWorkspace().noteSink;
+      return null;
+    }
+    renderWithProviders(
+      <>
+        <NotebookPane />
+        <SinkProbe />
+      </>,
+      { connected: true },
+    );
+    expect(await screen.findByRole("heading", { name: "ZTT" })).toBeInTheDocument();
+    await waitFor(() => expect(sink).not.toBeNull());
+
+    sink!("잔금 일정 요약: 최종 5%는 6/25 마감.");
+    // The saved answer lands as a cited note source and shows up as a new chip
+    // (titleless note → first-line snippet stands in as the title).
+    await waitFor(() =>
+      expect(added.at(-1)).toMatchObject({ kind: "note", text: expect.stringContaining("잔금 일정 요약") }),
+    );
   });
 
   it("creates a notebook and pins a citation source", async () => {
