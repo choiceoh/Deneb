@@ -34,7 +34,7 @@ func TestAfterTurn_DirtyCommitsAndPasses(t *testing.T) {
 	}}
 	m, store := newTurnFixture(t, "fix-login", fake)
 
-	AfterTurn(context.Background(), m, store, "fix-login", "로그인 폼 추가", nil)
+	AfterTurn(context.Background(), m, store, "fix-login", "로그인 폼 추가", nil, nil)
 
 	got, _ := store.Get("fix-login")
 	if got.Status != StatusPassed {
@@ -55,7 +55,7 @@ func TestAfterTurn_CleanTreeSkips(t *testing.T) {
 	fake := &fakeRunner{} // status returns nil → clean tree
 	m, store := newTurnFixture(t, "readonly", fake)
 
-	AfterTurn(context.Background(), m, store, "readonly", "코드 설명해줘", nil)
+	AfterTurn(context.Background(), m, store, "readonly", "코드 설명해줘", nil, nil)
 
 	got, _ := store.Get("readonly")
 	if got.Status != StatusWorking {
@@ -72,6 +72,53 @@ func TestAfterTurn_CleanTreeSkips(t *testing.T) {
 	}
 }
 
+func TestAfterTurn_SummarizeLabelsCheckpoint(t *testing.T) {
+	t.Run("summarize result becomes the label", func(t *testing.T) {
+		fake := &fakeRunner{out: map[string][]byte{
+			"status":    []byte("M main.go\n"),
+			"rev-parse": []byte("abc123\n"),
+		}}
+		m, store := newTurnFixture(t, "labeled", fake)
+
+		AfterTurn(context.Background(), m, store, "labeled", "로그인 고쳐줘",
+			func(context.Context) string { return " 로그인 폼 검증 추가 " }, nil)
+
+		got, _ := store.Get("labeled")
+		if len(got.Checkpoints) != 1 || got.Checkpoints[0].Summary != "로그인 폼 검증 추가" {
+			t.Errorf("checkpoints = %+v, want the trimmed summarize label", got.Checkpoints)
+		}
+	})
+
+	t.Run("empty summarize keeps the fallback (fail-open)", func(t *testing.T) {
+		fake := &fakeRunner{out: map[string][]byte{
+			"status":    []byte("M main.go\n"),
+			"rev-parse": []byte("abc123\n"),
+		}}
+		m, store := newTurnFixture(t, "fallback", fake)
+
+		AfterTurn(context.Background(), m, store, "fallback", "로그인 고쳐줘",
+			func(context.Context) string { return "  " }, nil)
+
+		got, _ := store.Get("fallback")
+		if len(got.Checkpoints) != 1 || got.Checkpoints[0].Summary != "로그인 고쳐줘" {
+			t.Errorf("checkpoints = %+v, want the fallback summary", got.Checkpoints)
+		}
+	})
+
+	t.Run("clean tree never invokes summarize", func(t *testing.T) {
+		fake := &fakeRunner{} // clean
+		m, store := newTurnFixture(t, "clean", fake)
+
+		called := false
+		AfterTurn(context.Background(), m, store, "clean", "설명해줘",
+			func(context.Context) string { called = true; return "x" }, nil)
+
+		if called {
+			t.Error("summarize must not run for a read-only turn (dirty check first)")
+		}
+	})
+}
+
 func TestAfterTurn_VerifyFailMarksFailedButKeepsCheckpoint(t *testing.T) {
 	fake := &fakeRunner{
 		out:  map[string][]byte{"status": []byte("M main.go\n"), "rev-parse": []byte("def456\n")},
@@ -79,7 +126,7 @@ func TestAfterTurn_VerifyFailMarksFailedButKeepsCheckpoint(t *testing.T) {
 	}
 	m, store := newTurnFixture(t, "bug", fake)
 
-	AfterTurn(context.Background(), m, store, "bug", "버그 수정 시도", nil)
+	AfterTurn(context.Background(), m, store, "bug", "버그 수정 시도", nil, nil)
 
 	got, _ := store.Get("bug")
 	if got.Status != StatusFailed {

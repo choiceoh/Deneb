@@ -12,10 +12,15 @@ import (
 // rail reflects pass/fail. The chat turn-end hook calls this for coding sessions —
 // the agent edits the worktree during the turn; this captures and grades the result.
 //
+// summarize, when non-nil, produces the checkpoint's Korean label (a tiny-role
+// LLM call in the real wiring). It is invoked ONLY after the dirty check — a
+// read-only turn never pays the call — and it is fail-open: an empty result
+// keeps the deterministic fallback summary.
+//
 // Best-effort: a read-only turn (no edits) checkpoints nothing and skips verify,
 // leaving the prior status intact; individual step failures are logged and do not
 // abort the rest. Callers serialize per task — AfterTurn itself does no locking.
-func AfterTurn(ctx context.Context, m *Manager, store *Store, taskID, summary string, logger *slog.Logger) {
+func AfterTurn(ctx context.Context, m *Manager, store *Store, taskID, summary string, summarize func(context.Context) string, logger *slog.Logger) {
 	if m == nil || store == nil || taskID == "" {
 		return
 	}
@@ -45,6 +50,11 @@ func AfterTurn(ctx context.Context, m *Manager, store *Store, taskID, summary st
 	summary = strings.TrimSpace(summary)
 	if summary == "" {
 		summary = "변경 저장"
+	}
+	if summarize != nil {
+		if s := strings.TrimSpace(summarize(ctx)); s != "" {
+			summary = s
+		}
 	}
 	if err := m.Commit(ctx, task, summary); err != nil {
 		logger.Warn("coding turn-end: commit failed", "task", taskID, "error", err)

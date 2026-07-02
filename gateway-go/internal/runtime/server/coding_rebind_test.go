@@ -3,6 +3,7 @@ package server
 import (
 	"log/slog"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/code"
@@ -82,4 +83,20 @@ func TestRebindCodingSession(t *testing.T) {
 			}
 		}
 	})
+}
+
+func TestSanitizeCheckpointLabel(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"로그인 폼 검증 추가", "로그인 폼 검증 추가"},
+		{"\"헬스체크 엔드포인트 신설.\"\n부연 설명", "헬스체크 엔드포인트 신설"},
+		{"- 버그 수정", "버그 수정"},
+		{"`config.go` 상수 정리", "config.go` 상수 정리"},
+		{"   \n\n", ""},
+		{strings.Repeat("가", 80), strings.Repeat("가", 60) + "…"},
+	}
+	for _, c := range cases {
+		if got := sanitizeCheckpointLabel(c.in); got != c.want {
+			t.Errorf("sanitizeCheckpointLabel(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
 }

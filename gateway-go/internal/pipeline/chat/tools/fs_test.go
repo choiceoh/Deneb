@@ -242,6 +242,87 @@ func TestToolEdit_ambiguous(t *testing.T) {
 	}
 }
 
+func TestToolEdit_whitespaceTolerant(t *testing.T) {
+	t.Run("unique indent mismatch auto-applies with re-indent", func(t *testing.T) {
+		tmp := t.TempDir()
+		path := filepath.Join(tmp, "f.go")
+		os.WriteFile(path, []byte("func a() {\n\tif x {\n\t\treturn 1\n\t}\n}\n"), 0o644)
+
+		// Model reproduced the block with spaces instead of tabs.
+		out := mustCallTool(t, ToolEdit(tmp), map[string]any{
+			"file_path":  "f.go",
+			"old_string": "    if x {\n        return 1\n    }",
+			"new_string": "    if x {\n        return 2\n    }",
+		})
+		if !strings.Contains(out, "whitespace-tolerant") {
+			t.Errorf("result should mention the tolerant match, got %q", out)
+		}
+		data, _ := os.ReadFile(path)
+		want := "func a() {\n\tif x {\n\t\treturn 2\n\t}\n}\n"
+		if string(data) != want {
+			t.Errorf("got %q, want %q (file indentation must win)", string(data), want)
+		}
+	})
+
+	t.Run("ambiguous tolerant matches report line numbers", func(t *testing.T) {
+		tmp := t.TempDir()
+		// "   foo" (3 spaces) is an exact substring of neither line, but both
+		// lines trim-match it → the fuzzy path must report the ambiguity.
+		os.WriteFile(filepath.Join(tmp, "f.txt"), []byte("\tfoo\nbar\n  foo\n"), 0o644)
+		_, err := callTool(t, ToolEdit(tmp), map[string]any{
+			"file_path":  "f.txt",
+			"old_string": "   foo",
+			"new_string": "baz",
+		})
+		if err == nil || !strings.Contains(err.Error(), "whitespace-tolerant matches") {
+			t.Fatalf("expected ambiguity error with line numbers, got %v", err)
+		}
+	})
+
+	t.Run("partial-line and true misses keep the not-found error", func(t *testing.T) {
+		tmp := t.TempDir()
+		os.WriteFile(filepath.Join(tmp, "f.txt"), []byte("return foo(bar)\n"), 0o644)
+		// "foo(bar)" is a substring of the line, not line-aligned → no auto-apply.
+		_, err := callTool(t, ToolEdit(tmp), map[string]any{
+			"file_path":  "f.txt",
+			"old_string": "foo(bar) ",
+			"new_string": "qux",
+		})
+		if err == nil || !strings.Contains(err.Error(), "not found") {
+			t.Fatalf("expected not-found error, got %v", err)
+		}
+	})
+
+	t.Run("whitespace-only old_string never matches", func(t *testing.T) {
+		tmp := t.TempDir()
+		os.WriteFile(filepath.Join(tmp, "f.txt"), []byte("a\n\t\nb\n"), 0o644)
+		_, err := callTool(t, ToolEdit(tmp), map[string]any{
+			"file_path":  "f.txt",
+			"old_string": "    ",
+			"new_string": "x",
+		})
+		if err == nil || !strings.Contains(err.Error(), "not found") {
+			t.Fatalf("expected not-found error, got %v", err)
+		}
+	})
+
+	t.Run("replace_all skips the tolerant fallback", func(t *testing.T) {
+		tmp := t.TempDir()
+		// "  foo" (2 spaces) is not an exact substring of "\tfoo" but would
+		// trim-match it — replace_all must keep exact semantics regardless.
+		os.WriteFile(filepath.Join(tmp, "f.txt"), []byte("\tfoo\n"), 0o644)
+		_, err := callTool(t, ToolEdit(tmp), map[string]any{
+			"file_path":   "f.txt",
+			"old_string":  "  foo",
+			"new_string":  "bar",
+			"replace_all": true,
+		})
+		if err == nil || !strings.Contains(err.Error(), "not found") {
+			t.Fatalf("replace_all must keep exact semantics, got %v", err)
+		}
+	})
+}
+
 func TestToolEdit_replaceAll(t *testing.T) {
 	tmp := t.TempDir()
 	os.WriteFile(filepath.Join(tmp, "f.txt"), []byte("aaa"), 0o644)
