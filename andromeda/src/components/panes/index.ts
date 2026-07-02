@@ -51,7 +51,9 @@ export const PANES: PaneDef[] = [
   { key: "fleet", label: "플릿", shortcut: "l", Component: FleetPane },
   { key: "workfeed", label: "피드", shortcut: "9", Component: WorkfeedPane },
   { key: "skills", label: "스킬", shortcut: "k", Component: SkillsPane },
-  { key: "code", label: "코드", shortcut: "c", Component: CodePane },
+  // ⚠ "c"는 금지 — Ctrl+C(복사)를 가로채 복사가 화면 전환으로 둔갑했던 충돌. 편집 계열 키
+  // (c/v/x/a/z/y)는 Workstation의 EDIT_KEYS 가드가 원천 차단하므로 배정해도 동작하지 않는다.
+  { key: "code", label: "코드", shortcut: "d", Component: CodePane },
   // App settings live at the bottom of the rail; ⌘, mirrors the OS settings shortcut.
   { key: "settings", label: "설정", shortcut: ",", Component: SettingsPane },
 ];

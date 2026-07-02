@@ -102,6 +102,22 @@ describe("Workstation (connected, fixtures)", () => {
     expect(screen.queryByRole("button", { name: "Deneb 패널 열기" })).not.toBeInTheDocument();
   });
 
+  it("keeps Ctrl+C for copy — editing combos never switch panes (code moved to Ctrl+D)", async () => {
+    renderWithProviders(<Workstation cfg={{ url: "http://test", token: "tok" }} />, {
+      connected: true,
+      dataProvider,
+    });
+    expect(await screen.findByText("세금 신고")).toBeInTheDocument();
+
+    // Ctrl+C(복사)는 화면 전환으로 가로채지 않는다 — 대시보드가 그대로 남는다.
+    fireEvent.keyDown(window, { key: "c", ctrlKey: true });
+    expect(screen.getByText("세금 신고")).toBeInTheDocument();
+
+    // 코드 pane은 Ctrl+D로 이동했다 — 대시보드가 코드 pane으로 바뀐다.
+    fireEvent.keyDown(window, { key: "d", ctrlKey: true });
+    await waitFor(() => expect(screen.queryByText("세금 신고")).not.toBeInTheDocument());
+  });
+
   it("opens the 비업무 채팅 탭 from the rail (center chat greets)", async () => {
     renderWithProviders(<Workstation cfg={{ url: "http://test", token: "tok" }} />, {
       connected: true,

@@ -14,6 +14,12 @@ import { PANES } from "./panes";
 // on the window's gradient, Zen-browser style. The work area renders only the
 // active pane; ⌘/Ctrl+0–9 shortcuts are derived from the pane registry (the labels
 // are hidden in the rail, but the keys still work).
+
+// OS 표준 텍스트 편집 콤보(⌘/Ctrl + 복사·붙여넣기·잘라내기·전체선택·실행취소/재실행)의
+// 키 — pane 단축키가 이걸 가로채면 복사가 화면 전환으로 둔갑한다(코드 pane의 옛 ⌘C 사고).
+// 레지스트리에 이 키를 배정해도 onKey 가드가 걸러내 편집 동작이 항상 이긴다.
+const EDIT_KEYS = new Set(["a", "c", "v", "x", "y", "z"]);
+
 export function Workstation({ cfg }: { cfg: GatewayConfig }) {
   const { view, setView, codeMode, connected } = useWorkspace();
 
@@ -40,6 +46,7 @@ export function Workstation({ cfg }: { cfg: GatewayConfig }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!(e.metaKey || e.ctrlKey)) return;
+      if (EDIT_KEYS.has(e.key.toLowerCase())) return; // 복사·붙여넣기류는 절대 가로채지 않는다
       const next = shortcuts[e.key];
       if (!next) return;
       e.preventDefault();
