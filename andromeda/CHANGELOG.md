@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.47](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.46...andromeda-v0.0.47) (2026-07-02)
+
+
+### ✨ Features
+
+* **andromeda:** 위키 트리 탐색 — 폴더 계층 그대로 접고 펼치는 레일 ([#3031](https://github.com/choiceoh/Deneb/issues/3031)) ([df4dc97](https://github.com/choiceoh/Deneb/commit/df4dc979cd5c5bdd4a53e5639271d8e79df7f5a7))
+
 ## [0.0.46](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.45...andromeda-v0.0.46) (2026-07-02)
 
 
