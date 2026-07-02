@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.0.45](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.44...andromeda-v0.0.45) (2026-07-02)
+
+
+### ✨ Features
+
+* **andromeda:** 노트북을 AI 작업대로 재구성 — 칩 자료 + 답변을 노트로 저장 ([#3016](https://github.com/choiceoh/Deneb/issues/3016)) ([937d15f](https://github.com/choiceoh/Deneb/commit/937d15f5b2775a234db331d421d9a7594234eae2))
+* **andromeda:** 우측 Deneb 패널에 파일 첨부 (이미지 OCR·문서·녹음) ([#3018](https://github.com/choiceoh/Deneb/issues/3018)) ([27e4167](https://github.com/choiceoh/Deneb/commit/27e4167fdbfe2a4cf8e13b1791094e20ea472d4c))
+* **andromeda:** 채팅 영역 전체를 무표시 드롭존으로 — 드래그 중일 때만 살짝 표시 ([#3019](https://github.com/choiceoh/Deneb/issues/3019)) ([fb150d8](https://github.com/choiceoh/Deneb/commit/fb150d8ba71600537370e93d14cd6d60239bb324))
+
 ## [0.0.44](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.43...andromeda-v0.0.44) (2026-07-01)
 
 
