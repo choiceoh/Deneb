@@ -1,6 +1,7 @@
 package wiki
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -43,6 +44,8 @@ func newRestructureStore(t *testing.T) *Store {
 	write("프로젝트/영산고-계약-법무검토-(2026-06-30).md", "영산고 계약 법무검토", "검토 내용", nil)
 	// Deal ledger page must stay put.
 	write("프로젝트/거래/한빛전기.md", "한빛전기", "거래 이력", nil)
+	// Folder-only project with no 대표페이지 (the production norm pre-migration).
+	write("프로젝트/기아-화성/치장장-태양광-배치.md", "기아 화성 치장장", "배치 검토", nil)
 
 	return store
 }
@@ -148,6 +151,20 @@ func TestRestructure_Apply(t *testing.T) {
 	// Deal ledger untouched.
 	if _, err := store.ReadPage("프로젝트/거래/한빛전기.md"); err != nil {
 		t.Errorf("deal ledger page must stay put: %v", err)
+	}
+
+	// Folder-only project got a minted 대표페이지 titled by the project.
+	kiaRep, err := store.ReadPage("프로젝트/기아-화성/대표.md")
+	if err != nil {
+		t.Fatalf("folder-only project must gain a 대표페이지: %v", err)
+	}
+	if kiaRep.Meta.Title != "기아-화성" || kiaRep.Meta.Type != "project" {
+		t.Errorf("minted rep page = title %q type %q", kiaRep.Meta.Title, kiaRep.Meta.Type)
+	}
+
+	// The emptied legacy mail-analyses directory is pruned from disk.
+	if _, statErr := os.Stat(filepath.Join(store.Dir(), "프로젝트", "mail-analyses")); !os.IsNotExist(statErr) {
+		t.Errorf("legacy mail-analyses dir should be pruned, stat err = %v", statErr)
 	}
 
 	// Idempotent: a second apply finds nothing left to do.

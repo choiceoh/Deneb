@@ -16,7 +16,9 @@ package wiki
 
 import (
 	"fmt"
+	"os"
 	"path"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -207,6 +209,35 @@ func RestructureProjectLayout(store *Store, plan []RestructureOp, apply bool) (*
 		simMove(p, dst)
 	}
 
+	// ---- phase 4: project folders missing a 대표페이지 get a minimal one ------
+	// Without this, a folder-only project (all 39 production folders predate rep
+	// pages) would vanish from KnownProjects — candidates, digests, research.
+	// The dreamer/research cycles fill the skeleton afterwards.
+	folderHasRep := make(map[string]bool)
+	folderHasAny := make(map[string]bool)
+	for p, ok := range exists {
+		if !ok {
+			continue
+		}
+		name, has := ProjectNameOf(p)
+		if !has || len(splitProjectPath(p)) < 2 {
+			continue
+		}
+		folderHasAny[name] = true
+		if IsProjectRepPage(p) {
+			folderHasRep[name] = true
+		}
+	}
+	for _, name := range sortedBoolKeys(folderHasAny) {
+		if folderHasRep[name] {
+			continue
+		}
+		repPath := RepPagePath(name)
+		actions = append(actions, restructureAction{kind: "ensure-rep", target: repPath, reason: "대표페이지 없는 프로젝트 폴더: " + name})
+		exists[repPath] = true
+		pages[repPath] = newRepPage(name)
+	}
+
 	// ---- render report ------------------------------------------------------
 	for _, a := range actions {
 		switch a.kind {
@@ -216,7 +247,7 @@ func RestructureProjectLayout(store *Store, plan []RestructureOp, apply bool) (*
 			rep.Actions = append(rep.Actions, fmt.Sprintf("move   %s → %s (%s)", a.source, a.target, a.reason))
 		case "delete":
 			rep.Actions = append(rep.Actions, fmt.Sprintf("delete %s (%s)", a.source, a.reason))
-		case "ensure-log":
+		case "ensure-log", "ensure-rep":
 			rep.Actions = append(rep.Actions, fmt.Sprintf("create %s (%s)", a.target, a.reason))
 		}
 	}
@@ -251,16 +282,53 @@ func RestructureProjectLayout(store *Store, plan []RestructureOp, apply bool) (*
 				}
 				return newLogPage(project), nil
 			})
+		case "ensure-rep":
+			project, _ := ProjectNameOf(a.target)
+			err = store.UpdatePage(a.target, func(existing *Page) (*Page, error) {
+				if existing != nil {
+					return nil, nil // already there — no-op
+				}
+				return newRepPage(project), nil
+			})
 		}
 		if err != nil {
 			rep.Errors = append(rep.Errors, fmt.Sprintf("%s %s: %v", a.kind, a.source, err))
 		}
 	}
 	rep.Applied = true
+	removeEmptyDirs(store.Dir())
 	if err := store.RebuildIndex(); err != nil {
 		rep.Errors = append(rep.Errors, fmt.Sprintf("rebuild index: %v", err))
 	}
 	return rep, nil
+}
+
+// removeEmptyDirs prunes directories the moves emptied (legacy mail-analyses/
+// nests, typo buckets), deepest-first. The six category roots and the wiki root
+// stay. Best-effort — a non-empty dir simply fails os.Remove and is kept.
+func removeEmptyDirs(root string) {
+	var dirs []string
+	_ = filepath.Walk(root, func(p string, info os.FileInfo, err error) error {
+		if err != nil || !info.IsDir() || p == root {
+			return nil //nolint:nilerr // best-effort walk
+		}
+		if base := filepath.Base(p); base == ".git" {
+			return filepath.SkipDir
+		}
+		dirs = append(dirs, p)
+		return nil
+	})
+	sort.Slice(dirs, func(i, j int) bool { return len(dirs[i]) > len(dirs[j]) }) // deepest first
+	category := make(map[string]bool, len(Categories))
+	for _, c := range Categories {
+		category[filepath.Join(root, c)] = true
+	}
+	for _, d := range dirs {
+		if category[d] {
+			continue
+		}
+		_ = os.Remove(d) // fails (kept) unless empty
+	}
 }
 
 // planReason renders a plan op's audit label.
@@ -284,6 +352,28 @@ func mergedBodyFor(target, source *Page) string {
 		return head + "\n\n" + s
 	}
 	return t + "\n\n" + head + "\n\n" + s
+}
+
+// newRepPage mints a minimal 대표페이지 skeleton for a folder-only project; the
+// dream/research cycles fill in the substance.
+func newRepPage(project string) *Page {
+	page := NewPage(project, projectCategoryPrefix, nil)
+	page.Meta.Type = "project"
+	page.Meta.Summary = project + " 프로젝트 대표페이지"
+	page.Meta.Importance = 0.5
+	page.Body = "# " + project + "\n\n## 요약\n\n\n## 핵심 사실\n\n\n## 변경 이력\n- " +
+		time.Now().Format("2006-01-02") + ": 레이아웃 이관으로 생성 (드림 사이클이 채움)\n"
+	return page
+}
+
+// sortedBoolKeys returns a bool-set's keys sorted for deterministic ordering.
+func sortedBoolKeys(m map[string]bool) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // newLogPage mints a project's 로그.md skeleton.
