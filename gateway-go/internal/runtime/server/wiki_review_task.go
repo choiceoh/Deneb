@@ -152,6 +152,15 @@ func (t *wikiReviewTask) Run(ctx context.Context) error {
 	// their 대표페이지 (surfaces in the 모아보기; quarter-idempotent; never
 	// auto-closes). Capped so a backlog can't flood the digest view.
 	dormant := t.wikiStore.FlagDormantProjects(time.Now(), 2)
+	// Graph hygiene: repair/drop dead Related references (idempotent; the first
+	// sweep clears the historical rot, later ones only touch fresh drift).
+	prune, perr := t.wikiStore.PruneDeadRelatedLinks()
+	if perr != nil {
+		t.logger.Warn("wiki-review: dead-link prune failed", "error", perr)
+	} else if prune.PagesChanged > 0 {
+		t.logger.Info("wiki-review: dead links pruned",
+			"pages", prune.PagesChanged, "repointed", prune.Repointed, "removed", prune.Removed)
+	}
 	t.logger.Info("wiki-review cycle completed",
 		"touched", len(touched), "suspects", len(suspects), "merged", merged,
 		"autoMerge", t.autoMerge, "logSectionsRotated", rotated, "dormantFlagged", len(dormant))
