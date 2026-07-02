@@ -135,8 +135,8 @@ func (wd *WikiDreamer) detectStaleDeadlines() []VerifyFinding {
 	var findings []VerifyFinding
 	for _, rp := range relPaths {
 		page, err := wd.store.ReadPage(rp)
-		if err != nil || page == nil {
-			continue
+		if err != nil || page == nil || page.Meta.Archived {
+			continue // 종결/보관된 페이지의 기한은 더 이상 살아있는 마감이 아니다
 		}
 		due := strings.TrimSpace(page.Meta.Due)
 		if due == "" {

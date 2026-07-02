@@ -1,0 +1,245 @@
+// project_close.go — project lifecycle: 종결(close) / 재개(reopen) / 졸음 감지.
+//
+// A closed project leaves the ACTIVE stage without losing anything: no file
+// moves (path stability is the layout's core lesson), no deletion. Closure =
+// a "## 종결" record on the 대표페이지 + the Archived flag on every page in the
+// project folder. Because KnownProjects skips archived rep pages, one flag
+// retires the project everywhere at once — mail-analyzer candidates, the
+// 모아보기 digests, the research rotation, and the reviewer's code signal —
+// while every page stays readable and searchable (demoted, not gone).
+// Reopen reverses it wholesale.
+package wiki
+
+import (
+	"fmt"
+	"strings"
+	"time"
+)
+
+// closedSectionHeading is the H2 section on a 대표페이지 recording closure.
+const closedSectionHeading = "종결"
+
+// DormantAfterDays is how long a project may sit with no page activity before
+// the dormancy check proposes closure (advisory bullet, never auto-close).
+const DormantAfterDays = 120
+
+// CloseResult summarizes a project closure.
+type CloseResult struct {
+	RepPath  string // the 대표페이지 the 종결 record landed on
+	Archived int    // pages newly flagged archived (rep included)
+}
+
+// ReopenResult summarizes a project reopening.
+type ReopenResult struct {
+	RepPath  string
+	Restored int // pages un-archived
+}
+
+// resolveProjectRep maps a project reference (bare name, folder path, or any
+// page path inside the project) to its 대표페이지 path — the in-folder 대표.md
+// first, the legacy flat page as fallback. Unlike KnownProjects this looks at
+// the disk directly, so it finds CLOSED (archived) projects too — reopen needs
+// exactly that.
+func (s *Store) resolveProjectRep(ref string) (name, repPath string, err error) {
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return "", "", fmt.Errorf("wiki: empty project reference")
+	}
+	if n, ok := ProjectNameOf(ref); ok {
+		name = n
+	} else {
+		name = strings.TrimSuffix(strings.TrimPrefix(ref, projectCategoryPrefix+"/"), ".md")
+	}
+	if name == "" || IsReservedProjectDir(name) {
+		return "", "", fmt.Errorf("wiki: %q is not a project", ref)
+	}
+	if _, rerr := s.ReadPage(RepPagePath(name)); rerr == nil {
+		return name, RepPagePath(name), nil
+	}
+	legacy := projectCategoryPrefix + "/" + name + ".md"
+	if _, rerr := s.ReadPage(legacy); rerr == nil {
+		return name, legacy, nil
+	}
+	return "", "", fmt.Errorf("wiki: project %q not found (대표페이지 없음)", name)
+}
+
+// projectFolderPages lists every page belonging to the project (rep, 로그,
+// 기자재, 메일분석, details). Legacy flat projects return just the rep page.
+func (s *Store) projectFolderPages(name, repPath string) []string {
+	pages, err := s.ListPages(projectCategoryPrefix)
+	if err != nil {
+		return []string{repPath}
+	}
+	folder := projectCategoryPrefix + "/" + name
+	var out []string
+	for _, p := range pages {
+		p = strings.ReplaceAll(p, "\\", "/")
+		if f, ok := ProjectFolderOf(p); ok && f == folder {
+			out = append(out, p)
+		}
+	}
+	if len(out) == 0 {
+		out = []string{repPath}
+	}
+	return out
+}
+
+// CloseProject retires a project: records the closure (date + outcome note) in
+// the 대표페이지's "## 종결" section and archives every page in the project
+// folder. Idempotent-ish: closing an already-closed project refreshes the
+// record and re-archives stragglers. No files move or disappear.
+func (s *Store) CloseProject(ref, note string, now time.Time) (CloseResult, error) {
+	name, repPath, err := s.resolveProjectRep(ref)
+	if err != nil {
+		return CloseResult{}, err
+	}
+	date := now.Format("2006-01-02")
+
+	// 1. Closure record on the 대표페이지 (kept even while archived — this is the
+	//    answer to "그 건 어떻게 끝났지?").
+	if err := s.UpdatePage(repPath, func(cur *Page) (*Page, error) {
+		if cur == nil {
+			return nil, fmt.Errorf("대표페이지 없음: %s", repPath)
+		}
+		content := "- 종결일: " + date
+		if n := strings.TrimSpace(note); n != "" {
+			content += "\n- 결과: " + n
+		}
+		if prev := strings.TrimSpace(cur.Section(closedSectionHeading)); prev != "" {
+			content = prev + "\n" + content // keep prior close/reopen history
+		}
+		cur.Body = upsertSection(cur.Body, closedSectionHeading, content)
+		cur.Meta.Archived = true
+		cur.Meta.Updated = date
+		return cur, nil
+	}); err != nil {
+		return CloseResult{}, fmt.Errorf("wiki: close %s: %w", name, err)
+	}
+
+	// 2. Archive the whole folder (rep already done above; count it once).
+	archived := 1
+	for _, p := range s.projectFolderPages(name, repPath) {
+		if p == repPath {
+			continue
+		}
+		changed := false
+		if err := s.UpdatePage(p, func(cur *Page) (*Page, error) {
+			if cur == nil || cur.Meta.Archived {
+				return nil, nil
+			}
+			cur.Meta.Archived = true
+			cur.Meta.Updated = date
+			changed = true
+			return cur, nil
+		}); err == nil && changed {
+			archived++
+		}
+	}
+	_ = s.AppendLog("close-project", repPath+" — "+strings.TrimSpace(note))
+	return CloseResult{RepPath: repPath, Archived: archived}, nil
+}
+
+// ReopenProject reverses CloseProject: un-archives every page in the project
+// folder and appends a 재개 line to the 종결 record (history stays visible).
+func (s *Store) ReopenProject(ref string, now time.Time) (ReopenResult, error) {
+	name, repPath, err := s.resolveProjectRep(ref)
+	if err != nil {
+		return ReopenResult{}, err
+	}
+	date := now.Format("2006-01-02")
+
+	restored := 0
+	for _, p := range s.projectFolderPages(name, repPath) {
+		changed := false
+		if err := s.UpdatePage(p, func(cur *Page) (*Page, error) {
+			if cur == nil {
+				return nil, nil
+			}
+			isRep := p == repPath
+			if !cur.Meta.Archived && !isRep {
+				return nil, nil
+			}
+			cur.Meta.Archived = false
+			cur.Meta.Updated = date
+			if isRep {
+				if prev := strings.TrimSpace(cur.Section(closedSectionHeading)); prev != "" {
+					cur.Body = upsertSection(cur.Body, closedSectionHeading, prev+"\n- "+date+": 재개")
+				}
+			}
+			changed = true
+			return cur, nil
+		}); err == nil && changed {
+			restored++
+		}
+	}
+	if restored == 0 {
+		return ReopenResult{RepPath: repPath}, fmt.Errorf("wiki: reopen %s: 보관된 페이지 없음 (이미 활성)", name)
+	}
+	_ = s.AppendLog("reopen-project", repPath)
+	return ReopenResult{RepPath: repPath, Restored: restored}, nil
+}
+
+// FlagDormantProjects proposes closure for ACTIVE projects with no page
+// activity for DormantAfterDays: one dated bullet on the 대표페이지's 현재 상태
+// (surfaces in the 모아보기), idempotent per quarter via the provenance ref,
+// capped per call. Never closes anything itself. Returns flagged rep paths.
+//
+// Activity basis: the newest Updated date across the project's pages, read
+// from the master index (no page I/O). The flag bullet itself stamps Updated,
+// so a flagged project naturally leaves the dormant set until next quarter.
+func (s *Store) FlagDormantProjects(now time.Time, maxFlags int) []string {
+	if maxFlags <= 0 {
+		return nil
+	}
+	cutoff := now.AddDate(0, 0, -DormantAfterDays).Format("2006-01-02")
+	quarter := fmt.Sprintf("dormant:%dQ%d", now.Year(), (int(now.Month())-1)/3+1)
+
+	idx := s.Index()
+	lastByFolder := make(map[string]string) // 프로젝트/<name> → newest Updated
+	for path, entry := range idx.Entries {
+		folder, ok := ProjectFolderOf(path)
+		if !ok {
+			continue
+		}
+		if entry.Updated > lastByFolder[folder] {
+			lastByFolder[folder] = entry.Updated
+		}
+	}
+
+	var flagged []string
+	for _, ref := range s.knownProjects() { // active projects only
+		name, ok := ProjectNameOf(ref.Path)
+		if !ok {
+			continue
+		}
+		last := lastByFolder[projectCategoryPrefix+"/"+name]
+		if last == "" || last >= cutoff { // ISO dates compare lexicographically
+			continue
+		}
+		// Already flagged this quarter (the provenance marker embeds the ref):
+		// skip so the per-call cap goes to projects that still need the nudge.
+		if page, rerr := s.ReadPage(ref.Path); rerr == nil && page != nil &&
+			strings.Contains(page.Body, quarter) {
+			continue
+		}
+		months := int(now.Sub(mustDate(last)).Hours() / 24 / 30)
+		line := fmt.Sprintf("약 %d개월간 활동 없음 — 종결 검토 제안 (\"%s 종결 처리\"라고 말하면 정리됩니다)", months, ref.Name)
+		if err := s.AppendProjectStatusLine(ref.Path, line, quarter, now); err != nil {
+			continue
+		}
+		flagged = append(flagged, ref.Path)
+		if len(flagged) >= maxFlags {
+			break
+		}
+	}
+	return flagged
+}
+
+// mustDate parses a YYYY-MM-DD date, zero time on failure.
+func mustDate(d string) time.Time {
+	t, err := time.Parse("2006-01-02", d)
+	if err != nil {
+		return time.Time{}
+	}
+	return t
+}

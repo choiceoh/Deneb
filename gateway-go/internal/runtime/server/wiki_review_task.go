@@ -148,9 +148,13 @@ func (t *wikiReviewTask) Run(ctx context.Context) error {
 	}
 	merged := t.applyVerdicts(ctx, suspects, verdicts, state)
 	rotated := t.rotateProjectLogs()
+	// Dormancy nudge: long-inactive ACTIVE projects get one 종결-검토 bullet on
+	// their 대표페이지 (surfaces in the 모아보기; quarter-idempotent; never
+	// auto-closes). Capped so a backlog can't flood the digest view.
+	dormant := t.wikiStore.FlagDormantProjects(time.Now(), 2)
 	t.logger.Info("wiki-review cycle completed",
 		"touched", len(touched), "suspects", len(suspects), "merged", merged,
-		"autoMerge", t.autoMerge, "logSectionsRotated", rotated)
+		"autoMerge", t.autoMerge, "logSectionsRotated", rotated, "dormantFlagged", len(dormant))
 	return nil
 }
 

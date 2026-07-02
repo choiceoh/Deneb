@@ -64,8 +64,12 @@ func ToolWiki(d *toolctx.WikiDeps, workspaceDir string) toolctx.ToolFunc {
 			return wikiDaily(d.Store.DiaryDir(), p.Limit)
 		case "status":
 			return wikiStatus(d.Store), nil
+		case "close":
+			return wikiCloseProject(d.Store, p.Query, p.Content)
+		case "reopen":
+			return wikiReopenProject(d.Store, p.Query)
 		default:
-			return fmt.Sprintf("알 수 없는 액션: %s. 사용 가능: search, read, index, write, log, daily, status", p.Action), nil
+			return fmt.Sprintf("알 수 없는 액션: %s. 사용 가능: search, read, index, write, log, daily, status, close, reopen", p.Action), nil
 		}
 	}
 }
@@ -346,6 +350,37 @@ func wikiWrite(ctx context.Context, store *wiki.Store, contactsStore *contacts.S
 		note += fmt.Sprintf(" · 대체 표시 실패: %s", strings.Join(failed, ", "))
 	}
 	return fmt.Sprintf("위키 페이지 %s: %s (%s)%s", action, path, title, note), nil
+}
+
+// wikiCloseProject retires a project (종결): closure record on the 대표페이지 +
+// the whole folder archived + removed from the active stage (candidates,
+// digests, research, reviewer). Nothing moves or is deleted; reopen reverses.
+func wikiCloseProject(store *wiki.Store, ref, note string) (string, error) {
+	if strings.TrimSpace(ref) == "" {
+		return "query에 종결할 프로젝트 이름(또는 대표페이지 경로)을 지정하세요.", nil
+	}
+	res, err := store.CloseProject(ref, note, time.Now())
+	if err != nil {
+		return fmt.Sprintf("프로젝트 종결 실패: %v", err), nil
+	}
+	msg := fmt.Sprintf("프로젝트 종결 완료: %s — 문서 %d건 보관 처리, 활성 목록(메일 연결 후보·모아보기·리서치)에서 제외됨.",
+		res.RepPath, res.Archived)
+	if strings.TrimSpace(note) != "" {
+		msg += " 결과 기록: " + strings.TrimSpace(note)
+	}
+	return msg + " 재개하려면 wiki(action=\"reopen\").", nil
+}
+
+// wikiReopenProject reverses a closure (재개).
+func wikiReopenProject(store *wiki.Store, ref string) (string, error) {
+	if strings.TrimSpace(ref) == "" {
+		return "query에 재개할 프로젝트 이름(또는 대표페이지 경로)을 지정하세요.", nil
+	}
+	res, err := store.ReopenProject(ref, time.Now())
+	if err != nil {
+		return fmt.Sprintf("프로젝트 재개 실패: %v", err), nil
+	}
+	return fmt.Sprintf("프로젝트 재개 완료: %s — 문서 %d건 복원, 활성 목록에 다시 포함됨.", res.RepPath, res.Restored), nil
 }
 
 func markSupersededPages(store *wiki.Store, oldPaths []string, newPath string) (marked, failed []string) {
