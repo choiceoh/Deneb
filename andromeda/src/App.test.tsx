@@ -197,4 +197,55 @@ describe("Workstation (connected, fixtures)", () => {
     expect(screen.getByText("gmail list recent")).toBeInTheDocument();
     expect(screen.getByText("메일 3건")).toBeInTheDocument();
   });
+
+  it("attaches a file from the work panel with typed text as caption (client:main)", async () => {
+    const rpcCalls: Array<{ method: string; params: Record<string, unknown> }> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init?: RequestInit) => {
+        const body = JSON.parse(String(init?.body ?? "{}")) as {
+          method?: string;
+          params?: Record<string, unknown>;
+        };
+        const method = String(body.method ?? "");
+        rpcCalls.push({ method, params: body.params ?? {} });
+        const payload =
+          method === "miniapp.models.list"
+            ? { current: "", sections: [] }
+            : method === "miniapp.sessions.recent"
+              ? { sessions: [], count: 0 }
+              : method === "miniapp.capture.image"
+                ? { text: "견적 금액은 1,200만원" }
+                : {};
+        return new Response(JSON.stringify({ ok: true, payload }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }),
+    );
+
+    const user = userEvent.setup();
+    renderWithProviders(<AIPanel cfg={{ url: "http://test", token: "tok" }} />, { connected: true });
+
+    // The work panel offers the same attach affordance as the chat tab.
+    expect(screen.getByRole("button", { name: "파일 첨부" })).toBeInTheDocument();
+
+    const composer = screen.getByRole("textbox", { name: "Deneb에게 메시지" });
+    await user.type(composer, "이 견적서에서 금액만 찾아줘");
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    await user.upload(input, new File(["fake image"], "quote.png", { type: "image/png" }));
+
+    await waitFor(() => expect(rpcCalls.some((c) => c.method === "miniapp.capture.image")).toBe(true));
+    const captureCall = rpcCalls.find((c) => c.method === "miniapp.capture.image");
+    // Lands in the panel's own client:main session (not the chat tab's chat:*).
+    expect(captureCall?.params).toMatchObject({
+      mimeType: "image/png",
+      sessionKey: "client:main",
+      caption: "이 견적서에서 금액만 찾아줘",
+    });
+    expect(composer).toHaveValue("");
+    const result = await screen.findByRole("group", { name: "첨부 분석 결과" });
+    expect(within(result).getByText("quote.png")).toBeInTheDocument();
+    expect(within(result).getByText("견적 금액은 1,200만원")).toBeInTheDocument();
+  });
 });
