@@ -1,5 +1,15 @@
 # Changelog
 
+## [4.57.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.56.0...deneb-v4.57.0) (2026-07-02)
+
+
+### ✨ Features
+
+* **andromeda:** 위키 트리 탐색 — 폴더 계층 그대로 접고 펼치는 레일 ([#3031](https://github.com/choiceoh/Deneb/issues/3031)) ([df4dc97](https://github.com/choiceoh/Deneb/commit/df4dc979cd5c5bdd4a53e5639271d8e79df7f5a7))
+* **wiki:** 죽은 관련 링크 정리 — 리뷰어 위생 스윕 ([#3030](https://github.com/choiceoh/Deneb/issues/3030)) ([7121ad1](https://github.com/choiceoh/Deneb/commit/7121ad14957e79bcb2a140c3869c632b1d804c36))
+* **wiki:** 중복 방어 3겹 — 쓰기 가드 + 위키 리뷰어(관찰모드·analysis) + 자가치유·보존정책 ([#3027](https://github.com/choiceoh/Deneb/issues/3027)) ([2f0d539](https://github.com/choiceoh/Deneb/commit/2f0d539fc1d18b0aa234c97bdb86d231f0056e9f))
+* **wiki:** 프로젝트 종결/재개 + 졸음 감지 — 생애주기 완성 ([#3029](https://github.com/choiceoh/Deneb/issues/3029)) ([2916393](https://github.com/choiceoh/Deneb/commit/29163933c20cff38a2a384bd3523b8b80bf76338))
+
 ## [4.56.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.55.0...deneb-v4.56.0) (2026-07-02)
 
 
