@@ -27,32 +27,25 @@ import (
 // email analyzer as related-project candidates.
 const wikiProjectCategory = "프로젝트"
 
-// mailAnalysisWikiPath maps a Gmail message ID to its wiki page path. Mail
-// analyses live in a raw-data sub-folder of 프로젝트 (one page per message) and —
-// when the analyzer linked the mail to a project — under a per-project sub-folder
-// of that, so the analyses for one deal sit together instead of scattering across
-// a single flat list. Mails with no related project land flat in mail-analyses/.
+// mailAnalysisWikiPath maps a Gmail message ID to its wiki page path — the
+// project's 메일분석/ slot when the analyzer linked one, else the category-level
+// unlinked bucket (see wiki/project_layout.go). One page per message.
 func mailAnalysisWikiPath(msgID string, relatedProjects []string) string {
-	base := wikiProjectCategory + "/mail-analyses/"
-	if sub := mailProjectSubfolder(relatedProjects); sub != "" {
-		return base + sub + "/" + msgID + ".md"
-	}
-	return base + msgID + ".md"
+	return wiki.MailAnalysisPagePath(mailProjectName(relatedProjects), msgID)
 }
 
-// mailProjectSubfolder picks a per-project sub-folder name from the analyzer's
-// related-project list: the basename (sans .md) of the first entry already under
-// the 프로젝트 category that isn't itself a mail-analyses page. Empty when the mail
-// relates to no project. The related list is the reliable project signal the
-// analyzer computed — far better than guessing the project from the mail subject.
-func mailProjectSubfolder(relatedProjects []string) string {
-	prefix := wikiProjectCategory + "/"
+// mailProjectName picks the owning project from the analyzer's related-project
+// list: the first entry that is a real project 대표페이지 (new in-folder or legacy
+// flat form). Empty when the mail relates to no project. The related list is the
+// reliable project signal the analyzer computed — far better than guessing the
+// project from the mail subject.
+func mailProjectName(relatedProjects []string) string {
 	for _, r := range relatedProjects {
 		r = strings.TrimSpace(r)
-		if !strings.HasPrefix(r, prefix) || strings.Contains(r, "mail-analyses") {
+		if !wiki.IsProjectRepPage(r) {
 			continue
 		}
-		if name := strings.TrimSuffix(filepath.Base(r), ".md"); name != "" {
+		if name, ok := wiki.ProjectNameOf(r); ok {
 			return name
 		}
 	}
@@ -141,25 +134,17 @@ func (s *Server) projectCandidatesFn() func() []gmailpoll.ProjectCandidate {
 		if store == nil {
 			return nil
 		}
-		paths, err := store.ListPages(wikiProjectCategory)
-		if err != nil {
-			return nil
-		}
-		cands := make([]gmailpoll.ProjectCandidate, 0, len(paths))
-		for _, p := range paths {
-			// Only direct project pages ("프로젝트/<name>.md") are related-project
-			// candidates. ListPages walks recursively, so skip the nested raw-data
-			// sub-folders (프로젝트/mail-analyses/, 프로젝트/거래/) — the analyzer must
-			// not cite an auto-generated mail dump or deal log as a "related project".
-			if strings.Count(p, "/") != 1 {
-				continue
-			}
-			c := gmailpoll.ProjectCandidate{Path: p}
-			if page, err := store.ReadPage(p); err == nil && page != nil {
-				c.Title = page.Meta.Title
-				c.Summary = page.Meta.Summary
-			}
-			cands = append(cands, c)
+		// Only project 대표페이지 are related-project candidates — the analyzer must
+		// not cite an auto-generated mail dump, deal ledger page, or sub-page as a
+		// "related project". KnownProjects owns that layout rule.
+		refs := store.KnownProjects()
+		cands := make([]gmailpoll.ProjectCandidate, 0, len(refs))
+		for _, r := range refs {
+			cands = append(cands, gmailpoll.ProjectCandidate{
+				Path:    r.Path,
+				Title:   r.Name,
+				Summary: r.Summary,
+			})
 		}
 		return cands
 	}
@@ -351,18 +336,18 @@ func (s *Server) pinDealEvidenceToNotebook(msg *gmail.MessageDetail, deal *gmail
 	}
 }
 
-// directProjectPages filters a related-project list to direct project 대표페이지
-// paths (프로젝트/<name>.md, count of "/" == 1), dropping the raw-data sub-folders
-// (mail-analyses/, 거래/) and any non-프로젝트 entry, deduped in order. This is the
-// reliable project signal the analyzer computed; the same filter gates both the
-// 현재 상태 status update and notebook 각인 so they link to the same canonical pages.
+// directProjectPages filters a related-project list to project 대표페이지 paths
+// (new in-folder or legacy flat form — wiki.IsProjectRepPage owns the rule),
+// dropping raw-data pages (메일분석/, 거래/) and any non-프로젝트 entry, deduped in
+// order. This is the reliable project signal the analyzer computed; the same
+// filter gates both the 현재 상태 status update and notebook 각인 so they link to
+// the same canonical pages.
 func directProjectPages(related []string) []string {
-	prefix := wikiProjectCategory + "/"
 	out := make([]string, 0, len(related))
 	seen := make(map[string]bool, len(related))
 	for _, r := range related {
 		r = strings.TrimSpace(r)
-		if !strings.HasPrefix(r, prefix) || strings.Count(r, "/") != 1 {
+		if !wiki.IsProjectRepPage(r) {
 			continue
 		}
 		if seen[r] {

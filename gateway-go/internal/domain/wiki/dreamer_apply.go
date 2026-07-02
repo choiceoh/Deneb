@@ -195,6 +195,11 @@ func buildWikiSynthesisPrompt(indexContent, processedHistory, polarisSection, di
   - 업무: 직무 도메인 지식 — 태양광·전선·구리값 등 일에 직접 쓰이는 지식
   - 사용자: 사용자 개인 — 선호, 톤·스타일 규칙, 개인 컨텍스트
   - 기타: 그 외 일반/세상 지식 — 국제정세·시사·잡학 등 위 분류에 안 맞는 것 (catch-all)
+- 프로젝트 카테고리의 문서 구조 (프로젝트당 폴더 하나, 정해진 슬롯만 사용):
+  - 프로젝트/<프로젝트명>/대표.md — 대표페이지 (현재 상태·개요·핵심 사실). 새 프로젝트 create는 반드시 이 경로
+  - 프로젝트/<프로젝트명>/로그.md — 진행 로그. 회의·결재·발주·법무검토 같은 **사건·진행 소식은 새 페이지를 만들지 말고** 이 페이지에 action:"update"로 날짜와 함께 append
+  - 프로젝트/<프로젝트명>/기자재/ — 케이블·모듈 등 기자재·자재 문서
+  - 프로젝트/<프로젝트명>/메일분석/ — 메일 분석 원본 (시스템이 자동 생성; 직접 만들지 마라)
 - 프로젝트 중 거래성 건(거래처·금액·납기)은 가장 임박한 결제기한/마감일을 frontmatter의 due 필드(YYYY-MM-DD)에 기록
 - content는 마크다운 형식. create 시 전체 본문, update 시 추가할 섹션/내용. 본문에서 다른 페이지를 언급할 때는 [[경로-또는-제목]] 형식의 위키링크를 쓰면 지식그래프 엣지가 된다 (예: [[프로젝트/dgx-spark]], [[홍길동]])
 - 상호링크: related에는 인덱스에 존재하는 관련 페이지 경로를 1~3개만 넣고, content에도 필요한 곳에 [[...]] 링크를 남겨라. 관련 페이지가 불확실하면 억지로 만들지 마라
@@ -256,6 +261,14 @@ func (wd *WikiDreamer) applyUpdates(_ context.Context, updates []wikiUpdate) (cr
 			wd.logger.Info("wiki-dream: normalized category path",
 				"from", u.Path, "fromCat", u.Category, "to", newPath, "toCat", newCat)
 			u.Path, u.Category = newPath, newCat
+		}
+		// Project layout: a flat 프로젝트/<name>.md is the legacy 대표페이지 form —
+		// route it onto the in-folder slot (프로젝트/<name>/대표.md) so the dreamer
+		// can't resurrect flat pages after the layout migration.
+		if newPath := NormalizeProjectPagePath(u.Path); newPath != u.Path {
+			wd.logger.Info("wiki-dream: normalized project layout path",
+				"from", u.Path, "to", newPath)
+			u.Path = newPath
 		}
 
 		// Duplicate prevention: if creating, check for existing similar pages.

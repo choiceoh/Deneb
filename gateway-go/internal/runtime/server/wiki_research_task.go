@@ -176,6 +176,12 @@ func (t *wikiResearchTask) selectTarget(state *wikiResearchState) *wikiResearchC
 
 	var cands []wikiResearchCandidate
 	for _, p := range paths {
+		// Research refreshes project 대표페이지 only — raw mail-analysis pages, deal
+		// ledger entries, and per-project sub-pages are inputs to research, not
+		// research targets (re-researching a raw mail page just re-creates it).
+		if !wiki.IsProjectRepPage(p) {
+			continue
+		}
 		page, err := t.wikiStore.ReadPage(p)
 		if err != nil || page == nil {
 			continue
@@ -237,6 +243,7 @@ func (t *wikiResearchTask) buildPrompt(c *wikiResearchCandidate) string {
    - 새 사실을 본문에 통합하고 Updated를 오늘로 갱신
    - 기존 사실과 모순되면 supersedes로 옛 내용을 대체 처리
    - 출처 신뢰도에 맞게 confidence 설정, importance는 유지
+   - **새 페이지를 만들지 마세요.** 대상 페이지(대표.md)를 갱신하고, 시간순 진행 이력은 같은 폴더의 로그.md에 append합니다
 4. 새로운 내용이 없으면 페이지를 건드리지 말고 조용히 종료합니다. 형식만 바꾸는 불필요한 재작성 금지.
 
 이것은 사용자에게 보내는 응답이 아니라 백그라운드 메모리 유지보수 작업입니다. 사용자에게 알리지 마세요.`)
