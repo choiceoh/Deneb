@@ -474,44 +474,19 @@ func (wd *WikiDreamer) rebuildIndex() error {
 }
 
 // findExistingPage checks if a similar page already exists by ID match,
-// slug prefix match, or FTS title search. Returns the existing path or "".
+// slug match, or FTS title search (the shared FindSimilarPages primitive).
+// Returns the existing path or "".
 func (wd *WikiDreamer) findExistingPage(u wikiUpdate) string {
-	idx := wd.store.Index()
-
-	// 1. Exact ID match in the same category.
-	if u.ID != "" {
-		for path, entry := range idx.Entries {
-			if entry.ID == u.ID {
-				return path
-			}
-		}
+	hits := wd.store.FindSimilarPages(context.Background(), SimilarQuery{
+		Path:     u.Path,
+		ID:       u.ID,
+		Title:    u.Title,
+		Category: u.Category,
+	}, 1)
+	if len(hits) == 0 {
+		return ""
 	}
-
-	// 2. Slug prefix match: normalize both and compare.
-	proposedSlug := normalizeSlug(u.Path)
-	for path := range idx.Entries {
-		if normalizeSlug(path) == proposedSlug {
-			return path
-		}
-	}
-
-	// 3. FTS title search: if a result in the same category scores well.
-	if u.Title != "" && wd.store.fts != nil {
-		results, err := wd.store.fts.search(context.Background(), u.Title, 3)
-		if err == nil {
-			for _, r := range results {
-				if r.Score < 0.6 {
-					continue
-				}
-				// Same category check.
-				if u.Category != "" && strings.HasPrefix(r.Path, u.Category+"/") {
-					return r.Path
-				}
-			}
-		}
-	}
-
-	return ""
+	return hits[0].Path
 }
 
 // normalizeSlug reduces a wiki path to a comparable slug form.

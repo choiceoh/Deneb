@@ -36,6 +36,7 @@ func ToolWiki(d *toolctx.WikiDeps, workspaceDir string) toolctx.ToolFunc {
 			Due        string   `json:"due"`
 			Section    string   `json:"section"`
 			Limit      int      `json:"limit"`
+			Force      bool     `json:"force"`
 		}
 		if err := json.Unmarshal(input, &p); err != nil {
 			return "", fmt.Errorf("parse input: %w", err)
@@ -56,7 +57,7 @@ func ToolWiki(d *toolctx.WikiDeps, workspaceDir string) toolctx.ToolFunc {
 		case "index":
 			return wikiIndex(d.Store, p.Category)
 		case "write":
-			return wikiWrite(d.Store, d.Contacts, p.Query, p.Title, p.ID, p.Summary, p.Category, p.Content, p.Tags, p.Related, p.Supersedes, p.Importance, p.Type, p.Confidence, p.Due)
+			return wikiWrite(ctx, d.Store, d.Contacts, p.Query, p.Title, p.ID, p.Summary, p.Category, p.Content, p.Tags, p.Related, p.Supersedes, p.Importance, p.Type, p.Confidence, p.Due, p.Force)
 		case "log":
 			return wikiLog(workspaceDir, d.Store, p.Content)
 		case "daily":
@@ -213,7 +214,7 @@ func wikiIndex(store *wiki.Store, category string) (string, error) {
 	return sb.String(), nil
 }
 
-func wikiWrite(store *wiki.Store, contactsStore *contacts.Store, path, title, id, summary, category, content string, tags, related, supersedes []string, importance float64, pageType, confidence, due string) (string, error) {
+func wikiWrite(ctx context.Context, store *wiki.Store, contactsStore *contacts.Store, path, title, id, summary, category, content string, tags, related, supersedes []string, importance float64, pageType, confidence, due string, force bool) (string, error) {
 	if title == "" {
 		return "title은 필수입니다.", nil
 	}
@@ -237,6 +238,31 @@ func wikiWrite(store *wiki.Store, contactsStore *contacts.Store, path, title, id
 	// resurrect flat pages after the layout migration (see wiki/project_layout.go).
 	if np := wiki.NormalizeProjectPagePath(path); np != path {
 		path = np
+	}
+
+	// Pre-write duplicate guard: creating a page whose subject an existing page
+	// already covers is how the wiki splintered (2026-07 cleanup). When the target
+	// doesn't exist yet and a near-match does, refuse and point at it — the agent
+	// should update that page (or retry with force=true if genuinely distinct).
+	if !force {
+		if _, err := store.ReadPage(path); err != nil { // create, not update
+			hits := store.FindSimilarPages(ctx, wiki.SimilarQuery{
+				Path: path, ID: id, Title: title, Category: category,
+			}, 3)
+			if len(hits) > 0 {
+				var sb strings.Builder
+				sb.WriteString("⚠️ 새 문서를 만들지 않았습니다 — 같은 주제로 보이는 기존 문서가 있습니다:\n")
+				for _, h := range hits {
+					fmt.Fprintf(&sb, "- %s — %s", h.Path, h.Title)
+					if h.Summary != "" {
+						fmt.Fprintf(&sb, " (%s)", h.Summary)
+					}
+					sb.WriteByte('\n')
+				}
+				sb.WriteString("기존 문서를 read 후 그 경로로 update 하세요. 정말 별개의 문서라면 force=true로 다시 호출하세요.")
+				return sb.String(), nil
+			}
+		}
 	}
 
 	// Read-modify-write through UpdatePage so a concurrent writer of the same page

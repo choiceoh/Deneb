@@ -47,6 +47,7 @@ globs: gateway-go/internal/ai/modelrole/**, gateway-go/internal/pipeline/pilot/*
 | 세션 자동 제목 | `chat/session_autotitle.go` | **tiny** | 짧은 명사구 제목 |
 | 워크피드 카드 제목+요약 | `runtime/server/workfeed_title_llm.go` | **lightweight** | 짧은 제목 + 2줄 카드 요약을 단일 호출로 생성 (#2504 후 lightweight). 휴리스틱(extractCardTitle/Summary)이 폴백 |
 | goal 루프 judge | `runtime/server/goal_task.go` | **lightweight** | 바운드 판정(DONE/CONTINUE), fail-open |
+| 위키 리뷰어 중복 판정 | `runtime/server/wiki_review_task.go` (2h 자율 태스크) | **analysis** (⚠️클라우드) | 최근 쓰인 위키 문서의 근사중복 판정 — 결정적 후보 수집(FindSimilarPages)→단일 JSON 판정 콜→결정적 병합(FoldDuplicate, 상한·git 스냅샷·기본 관찰모드 `DENEB_WIKI_REVIEW_AUTOMERGE`). **왜 lightweight가 아닌가**: 오판정 high가 실제 페이지 두 장을 병합하는 파괴적 판단이라 판정 품질 우선 — 운영자 명시 지시(2026-07-02). 호출량 극소(2h당 ≤1콜, 후보 없으면 0콜)라 비용 바운드. 스킬리뷰 교훈(텍스트 역할 toolCount=0) 반영해 도구호출 없는 bounded 파이프라인, fail-open |
 | 컴팩션 청크 요약 | `chat/run_prepare.go` `localAISummarizer` | **lightweight** | 내부 무손실 요약, 로컬·빠름 (#2508; 이전 analysis-클라우드가 #2489 타임아웃 주원인) |
 | youtube 자막 요약 | `chat/web/web_youtube.go` | **lightweight** | 충실도 요약, 로컬 (#2509) |
 | watch 영상 전사 분석 | `chat/tools/watch.go` | **lightweight** | 자막 기반 분석 요약 |

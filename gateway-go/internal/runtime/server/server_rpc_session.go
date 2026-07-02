@@ -570,6 +570,12 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 		// registerWikiResearchTask.
 		s.registerWikiResearchTask(homeDir)
 
+		// Wiki reviewer: every 2h, review pages created/updated since the last
+		// pass for near-duplicates (skill-reviewer pattern for memory writes) —
+		// deterministic candidate gather → one lightweight JSON verdict →
+		// capped, git-snapshotted merges. Production state dir only.
+		s.registerWikiReviewTask(homeDir)
+
 		// Model tuner: every 6h, aggregate the last 24h of agent logs by
 		// model, auto-apply the bounded output-token floor for models that
 		// keep hitting the ceiling, and calibrate newly served vLLM models.

@@ -925,6 +925,11 @@ func wikiToolSchema() map[string]any {
 				"type":        "string",
 				"description": "Upcoming deadline in YYYY-MM-DD (write action): payment due, delivery, or milestone date. Surfaced by the morning letter deadline scan.",
 			},
+			"force": map[string]any{
+				"type":        "boolean",
+				"description": "write action: 새 문서 생성 시 유사 문서가 발견되면 기본적으로 생성이 거부되고 기존 경로가 안내된다. 안내된 문서가 정말 별개 주제일 때만 force=true로 생성을 강행",
+				"default":     false,
+			},
 			"id": map[string]any{
 				"type":        "string",
 				"description": "Short identifier (kebab-case, e.g. 'dgx-spark')",

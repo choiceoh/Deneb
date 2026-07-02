@@ -176,6 +176,7 @@ func TestWikiWrite_MarksSupersededPages(t *testing.T) {
 	}
 
 	out, err := wikiWrite(
+		context.Background(),
 		store,
 		nil,
 		"프로젝트/new-fact.md",
@@ -191,6 +192,7 @@ func TestWikiWrite_MarksSupersededPages(t *testing.T) {
 		"concept",
 		"high",
 		"",
+		true, // force: "Old fact"가 유사 후보로 잡히는 것과 무관하게 이 테스트는 supersede 마킹을 검증
 	)
 	if err != nil {
 		t.Fatalf("wikiWrite: %v", err)
@@ -206,6 +208,41 @@ func TestWikiWrite_MarksSupersededPages(t *testing.T) {
 	}
 	if _, err := store.ReadPage("프로젝트/new-fact/대표.md"); err != nil {
 		t.Fatalf("normalized write target missing: %v", err)
+	}
+}
+
+// TestWikiWrite_DuplicateGuardBlocksCreate: creating a page whose subject an
+// existing page already covers is refused with guidance; force=true overrides.
+func TestWikiWrite_DuplicateGuardBlocksCreate(t *testing.T) {
+	store := newTestWikiStore(t)
+	// Seeded at a path the auto-slug will NOT hit, so the write below is a true
+	// create and the guard must catch the collision by ID/title, not by path.
+	existing := wiki.NewPage("영산고 태양광", "프로젝트", nil)
+	existing.Meta.ID = "yeongsan-solar"
+	existing.Body = "# 영산고 태양광"
+	if err := store.WritePage("프로젝트/영산고-pv/대표.md", existing); err != nil {
+		t.Fatalf("seed page: %v", err)
+	}
+
+	write := func(force bool) string {
+		out, err := wikiWrite(context.Background(), store, nil,
+			"", "영산고 태양광", "yeongsan-solar", "요약", "프로젝트", "본문",
+			nil, nil, nil, 0.5, "entity", "medium", "", force)
+		if err != nil {
+			t.Fatalf("wikiWrite: %v", err)
+		}
+		return out
+	}
+
+	blocked := write(false)
+	if !strings.Contains(blocked, "새 문서를 만들지 않았습니다") ||
+		!strings.Contains(blocked, "프로젝트/영산고-pv/대표.md") {
+		t.Fatalf("expected duplicate guard message naming the existing page, got: %s", blocked)
+	}
+
+	forced := write(true)
+	if !strings.Contains(forced, "위키 페이지 생성") {
+		t.Fatalf("expected forced create to proceed, got: %s", forced)
 	}
 }
 
