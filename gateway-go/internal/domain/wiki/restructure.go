@@ -359,6 +359,11 @@ func mergedBodyFor(target, source *Page) string {
 	return t + "\n\n" + head + "\n\n" + s
 }
 
+// RepSkeletonMarker is stamped into 대표페이지 skeletons minted by the layout
+// migration. The research task treats pages carrying it as backfill targets
+// (batched per cycle until the fleet of empty rep pages is filled in).
+const RepSkeletonMarker = "레이아웃 이관으로 생성 (연구·드림 사이클이 채움)"
+
 // newRepPage mints a minimal 대표페이지 skeleton for a folder-only project; the
 // dream/research cycles fill in the substance.
 func newRepPage(project string) *Page {
@@ -367,7 +372,7 @@ func newRepPage(project string) *Page {
 	page.Meta.Summary = project + " 프로젝트 대표페이지"
 	page.Meta.Importance = 0.5
 	page.Body = "# " + project + "\n\n## 요약\n\n\n## 핵심 사실\n\n\n## 변경 이력\n- " +
-		time.Now().Format("2006-01-02") + ": 레이아웃 이관으로 생성 (드림 사이클이 채움)\n"
+		time.Now().Format("2006-01-02") + ": " + RepSkeletonMarker + "\n"
 	return page
 }
 
