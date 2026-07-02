@@ -270,6 +270,12 @@ fun QuestionInput(
                             onSelectService = onSelectService,
                         )
                     }
+                    if (isLoading && textState.text.isNotBlank()) {
+                        // Queue-send: typing while a reply streams keeps the send
+                        // affordance next to stop — the message queues client-side and
+                        // fires the moment this turn completes (ask() handles the queue).
+                        TrailingIcon(icon = Res.drawable.ic_up, onClick = { submitQuestion() }, contentDescription = "보내기 (대기열)")
+                    }
                     if (isLoading) {
                         TrailingIcon(icon = Res.drawable.ic_stop, onClick = cancel, isPulsing = true, contentDescription = "중지")
                     } else if (textState.text.isNotBlank()) {

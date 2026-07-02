@@ -17,6 +17,8 @@ data class ChatActions(
     val startNewChat: () -> Unit,
     val regenerate: () -> Unit,
     val cancel: () -> Unit,
+    // Drops the messages queued while a reply was streaming (ChatUiState.pendingQuestions).
+    val cancelPendingQuestions: () -> Unit,
     val selectService: (String) -> Unit,
     val loadConversation: (String) -> Unit,
     val deleteConversation: (String) -> Unit,

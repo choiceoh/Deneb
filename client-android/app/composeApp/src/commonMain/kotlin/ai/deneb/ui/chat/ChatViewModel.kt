@@ -65,6 +65,7 @@ class ChatViewModel(
         startNewChat = ::startNewChat,
         regenerate = ::regenerate,
         cancel = ::cancel,
+        cancelPendingQuestions = ::cancelPendingQuestions,
         selectService = ::selectService,
         loadConversation = ::loadConversation,
         deleteConversation = ::deleteConversation,
@@ -244,8 +245,19 @@ class ChatViewModel(
     }
 
     private fun askInternal(question: String?, uiSubmission: UiSubmission?, restoreText: String? = null) {
-        // Prevent concurrent requests
-        if (_state.value.isLoading) return
+        // A typed send while a reply is still streaming QUEUES instead of being
+        // silently dropped: it fires automatically the moment this turn completes
+        // (see drainPendingQuestion). Only the plain typed path queues — retries
+        // (question == null) and UI-card submissions belong to the CURRENT turn's
+        // context and would be wrong to replay after it.
+        if (_state.value.isLoading) {
+            if (question != null && uiSubmission == null) {
+                _state.update {
+                    it.copy(pendingQuestions = (it.pendingQuestions + question).toImmutableList())
+                }
+            }
+            return
+        }
 
         // Capture files before launching coroutine to avoid race with files being cleared
         val files = _state.value.files
@@ -265,20 +277,41 @@ class ChatViewModel(
                 _state.update {
                     it.copy(isLoading = false)
                 }
+                drainPendingQuestion()
             } catch (exception: Exception) {
                 // CancellationException must be re-thrown to properly propagate coroutine cancellation
                 if (exception is CancellationException) throw exception
 
                 _state.update {
+                    // Never auto-send queued messages after a FAILED turn — fold them
+                    // back into the input (with the failed text) so the user decides.
                     it.copy(
                         error = exception.toUiError(),
                         isLoading = false,
-                        failedInput = restoreText,
+                        failedInput = foldIntoInput(restoreText, it.pendingQuestions),
+                        pendingQuestions = persistentListOf(),
                     )
                 }
             }
         }
     }
+
+    // Fires the next queued message once the running turn has completed
+    // successfully. Success-path only: an errored/stopped turn folds the queue
+    // back into the input instead (the user may want to rephrase).
+    private fun drainPendingQuestion() {
+        val next = _state.value.pendingQuestions.firstOrNull() ?: return
+        _state.update { it.copy(pendingQuestions = it.pendingQuestions.drop(1).toImmutableList()) }
+        askInternal(next, null, restoreText = next)
+    }
+
+    private fun cancelPendingQuestions() {
+        _state.update { it.copy(pendingQuestions = persistentListOf()) }
+    }
+
+    // Joins the failed text and any queued messages into one input-restore blob
+    // (blank → null so the restore effect stays quiet).
+    private fun foldIntoInput(restoreText: String?, queued: List<String>): String? = (listOfNotNull(restoreText) + queued).joinToString("\n\n").ifBlank { null }
 
     private fun clearHistory() {
         dataRepository.clearHistory()
@@ -358,7 +391,14 @@ class ChatViewModel(
         // mid-"thinking" leaves no rendered answer, so there's simply nothing to tag.
         val stoppedId = dataRepository.chatHistory.value.lastRenderedAssistant()?.id
         _state.update {
-            it.copy(isLoading = false, stoppedMessageId = stoppedId)
+            // A stop also cancels the auto-send of queued messages (the user pulled
+            // the brake) — fold them back into the input instead of firing them.
+            it.copy(
+                isLoading = false,
+                stoppedMessageId = stoppedId,
+                failedInput = foldIntoInput(null, it.pendingQuestions),
+                pendingQuestions = persistentListOf(),
+            )
         }
     }
 

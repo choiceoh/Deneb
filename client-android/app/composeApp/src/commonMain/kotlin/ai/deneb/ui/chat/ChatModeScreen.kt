@@ -38,6 +38,7 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.draganddrop.dragAndDropTarget
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -46,6 +47,7 @@ import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -89,6 +91,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment.Companion.BottomCenter
 import androidx.compose.ui.Alignment.Companion.CenterEnd
 import androidx.compose.ui.Alignment.Companion.CenterHorizontally
+import androidx.compose.ui.Alignment.Companion.CenterVertically
 import androidx.compose.ui.Alignment.Companion.TopCenter
 import androidx.compose.ui.Alignment.Companion.TopStart
 import androidx.compose.ui.Modifier
@@ -109,6 +112,7 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
@@ -999,6 +1003,36 @@ internal fun ChatModeScreen(
                             contentAlignment = TopCenter,
                         ) {
                             Column(denebContentWidthModifier()) {
+                                // Messages queued while the reply streams (sent with the
+                                // queue-send button): a quiet one-line notice above the
+                                // input — first message previewed, +N for the rest, × drops
+                                // the queue. They fire automatically when the turn completes.
+                                val pending = uiState.pendingQuestions
+                                if (pending.isNotEmpty()) {
+                                    Row(
+                                        Modifier.fillMaxWidth().padding(horizontal = 28.dp, vertical = 2.dp),
+                                        verticalAlignment = CenterVertically,
+                                    ) {
+                                        Text(
+                                            text = "답변 후 전송: " + pending.first() +
+                                                (if (pending.size > 1) "  외 ${pending.size - 1}건" else ""),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.weight(1f),
+                                        )
+                                        Text(
+                                            text = "취소",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier
+                                                .handCursor()
+                                                .clickable(onClick = uiState.actions.cancelPendingQuestions)
+                                                .padding(start = 10.dp, top = 2.dp, bottom = 2.dp),
+                                        )
+                                    }
+                                }
                                 QuestionInput(
                                     files = uiState.files,
                                     addFile = uiState.actions.addFile,
