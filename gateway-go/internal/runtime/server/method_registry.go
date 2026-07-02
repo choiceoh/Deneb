@@ -37,6 +37,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/prompt"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/pilot"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calprop"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
@@ -1093,10 +1094,12 @@ func (s *Server) codeSessions() handlerminiapp.CodeSessions {
 
 // codingTurnEnd is the chat turn-end hook (wired as HandlerConfig.CodingTurnEndFn):
 // for a coding session it checkpoints the worktree edits and verifies build/tests,
-// flipping the rail status. sessionKey is "code:<taskID>"; summary is the turn's
-// user message. Serialized per task because the verify outlives the turn, so
+// flipping the rail status. sessionKey is "code:<taskID>"; fallbackSummary is the
+// turn's trimmed user message and resultText the head of the agent's final report
+// — together they feed the tiny-role checkpoint labeler (fail-open to the
+// fallback). Serialized per task because the verify outlives the turn, so
 // back-to-back turns in one worktree must not run two commits + builds at once.
-func (s *Server) codingTurnEnd(ctx context.Context, sessionKey, summary string) {
+func (s *Server) codingTurnEnd(ctx context.Context, sessionKey, fallbackSummary, resultText string) {
 	mgr, store := s.codingBackends()
 	if mgr == nil || store == nil {
 		return
@@ -1108,11 +1111,61 @@ func (s *Server) codingTurnEnd(ctx context.Context, sessionKey, summary string) 
 	mu := s.codeTaskLock(taskID)
 	mu.Lock()
 	defer mu.Unlock()
-	code.AfterTurn(ctx, mgr, store, taskID, summary, s.logger)
+	code.AfterTurn(ctx, mgr, store, taskID, fallbackSummary, s.checkpointSummarizer(fallbackSummary, resultText), s.logger)
 	// Nudge the rail: the status may have flipped working → passed/failed.
 	if s.broadcaster != nil {
 		s.broadcaster.Broadcast("code.sessions.changed", map[string]any{"sessionKey": sessionKey})
 	}
+}
+
+// checkpointSummarySystem is the tiny-role labeler contract: the checkpoint
+// list is the vibe coder's change history, so the label must say what CHANGED,
+// not repeat the request verbatim.
+const checkpointSummarySystem = "너는 git 체크포인트 라벨러다. 코딩 턴의 요청과 결과 보고를 보고 무엇이 바뀌었는지 한국어 명사구 한 줄(최대 40자)로 요약하라. 따옴표·마침표·불릿·설명 없이 라벨 텍스트만 출력하라."
+
+// checkpointSummarizer returns the lazy tiny-role checkpoint labeler for
+// AfterTurn, or nil when no local AI is wired (tests, degraded boot). Invoked
+// only after AfterTurn's dirty check, so read-only turns never pay the call.
+// 임무→역할: 체크포인트 요약 = tiny (단순 추출 도그마, .claude/rules/model-roles.md).
+func (s *Server) checkpointSummarizer(fallbackSummary, resultText string) func(context.Context) string {
+	if pilot.LocalAIHub() == nil {
+		return nil
+	}
+	return func(ctx context.Context) string {
+		sctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+		defer cancel()
+		input := "요청: " + fallbackSummary
+		if strings.TrimSpace(resultText) != "" {
+			input += "\n결과 보고: " + resultText
+		}
+		out, err := pilot.CallTinyLLM(sctx, checkpointSummarySystem, input, 64)
+		if err != nil {
+			s.logger.Debug("checkpoint tiny summary failed; keeping fallback", "error", err)
+			return ""
+		}
+		return sanitizeCheckpointLabel(out)
+	}
+}
+
+// sanitizeCheckpointLabel normalizes a model-produced checkpoint label to one
+// clean line: first non-empty line, stripped of quote/bullet/backtick wrapping,
+// capped at 60 runes. Returns "" (→ fallback) when nothing usable remains.
+func sanitizeCheckpointLabel(s string) string {
+	for line := range strings.SplitSeq(s, "\n") {
+		line = strings.TrimSpace(line)
+		line = strings.Trim(line, "\"'`“”‘’")
+		line = strings.TrimLeft(line, "-•* ")
+		line = strings.TrimSuffix(line, ".")
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		if r := []rune(line); len(r) > 60 {
+			line = strings.TrimSpace(string(r[:60])) + "…"
+		}
+		return line
+	}
+	return ""
 }
 
 func (s *Server) codeTaskLock(taskID string) *sync.Mutex {

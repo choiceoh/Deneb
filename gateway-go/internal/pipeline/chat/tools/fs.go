@@ -562,6 +562,21 @@ func ToolEdit(defaultDir string) ToolFunc {
 
 		count := strings.Count(content, p.OldString)
 		if count == 0 {
+			// Whitespace-tolerant fallback: a unique line-aligned match that
+			// differs only in indentation is applied directly (with the file's
+			// indentation) instead of bouncing a "not found" back to the model —
+			// the mismatch is almost always tabs-vs-spaces or a copy at the
+			// wrong depth, and the retry round-trip is the single biggest
+			// coding-turn waste. Ambiguous or partial-line cases still fail
+			// with the existing hint so the model can disambiguate.
+			if !p.ReplaceAll {
+				if result, handled, err := editWhitespaceTolerant(path, p.FilePath, content, p.OldString, p.NewString); handled {
+					if err == nil {
+						updateCache()
+					}
+					return result, err
+				}
+			}
 			hint := editFuzzyHint(content, p.OldString)
 			return "", fmt.Errorf("old_string not found in file%s", hint)
 		}
@@ -691,6 +706,126 @@ func editByAnchor(path, displayPath, content, anchor, anchorEnd, newStr string) 
 		return fmt.Sprintf("Edited %s (anchor lines %d-%d)", displayPath, startIdx+1, endIdx+1), nil
 	}
 	return fmt.Sprintf("Edited %s (anchor line %d)", displayPath, startIdx+1), nil
+}
+
+// editWhitespaceTolerant applies old_string→new_string when the file contains
+// exactly one LINE-ALIGNED match that differs from old_string only in
+// per-line leading/trailing whitespace. handled=false → not applicable (no
+// line-aligned near-match; the caller falls through to the not-found error).
+// handled=true with err → applicable but ambiguous (multiple matches), which
+// is reported precisely instead of the generic not-found.
+//
+// Conservative by design: each old_string line must equal a file line after
+// TrimSpace (internal whitespace still matters — it can be semantic inside
+// string literals), a whitespace-only old_string never matches, and
+// new_string is re-indented by the first-line indent delta so the block lands
+// at the file's actual depth, preserving relative indentation.
+func editWhitespaceTolerant(path, displayPath, content, oldStr, newStr string) (result string, handled bool, err error) {
+	oldLines := strings.Split(oldStr, "\n")
+	allBlank := true
+	oldTrimmed := make([]string, len(oldLines))
+	for i, l := range oldLines {
+		oldTrimmed[i] = strings.TrimSpace(l)
+		if oldTrimmed[i] != "" {
+			allBlank = false
+		}
+	}
+	if allBlank {
+		return "", false, nil // whitespace-only target — too dangerous to guess
+	}
+
+	lines := strings.Split(content, "\n")
+	if len(oldLines) > len(lines) {
+		return "", false, nil
+	}
+	var starts []int
+	for i := 0; i+len(oldLines) <= len(lines); i++ {
+		ok := true
+		for j := range oldLines {
+			if strings.TrimSpace(lines[i+j]) != oldTrimmed[j] {
+				ok = false
+				break
+			}
+		}
+		if ok {
+			starts = append(starts, i)
+		}
+	}
+	switch len(starts) {
+	case 0:
+		return "", false, nil
+	case 1:
+		// fall through to apply
+	default:
+		shown := starts
+		if len(shown) > 3 {
+			shown = shown[:3]
+		}
+		lineNos := make([]string, len(shown))
+		for i, s := range shown {
+			lineNos[i] = fmt.Sprintf("%d", s+1)
+		}
+		return "", true, fmt.Errorf("old_string not found exactly, and %d whitespace-tolerant matches exist (lines %s). Add surrounding context or use line= to target one", len(starts), strings.Join(lineNos, ", "))
+	}
+
+	start := starts[0]
+	// Re-indent new_string so the block lands at the file's actual depth AND
+	// style (tabs vs spaces). The matched window gives an exact per-level
+	// translation table — old_string line j's indent maps to the file line's
+	// indent — and new lines almost always reuse indent levels present in the
+	// block they replace. Unseen levels fall back to swapping the base (first
+	// line) indent prefix, which preserves relative depth. Blank lines pass.
+	indentMap := make(map[string]string, len(oldLines))
+	for j := range oldLines {
+		if strings.TrimSpace(oldLines[j]) == "" {
+			continue
+		}
+		indentMap[leadingWhitespace(oldLines[j])] = leadingWhitespace(lines[start+j])
+	}
+	oldIndent := leadingWhitespace(oldLines[0])
+	fileIndent := leadingWhitespace(lines[start])
+	newLines := strings.Split(newStr, "\n")
+	reindented := false
+	for i, l := range newLines {
+		if strings.TrimSpace(l) == "" {
+			continue
+		}
+		ind := leadingWhitespace(l)
+		if mapped, ok := indentMap[ind]; ok {
+			if mapped != ind {
+				newLines[i] = mapped + l[len(ind):]
+				reindented = true
+			}
+			continue
+		}
+		if rest, ok := strings.CutPrefix(l, oldIndent); ok && oldIndent != fileIndent {
+			newLines[i] = fileIndent + rest
+			reindented = true
+		}
+	}
+
+	spliced := make([]string, 0, len(lines)-len(oldLines)+len(newLines))
+	spliced = append(spliced, lines[:start]...)
+	spliced = append(spliced, newLines...)
+	spliced = append(spliced, lines[start+len(oldLines):]...)
+	if err := atomicfile.WriteFile(path, []byte(strings.Join(spliced, "\n")), nil); err != nil {
+		return "", true, fmt.Errorf("failed to write file: %w", err)
+	}
+	note := ""
+	if reindented {
+		note = ", indentation adapted"
+	}
+	return fmt.Sprintf("Edited %s (whitespace-tolerant match at line %d%s)", displayPath, start+1, note), true, nil
+}
+
+// leadingWhitespace returns the run of spaces/tabs at the start of s.
+func leadingWhitespace(s string) string {
+	for i, r := range s {
+		if r != ' ' && r != '\t' {
+			return s[:i]
+		}
+	}
+	return s
 }
 
 // editFuzzyHint provides a hint when old_string is not found.

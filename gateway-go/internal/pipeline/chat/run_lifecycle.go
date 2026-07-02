@@ -319,7 +319,7 @@ func handleRunSuccess(
 
 	// Coding mode: after the turn, snapshot the worktree edits as a checkpoint and
 	// verify build/tests, flipping the rail status.
-	maybeCodingTurnEnd(deps, params, logger)
+	maybeCodingTurnEnd(deps, params, result.Text, logger)
 
 	// Diary recording: append raw conversation turn to today's diary.
 	// Wiki page curation is handled by the main LLM via system prompt.
@@ -530,7 +530,11 @@ func emitJobEvent(deps runDeps, runID, phase string, aborted bool, errMsg string
 // code Manager + session store); the chat package stays free of the domain/code
 // import by talking through this closure. sessionKey is the coding chat session
 // key ("code:<taskID>"); summary is the turn's user message (the checkpoint label).
-type CodingTurnEndFunc func(ctx context.Context, sessionKey, summary string)
+// CodingTurnEndFunc receives the turn's fallback checkpoint label (the trimmed
+// user message) plus the head of the agent's final report text, so the server
+// side can synthesize a better Korean checkpoint label (tiny role) with the
+// fallback as its fail-open floor.
+type CodingTurnEndFunc func(ctx context.Context, sessionKey, fallbackSummary, resultText string)
 
 // maybeCodingTurnEnd fires the coding checkpoint + verify hook after a
 // successful run of a Mode==code session; a no-op for every other session.
@@ -540,7 +544,7 @@ type CodingTurnEndFunc func(ctx context.Context, sessionKey, summary string)
 // miniapp.chat.send is SendSync, so hooking only the async path left the
 // per-turn checkpoint/verify dead on the real 코드모드 surface (rail stuck on
 // "working", empty checkpoint list, nothing for undo to pop).
-func maybeCodingTurnEnd(deps runDeps, params RunParams, logger *slog.Logger) {
+func maybeCodingTurnEnd(deps runDeps, params RunParams, resultText string, logger *slog.Logger) {
 	if deps.codingTurnEndFn == nil || deps.sessions == nil {
 		return
 	}
@@ -557,11 +561,21 @@ func maybeCodingTurnEnd(deps runDeps, params RunParams, logger *slog.Logger) {
 	}
 	sessionKey := params.SessionKey
 	summary := summarizeForCheckpoint(params.Message)
+	resultHead := headRunes(resultText, 600)
 	safego.GoWithSlog(logger, "coding-turn-end", func() {
 		hookCtx, cancel := context.WithTimeout(bgCtx, 6*time.Minute)
 		defer cancel()
-		fn(hookCtx, sessionKey, summary)
+		fn(hookCtx, sessionKey, summary, resultHead)
 	})
+}
+
+// headRunes returns at most n runes of s (rune-safe for Korean text).
+func headRunes(s string, n int) string {
+	r := []rune(strings.TrimSpace(s))
+	if len(r) <= n {
+		return string(r)
+	}
+	return string(r[:n])
 }
 
 // CodingRebindFunc re-establishes a coding session's worktree binding
