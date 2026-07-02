@@ -1,5 +1,18 @@
 # Changelog
 
+## [4.56.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.55.0...deneb-v4.56.0) (2026-07-02)
+
+
+### ✨ Features
+
+* **chat:** 응답 중 전송 대기열 — 답변 끝나면 자동 전송 ([#3026](https://github.com/choiceoh/Deneb/issues/3026)) ([7c06609](https://github.com/choiceoh/Deneb/commit/7c0660972c6efdc4132c1efe33c7d894aebd605c))
+* **wiki:** 프로젝트 문서 스키마 정형화 — 프로젝트당 폴더 + 대표/로그/기자재/메일분석 슬롯 ([#3021](https://github.com/choiceoh/Deneb/issues/3021)) ([ab54b87](https://github.com/choiceoh/Deneb/commit/ab54b87399f11d249e6a5fdd0f78cb889cc09430))
+
+
+### 🐛 Bug Fixes
+
+* **andromeda:** Ctrl+C 복사가 코드 화면 전환으로 둔갑하던 단축키 충돌 수정 ([#3024](https://github.com/choiceoh/Deneb/issues/3024)) ([ce26e7f](https://github.com/choiceoh/Deneb/commit/ce26e7ff90c2256632167a9050461003bba529fc))
+
 ## [4.55.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.54.0...deneb-v4.55.0) (2026-07-02)
 
 
