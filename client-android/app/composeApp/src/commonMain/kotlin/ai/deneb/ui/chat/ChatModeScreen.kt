@@ -429,17 +429,40 @@ internal fun ChatModeScreen(
                                         // capturing it instead lets unchanged messages skip during streaming.
                                         val actions = uiState.actions
 
+                                        // Scroll-on-append guard state: the newest USER message id the effect
+                                        // below has seen. A changed id = the user just sent (or a different
+                                        // session's history installed) → always snap to bottom. An unchanged id
+                                        // = a message arrived on its own (a mirrored work report, an error row)
+                                        // → follow only when already near the bottom, so scrolling up to read
+                                        // older history isn't yanked back down by an unrelated arrival.
+                                        var lastSeenUserMessageId by remember { mutableStateOf<String?>(null) }
+                                        var historyEverInstalled by remember { mutableStateOf(false) }
+
                                         LaunchedEffect(uiState.history.size) {
                                             // Capture history at effect start to prevent race conditions
                                             val history = uiState.history
                                             if (history.isNotEmpty()) {
-                                                // Pin the newest item to the BOTTOM (Int.MAX_VALUE offset), not its
-                                                // top — a fresh send/reply should rest just above the input bar like
-                                                // every chat. Matches the streaming autoscroll and the scroll-to-
-                                                // bottom button; without the offset the list stopped with the last
-                                                // message aligned to the viewport top, leaving a gap below it (the
-                                                // "안 내려오는 느낌").
-                                                listState.scrollToItem(history.lastIndex, Int.MAX_VALUE)
+                                                val lastUserId = history.lastOrNull { it.role == History.Role.USER }?.id
+                                                val ownSendOrInstall = !historyEverInstalled ||
+                                                    (lastUserId != null && lastUserId != lastSeenUserMessageId)
+                                                historyEverInstalled = true
+                                                lastSeenUserMessageId = lastUserId
+                                                // Near-bottom at effect time: layoutInfo can predate the append
+                                                // (totalItemsCount lags a frame), so tolerate the just-added item
+                                                // (-2) plus the same 240px slack the streaming follow uses.
+                                                val info = listState.layoutInfo
+                                                val lastVisible = info.visibleItemsInfo.lastOrNull()
+                                                val nearBottom = lastVisible == null || (
+                                                    lastVisible.index >= info.totalItemsCount - 2 &&
+                                                        lastVisible.offset + lastVisible.size <= info.viewportEndOffset + 240
+                                                    )
+                                                if (ownSendOrInstall || nearBottom) {
+                                                    // Pin the newest item to the BOTTOM (Int.MAX_VALUE offset), not
+                                                    // its top — a fresh send/reply should rest just above the input
+                                                    // bar like every chat. Matches the streaming autoscroll and the
+                                                    // scroll-to-bottom button.
+                                                    listState.scrollToItem(history.lastIndex, Int.MAX_VALUE)
+                                                }
                                                 val lastMessage = history.last()
                                                 if (uiState.isSpeechOutputEnabled && lastMessage.role == History.Role.ASSISTANT) {
                                                     componentScope.launch(getBackgroundDispatcher()) {
