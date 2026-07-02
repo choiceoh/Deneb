@@ -433,7 +433,13 @@ internal fun ChatModeScreen(
                                             // Capture history at effect start to prevent race conditions
                                             val history = uiState.history
                                             if (history.isNotEmpty()) {
-                                                listState.scrollToItem(history.lastIndex)
+                                                // Pin the newest item to the BOTTOM (Int.MAX_VALUE offset), not its
+                                                // top — a fresh send/reply should rest just above the input bar like
+                                                // every chat. Matches the streaming autoscroll and the scroll-to-
+                                                // bottom button; without the offset the list stopped with the last
+                                                // message aligned to the viewport top, leaving a gap below it (the
+                                                // "안 내려오는 느낌").
+                                                listState.scrollToItem(history.lastIndex, Int.MAX_VALUE)
                                                 val lastMessage = history.last()
                                                 if (uiState.isSpeechOutputEnabled && lastMessage.role == History.Role.ASSISTANT) {
                                                     componentScope.launch(getBackgroundDispatcher()) {
