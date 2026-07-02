@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.46](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.45...andromeda-v0.0.46) (2026-07-02)
+
+
+### 🐛 Bug Fixes
+
+* **andromeda:** Ctrl+C 복사가 코드 화면 전환으로 둔갑하던 단축키 충돌 수정 ([#3024](https://github.com/choiceoh/Deneb/issues/3024)) ([ce26e7f](https://github.com/choiceoh/Deneb/commit/ce26e7ff90c2256632167a9050461003bba529fc))
+
 ## [0.0.45](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.44...andromeda-v0.0.45) (2026-07-02)
 
 
