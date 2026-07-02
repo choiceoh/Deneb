@@ -49,12 +49,12 @@ func TestStaticCacheKeyIgnoresSkills(t *testing.T) {
 	tools := []ToolDef{{Name: "read"}, {Name: "exec"}, {Name: "wiki"}}
 	deferred := []DeferredToolInfo{{Name: "mail_archive", Description: "Local mail archive"}}
 
-	keyNoSkills := buildStaticCacheKey(tools, deferred, "", "", false)
+	keyNoSkills := buildStaticCacheKey(tools, deferred, "", "", false, false, "")
 
 	// Same tools + deferred list; the SkillsPrompt is NOT an input to this
 	// function. Calling again must return the identical key regardless of
 	// what skills are active.
-	keyAgain := buildStaticCacheKey(tools, deferred, "", "", false)
+	keyAgain := buildStaticCacheKey(tools, deferred, "", "", false, false, "")
 	if keyNoSkills != keyAgain {
 		t.Fatalf("buildStaticCacheKey not deterministic: %q vs %q", keyNoSkills, keyAgain)
 	}
@@ -134,10 +134,10 @@ func TestStaticCacheKeyVariesByTopic(t *testing.T) {
 	tools := []ToolDef{{Name: "read"}, {Name: "exec"}}
 	deferred := []DeferredToolInfo{{Name: "mail_archive", Description: "Local mail archive"}}
 
-	base := buildStaticCacheKey(tools, deferred, "", "", false)
-	coding := buildStaticCacheKey(tools, deferred, "coding:hashA", "", false)
-	codingEdited := buildStaticCacheKey(tools, deferred, "coding:hashB", "", false)
-	work := buildStaticCacheKey(tools, deferred, "work:hashA", "", false)
+	base := buildStaticCacheKey(tools, deferred, "", "", false, false, "")
+	coding := buildStaticCacheKey(tools, deferred, "coding:hashA", "", false, false, "")
+	codingEdited := buildStaticCacheKey(tools, deferred, "coding:hashB", "", false, false, "")
+	work := buildStaticCacheKey(tools, deferred, "work:hashA", "", false, false, "")
 
 	if coding == base {
 		t.Errorf("topic key must differ from the topic-less key")
@@ -157,7 +157,7 @@ func TestStaticCacheKeyTopicEmptyEqualsLegacy(t *testing.T) {
 	tools := []ToolDef{{Name: "read"}, {Name: "wiki"}}
 	deferred := []DeferredToolInfo{{Name: "mail_archive", Description: "Local mail archive"}}
 
-	withEmpty := buildStaticCacheKey(tools, deferred, "", "", false)
+	withEmpty := buildStaticCacheKey(tools, deferred, "", "", false, false, "")
 	if strings.Contains(withEmpty, "|topic=") {
 		t.Errorf("empty topic must not append a topic suffix: %q", withEmpty)
 	}
@@ -211,7 +211,7 @@ func TestPersonaDefaultByteIdentical(t *testing.T) {
 	if !strings.HasPrefix(staticText, DefaultPersona) {
 		t.Errorf("default 업무 Static block must open with DefaultPersona verbatim (byte-identity); got prefix %q", staticText[:min(len(staticText), 120)])
 	}
-	key := buildStaticCacheKey(tools, nil, "", "", false)
+	key := buildStaticCacheKey(tools, nil, "", "", false, false, "")
 	if strings.Contains(key, "|persona=") {
 		t.Errorf("no override must not append a persona suffix: %q", key)
 	}
@@ -242,7 +242,7 @@ func TestPersonaOverrideInStaticBlock(t *testing.T) {
 	if strings.Contains(semiStaticText, marker) || strings.Contains(dynamicText, marker) {
 		t.Errorf("persona override leaked out of the STATIC block")
 	}
-	key := buildStaticCacheKey(tools, nil, "", personaKey, false)
+	key := buildStaticCacheKey(tools, nil, "", personaKey, false, false, "")
 	if !strings.Contains(key, "|persona="+personaKey) {
 		t.Errorf("override must add its content-hash persona suffix to the cache key: %q", key)
 	}

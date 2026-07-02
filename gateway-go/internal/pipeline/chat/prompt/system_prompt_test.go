@@ -93,13 +93,85 @@ func TestBuildSystemPromptChatbot(t *testing.T) {
 
 	// Static cache key: 업무 (false) byte-identical to the pre-flag key (no
 	// "chatbot" marker), 챗봇 (true) distinct so the two never share a cache slot.
-	keyWork := buildStaticCacheKey(tools, nil, "", "", false)
-	keyChat := buildStaticCacheKey(tools, nil, "", "", true)
+	keyWork := buildStaticCacheKey(tools, nil, "", "", false, false, "")
+	keyChat := buildStaticCacheKey(tools, nil, "", "", true, false, "")
 	if strings.Contains(keyWork, "chatbot") {
 		t.Errorf("업무 static cache key must be unchanged, got %q", keyWork)
 	}
 	if !strings.Contains(keyChat, "|chatbot") || keyChat == keyWork {
 		t.Errorf("챗봇 static cache key must be distinct, got %q vs %q", keyChat, keyWork)
+	}
+}
+
+func TestBuildSystemPromptCoding(t *testing.T) {
+	tools := []ToolDef{{Name: "read"}, {Name: "write"}, {Name: "exec"}, {Name: "web"}}
+
+	// 코드모드: implementer contract replaces the Nev persona; 업무 work-loop
+	// coaching, skills, and the polaris section (tool absent from the coding
+	// preset) are all gone; the repo's root rule docs are injected.
+	coding := BuildSystemPrompt(SystemPromptParams{
+		ToolDefs:           tools,
+		Coding:             true,
+		CodingRepoContext:  "### CLAUDE.md\n\n커밋은 Conventional Commit 형식.",
+		CodingRepoCacheKey: "abc123def456",
+		WorkspaceDir:       "/data/code/acme/api/wt/task-1",
+	})
+	for _, gone := range []string{
+		"You are Nev", "비서실장",
+		"## 분석 → 위키 갱신", "## 작업 기억", "## 위키 — 너의 외부 메모리",
+		"## 스킬", "## 회상 (polaris)", "## 현재 모드: 코딩",
+	} {
+		if strings.Contains(coding, gone) {
+			t.Errorf("coding prompt must not contain 업무 framing: %q", gone)
+		}
+	}
+	for _, want := range []string{
+		"코드모드 구현자",
+		"## 작업 방식", "## 보고 형식 (매 턴)", "## 워크트리 라이프사이클",
+		"## 프로젝트 규칙 (저장소 루트 CLAUDE.md/AGENTS.md)",
+		"커밋은 Conventional Commit 형식.",
+		"## Tooling", "## 소통",
+		"/data/code/acme/api/wt/task-1",
+	} {
+		if !strings.Contains(coding, want) {
+			t.Errorf("coding prompt missing %q", want)
+		}
+	}
+
+	// Doc-less repo: the fallback 프로젝트 규칙 coaching renders instead.
+	bare := BuildSystemPrompt(SystemPromptParams{ToolDefs: tools, Coding: true})
+	if !strings.Contains(bare, "CLAUDE.md/AGENTS.md를 찾지 못했다") {
+		t.Error("doc-less coding prompt missing on-demand read coaching")
+	}
+
+	// Static cache keys: 업무 unchanged (no coding marker), coding distinct,
+	// and the repo hash splits coding entries per repo/doc version.
+	keyWork := buildStaticCacheKey(tools, nil, "", "", false, false, "")
+	keyCoding := buildStaticCacheKey(tools, nil, "", "", false, true, "")
+	keyRepoA := buildStaticCacheKey(tools, nil, "", "", false, true, "hashA")
+	keyRepoB := buildStaticCacheKey(tools, nil, "", "", false, true, "hashB")
+	if strings.Contains(keyWork, "coding") {
+		t.Errorf("업무 static cache key must be unchanged, got %q", keyWork)
+	}
+	if !strings.Contains(keyCoding, "|coding") || keyCoding == keyWork {
+		t.Errorf("coding static cache key must be distinct, got %q vs %q", keyCoding, keyWork)
+	}
+	if keyRepoA == keyRepoB || keyRepoA == keyCoding {
+		t.Errorf("repo hash must split coding cache entries: %q / %q / %q", keyCoding, keyRepoA, keyRepoB)
+	}
+}
+
+// TestBuildSystemPromptPolarisGating pins the tool-conditional 회상 coaching:
+// coaching a model to call polaris when the preset withholds the tool produces
+// failed tool-call loops, so the section renders only when the tool is present.
+func TestBuildSystemPromptPolarisGating(t *testing.T) {
+	with := BuildSystemPrompt(SystemPromptParams{ToolDefs: []ToolDef{{Name: "read"}, {Name: "polaris"}}})
+	if !strings.Contains(with, "## 회상 (polaris)") {
+		t.Error("polaris-carrying prompt missing 회상 section")
+	}
+	without := BuildSystemPrompt(SystemPromptParams{ToolDefs: []ToolDef{{Name: "read"}}})
+	if strings.Contains(without, "## 회상 (polaris)") {
+		t.Error("polaris-less prompt must not coach the polaris tool")
 	}
 }
 

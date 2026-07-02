@@ -74,6 +74,16 @@ func resolveModel(
 			initialRole = modelrole.RoleChatbot
 		}
 	}
+	// 코드모드 (code: session key) mirrors the 챗봇 block: when the operator
+	// assigned a coding model (agents.codingModel → RoleCoding — the same role
+	// spawned implementer sub-agents use), coding turns route to it. Opt-in:
+	// unconfigured deployments fall through to the main model unchanged.
+	if model == "" && deps.registry != nil && isCodingSessionKey(params.SessionKey) {
+		if cm := deps.registry.FullModelID(modelrole.RoleCoding); cm != "" {
+			model = cm
+			initialRole = modelrole.RoleCoding
+		}
+	}
 	if model == "" {
 		model = deps.callbacks.defaultModel
 	}

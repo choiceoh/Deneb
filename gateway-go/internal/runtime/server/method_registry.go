@@ -1121,6 +1121,31 @@ func (s *Server) codeTaskLock(taskID string) *sync.Mutex {
 	return mu
 }
 
+// rebindCodingSession re-establishes the chat-session ↔ worktree binding for a
+// coding turn (wired as HandlerConfig.CodingRebindFn; called at the start of
+// every code: turn). The session manager is in-memory only — terminal direct
+// sessions are GC'd after 1h and everything is lost on restart — while the
+// code store on disk is the durable truth, so the binding is derived from it
+// on demand. ConfigureCoding is idempotent (no event when unchanged), so the
+// common already-bound turn costs one store read + one map lookup. A missing
+// or worktree-less record (discarded, reconciled missing) leaves the session
+// untouched; the turn then runs unbound, same as before this hook existed.
+func (s *Server) rebindCodingSession(sessionKey string) {
+	_, store := s.codingBackends()
+	if store == nil || s.sessions == nil {
+		return
+	}
+	taskID := strings.TrimPrefix(sessionKey, "code:")
+	if taskID == "" || taskID == sessionKey {
+		return // not a coding-session key
+	}
+	sess, ok := store.Get(taskID)
+	if !ok || sess.Dir == "" || sess.Status == code.StatusMissing {
+		return
+	}
+	s.sessions.ConfigureCoding(sessionKey, sess.Dir)
+}
+
 // resolveCalendarProposals returns the process-wide calendar-proposal store
 // (the bell), or a nil interface when its file can't be read. Mirrors
 // resolveLocalCalendar. The store lives at {stateDir}/calendar_proposals.json.

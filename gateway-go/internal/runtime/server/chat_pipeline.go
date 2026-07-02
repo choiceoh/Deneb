@@ -274,10 +274,14 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 	}
 
 	// Coding mode: after a coding-session turn, checkpoint the worktree edits and
-	// verify build/tests (method_registry.go codingTurnEnd). nil when coding mode
-	// is disabled (no denebDir / store) → the chat hook is simply never armed.
+	// verify build/tests (method_registry.go codingTurnEnd); before each coding
+	// turn, lazily rebind the session to its worktree from the durable code store
+	// (rebindCodingSession — the in-memory binding does not survive session GC or
+	// restarts). nil when coding mode is disabled (no denebDir / store) → the
+	// chat hooks are simply never armed.
 	if mgr, store := s.codingBackends(); mgr != nil && store != nil {
 		chatCfg.CodingTurnEndFn = s.codingTurnEnd
+		chatCfg.CodingRebindFn = s.rebindCodingSession
 	}
 
 	// Polaris: retrieval tools for compressed conversation history.
