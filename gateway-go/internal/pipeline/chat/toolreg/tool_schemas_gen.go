@@ -904,7 +904,7 @@ func wikiToolSchema() map[string]any {
 		"properties": map[string]any{
 			"action": map[string]any{
 				"type":        "string",
-				"description": "Action: search (ripgrep full-text search), read (read wiki page), index (read master/category index), write (create/update page), log (append diary entry), daily (read recent diary), status (wiki stats)",
+				"description": "Action: search (ripgrep full-text search), read (read wiki page(s) — one via query, several at once via paths), index (read master/category index), write (create/update page), log (append diary entry), daily (read recent diary), status (wiki stats)",
 				"enum":        []string{"search", "read", "index", "write", "log", "daily", "status"},
 			},
 			"category": map[string]any{
@@ -941,9 +941,16 @@ func wikiToolSchema() map[string]any {
 				"minimum":     1,
 				"maximum":     50,
 			},
+			"paths": map[string]any{
+				"type":        "array",
+				"description": "Read several wiki pages in ONE call (read action) — after a search, pass every relevant page path here instead of calling read once per page. Same forms as query (path or w: ref); up to 8 pages per call.",
+				"items": map[string]any{
+					"type": "string",
+				},
+			},
 			"query": map[string]any{
 				"type":        "string",
-				"description": "Search query (search), page path (read/write), category name (index), or diary entry body (log)",
+				"description": "Search query (search), page path (read/write — to read SEVERAL pages use paths instead), category name (index), or diary entry body (log)",
 			},
 			"related": map[string]any{
 				"type":        "array",
