@@ -229,9 +229,11 @@ func wikiWrite(ctx context.Context, store *wiki.Store, contactsStore *contacts.S
 		return fmt.Sprintf("잘못된 카테고리: %s. 사용 가능: %s", category, strings.Join(wiki.Categories, ", ")), nil
 	}
 
-	// Auto-generate path if not provided.
+	// Auto-generate path if not provided. Slashes in the title ("6/25 회의")
+	// must not become directories — they'd mint phantom nested folders.
 	if path == "" {
-		slug := strings.ReplaceAll(strings.ToLower(title), " ", "-")
+		slug := strings.ToLower(title)
+		slug = strings.NewReplacer(" ", "-", "/", "-", "\\", "-").Replace(slug)
 		path = category + "/" + slug + ".md"
 	}
 	if !strings.HasSuffix(path, ".md") {

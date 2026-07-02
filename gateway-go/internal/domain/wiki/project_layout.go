@@ -151,21 +151,41 @@ func IsProjectRawDataPath(relPath string) bool {
 	return seg[1] == MailAnalysisDir || seg[1] == legacyMailAnalysisDir
 }
 
-// NormalizeProjectPagePath rewrites a flat project page path onto the in-folder
-// 대표페이지 slot: "프로젝트/<name>.md" → "프로젝트/<name>/대표.md". Every other path
-// (nested paths, reserved buckets, other categories) is returned unchanged. This
-// keeps the post-migration invariant — no flat pages under 프로젝트/ — for new
-// writes from the dreamer and the wiki tool.
+// NormalizeProjectPagePath enforces the project layout's path shape on a write:
+//
+//   - a flat "프로젝트/<name>.md" routes onto the 대표페이지 slot
+//     ("프로젝트/<name>/대표.md") — no flat pages after the migration;
+//   - segments deeper than the schema allows fold into the filename. LLM writers
+//     emit titles with dates like "재구매 — 6/25 회의", whose slashes would mint
+//     phantom nested project folders (a real 2026-07-02 incident: the dreamer
+//     created 프로젝트/…-6/25-…/06-….md). The schema bounds depth — 프로젝트/<name>/
+//     <file> or 프로젝트/<name>/<기자재|메일분석>/<file> — so anything deeper is a
+//     malformed filename, not an intended hierarchy.
+//
+// Reserved buckets (거래/, 메일분석/, legacy mail-analyses/) and other categories
+// are returned unchanged.
 func NormalizeProjectPagePath(relPath string) string {
 	name, ok := ProjectNameOf(relPath)
 	if !ok {
 		return relPath
 	}
 	seg := splitProjectPath(relPath)
-	if len(seg) != 1 { // already in a folder
+	switch {
+	case len(seg) == 1: // legacy flat 대표페이지 form
+		return RepPagePath(name)
+	case len(seg) == 2: // 프로젝트/<name>/<file>.md — canonical detail/slot
 		return relPath
+	case seg[1] == EquipmentDir || seg[1] == MailAnalysisDir || seg[1] == legacyMailAnalysisDir:
+		if len(seg) == 3 { // canonical slot file
+			return relPath
+		}
+		// Overdeep under a slot dir: fold the tail into one filename.
+		return projectCategoryPrefix + "/" + name + "/" + seg[1] + "/" + strings.Join(seg[2:], "-")
+	default:
+		// Overdeep under the project folder: the "sub-folders" are slash debris
+		// from a title — fold everything after the project into one filename.
+		return projectCategoryPrefix + "/" + name + "/" + strings.Join(seg[1:], "-")
 	}
-	return RepPagePath(name)
 }
 
 // IsMailAnalysisPath reports whether relPath sits in any mail-analysis bucket

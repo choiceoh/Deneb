@@ -51,7 +51,8 @@ func TestProjectNameOf(t *testing.T) {
 	}
 }
 
-// TestNormalizeProjectPagePath: flat project pages route onto the 대표.md slot;
+// TestNormalizeProjectPagePath: flat project pages route onto the 대표.md slot,
+// overdeep paths (title-slash debris) fold into a single filename, and
 // everything else is untouched.
 func TestNormalizeProjectPagePath(t *testing.T) {
 	cases := map[string]string{
@@ -63,6 +64,13 @@ func TestNormalizeProjectPagePath(t *testing.T) {
 		"프로젝트/메일분석/abc.md":  "프로젝트/메일분석/abc.md",
 		"업무/태양광.md":         "업무/태양광.md",
 		"인물/김민준.md":         "인물/김민준.md",
+		// Canonical slot files stay put; deeper slot paths fold.
+		"프로젝트/영산고/메일분석/19e8.md": "프로젝트/영산고/메일분석/19e8.md",
+		"프로젝트/영산고/기자재/케이블.md":   "프로젝트/영산고/기자재/케이블.md",
+		"프로젝트/영산고/메일분석/x/y.md":  "프로젝트/영산고/메일분석/x-y.md",
+		"프로젝트/영산고/사건/세부/더세부.md": "프로젝트/영산고/사건-세부-더세부.md",
+		// The real 2026-07-02 incident shape: a dreamer title with date slashes.
+		"프로젝트/lg전자-재구매-—-6/25-회의-완료,-7/06-최종-결정-대기.md": "프로젝트/lg전자-재구매-—-6/25-회의-완료,-7-06-최종-결정-대기.md",
 	}
 	for in, want := range cases {
 		if got := NormalizeProjectPagePath(in); got != want {
