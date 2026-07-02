@@ -9,6 +9,13 @@ let writeParams: Record<string, unknown> | null;
 let createParams: Record<string, unknown> | null;
 let moveParams: Record<string, unknown> | null;
 
+// Nested wiki paths exercising the folder tree (project slots + a mail bucket).
+const treePages = [
+  { path: "프로젝트/영산고/대표.md", title: "영산고" },
+  { path: "프로젝트/영산고/로그.md", title: "영산고 진행 로그" },
+  { path: "프로젝트/영산고/메일분석/19e8717314b5c914.md", title: "RE: 견적" },
+];
+
 beforeEach(() => {
   localStorage.clear();
   writeParams = null;
@@ -29,12 +36,14 @@ beforeEach(() => {
       switch (method) {
         case "miniapp.memory.categories":
           return reply({ categories: fx.wikiCategories, totalPages: fx.pages.length });
-        case "miniapp.memory.list_in_category":
-          return reply({
-            category: params.category,
-            pages: fx.pages.filter((p) => String(p.path ?? "").startsWith(`${params.category}/`)),
-            total: 1,
-          });
+        case "miniapp.memory.list_in_category": {
+          // No category = the whole corpus — what the folder tree fetches.
+          const all = [...fx.pages, ...treePages];
+          const rows = params.category
+            ? all.filter((p) => String(p.path ?? "").startsWith(`${params.category}/`))
+            : all;
+          return reply({ category: params.category ?? "", pages: rows, total: rows.length });
+        }
         case "miniapp.memory.diary_recent":
           return reply({ entries: fx.diaryEntries });
         case "miniapp.memory.search":
@@ -97,14 +106,44 @@ describe("WikiPane", () => {
     expect(createParams).not.toHaveProperty("path");
   });
 
-  it("opens on category browse and can switch to recent diary", async () => {
+  it("browses the folder tree: expand, drill into project slots, open a page", async () => {
     renderWithProviders(<WikiPane />, { connected: true });
 
-    await userEvent.click(await screen.findByRole("button", { name: /projects/ }));
-    expect(await screen.findByRole("button", { name: /Andromeda 설계 노트/ })).toBeInTheDocument();
+    // Root shows top-level folders with recursive counts; children stay hidden.
+    const projectFolder = await screen.findByRole("button", { name: /프로젝트\s*3/ });
+    expect(screen.queryByRole("button", { name: /영산고\s*3/ })).not.toBeInTheDocument();
+
+    // Expand 프로젝트 → the 영산고 project folder appears.
+    await userEvent.click(projectFolder);
+    const yeongsan = await screen.findByRole("button", { name: /영산고\s*3/ });
+
+    // Expand the project → fixed slots (대표/로그) + the 메일분석 bucket.
+    await userEvent.click(yeongsan);
+    expect(await screen.findByRole("button", { name: "대표" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "로그" })).toBeInTheDocument();
+    const mailBucket = screen.getByRole("button", { name: /메일분석\s*1/ });
+
+    // Mail bucket expands to the per-mail page, labeled by its title.
+    await userEvent.click(mailBucket);
+    expect(await screen.findByRole("button", { name: "RE: 견적" })).toBeInTheDocument();
+
+    // Opening a slot file loads it into the editor (path in the heading).
+    await userEvent.click(screen.getByRole("button", { name: "대표" }));
+    expect(await screen.findByRole("heading", { name: "프로젝트/영산고/대표.md" })).toBeInTheDocument();
+
+    // Collapse 프로젝트 → the whole subtree folds away.
+    await userEvent.click(screen.getByRole("button", { name: /프로젝트\s*3/ }));
+    expect(screen.queryByRole("button", { name: "대표" })).not.toBeInTheDocument();
+  });
+
+  it("switches to recent diary and back to the tree", async () => {
+    renderWithProviders(<WikiPane />, { connected: true });
 
     await userEvent.click(screen.getByRole("button", { name: "최근 일지" }));
     expect(await screen.findByRole("button", { name: /2026-06-17/ })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "트리로" }));
+    expect(await screen.findByRole("button", { name: /프로젝트\s*3/ })).toBeInTheDocument();
   });
 
   it("moves the selected page by clicking a destination category", async () => {

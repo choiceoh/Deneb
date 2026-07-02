@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { clearCachedResource } from "@/cachedList";
 import { MEMORY_RPC } from "@/resources";
 import type { WikiCategory, WikiDiaryEntry, WikiPage } from "@/types";
@@ -8,8 +8,13 @@ import { useRegisterPane, useWorkspace } from "@/workspaceContext";
 import { Field, Modal, ModalFooter } from "@/components/Modal";
 import { MarkdownEditor } from "@/components/MarkdownEditor";
 import { DeleteModal, OneFieldModal } from "./commonModals";
+import { ancestorsOf, buildWikiTree, fileLabel, type WikiTreeFolder } from "./wikiTree";
 
-type BrowseMode = "categories" | "search" | "diary";
+type BrowseMode = "tree" | "search" | "diary";
+
+// One list call covers the whole wiki (~450 pages today); the gateway caps at
+// maxMemoryListLimit. `total` in the response tells us when the cap truncated.
+const TREE_FETCH_LIMIT = 2000;
 
 interface NewPageDraft {
   title: string;
@@ -24,12 +29,13 @@ export function WikiPane() {
   const { connected, cfg, wikiTarget, consumeWikiTarget } = useWorkspace();
   const { call, callCached, readCache, writeCache, status, setStatus } = useCachedRpc(cfg, WIKI_RESOURCE);
   const [categoriesSnapshot] = useState(() => readCache<WikiCategoriesResponse>(MEMORY_RPC.categories));
-  const [mode, setMode] = useState<BrowseMode>("categories");
+  const [mode, setMode] = useState<BrowseMode>("tree");
   const [q, setQ] = useState("");
   const [pages, setPages] = useState<WikiPage[]>([]);
   const [categories, setCategories] = useState<WikiCategory[]>(categoriesSnapshot?.data.categories ?? []);
-  const [browseCat, setBrowseCat] = useState<string | null>(null);
-  const [catPages, setCatPages] = useState<WikiPage[]>([]);
+  const [tree, setTree] = useState<WikiTreeFolder | null>(null);
+  const [treeTotal, setTreeTotal] = useState(0);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [diary, setDiary] = useState<WikiDiaryEntry[]>([]);
   const [path, setPath] = useState<string | null>(null);
   const [content, setContent] = useState("");
@@ -46,9 +52,20 @@ export function WikiPane() {
 
   useEffect(() => {
     if (!connected) return;
-    void loadCategories();
+    void loadCategories(); // move-modal destinations
+    void loadTree();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connected, cfg.url, cfg.token]);
+
+  // Opening a page reveals it in the tree: expand every ancestor folder.
+  useEffect(() => {
+    if (!path) return;
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      for (const dir of ancestorsOf(path)) next.add(dir);
+      return next;
+    });
+  }, [path]);
 
   // 인물 카드 / 검색 결과에서 넘어온 위키 경로를 열고 채널을 비운다.
   useEffect(() => {
@@ -69,11 +86,28 @@ export function WikiPane() {
     );
   }
 
+  // The whole wiki in one call, folded into the folder tree the store keeps
+  // on disk (프로젝트/<이름>/{대표, 로그, 기자재, 메일분석…}).
+  async function loadTree() {
+    await callCached<WikiCategoryPagesResponse>(
+      MEMORY_RPC.listInCategory,
+      { limit: TREE_FETCH_LIMIT },
+      {
+        scope: "wiki:tree",
+        apply: (data) => {
+          const rows = data?.pages ?? [];
+          setTree(buildWikiTree(rows));
+          setTreeTotal(data?.total ?? rows.length);
+        },
+      },
+    );
+  }
+
   async function search() {
     if (!connected) return;
     const query = q.trim();
     if (!query) {
-      showCategories();
+      showTree();
       return;
     }
     await callCached<WikiSearchResponse>(
@@ -91,37 +125,27 @@ export function WikiPane() {
     const list = Array.isArray(data) ? data : (data?.results ?? data?.pages ?? []);
     setPages(list);
     setMode("search");
-    setBrowseCat(null);
     setStatus(list.length ? "" : "검색 결과 없음");
   }
 
-  function showCategories() {
-    setMode("categories");
-    setBrowseCat(null);
+  function showTree() {
+    setMode("tree");
     setPages([]);
     setQ("");
     setStatus("");
   }
 
-  async function openCategory(name: string) {
-    setBrowseCat(name);
-    setMode("categories");
-    setCatPages([]);
-    const r = await callCached<WikiCategoryPagesResponse>(
-      MEMORY_RPC.listInCategory,
-      { category: name, limit: 200 },
-      {
-        pending: "불러오는 중...",
-        scope: "wiki:browse",
-        apply: (data) => setCatPages(data?.pages ?? []),
-      },
-    );
-    if (r.ok && r.applied) setStatus("");
+  function toggleFolder(folderPath: string) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(folderPath)) next.delete(folderPath);
+      else next.add(folderPath);
+      return next;
+    });
   }
 
   async function loadDiary() {
     setMode("diary");
-    setBrowseCat(null);
     setDiary([]);
     const r = await callCached<WikiDiaryResponse>(
       MEMORY_RPC.diaryRecent,
@@ -216,6 +240,7 @@ export function WikiPane() {
     setCreating(false);
     clearCachedResource(WIKI_RESOURCE);
     await loadCategories();
+    await loadTree();
     const newPath = r.data?.path ?? `${category}/${title}`;
     await openPath(newPath);
     setPreview(false); // a freshly created page opens in edit — you just made it to write
@@ -232,6 +257,7 @@ export function WikiPane() {
     const nextPath = r.data?.to ?? dst;
     setPath(nextPath);
     await loadCategories();
+    await loadTree();
     await openPath(nextPath);
     setStatus("이동됨");
   }
@@ -261,9 +287,9 @@ export function WikiPane() {
     setPath(null);
     setContent("");
     setSavedContent("");
-    setCatPages((rows) => rows.filter((p) => keyOf(p) !== current));
     setPages((rows) => rows.filter((p) => keyOf(p) !== current));
     await loadCategories();
+    await loadTree();
     setStatus("삭제됨");
   }
 
@@ -279,6 +305,49 @@ export function WikiPane() {
       <span>{p.title ?? p.path ?? "(제목 없음)"}</span>
     </button>
   );
+
+  // The tree renders the wiki's real on-disk hierarchy: folders toggle open,
+  // files open in the editor. Slot files (대표/로그) lead each project folder.
+  const renderTree = (folder: WikiTreeFolder, depth: number): ReactNode[] => {
+    const rows: ReactNode[] = [];
+    for (const sub of folder.folders) {
+      const open = expanded.has(sub.path);
+      rows.push(
+        <button
+          key={sub.path}
+          className="wiki-tree-row"
+          style={{ paddingLeft: 8 + depth * 14 }}
+          onClick={() => toggleFolder(sub.path)}
+          aria-expanded={open}
+        >
+          <span className="wiki-tree-caret" aria-hidden>
+            {open ? "▾" : "▸"}
+          </span>
+          <span>{sub.name}</span>
+          <small>{sub.count}</small>
+        </button>,
+      );
+      if (open) rows.push(...renderTree(sub, depth + 1));
+    }
+    for (const file of folder.files) {
+      const label = fileLabel(file);
+      rows.push(
+        <button
+          key={file.path}
+          className="wiki-tree-row wiki-tree-file"
+          style={{
+            paddingLeft: 8 + depth * 14 + 16,
+            background: file.path === path ? color.active : undefined,
+          }}
+          title={file.title && file.title !== label ? file.title : undefined}
+          onClick={() => requestOpenPath(file.path)}
+        >
+          <span>{label}</span>
+        </button>,
+      );
+    }
+    return rows;
+  };
 
   return (
     <>
@@ -322,15 +391,15 @@ export function WikiPane() {
               <p style={muted}>게이트웨이에 연결하세요.</p>
             ) : mode === "search" ? (
               <>
-                <button className="row-btn" onClick={showCategories} style={{ marginBottom: 6, padding: "3px 6px" }}>
-                  목록으로
+                <button className="row-btn" onClick={showTree} style={{ marginBottom: 6, padding: "3px 6px" }}>
+                  트리로
                 </button>
                 {pages.length === 0 ? <p style={muted}>검색 결과 없음</p> : pages.map(renderPage)}
               </>
             ) : mode === "diary" ? (
               <>
-                <button className="row-btn" onClick={showCategories} style={{ marginBottom: 6, padding: "3px 6px" }}>
-                  카테고리
+                <button className="row-btn" onClick={showTree} style={{ marginBottom: 6, padding: "3px 6px" }}>
+                  트리로
                 </button>
                 {diary.length === 0 ? (
                   <p style={muted}>최근 일지 없음</p>
@@ -347,32 +416,17 @@ export function WikiPane() {
                   ))
                 )}
               </>
-            ) : browseCat ? (
-              <>
-                <button
-                  className="row-btn"
-                  onClick={() => setBrowseCat(null)}
-                  style={{ marginBottom: 4, padding: "3px 6px" }}
-                >
-                  카테고리
-                </button>
-                <div className="micro" style={{ margin: "0 0 6px 2px" }}>
-                  {browseCat}
-                </div>
-                {catPages.length === 0 ? <p style={muted}>페이지가 없습니다.</p> : catPages.map(renderPage)}
-              </>
-            ) : categories.length === 0 ? (
+            ) : !tree || tree.count === 0 ? (
               <p style={muted}>위키 페이지가 없습니다.</p>
             ) : (
-              categories.map((c) => {
-                const name = categoryName(c);
-                return (
-                  <button key={name} onClick={() => void openCategory(name)} className="wiki-category-row">
-                    <span>{name}</span>
-                    {categoryCount(c) != null && <small>{categoryCount(c)}</small>}
-                  </button>
-                );
-              })
+              <>
+                {renderTree(tree, 0)}
+                {treeTotal > tree.count && (
+                  <p className="micro" style={{ margin: "6px 2px 0" }}>
+                    전체 {treeTotal}건 중 {tree.count}건 표시
+                  </p>
+                )}
+              </>
             )}
           </div>
           <div className="wiki-editor">
@@ -485,6 +539,7 @@ type WikiSearchResponse = WikiPage[] | { results?: WikiPage[]; pages?: WikiPage[
 
 interface WikiCategoryPagesResponse {
   pages?: WikiPage[];
+  total?: number; // full corpus size — larger than pages.length when the server cap truncated
 }
 
 interface WikiDiaryResponse {
@@ -499,10 +554,6 @@ function keyOf(p: WikiPage): string {
 
 function categoryName(c: WikiCategory): string {
   return c.name ?? c.category ?? "(root)";
-}
-
-function categoryCount(c: WikiCategory): number | undefined {
-  return c.pageCount ?? c.count ?? c.pages;
 }
 
 // Split a page path into its directory and filename so each is editable on its own.
