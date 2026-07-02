@@ -100,6 +100,11 @@ data class ChatUiState(
     // updated in the wiki"); shown as a snackbar on the feed, then cleared.
     val feedbackResultText: String? = null,
     val pendingConversationDeletion: String? = null,
+    // Messages typed while a reply was still streaming: queued client-side (FIFO)
+    // and auto-sent the moment the running turn completes SUCCESSFULLY. An errored
+    // or stopped turn never auto-sends — the queue folds back into failedInput so
+    // the user can rephrase in light of what happened.
+    val pendingQuestions: ImmutableList<String> = persistentListOf(),
     val fallbackStatus: FallbackStatus? = null,
     val isRestoring: Boolean = true,
     // The user-typed message whose send failed, surfaced back into the input so a
