@@ -1,6 +1,7 @@
 package rpc
 
 import (
+	"context"
 	"runtime"
 	"sync/atomic"
 )
@@ -46,8 +47,27 @@ func defaultPoolSize() int {
 // Submit queues a task for execution. It blocks if all workers are busy,
 // providing natural back-pressure to callers.
 func (wp *WorkerPool) Submit(task func()) {
+	_ = wp.SubmitContext(context.Background(), task)
+}
+
+// SubmitContext queues a task for execution, but aborts if the caller's
+// context is canceled before a worker slot becomes available.
+func (wp *WorkerPool) SubmitContext(ctx context.Context, task func()) bool {
 	wp.queued.Add(1)
-	wp.sem <- struct{}{} // blocks when pool is full
+	acquired := false
+	defer func() {
+		if !acquired {
+			wp.queued.Add(-1)
+		}
+	}()
+
+	select {
+	case wp.sem <- struct{}{}:
+		acquired = true
+	case <-ctx.Done():
+		return false
+	}
+
 	wp.queued.Add(-1)
 	wp.active.Add(1)
 
@@ -59,6 +79,7 @@ func (wp *WorkerPool) Submit(task func()) {
 		}()
 		task()
 	}()
+	return true
 }
 
 // Stats returns a snapshot of pool utilization.

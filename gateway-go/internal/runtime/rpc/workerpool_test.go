@@ -1,6 +1,7 @@
 package rpc
 
 import (
+	"context"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -78,5 +79,38 @@ func TestWorkerPoolStats(t *testing.T) {
 	}
 	if stats.Active != 0 {
 		t.Errorf("got %d, want 0 active after completion", stats.Active)
+	}
+}
+
+func TestWorkerPoolSubmitContextCanceledBeforeAcquire(t *testing.T) {
+	pool := NewWorkerPool(1)
+	block := make(chan struct{})
+	released := make(chan struct{})
+
+	pool.Submit(func() {
+		defer close(released)
+		<-block
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	if ok := pool.SubmitContext(ctx, func() {}); ok {
+		t.Fatal("SubmitContext returned true for a canceled context")
+	}
+
+	stats := pool.Stats()
+	if stats.Active != 1 {
+		t.Fatalf("got %d active workers, want 1 blocked worker", stats.Active)
+	}
+	if stats.Queued != 0 {
+		t.Fatalf("got %d queued workers, want 0 after canceled submit", stats.Queued)
+	}
+
+	close(block)
+	select {
+	case <-released:
+	case <-time.After(time.Second):
+		t.Fatal("blocked worker did not exit")
 	}
 }
