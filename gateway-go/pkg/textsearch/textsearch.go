@@ -78,7 +78,9 @@ func (idx *Index) UpsertFields(id string, fields ...Field) {
 	for i, f := range fields {
 		texts[i] = f.Text
 		w := f.Weight
-		if w <= 0 {
+		// NaN/Inf must not reach scoring: a NaN score breaks sort.Slice's strict
+		// ordering (NaN comparisons are all false) and Inf swamps every rank.
+		if w <= 0 || math.IsNaN(w) || math.IsInf(w, 0) {
 			w = 1
 		}
 		if w != 1 {

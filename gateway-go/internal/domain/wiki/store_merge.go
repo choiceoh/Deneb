@@ -219,12 +219,16 @@ func (s *Store) repointReference(relPath, oldRef, newRef string) bool {
 }
 
 // mergeFrontmatterInto folds src's frontmatter into dst while keeping dst's
-// identity. Tags become a union; importance takes the max; due/created take the
-// earlier date (a merged entity's history starts at the earliest); summary
-// fills in from src only when dst's is empty. Title, Category, Type,
-// Confidence, Archived, and ID stay dst's.
+// identity. Tags and cue anchors become a union; importance takes the max;
+// due/created take the earlier date (a merged entity's history starts at the
+// earliest); summary fills in from src only when dst's is empty. Title,
+// Category, Type, Confidence, Archived, and ID stay dst's.
 func mergeFrontmatterInto(dst *Frontmatter, src Frontmatter) {
 	dst.Tags = unionStrings(dst.Tags, src.Tags)
+	// Cue anchors are recall entry points — dropping the source page's cues on a
+	// duplicate-fold would silently kill the paraphrase queries that page
+	// answered. Union with dst priority; normalizeCues dedupes/trims/caps.
+	dst.Cues = normalizeCues(append(append([]string{}, dst.Cues...), src.Cues...))
 	if src.Importance > dst.Importance {
 		dst.Importance = src.Importance
 	}
