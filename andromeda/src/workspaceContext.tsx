@@ -45,9 +45,11 @@ interface WorkspaceCtx {
   // registers a sink while a notebook is open (and clears it on unmount/close);
   // the AI panel shows a per-answer 노트에 저장 button only while a sink exists.
   // This is the notebook's output loop — an answer worth keeping becomes a cited
-  // note source instead of scrolling away in the chat.
-  noteSink: ((text: string) => void) | null;
-  setNoteSink: (sink: ((text: string) => void) | null) => void;
+  // note source instead of scrolling away in the chat. The sink resolves with
+  // whether the pin actually landed, so the button can show failure + retry
+  // instead of a false 저장됨.
+  noteSink: ((text: string) => Promise<boolean>) | null;
+  setNoteSink: (sink: ((text: string) => Promise<boolean>) | null) => void;
   // Nav-rail customization: pane keys the user has hidden from the left rail
   // (settings is never hideable — it's the way back). Persisted to localStorage.
   hiddenViews: View[];
@@ -115,8 +117,8 @@ export function WorkspaceProvider({
   const [paneTarget, setPaneTarget] = useState<PaneTarget | null>(null);
   // Stored via the updater form: the sink IS a function, and setState would
   // otherwise call it as an updater.
-  const [noteSink, setNoteSinkState] = useState<((text: string) => void) | null>(null);
-  const setNoteSink = (sink: ((text: string) => void) | null) => setNoteSinkState(() => sink);
+  const [noteSink, setNoteSinkState] = useState<((text: string) => Promise<boolean>) | null>(null);
+  const setNoteSink = (sink: ((text: string) => Promise<boolean>) | null) => setNoteSinkState(() => sink);
   const [hiddenViews, setHiddenViews] = useState<View[]>(readHiddenViews);
   const [viewOrder, setViewOrder] = useState<View[]>(readViewOrder);
   const [codeMode, setCodeMode] = useState<boolean>(readCodeMode);

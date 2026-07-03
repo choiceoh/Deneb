@@ -1,15 +1,17 @@
 // testfixtures.ts — hand-built CFB / HWP bytes for the parser tests. Kept out
 // of the .test files so the byte-layout knowledge lives in one place.
 //
-// The synthetic CFB uses a mini-stream cutoff of 0, so every stream (however
-// small) is stored through the regular FAT — this keeps the builder simple
-// while still exercising the reader's FAT path. Real HWP files set the cutoff
-// to 4096; the mini-FAT path is separate and not fixture-tested here.
+// By default the synthetic CFB uses a mini-stream cutoff of 0, so every stream
+// (however small) is stored through the regular FAT. Pass { miniCutoff: 4096 }
+// (the real HWP value) to pack small streams into the root entry's mini-stream
+// instead — that exercises the reader's mini-FAT path the way real files do.
 
 const SECTOR = 512;
+const MINI_SECTOR = 64;
 const FREESECT = 0xffffffff;
 const ENDOFCHAIN = 0xfffffffe;
 const FATSECT = 0xfffffffd;
+const DIFSECT = 0xfffffffc;
 
 const HB = 0x10;
 export const TAG_PARA_HEADER = HB + 50;
@@ -105,8 +107,13 @@ export function buildTable(rows: string[][], level = 1): Uint8Array {
 }
 
 // buildFileHeader makes a 256-byte HWP FileHeader stream. version bytes are laid
-// out at [32,33,34,35]; parseHwp reads them high-to-low ("5.1.0.0").
-export function buildFileHeader(opts: { compressed: boolean; version: [number, number, number, number] }): Uint8Array {
+// out at [32,33,34,35]; parseHwp reads them high-to-low ("5.1.0.0"). Property
+// bits: 0 = compressed, 2 = 배포용 문서 (view-only distribution format).
+export function buildFileHeader(opts: {
+  compressed: boolean;
+  version: [number, number, number, number];
+  distribution?: boolean;
+}): Uint8Array {
   const b = new Uint8Array(256);
   const sig = "HWP Document File";
   for (let i = 0; i < sig.length; i++) b[i] = sig.charCodeAt(i);
@@ -114,14 +121,21 @@ export function buildFileHeader(opts: { compressed: boolean; version: [number, n
   b[33] = opts.version[1];
   b[34] = opts.version[2];
   b[35] = opts.version[3];
-  new DataView(b.buffer).setUint32(36, opts.compressed ? 1 : 0, true);
+  new DataView(b.buffer).setUint32(36, (opts.compressed ? 1 : 0) | (opts.distribution ? 4 : 0), true);
   return b;
 }
 
 // buildCfb assembles a minimal compound file: FAT at sector 0, directory at
-// sector 1, stream data from sector 2. Fits multiple directory sectors when
-// more than 4 entries are needed.
-export function buildCfb(streams: { name: string; data: Uint8Array }[]): ArrayBuffer {
+// sector 1, then (with a non-zero miniCutoff) the mini-FAT sector + the root's
+// mini-stream, then regular stream data. Fits multiple directory sectors when
+// more than 4 entries are needed. With { miniCutoff: 4096 } every non-empty
+// stream under the cutoff is packed into 64-byte mini-sectors, matching how
+// real HWP files store FileHeader and small sections.
+export function buildCfb(
+  streams: { name: string; data: Uint8Array }[],
+  opts: { miniCutoff?: number } = {},
+): ArrayBuffer {
+  const miniCutoff = opts.miniCutoff ?? 0;
   const fat: number[] = [];
   const setFat = (i: number, v: number) => {
     while (fat.length <= i) fat.push(FREESECT);
@@ -129,7 +143,8 @@ export function buildCfb(streams: { name: string; data: Uint8Array }[]): ArrayBu
   };
 
   type DirEntry = { name: string; type: number; start: number; size: number };
-  const dir: DirEntry[] = [{ name: "Root Entry", type: 5, start: ENDOFCHAIN, size: 0 }];
+  const root: DirEntry = { name: "Root Entry", type: 5, start: ENDOFCHAIN, size: 0 };
+  const dir: DirEntry[] = [root];
 
   // Directory occupies ceil((1+streams)/4) sectors starting at sector 1.
   const dirSectors = Math.max(1, Math.ceil((streams.length + 1) / 4));
@@ -138,7 +153,45 @@ export function buildCfb(streams: { name: string; data: Uint8Array }[]): ArrayBu
 
   let nextSector = 1 + dirSectors;
   const placed: { data: Uint8Array; sectors: number[] }[] = [];
+
+  // Pack small streams into the mini-stream first: chain their 64-byte
+  // mini-sectors through the mini-FAT and remember each start mini-sector.
+  const isMini = (s: { data: Uint8Array }) => miniCutoff > 0 && s.data.length > 0 && s.data.length < miniCutoff;
+  const miniFat: number[] = [];
+  const miniChunks: Uint8Array[] = [];
+  const miniStart = new Map<(typeof streams)[number], number>();
+  let nextMini = 0;
   for (const s of streams) {
+    if (!isMini(s)) continue;
+    const nSec = Math.ceil(s.data.length / MINI_SECTOR);
+    miniStart.set(s, nextMini);
+    for (let k = 0; k < nSec; k++) miniFat[nextMini + k] = k === nSec - 1 ? ENDOFCHAIN : nextMini + k + 1;
+    nextMini += nSec;
+    const padded = new Uint8Array(nSec * MINI_SECTOR);
+    padded.set(s.data);
+    miniChunks.push(padded);
+  }
+  const miniData = concatBytes(...miniChunks);
+  let miniFatSector = ENDOFCHAIN;
+  if (miniData.length > 0) {
+    // One mini-FAT sector (128 entries → up to 8KB of mini data): enough for tests.
+    miniFatSector = nextSector++;
+    setFat(miniFatSector, ENDOFCHAIN);
+    // The mini-stream itself is a regular FAT chain owned by the root entry.
+    const nSec = Math.ceil(miniData.length / SECTOR);
+    const secs: number[] = [];
+    for (let k = 0; k < nSec; k++) secs.push(nextSector++);
+    secs.forEach((sec, k) => setFat(sec, k === nSec - 1 ? ENDOFCHAIN : secs[k + 1]));
+    placed.push({ data: miniData, sectors: secs });
+    root.start = secs[0];
+    root.size = miniData.length;
+  }
+
+  for (const s of streams) {
+    if (isMini(s)) {
+      dir.push({ name: s.name, type: 2, start: miniStart.get(s)!, size: s.data.length });
+      continue;
+    }
     const numSec = Math.max(1, Math.ceil(s.data.length / SECTOR));
     const secs: number[] = [];
     for (let k = 0; k < numSec; k++) secs.push(nextSector++);
@@ -159,8 +212,9 @@ export function buildCfb(streams: { name: string; data: Uint8Array }[]): ArrayBu
   dv.setUint16(32, 6, true); // mini sector shift (64)
   dv.setUint32(44, 1, true); // number of FAT sectors
   dv.setUint32(48, 1, true); // first directory sector
-  dv.setUint32(56, 0, true); // mini-stream cutoff = 0 (all streams via FAT)
-  dv.setUint32(60, ENDOFCHAIN, true);
+  dv.setUint32(56, miniCutoff, true); // mini-stream cutoff (0 = all streams via FAT)
+  dv.setUint32(60, miniFatSector, true); // first mini-FAT sector (ENDOFCHAIN when unused)
+  dv.setUint32(64, miniData.length > 0 ? 1 : 0, true); // mini-FAT sector count
   dv.setUint32(68, ENDOFCHAIN, true);
   dv.setUint32(76, 0, true); // DIFAT[0] → FAT at sector 0
   for (let i = 1; i < 109; i++) dv.setUint32(76 + i * 4, FREESECT, true);
@@ -178,6 +232,11 @@ export function buildCfb(streams: { name: string; data: Uint8Array }[]): ArrayBu
     dv.setUint32(off + 120, e.size, true);
   });
 
+  if (miniFatSector !== ENDOFCHAIN) {
+    const base = SECTOR + miniFatSector * SECTOR;
+    for (let i = 0; i < 128; i++) dv.setUint32(base + i * 4, i < miniFat.length ? miniFat[i] : FREESECT, true);
+  }
+
   for (const p of placed) {
     let written = 0;
     for (const sec of p.sectors) {
@@ -188,4 +247,74 @@ export function buildCfb(streams: { name: string; data: Uint8Array }[]): ArrayBu
     }
   }
   return buf;
+}
+
+// buildCfbDifatChain hand-rolls a compound file whose FAT is only fully
+// reachable through the extended DIFAT chain (header offset 68): FAT sector 0
+// is listed in the header DIFAT, FAT sector 1 only inside a DIFAT sector. The
+// lone stream ("Big") is chained across sectors 128 → 129, and BOTH links live
+// in FAT sector 1 — a reader that ignores the DIFAT chain truncates the stream
+// to its first sector. Returns the buffer plus the expected stream bytes.
+export function buildCfbDifatChain(): { buf: ArrayBuffer; expected: Uint8Array } {
+  const totalSectors = 130; // 0:FAT0, 1:dir, 2:DIFAT, 3:FAT1, …, 128–129: stream
+  const buf = new ArrayBuffer(SECTOR + totalSectors * SECTOR);
+  const bytes = new Uint8Array(buf);
+  const dv = new DataView(buf);
+  const sectorBase = (sec: number) => SECTOR + sec * SECTOR;
+
+  [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1].forEach((b, i) => (bytes[i] = b));
+  dv.setUint16(26, 3, true);
+  dv.setUint16(28, 0xfffe, true);
+  dv.setUint16(30, 9, true); // 512-byte sectors
+  dv.setUint16(32, 6, true);
+  dv.setUint32(44, 2, true); // TWO FAT sectors — the second only via DIFAT
+  dv.setUint32(48, 1, true); // directory at sector 1
+  dv.setUint32(56, 0, true); // cutoff 0 → the stream reads via the FAT
+  dv.setUint32(60, ENDOFCHAIN, true);
+  dv.setUint32(68, 2, true); // first DIFAT sector = sector 2
+  dv.setUint32(72, 1, true); // one DIFAT sector
+  dv.setUint32(76, 0, true); // header DIFAT[0] → FAT sector 0
+  for (let i = 1; i < 109; i++) dv.setUint32(76 + i * 4, FREESECT, true);
+
+  // FAT sector 0 (covers sectors 0..127).
+  const fat0 = sectorBase(0);
+  for (let i = 0; i < 128; i++) dv.setUint32(fat0 + i * 4, FREESECT, true);
+  dv.setUint32(fat0 + 0 * 4, FATSECT, true); // sector 0: FAT
+  dv.setUint32(fat0 + 1 * 4, ENDOFCHAIN, true); // sector 1: directory (single)
+  dv.setUint32(fat0 + 2 * 4, DIFSECT, true); // sector 2: DIFAT
+  dv.setUint32(fat0 + 3 * 4, FATSECT, true); // sector 3: FAT
+
+  // DIFAT sector (at sector 2): slot 0 → FAT sector 3; last slot ends the chain.
+  const dsec = sectorBase(2);
+  for (let i = 0; i < 127; i++) dv.setUint32(dsec + i * 4, FREESECT, true);
+  dv.setUint32(dsec + 0 * 4, 3, true);
+  dv.setUint32(dsec + 127 * 4, ENDOFCHAIN, true);
+
+  // FAT sector 1 (at sector 3, covers sectors 128..255): the stream's chain.
+  const fat1 = sectorBase(3);
+  for (let i = 0; i < 128; i++) dv.setUint32(fat1 + i * 4, FREESECT, true);
+  dv.setUint32(fat1 + 0 * 4, 129, true); // sector 128 → 129
+  dv.setUint32(fat1 + 1 * 4, ENDOFCHAIN, true); // sector 129 ends the chain
+
+  // Directory: root + the "Big" stream starting at sector 128.
+  const size = 1000;
+  const writeDirEntry = (idx: number, name: string, type: number, start: number, sz: number) => {
+    const off = sectorBase(1) + idx * 128;
+    for (let i = 0; i < name.length; i++) dv.setUint16(off + i * 2, name.charCodeAt(i), true);
+    dv.setUint16(off + 64, (name.length + 1) * 2, true);
+    dv.setUint8(off + 66, type);
+    dv.setUint32(off + 116, start, true);
+    dv.setUint32(off + 120, sz, true);
+  };
+  writeDirEntry(0, "Root Entry", 5, ENDOFCHAIN, 0);
+  writeDirEntry(1, "Big", 2, 128, size);
+
+  // Stream content spanning both sectors — a repeating counter, so a truncated
+  // read (sector 128 only) differs from the expected bytes in the second half.
+  const expected = new Uint8Array(size);
+  for (let i = 0; i < size; i++) expected[i] = i % 251;
+  bytes.set(expected.subarray(0, SECTOR), sectorBase(128));
+  bytes.set(expected.subarray(SECTOR), sectorBase(129));
+
+  return { buf, expected };
 }

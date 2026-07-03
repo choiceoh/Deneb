@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { screen } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { FILES_RPC } from "@/resources";
 import { cachedRpcStorageKey, rpcCacheKey } from "@/rpcCache";
@@ -156,5 +156,41 @@ describe("FilesPane", () => {
     // Closing the tab (now clean) removes it.
     await userEvent.click(screen.getByRole("button", { name: "notes.md 닫기" }));
     expect(screen.queryByRole("tab", { name: /notes\.md/ })).not.toBeInTheDocument();
+  });
+
+  it("re-paths the open viewer tab when its file is moved (a stale tab would save a fork)", async () => {
+    renderWithProviders(<FilesPane />, { connected: true });
+
+    await userEvent.click((await screen.findAllByText("projects"))[0]);
+    await userEvent.click(await screen.findByText("notes.md"));
+    expect(await screen.findByRole("tab", { name: /notes\.md/ })).toBeInTheDocument();
+
+    // Move the file from its grid row: the open tab must follow the new path —
+    // saving from the old one would recreate the file at the old location.
+    const row = screen.getByText("projects/notes.md").closest("tr") as HTMLElement;
+    await userEvent.click(within(row).getByRole("button", { name: "이동" }));
+    const dialog = await screen.findByRole("dialog");
+    const field = within(dialog).getByLabelText("대상 경로");
+    await userEvent.clear(field);
+    await userEvent.type(field, "projects/renamed.md");
+    await userEvent.click(within(dialog).getByRole("button", { name: "이동" }));
+
+    expect(await screen.findByRole("tab", { name: /renamed\.md/ })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: /notes\.md/ })).not.toBeInTheDocument();
+  });
+
+  it("closes the open viewer tab when its file is deleted (saving would resurrect it)", async () => {
+    renderWithProviders(<FilesPane />, { connected: true });
+
+    await userEvent.click((await screen.findAllByText("projects"))[0]);
+    await userEvent.click(await screen.findByText("notes.md"));
+    expect(await screen.findByRole("tab", { name: /notes\.md/ })).toBeInTheDocument();
+
+    const row = screen.getByText("projects/notes.md").closest("tr") as HTMLElement;
+    await userEvent.click(within(row).getByRole("button", { name: "삭제" }));
+    const dialog = await screen.findByRole("dialog");
+    await userEvent.click(within(dialog).getByRole("button", { name: "삭제" }));
+
+    await vi.waitFor(() => expect(screen.queryByRole("tab", { name: /notes\.md/ })).not.toBeInTheDocument());
   });
 });

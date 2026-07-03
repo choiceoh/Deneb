@@ -1,7 +1,15 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { Cfb } from "./cfb";
 import { type HwpBlock, parseHwp } from "./hwp";
-import { buildCfb, buildFileHeader, buildParagraph, buildTable, concatBytes, hwpWchars } from "./testfixtures";
+import {
+  buildCfb,
+  buildCfbDifatChain,
+  buildFileHeader,
+  buildParagraph,
+  buildTable,
+  concatBytes,
+  hwpWchars,
+} from "./testfixtures";
 
 // The parser is exercised against HAND-BUILT compound files (no real HWP binary
 // needed): a minimal CFB with a FileHeader + one uncompressed Section0 whose
@@ -33,6 +41,28 @@ describe("Cfb", () => {
 
   it("rejects a non-compound file", () => {
     expect(() => new Cfb(new Uint8Array([0, 1, 2, 3, 4, 5, 6, 7, 8]).buffer)).toThrow(/compound/);
+  });
+
+  it("follows the extended DIFAT chain for FAT sectors beyond the header's 109", () => {
+    // The stream's chain links live in a FAT sector only reachable via the DIFAT
+    // chain — a reader that stops at the header DIFAT truncates it to one sector.
+    const { buf, expected } = buildCfbDifatChain();
+    const cfb = new Cfb(buf);
+    expect(cfb.read("Big")).toEqual(expected);
+  });
+
+  it("reads small streams through the mini-FAT at the real cutoff (4096)", () => {
+    const cfb = new Cfb(
+      buildCfb(
+        [
+          { name: "Tiny", data: new Uint8Array([1, 2, 3]) }, // < 64B → one mini-sector
+          { name: "Spans", data: new Uint8Array(150).fill(7) }, // 3 chained mini-sectors
+        ],
+        { miniCutoff: 4096 },
+      ),
+    );
+    expect(cfb.read("Tiny")).toEqual(new Uint8Array([1, 2, 3]));
+    expect(cfb.read("Spans")).toEqual(new Uint8Array(150).fill(7));
   });
 });
 
@@ -119,5 +149,93 @@ describe("parseHwp", () => {
   it("errors clearly on a non-HWP compound file", async () => {
     const buf = buildCfb([{ name: "FileHeader", data: new Uint8Array(40) }]);
     await expect(parseHwp(buf)).rejects.toThrow(/not an HWP/);
+  });
+
+  it("parses a document stored the way real HWPs are — small streams via the mini-FAT", async () => {
+    // FileHeader (256B) and a short Section0 both sit under the real 4096 cutoff,
+    // so they ride the mini-stream path end to end.
+    const buf = buildCfb(
+      [
+        { name: "FileHeader", data: buildFileHeader({ compressed: false, version: [0, 0, 1, 5] }) },
+        { name: "Section0", data: buildParagraph("미니 스트림 본문") },
+      ],
+      { miniCutoff: 4096 },
+    );
+    const d = await parseHwp(buf);
+    expect(d.version).toBe("5.1.0.0");
+    expect(d.paragraphs).toEqual(["미니 스트림 본문"]);
+  });
+
+  it("mixes mini (FileHeader) and regular FAT (large Section0) streams at cutoff 4096", async () => {
+    const long = "가나다라마바사아".repeat(300); // 4800 bytes of PARA_TEXT ≥ cutoff → regular FAT
+    const buf = buildCfb(
+      [
+        { name: "FileHeader", data: buildFileHeader({ compressed: false, version: [0, 0, 1, 5] }) },
+        { name: "Section0", data: buildParagraph(long) },
+      ],
+      { miniCutoff: 4096 },
+    );
+    const d = await parseHwp(buf);
+    expect(d.paragraphs).toEqual([long]);
+  });
+
+  it("rejects 배포용(view-only distribution) documents instead of rendering garbage", async () => {
+    const buf = buildCfb([
+      {
+        name: "FileHeader",
+        data: buildFileHeader({ compressed: false, version: [0, 0, 1, 5], distribution: true }),
+      },
+      { name: "Section0", data: buildParagraph("암호화된 본문 자리") },
+    ]);
+    await expect(parseHwp(buf)).rejects.toThrow(/배포용/);
+  });
+
+  it("caps a runaway decompression (deflate bomb) and falls back to the raw bytes", async () => {
+    // A fake DecompressionStream that "inflates" endlessly: without the output
+    // cap parseHwp would accumulate unbounded chunks (this test would hang).
+    class BombDS {
+      readable = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          controller.enqueue(new Uint8Array(1 << 20));
+        },
+      });
+      writable = new WritableStream<Uint8Array>();
+    }
+    vi.stubGlobal("DecompressionStream", BombDS);
+    try {
+      const buf = buildCfb([
+        { name: "FileHeader", data: buildFileHeader({ compressed: true, version: [0, 0, 1, 5] }) },
+        { name: "Section0", data: buildParagraph("평문입니다") },
+      ]);
+      const d = await parseHwp(buf);
+      // Aborted at the cap → the per-section fallback parses the raw bytes.
+      expect(d.paragraphs).toEqual(["평문입니다"]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("keeps the preview alive when a stream flagged compressed is actually plaintext", async () => {
+    // Some producers set the compressed bit but store plaintext records; the
+    // failed inflate must fall back per-section instead of killing the preview.
+    class FailingDS {
+      readable = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.error(new Error("invalid deflate data"));
+        },
+      });
+      writable = new WritableStream<Uint8Array>();
+    }
+    vi.stubGlobal("DecompressionStream", FailingDS);
+    try {
+      const buf = buildCfb([
+        { name: "FileHeader", data: buildFileHeader({ compressed: true, version: [0, 0, 1, 5] }) },
+        { name: "Section0", data: buildParagraph("압축 표시지만 평문") },
+      ]);
+      const d = await parseHwp(buf);
+      expect(d.paragraphs).toEqual(["압축 표시지만 평문"]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

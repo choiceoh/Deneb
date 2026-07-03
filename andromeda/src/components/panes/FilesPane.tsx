@@ -17,11 +17,13 @@ import { DeleteModal, OneFieldModal } from "./commonModals";
 import { entryPath, formatBytes, isFolder, joinPath, parentPath } from "./fileHelpers";
 
 // One open viewer tab. Viewer content state lives in the (kept-mounted)
-// FileViewer; the tab records identity + dirty flag for the close guard.
+// FileViewer; the tab records identity + dirty flag for the close guard, and
+// the listed byte size so the viewer can refuse oversized files pre-download.
 interface FileTab {
   path: string;
   name: string;
   dirty: boolean;
+  size?: number;
 }
 
 // FilesPane stays mounted across pane switches (Workstation renders it like
@@ -136,6 +138,7 @@ export function FilesPane({ active = true }: { active?: boolean }) {
     const r = await call(FILES_RPC.move, { src: entryPath(entry), dst: target }, "이동 중...");
     if (!r.ok) return;
     setMoving(null);
+    retargetTabs(entryPath(entry), target);
     clearCachedResource(FILES_RESOURCE);
     await list(path);
     setStatus("이동됨");
@@ -146,6 +149,7 @@ export function FilesPane({ active = true }: { active?: boolean }) {
     if (!r.ok) return;
     setDeleting(null);
     setSelected(null);
+    closeTabsUnder(entryPath(entry));
     clearCachedResource(FILES_RESOURCE);
     await list(path);
     setStatus("삭제됨");
@@ -171,9 +175,43 @@ export function FilesPane({ active = true }: { active?: boolean }) {
     if (!p) return;
     setSelected(entry);
     setTabs((prev) =>
-      prev.some((t) => t.path === p) ? prev : [...prev, { path: p, name: entry.name ?? p, dirty: false }],
+      prev.some((t) => t.path === p)
+        ? prev
+        : [...prev, { path: p, name: entry.name ?? p, dirty: false, size: entry.size }],
     );
     setActiveTab(p);
+  }
+
+  // 이동/삭제와 열린 탭의 동기화 — 옛 경로로 남은 탭에서 저장하면 (삭제 후) 파일을 그
+  // 자리에 되살리거나 (이름변경 후) 사본을 만든다. 성공한 이동은 탭을 새 경로로 재지정
+  // 하고(폴더 이동은 하위 탭 전부), 삭제는 해당 탭을 닫는다.
+  function retargetTabs(src: string, dst: string) {
+    const mapPath = (p: string) => (p === src ? dst : p.startsWith(src + "/") ? dst + p.slice(src.length) : p);
+    setTabs((prev) => {
+      if (!prev.some((t) => mapPath(t.path) !== t.path)) return prev;
+      const seen = new Set<string>();
+      const next: FileTab[] = [];
+      for (const t of prev) {
+        const p = mapPath(t.path);
+        if (seen.has(p)) continue; // destination already open — drop the duplicate tab
+        seen.add(p);
+        // Re-pathing remounts the viewer (tab key = path): content reloads from
+        // the new path, so the dirty flag resets with it.
+        next.push(p === t.path ? t : { ...t, path: p, name: p.split("/").pop() || t.name, dirty: false });
+      }
+      setActiveTab((cur) => (cur ? mapPath(cur) : cur));
+      return next;
+    });
+  }
+
+  function closeTabsUnder(src: string) {
+    const gone = (p: string) => p === src || p.startsWith(src + "/");
+    setTabs((prev) => {
+      if (!prev.some((t) => gone(t.path))) return prev;
+      const next = prev.filter((t) => !gone(t.path));
+      setActiveTab((cur) => (cur && gone(cur) ? (next.at(-1)?.path ?? null) : cur));
+      return next;
+    });
   }
 
   function markDirty(p: string, dirty: boolean) {
@@ -357,7 +395,9 @@ export function FilesPane({ active = true }: { active?: boolean }) {
               <span key={t.path} className={"file-tab" + (t.path === activeTab ? " active" : "")}>
                 <button
                   role="tab"
+                  id={`file-tab-${tabDomId(t.path)}`}
                   aria-selected={t.path === activeTab}
+                  aria-controls={`file-tabpanel-${tabDomId(t.path)}`}
                   className="file-tab-label"
                   title={t.path}
                   onClick={() => setActiveTab(t.path)}
@@ -378,9 +418,17 @@ export function FilesPane({ active = true }: { active?: boolean }) {
           {tabs.map((t) => (
             // Inactive tabs stay MOUNTED (display:none) so the viewer keeps
             // unsaved edits and loaded blobs across tab switches.
-            <div key={t.path} className="file-tab-body" style={t.path === activeTab ? undefined : { display: "none" }}>
+            <div
+              key={t.path}
+              role="tabpanel"
+              id={`file-tabpanel-${tabDomId(t.path)}`}
+              aria-labelledby={`file-tab-${tabDomId(t.path)}`}
+              className="file-tab-body"
+              style={t.path === activeTab ? undefined : { display: "none" }}
+            >
               <FileViewer
                 name={t.name}
+                size={t.size}
                 load={() => fetchGatewayBlob(filesDownloadUrl(cfg, t.path))}
                 onSave={(text) => saveFile(t.path, text)}
                 onDirtyChange={(d) => markDirty(t.path, d)}
@@ -441,6 +489,12 @@ export function FilesPane({ active = true }: { active?: boolean }) {
 }
 
 const FILES_RESOURCE = "files";
+
+// Stable DOM id fragment for a tab path (role=tab ↔ role=tabpanel linkage).
+// encodeURIComponent keeps the id free of spaces/quotes whatever the path holds.
+function tabDomId(p: string): string {
+  return encodeURIComponent(p);
+}
 
 interface FilesListResponse {
   entries?: FileEntry[];

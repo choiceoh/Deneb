@@ -44,22 +44,36 @@ export function hasNativeInflate(): boolean {
   return typeof (globalThis as { DecompressionStream?: unknown }).DecompressionStream === "function";
 }
 
+// Decompressed-size cap per stream. The viewer's 16MiB guard checks the
+// COMPRESSED blob only, and raw deflate expands up to ~1000:1 — a hostile
+// mail-borne HWP could otherwise balloon to gigabytes on the UI thread. 64MiB
+// of inflated output is far beyond any real HWP section/BinData payload.
+const MAX_INFLATED_BYTES = 64 << 20; // 64 MiB
+
 async function inflateRaw(data: Uint8Array): Promise<Uint8Array> {
   const DS = (globalThis as { DecompressionStream?: typeof DecompressionStream }).DecompressionStream;
   if (!DS) throw new Error("DecompressionStream unavailable");
   const stream = new DS("deflate-raw");
   const writer = stream.writable.getWriter();
-  void writer.write(new Uint8Array(data));
-  void writer.close();
+  // Corrupt deflate errors both sides of the transform; the reader loop below is
+  // the single error channel. Swallow the writer promises' mirror rejections so
+  // they don't surface as unhandled rejections.
+  writer.write(new Uint8Array(data)).catch(() => {});
+  writer.close().catch(() => {});
   const chunks: Uint8Array[] = [];
+  let total = 0;
   const reader = stream.readable.getReader();
   for (;;) {
     const { value, done } = await reader.read();
     if (done) break;
-    if (value) chunks.push(value);
+    if (!value) continue;
+    total += value.length;
+    if (total > MAX_INFLATED_BYTES) {
+      await reader.cancel().catch(() => {});
+      throw new Error("압축 해제 결과가 미리보기 한도를 넘습니다. 원본을 내려받아 확인하세요.");
+    }
+    chunks.push(value);
   }
-  let total = 0;
-  for (const c of chunks) total += c.length;
   const out = new Uint8Array(total);
   let off = 0;
   for (const c of chunks) {
@@ -282,6 +296,13 @@ export async function parseHwp(buf: ArrayBuffer): Promise<HwpDocument> {
   const version = `${header[35]}.${header[34]}.${header[33]}.${header[32]}`;
   const flags = new DataView(header.buffer, header.byteOffset, header.byteLength).getUint32(36, true);
   const compressed = (flags & 0x01) === 1;
+  // Property bit 2 = 배포용 문서 (view-only distribution format): the body lives
+  // encrypted under a ViewText storage, so the plain Section scan below would
+  // render garbage. Fail clearly instead — the viewer shows this message with
+  // the download escape hatch.
+  if ((flags & 0x04) !== 0) {
+    throw new Error("배포용(보기 전용) HWP 문서는 미리보기를 지원하지 않습니다. 원본을 내려받아 확인하세요.");
+  }
 
   const sectionNames = cfb
     .streams()
@@ -296,7 +317,15 @@ export async function parseHwp(buf: ArrayBuffer): Promise<HwpDocument> {
     let bytes = raw;
     if (compressed) {
       if (!hasNativeInflate()) throw new Error("압축 해제 불가 (이 환경에 DecompressionStream 없음)");
-      bytes = await inflateRaw(raw);
+      try {
+        bytes = await inflateRaw(raw);
+      } catch {
+        // Some producers set the compressed flag but store a section as
+        // plaintext — one such stream shouldn't kill the whole preview. Feed
+        // the raw bytes to the record parser (its size checks stop quietly on
+        // genuine garbage, yielding an empty section instead of a throw).
+        bytes = raw;
+      }
     }
     blocks.push(...extractBlocks(parseRecords(bytes)));
   }

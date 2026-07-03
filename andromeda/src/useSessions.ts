@@ -91,6 +91,9 @@ export function useSessions(
   }
 
   async function removeSession(key: string) {
+    // busy에는 첨부 배치(attaching)도 포함된다 — 진행 중 세션이 삭제되면 남은 턴이
+    // 되살아난 유령 세션에 쌓인다. selectSession/newChat과 같은 게이트.
+    if (busy) return;
     try {
       await deleteSession(cfg, key);
       setSessions((prev) => prev.filter((s) => s.key !== key));

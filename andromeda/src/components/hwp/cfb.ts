@@ -60,17 +60,37 @@ export class Cfb {
   }
 
   private readFat() {
-    const numFatSectors = this.data.getUint32(44, true);
-    // The first 109 FAT sector locations sit in the header (DIFAT); that covers
-    // every HWP we care about (109 * sectorSize/4 * sectorSize ≫ any office doc),
-    // so the extended DIFAT chain is intentionally not followed.
+    const perSector = this.sectorSize / 4;
+    // A corrupt header can declare absurd counts; a real file cannot have more
+    // FAT (or DIFAT) sectors than it has sectors, so bound both by file size.
+    const fileSectors = Math.ceil(this.data.byteLength / this.sectorSize);
+    const numFatSectors = Math.min(this.data.getUint32(44, true), fileSectors);
+    // The first 109 FAT sector locations sit in the header DIFAT. For v3 (512B
+    // sectors) that only covers 109 * 128 entries * 512B ≈ 7.1MiB of file — real
+    // HWPs between that and the viewer cap exist, so the extended DIFAT chain
+    // (header offsets 68/72) is followed too; without it those files would
+    // silently read truncated FAT chains and render corrupt.
     const fatSectors: number[] = [];
     for (let i = 0; i < Math.min(numFatSectors, 109); i++) {
       const s = this.data.getUint32(76 + i * 4, true);
       if (s === FREESECT) break;
       fatSectors.push(s);
     }
-    const perSector = this.sectorSize / 4;
+    // Each DIFAT sector holds perSector-1 FAT locations plus a chain pointer to
+    // the next DIFAT sector in its last slot. The count is bounded so a cyclic
+    // or corrupt chain can't spin.
+    let difat = this.data.getUint32(68, true);
+    const numDifat = Math.min(this.data.getUint32(72, true), Math.ceil(fileSectors / (perSector - 1)) + 1);
+    for (let d = 0; d < numDifat && difat !== ENDOFCHAIN && difat !== FREESECT; d++) {
+      const base = this.sectorOffset(difat);
+      if (base + this.sectorSize > this.data.byteLength) break; // corrupt pointer
+      for (let i = 0; i < perSector - 1 && fatSectors.length < numFatSectors; i++) {
+        const s = this.data.getUint32(base + i * 4, true);
+        if (s === FREESECT) continue;
+        fatSectors.push(s);
+      }
+      difat = this.data.getUint32(base + (perSector - 1) * 4, true);
+    }
     for (const fs of fatSectors) {
       const base = this.sectorOffset(fs);
       for (let i = 0; i < perSector; i++) {
