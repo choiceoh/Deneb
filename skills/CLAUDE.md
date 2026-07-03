@@ -94,10 +94,18 @@ allowed so bundled skills stay readable in Markdown frontmatter.
 | `requires.anyBins` | string[] | At least one listed binary must be available |
 | `requires.env` | string[] | All listed env vars must be set |
 | `tags` | string[] | Searchable keywords for skill discovery |
+| `triggers` | string[] | Korean utterance keywords for per-turn auto-surfacing: when a user message contains one, the chat pipeline appends a wire-only hint pointing at this skill (`chat/skill_hints.go`, max 2/turn, longest match wins). Precision-first — deliberately NOT mined from tags/description |
 | `related_skills` | string[] | Cross-references to complementary skills |
 | `requires_tools` | string[] | Show only when ALL listed agent tools are available |
 | `fallback_for_tools` | string[] | Show only when ANY listed tool is UNavailable (fallback) |
 | `install` | object[] | Installation specs (`apt`, `brew`, `node`, `go`, `uv`, `download`) |
+
+### Trigger Convention (auto-surfacing)
+
+Give `triggers` only to skills a user would invoke by topic in chat, and keep
+each trigger a specific Korean substring ("계약서", "독소조항") — generic verbs
+("검토", "정리") over-fire on everyday messages. No triggers = the skill stays
+discoverable via the compact index only (fine for cron-summoned or meta skills).
 
 ### Description Field Convention
 

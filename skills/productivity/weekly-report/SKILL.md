@@ -9,6 +9,7 @@ metadata:
       {
         "emoji": "📋",
         "tags": ["주간보고", "업무보고", "weekly", "report", "기획조정실", "PDF"],
+        "triggers": ["주간업무보고", "주간보고", "주간 보고"],
         "related_skills": ["morning-letter", "email-analysis", "meeting-minutes"],
       },
   }

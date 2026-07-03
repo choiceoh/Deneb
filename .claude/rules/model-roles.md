@@ -70,6 +70,7 @@ globs: gateway-go/internal/ai/modelrole/**, gateway-go/internal/pipeline/pilot/*
 | 주간업무보고 | `tools/weekly_report.go` | 결정적 양식 | byte-identical 출력 (#2474) |
 | 메일 우선순위 분류 | `domain/mailpriority/score.go` | 정규식 점수 + 결합 신호 | 글랜스 트리아지 — 한국 업무메일 튜닝 휴리스틱. VIP(주소록)·활성 거래처(`wiki.ActiveCounterpartyDomains` — 최근 60일 프로젝트 연결 메일분석의 발신 도메인, freemail 제외, 서버 10분 캐시) 부스트는 콘텐츠 신호가 있을 때만 증폭(단독 발화 금지 — 글랜스성 보존). 같은 견적·금액 메일도 진행 거래처면 urgent로 — 단일 이벤트가 아닌 결합 신호(시나리오) 원칙 |
 | 카드 제목 폴백 | `runtime/server/workfeed_extract.go` | 휴리스틱 추출 | LLM 실패 시 graceful degradation |
+| 스킬 자동 힌트 (관련 스킬 표면화) | `chat/skill_hints.go` → `run_tail_inject.go` | 결정적 트리거 매칭 (frontmatter `triggers` ⊂ 사용자 메시지, 턴당 ≤2) | 매 턴 핫패스 — 인메모리 스냅샷 매칭이면 충분. 힌트는 마지막 user 메시지 wire-only 꼬리(APC-safe) |
 | 프로젝트 현재 상태 이벤트 갱신 (메일분석) | `runtime/server/wiki_mail_analysis.go` → `domain/wiki/project_status.go:AppendProjectStatusLine` | 결정적 날짜 불릿 | 메일분석 시 관련 프로젝트 대표페이지 `## 현재 상태`에 한 줄 append (idempotent by mail id). 8h 드림 사이클을 안 기다리고 즉시 최신화 — 주기적 LLM 압축은 드리머가 |
 
 ## 도그마

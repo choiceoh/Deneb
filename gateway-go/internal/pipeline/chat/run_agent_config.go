@@ -317,6 +317,14 @@ func recordTurnSkillUsage(rec SkillUsageRecorder, log *SkillConsultLog, activiti
 	if rec == nil || log == nil {
 		return
 	}
+	// Skill-review forks read SKILL.md bodies to JUDGE them — introspection,
+	// not usage. Recording them inflated consult counts and wrote failure rows
+	// that pinned innocent skills under the evolver's success-rate gate
+	// (production skill_usage.jsonl 2026-06: most "skills" tool calls and most
+	// topsolar-db "failures" came from review-fork sessions, not real use).
+	if strings.HasPrefix(sessionKey, "system:skill-review:") {
+		return
+	}
 	consulted := log.DrainNew()
 	if len(consulted) == 0 {
 		return

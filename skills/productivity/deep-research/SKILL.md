@@ -9,6 +9,7 @@ metadata:
       {
         "emoji": "🔬",
         "tags": ["deepresearch", "딥리서치", "패널", "교차검증", "multimodel", "fusion", "종합", "panel"],
+        "triggers": ["딥리서치", "딥 리서치", "교차검증", "여러 모델", "크로스체크"],
         "related_skills": ["fact-check", "decision-premortem", "retrieval-plan"],
         "requires_tools": ["research_panel"],
       },

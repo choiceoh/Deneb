@@ -1,0 +1,120 @@
+// skill_hints.go — deterministic per-turn skill surfacing (auto-hint).
+//
+// The semi-static system prompt carries a compact skills index, but 30-day
+// production forensics (2026-07) showed the model almost never acts on it
+// unprompted: ~170 skill consults across 7,986 tool calls, and every consult
+// that did happen was force-summoned (mail cron) or name-obvious (topsolar-db).
+// The barrier is discovery-at-the-right-moment, not availability.
+//
+// This matcher closes that gap: a skill declares Korean utterance triggers in
+// its frontmatter (metadata.deneb.triggers), and when the user's message
+// contains one, a short pointer rides the wire-only tail of the last user
+// message (run_tail_inject.go) telling the model the procedure exists and how
+// to load it. Deterministic — no LLM call (model-roles.md dogma 4), no I/O
+// (in-memory skills snapshot), APC-safe (tail addition, prompt-cache.md §1.5).
+// Opt-in per skill: no triggers, no hint — tags/descriptions are deliberately
+// NOT mined (generic taxonomy words like "검토" would over-fire).
+package chat
+
+import (
+	"fmt"
+	"sort"
+	"strings"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
+)
+
+// maxSkillHints caps how many skills one turn may surface — a hint is a nudge,
+// not a menu.
+const maxSkillHints = 2
+
+// cachedResolvedSkills returns the resolved skills of the last-built snapshot,
+// or nil before the first prompt build (hints simply stay off until then).
+func cachedResolvedSkills() []skills.PromptSkill {
+	if snap := CachedSkillsSnapshot(); snap != nil {
+		return snap.ResolvedSkills
+	}
+	return nil
+}
+
+// buildSkillHints returns the tail-addition block pointing at skills whose
+// triggers match the user message, or "" when nothing matches. Skipped for
+// system-internal runs (session "system:*" — skill-review forks carry SKILL.md
+// bodies as messages, which would self-trigger on their own trigger lists) and
+// for recall-suppressed runs (ephemeral probes share the same "no side
+// context" intent).
+func buildSkillHints(params RunParams, resolved []skills.PromptSkill) string {
+	if params.EphemeralUser || params.SkipRecall {
+		return ""
+	}
+	if strings.HasPrefix(params.SessionKey, "system:") {
+		return ""
+	}
+	message := strings.ToLower(strings.TrimSpace(params.Message))
+	if message == "" || len(resolved) == 0 {
+		return ""
+	}
+
+	type hint struct {
+		skill skills.PromptSkill
+		score int // rune length of the matched trigger — longer = more specific
+	}
+	var hints []hint
+	for _, s := range resolved {
+		if s.DisableModelInvocation || len(s.Triggers) == 0 {
+			continue
+		}
+		best := 0
+		for _, t := range s.Triggers {
+			t = strings.ToLower(strings.TrimSpace(t))
+			n := len([]rune(t))
+			if n < 2 { // single-rune triggers are noise
+				continue
+			}
+			if n > best && strings.Contains(message, t) {
+				best = n
+			}
+		}
+		if best > 0 {
+			hints = append(hints, hint{skill: s, score: best})
+		}
+	}
+	if len(hints) == 0 {
+		return ""
+	}
+	sort.SliceStable(hints, func(i, j int) bool {
+		if hints[i].score != hints[j].score {
+			return hints[i].score > hints[j].score
+		}
+		return hints[i].skill.Name < hints[j].skill.Name
+	})
+	if len(hints) > maxSkillHints {
+		hints = hints[:maxSkillHints]
+	}
+
+	var b strings.Builder
+	b.WriteString("[관련 스킬 — 이 요청에 맞는 준비된 절차]")
+	for _, h := range hints {
+		fmt.Fprintf(&b, "\n- %s: %s → 해당하면 `skills(action=\"read\", name=%q)`로 절차를 로드해 그대로 따르라.",
+			h.skill.Name, skillHintSummary(h.skill.Description), h.skill.Name)
+	}
+	return b.String()
+}
+
+// skillHintSummary reduces a skill description to its first clause — the
+// "what it does" — dropping the "Use when/NOT for" tail the compact index
+// already carries. Cut at the EARLIEST clause separator, capped at 90 runes.
+func skillHintSummary(desc string) string {
+	desc = strings.TrimSpace(desc)
+	cut := len(desc)
+	for _, sep := range []string{" — ", ". ", "。"} {
+		if i := strings.Index(desc, sep); i > 0 && i < cut {
+			cut = i
+		}
+	}
+	desc = desc[:cut]
+	if runes := []rune(desc); len(runes) > 90 {
+		desc = string(runes[:90]) + "…"
+	}
+	return desc
+}

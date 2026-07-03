@@ -33,12 +33,18 @@ func IsValidSkillType(t string) bool {
 
 // DenebSkillMetadata represents parsed skill metadata from frontmatter.
 type DenebSkillMetadata struct {
-	Always           bool               `json:"always,omitempty"`
-	SkillKey         string             `json:"skillKey,omitempty"`
-	PrimaryEnv       string             `json:"primaryEnv,omitempty"`
-	Emoji            string             `json:"emoji,omitempty"`
-	Homepage         string             `json:"homepage,omitempty"`
-	Tags             []string           `json:"tags,omitempty"`
+	Always     bool     `json:"always,omitempty"`
+	SkillKey   string   `json:"skillKey,omitempty"`
+	PrimaryEnv string   `json:"primaryEnv,omitempty"`
+	Emoji      string   `json:"emoji,omitempty"`
+	Homepage   string   `json:"homepage,omitempty"`
+	Tags       []string `json:"tags,omitempty"`
+	// Triggers are Korean utterance keywords for per-turn auto-surfacing: when a
+	// user message contains one, the chat pipeline appends a wire-only hint
+	// pointing at this skill (chat/skill_hints.go). Precision-curated and
+	// deliberately separate from Tags — tags are broad discovery taxonomy
+	// ("검토", "review") that would over-fire as substring triggers.
+	Triggers         []string           `json:"triggers,omitempty"`
 	RelatedSkills    []string           `json:"related_skills,omitempty"`
 	RequiresTools    []string           `json:"requires_tools,omitempty"`
 	FallbackForTools []string           `json:"fallback_for_tools,omitempty"`
@@ -256,6 +262,7 @@ func ResolveDenebMetadata(frontmatter ParsedFrontmatter) *DenebSkillMetadata {
 	parseJSONString(obj, "homepage", &meta.Homepage)
 	// Parse tags, related skills, and conditional activation.
 	meta.Tags = parseJSONStringList(obj, "tags")
+	meta.Triggers = parseJSONStringList(obj, "triggers")
 	meta.RelatedSkills = parseJSONStringList(obj, "related_skills")
 	meta.RequiresTools = parseJSONStringList(obj, "requires_tools")
 	meta.FallbackForTools = parseJSONStringList(obj, "fallback_for_tools")

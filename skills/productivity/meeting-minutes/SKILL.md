@@ -9,6 +9,7 @@ metadata:
       {
         "emoji": "📝",
         "tags": ["meeting", "minutes", "회의록", "회의", "녹음", "전사", "분석", "업무"],
+        "triggers": ["회의록", "회의 녹음", "녹취", "전사본", "회의 정리"],
         "related_skills": ["email-analysis"],
       },
   }

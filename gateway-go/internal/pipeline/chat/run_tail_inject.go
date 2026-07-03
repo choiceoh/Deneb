@@ -73,9 +73,10 @@ const chatbotToneDirective = `[대화 모드 — 이번 턴]
 // recall evidence + the 업무 feed digest otherwise — never both, so the
 // notebook's "이 자료 위주로" scope is not diluted by recall/feed (recall is also
 // suppressed upstream in run_prepare.go; the feed is withheld here). Then the
-// 챗봇 tone framing (workspace register), then the delivery directive
-// (current-turn policy). Empty strings are omitted.
-func buildTailAdditions(params RunParams, recallMemory, notebookGrounding string) []string {
+// skill hint (procedure pointer — orthogonal to reference material, so it rides
+// both branches; skill_hints.go), the 챗봇 tone framing (workspace register),
+// and the delivery directive (current-turn policy). Empty strings are omitted.
+func buildTailAdditions(params RunParams, recallMemory, notebookGrounding, skillHints string) []string {
 	var adds []string
 	if notebookGrounding != "" {
 		adds = append(adds, notebookGrounding)
@@ -89,6 +90,9 @@ func buildTailAdditions(params RunParams, recallMemory, notebookGrounding string
 		if params.FeedContext != "" {
 			adds = append(adds, params.FeedContext)
 		}
+	}
+	if skillHints != "" {
+		adds = append(adds, skillHints)
 	}
 	if isChatbotSessionKey(params.SessionKey) {
 		adds = append(adds, chatbotToneDirective)
