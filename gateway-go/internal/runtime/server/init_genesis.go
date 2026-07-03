@@ -68,6 +68,12 @@ func (s *Server) initGenesisServices() {
 	}
 
 	s.genesisEvolver = genesis.NewEvolver(lwClient, s.skillCatalog, s.genesisTracker, lwModel, s.logger)
+	// Copy-on-evolve for bundled repo skills: they are not seeded into the
+	// genesis catalog (curator staleness would archive the unused ones), so the
+	// evolver adopts one into the managed dir on its first evolve verdict and
+	// evolves the copy (managed overrides bundled at discovery). Managed dir ""
+	// = the default ~/.deneb/skills.
+	s.genesisEvolver.SetAdoptionDirs(chat.BundledSkillsDir(), "")
 	evolverRole, evolverModel := s.configureGenesisEvolverModels(s.genesisEvolver)
 	thinkingKwargs := s.genesisThinkingKwargs()
 

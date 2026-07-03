@@ -105,6 +105,11 @@ type Evolver struct {
 	// JSON ("judge error" / "parse response: unexpected end of JSON input").
 	thinkingKwargs map[string]string
 
+	// bundledSkillsDir/managedSkillsDir drive copy-on-evolve adoption of
+	// bundled (repo) skills — see evolver_adopt.go. Guarded by configMu.
+	bundledSkillsDir string
+	managedSkillsDir string
+
 	// runMu serializes evolve cycles so the periodic task and the event
 	// trigger can't overlap (TryLock: a second concurrent caller skips).
 	runMu sync.Mutex
@@ -208,10 +213,20 @@ func (e *Evolver) EvolveSkill(ctx context.Context, skillName, reviewFinding stri
 	if e.catalog == nil {
 		return nil, fmt.Errorf("evolver: catalog not configured")
 	}
-	// Get current skill content.
+	// Get current skill content. A miss usually means a BUNDLED (repo) skill:
+	// those are deliberately not seeded into this catalog (the curator's
+	// staleness archiver would eat the rarely-used ones), so an evolve verdict
+	// on one adopts it — copy into the managed dir, which overrides bundled at
+	// discovery — and evolves the copy. Never rewrite the repo checkout in
+	// place (deploy rsync --delete + auto git pull would clobber it). First
+	// production hit 2026-07-04: contract-review's evolve verdict died here.
 	entry, ok := e.catalog.Get(skillName)
 	if !ok {
-		return nil, fmt.Errorf("evolver: skill %q not found in catalog", skillName)
+		adopted, aerr := e.adoptBundledSkill(skillName)
+		if aerr != nil {
+			return nil, fmt.Errorf("evolver: skill %q not found in catalog (bundled adoption: %w)", skillName, aerr)
+		}
+		entry = adopted
 	}
 
 	// Circuit breakers, checked before any LLM call is spent. Both previously

@@ -240,6 +240,52 @@ func ptrInvocationPolicy(p SkillInvocationPolicy) *SkillInvocationPolicy {
 	return &p
 }
 
+// LoadSkillEntry loads a single skill directory (dir/SKILL.md) into a fully
+// parsed SkillEntry — the per-directory unit of DiscoverWorkspaceSkills,
+// exposed for consumers that materialize ONE skill outside a discovery walk
+// (the evolver's bundled-skill adoption copies a repo skill into the managed
+// dir and needs its entry immediately, without a full re-discovery).
+// Category comes from frontmatter only (there is no walk context here); the
+// name falls back to the directory basename when frontmatter omits it.
+func LoadSkillEntry(dir string, source SkillSource) (*SkillEntry, error) {
+	filePath := filepath.Join(dir, "SKILL.md")
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, err
+	}
+	fm := ParseFrontmatter(string(data))
+	name := strings.TrimSpace(fm["name"])
+	if name == "" {
+		name = filepath.Base(dir)
+	}
+	entry := SkillEntry{
+		Skill: Skill{
+			Name:     name,
+			Dir:      dir,
+			FilePath: filePath,
+			Source:   source,
+		},
+		Frontmatter: fm,
+		Metadata:    ResolveDenebMetadata(fm),
+		Invocation:  ptrInvocationPolicy(ResolveSkillInvocationPolicy(fm)),
+	}
+	if t, ok := fm["type"]; ok && IsValidSkillType(t) {
+		entry.Skill.Type = SkillType(t)
+	} else {
+		entry.Skill.Type = SkillTypePrompt
+	}
+	if desc, ok := fm["description"]; ok && desc != "" {
+		entry.Skill.Description = desc
+	}
+	if v, ok := fm["version"]; ok && v != "" {
+		entry.Skill.Version = v
+	}
+	if cat, ok := fm["category"]; ok && cat != "" {
+		entry.Skill.Category = cat
+	}
+	return &entry, nil
+}
+
 // loadSkillsFromSource loads skills from a single directory with limits.
 func loadSkillsFromSource(dir string, source SkillSource, limits SkillsLimits, log *slog.Logger) []discoveredSkill {
 	if dir == "" {
