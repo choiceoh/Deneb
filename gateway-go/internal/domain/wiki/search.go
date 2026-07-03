@@ -42,7 +42,7 @@ func newSearchDB() *searchDB {
 func (s *searchDB) indexPage(relPath string, page *Page) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.idx.Upsert(relPath, searchablePageFields(page)...)
+	s.idx.UpsertFields(relPath, searchablePageFields(page)...)
 	if page != nil {
 		s.validity[relPath] = validityFactor(page.Meta, time.Now())
 	}
@@ -169,27 +169,57 @@ func (s *searchDB) rebuildIndex(dir string) error {
 				"path", rel, "error", err)
 			return nil //nolint:nilerr // skip unparseable files
 		}
-		s.idx.Upsert(rel, searchablePageFields(page)...)
+		s.idx.UpsertFields(rel, searchablePageFields(page)...)
 		return nil
 	})
 }
 
-func searchablePageFields(page *Page) []string {
+// wikiFieldBoost is the BM25F-lite term-frequency weight for a page's IDENTITY
+// fields (title, summary, id, tags, cue anchors) relative to prose (body,
+// related, category — weight 1). Rationale: the measured crowding failure —
+// a common noun repeated across long log bodies outranks the canonical page
+// whose *title/summary* carries the term, pushing it out of recall's top-N.
+// A match on what a page IS should outweigh the same word buried in what a
+// page SAYS. 2.5 flips the bench crowding case while leaving every
+// body-fact case (attr-not-in-title 등) intact; override via
+// DENEB_WIKI_FIELD_BOOST (1.0 = flat legacy ranking, the rollback lever).
+const wikiFieldBoost = 2.5
+
+// wikiFieldBoostValue returns the identity-field boost, honoring the
+// DENEB_WIKI_FIELD_BOOST override (mirrors semanticOnlyFloorValue). Malformed
+// or non-positive overrides fall back to the default. Weights are baked at
+// index time, so a changed override takes effect on the next index rebuild
+// (gateway restart) — same lifecycle as the other search knobs.
+func wikiFieldBoostValue() float64 {
+	if v := os.Getenv("DENEB_WIKI_FIELD_BOOST"); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil && f > 0 {
+			return f
+		}
+	}
+	return wikiFieldBoost
+}
+
+func searchablePageFields(page *Page) []textsearch.Field {
 	if page == nil {
 		return nil
 	}
-	return []string{
-		page.Meta.Title,
-		page.Meta.Summary,
-		page.Meta.ID,
-		page.Meta.Category,
-		strings.Join(page.Meta.Tags, " "),
-		strings.Join(page.Meta.Related, " "),
+	boost := wikiFieldBoostValue()
+	return []textsearch.Field{
+		{Text: page.Meta.Title, Weight: boost},
+		{Text: page.Meta.Summary, Weight: boost},
+		{Text: page.Meta.ID, Weight: boost},
+		// Category names are generic bucket words (프로젝트/인물/…) — boosting them
+		// would make every page in a bucket a strong match for the bucket word.
+		{Text: page.Meta.Category, Weight: 1},
+		{Text: strings.Join(page.Meta.Tags, " "), Weight: boost},
+		// Related holds NEIGHBOR page paths — their vocabulary is not this page's
+		// identity, so it stays at prose weight.
+		{Text: strings.Join(page.Meta.Related, " "), Weight: 1},
 		// Cue anchors: alternate phrasings a future query may use (Memora-style
 		// entry points) — indexed so a paraphrased question reaches a page whose
 		// own vocabulary differs (예: cue "계약금" ↔ 본문 "선수금").
-		strings.Join(page.Meta.Cues, " "),
-		page.Body,
+		{Text: strings.Join(page.Meta.Cues, " "), Weight: boost},
+		{Text: page.Body, Weight: 1},
 	}
 }
 

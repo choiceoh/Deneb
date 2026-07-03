@@ -98,6 +98,40 @@ func buildRecallBenchStore(t *testing.T) *wiki.Store {
 			},
 			Body: "EPC 선수금 5천만원. 6월 15일 입금 예정. 미입금 시 착공 지연 리스크. 담당은 이서연 과장.",
 		}},
+		// Crowding set for identity-vs-body ranking (the measured leak shape): the
+		// canonical 정산 page carries the term only in its IDENTITY (title, summary,
+		// tag — the body describes the procedure without repeating the word), while
+		// three log-ish pages each repeat it in prose. Flat BM25 ranks the
+		// repetition-heavy logs above the canonical page, pushing it out of
+		// recall's top-3 — the identity-field boost is what flips this.
+		{"업무/settlement-process.md", &wiki.Page{
+			Meta: wiki.Frontmatter{
+				ID: "settlement-process", Title: "정산 프로세스", Category: "업무",
+				Summary: "거래처 정산 절차와 기한 기준", Tags: []string{"정산"}, Importance: 0.8,
+			},
+			Body: "월말 마감 후 5영업일 안에 거래처별 내역을 확정한다. 세금계산서 발행 확인까지가 한 사이클이다.",
+		}},
+		{"업무/meeting-0610.md", &wiki.Page{
+			Meta: wiki.Frontmatter{
+				ID: "meeting-0610", Title: "6월 회의 메모", Category: "업무",
+				Summary: "6월 둘째 주 회의 메모", Importance: 0.5,
+			},
+			Body: "정산 지연 이슈 공유. 정산 담당 부재로 정산 회의는 다음 주로 연기했다.",
+		}},
+		{"업무/order-log.md", &wiki.Page{
+			Meta: wiki.Frontmatter{
+				ID: "order-log", Title: "발주 기록", Category: "업무",
+				Summary: "6월 발주 진행 기록", Importance: 0.5,
+			},
+			Body: "케이블 발주 완료. 정산 반영 요청함. 정산 확인 대기. 정산 결과는 추후 기재.",
+		}},
+		{"업무/june-review.md", &wiki.Page{
+			Meta: wiki.Frontmatter{
+				ID: "june-review", Title: "6월 결산 리뷰", Category: "업무",
+				Summary: "6월 마감 리뷰 노트", Importance: 0.5,
+			},
+			Body: "이번 달 정산 건수 증가. 정산 오류 2건 정정. 정산 관련 문의는 줄었다.",
+		}},
 	}
 	for _, p := range pages {
 		if err := store.WritePage(p.path, p.page); err != nil {
@@ -161,6 +195,16 @@ func recallBenchCases() []recallBenchCase {
 			name:     "cue-paraphrase-ops",
 			question: "오프사이트 보관 며칠인지 기억나?",
 			wantAll:  []string{"운영시스템/backup.md"},
+		},
+		{
+			// Identity-vs-body crowding: three log pages repeat "정산" in prose and
+			// under flat BM25 outrank the canonical page (whose title/summary IS
+			// "정산 …"), pushing it out of the top-3 wiki evidence. The identity
+			// field boost (wikiFieldBoost / DENEB_WIKI_FIELD_BOOST) must keep the
+			// canonical page in the evidence.
+			name:     "identity-outranks-body-crowd",
+			question: "전에 정산 어떻게 하기로 했더라?",
+			wantAll:  []string{"업무/settlement-process.md"},
 		},
 		{
 			name:     "topicless-recency-fallback",
