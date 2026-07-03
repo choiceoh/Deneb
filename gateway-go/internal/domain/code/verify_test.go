@@ -80,6 +80,44 @@ func TestVerify_StopsAtFirstFailure(t *testing.T) {
 	}
 }
 
+func TestVerify_RejectsInvalidDirAndNilRunner(t *testing.T) {
+	t.Run("empty dir", func(t *testing.T) {
+		m := &Manager{Runner: &fakeRunner{}}
+		if _, err := m.Verify(context.Background(), "  "); err == nil || !strings.Contains(err.Error(), "empty dir") {
+			t.Fatalf("want empty dir error, got %v", err)
+		}
+	})
+
+	t.Run("missing dir", func(t *testing.T) {
+		m := &Manager{Runner: &fakeRunner{}}
+		missing := filepath.Join(t.TempDir(), "missing")
+		if _, err := m.Verify(context.Background(), missing); err == nil || !strings.Contains(err.Error(), "stat dir") {
+			t.Fatalf("want stat dir error, got %v", err)
+		}
+	})
+
+	t.Run("file path", func(t *testing.T) {
+		dir := t.TempDir()
+		file := filepath.Join(dir, "go.mod")
+		if err := os.WriteFile(file, []byte("module x\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		m := &Manager{Runner: &fakeRunner{}}
+		if _, err := m.Verify(context.Background(), file); err == nil || !strings.Contains(err.Error(), "not a directory") {
+			t.Fatalf("want not a directory error, got %v", err)
+		}
+	})
+
+	t.Run("nil runner", func(t *testing.T) {
+		dir := t.TempDir()
+		writeMarker(t, dir, "go.mod")
+		m := &Manager{}
+		if _, err := m.Verify(context.Background(), dir); err == nil || !strings.Contains(err.Error(), "runner is nil") {
+			t.Fatalf("want runner is nil error, got %v", err)
+		}
+	})
+}
+
 func TestVerify_UnknownToolchain(t *testing.T) {
 	dir := t.TempDir()
 	writeMarker(t, dir, "README.md")

@@ -114,8 +114,18 @@ func verifyPlan(kind ProjectKind) []plannedStep {
 // deterministic pass/fail. Each command runs with dir as the working directory.
 // It stops at the first failing step (the agent fixes it, then re-verifies).
 func (m *Manager) Verify(ctx context.Context, dir string) (VerifyResult, error) {
-	if dir == "" {
+	if strings.TrimSpace(dir) == "" {
 		return VerifyResult{}, fmt.Errorf("verify: empty dir")
+	}
+	info, err := os.Stat(dir)
+	if err != nil {
+		return VerifyResult{}, fmt.Errorf("verify: stat dir: %w", err)
+	}
+	if !info.IsDir() {
+		return VerifyResult{}, fmt.Errorf("verify: not a directory: %s", dir)
+	}
+	if m == nil || m.Runner == nil {
+		return VerifyResult{}, fmt.Errorf("verify: runner is nil")
 	}
 	kind := detectKind(func(rel string) bool {
 		_, err := os.Stat(filepath.Join(dir, rel))
