@@ -29,7 +29,21 @@ type Index struct {
 type document struct {
 	id     string
 	fields []string // original text fields for snippet generation
-	tokens int      // total token count
+	// weights holds one BM25F-style boost per field (nil = every field 1.0, the
+	// plain-Upsert path). A weight scales the field's term-frequency contribution
+	// only — document length/avgdl stay raw token counts so weighted and
+	// unweighted documents share one normalization basis.
+	weights []float64
+	tokens  int // total token count
+}
+
+// Field is one searchable text field with a term-frequency boost for
+// UpsertFields. Weight 1.0 behaves exactly like plain Upsert; >1.0 makes a
+// match in this field count proportionally more toward BM25 relevance
+// (identity fields like titles/summaries vs. body prose).
+type Field struct {
+	Text   string
+	Weight float64
 }
 
 // Hit is a single search result.
@@ -50,6 +64,35 @@ func New() *Index {
 // Upsert adds or replaces a document in the index.
 // fields are the searchable text fields (e.g., title, content).
 func (idx *Index) Upsert(id string, fields ...string) {
+	idx.upsert(id, fields, nil)
+}
+
+// UpsertFields adds or replaces a document whose fields carry per-field
+// term-frequency boosts (BM25F-lite). Membership in the inverted index is
+// weight-independent — a token in any field makes the document a candidate;
+// weights change only how strongly the match scores.
+func (idx *Index) UpsertFields(id string, fields ...Field) {
+	texts := make([]string, len(fields))
+	weights := make([]float64, len(fields))
+	flat := true
+	for i, f := range fields {
+		texts[i] = f.Text
+		w := f.Weight
+		if w <= 0 {
+			w = 1
+		}
+		if w != 1 {
+			flat = false
+		}
+		weights[i] = w
+	}
+	if flat {
+		weights = nil // all-1.0 collapses to the plain path
+	}
+	idx.upsert(id, texts, weights)
+}
+
+func (idx *Index) upsert(id string, fields []string, weights []float64) {
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
 
@@ -59,7 +102,7 @@ func (idx *Index) Upsert(id string, fields ...string) {
 	}
 
 	tokens := tokenize(strings.Join(fields, " "))
-	doc := &document{id: id, fields: fields, tokens: len(tokens)}
+	doc := &document{id: id, fields: fields, weights: weights, tokens: len(tokens)}
 	idx.docs[id] = doc
 	idx.totalLen += doc.tokens
 
@@ -170,9 +213,20 @@ func (idx *Index) search(queryTokens []string, andMode bool, limit int) []Hit {
 			continue
 		}
 
-		text := strings.Join(doc.fields, " ")
-		docTokens := tokenize(text)
 		dl := float64(doc.tokens)
+		// Flat docs keep the single joined-token pass; weighted docs (UpsertFields)
+		// count term frequency per field so each match scales by its field boost
+		// (BM25F-lite: a title/summary hit outweighs the same word buried in prose).
+		var docTokens []string
+		var fieldTokens [][]string
+		if doc.weights == nil {
+			docTokens = tokenize(strings.Join(doc.fields, " "))
+		} else {
+			fieldTokens = make([][]string, len(doc.fields))
+			for i, f := range doc.fields {
+				fieldTokens[i] = tokenize(f)
+			}
+		}
 
 		var score float64
 		for _, qt := range queryTokens {
@@ -184,7 +238,16 @@ func (idx *Index) search(queryTokens []string, andMode bool, limit int) []Hit {
 			// BM25+ IDF (always positive, even for very common terms)
 			idf := math.Log(1 + (n-df+0.5)/(df+0.5))
 			// BM25 TF component (k1=1.2, b=0.75)
-			termTF := float64(matchedTermFrequency(docTokens, qt))
+			var termTF float64
+			if doc.weights == nil {
+				termTF = float64(matchedTermFrequency(docTokens, qt))
+			} else {
+				for i, toks := range fieldTokens {
+					if c := matchedTermFrequency(toks, qt); c > 0 {
+						termTF += float64(c) * doc.weights[i]
+					}
+				}
+			}
 			if termTF == 0 {
 				continue
 			}
@@ -197,8 +260,15 @@ func (idx *Index) search(queryTokens []string, andMode bool, limit int) []Hit {
 		}
 	}
 
+	// Deterministic order: score desc, ID asc on ties. Candidates come from map
+	// iteration, so without the tie-break equal-score documents would shuffle
+	// between runs (measured as test flakiness; the same shuffle would hit
+	// production ranking across restarts).
 	sort.Slice(results, func(i, j int) bool {
-		return results[i].score > results[j].score
+		if results[i].score != results[j].score {
+			return results[i].score > results[j].score
+		}
+		return results[i].id < results[j].id
 	})
 
 	if limit > 0 && len(results) > limit {
