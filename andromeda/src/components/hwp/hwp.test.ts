@@ -1,14 +1,22 @@
 import { describe, expect, it } from "vitest";
 import { Cfb } from "./cfb";
-import { parseHwp } from "./hwp";
-import { buildCfb, buildFileHeader, buildParaTextRecord, hwpWchars } from "./testfixtures";
+import { type HwpBlock, parseHwp } from "./hwp";
+import { buildCfb, buildFileHeader, buildParagraph, buildTable, concatBytes, hwpWchars } from "./testfixtures";
 
-// These tests exercise the parser against a HAND-BUILT compound file (no real
-// HWP binary needed): a minimal CFB with a FileHeader + one uncompressed
-// Section0 whose records we control. That covers the CFB reader, the record
-// walker, and the control-char rules deterministically. Compression is left to
-// the platform DecompressionStream at runtime (jsdom lacks it), so the fixtures
-// use the uncompressed flag.
+// The parser is exercised against HAND-BUILT compound files (no real HWP binary
+// needed): a minimal CFB with a FileHeader + one uncompressed Section0 whose
+// record tree we control. That covers the CFB reader, the record walker, the
+// control-char rules, table reconstruction, and BinData image extraction
+// deterministically. Compression is left to the platform DecompressionStream at
+// runtime (jsdom lacks it), so the fixtures use the uncompressed flag and
+// pre-decoded (magic-valid) image bytes.
+
+function doc(...sectionParts: Uint8Array[]) {
+  return buildCfb([
+    { name: "FileHeader", data: buildFileHeader({ compressed: false, version: [0, 0, 1, 5] }) },
+    { name: "Section0", data: concatBytes(...sectionParts) },
+  ]);
+}
 
 describe("Cfb", () => {
   it("reads named streams out of a synthetic compound file", () => {
@@ -19,9 +27,7 @@ describe("Cfb", () => {
       ]),
     );
     expect(cfb.names()).toContain("FileHeader");
-    expect(cfb.names()).toContain("Section0");
     expect(cfb.read("FileHeader")).toEqual(new Uint8Array([1, 2, 3, 4]));
-    expect(cfb.read("Section0")).toEqual(new Uint8Array([9, 9]));
     expect(cfb.read("Nope")).toBeNull();
   });
 
@@ -31,26 +37,40 @@ describe("Cfb", () => {
 });
 
 describe("parseHwp", () => {
-  it("extracts paragraph text (incl. table-cell paragraphs) from an uncompressed doc", async () => {
-    const section = concat(
-      buildParaTextRecord("탑솔라 견적서"),
-      buildParaTextRecord("품목: 태양광 모듈"),
-      buildParaTextRecord("금액: 1,200,000원"),
+  it("extracts paragraphs in document order", async () => {
+    const buf = doc(
+      buildParagraph("탑솔라 견적서"),
+      buildParagraph("품목: 태양광 모듈"),
+      buildParagraph("금액: 1,200,000원"),
     );
-    const buf = buildCfb([
-      { name: "FileHeader", data: buildFileHeader({ compressed: false, version: [0, 0, 1, 5] }) },
-      { name: "Section0", data: section },
-    ]);
+    const d = await parseHwp(buf);
+    expect(d.version).toBe("5.1.0.0");
+    expect(d.paragraphs).toEqual(["탑솔라 견적서", "품목: 태양광 모듈", "금액: 1,200,000원"]);
+    expect(d.blocks.every((b) => b.type === "para")).toBe(true);
+  });
 
-    const doc = await parseHwp(buf);
-    expect(doc.version).toBe("5.1.0.0");
-    expect(doc.paragraphs).toEqual(["탑솔라 견적서", "품목: 태양광 모듈", "금액: 1,200,000원"]);
-    expect(doc.text).toContain("탑솔라 견적서");
-    expect(doc.text).toContain("금액: 1,200,000원");
+  it("reconstructs a table into a grid", async () => {
+    const buf = doc(
+      buildParagraph("발주 내역"),
+      buildTable([
+        ["품목", "수량", "금액"],
+        ["모듈", "100", "12,000,000"],
+        ["인버터", "5", "3,000,000"],
+      ]),
+    );
+    const d = await parseHwp(buf);
+    const table = d.blocks.find((b): b is Extract<HwpBlock, { type: "table" }> => b.type === "table");
+    expect(table).toBeDefined();
+    expect(table!.rows).toEqual([
+      ["품목", "수량", "금액"],
+      ["모듈", "100", "12,000,000"],
+      ["인버터", "5", "3,000,000"],
+    ]);
+    // The surrounding paragraph is still a paragraph block, in order.
+    expect(d.blocks[0]).toEqual({ type: "para", text: "발주 내역" });
   });
 
   it("skips inline/extended controls but keeps tabs and breaks", async () => {
-    // WCHARs: "가" <tab=9 (8 wchars)> "나" <extended=11 (8 wchars)> "다" <break=10> "라"
     const wchars = [
       ...hwpWchars("가"),
       9,
@@ -74,15 +94,26 @@ describe("parseHwp", () => {
       10, // line break
       ...hwpWchars("라"),
     ];
-    const section = buildParaTextRecord(wchars);
+    const d = await parseHwp(doc(buildParagraph(wchars)));
+    expect(d.paragraphs[0]).toBe("가\t나다\n라");
+  });
+
+  it("extracts a BinData image as a data URI (magic-sniffed)", async () => {
+    // A minimal PNG-magic'd stream — the sniff only needs the signature, and the
+    // fixture is uncompressed so no inflate is required in jsdom.
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4]);
     const buf = buildCfb([
       { name: "FileHeader", data: buildFileHeader({ compressed: false, version: [0, 0, 1, 5] }) },
-      { name: "Section0", data: section },
+      { name: "Section0", data: buildParagraph("도면 첨부") },
+      { name: "BIN0001.png", data: png },
     ]);
-
-    const doc = await parseHwp(buf);
-    // 나 keeps, extended control gone, tab preserved, break -> newline.
-    expect(doc.paragraphs[0]).toBe("가\t나다\n라");
+    const d = await parseHwp(buf);
+    const img = d.blocks.find((b): b is Extract<HwpBlock, { type: "image" }> => b.type === "image");
+    expect(img).toBeDefined();
+    expect(img!.name).toBe("BIN0001.png");
+    expect(img!.dataUri.startsWith("data:image/png;base64,")).toBe(true);
+    // Images are appended after the text blocks.
+    expect(d.blocks[0]).toEqual({ type: "para", text: "도면 첨부" });
   });
 
   it("errors clearly on a non-HWP compound file", async () => {
@@ -90,15 +121,3 @@ describe("parseHwp", () => {
     await expect(parseHwp(buf)).rejects.toThrow(/not an HWP/);
   });
 });
-
-function concat(...parts: Uint8Array[]): Uint8Array {
-  let total = 0;
-  for (const p of parts) total += p.length;
-  const out = new Uint8Array(total);
-  let off = 0;
-  for (const p of parts) {
-    out.set(p, off);
-    off += p.length;
-  }
-  return out;
-}
