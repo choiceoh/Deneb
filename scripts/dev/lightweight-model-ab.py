@@ -400,7 +400,7 @@ def chat_with_retry(base_url, api_key, model, prompt, max_tokens, timeout, respo
 # --- Runner ------------------------------------------------------------------
 
 
-def run_model(base_url, api_key, model, rounds, timeout, extra_body=None):
+def run_model(base_url, api_key, model, rounds, timeout, extra_body=None, dump=None):
     per_task = {}
     latencies, out_tokens_all = [], []
     for task_name, cases, mk_prompt, scorer, max_tokens, response_format in TASKS:
@@ -415,6 +415,10 @@ def run_model(base_url, api_key, model, rounds, timeout, extra_body=None):
                 latencies.append(ms)
                 out_tokens_all.append(otoks)
                 print(f"  {model:<24} {case['name']:<20} score={s:5.1f} latency={ms}ms out_tokens={otoks}")
+                if dump is not None:
+                    # 판정 근거를 눈으로 확인하는 정성 리뷰용 — 점수는 규칙 통과 여부만
+                    # 말해주고, 문장 품질·누락 사실은 원문을 읽어야 보인다.
+                    dump.append({"model": model, "case": case["name"], "score": s, "latency_ms": ms, "output": out})
         per_task[task_name] = sum(scores) / len(scores)
     total = sum(per_task.values()) / len(per_task)
     return {
@@ -567,6 +571,7 @@ def main() -> int:
         "--extra-body-a", default="", help='model-a 요청 body에 병합할 JSON (예: \'{"chat_template_kwargs":{"enable_thinking":false}}\')'
     )
     ap.add_argument("--extra-body-b", default="", help="model-b 요청 body에 병합할 JSON — 사고형 후보의 사고-off 실험 등")
+    ap.add_argument("--dump", default="", help="모든 케이스의 모델 출력 원문을 JSON으로 저장할 경로 (정성 리뷰용)")
     ap.add_argument("--mock", action="store_true", help="run the harness self-test against built-in mock models")
     args = ap.parse_args()
 
@@ -579,11 +584,16 @@ def main() -> int:
         print(f"warning: ${args.api_key_env} is empty — sending without auth", file=sys.stderr)
     extra_a = json.loads(args.extra_body_a) if args.extra_body_a else None
     extra_b = json.loads(args.extra_body_b) if args.extra_body_b else None
+    dump = [] if args.dump else None
     results = [
-        run_model(args.base_url, api_key, args.model_a, args.rounds, args.timeout, extra_a),
-        run_model(args.base_url_b or args.base_url, api_key, args.model_b, args.rounds, args.timeout, extra_b),
+        run_model(args.base_url, api_key, args.model_a, args.rounds, args.timeout, extra_a, dump),
+        run_model(args.base_url_b or args.base_url, api_key, args.model_b, args.rounds, args.timeout, extra_b, dump),
     ]
     print_report(results)
+    if args.dump:
+        with open(args.dump, "w", encoding="utf-8") as f:
+            json.dump(dump, f, ensure_ascii=False, indent=1)
+        print(f"outputs dumped: {args.dump}")
     return 0
 
 
