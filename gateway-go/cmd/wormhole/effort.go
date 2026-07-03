@@ -37,12 +37,27 @@ func noEffortRouting(r *http.Request) bool {
 	return false
 }
 
+// Thinking-routing directions for modelEntry.ThinkingMode (validated in
+// validate.go; "" is the historical judge behavior).
+const (
+	thinkingModeJudge         = ""                // off only when obviously simple (thinking-on bias)
+	thinkingModeOff           = "off"             // always off — the entry is a no-thinking variant
+	thinkingModeOffUnlessHard = "off-unless-hard" // off unless clearly hard (thinking-off bias)
+)
+
 // applyThinking runs the effort router for one resolved model and logs when it
 // turns thinking off (the actionable event; the no-op pass-through stays quiet).
-func (rt *router) applyThinking(entry modelEntry, body []byte) []byte {
+// noEffort is the caller's X-Wormhole-No-Effort opt-out: it suppresses the
+// CLASSIFIER modes (judge / off-unless-hard) so a smart client that runs its own
+// Ares isn't double-routed — but a static "off" entry applies regardless, because
+// the caller picked that entry BY NAME and no-thinking is its contract.
+func (rt *router) applyThinking(entry modelEntry, body []byte, noEffort bool) []byte {
+	if noEffort && entry.ThinkingMode != thinkingModeOff {
+		return body
+	}
 	out, reason, off := thinkingRoute(body, entry)
 	if off {
-		rt.log.Info("thinking routed off", "model", entry.Name, "reason", reason)
+		rt.log.Info("thinking routed off", "model", entry.Name, "mode", entry.ThinkingMode, "reason", reason)
 	}
 	return out
 }
@@ -92,18 +107,45 @@ func reasoningRoute(body []byte, entry modelEntry) (out []byte, reason string, t
 }
 
 // thinkingRoute classifies the request's effort and, for a model with a thinking
-// toggle, injects chat_template_kwargs to skip the thinking phase on a simple
-// turn. Returns the (possibly modified) body and a short reason tag for the log
-// (empty reason = the model has no toggle, so nothing was classified).
+// toggle, injects chat_template_kwargs to skip the thinking phase — in the
+// direction the entry's ThinkingMode selects. Returns the (possibly modified)
+// body and a short reason tag for the log (empty reason = the model has no
+// toggle, so nothing was classified).
 func thinkingRoute(body []byte, entry modelEntry) (out []byte, reason string, thinkingOff bool) {
 	if entry.ToggleKwarg == "" {
 		return body, "", false // model has no per-request thinking switch
 	}
-	d := ares.Decide(ares.DefaultProfile(), effortRequest(body))
-	if !d.ThinkingOff {
-		return body, d.Reason, false // hard/long/structured → keep thinking on
+	switch entry.ThinkingMode {
+	case thinkingModeOff:
+		// Static no-thinking variant — no classification, always off.
+		return injectKwarg(body, entry.ToggleKwarg, false), "mode-off", true
+	case thinkingModeOffUnlessHard:
+		// Inverted bias: default off; only a CLEAR hardness signal keeps the
+		// model's thinking. The ambiguous middle (long, context-heavy) routes
+		// off — measured on dsv4: no-think matched think quality on long
+		// bounded synthesis at 5× speed, so "long" alone is not evidence of
+		// needing the thinking phase.
+		d := ares.Decide(ares.DefaultProfile(), effortRequest(body))
+		if hardReason(d.Reason) {
+			return body, d.Reason, false
+		}
+		return injectKwarg(body, entry.ToggleKwarg, false), d.Reason, true
+	default:
+		// Judge with thinking-on bias (historical behavior).
+		d := ares.Decide(ares.DefaultProfile(), effortRequest(body))
+		if !d.ThinkingOff {
+			return body, d.Reason, false // hard/long/structured → keep thinking on
+		}
+		return injectKwarg(body, entry.ToggleKwarg, false), d.Reason, true
 	}
-	return injectKwarg(body, entry.ToggleKwarg, false), d.Reason, true
+}
+
+// hardReason reports whether an Ares reason tag marks CLEAR hardness — the only
+// signals that keep thinking on under the inverted (off-unless-hard) mode:
+// an explicit hard cue in the message, an attachment-bearing turn, or
+// structured (code/multiline) input.
+func hardReason(reason string) bool {
+	return reason == "attachments" || reason == "structured" || strings.HasPrefix(reason, "hard-signal:")
 }
 
 // injectKwarg sets chat_template_kwargs.<key> = val on the request body, merging

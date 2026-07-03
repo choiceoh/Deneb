@@ -127,9 +127,10 @@ Hindsight(Hermes 계열 FastAPI+pgvector 장기기억 서비스)는 **2026-06-15
 ### ★★ APC 불가침 (메인 경로의 절대 규칙)
 > 메인 챗(dsv4)은 vLLM APC(byte-prefix 캐시)에 극도로 민감하다(`.claude/rules/prompt-cache.md` §1.5). wormhole을 메인 앞에 두려면 **바이트 투명**해야 한다.
 
-- **Deneb 가 쓰는 wormhole 엔트리는 `toggleKwarg` 를 절대 달지 마라.** `toggleKwarg` 가 있으면 wormhole 이 effort 라우팅으로 `chat_template_kwargs` 를 **주입**해 렌더 프롬프트를 바꾼다 → APC 파괴 + Deneb 자체 effort 라우팅(`run_capability.go`)과 **이중화 충돌**(injectKwarg 가 기존 값 덮어씀). 엔트리에 toggleKwarg 가 없으면 `applyThinking` 이 즉시 return → **순수 패스스루**.
+- **Deneb 메인이 쓰는 wormhole 엔트리(`deepseek-v4-flash`)는 `toggleKwarg` 를 절대 달지 마라.** `toggleKwarg` 가 있으면 wormhole 이 effort 라우팅으로 `chat_template_kwargs` 를 **주입**해 렌더 프롬프트를 바꾼다 → APC 파괴 + Deneb 자체 effort 라우팅(`run_capability.go`)과 **이중화 충돌**(injectKwarg 가 기존 값 덮어씀). 엔트리에 toggleKwarg 가 없으면 `applyThinking` 이 즉시 return → **순수 패스스루**.
 - **이름 일치**: 엔트리 `name == upstreamModel == vLLM 서빙 모델명`, deneb.json 이 그 name 을 보냄 → `rewriteModel` 미발동 → 바이트 동일. (model 필드는 렌더 프롬프트에 안 들어가 rewrite 자체는 APC-safe 지만, 무변경이 가장 안전.)
 - 결론: **effort 라우팅은 Deneb 가 단독 수행**(튜닝됨·파이프라인 통합), wormhole 은 메인에 대해 dumb passthrough. (외부 클라용 effort 라우팅을 살리려면 별도 toggleKwarg 엔트리 또는 향후 per-request opt-out 헤더.)
+- **★ 전용 변형 엔트리는 허용 (`thinkingMode`, 2026-07-04).** 같은 업스트림을 가리키는 **별도 이름** 엔트리로 추론 방향을 계약할 수 있다: `"off"` = 무조건 노추론 — 엔트리의 정체성이라 **X-Wormhole-No-Effort 로도 억제되지 않음**(이름으로 고른 소비자의 명시적 선택); `"off-unless-hard"` = **노추론 기본**, 명백한 어려움 신호(hard-signal·첨부·구조화)에서만 추론 유지 — "긴 입력"만으로는 안 켬(실측: dsv4 노추론이 메일 분석에서 동급 품질·5배 속도, 판정 근거는 agents-a1 메모리). APC 논거: 엔트리별 주입이 **일정**해 그 엔트리 소비자끼리 prefix family 일관, 메인 패스스루 바이트 불변. 운영 예: `{"name":"dsv4-nothink","url":"http://100.125.220.117:8000/v1","upstreamModel":"deepseek-v4-flash","toggleKwarg":"thinking","thinkingMode":"off"}` — analysis 류 헬퍼 역할이 이 이름을 소비. ⚠ dsv4 의 진짜 스위치는 `thinking`(`enable_thinking` 은 무시됨 — 실측), 노추론 dsv4 는 산술 취약(메일 분석엔 무해 — 대소비교·보존 작업).
 
 ### ★ 클라우드 모델 추론 프로필 (`reasoning`, glm-5.2; 2026-06-21)
 > `toggleKwarg`(vLLM `chat_template_kwargs`)는 위 규칙대로 Deneb 엔트리에 금지(APC). 하지만 **클라우드 모델은 추론 제어 방언이 달라** 게이트웨이가 표현하지 못한다 — 그 번역은 wormhole 만 할 수 있다. 그래서 cloud 전용 필드 `reasoning` 을 둔다(`cmd/wormhole/effort.go:reasoningRoute`, `applyReasoning`).

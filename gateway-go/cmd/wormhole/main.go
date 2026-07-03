@@ -43,6 +43,24 @@ type modelEntry struct {
 	// Qwen3). Set it to enable effort-based thinking routing: wormhole turns
 	// thinking OFF for obviously-simple turns. Empty = no routing (pass through).
 	ToggleKwarg string `json:"toggleKwarg,omitempty"`
+	// ThinkingMode picks the DIRECTION of thinking routing for a ToggleKwarg
+	// model (requires ToggleKwarg to name the switch):
+	//   ""                — judge, thinking-on bias (default): OFF only for an
+	//                       obviously-simple turn; anything ambiguous keeps
+	//                       thinking (a false-easy costs quality).
+	//   "off"             — always inject <toggleKwarg>=false. The entry IS the
+	//                       model's no-thinking variant — callers pick it by
+	//                       name (예: analysis 헬퍼용 dsv4-nothink; 실측 근거는
+	//                       메일 분석에서 think 대비 동급 품질·5배 속도). Applies
+	//                       even under X-Wormhole-No-Effort: the caller chose
+	//                       this entry, so no-thinking is the contract, not an
+	//                       opportunistic routing decision.
+	//   "off-unless-hard" — inverted bias: thinking off by default, kept ON only
+	//                       when the turn carries a CLEAR hardness signal
+	//                       (hard-signal/attachments/structured). The ambiguous
+	//                       middle (long, context-heavy) routes off — "노추론
+	//                       기본, 추론은 필요할 때만".
+	ThinkingMode string `json:"thinkingMode,omitempty"`
 	// Reasoning selects a cloud model's NATIVE reasoning dialect for effort
 	// routing — for backends that don't use vLLM's chat_template_kwargs toggle.
 	// Unlike ToggleKwarg, this runs even under X-Wormhole-No-Effort, because the

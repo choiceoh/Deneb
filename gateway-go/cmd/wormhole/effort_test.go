@@ -40,6 +40,70 @@ func TestThinkingRoute_KeepsThinkingOnHardTurn(t *testing.T) {
 	}
 }
 
+func TestThinkingRoute_ModeOffAlwaysInjects(t *testing.T) {
+	entry := modelEntry{Name: "dsv4-nothink", ToggleKwarg: "thinking", ThinkingMode: thinkingModeOff}
+	// "분석" is a hard signal — the judge mode would keep thinking; static off must not.
+	body := []byte(`{"model":"dsv4-nothink","messages":[{"role":"user","content":"이거 분석해줘"}]}`)
+	out, reason, off := thinkingRoute(body, entry)
+	if !off || reason != "mode-off" {
+		t.Fatalf("mode off must always inject; off=%v reason=%q", off, reason)
+	}
+	var m map[string]any
+	if err := json.Unmarshal(out, &m); err != nil {
+		t.Fatal(err)
+	}
+	kw, _ := m["chat_template_kwargs"].(map[string]any)
+	if kw["thinking"] != false {
+		t.Errorf("expected chat_template_kwargs.thinking=false, got %v", m["chat_template_kwargs"])
+	}
+}
+
+func TestThinkingRoute_OffUnlessHard(t *testing.T) {
+	entry := modelEntry{Name: "dsv4-auto", ToggleKwarg: "thinking", ThinkingMode: thinkingModeOffUnlessHard}
+
+	// Long-but-plain input ("long" — the ambiguous middle) routes OFF under the
+	// inverted bias, where the judge mode would have kept thinking.
+	long := strings.Repeat("보고 내용 정리 문장입니다 ", 60)
+	body := []byte(`{"model":"dsv4-auto","messages":[{"role":"user","content":"` + long + `"}]}`)
+	out, reason, off := thinkingRoute(body, entry)
+	if !off {
+		t.Fatalf("ambiguous-middle turn must route off in off-unless-hard mode; reason=%q", reason)
+	}
+	if !bytes.Contains(out, []byte("chat_template_kwargs")) {
+		t.Error("expected kwargs injection on the ambiguous-middle turn")
+	}
+
+	// A clear hard signal keeps the model's thinking (no injection).
+	hard := []byte(`{"model":"dsv4-auto","messages":[{"role":"user","content":"이거 분석해줘"}]}`)
+	out, reason, off = thinkingRoute(hard, entry)
+	if off || bytes.Contains(out, []byte("chat_template_kwargs")) {
+		t.Errorf("hard-signal turn must keep thinking; off=%v reason=%q", off, reason)
+	}
+
+	// Structured (code-fenced) input also counts as clearly hard.
+	structured := []byte(`{"model":"dsv4-auto","messages":[{"role":"user","content":"` + "``` -\\n- x\\n- y ```" + `"}]}`)
+	_, reason, off = thinkingRoute(structured, entry)
+	if off {
+		t.Errorf("structured turn must keep thinking; reason=%q", reason)
+	}
+}
+
+func TestApplyThinking_StaticOffIgnoresNoEffortHeader(t *testing.T) {
+	rt := &router{log: quietLog()}
+	staticOff := modelEntry{Name: "dsv4-nothink", ToggleKwarg: "thinking", ThinkingMode: thinkingModeOff}
+	judge := modelEntry{Name: "dsv4", ToggleKwarg: "thinking"}
+	body := []byte(`{"model":"m","messages":[{"role":"user","content":"hi"}]}`)
+
+	// noEffort=true (the gateway's header): judge mode must NOT touch the body…
+	if out := rt.applyThinking(judge, body, true); !bytes.Equal(out, body) {
+		t.Error("judge mode must be suppressed under X-Wormhole-No-Effort")
+	}
+	// …but a static off entry is the caller's explicit choice — still injected.
+	if out := rt.applyThinking(staticOff, body, true); !bytes.Contains(out, []byte(`"thinking":false`)) {
+		t.Errorf("static off entry must inject even under X-Wormhole-No-Effort; got %s", out)
+	}
+}
+
 func TestThinkingRoute_NoToggleIsNoOp(t *testing.T) {
 	entry := modelEntry{Name: "x"} // no ToggleKwarg
 	body := []byte(`{"model":"x","messages":[{"role":"user","content":"hi"}]}`)
