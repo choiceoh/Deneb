@@ -129,24 +129,18 @@ func (t *wikiReviewTask) Run(ctx context.Context) error {
 	if err := t.saveState(state); err != nil {
 		t.logger.Warn("wiki-review: failed to persist state", "error", err)
 	}
-	if len(touched) == 0 {
-		return nil
-	}
 
-	// Deterministic layout repair first: a flat 프로젝트/<name>.md (from a blind
-	// RPC write) routes onto its 대표.md slot. No LLM involved.
-	suspects := t.gatherSuspects(ctx, touched)
-	if len(suspects) == 0 {
-		t.logger.Info("wiki-review: no duplicate candidates among touched pages", "touched", len(touched))
-		return nil
-	}
+	// The LLM-backed duplicate review runs only when pages were recently
+	// written, but it is fully self-contained: every early exit inside it (no
+	// touched pages, no candidates, verdict error) must NOT skip the
+	// deterministic maintenance sweep below. That sweep is the wiki's real
+	// upkeep — log rotation, dormancy nudge, dead-link pruning, mail refiling —
+	// and has to run on quiet cycles too, the very cycles where nothing was
+	// touched. (It used to sit after the duplicate-review early-returns and so
+	// almost never ran.)
+	merged, suspectCount := t.reviewDuplicates(ctx, touched, state)
 
-	verdicts, err := t.judge(ctx, suspects)
-	if err != nil {
-		t.logger.Warn("wiki-review: verdict call failed (skipping cycle)", "error", err)
-		return nil // fail-open
-	}
-	merged := t.applyVerdicts(ctx, suspects, verdicts, state)
+	// Deterministic maintenance — always runs, no LLM, independent of the review.
 	rotated := t.rotateProjectLogs()
 	// Dormancy nudge: long-inactive ACTIVE projects get one 종결-검토 bullet on
 	// their 대표페이지 (surfaces in the 모아보기; quarter-idempotent; never
@@ -163,13 +157,41 @@ func (t *wikiReviewTask) Run(ctx context.Context) error {
 	}
 	// Retroactive mail filing: unlinked analyses whose project has since become
 	// known move into that project's 메일분석 slot (deterministic signals only).
+	refiled := 0
 	for _, m := range t.wikiStore.ReclassifyUnlinkedMailAnalyses(time.Now(), 10) {
 		t.logger.Info("wiki-review: unlinked mail re-filed", "from", m.From, "project", m.Project)
+		refiled++
 	}
 	t.logger.Info("wiki-review cycle completed",
-		"touched", len(touched), "suspects", len(suspects), "merged", merged,
-		"autoMerge", t.autoMerge, "logSectionsRotated", rotated, "dormantFlagged", len(dormant))
+		"touched", len(touched), "suspects", suspectCount, "merged", merged,
+		"autoMerge", t.autoMerge, "logSectionsRotated", rotated,
+		"dormantFlagged", len(dormant), "mailRefiled", refiled)
 	return nil
+}
+
+// reviewDuplicates runs the LLM-backed near-duplicate pass over the recently
+// touched pages. It is the ONLY LLM-using part of the cycle and is deliberately
+// self-contained: every early exit (no touched pages, no candidates, verdict
+// error) returns quietly so the caller's deterministic maintenance sweep still
+// runs. Returns (merges applied, suspect count) for the cycle summary. The flat
+// layout repair inside gatherSuspects still happens whenever pages were touched.
+func (t *wikiReviewTask) reviewDuplicates(ctx context.Context, touched []string, state *wikiReviewState) (merged, suspects int) {
+	if len(touched) == 0 {
+		return 0, 0
+	}
+	// gatherSuspects also does the deterministic flat-layout repair (a blind RPC
+	// write of 프로젝트/<name>.md routes onto its 대표.md slot) — no LLM involved.
+	found := t.gatherSuspects(ctx, touched)
+	if len(found) == 0 {
+		t.logger.Info("wiki-review: no duplicate candidates among touched pages", "touched", len(touched))
+		return 0, 0
+	}
+	verdicts, err := t.judge(ctx, found)
+	if err != nil {
+		t.logger.Warn("wiki-review: verdict call failed (skipping duplicate review)", "error", err)
+		return 0, len(found) // fail-open — maintenance still runs
+	}
+	return t.applyVerdicts(ctx, found, verdicts, state), len(found)
 }
 
 // rotateProjectLogs keeps every project's 로그.md bounded: sections beyond the

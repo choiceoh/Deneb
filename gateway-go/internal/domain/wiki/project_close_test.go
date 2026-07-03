@@ -1,6 +1,7 @@
 package wiki
 
 import (
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -87,6 +88,47 @@ func TestCloseAndReopenProject(t *testing.T) {
 	// Missing project errors clearly.
 	if _, err := store.CloseProject("없는-프로젝트", "", now); err == nil {
 		t.Error("closing a missing project must error")
+	}
+}
+
+// TestReopenProject_KeepsLogArchiveArchived: reopening a project un-archives its
+// pages EXCEPT the rotated-log archive (로그-보관.md), which RotateProjectLog
+// archived on purpose. Un-archiving it would resurface old rotated-out log
+// sections in search — so it must stay archived across a close/reopen.
+func TestReopenProject_KeepsLogArchiveArchived(t *testing.T) {
+	store := newCloseStore(t)
+	seedProject(t, store, "가덕도")
+
+	// Over-long 로그.md → rotate → 로그-보관.md (archived by rotation, not closure).
+	var sb strings.Builder
+	for i := 1; i <= LogKeepSections+3; i++ {
+		fmt.Fprintf(&sb, "## 2026-01-%02d 회의\n메모 %d\n\n", i, i)
+	}
+	logPage := NewPage("가덕도 로그", "프로젝트", nil)
+	logPage.Body = sb.String()
+	if err := store.WritePage(LogPagePath("가덕도"), logPage); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.RotateProjectLog("가덕도"); err != nil {
+		t.Fatalf("RotateProjectLog: %v", err)
+	}
+	if arc := testutil.Must(store.ReadPage(LogArchivePath("가덕도"))); !arc.Meta.Archived {
+		t.Fatal("precondition: rotated 로그-보관.md must be archived")
+	}
+
+	now := time.Date(2026, 7, 2, 12, 0, 0, 0, time.UTC)
+	if _, err := store.CloseProject("가덕도", "보류", now); err != nil {
+		t.Fatalf("CloseProject: %v", err)
+	}
+	if _, err := store.ReopenProject("가덕도", now.AddDate(0, 1, 0)); err != nil {
+		t.Fatalf("ReopenProject: %v", err)
+	}
+
+	if rep := testutil.Must(store.ReadPage(RepPagePath("가덕도"))); rep.Meta.Archived {
+		t.Error("rep must be active after reopen")
+	}
+	if arc := testutil.Must(store.ReadPage(LogArchivePath("가덕도"))); !arc.Meta.Archived {
+		t.Error("로그-보관.md must stay archived after reopen (rotation artifact, not closure)")
 	}
 }
 

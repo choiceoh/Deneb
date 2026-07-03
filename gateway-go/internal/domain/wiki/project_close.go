@@ -148,8 +148,15 @@ func (s *Store) ReopenProject(ref string, now time.Time) (ReopenResult, error) {
 	}
 	date := now.Format("2006-01-02")
 
+	logArchive := LogArchivePath(name)
 	restored := 0
 	for _, p := range s.projectFolderPages(name, repPath) {
+		// The rotated-log archive (로그-보관.md) is archived by RotateProjectLog,
+		// not by closure — leave it archived (search-demoted) after reopen so the
+		// old rotated-out log sections don't resurface.
+		if p == logArchive {
+			continue
+		}
 		changed := false
 		if err := s.UpdatePage(p, func(cur *Page) (*Page, error) {
 			if cur == nil {
@@ -222,7 +229,11 @@ func (s *Store) FlagDormantProjects(now time.Time, maxFlags int) []string {
 			strings.Contains(page.Body, quarter) {
 			continue
 		}
-		months := int(now.Sub(mustDate(last)).Hours() / 24 / 30)
+		lastDate := mustDate(last)
+		if lastDate.IsZero() {
+			continue // unparseable Updated stamp — don't emit a nonsense month count
+		}
+		months := int(now.Sub(lastDate).Hours() / 24 / 30)
 		line := fmt.Sprintf("약 %d개월간 활동 없음 — 종결 검토 제안 (\"%s 종결 처리\"라고 말하면 정리됩니다)", months, ref.Name)
 		if err := s.AppendProjectStatusLine(ref.Path, line, quarter, now); err != nil {
 			continue

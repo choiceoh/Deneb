@@ -588,6 +588,7 @@ func (wd *WikiDreamer) findExistingPage(u wikiUpdate) string {
 	hits := wd.store.FindSimilarPages(context.Background(), SimilarQuery{
 		Path:     u.Path,
 		ID:       u.ID,
+		Code:     u.Code,
 		Title:    u.Title,
 		Category: u.Category,
 	}, 1)
