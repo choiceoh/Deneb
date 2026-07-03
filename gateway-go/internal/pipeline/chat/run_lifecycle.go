@@ -323,36 +323,7 @@ func handleRunSuccess(
 
 	// Diary recording: append raw conversation turn to today's diary.
 	// Wiki page curation is handled by the main LLM via system prompt.
-	if deps.wikiStore != nil && shouldRecordRunDiary(params) {
-		toolNames := make([]string, 0, len(result.ToolActivities))
-		for _, ta := range result.ToolActivities {
-			if ta.Name == "" {
-				continue
-			}
-			name := ta.Name
-			if ta.IsError {
-				name += "!"
-			}
-			toolNames = append(toolNames, name)
-			if len(toolNames) >= 16 {
-				toolNames = append(toolNames, "...")
-				break
-			}
-		}
-		assistantText := result.AllText
-		if assistantText == "" {
-			assistantText = result.Text
-		}
-		assistantText = strings.TrimSpace(StripSilentToken(jsonutil.StripThinkingTags(assistantText)))
-		dreamTurnFn := deps.dreamTurnFn
-		shouldIncrementDream := dreamTurnFn != nil
-		go func() {
-			recorded := recordDiary(deps.wikiStore, logger, params.Message, toolNames, assistantText, result.StopReason, result.Turns)
-			if recorded && shouldIncrementDream {
-				dreamTurnFn(context.Background())
-			}
-		}()
-	}
+	maybeRecordRunDiary(deps, params, result, logger)
 
 	logger.Info(
 		"agent run completed",
@@ -535,6 +506,49 @@ func emitJobEvent(deps runDeps, runID, phase string, aborted bool, errMsg string
 // side can synthesize a better Korean checkpoint label (tiny role) with the
 // fallback as its fail-open floor.
 type CodingTurnEndFunc func(ctx context.Context, sessionKey, fallbackSummary, resultText string)
+
+// maybeRecordRunDiary appends a successful run to today's diary and, when an
+// entry was actually recorded, feeds the dream-turn trigger. Shared by the
+// async lifecycle (handleRunSuccess) and the synchronous SendSync/
+// SendSyncStream paths: the native client's chat path is SendSync, so hooking
+// only the async path left auto-diary AND turn-triggered dreaming dead on the
+// real interactive surface — the prompt doctrine "서버가 성공한 대화 턴을
+// 자동으로 일지에 기록한다" silently held for no interactive turn since the
+// native client became the sole surface (PR #1922), leaving the diary fed
+// only by mail polling/captures and dreaming fired only by the 30-min timer.
+func maybeRecordRunDiary(deps runDeps, params RunParams, result *agent.AgentResult, logger *slog.Logger) {
+	if deps.wikiStore == nil || result == nil || !shouldRecordRunDiary(params) {
+		return
+	}
+	toolNames := make([]string, 0, len(result.ToolActivities))
+	for _, ta := range result.ToolActivities {
+		if ta.Name == "" {
+			continue
+		}
+		name := ta.Name
+		if ta.IsError {
+			name += "!"
+		}
+		toolNames = append(toolNames, name)
+		if len(toolNames) >= 16 {
+			toolNames = append(toolNames, "...")
+			break
+		}
+	}
+	assistantText := result.AllText
+	if assistantText == "" {
+		assistantText = result.Text
+	}
+	assistantText = strings.TrimSpace(StripSilentToken(jsonutil.StripThinkingTags(assistantText)))
+	dreamTurnFn := deps.dreamTurnFn
+	shouldIncrementDream := dreamTurnFn != nil
+	safego.GoWithSlog(logger, "run-diary", func() {
+		recorded := recordDiary(deps.wikiStore, logger, params.Message, toolNames, assistantText, result.StopReason, result.Turns)
+		if recorded && shouldIncrementDream {
+			dreamTurnFn(context.Background())
+		}
+	})
+}
 
 // maybeCodingTurnEnd fires the coding checkpoint + verify hook after a
 // successful run of a Mode==code session; a no-op for every other session.

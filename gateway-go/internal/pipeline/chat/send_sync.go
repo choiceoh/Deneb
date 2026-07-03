@@ -280,6 +280,8 @@ func (h *Handler) SendSync(ctx context.Context, sessionKey, message, model strin
 	// Coding sessions: checkpoint + verify the worktree after the turn (the
 	// native client's chat path is this sync one, not the async lifecycle).
 	maybeCodingTurnEnd(deps, params, result.Text, h.logger)
+	// Auto-diary + dream-turn trigger (same sync-path gap as the coding hook).
+	maybeRecordRunDiary(deps, params, result.AgentResult, h.logger)
 	res, err := h.buildSyncResult(model, result)
 	if err == nil {
 		h.autoTitleSessionAsync(sessionKey, message, res)
@@ -374,6 +376,8 @@ func (h *Handler) SendSyncStream(ctx context.Context, sessionKey, message, model
 	// Coding sessions: checkpoint + verify the worktree after the turn (mirrors
 	// SendSync — the streaming native path must not lose the safety net).
 	maybeCodingTurnEnd(deps, params, result.Text, h.logger)
+	// Auto-diary + dream-turn trigger (same sync-path gap as the coding hook).
+	maybeRecordRunDiary(deps, params, result.AgentResult, h.logger)
 	res, err := h.buildSyncResult(model, result)
 	if err == nil {
 		h.autoTitleSessionAsync(sessionKey, message, res)
