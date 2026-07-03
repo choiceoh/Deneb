@@ -18,6 +18,14 @@ func TestDreamerLLMShape(t *testing.T) {
 		reg := modelrole.NewRegistryWithOptions(slog.Default(), modelrole.RegistryOptions{
 			MainModel:        "zai/main-model",
 			LightweightModel: lightweight,
+			// Hermetic endpoints: registry construction probes vLLM-backed
+			// providers for /v1/models discovery — an unroutable loopback
+			// port fails instantly on any host, so the test neither dials a
+			// live dev vLLM nor waits on a discovery timeout.
+			Providers: map[string]modelrole.ProviderResolved{
+				"vllm":     {BaseURL: "http://127.0.0.1:1/v1"},
+				"wormhole": {BaseURL: "http://127.0.0.1:1/v1"},
+			},
 		})
 		return dreamerLLMShape(reg)
 	}
@@ -73,6 +81,35 @@ func TestDreamerLLMShape(t *testing.T) {
 		}
 		if synthMax != 16384 {
 			t.Errorf("synthMax = %d, want 16384", synthMax)
+		}
+	})
+
+	t.Run("non-reasoning cloud model is left unshaped, no headroom", func(t *testing.T) {
+		// chat_template_kwargs is a vLLM serving feature; a direct cloud
+		// provider must get neither NoThinking kwargs (unknown-field 400
+		// risk) nor the reasoning headroom (nothing to budget for).
+		extra, synthMax := shape("zai/foo-chat")
+		if extra != nil {
+			t.Errorf("extra = %v, want nil off vLLM-backed providers", extra)
+		}
+		if synthMax != 0 {
+			t.Errorf("synthMax = %d, want 0", synthMax)
+		}
+	})
+
+	t.Run("routing.toggleKwarg override shapes a config-declared dual-mode model", func(t *testing.T) {
+		kw := "custom_thinking"
+		reg := modelrole.NewRegistryWithOptions(slog.Default(), modelrole.RegistryOptions{
+			MainModel:        "zai/main-model",
+			LightweightModel: "myvllm/custom-dual-mode",
+			Providers: map[string]modelrole.ProviderResolved{
+				"myvllm": {BaseURL: "http://127.0.0.1:1/v1", Routing: &modelrole.RoutingOverride{ToggleKwarg: &kw}},
+			},
+		})
+		extra, synthMax := dreamerLLMShape(reg)
+		assertToggle(t, extra, kw)
+		if synthMax != 0 {
+			t.Errorf("synthMax = %d, want 0 (toggle available)", synthMax)
 		}
 	})
 

@@ -721,6 +721,13 @@ func editByAnchor(path, displayPath, content, anchor, anchorEnd, newStr string) 
 // new_string is re-indented by the first-line indent delta so the block lands
 // at the file's actual depth, preserving relative indentation.
 func editWhitespaceTolerant(path, displayPath, content, oldStr, newStr string) (result string, handled bool, err error) {
+	if strings.Contains(content, "\r") {
+		// CR/CRLF file: the tolerant splice joins with bare \n, so the
+		// replaced block (and any new lines) would silently switch line
+		// endings inside a Windows-style file. Exact matching still works —
+		// leave those files to it.
+		return "", false, nil
+	}
 	oldLines := strings.Split(oldStr, "\n")
 	allBlank := true
 	oldTrimmed := make([]string, len(oldLines))
@@ -773,14 +780,23 @@ func editWhitespaceTolerant(path, displayPath, content, oldStr, newStr string) (
 	// style (tabs vs spaces). The matched window gives an exact per-level
 	// translation table — old_string line j's indent maps to the file line's
 	// indent — and new lines almost always reuse indent levels present in the
-	// block they replace. Unseen levels fall back to swapping the base (first
-	// line) indent prefix, which preserves relative depth. Blank lines pass.
+	// block they replace. Unseen levels fall back to translating whole
+	// repetitions of the base (first line) indent, which preserves relative
+	// depth without mixing whitespace styles. Blank lines pass.
 	indentMap := make(map[string]string, len(oldLines))
 	for j := range oldLines {
 		if strings.TrimSpace(oldLines[j]) == "" {
 			continue
 		}
-		indentMap[leadingWhitespace(oldLines[j])] = leadingWhitespace(lines[start+j])
+		k, v := leadingWhitespace(oldLines[j]), leadingWhitespace(lines[start+j])
+		if prev, ok := indentMap[k]; ok && prev != v {
+			// The same source indent maps to two different file depths (the
+			// model flattened a nested block). Any replacement choice would
+			// corrupt indentation-sensitive files — refuse and ask for exact
+			// text instead of guessing.
+			return "", true, fmt.Errorf("old_string not found exactly; a whitespace-tolerant match exists at line %d but old_string's indentation is ambiguous (identical source indents map to different file depths). Copy the exact text from read, including indentation", start+1)
+		}
+		indentMap[k] = v
 	}
 	oldIndent := leadingWhitespace(oldLines[0])
 	fileIndent := leadingWhitespace(lines[start])
@@ -798,8 +814,8 @@ func editWhitespaceTolerant(path, displayPath, content, oldStr, newStr string) (
 			}
 			continue
 		}
-		if rest, ok := strings.CutPrefix(l, oldIndent); ok && oldIndent != fileIndent {
-			newLines[i] = fileIndent + rest
+		if newInd, ok := translateUnseenIndent(ind, oldIndent, fileIndent); ok {
+			newLines[i] = newInd + l[len(ind):]
 			reindented = true
 		}
 	}
@@ -826,6 +842,48 @@ func leadingWhitespace(s string) string {
 		}
 	}
 	return s
+}
+
+// translateUnseenIndent maps a new_string indent level absent from the
+// matched block's translation table: whole repetitions of the old base
+// indent become repetitions of the file base indent (a deeper level in
+// new_string keeps its relative depth in the file's style), and any
+// remainder must not mix whitespace styles with the translated prefix —
+// concatenating a tab-file base with a space remainder is exactly the mixed
+// indentation that breaks Python/YAML, so mixing returns ok=false and the
+// line is left untouched.
+func translateUnseenIndent(ind, oldIndent, fileIndent string) (string, bool) {
+	if oldIndent == fileIndent {
+		return "", false // no depth shift — nothing to translate
+	}
+	if oldIndent == "" {
+		// Flush-left old block: deepen by the file's base indent.
+		if mixesWhitespaceStyles(fileIndent, ind) {
+			return "", false
+		}
+		return fileIndent + ind, true
+	}
+	n := 0
+	rest := ind
+	for strings.HasPrefix(rest, oldIndent) {
+		n++
+		rest = rest[len(oldIndent):]
+	}
+	if n == 0 {
+		return "", false // shallower than the base — leave as written
+	}
+	if mixesWhitespaceStyles(fileIndent, rest) {
+		return "", false
+	}
+	return strings.Repeat(fileIndent, n) + rest, true
+}
+
+// mixesWhitespaceStyles reports whether joining the two indent fragments
+// would put tabs and spaces in one indentation run.
+func mixesWhitespaceStyles(a, b string) bool {
+	tabs := strings.Contains(a, "\t") || strings.Contains(b, "\t")
+	spaces := strings.Contains(a, " ") || strings.Contains(b, " ")
+	return tabs && spaces
 }
 
 // editFuzzyHint provides a hint when old_string is not found.

@@ -443,18 +443,27 @@ func ToolSessionsSpawn(d *toolctx.SessionDeps) ToolFunc {
 		}
 		p.Model = strings.TrimSpace(p.Model)
 
-		// Fail closed on unknown presets: AllowedTools returns nil (= no
-		// restriction) for unrecognized names, so a typo'd preset would
-		// silently spawn a FULLY unrestricted child — the opposite of what
-		// the caller asked for.
+		// Fail closed on presets outside the spawn contract. AllowedTools
+		// returns nil (= no restriction) for unrecognized names, so a typo'd
+		// preset would silently spawn a FULLY unrestricted child; and presets
+		// that are valid elsewhere but carry side contracts this tool cannot
+		// honor — "coding" grants the write/exec allow-list but its worktree
+		// binding and prompt profile come only from code: sessions — must not
+		// slip through a generic validity check either.
 		p.ToolPreset = strings.TrimSpace(p.ToolPreset)
-		if p.ToolPreset != "" && !toolpreset.IsValid(toolpreset.Preset(p.ToolPreset)) {
+		if p.ToolPreset != "" {
+			allowed := false
 			valid := make([]string, 0, 3)
 			for _, sp := range toolpreset.SpawnPresets() {
 				valid = append(valid, string(sp))
+				if toolpreset.Preset(p.ToolPreset) == sp {
+					allowed = true
+				}
 			}
-			return fmt.Sprintf("Spawn rejected: unknown tool_preset %q. Valid presets: %s. Omit tool_preset for the full toolset.",
-				p.ToolPreset, strings.Join(valid, ", ")), nil
+			if !allowed {
+				return fmt.Sprintf("Spawn rejected: unknown tool_preset %q. Valid presets: %s. Omit tool_preset for the full toolset.",
+					p.ToolPreset, strings.Join(valid, ", ")), nil
+			}
 		}
 
 		if d == nil || d.Manager == nil || d.SendFn == nil {

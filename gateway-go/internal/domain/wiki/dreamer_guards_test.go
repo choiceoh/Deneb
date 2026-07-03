@@ -32,6 +32,33 @@ func TestSplitProgressLogSection(t *testing.T) {
 			t.Fatalf("got body=%q log=%q", body, logLines)
 		}
 	})
+
+	t.Run("nested date subheadings belong to the section", func(t *testing.T) {
+		// ## 진행 로그 with ### date subheadings — the common markdown shape.
+		// A deeper heading must NOT end the capture (it used to, leaving the
+		// whole log on the 대표페이지); the next same-level heading does.
+		content := "개요.\n\n## 진행 로그\n### 2026-07-02\n- 회의\n### 2026-07-03\n- 공정표 제출\n\n## 관련 문서\n- [[a]]"
+		body, logLines := splitProgressLogSection(content)
+		if !strings.Contains(logLines, "2026-07-03") || !strings.Contains(logLines, "공정표 제출") {
+			t.Fatalf("nested subheadings must stay in the section, logLines=%q", logLines)
+		}
+		if strings.Contains(logLines, "관련 문서") {
+			t.Fatalf("same-level heading must end the section, logLines=%q", logLines)
+		}
+		if strings.Contains(body, "진행 로그") || strings.Contains(body, "2026-07-03") || !strings.Contains(body, "관련 문서") {
+			t.Fatalf("body = %q", body)
+		}
+	})
+
+	t.Run("H3 section ends at the next H2", func(t *testing.T) {
+		body, logLines := splitProgressLogSection("본문\n\n### 진행 로그\n- 사건\n\n## 다음 섹션\n내용")
+		if logLines != "- 사건" {
+			t.Fatalf("logLines = %q", logLines)
+		}
+		if !strings.Contains(body, "다음 섹션") {
+			t.Fatalf("body = %q", body)
+		}
+	})
 }
 
 func TestIsDailyMailDigestPage(t *testing.T) {
@@ -182,5 +209,39 @@ func TestApplyUpdates_UpdateFallbackDedup(t *testing.T) {
 	pg, err := store.ReadPage("프로젝트/해밀고흥솔라팜-모듈/대표.md")
 	if err != nil || pg == nil || !strings.Contains(pg.Body, "새 진행 사실") {
 		t.Fatalf("existing page should carry the update: %v", err)
+	}
+}
+
+func TestApplyUpdates_LogReroutesAfterDedup(t *testing.T) {
+	store, err := NewStore(t.TempDir(), t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	wd := NewWikiDreamer(store, nil, "", Config{Enabled: true}, slog.Default())
+
+	if err := store.WritePage("프로젝트/해밀고흥솔라팜-모듈/대표.md", &Page{
+		Meta: Frontmatter{ID: "haemil-solar", Title: "해밀고흥솔라팜 모듈", Category: "프로젝트", Type: "entity", Confidence: "high"},
+		Body: "기존 본문",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// A slug-variant create carrying a 진행 로그 section: the dedup retarget
+	// must run FIRST so the rerouted log lands under the real project folder,
+	// not a duplicate one named after the proposed path.
+	created, updated, _ := wd.applyUpdates(context.Background(), []wikiUpdate{{
+		Action: "create", Path: "프로젝트/해밀고흥-솔라팜모듈/대표.md", ID: "haemil-solar",
+		Title: "해밀고흥솔라팜 모듈", Category: "프로젝트",
+		Content: "요약 갱신 내용입니다.\n\n## 진행 로그\n- 2026-07-03: 모듈 납기 확정",
+	}})
+	if created != 0 || updated != 1 {
+		t.Fatalf("created=%d updated=%d, want 0/1", created, updated)
+	}
+	logPage, err := store.ReadPage(LogPagePath("해밀고흥솔라팜-모듈"))
+	if err != nil || logPage == nil || !strings.Contains(logPage.Body, "납기 확정") {
+		t.Fatalf("log must land under the EXISTING project folder: %v", err)
+	}
+	if pg, _ := store.ReadPage(LogPagePath("해밀고흥-솔라팜모듈")); pg != nil {
+		t.Error("log must not be filed under the duplicate slug-variant folder")
 	}
 }

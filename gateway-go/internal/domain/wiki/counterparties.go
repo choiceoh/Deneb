@@ -46,12 +46,15 @@ func IsFreemailDomain(domain string) bool {
 }
 
 // ActiveCounterpartyDomains returns the lowercase sender domains of
-// project-linked mail-analysis pages whose Updated date is on/after cutoff
-// (YYYY-MM-DD; lexical compare — mail-analysis pages are write-once so Updated
-// is the analysis day). Freemail domains are excluded. The iteration happens
-// under the store's read lock (the returned map is a fresh copy): index
-// entries are mutated in place by writers, so callers must never walk
-// Index().Entries themselves (same contract as Tier1Pages).
+// project-linked mail-analysis pages created on/after cutoff (YYYY-MM-DD;
+// lexical compare — Created is the analysis day and, unlike Updated, is not
+// re-stamped by later metadata churn such as ReclassifyUnlinkedMailAnalyses
+// moving an old mail into a project, which would wrongly re-activate a stale
+// sender domain for the whole window). Entries without Created (parsed from
+// a rendered index.md) fall back to Updated. Freemail domains are excluded.
+// The iteration happens under the store's read lock (the returned map is a
+// fresh copy): index entries are mutated in place by writers, so callers
+// must never walk Index().Entries themselves (same contract as Tier1Pages).
 func (s *Store) ActiveCounterpartyDomains(cutoff string) map[string]struct{} {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -63,7 +66,11 @@ func (s *Store) ActiveCounterpartyDomains(cutoff string) map[string]struct{} {
 		if _, ok := ProjectOfLinkedMailAnalysis(path); !ok {
 			continue
 		}
-		if entry.Updated == "" || entry.Updated < cutoff {
+		created := entry.Created
+		if created == "" {
+			created = entry.Updated
+		}
+		if created == "" || created < cutoff {
 			continue
 		}
 		for _, tag := range entry.Tags {

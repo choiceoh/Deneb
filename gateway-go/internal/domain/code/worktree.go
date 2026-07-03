@@ -173,11 +173,26 @@ func (m *Manager) StartTask(ctx context.Context, r Repo, taskID string) (Task, e
 
 // Commit stages everything and commits in the task worktree — one checkpoint.
 func (m *Manager) Commit(ctx context.Context, t Task, message string) error {
-	if strings.TrimSpace(message) == "" {
-		message = "deneb: update"
+	if err := m.Stage(ctx, t); err != nil {
+		return err
 	}
+	return m.CommitStaged(ctx, t, message)
+}
+
+// Stage stages the worktree's current state without committing. AfterTurn
+// stages BEFORE its (slow) label call so edits a following turn makes while
+// the label is generated cannot sweep into this turn's checkpoint.
+func (m *Manager) Stage(ctx context.Context, t Task) error {
 	if _, err := m.Runner.Run(ctx, t.Dir, "git", "add", "-A"); err != nil {
 		return fmt.Errorf("stage changes: %w", err)
+	}
+	return nil
+}
+
+// CommitStaged commits the already-staged index as-is (no re-add).
+func (m *Manager) CommitStaged(ctx context.Context, t Task, message string) error {
+	if strings.TrimSpace(message) == "" {
+		message = "deneb: update"
 	}
 	if _, err := m.Runner.Run(ctx, t.Dir, "git", "commit", "-m", message); err != nil {
 		return fmt.Errorf("commit: %w", err)

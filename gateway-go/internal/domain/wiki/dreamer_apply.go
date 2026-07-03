@@ -334,18 +334,6 @@ func (wd *WikiDreamer) applyUpdates(_ context.Context, updates []wikiUpdate) (cr
 				"path", u.Path, "title", u.Title)
 			continue
 		}
-		// Guard: a 진행 로그 section aimed at a 대표페이지 belongs in the project's
-		// 로그.md slot (wiki-layout 불변식) — the synthesis prompt says so, but the
-		// model violates it, so the apply pass reroutes structurally.
-		if project, ok := ProjectNameOf(u.Path); ok && IsProjectRepPage(u.Path) && u.Content != "" {
-			if body, logLines := splitProgressLogSection(u.Content); logLines != "" {
-				wd.appendProjectLog(project, logLines)
-				u.Content = body
-				wd.logger.Info("wiki-dream: rerouted 진행 로그 section to project log",
-					"project", project)
-			}
-		}
-
 		// Duplicate prevention: if creating, check for existing similar pages.
 		if u.Action == "create" {
 			if existing := wd.findExistingPage(u); existing != "" {
@@ -366,6 +354,24 @@ func (wd *WikiDreamer) applyUpdates(_ context.Context, updates []wikiUpdate) (cr
 					wd.logger.Info("wiki-dream: missing update target matched existing page",
 						"proposed", u.Path, "existing", existing)
 					u.Path = existing
+				}
+			}
+		}
+
+		// Guard: a 진행 로그 section aimed at a 대표페이지 belongs in the project's
+		// 로그.md slot (wiki-layout 불변식) — the synthesis prompt says so, but the
+		// model violates it, so the apply pass reroutes structurally. Runs AFTER
+		// the dedup retargets above so the log lands under the project that will
+		// actually receive the content — rerouting on the proposed path filed a
+		// slug-variant duplicate's log under a second project folder. On append
+		// failure the section stays in u.Content (imperfect placement beats
+		// silently losing the events).
+		if project, ok := ProjectNameOf(u.Path); ok && IsProjectRepPage(u.Path) && u.Content != "" {
+			if body, logLines := splitProgressLogSection(u.Content); logLines != "" {
+				if wd.appendProjectLog(project, logLines) {
+					u.Content = body
+					wd.logger.Info("wiki-dream: rerouted 진행 로그 section to project log",
+						"project", project)
 				}
 			}
 		}

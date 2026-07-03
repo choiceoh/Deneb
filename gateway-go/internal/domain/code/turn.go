@@ -46,7 +46,15 @@ func AfterTurn(ctx context.Context, m *Manager, store *Store, taskID, summary st
 	}
 
 	// 1. Checkpoint the edits — even if verify later fails, the change is saved and
-	//    undoable, and the rail shows what the turn did.
+	//    undoable, and the rail shows what the turn did. Stage FIRST, label after:
+	//    the label call can take ~20s, and a user firing the next coding turn in
+	//    that window would otherwise have its fresh edits swept into THIS turn's
+	//    checkpoint under the wrong label. The staged index freezes the snapshot;
+	//    later edits stay dirty for the next turn's checkpoint.
+	if err := m.Stage(ctx, task); err != nil {
+		logger.Warn("coding turn-end: stage failed", "task", taskID, "error", err)
+		return
+	}
 	summary = strings.TrimSpace(summary)
 	if summary == "" {
 		summary = "변경 저장"
@@ -56,7 +64,7 @@ func AfterTurn(ctx context.Context, m *Manager, store *Store, taskID, summary st
 			summary = s
 		}
 	}
-	if err := m.Commit(ctx, task, summary); err != nil {
+	if err := m.CommitStaged(ctx, task, summary); err != nil {
 		logger.Warn("coding turn-end: commit failed", "task", taskID, "error", err)
 		return
 	}

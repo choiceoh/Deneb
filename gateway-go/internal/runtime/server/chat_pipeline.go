@@ -350,11 +350,18 @@ func dreamerLLMShape(reg *modelrole.Registry) (extraBody map[string]any, synthes
 		return nil, 0
 	}
 	cfg := reg.Config(modelrole.RoleLightweight)
-	// Shared three-way (toggle first — see modelrole.ThinkingOffExtraBody):
-	// nil means an untoggleable reasoning model, where the only defense is
-	// budgeting the synthesis call for chain-of-thought + answer.
-	if off := modelrole.ThinkingOffExtraBody(cfg.ProviderID, cfg.Model); off != nil {
+	// Shared three-way, registry-aware so deneb.json routing.toggleKwarg
+	// overrides shape the dreamer like they shape foreground turns (see
+	// modelrole.ThinkingOffExtraBodyFor).
+	if off := reg.ThinkingOffExtraBodyFor(cfg.ProviderID, cfg.Model); off != nil {
 		return off, 0
 	}
-	return nil, 16384
+	// nil kwargs + a reasoning model = untoggleable chain-of-thought: the
+	// only defense is budgeting reasoning + answer. The dreamer scales its
+	// non-synthesis calls by the same 4x (llmRequest). Non-reasoning models
+	// with nil kwargs (direct cloud providers) need no headroom.
+	if modelrole.IsReasoningModel(cfg.Model) {
+		return nil, 16384
+	}
+	return nil, 0
 }

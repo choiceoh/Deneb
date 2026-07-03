@@ -49,13 +49,15 @@ func TestThinkingOffExtraBody(t *testing.T) {
 		}
 	})
 
-	t.Run("cloud dsv4 keeps the historical non-reasoning shaping", func(t *testing.T) {
-		// The template toggle is gated to vLLM-backed servings; a cloud dsv4
-		// falls through to NoThinkingBody exactly as the hub always did
-		// (harmless — cloud APIs drop the unknown field).
-		ctk := toggleOf(ThinkingOffExtraBody("zai", "deepseek-v4-flash"))
-		if ctk["enable_thinking"] != false {
-			t.Errorf("cloud dsv4: enable_thinking = %v, want false", ctk["enable_thinking"])
+	t.Run("direct cloud providers are left unshaped", func(t *testing.T) {
+		// chat_template_kwargs is a vLLM serving feature: a strict OpenAI-compat
+		// API can 400 on the unknown field, so off vLLM-backed providers the
+		// three-way now returns nil for non-reasoning models too (the hub's
+		// historical NoThinkingBody used to leak to cloud lightweight configs).
+		for _, model := range []string{"deepseek-v4-flash", "gemma4"} {
+			if got := ThinkingOffExtraBody("zai", model); got != nil {
+				t.Errorf("zai/%s: extra = %v, want nil off vLLM-backed providers", model, got)
+			}
 		}
 	})
 }

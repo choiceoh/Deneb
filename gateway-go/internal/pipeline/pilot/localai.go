@@ -110,34 +110,44 @@ func CallRoleLLM(ctx context.Context, role modelrole.Role, system, userMessage s
 	// ThinkingOffExtraBody): the template toggle for dual-mode models
 	// (deepseek-v4 → chat_template_kwargs.thinking=false), nothing for
 	// untoggleable reasoning models (their thinking-only templates can 400
-	// on enable_thinking), NoThinking for the rest. The provider gates the
-	// toggle to vLLM-backed servings; the registry-less fallback assumes
-	// "vllm" — this direct path defaults to DefaultVllmBaseURL anyway.
+	// on enable_thinking), NoThinking for vLLM-backed non-reasoning models.
+	// Registry-aware when possible so routing.toggleKwarg overrides apply;
+	// the registry-less fallback assumes "vllm" — this direct path defaults
+	// to DefaultVllmBaseURL anyway.
 	providerID := "vllm"
 	if pkgRegistry != nil {
 		if p := pkgRegistry.Config(role).ProviderID; p != "" {
 			providerID = p
 		}
 	}
-	off := modelrole.ThinkingOffExtraBody(providerID, model)
-	merged := make(map[string]any, len(off)+1)
-	for k, v := range off {
-		merged[k] = v
+	var callerExtra map[string]any
+	if len(extraBody) > 0 {
+		callerExtra = extraBody[0]
 	}
-	if len(extraBody) > 0 && extraBody[0] != nil {
-		for k, v := range extraBody[0] {
+	// shapedExtra rebuilds the per-model request body: model-specific
+	// thinking-off kwargs + caller extras + the server-side timeout. Computed
+	// per attempt — the fallback chain crosses providers, and reusing the
+	// primary model's kwargs would send e.g. a vLLM-only template toggle to a
+	// cloud provider (or enable_thinking to an untoggleable reasoning model).
+	shapedExtra := func(providerID, model string) map[string]any {
+		off := pkgRegistry.ThinkingOffExtraBodyFor(providerID, model) // nil-receiver safe
+		merged := make(map[string]any, len(off)+len(callerExtra)+1)
+		for k, v := range off {
 			merged[k] = v
 		}
-	}
-
-	// Inject server-side timeout so local AI aborts generation when the
-	// gateway's context deadline expires. Without this, cancelled requests
-	// become zombies that hold KV cache until max_tokens is exhausted.
-	if deadline, ok := ctx.Deadline(); ok {
-		remaining := time.Until(deadline).Seconds() - 2.0 // 2s headroom for network
-		if remaining > 1 {
-			merged["timeout"] = remaining
+		for k, v := range callerExtra {
+			merged[k] = v
 		}
+		// Inject server-side timeout so local AI aborts generation when the
+		// gateway's context deadline expires. Without this, cancelled requests
+		// become zombies that hold KV cache until max_tokens is exhausted.
+		if deadline, ok := ctx.Deadline(); ok {
+			remaining := time.Until(deadline).Seconds() - 2.0 // 2s headroom for network
+			if remaining > 1 {
+				merged["timeout"] = remaining
+			}
+		}
+		return merged
 	}
 
 	req := llm.ChatRequest{
@@ -146,7 +156,7 @@ func CallRoleLLM(ctx context.Context, role modelrole.Role, system, userMessage s
 		System:    llm.SystemString(system),
 		MaxTokens: maxTokens,
 		Stream:    true,
-		ExtraBody: merged,
+		ExtraBody: shapedExtra(providerID, model),
 	}
 
 	events, err := client.StreamChat(ctx, req)
@@ -161,6 +171,7 @@ func CallRoleLLM(ctx context.Context, role modelrole.Role, system, userMessage s
 					continue
 				}
 				req.Model = fbCfg.Model
+				req.ExtraBody = shapedExtra(fbCfg.ProviderID, fbCfg.Model)
 				events, err = fbClient.StreamChat(ctx, req)
 				if err == nil {
 					break

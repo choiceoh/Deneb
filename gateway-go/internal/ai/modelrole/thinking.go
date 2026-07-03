@@ -39,8 +39,12 @@ var NoThinkingBody = map[string]any{
 //  2. Reasoning models with no off-switch (step3, qwen3 non-instruct, r1…):
 //     nil — the channel is always on; attaching enable_thinking risks a 400
 //     on thinking-only templates.
-//  3. Everything else: NoThinkingBody, byte-identical to the hub's historical
-//     behavior.
+//  3. Non-reasoning models on vLLM-backed providers: NoThinkingBody,
+//     byte-identical to the hub's historical behavior. Direct cloud
+//     providers get nil instead — chat_template_kwargs is a vLLM serving
+//     feature, and an unknown top-level field can 400 on strict
+//     OpenAI-compat APIs (wormhole-fronted models still count as
+//     vLLM-backed, preserving today's passthrough behavior).
 func ThinkingOffExtraBody(providerID, model string) map[string]any {
 	if kw := modelcaps.ThinkingToggleKwarg(providerID, model); kw != "" {
 		return map[string]any{"chat_template_kwargs": map[string]any{kw: false}}
@@ -48,5 +52,23 @@ func ThinkingOffExtraBody(providerID, model string) map[string]any {
 	if IsReasoningModel(model) {
 		return nil
 	}
+	if !modelcaps.ServesVllmBacked(providerID) {
+		return nil
+	}
 	return NoThinkingBody
+}
+
+// ThinkingOffExtraBodyFor is the registry-aware variant of
+// ThinkingOffExtraBody: the off-switch name comes from the resolved routing
+// profile (builtin capability + deneb.json routing.toggleKwarg override), so
+// an operator-declared dual-mode model shapes raw calls the same way the
+// chat effort router shapes foreground turns. Falls back to the package
+// heuristics when the profile names no toggle. Nil-receiver safe.
+func (r *Registry) ThinkingOffExtraBodyFor(providerID, model string) map[string]any {
+	if r != nil {
+		if kw := r.RoutingProfileForModel(providerID, model).ToggleKwarg; kw != "" {
+			return map[string]any{"chat_template_kwargs": map[string]any{kw: false}}
+		}
+	}
+	return ThinkingOffExtraBody(providerID, model)
 }

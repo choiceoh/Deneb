@@ -1,14 +1,59 @@
 package chat
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
+
+// TestMaybeRecordRunDiary_SyncPathSideEffects pins the wiring shared by the
+// async lifecycle and SendSync/SendSyncStream (the native chat path): an
+// eligible turn records the diary — with leaked reasoning delimiters stripped
+// — and fires the dream-turn trigger; an excluded session prefix does neither.
+func TestMaybeRecordRunDiary_SyncPathSideEffects(t *testing.T) {
+	dir := t.TempDir()
+	store := testutil.Must(wiki.NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
+	defer store.Close()
+
+	dreamFired := make(chan struct{}, 2)
+	deps := runDeps{
+		wikiStore:   store,
+		dreamTurnFn: func(context.Context) { dreamFired <- struct{}{} },
+	}
+	result := &agent.AgentResult{
+		Text:       "[thinking]\n내부 추론 노출\n[/thinking]\n계약 협상 단계입니다. 다음 주 공정표 제출 예정.",
+		StopReason: "end_turn", Turns: 1,
+	}
+	maybeRecordRunDiary(deps, RunParams{SessionKey: "client:main", Message: "당진 계약 진행상황 정리해줘"}, result, nil)
+
+	select {
+	case <-dreamFired:
+	case <-time.After(5 * time.Second):
+		t.Fatal("dream-turn trigger did not fire for an eligible recorded turn")
+	}
+	content := readDiaryDir(t, store.DiaryDir())
+	if strings.Contains(content, "[thinking]") || strings.Contains(content, "내부 추론 노출") {
+		t.Fatalf("reasoning leak must be stripped from the diary:\n%s", content)
+	}
+	if !strings.Contains(content, "계약 협상 단계") {
+		t.Fatalf("assistant outcome missing from diary:\n%s", content)
+	}
+
+	// Excluded prefix: nothing recorded, no dream trigger.
+	maybeRecordRunDiary(deps, RunParams{SessionKey: "system:heartbeat", Message: "내부 하트비트 점검 메시지"}, result, nil)
+	select {
+	case <-dreamFired:
+		t.Fatal("excluded session must not fire the dream trigger")
+	case <-time.After(300 * time.Millisecond):
+	}
+}
 
 func TestRecordDiaryIncludesOutcomeForShortPrompt(t *testing.T) {
 	dir := t.TempDir()

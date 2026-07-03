@@ -17,37 +17,47 @@ import (
 )
 
 // progressLogHeadingRe matches a 진행 로그 section heading (H2–H4) on its own
-// line, tolerating spacing variants the model emits.
-var progressLogHeadingRe = regexp.MustCompile(`(?m)^#{2,4}\s*진행\s*로그\s*$`)
+// line, tolerating spacing variants the model emits. The captured # run
+// determines which later heading closes the section.
+var progressLogHeadingRe = regexp.MustCompile(`(?m)^(#{2,4})\s*진행\s*로그\s*$`)
 
-// nextHeadingRe finds the heading that ends a captured section.
-var nextHeadingRe = regexp.MustCompile(`(?m)^#{1,4}\s`)
+// nextHeadingRe finds candidate headings that may end a captured section.
+var nextHeadingRe = regexp.MustCompile(`(?m)^(#{1,4})\s`)
 
 // splitProgressLogSection cuts a "진행 로그" section out of content proposed
 // for a 대표페이지, returning the remaining body and the section's lines
 // (without its heading). ("", content unchanged) when no such section exists.
-// Progress events belong in the project's 로그.md slot (wiki-layout 불변식);
-// the caller reroutes the extracted lines there.
+// The section ends at the next heading of the SAME OR SHALLOWER level — a
+// deeper heading (### 2026-07-03 under ## 진행 로그) is the section's own
+// content, a common shape that used to terminate the capture early and leave
+// the log on the 대표페이지. Progress events belong in the project's 로그.md
+// slot (wiki-layout 불변식); the caller reroutes the extracted lines there.
 func splitProgressLogSection(content string) (body, logLines string) {
-	loc := progressLogHeadingRe.FindStringIndex(content)
-	if loc == nil {
+	m := progressLogHeadingRe.FindStringSubmatchIndex(content)
+	if m == nil {
 		return content, ""
 	}
-	rest := content[loc[1]:]
-	if end := nextHeadingRe.FindStringIndex(rest); end != nil {
-		return strings.TrimSpace(content[:loc[0]] + rest[end[0]:]), strings.TrimSpace(rest[:end[0]])
+	level := m[3] - m[2] // length of the heading's # run
+	rest := content[m[1]:]
+	for _, h := range nextHeadingRe.FindAllStringSubmatchIndex(rest, -1) {
+		if h[3]-h[2] <= level {
+			return strings.TrimSpace(content[:m[0]] + rest[h[0]:]), strings.TrimSpace(rest[:h[0]])
+		}
 	}
-	return strings.TrimSpace(content[:loc[0]]), strings.TrimSpace(rest)
+	return strings.TrimSpace(content[:m[0]]), strings.TrimSpace(rest)
 }
 
 // appendProjectLog appends a dated H2 section to the project's 로그.md,
 // creating the page on first use. H2 is the unit RotateProjectLog rotates on,
-// so rerouted entries age out with the rest of the log.
-func (wd *WikiDreamer) appendProjectLog(project, entry string) {
+// so rerouted entries age out with the rest of the log. Returns whether the
+// entry was persisted — on failure the caller must keep the section in its
+// original page (dropping it there too would silently lose the events).
+func (wd *WikiDreamer) appendProjectLog(project, entry string) bool {
 	if strings.TrimSpace(entry) == "" {
-		return
+		return false
 	}
-	section := "## " + time.Now().Format("2006-01-02") + " (dream)\n" + strings.TrimSpace(entry) + "\n"
+	today := time.Now().Format("2006-01-02")
+	section := "## " + today + " (dream)\n" + strings.TrimSpace(entry) + "\n"
 	err := wd.store.UpdatePage(LogPagePath(project), func(cur *Page) (*Page, error) {
 		if cur == nil {
 			p := NewPage(project+" 진행 로그", "프로젝트", nil)
@@ -57,11 +67,16 @@ func (wd *WikiDreamer) appendProjectLog(project, entry string) {
 			return p, nil
 		}
 		cur.Body = strings.TrimRight(cur.Body, "\n") + "\n\n" + section
+		cur.Meta.Updated = today // the store does not auto-stamp writes
 		return cur, nil
 	})
-	if err != nil && wd.logger != nil {
-		wd.logger.Warn("wiki-dream: project log reroute failed", "project", project, "error", err)
+	if err != nil {
+		if wd.logger != nil {
+			wd.logger.Warn("wiki-dream: project log reroute failed", "project", project, "error", err)
+		}
+		return false
 	}
+	return true
 }
 
 // digestDateRe matches the date stamps daily-digest titles carry.

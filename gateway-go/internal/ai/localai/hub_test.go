@@ -143,7 +143,7 @@ func TestCacheKey_DifferentMaxTokens(t *testing.T) {
 }
 
 func TestMergeRequestBody_NonReasoningKeepsNoThinking(t *testing.T) {
-	merged := mergeRequestBody("vllm", "gemma4", nil)
+	merged := mergeRequestBody(nil, "vllm", "gemma4", nil)
 	ctk, ok := merged["chat_template_kwargs"].(map[string]any)
 	if !ok {
 		t.Fatalf("non-reasoning model: chat_template_kwargs missing, got %v", merged)
@@ -157,7 +157,7 @@ func TestMergeRequestBody_ReasoningDropsNoThinking(t *testing.T) {
 	// A reasoning model must not receive enable_thinking — vLLM's
 	// --reasoning-parser ignores it and a thinking-only chat template that
 	// lacks the parameter rejects the request with a 400.
-	merged := mergeRequestBody("vllm", "qwen3.6-35b-a3b", nil)
+	merged := mergeRequestBody(nil, "vllm", "qwen3.6-35b-a3b", nil)
 	if _, exists := merged["chat_template_kwargs"]; exists {
 		t.Errorf("reasoning model: chat_template_kwargs must be omitted, got %v", merged)
 	}
@@ -169,7 +169,7 @@ func TestMergeRequestBody_DualModeGetsTemplateToggle(t *testing.T) {
 	// branch sent the Qwen enable_thinking spelling, which dsv4 templates
 	// silently ignore — thinking stayed on and ate small output budgets (the
 	// 2026-07-02/03 wiki-dream failures). The toggle must now be attached.
-	merged := mergeRequestBody("vllm", "deepseek-v4-flash", nil)
+	merged := mergeRequestBody(nil, "vllm", "deepseek-v4-flash", nil)
 	ctk, ok := merged["chat_template_kwargs"].(map[string]any)
 	if !ok {
 		t.Fatalf("dsv4: chat_template_kwargs missing, got %v", merged)
@@ -184,7 +184,7 @@ func TestMergeRequestBody_DualModeGetsTemplateToggle(t *testing.T) {
 
 func TestMergeRequestBody_CallerExtraWins(t *testing.T) {
 	caller := map[string]any{"timeout": 30.0, "chat_template_kwargs": "caller-value"}
-	merged := mergeRequestBody("vllm", "qwen3.6-35b-a3b", caller)
+	merged := mergeRequestBody(nil, "vllm", "qwen3.6-35b-a3b", caller)
 	if merged["timeout"] != 30.0 {
 		t.Errorf("caller timeout lost: got %v", merged["timeout"])
 	}

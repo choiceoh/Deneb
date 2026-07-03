@@ -1154,20 +1154,24 @@ func (s *Server) checkpointSummarizer(fallbackSummary, resultText string) func(c
 }
 
 // sanitizeCheckpointLabel normalizes a model-produced checkpoint label to one
-// clean line: first non-empty line, stripped of quote/bullet/backtick wrapping,
-// capped at 60 runes. Returns "" (→ fallback) when nothing usable remains.
+// clean line: first non-empty line, quotes/bullets stripped, ALL backticks
+// removed (inline-code style like `config.go` used to leave a dangling
+// backtick after edge-trimming), capped at the 40-rune labeler contract
+// (checkpointSummarySystem, model-roles.md). Returns "" (→ fallback) when
+// nothing usable remains.
 func sanitizeCheckpointLabel(s string) string {
 	for line := range strings.SplitSeq(s, "\n") {
+		line = strings.ReplaceAll(line, "`", "")
 		line = strings.TrimSpace(line)
-		line = strings.Trim(line, "\"'`“”‘’")
+		line = strings.Trim(line, "\"'“”‘’")
 		line = strings.TrimLeft(line, "-•* ")
 		line = strings.TrimSuffix(line, ".")
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
 		}
-		if r := []rune(line); len(r) > 60 {
-			line = strings.TrimSpace(string(r[:60])) + "…"
+		if r := []rune(line); len(r) > 40 {
+			line = strings.TrimSpace(string(r[:40])) + "…"
 		}
 		return line
 	}
