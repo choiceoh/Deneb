@@ -69,6 +69,9 @@ COMPACTION_CASES = [
             ["강민석"],
             ["재협상"],
         ],
+        # Facts that belong to the OTHER case — appearing here means the model
+        # contaminated the summary with unrelated context (hallucination probe).
+        "foreign": [["18789"], ["spark4tb"], ["ssh 타임아웃", "ssh타임아웃"], ["7월 15일"]],
     },
     {
         "name": "compaction-ops",
@@ -89,6 +92,7 @@ COMPACTION_CASES = [
             ["90초"],
             ["7월 15일"],
         ],
+        "foreign": [["12,400원", "12400원"], ["한빛건설"], ["박정우"], ["5,300만원", "5300만원"]],
     },
 ]
 
@@ -108,6 +112,9 @@ EXTRACT_CASES = [
             "기한": [["7월 11일", "7/11"]],
             "요청사항": [["견적"], ["KS 인증서", "KS인증서"], ["납기 계획서", "납기계획서"]],
         },
+        # Values from the OTHER mail — presence means over-extraction (each hit
+        # deducts; a model that dumps every value it has ever seen must not pass).
+        "foreign": [["1억 4,500만원", "1억4500만원", "1억 4500만원"], ["8월 5일"], ["세금계산서"], ["통장 사본", "통장사본"]],
     },
     {
         "name": "extract-payment",
@@ -122,6 +129,7 @@ EXTRACT_CASES = [
             "기한": [["8월 5일", "8/5"]],
             "요청사항": [["세금계산서"], ["통장 사본", "통장사본"]],
         },
+        "foreign": [["9억 2천만원", "9억2천만원"], ["7월 11일"], ["KS 인증서", "KS인증서"], ["납기 계획서", "납기계획서"]],
     },
 ]
 
@@ -132,6 +140,9 @@ TITLE_CASES = [
             "사용자: 한빛건설 케이블 단가 합의된 걸로 계약서 초안 잡아줘. 선수금 조항이랑 "
             "구리값 재협상 조항 꼭 넣고.\n비서: 초안을 작성하겠습니다. 날인 일정은 다음 주 화요일로 잡습니다."
         ),
+        # Relevance anchor: a useful title must name the subject, not just be a
+        # short Korean phrase — any one of these must appear.
+        "keywords": ["한빛", "계약", "케이블", "단가"],
     },
     {
         "name": "title-ops",
@@ -139,6 +150,7 @@ TITLE_CASES = [
             "사용자: 백업 실패 알림이 왜 안 왔는지 봐줘.\n"
             "비서: 6월 28일 실패는 Warn 레벨로만 기록되어 알림이 발송되지 않았습니다. Error로 올리겠습니다."
         ),
+        "keywords": ["백업", "알림", "실패"],
     },
 ]
 
@@ -215,7 +227,15 @@ def score_compaction(case, out: str) -> float:
     ratio = len(out) / max(1, len(case["dialogue"]))
     brevity = 1.0 if ratio <= 0.35 else max(0.0, (1.0 - ratio) / 0.65)
     korean = 1.0 if hangul_ratio(out) >= 0.3 else 0.0
-    return 100 * (0.6 * fact_score + 0.25 * brevity + 0.15 * korean)
+    score = 100 * (0.6 * fact_score + 0.25 * brevity + 0.15 * korean)
+    # 압축 실패는 하드 캡: 원문의 70%를 넘겨 출력하면 사실을 다 담아도 "요약"이 아니다
+    # (통짜 에코가 부분 점수로 살아남던 헛점 봉쇄).
+    if ratio > 0.7:
+        score = min(score, 30.0)
+    # 환각 혼입 벌점: 다른 케이스의 사실이 이 요약에 나타나면 건당 -15 — 복원된
+    # 컨텍스트를 오염시키는 모델이 승격되면 안 된다.
+    foreign = sum(1 for f in case.get("foreign", []) if _any_variant(out, f))
+    return max(0.0, score - 15.0 * foreign)
 
 
 def _strip_fence(text: str) -> str:
@@ -237,26 +257,39 @@ def score_extract(case, out: str) -> float:
         return 0.0
     # parse 40 (fence-wrapped costs 10: the real pipeline wants bare JSON)
     score = 30.0 if fenced else 40.0
-    keys = {"보낸사람", "의도", "금액", "기한", "요청사항"}
-    score += 20.0 * (len(keys & set(obj.keys())) / len(keys))
+    # 스키마 준수는 키 존재 + 타입까지 — 리스트 필드에 문자열을 넣는 출력이
+    # 통과하면 stage1 소비자(배열 순회)가 깨진다.
+    want_types = {"보낸사람": str, "의도": str, "금액": list, "기한": list, "요청사항": list}
+    ok_keys = sum(1 for k, t in want_types.items() if isinstance(obj.get(k), t))
+    score += 20.0 * (ok_keys / len(want_types))
     # ground-truth field hits: 40
     blob = json.dumps(obj, ensure_ascii=False)
     checks = [v for groups in case["truth"].values() for v in groups]
     hit = sum(1 for variants in checks if _any_variant(blob, variants))
     score += 40.0 * (hit / len(checks))
-    return score
+    # 과잉 추출 벌점: 이 메일에 없는(다른 메일의) 값이 섞여 나오면 건당 -15 —
+    # 정답을 다 맞혀도 오염된 필드는 승격 불가.
+    foreign = sum(1 for variants in case.get("foreign", []) if _any_variant(blob, variants))
+    return max(0.0, score - 15.0 * foreign)
 
 
-def score_title(_case, out: str) -> float:
+def score_title(case, out: str) -> float:
     t = out.strip()
     score = 0.0
     if t and "\n" not in t:
-        score += 25
-    if 0 < len(t) <= 20:  # 15자 목표, 20자까지 관용
-        score += 25
-    if t and not re.search(r'["\'`.!?」』]$|^["\'`「『]', t) and "#" not in t:
-        score += 25
+        score += 20
+    # 프롬프트는 15자 요구 — 15자 만점, 20자까진 절반 (글자수 감각 관용은 부분 점수로만)
+    if 0 < len(t) <= 15:
+        score += 20
+    elif len(t) <= 20:
+        score += 10
+    # 금지 문자는 위치 불문 (따옴표·마크다운 전역, 마침표류는 끝)
+    if t and not re.search(r'["\'`「」『』#*]|[.!?…]$', t):
+        score += 20
     if hangul_ratio(t) >= 0.3:
+        score += 15
+    # 관련성: 주제를 지칭해야 제목이다 — "업무 정리" 같은 만능 제목 차단.
+    if any(k in t for k in case.get("keywords", [])):
         score += 25
     return score
 
@@ -271,48 +304,72 @@ def score_verdict(case, out: str) -> float:
     return 0.0
 
 
+# (name, cases, prompt-builder, scorer, max_tokens, response_format)
+# extract는 프로덕션 gmail stage1과 같은 JSON 모드로 호출해 guided-decoding 호환까지
+# 함께 측정한다 (서버가 400으로 거부하면 형식 없이 1회 폴백 — 로그에 표기).
 TASKS = [
-    ("compaction", COMPACTION_CASES, lambda c: compaction_prompt(c["dialogue"]), score_compaction, 400),
-    ("extract", EXTRACT_CASES, lambda c: extract_prompt(c["mail"]), score_extract, 300),
-    ("title", TITLE_CASES, lambda c: title_prompt(c["snippet"]), score_title, 50),
-    ("verdict", VERDICT_CASES, lambda c: verdict_prompt(c["context"]), score_verdict, 20),
+    ("compaction", COMPACTION_CASES, lambda c: compaction_prompt(c["dialogue"]), score_compaction, 400, None),
+    ("extract", EXTRACT_CASES, lambda c: extract_prompt(c["mail"]), score_extract, 300, {"type": "json_object"}),
+    ("title", TITLE_CASES, lambda c: title_prompt(c["snippet"]), score_title, 50, None),
+    ("verdict", VERDICT_CASES, lambda c: verdict_prompt(c["context"]), score_verdict, 20, None),
 ]
 
 # --- OpenAI-compatible client (stdlib only) ---------------------------------
 
 
-def chat_once(base_url: str, api_key: str, model: str, prompt: str, max_tokens: int, timeout: float):
-    body = json.dumps(
-        {
-            "model": model,
-            "messages": [{"role": "user", "content": prompt}],
-            "temperature": 0,
-            "max_tokens": max_tokens,
-        }
-    ).encode("utf-8")
+def chat_once(base_url: str, api_key: str, model: str, prompt: str, max_tokens: int, timeout: float, response_format=None):
+    payload_body = {
+        "model": model,
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0,
+        "max_tokens": max_tokens,
+    }
+    if response_format:
+        payload_body["response_format"] = response_format
+    headers = {"Content-Type": "application/json"}
+    if api_key:  # 빈 Bearer 헤더는 무인증과 다르게 취급하는 서버가 있다 — 아예 생략
+        headers["Authorization"] = f"Bearer {api_key}"
     req = urllib.request.Request(
         base_url.rstrip("/") + "/chat/completions",
-        data=body,
-        headers={"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"},
+        data=json.dumps(payload_body).encode("utf-8"),
+        headers=headers,
         method="POST",
     )
-    start = time.monotonic()
     with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310 — local/tailnet endpoints only
         payload = json.load(resp)
-    latency_ms = int((time.monotonic() - start) * 1000)
     content = payload["choices"][0]["message"]["content"] or ""
     usage = payload.get("usage") or {}
     out_tokens = usage.get("completion_tokens") or max(1, len(content) // 3)
-    return content, latency_ms, out_tokens
+    return content, out_tokens
 
 
-def chat_with_retry(base_url, api_key, model, prompt, max_tokens, timeout):
+# 재시도할 가치가 있는 상태만 — 4xx(400/401/404 등)는 재시도해도 같은 답이고
+# 서버에 이중 부하만 준다.
+TRANSIENT_HTTP = {408, 429, 500, 502, 503, 504}
+
+
+def chat_with_retry(base_url, api_key, model, prompt, max_tokens, timeout, response_format=None):
+    # 레이턴시는 재시도·백오프를 포함한 벽시계 전체 — 플레이키한 모델이 실패 시간을
+    # 숨기고 건강한 avg_latency_ms를 보고하면 운영 판단이 왜곡된다.
+    start = time.monotonic()
+
+    def done(content, out_tokens):
+        return content, int((time.monotonic() - start) * 1000), out_tokens
+
     try:
-        return chat_once(base_url, api_key, model, prompt, max_tokens, timeout)
-    except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, OSError) as e:
+        return done(*chat_once(base_url, api_key, model, prompt, max_tokens, timeout, response_format))
+    except urllib.error.HTTPError as e:
+        # guided-decoding 미지원 서버의 response_format 거부 → 형식 없이 1회 폴백
+        if response_format is not None and e.code == 400:
+            print(f"  ! {model}: response_format rejected (400) — falling back without JSON mode", file=sys.stderr)
+            return done(*chat_once(base_url, api_key, model, prompt, max_tokens, timeout, None))
+        if e.code not in TRANSIENT_HTTP:
+            raise
+        print(f"  ! transient HTTP {e.code} for {model} — retrying once", file=sys.stderr)
+    except (urllib.error.URLError, TimeoutError, OSError) as e:
         print(f"  ! transient error for {model}: {e} — retrying once", file=sys.stderr)
-        time.sleep(2)
-        return chat_once(base_url, api_key, model, prompt, max_tokens, timeout)
+    time.sleep(2)
+    return done(*chat_once(base_url, api_key, model, prompt, max_tokens, timeout, response_format))
 
 
 # --- Runner ------------------------------------------------------------------
@@ -321,11 +378,13 @@ def chat_with_retry(base_url, api_key, model, prompt, max_tokens, timeout):
 def run_model(base_url, api_key, model, rounds, timeout):
     per_task = {}
     latencies, out_tokens_all = [], []
-    for task_name, cases, mk_prompt, scorer, max_tokens in TASKS:
+    for task_name, cases, mk_prompt, scorer, max_tokens, response_format in TASKS:
         scores = []
         for _ in range(rounds):
             for case in cases:
-                out, ms, otoks = chat_with_retry(base_url, api_key, model, mk_prompt(case), max_tokens, timeout)
+                out, ms, otoks = chat_with_retry(
+                    base_url, api_key, model, mk_prompt(case), max_tokens, timeout, response_format
+                )
                 s = scorer(case, out)
                 scores.append(s)
                 latencies.append(ms)
@@ -346,7 +405,7 @@ def print_report(results):
     print()
     header = f"{'task':<12}" + "".join(f"{r['model']:>26}" for r in results)
     print(header)
-    for task_name, _, _, _, _ in TASKS:
+    for task_name, _, _, _, _, _ in TASKS:
         print(f"{task_name:<12}" + "".join(f"{r['per_task'][task_name]:>26.1f}" for r in results))
     print(f"{'TOTAL':<12}" + "".join(f"{r['total']:>26.1f}" for r in results))
     print(f"{'avg ms':<12}" + "".join(f"{r['avg_latency_ms']:>26}" for r in results))
@@ -372,51 +431,76 @@ def print_report(results):
 # actually tell the two behaviors apart before anyone trusts it on real models.
 
 MOCK_GOOD = {
-    "compaction": (
+    # 케이스별로 정확한(그 케이스의 사실만 담은) 모범 답 — 교차 오염/과잉 추출 벌점이
+    # 모범생에게는 발동하지 않고 위반자만 잡는다는 것까지 셀프테스트가 검증한다.
+    "compaction-deal": (
         "한빛건설 케이블 단가는 미터당 12,400원으로 합의했고 1차 납품은 8월 20일, 잔여분은 9월 10일까지다. "
-        "선수금은 5,300만원이며 담당은 박정우 차장, 최종 승인은 강민석 상무다. "
-        "구리값 5% 이상 상승 시 단가 재협상 조항이 발동된다. "
-        "서버는 18789 포트 정상, spark4tb 디스크 82%, 6월 28일 백업 실패 원인은 ssh 타임아웃이며 재시도 간격을 90초로 늘렸고 다음 점검은 7월 15일이다."
+        "선수금은 5,300만원, 담당은 박정우 차장이고 최종 승인은 강민석 상무다. "
+        "구리값 5% 이상 상승 시 단가 재협상 조항이 발동된다."
     ),
-    "extract": (
-        '{"보낸사람": "김서연", "의도": "견적 요청", "금액": ["9억 2천만원", "1억 4,500만원"], '
-        '"기한": ["7월 11일", "8월 5일"], "요청사항": ["견적", "KS 인증서", "납기 계획서", "세금계산서", "통장 사본"]}'
+    "compaction-ops": (
+        "게이트웨이는 18789 포트에서 정상이고 spark4tb 디스크는 82% 사용 중이다. "
+        "6월 28일 백업 실패 원인은 ssh 타임아웃으로, 재시도 간격을 90초로 늘리고 알림을 Error로 올렸다. "
+        "다음 점검은 7월 15일이다."
     ),
-    "title": "한빛건설 계약 초안",
+    "extract-quote": (
+        '{"보낸사람": "김서연", "의도": "견적 요청", "금액": ["9억 2천만원"], '
+        '"기한": ["7월 11일"], "요청사항": ["견적", "KS 인증서", "납기 계획서"]}'
+    ),
+    "extract-payment": (
+        '{"보낸사람": "정해준", "의도": "잔금 입금 안내", "금액": ["1억 4,500만원"], '
+        '"기한": ["8월 5일"], "요청사항": ["세금계산서", "통장 사본"]}'
+    ),
+    "title-deal": "한빛건설 계약 초안",
+    "title-ops": "백업 알림 누락 점검",
     "verdict-done": "DONE",
     "verdict-continue": "CONTINUE",
 }
 
 MOCK_VERBOSE = {
+    # 에이전트형 실패 모드 총집합: 계획 서두·통짜 재진술 + 교차 사실 혼입(compaction),
+    # 코드펜스+사족+타입 위반+과잉 추출(extract), 따옴표 장문(title), 판정 사족(verdict).
     "compaction": (
         "이 과제를 해결하기 위해 먼저 대화를 단계별로 분석하겠습니다. 1단계: 주요 주제 식별. 2단계: 세부 사실 정리. "
         "회의에서는 여러 주제가 논의되었습니다. 단가와 납기에 대한 논의가 있었고 담당자 관련 사항도 언급되었습니다. "
+        "참고로 지난 점검에서 spark4tb 디스크와 18789 포트 상태도 함께 확인된 바 있습니다. "
         "추가로 리스크 요인에 대한 검토가 필요해 보입니다. 요약하자면 전반적으로 계약 관련 진행 상황이 공유되었습니다. "
-        "다음 단계로는 계약서 검토를 제안드립니다. 더 자세한 분석이 필요하시면 말씀해 주세요. "
-        "이상으로 대화 내용을 폭넓게 살펴보았습니다. 참고로 위 내용은 제공된 대화만을 근거로 하였습니다."
+        "다음 단계로는 계약서 검토를 제안드립니다. 더 자세한 분석이 필요하시면 말씀해 주세요."
     ),
-    "extract": '```json\n{"보낸사람": "김서연", "의도": "견적 요청", "금액": [], "기한": []}\n```\n추출을 완료했습니다.',
+    "extract": (
+        '```json\n{"보낸사람": "김서연", "의도": "견적 요청", "금액": "9억 2천만원과 1억 4,500만원", '
+        '"기한": ["7월 11일", "8월 5일"], "요청사항": ["견적", "세금계산서", "통장 사본"]}\n```'
+    ),
     "title": '"한빛건설과의 케이블 단가 계약 초안 작성 요청 건에 대한 대화입니다."',
     "verdict-done": "분석 결과, 목표가 달성된 것으로 판단되므로 DONE입니다.",
     "verdict-continue": "아직 서류 2종이 남아 있으므로 CONTINUE가 적절해 보입니다. 추가 조치를 제안드립니다.",
 }
 
 
+def _mock_reply(model: str, prompt: str) -> str:
+    good = model == "mock-good"
+    if "요약으로 압축" in prompt:
+        if good:
+            return MOCK_GOOD["compaction-deal"] if "한빛건설" in prompt else MOCK_GOOD["compaction-ops"]
+        return MOCK_VERBOSE["compaction"]
+    if "JSON만 출력" in prompt:
+        if good:
+            return MOCK_GOOD["extract-quote"] if "영덕" in prompt else MOCK_GOOD["extract-payment"]
+        return MOCK_VERBOSE["extract"]
+    if "제목" in prompt:
+        if good:
+            return MOCK_GOOD["title-deal"] if "케이블" in prompt else MOCK_GOOD["title-ops"]
+        return MOCK_VERBOSE["title"]
+    if "DONE" in prompt:
+        key = "verdict-done" if "발송 완료" in prompt else "verdict-continue"
+        return MOCK_GOOD[key] if good else MOCK_VERBOSE[key]
+    return "?"
+
+
 class _MockHandler(http.server.BaseHTTPRequestHandler):
     def do_POST(self):  # noqa: N802 — http.server API
         body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
-        prompt = body["messages"][0]["content"]
-        table = MOCK_GOOD if body["model"] == "mock-good" else MOCK_VERBOSE
-        if "요약으로 압축" in prompt:
-            content = table["compaction"]
-        elif "JSON만 출력" in prompt:
-            content = table["extract"]
-        elif "제목" in prompt:
-            content = table["title"]
-        elif "DONE" in prompt:
-            content = table["verdict-done"] if "발송 완료" in prompt else table["verdict-continue"]
-        else:
-            content = "?"
+        content = _mock_reply(body["model"], body["messages"][0]["content"])
         resp = json.dumps(
             {"choices": [{"message": {"content": content}}], "usage": {"completion_tokens": len(content) // 3}}
         ).encode("utf-8")
