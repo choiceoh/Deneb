@@ -222,8 +222,19 @@ func executeAgentRun(
 			storeNotebookGrounding(params.SessionKey, nbID, updated, g)
 		}
 	}
-	tailAdds := buildTailAdditions(params, prep.RecallMemory, notebookGrounding,
-		buildSkillHints(params, cachedResolvedSkills()))
+	skillHints, hintedSkills := buildSkillHints(params, cachedResolvedSkills())
+	if len(hintedSkills) > 0 {
+		// Measurement anchor for the auto-hint experiment: joining these events
+		// with skill_usage.jsonl (same session, consult after this ts) yields the
+		// hint→consult conversion rate. Rare by construction (trigger match), so
+		// Info + one agentlog event per fire is not spam.
+		deps.logger.Info("skill hints injected",
+			"session", params.SessionKey, "skills", strings.Join(hintedSkills, ","))
+		deps.agentLog.LogEvent(params.SessionKey, "run.skillhints", map[string]any{
+			"skills": hintedSkills,
+		})
+	}
+	tailAdds := buildTailAdditions(params, prep.RecallMemory, notebookGrounding, skillHints)
 	messages, tailInjected := injectTailAdditions(messages, tailAdds)
 	tailForSystem := ""
 	if !tailInjected {
