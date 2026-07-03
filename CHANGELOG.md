@@ -1,5 +1,24 @@
 # Changelog
 
+## [4.59.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.58.0...deneb-v4.59.0) (2026-07-03)
+
+
+### ✨ Features
+
+* **code:** 코드모드 품질 후속 — edit 공백 관용 자동 적용 + 체크포인트 tiny 한국어 라벨 ([#3035](https://github.com/choiceoh/Deneb/issues/3035)) ([b4ab613](https://github.com/choiceoh/Deneb/commit/b4ab613ef1ba3007afbc578b6042a06b619b7cc2))
+* **gateway:** MCP 게이트웨이 — 데네브 기억을 외부 AI 도구의 표준 도구로 ([#3036](https://github.com/choiceoh/Deneb/issues/3036)) ([6efdb4e](https://github.com/choiceoh/Deneb/commit/6efdb4e41c0ca4eecb7d6fd20c618c3212c8b624))
+* **mail:** 메일 우선순위에 활성 거래처 결합 신호 — 위키 메일분석 도메인 조인 (+2 증폭) ([#3039](https://github.com/choiceoh/Deneb/issues/3039)) ([a42c877](https://github.com/choiceoh/Deneb/commit/a42c877cde3d8078d5b79e6052d24d874719327d))
+* **wiki:** 정체성 필드 가중 검색(BM25F-lite) — 본문 반복이 대표 문서를 밀어내지 않게 ([#3043](https://github.com/choiceoh/Deneb/issues/3043)) ([ac8bc0f](https://github.com/choiceoh/Deneb/commit/ac8bc0f88125c0c16e7c1b090baef57300a2b101))
+* **wiki:** 큐 앵커(cue anchors) — 다른 어휘의 질문이 문서에 닿게 (Memora 아이디어 차용) ([#3040](https://github.com/choiceoh/Deneb/issues/3040)) ([8962eb0](https://github.com/choiceoh/Deneb/commit/8962eb01ebfaeb6b127fa604d4f146f674f57e92))
+
+
+### 🐛 Bug Fixes
+
+* **chat:** 일지 자동기록·드림턴 트리거를 sync 경로에도 배선 — 네이티브 턴이 일지·드리밍에서 누락되던 갭 ([#3044](https://github.com/choiceoh/Deneb/issues/3044)) ([813b62a](https://github.com/choiceoh/Deneb/commit/813b62abf1d96096ea40d0789e86f0abfdb1bafa))
+* **localai:** 허브·pilot 원시 콜에 dsv4 thinking 토글 — 공유 3분기 셰이핑으로 통일 ([#3042](https://github.com/choiceoh/Deneb/issues/3042)) ([a33f6a4](https://github.com/choiceoh/Deneb/commit/a33f6a409aaf22775dd6671df11b1ebe20b0a267))
+* **wiki:** 드림 사이클 LLM 콜에 thinking-off 셰이핑 — dsv4 추론이 합성 예산을 소진하던 실패 수리 ([#3041](https://github.com/choiceoh/Deneb/issues/3041)) ([1dac516](https://github.com/choiceoh/Deneb/commit/1dac51612c1a4f53462b0b7a33ace7a9c5270c48))
+* **wiki:** 드림 합성 JSON 회수 파서 + 예산 8192 — 손상 배열이 사이클을 무산시키지 않게 ([#3045](https://github.com/choiceoh/Deneb/issues/3045)) ([60f9d53](https://github.com/choiceoh/Deneb/commit/60f9d53ec8c71628bf643bb1f8970531990a41cf))
+
 ## [4.58.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.57.0...deneb-v4.58.0) (2026-07-02)
 
 
