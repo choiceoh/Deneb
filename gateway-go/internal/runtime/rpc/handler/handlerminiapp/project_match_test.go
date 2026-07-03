@@ -34,6 +34,49 @@ func TestProjectMatchKeysAndLink(t *testing.T) {
 	}
 }
 
+// TestProjectMatchKeys_FolderSchemaNoCrossMatch: after the folder-schema
+// migration every rep page ends in 대표.md (logs in 로그.md), so the slot leaf
+// must never act as a match key — otherwise ANY project's rep/log path links to
+// EVERY project. The discriminating leaf of a slot path is its project folder.
+func TestProjectMatchKeys_FolderSchemaNoCrossMatch(t *testing.T) {
+	keys := projectMatchKeys(
+		"탑솔라",
+		"프로젝트/탑솔라/대표.md",
+		"pl1-tps-sup-001",
+		[]string{
+			"프로젝트/탑솔라/로그.md",
+			"프로젝트/탑솔라/메일분석/abc123.md",
+			"프로젝트/거래/한빛전기.md",
+		},
+	)
+	if _, leaked := keys["대표"]; leaked {
+		t.Fatal("rep-slot leaf 대표 must not be a match key (cross-links every project)")
+	}
+	if _, leaked := keys["로그"]; leaked {
+		t.Fatal("log-slot leaf 로그 must not be a match key (cross-links every project)")
+	}
+
+	cases := []struct {
+		name string
+		refs []string
+		want bool
+	}{
+		{"own rep page (folder schema)", []string{"프로젝트/탑솔라/대표.md"}, true},
+		{"own rep page folder leaf", []string{"탑솔라/대표.md"}, true}, // category-less variant → folder leaf
+		{"own log page", []string{"프로젝트/탑솔라/로그.md"}, true},
+		{"project name only", []string{"탑솔라"}, true},
+		{"ANOTHER project's rep page", []string{"프로젝트/영산고/대표.md"}, false},
+		{"ANOTHER project's log page", []string{"프로젝트/영산고/로그.md"}, false},
+		{"ANOTHER project's log archive", []string{"프로젝트/영산고/로그-보관.md"}, false},
+		{"bare slot filename", []string{"대표", "로그"}, false},
+	}
+	for _, c := range cases {
+		if got := itemLinkedToProject(keys, c.refs...); got != c.want {
+			t.Errorf("%s: itemLinkedToProject(%v) = %v, want %v", c.name, c.refs, got, c.want)
+		}
+	}
+}
+
 func TestMailIDsFromRefs(t *testing.T) {
 	refs := []string{
 		"프로젝트/mail-analyses/탑솔라/abc123.md", // → abc123

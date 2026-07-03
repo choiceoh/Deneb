@@ -585,13 +585,21 @@ func (wd *WikiDreamer) rebuildIndex() error {
 // slug match, or FTS title search (the shared FindSimilarPages primitive).
 // Returns the existing path or "".
 func (wd *WikiDreamer) findExistingPage(u wikiUpdate) string {
-	hits := wd.store.FindSimilarPages(context.Background(), SimilarQuery{
+	q := SimilarQuery{
 		Path:     u.Path,
 		ID:       u.ID,
-		Code:     u.Code,
 		Title:    u.Title,
 		Category: u.Category,
-	}, 1)
+	}
+	// The frozen-code signal identifies the PROJECT (FindSimilarPages resolves
+	// it to rep pages), so it applies only when the proposal itself IS a rep
+	// page. A CHILD page (기자재/메일분석/상세) legitimately carries its project's
+	// code — matching on it returned the 대표페이지 and converted the child
+	// create into a rep update, absorbing child content into the rep.
+	if IsProjectRepPage(u.Path) {
+		q.Code = u.Code
+	}
+	hits := wd.store.FindSimilarPages(context.Background(), q, 1)
 	if len(hits) == 0 {
 		return ""
 	}
@@ -703,19 +711,17 @@ func (wd *WikiDreamer) resetCounters() {
 	}
 }
 
-// mergeTags merges two tag lists, deduplicating.
-// mergeCues appends new cue anchors not already present, capped so repeated
-// dream cycles can't grow a page into a BM25 stopword magnet — a page matching
-// everything is as useless as one matching nothing. Existing cues keep priority
-// (stable across cycles); overflow from a single update is dropped.
+// mergeCues appends new cue anchors not already present, normalized
+// (trim/drop-empty/dedupe) BEFORE the cap so whitespace variants and empties
+// can't eat cap slots, then capped so repeated dream cycles can't grow a page
+// into a BM25 stopword magnet — a page matching everything is as useless as
+// one matching nothing. Existing cues keep priority (stable across cycles);
+// overflow from a single update is dropped. normalizeCues owns the cap (10).
 func mergeCues(existing, added []string) []string {
-	const maxCues = 10
-	merged := mergeTags(existing, added)
-	if len(merged) > maxCues {
-		merged = merged[:maxCues]
-	}
-	return merged
+	return normalizeCues(mergeTags(existing, added))
 }
+
+// mergeTags merges two tag lists, deduplicating.
 
 func mergeTags(existing, added []string) []string {
 	seen := map[string]struct{}{}

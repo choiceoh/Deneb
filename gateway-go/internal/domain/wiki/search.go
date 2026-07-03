@@ -249,10 +249,14 @@ func (s *Store) Search(ctx context.Context, query string, limit int) ([]SearchRe
 	// sat just outside the window. With identity-field boosts an archived
 	// title match outranks a current body match, so at small limits the stale
 	// page would be the ONLY result. Fetch a wider candidate set, apply
-	// validity, and cut to the caller's limit at the very end.
+	// validity, and cut to the caller's limit at the very end. The +50 floor
+	// keeps small limits meaningful in a mature wiki: at limit=1 the old +10
+	// floor fetched 11 rows, and a project with a dozen boosted-but-archived
+	// pages could fill all of them, leaving applyValidity nothing current to
+	// rescue (stale crowd-out). Still bounded — this is one in-memory BM25 pass.
 	fetchLimit := limit * 3
-	if fetchLimit < limit+10 {
-		fetchLimit = limit + 10
+	if fetchLimit < limit+50 {
+		fetchLimit = limit + 50
 	}
 	bm25, err := s.fts.search(ctx, query, fetchLimit)
 	if err != nil {

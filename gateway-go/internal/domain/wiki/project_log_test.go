@@ -72,6 +72,46 @@ func TestRotateProjectLog(t *testing.T) {
 	}
 }
 
+// TestTrimRotatedLogSections_KeepsConcurrentAppend: the trim mutate rebuilds
+// from the page's CURRENT body — a section appended between the rotation's
+// pre-read and the trim (here simulated by a body that grew a tail section
+// after the overflow snapshot) must survive; the stale-snapshot rebuild lost
+// it silently.
+func TestTrimRotatedLogSections_KeepsConcurrentAppend(t *testing.T) {
+	var b strings.Builder
+	b.WriteString("서문\n")
+	for i := 1; i <= 4; i++ {
+		fmt.Fprintf(&b, "\n## 사건 %d\n\n내용 %d\n", i, i)
+	}
+	snapshot := &Page{Body: b.String()}
+	_, sections := snapshot.SplitByH2()
+	overflow := sections[:2] // 사건 1, 사건 2 were archived
+
+	// Meanwhile the live page gained 사건 5 (the race window append).
+	cur := &Page{Body: b.String() + "\n## 사건 5\n\n내용 5\n"}
+	got := trimRotatedLogSections(cur, overflow)
+	if got == nil {
+		t.Fatal("trim skipped despite a matching head")
+	}
+	_, kept := got.SplitByH2()
+	if len(kept) != 3 || kept[0].Heading != "사건 3" || kept[2].Heading != "사건 5" {
+		t.Fatalf("kept = %+v, want [사건 3, 사건 4, 사건 5]", kept)
+	}
+	if !strings.Contains(got.Body, "서문") {
+		t.Errorf("preamble lost:\n%s", got.Body)
+	}
+
+	// Head mismatch (log rewritten concurrently) → skip, never guess.
+	rewritten := &Page{Body: "## 완전히 다른 섹션\n\n내용\n"}
+	if trimRotatedLogSections(rewritten, overflow) != nil {
+		t.Error("trim must bail when the head no longer matches the archived overflow")
+	}
+	// Deleted concurrently → skip.
+	if trimRotatedLogSections(nil, overflow) != nil {
+		t.Error("trim must bail on a deleted page")
+	}
+}
+
 // TestIsProjectLogPage guards the review-exclusion rule for log slots.
 func TestIsProjectLogPage(t *testing.T) {
 	cases := map[string]bool{

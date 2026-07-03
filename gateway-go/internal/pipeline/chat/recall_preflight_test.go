@@ -81,6 +81,36 @@ func TestRecallPrimaryQuery(t *testing.T) {
 	}
 }
 
+// TestApplyBroadeningPenalty_ProjectAnchorExempt: the guaranteed project-anchor
+// row is pinned structurally (sentinel Query, not a search term) — the
+// broadening penalty must demote term-only stragglers but never the anchor,
+// or combined-query wiki hits outrank the named project's 대표페이지.
+func TestApplyBroadeningPenalty_ProjectAnchorExempt(t *testing.T) {
+	queries := []string{"기아 화성 근황", "기아", "화성"}
+	evidence := []recallEvidence{
+		{Query: recallProjectAnchorQuery, Score: recallProjectAnchorScore},
+		{Query: "기아 화성 근황", Score: 1.7}, // combined-query hit — untouched
+		{Query: "화성", Score: 1.7},       // term-only straggler — demoted
+	}
+	applyBroadeningPenalty(evidence, queries)
+
+	if evidence[0].Score != recallProjectAnchorScore {
+		t.Errorf("anchor demoted: %v, want %v", evidence[0].Score, recallProjectAnchorScore)
+	}
+	if evidence[1].Score != 1.7 {
+		t.Errorf("combined-query hit demoted: %v", evidence[1].Score)
+	}
+	if evidence[2].Score >= 1.7 {
+		t.Errorf("term-only hit not demoted: %v", evidence[2].Score)
+	}
+	// The anchor must outrank every non-anchor row after the penalty.
+	for i := 1; i < len(evidence); i++ {
+		if evidence[i].Score >= evidence[0].Score {
+			t.Errorf("row %d (%v) outranks the anchor (%v)", i, evidence[i].Score, evidence[0].Score)
+		}
+	}
+}
+
 func TestDiaryHitEvidenceNormalizesScore(t *testing.T) {
 	// Raw recency-weighted diary BM25 (3-9) must be normalized into the 0-1
 	// source-prior family, not left raw to dwarf wiki (0.80+0-1) and bury the

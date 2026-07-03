@@ -112,6 +112,75 @@ func TestBuildCodeIndex(t *testing.T) {
 	}
 }
 
+// TestBuildCodeIndex_RepCodeWinsOverLaterEntity: the 대표페이지's code owns the
+// folder — a child page typed "entity" iterated AFTER the rep (여기서는 파일명
+// 정렬상 대표.md 뒤에 오는 이름) must not overwrite it.
+func TestBuildCodeIndex_RepCodeWinsOverLaterEntity(t *testing.T) {
+	s, err := NewStore(t.TempDir(), t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	rep := NewPage("기아화성", "프로젝트", nil)
+	rep.Meta.Code = "pl3-kia-mod-001"
+	if err := s.WritePage(RepPagePath("기아화성"), rep); err != nil {
+		t.Fatal(err)
+	}
+	// ListPages walks lexically; "화성-계약.md" sorts after "대표.md" so this
+	// entity is iterated after the rep — the old `|| Type=="entity"` clause let
+	// it clobber the rep's code.
+	ent := NewPage("기아화성 하도급 계약", "프로젝트", nil)
+	ent.Meta.Code = "pl3-kia-epc-001"
+	ent.Meta.Type = "entity"
+	if err := s.WritePage("프로젝트/기아화성/화성-계약.md", ent); err != nil {
+		t.Fatal(err)
+	}
+
+	wd := &WikiDreamer{store: s, logger: slog.Default()}
+	ci := wd.buildCodeIndex()
+	if got := ci.folderCode["프로젝트/기아화성"]; got != "pl3-kia-mod-001" {
+		t.Errorf("folderCode = %q, want the rep's code pl3-kia-mod-001", got)
+	}
+}
+
+// TestFindExistingPage_ChildCreateKeepsOwnPath (regression, M21): a CHILD page
+// create carrying its project's inherited code must stay a create at its own
+// path — the code signal resolves to the 대표페이지, and matching on it turned
+// child creates into rep updates (child content absorbed into the rep). A rep
+// proposal with the same code must still dedup onto the existing rep.
+func TestFindExistingPage_ChildCreateKeepsOwnPath(t *testing.T) {
+	s, err := NewStore(t.TempDir(), t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	rep := NewPage("기아화성", "프로젝트", nil)
+	rep.Meta.Code = "pl3-kia-mod-001"
+	rep.Body = "# 기아화성"
+	if err := s.WritePage(RepPagePath("기아화성"), rep); err != nil {
+		t.Fatal(err)
+	}
+	wd := &WikiDreamer{store: s, logger: slog.Default()}
+
+	child := wikiUpdate{
+		Path:     "프로젝트/기아화성/기자재/모듈-상세.md",
+		Title:    "모듈 상세",
+		Code:     "pl3-kia-mod-001", // inherited project code
+		Category: "프로젝트",
+	}
+	if got := wd.findExistingPage(child); got != "" {
+		t.Fatalf("child create redirected onto %q — must stay a create in its own path", got)
+	}
+
+	repDup := wikiUpdate{
+		Path:     "프로젝트/기아-오토랜드-화성/대표.md",
+		Title:    "기아 오토랜드 화성",
+		Code:     "pl3-kia-mod-001",
+		Category: "프로젝트",
+	}
+	if got := wd.findExistingPage(repDup); got != RepPagePath("기아화성") {
+		t.Fatalf("rep-page code dedup broken: got %q, want %q", got, RepPagePath("기아화성"))
+	}
+}
+
 // TestGraphContext_CodeRefSurvivesMove is the headline guarantee: a reference by
 // code resolves to its target page, and keeps resolving after the target moves to
 // a different path/folder (the whole point of a frozen identity).

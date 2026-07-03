@@ -77,6 +77,44 @@ func TestReclassifyUnlinkedMailAnalyses(t *testing.T) {
 	}
 }
 
+// TestReclassifyTarget_TwoDistinctRelatedProjectsIsAmbiguous (M23): a mail
+// whose Related cites TWO different projects has no unambiguous home — the
+// doctrine is 모호하면 잔류, and returning the first Related entry was arbitrary.
+// Repeated citations of the SAME project stay a valid signal.
+func TestReclassifyTarget_TwoDistinctRelatedProjectsIsAmbiguous(t *testing.T) {
+	store := newReclassifyStore(t)
+	projects := store.KnownProjects()
+
+	ambiguous := &Page{Meta: Frontmatter{
+		Title: "비교 검토",
+		Related: []string{
+			"프로젝트/기아-화성/대표.md",
+			"프로젝트/해남-희망에너지-epc/대표.md",
+		},
+	}}
+	if got := reclassifyTarget(ambiguous, projects); got != "" {
+		t.Errorf("two distinct related projects must be ambiguous, got %q", got)
+	}
+
+	sameTwice := &Page{Meta: Frontmatter{
+		Title: "견적 회신",
+		Related: []string{
+			"프로젝트/기아-화성/대표.md",
+			`프로젝트\기아-화성\로그.md`, // same project, other slot + windows separators
+		},
+	}}
+	if got := reclassifyTarget(sameTwice, projects); got != "기아-화성" {
+		t.Errorf("agreeing related entries = %q, want 기아-화성", got)
+	}
+
+	// End-to-end: the ambiguous mail stays in the unlinked bucket.
+	writeUnlinkedMail(t, store, "amb1", "비교 검토",
+		[]string{"프로젝트/기아-화성/대표.md", "프로젝트/해남-희망에너지-epc/대표.md"})
+	if moved := store.ReclassifyUnlinkedMailAnalyses(time.Now(), 10); len(moved) != 0 {
+		t.Errorf("ambiguous mail was re-filed: %+v", moved)
+	}
+}
+
 // TestReclassifyUnlinkedMailAnalyses_Cap: the per-call cap holds.
 func TestReclassifyUnlinkedMailAnalyses_Cap(t *testing.T) {
 	store := newReclassifyStore(t)

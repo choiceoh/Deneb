@@ -52,6 +52,23 @@ func recallPrimaryQuery(queries []string) string {
 	return ""
 }
 
+// applyBroadeningPenalty demotes evidence found only by an individual
+// broadening term below combined-query hits (see the call site for rationale).
+// Rows tagged with the project-anchor sentinel keep their score: the anchor is
+// pinned structurally, not found by a term.
+func applyBroadeningPenalty(evidence []recallEvidence, queries []string) {
+	primary := recallPrimaryQuery(queries)
+	if primary == "" {
+		return
+	}
+	for i := range evidence {
+		q := evidence[i].Query
+		if q != "" && q != primary && q != recallProjectAnchorQuery {
+			evidence[i].Score *= recallBroadeningPenalty
+		}
+	}
+}
+
 // dedupRecallEvidence collapses rows describing the same content surfaced via
 // different sources, keeping the best-scored row. Keyed on a normalized note
 // prefix: refs differ across sources for the same fact, the words don't.
@@ -287,13 +304,10 @@ func buildRecallPreflight(ctx context.Context, params RunParams, deps runDeps, l
 	// rank below combined-query hits. Within-source dedup already recorded
 	// combined-query hits under the combined query string (it runs first), so
 	// this demotes only the term-only stragglers. No-op for single-term messages.
-	if primary := recallPrimaryQuery(queries); primary != "" {
-		for i := range evidence {
-			if evidence[i].Query != "" && evidence[i].Query != primary {
-				evidence[i].Score *= recallBroadeningPenalty
-			}
-		}
-	}
+	// The project-anchor sentinel is exempt — it marks a guaranteed structural
+	// anchor, not a term hit, and the penalty let combined-query wiki hits
+	// outrank the named project's 대표페이지.
+	applyBroadeningPenalty(evidence, queries)
 
 	// The same fact often surfaces from several sources at once (wiki page +
 	// polaris summary + diary echo); duplicate rows waste the evidence budget.

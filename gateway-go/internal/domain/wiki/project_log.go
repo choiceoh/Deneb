@@ -47,12 +47,11 @@ func (s *Store) RotateProjectLog(project string) (int, error) {
 	if err != nil || logPage == nil {
 		return 0, nil // no log yet — nothing to rotate
 	}
-	preamble, sections := logPage.SplitByH2()
+	_, sections := logPage.SplitByH2()
 	if len(sections) <= LogKeepSections {
 		return 0, nil
 	}
 	overflow := sections[:len(sections)-LogKeepSections]
-	kept := sections[len(sections)-LogKeepSections:]
 
 	// 1. Append the overflow to the archive page (created on first rotation).
 	archivePath := LogArchivePath(project)
@@ -82,32 +81,58 @@ func (s *Store) RotateProjectLog(project string) (int, error) {
 		return 0, fmt.Errorf("wiki: rotate log archive %q: %w", archivePath, err)
 	}
 
-	// 2. Trim the log page down to the kept tail.
+	// 2. Trim the log page down to the kept tail. The trim re-splits CUR (read
+	//    under the write lock), not the pre-read snapshot: a section appended
+	//    between the read above and this mutate would be silently rebuilt away
+	//    by the stale snapshot. We drop exactly the archived head sections
+	//    (verified by heading) and keep everything after — concurrent appends
+	//    land at the tail and survive.
 	if err := s.UpdatePage(logPath, func(cur *Page) (*Page, error) {
-		if cur == nil {
-			return nil, nil // deleted concurrently — archive already holds the overflow
-		}
-		var b strings.Builder
-		if p := strings.TrimSpace(preamble); p != "" {
-			b.WriteString(p)
-		}
-		for _, sec := range kept {
-			if b.Len() > 0 {
-				b.WriteString("\n\n")
-			}
-			b.WriteString("## ")
-			b.WriteString(sec.Heading)
-			if c := strings.TrimSpace(sec.Content); c != "" {
-				b.WriteString("\n\n")
-				b.WriteString(c)
-			}
-		}
-		cur.Body = b.String()
-		cur.Meta.Updated = time.Now().Format("2006-01-02")
-		return cur, nil
+		return trimRotatedLogSections(cur, overflow), nil
 	}); err != nil {
 		return 0, fmt.Errorf("wiki: rotate log trim %q: %w", logPath, err)
 	}
 	_ = s.AppendLog("rotate-log", fmt.Sprintf("%s — %d개 섹션 → %s", logPath, len(overflow), archivePath))
 	return len(overflow), nil
+}
+
+// trimRotatedLogSections rebuilds a log page's body from its CURRENT state
+// minus the already-archived head sections. It drops exactly len(overflow)
+// head sections after verifying their headings still match what was archived;
+// on any mismatch (log deleted, rewritten, or shrunk concurrently) it returns
+// nil — skip the write, the next rotation cycle re-runs from fresh state (the
+// archive tolerating a duplicated section is the documented crash-safe
+// tradeoff). Sections appended after the pre-read land at the tail and are
+// preserved.
+func trimRotatedLogSections(cur *Page, overflow []H2Section) *Page {
+	if cur == nil || len(overflow) == 0 {
+		return nil
+	}
+	preamble, sections := cur.SplitByH2()
+	if len(sections) < len(overflow) {
+		return nil
+	}
+	for i, sec := range overflow {
+		if sections[i].Heading != sec.Heading {
+			return nil
+		}
+	}
+	var b strings.Builder
+	if p := strings.TrimSpace(preamble); p != "" {
+		b.WriteString(p)
+	}
+	for _, sec := range sections[len(overflow):] {
+		if b.Len() > 0 {
+			b.WriteString("\n\n")
+		}
+		b.WriteString("## ")
+		b.WriteString(sec.Heading)
+		if c := strings.TrimSpace(sec.Content); c != "" {
+			b.WriteString("\n\n")
+			b.WriteString(c)
+		}
+	}
+	cur.Body = b.String()
+	cur.Meta.Updated = time.Now().Format("2006-01-02")
+	return cur
 }
