@@ -213,7 +213,7 @@ describe("MailPane", () => {
     expect(screen.queryByText(/kim@corp\.com/)).not.toBeInTheDocument();
   });
 
-  it("shows attachment download links in the expanded detail", async () => {
+  it("shows a download link for a non-previewable attachment", async () => {
     const dataProvider = fakeProvider({
       mail: [
         {
@@ -222,7 +222,10 @@ describe("MailPane", () => {
           from: "a@b.com",
           body: "본문",
           attachmentCount: 1,
-          attachments: [{ id: "att1", filename: "quote.pdf", mimeType: "application/pdf", size: 2048 }],
+          // .hwp has no in-app previewer, so it stays a plain download link
+          // (previewable formats like PDF become an in-app viewer button —
+          // covered by MailDetail.test).
+          attachments: [{ id: "att1", filename: "계약서.hwp", mimeType: "application/octet-stream", size: 2048 }],
         },
       ],
     });
@@ -230,7 +233,7 @@ describe("MailPane", () => {
 
     await userEvent.click(await screen.findByText("첨부 메일"));
     const detail = screen.getByLabelText("메일 상세");
-    const link = within(detail).getByRole("link", { name: /quote.pdf/ });
+    const link = within(detail).getByRole("link", { name: /계약서\.hwp/ });
 
     expect(within(detail).getByText("첨부파일")).toBeInTheDocument();
     expect(link).toHaveAttribute("href", expect.stringContaining("/api/v1/miniapp/gmail/attachment"));

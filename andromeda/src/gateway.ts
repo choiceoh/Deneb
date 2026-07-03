@@ -83,6 +83,22 @@ export function mailAttachmentUrl(cfg: GatewayConfig, messageId: string, attachm
   return `${base(cfg.url)}/api/v1/miniapp/gmail/attachment?${q.toString()}`;
 }
 
+// filesDownloadUrl streams a file-store path — the token rides in the query
+// (same pattern as the mail attachment route) so it works both as a plain link
+// and as a gatewayFetch target for the in-app viewer.
+export function filesDownloadUrl(cfg: GatewayConfig, path: string): string {
+  const q = new URLSearchParams({ path, clientToken: cfg.token });
+  return `${base(cfg.url)}/api/v1/files/download?${q.toString()}`;
+}
+
+// fetchGatewayBlob loads a gateway URL's bytes for inline rendering (viewer),
+// through gatewayFetch so the packaged desktop app bypasses CORS/ATS.
+export async function fetchGatewayBlob(url: string): Promise<Blob> {
+  const res = await gatewayFetch(url);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.blob();
+}
+
 // One JSON-RPC call against POST /api/v1/miniapp/rpc.
 export async function callRpc<T>(cfg: GatewayConfig, method: string, params: Record<string, unknown> = {}): Promise<T> {
   const body: RpcRequest = { id: crypto.randomUUID(), method, params };

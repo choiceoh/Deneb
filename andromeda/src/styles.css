@@ -2406,6 +2406,20 @@ textarea {
 .mail-attachment:hover {
   border-color: var(--line-2);
 }
+/* the previewable variant is a <button>; align it with the <a> look */
+button.mail-attachment {
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+}
+.mail-attachment-preview {
+  min-height: 320px;
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
 .mail-attachment span:first-child {
   min-width: 0;
   overflow: hidden;
@@ -4548,4 +4562,170 @@ textarea {
   font-size: 13px;
   line-height: 1.6;
   margin-top: 2px;
+}
+
+/* ---- in-app file viewer (FilesPane tabs + mail attachment preview) ---- */
+.file-tabs-shell {
+  margin-top: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-ctl);
+  background: var(--panel);
+  display: flex;
+  flex-direction: column;
+  min-height: 260px;
+  max-height: 62vh;
+}
+.file-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 4px 6px 0;
+  border-bottom: 1px solid var(--line);
+  overflow-x: auto;
+  flex: none;
+}
+.file-tab {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: var(--radius-ctl) var(--radius-ctl) 0 0;
+  color: var(--muted);
+}
+.file-tab.active {
+  border-color: var(--line);
+  background: var(--panel-sunken);
+  color: var(--ink);
+}
+.file-tab-label {
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  padding: 5px 4px 5px 10px;
+  cursor: pointer;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.file-tab-close {
+  border: none;
+  background: transparent;
+  color: var(--muted-2);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 4px 8px 4px 4px;
+}
+.file-tab-close:hover {
+  color: var(--ink);
+}
+.file-tab-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 8px;
+}
+.file-viewer-media {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: auto;
+}
+.file-viewer-media img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+.file-viewer-pdf {
+  flex-direction: column;
+  align-items: stretch;
+}
+.file-viewer-pdf embed {
+  flex: 1;
+  width: 100%;
+  min-height: 300px;
+  border: none;
+}
+.file-viewer-medialinks {
+  flex: none;
+  padding-top: 6px;
+  text-align: right;
+}
+.file-viewer-text {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.file-viewer-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.file-viewer-code {
+  flex: 1;
+  min-height: 180px;
+  resize: none;
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 12.5px;
+  line-height: 1.5;
+  white-space: pre;
+}
+.file-viewer-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+.file-viewer-csv {
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+.file-viewer-csv th,
+.file-viewer-csv td {
+  border: 1px solid var(--line);
+  padding: 4px 8px;
+  text-align: left;
+  white-space: nowrap;
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.file-viewer-csv th {
+  background: var(--panel-sunken);
+  position: sticky;
+  top: 0;
+}
+.file-viewer-diff {
+  margin: 0;
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.diff-line {
+  padding: 0 6px;
+  white-space: pre-wrap;
+}
+.diff-add {
+  background: color-mix(in srgb, #3fb950 14%, transparent);
+}
+.diff-del {
+  background: color-mix(in srgb, #f85149 14%, transparent);
+}
+.diff-hunk {
+  color: var(--accent, #7fa8d0);
+}
+.diff-meta {
+  color: var(--muted);
+}
+.file-viewer-empty {
+  padding: 18px 6px;
+  display: grid;
+  gap: 8px;
+  justify-items: start;
 }

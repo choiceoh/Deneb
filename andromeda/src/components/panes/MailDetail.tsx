@@ -4,7 +4,15 @@
 // and a grounded Q&A box. The enrichment cards each own their fetch/loading/error
 // state and degrade silently on an older gateway that lacks the method.
 import { useEffect, useState } from "react";
-import { type QATurn, analyzeMail, askMail, cachedMailAnalysis, mailAttachmentUrl, senderContext } from "@/gateway";
+import {
+  type QATurn,
+  analyzeMail,
+  askMail,
+  cachedMailAnalysis,
+  fetchGatewayBlob,
+  mailAttachmentUrl,
+  senderContext,
+} from "@/gateway";
 import type { Mail, MailAttachment } from "@/types";
 import { errText, firstString, fmtMailDate, senderName, text } from "@/format";
 import { stripMailChrome } from "@/mailChrome";
@@ -12,6 +20,9 @@ import { formatBytes } from "@/components/panes/fileHelpers";
 import { useAsyncOnOpen } from "@/useAsyncOnOpen";
 import { useWorkspace } from "@/workspaceContext";
 import { Markdown } from "@/components/Markdown";
+import { Modal } from "@/components/Modal";
+import { FileViewer } from "@/components/FileViewer";
+import { viewKindFor } from "@/components/fileView";
 
 // The displayable mail body, falling back through the gateway's field aliases and
 // finally a stripped HTML part. Exported so the pane can project it to the AI.
@@ -148,6 +159,7 @@ function AttachmentCard({
   count?: number;
 }) {
   const { cfg } = useWorkspace();
+  const [previewing, setPreviewing] = useState<MailAttachment | null>(null);
   const list = attachments ?? [];
   const knownCount = count ?? list.length;
   if (knownCount <= 0 && list.length === 0) return null;
@@ -163,6 +175,17 @@ function AttachmentCard({
             const id = att.attachmentId ?? att.id ?? String(i);
             const name = att.filename ?? att.name ?? `attachment-${i + 1}`;
             const canOpen = Boolean(att.attachmentId ?? att.id);
+            // Previewable formats open in the in-app viewer; the rest keep the
+            // plain download link (a broken preview is worse than none).
+            const previewable = canOpen && viewKindFor(name, att.mimeType) !== "none";
+            if (previewable) {
+              return (
+                <button key={id} className="mail-attachment" onClick={() => setPreviewing(att)} title="미리보기">
+                  <span>{name}</span>
+                  <span>{formatAttachmentMeta(att)}</span>
+                </button>
+              );
+            }
             return canOpen ? (
               <a
                 key={id}
@@ -183,7 +206,33 @@ function AttachmentCard({
           })}
         </div>
       )}
+      {previewing && (
+        <AttachmentPreviewModal mailId={mailId} attachment={previewing} onClose={() => setPreviewing(null)} />
+      )}
     </div>
+  );
+}
+
+// AttachmentPreviewModal shows one attachment in the in-app viewer (read-only —
+// mail bytes have no save-back), with the download link as escape hatch.
+function AttachmentPreviewModal({
+  mailId,
+  attachment,
+  onClose,
+}: {
+  mailId: string;
+  attachment: MailAttachment;
+  onClose: () => void;
+}) {
+  const { cfg } = useWorkspace();
+  const name = attachment.filename ?? attachment.name ?? "attachment";
+  const url = mailAttachmentUrl(cfg, mailId, attachment);
+  return (
+    <Modal title={name} onClose={onClose} width={860}>
+      <div className="mail-attachment-preview">
+        <FileViewer name={name} mime={attachment.mimeType} load={() => fetchGatewayBlob(url)} downloadUrl={url} />
+      </div>
+    </Modal>
   );
 }
 
