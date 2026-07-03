@@ -307,6 +307,27 @@ func (wd *WikiDreamer) applyUpdates(_ context.Context, updates []wikiUpdate) (cr
 			u.Path = newPath
 		}
 
+		// Guard: date-titled daily mail digests are neither created nor grown —
+		// the same batch already distributes those facts onto per-project pages,
+		// and a "오늘의 메일 분석" page re-spawns daily (2026-07-03 observed:
+		// 기타/daily mail analysis.md). See isDailyMailDigestPage.
+		if isDailyMailDigestPage(u.Title, u.Path) {
+			wd.logger.Warn("wiki-dream: skipped daily mail digest page",
+				"path", u.Path, "title", u.Title)
+			continue
+		}
+		// Guard: a 진행 로그 section aimed at a 대표페이지 belongs in the project's
+		// 로그.md slot (wiki-layout 불변식) — the synthesis prompt says so, but the
+		// model violates it, so the apply pass reroutes structurally.
+		if project, ok := ProjectNameOf(u.Path); ok && IsProjectRepPage(u.Path) && u.Content != "" {
+			if body, logLines := splitProgressLogSection(u.Content); logLines != "" {
+				wd.appendProjectLog(project, logLines)
+				u.Content = body
+				wd.logger.Info("wiki-dream: rerouted 진행 로그 section to project log",
+					"project", project)
+			}
+		}
+
 		// Duplicate prevention: if creating, check for existing similar pages.
 		if u.Action == "create" {
 			if existing := wd.findExistingPage(u); existing != "" {
