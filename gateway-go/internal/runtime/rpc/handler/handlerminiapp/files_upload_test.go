@@ -65,7 +65,7 @@ func TestFilesBrowseUpload_OverwriteFlagReachesStore(t *testing.T) {
 func TestFilesBrowseUpload_RejectsBadBase64(t *testing.T) {
 	h := filesBrowseUpload(FilesBrowseDeps{Store: &captureUploadStore{}})
 	resp := h(authedCtx(), reqWith(t, "miniapp.files.upload", map[string]any{"path": "x", "dataBase64": "!!!notbase64!!!"}))
-	if resp.OK || resp.Error == nil || resp.Error.Code != protocol.ErrInvalidParams {
-		t.Fatalf("want INVALID_PARAMS, got %+v", resp)
+	if resp.OK || resp.Error == nil || resp.Error.Code != protocol.ErrInvalidRequest {
+		t.Fatalf("want INVALID_REQUEST, got %+v", resp)
 	}
 }
