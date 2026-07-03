@@ -48,7 +48,7 @@ func TestIsDailyMailDigestPage(t *testing.T) {
 	negatives := []struct{ title, path string }{
 		{"당진 솔라빌리지 EPC 태양광", "프로젝트/당진-솔라빌리지/대표.md"},
 		{"기아 AL 화성 PG국유지 모듈 RFx — 2026.06.15", "프로젝트/기아-화성/기아-al-화성.md"},
-		{"진코솔라 계약 메일 분석 방법론", "업무/메일-분석-방법론.md"}, // no date
+		{"진코솔라 계약 메일 분석 방법론", "업무/메일-분석-방법론.md"},              // no date
 		{"발주 확인", "프로젝트/a/메일분석/TY7PR01MB1776@outlook.com.md"}, // system page: base is a msg id
 	}
 	for _, n := range negatives {
