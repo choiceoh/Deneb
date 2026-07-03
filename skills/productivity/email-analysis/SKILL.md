@@ -9,7 +9,7 @@ metadata:
       {
         "emoji": "📬",
         "tags": ["email", "analysis", "메일", "분석", "triage", "업무"],
-        "related_skills": ["morning-letter", "summarize"],
+        "related_skills": ["morning-letter"],
       },
   }
 user-invocable: true
