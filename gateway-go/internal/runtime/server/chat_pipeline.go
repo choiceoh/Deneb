@@ -11,7 +11,6 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agentlog"
-	"github.com/choiceoh/deneb/gateway-go/internal/ai/localai"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/knowledge"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/notebook"
@@ -351,16 +350,11 @@ func dreamerLLMShape(reg *modelrole.Registry) (extraBody map[string]any, synthes
 		return nil, 0
 	}
 	cfg := reg.Config(modelrole.RoleLightweight)
-	// Toggle first: dual-mode models (deepseek-v4) deliberately keep
-	// Profile.Reasoning=false and are controlled ONLY through their template
-	// kwarg (see the profile.go dsv4 entry) — checking IsReasoningModel first
-	// would mis-route them into the NoThinking branch, whose Qwen-spelled
-	// enable_thinking kwarg dsv4 templates silently ignore.
-	if kw := reg.CapabilityForModel(cfg.ProviderID, cfg.Model).ThinkingToggleKwarg; kw != "" {
-		return map[string]any{"chat_template_kwargs": map[string]any{kw: false}}, 0
+	// Shared three-way (toggle first — see modelrole.ThinkingOffExtraBody):
+	// nil means an untoggleable reasoning model, where the only defense is
+	// budgeting the synthesis call for chain-of-thought + answer.
+	if off := modelrole.ThinkingOffExtraBody(cfg.ProviderID, cfg.Model); off != nil {
+		return off, 0
 	}
-	if modelrole.IsReasoningModel(cfg.Model) {
-		return nil, 16384
-	}
-	return localai.NoThinking, 0
+	return nil, 16384
 }

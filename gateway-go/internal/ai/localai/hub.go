@@ -25,31 +25,26 @@ var (
 
 // NoThinking disables Qwen3 reasoning mode at the chat-template level — hub
 // calls (memory extraction, summaries, proactive context, pilot) need fast,
-// deterministic output and stable tool calls, not <think> traces.
-// It is merged into non-reasoning-model requests by mergeRequestBody;
-// reasoning models omit it (the flag is ignored or rejected — see
-// mergeRequestBody). Exported so pilot and memory packages can reference it
-// without duplicating.
-var NoThinking = map[string]any{
-	"chat_template_kwargs": map[string]any{
-		"enable_thinking": false,
-	},
-}
+// deterministic output and stable tool calls, not <think> traces. Alias of
+// modelrole.NoThinkingBody (the single definition) so the packages cannot
+// drift; exported so pilot and memory packages can reference it.
+var NoThinking = modelrole.NoThinkingBody
 
 // mergeRequestBody builds the OpenAI-compatible ExtraBody for a hub request.
 //
-// NoThinking (chat_template_kwargs.enable_thinking=false) is applied only to
-// non-reasoning models. A reasoning model gains nothing from it — vLLM exposes
-// the reasoning channel through --reasoning-parser no matter what the flag says
-// — and a thinking-only chat template that lacks the parameter rejects the
-// kwarg outright with a 400 at render time. Omitting it keeps reasoning-model
-// requests valid. callerExtra is merged last so explicit fields win.
-func mergeRequestBody(model string, callerExtra map[string]any) map[string]any {
-	merged := make(map[string]any, len(NoThinking)+len(callerExtra))
-	if !modelrole.IsReasoningModel(model) {
-		for k, v := range NoThinking {
-			merged[k] = v
-		}
+// The thinking-off decision is modelrole.ThinkingOffExtraBody's three-way:
+// dual-mode models get their template toggle (deepseek-v4 →
+// chat_template_kwargs.thinking=false — the previous non-reasoning branch
+// sent the Qwen enable_thinking spelling, which dsv4 templates silently
+// ignore, leaving thinking ON for every hub call), untoggleable reasoning
+// models get nothing (a thinking-only template 400s on the kwarg), and
+// non-reasoning models keep NoThinking. providerID gates the template toggle
+// to vLLM-backed servings. callerExtra merges last so explicit fields win.
+func mergeRequestBody(providerID, model string, callerExtra map[string]any) map[string]any {
+	off := modelrole.ThinkingOffExtraBody(providerID, model)
+	merged := make(map[string]any, len(off)+len(callerExtra))
+	for k, v := range off {
+		merged[k] = v
 	}
 	for k, v := range callerExtra {
 		merged[k] = v
@@ -109,11 +104,12 @@ func (c *Config) withDefaults() Config {
 
 // Hub is the centralized gateway for all local AI LLM requests.
 type Hub struct {
-	client   *llm.Client
-	model    string
-	baseURL  string
-	apiKey   string
-	registry *modelrole.Registry
+	client     *llm.Client
+	model      string
+	providerID string // lightweight role's provider — gates the thinking template toggle
+	baseURL    string
+	apiKey     string
+	registry   *modelrole.Registry
 
 	// Vendor-recommended sampling defaults, resolved once at startup.
 	defaultTemp *float64
@@ -183,6 +179,7 @@ func New(cfg Config, registry *modelrole.Registry, logger *slog.Logger) *Hub {
 	if registry != nil {
 		h.client = registry.Client(modelrole.RoleLightweight)
 		h.model = registry.Model(modelrole.RoleLightweight)
+		h.providerID = registry.Config(modelrole.RoleLightweight).ProviderID
 		h.baseURL = registry.BaseURL(modelrole.RoleLightweight)
 		h.apiKey = registry.APIKey(modelrole.RoleLightweight)
 	}
@@ -333,7 +330,8 @@ func (h *Hub) callFallbackRole(ctx context.Context, role modelrole.Role, system,
 	if client == nil {
 		return "", false
 	}
-	text, err := h.callDirect(ctx, client, h.registry.Model(role), system, userMessage, maxTokens, extraBody...)
+	roleCfg := h.registry.Config(role)
+	text, err := h.callDirect(ctx, client, roleCfg.ProviderID, roleCfg.Model, system, userMessage, maxTokens, extraBody...)
 	if err != nil {
 		h.logger.Debug("localai hub: fallback role failed",
 			"role", role, "reasoning", h.registry.RoleIsReasoning(role), "error", err)
@@ -407,7 +405,7 @@ func (h *Hub) executeRequest(entry *queueEntry) {
 
 	// Build the LLM request. Reasoning models omit the enable_thinking flag
 	// (see mergeRequestBody).
-	merged := mergeRequestBody(h.model, req.ExtraBody)
+	merged := mergeRequestBody(h.providerID, h.model, req.ExtraBody)
 
 	// Inject server-side timeout to prevent zombie generation.
 	if deadline, ok := reqCtx.Deadline(); ok {
@@ -475,12 +473,12 @@ func (h *Hub) executeRequest(entry *queueEntry) {
 }
 
 // callDirect is a raw local AI call for fallback chains (bypasses queue/budget).
-func (h *Hub) callDirect(ctx context.Context, client *llm.Client, model, system, userMessage string, maxTokens int, extraBody ...map[string]any) (string, error) {
+func (h *Hub) callDirect(ctx context.Context, client *llm.Client, providerID, model, system, userMessage string, maxTokens int, extraBody ...map[string]any) (string, error) {
 	var callerExtra map[string]any
 	if len(extraBody) > 0 {
 		callerExtra = extraBody[0]
 	}
-	merged := mergeRequestBody(model, callerExtra)
+	merged := mergeRequestBody(providerID, model, callerExtra)
 
 	fbTemp, fbTopP, fbTopK := modelSamplingDefaults(model)
 	req := llm.ChatRequest{
