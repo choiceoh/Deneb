@@ -113,18 +113,43 @@ func mergeUpdateContent(body, content string) string {
 	return body + "\n\n" + fresh
 }
 
-// dropDuplicateLines removes content lines that already appear verbatim in
-// body. Only substantial lines (≥16 runes trimmed) are candidates: dropping a
-// repeated short bullet or heading risks mangling structure for little gain.
+// dropDuplicateLines removes content lines that already appear verbatim as a
+// LINE of body. Matching is per-line, not substring — a content line that
+// merely occurs inside a longer body sentence or link text is new context in
+// its own right and must survive (a substring check over-dropped those). A
+// leading list marker is normalized away so a body sentence re-stated as a
+// bullet (or vice versa) still dedups. Only substantial lines (≥16 runes
+// trimmed) are candidates: dropping a repeated short bullet or heading risks
+// mangling structure for little gain.
 func dropDuplicateLines(content, body string) string {
+	bodyLines := make(map[string]struct{})
+	for _, ln := range strings.Split(body, "\n") {
+		if t := normalizeDedupLine(ln); t != "" {
+			bodyLines[t] = struct{}{}
+		}
+	}
 	lines := strings.Split(content, "\n")
 	kept := make([]string, 0, len(lines))
 	for _, ln := range lines {
-		t := strings.TrimSpace(ln)
-		if utf8.RuneCountInString(t) >= 16 && strings.Contains(body, t) {
-			continue
+		t := normalizeDedupLine(ln)
+		if utf8.RuneCountInString(t) >= 16 {
+			if _, dup := bodyLines[t]; dup {
+				continue
+			}
 		}
 		kept = append(kept, ln)
 	}
 	return strings.TrimSpace(strings.Join(kept, "\n"))
+}
+
+// normalizeDedupLine trims a line and strips one leading markdown list marker
+// for duplicate comparison.
+func normalizeDedupLine(ln string) string {
+	t := strings.TrimSpace(ln)
+	for _, m := range []string{"- ", "* ", "> "} {
+		if strings.HasPrefix(t, m) {
+			return strings.TrimSpace(t[len(m):])
+		}
+	}
+	return t
 }

@@ -315,4 +315,22 @@ func TestParseWikiUpdates_SalvagesDamagedArray(t *testing.T) {
 			t.Fatal("expected error when nothing is salvageable")
 		}
 	})
+
+	t.Run("trailing junk after a complete array is not partial", func(t *testing.T) {
+		text := `[
+  {"action":"update","path":"프로젝트/a/대표.md","title":"A","content":"본문"},
+  {"action":"create","path":"프로젝트/b/대표.md","title":"B","content":"본문"}
+]
+이상으로 위키 갱신 제안을 마칩니다.`
+		updates, partial, err := parseWikiUpdates(text, nil)
+		if err != nil {
+			t.Fatalf("expected clean parse, got error: %v", err)
+		}
+		if partial {
+			t.Error("complete array + trailing junk must not report partial (nothing was lost)")
+		}
+		if len(updates) != 2 {
+			t.Fatalf("updates = %+v, want both items", updates)
+		}
+	})
 }

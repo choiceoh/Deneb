@@ -397,6 +397,7 @@ func (wd *WikiDreamer) RunDream(ctx context.Context) (*autonomous.DreamReport, e
 		phaseErrors = append(phaseErrors, fmt.Sprintf("project-digests: %v", derr))
 	} else if len(digests) > 0 {
 		if written := wd.applyProjectDigests(digests, time.Now()); written > 0 {
+			report.WikiProjectDigests = written
 			wd.logger.Info("wiki-dream: project status updated", "written", written)
 		}
 	}
@@ -474,19 +475,24 @@ func (wd *WikiDreamer) RunDream(ctx context.Context) (*autonomous.DreamReport, e
 	}
 
 	// Partial synthesis back-pressure: a salvaged (damaged) array means the
-	// tail of this cycle's input was never turned into updates. Hold the diary
-	// offsets (and the MEMORY.md high-water mark) so the next cycle re-consumes
-	// the same input — duplicate re-application is absorbed by the create/update
-	// dedup, the verbatim-line drop (mergeUpdateContent), and the project-log
-	// contains check. A streak cap stops a deterministic corruption from
-	// pinning the pipeline to the same chunk forever.
+	// tail of this cycle's input was never turned into updates. Hold EVERY
+	// consumed cursor — diary per-file offsets, the MEMORY.md high-water mark
+	// (Phase 4b), and the legacy date cutoff (index.LastProcessed below) — so
+	// the next cycle re-consumes the same input; duplicate re-application is
+	// absorbed by the create/update dedup, the verbatim-line drop
+	// (mergeUpdateContent), and the project-log contains check. The hold must
+	// not depend on PriorFiles: a MEMORY.md-only cycle has none, but its
+	// high-water mark still needs holding. A streak cap stops a deterministic
+	// corruption from pinning the pipeline to the same chunk forever.
 	heldOffsets := false
 	if partial {
-		if scan.State.PartialStreak < 2 && scan.PriorFiles != nil {
+		if scan.State.PartialStreak < 2 {
 			scan.State.PartialStreak++
-			scan.State.Files = scan.PriorFiles
+			if scan.PriorFiles != nil {
+				scan.State.Files = scan.PriorFiles
+			}
 			heldOffsets = true
-			wd.logger.Warn("wiki-dream: partial synthesis — diary offsets held for re-consumption",
+			wd.logger.Warn("wiki-dream: partial synthesis — input cursors held for re-consumption",
 				"streak", scan.State.PartialStreak)
 		} else {
 			wd.logger.Warn("wiki-dream: partial synthesis repeated — advancing past damaged input",
@@ -512,9 +518,14 @@ func (wd *WikiDreamer) RunDream(ctx context.Context) (*autonomous.DreamReport, e
 	// completed. LastProcessed remains for display and legacy migration, but
 	// scanDiaries uses per-file offsets as the primary source of truth.
 	idx := wd.store.Index()
-	if scan != nil && scan.LatestDate != "" {
+	switch {
+	case heldOffsets:
+		// Keep the previous cutoff. LastProcessed doubles as scanDiaries's
+		// legacy cutoff for newly-seen files without per-file state; advancing
+		// it while cursors are held would skip those files next cycle.
+	case scan.LatestDate != "":
 		idx.LastProcessed = scan.LatestDate
-	} else {
+	default:
 		idx.LastProcessed = time.Now().Format("2006-01-02")
 	}
 	indexPath := filepath.Join(wd.store.Dir(), "index.md")

@@ -88,23 +88,31 @@ type wikiUpdate struct {
 // hold the diary offsets for re-consumption next cycle.
 func parseWikiUpdates(text string, logger *slog.Logger) (updates []wikiUpdate, partial bool, err error) {
 	var rawItems []json.RawMessage
-	if err := json.Unmarshal([]byte(text), &rawItems); err != nil {
+	if uerr := json.Unmarshal([]byte(text), &rawItems); uerr != nil {
 		// Damaged array — a mid-string truncation (output budget) or a stray
 		// unescaped character inside a Korean value (observed 2026-07-03:
 		// "invalid character 'ì' after object key:value pair") used to zero
 		// the whole cycle and back off 8h. Salvage every complete element
 		// before the damage point instead; only a response that is not a JSON
-		// array at all still fails (worth backing off on).
-		salvaged := salvageJSONArrayPrefix(text)
-		if len(salvaged) == 0 {
-			return nil, false, err
+		// array at all still fails (worth backing off on). A COMPLETE array
+		// followed by trailing junk (which also fails the strict Unmarshal) is
+		// not damage — nothing was lost, so it must not report partial, or the
+		// caller would hold diary offsets and re-consume the cycle for nothing.
+		salvaged, complete := salvageJSONArrayPrefix(text)
+		if len(salvaged) == 0 && !complete {
+			return nil, false, uerr
 		}
 		if logger != nil {
-			logger.Warn("wiki-dream: synthesis array damaged; applying salvaged prefix",
-				"error", err, "salvaged", len(salvaged))
+			if complete {
+				logger.Warn("wiki-dream: synthesis array carried trailing junk; using the complete array",
+					"error", uerr, "items", len(salvaged))
+			} else {
+				logger.Warn("wiki-dream: synthesis array damaged; applying salvaged prefix",
+					"error", uerr, "salvaged", len(salvaged))
+			}
 		}
 		rawItems = salvaged
-		partial = true
+		partial = !complete
 	}
 	updates = make([]wikiUpdate, 0, len(rawItems))
 	skipped := 0
@@ -128,29 +136,35 @@ func parseWikiUpdates(text string, logger *slog.Logger) (updates []wikiUpdate, p
 }
 
 // salvageJSONArrayPrefix decodes complete elements off the front of a JSON
-// array until the first syntax error and returns them ([] when the text is
+// array until the first syntax error and returns them (nil when the text is
 // not an array or the very first element is already damaged). Elements after
 // the damage point are unrecoverable by construction — the parser cannot
 // resynchronize on free-form JSON — and losing the tail of one cycle is
-// strictly better than losing the cycle.
-func salvageJSONArrayPrefix(text string) []json.RawMessage {
+// strictly better than losing the cycle. complete is true when the array's
+// closing bracket was reached — i.e. every element decoded and only trailing
+// junk after the array made the strict whole-text Unmarshal fail.
+func salvageJSONArrayPrefix(text string) (items []json.RawMessage, complete bool) {
 	dec := json.NewDecoder(strings.NewReader(text))
 	tok, err := dec.Token()
 	if err != nil {
-		return nil
+		return nil, false
 	}
 	if d, ok := tok.(json.Delim); !ok || d != '[' {
-		return nil
+		return nil, false
 	}
-	var items []json.RawMessage
 	for dec.More() {
 		var raw json.RawMessage
 		if err := dec.Decode(&raw); err != nil {
-			break
+			return items, false
 		}
 		items = append(items, raw)
 	}
-	return items
+	if tok, err := dec.Token(); err == nil {
+		if d, ok := tok.(json.Delim); ok && d == ']' {
+			complete = true
+		}
+	}
+	return items, complete
 }
 
 // synthesize calls the LLM to determine which wiki pages should be updated.

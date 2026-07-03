@@ -134,6 +134,24 @@ func TestMergeUpdateContent(t *testing.T) {
 			t.Errorf("short lines must not be dropped:\n%s", merged)
 		}
 	})
+
+	t.Run("substring of a longer body line is kept", func(t *testing.T) {
+		// Line-level dedup only: this content line occurs INSIDE a longer body
+		// sentence, so it is new standalone context and must survive (the old
+		// substring check over-dropped it).
+		longBody := "참고로 인터커넥션 승인 완료 상태입니다만 세부 일정은 미정입니다.\n"
+		merged := mergeUpdateContent(longBody, "인터커넥션 승인 완료 상태입니다")
+		if !strings.Contains(merged, "\n인터커넥션 승인 완료 상태입니다") {
+			t.Errorf("substring-only match must not be dropped:\n%s", merged)
+		}
+	})
+
+	t.Run("bullet restating a body sentence still dedups", func(t *testing.T) {
+		merged := mergeUpdateContent(body, "- 당진 솔라빌리지 98MW EPC/O&M 수의계약 진행 건입니다.")
+		if merged != body {
+			t.Errorf("list-marker variant of an existing line must dedup, got:\n%s", merged)
+		}
+	})
 }
 
 func TestApplyUpdates_UpdateFallbackDedup(t *testing.T) {
