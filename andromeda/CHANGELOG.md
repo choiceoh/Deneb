@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.0.48](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.47...andromeda-v0.0.48) (2026-07-03)
+
+
+### ✨ Features
+
+* **andromeda:** HWP 인앱 미리보기 — 텍스트·표·이미지 (순수 TS 파서 직접 구현) ([#3050](https://github.com/choiceoh/Deneb/issues/3050)) ([1e31736](https://github.com/choiceoh/Deneb/commit/1e317361540fa7cbba20f26013e6481d38c9e10b))
+* **andromeda:** 파일 미리보기 + 라이브 편집 + 탭 — AionUi식 인앱 뷰어 ([#3048](https://github.com/choiceoh/Deneb/issues/3048)) ([91201fe](https://github.com/choiceoh/Deneb/commit/91201fed91b6ccc3004df67347ed4afa395ab00c))
+
 ## [0.0.47](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.46...andromeda-v0.0.47) (2026-07-02)
 
 
