@@ -83,7 +83,10 @@ type wikiUpdate struct {
 // deterministic (the #2341 supersedes case) — re-failed every cycle, stalling
 // the diary pipeline. Returns an error only when the response is not a JSON
 // array at all (a genuine total failure worth backing off on).
-func parseWikiUpdates(text string, logger *slog.Logger) ([]wikiUpdate, error) {
+// partial is true when the response array was damaged and only a salvaged
+// prefix was applied — the tail's facts were not consumed, so the caller can
+// hold the diary offsets for re-consumption next cycle.
+func parseWikiUpdates(text string, logger *slog.Logger) (updates []wikiUpdate, partial bool, err error) {
 	var rawItems []json.RawMessage
 	if err := json.Unmarshal([]byte(text), &rawItems); err != nil {
 		// Damaged array — a mid-string truncation (output budget) or a stray
@@ -94,15 +97,16 @@ func parseWikiUpdates(text string, logger *slog.Logger) ([]wikiUpdate, error) {
 		// array at all still fails (worth backing off on).
 		salvaged := salvageJSONArrayPrefix(text)
 		if len(salvaged) == 0 {
-			return nil, err
+			return nil, false, err
 		}
 		if logger != nil {
 			logger.Warn("wiki-dream: synthesis array damaged; applying salvaged prefix",
 				"error", err, "salvaged", len(salvaged))
 		}
 		rawItems = salvaged
+		partial = true
 	}
-	updates := make([]wikiUpdate, 0, len(rawItems))
+	updates = make([]wikiUpdate, 0, len(rawItems))
 	skipped := 0
 	for _, item := range rawItems {
 		var u wikiUpdate
@@ -120,7 +124,7 @@ func parseWikiUpdates(text string, logger *slog.Logger) ([]wikiUpdate, error) {
 		logger.Warn("wiki-dream: synthesis dropped malformed items",
 			"skipped", skipped, "applied", len(updates))
 	}
-	return updates, nil
+	return updates, partial, nil
 }
 
 // salvageJSONArrayPrefix decodes complete elements off the front of a JSON
@@ -150,7 +154,7 @@ func salvageJSONArrayPrefix(text string) []json.RawMessage {
 }
 
 // synthesize calls the LLM to determine which wiki pages should be updated.
-func (wd *WikiDreamer) synthesize(ctx context.Context, diaryContent string, state diaryProcessState) ([]wikiUpdate, error) {
+func (wd *WikiDreamer) synthesize(ctx context.Context, diaryContent string, state diaryProcessState) ([]wikiUpdate, bool, error) {
 	ctx, cancel := context.WithTimeout(ctx, wikiDreamSynthesisTimeout)
 	defer cancel()
 
@@ -171,7 +175,7 @@ func (wd *WikiDreamer) synthesize(ctx context.Context, diaryContent string, stat
 	resp, err := wd.client.Complete(ctx,
 		wd.llmRequest("You are a wiki knowledge base maintainer. Respond only with a JSON array.", prompt, wd.synthesisBudget()))
 	if err != nil {
-		return nil, fmt.Errorf("LLM call: %w", err)
+		return nil, false, fmt.Errorf("LLM call: %w", err)
 	}
 
 	// Extract JSON from response.
@@ -187,9 +191,9 @@ func (wd *WikiDreamer) synthesize(ctx context.Context, diaryContent string, stat
 		text = strings.TrimSpace(text)
 	}
 
-	updates, err := parseWikiUpdates(text, wd.logger)
+	updates, partial, err := parseWikiUpdates(text, wd.logger)
 	if err != nil {
-		return nil, fmt.Errorf("parse LLM response: %w (raw: %.200s)", err, text)
+		return nil, false, fmt.Errorf("parse LLM response: %w (raw: %.200s)", err, text)
 	}
 
 	// Defense in depth: even if Site 1 (transcript) redacted raw tool output,
@@ -202,7 +206,7 @@ func (wd *WikiDreamer) synthesize(ctx context.Context, diaryContent string, stat
 		updates[i].Content = redact.String(updates[i].Content)
 	}
 
-	return updates, nil
+	return updates, partial, nil
 }
 
 func buildWikiSynthesisPrompt(indexContent, processedHistory, polarisSection, diaryContent string) string {
@@ -337,6 +341,20 @@ func (wd *WikiDreamer) applyUpdates(_ context.Context, updates []wikiUpdate) (cr
 				u.Path = existing
 			}
 		}
+		// The update→create-on-missing fallback must not bypass dedup either:
+		// a slug variant of an existing page would silently resurrect a
+		// near-duplicate (the 2026-07 duplicate incident's root was exactly
+		// creation-without-search). One page read per update is cheap, and the
+		// single-writer dreamer makes the read-then-update window benign.
+		if u.Action == "update" {
+			if pg, _ := wd.store.ReadPage(u.Path); pg == nil {
+				if existing := wd.findExistingPage(u); existing != "" {
+					wd.logger.Info("wiki-dream: missing update target matched existing page",
+						"proposed", u.Path, "existing", existing)
+					u.Path = existing
+				}
+			}
+		}
 
 		// Stamp the project's frozen code: a child filing inherits the folder's
 		// code; a new project mints one from the LLM stem (Go assigns the 순번).
@@ -445,7 +463,11 @@ func (wd *WikiDreamer) applyUpdates(_ context.Context, updates []wikiUpdate) (cr
 					existing.Meta.Code = code
 				}
 				if u.Content != "" {
-					existing.Body += "\n\n" + u.Content
+					merged := mergeUpdateContent(existing.Body, u.Content)
+					if merged == existing.Body {
+						wd.logger.Info("wiki-dream: update content already on page; append skipped", "path", u.Path)
+					}
+					existing.Body = merged
 				}
 				if len(u.Tags) > 0 {
 					existing.Meta.Tags = mergeTags(existing.Meta.Tags, u.Tags)

@@ -45,6 +45,10 @@ type diaryScanResult struct {
 	Content    string
 	State      diaryProcessState
 	LatestDate string
+	// PriorFiles is the offset ledger BEFORE this scan advanced it — restored
+	// by RunDream when a partial (salvaged) synthesis leaves tail content
+	// unconsumed, so the next cycle re-reads it.
+	PriorFiles map[string]diaryFileState
 }
 
 type diaryProcessState struct {
@@ -52,6 +56,11 @@ type diaryProcessState struct {
 	Files     map[string]diaryFileState `json:"files"`
 	Recent    []processedDiaryCapsule   `json:"recent,omitempty"`
 	UpdatedAt string                    `json:"updatedAt,omitempty"`
+	// PartialStreak counts consecutive cycles whose synthesis array was
+	// damaged and only partially salvaged. Offsets are held (re-consumed) for
+	// up to two such cycles; a third advances anyway so a deterministic
+	// corruption cannot pin the pipeline to the same chunk forever.
+	PartialStreak int `json:"partialStreak,omitempty"`
 	// LastDreamMs is the unix-millis time of the last dream cycle, persisted so
 	// the 8h time-trigger survives gateway restarts (which happen every few
 	// minutes). Without it, in-memory lastDream reset to zero on every boot and
@@ -328,7 +337,7 @@ func (wd *WikiDreamer) RunDream(ctx context.Context) (*autonomous.DreamReport, e
 		return report, nil
 	}
 
-	updates, err := wd.synthesize(ctx, synthInput, scan.State)
+	updates, partial, err := wd.synthesize(ctx, synthInput, scan.State)
 	if err != nil {
 		// Dreaming silently stalling is the audit's #1 ghost failure —
 		// surface it at Error so the operator sees consolidation is stuck.
@@ -464,9 +473,35 @@ func (wd *WikiDreamer) RunDream(ctx context.Context) (*autonomous.DreamReport, e
 		}
 	}
 
+	// Partial synthesis back-pressure: a salvaged (damaged) array means the
+	// tail of this cycle's input was never turned into updates. Hold the diary
+	// offsets (and the MEMORY.md high-water mark) so the next cycle re-consumes
+	// the same input — duplicate re-application is absorbed by the create/update
+	// dedup, the verbatim-line drop (mergeUpdateContent), and the project-log
+	// contains check. A streak cap stops a deterministic corruption from
+	// pinning the pipeline to the same chunk forever.
+	heldOffsets := false
+	if partial {
+		if scan.State.PartialStreak < 2 && scan.PriorFiles != nil {
+			scan.State.PartialStreak++
+			scan.State.Files = scan.PriorFiles
+			heldOffsets = true
+			wd.logger.Warn("wiki-dream: partial synthesis — diary offsets held for re-consumption",
+				"streak", scan.State.PartialStreak)
+		} else {
+			wd.logger.Warn("wiki-dream: partial synthesis repeated — advancing past damaged input",
+				"streak", scan.State.PartialStreak)
+			scan.State.PartialStreak = 0
+		}
+	} else {
+		scan.State.PartialStreak = 0
+	}
+
 	// Phase 4b: curate MEMORY.md now that its consumed sections are distilled
 	// into wiki pages, and advance the high-water mark for the state save below.
-	if memScan != nil {
+	// Skipped while offsets are held — the memory sections ride the same
+	// re-consumed input.
+	if memScan != nil && !heldOffsets {
 		if _, derr := wd.curateWorkspaceMemory(memScan); derr != nil {
 			phaseErrors = append(phaseErrors, fmt.Sprintf("memory-curation: %v", derr))
 		}

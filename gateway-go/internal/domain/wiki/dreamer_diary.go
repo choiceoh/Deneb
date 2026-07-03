@@ -33,6 +33,12 @@ func (wd *WikiDreamer) scanDiaries(_ context.Context) (*diaryScanResult, error) 
 	}
 
 	state := wd.loadDiaryProcessState()
+	// Snapshot the pre-scan offsets: a partial synthesis restores these so
+	// unconsumed tail content is re-read next cycle (see RunDream).
+	priorFiles := make(map[string]diaryFileState, len(state.Files))
+	for k, v := range state.Files {
+		priorFiles[k] = v
+	}
 	legacyCutoff := wd.store.Index().LastProcessed
 	var diaryFiles []os.DirEntry
 	for _, e := range entries {
@@ -136,6 +142,7 @@ func (wd *WikiDreamer) scanDiaries(_ context.Context) (*diaryScanResult, error) 
 		Content:    sb.String(),
 		State:      state,
 		LatestDate: latestDate,
+		PriorFiles: priorFiles,
 	}, nil
 }
 

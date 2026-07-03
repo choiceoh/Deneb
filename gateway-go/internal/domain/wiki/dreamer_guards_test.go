@@ -98,3 +98,71 @@ func TestApplyUpdates_Guards(t *testing.T) {
 		t.Error("daily digest page must not be created")
 	}
 }
+
+func TestMergeUpdateContent(t *testing.T) {
+	body := "# 당진\n\n## 요약\n당진 솔라빌리지 98MW EPC/O&M 수의계약 진행 건입니다.\n\n## 관련 문서\n- [[프로젝트/거래/hre]]\n"
+
+	t.Run("drops verbatim duplicate lines and inserts before 관련 문서", func(t *testing.T) {
+		content := "당진 솔라빌리지 98MW EPC/O&M 수의계약 진행 건입니다.\n공사기한 연장 수용 — COD 2028.3, 준공 2028.6 확정."
+		merged := mergeUpdateContent(body, content)
+		if strings.Count(merged, "수의계약 진행 건입니다") != 1 {
+			t.Errorf("duplicate line must be dropped once:\n%s", merged)
+		}
+		relIdx := strings.Index(merged, "## 관련 문서")
+		newIdx := strings.Index(merged, "COD 2028.3")
+		if newIdx == -1 || relIdx == -1 || newIdx > relIdx {
+			t.Errorf("new fact must land before 관련 문서:\n%s", merged)
+		}
+	})
+
+	t.Run("all-duplicate content is a no-op", func(t *testing.T) {
+		if merged := mergeUpdateContent(body, "당진 솔라빌리지 98MW EPC/O&M 수의계약 진행 건입니다."); merged != body {
+			t.Errorf("no-op expected, got:\n%s", merged)
+		}
+	})
+
+	t.Run("no boilerplate appends at end", func(t *testing.T) {
+		merged := mergeUpdateContent("본문뿐", "새로 추가되는 충분히 긴 사실 한 줄입니다.")
+		if !strings.HasSuffix(merged, "새로 추가되는 충분히 긴 사실 한 줄입니다.") {
+			t.Errorf("append-at-end expected, got:\n%s", merged)
+		}
+	})
+
+	t.Run("short repeated bullets pass through", func(t *testing.T) {
+		merged := mergeUpdateContent("- 완료\n본문", "- 완료\n다른 새로운 내용이 추가로 붙는 줄입니다.")
+		if !strings.Contains(merged, "- 완료\n본문") || strings.Count(merged, "- 완료") != 2 {
+			t.Errorf("short lines must not be dropped:\n%s", merged)
+		}
+	})
+}
+
+func TestApplyUpdates_UpdateFallbackDedup(t *testing.T) {
+	store, err := NewStore(t.TempDir(), t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	wd := NewWikiDreamer(store, nil, "", Config{Enabled: true}, slog.Default())
+
+	// Existing page the model will mistarget with a slug/ID variant.
+	if err := store.WritePage("프로젝트/해밀고흥솔라팜-모듈/대표.md", &Page{
+		Meta: Frontmatter{ID: "haemil-solar", Title: "해밀고흥솔라팜 모듈", Category: "프로젝트", Type: "entity", Confidence: "high"},
+		Body: "기존 본문",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	created, updated, _ := wd.applyUpdates(context.Background(), []wikiUpdate{{
+		Action: "update", Path: "프로젝트/해밀고흥-솔라팜모듈/대표.md", ID: "haemil-solar",
+		Title: "해밀고흥솔라팜 모듈", Category: "프로젝트", Content: "새 진행 사실이 추가되는 줄입니다.",
+	}})
+	if created != 0 || updated != 1 {
+		t.Fatalf("created=%d updated=%d, want 0/1 (retargeted to the existing page)", created, updated)
+	}
+	if pg, _ := store.ReadPage("프로젝트/해밀고흥-솔라팜모듈/대표.md"); pg != nil {
+		t.Error("slug-variant duplicate page must not be created")
+	}
+	pg, err := store.ReadPage("프로젝트/해밀고흥솔라팜-모듈/대표.md")
+	if err != nil || pg == nil || !strings.Contains(pg.Body, "새 진행 사실") {
+		t.Fatalf("existing page should carry the update: %v", err)
+	}
+}

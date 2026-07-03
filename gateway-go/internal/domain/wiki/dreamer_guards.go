@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // progressLogHeadingRe matches a 진행 로그 section heading (H2–H4) on its own
@@ -83,4 +84,47 @@ func isDailyMailDigestPage(title, path string) bool {
 		return true
 	}
 	return strings.Contains(compact, "메일분석") && digestDateRe.MatchString(t)
+}
+
+// trailingBoilerplateRe matches the boilerplate section the create template
+// puts at a page's tail (관련 문서). Dream update content belongs before it —
+// the blind Body-append used to land new facts after the link list
+// (2026-07-03 observed on 당진 대표.md).
+var trailingBoilerplateRe = regexp.MustCompile(`(?m)^##\s*관련\s*문서\s*$`)
+
+// mergeUpdateContent merges dream update content into an existing page body
+// with two structural corrections over a blind append:
+//
+//   - lines the body already contains verbatim are dropped (the model
+//     routinely re-states the page's own summary sentence alongside the one
+//     new fact — the 2026-07-03 duplicate), and
+//   - what remains is inserted BEFORE the trailing 관련 문서 boilerplate
+//     instead of after it.
+//
+// Returns body unchanged when nothing new remains.
+func mergeUpdateContent(body, content string) string {
+	fresh := dropDuplicateLines(content, body)
+	if strings.TrimSpace(fresh) == "" {
+		return body
+	}
+	if loc := trailingBoilerplateRe.FindStringIndex(body); loc != nil {
+		return strings.TrimRight(body[:loc[0]], "\n") + "\n\n" + fresh + "\n\n" + body[loc[0]:]
+	}
+	return body + "\n\n" + fresh
+}
+
+// dropDuplicateLines removes content lines that already appear verbatim in
+// body. Only substantial lines (≥16 runes trimmed) are candidates: dropping a
+// repeated short bullet or heading risks mangling structure for little gain.
+func dropDuplicateLines(content, body string) string {
+	lines := strings.Split(content, "\n")
+	kept := make([]string, 0, len(lines))
+	for _, ln := range lines {
+		t := strings.TrimSpace(ln)
+		if utf8.RuneCountInString(t) >= 16 && strings.Contains(body, t) {
+			continue
+		}
+		kept = append(kept, ln)
+	}
+	return strings.TrimSpace(strings.Join(kept, "\n"))
 }

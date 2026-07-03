@@ -15,6 +15,7 @@ import (
 const (
 	SourceProactive       = "proactive"
 	SourceMailReport      = "mail_report" // proactive mail analysis — gets the envelope card icon
+	SourceDream           = "dream"       // wiki dream-cycle result card (pages created/updated)
 	SourceCaptureImage    = "capture_image"
 	SourceCaptureAudio    = "capture_audio"
 	SourceCaptureDocument = "capture_document"

@@ -255,6 +255,13 @@ func (s *Service) SetDreamer(d Dreamer) {
 // user activity. This ensures time-based and data-volume triggers fire
 // even when the user is idle.
 func (s *Service) dreamTimerLoop(ctx context.Context) {
+	// Check once immediately: lastDream is restored from disk, so on a host
+	// where auto-deploy restarts the gateway every few minutes the 30-minute
+	// ticker keeps resetting and the time trigger can be deferred for hours
+	// (observed 2026-07-03: four restarts in twenty minutes). The immediate
+	// check is safe — ShouldDream is false inside the 8h interval and
+	// runDreamingAsync dedups overlapping cycles.
+	s.dreamTimerTick(ctx)
 	ticker := time.NewTicker(30 * time.Minute)
 	defer ticker.Stop()
 

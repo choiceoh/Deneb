@@ -481,9 +481,14 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 		s.autonomousSvc.SetDreamer(s.wikiDreamer)
 	}
 
-	// Broadcast dreaming events to WebSocket clients.
+	// Broadcast dreaming events to WebSocket clients, and surface completed
+	// cycles that actually changed pages as a work-feed card — the proposal
+	// JSON always existed but had no user-facing surface.
 	s.autonomousSvc.OnEvent(func(event autonomous.CycleEvent) {
 		hub.Broadcast("dreaming.cycle", event)
+		if event.Type == "dreaming_completed" {
+			s.postDreamWorkfeedCard(event.DreamReport)
+		}
 	})
 
 	// Wire the proactive relay as the dreaming notifier, bound to a dedicated

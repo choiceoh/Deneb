@@ -1,0 +1,42 @@
+package server
+
+import (
+	"log/slog"
+	"path/filepath"
+	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/autonomous"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/nativesync"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
+)
+
+func TestPostDreamWorkfeedCard(t *testing.T) {
+	dir := t.TempDir()
+	s := &Server{
+		logger: slog.Default(),
+		MemorySubsystem: &MemorySubsystem{
+			workFeedStore:   workfeed.NewStore(filepath.Join(dir, "feed.jsonl")),
+			nativeSyncStore: nativesync.NewStore(filepath.Join(dir, "sync.jsonl")),
+		},
+	}
+
+	// No-change cycles and nil reports post nothing.
+	s.postDreamWorkfeedCard(nil)
+	s.postDreamWorkfeedCard(&autonomous.DreamReport{WikiUpdatesProposed: 3})
+	items, _, err := s.workFeedStore.List(10, true)
+	if err != nil || len(items) != 0 {
+		t.Fatalf("no-change cycle must not post: items=%d err=%v", len(items), err)
+	}
+
+	// A page-changing cycle posts exactly one card.
+	s.postDreamWorkfeedCard(&autonomous.DreamReport{
+		WikiPagesCreated: 1, WikiPagesUpdated: 4, WikiUpdatesProposed: 5,
+	})
+	items, _, err = s.workFeedStore.List(10, true)
+	if err != nil || len(items) != 1 {
+		t.Fatalf("expected one dream card, got %d (err=%v)", len(items), err)
+	}
+	if items[0].Source != workfeed.SourceDream || items[0].Title != "위키 드림: 1 생성 · 4 갱신" {
+		t.Errorf("card = %+v", items[0])
+	}
+}
