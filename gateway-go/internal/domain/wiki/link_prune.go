@@ -18,6 +18,7 @@ package wiki
 
 import (
 	"fmt"
+	"log/slog"
 	"path"
 	"strings"
 )
@@ -27,6 +28,9 @@ type PruneStats struct {
 	PagesChanged int
 	Repointed    int
 	Removed      int
+	// Failed counts pages whose rebuilt Related list could not be written back
+	// (the sweep is best-effort per page; failures must still be visible).
+	Failed int
 }
 
 // linkResolver holds the lookup sets one sweep resolves against.
@@ -35,6 +39,13 @@ type linkResolver struct {
 	byBasename map[string][]string
 	byTitle    map[string][]string
 	byID       map[string][]string
+	// codes holds every frozen project code carried by a 프로젝트/ page
+	// (normalized). Code-form Related entries are first-class move-stable edges
+	// (graph_query and projectOwnedRefs resolve them), not paths — the sweep
+	// must preserve them while the code is alive. Built from page frontmatter
+	// (the index doesn't carry Code) and including archived pages, so an edge
+	// into a CLOSED project survives too.
+	codes map[string]bool
 }
 
 func (s *Store) newLinkResolver() *linkResolver {
@@ -44,6 +55,7 @@ func (s *Store) newLinkResolver() *linkResolver {
 		byBasename: make(map[string][]string),
 		byTitle:    make(map[string][]string),
 		byID:       make(map[string][]string),
+		codes:      make(map[string]bool),
 	}
 	for p, entry := range idx.Entries {
 		r.exists[p] = true
@@ -55,6 +67,17 @@ func (s *Store) newLinkResolver() *linkResolver {
 			r.byID[id] = append(r.byID[id], p)
 		}
 	}
+	// Live project codes come from page frontmatter (bounded to 프로젝트/ pages —
+	// only they carry codes; see dreamer_code.go).
+	if paths, err := s.ListPages(projectCategoryPrefix); err == nil {
+		for _, p := range paths {
+			if page, perr := s.ReadPage(p); perr == nil && page != nil {
+				if c := normalizeProjectCode(page.Meta.Code); c != "" {
+					r.codes[c] = true
+				}
+			}
+		}
+	}
 	return r
 }
 
@@ -64,11 +87,18 @@ func (s *Store) newLinkResolver() *linkResolver {
 // dropped edge.
 func (r *linkResolver) resolve(ref string) string {
 	ref = strings.TrimSpace(ref)
-	ref = strings.TrimPrefix(ref, "w:") // knowledge-router namespace leak
-	ref = strings.Trim(ref, "[]")       // stray wikilink brackets
+	ref = strings.TrimPrefix(ref, "w:")      // knowledge-router namespace leak
+	ref = strings.Trim(ref, "[]")            // stray wikilink brackets
+	ref = strings.ReplaceAll(ref, "\\", "/") // windows separators
 	ref = strings.TrimSpace(ref)
 	if ref == "" {
 		return ""
+	}
+	// 0. Frozen project code — a first-class move-stable edge, not a path.
+	// Preserved verbatim (repointing to the rep page would forfeit exactly the
+	// move-stability the code form exists for).
+	if c := normalizeProjectCode(ref); c != "" && r.codes[c] {
+		return ref
 	}
 	// 1. Exact path, with the .md extension normalized on.
 	if p := normalizePagePath(ref); r.exists[p] {
@@ -97,14 +127,23 @@ func (r *linkResolver) resolve(ref string) string {
 }
 
 // PruneDeadRelatedLinks sweeps every page's Related list, repairing or
-// dropping dead entries. Hygiene-only writes: the page's Updated date is NOT
-// stamped (a metadata repair must not make a dormant page look active).
+// dropping dead entries. Hygiene-only writes: neither the swept page's Updated
+// date nor (via backlink maintenance) any target page's is stamped — a
+// metadata repair must not make a dormant page look active.
 func (s *Store) PruneDeadRelatedLinks() (PruneStats, error) {
 	pages, err := s.ListPages("")
 	if err != nil {
 		return PruneStats{}, fmt.Errorf("wiki: prune links: %w", err)
 	}
 	resolver := s.newLinkResolver()
+	if len(resolver.exists) == 0 && len(pages) > 0 {
+		// Index lost/empty while pages exist on disk (e.g. index.md wiped, then
+		// rebuilt empty on startup) — resolving against it would deem EVERY
+		// reference dead and strip Related wiki-wide. Skip; the next index
+		// rebuild/write self-heals and the sweep resumes.
+		slog.Warn("wiki: prune links skipped — index empty but pages exist", "pages", len(pages))
+		return PruneStats{}, nil
+	}
 
 	var stats PruneStats
 	for _, rp := range pages {
@@ -142,7 +181,11 @@ func (s *Store) PruneDeadRelatedLinks() (PruneStats, error) {
 			cur.Meta.Related = rebuilt
 			return cur, nil
 		}); err != nil {
-			continue // best-effort: one unwritable page must not stop the sweep
+			// Best-effort: one unwritable page must not stop the sweep — but a
+			// silent skip hides real rot repair failing forever.
+			stats.Failed++
+			slog.Warn("wiki: prune links: page write failed", "page", rp, "error", err)
+			continue
 		}
 		if repointed+removed > 0 {
 			stats.PagesChanged++

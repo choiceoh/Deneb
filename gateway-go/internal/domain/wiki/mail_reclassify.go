@@ -63,7 +63,7 @@ func (s *Store) ReclassifyUnlinkedMailAnalyses(now time.Time, maxMoves int) []Re
 		if perr != nil || page == nil {
 			continue
 		}
-		project := reclassifyTarget(s, page, projects)
+		project := reclassifyTarget(page, projects)
 		if project == "" {
 			continue
 		}
@@ -95,25 +95,46 @@ func (s *Store) ReclassifyUnlinkedMailAnalyses(now time.Time, maxMoves int) []Re
 }
 
 // reclassifyTarget picks the owning project for an unlinked mail page, or ""
-// when no unambiguous signal exists.
-func reclassifyTarget(s *Store, page *Page, projects []ProjectRef) string {
-	// Signal 1: a Related entry already resolving into a project.
+// when no unambiguous signal exists (모호하면 잔류 — a wrong filing is worse than
+// an unfiled mail). Matching runs against the caller's already-fetched project
+// list; re-listing per candidate was a silent N× knownProjects scan.
+func reclassifyTarget(page *Page, projects []ProjectRef) string {
+	// Signal 1: Related entries resolving into projects — but only when they
+	// all agree. Two DISTINCT related projects are exactly the ambiguity the
+	// doctrine says to leave alone (returning the first was arbitrary).
+	related := ""
 	for _, r := range page.Meta.Related {
-		if name, ok := ProjectNameOf(strings.TrimSpace(r)); ok {
-			return name
+		name, ok := ProjectNameOf(strings.ReplaceAll(strings.TrimSpace(r), "\\", "/"))
+		if !ok {
+			continue
 		}
+		if related != "" && related != name {
+			return "" // ≥2 distinct projects → ambiguous, stay put
+		}
+		related = name
 	}
-	// Signal 2: the title names exactly one known project.
-	title := strings.TrimSpace(page.Meta.Title)
-	if title == "" {
+	if related != "" {
+		return related
+	}
+	// Signal 2: the title names exactly one known project (normalized
+	// containment on the passed project set).
+	hay := normalizeTitleKey(strings.TrimSpace(page.Meta.Title))
+	if hay == "" {
 		return ""
 	}
-	matches := s.MatchProjectsInText(title, 2)
-	if len(matches) != 1 {
-		return "" // zero or ambiguous — stay put
+	matched := ""
+	for _, ref := range projects {
+		if bestProjectKeyIn(hay, ref) == "" {
+			continue
+		}
+		name, ok := ProjectNameOf(ref.Path)
+		if !ok {
+			continue
+		}
+		if matched != "" && matched != name {
+			return "" // names two projects → ambiguous, stay put
+		}
+		matched = name
 	}
-	if name, ok := ProjectNameOf(matches[0].Path); ok {
-		return name
-	}
-	return ""
+	return matched
 }

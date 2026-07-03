@@ -919,7 +919,7 @@ func wikiToolSchema() map[string]any {
 			},
 			"content": map[string]any{
 				"type":        "string",
-				"description": "Page body content in markdown (write action) or diary entry body (log action). In write bodies, link related pages inline with [[path-or-title]] (e.g. [[프로젝트/dgx-spark]] or [[홍길동]]); these become knowledge-graph edges, so prefer them over plain mentions.",
+				"description": "Page body content in markdown (write action) or diary entry body (log action). In write bodies, link related pages inline with [[path-or-title]] (e.g. [[프로젝트/dgx-spark]] or [[홍길동]]); these become knowledge-graph edges, so prefer them over plain mentions. 프로젝트/<이름>/로그.md에 쓰면 content가 날짜 H2 섹션으로 기존 로그에 append된다 — 새 항목만 보낼 것(전체 본문 재전송 금지); 전체 재작성이 정말 필요하면 force=true.",
 			},
 			"cues": map[string]any{
 				"type":        "array",

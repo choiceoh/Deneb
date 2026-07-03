@@ -166,11 +166,12 @@ func TestWikiReview_SameProjectSlotsAreNotSuspects(t *testing.T) {
 }
 
 // TestWikiReview_MaintenanceRunsOnQuietCycle: the deterministic maintenance
-// sweep (here proven via log rotation) must run even when the duplicate review
-// finds nothing. The regression this guards: rotation/dormancy/dead-link
-// pruning/mail-refiling used to sit AFTER the duplicate-review early-returns
-// (touched==0, suspects==0, verdict error), so on the common quiet cycle they
-// never ran. On the old code this test fails (로그-보관.md never appears).
+// sweep (here proven via log rotation) must run even on a TRULY quiet cycle —
+// touched==0, because the watermark is pre-advanced past the fixture writes.
+// The regression this guards: rotation/dormancy/dead-link pruning/mail-refiling
+// used to sit AFTER the duplicate-review early-returns (touched==0,
+// suspects==0, verdict error), so on the common quiet cycle they never ran. On
+// the old code this test fails (로그-보관.md never appears).
 func TestWikiReview_MaintenanceRunsOnQuietCycle(t *testing.T) {
 	task, store := newReviewFixture(t)
 	// A lone project with an over-long 로그.md and no duplicate candidates.
@@ -189,19 +190,62 @@ func TestWikiReview_MaintenanceRunsOnQuietCycle(t *testing.T) {
 	if err := store.WritePage("프로젝트/테스트프로젝트/로그.md", logPage); err != nil {
 		t.Fatal(err)
 	}
+	// Advance the watermark past the fixture writes (the parser pulls the window
+	// back one minute, hence the +2m) so this cycle genuinely sees touched==0.
+	if err := task.saveState(&wikiReviewState{
+		Version:      1,
+		LastReviewMs: time.Now().Add(2 * time.Minute).UnixMilli(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if got := task.recentlyTouchedPages(time.UnixMilli(task.loadState().LastReviewMs)); len(got) != 0 {
+		t.Fatalf("precondition: touched must be empty, got %v", got)
+	}
 
-	// No duplicate candidates exist anywhere, so the verdict LLM must never fire.
+	// touched==0 → the verdict LLM must never fire.
 	task.llm = func(_ context.Context, _, _ string, _ int) (string, error) {
-		t.Error("verdict call must not fire when there are no duplicate suspects")
+		t.Error("verdict call must not fire on a quiet cycle")
 		return "[]", nil
 	}
 	if err := task.Run(context.Background()); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
 
-	// Maintenance ran despite zero duplicate suspects: the overflow sections
+	// Maintenance ran despite zero touched pages: the overflow sections
 	// (beyond the newest LogKeepSections) moved into the archive page.
 	if _, err := store.ReadPage(wiki.LogArchivePath("테스트프로젝트")); err != nil {
 		t.Errorf("log rotation must run on a quiet cycle, but 로그-보관.md missing: %v", err)
+	}
+}
+
+// TestWikiReview_FlatRemnantFoldsIntoExistingSlot: when a blind write recreates
+// the flat 프로젝트/<name>.md while the in-folder 대표.md already exists, MovePage
+// fails (target exists) and the same-folder filter hides the pair from the
+// duplicate review — so the layout repair must FOLD the remnant into the slot
+// (deterministic; content survives under the merge marker).
+func TestWikiReview_FlatRemnantFoldsIntoExistingSlot(t *testing.T) {
+	task, store := newReviewFixture(t)
+	rep := wiki.NewPage("영산고", "프로젝트", nil)
+	rep.Body = "# 영산고 태양광"
+	if err := store.WritePage("프로젝트/영산고/대표.md", rep); err != nil {
+		t.Fatal(err)
+	}
+	flat := wiki.NewPage("영산고", "프로젝트", nil)
+	flat.Body = "# 영산고\n\n블라인드 RPC가 쓴 잔재 내용"
+	if err := store.WritePage("프로젝트/영산고.md", flat); err != nil {
+		t.Fatal(err)
+	}
+
+	task.gatherSuspects(context.Background(), []string{"프로젝트/영산고.md"})
+
+	if _, err := store.ReadPage("프로젝트/영산고.md"); err == nil {
+		t.Error("flat remnant must be folded away, but still exists")
+	}
+	merged, err := store.ReadPage("프로젝트/영산고/대표.md")
+	if err != nil {
+		t.Fatalf("rep slot unreadable after fold: %v", err)
+	}
+	if !strings.Contains(merged.Body, "블라인드 RPC가 쓴 잔재 내용") {
+		t.Errorf("remnant content lost in fold:\n%s", merged.Body)
 	}
 }

@@ -253,6 +253,12 @@ func wikiWrite(ctx context.Context, store *wiki.Store, contactsStore *contacts.S
 	// should update that page (or retry with force=true if genuinely distinct).
 	if !force {
 		if _, err := store.ReadPage(path); err != nil { // create, not update
+			if !os.IsNotExist(err) {
+				// Transient read failure (permissions, I/O) — routing it through
+				// the create guard would give the model wrong guidance; fail the
+				// write with the real error instead.
+				return fmt.Sprintf("위키 페이지 읽기 실패 (쓰기 중단): %v", err), nil
+			}
 			hits := store.FindSimilarPages(ctx, wiki.SimilarQuery{
 				Path: path, ID: id, Title: title, Category: category,
 			}, 3)
@@ -270,6 +276,17 @@ func wikiWrite(ctx context.Context, store *wiki.Store, contactsStore *contacts.S
 				return sb.String(), nil
 			}
 		}
+	}
+
+	// Project 로그.md slot: the tool contract says events APPEND there (query
+	// description: "사건·소식은 여기에 append"), but a body replace would let a model
+	// sending only its new entry wipe the whole log. Append it as a dated H2
+	// section instead (H2 = RotateProjectLog's rotation unit, mirroring the
+	// dreamer's reroute); force=true keeps the raw replace for deliberate
+	// rewrites.
+	logAppend := false
+	if name, ok := wiki.ProjectNameOf(path); ok && path == wiki.LogPagePath(name) && !force {
+		logAppend = true
 	}
 
 	// Read-modify-write through UpdatePage so a concurrent writer of the same page
@@ -314,7 +331,11 @@ func wikiWrite(ctx context.Context, store *wiki.Store, contactsStore *contacts.S
 			}
 			page.Meta.Updated = time.Now().Format("2006-01-02")
 			if content != "" {
-				page.Body = content
+				if logAppend {
+					page.Body = appendProjectLogSection(page.Body, content)
+				} else {
+					page.Body = content
+				}
 			}
 			return page, nil
 		}
@@ -332,9 +353,14 @@ func wikiWrite(ctx context.Context, store *wiki.Store, contactsStore *contacts.S
 		if due != "" {
 			page.Meta.Due = due
 		}
-		if content != "" {
+		switch {
+		case content != "" && logAppend:
+			// A fresh 로그.md starts as a dated section so rotation works from
+			// the first entry.
+			page.Body = appendProjectLogSection("", content)
+		case content != "":
 			page.Body = content
-		} else {
+		default:
 			page.Body = fmt.Sprintf("# %s\n\n## 요약\n\n\n## 핵심 사실\n\n\n## 변경 이력\n- %s: 페이지 생성\n",
 				title, time.Now().Format("2006-01-02"))
 		}
@@ -348,6 +374,9 @@ func wikiWrite(ctx context.Context, store *wiki.Store, contactsStore *contacts.S
 	action := "생성"
 	if existed {
 		action = "업데이트"
+		if logAppend && content != "" {
+			action = "업데이트 (로그에 섹션 append — 기존 항목 유지)"
+		}
 	}
 	note := autoRecordPeople(store, contactsStore, page, category)
 	if len(marked) > 0 {
@@ -357,6 +386,22 @@ func wikiWrite(ctx context.Context, store *wiki.Store, contactsStore *contacts.S
 		note += fmt.Sprintf(" · 대체 표시 실패: %s", strings.Join(failed, ", "))
 	}
 	return fmt.Sprintf("위키 페이지 %s: %s (%s)%s", action, path, title, note), nil
+}
+
+// appendProjectLogSection appends a write's content to a project 로그.md body
+// as a dated H2 section — H2 is the unit RotateProjectLog rotates on, matching
+// the dreamer's reroute (dreamer_guards.go appendProjectLog). Content that
+// already opens with its own H2 heading is appended verbatim (no empty dated
+// shell above it). body may be "" (fresh log page).
+func appendProjectLogSection(body, content string) string {
+	entry := strings.TrimSpace(content)
+	if !strings.HasPrefix(entry, "## ") {
+		entry = "## " + time.Now().Format("2006-01-02") + "\n" + entry
+	}
+	if strings.TrimSpace(body) == "" {
+		return entry + "\n"
+	}
+	return strings.TrimRight(body, "\n") + "\n\n" + entry + "\n"
 }
 
 // wikiCloseProject retires a project (종결): closure record on the 대표페이지 +

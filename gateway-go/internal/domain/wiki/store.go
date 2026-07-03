@@ -313,12 +313,19 @@ func (s *Store) deletePageLocked(relPath string) error {
 // pages it rewrites (addBacklink/removeBacklink → writePageInternal) are part of
 // the same serialized write — a single global lock means no cross-page ordering
 // deadlock between two writers maintaining each other's backlinks.
+//
+// The diff runs on normalized paths: raw-string diffing saw an extension repair
+// ("기술/b" → "기술/b.md") as an add of one target plus a remove of a DIFFERENT
+// target, and since both resolve to the same file the remove leg deleted the
+// mutual backlink the entry was just repaired to keep.
 func (s *Store) maintainBacklinks(relPath string, oldRelated, newRelated []string) {
-	oldSet := toSet(oldRelated)
-	newSet := toSet(newRelated)
+	oldNorm := normalizeRelatedPaths(oldRelated)
+	newNorm := normalizeRelatedPaths(newRelated)
+	oldSet := toSet(oldNorm)
+	newSet := toSet(newNorm)
 
 	// Add relPath to newly-related pages.
-	for _, target := range newRelated {
+	for _, target := range newNorm {
 		if _, ok := oldSet[target]; ok {
 			continue // already linked
 		}
@@ -326,12 +333,27 @@ func (s *Store) maintainBacklinks(relPath string, oldRelated, newRelated []strin
 	}
 
 	// Remove relPath from no-longer-related pages.
-	for _, target := range oldRelated {
+	for _, target := range oldNorm {
 		if _, ok := newSet[target]; ok {
 			continue // still linked
 		}
 		s.removeBacklink(target, relPath)
 	}
+}
+
+// normalizeRelatedPaths maps Related entries through normalizePagePath so the
+// backlink diff compares file identities, not raw spellings. Non-path entries
+// (titles, project codes) normalize to a non-existent ".md" name and stay
+// harmless — addBacklink/removeBacklink skip targets that don't read.
+func normalizeRelatedPaths(related []string) []string {
+	if len(related) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(related))
+	for _, r := range related {
+		out = append(out, normalizePagePath(r))
+	}
+	return out
 }
 
 func (s *Store) addBacklink(targetPath, sourcePath string) {
@@ -345,7 +367,9 @@ func (s *Store) addBacklink(targetPath, sourcePath string) {
 		}
 	}
 	page.Meta.Related = append(page.Meta.Related, sourcePath)
-	page.Meta.Updated = time.Now().Format("2006-01-02")
+	// Deliberately NOT stamping Updated: a reverse-edge repair is metadata
+	// hygiene on the TARGET page, not activity — stamping made dormant projects
+	// look freshly active (dormancy detection keys off Updated).
 	// Best-effort: a failed reverse edge is non-fatal, but silent failures let
 	// the graph drift apart over months — surface them for the operator.
 	if err := s.writePageInternal(targetPath, page, true); err != nil {
@@ -369,7 +393,8 @@ func (s *Store) removeBacklink(targetPath, sourcePath string) {
 		return // nothing changed
 	}
 	page.Meta.Related = filtered
-	page.Meta.Updated = time.Now().Format("2006-01-02")
+	// No Updated stamp — see addBacklink: backlink maintenance is hygiene, not
+	// page activity.
 	if err := s.writePageInternal(targetPath, page, true); err != nil {
 		slog.Warn("wiki: backlink removal failed; stale reverse edge remains",
 			"target", targetPath, "source", sourcePath, "error", err)

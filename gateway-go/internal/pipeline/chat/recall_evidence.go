@@ -108,6 +108,13 @@ func formatRecallFileNote(path, snippet string) string {
 // keyword search prefers detail pages (or the 대표 is a fresh skeleton).
 const recallProjectAnchorScore = 2.2
 
+// recallProjectAnchorQuery is the sentinel Query value marking a project-anchor
+// evidence row. It is not a search query: the broadening penalty (which demotes
+// hits found only by an individual term) must never apply to it — ×0.7 dropped
+// the guaranteed anchor to 1.54, which a strong combined-query wiki hit
+// (0.80+BM25) could outrank.
+const recallProjectAnchorQuery = "project-anchor"
+
 func recallWikiEvidence(ctx context.Context, store *wiki.Store, queries []string) []recallEvidence {
 	if store == nil || len(queries) == 0 {
 		return nil
@@ -125,7 +132,7 @@ func recallWikiEvidence(ctx context.Context, store *wiki.Store, queries []string
 		evidence = append(evidence, recallEvidence{
 			Kind:   "wiki",
 			Source: ref.Path,
-			Query:  "project-anchor",
+			Query:  recallProjectAnchorQuery,
 			Note:   formatRecallProjectAnchorNote(store, ref),
 			Score:  recallProjectAnchorScore,
 		})

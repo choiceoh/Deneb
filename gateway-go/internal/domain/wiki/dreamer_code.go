@@ -35,6 +35,11 @@ func (wd *WikiDreamer) buildCodeIndex() codeIndex {
 	if err != nil {
 		return ci
 	}
+	// Precedence per folder: the 대표페이지's code always wins; an entity page is
+	// the legacy signal used only until a rep page is seen (a later-iterated
+	// child typed "entity" must not overwrite the rep's code); otherwise
+	// first-seen wins.
+	repSeen := map[string]bool{}
 	for _, rp := range rels {
 		page, perr := wd.store.ReadPage(rp)
 		if perr != nil || page == nil || page.Meta.Code == "" {
@@ -42,10 +47,13 @@ func (wd *WikiDreamer) buildCodeIndex() codeIndex {
 		}
 		code := page.Meta.Code
 		dir := codeFolderKey(rp)
-		// Prefer the 대표페이지's code when a folder carries several (entity kept as
-		// the legacy signal); otherwise first-seen wins.
-		if _, ok := ci.folderCode[dir]; !ok || page.Meta.Type == "entity" || IsProjectRepPage(rp) {
+		isRep := IsProjectRepPage(rp)
+		if _, ok := ci.folderCode[dir]; !ok || isRep ||
+			(page.Meta.Type == "entity" && !repSeen[dir]) {
 			ci.folderCode[dir] = code
+		}
+		if isRep {
+			repSeen[dir] = true
 		}
 		if stem, seq, ok := splitCode(code); ok {
 			if seq > ci.maxSeq[stem] {

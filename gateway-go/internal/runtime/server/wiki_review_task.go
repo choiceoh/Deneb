@@ -141,11 +141,14 @@ func (t *wikiReviewTask) Run(ctx context.Context) error {
 	merged, suspectCount := t.reviewDuplicates(ctx, touched, state)
 
 	// Deterministic maintenance — always runs, no LLM, independent of the review.
-	rotated := t.rotateProjectLogs()
-	// Dormancy nudge: long-inactive ACTIVE projects get one 종결-검토 bullet on
-	// their 대표페이지 (surfaces in the 모아보기; quarter-idempotent; never
-	// auto-closes). Capped so a backlog can't flood the digest view.
+	// Dormancy nudge FIRST: log rotation stamps 로그.md/로그-보관.md Updated with
+	// today, which would reset the whole folder's activity clock and push a
+	// genuinely dormant project's detection out another ~120 days.
+	// Long-inactive ACTIVE projects get one 종결-검토 bullet on their 대표페이지
+	// (surfaces in the 모아보기; quarter-idempotent; never auto-closes). Capped
+	// so a backlog can't flood the digest view.
 	dormant := t.wikiStore.FlagDormantProjects(time.Now(), 2)
+	rotated := t.rotateProjectLogs()
 	// Graph hygiene: repair/drop dead Related references (idempotent; the first
 	// sweep clears the historical rot, later ones only touch fresh drift).
 	prune, perr := t.wikiStore.PruneDeadRelatedLinks()
@@ -223,6 +226,9 @@ var wikiLogEntryRe = regexp.MustCompile(`^## \[(\d{4}-\d{2}-\d{2} \d{2}:\d{2})\]
 func (t *wikiReviewTask) recentlyTouchedPages(since time.Time) []string {
 	data, err := os.ReadFile(filepath.Join(t.wikiStore.Dir(), "log.md"))
 	if err != nil {
+		if !os.IsNotExist(err) { // a fresh wiki has no audit log yet — that's not a failure
+			t.logger.Warn("wiki-review: audit log unreadable, skipping duplicate review", "error", err)
+		}
 		return nil
 	}
 	// Minute-precision timestamps: pull the window back one minute so an entry
@@ -258,16 +264,28 @@ func (t *wikiReviewTask) recentlyTouchedPages(since time.Time) []string {
 		}
 		entries = append(entries, entry{ts: ts, path: path})
 	}
-	// Newest first, dedup by path, cap.
+	// Newest first, dedup by path, cap. The high-water mark advances past the
+	// whole window regardless, so pages beyond the cap are dropped from review
+	// (accepted tradeoff: re-queueing them forever would starve fresh writes) —
+	// but that overflow must at least be visible.
 	seen := make(map[string]bool, len(entries))
 	var out []string
-	for i := len(entries) - 1; i >= 0 && len(out) < wikiReviewMaxPages; i-- {
+	overflow := 0
+	for i := len(entries) - 1; i >= 0; i-- {
 		p := entries[i].path
 		if seen[p] {
 			continue
 		}
 		seen[p] = true
+		if len(out) >= wikiReviewMaxPages {
+			overflow++
+			continue
+		}
 		out = append(out, p)
+	}
+	if overflow > 0 {
+		t.logger.Info("wiki-review: touched pages exceed the per-cycle cap; oldest skipped unreviewed",
+			"cap", wikiReviewMaxPages, "skipped", overflow)
 	}
 	return out
 }
@@ -278,11 +296,31 @@ func (t *wikiReviewTask) recentlyTouchedPages(since time.Time) []string {
 func (t *wikiReviewTask) gatherSuspects(ctx context.Context, touched []string) []wikiReviewSuspect {
 	var suspects []wikiReviewSuspect
 	for _, p := range touched {
-		// Layout repair: a flat project page routes onto its 대표.md slot.
+		// Layout repair: a flat project page routes onto its 대표.md slot. When
+		// the slot ALREADY exists the move fails — and the flat remnant would
+		// then be invisible forever (the same-folder filter below hides its own
+		// rep from the duplicate candidates), so fold it into the slot instead:
+		// both are BY CONSTRUCTION the same project's rep, making this a
+		// deterministic layout repair (content preserved under a merge marker),
+		// not an LLM judgment gated by autoMerge.
 		if np := wiki.NormalizeProjectPagePath(p); np != p {
-			if err := t.wikiStore.MovePage(p, np); err == nil {
+			if _, perr := t.wikiStore.ReadPage(p); perr != nil {
+				p = np // flat form already gone (moved/folded earlier) — review the slot
+			} else if _, rerr := t.wikiStore.ReadPage(np); rerr == nil {
+				if err := t.wikiStore.FoldDuplicate(np, p); err != nil {
+					t.logger.Warn("wiki-review: flat project remnant fold failed",
+						"flat", p, "slot", np, "error", err)
+					continue // unreadable pair — retried next time it's touched
+				}
+				t.logger.Info("wiki-review: flat project remnant folded into layout slot",
+					"from", p, "to", np)
+				p = np
+			} else if err := t.wikiStore.MovePage(p, np); err == nil {
 				t.logger.Info("wiki-review: flat project page moved to layout slot", "from", p, "to", np)
 				p = np
+			} else {
+				t.logger.Warn("wiki-review: flat project page move failed",
+					"from", p, "to", np, "error", err)
 			}
 		}
 		page, err := t.wikiStore.ReadPage(p)

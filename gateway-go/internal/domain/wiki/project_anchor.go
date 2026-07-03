@@ -42,7 +42,11 @@ func (s *Store) MatchProjectsInText(text string, limit int) []ProjectRef {
 		}
 		hits = append(hits, scored{ref: ref, key: key})
 	}
-	sort.SliceStable(hits, func(i, j int) bool { return len(hits[i].key) > len(hits[j].key) })
+	// Specificity = rune count, not byte length: on mixed Hangul/ASCII keys a
+	// 3-byte Hangul rune would out-"length" three ASCII runes.
+	sort.SliceStable(hits, func(i, j int) bool {
+		return utf8.RuneCountInString(hits[i].key) > utf8.RuneCountInString(hits[j].key)
+	})
 	out := make([]ProjectRef, 0, limit)
 	for _, h := range hits {
 		out = append(out, h.ref)
@@ -53,8 +57,9 @@ func (s *Store) MatchProjectsInText(text string, limit int) []ProjectRef {
 	return out
 }
 
-// bestProjectKeyIn returns the longest normalized identity key of ref (display
-// name or folder name) contained in hay, or "" when none matches.
+// bestProjectKeyIn returns the longest (by rune count) normalized identity key
+// of ref (display name or folder name) contained in hay, or "" when none
+// matches.
 func bestProjectKeyIn(hay string, ref ProjectRef) string {
 	best := ""
 	name, _ := ProjectNameOf(ref.Path)
@@ -63,7 +68,8 @@ func bestProjectKeyIn(hay string, ref ProjectRef) string {
 		if utf8.RuneCountInString(key) < minProjectKeyRunes {
 			continue
 		}
-		if strings.Contains(hay, key) && len(key) > len(best) {
+		if strings.Contains(hay, key) &&
+			utf8.RuneCountInString(key) > utf8.RuneCountInString(best) {
 			best = key
 		}
 	}

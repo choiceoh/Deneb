@@ -247,6 +247,59 @@ func TestWikiWrite_DuplicateGuardBlocksCreate(t *testing.T) {
 	}
 }
 
+// TestWikiWrite_ProjectLogAppendsSection: the tool contract for 프로젝트/<이름>/
+// 로그.md is APPEND ("사건·소식은 여기에 append") — a model sending only the new
+// entry must not wipe the log. The write lands as a dated H2 section (the
+// rotation unit); force=true keeps the raw replace.
+func TestWikiWrite_ProjectLogAppendsSection(t *testing.T) {
+	store := newTestWikiStore(t)
+	logPage := wiki.NewPage("영산고 진행 로그", "프로젝트", nil)
+	logPage.Meta.Type = "log"
+	logPage.Body = "## 2026-07-01 계약\n\n계약 체결\n"
+	if err := store.WritePage(wiki.LogPagePath("영산고"), logPage); err != nil {
+		t.Fatalf("seed log: %v", err)
+	}
+
+	write := func(content string, force bool) string {
+		t.Helper()
+		out, err := wikiWrite(context.Background(), store, nil,
+			"프로젝트/영산고/로그.md", "영산고 진행 로그", "", "", "프로젝트", content,
+			nil, nil, nil, nil, 0, "log", "", "", force)
+		if err != nil {
+			t.Fatalf("wikiWrite: %v", err)
+		}
+		return out
+	}
+
+	out := write("자재 입고 완료", false)
+	if !strings.Contains(out, "append") {
+		t.Errorf("result message should surface append semantics, got: %s", out)
+	}
+	got := testutil.Must(store.ReadPage(wiki.LogPagePath("영산고")))
+	if !strings.Contains(got.Body, "계약 체결") || !strings.Contains(got.Body, "자재 입고 완료") {
+		t.Fatalf("append lost prior entries:\n%s", got.Body)
+	}
+	if _, sections := got.SplitByH2(); len(sections) != 2 {
+		t.Fatalf("appended entry must be its own dated H2 section, got %d sections:\n%s",
+			len(sections), got.Body)
+	}
+
+	// Content already carrying its own H2 heading is appended verbatim.
+	write("## 2026-07-04 회의\n\n납기 논의", false)
+	got = testutil.Must(store.ReadPage(wiki.LogPagePath("영산고")))
+	if _, sections := got.SplitByH2(); len(sections) != 3 {
+		t.Fatalf("own-heading entry must not gain an empty dated shell (%d sections):\n%s",
+			len(sections), got.Body)
+	}
+
+	// force=true = deliberate rewrite: raw replace.
+	write("# 영산고 진행 로그\n\n## 정리됨\n\n한 섹션만", true)
+	got = testutil.Must(store.ReadPage(wiki.LogPagePath("영산고")))
+	if strings.Contains(got.Body, "계약 체결") {
+		t.Errorf("force write must replace the body:\n%s", got.Body)
+	}
+}
+
 // TestWikiSearch_EmptyQueryReturnsGuidance verifies that an empty query
 // returns a friendly Korean guidance string (not an error).
 func TestWikiSearch_EmptyQueryReturnsGuidance(t *testing.T) {

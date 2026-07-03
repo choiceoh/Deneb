@@ -65,7 +65,10 @@ func (wd *WikiDreamer) applyVerifyFixes(findings []VerifyFinding) int {
 				wd.logger.Warn("wiki-verify: auto-archive failed", "path", f.PageA, "error", err)
 				continue
 			}
-			wd.logger.Info("wiki-verify: archived long-superseded page", "path", f.PageA)
+			// Detail distinguishes WHY (long-superseded vs mail retention 90d —
+			// both arrive as "archive" fixes; the old fixed message mislabeled
+			// retention archives as superseded).
+			wd.logger.Info("wiki-verify: archived page", "path", f.PageA, "detail", f.Detail)
 			applied++
 		}
 	}

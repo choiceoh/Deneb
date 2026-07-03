@@ -11,7 +11,12 @@
 // value or by path leaf — exactly as the client did.
 package handlerminiapp
 
-import "strings"
+import (
+	"path"
+	"strings"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
+)
 
 // projectMatchKeys builds a project's identity key set from the same inputs the
 // digest ships. Each value contributes its normalized form plus its path leaf,
@@ -49,13 +54,43 @@ func normalizeMatchKey(v string) string {
 	return strings.Join(strings.Fields(v), " ")
 }
 
-// matchKeyLeaf returns the last '/'-separated segment of a normalized key (the
-// whole key when there's no slash).
-func matchKeyLeaf(k string) string {
-	if i := strings.LastIndex(k, "/"); i >= 0 {
-		return k[i+1:]
+// projectSlotLeafKeys are the fixed per-project slot filenames in normalized
+// key form (lowercased, ".md" stripped) — sourced from the layout's single
+// truth (wiki/project_layout.go, wiki/project_log.go). After the folder-schema
+// migration EVERY project's rep page ends in 대표.md (and its log in 로그.md), so
+// these leaves identify a SLOT, not a project: using them as match keys
+// cross-linked items across all projects (the project corner showed other
+// projects' notebooks).
+var projectSlotLeafKeys = func() map[string]struct{} {
+	m := make(map[string]struct{}, 3)
+	for _, f := range []string{
+		wiki.RepPageFile,                   // 대표.md
+		wiki.LogPageFile,                   // 로그.md
+		path.Base(wiki.LogArchivePath("")), // 로그-보관.md
+	} {
+		m[normalizeMatchKey(f)] = struct{}{}
 	}
-	return k
+	return m
+}()
+
+// matchKeyLeaf returns the DISCRIMINATING leaf of a normalized key: the last
+// '/'-separated segment (the whole key when there's no slash) — except for
+// fixed project slot filenames (대표, 로그, …), where the project FOLDER segment
+// (second-to-last) is what identifies the project, so that is returned instead.
+func matchKeyLeaf(k string) string {
+	i := strings.LastIndex(k, "/")
+	if i < 0 {
+		return k
+	}
+	leaf := k[i+1:]
+	if _, slot := projectSlotLeafKeys[leaf]; !slot {
+		return leaf
+	}
+	rest := k[:i]
+	if j := strings.LastIndex(rest, "/"); j >= 0 {
+		return rest[j+1:]
+	}
+	return rest
 }
 
 // itemLinkedToProject reports whether any of an item's project-ref strings match

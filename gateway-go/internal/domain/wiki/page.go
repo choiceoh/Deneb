@@ -195,9 +195,11 @@ func WritePageFile(path string, page *Page) error {
 	// Single choke point for cue hygiene: every producer (dreamer create/update,
 	// the agent wiki tool, duplicate folds) funnels through here, so trim/dedupe
 	// and the 10-cue cap hold regardless of which path set the field — without
-	// this, the cap only held on the dreamer's merge branch.
-	page.Meta.Cues = normalizeCues(page.Meta.Cues)
+	// this, the cap only held on the dreamer's merge branch. Redaction runs
+	// FIRST: two distinct cues can redact to the same placeholder, and
+	// normalizing the pre-redaction list would let those duplicates back in.
 	redactPage(page)
+	page.Meta.Cues = normalizeCues(page.Meta.Cues)
 	data := page.Render()
 	tmp := path + ".tmp"
 	if err := writeFileSync(tmp, data, 0o644); err != nil { //nolint:gosec // G306 — world-readable is intentional

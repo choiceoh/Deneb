@@ -154,6 +154,85 @@ func TestCloseProject_LegacyFlatRep(t *testing.T) {
 	}
 }
 
+// TestCloseProject_ReservedBucketPathRejected: the 거래 ledger (and any other
+// reserved-bucket page) must never resolve as a project rep — the old fallback
+// name "거래/탑솔라" slipped past IsReservedProjectDir and the legacy lookup
+// then archived the ledger itself.
+func TestCloseProject_ReservedBucketPathRejected(t *testing.T) {
+	store := newCloseStore(t)
+	ledger := NewPage("탑솔라", "프로젝트", nil)
+	ledger.Body = "# 탑솔라 거래 원장"
+	if err := store.WritePage("프로젝트/거래/탑솔라.md", ledger); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, ref := range []string{"프로젝트/거래/탑솔라.md", "프로젝트/거래/탑솔라", `프로젝트\거래\탑솔라.md`} {
+		if _, err := store.CloseProject(ref, "", time.Now()); err == nil {
+			t.Errorf("CloseProject(%q) must error — reserved bucket page is not a project", ref)
+		}
+	}
+	if got := testutil.Must(store.ReadPage("프로젝트/거래/탑솔라.md")); got.Meta.Archived {
+		t.Error("거래 ledger was archived by a rejected close")
+	}
+}
+
+// TestCloseProject_RecloseCountsNoNewArchives: re-closing refreshes the 종결
+// record but must report 0 newly archived pages (the flag didn't flip).
+func TestCloseProject_RecloseCountsNoNewArchives(t *testing.T) {
+	store := newCloseStore(t)
+	seedProject(t, store, "영산고", "로그")
+	now := time.Date(2026, 7, 2, 12, 0, 0, 0, time.UTC)
+
+	first := testutil.Must(store.CloseProject("영산고", "보류", now))
+	if first.Archived != 2 {
+		t.Fatalf("first close archived = %d, want 2", first.Archived)
+	}
+	again := testutil.Must(store.CloseProject("영산고", "최종 종결", now.AddDate(0, 0, 1)))
+	if again.Archived != 0 {
+		t.Errorf("re-close archived = %d, want 0 (nothing newly flagged)", again.Archived)
+	}
+}
+
+// TestReopenProject_ActiveProjectErrors: reopening a project that was never
+// closed must return the "이미 활성" error — and must not stamp a spurious 재개
+// line or touch Updated.
+func TestReopenProject_ActiveProjectErrors(t *testing.T) {
+	store := newCloseStore(t)
+	seedProject(t, store, "영산고")
+	before := testutil.Must(store.ReadPage(RepPagePath("영산고")))
+
+	res, err := store.ReopenProject("영산고", time.Date(2026, 7, 2, 12, 0, 0, 0, time.UTC))
+	if err == nil || !strings.Contains(err.Error(), "이미 활성") {
+		t.Fatalf("ReopenProject(active) = (%+v, %v), want 이미 활성 error", res, err)
+	}
+	after := testutil.Must(store.ReadPage(RepPagePath("영산고")))
+	if strings.Contains(after.Body, "재개") {
+		t.Errorf("spurious 재개 history on an active project:\n%s", after.Body)
+	}
+	if after.Meta.Updated != before.Meta.Updated {
+		t.Errorf("Updated churned by a rejected reopen: %q → %q", before.Meta.Updated, after.Meta.Updated)
+	}
+}
+
+// TestCloseProject_ByDisplayTitle: a project addressable by its page Title even
+// when the Title differs from the folder name.
+func TestCloseProject_ByDisplayTitle(t *testing.T) {
+	store := newCloseStore(t)
+	rep := NewPage("기아 화성", "프로젝트", nil) // display title with a space
+	rep.Body = "# 기아 화성"
+	if err := store.WritePage(RepPagePath("기아-화성"), rep); err != nil { // folder name differs
+		t.Fatal(err)
+	}
+
+	res, err := store.CloseProject("기아 화성", "완료", time.Now())
+	if err != nil {
+		t.Fatalf("CloseProject(by title): %v", err)
+	}
+	if res.RepPath != RepPagePath("기아-화성") {
+		t.Errorf("resolved rep = %q, want %q", res.RepPath, RepPagePath("기아-화성"))
+	}
+}
+
 // TestFlagDormantProjects: long-inactive active projects get one 종결-검토
 // bullet (quarter-idempotent, capped); fresh and closed projects don't.
 func TestFlagDormantProjects(t *testing.T) {

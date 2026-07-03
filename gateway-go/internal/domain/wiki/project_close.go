@@ -41,7 +41,7 @@ type ReopenResult struct {
 // the disk directly, so it finds CLOSED (archived) projects too — reopen needs
 // exactly that.
 func (s *Store) resolveProjectRep(ref string) (name, repPath string, err error) {
-	ref = strings.TrimSpace(ref)
+	ref = strings.ReplaceAll(strings.TrimSpace(ref), "\\", "/")
 	if ref == "" {
 		return "", "", fmt.Errorf("wiki: empty project reference")
 	}
@@ -50,7 +50,11 @@ func (s *Store) resolveProjectRep(ref string) (name, repPath string, err error) 
 	} else {
 		name = strings.TrimSuffix(strings.TrimPrefix(ref, projectCategoryPrefix+"/"), ".md")
 	}
-	if name == "" || IsReservedProjectDir(name) {
+	// A fallback name with a path separator is never a project: ProjectNameOf
+	// already rejected the ref (reserved bucket like 프로젝트/거래/…, or another
+	// category), and letting "거래/탑솔라" through would make the legacy lookup
+	// below treat the 거래 ledger page as a rep page and archive it.
+	if name == "" || strings.Contains(name, "/") || IsReservedProjectDir(name) {
 		return "", "", fmt.Errorf("wiki: %q is not a project", ref)
 	}
 	if _, rerr := s.ReadPage(RepPagePath(name)); rerr == nil {
@@ -60,11 +64,26 @@ func (s *Store) resolveProjectRep(ref string) (name, repPath string, err error) 
 	if _, rerr := s.ReadPage(legacy); rerr == nil {
 		return name, legacy, nil
 	}
+	// Display-title fallback: a project whose page Title differs from its folder
+	// name ("기아 화성" vs 기아-화성) is addressable by the name the user actually
+	// says. KnownProjects lists ACTIVE projects only, so this serves close (and
+	// text-form reopen of a closed project still needs the folder name or path).
+	for _, kp := range s.knownProjects() {
+		if !strings.EqualFold(strings.TrimSpace(kp.Name), name) {
+			continue
+		}
+		if n, ok := ProjectNameOf(kp.Path); ok {
+			return n, kp.Path, nil
+		}
+	}
 	return "", "", fmt.Errorf("wiki: project %q not found (대표페이지 없음)", name)
 }
 
 // projectFolderPages lists every page belonging to the project (rep, 로그,
-// 기자재, 메일분석, details). Legacy flat projects return just the rep page.
+// 기자재, 메일분석, details) — ProjectFolderOf matches the legacy flat rep page
+// AND any in-folder children, so a transitional project (flat rep + folder
+// children) returns all of them. The repPath fallback covers only the case
+// where the listing itself came back empty.
 func (s *Store) projectFolderPages(name, repPath string) []string {
 	pages, err := s.ListPages(projectCategoryPrefix)
 	if err != nil {
@@ -97,10 +116,12 @@ func (s *Store) CloseProject(ref, note string, now time.Time) (CloseResult, erro
 
 	// 1. Closure record on the 대표페이지 (kept even while archived — this is the
 	//    answer to "그 건 어떻게 끝났지?").
+	repWasArchived := false
 	if err := s.UpdatePage(repPath, func(cur *Page) (*Page, error) {
 		if cur == nil {
 			return nil, fmt.Errorf("대표페이지 없음: %s", repPath)
 		}
+		repWasArchived = cur.Meta.Archived
 		content := "- 종결일: " + date
 		if n := strings.TrimSpace(note); n != "" {
 			content += "\n- 결과: " + n
@@ -116,8 +137,13 @@ func (s *Store) CloseProject(ref, note string, now time.Time) (CloseResult, erro
 		return CloseResult{}, fmt.Errorf("wiki: close %s: %w", name, err)
 	}
 
-	// 2. Archive the whole folder (rep already done above; count it once).
-	archived := 1
+	// 2. Archive the whole folder. Archived counts pages whose flag actually
+	//    flipped — re-closing an already-closed project refreshes the record but
+	//    reports 0 newly archived, not a phantom rep.
+	archived := 0
+	if !repWasArchived {
+		archived = 1
+	}
 	for _, p := range s.projectFolderPages(name, repPath) {
 		if p == repPath {
 			continue
@@ -159,16 +185,15 @@ func (s *Store) ReopenProject(ref string, now time.Time) (ReopenResult, error) {
 		}
 		changed := false
 		if err := s.UpdatePage(p, func(cur *Page) (*Page, error) {
-			if cur == nil {
-				return nil, nil
-			}
-			isRep := p == repPath
-			if !cur.Meta.Archived && !isRep {
+			if cur == nil || !cur.Meta.Archived {
+				// Already active (rep included): no restore, no spurious 재개
+				// history line, no Updated churn. Reopening a fully-active
+				// project must fall through to the "이미 활성" error below.
 				return nil, nil
 			}
 			cur.Meta.Archived = false
 			cur.Meta.Updated = date
-			if isRep {
+			if p == repPath {
 				if prev := strings.TrimSpace(cur.Section(closedSectionHeading)); prev != "" {
 					cur.Body = upsertSection(cur.Body, closedSectionHeading, prev+"\n- "+date+": 재개")
 				}

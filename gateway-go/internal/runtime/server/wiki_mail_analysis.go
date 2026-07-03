@@ -346,7 +346,9 @@ func directProjectPages(related []string) []string {
 	out := make([]string, 0, len(related))
 	seen := make(map[string]bool, len(related))
 	for _, r := range related {
-		r = strings.TrimSpace(r)
+		// Normalize backslashes universally (filepath.ToSlash is a no-op off
+		// Windows) so separator variants dedupe and match as one path.
+		r = strings.ReplaceAll(strings.TrimSpace(r), "\\", "/")
 		if !wiki.IsProjectRepPage(r) {
 			continue
 		}
