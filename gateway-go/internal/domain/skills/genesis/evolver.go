@@ -453,22 +453,24 @@ func (e *Evolver) generateCandidateText(ctx context.Context, userPrompt string, 
 	if attempt > 0 {
 		prompt = userPrompt + candidateVariationNote(attempt)
 	}
-	events, err := primaryClient.StreamChat(ctx, llm.ChatRequest{
+	// Non-streaming on purpose: glm-5.2 (the coding-role producer) is
+	// unreliable when STREAMING structured JSON — live 2026-07-04 the reasoning
+	// prose leaked into the content stream ("Let me analyze...", no JSON), and
+	// a reproduction probe got a stray trailing quote after the closing brace;
+	// the same payload non-streaming returned clean, valid JSON every time.
+	// Complete() also guards the empty-content-after-reasoning trap.
+	text, err := primaryClient.Complete(ctx, llm.ChatRequest{
 		Model:          primaryModel,
 		Messages:       []llm.Message{llm.NewTextMessage("user", prompt)},
 		System:         llm.SystemString(evolveSystemPrompt),
 		MaxTokens:      4096,
-		Stream:         true,
 		Thinking:       e.thinkingOff(primaryModel),
 		ResponseFormat: &llm.ResponseFormat{Type: "json_object"},
 	})
 	if err != nil {
 		return "", fmt.Errorf("evolver LLM call: %w", err)
 	}
-	if events == nil {
-		return "", fmt.Errorf("evolver LLM: nil event channel")
-	}
-	return drainStreamText(events), nil
+	return text, nil
 }
 
 // candidateVariationNote nudges the producer toward a distinct rewrite on the
@@ -2085,22 +2087,20 @@ func (e *Evolver) judgeCandidate(ctx context.Context, skillName string, client *
 		failurePatternSection,
 		validationSection)
 
-	events, err := client.StreamChat(ctx, llm.ChatRequest{
+	// Non-streaming for the same reason as generateCandidateText: glm-class
+	// models leak reasoning into the content stream / append junk when
+	// streaming JSON; non-streaming is clean.
+	raw, err := client.Complete(ctx, llm.ChatRequest{
 		Model:          model,
 		Messages:       []llm.Message{llm.NewTextMessage("user", userPrompt)},
 		System:         llm.SystemString(skillJudgeSystemPrompt),
 		MaxTokens:      2048,
-		Stream:         true,
 		Thinking:       e.thinkingOff(model),
 		ResponseFormat: &llm.ResponseFormat{Type: "json_object"},
 	})
 	if err != nil {
 		return false, "", fmt.Errorf("judge LLM call: %w", err)
 	}
-	if events == nil {
-		return false, "", fmt.Errorf("judge: nil event channel")
-	}
-	raw := drainStreamText(events)
 	if strings.TrimSpace(raw) == "" {
 		return false, "", fmt.Errorf("judge: empty verdict")
 	}
@@ -2201,22 +2201,18 @@ func (e *Evolver) teacherRewrite(ctx context.Context, teacherClient *llm.Client,
 		failurePatternSection,
 		validationSection)
 
-	events, err := teacherClient.StreamChat(ctx, llm.ChatRequest{
+	// Non-streaming — same glm streaming-JSON unreliability as the producer.
+	raw, err := teacherClient.Complete(ctx, llm.ChatRequest{
 		Model:          teacherModel,
 		Messages:       []llm.Message{llm.NewTextMessage("user", userPrompt)},
 		System:         llm.SystemString(evolveSystemPrompt),
 		MaxTokens:      4096,
-		Stream:         true,
 		Thinking:       e.thinkingOff(teacherModel),
 		ResponseFormat: &llm.ResponseFormat{Type: "json_object"},
 	})
 	if err != nil {
 		return acceptedSkillCandidate{}, fmt.Errorf("teacher rewrite LLM call: %w", err)
 	}
-	if events == nil {
-		return acceptedSkillCandidate{}, fmt.Errorf("teacher rewrite: nil event channel")
-	}
-	raw := drainStreamText(events)
 	if strings.TrimSpace(raw) == "" {
 		return acceptedSkillCandidate{}, nil
 	}

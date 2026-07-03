@@ -431,11 +431,14 @@ func TestParseAndApplyUsesTeacherRewriteAuditWhenEscalated(t *testing.T) {
 	}
 }
 
+// writeTestSSEJSON answers as a NON-STREAMING OpenAI completion (the name
+// survives from the SSE era). The evolver's producer/judge/teacher calls
+// moved to Complete() — glm-5.2 streams structured JSON unreliably — so the
+// fake servers in this file now speak the non-stream wire shape.
 func writeTestSSEJSON(t *testing.T, w http.ResponseWriter, payload string) {
 	t.Helper()
-	fmt.Fprintf(w, "data: {\"choices\":[{\"delta\":{\"role\":\"assistant\",\"content\":%q}}]}\n\n", payload)
-	fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n")
-	fmt.Fprint(w, "data: [DONE]\n\n")
+	w.Header().Set("Content-Type", "application/json")
+	fmt.Fprintf(w, `{"choices":[{"message":{"role":"assistant","content":%q},"finish_reason":"stop"}]}`, payload)
 }
 
 func TestStripEchoedFrontmatter(t *testing.T) {
@@ -766,10 +769,7 @@ func TestEvolveSkillPromptIncludesValidationCases(t *testing.T) {
 				capturedPrompt += "\n" + text
 			}
 		}
-		w.Header().Set("Content-Type", "text/event-stream")
-		fmt.Fprintf(w, "data: {\"choices\":[{\"delta\":{\"role\":\"assistant\",\"content\":%q}}]}\n\n", `{"skip":true,"reason":"prompt captured"}`)
-		fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n")
-		fmt.Fprint(w, "data: [DONE]\n\n")
+		writeTestSSEJSON(t, w, `{"skip":true,"reason":"prompt captured"}`)
 	}))
 	defer server.Close()
 
