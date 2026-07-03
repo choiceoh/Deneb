@@ -164,3 +164,44 @@ func TestWikiReview_SameProjectSlotsAreNotSuspects(t *testing.T) {
 		}
 	}
 }
+
+// TestWikiReview_MaintenanceRunsOnQuietCycle: the deterministic maintenance
+// sweep (here proven via log rotation) must run even when the duplicate review
+// finds nothing. The regression this guards: rotation/dormancy/dead-link
+// pruning/mail-refiling used to sit AFTER the duplicate-review early-returns
+// (touched==0, suspects==0, verdict error), so on the common quiet cycle they
+// never ran. On the old code this test fails (로그-보관.md never appears).
+func TestWikiReview_MaintenanceRunsOnQuietCycle(t *testing.T) {
+	task, store := newReviewFixture(t)
+	// A lone project with an over-long 로그.md and no duplicate candidates.
+	rep := wiki.NewPage("테스트프로젝트", "프로젝트", nil)
+	rep.Body = "# 테스트프로젝트"
+	if err := store.WritePage("프로젝트/테스트프로젝트/대표.md", rep); err != nil {
+		t.Fatal(err)
+	}
+	var sb strings.Builder
+	sb.WriteString("# 테스트프로젝트 진행 로그\n\n")
+	for i := 1; i <= wiki.LogKeepSections+5; i++ {
+		fmt.Fprintf(&sb, "## 2026-01-%02d 회의\n내용 %d\n\n", i, i)
+	}
+	logPage := wiki.NewPage("테스트프로젝트 진행 로그", "프로젝트", nil)
+	logPage.Body = sb.String()
+	if err := store.WritePage("프로젝트/테스트프로젝트/로그.md", logPage); err != nil {
+		t.Fatal(err)
+	}
+
+	// No duplicate candidates exist anywhere, so the verdict LLM must never fire.
+	task.llm = func(_ context.Context, _, _ string, _ int) (string, error) {
+		t.Error("verdict call must not fire when there are no duplicate suspects")
+		return "[]", nil
+	}
+	if err := task.Run(context.Background()); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	// Maintenance ran despite zero duplicate suspects: the overflow sections
+	// (beyond the newest LogKeepSections) moved into the archive page.
+	if _, err := store.ReadPage(wiki.LogArchivePath("테스트프로젝트")); err != nil {
+		t.Errorf("log rotation must run on a quiet cycle, but 로그-보관.md missing: %v", err)
+	}
+}
