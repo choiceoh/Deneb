@@ -327,7 +327,9 @@ def score_verdict(case, out: str) -> float:
 # extract는 프로덕션 gmail stage1과 같은 JSON 모드로 호출해 guided-decoding 호환까지
 # 함께 측정한다 (서버가 400으로 거부하면 형식 없이 1회 폴백 — 로그에 표기).
 TASKS = [
-    ("compaction", COMPACTION_CASES, lambda c: compaction_prompt(c["dialogue"]), score_compaction, 400, None),
+    # 1024 = 프로덕션 컴팩션의 per-chunk 출력 캡과 동일 (사고형 모델도 완주 기회를 갖되,
+    # 장황함은 brevity 점수·avg_out_tokens·레이턴시로 정직하게 드러난다).
+    ("compaction", COMPACTION_CASES, lambda c: compaction_prompt(c["dialogue"]), score_compaction, 1024, None),
     ("extract", EXTRACT_CASES, lambda c: extract_prompt(c["mail"]), score_extract, 300, {"type": "json_object"}),
     ("title", TITLE_CASES, lambda c: title_prompt(c["snippet"]), score_title, 50, None),
     ("verdict", VERDICT_CASES, lambda c: verdict_prompt(c["context"]), score_verdict, 20, None),
