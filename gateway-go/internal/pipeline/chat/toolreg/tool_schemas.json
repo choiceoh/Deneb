@@ -1088,6 +1088,13 @@
         },
         "description": "Related page topics (write action)"
       },
+      "cues": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "검색 진입 표현 2~5개 (write action): 나중에 이 문서를 찾을 질문에 나올 법한 동의어·별칭 — 제목/본문/tags에 이미 있는 단어는 넣지 말 것 (예: 본문이 '선수금'이면 cues=['계약금','착수금']). 검색에만 쓰이고 본문에는 안 보인다."
+      },
       "supersedes": {
         "type": "array",
         "items": {

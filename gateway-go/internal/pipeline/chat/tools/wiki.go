@@ -29,6 +29,7 @@ func ToolWiki(d *toolctx.WikiDeps, workspaceDir string) toolctx.ToolFunc {
 			Content    string   `json:"content"`
 			Tags       []string `json:"tags"`
 			Related    []string `json:"related"`
+			Cues       []string `json:"cues"`
 			Supersedes []string `json:"supersedes"`
 			Importance float64  `json:"importance"`
 			Type       string   `json:"type"`
@@ -57,7 +58,7 @@ func ToolWiki(d *toolctx.WikiDeps, workspaceDir string) toolctx.ToolFunc {
 		case "index":
 			return wikiIndex(d.Store, p.Category)
 		case "write":
-			return wikiWrite(ctx, d.Store, d.Contacts, p.Query, p.Title, p.ID, p.Summary, p.Category, p.Content, p.Tags, p.Related, p.Supersedes, p.Importance, p.Type, p.Confidence, p.Due, p.Force)
+			return wikiWrite(ctx, d.Store, d.Contacts, p.Query, p.Title, p.ID, p.Summary, p.Category, p.Content, p.Tags, p.Related, p.Cues, p.Supersedes, p.Importance, p.Type, p.Confidence, p.Due, p.Force)
 		case "log":
 			return wikiLog(workspaceDir, d.Store, p.Content)
 		case "daily":
@@ -218,7 +219,7 @@ func wikiIndex(store *wiki.Store, category string) (string, error) {
 	return sb.String(), nil
 }
 
-func wikiWrite(ctx context.Context, store *wiki.Store, contactsStore *contacts.Store, path, title, id, summary, category, content string, tags, related, supersedes []string, importance float64, pageType, confidence, due string, force bool) (string, error) {
+func wikiWrite(ctx context.Context, store *wiki.Store, contactsStore *contacts.Store, path, title, id, summary, category, content string, tags, related, cues, supersedes []string, importance float64, pageType, confidence, due string, force bool) (string, error) {
 	if title == "" {
 		return "title은 필수입니다.", nil
 	}
@@ -296,6 +297,9 @@ func wikiWrite(ctx context.Context, store *wiki.Store, contactsStore *contacts.S
 			if len(related) > 0 {
 				page.Meta.Related = related
 			}
+			if len(cues) > 0 {
+				page.Meta.Cues = cues
+			}
 			if importance > 0 {
 				page.Meta.Importance = importance
 			}
@@ -319,6 +323,7 @@ func wikiWrite(ctx context.Context, store *wiki.Store, contactsStore *contacts.S
 		page.Meta.ID = id
 		page.Meta.Summary = summary
 		page.Meta.Related = related
+		page.Meta.Cues = cues
 		if importance > 0 {
 			page.Meta.Importance = importance
 		}

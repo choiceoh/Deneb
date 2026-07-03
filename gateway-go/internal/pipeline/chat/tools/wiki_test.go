@@ -187,6 +187,7 @@ func TestWikiWrite_MarksSupersededPages(t *testing.T) {
 		"모순/갱신: old fact를 대체한다.",
 		[]string{"deneb"},
 		[]string{"프로젝트/old-fact.md"},
+		nil, // cues
 		[]string{"프로젝트/old-fact.md"},
 		0.8,
 		"concept",
@@ -227,7 +228,7 @@ func TestWikiWrite_DuplicateGuardBlocksCreate(t *testing.T) {
 	write := func(force bool) string {
 		out, err := wikiWrite(context.Background(), store, nil,
 			"", "영산고 태양광", "yeongsan-solar", "요약", "프로젝트", "본문",
-			nil, nil, nil, 0.5, "entity", "medium", "", force)
+			nil, nil, nil, nil, 0.5, "entity", "medium", "", force)
 		if err != nil {
 			t.Fatalf("wikiWrite: %v", err)
 		}

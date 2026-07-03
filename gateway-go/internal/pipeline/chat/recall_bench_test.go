@@ -79,8 +79,24 @@ func buildRecallBenchStore(t *testing.T) *wiki.Store {
 			Meta: wiki.Frontmatter{
 				ID: "memory-backup", Title: "기억 백업 체계", Category: "운영시스템",
 				Summary: "spark4tb로 일일 메모리 백업, 보존 30일", Tags: []string{"백업", "spark4tb"}, Importance: 0.7,
+				// Cue anchors: paraphrase vocabulary absent from title/summary/body
+				// ("보존"이 아니라 "보관", offsite라는 관점) — cue-paraphrase-ops 케이스가 의존.
+				Cues: []string{"오프사이트", "기억 보관"},
 			},
 			Body: "매일 자정 무렵 spark4tb 스토리지 노드로 tar.gz 전송. 보존 기간은 30일.",
+		}},
+		{"거래/sunshine-downpayment.md", &wiki.Page{
+			Meta: wiki.Frontmatter{
+				ID: "sunshine-downpayment", Title: "썬샤인에너지 선수금 입금 일정", Category: "거래",
+				Summary: "썬샤인에너지 EPC 선수금 5천만원, 6월 15일 입금 예정",
+				Tags:    []string{"썬샤인에너지", "선수금"},
+				// Cue anchors: the words a future question will actually use —
+				// deliberately absent everywhere else on the page ("계약금"/"착수금"
+				// vs the page's own "선수금"). cue-paraphrase-deal 케이스가 의존.
+				Cues:       []string{"계약금", "착수금"},
+				Importance: 0.85,
+			},
+			Body: "EPC 선수금 5천만원. 6월 15일 입금 예정. 미입금 시 착공 지연 리스크. 담당은 이서연 과장.",
 		}},
 	}
 	for _, p := range pages {
@@ -130,6 +146,21 @@ func recallBenchCases() []recallBenchCase {
 			name:     "diary-decision",
 			question: "주간보고 자동화 방식 전에 어떻게 결정했더라?",
 			wantAll:  []string{"모닝레터"},
+		},
+		{
+			// Cue-anchor paraphrase: the question's vocabulary ("계약금") exists ONLY
+			// in the page's cue anchors — title/summary/body/tags all say "선수금".
+			// Reachable lexically only through indexed cues (searchablePageFields).
+			name:     "cue-paraphrase-deal",
+			question: "전에 계약금 언제 들어오기로 했지?",
+			wantAll:  []string{"거래/sunshine-downpayment.md"},
+		},
+		{
+			// Same shape for an ops page: "오프사이트"/"보관" live only in cues
+			// (the page itself says "백업"/"보존").
+			name:     "cue-paraphrase-ops",
+			question: "오프사이트 보관 며칠인지 기억나?",
+			wantAll:  []string{"운영시스템/backup.md"},
 		},
 		{
 			name:     "topicless-recency-fallback",

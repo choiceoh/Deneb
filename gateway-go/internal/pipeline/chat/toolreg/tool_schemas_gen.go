@@ -921,6 +921,13 @@ func wikiToolSchema() map[string]any {
 				"type":        "string",
 				"description": "Page body content in markdown (write action) or diary entry body (log action). In write bodies, link related pages inline with [[path-or-title]] (e.g. [[프로젝트/dgx-spark]] or [[홍길동]]); these become knowledge-graph edges, so prefer them over plain mentions.",
 			},
+			"cues": map[string]any{
+				"type":        "array",
+				"description": "검색 진입 표현 2~5개 (write action): 나중에 이 문서를 찾을 질문에 나올 법한 동의어·별칭 — 제목/본문/tags에 이미 있는 단어는 넣지 말 것 (예: 본문이 '선수금'이면 cues=['계약금','착수금']). 검색에만 쓰이고 본문에는 안 보인다.",
+				"items": map[string]any{
+					"type": "string",
+				},
+			},
 			"due": map[string]any{
 				"type":        "string",
 				"description": "Upcoming deadline in YYYY-MM-DD (write action): payment due, delivery, or milestone date. Surfaced by the morning letter deadline scan.",
