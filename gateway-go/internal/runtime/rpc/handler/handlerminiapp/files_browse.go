@@ -251,6 +251,10 @@ func filesBrowseUpload(deps FilesBrowseDeps) rpcutil.HandlerFunc {
 		Path       string `json:"path"`
 		MimeType   string `json:"mimeType,omitempty"`
 		DataBase64 string `json:"dataBase64"`
+		// Overwrite replaces the file at Path in place — the desktop editor's
+		// save path. Default false keeps the capture semantics (autorename on
+		// name clash) so existing uploaders never clobber a file.
+		Overwrite bool `json:"overwrite,omitempty"`
 	}
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		if errResp := requireAuth(ctx, req.ID); errResp != nil {
@@ -278,9 +282,10 @@ func filesBrowseUpload(deps FilesBrowseDeps) rpcutil.HandlerFunc {
 		if err != nil || len(data) == 0 {
 			return rpcerr.InvalidParams(fmt.Errorf("dataBase64 is not valid base64")).Response(req.ID)
 		}
-		// overwrite=false → the store autorenames on a name clash, so an upload
-		// never clobbers an existing file.
-		meta, err := deps.Store.Put(ctx, dest, data, false)
+		// overwrite=false (default) → the store autorenames on a name clash, so
+		// a capture upload never clobbers a file; overwrite=true is the editor
+		// save, replacing the same path in place.
+		meta, err := deps.Store.Put(ctx, dest, data, p.Overwrite)
 		if err != nil {
 			return mapFilesError(req.ID, "file upload failed", err)
 		}

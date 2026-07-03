@@ -18,6 +18,13 @@ const projectEntries: FileEntry[] = [
     size: 245_760,
     serverModified: "2026-06-17T09:00:00Z",
   },
+  {
+    tag: "file",
+    name: "notes.md",
+    pathDisplay: "projects/notes.md",
+    size: 42,
+    serverModified: "2026-06-18T09:00:00Z",
+  },
 ];
 
 beforeEach(() => {
@@ -28,7 +35,15 @@ beforeEach(() => {
   }
   vi.stubGlobal(
     "fetch",
-    vi.fn(async (_url: string, init?: RequestInit) => {
+    vi.fn(async (url: string, init?: RequestInit) => {
+      // The file viewer downloads bytes via GET /api/v1/files/download (no JSON
+      // body) — serve markdown as a Blob. jsdom's Blob lacks .text(), so back
+      // it with an explicit body the viewer can read.
+      if (typeof url === "string" && url.includes("/api/v1/files/download")) {
+        const body = "# 메모\n원본 내용";
+        const blob = { size: body.length, type: "text/markdown", text: async () => body } as unknown as Blob;
+        return { ok: true, blob: async () => blob } as unknown as Response;
+      }
       const { method, params } = JSON.parse(String(init?.body ?? "{}")) as {
         method: string;
         params: Record<string, unknown>;
@@ -107,8 +122,39 @@ describe("FilesPane", () => {
     await userEvent.click(screen.getByRole("button", { name: "검색" }));
     expect(await screen.findByText("quarter-review.pdf")).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: "공유" }));
+    await userEvent.click(screen.getAllByRole("button", { name: "공유" })[0]);
 
     expect(await screen.findByText(/https:\/\/files.example/)).toBeInTheDocument();
+  });
+
+  it("opens a file in a viewer tab and saves edits with overwrite", async () => {
+    renderWithProviders(<FilesPane />, { connected: true });
+
+    await userEvent.click((await screen.findAllByText("projects"))[0]);
+    // Clicking a file row opens it as a viewer tab (the markdown body loads).
+    await userEvent.click(await screen.findByText("notes.md"));
+    expect(await screen.findByRole("tab", { name: /notes\.md/ })).toBeInTheDocument();
+
+    // Wait for the blob to load (mode tabs appear once ready), then edit.
+    await userEvent.click(await screen.findByRole("button", { name: "편집" }, { timeout: 3000 }));
+    const editor = (await screen.findByDisplayValue(/원본 내용/)) as HTMLTextAreaElement;
+    await userEvent.type(editor, "추가");
+    expect(screen.getByText("수정됨")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "저장" }));
+    // Save round-trips through the upload RPC with overwrite=true (replace in
+    // place — the default autorenames and would fork the file per save).
+    await vi.waitFor(() => {
+      const save = rpcCalls.find((c) => c.method === FILES_RPC.upload);
+      expect(save?.params).toMatchObject({ path: "projects/notes.md", overwrite: true });
+      expect(String(save?.params.dataBase64 ?? "")).not.toBe("");
+    });
+    // The viewer bar's dirty badge flips back to 저장됨 (it also shows in the
+    // pane status line, so scope to the viewer's save-state element).
+    expect(document.querySelector(".wiki-save-state")?.textContent).toBe("저장됨");
+
+    // Closing the tab (now clean) removes it.
+    await userEvent.click(screen.getByRole("button", { name: "notes.md 닫기" }));
+    expect(screen.queryByRole("tab", { name: /notes\.md/ })).not.toBeInTheDocument();
   });
 });

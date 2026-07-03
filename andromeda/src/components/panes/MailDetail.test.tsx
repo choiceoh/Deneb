@@ -29,10 +29,10 @@ const mail: Mail = {
   body: "이것은 본문입니다.",
 };
 
-function renderDetail() {
+function renderDetail(over?: Partial<Mail>) {
   return renderWithProviders(
     <MailDetail
-      mail={mail}
+      mail={{ ...mail, ...over }}
       query={{ isLoading: false }}
       busy={false}
       onMarkRead={() => {}}
@@ -69,5 +69,50 @@ describe("MailDetail layout", () => {
 
     // Expanded: the curated wiki page now shows as a chip.
     expect(await screen.findByRole("button", { name: "탑솔라" })).toBeInTheDocument();
+  });
+
+  it("previews a PDF attachment in-app and keeps a non-previewable one as a link", async () => {
+    const originalFetch = globalThis.fetch;
+    // jsdom has no object-URL support; the PDF viewer creates one for its
+    // <embed>. Patch createObjectURL directly (spreading URL drops its static
+    // methods); the viewer guards revoke, so it need not exist.
+    const urlObj = globalThis.URL as unknown as { createObjectURL?: (b: Blob) => string };
+    const prevCreate = urlObj.createObjectURL;
+    urlObj.createObjectURL = () => "blob:pdf";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (typeof url === "string" && url.includes("/gmail/attachment")) {
+          return { ok: true, blob: async () => ({ size: 1024, type: "application/pdf" }) } as unknown as Response;
+        }
+        return originalFetch(url);
+      }),
+    );
+    try {
+      renderDetail({
+        attachmentCount: 2,
+        attachments: [
+          { attachmentId: "a1", filename: "견적서.pdf", mimeType: "application/pdf", size: 1024 },
+          { attachmentId: "a2", filename: "계약서.hwp", mimeType: "application/octet-stream", size: 2048 },
+        ],
+      });
+
+      // The PDF is previewable → a button that opens the in-app viewer modal.
+      const pdf = await screen.findByRole("button", { name: /견적서\.pdf/ });
+      // The HWP has no previewer → stays a plain download link.
+      const hwp = screen.getByRole("link", { name: /계약서\.hwp/ });
+      expect(hwp).toHaveAttribute("href", expect.stringContaining("/gmail/attachment"));
+
+      await userEvent.click(pdf);
+      await screen.findByRole("dialog");
+      // The PDF viewer renders an <embed> once the blob loads; the modal also
+      // offers a download link. Re-query each poll (the embed appears async).
+      await vi.waitFor(() =>
+        expect(document.querySelector('.mail-attachment-preview embed[type="application/pdf"]')).toBeTruthy(),
+      );
+    } finally {
+      urlObj.createObjectURL = prevCreate;
+      vi.unstubAllGlobals();
+    }
   });
 });

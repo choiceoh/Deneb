@@ -2,15 +2,27 @@ import { useEffect, useRef, useState } from "react";
 import { inferAttachmentMimeType } from "@/attachmentMime";
 import { clearCachedResource } from "@/cachedList";
 import { projectList } from "@/aiText";
+import { fetchGatewayBlob, filesDownloadUrl } from "@/gateway";
 import { FILES_RPC } from "@/resources";
 import type { FileEntry } from "@/types";
 import { useCachedRpc } from "@/useCachedRpc";
-import { color, ellipsis } from "@/theme";
+import { color, ellipsis, muted } from "@/theme";
 import { fmtDate } from "@/format";
 import { useRegisterPane, useWorkspace } from "@/workspaceContext";
 import { Column, Grid, GridNotice, RowBtn } from "@/components/Grid";
+import { FileViewer } from "@/components/FileViewer";
+import { textToBase64 } from "@/components/fileView";
+import { Modal } from "@/components/Modal";
 import { DeleteModal, OneFieldModal } from "./commonModals";
 import { entryPath, formatBytes, isFolder, joinPath, parentPath } from "./fileHelpers";
+
+// One open viewer tab. Viewer content state lives in the (kept-mounted)
+// FileViewer; the tab records identity + dirty flag for the close guard.
+interface FileTab {
+  path: string;
+  name: string;
+  dirty: boolean;
+}
 
 export function FilesPane() {
   const { connected, cfg } = useWorkspace();
@@ -27,6 +39,9 @@ export function FilesPane() {
   const [makingFolder, setMakingFolder] = useState(false);
   const [moving, setMoving] = useState<FileEntry | null>(null);
   const [deleting, setDeleting] = useState<FileEntry | null>(null);
+  const [tabs, setTabs] = useState<FileTab[]>([]);
+  const [activeTab, setActiveTab] = useState<string | null>(null);
+  const [closingTab, setClosingTab] = useState<string | null>(null); // dirty-close confirm
   const uploadRef = useRef<HTMLInputElement>(null);
 
   useRegisterPane(
@@ -138,6 +153,54 @@ export function FilesPane() {
     clearCachedResource(FILES_RESOURCE);
     await list(path);
     setStatus("업로드됨");
+  }
+
+  // --- viewer tabs ---------------------------------------------------------
+
+  function openFile(entry: FileEntry) {
+    const p = entryPath(entry);
+    if (!p) return;
+    setSelected(entry);
+    setTabs((prev) =>
+      prev.some((t) => t.path === p) ? prev : [...prev, { path: p, name: entry.name ?? p, dirty: false }],
+    );
+    setActiveTab(p);
+  }
+
+  function markDirty(p: string, dirty: boolean) {
+    setTabs((prev) => prev.map((t) => (t.path === p ? { ...t, dirty } : t)));
+  }
+
+  function requestCloseTab(p: string) {
+    const tab = tabs.find((t) => t.path === p);
+    if (tab?.dirty) {
+      setClosingTab(p);
+      return;
+    }
+    closeTab(p);
+  }
+
+  function closeTab(p: string) {
+    setClosingTab(null);
+    setTabs((prev) => {
+      const next = prev.filter((t) => t.path !== p);
+      setActiveTab((cur) => (cur === p ? (next.at(-1)?.path ?? null) : cur));
+      return next;
+    });
+  }
+
+  // saveFile is the live-edit save: overwrite=true replaces the same path (the
+  // default upload autorenames on clash, which would fork the file per save).
+  async function saveFile(p: string, text: string): Promise<boolean> {
+    const r = await call(
+      FILES_RPC.upload,
+      { path: p, mimeType: inferAttachmentMimeType(p, ""), dataBase64: textToBase64(text), overwrite: true },
+      "저장 중...",
+    );
+    if (!r.ok) return false;
+    clearCachedResource(FILES_RESOURCE);
+    setStatus("저장됨");
+    return true;
   }
 
   const columns: Column<FileEntry>[] = [
@@ -272,12 +335,52 @@ export function FilesPane() {
           maxWidth={980}
           onRowClick={(e) => {
             if (isFolder(e)) void list(entryPath(e));
-            else setSelected(e);
+            else openFile(e);
           }}
           isRowSelected={(e) => entryPath(e) === entryPath(selected ?? {})}
           rowTitle={(e) => entryPath(e)}
         />
       </GridNotice>
+      {tabs.length > 0 && (
+        <div className="file-tabs-shell">
+          <div className="file-tabs" role="tablist" aria-label="열린 파일">
+            {tabs.map((t) => (
+              <span key={t.path} className={"file-tab" + (t.path === activeTab ? " active" : "")}>
+                <button
+                  role="tab"
+                  aria-selected={t.path === activeTab}
+                  className="file-tab-label"
+                  title={t.path}
+                  onClick={() => setActiveTab(t.path)}
+                >
+                  {t.dirty ? "● " : ""}
+                  {t.name}
+                </button>
+                <button
+                  className="file-tab-close"
+                  aria-label={`${t.name} 닫기`}
+                  onClick={() => requestCloseTab(t.path)}
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+          </div>
+          {tabs.map((t) => (
+            // Inactive tabs stay MOUNTED (display:none) so the viewer keeps
+            // unsaved edits and loaded blobs across tab switches.
+            <div key={t.path} className="file-tab-body" style={t.path === activeTab ? undefined : { display: "none" }}>
+              <FileViewer
+                name={t.name}
+                load={() => fetchGatewayBlob(filesDownloadUrl(cfg, t.path))}
+                onSave={(text) => saveFile(t.path, text)}
+                onDirtyChange={(d) => markDirty(t.path, d)}
+                downloadUrl={filesDownloadUrl(cfg, t.path)}
+              />
+            </div>
+          ))}
+        </div>
+      )}
       {makingFolder && (
         <OneFieldModal
           title="새 폴더"
@@ -304,6 +407,25 @@ export function FilesPane() {
           onClose={() => setDeleting(null)}
           onDelete={() => void deleteEntry(deleting)}
         />
+      )}
+      {closingTab && (
+        <Modal
+          title="저장하지 않은 변경"
+          onClose={() => setClosingTab(null)}
+          width={420}
+          footer={
+            <>
+              <button className="btn" onClick={() => setClosingTab(null)}>
+                계속 편집
+              </button>
+              <button className="btn" style={{ color: color.danger }} onClick={() => closeTab(closingTab)}>
+                버리고 닫기
+              </button>
+            </>
+          }
+        >
+          <p style={{ ...muted, margin: 0 }}>{closingTab}에 저장하지 않은 변경이 있습니다.</p>
+        </Modal>
       )}
     </>
   );
