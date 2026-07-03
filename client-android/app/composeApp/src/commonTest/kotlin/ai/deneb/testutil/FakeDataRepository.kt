@@ -29,13 +29,20 @@ class FakeDataRepository : DataRepository {
     var askException: Exception? = null
 
     /**
+     * Return value of [ask]. `false` mimics the gateway client surfacing a turn
+     * failure as an in-transcript ⚠️ bubble instead of throwing (the ViewModel
+     * must then NOT auto-send queued messages).
+     */
+    var askResult: Boolean = true
+
+    /**
      * When non-null, [ask] suspends on this gate before doing any work. Tests can use this
      * to keep an in-flight ask in progress while inspecting state (e.g., to verify
      * concurrent ask prevention or to test cancel behavior).
      */
     var askGate: CompletableDeferred<Unit>? = null
 
-    override suspend fun ask(question: String?, files: List<PlatformFile>, uiSubmission: UiSubmission?) {
+    override suspend fun ask(question: String?, files: List<PlatformFile>, uiSubmission: UiSubmission?): Boolean {
         askCalls.add(question to files)
         askGate?.await()
         askException?.let { throw it }
@@ -47,6 +54,7 @@ class FakeDataRepository : DataRepository {
         chatHistory.update { history ->
             history + History(role = History.Role.ASSISTANT, content = "Test response")
         }
+        return askResult
     }
 
     override fun clearHistory() {

@@ -24,7 +24,14 @@ interface DataRepository {
     val currentConversationId: StateFlow<String?>
     val fallbackStatus: StateFlow<FallbackStatus?>
 
-    suspend fun ask(question: String?, files: List<PlatformFile>, uiSubmission: UiSubmission? = null)
+    /**
+     * Runs one chat turn. Returns `true` when the turn completed successfully,
+     * `false` when it failed but the failure was surfaced in-transcript instead of
+     * thrown — the gateway client converts stream/RPC failures into an ⚠️ error
+     * bubble and returns normally. Callers gate follow-up side effects on this:
+     * queued messages must never auto-fire after a failed turn (ChatViewModel).
+     */
+    suspend fun ask(question: String?, files: List<PlatformFile>, uiSubmission: UiSubmission? = null): Boolean
     fun clearHistory()
     fun supportedFileExtensions(): List<String>
 

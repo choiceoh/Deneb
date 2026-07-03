@@ -429,13 +429,13 @@ class DenebGatewayClient(
         nativeSyncBaselined = false
     }
 
-    override suspend fun ask(question: String?, files: List<PlatformFile>, uiSubmission: UiSubmission?) {
+    override suspend fun ask(question: String?, files: List<PlatformFile>, uiSubmission: UiSubmission?): Boolean {
         val displayText = question?.trim().orEmpty()
         // A deneb-ui button press arrives as a UiSubmission. Show the friendly
         // question in the chat, but send the agent a structured callback naming
         // the event (per the deneb-ui prompt contract) plus the collected inputs.
         val sendText = if (uiSubmission != null) formatCallback(uiSubmission) else displayText
-        if (sendText.isEmpty()) return
+        if (sendText.isEmpty()) return true // no-op, not a failure
 
         // Append the user message + a placeholder assistant bubble (grown as
         // deltas stream in; replacement is keyed by id so concurrent history
@@ -525,9 +525,11 @@ class DenebGatewayClient(
             // partial answer is never discarded or double-generated.
             if (accumulated.isEmpty()) {
                 runCatching { send(sendText) }
-                    .getOrElse { GatewayReply("⚠️ ${it.message ?: "gateway request failed"}") }
+                    .getOrElse { GatewayReply("⚠️ ${it.message ?: "gateway request failed"}", ok = false) }
             } else {
-                GatewayReply(text = accumulated.toString())
+                // Keep the partial answer, but the turn still FAILED (stream broke
+                // mid-answer) — report ok=false so the queue never auto-fires after it.
+                GatewayReply(text = accumulated.toString(), ok = false)
             }
         } finally {
             // Progress rows are turn-scoped — never leak a zombie chip past the
@@ -564,6 +566,7 @@ class DenebGatewayClient(
                 list.map { if (it.id == assistantId) it.copy(toolFootprint = fp) else it }
             }
         }
+        return reply.ok
     }
 
     private fun formatCallback(submission: UiSubmission): String = buildString {
@@ -1575,7 +1578,7 @@ class DenebGatewayClient(
 
     private suspend fun send(message: String): GatewayReply {
         if (clientToken.isEmpty()) {
-            return GatewayReply("⚠️ Deneb 클라이언트 토큰이 설정되지 않았습니다. 게이트웨이에서 deneb-client-token을 생성해 설정하세요.")
+            return GatewayReply("⚠️ Deneb 클라이언트 토큰이 설정되지 않았습니다. 게이트웨이에서 deneb-client-token을 생성해 설정하세요.", ok = false)
         }
         val resp: RpcResponse = http.post("$gatewayUrl/api/v1/miniapp/rpc") {
             header(CLIENT_TOKEN_HEADER, clientToken)
@@ -1596,7 +1599,7 @@ class DenebGatewayClient(
         return if (resp.ok && payload != null) {
             GatewayReply(text = payload.text, model = payload.model, fellBack = payload.fellBack)
         } else {
-            GatewayReply("⚠️ 게이트웨이 오류")
+            GatewayReply("⚠️ 게이트웨이 오류", ok = false)
         }
     }
 
@@ -1626,7 +1629,7 @@ class DenebGatewayClient(
         onDelta: (String) -> Unit,
     ): GatewayReply {
         if (clientToken.isEmpty()) {
-            return GatewayReply("⚠️ Deneb 클라이언트 토큰이 설정되지 않았습니다. 게이트웨이에서 deneb-client-token을 생성해 설정하세요.")
+            return GatewayReply("⚠️ Deneb 클라이언트 토큰이 설정되지 않았습니다. 게이트웨이에서 deneb-client-token을 생성해 설정하세요.", ok = false)
         }
         var model = ""
         var fellBack = false
@@ -1945,11 +1948,18 @@ class DenebGatewayClient(
         val fellBack: Boolean = false,
     )
 
-    /** Internal result of one gateway chat turn (text + which model answered). */
+    /**
+     * Internal result of one gateway chat turn (text + which model answered).
+     * [ok] is false when the turn FAILED and [text] is an ⚠️ error notice (or a
+     * partial answer cut off mid-stream) rather than a real reply — [ask] renders
+     * it as a bubble but reports the failure to its caller, so the ViewModel never
+     * auto-fires queued messages after a failed turn.
+     */
     private data class GatewayReply(
         val text: String,
         val model: String = "",
         val fellBack: Boolean = false,
+        val ok: Boolean = true,
     )
 
     // SSE frame payloads from POST /api/v1/miniapp/chat/stream.
