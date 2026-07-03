@@ -5,6 +5,8 @@
   "sparkfleet": { "url": "http://127.0.0.1:18900", "token": "${FLEET_TOKEN}" },
   "models": [
     { "name": "dsv4", "url": "http://127.0.0.1:8000/v1", "toggleKwarg": "thinking" },
+    { "name": "dsv4-nothink", "url": "http://127.0.0.1:8000/v1", "upstreamModel": "dsv4", "toggleKwarg": "thinking", "thinkingMode": "off" },
+    { "name": "dsv4-fast", "url": "http://127.0.0.1:8000/v1", "upstreamModel": "dsv4", "toggleKwarg": "thinking", "thinkingMode": "off-unless-hard" },
     { "name": "qwen", "fleet": true, "upstreamModel": "qwen3.6-35b-a3b", "toggleKwarg": "enable_thinking" },
     { "name": "glm-5.2", "url": "https://api.z.ai/api/coding/paas/v4", "key": "${ZAI_API_KEY}", "upstreamModel": "glm-5.2", "reasoning": "glm" },
     {

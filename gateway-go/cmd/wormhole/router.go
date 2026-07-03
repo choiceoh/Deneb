@@ -457,12 +457,12 @@ func (rt *router) serve(w http.ResponseWriter, r *http.Request, proto, pathSuffi
 		}
 	}
 	if rt.cur().cfg.effortRoutingOn() {
-		// X-Wormhole-No-Effort suppresses the vLLM chat_template_kwargs toggle (the
-		// gateway owns that and its prefix cache); the cloud reasoning dialect runs
-		// regardless, since the gateway can't express it.
-		if !noEffortRouting(r) {
-			out = rt.applyThinking(entry, out)
-		}
+		// X-Wormhole-No-Effort suppresses CLASSIFIER thinking routing (the gateway
+		// owns that and its prefix cache) but not a static "off" entry — the caller
+		// picked that variant by name, so no-thinking is its contract (see
+		// applyThinking). The cloud reasoning dialect runs regardless, since the
+		// gateway can't express it.
+		out = rt.applyThinking(entry, out, noEffortRouting(r))
 		out = rt.applyReasoning(entry, out)
 	}
 	rt.forward(client, w, r, entry, out, pathSuffix)
@@ -498,9 +498,7 @@ func (rt *router) serveAuto(client clientInfo, w http.ResponseWriter, r *http.Re
 			out = rewritten
 		}
 		if rt.cur().cfg.effortRoutingOn() {
-			if !noEffortRouting(r) {
-				out = rt.applyThinking(entry, out)
-			}
+			out = rt.applyThinking(entry, out, noEffortRouting(r))
 			out = rt.applyReasoning(entry, out)
 		}
 		resp, err := rt.doUpstream(r, entry, out, pathSuffix)
