@@ -244,23 +244,45 @@ class ChatViewModel(
         askInternal(question, null, restoreText = question)
     }
 
-    private fun askInternal(question: String?, uiSubmission: UiSubmission?, restoreText: String? = null) {
-        // A typed send while a reply is still streaming QUEUES instead of being
-        // silently dropped: it fires automatically the moment this turn completes
-        // (see drainPendingQuestion). Only the plain typed path queues — retries
-        // (question == null) and UI-card submissions belong to the CURRENT turn's
-        // context and would be wrong to replay after it.
+    private fun askInternal(
+        question: String?,
+        uiSubmission: UiSubmission?,
+        restoreText: String? = null,
+        // Attachment snapshot carried by a drained queue entry. null = direct send
+        // (consume the files staged in the UI); non-null (possibly empty) = queued
+        // send whose attachments were captured at queue time, so it never absorbs
+        // files the user staged for a LATER message.
+        presetFiles: ImmutableList<PlatformFile>? = null,
+    ) {
+        // A send while a reply is still streaming QUEUES instead of being silently
+        // dropped: it fires automatically the moment this turn completes (see
+        // drainPendingQuestion). Retries (question == null) and UI-card submissions
+        // belong to the CURRENT turn's context and would be wrong to replay after
+        // it. Queued entries are tagged: user-typed sends (restoreText != null) may
+        // be restored into the input box later and take the staged attachments with
+        // them; programmatic prompts (work-feed card actions) must never surface in
+        // the input box and never touch the user's staged files.
         if (_state.value.isLoading) {
             if (question != null && uiSubmission == null) {
+                val userTyped = restoreText != null
                 _state.update {
-                    it.copy(pendingQuestions = (it.pendingQuestions + question).toImmutableList())
+                    val entry = PendingQuestion(
+                        text = question,
+                        restoreToInput = userTyped,
+                        files = if (userTyped) it.files else persistentListOf(),
+                    )
+                    it.copy(
+                        pendingQuestions = (it.pendingQuestions + entry).toImmutableList(),
+                        // The staged files now belong to the queued message.
+                        files = if (userTyped) persistentListOf() else it.files,
+                    )
                 }
             }
             return
         }
 
         // Capture files before launching coroutine to avoid race with files being cleared
-        val files = _state.value.files
+        val files = presetFiles ?: _state.value.files
 
         currentJob = viewModelScope.launch(backgroundDispatcher) {
             _state.update {
@@ -268,16 +290,34 @@ class ChatViewModel(
                     isLoading = true,
                     error = null,
                     failedInput = null,
-                    files = persistentListOf(),
+                    // Only a direct send consumes the staged files; a drained queue
+                    // entry carries its own snapshot, so anything staged since then
+                    // stays with the user's next draft.
+                    files = if (presetFiles == null) persistentListOf() else it.files,
                 )
             }
             try {
-                dataRepository.ask(question, files, uiSubmission)
+                val delivered = dataRepository.ask(question, files, uiSubmission)
 
-                _state.update {
-                    it.copy(isLoading = false)
+                if (delivered) {
+                    _state.update {
+                        it.copy(isLoading = false)
+                    }
+                    drainPendingQuestion()
+                } else {
+                    // The gateway client surfaces turn failures as an ⚠️ bubble and
+                    // returns normally — treat that as a failed turn all the same:
+                    // never auto-send the queue after a failure. Unlike the exception
+                    // path below, the sent text is already in the transcript (user
+                    // bubble + error bubble), so only the queue folds into the input.
+                    _state.update {
+                        it.copy(
+                            isLoading = false,
+                            failedInput = foldIntoInput(null, it.pendingQuestions),
+                            pendingQuestions = persistentListOf(),
+                        )
+                    }
                 }
-                drainPendingQuestion()
             } catch (exception: Exception) {
                 // CancellationException must be re-thrown to properly propagate coroutine cancellation
                 if (exception is CancellationException) throw exception
@@ -302,16 +342,26 @@ class ChatViewModel(
     private fun drainPendingQuestion() {
         val next = _state.value.pendingQuestions.firstOrNull() ?: return
         _state.update { it.copy(pendingQuestions = it.pendingQuestions.drop(1).toImmutableList()) }
-        askInternal(next, null, restoreText = next)
+        // A drained programmatic prompt keeps its no-restore semantics: if THIS
+        // turn fails, its text must not land in the input box either.
+        askInternal(
+            next.text,
+            null,
+            restoreText = if (next.restoreToInput) next.text else null,
+            presetFiles = next.files,
+        )
     }
 
     private fun cancelPendingQuestions() {
         _state.update { it.copy(pendingQuestions = persistentListOf()) }
     }
 
-    // Joins the failed text and any queued messages into one input-restore blob
-    // (blank → null so the restore effect stays quiet).
-    private fun foldIntoInput(restoreText: String?, queued: List<String>): String? = (listOfNotNull(restoreText) + queued).joinToString("\n\n").ifBlank { null }
+    // Joins the failed text and the user-typed queued messages into one
+    // input-restore blob (blank → null so the restore effect stays quiet).
+    // Programmatic queue entries are dropped — their text must never surface
+    // verbatim in the input box.
+    private fun foldIntoInput(restoreText: String?, queued: List<PendingQuestion>): String? = (listOfNotNull(restoreText) + queued.filter { it.restoreToInput }.map { it.text })
+        .joinToString("\n\n").ifBlank { null }
 
     private fun clearHistory() {
         dataRepository.clearHistory()
@@ -443,7 +493,20 @@ class ChatViewModel(
         currentJob = null
         dataRepository.loadConversation(id)
         _state.update {
-            it.copy(error = null, isLoading = false)
+            // Queued messages belong to the conversation they were sent in — they
+            // must never auto-fire into the one we're switching to. (The cancel
+            // above rethrows CancellationException inside askInternal, so its
+            // catch-side queue fold never runs — clear here.) User-typed entries
+            // are restored into the input box via failedInput; programmatic card
+            // prompts are dropped (their card side effects already ran). An empty
+            // queue folds to null, which also clears any stale failedInput so it
+            // can't restore into the wrong conversation later.
+            it.copy(
+                error = null,
+                isLoading = false,
+                failedInput = foldIntoInput(null, it.pendingQuestions),
+                pendingQuestions = persistentListOf(),
+            )
         }
     }
 
@@ -624,7 +687,15 @@ class ChatViewModel(
         currentJob = null
         dataRepository.startNewChat()
         _state.update {
-            it.copy(error = null, isLoading = false)
+            // Same queue hygiene as loadConversation: never carry queued messages
+            // into the fresh conversation — restore user-typed ones to the input,
+            // drop programmatic ones, and clear any stale failedInput.
+            it.copy(
+                error = null,
+                isLoading = false,
+                failedInput = foldIntoInput(null, it.pendingQuestions),
+                pendingQuestions = persistentListOf(),
+            )
         }
     }
 

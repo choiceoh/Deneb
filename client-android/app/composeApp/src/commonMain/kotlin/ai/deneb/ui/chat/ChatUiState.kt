@@ -67,6 +67,23 @@ data class WorkFeedItem(
 val WorkFeedItem.isProactiveReport: Boolean
     get() = source == "proactive"
 
+/**
+ * One message queued while a reply was still streaming ([ChatUiState.pendingQuestions]).
+ *
+ * [restoreToInput] separates the two producers: `true` for user-typed sends (safe to
+ * surface back into the input box when a turn fails / stops / the session switches),
+ * `false` for programmatic prompts (work-feed card actions, UI callbacks) whose text
+ * must never appear verbatim in the input box — those are dropped instead of restored.
+ * [files] snapshots the attachments staged when the message was queued, so they ride
+ * with THIS message instead of being absorbed by whichever send happens first.
+ */
+@Immutable
+data class PendingQuestion(
+    val text: String,
+    val restoreToInput: Boolean,
+    val files: ImmutableList<PlatformFile> = persistentListOf(),
+)
+
 @Immutable
 data class ChatUiState(
     val actions: ChatActions,
@@ -100,11 +117,13 @@ data class ChatUiState(
     // updated in the wiki"); shown as a snackbar on the feed, then cleared.
     val feedbackResultText: String? = null,
     val pendingConversationDeletion: String? = null,
-    // Messages typed while a reply was still streaming: queued client-side (FIFO)
+    // Messages sent while a reply was still streaming: queued client-side (FIFO)
     // and auto-sent the moment the running turn completes SUCCESSFULLY. An errored
-    // or stopped turn never auto-sends — the queue folds back into failedInput so
-    // the user can rephrase in light of what happened.
-    val pendingQuestions: ImmutableList<String> = persistentListOf(),
+    // or stopped turn never auto-sends — user-typed entries fold back into
+    // failedInput so the user can rephrase in light of what happened; programmatic
+    // entries are dropped. A session switch / new chat also clears the queue (a
+    // queued message must never fire into a different conversation).
+    val pendingQuestions: ImmutableList<PendingQuestion> = persistentListOf(),
     val fallbackStatus: FallbackStatus? = null,
     val isRestoring: Boolean = true,
     // The user-typed message whose send failed, surfaced back into the input so a

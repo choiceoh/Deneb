@@ -89,6 +89,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment.Companion.BottomCenter
+import androidx.compose.ui.Alignment.Companion.Center
 import androidx.compose.ui.Alignment.Companion.CenterEnd
 import androidx.compose.ui.Alignment.Companion.CenterHorizontally
 import androidx.compose.ui.Alignment.Companion.CenterVertically
@@ -110,6 +111,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
@@ -209,13 +211,19 @@ internal fun ChatModeScreen(
     }
 
     // A failed send restores the user's text into the input so a typo or a long prompt
-    // can be fixed and resent instead of retyped. Only the typed-send path sets
-    // failedInput, and only when the box is empty so freshly typed text is never lost.
+    // can be fixed and resent instead of retyped. Only the typed-send path (and the
+    // queue folds — error/stop/session switch) sets failedInput. An empty box is
+    // filled; a non-empty box gets the restored text APPENDED after the draft —
+    // this effect keys on failedInput only and never re-fires when the box later
+    // empties, so skipping a non-empty box would silently lose the text (queued
+    // messages folded while the user was typing a follow-up).
     LaunchedEffect(uiState.failedInput) {
         val failed = uiState.failedInput
-        if (!failed.isNullOrBlank() && questionInputText.text.isBlank()) {
-            questionInputText = TextFieldValue(failed, selection = TextRange(failed.length))
-        }
+        if (failed.isNullOrBlank()) return@LaunchedEffect
+        val draft = questionInputText.text
+        if (draft == failed) return@LaunchedEffect // box already holds exactly this restore
+        val merged = if (draft.isBlank()) failed else "$draft\n\n$failed"
+        questionInputText = TextFieldValue(merged, selection = TextRange(merged.length))
     }
 
     val filteredConversations = remember(uiState.savedConversations, uiState.pendingConversationDeletion) {
@@ -1014,7 +1022,7 @@ internal fun ChatModeScreen(
                                         verticalAlignment = CenterVertically,
                                     ) {
                                         Text(
-                                            text = "답변 후 전송: " + pending.first() +
+                                            text = "답변 후 전송: " + pending.first().text +
                                                 (if (pending.size > 1) "  외 ${pending.size - 1}건" else ""),
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1022,15 +1030,29 @@ internal fun ChatModeScreen(
                                             overflow = TextOverflow.Ellipsis,
                                             modifier = Modifier.weight(1f),
                                         )
-                                        Text(
-                                            text = "취소",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.primary,
+                                        // Text-first cancel with real control semantics: a 44dp
+                                        // box gives an adequate touch target + Role.Button /
+                                        // TalkBack label (same pattern as the session drawer's
+                                        // × delete affordance) without a full Material button
+                                        // inflating this quiet one-line notice.
+                                        Box(
                                             modifier = Modifier
-                                                .handCursor()
-                                                .clickable(onClick = uiState.actions.cancelPendingQuestions)
-                                                .padding(start = 10.dp, top = 2.dp, bottom = 2.dp),
-                                        )
+                                                .padding(start = 4.dp)
+                                                .size(44.dp)
+                                                .clickable(
+                                                    onClickLabel = "대기열 취소",
+                                                    role = Role.Button,
+                                                    onClick = uiState.actions.cancelPendingQuestions,
+                                                )
+                                                .handCursor(),
+                                            contentAlignment = Center,
+                                        ) {
+                                            Text(
+                                                text = "취소",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.primary,
+                                            )
+                                        }
                                     }
                                 }
                                 QuestionInput(
