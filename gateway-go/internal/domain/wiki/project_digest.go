@@ -24,7 +24,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/pkg/redact"
 )
 
@@ -101,13 +100,8 @@ func (wd *WikiDreamer) extractProjectDigests(ctx context.Context, content string
 ## 일지/메모
 %s`, formatProjectList(names), projectDigestMaxPerCycle, content)
 
-	systemJSON, _ := json.Marshal("You summarize the latest progress per project. Respond only with a JSON array.")
-	resp, err := wd.client.Complete(ctx, llm.ChatRequest{
-		Model:     wd.model,
-		System:    systemJSON,
-		Messages:  []llm.Message{llm.NewTextMessage("user", prompt)},
-		MaxTokens: projectDigestMaxTokens,
-	})
+	resp, err := wd.client.Complete(ctx,
+		wd.llmRequest("You summarize the latest progress per project. Respond only with a JSON array.", prompt, projectDigestMaxTokens))
 	if err != nil {
 		return nil, fmt.Errorf("project-digest LLM call: %w", err)
 	}

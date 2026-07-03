@@ -14,7 +14,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/pkg/redact"
 )
 
@@ -128,13 +127,8 @@ func (wd *WikiDreamer) synthesize(ctx context.Context, diaryContent string, stat
 
 	prompt := buildWikiSynthesisPrompt(indexContent, processedHistory, polarisSection, diaryContent)
 
-	systemJSON, _ := json.Marshal("You are a wiki knowledge base maintainer. Respond only with a JSON array.")
-	resp, err := wd.client.Complete(ctx, llm.ChatRequest{
-		Model:     wd.model,
-		System:    systemJSON,
-		Messages:  []llm.Message{llm.NewTextMessage("user", prompt)},
-		MaxTokens: wikiDreamMaxTokens,
-	})
+	resp, err := wd.client.Complete(ctx,
+		wd.llmRequest("You are a wiki knowledge base maintainer. Respond only with a JSON array.", prompt, wd.synthesisBudget()))
 	if err != nil {
 		return nil, fmt.Errorf("LLM call: %w", err)
 	}
