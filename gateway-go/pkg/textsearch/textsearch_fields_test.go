@@ -1,6 +1,9 @@
 package textsearch
 
-import "testing"
+import (
+	"math"
+	"testing"
+)
 
 // TestUpsertFieldsBoostFlipsRanking is the causal proof for field boosts: the
 // same two documents, the same query — flat indexing ranks the body-heavy
@@ -45,6 +48,41 @@ func TestUpsertFieldsBoostFlipsRanking(t *testing.T) {
 	}
 	if hits[0].ID != "canonical" {
 		t.Fatalf("boosted ranking: top = %s, want canonical", hits[0].ID)
+	}
+}
+
+// TestSearchTieBreakDeterministic pins the equal-score ordering: candidates
+// come from map iteration, so without the ID tie-break identical documents
+// would shuffle between runs (measured as test flakiness; the same shuffle
+// would hit production ranking across restarts).
+func TestSearchTieBreakDeterministic(t *testing.T) {
+	idx := New()
+	// Identical field content → identical BM25 scores for the query.
+	idx.Upsert("b-doc", "정산 안내", "내용")
+	idx.Upsert("a-doc", "정산 안내", "내용")
+	for i := 0; i < 5; i++ {
+		hits := idx.Search("정산", 2)
+		if len(hits) != 2 || hits[0].ID != "a-doc" || hits[1].ID != "b-doc" {
+			t.Fatalf("run %d: tie order not deterministic by ID: %+v", i, hits)
+		}
+	}
+}
+
+// TestUpsertFieldsRejectsNaNInfWeights — NaN/Inf weights must be normalized
+// away: a NaN score breaks sort.Slice's strict ordering and Inf swamps ranks.
+func TestUpsertFieldsRejectsNaNInfWeights(t *testing.T) {
+	idx := New()
+	idx.UpsertFields("nan", Field{Text: "정산 문서", Weight: math.NaN()})
+	idx.UpsertFields("inf", Field{Text: "정산 기록", Weight: math.Inf(1)})
+	idx.UpsertFields("neg", Field{Text: "정산 노트", Weight: -3})
+	hits := idx.Search("정산", 3)
+	if len(hits) != 3 {
+		t.Fatalf("want 3 hits, got %d", len(hits))
+	}
+	for _, h := range hits {
+		if math.IsNaN(h.Score) || math.IsInf(h.Score, 0) || h.Score <= 0 {
+			t.Fatalf("weight sanitization failed: %+v", h)
+		}
 	}
 }
 

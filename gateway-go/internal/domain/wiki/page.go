@@ -192,6 +192,11 @@ func (p *Page) Render() []byte {
 // importance) is left alone — categories are from a fixed allow-list and tags
 // are keyword-sized.
 func WritePageFile(path string, page *Page) error {
+	// Single choke point for cue hygiene: every producer (dreamer create/update,
+	// the agent wiki tool, duplicate folds) funnels through here, so trim/dedupe
+	// and the 10-cue cap hold regardless of which path set the field — without
+	// this, the cap only held on the dreamer's merge branch.
+	page.Meta.Cues = normalizeCues(page.Meta.Cues)
 	redactPage(page)
 	data := page.Render()
 	tmp := path + ".tmp"
@@ -226,11 +231,12 @@ func writeFileSync(path string, data []byte, perm os.FileMode) error {
 }
 
 // redactPage masks secret patterns in a Page's free-text fields before write.
-// No-op when redaction is disabled. Title and Summary are user-visible strings
-// that the Dreamer populates from LLM output; Body is the main leak surface.
-// Other frontmatter fields (Category, Tags, dates, Importance, Archived, Type,
-// Confidence, Resource) are structural and unaffected — Resource is an asset
-// identifier/URI, not free-text prose, so redacting it would corrupt the ref.
+// No-op when redaction is disabled. Title, Summary, and Cues are free-text
+// strings that the Dreamer/agent populate from LLM output; Body is the main
+// leak surface. Other frontmatter fields (Category, Tags, dates, Importance,
+// Archived, Type, Confidence, Resource) are structural and unaffected —
+// Resource is an asset identifier/URI, not free-text prose, so redacting it
+// would corrupt the ref.
 func redactPage(p *Page) {
 	if p == nil || !redact.Enabled() {
 		return
@@ -238,6 +244,39 @@ func redactPage(p *Page) {
 	p.Body = redact.String(p.Body)
 	p.Meta.Title = redact.String(p.Meta.Title)
 	p.Meta.Summary = redact.String(p.Meta.Summary)
+	// Cues are LLM-supplied free text that gets indexed and embedded — a
+	// credential-looking value slipping in here would persist unmasked.
+	for i := range p.Meta.Cues {
+		p.Meta.Cues[i] = redact.String(p.Meta.Cues[i])
+	}
+}
+
+// normalizeCues trims, drops empties, dedupes (first occurrence wins), and caps
+// the cue-anchor list. Enforced at write time (WritePageFile) so every producer
+// lands within the same bounds — one over-eager LLM emission must not turn a
+// page into a match-everything BM25 magnet.
+func normalizeCues(cues []string) []string {
+	const maxCues = 10
+	seen := make(map[string]struct{}, len(cues))
+	out := make([]string, 0, len(cues))
+	for _, c := range cues {
+		c = strings.TrimSpace(c)
+		if c == "" {
+			continue
+		}
+		if _, dup := seen[c]; dup {
+			continue
+		}
+		seen[c] = struct{}{}
+		out = append(out, c)
+		if len(out) == maxCues {
+			break
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 // NewPage creates a page with sensible defaults.

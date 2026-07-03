@@ -243,7 +243,18 @@ func (s *Store) Search(ctx context.Context, query string, limit int) ([]SearchRe
 	if limit <= 0 {
 		limit = 10
 	}
-	bm25, err := s.fts.search(ctx, query, limit)
+	// Over-fetch, demote, THEN truncate. validityFactor (archived/superseded/
+	// aging demotion) multiplies scores after ranking — truncating at the
+	// caller's limit first could return only stale pages while the current page
+	// sat just outside the window. With identity-field boosts an archived
+	// title match outranks a current body match, so at small limits the stale
+	// page would be the ONLY result. Fetch a wider candidate set, apply
+	// validity, and cut to the caller's limit at the very end.
+	fetchLimit := limit * 3
+	if fetchLimit < limit+10 {
+		fetchLimit = limit + 10
+	}
+	bm25, err := s.fts.search(ctx, query, fetchLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -261,7 +272,7 @@ func (s *Store) Search(ctx context.Context, query string, limit int) ([]SearchRe
 	commonOnlyQuery := s.fts.docCount() >= bm25GateMinCorpus &&
 		s.fts.queryMaxRarity(query) < bm25RarityFloorValue()
 
-	sem := s.searchSemantic(ctx, query, max(limit, semanticBlendK))
+	sem := s.searchSemantic(ctx, query, max(fetchLimit, semanticBlendK))
 	if len(sem) == 0 {
 		// Pure-BM25 path (no embedder / server down / CI). Nothing can confirm a
 		// lexical hit here, so a common-only query's hits are all weak matches and
@@ -270,9 +281,18 @@ func (s *Store) Search(ctx context.Context, query string, limit int) ([]SearchRe
 		if commonOnlyQuery {
 			return nil, nil
 		}
-		return s.fts.applyValidity(bm25), nil
+		return truncateResults(s.fts.applyValidity(bm25), limit), nil
 	}
-	return s.fts.applyValidity(mergeSearchResults(bm25, sem, limit, commonOnlyQuery)), nil
+	return truncateResults(s.fts.applyValidity(mergeSearchResults(bm25, sem, fetchLimit, commonOnlyQuery)), limit), nil
+}
+
+// truncateResults cuts a validity-adjusted, re-sorted result list down to the
+// caller's limit — the final step of the over-fetch → demote → truncate order.
+func truncateResults(results []SearchResult, limit int) []SearchResult {
+	if len(results) > limit {
+		return results[:limit]
+	}
+	return results
 }
 
 const (

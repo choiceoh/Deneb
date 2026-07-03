@@ -2,6 +2,7 @@ package wiki
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -97,6 +98,107 @@ func TestSearchFindsPageByCueOnly(t *testing.T) {
 		if r.Path == "거래/sunshine-downpayment.md" {
 			t.Fatalf("control page surfaced WITHOUT cues — the test no longer isolates cue indexing; results=%v", results)
 		}
+	}
+}
+
+// TestCuesNormalizedOnWrite — the write-time choke point must trim, drop
+// empties, dedupe, and cap cues no matter which producer set them (the 10-cue
+// cap used to hold only on the dreamer's merge branch).
+func TestCuesNormalizedOnWrite(t *testing.T) {
+	dir := t.TempDir()
+	store, err := NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	cues := []string{" 계약금 ", "", "계약금", "  "}
+	for i := 0; i < 12; i++ {
+		cues = append(cues, fmt.Sprintf("진입표현%d", i))
+	}
+	page := &Page{Meta: Frontmatter{Title: "t", Category: "기타", Cues: cues}, Body: "b"}
+	if err := store.WritePage("기타/cue-cap.md", page); err != nil {
+		t.Fatalf("WritePage: %v", err)
+	}
+	got, err := store.ReadPage("기타/cue-cap.md")
+	if err != nil {
+		t.Fatalf("ReadPage: %v", err)
+	}
+	if len(got.Meta.Cues) != 10 {
+		t.Fatalf("cues not capped at write: %d %v", len(got.Meta.Cues), got.Meta.Cues)
+	}
+	if got.Meta.Cues[0] != "계약금" || got.Meta.Cues[1] != "진입표현0" {
+		t.Fatalf("cues not trimmed/deduped in order: %v", got.Meta.Cues[:2])
+	}
+}
+
+// TestMergePreservesCues — folding a duplicate page must union its cue anchors
+// into the survivor; dropping them would kill the paraphrase queries the
+// source page used to answer.
+func TestMergePreservesCues(t *testing.T) {
+	dir := t.TempDir()
+	store, err := NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	target := &Page{Meta: Frontmatter{Title: "선수금 일정", Category: "기타", Cues: []string{"계약금"}}, Body: "target"}
+	source := &Page{Meta: Frontmatter{Title: "선수금 일정 (중복)", Category: "기타", Cues: []string{"착수금", "계약금"}}, Body: "source"}
+	if err := store.WritePage("기타/target.md", target); err != nil {
+		t.Fatalf("WritePage target: %v", err)
+	}
+	if err := store.WritePage("기타/source.md", source); err != nil {
+		t.Fatalf("WritePage source: %v", err)
+	}
+	if _, err := store.MergePage("기타/target.md", "기타/source.md", "merged body", MergeOptions{}); err != nil {
+		t.Fatalf("MergePage: %v", err)
+	}
+	got, err := store.ReadPage("기타/target.md")
+	if err != nil {
+		t.Fatalf("ReadPage: %v", err)
+	}
+	joined := strings.Join(got.Meta.Cues, ",")
+	if joined != "계약금,착수금" {
+		t.Fatalf("merged cues = %q, want 계약금,착수금 (union, dst priority, deduped)", joined)
+	}
+}
+
+// TestSearchValidityBeforeTruncate — an archived page whose IDENTITY matches
+// the query (boosted) must not crowd the current body-match page out of a
+// small result window: validity demotion has to apply before the limit cut.
+func TestSearchValidityBeforeTruncate(t *testing.T) {
+	dir := t.TempDir()
+	store, err := NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	archived := &Page{
+		Meta: Frontmatter{Title: "정산 프로세스 (구)", Category: "기타", Archived: true},
+		Body: "낡은 절차 문서.",
+	}
+	current := &Page{
+		Meta: Frontmatter{Title: "월말 마감 절차", Category: "기타"},
+		Body: "정산 확정은 5영업일 안에 끝낸다.",
+	}
+	if err := store.WritePage("기타/old-settle.md", archived); err != nil {
+		t.Fatalf("WritePage archived: %v", err)
+	}
+	if err := store.WritePage("기타/current-settle.md", current); err != nil {
+		t.Fatalf("WritePage current: %v", err)
+	}
+
+	results, err := store.Search(context.Background(), "정산", 1)
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("want 1 result, got %d (%v)", len(results), results)
+	}
+	if results[0].Path != "기타/current-settle.md" {
+		t.Fatalf("top result = %s — archived identity match crowded out the current page (validity applied after truncation?)", results[0].Path)
 	}
 }
 
