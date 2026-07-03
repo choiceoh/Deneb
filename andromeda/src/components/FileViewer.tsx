@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { color, muted } from "@/theme";
 import { MarkdownEditor } from "@/components/MarkdownEditor";
 import { diffLineClass, isEditableKind, maxTextPreviewBytes, parseCsv, viewKindFor } from "@/components/fileView";
+import { type HwpBlock, parseHwp } from "@/components/hwp/hwp";
 
 // FileViewer renders one file inline — the AionUi-style preview sized to
 // Deneb: images and PDFs straight off a blob, markdown through the existing
@@ -32,6 +33,7 @@ export function FileViewer({
   const [objectUrl, setObjectUrl] = useState("");
   const [text, setText] = useState("");
   const [savedText, setSavedText] = useState("");
+  const [hwpBlocks, setHwpBlocks] = useState<HwpBlock[]>([]);
   const [preview, setPreview] = useState(true); // markdown/csv/diff: rendered view first
   const [saving, setSaving] = useState(false);
   const dirty = isEditableKind(kind) && text !== savedText;
@@ -55,6 +57,17 @@ export function FileViewer({
         if (kind === "image" || kind === "pdf") {
           url = URL.createObjectURL(blob);
           setObjectUrl(url);
+          setPhase("ready");
+          return;
+        }
+        if (kind === "hwp") {
+          // 한/글 5.x: extract content in-browser (dependency-free parser) —
+          // paragraphs, tables, and embedded images. Cap on the parsed text,
+          // not the (compressed) blob.
+          const doc = await parseHwp(await blob.arrayBuffer());
+          if (!alive) return;
+          setHwpBlocks(doc.blocks);
+          setText(doc.text);
           setPhase("ready");
           return;
         }
@@ -137,9 +150,23 @@ export function FileViewer({
       </div>
     );
   }
+  if (kind === "hwp") {
+    return (
+      <div className="file-viewer-text">
+        <div className="file-viewer-bar">
+          <span style={muted}>한글 문서 — 텍스트·표·이미지 추출 (서식·레이아웃은 원본에서)</span>
+          {downloadLink}
+        </div>
+        <HwpView blocks={hwpBlocks} name={name} />
+      </div>
+    );
+  }
 
   // Text-family: shared editor chrome (모드 탭 + 저장) over per-kind rendering.
-  const editable = Boolean(onSave);
+  // Only genuinely text-backed kinds are editable — HWP is EXTRACTED text
+  // (saving it would corrupt the binary original), so it stays read-only even
+  // inside the file-tab (which passes an onSave).
+  const editable = Boolean(onSave) && isEditableKind(kind);
   const hasPreviewMode = kind === "markdown" || kind === "csv" || kind === "diff";
   const showPreview = hasPreviewMode && preview;
 
@@ -200,6 +227,45 @@ export function FileViewer({
           aria-label={name}
         />
       )}
+    </div>
+  );
+}
+
+// HwpView renders the extracted HWP content — paragraphs, tables (as a grid),
+// and images — read-only. Images are data: URIs the parser built from the
+// document's own BinData streams (image bytes only, never markup), so an <img>
+// src is safe here. Empty extraction shows a hint + download escape hatch.
+function HwpView({ blocks, name }: { blocks: HwpBlock[]; name: string }) {
+  if (blocks.length === 0) {
+    return (
+      <p style={muted}>이 문서에서 추출할 수 있는 텍스트·표·이미지를 찾지 못했습니다. 원본을 내려받아 확인하세요.</p>
+    );
+  }
+  return (
+    <div className="file-viewer-scroll hwp-doc" aria-label={name}>
+      {blocks.map((b, i) => {
+        if (b.type === "para") return <p key={i}>{b.text}</p>;
+        if (b.type === "image") {
+          return (
+            <figure key={i} className="hwp-figure">
+              <img src={b.dataUri} alt={b.name} loading="lazy" />
+            </figure>
+          );
+        }
+        return (
+          <table key={i} className="file-viewer-csv hwp-table">
+            <tbody>
+              {b.rows.map((row, ri) => (
+                <tr key={ri}>
+                  {row.map((cell, ci) => (
+                    <td key={ci}>{cell}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        );
+      })}
     </div>
   );
 }

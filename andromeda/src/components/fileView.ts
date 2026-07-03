@@ -2,7 +2,7 @@
 // gets, whether it is text-editable, and tiny no-dependency parsers for CSV
 // tables and diff coloring. No React, fully unit-testable.
 
-export type ViewKind = "image" | "pdf" | "markdown" | "csv" | "diff" | "text" | "none";
+export type ViewKind = "image" | "pdf" | "markdown" | "csv" | "diff" | "text" | "hwp" | "none";
 
 const IMAGE_EXTS = new Set(["png", "jpg", "jpeg", "gif", "svg", "webp", "bmp", "ico", "tiff", "avif"]);
 
@@ -69,6 +69,7 @@ export function viewKindFor(name: string, mime?: string): ViewKind {
   if (ext === "md" || ext === "markdown") return "markdown";
   if (ext === "csv" || ext === "tsv") return "csv";
   if (ext === "diff" || ext === "patch") return "diff";
+  if (ext === "hwp") return "hwp"; // 한/글 5.x — in-app text extraction (see hwp/)
   if (TEXT_EXTS.has(ext)) return "text";
   const m = (mime ?? "").toLowerCase();
   if (m.startsWith("image/")) return "image";

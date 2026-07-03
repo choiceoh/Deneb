@@ -12,7 +12,7 @@ describe("viewKindFor", () => {
     expect(viewKindFor("이름없음", "image/webp")).toBe("image");
     expect(viewKindFor("이름없음", "application/pdf")).toBe("pdf");
     expect(viewKindFor("이름없음", "text/plain")).toBe("text");
-    expect(viewKindFor("계약서.hwp")).toBe("none");
+    expect(viewKindFor("계약서.hwp")).toBe("hwp");
     expect(viewKindFor("자료.xlsx", "application/octet-stream")).toBe("none");
   });
 
@@ -23,6 +23,7 @@ describe("viewKindFor", () => {
     expect(isEditableKind("diff")).toBe(true);
     expect(isEditableKind("pdf")).toBe(false);
     expect(isEditableKind("image")).toBe(false);
+    expect(isEditableKind("hwp")).toBe(false); // extracted text — read-only
     expect(isEditableKind("none")).toBe(false);
   });
 });

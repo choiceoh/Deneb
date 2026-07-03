@@ -4729,3 +4729,33 @@ button.mail-attachment {
   gap: 8px;
   justify-items: start;
 }
+
+/* ---- HWP extracted-content view (paragraphs + tables + images) ---- */
+.hwp-doc {
+  padding: 4px 8px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.hwp-doc p {
+  margin: 0 0 8px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.hwp-table {
+  margin: 8px 0 12px;
+}
+.hwp-table td {
+  white-space: pre-wrap;
+  word-break: break-word;
+  vertical-align: top;
+  max-width: 360px;
+}
+.hwp-figure {
+  margin: 8px 0 12px;
+}
+.hwp-figure img {
+  max-width: 100%;
+  height: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-ctl);
+}
