@@ -321,6 +321,68 @@ func TestToolEdit_whitespaceTolerant(t *testing.T) {
 			t.Fatalf("replace_all must keep exact semantics, got %v", err)
 		}
 	})
+
+	t.Run("conflicting indent depths refuse instead of guessing", func(t *testing.T) {
+		tmp := t.TempDir()
+		path := filepath.Join(tmp, "f.py")
+		os.WriteFile(path, []byte("def f():\n    if x:\n        return 1\n"), 0o644)
+		// Model flattened the nested block: both lines share indent "" but map
+		// to different file depths — any rewrite choice corrupts Python.
+		_, err := callTool(t, ToolEdit(tmp), map[string]any{
+			"file_path":  "f.py",
+			"old_string": "if x:\nreturn 1",
+			"new_string": "if x:\nreturn 2",
+		})
+		if err == nil || !strings.Contains(err.Error(), "ambiguous") {
+			t.Fatalf("expected ambiguous-indentation refusal, got %v", err)
+		}
+		data, _ := os.ReadFile(path)
+		if !strings.Contains(string(data), "return 1") {
+			t.Errorf("file must be untouched, got %q", string(data))
+		}
+	})
+
+	t.Run("CRLF files skip the tolerant path", func(t *testing.T) {
+		tmp := t.TempDir()
+		path := filepath.Join(tmp, "f.txt")
+		os.WriteFile(path, []byte("\tfoo\r\nbar\r\n"), 0o644)
+		// Would trim-match "\tfoo", but splicing joins with bare \n — the
+		// tolerant path must decline and leave CRLF files to exact matching.
+		_, err := callTool(t, ToolEdit(tmp), map[string]any{
+			"file_path":  "f.txt",
+			"old_string": "  foo",
+			"new_string": "baz",
+		})
+		if err == nil || !strings.Contains(err.Error(), "not found") {
+			t.Fatalf("expected not-found (tolerant path declined), got %v", err)
+		}
+		data, _ := os.ReadFile(path)
+		if !strings.Contains(string(data), "\r\n") {
+			t.Errorf("line endings must be untouched, got %q", string(data))
+		}
+	})
+
+	t.Run("unseen deeper level repeats the file indent unit", func(t *testing.T) {
+		tmp := t.TempDir()
+		path := filepath.Join(tmp, "f.go")
+		os.WriteFile(path, []byte("func a() {\n\tif x {\n\t\treturn 1\n\t}\n}\n"), 0o644)
+		// old_string uses 4-space units; new_string introduces a deeper level
+		// (12 spaces = 3 units) absent from the matched block. The rewrite
+		// must repeat the file's tab unit (3 tabs), not concatenate tab+spaces.
+		out := mustCallTool(t, ToolEdit(tmp), map[string]any{
+			"file_path":  "f.go",
+			"old_string": "    if x {\n        return 1\n    }",
+			"new_string": "    if x {\n        if y {\n            return 3\n        }\n    }",
+		})
+		if !strings.Contains(out, "indentation adapted") {
+			t.Errorf("expected re-indent note, got %q", out)
+		}
+		data, _ := os.ReadFile(path)
+		want := "func a() {\n\tif x {\n\t\tif y {\n\t\t\treturn 3\n\t\t}\n\t}\n}\n"
+		if string(data) != want {
+			t.Errorf("got %q, want %q (no mixed tab/space indentation)", string(data), want)
+		}
+	})
 }
 
 func TestToolEdit_replaceAll(t *testing.T) {

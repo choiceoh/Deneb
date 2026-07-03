@@ -56,20 +56,26 @@ func (c *counterpartyLookup) Has(email string) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.domains == nil || time.Since(c.builtAt) > counterpartyTTL {
-		c.domains = c.build()
-		c.builtAt = time.Now()
+		set, ok := c.build()
+		if !ok {
+			// Store not wired yet (late-bound): don't cache the empty set —
+			// stamping builtAt here would keep the boost off for a full TTL
+			// after the store appears. Retry on the next row instead.
+			return false
+		}
+		c.domains, c.builtAt = set, time.Now()
 	}
 	_, ok := c.domains[domain]
 	return ok
 }
 
-// build snapshots the wiki-derived set; empty (never nil) when the store is
-// not wired yet so the next TTL lapse retries.
-func (c *counterpartyLookup) build() map[string]struct{} {
+// build snapshots the wiki-derived set; ok=false when the store is not wired
+// yet (the caller skips caching so the next call retries immediately).
+func (c *counterpartyLookup) build() (map[string]struct{}, bool) {
 	s := c.store()
 	if s == nil {
-		return map[string]struct{}{}
+		return nil, false
 	}
 	cutoff := dentime.Now().AddDate(0, 0, -counterpartyWindowDays).Format("2006-01-02")
-	return s.ActiveCounterpartyDomains(cutoff)
+	return s.ActiveCounterpartyDomains(cutoff), true
 }

@@ -29,6 +29,12 @@ type IndexEntry struct {
 	Related    []string
 	Importance float64
 	Updated    string // YYYY-MM-DD
+	// Created is the page's frontmatter creation date (YYYY-MM-DD). Unlike
+	// Updated it is immutable across moves/reclassification, so recency
+	// windows that must not re-trigger on metadata churn key off it (e.g.
+	// ActiveCounterpartyDomains). Empty for entries parsed from a rendered
+	// index.md (the render doesn't carry it) — callers fall back to Updated.
+	Created    string // YYYY-MM-DD
 	Type       string // concept, entity, source, comparison, log
 	Confidence string // high, medium, low
 }
@@ -51,6 +57,7 @@ func (idx *Index) UpdateEntry(relPath string, page *Page) {
 		Related:    page.Meta.Related,
 		Importance: page.Meta.Importance,
 		Updated:    page.Meta.Updated,
+		Created:    page.Meta.Created,
 		Type:       page.Meta.Type,
 		Confidence: page.Meta.Confidence,
 	}

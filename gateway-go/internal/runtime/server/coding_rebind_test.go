@@ -90,9 +90,12 @@ func TestSanitizeCheckpointLabel(t *testing.T) {
 		{"로그인 폼 검증 추가", "로그인 폼 검증 추가"},
 		{"\"헬스체크 엔드포인트 신설.\"\n부연 설명", "헬스체크 엔드포인트 신설"},
 		{"- 버그 수정", "버그 수정"},
-		{"`config.go` 상수 정리", "config.go` 상수 정리"},
+		// Inline-code style must not leave a dangling backtick (all backticks
+		// are stripped, not just wrapping ones).
+		{"`config.go` 상수 정리", "config.go 상수 정리"},
 		{"   \n\n", ""},
-		{strings.Repeat("가", 80), strings.Repeat("가", 60) + "…"},
+		// Cap = the 40-rune labeler contract (checkpointSummarySystem).
+		{strings.Repeat("가", 80), strings.Repeat("가", 40) + "…"},
 	}
 	for _, c := range cases {
 		if got := sanitizeCheckpointLabel(c.in); got != c.want {

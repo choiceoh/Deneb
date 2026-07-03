@@ -487,8 +487,13 @@ func buildClient(logger *slog.Logger, cfg ModelConfig) *llm.Client {
 		opts = append(opts, llm.WithAuthScheme(scheme))
 	}
 	// Kimi Code authenticates with the official Kimi CLI's OAuth token
-	// cache; read it per request so a re-login is picked up live.
-	if cfg.ProviderID == "kimi" {
+	// cache; read it per request so a re-login is picked up live. Only when
+	// no static key is configured: the client prefers apiKeyFunc over the
+	// static key, so on a host that still has Kimi CLI credentials the env
+	// func would silently override an explicit apiKey — exactly the
+	// wormhole-fronted setup (apiKey=WORMHOLE_TOKEN, sidecar-models.md
+	// runbook), which would then send the Kimi token to wormhole and 401.
+	if cfg.ProviderID == "kimi" && strings.TrimSpace(cfg.APIKey) == "" {
 		opts = append(opts, llm.WithAPIKeyFunc(kimiToken))
 	}
 	return llm.NewClient(cfg.BaseURL, cfg.APIKey, opts...)

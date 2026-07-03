@@ -285,10 +285,17 @@ func TestConfigureCoding(t *testing.T) {
 	t.Run("idempotent when already bound (lazy per-turn rebind)", func(t *testing.T) {
 		m := NewManager()
 		m.ConfigureCoding("code:task-1", "/wt/task-1")
-		first := m.Get("code:task-1").UpdatedAt
+		// Install a sentinel UpdatedAt via Set — Get returns a snapshot copy,
+		// and comparing two wall-clock stamps would false-pass when both
+		// Configure calls land in the same millisecond.
+		s := m.Get("code:task-1")
+		s.UpdatedAt = 12345
+		if err := m.Set(s); err != nil {
+			t.Fatal(err)
+		}
 		m.ConfigureCoding("code:task-1", "/wt/task-1")
-		if got := m.Get("code:task-1").UpdatedAt; got != first {
-			t.Errorf("re-bind with identical values must be a no-op, UpdatedAt %d → %d", first, got)
+		if got := m.Get("code:task-1").UpdatedAt; got != 12345 {
+			t.Errorf("re-bind with identical values must be a no-op, UpdatedAt overwritten to %d", got)
 		}
 	})
 
@@ -296,7 +303,10 @@ func TestConfigureCoding(t *testing.T) {
 		m := NewManager()
 		m.ConfigureCoding("code:task-1", "/wt/task-1")
 		s := m.Get("code:task-1")
-		s.ToolPreset = "implementer" // pre-PresetCoding deployments used implementer
+		s.ToolPreset = "implementer"     // pre-PresetCoding deployments used implementer
+		if err := m.Set(s); err != nil { // Get returns a copy — install the stale state
+			t.Fatal(err)
+		}
 		m.ConfigureCoding("code:task-1", "/wt/task-1")
 		if got := m.Get("code:task-1").ToolPreset; got != "coding" {
 			t.Errorf("toolPreset = %q, want coding after migration", got)

@@ -236,6 +236,16 @@ func (wd *WikiDreamer) SetLLMRequestShape(extraBody map[string]any, synthesisMax
 // verify, open-loops, and project-digest calls so none can drift back to an
 // unshaped request.
 func (wd *WikiDreamer) llmRequest(system, prompt string, maxTokens int) llm.ChatRequest {
+	// Headroom mode (untoggleable reasoning model: no off-switch kwargs, a
+	// raised synthesis budget): every call pays chain-of-thought before the
+	// answer, so the small fixed budgets of the non-synthesis calls (verify,
+	// open-loops, digests) get the same 4x scaling the synthesis budget got —
+	// otherwise those phases keep failing on exactly the models the headroom
+	// exists for. The synthesis call itself passes synthesisBudget() and is
+	// excluded by the < guard.
+	if wd.llmExtraBody == nil && wd.synthesisMaxTokens > 0 && maxTokens < wd.synthesisMaxTokens {
+		maxTokens *= 4
+	}
 	systemJSON, _ := json.Marshal(system)
 	return llm.ChatRequest{
 		Model:     wd.model,

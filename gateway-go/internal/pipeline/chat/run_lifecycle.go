@@ -539,13 +539,22 @@ func maybeRecordRunDiary(deps runDeps, params RunParams, result *agent.AgentResu
 	if assistantText == "" {
 		assistantText = result.Text
 	}
-	assistantText = strings.TrimSpace(StripSilentToken(jsonutil.StripThinkingTags(assistantText)))
+	// stripReasoningLeak on top of the tag strip: leaked "[thinking]"/bare
+	// "<think>" delimiters would otherwise persist into the diary and later
+	// seed dreaming with reasoning noise.
+	assistantText = strings.TrimSpace(stripReasoningLeak(StripSilentToken(jsonutil.StripThinkingTags(assistantText))))
 	dreamTurnFn := deps.dreamTurnFn
 	shouldIncrementDream := dreamTurnFn != nil
+	// Background work rides the server lifecycle ctx (canceled on shutdown,
+	// not on request completion) — same contract as maybeCodingTurnEnd.
+	bgCtx := deps.callbacks.shutdownCtx
+	if bgCtx == nil {
+		bgCtx = context.Background()
+	}
 	safego.GoWithSlog(logger, "run-diary", func() {
 		recorded := recordDiary(deps.wikiStore, logger, params.Message, toolNames, assistantText, result.StopReason, result.Turns)
 		if recorded && shouldIncrementDream {
-			dreamTurnFn(context.Background())
+			dreamTurnFn(bgCtx)
 		}
 	})
 }

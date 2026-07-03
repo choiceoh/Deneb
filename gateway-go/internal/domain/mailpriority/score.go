@@ -137,9 +137,14 @@ func (s *Scorer) Score(from, subject, snippet string) (Tier, string) {
 	// synced contacts, "sender is in the address book" alone would mark
 	// nearly every business row 🟡 and destroy the marker's glanceability
 	// (observed on the live inbox). FYI mail from a VIP stays unmarked.
+	// Relationship hints are collected separately: they are the amplifiers
+	// that push a row across a tier, so one of them must survive the
+	// two-hint cap — appended last they used to be silently dropped, leaving
+	// the escalation unexplained.
+	var relHints []string
 	if score > 0 && s.vip != nil && email != "" && s.vip(email) {
 		score += pointsVIP
-		hints = append(hints, "주요 연락처")
+		relHints = append(relHints, "주요 연락처")
 	}
 	// Active counterparty amplifies the same way (and stacks with VIP by
 	// design): 견적+진행 거래처 lands amber→near-urgent, 기한+진행 거래처
@@ -147,25 +152,38 @@ func (s *Scorer) Score(from, subject, snippet string) (Tier, string) {
 	// express. A contentless FYI from a counterparty still stays unmarked.
 	if score > 0 && s.counterparty != nil && email != "" && s.counterparty(email) {
 		score += pointsCounterparty
-		hints = append(hints, "진행 거래처")
+		relHints = append(relHints, "진행 거래처")
 	}
 
 	switch {
 	case score >= thresholdUrgent:
-		return TierUrgent, joinHints(hints)
+		return TierUrgent, joinHints(hints, relHints)
 	case score >= thresholdAttention:
-		return TierAttention, joinHints(hints)
+		return TierAttention, joinHints(hints, relHints)
 	default:
 		return TierNone, ""
 	}
 }
 
-// joinHints keeps the marker glanceable: at most two signal names.
-func joinHints(h []string) string {
-	if len(h) > 2 {
-		h = h[:2]
+// joinHints keeps the marker glanceable: at most two signal names — the
+// strongest content signal plus (when present) the first relationship
+// amplifier, so a tier escalated by VIP/거래처 always says why. Remaining
+// slots fall back to further content hints.
+func joinHints(content, relation []string) string {
+	out := make([]string, 0, 2)
+	if len(content) > 0 {
+		out = append(out, content[0])
 	}
-	return strings.Join(h, " · ")
+	if len(relation) > 0 && len(out) < 2 {
+		out = append(out, relation[0])
+	}
+	for _, c := range content[min(1, len(content)):] {
+		if len(out) >= 2 {
+			break
+		}
+		out = append(out, c)
+	}
+	return strings.Join(out, " · ")
 }
 
 // distinctMatches returns the deduped matches of re in text, in order.

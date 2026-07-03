@@ -29,11 +29,24 @@ func TestActiveCounterpartyDomains(t *testing.T) {
 	write("프로젝트/영산고/메일분석/m3.md", "old-corp.kr", "2020-01-01") // stale
 	write("프로젝트/메일분석/m4.md", "bucket-only.kr", today)         // unlinked bucket — excluded
 
+	// Reclassify churn: an old unlinked analysis moved into a project gets its
+	// Updated re-stamped to today, but the window keys off the immutable
+	// Created — the stale domain must NOT re-activate for another 60 days.
+	if err := store.WritePage("프로젝트/영산고/메일분석/m5.md", &Page{
+		Meta: Frontmatter{
+			Title: "m5", Category: "프로젝트", Type: "log", Confidence: "medium",
+			Tags: []string{"resurrected.kr"}, Created: "2020-01-01", Updated: today,
+		},
+		Body: "분석",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
 	got := store.ActiveCounterpartyDomains("2026-01-01")
 	if _, ok := got["acme.co.kr"]; !ok {
 		t.Errorf("acme.co.kr missing from active set: %v", got)
 	}
-	for _, excluded := range []string{"gmail.com", "old-corp.kr", "bucket-only.kr"} {
+	for _, excluded := range []string{"gmail.com", "old-corp.kr", "bucket-only.kr", "resurrected.kr"} {
 		if _, ok := got[excluded]; ok {
 			t.Errorf("%s must be excluded, set: %v", excluded, got)
 		}

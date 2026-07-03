@@ -38,10 +38,12 @@ var NoThinking = modelrole.NoThinkingBody
 // sent the Qwen enable_thinking spelling, which dsv4 templates silently
 // ignore, leaving thinking ON for every hub call), untoggleable reasoning
 // models get nothing (a thinking-only template 400s on the kwarg), and
-// non-reasoning models keep NoThinking. providerID gates the template toggle
-// to vLLM-backed servings. callerExtra merges last so explicit fields win.
-func mergeRequestBody(providerID, model string, callerExtra map[string]any) map[string]any {
-	off := modelrole.ThinkingOffExtraBody(providerID, model)
+// vLLM-backed non-reasoning models keep NoThinking. reg (nil-safe) upgrades
+// the resolution to the routing profile so deneb.json routing.toggleKwarg
+// overrides shape hub calls too. callerExtra merges last so explicit fields
+// win.
+func mergeRequestBody(reg *modelrole.Registry, providerID, model string, callerExtra map[string]any) map[string]any {
+	off := reg.ThinkingOffExtraBodyFor(providerID, model)
 	merged := make(map[string]any, len(off)+len(callerExtra))
 	for k, v := range off {
 		merged[k] = v
@@ -405,7 +407,7 @@ func (h *Hub) executeRequest(entry *queueEntry) {
 
 	// Build the LLM request. Reasoning models omit the enable_thinking flag
 	// (see mergeRequestBody).
-	merged := mergeRequestBody(h.providerID, h.model, req.ExtraBody)
+	merged := mergeRequestBody(h.registry, h.providerID, h.model, req.ExtraBody)
 
 	// Inject server-side timeout to prevent zombie generation.
 	if deadline, ok := reqCtx.Deadline(); ok {
@@ -478,7 +480,7 @@ func (h *Hub) callDirect(ctx context.Context, client *llm.Client, providerID, mo
 	if len(extraBody) > 0 {
 		callerExtra = extraBody[0]
 	}
-	merged := mergeRequestBody(providerID, model, callerExtra)
+	merged := mergeRequestBody(h.registry, providerID, model, callerExtra)
 
 	fbTemp, fbTopP, fbTopK := modelSamplingDefaults(model)
 	req := llm.ChatRequest{
