@@ -1,5 +1,20 @@
 # Changelog
 
+## [4.61.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.60.0...deneb-v4.61.0) (2026-07-03)
+
+
+### ✨ Features
+
+* **scripts:** lightweight/tiny 모델 교체용 실부하 A/B 배터리 ([#3049](https://github.com/choiceoh/Deneb/issues/3049)) ([5f41dba](https://github.com/choiceoh/Deneb/commit/5f41dba161f252af60be4c1b81585dd3dd4c5117))
+
+
+### 🐛 Bug Fixes
+
+* **andromeda:** 파일 pane 미저장 편집 유실·빈 파일 저장·HWP 방어 수정 ([#3058](https://github.com/choiceoh/Deneb/issues/3058)) ([82f3d7a](https://github.com/choiceoh/Deneb/commit/82f3d7aa16987ce9ace920999341f6ab85f460de))
+* **wiki:** 리뷰어 정비 작업을 조기 종료 밖으로 이동 — 조용한 사이클에도 실행 ([#3053](https://github.com/choiceoh/Deneb/issues/3053)) ([3bb617c](https://github.com/choiceoh/Deneb/commit/3bb617cf411686a3170f812b1fd40c73fab0d1aa))
+* **wiki:** 큐 앵커·가중 검색 리뷰 후속 — 리댁션·캡 일원화·병합 보존·NaN 가드·검증 후 절단 ([#3052](https://github.com/choiceoh/Deneb/issues/3052)) ([7bf8574](https://github.com/choiceoh/Deneb/commit/7bf8574a4dde8734dea78aff106f749d392c7a45))
+* 머지된 PR 리뷰 후속 일괄 — 편집 들여쓰기·체크포인트 경합·모델 조형·거래처 창·위키 가드 ([#3055](https://github.com/choiceoh/Deneb/issues/3055)) ([0eb7fb0](https://github.com/choiceoh/Deneb/commit/0eb7fb0c77008fdb3069e2c440b49e16b8d4a0de))
+
 ## [4.60.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.59.0...deneb-v4.60.0) (2026-07-03)
 
 
