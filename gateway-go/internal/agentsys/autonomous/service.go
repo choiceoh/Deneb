@@ -255,6 +255,13 @@ func (s *Service) SetDreamer(d Dreamer) {
 // user activity. This ensures time-based and data-volume triggers fire
 // even when the user is idle.
 func (s *Service) dreamTimerLoop(ctx context.Context) {
+	// Check once immediately: lastDream is restored from disk, so on a host
+	// where auto-deploy restarts the gateway every few minutes the 30-minute
+	// ticker keeps resetting and the time trigger can be deferred for hours
+	// (observed 2026-07-03: four restarts in twenty minutes). The immediate
+	// check is safe — ShouldDream is false inside the 8h interval and
+	// runDreamingAsync dedups overlapping cycles.
+	s.dreamTimerTick(ctx)
 	ticker := time.NewTicker(30 * time.Minute)
 	defer ticker.Stop()
 
@@ -390,7 +397,8 @@ func (s *Service) notifyDreaming(report *DreamReport, err error) {
 		total := report.FactsVerified + report.FactsMerged + report.FactsExpired +
 			report.FactsPruned + report.PatternsExtracted +
 			report.UserModelUpdated + report.MutualUpdated +
-			report.WikiPagesCreated + report.WikiPagesUpdated
+			report.WikiPagesCreated + report.WikiPagesUpdated +
+			report.WikiProjectDigests
 		dur := float64(report.DurationMs) / 1000
 		// A phase error makes the headline say 실패 / 부분 완료 — otherwise the card
 		// title read "완료: 변경 없음" while the real failure sat in the summary, so a
@@ -403,7 +411,7 @@ func (s *Service) notifyDreaming(report *DreamReport, err error) {
 			msg = fmt.Sprintf("⚠️ Aurora Dream 실패 (%.1fs)", dur)
 		case total == 0:
 			msg = fmt.Sprintf("🌙 Aurora Dream 완료: 변경 없음 (%.1fs)", dur)
-		case report.WikiPagesCreated > 0 || report.WikiPagesUpdated > 0 || report.WikiUpdatesProposed > 0:
+		case report.WikiPagesCreated > 0 || report.WikiPagesUpdated > 0 || report.WikiUpdatesProposed > 0 || report.WikiProjectDigests > 0:
 			// Wiki dreaming report.
 			head := "📖 Wiki Dream 완료"
 			if failed {
@@ -411,6 +419,9 @@ func (s *Service) notifyDreaming(report *DreamReport, err error) {
 			}
 			msg = fmt.Sprintf("%s: 제안 %d, 생성 %d, 수정 %d (%.1fs)",
 				head, report.WikiUpdatesProposed, report.WikiPagesCreated, report.WikiPagesUpdated, dur)
+			if report.WikiProjectDigests > 0 {
+				msg += fmt.Sprintf(", 근황 %d", report.WikiProjectDigests)
+			}
 		default:
 			head := "🌙 Aurora Dream 완료"
 			if failed {

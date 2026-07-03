@@ -476,14 +476,14 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 	// goroutine (server_lifecycle.go). See chat/prompt_snapshot_persist.go.
 	chat.ConfigurePromptSnapshots(config.ResolveStateDir(), s.logger)
 
-	// Wire wiki dreamer for autonomous diary → wiki consolidation.
-	if s.wikiDreamer != nil {
-		s.autonomousSvc.SetDreamer(s.wikiDreamer)
-	}
-
-	// Broadcast dreaming events to WebSocket clients.
+	// Broadcast dreaming events to WebSocket clients, and surface completed
+	// cycles that actually changed pages as a work-feed card — the proposal
+	// JSON always existed but had no user-facing surface.
 	s.autonomousSvc.OnEvent(func(event autonomous.CycleEvent) {
 		hub.Broadcast("dreaming.cycle", event)
+		if event.Type == "dreaming_completed" {
+			s.postDreamWorkfeedCard(event.DreamReport)
+		}
 	})
 
 	// Wire the proactive relay as the dreaming notifier, bound to a dedicated
@@ -493,6 +493,14 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 	// still answered with the dream delivery in view.
 	if n := s.proactiveRelay.notifierForSession(dreamWorkSessionKey); n != nil {
 		s.autonomousSvc.SetNotifier(n)
+	}
+
+	// Wire the wiki dreamer for autonomous diary → wiki consolidation — LAST:
+	// SetDreamer starts the dream timer loop, whose immediate overdue check can
+	// finish a short cycle right away, so the event listener and notifier above
+	// must already be in place or the first cycle's events would be dropped.
+	if s.wikiDreamer != nil {
+		s.autonomousSvc.SetDreamer(s.wikiDreamer)
 	}
 
 	// Register boot task: on startup (and daily thereafter), runs a full

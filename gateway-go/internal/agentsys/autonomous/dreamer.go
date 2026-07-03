@@ -16,21 +16,25 @@ type Dreamer interface {
 
 // DreamReport summarizes the results of a dreaming cycle.
 type DreamReport struct {
-	FactsVerified       int      `json:"factsVerified"`
-	FactsMerged         int      `json:"factsMerged"`
-	FactsExpired        int      `json:"factsExpired"`
-	FactsPruned         int      `json:"factsPruned"`
-	PatternsExtracted   int      `json:"patternsExtracted"`
-	UserModelUpdated    int      `json:"userModelUpdated"`
-	MutualUpdated       int      `json:"mutualUpdated"`
-	WikiPagesCreated    int      `json:"wikiPagesCreated,omitempty"`
-	WikiPagesUpdated    int      `json:"wikiPagesUpdated,omitempty"`
-	WikiUpdatesProposed int      `json:"wikiUpdatesProposed,omitempty"`
-	WikiProposalPath    string   `json:"wikiProposalPath,omitempty"`
-	VerifyFindings      []string `json:"verifyFindings,omitempty"`
-	WikiGraphNodes      int      `json:"wikiGraphNodes,omitempty"`
-	WikiGraphEdges      int      `json:"wikiGraphEdges,omitempty"`
-	WikiGraphClustered  bool     `json:"wikiGraphClustered,omitempty"`
+	FactsVerified       int `json:"factsVerified"`
+	FactsMerged         int `json:"factsMerged"`
+	FactsExpired        int `json:"factsExpired"`
+	FactsPruned         int `json:"factsPruned"`
+	PatternsExtracted   int `json:"patternsExtracted"`
+	UserModelUpdated    int `json:"userModelUpdated"`
+	MutualUpdated       int `json:"mutualUpdated"`
+	WikiPagesCreated    int `json:"wikiPagesCreated,omitempty"`
+	WikiPagesUpdated    int `json:"wikiPagesUpdated,omitempty"`
+	WikiUpdatesProposed int `json:"wikiUpdatesProposed,omitempty"`
+	// WikiProjectDigests counts project 대표페이지 "## 현재 상태" sections the
+	// cycle refreshed (Phase 3d) — page mutations outside the created/updated
+	// apply counters, so digest-only cycles still register as page-changing.
+	WikiProjectDigests int      `json:"wikiProjectDigests,omitempty"`
+	WikiProposalPath   string   `json:"wikiProposalPath,omitempty"`
+	VerifyFindings     []string `json:"verifyFindings,omitempty"`
+	WikiGraphNodes     int      `json:"wikiGraphNodes,omitempty"`
+	WikiGraphEdges     int      `json:"wikiGraphEdges,omitempty"`
+	WikiGraphClustered bool     `json:"wikiGraphClustered,omitempty"`
 	// WikiChangeSummary is a preformatted, human-readable block describing
 	// what this cycle changed (paths, git snapshot hash, diffstat, rollback
 	// hint). Appended verbatim to the dream notification.

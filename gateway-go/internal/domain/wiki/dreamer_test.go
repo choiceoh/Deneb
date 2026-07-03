@@ -200,9 +200,12 @@ func TestParseWikiUpdates_SkipsMalformedItem(t *testing.T) {
 		{"action":"create","path":"bad.md","title":"B","importance":"not-a-number"},
 		{"action":"update","path":"good/c.md","title":"C","supersedes":["x.md","y.md"]}
 	]`
-	updates, err := parseWikiUpdates(text, nil)
+	updates, partial, err := parseWikiUpdates(text, nil)
 	if err != nil {
 		t.Fatalf("parse: %v", err)
+	}
+	if partial {
+		t.Error("per-item skips on an intact array must not report partial")
 	}
 	if len(updates) != 2 {
 		t.Fatalf("expected 2 well-formed updates (1 skipped), got %d: %+v", len(updates), updates)
@@ -218,7 +221,7 @@ func TestParseWikiUpdates_SkipsMalformedItem(t *testing.T) {
 // TestParseWikiUpdates_NonArrayIsError verifies a non-array response is a
 // genuine total failure (caller backs off and re-consumes the diary content).
 func TestParseWikiUpdates_NonArrayIsError(t *testing.T) {
-	if _, err := parseWikiUpdates(`{"not":"an array"}`, nil); err == nil {
+	if _, _, err := parseWikiUpdates(`{"not":"an array"}`, nil); err == nil {
 		t.Fatal("expected error for non-array response")
 	}
 }
@@ -277,9 +280,12 @@ func TestParseWikiUpdates_SalvagesDamagedArray(t *testing.T) {
 		text := `[
   {"action":"update","path":"프로젝트/a/대표.md","title":"A","content":"본문"},
   {"action":"create","path":"프로젝트/b/대표.md","title":"B","content":"잘리는 중`
-		updates, err := parseWikiUpdates(text, nil)
+		updates, partial, err := parseWikiUpdates(text, nil)
 		if err != nil {
 			t.Fatalf("expected salvage, got error: %v", err)
+		}
+		if !partial {
+			t.Error("salvaged array must report partial")
 		}
 		if len(updates) != 1 || updates[0].Path != "프로젝트/a/대표.md" {
 			t.Fatalf("updates = %+v, want the one complete item", updates)
@@ -292,9 +298,12 @@ func TestParseWikiUpdates_SalvagesDamagedArray(t *testing.T) {
   {"action":"update","path":"프로젝트/a/대표.md","title":"A"},
   {"action":"update","path":"프로젝트/b/대표.md","summary":"98MW EPC — "회의" 이후"}
 ]`
-		updates, err := parseWikiUpdates(text, nil)
+		updates, partial, err := parseWikiUpdates(text, nil)
 		if err != nil {
 			t.Fatalf("expected salvage, got error: %v", err)
+		}
+		if !partial {
+			t.Error("salvaged array must report partial")
 		}
 		if len(updates) != 1 || updates[0].Path != "프로젝트/a/대표.md" {
 			t.Fatalf("updates = %+v, want the one complete item", updates)
@@ -302,8 +311,26 @@ func TestParseWikiUpdates_SalvagesDamagedArray(t *testing.T) {
 	})
 
 	t.Run("first element already damaged still errors", func(t *testing.T) {
-		if _, err := parseWikiUpdates(`[{"broken": }`, nil); err == nil {
+		if _, _, err := parseWikiUpdates(`[{"broken": }`, nil); err == nil {
 			t.Fatal("expected error when nothing is salvageable")
+		}
+	})
+
+	t.Run("trailing junk after a complete array is not partial", func(t *testing.T) {
+		text := `[
+  {"action":"update","path":"프로젝트/a/대표.md","title":"A","content":"본문"},
+  {"action":"create","path":"프로젝트/b/대표.md","title":"B","content":"본문"}
+]
+이상으로 위키 갱신 제안을 마칩니다.`
+		updates, partial, err := parseWikiUpdates(text, nil)
+		if err != nil {
+			t.Fatalf("expected clean parse, got error: %v", err)
+		}
+		if partial {
+			t.Error("complete array + trailing junk must not report partial (nothing was lost)")
+		}
+		if len(updates) != 2 {
+			t.Fatalf("updates = %+v, want both items", updates)
 		}
 	})
 }
