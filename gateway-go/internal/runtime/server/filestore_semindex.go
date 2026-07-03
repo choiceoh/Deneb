@@ -108,9 +108,11 @@ func (s *Server) fileSemanticSearch(ctx context.Context, query string, max int) 
 	return live, nil
 }
 
-// fileIndexRemove drops a deleted/moved-away path from the semantic index
-// immediately (between 15-min reindex passes). Wired into the files RPC delete
-// path. No-op when the index isn't enabled.
+// fileIndexRemove drops a path's vectors from the semantic index immediately
+// (between 15-min reindex passes). Wired into the files RPC delete path AND
+// the overwrite-save path (an in-place replace leaves stale-content vectors;
+// dropping them beats ranking the file by text it no longer contains — the
+// next reindex re-embeds it). No-op when the index isn't enabled.
 func (s *Server) fileIndexRemove(path string) {
 	if s.fileSemanticIndex == nil {
 		return

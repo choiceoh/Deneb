@@ -97,6 +97,27 @@ func TestDreamerLLMShape(t *testing.T) {
 		}
 	})
 
+	t.Run("deneb.json reasoning:true override gets budget headroom", func(t *testing.T) {
+		// A model the builtin prefix table doesn't know, declared a reasoning
+		// endpoint by its provider's deneb.json entry (CapabilityForModel
+		// layering) — must budget like a builtin reasoning model.
+		yes := true
+		reg := modelrole.NewRegistryWithOptions(slog.Default(), modelrole.RegistryOptions{
+			MainModel:        "zai/main-model",
+			LightweightModel: "mycloud/mystery-reasoner",
+			Providers: map[string]modelrole.ProviderResolved{
+				"mycloud": {BaseURL: "http://127.0.0.1:1/v1", Reasoning: &yes},
+			},
+		})
+		extra, synthMax := dreamerLLMShape(reg)
+		if extra != nil {
+			t.Errorf("extra = %v, want nil (no template toggle off vLLM)", extra)
+		}
+		if synthMax != 16384 {
+			t.Errorf("synthMax = %d, want 16384 (provider-declared reasoning)", synthMax)
+		}
+	})
+
 	t.Run("routing.toggleKwarg override shapes a config-declared dual-mode model", func(t *testing.T) {
 		kw := "custom_thinking"
 		reg := modelrole.NewRegistryWithOptions(slog.Default(), modelrole.RegistryOptions{

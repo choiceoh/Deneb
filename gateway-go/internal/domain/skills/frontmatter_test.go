@@ -1,9 +1,70 @@
 package skills
 
 import (
+	"io/fs"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
+
+// TestBundledSkillMetadataResolves sweeps the repo's bundled skills/ tree:
+// every SKILL.md that declares a metadata block must parse to non-nil deneb
+// metadata. ResolveDenebMetadata fails SILENTLY (nil) on malformed JSON, which
+// drops triggers/tags/related_skills without any error — kb-interview shipped
+// with a broken "tags": key and its auto-surfacing triggers were dead until
+// this sweep existed. Skipped when the repo skills/ dir isn't present (e.g.
+// the module built outside the repo).
+func TestBundledSkillMetadataResolves(t *testing.T) {
+	skillsDir := filepath.Join("..", "..", "..", "..", "skills")
+	if info, err := os.Stat(skillsDir); err != nil || !info.IsDir() {
+		t.Skipf("bundled skills dir not found at %s", skillsDir)
+	}
+	checked := 0
+	err := filepath.WalkDir(skillsDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() || d.Name() != "SKILL.md" {
+			return err
+		}
+		content, rerr := os.ReadFile(path)
+		if rerr != nil {
+			t.Errorf("read %s: %v", path, rerr)
+			return nil
+		}
+		fm := ParseFrontmatter(string(content))
+		raw, ok := fm["metadata"]
+		if !ok || raw == "" {
+			return nil // no metadata block — nothing to validate
+		}
+		checked++
+		if meta := ResolveDenebMetadata(fm); meta == nil {
+			t.Errorf("%s: metadata block does not resolve (malformed JSON?) — triggers/tags are silently dropped", path)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk: %v", err)
+	}
+	if checked == 0 {
+		t.Fatal("no SKILL.md with a metadata block found — sweep is not covering anything")
+	}
+
+	// Pin the kb-interview fix specifically: its triggers must survive to the
+	// auto-surfacing matcher (skill_hints).
+	kb, err := os.ReadFile(filepath.Join(skillsDir, "knowledge", "kb-interview", "SKILL.md"))
+	if err != nil {
+		t.Skipf("kb-interview skill not found: %v", err)
+	}
+	meta := ResolveDenebMetadata(ParseFrontmatter(string(kb)))
+	if meta == nil {
+		t.Fatal("kb-interview metadata must resolve")
+	}
+	if len(meta.Triggers) == 0 {
+		t.Error("kb-interview triggers = empty, want the declared utterance triggers")
+	}
+	if len(meta.Tags) == 0 {
+		t.Error("kb-interview tags = empty, want the declared tags")
+	}
+}
 
 func TestParseFrontmatter_Basic(t *testing.T) {
 	content := `---

@@ -14,6 +14,11 @@ type fakeRunner struct {
 	calls []fakeCall
 	fail  map[string]bool   // keyed by first arg (the git subcommand)
 	out   map[string][]byte // canned stdout keyed by first arg
+	// seq queues per-call stdout for a subcommand, popped front-first and
+	// taking precedence over out; a drained queue falls back to out. Lets a
+	// test model state changes across repeated calls — e.g. `git status`
+	// dirty before the commit, clean after (AfterTurn's re-checks).
+	seq map[string][][]byte
 }
 
 type fakeCall struct {
@@ -30,6 +35,10 @@ func (f *fakeRunner) Run(_ context.Context, dir, name string, args ...string) ([
 	}
 	if f.fail[key] {
 		return nil, fmt.Errorf("forced fail: %s", key)
+	}
+	if q := f.seq[key]; len(q) > 0 {
+		f.seq[key] = q[1:]
+		return q[0], nil
 	}
 	return f.out[key], nil
 }

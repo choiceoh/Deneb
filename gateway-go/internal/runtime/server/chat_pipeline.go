@@ -359,8 +359,11 @@ func dreamerLLMShape(reg *modelrole.Registry) (extraBody map[string]any, synthes
 	// nil kwargs + a reasoning model = untoggleable chain-of-thought: the
 	// only defense is budgeting reasoning + answer. The dreamer scales its
 	// non-synthesis calls by the same 4x (llmRequest). Non-reasoning models
-	// with nil kwargs (direct cloud providers) need no headroom.
-	if modelrole.IsReasoningModel(cfg.Model) {
+	// with nil kwargs (direct cloud providers) need no headroom. Reasoning is
+	// checked registry-aware, not builtin-only: a deneb.json provider entry
+	// declaring reasoning:true (a model the builtin prefix table doesn't
+	// know) must get the same headroom.
+	if modelrole.IsReasoningModel(cfg.Model) || reg.CapabilityForModel(cfg.ProviderID, cfg.Model).Reasoning {
 		return nil, 16384
 	}
 	return nil, 0

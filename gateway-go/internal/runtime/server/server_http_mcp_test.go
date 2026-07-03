@@ -201,18 +201,74 @@ func TestMCP_TransportRules(t *testing.T) {
 
 // TestMCP_ToolTableIsReadOnly guards the allowlist: every mapped method must be
 // a read verb — a write method appearing here is a security regression, not a
-// mapping tweak.
+// mapping tweak. Verbs match on word boundaries (the "."/"_" segments of the
+// method name), not raw substrings: substring matching false-positives on
+// legitimate read methods that merely CONTAIN a verb (e.g. "unarchived",
+// "bookmarks"). A segment-prefix match still catches derived forms
+// ("creates", "marked") — over-flagging is fine for a security tripwire.
 func TestMCP_ToolTableIsReadOnly(t *testing.T) {
 	writeVerbs := []string{"write", "create", "update", "delete", "move", "merge", "send", "accept", "reject", "mark", "archive", "trash", "close", "reopen", "analyze", "ask"}
 	for _, tool := range mcpTools {
 		if !strings.HasPrefix(tool.Method, "miniapp.") {
 			t.Errorf("%s maps outside the miniapp surface: %s", tool.Name, tool.Method)
 		}
-		lower := strings.ToLower(tool.Method)
-		for _, verb := range writeVerbs {
-			if strings.Contains(lower, verb) {
-				t.Errorf("%s maps to a write-ish method %s (verb %q)", tool.Name, tool.Method, verb)
+		segments := strings.FieldsFunc(strings.ToLower(tool.Method), func(r rune) bool {
+			return r == '.' || r == '_' || r == '-'
+		})
+		for _, seg := range segments {
+			for _, verb := range writeVerbs {
+				if strings.HasPrefix(seg, verb) {
+					t.Errorf("%s maps to a write-ish method %s (segment %q matches verb %q)", tool.Name, tool.Method, seg, verb)
+				}
 			}
 		}
+	}
+}
+
+// TestMCP_RejectsMalformedEnvelopes pins the JSON-RPC 2.0 envelope validation:
+// a wrong/missing jsonrpc version and object/array ids are invalid requests
+// (id echoed as null — an invalid id must not be echoed back).
+func TestMCP_RejectsMalformedEnvelopes(t *testing.T) {
+	token := withClientToken(t)
+	s := newTestServer(t)
+
+	cases := []struct {
+		name string
+		body string
+	}{
+		{"missing jsonrpc", `{"id":1,"method":"ping"}`},
+		{"wrong jsonrpc", `{"jsonrpc":"1.0","id":1,"method":"ping"}`},
+		{"object id", `{"jsonrpc":"2.0","id":{"a":1},"method":"ping"}`},
+		{"array id", `{"jsonrpc":"2.0","id":[1],"method":"ping"}`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			out := decodeMCP(t, postMCP(t, s, token, tc.body))
+			errObj, _ := out["error"].(map[string]any)
+			if errObj == nil {
+				t.Fatalf("expected a JSON-RPC error, got: %v", out)
+			}
+			if code, _ := errObj["code"].(float64); code != -32600 {
+				t.Errorf("code = %v, want -32600 (invalid request)", errObj["code"])
+			}
+			if out["id"] != nil {
+				t.Errorf("id = %v, want null (invalid/unusable request id)", out["id"])
+			}
+		})
+	}
+}
+
+// TestMCPInternalID pins the internal dispatch-id derivation: type-prefixed
+// (numeric 1 vs string "1" must not collide) and length-capped (a
+// client-chosen id can't inflate internal ids).
+func TestMCPInternalID(t *testing.T) {
+	num := mcpInternalID(json.RawMessage(`1`))
+	str := mcpInternalID(json.RawMessage(`"1"`))
+	if num == str {
+		t.Errorf("numeric 1 and string \"1\" collide: %q", num)
+	}
+	long := mcpInternalID(json.RawMessage(`"` + strings.Repeat("x", 500) + `"`))
+	if n := len([]rune(long)); n > 66 { // prefix + 64-rune cap
+		t.Errorf("derived id length = %d, want capped", n)
 	}
 }

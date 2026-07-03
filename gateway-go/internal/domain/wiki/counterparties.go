@@ -50,8 +50,10 @@ func IsFreemailDomain(domain string) bool {
 // lexical compare — Created is the analysis day and, unlike Updated, is not
 // re-stamped by later metadata churn such as ReclassifyUnlinkedMailAnalyses
 // moving an old mail into a project, which would wrongly re-activate a stale
-// sender domain for the whole window). Entries without Created (parsed from
-// a rendered index.md) fall back to Updated. Freemail domains are excluded.
+// sender domain for the whole window). Created is persisted in the index.md
+// TSV, so it survives gateway restarts; entries without it (parsed from a
+// pre-created-column index.md) fall back to Updated. Freemail domains are
+// excluded.
 // The iteration happens under the store's read lock (the returned map is a
 // fresh copy): index entries are mutated in place by writers, so callers
 // must never walk Index().Entries themselves (same contract as Tier1Pages).

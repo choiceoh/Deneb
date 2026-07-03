@@ -184,6 +184,17 @@ func (s *Server) handleMCP(w http.ResponseWriter, r *http.Request) {
 		s.writeMCPError(w, nil, -32700, "parse error: "+err.Error())
 		return
 	}
+	if msg.JSONRPC != "2.0" {
+		s.writeMCPError(w, nil, -32600, `jsonrpc must be "2.0"`)
+		return
+	}
+	// JSON-RPC ids are string, number, or null — an object/array id is an
+	// invalid request (and must not be echoed back; the reply id is null,
+	// per the spec's invalid-request rule).
+	if id := strings.TrimSpace(string(msg.ID)); strings.HasPrefix(id, "{") || strings.HasPrefix(id, "[") {
+		s.writeMCPError(w, nil, -32600, "id must be a string, number, or null")
+		return
+	}
 	if msg.Method == "" {
 		s.writeMCPError(w, msg.ID, -32600, "missing method")
 		return
@@ -252,7 +263,7 @@ func (s *Server) handleMCPToolCall(w http.ResponseWriter, r *http.Request, ident
 
 	frame := &protocol.RequestFrame{
 		Type:   protocol.FrameTypeRequest,
-		ID:     "mcp-" + strings.Trim(string(msg.ID), `"`),
+		ID:     "mcp-" + mcpInternalID(msg.ID),
 		Method: tool.Method,
 		Params: p.Arguments,
 	}
@@ -284,6 +295,25 @@ func (s *Server) handleMCPToolCall(w http.ResponseWriter, r *http.Request, ident
 	s.writeMCPResult(w, msg.ID, map[string]any{
 		"content": []map[string]any{{"type": "text", "text": text}},
 	})
+}
+
+// mcpInternalID derives the internal dispatch-frame id from a JSON-RPC id.
+// Type-prefixed so numeric 1 and string "1" never collide, and length-capped
+// so a client-chosen id can't inflate internal ids/log lines. The response is
+// matched synchronously (the JSON-RPC reply echoes msg.ID itself), so the
+// derived id is tracing-only — a cap-induced tie is harmless.
+func mcpInternalID(id json.RawMessage) string {
+	raw := string(id)
+	prefix := "n" // number (id validation upstream leaves string/number only)
+	if strings.HasPrefix(raw, `"`) {
+		prefix = "s"
+		raw = strings.Trim(raw, `"`)
+	}
+	const maxIDLen = 64
+	if r := []rune(raw); len(r) > maxIDLen {
+		raw = string(r[:maxIDLen]) // rune-safe: string ids may be non-ASCII
+	}
+	return prefix + raw
 }
 
 // negotiateMCPVersion echoes the client's requested protocol version when this

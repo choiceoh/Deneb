@@ -43,7 +43,7 @@ func TestIndex_RenderAndParse(t *testing.T) {
 		t.Error("missing last processed date")
 	}
 	// TSV header row.
-	if !strings.Contains(rendered, "id\tpath\ttitle\tsummary\ttags\timportance\tupdated\ttype\tconfidence\tbacklinks") {
+	if !strings.Contains(rendered, "id\tpath\ttitle\tsummary\ttags\timportance\tupdated\ttype\tconfidence\tbacklinks\tcreated") {
 		t.Error("missing TSV header row")
 	}
 	// TSV data should contain the entry fields.
@@ -119,6 +119,64 @@ func TestIndex_SaveAndReload(t *testing.T) {
 	}
 	if wikiEntry.Importance != 0.9 {
 		t.Errorf("wiki importance = %f, want 0.9", wikiEntry.Importance)
+	}
+}
+
+// TestIndex_CreatedPersistsAcrossReload pins the created column: NewStore
+// restores the index from index.md on every gateway restart, and
+// ActiveCounterpartyDomains keys its recency window off Created (falling back
+// to Updated only when absent). Before the column existed, every restart
+// blanked Created and the Updated fallback re-activated stale sender domains
+// whenever an old mail was reclassified (metadata churn re-stamps Updated).
+func TestIndex_CreatedPersistsAcrossReload(t *testing.T) {
+	dir := t.TempDir()
+	indexPath := filepath.Join(dir, "index.md")
+
+	idx := NewIndex()
+	idx.UpdateEntry("프로젝트/기아/메일분석/m1.md", &Page{
+		Meta: Frontmatter{
+			ID:       "m1",
+			Title:    "견적 요청",
+			Category: "프로젝트",
+			Tags:     []string{"acme.co.kr"},
+			Updated:  "2026-07-01",
+			Created:  "2026-05-02",
+		},
+	})
+	if err := idx.Save(indexPath); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	reloaded := testutil.Must(ParseIndex(indexPath))
+	entry, ok := reloaded.Entries["프로젝트/기아/메일분석/m1.md"]
+	if !ok {
+		t.Fatal("missing entry after reload")
+	}
+	if entry.Created != "2026-05-02" {
+		t.Errorf("Created = %q, want it to survive the render→parse roundtrip", entry.Created)
+	}
+	if entry.Updated != "2026-07-01" {
+		t.Errorf("Updated = %q, want 2026-07-01", entry.Updated)
+	}
+}
+
+// TestParseTSVLine_OldFormatWithoutCreated: a pre-created-column line (10
+// fields ending at backlinks) parses with Created empty — the callers'
+// Updated fallback covers it.
+func TestParseTSVLine_OldFormatWithoutCreated(t *testing.T) {
+	line := "m1\t프로젝트/기아/메일분석/m1.md\t견적 요청\t요약\tacme.co.kr\t0.50\t2026-07-01\tsource\thigh\t3"
+	got := parseTSVLine(line, "프로젝트")
+	if got.path != "프로젝트/기아/메일분석/m1.md" {
+		t.Fatalf("path = %q", got.path)
+	}
+	if got.entry.Created != "" {
+		t.Errorf("Created = %q, want empty for the old 10-field format", got.entry.Created)
+	}
+	if got.entry.Updated != "2026-07-01" {
+		t.Errorf("Updated = %q", got.entry.Updated)
+	}
+	if got.entry.Type != "source" || got.entry.Confidence != "high" {
+		t.Errorf("type/confidence = %q/%q, want source/high", got.entry.Type, got.entry.Confidence)
 	}
 }
 

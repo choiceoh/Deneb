@@ -32,8 +32,10 @@ type IndexEntry struct {
 	// Created is the page's frontmatter creation date (YYYY-MM-DD). Unlike
 	// Updated it is immutable across moves/reclassification, so recency
 	// windows that must not re-trigger on metadata churn key off it (e.g.
-	// ActiveCounterpartyDomains). Empty for entries parsed from a rendered
-	// index.md (the render doesn't carry it) — callers fall back to Updated.
+	// ActiveCounterpartyDomains). Persisted as the trailing TSV column so it
+	// survives a gateway restart (NewStore restores from index.md); empty only
+	// for entries parsed from a pre-created-column index.md — callers fall
+	// back to Updated.
 	Created    string // YYYY-MM-DD
 	Type       string // concept, entity, source, comparison, log
 	Confidence string // high, medium, low
@@ -113,7 +115,7 @@ func (idx *Index) Render() string {
 		})
 
 		sb.WriteString(fmt.Sprintf("## %s\n\n", cat))
-		sb.WriteString("id\tpath\ttitle\tsummary\ttags\timportance\tupdated\ttype\tconfidence\tbacklinks\n")
+		sb.WriteString("id\tpath\ttitle\tsummary\ttags\timportance\tupdated\ttype\tconfidence\tbacklinks\tcreated\n")
 		for _, e := range entries {
 			tags := strings.Join(e.entry.Tags, ",")
 			imp := ""
@@ -121,8 +123,11 @@ func (idx *Index) Render() string {
 				imp = fmt.Sprintf("%.2f", e.entry.Importance)
 			}
 			bl := backlinkCount[e.path]
+			// created rides as the LAST column (after the render-computed
+			// backlinks) so every older field keeps its position — old parsers
+			// and old files stay compatible; ParseIndex tolerates its absence.
 			sb.WriteString(fmt.Sprintf(
-				"%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%d\n",
+				"%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%d\t%s\n",
 				sanitizeTSV(e.entry.ID),
 				e.path,
 				sanitizeTSV(e.entry.Title),
@@ -133,6 +138,7 @@ func (idx *Index) Render() string {
 				sanitizeTSV(e.entry.Type),
 				sanitizeTSV(e.entry.Confidence),
 				bl,
+				sanitizeTSV(e.entry.Created),
 			))
 		}
 		sb.WriteString("\n")
@@ -218,8 +224,11 @@ func ParseIndex(path string) (*Index, error) {
 }
 
 // parseTSVLine parses a TSV data row:
-// id\tpath\ttitle\tsummary\ttags\timportance\tupdated\ttype\tconfidence\tbacklinks
-// Backward-compatible: old 8-field format (without type/confidence) still parses correctly.
+// id\tpath\ttitle\tsummary\ttags\timportance\tupdated\ttype\tconfidence\tbacklinks\tcreated
+// Backward-compatible: the old 10-field format (without created) and the old
+// 8-field format (without type/confidence) still parse correctly — missing
+// trailing columns simply stay zero (Created "" falls back to Updated at the
+// call sites).
 func parseTSVLine(line, category string) indexRenderEntry {
 	fields := strings.Split(line, "\t")
 	if len(fields) < 2 {
@@ -268,7 +277,11 @@ func parseTSVLine(line, category string) indexRenderEntry {
 			e.Confidence = fields[8]
 		}
 	}
-	// backlinks (last field) is computed at render time, not stored.
+	// backlinks (field 9) is computed at render time, not stored.
+	// created (field 10) is absent in pre-created-column files → stays "".
+	if len(fields) > 10 {
+		e.Created = fields[10]
+	}
 
 	return indexRenderEntry{path: path, entry: e}
 }

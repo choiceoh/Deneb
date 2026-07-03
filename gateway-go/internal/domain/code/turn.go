@@ -80,12 +80,35 @@ func AfterTurn(ctx context.Context, m *Manager, store *Store, taskID, summary st
 
 	// 2. Verify build/tests and flip the rail status. An unknown toolchain yields
 	//    no pass/fail signal — leave the status as-is (mirrors miniapp.code.verify).
+	//
+	// Verify builds the LIVE worktree while AfterTurn runs detached from the
+	// turn loop — if the user already fired the next coding turn, its
+	// in-progress edits would be graded under THIS turn's checkpoint and could
+	// transiently mislabel the rail. Only grade when the tree still equals the
+	// checkpoint just committed: dirty again → keep the prior status and let
+	// the next turn's AfterTurn grade the combined state. Best-effort by
+	// design (an edit landing mid-verify still races — accepted tradeoff to
+	// stay lock-free; the window shrinks from the whole build to one check).
+	if dirtyAgain, err := m.hasUncommitted(ctx, sess.Dir); err != nil || dirtyAgain {
+		if err != nil {
+			logger.Warn("coding turn-end: pre-verify status check failed", "task", taskID, "error", err)
+		} else {
+			logger.Debug("coding turn-end: tree dirty again (next turn in progress), skipping verify", "task", taskID)
+		}
+		return
+	}
 	res, err := m.Verify(ctx, sess.Dir)
 	if err != nil {
 		logger.Warn("coding turn-end: verify failed to run", "task", taskID, "error", err)
 		return
 	}
 	if res.Kind == KindUnknown {
+		return
+	}
+	// Same race, other side: edits that landed DURING the build mean the
+	// result no longer describes the checkpoint — don't flip the rail on it.
+	if dirtyAgain, err := m.hasUncommitted(ctx, sess.Dir); err == nil && dirtyAgain {
+		logger.Debug("coding turn-end: tree changed during verify, keeping prior status", "task", taskID)
 		return
 	}
 	status := StatusFailed

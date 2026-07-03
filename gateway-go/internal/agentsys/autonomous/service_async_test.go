@@ -71,6 +71,20 @@ func waitForEvent(t *testing.T, ch <-chan CycleEvent, typ string) CycleEvent {
 	}
 }
 
+// setDreamerNoTimer installs the dreamer WITHOUT SetDreamer's dream-timer
+// goroutine. The timer's boot-time immediate tick (added for auto-deploy
+// restart resilience) can start a dream cycle asynchronously and race the
+// test's own IncrementDreamTurn: if that tick's run is still in progress, the
+// dreamRunning early-return skips IncrementTurn (incrementCount==0 flake); if
+// it finished and the fake doesn't reset ShouldDream, the test's call starts
+// a SECOND run (runCount==2 flake). Tests asserting per-call semantics need
+// the trigger to be the test's own call, so they bypass the timer entirely.
+func setDreamerNoTimer(svc *Service, d Dreamer) {
+	svc.mu.Lock()
+	svc.dreamer = d
+	svc.mu.Unlock()
+}
+
 func TestServiceIncrementDreamTurnRunsDreamCycle(t *testing.T) {
 	svc := NewService(nil)
 	d := &fakeDreamer{shouldDream: true, runReport: &DreamReport{FactsVerified: 2, DurationMs: 250}}
@@ -78,7 +92,9 @@ func TestServiceIncrementDreamTurnRunsDreamCycle(t *testing.T) {
 	events := make(chan CycleEvent, 4)
 	svc.OnEvent(func(ev CycleEvent) { events <- ev })
 	svc.SetNotifier(n)
-	svc.SetDreamer(d)
+	// No timer: its immediate tick could hold dreamRunning when the call below
+	// arrives, skipping IncrementTurn (incrementCount==0 flake).
+	setDreamerNoTimer(svc, d)
 
 	svc.IncrementDreamTurn(context.Background())
 
@@ -114,7 +130,7 @@ func TestServiceIncrementDreamTurnRunErrorEmitsFailure(t *testing.T) {
 	events := make(chan CycleEvent, 4)
 	svc.OnEvent(func(ev CycleEvent) { events <- ev })
 	svc.SetNotifier(n)
-	svc.SetDreamer(d)
+	setDreamerNoTimer(svc, d) // deterministic trigger (see setDreamerNoTimer)
 
 	svc.IncrementDreamTurn(context.Background())
 
@@ -260,7 +276,9 @@ func TestService_ConcurrentIncrementDreamTurn(t *testing.T) {
 	}
 	events := make(chan CycleEvent, 20)
 	svc.OnEvent(func(ev CycleEvent) { events <- ev })
-	svc.SetDreamer(d)
+	// No timer: slowFakeDreamer never resets ShouldDream, so a timer-tick run
+	// finishing before the goroutines below fire would allow a second run.
+	setDreamerNoTimer(svc, d)
 
 	// Launch 10 goroutines calling IncrementDreamTurn simultaneously.
 	var wg sync.WaitGroup
@@ -345,7 +363,7 @@ func TestService_DreamNotRunWhileAlreadyRunning(t *testing.T) {
 	}
 	events := make(chan CycleEvent, 10)
 	svc.OnEvent(func(ev CycleEvent) { events <- ev })
-	svc.SetDreamer(slowDreamer)
+	setDreamerNoTimer(svc, slowDreamer) // no ShouldDream reset → timer could double-run
 
 	// First call triggers dream.
 	svc.IncrementDreamTurn(context.Background())

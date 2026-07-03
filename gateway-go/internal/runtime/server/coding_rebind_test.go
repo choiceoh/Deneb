@@ -94,8 +94,9 @@ func TestSanitizeCheckpointLabel(t *testing.T) {
 		// are stripped, not just wrapping ones).
 		{"`config.go` 상수 정리", "config.go 상수 정리"},
 		{"   \n\n", ""},
-		// Cap = the 40-rune labeler contract (checkpointSummarySystem).
-		{strings.Repeat("가", 80), strings.Repeat("가", 40) + "…"},
+		// Cap = the 40-rune labeler contract (checkpointSummarySystem):
+		// 39 content runes + ellipsis = 40 total.
+		{strings.Repeat("가", 80), strings.Repeat("가", 39) + "…"},
 	}
 	for _, c := range cases {
 		if got := sanitizeCheckpointLabel(c.in); got != c.want {
