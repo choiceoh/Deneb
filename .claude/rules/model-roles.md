@@ -81,6 +81,7 @@ globs: gateway-go/internal/ai/modelrole/**, gateway-go/internal/pipeline/pilot/*
 5. **★ analysis 역할은 현재 클라우드다.** 헬퍼 콜을 여기 얹으면 샌다. "왜 로컬 lightweight로 안 되나"를 답 못 하면 lightweight를 써라. (닥스트링이 `CallLocalLLM`/local을 가리키는데 코드가 `CallAnalysisLLM`이면 그건 드리프트 — 원복하라.)
 6. **코드에 모델 이름 하드코딩 금지.** 역할만 고른다.
 7. **★ 도구 무거운 역할(main/fallback)에 새 모델을 배선하기 전, 후보의 도구호출 역량을 측정하라.** 챗 `main`은 150+ 도구를 쓰고 도구호출이 에이전트의 성패를 가른다 — `/v1/models` 200·속도만으로는 빈 `tool_calls`(서빙설정 미스로 도구가 안 나오는 인프라 오진단의 단골)나 프롬프트 인젝션 취약을 못 잡는다. SparkFleet의 `run_tool_eval`(tool-eval-bench 래퍼)로 그 엔드포인트를 벤치해 **멀티스텝 체인·에러복구·Category K(안전·프롬프트 인젝션)** 점수를 확인하고 배선한다(결과 회독: `tool_eval_history`). 이건 코드 게이트가 아니라 **운영자 승격 절차**다 — 게이트웨이는 모델을 소비만 하고, 검증은 플릿 매니저(sparkfleet)에서 한다.
+8. **★ 텍스트 역할(lightweight/tiny) 교체 후보는 `scripts/dev/lightweight-model-ab.py`로 실부하 A/B 후 승격하라.** 공개 벤치(특히 에이전트 벤치)는 이 역할의 실제 임무 — 한국어 압축 요약·JSON 추출·짧은 제목·바운드 판정(한 단어) — 를 측정하지 않는다. 이 스크립트가 그 4종을 결정적 채점(사실 보존 체크리스트·JSON 파싱·형식 규칙 + 레이턴시/장황함)으로 비교한다: wormhole에 두 모델을 서빙해 두고 `python3 scripts/dev/lightweight-model-ab.py --model-a <현역> --model-b <후보>` → `AB_VERDICT` 우세 + 레이턴시/토큰 비열화 확인 후 deneb.json 역할 매핑 교체. (에이전트 튜닝 모델의 전형적 실패 모드 — 요약에 계획 서두, 코드펜스 JSON, 판정에 사족 — 을 채점이 감지함은 `--mock` 셀프테스트로 고정.)
 
 ## PR 체크리스트 (새 LLM 호출 / 역할 변경 시)
 
@@ -89,3 +90,4 @@ globs: gateway-go/internal/ai/modelrole/**, gateway-go/internal/pipeline/pilot/*
 - [ ] analysis(클라우드) 선택 시 "왜 로컬 lightweight로 안 되나" 명시
 - [ ] 요약/추출/분류류는 **로컬 lightweight/tiny부터** 검토
 - [ ] 도구 무거운 역할(main/fallback) 배선·교체 시: SparkFleet `run_tool_eval`로 후보 모델의 도구호출 역량(특히 Category K·멀티스텝 체인) 확인
+- [ ] lightweight/tiny 모델 교체 시: `scripts/dev/lightweight-model-ab.py` A/B 결과(AB_METRIC/AB_VERDICT + 레이턴시·토큰) 확인
