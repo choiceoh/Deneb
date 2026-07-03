@@ -6,13 +6,16 @@ describe("splitAttachable", () => {
   it("keeps supported files and skips unsupported/oversized ones with notices", () => {
     const img = new File(["x"], "a.png", { type: "image/png" });
     const doc = new File(["x"], "b.pdf", { type: "" }); // OS drops often omit the type — inferred from the extension
+    // OS-backed drops/pastes often report a GENERIC type — must fall back to the
+    // extension, not get rejected as unsupported (리뷰 지적: octet-stream pdf 거부).
+    const generic = new File(["x"], "b2.docx", { type: "application/octet-stream" });
     const vid = new File(["x"], "c.mp4", { type: "video/mp4" });
     const unknown = new File(["x"], "d.xyz", { type: "" });
     const big = new File(["x"], "e.pdf", { type: "application/pdf" });
     Object.defineProperty(big, "size", { value: (MAX_ATTACH_MB + 1) * 1024 * 1024 });
 
-    const { ok, skipped } = splitAttachable([img, doc, vid, unknown, big]);
-    expect(ok).toEqual([img, doc]);
+    const { ok, skipped } = splitAttachable([img, doc, generic, vid, unknown, big]);
+    expect(ok).toEqual([img, doc, generic]);
     expect(skipped).toHaveLength(3);
     expect(skipped[0]).toContain("c.mp4");
     expect(skipped[0]).toContain("형식");

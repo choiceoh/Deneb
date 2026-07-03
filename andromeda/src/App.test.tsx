@@ -433,6 +433,59 @@ describe("Workstation (connected, fixtures)", () => {
     expect(composer).not.toBeDisabled();
   });
 
+  it("does not steal focus back when the user moved it elsewhere during a turn", async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init?: RequestInit) => {
+        const body = JSON.parse(String(init?.body ?? "{}")) as { method?: string };
+        const method = String(body.method ?? "");
+        if (method === "miniapp.capture.image") {
+          await gate; // hold the turn open until the test moves focus
+          return new Response(JSON.stringify({ ok: true, payload: { text: "분석 완료" } }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        const payload =
+          method === "miniapp.models.list"
+            ? { current: "", sections: [] }
+            : method === "miniapp.sessions.recent"
+              ? { sessions: [], count: 0 }
+              : {};
+        return new Response(JSON.stringify({ ok: true, payload }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }),
+    );
+
+    renderWithProviders(<AIPanel cfg={{ url: "http://test", token: "tok" }} />, { connected: true });
+
+    const panel = screen.getByRole("complementary");
+    fireEvent.drop(panel, {
+      dataTransfer: { files: [new File(["i"], "a.png", { type: "image/png" })], types: ["Files"] },
+    });
+    // busy: the non-stop attach state replaces the send button
+    await screen.findByRole("button", { name: "첨부 분석 중" });
+
+    // the user moves focus elsewhere mid-turn…
+    const historyBtn = screen.getByRole("button", { name: "대화 기록" });
+    historyBtn.focus();
+    expect(historyBtn).toHaveFocus();
+
+    // …then the turn finishes: focus must STAY where the user put it.
+    release();
+    await screen.findByRole("group", { name: "첨부 분석 결과" });
+    const composer = screen.getByRole("textbox", { name: "Deneb에게 메시지" });
+    await waitFor(() => expect(composer).not.toBeDisabled());
+    expect(historyBtn).toHaveFocus();
+    expect(composer).not.toHaveFocus();
+  });
+
   it("shows a non-stop state while an attachment is being analyzed (capture is not abortable)", async () => {
     vi.stubGlobal(
       "fetch",

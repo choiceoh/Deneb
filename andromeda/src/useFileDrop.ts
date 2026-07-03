@@ -6,22 +6,35 @@ import { type DragEvent as ReactDragEvent, useEffect, useRef, useState } from "r
 // 깜빡임 없이 유지한다. 파일이 아닌 드래그(텍스트 선택 등)는 건드리지 않아 평소 동작 그대로다.
 // Tauri 창에서는 dragDropEnabled:false(src-tauri/tauri.conf.json)가 전제 — 그래야 OS 파일
 // 드래그가 웹뷰 HTML5 DnD 이벤트(File 객체)로 그대로 들어온다.
+// Singleton window-level guard, refcounted across mounted drop zones.
+let windowGuardRefs = 0;
+function windowDragGuard(e: globalThis.DragEvent) {
+  if (e.dataTransfer && Array.from(e.dataTransfer.types).includes("Files")) e.preventDefault();
+}
+function acquireWindowDragGuard() {
+  if (windowGuardRefs++ === 0) {
+    window.addEventListener("dragover", windowDragGuard);
+    window.addEventListener("drop", windowDragGuard);
+  }
+}
+function releaseWindowDragGuard() {
+  if (--windowGuardRefs === 0) {
+    window.removeEventListener("dragover", windowDragGuard);
+    window.removeEventListener("drop", windowDragGuard);
+  }
+}
+
 export function useFileDrop(enabled: boolean, onFiles: (files: File[]) => void) {
   const depth = useRef(0);
   const [over, setOver] = useState(false);
 
   // 존 밖(창 아무 데나)에 파일을 놓으면 브라우저/웹뷰가 그 파일로 이동해 앱이 날아간다 —
-  // 파일 드래그에 한해 창 수준 기본 동작을 막는다 (텍스트 드래그는 통과).
+  // 파일 드래그에 한해 창 수준 기본 동작을 막는다 (텍스트 드래그는 통과). 여러 드롭존이
+  // 마운트돼도(우측 패널+채팅 탭) 리스너는 refcount로 한 벌만 단다 — dragover는 고빈도
+  // 이벤트라 중복 등록이 그대로 중복 비용이 된다.
   useEffect(() => {
-    const guard = (e: globalThis.DragEvent) => {
-      if (e.dataTransfer && Array.from(e.dataTransfer.types).includes("Files")) e.preventDefault();
-    };
-    window.addEventListener("dragover", guard);
-    window.addEventListener("drop", guard);
-    return () => {
-      window.removeEventListener("dragover", guard);
-      window.removeEventListener("drop", guard);
-    };
+    acquireWindowDragGuard();
+    return releaseWindowDragGuard;
   }, []);
 
   const hasFiles = (e: ReactDragEvent) => Array.from(e.dataTransfer?.types ?? []).includes("Files");
