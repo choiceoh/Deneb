@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.50](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.49...andromeda-v0.0.50) (2026-07-03)
+
+
+### 🐛 Bug Fixes
+
+* **andromeda:** 리뷰 잔여분 — 노트 저장 위장·첨부 중 세션 가드·HWP 상한/DIFAT·탭 동기화 외 ([#3066](https://github.com/choiceoh/Deneb/issues/3066)) ([335d5e4](https://github.com/choiceoh/Deneb/commit/335d5e4cbc72bc84cdc72764fa95fe25ef0ac2f3))
+
 ## [0.0.49](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.48...andromeda-v0.0.49) (2026-07-03)
 
 
