@@ -38,21 +38,23 @@ func cachedResolvedSkills() []skills.PromptSkill {
 }
 
 // buildSkillHints returns the tail-addition block pointing at skills whose
-// triggers match the user message, or "" when nothing matches. Skipped for
-// system-internal runs (session "system:*" — skill-review forks carry SKILL.md
-// bodies as messages, which would self-trigger on their own trigger lists) and
-// for recall-suppressed runs (ephemeral probes share the same "no side
-// context" intent).
-func buildSkillHints(params RunParams, resolved []skills.PromptSkill) string {
+// triggers match the user message, plus the matched skill names (for the
+// hint-fired measurement event — joined against skill_usage.jsonl this yields
+// the hint→consult conversion rate). Both empty when nothing matches. Skipped
+// for system-internal runs (session "system:*" — skill-review forks carry
+// SKILL.md bodies as messages, which would self-trigger on their own trigger
+// lists) and for recall-suppressed runs (ephemeral probes share the same "no
+// side context" intent).
+func buildSkillHints(params RunParams, resolved []skills.PromptSkill) (string, []string) {
 	if params.EphemeralUser || params.SkipRecall {
-		return ""
+		return "", nil
 	}
 	if strings.HasPrefix(params.SessionKey, "system:") {
-		return ""
+		return "", nil
 	}
 	message := strings.ToLower(strings.TrimSpace(params.Message))
 	if message == "" || len(resolved) == 0 {
-		return ""
+		return "", nil
 	}
 
 	type hint struct {
@@ -80,7 +82,7 @@ func buildSkillHints(params RunParams, resolved []skills.PromptSkill) string {
 		}
 	}
 	if len(hints) == 0 {
-		return ""
+		return "", nil
 	}
 	sort.SliceStable(hints, func(i, j int) bool {
 		if hints[i].score != hints[j].score {
@@ -93,12 +95,14 @@ func buildSkillHints(params RunParams, resolved []skills.PromptSkill) string {
 	}
 
 	var b strings.Builder
+	names := make([]string, 0, len(hints))
 	b.WriteString("[관련 스킬 — 이 요청에 맞는 준비된 절차]")
 	for _, h := range hints {
 		fmt.Fprintf(&b, "\n- %s: %s → 해당하면 `skills(action=\"read\", name=%q)`로 절차를 로드해 그대로 따르라.",
 			h.skill.Name, skillHintSummary(h.skill.Description), h.skill.Name)
+		names = append(names, h.skill.Name)
 	}
-	return b.String()
+	return b.String(), names
 }
 
 // skillHintSummary reduces a skill description to its first clause — the

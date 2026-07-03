@@ -136,6 +136,19 @@ The gateway uses 3-stage progressive disclosure to minimize token usage:
 2. **Stage 2 (system prompt):** Name, category, description, and file path are injected into the LLM system prompt.
 3. **Stage 3 (on-demand):** The LLM reads the full SKILL.md body via file read when it needs the skill's workflow instructions.
 
+## Workspace Overrides Bundled (single-name precedence)
+
+Discovery merges sources with **workspace (`~/.deneb/skills/`) overriding
+bundled (repo `skills/`)** for the same skill name. Two practical consequences:
+
+- **Propus evolution edits the workspace copy**, never the repo. A skill that
+  has been evolved (e.g. `email-analysis`) therefore lives in the workspace;
+  the repo copy is a **seed** — editing it has NO runtime effect until the
+  workspace copy is deliberately removed (which re-adopts the repo version).
+- When changing an overridden skill's behavior, change the **workspace copy on
+  the gateway host** (and mirror to the repo seed if the change should survive
+  a workspace reset). Check for an override first: `ls ~/.deneb/skills/<name>`.
+
 ## Adding a New Skill
 
 1. Pick the right category directory (or create a new one with `DESCRIPTION.md`)

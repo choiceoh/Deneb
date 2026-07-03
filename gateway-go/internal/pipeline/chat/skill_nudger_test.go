@@ -43,6 +43,13 @@ func TestShouldEnableSkillNudgerFencesAutonomousAndSelfReviewRuns(t *testing.T) 
 			name:   "system session",
 			params: RunParams{SessionKey: "system:skill-review:telegram:1"},
 		},
+		{
+			// Crons follow an existing skill by construction — reviewing them is
+			// structurally a no-op (production 2026-07: 60/60 no-op decisions all
+			// came from cron sessions, drowning out interactive review input).
+			name:   "cron session",
+			params: RunParams{SessionKey: "cron:email-single-analysis:1781221995334"},
+		},
 	}
 
 	for _, tt := range tests {

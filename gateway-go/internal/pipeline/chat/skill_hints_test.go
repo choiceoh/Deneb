@@ -33,9 +33,12 @@ func hintSkills() []skills.PromptSkill {
 // TestBuildSkillHints_MatchAndFormat: a trigger hit produces the hint block
 // with the skill name, first-clause summary, and an explicit read call.
 func TestBuildSkillHints_MatchAndFormat(t *testing.T) {
-	out := buildSkillHints(RunParams{SessionKey: "client:main", Message: "이 계약서 검토해줘"}, hintSkills())
+	out, names := buildSkillHints(RunParams{SessionKey: "client:main", Message: "이 계약서 검토해줘"}, hintSkills())
 	if out == "" {
 		t.Fatal("expected a hint for 계약서")
+	}
+	if len(names) != 1 || names[0] != "contract-review" {
+		t.Errorf("hinted names = %v, want [contract-review]", names)
 	}
 	if !strings.Contains(out, "contract-review") {
 		t.Errorf("hint missing skill name:\n%s", out)
@@ -57,9 +60,9 @@ func TestBuildSkillHints_MatchAndFormat(t *testing.T) {
 // longest-trigger (most specific) ones.
 func TestBuildSkillHints_CapAndOrder(t *testing.T) {
 	msg := "회의록이랑 계약서, 그리고 팩트체크까지 — 독소조항 있는지 확실해?"
-	out := buildSkillHints(RunParams{SessionKey: "client:main", Message: msg}, hintSkills())
-	if out == "" {
-		t.Fatal("expected hints")
+	out, names := buildSkillHints(RunParams{SessionKey: "client:main", Message: msg}, hintSkills())
+	if out == "" || len(names) == 0 || len(names) > maxSkillHints {
+		t.Fatalf("expected capped hints, names=%v", names)
 	}
 	if n := strings.Count(out, "\n- "); n > maxSkillHints {
 		t.Errorf("hints = %d, cap is %d:\n%s", n, maxSkillHints, out)
@@ -85,11 +88,11 @@ func TestBuildSkillHints_Gates(t *testing.T) {
 		{"no match", RunParams{SessionKey: "client:main", Message: "오늘 날씨 어때"}},
 	}
 	for _, tc := range cases {
-		if out := buildSkillHints(tc.params, hintSkills()); out != "" {
+		if out, names := buildSkillHints(tc.params, hintSkills()); out != "" || len(names) != 0 {
 			t.Errorf("%s: expected no hint, got:\n%s", tc.name, out)
 		}
 	}
-	if out := buildSkillHints(RunParams{SessionKey: "client:main", Message: "계약서"}, nil); out != "" {
+	if out, _ := buildSkillHints(RunParams{SessionKey: "client:main", Message: "계약서"}, nil); out != "" {
 		t.Errorf("nil catalog: expected no hint, got:\n%s", out)
 	}
 }

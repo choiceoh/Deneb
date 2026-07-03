@@ -355,6 +355,19 @@ func shouldEnableSkillNudger(nudger SkillNudger, params RunParams, sessionToolPr
 	if sessionToolPreset == string(toolpreset.PresetSelfReview) {
 		return false
 	}
+	// Cron sessions are excluded: a cron is an already-codified workflow (its
+	// prompt follows an existing skill by construction), so reviewing it is
+	// structurally a no-op. And because every cron run gets a FRESH session key
+	// (cron:<job>:<ts>) its nudge backoff restarts at the base interval, while
+	// the long-lived interactive session's backoff climbs to the cap — in
+	// production (2026-07-04) that inverted the review input: the last 60
+	// lifecycle decisions were ALL cron-session no-ops while the sessions where
+	// genesis-worthy patterns actually appear (interactive work) were barely
+	// reviewed. Skill improvement for cron-used skills still happens via the
+	// usage-stats-driven Evolver — this gate only redirects the nudger.
+	if strings.HasPrefix(params.SessionKey, "cron:") {
+		return false
+	}
 	return !strings.HasPrefix(params.SessionKey, "system:")
 }
 
