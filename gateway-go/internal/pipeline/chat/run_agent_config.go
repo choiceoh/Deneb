@@ -322,7 +322,11 @@ func recordTurnSkillUsage(rec SkillUsageRecorder, log *SkillConsultLog, activiti
 	// that pinned innocent skills under the evolver's success-rate gate
 	// (production skill_usage.jsonl 2026-06: most "skills" tool calls and most
 	// topsolar-db "failures" came from review-fork sessions, not real use).
-	if strings.HasPrefix(sessionKey, "system:skill-review:") {
+	// Coding sessions are excluded for the same reason: they read/edit
+	// SKILL.md files as CODE (and the read-tool consult attribution in
+	// tool_skill_read_consult.go would otherwise count each open as a use,
+	// with the coding turn's build/test errors blamed on the skill).
+	if strings.HasPrefix(sessionKey, "system:skill-review:") || strings.HasPrefix(sessionKey, "code:") {
 		return
 	}
 	consulted := log.DrainNew()
