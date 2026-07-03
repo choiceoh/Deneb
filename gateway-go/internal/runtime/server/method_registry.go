@@ -391,11 +391,15 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 			SemanticSearch: func(ctx context.Context, query string, max int) ([]filestore.ScoredEntry, error) {
 				return s.fileSemanticSearch(ctx, query, max)
 			},
-			// Keep the semantic index fresh after a delete/move so search doesn't
-			// hand back a stale path between 15-min reindex passes. Lazy like
-			// SemanticSearch (the index is created later in initToolsAndDeps).
+			// Keep the semantic index fresh after a delete/move/overwrite so
+			// search doesn't hand back a stale path — or rank an overwritten
+			// file by its old content — between 15-min reindex passes. Lazy
+			// like SemanticSearch (the index is created later in
+			// initToolsAndDeps). An overwrite-save drops the stale vectors
+			// (Remove); the next reindex re-embeds the new content.
 			OnDelete: s.fileIndexRemove,
 			OnMove:   s.fileIndexRename,
+			OnUpload: s.fileIndexRemove,
 		}),
 
 		// Native mail domain. The RPC namespace stays miniapp.gmail.* for
@@ -1171,7 +1175,9 @@ func sanitizeCheckpointLabel(s string) string {
 			continue
 		}
 		if r := []rune(line); len(r) > 40 {
-			line = strings.TrimSpace(string(r[:40])) + "…"
+			// 39 content runes + the ellipsis = exactly the 40-rune contract
+			// (r[:40]+"…" would overshoot to 41).
+			line = strings.TrimSpace(string(r[:39])) + "…"
 		}
 		return line
 	}

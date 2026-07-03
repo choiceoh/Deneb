@@ -222,7 +222,10 @@ func executeAgentRun(
 			storeNotebookGrounding(params.SessionKey, nbID, updated, g)
 		}
 	}
-	skillHints, hintedSkills := buildSkillHints(params, cachedResolvedSkills())
+	// Gated on the run's effective preset: a preset without the skills tool
+	// (btw "conversation", code: "coding") must not receive a hint that
+	// instructs a blocked call. Tail injection keeps this APC-safe.
+	skillHints, hintedSkills := buildSkillHints(params, sessionToolPreset, cachedResolvedSkills())
 	if len(hintedSkills) > 0 {
 		// Measurement anchor for the auto-hint experiment: joining these events
 		// with skill_usage.jsonl (same session, consult after this ts) yields the

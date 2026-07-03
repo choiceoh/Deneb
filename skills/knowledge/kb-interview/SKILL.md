@@ -8,18 +8,8 @@ metadata:
     "deneb":
       {
         "emoji": "🎤",
-        "tags":
+        "tags": ["인터뷰", "지식추출", "문서화", "엘리시테이션", "백과", "grill", "interview", "knowledge"],
         "triggers": ["지식 인터뷰", "인터뷰로 정리", "경쟁사 정리", "시장 세분", "머릿속에만"],
-          [
-            "인터뷰",
-            "지식추출",
-            "문서화",
-            "엘리시테이션",
-            "백과",
-            "grill",
-            "interview",
-            "knowledge",
-          ],
         "related_skills": ["email-analysis"],
       },
   }

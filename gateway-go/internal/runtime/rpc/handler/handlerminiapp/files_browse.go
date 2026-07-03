@@ -90,18 +90,22 @@ type FilesUploadOut struct {
 // this closure; a nil func — or an empty result when the embedding server is
 // down — falls back to name/content search, so semantic search is optional.
 //
-// OnDelete / OnMove keep the semantic index fresh after a mutation: without
-// them, a deleted/moved file would still surface in semantic search (and 404 at
-// download time) until the next 15-minute reindex. The server wires them to the
-// shared index's Remove/Rename. Both are optional (nil = no-op); a Stat backstop
-// in the search path also drops vanished hits, so these are a freshness
-// optimization, not a correctness requirement.
+// OnDelete / OnMove / OnUpload keep the semantic index fresh after a mutation:
+// without them, a deleted/moved file would still surface in semantic search
+// (and 404 at download time) — and an overwrite-saved file would keep ranking
+// by its OLD content — until the next 15-minute reindex. The server wires
+// OnDelete and OnUpload to the shared index's Remove (an overwrite drops the
+// stale vectors; the reindex re-embeds the new content) and OnMove to Rename.
+// All are optional (nil = no-op); a Stat backstop in the search path also
+// drops vanished hits, so these are a freshness optimization, not a
+// correctness requirement.
 type FilesBrowseDeps struct {
 	Store          filestore.Store
 	ExtractText    func(ctx context.Context, data []byte, name string) string
 	SemanticSearch func(ctx context.Context, query string, max int) ([]filestore.ScoredEntry, error)
 	OnDelete       func(path string)
 	OnMove         func(oldPath, newPath string)
+	OnUpload       func(path string)
 }
 
 // FilesBrowseMethods returns the
@@ -248,9 +252,13 @@ func filesBrowseShare(deps FilesBrowseDeps) rpcutil.HandlerFunc {
 
 func filesBrowseUpload(deps FilesBrowseDeps) rpcutil.HandlerFunc {
 	type params struct {
-		Path       string `json:"path"`
-		MimeType   string `json:"mimeType,omitempty"`
-		DataBase64 string `json:"dataBase64"`
+		Path     string `json:"path"`
+		MimeType string `json:"mimeType,omitempty"`
+		// Pointer distinguishes an ABSENT field (client bug — reject, even on
+		// the overwrite path, where it used to silently truncate the file to
+		// zero bytes) from an explicit empty string (editor clearing a text
+		// file — legitimate, but only with overwrite=true).
+		DataBase64 *string `json:"dataBase64"`
 		// Overwrite replaces the file at Path in place — the desktop editor's
 		// save path. Default false keeps the capture semantics (autorename on
 		// name clash) so existing uploaders never clobber a file.
@@ -268,8 +276,11 @@ func filesBrowseUpload(deps FilesBrowseDeps) rpcutil.HandlerFunc {
 		if dest == "" {
 			return rpcerr.MissingParam("path").Response(req.ID)
 		}
+		if p.DataBase64 == nil {
+			return rpcerr.MissingParam("dataBase64").Response(req.ID)
+		}
 		// Strip an optional data-URI prefix, then base64-decode (capture pattern).
-		raw := strings.TrimSpace(p.DataBase64)
+		raw := strings.TrimSpace(*p.DataBase64)
 		if strings.HasPrefix(raw, "data:") {
 			if i := strings.IndexByte(raw, ','); i > 0 {
 				raw = raw[i+1:]
@@ -300,6 +311,14 @@ func filesBrowseUpload(deps FilesBrowseDeps) rpcutil.HandlerFunc {
 		var entry FilesEntryOut
 		if meta != nil {
 			entry = projectFilesEntry(*meta)
+		}
+		// An in-place replace leaves the semantic index holding the OLD
+		// content's vectors for up to a 15-min reindex cycle — drop them so
+		// semantic search stops ranking the file by stale text (it re-embeds
+		// at the next pass; lexical search still finds it meanwhile). Fresh
+		// uploads (autorenamed or new paths) have no entry — harmless no-op.
+		if deps.OnUpload != nil && p.Overwrite && meta != nil {
+			deps.OnUpload(meta.PathDisplay)
 		}
 		return rpcutil.RespondOK(req.ID, FilesUploadOut{Entry: entry})
 	}

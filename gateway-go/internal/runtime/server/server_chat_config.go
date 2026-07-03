@@ -13,6 +13,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
@@ -419,6 +420,14 @@ func loadProviderConfigs(logger *slog.Logger) map[string]chat.ProviderConfig {
 // modelrole registry's dependency-free ProviderResolved shape, so a per-role
 // model can target ANY configured provider (e.g. "google/...") instead of
 // falling back to modelrole's built-in provider switch.
+//
+// BaseURL/APIKey expand ${ENV} references here, like the chat path
+// (run_provider.go) and the model-picker probe (miniapp_models_providers.go):
+// deneb.json keeps secrets as ${WORMHOLE_TOKEN}-style refs, and the registry
+// consumers (buildClient → llm.NewClient) never expand — without this the
+// literal "${WORMHOLE_TOKEN}" would be sent as the bearer token AND, being
+// non-empty, suppress the kimi OAuth-token fallback in buildClient. An unset
+// env expands to "" so the built-in env/key fallbacks still apply.
 func providerCatalog(logger *slog.Logger) map[string]modelrole.ProviderResolved {
 	raw := loadProviderConfigs(logger)
 	if len(raw) == 0 {
@@ -427,8 +436,8 @@ func providerCatalog(logger *slog.Logger) map[string]modelrole.ProviderResolved 
 	out := make(map[string]modelrole.ProviderResolved, len(raw))
 	for id, p := range raw {
 		out[id] = modelrole.ProviderResolved{
-			BaseURL:       p.BaseURL,
-			APIKey:        p.APIKey,
+			BaseURL:       strings.TrimSpace(provider.ExpandEnvVars(p.BaseURL)),
+			APIKey:        strings.TrimSpace(provider.ExpandEnvVars(p.APIKey)),
 			APIMode:       p.API,
 			ContextWindow: p.ContextWindow,
 			Reasoning:     p.Reasoning,

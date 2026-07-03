@@ -33,7 +33,7 @@ func hintSkills() []skills.PromptSkill {
 // TestBuildSkillHints_MatchAndFormat: a trigger hit produces the hint block
 // with the skill name, first-clause summary, and an explicit read call.
 func TestBuildSkillHints_MatchAndFormat(t *testing.T) {
-	out, names := buildSkillHints(RunParams{SessionKey: "client:main", Message: "이 계약서 검토해줘"}, hintSkills())
+	out, names := buildSkillHints(RunParams{SessionKey: "client:main", Message: "이 계약서 검토해줘"}, "", hintSkills())
 	if out == "" {
 		t.Fatal("expected a hint for 계약서")
 	}
@@ -60,7 +60,7 @@ func TestBuildSkillHints_MatchAndFormat(t *testing.T) {
 // longest-trigger (most specific) ones.
 func TestBuildSkillHints_CapAndOrder(t *testing.T) {
 	msg := "회의록이랑 계약서, 그리고 팩트체크까지 — 독소조항 있는지 확실해?"
-	out, names := buildSkillHints(RunParams{SessionKey: "client:main", Message: msg}, hintSkills())
+	out, names := buildSkillHints(RunParams{SessionKey: "client:main", Message: msg}, "", hintSkills())
 	if out == "" || len(names) == 0 || len(names) > maxSkillHints {
 		t.Fatalf("expected capped hints, names=%v", names)
 	}
@@ -75,25 +75,39 @@ func TestBuildSkillHints_CapAndOrder(t *testing.T) {
 
 // TestBuildSkillHints_Gates: system sessions (skill-review forks would
 // self-trigger on SKILL.md bodies), ephemeral/recall-suppressed runs, empty
-// messages, and triggerless catalogs all yield no hint.
+// messages, triggerless catalogs, skills-tool-less presets (the hint would
+// instruct a blocked call), and coding sessions all yield no hint.
 func TestBuildSkillHints_Gates(t *testing.T) {
 	cases := []struct {
 		name   string
 		params RunParams
+		preset string
 	}{
-		{"system session", RunParams{SessionKey: "system:skill-review:client:main", Message: "계약서 검토"}},
-		{"ephemeral", RunParams{SessionKey: "client:main", Message: "계약서 검토", EphemeralUser: true}},
-		{"skip recall", RunParams{SessionKey: "client:main", Message: "계약서 검토", SkipRecall: true}},
-		{"empty message", RunParams{SessionKey: "client:main", Message: "  "}},
-		{"no match", RunParams{SessionKey: "client:main", Message: "오늘 날씨 어때"}},
+		{"system session", RunParams{SessionKey: "system:skill-review:client:main", Message: "계약서 검토"}, ""},
+		{"ephemeral", RunParams{SessionKey: "client:main", Message: "계약서 검토", EphemeralUser: true}, ""},
+		{"skip recall", RunParams{SessionKey: "client:main", Message: "계약서 검토", SkipRecall: true}, ""},
+		{"empty message", RunParams{SessionKey: "client:main", Message: "  "}, ""},
+		{"no match", RunParams{SessionKey: "client:main", Message: "오늘 날씨 어때"}, ""},
+		// btw:* side questions run with the "conversation" preset, whose
+		// allow-list has no skills tool — the hinted call would be rejected.
+		{"conversation preset (btw)", RunParams{SessionKey: "btw:abc123", Message: "계약서 검토"}, "conversation"},
+		// code: sessions run the "coding" preset (no skills tool), and even an
+		// unbound coding session (empty preset) is off-profile for 업무 skills.
+		{"coding preset", RunParams{SessionKey: "code:fix-login", Message: "계약서 검토"}, "coding"},
+		{"coding session without preset", RunParams{SessionKey: "code:fix-login", Message: "계약서 검토"}, ""},
 	}
 	for _, tc := range cases {
-		if out, names := buildSkillHints(tc.params, hintSkills()); out != "" || len(names) != 0 {
+		if out, names := buildSkillHints(tc.params, tc.preset, hintSkills()); out != "" || len(names) != 0 {
 			t.Errorf("%s: expected no hint, got:\n%s", tc.name, out)
 		}
 	}
-	if out, _ := buildSkillHints(RunParams{SessionKey: "client:main", Message: "계약서"}, nil); out != "" {
+	if out, _ := buildSkillHints(RunParams{SessionKey: "client:main", Message: "계약서"}, "", nil); out != "" {
 		t.Errorf("nil catalog: expected no hint, got:\n%s", out)
+	}
+	// The self-review preset DOES allow the skills tool — the preset gate must
+	// key on the allow-list, not blanket-suppress preset runs.
+	if out, _ := buildSkillHints(RunParams{SessionKey: "client:main", Message: "계약서 검토"}, "self-review", hintSkills()); out == "" {
+		t.Error("self-review preset allows the skills tool; hint should fire")
 	}
 }
 

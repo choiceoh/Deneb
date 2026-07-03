@@ -22,6 +22,7 @@ import (
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolpreset"
 )
 
 // maxSkillHints caps how many skills one turn may surface — a hint is a nudge,
@@ -45,11 +46,23 @@ func cachedResolvedSkills() []skills.PromptSkill {
 // SKILL.md bodies as messages, which would self-trigger on their own trigger
 // lists) and for recall-suppressed runs (ephemeral probes share the same "no
 // side context" intent).
-func buildSkillHints(params RunParams, resolved []skills.PromptSkill) (string, []string) {
+//
+// sessionToolPreset is the run's effective preset: the hint instructs a
+// `skills(action="read")` call, so a preset whose allow-list excludes the
+// skills tool (btw:* runs use "conversation", code: sessions use "coding")
+// would turn the hint into a guaranteed tool-not-allowed error — no hint
+// beats a hint at a blocked door. Coding sessions are excluded even when
+// unbound (empty preset): the coding profile deliberately withholds the 업무
+// context (run_prepare), and 업무 skill pointers inside an external repo
+// worktree are off-profile noise.
+func buildSkillHints(params RunParams, sessionToolPreset string, resolved []skills.PromptSkill) (string, []string) {
 	if params.EphemeralUser || params.SkipRecall {
 		return "", nil
 	}
 	if strings.HasPrefix(params.SessionKey, "system:") {
+		return "", nil
+	}
+	if isCodingSessionKey(params.SessionKey) || !presetAllowsSkillsTool(sessionToolPreset) {
 		return "", nil
 	}
 	message := strings.ToLower(strings.TrimSpace(params.Message))
@@ -103,6 +116,18 @@ func buildSkillHints(params RunParams, resolved []skills.PromptSkill) (string, [
 		names = append(names, h.skill.Name)
 	}
 	return b.String(), names
+}
+
+// presetAllowsSkillsTool reports whether the run's effective tool preset
+// permits calling the `skills` tool the hint points at. An empty/unknown
+// preset means no restriction (AllowedTools nil).
+func presetAllowsSkillsTool(sessionToolPreset string) bool {
+	allowed := toolpreset.AllowedTools(toolpreset.Preset(sessionToolPreset))
+	if allowed == nil {
+		return true
+	}
+	_, ok := allowed["skills"]
+	return ok
 }
 
 // skillHintSummary reduces a skill description to its first clause — the
