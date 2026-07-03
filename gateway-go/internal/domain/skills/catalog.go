@@ -19,7 +19,7 @@ type Skill struct {
 	Dir         string `json:"dir"`
 	FilePath    string `json:"filePath,omitempty"`
 	// Category is the parent directory name when using nested category layout
-	// (e.g. "devops" for skills/devops/tmux/SKILL.md).
+	// (e.g. "coding" for skills/coding/github/SKILL.md).
 	Category string `json:"category,omitempty"`
 	// Version from frontmatter (e.g. "1.0.0").
 	Version string `json:"version,omitempty"`
