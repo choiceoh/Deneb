@@ -1,24 +1,12 @@
-import { inferAttachmentMimeType } from "@/attachmentMime";
+import { DOCUMENT_MIMES, inferAttachmentMimeType } from "@/attachmentMime";
 
 // Attachment intake shared by the chat surfaces (right Deneb panel · chat tab).
 // The clip button, drag-drop, and clipboard paste all funnel through here so every
 // intake path enforces the same rules: which files capture can handle, the size
 // ceiling, and base64 reading. The picker's `accept` list only filters the file
 // dialog — drops and pastes bypass it, hence this explicit guard.
-
-// Document MIMEs capture's document extractor accepts — mirrors MIME_BY_EXTENSION
-// in attachmentMime.ts (images/audio are matched by prefix instead).
-const DOCUMENT_MIMES = new Set([
-  "application/msword",
-  "application/pdf",
-  "application/vnd.ms-excel",
-  "application/vnd.ms-powerpoint",
-  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "text/csv",
-  "text/plain",
-]);
+// (Document MIMEs come from attachmentMime.ts — one source of truth with the
+// extension map, so a newly supported extension can't drift out of the guard.)
 
 // The base64 payload rides in a single JSON RPC body — cap the file size well below
 // any gateway body limit so a stray huge file fails fast with a friendly notice

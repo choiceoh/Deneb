@@ -76,18 +76,32 @@ export function ChatView({ cfg, hidden = false }: { cfg: GatewayConfig; hidden?:
   }, [hidden]);
 
   // 응답/첨부 분석이 끝나면 입력창 포커스를 복구한다 — busy 동안 textarea가 disabled 되며
-  // 포커스를 잃어, 이게 없으면 매 턴 입력창을 다시 클릭해야 한다.
+  // 포커스를 잃어, 이게 없으면 매 턴 입력창을 다시 클릭해야 한다. 단 사용자가 그 사이
+  // 다른 곳으로 포커스를 옮겼다면 뺏지 않는다 (disabled 해제 시 activeElement는 body).
   const wasBusy = useRef(false);
   useEffect(() => {
-    if (wasBusy.current && !busy && !hidden) composeRef.current?.focus();
+    if (wasBusy.current && !busy && !hidden) {
+      const active = document.activeElement;
+      if (!active || active === document.body || active === composeRef.current) {
+        composeRef.current?.focus();
+      }
+    }
     wasBusy.current = busy;
   }, [busy, hidden]);
+
+  // busy의 ref 미러 + 첨부 큐 락 — attachFiles의 파일 읽기 틈에 턴이 인터리브되는 것 방지
+  // (AIPanel과 동일 패턴).
+  const busyRef = useRef(busy);
+  useEffect(() => {
+    busyRef.current = busy;
+  }, [busy]);
+  const attachingRef = useRef(false);
 
   // Non-work: no workspaceContext / activeResource — a pure conversation, scoped to
   // its own chat:* session.
   function submit(message = input) {
     const msg = message.trim();
-    if (!msg || busy || !connected) return;
+    if (!msg || busy || attachingRef.current || !connected) return;
     setInput("");
     pin();
     // refresh the history once the turn finishes — the gateway may have created or
@@ -115,25 +129,36 @@ export function ChatView({ cfg, hidden = false }: { cfg: GatewayConfig; hidden?:
   // 순서대로 capture(이미지 OCR·음성 전사·문서 추출)에 보낸다. 입력창의 텍스트는 첫 비-음성
   // 파일의 캡션으로 동봉하고, 배치가 끝나면 세션 목록을 한 번 갱신한다.
   async function attachFiles(files: File[]) {
-    if (busy || !connected || files.length === 0) return;
+    if (busy || attachingRef.current || !connected || files.length === 0) return;
     const { ok, skipped } = splitAttachable(files);
     showAttachNote(skipped);
     if (ok.length === 0) return;
     const captionTarget = ok.find((f) => !inferAttachmentMimeType(f.name, f.type).startsWith("audio/"));
     const caption = captionTarget ? input.trim() : "";
     if (caption) setInput("");
-    for (const file of ok) {
-      const mimeType = inferAttachmentMimeType(file.name, file.type);
-      try {
-        const base64 = await readFileBase64(file);
-        pin();
-        await capture(
-          { name: file.name, mimeType, base64 },
-          { sessionKey, caption: file === captionTarget ? caption : "" },
-        );
-      } catch {
-        showAttachNote([`${file.name} — 읽기 실패라 건너뜀`]);
+    attachingRef.current = true;
+    try {
+      for (const file of ok) {
+        const mimeType = inferAttachmentMimeType(file.name, file.type);
+        try {
+          const base64 = await readFileBase64(file);
+          // 파일 읽기 틈에 이 배치 밖의 턴이 시작됐다면 남은 파일은 건너뛴다 —
+          // 턴 인터리브 방지 (읽기 후 확인이라 직전 capture의 busy 해제는 반영됨).
+          if (busyRef.current) {
+            showAttachNote([`${file.name} — 다른 응답이 진행 중이라 건너뜀`]);
+            continue;
+          }
+          pin();
+          await capture(
+            { name: file.name, mimeType, base64 },
+            { sessionKey, caption: file === captionTarget ? caption : "" },
+          );
+        } catch {
+          showAttachNote([`${file.name} — 읽기 실패라 건너뜀`]);
+        }
       }
+    } finally {
+      attachingRef.current = false;
     }
     void refreshSessions();
   }
