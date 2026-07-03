@@ -1,7 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { color, muted } from "@/theme";
 import { MarkdownEditor } from "@/components/MarkdownEditor";
-import { diffLineClass, isEditableKind, maxTextPreviewBytes, parseCsv, viewKindFor } from "@/components/fileView";
+import {
+  diffLineClass,
+  isEditableKind,
+  maxHwpBytes,
+  maxTextPreviewBytes,
+  parseCsv,
+  viewKindFor,
+} from "@/components/fileView";
 import { type HwpBlock, parseHwp } from "@/components/hwp/hwp";
 
 // FileViewer renders one file inline — the AionUi-style preview sized to
@@ -62,8 +69,13 @@ export function FileViewer({
         }
         if (kind === "hwp") {
           // 한/글 5.x: extract content in-browser (dependency-free parser) —
-          // paragraphs, tables, and embedded images. Cap on the parsed text,
-          // not the (compressed) blob.
+          // paragraphs, tables, and embedded images. Guard the blob size first:
+          // inflate + record-walk runs on the UI thread, so an unbounded file
+          // would freeze the webview (degrade to the download link instead).
+          if (blob.size > maxHwpBytes) {
+            setPhase("toobig");
+            return;
+          }
           const doc = await parseHwp(await blob.arrayBuffer());
           if (!alive) return;
           setHwpBlocks(doc.blocks);
@@ -129,7 +141,7 @@ export function FileViewer({
   if (phase === "toobig") {
     return (
       <div className="file-viewer-empty">
-        <p style={muted}>파일이 미리보기 한도(2MB)를 넘습니다.</p>
+        <p style={muted}>파일이 미리보기 한도를 넘습니다. 내려받아 확인하세요.</p>
         {downloadLink}
       </div>
     );

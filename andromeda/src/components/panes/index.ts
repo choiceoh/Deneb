@@ -12,7 +12,6 @@ import { NotebookPane } from "./NotebookPane";
 import { MailPane } from "./MailPane";
 import { CalendarPane } from "./CalendarPane";
 import { WikiPane } from "./WikiPane";
-import { FilesPane } from "./FilesPane";
 import { SearchPane } from "./SearchPane";
 import { PeoplePane } from "./PeoplePane";
 import { CronsPane } from "./CronsPane";
@@ -44,7 +43,9 @@ export const PANES: PaneDef[] = [
   { key: "mail", label: "메일", shortcut: "3", Component: MailPane },
   { key: "calendar", label: "일정", shortcut: "4", Component: CalendarPane },
   { key: "wiki", label: "위키", shortcut: "5", Component: WikiPane },
-  { key: "files", label: "파일", shortcut: "f", Component: FilesPane },
+  // 파일 — Workstation이 항상 마운트해(열린 탭·미저장 편집 보존) 별도로 렌더하므로, chat 처럼
+  // 여기 Component는 placeholder다. 레일 버튼·⌘F 단축키만 레지스트리에서 파생된다.
+  { key: "files", label: "파일", shortcut: "f", Component: () => null },
   { key: "search", label: "검색", shortcut: "6", Component: SearchPane },
   { key: "people", label: "연락처", shortcut: "7", Component: PeoplePane },
   { key: "crons", label: "크론", shortcut: "8", Component: CronsPane },

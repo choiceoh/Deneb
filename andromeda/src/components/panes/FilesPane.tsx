@@ -8,7 +8,7 @@ import type { FileEntry } from "@/types";
 import { useCachedRpc } from "@/useCachedRpc";
 import { color, ellipsis, muted } from "@/theme";
 import { fmtDate } from "@/format";
-import { useRegisterPane, useWorkspace } from "@/workspaceContext";
+import { useWorkspace } from "@/workspaceContext";
 import { Column, Grid, GridNotice, RowBtn } from "@/components/Grid";
 import { FileViewer } from "@/components/FileViewer";
 import { textToBase64 } from "@/components/fileView";
@@ -24,8 +24,11 @@ interface FileTab {
   dirty: boolean;
 }
 
-export function FilesPane() {
-  const { connected, cfg } = useWorkspace();
+// FilesPane stays mounted across pane switches (Workstation renders it like
+// chat/code) so open viewer tabs and their unsaved edits survive. `active` is
+// true only while 파일 is the current view.
+export function FilesPane({ active = true }: { active?: boolean }) {
+  const { connected, cfg, registerPane } = useWorkspace();
   const { call, callCached, readCache, status, setStatus, busy } = useCachedRpc(cfg, FILES_RESOURCE);
   const [rootSnapshot] = useState(() => readCache<FilesListResponse>(FILES_RPC.list, filesListParams("")));
   const [path, setPath] = useState(rootSnapshot?.data.path ?? "");
@@ -44,14 +47,20 @@ export function FilesPane() {
   const [closingTab, setClosingTab] = useState<string | null>(null); // dirty-close confirm
   const uploadRef = useRef<HTMLInputElement>(null);
 
-  useRegisterPane(
-    FILES_RESOURCE,
-    projectList(
-      `[파일 ${searching ? "검색" : path || "/"}]`,
-      entries,
-      (e) => `- ${isFolder(e) ? "[폴더] " : ""}${entryPath(e)}${e.size ? ` (${formatBytes(e.size)})` : ""}`,
-    ),
+  const aiText = projectList(
+    `[파일 ${searching ? "검색" : path || "/"}]`,
+    entries,
+    (e) => `- ${isFolder(e) ? "[폴더] " : ""}${entryPath(e)}${e.size ? ` (${formatBytes(e.size)})` : ""}`,
   );
+  // Publish the file listing to the AI panel only while active. Because the pane
+  // stays mounted while hidden (to preserve tabs/edits), an unconditional
+  // registration would clobber the visible pane's AI context. Guarding on
+  // `active` is also race-safe on switch-away: it's a no-op, so the newly active
+  // pane's registration wins regardless of effect order.
+  useEffect(() => {
+    if (active) registerPane(FILES_RESOURCE, aiText);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, aiText]);
 
   useEffect(() => {
     if (!connected) return;

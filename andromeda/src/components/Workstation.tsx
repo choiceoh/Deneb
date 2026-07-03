@@ -9,6 +9,7 @@ import { CodeView } from "./CodeView";
 import { Icon } from "./Icon";
 import { Sidebar } from "./Sidebar";
 import { PANES } from "./panes";
+import { FilesPane } from "./panes/FilesPane";
 
 // The shell: a slim nav rail + two floating panels (work area · Deneb AI) drifting
 // on the window's gradient, Zen-browser style. The work area renders only the
@@ -32,6 +33,13 @@ export function Workstation({ cfg }: { cfg: GatewayConfig }) {
   // 작업 pane이 전 폭을 차지하고, 우측 가장자리의 작은 탭으로 다시 연다. (노트북 하단 채팅
   // 모드에는 적용하지 않는다 — 거기선 채팅이 하단에 도킹돼 있다.)
   const [aiCollapsed, setAiCollapsed] = useState(false);
+
+  // 파일 pane은 첫 방문 이후 계속 마운트 유지(열린 탭·미저장 편집을 pane 전환에도 보존).
+  // 방문 전엔 렌더하지 않아 불필요한 프리페치·DOM 중복을 피한다.
+  const [filesMounted, setFilesMounted] = useState(false);
+  useEffect(() => {
+    if (view === "files") setFilesMounted(true);
+  }, [view]);
 
   // Durable catch-up sync, session-scoped (Workstation is always mounted): keeps
   // the work feed / calendar reconciled even when a live proactive push is missed.
@@ -66,7 +74,11 @@ export function Workstation({ cfg }: { cfg: GatewayConfig }) {
   const aiSideCollapsed = aiCollapsed && !bottomChat;
   // 작업 pane은 비채팅·비코드 탭에서 렌더. 데네브 패널 확대(maximize) 시엔 숨기지만, 노트북
   // 하단 채팅 모드·패널 접힘에서는 작업 pane이 전 폭을 차지하도록 함께 렌더한다.
-  const showMain = view !== "chat" && !codeMode && (bottomChat || aiSideCollapsed || !aiExpanded);
+  const mainVisible = !codeMode && (bottomChat || aiSideCollapsed || !aiExpanded);
+  // 파일 pane은 chat/code 처럼 별도로 항상 마운트되므로(열린 탭·미저장 편집 보존) 제네릭
+  // 렌더에서 제외한다.
+  const showMain = view !== "chat" && view !== "files" && mainVisible;
+  const showFiles = view === "files" && mainVisible;
 
   return (
     <div className={"workstation-shell" + (bottomChat ? " ws-bottom-chat" : "")}>
@@ -83,6 +95,23 @@ export function Workstation({ cfg }: { cfg: GatewayConfig }) {
           <div key={view} className="pane-enter">
             <Active />
           </div>
+        </main>
+      )}
+      {/* 파일 pane — 첫 방문 때 마운트하고 이후 계속 마운트 유지(숨김)해, 열린 탭과 저장하지
+          않은 편집이 pane 전환에도 살아남게 한다(채팅·코드와 같은 규칙; key 리마운트면 편집이
+          날아간다). active 로 현재 뷰일 때만 AI 패널에 게시(숨은 동안 오염 방지). */}
+      {filesMounted && (
+        <main
+          className="panel"
+          style={{
+            flex: 1,
+            minWidth: 0,
+            overflow: "auto",
+            padding: "20px 22px",
+            display: showFiles ? undefined : "none",
+          }}
+        >
+          <FilesPane active={view === "files"} />
         </main>
       )}
       {/* 코드 모드 — 가운데 코딩 채팅(주작업) + 우측 작업 관리. 항상 마운트, 비활성 시 숨김. */}
