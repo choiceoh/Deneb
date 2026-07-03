@@ -338,7 +338,7 @@ TASKS = [
 # --- OpenAI-compatible client (stdlib only) ---------------------------------
 
 
-def chat_once(base_url: str, api_key: str, model: str, prompt: str, max_tokens: int, timeout: float, response_format=None):
+def chat_once(base_url: str, api_key: str, model: str, prompt: str, max_tokens: int, timeout: float, response_format=None, extra_body=None):
     payload_body = {
         "model": model,
         "messages": [{"role": "user", "content": prompt}],
@@ -347,6 +347,10 @@ def chat_once(base_url: str, api_key: str, model: str, prompt: str, max_tokens: 
     }
     if response_format:
         payload_body["response_format"] = response_format
+    if extra_body:
+        # 후보별 서빙 옵션 실험용 — 예: {"chat_template_kwargs": {"enable_thinking": false}}
+        # (사고형 모델의 사고 억제가 as-served로 가능한지까지 같은 배터리로 잰다).
+        payload_body.update(extra_body)
     headers = {"Content-Type": "application/json"}
     if api_key:  # 빈 Bearer 헤더는 무인증과 다르게 취급하는 서버가 있다 — 아예 생략
         headers["Authorization"] = f"Bearer {api_key}"
@@ -369,7 +373,7 @@ def chat_once(base_url: str, api_key: str, model: str, prompt: str, max_tokens: 
 TRANSIENT_HTTP = {408, 429, 500, 502, 503, 504}
 
 
-def chat_with_retry(base_url, api_key, model, prompt, max_tokens, timeout, response_format=None):
+def chat_with_retry(base_url, api_key, model, prompt, max_tokens, timeout, response_format=None, extra_body=None):
     # 레이턴시는 재시도·백오프를 포함한 벽시계 전체 — 플레이키한 모델이 실패 시간을
     # 숨기고 건강한 avg_latency_ms를 보고하면 운영 판단이 왜곡된다.
     start = time.monotonic()
@@ -378,25 +382,25 @@ def chat_with_retry(base_url, api_key, model, prompt, max_tokens, timeout, respo
         return content, int((time.monotonic() - start) * 1000), out_tokens
 
     try:
-        return done(*chat_once(base_url, api_key, model, prompt, max_tokens, timeout, response_format))
+        return done(*chat_once(base_url, api_key, model, prompt, max_tokens, timeout, response_format, extra_body))
     except urllib.error.HTTPError as e:
         # guided-decoding 미지원 서버의 response_format 거부 → 형식 없이 1회 폴백
         if response_format is not None and e.code == 400:
             print(f"  ! {model}: response_format rejected (400) — falling back without JSON mode", file=sys.stderr)
-            return done(*chat_once(base_url, api_key, model, prompt, max_tokens, timeout, None))
+            return done(*chat_once(base_url, api_key, model, prompt, max_tokens, timeout, None, extra_body))
         if e.code not in TRANSIENT_HTTP:
             raise
         print(f"  ! transient HTTP {e.code} for {model} — retrying once", file=sys.stderr)
     except (urllib.error.URLError, TimeoutError, OSError) as e:
         print(f"  ! transient error for {model}: {e} — retrying once", file=sys.stderr)
     time.sleep(2)
-    return done(*chat_once(base_url, api_key, model, prompt, max_tokens, timeout, response_format))
+    return done(*chat_once(base_url, api_key, model, prompt, max_tokens, timeout, response_format, extra_body))
 
 
 # --- Runner ------------------------------------------------------------------
 
 
-def run_model(base_url, api_key, model, rounds, timeout):
+def run_model(base_url, api_key, model, rounds, timeout, extra_body=None):
     per_task = {}
     latencies, out_tokens_all = [], []
     for task_name, cases, mk_prompt, scorer, max_tokens, response_format in TASKS:
@@ -404,7 +408,7 @@ def run_model(base_url, api_key, model, rounds, timeout):
         for _ in range(rounds):
             for case in cases:
                 out, ms, otoks = chat_with_retry(
-                    base_url, api_key, model, mk_prompt(case), max_tokens, timeout, response_format
+                    base_url, api_key, model, mk_prompt(case), max_tokens, timeout, response_format, extra_body
                 )
                 s = scorer(case, out)
                 scores.append(s)
@@ -555,9 +559,14 @@ def main() -> int:
     ap.add_argument("--model-a", help="first model name as served (e.g. qwen3.6-35b)")
     ap.add_argument("--model-b", help="second model name as served (e.g. agents-a1)")
     ap.add_argument("--base-url", default="http://127.0.0.1:18800/v1", help="OpenAI-compatible base (default: wormhole)")
+    ap.add_argument("--base-url-b", default="", help="model-b용 별도 엔드포인트 (기본: --base-url과 동일 — 후보를 wormhole에 태우기 전 raw vLLM으로 직접 잴 때)")
     ap.add_argument("--api-key-env", default="WORMHOLE_TOKEN", help="env var holding the bearer token")
     ap.add_argument("--rounds", type=int, default=1, help="repeat the battery N times per model")
     ap.add_argument("--timeout", type=float, default=120.0, help="per-call timeout seconds")
+    ap.add_argument(
+        "--extra-body-a", default="", help='model-a 요청 body에 병합할 JSON (예: \'{"chat_template_kwargs":{"enable_thinking":false}}\')'
+    )
+    ap.add_argument("--extra-body-b", default="", help="model-b 요청 body에 병합할 JSON — 사고형 후보의 사고-off 실험 등")
     ap.add_argument("--mock", action="store_true", help="run the harness self-test against built-in mock models")
     args = ap.parse_args()
 
@@ -568,7 +577,12 @@ def main() -> int:
     api_key = os.environ.get(args.api_key_env, "")
     if not api_key:
         print(f"warning: ${args.api_key_env} is empty — sending without auth", file=sys.stderr)
-    results = [run_model(args.base_url, api_key, m, args.rounds, args.timeout) for m in (args.model_a, args.model_b)]
+    extra_a = json.loads(args.extra_body_a) if args.extra_body_a else None
+    extra_b = json.loads(args.extra_body_b) if args.extra_body_b else None
+    results = [
+        run_model(args.base_url, api_key, args.model_a, args.rounds, args.timeout, extra_a),
+        run_model(args.base_url_b or args.base_url, api_key, args.model_b, args.rounds, args.timeout, extra_b),
+    ]
     print_report(results)
     return 0
 
