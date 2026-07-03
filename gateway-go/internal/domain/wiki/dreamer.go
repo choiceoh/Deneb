@@ -32,10 +32,10 @@ const (
 	// parser then failed the whole cycle. 8192 covers the observed batches;
 	// the salvage parser (parseWikiUpdates) keeps a truncated tail from
 	// zeroing the cycle regardless.
-	wikiDreamMaxTokens        = 8192
-	diaryProcessStateFile     = ".diary-process-state.json"
-	dreamProposalFile         = ".dream-last-proposal.json"
-	processedCapsuleLimit     = 12
+	wikiDreamMaxTokens    = 8192
+	diaryProcessStateFile = ".diary-process-state.json"
+	dreamProposalFile     = ".dream-last-proposal.json"
+	processedCapsuleLimit = 12
 )
 
 // Compile-time interface compliance.
