@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.49](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.48...andromeda-v0.0.49) (2026-07-03)
+
+
+### 🐛 Bug Fixes
+
+* **andromeda:** 파일 pane 미저장 편집 유실·빈 파일 저장·HWP 방어 수정 ([#3058](https://github.com/choiceoh/Deneb/issues/3058)) ([82f3d7a](https://github.com/choiceoh/Deneb/commit/82f3d7aa16987ce9ace920999341f6ab85f460de))
+
 ## [0.0.48](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.47...andromeda-v0.0.48) (2026-07-03)
 
 
