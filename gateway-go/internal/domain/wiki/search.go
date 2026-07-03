@@ -185,6 +185,10 @@ func searchablePageFields(page *Page) []string {
 		page.Meta.Category,
 		strings.Join(page.Meta.Tags, " "),
 		strings.Join(page.Meta.Related, " "),
+		// Cue anchors: alternate phrasings a future query may use (Memora-style
+		// entry points) — indexed so a paraphrased question reaches a page whose
+		// own vocabulary differs (예: cue "계약금" ↔ 본문 "선수금").
+		strings.Join(page.Meta.Cues, " "),
 		page.Body,
 	}
 }

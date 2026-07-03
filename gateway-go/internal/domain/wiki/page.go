@@ -75,6 +75,14 @@ type Frontmatter struct {
 	Category string
 	Tags     []string
 	Related  []string
+	// Cues are recall entry points (Memora-style cue anchors): alternate Korean
+	// phrasings a future query might use for this page — synonyms, aliases,
+	// question forms — deliberately words NOT already in the title/summary/body.
+	// They are indexed for lexical search and folded into the semantic embedding,
+	// but never rendered as content; they exist purely so a paraphrased question
+	// ("계약금 언제 받지?") can find a page written with different vocabulary
+	// ("선수금 입금 일정").
+	Cues []string
 	// Resource is a stable URI/identifier for the concept's underlying asset
 	// (e.g. a gmail thread, deal ref, calendar event, file path) — Google OKF's
 	// `resource` field. It lets the agent jump from a wiki concept straight to
@@ -139,6 +147,9 @@ func (p *Page) Render() []byte {
 	}
 	if len(p.Meta.Related) > 0 {
 		buf.WriteString("related: [" + strings.Join(p.Meta.Related, ", ") + "]\n")
+	}
+	if len(p.Meta.Cues) > 0 {
+		buf.WriteString("cues: [" + strings.Join(p.Meta.Cues, ", ") + "]\n")
 	}
 	if p.Meta.Resource != "" {
 		buf.WriteString("resource: " + p.Meta.Resource + "\n")
@@ -451,6 +462,8 @@ func parseFrontmatterFields(raw string) Frontmatter {
 			fm.Tags = parseFlowArray(val)
 		case "related":
 			fm.Related = parseFlowArray(val)
+		case "cues":
+			fm.Cues = parseFlowArray(val)
 		case "resource":
 			fm.Resource = val
 		case "created":

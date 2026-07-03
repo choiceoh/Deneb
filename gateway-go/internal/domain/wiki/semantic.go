@@ -235,8 +235,11 @@ func (si *semanticIndex) saveCache() {
 	}
 }
 
-// semanticText is the text embedded for a page: title + summary + body, which
-// is what a meaning-based query should match against.
+// semanticText is the text embedded for a page: title + summary + cue anchors +
+// body, which is what a meaning-based query should match against. Cues are the
+// alternate phrasings a future query may use, so folding them into the embedding
+// pulls the page's vector toward the question vocabulary; a page whose cues
+// change re-embeds automatically via the contentHash cache key.
 func semanticText(page *Page) string {
 	if page == nil {
 		return ""
@@ -245,6 +248,9 @@ func semanticText(page *Page) string {
 	sb.WriteString(page.Meta.Title)
 	if page.Meta.Summary != "" {
 		sb.WriteString("\n" + page.Meta.Summary)
+	}
+	if len(page.Meta.Cues) > 0 {
+		sb.WriteString("\n" + strings.Join(page.Meta.Cues, " · "))
 	}
 	if page.Body != "" {
 		sb.WriteString("\n" + page.Body)
