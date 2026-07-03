@@ -20,7 +20,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/pkg/redact"
 )
 
@@ -73,13 +72,8 @@ func (wd *WikiDreamer) extractOpenLoops(ctx context.Context, content string) ([]
 ## 일지/메모
 %s`, openLoopMaxPerCycle, content)
 
-	systemJSON, _ := json.Marshal("You extract unfulfilled commitments. Respond only with a JSON array.")
-	resp, err := wd.client.Complete(ctx, llm.ChatRequest{
-		Model:     wd.model,
-		System:    systemJSON,
-		Messages:  []llm.Message{llm.NewTextMessage("user", prompt)},
-		MaxTokens: openLoopMaxTokens,
-	})
+	resp, err := wd.client.Complete(ctx,
+		wd.llmRequest("You extract unfulfilled commitments. Respond only with a JSON array.", prompt, openLoopMaxTokens))
 	if err != nil {
 		return nil, fmt.Errorf("open-loop LLM call: %w", err)
 	}

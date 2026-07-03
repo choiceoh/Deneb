@@ -4,7 +4,6 @@ package wiki
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -12,7 +11,6 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
@@ -381,13 +379,8 @@ JSON 배열만 반환. 다른 텍스트 없이.
 형식: [{"path":"...", "currentCategory":"...", "correctCategory":"...", "confidence":"high|medium|low", "reason":"..."}]`,
 		strings.Join(Categories, ", "), strings.Join(lines, "\n"))
 
-	systemJSON, _ := json.Marshal("You are a wiki category validator. Respond only with a JSON array.")
-	resp, err := wd.client.Complete(ctx, llm.ChatRequest{
-		Model:     wd.model,
-		System:    systemJSON,
-		Messages:  []llm.Message{llm.NewTextMessage("user", prompt)},
-		MaxTokens: 2048,
-	})
+	resp, err := wd.client.Complete(ctx,
+		wd.llmRequest("You are a wiki category validator. Respond only with a JSON array.", prompt, 2048))
 	if err != nil {
 		wd.logger.Warn("wiki-verify: LLM misclassification check failed", "error", err)
 		return nil

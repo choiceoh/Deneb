@@ -5,6 +5,7 @@ package wiki
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"path/filepath"
@@ -137,6 +138,21 @@ type WikiDreamer struct {
 	// personDirectory supplies the address-book snapshot for mention-driven
 	// 인물 page seeding (see person_seed.go). nil disables seeding.
 	personDirectory func() []PersonSeed
+
+	// llmExtraBody is merged into every dreamer LLM request (synthesis,
+	// verify, open-loops, project-digest). The chat pipeline wires it with
+	// the lightweight model's thinking-off shaping: the dreamer calls the
+	// raw client — not pilot/localai, not the chat effort router — so
+	// without this a dual-mode reasoning model (deepseek-v4) spends the
+	// whole output budget on chain-of-thought and returns empty content
+	// (observed: 2026-07-02/03 synthesis failures, reasoning_chars≈13K vs
+	// MaxTokens 4096). nil = no shaping (previous behavior).
+	llmExtraBody map[string]any
+
+	// synthesisMaxTokens overrides wikiDreamMaxTokens for the synthesis call
+	// (0 = default). Set for reasoning models with no thinking off-switch,
+	// where the budget must fit chain-of-thought + the JSON answer.
+	synthesisMaxTokens int
 }
 
 // NewWikiDreamer creates a new wiki dreamer.
@@ -187,6 +203,40 @@ func (wd *WikiDreamer) SetPolarisContextFn(fn func() string) {
 // disables memory curation.
 func (wd *WikiDreamer) SetWorkspaceDir(dir string) {
 	wd.workspaceDir = dir
+}
+
+// SetLLMRequestShape installs the request shaping applied to every dreamer
+// LLM call: extraBody (typically the model's thinking-off
+// chat_template_kwargs — see the llmExtraBody field doc) and an optional
+// synthesis MaxTokens override (0 keeps wikiDreamMaxTokens; used to budget
+// chain-of-thought on reasoning models that cannot switch it off). Call
+// before the first dream cycle; the wiring lives in server/chat_pipeline.go.
+func (wd *WikiDreamer) SetLLMRequestShape(extraBody map[string]any, synthesisMaxTokens int) {
+	wd.llmExtraBody = extraBody
+	wd.synthesisMaxTokens = synthesisMaxTokens
+}
+
+// llmRequest builds the dreamer's standard one-shot chat request with the
+// shared shaping applied — the single construction point for the synthesis,
+// verify, open-loops, and project-digest calls so none can drift back to an
+// unshaped request.
+func (wd *WikiDreamer) llmRequest(system, prompt string, maxTokens int) llm.ChatRequest {
+	systemJSON, _ := json.Marshal(system)
+	return llm.ChatRequest{
+		Model:     wd.model,
+		System:    systemJSON,
+		Messages:  []llm.Message{llm.NewTextMessage("user", prompt)},
+		MaxTokens: maxTokens,
+		ExtraBody: wd.llmExtraBody,
+	}
+}
+
+// synthesisBudget returns the synthesis call's MaxTokens (override or default).
+func (wd *WikiDreamer) synthesisBudget() int {
+	if wd.synthesisMaxTokens > 0 {
+		return wd.synthesisMaxTokens
+	}
+	return wikiDreamMaxTokens
 }
 
 // ShouldDream checks if dreaming conditions are met.

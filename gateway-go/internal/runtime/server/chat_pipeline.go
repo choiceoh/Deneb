@@ -11,6 +11,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agentlog"
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/localai"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/knowledge"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/notebook"
@@ -77,6 +78,13 @@ func (s *Server) initMemorySubsystem(chatCfg *chat.HandlerConfig, regPtr **model
 			lwModel := (*regPtr).Model(modelrole.RoleLightweight)
 			if lwClient != nil && lwModel != "" {
 				s.wikiDreamer = wiki.NewWikiDreamer(wikiStore, lwClient, lwModel, wikiCfg, s.logger)
+				// Shape the dreamer's raw LLM calls for the lightweight model:
+				// thinking off on dual-mode reasoning models (deepseek-v4's
+				// chain-of-thought consumed the whole 4096-token synthesis
+				// budget — 2026-07-02/03 "empty content (finish_reason=length)"
+				// dream failures), reasoning headroom when no off-switch exists.
+				extra, synthMax := dreamerLLMShape(*regPtr)
+				s.wikiDreamer.SetLLMRequestShape(extra, synthMax)
 				// Let dream cycles consume + curate the auto-recorded
 				// workspace MEMORY.md (distill to wiki, keep a bounded buffer).
 				s.wikiDreamer.SetWorkspaceDir(resolveWorkspaceDir())
@@ -320,4 +328,39 @@ func formatRecentPolarisSummaries(nodes []polaris.SummaryNode) string {
 		sb.WriteString("\n")
 	}
 	return sb.String()
+}
+
+// dreamerLLMShape computes the request shaping for the wiki dreamer's raw
+// lightweight-role LLM calls. The dreamer talks to the registry client
+// directly — it goes through neither the pilot/localai hub (which injects
+// enable_thinking=false for non-reasoning models, localai.mergeRequestBody)
+// nor the chat effort router (which attaches the dual-mode thinking toggle,
+// run_capability.go) — so this helper reproduces both policies at wiring time:
+//
+//   - reasoning model with a template off-switch (deepseek-v4 →
+//     chat_template_kwargs.thinking=false): disable thinking. The dreamer's
+//     JSON-extraction calls gain nothing from chain-of-thought, and with it on
+//     the synthesis budget was fully consumed by reasoning (the 2026-07-02/03
+//     empty-content failures).
+//   - reasoning model with no off-switch: budget for the thinking instead —
+//     observed dsv4 reasoning runs ~13K chars (≈4K tokens), so 4x headroom.
+//   - non-reasoning model: mirror the hub's NoThinking kwargs (Qwen-family
+//     templates default thinking on).
+func dreamerLLMShape(reg *modelrole.Registry) (extraBody map[string]any, synthesisMaxTokens int) {
+	if reg == nil {
+		return nil, 0
+	}
+	cfg := reg.Config(modelrole.RoleLightweight)
+	// Toggle first: dual-mode models (deepseek-v4) deliberately keep
+	// Profile.Reasoning=false and are controlled ONLY through their template
+	// kwarg (see the profile.go dsv4 entry) — checking IsReasoningModel first
+	// would mis-route them into the NoThinking branch, whose Qwen-spelled
+	// enable_thinking kwarg dsv4 templates silently ignore.
+	if kw := reg.CapabilityForModel(cfg.ProviderID, cfg.Model).ThinkingToggleKwarg; kw != "" {
+		return map[string]any{"chat_template_kwargs": map[string]any{kw: false}}, 0
+	}
+	if modelrole.IsReasoningModel(cfg.Model) {
+		return nil, 16384
+	}
+	return localai.NoThinking, 0
 }
