@@ -106,14 +106,23 @@ func CallRoleLLM(ctx context.Context, role modelrole.Role, system, userMessage s
 	client := getRoleClient(role, modelrole.DefaultVllmBaseURL, "local")
 	model := getRoleModel(role, modelrole.DefaultVllmModel)
 
-	// Disable reasoning only for non-reasoning models — a reasoning model's
-	// thinking-only chat template can 400 on enable_thinking (mirrors
-	// localai.Hub.mergeRequestBody). Caller-supplied extraBody merges on top.
-	merged := make(map[string]any, len(localai.NoThinking)+1)
-	if !modelrole.IsReasoningModel(model) {
-		for k, v := range localai.NoThinking {
-			merged[k] = v
+	// Thinking-off shaping, shared with the localai hub (modelrole.
+	// ThinkingOffExtraBody): the template toggle for dual-mode models
+	// (deepseek-v4 → chat_template_kwargs.thinking=false), nothing for
+	// untoggleable reasoning models (their thinking-only templates can 400
+	// on enable_thinking), NoThinking for the rest. The provider gates the
+	// toggle to vLLM-backed servings; the registry-less fallback assumes
+	// "vllm" — this direct path defaults to DefaultVllmBaseURL anyway.
+	providerID := "vllm"
+	if pkgRegistry != nil {
+		if p := pkgRegistry.Config(role).ProviderID; p != "" {
+			providerID = p
 		}
+	}
+	off := modelrole.ThinkingOffExtraBody(providerID, model)
+	merged := make(map[string]any, len(off)+1)
+	for k, v := range off {
+		merged[k] = v
 	}
 	if len(extraBody) > 0 && extraBody[0] != nil {
 		for k, v := range extraBody[0] {
