@@ -1,5 +1,17 @@
 # Changelog
 
+## [4.62.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.61.0...deneb-v4.62.0) (2026-07-03)
+
+
+### ✨ Features
+
+* **skills:** 스킬 자동 표면화 — 트리거 힌트 + 캡처 배선 + 사용 기록 위생 ([#3060](https://github.com/choiceoh/Deneb/issues/3060)) ([1b39285](https://github.com/choiceoh/Deneb/commit/1b39285e9a6b02a1c3ff3393222fd062d0531d4d))
+
+
+### 🐛 Bug Fixes
+
+* **skills:** 리뷰 입력 재균형(크론 제외) + 힌트 발화 계측 + 오버라이드 문서 ([#3063](https://github.com/choiceoh/Deneb/issues/3063)) ([9709197](https://github.com/choiceoh/Deneb/commit/9709197dff3e33aae1ca401e38aa0da30e538883))
+
 ## [4.61.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.60.0...deneb-v4.61.0) (2026-07-03)
 
 
