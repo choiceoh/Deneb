@@ -99,9 +99,12 @@ export function Workstation({ cfg }: { cfg: GatewayConfig }) {
       )}
       {/* 파일 pane — 첫 방문 때 마운트하고 이후 계속 마운트 유지(숨김)해, 열린 탭과 저장하지
           않은 편집이 pane 전환에도 살아남게 한다(채팅·코드와 같은 규칙; key 리마운트면 편집이
-          날아간다). active 로 현재 뷰일 때만 AI 패널에 게시(숨은 동안 오염 방지). */}
+          날아간다). active 로 현재 뷰일 때만 AI 패널에 게시(숨은 동안 오염 방지).
+          단 게이트웨이 식별(URL/토큰)이 바뀌면 key 리마운트로 탭·편집 버퍼를 비운다 — 이전
+          게이트웨이에서 연 내용이 새 게이트웨이의 같은 경로로 저장되는 사고 방지. */}
       {filesMounted && (
         <main
+          key={`${cfg.url}|${cfg.token}`}
           className="panel"
           style={{
             flex: 1,

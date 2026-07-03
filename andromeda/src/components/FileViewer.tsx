@@ -22,6 +22,7 @@ import { type HwpBlock, parseHwp } from "@/components/hwp/hwp";
 export function FileViewer({
   name,
   mime,
+  size,
   load,
   onSave,
   onDirtyChange,
@@ -29,13 +30,22 @@ export function FileViewer({
 }: {
   name: string;
   mime?: string;
+  // Known byte size (the files grid has it) — lets the size caps refuse BEFORE
+  // downloading the whole blob. Unknown sizes fall back to the post-load check.
+  size?: number;
   load: () => Promise<Blob>;
   onSave?: (text: string) => Promise<boolean>;
   onDirtyChange?: (dirty: boolean) => void;
   downloadUrl?: string;
 }) {
   const kind = viewKindFor(name, mime);
-  const [phase, setPhase] = useState<"loading" | "ready" | "error" | "toobig">(kind === "none" ? "ready" : "loading");
+  const preTooBig =
+    size !== undefined &&
+    size > 0 &&
+    (kind === "hwp" ? size > maxHwpBytes : isEditableKind(kind) && size > maxTextPreviewBytes);
+  const [phase, setPhase] = useState<"loading" | "ready" | "error" | "toobig">(
+    preTooBig ? "toobig" : kind === "none" ? "ready" : "loading",
+  );
   const [errText, setErrText] = useState("");
   const [objectUrl, setObjectUrl] = useState("");
   const [text, setText] = useState("");
@@ -54,7 +64,7 @@ export function FileViewer({
   }, [dirty, onDirtyChange]);
 
   useEffect(() => {
-    if (kind === "none") return;
+    if (kind === "none" || preTooBig) return;
     let alive = true;
     let url = "";
     void (async () => {
@@ -110,9 +120,14 @@ export function FileViewer({
   async function save() {
     if (!onSave || saving) return;
     setSaving(true);
-    const ok = await onSave(text);
-    setSaving(false);
-    if (ok) setSavedText(text);
+    try {
+      // finally-guarded: an onSave rejection must not leave saving=true stuck
+      // (the 저장/되돌리기 buttons would stay disabled forever).
+      const ok = await onSave(text);
+      if (ok) setSavedText(text);
+    } finally {
+      setSaving(false);
+    }
   }
 
   const downloadLink = downloadUrl && (
@@ -314,15 +329,18 @@ function CsvTable({ text, tsv }: { text: string; tsv: boolean }) {
   );
 }
 
-// DiffView colorizes unified-diff lines (added/removed/hunk/meta).
+// DiffView colorizes unified-diff lines (added/removed/hunk/meta). A <div>
+// wrapper, not <pre> — flow content (the line <div>s) inside <pre> is invalid
+// HTML; the mono font/size come from .file-viewer-diff and the line whitespace
+// from .diff-line (pre-wrap), so nothing relied on the <pre> element itself.
 function DiffView({ text }: { text: string }) {
   return (
-    <pre className="file-viewer-scroll file-viewer-diff">
+    <div className="file-viewer-scroll file-viewer-diff">
       {text.split("\n").map((line, i) => (
         <div key={i} className={"diff-line" + (diffLineClass(line) ? " diff-" + diffLineClass(line) : "")}>
           {line || " "}
         </div>
       ))}
-    </pre>
+    </div>
   );
 }

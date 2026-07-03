@@ -416,7 +416,11 @@ export function WikiPane() {
                   ))
                 )}
               </>
-            ) : !tree || tree.count === 0 ? (
+            ) : !tree ? (
+              // null = the first tree fetch hasn't landed yet (or failed — status
+              // shows the error) — not the same as a genuinely empty wiki.
+              <p style={muted}>불러오는 중...</p>
+            ) : tree.count === 0 ? (
               <p style={muted}>위키 페이지가 없습니다.</p>
             ) : (
               <>

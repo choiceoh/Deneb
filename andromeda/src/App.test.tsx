@@ -1,10 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useEffect } from "react";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { App } from "./App";
 import { AIPanel } from "./components/AIPanel";
 import { Workstation } from "./components/Workstation";
 import { fakeProvider, renderWithProviders } from "./test/util";
+import { useWorkspace } from "./workspaceContext";
 
 beforeEach(() => {
   localStorage.clear();
@@ -116,6 +118,8 @@ describe("Workstation (connected, fixtures)", () => {
     // 코드 pane은 Ctrl+D로 이동했다 — 대시보드가 코드 pane으로 바뀐다.
     fireEvent.keyDown(window, { key: "d", ctrlKey: true });
     await waitFor(() => expect(screen.queryByText("세금 신고")).not.toBeInTheDocument());
+    // 대시보드가 사라졌을 뿐 아니라 실제로 코드 pane이 렌더됐는지 — 고유 마커까지 확인.
+    expect(document.querySelector(".code-pane")).toBeInTheDocument();
   });
 
   it("opens the 비업무 채팅 탭 from the rail (center chat greets)", async () => {
@@ -484,6 +488,56 @@ describe("Workstation (connected, fixtures)", () => {
     await waitFor(() => expect(composer).not.toBeDisabled());
     expect(historyBtn).toHaveFocus();
     expect(composer).not.toHaveFocus();
+  });
+
+  it("marks 노트로 저장됨 only when the notebook sink succeeds — a failure stays retryable", async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/api/v1/miniapp/chat/stream")) {
+        return sseResponse('event: delta\ndata: {"delta":"요약 완료"}\n\nevent: done\ndata: {"text":"요약 완료"}\n\n');
+      }
+      return sseResponse();
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    // The notebook's sink, first failing (RPC error) then succeeding on retry.
+    const sink = vi.fn<(text: string) => Promise<boolean>>().mockResolvedValueOnce(false).mockResolvedValue(true);
+    function SinkSetter() {
+      const { setNoteSink } = useWorkspace();
+      useEffect(() => {
+        setNoteSink(sink);
+        return () => setNoteSink(null);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+      }, []);
+      return null;
+    }
+
+    renderWithProviders(
+      <>
+        <AIPanel cfg={{ url: "http://test", token: "tok" }} />
+        <SinkSetter />
+      </>,
+      { connected: true },
+    );
+
+    const composer = screen.getByRole("textbox", { name: "Deneb에게 메시지" });
+    await user.type(composer, "요약해줘");
+    await user.keyboard("{Enter}");
+    await screen.findByText("요약 완료");
+
+    // Save into the notebook → the sink fails → NOT marked 저장됨; the button
+    // reports the failure and stays clickable for a retry.
+    await user.click(await screen.findByRole("button", { name: /노트에 저장/ }));
+    const retryBtn = await screen.findByRole("button", { name: /저장 실패/ });
+    expect(retryBtn).toBeEnabled();
+    expect(screen.queryByRole("button", { name: /노트로 저장됨/ })).not.toBeInTheDocument();
+    expect(sink).toHaveBeenCalledWith("요약 완료");
+
+    // Retry → success → the done state locks out double-pinning.
+    await user.click(retryBtn);
+    expect(await screen.findByRole("button", { name: /노트로 저장됨/ })).toBeDisabled();
+    expect(sink).toHaveBeenCalledTimes(2);
   });
 
   it("shows a non-stop state while an attachment is being analyzed (capture is not abortable)", async () => {

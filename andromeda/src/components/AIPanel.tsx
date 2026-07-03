@@ -131,16 +131,26 @@ export function AIPanel({
   const { aiText, activeResource, connected, noteSink } = useWorkspace();
   const { thinking, busy, stoppable, turns, send, capture, stop, regenerate, clear, setTurns } = useChat(cfg);
   const [input, setInput] = useState("");
-  // Answers already saved into the open notebook this session (turn ids) — flips
-  // the per-answer 노트에 저장 button to a done state so a double-click can't pin
-  // the same answer twice.
-  const [savedNoteIds, setSavedNoteIds] = useState<ReadonlySet<string>>(new Set());
+  // Per-answer save-to-notebook progress (turn id → state). "saved" flips the
+  // button to a done state so a double-click can't pin the same answer twice;
+  // "error" keeps it clickable — the RPC failed, nothing was pinned, retry works.
+  const [noteSaves, setNoteSaves] = useState<ReadonlyMap<string, "saving" | "saved" | "error">>(new Map());
+  // A different sink = a different target notebook (or none) — the 저장됨 marks
+  // belong to the previous target, so saving the same answer to a NEW notebook
+  // must start fresh.
+  useEffect(() => {
+    setNoteSaves(new Map());
+  }, [noteSink]);
   const composeRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const [models, setModels] = useState<ModelsList | null>(null);
   const [model, setModel] = useState(""); // selected override id ("" → gateway main)
+  // 첨부 배치 진행 플래그(상태) — busy가 파일 읽기 틈에 잠깐 내려가는 동안에도 세션
+  // 전환/삭제/새 대화를 막는다 (배치 도중 세션이 바뀌면 남은 파일이 옛 sessionKey로
+  // 보이지 않게 전송된다). 동기 재진입 차단은 아래 attachingRef가 맡는다.
+  const [attaching, setAttaching] = useState(false);
   const { sessions, sessionKey, sessionsOpen, sessionErr, toggleSessions, selectSession, removeSession, newChat } =
-    useSessions(cfg, connected, busy, { clear, setTurns });
+    useSessions(cfg, connected, busy || attaching, { clear, setTurns });
   // Follow the newest message while it streams, unless the user scrolled up to read.
   const { ref: transcriptRef, onScroll, pin, atBottom, scrollToBottom } = useStickyScroll([turns, thinking]);
 
@@ -191,10 +201,10 @@ export function AIPanel({
   // busy의 ref 미러 + 첨부 큐 락. attachFiles의 순차 루프는 파일당 capture가 busy를
   // 내렸다 올리는 틈(파일 읽기 구간)이 있어, 그 틈에 사용자가 전송하면 턴이 인터리브된다.
   // 루프는 매 파일 전에 busyRef를 재확인하고, submit/새 배치는 attaching 동안 차단한다.
+  // 미러는 렌더 중 대입 — useEffect 반영은 커밋 뒤로 밀릴 수 있어 FileReader 태스크
+  // 인터리빙에서 낡은 값을 읽을 수 있다.
   const busyRef = useRef(busy);
-  useEffect(() => {
-    busyRef.current = busy;
-  }, [busy]);
+  busyRef.current = busy;
   const attachingRef = useRef(false);
 
   function submit(message = input) {
@@ -222,8 +232,9 @@ export function AIPanel({
   }
 
   // 첨부 인입(클립 버튼·드롭·붙여넣기 공용): 형식·크기를 거른 뒤(splitAttachable) 한 파일씩
-  // 순서대로 capture(이미지 OCR·음성 전사·문서 추출)에 보낸다 — 채팅 탭과 같은 경로, 이
-  // 패널의 세션(client:main)에 턴으로 남는다. 입력창의 텍스트는 첫 비-음성 파일의 캡션으로.
+  // 순서대로 capture(이미지 OCR·음성 전사·문서 추출)에 보낸다 — 채팅 탭과 같은 경로,
+  // 드로어에서 선택된 현재 세션(sessionKey)에 턴으로 남는다. 입력창의 텍스트는 첫 비-음성
+  // 파일의 캡션으로.
   async function attachFiles(files: File[]) {
     if (busy || attachingRef.current || !connected || files.length === 0) return;
     const { ok, skipped } = splitAttachable(files);
@@ -233,6 +244,7 @@ export function AIPanel({
     const caption = captionTarget ? input.trim() : "";
     if (caption) setInput("");
     attachingRef.current = true;
+    setAttaching(true);
     try {
       for (const file of ok) {
         const mimeType = inferAttachmentMimeType(file.name, file.type);
@@ -256,7 +268,22 @@ export function AIPanel({
       }
     } finally {
       attachingRef.current = false;
+      setAttaching(false);
     }
+  }
+
+  // 노트에 저장: 성공해야만 저장됨으로 표시한다 — sink(RPC)가 실패하면 실패 상태로
+  // 남겨 같은 버튼으로 재시도할 수 있다 (과거엔 발사 후 무조건 저장됨으로 위장했다).
+  async function saveNote(turnId: string, text: string) {
+    if (!noteSink) return;
+    setNoteSaves((prev) => new Map(prev).set(turnId, "saving"));
+    let ok = false;
+    try {
+      ok = await noteSink(text);
+    } catch {
+      ok = false;
+    }
+    setNoteSaves((prev) => new Map(prev).set(turnId, ok ? "saved" : "error"));
   }
 
   function onPick(e: ChangeEvent<HTMLInputElement>) {
@@ -343,7 +370,7 @@ export function AIPanel({
         <SessionDrawer
           sessions={sessions}
           currentKey={sessionKey}
-          busy={busy}
+          busy={busy || attaching}
           error={sessionErr}
           onSelect={selectSession}
           onDelete={removeSession}
@@ -387,18 +414,23 @@ export function AIPanel({
                 )}
               {/* Save this answer into the open notebook as a cited note — shown only
                   while a notebook pane has registered a sink (the notebook's output
-                  loop: material made with the AI stays with the deal). */}
+                  loop: material made with the AI stays with the deal). 저장됨 only
+                  after the sink confirms; a failed pin stays clickable for retry. */}
               {noteSink && turn.role === "assistant" && turn.status === "done" && turn.text.trim() && (
                 <button
                   className="row-btn ai-save-note"
-                  disabled={savedNoteIds.has(turn.id)}
-                  onClick={() => {
-                    noteSink(turn.text);
-                    setSavedNoteIds((prev) => new Set(prev).add(turn.id));
-                  }}
+                  disabled={noteSaves.get(turn.id) === "saving" || noteSaves.get(turn.id) === "saved"}
+                  onClick={() => void saveNote(turn.id, turn.text)}
                   title="이 답변을 노트북에 인용자료(노트)로 저장"
                 >
-                  <Icon name="plus" size={12} /> {savedNoteIds.has(turn.id) ? "노트로 저장됨" : "노트에 저장"}
+                  <Icon name="plus" size={12} />{" "}
+                  {noteSaves.get(turn.id) === "saved"
+                    ? "노트로 저장됨"
+                    : noteSaves.get(turn.id) === "saving"
+                      ? "저장 중…"
+                      : noteSaves.get(turn.id) === "error"
+                        ? "저장 실패 — 다시 시도"
+                        : "노트에 저장"}
                 </button>
               )}
             </div>

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { NOTEBOOK_RPC } from "@/resources";
 import { projectList } from "@/aiText";
 import type { Notebook, NotebookSource, NotebookSummary } from "@/types";
@@ -78,28 +78,38 @@ export function NotebookPane() {
     );
   }
 
+  // The active notebook id as a render-time ref mirror — the note sink below runs
+  // asynchronously and must see the CURRENT notebook at completion time, not the
+  // one captured when it was registered.
+  const activeIdRef = useRef<string | null>(null);
+  activeIdRef.current = active?.id ?? null;
+
   // AI-answer → note sink: while a notebook is open, register a save function so
   // the docked AI panel can offer 노트에 저장 on every finished answer. Saving pins
   // the answer as a kind=note source (title falls back to a first-line snippet) —
   // the notebook's OUTPUT loop: material made with the AI stays in the notebook
-  // instead of scrolling away in the chat.
+  // instead of scrolling away in the chat. Resolves with whether the pin landed so
+  // the AI panel only marks 저장됨 on success (failure stays retryable). `call` is
+  // cfg-keyed (useCallback), so a gateway change re-registers a fresh sink instead
+  // of leaving a stale client captured here.
   useEffect(() => {
     if (!connected || !active) {
       setNoteSink(null);
       return;
     }
     const id = active.id;
-    setNoteSink((text: string) => {
-      void (async () => {
-        const r = await call(NOTEBOOK_RPC.addSource, { id, kind: "note", title: "", text }, "노트 저장 중…");
-        if (!r.ok) return;
-        await openNotebook(id);
-        void loadNotebooks();
-      })();
+    setNoteSink(async (text: string) => {
+      const r = await call(NOTEBOOK_RPC.addSource, { id, kind: "note", title: "", text }, "노트 저장 중…");
+      if (!r.ok) return false;
+      // Refresh only if this notebook is still the open one — the user may have
+      // switched during the RPC, and re-opening would yank them back.
+      if (activeIdRef.current === id) await openNotebook(id);
+      void loadNotebooks();
+      return true;
     });
     return () => setNoteSink(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [connected, active?.id]);
+  }, [connected, active?.id, call]);
 
   async function createNotebook(name: string, description: string) {
     const r = await call<NotebookSummary>(
@@ -209,7 +219,10 @@ export function NotebookPane() {
         )}
         {status && <span className="pane-status">{status}</span>}
         <span className="notebook-bar-spring" />
-        {connected && sortedNotebooks.length > 1 && (
+        {/* Switcher shows when there is something to switch to — and also whenever
+            nothing is open (e.g. the auto-open fetch failed with a single notebook):
+            otherwise the body says "위에서 노트북을 선택하세요" with nothing to select. */}
+        {connected && sortedNotebooks.length > 0 && (!active || sortedNotebooks.length > 1) && (
           <select
             className="field notebook-select"
             aria-label="노트북 선택"

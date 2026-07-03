@@ -27,11 +27,15 @@ export function ChatView({ cfg, hidden = false }: { cfg: GatewayConfig; hidden?:
   const fileRef = useRef<HTMLInputElement>(null);
   const [models, setModels] = useState<ModelsList | null>(null);
   const [model, setModel] = useState("");
+  // 첨부 배치 진행 플래그(상태) — busy가 파일 읽기 틈에 잠깐 내려가는 동안에도 세션
+  // 전환/삭제/새 대화를 막는다 (배치 도중 세션이 바뀌면 남은 파일이 옛 sessionKey로
+  // 보이지 않게 전송된다). 동기 재진입 차단은 아래 attachingRef가 맡는다.
+  const [attaching, setAttaching] = useState(false);
   // chat:* 네임스페이스로 스코프 — 업무 패널의 client:main 세션과 섞이지 않는다.
   const { sessions, sessionKey, sessionErr, selectSession, removeSession, newChat, refreshSessions } = useSessions(
     cfg,
     connected,
-    busy,
+    busy || attaching,
     { clear, setTurns },
     {
       mainKey: "chat:main",
@@ -90,11 +94,10 @@ export function ChatView({ cfg, hidden = false }: { cfg: GatewayConfig; hidden?:
   }, [busy, hidden]);
 
   // busy의 ref 미러 + 첨부 큐 락 — attachFiles의 파일 읽기 틈에 턴이 인터리브되는 것 방지
-  // (AIPanel과 동일 패턴).
+  // (AIPanel과 동일 패턴). 미러는 렌더 중 대입 — useEffect 반영은 커밋 뒤로 밀릴 수 있어
+  // FileReader 태스크 인터리빙에서 낡은 값을 읽을 수 있다.
   const busyRef = useRef(busy);
-  useEffect(() => {
-    busyRef.current = busy;
-  }, [busy]);
+  busyRef.current = busy;
   const attachingRef = useRef(false);
 
   // Non-work: no workspaceContext / activeResource — a pure conversation, scoped to
@@ -137,6 +140,7 @@ export function ChatView({ cfg, hidden = false }: { cfg: GatewayConfig; hidden?:
     const caption = captionTarget ? input.trim() : "";
     if (caption) setInput("");
     attachingRef.current = true;
+    setAttaching(true);
     try {
       for (const file of ok) {
         const mimeType = inferAttachmentMimeType(file.name, file.type);
@@ -159,6 +163,7 @@ export function ChatView({ cfg, hidden = false }: { cfg: GatewayConfig; hidden?:
       }
     } finally {
       attachingRef.current = false;
+      setAttaching(false);
     }
     void refreshSessions();
   }
@@ -184,7 +189,7 @@ export function ChatView({ cfg, hidden = false }: { cfg: GatewayConfig; hidden?:
           <button
             className="row-btn"
             onClick={newChat}
-            disabled={busy}
+            disabled={busy || attaching}
             title="새 대화"
             aria-label="새 대화"
             style={{ padding: 4, display: "inline-flex" }}
@@ -330,7 +335,7 @@ export function ChatView({ cfg, hidden = false }: { cfg: GatewayConfig; hidden?:
         <SessionDrawer
           sessions={sessions}
           currentKey={sessionKey}
-          busy={busy}
+          busy={busy || attaching}
           error={sessionErr}
           onSelect={selectSession}
           onDelete={removeSession}
