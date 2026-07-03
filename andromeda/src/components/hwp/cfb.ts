@@ -51,10 +51,12 @@ export class Cfb {
     this.readMiniFatAndStream();
   }
 
-  // sectorOffset maps a sector number to its byte offset (sector 0 starts right
-  // after the 512-byte header).
+  // sectorOffset maps a sector number to its byte offset. Per [MS-CFB] sector N
+  // begins at (N+1)*sectorSize: the header occupies the first full sector. In v3
+  // that's 512 bytes; in v4 the 512-byte header is padded to a full 4096-byte
+  // sector, so hardcoding 512 here would mis-locate every v4 sector.
   private sectorOffset(sector: number): number {
-    return 512 + sector * this.sectorSize;
+    return (sector + 1) * this.sectorSize;
   }
 
   private readFat() {

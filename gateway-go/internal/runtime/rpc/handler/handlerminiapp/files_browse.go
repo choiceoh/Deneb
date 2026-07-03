@@ -275,12 +275,20 @@ func filesBrowseUpload(deps FilesBrowseDeps) rpcutil.HandlerFunc {
 				raw = raw[i+1:]
 			}
 		}
-		if raw == "" {
-			return rpcerr.MissingParam("dataBase64").Response(req.ID)
+		// Decode the payload. Empty content is allowed ONLY on the editor save
+		// path (overwrite=true) — clearing a text file to zero bytes is a
+		// legitimate save. A capture upload (overwrite=false) with no bytes is a
+		// botched capture, so it still errors rather than storing an empty file.
+		var data []byte
+		if raw != "" {
+			decoded, derr := base64.StdEncoding.DecodeString(raw)
+			if derr != nil {
+				return rpcerr.InvalidParams(fmt.Errorf("dataBase64 is not valid base64")).Response(req.ID)
+			}
+			data = decoded
 		}
-		data, err := base64.StdEncoding.DecodeString(raw)
-		if err != nil || len(data) == 0 {
-			return rpcerr.InvalidParams(fmt.Errorf("dataBase64 is not valid base64")).Response(req.ID)
+		if len(data) == 0 && !p.Overwrite {
+			return rpcerr.MissingParam("dataBase64").Response(req.ID)
 		}
 		// overwrite=false (default) → the store autorenames on a name clash, so
 		// a capture upload never clobbers a file; overwrite=true is the editor

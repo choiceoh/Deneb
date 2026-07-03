@@ -87,6 +87,12 @@ export function isEditableKind(kind: ViewKind): boolean {
 // the webview; past the cap the viewer degrades to the download link.
 export const maxTextPreviewBytes = 2 << 20; // 2 MiB
 
+// maxHwpBytes caps the HWP blob we parse in-browser. HWP is compressed and can
+// embed images, so it gets a larger cap than plain text — but an unbounded file
+// would inflate + parse on the UI thread and freeze the webview. Past the cap
+// the viewer degrades to the download link (real business docs are well under).
+export const maxHwpBytes = 16 << 20; // 16 MiB
+
 // parseCsv is a small RFC-4180-ish parser (quoted fields, embedded commas and
 // newlines, "" escapes). TSV rides the same path with a tab delimiter.
 export function parseCsv(text: string, delimiter = ","): string[][] {
