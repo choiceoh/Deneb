@@ -86,7 +86,21 @@ type wikiUpdate struct {
 func parseWikiUpdates(text string, logger *slog.Logger) ([]wikiUpdate, error) {
 	var rawItems []json.RawMessage
 	if err := json.Unmarshal([]byte(text), &rawItems); err != nil {
-		return nil, err
+		// Damaged array — a mid-string truncation (output budget) or a stray
+		// unescaped character inside a Korean value (observed 2026-07-03:
+		// "invalid character 'ì' after object key:value pair") used to zero
+		// the whole cycle and back off 8h. Salvage every complete element
+		// before the damage point instead; only a response that is not a JSON
+		// array at all still fails (worth backing off on).
+		salvaged := salvageJSONArrayPrefix(text)
+		if len(salvaged) == 0 {
+			return nil, err
+		}
+		if logger != nil {
+			logger.Warn("wiki-dream: synthesis array damaged; applying salvaged prefix",
+				"error", err, "salvaged", len(salvaged))
+		}
+		rawItems = salvaged
 	}
 	updates := make([]wikiUpdate, 0, len(rawItems))
 	skipped := 0
@@ -107,6 +121,32 @@ func parseWikiUpdates(text string, logger *slog.Logger) ([]wikiUpdate, error) {
 			"skipped", skipped, "applied", len(updates))
 	}
 	return updates, nil
+}
+
+// salvageJSONArrayPrefix decodes complete elements off the front of a JSON
+// array until the first syntax error and returns them ([] when the text is
+// not an array or the very first element is already damaged). Elements after
+// the damage point are unrecoverable by construction — the parser cannot
+// resynchronize on free-form JSON — and losing the tail of one cycle is
+// strictly better than losing the cycle.
+func salvageJSONArrayPrefix(text string) []json.RawMessage {
+	dec := json.NewDecoder(strings.NewReader(text))
+	tok, err := dec.Token()
+	if err != nil {
+		return nil
+	}
+	if d, ok := tok.(json.Delim); !ok || d != '[' {
+		return nil
+	}
+	var items []json.RawMessage
+	for dec.More() {
+		var raw json.RawMessage
+		if err := dec.Decode(&raw); err != nil {
+			break
+		}
+		items = append(items, raw)
+	}
+	return items
 }
 
 // synthesize calls the LLM to determine which wiki pages should be updated.

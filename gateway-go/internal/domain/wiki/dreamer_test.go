@@ -271,3 +271,39 @@ func twoDigit(n int) string {
 	}
 	return strconv.Itoa(n)
 }
+
+func TestParseWikiUpdates_SalvagesDamagedArray(t *testing.T) {
+	t.Run("mid-string truncation keeps preceding items", func(t *testing.T) {
+		text := `[
+  {"action":"update","path":"프로젝트/a/대표.md","title":"A","content":"본문"},
+  {"action":"create","path":"프로젝트/b/대표.md","title":"B","content":"잘리는 중`
+		updates, err := parseWikiUpdates(text, nil)
+		if err != nil {
+			t.Fatalf("expected salvage, got error: %v", err)
+		}
+		if len(updates) != 1 || updates[0].Path != "프로젝트/a/대표.md" {
+			t.Fatalf("updates = %+v, want the one complete item", updates)
+		}
+	})
+
+	t.Run("unescaped quote inside a value keeps preceding items", func(t *testing.T) {
+		// The 2026-07-03 failure shape: a closed value followed by stray text.
+		text := `[
+  {"action":"update","path":"프로젝트/a/대표.md","title":"A"},
+  {"action":"update","path":"프로젝트/b/대표.md","summary":"98MW EPC — "회의" 이후"}
+]`
+		updates, err := parseWikiUpdates(text, nil)
+		if err != nil {
+			t.Fatalf("expected salvage, got error: %v", err)
+		}
+		if len(updates) != 1 || updates[0].Path != "프로젝트/a/대표.md" {
+			t.Fatalf("updates = %+v, want the one complete item", updates)
+		}
+	})
+
+	t.Run("first element already damaged still errors", func(t *testing.T) {
+		if _, err := parseWikiUpdates(`[{"broken": }`, nil); err == nil {
+			t.Fatal("expected error when nothing is salvageable")
+		}
+	})
+}

@@ -26,7 +26,13 @@ const (
 	// backend must fail the phase quickly instead of eating the whole cycle
 	// budget (a stuck vLLM engine held every cycle for the full 10 minutes).
 	wikiDreamSynthesisTimeout = 5 * time.Minute
-	wikiDreamMaxTokens        = 4096
+	// wikiDreamMaxTokens sizes the synthesis answer. 4096 was tuned in the
+	// qwen-lightweight era and truncated mid-JSON once dsv4 (thinking off)
+	// started emitting full page bodies for a multi-day diary backlog — the
+	// parser then failed the whole cycle. 8192 covers the observed batches;
+	// the salvage parser (parseWikiUpdates) keeps a truncated tail from
+	// zeroing the cycle regardless.
+	wikiDreamMaxTokens        = 8192
 	diaryProcessStateFile     = ".diary-process-state.json"
 	dreamProposalFile         = ".dream-last-proposal.json"
 	processedCapsuleLimit     = 12
