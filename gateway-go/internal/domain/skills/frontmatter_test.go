@@ -278,6 +278,7 @@ metadata:
         "emoji": "🐙",
         "requires": { "bins": ["gh"] },
         "tags": ["git", "PR", "issues"],
+        "triggers": ["계약서", "독소조항"],
         "related_skills": ["skill-creator"],
         "install":
           [
@@ -310,6 +311,9 @@ metadata:
 	}
 	if len(meta.RelatedSkills) != 1 || meta.RelatedSkills[0] != "skill-creator" {
 		t.Fatalf("related skills = %#v, want skill-creator", meta.RelatedSkills)
+	}
+	if len(meta.Triggers) != 2 || meta.Triggers[0] != "계약서" {
+		t.Fatalf("triggers = %#v, want parsed triggers", meta.Triggers)
 	}
 	if meta.Requires == nil || len(meta.Requires.Bins) != 1 || meta.Requires.Bins[0] != "gh" {
 		t.Fatalf("requires = %#v, want gh bin", meta.Requires)

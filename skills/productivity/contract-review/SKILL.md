@@ -9,6 +9,7 @@ metadata:
       {
         "emoji": "📑",
         "tags": ["contract", "계약", "검토", "독소조항", "위험조항", "법무", "발주서", "review"],
+        "triggers": ["계약서", "계약 검토", "독소조항", "약정서", "공급계약", "발주서 검토", "이 조건 받아도", "mou"],
         "related_skills": ["email-analysis", "fact-check", "decision-premortem"],
       },
   }

@@ -56,10 +56,13 @@ func TestRecordTurnSkillUsage_skillsToolErrorIsNotSkillFailure(t *testing.T) {
 	// badly, so the consulted skill must NOT be recorded as a failure. Otherwise
 	// the evolver pins it below its success-rate threshold and re-evolves it
 	// forever chasing a gateway error it cannot fix.
+	// (Session key must be a REAL session: review-fork sessions
+	// ("system:skill-review:*") are now excluded from recording entirely —
+	// see TestRecordTurnSkillUsage_SkipsReviewForks.)
 	rec := &fakeUsageRecorder{}
 	log := NewSkillConsultLog()
 	log.Add("email-analysis")
-	recordTurnSkillUsage(rec, log, []agent.ToolActivity{{Name: "skills", IsError: true}}, "system:skill-review:cron:x")
+	recordTurnSkillUsage(rec, log, []agent.ToolActivity{{Name: "skills", IsError: true}}, "client:main")
 
 	if len(rec.calls) != 1 {
 		t.Fatalf("got %d calls, want 1: %+v", len(rec.calls), rec.calls)

@@ -9,6 +9,7 @@ metadata:
       {
         "emoji": "🧭",
         "tags": ["retrieval", "검색", "분해", "multihop", "멀티홉", "회상", "근거"],
+        "triggers": ["경위", "어떻게 됐던", "타임라인 정리", "이력 추적"],
         "related_skills": ["fact-check", "decision-premortem"],
       },
   }

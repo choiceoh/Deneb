@@ -222,7 +222,8 @@ func executeAgentRun(
 			storeNotebookGrounding(params.SessionKey, nbID, updated, g)
 		}
 	}
-	tailAdds := buildTailAdditions(params, prep.RecallMemory, notebookGrounding)
+	tailAdds := buildTailAdditions(params, prep.RecallMemory, notebookGrounding,
+		buildSkillHints(params, cachedResolvedSkills()))
 	messages, tailInjected := injectTailAdditions(messages, tailAdds)
 	tailForSystem := ""
 	if !tailInjected {

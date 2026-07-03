@@ -416,15 +416,18 @@ func handleMiniappCaptureAudio(deps Deps) rpcutil.HandlerFunc {
 				savedPath = rel
 			}
 		}
-		// Drive a meeting-minutes turn, not a bare transcript dump. The agent
-		// judges meeting vs short memo (the meeting-minutes skill carries the
-		// stance); for a real discussion it writes minutes + analysis and saves
-		// them to the wiki so the next meeting can build on it.
+		// Drive a meeting-minutes turn, not a bare transcript dump. For a real
+		// discussion the agent must LOAD the meeting-minutes skill (single source
+		// of the minutes procedure — inlining a paraphrase here let the skill
+		// drift unused; 30d forensics showed zero organic consults) and follow
+		// it: minutes + analysis, saved to the wiki so the next meeting builds on
+		// it. Short memos skip the ceremony.
 		message := "🎙️ 공유 녹음을 받아썼습니다 (화자분리·타임스탬프).\n\n" +
-			"회의·통화·논의 녹음이면 회의록을 작성하고 업무 관점에서 분석하라 — 핵심 논의, " +
+			"회의·통화·논의 녹음이면 먼저 `skills(action=\"read\", name=\"meeting-minutes\")`로 " +
+			"회의록 절차를 로드해 그대로 따르라 — 핵심 논의, " +
 			"결정사항, 액션아이템(담당·기한), 리스크·후속을 빠짐없이 정리하고, 위키에 남겨 " +
 			"다음에 이어보게 하라. 기한이 있는 항목은 due로 남겨 임박 알림이 챙기게 한다. " +
-			"짧은 음성 메모면 과하게 격식 차리지 말고 핵심만 정리하라. 한국어로.\n\n" +
+			"짧은 음성 메모면 스킬 없이 과하게 격식 차리지 말고 핵심만 정리하라. 한국어로.\n\n" +
 			"## 전사\n" + strings.TrimSpace(transcript)
 		if savedPath != "" {
 			message += "\n\n(전사 원문 보관: memory/" + savedPath + " — 회의록에 이 경로를 출처로 남겨라)"

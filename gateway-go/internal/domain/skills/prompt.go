@@ -15,15 +15,19 @@ import (
 
 // PromptSkill is the input type for prompt building.
 type PromptSkill struct {
-	Name                   string    `json:"name"`
-	Description            string    `json:"description,omitempty"`
-	FilePath               string    `json:"filePath"`
-	Category               string    `json:"category,omitempty"`
-	Version                string    `json:"version,omitempty"`
-	Type                   SkillType `json:"type,omitempty"`
-	Tags                   []string  `json:"tags,omitempty"`
-	RelatedSkills          []string  `json:"relatedSkills,omitempty"`
-	DisableModelInvocation bool      `json:"disableModelInvocation,omitempty"`
+	Name        string    `json:"name"`
+	Description string    `json:"description,omitempty"`
+	FilePath    string    `json:"filePath"`
+	Category    string    `json:"category,omitempty"`
+	Version     string    `json:"version,omitempty"`
+	Type        SkillType `json:"type,omitempty"`
+	Tags        []string  `json:"tags,omitempty"`
+	// Triggers are NOT rendered into any prompt block (the semi-static skills
+	// index stays byte-stable) — they feed the chat pipeline's deterministic
+	// per-turn auto-hint matcher (chat/skill_hints.go).
+	Triggers               []string `json:"triggers,omitempty"`
+	RelatedSkills          []string `json:"relatedSkills,omitempty"`
+	DisableModelInvocation bool     `json:"disableModelInvocation,omitempty"`
 }
 
 // PromptResult is the output of prompt building.

@@ -9,6 +9,7 @@ metadata:
       {
         "emoji": "♟️",
         "tags": ["decision", "의사결정", "사전부검", "premortem", "리스크", "악마의변호인", "선택"],
+        "triggers": ["사전부검", "프리모템", "결정해야", "받을까 말까", "리스크 짚어", "어느 안이"],
         "related_skills": ["fact-check", "contract-review", "email-analysis"],
       },
   }
