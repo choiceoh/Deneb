@@ -1,5 +1,17 @@
 # Changelog
 
+## [4.62.1](https://github.com/choiceoh/Deneb/compare/deneb-v4.62.0...deneb-v4.62.1) (2026-07-03)
+
+
+### 🐛 Bug Fixes
+
+* **andromeda:** 리뷰 잔여분 — 노트 저장 위장·첨부 중 세션 가드·HWP 상한/DIFAT·탭 동기화 외 ([#3066](https://github.com/choiceoh/Deneb/issues/3066)) ([335d5e4](https://github.com/choiceoh/Deneb/commit/335d5e4cbc72bc84cdc72764fa95fe25ef0ac2f3))
+* **gateway:** 리뷰 잔여분 — provider ${ENV} 확장·위키 Created 영속·verify 레이스 가드·스킬 힌트 프리셋 게이트·MCP 위생 ([#3067](https://github.com/choiceoh/Deneb/issues/3067)) ([d6404de](https://github.com/choiceoh/Deneb/commit/d6404de151aa8d894d2c8b56997ab9bf90ce44ea))
+* **native:** 전송 대기열 4종 — 세션 전환 오발사·programmatic 큐잉·실패 위장 드레인·유실 복원 ([#3069](https://github.com/choiceoh/Deneb/issues/3069)) ([d1cd3bb](https://github.com/choiceoh/Deneb/commit/d1cd3bb8cceca5baac4f7b30e58607976da0020d))
+* **scripts:** A/B 배터리 채점 신뢰도 — JSON모드 거부 벌점·역할별 버딕트·프로덕션 계약 정렬 ([#3065](https://github.com/choiceoh/Deneb/issues/3065)) ([cc08005](https://github.com/choiceoh/Deneb/commit/cc08005204b6d9985a85ab5d98eee488020bdb7e))
+* **skills:** read 도구 스킬 소비 집계 + 코딩 세션 기록 제외 ([#3064](https://github.com/choiceoh/Deneb/issues/3064)) ([1bc118a](https://github.com/choiceoh/Deneb/commit/1bc118a89acc99444c84e67068f1b1ab09fb83a8))
+* **wiki:** 리뷰 잔여분 일괄 — 대표.md 교차매칭·link_prune·로그 회전 유실·종결 가드·리콜 앵커 ([#3068](https://github.com/choiceoh/Deneb/issues/3068)) ([fff5a39](https://github.com/choiceoh/Deneb/commit/fff5a39539faef1abc8ed4502ba0c2010db8eaab))
+
 ## [4.62.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.61.0...deneb-v4.62.0) (2026-07-03)
 
 
