@@ -174,6 +174,11 @@ func RegisterDefaultPostProcessors(registry *ToolRegistry) {
 	// avoiding unnecessary function calls across all 34+ tools every turn.
 	pp.Add("exec", ExecAnnotator)
 	pp.Add("grep", GrepResultSummarizer)
+	// Skill-consult attribution: a plain `read` of a cataloged SKILL.md counts
+	// as a consult (the compact index teaches exactly that load path), so the
+	// usage ledger and the hint→consult conversion metric see it. Side-effect
+	// only — output passes through unchanged. See tool_skill_read_consult.go.
+	pp.Add("read", ReadSkillConsultRecorder)
 
 	// JSON formatting for structured tools.
 	for _, tool := range []string{"web", "kv", "sessions"} {
