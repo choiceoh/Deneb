@@ -1,12 +1,15 @@
 package mailpriority
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // Fixtures mirror the shapes of real Korean business mail this deployment
 // receives (synthetic values — no live data).
 func TestScore_Tiers(t *testing.T) {
 	vip := func(email string) bool { return email == "kim@partner.co.kr" }
-	s := New(vip)
+	s := New(vip, nil)
 
 	cases := []struct {
 		name    string
@@ -61,7 +64,7 @@ func TestScore_Tiers(t *testing.T) {
 }
 
 func TestScore_NilVIPLookupSafe(t *testing.T) {
-	s := New(nil)
+	s := New(nil, nil)
 	tier, _ := s.Score("a <a@b.c>", "회의 일정", "방문 일정 조율")
 	if tier != TierAttention {
 		t.Fatalf("tier = %q, want attention", tier)
@@ -82,7 +85,7 @@ func TestSenderEmail(t *testing.T) {
 }
 
 func TestScore_HintCappedAtTwo(t *testing.T) {
-	s := New(func(string) bool { return true })
+	s := New(func(string) bool { return true }, nil)
 	// urgent keyword + deadline + attention + money + vip = 5 categories
 	_, hint := s.Score("k <k@p.kr>", "긴급 낙찰 계약 3억원", "내일까지 회신 요망")
 	// " · " separator appears at most once when capped at two hints.
@@ -102,4 +105,34 @@ func countSep(s string) int {
 		}
 	}
 	return n
+}
+
+func TestScore_CounterpartyAmplifies(t *testing.T) {
+	counterparty := func(email string) bool { return strings.HasSuffix(email, "@acme.co.kr") }
+
+	// Amplify-only: a contentless FYI from an active counterparty stays unmarked.
+	s := New(nil, counterparty)
+	if tier, _ := s.Score("kim <kim@acme.co.kr>", "회사 소식 공유", "지난 분기 소식입니다"); tier != TierNone {
+		t.Fatalf("contentless counterparty mail = %q, want TierNone (amplify-only)", tier)
+	}
+
+	// The combined-signal scenario: money(+2)+attention(+2)=4 is amber on its
+	// own, but from an active counterparty (+2 → 6) it crosses into urgent —
+	// 같은 단가+금액 메일도 진행 거래처면 지금 봐야 한다.
+	if tier, _ := s.Score("lee <lee@other.com>", "단가 3억원 조정", "인상 검토 부탁드립니다"); tier != TierAttention {
+		t.Fatalf("money+attention non-counterparty = %q, want attention", tier)
+	}
+	if tier, _ := s.Score("kim <kim@acme.co.kr>", "단가 3억원 조정", "인상 검토 부탁드립니다"); tier != TierUrgent {
+		t.Fatalf("money+attention+counterparty = %q, want urgent (combined-signal boost)", tier)
+	}
+
+	// One content signal + the boost stays amber (the boost alone must not
+	// manufacture urgency), and the hint names the relationship.
+	tier, hint := s.Score("kim <kim@acme.co.kr>", "견적 문의", "확인 부탁드립니다")
+	if tier != TierAttention {
+		t.Fatalf("attention+counterparty (4점) = %q, want attention", tier)
+	}
+	if !strings.Contains(hint, "진행 거래처") {
+		t.Errorf("hint = %q, want 진행 거래처 signal named", hint)
+	}
 }

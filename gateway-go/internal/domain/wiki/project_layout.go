@@ -87,6 +87,22 @@ func MailAnalysisPagePath(project, msgID string) string {
 	return projectCategoryPrefix + "/" + project + "/" + MailAnalysisDir + "/" + msgID + ".md"
 }
 
+// ProjectOfLinkedMailAnalysis returns the owning project of a PROJECT-LINKED
+// mail-analysis page ("프로젝트/<project>/메일분석/<msgID>.md") and true, or
+// ("", false) for everything else — including the unlinked category bucket
+// (프로젝트/메일분석/) and legacy dirs, whose senders have no established
+// project relationship and must not count as active counterparties.
+func ProjectOfLinkedMailAnalysis(relPath string) (string, bool) {
+	seg := splitProjectPath(relPath)
+	if len(seg) != 3 || seg[1] != MailAnalysisDir || !strings.HasSuffix(seg[2], ".md") {
+		return "", false
+	}
+	if seg[0] == "" || IsReservedProjectDir(seg[0]) {
+		return "", false
+	}
+	return seg[0], true
+}
+
 // IsProjectRepPage reports whether relPath is a project 대표페이지 — the new
 // in-folder form 프로젝트/<name>/대표.md, or the legacy flat form 프로젝트/<name>.md
 // (accepted during the migration transition).

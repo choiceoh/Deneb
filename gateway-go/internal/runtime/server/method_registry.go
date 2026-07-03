@@ -408,13 +408,19 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 			// prefer its LLM verdict over the heuristic below.
 			AnalysisCache: handlerminiapp.NewAnalysisStore(filepath.Join(denebDir, "cache", "mail_analysis")),
 			WorkState:     mailwork.New(filepath.Join(denebDir, "mail_work_state.json")),
-			// Row priority: cheap local heuristics + address-book VIP
-			// lookup. contactsStore is created above in this same
-			// registration pass; a nil store just drops the VIP signal.
-			Priority: func(from, subject, snippet string) (string, string) {
-				tier, hint := mailPriorityScorer(s.contactsStore).Score(from, subject, snippet)
-				return string(tier), hint
-			},
+			// Row priority: cheap local heuristics + address-book VIP lookup
+			// + active-counterparty boost (recent project-linked mail
+			// analyses in the wiki). contactsStore is created above in this
+			// same registration pass; the wiki store is late-bound (session
+			// phase), which the lookup's getter tolerates — until it exists
+			// the boost is simply off. Nil stores just drop their signal.
+			Priority: func() func(from, subject, snippet string) (string, string) {
+				cp := newCounterpartyLookup(func() *wiki.Store { return s.wikiStore })
+				return func(from, subject, snippet string) (string, string) {
+					tier, hint := mailPriorityScorer(s.contactsStore, cp).Score(from, subject, snippet)
+					return string(tier), hint
+				}
+			}(),
 		}),
 
 		// Mini App Calendar domain. Hybrid: a read-only Google client (lazy
@@ -1228,12 +1234,17 @@ func resolveLocalTodos(logger *slog.Logger) handlerminiapp.LocalTodos {
 }
 
 // mailPriorityScorer builds the inbox-row scorer for the gmail list handler.
-// The scorer is stateless and cheap to construct; the VIP signal binds the
-// (possibly nil) contacts store — nil simply drops that signal.
-func mailPriorityScorer(cs *contacts.Store) *mailpriority.Scorer {
+// The scorer is stateless and cheap to construct. The VIP signal binds the
+// (possibly nil) contacts store; the active-counterparty signal binds the
+// wiki-derived cached lookup — either nil simply drops its signal.
+func mailPriorityScorer(cs *contacts.Store, cp *counterpartyLookup) *mailpriority.Scorer {
 	var vip func(string) bool
 	if cs != nil {
 		vip = cs.HasEmail
 	}
-	return mailpriority.New(vip)
+	var counterparty func(string) bool
+	if cp != nil {
+		counterparty = cp.Has
+	}
+	return mailpriority.New(vip, counterparty)
 }
