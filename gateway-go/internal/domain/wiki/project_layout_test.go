@@ -122,3 +122,24 @@ func TestProjectFolderOf(t *testing.T) {
 		t.Error("reserved bucket must not resolve to a project folder")
 	}
 }
+
+func TestProjectOfLinkedMailAnalysis(t *testing.T) {
+	cases := map[string]struct {
+		project string
+		ok      bool
+	}{
+		"프로젝트/영산고/메일분석/msg123.md": {"영산고", true},
+		"프로젝트/메일분석/msg123.md":     {"", false}, // unlinked bucket — no relationship
+		"프로젝트/mail-analyses/a.md": {"", false}, // legacy bucket
+		"프로젝트/거래/메일분석/msg.md":     {"", false}, // reserved dir is not a project
+		"프로젝트/영산고/로그.md":          {"", false},
+		"프로젝트/영산고/메일분석/깊은/msg.md": {"", false}, // extra depth
+		"사람/김민준.md":               {"", false},
+	}
+	for path, want := range cases {
+		project, ok := ProjectOfLinkedMailAnalysis(path)
+		if project != want.project || ok != want.ok {
+			t.Errorf("ProjectOfLinkedMailAnalysis(%q) = (%q, %v), want (%q, %v)", path, project, ok, want.project, want.ok)
+		}
+	}
+}

@@ -31,16 +31,22 @@ const (
 )
 
 // Scorer evaluates mail rows. Construct once and reuse; Score is safe for
-// concurrent use (regexes are package-level, vip must be thread-safe).
+// concurrent use (regexes are package-level, the closures must be thread-safe).
 type Scorer struct {
 	// vip reports whether a sender address belongs to the user's address
 	// book. Nil disables the signal (tests, contacts store unavailable).
 	vip func(email string) bool
+	// counterparty reports whether a sender address belongs to a company the
+	// user is actively working with (recent project-linked mail analyses —
+	// see wiki.ActiveCounterpartyDomains and the server's cached lookup).
+	// This is the combined-signal layer: the same 견적/기한 content scores
+	// higher when the sender is mid-deal. Nil disables the signal.
+	counterparty func(email string) bool
 }
 
-// New returns a Scorer. vip may be nil.
-func New(vip func(email string) bool) *Scorer {
-	return &Scorer{vip: vip}
+// New returns a Scorer. Either closure may be nil.
+func New(vip, counterparty func(email string) bool) *Scorer {
+	return &Scorer{vip: vip, counterparty: counterparty}
 }
 
 // Signal categories. Each category counts at most once so a keyword-stuffed
@@ -53,6 +59,7 @@ const (
 	pointsAttention     = 2
 	pointsMoney         = 2
 	pointsVIP           = 2
+	pointsCounterparty  = 2
 
 	thresholdUrgent    = 5
 	thresholdAttention = 2
@@ -133,6 +140,14 @@ func (s *Scorer) Score(from, subject, snippet string) (Tier, string) {
 	if score > 0 && s.vip != nil && email != "" && s.vip(email) {
 		score += pointsVIP
 		hints = append(hints, "주요 연락처")
+	}
+	// Active counterparty amplifies the same way (and stacks with VIP by
+	// design): 견적+진행 거래처 lands amber→near-urgent, 기한+진행 거래처
+	// lands urgent — the combined-signal scenario a lone keyword can't
+	// express. A contentless FYI from a counterparty still stays unmarked.
+	if score > 0 && s.counterparty != nil && email != "" && s.counterparty(email) {
+		score += pointsCounterparty
+		hints = append(hints, "진행 거래처")
 	}
 
 	switch {
