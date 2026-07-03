@@ -27,6 +27,12 @@ func (f *fakeDreamer) RunDream(context.Context) (*DreamReport, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.runCount++
+	// Mirror the real dreamer's contract: a run (success or error) resets the
+	// trigger (resetCounters), so ShouldDream flips false. Without this the
+	// SetDreamer immediate tick AND IncrementDreamTurn could each run one
+	// cycle — a scheduling-dependent double-run that flaked CI ("got 2, want
+	// run count 1") while passing locally.
+	f.shouldDream = false
 	return f.runReport, f.runErr
 }
 
