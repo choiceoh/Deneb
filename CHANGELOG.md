@@ -1,5 +1,15 @@
 # Changelog
 
+## [4.60.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.59.0...deneb-v4.60.0) (2026-07-03)
+
+
+### ✨ Features
+
+* **andromeda:** HWP 인앱 미리보기 — 텍스트·표·이미지 (순수 TS 파서 직접 구현) ([#3050](https://github.com/choiceoh/Deneb/issues/3050)) ([1e31736](https://github.com/choiceoh/Deneb/commit/1e317361540fa7cbba20f26013e6481d38c9e10b))
+* **andromeda:** 파일 미리보기 + 라이브 편집 + 탭 — AionUi식 인앱 뷰어 ([#3048](https://github.com/choiceoh/Deneb/issues/3048)) ([91201fe](https://github.com/choiceoh/Deneb/commit/91201fed91b6ccc3004df67347ed4afa395ab00c))
+* **wiki:** 드리머 종합 개선 — 구조 병합·update 폴백 dedup·즉시 첫 체크·partial 백프레셔·드림 피드 카드 ([#3051](https://github.com/choiceoh/Deneb/issues/3051)) ([34b3823](https://github.com/choiceoh/Deneb/commit/34b38234e0449061c7f0cc2e6f4753fea4640255))
+* **wiki:** 드림 apply 구조 가드 — 진행 로그 리라우팅 + 일일 다이제스트 생성 차단 ([#3046](https://github.com/choiceoh/Deneb/issues/3046)) ([cd494be](https://github.com/choiceoh/Deneb/commit/cd494be89f6c4167717aeb7b81611da42f412000))
+
 ## [4.59.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.58.0...deneb-v4.59.0) (2026-07-03)
 
 
