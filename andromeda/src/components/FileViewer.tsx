@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { color, muted } from "@/theme";
 import { MarkdownEditor } from "@/components/MarkdownEditor";
 import { diffLineClass, isEditableKind, maxTextPreviewBytes, parseCsv, viewKindFor } from "@/components/fileView";
+import { parseHwp } from "@/components/hwp/hwp";
 
 // FileViewer renders one file inline — the AionUi-style preview sized to
 // Deneb: images and PDFs straight off a blob, markdown through the existing
@@ -55,6 +56,17 @@ export function FileViewer({
         if (kind === "image" || kind === "pdf") {
           url = URL.createObjectURL(blob);
           setObjectUrl(url);
+          setPhase("ready");
+          return;
+        }
+        if (kind === "hwp") {
+          // 한/글 5.x: extract text in-browser (dependency-free parser). The
+          // container is compressed, so cap on the parsed text, not the blob.
+          const doc = await parseHwp(await blob.arrayBuffer());
+          if (!alive) return;
+          const body = doc.paragraphs.length ? doc.text : "(문서에서 읽을 수 있는 텍스트를 찾지 못했습니다)";
+          setText(body);
+          setSavedText(body);
           setPhase("ready");
           return;
         }
@@ -139,13 +151,17 @@ export function FileViewer({
   }
 
   // Text-family: shared editor chrome (모드 탭 + 저장) over per-kind rendering.
-  const editable = Boolean(onSave);
+  // Only genuinely text-backed kinds are editable — HWP is EXTRACTED text
+  // (saving it would corrupt the binary original), so it stays read-only even
+  // inside the file-tab (which passes an onSave).
+  const editable = Boolean(onSave) && isEditableKind(kind);
   const hasPreviewMode = kind === "markdown" || kind === "csv" || kind === "diff";
   const showPreview = hasPreviewMode && preview;
 
   return (
     <div className="file-viewer-text">
       <div className="file-viewer-bar">
+        {kind === "hwp" && <span style={muted}>한글 문서 — 텍스트만 추출 (서식·표·이미지는 원본에서)</span>}
         {hasPreviewMode && (
           <div className="wiki-mode-tabs" role="group" aria-label="보기 방식">
             <button
@@ -198,6 +214,8 @@ export function FileViewer({
           readOnly={!editable}
           spellCheck={false}
           aria-label={name}
+          // Extracted HWP prose has long paragraphs — wrap rather than scroll.
+          style={kind === "hwp" ? { whiteSpace: "pre-wrap" } : undefined}
         />
       )}
     </div>

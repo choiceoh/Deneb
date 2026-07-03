@@ -93,15 +93,16 @@ describe("MailDetail layout", () => {
         attachmentCount: 2,
         attachments: [
           { attachmentId: "a1", filename: "견적서.pdf", mimeType: "application/pdf", size: 1024 },
-          { attachmentId: "a2", filename: "계약서.hwp", mimeType: "application/octet-stream", size: 2048 },
+          { attachmentId: "a2", filename: "정산.xlsx", mimeType: "application/octet-stream", size: 2048 },
         ],
       });
 
       // The PDF is previewable → a button that opens the in-app viewer modal.
       const pdf = await screen.findByRole("button", { name: /견적서\.pdf/ });
-      // The HWP has no previewer → stays a plain download link.
-      const hwp = screen.getByRole("link", { name: /계약서\.hwp/ });
-      expect(hwp).toHaveAttribute("href", expect.stringContaining("/gmail/attachment"));
+      // The XLSX has no previewer → stays a plain download link (HWP would be a
+      // preview button — the in-browser HWP text extractor covers it).
+      const xlsx = screen.getByRole("link", { name: /정산\.xlsx/ });
+      expect(xlsx).toHaveAttribute("href", expect.stringContaining("/gmail/attachment"));
 
       await userEvent.click(pdf);
       await screen.findByRole("dialog");
