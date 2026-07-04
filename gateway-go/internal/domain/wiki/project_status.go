@@ -1,10 +1,11 @@
 // project_status.go — the project representative page's "## 현재 상태" section.
 //
-// A project lives as a single page 프로젝트/<name>.md (the same direct-page
-// convention the mail analyzer's related-project candidates use; the nested
-// 프로젝트/mail-analyses/ and 프로젝트/거래/ folders are raw data, not projects).
-// That page is the project's 대표페이지, and its "## 현재 상태" section is the
-// living latest-progress digest the 모아보기 screen reads.
+// A project lives in its own folder 프로젝트/<name>/ with fixed slots
+// (project_layout.go is the single source of truth); its 대표.md is the
+// 대표페이지, and legacy flat 프로젝트/<name>.md pages still count during the
+// migration transition. The category-level 프로젝트/메일분석/ and 프로젝트/거래/
+// buckets are raw data, not projects. The 대표페이지's "## 현재 상태" section is
+// the living latest-progress digest the 모아보기 screen reads.
 //
 // Two writers keep it fresh:
 //   - the dream cycle (periodic, LLM): replaces the section with a clean roll-up
