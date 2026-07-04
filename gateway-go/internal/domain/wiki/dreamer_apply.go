@@ -114,6 +114,23 @@ func parseWikiUpdates(text string, logger *slog.Logger) (updates []wikiUpdate, p
 		rawItems = salvaged
 		partial = !complete
 	}
+	// Double-wrapped array ("[[{...},{...}]]"): the strict unmarshal above
+	// SUCCEEDS with one raw element that is itself a JSON array; that element
+	// then fails the per-item wikiUpdate unmarshal → updates=0, partial=false,
+	// err=nil — and the caller advances offsets, silently losing the whole
+	// cycle's input. Unwrap the inner array instead.
+	if len(rawItems) == 1 {
+		if inner := strings.TrimSpace(string(rawItems[0])); strings.HasPrefix(inner, "[") {
+			var innerItems []json.RawMessage
+			if err := json.Unmarshal(rawItems[0], &innerItems); err == nil {
+				if logger != nil {
+					logger.Warn("wiki-dream: unwrapped double-wrapped synthesis array",
+						"items", len(innerItems))
+				}
+				rawItems = innerItems
+			}
+		}
+	}
 	updates = make([]wikiUpdate, 0, len(rawItems))
 	skipped := 0
 	for _, item := range rawItems {
@@ -131,6 +148,13 @@ func parseWikiUpdates(text string, logger *slog.Logger) (updates []wikiUpdate, p
 	if skipped > 0 && logger != nil {
 		logger.Warn("wiki-dream: synthesis dropped malformed items",
 			"skipped", skipped, "applied", len(updates))
+	}
+	// Every element skipped = NOTHING of this cycle's input was consumed, which
+	// is materially a total failure even though the array itself parsed. Report
+	// partial so the caller holds the input cursors for re-consumption instead
+	// of advancing past unconsumed content (#3051 backpressure blind spot).
+	if skipped > 0 && len(updates) == 0 {
+		partial = true
 	}
 	return updates, partial, nil
 }
@@ -283,10 +307,30 @@ func (wd *WikiDreamer) applyUpdates(_ context.Context, updates []wikiUpdate) (cr
 	// Snapshot existing codes once so filings inherit their project's frozen code
 	// (and new-project mints stay collision-free across this batch).
 	codeIdx := wd.buildCodeIndex()
+	// Paths already written by THIS batch: FindSimilarPages excludes self, so a
+	// second create aimed at the same path sails past the dedup below and
+	// WritePage would clobber the first item's content. A later create to a
+	// written path becomes an update (which merges via mergeUpdateContent).
+	writtenThisBatch := make(map[string]bool, len(updates))
 
 	for _, u := range updates {
 		if u.Path == "" || u.Title == "" {
 			continue
+		}
+		// LLM action drift ("replace"/"delete"/"append"/empty): the switch below
+		// only writes create/update, and an unknown action used to fall through
+		// it silently while STILL running the Supersedes side effect — existing
+		// pages got SupersededBy pointing at a never-written path (search
+		// demotion + auto-archive 30d later). Normalize to "update": every
+		// observed drift form intends a content write, and update flows through
+		// the dedup + merge machinery. Side effects thus only ever run after a
+		// successful write (the failure paths below `continue` past them).
+		switch u.Action {
+		case "create", "update":
+		default:
+			wd.logger.Warn("wiki-dream: unknown update action treated as update",
+				"action", u.Action, "path", u.Path)
+			u.Action = "update"
 		}
 		// The LLM occasionally wraps its proposed content in a frontmatter
 		// block; strip it here so the append/create paths below never fold a
@@ -356,6 +400,13 @@ func (wd *WikiDreamer) applyUpdates(_ context.Context, updates []wikiUpdate) (cr
 					u.Path = existing
 				}
 			}
+		}
+		// Batch-internal dedup: a second create for a path THIS batch already
+		// wrote (identical paths bypass FindSimilarPages' self-exclusion) must
+		// append, not clobber the first item's content.
+		if u.Action == "create" && writtenThisBatch[u.Path] {
+			wd.logger.Info("wiki-dream: repeated create in batch converted to update", "path", u.Path)
+			u.Action = "update"
 		}
 
 		// Guard: a 진행 로그 section aimed at a 대표페이지 belongs in the project's
@@ -532,6 +583,9 @@ func (wd *WikiDreamer) applyUpdates(_ context.Context, updates []wikiUpdate) (cr
 				updated++
 			}
 		}
+		// Reaching here means the write above succeeded (every failure path
+		// `continue`s) — record it for the batch-internal create dedup.
+		writtenThisBatch[u.Path] = true
 
 		// Contradiction handling: when the LLM flagged this update as REPLACING
 		// one or more existing pages' facts, stamp each old page so search

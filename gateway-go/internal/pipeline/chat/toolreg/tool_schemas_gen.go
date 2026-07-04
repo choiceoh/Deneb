@@ -904,7 +904,7 @@ func wikiToolSchema() map[string]any {
 		"properties": map[string]any{
 			"action": map[string]any{
 				"type":        "string",
-				"description": "Action: search (ripgrep full-text search), read (read wiki page(s) — one via query, several at once via paths), index (read master/category index), write (create/update page), log (append diary entry), daily (read recent diary), status (wiki stats), close (프로젝트 종결 — query=프로젝트명, content=결과·사유 한 줄; 폴더 전체 보관+활성 목록 제외, 삭제 아님), reopen (종결 프로젝트 재개 — query=프로젝트명)",
+				"description": "Action: search (ripgrep full-text search), read (read wiki page(s) — one via query, several at once via paths), index (read master/category index), write (create/update page), log (append diary entry), daily (read recent diary), status (wiki stats), close (프로젝트 종결 — query=프로젝트명, content=결과·사유 한 줄; 폴더 전체 보관+활성 목록 제외, 삭제 아님), reopen (종결 프로젝트 재개 — query=프로젝트 폴더명 또는 대표페이지 경로; 종결된 프로젝트는 표시 제목으로는 못 찾는다)",
 				"enum":        []string{"search", "read", "index", "write", "log", "daily", "status", "close", "reopen"},
 			},
 			"category": map[string]any{
@@ -1231,7 +1231,7 @@ func knowledgeToolSchema() map[string]any {
 			},
 			"page": map[string]any{
 				"type":        "string",
-				"description": "wiki 페이지 상대 경로 (op=record). 카테고리/이름 형식 — 예: `인물/박부장`, `프로젝트/ABC상사-NDA`",
+				"description": "wiki 페이지 상대 경로 (op=record). 카테고리/이름 형식 — 예: `인물/박부장`. 프로젝트는 폴더 스키마를 따른다 — 대표페이지는 `프로젝트/<이름>/대표.md` (예: `프로젝트/ABC상사-NDA/대표.md`; flat `프로젝트/<이름>` 신규 생성은 자동으로 대표 슬롯으로 정규화됨)",
 			},
 			"query": map[string]any{
 				"type":        "string",

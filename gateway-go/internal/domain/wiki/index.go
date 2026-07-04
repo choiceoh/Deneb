@@ -39,6 +39,12 @@ type IndexEntry struct {
 	Created    string // YYYY-MM-DD
 	Type       string // concept, entity, source, comparison, log
 	Confidence string // high, medium, low
+	// Archived mirrors the page's frontmatter Archived flag so index-driven
+	// curation (duplicate detection, keeper choice) can respect retirement
+	// without reading every page. Persisted as a trailing TSV column; entries
+	// parsed from a pre-archived-column index.md stay false until the next
+	// page write or RebuildIndex self-heals them.
+	Archived bool
 }
 
 // NewIndex creates an empty index.
@@ -90,6 +96,7 @@ func (idx *Index) UpdateEntry(relPath string, page *Page) {
 		Created:    page.Meta.Created,
 		Type:       page.Meta.Type,
 		Confidence: page.Meta.Confidence,
+		Archived:   page.Meta.Archived,
 	}
 }
 
@@ -143,7 +150,7 @@ func (idx *Index) Render() string {
 		})
 
 		sb.WriteString(fmt.Sprintf("## %s\n\n", cat))
-		sb.WriteString("id\tpath\ttitle\tsummary\ttags\timportance\tupdated\ttype\tconfidence\tbacklinks\tcreated\trelated\n")
+		sb.WriteString("id\tpath\ttitle\tsummary\ttags\timportance\tupdated\ttype\tconfidence\tbacklinks\tcreated\trelated\tarchived\n")
 		for _, e := range entries {
 			tags := strings.Join(e.entry.Tags, ",")
 			imp := ""
@@ -151,16 +158,22 @@ func (idx *Index) Render() string {
 				imp = fmt.Sprintf("%.2f", e.entry.Importance)
 			}
 			bl := backlinkCount[e.path]
-			// created and related ride as the LAST columns (after the
-			// render-computed backlinks) so every older field keeps its
+			// created, related, and archived ride as the LAST columns (after
+			// the render-computed backlinks) so every older field keeps its
 			// position — old parsers and old files stay compatible; ParseIndex
 			// tolerates their absence. Without the related column the
 			// in-memory Related lists evaporate on every restart (index.md is
 			// what NewStore reloads), leaving backlink diffs, reference
 			// repointing, and the backlinks count blind until the next full
-			// RebuildIndex.
+			// RebuildIndex; without the archived column, retirement-aware
+			// curation (duplicate exclusion, keeper choice) goes blind the
+			// same way.
+			archived := ""
+			if e.entry.Archived {
+				archived = "1"
+			}
 			sb.WriteString(fmt.Sprintf(
-				"%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%d\t%s\t%s\n",
+				"%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%d\t%s\t%s\t%s\n",
 				sanitizeTSV(e.entry.ID),
 				e.path,
 				sanitizeTSV(e.entry.Title),
@@ -173,6 +186,7 @@ func (idx *Index) Render() string {
 				bl,
 				sanitizeTSV(e.entry.Created),
 				renderRelatedTSV(e.entry.Related),
+				archived,
 			))
 		}
 		sb.WriteString("\n")
@@ -300,12 +314,13 @@ func ParseIndex(path string) (*Index, error) {
 }
 
 // parseTSVLine parses a TSV data row:
-// id\tpath\ttitle\tsummary\ttags\timportance\tupdated\ttype\tconfidence\tbacklinks\tcreated\trelated
-// Backward-compatible: the old 11-field format (without related), the old
-// 10-field format (without created), and the old 8-field format (without
-// type/confidence) still parse correctly — missing trailing columns simply
-// stay zero (Created "" falls back to Updated at the call sites; Related nil
-// self-heals on the next RebuildIndex).
+// id\tpath\ttitle\tsummary\ttags\timportance\tupdated\ttype\tconfidence\tbacklinks\tcreated\trelated\tarchived
+// Backward-compatible: the old 12-field format (without archived), the old
+// 11-field format (without related), the old 10-field format (without
+// created), and the old 8-field format (without type/confidence) still parse
+// correctly — missing trailing columns simply stay zero (Created "" falls back
+// to Updated at the call sites; Related nil and Archived false self-heal on
+// the next RebuildIndex).
 func parseTSVLine(line, category string) indexRenderEntry {
 	fields := strings.Split(line, "\t")
 	if len(fields) < 2 {
@@ -362,6 +377,10 @@ func parseTSVLine(line, category string) indexRenderEntry {
 	// related (field 11) is absent in pre-related-column files → stays nil.
 	if len(fields) > 11 {
 		e.Related = parseRelatedTSV(fields[11])
+	}
+	// archived (field 12) is absent in pre-archived-column files → stays false.
+	if len(fields) > 12 {
+		e.Archived = fields[12] == "1"
 	}
 
 	return indexRenderEntry{path: path, entry: e}

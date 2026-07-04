@@ -40,14 +40,13 @@ func writeUnlinkedMail(t *testing.T, store *Store, id, title string, related []s
 // ambiguous and signal-less mails stay put.
 func TestReclassifyUnlinkedMailAnalyses(t *testing.T) {
 	store := newReclassifyStore(t)
-	now := time.Date(2026, 7, 3, 9, 0, 0, 0, time.UTC)
 
 	writeUnlinkedMail(t, store, "m1", "RE: 견적 회신", []string{"프로젝트/기아-화성/대표.md"}) // signal 1
 	writeUnlinkedMail(t, store, "m2", "해남 희망에너지 EPC 낙찰 통보", nil)                 // signal 2 (unique title)
 	writeUnlinkedMail(t, store, "m3", "기아 화성 + 해남 희망에너지 EPC 비교", nil)            // ambiguous → stays
 	writeUnlinkedMail(t, store, "m4", "뉴스레터", nil)                               // no signal → stays
 
-	moved := store.ReclassifyUnlinkedMailAnalyses(now, 10)
+	moved := store.ReclassifyUnlinkedMailAnalyses(10)
 	if len(moved) != 2 {
 		t.Fatalf("moved = %+v, want exactly the two signal mails", moved)
 	}
@@ -72,7 +71,7 @@ func TestReclassifyUnlinkedMailAnalyses(t *testing.T) {
 	}
 
 	// Idempotent: nothing left to move.
-	if again := store.ReclassifyUnlinkedMailAnalyses(now, 10); len(again) != 0 {
+	if again := store.ReclassifyUnlinkedMailAnalyses(10); len(again) != 0 {
 		t.Errorf("second pass moved again: %+v", again)
 	}
 }
@@ -110,7 +109,7 @@ func TestReclassifyTarget_TwoDistinctRelatedProjectsIsAmbiguous(t *testing.T) {
 	// End-to-end: the ambiguous mail stays in the unlinked bucket.
 	writeUnlinkedMail(t, store, "amb1", "비교 검토",
 		[]string{"프로젝트/기아-화성/대표.md", "프로젝트/해남-희망에너지-epc/대표.md"})
-	if moved := store.ReclassifyUnlinkedMailAnalyses(time.Now(), 10); len(moved) != 0 {
+	if moved := store.ReclassifyUnlinkedMailAnalyses(10); len(moved) != 0 {
 		t.Errorf("ambiguous mail was re-filed: %+v", moved)
 	}
 }
@@ -122,7 +121,7 @@ func TestReclassifyUnlinkedMailAnalyses_Cap(t *testing.T) {
 	writeUnlinkedMail(t, store, "c2", "기아 화성 문의 2", nil)
 	writeUnlinkedMail(t, store, "c3", "기아 화성 문의 3", nil)
 
-	if moved := store.ReclassifyUnlinkedMailAnalyses(time.Now(), 2); len(moved) != 2 {
+	if moved := store.ReclassifyUnlinkedMailAnalyses(2); len(moved) != 2 {
 		t.Fatalf("moved = %d, want cap 2", len(moved))
 	}
 }

@@ -73,7 +73,13 @@ func (s *Store) newLinkResolver(pages []string) *linkResolver {
 	for _, p := range pages {
 		p = filepath.ToSlash(p)
 		r.exists[p] = true
-		r.byBasename[path.Base(p)] = append(r.byBasename[path.Base(p)], p)
+		// Slot filenames (대표.md/로그.md/로그-보관.md) identify a slot, not a
+		// subject: with a single project on disk byBasename["대표.md"] would be
+		// "unique", and a dead slot ref (its project deleted/renamed) would
+		// repoint to an UNRELATED project's slot instead of being dropped.
+		if base := path.Base(p); !isProjectSlotLeafFile(base) {
+			r.byBasename[base] = append(r.byBasename[base], p)
+		}
 	}
 	for p, entry := range entries {
 		if t := strings.TrimSpace(entry.Title); t != "" {

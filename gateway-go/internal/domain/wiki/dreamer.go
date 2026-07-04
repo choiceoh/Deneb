@@ -70,6 +70,14 @@ type diaryProcessState struct {
 	// at or before this stamp may be dropped from MEMORY.md once they age out
 	// of the keep window (see memory_curation.go).
 	MemoryConsumedThrough string `json:"memoryConsumedThrough,omitempty"`
+
+	// corrupt marks a state whose ledger file existed but failed to parse
+	// (never persisted — unexported). scanDiaries then ignores the legacy
+	// LastProcessed cutoff for that scan: with the per-file offsets lost, the
+	// cutoff would seal unconsumed older diary files as "done". The dupe
+	// re-consumption this allows is absorbed by the create/update dedup, the
+	// verbatim-line drop, and the project-log contains guard.
+	corrupt bool
 }
 
 type diaryFileState struct {
@@ -281,8 +289,25 @@ func (wd *WikiDreamer) ShouldDream(_ context.Context) bool {
 	return false
 }
 
-// RunDream executes the wiki consolidation cycle.
-func (wd *WikiDreamer) RunDream(ctx context.Context) (*autonomous.DreamReport, error) {
+// RunDream executes the wiki consolidation cycle. The wrapper turns a panic
+// into an error WITH the interval backoff (resetCounters): the autonomous
+// service's own recover keeps the process alive but cannot reach the dreamer's
+// counters, so a panicking cycle used to leave ShouldDream true and the 30-min
+// timer hot-looped the same doomed cycle forever.
+func (wd *WikiDreamer) RunDream(ctx context.Context) (report *autonomous.DreamReport, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			wd.logger.Error("wiki-dream: cycle panicked; backing off one interval", "panic", r)
+			wd.resetCounters()
+			report = nil
+			err = fmt.Errorf("wiki-dream: panic: %v", r)
+		}
+	}()
+	return wd.runDream(ctx)
+}
+
+// runDream is RunDream's body (see the panic-recovery wrapper above).
+func (wd *WikiDreamer) runDream(ctx context.Context) (*autonomous.DreamReport, error) {
 	start := time.Now()
 	ctx, cancel := context.WithTimeout(ctx, wikiDreamTimeout)
 	defer cancel()
@@ -437,6 +462,16 @@ func (wd *WikiDreamer) RunDream(ctx context.Context) (*autonomous.DreamReport, e
 	// are reversible from this cycle's git snapshot.
 	findings := wd.verifyPages(ctx)
 	if len(findings) > 0 {
+		// Pre-fix git snapshot: the auto-fixes' safety story is git
+		// revertibility, but the cycle snapshot lands at the END — so the
+		// first-ever cycle's merges/moves had no pre-state commit to revert
+		// to. Cheap: SnapshotGit commits only when changes exist.
+		for _, f := range findings {
+			if f.Fix != nil {
+				wd.store.SnapshotGit(ctx, "dream: pre-verify-fix snapshot")
+				break
+			}
+		}
 		applied := wd.applyVerifyFixes(findings)
 		for _, f := range findings {
 			if f.Fix != nil {
@@ -545,14 +580,21 @@ func (wd *WikiDreamer) RunDream(ctx context.Context) (*autonomous.DreamReport, e
 		phaseErrors = append(phaseErrors, fmt.Sprintf("index-save: %v", err))
 	}
 	if scan != nil {
-		scan.State.Recent = appendProcessedDiaryCapsule(scan.State.Recent, processedDiaryCapsule{
-			At:        time.Now().Format(time.RFC3339),
-			DiaryDate: scan.LatestDate,
-			Proposed:  len(updates),
-			Created:   created,
-			Updated:   updated,
-			Paths:     updatePaths(updates),
-		})
+		// No capsule on held cycles: the held input is RE-CONSUMED next cycle,
+		// and recording its paths as 처리 이력 would tell the synthesis prompt
+		// not to repeat exactly the topics we are about to re-feed — the model
+		// then answers [] and the tail is lost for good. The capsule is only
+		// history once the cursors actually advanced past the input.
+		if !heldOffsets {
+			scan.State.Recent = appendProcessedDiaryCapsule(scan.State.Recent, processedDiaryCapsule{
+				At:        time.Now().Format(time.RFC3339),
+				DiaryDate: scan.LatestDate,
+				Proposed:  len(updates),
+				Created:   created,
+				Updated:   updated,
+				Paths:     updatePaths(updates),
+			})
+		}
 		if err := wd.saveDiaryProcessState(scan.State); err != nil {
 			phaseErrors = append(phaseErrors, fmt.Sprintf("diary-state-save: %v", err))
 		}

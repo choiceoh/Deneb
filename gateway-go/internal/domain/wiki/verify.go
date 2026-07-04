@@ -209,8 +209,10 @@ func (wd *WikiDreamer) detectStaleSuperseded() []VerifyFinding {
 const mailAnalysisArchiveAfterDays = 90
 
 // detectStaleMailAnalyses flags mail-analysis pages older than the retention
-// window with an auto-archive fix. Date basis: Updated (set once at creation —
-// the mail sink never rewrites these), falling back to Created.
+// window with an auto-archive fix. Date basis: Updated (stamped at creation
+// and only refreshed by a genuine re-analysis of the mail; the curation
+// passes — reclassify re-filing, retention archiving — deliberately preserve
+// it), falling back to Created.
 func (wd *WikiDreamer) detectStaleMailAnalyses() []VerifyFinding {
 	relPaths, err := wd.store.ListPages("")
 	if err != nil {
@@ -255,6 +257,17 @@ type pageRef struct {
 func detectDuplicates(entries map[string]IndexEntry) []VerifyFinding {
 	pages := make([]pageRef, 0, len(entries))
 	for path, entry := range entries {
+		// Mirror the wiki reviewer's exclusions (wiki_review_task.go): raw-data
+		// pages (메일분석·거래), project log slots (로그.md/로그-보관.md), and archived
+		// pages are never duplicate candidates. Same-subject thread mails
+		// ("RE: 견적 요청" × N) share normalized titles, so without this the
+		// auto-merge folded mail pages together — deleting pages and breaking
+		// the 메일 1통=1페이지 contract; archived pages are retired, and merging
+		// into (or out of) them drags live content off the active surface.
+		if IsMailAnalysisPath(path) || IsProjectRawDataPath(path) ||
+			IsProjectLogPage(path) || entry.Archived {
+			continue
+		}
 		pages = append(pages, pageRef{path: path, title: entry.Title, id: entry.ID})
 	}
 
@@ -352,14 +365,45 @@ type misclassificationResult struct {
 	Reason          string `json:"reason"`
 }
 
-// detectMisclassifications sends page list to LLM to find category errors.
-// entries is an index snapshot (Store.SnapshotEntries).
-func (wd *WikiDreamer) detectMisclassifications(ctx context.Context, entries map[string]IndexEntry) []VerifyFinding {
-	var lines []string
+// misclassifyTimeout bounds the misclassification LLM call — the only dreamer
+// LLM call that previously ran on the whole cycle budget: a wedged backend
+// must fail this phase, not eat the remaining cycle (mirrors open-loops and
+// project-digest).
+const misclassifyTimeout = 2 * time.Minute
+
+// misclassifyMaxLines caps how many index rows one misclassification prompt
+// carries. Map iteration order is random, so the sample rotates across cycles
+// — bounded prompt size with eventual coverage.
+const misclassifyMaxLines = 300
+
+// misclassificationLines renders the candidate rows for the misclassification
+// prompt. Raw-data buckets (메일분석·거래 — deterministic writers, and by far the
+// longest tail), path-fixed project log slots, and archived (retired) pages
+// are excluded: their placement is structural, a "correct category" verdict on
+// them is meaningless, and the mail long tail alone could blow the prompt.
+func misclassificationLines(entries map[string]IndexEntry) []string {
+	lines := make([]string, 0, min(len(entries), misclassifyMaxLines))
 	for path, entry := range entries {
+		if IsMailAnalysisPath(path) || IsProjectRawDataPath(path) ||
+			IsProjectLogPage(path) || entry.Archived {
+			continue
+		}
+		if len(lines) >= misclassifyMaxLines {
+			break
+		}
 		lines = append(lines, fmt.Sprintf("%s\t%s\t%s\t%s",
 			path, entry.Title, entry.Category, entry.Summary))
 	}
+	return lines
+}
+
+// detectMisclassifications sends page list to LLM to find category errors.
+// entries is an index snapshot (Store.SnapshotEntries).
+func (wd *WikiDreamer) detectMisclassifications(ctx context.Context, entries map[string]IndexEntry) []VerifyFinding {
+	ctx, cancel := context.WithTimeout(ctx, misclassifyTimeout)
+	defer cancel()
+
+	lines := misclassificationLines(entries)
 	if len(lines) == 0 {
 		return nil
 	}
