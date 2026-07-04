@@ -1,5 +1,15 @@
 # Changelog
 
+## [4.62.2](https://github.com/choiceoh/Deneb/compare/deneb-v4.62.1...deneb-v4.62.2) (2026-07-04)
+
+
+### 🐛 Bug Fixes
+
+* **llm:** glm 추론 폭주 3중 방어 — 명시 effort 존중·봉투 1MiB·length=에러 ([#3078](https://github.com/choiceoh/Deneb/issues/3078)) ([c83b787](https://github.com/choiceoh/Deneb/commit/c83b787e131433923cf11c6bb377b3405a1c1051))
+* **skills:** evolve 프롬프트 위생 — 검증케이스 조각 정화·온도 0·꼬리 진단 ([#3077](https://github.com/choiceoh/Deneb/issues/3077)) ([121e243](https://github.com/choiceoh/Deneb/commit/121e2434fc59d546eeaec49295c4429da5514085))
+* **skills:** evolver LLM 호출 비스트리밍 전환 — glm 스트리밍 JSON 누출/절단 방어 ([#3072](https://github.com/choiceoh/Deneb/issues/3072)) ([791fe85](https://github.com/choiceoh/Deneb/commit/791fe8503a565f9bc644c9fca27eb2e52cfe48de))
+* **skills:** evolver 출력 예산 증액 — glm 추론이 완성 예산을 공유 ([#3074](https://github.com/choiceoh/Deneb/issues/3074)) ([4aa105b](https://github.com/choiceoh/Deneb/commit/4aa105ba0b015dc9fe961376d0cfe2716d09d61c))
+
 ## [4.62.1](https://github.com/choiceoh/Deneb/compare/deneb-v4.62.0...deneb-v4.62.1) (2026-07-03)
 
 
