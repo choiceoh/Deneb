@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -611,7 +612,47 @@ func (rt *router) forward(client clientInfo, w http.ResponseWriter, r *http.Requ
 		writeErr(w, http.StatusBadGateway, "upstream unreachable: "+entry.Name)
 		return
 	}
+	// Diagnostic tap: WORMHOLE_DUMP_MODEL=<name> logs the exact request body
+	// and the exact upstream response (head+tail) for that model's
+	// NON-STREAMING calls. Off by default (empty env — zero hot-path cost);
+	// used to capture what a client REALLY sends when curl reproductions and
+	// live behavior diverge (the 2026-07-04 evolver truncation hunt).
+	if dump := os.Getenv("WORMHOLE_DUMP_MODEL"); dump != "" && dump == entry.Name &&
+		!bytes.Contains(body, []byte(`"stream":true`)) {
+		rt.log.Info("dump: request", "model", entry.Name, "len", len(body),
+			"head", dumpSlice(body, 500, false), "tail", dumpSlice(body, 300, true))
+		data, rerr := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+		_ = resp.Body.Close()
+		if rerr != nil {
+			writeErr(w, http.StatusBadGateway, "upstream read failed: "+entry.Name)
+			return
+		}
+		rt.log.Info("dump: response", "model", entry.Name, "status", resp.StatusCode, "len", len(data),
+			"head", dumpSlice(data, 500, false), "tail", dumpSlice(data, 700, true))
+		for k, vs := range resp.Header {
+			if strings.EqualFold(k, "Content-Length") {
+				continue // length may differ after buffering; let net/http set it
+			}
+			for _, v := range vs {
+				w.Header().Add(k, v)
+			}
+		}
+		w.WriteHeader(resp.StatusCode)
+		_, _ = w.Write(data)
+		return
+	}
 	streamResponse(client, w, resp)
+}
+
+// dumpSlice returns the head (or tail) n bytes of b as a string for logging.
+func dumpSlice(b []byte, n int, tail bool) string {
+	if len(b) <= n {
+		return string(b)
+	}
+	if tail {
+		return "…" + string(b[len(b)-n:])
+	}
+	return string(b[:n]) + "…"
 }
 
 // streamResponse copies the upstream status, headers, and body straight back —

@@ -57,7 +57,29 @@ func StripThinkingTags(s string) string {
 		// Find closing tag.
 		closeIdx := strings.Index(rest, closeTag)
 		if closeIdx == -1 {
-			// Unclosed tag — skip to end (defensive: model output was truncated).
+			// No closing tag. Two very different realities share this shape:
+			//   - The tag opens the content (tagStart==0 with nothing written
+			//     yet): a genuine reasoning leak from a truncated model reply.
+			//     Strip the tag token but KEEP the rest — the payload usually
+			//     follows the leaked prose, and dropping everything (the old
+			//     behavior) lost it.
+			//   - The tag appears mid-content: almost always a LITERAL mention
+			//     in legitimate text (a skill body documenting "`<thinking>`
+			//     토큰이 새지 않게 하라"). The old skip-to-end amputated a
+			//     complete, valid evolve JSON mid-body — live 2026-07-04, eight
+			//     consecutive skill-evolve failures traced to this line. Keep
+			//     the remainder verbatim.
+			if tagStart == 0 && b.Len() == 0 {
+				openLen := len("<think>")
+				if closeTag == "</thinking>" {
+					openLen = len("<thinking>")
+				}
+				b.WriteString(s[tagStart+openLen:])
+				break
+			}
+			// The prefix s[i:tagStart] was already written above — append only
+			// the remainder from the tag itself.
+			b.WriteString(s[tagStart:])
 			break
 		}
 
