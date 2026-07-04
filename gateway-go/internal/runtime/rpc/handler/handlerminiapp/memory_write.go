@@ -238,7 +238,11 @@ func memoryMergePage(deps MemoryDeps) rpcutil.HandlerFunc {
 		if err := validateWikiPath(source); err != nil {
 			return rpcerr.InvalidRequest(err.Error()).Response(req.ID)
 		}
-		if target == source {
+		// Compare NORMALIZED identities: "기타/dup" and "기타/dup.md" are the
+		// same file, and a raw-string guard let that spelling variant queue a
+		// background self-merge that deleted the page (MergePage re-checks, but
+		// failing fast here beats a doomed job + failure notice).
+		if wiki.NormalizePagePath(target) == wiki.NormalizePagePath(source) {
 			return rpcerr.InvalidRequest("cannot merge a page into itself").Response(req.ID)
 		}
 

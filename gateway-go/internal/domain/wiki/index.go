@@ -48,15 +48,43 @@ func NewIndex() *Index {
 	}
 }
 
-// UpdateEntry adds or updates an index entry from a page.
+// Clone returns a deep copy of the index (entry map and slice fields
+// included). Backs Store.SnapshotIndex — the copy is what makes lock-free
+// walking/rendering safe while writers mutate the live index in place.
+func (idx *Index) Clone() *Index {
+	if idx == nil {
+		return nil
+	}
+	return &Index{
+		Entries:       cloneIndexEntries(idx.Entries),
+		LastProcessed: idx.LastProcessed,
+		GeneratedAt:   idx.GeneratedAt,
+	}
+}
+
+// cloneIndexEntries deep-copies an entry map, duplicating the Tags/Related
+// slices so the copy shares no backing arrays with the live entries.
+func cloneIndexEntries(in map[string]IndexEntry) map[string]IndexEntry {
+	out := make(map[string]IndexEntry, len(in))
+	for k, e := range in {
+		e.Tags = append([]string(nil), e.Tags...)
+		e.Related = append([]string(nil), e.Related...)
+		out[k] = e
+	}
+	return out
+}
+
+// UpdateEntry adds or updates an index entry from a page. Slice fields are
+// copied — storing the caller's live Tags/Related slices would alias the index
+// entry to memory the caller may keep mutating after the write returns.
 func (idx *Index) UpdateEntry(relPath string, page *Page) {
 	idx.Entries[relPath] = IndexEntry{
 		ID:         page.Meta.ID,
 		Title:      page.Meta.Title,
 		Summary:    page.Meta.Summary,
 		Category:   page.Meta.Category,
-		Tags:       page.Meta.Tags,
-		Related:    page.Meta.Related,
+		Tags:       append([]string(nil), page.Meta.Tags...),
+		Related:    append([]string(nil), page.Meta.Related...),
 		Importance: page.Meta.Importance,
 		Updated:    page.Meta.Updated,
 		Created:    page.Meta.Created,
@@ -115,7 +143,7 @@ func (idx *Index) Render() string {
 		})
 
 		sb.WriteString(fmt.Sprintf("## %s\n\n", cat))
-		sb.WriteString("id\tpath\ttitle\tsummary\ttags\timportance\tupdated\ttype\tconfidence\tbacklinks\tcreated\n")
+		sb.WriteString("id\tpath\ttitle\tsummary\ttags\timportance\tupdated\ttype\tconfidence\tbacklinks\tcreated\trelated\n")
 		for _, e := range entries {
 			tags := strings.Join(e.entry.Tags, ",")
 			imp := ""
@@ -123,11 +151,16 @@ func (idx *Index) Render() string {
 				imp = fmt.Sprintf("%.2f", e.entry.Importance)
 			}
 			bl := backlinkCount[e.path]
-			// created rides as the LAST column (after the render-computed
-			// backlinks) so every older field keeps its position — old parsers
-			// and old files stay compatible; ParseIndex tolerates its absence.
+			// created and related ride as the LAST columns (after the
+			// render-computed backlinks) so every older field keeps its
+			// position — old parsers and old files stay compatible; ParseIndex
+			// tolerates their absence. Without the related column the
+			// in-memory Related lists evaporate on every restart (index.md is
+			// what NewStore reloads), leaving backlink diffs, reference
+			// repointing, and the backlinks count blind until the next full
+			// RebuildIndex.
 			sb.WriteString(fmt.Sprintf(
-				"%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%d\t%s\n",
+				"%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%d\t%s\t%s\n",
 				sanitizeTSV(e.entry.ID),
 				e.path,
 				sanitizeTSV(e.entry.Title),
@@ -139,6 +172,7 @@ func (idx *Index) Render() string {
 				sanitizeTSV(e.entry.Confidence),
 				bl,
 				sanitizeTSV(e.entry.Created),
+				renderRelatedTSV(e.entry.Related),
 			))
 		}
 		sb.WriteString("\n")
@@ -153,6 +187,44 @@ func sanitizeTSV(s string) string {
 	s = strings.ReplaceAll(s, "\n", " ")
 	s = strings.ReplaceAll(s, "\r", " ")
 	return s
+}
+
+// relatedTSVSep separates related items inside the single TSV column. "|" is
+// safe because renderRelatedTSV strips it from items: related entries are page
+// paths / project codes / occasionally titles, none of which legitimately
+// carry a pipe (the wikilink alias form "[[a|b]]" never reaches Related — the
+// frontmatter list stores bare targets).
+const relatedTSVSep = "|"
+
+// renderRelatedTSV joins a Related list into one TSV field. Items are
+// TSV-sanitized and have any inner separator replaced by a space so one item
+// can never split into two on reparse.
+func renderRelatedTSV(related []string) string {
+	if len(related) == 0 {
+		return ""
+	}
+	items := make([]string, 0, len(related))
+	for _, r := range related {
+		r = strings.TrimSpace(strings.ReplaceAll(sanitizeTSV(r), relatedTSVSep, " "))
+		if r != "" {
+			items = append(items, r)
+		}
+	}
+	return strings.Join(items, relatedTSVSep)
+}
+
+// parseRelatedTSV splits the related TSV field back into a list.
+func parseRelatedTSV(field string) []string {
+	if strings.TrimSpace(field) == "" {
+		return nil
+	}
+	var out []string
+	for _, r := range strings.Split(field, relatedTSVSep) {
+		if r = strings.TrimSpace(r); r != "" {
+			out = append(out, r)
+		}
+	}
+	return out
 }
 
 // Save writes the index to disk.
@@ -197,8 +269,12 @@ func ParseIndex(path string) (*Index, error) {
 		}
 
 		// TSV data row: contains tabs and doesn't start with "- [[".
+		// Parse the line with only the line ending trimmed, NOT TrimSpace:
+		// an entry with an empty ID renders as "\tpath\t…", and trimming the
+		// leading tab would shift every field left one column (path read as
+		// the ID, title as the path — the whole row corrupts on reload).
 		if strings.Contains(trimmed, "\t") && !strings.HasPrefix(trimmed, "- [[") {
-			entry := parseTSVLine(trimmed, currentCategory)
+			entry := parseTSVLine(strings.TrimRight(line, "\r\n"), currentCategory)
 			if entry.path != "" {
 				idx.Entries[entry.path] = entry.entry
 			}
@@ -224,11 +300,12 @@ func ParseIndex(path string) (*Index, error) {
 }
 
 // parseTSVLine parses a TSV data row:
-// id\tpath\ttitle\tsummary\ttags\timportance\tupdated\ttype\tconfidence\tbacklinks\tcreated
-// Backward-compatible: the old 10-field format (without created) and the old
-// 8-field format (without type/confidence) still parse correctly — missing
-// trailing columns simply stay zero (Created "" falls back to Updated at the
-// call sites).
+// id\tpath\ttitle\tsummary\ttags\timportance\tupdated\ttype\tconfidence\tbacklinks\tcreated\trelated
+// Backward-compatible: the old 11-field format (without related), the old
+// 10-field format (without created), and the old 8-field format (without
+// type/confidence) still parse correctly — missing trailing columns simply
+// stay zero (Created "" falls back to Updated at the call sites; Related nil
+// self-heals on the next RebuildIndex).
 func parseTSVLine(line, category string) indexRenderEntry {
 	fields := strings.Split(line, "\t")
 	if len(fields) < 2 {
@@ -281,6 +358,10 @@ func parseTSVLine(line, category string) indexRenderEntry {
 	// created (field 10) is absent in pre-created-column files → stays "".
 	if len(fields) > 10 {
 		e.Created = fields[10]
+	}
+	// related (field 11) is absent in pre-related-column files → stays nil.
+	if len(fields) > 11 {
+		e.Related = parseRelatedTSV(fields[11])
 	}
 
 	return indexRenderEntry{path: path, entry: e}

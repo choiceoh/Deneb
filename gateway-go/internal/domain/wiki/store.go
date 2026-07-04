@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -100,13 +101,17 @@ func NewStore(dir, diaryDir string) (*Store, error) {
 	}
 	s := &Store{dir: dir, diaryDir: diaryDir}
 
-	// Load or create master index, then prune ghost entries.
+	// Load or create master index, then reconcile it with disk in both
+	// directions: prune ghost entries (index → no file) and adopt orphan pages
+	// (file → no index entry — e.g. a crash between a page write and the index
+	// save left the page invisible to the master index until the next rebuild).
 	idx, err := s.loadOrCreateIndex()
 	if err != nil {
 		return nil, fmt.Errorf("wiki: load index: %w", err)
 	}
 	s.index = idx
 	s.pruneGhostEntries()
+	s.adoptOrphanPages()
 
 	// Initialize in-memory search index (rebuilt from .md files on startup).
 	fts := newSearchDB()
@@ -150,6 +155,48 @@ func normalizePagePath(relPath string) string {
 		relPath += ".md"
 	}
 	return relPath
+}
+
+// NormalizePagePath is the exported form of normalizePagePath for callers
+// outside the package that must compare page identities before invoking a
+// destructive operation — e.g. a merge handler's self-merge guard, where
+// "기타/dup" and "기타/dup.md" are the same file and must be rejected as such.
+func NormalizePagePath(relPath string) string {
+	return normalizePagePath(relPath)
+}
+
+// ValidateExternalPath rejects a page path supplied by an external caller
+// (agent tool input, RPC params) that could resolve outside the wiki root.
+// The store itself does filepath.Join(dir, rel), which happily preserves an
+// embedded absolute path and lets ".." climb out — fine for trusted internal
+// callers, not for externally-parameterized surfaces (a prompt-injected agent
+// turn is in scope). Mirrors the miniapp handler's validateWikiPath contract:
+// reject absolute forms, drive letters, backslashes, and any path whose
+// cleaned form escapes the root.
+func ValidateExternalPath(rel string) error {
+	rel = strings.TrimSpace(rel)
+	if rel == "" {
+		return fmt.Errorf("wiki: empty page path")
+	}
+	if strings.HasPrefix(rel, "/") {
+		return fmt.Errorf("wiki: path must be relative to the wiki root")
+	}
+	// Backslashes are rejected outright: no legitimate page path contains one
+	// (the store writes forward-slash paths), and on Windows they'd smuggle
+	// separators past the checks below.
+	if strings.Contains(rel, "\\") {
+		return fmt.Errorf("wiki: path must not contain backslashes")
+	}
+	// Windows-style C:foo / C:\foo — reject up front so path.Clean can't
+	// normalize the drive letter away.
+	if len(rel) >= 2 && rel[1] == ':' {
+		return fmt.Errorf("wiki: path must be relative to the wiki root")
+	}
+	cleaned := path.Clean(rel)
+	if cleaned == "." || cleaned == ".." || strings.HasPrefix(cleaned, "../") {
+		return fmt.Errorf("wiki: path must stay within the wiki root")
+	}
+	return nil
 }
 
 // ReadPage reads a wiki page by relative path (e.g., "기술/dgx-spark.md").
@@ -214,7 +261,16 @@ func (s *Store) writePageLocked(relPath string, page *Page) error {
 func (s *Store) UpdatePage(relPath string, mutate func(current *Page) (*Page, error)) error {
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
-	current, _ := s.ReadPage(relPath) // nil when absent/unreadable — same as the create path
+	current, readErr := s.ReadPage(relPath)
+	if readErr != nil {
+		if !os.IsNotExist(readErr) {
+			// A transient I/O failure (permissions, disk error) is NOT "absent":
+			// treating it as the create path would hand mutate a nil page and
+			// overwrite the existing content wholesale.
+			return fmt.Errorf("wiki: update read %s: %w", relPath, readErr)
+		}
+		current = nil // genuinely absent — the create path
+	}
 	next, err := mutate(current)
 	if err != nil || next == nil {
 		return err
@@ -361,8 +417,12 @@ func (s *Store) addBacklink(targetPath, sourcePath string) {
 	if err != nil {
 		return // target doesn't exist — skip
 	}
+	// Normalized presence check: "기타/src" and "기타/src.md" are the same file,
+	// so a raw compare would stack a second spelling of an edge that already
+	// exists (which removeBacklink then only half-removes).
+	srcNorm := normalizePagePath(sourcePath)
 	for _, r := range page.Meta.Related {
-		if r == sourcePath {
+		if normalizePagePath(r) == srcNorm {
 			return // already present
 		}
 	}
@@ -383,9 +443,12 @@ func (s *Store) removeBacklink(targetPath, sourcePath string) {
 	if err != nil {
 		return
 	}
+	// Normalized filter — see addBacklink: a denormalized spelling of the same
+	// edge ("기타/src" for "기타/src.md") must not survive as a stale reverse link.
+	srcNorm := normalizePagePath(sourcePath)
 	filtered := page.Meta.Related[:0]
 	for _, r := range page.Meta.Related {
-		if r != sourcePath {
+		if normalizePagePath(r) != srcNorm {
 			filtered = append(filtered, r)
 		}
 	}
@@ -432,11 +495,50 @@ func (s *Store) ListPages(category string) ([]string, error) {
 	return pages, err
 }
 
-// Index returns the cached master index.
-func (s *Store) Index() *Index {
+// SnapshotIndex returns a deep copy of the cached master index, safe to walk,
+// render, or marshal without holding any lock.
+//
+// There is deliberately NO accessor returning the live *Index: writers mutate
+// the entry map in place under s.mu (writePageInternal → UpdateEntry), so any
+// caller iterating the live map without that lock races them — the exact
+// "concurrent map iteration and map write" fatal the old Index() accessor
+// caused across a dozen walkers (Tier1Pages, FindSimilarPages, verify, the
+// wiki RPC handler, …). Mutations must go through Store methods
+// (WritePage/UpdatePage/DeletePage/RebuildIndex/SetLastProcessedAndSave).
+func (s *Store) SnapshotIndex() *Index {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.index
+	return s.index.Clone()
+}
+
+// SnapshotEntries returns a deep copy of the master index's entry map (slice
+// fields included, so no aliasing with live entries). The read primitive for
+// every index walker outside the store's own locked internals.
+func (s *Store) SnapshotEntries() map[string]IndexEntry {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return cloneIndexEntries(s.index.Entries)
+}
+
+// LastProcessed returns the master index's diary high-water cursor.
+func (s *Store) LastProcessed() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.index.LastProcessed
+}
+
+// SetLastProcessedAndSave advances the master index's LastProcessed cursor
+// (when date is non-empty; empty keeps the current cursor) and persists the
+// index. The locked write path for the dreamer's end-of-cycle cursor save —
+// mutating the cursor through a raw index pointer and calling Save (whose
+// Render walks the entry map) would race concurrent page writers.
+func (s *Store) SetLastProcessedAndSave(date string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if date != "" {
+		s.index.LastProcessed = date
+	}
+	return s.index.Save(filepath.Join(s.dir, "index.md"))
 }
 
 // RebuildIndex rescans every page from disk and replaces the cached master index
@@ -488,12 +590,12 @@ func (s *Store) RebuildIndex() error {
 // Tier1Pages returns all non-archived pages with importance >= minImportance,
 // sorted by importance descending. Each result includes the page path and content.
 func (s *Store) Tier1Pages(minImportance float64) []Tier1Result {
-	s.mu.RLock()
-	idx := s.index
-	s.mu.RUnlock()
+	// Snapshot, then walk without the lock — the page reads below do disk I/O
+	// and must not iterate the live map writers mutate in place.
+	entries := s.SnapshotEntries()
 
 	var results []Tier1Result
-	for path, entry := range idx.Entries {
+	for path, entry := range entries {
 		if entry.Importance < minImportance {
 			continue
 		}
@@ -752,6 +854,38 @@ func (s *Store) pruneGhostEntries() {
 	for _, g := range ghosts {
 		delete(s.index.Entries, g)
 	}
+	_ = s.index.Save(filepath.Join(s.dir, "index.md")) // best-effort: index save is non-critical
+}
+
+// adoptOrphanPages indexes pages that exist on disk but are missing from the
+// master index — pruneGhostEntries' other half. A crash in the window between
+// a page's file write and its index save (they are two separate disk writes)
+// leaves the page findable by FTS (rebuilt from disk on startup) yet invisible
+// to every index consumer until the next dream-cycle RebuildIndex. Runs once
+// at NewStore, before any concurrency, so it touches s.index directly. Cost is
+// bounded: one walk (ListPages) plus a parse of only the missing pages.
+func (s *Store) adoptOrphanPages() {
+	pages, err := s.ListPages("")
+	if err != nil {
+		return // best-effort: startup reconciliation must not fail the store
+	}
+	adopted := 0
+	for _, rel := range pages {
+		rel = filepath.ToSlash(rel)
+		if _, ok := s.index.Entries[rel]; ok {
+			continue
+		}
+		page, perr := s.ReadPage(rel)
+		if perr != nil {
+			continue // unreadable/parse error: leave it out, same as RebuildIndex
+		}
+		s.index.UpdateEntry(rel, page)
+		adopted++
+	}
+	if adopted == 0 {
+		return
+	}
+	slog.Info("wiki: adopted orphan pages into master index", "count", adopted)
 	_ = s.index.Save(filepath.Join(s.dir, "index.md")) // best-effort: index save is non-critical
 }
 

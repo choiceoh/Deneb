@@ -39,7 +39,7 @@ func (wd *WikiDreamer) scanDiaries(_ context.Context) (*diaryScanResult, error) 
 	for k, v := range state.Files {
 		priorFiles[k] = v
 	}
-	legacyCutoff := wd.store.Index().LastProcessed
+	legacyCutoff := wd.store.LastProcessed()
 	var diaryFiles []os.DirEntry
 	for _, e := range entries {
 		if e.IsDir() || !strings.HasPrefix(e.Name(), "diary-") || !strings.HasSuffix(e.Name(), ".md") {

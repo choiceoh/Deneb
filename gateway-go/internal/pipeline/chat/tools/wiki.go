@@ -111,6 +111,12 @@ func wikiRead(ctx context.Context, store *wiki.Store, path, section string) (str
 	// recall is interchangeable between the two tools' read paths.
 	path = strings.TrimPrefix(strings.TrimSpace(path), RefWiki)
 
+	// Escape guard: the store joins this path under the wiki root verbatim, so
+	// a "../…" path from a prompt-injected turn would read arbitrary files.
+	if err := wiki.ValidateExternalPath(path); err != nil {
+		return fmt.Sprintf("잘못된 페이지 경로입니다 (위키 루트 밖 접근 불가): %s", path), nil //nolint:nilerr // tool surface: guidance to the model, not an error
+	}
+
 	// Ensure .md extension.
 	if !strings.HasSuffix(path, ".md") {
 		path += ".md"
@@ -188,9 +194,15 @@ func wikiReadBatch(ctx context.Context, store *wiki.Store, paths []string, secti
 
 func wikiIndex(store *wiki.Store, category string) (string, error) {
 	if category == "" {
-		// Return master index.
-		idx := store.Index()
-		return idx.Render(), nil
+		// Return master index — a snapshot, since Render walks the entry map
+		// concurrent writers mutate in place.
+		return store.SnapshotIndex().Render(), nil
+	}
+
+	// Escape guard: ListPages walks filepath.Join(root, category), so a
+	// caller-supplied "../…" category would list files outside the wiki.
+	if err := wiki.ValidateExternalPath(category); err != nil {
+		return fmt.Sprintf("잘못된 카테고리 경로입니다 (위키 루트 밖 접근 불가): %s", category), nil //nolint:nilerr // tool surface: guidance to the model, not an error
 	}
 
 	// Return category listing.
@@ -236,6 +248,10 @@ func wikiWrite(ctx context.Context, store *wiki.Store, contactsStore *contacts.S
 		slug := strings.ToLower(title)
 		slug = strings.NewReplacer(" ", "-", "/", "-", "\\", "-").Replace(slug)
 		path = category + "/" + slug + ".md"
+	} else if err := wiki.ValidateExternalPath(path); err != nil {
+		// Escape guard on caller-supplied paths — a "../…" write target would
+		// land a file outside the wiki root (same contract as the read path).
+		return fmt.Sprintf("잘못된 페이지 경로입니다 (위키 루트 밖 접근 불가): %s", path), nil //nolint:nilerr // tool surface: guidance to the model, not an error
 	}
 	if !strings.HasSuffix(path, ".md") {
 		path += ".md"

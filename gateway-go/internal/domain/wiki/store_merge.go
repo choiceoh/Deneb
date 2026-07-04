@@ -80,17 +80,38 @@ func (s *Store) MergePage(targetPath, sourcePath, mergedBody string, _ MergeOpti
 	if targetPath == "" || sourcePath == "" {
 		return MergeResult{}, fmt.Errorf("wiki: merge needs both target and source paths")
 	}
+	// Compare NORMALIZED identities: "기타/dup" and "기타/dup.md" are the same
+	// file, and a raw-string guard let that spelling variant through — the
+	// "merge" then deleted the page it had just written (self-merge data loss).
+	targetPath = normalizePagePath(targetPath)
+	sourcePath = normalizePagePath(sourcePath)
 	if targetPath == sourcePath {
 		return MergeResult{}, fmt.Errorf("wiki: cannot merge a page into itself")
 	}
 
 	// Hold writeMu across the whole merge (read both pages, write target, repoint
 	// references, delete source) so no concurrent writer slips an edit into either
-	// page mid-merge. The internal helpers below (writePageInternal,
-	// repointReference, deletePageLocked) all assume the lock is held.
+	// page mid-merge. The internal helpers (writePageInternal, repointReference,
+	// deletePageLocked) all assume the lock is held.
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
 
+	return s.mergePageLocked(targetPath, sourcePath, func(target, source *Page) string {
+		// Caller-supplied merged text. Guard against an empty body silently
+		// wiping content: fall back to a plain concatenation.
+		if strings.TrimSpace(mergedBody) != "" {
+			return mergedBody
+		}
+		return strings.TrimSpace(target.Body + "\n\n" + source.Body)
+	})
+}
+
+// mergePageLocked is the shared body of MergePage and FoldDuplicate: read both
+// pages, synthesize the surviving body via bodyFn (called with the pages as
+// read UNDER the lock, so no mid-window write can be lost), union frontmatter,
+// repoint inbound references, delete the source. The caller must hold writeMu
+// and pass normalized, non-identical paths.
+func (s *Store) mergePageLocked(targetPath, sourcePath string, bodyFn func(target, source *Page) string) (MergeResult, error) {
 	target, err := s.ReadPage(targetPath)
 	if err != nil {
 		return MergeResult{}, fmt.Errorf("wiki: read merge target %q: %w", targetPath, err)
@@ -114,13 +135,8 @@ func (s *Store) MergePage(targetPath, sourcePath, mergedBody string, _ MergeOpti
 	delete(refSet, sourcePath)
 	delete(refSet, "")
 
-	// 1. Body — caller-supplied merged text. Guard against an empty body
-	//    silently wiping content: fall back to a plain concatenation.
-	if strings.TrimSpace(mergedBody) != "" {
-		target.Body = mergedBody
-	} else {
-		target.Body = strings.TrimSpace(target.Body + "\n\n" + source.Body)
-	}
+	// 1. Body — synthesized from the locked reads.
+	target.Body = bodyFn(target, source)
 
 	// 2. Frontmatter union (tags, importance, due, summary, created).
 	mergeFrontmatterInto(&target.Meta, source.Meta)
@@ -164,17 +180,20 @@ func (s *Store) MergePage(targetPath, sourcePath, mergedBody string, _ MergeOpti
 
 // findPagesReferencingPath scans the master index for every page (other than
 // relPath itself) whose Related list contains relPath. Index-based so it sees
-// all inbound references regardless of any backlink-mirror drift.
+// all inbound references regardless of any backlink-mirror drift. Matching is
+// on normalized paths — a related entry written without the ".md" extension
+// still counts as an inbound reference.
 func (s *Store) findPagesReferencingPath(relPath string) []string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	want := normalizePagePath(relPath)
 	var out []string
 	for path, entry := range s.index.Entries {
-		if path == relPath {
+		if path == want {
 			continue
 		}
 		for _, r := range entry.Related {
-			if r == relPath {
+			if normalizePagePath(r) == want {
 				out = append(out, path)
 				break
 			}
@@ -191,22 +210,26 @@ func (s *Store) repointReference(relPath, oldRef, newRef string) bool {
 	if err != nil {
 		return false
 	}
+	// Normalized matching throughout: a ref recorded as "기타/x" must repoint
+	// (and dedupe) the same as "기타/x.md".
+	oldNorm := normalizePagePath(oldRef)
+	selfNorm := normalizePagePath(relPath)
 	seen := make(map[string]struct{}, len(page.Meta.Related))
 	rebuilt := make([]string, 0, len(page.Meta.Related))
 	changed := false
 	for _, r := range page.Meta.Related {
-		if r == oldRef {
+		if normalizePagePath(r) == oldNorm {
 			r = newRef
 			changed = true
 		}
-		if r == relPath { // never self-reference
+		if normalizePagePath(r) == selfNorm { // never self-reference
 			changed = true
 			continue
 		}
-		if _, dup := seen[r]; dup {
+		if _, dup := seen[normalizePagePath(r)]; dup {
 			continue
 		}
-		seen[r] = struct{}{}
+		seen[normalizePagePath(r)] = struct{}{}
 		rebuilt = append(rebuilt, r)
 	}
 	if !changed {
@@ -221,8 +244,11 @@ func (s *Store) repointReference(relPath, oldRef, newRef string) bool {
 // mergeFrontmatterInto folds src's frontmatter into dst while keeping dst's
 // identity. Tags and cue anchors become a union; importance takes the max;
 // due/created take the earlier date (a merged entity's history starts at the
-// earliest); summary fills in from src only when dst's is empty. Title,
-// Category, Type, Confidence, Archived, and ID stay dst's.
+// earliest); summary, the frozen project code, and the resource URI fill in
+// from src only when dst's is empty (the code is the move-stable project
+// identity — dropping it on a legacy-flat merge kills every code-form related
+// edge into the surviving page). Title, Category, Type, Confidence, Archived,
+// and ID stay dst's.
 func mergeFrontmatterInto(dst *Frontmatter, src Frontmatter) {
 	dst.Tags = unionStrings(dst.Tags, src.Tags)
 	// Cue anchors are recall entry points — dropping the source page's cues on a
@@ -234,6 +260,12 @@ func mergeFrontmatterInto(dst *Frontmatter, src Frontmatter) {
 	}
 	if strings.TrimSpace(dst.Summary) == "" {
 		dst.Summary = src.Summary
+	}
+	if strings.TrimSpace(dst.Code) == "" {
+		dst.Code = src.Code
+	}
+	if strings.TrimSpace(dst.Resource) == "" {
+		dst.Resource = src.Resource
 	}
 	dst.Due = earlierDate(dst.Due, src.Due)
 	dst.Created = earlierDate(dst.Created, src.Created)

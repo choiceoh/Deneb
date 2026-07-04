@@ -68,7 +68,7 @@ func TestWikiDreamerScanDiariesDoesNotSkipLegacyCutoffDay(t *testing.T) {
 	store := testutil.Must(NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
 	defer store.Close()
 
-	store.Index().LastProcessed = "2026-05-05"
+	store.index.LastProcessed = "2026-05-05" // pre-concurrency test setup: direct field poke
 	wd := NewWikiDreamer(store, nil, "", Config{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if err := os.MkdirAll(store.DiaryDir(), 0o755); err != nil {
 		t.Fatalf("mkdir diary: %v", err)

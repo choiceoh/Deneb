@@ -172,9 +172,9 @@ func (wd *WikiDreamer) synthesize(ctx context.Context, diaryContent string, stat
 	ctx, cancel := context.WithTimeout(ctx, wikiDreamSynthesisTimeout)
 	defer cancel()
 
-	// Build existing wiki context.
-	idx := wd.store.Index()
-	indexContent := idx.Render()
+	// Build existing wiki context. Snapshot before rendering — Render walks the
+	// entry map, which writers mutate in place under the store lock.
+	indexContent := wd.store.SnapshotIndex().Render()
 	processedHistory := formatProcessedDiaryCapsules(state.Recent)
 
 	polarisSection := ""

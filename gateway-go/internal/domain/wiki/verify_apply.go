@@ -76,35 +76,39 @@ func (wd *WikiDreamer) applyVerifyFixes(findings []VerifyFinding) int {
 }
 
 // FoldDuplicate folds the `fold` page into `keep`: the folded body is appended
-// under a "병합된 중복 문서" marker (so nothing is lost), related/tags are unioned,
-// and the folded page is deleted. Crude but safe — no LLM synthesis — which is
-// the right tradeoff for an automatic duplicate merge. Shared by the dream
-// cycle's verify pass and the background wiki reviewer.
+// under a "병합된 중복 문서" marker (so nothing is lost), frontmatter is unioned
+// (tags, related, cues, code, importance — same policy as MergePage), inbound
+// references are repointed keep-ward, and the folded page is deleted. Crude but
+// safe — no LLM synthesis — which is the right tradeoff for an automatic
+// duplicate merge. Shared by the dream cycle's verify pass and the background
+// wiki reviewer.
+//
+// Delegates to the same single-writeMu helper as MergePage: the old two-step
+// implementation (read fold → UpdatePage(keep) → DeletePage(fold)) took the
+// write lock three separate times, so a write landing on fold between the read
+// and the delete was silently destroyed, nothing repointed inbound references,
+// and fold's cues/code were dropped.
 func (s *Store) FoldDuplicate(keep, fold string) error {
-	foldPage, err := s.ReadPage(fold)
-	if err != nil || foldPage == nil {
-		return fmt.Errorf("read fold %q: %w", fold, err)
+	keep = strings.TrimSpace(keep)
+	fold = strings.TrimSpace(fold)
+	if keep == "" || fold == "" {
+		return fmt.Errorf("wiki: fold needs both keep and fold paths")
 	}
-	// Apply the fold onto keep via UpdatePage so a concurrent writer of keep can't
-	// be clobbered by this append. fold (read above) is about to be deleted, so a
-	// stale read of it is harmless.
-	if err := s.UpdatePage(keep, func(keepPage *Page) (*Page, error) {
-		if keepPage == nil {
-			return nil, fmt.Errorf("read keep %q: not found", keep)
-		}
-		keepPage.Body = strings.TrimRight(keepPage.Body, "\n") +
+	// Normalized self-fold guard — mirror MergePage: "기타/dup" vs "기타/dup.md"
+	// is the same file, and folding a page into itself deletes it.
+	keep = normalizePagePath(keep)
+	fold = normalizePagePath(fold)
+	if keep == fold {
+		return fmt.Errorf("wiki: cannot fold a page into itself")
+	}
+
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+	_, err := s.mergePageLocked(keep, fold, func(keepPage, foldPage *Page) string {
+		return strings.TrimRight(keepPage.Body, "\n") +
 			"\n\n## 병합된 중복 문서 (" + fold + ")\n\n" + foldPage.Body
-		keepPage.Meta.Related = mergeRelated(keepPage.Meta.Related, foldPage.Meta.Related)
-		keepPage.Meta.Tags = mergeTags(keepPage.Meta.Tags, foldPage.Meta.Tags)
-		keepPage.Meta.Updated = time.Now().Format("2006-01-02")
-		return keepPage, nil
-	}); err != nil {
-		return fmt.Errorf("write merged %q: %w", keep, err)
-	}
-	if err := s.DeletePage(fold); err != nil {
-		return fmt.Errorf("delete folded %q: %w", fold, err)
-	}
-	return nil
+	})
+	return err
 }
 
 // archivePage sets a page's Archived flag in place (no move, no delete) — the
@@ -126,10 +130,10 @@ func (s *Store) archivePage(relPath string) error {
 
 // exactDupFinding builds a high-confidence duplicate finding with a merge Fix,
 // keeping the higher-importance page (a later Updated date breaks ties) and
-// folding the other into it.
-func exactDupFinding(idx *Index, pathA, pathB, detail string) VerifyFinding {
+// folding the other into it. entries is an index snapshot (Store.SnapshotEntries).
+func exactDupFinding(entries map[string]IndexEntry, pathA, pathB, detail string) VerifyFinding {
 	keep, fold := pathA, pathB
-	if dupKeepSecond(idx, pathA, pathB) {
+	if dupKeepSecond(entries, pathA, pathB) {
 		keep, fold = pathB, pathA
 	}
 	return VerifyFinding{
@@ -143,8 +147,8 @@ func exactDupFinding(idx *Index, pathA, pathB, detail string) VerifyFinding {
 
 // dupKeepSecond reports whether pathB should be the keeper — true when pathB has
 // higher importance, or equal importance but a later Updated date.
-func dupKeepSecond(idx *Index, pathA, pathB string) bool {
-	a, b := idx.Entries[pathA], idx.Entries[pathB]
+func dupKeepSecond(entries map[string]IndexEntry, pathA, pathB string) bool {
+	a, b := entries[pathA], entries[pathB]
 	if b.Importance != a.Importance {
 		return b.Importance > a.Importance
 	}

@@ -72,6 +72,11 @@ func wikiRead(deps Deps) rpcutil.HandlerFunc {
 		if p.Path == "" {
 			return nil, rpcerr.MissingParam("path")
 		}
+		// Escape guard: the store joins this path under the wiki root verbatim,
+		// so "../…" (or an absolute path) would read arbitrary files.
+		if err := wiki.ValidateExternalPath(p.Path); err != nil {
+			return nil, rpcerr.InvalidRequest(err.Error())
+		}
 		page, err := deps.Store.ReadPage(p.Path)
 		if err != nil {
 			return nil, rpcerr.Wrap(protocol.ErrNotFound, err)
@@ -104,6 +109,10 @@ func wikiWrite(deps Deps) rpcutil.HandlerFunc {
 		if p.Title == "" {
 			return nil, rpcerr.MissingParam("title")
 		}
+		// Escape guard — a "../…" write target would land outside the wiki root.
+		if err := wiki.ValidateExternalPath(p.Path); err != nil {
+			return nil, rpcerr.InvalidRequest(err.Error())
+		}
 		page := wiki.NewPage(p.Title, p.Category, p.Tags)
 		page.Body = p.Body
 		if p.Importance > 0 {
@@ -124,6 +133,10 @@ func wikiDelete(deps Deps) rpcutil.HandlerFunc {
 		if p.Path == "" {
 			return nil, rpcerr.MissingParam("path")
 		}
+		// Escape guard — a "../…" target would delete a file outside the wiki root.
+		if err := wiki.ValidateExternalPath(p.Path); err != nil {
+			return nil, rpcerr.InvalidRequest(err.Error())
+		}
 		if err := deps.Store.DeletePage(p.Path); err != nil {
 			return nil, rpcerr.Wrap(protocol.ErrUnavailable, err)
 		}
@@ -136,6 +149,13 @@ func wikiList(deps Deps) rpcutil.HandlerFunc {
 		Category string `json:"category,omitempty"`
 	}
 	return rpcutil.BindHandler[params](func(p params) (any, error) {
+		// Escape guard: ListPages walks filepath.Join(root, category), so a
+		// "../…" category would list files outside the wiki.
+		if p.Category != "" {
+			if err := wiki.ValidateExternalPath(p.Category); err != nil {
+				return nil, rpcerr.InvalidRequest(err.Error())
+			}
+		}
 		pages, err := deps.Store.ListPages(p.Category)
 		if err != nil {
 			return nil, rpcerr.Wrap(protocol.ErrUnavailable, err)
@@ -149,7 +169,10 @@ func wikiIndex(deps Deps) rpcutil.HandlerFunc {
 		Category string `json:"category,omitempty"`
 	}
 	return rpcutil.BindHandler[params](func(p params) (any, error) {
-		idx := deps.Store.Index()
+		// Snapshot: the JSON marshal below iterates the entry map, which
+		// concurrent page writers mutate in place — handing it the live map
+		// was a fatal "concurrent map iteration and map write" waiting to fire.
+		idx := deps.Store.SnapshotIndex()
 		if p.Category == "" {
 			return map[string]any{
 				"entries":       idx.Entries,

@@ -17,7 +17,7 @@ func TestDetectDuplicates_NormalizedTitle(t *testing.T) {
 	idx.UpdateEntry("프로젝트/영산고태양광/대표.md", &Page{Meta: Frontmatter{Title: "영산고-태양광", Importance: 0.5}})
 	idx.UpdateEntry("프로젝트/부산8호/대표.md", &Page{Meta: Frontmatter{Title: "부산 8호 태양광", Importance: 0.5}})
 
-	findings := detectDuplicates(idx)
+	findings := detectDuplicates(idx.Entries)
 	var normFix *VerifyFinding
 	for i := range findings {
 		if findings[i].Type == "duplicate" && findings[i].Fix != nil &&

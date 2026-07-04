@@ -226,9 +226,9 @@ func (s *Store) FlagDormantProjects(now time.Time, maxFlags int) []string {
 	cutoff := now.AddDate(0, 0, -DormantAfterDays).Format("2006-01-02")
 	quarter := fmt.Sprintf("dormant:%dQ%d", now.Year(), (int(now.Month())-1)/3+1)
 
-	idx := s.Index()
+	// Snapshot — never walk the live index map (writers mutate it in place).
 	lastByFolder := make(map[string]string) // 프로젝트/<name> → newest Updated
-	for path, entry := range idx.Entries {
+	for path, entry := range s.SnapshotEntries() {
 		folder, ok := ProjectFolderOf(path)
 		if !ok {
 			continue

@@ -70,7 +70,7 @@ func TestStore_ConcurrentUpdatePage_NoLostUpdate(t *testing.T) {
 	}
 
 	// The cached index entry must reflect the page that's actually on disk.
-	entry, ok := store.Index().Entries[relPath]
+	entry, ok := store.SnapshotEntries()[relPath]
 	if !ok {
 		t.Fatal("page missing from index after concurrent updates")
 	}
@@ -118,7 +118,7 @@ func TestStore_ConcurrentWritePage_IndexMatchesDisk(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for i := 0; i < iters; i++ {
-				_ = store.Index()
+				_ = store.SnapshotIndex()
 				_, _ = store.ReadPage(relPath)
 			}
 		}()
@@ -127,7 +127,7 @@ func TestStore_ConcurrentWritePage_IndexMatchesDisk(t *testing.T) {
 
 	// Final state: the index entry must match the page on disk.
 	onDisk := testutil.Must(store.ReadPage(relPath))
-	entry, ok := store.Index().Entries[relPath]
+	entry, ok := store.SnapshotEntries()[relPath]
 	if !ok {
 		t.Fatal("page missing from index after concurrent writes")
 	}
@@ -250,7 +250,7 @@ func TestStore_RebuildIndexConcurrentWithWrites_IndexMatchesDisk(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for i := 0; i < newPages; i++ {
-				_ = store.Index().Entries
+				_ = store.SnapshotEntries()
 			}
 		}()
 	}
@@ -259,7 +259,7 @@ func TestStore_RebuildIndexConcurrentWithWrites_IndexMatchesDisk(t *testing.T) {
 	// Every page on disk must have a matching index entry: a dropped create (the
 	// race) shows up as a page present on disk but missing from the cached index.
 	onDisk := testutil.Must(store.ListPages(""))
-	idx := store.Index()
+	idx := store.SnapshotIndex()
 	diskSet := make(map[string]bool, len(onDisk))
 	for _, relPath := range onDisk {
 		diskSet[relPath] = true
