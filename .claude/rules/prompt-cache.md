@@ -218,6 +218,8 @@ LLM summarizer 를 부르기 전에 두 단계 cheap pruning 이 항상 발화�
 1. **Tier 2 — `MicroCompact`** (`compaction/micro.go`): 4 turn 이전의 tool_result 의 fenced code block 만 `[code omitted]` 로 교체. 30-60% 토큰 절감 가능, 정보 손실 작음.
 2. **Tier 2b — `TruncateOldToolResults`** (`compaction/restore.go`): 같은 cutoff 의 tool_result 중 content 가 256 runes 초과인 블록 통째 `[older tool output cleared to save context]` placeholder 로 교체. MicroCompact 가 이미 줄여놓은 짧은 결과는 자동 패스. CJK rune-count 기반 (byte-count 아님).
 
+두 cheap 패스 공통 **보호 목록** (`compaction/protected.go:protectedToolResultIDs`): `fetch_tools` 결과는 스텁/펜스제거에서 제외한다 — 그 결과가 곧 도구 스키마라서 지우면 모델이 동일 재fetch를 반복한다 (실측 2026-07-05: fetch_tools 호출의 20%가 런 내 동일입력·동일결과 반복, 한 런에서 7회). LLM 요약 tier 는 보호 대상이 아니므로 초장기 런에서는 여전히 압축될 수 있다.
+
 두 단계 모두 LLM 호출 X. Hermes Agent 의 Phase 1 cheap pruning 패턴. Tier 2b 가 발화하면 `polaris: stubbed old tool results count=N` 로 logger 에 기록.
 
 ### Bounded digestion — LLM tier 의 실행 형태 (P7, 2026-06-11)
