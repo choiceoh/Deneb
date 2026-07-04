@@ -90,3 +90,62 @@ func TestSearch_DemotesSupersededPages(t *testing.T) {
 		t.Errorf("validity demotion lost after restart: %+v err=%v", results2, err)
 	}
 }
+
+// TestSearch_ValiditySurvivesRestart: staleness demotion must hold across a
+// store reopen. rebuildIndex (the ONLY boot path) used to repopulate the FTS
+// but not the validity map, so after every gateway restart archived/superseded
+// pages ranked at full BM25 strength — and since archived pages are never
+// rewritten, the demotion stayed dead for the whole process lifetime. The
+// archived page is lexically FIRST with a heavier term count so the path
+// tiebreak cannot mask a missing demotion.
+func TestSearch_ValiditySurvivesRestart(t *testing.T) {
+	dir := t.TempDir()
+	wikiDir, diaryDir := filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")
+	store, err := NewStore(wikiDir, diaryDir)
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+
+	archived := &Page{
+		Meta: Frontmatter{
+			ID: "port-archived", Title: "게이트웨이 포트 정책 구버전", Category: "운영시스템",
+			Summary: "게이트웨이 포트 18789 포트 정책", Archived: true,
+		},
+		Body: "게이트웨이 포트는 18789. 포트 포트 포트 관련 구식 문서.",
+	}
+	current := &Page{
+		Meta: Frontmatter{
+			ID: "port-current", Title: "게이트웨이 포트 정책", Category: "운영시스템",
+			Summary: "게이트웨이 포트는 19000",
+		},
+		Body: "게이트웨이 포트는 19000으로 변경되었다.",
+	}
+	if err := store.WritePage("운영시스템/a-old.md", archived); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.WritePage("운영시스템/z-new.md", current); err != nil {
+		t.Fatal(err)
+	}
+
+	assertCurrentFirst := func(t *testing.T, s *Store, phase string) {
+		t.Helper()
+		results, err := s.Search(context.Background(), "게이트웨이 포트", 5)
+		if err != nil || len(results) < 2 {
+			t.Fatalf("%s: search failed: %v (%d results)", phase, err, len(results))
+		}
+		if results[0].Path != "운영시스템/z-new.md" {
+			t.Fatalf("%s: archived page outranks current: %+v", phase, results[:2])
+		}
+	}
+	assertCurrentFirst(t, store, "same-process")
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	reopened, err := NewStore(wikiDir, diaryDir)
+	if err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	t.Cleanup(func() { _ = reopened.Close() })
+	assertCurrentFirst(t, reopened, "post-restart")
+}

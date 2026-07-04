@@ -218,3 +218,34 @@ func TestSemanticTextIncludesCues(t *testing.T) {
 		t.Fatal("cue-less page produced identical semantic text — cache key would not change on cue edits")
 	}
 }
+
+// TestSearch_CueMatchDoesNotLeakCueTextAsSnippet: cues are retrieval anchors,
+// not content — a cue-only match must find the page but the result snippet
+// (recall evidence "match:", memory search) must come from visible fields.
+func TestSearch_CueMatchDoesNotLeakCueTextAsSnippet(t *testing.T) {
+	dir := t.TempDir()
+	store, err := NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	page := &Page{
+		Meta: Frontmatter{
+			ID: "dangjin-deal", Title: "당진 프로젝트 자금 흐름", Category: "프로젝트",
+			Cues: []string{"계약금 선수금 회수 일정"},
+		},
+		Body: "당진 건 자금 흐름 정리. 1차 지급은 착공 후.",
+	}
+	if err := store.WritePage("프로젝트/당진/대표.md", page); err != nil {
+		t.Fatal(err)
+	}
+
+	results, err := store.Search(context.Background(), "계약금", 5)
+	if err != nil || len(results) == 0 {
+		t.Fatalf("cue match must still find the page: %v (%d)", err, len(results))
+	}
+	if strings.Contains(results[0].Content, "계약금") {
+		t.Fatalf("cue text leaked into the snippet: %q", results[0].Content)
+	}
+}

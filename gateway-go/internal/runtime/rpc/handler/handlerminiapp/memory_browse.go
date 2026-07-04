@@ -128,10 +128,13 @@ func memoryListInCategory(deps MemoryDeps) rpcutil.HandlerFunc {
 			return rpcerr.WrapUnavailable("list pages failed", err).Response(req.ID)
 		}
 		total := len(paths)
-		if len(paths) > limit {
-			paths = paths[:limit]
-		}
 
+		// Enrich EVERY page before sorting: ListPages yields lexical (path)
+		// order, so truncating first kept "the alphabetically first N sorted
+		// among themselves" — the genuinely newest pages in later folders
+		// never appeared and the "newest first" contract below was false for
+		// any category larger than the limit. Single-user local store: one
+		// frontmatter read per page is cheap at wiki scale.
 		pages := make([]MemoryPageRow, 0, len(paths))
 		for _, rel := range paths {
 			row := MemoryPageRow{Path: rel}
@@ -158,6 +161,9 @@ func memoryListInCategory(deps MemoryDeps) rpcutil.HandlerFunc {
 			}
 			return ai > aj
 		})
+		if len(pages) > limit {
+			pages = pages[:limit]
+		}
 		return rpcutil.RespondOK(req.ID, out{
 			Category: cat,
 			Pages:    pages,

@@ -148,6 +148,13 @@ func (s *searchDB) rebuildIndex(dir string) error {
 	defer s.mu.Unlock()
 
 	s.idx.Clear()
+	// Rebuild the validity map alongside the FTS index. This is the ONLY
+	// index path a restart takes, and archived/superseded pages are never
+	// rewritten afterwards — leaving validity empty here made every staleness
+	// demotion a silent no-op for the whole process lifetime (year-old
+	// archived facts outranked current pages until the next in-process write
+	// of that exact page, i.e. never).
+	s.validity = make(map[string]float64)
 
 	return filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil || info.IsDir() {
@@ -170,6 +177,7 @@ func (s *searchDB) rebuildIndex(dir string) error {
 			return nil //nolint:nilerr // skip unparseable files
 		}
 		s.idx.UpsertFields(rel, searchablePageFields(page)...)
+		s.validity[rel] = validityFactor(page.Meta, time.Now())
 		return nil
 	})
 }
@@ -217,8 +225,11 @@ func searchablePageFields(page *Page) []textsearch.Field {
 		{Text: strings.Join(page.Meta.Related, " "), Weight: 1},
 		// Cue anchors: alternate phrasings a future query may use (Memora-style
 		// entry points) — indexed so a paraphrased question reaches a page whose
-		// own vocabulary differs (예: cue "계약금" ↔ 본문 "선수금").
-		{Text: strings.Join(page.Meta.Cues, " "), Weight: boost},
+		// own vocabulary differs (예: cue "계약금" ↔ 본문 "선수금"). Hidden: cues
+		// are retrieval anchors, never content — without it a cue-only match
+		// surfaced the raw cue text as the result "match" snippet (recall
+		// evidence, memory search), presenting index metadata as page content.
+		{Text: strings.Join(page.Meta.Cues, " "), Weight: boost, Hidden: true},
 		{Text: page.Body, Weight: 1},
 	}
 }

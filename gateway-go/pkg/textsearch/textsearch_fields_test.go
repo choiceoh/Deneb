@@ -2,6 +2,7 @@ package textsearch
 
 import (
 	"math"
+	"strings"
 	"testing"
 )
 
@@ -106,5 +107,39 @@ func TestUpsertFieldsFlatWeightEqualsUpsert(t *testing.T) {
 		if p[i].ID != f[i].ID || p[i].Score != f[i].Score {
 			t.Fatalf("hit %d differs: plain=%+v fields=%+v", i, p[i], f[i])
 		}
+	}
+}
+
+// TestUpsertFieldsHiddenExcludedFromSnippet: a Hidden field must still make
+// the document matchable (membership/scoring) but its text must never appear
+// as the result snippet — retrieval-only anchors (wiki cues) are index
+// metadata, not content.
+func TestUpsertFieldsHiddenExcludedFromSnippet(t *testing.T) {
+	idx := New()
+	idx.UpsertFields(
+		"doc",
+		Field{Text: "프로젝트 일정 정리 본문입니다", Weight: 1},
+		Field{Text: "계약금 선수금 회수 조건", Weight: 2, Hidden: true},
+	)
+	hits := idx.Search("계약금", 5)
+	if len(hits) != 1 || hits[0].ID != "doc" {
+		t.Fatalf("hidden field must still match, hits=%+v", hits)
+	}
+	if strings.Contains(hits[0].Snippet, "계약금") || strings.Contains(hits[0].Snippet, "선수금") {
+		t.Fatalf("hidden field text leaked into snippet: %q", hits[0].Snippet)
+	}
+	if !strings.Contains(hits[0].Snippet, "본문") {
+		t.Fatalf("snippet should fall back to visible fields, got %q", hits[0].Snippet)
+	}
+
+	// No hidden fields → zero behavior change (snippet may quote any field).
+	idx.UpsertFields(
+		"plain",
+		Field{Text: "제목", Weight: 2},
+		Field{Text: "잔금 입금 확인", Weight: 1},
+	)
+	hits = idx.Search("잔금", 5)
+	if len(hits) != 1 || !strings.Contains(hits[0].Snippet, "잔금") {
+		t.Fatalf("visible-field snippet regressed: %+v", hits)
 	}
 }

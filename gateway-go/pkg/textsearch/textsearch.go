@@ -34,7 +34,11 @@ type document struct {
 	// only — document length/avgdl stay raw token counts so weighted and
 	// unweighted documents share one normalization basis.
 	weights []float64
-	tokens  int // total token count
+	// snippetSrc, when non-nil, is the subset of fields eligible for snippet
+	// extraction (Hidden fields removed). nil = all fields visible (the plain
+	// path and hidden-free UpsertFields calls pay nothing).
+	snippetSrc []string
+	tokens     int // total token count
 }
 
 // Field is one searchable text field with a term-frequency boost for
@@ -44,6 +48,10 @@ type document struct {
 type Field struct {
 	Text   string
 	Weight float64
+	// Hidden indexes the field for matching/scoring but excludes it from
+	// snippet extraction — for retrieval-only anchors (e.g. wiki cue
+	// paraphrases) that must never surface as "match" text.
+	Hidden bool
 }
 
 // Hit is a single search result.
@@ -64,7 +72,7 @@ func New() *Index {
 // Upsert adds or replaces a document in the index.
 // fields are the searchable text fields (e.g., title, content).
 func (idx *Index) Upsert(id string, fields ...string) {
-	idx.upsert(id, fields, nil)
+	idx.upsert(id, fields, nil, nil)
 }
 
 // UpsertFields adds or replaces a document whose fields carry per-field
@@ -75,6 +83,22 @@ func (idx *Index) UpsertFields(id string, fields ...Field) {
 	texts := make([]string, len(fields))
 	weights := make([]float64, len(fields))
 	flat := true
+	var snippetSrc []string
+	anyHidden := false
+	for _, f := range fields {
+		if f.Hidden {
+			anyHidden = true
+			break
+		}
+	}
+	if anyHidden {
+		snippetSrc = make([]string, 0, len(fields))
+		for _, f := range fields {
+			if !f.Hidden {
+				snippetSrc = append(snippetSrc, f.Text)
+			}
+		}
+	}
 	for i, f := range fields {
 		texts[i] = f.Text
 		w := f.Weight
@@ -91,10 +115,10 @@ func (idx *Index) UpsertFields(id string, fields ...Field) {
 	if flat {
 		weights = nil // all-1.0 collapses to the plain path
 	}
-	idx.upsert(id, texts, weights)
+	idx.upsert(id, texts, weights, snippetSrc)
 }
 
-func (idx *Index) upsert(id string, fields []string, weights []float64) {
+func (idx *Index) upsert(id string, fields []string, weights []float64, snippetSrc []string) {
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
 
@@ -104,7 +128,7 @@ func (idx *Index) upsert(id string, fields []string, weights []float64) {
 	}
 
 	tokens := tokenize(strings.Join(fields, " "))
-	doc := &document{id: id, fields: fields, weights: weights, tokens: len(tokens)}
+	doc := &document{id: id, fields: fields, weights: weights, snippetSrc: snippetSrc, tokens: len(tokens)}
 	idx.docs[id] = doc
 	idx.totalLen += doc.tokens
 
@@ -280,10 +304,14 @@ func (idx *Index) search(queryTokens []string, andMode bool, limit int) []Hit {
 	hits := make([]Hit, len(results))
 	for i, r := range results {
 		doc := idx.docs[r.id]
+		src := doc.fields
+		if doc.snippetSrc != nil {
+			src = doc.snippetSrc
+		}
 		hits[i] = Hit{
 			ID:      r.id,
 			Score:   r.score,
-			Snippet: extractSnippet(doc.fields, queryTokens, 40),
+			Snippet: extractSnippet(src, queryTokens, 40),
 		}
 	}
 	return hits
