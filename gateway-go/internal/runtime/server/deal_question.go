@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmailpoll"
 )
@@ -107,18 +108,21 @@ func (s *Server) recordDealQuestionAnswer(item workfeed.Item, actionID string) {
 		s.logger.Info("deal question: 딜 아님 응답", "path", pagePath)
 		return
 	}
-	page, err := s.wikiStore.ReadPage(pagePath)
-	if err != nil || page == nil {
-		s.logger.Warn("deal question 기록: 페이지 읽기 실패", "path", pagePath, "error", err)
-		return
-	}
 	label := deptLabel(code)
 	stamp := time.Now().Format("2006-01-02")
-	// Append the assignment as a visible fact. The dreamer's code minting
-	// (dreamer_code.go) can later fold this 부서 into the project code.
-	page.Body = strings.TrimRight(page.Body, "\n") +
-		fmt.Sprintf("\n\n## 담당 팀\n%s (%s, 사용자 지정)\n", label, stamp)
-	if err := s.wikiStore.WritePage(pagePath, page); err != nil {
+	// Append the assignment as a visible fact via UpdatePage — an atomic
+	// read-modify-write, so a concurrent writer of the deal page (mail
+	// analysis upserts target the same 거래 pages) can't be clobbered between
+	// a separate read and write. The dreamer's code minting (dreamer_code.go)
+	// can later fold this 부서 into the project code.
+	if err := s.wikiStore.UpdatePage(pagePath, func(page *wiki.Page) (*wiki.Page, error) {
+		if page == nil {
+			return nil, fmt.Errorf("페이지 없음")
+		}
+		page.Body = strings.TrimRight(page.Body, "\n") +
+			fmt.Sprintf("\n\n## 담당 팀\n%s (%s, 사용자 지정)\n", label, stamp)
+		return page, nil
+	}); err != nil {
 		s.logger.Warn("deal question 기록 실패", "path", pagePath, "error", err)
 		return
 	}

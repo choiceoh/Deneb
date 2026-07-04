@@ -135,6 +135,13 @@ func memoryCreatePage(deps MemoryDeps) rpcutil.HandlerFunc {
 		if category == "" {
 			return rpcerr.MissingParam("category").Response(req.ID)
 		}
+		// The category must be a real taxonomy bucket so a typo can't spawn a
+		// junk top-level directory — the same guard move already enforces.
+		if !wiki.ValidateCategory(category) {
+			return rpcerr.InvalidRequest(
+				"category must be one of: " + strings.Join(wiki.Categories, ", "),
+			).Response(req.ID)
+		}
 
 		// Compute path: <category>/<slug>.md. The category itself goes
 		// through the same path validation as the final relative path
@@ -145,6 +152,10 @@ func memoryCreatePage(deps MemoryDeps) rpcutil.HandlerFunc {
 			return rpcerr.InvalidRequest("title yields empty slug").Response(req.ID)
 		}
 		rel := path.Join(category, slug+".md")
+		// Layout invariant: create is always a NEW page (the conflict check
+		// below), and a new flat 프로젝트/<slug>.md belongs on its 대표.md slot —
+		// flat creation would resurrect the pre-migration layout.
+		rel = wiki.NormalizeProjectPagePath(rel)
 		if err := validateWikiPath(rel); err != nil {
 			return rpcerr.InvalidRequest(err.Error()).Response(req.ID)
 		}

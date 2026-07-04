@@ -161,7 +161,7 @@ func (t *wikiReviewTask) Run(ctx context.Context) error {
 	// Retroactive mail filing: unlinked analyses whose project has since become
 	// known move into that project's 메일분석 slot (deterministic signals only).
 	refiled := 0
-	for _, m := range t.wikiStore.ReclassifyUnlinkedMailAnalyses(time.Now(), 10) {
+	for _, m := range t.wikiStore.ReclassifyUnlinkedMailAnalyses(10) {
 		t.logger.Info("wiki-review: unlinked mail re-filed", "from", m.From, "project", m.Project)
 		refiled++
 	}
@@ -342,6 +342,13 @@ func (t *wikiReviewTask) gatherSuspects(ctx context.Context, touched []string) [
 				if f, ok := wiki.ProjectFolderOf(h.Path); ok && f == selfFolder {
 					continue // same project's own slots/details
 				}
+			}
+			// Archived pages are retired — never merge candidates. Without this
+			// a live page could be judged a duplicate of a closed project's page
+			// and folded toward retirement (the keeper preference guards the
+			// direction, but an archived candidate is noise to the verdict too).
+			if hp, herr := t.wikiStore.ReadPage(h.Path); herr == nil && hp != nil && hp.Meta.Archived {
+				continue
 			}
 			kept = append(kept, h)
 		}

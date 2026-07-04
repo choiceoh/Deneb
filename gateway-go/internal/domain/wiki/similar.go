@@ -112,9 +112,11 @@ func (s *Store) FindSimilarPages(ctx context.Context, q SimilarQuery, limit int)
 	return hits
 }
 
-// ChooseDuplicateKeeper picks which of two duplicate pages survives a fold:
-// the higher-importance page, with a later Updated date breaking ties (the
-// same policy the dream cycle's exact-duplicate auto-merge uses).
+// ChooseDuplicateKeeper picks which of two duplicate pages survives a fold: a
+// live (non-archived) page always beats an archived one — folding live content
+// into a retired page would vanish it from the active surface — then the
+// higher-importance page, with a later Updated date breaking ties (the same
+// policy the dream cycle's exact-duplicate auto-merge uses).
 func (s *Store) ChooseDuplicateKeeper(a, b string) (keep, fold string) {
 	if dupKeepSecond(s.SnapshotEntries(), a, b) {
 		return b, a

@@ -29,8 +29,15 @@ const wikiProjectCategory = "프로젝트"
 
 // mailAnalysisWikiPath maps a Gmail message ID to its wiki page path — the
 // project's 메일분석/ slot when the analyzer linked one, else the category-level
-// unlinked bucket (see wiki/project_layout.go). One page per message.
-func mailAnalysisWikiPath(msgID string, relatedProjects []string) string {
+// unlinked bucket (see wiki/project_layout.go). One page per message: when a
+// page for this msgID already exists ANYWHERE in a 메일분석 bucket (the analysis
+// cache was bypassed/lost, or the re-run resolved a different project, or the
+// reviewer re-filed the page), it is updated in place — a second page for the
+// same mail is never minted.
+func mailAnalysisWikiPath(store *wiki.Store, msgID string, relatedProjects []string) string {
+	if prev := store.FindMailAnalysisPage(msgID); prev != "" {
+		return prev
+	}
 	return wiki.MailAnalysisPagePath(mailProjectName(relatedProjects), msgID)
 }
 
@@ -81,6 +88,10 @@ func buildMailAnalysisPage(in handlerminiapp.WikiAnalysisInput) *wiki.Page {
 
 	return &wiki.Page{
 		Meta: wiki.Frontmatter{
+			// The message ID is the page's stable identity — it feeds the
+			// FindSimilarPages id signal and makes the one-page-per-message
+			// contract checkable without parsing the body blockquote.
+			ID:         in.MsgID,
 			Title:      title,
 			Summary:    senderShortLabel(in.From) + " 메일 분석",
 			Category:   wikiProjectCategory, // 프로젝트 (raw-data sub-folder; bucket = path dir)
@@ -186,7 +197,7 @@ func (s *Server) makeMailAnalysisSink() func(*gmail.MessageDetail, gmailpoll.Ana
 				Analysis:        res.Text,
 				RelatedProjects: res.RelatedProjects,
 			})
-			if err := s.wikiStore.WritePage(mailAnalysisWikiPath(msg.ID, res.RelatedProjects), page); err != nil {
+			if err := s.wikiStore.WritePage(mailAnalysisWikiPath(s.wikiStore, msg.ID, res.RelatedProjects), page); err != nil {
 				s.logger.Warn("mail analysis 위키 저장 실패", "id", msg.ID, "error", err)
 				errs = append(errs, err)
 			}
@@ -400,10 +411,11 @@ func dealEvidenceText(deal *gmailpoll.DealInfo, msg *gmail.MessageDetail) string
 
 // appendMailStatusToProjects prepends a dated status bullet onto every project
 // 대표페이지 the analyzer linked, so the 모아보기 reflects a freshly-analyzed mail
-// between dream cycles. Only direct project pages (프로젝트/<name>.md, count of
-// "/" == 1) are touched — the raw-data sub-folders (mail-analyses/, 거래/) are
-// skipped, mirroring projectCandidatesFn. Idempotent by mail id; best-effort
-// (a failure logs, never fails the analysis).
+// between dream cycles. Only 대표페이지 (wiki.IsProjectRepPage — the in-folder
+// 대표.md slot, or a legacy flat 프로젝트/<name>.md) are touched — raw-data
+// sub-folders (메일분석/, 거래/) are skipped via directProjectPages, mirroring
+// projectCandidatesFn. Idempotent by mail id; best-effort (a failure logs,
+// never fails the analysis).
 func (s *Server) appendMailStatusToProjects(msg *gmail.MessageDetail, res gmailpoll.AnalysisResult) {
 	if s.wikiStore == nil || msg == nil {
 		return

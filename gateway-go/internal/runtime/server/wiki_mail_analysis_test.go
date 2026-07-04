@@ -1,6 +1,11 @@
 package server
 
-import "testing"
+import (
+	"path/filepath"
+	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
+)
 
 // TestMailAnalysisWikiPath locks the per-project layout slot: a mail the
 // analyzer linked to a project is filed under that project's 메일분석/ folder
@@ -48,9 +53,43 @@ func TestMailAnalysisWikiPath(t *testing.T) {
 		},
 	}
 	for _, c := range cases {
-		if got := mailAnalysisWikiPath(c.msgID, c.related); got != c.want {
+		// nil store = no existing pages → pure layout mapping.
+		if got := mailAnalysisWikiPath(nil, c.msgID, c.related); got != c.want {
 			t.Errorf("%s:\n  mailAnalysisWikiPath(%q, %v)\n  = %q\n  want %q", c.name, c.msgID, c.related, got, c.want)
 		}
+	}
+}
+
+// TestMailAnalysisWikiPath_ExistingPageWins locks the global msgID dedup
+// (메일 1통 = 1페이지): when a page for the message already exists in ANY
+// 메일분석 bucket — the analysis cache was bypassed, or a re-run resolved a
+// different project — the write targets that page in place instead of minting
+// a second page in another folder.
+func TestMailAnalysisWikiPath_ExistingPageWins(t *testing.T) {
+	store, err := wiki.NewStore(filepath.Join(t.TempDir(), "wiki"), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+
+	existing := wiki.MailAnalysisPagePath("영산고", "msg-1")
+	page := wiki.NewPage("RE: 견적", "프로젝트", nil)
+	page.Meta.ID = "msg-1"
+	if err := store.WritePage(existing, page); err != nil {
+		t.Fatal(err)
+	}
+
+	// Re-run resolves a DIFFERENT project → still the existing page.
+	if got := mailAnalysisWikiPath(store, "msg-1", []string{"프로젝트/부산8호/대표.md"}); got != existing {
+		t.Fatalf("existing page must win: got %q, want %q", got, existing)
+	}
+	// Re-run resolves no project → still the existing page (not the bucket).
+	if got := mailAnalysisWikiPath(store, "msg-1", nil); got != existing {
+		t.Fatalf("existing page must win over the unlinked bucket: got %q, want %q", got, existing)
+	}
+	// A different message is unaffected.
+	if got := mailAnalysisWikiPath(store, "msg-2", nil); got != "프로젝트/메일분석/msg-2.md" {
+		t.Fatalf("fresh msgID must map to the layout slot: got %q", got)
 	}
 }
 

@@ -53,6 +53,20 @@ var reservedProjectDirs = map[string]bool{
 // under 프로젝트/ (거래, 메일분석, legacy mail-analyses) rather than a project folder.
 func IsReservedProjectDir(name string) bool { return reservedProjectDirs[name] }
 
+// isProjectSlotLeafFile reports whether base (a bare filename) is one of the
+// fixed per-project slot filenames — 대표.md, 로그.md, 로그-보관.md. After the
+// folder-schema migration EVERY project carries these leaves, so the filename
+// identifies a SLOT, not a subject: resolvers must never treat it as a page
+// identity (a "unique basename" lookup on 대표.md would repoint a dead slot
+// reference at an unrelated project's slot).
+func isProjectSlotLeafFile(base string) bool {
+	switch base {
+	case RepPageFile, LogPageFile, logArchiveFile:
+		return true
+	}
+	return false
+}
+
 // splitProjectPath breaks a slash-normalized wiki path under 프로젝트/ into its
 // path segments after the category ("프로젝트/a/b.md" → ["a","b.md"]). Returns nil
 // when the path is not under the 프로젝트 category.

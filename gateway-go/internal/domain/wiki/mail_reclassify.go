@@ -20,7 +20,6 @@ package wiki
 import (
 	"path"
 	"strings"
-	"time"
 )
 
 // ReclassifyResult is one re-filed mail page.
@@ -32,7 +31,13 @@ type ReclassifyResult struct {
 
 // ReclassifyUnlinkedMailAnalyses re-files pages from the category-level
 // 메일분석 bucket into per-project slots, at most maxMoves per call.
-func (s *Store) ReclassifyUnlinkedMailAnalyses(now time.Time, maxMoves int) []ReclassifyResult {
+//
+// Retention-archived pages stay put: they are retired, and re-filing them
+// would resurrect them into a project's active 메일분석 slot. The re-file is a
+// metadata repair, so it never stamps Updated (link_prune's no-stamp doctrine)
+// — stamping extended the mail's 90d retention window and reset the target
+// project's dormancy clock.
+func (s *Store) ReclassifyUnlinkedMailAnalyses(maxMoves int) []ReclassifyResult {
 	if s == nil || maxMoves <= 0 {
 		return nil
 	}
@@ -63,6 +68,9 @@ func (s *Store) ReclassifyUnlinkedMailAnalyses(now time.Time, maxMoves int) []Re
 		if perr != nil || page == nil {
 			continue
 		}
+		if page.Meta.Archived {
+			continue // retention-archived — retired mail must not be re-filed
+		}
 		project := reclassifyTarget(page, projects)
 		if project == "" {
 			continue
@@ -75,7 +83,8 @@ func (s *Store) ReclassifyUnlinkedMailAnalyses(now time.Time, maxMoves int) []Re
 		if err := s.MovePage(rp, dst); err != nil {
 			continue // e.g. same msgID already filed there — leave for the operator
 		}
-		// The project-corner ownership edge: mail → 대표페이지 via Related.
+		// The project-corner ownership edge: mail → 대표페이지 via Related. No
+		// Updated stamp — see the method comment (metadata repair, no re-stamp).
 		_ = s.UpdatePage(dst, func(cur *Page) (*Page, error) {
 			if cur == nil {
 				return nil, nil
@@ -86,12 +95,33 @@ func (s *Store) ReclassifyUnlinkedMailAnalyses(now time.Time, maxMoves int) []Re
 				}
 			}
 			cur.Meta.Related = append(cur.Meta.Related, repPath)
-			cur.Meta.Updated = now.Format("2006-01-02")
 			return cur, nil
 		})
 		moved = append(moved, ReclassifyResult{From: rp, To: dst, Project: project})
 	}
 	return moved
+}
+
+// FindMailAnalysisPage returns the path of the existing mail-analysis page
+// carrying msgID — searching every 메일분석 bucket (per-project, category-level
+// unlinked, legacy mail-analyses) — or "" when none exists. Mail pages are
+// keyed by message ID as the filename, so this is a cheap index scan. It backs
+// the "메일 1통 = 1페이지" contract's global lookup: when the analysis cache is
+// bypassed/lost and the analyzer resolves projects differently on a re-run,
+// the same msgID must update its existing page in place, not mint a second
+// page in another folder.
+func (s *Store) FindMailAnalysisPage(msgID string) string {
+	msgID = strings.TrimSpace(msgID)
+	if s == nil || msgID == "" {
+		return ""
+	}
+	want := msgID + ".md"
+	for p := range s.SnapshotEntries() {
+		if IsMailAnalysisPath(p) && path.Base(p) == want {
+			return p
+		}
+	}
+	return ""
 }
 
 // reclassifyTarget picks the owning project for an unlinked mail page, or ""

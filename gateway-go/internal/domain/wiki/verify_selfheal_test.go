@@ -11,11 +11,14 @@ import (
 
 // TestDetectDuplicates_NormalizedTitle: punctuation/spacing title variants get
 // a high-confidence merge Fix; genuinely different titles stay advisory.
+// (Non-project pages here on purpose — 대표페이지 pairs of DIFFERENT project
+// folders are demoted to advisory since the C3 fix; see
+// TestDetectDuplicates_CrossProjectRepPairIsAdvisory.)
 func TestDetectDuplicates_NormalizedTitle(t *testing.T) {
 	idx := NewIndex()
-	idx.UpdateEntry("프로젝트/영산고-태양광/대표.md", &Page{Meta: Frontmatter{Title: "영산고 태양광", Importance: 0.7}})
-	idx.UpdateEntry("프로젝트/영산고태양광/대표.md", &Page{Meta: Frontmatter{Title: "영산고-태양광", Importance: 0.5}})
-	idx.UpdateEntry("프로젝트/부산8호/대표.md", &Page{Meta: Frontmatter{Title: "부산 8호 태양광", Importance: 0.5}})
+	idx.UpdateEntry("업무/영산고-태양광.md", &Page{Meta: Frontmatter{Title: "영산고 태양광", Importance: 0.7}})
+	idx.UpdateEntry("업무/영산고태양광.md", &Page{Meta: Frontmatter{Title: "영산고-태양광", Importance: 0.5}})
+	idx.UpdateEntry("업무/부산8호.md", &Page{Meta: Frontmatter{Title: "부산 8호 태양광", Importance: 0.5}})
 
 	findings := detectDuplicates(idx.Entries)
 	var normFix *VerifyFinding
@@ -25,7 +28,7 @@ func TestDetectDuplicates_NormalizedTitle(t *testing.T) {
 			normFix = &findings[i]
 		}
 		if findings[i].Fix != nil &&
-			(findings[i].PageA == "프로젝트/부산8호/대표.md" || findings[i].PageB == "프로젝트/부산8호/대표.md") {
+			(findings[i].PageA == "업무/부산8호.md" || findings[i].PageB == "업무/부산8호.md") {
 			t.Errorf("distinct title must not get an auto-fix: %+v", findings[i])
 		}
 	}
@@ -33,7 +36,7 @@ func TestDetectDuplicates_NormalizedTitle(t *testing.T) {
 		t.Fatalf("expected a normalized-title merge fix, findings: %+v", findings)
 	}
 	// Higher-importance page is the keeper (PageA).
-	if normFix.PageA != "프로젝트/영산고-태양광/대표.md" {
+	if normFix.PageA != "업무/영산고-태양광.md" {
 		t.Errorf("keeper = %s, want the higher-importance page", normFix.PageA)
 	}
 }

@@ -371,22 +371,25 @@ func TestStore_FoldDuplicate_MergesLikeMergePage(t *testing.T) {
 	if err := store.WritePage("프로젝트/탑솔라/대표.md", keep); err != nil {
 		t.Fatal(err)
 	}
+	// The fold page is the SAME project's legacy flat rep (the reviewer's
+	// flat-remnant repair path) — 대표페이지 of DIFFERENT projects are refused
+	// by the cross-project auto-fold guard (C3).
 	fold := NewPage("탑솔라 (중복)", "프로젝트", []string{"중복태그"})
 	fold.Meta.Code = "pl3-top-mod-001"
 	fold.Meta.Cues = []string{"선수금 일정"}
 	fold.Body = "# 중복\n\n중복 페이지의 본문"
-	if err := store.WritePage("프로젝트/탑솔라-중복/대표.md", fold); err != nil {
+	if err := store.WritePage("프로젝트/탑솔라.md", fold); err != nil {
 		t.Fatal(err)
 	}
 	// Third page referencing the fold — must be repointed to keep.
 	ref := NewPage("참조자", "기타", nil)
-	ref.Meta.Related = []string{"프로젝트/탑솔라-중복/대표.md"}
+	ref.Meta.Related = []string{"프로젝트/탑솔라.md"}
 	ref.Body = "# ref"
 	if err := store.WritePage("기타/참조자.md", ref); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := store.FoldDuplicate("프로젝트/탑솔라/대표.md", "프로젝트/탑솔라-중복/대표.md"); err != nil {
+	if err := store.FoldDuplicate("프로젝트/탑솔라/대표.md", "프로젝트/탑솔라.md"); err != nil {
 		t.Fatalf("FoldDuplicate: %v", err)
 	}
 
@@ -404,7 +407,7 @@ func TestStore_FoldDuplicate_MergesLikeMergePage(t *testing.T) {
 	if len(refGot.Meta.Related) != 1 || refGot.Meta.Related[0] != "프로젝트/탑솔라/대표.md" {
 		t.Errorf("inbound reference not repointed: %v", refGot.Meta.Related)
 	}
-	if _, err := store.ReadPage("프로젝트/탑솔라-중복/대표.md"); !os.IsNotExist(err) {
+	if _, err := store.ReadPage("프로젝트/탑솔라.md"); !os.IsNotExist(err) {
 		t.Errorf("fold page should be deleted, err=%v", err)
 	}
 }

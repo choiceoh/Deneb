@@ -113,6 +113,18 @@ func wikiWrite(deps Deps) rpcutil.HandlerFunc {
 		if err := wiki.ValidateExternalPath(p.Path); err != nil {
 			return nil, rpcerr.InvalidRequest(err.Error())
 		}
+		// Flat-creation guard (wiki-layout 불변식): creating a NEW flat
+		// 프로젝트/<name>.md routes onto the 대표.md slot. An EXISTING legacy flat
+		// page keeps being written in place — only genuinely absent targets
+		// (os.IsNotExist, not transient read errors) normalize. The ".md"
+		// canonicalization comes first: the layout guard detects the flat form
+		// by extension, and the store applies it on write anyway.
+		p.Path = wiki.NormalizePagePath(p.Path)
+		if np := wiki.NormalizeProjectPagePath(p.Path); np != p.Path {
+			if _, rerr := deps.Store.ReadPage(p.Path); rerr != nil && os.IsNotExist(rerr) {
+				p.Path = np
+			}
+		}
 		page := wiki.NewPage(p.Title, p.Category, p.Tags)
 		page.Body = p.Body
 		if p.Importance > 0 {

@@ -3,6 +3,7 @@ package knowledge
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -77,7 +78,23 @@ func (a *wikiAdapter) Record(_ context.Context, opts RecordOptions) (Ref, error)
 	if strings.TrimSpace(opts.Page) == "" {
 		return Ref{}, fmt.Errorf("page is required for knowledge.record")
 	}
-	path := opts.Page
+	// Canonical spelling first (".md" appended when absent) — the layout guard
+	// below detects the flat 대표페이지 form by its extension, and the store
+	// would apply the same normalization on write anyway.
+	path := wiki.NormalizePagePath(opts.Page)
+
+	// Flat-creation guard (wiki-layout 불변식): a NEW flat 프로젝트/<name>.md
+	// routes onto its 대표.md slot. Updates of an EXISTING legacy flat page keep
+	// writing in place, so only the creation case normalizes — the pre-read
+	// decides which case this is (only a definite not-exists counts; a
+	// transient read error must not fork a slot sibling of a live flat page).
+	// A racing creator is then caught by the atomic UpdatePage below, which
+	// re-reads under the write lock.
+	if np := wiki.NormalizeProjectPagePath(path); np != path {
+		if _, rerr := a.store.ReadPage(path); rerr != nil && os.IsNotExist(rerr) {
+			path = np
+		}
+	}
 
 	title := strings.TrimSpace(opts.Title)
 	if title == "" {
@@ -89,32 +106,36 @@ func (a *wikiAdapter) Record(_ context.Context, opts RecordOptions) (Ref, error)
 		}
 	}
 
-	existing, _ := a.store.ReadPage(path)
-	var page *wiki.Page
+	// Atomic read-modify-write: a separate ReadPage→WritePage pair loses any
+	// concurrent write landing between the two calls (the dreamer, mail
+	// analysis, and the agent wiki tool all target the same pages).
 	now := time.Now().Format("2006-01-02")
-	if existing != nil {
-		page = existing
-		page.Meta.Title = title
-		if opts.Summary != "" {
-			page.Meta.Summary = opts.Summary
+	err := a.store.UpdatePage(path, func(existing *wiki.Page) (*wiki.Page, error) {
+		var page *wiki.Page
+		if existing != nil {
+			page = existing
+			page.Meta.Title = title
+			if opts.Summary != "" {
+				page.Meta.Summary = opts.Summary
+			}
+			if len(opts.Tags) > 0 {
+				page.Meta.Tags = opts.Tags
+			}
+			if len(opts.Related) > 0 {
+				page.Meta.Related = opts.Related
+			}
+			if opts.Importance > 0 {
+				page.Meta.Importance = opts.Importance
+			}
+			if opts.Category != "" {
+				page.Meta.Category = opts.Category
+			}
+			page.Meta.Updated = now
+			if opts.Body != "" {
+				page.Body = opts.Body
+			}
+			return page, nil
 		}
-		if len(opts.Tags) > 0 {
-			page.Meta.Tags = opts.Tags
-		}
-		if len(opts.Related) > 0 {
-			page.Meta.Related = opts.Related
-		}
-		if opts.Importance > 0 {
-			page.Meta.Importance = opts.Importance
-		}
-		if opts.Category != "" {
-			page.Meta.Category = opts.Category
-		}
-		page.Meta.Updated = now
-		if opts.Body != "" {
-			page.Body = opts.Body
-		}
-	} else {
 		page = wiki.NewPage(title, opts.Category, opts.Tags)
 		page.Meta.Summary = opts.Summary
 		page.Meta.Related = opts.Related
@@ -127,9 +148,9 @@ func (a *wikiAdapter) Record(_ context.Context, opts RecordOptions) (Ref, error)
 			page.Body = fmt.Sprintf("# %s\n\n## 요약\n\n\n## 핵심 사실\n\n\n## 변경 이력\n- %s: 페이지 생성\n",
 				title, now)
 		}
-	}
-
-	if err := a.store.WritePage(path, page); err != nil {
+		return page, nil
+	})
+	if err != nil {
 		return Ref{}, fmt.Errorf("write wiki page %q: %w", path, err)
 	}
 	for _, old := range opts.Supersedes {

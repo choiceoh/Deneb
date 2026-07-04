@@ -50,14 +50,20 @@ func splitProgressLogSection(content string) (body, logLines string) {
 // appendProjectLog appends a dated H2 section to the project's 로그.md,
 // creating the page on first use. H2 is the unit RotateProjectLog rotates on,
 // so rerouted entries age out with the rest of the log. Returns whether the
-// entry was persisted — on failure the caller must keep the section in its
+// entry is persisted — on failure the caller must keep the section in its
 // original page (dropping it there too would silently lose the events).
+//
+// Idempotent by content: a log that already contains the entry text verbatim
+// is left untouched (still "persisted" → true). Partial-synthesis cycles hold
+// diary offsets and RE-CONSUME the same input next cycle — without this check
+// each retry stacked an identical dated section onto the log.
 func (wd *WikiDreamer) appendProjectLog(project, entry string) bool {
-	if strings.TrimSpace(entry) == "" {
+	trimmed := strings.TrimSpace(entry)
+	if trimmed == "" {
 		return false
 	}
 	today := time.Now().Format("2006-01-02")
-	section := "## " + today + " (dream)\n" + strings.TrimSpace(entry) + "\n"
+	section := "## " + today + " (dream)\n" + trimmed + "\n"
 	err := wd.store.UpdatePage(LogPagePath(project), func(cur *Page) (*Page, error) {
 		if cur == nil {
 			p := NewPage(project+" 진행 로그", "프로젝트", nil)
@@ -65,6 +71,9 @@ func (wd *WikiDreamer) appendProjectLog(project, entry string) bool {
 			p.Meta.Summary = project + " 진행 로그"
 			p.Body = section
 			return p, nil
+		}
+		if strings.Contains(cur.Body, trimmed) {
+			return nil, nil // already on the log — no-op write, keep Updated
 		}
 		cur.Body = strings.TrimRight(cur.Body, "\n") + "\n\n" + section
 		cur.Meta.Updated = today // the store does not auto-stamp writes

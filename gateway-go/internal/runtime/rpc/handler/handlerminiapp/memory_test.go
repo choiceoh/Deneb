@@ -645,7 +645,7 @@ func TestMemoryCreatePage_HappyPath(t *testing.T) {
 	h := memoryCreatePage(memoryDepsFor(store))
 	resp := h(authedCtx(), reqWith(t, "miniapp.memory.create_page", map[string]any{
 		"title":    "Acme Corp",
-		"category": "회사",
+		"category": "인물", // must be a real taxonomy category (create now validates)
 		"summary":  "Vendor of widgets",
 		"tags":     []any{"vendor", "B2B", ""},
 		"body":     "## 컨택\n\nAlice",
@@ -653,10 +653,10 @@ func TestMemoryCreatePage_HappyPath(t *testing.T) {
 	if !resp.OK {
 		t.Fatalf("expected OK: %+v", resp.Error)
 	}
-	if capturedPath != "회사/acme-corp.md" {
-		t.Errorf("path = %q, want '회사/acme-corp.md'", capturedPath)
+	if capturedPath != "인물/acme-corp.md" {
+		t.Errorf("path = %q, want '인물/acme-corp.md'", capturedPath)
 	}
-	if captured.Meta.Title != "Acme Corp" || captured.Meta.Category != "회사" {
+	if captured.Meta.Title != "Acme Corp" || captured.Meta.Category != "인물" {
 		t.Errorf("meta wrong: %+v", captured.Meta)
 	}
 	if captured.Meta.Created != "2026-05-27" || captured.Meta.Updated != "2026-05-27" {
@@ -671,7 +671,7 @@ func TestMemoryCreatePage_HappyPath(t *testing.T) {
 
 	var got map[string]any
 	decode(t, resp, &got)
-	if got["path"] != "회사/acme-corp.md" || got["title"] != "Acme Corp" {
+	if got["path"] != "인물/acme-corp.md" || got["title"] != "Acme Corp" {
 		t.Errorf("response: %+v", got)
 	}
 }
@@ -685,7 +685,7 @@ func TestMemoryCreatePage_RejectsExisting(t *testing.T) {
 	h := memoryCreatePage(memoryDepsFor(store))
 	resp := h(authedCtx(), reqWith(t, "miniapp.memory.create_page", map[string]any{
 		"title":    "Existing",
-		"category": "사람",
+		"category": "인물",
 	}))
 	if resp.OK {
 		t.Fatal("expected error for existing page")
@@ -731,10 +731,11 @@ func TestMemoryCreatePage_RejectsCategoryTraversal(t *testing.T) {
 
 func TestMemoryCreatePage_EmptySlugRejected(t *testing.T) {
 	h := memoryCreatePage(memoryDepsFor(&fakeMemoryStore{}))
-	// Title is all punctuation → slug ends up empty.
+	// Title is all punctuation → slug ends up empty. (Category must be valid
+	// so the slug check — not the category guard — is what rejects.)
 	resp := h(authedCtx(), reqWith(t, "miniapp.memory.create_page", map[string]any{
 		"title":    "??!!",
-		"category": "misc",
+		"category": "기타",
 	}))
 	if resp.OK {
 		t.Fatal("expected error for empty slug")

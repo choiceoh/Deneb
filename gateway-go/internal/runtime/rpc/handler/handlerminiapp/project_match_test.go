@@ -77,6 +77,39 @@ func TestProjectMatchKeys_FolderSchemaNoCrossMatch(t *testing.T) {
 	}
 }
 
+// TestProjectMatchKeys_VariableChildLeafNoCrossMatch: variable-named project
+// children (기자재/모듈.md) must not emit their file leaf as a match key —
+// two projects both holding a 모듈.md would cross-link every "모듈"-ref'd item
+// between them. The discriminating leaf of ANY project-owned path is its
+// project folder segment (superset of the fixed slot-leaf rule).
+func TestProjectMatchKeys_VariableChildLeafNoCrossMatch(t *testing.T) {
+	keys := projectMatchKeys(
+		"탑솔라",
+		"프로젝트/탑솔라/대표.md",
+		"",
+		[]string{"프로젝트/탑솔라/기자재/모듈.md"},
+	)
+	if _, leaked := keys["모듈"]; leaked {
+		t.Fatal("variable child leaf 모듈 must not be a match key (cross-links projects sharing the doc name)")
+	}
+	cases := []struct {
+		name string
+		refs []string
+		want bool
+	}{
+		{"own child page (full path)", []string{"프로젝트/탑솔라/기자재/모듈.md"}, true}, // folder segment matches
+		{"ANOTHER project's same-named child", []string{"프로젝트/영산고/기자재/모듈.md"}, false},
+		{"bare child filename", []string{"모듈"}, false},
+		// Raw-data buckets are NOT project-owned: mail msgIDs keep their leaf.
+		{"unlinked mail by msgID leaf", []string{"프로젝트/메일분석/abc123.md"}, false},
+	}
+	for _, c := range cases {
+		if got := itemLinkedToProject(keys, c.refs...); got != c.want {
+			t.Errorf("%s: itemLinkedToProject(%v) = %v, want %v", c.name, c.refs, got, c.want)
+		}
+	}
+}
+
 func TestMailIDsFromRefs(t *testing.T) {
 	refs := []string{
 		"프로젝트/mail-analyses/탑솔라/abc123.md", // → abc123

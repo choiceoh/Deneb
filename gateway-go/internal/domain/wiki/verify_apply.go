@@ -17,7 +17,6 @@ package wiki
 import (
 	"fmt"
 	"strings"
-	"time"
 )
 
 // maxAutoVerifyFixes caps how many auto-corrections one dream cycle applies, so
@@ -101,6 +100,16 @@ func (s *Store) FoldDuplicate(keep, fold string) error {
 	if keep == fold {
 		return fmt.Errorf("wiki: cannot fold a page into itself")
 	}
+	// Cross-project rep-pair guard: FoldDuplicate is the AUTOMATIC merge
+	// primitive (dream verify, wiki reviewer), and folding one project's
+	// 대표페이지 into another project's orphans the folded folder's children
+	// (로그/메일분석/기자재 stay behind while the project vanishes from
+	// knownProjects). Same-folder folds (flat remnant → 대표.md slot) pass —
+	// that's a layout repair. Operator-driven project merges go through
+	// MergePage (the miniapp merge), which is deliberately not guarded.
+	if crossProjectRepPair(keep, fold) {
+		return fmt.Errorf("wiki: refusing to auto-fold 대표페이지 of different projects (%s ← %s): children need re-parenting first", keep, fold)
+	}
 
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
@@ -112,8 +121,15 @@ func (s *Store) FoldDuplicate(keep, fold string) error {
 }
 
 // archivePage sets a page's Archived flag in place (no move, no delete) — the
-// soft retirement used for long-superseded pages. Archived pages drop out of
-// Tier-1 injection and research selection and are heavily demoted in search.
+// soft retirement used for long-superseded pages and mail-retention archiving.
+// Archived pages drop out of Tier-1 injection and research selection and are
+// heavily demoted in search.
+//
+// The prior Updated date is deliberately preserved (link_prune's no-stamp
+// doctrine: metadata-only repair must not make a page look active). Stamping
+// today here made a 90-day-old mail analysis look fresh the moment retention
+// archived it — pushing the owning project's dormancy detection out by up to
+// another retention window.
 func (s *Store) archivePage(relPath string) error {
 	return s.UpdatePage(relPath, func(cur *Page) (*Page, error) {
 		if cur == nil {
@@ -123,15 +139,30 @@ func (s *Store) archivePage(relPath string) error {
 			return nil, nil // already archived — no-op
 		}
 		cur.Meta.Archived = true
-		cur.Meta.Updated = time.Now().Format("2006-01-02")
 		return cur, nil
 	})
 }
 
-// exactDupFinding builds a high-confidence duplicate finding with a merge Fix,
-// keeping the higher-importance page (a later Updated date breaks ties) and
-// folding the other into it. entries is an index snapshot (Store.SnapshotEntries).
+// exactDupFinding builds a high-confidence duplicate finding, keeping the
+// higher-importance page (a later Updated date breaks ties) and folding the
+// other into it. entries is an index snapshot (Store.SnapshotEntries).
+//
+// Exception: two 대표페이지 of DIFFERENT project folders stay advisory (no Fix).
+// Normalization-identical project names ("기아 화성" / "기아-화성") produce rep
+// pairs whose auto-fold would leave the folded project's children (로그.md,
+// 메일분석/*, 기자재/*) orphaned — the project vanishes from knownProjects /
+// 모아보기 / 리서치 / 회전 / 휴면 while its files remain. Folding rep pairs safely
+// requires re-parenting the children, which is beyond an auto-fix; the
+// operator merges via the native client when it's really one project.
 func exactDupFinding(entries map[string]IndexEntry, pathA, pathB, detail string) VerifyFinding {
+	if crossProjectRepPair(pathA, pathB) {
+		return VerifyFinding{
+			Type:   "duplicate",
+			Detail: detail + " — 서로 다른 프로젝트 폴더의 대표페이지: 하위 문서 재부모화가 필요해 자동 병합하지 않음",
+			PageA:  pathA,
+			PageB:  pathB,
+		}
+	}
 	keep, fold := pathA, pathB
 	if dupKeepSecond(entries, pathA, pathB) {
 		keep, fold = pathB, pathA
@@ -145,10 +176,29 @@ func exactDupFinding(entries map[string]IndexEntry, pathA, pathB, detail string)
 	}
 }
 
-// dupKeepSecond reports whether pathB should be the keeper — true when pathB has
-// higher importance, or equal importance but a later Updated date.
+// crossProjectRepPair reports whether a and b are 대표페이지 of two DIFFERENT
+// project folders (legacy flat and in-folder forms both count as reps). A
+// same-folder pair — the flat remnant plus its 대표.md slot — is NOT cross-
+// project and stays auto-foldable (that fold is a layout repair).
+func crossProjectRepPair(a, b string) bool {
+	if !IsProjectRepPage(a) || !IsProjectRepPage(b) {
+		return false
+	}
+	fa, oka := ProjectFolderOf(a)
+	fb, okb := ProjectFolderOf(b)
+	return oka && okb && fa != fb
+}
+
+// dupKeepSecond reports whether pathB should be the keeper — true when pathB
+// has higher importance, or equal importance but a later Updated date. An
+// archived page never wins over a live one, regardless of importance/Updated:
+// keeping the archived side would fold the live page INTO retirement and
+// vanish it from the active surface (search demotion, Tier-1/research drop).
 func dupKeepSecond(entries map[string]IndexEntry, pathA, pathB string) bool {
 	a, b := entries[pathA], entries[pathB]
+	if a.Archived != b.Archived {
+		return a.Archived // exactly one archived → keep the live one
+	}
 	if b.Importance != a.Importance {
 		return b.Importance > a.Importance
 	}
@@ -159,9 +209,17 @@ func dupKeepSecond(entries map[string]IndexEntry, pathA, pathB string) bool {
 // returning "" when newCat isn't a valid taxonomy category, equals the current
 // one, or the path has no category segment to replace. The guard is what keeps a
 // bogus LLM "correctCategory" from producing a junk move target.
+//
+// Project-owned paths never get a move target: swapping the leading directory
+// would relocate a project SLOT page (대표.md/로그.md/메일분석/*) out of 프로젝트/,
+// severing it from its folder and breaking the whole project (knownProjects,
+// 모아보기, 회전, 휴면 all key off the folder). Those findings stay advisory.
 func recategorizedPath(path, newCat string) string {
 	newCat = strings.TrimSpace(newCat)
 	if !ValidateCategory(newCat) {
+		return ""
+	}
+	if _, ok := ProjectNameOf(path); ok {
 		return ""
 	}
 	cur, rest, ok := strings.Cut(path, "/")

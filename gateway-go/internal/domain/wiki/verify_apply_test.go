@@ -67,23 +67,26 @@ func TestApplyVerifyFixes_Move(t *testing.T) {
 }
 
 func TestApplyVerifyFixes_Merge(t *testing.T) {
+	// Non-project pages: 대표페이지 pairs of different project folders are
+	// refused by the C3 auto-fold guard (children would be orphaned) — the
+	// merge machinery itself is what this test locks.
 	s, wd := newVerifyStore(t)
-	writePageT(t, s, "프로젝트/a.md", "탑솔라", "프로젝트", "AAA 본문")
-	writePageT(t, s, "프로젝트/b.md", "탑솔라", "프로젝트", "BBB 본문")
+	writePageT(t, s, "업무/a.md", "탑솔라", "업무", "AAA 본문")
+	writePageT(t, s, "업무/b.md", "탑솔라", "업무", "BBB 본문")
 
 	n := wd.applyVerifyFixes([]VerifyFinding{{
 		Type:  "duplicate",
-		PageA: "프로젝트/a.md", // keep
-		PageB: "프로젝트/b.md", // fold
+		PageA: "업무/a.md", // keep
+		PageB: "업무/b.md", // fold
 		Fix:   &VerifyFix{Kind: "merge"},
 	}})
 	if n != 1 {
 		t.Fatalf("applied = %d, want 1", n)
 	}
-	if p, _ := s.ReadPage("프로젝트/b.md"); p != nil {
+	if p, _ := s.ReadPage("업무/b.md"); p != nil {
 		t.Error("folded page still present after auto-merge")
 	}
-	keep, _ := s.ReadPage("프로젝트/a.md")
+	keep, _ := s.ReadPage("업무/a.md")
 	if keep == nil {
 		t.Fatal("keeper page vanished")
 	}
@@ -138,14 +141,16 @@ func TestApplyVerifyFixes_SkipsAdvisoryAndCaps(t *testing.T) {
 }
 
 func TestExactDupFinding_KeepsHigherImportance(t *testing.T) {
+	// Non-project paths: rep pairs of different project folders demote to
+	// advisory (C3) — the keeper policy is what this test locks.
 	entries := map[string]IndexEntry{
-		"프로젝트/low.md":  {Title: "탑솔라", Importance: 0.3},
-		"프로젝트/high.md": {Title: "탑솔라", Importance: 0.8},
+		"업무/low.md":  {Title: "탑솔라", Importance: 0.3},
+		"업무/high.md": {Title: "탑솔라", Importance: 0.8},
 	}
 
 	// pathA is the low-importance one; the keeper should flip to the high one.
-	f := exactDupFinding(entries, "프로젝트/low.md", "프로젝트/high.md", "동일한 제목")
-	if f.PageA != "프로젝트/high.md" || f.PageB != "프로젝트/low.md" {
+	f := exactDupFinding(entries, "업무/low.md", "업무/high.md", "동일한 제목")
+	if f.PageA != "업무/high.md" || f.PageB != "업무/low.md" {
 		t.Errorf("keep/fold = %q/%q, want high kept, low folded", f.PageA, f.PageB)
 	}
 	if f.Fix == nil || f.Fix.Kind != "merge" {

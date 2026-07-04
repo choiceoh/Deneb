@@ -56,11 +56,10 @@ func normalizeMatchKey(v string) string {
 
 // projectSlotLeafKeys are the fixed per-project slot filenames in normalized
 // key form (lowercased, ".md" stripped) — sourced from the layout's single
-// truth (wiki/project_layout.go, wiki/project_log.go). After the folder-schema
-// migration EVERY project's rep page ends in 대표.md (and its log in 로그.md), so
-// these leaves identify a SLOT, not a project: using them as match keys
-// cross-linked items across all projects (the project corner showed other
-// projects' notebooks).
+// truth (wiki/project_layout.go, wiki/project_log.go). They back the
+// category-less fallback in matchKeyLeaf: a ref like "탑솔라/대표" has no
+// 프로젝트/ prefix for wiki.ProjectNameOf, but its slot leaf still says the
+// parent segment is the project.
 var projectSlotLeafKeys = func() map[string]struct{} {
 	m := make(map[string]struct{}, 3)
 	for _, f := range []string{
@@ -75,9 +74,22 @@ var projectSlotLeafKeys = func() map[string]struct{} {
 
 // matchKeyLeaf returns the DISCRIMINATING leaf of a normalized key: the last
 // '/'-separated segment (the whole key when there's no slash) — except for
-// fixed project slot filenames (대표, 로그, …), where the project FOLDER segment
-// (second-to-last) is what identifies the project, so that is returned instead.
+// paths OWNED BY A PROJECT (프로젝트/<name>/... — wiki.ProjectNameOf owns the
+// rule), where the project FOLDER segment identifies the project and is
+// returned instead. That covers both the fixed slot filenames (대표.md/로그.md —
+// after the folder migration every project carries them, so the leaf
+// identifies a slot, not a project) and variable-named children (기자재/모듈.md
+// — two projects both holding a 모듈.md would otherwise cross-link through the
+// shared "모듈" key, showing other projects' items in the project corner).
+// Reserved raw-data buckets (프로젝트/메일분석/<msgID>, 프로젝트/거래/…) are not
+// project-owned and keep their unique file leaf (mail msgIDs must stay keys).
 func matchKeyLeaf(k string) string {
+	// Normalized keys have ".md" stripped; ProjectNameOf's legacy-flat branch
+	// requires the extension, so probe with it re-attached. Korean segments
+	// survive normalizeMatchKey's lowercasing unchanged.
+	if name, ok := wiki.ProjectNameOf(k + ".md"); ok {
+		return name
+	}
 	i := strings.LastIndex(k, "/")
 	if i < 0 {
 		return k
@@ -86,6 +98,8 @@ func matchKeyLeaf(k string) string {
 	if _, slot := projectSlotLeafKeys[leaf]; !slot {
 		return leaf
 	}
+	// Category-less slot path ("탑솔라/대표") — the parent segment names the
+	// project even though ProjectNameOf can't see the 프로젝트/ prefix.
 	rest := k[:i]
 	if j := strings.LastIndex(rest, "/"); j >= 0 {
 		return rest[j+1:]

@@ -40,6 +40,12 @@ func (wd *WikiDreamer) scanDiaries(_ context.Context) (*diaryScanResult, error) 
 		priorFiles[k] = v
 	}
 	legacyCutoff := wd.store.LastProcessed()
+	if state.corrupt {
+		// Offsets lost to a corrupt ledger: the legacy cutoff below would mark
+		// every older file fully consumed without reading it. Ignore it for
+		// this scan; duplicate re-consumption is absorbed by the apply guards.
+		legacyCutoff = ""
+	}
 	var diaryFiles []os.DirEntry
 	for _, e := range entries {
 		if e.IsDir() || !strings.HasPrefix(e.Name(), "diary-") || !strings.HasSuffix(e.Name(), ".md") {
@@ -82,7 +88,17 @@ func (wd *WikiDreamer) scanDiaries(_ context.Context) (*diaryScanResult, error) 
 			offset = 0
 		}
 		if offset == info.Size() {
-			continue
+			// Fully consumed by offset — unless the recorded stat says the file
+			// was REWRITTEN at the same length (mtime moved, or the recorded
+			// size disagrees): same-size rewrites never re-enter consumption
+			// otherwise, because the offset ledger only measures length.
+			rewritten := hasState && fileState.ModUnix != 0 &&
+				(fileState.ModUnix != info.ModTime().Unix() ||
+					(fileState.Size != 0 && fileState.Size != info.Size()))
+			if !rewritten {
+				continue
+			}
+			offset = 0
 		}
 
 		data, err := os.ReadFile(filepath.Join(diaryDir, name))
@@ -164,8 +180,15 @@ func (wd *WikiDreamer) loadDiaryProcessState() diaryProcessState {
 	if err != nil {
 		return state
 	}
-	if err := json.Unmarshal(data, &state); err != nil && wd.logger != nil {
-		wd.logger.Warn("wiki-dream: diary state parse failed", "error", err)
+	if err := json.Unmarshal(data, &state); err != nil {
+		if wd.logger != nil {
+			wd.logger.Warn("wiki-dream: diary state parse failed", "error", err)
+		}
+		// The ledger existed but is unreadable: the per-file offsets are gone,
+		// and treating this like a fresh install would let the legacy date
+		// cutoff SEAL every older diary file as "done" without consuming it
+		// (see scanDiaries). Flag it so that cutoff is ignored for this scan.
+		state.corrupt = true
 	}
 	if state.Version == 0 {
 		state.Version = 1
