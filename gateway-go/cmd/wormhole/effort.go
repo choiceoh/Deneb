@@ -95,6 +95,28 @@ func reasoningRoute(body []byte, entry modelEntry) (out []byte, reason string, t
 	if entry.Reasoning != reasoningStyleGLM {
 		return body, "", false // unknown/empty style → leave the body untouched
 	}
+	// Explicit caller intent wins over Ares. The Deneb gateway translates its
+	// thinking config to reasoning_effort on the OpenAI path ("low" = thinking
+	// disabled, its documented minimal-reasoning floor). Ares used to override
+	// that to "high" on every non-simple turn — for the skill evolver's
+	// structured-JSON rewrites GLM then burned most of the 12K completion
+	// budget in the reasoning channel and the JSON arrived truncated
+	// (finish=length, live 2026-07-04). GLM's dialect has no true "low": only
+	// high|max are honored and anything else silently means MAX, so a non-high
+	// explicit effort maps to thinking OFF (closest to the caller's intent),
+	// and an explicit high/max stays high with thinking enabled.
+	if eff := getBodyStringField(body, "reasoning_effort"); eff != "" {
+		switch strings.ToLower(eff) {
+		case "high", "max":
+			b := setBodyField(body, "thinking", map[string]string{"type": "enabled"})
+			b = setBodyField(b, "reasoning_effort", "high")
+			return b, "explicit-" + eff, false
+		default:
+			b := setBodyField(body, "thinking", map[string]string{"type": "disabled"})
+			b = deleteBodyField(b, "reasoning_effort")
+			return b, "explicit-" + eff, true
+		}
+	}
 	d := ares.Decide(ares.DefaultProfile(), effortRequest(body))
 	if d.ThinkingOff {
 		b := setBodyField(body, "thinking", map[string]string{"type": "disabled"})
@@ -179,6 +201,20 @@ func injectKwarg(body []byte, key string, val bool) []byte {
 
 // setBodyField sets a top-level field to value, preserving every other field's raw
 // bytes. Returns the body unchanged if it isn't a JSON object or value won't marshal.
+// getBodyStringField returns the string value of a top-level body field, or
+// "" when absent/non-string/unparseable.
+func getBodyStringField(body []byte, key string) string {
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(body, &fields) != nil {
+		return ""
+	}
+	var v string
+	if json.Unmarshal(fields[key], &v) != nil {
+		return ""
+	}
+	return v
+}
+
 func setBodyField(body []byte, key string, value any) []byte {
 	var fields map[string]json.RawMessage
 	if json.Unmarshal(body, &fields) != nil {

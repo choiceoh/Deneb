@@ -154,7 +154,10 @@ func (c *Client) completeOpenAI(ctx context.Context, req ChatRequest) (string, e
 	}
 	defer respBody.Close()
 
-	data, err := io.ReadAll(io.LimitReader(respBody, 64*1024))
+	// 1 MiB, not 64 KiB: a 12K-token completion plus a reasoning_content
+	// channel easily exceeds 64 KiB, and a limit-truncated envelope fails
+	// json.Unmarshal with a misleading "decode response" error.
+	data, err := io.ReadAll(io.LimitReader(respBody, 1<<20))
 	if err != nil {
 		return "", fmt.Errorf("read response: %w", err)
 	}
@@ -169,6 +172,12 @@ func (c *Client) completeOpenAI(ctx context.Context, req ChatRequest) (string, e
 			} `json:"message"`
 			FinishReason string `json:"finish_reason"`
 		} `json:"choices"`
+		Usage struct {
+			CompletionTokens int `json:"completion_tokens"`
+			Details          struct {
+				ReasoningTokens int `json:"reasoning_tokens"`
+			} `json:"completion_tokens_details"`
+		} `json:"usage"`
 	}
 	if err := json.Unmarshal(data, &resp); err != nil {
 		return "", fmt.Errorf("decode response: %w", err)
@@ -197,6 +206,20 @@ func (c *Client) completeOpenAI(ctx context.Context, req ChatRequest) (string, e
 			)
 		}
 	}
+	// A length-capped answer is a FAILURE, not a short success: the truncated
+	// tail is exactly what structured-output callers (the skill evolver's JSON
+	// rewrite) need, and returning it with a nil error made the parse step the
+	// first place the damage surfaced (live 2026-07-04: content cut mid-string
+	// at 6049 chars, reasoning had eaten the rest of the 12K budget). The
+	// usage split rides in the error so the caller's log answers "budget or
+	// reasoning?" without a reproduction round-trip.
+	if choice.FinishReason == "length" {
+		return "", fmt.Errorf(
+			"output truncated at max_tokens (completion_tokens=%d, reasoning_tokens=%d, content_chars=%d): raise MaxTokens or disable thinking",
+			resp.Usage.CompletionTokens, resp.Usage.Details.ReasoningTokens, len(msg.Content),
+		)
+	}
+
 	// Strip reasoning model artifacts (<think> tags, "Thinking Process:" preamble)
 	// that leak into the content field of some local models (DeepSeek-R1, QwQ, etc.).
 	content := strings.TrimSpace(msg.Content)
