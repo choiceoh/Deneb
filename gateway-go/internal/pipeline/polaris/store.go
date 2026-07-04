@@ -16,6 +16,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/atomicfile"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonlstore"
 	"github.com/choiceoh/deneb/gateway-go/pkg/textsearch"
+	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
 
 // Store is the file-backed immutable message store and summary DAG.
@@ -132,7 +133,7 @@ func (s *Store) AppendMessage(sessionKey string, msg toolctx.ChatMessage) error 
 	sd := s.ensureSession(sessionKey)
 
 	content := string(msg.Content)
-	textContent := msg.TextContent()
+	textContent := indexableText(msg)
 	tokenEst := tokenest.Estimate(textContent)
 	ts := msg.Timestamp
 	if ts == 0 {
@@ -158,6 +159,63 @@ func (s *Store) AppendMessage(sessionKey string, msg toolctx.ChatMessage) error 
 	sd.fts.Upsert(fmt.Sprintf("%d", rec.MsgIndex), textContent)
 
 	return nil
+}
+
+// indexableText renders a message for FTS indexing (and thus search snippets)
+// as human-readable prose: text blocks, thinking prose, tool calls (name +
+// input), and tool results. ChatMessage.TextContent falls back to the RAW JSON
+// string for block arrays without text blocks — the common shape of tool-heavy
+// assistant turns (thinking + tool_use only) — which indexed JSON syntax and
+// made polaris search snippets read as `[{"type":"thinking",...` (production
+// observation 2026-07-05). Plain-string content passes through unchanged.
+func indexableText(msg toolctx.ChatMessage) string {
+	if len(msg.Content) == 0 {
+		return ""
+	}
+	var s string
+	if err := json.Unmarshal(msg.Content, &s); err == nil {
+		return s
+	}
+	var blocks []struct {
+		Type     string          `json:"type"`
+		Text     string          `json:"text,omitempty"`
+		Thinking string          `json:"thinking,omitempty"`
+		Name     string          `json:"name,omitempty"`
+		Input    json.RawMessage `json:"input,omitempty"`
+		Content  string          `json:"content,omitempty"`
+	}
+	if err := json.Unmarshal(msg.Content, &blocks); err != nil {
+		return msg.TextContent()
+	}
+	var parts []string
+	for _, b := range blocks {
+		switch b.Type {
+		case "text":
+			if b.Text != "" {
+				parts = append(parts, b.Text)
+			}
+		case "thinking":
+			if b.Thinking != "" {
+				parts = append(parts, b.Thinking)
+			}
+		case "tool_use":
+			if b.Name != "" {
+				in := string(b.Input)
+				if len(in) > 200 {
+					in = textutil.TruncateBytes(in, 200)
+				}
+				parts = append(parts, "[도구 "+b.Name+"] "+in)
+			}
+		case "tool_result":
+			if b.Content != "" {
+				parts = append(parts, b.Content)
+			}
+		}
+	}
+	if len(parts) == 0 {
+		return msg.TextContent()
+	}
+	return strings.Join(parts, "\n")
 }
 
 // MessageCount returns the number of messages for a session.

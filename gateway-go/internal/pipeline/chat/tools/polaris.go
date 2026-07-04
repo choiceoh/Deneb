@@ -64,7 +64,15 @@ func toolPolarisSearch(store *polaris.Store) toolctx.ToolFunc {
 			return fmt.Sprintf("검색 실패: %v", err), nil
 		}
 		if len(hits) == 0 {
-			return fmt.Sprintf("'%s' 검색 결과가 없습니다.", p.Query), nil
+			// Zero hits are usually a scope mismatch, not a bad query: polaris
+			// searches ONLY the current session, and fresh cron/one-shot
+			// sessions have almost nothing to find (production 2026-07-05:
+			// most polaris zero-hits came from young sessions). Say so and
+			// point at the cross-conversation / durable-memory tools instead
+			// of returning a bare miss the model retries with synonyms.
+			msgCount, _ := store.MessageCount(sessionKey)
+			return fmt.Sprintf("'%s' 검색 결과가 없습니다. polaris는 현재 세션의 대화(메시지 %d개)만 검색합니다 — 과거·다른 대화는 `vega`, 문서·사실은 `wiki`로 검색하세요.",
+				p.Query, msgCount), nil
 		}
 
 		var sb strings.Builder
