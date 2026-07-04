@@ -460,10 +460,14 @@ func (e *Evolver) generateCandidateText(ctx context.Context, userPrompt string, 
 	// the same payload non-streaming returned clean, valid JSON every time.
 	// Complete() also guards the empty-content-after-reasoning trap.
 	text, err := primaryClient.Complete(ctx, llm.ChatRequest{
-		Model:          primaryModel,
-		Messages:       []llm.Message{llm.NewTextMessage("user", prompt)},
-		System:         llm.SystemString(evolveSystemPrompt),
-		MaxTokens:      4096,
+		Model:    primaryModel,
+		Messages: []llm.Message{llm.NewTextMessage("user", prompt)},
+		System:   llm.SystemString(evolveSystemPrompt),
+		// 12288, not 4096: GLM bills reasoning INSIDE the completion budget and
+		// the rewrite must carry a full SKILL.md body (cap 15KB ≈ 5.5K tokens)
+		// plus audit fields — at 4096 the live drill (2026-07-04) truncated
+		// mid-field ("target_signature" cut) even after the non-stream fix.
+		MaxTokens:      12288,
 		Thinking:       e.thinkingOff(primaryModel),
 		ResponseFormat: &llm.ResponseFormat{Type: "json_object"},
 	})
@@ -2091,10 +2095,11 @@ func (e *Evolver) judgeCandidate(ctx context.Context, skillName string, client *
 	// models leak reasoning into the content stream / append junk when
 	// streaming JSON; non-streaming is clean.
 	raw, err := client.Complete(ctx, llm.ChatRequest{
-		Model:          model,
-		Messages:       []llm.Message{llm.NewTextMessage("user", userPrompt)},
-		System:         llm.SystemString(skillJudgeSystemPrompt),
-		MaxTokens:      2048,
+		Model:    model,
+		Messages: []llm.Message{llm.NewTextMessage("user", userPrompt)},
+		System:   llm.SystemString(skillJudgeSystemPrompt),
+		// 4096: verdict JSON is small, but GLM reasoning shares the budget.
+		MaxTokens:      4096,
 		Thinking:       e.thinkingOff(model),
 		ResponseFormat: &llm.ResponseFormat{Type: "json_object"},
 	})
@@ -2203,10 +2208,11 @@ func (e *Evolver) teacherRewrite(ctx context.Context, teacherClient *llm.Client,
 
 	// Non-streaming — same glm streaming-JSON unreliability as the producer.
 	raw, err := teacherClient.Complete(ctx, llm.ChatRequest{
-		Model:          teacherModel,
-		Messages:       []llm.Message{llm.NewTextMessage("user", userPrompt)},
-		System:         llm.SystemString(evolveSystemPrompt),
-		MaxTokens:      4096,
+		Model:    teacherModel,
+		Messages: []llm.Message{llm.NewTextMessage("user", userPrompt)},
+		System:   llm.SystemString(evolveSystemPrompt),
+		// Same budget as the producer — the teacher rewrites the same shape.
+		MaxTokens:      12288,
 		Thinking:       e.thinkingOff(teacherModel),
 		ResponseFormat: &llm.ResponseFormat{Type: "json_object"},
 	})
