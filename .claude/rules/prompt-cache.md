@@ -48,11 +48,13 @@ scripts/dev/live-test.sh logs-grep "cache_read_input_tokens\|cache_creation_inpu
 
 ---
 
-## 1.5. vLLM APC (메인 모델 경로) — 꼬리 주입 원칙
+## 1.5. vLLM APC (로컬 dsv4 경로) — 꼬리 주입 원칙
 
-> 메인 챗 모델이 로컬 vLLM(현재 DSV4-Flash)로 옮겨가면서 **마커 기반 Anthropic 캐시와 전혀 다른 제약**이 1순위가 됐다. vLLM 의 Automatic Prefix Caching 은 렌더된 프롬프트 전체에 대한 **엄격한 byte-prefix 매칭**이고, DSV4 인코더의 렌더 순서는 `[system 내용][tools 스키마][대화 히스토리]` 다. 즉 **system 끝의 per-turn 바이트 1줄이 tools + 전체 히스토리(수만 토큰)의 KV 를 통째로 무효화**한다.
+> ★ **역할 배치 갱신 (2026-07-04):** main 은 2026-06-28부터 **클라우드 glm-5.2** 라 이 절의 핫패스가 아니다. vLLM APC 가 실제로 작동하는 트래픽은 **dsv4 경로** — fallback(deepseek-v4-flash)·dsv4-nothink 헬퍼(lightweight/tiny/translation)·챗봇 세션 — 로 축소됐다. 그래도 이 절의 원칙은 **그대로 준수**한다: dsv4 경로가 여전히 이 제약 위에 있고, main 의 로컬 복귀는 config 한 줄이라 언제든 되돌아온다. 현재 매핑은 `model-roles.md` 의 스냅샷 경고대로 deneb.json 실측이 기준.
 
-2026-06-13 측정: recall(`<recall-context>`, hindsight auto-recall 이 매 턴 변동) + tier-1 위키가 system 꼬리에 append 되던 시절 적중률 80.7%, 인터랙티브 턴 프리필 꼬리 20–40초 (프리필 스파이크는 dsv4 메모리 워치독 트립의 문서화된 원인이기도 하다).
+> 메인 챗 모델이 로컬 vLLM(DSV4-Flash)로 옮겨가 있던 시기에 **마커 기반 Anthropic 캐시와 전혀 다른 제약**이 1순위가 됐다. vLLM 의 Automatic Prefix Caching 은 렌더된 프롬프트 전체에 대한 **엄격한 byte-prefix 매칭**이고, DSV4 인코더의 렌더 순서는 `[system 내용][tools 스키마][대화 히스토리]` 다. 즉 **system 끝의 per-turn 바이트 1줄이 tools + 전체 히스토리(수만 토큰)의 KV 를 통째로 무효화**한다.
+
+2026-06-13 측정(main=dsv4 시절): recall(`<recall-context>`, hindsight auto-recall 이 매 턴 변동) + tier-1 위키가 system 꼬리에 append 되던 시절 적중률 80.7%, 인터랙티브 턴 프리필 꼬리 20–40초 (프리필 스파이크는 dsv4 메모리 워치독 트립의 문서화된 원인이기도 하다). 2026-07-04 실측: main 이사 후 dsv4 엔진 누적 적중률 22% — 고장이 아니라 재사용 여지가 없는 1회성 헬퍼 호출 위주로 워크로드가 바뀐 결과(엔진 A/A 89%·웜홀 투명 89%·턴간 재사용 86% 전부 정상 확인).
 
 ### 원칙 (Anthropic 4-마커 룰과 별개로 동시 적용)
 
@@ -63,8 +65,8 @@ scripts/dev/live-test.sh logs-grep "cache_read_input_tokens\|cache_creation_inpu
 
 ### 측정
 
-- 엔진 전역: `curl -s http://<engine>/metrics | grep prefix_cache` (`vllm:prefix_cache_{hits,queries}_total`, 토큰 단위 누적).
-- per-run: agentlog `run.cache` 이벤트 (`chat/engine_cache_sample.go` 가 턴 종료 후 /metrics 델타를 비동기 기록; vLLM usage 에 cached_tokens 가 없는 빌드에서 유일한 per-turn 신호). 단일 사용자 직렬 트래픽 기준 근사치.
+- 엔진 전역: `curl -s http://<engine>/metrics | grep prefix_cache` (`vllm:prefix_cache_{hits,queries}_total`, 토큰 단위 누적). vLLM 컨테이너 로그의 `Prefix cache hit rate: N%` 라인은 **누적** 비율이라 시간대별 grep 으로 하락/상승 시점을 복원할 수 있다.
+- per-run: agentlog `run.cache` 이벤트 (`chat/engine_cache_sample.go` 가 턴 종료 후 /metrics 델타를 비동기 기록; vLLM usage 에 cached_tokens 가 없는 빌드에서 유일한 per-turn 신호). 단일 사용자 직렬 트래픽 기준 근사치. ⚠️ **2026-06-14 웜홀 전환 이후 죽어 있다**: 게이트웨이가 provider baseURL(웜홀 `:18800`)에서 `/metrics` 를 유도해 404 → 조용히 skip (`engineMetricsURL`). 실측(2026-07-04) 프로덕션 agent-logs 에 6/14 이후 run.cache 이벤트 0건. 수리 방향 = provider config `metricsUrl` 오버라이드 또는 웜홀 per-model /metrics 패스스루; 수리 전에는 엔진 /metrics 직접 폴링으로 측정한다.
 
 ---
 

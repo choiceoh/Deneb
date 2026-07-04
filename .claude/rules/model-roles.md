@@ -11,19 +11,23 @@ globs: gateway-go/internal/ai/modelrole/**, gateway-go/internal/pipeline/pilot/*
 
 상수: `gateway-go/internal/ai/modelrole/registry.go`. 모델 매핑: `~/.deneb/deneb.json` `agents.*Model` (예시는 *현재값*일 뿐 — 코드 판단 기준이 아니다).
 
-| 역할 | 상수 | 의도 | 로컬/클라우드 (현재 예시) |
-|---|---|---|---|
-| main | `RoleMain` | 대화·분석·도구호출·생성물 합성 (가장 강력) | 로컬 (deepseek-v4-flash) |
-| chatbot | `RoleChatbot` | 챗봇 워크스페이스(`chat:`) 전용 | (config) |
-| analysis | `RoleAnalysis` | **추론급 품질** 종합 (리포트 등) | ⚠️ **현재 클라우드** (glm-5.2) |
-| coding | `RoleCoding` | 코드 수정·구현자 서브에이전트·스킬 패치 | (config) |
-| lightweight | `RoleLightweight` | **바운드 요약**·로컬 잡일꾼 | 로컬 (qwen3.6-35b) |
-| tiny | `RoleTiny` | **단순 분류/추출** (가장 작음) | 로컬 (qwen3.6-35b) |
-| fallback | `RoleFallback` | 폴백 체인 | (config) |
-| vision | `RoleVision` | 이미지 턴 (#2510) | (config) |
-| translation | `RoleTranslation` | 인앱 브라우저 웹페이지 번역 (en/ru→ko) | 로컬 (미설정 시 lightweight 폴백) |
+> ★ **현재값 칼럼은 스냅샷(2026-07-04)이다.** 오퍼레이터가 네이티브 모델 픽커로 수시로 바꾸므로 문서를 믿지 말고 **판단 전에 실측**하라: 프로덕션 호스트에서 `~/.deneb/deneb.json` 의 `agents.*Model` 키를 직접 읽는다. 이 문서가 과거에 "main=로컬 dsv4"를 서술하는 동안 실제 main 은 2026-06-28부터 클라우드 glm-5.2 였다 — 그 드리프트가 이 경고의 근거다.
 
-> ⚠️ **analysis 역할의 함정.** enum 주석은 "highest-quality **LOCAL** model"이라 적혀 있지만, 현재 deneb.json은 `analysis → glm-5.2`(클라우드)로 지정한다(chatbot·fallback과 공유). 즉 **analysis 역할에 임무를 얹으면 클라우드로 샌다** — 비용(구독 크레딧) + 레이턴시(~20s/콜). 요약류 헬퍼 콜을 무심코 analysis로 두면 안 된다. 실제로 **컴팩션·youtube 요약이 이렇게 샜다가** #2508/#2509로 lightweight(로컬)로 환원됐다.
+| 역할 | 상수 | 의도 | 로컬/클라우드 (2026-07-04 스냅샷) |
+|---|---|---|---|
+| main | `RoleMain` | 대화·분석·도구호출·생성물 합성 (가장 강력) | ⚠️ **클라우드** (glm-5.2, ≥06-28) |
+| chatbot | `RoleChatbot` | 챗봇 워크스페이스(`chat:`) 전용 | 클라우드 (glm-5.2) |
+| analysis | `RoleAnalysis` | **추론급 품질** 종합 (리포트 등) | ⚠️ **클라우드** (glm-5.2) |
+| coding | `RoleCoding` | 코드 수정·구현자 서브에이전트·스킬 패치 | 클라우드 (glm-5.2) |
+| lightweight | `RoleLightweight` | **바운드 요약**·로컬 잡일꾼 | 로컬 (wormhole/dsv4-nothink@srv2 — qwen3.6에서 교체) |
+| tiny | `RoleTiny` | **단순 분류/추출** (가장 작음) | 로컬 (wormhole/dsv4-nothink) |
+| fallback | `RoleFallback` | 폴백 체인 | 로컬 (wormhole/deepseek-v4-flash@srv2) |
+| vision | `RoleVision` | 이미지 턴 (#2510) | 클라우드 (google/gemini-3.5-flash) |
+| translation | `RoleTranslation` | 인앱 브라우저 웹페이지 번역 (en/ru→ko) | 로컬 (wormhole/dsv4-nothink) |
+
+> ⚠️ **analysis 역할의 함정 (여전히 유효).** enum 주석은 "highest-quality **LOCAL** model"이라 적혀 있지만, 현재 deneb.json은 `analysis → glm-5.2`(클라우드)로 지정한다(main·chatbot·coding과 공유). 즉 **analysis 역할에 임무를 얹으면 클라우드로 샌다** — 비용(구독 크레딧) + 레이턴시(~20s/콜). 요약류 헬퍼 콜을 무심코 analysis로 두면 안 된다. 실제로 **컴팩션·youtube 요약이 이렇게 샜다가** #2508/#2509로 lightweight(로컬)로 환원됐다.
+>
+> ⚠️ **2026-07 현재는 main도 클라우드다.** 폴백 방향이 뒤집혔다: 클라우드 main(glm)이 죽으면 **로컬 dsv4로 낙하**한다(가용성 관점에선 건강한 배치). 실측(2026-07-04) glm 소비 ≈ 3.2M input tok/일, main 턴 평균 54~73s. vLLM APC(prefix cache) 핫패스는 main이 아니라 **dsv4 경로**(fallback·dsv4-nothink 헬퍼·챗봇 세션 오버라이드)로 축소됐다 — `.claude/rules/prompt-cache.md` §1.5 의 원칙은 그 트래픽과 main 의 로컬 복귀 대비로 그대로 준수한다.
 
 ## 역할 선택 헬퍼 (`pipeline/pilot/localai.go`)
 
@@ -37,6 +41,8 @@ globs: gateway-go/internal/ai/modelrole/**, gateway-go/internal/pipeline/pilot/*
 | `(*Server).mailAnalysisModels()` | stage2 = analysis, stage1 = tiny |
 
 ## 임무 → 역할 표
+
+> 근거 칼럼의 "로컬/클라우드" 언급은 각 행 작성 시점의 스냅샷이다. 임무→**역할** 배치가 이 표의 불변 내용이고, 역할→모델(로컬 여부)은 위 스냅샷 표와 deneb.json 실측이 기준.
 
 | 임무 | 위치 | 역할 | 근거 |
 |---|---|---|---|
