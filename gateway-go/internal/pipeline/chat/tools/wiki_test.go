@@ -444,3 +444,55 @@ func TestMemorySystemStatus_Panel(t *testing.T) {
 		}
 	}
 }
+
+// TestWikiReadWrite_RejectsPathEscape: caller-supplied paths used to flow
+// straight into ReadPage/UpdatePage, so "../../secret.md" read (or wrote)
+// files outside the wiki root — reachable from a prompt-injected agent turn.
+func TestWikiReadWrite_RejectsPathEscape(t *testing.T) {
+	store := newTestWikiStore(t)
+
+	// Plant a file outside the wiki root a traversal path could reach.
+	outside := filepath.Join(filepath.Dir(store.Dir()), "secret.md")
+	if err := os.WriteFile(outside, []byte("---\ntitle: secret\n---\n\nsecret body"), 0o644); err != nil {
+		t.Fatalf("plant outside file: %v", err)
+	}
+
+	for _, evil := range []string{"../secret.md", "/etc/passwd", "기타/../../secret.md"} {
+		out, err := wikiRead(context.Background(), store, evil, "")
+		if err != nil {
+			t.Fatalf("wikiRead(%q): %v", evil, err)
+		}
+		if strings.Contains(out, "secret body") || strings.Contains(out, "root:") {
+			t.Errorf("read escaped the wiki root for %q: %q", evil, out)
+		}
+		if !strings.Contains(out, "잘못된 페이지 경로") {
+			t.Errorf("expected rejection message for %q, got: %q", evil, out)
+		}
+	}
+
+	// Write with a traversal target must refuse (and not touch the file).
+	out, err := wikiWrite(context.Background(), store, nil, "../secret", "탈출", "", "", "기타",
+		"overwritten", nil, nil, nil, nil, 0, "", "", "", false)
+	if err != nil {
+		t.Fatalf("wikiWrite: %v", err)
+	}
+	if !strings.Contains(out, "잘못된 페이지 경로") {
+		t.Errorf("expected write rejection, got: %q", out)
+	}
+	data, rerr := os.ReadFile(outside)
+	if rerr != nil {
+		t.Fatalf("outside file gone: %v", rerr)
+	}
+	if !strings.Contains(string(data), "secret body") {
+		t.Errorf("outside file modified: %q", data)
+	}
+
+	// Index with a traversal category must refuse to list outside the root.
+	out, err = wikiIndex(store, "..")
+	if err != nil {
+		t.Fatalf("wikiIndex: %v", err)
+	}
+	if !strings.Contains(out, "잘못된 카테고리 경로") {
+		t.Errorf("expected category rejection, got: %q", out)
+	}
+}

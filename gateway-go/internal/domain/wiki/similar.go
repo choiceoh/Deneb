@@ -56,11 +56,13 @@ func (s *Store) FindSimilarPages(ctx context.Context, q SimilarQuery, limit int)
 		return len(hits) >= limit
 	}
 
-	idx := s.Index()
+	// Snapshot: the walks below must not iterate the live index map while
+	// writers mutate it in place (concurrent map iteration and write is fatal).
+	entries := s.SnapshotEntries()
 
 	// 1. Exact frontmatter-ID match (strongest author-intended identity).
 	if id := strings.TrimSpace(q.ID); id != "" {
-		for path, entry := range idx.Entries {
+		for path, entry := range entries {
 			if entry.ID == id && add(path, "id") {
 				return hits
 			}
@@ -82,7 +84,7 @@ func (s *Store) FindSimilarPages(ctx context.Context, q SimilarQuery, limit int)
 	// 2. Slug-normalized path equality ("프로젝트 A" / "프로젝트-a" / "프로젝트_A").
 	if self != "" {
 		proposed := normalizeSlug(self)
-		for path := range idx.Entries {
+		for path := range entries {
 			if normalizeSlug(path) == proposed && add(path, "slug") {
 				return hits
 			}
@@ -114,7 +116,7 @@ func (s *Store) FindSimilarPages(ctx context.Context, q SimilarQuery, limit int)
 // the higher-importance page, with a later Updated date breaking ties (the
 // same policy the dream cycle's exact-duplicate auto-merge uses).
 func (s *Store) ChooseDuplicateKeeper(a, b string) (keep, fold string) {
-	if dupKeepSecond(s.Index(), a, b) {
+	if dupKeepSecond(s.SnapshotEntries(), a, b) {
 		return b, a
 	}
 	return a, b

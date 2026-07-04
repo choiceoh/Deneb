@@ -56,7 +56,8 @@ func IsFreemailDomain(domain string) bool {
 // excluded.
 // The iteration happens under the store's read lock (the returned map is a
 // fresh copy): index entries are mutated in place by writers, so callers
-// must never walk Index().Entries themselves (same contract as Tier1Pages).
+// must never walk the live index themselves — use Store.SnapshotEntries
+// (same contract as Tier1Pages).
 func (s *Store) ActiveCounterpartyDomains(cutoff string) map[string]struct{} {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

@@ -138,12 +138,13 @@ func TestApplyVerifyFixes_SkipsAdvisoryAndCaps(t *testing.T) {
 }
 
 func TestExactDupFinding_KeepsHigherImportance(t *testing.T) {
-	idx := NewIndex()
-	idx.Entries["프로젝트/low.md"] = IndexEntry{Title: "탑솔라", Importance: 0.3}
-	idx.Entries["프로젝트/high.md"] = IndexEntry{Title: "탑솔라", Importance: 0.8}
+	entries := map[string]IndexEntry{
+		"프로젝트/low.md":  {Title: "탑솔라", Importance: 0.3},
+		"프로젝트/high.md": {Title: "탑솔라", Importance: 0.8},
+	}
 
 	// pathA is the low-importance one; the keeper should flip to the high one.
-	f := exactDupFinding(idx, "프로젝트/low.md", "프로젝트/high.md", "동일한 제목")
+	f := exactDupFinding(entries, "프로젝트/low.md", "프로젝트/high.md", "동일한 제목")
 	if f.PageA != "프로젝트/high.md" || f.PageB != "프로젝트/low.md" {
 		t.Errorf("keep/fold = %q/%q, want high kept, low folded", f.PageA, f.PageB)
 	}

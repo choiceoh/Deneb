@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"log/slog"
 	"path"
+	"path/filepath"
 	"strings"
 )
 
@@ -35,10 +36,14 @@ type PruneStats struct {
 
 // linkResolver holds the lookup sets one sweep resolves against.
 type linkResolver struct {
-	exists     map[string]bool
-	byBasename map[string][]string
-	byTitle    map[string][]string
-	byID       map[string][]string
+	// indexEntries is the snapshot size the title/ID maps were built from —
+	// the sweep skips when the index is empty while pages exist (lost index:
+	// title/ID repairs would silently degrade to drops).
+	indexEntries int
+	exists       map[string]bool
+	byBasename   map[string][]string
+	byTitle      map[string][]string
+	byID         map[string][]string
 	// codes holds every frozen project code carried by a 프로젝트/ page
 	// (normalized). Code-form Related entries are first-class move-stable edges
 	// (graph_query and projectOwnedRefs resolve them), not paths — the sweep
@@ -48,18 +53,29 @@ type linkResolver struct {
 	codes map[string]bool
 }
 
-func (s *Store) newLinkResolver() *linkResolver {
-	idx := s.Index()
+// newLinkResolver builds the sweep's lookup sets. pages is the ON-DISK page
+// list the caller already walked (PruneDeadRelatedLinks) — existence and
+// basename resolution key off it, NOT the index: the index can lag disk (a
+// crash between page write and index save), and an index-based exists map
+// deemed real pages dead and stripped their inbound references. Title/ID
+// resolution stays index-based (only the index carries those) via a snapshot,
+// so a stale index merely skips a repair, never prunes a live page.
+func (s *Store) newLinkResolver(pages []string) *linkResolver {
+	entries := s.SnapshotEntries()
 	r := &linkResolver{
-		exists:     make(map[string]bool, len(idx.Entries)),
-		byBasename: make(map[string][]string),
-		byTitle:    make(map[string][]string),
-		byID:       make(map[string][]string),
-		codes:      make(map[string]bool),
+		indexEntries: len(entries),
+		exists:       make(map[string]bool, len(pages)),
+		byBasename:   make(map[string][]string),
+		byTitle:      make(map[string][]string),
+		byID:         make(map[string][]string),
+		codes:        make(map[string]bool),
 	}
-	for p, entry := range idx.Entries {
+	for _, p := range pages {
+		p = filepath.ToSlash(p)
 		r.exists[p] = true
 		r.byBasename[path.Base(p)] = append(r.byBasename[path.Base(p)], p)
+	}
+	for p, entry := range entries {
 		if t := strings.TrimSpace(entry.Title); t != "" {
 			r.byTitle[t] = append(r.byTitle[t], p)
 		}
@@ -69,12 +85,14 @@ func (s *Store) newLinkResolver() *linkResolver {
 	}
 	// Live project codes come from page frontmatter (bounded to 프로젝트/ pages —
 	// only they carry codes; see dreamer_code.go).
-	if paths, err := s.ListPages(projectCategoryPrefix); err == nil {
-		for _, p := range paths {
-			if page, perr := s.ReadPage(p); perr == nil && page != nil {
-				if c := normalizeProjectCode(page.Meta.Code); c != "" {
-					r.codes[c] = true
-				}
+	for _, p := range pages {
+		p = filepath.ToSlash(p)
+		if !strings.HasPrefix(p, projectCategoryPrefix+"/") {
+			continue
+		}
+		if page, perr := s.ReadPage(p); perr == nil && page != nil {
+			if c := normalizeProjectCode(page.Meta.Code); c != "" {
+				r.codes[c] = true
 			}
 		}
 	}
@@ -135,12 +153,13 @@ func (s *Store) PruneDeadRelatedLinks() (PruneStats, error) {
 	if err != nil {
 		return PruneStats{}, fmt.Errorf("wiki: prune links: %w", err)
 	}
-	resolver := s.newLinkResolver()
-	if len(resolver.exists) == 0 && len(pages) > 0 {
+	resolver := s.newLinkResolver(pages)
+	if resolver.indexEntries == 0 && len(pages) > 0 {
 		// Index lost/empty while pages exist on disk (e.g. index.md wiped, then
-		// rebuilt empty on startup) — resolving against it would deem EVERY
-		// reference dead and strip Related wiki-wide. Skip; the next index
-		// rebuild/write self-heals and the sweep resumes.
+		// rebuilt empty on startup). Path-form refs would still resolve against
+		// the on-disk exists map, but title/ID-form refs would silently turn
+		// from "repairable" into "removed". Skip; the next index rebuild/write
+		// self-heals and the sweep resumes.
 		slog.Warn("wiki: prune links skipped — index empty but pages exist", "pages", len(pages))
 		return PruneStats{}, nil
 	}

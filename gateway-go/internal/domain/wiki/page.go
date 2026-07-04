@@ -125,43 +125,48 @@ func ParsePageFile(path string) (*Page, error) {
 }
 
 // Render produces the full page content: frontmatter + body.
+//
+// Every frontmatter value passes through sanitizeScalar/sanitizeFlowItems:
+// the values are LLM-/caller-supplied free text, and a raw newline inside one
+// (e.g. a title of "A\nB") would terminate its line early, shred the rest of
+// the frontmatter into the body, and drop all metadata on the next parse.
 func (p *Page) Render() []byte {
 	var buf bytes.Buffer
 
 	buf.WriteString("---\n")
 	if p.Meta.ID != "" {
-		buf.WriteString("id: " + p.Meta.ID + "\n")
+		buf.WriteString("id: " + sanitizeScalar(p.Meta.ID) + "\n")
 	}
 	if p.Meta.Code != "" {
-		buf.WriteString("code: " + p.Meta.Code + "\n")
+		buf.WriteString("code: " + sanitizeScalar(p.Meta.Code) + "\n")
 	}
-	buf.WriteString("title: " + p.Meta.Title + "\n")
+	buf.WriteString("title: " + sanitizeScalar(p.Meta.Title) + "\n")
 	if p.Meta.Summary != "" {
-		buf.WriteString("summary: " + p.Meta.Summary + "\n")
+		buf.WriteString("summary: " + sanitizeScalar(p.Meta.Summary) + "\n")
 	}
 	if p.Meta.Category != "" {
-		buf.WriteString("category: " + p.Meta.Category + "\n")
+		buf.WriteString("category: " + sanitizeScalar(p.Meta.Category) + "\n")
 	}
 	if len(p.Meta.Tags) > 0 {
-		buf.WriteString("tags: [" + strings.Join(p.Meta.Tags, ", ") + "]\n")
+		buf.WriteString("tags: [" + strings.Join(sanitizeFlowItems(p.Meta.Tags), ", ") + "]\n")
 	}
 	if len(p.Meta.Related) > 0 {
-		buf.WriteString("related: [" + strings.Join(p.Meta.Related, ", ") + "]\n")
+		buf.WriteString("related: [" + strings.Join(sanitizeFlowItems(p.Meta.Related), ", ") + "]\n")
 	}
 	if len(p.Meta.Cues) > 0 {
-		buf.WriteString("cues: [" + strings.Join(p.Meta.Cues, ", ") + "]\n")
+		buf.WriteString("cues: [" + strings.Join(sanitizeFlowItems(p.Meta.Cues), ", ") + "]\n")
 	}
 	if p.Meta.Resource != "" {
-		buf.WriteString("resource: " + p.Meta.Resource + "\n")
+		buf.WriteString("resource: " + sanitizeScalar(p.Meta.Resource) + "\n")
 	}
 	if p.Meta.Created != "" {
-		buf.WriteString("created: " + p.Meta.Created + "\n")
+		buf.WriteString("created: " + sanitizeScalar(p.Meta.Created) + "\n")
 	}
 	if p.Meta.Updated != "" {
-		buf.WriteString("updated: " + p.Meta.Updated + "\n")
+		buf.WriteString("updated: " + sanitizeScalar(p.Meta.Updated) + "\n")
 	}
 	if p.Meta.Due != "" {
-		buf.WriteString("due: " + p.Meta.Due + "\n")
+		buf.WriteString("due: " + sanitizeScalar(p.Meta.Due) + "\n")
 	}
 	if p.Meta.Importance > 0 {
 		fmt.Fprintf(&buf, "importance: %.2f\n", p.Meta.Importance)
@@ -170,18 +175,50 @@ func (p *Page) Render() []byte {
 		buf.WriteString("archived: true\n")
 	}
 	if p.Meta.Type != "" {
-		buf.WriteString("type: " + p.Meta.Type + "\n")
+		buf.WriteString("type: " + sanitizeScalar(p.Meta.Type) + "\n")
 	}
 	if p.Meta.Confidence != "" {
-		buf.WriteString("confidence: " + p.Meta.Confidence + "\n")
+		buf.WriteString("confidence: " + sanitizeScalar(p.Meta.Confidence) + "\n")
 	}
 	if p.Meta.SupersededBy != "" {
-		buf.WriteString("superseded_by: " + p.Meta.SupersededBy + "\n")
+		buf.WriteString("superseded_by: " + sanitizeScalar(p.Meta.SupersededBy) + "\n")
 	}
 	buf.WriteString("---\n\n")
 
 	buf.WriteString(p.Body)
 	return buf.Bytes()
+}
+
+// sanitizeScalar makes a value safe to emit as a single-line "key: value"
+// frontmatter scalar: newlines collapse to spaces (mirroring index.go's
+// sanitizeTSV — a raw "\n" would prematurely end the line and shred every
+// following field into the body).
+func sanitizeScalar(s string) string {
+	if !strings.ContainsAny(s, "\r\n") {
+		return s
+	}
+	s = strings.ReplaceAll(s, "\r\n", " ")
+	s = strings.ReplaceAll(s, "\n", " ")
+	s = strings.ReplaceAll(s, "\r", " ")
+	return strings.TrimSpace(s)
+}
+
+// sanitizeFlowItems makes list items safe for the "[a, b, c]" flow-array form:
+// newlines collapse like any scalar, and a comma INSIDE an item becomes "·" —
+// parseFlowArray splits on commas, so a cue like "계약금, 선수금 일정" would
+// otherwise reparse as two items. Deliberately a lossy-but-stable substitution
+// rather than an escape scheme: it is idempotent across render/parse cycles
+// and immune to escape-state bugs, at the cost of the literal comma glyph.
+func sanitizeFlowItems(items []string) []string {
+	out := make([]string, len(items))
+	for i, it := range items {
+		it = sanitizeScalar(it)
+		if strings.Contains(it, ",") {
+			it = strings.TrimSpace(strings.ReplaceAll(it, ",", "·"))
+		}
+		out[i] = it
+	}
+	return out
 }
 
 // WritePageFile writes a page to disk atomically (via temp file + rename).
@@ -351,15 +388,25 @@ type H2Section struct {
 // SplitByH2 splits the page body into a preamble (content before first H2)
 // and an ordered list of H2 sections. Each section includes everything up to
 // the next H2 heading.
+//
+// Lines inside fenced code blocks (```) are never treated as headings: log
+// entries and captured tool output legitimately contain "## " lines, and
+// splitting on them would shred a fenced entry across sections (log rotation
+// re-assembles pages from these sections).
 func (p *Page) SplitByH2() (preamble string, sections []H2Section) {
 	scanner := bufio.NewScanner(strings.NewReader(p.Body))
 	var current *H2Section
 	var preambleBuf, sectionBuf strings.Builder
+	inFence := false
 
 	for scanner.Scan() {
 		line := scanner.Text()
 
-		if strings.HasPrefix(line, "## ") {
+		if strings.HasPrefix(strings.TrimSpace(line), "```") {
+			inFence = !inFence
+		}
+
+		if !inFence && strings.HasPrefix(line, "## ") {
 			// Flush previous section.
 			if current != nil {
 				current.Content = strings.TrimSpace(sectionBuf.String())

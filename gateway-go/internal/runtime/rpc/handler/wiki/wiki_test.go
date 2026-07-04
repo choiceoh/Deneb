@@ -1,6 +1,7 @@
 package wiki
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -365,4 +366,50 @@ func TestStats_withPages(t *testing.T) {
 	if catCount["기술"] == nil {
 		t.Error("missing 기술 category count")
 	}
+}
+
+// ─── path escape guard (finding: caller paths reached ReadPage/WritePage/
+// DeletePage/ListPages unvalidated — "../../secret.md" escaped the wiki root) ─
+
+func TestPathEscapeGuard_AllPathMethods(t *testing.T) {
+	m, store := methodsWithStore(t)
+	seedPage(t, store, "기술/safe.md", "Safe", "기술", "safe content", nil)
+
+	// Plant a file OUTSIDE the wiki root that a traversal path could reach.
+	outside := filepath.Join(filepath.Dir(store.Dir()), "secret.md")
+	if err := os.WriteFile(outside, []byte("---\ntitle: secret\n---\n\nsecret body"), 0o644); err != nil {
+		t.Fatalf("plant outside file: %v", err)
+	}
+
+	evil := "../secret.md"
+	cases := []struct {
+		method string
+		params map[string]any
+	}{
+		{"wiki.read", map[string]any{"path": evil}},
+		{"wiki.write", map[string]any{"path": evil, "title": "evil", "body": "x"}},
+		{"wiki.delete", map[string]any{"path": evil}},
+		{"wiki.list", map[string]any{"category": ".."}},
+		{"wiki.read", map[string]any{"path": "/etc/passwd"}},
+		{"wiki.read", map[string]any{"path": "기술/../../secret.md"}},
+	}
+	for _, tc := range cases {
+		resp := callMethod(m, tc.method, tc.params)
+		if resp.Error == nil {
+			t.Errorf("%s with %v must be rejected", tc.method, tc.params)
+		}
+	}
+
+	// The outside file must be untouched (not deleted, not overwritten).
+	data, err := os.ReadFile(outside)
+	if err != nil {
+		t.Fatalf("outside file gone: %v", err)
+	}
+	if string(data) != "---\ntitle: secret\n---\n\nsecret body" {
+		t.Errorf("outside file modified: %q", data)
+	}
+
+	// Sane paths still work.
+	mustOK(t, callMethod(m, "wiki.read", map[string]any{"path": "기술/safe.md"}))
+	mustOK(t, callMethod(m, "wiki.list", map[string]any{"category": "기술"}))
 }

@@ -34,7 +34,7 @@ func TestStore_WriteAndReadPage(t *testing.T) {
 	}
 
 	// Verify index was updated.
-	idx := store.Index()
+	idx := store.SnapshotIndex()
 	entry, ok := idx.Entries["기술/dgx-spark.md"]
 	if !ok {
 		t.Fatal("page not in index")
@@ -131,8 +131,8 @@ func TestStore_PathNormalization(t *testing.T) {
 	}
 
 	// The master index is keyed by the normalized .md path.
-	if _, ok := store.Index().Entries["프로젝트/스파이럴-테스트베드.md"]; !ok {
-		t.Errorf("index missing normalized key; entries=%v", store.Index().Entries)
+	if _, ok := store.SnapshotEntries()["프로젝트/스파이럴-테스트베드.md"]; !ok {
+		t.Errorf("index missing normalized key; entries=%v", store.SnapshotEntries())
 	}
 
 	// Re-writing with the .md form must update in place, not create a second page.
@@ -167,7 +167,7 @@ func TestStore_DeletePage(t *testing.T) {
 	}
 
 	// Index should be updated.
-	idx := store.Index()
+	idx := store.SnapshotIndex()
 	if _, ok := idx.Entries["결정/temp.md"]; ok {
 		t.Error("deleted page still in index")
 	}

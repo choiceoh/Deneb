@@ -43,19 +43,22 @@ type VerifyFix struct {
 // the operator (or a later analysis turn) decides whether a deal/milestone is
 // done or slipped, and analysis stops treating a passed deadline as upcoming.
 func (wd *WikiDreamer) verifyPages(ctx context.Context) []VerifyFinding {
-	idx := wd.store.Index()
-	if len(idx.Entries) < 2 {
+	// Snapshot once: the detectors below walk the entries (and the LLM pass
+	// holds them across a network call) — iterating the live index map would
+	// race concurrent page writers.
+	entries := wd.store.SnapshotEntries()
+	if len(entries) < 2 {
 		return nil
 	}
 
 	var findings []VerifyFinding
 
 	// 5a: Duplicate detection (pure computation).
-	findings = append(findings, detectDuplicates(idx)...)
+	findings = append(findings, detectDuplicates(entries)...)
 
 	// 5b: Misclassification detection (single LLM call).
 	if wd.client != nil {
-		findings = append(findings, wd.detectMisclassifications(ctx, idx)...)
+		findings = append(findings, wd.detectMisclassifications(ctx, entries)...)
 	}
 
 	// 5c: Stale-deadline detection (pure computation).
@@ -248,9 +251,10 @@ type pageRef struct {
 }
 
 // detectDuplicates finds pages with identical or very similar titles/IDs.
-func detectDuplicates(idx *Index) []VerifyFinding {
-	pages := make([]pageRef, 0, len(idx.Entries))
-	for path, entry := range idx.Entries {
+// entries is an index snapshot (Store.SnapshotEntries).
+func detectDuplicates(entries map[string]IndexEntry) []VerifyFinding {
+	pages := make([]pageRef, 0, len(entries))
+	for path, entry := range entries {
 		pages = append(pages, pageRef{path: path, title: entry.Title, id: entry.ID})
 	}
 
@@ -272,7 +276,7 @@ func detectDuplicates(idx *Index) []VerifyFinding {
 			// splinters across agent writes.
 			if a.title != "" && b.title != "" {
 				if norm := normalizeTitleKey(a.title); norm != "" && norm == normalizeTitleKey(b.title) {
-					findings = append(findings, exactDupFinding(idx, a.path, b.path,
+					findings = append(findings, exactDupFinding(entries, a.path, b.path,
 						fmt.Sprintf("동일한 제목(정규화): \"%s\" ~ \"%s\"", a.title, b.title)))
 					seen[key] = struct{}{}
 					continue
@@ -293,7 +297,7 @@ func detectDuplicates(idx *Index) []VerifyFinding {
 			if _, dup := seen[key]; a.id != "" && b.id != "" && !dup && isSimilar(a.id, b.id) {
 				dist := levenshtein(a.id, b.id)
 				if dist == 0 {
-					findings = append(findings, exactDupFinding(idx, a.path, b.path,
+					findings = append(findings, exactDupFinding(entries, a.path, b.path,
 						fmt.Sprintf("동일한 ID: \"%s\"", a.id)))
 				} else {
 					findings = append(findings, VerifyFinding{
@@ -349,9 +353,10 @@ type misclassificationResult struct {
 }
 
 // detectMisclassifications sends page list to LLM to find category errors.
-func (wd *WikiDreamer) detectMisclassifications(ctx context.Context, idx *Index) []VerifyFinding {
+// entries is an index snapshot (Store.SnapshotEntries).
+func (wd *WikiDreamer) detectMisclassifications(ctx context.Context, entries map[string]IndexEntry) []VerifyFinding {
 	var lines []string
-	for path, entry := range idx.Entries {
+	for path, entry := range entries {
 		lines = append(lines, fmt.Sprintf("%s\t%s\t%s\t%s",
 			path, entry.Title, entry.Category, entry.Summary))
 	}

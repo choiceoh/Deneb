@@ -1078,13 +1078,23 @@ func TestMemoryMerge_UnavailableWhenStarterMissing(t *testing.T) {
 }
 
 func TestMemoryMerge_RejectsSelfMerge(t *testing.T) {
-	resp := memoryMergePage(mergeDepsFor(&fakeMemoryStore{}, noopStart))(authedCtx(),
-		reqWith(t, "miniapp.memory.merge", map[string]any{
-			"targetPath": "프로젝트/a.md",
-			"sourcePath": "프로젝트/a.md",
-		}))
-	if resp.OK || resp.Error.Code != protocol.ErrInvalidRequest {
-		t.Errorf("expected INVALID_REQUEST for self-merge: %+v", resp)
+	// Includes the spelling variant ("프로젝트/a" vs "프로젝트/a.md" — same
+	// file): the raw-string guard let it queue a background self-merge that
+	// deleted the page.
+	pairs := [][2]string{
+		{"프로젝트/a.md", "프로젝트/a.md"},
+		{"프로젝트/a", "프로젝트/a.md"},
+		{"프로젝트/a.md", "프로젝트/a"},
+	}
+	for _, pr := range pairs {
+		resp := memoryMergePage(mergeDepsFor(&fakeMemoryStore{}, noopStart))(authedCtx(),
+			reqWith(t, "miniapp.memory.merge", map[string]any{
+				"targetPath": pr[0],
+				"sourcePath": pr[1],
+			}))
+		if resp.OK || resp.Error.Code != protocol.ErrInvalidRequest {
+			t.Errorf("target=%q source=%q: expected INVALID_REQUEST for self-merge: %+v", pr[0], pr[1], resp)
+		}
 	}
 }
 

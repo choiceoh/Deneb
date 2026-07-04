@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -526,20 +525,23 @@ func (wd *WikiDreamer) RunDream(ctx context.Context) (*autonomous.DreamReport, e
 
 	// Persist diary high-water state only after synthesis/apply/index work has
 	// completed. LastProcessed remains for display and legacy migration, but
-	// scanDiaries uses per-file offsets as the primary source of truth.
-	idx := wd.store.Index()
+	// scanDiaries uses per-file offsets as the primary source of truth. The
+	// cursor advance + save goes through the locked Store method — mutating the
+	// live index through a raw pointer (and rendering it in Save) would race
+	// concurrent page writers.
+	var cursor string
 	switch {
 	case heldOffsets:
-		// Keep the previous cutoff. LastProcessed doubles as scanDiaries's
-		// legacy cutoff for newly-seen files without per-file state; advancing
-		// it while cursors are held would skip those files next cycle.
+		// Keep the previous cutoff (empty cursor = no advance). LastProcessed
+		// doubles as scanDiaries's legacy cutoff for newly-seen files without
+		// per-file state; advancing it while cursors are held would skip those
+		// files next cycle.
 	case scan.LatestDate != "":
-		idx.LastProcessed = scan.LatestDate
+		cursor = scan.LatestDate
 	default:
-		idx.LastProcessed = time.Now().Format("2006-01-02")
+		cursor = time.Now().Format("2006-01-02")
 	}
-	indexPath := filepath.Join(wd.store.Dir(), "index.md")
-	if err := idx.Save(indexPath); err != nil {
+	if err := wd.store.SetLastProcessedAndSave(cursor); err != nil {
 		phaseErrors = append(phaseErrors, fmt.Sprintf("index-save: %v", err))
 	}
 	if scan != nil {
