@@ -68,9 +68,20 @@ func TestStripThinkingTags(t *testing.T) {
 			want:  "<thinker>not a tag</thinker>\ndata",
 		},
 		{
-			name:  "unclosed thinking tag",
+			// A leak that OPENS the content: strip the tag token, keep the rest
+			// (the payload follows the leaked prose; the old drop-everything
+			// behavior lost it).
+			name:  "unclosed thinking tag at start keeps the remainder",
 			input: "<thinking>never closed\n{\"data\": 1}",
-			want:  "",
+			want:  "never closed\n{\"data\": 1}",
+		},
+		{
+			// A literal mid-content mention (documentation text) must survive
+			// verbatim — the old skip-to-end amputated a complete evolve JSON
+			// mid-body (live 2026-07-04, 8 consecutive skill-evolve failures).
+			name:  "unclosed mid-content mention survives verbatim",
+			input: "{\"body\": \"내부 토큰(`<thinking>`, `NO_REPLY`)이 새지 않게 한다\"}",
+			want:  "{\"body\": \"내부 토큰(`<thinking>`, `NO_REPLY`)이 새지 않게 한다\"}",
 		},
 	}
 
