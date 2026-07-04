@@ -16,7 +16,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 
 /**
@@ -38,11 +40,25 @@ fun DenebLoading(@Suppress("UNUSED_PARAMETER") text: String = "불러오는 중�
     SkeletonList(showAvatar = false)
 }
 
-/** Error banner with an optional retry button. */
+/**
+ * Error banner with an optional retry button. Centered with its own horizontal
+ * padding: these state helpers often render in containers WITHOUT content
+ * padding (feed/mail list slots), where the old left-aligned, padding-less
+ * layout pressed the text against the physical screen edge (reported on the
+ * feed empty state, 2026-07-05; the mail error banner had the same lean).
+ */
 @Composable
 fun DenebError(text: String, onRetry: (() -> Unit)? = null) {
-    Column(Modifier.fillMaxWidth().padding(vertical = 16.dp)) {
-        Text(text, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+    Column(
+        Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(
+            text,
+            color = MaterialTheme.colorScheme.error,
+            style = MaterialTheme.typography.bodyMedium,
+            textAlign = TextAlign.Center,
+        )
         if (onRetry != null) {
             Spacer(Modifier.height(8.dp))
             OutlinedButton(onClick = onRetry) { Text("다시 시도") }
@@ -53,12 +69,20 @@ fun DenebError(text: String, onRetry: (() -> Unit)? = null) {
 /**
  * Empty-state placeholder: a quiet line with an optional call-to-action, so an
  * empty list guides the user instead of looking broken or still-loading. Shared
- * by every Deneb screen.
+ * by every Deneb screen. Centered for the same edge-press reason as DenebError.
  */
 @Composable
 fun DenebEmpty(text: String, actionLabel: String? = null, onAction: (() -> Unit)? = null) {
-    Column(Modifier.fillMaxWidth().padding(vertical = 24.dp)) {
-        Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+    Column(
+        Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(
+            text,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodyMedium,
+            textAlign = TextAlign.Center,
+        )
         if (actionLabel != null && onAction != null) {
             Spacer(Modifier.height(8.dp))
             OutlinedButton(onClick = onAction) { Text(actionLabel) }
