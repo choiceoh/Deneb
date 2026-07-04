@@ -1326,3 +1326,37 @@ func TestMemoryMovePage_RequiresAuth(t *testing.T) {
 		t.Errorf("expected auth rejection, got OK")
 	}
 }
+
+// TestMemoryListInCategory_SortsBeforeTruncate: ListPages yields lexical
+// order; the handler must sort by Updated desc BEFORE applying the limit or
+// the newest pages in alphabetically-late folders never appear at all.
+func TestMemoryListInCategory_SortsBeforeTruncate(t *testing.T) {
+	updated := map[string]string{
+		"projects/a.md": "2026-01-01",
+		"projects/b.md": "2026-02-01",
+		"projects/z.md": "2026-07-01", // newest, lexically last
+	}
+	store := &fakeMemoryStore{
+		listPagesFn: func(string) ([]string, error) {
+			return []string{"projects/a.md", "projects/b.md", "projects/z.md"}, nil
+		},
+		readPageFn: func(p string) (*wiki.Page, error) {
+			return &wiki.Page{Meta: wiki.Frontmatter{Title: p, Updated: updated[p]}}, nil
+		},
+	}
+	h := memoryListInCategory(memoryDepsFor(store))
+	resp := h(authedCtx(), reqWith(t, "miniapp.memory.list_in_category", map[string]any{
+		"category": "projects", "limit": 2,
+	}))
+	var got struct {
+		Pages []map[string]any `json:"pages"`
+		Total int              `json:"total"`
+	}
+	decode(t, resp, &got)
+	if got.Total != 3 || len(got.Pages) != 2 {
+		t.Fatalf("total=%d pages=%d, want 3/2", got.Total, len(got.Pages))
+	}
+	if got.Pages[0]["path"] != "projects/z.md" {
+		t.Fatalf("newest page missing from window: %+v", got.Pages)
+	}
+}
