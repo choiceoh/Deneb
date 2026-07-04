@@ -24,6 +24,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -60,7 +61,7 @@ func logEngineCacheAsync(deps runDeps, runLog *agentlog.RunLogger, client *llm.C
 	if runLog == nil || client == nil || fellBack || apiMode != llm.APIModeOpenAI {
 		return
 	}
-	metricsURL := engineMetricsURL(client.BaseURL())
+	metricsURL := resolveEngineMetricsURL(client.BaseURL())
 	if metricsURL == "" {
 		return
 	}
@@ -83,6 +84,29 @@ func logEngineCacheAsync(deps runDeps, runLog *agentlog.RunLogger, client *llm.C
 	})
 }
 
+// engineMetricsURLEnv pins the engine /metrics endpoint explicitly. Needed
+// since the wormhole cutover (2026-06-14): the provider baseURL points at the
+// router (:18800), which serves no /metrics, so URL derivation fails and
+// per-run APC sampling silently died — production agent-logs show zero
+// run.cache events after the cutover. Set it to the actual serving engine,
+// e.g. http://100.125.220.117:8000/metrics.
+const engineMetricsURLEnv = "DENEB_ENGINE_METRICS_URL"
+
+// resolveEngineMetricsURL picks the metrics endpoint: the operator override
+// when set (validated by the same private-host rule so a typo cannot point
+// the sampler at a public service), else derivation from the base URL.
+func resolveEngineMetricsURL(baseURL string) string {
+	if override := strings.TrimSpace(os.Getenv(engineMetricsURLEnv)); override != "" {
+		u, err := url.Parse(override)
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" ||
+			!isPrivateEngineHost(u.Hostname()) {
+			return "" // misconfigured override fails safe: skip sampling
+		}
+		return override
+	}
+	return engineMetricsURL(baseURL)
+}
+
 // engineMetricsURL derives the /metrics endpoint from an OpenAI-compatible
 // base URL, but ONLY for hosts that are plausibly a self-hosted engine:
 // loopback, RFC1918 private, or CGNAT 100.64/10 (Tailscale). Anything else —
@@ -93,15 +117,8 @@ func engineMetricsURL(baseURL string) string {
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
 		return ""
 	}
-	host := u.Hostname()
-	if host != "localhost" {
-		ip := net.ParseIP(host)
-		if ip == nil {
-			return ""
-		}
-		if !ip.IsLoopback() && !ip.IsPrivate() && !isCGNAT(ip) {
-			return ""
-		}
+	if !isPrivateEngineHost(u.Hostname()) {
+		return ""
 	}
 	base := strings.TrimRight(u.Path, "/")
 	base = strings.TrimSuffix(base, "/v1")
@@ -109,6 +126,19 @@ func engineMetricsURL(baseURL string) string {
 	u.RawQuery = ""
 	u.Fragment = ""
 	return u.String()
+}
+
+// isPrivateEngineHost reports whether host is plausibly a self-hosted engine:
+// localhost, loopback, RFC1918 private, or CGNAT 100.64/10 (Tailscale).
+func isPrivateEngineHost(host string) bool {
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return false
+	}
+	return ip.IsLoopback() || ip.IsPrivate() || isCGNAT(ip)
 }
 
 // isCGNAT reports whether ip falls in 100.64.0.0/10 (carrier-grade NAT — the

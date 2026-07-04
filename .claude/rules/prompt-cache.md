@@ -66,7 +66,7 @@ scripts/dev/live-test.sh logs-grep "cache_read_input_tokens\|cache_creation_inpu
 ### 측정
 
 - 엔진 전역: `curl -s http://<engine>/metrics | grep prefix_cache` (`vllm:prefix_cache_{hits,queries}_total`, 토큰 단위 누적). vLLM 컨테이너 로그의 `Prefix cache hit rate: N%` 라인은 **누적** 비율이라 시간대별 grep 으로 하락/상승 시점을 복원할 수 있다.
-- per-run: agentlog `run.cache` 이벤트 (`chat/engine_cache_sample.go` 가 턴 종료 후 /metrics 델타를 비동기 기록; vLLM usage 에 cached_tokens 가 없는 빌드에서 유일한 per-turn 신호). 단일 사용자 직렬 트래픽 기준 근사치. ⚠️ **2026-06-14 웜홀 전환 이후 죽어 있다**: 게이트웨이가 provider baseURL(웜홀 `:18800`)에서 `/metrics` 를 유도해 404 → 조용히 skip (`engineMetricsURL`). 실측(2026-07-04) 프로덕션 agent-logs 에 6/14 이후 run.cache 이벤트 0건. 수리 방향 = provider config `metricsUrl` 오버라이드 또는 웜홀 per-model /metrics 패스스루; 수리 전에는 엔진 /metrics 직접 폴링으로 측정한다.
+- per-run: agentlog `run.cache` 이벤트 (`chat/engine_cache_sample.go` 가 턴 종료 후 /metrics 델타를 비동기 기록; vLLM usage 에 cached_tokens 가 없는 빌드에서 유일한 per-turn 신호). 단일 사용자 직렬 트래픽 기준 근사치. ⚠️ **웜홀 뒤에서는 baseURL 유도가 불가** — 2026-06-14 웜홀 전환 후 provider baseURL(`:18800`)에 /metrics 가 없어 6/14~7/5 사이 run.cache 가 조용히 죽어 있었다(실측: agent-logs 0건). 수리(2026-07-05): **`DENEB_ENGINE_METRICS_URL`** 오버라이드(`resolveEngineMetricsURL`, 사설망 호스트 검증 포함)로 실제 서빙 엔진의 /metrics 를 지정한다 — 웜홀 경유 배치에서는 이 env 가 필수, 미설정 시 샘플링은 안전하게 skip.
 
 ---
 

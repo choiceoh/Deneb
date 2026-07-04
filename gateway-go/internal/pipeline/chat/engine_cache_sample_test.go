@@ -31,6 +31,32 @@ func TestEngineMetricsURL(t *testing.T) {
 	}
 }
 
+// The operator override must win over derivation (the wormhole cutover left
+// derivation pointing at a router with no /metrics), and a misconfigured
+// override — public host, garbage URL — must fail safe to "" instead of
+// probing an external service.
+func TestResolveEngineMetricsURL_EnvOverride(t *testing.T) {
+	t.Setenv(engineMetricsURLEnv, "http://100.125.220.117:8000/metrics")
+	if got := resolveEngineMetricsURL("http://127.0.0.1:18800/v1"); got != "http://100.125.220.117:8000/metrics" {
+		t.Errorf("override not used: %q", got)
+	}
+
+	t.Setenv(engineMetricsURLEnv, "https://api.openai.com/metrics")
+	if got := resolveEngineMetricsURL("http://127.0.0.1:8000/v1"); got != "" {
+		t.Errorf("public override must fail safe, got %q", got)
+	}
+
+	t.Setenv(engineMetricsURLEnv, "not a url")
+	if got := resolveEngineMetricsURL("http://127.0.0.1:8000/v1"); got != "" {
+		t.Errorf("garbage override must fail safe, got %q", got)
+	}
+
+	t.Setenv(engineMetricsURLEnv, "")
+	if got := resolveEngineMetricsURL("http://127.0.0.1:8000/v1"); got != "http://127.0.0.1:8000/metrics" {
+		t.Errorf("derivation broken without override: %q", got)
+	}
+}
+
 func TestSampleEngineCacheDelta(t *testing.T) {
 	hits, queries := 1000.0, 2000.0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
