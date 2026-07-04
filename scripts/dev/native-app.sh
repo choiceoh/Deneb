@@ -65,7 +65,11 @@ PROFILE_FILE="$STATE_DIR/profile"
 VNC_PORT="${NATIVE_VNC_PORT:-$((5910 + OFFSET))}"
 NOVNC_PORT="${NATIVE_NOVNC_PORT:-$((6080 + OFFSET))}"
 TAILNET_IP="${NATIVE_TAILNET_IP:-100.105.145.6}"
-GW_URL="${DENEB_GATEWAY_URL:-http://100.105.145.6:18789}"
+# Default gateway = srv4 (production moved off this host on 2026-06-20).
+# The old srv1 default silently pointed the harness app at a dead port — every
+# data screen rendered "empty/failed" and mimicked a client regression during
+# the 2026-07-05 feed-outage debug. Override with DENEB_GATEWAY_URL as before.
+GW_URL="${DENEB_GATEWAY_URL:-http://100.111.114.20:18789}"
 # Default targets the PROD gateway. To verify a LOCAL modified build without
 # deploying, point this at a dev gateway from scripts/dev/live-test.sh:
 #   DENEB_GATEWAY_URL=http://127.0.0.1:<dev-port> scripts/dev/native-app.sh start

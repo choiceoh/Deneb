@@ -195,13 +195,28 @@ mv deneb-gateway.new deneb-gateway
 oldpid=$(systemctl --user show "$GATEWAY_SERVICE" -p MainPID --value 2>/dev/null || true)
 [ -z "${oldpid:-}" ] && oldpid=$(pgrep -f 'dist/deneb-gateway' | head -1 || true)
 [ -z "${oldpid:-}" ] && { echo "ERROR: no running gateway to cut over" >&2; exit 1; }
-echo "    SIGUSR1 → pid $oldpid (cutover)"
+oldver=$(curl -sf -m 3 "http://127.0.0.1:$PROD_PORT/health" | tr ',' '\n' | grep '"version"' | head -1 | cut -d'"' -f4 || true)
+echo "    SIGUSR1 → pid $oldpid (cutover, old version ${oldver:-unknown})"
 kill -USR1 "$oldpid"
 for i in $(seq 1 45); do
     pid=$(systemctl --user show "$GATEWAY_SERVICE" -p MainPID --value 2>/dev/null || true)
     [ -z "${pid:-}" ] && pid=$(pgrep -f 'dist/deneb-gateway' | head -1 || true)
     if [ -n "${pid:-}" ] && [ "$pid" != "$oldpid" ] && curl -sf -o /dev/null "http://127.0.0.1:$PROD_PORT/health"; then
-        echo "    remote deploy OK: new pid $pid after ${i}s"
+        newver=$(curl -sf -m 3 "http://127.0.0.1:$PROD_PORT/health" | tr ',' '\n' | grep '"version"' | head -1 | cut -d'"' -f4 || true)
+        echo "    remote deploy OK: new pid $pid after ${i}s (version ${newver:-unknown})"
+        # Version-regression tripwire: on 2026-07-04 23:17 an unattributed deploy
+        # cut production over to a stale-tag build (4.61.x → 4.47.1) and every
+        # native-app data screen went dark until the next morning. A deploy that
+        # LOWERS the reported version is almost always a stale checkout — scream,
+        # don't stop (the operator may be rolling back on purpose).
+        if [ -n "${oldver:-}" ] && [ -n "${newver:-}" ] && [ "$newver" != "$oldver" ]; then
+            lower=$(printf '%s
+%s
+' "$oldver" "$newver" | sort -V | head -1)
+            if [ "$lower" = "$newver" ]; then
+                echo "    ⚠ WARNING: version went BACKWARD ($oldver → $newver) — stale checkout? verify your build host's git tags" >&2
+            fi
+        fi
         exit 0
     fi
     sleep 1
