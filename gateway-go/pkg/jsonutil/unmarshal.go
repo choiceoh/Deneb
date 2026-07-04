@@ -14,8 +14,8 @@ import (
 //	// error: "parse cron params: unexpected end of JSON input"
 func Unmarshal[T any](context string, data []byte) (T, error) {
 	var v T
-	if err := json.Unmarshal(data, &v); err != nil {
-		return v, fmt.Errorf("parse %s: %w", context, err)
+	if err := UnmarshalInto(context, data, &v); err != nil {
+		return v, err
 	}
 	return v, nil
 }

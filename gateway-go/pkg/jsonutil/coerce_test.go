@@ -19,6 +19,20 @@ func TestUnmarshalInto_CoercesStringScalars(t *testing.T) {
 	}
 }
 
+func TestUnmarshal_CoercesStringScalars(t *testing.T) {
+	type params struct {
+		Max      int  `json:"max"`
+		Download bool `json:"download"`
+	}
+	p, err := Unmarshal[params]("t", []byte(`{"max":"7","download":"true"}`))
+	if err != nil {
+		t.Fatalf("generic coercion should succeed: %v", err)
+	}
+	if p.Max != 7 || !p.Download {
+		t.Errorf("got %+v", p)
+	}
+}
+
 func TestUnmarshalInto_FastPathUnaffected(t *testing.T) {
 	var p struct {
 		Max      int  `json:"max"`
