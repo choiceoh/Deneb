@@ -623,6 +623,45 @@ func TestMemoryWritePage_OmittedTagsPreserved(t *testing.T) {
 	}
 }
 
+func TestMemoryWritePage_OmittedBodyPreserved(t *testing.T) {
+	prevNow := nowFunc
+	nowFunc = func() time.Time { return time.Date(2026, 5, 27, 0, 0, 0, 0, time.UTC) }
+	defer func() { nowFunc = prevNow }()
+
+	var captured *wiki.Page
+	store := &fakeMemoryStore{
+		readPageFn: func(_ string) (*wiki.Page, error) {
+			return &wiki.Page{
+				Meta: wiki.Frontmatter{
+					Title:    "Old",
+					Summary:  "Old summary",
+					Category: "사람",
+				},
+				Body: "keep this body",
+			}, nil
+		},
+		writePageFn: func(_ string, page *wiki.Page) error {
+			captured = page
+			return nil
+		},
+	}
+	h := memoryWritePage(memoryDepsFor(store))
+	resp := h(authedCtx(), reqWith(t, "miniapp.memory.write_page", map[string]any{
+		"path":    "people/alice.md",
+		"title":   "New",
+		"summary": "New summary",
+	}))
+	if !resp.OK {
+		t.Fatalf("expected OK: %+v", resp.Error)
+	}
+	if captured.Body != "keep this body" {
+		t.Fatalf("body = %q, want preserved body", captured.Body)
+	}
+	if captured.Meta.Title != "New" || captured.Meta.Summary != "New summary" {
+		t.Errorf("frontmatter not updated: %+v", captured.Meta)
+	}
+}
+
 // --- create_page --------------------------------------------------------
 
 func TestMemoryCreatePage_HappyPath(t *testing.T) {

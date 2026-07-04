@@ -24,17 +24,25 @@ package server
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/clientauth"
 )
 
-// withCORS wraps the gateway mux so browser clients can reach the miniapp.* HTTP
-// surface. It is a no-op for requests without an Origin header (native clients),
-// so non-browser callers are entirely unaffected.
+// corsAllowedPath reports whether the path belongs to the browser-facing,
+// token-authenticated surface. Loopback-only admin routes (cron/event ingest,
+// observatory, pprof, health, etc.) must not opt into browser access.
+func corsAllowedPath(path string) bool {
+	return strings.HasPrefix(path, "/api/v1/miniapp/") || path == "/api/v1/files/download"
+}
+
+// withCORS wraps the gateway mux so browser clients can reach the browser-facing
+// HTTP surface. It is a no-op for requests without an Origin header (native
+// clients), and it deliberately skips loopback-only admin routes.
 func withCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
-		if origin != "" {
+		if origin != "" && corsAllowedPath(r.URL.Path) {
 			h := w.Header()
 			h.Set("Access-Control-Allow-Origin", origin)
 			h.Add("Vary", "Origin")

@@ -35,10 +35,29 @@ func TestWithCORS_Preflight(t *testing.T) {
 	}
 }
 
-// TestWithCORS_ActualRequestEchoesOrigin verifies a normal cross-origin request
-// passes through to the handler AND carries Access-Control-Allow-Origin so the
-// browser exposes the response.
-func TestWithCORS_ActualRequestEchoesOrigin(t *testing.T) {
+// TestWithCORS_ActualMiniappRequestEchoesOrigin verifies a normal cross-origin
+// request on the browser-facing surface passes through with CORS headers.
+func TestWithCORS_ActualMiniappRequestEchoesOrigin(t *testing.T) {
+	h := withCORS(testutil.Must(New(":0")).buildMux())
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/miniapp/rpc", strings.NewReader(`{}`))
+	req.Header.Set("Origin", "http://localhost:1420")
+	req.Header.Set(clientauth.Header, "invalid")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("POST /api/v1/miniapp/rpc → %d, want 401 (should pass through to auth)", w.Code)
+	}
+	if got := w.Header().Get("Access-Control-Allow-Origin"); got != "http://localhost:1420" {
+		t.Errorf("Allow-Origin = %q, want echoed origin", got)
+	}
+}
+
+// TestWithCORS_LoopbackOnlyRoutesDoNotOptIn ensures loopback/admin endpoints do
+// not become browser-readable or preflightable just because the server as a
+// whole supports browser access for the miniapp surface.
+func TestWithCORS_LoopbackOnlyRoutesDoNotOptIn(t *testing.T) {
 	h := withCORS(testutil.Must(New(":0")).buildMux())
 
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
@@ -47,10 +66,28 @@ func TestWithCORS_ActualRequestEchoesOrigin(t *testing.T) {
 	h.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
-		t.Fatalf("GET /health → %d, want 200 (should pass through)", w.Code)
+		t.Fatalf("GET /health → %d, want 200", w.Code)
 	}
-	if got := w.Header().Get("Access-Control-Allow-Origin"); got != "http://localhost:1420" {
-		t.Errorf("Allow-Origin = %q, want echoed origin", got)
+	if got := w.Header().Get("Access-Control-Allow-Origin"); got != "" {
+		t.Errorf("Allow-Origin = %q, want empty for loopback-only route", got)
+	}
+}
+
+func TestWithCORS_PreflightRejectedOnLoopbackOnlyRoute(t *testing.T) {
+	h := withCORS(testutil.Must(New(":0")).buildMux())
+
+	req := httptest.NewRequest(http.MethodOptions, "/api/event/ingest", nil)
+	req.Header.Set("Origin", "http://localhost:1420")
+	req.Header.Set("Access-Control-Request-Method", "POST")
+	req.Header.Set("Access-Control-Request-Headers", "Content-Type")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+
+	if w.Code == http.StatusNoContent {
+		t.Fatalf("OPTIONS /api/event/ingest unexpectedly succeeded as a CORS preflight")
+	}
+	if got := w.Header().Get("Access-Control-Allow-Origin"); got != "" {
+		t.Errorf("Allow-Origin = %q, want empty for loopback-only route", got)
 	}
 }
 

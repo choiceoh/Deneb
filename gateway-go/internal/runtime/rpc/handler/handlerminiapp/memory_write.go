@@ -72,7 +72,9 @@ func memoryWritePage(deps MemoryDeps) rpcutil.HandlerFunc {
 			return rpcerr.NotFound("wiki page " + rpcutil.TruncateForError(rel)).Response(req.ID)
 		}
 
-		existing.Body = p.Body
+		if _, ok := rawFields["body"]; ok {
+			existing.Body = p.Body
+		}
 		if p.Title != nil {
 			existing.Meta.Title = strings.TrimSpace(*p.Title)
 		}

@@ -251,3 +251,40 @@ func TestDispatchTimeoutCancelsHandler(t *testing.T) {
 		t.Error("handler did not observe context cancellation after timeout")
 	}
 }
+
+func TestDispatchTimeoutWhileWaitingForWorkerSlot(t *testing.T) {
+	d := NewDispatcher(rpctest.NewLogger())
+	pool := NewWorkerPool(1)
+	d.SetWorkerPool(pool)
+
+	blockerStarted := make(chan struct{})
+	releaseBlocker := make(chan struct{})
+	d.Register("slow.blocking", func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		close(blockerStarted)
+		<-releaseBlocker
+		resp, _ := protocol.NewResponseOK(req.ID, nil)
+		return resp
+	})
+	d.Register("fast", func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		resp, _ := protocol.NewResponseOK(req.ID, nil)
+		return resp
+	})
+
+	go d.Dispatch(context.Background(), &protocol.RequestFrame{ID: "blocker", Method: "slow.blocking"})
+	<-blockerStarted
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	resp := d.Dispatch(ctx, &protocol.RequestFrame{ID: "timeout", Method: "fast"})
+	elapsed := time.Since(start)
+	close(releaseBlocker)
+
+	if resp.Error == nil || resp.Error.Code != protocol.ErrAgentTimeout {
+		t.Fatalf("expected AGENT_TIMEOUT, got %+v", resp.Error)
+	}
+	if elapsed > 200*time.Millisecond {
+		t.Fatalf("dispatch blocked %v waiting for a worker slot after deadline", elapsed)
+	}
+}
