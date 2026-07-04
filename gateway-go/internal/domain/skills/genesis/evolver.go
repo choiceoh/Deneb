@@ -468,6 +468,7 @@ func (e *Evolver) generateCandidateText(ctx context.Context, userPrompt string, 
 		// plus audit fields — at 4096 the live drill (2026-07-04) truncated
 		// mid-field ("target_signature" cut) even after the non-stream fix.
 		MaxTokens:      12288,
+		Temperature:    evolveTemperature(),
 		Thinking:       e.thinkingOff(primaryModel),
 		ResponseFormat: &llm.ResponseFormat{Type: "json_object"},
 	})
@@ -604,7 +605,8 @@ type evaluatedCandidate struct {
 func (e *Evolver) evaluateCandidateText(ctx context.Context, text string, entry *skills.SkillEntry, originalContent string, stats *UsageStats, reviewFinding string) (evaluatedCandidate, error) {
 	resp, err := jsonutil.UnmarshalLLM[evolveResp](text)
 	if err != nil {
-		return evaluatedCandidate{}, fmt.Errorf("evolver: parse response: %w", err)
+		return evaluatedCandidate{}, fmt.Errorf("evolver: parse response (len=%d, tail=%q): %w",
+			len(text), tailRunes(text, 160), err)
 	}
 
 	if resp.Skip || resp.Changes == nil {
@@ -1577,6 +1579,45 @@ func writePromptList(b *strings.Builder, label string, values []string) {
 	}
 }
 
+// evolveTemperature pins the rewrite/judge/teacher calls to temperature 0:
+// glm-5.2 flaked ACROSS identical retries (double-encoded one run, clean the
+// next) — structured-output extraction wants determinism, not creativity.
+func evolveTemperature() *float64 {
+	t := 0.0
+	return &t
+}
+
+// tailRunes returns the last n runes of s (diagnostics: truncation shows at
+// the TAIL, which the head-only excerpt in jsonutil's error never reaches).
+func tailRunes(s string, n int) string {
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return "…" + string(r[len(r)-n:])
+}
+
+// promptFragment normalizes a replay/validation fragment for PROMPT rendering:
+// collapse escaped quotes and newlines. Raw tool-input substrings carry
+// backslash-escaped JSON ({\"file_path\":...); rendered verbatim they taught
+// glm-5.2 to emit its whole rewrite double-encoded (observed live 2026-07-04 —
+// the response began {\"skip\": and the parse chain died on the truncation).
+// Display-only: the stored case is untouched.
+func promptFragment(v string) string {
+	v = strings.ReplaceAll(v, `\"`, `"`)
+	v = strings.ReplaceAll(v, `\n`, " ")
+	v = strings.ReplaceAll(v, "\n", " ")
+	return v
+}
+
+func promptFragments(vs []string) []string {
+	out := make([]string, 0, len(vs))
+	for _, v := range vs {
+		out = append(out, promptFragment(v))
+	}
+	return out
+}
+
 func writePromptToolCalls(b *strings.Builder, label string, calls []SkillReplayToolCallRecord) {
 	if len(calls) == 0 {
 		return
@@ -1588,10 +1629,10 @@ func writePromptToolCalls(b *strings.Builder, label string, calls []SkillReplayT
 			parts = append(parts, "tool="+truncateRunes(name, 80))
 		}
 		if len(call.InputIncludes) > 0 {
-			parts = append(parts, "input includes ["+truncateRunes(strings.Join(call.InputIncludes, "; "), 180)+"]")
+			parts = append(parts, "input includes ["+truncateRunes(strings.Join(promptFragments(call.InputIncludes), "; "), 180)+"]")
 		}
 		if len(call.InputExcludes) > 0 {
-			parts = append(parts, "input excludes ["+truncateRunes(strings.Join(call.InputExcludes, "; "), 180)+"]")
+			parts = append(parts, "input excludes ["+truncateRunes(strings.Join(promptFragments(call.InputExcludes), "; "), 180)+"]")
 		}
 		if call.FixtureError {
 			parts = append(parts, "fixture errored")
@@ -2100,6 +2141,7 @@ func (e *Evolver) judgeCandidate(ctx context.Context, skillName string, client *
 		System:   llm.SystemString(skillJudgeSystemPrompt),
 		// 4096: verdict JSON is small, but GLM reasoning shares the budget.
 		MaxTokens:      4096,
+		Temperature:    evolveTemperature(),
 		Thinking:       e.thinkingOff(model),
 		ResponseFormat: &llm.ResponseFormat{Type: "json_object"},
 	})
@@ -2213,6 +2255,7 @@ func (e *Evolver) teacherRewrite(ctx context.Context, teacherClient *llm.Client,
 		System:   llm.SystemString(evolveSystemPrompt),
 		// Same budget as the producer — the teacher rewrites the same shape.
 		MaxTokens:      12288,
+		Temperature:    evolveTemperature(),
 		Thinking:       e.thinkingOff(teacherModel),
 		ResponseFormat: &llm.ResponseFormat{Type: "json_object"},
 	})
