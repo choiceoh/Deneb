@@ -93,7 +93,7 @@ func ReadContextMessage(ctx context.Context, cfg Config, messageID, query string
 func ListContextMessages(ctx context.Context, cfg Config, since time.Time, opts ContextOptions) ([]ContextMessage, error) {
 	criteria := "ALL"
 	if !since.IsZero() {
-		criteria = "SINCE " + imapSinceDate(since)
+		criteria = archiveSentSinceCriteria(since)
 	}
 	c, err := connectArchive(ctx, cfg)
 	if err != nil {
@@ -220,7 +220,7 @@ func ProjectHistoryContext(ctx context.Context, cfg Config, query string, opts C
 	if len(msgs) == 0 {
 		criteria := archiveTextCriteria(query)
 		if !opts.Since.IsZero() {
-			criteria = "SINCE " + imapSinceDate(opts.Since) + " " + criteria
+			criteria = archiveSentSinceCriteria(opts.Since) + " " + criteria
 		}
 		fallbackOpts := opts
 		fallbackOpts.Limit = candidateLimit
@@ -489,8 +489,45 @@ func contextMailboxes(cfg Config, override []string) []string {
 	return out
 }
 
+// archiveTextCriteria builds the free-text IMAP criteria for a query. The query
+// is tokenized on whitespace and each token must match somewhere (FROM, SUBJECT,
+// or body TEXT) — IMAP juxtaposition is AND, so tokens AND together while each
+// token ORs across fields. The old single-phrase form (`TEXT "당진 EPC Taiwoo"`)
+// required the whole query to appear verbatim, which made every multi-word
+// mixed-language query miss (production 2026-07-04: "당진솔라빌리지 EPC O&M 요청사항
+// Taiwoo" → 0 hits while each word matched individually). Token count is capped
+// to keep the criteria bounded; extra tokens add precision the first ones
+// already establish.
 func archiveTextCriteria(query string) string {
-	return fmt.Sprintf(`OR OR FROM %s SUBJECT %s TEXT %s`, quote(query), quote(query), quote(query))
+	tokens := strings.Fields(query)
+	const maxTokens = 6
+	if len(tokens) > maxTokens {
+		tokens = tokens[:maxTokens]
+	}
+	if len(tokens) == 0 {
+		tokens = []string{query}
+	}
+	parts := make([]string, 0, len(tokens))
+	for _, t := range tokens {
+		parts = append(parts, fmt.Sprintf(`OR OR FROM %s SUBJECT %s TEXT %s`, quote(t), quote(t), quote(t)))
+	}
+	return strings.Join(parts, " ")
+}
+
+// archiveSentSinceCriteria builds the "received in the last N days" criteria on
+// the Date header (SENTSINCE) instead of INTERNALDATE (SINCE). This archive's
+// INTERNALDATE is unreliable for day windows — bulk imports deliver many
+// sent-days under one internal date (the after:/before: query path switched to
+// SENTSINCE for the same reason; see buildSearchSpec). Production 2026-07-04:
+// `list days:1` at 17:00 missed a mail received 09:50 the same day and
+// `days:2` missed all of the previous day's mail via the SINCE path.
+//
+// The one-day back-margin absorbs SENTSINCE's date-only, timezone-blind
+// comparison (RFC 3501): a mail sent 08:59 KST carries the previous day's UTC
+// date and would otherwise fall out of the window. Over-inclusion by one day
+// is harmless — callers label output with each mail's own date.
+func archiveSentSinceCriteria(since time.Time) string {
+	return "SENTSINCE " + imapSinceDate(since.AddDate(0, 0, -1))
 }
 
 func clampContextLimit(limit int) int {

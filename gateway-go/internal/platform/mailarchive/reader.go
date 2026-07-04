@@ -21,9 +21,10 @@ const summarySnippetRunes = 1200
 
 // ListSince returns messages in mailbox received on/after since, most-recent
 // first, capped at limit. Used by the daily-digest agent to read the day's mail
-// from the archive instead of Gmail.
+// from the archive instead of Gmail. Filters on the Date header (SENTSINCE) —
+// see archiveSentSinceCriteria for why INTERNALDATE is unusable here.
 func ListSince(ctx context.Context, cfg Config, mailbox string, since time.Time, limit int) ([]Summary, error) {
-	return readSummaries(ctx, cfg, mailbox, fmt.Sprintf("SINCE %s", imapSinceDate(since)), limit)
+	return readSummaries(ctx, cfg, mailbox, archiveSentSinceCriteria(since), limit)
 }
 
 // Search returns messages in mailbox matching a free-text query (matched against
