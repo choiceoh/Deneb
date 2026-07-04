@@ -124,13 +124,13 @@ Hindsight(Hermes 계열 FastAPI+pgvector 장기기억 서비스)는 **2026-06-15
 - 사이드카 *모델*이 아니라 모델 *라우터*. OpenAI/Anthropic 호환 단일 엔드포인트(`:18800`) 뒤로 로컬 vLLM + 클라우드(claude 등)를 **모델명으로** 멀티플렉싱하는 우리 자체 Go 바이너리(`gateway-go/cmd/wormhole`). 원래 목적=외부 클라(Claude Code·스크립트) 단일 URL. **이제 Deneb 자신의 모델 호출도 wormhole 경유**로 통합(2026-06-14, 사용자 결정 "메인 포함 전부").
 - 이득: 단일 엔드포인트 + 업스트림 키 단일 금고 + SparkFleet 자동발견(`:18900`) + 로컬→클라우드 auto 폴백 + 프라이버시 가드. 상세 설계는 [[project_wormhole]].
 
-### ★★ APC 불가침 (메인 경로의 절대 규칙)
-> 메인 챗(dsv4)은 vLLM APC(byte-prefix 캐시)에 극도로 민감하다(`.claude/rules/prompt-cache.md` §1.5). wormhole을 메인 앞에 두려면 **바이트 투명**해야 한다.
+### ★★ APC 불가침 (게이트웨이 dsv4 경로의 절대 규칙)
+> 게이트웨이의 dsv4 트래픽은 vLLM APC(byte-prefix 캐시)에 극도로 민감하다(`.claude/rules/prompt-cache.md` §1.5). wormhole을 그 앞에 두려면 **바이트 투명**해야 한다. (2026-07-04 현재 main 은 클라우드 glm 이고 dsv4 는 fallback·챗봇 경로지만, 이 규칙은 역할이 아니라 **엔트리** 계약이다 — main 이 로컬로 복귀해도 그대로 성립. 실측 검증(2026-07-04): 동일 요청 직결 vs wormhole 경유가 같은 prefix family 에 합류, 적중 89% 동일.)
 
-- **Deneb 메인이 쓰는 wormhole 엔트리(`deepseek-v4-flash`)는 `toggleKwarg` 를 절대 달지 마라.** `toggleKwarg` 가 있으면 wormhole 이 effort 라우팅으로 `chat_template_kwargs` 를 **주입**해 렌더 프롬프트를 바꾼다 → APC 파괴 + Deneb 자체 effort 라우팅(`run_capability.go`)과 **이중화 충돌**(injectKwarg 가 기존 값 덮어씀). 엔트리에 toggleKwarg 가 없으면 `applyThinking` 이 즉시 return → **순수 패스스루**.
+- **게이트웨이 dsv4 경로가 쓰는 wormhole 엔트리(`deepseek-v4-flash`)는 `toggleKwarg` 를 절대 달지 마라.** `toggleKwarg` 가 있으면 wormhole 이 effort 라우팅으로 `chat_template_kwargs` 를 **주입**해 렌더 프롬프트를 바꾼다 → APC 파괴 + Deneb 자체 effort 라우팅(`run_capability.go`)과 **이중화 충돌**(injectKwarg 가 기존 값 덮어씀). 엔트리에 toggleKwarg 가 없으면 `applyThinking` 이 즉시 return → **순수 패스스루**.
 - **이름 일치**: 엔트리 `name == upstreamModel == vLLM 서빙 모델명`, deneb.json 이 그 name 을 보냄 → `rewriteModel` 미발동 → 바이트 동일. (model 필드는 렌더 프롬프트에 안 들어가 rewrite 자체는 APC-safe 지만, 무변경이 가장 안전.)
 - 결론: **effort 라우팅은 Deneb 가 단독 수행**(튜닝됨·파이프라인 통합), wormhole 은 메인에 대해 dumb passthrough. (외부 클라용 effort 라우팅을 살리려면 별도 toggleKwarg 엔트리 또는 향후 per-request opt-out 헤더.)
-- **★ 전용 변형 엔트리는 허용 (`thinkingMode`, 2026-07-04).** 같은 업스트림을 가리키는 **별도 이름** 엔트리로 추론 방향을 계약할 수 있다: `"off"` = 무조건 노추론 — 엔트리의 정체성이라 **X-Wormhole-No-Effort 로도 억제되지 않음**(이름으로 고른 소비자의 명시적 선택); `"off-unless-hard"` = **노추론 기본**, 명백한 어려움 신호(hard-signal·첨부·구조화)에서만 추론 유지 — "긴 입력"만으로는 안 켬(실측: dsv4 노추론이 메일 분석에서 동급 품질·5배 속도, 판정 근거는 agents-a1 메모리). APC 논거: 엔트리별 주입이 **일정**해 그 엔트리 소비자끼리 prefix family 일관, 메인 패스스루 바이트 불변. 운영 예: `{"name":"dsv4-nothink","url":"http://100.125.220.117:8000/v1","upstreamModel":"deepseek-v4-flash","toggleKwarg":"thinking","thinkingMode":"off"}` — analysis 류 헬퍼 역할이 이 이름을 소비. ⚠ dsv4 의 진짜 스위치는 `thinking`(`enable_thinking` 은 무시됨 — 실측), 노추론 dsv4 는 산술 취약(메일 분석엔 무해 — 대소비교·보존 작업).
+- **★ 전용 변형 엔트리는 허용 (`thinkingMode`, 2026-07-04).** 같은 업스트림을 가리키는 **별도 이름** 엔트리로 추론 방향을 계약할 수 있다: `"off"` = 무조건 노추론 — 엔트리의 정체성이라 **X-Wormhole-No-Effort 로도 억제되지 않음**(이름으로 고른 소비자의 명시적 선택); `"off-unless-hard"` = **노추론 기본**, 명백한 어려움 신호(hard-signal·첨부·구조화)에서만 추론 유지 — "긴 입력"만으로는 안 켬(실측: dsv4 노추론이 메일 분석에서 동급 품질·5배 속도, 판정 근거는 agents-a1 메모리). APC 논거: 엔트리별 주입이 **일정**해 그 엔트리 소비자끼리 prefix family 일관, 메인 패스스루 바이트 불변. 운영 예: `{"name":"dsv4-nothink","url":"http://100.125.220.117:8000/v1","upstreamModel":"deepseek-v4-flash","toggleKwarg":"thinking","thinkingMode":"off"}` — 2026-07-04 현재 **lightweight/tiny/translation 역할**이 이 이름을 소비(qwen3.6 에서 교체, qwen 엔진은 유휴 서빙 중). ⚠ dsv4 의 진짜 스위치는 `thinking`(`enable_thinking` 은 무시됨 — 실측), 노추론 dsv4 는 산술 취약(메일 분석엔 무해 — 대소비교·보존 작업).
 
 ### ★ 클라우드 모델 추론 프로필 (`reasoning`, glm-5.2; 2026-06-21)
 > `toggleKwarg`(vLLM `chat_template_kwargs`)는 위 규칙대로 Deneb 엔트리에 금지(APC). 하지만 **클라우드 모델은 추론 제어 방언이 달라** 게이트웨이가 표현하지 못한다 — 그 번역은 wormhole 만 할 수 있다. 그래서 cloud 전용 필드 `reasoning` 을 둔다(`cmd/wormhole/effort.go:reasoningRoute`, `applyReasoning`).
@@ -141,8 +141,8 @@ Hindsight(Hermes 계열 FastAPI+pgvector 장기기억 서비스)는 **2026-06-15
 - **호스트 적용**: `~/.wormhole/config.json` 의 glm-5.2 엔트리에 `"reasoning": "glm"` 추가 → `make wormhole` → wormhole 재시작. config 예시는 `cmd/wormhole/config.example.json`.
 
 ### ★ SPOF (핫패스가 된 wormhole)
-- 메인을 wormhole 로 태우면 **wormhole 다운 = 메인 다운**. **현재 운영(2026-06-14): main/lightweight/tiny + fallback/analysis(클라우드 glm-5.2) 전부 wormhole 경유** (사용자 "클라우드 호출 모아"). 즉 wormhole 이 모델 레이어의 단일 관문.
-- 핵심 구분: **흔한 실패(업스트림 모델 다운)는 여전히 커버됨** — main(dsv4@srv2) 죽으면 게이트웨이 서킷브레이커→fallback role→wormhole(살아있음)→다른 업스트림(zai). 안 커버되는 건 **wormhole 프로세스 자체 사망**뿐인데, 얇은 프록시 + `Restart=on-failure`(≈5s respawn) 로 자가치유. 더 강한 격리를 원하면 fallback 하나를 직결로 빼면 됨(그 경우 SPOF 0, 단 키 중복).
+- 메인을 wormhole 로 태우면 **wormhole 다운 = 메인 다운**. **현재 운영(2026-07-04 실측): vision(google 직결) 제외 전 역할이 wormhole 경유** — main/chatbot/coding/analysis=glm-5.2(클라우드), fallback=deepseek-v4-flash(srv2 로컬), lightweight/tiny/translation=dsv4-nothink(srv2 로컬). 즉 wormhole 이 모델 레이어의 단일 관문. (역할→모델은 오퍼레이터가 수시 변경 — `model-roles.md` 스냅샷 경고 참조.)
+- 핵심 구분: **흔한 실패(업스트림 모델 다운)는 여전히 커버됨** — 폴백 방향은 현재 **클라우드→로컬**: main(glm, 클라우드) 죽으면 게이트웨이 서킷브레이커→fallback role(dsv4@srv2, 로컬)→wormhole(살아있음) 경유로 낙하. 안 커버되는 건 **wormhole 프로세스 자체 사망**뿐인데, 얇은 프록시 + `Restart=on-failure`(≈5s respawn) 로 자가치유. 더 강한 격리를 원하면 fallback 하나를 직결로 빼면 됨(그 경우 SPOF 0, 단 키 중복).
 - wormhole 은 `Restart=on-failure` systemd 서비스로 상주(아래).
 
 ### 서버 (상주)
