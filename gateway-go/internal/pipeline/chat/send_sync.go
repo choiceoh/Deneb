@@ -55,6 +55,20 @@ func (r *SyncResult) BestText() string {
 	return strings.TrimSpace(StripSilentToken(r.AllText))
 }
 
+func (r *SyncResult) fillEmptyStopFallback() bool {
+	if r == nil || r.BestText() != "" {
+		return false
+	}
+	msg := fallbackForStopReason(r.StopReason)
+	if msg == "" {
+		return false
+	}
+	r.Text = msg
+	r.AllText = msg
+	r.DeliverableText = msg
+	return true
+}
+
 // SyncOptions holds optional parameters for synchronous agent runs.
 // Used by the OpenAI-compatible HTTP endpoints to pass through sampling
 // parameters and conversation context.
@@ -247,7 +261,7 @@ func (h *Handler) buildSyncResult(model string, result *chatRunResult) (*SyncRes
 	// Then read Sino-Korean Hanja as Hangul (報告書 → 보고서) so a Chinese-lineage
 	// model's output surfaces in Korean — this is the chokepoint for every
 	// BestText() consumer (the stream done frame, proactive bridge, auto-title).
-	return &SyncResult{
+	res := &SyncResult{
 		Text:            hanja.Transliterate(strings.TrimSpace(stripReasoningLeak(result.Text))),
 		AllText:         hanja.Transliterate(strings.TrimSpace(stripReasoningLeak(result.AllText))),
 		DeliverableText: hanja.Transliterate(strings.TrimSpace(stripReasoningLeak(result.DeliverableText))),
@@ -256,7 +270,9 @@ func (h *Handler) buildSyncResult(model string, result *chatRunResult) (*SyncRes
 		InputTokens:     result.Usage.InputTokens,
 		OutputTokens:    result.Usage.OutputTokens,
 		StopReason:      result.StopReason,
-	}, nil
+	}
+	res.fillEmptyStopFallback()
+	return res, nil
 }
 
 // SendSync runs the agent loop synchronously, blocking until the response is
