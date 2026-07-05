@@ -7,7 +7,9 @@ import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
+import ai.deneb.ui.handCursor
 import ai.deneb.ui.markdown.MarkdownContent
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -33,6 +35,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -287,44 +290,65 @@ internal fun SkillDetailContent(
         )
     }
 
+    // 최근 활동 first: what the skill DID (uses, evolutions, verdicts) is what
+    // a non-technical operator came for; the technical procedure document is
+    // reference material and folds away below (field report 2026-07-05: the
+    // raw English SKILL.md dominated the screen).
     Spacer(Modifier.height(16.dp))
     HorizontalDivider(color = denebHairline())
     Spacer(Modifier.height(12.dp))
-    Text("문서", style = DenebType.cardTitle, color = MaterialTheme.colorScheme.primary)
-    Spacer(Modifier.height(8.dp))
-    if (editMode) {
-        OutlinedTextField(
-            value = draftBody,
-            onValueChange = onDraftChange,
-            enabled = !actionBusy,
-            label = { Text("SKILL.md") },
-            textStyle = DenebType.snippet.copy(fontFamily = FontFamily.Monospace),
-            modifier = Modifier.fillMaxWidth().heightIn(min = 360.dp),
-        )
+    Text("최근 활동", style = DenebType.cardTitle, color = MaterialTheme.colorScheme.primary)
+    if (events.isEmpty()) {
+        Spacer(Modifier.height(8.dp))
+        Text("이 스킬의 활동 기록이 아직 없습니다.", style = DenebType.hint, color = denebHint())
     } else {
-        val body = stripFrontmatter(detail.body)
-        if (body.isNotBlank()) {
-            MarkdownContent(body, baseStyle = DenebType.body)
-            if (detail.bodyTruncated) {
-                Spacer(Modifier.height(4.dp))
-                Text("(문서가 길어 일부만 표시합니다)", style = DenebType.hint, color = denebHint())
-            }
-        } else {
-            Text("SKILL.md 본문을 읽을 수 없습니다.", style = DenebType.hint, color = denebHint())
+        events.forEachIndexed { idx, event ->
+            SkillLifecycleRow(event, showSkillName = false, horizontalPadding = 0.dp)
+            if (idx < events.lastIndex) HorizontalDivider(color = denebHairline())
         }
     }
 
     Spacer(Modifier.height(16.dp))
     HorizontalDivider(color = denebHairline())
     Spacer(Modifier.height(12.dp))
-    Text("Propus 로그", style = DenebType.cardTitle, color = MaterialTheme.colorScheme.primary)
-    if (events.isEmpty()) {
+    var docExpanded by rememberSaveable { mutableStateOf(false) }
+    val docOpen = docExpanded || editMode
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .handCursor()
+            .clickable(enabled = !editMode) { docExpanded = !docExpanded },
+    ) {
+        Text("기술 문서", style = DenebType.cardTitle, color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f))
+        Text(
+            if (docOpen) "접기" else "보기",
+            style = DenebType.button,
+            color = MaterialTheme.colorScheme.primary,
+        )
+    }
+    if (docOpen) {
         Spacer(Modifier.height(8.dp))
-        Text("이 스킬의 Propus 활동이 아직 없습니다.", style = DenebType.hint, color = denebHint())
-    } else {
-        events.forEachIndexed { idx, event ->
-            SkillLifecycleRow(event, showSkillName = false, horizontalPadding = 0.dp)
-            if (idx < events.lastIndex) HorizontalDivider(color = denebHairline())
+        if (editMode) {
+            OutlinedTextField(
+                value = draftBody,
+                onValueChange = onDraftChange,
+                enabled = !actionBusy,
+                label = { Text("SKILL.md") },
+                textStyle = DenebType.snippet.copy(fontFamily = FontFamily.Monospace),
+                modifier = Modifier.fillMaxWidth().heightIn(min = 360.dp),
+            )
+        } else {
+            val body = stripFrontmatter(detail.body)
+            if (body.isNotBlank()) {
+                MarkdownContent(body, baseStyle = DenebType.body)
+                if (detail.bodyTruncated) {
+                    Spacer(Modifier.height(4.dp))
+                    Text("(문서가 길어 일부만 표시합니다)", style = DenebType.hint, color = denebHint())
+                }
+            } else {
+                Text("SKILL.md 본문을 읽을 수 없습니다.", style = DenebType.hint, color = denebHint())
+            }
         }
     }
 

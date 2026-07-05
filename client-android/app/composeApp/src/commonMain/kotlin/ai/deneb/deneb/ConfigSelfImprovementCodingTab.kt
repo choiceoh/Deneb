@@ -50,7 +50,7 @@ import kotlinx.coroutines.launch
 @Composable
 internal fun SelfImprovementCodingTab(client: DenebGatewayClient) {
     val scope = rememberCoroutineScope()
-    var selectedStatus by rememberSaveable { mutableStateOf(selfImprovementCodingDefaultStatus) }
+    var selectedStatus by rememberSaveable { mutableStateOf(selfImprovementCodingDefaultFilter) }
     var queue by remember { mutableStateOf<SelfImprovementCodingListResponse?>(null) }
     var loadFailed by remember { mutableStateOf(false) }
 
@@ -109,7 +109,15 @@ internal fun SelfImprovementCodingContent(
                     color = MaterialTheme.colorScheme.primary,
                 )
                 Spacer(Modifier.height(2.dp))
-                Text("대기 ${pendingCount}건 · 전체 ${totalCount}건", style = DenebType.meta, color = denebHint())
+                Text(
+                    if (pendingCount > 0) {
+                        "대기 ${pendingCount}건 — 다음 하트비트가 자동 검토합니다 · 전체 ${totalCount}건"
+                    } else {
+                        "처리 ${totalCount}건 · 새 후보는 하트비트가 자동 검토·적용합니다"
+                    },
+                    style = DenebType.meta,
+                    color = denebHint(),
+                )
             }
             SelfImprovementCodingStatusFilters(
                 counts = queue.statusCounts,
@@ -128,7 +136,12 @@ internal fun SelfImprovementCodingContent(
                 )
             }
         } else {
-            items(candidates, key = { it.id }) { candidate ->
+            // Pending first (there is rarely more than one), then newest-processed.
+            val ordered = candidates.sortedWith(
+                compareByDescending<SelfCorrectionCandidate> { it.status == "proposed" }
+                    .thenByDescending { it.updatedAt },
+            )
+            items(ordered, key = { it.id }) { candidate ->
                 SelfImprovementCodingCandidateRow(candidate)
                 HorizontalDivider(Modifier.padding(start = 16.dp), color = denebHairline())
             }
@@ -222,8 +235,20 @@ private fun SelfImprovementCodingCandidateRow(candidate: SelfCorrectionCandidate
                 overflow = TextOverflow.Ellipsis,
             )
         }
+        val outcome = candidate.reviewNote.takeIf { it.isNotBlank() && candidate.status != "proposed" }
+        if (outcome != null) {
+            Spacer(Modifier.height(2.dp))
+            Text(
+                "결과: $outcome",
+                style = DenebType.rowSubtitle,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = if (expanded) Int.MAX_VALUE else 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
         if (expanded) {
             val detailLines = listOfNotNull(
+                candidate.reviewer.takeIf { it.isNotBlank() }?.let { "처리: $it" },
                 candidate.evidenceKinds.takeIf { it.isNotEmpty() }
                     ?.joinToString(" · ") { selfImprovementCodingEvidenceLabel(it) }
                     ?.let { "증거 상태: $it" },
@@ -318,6 +343,11 @@ private fun selfImprovementCodingActionLabel(action: String): String = when (act
 
 private const val selfImprovementCodingDefaultStatus = "proposed"
 
+// Default view since the heartbeat self-coding lane (#3177): the queue is
+// consumed automatically, so the screen's job is the processing HISTORY —
+// what the loop noticed and what was done about it — not a to-do list.
+private const val selfImprovementCodingDefaultFilter = "all"
+
 private data class SelfImprovementCodingFilter(val status: String, val label: String)
 
 private val selfImprovementCodingFilters = listOf(
@@ -340,5 +370,6 @@ private fun selfImprovementCodingEmptyText(status: String): String = when (statu
     "applied" -> "적용된 자가개선 코딩 후보가 없습니다."
     "rejected" -> "기각된 자가개선 코딩 후보가 없습니다."
     "superseded" -> "대체된 자가개선 코딩 후보가 없습니다."
+    "all" -> "아직 자가개선 후보가 없습니다. 후보가 생기면 하트비트가 자동으로 검토합니다."
     else -> "자가개선 코딩 후보가 없습니다."
 }
