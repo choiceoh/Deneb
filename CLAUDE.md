@@ -59,6 +59,7 @@
 | model-roles.md · sidecar-models.md | LLM 역할 배치 · 로컬 모델/wormhole 운영 |
 | wiki-layout.md | 위키 도메인 (project_layout.go 규약) |
 | native-design-system.md · native-live-app.md | client-android UI · 실앱 라이브 검증 |
+| denebui.md | deneb-ui 카드 (라벨 HTML) — 3구현 동기·계약 위치·검증 사슬 |
 | generated-code.md | 생성 파일 재생성 방법 |
 | release-and-deploy.md | 배포 · APK 발행/서명 · OTA |
 | git-pr.md · testing.md · docs.md · build-status.md · collaboration.md · optimization.md | 각 주제 상세 |

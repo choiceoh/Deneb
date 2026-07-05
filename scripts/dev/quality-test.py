@@ -44,6 +44,7 @@ from mock_native_client import NativeTestClient, ChatCapture, check_prerequisite
 from checks import (  # noqa: E402
     check_korean_response, check_no_leaked_markup, check_telegram_safe,
     check_response_substance, check_no_filler, check_latency,
+    check_deneb_ui_valid,
 )
 
 try:
@@ -801,6 +802,10 @@ def _eval_simple(name: str, capture: ChatCapture) -> tuple[str, bool, str]:
         ok, detail = check_telegram_safe(text)
         return ("telegram_safe", ok, detail)
 
+    if name == "deneb_ui_valid":
+        ok, detail = check_deneb_ui_valid(text)
+        return ("deneb_ui_valid", ok, detail)
+
     if name == "streaming":
         ok, detail = check_streaming_flow(capture)
         return ("streaming", ok, detail)
@@ -1331,6 +1336,7 @@ async def run_custom(client: GatewayClient, message: str) -> QualityResult:
     result.add_check("no_filler", *check_no_filler(capture.reply_text))
     result.add_check("no_leak", *check_no_leaked_markup(capture.reply_text))
     result.add_check("telegram_safe", *check_telegram_safe(capture.reply_text))
+    result.add_check("deneb_ui_valid", *check_deneb_ui_valid(capture.reply_text))
     result.add_check("streaming", *check_streaming_flow(capture))
     result.add_check("tools_clean", *check_no_hallucinated_tool(capture))
     result.add_check("latency", *check_latency(capture.latency_ms, 60000))

@@ -84,6 +84,7 @@ import ai.deneb.ui.dynamicui.BadgeNode
 import ai.deneb.ui.dynamicui.CardNode
 import ai.deneb.ui.dynamicui.ChartNode
 import ai.deneb.ui.dynamicui.ColumnNode
+import ai.deneb.ui.dynamicui.DenebUiHtml
 import ai.deneb.ui.dynamicui.DenebUiNode
 import ai.deneb.ui.dynamicui.DenebUiRenderer
 import ai.deneb.ui.dynamicui.IconNode
@@ -1285,145 +1286,60 @@ private fun renderLetterCard(name: String, scheme: ColorScheme, node: DenebUiNod
 
 // Weather uses a headline temp + caption line (not three stats abreast) and FX
 // is a 2-up stat row + full-width copper — tuned for phone width.
-private fun morningLetterNode(): DenebUiNode = ColumnNode(
-    children = persistentListOf(
-        CardNode(
-            children = persistentListOf(
-                RowNode(
-                    children = persistentListOf(
-                        IconNode(name = "sunny", size = 16),
-                        TextNode(value = "날씨 · 광주", style = TextNodeStyle.CAPTION),
-                    ),
-                ),
-                RowNode(
-                    children = persistentListOf(
-                        TextNode(value = "18°", style = TextNodeStyle.HEADLINE),
-                        TextNode(value = "체감 16°", style = TextNodeStyle.CAPTION),
-                    ),
-                ),
-                TextNode(value = "최고 24° · 최저 14° · 강수 30%", style = TextNodeStyle.CAPTION),
-                TextNode(value = "오후 소나기 가능 — 우산 챙기세요", style = TextNodeStyle.BODY),
-            ),
-        ),
-        CardNode(
-            children = persistentListOf(
-                RowNode(
-                    children = persistentListOf(
-                        IconNode(name = "payments", size = 16),
-                        TextNode(value = "환율 · 구리", style = TextNodeStyle.CAPTION),
-                    ),
-                ),
-                RowNode(
-                    children = persistentListOf(
-                        StatNode(value = "1,386", label = "USD/KRW"),
-                        StatNode(value = "1,498", label = "EUR/KRW"),
-                    ),
-                ),
-                StatNode(value = "\$9,540 /t", label = "LME 구리"),
-            ),
-        ),
-        CardNode(
-            children = persistentListOf(
-                RowNode(
-                    children = persistentListOf(
-                        IconNode(name = "calendar", size = 16),
-                        TextNode(value = "오늘 일정", style = TextNodeStyle.CAPTION),
-                    ),
-                ),
-                ListNode(
-                    items = persistentListOf(
-                        TextNode(value = "09:00 — 팀 스탠드업"),
-                        TextNode(value = "14:00 — 거래처 미팅"),
-                    ),
-                ),
-            ),
-        ),
-        CardNode(
-            children = persistentListOf(
-                RowNode(
-                    children = persistentListOf(
-                        IconNode(name = "mail", size = 16),
-                        TextNode(value = "전일 메일", style = TextNodeStyle.CAPTION),
-                    ),
-                ),
-                ListNode(
-                    items = persistentListOf(
-                        TextNode(value = "김부장 — 견적서 회신 요청"),
-                        TextNode(value = "세무서 — 부가세 신고 안내"),
-                    ),
-                ),
-            ),
-        ),
-        CardNode(
-            children = persistentListOf(
-                RowNode(
-                    children = persistentListOf(
-                        IconNode(name = "alarm", size = 16),
-                        TextNode(value = "임박 마감", style = TextNodeStyle.CAPTION),
-                    ),
-                ),
-                RowNode(
-                    children = persistentListOf(
-                        TextNode(value = "부가세 신고", style = TextNodeStyle.BODY),
-                        BadgeNode(value = "D-2"),
-                    ),
-                ),
-            ),
-        ),
-    ),
+// Letter-card previews parse the CANONICAL HTML skeletons — the same markup
+// skills/productivity/morning-letter/SKILL.md and the evening_letter tool
+// contract (toolreg/core.go) instruct the model to emit. The PNGs therefore
+// show exactly what the phone renders for a contract-conformant letter, and a
+// parser regression breaks the preview loudly instead of drifting silently.
+private fun parseLetterHtml(html: String): DenebUiNode = DenebUiHtml.parse(html) ?: error("letter skeleton failed to parse")
+
+private fun morningLetterNode(): DenebUiNode = parseLetterHtml(
+    """
+    <column>
+      <card>
+        <row><icon name="sunny" size="16"/><text style="caption">날씨 · 광주</text></row>
+        <row><text style="headline">18°</text><text style="caption">체감 16°</text></row>
+        <text style="caption">최고 24° · 최저 14° · 강수 30%</text>
+        <text style="body">오후 소나기 가능 — 우산 챙기세요</text>
+      </card>
+      <card>
+        <row><icon name="payments" size="16"/><text style="caption">환율 · 구리</text></row>
+        <row><stat value="1,386" label="USD/KRW"/><stat value="1,498" label="EUR/KRW"/></row>
+        <stat value="${'$'}9,540 /t" label="LME 구리"/>
+      </card>
+      <card>
+        <row><icon name="calendar" size="16"/><text style="caption">오늘 일정</text></row>
+        <ul><li>09:00 — 팀 스탠드업</li><li>14:00 — 거래처 미팅</li></ul>
+      </card>
+      <card>
+        <row><icon name="mail" size="16"/><text style="caption">전일 메일</text></row>
+        <ul><li>김부장 — 견적서 회신 요청</li><li>세무서 — 부가세 신고 안내</li></ul>
+      </card>
+      <card>
+        <row><icon name="alarm" size="16"/><text style="caption">임박 마감</text></row>
+        <row><text style="body">부가세 신고</text><badge>D-2</badge></row>
+      </card>
+    </column>
+    """.trimIndent(),
 )
 
-// Forward-looking 3-card view (tomorrow / mail / deadlines); no market section.
-private fun eveningLetterNode(): DenebUiNode = ColumnNode(
-    children = persistentListOf(
-        CardNode(
-            children = persistentListOf(
-                RowNode(
-                    children = persistentListOf(
-                        IconNode(name = "calendar", size = 16),
-                        TextNode(value = "내일 일정", style = TextNodeStyle.CAPTION),
-                    ),
-                ),
-                ListNode(
-                    items = persistentListOf(
-                        TextNode(value = "10:00 — 분기 리뷰"),
-                        TextNode(value = "15:00 — 거래처 콜"),
-                    ),
-                ),
-            ),
-        ),
-        CardNode(
-            children = persistentListOf(
-                RowNode(
-                    children = persistentListOf(
-                        IconNode(name = "mail", size = 16),
-                        TextNode(value = "챙길 메일", style = TextNodeStyle.CAPTION),
-                    ),
-                ),
-                ListNode(
-                    items = persistentListOf(
-                        TextNode(value = "이대리 — 내일 회의자료 공유"),
-                    ),
-                ),
-            ),
-        ),
-        CardNode(
-            children = persistentListOf(
-                RowNode(
-                    children = persistentListOf(
-                        IconNode(name = "alarm", size = 16),
-                        TextNode(value = "임박 마감", style = TextNodeStyle.CAPTION),
-                    ),
-                ),
-                RowNode(
-                    children = persistentListOf(
-                        TextNode(value = "부가세 신고", style = TextNodeStyle.BODY),
-                        BadgeNode(value = "D-2"),
-                    ),
-                ),
-            ),
-        ),
-    ),
+private fun eveningLetterNode(): DenebUiNode = parseLetterHtml(
+    """
+    <column>
+      <card>
+        <row><icon name="calendar" size="16"/><text style="caption">내일 일정</text></row>
+        <ul><li>10:00 — 분기 리뷰</li><li>15:00 — 거래처 콜</li></ul>
+      </card>
+      <card>
+        <row><icon name="mail" size="16"/><text style="caption">챙길 메일</text></row>
+        <ul><li>이대리 — 내일 회의자료 공유</li></ul>
+      </card>
+      <card>
+        <row><icon name="alarm" size="16"/><text style="caption">임박 마감</text></row>
+        <row><text style="body">부가세 신고</text><badge>D-2</badge></row>
+      </card>
+    </column>
+    """.trimIndent(),
 )
 
 // --- Home widget mirror ---

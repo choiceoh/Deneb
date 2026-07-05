@@ -92,4 +92,20 @@ describe("AssistantText", () => {
     expect(screen.getByText("요약").tagName).toBe("STRONG"); // markdown span
     expect(screen.getByRole("button", { name: "승인" })).toBeInTheDocument(); // drawn UI
   });
+
+  it("paints a streaming display-only HTML card progressively instead of a placeholder", () => {
+    // Unclosed fence mid-stream, display-only tree → progressive render.
+    const text = "브리핑입니다\n```deneb-ui\n<column><card><text>부가세 신고</text><badge>D-2</badge></card>";
+    const { container } = render(<AssistantText text={text} onUiSubmit={() => {}} />);
+    expect(container.querySelector(".dui-pending")).not.toBeInTheDocument();
+    expect(screen.getByText("부가세 신고")).toBeInTheDocument();
+    expect(screen.getByText("D-2")).toBeInTheDocument();
+  });
+
+  it("holds the placeholder for a streaming card that contains interactive nodes", () => {
+    const text = '질문입니다\n```deneb-ui\n<column><card><button event="answer">42</button></card>';
+    const { container } = render(<AssistantText text={text} onUiSubmit={() => {}} />);
+    expect(container.querySelector(".dui-pending")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "42" })).not.toBeInTheDocument();
+  });
 });
