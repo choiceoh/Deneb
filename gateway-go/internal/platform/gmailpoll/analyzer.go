@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
@@ -107,6 +108,10 @@ func AnalyzeEmail(ctx context.Context, client *llm.Client, model, prompt, thinki
 	userContent := prompt + "\n\n" + FormatEmailForAnalysis(msg)
 	// Same deterministic party anchor as the pipeline path (party_anchor.go).
 	if anchor := buildPartyAnchor(msg, ourAnchorDomains()); anchor != "" {
+		userContent += "\n\n" + anchor
+	}
+	// Same deterministic date anchor as the pipeline path (date_anchor.go).
+	if anchor := buildDateAnchor(msg, time.Now()); anchor != "" {
 		userContent += "\n\n" + anchor
 	}
 
