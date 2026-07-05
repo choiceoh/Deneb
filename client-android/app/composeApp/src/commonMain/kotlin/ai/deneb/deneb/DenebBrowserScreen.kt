@@ -122,8 +122,9 @@ fun DenebBrowserScreen(
  * exercise the look with mock state. Safari-style: NO top header — the page fills the
  * screen and all chrome (editable address bar + actions) sits at the BOTTOM, above the
  * system nav bar. The address bar shows the real current URL (link safety) and is
- * editable (type/paste + Go); there is no on-screen back button — system back pops page
- * history then exits; the open-external action escapes to the system browser.
+ * editable (type/paste + Go); the close button exits immediately, while system
+ * back pops page history then exits. The open-external action escapes to the
+ * system browser.
  *
  * Design system: Material IconButtons with functional icons, skinned with Deneb colors
  * — the translate toggle lights the warm insight accent when ON (translation is an AI
@@ -162,9 +163,10 @@ fun DenebBrowserChrome(
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), progress = { state.progress / 100f })
             }
             HorizontalDivider(color = denebHairline())
-            // Bottom chrome (Safari-style): back · forward · editable address bar (omnibox) ·
-            // reload-or-stop · overflow (⋮), above the system gesture bar. Secondary actions
-            // (translate, copy, open-external) live in the ⋮ menu so the row scales as features grow.
+            // Bottom chrome (Safari-style): close · forward · editable address bar
+            // (omnibox) · reload-or-stop · translate · overflow (⋮), above the
+            // system gesture bar. Secondary actions (copy, open-external, model)
+            // live in the ⋮ menu so the row scales as features grow.
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -175,6 +177,15 @@ fun DenebBrowserChrome(
                     .padding(horizontal = 4.dp, vertical = 2.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                IconButton(
+                    onClick = {
+                        haptics.tap()
+                        onBack()
+                    },
+                    modifier = Modifier.size(40.dp),
+                ) {
+                    Icon(Icons.Outlined.Close, contentDescription = "브라우저 닫기", tint = denebHint())
+                }
                 IconButton(
                     onClick = {
                         haptics.tap()
@@ -206,12 +217,32 @@ fun DenebBrowserChrome(
                             focusManager.clearFocus()
                         },
                     ),
-                    modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
+                    modifier = Modifier.weight(1f).padding(horizontal = 4.dp),
                     decorationBox = { innerTextField ->
-                        if (field.isEmpty()) {
-                            Text("주소 또는 검색", style = DenebType.meta, color = denebHint(), maxLines = 1)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.weight(1f)) {
+                                if (field.isEmpty()) {
+                                    Text("주소 또는 검색", style = DenebType.meta, color = denebHint(), maxLines = 1)
+                                }
+                                innerTextField()
+                            }
+                            if (field.isNotEmpty()) {
+                                IconButton(
+                                    onClick = {
+                                        haptics.tap()
+                                        field = ""
+                                    },
+                                    modifier = Modifier.size(28.dp),
+                                ) {
+                                    Icon(
+                                        Icons.Outlined.Close,
+                                        contentDescription = "주소 지우기",
+                                        tint = denebHint(),
+                                        modifier = Modifier.size(18.dp),
+                                    )
+                                }
+                            }
                         }
-                        innerTextField()
                     },
                 )
                 IconButton(

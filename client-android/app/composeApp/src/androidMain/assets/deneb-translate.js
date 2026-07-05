@@ -11,9 +11,16 @@
  *  - Each text node gets a stable id; the native↔model round-trip returns
  *    translations keyed by that id, so replacement is exact and order-free.
  *  - Cache by original text: identical strings (nav items, repeated labels) are
- *    translated once.
+ *    translated once. Persist page, site, and reusable short-label caches in
+ *    localStorage so reload/back/revisit and repeated site chrome can apply
+ *    known translations before asking the model again.
+ *  - Body-first + viewport-first: article/main/body candidates near the current
+ *    viewport are shipped before menus, footers, and off-screen text.
+ *  - When a text node is part of a paragraph/list/table block, ship a small
+ *    same-block context envelope. The gateway translates only the node text, but
+ *    can use the context for better terminology and sentence flow.
  *  - Debounce + a MutationObserver pick up dynamically loaded / infinite-scroll
- *    content without re-walking the whole DOM each time.
+ *    content. A scroll listener retries newly visible nodes first.
  *  - Toggle: OFF by default — translation starts only when the native chrome
  *    calls setEnabled(true). Turning OFF restores originals; turning ON again
  *    re-applies cached translations + translates anything new (applyAll).
@@ -28,15 +35,50 @@
 
   var ATTR = 'data-deneb-tid';
   var nextId = 1;
+  var nextBlockId = 1;
   var nodes = {};            // tid -> { node, original }
   var cache = {};            // originalText -> translatedText
-  var pending = {};          // requestId -> [tids]
+  var persistentStores = {}; // localStorageKey -> cache store
+  var persistentDirtyStores = {};
+  var inFlight = {};         // tid -> true while a native/model batch is pending
+  var pending = {};          // requestId -> [{ tids, ... }]
   var nextRequestId = 1;
   var enabled = false; // OFF by default — the native chrome calls setEnabled(true) per the toggle
   var debounceTimer = null;
+  var viewportTimer = null;
   var HANGUL = /[가-힣]/;
   var SKIP_TAGS = { SCRIPT: 1, STYLE: 1, NOSCRIPT: 1, CODE: 1, PRE: 1, TEXTAREA: 1, KBD: 1, SAMP: 1 };
   var MAX_SEGMENTS_PER_BATCH = 40;
+  var MAX_PERSISTENT_CACHE_ENTRIES = 700;
+  var MAX_SITE_CACHE_ENTRIES = 1600;
+  var MAX_GLOBAL_CACHE_ENTRIES = 1000;
+  var MAX_CONTEXT_CHARS = 420;
+  var MAX_GROUP_PARTS = 8;
+  var MAX_GROUP_CHARS = 800;
+  var VIEWPORT_MARGIN = 900;
+  var SEGMENT_PAYLOAD_PREFIX = '\uE000deneb_translate_segment:v1:';
+  var PARTS_RESULT_PREFIX = '\uE000deneb_translate_parts:v1:';
+  var BLOCK_SELECTOR = 'p,li,blockquote,figcaption,caption,td,th,dt,dd,h1,h2,h3,h4,h5,h6,article,section';
+  var CONTENT_SELECTORS = [
+    'article',
+    'main',
+    '[role="main"]',
+    '[itemprop="articleBody"]',
+    '.article-body',
+    '.article-content',
+    '.entry-content',
+    '.main-content',
+    '.post-content',
+    '.story-body',
+    '.content-body',
+    '.markdown-body',
+    '.article',
+    '.post',
+    '.story',
+    '#article',
+    '#content',
+    '#main'
+  ];
 
   function translatable(text) {
     var t = (text || '').trim();
@@ -44,6 +86,163 @@
     if (HANGUL.test(t)) return false;       // already Korean
     if (!/[A-Za-zЀ-ӿ]/.test(t)) return false; // no Latin/Cyrillic → nothing to do
     return true;
+  }
+
+  function pageCacheKey() {
+    var href = '';
+    try {
+      href = String(window.location.href || '');
+    } catch (e) {
+      href = '';
+    }
+    href = href.split('#')[0];
+    return 'denebTranslate:v1:' + href;
+  }
+
+  function siteCacheKey() {
+    var origin = '';
+    try {
+      origin = String(window.location.origin || '');
+    } catch (e) {
+      origin = '';
+    }
+    if (!origin) origin = pageCacheKey();
+    return 'denebTranslateSite:v1:' + origin;
+  }
+
+  function globalCacheKey() {
+    return 'denebTranslateGlobal:v1';
+  }
+
+  function normalizedText(text) {
+    return String(text || '').replace(/\s+/g, ' ').trim();
+  }
+
+  function restoreOriginalSpacing(original, translated) {
+    var lead = (String(original || '').match(/^\s*/) || [''])[0];
+    var tail = (String(original || '').match(/\s*$/) || [''])[0];
+    return lead + String(translated || '').trim() + tail;
+  }
+
+  function reusableGlobalText(text) {
+    var t = normalizedText(text);
+    if (!t || t.length > 80) return false;
+    var words = t.split(/\s+/).length;
+    if (t.length <= 36 || words <= 6) return true;
+    return false;
+  }
+
+  function textHash(text) {
+    var h = 2166136261;
+    for (var i = 0; i < text.length; i++) {
+      h ^= text.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    return (h >>> 0).toString(36);
+  }
+
+  function loadPersistentStore(storageKey) {
+    if (persistentStores[storageKey]) return persistentStores[storageKey];
+    var store = {};
+    try {
+      var raw = window.localStorage && window.localStorage.getItem(storageKey);
+      var parsed = raw ? JSON.parse(raw) : null;
+      if (parsed && typeof parsed === 'object') store = parsed;
+    } catch (e) {
+      store = {};
+    }
+    persistentStores[storageKey] = store;
+    return store;
+  }
+
+  function cacheLimit(storageKey) {
+    if (storageKey === globalCacheKey()) return MAX_GLOBAL_CACHE_ENTRIES;
+    if (storageKey.indexOf('denebTranslateSite:v1:') === 0) return MAX_SITE_CACHE_ENTRIES;
+    return MAX_PERSISTENT_CACHE_ENTRIES;
+  }
+
+  function trimPersistentCache(store, limit) {
+    var keys = [];
+    for (var k in store) if (store.hasOwnProperty(k)) keys.push(k);
+    if (keys.length <= limit) return;
+    keys.sort(function (a, b) {
+      return ((store[a] && store[a].at) || 0) - ((store[b] && store[b].at) || 0);
+    });
+    for (var i = 0; i < keys.length - limit; i++) delete store[keys[i]];
+  }
+
+  function flushPersistentStoreSoon(storageKey) {
+    if (persistentDirtyStores[storageKey]) return;
+    persistentDirtyStores[storageKey] = true;
+    window.setTimeout(function () {
+      delete persistentDirtyStores[storageKey];
+      var store = loadPersistentStore(storageKey);
+      trimPersistentCache(store, cacheLimit(storageKey));
+      try {
+        if (window.localStorage) window.localStorage.setItem(storageKey, JSON.stringify(store));
+      } catch (e) {}
+    }, 300);
+  }
+
+  function cachedTranslation(original) {
+    var inMemory = cache[original];
+    if (inMemory != null) return inMemory;
+    var now = Date.now();
+    var pageKey = pageCacheKey();
+    var entry = loadPersistentStore(pageKey)[textHash(original)];
+    if (entry && entry.s === original && typeof entry.t === 'string') {
+      cache[original] = entry.t;
+      entry.at = now;
+      flushPersistentStoreSoon(pageKey);
+      return entry.t;
+    }
+    var normalized = normalizedText(original);
+    if (!normalized) return null;
+    var normalizedKey = textHash(normalized);
+    var siteKey = siteCacheKey();
+    var siteEntry = loadPersistentStore(siteKey)[normalizedKey];
+    if (siteEntry && siteEntry.n === normalized && typeof siteEntry.t === 'string') {
+      var siteTranslation = restoreOriginalSpacing(original, siteEntry.t);
+      cache[original] = siteTranslation;
+      siteEntry.at = now;
+      flushPersistentStoreSoon(siteKey);
+      return siteTranslation;
+    }
+    if (reusableGlobalText(original)) {
+      var globalKey = globalCacheKey();
+      var globalEntry = loadPersistentStore(globalKey)[normalizedKey];
+      if (globalEntry && globalEntry.n === normalized && typeof globalEntry.t === 'string') {
+        var globalTranslation = restoreOriginalSpacing(original, globalEntry.t);
+        cache[original] = globalTranslation;
+        globalEntry.at = now;
+        flushPersistentStoreSoon(globalKey);
+        return globalTranslation;
+      }
+    }
+    return null;
+  }
+
+  function rememberTranslation(original, translated) {
+    cache[original] = translated;
+    var now = Date.now();
+    var pageKey = pageCacheKey();
+    var pageStore = loadPersistentStore(pageKey);
+    pageStore[textHash(original)] = { s: original, t: translated, at: now };
+    flushPersistentStoreSoon(pageKey);
+    var normalized = normalizedText(original);
+    if (!normalized) return;
+    var shared = String(translated || '').trim();
+    var normalizedKey = textHash(normalized);
+    var siteKey = siteCacheKey();
+    var siteStore = loadPersistentStore(siteKey);
+    siteStore[normalizedKey] = { n: normalized, t: shared, at: now };
+    flushPersistentStoreSoon(siteKey);
+    if (reusableGlobalText(original)) {
+      var globalKey = globalCacheKey();
+      var globalStore = loadPersistentStore(globalKey);
+      globalStore[normalizedKey] = { n: normalized, t: shared, at: now };
+      flushPersistentStoreSoon(globalKey);
+    }
   }
 
   function skipParent(node) {
@@ -56,23 +255,260 @@
     return false;
   }
 
+  function hiddenParent(node) {
+    var p = node.parentNode;
+    while (p && p.nodeType === 1) {
+      if (p.getAttribute && p.getAttribute('aria-hidden') === 'true') return true;
+      var style = window.getComputedStyle ? window.getComputedStyle(p) : null;
+      if (style && (style.display === 'none' || style.visibility === 'hidden')) return true;
+      p = p.parentNode;
+    }
+    return false;
+  }
+
+  function nearestTextBlock(node) {
+    var el = node && node.parentElement;
+    while (el && el !== document.body && el.nodeType === 1) {
+      try {
+        if (el.matches && el.matches(BLOCK_SELECTOR)) return el;
+      } catch (e) {}
+      el = el.parentElement;
+    }
+    return node && node.parentElement;
+  }
+
+  function groupTextBlock(node) {
+    var el = node && node.parentElement;
+    while (el && el !== document.body && el.nodeType === 1) {
+      try {
+        if (el.matches && el.matches(BLOCK_SELECTOR)) return el;
+      } catch (e) {}
+      el = el.parentElement;
+    }
+    return null;
+  }
+
+  function blockGroupKey(rec) {
+    var block = groupTextBlock(rec && rec.node);
+    if (!block) return '';
+    if (!block.__denebTranslateBlockId) block.__denebTranslateBlockId = String(nextBlockId++);
+    return block.__denebTranslateBlockId;
+  }
+
+  function clippedContext(text) {
+    var t = normalizedText(text);
+    if (t.length <= MAX_CONTEXT_CHARS) return t;
+    var half = Math.floor((MAX_CONTEXT_CHARS - 5) / 2);
+    return t.slice(0, half) + ' ... ' + t.slice(t.length - half);
+  }
+
+  function blockContext(rec) {
+    var block = nearestTextBlock(rec && rec.node);
+    if (!block) return '';
+    var text = '';
+    try {
+      text = block.innerText || block.textContent || '';
+    } catch (e) {
+      text = '';
+    }
+    var context = clippedContext(text);
+    var original = normalizedText(rec.original);
+    if (!context || context === original) return '';
+    if (context.length < Math.max(20, original.length + 8)) return '';
+    return context;
+  }
+
+  function segmentPayload(rec) {
+    if (!rec) return '';
+    if (!rec.context) rec.context = blockContext(rec);
+    if (!rec.context) return rec.original;
+    try {
+      return SEGMENT_PAYLOAD_PREFIX + JSON.stringify({
+        text: rec.original,
+        context: rec.context,
+        role: rec.primary ? 'body' : 'chrome'
+      });
+    } catch (e) {
+      return rec.original;
+    }
+  }
+
+  function buildShipUnits(tids) {
+    var units = [];
+    for (var i = 0; i < tids.length; i++) {
+      var tid = tids[i];
+      var rec = nodes[tid];
+      if (!rec) continue;
+      var key = blockGroupKey(rec);
+      var chars = String(rec.original || '').length;
+      var last = units.length ? units[units.length - 1] : null;
+      if (key && last && last.key === key && last.tids.length < MAX_GROUP_PARTS && last.chars + chars <= MAX_GROUP_CHARS) {
+        last.tids.push(tid);
+        last.chars += chars;
+        last.primary = last.primary || !!rec.primary;
+        continue;
+      }
+      units.push({ key: key, tids: [tid], chars: chars, primary: !!rec.primary });
+    }
+    return units;
+  }
+
+  function unitPayload(unit) {
+    if (!unit || unit.tids.length === 0) return '';
+    if (unit.tids.length === 1) return segmentPayload(nodes[unit.tids[0]]);
+    var parts = [];
+    var context = '';
+    for (var i = 0; i < unit.tids.length; i++) {
+      var rec = nodes[unit.tids[i]];
+      if (!rec) continue;
+      parts.push(rec.original);
+      if (!context) {
+        if (!rec.context) rec.context = blockContext(rec);
+        context = rec.context || '';
+      }
+    }
+    if (parts.length !== unit.tids.length) return segmentPayload(nodes[unit.tids[0]]);
+    try {
+      return SEGMENT_PAYLOAD_PREFIX + JSON.stringify({
+        parts: parts,
+        context: context,
+        role: unit.primary ? 'body' : 'chrome'
+      });
+    } catch (e) {
+      return segmentPayload(nodes[unit.tids[0]]);
+    }
+  }
+
+  function unitTids(units) {
+    var tids = [];
+    for (var i = 0; i < units.length; i++) {
+      for (var j = 0; j < units[i].tids.length; j++) tids.push(units[i].tids[j]);
+    }
+    return tids;
+  }
+
+  function translatedParts(value, want) {
+    if (typeof value !== 'string' || value.indexOf(PARTS_RESULT_PREFIX) !== 0) return null;
+    try {
+      var parts = JSON.parse(value.slice(PARTS_RESULT_PREFIX.length));
+      if (!Array.isArray(parts) || parts.length !== want) return null;
+      for (var i = 0; i < parts.length; i++) {
+        if (typeof parts[i] !== 'string') return null;
+      }
+      return parts;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function applyTranslationToTid(tid, translated) {
+    var rec = nodes[tid];
+    if (!rec) return;
+    if (typeof translated !== 'string' || translated === rec.original) return;
+    rememberTranslation(rec.original, translated);
+    replace(rec, translated);
+  }
+
+  function textLength(el) {
+    return ((el && (el.innerText || el.textContent)) || '').trim().length;
+  }
+
+  function contentRank(el) {
+    if (!el || !el.matches) return CONTENT_SELECTORS.length;
+    for (var i = 0; i < CONTENT_SELECTORS.length; i++) {
+      try {
+        if (el.matches(CONTENT_SELECTORS[i])) return i;
+      } catch (e) {}
+    }
+    return CONTENT_SELECTORS.length;
+  }
+
+  function contentRoots() {
+    var roots = [];
+    var candidates = [];
+    try {
+      candidates = Array.prototype.slice.call(document.querySelectorAll(CONTENT_SELECTORS.join(',')));
+    } catch (e) {
+      candidates = [];
+    }
+    candidates.sort(function (a, b) {
+      var ar = contentRank(a);
+      var br = contentRank(b);
+      if (ar !== br) return ar - br;
+      return textLength(b) - textLength(a);
+    });
+    for (var i = 0; i < candidates.length && roots.length < 4; i++) {
+      var el = candidates[i];
+      if (!el || textLength(el) < 80) continue;
+      var nested = false;
+      for (var j = 0; j < roots.length; j++) {
+        if (roots[j] === el || roots[j].contains(el) || el.contains(roots[j])) {
+          nested = true;
+          break;
+        }
+      }
+      if (!nested) roots.push(el);
+    }
+    return roots;
+  }
+
+  function isInViewport(rec) {
+    var el = rec && rec.node && rec.node.parentElement;
+    if (!el || !el.getBoundingClientRect) return false;
+    var rect = el.getBoundingClientRect();
+    var h = window.innerHeight || document.documentElement.clientHeight || 0;
+    var w = window.innerWidth || document.documentElement.clientWidth || 0;
+    if ((rect.width <= 0 && rect.height <= 0) || rect.bottom < -VIEWPORT_MARGIN || rect.top > h + VIEWPORT_MARGIN) return false;
+    return rect.right >= -80 && rect.left <= w + 80;
+  }
+
   // Collect untranslated text nodes under root, assigning each a stable tid.
-  function collect(root) {
+  function collect(root, primary) {
     var fresh = [];
+    if (!root) return fresh;
     var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null, false);
     var n;
     while ((n = walker.nextNode())) {
-      if (n.__denebSeen) continue;
+      if (n.__denebSeen) {
+        if (primary && n.__denebTid && nodes[n.__denebTid]) nodes[n.__denebTid].primary = true;
+        continue;
+      }
       if (!translatable(n.nodeValue)) { n.__denebSeen = true; continue; }
       if (skipParent(n)) { n.__denebSeen = true; continue; }
+      if (hiddenParent(n)) continue;
       n.__denebSeen = true;
       var tid = String(nextId++);
+      n.__denebTid = tid;
       var original = n.nodeValue;
-      nodes[tid] = { node: n, original: original };
+      nodes[tid] = { node: n, original: original, primary: !!primary };
       if (n.parentElement) n.parentElement.setAttribute(ATTR, tid);
       fresh.push(tid);
     }
     return fresh;
+  }
+
+  function unique(tids) {
+    var seen = {};
+    var out = [];
+    for (var i = 0; i < tids.length; i++) {
+      var tid = tids[i];
+      if (!tid || seen[tid]) continue;
+      seen[tid] = true;
+      out.push(tid);
+    }
+    return out;
+  }
+
+  function knownTids() {
+    var out = [];
+    for (var tid in nodes) if (nodes.hasOwnProperty(tid)) out.push(tid);
+    return out;
+  }
+
+  function collectPage() {
+    var roots = contentRoots();
+    for (var i = 0; i < roots.length; i++) collect(roots[i], true);
+    collect(document.body, false);
   }
 
   function dispatch(tids) {
@@ -80,27 +516,70 @@
     if (!window.DenebTranslateBridge) return;
     // Split into bounded batches; serve cache hits immediately, only ship misses.
     var batch = [];
+    tids = unique(tids);
     for (var i = 0; i < tids.length; i++) {
       var rec = nodes[tids[i]];
       if (!rec) continue;
-      var cached = cache[rec.original];
+      if (inFlight[tids[i]]) continue;
+      var cached = cachedTranslation(rec.original);
       if (cached != null) { replace(rec, cached); continue; }
+      inFlight[tids[i]] = true;
       batch.push(tids[i]);
       if (batch.length >= MAX_SEGMENTS_PER_BATCH) { ship(batch); batch = []; }
     }
     if (batch.length) ship(batch);
   }
 
+  function clearInFlight(tids) {
+    for (var i = 0; i < tids.length; i++) delete inFlight[tids[i]];
+  }
+
+  function dispatchPrioritized(tids) {
+    var primaryVisible = [];
+    var visible = [];
+    var primaryRest = [];
+    var rest = [];
+    tids = unique(tids);
+    for (var i = 0; i < tids.length; i++) {
+      var rec = nodes[tids[i]];
+      if (!rec) continue;
+      var near = isInViewport(rec);
+      if (rec.primary && near) primaryVisible.push(tids[i]);
+      else if (near) visible.push(tids[i]);
+      else if (rec.primary) primaryRest.push(tids[i]);
+      else rest.push(tids[i]);
+    }
+
+    // Main readable text in/near the viewport gets the first model calls. If no
+    // readable-body node is visible yet, visible chrome still translates so the
+    // current screen is not left blank while off-screen body text waits.
+    dispatch(primaryVisible.length ? primaryVisible : visible);
+    window.setTimeout(function () { if (enabled) dispatch(primaryRest); }, 120);
+    if (primaryVisible.length) window.setTimeout(function () { if (enabled) dispatch(visible); }, 180);
+    window.setTimeout(function () { if (enabled) dispatch(rest); }, 700);
+  }
+
   function ship(tids) {
+    var units = buildShipUnits(tids);
+    if (!units.length) {
+      clearInFlight(tids);
+      return;
+    }
     var rid = String(nextRequestId++);
-    pending[rid] = tids.slice();
+    pending[rid] = units;
     var segments = [];
-    for (var i = 0; i < tids.length; i++) segments.push(nodes[tids[i]].original);
+    for (var i = 0; i < units.length; i++) segments.push(unitPayload(units[i]));
     try {
       window.DenebTranslateBridge.translate(rid, JSON.stringify(segments));
     } catch (e) {
       delete pending[rid];
+      clearInFlight(unitTids(units));
     }
+    window.setTimeout(function () {
+      if (!pending[rid]) return;
+      delete pending[rid];
+      clearInFlight(unitTids(units));
+    }, 45000);
   }
 
   function replace(rec, translated) {
@@ -109,32 +588,58 @@
   }
 
   // Called by native after the model returns. translations is a JSON array the
-  // SAME length/order as the shipped segments; a count mismatch means the
-  // gateway kept originals, so we no-op rather than risk misaligned text.
+  // SAME length/order as the shipped units. A unit can be one text node or a
+  // grouped block-part payload; any count mismatch no-ops rather than risking
+  // misaligned text.
   function applyBatch(requestId, translationsJson) {
-    var tids = pending[requestId];
+    var units = pending[requestId];
     delete pending[requestId];
-    if (!tids) return;
+    if (!units) return;
+    var tids = unitTids(units);
     var translations;
-    try { translations = JSON.parse(translationsJson); } catch (e) { return; }
-    if (!Array.isArray(translations) || translations.length !== tids.length) return;
-    for (var i = 0; i < tids.length; i++) {
-      var rec = nodes[tids[i]];
-      if (!rec) continue;
+    try {
+      translations = JSON.parse(translationsJson);
+    } catch (e) {
+      clearInFlight(tids);
+      return;
+    }
+    if (!Array.isArray(translations) || translations.length !== units.length) {
+      clearInFlight(tids);
+      return;
+    }
+    clearInFlight(tids);
+    for (var i = 0; i < units.length; i++) {
+      var unit = units[i];
       var tr = translations[i];
-      if (typeof tr !== 'string' || tr === rec.original) continue;
-      cache[rec.original] = tr;
-      replace(rec, tr);
+      if (unit.tids.length === 1) {
+        applyTranslationToTid(unit.tids[0], tr);
+        continue;
+      }
+      var parts = translatedParts(tr, unit.tids.length);
+      if (!parts) continue;
+      for (var j = 0; j < unit.tids.length; j++) applyTranslationToTid(unit.tids[j], parts[j]);
     }
   }
 
   function scan(root) {
-    dispatch(collect(root || document.body));
+    dispatchPrioritized(collect(root || document.body, false));
   }
 
   function scheduleScan() {
     if (debounceTimer) clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(function () { scan(document.body); }, 400);
+    debounceTimer = setTimeout(function () {
+      debounceTimer = null;
+      collectPage();
+      dispatchPrioritized(knownTids());
+    }, 400);
+  }
+
+  function scheduleViewportScan() {
+    if (!enabled || viewportTimer) return;
+    viewportTimer = setTimeout(function () {
+      viewportTimer = null;
+      dispatchPrioritized(knownTids());
+    }, 140);
   }
 
   // Re-apply translation to the whole page (used when turning the toggle ON):
@@ -143,12 +648,8 @@
   // why re-enabling after a disable actually re-translates — collect() alone only
   // returns never-seen nodes, so the old scan()-only path left the page in originals.
   function applyAll() {
-    var known = [];
-    for (var tid in nodes) {
-      if (nodes.hasOwnProperty(tid)) known.push(tid);
-    }
-    if (known.length) dispatch(known);
-    scan(document.body);
+    collectPage();
+    dispatchPrioritized(knownTids());
   }
 
   function setEnabled(on) {
@@ -187,6 +688,9 @@
       // a translate request on load.
       try {
         observer.observe(document.documentElement || document.body, { childList: true, subtree: true, characterData: false });
+      } catch (e) {}
+      try {
+        window.addEventListener('scroll', scheduleViewportScan, { passive: true });
       } catch (e) {}
     },
   };
