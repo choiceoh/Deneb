@@ -740,7 +740,23 @@
       },
       "y_unit": {
         "type": "string",
-        "description": "y축 값의 단위 (선택, 예: '건', '만원', '%'). line/area/bar에만 적용."
+        "description": "값 축 단위 (예: 건, 만원, %). 눈금에 접미사로 표시되고 도넛 범례의 값에도 붙는다"
+      },
+      "stacked": {
+        "type": "boolean",
+        "description": "bar/area 시리즈를 누적으로 (구성비 추이). 여러 시리즈일 때만 의미"
+      },
+      "horizontal": {
+        "type": "boolean",
+        "description": "bar를 가로 방향으로 (항목별 순위·긴 라벨). bar 전용"
+      },
+      "send": {
+        "type": "boolean",
+        "description": "true면 렌더 즉시 사용자에게 사진으로 전송 (별도 send_file 호출 불필요). caption 미지정 시 title 사용"
+      },
+      "caption": {
+        "type": "string",
+        "description": "send=true일 때 사진 캡션"
       }
     },
     "required": [
@@ -903,6 +919,14 @@
             "period"
           ]
         }
+      },
+      "send": {
+        "type": "boolean",
+        "description": "true면 렌더 즉시 사용자에게 사진으로 전송 (별도 send_file 호출 불필요). caption 미지정 시 title 사용"
+      },
+      "caption": {
+        "type": "string",
+        "description": "send=true일 때 사진 캡션"
       }
     },
     "required": [

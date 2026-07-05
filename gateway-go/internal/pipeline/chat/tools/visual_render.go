@@ -16,7 +16,49 @@ import (
 	"os/exec"
 	"path/filepath"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 )
+
+// finishRenderedImage is the common tail of the chart/diagram tools: with
+// send=false it returns the classic "path + call send_file" instruction; with
+// send=true it delivers the PNG in the same call (photo, caption defaulting to
+// the chart/diagram title), removing the second round-trip the model sometimes
+// forgets. Delivery failure degrades to the send_file instruction — the render
+// itself succeeded, so never fail the call at this point.
+func finishRenderedImage(ctx context.Context, pngPath, kind string, send bool, caption, title string) string {
+	if !send {
+		return fmt.Sprintf("%s PNG 생성됨: %s\n이제 send_file(file_path=%q, type=\"photo\", caption=\"...\")로 사용자에게 전송하세요.",
+			kind, pngPath, pngPath)
+	}
+	capText := caption
+	if capText == "" {
+		capText = title
+	}
+	if err := deliverRenderedImage(ctx, pngPath, capText); err != nil {
+		return fmt.Sprintf("%s PNG 생성됨: %s\n자동 전송 실패(%s) — send_file(file_path=%q, type=\"photo\")로 직접 전송하세요.",
+			kind, pngPath, err, pngPath)
+	}
+	result := fmt.Sprintf("%s PNG 생성 + 전송 완료: %s", kind, pngPath)
+	if info, err := os.Stat(pngPath); err == nil {
+		if vpath := archiveSentFile(ctx, pngPath, info.Size()); vpath != "" {
+			result += "; 파일 저장소 보관: " + vpath
+		}
+	}
+	return result
+}
+
+// deliverRenderedImage sends a just-rendered PNG over the active channel.
+func deliverRenderedImage(ctx context.Context, pngPath, caption string) error {
+	sendFn := toolctx.MediaSendFuncFromContext(ctx)
+	delivery := toolctx.DeliveryFromContext(ctx)
+	if sendFn == nil || delivery == nil || delivery.Channel == "" || delivery.To == "" {
+		return fmt.Errorf("채널 미연결/배달 대상 없음")
+	}
+	sendCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	defer cancel()
+	return sendFn(sendCtx, delivery, pngPath, "photo", caption, false)
+}
 
 // renderHTMLToPNG screenshots a local HTML file to a PNG via headless Chromium.
 //

@@ -617,10 +617,18 @@ func chartToolSchema() map[string]any {
 	return map[string]any{
 		"type": "object",
 		"properties": map[string]any{
+			"caption": map[string]any{
+				"type":        "string",
+				"description": "send=true일 때 사진 캡션",
+			},
 			"chart_type": map[string]any{
 				"type":        "string",
 				"description": "데이터 성격에 맞게 고른다 — 시간에 따른 추이=line, 점층 누적/면적 강조=area, 항목 간 비교=bar, 전체 대비 구성비(부분의 합=전체)=doughnut. 막대+추세선 콤보는 bar로 두고 한 시리즈에 type:line을 지정.",
 				"enum":        []string{"line", "area", "bar", "doughnut"},
+			},
+			"horizontal": map[string]any{
+				"type":        "boolean",
+				"description": "bar를 가로 방향으로 (항목별 순위·긴 라벨). bar 전용",
 			},
 			"labels": map[string]any{
 				"type":        "array",
@@ -628,6 +636,10 @@ func chartToolSchema() map[string]any {
 				"items": map[string]any{
 					"type": "string",
 				},
+			},
+			"send": map[string]any{
+				"type":        "boolean",
+				"description": "true면 렌더 즉시 사용자에게 사진으로 전송 (별도 send_file 호출 불필요). caption 미지정 시 title 사용",
 			},
 			"series": map[string]any{
 				"type":        "array",
@@ -655,6 +667,10 @@ func chartToolSchema() map[string]any {
 					},
 				},
 			},
+			"stacked": map[string]any{
+				"type":        "boolean",
+				"description": "bar/area 시리즈를 누적으로 (구성비 추이). 여러 시리즈일 때만 의미",
+			},
 			"subtitle": map[string]any{
 				"type":        "string",
 				"description": "제목 아래 보조 설명 한 줄 (선택, 예: '2026년 상반기 · 단위 건')",
@@ -665,7 +681,7 @@ func chartToolSchema() map[string]any {
 			},
 			"y_unit": map[string]any{
 				"type":        "string",
-				"description": "y축 값의 단위 (선택, 예: '건', '만원', '%'). line/area/bar에만 적용.",
+				"description": "값 축 단위 (예: 건, 만원, %). 눈금에 접미사로 표시되고 도넛 범례의 값에도 붙는다",
 			},
 		},
 		"required": []string{"chart_type", "labels", "series"},
@@ -676,6 +692,10 @@ func diagramToolSchema() map[string]any {
 	return map[string]any{
 		"type": "object",
 		"properties": map[string]any{
+			"caption": map[string]any{
+				"type":        "string",
+				"description": "send=true일 때 사진 캡션",
+			},
 			"diagram_type": map[string]any{
 				"type":        "string",
 				"description": "flowchart=절차·흐름·관계·상태도(노드+화살표), gantt=일정(작업별 기간 막대), timeline=연혁·이력·로드맵(시점별 사건). 숫자 비교/추이는 diagram이 아니라 chart를 써라.",
@@ -755,6 +775,10 @@ func diagramToolSchema() map[string]any {
 						},
 					},
 				},
+			},
+			"send": map[string]any{
+				"type":        "boolean",
+				"description": "true면 렌더 즉시 사용자에게 사진으로 전송 (별도 send_file 호출 불필요). caption 미지정 시 title 사용",
 			},
 			"subtitle": map[string]any{
 				"type":        "string",

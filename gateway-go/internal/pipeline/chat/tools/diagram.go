@@ -75,6 +75,10 @@ type diagramParams struct {
 	Edges       []diagramEdge   `json:"edges"`
 	Tasks       []ganttTask     `json:"tasks"`
 	Events      []timelineEvent `json:"events"`
+	// Send delivers the rendered PNG to the user in the same call (photo,
+	// with Caption), removing the separate send_file round-trip.
+	Send    bool   `json:"send"`
+	Caption string `json:"caption"`
 }
 
 // ToolDiagram renders a diagram to a PNG and returns its path for send_file.
@@ -139,8 +143,7 @@ func ToolDiagram() ToolFunc {
 			return "", fmt.Errorf("diagram trim failed: %w", err)
 		}
 
-		return fmt.Sprintf("다이어그램 PNG 생성됨: %s\n이제 send_file(file_path=%q, type=\"photo\", caption=\"...\")로 사용자에게 전송하세요.",
-			pngPath, pngPath), nil
+		return finishRenderedImage(ctx, pngPath, "다이어그램", p.Send, p.Caption, p.Title), nil
 	}
 }
 

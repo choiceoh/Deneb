@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -33,9 +34,23 @@ func TestChartRender_Sample(t *testing.T) {
 			Series: []chartSeries{{Name: "매출", Data: []float64{120, 240, 360, 510, 680, 900}}},
 		}},
 		{"doughnut", chartParams{
-			ChartType: "doughnut", Title: "프로젝트 단계별 구성비",
+			ChartType: "doughnut", Title: "프로젝트 단계별 구성비", YUnit: "건",
 			Labels: []string{"인허가", "공사", "검사", "준공"},
 			Series: []chartSeries{{Name: "비율", Data: []float64{8, 14, 5, 11}}},
+		}},
+		{"stacked-bar", chartParams{
+			ChartType: "bar", Title: "월별 매출 구성 (누적)", YUnit: "백만원", Stacked: true,
+			Labels: []string{"1월", "2월", "3월", "4월"},
+			Series: []chartSeries{
+				{Name: "제품A", Data: []float64{40, 55, 48, 70}},
+				{Name: "제품B", Data: []float64{25, 30, 42, 38}},
+				{Name: "제품C", Data: []float64{12, 18, 15, 22}},
+			},
+		}},
+		{"horizontal-bar", chartParams{
+			ChartType: "bar", Title: "거래처별 발주액 순위", YUnit: "만원", Horizontal: true,
+			Labels: []string{"현대차", "탑솔라", "남도에코", "한빛전력"},
+			Series: []chartSeries{{Name: "발주액", Data: []float64{4200, 3100, 1800, 950}}},
 		}},
 	}
 	for _, c := range cases {
@@ -52,5 +67,74 @@ func TestChartRender_Sample(t *testing.T) {
 			t.Fatalf("%s: render: %v", c.name, err)
 		}
 		t.Logf("%s -> %s", c.name, pngPath)
+	}
+}
+
+// Stacked/horizontal flow into the Chart.js config: stacked marks both scales,
+// horizontal flips indexAxis and moves the value axis (beginAtZero) to x.
+func TestChartConfig_StackedAndHorizontal(t *testing.T) {
+	p := chartParams{
+		ChartType: "bar",
+		Labels:    []string{"a", "b"},
+		Series: []chartSeries{
+			{Name: "s1", Data: []float64{1, 2}},
+			{Name: "s2", Data: []float64{3, 4}},
+		},
+		Stacked:    true,
+		Horizontal: true,
+	}
+	cfg, err := chartConfig(p)
+	if err != nil {
+		t.Fatalf("chartConfig: %v", err)
+	}
+	opts := cfg["options"].(map[string]any)
+	if opts["indexAxis"] != "y" {
+		t.Errorf("horizontal must set indexAxis=y, got %v", opts["indexAxis"])
+	}
+	scales := opts["scales"].(map[string]any)
+	x := scales["x"].(map[string]any)
+	y := scales["y"].(map[string]any)
+	if x["stacked"] != true || y["stacked"] != true {
+		t.Errorf("stacked must mark both scales: x=%v y=%v", x["stacked"], y["stacked"])
+	}
+	// Horizontal: value axis (beginAtZero) is x, category axis is y.
+	if x["beginAtZero"] != true {
+		t.Errorf("horizontal must put the value axis on x: %v", x)
+	}
+	if _, ok := y["beginAtZero"]; ok {
+		t.Errorf("category axis must not carry beginAtZero: %v", y)
+	}
+}
+
+// The HTML page carries the JS runtime that labels doughnut segments and
+// suffixes value ticks with y_unit (JSON config can't hold callbacks).
+func TestBuildChartHTML_RuntimeWiring(t *testing.T) {
+	p := chartParams{
+		ChartType: "doughnut",
+		Labels:    []string{"인허가", "공사"},
+		YUnit:     "건",
+		Series:    []chartSeries{{Data: []float64{3, 7}}},
+	}
+	html, err := buildChartHTML(p)
+	if err != nil {
+		t.Fatalf("buildChartHTML: %v", err)
+	}
+	for _, want := range []string{`const Y_UNIT = "건"`, "segLabels", "ticks.callback"} {
+		if !strings.Contains(html, want) {
+			t.Errorf("chart html missing %q", want)
+		}
+	}
+}
+
+// send=true without a connected channel degrades to the send_file instruction
+// (the render succeeded — never fail the call at delivery stage).
+func TestFinishRenderedImage_SendWithoutChannel(t *testing.T) {
+	out := finishRenderedImage(context.Background(), "/tmp/x.png", "차트", true, "", "제목")
+	if !strings.Contains(out, "자동 전송 실패") || !strings.Contains(out, "send_file") {
+		t.Errorf("expected graceful degradation to send_file instruction, got: %q", out)
+	}
+	out = finishRenderedImage(context.Background(), "/tmp/x.png", "차트", false, "", "")
+	if !strings.Contains(out, "send_file") || strings.Contains(out, "자동 전송 실패") {
+		t.Errorf("send=false must keep the classic instruction, got: %q", out)
 	}
 }
