@@ -127,8 +127,9 @@ class DenebNotificationListenerService : NotificationListenerService() {
     // Keyed per package+line; a much longer window than the event dedup because the
     // retained list persists across many updates. Trade-off: a genuinely repeated
     // identical line ("네") within the window is dropped from the event — acceptable
-    // for proactive sensing. Observing a line refreshes its timestamp, so a payload
-    // that keeps re-posting stays stale.
+    // for proactive sensing. Observing a line refreshes its timestamp (the window
+    // slides), so a payload that keeps re-posting keeps being suppressed — a line
+    // only becomes forwardable again after it has been absent for a full window.
     private val forwardedLines = object : LinkedHashMap<String, Long>(128, 0.75f, true) {
         override fun removeEldestEntry(eldest: Map.Entry<String, Long>): Boolean = size > MAX_LINE_KEYS
     }
