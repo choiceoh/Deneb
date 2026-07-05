@@ -176,6 +176,11 @@ type Server struct {
 	// call start() unconditionally; the service is a no-op.
 	calendarBriefing *calendarBriefingService
 
+	// meetingHarvest asks "회의 어떻게 됐어요?" after work-linked calendar events
+	// end, pulling meeting/call outcomes into the wiki flywheel (mail is only
+	// half the negotiation). nil-safe start(); see meeting_harvest.go.
+	meetingHarvest *meetingHarvestService
+
 	// mailIngestHealth stores mailIngestHealth when LMTP ingest is enabled so
 	// /health exposes archive-context degradation instead of leaving it in logs.
 	mailIngestHealth     atomic.Value

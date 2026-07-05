@@ -177,6 +177,14 @@ func (d proactiveRelayDeps) relayNativeTo(sessionKey, content string) (bool, err
 type proactiveRelayOptions struct {
 	collapse       bool
 	workFeedSource string
+	// mirrorTranscript also appends the body to the client:main transcript
+	// even when the work feed would normally take the delivery alone
+	// (feed-only doctrine). Question producers (meeting harvest) need this:
+	// miniapp.workfeed.answer routes only the user's typed answer back as the
+	// next main-session prompt, so unless the question itself is mirrored
+	// into the transcript, the agent receives "승인됐어요" with no clue which
+	// meeting/project it refers to and cannot file the outcome.
+	mirrorTranscript bool
 }
 
 // relayNativeToOpts is relayNativeTo with the collapse switch: when collapse is
@@ -258,7 +266,7 @@ func (d proactiveRelayDeps) relayNativeToOptions(sessionKey, content string, opt
 	// of pushed reports. The feed card carries the full body, read in the 피드 screen
 	// (PR #2448). Sub-sessions (e.g. a dream side-thread) and the no-feed-store
 	// fallback still mirror into their transcript so nothing is silently dropped.
-	feedOnly := target == nativeWorkSessionKey && d.workFeed != nil
+	feedOnly := target == nativeWorkSessionKey && d.workFeed != nil && !opts.mirrorTranscript
 
 	if !feedOnly {
 		if d.transcriptStore == nil {

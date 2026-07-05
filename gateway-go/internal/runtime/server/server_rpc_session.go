@@ -585,6 +585,49 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 		// capped, git-snapshotted merges. Production state dir only.
 		s.registerWikiReviewTask(homeDir)
 
+		// Post-meeting harvest: after a project/counterparty-linked calendar
+		// event ends, push ONE follow-up question ("결과 한 줄로 알려주세요")
+		// into the main transcript so the outcome lands in the wiki flywheel
+		// instead of evaporating. Deterministic matchers, 2/day cap, 08–21 KST
+		// — see meeting_harvest.go. PRODUCTION ONLY: dev live-test gateways
+		// share the prod transcript dir (homeDir-based), so a dev instance
+		// running this would double-ask the operator with its own state.
+		if os.Getenv("DENEB_MEETING_HARVEST_DISABLE") != "1" {
+			if stateDir, ok := s.productionStateDir(homeDir); ok {
+				s.meetingHarvest = newMeetingHarvestService(
+					// mirrorTranscript: the question must land in the
+					// client:main transcript too — the feed answer path sends
+					// only the user's typed reply as the next prompt, and the
+					// filing loop needs the question (with project name) right
+					// above it in context.
+					func(text string) (bool, error) {
+						return s.proactiveRelay.relayNativeToOptions("", text,
+							proactiveRelayOptions{mirrorTranscript: true})
+					},
+					resolveBriefingCalendarClient,
+					func(text string) string {
+						st := s.wikiStore
+						if st == nil {
+							return ""
+						}
+						if refs := st.MatchProjectsInText(text, 1); len(refs) > 0 {
+							return refs[0].Name
+						}
+						if cps := st.MatchCounterpartiesInText(text, 1); len(cps) > 0 {
+							return cps[0].Name
+						}
+						// Terse real-world titles ("비금도 … 견학") never contain
+						// the full compound project name — recover via unique
+						// token containment (ambiguous tokens resolve to none).
+						return looseUniqueProjectMatch(text, st.KnownProjects())
+					},
+					filepath.Join(stateDir, harvestStateFile),
+					s.logger,
+				)
+				s.meetingHarvest.start(s.ShutdownCtx())
+			}
+		}
+
 		// Model tuner: every 6h, aggregate the last 24h of agent logs by
 		// model, auto-apply the bounded output-token floor for models that
 		// keep hitting the ceiling, and calibrate newly served vLLM models.
