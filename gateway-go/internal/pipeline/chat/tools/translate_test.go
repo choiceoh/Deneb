@@ -4,13 +4,27 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 )
+
+type deepLRoundTripFunc func(*http.Request) (*http.Response, error)
+
+func (fn deepLRoundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return fn(req)
+}
+
+func deepLTestResponse(status int, body string) *http.Response {
+	return &http.Response{
+		StatusCode: status,
+		Header:     make(http.Header),
+		Body:       io.NopCloser(strings.NewReader(body)),
+	}
+}
 
 func TestParseTranslations(t *testing.T) {
 	cases := []struct {
@@ -199,42 +213,44 @@ func TestTranslateBatchDeepL_TextAndParts(t *testing.T) {
 	var sawTarget string
 	var sawTexts []string
 	var sawContext string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	deeplHTTPClient = &http.Client{Transport: deepLRoundTripFunc(func(r *http.Request) (*http.Response, error) {
+		if got := r.URL.String(); got != defaultDeepLTranslateURL {
+			t.Errorf("url=%q want %q", got, defaultDeepLTranslateURL)
+			return deepLTestResponse(http.StatusBadRequest, `{"message":"bad url"}`), nil
+		}
 		if r.Method != http.MethodPost {
 			t.Errorf("method=%s want POST", r.Method)
-			http.Error(w, "bad method", http.StatusMethodNotAllowed)
-			return
+			return deepLTestResponse(http.StatusMethodNotAllowed, `{"message":"bad method"}`), nil
 		}
 		if got := r.Header.Get("Authorization"); got != "DeepL-Auth-Key test-key" {
 			t.Errorf("authorization=%q", got)
-			http.Error(w, "bad auth", http.StatusUnauthorized)
-			return
+			return deepLTestResponse(http.StatusUnauthorized, `{"message":"bad auth"}`), nil
 		}
 		if got := r.Header.Get("Content-Type"); !strings.HasPrefix(got, "application/x-www-form-urlencoded") {
 			t.Errorf("content-type=%q", got)
-			http.Error(w, "bad content type", http.StatusBadRequest)
-			return
+			return deepLTestResponse(http.StatusBadRequest, `{"message":"bad content type"}`), nil
 		}
 		if err := r.ParseForm(); err != nil {
 			t.Errorf("ParseForm: %v", err)
-			http.Error(w, "bad form", http.StatusBadRequest)
-			return
+			return deepLTestResponse(http.StatusBadRequest, `{"message":"bad form"}`), nil
 		}
 		sawTarget = r.Form.Get("target_lang")
 		sawTexts = append([]string(nil), r.Form["text"]...)
 		sawContext = r.Form.Get("context")
-		_ = json.NewEncoder(w).Encode(map[string]any{
+		body, err := json.Marshal(map[string]any{
 			"translations": []map[string]string{
 				{"text": "안녕 "},
 				{"text": "세계"},
 				{"text": "더 보기"},
 			},
 		})
-	}))
-	defer srv.Close()
-	deeplHTTPClient = srv.Client()
+		if err != nil {
+			t.Errorf("marshal response: %v", err)
+			return deepLTestResponse(http.StatusInternalServerError, `{"message":"marshal"}`), nil
+		}
+		return deepLTestResponse(http.StatusOK, string(body)), nil
+	})}
 	t.Setenv("DEEPL_API_KEY", "test-key")
-	t.Setenv("DEEPL_API_URL", srv.URL)
 
 	out, ok := translateBatchDeepL(context.Background(), []translateInput{
 		{Text: "Hello world", Parts: []string{"Hello ", "world"}, Context: "Greeting block", Role: "body"},
@@ -270,15 +286,17 @@ func TestTranslateBatchDeepLMismatchFallsBack(t *testing.T) {
 	oldClient := deeplHTTPClient
 	defer func() { deeplHTTPClient = oldClient }()
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode(map[string]any{
+	deeplHTTPClient = &http.Client{Transport: deepLRoundTripFunc(func(r *http.Request) (*http.Response, error) {
+		body, err := json.Marshal(map[string]any{
 			"translations": []map[string]string{{"text": "하나뿐"}},
 		})
-	}))
-	defer srv.Close()
-	deeplHTTPClient = srv.Client()
+		if err != nil {
+			t.Errorf("marshal response: %v", err)
+			return deepLTestResponse(http.StatusInternalServerError, `{"message":"marshal"}`), nil
+		}
+		return deepLTestResponse(http.StatusOK, string(body)), nil
+	})}
 	t.Setenv("DEEPL_API_KEY", "test-key")
-	t.Setenv("DEEPL_API_URL", srv.URL)
 
 	out, ok := translateBatchDeepL(context.Background(), []translateInput{
 		{Text: "Hello"},
@@ -286,6 +304,30 @@ func TestTranslateBatchDeepLMismatchFallsBack(t *testing.T) {
 	}, "Korean")
 	if ok || out != nil {
 		t.Fatalf("out=%v ok=%v, want nil,false", out, ok)
+	}
+}
+
+func TestDeepLTranslateEndpoint(t *testing.T) {
+	t.Setenv("DEEPL_API_URL", "")
+	if got := deepLTranslateEndpoint(); got != defaultDeepLTranslateURL {
+		t.Fatalf("default endpoint=%q want %q", got, defaultDeepLTranslateURL)
+	}
+
+	t.Setenv("DEEPL_API_URL", "https://api-free.deepl.com/v2/translate")
+	if got := deepLTranslateEndpoint(); got != "https://api-free.deepl.com/v2/translate" {
+		t.Fatalf("free endpoint=%q", got)
+	}
+
+	for _, bad := range []string{
+		"http://api.deepl.com/v2/translate",
+		"https://127.0.0.1/v2/translate",
+		"https://api.deepl.com/admin",
+		"https://api.deepl.com/v2/translate?x=1",
+	} {
+		t.Setenv("DEEPL_API_URL", bad)
+		if got := deepLTranslateEndpoint(); got != "" {
+			t.Fatalf("bad endpoint %q returned %q", bad, got)
+		}
 	}
 }
 

@@ -46,9 +46,9 @@ func translateBatchDeepL(ctx context.Context, batch []translateInput, lang strin
 	if target == "" {
 		return nil, false
 	}
-	endpoint := strings.TrimSpace(os.Getenv("DEEPL_API_URL"))
+	endpoint := deepLTranslateEndpoint()
 	if endpoint == "" {
-		endpoint = defaultDeepLTranslateURL
+		return nil, false
 	}
 
 	out, partOut, texts, mapping := flattenDeepLInputs(batch)
@@ -127,19 +127,21 @@ func callDeepL(ctx context.Context, endpoint, key, target string, texts []string
 	if contextHint != "" {
 		form.Set("context", contextHint)
 	}
+	//nolint:gosec // endpoint is restricted to official DeepL translate hosts by deepLTranslateEndpoint.
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(form.Encode()))
 	if err != nil {
 		return nil, false
 	}
 	req.Header.Set("Authorization", "DeepL-Auth-Key "+key)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	//nolint:gosec // req URL comes from the same DeepL-only endpoint gate above.
 	resp, err := deeplHTTPClient.Do(req)
 	if err != nil {
 		return nil, false
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		io.Copy(io.Discard, io.LimitReader(resp.Body, 4<<10))
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4<<10))
 		return nil, false
 	}
 	var payload deepLTranslationResponse
@@ -151,6 +153,33 @@ func callDeepL(ctx context.Context, endpoint, key, target string, texts []string
 		out[i] = tr.Text
 	}
 	return out, true
+}
+
+func deepLTranslateEndpoint() string {
+	endpoint := strings.TrimSpace(os.Getenv("DEEPL_API_URL"))
+	if endpoint == "" {
+		return defaultDeepLTranslateURL
+	}
+	if isDeepLTranslateEndpoint(endpoint) {
+		return endpoint
+	}
+	return ""
+}
+
+func isDeepLTranslateEndpoint(raw string) bool {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return false
+	}
+	if u.Scheme != "https" || u.RawQuery != "" || u.Fragment != "" {
+		return false
+	}
+	switch strings.ToLower(u.Hostname()) {
+	case "api.deepl.com", "api-free.deepl.com":
+	default:
+		return false
+	}
+	return strings.TrimRight(u.EscapedPath(), "/") == "/v2/translate"
 }
 
 func deepLContext(batch []translateInput) string {
