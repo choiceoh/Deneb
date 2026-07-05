@@ -122,13 +122,13 @@ func TestComposeHeartbeatBody_ResearchLane(t *testing.T) {
 	nudge := "[리서치 레인] 다이제스트"
 
 	// Nudge-only: agenda note appended (no user tasks in HEARTBEAT.md).
-	body := composeHeartbeatBody("", "", nudge)
+	body := composeHeartbeatBody("", "", "", nudge)
 	if !strings.Contains(body, nudge) || !strings.Contains(body, "등록된 작업은 없습니다") {
 		t.Errorf("nudge-only body wrong:\n%s", body)
 	}
 
 	// All three: signals first, user tasks, then research lane; no note.
-	body = composeHeartbeatBody("신호", "- 작업", nudge)
+	body = composeHeartbeatBody("신호", "- 작업", "", nudge)
 	si, ci, ni := strings.Index(body, "신호"), strings.Index(body, "- 작업"), strings.Index(body, nudge)
 	if !(si >= 0 && si < ci && ci < ni) {
 		t.Errorf("section order wrong (signal=%d content=%d nudge=%d):\n%s", si, ci, ni, body)
