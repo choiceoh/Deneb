@@ -18,9 +18,9 @@ import (
 type PhoneActionFunc func(ctx context.Context, action string, args map[string]string) error
 
 // phoneWriteParams is the phone_write tool input. `to` selects the operation:
-// the SSH-backed ones (notification/tts/clipboard) stay as-is for now; the
-// Intent-backed P1 actions (open_url/open_app/share/message/dial/photo) route
-// through PhoneActionFunc to the app.
+// the app-permission ops (notify/speak/clipboard) run via platform services;
+// the Intent-backed actions (open_url/open_app/share/message/dial/photo/
+// alarm/timer) route through PhoneActionFunc to the app.
 type phoneWriteParams struct {
 	To     string `json:"to"`
 	Target string `json:"target"` // url / package / phone number, per action
@@ -115,8 +115,8 @@ func buildPhoneAction(p phoneWriteParams) (string, map[string]string, error) {
 		if err != nil {
 			return "", nil, err
 		}
-		args["hour"] = fmt.Sprintf("%d", hh)
-		args["minute"] = fmt.Sprintf("%d", mm)
+		args["hour"] = strconv.Itoa(hh)
+		args["minute"] = strconv.Itoa(mm)
 		if text != "" {
 			args["label"] = text
 		}
@@ -125,7 +125,7 @@ func buildPhoneAction(p phoneWriteParams) (string, map[string]string, error) {
 		if err != nil {
 			return "", nil, err
 		}
-		args["seconds"] = fmt.Sprintf("%d", secs)
+		args["seconds"] = strconv.Itoa(secs)
 		if text != "" {
 			args["label"] = text
 		}
@@ -133,38 +133,40 @@ func buildPhoneAction(p phoneWriteParams) (string, map[string]string, error) {
 	return action, args, nil
 }
 
-// alarmTimeRe matches a strict 24h "HH:MM" / "H:MM" — no trailing junk.
-var alarmTimeRe = regexp.MustCompile(`^(\d{1,2}):(\d{2})$`)
+// alarmTimeRe matches a 24h clock time "H:MM"/"HH:MM"/"H:M" — no trailing junk.
+// Minute accepts one or two digits (symmetric with the hour) so a model
+// emitting "7:5" for 07:05 still lands.
+var alarmTimeRe = regexp.MustCompile(`^(\d{1,2}):(\d{1,2})$`)
 
-// parseAlarmTime parses a 24h "HH:MM" (or "H:MM") alarm time.
+// parseAlarmTime parses a 24h clock time for the alarm action.
 func parseAlarmTime(s string) (hour, minute int, err error) {
 	m := alarmTimeRe.FindStringSubmatch(s)
 	if m == nil {
-		return 0, 0, fmt.Errorf(`alarm target %q must be 24h "HH:MM" (예: "07:00")`, s)
+		return 0, 0, fmt.Errorf(`alarm target %q must be a 24h clock time like "07:00"`, s)
 	}
 	hour, _ = strconv.Atoi(m[1])
 	minute, _ = strconv.Atoi(m[2])
 	if hour > 23 || minute > 59 {
-		return 0, 0, fmt.Errorf("alarm target %q out of range (00:00–23:59)", s)
+		return 0, 0, fmt.Errorf("alarm target %q out of range (00:00-23:59)", s)
 	}
 	return hour, minute, nil
 }
 
-// parseTimerSeconds parses a timer duration: Go-style ("10m", "90s", "1h30m")
-// or a bare number meaning minutes ("10" → 600s). Bounded to 24h.
+// parseTimerSeconds parses a timer duration with an EXPLICIT unit ("10m",
+// "90s", "1h30m"), bounded to 1s-24h. A bare number is rejected on purpose:
+// "90" is ambiguous (the user said seconds, the schema said minutes) and a
+// silent 60x mistake sets a 90-minute timer for a 90-second request — an
+// explicit-unit error makes the model retry correctly instead.
 func parseTimerSeconds(s string) (int, error) {
 	if s == "" {
-		return 0, fmt.Errorf(`timer needs target as a duration (예: "10m", "90s", "1h30m", 분 단위 숫자)`)
-	}
-	if mins, err := strconv.Atoi(s); err == nil {
-		s = fmt.Sprintf("%dm", mins)
+		return 0, fmt.Errorf(`timer needs target as a duration with an explicit unit like "10m", "90s", "1h30m"`)
 	}
 	d, err := time.ParseDuration(s)
 	if err != nil {
-		return 0, fmt.Errorf(`timer target %q must be a duration (예: "10m", "90s", "1h30m")`, s)
+		return 0, fmt.Errorf(`timer target %q must be a duration with an explicit unit like "10m", "90s", "1h30m" (bare numbers are ambiguous and rejected)`, s)
 	}
 	if d < time.Second || d > 24*time.Hour {
-		return 0, fmt.Errorf("timer target %q out of range (1s–24h)", s)
+		return 0, fmt.Errorf("timer target %q out of range (1s-24h)", s)
 	}
 	return int(d / time.Second), nil
 }

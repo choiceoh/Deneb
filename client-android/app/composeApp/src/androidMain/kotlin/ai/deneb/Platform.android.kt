@@ -209,9 +209,12 @@ actual fun executePhoneAction(action: String, args: Map<String, String>): Boolea
         // timer silently — the gateway already validated hour/minute/seconds,
         // and a voice-driven "7시에 깨워줘" must not strand a form on screen.
         "alarm" -> Intent(android.provider.AlarmClock.ACTION_SET_ALARM).apply {
+            // Both fields are required: a minute that silently defaulted to 0
+            // would schedule 7:00 for a 7:45 request — fail the action instead.
             val hour = args["hour"]?.toIntOrNull() ?: return false
+            val minute = args["minute"]?.toIntOrNull() ?: return false
             putExtra(android.provider.AlarmClock.EXTRA_HOUR, hour)
-            putExtra(android.provider.AlarmClock.EXTRA_MINUTES, args["minute"]?.toIntOrNull() ?: 0)
+            putExtra(android.provider.AlarmClock.EXTRA_MINUTES, minute)
             args["label"]?.takeIf { it.isNotBlank() }
                 ?.let { putExtra(android.provider.AlarmClock.EXTRA_MESSAGE, it) }
             putExtra(android.provider.AlarmClock.EXTRA_SKIP_UI, true)
