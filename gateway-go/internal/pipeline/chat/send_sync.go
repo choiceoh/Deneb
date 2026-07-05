@@ -46,7 +46,10 @@ func (r *SyncResult) BestText() string {
 	if d := strings.TrimSpace(StripSilentToken(r.DeliverableText)); d != "" {
 		return d
 	}
-	if t := strings.TrimSpace(r.Text); t != "" {
+	// Text needs the silent strip too: a final turn of exactly NO_REPLY with an
+	// empty DeliverableText would otherwise return the literal marker here,
+	// contradicting the "never leaks to the client" contract above.
+	if t := strings.TrimSpace(StripSilentToken(r.Text)); t != "" {
 		return t
 	}
 	return strings.TrimSpace(StripSilentToken(r.AllText))
@@ -277,11 +280,7 @@ func (h *Handler) SendSync(ctx context.Context, sessionKey, message, model strin
 	if err != nil {
 		return nil, err
 	}
-	// Coding sessions: checkpoint + verify the worktree after the turn (the
-	// native client's chat path is this sync one, not the async lifecycle).
-	maybeCodingTurnEnd(deps, params, result.Text, h.logger)
-	// Auto-diary + dream-turn trigger (same sync-path gap as the coding hook).
-	maybeRecordRunDiary(deps, params, result.AgentResult, h.logger)
+	finishTurnSideEffects(deps, params, result.AgentResult, h.logger)
 	res, err := h.buildSyncResult(model, result)
 	if err == nil {
 		h.autoTitleSessionAsync(sessionKey, message, res)
@@ -373,11 +372,7 @@ func (h *Handler) SendSyncStream(ctx context.Context, sessionKey, message, model
 	if err != nil {
 		return nil, err
 	}
-	// Coding sessions: checkpoint + verify the worktree after the turn (mirrors
-	// SendSync — the streaming native path must not lose the safety net).
-	maybeCodingTurnEnd(deps, params, result.Text, h.logger)
-	// Auto-diary + dream-turn trigger (same sync-path gap as the coding hook).
-	maybeRecordRunDiary(deps, params, result.AgentResult, h.logger)
+	finishTurnSideEffects(deps, params, result.AgentResult, h.logger)
 	res, err := h.buildSyncResult(model, result)
 	if err == nil {
 		h.autoTitleSessionAsync(sessionKey, message, res)
