@@ -134,6 +134,13 @@ func (t *heartbeatTask) Run(ctx context.Context) error {
 	}
 
 	content := t.readHeartbeat()
+	// Scaffolding-only files (just section headers / archived items) count as
+	// empty: production 2026-07-05 showed a file holding only "## Active Tasks"
+	// kept every 30-min tick paying a full ~29K-token cloud turn — roughly half
+	// the day's model spend — to conclude there was nothing to do.
+	if !heartbeatHasTasks(content) {
+		content = ""
+	}
 
 	// Proactive signal pass: cheap, runs before the LLM turn. Detected anomalies
 	// (calendar conflicts, imminent meetings, …) both enrich a HEARTBEAT.md run
@@ -143,6 +150,7 @@ func (t *heartbeatTask) Run(ctx context.Context) error {
 
 	// Nothing to do: no user-configured checks and no escalation-worthy signals.
 	if !heartbeatShouldRun(content, signalSummary) {
+		t.logger.Debug("heartbeat: skipped, no actionable tasks or signals")
 		return nil
 	}
 	if signalSummary != "" {
@@ -197,6 +205,31 @@ func (t *heartbeatTask) detectSignalSummary(ctx context.Context) string {
 // Pure for unit testing.
 func heartbeatShouldRun(content, signalSummary string) bool {
 	return strings.TrimSpace(content) != "" || strings.TrimSpace(signalSummary) != ""
+}
+
+// heartbeatHasTasks reports whether HEARTBEAT.md carries anything the agent
+// should act on. Blank lines, markdown headers ("## Active Tasks"), full-line
+// HTML comments, and everything under an "## archive" section are scaffolding
+// — the file template survives an emptied task list, and archived items are by
+// definition parked. Only a remaining content line makes the tick worth a turn.
+func heartbeatHasTasks(content string) bool {
+	inArchive := false
+	for _, line := range strings.Split(content, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		if strings.HasPrefix(trimmed, "#") {
+			section := strings.TrimSpace(strings.TrimLeft(trimmed, "# "))
+			inArchive = strings.EqualFold(section, "archive")
+			continue
+		}
+		if inArchive || strings.HasPrefix(trimmed, "<!--") {
+			continue
+		}
+		return true
+	}
+	return false
 }
 
 // composeHeartbeatBody builds the trigger body from the (optional) signal summary

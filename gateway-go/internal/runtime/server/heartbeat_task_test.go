@@ -157,3 +157,28 @@ func TestHeartbeatTriggerTemplate_doesNotPromoteFSWrite(t *testing.T) {
 	// fs.write may appear in a "do not use this" warning context, but the
 	// template's update instruction must stand on heartbeat_update.
 }
+
+// A scaffolding-only HEARTBEAT.md (section headers, comments, archived items)
+// must not count as tasks — production 2026-07-05: a file holding only
+// "## Active Tasks" kept every 30-min tick paying a full ~29K-token cloud turn.
+func TestHeartbeatHasTasks(t *testing.T) {
+	cases := []struct {
+		name    string
+		content string
+		want    bool
+	}{
+		{"empty", "", false},
+		{"header only", "## Active Tasks", false},
+		{"headers and blanks", "# HEARTBEAT\n\n## Active Tasks\n\n", false},
+		{"comment only", "## Active Tasks\n<!-- 여기에 작업을 적으세요 -->", false},
+		{"archive only", "## Active Tasks\n\n## archive\n- [완료 07-01] 옛 작업", false},
+		{"real task", "## Active Tasks\n- 매일 18시 진코솔라 회신 확인", true},
+		{"task after archive section resumes", "## archive\n- 옛 작업\n\n## Active Tasks\n- 새 작업", true},
+		{"plain text without headers", "진코솔라 LC 개설 진행 상황 점검", true},
+	}
+	for _, tc := range cases {
+		if got := heartbeatHasTasks(tc.content); got != tc.want {
+			t.Errorf("%s: heartbeatHasTasks = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
