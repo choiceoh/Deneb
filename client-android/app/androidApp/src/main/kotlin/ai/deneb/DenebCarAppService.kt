@@ -20,14 +20,13 @@ import androidx.car.app.validation.HostValidator
  * Desktop Head Unit keeps working without a signed host.
  */
 class DenebCarAppService : CarAppService() {
-    override fun createHostValidator(): HostValidator =
-        if ((applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
-            HostValidator.ALLOW_ALL_HOSTS_VALIDATOR
-        } else {
-            HostValidator.Builder(applicationContext)
-                .addAllowedHosts(androidx.car.app.R.array.hosts_allowlist_sample)
-                .build()
-        }
+    override fun createHostValidator(): HostValidator = if ((applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
+        HostValidator.ALLOW_ALL_HOSTS_VALIDATOR
+    } else {
+        HostValidator.Builder(applicationContext)
+            .addAllowedHosts(androidx.car.app.R.array.hosts_allowlist_sample)
+            .build()
+    }
 
     override fun onCreateSession(): Session = object : Session() {
         override fun onCreateScreen(intent: android.content.Intent): Screen = DenebCarFeedScreen(carContext)
