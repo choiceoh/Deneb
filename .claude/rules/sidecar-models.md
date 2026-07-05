@@ -191,12 +191,20 @@ Hindsight(Hermes 계열 FastAPI+pgvector 장기기억 서비스)는 **2026-06-15
 
 > ★★**왜 anthropic 말고 openai 인가 (2026-06-15 교훈, 2026-07-03 갱신)**: anthropic 으로 모으려면 별도 `wormhole-anthropic` provider(baseUrl `:18800` 무 /v1, 클라가 `/v1/messages` 부착, wormhole 은 url 뒤 `/messages`)가 필요한데 이건 **loopback-anthropic 라 `/v1/models` 가 없다(404)**. 당시엔 모델 피커 프로브·modelrole 레지스트리 해석이 `/v1/models` 에 의존해 glm 이 피커에 안 뜨고 resolve 가 실패했다. **백엔드가 openai 호환 엔드포인트를 가지면 그걸로 openai 라우팅하는 게 여전히 1순위** — /v1/models 가 있어 발견·윈도우 프로브까지 전부 공짜. 단 그 뒤 코드가 바뀌어(카탈로그 우선 `resolveModelConfig`, 선언 모델 렌더, 프로브 non-200=reachable-green) **anthropic-only 백엔드는 이제 위 kimi 런북 패턴(빌트인 provider id 유지 + baseUrl 만 wormhole)으로 anthropic 프론트에 태울 수 있다** — cross-protocol 마찰은 openai 백엔드를 굳이 anthropic 으로 모을 때의 문제로 좁혀졌다.
 
+### ★ 사용량 계량 (`/v1/usage`, 2026-07-05)
+> 단일 관문이라 wormhole 이 "이 달 각 모델이 태운 토큰/요청"의 자연스러운 단일 진실원이다 (ClawRouter 패턴 차용). 이전엔 agent-logs 채굴로만 보이던 glm 소비(~3.2M tok/일)를 GET 한 번으로 답한다.
+
+- **동작**: 업스트림 응답의 **바운드 테일 사본**(64KB)에서 usage 프레임(openai `prompt/completion_tokens`·anthropic `input/output_tokens` 양 방언, 마지막 프레임 승)을 베스트에포트 파싱. 월 윈도우(`YYYY-MM`)로 `~/.wormhole/usage.json` 에 영속(atomic replace, 30s 디바운스) — 재시작해도 월 누계 유지.
+- **★ APC/바이트 불변**: 계량은 요청을 절대 안 건드리고(`stream_options.include_usage` 주입 금지 — usage 프레임 없는 스트림은 토큰 0으로 계량, 요청 수는 집계) 응답 스트림도 read-through 사본이라 클라이언트 바이트 무변형.
+- **비용/예산(선택)**: 엔트리 `"pricing":{"inputPerMTokUsd":…,"outputPerMTokUsd":…}` 선언 시 추정 비용 계산, 톱레벨 `"monthlyBudgetUsd"` 선언 시 budget/usedPercent 표기. 어디까지나 표시용 — 예산 초과로 요청을 막지 않는다.
+
 ### 운영 명령
 ```bash
 make wormhole                                    # 빌드
 systemctl --user enable --now wormhole.service   # 상주 (또는 scripts/deploy/start-wormhole.sh start)
 curl -s http://127.0.0.1:18800/health            # ok
 curl -s http://127.0.0.1:18800/v1/models -H "Authorization: Bearer $WORMHOLE_TOKEN"  # 라우팅 테이블(config+발견)
+curl -s http://127.0.0.1:18800/v1/usage -H "Authorization: Bearer $WORMHOLE_TOKEN"   # 이 달 모델별 토큰/요청/비용
 ```
 
 ### 라이브 검증 (메인 경로 cutover 시 필수)

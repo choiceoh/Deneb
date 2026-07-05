@@ -72,6 +72,9 @@ type modelEntry struct {
 	//   (on). GLM honors only reasoning_effort high|max and resolves anything but
 	//   an explicit "high" to MAX, so on-mode pins "high" rather than leaking max.
 	Reasoning string `json:"reasoning,omitempty"`
+	// Pricing optionally declares this entry's per-token cost, consumed ONLY by
+	// GET /v1/usage to estimate spend — it never affects routing.
+	Pricing *modelPricing `json:"pricing,omitempty"`
 	// Vision overrides the builtin image-capability table (vision.go): false
 	// forces image content parts to be stripped to text stubs before forwarding,
 	// true forces pass-through. Nil = builtin table keyed by the upstream model
@@ -110,6 +113,10 @@ type config struct {
 	Auto []string `json:"auto,omitempty"`
 	// AutoName overrides the reserved auto model name (default "auto").
 	AutoName string `json:"autoName,omitempty"`
+	// MonthlyBudgetUSD, when set, is surfaced by GET /v1/usage as the month's
+	// budget line (with usedPercent when entries declare pricing). Advisory
+	// only — wormhole never blocks a request on budget.
+	MonthlyBudgetUSD float64 `json:"monthlyBudgetUsd,omitempty"`
 	// EffortRouting gates the thinking/non-thinking routing globally. Nil (absent)
 	// means ON — a model with a toggleKwarg routes by effort. Set false to turn
 	// the whole feature off without editing every model. Pointer so absent ≠ off.
