@@ -124,12 +124,17 @@ scripts/dev/native-app.sh shot home    # 홈 데이터가 차 있으면 인증 �
 
 > **종료는 PID 기반**(`app_jvm.pid`는 창에서 `getwindowpid`로). `pkill -f <패턴>`은 그 문자열을 argv에 담은 셸까지 죽인다(셸 자살) — 스크립트는 절대 쓰지 않는다.
 
-## 일회성 셋업 (이미 완료됨 — 새 머신에서만)
+## 일회성 셋업 (srv4 에 2026-07-06 완료 — 새 머신에서만)
 
 ```bash
 sudo apt-get install -y xvfb x11vnc novnc websockify matchbox-window-manager \
   fluxbox xdotool scrot x11-utils openjdk-21-jre
 # ANDROID_HOME=~/android-sdk, python3 cryptography (시드용) 필요
+# ★openjdk-21-jre 는 헤드풀 버전이어야 한다 — jdk-headless 만 있으면
+#   libawt_xawt.so 부재로 Compose 창 생성이 UnsatisfiedLinkError 로 죽는다.
+# ★ARM64 는 ~/.gradle/gradle.properties 의 aapt2FromMavenOverride 필수
+#   (release-and-deploy.md 러너 셋업 참조 — 하네스 gradle 빌드도 같은 함정).
+# 실행 위치: ~/deneb-dev (개발 체크아웃). ~/deneb(프로덕션)에서 빌드 금지.
 ```
 
 ## 배포 전 스모크 (`native-app-smoke.sh`)
@@ -149,4 +154,4 @@ sudo apt-get install -y xvfb x11vnc novnc websockify matchbox-window-manager \
 
 - **시스템 제스처**(엣지 스와이프 등)는 재현 불가 — 실기기 필요. 관련: [[reference_native_client_build_verify]], [[reference_native_nested_drawer_gesture]].
 - 빌드가 매번 `client-android/app/iosApp/Configuration/Config.xcconfig`(APP_VERSION) 재생성 → **커밋 전 `git checkout --`로 원복**.
-- 단일 사용자·단일 머신 전용(srv1, 구 gx10). 디스플레이 `:99`, noVNC 포트 6080은 Tailnet 한정.
+- 단일 사용자·단일 머신 전용(**srv4** — 2026-07-06 개발/배포 통일로 srv1 에서 이전; 실행 체크아웃은 `~/deneb-dev`). 디스플레이 `:99`, noVNC 포트 6080은 Tailnet 한정.

@@ -1,11 +1,14 @@
 name: Publish APK (OTA)
 
-# Build the foss release APK on the srv1 (formerly gx10) self-hosted runner via
+# Build the foss release APK on the srv4 self-hosted runner (srv4-apk — the
+# gateway host itself since the 2026-07-06 dev/deploy unification) via
 # scripts/dev/publish-apk.sh, which assigns the versionCode under flock and stages
-# the artifact in the runner-local ~/.cache/deneb-apk; a follow-up step rsyncs it
-# to the srv4 gateway's serve dir. This is a thin trigger over the same script the
-# operator runs by hand. The pre-publish native-app smoke gate is skipped here
-# (DENEB_SKIP_SMOKE, see the job env for why) — it is unreliable unattended.
+# the artifact in the runner-local ~/.cache/deneb-apk. Because the runner shares
+# the gateway host, that directory IS the OTA serve dir — the sync step below
+# self-skips and only matters if the runner ever moves off-host again. This is a
+# thin trigger over the same script the operator runs by hand. The pre-publish
+# native-app smoke gate is skipped here (DENEB_SKIP_SMOKE, see the job env for
+# why) — it is unreliable unattended.
 #
 # Auto-runs when a native change lands on main (paths: client-android/**). With the
 # versionCode-only scheme there is no semantic version to gate on -- every shipped
@@ -13,10 +16,10 @@ name: Publish APK (OTA)
 # flock), so merging a native PR is itself the release signal. Also runnable on demand
 # (workflow_dispatch) with custom release notes.
 #
-# Prerequisite: a self-hosted runner on srv1 labeled "gx10" (the label predates the
-# host rename and is pinned in actionlint.yaml), with the Android SDK installed and
-# ssh access to srv4 for the publish sync. One-time setup is documented in
-# docs/agent-rules/release-and-deploy.md.
+# Prerequisite: a self-hosted runner on srv4 labeled "gx10" (the label predates
+# two host renames and is pinned in actionlint.yaml), with the Android SDK,
+# JDK 21, and the ARM64 aapt2 override in ~/.gradle/gradle.properties. One-time
+# setup is documented in docs/agent-rules/release-and-deploy.md.
 # Only push-to-main and manual dispatch trigger this -- never fork pull requests --
 # so untrusted code can never run on the host runner.
 
@@ -93,6 +96,13 @@ jobs:
       - name: Sync published APK to srv4 gateway serve dir
         run: |
           set -euo pipefail
+          # Runner and gateway share srv4 since 2026-07-06: the publish dir IS
+          # the serve dir, so there is nothing to ship. Keep the ssh path only
+          # for a future off-host runner.
+          if [ "$(hostname)" = "srv4" ]; then
+            echo "runner is on the gateway host — publish dir is the serve dir; skip sync"
+            exit 0
+          fi
           d="${DENEB_APK_DIR:-$HOME/.cache/deneb-apk}"
           # Newest APK by mtime. Avoid `ls | head`: under `set -o pipefail` head
           # closing early makes ls fail with SIGPIPE once the serve dir holds many
