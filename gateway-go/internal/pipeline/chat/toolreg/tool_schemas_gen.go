@@ -1584,11 +1584,11 @@ func phoneWriteToolSchema() map[string]any {
 		"properties": map[string]any{
 			"target": map[string]any{
 				"type":        "string",
-				"description": "액션 대상: open_url=URL, open_app=패키지/앱명, message=수신자, dial=전화번호",
+				"description": "액션 대상: open_url=URL, open_app=패키지/앱명, message=수신자, dial=전화번호, alarm=\"HH:MM\"(24h), timer=단위 포함 길이(\"10m\"/\"90s\"/\"1h30m\" — 단위 없는 숫자는 모호해서 거부)",
 			},
 			"text": map[string]any{
 				"type":        "string",
-				"description": "알림/음성/클립보드/공유/문자 텍스트 (notify/speak/clipboard/share/message)",
+				"description": "알림/음성/클립보드/공유/문자 텍스트 (notify/speak/clipboard/share/message), alarm/timer에서는 라벨",
 			},
 			"title": map[string]any{
 				"type":        "string",
@@ -1596,8 +1596,8 @@ func phoneWriteToolSchema() map[string]any {
 			},
 			"to": map[string]any{
 				"type":        "string",
-				"description": "작업(전부 인앱 실행): notify(알림, text 필수·title 선택) | speak(음성, text) | clipboard(클립보드에 넣기, text) | open_url(target=URL) | open_app(target=패키지/앱명) | share(text) | message(target=수신자,text) | dial(target=전화번호) | photo(카메라)",
-				"enum":        []string{"notify", "speak", "clipboard", "open_url", "open_app", "share", "message", "dial", "photo"},
+				"description": "작업(전부 인앱 실행): notify(알림, text 필수·title 선택) | speak(음성, text) | clipboard(클립보드에 넣기, text) | open_url(target=URL) | open_app(target=패키지/앱명) | share(text) | message(target=수신자,text) | dial(target=전화번호) | photo(카메라) | alarm(target=\"HH:MM\" 24h, text=라벨 — 일회성, 반복/매일 알람 미지원이니 사용자에게 안내; \"30분 뒤\"류 상대시간은 timer 사용 또는 현재 시각 기준 HH:MM 계산; Android 전용 — iOS는 미지원, 전송 성공이 실행 보장은 아님) | timer(target=단위 포함 길이 \"10m\"/\"90s\"/\"1h30m\", text=라벨 — 단위 없는 숫자는 거부됨)",
+				"enum":        []string{"notify", "speak", "clipboard", "open_url", "open_app", "share", "message", "dial", "photo", "alarm", "timer"},
 			},
 		},
 		"required": []string{"to"},

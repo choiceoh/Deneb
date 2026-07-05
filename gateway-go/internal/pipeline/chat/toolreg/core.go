@@ -104,7 +104,7 @@ func RegisterPhoneTools(registry toolctx.ToolRegistrar, send tools.PhoneActionFu
 	})
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "phone_write",
-		Description: "사용자 스마트폰에 직접 작용한다(전부 인앱 실행, SSH 불필요). to — notify(알림 띄우기, text 필수·title 선택) | speak(음성으로 말하기, text) | clipboard(클립보드에 넣기, text) | open_url(target=URL) | open_app(target=패키지/앱명) | share(text) | message(target=수신자,text) | dial(target=전화번호) | photo(카메라). 운전 중 음성 안내, 답을 클립보드에 꽂기, 링크/앱 열기, 메시지·전화·사진.",
+		Description: "사용자 스마트폰에 직접 작용한다(전부 인앱 실행, SSH 불필요). to — notify(알림 띄우기, text 필수·title 선택) | speak(음성으로 말하기, text) | clipboard(클립보드에 넣기, text) | open_url(target=URL) | open_app(target=패키지/앱명) | share(text) | message(target=수신자,text) | dial(target=전화번호) | photo(카메라) | alarm(알람 설정, target=\"HH:MM\" 24h, text=라벨 — 일회성·Android 전용, 반복 알람 미지원) | timer(타이머, target=단위 포함 \"10m\"/\"90s\"/\"1h30m\", text=라벨 — 단위 없는 숫자 거부). 운전 중 음성 안내, 답을 클립보드에 꽂기, 링크/앱 열기, 메시지·전화·사진·알람·타이머.",
 		InputSchema: phoneWriteToolSchema(),
 		Fn:          tools.ToolPhoneWrite(send),
 		Deferred:    true,

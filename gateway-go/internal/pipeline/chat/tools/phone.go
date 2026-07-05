@@ -81,8 +81,9 @@ func phoneStateStaleReply(ctx context.Context, send PhoneActionFunc, what string
 
 // ToolPhoneWrite acts on the phone. Every operation is an in-app P1 action
 // now: notify / speak / clipboard plus the Intent actions
-// (open_url/open_app/share/message/dial/photo). Legacy names from the SSH era
-// (notification, tts) are normalized so older transcripts keep working.
+// (open_url/open_app/share/message/dial/photo/alarm/timer). Legacy names from
+// the SSH era (notification, tts) are normalized so older transcripts keep
+// working.
 func ToolPhoneWrite(send PhoneActionFunc) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p phoneWriteParams
@@ -91,7 +92,7 @@ func ToolPhoneWrite(send PhoneActionFunc) ToolFunc {
 		}
 		p.To = normalizePhoneWriteTo(p.To)
 		if !isPhoneAction(p.To) {
-			return "", fmt.Errorf("phone_write: unknown to=%q (notify|speak|clipboard | open_url|open_app|share|message|dial|photo)", p.To)
+			return "", fmt.Errorf("phone_write: unknown to=%q (notify|speak|clipboard | open_url|open_app|share|message|dial|photo|alarm|timer)", p.To)
 		}
 		return dispatchPhoneAction(ctx, send, p)
 	}
