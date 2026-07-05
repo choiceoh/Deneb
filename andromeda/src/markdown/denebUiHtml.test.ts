@@ -3,7 +3,7 @@
 // scenarios; keep all three in sync when the grammar changes.
 import { describe, expect, it } from "vitest";
 
-import { parseDenebUi } from "./denebUiParse";
+import { hasInteractiveNode, parseDenebUi, splitDenebUi } from "./denebUiParse";
 
 describe("parseDenebUi (labeled HTML)", () => {
   it("parses a letter card skeleton", () => {
@@ -136,5 +136,31 @@ describe("parseDenebUi (labeled HTML)", () => {
   it("still parses legacy JSON bodies strictly", () => {
     expect(parseDenebUi('{"type":"text","value":"Hi"}')).toMatchObject({ type: "text", value: "Hi" });
     expect(parseDenebUi('{"type":"a"}\n{"type":"b"}')).toMatchObject({ type: "column" });
+  });
+
+  it("survives a truncated close tag with Unicode case-fold hazards", () => {
+    // Go-side fuzzer regression: "</Code" without '>' + 'İ' whose toLowerCase()
+    // changes string length — the close-tag search must fold ASCII manually.
+    expect(parseDenebUi("<Code>İstanbul x</Code")).toMatchObject({ type: "code", code: "İstanbul x" });
+    expect(parseDenebUi("<markdown>İİİİ 열린 채 끝")).toMatchObject({ type: "markdown", value: "İİİİ 열린 채 끝" });
+  });
+
+  it("hasInteractiveNode distinguishes display trees from forms", () => {
+    expect(hasInteractiveNode(parseDenebUi("<card><text>본문</text><badge>D-2</badge></card>"))).toBe(false);
+    expect(hasInteractiveNode(parseDenebUi(`<card><input id="n" label="이름"/></card>`))).toBe(true);
+    expect(hasInteractiveNode(parseDenebUi(`<tabs><tab label="a"><button event="e">전송</button></tab></tabs>`))).toBe(
+      true,
+    );
+  });
+
+  it("carries the partial body on ui-pending segments for progressive render", () => {
+    const segs = splitDenebUi("머리말\n```deneb-ui\n<column><card><text>부분");
+    const last = segs.at(-1);
+    expect(last?.kind).toBe("ui-pending");
+    if (last?.kind === "ui-pending") {
+      const partial = parseDenebUi(last.body);
+      expect(partial).toMatchObject({ type: "column" });
+      expect(hasInteractiveNode(partial)).toBe(false);
+    }
   });
 });

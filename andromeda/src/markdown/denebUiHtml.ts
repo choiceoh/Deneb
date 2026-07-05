@@ -174,8 +174,7 @@ class Parser {
   }
 
   private captureRawText(name: string, attrs: Record<string, string>) {
-    const lower = this.src.toLowerCase();
-    const end = lower.indexOf("</" + name, this.pos);
+    const end = indexOfCloseTag(this.src, this.pos, name);
     let raw: string;
     if (end < 0) {
       raw = this.src.slice(this.pos);
@@ -489,6 +488,29 @@ function actionFromAttrs(a: Record<string, string>): Node | undefined {
   if (a.toggle) return { type: "toggle", targetId: a.toggle };
   if (a.copy) return { type: "copy_to_clipboard", text: a.copy };
   return undefined;
+}
+
+// Absolute index of the first `</name` at or after `from`, comparing the
+// (ASCII, whitelist-only) tag name case-insensitively via manual folding.
+// Never lowercase the whole source for index math: Unicode case mapping can
+// change string length (e.g. "İ".toLowerCase() === "i̇"), skewing indexes into
+// the original — the fuzzer-found crash in the Go port of this parser.
+function indexOfCloseTag(s: string, from: number, name: string): number {
+  const n = name.length;
+  for (let i = from; i + 2 + n <= s.length; i++) {
+    if (s[i] !== "<" || s[i + 1] !== "/") continue;
+    let match = true;
+    for (let k = 0; k < n; k++) {
+      let c = s.charCodeAt(i + 2 + k);
+      if (c >= 65 && c <= 90) c += 32;
+      if (c !== name.charCodeAt(k)) {
+        match = false;
+        break;
+      }
+    }
+    if (match) return i;
+  }
+  return -1;
 }
 
 function truthy(v: string): boolean {

@@ -232,4 +232,25 @@ class DenebUiHtmlTest {
         val node = assertIs<TextNode>(parseUi("<text>a < b 그리고 c</text>"))
         assertEquals("a < b 그리고 c", node.value)
     }
+
+    @Test
+    fun `raw text with truncated close tag and unicode does not crash`() {
+        // Go-side fuzzer regression: "</Code" without '>' + case-fold length hazard.
+        // Whole-string lowercasing skews indexes when Unicode case mapping changes
+        // length ('İ' → "i̇") — the close-tag search must fold ASCII manually.
+        val truncated = assertIs<CodeNode>(parseUi("<Code>İstanbul x</Code"))
+        assertEquals("İstanbul x", truncated.code)
+        val eof = assertIs<MarkdownNode>(parseUi("<markdown>İİİİ 열린 채 끝"))
+        assertEquals("İİİİ 열린 채 끝", eof.value)
+    }
+
+    @Test
+    fun `hasInteractiveNode distinguishes display trees from forms`() {
+        val display = parseUi("<column><card><text>본문</text><badge>D-2</badge></card></column>")
+        assertEquals(false, display.hasInteractiveNode())
+        val form = parseUi("""<column><card><input id="n" label="이름"/></card></column>""")
+        assertEquals(true, form.hasInteractiveNode())
+        val nested = parseUi("""<tabs><tab label="a"><button event="e">전송</button></tab></tabs>""")
+        assertEquals(true, nested.hasInteractiveNode())
+    }
 }

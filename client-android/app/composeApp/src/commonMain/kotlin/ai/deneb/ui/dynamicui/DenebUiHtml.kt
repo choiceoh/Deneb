@@ -199,8 +199,7 @@ object DenebUiHtml {
         }
 
         private fun captureRawText(name: String, attrs: Map<String, String>) {
-            val lower = src.lowercase()
-            val end = lower.indexOf("</$name", pos)
+            val end = indexOfCloseTag(src, pos, name)
             val raw: String
             if (end < 0) {
                 raw = src.substring(pos)
@@ -213,6 +212,34 @@ object DenebUiHtml {
             val el = OpenElem(name, attrs)
             el.text.add(decodeEntities(raw))
             attach(convert(el))
+        }
+
+        /**
+         * Absolute index of the first `</name` at or after [from], comparing the
+         * (ASCII, whitelist-only) tag name case-insensitively via manual folding.
+         * Never lowercase the whole source for index math: Unicode case mapping
+         * can change string length (e.g. 'İ' → "i̇"), skewing indexes into the
+         * original — the fuzzer-found crash in the Go port of this parser.
+         */
+        private fun indexOfCloseTag(s: String, from: Int, name: String): Int {
+            val n = name.length
+            var i = from
+            while (i + 2 + n <= s.length) {
+                if (s[i] == '<' && s[i + 1] == '/') {
+                    var match = true
+                    for (k in 0 until n) {
+                        var c = s[i + 2 + k]
+                        if (c in 'A'..'Z') c += 32
+                        if (c != name[k]) {
+                            match = false
+                            break
+                        }
+                    }
+                    if (match) return i
+                }
+                i++
+            }
+            return -1
         }
 
         private fun handleClose(name: String) {

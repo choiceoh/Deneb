@@ -5,9 +5,11 @@ import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.DenebChip
 import ai.deneb.ui.components.LocalShowFullScreenImageModel
 import ai.deneb.ui.components.rememberHaptics
+import ai.deneb.ui.dynamicui.DenebUiHtml
 import ai.deneb.ui.dynamicui.DenebUiParser
 import ai.deneb.ui.dynamicui.DenebUiRenderer
 import ai.deneb.ui.dynamicui.FrozenSubmission
+import ai.deneb.ui.dynamicui.hasInteractiveNode
 import ai.deneb.ui.handCursor
 import ai.deneb.ui.markdown.math.MathFormula
 import androidx.compose.foundation.background
@@ -345,8 +347,26 @@ private fun DenebUiPendingBlock(
     frozen: FrozenSubmission?,
 ) {
     if (LocalDenebUiStreaming.current) {
-        // Mid-stream: hold a stable placeholder instead of re-rendering a half-built
-        // form (or the truncation-salvage warning) on every token tick.
+        // Mid-stream, HTML v2 body: partial trees parse cleanly (EOF auto-close), so
+        // paint the card live as it streams — the upgrade the JSON format could never
+        // support. Interactive trees stay on the placeholder below: a half-built form
+        // must not accept taps mid-stream.
+        val trimmed = block.rawBody.trim()
+        if (trimmed.startsWith("<")) {
+            val node = remember(block.rawBody) { DenebUiHtml.parse(trimmed) }
+            if (node != null && !node.hasInteractiveNode()) {
+                DenebUiRenderer(
+                    node = node,
+                    isInteractive = false,
+                    onCallback = onUiCallback,
+                    frozen = frozen,
+                    modifier = Modifier.padding(vertical = 8.dp),
+                )
+                return
+            }
+        }
+        // Legacy JSON stream or an interactive tree: hold a stable placeholder instead
+        // of re-rendering a half-built form on every token tick.
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.padding(vertical = 8.dp),

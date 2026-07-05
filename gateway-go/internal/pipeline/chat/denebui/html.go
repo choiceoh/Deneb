@@ -269,23 +269,51 @@ func (p *htmlParser) handleOpen(name string, attrs map[string]string, selfClose 
 // captureRawText consumes verbatim content for markdown/code up to the literal
 // close tag (case-insensitive); EOF closes implicitly.
 func (p *htmlParser) captureRawText(name string, attrs map[string]string) {
-	lowerSrc := strings.ToLower(p.src)
-	end := strings.Index(lowerSrc[p.pos:], "</"+name)
+	end := indexOfCloseTag(p.src, p.pos, name)
 	var raw string
 	if end < 0 {
 		raw = p.src[p.pos:]
 		p.pos = len(p.src)
 	} else {
-		raw = p.src[p.pos : p.pos+end]
-		gt := strings.IndexByte(p.src[p.pos+end:], '>')
+		raw = p.src[p.pos:end]
+		gt := strings.IndexByte(p.src[end:], '>')
 		if gt < 0 {
 			p.pos = len(p.src)
 		} else {
-			p.pos = p.pos + end + gt + 1
+			p.pos = end + gt + 1
 		}
 	}
 	el := &openElem{tag: name, attrs: attrs, text: []string{decodeEntities(raw)}}
 	p.attach(convertElem(el, p))
+}
+
+// indexOfCloseTag returns the absolute index of the first "</name" at or after
+// from, comparing the (ASCII, whitelist-only) tag name case-insensitively via
+// manual byte folding. Never lowercase the whole source for index math:
+// Unicode case mapping can change byte length (e.g. 'İ' → "i̇"), skewing
+// indexes into the original string — the fuzzer-found slice panic.
+func indexOfCloseTag(s string, from int, name string) int {
+	n := len(name)
+	for i := from; i+2+n <= len(s); i++ {
+		if s[i] != '<' || s[i+1] != '/' {
+			continue
+		}
+		match := true
+		for k := 0; k < n; k++ {
+			c := s[i+2+k]
+			if c >= 'A' && c <= 'Z' {
+				c += 'a' - 'A'
+			}
+			if c != name[k] {
+				match = false
+				break
+			}
+		}
+		if match {
+			return i
+		}
+	}
+	return -1
 }
 
 func (p *htmlParser) handleClose(name string) {

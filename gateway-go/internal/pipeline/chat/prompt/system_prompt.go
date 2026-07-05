@@ -167,6 +167,11 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		s.WriteString("\"좋은 질문이네요!\" \"기꺼이 도와드리겠습니다\" 같은 빈말 금지. 결과로 신뢰를 쌓아라.\n")
 		s.WriteString("응답 길이는 질문 복잡도에 맞게: 단순 질문 → 1-3문장, 분석/설명 → 구조화된 답변, 작업 보고 → 결과 + 다음 단계.\n")
 		s.WriteString("표가 필요하면 **GitHub 마크다운 표**(`| 항목 | 상태 |` 헤더 + `|---|---|` 구분선)만 써라. `┌─┐│├┼┤└┘` 같은 박스 드로잉/아스키 아트 표는 절대 금지 — 네이티브 앱은 마크다운 표를 제대로 렌더하지만 박스 아트는 한글이 전각(2칸)이라 칸 정렬이 어긋나 깨져 보인다. 칸을 공백으로 손수 맞추지도 마라. 표가 과하면 차라리 짧은 불릿으로 답하라.\n")
+		// deneb-ui rich cards (labeled-HTML wire format; grammar:
+		// docs/research/deneb-ui-html.md). Conservative trigger guidance —
+		// prose stays the default; cards are for structure-is-the-content
+		// replies only. Static block edit = one-time cache invalidation.
+		s.WriteString("구조가 곧 내용인 답변(현황판·일정/목록 브리핑·비교·수치 요약)은 **deneb-ui 카드**로 그릴 수 있다: ```deneb-ui 펜스 안에 라벨 HTML 한 덩어리(루트 `<column>` 하나). 태그는 `column/card/row/text(style: headline·title·body·caption)/ul·li/icon/badge/stat/divider/table·tr·td`, 상호작용은 `button(event=\"…\" 또는 href=\"…\")`/`select`+`option`/`input`(인터랙티브는 id 필수). 예: `<card><row><icon name=\"calendar\" size=\"16\"/><text style=\"caption\">오늘 일정</text></row><ul><li>10:00 — 회의</li></ul></card>`. 카드 안에 백틱·코드펜스 금지(코드는 `<code>` 태그로). 산문이 자연스러우면 산문으로 — 카드 남용 금지, 응답당 최대 1블록, 짧은 답변·일상 대화에는 쓰지 마라.\n")
 		s.WriteString("유저가 '왜 대답이 없었어?' / '방금 뭐라고 했어?'라고 물으면:\n")
 		s.WriteString("- 트랜스크립트에 `[SYSTEM: ... 전송이 확인되지 않았습니다 ...]` 노트가 있으면 그 사실만 그대로 전해라.\n")
 		s.WriteString("- 그런 노트가 없으면 이유를 **지어내지 마라**. '채널이 끊겼었어', '연결이 안 됐어' 같은 추측성 설명 금지. 모르면 모른다고 말하고 본론을 다시 답하라.\n")

@@ -13,7 +13,7 @@
 | `web/` | `web` 도구 백엔드: fetch/HTML 전처리/youtube/검색 escalate/stealth, singleflight+캐시 | — |
 | `streaming/` | `Broadcaster` — 턴 이벤트 SSE 방출 | — |
 | `knowledge/` | `knowledge` 도구 → `domain/knowledge.Router` 얇은 어댑터 | — |
-| `denebui/` | 서버 조립 collapsed 카드(메일 등). 인터랙티브 UI 표면은 축소됨([project_kaiui_server_assembly]) | — |
+| `denebui/` | deneb-ui 블록 검증·저작. wire 포맷 = **라벨 HTML v2**(`html.go`, 그래머: `docs/research/deneb-ui-html.md`; legacy JSON은 구 트랜스크립트 표시용 strict 경로). 서버 조립 collapsed 카드(메일 등) + 시스템 프롬프트 소통 섹션이 일반 응답 카드 사용을 허용([project_kaiui_server_assembly]) | — |
 | `toolpreset/` | 서브에이전트 도구 프리셋(implementer 등) | — |
 
 루스 파일(top-level)은 기능별 클러스터로 읽는다:
