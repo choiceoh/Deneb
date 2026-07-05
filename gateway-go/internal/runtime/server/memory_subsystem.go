@@ -19,4 +19,9 @@ type MemorySubsystem struct {
 	contactsStore   *contacts.Store   // set during registerEarlyMethods()
 	workFeedStore   *workfeed.Store   // set during registerEarlyMethods()
 	nativeSyncStore *nativesync.Store // set during registerEarlyMethods()
+
+	// cpProjects caches the wiki-derived counterparty→projects map for the
+	// mail-analysis party anchor (mail_counterparty.go). Zero value ready;
+	// reads tolerate the late-bound wikiStore.
+	cpProjects counterpartyProjectsCache
 }

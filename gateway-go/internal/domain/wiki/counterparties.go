@@ -15,7 +15,10 @@
 // page bodies, not worth the I/O for a glance marker.)
 package wiki
 
-import "strings"
+import (
+	"sort"
+	"strings"
+)
 
 // freemailDomains are consumer mail hosts whose domain says nothing about the
 // sender's organization. Lowercase.
@@ -85,6 +88,72 @@ func (s *Store) ActiveCounterpartyDomains(cutoff string) map[string]struct{} {
 			}
 			out[d] = struct{}{}
 		}
+	}
+	return out
+}
+
+// maxCounterpartyProjects caps how many linked projects a single domain lists
+// in the mail-analysis party anchor — a glance label, not a ledger.
+const maxCounterpartyProjects = 3
+
+// CounterpartyProjects returns, per active counterparty domain, the distinct
+// project names its project-linked mail analyses belong to — most recently
+// active project first, capped at maxCounterpartyProjects. Same window,
+// created-date, and freemail rules as ActiveCounterpartyDomains (the walks are
+// kept separate on purpose: this one carries per-project recency bookkeeping
+// the boolean set never needs). Deterministic wiki-index walk under the read
+// lock; feeds the mail-analysis party anchor's counterparty labels.
+func (s *Store) CounterpartyProjects(cutoff string) map[string][]string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.index == nil {
+		return map[string][]string{}
+	}
+	// domain → project → latest created (for recency ordering).
+	latest := map[string]map[string]string{}
+	for path, entry := range s.index.Entries {
+		project, ok := ProjectOfLinkedMailAnalysis(path)
+		if !ok {
+			continue
+		}
+		created := entry.Created
+		if created == "" {
+			created = entry.Updated
+		}
+		if created == "" || created < cutoff {
+			continue
+		}
+		for _, tag := range entry.Tags {
+			d := strings.ToLower(strings.TrimSpace(tag))
+			if d == "" || !strings.Contains(d, ".") || IsFreemailDomain(d) {
+				continue
+			}
+			m := latest[d]
+			if m == nil {
+				m = map[string]string{}
+				latest[d] = m
+			}
+			if created > m[project] {
+				m[project] = created
+			}
+		}
+	}
+	out := make(map[string][]string, len(latest))
+	for d, projs := range latest {
+		names := make([]string, 0, len(projs))
+		for p := range projs {
+			names = append(names, p)
+		}
+		sort.Slice(names, func(i, j int) bool {
+			if projs[names[i]] != projs[names[j]] {
+				return projs[names[i]] > projs[names[j]] // newest activity first
+			}
+			return names[i] < names[j] // deterministic tie-break
+		})
+		if len(names) > maxCounterpartyProjects {
+			names = names[:maxCounterpartyProjects]
+		}
+		out[d] = names
 	}
 	return out
 }

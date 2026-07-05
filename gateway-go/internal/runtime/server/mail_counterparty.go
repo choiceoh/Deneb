@@ -79,3 +79,37 @@ func (c *counterpartyLookup) build() (map[string]struct{}, bool) {
 	cutoff := dentime.Now().AddDate(0, 0, -counterpartyWindowDays).Format("2006-01-02")
 	return s.ActiveCounterpartyDomains(cutoff), true
 }
+
+// counterpartyProjectsCache mirrors counterpartyLookup for the richer
+// domain → linked-projects map that the mail-analysis party anchor renders
+// ("외부(hre-korea.com · 활성 거래처: 당진-솔라빌리지)"). Zero value is ready to
+// use — it lives as a value field on MemorySubsystem so no constructor wiring
+// is needed. Same TTL/window; a nil store returns nil without stamping the
+// cache (late-bound store: retry on the next mail).
+type counterpartyProjectsCache struct {
+	mu       sync.Mutex
+	builtAt  time.Time
+	projects map[string][]string
+}
+
+func (c *counterpartyProjectsCache) lookup(store *wiki.Store, domain string) []string {
+	domain = strings.ToLower(strings.TrimSpace(domain))
+	if store == nil || domain == "" {
+		return nil
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.projects == nil || time.Since(c.builtAt) > counterpartyTTL {
+		cutoff := dentime.Now().AddDate(0, 0, -counterpartyWindowDays).Format("2006-01-02")
+		c.projects = store.CounterpartyProjects(cutoff)
+		c.builtAt = time.Now()
+	}
+	return c.projects[domain]
+}
+
+// mailCounterpartyProjects is the PipelineDeps-injected lookup: linked project
+// names for an active counterparty domain, nil otherwise. Deterministic and
+// cheap (10-min cached index walk).
+func (s *Server) mailCounterpartyProjects(domain string) []string {
+	return s.cpProjects.lookup(s.wikiStore, domain)
+}

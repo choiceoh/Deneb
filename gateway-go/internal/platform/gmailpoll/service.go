@@ -78,6 +78,11 @@ type Config struct {
 	// Forwarded to PipelineDeps; nil = fall back to the graphify subprocess.
 	SenderFactsFn func(ctx context.Context, displayName string) string
 
+	// CounterpartyProjectsFn returns linked project names for an active
+	// counterparty domain (party-anchor enrichment). Forwarded to
+	// PipelineDeps; nil = plain side labels.
+	CounterpartyProjectsFn func(domain string) []string
+
 	// AttachmentExtractFn extracts readable text from an attachment's bytes
 	// (documents + image OCR). Forwarded to PipelineDeps so the analysis can read
 	// the business documents arriving as attachments. nil = attachment gate off.
@@ -388,19 +393,20 @@ func (s *Service) poll(ctx context.Context, client *gmail.Client) error {
 // config (shared by the batch and single-email paths).
 func (s *Service) pipelineDeps(gmailClient *gmail.Client) PipelineDeps {
 	deps := PipelineDeps{
-		GmailClient:         gmailClient,
-		LLMClient:           s.llmClient,
-		LocalClient:         s.cfg.LocalClient,
-		LocalModel:          s.cfg.LocalModel,
-		MainModel:           s.cfg.Model,
-		AnalysisPrompt:      s.analysisPrompt(),
-		Logger:              s.log,
-		ProjectsFn:          s.cfg.ProjectsFn,
-		SenderFactsFn:       s.cfg.SenderFactsFn,
-		AttachmentExtractFn: s.cfg.AttachmentExtractFn,
-		ThinkingKwarg:       s.cfg.ThinkingKwarg,
-		ThreadSource:        s.cfg.ThreadSource,
-		AgentSynthesisFn:    s.cfg.AgentSynthesisFn,
+		GmailClient:            gmailClient,
+		LLMClient:              s.llmClient,
+		LocalClient:            s.cfg.LocalClient,
+		LocalModel:             s.cfg.LocalModel,
+		MainModel:              s.cfg.Model,
+		AnalysisPrompt:         s.analysisPrompt(),
+		Logger:                 s.log,
+		ProjectsFn:             s.cfg.ProjectsFn,
+		SenderFactsFn:          s.cfg.SenderFactsFn,
+		CounterpartyProjectsFn: s.cfg.CounterpartyProjectsFn,
+		AttachmentExtractFn:    s.cfg.AttachmentExtractFn,
+		ThinkingKwarg:          s.cfg.ThinkingKwarg,
+		ThreadSource:           s.cfg.ThreadSource,
+		AgentSynthesisFn:       s.cfg.AgentSynthesisFn,
 	}
 	// Poll path: the attachment gate fetches bytes lazily from Gmail. The LMTP
 	// path (IngestMessage) overrides this with a closure over the inline bytes,

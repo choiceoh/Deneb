@@ -78,6 +78,13 @@ type PipelineDeps struct {
 	// was never snapshotted. nil → fall back to the graphify subprocess.
 	SenderFactsFn func(ctx context.Context, displayName string) string
 
+	// CounterpartyProjectsFn returns the linked project names for an active
+	// counterparty mail domain (wiki-derived, cached server-side), nil/empty
+	// otherwise. Enriches the party anchor's side labels — "외부(domain · 활성
+	// 거래처: 프로젝트…)" — so stage2 gets the deal linkage deterministically.
+	// nil → plain side labels.
+	CounterpartyProjectsFn func(domain string) []string
+
 	// AttachmentExtractFn extracts readable text from an attachment's raw bytes
 	// (documents and images/OCR). When set together with a LocalClient, the
 	// attachment selection gate (attachments.go) reads the business documents the

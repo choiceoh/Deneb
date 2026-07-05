@@ -64,15 +64,16 @@ func (s *Server) initGmailPoll(snap *config.ConfigSnapshot) {
 
 	stage2, stage2Model, stage1, stage1Model := s.mailAnalysisModels()
 	cfg := gmailpoll.Config{
-		StateDir:            stateDir,
-		LLMClient:           stage2,
-		Model:               stage2Model,
-		LocalClient:         stage1,
-		LocalModel:          stage1Model,
-		SenderFactsFn:       s.wikiSenderFacts,
-		AttachmentExtractFn: tools.ExtractAttachmentTextBytes,
-		PromptOverride:      s.promptOverride,
-		ThinkingKwarg:       s.analysisThinkingKwarg(),
+		StateDir:               stateDir,
+		LLMClient:              stage2,
+		Model:                  stage2Model,
+		LocalClient:            stage1,
+		LocalModel:             stage1Model,
+		SenderFactsFn:          s.wikiSenderFacts,
+		CounterpartyProjectsFn: s.mailCounterpartyProjects,
+		AttachmentExtractFn:    tools.ExtractAttachmentTextBytes,
+		PromptOverride:         s.promptOverride,
+		ThinkingKwarg:          s.analysisThinkingKwarg(),
 	}
 
 	if pollCfg.IntervalMin != nil {
@@ -214,20 +215,21 @@ func (s *Server) initLMTPServer(snap *config.ConfigSnapshot) {
 	stage2, stage2Model, stage1, stage1Model := s.mailAnalysisModels()
 	threadSource := s.archiveThreadSource()
 	cfg := gmailpoll.Config{
-		StateDir:            stateDir,
-		LLMClient:           stage2,
-		Model:               stage2Model,
-		LocalClient:         stage1,
-		LocalModel:          stage1Model,
-		SenderFactsFn:       s.wikiSenderFacts,
-		AttachmentExtractFn: tools.ExtractAttachmentTextBytes,
-		PromptOverride:      s.promptOverride,
-		OnAnalyzed:          s.makeMailAnalysisSink(),
-		OnDelivered:         s.makeMailFeedDeliverySink(),
-		OnAnalysisFailed:    s.makeMailAnalysisFailureSink(),
-		ProjectsFn:          s.projectCandidatesFn(),
-		ThreadSource:        threadSource,
-		ThinkingKwarg:       s.analysisThinkingKwarg(),
+		StateDir:               stateDir,
+		LLMClient:              stage2,
+		Model:                  stage2Model,
+		LocalClient:            stage1,
+		LocalModel:             stage1Model,
+		SenderFactsFn:          s.wikiSenderFacts,
+		CounterpartyProjectsFn: s.mailCounterpartyProjects,
+		AttachmentExtractFn:    tools.ExtractAttachmentTextBytes,
+		PromptOverride:         s.promptOverride,
+		OnAnalyzed:             s.makeMailAnalysisSink(),
+		OnDelivered:            s.makeMailFeedDeliverySink(),
+		OnAnalysisFailed:       s.makeMailAnalysisFailureSink(),
+		ProjectsFn:             s.projectCandidatesFn(),
+		ThreadSource:           threadSource,
+		ThinkingKwarg:          s.analysisThinkingKwarg(),
 	}
 	if s.wikiStore != nil && s.wikiStore.DiaryDir() != "" {
 		cfg.DiaryDir = s.wikiStore.DiaryDir()

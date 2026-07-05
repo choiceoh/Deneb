@@ -287,7 +287,7 @@ func synthesizeAnalysis(ctx context.Context, deps PipelineDeps, msg *gmail.Messa
 	// Deterministic party anchor (who is our side vs the counterparty) —
 	// eliminates party-inversion failures in the synthesized analysis; see
 	// party_anchor.go for the shadow-eval evidence.
-	if anchor := buildPartyAnchor(msg, ourAnchorDomains()); anchor != "" {
+	if anchor := buildPartyAnchor(msg, ourAnchorDomains(), deps.CounterpartyProjectsFn); anchor != "" {
 		emailText += "\n\n" + anchor
 	}
 
