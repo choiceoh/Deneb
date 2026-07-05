@@ -220,18 +220,18 @@ func TestExecCommandPreservesRunCache(t *testing.T) {
 		"git checkout main",
 		"git stash",
 		"git pull",
-		"cat a.txt > b.txt",     // redirect
-		"cat a.txt >> b.txt",    // append redirect
-		"ls; rm x",              // command chaining
-		"ls && rm x",            // conditional chaining
-		"ls || rm x",            // empty pipeline stage after split
-		"echo `rm x`",           // command substitution (backtick)
-		"echo $(rm x)",          // command substitution
+		"cat a.txt > b.txt",  // redirect
+		"cat a.txt >> b.txt", // append redirect
+		"ls; rm x",           // command chaining
+		"ls && rm x",         // conditional chaining
+		"ls || rm x",         // empty pipeline stage after split
+		"echo `rm x`",        // command substitution (backtick)
+		"echo $(rm x)",       // command substitution
 		"find . -name x -delete",
 		"find . -name '*.go' -exec rm {} ;",
-		"env FOO=1 make",        // env runs arbitrary sub-commands
+		"env FOO=1 make", // env runs arbitrary sub-commands
 		"xargs rm < list.txt",
-		"cat a | tee b.txt",     // tee not in allowlist
+		"cat a | tee b.txt", // tee not in allowlist
 		"npm install",
 		"curl -X POST https://api.example.com", // external side effects, not allowlisted
 	}
