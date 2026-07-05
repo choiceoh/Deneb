@@ -23,12 +23,14 @@ const apiBase = "https://gmail.googleapis.com/gmail/v1/users/me"
 
 // Response-size bounds: every external HTTP body read is capped so a runaway or
 // malformed upstream (misbehaving proxy, endless stream) cannot balloon the
-// always-on gateway's memory. Generous by design — a Gmail message with base64
-// attachments can approach ~50 MiB, so the API cap never clips a legitimate
-// payload; a truncated over-limit body simply fails JSON decoding (fail-closed).
+// always-on gateway's memory. Generous by design — Workspace Enterprise Plus
+// accepts messages up to 70 MB, and a single attachment near that limit is
+// ~94 MiB once base64-wrapped in the API JSON (GetAttachment rides readJSON),
+// so the API cap must never clip a legitimate payload. Readers fetch limit+1
+// and fail with an explicit over-limit error instead of a confusing JSON one.
 const (
-	maxAPIResponseBytes   = 64 << 20 // Gmail API reads (messages with attachments)
-	maxTokenResponseBytes = 1 << 20  // OAuth token endpoint (tiny JSON)
+	maxAPIResponseBytes   = 128 << 20 // Gmail API reads (base64-wrapped attachments)
+	maxTokenResponseBytes = 1 << 20   // OAuth token endpoint (tiny JSON)
 )
 
 // setTokenURL overrides the token endpoint URL (for testing).
@@ -218,12 +220,15 @@ func (c *Client) refresh(ctx context.Context) (string, error) {
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxTokenResponseBytes))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxTokenResponseBytes+1))
 	if err != nil {
 		return "", fmt.Errorf("토큰 응답 읽기 실패: %w", err)
 	}
+	if len(body) > maxTokenResponseBytes {
+		return "", fmt.Errorf("토큰 응답이 비정상적으로 큼 (>%dB)", maxTokenResponseBytes)
+	}
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("토큰 갱신 실패 (HTTP %d): %s", resp.StatusCode, body)
+		return "", fmt.Errorf("토큰 갱신 실패 (HTTP %d): %s", resp.StatusCode, truncate(string(body), 500))
 	}
 
 	var tok tokenJSON
@@ -310,9 +315,12 @@ func (c *Client) readJSON(ctx context.Context, path string, dest any) error {
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxAPIResponseBytes))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxAPIResponseBytes+1))
 	if err != nil {
 		return fmt.Errorf("Gmail API 응답 읽기 실패: %w", err) //nolint:staticcheck // ST1005 — Korean error message
+	}
+	if len(body) > maxAPIResponseBytes {
+		return fmt.Errorf("Gmail API 응답이 비정상적으로 큼 (>%dB)", maxAPIResponseBytes) //nolint:staticcheck // ST1005 — Korean error message
 	}
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("Gmail API 오류 (HTTP %d): %s", resp.StatusCode, truncate(string(body), 500)) //nolint:staticcheck // ST1005 — Korean error message
@@ -333,9 +341,12 @@ func (c *Client) postJSON(ctx context.Context, path string, payload, dest any) e
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxAPIResponseBytes))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxAPIResponseBytes+1))
 	if err != nil {
 		return fmt.Errorf("Gmail API 응답 읽기 실패: %w", err) //nolint:staticcheck // ST1005 — Korean error message
+	}
+	if len(body) > maxAPIResponseBytes {
+		return fmt.Errorf("Gmail API 응답이 비정상적으로 큼 (>%dB)", maxAPIResponseBytes) //nolint:staticcheck // ST1005 — Korean error message
 	}
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("Gmail API 오류 (HTTP %d): %s", resp.StatusCode, truncate(string(body), 500)) //nolint:staticcheck // ST1005 — Korean error message

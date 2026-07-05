@@ -25,8 +25,8 @@ const apiBase = "https://www.googleapis.com/calendar/v3"
 
 // Response-size bounds — same rationale as the Gmail client: cap every external
 // body read so a runaway upstream can't balloon the always-on gateway's memory.
-// Calendar payloads are event lists (far smaller than mail), so 16 MiB is ample;
-// a truncated over-limit body simply fails JSON decoding (fail-closed).
+// Calendar payloads are event lists (far smaller than mail), so 16 MiB is ample.
+// Readers fetch limit+1 and fail with an explicit over-limit error.
 const (
 	maxAPIResponseBytes   = 16 << 20
 	maxTokenResponseBytes = 1 << 20
@@ -204,12 +204,15 @@ func (c *Client) refresh(ctx context.Context) (string, error) {
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxTokenResponseBytes))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxTokenResponseBytes+1))
 	if err != nil {
 		return "", fmt.Errorf("토큰 응답 읽기 실패: %w", err)
 	}
+	if len(body) > maxTokenResponseBytes {
+		return "", fmt.Errorf("토큰 응답이 비정상적으로 큼 (>%dB)", maxTokenResponseBytes)
+	}
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("토큰 갱신 실패 (HTTP %d): %s", resp.StatusCode, body)
+		return "", fmt.Errorf("토큰 갱신 실패 (HTTP %d): %s", resp.StatusCode, truncate(string(body), 500))
 	}
 
 	var tok tokenJSON
@@ -280,9 +283,12 @@ func (c *Client) readJSON(ctx context.Context, path string, dest any) error {
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxAPIResponseBytes))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxAPIResponseBytes+1))
 	if err != nil {
 		return fmt.Errorf("Calendar API 응답 읽기 실패: %w", err) //nolint:staticcheck // ST1005 — Korean error message
+	}
+	if len(body) > maxAPIResponseBytes {
+		return fmt.Errorf("Calendar API 응답이 비정상적으로 큼 (>%dB)", maxAPIResponseBytes) //nolint:staticcheck // ST1005 — Korean error message
 	}
 	if resp.StatusCode != http.StatusOK {
 		return &APIError{

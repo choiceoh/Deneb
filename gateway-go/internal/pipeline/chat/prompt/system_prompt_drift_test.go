@@ -347,20 +347,28 @@ func TestSessionVariableContentStaysOutOfCachedBlocks(t *testing.T) {
 // timestamp rule plus session-frozen inputs mean nothing per-turn may tick the
 // bytes. Both Hermes (#24778: a per-turn volatile tier dropped cumulative cache
 // hits 83.3%→66.6%, then was killed) and OpenClaw (#98267) re-learned this the
-// hard way; this pins Deneb's invariant. (Crossing midnight between the two
-// builds is the one legitimate difference — vanishingly unlikely in a test.)
+// hard way; this pins Deneb's invariant.
 func TestSystemPromptByteStableAcrossTurns(t *testing.T) {
 	params := SystemPromptParams{
-		WorkspaceDir:   "/tmp",
-		ToolDefs:       []ToolDef{{Name: "read"}, {Name: "exec"}},
-		Channel:        "native",
+		WorkspaceDir: "/tmp",
+		ToolDefs:     []ToolDef{{Name: "read"}, {Name: "exec"}},
+		Channel:      "native",
+		// Explicit timezone so the date line doesn't depend on the runner's
+		// cached/local zone (review feedback).
+		UserTimezone:   "Asia/Seoul",
 		CalendarGlance: "오늘 14:00 미팅",
 	}
-	sA, ssA, dA := buildPromptSections(params)
-	sB, ssB, dB := buildPromptSections(params)
-	if sA != sB || ssA != ssB || dA != dB {
-		t.Fatal("system prompt not byte-stable across two identical builds — a per-turn variable byte crept in")
+	// Two attempts absorb the one legitimate byte difference — the day-only
+	// date line rolling over between the two builds at midnight. On a
+	// rollover the second attempt runs entirely on the new day and must pass.
+	for attempt := 0; attempt < 2; attempt++ {
+		sA, ssA, dA := buildPromptSections(params)
+		sB, ssB, dB := buildPromptSections(params)
+		if sA == sB && ssA == ssB && dA == dB {
+			return
+		}
 	}
+	t.Fatal("system prompt not byte-stable across two identical builds — a per-turn variable byte crept in")
 }
 
 // TestDynamicTimestampIsDayOnly asserts the dynamic block's date line carries
