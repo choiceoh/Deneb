@@ -175,8 +175,18 @@ internal fun SkillsViewSwitcher(showLifecycle: Boolean, onSelect: (Boolean) -> U
 @Composable
 internal fun SkillListContent(skills: List<SkillRow>, onOpenSkill: (String) -> Unit = {}) {
     val haptics = rememberHaptics()
+    // Working skills first: the alphabetical order buried the daily drivers
+    // (email-analysis, 16 uses) between never-used rows. Single flat list —
+    // usage count, then recency (use or evolve), then name.
+    val ordered = remember(skills) {
+        skills.sortedWith(
+            compareByDescending<SkillRow> { it.totalUses }
+                .thenByDescending { maxOf(it.lastUsedAt, it.lastEvolvedAt) }
+                .thenBy { it.name },
+        )
+    }
     LazyColumn(Modifier.fillMaxSize()) {
-        items(skills, key = { it.name }) { skill ->
+        items(ordered, key = { it.name }) { skill ->
             Column(
                 Modifier
                     .animateItem()
@@ -201,7 +211,7 @@ internal fun SkillListContent(skills: List<SkillRow>, onOpenSkill: (String) -> U
                         modifier = Modifier.weight(1f, fill = false),
                     )
                     Spacer(Modifier.width(6.dp))
-                    SkillOriginBadge(skill.origin)
+                    SkillStateBadges(skill)
                 }
                 if (skill.description.isNotBlank()) {
                     Text(
@@ -235,9 +245,10 @@ internal fun SkillLifecycleContent(
     onOpenSkill: (String) -> Unit = {},
     summary: PropusLifecycleSummary = propusTimelineSummary(events),
 ) {
+    val todayLine = remember(events) { propusTodayLine(events) }
     LazyColumn(Modifier.fillMaxSize()) {
         item {
-            PropusTimelineHeader(summary)
+            PropusTimelineHeader(summary, todayLine)
             HorizontalDivider(Modifier.padding(start = 16.dp), color = denebHairline())
         }
         itemsIndexed(events) { _, event ->
@@ -248,7 +259,10 @@ internal fun SkillLifecycleContent(
 }
 
 @Composable
-private fun PropusTimelineHeader(summary: PropusLifecycleSummary) {
+private fun PropusTimelineHeader(summary: PropusLifecycleSummary, todayLine: String = "") {
+    // The doctrine/coverage/cue block is operator-debug depth — fold it so the
+    // header reads as a one-glance digest (오늘 활동 + 상태) by default.
+    var detailsExpanded by rememberSaveable { mutableStateOf(false) }
     val activity = listOfNotNull(
         "최근 ${summary.total}건",
         "생성 ${summary.genesis}",
@@ -267,15 +281,9 @@ private fun PropusTimelineHeader(summary: PropusLifecycleSummary) {
             style = DenebType.cardTitle,
             color = MaterialTheme.colorScheme.primary,
         )
-        val doctrineMeta = listOfNotNull(
-            summary.doctrineVersion.takeIf { it.isNotBlank() },
-            summary.sourcePapers.size.takeIf { it > 0 }?.let { "논문 ${it}개" },
-            summary.filteredSources.size.takeIf { it > 0 }?.let { "보류 ${it}개" },
-            summary.qualityGates.size.takeIf { it > 0 }?.let { "게이트 ${it}개" },
-        ).joinToString(" · ")
-        if (doctrineMeta.isNotBlank()) {
+        if (todayLine.isNotBlank()) {
             Spacer(Modifier.height(2.dp))
-            Text(doctrineMeta, style = DenebType.meta, color = denebHint(), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(todayLine, style = DenebType.rowSubtitle, color = MaterialTheme.colorScheme.onSurface)
         }
         Spacer(Modifier.height(2.dp))
         Text(activity, style = DenebType.meta, color = denebHint())
@@ -285,25 +293,75 @@ private fun PropusTimelineHeader(summary: PropusLifecycleSummary) {
             style = DenebType.rowSubtitle,
             color = if (summary.attention > 0) MaterialTheme.colorScheme.error else denebHint(),
         )
-        val coverage = listOfNotNull(
-            summary.coverageState.takeIf { it.isNotBlank() }?.let { "근거 $it" },
-            summary.coverageGaps.firstOrNull()?.let { "공백 $it" },
-        ).joinToString(" · ")
-        if (coverage.isNotBlank()) {
-            Spacer(Modifier.height(2.dp))
-            Text(coverage, style = DenebType.meta, color = denebHint(), maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-        val cue = summary.attentionCue.ifBlank { summary.nextCue }
-        if (cue.isNotBlank()) {
-            Spacer(Modifier.height(2.dp))
-            Text(cue, style = DenebType.meta, color = denebHint(), maxLines = 2, overflow = TextOverflow.Ellipsis)
-        }
-        val gate = summary.qualityGate.ifBlank { summary.qualityGates.firstOrNull().orEmpty() }
-        if (gate.isNotBlank()) {
-            Spacer(Modifier.height(2.dp))
-            Text(gate, style = DenebType.meta, color = denebHint(), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Spacer(Modifier.height(4.dp))
+        Text(
+            if (detailsExpanded) "자세히 접기" else "자세히 보기",
+            style = DenebType.button,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier
+                .handCursor()
+                .clickable { detailsExpanded = !detailsExpanded }
+                .padding(vertical = 2.dp),
+        )
+        if (detailsExpanded) {
+            val doctrineMeta = listOfNotNull(
+                summary.doctrineVersion.takeIf { it.isNotBlank() },
+                summary.sourcePapers.size.takeIf { it > 0 }?.let { "논문 ${it}개" },
+                summary.filteredSources.size.takeIf { it > 0 }?.let { "보류 ${it}개" },
+                summary.qualityGates.size.takeIf { it > 0 }?.let { "게이트 ${it}개" },
+            ).joinToString(" · ")
+            if (doctrineMeta.isNotBlank()) {
+                Spacer(Modifier.height(2.dp))
+                Text(doctrineMeta, style = DenebType.meta, color = denebHint(), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            val coverage = listOfNotNull(
+                summary.coverageState.takeIf { it.isNotBlank() }?.let { "근거 $it" },
+                summary.coverageGaps.firstOrNull()?.let { "공백 $it" },
+            ).joinToString(" · ")
+            if (coverage.isNotBlank()) {
+                Spacer(Modifier.height(2.dp))
+                Text(coverage, style = DenebType.meta, color = denebHint(), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            val cue = summary.attentionCue.ifBlank { summary.nextCue }
+            if (cue.isNotBlank()) {
+                Spacer(Modifier.height(2.dp))
+                Text(cue, style = DenebType.meta, color = denebHint(), maxLines = 2, overflow = TextOverflow.Ellipsis)
+            }
+            val gate = summary.qualityGate.ifBlank { summary.qualityGates.firstOrNull().orEmpty() }
+            if (gate.isNotBlank()) {
+                Spacer(Modifier.height(2.dp))
+                Text(gate, style = DenebType.meta, color = denebHint(), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
         }
     }
+}
+
+/** One-line digest of today's Propus events ("오늘 검토 3 · 진화 1"), or
+ *  "오늘 활동 없음" — the header's first read for a non-technical operator. */
+internal fun propusTodayLine(events: List<SkillLifecycleEvent>): String {
+    val tz = TimeZone.currentSystemDefault()
+    val today = Clock.System.now().toLocalDateTime(tz).date
+    var review = 0
+    var evolved = 0
+    var genesis = 0
+    var attention = 0
+    for (e in events) {
+        if (e.at <= 0L) continue
+        if (Instant.fromEpochMilliseconds(e.at).toLocalDateTime(tz).date != today) continue
+        when (e.type) {
+            "genesis" -> genesis++
+            "evolved" -> evolved++
+            "evolve_rejected", "evolve_rolled_back" -> attention++
+            else -> review++
+        }
+    }
+    if (review + evolved + genesis + attention == 0) return "오늘 활동 없음"
+    return listOfNotNull(
+        "오늘 검토 $review".takeIf { review > 0 },
+        "진화 $evolved".takeIf { evolved > 0 },
+        "생성 $genesis".takeIf { genesis > 0 },
+        "주의 $attention".takeIf { attention > 0 },
+    ).joinToString(" · ")
 }
 
 private fun propusTimelineSummary(events: List<SkillLifecycleEvent>): PropusLifecycleSummary {
@@ -486,17 +544,43 @@ internal fun SkillLifecycleRow(
     }
 }
 
-// Origin badge: 생성 (Propus authored) vs 최초 (installed/hand-written).
-// Both render so the distinction is explicit, not inferred from absence. A
-// self-authored skill is AI-analysis output, so 생성 takes the warm apricot
-// insight accent (2026-06 doctrine); 최초 stays a neutral mono chip.
+// Origin badge renders only for Propus-authored skills (warm apricot insight
+// accent). The old counterpart chip — [최초] on every installed/hand-written
+// row — carried zero information once it appeared everywhere (field report
+// 2026-07-05), so absence now means "installed" and the chip space goes to
+// meaningful states instead ([SkillStateBadges]).
 @Composable
 internal fun SkillOriginBadge(origin: String) {
-    val generated = origin == "genesis"
-    val bg = if (generated) denebInsightContainer() else MaterialTheme.colorScheme.surfaceVariant
-    val fg = if (generated) denebInsight() else MaterialTheme.colorScheme.onSurfaceVariant
+    if (origin != "genesis") return
+    SkillStateChip("생성", denebInsightContainer(), denebInsight())
+}
+
+// State chips for the skills list: at most origin + one activity state, so a
+// glance answers "무엇이 일하고 있고 무엇이 놀고 있나". 새로 배움 = evolved in
+// the last 14 days (insight accent — the loop just changed this skill);
+// 미사용/잠자는 중 = never used / no use in 30 days (neutral, dimmed).
+@Composable
+internal fun SkillStateBadges(skill: SkillRow) {
+    val now = Clock.System.now().toEpochMilliseconds()
+    Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+        SkillOriginBadge(skill.origin)
+        when {
+            skill.lastEvolvedAt > 0 && now - skill.lastEvolvedAt < 14L * 86_400_000L ->
+                SkillStateChip("새로 배움", denebInsightContainer(), denebInsight())
+
+            skill.totalUses <= 0 ->
+                SkillStateChip("미사용", MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.onSurfaceVariant)
+
+            skill.lastUsedAt > 0 && now - skill.lastUsedAt > 30L * 86_400_000L ->
+                SkillStateChip("잠자는 중", MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun SkillStateChip(label: String, bg: androidx.compose.ui.graphics.Color, fg: androidx.compose.ui.graphics.Color) {
     Text(
-        if (generated) "생성" else "최초",
+        label,
         style = DenebType.meta,
         color = fg,
         modifier = Modifier
@@ -553,18 +637,17 @@ internal fun skillSourceLabel(source: String): String = when (source) {
     else -> source
 }
 
-// skillMetaLine renders "category · source · vN · 진화 N회 · 사용 N회",
-// omitting whichever is blank/zero.
-private fun skillMetaLine(skill: SkillRow): String = listOfNotNull(
-    skill.category.takeIf { it.isNotBlank() },
-    skillSourceLabel(skill.source).takeIf { it.isNotBlank() },
-    (skill.editable && skill.deletable).takeIf { it }?.let { "수정/삭제 가능" },
-    skill.version.takeIf { it.isNotBlank() }?.let { "v$it" },
-    skill.dependencySummary.size.takeIf { it > 0 }?.let { "요구 ${it}개" },
-    skill.installSummary.size.takeIf { it > 0 }?.let { "설치 ${it}개" },
-    skill.evolveCount.takeIf { it > 0 }?.let { "진화 ${it}회" },
-    skill.totalUses.takeIf { it > 0 }?.let { "사용 ${it}회" },
-).joinToString(" · ")
+// skillMetaLine is the list row's activity line — usage and evolution only,
+// in plain Korean. Category/source/version/dependency jargon lives in the
+// detail screen's fact lines, not here (the list answers "일하고 있나").
+private fun skillMetaLine(skill: SkillRow): String {
+    if (skill.totalUses <= 0) return "아직 사용 안 함"
+    return listOfNotNull(
+        "사용 ${skill.totalUses}회",
+        skill.lastUsedAt.takeIf { it > 0 }?.let { "마지막 ${lifecycleTime(it)}" },
+        skill.evolveCount.takeIf { it > 0 }?.let { "진화 ${it}회" },
+    ).joinToString(" · ")
+}
 
 /** Review verdict in Korean for the expanded timeline row; null for events
  *  without a route (genesis/evolved/rejected). Unknown future routes fall back

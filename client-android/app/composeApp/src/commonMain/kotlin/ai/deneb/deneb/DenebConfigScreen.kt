@@ -207,6 +207,6 @@ private enum class ConfigTab(val label: String, val desc: String, val icon: Imag
     FLEET("플릿", "GPU 노드 상태, 모델 기동/중지, 작업 로그", Icons.Outlined.Storage),
     VERSION("버전", "현재 빌드, 패치노트, 업데이트", Icons.Outlined.Info),
     PROMPTS("프롬프트 코너", "자동 분석·도구 프롬프트, 토픽 배경 편집", Icons.Outlined.Article),
-    SELF_IMPROVEMENT_CODING("자가개선 코딩", "코딩 수정 후보, 적용 대기열", Icons.Outlined.Code),
+    SELF_IMPROVEMENT_CODING("자가개선 코딩", "자가개선 후보, 하트비트 자동 처리", Icons.Outlined.Code),
     APP_TILES("더보기 표시 항목", "더보기에 표시할 항목 선택 (미완성 기능 숨기기)", Icons.Outlined.Apps),
 }
