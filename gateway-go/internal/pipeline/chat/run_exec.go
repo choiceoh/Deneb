@@ -277,7 +277,6 @@ func executeAgentRun(
 		execStats:      execStats,
 		runStart:       runStart,
 		agentStart:     agentStart,
-		execStats:      execStats,
 	}, logger)
 
 	return &chatRunResult{AgentResult: agentResult, SpawnFlag: spawnFlag, ActualModel: actualModel, FellBack: fellBack}, nil
@@ -299,7 +298,6 @@ type runCompletionRecord struct {
 	execStats      *toolctx.ToolExecStats
 	runStart       time.Time
 	agentStart     time.Time
-	execStats      *toolctx.ToolExecStats
 }
 
 // recordRunCompletion emits every post-loop success record in one place: the
@@ -419,7 +417,7 @@ func recordRunCompletion(rec runCompletionRecord, logger *slog.Logger) {
 		Proactive:           params.AutoDeliveredOutput || params.EphemeralUser,
 		EffortDecision:      effortDecision,
 		EffortEscalated:     effortRt != nil && effortRt.escalated,
-		RepairedToolCalls:   rec.execStats.RepairedCounts(),
+		RepairedToolCalls:   execStats.RepairedCounts(),
 	})
 
 	// Engine-side APC sample → run.cache event (async, best-effort). The vLLM
