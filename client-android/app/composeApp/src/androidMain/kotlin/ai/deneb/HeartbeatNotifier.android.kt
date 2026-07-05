@@ -57,7 +57,7 @@ private fun postNotification(title: String, body: String, deepLinkExtra: String,
     val context: Context by inject(Context::class.java)
     val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
-    ensureChannel(notificationManager)
+    ensureAiNotificationChannel(notificationManager)
     if (!canPostNotifications(context, AI_NOTIFICATION_CHANNEL_ID)) return
 
     val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)?.apply {
@@ -88,7 +88,12 @@ private fun postNotification(title: String, body: String, deepLinkExtra: String,
     runCatching { notificationManager.notify(notificationId, notification) }
 }
 
-private fun ensureChannel(manager: NotificationManager) {
+/**
+ * Lazily creates the shared AI notification channel. Public because the
+ * androidApp module's FCM messaging path (FcmService/DenebReplyReceiver) posts
+ * on a cold app process where NotificationHelper may never have run.
+ */
+fun ensureAiNotificationChannel(manager: NotificationManager) {
     if (manager.getNotificationChannel(AI_NOTIFICATION_CHANNEL_ID) != null) return
     val name = runBlocking { getString(Res.string.notification_channel_name) }
     val description = runBlocking { getString(Res.string.notification_channel_description) }

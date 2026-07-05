@@ -147,6 +147,7 @@ dependencies {
     implementation(libs.firebase.messaging)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.process)
+    implementation(libs.androidx.work.runtime)
     implementation(libs.androidx.foundation.android)
     implementation(libs.compose.material3)
     implementation(libs.koin.android)

@@ -5,9 +5,11 @@ import android.content.Context
 import android.os.Build
 import androidx.core.app.NotificationManagerCompat
 
-internal const val AI_NOTIFICATION_CHANNEL_ID = "kai_ai_notifications"
+// Public (not internal): the androidApp module's FCM/Auto messaging path posts
+// to the same channel so all Deneb notifications share one user-facing switch.
+const val AI_NOTIFICATION_CHANNEL_ID = "kai_ai_notifications"
 
-internal fun canPostNotifications(
+fun canPostNotifications(
     context: Context,
     channelId: String? = null,
 ): Boolean {

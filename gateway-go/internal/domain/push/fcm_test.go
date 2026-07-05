@@ -3,6 +3,7 @@ package push
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -97,14 +98,60 @@ func TestFCMSender_Send_OK(t *testing.T) {
 	if gotMsg.Message.Token != "device-1" {
 		t.Errorf("token = %q", gotMsg.Message.Token)
 	}
-	if gotMsg.Message.Notification["title"] != "제목" || gotMsg.Message.Notification["body"] != "본문" {
-		t.Errorf("notification = %v", gotMsg.Message.Notification)
+	// Data-only contract: no `notification` block (the app must build the
+	// MessagingStyle notification itself for Android Auto), title/body in data.
+	if len(gotMsg.Message.Notification) != 0 {
+		t.Errorf("notification block must be absent, got %v", gotMsg.Message.Notification)
+	}
+	if gotMsg.Message.Data["title"] != "제목" || gotMsg.Message.Data["body"] != "본문" {
+		t.Errorf("data title/body = %v", gotMsg.Message.Data)
 	}
 	if gotMsg.Message.Data["kind"] != "proactive" {
 		t.Errorf("data = %v", gotMsg.Message.Data)
 	}
 	if gotMsg.Message.Android["priority"] != "high" {
 		t.Errorf("android = %v, want priority high", gotMsg.Message.Android)
+	}
+}
+
+// Send must stay data-only even with a nil caller data map, and explicit
+// title/body must win over colliding caller-supplied keys.
+func TestFCMSender_Send_DataOnly(t *testing.T) {
+	tokenSrv := tokenServer(t)
+	defer tokenSrv.Close()
+
+	var gotRaw map[string]any
+	var gotMsg struct {
+		Message struct {
+			Data map[string]string `json:"data"`
+		} `json:"message"`
+	}
+	fcmSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(body, &gotRaw)
+		_ = json.Unmarshal(body, &gotMsg)
+		_, _ = w.Write([]byte(`{"name":"projects/deneb-test/messages/2"}`))
+	}))
+	defer fcmSrv.Close()
+
+	s := newTestSender(t, tokenSrv, fcmSrv)
+	if res := s.Send(context.Background(), "device-1", "t1", "b1", nil); !res.OK {
+		t.Fatalf("send nil data: %+v", res)
+	}
+	msg, _ := gotRaw["message"].(map[string]any)
+	if _, has := msg["notification"]; has {
+		t.Errorf("nil-data send still carries a notification block: %v", msg)
+	}
+	if gotMsg.Message.Data["title"] != "t1" || gotMsg.Message.Data["body"] != "b1" {
+		t.Errorf("data = %v, want title/body present", gotMsg.Message.Data)
+	}
+
+	if res := s.Send(context.Background(), "device-1", "real-title", "real-body",
+		map[string]string{"title": "spoof", "kind": "proactive"}); !res.OK {
+		t.Fatalf("send colliding data: %+v", res)
+	}
+	if gotMsg.Message.Data["title"] != "real-title" || gotMsg.Message.Data["kind"] != "proactive" {
+		t.Errorf("data = %v, want explicit title to win and kind preserved", gotMsg.Message.Data)
 	}
 }
 

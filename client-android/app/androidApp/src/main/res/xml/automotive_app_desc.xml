@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android Auto capability declaration: this app posts messaging notifications
+     Auto can read aloud and voice-reply to (see DenebMessagingNotification). -->
+<automotiveApp>
+    <uses name="notification" />
+</automotiveApp>
