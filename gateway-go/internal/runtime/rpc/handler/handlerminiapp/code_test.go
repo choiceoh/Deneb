@@ -21,6 +21,7 @@ func (fakeWorktrees) StartTask(_ context.Context, r code.Repo, id string) (code.
 func (fakeWorktrees) ListRepos(context.Context) ([]code.Repo, error) {
 	return []code.Repo{{Owner: "acme", Name: "app"}}, nil
 }
+
 func (f fakeWorktrees) WorktreeStatus(context.Context, code.Task) (code.WorktreeStatus, error) {
 	return f.status, f.statusErr
 }
