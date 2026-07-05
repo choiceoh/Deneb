@@ -399,17 +399,11 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 		typingSignaler.SignalRunStart()
 	}
 
-	// Status reactions (phase-aware emoji on the user's message) were a
-	// Telegram-only affordance, retired with the bot. statusCtrl stays nil and
-	// the guarded calls downstream are inert; the native client surfaces run
-	// phase via structured WebSocket/SSE events instead of message reactions.
-	var statusCtrl statusReactor
-
 	// Create agent detail logger for this run.
 	runLog := agentlog.NewRunLogger(deps.agentLog, params.SessionKey, params.ClientRunID)
 
 	// Run the agent and capture result.
-	chatResult, err := executeAgentRun(ctx, params, deps, broadcaster, typingSignaler, statusCtrl, logger, runLog)
+	chatResult, err := executeAgentRun(ctx, params, deps, broadcaster, typingSignaler, logger, runLog)
 
 	// Stop typing indicator before delivering the reply.
 	if typingSignaler != nil {
@@ -432,19 +426,10 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 	//   - success path: agent loop saw ctx.Done() between turns and
 	//     returned cleanly with stopReason="aborted" (no error)
 	// In both cases the user's intent is "supersede with the next run",
-	// so we clear the emoji instead of finishing with 👍 (Done) or 😱
-	// (Error). The new run sets its own emoji on the new user message.
+	// so the run is quietly superseded; the new run produces the reply.
 	mergedCancel := errors.Is(context.Cause(ctx), ErrMergedIntoNewRun)
 
 	if err != nil {
-		if statusCtrl != nil {
-			if mergedCancel {
-				statusCtrl.SetClear()
-			} else {
-				statusCtrl.SetError()
-			}
-			statusCtrl.CloseAfterDrain()
-		}
 		handleRunError(ctx, params, deps, broadcaster, logger, err, now)
 
 		// Drain pending queue even on error: if the user sent a message while
@@ -459,15 +444,6 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 			}
 		}
 		return
-	}
-
-	if statusCtrl != nil {
-		if mergedCancel {
-			statusCtrl.SetClear()
-		} else {
-			statusCtrl.SetDone()
-		}
-		statusCtrl.CloseAfterDrain()
 	}
 
 	// Skip handleRunSuccess on a merge cancel: there's no real assistant

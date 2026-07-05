@@ -273,7 +273,7 @@ func (h *Handler) SendSync(ctx context.Context, sessionKey, message, model strin
 	// (miniapp.chat.send, cron single-run, heartbeat, boot, mail-qa, BTW) is
 	// invisible in ~/.deneb/agent-logs and to the modeltuner's AggregateByModel.
 	runLog := agentlog.NewRunLogger(deps.agentLog, params.SessionKey, params.ClientRunID)
-	result, err := executeAgentRun(ctx, params, deps, nil, nil, nil, h.logger, runLog)
+	result, err := executeAgentRun(ctx, params, deps, nil, nil, h.logger, runLog)
 	if err != nil {
 		return nil, err
 	}

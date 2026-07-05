@@ -42,18 +42,12 @@ type prepResult struct {
 
 // prepareContextAndPrompt runs wiki injection, context assembly, and system prompt
 // build in parallel. Returns the combined results.
-//
-// statusCtrl is optional: when non-nil, the recall goroutine signals
-// SetRecalling on a true cache miss (cue present + no cached evidence) so
-// the user sees 🧠 only when memory search is actually happening, not for
-// every prep call.
 func prepareContextAndPrompt(
 	ctx context.Context,
 	params RunParams,
 	deps runDeps,
 	workspaceDir string,
 	sessionToolPreset string,
-	statusCtrl statusReactor,
 	logger *slog.Logger,
 ) prepResult {
 	var result prepResult
@@ -151,13 +145,10 @@ func prepareContextAndPrompt(
 				resultMu.Unlock()
 				return
 			}
-			// Explicit recall: surface the 🧠 phase so the user sees the
-			// wiki/diary/transcript search instead of a frozen 📚. Silent
-			// auto-recall on no-cue turns stays invisible.
+			// Explicit recall: surface the recalling phase so the user sees the
+			// wiki/diary/transcript search. Silent auto-recall on no-cue turns
+			// stays invisible.
 			emitPhase(deps, params, "recalling", time.Now())
-			if statusCtrl != nil {
-				statusCtrl.SetRecalling()
-			}
 		}
 		recallMemory, recallTruncated := buildRecallPreflight(ctx, params, deps, logger)
 		if shouldFreezeRecallSnapshot(hasCue, recallTruncated, recallMemory) {
@@ -400,9 +391,8 @@ func prepareContextAndPrompt(
 
 // compactionHooks holds optional callbacks for the STW compaction phase.
 // When LLM compaction fires, these hooks provide user-visible feedback
-// (status emoji + typing keepalive) so the user knows the system is working.
+// (typing keepalive) so the user knows the system is working.
 type compactionHooks struct {
-	onStart  func() // called when LLM compaction begins (e.g. set ✍ emoji)
 	typingFn func() // sends typing indicator every 5s during compaction
 }
 
@@ -568,9 +558,6 @@ func assembleMessages(
 			threshold := int(float64(contextBudget) * compact.DefaultLLMThresholdPct)
 			if currentTokens > threshold {
 				compactStart = time.Now()
-				if hooks.onStart != nil {
-					hooks.onStart()
-				}
 				logger.Info("pipeline: STW compaction starting",
 					"tokens", currentTokens, "budget", contextBudget,
 					"ratio", fmt.Sprintf("%.1f%%", float64(currentTokens)/float64(contextBudget)*100))

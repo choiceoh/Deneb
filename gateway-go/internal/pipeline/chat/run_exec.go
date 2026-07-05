@@ -46,7 +46,6 @@ func executeAgentRun(
 	deps runDeps,
 	broadcaster *streaming.Broadcaster,
 	typingSignaler chatport.TypingSignaler,
-	statusCtrl statusReactor,
 	logger *slog.Logger,
 	runLog *agentlog.RunLogger,
 ) (*chatRunResult, error) {
@@ -61,14 +60,9 @@ func executeAgentRun(
 	}
 
 	// Signal "preparing" phase — covers parallel context assembly, system prompt
-	// build, and recall preflight setup. The status controller debounces this
-	// against the prior Queued state so very fast preps (<700ms) keep showing
-	// 👀 instead of flickering to 📚 and back. WebSocket clients receive a
-	// structured phase.changed event for the same transition.
+	// build, and recall preflight setup. WebSocket clients receive a structured
+	// phase.changed event for the transition.
 	emitPhase(deps, params, "preparing", runStart)
-	if statusCtrl != nil {
-		statusCtrl.SetPreparing()
-	}
 
 	// 1. Persist user message to transcript + Aurora store. Skipped when the
 	// turn is marked Ephemeral — autonomous self-triggers (heartbeat) share
@@ -170,7 +164,7 @@ func executeAgentRun(
 
 	// Stage 1: Parallel context + prompt preparation.
 	prepStart := time.Now()
-	prep := prepareContextAndPrompt(ctx, params, deps, workspaceDir, sessionToolPreset, statusCtrl, logger)
+	prep := prepareContextAndPrompt(ctx, params, deps, workspaceDir, sessionToolPreset, logger)
 	logger.Info("pipeline: parallel prep done (context+sysprompt)", "ms", time.Since(prepStart).Milliseconds())
 
 	if prep.ContextErr != nil {
@@ -180,19 +174,15 @@ func executeAgentRun(
 
 	// Stage 2: Assemble final message list (prebuilt, attachments, Polaris compaction).
 	var cHooks *compactionHooks
-	if statusCtrl != nil || (deps.callbacks.typingFn != nil && params.Delivery != nil) {
-		cHooks = &compactionHooks{}
-		if statusCtrl != nil {
-			cHooks.onStart = statusCtrl.SetCompacting
-		}
-		if deps.callbacks.typingFn != nil && params.Delivery != nil {
-			delivery := params.Delivery
-			typingFn := deps.callbacks.typingFn
-			cHooks.typingFn = func() {
+	if deps.callbacks.typingFn != nil && params.Delivery != nil {
+		delivery := params.Delivery
+		typingFn := deps.callbacks.typingFn
+		cHooks = &compactionHooks{
+			typingFn: func() {
 				tCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 				defer cancel()
 				_ = typingFn(tCtx, delivery)
-			}
+			},
 		}
 	}
 	messages := assembleMessages(ctx, params, deps, prep, mr, logger, cHooks)
@@ -318,7 +308,7 @@ func executeAgentRun(
 
 	// Set up stream hooks via compositor: fan-out dispatch for each hook type.
 	var hc agent.HookCompositor
-	deltaTranslit := wireStreamHooks(&hc, params, deps, broadcaster, typingSignaler, statusCtrl)
+	deltaTranslit := wireStreamHooks(&hc, params, deps, broadcaster, typingSignaler)
 	// Untrusted-origin tool gate (interactive runs only): block irreversible
 	// tools once promptware enters the turn. Placed here so prep.RecallMemory is
 	// available to seed the taint; composes with any gate wireStreamHooks set.

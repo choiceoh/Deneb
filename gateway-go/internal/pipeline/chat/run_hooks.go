@@ -10,7 +10,7 @@ import (
 )
 
 // wireStreamHooks registers all non-draft streaming hooks on the compositor:
-// WebSocket broadcaster, typing signaler, status reactions, and gateway events.
+// WebSocket broadcaster, typing signaler, and gateway events.
 // The draft stream loop is wired separately in executeAgentRun because it has
 // defer-based cleanup tied to that scope.
 //
@@ -24,7 +24,6 @@ func wireStreamHooks(
 	deps runDeps,
 	broadcaster *streaming.Broadcaster,
 	typingSignaler chatport.TypingSignaler,
-	statusCtrl statusReactor,
 ) *hanja.Streamer {
 	var deltaTranslit *hanja.Streamer
 	// Broadcaster: WebSocket streaming deltas. Read Sino-Korean Hanja as Hangul
@@ -72,15 +71,6 @@ func wireStreamHooks(
 		hc.OnToolProgress(func(_ string, _ string, _ int) {
 			typingSignaler.SignalToolProgress(0)
 		})
-	}
-
-	// Status controller: live phase/status indicators.
-	if statusCtrl != nil {
-		hc.OnThinking(func(string) { statusCtrl.SetThinking() })
-		hc.OnToolStart(func(name, _ string, _ []byte) { statusCtrl.SetTool(name) })
-		// First text delta means we moved past thinking — set thinking
-		// emoji if not already in a tool phase.
-		hc.OnTextDelta(func(_ string) { statusCtrl.SetThinking() })
 	}
 
 	// Mutation failure escalation: a mutation tool reported an in-band failure
