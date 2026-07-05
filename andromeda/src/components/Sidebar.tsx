@@ -37,11 +37,16 @@ export function Sidebar() {
   // Session list backing the rail in 코드 모드. Refetch on (re)entering the mode or
   // returning to the 코드 view, so create/delete in CodePane reflects here.
   const [sessions, setSessions] = useState<CodeSession[]>([]);
+  // Leaving 코드 모드 (or losing the gateway) empties the rail immediately —
+  // adjusted during render; the effect below only fetches.
+  const codeRailActive = codeMode && connected;
+  const [prevCodeRailActive, setPrevCodeRailActive] = useState(codeRailActive);
+  if (prevCodeRailActive !== codeRailActive) {
+    setPrevCodeRailActive(codeRailActive);
+    if (!codeRailActive) setSessions([]);
+  }
   useEffect(() => {
-    if (!codeMode || !connected) {
-      setSessions([]);
-      return;
-    }
+    if (!codeMode || !connected) return;
     let alive = true;
     codeSessions(cfg)
       .then((s) => alive && setSessions(s))

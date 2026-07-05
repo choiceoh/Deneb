@@ -257,21 +257,25 @@ function SkillDetailModal({
     }
   }, [cfg, name]);
 
-  const load = useCallback(async () => {
+  // The stale-error reset is a render adjustment so the loader below has no
+  // synchronous setState left for its effect-driven runs.
+  const detailKey = `${name}|${cfg.url}|${cfg.token}`;
+  const [prevDetailKey, setPrevDetailKey] = useState(detailKey);
+  if (prevDetailKey !== detailKey) {
+    setPrevDetailKey(detailKey);
     setLoadErr("");
-    try {
-      const d = await callRpc<SkillDetailResponse>(cfg, SKILLS_RPC.detail, { name });
-      setDetail(d);
-      setDraft(d?.body ?? "");
-    } catch (e) {
-      setLoadErr(errText(e));
-    }
-    await loadLifecycle();
-  }, [cfg, name, loadLifecycle]);
+  }
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    void callRpc<SkillDetailResponse>(cfg, SKILLS_RPC.detail, { name })
+      .then((d) => {
+        setDetail(d);
+        setDraft(d?.body ?? "");
+        setLoadErr("");
+      })
+      .catch((e) => setLoadErr(errText(e)))
+      .then(() => loadLifecycle());
+  }, [cfg, name, loadLifecycle]);
 
   const skill = detail?.skill;
   const body = detail?.body ?? "";
@@ -501,22 +505,28 @@ function PropusFeed({
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(true);
 
-  const load = useCallback(async () => {
-    if (!connected) return;
-    setLoading(true);
-    setErr("");
-    try {
-      setData(await callRpc<SkillsLifecycleResponse>(cfg, SKILLS_RPC.lifecycle, { limit: 60 }));
-    } catch (e) {
-      setErr(errText(e));
-    } finally {
-      setLoading(false);
+  // Spinner/error reset for each (re)load is a render adjustment; the loader
+  // keeps only the async parts so the effect call has no sync setState.
+  const lifecycleKey = `${connected}|${cfg.url}|${cfg.token}`;
+  const [prevLifecycleKey, setPrevLifecycleKey] = useState(lifecycleKey);
+  if (prevLifecycleKey !== lifecycleKey) {
+    setPrevLifecycleKey(lifecycleKey);
+    if (connected) {
+      setLoading(true);
+      setErr("");
     }
-  }, [cfg, connected]);
+  }
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (!connected) return;
+    void callRpc<SkillsLifecycleResponse>(cfg, SKILLS_RPC.lifecycle, { limit: 60 })
+      .then((d) => {
+        setData(d);
+        setErr("");
+      })
+      .catch((e) => setErr(errText(e)))
+      .finally(() => setLoading(false));
+  }, [cfg, connected]);
 
   if (!connected) return <p style={{ color: color.muted }}>미연결</p>;
   if (loading && !data) return <p style={{ color: color.muted }}>불러오는 중…</p>;

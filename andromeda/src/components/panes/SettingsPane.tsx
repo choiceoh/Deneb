@@ -87,7 +87,7 @@ export function SettingsPane() {
   // tabindex below keeps only the active tab in the page tab order).
   function onTabKey(e: KeyboardEvent, idx: number) {
     const last = TABS.length - 1;
-    let next = idx;
+    let next: number;
     if (e.key === "ArrowRight") next = idx === last ? 0 : idx + 1;
     else if (e.key === "ArrowLeft") next = idx === 0 ? last : idx - 1;
     else if (e.key === "Home") next = 0;
@@ -278,21 +278,26 @@ function PromptSettings() {
   const dirty = Boolean(detail) && draft !== originalText;
   const editable = detail?.editable !== false;
 
-  useEffect(() => {
+  // A new connection identity restarts the prompt browser from scratch — the
+  // resets are render adjustments; the initial fetch lives in the effect below
+  // (placed after the loader declarations so it can reference them).
+  const promptsKey = `${connected}|${cfg.url}|${cfg.token}`;
+  const [prevPromptsKey, setPrevPromptsKey] = useState(promptsKey);
+  if (prevPromptsKey !== promptsKey) {
+    setPrevPromptsKey(promptsKey);
     setPrompts([]);
     setSelectedId("");
     setDetail(null);
     setDraft("");
     setStatus("");
     setError("");
-    if (connected) void refreshPrompts(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [connected, cfg.url, cfg.token]);
+    if (connected) setLoadingList(true);
+  }
 
-  async function refreshPrompts(openFirst = false) {
+  // Async body only (no synchronous setState) so the effect below can call it
+  // directly; handlers go through refreshPrompts, which adds the sync spinner.
+  async function refreshPromptsInner(openFirst = false) {
     if (!connected) return;
-    setLoadingList(true);
-    setError("");
     try {
       const rows = await listPrompts(cfg);
       setPrompts(rows);
@@ -305,6 +310,13 @@ function PromptSettings() {
     } finally {
       setLoadingList(false);
     }
+  }
+
+  function refreshPrompts(openFirst = false) {
+    if (!connected) return;
+    setLoadingList(true);
+    setError("");
+    void refreshPromptsInner(openFirst);
   }
 
   async function openPrompt(id: string, force = false) {
@@ -325,6 +337,13 @@ function PromptSettings() {
       setLoadingDetail(false);
     }
   }
+
+  useEffect(() => {
+    // Deferred one microtask (still pre-paint): the loader is shared with
+    // refreshPrompts and trips the lint's interprocedural sync-setState pass.
+    if (connected) queueMicrotask(() => void refreshPromptsInner(true));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connected, cfg.url, cfg.token]);
 
   async function savePrompt() {
     if (!detail?.id || !editable || !dirty) return;

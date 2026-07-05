@@ -116,17 +116,29 @@ export function FleetPane() {
     setLoading(false);
   }, [cfg, connected]);
 
-  useEffect(() => {
+  // Disconnect wipes the visible load state during render (adjust pattern);
+  // the effect keeps only the ref bookkeeping and the polling loop.
+  const [prevFleetConn, setPrevFleetConn] = useState(connected);
+  if (prevFleetConn !== connected) {
+    setPrevFleetConn(connected);
     if (!connected) {
-      refreshSeqRef.current += 1;
-      loadedRef.current = false;
       setLoaded(false);
       setLoading(false);
       setStale(false);
       setError("");
+    }
+  }
+
+  useEffect(() => {
+    if (!connected) {
+      refreshSeqRef.current += 1;
+      loadedRef.current = false;
       return;
     }
-    void refresh();
+    // First load deferred one microtask (still pre-paint) — refresh() is shared
+    // with handlers and the interval, and its body trips the lint's
+    // interprocedural sync-setState pass.
+    queueMicrotask(() => void refresh());
     const id = window.setInterval(() => void refresh(), 7_000);
     return () => {
       refreshSeqRef.current += 1;
@@ -246,7 +258,7 @@ export function FleetPane() {
 
   function onViewKey(e: KeyboardEvent<HTMLButtonElement>, idx: number) {
     const last = FLEET_VIEWS.length - 1;
-    let next = idx;
+    let next: number;
     if (e.key === "ArrowRight") next = idx === last ? 0 : idx + 1;
     else if (e.key === "ArrowLeft") next = idx === 0 ? last : idx - 1;
     else if (e.key === "Home") next = 0;

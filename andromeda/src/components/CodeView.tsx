@@ -18,7 +18,7 @@ import { ModelPicker } from "./ModelPicker";
 // 목록·검증/올리기/되돌리기). ChatView와 같은 중앙-채팅 레이아웃(chat-view)을 재사용한다.
 export function CodeView({ cfg, hidden = false }: { cfg: GatewayConfig; hidden?: boolean }) {
   const { connected, activeCodeKey } = useWorkspace();
-  const { thinking, busy, turns, send, stop, regenerate, clear, setTurns } = useChat(cfg);
+  const { thinking, busy, turns, send, stop, regenerate, setTurns } = useChat(cfg);
   const [input, setInput] = useState("");
   const composeRef = useRef<HTMLTextAreaElement>(null);
   const [models, setModels] = useState<ModelsList | null>(null);
@@ -28,12 +28,18 @@ export function CodeView({ cfg, hidden = false }: { cfg: GatewayConfig; hidden?:
 
   // Load the selected coding session's transcript into the chat when it changes; clear
   // when nothing is selected. Switching tasks continues that worktree's turns.
+  // The inactive reset is a render adjustment: setTurns([]) empties the visible
+  // transcript (thinking/regenerate only render off an existing streaming turn,
+  // so useChat's leftover internals are unreachable until the next send).
+  const codeKeyNow = connected ? (activeCodeKey ?? null) : null;
+  const [prevCodeKey, setPrevCodeKey] = useState(codeKeyNow);
+  if (prevCodeKey !== codeKeyNow) {
+    setPrevCodeKey(codeKeyNow);
+    setLoadErr("");
+    if (!codeKeyNow) setTurns([]);
+  }
   useEffect(() => {
-    if (!activeCodeKey || !connected) {
-      clear();
-      setLoadErr("");
-      return;
-    }
+    if (!activeCodeKey || !connected) return;
     let cancelled = false;
     sessionTranscript(cfg, activeCodeKey)
       .then((msgs) => {
@@ -56,11 +62,13 @@ export function CodeView({ cfg, hidden = false }: { cfg: GatewayConfig; hidden?:
   }, [activeCodeKey, connected, cfg.url, cfg.token]);
 
   // Model registry — best-effort, same as ChatView/AIPanel.
+  const [prevModelsConn, setPrevModelsConn] = useState(connected);
+  if (prevModelsConn !== connected) {
+    setPrevModelsConn(connected);
+    if (!connected) setModels(null);
+  }
   useEffect(() => {
-    if (!connected) {
-      setModels(null);
-      return;
-    }
+    if (!connected) return;
     let cancelled = false;
     void listModels(cfg)
       .then((m) => {

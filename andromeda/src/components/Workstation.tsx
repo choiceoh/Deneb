@@ -37,9 +37,7 @@ export function Workstation({ cfg }: { cfg: GatewayConfig }) {
   // 파일 pane은 첫 방문 이후 계속 마운트 유지(열린 탭·미저장 편집을 pane 전환에도 보존).
   // 방문 전엔 렌더하지 않아 불필요한 프리페치·DOM 중복을 피한다.
   const [filesMounted, setFilesMounted] = useState(false);
-  useEffect(() => {
-    if (view === "files") setFilesMounted(true);
-  }, [view]);
+  if (view === "files" && !filesMounted) setFilesMounted(true);
 
   // Durable catch-up sync, session-scoped (Workstation is always mounted): keeps
   // the work feed / calendar reconciled even when a live proactive push is missed.

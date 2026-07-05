@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useCreate, useInvalidate, useUpdate } from "@refinedev/core";
 
 import type { CalEvent } from "@/types";
@@ -66,11 +66,16 @@ export function CalendarPane() {
     [events, selectedEventId],
   );
 
+  // Drop the proposal tray the moment the connection goes away — a render
+  // adjustment, so the refresh effect below stays async-only.
+  const [prevProposalConn, setPrevProposalConn] = useState(connected);
+  if (prevProposalConn !== connected) {
+    setPrevProposalConn(connected);
+    if (!connected) setProposals([]);
+  }
+
   async function refreshProposals() {
-    if (!connected) {
-      setProposals([]);
-      return;
-    }
+    if (!connected) return;
     try {
       setProposals(await listCalendarProposals(cfg));
     } catch {
@@ -101,7 +106,10 @@ export function CalendarPane() {
   }
 
   useEffect(() => {
-    void refreshProposals();
+    // Deferred one microtask (still pre-paint): refreshProposals is shared with
+    // decideProposal, and the lint's interprocedural pass doesn't model await
+    // boundaries inside called functions.
+    queueMicrotask(() => void refreshProposals());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connected, cfg.url, cfg.token]);
 
@@ -111,19 +119,19 @@ export function CalendarPane() {
   // events load — so the target is consumed at once and never re-applies over the
   // user's later navigation. An id WITHOUT a dayKey needs its event to find the
   // day, so we keep the target pending (return false) while events are loading.
-  const applyTarget = useCallback(
-    (t: PaneTarget) => {
-      const matchedEvent = t.id !== undefined ? events.find((ev) => String(ev.id) === String(t.id)) : undefined;
-      const matchedKey = t.dayKey ?? (matchedEvent ? eventDayKeys(matchedEvent.start, matchedEvent.end)[0] : "");
-      if (!matchedKey) return t.id !== undefined && query.isLoading ? false : undefined;
-      const targetDate = parseDayKey(matchedKey);
-      if (!targetDate) return;
-      setCursor({ y: targetDate.getFullYear(), m: targetDate.getMonth() });
-      setSelectedDay(matchedKey);
-      setSelectedEventId(t.id !== undefined ? String(t.id) : null);
-    },
-    [events, query.isLoading],
-  );
+  // Plain function (no manual memo — the compiler lint couldn't preserve it):
+  // usePaneTarget's effect is null-guarded and consume-once, so an unstable
+  // identity just means a cheap idempotent re-run per render.
+  const applyTarget = (t: PaneTarget) => {
+    const matchedEvent = t.id !== undefined ? events.find((ev) => String(ev.id) === String(t.id)) : undefined;
+    const matchedKey = t.dayKey ?? (matchedEvent ? eventDayKeys(matchedEvent.start, matchedEvent.end)[0] : "");
+    if (!matchedKey) return t.id !== undefined && query.isLoading ? false : undefined;
+    const targetDate = parseDayKey(matchedKey);
+    if (!targetDate) return;
+    setCursor({ y: targetDate.getFullYear(), m: targetDate.getMonth() });
+    setSelectedDay(matchedKey);
+    setSelectedEventId(t.id !== undefined ? String(t.id) : null);
+  };
   usePaneTarget("calendar", applyTarget);
 
   // Place each event on every day it spans, so the month grid can look a day up.

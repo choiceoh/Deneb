@@ -160,6 +160,9 @@ export function TodayPane() {
   const people = ppl.result?.data ?? [];
   const crons = cron.result?.data ?? [];
   const quotes = market.result?.data ?? [];
+  // Render-time clock read — the briefs bucket events/todos by "now" and must
+  // stay honest on every re-render; a state snapshot would drift.
+  // eslint-disable-next-line react-hooks/purity
   const now = Date.now();
 
   const briefs: Brief[] = [

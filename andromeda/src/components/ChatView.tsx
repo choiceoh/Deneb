@@ -1,4 +1,4 @@
-import { type ChangeEvent, useEffect, useRef, useState } from "react";
+import { type ChangeEvent, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { inferAttachmentMimeType } from "@/attachmentMime";
 import { readFileBase64, splitAttachable } from "@/attachments";
@@ -46,11 +46,14 @@ export function ChatView({ cfg, hidden = false }: { cfg: GatewayConfig; hidden?:
   );
   const { ref: transcriptRef, onScroll, pin, atBottom, scrollToBottom } = useStickyScroll([turns, thinking]);
 
+  // Disconnect reset is a render adjustment; the effect only does the fetch.
+  const [prevModelsConn, setPrevModelsConn] = useState(connected);
+  if (prevModelsConn !== connected) {
+    setPrevModelsConn(connected);
+    if (!connected) setModels(null);
+  }
   useEffect(() => {
-    if (!connected) {
-      setModels(null);
-      return;
-    }
+    if (!connected) return;
     let cancelled = false;
     void listModels(cfg)
       .then((m) => {
@@ -94,10 +97,12 @@ export function ChatView({ cfg, hidden = false }: { cfg: GatewayConfig; hidden?:
   }, [busy, hidden]);
 
   // busy의 ref 미러 + 첨부 큐 락 — attachFiles의 파일 읽기 틈에 턴이 인터리브되는 것 방지
-  // (AIPanel과 동일 패턴). 미러는 렌더 중 대입 — useEffect 반영은 커밋 뒤로 밀릴 수 있어
-  // FileReader 태스크 인터리빙에서 낡은 값을 읽을 수 있다.
+  // (AIPanel과 동일 패턴). 미러는 useLayoutEffect — 커밋 시 동기 반영이라 FileReader
+  // 콜백이 낡은 값을 읽을 수 없고, 렌더 중 ref 대입(react-hooks/refs 위반)도 피한다.
   const busyRef = useRef(busy);
-  busyRef.current = busy;
+  useLayoutEffect(() => {
+    busyRef.current = busy;
+  });
   const attachingRef = useRef(false);
 
   // Non-work: no workspaceContext / activeResource — a pure conversation, scoped to

@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useState } from "react";
 import type { WorkItem } from "@/types";
 import { useCachedList } from "@/cachedList";
 import { callRpc, chatStream } from "@/gateway";
@@ -103,13 +103,17 @@ export function WorkfeedPane() {
   });
 
   // An id-less workfeed target is meaningless — keep it pending rather than
-  // clearing the current selection.
-  const openTargetedItem = useCallback((t: PaneTarget) => {
+  // clearing the current selection. Plain function (no manual memo — the
+  // compiler lint couldn't preserve it); usePaneTarget re-runs are idempotent.
+  const openTargetedItem = (t: PaneTarget) => {
     if (t.id === undefined) return false;
     setSelectedId(t.id);
-  }, []);
+  };
   usePaneTarget("workfeed", openTargetedItem);
 
+  // Render-time clock read — day bucketing/pager bounds must track wall-clock at
+  // paint; a state snapshot would go stale across midnight.
+  // eslint-disable-next-line react-hooks/purity
   const nowMs = Date.now();
   const todayMs = startOfDay(nowMs);
   // Navigation mirrors the native feed: freely steppable back across the lookback

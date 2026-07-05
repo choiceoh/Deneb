@@ -58,14 +58,19 @@ export function WikiPane() {
   }, [connected, cfg.url, cfg.token]);
 
   // Opening a page reveals it in the tree: expand every ancestor folder.
-  useEffect(() => {
-    if (!path) return;
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      for (const dir of ancestorsOf(path)) next.add(dir);
-      return next;
-    });
-  }, [path]);
+  // Adjusted during render so the reveal lands in the same pass as the path
+  // change (the Set updater is pure).
+  const [prevRevealPath, setPrevRevealPath] = useState(path);
+  if (prevRevealPath !== path) {
+    setPrevRevealPath(path);
+    if (path) {
+      setExpanded((prev) => {
+        const next = new Set(prev);
+        for (const dir of ancestorsOf(path)) next.add(dir);
+        return next;
+      });
+    }
+  }
 
   // 인물 카드 / 검색 결과에서 넘어온 위키 경로를 열고 채널을 비운다.
   useEffect(() => {

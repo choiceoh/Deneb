@@ -64,13 +64,18 @@ export function MailPane() {
   const markMailRead = useCallback(
     (id: string | number) => {
       const key = String(id);
-      setLocallyReadIds((prev) => {
-        if (prev.has(key)) return prev;
-        const next = new Set(prev);
-        next.add(key);
-        writeLocallyReadIds(next);
-        return next;
-      });
+      // Optimistic local echo, deferred one microtask: the selection effect calls
+      // this synchronously, and microtasks still flush before paint, so the row
+      // flips just as instantly without a sync setState inside an effect pass.
+      queueMicrotask(() =>
+        setLocallyReadIds((prev) => {
+          if (prev.has(key)) return prev;
+          const next = new Set(prev);
+          next.add(key);
+          writeLocallyReadIds(next);
+          return next;
+        }),
+      );
       if (markingReadIdsRef.current.has(key)) return;
       markingReadIdsRef.current.add(key);
       void run(MAIL_RPC.markRead, { id })
@@ -97,6 +102,9 @@ export function MailPane() {
     markMailRead(selectedId);
   }, [markMailRead, selectedId, selectedMail?.isUnread]);
 
+  // Render-time clock read — "today" must track wall-clock at paint so the pager's
+  // forward ceiling stays honest; a state snapshot would go stale across midnight.
+  // eslint-disable-next-line react-hooks/purity
   const nowMs = Date.now();
   const todayMs = startOfDay(nowMs);
   // Step back freely across the lookback window (forward stops at today). A deep-
@@ -122,13 +130,13 @@ export function MailPane() {
   // A mail opened by id (work feed / search / notification deep-link) may belong to
   // another day than the one in view — there'd be no row to expand. Once its detail
   // lands, jump the pager to that mail's day so the row appears. Same-day row clicks
-  // are a no-op (the day already matches).
+  // are a no-op (the day already matches). Adjusted during render — converges in one
+  // extra pass because the next render sees dayMs === md.
   const selectedDateMs = selectedMail?.date ? new Date(selectedMail.date).getTime() : NaN;
-  useEffect(() => {
-    if (selectedId === undefined || Number.isNaN(selectedDateMs)) return;
+  if (selectedId !== undefined && !Number.isNaN(selectedDateMs)) {
     const md = startOfDay(selectedDateMs);
     if (md !== dayMs) setDayMs(md);
-  }, [selectedId, selectedDateMs, dayMs]);
+  }
 
   // Mirror the grid (subject · sender · date) so the AI sees what the user sees.
   const listText = serializeList("메일", mails, (m) => {
