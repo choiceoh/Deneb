@@ -289,6 +289,7 @@ actual suspend fun shareImageToApps(bytes: ByteArray, baseName: String, extensio
     // Started from the application Context (no Activity), so the chooser needs NEW_TASK.
     context.startActivity(Intent.createChooser(send, null).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
 }
+
 // postAgentNotification shows a local notification on the agent's own channel —
 // the app-permission successor of termux-notification. Channel is created
 // idempotently; POST_NOTIFICATIONS may be revoked on 13+, in which case notify()
@@ -331,9 +332,14 @@ private fun speakText(context: Context, text: String): Boolean {
                 engine.language = java.util.Locale.KOREAN
                 engine.setOnUtteranceProgressListener(object : android.speech.tts.UtteranceProgressListener() {
                     override fun onStart(utteranceId: String?) {}
-                    override fun onDone(utteranceId: String?) { engine.shutdown() }
+                    override fun onDone(utteranceId: String?) {
+                        engine.shutdown()
+                    }
+
                     @Deprecated("platform callback")
-                    override fun onError(utteranceId: String?) { engine.shutdown() }
+                    override fun onError(utteranceId: String?) {
+                        engine.shutdown()
+                    }
                 })
                 engine.speak(text, android.speech.tts.TextToSpeech.QUEUE_FLUSH, null, "deneb-speak")
             } else {
