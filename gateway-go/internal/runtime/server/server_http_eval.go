@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmailpoll"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailanalysis"
 )
 
 // handleEvalExtract runs a PRODUCTION extractor (its real prompt + jsonutil parse +
@@ -54,7 +54,7 @@ func (s *Server) handleEvalExtract(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := gmailpoll.ExtractForEval(r.Context(), client, req.Model, req.Kind, req.Input)
+	result, err := mailanalysis.ExtractForEval(r.Context(), client, req.Model, req.Kind, req.Input)
 	if err != nil {
 		s.writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": err.Error()})
 		return

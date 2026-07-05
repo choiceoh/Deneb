@@ -120,6 +120,15 @@ var requiredMethods = []string{
 	"miniapp.gmail.trash",
 	"miniapp.gmail.native_status",
 	"miniapp.gmail.sender_context",
+	// miniapp.mail.* — the accurate archive-first namespace, registered as
+	// aliases of the miniapp.gmail.* handlers above (withMailAliases).
+	"miniapp.mail.list_recent",
+	"miniapp.mail.get",
+	"miniapp.mail.mark_read",
+	"miniapp.mail.archive",
+	"miniapp.mail.trash",
+	"miniapp.mail.native_status",
+	"miniapp.mail.sender_context",
 	"miniapp.models.add_custom",
 	"miniapp.models.delete_custom",
 	"miniapp.models.list",

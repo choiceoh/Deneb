@@ -6,18 +6,18 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmailpoll"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailanalysis"
 )
 
 func TestCalendarProposalsFromMail(t *testing.T) {
 	now := time.Date(2026, 6, 17, 10, 0, 0, 0, time.Local)
-	items := []gmailpoll.ActionItem{
+	items := []mailanalysis.ActionItem{
 		{Title: "킥오프 미팅 참석", DueHint: "6월 30일", Priority: "high"}, // dated + high → proposed
 		{Title: "자료 검토", DueHint: "", Priority: "high"},           // no date → skipped
 		{Title: "사소한 확인", DueHint: "내일", Priority: "low"},         // dated but low → skipped
 		{Title: "  ", DueHint: "내일", Priority: "high"},            // blank title → skipped
 	}
-	deal := &gmailpoll.DealInfo{Counterparty: "탑솔라", DocType: "세금계산서", DueDate: "2026-06-30"}
+	deal := &mailanalysis.DealInfo{Counterparty: "탑솔라", DocType: "세금계산서", DueDate: "2026-06-30"}
 
 	got := calendarProposalsFromMail("m1", "FW: 미팅", "boss@example.com", []string{"견적서.pdf"}, items, deal, "attention", now)
 
@@ -68,7 +68,7 @@ func TestDocumentAttachmentNames(t *testing.T) {
 
 func TestCalendarProposalsFromMail_NoneWhenNothingQualifies(t *testing.T) {
 	now := time.Date(2026, 6, 17, 10, 0, 0, 0, time.Local)
-	items := []gmailpoll.ActionItem{
+	items := []mailanalysis.ActionItem{
 		{Title: "막연한 후속", DueHint: "", Priority: "high"}, // no date
 		{Title: "낮은 우선순위", DueHint: "내일", Priority: "low"},
 	}
@@ -79,12 +79,12 @@ func TestCalendarProposalsFromMail_NoneWhenNothingQualifies(t *testing.T) {
 
 func TestDealDeadlineTitle(t *testing.T) {
 	cases := []struct {
-		deal gmailpoll.DealInfo
+		deal mailanalysis.DealInfo
 		want string
 	}{
-		{gmailpoll.DealInfo{Counterparty: "탑솔라", DocType: "세금계산서"}, "탑솔라 세금계산서 결제 기한"},
-		{gmailpoll.DealInfo{Counterparty: "남도에코"}, "남도에코 결제 기한"},
-		{gmailpoll.DealInfo{}, "결제 기한"},
+		{mailanalysis.DealInfo{Counterparty: "탑솔라", DocType: "세금계산서"}, "탑솔라 세금계산서 결제 기한"},
+		{mailanalysis.DealInfo{Counterparty: "남도에코"}, "남도에코 결제 기한"},
+		{mailanalysis.DealInfo{}, "결제 기한"},
 	}
 	for _, c := range cases {
 		if got := dealDeadlineTitle(&c.deal); got != c.want {
@@ -124,7 +124,7 @@ func TestParseTimeOfDay(t *testing.T) {
 
 func TestCalendarProposalsFromMail_TimedMeeting(t *testing.T) {
 	now := time.Date(2026, 6, 17, 10, 0, 0, 0, time.Local)
-	items := []gmailpoll.ActionItem{
+	items := []mailanalysis.ActionItem{
 		// medium priority but TIMED → should still be proposed (a real meeting),
 		// and as a timed (not all-day) event.
 		{Title: "주간 회의 참석", DueHint: "6월 18일 14:00", Priority: "medium"},
@@ -146,11 +146,11 @@ func TestCalendarProposalsFromMail_TimedMeeting(t *testing.T) {
 func TestCalendarProposalsFromMail_RoutineImportanceSuppressed(t *testing.T) {
 	now := time.Date(2026, 6, 17, 10, 0, 0, 0, time.Local)
 	// Items that WOULD normally propose (high-priority dated + timed meeting + deal).
-	items := []gmailpoll.ActionItem{
+	items := []mailanalysis.ActionItem{
 		{Title: "킥오프 미팅 참석", DueHint: "6월 30일", Priority: "high"},
 		{Title: "주간 회의 참석", DueHint: "6월 18일 14:00", Priority: "medium"},
 	}
-	deal := &gmailpoll.DealInfo{Counterparty: "탑솔라", DocType: "세금계산서", DueDate: "2026-06-30"}
+	deal := &mailanalysis.DealInfo{Counterparty: "탑솔라", DocType: "세금계산서", DueDate: "2026-06-30"}
 
 	// routine (FYI/자동발신) mail → nothing proposed.
 	if got := calendarProposalsFromMail("m9", "뉴스레터", "noreply@x.com", nil, items, deal, "routine", now); len(got) != 0 {

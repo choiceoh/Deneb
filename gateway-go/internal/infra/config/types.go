@@ -255,7 +255,9 @@ type TopicsConfig struct {
 	Map map[string]string `json:"map,omitempty"`
 }
 
-// GmailPollConfig configures the periodic Gmail polling and analysis service.
+// GmailPollConfig configures the periodic Gmail polling and analysis service
+// (the legacy Gmail intake; the shared analysis pipeline it drives lives in
+// platform/mailanalysis and is intake-agnostic).
 type GmailPollConfig struct {
 	Enabled     *bool  `json:"enabled,omitempty"`
 	IntervalMin *int   `json:"intervalMin,omitempty"` // polling interval in minutes (default 30)
@@ -268,7 +270,7 @@ type GmailPollConfig struct {
 	// wiki page (so mail-detail opens as a cache hit instead of re-analyzing),
 	// but suppresses the proactive chat delivery. Use when another path (the
 	// kakao-watch email-single-analysis cron) already delivers the prose
-	// analysis to chat and gmailpoll would only duplicate it. Default false.
+	// analysis to chat and the mail poller would only duplicate it. Default false.
 	Silent *bool `json:"silent,omitempty"`
 }
 

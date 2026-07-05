@@ -80,7 +80,7 @@ func TestApplySamplingParams_MaxTokensRemap(t *testing.T) {
 // that is "low", not "minimal" or "none": over N=4 deterministic samples "low"
 // reasoned ~half of "none"/"minimal" with a non-overlapping range. Minimizing the
 // chain-of-thought keeps it from eating the max_tokens budget and truncating the
-// answer. The gmailpoll analysis path sets Thinking{Type:"disabled"} for this.
+// answer. The mail-analysis path sets Thinking{Type:"disabled"} for this.
 func TestApplySamplingParams_ReasoningDisabled(t *testing.T) {
 	oai := &openAIRequest{MaxTokens: 1536}
 	applySamplingParams(oai, &ChatRequest{Model: "step3p7", Thinking: &ThinkingConfig{Type: "disabled"}})

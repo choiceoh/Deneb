@@ -9,7 +9,7 @@
 //
 // This is intentionally permissive: every absolute http(s) anchor in a
 // large-attachment body becomes a candidate. The SSRF gate (which hosts may be
-// fetched) lives at the download boundary (gmailpoll), not here — a parser must
+// fetched) lives at the download boundary (mailanalysis), not here — a parser must
 // not make network-policy decisions.
 package lmtpd
 

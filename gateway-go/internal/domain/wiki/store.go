@@ -657,7 +657,7 @@ type StoreStats struct {
 // the in-memory diary search index so the new entry is immediately recallable.
 // Safe to call from any goroutine.
 //
-// Callers that go through the package-level AppendDiaryTo (gmailpoll,
+// Callers that go through the package-level AppendDiaryTo (mailanalysis,
 // morning_letter, etc.) bypass this indexing — their entries will only be
 // searchable after the next gateway restart, when rebuildFromDir picks them
 // up. Prefer Store.AppendDiary whenever a Store handle is available.

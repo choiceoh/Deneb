@@ -41,9 +41,9 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calprop"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmailpoll"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/localcal"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/localtodo"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailanalysis"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailwork"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/insights"
 	handleragent "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/agent"
@@ -96,6 +96,23 @@ func (s *Server) wikiSenderFacts(ctx context.Context, displayName string) string
 		return ""
 	}
 	return facts
+}
+
+// withMailAliases returns a miniapp.gmail.* method map extended with a
+// miniapp.mail.* alias for every method (same handler, both names dispatch).
+// The mail domain is archive-first — LMTP-ingested mail on the local archive
+// is the primary store and the Gmail API only a legacy fallback — so mail.*
+// is the accurate namespace going forward; gmail.* stays registered for
+// client compatibility until both native clients migrate.
+func withMailAliases(m map[string]rpcutil.HandlerFunc) map[string]rpcutil.HandlerFunc {
+	out := make(map[string]rpcutil.HandlerFunc, len(m)*2)
+	for name, h := range m {
+		out[name] = h
+		if rest, ok := strings.CutPrefix(name, "miniapp.gmail."); ok {
+			out["miniapp.mail."+rest] = h
+		}
+	}
+	return out
 }
 
 // registerEarlyMethods registers all RPC domains that don't depend on chatHandler.
@@ -398,10 +415,11 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 			OnUpload: s.fileIndexRemove,
 		}),
 
-		// Native mail domain. The RPC namespace stays miniapp.gmail.* for
-		// client compatibility, but the server now prefers the on-box archive
-		// repository and keeps Gmail as a fallback for legacy queries/tokens.
-		handlerminiapp.GmailMethods(handlerminiapp.GmailDeps{
+		// Native mail domain. Registered under BOTH miniapp.gmail.* (legacy,
+		// what shipped clients call) and miniapp.mail.* (accurate name — the
+		// server prefers the on-box archive repository and keeps Gmail only as
+		// a fallback for legacy queries/tokens). See withMailAliases.
+		withMailAliases(handlerminiapp.GmailMethods(handlerminiapp.GmailDeps{
 			Client: s.miniappMailClientFactory(denebDir),
 			// Same per-msgID cache directory the analyze handler/poller
 			// write to (the store is a stateless dir wrapper) — list rows
@@ -421,7 +439,7 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 					return string(tier), hint
 				}
 			}(),
-		}),
+		})),
 
 		// Mini App Calendar domain. Hybrid: a read-only Google client (lazy
 		// factory, like Gmail — gateway boots without OAuth tokens; reads
@@ -622,7 +640,7 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		// Combines Gmail recent-activity query, wiki memory lookup, and
 		// wiki-graph traversal (graphify CLI) so the Mini App detail
 		// view can show a contextual sender card.
-		handlerminiapp.GmailContextMethods(handlerminiapp.GmailContextDeps{
+		withMailAliases(handlerminiapp.GmailContextMethods(handlerminiapp.GmailContextDeps{
 			Client: func() (handlerminiapp.GmailClient, error) {
 				return gmail.DefaultClient()
 			},
@@ -639,9 +657,9 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 				if f := s.wikiSenderFacts(ctx, from); f != "" {
 					return f
 				}
-				return gmailpoll.ExtractSenderFacts(ctx, from)
+				return mailanalysis.ExtractSenderFacts(ctx, from)
 			},
-		}),
+		})),
 
 		// Mini App people directory (miniapp.people.list). Same Gmail
 		// lazy-client pattern; aggregates a single Search call into a
@@ -912,7 +930,7 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 		// init right before this phase. Lazy factory still — operator
 		// runs without any provider configured, the call returns
 		// UNAVAILABLE rather than crashing the gateway.
-		handlerminiapp.GmailAnalyzeMethods(handlerminiapp.GmailAnalyzeDeps{
+		withMailAliases(handlerminiapp.GmailAnalyzeMethods(handlerminiapp.GmailAnalyzeDeps{
 			// Archive-first client — the same factory the native mail list/detail
 			// surface uses. Mail now arrives via LMTP and lives in the on-box
 			// archive keyed by RFC822 Message-ID. The old gmail.DefaultClient()
@@ -939,7 +957,7 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 				if err != nil {
 					return nil, err
 				}
-				return handlerminiapp.PipelineFromGmailpoll(gmailClient, llmClient, localClient, model, localModel, s.mailAnalysisPrompt(), s.projectCandidatesFn(), s.wikiSenderFacts, tools.ExtractAttachmentTextBytes, s.mailCounterpartyProjects)
+				return handlerminiapp.PipelineFromMailAnalysis(gmailClient, llmClient, localClient, model, localModel, s.mailAnalysisPrompt(), s.projectCandidatesFn(), s.wikiSenderFacts, tools.ExtractAttachmentTextBytes, s.mailCounterpartyProjects)
 			},
 			Cache:      handlerminiapp.NewAnalysisStore(filepath.Join(s.denebDir, "cache", "mail_analysis")),
 			WorkState:  mailwork.New(filepath.Join(s.denebDir, "mail_work_state.json")),
@@ -952,7 +970,7 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 				return store, nil
 			},
 			Ask: s.makeMailQAAsk(),
-		}),
+		})),
 	}
 
 	for _, d := range domains {

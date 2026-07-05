@@ -14,7 +14,7 @@ globs: ["gateway-go/internal/pipeline/chat/tools/paddleocr.go", "gateway-go/inte
 | **PaddleOCR-VL-1.6** (0.9B) | 문서 OCR (스캔 PDF·이미지 첨부) | `http://127.0.0.1:18011/v1` | `chat/tools/paddleocr.go` | 상주 서빙. tesseract 폴백 있음. ↓ 상세 |
 | **VibeVoice-ASR** (9B) | 음성 전사 + 화자분리 + 타임스탬프 (최대 60분·50+개 언어·한국어) | `http://127.0.0.1:18013` (`POST /v1/transcribe`, OpenAI 비호환) | `chat/tools/asr.go` | transformers+FastAPI 상주. 핫워드로 고유명사 교정. `miniapp.capture.audio` 캡처 배선(#1847). ↓ 상세 |
 | 메인 챗 LLM | 대화/분석/도구호출 | provider config (Anthropic/OpenRouter/vLLM 등) | `pipeline/chat/run_provider.go` | modelrole `main`. 로컬일 때 기본 `http://127.0.0.1:8000/v1` |
-| lightweight 서브 LLM | gmailpoll/genesis/pilot 등 잡일꾼 | modelrole `lightweight` | `pipeline/pilot/localai.go` | 메인보다 작은 모델, 백그라운드 작업용 |
+| lightweight 서브 LLM | mailanalysis(메일폴)/genesis/pilot 등 잡일꾼 | modelrole `lightweight` | `pipeline/pilot/localai.go` | 메인보다 작은 모델, 백그라운드 작업용 |
 | NuExtract3-FP8 | 구조화 추출 (스키마 기반) | (config-driven, 코드 하드코딩 없음) | — | `~/models/NuExtract3-FP8`. 현재 게이트웨이 코드에서 직접 참조 없음 |
 | granite-embedding-311m / nomic-embed-text-v2-moe / BGE-M3 | 임베딩 (압축/검색) | config-driven | compaction 임베딩 폴백 경로 | `~/models/` 보관 |
 

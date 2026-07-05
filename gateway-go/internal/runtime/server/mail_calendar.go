@@ -27,12 +27,12 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calprop"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmailpoll"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailanalysis"
 )
 
 // autoProposeCalendarFromMail creates calendar proposals from a mail analysis.
 // Best-effort: a missing store or a per-item failure is logged and skipped.
-func (s *Server) autoProposeCalendarFromMail(msg *gmail.MessageDetail, items []gmailpoll.ActionItem, deal *gmailpoll.DealInfo, importance string) int {
+func (s *Server) autoProposeCalendarFromMail(msg *gmail.MessageDetail, items []mailanalysis.ActionItem, deal *mailanalysis.DealInfo, importance string) int {
 	if msg == nil {
 		return 0
 	}
@@ -70,7 +70,7 @@ func (s *Server) autoProposeCalendarFromMail(msg *gmail.MessageDetail, items []g
 // (FYI·자동발신·뉴스레터) mail proposes nothing at all — the single biggest cut to an
 // over-frequent proposal bell. urgent/attention still propose; an empty/unknown
 // tier is treated as proposable so a missing tag never silently drops a real one.
-func calendarProposalsFromMail(msgID, subject, from string, docs []string, items []gmailpoll.ActionItem, deal *gmailpoll.DealInfo, importance string, now time.Time) []calprop.CreateInput {
+func calendarProposalsFromMail(msgID, subject, from string, docs []string, items []mailanalysis.ActionItem, deal *mailanalysis.DealInfo, importance string, now time.Time) []calprop.CreateInput {
 	if strings.EqualFold(strings.TrimSpace(importance), "routine") {
 		return nil
 	}
@@ -193,7 +193,7 @@ func parseISODate(s string) (time.Time, bool) {
 
 // dealDeadlineTitle builds a human title for a deal's due date, e.g.
 // "탑솔라 세금계산서 결제 기한".
-func dealDeadlineTitle(deal *gmailpoll.DealInfo) string {
+func dealDeadlineTitle(deal *mailanalysis.DealInfo) string {
 	parts := make([]string, 0, 3)
 	if cp := strings.TrimSpace(deal.Counterparty); cp != "" {
 		parts = append(parts, cp)

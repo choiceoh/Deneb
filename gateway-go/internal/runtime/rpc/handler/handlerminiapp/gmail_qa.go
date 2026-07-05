@@ -18,7 +18,7 @@ import (
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmailpoll"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailanalysis"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
@@ -98,7 +98,7 @@ func gmailAsk(deps GmailAnalyzeDeps) rpcutil.HandlerFunc {
 func buildMailQAContext(msg *gmail.MessageDetail, deps GmailAnalyzeDeps) string {
 	var sb strings.Builder
 	sb.WriteString("## 이메일\n")
-	sb.WriteString(gmailpoll.FormatEmailForAnalysis(msg))
+	sb.WriteString(mailanalysis.FormatEmailForAnalysis(msg))
 
 	if deps.Cache != nil {
 		if rec, err := deps.Cache.load(msg.ID); err == nil && rec != nil {

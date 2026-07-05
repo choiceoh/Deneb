@@ -17,13 +17,13 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmailpoll"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/lmtpd"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailanalysis"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailarchive"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 )
 
-// noopGmailNotifier is a gmailpoll.Notifier that drops messages. Used in
+// noopGmailNotifier is a mailanalysis.Notifier that drops messages. Used in
 // silent mode so the poller fills the Mini App cache + wiki (via OnAnalyzed)
 // without delivering a duplicate proactive chat message. A real no-op (rather
 // than a nil notifier) keeps sendNotification from logging a per-cycle warn.
@@ -63,7 +63,7 @@ func (s *Server) initGmailPoll(snap *config.ConfigSnapshot) {
 	stateDir := config.ResolveStateDir()
 
 	stage2, stage2Model, stage1, stage1Model := s.mailAnalysisModels()
-	cfg := gmailpoll.Config{
+	cfg := mailanalysis.Config{
 		StateDir:               stateDir,
 		LLMClient:              stage2,
 		Model:                  stage2Model,
@@ -111,7 +111,7 @@ func (s *Server) initGmailPoll(snap *config.ConfigSnapshot) {
 		cfg.OnDelivered = s.makeMailFeedDeliverySink()
 	}
 
-	s.gmailPollSvc = gmailpoll.NewService(cfg, s.logger)
+	s.gmailPollSvc = mailanalysis.NewService(cfg, s.logger)
 
 	// Wire proactive relay as the gmail-poll notifier so email summaries
 	// are delivered verbatim AND mirrored into the main session
@@ -123,7 +123,7 @@ func (s *Server) initGmailPoll(snap *config.ConfigSnapshot) {
 	// consulted after Telegram bot retirement.
 	//
 	// Silent mode: the kakao-watch email-single-analysis cron already delivers
-	// the prose analysis to chat, so a duplicate gmailpoll message is noise. A
+	// the prose analysis to chat, so a duplicate mail-poll message is noise. A
 	// no-op notifier suppresses delivery while OnAnalyzed still pre-warms the
 	// Mini App analysis cache + per-message wiki page.
 	if pollCfg.Silent != nil && *pollCfg.Silent {
@@ -152,7 +152,7 @@ func (s *Server) initGmailPoll(snap *config.ConfigSnapshot) {
 //	DENEB_ARCHIVE_IMAP_ADDR  (default 127.0.0.1:1143)
 //	DENEB_ARCHIVE_IMAP_USER  / DENEB_ARCHIVE_IMAP_PASS  (required to enable)
 //	DENEB_ARCHIVE_IMAP_MAILBOXES (optional, e.g. INBOX,Archive)
-func (s *Server) archiveThreadSource() gmailpoll.ThreadSource {
+func (s *Server) archiveThreadSource() mailanalysis.ThreadSource {
 	addr := archiveIMAPAddr()
 	user := strings.TrimSpace(os.Getenv("DENEB_ARCHIVE_IMAP_USER"))
 	pass := os.Getenv("DENEB_ARCHIVE_IMAP_PASS")
@@ -195,7 +195,7 @@ func (s *Server) mailAnalysisAgentSynthesis(ctx context.Context, prompt string) 
 // on-box mail server (e.g. Maddy in Docker) PUSHES new mail over LMTP, which
 // replaces IMAP polling for that source: each message is parsed and analyzed
 // through the same pipeline as a polled one (Mini App cache + per-message wiki +
-// proactive 업무 chat). A dedicated gmailpoll.Service — built with the same analysis
+// proactive 업무 chat). A dedicated mailanalysis.Service — built with the same analysis
 // deps but NOT registered as a periodic task and given a real chat notifier —
 // carries the analysis + delivery wiring; the LMTP server just feeds it messages.
 func (s *Server) initLMTPServer(snap *config.ConfigSnapshot) {
@@ -214,7 +214,7 @@ func (s *Server) initLMTPServer(snap *config.ConfigSnapshot) {
 	stateDir := config.ResolveStateDir()
 	stage2, stage2Model, stage1, stage1Model := s.mailAnalysisModels()
 	threadSource := s.archiveThreadSource()
-	cfg := gmailpoll.Config{
+	cfg := mailanalysis.Config{
 		StateDir:               stateDir,
 		LLMClient:              stage2,
 		Model:                  stage2Model,
@@ -237,7 +237,7 @@ func (s *Server) initLMTPServer(snap *config.ConfigSnapshot) {
 	// Run the synthesis as a chat agent turn so the analysis prompt's tools
 	// (wiki, mail_archive) execute instead of leaking as <tool_call> text.
 	cfg.AgentSynthesisFn = s.mailAnalysisAgentSynthesis
-	svc := gmailpoll.NewService(cfg, s.logger)
+	svc := mailanalysis.NewService(cfg, s.logger)
 	svc.SetNotifier(s.proactiveRelay.mailNotifierForSession(nativeWorkSessionKey))
 
 	queue, err := lmtpd.NewQueue(filepath.Join(stateDir, "lmtp-queue"))
@@ -304,7 +304,7 @@ func (s *Server) initLMTPServer(snap *config.ConfigSnapshot) {
 	s.logger.Info("LMTP mail ingest 활성화 (IMAP 폴링 대체)", "addr", addr)
 }
 
-func (s *Server) startLMTPAnalysisWorkers(queue *lmtpd.Queue, seen *lmtpd.SeenStore, svc *gmailpoll.Service) {
+func (s *Server) startLMTPAnalysisWorkers(queue *lmtpd.Queue, seen *lmtpd.SeenStore, svc *mailanalysis.Service) {
 	for i := 0; i < lmtpAnalysisWorkers; i++ {
 		workerID := i + 1
 		s.safeGo("lmtp-analyze-worker", func() {
@@ -354,7 +354,7 @@ func (s *Server) startLMTPAnalysisWorkers(queue *lmtpd.Queue, seen *lmtpd.SeenSt
 	}
 }
 
-func (s *Server) processLMTPQueueItem(ctx context.Context, svc *gmailpoll.Service, item *lmtpd.QueueItem) error {
+func (s *Server) processLMTPQueueItem(ctx context.Context, svc *mailanalysis.Service, item *lmtpd.QueueItem) error {
 	if item == nil {
 		return nil
 	}
@@ -587,7 +587,7 @@ func (s *Server) mailAnalysisModels() (stage2 *llm.Client, stage2Model string, s
 
 // analysisThinkingKwarg returns the chat_template_kwargs thinking off-switch for
 // the mail-analysis model (RoleAnalysis / stage-2), or "" when the model has none
-// (non-vLLM, e.g. an Anthropic-wire cloud model). Threaded into the gmailpoll
+// (non-vLLM, e.g. an Anthropic-wire cloud model). Threaded into the mailanalysis
 // analysis so its "disabled" thinking config truly stops reasoning on dual-mode
 // vLLM models (dsv4) instead of exhausting the budget and returning empty — the
 // analysis-path equivalent of what applyModelTuning does for the main chat.

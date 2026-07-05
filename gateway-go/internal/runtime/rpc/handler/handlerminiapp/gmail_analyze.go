@@ -5,7 +5,7 @@
 // stakeholders + risks + next-step suggestions) and returns the result as
 // markdown for inline rendering.
 //
-// Reuses `gmailpoll.AnalyzeEmailPipeline` verbatim — no separate prompt
+// Reuses `mailanalysis.AnalyzeEmailPipeline` verbatim — no separate prompt
 // or LLM wrapper to maintain. The pipeline already falls back to a single
 // LLM call when LocalClient is absent, so the Mini App path doesn't need
 // to know about the two-stage detail.
@@ -27,18 +27,18 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmailpoll"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailanalysis"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailwork"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
-// AnalyzePipeline is the subset of gmailpoll the analyze handler depends
+// AnalyzePipeline is the subset of mailanalysis the analyze handler depends
 // on. Pulling it behind an interface keeps the handler testable without
 // standing up an LLM.
 type AnalyzePipeline interface {
-	Analyze(ctx context.Context, msg *gmail.MessageDetail) (gmailpoll.AnalysisResult, error)
+	Analyze(ctx context.Context, msg *gmail.MessageDetail) (mailanalysis.AnalysisResult, error)
 }
 
 // ProjectRef is a related project wiki page surfaced to the Mini App: the
@@ -66,7 +66,7 @@ type WikiAnalysisInput struct {
 
 // GmailAnalyzeDeps groups the factories the handler needs. Client supplies
 // the Gmail OAuth client; Pipeline supplies the analysis driver
-// (production wires it to `gmailpoll.AnalyzeEmailPipeline` with a real
+// (production wires it to `mailanalysis.AnalyzeEmailPipeline` with a real
 // LLM client + main model). Cache and SaveToWiki are optional; nil/zero
 // values disable cache lookups and wiki persistence respectively so the
 // handler keeps working when those subsystems aren't wired yet.
@@ -168,7 +168,7 @@ func gmailAnalyze(deps GmailAnalyzeDeps) rpcutil.HandlerFunc {
 					Subject:         rec.Subject,
 					From:            rec.From,
 					Date:            rec.Date,
-					Analysis:        gmailpoll.StripWikiFactsBlock(rec.Analysis), // drop legacy 위키 갱신 제안 block (no longer emitted)
+					Analysis:        mailanalysis.StripWikiFactsBlock(rec.Analysis), // drop legacy 위키 갱신 제안 block (no longer emitted)
 					RelatedProjects: enrichProjects(deps, rec.RelatedProjects),
 					DurationMs:      rec.DurationMs,
 					Cached:          true,
@@ -379,7 +379,7 @@ func gmailAnalysisCached(deps GmailAnalyzeDeps) rpcutil.HandlerFunc {
 		}
 		payload := out{
 			ID:              rec.MsgID,
-			Analysis:        gmailpoll.StripWikiFactsBlock(rec.Analysis), // drop legacy 위키 갱신 제안 block (no longer emitted)
+			Analysis:        mailanalysis.StripWikiFactsBlock(rec.Analysis), // drop legacy 위키 갱신 제안 block (no longer emitted)
 			RelatedProjects: enrichProjects(deps, rec.RelatedProjects),
 			Cached:          true,
 			CreatedAt:       rec.CreatedAt,
@@ -412,10 +412,10 @@ var ErrAnalyzeNoLLM = errors.New("analyze pipeline: LLM client not configured")
 // room for extended thinking when the synthesis model supports it.
 const interactiveAnalysisStage2Tokens = 4096
 
-// PipelineFromGmailpoll adapts gmailpoll.AnalyzeEmailPipeline to the
+// PipelineFromMailAnalysis adapts mailanalysis.AnalyzeEmailPipeline to the
 // AnalyzePipeline interface. Returns ErrAnalyzeNoLLM when the inputs are
 // missing so callers can map cleanly to UNAVAILABLE without touching the
-// gmailpoll package internals.
+// mailanalysis package internals.
 //
 // localClient/localModel drive the stage-1 extractors (thread context + wiki
 // fact extraction, JSON-mode on the lightweight/local model). When both are
@@ -427,12 +427,12 @@ const interactiveAnalysisStage2Tokens = 4096
 // senderFactsFn (optional) resolves sender context in-process from the wiki
 // graph; when supplied it is preferred over the external graphify CLI so the
 // analysis always has "who is this person to us" even on a fresh deploy.
-func PipelineFromGmailpoll(gmailClient *gmail.Client, llmClient, localClient *llm.Client, mainModel, localModel, analysisPrompt string, projectsFn func() []gmailpoll.ProjectCandidate, senderFactsFn func(ctx context.Context, displayName string) string, attachmentExtractFn func(ctx context.Context, data []byte, filename, mimeType string) string, counterpartyProjectsFn func(domain string) []string) (AnalyzePipeline, error) {
+func PipelineFromMailAnalysis(gmailClient *gmail.Client, llmClient, localClient *llm.Client, mainModel, localModel, analysisPrompt string, projectsFn func() []mailanalysis.ProjectCandidate, senderFactsFn func(ctx context.Context, displayName string) string, attachmentExtractFn func(ctx context.Context, data []byte, filename, mimeType string) string, counterpartyProjectsFn func(domain string) []string) (AnalyzePipeline, error) {
 	if llmClient == nil || strings.TrimSpace(mainModel) == "" {
 		return nil, ErrAnalyzeNoLLM
 	}
-	return &gmailpollPipeline{
-		deps: gmailpoll.PipelineDeps{
+	return &mailAnalysisPipeline{
+		deps: mailanalysis.PipelineDeps{
 			GmailClient:         gmailClient,
 			LLMClient:           llmClient,
 			LocalClient:         localClient,
@@ -453,10 +453,10 @@ func PipelineFromGmailpoll(gmailClient *gmail.Client, llmClient, localClient *ll
 	}, nil
 }
 
-type gmailpollPipeline struct {
-	deps gmailpoll.PipelineDeps
+type mailAnalysisPipeline struct {
+	deps mailanalysis.PipelineDeps
 }
 
-func (g *gmailpollPipeline) Analyze(ctx context.Context, msg *gmail.MessageDetail) (gmailpoll.AnalysisResult, error) {
-	return gmailpoll.AnalyzeEmailPipeline(ctx, g.deps, msg)
+func (g *mailAnalysisPipeline) Analyze(ctx context.Context, msg *gmail.MessageDetail) (mailanalysis.AnalysisResult, error) {
+	return mailanalysis.AnalyzeEmailPipeline(ctx, g.deps, msg)
 }

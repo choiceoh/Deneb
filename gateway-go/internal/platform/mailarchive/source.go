@@ -11,7 +11,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/lmtpd"
 )
 
-// Default tuning. These mirror the Gmail-path caps in gmailpoll so the LLM thread
+// Default tuning. These mirror the Gmail-path caps in mailanalysis so the LLM thread
 // extractor sees a comparable amount of context regardless of source.
 const (
 	defaultMaxThread     = 10

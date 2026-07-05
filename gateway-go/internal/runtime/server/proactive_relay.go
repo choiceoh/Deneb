@@ -17,14 +17,14 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/denebui"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmailpoll"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailanalysis"
 )
 
 // Compile-time interface compliance — same notifier satisfies both the
 // autonomous service (wiki dreaming) and gmail polling.
 var (
-	_ autonomous.Notifier = (*relayNotifier)(nil)
-	_ gmailpoll.Notifier  = (*relayNotifier)(nil)
+	_ autonomous.Notifier   = (*relayNotifier)(nil)
+	_ mailanalysis.Notifier = (*relayNotifier)(nil)
 )
 
 const (
@@ -450,7 +450,7 @@ func (d proactiveRelayDeps) logProactive(decision, reason string, contentLen int
 // (see isContentlessProactive) so a real multi-section report that merely
 // mentions one of these is never affected.
 var contentlessProactiveFragments = []string{
-	"분석 실패",    // gmailpoll batch-analyze stub "(분석 실패)"
+	"분석 실패",    // mail batch-analyze stub "(분석 실패)"
 	"변경 없음",    // autonomous dreaming: nothing consolidated this cycle
 	"검색 결과 없음", // "검색 결과 없음 — 읽지 않은 ... 없습니다"
 	"알림이 없",    // "읽지 않은 카카오메일 알림이 없습니다"
@@ -804,7 +804,7 @@ const dreamWorkSessionKey = nativeWorkSessionKey + ":dream"
 const nativeWorkSessionKeyTo = "main"
 
 // relayNotifier adapts proactiveRelayDeps to the Notifier interface used by
-// both the autonomous service (wiki dreaming) and gmailpoll. It binds a session
+// both the autonomous service (wiki dreaming) and mailanalysis. It binds a session
 // key at construction so Notify(ctx, message) delivers there.
 type relayNotifier struct {
 	deps       proactiveRelayDeps
@@ -812,7 +812,7 @@ type relayNotifier struct {
 	opts       proactiveRelayOptions
 }
 
-// Notify satisfies autonomous.Notifier and gmailpoll.Notifier. Returns the
+// Notify satisfies autonomous.Notifier and mailanalysis.Notifier. Returns the
 // underlying send error; delivery-not-wired (relay returns false with no error)
 // is treated as a silent no-op.
 func (n *relayNotifier) Notify(_ context.Context, message string) error {
@@ -821,7 +821,7 @@ func (n *relayNotifier) Notify(_ context.Context, message string) error {
 }
 
 // notifierForSession binds the relay to a session key and returns a Notifier
-// ready to plug into autonomous.Service or gmailpoll.Service. Always returns a
+// ready to plug into autonomous.Service or mailanalysis.Service. Always returns a
 // non-nil notifier because the native relay requires only a transcript store,
 // not a Telegram plugin.
 func (d proactiveRelayDeps) notifierForSession(sessionKey string) *relayNotifier {

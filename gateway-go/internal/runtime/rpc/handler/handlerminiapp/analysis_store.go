@@ -29,7 +29,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/atomicfile"
 )
 
-// AnalysisPromptVersion bumps when the gmailpoll analysis prompt
+// AnalysisPromptVersion bumps when the mail-analysis prompt
 // changes in a way that should invalidate cached results.
 // v2: the analysis prompt now demands a structured IMPORTANCE tag line,
 // parsed into the Importance field below — v1 records lack it, so they are

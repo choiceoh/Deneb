@@ -18,7 +18,7 @@ func TestExtractLargeAttachmentLinks(t *testing.T) {
 	refs := extractLargeAttachmentLinks(body)
 	// Absolute http(s) anchors only: 2 download links + the homepage link. The
 	// <img> thumbnail and the mailto: are excluded. The homepage is harmless
-	// noise here — the download host allowlist (gmailpoll) is the real filter.
+	// noise here — the download host allowlist (mailanalysis) is the real filter.
 	if len(refs) != 3 {
 		t.Fatalf("want 3 refs, got %d: %+v", len(refs), refs)
 	}

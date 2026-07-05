@@ -18,7 +18,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/notebook"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmailpoll"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailanalysis"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailwork"
 	handlerminiapp "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp"
 )
@@ -128,8 +128,8 @@ func senderShortLabel(from string) string {
 // analysis. Returns nil when the wiki store is unavailable. Shared by the
 // autonomous poller and the Mini App's manual analyze path so both cite
 // projects from the same source.
-func (s *Server) projectCandidatesFn() func() []gmailpoll.ProjectCandidate {
-	return func() []gmailpoll.ProjectCandidate {
+func (s *Server) projectCandidatesFn() func() []mailanalysis.ProjectCandidate {
+	return func() []mailanalysis.ProjectCandidate {
 		store := s.wikiStore
 		if store == nil {
 			return nil
@@ -138,9 +138,9 @@ func (s *Server) projectCandidatesFn() func() []gmailpoll.ProjectCandidate {
 		// not cite an auto-generated mail dump, deal ledger page, or sub-page as a
 		// "related project". KnownProjects owns that layout rule.
 		refs := store.KnownProjects()
-		cands := make([]gmailpoll.ProjectCandidate, 0, len(refs))
+		cands := make([]mailanalysis.ProjectCandidate, 0, len(refs))
 		for _, r := range refs {
-			cands = append(cands, gmailpoll.ProjectCandidate{
+			cands = append(cands, mailanalysis.ProjectCandidate{
 				Path:    r.Path,
 				Title:   r.Name,
 				Summary: r.Summary,
@@ -156,10 +156,10 @@ func (s *Server) projectCandidatesFn() func() []gmailpoll.ProjectCandidate {
 // mirroring what the manual analyze handler does on a fresh run. This is
 // what lets a polled email show up already-analyzed in the Mini App with no
 // manual tap.
-func (s *Server) makeMailAnalysisSink() func(*gmail.MessageDetail, gmailpoll.AnalysisResult) error {
+func (s *Server) makeMailAnalysisSink() func(*gmail.MessageDetail, mailanalysis.AnalysisResult) error {
 	cacheStore := handlerminiapp.NewAnalysisStore(filepath.Join(s.denebDir, "cache", "mail_analysis"))
 	workStore := mailwork.New(filepath.Join(s.denebDir, "mail_work_state.json"))
-	return func(msg *gmail.MessageDetail, res gmailpoll.AnalysisResult) error {
+	return func(msg *gmail.MessageDetail, res mailanalysis.AnalysisResult) error {
 		if msg == nil {
 			return nil
 		}
@@ -269,7 +269,7 @@ func (s *Server) makeMailAnalysisFailureSink() func(*gmail.MessageDetail, error)
 // fileDealFromMail files a structured business-document extraction onto its
 // counterparty's 거래 wiki page. Silent and best-effort: no push, deduped by
 // the mail id, failures logged only. nil deal (non-deal mail) is a no-op.
-func (s *Server) fileDealFromMail(msg *gmail.MessageDetail, deal *gmailpoll.DealInfo, relatedProjects []string) {
+func (s *Server) fileDealFromMail(msg *gmail.MessageDetail, deal *mailanalysis.DealInfo, relatedProjects []string) {
 	if deal == nil || msg == nil || s.wikiStore == nil {
 		return
 	}
@@ -307,7 +307,7 @@ func (s *Server) fileDealFromMail(msg *gmail.MessageDetail, deal *gmailpoll.Deal
 // pinDealEvidenceToNotebook auto-pins a deal email's extraction onto its deal
 // notebook. Silent, best-effort, deduped by mail id (PinUnique): re-analysis of
 // the same email never double-pins. Mirrors fileDealFromMail's silent behavior.
-func (s *Server) pinDealEvidenceToNotebook(msg *gmail.MessageDetail, deal *gmailpoll.DealInfo, dealRef string, relatedProjects []string) {
+func (s *Server) pinDealEvidenceToNotebook(msg *gmail.MessageDetail, deal *mailanalysis.DealInfo, dealRef string, relatedProjects []string) {
 	if s.notebookStore == nil || dealRef == "" {
 		return
 	}
@@ -362,7 +362,7 @@ func directProjectPages(related []string) []string {
 }
 
 // dealEvidenceTitle is the human label for a pinned deal source ("견적서 · 탑솔라").
-func dealEvidenceTitle(deal *gmailpoll.DealInfo) string {
+func dealEvidenceTitle(deal *mailanalysis.DealInfo) string {
 	parts := make([]string, 0, 2)
 	if t := strings.TrimSpace(deal.DocType); t != "" {
 		parts = append(parts, t)
@@ -378,7 +378,7 @@ func dealEvidenceTitle(deal *gmailpoll.DealInfo) string {
 
 // dealEvidenceText renders the extracted deal fields as the pinned note body —
 // the citable evidence a brief grounds on.
-func dealEvidenceText(deal *gmailpoll.DealInfo, msg *gmail.MessageDetail) string {
+func dealEvidenceText(deal *mailanalysis.DealInfo, msg *gmail.MessageDetail) string {
 	var b strings.Builder
 	writeField := func(label, val string) {
 		if v := strings.TrimSpace(val); v != "" {
@@ -404,7 +404,7 @@ func dealEvidenceText(deal *gmailpoll.DealInfo, msg *gmail.MessageDetail) string
 // "/" == 1) are touched — the raw-data sub-folders (mail-analyses/, 거래/) are
 // skipped, mirroring projectCandidatesFn. Idempotent by mail id; best-effort
 // (a failure logs, never fails the analysis).
-func (s *Server) appendMailStatusToProjects(msg *gmail.MessageDetail, res gmailpoll.AnalysisResult) {
+func (s *Server) appendMailStatusToProjects(msg *gmail.MessageDetail, res mailanalysis.AnalysisResult) {
 	if s.wikiStore == nil || msg == nil {
 		return
 	}
@@ -424,7 +424,7 @@ func (s *Server) appendMailStatusToProjects(msg *gmail.MessageDetail, res gmailp
 // mailStatusLine renders the one-line status entry for a project from an analyzed
 // mail: the deal title when it's a recognized business document ("견적서 · 탑솔라
 // 수신"), else the sender + subject. Empty when there's nothing to say.
-func mailStatusLine(msg *gmail.MessageDetail, res gmailpoll.AnalysisResult) string {
+func mailStatusLine(msg *gmail.MessageDetail, res mailanalysis.AnalysisResult) string {
 	if d := res.Deal; d != nil {
 		if t := strings.TrimSpace(dealEvidenceTitle(d)); t != "" && t != "거래 문서" {
 			return t + " 수신"
