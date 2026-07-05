@@ -80,7 +80,13 @@ class DenebCarFeedScreen(carContext: CarContext) : Screen(carContext) {
         return Row.Builder()
             .setTitle(if (item.question) "❓ $title" else title)
             .apply { item.summary.takeIf { it.isNotBlank() && it != title }?.let { addText(it) } }
-            .setOnClickListener { screenManager.push(DenebCarCardScreen(carContext, item)) }
+            .setOnClickListener {
+                // Opening a card reads it — same durable, cross-device read state the
+                // phone sets (miniapp.workfeed.read). Fire-and-forget: only readAtMs on
+                // the gateway changes, so the car list doesn't reshuffle mid-drive.
+                client?.let { c -> lifecycleScope.launch { runCatching { c.markWorkFeedRead(item.id) } } }
+                screenManager.push(DenebCarCardScreen(carContext, item))
+            }
             .build()
     }
 
