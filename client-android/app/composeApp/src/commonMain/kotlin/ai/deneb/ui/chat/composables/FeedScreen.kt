@@ -12,11 +12,14 @@ import ai.deneb.ui.markdown.MarkdownContent
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -25,11 +28,13 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -38,6 +43,8 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlinx.collections.immutable.ImmutableList
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
@@ -101,13 +108,6 @@ internal fun FeedScreen(
             onNext = { if (nav.canGoNext) selectedDate = selectedDate.plus(1, DateTimeUnit.DAY) },
         )
 
-        if (items.isEmpty()) {
-            // Before the first fetch finishes, show the skeleton instead of "no feed"
-            // so a cold launch into the 업무 home doesn't flash an empty state.
-            if (loaded) DenebEmpty(feedEmptyLabel(selectedDate, today)) else DenebLoading()
-            return@DenebScreenScaffold
-        }
-
         var expandedId by remember { mutableStateOf<String?>(null) }
         // Partition by a snapshot of seenIds taken when the feed's items load, not
         // live: tapping a row marks it seen (onMarkSeen) and expands it inline, and a
@@ -129,17 +129,47 @@ internal fun FeedScreen(
             onMarkSeen(id)
         }
 
-        if (dayItems.isEmpty()) {
-            DenebEmpty(feedEmptyLabel(selectedDate, today))
-        } else {
-            LazyColumn(Modifier.fillMaxWidth().weight(1f)) {
-                items(unread.size) { i ->
-                    FeedRowWithBody(unread[i], expandedId == unread[i].id, open, onRunAction, onAnswer) { actionItem = it }
+        // Pull-to-refresh is the feed's user-driven recovery path. A boot-time
+        // fetch that lost a race (gateway mid-redeploy, VPN waking) used to
+        // leave this screen empty with NOTHING that retried — 2026-07-05 field
+        // report: the phone showed "피드 없음" for days while the server had
+        // every card. The empty state scrolls so the gesture works there too.
+        val refreshScope = rememberCoroutineScope()
+        var refreshing by remember { mutableStateOf(false) }
+        PullToRefreshBox(
+            isRefreshing = refreshing,
+            onRefresh = {
+                refreshing = true
+                onLoadDateRange(
+                    dayStartMs(selectedDate, tz),
+                    dayStartMs(selectedDate.plus(1, DateTimeUnit.DAY), tz),
+                )
+                // onLoadDateRange is fire-and-forget; the merged result lands via
+                // state. A short spinner window keeps the affordance honest
+                // without threading a completion signal through the view model.
+                refreshScope.launch {
+                    delay(1200)
+                    refreshing = false
                 }
-                if (read.isNotEmpty()) {
-                    item { DenebSectionLabel("읽음", Modifier.padding(start = 12.dp)) }
-                    items(read.size) { i ->
-                        FeedRowWithBody(read[i], expandedId == read[i].id, open, onRunAction, onAnswer) { actionItem = it }
+            },
+            modifier = Modifier.fillMaxWidth().weight(1f),
+        ) {
+            when {
+                items.isEmpty() && !loaded -> DenebLoading()
+
+                dayItems.isEmpty() -> Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+                    DenebEmpty(feedEmptyLabel(selectedDate, today))
+                }
+
+                else -> LazyColumn(Modifier.fillMaxSize()) {
+                    items(unread.size) { i ->
+                        FeedRowWithBody(unread[i], expandedId == unread[i].id, open, onRunAction, onAnswer) { actionItem = it }
+                    }
+                    if (read.isNotEmpty()) {
+                        item { DenebSectionLabel("읽음", Modifier.padding(start = 12.dp)) }
+                        items(read.size) { i ->
+                            FeedRowWithBody(read[i], expandedId == read[i].id, open, onRunAction, onAnswer) { actionItem = it }
+                        }
                     }
                 }
             }

@@ -1106,7 +1106,13 @@ class DenebGatewayClient(
         if (!pulled) {
             return refreshWorkFeed()
         }
-        if (eventCount == 0 && _denebWorkFeed.value.isEmpty()) {
+        // An empty in-memory feed on a live gateway is always wrong — the server
+        // keeps weeks of cards — it means the boot-time fetch lost a race
+        // (gateway mid-redeploy, VPN still waking). Heal on ANY successful sync:
+        // the old `eventCount == 0 &&` gate never fired on a busy system (there
+        // are always fresh events), which left the feed stuck empty for days
+        // (2026-07-05 field report).
+        if (_denebWorkFeed.value.isEmpty()) {
             refreshWorkFeed()
         }
         // A calendar.changed event arrived: clear the throttle so the warm below refreshes
