@@ -16,8 +16,8 @@ description: "협업, 보안, 멀티 에이전트 안전 규칙"
 ```
 
 - **Agents MUST use `~/deneb-dev/`** for all development work (coding, branches, worktrees, PRs).
-- **`~/deneb/` is production-only.** It auto-syncs with GitHub main every 5 minutes (cron). Never modify directly.
-- **Deploy flow:** PR merged on GitHub → `~/deneb` auto-pulls → operator runs `~/deneb/scripts/deploy/deploy.sh` to build + restart.
+- **`~/deneb/` is production-only.** srv4's `deneb-auto-deploy.timer` (1-min tick, 300s quiet period) pulls, builds, and hot-swaps it. Never modify directly.
+- **Deploy flow:** PR merged on GitHub → srv4 auto-deploy detects the new head → `make gateway-prod` + SIGUSR1 hot swap of `deneb-gateway.service`, no operator step (details: `docs/agent-rules/release-and-deploy.md`).
 - **Do NOT run builds, create worktrees, or switch branches in `~/deneb/`.**
 
 ## Multi-Agent Safety

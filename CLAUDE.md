@@ -12,7 +12,7 @@
 ## 안전 (항상 적용)
 
 - 레포: https://github.com/choiceoh/Deneb. 챗 응답의 파일 참조는 레포 상대 경로만 (절대경로·`~/...` 금지).
-- `~/deneb/` = **프로덕션 전용** (main만, 5분 자동 pull) — 거기서 브랜치/워크트리/빌드 금지. 개발은 `~/deneb-dev/`.
+- `~/deneb/` = **프로덕션 전용** (main만 — srv4 의 auto-deploy 타이머가 pull·빌드·핫스왑) — 에이전트는 거기서 브랜치/워크트리/수동 빌드 금지. 개발은 `~/deneb-dev/`.
 - 멀티에이전트 안전: `git stash`·워크트리 조작·브랜치 전환은 **명시 요청 시에만**. "push" = rebase 통합 허용, "commit" = 내 변경만. 낯선 파일은 무시하고 내 변경만 커밋.
 - **생성 코드(`DO NOT EDIT` 헤더) 직접 수정 금지** — 소스 오브 트루스 수정 후 make 타깃으로 재생성 ([generated-code](docs/agent-rules/generated-code.md)). `//deneb:wire` 변경 = `make kotlin-models` **와** `pnpm gen:wire` 둘 다.
 - 보안 CODEOWNERS 경로(`.github/dependabot.yml`, `codeql.yml`, `gateway-go/internal/infra/{clientauth,secret,config}/`)는 소유자가 명시 요청할 때만 수정.
