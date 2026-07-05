@@ -34,10 +34,12 @@ const maxProjectStatusBullets = 8
 
 // ProjectRef names a real project bucket via its 대표페이지.
 type ProjectRef struct {
-	Name    string // display name (page Title, else the project folder name)
-	Path    string // 대표페이지 path, e.g. "프로젝트/영산고/대표.md" (legacy: "프로젝트/영산고.md")
-	Summary string // page Meta.Summary — one-line description for pickers
-	Code    string // page Meta.Code — frozen project identity, "" if unset
+	Name    string   // display name (page Title, else the project folder name)
+	Path    string   // 대표페이지 path, e.g. "프로젝트/영산고/대표.md" (legacy: "프로젝트/영산고.md")
+	Summary string   // page Meta.Summary — one-line description for pickers
+	Code    string   // page Meta.Code — frozen project identity, "" if unset
+	Sites   []string // page Meta.Sites — canonical 현장 admin paths (matching keys)
+	Kinds   []string // page Meta.Kinds — 특성 enum (시공/모듈/케이블/… 복수)
 }
 
 // KnownProjects lists the real projects by their 대표페이지 (see project_layout.go;
@@ -83,6 +85,8 @@ func (s *Store) knownProjects() []ProjectRef {
 			}
 			ref.Summary = strings.TrimSpace(page.Meta.Summary)
 			ref.Code = strings.TrimSpace(page.Meta.Code)
+			ref.Sites = page.Meta.Sites
+			ref.Kinds = page.Meta.Kinds
 		}
 		refs = append(refs, ref)
 	}
@@ -148,9 +152,14 @@ func (s *Store) ProjectStatuses() ([]ProjectStatus, error) {
 // roll-up (the dream cycle's compacted lines, most salient first). Creates the
 // page if absent. now stamps Updated (injected for deterministic tests).
 func (s *Store) SetProjectStatus(relPath string, lines []string, due string, now time.Time) error {
+	// Dedupe while cleaning: the 2026-07 audit found rep pages whose whole
+	// 현재 상태 was the same no-information bullet twice ("테스트베드 구축
+	// 진행" ×2) — a duplicate line adds zero signal at any position.
+	seen := make(map[string]bool, len(lines))
 	clean := make([]string, 0, len(lines))
 	for _, ln := range lines {
-		if ln = strings.TrimSpace(ln); ln != "" {
+		if ln = strings.TrimSpace(ln); ln != "" && !seen[ln] {
+			seen[ln] = true
 			clean = append(clean, ln)
 		}
 	}

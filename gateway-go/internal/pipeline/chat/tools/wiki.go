@@ -30,6 +30,8 @@ func ToolWiki(d *toolctx.WikiDeps, workspaceDir string) toolctx.ToolFunc {
 			Tags       []string `json:"tags"`
 			Related    []string `json:"related"`
 			Cues       []string `json:"cues"`
+			Sites      []string `json:"sites"`
+			Kinds      []string `json:"kinds"`
 			Supersedes []string `json:"supersedes"`
 			Importance float64  `json:"importance"`
 			Type       string   `json:"type"`
@@ -58,7 +60,7 @@ func ToolWiki(d *toolctx.WikiDeps, workspaceDir string) toolctx.ToolFunc {
 		case "index":
 			return wikiIndex(d.Store, p.Category)
 		case "write":
-			return wikiWrite(ctx, d.Store, d.Contacts, p.Query, p.Title, p.ID, p.Summary, p.Category, p.Content, p.Tags, p.Related, p.Cues, p.Supersedes, p.Importance, p.Type, p.Confidence, p.Due, p.Force)
+			return wikiWrite(ctx, d.Store, d.Contacts, p.Query, p.Title, p.ID, p.Summary, p.Category, p.Content, p.Tags, p.Related, p.Cues, p.Sites, p.Kinds, p.Supersedes, p.Importance, p.Type, p.Confidence, p.Due, p.Force)
 		case "log":
 			return wikiLog(workspaceDir, d.Store, p.Content)
 		case "daily":
@@ -231,7 +233,7 @@ func wikiIndex(store *wiki.Store, category string) (string, error) {
 	return sb.String(), nil
 }
 
-func wikiWrite(ctx context.Context, store *wiki.Store, contactsStore *contacts.Store, path, title, id, summary, category, content string, tags, related, cues, supersedes []string, importance float64, pageType, confidence, due string, force bool) (string, error) {
+func wikiWrite(ctx context.Context, store *wiki.Store, contactsStore *contacts.Store, path, title, id, summary, category, content string, tags, related, cues, sites, kinds, supersedes []string, importance float64, pageType, confidence, due string, force bool) (string, error) {
 	if title == "" {
 		return "title은 필수입니다.", nil
 	}
@@ -260,6 +262,12 @@ func wikiWrite(ctx context.Context, store *wiki.Store, contactsStore *contacts.S
 	// it onto the in-folder slot (프로젝트/<name>/대표.md) so agent writes can't
 	// resurrect flat pages after the layout migration (see wiki/project_layout.go).
 	if np := wiki.NormalizeProjectPagePath(path); np != path {
+		path = np
+	}
+	// Mint-time name hygiene: a NEW project folder must not carry mail-subject
+	// debris (trailing dates, 요청/송부 suffixes); existing folders keep their
+	// paths, and a cleaned twin routes into the existing clean folder.
+	if np := store.CleanNewProjectRepPath(path); np != path {
 		path = np
 	}
 
@@ -333,6 +341,12 @@ func wikiWrite(ctx context.Context, store *wiki.Store, contactsStore *contacts.S
 			if len(cues) > 0 {
 				page.Meta.Cues = cues
 			}
+			if len(sites) > 0 {
+				page.Meta.Sites = sites
+			}
+			if len(kinds) > 0 {
+				page.Meta.Kinds = kinds
+			}
 			if importance > 0 {
 				page.Meta.Importance = importance
 			}
@@ -361,6 +375,8 @@ func wikiWrite(ctx context.Context, store *wiki.Store, contactsStore *contacts.S
 		page.Meta.Summary = summary
 		page.Meta.Related = related
 		page.Meta.Cues = cues
+		page.Meta.Sites = sites
+		page.Meta.Kinds = kinds
 		if importance > 0 {
 			page.Meta.Importance = importance
 		}

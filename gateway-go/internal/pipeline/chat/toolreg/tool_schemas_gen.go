@@ -1045,6 +1045,14 @@ func wikiToolSchema() map[string]any {
 				"minimum":     0,
 				"maximum":     1,
 			},
+			"kinds": map[string]any{
+				"type":        "array",
+				"description": "프로젝트 특성 (프로젝트 대표페이지 write 전용, 복수 허용): 시공(EPC·턴키·발전소 건설), 모듈/인버터/케이블/BESS(기자재 공급), 풍력, 개발(인허가·부지·RPS·가배치), 용역(안전관리대행 등), 협력(NDA·전략제휴·R&D 검토). 이 9개 고정 어휘만 유효(밖의 값은 드롭됨) — 자가소비·루프탑 같은 시장 구분은 tags로",
+				"items": map[string]any{
+					"type": "string",
+					"enum": []string{"시공", "모듈", "인버터", "케이블", "BESS", "풍력", "개발", "용역", "협력"},
+				},
+			},
 			"limit": map[string]any{
 				"type":        "integer",
 				"description": "Max results (search: default 10)",
@@ -1072,6 +1080,13 @@ func wikiToolSchema() map[string]any {
 			"section": map[string]any{
 				"type":        "string",
 				"description": "Read a specific section from the page (read action)",
+			},
+			"sites": map[string]any{
+				"type":        "array",
+				"description": "프로젝트 현장 위치 (프로젝트 대표페이지 write 전용). 작성 규칙 고정: '광역약칭 시/군 읍/면/동 [리]' — 공백 구분, 번지·마침표 없음, 광역은 약칭(전북·전남·충남·경기…). 예: ['전북 군산시 옥구읍 수산리']. 복수 현장이면 여러 항목. 메일·일정이 장소로 프로젝트를 부르는 일이 많아 회상 앵커·미팅 매칭 키로 쓰인다 — 현장이 확인되면 반드시 기입, 임의 표기(도로명·번지·도 전체명)는 금지",
+				"items": map[string]any{
+					"type": "string",
+				},
 			},
 			"summary": map[string]any{
 				"type":        "string",

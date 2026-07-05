@@ -58,12 +58,22 @@ func (s *Store) MatchProjectsInText(text string, limit int) []ProjectRef {
 }
 
 // bestProjectKeyIn returns the longest (by rune count) normalized identity key
-// of ref (display name or folder name) contained in hay, or "" when none
-// matches.
+// of ref contained in hay, or "" when none matches. Identity keys are the
+// display name, the folder name, and the project's 현장 site paths — mail and
+// calendar text names the PLACE ("수산리 현장 방문") at least as often as the
+// project title, so each site contributes its full form and its final
+// administrative unit (수산리) as keys.
 func bestProjectKeyIn(hay string, ref ProjectRef) string {
 	best := ""
 	name, _ := ProjectNameOf(ref.Path)
-	for _, cand := range []string{ref.Name, name} {
+	cands := []string{ref.Name, name}
+	for _, site := range ref.Sites {
+		cands = append(cands, site)
+		if fields := strings.Fields(site); len(fields) > 1 {
+			cands = append(cands, fields[len(fields)-1])
+		}
+	}
+	for _, cand := range cands {
 		key := normalizeTitleKey(cand)
 		if utf8.RuneCountInString(key) < minProjectKeyRunes {
 			continue

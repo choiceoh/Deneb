@@ -188,6 +188,7 @@ type wikiResearchCandidate struct {
 	importance float64
 	lastRun    int64 // unix millis this task last refreshed it; 0 = never
 	skeleton   bool  // layout-migration mint (wiki.RepSkeletonMarker) awaiting backfill
+	noStatus   bool  // 현재 상태 section empty — the 2026-07 audit's top gap (57%)
 }
 
 // selectTarget picks the project page most overdue for a refresh: never-refreshed
@@ -226,6 +227,7 @@ func (t *wikiResearchTask) selectTarget(state *wikiResearchState) *wikiResearchC
 			importance: page.Meta.Importance,
 			lastRun:    state.Researched[p],
 			skeleton:   strings.Contains(page.Body, wiki.RepSkeletonMarker),
+			noStatus:   strings.TrimSpace(page.Section("현재 상태")) == "",
 		})
 	}
 	if len(cands) == 0 {
@@ -235,6 +237,13 @@ func (t *wikiResearchTask) selectTarget(state *wikiResearchState) *wikiResearchC
 	sort.Slice(cands, func(i, j int) bool {
 		if cands[i].skeleton != cands[j].skeleton {
 			return cands[i].skeleton // empty migration mints first — they carry no facts yet
+		}
+		if cands[i].noStatus != cands[j].noStatus {
+			// Pages with no 현재 상태 next: the anchor injects the rep page on
+			// every project mention, and an empty status section injects
+			// nothing — filling these first is the fastest quality win
+			// (2026-07-05 audit: 57% of live projects had none).
+			return cands[i].noStatus
 		}
 		if cands[i].lastRun != cands[j].lastRun {
 			return cands[i].lastRun < cands[j].lastRun // never/least-recently refreshed first
@@ -277,6 +286,8 @@ func (t *wikiResearchTask) buildPrompt(c *wikiResearchCandidate) string {
    - 기존 사실과 모순되면 supersedes로 옛 내용을 대체 처리
    - 출처 신뢰도에 맞게 confidence 설정, importance는 유지
    - **새 페이지를 만들지 마세요.** 위에 명시된 대상 페이지 경로를 그대로 갱신하고(레거시 flat 경로면 그 경로 그대로), 시간순 진행 이력은 그 프로젝트의 로그.md(프로젝트/<이름>/로그.md)에 append합니다
+   - sites(현장): 내부 소스에서 현장 위치가 확인되는데 sites가 비어 있으면 고정 규칙 "광역약칭 시/군 읍/면/동 [리]"(예: "전북 군산시 옥구읍 수산리")로 기입하세요. 이미 있으면 유지, 불확실하면 비워둠(추측 금지)
+   - kinds(특성): 비어 있으면 고정 어휘 9개(시공·모듈·인버터·케이블·BESS·풍력·개발·용역·협력)에서 해당하는 것을 복수 기입하세요. 내용상 명백한 것만(추측 금지), 시장 구분(자가소비/루프탑)은 tags로
 4. 대상 페이지의 "## 미해결 질문" 섹션을 관리합니다:
    - 내부 소스를 다 뒤져도 답을 못 찾은, 이 프로젝트 진행에 실제로 중요한 질문이 있으면 "- YYYY-MM-DD 질문" 형식 불릿으로 추가 (섹션 전체 최대 5개, 이미 있는 질문과 중복 금지, 사소한 질문은 넣지 않음)
    - 이번 리서치에서 답이 확인된 기존 질문은 섹션에서 제거하고 그 답을 본문/로그에 반영

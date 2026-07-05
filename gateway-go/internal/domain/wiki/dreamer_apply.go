@@ -75,6 +75,8 @@ type wikiUpdate struct {
 	Supersedes flexStringList `json:"supersedes"` // relPath(s) of existing page(s) this update REPLACES; accepts a string or an array (the LLM emits both, and an array used to fail synthesis parsing)
 	Resource   string         `json:"resource"`   // OKF resource: stable URI/id of the concept's underlying asset (gmail thread, deal ref, calendar event, file path); empty for abstract concepts
 	Cues       flexStringList `json:"cues"`       // recall entry points: alternate Korean phrasings a future query might use (synonyms/aliases/question forms NOT already on the page) — indexed for search, never rendered as content
+	Sites      flexStringList `json:"sites"`      // 프로젝트 현장 (canonical "광역약칭 시/군 읍/면/동 [리]"); matching keys for recall anchor + meeting harvest — 프로젝트 대표페이지 전용
+	Kinds      flexStringList `json:"kinds"`      // 프로젝트 특성 enum (시공/모듈/인버터/케이블/BESS/풍력/개발/용역/협력, 복수) — 대표페이지 전용
 }
 
 // parseWikiUpdates parses the synthesis response array leniently: one malformed
@@ -271,6 +273,8 @@ func buildWikiSynthesisPrompt(indexContent, processedHistory, polarisSection, di
 - related: 의미적으로 관련된 기존 위키 페이지 경로 목록 (인덱스에서 선택)
 - resource: 이 개념의 근거가 되는 실제 자산의 안정 식별자/URI (예: gmail 스레드 id, 거래 ref, 캘린더 이벤트, 파일 경로). 다음 세션이 원본으로 바로 점프하게. 추상 개념이면 생략
 - cues: 이 문서를 나중에 다시 찾을 때 질문에 나올 법한 **검색 진입 표현** 2~5개 (동의어·별칭·다른 관점의 명사 — 제목/본문/tags에 **이미 있는 단어는 넣지 마라**; 예: 본문이 "선수금"이면 cues는 ["계약금", "착수금"]). 검색 전용이라 본문에 안 보인다. 마땅한 게 없으면 생략
+- sites: **프로젝트 대표페이지 전용** — 현장 위치를 고정 규칙 "광역약칭 시/군 읍/면/동 [리]"로 (예: "전북 군산시 옥구읍 수산리"; 공백 구분·번지/마침표 금지·광역은 약칭). 일지·메일에서 현장이 확인되면 기입/갱신, 복수 현장은 배열로. 불확실하면 생략(추측 금지)
+- kinds: **프로젝트 대표페이지 전용** — 특성을 고정 어휘 9개에서만 (복수 허용): 시공(EPC·턴키), 모듈, 인버터, 케이블, BESS, 풍력, 개발(인허가·부지·RPS), 용역, 협력(NDA·제휴). 자가소비/루프탑 같은 시장 구분은 tags로. 어휘 밖 값은 무시됨
 - 업데이트가 불필요하면 빈 배열 [] 반환
 
 JSON 배열만 반환하세요. 다른 텍스트 없이.`, indexContent, processedHistory, polarisSection, diaryContent)
@@ -321,6 +325,14 @@ func (wd *WikiDreamer) applyUpdates(_ context.Context, updates []wikiUpdate) (cr
 		// can't resurrect flat pages after the layout migration.
 		if newPath := NormalizeProjectPagePath(u.Path); newPath != u.Path {
 			wd.logger.Info("wiki-dream: normalized project layout path",
+				"from", u.Path, "to", newPath)
+			u.Path = newPath
+		}
+		// New project folders must not be named after a mail subject
+		// ("…-요청-(2026-06-25)") — strip the debris at mint time; existing
+		// folders keep their paths.
+		if newPath := wd.store.CleanNewProjectRepPath(u.Path); newPath != u.Path {
+			wd.logger.Info("wiki-dream: cleaned mail-subject project name",
 				"from", u.Path, "to", newPath)
 			u.Path = newPath
 		}
@@ -413,6 +425,12 @@ func (wd *WikiDreamer) applyUpdates(_ context.Context, updates []wikiUpdate) (cr
 			if len(u.Cues) > 0 {
 				page.Meta.Cues = u.Cues
 			}
+			if len(u.Sites) > 0 {
+				page.Meta.Sites = normalizeSites(u.Sites)
+			}
+			if len(u.Kinds) > 0 {
+				page.Meta.Kinds = normalizeKinds(u.Kinds)
+			}
 			if u.Content != "" {
 				page.Body = u.Content
 			} else {
@@ -471,6 +489,12 @@ func (wd *WikiDreamer) applyUpdates(_ context.Context, updates []wikiUpdate) (cr
 					}
 					if len(u.Cues) > 0 {
 						page.Meta.Cues = u.Cues
+					}
+					if len(u.Sites) > 0 {
+						page.Meta.Sites = normalizeSites(u.Sites)
+					}
+					if len(u.Kinds) > 0 {
+						page.Meta.Kinds = normalizeKinds(u.Kinds)
 					}
 					page.Body = u.Content
 					createdThis = true
