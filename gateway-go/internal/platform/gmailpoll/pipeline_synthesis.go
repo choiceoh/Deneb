@@ -284,6 +284,13 @@ func synthesizeAnalysis(ctx context.Context, deps PipelineDeps, msg *gmail.Messa
 	attach := gateAndExtractAttachments(ctx, deps, msg)
 	emailText += attach.Injected
 
+	// Deterministic party anchor (who is our side vs the counterparty) —
+	// eliminates party-inversion failures in the synthesized analysis; see
+	// party_anchor.go for the shadow-eval evidence.
+	if anchor := buildPartyAnchor(msg, ourAnchorDomains()); anchor != "" {
+		emailText += "\n\n" + anchor
+	}
+
 	// Build optional context sections.
 	var threadSection, memorySection string
 

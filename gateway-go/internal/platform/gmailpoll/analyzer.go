@@ -105,6 +105,10 @@ func FormatEmailForAnalysis(msg *gmail.MessageDetail) string {
 // on reasoning and return empty.
 func AnalyzeEmail(ctx context.Context, client *llm.Client, model, prompt, thinkingKwarg string, msg *gmail.MessageDetail) (string, error) {
 	userContent := prompt + "\n\n" + FormatEmailForAnalysis(msg)
+	// Same deterministic party anchor as the pipeline path (party_anchor.go).
+	if anchor := buildPartyAnchor(msg, ourAnchorDomains()); anchor != "" {
+		userContent += "\n\n" + anchor
+	}
 
 	req := llm.ChatRequest{
 		Model:     model,

@@ -78,6 +78,7 @@ globs: gateway-go/internal/ai/modelrole/**, gateway-go/internal/pipeline/pilot/*
 | 카드 제목 폴백 | `runtime/server/workfeed_extract.go` | 휴리스틱 추출 | LLM 실패 시 graceful degradation |
 | 스킬 자동 힌트 (관련 스킬 표면화) | `chat/skill_hints.go` → `run_tail_inject.go` | 결정적 트리거 매칭 (frontmatter `triggers` ⊂ 사용자 메시지, 턴당 ≤2) | 매 턴 핫패스 — 인메모리 스냅샷 매칭이면 충분. 힌트는 마지막 user 메시지 wire-only 꼬리(APC-safe) |
 | 프로젝트 현재 상태 이벤트 갱신 (메일분석) | `runtime/server/wiki_mail_analysis.go` → `domain/wiki/project_status.go:AppendProjectStatusLine` | 결정적 날짜 불릿 | 메일분석 시 관련 프로젝트 대표페이지 `## 현재 상태`에 한 줄 append (idempotent by mail id). 8h 드림 사이클을 안 기다리고 즉시 최신화 — 주기적 LLM 압축은 드리머가 |
+| 메일분석 당사자 앵커 | `platform/gmailpoll/party_anchor.go` (stage2 프롬프트 주입) | 헤더 파싱 + 우리측 도메인 셋 (`DENEB_MAIL_OUR_DOMAINS`) | 발신/수신/참조의 소속(우리 측/외부)을 결정적으로 명시해 분석 모델의 당사자 뒤집기 제거 — 실메일 섀도런 검증(2026-07-05, 모델 무관 이득). 형식은 scripts/dev/mail-bench.py 앵커와 동기 유지 |
 
 ## 도그마
 
