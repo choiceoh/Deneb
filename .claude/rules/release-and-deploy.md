@@ -1,6 +1,6 @@
 ---
 description: "릴리스, 어드바이저리, 프로덕션 배포 워크플로우"
-globs: ["scripts/release*", "scripts/deploy*", "scripts/dev/publish-apk.sh", "client-android/app/androidApp/build.gradle.kts", "client-android/app/composeApp/build.gradle.kts", ".github/workflows/release*", ".github/workflows/publish-apk.yml"]
+globs: ["scripts/deploy*", "scripts/dev/publish-apk.sh", "client-android/app/androidApp/build.gradle.kts", "client-android/app/composeApp/build.gradle.kts", ".github/workflows/release*", ".github/workflows/publish-apk.yml"]
 ---
 
 # Release & Advisory Workflows
