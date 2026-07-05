@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
 )
 
@@ -98,6 +99,63 @@ func TestFormatHarvestAsk(t *testing.T) {
 		if !strings.Contains(got, want) {
 			t.Errorf("ask missing %q:\n%s", want, got)
 		}
+	}
+}
+
+// TestIsMeetingShaped_RealCalendarSample pins the shape gate against the
+// operator's ACTUAL calendar titles (17-event sample, 2026-07-05): the
+// dominant pattern is "<회사> <이름> <직함>" with no meeting word, which the
+// job-title list must catch. Bare "<회사> <이름>" without any evidence stays
+// silent — documented gap, second-locked by the target matcher anyway.
+func TestIsMeetingShaped_RealCalendarSample(t *testing.T) {
+	shaped := []string{
+		"프라임에너지 대표 미팅",
+		"6/25(목) 11시 LG 방문 (계약서 검토 및 현물 확인)",
+		"바로 및 기자재 회식",
+		"비금도 해저케이블 포설 견학",
+		"한화 유성민 팀장",
+		"singsun 동사장",
+		"현대차 esg 평가위원",
+		"간납사 관련 pwc 미팅",
+	}
+	for _, s := range shaped {
+		if !isMeetingShaped(calendar.Event{Summary: s}) {
+			t.Errorf("real meeting title not shaped: %q", s)
+		}
+	}
+	notShaped := []string{"영산고 발주", "견적서 제출", "잔금 송금", "징코 유정영"}
+	for _, s := range notShaped {
+		if isMeetingShaped(calendar.Event{Summary: s}) {
+			t.Errorf("non-meeting title shaped: %q", s)
+		}
+	}
+	// Structural evidence lifts a bare-name title into shape.
+	if !isMeetingShaped(calendar.Event{Summary: "한솔 육종태", Location: "한솔 본사"}) {
+		t.Error("location evidence must shape a bare-name event")
+	}
+}
+
+// TestLooseUniqueProjectMatch: terse titles resolve to a project only via a
+// UNIQUE token containment — ambiguous tokens (당진 spans three projects)
+// resolve to nothing rather than guessing.
+func TestLooseUniqueProjectMatch(t *testing.T) {
+	projects := []wiki.ProjectRef{
+		{Name: "비금도-154kv-케이블-및-액세서리-(ztt)"},
+		{Name: "당진-솔라빌리지"},
+		{Name: "lg화학-당진"},
+		{Name: "대한전선-당진"},
+	}
+	if got := looseUniqueProjectMatch("비금도 해저케이블 포설 견학", projects); got != "비금도-154kv-케이블-및-액세서리-(ztt)" {
+		t.Errorf("unique token match = %q", got)
+	}
+	if got := looseUniqueProjectMatch("당진 방문", projects); got != "" {
+		t.Errorf("ambiguous token must not resolve, got %q", got)
+	}
+	if got := looseUniqueProjectMatch("lg화학 당진 미팅", projects); got != "lg화학-당진" {
+		t.Errorf("compound token should disambiguate, got %q", got)
+	}
+	if got := looseUniqueProjectMatch("점심 약속", projects); got != "" {
+		t.Errorf("no-token text must not resolve, got %q", got)
 	}
 }
 

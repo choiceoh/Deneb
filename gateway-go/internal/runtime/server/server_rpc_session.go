@@ -588,34 +588,35 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 		// event ends, push ONE follow-up question ("결과 한 줄로 알려주세요")
 		// into the main transcript so the outcome lands in the wiki flywheel
 		// instead of evaporating. Deterministic matchers, 2/day cap, 08–21 KST
-		// — see meeting_harvest.go. Ask-state persists in the production state
-		// dir only; dev instances stay memory-only (and have no calendar OAuth,
-		// so the service quietly idles there).
+		// — see meeting_harvest.go. PRODUCTION ONLY: dev live-test gateways
+		// share the prod transcript dir (homeDir-based), so a dev instance
+		// running this would double-ask the operator with its own state.
 		if os.Getenv("DENEB_MEETING_HARVEST_DISABLE") != "1" {
-			harvestStatePath := ""
 			if stateDir, ok := s.productionStateDir(homeDir); ok {
-				harvestStatePath = filepath.Join(stateDir, harvestStateFile)
+				s.meetingHarvest = newMeetingHarvestService(
+					func(text string) (bool, error) { return s.proactiveRelay.relayNative(text) },
+					resolveBriefingCalendarClient,
+					func(text string) string {
+						st := s.wikiStore
+						if st == nil {
+							return ""
+						}
+						if refs := st.MatchProjectsInText(text, 1); len(refs) > 0 {
+							return refs[0].Name
+						}
+						if cps := st.MatchCounterpartiesInText(text, 1); len(cps) > 0 {
+							return cps[0].Name
+						}
+						// Terse real-world titles ("비금도 … 견학") never contain
+						// the full compound project name — recover via unique
+						// token containment (ambiguous tokens resolve to none).
+						return looseUniqueProjectMatch(text, st.KnownProjects())
+					},
+					filepath.Join(stateDir, harvestStateFile),
+					s.logger,
+				)
+				s.meetingHarvest.start(s.ShutdownCtx())
 			}
-			s.meetingHarvest = newMeetingHarvestService(
-				func(text string) (bool, error) { return s.proactiveRelay.relayNative(text) },
-				resolveBriefingCalendarClient,
-				func(text string) string {
-					st := s.wikiStore
-					if st == nil {
-						return ""
-					}
-					if refs := st.MatchProjectsInText(text, 1); len(refs) > 0 {
-						return refs[0].Name
-					}
-					if cps := st.MatchCounterpartiesInText(text, 1); len(cps) > 0 {
-						return cps[0].Name
-					}
-					return ""
-				},
-				harvestStatePath,
-				s.logger,
-			)
-			s.meetingHarvest.start(s.ShutdownCtx())
 		}
 
 		// Model tuner: every 6h, aggregate the last 24h of agent logs by

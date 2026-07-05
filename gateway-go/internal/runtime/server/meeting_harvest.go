@@ -28,7 +28,10 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
 	"github.com/choiceoh/deneb/gateway-go/pkg/atomicfile"
 	"github.com/choiceoh/deneb/gateway-go/pkg/safego"
@@ -205,7 +208,13 @@ func decideHarvests(
 			// nagging (operator feedback 2026-07-05: 사람을 실제로 만나야 미팅).
 			continue
 		}
-		target := matchTarget(strings.TrimSpace(ev.Summary + " " + ev.Description))
+		// Attendee names/emails join the match text: Google events often carry
+		// the counterparty only in the guest list, not the title.
+		text := ev.Summary + " " + ev.Description
+		for _, a := range ev.Attendees {
+			text += " " + a.DisplayName + " " + a.Email
+		}
+		target := matchTarget(strings.TrimSpace(text))
 		if target == "" {
 			continue // not work-linked — personal events are never harvested
 		}
@@ -225,18 +234,33 @@ func decideHarvests(
 }
 
 // meetingWords are Korean calendar-title tokens that signal an actual human
-// encounter. Conservative allowlist — generic task verbs (발주, 제출, 송금,
-// 마감…) are deliberately absent so task blocks never trigger.
+// encounter. Calibrated against the operator's REAL calendar (17-event sample,
+// 2026-07-05): 회식·견학 etc. appear verbatim there. Generic task verbs (발주,
+// 제출, 송금, 마감…) are deliberately absent so task blocks never trigger.
 var meetingWords = []string{
 	"미팅", "회의", "면담", "방문", "상담", "협의", "만남", "통화", "전화",
-	"점심", "저녁", "식사", "킥오프", "발표", "인터뷰", "출장", "외근",
+	"점심", "저녁", "식사", "회식", "킥오프", "발표", "인터뷰", "출장", "외근",
+	"견학", "워크숍", "워크샵", "세미나", "컨퍼런스", "박람회", "전시회", "답사",
+}
+
+// jobTitleWords: the DOMINANT pattern in the operator's real calendar is
+// "<회사> <이름> <직함>" with no meeting word at all ("한화 유성민 팀장",
+// "프라임에너지 대표 미팅", "singsun 동사장"). A job title in the text is
+// strong evidence of meeting a person. False-positive-ish hits ("집 이사")
+// are neutralized by the second lock: a work target must ALSO match before
+// anything fires.
+var jobTitleWords = []string{
+	"대표", "사장", "부사장", "회장", "전무", "상무", "이사", "본부장", "실장",
+	"소장", "부장", "차장", "과장", "팀장", "대리", "주임", "위원", "교수",
+	"총괄", "매니저",
 }
 
 // isMeetingShaped reports whether the event looks like the operator actually
 // met (or called) someone: structural evidence first — external attendees, an
-// attached conference link, a physical location — then a meeting-word in the
-// title/description. Hand-added local events usually carry no attendee
-// metadata, so the word list is what keeps those alive.
+// attached conference link, a physical location — then a meeting-word or a
+// job-title word in the title/description. Hand-added local events (the
+// operator's main calendar) carry no attendee metadata, so the word lists are
+// what keeps those alive.
 func isMeetingShaped(ev calendar.Event) bool {
 	if len(externalAttendees(ev.Attendees, 1)) > 0 {
 		return true
@@ -253,7 +277,75 @@ func isMeetingShaped(ev calendar.Event) bool {
 			return true
 		}
 	}
+	for _, w := range jobTitleWords {
+		if strings.Contains(text, w) {
+			return true
+		}
+	}
 	return false
+}
+
+// looseUniqueProjectMatch recovers targets the exact matcher misses: real
+// calendar titles are terse ("비금도 해저케이블 포설 견학") while wiki project
+// folders are long compound names ("비금도-154kv-케이블-및-액세서리-(ztt)"), so
+// containment-of-full-name never fires. Here an event TOKEN (≥2 Hangul runes /
+// ≥3 otherwise) matching INSIDE exactly ONE project name resolves that project;
+// ambiguous tokens ("당진" spans three projects) resolve to nothing rather than
+// guessing.
+func looseUniqueProjectMatch(text string, projects []wiki.ProjectRef) string {
+	toks := harvestTokens(text)
+	if len(toks) == 0 {
+		return ""
+	}
+	keys := make([]string, len(projects))
+	for i, p := range projects {
+		keys[i] = harvestNorm(p.Name)
+	}
+	for _, tok := range toks {
+		hit := ""
+		count := 0
+		for i, p := range projects {
+			if strings.Contains(keys[i], tok) {
+				count++
+				hit = p.Name
+			}
+		}
+		if count == 1 {
+			return hit
+		}
+	}
+	return ""
+}
+
+// harvestTokens splits free text into normalized candidate tokens. Short ASCII
+// fragments ("lg" 2 chars is fine, "w" is not) and 1-rune Hangul are dropped.
+func harvestTokens(text string) []string {
+	fields := strings.FieldsFunc(text, func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsDigit(r)
+	})
+	var out []string
+	for _, f := range fields {
+		tok := harvestNorm(f)
+		n := utf8.RuneCountInString(tok)
+		if n < 2 {
+			continue
+		}
+		out = append(out, tok)
+	}
+	return out
+}
+
+// harvestNorm lowercases and strips non-letter/digit runes — the same shape the
+// wiki's name keys use, kept local because this normalizes EVENT tokens, not
+// wiki paths (no layout-rule duplication).
+func harvestNorm(s string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(s) {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }
 
 // harvestKey identifies one occurrence: same event ID rescheduled to a new end
