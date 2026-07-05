@@ -133,7 +133,7 @@ func (r *ToolRegistry) Execute(ctx context.Context, name string, input json.RawM
 	// Resolve $ref: wait for the referenced tool result and inject it.
 	input = resolveRef(ctx, input)
 
-	// Check run-level cache for idempotent read tools (find, tree).
+	// Check run-level cache for idempotent tools (grep, fetch_tools).
 	// Cached results include post-processing but not compression.
 	rc := RunCacheFromContext(ctx)
 	if rc != nil && IsCacheableTool(name) {
@@ -207,6 +207,12 @@ func (r *ToolRegistry) Execute(ctx context.Context, name string, input json.RawM
 	if rc != nil && IsCacheableTool(name) {
 		cacheKey := BuildCacheKey(name, input)
 		scope := extractPathScope(input)
+		if name == "fetch_tools" {
+			// Schema lookups don't depend on workspace files — without this
+			// sentinel the unscoped entry would be conservatively wiped by
+			// every path-scoped write/edit invalidation.
+			scope = toolctx.ScopeNonFilesystem
+		}
 		rc.SetWithScope(cacheKey, output, scope)
 	}
 
