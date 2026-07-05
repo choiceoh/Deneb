@@ -194,7 +194,7 @@ func timedTranslate(t *testing.T, client *llm.Client, model string, segs []strin
 // keeping the same count-preserving contract as TranslateSegments.
 func benchTranslate(t *testing.T, client *llm.Client, model string, segs []string) []string {
 	t.Helper()
-	system, user := buildTranslatePrompt(segs, "Korean")
+	system, user := buildTranslatePrompt(normalizeTranslateInputs(segs), "Korean")
 	raw, err := client.Complete(context.Background(), llm.ChatRequest{
 		Model:          model,
 		System:         llm.SystemString(system),
