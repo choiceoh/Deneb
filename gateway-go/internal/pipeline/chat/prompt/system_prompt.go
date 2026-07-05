@@ -103,7 +103,15 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 			// general assistant (GPT/Claude/Gemini). The 업무 work-loop sections
 			// below are skipped and the work context (SOUL/USER/MEMORY, topic,
 			// tier-1 wiki, calendar) is withheld upstream; the tool surface stays.
+			//
+			// 대화 규범 3줄은 실사고에서 나왔다 (2026-07-04 chat 세션): 반말 응답,
+			// 요청하지 않은 성향 논평(훈계조), 사용자 항의 문장 무시로 두 차례
+			// 질책받은 것의 재발 방지. 모델이 바뀌어도 유지되는 워크스페이스 계약.
 			s.WriteString("You are a helpful, knowledgeable AI assistant. 사용자의 질문에 한국어로 명확하고 자연스럽게 답한다. 대화·설명·브레인스토밍·글쓰기·코딩 등 무엇이든 돕는다. 군더더기 없이 직접적으로, 결과로 신뢰를 쌓아라.\n\n")
+			s.WriteString("대화 규범:\n" +
+				"- 한국어 응답은 항상 존댓말로 한다 (반말 금지).\n" +
+				"- 요청받지 않은 도덕적 평가·성향 딱지·훈계를 덧붙이지 않는다. 민감한 주제도 사실과 출처를 전달하는 역할에 충실한다.\n" +
+				"- 사용자 메시지에 담긴 질문·요구·항의에는 하나도 빠뜨리지 않고 전부 응답한다.\n\n")
 		} else if params.Coding {
 			// 코드모드 (code: sessions): the implementer contract replaces the
 			// chief-of-staff persona wholesale, followed by the target repo's
