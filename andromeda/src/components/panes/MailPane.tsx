@@ -43,6 +43,7 @@ export function MailPane() {
   const fetchedMails = result?.data;
   const [selectedId, setSelectedId] = useState<string | number | undefined>();
   const [locallyReadIds, setLocallyReadIds] = useState<Set<string>>(readLocallyReadIds);
+  const mountedRef = useRef(true);
   const markingReadIdsRef = useRef(new Set<string>());
   const { run, error, busy } = useAction(() => void query.refetch());
   const mails = useMemo(
@@ -52,6 +53,13 @@ export function MailPane() {
   const selectedPreview = mails.find((m) => String(m.id) === String(selectedId));
   const detail = useCachedOne<Mail>("mail", selectedId, connected && selectedId !== undefined);
   const selectedMail = detail.result ? applyLocalRead(detail.result, locallyReadIds) : selectedPreview;
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const markMailRead = useCallback(
     (id: string | number) => {
@@ -68,6 +76,7 @@ export function MailPane() {
       void run(MAIL_RPC.markRead, { id })
         .then((result) => {
           if (result !== undefined) return;
+          if (!mountedRef.current) return;
           setLocallyReadIds((prev) => {
             if (!prev.has(key)) return prev;
             const next = new Set(prev);
