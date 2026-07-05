@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -151,12 +152,18 @@ func ToolGatewayWithDeps(repoDir string, deps GatewayDeps) ToolFunc {
 			return gatewayConfigSet(deps, p.Path, p.Value, false)
 
 		case "config_set.confirmed":
+			if msg := consumePendingApproval(p.ActionToken, "config_set", approvalPayload(p.Path, p.Value)); msg != "" {
+				return msg, nil
+			}
 			return gatewayConfigSet(deps, p.Path, p.Value, true)
 
 		case "update":
 			return gatewayUpdate(ctx, deps, repoDir, false)
 
 		case "update.confirmed":
+			if msg := consumePendingApproval(p.ActionToken, "update", ""); msg != "" {
+				return msg, nil
+			}
 			return gatewayUpdate(ctx, deps, repoDir, true)
 
 		// ── Legacy / existing actions (preserved) ──────────────────────────
@@ -184,9 +191,29 @@ func ToolGatewayWithDeps(repoDir string, deps GatewayDeps) ToolFunc {
 			data, _ := json.MarshalIndent(node, "", "  ")
 			return string(data), nil
 
+		// Legacy bulk writes: same secret-path block + approval gate as
+		// config_set — the schema has always promised approval for these, and
+		// config.apply replaces the ENTIRE config file.
 		case "config.patch":
 			if p.Patch == nil {
 				return "", fmt.Errorf("config.patch에는 patch 객체가 필요합니다")
+			}
+			if hit := findSecretKey("", p.Patch); hit != "" {
+				slog.Warn("gateway tool: config.patch blocked (secret path)", "path", hit)
+				return fmt.Sprintf("거부: patch의 %q 경로는 비밀 값으로 보입니다. 에이전트는 토큰/비밀번호/API 키를 관리하지 않습니다.", hit), nil
+			}
+			token := newActionToken()
+			registerPendingApproval(token, "config.patch", approvalPayload(p.Patch))
+			slog.Info("gateway tool: config.patch awaiting approval", "token", token)
+			return approvalEnvelope(token, "config.patch",
+				fmt.Sprintf("설정 병합 패치: 최상위 키 %d개를 덮어씁니다", len(p.Patch)), "설정 패치")
+
+		case "config.patch.confirmed":
+			if p.Patch == nil {
+				return "", fmt.Errorf("config.patch에는 patch 객체가 필요합니다")
+			}
+			if msg := consumePendingApproval(p.ActionToken, "config.patch", approvalPayload(p.Patch)); msg != "" {
+				return msg, nil
 			}
 			return gatewayConfigPatch(deps, p.Patch)
 
@@ -194,10 +221,28 @@ func ToolGatewayWithDeps(repoDir string, deps GatewayDeps) ToolFunc {
 			if p.Config == nil {
 				return "", fmt.Errorf("config.apply에는 config 객체가 필요합니다")
 			}
+			if hit := findSecretKey("", p.Config); hit != "" {
+				slog.Warn("gateway tool: config.apply blocked (secret path)", "path", hit)
+				return fmt.Sprintf("거부: config의 %q 경로는 비밀 값으로 보입니다. 에이전트는 토큰/비밀번호/API 키를 관리하지 않습니다.", hit), nil
+			}
+			token := newActionToken()
+			registerPendingApproval(token, "config.apply", approvalPayload(p.Config))
+			slog.Info("gateway tool: config.apply awaiting approval", "token", token)
+			return approvalEnvelope(token, "config.apply",
+				"설정 전체 교체: deneb.json 파일 전체를 제공된 내용으로 바꿉니다", "설정 교체")
+
+		case "config.apply.confirmed":
+			if p.Config == nil {
+				return "", fmt.Errorf("config.apply에는 config 객체가 필요합니다")
+			}
+			if msg := consumePendingApproval(p.ActionToken, "config.apply", approvalPayload(p.Config)); msg != "" {
+				return msg, nil
+			}
 			return gatewayConfigApply(deps, p.Config)
 
 		case "restart":
 			token := newActionToken()
+			registerPendingApproval(token, "restart", "")
 			slog.Info("gateway tool: restart requested, awaiting approval",
 				"reason", p.Reason, "token", token)
 			return approvalEnvelope(
@@ -208,6 +253,9 @@ func ToolGatewayWithDeps(repoDir string, deps GatewayDeps) ToolFunc {
 			)
 
 		case "restart.confirmed":
+			if msg := consumePendingApproval(p.ActionToken, "restart", ""); msg != "" {
+				return msg, nil
+			}
 			slog.Info("gateway tool: restart confirmed, sending SIGUSR1",
 				"pid", deps.signaller().PID(), "token", p.ActionToken)
 			if err := deps.signaller().Signal(syscall.SIGUSR1); err != nil {
@@ -289,6 +337,7 @@ func gatewayConfigSet(deps GatewayDeps, path string, value any, confirmed bool) 
 
 	if !confirmed {
 		token := newActionToken()
+		registerPendingApproval(token, "config_set", approvalPayload(path, value))
 		slog.Info("gateway tool: config_set awaiting approval",
 			"path", path, "token", token)
 		summary := fmt.Sprintf("설정 변경: `%s` = %s", path, formatValueForSummary(value))
@@ -378,6 +427,7 @@ func gatewayUpdate(ctx context.Context, deps GatewayDeps, repoDir string, confir
 
 	if !confirmed {
 		token := newActionToken()
+		registerPendingApproval(token, "update", "")
 		slog.Info("gateway tool: update awaiting approval",
 			"branch", branch, "dir", dir, "token", token)
 		summary := fmt.Sprintf("업데이트: `git pull --rebase origin main` → `make go` → 재시작 (현재 브랜치: %s)", branch)
@@ -415,6 +465,106 @@ func gatewayUpdate(ctx context.Context, deps GatewayDeps, repoDir string, confir
 		return fmt.Sprintf("업데이트는 성공했지만 재시작 신호 실패: %s. CLI에서 `deneb gateway restart`를 실행하세요.\n\n%s", err.Error(), strings.TrimSpace(string(pullOut))), nil
 	}
 	return fmt.Sprintf("업데이트 완료 — 곧 재시작됩니다.\n\n- git pull: %s\n- 빌드: OK", strings.TrimSpace(string(pullOut))), nil
+}
+
+// ── Approval token registry ──────────────────────────────────────────────
+
+// pendingApprovals holds minted approval tokens awaiting user confirmation.
+// A `.confirmed` call must present a token this gateway minted, unexpired,
+// for the same action AND the same payload — otherwise the model could skip
+// the human-approval step by emitting `.confirmed` directly (the token used
+// to be logged but never checked), or get approval for one change and then
+// execute a different one. In-memory by design: a restart invalidates
+// outstanding approvals (safe default for a single-user deployment).
+var (
+	pendingApprovalsMu sync.Mutex
+	pendingApprovals   = map[string]pendingApproval{}
+)
+
+type pendingApproval struct {
+	action  string
+	payload string
+	expires time.Time
+}
+
+const approvalTTL = 10 * time.Minute
+
+func registerPendingApproval(token, action, payload string) {
+	pendingApprovalsMu.Lock()
+	defer pendingApprovalsMu.Unlock()
+	now := time.Now()
+	for t, pa := range pendingApprovals {
+		if now.After(pa.expires) {
+			delete(pendingApprovals, t)
+		}
+	}
+	pendingApprovals[token] = pendingApproval{action: action, payload: payload, expires: now.Add(approvalTTL)}
+}
+
+// consumePendingApproval validates and single-use-consumes an approval token.
+// Returns a Korean guidance message on failure (empty string on success) so
+// callers can hand it straight back to the model.
+func consumePendingApproval(token, action, payload string) string {
+	pendingApprovalsMu.Lock()
+	defer pendingApprovalsMu.Unlock()
+	pa, ok := pendingApprovals[token]
+	if !ok || time.Now().After(pa.expires) {
+		delete(pendingApprovals, token)
+		return fmt.Sprintf("거부: 승인 토큰이 유효하지 않거나 만료되었습니다. `action=%s`부터 다시 시작해 사용자 승인을 받으세요.", action)
+	}
+	if pa.action != action {
+		return fmt.Sprintf("거부: 이 토큰은 %q 승인용입니다. `action=%s`부터 다시 시작하세요.", pa.action, action)
+	}
+	if pa.payload != payload {
+		return "거부: 승인받은 내용과 실행 요청 내용이 다릅니다. 변경 내용을 바꿨다면 승인 절차를 처음부터 다시 시작하세요."
+	}
+	delete(pendingApprovals, token)
+	return ""
+}
+
+// approvalPayload canonicalizes an action's parameters so the confirmed call
+// is bound to exactly what the user approved (json.Marshal sorts map keys).
+func approvalPayload(parts ...any) string {
+	data, err := json.Marshal(parts)
+	if err != nil {
+		return fmt.Sprintf("%v", parts)
+	}
+	return string(data)
+}
+
+// findSecretKey walks a nested config object and returns the first dotted
+// path whose key looks like a credential, or "" when clean. Guards the
+// legacy config.patch/config.apply write paths with the same "agents never
+// manage tokens" rule config_set enforces on its single path. Recurses into
+// arrays too — providers: [{apiKey: ...}] must not slip past the block.
+func findSecretKey(prefix string, m map[string]any) string {
+	for k, v := range m {
+		p := k
+		if prefix != "" {
+			p = prefix + "." + k
+		}
+		if secretPathPattern.MatchString(k) {
+			return p
+		}
+		if hit := findSecretValue(p, v); hit != "" {
+			return hit
+		}
+	}
+	return ""
+}
+
+func findSecretValue(prefix string, v any) string {
+	switch t := v.(type) {
+	case map[string]any:
+		return findSecretKey(prefix, t)
+	case []any:
+		for i, el := range t {
+			if hit := findSecretValue(fmt.Sprintf("%s[%d]", prefix, i), el); hit != "" {
+				return hit
+			}
+		}
+	}
+	return ""
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────

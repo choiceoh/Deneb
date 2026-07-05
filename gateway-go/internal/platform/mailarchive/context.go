@@ -111,7 +111,8 @@ func ListContextMessages(ctx context.Context, cfg Config, since time.Time, opts 
 }
 
 // SearchContextMessages searches archive messages with stable locators, newest
-// first.
+// first. A non-zero opts.Since bounds the search window (SENTSINCE), same as
+// the project-history fallback path.
 func SearchContextMessages(ctx context.Context, cfg Config, query string, opts ContextOptions) ([]ContextMessage, error) {
 	query = strings.TrimSpace(query)
 	if query == "" {
@@ -123,7 +124,17 @@ func SearchContextMessages(ctx context.Context, cfg Config, query string, opts C
 	}
 	defer c.close()
 	defer c.logout()
-	return searchContextMessages(ctx, c, cfg, archiveTextCriteria(query), opts, true)
+	criteria := archiveTextCriteria(query)
+	if !opts.Since.IsZero() {
+		criteria = archiveSentSinceCriteria(opts.Since) + " " + criteria
+	}
+	msgs, err := searchContextMessages(ctx, c, cfg, criteria, opts, true)
+	if err != nil || opts.Since.IsZero() {
+		return msgs, err
+	}
+	// SENTSINCE carries a deliberate 1-day prefetch margin (date-only IMAP
+	// semantics); post-filter back to the exact boundary like ListSince does.
+	return filterSentOnOrAfter(msgs, opts.Since), nil
 }
 
 // ThreadContext reconstructs the whole available archive thread around one

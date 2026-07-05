@@ -523,7 +523,51 @@ func pdfOCR(ctx context.Context, pdf []byte) (string, error) {
 	if out == "" {
 		return "", fmt.Errorf("OCR 결과 없음")
 	}
+	// Surface the page cap — a 30-page scanned contract must not silently
+	// lose 20 pages (xlsx/csv extraction already reports truncation).
+	if len(imgs) == ocrPageCap {
+		if total := pdfPageCount(ctx, pdf); total > ocrPageCap {
+			fmt.Fprintf(&sb, "\n\n[페이지 %d–%d 생략: 총 %d페이지 중 처음 %d페이지만 OCR]",
+				ocrPageCap+1, total, total, ocrPageCap)
+		} else if total == 0 {
+			fmt.Fprintf(&sb, "\n\n[처음 %d페이지만 OCR — 문서가 더 길면 뒷부분은 생략됨]", ocrPageCap)
+		}
+		out = strings.TrimSpace(sb.String())
+	}
 	return out, nil
+}
+
+// pdfPageCount returns the PDF's total page count via pdfinfo, or 0 when
+// unavailable (pdfinfo missing / parse failure). Best-effort — used only to
+// make the OCR page-cap notice precise.
+func pdfPageCount(ctx context.Context, pdf []byte) int {
+	if _, err := exec.LookPath("pdfinfo"); err != nil {
+		return 0
+	}
+	dir, err := os.MkdirTemp("", "deneb-pdfinfo-")
+	if err != nil {
+		return 0
+	}
+	defer os.RemoveAll(dir)
+	if err := os.WriteFile(filepath.Join(dir, "in.pdf"), pdf, 0o600); err != nil {
+		return 0
+	}
+	runCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(runCtx, "pdfinfo", "in.pdf")
+	cmd.Dir = dir
+	outBytes, err := cmd.Output()
+	if err != nil {
+		return 0
+	}
+	for _, line := range strings.Split(string(outBytes), "\n") {
+		if rest, ok := strings.CutPrefix(line, "Pages:"); ok {
+			if n, err := strconv.Atoi(strings.TrimSpace(rest)); err == nil {
+				return n
+			}
+		}
+	}
+	return 0
 }
 
 // tesseract runs the tesseract CLI on image bytes piped through stdin.

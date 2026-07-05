@@ -243,9 +243,115 @@ func TestGatewayRestartApprovalEnvelope(t *testing.T) {
 func TestGatewayRestartConfirmed(t *testing.T) {
 	sig := &fakeSignaller{}
 	tool := ToolGatewayWithDeps("", GatewayDeps{Signaller: sig})
-	mustCallTool(t, tool, map[string]any{"action": "restart.confirmed"})
+	env := parseEnvelope(t, mustCallTool(t, tool, map[string]any{"action": "restart"}))
+	token := env["action_token"].(string)
+	mustCallTool(t, tool, map[string]any{"action": "restart.confirmed", "action_token": token})
 	if len(sig.sent) != 1 || sig.sent[0] != syscall.SIGUSR1 {
 		t.Errorf("expected SIGUSR1, got: %v", sig.sent)
+	}
+}
+
+// A `.confirmed` call without a previously minted approval token must be
+// rejected — otherwise the model can skip the human-approval step entirely.
+func TestGatewayConfirmedWithoutApprovalRejected(t *testing.T) {
+	sig := &fakeSignaller{}
+	cfgPath := writeTempConfig(t, `{"model": {"main": "a"}}`)
+	tool := ToolGatewayWithDeps("", GatewayDeps{Signaller: sig, ConfigPath: cfgPath})
+
+	for _, call := range []map[string]any{
+		{"action": "restart.confirmed"},
+		{"action": "restart.confirmed", "action_token": "tok_forged"},
+		{"action": "config_set.confirmed", "path": "model.main", "value": "b"},
+		{"action": "config.patch.confirmed", "patch": map[string]any{"model": "x"}},
+		{"action": "config.apply.confirmed", "config": map[string]any{}},
+	} {
+		out := mustCallTool(t, tool, call)
+		if !strings.Contains(out, "거부") {
+			t.Errorf("%v: expected rejection, got: %s", call["action"], out)
+		}
+	}
+	if len(sig.sent) != 0 {
+		t.Errorf("no signal may fire without approval: %v", sig.sent)
+	}
+	raw, _ := os.ReadFile(cfgPath)
+	if !strings.Contains(string(raw), `"a"`) {
+		t.Errorf("config must be untouched, got: %s", raw)
+	}
+}
+
+// A token approved for one payload must not execute a different one.
+func TestGatewayConfigSetConfirmPayloadMismatch(t *testing.T) {
+	cfgPath := writeTempConfig(t, `{"model": {"main": "a"}}`)
+	tool := ToolGatewayWithDeps("", GatewayDeps{ConfigPath: cfgPath})
+
+	env := parseEnvelope(t, mustCallTool(t, tool, map[string]any{
+		"action": "config_set", "path": "model.main", "value": "b",
+	}))
+	token := env["action_token"].(string)
+
+	out := mustCallTool(t, tool, map[string]any{
+		"action": "config_set.confirmed", "path": "model.fallback", "value": "b",
+		"action_token": token,
+	})
+	if !strings.Contains(out, "거부") {
+		t.Errorf("expected payload-mismatch rejection, got: %s", out)
+	}
+	// The mismatch attempt must not consume the token for the original payload.
+	out = mustCallTool(t, tool, map[string]any{
+		"action": "config_set.confirmed", "path": "model.main", "value": "b",
+		"action_token": token,
+	})
+	if !strings.Contains(out, "저장했습니다") {
+		t.Errorf("original approved payload should still execute, got: %s", out)
+	}
+	// Token is single-use.
+	out = mustCallTool(t, tool, map[string]any{
+		"action": "config_set.confirmed", "path": "model.main", "value": "b",
+		"action_token": token,
+	})
+	if !strings.Contains(out, "거부") {
+		t.Errorf("expected single-use token rejection on replay, got: %s", out)
+	}
+}
+
+// Legacy bulk writes now share the secret block + approval gate.
+func TestGatewayConfigPatchApprovalFlow(t *testing.T) {
+	cfgPath := writeTempConfig(t, `{"model": {"main": "a"}}`)
+	tool := ToolGatewayWithDeps("", GatewayDeps{ConfigPath: cfgPath})
+
+	// Secret-looking key anywhere in the patch is rejected outright.
+	out := mustCallTool(t, tool, map[string]any{
+		"action": "config.patch",
+		"patch":  map[string]any{"providers": map[string]any{"openai": map[string]any{"apiKey": "x"}}},
+	})
+	if !strings.Contains(out, "거부") {
+		t.Errorf("expected secret-key rejection, got: %s", out)
+	}
+	// ...including inside array elements (providers: [{apiKey: ...}]).
+	out = mustCallTool(t, tool, map[string]any{
+		"action": "config.patch",
+		"patch":  map[string]any{"providers": []any{map[string]any{"apiKey": "x"}}},
+	})
+	if !strings.Contains(out, "거부") {
+		t.Errorf("expected secret-key-in-array rejection, got: %s", out)
+	}
+
+	// Clean patch: envelope → confirmed → written.
+	patch := map[string]any{"model": map[string]any{"main": "b"}}
+	env := parseEnvelope(t, mustCallTool(t, tool, map[string]any{"action": "config.patch", "patch": patch}))
+	if env["needs_approval"] != true {
+		t.Fatalf("expected approval envelope: %#v", env)
+	}
+	token := env["action_token"].(string)
+	out = mustCallTool(t, tool, map[string]any{
+		"action": "config.patch.confirmed", "patch": patch, "action_token": token,
+	})
+	if !strings.Contains(out, "패치했습니다") {
+		t.Errorf("expected patch success, got: %s", out)
+	}
+	raw, _ := os.ReadFile(cfgPath)
+	if !strings.Contains(string(raw), `"b"`) {
+		t.Errorf("patch not written: %s", raw)
 	}
 }
 
@@ -328,7 +434,9 @@ func TestGatewayUpdateConfirmedHappyPath(t *testing.T) {
 		Runner: runner, Signaller: sig,
 		Now: func() time.Time { return time.Unix(1, 0) },
 	})
-	out := mustCallTool(t, tool, map[string]any{"action": "update.confirmed"})
+	env := parseEnvelope(t, mustCallTool(t, tool, map[string]any{"action": "update"}))
+	token := env["action_token"].(string)
+	out := mustCallTool(t, tool, map[string]any{"action": "update.confirmed", "action_token": token})
 	if !strings.Contains(out, "업데이트 완료") {
 		t.Errorf("expected success Korean message: %s", out)
 	}

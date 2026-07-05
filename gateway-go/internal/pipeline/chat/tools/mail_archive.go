@@ -70,6 +70,12 @@ func ToolMailArchive(optional ...MailArchiveDeps) func(ctx context.Context, inpu
 			if strings.TrimSpace(args.Query) == "" {
 				return "", fmt.Errorf("search에는 query가 필요합니다")
 			}
+			// Honor days on search too — it was silently ignored here (only
+			// project_history bounded by date), so "지난달 메일만" forced the
+			// model to over-fetch and eyeball dates.
+			if args.Days > 0 {
+				opts.Since = time.Now().AddDate(0, 0, -(args.Days - 1))
+			}
 			msgs, err := mailarchive.SearchContextMessages(ctx, cfg, args.Query, opts)
 			if err != nil {
 				return "", fmt.Errorf("아카이브 검색 실패: %w", err)
@@ -86,6 +92,9 @@ func ToolMailArchive(optional ...MailArchiveDeps) func(ctx context.Context, inpu
 		case "read":
 			msg, err := mailarchive.ReadContextMessage(ctx, cfg, args.MessageID, args.Query, opts)
 			if err != nil {
+				if errors.Is(err, mailarchive.ErrArchiveNotFound) {
+					return "해당 메일을 아카이브에서 찾지 못했습니다 — Locator가 오래됐을 수 있습니다(재색인 후 흔함). action=search에 제목 키워드로 다시 찾아 새 Locator로 여세요.", nil
+				}
 				return "", fmt.Errorf("아카이브 메일 열기 실패: %w", err)
 			}
 			enriched := enrichArchiveMessage(ctx, deps, msg, true)
@@ -105,6 +114,9 @@ func ToolMailArchive(optional ...MailArchiveDeps) func(ctx context.Context, inpu
 		case "thread":
 			msgs, err := mailarchive.ThreadContext(ctx, cfg, args.MessageID, args.Query, opts)
 			if err != nil {
+				if errors.Is(err, mailarchive.ErrArchiveNotFound) {
+					return "스레드 기준 메일을 아카이브에서 찾지 못했습니다 — Locator가 오래됐을 수 있습니다. action=search에 제목 키워드로 다시 찾아 새 Locator로 시도하세요.", nil
+				}
 				return "", fmt.Errorf("아카이브 스레드 조회 실패: %w", err)
 			}
 			enriched := enrichArchiveMessages(ctx, deps, msgs, true)

@@ -104,6 +104,25 @@ func editToolSchema() map[string]any {
 				"type":        "string",
 				"description": "Optional second anchor. With anchor set, replaces the inclusive line range anchor..anchor_end with new_string (which may span multiple lines)",
 			},
+			"edits": map[string]any{
+				"type":        "array",
+				"description": "배치 편집: 같은 파일에 여러 치환을 한 번에 적용 (순차 적용 — 뒤 항목은 앞 항목 결과를 본다). 전부 성공해야 기록되는 all-or-nothing. N회 호출 대비 토큰·턴 절약; 사용 시 old_string/new_string은 생략",
+				"items": map[string]any{
+					"type":     "object",
+					"required": []string{"old_string", "new_string"},
+					"properties": map[string]any{
+						"new_string": map[string]any{
+							"type": "string",
+						},
+						"old_string": map[string]any{
+							"type": "string",
+						},
+						"replace_all": map[string]any{
+							"type": "boolean",
+						},
+					},
+				},
+			},
 			"file_path": map[string]any{
 				"type":        "string",
 				"description": "The absolute path to the file to modify",
@@ -262,7 +281,7 @@ func processToolSchema() map[string]any {
 			},
 			"timeout": map[string]any{
 				"type":        "number",
-				"description": "Poll timeout in milliseconds",
+				"description": "poll에서 완료까지 최대 대기(ms). 지정하면 프로세스가 끝나거나 시한이 지날 때까지 블록(최대 5분), 미지정 시 즉시 스냅샷 반환",
 			},
 		},
 		"required": []string{"action"},
@@ -447,7 +466,7 @@ func gatewayToolSchema() map[string]any {
 			"action": map[string]any{
 				"type":        "string",
 				"description": "Gateway action. config_get/config_set: read or write a single dotted path. config.get: full config snapshot. config.apply: replace the whole config. config.patch: merge a patch object. config.schema.lookup: schema for a path. Destructive actions (restart/update/config_set/config.apply/config.patch) require approval: the first call returns a needs_approval envelope; after the user confirms, call the .confirmed variant with the same action_token.",
-				"enum":        []string{"status", "config_get", "config_set", "config_set.confirmed", "update", "update.confirmed", "restart", "restart.confirmed", "config.get", "config.schema.lookup", "config.apply", "config.patch"},
+				"enum":        []string{"status", "config_get", "config_set", "config_set.confirmed", "update", "update.confirmed", "restart", "restart.confirmed", "config.get", "config.schema.lookup", "config.apply", "config.apply.confirmed", "config.patch", "config.patch.confirmed"},
 			},
 			"action_token": map[string]any{
 				"type":        "string",
@@ -1114,8 +1133,8 @@ func contactsToolSchema() map[string]any {
 		"properties": map[string]any{
 			"action": map[string]any{
 				"type":        "string",
-				"description": "lookup: 전화번호로 인물 찾기 (정규화·+82↔0·뒷자리 폴백). search: 이름·회사·이메일·번호 부분일치 검색 (최대 20건).",
-				"enum":        []string{"lookup", "search"},
+				"description": "lookup: 전화번호로 인물 찾기 (정규화·+82↔0·뒷자리 폴백). search: 이름·회사·이메일·번호 부분일치 검색 (최대 20건, 초과 시 표시). by_company: 회사명으로 소속 인물 전체 열거 (이름순, 최대 50명).",
+				"enum":        []string{"lookup", "search", "by_company"},
 			},
 			"query": map[string]any{
 				"type":        "string",
@@ -1170,6 +1189,10 @@ func calendarToolSchema() map[string]any {
 			"id": map[string]any{
 				"type":        "string",
 				"description": "이벤트 ID (get/update/delete). list 결과의 'id=...' 값을 그대로 사용. 'local:' 접두사면 로컬(수정·삭제 가능), 아니면 구글(읽기 전용).",
+			},
+			"include_weekends": map[string]any{
+				"type":        "boolean",
+				"description": "free_slots에서 토/일도 후보로 포함할지 (기본 false — 주말은 업무 시간이 아니므로 제외). 점심 12–13시는 근무창이 점심을 온전히 포함할 때 자동 제외",
 			},
 			"location": map[string]any{
 				"type":        "string",
@@ -1590,7 +1613,7 @@ func mailArchiveToolSchema() map[string]any {
 			},
 			"days": map[string]any{
 				"type":        "number",
-				"description": "action=list에서 최근 며칠치를 볼지 (기본 1=오늘). 예: 7=최근 7일",
+				"description": "list/search에서 최근 며칠치로 범위를 한정할지 (list 기본 1=오늘, search 기본 무제한). 예: 7=최근 7일",
 				"minimum":     1,
 			},
 			"include_body": map[string]any{

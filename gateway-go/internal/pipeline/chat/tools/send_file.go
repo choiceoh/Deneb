@@ -33,6 +33,13 @@ func ToolSendFile() ToolFunc {
 			return "", fmt.Errorf("file_path is required")
 		}
 
+		// Protected-path guard: fs read/write/edit all refuse credential/
+		// control-plane paths, but delivery is strictly worse than a read —
+		// it exfiltrates the bytes off-box. Same safeguard applies here.
+		if err := CheckProtectedPath(p.FilePath, "send"); err != nil {
+			return "", err
+		}
+
 		// Verify file exists and is readable.
 		info, err := os.Stat(p.FilePath)
 		if err != nil {

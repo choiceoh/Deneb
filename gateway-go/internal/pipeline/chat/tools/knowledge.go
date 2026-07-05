@@ -103,13 +103,16 @@ func knowledgeRead(ctx context.Context, router *knowledge.Router, refStr string)
 	if refStr == "" {
 		return "", fmt.Errorf("ref is required for knowledge(op=\"read\")")
 	}
+	// Guidance strings instead of raw Go errors: a bad ref or a missing doc is
+	// an expected state the model should recover from (search first), not a
+	// hard failure to surface to the user.
 	ref, err := knowledge.ParseRef(refStr)
 	if err != nil {
-		return "", err
+		return fmt.Sprintf("ref 형식이 잘못됐습니다 (%s). `knowledge(op=\"recall\", query=...)`로 먼저 검색해 결과의 ref를 그대로 사용하세요.", err), nil
 	}
 	doc, err := router.Read(ctx, ref)
 	if err != nil {
-		return "", err
+		return fmt.Sprintf("문서를 열 수 없습니다: `%s` (%s). ref가 오래됐을 수 있으니 `knowledge(op=\"recall\", query=...)`로 다시 검색하세요.", ref.String(), err), nil
 	}
 
 	var sb strings.Builder

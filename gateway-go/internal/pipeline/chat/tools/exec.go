@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -162,12 +163,20 @@ func ToolExec(procMgr *process.Manager, defaultDir string) ToolFunc {
 			return out, nil
 		}
 
-		// Fallback: direct exec without process manager.
+		// Fallback: direct exec without process manager. Same env hygiene as
+		// the procMgr path — the inherited gateway environment carries
+		// secrets, so it must never reach the child unsanitized; p.Env is
+		// applied on top (it was silently dropped here before).
 		execCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutMs)*time.Millisecond)
 		defer cancel()
 		start := time.Now()
 		cmd := exec.CommandContext(execCtx, "bash", "-c", p.Command) //nolint:gosec // G204 — command execution is by design
 		cmd.Dir = workDir
+		env := process.SanitizeEnv(os.Environ(), slog.Default())
+		for k, v := range p.Env {
+			env = append(env, k+"="+v)
+		}
+		cmd.Env = env
 		out, err := cmd.CombinedOutput()
 		elapsed := time.Since(start)
 
@@ -192,10 +201,22 @@ func ToolExec(procMgr *process.Manager, defaultDir string) ToolFunc {
 			return string(data), nil
 		}
 
+		// Exit-code hints + destructive warning previously applied only on the
+		// procMgr path; the fallback dropped both.
+		outStr := string(out)
 		if err != nil {
-			return fmt.Sprintf("%s\n\nError: %s", string(out), err.Error()), nil
+			var exitErr *exec.ExitError
+			if errors.As(err, &exitErr) {
+				if isErr, hint := InterpretExitCode(p.Command, exitErr.ExitCode()); !isErr && hint != "" {
+					outStr += " " + hint
+				}
+			}
+			outStr = fmt.Sprintf("%s\n\nError: %s", outStr, err.Error())
 		}
-		return string(out), nil
+		if destructiveWarning != "" {
+			outStr = destructiveWarning + "\n" + outStr
+		}
+		return outStr, nil
 	}
 }
 
@@ -245,11 +266,12 @@ func formatExecResult(r *process.ExecResult) string {
 // --- Process tool ---
 
 func ToolProcess(procMgr *process.Manager) ToolFunc {
-	return func(_ context.Context, input json.RawMessage) (string, error) {
+	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			Action    string `json:"action"`
 			SessionID string `json:"sessionId"`
 			Input     string `json:"input"`
+			Timeout   int64  `json:"timeout"` // poll: block up to this many ms for completion
 		}
 		if err := jsonutil.UnmarshalInto("process params", input, &p); err != nil {
 			return "", err
@@ -274,6 +296,25 @@ func ToolProcess(procMgr *process.Manager) ToolFunc {
 			if t == nil {
 				return fmt.Sprintf("Process %q not found.", p.SessionID), nil
 			}
+			// The schema has always advertised a poll timeout, but it was never
+			// read — poll returned an instant snapshot, leaving the model no way
+			// to wait for a background job. Block (bounded, ctx-aware) until the
+			// process leaves running/pending or the timeout elapses.
+			if p.Action == "poll" && p.Timeout > 0 {
+				const maxPollMs = 5 * 60 * 1000
+				waitMs := min(p.Timeout, maxPollMs)
+				deadline := time.Now().Add(time.Duration(waitMs) * time.Millisecond)
+				for isProcessInFlight(t.Status) && time.Now().Before(deadline) {
+					select {
+					case <-ctx.Done():
+						return "", ctx.Err()
+					case <-time.After(200 * time.Millisecond):
+					}
+					if t = procMgr.Get(p.SessionID); t == nil {
+						return fmt.Sprintf("Process %q not found.", p.SessionID), nil
+					}
+				}
+			}
 			data, _ := json.MarshalIndent(t, "", "  ")
 			return string(data), nil
 		case "write":
@@ -297,4 +338,10 @@ func ToolProcess(procMgr *process.Manager) ToolFunc {
 			return fmt.Sprintf("Unknown process action: %q", p.Action), nil
 		}
 	}
+}
+
+// isProcessInFlight reports whether a tracked process may still change state
+// (poll-with-timeout keeps waiting only in these states).
+func isProcessInFlight(s process.RunStatus) bool {
+	return s == process.StatusRunning || s == process.StatusPending || s == process.StatusApproved
 }

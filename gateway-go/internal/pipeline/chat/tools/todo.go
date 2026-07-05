@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/localtodo"
+	"github.com/choiceoh/deneb/gateway-go/pkg/dentime"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
@@ -69,7 +71,7 @@ func toolTodoWithStore(store *localtodo.Store) ToolFunc {
 			}
 			td, serr := s.SetDone(strings.TrimSpace(p.ID), done)
 			if serr != nil {
-				return "", serr
+				return fmt.Sprintf("할일을 찾지 못했습니다 (id=%s): %s. `todo(action=\"list\")`로 현재 id를 확인한 뒤 다시 시도하세요.", p.ID, serr), nil
 			}
 			state := "완료"
 			if !done {
@@ -79,7 +81,7 @@ func toolTodoWithStore(store *localtodo.Store) ToolFunc {
 
 		case "delete", "remove":
 			if derr := s.Delete(strings.TrimSpace(p.ID)); derr != nil {
-				return "", derr
+				return fmt.Sprintf("할일을 찾지 못했습니다 (id=%s): %s. `todo(action=\"list\")`로 현재 id를 확인한 뒤 다시 시도하세요.", p.ID, derr), nil
 			}
 			return fmt.Sprintf("할일 삭제됨 (id=%s)", p.ID), nil
 
@@ -89,13 +91,39 @@ func toolTodoWithStore(store *localtodo.Store) ToolFunc {
 	}
 }
 
+// formatTodoList renders the list deadline-first: undone items sorted by due
+// (dated before undated), completed items last — and flags overdue items with
+// D+N. The whole value of a task list is surfacing deadlines; store order
+// buried them and "마감 2026-06-01" read the same whether past or future.
 func formatTodoList(todos []localtodo.Todo) string {
+	// dentime honors the configured timezone (DENEB_TIMEZONE) — a bare
+	// time.Now() on a UTC host would shift the D+N overdue math by a day.
+	return formatTodoListAt(todos, dentime.Now())
+}
+
+func formatTodoListAt(todos []localtodo.Todo, now time.Time) string {
 	if len(todos) == 0 {
 		return "할일 없음."
 	}
+	sorted := append([]localtodo.Todo(nil), todos...)
+	sort.SliceStable(sorted, func(i, j int) bool {
+		a, b := sorted[i], sorted[j]
+		if a.Done != b.Done {
+			return !a.Done // undone first
+		}
+		if a.Due.IsZero() != b.Due.IsZero() {
+			return !a.Due.IsZero() // dated before undated
+		}
+		if !a.Due.Equal(b.Due) {
+			return a.Due.Before(b.Due)
+		}
+		return false
+	})
+
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 	var b strings.Builder
-	fmt.Fprintf(&b, "할일 %d건:\n", len(todos))
-	for _, t := range todos {
+	fmt.Fprintf(&b, "할일 %d건:\n", len(sorted))
+	for _, t := range sorted {
 		mark := " "
 		if t.Done {
 			mark = "x"
@@ -103,6 +131,12 @@ func formatTodoList(todos []localtodo.Todo) string {
 		fmt.Fprintf(&b, "- [%s] %s (id=%s)", mark, t.Title, t.ID)
 		if !t.Due.IsZero() {
 			fmt.Fprintf(&b, " · 마감 %s", t.Due.Format("2006-01-02"))
+			if !t.Done {
+				due := time.Date(t.Due.Year(), t.Due.Month(), t.Due.Day(), 0, 0, 0, 0, now.Location())
+				if days := int(today.Sub(due).Hours() / 24); days > 0 {
+					fmt.Fprintf(&b, " ⚠️ 지남 D+%d", days)
+				}
+			}
 		}
 		b.WriteByte('\n')
 	}
