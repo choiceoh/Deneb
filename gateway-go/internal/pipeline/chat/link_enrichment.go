@@ -110,6 +110,10 @@ func (h *Handler) startLinkEnrichment(ctx context.Context, message string, opts 
 	}
 	ch := make(chan enrichOutcome, 1) // buffered: the goroutine never blocks on an abandoned join
 	logger := h.logger
+	// Snapshot the fetch func on the caller's goroutine: enrichFetch is a
+	// package global that tests swap/restore, so reading it inside the spawned
+	// goroutine races with the test's deferred restore (-race, #3168 follow-up).
+	fetch := enrichFetch
 	go func() {
 		// Manual recover instead of safego: the join must always receive a
 		// result or it would block until the turn context dies.
@@ -119,7 +123,7 @@ func (h *Handler) startLinkEnrichment(ctx context.Context, message string, opts 
 				ch <- enrichOutcome{fetchMs: time.Since(start).Milliseconds()}
 			}
 		}()
-		summary := enrichMessageWithLinks(ctx, message, enrichFetch, logger)
+		summary := enrichMessageWithLinks(ctx, message, fetch, logger)
 		ch <- enrichOutcome{summary: summary, fetchMs: time.Since(start).Milliseconds()}
 	}()
 
