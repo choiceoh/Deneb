@@ -41,6 +41,46 @@ jobs:
         with:
           app-id: "2971289"
           private-key: ${{ secrets.GH_APP_PRIVATE_KEY_FALLBACK }}
+      # actions/labeler fails when a configured label doesn't exist in the repo,
+      # so create any missing ones first (same pattern as the size:* step below).
+      # Keep this list in sync with the label keys in .github/labeler.yml.
+      - name: Ensure labeler labels exist
+        uses: actions/github-script@v8
+        with:
+          github-token: ${{ steps.app-token.outputs.token || steps.app-token-fallback.outputs.token || github.token }}
+          script: |
+            const labels = [
+              ["lang: go", "16e2e2"],
+              ["lang: kotlin", "a97bff"],
+              ["lang: typescript", "3178c6"],
+              ["ai", "0e8a16"],
+              ["gateway", "1d76db"],
+              ["native", "fbca04"],
+              ["andromeda", "5319e7"],
+              ["docs", "0075ca"],
+              ["skills", "c2e0c6"],
+              ["scripts", "bfd4f2"],
+              ["security", "d93f0b"],
+            ];
+            for (const [name, color] of labels) {
+              try {
+                await github.rest.issues.getLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  name,
+                });
+              } catch (error) {
+                if (error?.status !== 404) {
+                  throw error;
+                }
+                await github.rest.issues.createLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  name,
+                  color,
+                });
+              }
+            }
       - uses: actions/labeler@v6
         with:
           configuration-path: .github/labeler.yml
