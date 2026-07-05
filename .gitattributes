@@ -1,4 +1,6 @@
 * text=auto eol=lf
 CLAUDE.md -text
-src/gateway/server-methods/CLAUDE.md -text
-gateway-go/internal/chat/tool_schemas_gen.go linguist-generated=true diff=generated
+gateway-go/internal/pipeline/chat/toolreg/tool_schemas_gen.go linguist-generated=true diff=generated
+gateway-go/internal/pipeline/chat/tool_classification_gen.go linguist-generated=true diff=generated
+client-android/app/composeApp/src/commonMain/kotlin/ai/deneb/deneb/generated/MiniappWireTypes.kt linguist-generated=true diff=generated
+andromeda/src/gen/miniappWire.ts linguist-generated=true diff=generated

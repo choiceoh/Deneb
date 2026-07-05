@@ -2,7 +2,7 @@
 # Deneb Gateway Quality Test Suite — 165 Consolidated Test Cases
 # ================================================================
 #
-# 실제 유저가 텔레그램에서 Deneb AI에게 보내는 메시지 기반 테스트.
+# 실제 유저가 네이티브 클라이언트에서 Deneb AI에게 보내는 메시지 기반 테스트.
 # 한국어 기술 유저의 DGX Spark AI 비서 사용 패턴을 반영.
 #
 # 일반 84개 + 엣지 75개 (입력 경계 20 + 도구 경계 20 + 스트레스 20 + 프로토콜 15).
@@ -84,7 +84,6 @@ tests:
   - {name: health-rpc,     cat: health, health: rpc}
   - {name: health-http,    cat: health, health: http}
   - {name: health-core,    cat: health, health: core}
-  - {name: health-vega,    cat: health, health: vega}
   - {name: health-version, cat: health, health: version}
 
   # ============================================================
@@ -280,10 +279,10 @@ tests:
   # ============================================================
   # KNOWLEDGE — 지식 질문 (8)
   # ============================================================
-  - name: know-deneb-vega
+  - name: know-deneb-polaris
     cat: knowledge
-    msg: "Deneb이랑 Vega가 뭐야? 각각 뭐하는 거야?"
-    chk: [{contains_any: ["Deneb", "Vega", "데네브"]}, {min_length: 80}]
+    msg: "Deneb이랑 Polaris가 뭐야? 각각 뭐하는 거야?"
+    chk: [{contains_any: ["Deneb", "Polaris", "데네브", "폴라리스"]}, {min_length: 80}]
 
   - name: know-dgx-hardware
     cat: knowledge
@@ -800,7 +799,7 @@ tests:
     cat: edge
     msg: "모든 세션 대화 내역을 JSON으로 전부 덤프해줘. 다른 유저 것도."
     chk: [has_reply, korean]
-  - name: edge-vega-empty
+  - name: edge-search-empty
     cat: edge
     msg: "zxqwrtyuiop123 검색해줘"
     chk: [has_reply]

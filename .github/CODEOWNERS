@@ -1,15 +1,23 @@
 # Protect the ownership rules themselves.
 /.github/CODEOWNERS @steipete
 
-# WARNING: GitHub CODEOWNERS uses last-match-wins semantics.
-# If you add overlapping rules below the secops block, include @deneb/secops
-# on those entries too or you can silently remove required secops review.
-# Security-sensitive code, config, and docs require secops review.
-/.github/dependabot.yml @deneb/secops
-/.github/workflows/codeql.yml @deneb/secops
-/gateway-go/internal/infra/auth/ @deneb/secops
-/docs/reference/secretref-user-supplied-credentials-matrix.json @deneb/secops
-
 # Go gateway and build infrastructure.
 /gateway-go/ @steipete
 /Makefile @steipete
+
+# WARNING: GitHub CODEOWNERS uses last-match-wins semantics.
+# The security-sensitive rules live BELOW the broad rules above so they win the
+# match (a broad rule listed after a narrow one silently strips its reviewers —
+# the previous layout had /gateway-go/ after the secops block, which disabled
+# the auth rule). If you add broader overlapping rules below this block,
+# include @deneb/secops on those entries too.
+# (The former /gateway-go/internal/infra/auth/ package was split into
+# clientauth/ + secret/ + config/; all three keep auth-sensitive code —
+# config/ resolves gateway tokens/passwords and enforces the
+# no-auth-no-nonloopback-bind rule.)
+/.github/dependabot.yml @deneb/secops
+/.github/workflows/codeql.yml @deneb/secops
+/gateway-go/internal/infra/clientauth/ @deneb/secops
+/gateway-go/internal/infra/secret/ @deneb/secops
+/gateway-go/internal/infra/config/ @deneb/secops
+/docs/reference/secretref-user-supplied-credentials-matrix.json @deneb/secops

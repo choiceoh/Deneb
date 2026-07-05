@@ -45,10 +45,6 @@ gateway-go/deneb-gateway
 # ML/OCR model data
 *.traineddata
 
-# Proto generation
-.proto-gen.lock
-.proto-gen.hash
-
 # Generated docs
 docs/.generated/config-baseline.json
 docs/.generated/config-baseline.jsonl
@@ -90,7 +86,4 @@ gateway-go/internal/runtime/server/miniapp_dist/*.gz
 graphify-out/
 .graphify_python
 .graphify_*.json
-core-rs/
 gateway-go/dream-once
-gateway-go/internal/memory/
-target/

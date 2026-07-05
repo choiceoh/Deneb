@@ -20,12 +20,6 @@ CHANGED_FILES=$(git diff --cached --name-only 2>/dev/null; git diff --name-only 
 
 TARGETS=""
 
-if echo "$CHANGED_FILES" | grep -q '^core-rs/'; then
-  TARGETS="$TARGETS rust-fmt rust-clippy"
-fi
-if echo "$CHANGED_FILES" | grep -q '^cli-rs/'; then
-  TARGETS="$TARGETS cli-fmt cli-clippy"
-fi
 if echo "$CHANGED_FILES" | grep -q '^gateway-go/'; then
   TARGETS="$TARGETS go-fmt go-vet"
 fi

@@ -1,6 +1,13 @@
 #!/bin/bash
 # PostToolUse hook: notify Deneb main agent about key events via bridge.
 # Triggers on: git commit, git push, gh pr create
+#
+# ⚠️ RETIRED TRANSPORT — currently a no-op. The /api/v1/rpc route and the
+# bridge.send RPC method no longer exist in the gateway (only
+# /api/v1/miniapp/rpc with X-Deneb-Client-Token survives), so the curl below
+# had been silently failing. Kept as an explicit no-op (host-side hook configs
+# may still reference this file); re-enable by porting to the miniapp surface.
+exit 0
 set -euo pipefail
 
 INPUT=$(cat)

@@ -51,7 +51,9 @@ function main() {
     writeFileSync(path, fn(readFileSync(path, "utf8"), version));
     console.info(`  ${file} → ${version}`);
   }
-  console.info(`\nBumped to ${version}. Next: commit, then \`git tag v${version} && git push --tags\` to release.`);
+  console.info(
+    `\nBumped to ${version}. Releases normally go through root release-please (tag andromeda-v${version} is cut by merging its release PR); this script is only the manual fallback for the three lockstep files.`,
+  );
 }
 
 // Run only when invoked as a script, not when imported by tests.

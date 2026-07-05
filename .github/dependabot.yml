@@ -35,3 +35,51 @@ updates:
           - minor
           - patch
     open-pull-requests-limit: 5
+
+  # Andromeda desktop client (TypeScript, pnpm)
+  - package-ecosystem: npm
+    directory: /andromeda
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 3
+    groups:
+      andromeda-deps:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+    open-pull-requests-limit: 5
+
+  # Andromeda Tauri shell (Rust)
+  - package-ecosystem: cargo
+    directory: /andromeda/src-tauri
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 3
+    groups:
+      tauri-deps:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+    open-pull-requests-limit: 5
+
+  # Native client (Kotlin Multiplatform, Gradle)
+  - package-ecosystem: gradle
+    directory: /client-android/app
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 3
+    groups:
+      native-deps:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+    open-pull-requests-limit: 5

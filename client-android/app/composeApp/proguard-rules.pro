@@ -64,10 +64,6 @@
 -keep class org.bouncycastle.** { *; }
 -dontwarn org.bouncycastle.**
 
-# LiteRT LM — on-device inference SDK with JNI native bridge.
--keep class com.google.ai.edge.litertlm.** { *; }
--dontwarn com.google.ai.edge.litertlm.**
-
 # JNA — FileKit uses it on Windows (Shell32 IFileDialog / IShellItem COM) and
 # macOS (Cocoa Foundation bindings). JNA resolves native symbols by exact
 # method name via reflection; any rename produces errors like
@@ -188,20 +184,20 @@
 # (Android R8) already ship targeted keeps for the reflective hotspots
 # (SliderDefaults, SnapshotStateKt__DerivedStateKt, etc.). Letting Compose
 # be the one package ProGuard is allowed to rewrite is what buys us the size
-# win on desktop (see proguard-desktop.pro's negative-match keep).
+# win on desktop (the desktop-release ProGuard pass and its
+# proguard-desktop.pro were removed with the desktop product; this file now
+# feeds Android R8 only — desktop-era keeps like FreeTTS/JNA/FileKit/DBus are
+# inert on the Android graph and can be pruned once a device-verified release
+# build confirms it).
 -dontwarn androidx.compose.**
 -dontwarn org.jetbrains.compose.**
 -dontwarn androidx.annotation.**
 
-# Gson — pulled in transitively by com.google.ai.edge.litertlm:0.10.2. Uses
-# heavy runtime reflection (Field.getType, Class.getGenericSuperclass,
-# Unsafe.allocateInstance) to map JSON to classes. The generic-type attributes
-# must survive; without Signature, Gson can't resolve List<Foo> → Foo.
--keep class com.google.gson.** { *; }
+# Generic-type reflection attributes — originally added for Gson (a LiteRT-LM
+# transitive dep; both left the graph when that SDK was removed), but
+# Signature/InnerClasses/EnclosingMethod are load-bearing for any reflective
+# serialization on the Android graph, so the attribute keep stays. The
+# Gson-specific class keeps were removed with the SDK.
 -keepattributes Signature,InnerClasses,EnclosingMethod
--keepclassmembers,allowobfuscation class * {
-    @com.google.gson.annotations.SerializedName <fields>;
-    @com.google.gson.annotations.JsonAdapter *;
-}
 -dontwarn com.google.gson.**
 -dontwarn sun.misc.Unsafe
