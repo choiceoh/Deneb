@@ -9,9 +9,11 @@ GATEWAY_SERVICE="${DENEB_GATEWAY_SERVICE:-deneb-gateway.service}"
 RESTART_MODE="${DENEB_DEPLOY_RESTART_MODE:-auto}" # auto | systemd | nohup
 # Remote deploy: when set, build locally (this host has Go + the git repo) and
 # ship the binary to a gateway host that lacks a toolchain — instead of an
-# in-place restart. This is the srv4 topology (the gateway moved to a lean host
-# on 2026-06-20; building ON the gateway host risks OOM-ing prod under strict
-# overcommit, so srv1 builds and pushes). Empty = in-place restart (legacy).
+# in-place restart. This was the 2026-06-20~07-06 split (srv1 built, srv4 ran;
+# srv1 was strict-overcommit so building beside prod was risky). Since the
+# 2026-07-06 srv4 unification the gateway host builds in place (heuristic
+# overcommit + user-space Go at ~/go-sdk/go), so this stays unset; the path is
+# kept for any future host split. Empty = in-place restart (current default).
 DEPLOY_REMOTE="${DENEB_DEPLOY_REMOTE:-}"            # e.g. "srv4" (ssh host)
 DEPLOY_REMOTE_DIR="${DENEB_DEPLOY_REMOTE_DIR:-deneb}" # remote $HOME-relative repo dir
 LOG_FILE="/tmp/deneb-gateway.log"

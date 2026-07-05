@@ -5,10 +5,11 @@
 # without manual intervention. Pair with scripts/deploy/deploy.sh which does
 # the actual build + graceful restart.
 #
-# Remote topology (srv4): set DENEB_DEPLOY_REMOTE=<gateway-host> in the
-# environment (see deneb-auto-deploy.service) and run this on the build host —
-# the env is inherited by deploy.sh, which builds here and ships the binary to
-# the gateway host instead of restarting in place. Unset = legacy single-host.
+# Remote topology (optional): set DENEB_DEPLOY_REMOTE=<gateway-host> in the
+# environment and run this on a separate build host — the env is inherited by
+# deploy.sh, which builds here and ships the binary instead of restarting in
+# place. Unset = single-host in-place, the default since the 2026-07-06 srv4
+# unification (the deneb-auto-deploy timer runs on the gateway host itself).
 #
 # Design choices:
 # - flock on /tmp/deneb-auto-deploy.lock so a slow deploy never overlaps with
