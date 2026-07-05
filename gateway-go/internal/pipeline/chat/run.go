@@ -101,6 +101,15 @@ type RunParams struct {
 	// down" report delivered through that very channel.
 	AutoDeliveredOutput bool
 
+	// ToolDryRun, when true, suppresses side-effect tools for the whole run:
+	// the ToolRegistry executes only its read-only allowlist (read, grep,
+	// fetch_tools, read_spillover — tool_dry_run.go) and stubs everything
+	// else. For eval/replay harnesses that need the real agent loop and real
+	// registry without real writes/sends. Per-run only; the stubbed results
+	// are persisted like any tool output, so do not combine with a session
+	// you care about — pair with EphemeralUser/EphemeralAssistant.
+	ToolDryRun bool
+
 	// BeforeToolCall, when set, is consulted before each tool execution and can
 	// block the call (block=true, with blockReason surfaced as the tool's error
 	// output). The goal loop sets this to its idempotency guard so a re-driven

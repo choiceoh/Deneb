@@ -114,6 +114,14 @@ func (r *ToolRegistry) Execute(ctx context.Context, name string, input json.RawM
 		}
 	}
 
+	// Dry-run: suppress side-effect tools (everything not on the read-only
+	// allowlist) before any execution machinery runs. See tool_dry_run.go.
+	if toolctx.ToolDryRunFromContext(ctx) {
+		if _, safe := dryRunSafeTools[name]; !safe {
+			return dryRunStub(name), nil
+		}
+	}
+
 	// Repair common malformed-JSON argument patterns from open-weight models
 	// (markdown fences, Python literals, trailing commas) before any input
 	// parsing. Only invalid JSON is touched, and only when the repair makes it

@@ -253,6 +253,9 @@ func buildAgentConfig(
 			ctx = WithSpawnFlag(ctx, spawnFlag)
 			ctx = WithVerifyGate(ctx, verifyGate)
 			ctx = toolctx.WithToolExecStats(ctx, execStats)
+			if params.ToolDryRun {
+				ctx = toolctx.WithToolDryRun(ctx)
+			}
 			// Cron/scheduled runs deliver their final text via the run-completion
 			// layer, so an in-loop message-tool send is a benign no-op rather than
 			// an outage. Without this flag on the tool context, the message tool
