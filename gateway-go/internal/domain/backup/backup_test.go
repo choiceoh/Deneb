@@ -116,14 +116,14 @@ func TestNewTask_Validation(t *testing.T) {
 // TestBackup_Live ships a tiny real archive over ssh and cleans it up.
 // Requires the storage host to be reachable:
 //
-//	DENEB_BACKUP_LIVE=1 DENEB_BACKUP_SSH_HOST=spark4tb go test -run TestBackup_Live ./internal/domain/backup/
+//	DENEB_BACKUP_LIVE=1 DENEB_BACKUP_SSH_HOST=srv2 go test -run TestBackup_Live ./internal/domain/backup/
 func TestBackup_Live(t *testing.T) {
 	if os.Getenv("DENEB_BACKUP_LIVE") == "" {
 		t.Skip("set DENEB_BACKUP_LIVE=1 for the live ssh test")
 	}
 	host := os.Getenv("DENEB_BACKUP_SSH_HOST")
 	if host == "" {
-		host = "spark4tb"
+		host = "srv2"
 	}
 	dir := writeTestStore(t)
 	task, err := NewTask(Config{StateDir: dir, SSHHost: host, RemoteDir: "deneb-backups-livetest", RetentionDays: 1}, nil)

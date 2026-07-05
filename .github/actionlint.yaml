@@ -3,8 +3,9 @@
 
 self-hosted-runner:
   labels:
-    # gx10 DGX Spark host runner — builds + publishes the native APK OTA
-    # (publish-apk.yml). Pinned label so the job only lands on that host.
+    # srv1 (formerly gx10) DGX Spark host runner — builds + publishes the native
+    # APK OTA (publish-apk.yml). The label keeps the legacy "gx10" name; pinned
+    # so the job only lands on that host.
     - gx10
 
 # Ignore patterns for known issues

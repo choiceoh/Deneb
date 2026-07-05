@@ -347,7 +347,7 @@ func weeklyTrimPNG(pngPath string) ([]byte, error) {
 
 // weeklyMinHeadroomMB is the commit headroom below which a Chromium render is
 // not even attempted (it would hang). Empirically render succeeds with multi-GB
-// headroom and hangs near ~1GB on the gx10 head node.
+// headroom and hangs near ~1GB on the srv1 (formerly gx10) head node.
 const weeklyMinHeadroomMB = 2048
 
 // weeklyMinDiskMB is the free space (on the output filesystem) below which a
@@ -356,7 +356,7 @@ const weeklyMinHeadroomMB = 2048
 const weeklyMinDiskMB = 256
 
 // weeklyOutputDir returns a real-disk directory for the report's HTML/PDF and
-// for Chromium's own scratch files. os.TempDir() is /tmp, which on the gx10
+// for Chromium's own scratch files. os.TempDir() is /tmp, which on the srv1
 // head node is a small tmpfs that routinely fills up (vLLM build trees, large
 // media) — a full /tmp makes Chromium abort with ENOSPC mid-render and the
 // report silently degrades to text every time. Prefer ~/.cache/deneb-visual on
