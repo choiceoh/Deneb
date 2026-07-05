@@ -15,6 +15,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolpreset"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 )
@@ -44,7 +45,7 @@ func buildAgentConfig(
 	sessionToolPreset string,
 	acd agentConfigDeps,
 	logger *slog.Logger,
-) (cfg agent.AgentConfig, spawnFlag *SpawnFlag) {
+) (cfg agent.AgentConfig, spawnFlag *SpawnFlag, execStats *toolctx.ToolExecStats) {
 	// Build tool list from registry (uses stored descriptions and schemas).
 	// If a tool preset is active, filter the tool list to only include allowed tools.
 	var tools []llm.Tool
@@ -96,6 +97,10 @@ func buildAgentConfig(
 	// DeferredActivation: tracks which deferred tools have been activated via
 	// fetch_tools during this run.
 	deferredActivation := NewDeferredActivation()
+
+	// ToolExecStats: run-scoped anomaly counters only the chat tool layer can
+	// see (malformed-argument repairs); logged on run.end for aggregation.
+	execStats = toolctx.NewToolExecStats()
 
 	// Resolve thinking config from the session's ThinkingLevel setting. A
 	// per-run override (params.Thinking — e.g. a cron payload's `thinking`
@@ -240,6 +245,7 @@ func buildAgentConfig(
 			ctx = WithDeferredActivation(ctx, deferredActivation)
 			ctx = WithSpawnFlag(ctx, spawnFlag)
 			ctx = WithVerifyGate(ctx, verifyGate)
+			ctx = toolctx.WithToolExecStats(ctx, execStats)
 			// Cron/scheduled runs deliver their final text via the run-completion
 			// layer, so an in-loop message-tool send is a benign no-op rather than
 			// an outage. Without this flag on the tool context, the message tool
@@ -306,7 +312,7 @@ func buildAgentConfig(
 		}
 	}
 
-	return cfg, spawnFlag
+	return cfg, spawnFlag, execStats
 }
 
 // recordTurnSkillUsage attributes one turn's outcome to the skills consulted

@@ -26,6 +26,7 @@ const (
 	ctxKeyAutoDelivery
 	ctxKeySkillConsult
 	ctxKeyWorkspaceOverride
+	ctxKeyToolExecStats
 )
 
 // WithDeliveryContext attaches a DeliveryContext to the context.

@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agent"
 )
 
 // suggestToolNames returns up to maxResults registered tool names that are
@@ -60,10 +62,12 @@ func (r *ToolRegistry) suggestToolNames(name string, maxResults, maxDistance int
 func (r *ToolRegistry) unknownToolError(name string) error {
 	maxDist := dynamicMaxDistance(name)
 	suggestions := r.suggestToolNames(name, 3, maxDist)
+	// Wraps agent.ErrUnknownTool so the executor can tag the call in
+	// turn.tool (hallucinated-name rate measurement) via errors.Is.
 	if len(suggestions) == 0 {
-		return fmt.Errorf("unknown tool: %q", name)
+		return fmt.Errorf("%w: %q", agent.ErrUnknownTool, name)
 	}
-	return fmt.Errorf("unknown tool: %q. Did you mean: %s?", name, strings.Join(suggestions, ", "))
+	return fmt.Errorf("%w: %q. Did you mean: %s?", agent.ErrUnknownTool, name, strings.Join(suggestions, ", "))
 }
 
 // dynamicMaxDistance scales the allowed edit distance to the query length.

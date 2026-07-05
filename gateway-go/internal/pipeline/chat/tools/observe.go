@@ -345,7 +345,22 @@ func formatObserveBehavior(agg agentlog.AggregateResult, days int) string {
 				fmt.Fprintf(&b, "    … and %d more tools\n", len(agg.Tools)-15)
 				break
 			}
-			fmt.Fprintf(&b, "    %s: %d calls, %d err, %dms avg\n", t.Name, t.Calls, t.Errors, t.AvgMs)
+			fmt.Fprintf(&b, "    %s: %d calls, %d err, %dms avg", t.Name, t.Calls, t.Errors, t.AvgMs)
+			// Anomaly counters — only shown when nonzero to keep lines scannable.
+			if t.Repaired > 0 {
+				fmt.Fprintf(&b, ", %d repaired-args", t.Repaired)
+			}
+			if t.Unknown > 0 {
+				fmt.Fprintf(&b, ", %d unknown-name", t.Unknown)
+			}
+			if t.Blocked > 0 {
+				fmt.Fprintf(&b, ", %d blocked", t.Blocked)
+			}
+			if t.Calls > 0 && t.TotalOutputChars > 0 {
+				fmt.Fprintf(&b, ", ~%.1fK out avg (max %.1fK)",
+					float64(t.TotalOutputChars)/float64(t.Calls)/1000, float64(t.MaxOutputChars)/1000)
+			}
+			b.WriteString("\n")
 		}
 	}
 	if len(agg.ProactiveDecisions) > 0 {

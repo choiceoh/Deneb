@@ -6,6 +6,7 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -52,7 +53,7 @@ func executeOneTool(
 				if hooks.OnToolResult != nil {
 					hooks.OnToolResult(tc.Name, tc.ID, loopResult.Message, true)
 				}
-				logToolExecution(runLog, turn, tc, result, time.Since(start), nil)
+				logToolExecution(runLog, turn, tc, result, time.Since(start), nil, "loop", false)
 				return result
 			}
 			// Warning level: inject the warning as a prefix but allow execution.
@@ -74,7 +75,7 @@ func executeOneTool(
 			if hooks.OnToolResult != nil {
 				hooks.OnToolResult(tc.Name, tc.ID, reason, true)
 			}
-			logToolExecution(runLog, turn, tc, result, time.Since(start), nil)
+			logToolExecution(runLog, turn, tc, result, time.Since(start), nil, "hook", false)
 			return result
 		}
 	}
@@ -182,7 +183,7 @@ func executeOneTool(
 	}
 
 	// Log tool execution to agent detail log.
-	logToolExecution(runLog, turn, tc, block, elapsed, fileEffects)
+	logToolExecution(runLog, turn, tc, block, elapsed, fileEffects, "", errors.Is(toolErr, ErrUnknownTool))
 
 	// Gateway-log a compact "tool complete" entry — pairs with the existing
 	// "exec" start line so each tool call has a bracketed timing + outcome. On

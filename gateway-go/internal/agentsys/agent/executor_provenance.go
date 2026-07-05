@@ -15,7 +15,11 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 )
 
-func logToolExecution(runLog *agentlog.RunLogger, turn int, tc llm.ContentBlock, block llm.ContentBlock, elapsed time.Duration, fileEffects []agentlog.ToolFileEffect) {
+// logToolExecution writes one turn.tool entry. blocked ("loop"/"hook"/"")
+// marks calls vetoed before execution; unknown marks calls to nonexistent
+// tool names (agent.ErrUnknownTool) — both feed the cross-session per-tool
+// anomaly counters in agentlog.Aggregate.
+func logToolExecution(runLog *agentlog.RunLogger, turn int, tc llm.ContentBlock, block llm.ContentBlock, elapsed time.Duration, fileEffects []agentlog.ToolFileEffect, blocked string, unknown bool) {
 	if runLog == nil {
 		return
 	}
@@ -31,6 +35,8 @@ func logToolExecution(runLog *agentlog.RunLogger, turn int, tc llm.ContentBlock,
 		Targets:     toolTargetHints(tc.Input),
 		FileEffects: fileEffects,
 		IsError:     block.IsError,
+		Blocked:     blocked,
+		UnknownTool: unknown,
 	}
 	if block.IsError {
 		td.Error = block.Content
