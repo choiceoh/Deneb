@@ -203,7 +203,9 @@ func dispatchPhoneAction(ctx context.Context, send PhoneActionFunc, p phoneWrite
 		if errors.Is(err, ErrPhoneActionUnconfirmed) {
 			return fmt.Sprintf("phone action %s dispatched to app, but the app did not confirm execution in time — it may still run late. Do NOT retry (risk of duplicates); tell the user to check the phone.", action), nil
 		}
-		return "", fmt.Errorf("phone action %q delivery failed: %w", action, err)
+		// Neutral prefix: err covers both delivery failures (no app connected)
+		// and device-reported execution failures ("failed on the device").
+		return "", fmt.Errorf("phone action %q failed: %w", action, err)
 	}
 	return fmt.Sprintf("phone action executed on device: %s", action), nil
 }

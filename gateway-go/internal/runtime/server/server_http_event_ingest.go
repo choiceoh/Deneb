@@ -247,8 +247,12 @@ func (s *Server) ingestPhoneEventAsync(eventType, source, text string) {
 	// and return; never a judgment turn. source carries the action name for the log.
 	if strings.EqualFold(strings.TrimSpace(eventType), "phone_action_result") {
 		var res phoneActionResult
-		if err := json.Unmarshal([]byte(text), &res); err != nil || res.ID == "" {
+		if err := json.Unmarshal([]byte(text), &res); err != nil {
 			s.logger.Warn("phone_action_result: malformed payload", "source", source, "error", err)
+			return
+		}
+		if res.ID == "" {
+			s.logger.Warn("phone_action_result: missing id", "source", source, "ok", res.OK)
 			return
 		}
 		if !s.phoneActions.resolve(res) {
