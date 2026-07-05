@@ -4,3 +4,24 @@ gateway-go/internal/pipeline/chat/toolreg/tool_schemas_gen.go linguist-generated
 gateway-go/internal/pipeline/chat/tool_classification_gen.go linguist-generated=true diff=generated
 client-android/app/composeApp/src/commonMain/kotlin/ai/deneb/deneb/generated/MiniappWireTypes.kt linguist-generated=true diff=generated
 andromeda/src/gen/miniappWire.ts linguist-generated=true diff=generated
+
+# Structural merges (mergiraf) — syntax-aware merge driver for the languages
+# agents edit concurrently (rebase/merge conflicts resolve at AST level, e.g.
+# two agents appending to the same list/import block). Machines without the
+# driver configured silently fall back to git's normal text merge. Setup:
+#   brew install mergiraf   (or codeberg.org/mergiraf release binary)
+#   git config --global merge.mergiraf.name mergiraf
+#   git config --global merge.mergiraf.driver "mergiraf merge --git %O %A %B -s %S -x %X -y %Y -p %P -l %L"
+*.go merge=mergiraf
+go.mod merge=mergiraf
+go.sum merge=mergiraf
+*.kt merge=mergiraf
+*.ts merge=mergiraf
+*.tsx merge=mergiraf
+*.json merge=mergiraf
+*.yml merge=mergiraf
+*.yaml merge=mergiraf
+*.toml merge=mergiraf
+# Lockfiles: resolve by regenerating, not merging — keep the default text
+# driver so conflicts stay loud instead of getting auto-stitched.
+andromeda/pnpm-lock.yaml -merge
