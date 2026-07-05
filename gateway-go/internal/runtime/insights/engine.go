@@ -43,9 +43,10 @@ type Engine struct {
 	usage    UsageSource // may be nil if no tracker is wired
 	now      func() time.Time
 
-	// toolAggregator is an optional hook for future tool-call tracking.
-	// Today Deneb does not persist per-tool invocation counts, so this
-	// returns nil by default.
+	// toolAggregator is an optional hook for tool-call tracking. Production
+	// wires it to agentlog.Writer.Aggregate (per-tool calls/errors/latency
+	// from turn.tool entries) in server_rpc_session.go; it stays nil only in
+	// tests or when the agent log writer is absent.
 	toolAggregator func(ctx context.Context, since time.Time) []ToolStat
 
 	// mu guards the optional hooks from concurrent override (tests).
@@ -172,9 +173,9 @@ func (e *Engine) Generate(ctx context.Context, days int) (*Report, error) {
 	r.Models = computeModelStats(windowed)
 	r.TopSessions = computeTopSessions(windowed, 5)
 
-	// Tool stats: only if a custom aggregator is wired. Deneb's default
-	// pipeline does not persist per-tool invocation counts, so this is
-	// empty unless future code installs a hook.
+	// Tool stats: only if an aggregator is wired. Production installs the
+	// agentlog-backed aggregator at startup (server_rpc_session.go), so this
+	// is empty only in tests or when the agent log writer is absent.
 	e.mu.RLock()
 	agg := e.toolAggregator
 	e.mu.RUnlock()
