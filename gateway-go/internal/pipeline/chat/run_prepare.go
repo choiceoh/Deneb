@@ -82,7 +82,11 @@ func prepareContextAndPrompt(
 	safego.GoWithSlog(logger, "prep-tier1-wiki", func() {
 		defer prepWg.Done()
 		var tier1 string
-		if deps.wikiStore != nil && !chatbot && !coding {
+		// Explicit-System runs (subagents, skill-review forks) own their prompt
+		// end to end — finalizePrompt would otherwise append always-on wiki
+		// memory on top of a deliberately lean caller prompt (review-sweep
+		// finding on #3103: the mini review prompt still carried tier-1 wiki).
+		if deps.wikiStore != nil && !chatbot && !coding && params.System == "" {
 			if cached, ok := cachedTier1Wiki(params.SessionKey); ok {
 				tier1 = cached
 			} else {

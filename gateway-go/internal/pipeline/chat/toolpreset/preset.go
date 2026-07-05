@@ -52,8 +52,12 @@ var selfReviewTools = toSet(
 // fetch_tools -> call 2-step it routinely skipped, emitting a prose verdict with
 // zero tool calls and no-oping every review. Pre-loading makes the review's one
 // required tool directly callable.
+// skills is preloaded too since the lean review system prompt (#3103): the
+// reviewer is told to check existing skills via skills(action=list) before
+// choosing evolve vs genesis, and without the main prompt's deferred-tool
+// listing it would not even learn the fetch_tools escape hatch.
 var preloadedDeferred = map[Preset][]string{
-	PresetSelfReview: {"skill_lifecycle"},
+	PresetSelfReview: {"skill_lifecycle", "skills"},
 }
 
 // PreloadedDeferredTools returns the deferred tools to load as active (callable

@@ -71,7 +71,7 @@ func toolPolarisSearch(store *polaris.Store) toolctx.ToolFunc {
 			// point at the cross-conversation / durable-memory tools instead
 			// of returning a bare miss the model retries with synonyms.
 			msgCount, _ := store.MessageCount(sessionKey)
-			return fmt.Sprintf("'%s' 검색 결과가 없습니다. polaris는 현재 세션의 대화(메시지 %d개)만 검색합니다 — 과거·다른 대화는 `vega`, 문서·사실은 `wiki`로 검색하세요.",
+			return fmt.Sprintf("'%s' 검색 결과가 없습니다. polaris는 현재 세션의 대화(메시지 %d개)만 검색합니다 — 과거·다른 대화는 `sessions`(action=\"search\"), 문서·사실은 `wiki`로 검색하세요.",
 				p.Query, msgCount), nil
 		}
 

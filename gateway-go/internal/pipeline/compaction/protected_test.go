@@ -65,7 +65,7 @@ func TestTruncateOldToolResults_ProtectsFetchToolsSchema(t *testing.T) {
 		t.Fatalf("stubbed = %d, want 1 (only the unprotected result)", stubbed)
 	}
 	if got := toolResultContentFor(t, out[1].Content); got != schema {
-		t.Errorf("fetch_tools schema was stubbed: %q", got[:40])
+		t.Errorf("fetch_tools schema was stubbed: %q", got[:min(40, len(got))])
 	}
 	if got := toolResultContentFor(t, out[2].Content); got == plain {
 		t.Errorf("unprotected oversized result survived")

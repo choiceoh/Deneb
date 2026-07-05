@@ -57,8 +57,15 @@ var engineCacheState = struct {
 // run.cache event. Fire-and-forget: never blocks the reply path. Skipped for
 // non-OpenAI-mode providers, fallback runs (the sampled engine would not be
 // the one that answered), and base URLs that don't resolve to a local engine.
-func logEngineCacheAsync(deps runDeps, runLog *agentlog.RunLogger, client *llm.Client, apiMode string, fellBack bool, logger *slog.Logger) {
-	if runLog == nil || client == nil || fellBack || apiMode != llm.APIModeOpenAI {
+func logEngineCacheAsync(deps runDeps, runLog *agentlog.RunLogger, client *llm.Client, model string, fellBack bool, logger *slog.Logger) {
+	// Gate on the client's actual wire mode, not the config-derived apiMode:
+	// providers without an explicit `api` field resolve to "" upstream while
+	// the client still speaks OpenAI by default — an apiMode!=openai check
+	// silently disabled sampling for exactly that common config.
+	if runLog == nil || client == nil || fellBack || client.APIMode() != llm.APIModeOpenAI {
+		return
+	}
+	if !engineMetricsModelAllowed(model, os.Getenv(engineMetricsModelsEnv)) {
 		return
 	}
 	metricsURL := resolveEngineMetricsURL(client.BaseURL())
@@ -92,13 +99,39 @@ func logEngineCacheAsync(deps runDeps, runLog *agentlog.RunLogger, client *llm.C
 // e.g. http://100.125.220.117:8000/metrics.
 const engineMetricsURLEnv = "DENEB_ENGINE_METRICS_URL"
 
+// engineMetricsModelsEnv scopes sampling to runs whose model name contains one
+// of the comma-separated substrings (case-insensitive). Needed when a single
+// OpenAI-mode provider (wormhole) fronts both cloud and local models: without
+// a filter, a cloud glm run would scrape the pinned local engine and log
+// unrelated APC deltas under its own run ID. Empty = sample every run.
+const engineMetricsModelsEnv = "DENEB_ENGINE_METRICS_MODELS"
+
+// engineMetricsModelAllowed applies the optional model filter. Pure for tests.
+func engineMetricsModelAllowed(model, filter string) bool {
+	filter = strings.TrimSpace(filter)
+	if filter == "" {
+		return true
+	}
+	m := strings.ToLower(model)
+	for _, part := range strings.Split(filter, ",") {
+		if part = strings.ToLower(strings.TrimSpace(part)); part != "" && strings.Contains(m, part) {
+			return true
+		}
+	}
+	return false
+}
+
 // resolveEngineMetricsURL picks the metrics endpoint: the operator override
 // when set (validated by the same private-host rule so a typo cannot point
 // the sampler at a public service), else derivation from the base URL.
 func resolveEngineMetricsURL(baseURL string) string {
 	if override := strings.TrimSpace(os.Getenv(engineMetricsURLEnv)); override != "" {
 		u, err := url.Parse(override)
+		// Also reject userinfo/query/fragment: the override string is persisted
+		// verbatim into run.cache events (MetricsURL), so embedded credentials
+		// or tokens would leak into agent logs.
 		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" ||
+			u.User != nil || u.RawQuery != "" || u.Fragment != "" ||
 			!isPrivateEngineHost(u.Hostname()) {
 			return "" // misconfigured override fails safe: skip sampling
 		}
