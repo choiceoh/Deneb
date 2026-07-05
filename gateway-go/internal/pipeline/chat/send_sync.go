@@ -4,6 +4,9 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"unicode/utf8"
+
+	"github.com/choiceoh/deneb/gateway-go/pkg/dentime"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
@@ -282,6 +285,9 @@ func (h *Handler) SendSync(ctx context.Context, sessionKey, message, model strin
 	if res, handled := h.trySlashSync(sessionKey, message, opts); handled {
 		return res, nil
 	}
+	if res, handled := h.trySteerIntoActiveRun(sessionKey, message, opts); handled {
+		return res, nil
+	}
 	// Link fetches start now and join inside executeAgentRun, AFTER the
 	// parallel prep phase — a pasted slow link no longer blocks the turn
 	// start for up to 30s (see link_enrichment.go).
@@ -306,6 +312,60 @@ func (h *Handler) SendSync(ctx context.Context, sessionKey, message, model strin
 		h.autoTitleSessionAsync(sessionKey, message, res)
 	}
 	return res, err
+}
+
+// steerMaxRunes bounds which mid-run follow-ups fold into the active turn as a
+// steer note. Longer messages read as a genuinely new request and keep the
+// current behavior (their own run).
+const steerMaxRunes = 400
+
+// trySteerIntoActiveRun folds a short follow-up that arrives while this
+// session's run is still executing into that run's steer queue — the same
+// mechanism as the explicit /steer command, made automatic (OpenClaw's
+// queue-steering default: a mid-run correction like "아 내일 말고 모레" joins
+// the active turn at the next tool-result boundary instead of racing it with
+// a second concurrent run on the same session/transcript).
+//
+// The message is ALSO persisted to the transcript (same store the run uses),
+// so history keeps the correction in order: …, user(correction),
+// assistant(reply that honored it). The wire injection itself stays a
+// per-request copy (steer_inject.go) — prompt-cache Rule A intact.
+//
+// Conservative gates: interactive chat only (no API Messages, no autonomous
+// EphemeralUser/AutoDelivered surfaces), short plain text, and an active run.
+// If the run finishes between the check and the hook's drain, the note is
+// consumed by this session's next run (the steer hook drains before every LLM
+// call) — deferred, never lost.
+func (h *Handler) trySteerIntoActiveRun(sessionKey, message string, opts *SyncOptions) (*SyncResult, bool) {
+	if opts == nil || len(opts.Messages) > 0 || opts.EphemeralUser || opts.AutoDeliveredOutput {
+		return nil, false
+	}
+	trimmed := strings.TrimSpace(message)
+	if trimmed == "" || utf8.RuneCountInString(trimmed) > steerMaxRunes {
+		return nil, false
+	}
+	if !h.abort.HasActiveRun(sessionKey) {
+		return nil, false
+	}
+	if !h.steer.Enqueue(sessionKey, trimmed) {
+		return nil, false
+	}
+	if h.transcript != nil {
+		now := dentime.Now()
+		userMsg := NewTextChatMessage("user", formatTurnUserMessage(trimmed, now), now.UnixMilli())
+		if err := h.transcript.Append(sessionKey, userMsg); err != nil {
+			h.logger.Error("auto-steer: persist steered user message failed", "sessionKey", sessionKey, "error", err)
+		}
+	}
+	h.logger.Info("auto-steer: folded mid-run message into the active run", "sessionKey", sessionKey, "runes", utf8.RuneCountInString(trimmed))
+	const ack = "지금 진행 중인 답변에 반영할게요."
+	return &SyncResult{
+		Text:            ack,
+		AllText:         ack,
+		DeliverableText: ack,
+		Model:           "steer",
+		StopReason:      "steered",
+	}, true
 }
 
 // trySlashSync short-circuits slash commands on the synchronous send paths.
@@ -359,6 +419,12 @@ func (h *Handler) trySlashSync(sessionKey, message string, opts *SyncOptions) (*
 // endpoints and the native client's miniapp.chat.stream.
 func (h *Handler) SendSyncStream(ctx context.Context, sessionKey, message, model string, opts *SyncOptions, onDelta func(string)) (*SyncResult, error) {
 	if res, handled := h.trySlashSync(sessionKey, message, opts); handled {
+		if onDelta != nil && res.Text != "" {
+			onDelta(res.Text)
+		}
+		return res, nil
+	}
+	if res, handled := h.trySteerIntoActiveRun(sessionKey, message, opts); handled {
 		if onDelta != nil && res.Text != "" {
 			onDelta(res.Text)
 		}
