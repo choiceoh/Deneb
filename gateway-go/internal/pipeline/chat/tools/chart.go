@@ -82,6 +82,14 @@ type chartParams struct {
 	Labels    []string      `json:"labels"`
 	Series    []chartSeries `json:"series"`
 	YUnit     string        `json:"y_unit"` // e.g. "건", "만원", "%"
+	// Stacked stacks bar/area series (구성비 추이). Horizontal flips a bar
+	// chart to horizontal orientation (항목별 순위).
+	Stacked    bool `json:"stacked"`
+	Horizontal bool `json:"horizontal"`
+	// Send delivers the rendered PNG to the user in the same call (photo,
+	// with Caption), removing the separate send_file round-trip.
+	Send    bool   `json:"send"`
+	Caption string `json:"caption"`
 }
 
 // ToolChart renders a chart to a PNG and returns its path for send_file.
@@ -131,8 +139,7 @@ func ToolChart() ToolFunc {
 			return "", fmt.Errorf("chart render failed: %w", err)
 		}
 
-		return fmt.Sprintf("차트 PNG 생성됨: %s\n이제 send_file(file_path=%q, type=\"photo\", caption=\"...\")로 사용자에게 전송하세요.",
-			pngPath, pngPath), nil
+		return finishRenderedImage(ctx, pngPath, "차트", p.Send, p.Caption, p.Title), nil
 	}
 }
 
@@ -157,6 +164,8 @@ func buildChartHTML(p chartParams) (string, error) {
 		titleBlock = `<div class="head"><div class="title">` + htmlEscape(title) + `</div>` + subtitle + `</div>`
 	}
 
+	yUnitJSON, _ := json.Marshal(strings.TrimSpace(p.YUnit))
+
 	var b strings.Builder
 	fmt.Fprintf(&b, `<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8">
 <style>
@@ -173,13 +182,59 @@ func buildChartHTML(p chartParams) (string, error) {
 <script>%s</script>
 <script>
   const cfg = %s;
-  new Chart(document.getElementById('c').getContext('2d'), cfg);
+  const Y_UNIT = %s;
+%s
 </script>
 </body></html>`,
 		chartCanvasW, chartCanvasH, chartBg, chartFg, chartMuted,
-		titleBlock, chartJS, cfgJSON)
+		titleBlock, chartJS, cfgJSON, yUnitJSON, chartRuntimeJS)
 	return b.String(), nil
 }
+
+// chartRuntimeJS is the config post-processing that a JSON-only Chart.js config
+// cannot express (callbacks, canvas drawing):
+//   - value-axis tick suffix for y_unit ("20" → "20만원") — replaces the old
+//     "단위: X" axis-title workaround;
+//   - doughnut segment % labels + value-annotated legend entries: a static PNG
+//     has no hover tooltips, so without these a 구성비 chart shows no numbers
+//     at all (the audit's worst chart finding).
+//
+// Kept as a raw const (not inside the Fprintf format string) so its % and
+// template literals need no escaping.
+const chartRuntimeJS = `
+  if (Y_UNIT && cfg.options && cfg.options.scales) {
+    const axis = (cfg.options.indexAxis === 'y') ? 'x' : 'y';
+    const sc = cfg.options.scales[axis];
+    if (sc) { sc.ticks = sc.ticks || {}; sc.ticks.callback = v => v.toLocaleString('ko-KR') + Y_UNIT; }
+  }
+  const segLabels = { id: 'segLabels', afterDatasetsDraw(chart) {
+    if (chart.config.type !== 'doughnut') return;
+    const data = chart.data.datasets[0].data.map(Number);
+    const total = data.reduce((a, b) => a + (b || 0), 0);
+    if (!total) return;
+    const ctx = chart.ctx, meta = chart.getDatasetMeta(0);
+    ctx.save();
+    ctx.font = '600 16px "Noto Sans CJK KR","Noto Sans KR",sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#FFFFFF';
+    meta.data.forEach((arc, i) => {
+      const f = (data[i] || 0) / total;
+      if (f < 0.04) return; // slice too thin to label legibly
+      const pos = arc.tooltipPosition();
+      ctx.fillText(Math.round(f * 100) + '%', pos.x, pos.y);
+    });
+    ctx.restore();
+  }};
+  if (cfg.type === 'doughnut' && Array.isArray(cfg.data.labels)) {
+    const data = cfg.data.datasets[0].data.map(Number);
+    const total = data.reduce((a, b) => a + (b || 0), 0) || 1;
+    cfg.data.labels = cfg.data.labels.map((l, i) => {
+      const v = data[i] || 0;
+      return l + ' · ' + v.toLocaleString('ko-KR') + Y_UNIT + ' (' + Math.round(v / total * 100) + '%)';
+    });
+  }
+  cfg.plugins = [segLabels];
+  new Chart(document.getElementById('c').getContext('2d'), cfg);
+`
 
 // chartConfig builds the Chart.js config object (marshaled to JSON, no JS
 // callbacks) for the given params.
@@ -239,45 +294,46 @@ func xyConfig(p chartParams, base string, fill bool) map[string]any {
 		datasets = append(datasets, ds)
 	}
 
-	yTick := map[string]any{"color": chartMuted, "font": tickFont()}
-	if u := strings.TrimSpace(p.YUnit); u != "" {
-		// Append the unit to each y tick without a JS callback: Chart.js accepts a
-		// per-value map is overkill, so we keep ticks numeric and show the unit in
-		// the axis title instead — robust and JSON-only.
-		yTick["padding"] = 6
+	// Category axis (labels) vs value axis (numbers) — horizontal bars swap
+	// them. The y_unit tick suffix is attached in JS (chartRuntimeJS) since a
+	// JSON-marshaled config cannot carry a callback.
+	categoryScale := map[string]any{
+		"grid":  map[string]any{"display": false, "drawBorder": false},
+		"ticks": map[string]any{"color": chartMuted, "font": tickFont()},
 	}
-	yScale := map[string]any{
+	valueScale := map[string]any{
 		"beginAtZero": true,
 		"grid":        map[string]any{"color": chartGrid, "drawBorder": false},
-		"ticks":       yTick,
+		"ticks":       map[string]any{"color": chartMuted, "font": tickFont(), "padding": 6},
 	}
-	if u := strings.TrimSpace(p.YUnit); u != "" {
-		yScale["title"] = map[string]any{
-			"display": true, "text": "단위: " + u, "color": chartMuted, "font": tickFont(),
-		}
+	if p.Stacked {
+		categoryScale["stacked"] = true
+		valueScale["stacked"] = true
+	}
+	xScale, yScale := categoryScale, valueScale
+	if p.Horizontal {
+		xScale, yScale = valueScale, categoryScale
 	}
 
 	showLegend := len(p.Series) > 1 || anySeriesNamed(p.Series)
-	return map[string]any{
-		"type": base,
-		"data": map[string]any{"labels": p.Labels, "datasets": datasets},
-		"options": map[string]any{
-			"responsive":          true,
-			"maintainAspectRatio": false,
-			"animation":           false,
-			"layout":              map[string]any{"padding": map[string]any{"top": 4, "right": 6}},
-			"interaction":         map[string]any{"intersect": false},
-			"plugins": map[string]any{
-				"legend": legendCfg(showLegend),
-			},
-			"scales": map[string]any{
-				"x": map[string]any{
-					"grid":  map[string]any{"display": false, "drawBorder": false},
-					"ticks": map[string]any{"color": chartMuted, "font": tickFont()},
-				},
-				"y": yScale,
-			},
+	options := map[string]any{
+		"responsive":          true,
+		"maintainAspectRatio": false,
+		"animation":           false,
+		"layout":              map[string]any{"padding": map[string]any{"top": 4, "right": 6}},
+		"interaction":         map[string]any{"intersect": false},
+		"plugins": map[string]any{
+			"legend": legendCfg(showLegend),
 		},
+		"scales": map[string]any{"x": xScale, "y": yScale},
+	}
+	if p.Horizontal {
+		options["indexAxis"] = "y"
+	}
+	return map[string]any{
+		"type":    base,
+		"data":    map[string]any{"labels": p.Labels, "datasets": datasets},
+		"options": options,
 	}
 }
 
