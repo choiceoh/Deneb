@@ -30,7 +30,7 @@ globs: [".github/**", "scripts/committer"]
 
 - **필수 3섹션**: Summary · Changes · Verification. `make check` 통과를 Verification 에 명시한다 (빌드가 하드 게이트).
 - **선택 섹션**(해당될 때만): `## Before → After`(표로 회귀 방지 증거) · `## 한계 / 리뷰 노트` · `## Follow-up (out of scope)` · `## Cache 영향`(프롬프트 캐시 경로를 건드릴 때 — `.claude/rules/prompt-cache.md` PR 체크리스트 참조).
-- **푸터**: 마지막 줄은 항상 `🤖 Generated with [Claude Code](https://claude.com/claude-code)`.
+- **푸터**: 에이전트 생성 PR 은 마지막 줄에 항상 `🤖 Generated with [Claude Code](https://claude.com/claude-code)`. (웹 UI/손PR 용 `.github/pull_request_template.md` 미러에는 이 푸터가 의도적으로 없다 — 사람 PR 에는 해당 없음.)
 - PR 제목·커밋 제목은 Conventional Commit 형식 (예: `fix(chat): …`) — CLAUDE.md "Git Commit Format" 참조.
 
 ## Git Operations & Safety

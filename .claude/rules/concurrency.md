@@ -111,7 +111,12 @@ safego.GoWithSlog(logger, "my-worker", func() { ... })
 
 ## 8. 사용자 응답 경로의 deadline
 
-네이티브 클라 inbound → chat pipeline → tool 실행 경로는 `server.DefaultTurnDeadline` (현재 5분)에 묶임.
+턴 예산의 기준 상수는 `server.DefaultTurnDeadline` (현재 5분, `miniapp_models.go`)이다. 단 경로별 적용 형태가 다르다:
+
+- **네이티브 스트리밍 인바운드** (`handleMiniappChatStream`): 명시 deadline 없이 `r.Context()`에 묶임 — 클라 연결이 수명. HTTP `WriteTimeout` 백스톱이 `2 × DefaultTurnDeadline`.
+- **자율 auto-resume 디스패치**: 명시 `context.WithTimeout(ctx, DefaultTurnDeadline)`.
+- **폰 이벤트 인제스트**: 별도 상수 `phoneEventTurnDeadline` (4분).
+
 툴이 자기 sub-timeout을 더 짧게 설정할 순 있지만, request ctx를 **절대 `context.Background()`로 대체하지 말 것.**
 
 ## PR 체크리스트

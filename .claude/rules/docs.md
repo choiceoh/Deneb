@@ -9,7 +9,7 @@ globs: ["docs/**"]
 
 - Docs are hosted on Mintlify (docs.deneb.ai).
 - Internal doc links in `docs/**/*.md`: root-relative, no `.md`/`.mdx` (example: `[Config](/configuration)`).
-- When working with documentation, read the mintlify skill.
+- Mintlify 구성의 단일 진실원은 `docs/docs.json` (내비게이션·테마). 문법/컴포넌트 규칙은 아래 "Docs Syntax Rules" 섹션을 따른다.
 - For docs, UI copy, and picker lists, order services/providers alphabetically unless the section is explicitly describing runtime behavior (for example auto-detection or execution order).
 - Section cross-references: use anchors on root-relative paths (example: `[Hooks](/configuration#hooks)`).
 - Doc headings and anchors: avoid em dashes and apostrophes in headings because they break Mintlify anchor links.
@@ -20,7 +20,7 @@ globs: ["docs/**"]
 
 ## Docs Syntax Rules (Mintlify)
 
-- Frontmatter (YAML) is required on every doc file with these fields:
+- Frontmatter (YAML) is required on every doc page wired into `docs/docs.json` navigation, with these fields (internal research notes under `docs/research/` that are not in the navigation are exempt):
   - `title` (required): matches the page H1 heading; 2-5 words.
   - `summary` (required): 1-2 sentences, max ~100 chars.
   - `read_when` (required): array of 2-3 user scenarios/intents describing when to read this page.
