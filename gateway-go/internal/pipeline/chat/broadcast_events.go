@@ -17,7 +17,7 @@ package chat
 // documentation change — the JSON bytes on the wire are unchanged. The round-trip
 // checks in broadcast_events_test.go lock that invariant.
 //
-// Reference: .claude/rules/logging.md treats delivery/empty-response events as
+// Reference: docs/agent-rules/logging.md treats delivery/empty-response events as
 // "user did not get a reply" signals; keeping their schema explicit here makes
 // those failure payloads auditable.
 

@@ -30,7 +30,7 @@
 //	before the restart. /reset forgets a session's entry; sessions whose
 //	transcript is gone (deleted or expired) are pruned at load to bound growth.
 //
-// Cache doctrine (.claude/rules/prompt-cache.md): the persisted bytes must be
+// Cache doctrine (docs/agent-rules/prompt-cache.md): the persisted bytes must be
 // restored EXACTLY. A JSON round-trip of the snapshot strings is byte-exact, so
 // the reconstructed system prompt is identical and the APC prefix survives.
 // Restoring is first-write-wins against the live stores so a turn that races

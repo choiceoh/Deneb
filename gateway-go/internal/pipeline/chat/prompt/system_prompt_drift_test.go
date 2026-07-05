@@ -46,7 +46,7 @@ func TestToolCategoriesMatchRegistry(t *testing.T) {
 // session with different active skills would get a different static prefix,
 // defeating the Anthropic prompt cache across sessions.
 //
-// Prompt Cache Doctrine (see .claude/rules/prompt-cache.md):
+// Prompt Cache Doctrine (see docs/agent-rules/prompt-cache.md):
 //   - Static block: identity, tooling, safety. Cache key = sorted tool names.
 //   - Semi-static block: skills prompt. Separate ephemeral cache breakpoint.
 //   - Dynamic block: memory, context, runtime. Rebuilt per request.

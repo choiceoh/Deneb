@@ -91,7 +91,7 @@ func Analyze(stats []agentlog.ModelStat) []Recommendation {
 			if denom > 0 && float64(s.CacheReadTokens)/denom < cacheReadRatioFloor {
 				recs = append(recs, Recommendation{
 					Model: s.Model, Provider: s.Provider, Rule: "cache_break",
-					Message: fmt.Sprintf("프롬프트 캐시 히트율 %.0f%% — 캐시 prefix가 깨지고 있습니다 (.claude/rules/prompt-cache.md 참조).",
+					Message: fmt.Sprintf("프롬프트 캐시 히트율 %.0f%% — 캐시 prefix가 깨지고 있습니다 (docs/agent-rules/prompt-cache.md 참조).",
 						float64(s.CacheReadTokens)/denom*100),
 				})
 			}

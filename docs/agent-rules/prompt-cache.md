@@ -258,7 +258,7 @@ LLM summarizer 를 부르기 전에 두 단계 cheap pruning 이 항상 발화�
 - 구현 (시스템 블록 마커): `gateway-go/internal/pipeline/chat/prompt/system_prompt.go`, `prompt_cache.go`
 - 구현 (트레일링 메시지 마커): `gateway-go/internal/pipeline/chat/cache_breakpoints.go`, `run_exec.go`, `run_provider.go:resolveAPIMode`
 - 압축 정책: `gateway-go/internal/pipeline/chat/` (compaction 관련 파일 — `merge_window.go`, `compact_guard.go` 참조)
-- Hermes 설계 소스: [Hermes Agent 심층 분석 보고서](../docs/research/hermes-agent-analysis.md) § "프롬프트 캐시 신성화"
+- Hermes 설계 소스: [Hermes Agent 심층 분석 보고서](../research/hermes-agent-analysis.md) § "프롬프트 캐시 신성화"
 - Hermes 공식 문서 (작업 시 자주 참조):
   - [Prompt assembly](https://hermes-agent.nousresearch.com/docs/developer-guide/prompt-assembly)
   - [Context compression and caching](https://hermes-agent.nousresearch.com/docs/developer-guide/context-compression-and-caching)

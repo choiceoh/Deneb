@@ -1,6 +1,6 @@
 # RFC: 모닝/이브닝레터를 deneb-ui 카드로
 
-> 상태: **draft (검토 대기)** · 작성: 2026-06 · 관련: [[skills/productivity/morning-letter]], [[skills/productivity/evening-letter]], PR #2921(레터 이모지 정리), `.claude/rules/native-design-system.md`
+> 상태: **draft (검토 대기)** · 작성: 2026-06 · 관련: [[skills/productivity/morning-letter]], [[skills/productivity/evening-letter]], PR #2921(레터 이모지 정리), `docs/agent-rules/native-design-system.md`
 
 ## 0. TL;DR
 
@@ -138,7 +138,7 @@ deneb-ui 카탈로그는 **클라이언트(`data/ChatSystemPromptBuilder.kt`)가
 
 ## 8. 디자인 시스템 정합
 
-`.claude/rules/native-design-system.md` 준수:
+`docs/agent-rules/native-design-system.md` 준수:
 - **모노크롬 AMOLED 베이스 + 2액센트.** 쿨 `primary`=상호작용/CTA(P2 버튼), 웜 애프리콧 `denebInsight()`=AI/비서 페르소나. → **레터의 따뜻한 어조 = 웜 애프리콧 액센트**에 매핑(인사/회고 한마디를 insight tint로). 색은 작은 마크에만.
 - **아이콘은 기능 아이콘만**(섹션 헤더 leading) — 장식 금지. 콘텐츠 제목(메일 제목 등)엔 아이콘 안 붙임.
 - 타이포는 렌더러가 MaterialTheme 기반 → 다크모드 자동. (단 렌더러의 `DenebType` 정합도는 별도 이슈 — P1은 "깔끔한 Material"로 충분, PNG로 판단.)

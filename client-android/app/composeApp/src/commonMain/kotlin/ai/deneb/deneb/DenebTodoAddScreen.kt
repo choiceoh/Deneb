@@ -53,7 +53,7 @@ import kotlin.time.Instant
  * an optional due date (whole-day or a specific time). Saving posts to the gateway
  * and pops back; a gateway error is shown inline.
  *
- * Design split (see .claude/rules/native-design-system.md): frame + type are the
+ * Design split (see docs/agent-rules/native-design-system.md): frame + type are the
  * Deneb skin; the inputs are Material (OutlinedTextField/Switch/DatePicker/
  * TimePicker/Button). Body rendering lives in [TodoAddContent] so the render
  * harness can preview it; this composable is the stateful shell (pickers + save).

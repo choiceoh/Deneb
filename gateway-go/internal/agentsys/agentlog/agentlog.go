@@ -80,7 +80,7 @@ type TurnLLMData struct {
 	// Cache effectiveness per turn — on Anthropic/OpenRouter the prompt-cache
 	// prefix is reused across turns, so cacheRead should rise turn-over-turn
 	// in a healthy multi-turn run. A turn that reads 0 cache mid-conversation
-	// signals a cache break (see .claude/rules/prompt-cache.md).
+	// signals a cache break (see docs/agent-rules/prompt-cache.md).
 	CacheReadTokens     int `json:"cacheReadTokens,omitempty"`
 	CacheCreationTokens int `json:"cacheCreationTokens,omitempty"`
 	// ThinkingOff is true when the adaptive effort router ran this turn with

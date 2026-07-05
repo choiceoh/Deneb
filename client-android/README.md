@@ -28,7 +28,7 @@ client-android/
 
 - Compile (no device): `cd app && ANDROID_HOME=~/android-sdk ./gradlew :composeApp:compileKotlinDesktop`
 - Static previews: `./gradlew :composeApp:renderPreviews` → `/tmp/deneb-render/*.png`
-- Live app on the server (headless harness): `scripts/dev/native-app.sh start|shot|tap|stop` — see `.claude/rules/native-live-app.md`
+- Live app on the server (headless harness): `scripts/dev/native-app.sh start|shot|tap|stop` — see `docs/agent-rules/native-live-app.md`
 - Publish an OTA build: `scripts/dev/publish-apk.sh "release notes"`
 
 ## Architecture

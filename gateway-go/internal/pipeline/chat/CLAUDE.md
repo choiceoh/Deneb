@@ -1,6 +1,6 @@
 # chat 서브트리 지도 (구조)
 
-> 챗 파이프라인의 **구조적 지도** — 무엇이 어디에 있고 한 턴이 어떻게 흐르는지. 정책(캐시·동시성·로깅·모델역할)은 `.claude/rules/*.md`가 소관이고 여기 복붙하지 않는다. 모듈 전체 맵·"도구/RPC 추가법"은 상위 `gateway-go/CLAUDE.md`.
+> 챗 파이프라인의 **구조적 지도** — 무엇이 어디에 있고 한 턴이 어떻게 흐르는지. 정책(캐시·동시성·로깅·모델역할)은 `docs/agent-rules/*.md`가 소관이고 여기 복붙하지 않는다. 모듈 전체 맵·"도구/RPC 추가법"은 상위 `gateway-go/CLAUDE.md`.
 
 ## 디렉토리 맵 (서브패키지)
 
@@ -54,9 +54,9 @@ startAsyncRun (run_start.go)        # 세션 확보, abort ctx, buildRunDeps, go
 ## 함정 (이 서브트리 특유)
 
 - **레이어 의존 방향 엄수**: `toolctx/`(리프) ← `tools/` ← `toolreg/`. `tools/`·`toolreg/`는 **chat/를 import하지 않는다**. localai에 결합된 pilot 도구만 `toolreg_core.go`(얇은 래퍼)에서 별도 등록.
-- **회상·자동배달 지시문은 system이 아니라 마지막 user 메시지 꼬리로 주입**(`run_tail_inject.go`). per-turn 가변 바이트를 system에 넣으면 vLLM APC가 히스토리 전체를 무효화한다 — 근거/규칙: `.claude/rules/prompt-cache.md` §1.5.
-- **캐시 마커는 정확히 4개**(system 2 + trailing 2). 새 `cache_control` 추가 시 `cache_breakpoint_budget_test.go`가 먼저 빨개진다 — `.claude/rules/prompt-cache.md` §1.
+- **회상·자동배달 지시문은 system이 아니라 마지막 user 메시지 꼬리로 주입**(`run_tail_inject.go`). per-turn 가변 바이트를 system에 넣으면 vLLM APC가 히스토리 전체를 무효화한다 — 근거/규칙: `docs/agent-rules/prompt-cache.md` §1.5.
+- **캐시 마커는 정확히 4개**(system 2 + trailing 2). 새 `cache_control` 추가 시 `cache_breakpoint_budget_test.go`가 먼저 빨개진다 — `docs/agent-rules/prompt-cache.md` §1.
 - **세션-동결 스냅샷**(tier1/context/topic)은 재시작 시 증발해 APC 재-prefill을 유발 → `prompt_snapshot_persist.go`가 persist/복원. `/reset`이 일괄 clear.
-- **생성 파일 직접 수정 금지**: `toolreg/tool_schemas_gen.go`, `tool_classification_gen.go` (`.claude/rules/generated-code.md`).
-- **모델 역할 하드코딩 금지** — 코드는 역할만 고른다(`.claude/rules/model-roles.md`). 요약/추출 헬퍼를 analysis(클라우드)로 두면 비용·레이턴시가 샌다.
-- **새 goroutine/뮤텍스**는 `.claude/rules/concurrency.md`(턴 데드라인=`server.DefaultTurnDeadline`, recover 필수). 사용자 무응답 실패는 `Error`+broadcast(`.claude/rules/logging.md`).
+- **생성 파일 직접 수정 금지**: `toolreg/tool_schemas_gen.go`, `tool_classification_gen.go` (`docs/agent-rules/generated-code.md`).
+- **모델 역할 하드코딩 금지** — 코드는 역할만 고른다(`docs/agent-rules/model-roles.md`). 요약/추출 헬퍼를 analysis(클라우드)로 두면 비용·레이턴시가 샌다.
+- **새 goroutine/뮤텍스**는 `docs/agent-rules/concurrency.md`(턴 데드라인=`server.DefaultTurnDeadline`, recover 필수). 사용자 무응답 실패는 `Error`+broadcast(`docs/agent-rules/logging.md`).

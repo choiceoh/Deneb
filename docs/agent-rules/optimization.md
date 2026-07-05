@@ -1,6 +1,5 @@
 ---
 description: "상수/파라미터 반복 최적화 전략 — 라이브 테스트 연동"
-globs: ["gateway-go/**/*.go"]
 ---
 
 # Iterative Optimization

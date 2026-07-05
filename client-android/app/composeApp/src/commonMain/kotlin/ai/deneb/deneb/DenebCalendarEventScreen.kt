@@ -39,7 +39,7 @@ import kotlinx.datetime.TimeZone
  * attendees and description. Locally-stored events (created in this app) also get
  * 편집 / 삭제 actions; read-only Google events don't.
  *
- * Design split (see .claude/rules/native-design-system.md): the frame + type are
+ * Design split (see docs/agent-rules/native-design-system.md): the frame + type are
  * the Deneb typographic skin (DenebScreenScaffold + DenebType + DenebSectionLabel).
  * The loaded-event presentation lives in [CalendarEventContent] — a stateless body
  * the render harness previews with mock data; this composable is the stateful shell

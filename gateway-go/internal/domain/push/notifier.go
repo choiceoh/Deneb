@@ -69,7 +69,7 @@ func NewNotifier(deps NotifierDeps) *Notifier {
 // It is fire-and-forget (async) so it never blocks the proactive relay, and
 // nil-safe so a dormant integration is a no-op. Dead tokens are pruned; a
 // complete failure to reach any device is logged Error + broadcast, since a
-// user-observable proactive notification was dropped (see .claude/rules/logging.md).
+// user-observable proactive notification was dropped (see docs/agent-rules/logging.md).
 func (n *Notifier) DeliverFallback(title, body string) {
 	if n == nil {
 		return

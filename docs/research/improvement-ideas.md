@@ -3,7 +3,7 @@
 **Status:** ideation / proposal backlog
 **Audience:** Deneb 운영자 + 차기 AI 세션
 **Scope:** 코드 위생, 성능, 신뢰성, 제품/UX, AI 능력 — 다섯 갈래.
-**Methodology:** `gateway-go/` 전체 inventory + 최근 4.22.x CHANGELOG + `.claude/rules/` 도메인 규칙 + 기존 research 노트 (hermes-agent-analysis, tool-interception-gap) 교차 검토.
+**Methodology:** `gateway-go/` 전체 inventory + 최근 4.22.x CHANGELOG + `docs/agent-rules/` 도메인 규칙 + 기존 research 노트 (hermes-agent-analysis, tool-interception-gap) 교차 검토.
 
 > **읽는 법.** 각 아이디어는 **무엇을 → 왜 → 어디서** 순으로 정리했다. 우선순위 (P0~P3) 와 추정 작업량 (S/M/L) 을 라벨로 붙였다. 채택 여부는 운영자 판단. 합의된 아이디어만 별도 PR 로 진행한다.
 
@@ -50,7 +50,7 @@
 - `run_exec.go:100~` — 컨텍스트 pre-warming → `run_context_prewarm.go`
 - 핵심 agent loop 만 `run_exec.go` 에 남기고 ~600 LOC 목표.
 
-**주의.** `.claude/rules/prompt-cache.md` 의 `BeforeAPICall` hook 부착 위치를 깨지 말 것. `cache_breakpoint_budget_test.go` 가 회귀를 잡아주지만, 분리 PR 에서 hook 등록 순서 (`ComposeBeforeAPICall(steer, trailingCache)`) 보존이 필수.
+**주의.** `docs/agent-rules/prompt-cache.md` 의 `BeforeAPICall` hook 부착 위치를 깨지 말 것. `cache_breakpoint_budget_test.go` 가 회귀를 잡아주지만, 분리 PR 에서 hook 등록 순서 (`ComposeBeforeAPICall(steer, trailingCache)`) 보존이 필수.
 
 ---
 
@@ -95,7 +95,7 @@
 
 ### 2.1 캐시 히트율 ops 대시보드 — **P2 / S**
 
-**무엇.** `.claude/rules/prompt-cache.md` 에 정의된 4-breakpoint 캐시가 실제 프로덕션에서 얼마나 hit 하는지 누적 지표가 없다.
+**무엇.** `docs/agent-rules/prompt-cache.md` 에 정의된 4-breakpoint 캐시가 실제 프로덕션에서 얼마나 hit 하는지 누적 지표가 없다.
 
 **어디서.**
 - `gateway-go/internal/ai/llm/openai.go` 응답 처리 부분에서 `cache_read_input_tokens`, `cache_creation_input_tokens` 헤더/필드를 metric counter 로 누적
@@ -130,7 +130,7 @@
 
 **어디서.** `compaction/polaris.go` 에 anchor stage 추가 (Tier 1 LLM 전, 또는 함께). `polaris/store.go` 에 anchor field 추가.
 
-**위험.** anchor extraction 자체가 LLM 호출 → latency. **frozen 패턴** 으로 세션 첫 evidence-bearing turn 1회만 (`.claude/rules/prompt-cache.md` § 3.5 lazy session-frozen snapshots 패턴 그대로 적용).
+**위험.** anchor extraction 자체가 LLM 호출 → latency. **frozen 패턴** 으로 세션 첫 evidence-bearing turn 1회만 (`docs/agent-rules/prompt-cache.md` § 3.5 lazy session-frozen snapshots 패턴 그대로 적용).
 
 ---
 
@@ -370,7 +370,7 @@
 
 ### 6.3 Release-please autobump 검증 — **P3 / S**
 
-**현황.** Conventional commit 강제 (`.claude/rules` 의 git-pr.md). 단 release-please 가 실제로 올바르게 bump 하는지 dry-run CI 없음.
+**현황.** Conventional commit 강제 (`docs/agent-rules` 의 git-pr.md). 단 release-please 가 실제로 올바르게 bump 하는지 dry-run CI 없음.
 
 **제안.** PR open 시 `release-please --dry-run` → 다음 버전 예측 표시. 사용자가 의도와 맞는지 review.
 
@@ -432,6 +432,6 @@
 ## 10. 참고
 
 - 코드 인벤토리: Explore 에이전트 (2026-05-25) — `gateway-go/` 핵심 파일 LOC, 테스트 커버리지 갭, 컴팩션 tier 점검
-- 도메인 규칙: `.claude/rules/{go-gateway,prompt-cache,concurrency,logging,live-testing,optimization}.md`
+- 도메인 규칙: `docs/agent-rules/{go-gateway,prompt-cache,concurrency,logging,live-testing,optimization}.md`
 - 최근 4.22.x CHANGELOG: Polaris/Wiki/단일사용자 simplification 흐름
 - 관련 research: `docs/research/{hermes-agent-analysis,hermes-deneb-mapping,tool-interception-gap}.md`

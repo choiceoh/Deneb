@@ -16,7 +16,7 @@
 >
 > 환경은 "어디 사는가", 하네스는 "어떻게 생각하고 행동하는가". 둘은 별개지만 서로를 제약한다. 좋은 환경이 나쁜 하네스를 구하지 못하고, 그 역도 같다.
 
-> **"Pi" 에 대한 주석.** 이 레포 어휘에서 "Pi" 는 디스크에 사는 세션/에이전트 런타임(`~/.deneb/sessions/`, `.claude/rules/collaboration.md`)을 가리키고, `gateway-go/internal/pipeline/pilot/` 은 그 위에서 도는 경량 서브에이전트(워커)다. 외부의 다른 "Pi" 제품을 의도했다면 이 고찰은 Deneb 의 pilot/세션 런타임을 그 자리에 대입해 읽으면 된다 — 원리는 동일하다.
+> **"Pi" 에 대한 주석.** 이 레포 어휘에서 "Pi" 는 디스크에 사는 세션/에이전트 런타임(`~/.deneb/sessions/`, `docs/agent-rules/collaboration.md`)을 가리키고, `gateway-go/internal/pipeline/pilot/` 은 그 위에서 도는 경량 서브에이전트(워커)다. 외부의 다른 "Pi" 제품을 의도했다면 이 고찰은 Deneb 의 pilot/세션 런타임을 그 자리에 대입해 읽으면 된다 — 원리는 동일하다.
 
 ---
 
@@ -74,7 +74,7 @@
 
 ## 2. prefix 캐시 불변은 *편의* 가 아니라 *법* 이다
 
-prefix 캐싱을 채택하는 순간 **"과거는 변경 불가" 가 구조적 법칙이 된다.** Deneb `.claude/rules/prompt-cache.md` 교리와 Hermes "프롬프트 캐시 신성화" 가 *독립적으로* 도달한 같은 결론이다.
+prefix 캐싱을 채택하는 순간 **"과거는 변경 불가" 가 구조적 법칙이 된다.** Deneb `docs/agent-rules/prompt-cache.md` 교리와 Hermes "프롬프트 캐시 신성화" 가 *독립적으로* 도달한 같은 결론이다.
 
 법칙이 강제하는 비직관적 귀결들:
 
@@ -153,11 +153,11 @@ Terminal-Bench 수렴: 상위권 하네스는 **multi-model routing — 워크�
 
 에이전트의 실패는 **기본적으로 조용하다** — 틀린 도구 선택, 누락된 컨텍스트, 캐시 미스, 삼켜진 `NO_REPLY`. 이상적 하네스는 자신의 실행을 *읽을 수 있게* 만든다:
 
-- **사용자 무응답 사건은 무조건 `Error`** (Deneb `.claude/rules/logging.md`): replyFunc/media/push 영구 실패. 이 레포는 이런 사건이 `Warn` 에 파묻혔던 이력으로 이 교리를 세웠다.
+- **사용자 무응답 사건은 무조건 `Error`** (Deneb `docs/agent-rules/logging.md`): replyFunc/media/push 영구 실패. 이 레포는 이런 사건이 `Warn` 에 파묻혔던 이력으로 이 교리를 세웠다.
 - **재시도는 2단계 로깅** (transient `Warn` → 영구 `Error` + broadcast).
 - **자기 성찰 도구** — `/status`, 캐시 히트율 대시보드, tool histogram, "왜 그 도구를 골랐나" 1줄 trace, `/explain`(improvement-ideas 미구현). 모두 "이 답이 어떻게 나왔나" 를 추궁 가능하게 한다.
 
-Terminal-Bench 수렴 — *가장 인상적인 부분*: LangChain 은 **Trace Analyzer Skill** 로 *디버깅 루프 자체를 자동화* 했다 — LangSmith 트레이스를 가져와 **병렬 오류분석 에이전트** 를 띄우고 결과를 종합해 하네스 변경 지점을 콕 집는다. 이것이 Deneb `.claude/rules/optimization.md` 의 반복 루프(가설→1 atomic change→측정→keep/revert)를 *에이전트가 직접 도는* 형태다. 결정적 연결: **최적화는 metric 없이는 불가능하고, metric 은 관찰성 없이는 없다.** `iterate.sh` 의 `ITERATE_RESULT`/`DENEB_TEST_JSON` 가 그 관찰 신호다. **관찰성은 운영 편의가 아니라 자기개선의 전제조건.**
+Terminal-Bench 수렴 — *가장 인상적인 부분*: LangChain 은 **Trace Analyzer Skill** 로 *디버깅 루프 자체를 자동화* 했다 — LangSmith 트레이스를 가져와 **병렬 오류분석 에이전트** 를 띄우고 결과를 종합해 하네스 변경 지점을 콕 집는다. 이것이 Deneb `docs/agent-rules/optimization.md` 의 반복 루프(가설→1 atomic change→측정→keep/revert)를 *에이전트가 직접 도는* 형태다. 결정적 연결: **최적화는 metric 없이는 불가능하고, metric 은 관찰성 없이는 없다.** `iterate.sh` 의 `ITERATE_RESULT`/`DENEB_TEST_JSON` 가 그 관찰 신호다. **관찰성은 운영 편의가 아니라 자기개선의 전제조건.**
 
 ---
 
@@ -166,7 +166,7 @@ Terminal-Bench 수렴 — *가장 인상적인 부분*: LangChain 은 **Trace An
 파국적 실패 모드 — 무한 도구 루프, KV 캐시를 쥔 좀비 goroutine, 뮤텍스 재진입 데드락 — 는 *모두 비종료* 이고 *모두 조용하다*. 이상적 하네스는 비종료에 대해 **편집증적** 이다. Deneb 이 실제 프로덕션 행(cron emit 재진입 데드락, tracks-process drain panic)을 겪고 세운 방어선:
 
 - **모든 루프에 터미널 상태** — 턴 캡(기본 25, grace +1), 턴 데드라인(5분), `ctx.Done()`, 루프 감지(generic_repeat 30회 / poll_no_progress / ping_pong / circuit breaker), 압축 anti-thrashing 가드, abort grace(4h).
-- **동시성 교리**(`.claude/rules/concurrency.md`): 뮤텍스 재진입 금지(`xxxLocked`), 2개↑면 lock hierarchy docstring, 콜백은 *snapshot-후-락해제*, 모든 장기 goroutine 에 `defer recover()` + `pkg/safego`, 채널 close 는 owner 만(`sync.Once`).
+- **동시성 교리**(`docs/agent-rules/concurrency.md`): 뮤텍스 재진입 금지(`xxxLocked`), 2개↑면 lock hierarchy docstring, 콜백은 *snapshot-후-락해제*, 모든 장기 goroutine 에 `defer recover()` + `pkg/safego`, 채널 close 는 owner 만(`sync.Once`).
 - **context 규율** — 사용자 응답 경로는 절대 `context.Background()` 금지, 항상 request ctx / `ShutdownCtx()` 파생.
 
 Terminal-Bench 수렴: 상위권 전부가 **doom-loop detection** 을 둔다. LangChain 의 `LoopDetectionMiddleware` 는 *파일별 편집 횟수* 를 세다가 N회 초과 시 *"접근을 재고하라"* 를 주입한다(10+회 같은 실패 변주 반복 탈출). arxiv 도 "같은 행동 연속 반복 감지 → 자동 에스컬레이션(사용자 질문/플래너 스폰/중단) + iteration cap" — Deneb tool-loop detector 와 *완전 동형*. **세 시스템이 같은 함정을 같은 장치로 막았다.**
@@ -194,7 +194,7 @@ Terminal-Bench 상위권의 가장 강한 *공통* 발견: **비구조 ReAct 루
 - **ForgeCode/arxiv: 6단계 per-iteration** — pre-check/compaction → thinking → self-critique → action → tool execution → post-processing. *thinking* 과 *self-critique* 를 행동에서 분리해 추론을 관찰·감사 가능하게.
 - **시간 예산 인식:** 에이전트는 *시간을 과소평가* 한다 → 시간 경고를 주입해 무한 반복 대신 검증으로 유도.
 
-이상적 하네스 함의: **루프에 골격을 박는다.** 특히 *"끝내기 전에 스스로 검증했는가"* 를 종료 게이트로 둔다 — LLM 의 기본 성향(쓰고 멈춤)을 구조로 교정. Deneb 매핑: chat 루프는 자유 ReAct 에 가깝다. Verify 게이트(예: 코드 변경 턴은 `make check`/테스트 통과를 *종료 조건* 으로)는 `.claude/rules/live-testing.md` 의 "라이브 검증 필수" 교리를 *하네스 레벨로 내재화* 하는 자연스러운 다음 수다. self-critique 단계는 Anthropic extended thinking 을 종료 직전 1회 "스펙 대조" 로 쓰면 캐시 영향 없이 얹을 수 있다.
+이상적 하네스 함의: **루프에 골격을 박는다.** 특히 *"끝내기 전에 스스로 검증했는가"* 를 종료 게이트로 둔다 — LLM 의 기본 성향(쓰고 멈춤)을 구조로 교정. Deneb 매핑: chat 루프는 자유 ReAct 에 가깝다. Verify 게이트(예: 코드 변경 턴은 `make check`/테스트 통과를 *종료 조건* 으로)는 `docs/agent-rules/live-testing.md` 의 "라이브 검증 필수" 교리를 *하네스 레벨로 내재화* 하는 자연스러운 다음 수다. self-critique 단계는 Anthropic extended thinking 을 종료 직전 1회 "스펙 대조" 로 쓰면 캐시 영향 없이 얹을 수 있다.
 
 > 주의: 단계 구조가 §3(right-size)와 충돌하지 않게. pilot 급 단발 작업엔 4단계가 과하다. *기다리는 사용자 대면 작업 + 검증 가능한 산출물* 일 때만 풀 구조를 입힌다.
 
@@ -255,7 +255,7 @@ Terminal-Bench 상위권의 가장 강한 *공통* 발견: **비구조 ReAct 루
 ## 14. 참고
 
 - Deneb 런타임: `gateway-go/internal/pipeline/pilot/localai.go`(경량 워커), `gateway-go/internal/agentsys/agent/executor.go`(턴 루프), `gateway-go/internal/runtime/session/`(라이프사이클), `gateway-go/internal/agentsys/autonomous/`(자율 서비스).
-- 교리(`.claude/rules/`): `prompt-cache.md`, `concurrency.md`, `logging.md`, `optimization.md`, `live-testing.md`, `go-gateway.md`.
+- 교리(`docs/agent-rules/`): `prompt-cache.md`, `concurrency.md`, `logging.md`, `optimization.md`, `live-testing.md`, `go-gateway.md`.
 - 관련 research: `docs/research/{hermes-agent-analysis,hermes-deneb-mapping,tool-interception-gap,improvement-ideas}.md`.
 - 외부 — 캐시/압축: Hermes Agent [Prompt assembly](https://hermes-agent.nousresearch.com/docs/developer-guide/prompt-assembly), [Context compression and caching](https://hermes-agent.nousresearch.com/docs/developer-guide/context-compression-and-caching); Anthropic [Prompt caching](https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching).
 - 외부 — Terminal-Bench 하네스: [Terminal-Bench 2.0 리더보드](https://www.tbench.ai/leaderboard/terminal-bench/2.0); LangChain [Improving Deep Agents with harness engineering](https://www.langchain.com/blog/improving-deep-agents-with-harness-engineering) (모델 고정, 하네스만 52.8→66.5); arxiv [Building AI Coding Agents for the Terminal: Scaffolding, Harness, Context Engineering](https://arxiv.org/html/2603.05344v1); arxiv [Terminal-Bench](https://arxiv.org/pdf/2601.11868); [ForgeCode harness deep-dive](https://medium.com/@richardhightower/forgecode-dominating-terminal-bench-2-0-harness-engineering-beat-claude-code-codex-gemini-etc-eb5df74a3fa4).

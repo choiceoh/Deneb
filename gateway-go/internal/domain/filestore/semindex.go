@@ -141,7 +141,7 @@ type indexData struct {
 // around map reads/writes — never across the network embed call, the cosine
 // scan, or disk I/O (marshal + write). The slow paths (save, Search) snapshot
 // under the lock and do the heavy work outside it, so a large index never
-// freezes a concurrent Search or write (see .claude/rules/concurrency.md: no
+// freezes a concurrent Search or write (see docs/agent-rules/concurrency.md: no
 // network/disk I/O while holding a lock).
 //
 // Lock discipline: callers must hold mu when invoking a *Locked helper; public

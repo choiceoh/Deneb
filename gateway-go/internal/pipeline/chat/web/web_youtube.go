@@ -4,7 +4,7 @@
 // transcript into the conversation transcript is exactly what makes "summarize a
 // few YouTube links" overflow the protected context window: each result lands in
 // the recent (non-compactable) turns, and a handful of them exceed the budget
-// before compaction can touch anything (see .claude/rules/prompt-cache.md §5 +
+// before compaction can touch anything (see docs/agent-rules/prompt-cache.md §5 +
 // chat/compact_guard.go protectedZoneExceedsBudget).
 //
 // To keep the main context small, we summarize the transcript in an isolated

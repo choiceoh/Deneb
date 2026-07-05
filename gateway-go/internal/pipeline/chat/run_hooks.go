@@ -75,7 +75,7 @@ func wireStreamHooks(
 
 	// Mutation failure escalation: a mutation tool reported an in-band failure
 	// (banner added by MutationFailureAnnotator) that the agent loop saw as
-	// isError=false. Per .claude/rules/logging.md, a user-observable failure must
+	// isError=false. Per docs/agent-rules/logging.md, a user-observable failure must
 	// surface as Error + a broadcast so the operator/UI sees the dropped action,
 	// not just the agent. Runs regardless of broadcaster wiring. (research finding A)
 	hc.OnToolResult(func(name, _ string, result string, isErr bool) {

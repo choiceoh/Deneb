@@ -9,6 +9,12 @@
             "command": "command -v clash >/dev/null 2>&1 || exit 0; exec clash check",
             "timeout": 10,
             "statusMessage": "clash: 워크트리 충돌 검사"
+          },
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/scripts/dev/claude-rules-gate.py\"",
+            "timeout": 10,
+            "statusMessage": "rules-gate: 경로별 룰 첫 접촉 안내"
           }
         ]
       }

@@ -16,7 +16,7 @@
 //     friendly Korean notice.
 //
 // Handler packages must never import the hub type directly — the Deps struct
-// is the only contract. See .claude/rules/hub-wiring.md Rule 3.
+// is the only contract. See docs/agent-rules/hub-wiring.md Rule 3.
 package checkpoint
 
 import (

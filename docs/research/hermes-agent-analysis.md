@@ -2049,7 +2049,7 @@ Claude Code의 프로젝트 규칙 패턴을 차용:
 ```
 hermes-agent/
 ├── AGENTS.md           # 항상 필요한 핵심 규칙
-└── .claude/rules/*.md  # 모듈별 조건부 (frontmatter globs 매치 시 로딩)
+└── docs/agent-rules/*.md  # 모듈별 조건부 (frontmatter globs 매치 시 로딩)
 ```
 
 ### 24.3 Dual-layer 메시지 시퀀싱
@@ -2225,7 +2225,7 @@ hermes doctor — 어느 환경에서도 동일 진단
 - **스킬 시스템** — agentskills.io 표준 호환 옵션 (예: `/test-driven-development` 같은 범용 스킬 자동 설치)
 - **셸 훅** — 파이썬 플러그인 없이 쉘 스크립트를 lifecycle 훅에 바인딩
 - **Checkpoint/Rollback** — 에이전트 파일 수정 시 자동 스냅샷
-- **문서화 디스플린** — `AGENTS.md` + `.claude/rules/` 조건부 로딩 패턴이 이미 유사. Hermes가 훨씬 많은 규칙 + skill 문서화를 체계적으로 운영하는 법 참고
+- **문서화 디스플린** — `AGENTS.md` + `docs/agent-rules/` 조건부 로딩 패턴이 이미 유사. Hermes가 훨씬 많은 규칙 + skill 문서화를 체계적으로 운영하는 법 참고
 
 ---
 

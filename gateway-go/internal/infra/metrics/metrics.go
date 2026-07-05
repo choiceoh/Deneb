@@ -67,7 +67,7 @@ var RPCRequestsTotal = NewCounter()
 // CacheHitTracker accumulates Anthropic-style prompt-cache token usage across
 // every LLM turn in the process. It exists so /status can surface a cumulative
 // cache hit ratio — the regression alarm for the prompt-cache doctrine
-// (.claude/rules/prompt-cache.md): if a doctrine violation (system prompt
+// (docs/agent-rules/prompt-cache.md): if a doctrine violation (system prompt
 // rebuilt per turn, toolset churn, etc.) silently breaks caching, the ratio
 // drops and the operator can see it. Safe for concurrent use.
 //

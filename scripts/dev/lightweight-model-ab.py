@@ -69,7 +69,7 @@ extract·title·triage=tiny, compaction·verdict=lightweight):
   AB_VERDICT_LIGHTWEIGHT winner=<name|tie> margin=<pts>
 and a final `AB_VERDICT winner=<name|tie> margin=<pts>[ json_mode_rejected=<models>]` line.
 
-Role doctrine: .claude/rules/model-roles.md — tool-heavy roles are promoted via
+Role doctrine: docs/agent-rules/model-roles.md — tool-heavy roles are promoted via
 SparkFleet run_tool_eval; THIS script is the counterpart for the text roles.
 """
 

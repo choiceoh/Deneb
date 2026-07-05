@@ -30,7 +30,7 @@ Deneb 의 스킬 시스템은 **두 층**이다 — 추론시 *인덱스*와 백
 | SIRI 요소 | Deneb 대응 | 위치 | 판정 |
 |---|---|---|---|
 | RL 로 스킬을 **정책 가중치에 distill**(Phase 2) | **없음** — Deneb 는 기성 로컬/클라우드 모델을 *호출만* 한다. 파인튜닝·RL·가중치 갱신 0 | — | ⛔ **범위 밖** |
-| 추론시 **상시 스킬뱅크가 컨텍스트를 늘린다**는 비판 | **compact 스킬-인덱스**(name+description+location, ~5–7K tok) + 본문 on-demand(`skills(read)`/`read`) | `.claude/rules/prompt-cache.md` Semi-static, `prompt/system_prompt.go` | ✅ **다르게 해결** (내재화 대신 인덱스+지연로드) |
+| 추론시 **상시 스킬뱅크가 컨텍스트를 늘린다**는 비판 | **compact 스킬-인덱스**(name+description+location, ~5–7K tok) + 본문 on-demand(`skills(read)`/`read`) | `docs/agent-rules/prompt-cache.md` Semi-static, `prompt/system_prompt.go` | ✅ **다르게 해결** (내재화 대신 인덱스+지연로드) |
 | **paired 롤아웃 검증**(skill vs skill-free 유용성)(Phase 1) | **original↔candidate 행동 델타 게이트** — 같은 입력을 원본/후보 SKILL.md 로 시뮬레이션해 도구호출 plan 회귀 채점 | `domain/skills/genesis/validation_executor.go:57-61` (`runReplayExecutorWith`), `validation_replay.go`, `DENEB_SKILL_EVOLVE_REPLAY` | ✅ **이미 구현(개념적)** |
 | **self-skill mining**(자기 성공 롤아웃에서 스킬 요약)(Phase 1) | genesis Evolver 가 에이전트 *자기 행동*에서 SKILL.md 패치 채굴 → nudger fork 가 propose 결정 | `genesis/evolver.go`, `nudger.go`, `tracker_opportunities.go` | ✅ **이미 구현(개념적)** |
 | **Phase-0 warmup**(naive 정책에서 캐지 마라, -10.2%) | usage-quality·validation-case 게이팅 + daily cap + liveness — 검증된 품질 사용에서만 채굴, 콜드스타트 폭주 방지 | `genesis/tracker_usage_quality.go`, `tracker_validation_cases.go`, `genesis_dailycap_test.go`, `liveness_test.go` | 🟡 **부분/점검 가치** |
@@ -69,9 +69,9 @@ Deneb 의 스킬 시스템은 **두 층**이다 — 추론시 *인덱스*와 백
 
 ## 5. 관련 문서
 
-- 스킬 인덱스/캐시: `.claude/rules/prompt-cache.md` (Semi-static = compact skill-index), `gateway-go/internal/pipeline/chat/prompt/system_prompt.go`
+- 스킬 인덱스/캐시: `docs/agent-rules/prompt-cache.md` (Semi-static = compact skill-index), `gateway-go/internal/pipeline/chat/prompt/system_prompt.go`
 - 스킬 진화(genesis): `gateway-go/internal/domain/skills/genesis/` (`evolver.go` 채굴, `validation_executor.go`/`validation_replay.go` paired 검증, `nudger.go` propose, `tracker_*.go` 게이팅)
-- 모델 역할(진화=coding, replay=lightweight): `.claude/rules/model-roles.md` (스킬 진화 패치 생성·behavioral replay 행)
+- 모델 역할(진화=coding, replay=lightweight): `docs/agent-rules/model-roles.md` (스킬 진화 패치 생성·behavioral replay 행)
 - 선행 "범위 밖 RL 거버넌스" 판정: `docs/research/code-as-agent-harness-review.md`
 - genesis 자체 리서치 노트: `gateway-go/internal/domain/skills/genesis/research/` (apex-self-evolution, self-harness 등)
 - 선행 검토 포맷: `docs/research/self-compacting-agents-2606.23525.md`

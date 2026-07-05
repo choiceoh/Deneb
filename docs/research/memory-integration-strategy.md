@@ -63,5 +63,5 @@ Hindsight (cue-gated 장기 semantic 검색)
 
 ## 참고
 
-- `.claude/rules/prompt-cache.md` — anchor 는 transcript 영역, system prompt 와 무관
-- `.claude/rules/concurrency.md` — wiki 동시 mutate (dreamer + 자율 task) 락 hierarchy
+- `docs/agent-rules/prompt-cache.md` — anchor 는 transcript 영역, system prompt 와 무관
+- `docs/agent-rules/concurrency.md` — wiki 동시 mutate (dreamer + 자율 task) 락 hierarchy

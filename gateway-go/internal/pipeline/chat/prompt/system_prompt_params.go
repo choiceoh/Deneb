@@ -129,7 +129,7 @@ type SystemPromptParams struct {
 	// no section. Dynamic (uncached) block, but frozen per day by the provider
 	// (see chat/calendar_glance.go) so it stays byte-stable within a day like
 	// the day-only timestamp — preserving the trailing-message cache
-	// (.claude/rules/prompt-cache.md). The live `calendar` tool remains the
+	// (docs/agent-rules/prompt-cache.md). The live `calendar` tool remains the
 	// authoritative source; this is background context only.
 	CalendarGlance string
 

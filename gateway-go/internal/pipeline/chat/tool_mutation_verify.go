@@ -69,7 +69,7 @@ func mutationOutcomeIsFailure(toolName, output string) bool {
 // isMutationFailureResult reports whether a finalized tool result carries the
 // mutation failure banner (i.e. MutationFailureAnnotator surfaced an in-band
 // failure the agent loop saw as isError=false). Used by the run hooks to escalate
-// to an Error log + operator broadcast per .claude/rules/logging.md.
+// to an Error log + operator broadcast per docs/agent-rules/logging.md.
 func isMutationFailureResult(result string) bool {
 	return strings.Contains(result, mutationFailureBanner)
 }

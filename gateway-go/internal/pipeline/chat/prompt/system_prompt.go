@@ -120,7 +120,7 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 			s.WriteString(CodingPersona)
 			if params.CodingRepoContext != "" {
 				s.WriteString("## 프로젝트 규칙 (저장소 루트 CLAUDE.md/AGENTS.md)\n")
-				s.WriteString("아래는 작업 중인 저장소가 선언한 규칙이다(세션 시작 시점 동결). 커밋 형식·빌드/테스트 명령·금지사항을 그대로 따르라. 하위 디렉토리에 별도 CLAUDE.md/AGENTS.md나 .claude/rules/ 규칙 파일이 있으면 그 영역을 수정하기 전에 read로 직접 읽어라.\n\n")
+				s.WriteString("아래는 작업 중인 저장소가 선언한 규칙이다(세션 시작 시점 동결). 커밋 형식·빌드/테스트 명령·금지사항을 그대로 따르라. 하위 디렉토리에 별도 CLAUDE.md/AGENTS.md나 docs/agent-rules/ 규칙 파일이 있으면 그 영역을 수정하기 전에 read로 직접 읽어라.\n\n")
 				s.WriteString(params.CodingRepoContext)
 				s.WriteString("\n\n")
 			} else {

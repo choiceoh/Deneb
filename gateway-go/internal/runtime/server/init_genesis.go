@@ -211,7 +211,7 @@ func (s *Server) configureGenesisEvolverModels(evolver *genesis.Evolver) (modelr
 	// reject a rewrite that regresses it. Lightweight (not main) is the right
 	// role: a consistent, cheap discriminator for the original-vs-candidate delta
 	// that avoids chat contention — the gate scores both bodies with the SAME
-	// model, so any executor bias cancels (.claude/rules/model-roles.md). It is
+	// model, so any executor bias cancels (docs/agent-rules/model-roles.md). It is
 	// the strongest "did it break what worked" gate (#6); the engine no-ops when
 	// the replay-case corpus is empty, so defaulting on only adds cost once cases
 	// exist.

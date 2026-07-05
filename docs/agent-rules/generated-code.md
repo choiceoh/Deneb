@@ -1,6 +1,6 @@
 ---
 description: "기계 생성 코드 수정 금지 규칙"
-globs: ["gateway-go/internal/pipeline/chat/toolreg/tool_schemas_gen.go", "gateway-go/internal/pipeline/chat/tool_classification_gen.go", "client-android/app/composeApp/src/commonMain/kotlin/ai/deneb/deneb/generated/*.kt"]
+globs: ["gateway-go/internal/pipeline/chat/toolreg/tool_schemas_gen.go", "gateway-go/internal/pipeline/chat/tool_classification_gen.go", "client-android/**/generated/*.kt", "andromeda/src/gen/**"]
 ---
 
 # Generated Code Boundary

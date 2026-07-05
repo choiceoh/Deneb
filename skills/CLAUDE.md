@@ -217,7 +217,7 @@ Experience → Proposal → Genesis/Create → Use → Evolution → Improved Sk
 | **Proposal** | `evolution-proposal` + `skill_lifecycle` | Decide, record, and execute genesis/evolution/no-op routes |
 | **Creation** | `skill-factory` | Extract reusable patterns from complex workflows |
 | **Authoring** | `skill-creator` | Create/edit/audit SKILL.md files |
-| **Evolution** | `skill-evolution` | Optimize skills via the iterative-optimization loop (`.claude/rules/optimization.md`) |
+| **Evolution** | `skill-evolution` | Optimize skills via the iterative-optimization loop (`docs/agent-rules/optimization.md`) |
 
 ### Autonomous Skill Creation
 

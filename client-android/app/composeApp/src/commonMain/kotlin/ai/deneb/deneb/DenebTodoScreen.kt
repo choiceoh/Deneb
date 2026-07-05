@@ -63,7 +63,7 @@ import kotlin.time.Instant
  * button opens the add screen; tapping a row opens it for editing. Pull to refresh
  * re-fetches.
  *
- * Design split (see .claude/rules/native-design-system.md): frame + type are the
+ * Design split (see docs/agent-rules/native-design-system.md): frame + type are the
  * Deneb skin (DenebScreenScaffold + DenebType + DenebRow); the checkbox and button
  * are Material. The list is a stateless body ([TodoListContent]) the render harness
  * previews with mock data; this composable is the stateful shell (fetch + toggle +

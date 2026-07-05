@@ -114,7 +114,7 @@
 
 - **선결**: 변경 전/후 **standby drain** 을 같은 조건에서 비교. `adb shell dumpsys batterystats --charged` + Battery Historian, 또는 `dumpsys deviceidle` 로 Doze 진입 여부 확인(M1 의 핵심 가설 = "백그라운드에서 실제로 Doze 에 드는가").
 - **라디오 wakeup**: `dumpsys batterystats` 의 mobile radio active time / wakeup count 로 keepalive 영향 측정(M3).
-- **회귀 가드**: M1 적용 후 **프로액티브 리포트가 FCM 으로 실제 도착하는지**(앱 백그라운드/killed 시 트레이 알림 수신) + 포그라운드 복귀 시 **커서 드레인으로 누락 0** 확인. `native-app.sh` 하네스로 포그라운드 재연결 흐름을, 실기기로 백그라운드 FCM 전달을 검증(시스템 Doze 는 실기기 필요 — `.claude/rules/native-live-app.md` 한계).
+- **회귀 가드**: M1 적용 후 **프로액티브 리포트가 FCM 으로 실제 도착하는지**(앱 백그라운드/killed 시 트레이 알림 수신) + 포그라운드 복귀 시 **커서 드레인으로 누락 0** 확인. `native-app.sh` 하네스로 포그라운드 재연결 흐름을, 실기기로 백그라운드 FCM 전달을 검증(시스템 Doze 는 실기기 필요 — `docs/agent-rules/native-live-app.md` 한계).
 - **반증가능 예측**(편집 전 선언): "M1 은 화면-off 1시간 standby drain 을 −X%, 프로액티브 전달 성공률을 ±0(FCM 가용 빌드) 으로 바꾼다 — 백그라운드에서 Doze 에 들기 때문." Doze 진입이 dumpsys 로 확인 안 되면(OEM 가 포그라운드 서비스 잔재로 막으면) 원인 규명 후 keep/revert.
 
 ---
@@ -133,6 +133,6 @@
 
 ## 7. 관련 문서
 
-- 네이티브 라이브 검증(실기기 한계 포함): `.claude/rules/native-live-app.md`
+- 네이티브 라이브 검증(실기기 한계 포함): `docs/agent-rules/native-live-app.md`
 - 코드: `DenebGatewayClient.kt`(SSE/sync), `DaemonService.kt`(포그라운드 서비스), `FcmService.kt`/`FcmRegistration.kt`(푸시), `DenebApplication.kt`(`ProcessLifecycleOwner`), `androidApp/build.gradle.kts:16`(FCM 빌드 게이팅)
 - 선행 네이티브 리뷰 포맷: `docs/research/android-launcher-review.md`

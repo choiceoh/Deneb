@@ -14,7 +14,7 @@ package server
 // end in a "logically done" state, we inject a new user-role message on the
 // transcript that instructs the agent to pick up where it left off. No
 // existing transcript content is modified — the prompt cache is preserved
-// (see .claude/rules/prompt-cache.md, Rule A).
+// (see docs/agent-rules/prompt-cache.md, Rule A).
 //
 // Safety gates:
 //   - Max age (resumeMaxAge, default 2h): older markers are cleared without

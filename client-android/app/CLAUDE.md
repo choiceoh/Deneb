@@ -23,15 +23,16 @@ scripts/dev/native-app.sh stop
 ```
 
 Full guide, command reference, and troubleshooting: repo root
-`.claude/rules/native-live-app.md`. Design-system boundaries (controls =
+`docs/agent-rules/native-live-app.md`. Design-system boundaries (controls =
 Material, presentation = Deneb typography): repo root
-`.claude/rules/native-design-system.md`. System gestures (edge swipes, etc.)
+`docs/agent-rules/native-design-system.md`. System gestures (edge swipes, etc.)
 still need a real device.
 
 ## Gates before pushing
 
-Run `make ci` from the repo root — it includes the Kotlin lane (spotless,
-detekt, desktop smoke test, android compile). APK publishing goes through
+Run `make ci ARGS=--kotlin` from the repo root — spotless, detekt, desktop
+smoke test, android compile (use full `make ci` only when the diff also spans
+other lanes; CI re-verifies everything anyway). APK publishing goes through
 `scripts/dev/publish-apk.sh` only (see repo root
-`.claude/rules/release-and-deploy.md`).
+`docs/agent-rules/release-and-deploy.md`).
 

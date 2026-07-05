@@ -147,7 +147,7 @@ After each evolution cycle, update the skill's version and add a brief comment i
 ## Iterative Optimization Integration
 
 For systematic optimization, use the iterate loop (there is no separate
-autoresearch CLI — the methodology lives in `.claude/rules/optimization.md`
+autoresearch CLI — the methodology lives in `docs/agent-rules/optimization.md`
 and the agent itself drives the loop):
 
 ```bash
@@ -161,7 +161,7 @@ scripts/dev/quality-metric.sh "스킬을 트리거하는 실제 메시지"
 
 Loop: hypothesis+prediction → edit SKILL.md → run metric → keep(improved) or
 revert(regressed) → record — per the strategy table in
-`.claude/rules/optimization.md`.
+`docs/agent-rules/optimization.md`.
 
 ### Hard Constraints for Optimization
 

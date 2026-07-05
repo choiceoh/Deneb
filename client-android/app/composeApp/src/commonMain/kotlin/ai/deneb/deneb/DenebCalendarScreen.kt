@@ -88,7 +88,7 @@ import kotlin.time.Instant
  * top (dots mark days with events), the selected day's events below, and a "+"
  * button that opens the manual add screen. Pull to refresh re-fetches the month.
  *
- * Design split (see .claude/rules/native-design-system.md): the frame + type are
+ * Design split (see docs/agent-rules/native-design-system.md): the frame + type are
  * the Deneb skin (DenebScreenScaffold + DenebType); buttons are Material. The grid
  * and day list are stateless bodies ([CalendarMonthGrid], [CalendarDayList]) the
  * render harness previews with mock data; this composable is the stateful shell

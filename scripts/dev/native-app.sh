@@ -75,7 +75,7 @@ GW_URL="${DENEB_GATEWAY_URL:-http://100.111.114.20:18789}"
 #   DENEB_GATEWAY_URL=http://127.0.0.1:<dev-port> scripts/dev/native-app.sh start
 # That dev gateway accepts the same client token this script seeds because
 # lib-server.sh mirrors ~/.deneb/client_token into the dev state dir on start.
-# See .claude/rules/native-live-app.md ("dev 게이트웨이 연결").
+# See docs/agent-rules/native-live-app.md ("dev 게이트웨이 연결").
 SKIKO_RENDER="${NATIVE_SKIKO:-SOFTWARE}"   # SOFTWARE is safe on headless Xvfb (no GL)
 
 # Profiles: NAME -> dpW dpH scale.  On Linux, Compose/Skiko ignores

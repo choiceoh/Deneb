@@ -63,7 +63,7 @@ type AgentConfig struct {
 	// falls back to Thinking. Used by the reasoning-sandwich policy and the
 	// effort router's per-step revert. Like Thinking this is a request-level
 	// parameter, so varying it per turn does NOT affect prompt cache (see
-	// .claude/rules/prompt-cache.md).
+	// docs/agent-rules/prompt-cache.md).
 	ThinkingModulator func(turn int, toolActivities []ToolActivity) *llm.ThinkingConfig
 
 	// ThinkingOffRetry, when non-nil, is the thinking config used to retry a turn
