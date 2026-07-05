@@ -30,7 +30,7 @@
 
 - **Conventional Commit 필수**: `feat(chat): …` (type: feat|fix|perf|refactor|docs|test|chore|ci|build · scope: 모듈명). 커밋은 `scripts/committer "<msg>" <files…>` 로 (스테이징 스코프 유지).
 - PR 본문: Summary / Changes / Verification 3섹션 + 푸터 `🤖 Generated with [Claude Code](https://claude.com/claude-code)` — 상세 [git-pr](docs/agent-rules/git-pr.md).
-- 머지 후 `git merge-base --is-ancestor <sha> origin/main` 으로 랜딩 검증 (MERGED 표시 ≠ 랜딩). main에 머지커밋 푸시 금지 — 리베이스.
+- 머지는 **`scripts/dev/pr.sh land <pr>`** — 체크 그린 감시→스쿼시→랜딩 검증(`merge-base --is-ancestor`, MERGED ≠ 랜딩)→브랜치 정리를 한 번에. main에 머지커밋 푸시 금지 — 리베이스.
 - 네이티브 사용자 표시 패치노트는 `client-android/app/changelog.d/` 조각 파일로 (사용자 영향 변경만). 루트 CHANGELOG.md는 release-please 자동 생성 — 직접 편집 금지.
 
 ## 스타일
