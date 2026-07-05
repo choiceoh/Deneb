@@ -16,8 +16,12 @@
 | `pipeline_synthesis.go` | `AnalyzeEmailPipeline`의 단계들: **stage-1 컨텍스트 추출**(스레드·발신자 기억·위키 그래프) + **stage-2 합성** 호출 + 중요도 판정/관련 프로젝트 suffix 파싱 |
 | `pipeline_extractors.go` | 합성된 분석 텍스트 위에서 도는 로컬-AI 추출기: 위키 fact 제안·운영자 action item·거래 정보. 전부 lightweight 모델 JSON 모드 |
 | `pipeline_batch.go` | 배치 분석 경로 |
+| `party_anchor.go` | 당사자 앵커 — 발신/수신/참조의 소속(우리 측/외부)을 결정적으로 stage-2 프롬프트에 주입 (분석 모델의 당사자 뒤집기 제거) |
+| `date_anchor.go` | 날짜 앵커 — Date 헤더 + 상대 날짜 환산표(KST) 주입 (상대 날짜 산술은 측정된 모델 약점) |
 | `analyzer.go` | 분석 보조(프롬프트/파싱) |
 | `attachments.go` | 첨부 해석. 본문 추출(OCR/문서파싱)은 pipeline 레이어 경유 |
+| `large_attachment.go` | 대용량 첨부 처리 |
+| `eval_extract.go` | 추출 평가 보조 |
 | `files_archive.go` | 첨부/파일 아카이빙 |
 | `mail_body_prep.go` | 본문 정제 |
 | `money_normalize.go` | 금액 표기 정규화(한국 업무메일) |

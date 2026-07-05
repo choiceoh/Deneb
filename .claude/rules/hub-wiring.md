@@ -45,9 +45,9 @@ Inline Deps literals in `method_registry.go` are the only wiring point.
 | Phase | Function | Timing | Content |
 |---|---|---|---|
 | Builtin | `registerBuiltinMethods()` | Before hub | Gateway status (server-state closures) |
-| Early | `registerEarlyMethods(hub)` | Before chatHandler | ~30 domains via hub inline |
+| Early | `registerEarlyMethods(hub)` | Before chatHandler | ~50 domains via hub inline |
 | Session | `registerSessionRPCMethods()` | Creates chatHandler | Chat pipeline init + handler |
-| Late | `registerLateMethods(hub)` | After chatHandler | Chat/BTW/Exec/Aurora (~4 domains) |
+| Late | `registerLateMethods(hub)` | After chatHandler | Chat/BTW/Miniapp-chat/Exec/Wiki/Genesis/GmailAnalyze (~7 domains). Aurora(드리밍)는 여기가 아니라 side effects 단계 |
 | Side effects | `registerWorkflowSideEffects(hub)` | After late | Non-RPC: autonomous, dreaming, notifier |
 
 ## Snapshot Test

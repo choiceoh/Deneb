@@ -334,7 +334,7 @@ scripts/dev/puppet.sh stop                   # 게이트웨이 + 브로커 정�
 ## 주의사항
 
 - 반복 테스트는 포트 **18791** (dev=18790, prod=18789와 분리)
-- `DEV_LIVE_PORT` 환경변수로 포트 변경 가능
+- 포트 오버라이드: iterate는 `ITERATE_PORT`, dev live-test/puppet(18790)은 `DEV_LIVE_PORT`
 - 프로덕션에 절대 영향 없음
 - **quality test 실패 시 "완료"라고 하지 마라** — 품질 문제를 수정하고 재검증해야 한다
 - **로그에서 에러/경고 없는 것까지 확인**해야 진짜 완료
