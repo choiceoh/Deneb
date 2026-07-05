@@ -44,9 +44,68 @@ func ToolSessions(d *toolctx.SessionDeps) ToolFunc {
 			return toolSessionsSearch(d.Transcript)(ctx, input)
 		case "send":
 			return toolSessionsSend(d)(ctx, input)
+		case "stats":
+			return toolSessionsStats(d)(ctx, input)
 		default:
-			return "action은 list, history, search, send 중 하나를 지정하세요.", nil
+			return "action은 list, history, search, send, stats 중 하나를 지정하세요.", nil
 		}
+	}
+}
+
+// --- sessions stats sub-action ---
+
+// toolSessionsStats rolls up run/token/tool totals from the agent log — the
+// Go replacement for the session-logs skill's brittle jq recipes over raw
+// JSONL. Window totals via Aggregate, per-session table via
+// AggregateBySession. Tokens only: agentlog persists no dollar cost, so none
+// is invented here (per-tool histograms live in observe action=behavior).
+func toolSessionsStats(d *toolctx.SessionDeps) ToolFunc {
+	return func(_ context.Context, input json.RawMessage) (string, error) {
+		if d == nil || d.AgentLog == nil {
+			return "agent log가 배선되지 않아 통계를 낼 수 없습니다.", nil
+		}
+		var p struct {
+			Days  int `json:"days"`
+			Limit int `json:"limit"`
+		}
+		if err := json.Unmarshal(input, &p); err != nil {
+			return "", fmt.Errorf("parse input: %w", err)
+		}
+		if p.Days <= 0 {
+			p.Days = 7
+		}
+		if p.Limit <= 0 {
+			p.Limit = 15
+		}
+		since := time.Now().Add(-time.Duration(p.Days) * 24 * time.Hour).UnixMilli()
+
+		agg := d.AgentLog.Aggregate(since)
+		var b strings.Builder
+		fmt.Fprintf(&b, "세션 통계 (최근 %d일): runs=%d proactive=%d in=%d out=%d cacheRead=%d 토큰\n",
+			p.Days, agg.Runs, agg.ProactiveRuns, agg.TotalInputTokens, agg.TotalOutputTokens, agg.CacheReadTokens)
+
+		bySession := d.AgentLog.AggregateBySession(since)
+		if len(bySession) == 0 {
+			b.WriteString("기간 내 기록된 세션이 없습니다.")
+			return b.String(), nil
+		}
+		if len(bySession) > p.Limit {
+			fmt.Fprintf(&b, "\n토큰 상위 %d개 세션 (전체 %d개):\n", p.Limit, len(bySession))
+			bySession = bySession[:p.Limit]
+		} else {
+			fmt.Fprintf(&b, "\n세션별 (%d개):\n", len(bySession))
+		}
+		for _, st := range bySession {
+			fmt.Fprintf(&b, "- %s: runs=%d", st.Session, st.Runs)
+			if st.Errors > 0 {
+				fmt.Fprintf(&b, " errors=%d", st.Errors)
+			}
+			fmt.Fprintf(&b, " in=%d out=%d tools=%d · 마지막 %s\n",
+				st.InputTokens, st.OutputTokens, st.ToolCalls,
+				time.UnixMilli(st.LastTs).Format("01-02 15:04"))
+		}
+		b.WriteString("\n(도구별 사용 히스토그램은 observe action=behavior, 비용($)은 게이트웨이 미보유 — 토큰 기준)")
+		return b.String(), nil
 	}
 }
 

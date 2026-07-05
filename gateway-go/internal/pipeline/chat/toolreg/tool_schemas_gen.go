@@ -511,7 +511,13 @@ func sessionsToolSchema() map[string]any {
 			"action": map[string]any{
 				"type":        "string",
 				"description": "Session action",
-				"enum":        []string{"list", "history", "search", "send"},
+				"enum":        []string{"list", "history", "search", "send", "stats"},
+			},
+			"days": map[string]any{
+				"type":        "number",
+				"description": "stats: 집계 기간(일). 기본 7",
+				"default":     7,
+				"minimum":     1,
 			},
 			"kinds": map[string]any{
 				"type":        "array",
@@ -1601,6 +1607,81 @@ func phoneWriteToolSchema() map[string]any {
 			},
 		},
 		"required": []string{"to"},
+	}
+}
+
+func workfeedToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"action": map[string]any{
+				"type":        "string",
+				"description": "list(카드 목록, 기본) | read(카드 본문 — 열람 표시 겸함) | ack(처리 완료 표시)",
+				"enum":        []string{"list", "read", "ack"},
+			},
+			"id": map[string]any{
+				"type":        "string",
+				"description": "카드 ID (read/ack 필수)",
+			},
+			"include_acked": map[string]any{
+				"type":        "boolean",
+				"description": "true면 처리 완료된 카드까지 포함 (기본 미처리만)",
+			},
+			"limit": map[string]any{
+				"type":        "number",
+				"description": "list 최대 개수 (기본 20)",
+				"default":     20,
+				"minimum":     1,
+			},
+		},
+	}
+}
+
+func transcribeToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"hotwords": map[string]any{
+				"type":        "string",
+				"description": "고유명사 교정 힌트 (쉼표 구분 — 거래처·인명·제품명). 주소록/위키 힌트는 자동 병합",
+			},
+			"path": map[string]any{
+				"type":        "string",
+				"description": "디스크의 오디오 파일 절대 경로 (m4a/mp3/oga/wav/webm/flac, 최대 60분)",
+			},
+		},
+		"required": []string{"path"},
+	}
+}
+
+func ocrToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"path": map[string]any{
+				"type":        "string",
+				"description": "디스크의 이미지/스캔 PDF/오피스 문서 절대 경로",
+			},
+		},
+		"required": []string{"path"},
+	}
+}
+
+func marketToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+	}
+}
+
+func orgToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"query": map[string]any{
+				"type":        "string",
+				"description": "이름 검색어 (사람/팀/회사, 부분 일치). 생략하면 전체 조직도",
+			},
+		},
 	}
 }
 

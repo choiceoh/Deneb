@@ -167,6 +167,8 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 				}
 				return reg.FullModelID(modelrole.RoleCoding)
 			},
+			// Powers sessions action=stats (per-session run/token roll-ups).
+			AgentLog: agentLogWriter,
 		},
 		Chrono: chat.ChronoDeps{
 			Service: s.cronService,
@@ -224,6 +226,33 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 		// reaches the same SparkFleet control plane via s.fleet's accessors, so
 		// "is the fleet ok / restart qwen36" works from chat. "" base = off.
 		Fleet: chat.FleetDeps{BaseURL: s.fleet.BaseURL, Token: s.fleet.Token},
+		// ASR proper-noun bias for the transcribe tool — the same wiki+contacts
+		// hints the miniapp.capture.audio path merges (people/companies/deals).
+		AsrHotwords: func() string {
+			var parts []string
+			if w := chatCfg.Memory.Wiki; w != nil {
+				if h := w.HotwordHints(150); h != "" {
+					parts = append(parts, h)
+				}
+			}
+			if c := s.contactsStore; c != nil {
+				if h := c.HotwordHints(100); h != "" {
+					parts = append(parts, h)
+				}
+			}
+			return strings.Join(parts, ", ")
+		},
+	}
+	// Market tool shares the dashboard's quote cache (set in
+	// registerEarlyMethods, which runs before chat init).
+	if s.marketCache != nil {
+		s.toolDeps.MarketSummary = s.marketCache.Summary
+	}
+	// Workfeed tool mutates through the native-sync-teeing wrapper so agent
+	// reads/acks mirror to the phone. Typed-nil guard: assigning a nil
+	// *nativeWorkFeedStore directly would make the interface non-nil.
+	if nw := s.nativeWorkFeedStore(); nw != nil {
+		s.toolDeps.WorkFeedRW = nw
 	}
 
 	// Ambient calendar awareness: a frozen-per-day upcoming-events glance in the

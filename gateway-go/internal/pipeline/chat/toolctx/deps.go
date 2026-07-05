@@ -9,6 +9,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/filestore"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/market"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/notebook"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
@@ -52,6 +53,22 @@ type CoreToolDeps struct {
 	LogCapture       *observe.LogCapture   // optional; in-memory log ring for the observe tool
 	WorkFeed         *workfeed.Store       // optional; proactive-card engagement for observe action=proactive
 	SpilloverStore   *agent.SpilloverStore // optional; spills large tool results to disk
+
+	// WorkFeedRW is the workfeed tool's read/settle surface. Wired to the
+	// server's native-sync-teeing wrapper (NOT the raw store above) so an
+	// agent-side read/ack mirrors to the phone exactly like a tap in the app.
+	// nil disables the workfeed tool.
+	WorkFeedRW WorkFeedRW
+
+	// MarketSummary is market.Cache.Summary — shared with the miniapp 오늘
+	// dashboard so both surfaces serve one cache/asOf. nil disables the
+	// market tool.
+	MarketSummary func(ctx context.Context) (quotes []market.Quote, asOf int64, stale bool, err error)
+
+	// AsrHotwords supplies the wiki+contacts proper-noun bias for the
+	// transcribe tool (people/companies/deals — same hints the capture RPC
+	// uses). nil just skips the bias; the tool still works.
+	AsrHotwords func() string
 
 	// VllmBaseURLs lazily lists the deduped base URLs of OpenAI-mode vLLM
 	// roles; the observe tool scrapes each endpoint's /metrics for the
@@ -100,6 +117,16 @@ type FleetDeps struct {
 	Token   func() string // sent as X-Fleet-Token when non-empty
 }
 
+// WorkFeedRW is the mutating slice of the work-feed store the workfeed tool
+// needs: list, read-stamp, ack. Satisfied by the server's nativeWorkFeedStore
+// wrapper (which tees each mutation onto the native-sync stream) — an
+// interface here so tools/ never depends on the server package.
+type WorkFeedRW interface {
+	List(limit int, includeAcked bool) ([]workfeed.Item, int, error)
+	MarkRead(id string) (workfeed.Item, error)
+	Ack(id string) (workfeed.Item, error)
+}
+
 // ProcessDeps holds dependencies for exec and process management tools.
 type ProcessDeps struct {
 	Mgr          *process.Manager
@@ -123,6 +150,9 @@ type SessionDeps struct {
 	// supersedes CodingDefaultModel so Settings changes take effect without a
 	// gateway restart.
 	CodingDefaultModelFn func() string
+	// AgentLog powers action=stats (per-session run/token roll-ups). nil
+	// degrades stats to an "not wired" notice; other actions are unaffected.
+	AgentLog *agentlog.Writer
 }
 
 // ChronoDeps holds dependencies for the cron scheduling tool.
