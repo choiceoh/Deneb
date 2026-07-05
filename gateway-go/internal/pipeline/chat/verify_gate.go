@@ -110,10 +110,7 @@ func (g *verifyGateState) recordTool(name string, input json.RawMessage, output 
 		g.mutatedTool = name
 		g.mu.Unlock()
 	case "exec":
-		var p struct {
-			Command string `json:"command"`
-		}
-		if json.Unmarshal(input, &p) != nil || !verifyCmdRe.MatchString(p.Command) {
+		if !verifyCmdRe.MatchString(extractExecCommand(input)) {
 			return
 		}
 		if execFailureRe.MatchString(output) {

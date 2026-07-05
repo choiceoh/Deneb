@@ -219,6 +219,18 @@ func targetMatches(targets []string, effects []ToolFileEffect, query string) boo
 	return false
 }
 
+// statFor returns the ToolStat for name, creating it on first sight. Shared
+// by the turn.tool and run.end folds so name handling cannot drift between
+// the two aggregation sites.
+func statFor(m map[string]*ToolStat, name string) *ToolStat {
+	ts := m[name]
+	if ts == nil {
+		ts = &ToolStat{Name: name}
+		m[name] = ts
+	}
+	return ts
+}
+
 // ToolStat aggregates one tool's usage across every recorded run.
 //
 // The anomaly counters close the measurement loop the tool code asks for:
@@ -300,11 +312,7 @@ func (w *Writer) Aggregate(sinceMs int64) AggregateResult {
 				if json.Unmarshal(e.Data, &d) != nil {
 					continue
 				}
-				ts := toolMap[d.Name]
-				if ts == nil {
-					ts = &ToolStat{Name: d.Name}
-					toolMap[d.Name] = ts
-				}
+				ts := statFor(toolMap, d.Name)
 				ts.Calls++
 				ts.TotalMs += d.DurationMs
 				if d.IsError {
@@ -325,19 +333,15 @@ func (w *Writer) Aggregate(sinceMs int64) AggregateResult {
 				if json.Unmarshal(e.Data, &d) != nil {
 					continue
 				}
-				foldToolCounter := func(counts map[string]int, add func(*ToolStat, int)) {
-					for name, c := range counts {
-						ts := toolMap[name]
-						if ts == nil {
-							ts = &ToolStat{Name: name}
-							toolMap[name] = ts
-						}
-						add(ts, c)
-					}
+				for name, c := range d.RepairedToolCalls {
+					statFor(toolMap, name).Repaired += c
 				}
-				foldToolCounter(d.RepairedToolCalls, func(ts *ToolStat, c int) { ts.Repaired += c })
-				foldToolCounter(d.CacheHitToolCalls, func(ts *ToolStat, c int) { ts.CacheHits += c })
-				foldToolCounter(d.TruncatedToolCalls, func(ts *ToolStat, c int) { ts.Truncated += c })
+				for name, c := range d.CacheHitToolCalls {
+					statFor(toolMap, name).CacheHits += c
+				}
+				for name, c := range d.TruncatedToolCalls {
+					statFor(toolMap, name).Truncated += c
+				}
 				res.Runs++
 				res.TotalInputTokens += int64(d.InputTokens)
 				res.TotalOutputTokens += int64(d.OutputTokens)
