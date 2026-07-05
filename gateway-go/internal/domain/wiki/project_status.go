@@ -39,6 +39,7 @@ type ProjectRef struct {
 	Summary string   // page Meta.Summary — one-line description for pickers
 	Code    string   // page Meta.Code — frozen project identity, "" if unset
 	Sites   []string // page Meta.Sites — canonical 현장 admin paths (matching keys)
+	Kinds   []string // page Meta.Kinds — 특성 enum (시공/모듈/케이블/… 복수)
 }
 
 // KnownProjects lists the real projects by their 대표페이지 (see project_layout.go;
@@ -85,6 +86,7 @@ func (s *Store) knownProjects() []ProjectRef {
 			ref.Summary = strings.TrimSpace(page.Meta.Summary)
 			ref.Code = strings.TrimSpace(page.Meta.Code)
 			ref.Sites = page.Meta.Sites
+			ref.Kinds = page.Meta.Kinds
 		}
 		refs = append(refs, ref)
 	}

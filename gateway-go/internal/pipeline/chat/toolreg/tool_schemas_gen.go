@@ -1039,6 +1039,14 @@ func wikiToolSchema() map[string]any {
 				"minimum":     0,
 				"maximum":     1,
 			},
+			"kinds": map[string]any{
+				"type":        "array",
+				"description": "프로젝트 특성 (프로젝트 대표페이지 write 전용, 복수 허용): 시공(EPC·턴키·발전소 건설), 모듈/인버터/케이블/BESS(기자재 공급), 풍력, 개발(인허가·부지·RPS·가배치), 용역(안전관리대행 등), 협력(NDA·전략제휴·R&D 검토). 이 9개 고정 어휘만 유효(밖의 값은 드롭됨) — 자가소비·루프탑 같은 시장 구분은 tags로",
+				"items": map[string]any{
+					"type": "string",
+					"enum": []string{"시공", "모듈", "인버터", "케이블", "BESS", "풍력", "개발", "용역", "협력"},
+				},
+			},
 			"limit": map[string]any{
 				"type":        "integer",
 				"description": "Max results (search: default 10)",

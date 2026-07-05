@@ -97,7 +97,14 @@ type Frontmatter struct {
 	// titles, so sites are matching keys for the recall project anchor and the
 	// meeting harvest. Multiple entries for multi-site projects (물류센터 3개소).
 	// Project 대표페이지 only; empty elsewhere.
-	Sites      []string
+	Sites []string
+	// Kinds classify what the project IS as business (복수 허용): fixed
+	// vocabulary derived from the 2026-07-05 live-data distribution —
+	// 시공(EPC/턴키), 모듈, 인버터, 케이블, BESS, 풍력, 개발(인허가·부지·RPS),
+	// 용역(안전관리 등), 협력(NDA·전략·R&D). Values outside the vocabulary are
+	// dropped at parse/render (normalizeKinds) so aggregation stays clean;
+	// market segments (자가소비/루프탑) are tags, not kinds. 대표페이지 전용.
+	Kinds      []string
 	Created    string  // YYYY-MM-DD
 	Updated    string  // YYYY-MM-DD
 	Due        string  // YYYY-MM-DD — upcoming deadline (payment due, delivery, milestone); empty if none
@@ -170,6 +177,9 @@ func (p *Page) Render() []byte {
 	}
 	if sites := normalizeSites(p.Meta.Sites); len(sites) > 0 {
 		buf.WriteString("sites: [" + strings.Join(sanitizeFlowItems(sites), ", ") + "]\n")
+	}
+	if kinds := normalizeKinds(p.Meta.Kinds); len(kinds) > 0 {
+		buf.WriteString("kinds: [" + strings.Join(sanitizeFlowItems(kinds), ", ") + "]\n")
 	}
 	if p.Meta.Created != "" {
 		buf.WriteString("created: " + sanitizeScalar(p.Meta.Created) + "\n")
@@ -568,6 +578,8 @@ func parseFrontmatterFields(raw string) Frontmatter {
 			fm.Resource = val
 		case "sites":
 			fm.Sites = normalizeSites(parseFlowArray(val))
+		case "kinds":
+			fm.Kinds = normalizeKinds(parseFlowArray(val))
 		case "created":
 			fm.Created = val
 		case "updated":
@@ -626,6 +638,37 @@ func normalizeSites(sites []string) []string {
 		if n := normalizeSiteName(s); n != "" {
 			out = append(out, n)
 		}
+	}
+	return out
+}
+
+// projectKinds is the fixed 특성 vocabulary (see Frontmatter.Kinds). Keys are
+// the canonical values; the map also folds common synonyms/EN/code-segment
+// spellings onto them so any writer converges on the enum.
+var projectKinds = map[string]string{
+	"시공": "시공", "epc": "시공", "턴키": "시공",
+	"모듈": "모듈", "module": "모듈", "mod": "모듈",
+	"인버터": "인버터", "inverter": "인버터", "inv": "인버터",
+	"케이블": "케이블", "cable": "케이블", "cbl": "케이블",
+	"bess": "BESS", "ess": "BESS", "bes": "BESS",
+	"풍력": "풍력", "wind": "풍력", "wnd": "풍력",
+	"개발": "개발", "dev": "개발", "인허가": "개발",
+	"용역": "용역", "대행": "용역",
+	"협력": "협력", "nda": "협력", "제휴": "협력",
+}
+
+// normalizeKinds folds synonyms onto the canonical vocabulary, drops values
+// outside it (enum discipline keeps aggregation clean), and dedupes.
+func normalizeKinds(kinds []string) []string {
+	var out []string
+	seen := map[string]bool{}
+	for _, k := range kinds {
+		canon, ok := projectKinds[strings.ToLower(strings.TrimSpace(k))]
+		if !ok || seen[canon] {
+			continue
+		}
+		seen[canon] = true
+		out = append(out, canon)
 	}
 	return out
 }

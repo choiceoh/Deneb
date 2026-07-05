@@ -31,6 +31,7 @@ func ToolWiki(d *toolctx.WikiDeps, workspaceDir string) toolctx.ToolFunc {
 			Related    []string `json:"related"`
 			Cues       []string `json:"cues"`
 			Sites      []string `json:"sites"`
+			Kinds      []string `json:"kinds"`
 			Supersedes []string `json:"supersedes"`
 			Importance float64  `json:"importance"`
 			Type       string   `json:"type"`
@@ -59,7 +60,7 @@ func ToolWiki(d *toolctx.WikiDeps, workspaceDir string) toolctx.ToolFunc {
 		case "index":
 			return wikiIndex(d.Store, p.Category)
 		case "write":
-			return wikiWrite(ctx, d.Store, d.Contacts, p.Query, p.Title, p.ID, p.Summary, p.Category, p.Content, p.Tags, p.Related, p.Cues, p.Sites, p.Supersedes, p.Importance, p.Type, p.Confidence, p.Due, p.Force)
+			return wikiWrite(ctx, d.Store, d.Contacts, p.Query, p.Title, p.ID, p.Summary, p.Category, p.Content, p.Tags, p.Related, p.Cues, p.Sites, p.Kinds, p.Supersedes, p.Importance, p.Type, p.Confidence, p.Due, p.Force)
 		case "log":
 			return wikiLog(workspaceDir, d.Store, p.Content)
 		case "daily":
@@ -232,7 +233,7 @@ func wikiIndex(store *wiki.Store, category string) (string, error) {
 	return sb.String(), nil
 }
 
-func wikiWrite(ctx context.Context, store *wiki.Store, contactsStore *contacts.Store, path, title, id, summary, category, content string, tags, related, cues, sites, supersedes []string, importance float64, pageType, confidence, due string, force bool) (string, error) {
+func wikiWrite(ctx context.Context, store *wiki.Store, contactsStore *contacts.Store, path, title, id, summary, category, content string, tags, related, cues, sites, kinds, supersedes []string, importance float64, pageType, confidence, due string, force bool) (string, error) {
 	if title == "" {
 		return "title은 필수입니다.", nil
 	}
@@ -343,6 +344,9 @@ func wikiWrite(ctx context.Context, store *wiki.Store, contactsStore *contacts.S
 			if len(sites) > 0 {
 				page.Meta.Sites = sites
 			}
+			if len(kinds) > 0 {
+				page.Meta.Kinds = kinds
+			}
 			if importance > 0 {
 				page.Meta.Importance = importance
 			}
@@ -372,6 +376,7 @@ func wikiWrite(ctx context.Context, store *wiki.Store, contactsStore *contacts.S
 		page.Meta.Related = related
 		page.Meta.Cues = cues
 		page.Meta.Sites = sites
+		page.Meta.Kinds = kinds
 		if importance > 0 {
 			page.Meta.Importance = importance
 		}

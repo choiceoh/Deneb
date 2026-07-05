@@ -31,6 +31,8 @@ func TestFrontmatterSitesRoundtrip(t *testing.T) {
 		Meta: Frontmatter{
 			Title: "군산 수산리 태양광",
 			Sites: []string{"전라북도 군산시 옥구읍 수산리.", "충남 당진시 송악읍"},
+			// Synonyms fold onto the enum; out-of-vocabulary values drop.
+			Kinds: []string{"EPC", "모듈", "루프탑", "모듈"},
 		},
 		Body: "본문.",
 	}
@@ -41,6 +43,10 @@ func TestFrontmatterSitesRoundtrip(t *testing.T) {
 	want := []string{"전북 군산시 옥구읍 수산리", "충남 당진시 송악읍"}
 	if len(parsed.Meta.Sites) != 2 || parsed.Meta.Sites[0] != want[0] || parsed.Meta.Sites[1] != want[1] {
 		t.Errorf("sites roundtrip = %v, want %v", parsed.Meta.Sites, want)
+	}
+	wantKinds := []string{"시공", "모듈"}
+	if len(parsed.Meta.Kinds) != 2 || parsed.Meta.Kinds[0] != wantKinds[0] || parsed.Meta.Kinds[1] != wantKinds[1] {
+		t.Errorf("kinds roundtrip = %v, want %v (synonym folded, 루프탑 dropped, deduped)", parsed.Meta.Kinds, wantKinds)
 	}
 }
 
