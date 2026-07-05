@@ -70,10 +70,10 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 
 /**
- * In-app browser for external links, with one-tap in-place translation (en/ru →
- * ko). Android renders a real WebView; other platforms show an Android-only stub
- * (the chrome and navigation still render, so the desktop harness / renderPreviews
- * can exercise them).
+ * In-app browser for external links, with one-tap in-place DeepL translation to
+ * Korean. Android renders a real WebView; other platforms show an Android-only
+ * stub (the chrome and navigation still render, so the desktop harness /
+ * renderPreviews can exercise them).
  */
 @Composable
 fun DenebBrowserScreen(
@@ -83,28 +83,28 @@ fun DenebBrowserScreen(
     modifier: Modifier = Modifier,
 ) {
     val state = remember(url) { DenebWebViewState(url) }
-    var showModelPicker by remember { mutableStateOf(false) }
-    // Resolve the model actually used for translation so the chrome shows it at a glance.
-    // A bound `translation` role wins; unbound falls back to `lightweight` (tagged 기본).
+    var showFallbackModelPicker by remember { mutableStateOf(false) }
+    // Browser translation is DeepL-first. The translation role is now only the
+    // LLM fallback when DeepL is unavailable or returns an unusable response.
     val roleModels by client.denebRoleModels.collectAsState()
     val models by client.denebModels.collectAsState()
     LaunchedEffect(Unit) { if (models.isEmpty()) client.refreshModels() }
-    val translateModelLabel = run {
+    val fallbackModelLabel = run {
         val bound = roleModels["translation"]
         val effId = bound ?: roleModels["lightweight"]
         val disp = models.firstOrNull { it.id == effId }?.display ?: effId
         when {
             disp == null -> null
             bound != null -> disp
-            else -> "$disp (기본)"
+            else -> "$disp (기본 fallback)"
         }
     }
     DenebBrowserChrome(
         state = state,
         onBack = onBack,
         modifier = modifier,
-        onTranslateModel = { showModelPicker = true },
-        currentTranslateModel = translateModelLabel,
+        onFallbackModel = { showFallbackModelPicker = true },
+        currentFallbackModel = fallbackModelLabel,
     ) {
         DenebWebView(
             state = state,
@@ -112,8 +112,8 @@ fun DenebBrowserScreen(
             modifier = Modifier.fillMaxWidth().weight(1f),
         )
     }
-    if (showModelPicker) {
-        TranslateModelSheet(client = client, onDismiss = { showModelPicker = false })
+    if (showFallbackModelPicker) {
+        TranslateFallbackModelSheet(client = client, onDismiss = { showFallbackModelPicker = false })
     }
 }
 
@@ -127,21 +127,22 @@ fun DenebBrowserScreen(
  * system browser.
  *
  * Design system: Material IconButtons with functional icons, skinned with Deneb colors
- * — the translate toggle lights the warm insight accent when ON (translation is an AI
- * surface), inactive actions use the muted hint color. [content] is the page area (the
- * real WebView, or a stub) and takes the weight, so it fills above the bottom bar.
+ * — the translate toggle lights the warm insight accent when ON (DeepL-backed
+ * translation), inactive actions use the muted hint color. [content] is the page
+ * area (the real WebView, or a stub) and takes the weight, so it fills above the
+ * bottom bar.
  */
 @Composable
 fun DenebBrowserChrome(
     state: DenebWebViewState,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
-    // Opens the 번역 모델 picker (wired by the stateful screen, which has the client).
+    // Opens the LLM fallback picker (wired by the stateful screen, which has the client).
     // Null in previews → the ⋮ entry is hidden.
-    onTranslateModel: (() -> Unit)? = null,
-    // Display name of the model currently used for translation, shown under the ⋮ entry
-    // so the active model is visible at a glance. Null → no subtitle (previews / unknown).
-    currentTranslateModel: String? = null,
+    onFallbackModel: (() -> Unit)? = null,
+    // Display name of the model used only when DeepL falls back to LLM translation.
+    // Null → no subtitle (previews / unknown).
+    currentFallbackModel: String? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val haptics = rememberHaptics()
@@ -165,7 +166,7 @@ fun DenebBrowserChrome(
             HorizontalDivider(color = denebHairline())
             // Bottom chrome (Safari-style): close · forward · editable address bar
             // (omnibox) · reload-or-stop · translate · overflow (⋮), above the
-            // system gesture bar. Secondary actions (copy, open-external, model)
+            // system gesture bar. Secondary actions (copy, open-external, fallback)
             // live in the ⋮ menu so the row scales as features grow.
             Row(
                 modifier = Modifier
@@ -267,7 +268,7 @@ fun DenebBrowserChrome(
                 ) {
                     Icon(
                         Icons.Outlined.Translate,
-                        contentDescription = if (state.translateEnabled) "원문 보기" else "한국어로 번역",
+                        contentDescription = if (state.translateEnabled) "원문 보기" else "DeepL로 한국어 번역",
                         tint = if (state.translateEnabled) denebInsight() else denebHint(),
                     )
                 }
@@ -282,21 +283,34 @@ fun DenebBrowserChrome(
                         Icon(Icons.Outlined.MoreVert, contentDescription = "더보기", tint = denebHint())
                     }
                     DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                        if (onTranslateModel != null) {
+                        DropdownMenuItem(
+                            enabled = false,
+                            text = {
+                                Column {
+                                    Text("DeepL 번역")
+                                    Text("기본 엔진", style = DenebType.meta, color = denebHint())
+                                }
+                            },
+                            leadingIcon = { Icon(Icons.Outlined.Translate, contentDescription = null, tint = denebInsight()) },
+                            onClick = {},
+                        )
+                        if (onFallbackModel != null) {
                             DropdownMenuItem(
                                 text = {
                                     Column {
-                                        Text("번역 모델")
-                                        if (currentTranslateModel != null) {
-                                            Text(currentTranslateModel, style = DenebType.meta, color = denebHint())
+                                        Text("LLM fallback 모델")
+                                        if (currentFallbackModel != null) {
+                                            Text(currentFallbackModel, style = DenebType.meta, color = denebHint())
+                                        } else {
+                                            Text("DeepL 실패 시에만 사용", style = DenebType.meta, color = denebHint())
                                         }
                                     }
                                 },
-                                leadingIcon = { Icon(Icons.Outlined.Translate, contentDescription = null, tint = denebInsight()) },
+                                leadingIcon = { Icon(Icons.Outlined.Check, contentDescription = null, tint = denebHint()) },
                                 onClick = {
                                     haptics.tap()
                                     menuOpen = false
-                                    onTranslateModel()
+                                    onFallbackModel()
                                 },
                             )
                         }
@@ -326,20 +340,21 @@ fun DenebBrowserChrome(
 }
 
 /**
- * Bottom-sheet picker to swap the web-translation model on the fly. Lists the served
- * models (client.denebModels via miniapp.models) and binds the chosen one to the
- * `translation` role (setRoleModel → miniapp.models.set), so subsequent in-page
- * translations use it without a trip to settings. The current binding is checked.
+ * Bottom-sheet picker for the LLM fallback used only when DeepL cannot serve the
+ * browser translation. Lists the served models (client.denebModels via
+ * miniapp.models) and binds the chosen one to the `translation` role
+ * (setRoleModel → miniapp.models.set). The current binding is checked.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun TranslateModelSheet(client: DenebGatewayClient, onDismiss: () -> Unit) {
+private fun TranslateFallbackModelSheet(client: DenebGatewayClient, onDismiss: () -> Unit) {
     val haptics = rememberHaptics()
     val scope = rememberCoroutineScope()
     val models by client.denebModels.collectAsState()
     val roleModels by client.denebRoleModels.collectAsState()
     val current = roleModels["translation"]
-    // Effective model shown in the header: the bound translation role, else the lightweight fallback.
+    // Effective fallback model shown in the header: the bound translation role,
+    // else the lightweight fallback.
     val effId = current ?: roleModels["lightweight"]
     val effDisp = models.firstOrNull { it.id == effId }?.display ?: effId
     var refreshing by remember { mutableStateOf(models.isEmpty()) }
@@ -354,13 +369,13 @@ private fun TranslateModelSheet(client: DenebGatewayClient, onDismiss: () -> Uni
                 .padding(horizontal = 20.dp)
                 .padding(bottom = 24.dp),
         ) {
-            Text("번역 모델", style = DenebType.subject, color = MaterialTheme.colorScheme.onSurface)
+            Text("LLM fallback 모델", style = DenebType.subject, color = MaterialTheme.colorScheme.onSurface)
             Spacer(Modifier.height(2.dp))
-            Text("웹페이지 번역(영어·러시아어 → 한국어)에 쓸 모델", style = DenebType.meta, color = denebHint())
+            Text("DeepL을 쓸 수 없을 때만 웹페이지 번역에 쓰는 모델", style = DenebType.meta, color = denebHint())
             if (effDisp != null) {
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    "현재 적용: $effDisp" + if (current == null) " (기본값)" else "",
+                    "현재 fallback: $effDisp" + if (current == null) " (경량 기본)" else "",
                     style = DenebType.rowTitle,
                     color = denebInsight(),
                 )

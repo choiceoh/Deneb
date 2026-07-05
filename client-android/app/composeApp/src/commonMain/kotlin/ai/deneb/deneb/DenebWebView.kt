@@ -75,8 +75,9 @@ class DenebWebViewState(initialUrl: String) {
 
 /**
  * Translate callback: given the page's text segments, return a SAME-length,
- * SAME-order list of translations (en/ru → ko), or null to keep the originals.
- * Wired to the gateway's miniapp.web.translate RPC (DenebGatewayClient.translateSegments).
+ * SAME-order list of translations to Korean, or null to keep the originals.
+ * Wired to the gateway's DeepL-first miniapp.web.translate RPC
+ * (DenebGatewayClient.translateSegments).
  */
 typealias TranslateFn = suspend (segments: List<String>, targetLang: String) -> List<String>?
 
