@@ -20,12 +20,12 @@ func TestBuildDateAnchor_ThursdayNextWeekTable(t *testing.T) {
 
 	for _, want := range []string{
 		"발송일: 2026-07-02(목)",
-		"분석 시점(오늘): 2026-07-05(일)",
+		"분석 실행 시각(참고용 — 본문 상대 표현의 기준 아님): 2026-07-05(일)",
 		"이번 주 (발송 주)",
-		"06-29(월)",         // 발송 주 월요일
-		"다음 주: 07-06(월)",   // 다음 주 시작
-		"07-10(금)",         // ★ 다음 주 금요일 — the trap answer, by lookup
-		"그 다음 주: 07-13(월)", // "그 다음 주 월요일" (m5의 내부 보고일 표현)
+		"06-29(월)",              // 발송 주 월요일
+		"다음 주: 2026-07-06(월)",   // 다음 주 시작
+		"07-10(금)",              // ★ 다음 주 금요일 — the trap answer, by lookup
+		"그 다음 주: 2026-07-13(월)", // "그 다음 주 월요일" (m5의 내부 보고일 표현)
 		"직접 계산하지 말 것",
 	} {
 		if !strings.Contains(got, want) {
@@ -38,7 +38,7 @@ func TestBuildDateAnchor_ThursdayNextWeekTable(t *testing.T) {
 func TestBuildDateAnchor_SundayWeekStart(t *testing.T) {
 	msg := &gmail.MessageDetail{Date: "Sun, 5 Jul 2026 09:00:00 +0900"}
 	got := buildDateAnchor(msg, time.Date(2026, 7, 5, 12, 0, 0, 0, anchorTimezone))
-	if !strings.Contains(got, "이번 주 (발송 주): 06-29(월)") {
+	if !strings.Contains(got, "이번 주 (발송 주): 2026-06-29(월)") {
 		t.Errorf("Sunday mail must anchor to the preceding Monday:\n%s", got)
 	}
 }
@@ -61,5 +61,48 @@ func TestBuildDateAnchor_UnparsableDateFailsOpen(t *testing.T) {
 	}
 	if got := buildDateAnchor(nil, time.Now()); got != "" {
 		t.Errorf("nil message must skip the anchor")
+	}
+}
+
+// Year-boundary week: a late-December send must expose full YYYY-MM-DD cells
+// so "다음 주 금요일" is copyable across the year change, not inferred.
+func TestBuildDateAnchor_YearBoundaryRows(t *testing.T) {
+	msg := &gmail.MessageDetail{Date: "Thu, 31 Dec 2026 09:00:00 +0900"}
+	got := buildDateAnchor(msg, time.Date(2026, 12, 31, 12, 0, 0, 0, anchorTimezone))
+	for _, want := range []string{
+		"다음 주: 2027-01-04(월)",
+		"2027-01-08(금)", // 다음 주 금요일 — 연도까지 복사 가능해야 함
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("year-boundary anchor missing %q:\n%s", want, got)
+		}
+	}
+}
+
+// 내일/모레/월말 must be lookup rows too — the reading rule forbids arithmetic,
+// so every cue it names needs an explicit anchor.
+func TestBuildDateAnchor_DirectiveRow(t *testing.T) {
+	msg := &gmail.MessageDetail{Date: "Thu, 2 Jul 2026 10:05:00 +0900"}
+	got := buildDateAnchor(msg, time.Date(2026, 7, 5, 10, 0, 0, 0, anchorTimezone))
+	for _, want := range []string{
+		"오늘=2026-07-02(목)",
+		"내일=2026-07-03(금)",
+		"모레=2026-07-04(토)",
+		"이번 달 말일=2026-07-31(금)",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("directive row missing %q:\n%s", want, got)
+		}
+	}
+}
+
+// Bare "KST" zone tokens (Korean groupware) parse as UTC+0 in net/mail; the
+// normalizer must keep a 23:30 KST send on its own calendar day instead of
+// shifting it to the next.
+func TestParseMailDate_BareKSTKeepsCalendarDay(t *testing.T) {
+	msg := &gmail.MessageDetail{Date: "Thu, 2 Jul 2026 23:30:00 KST"}
+	got := buildDateAnchor(msg, time.Date(2026, 7, 5, 10, 0, 0, 0, anchorTimezone))
+	if !strings.Contains(got, "발송일: 2026-07-02(목)") {
+		t.Errorf("bare KST send must stay on 07-02, got:\n%s", got)
 	}
 }

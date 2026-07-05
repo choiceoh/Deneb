@@ -77,18 +77,39 @@ func parseAnchorParties(header string) []anchorParty {
 			continue
 		}
 		addr := strings.ToLower(extractAddrForAnchor(frag))
+		if addr == "" {
+			// A fragment without an address is almost always a comma-split
+			// artifact of a display name ("홍길동, 탑솔라 <hong@...>" decoded by
+			// the LMTP path) — keeping it would inject a bogus 외부(주소 불명)
+			// party line, the exact inversion this anchor exists to prevent.
+			continue
+		}
 		name := frag
 		if i := strings.IndexByte(frag, '<'); i >= 0 {
 			name = strings.TrimSpace(frag[:i])
-		} else if addr != "" {
+		} else {
 			name = ""
-		}
-		if addr == "" && name == "" {
-			continue
 		}
 		out = append(out, anchorParty{name: strings.Trim(name, `"`), addr: addr})
 	}
 	return out
+}
+
+// anchorOneLine folds newlines/tabs in header-derived text to single spaces —
+// anchor lines are a trusted prompt surface, so header bytes must not be able
+// to fabricate additional lines or markdown structure.
+func anchorOneLine(s string) string {
+	if !strings.ContainsAny(s, "\r\n\t") {
+		return strings.TrimSpace(s)
+	}
+	f := strings.FieldsFunc(s, func(r rune) bool { return r == '\r' || r == '\n' || r == '\t' })
+	out := make([]string, 0, len(f))
+	for _, part := range f {
+		if part = strings.TrimSpace(part); part != "" {
+			out = append(out, part)
+		}
+	}
+	return strings.Join(out, " ")
 }
 
 // extractAddrForAnchor pulls a bare email address out of a header fragment.
@@ -141,15 +162,19 @@ func buildPartyAnchor(msg *gmail.MessageDetail, ourDomains map[string]bool, coun
 	wrote := false
 	writeParties := func(label, header string) {
 		for _, p := range parseAnchorParties(header) {
-			disp := p.name
+			// Header-derived text goes verbatim into the LLM prompt: fold any
+			// CR/LF/TAB (folded or malicious headers) to spaces so one party
+			// cannot fabricate extra anchor lines or sections.
+			disp := anchorOneLine(p.name)
+			addr := anchorOneLine(p.addr)
 			if disp == "" {
-				disp = p.addr
+				disp = addr
 			}
 			sb.WriteString("- " + label + ": " + disp)
-			if p.addr != "" {
-				sb.WriteString(" <" + p.addr + ">")
+			if addr != "" {
+				sb.WriteString(" <" + addr + ">")
 			}
-			sb.WriteString(" — " + anchorSideLabel(p.addr, ourDomains, counterpartyFn) + "\n")
+			sb.WriteString(" — " + anchorSideLabel(addr, ourDomains, counterpartyFn) + "\n")
 			wrote = true
 		}
 	}

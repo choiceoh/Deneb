@@ -104,10 +104,12 @@ func FormatEmailForAnalysis(msg *gmail.MessageDetail) string {
 // "thinking"); "" for models without one. Without it, "disabled" degrades to a
 // no-op reasoning_effort on dual-mode vLLM models, which then exhaust the budget
 // on reasoning and return empty.
-func AnalyzeEmail(ctx context.Context, client *llm.Client, model, prompt, thinkingKwarg string, msg *gmail.MessageDetail) (string, error) {
+func AnalyzeEmail(ctx context.Context, client *llm.Client, model, prompt, thinkingKwarg string, counterpartyFn func(domain string) []string, msg *gmail.MessageDetail) (string, error) {
 	userContent := prompt + "\n\n" + FormatEmailForAnalysis(msg)
-	// Same deterministic party anchor as the pipeline path (party_anchor.go).
-	if anchor := buildPartyAnchor(msg, ourAnchorDomains(), nil); anchor != "" {
+	// Same deterministic party anchor as the pipeline path (party_anchor.go);
+	// counterpartyFn (nil-safe) keeps active-counterparty labels on the
+	// single-call fallback too, not just the full 2-stage pipeline.
+	if anchor := buildPartyAnchor(msg, ourAnchorDomains(), counterpartyFn); anchor != "" {
 		userContent += "\n\n" + anchor
 	}
 	// Same deterministic date anchor as the pipeline path (date_anchor.go).

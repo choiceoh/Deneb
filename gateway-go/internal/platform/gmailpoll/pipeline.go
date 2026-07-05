@@ -292,7 +292,7 @@ func AnalyzeEmailPipeline(ctx context.Context, deps PipelineDeps, msg *gmail.Mes
 		// prompt, so the manual Mini App path — which never wires LocalClient
 		// — still cites related projects.
 		prompt := analysisPrompt(deps) + projectSelectionSuffix(candidates) + importanceSuffix
-		text, err := AnalyzeEmail(ctx, deps.LLMClient, deps.MainModel, prompt, deps.ThinkingKwarg, msg)
+		text, err := AnalyzeEmail(ctx, deps.LLMClient, deps.MainModel, prompt, deps.ThinkingKwarg, deps.CounterpartyProjectsFn, msg)
 		if err != nil {
 			return AnalysisResult{}, err
 		}
