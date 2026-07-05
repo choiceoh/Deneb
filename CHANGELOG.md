@@ -1,5 +1,18 @@
 # Changelog
 
+## [4.68.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.67.0...deneb-v4.68.0) (2026-07-05)
+
+
+### ✨ Features
+
+* **native:** 스킬·Propus·자가개선 화면 개편 — 활동 중심, 비기술 운영자 기준 ([#3188](https://github.com/choiceoh/Deneb/issues/3188)) ([3898bd2](https://github.com/choiceoh/Deneb/commit/3898bd22d606db5db5e9a422d3d2b6bccf97b92f))
+* **wiki:** 프로젝트 현장(sites) 정본 필드 — 작성 규칙 확정·광역 정규화·회상 앵커 매칭 ([#3179](https://github.com/choiceoh/Deneb/issues/3179)) ([e809340](https://github.com/choiceoh/Deneb/commit/e809340718d7ac3138f8ca4456df808fd5cbcae2))
+
+
+### 🐛 Bug Fixes
+
+* **native:** WorkManager Room DB R8 keep — 빌드 571 기동 크래시 수리 ([#3191](https://github.com/choiceoh/Deneb/issues/3191)) ([8fd3892](https://github.com/choiceoh/Deneb/commit/8fd3892ccc47a85e45cabe38a5d362aff4d5cc87))
+
 ## [4.67.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.66.0...deneb-v4.67.0) (2026-07-05)
 
 
