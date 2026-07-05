@@ -807,6 +807,7 @@ private fun AppContent(
                                     DenebBrowserScreen(
                                         url = entry.toRoute<DenebBrowser>().url,
                                         client = client,
+                                        appSettings = appSettings,
                                         onBack = { navController.navigateUp() },
                                     )
                                 }

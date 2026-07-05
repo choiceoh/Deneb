@@ -1,6 +1,7 @@
 package ai.deneb.deneb
 
 import ai.deneb.PlatformBackHandler
+import ai.deneb.data.AppSettings
 import ai.deneb.openUrl
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.rememberHaptics
@@ -32,9 +33,12 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowForward
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
+import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Translate
@@ -66,6 +70,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 
@@ -79,11 +84,22 @@ import kotlinx.coroutines.launch
 fun DenebBrowserScreen(
     url: String,
     client: DenebGatewayClient,
+    appSettings: AppSettings,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val state = remember(url) { DenebWebViewState(url) }
     var showFallbackModelPicker by remember { mutableStateOf(false) }
+    var showBookmarks by remember { mutableStateOf(false) }
+    var bookmarks by remember { mutableStateOf(decodeBrowserBookmarks(appSettings.getBrowserBookmarksJson())) }
+    fun persistBookmarks(next: List<BrowserBookmark>) {
+        val json = encodeBrowserBookmarks(next)
+        appSettings.setBrowserBookmarksJson(json)
+        bookmarks = decodeBrowserBookmarks(json)
+    }
+    val bookmarkUrl = state.currentUrl.ifBlank { state.url }
+    val bookmarkable = canBookmarkUrl(bookmarkUrl)
+    val bookmarked = isBrowserBookmarked(bookmarks, bookmarkUrl)
     // Browser translation is DeepL-first. The translation role is now only the
     // LLM fallback when DeepL is unavailable or returns an unusable response.
     val roleModels by client.denebRoleModels.collectAsState()
@@ -105,6 +121,13 @@ fun DenebBrowserScreen(
         modifier = modifier,
         onFallbackModel = { showFallbackModelPicker = true },
         currentFallbackModel = fallbackModelLabel,
+        bookmarksCount = bookmarks.size,
+        isBookmarked = bookmarked,
+        canBookmark = bookmarkable,
+        onToggleBookmark = {
+            persistBookmarks(toggleBrowserBookmark(bookmarks, bookmarkUrl, state.pageTitle))
+        },
+        onShowBookmarks = { showBookmarks = true },
     ) {
         DenebWebView(
             state = state,
@@ -114,6 +137,17 @@ fun DenebBrowserScreen(
     }
     if (showFallbackModelPicker) {
         TranslateFallbackModelSheet(client = client, onDismiss = { showFallbackModelPicker = false })
+    }
+    if (showBookmarks) {
+        BrowserBookmarksSheet(
+            bookmarks = bookmarks,
+            onOpen = { bookmark ->
+                state.load(bookmark.url)
+                showBookmarks = false
+            },
+            onDelete = { bookmark -> persistBookmarks(removeBrowserBookmark(bookmarks, bookmark.url)) },
+            onDismiss = { showBookmarks = false },
+        )
     }
 }
 
@@ -143,6 +177,11 @@ fun DenebBrowserChrome(
     // Display name of the model used only when DeepL falls back to LLM translation.
     // Null → no subtitle (previews / unknown).
     currentFallbackModel: String? = null,
+    bookmarksCount: Int = 0,
+    isBookmarked: Boolean = false,
+    canBookmark: Boolean = false,
+    onToggleBookmark: (() -> Unit)? = null,
+    onShowBookmarks: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val haptics = rememberHaptics()
@@ -272,6 +311,25 @@ fun DenebBrowserChrome(
                         tint = if (state.translateEnabled) denebInsight() else denebHint(),
                     )
                 }
+                val bookmarkEnabled = canBookmark && onToggleBookmark != null
+                IconButton(
+                    onClick = {
+                        haptics.tap()
+                        onToggleBookmark?.invoke()
+                    },
+                    enabled = bookmarkEnabled,
+                    modifier = Modifier.size(40.dp),
+                ) {
+                    Icon(
+                        if (isBookmarked) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
+                        contentDescription = if (isBookmarked) "북마크 삭제" else "북마크 추가",
+                        tint = when {
+                            isBookmarked -> denebInsight()
+                            bookmarkEnabled -> denebHint()
+                            else -> denebHint().copy(alpha = 0.3f)
+                        },
+                    )
+                }
                 Box {
                     IconButton(
                         onClick = {
@@ -294,6 +352,26 @@ fun DenebBrowserChrome(
                             leadingIcon = { Icon(Icons.Outlined.Translate, contentDescription = null, tint = denebInsight()) },
                             onClick = {},
                         )
+                        if (onShowBookmarks != null) {
+                            DropdownMenuItem(
+                                text = {
+                                    Column {
+                                        Text("북마크")
+                                        Text(
+                                            if (bookmarksCount > 0) "${bookmarksCount}개 저장됨" else "저장된 북마크 없음",
+                                            style = DenebType.meta,
+                                            color = denebHint(),
+                                        )
+                                    }
+                                },
+                                leadingIcon = { Icon(Icons.Filled.Bookmark, contentDescription = null, tint = denebHint()) },
+                                onClick = {
+                                    haptics.tap()
+                                    menuOpen = false
+                                    onShowBookmarks()
+                                },
+                            )
+                        }
                         if (onFallbackModel != null) {
                             DropdownMenuItem(
                                 text = {
@@ -332,6 +410,88 @@ fun DenebBrowserChrome(
                                 menuOpen = false
                             },
                         )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun BrowserBookmarksSheet(
+    bookmarks: List<BrowserBookmark>,
+    onOpen: (BrowserBookmark) -> Unit,
+    onDelete: (BrowserBookmark) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val haptics = rememberHaptics()
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 24.dp),
+        ) {
+            Text("북마크", style = DenebType.subject, color = MaterialTheme.colorScheme.onSurface)
+            Spacer(Modifier.height(2.dp))
+            Text(
+                if (bookmarks.isEmpty()) "저장한 페이지가 없습니다" else "저장한 페이지 ${bookmarks.size}개",
+                style = DenebType.meta,
+                color = denebHint(),
+            )
+            Spacer(Modifier.height(12.dp))
+            if (bookmarks.isEmpty()) {
+                Text(
+                    "아직 비어 있습니다.",
+                    style = DenebType.body,
+                    color = denebHint(),
+                )
+            } else {
+                LazyColumn(Modifier.fillMaxWidth()) {
+                    items(bookmarks, key = { it.url }) { bookmark ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    haptics.tap()
+                                    onOpen(bookmark)
+                                }
+                                .padding(vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(
+                                Icons.Filled.Bookmark,
+                                contentDescription = null,
+                                tint = denebInsight(),
+                                modifier = Modifier.size(22.dp),
+                            )
+                            Column(Modifier.weight(1f).padding(start = 12.dp)) {
+                                Text(
+                                    browserBookmarkDisplayTitle(bookmark),
+                                    style = DenebType.rowTitle,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                Text(
+                                    bookmark.url,
+                                    style = DenebType.meta,
+                                    color = denebHint(),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                            IconButton(
+                                onClick = {
+                                    haptics.tap()
+                                    onDelete(bookmark)
+                                },
+                                modifier = Modifier.size(40.dp),
+                            ) {
+                                Icon(Icons.Outlined.Delete, contentDescription = "북마크 삭제", tint = denebHint())
+                            }
+                        }
                     }
                 }
             }
