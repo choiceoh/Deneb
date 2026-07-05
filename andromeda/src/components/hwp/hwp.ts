@@ -140,7 +140,7 @@ function paraTextToString(payload: Uint8Array): string {
   const dv = new DataView(payload.buffer, payload.byteOffset, payload.byteLength);
   const n = Math.floor(payload.byteLength / 2);
   let out = "";
-  for (let i = 0; i < n; ) {
+  for (let i = 0; i < n;) {
     const c = dv.getUint16(i * 2, true);
     if (c >= 0xe000 && c <= 0xf8ff) {
       i += 1; // Private Use Area: font-specific decorative glyphs — drop

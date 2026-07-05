@@ -63,7 +63,7 @@ export function buildWikiTree(pages: WikiPage[]): WikiTreeFolder {
     const folder = folderFor(cut < 0 ? "" : path.slice(0, cut));
     folder.files.push({ path, name: cut < 0 ? path : path.slice(cut + 1), title: page.title });
     // Every ancestor's badge counts this page.
-    for (let node: WikiTreeFolder | undefined = folder; node; ) {
+    for (let node: WikiTreeFolder | undefined = folder; node;) {
       node.count += 1;
       const at = node.path.lastIndexOf("/");
       node = node.path === "" ? undefined : folderIndex.get(at < 0 ? "" : node.path.slice(0, at));
