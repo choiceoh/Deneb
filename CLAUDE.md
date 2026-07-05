@@ -1,8 +1,11 @@
 # Deneb
 
-**Chief-of-Staff–style single AI agent for NVIDIA DGX Spark (비서실장형 단일 에이전트).** One persona that performs **업무분석** (deep context — mail, projects, people, deals) and **업무비서** (proactive ops — calendar, meeting prep, capture) in lockstep — same head, two hands. Native client → Go gateway server. Single-user, single-machine deployment. Korean-first. General assistant capabilities are preserved.
+**Chief-of-Staff–style single AI agent for NVIDIA DGX Spark (비서실장형 단일 에이전트).** One persona that performs **업무분석** (deep context — mail, projects, people, deals) and **업무비서** (proactive ops — calendar, meeting prep, capture) in lockstep — same head, two hands. Clients → Go gateway server. Single-user, single-machine deployment. Korean-first. General assistant capabilities are preserved.
 
-- **Go gateway** (`gateway-go/`): HTTP + SSE server, RPC dispatch, session management, chat/LLM pipeline, 150+ tool integrations, native-client `miniapp.*` RPC surface.
+- **Go gateway** (`gateway-go/`): HTTP + SSE server, RPC dispatch, session management, chat/LLM pipeline, 150+ tool integrations, `miniapp.*` RPC surface consumed by all clients. The primary runtime.
+- **Native client** (`client-android/`): Kotlin Multiplatform (Compose) **mobile** client — Android (daily driver) + iOS from one codebase. The Compose Desktop target survives only as a headless verification harness.
+- **Andromeda** (`andromeda/`): **desktop** workstation client (work-command cockpit) — Tauri 2 + React 18 + Refine + Vite (TypeScript). Owns the desktop surface since the native client's desktop product UI was retired.
+- **Skills** (`skills/`): filesystem-discovered skill plugins by category.
 
 ---
 
@@ -28,13 +31,13 @@
 
 | File | Scope | Globs |
 |---|---|---|
-| `architecture.md` | 프로젝트 구조/모듈맵 | `gateway-go/cmd/**`, `gateway-go/internal/**`, `gateway-go/pkg/**` |
+| `architecture.md` | 프로젝트 구조/모듈맵 | `gateway-go/cmd/**`, `gateway-go/internal/**`, `gateway-go/pkg/**`, `client-android/**`, `andromeda/**` |
 | `go-gateway.md` | Go 게이트웨이 구조 | `gateway-go/**` |
 | `docs.md` | 문서 작성 표준 | `docs/**` |
 | `generated-code.md` | 생성 코드 수정 금지 | 생성 파일 직접 지정 |
 | `testing.md` | 테스트 가이드라인 | `**/*_test.go` |
-| `release-and-deploy.md` | 릴리스/배포 워크플로우 | `scripts/release*`, `.github/workflows/release*` |
-| `git-pr.md` | Git/PR 상세 가이드 | `.github/**` |
+| `release-and-deploy.md` | 릴리스/배포 워크플로우 | `scripts/deploy*`, `scripts/dev/publish-apk.sh`, `.github/workflows/release*`, `.github/workflows/publish-apk.yml` |
+| `git-pr.md` | Git/PR 상세 가이드 | `.github/**`, `scripts/committer` |
 | `build-status.md` | CI 빌드 상태 확인 | `.github/workflows/**`, `scripts/build-status` |
 | `collaboration.md` | 협업/보안/멀티에이전트 | `**` |
 | `hub-wiring.md` | GatewayHub 배선 규칙 | `gateway-go/internal/runtime/server/method_registry.go`, `gateway-go/internal/runtime/rpc/rpcutil/gateway_hub.go` |
@@ -43,7 +46,7 @@
 | `concurrency.md` | 뮤텍스/채널/goroutine 규칙 (데드락 방지) | `gateway-go/**/*.go` |
 | `logging.md` | slog 레벨 가이드 (사용자 무응답 Error 원칙) | `gateway-go/**/*.go` |
 | `prompt-cache.md` | 프롬프트 캐시 불가침 원칙, 3계층 구조, cache-aware 슬래시 | `gateway-go/internal/pipeline/chat/prompt/**`, `gateway-go/internal/pipeline/chat/slash_commands.go` |
-| `sidecar-models.md` | GPU 부가 모델 운영 현황 (PaddleOCR-VL OCR·추출·임베딩) | `gateway-go/internal/pipeline/chat/tools/paddleocr.go`, `gateway-go/internal/ai/modelrole/**`, `gateway-go/internal/pipeline/pilot/**` |
+| `sidecar-models.md` | GPU 사이드카 모델·모델 라우터 운영 현황 (PaddleOCR-VL·VibeVoice-ASR·wormhole) | `gateway-go/internal/pipeline/chat/tools/paddleocr.go`, `gateway-go/internal/pipeline/chat/tools/asr.go`, `gateway-go/internal/ai/modelrole/**`, `gateway-go/internal/pipeline/pilot/**`, `gateway-go/cmd/wormhole/**` |
 | `model-roles.md` | 역할(main/tiny/lightweight/analysis/…)별 임무 배치 단일 진실원 (analysis=클라우드 드리프트 주의) | `gateway-go/internal/ai/modelrole/**`, `gateway-go/internal/pipeline/pilot/**`, `gateway-go/internal/runtime/server/server_chat_config.go` |
 | `native-design-system.md` | 네이티브 클라 디자인 경계 (컨트롤=Material, 외형=Deneb 타이포) | `client-android/app/composeApp/src/**/*.kt` |
 | `native-live-app.md` | 서버에서 실제 네이티브 앱 라이브 검증 (Xvfb+matchbox+Compose Desktop, 프로덕션) | `client-android/**`, `scripts/dev/native-app.sh` |
@@ -61,7 +64,7 @@
 4. **Fast iteration:** `make go-dev` (auto-restart)
 5. **Live test:** `scripts/dev/live-test.sh restart && scripts/dev/live-test.sh smoke` (코드 변경 후 실제 동작 검증 필수)
 
-**Module guides:** Each module (`gateway-go/`, `skills/`) has its own `CLAUDE.md` with targeted build/test/contribution guidance.
+**Module guides:** Each module has its own `CLAUDE.md` with targeted build/test/contribution guidance: `gateway-go/CLAUDE.md`, `client-android/app/CLAUDE.md`, `andromeda/CLAUDE.md`, `skills/CLAUDE.md`.
 
 ---
 
@@ -83,14 +86,14 @@
 
 - **Single operator, single user.** No multi-tenant, multi-user, or team deployment. Ignore user isolation, permission separation, multi-user auth.
 - **Hardware:** NVIDIA DGX Spark (local server). All services run on this single machine.
-- **Primary I/O surface:** the native client (`client-android/`, a Kotlin Multiplatform app) — the sole user surface since the Telegram bot was retired (PR #1922). It runs on Android (Samsung Galaxy S26, the daily driver), iOS, and desktop (Mac/Windows) from one codebase, and talks to the gateway over the `miniapp.*` RPC surface with an `X-Deneb-Client-Token`. Optimize this path first.
+- **Primary I/O surface:** the native client (`client-android/`, a Kotlin Multiplatform app) — the primary user surface since the Telegram bot was retired (PR #1922). It is **mobile-only**: Android (Samsung Galaxy S26, the daily driver) + iOS from one codebase; its desktop product UI was retired and **Andromeda (`andromeda/`) owns the desktop surface** as a separate Tauri/React workstation. Both clients talk to the gateway over the `miniapp.*` RPC surface with an `X-Deneb-Client-Token`. Optimize the mobile path first.
 
 ### Design Principles
 
 - **High completeness and cohesion.** Every feature must be fully finished and tightly integrated.
 - **Opinionated defaults over user configuration.** Apple-like philosophy: fewer moving parts, not more options.
 - **Narrow scope, deep quality.** Fewer things well > more things shallowly.
-- **Depth over breadth.** Optimize the narrow supported surface (native client + DGX Spark + single user). "Narrow" means one user + one backend — not one device class: the native client (`client-android/`) spans phone touch and desktop (mouse/keyboard) from one codebase.
+- **Depth over breadth.** Optimize the narrow supported surface (native client + Andromeda + DGX Spark + single user). "Narrow" means one user + one backend — not one device class: the native client (`client-android/`) covers phone touch (Android/iOS), and Andromeda (`andromeda/`) covers desktop (mouse/keyboard), both against the same gateway.
 
 ### AI Agent Guidelines
 
@@ -102,7 +105,7 @@
 
 - Optimize for the native client's `miniapp.*` RPC surface and rich rendering (Markdown, native lists/cards) — no Telegram-style hard 4096-char cap or MarkdownV2 escaping.
 - Design system: controls = Material, presentation = Deneb typography (see `.claude/rules/native-design-system.md`).
-- **Adapt layout to the screen, never split the persona:** rendering may differ by surface (native client phone vs. desktop), but that is orthogonal to the "UI 분리 금지" persona rule — it forbids splitting 분석/비서 *personas* into tabs, not adapting layout to screen size.
+- **Adapt layout to the screen, never split the persona:** rendering may differ by surface (native client phone vs. Andromeda desktop), but that is orthogonal to the "UI 분리 금지" persona rule — it forbids splitting 분석/비서 *personas* into tabs, not adapting layout to screen size.
 
 ### Korean Language First
 
@@ -117,8 +120,9 @@
 
 ## Code Style Essentials
 
-- Language: Go (`gateway-go/`).
+- Languages: Go (`gateway-go/`), Kotlin Multiplatform (`client-android/`), TypeScript/React + Rust shell (`andromeda/`).
 - Go: `gofumpt` (stricter gofmt superset; `make fmt` applies it, golangci-lint enforces it) / `go vet`.
+- Kotlin: spotless + detekt (enforced via `make ci`). TypeScript: eslint + prettier (enforced via `cd andromeda && pnpm verify`).
 - Naming: **Deneb** for product/app/docs headings; `deneb` for CLI/package/binary/paths/config.
 - American English in code, comments, docs, UI strings.
 - Keep files under ~700 LOC; split/refactor when it improves clarity.
@@ -142,9 +146,16 @@
 - `make check` is the **Go-only** subset (no Kotlin) — it does *not* cover the
   native client's `kotlin-lint` CI gate. Prefer `make ci` whenever you touch
   `client-android/`, or any time you want the full pre-push guarantee.
+- **Andromeda is a separate lane** — `make ci` does *not* cover it. When you
+  touch `andromeda/`, run `cd andromeda && pnpm verify` (typecheck + lint +
+  format:check + test + build; mirrors `.github/workflows/andromeda-ci.yml`).
+  That workflow also triggers on `gateway-go/**` changes for its `wire-drift`
+  job: changing a `//deneb:wire` struct requires regenerating **both** Kotlin
+  and TS wire types (`.claude/rules/generated-code.md`).
 - Do not commit or push with failing build or test checks.
 - Toolchain: Go (1.25+); the Kotlin gate needs a JDK + Android SDK
-  (`ANDROID_HOME`, default `~/android-sdk`).
+  (`ANDROID_HOME`, default `~/android-sdk`); the Andromeda gate needs Node +
+  pnpm.
 
 ---
 

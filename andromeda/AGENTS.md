@@ -29,8 +29,9 @@ pnpm build         # tsc && vite build (web bundle → dist/)
 pnpm tauri:dev     # run the desktop shell (needs Rust + system GUI libs)
 ```
 
-**Always run `pnpm verify` before pushing.** CI (`.github/workflows/ci.yml`) runs
-the same steps on every PR.
+**Always run `pnpm verify` before pushing.** CI (repo root
+`.github/workflows/andromeda-ci.yml`) runs the same steps on every PR — and it
+also triggers on `gateway-go/**` changes for the `wire-drift` job.
 
 ## Architecture & data flow
 
@@ -172,14 +173,16 @@ Releases are automated from Conventional Commits — no manual version bumping.
 
 - Land work on `main` with `feat:` / `fix:` / `chore:` … commits (squash-merge keeps the
   PR title as the commit, so write the PR title in that form).
-- `release-please` (in `.github/workflows/release.yml`) keeps a single open **release
-  PR** that bumps the version + writes `CHANGELOG.md`. **Merging that PR** is what cuts a
-  release: it tags `vX.Y.Z`, creates the GitHub Release, then the same workflow builds &
-  signs the Win/macOS bundles + `latest.json` and uploads them (auto-updater endpoint).
-- Version lives in three files kept in lockstep by release-please via
-  `release-please-config.json` (`package.json`, `src-tauri/tauri.conf.json`,
-  `src-tauri/Cargo.toml`). Don't hand-edit versions. `pnpm bump <v>` remains only as a
-  manual fallback.
+- `release-please` (repo root `.github/workflows/release-please.yml`, manifest
+  mode) keeps a release PR that bumps the version + writes `CHANGELOG.md`.
+  Andromeda is a package entry (`component: andromeda`) in the root
+  `.release-please-config.json` + `.release-please-manifest.json`. **Merging
+  that PR** is what cuts a release: it tags `andromeda-vX.Y.Z`, creates the
+  GitHub Release, then the workflow's `andromeda-build` job builds & signs the
+  Win/macOS bundles + `latest.json` and uploads them (auto-updater endpoint).
+- Version lives in three files kept in lockstep by release-please
+  (`package.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`). Don't
+  hand-edit versions. `pnpm bump <v>` remains only as a manual fallback.
 - Pre-1.0 bumping: `feat`/`fix` → patch (`0.0.x`), `!`/`BREAKING CHANGE` → minor (`0.x.0`).
 
 ## Roadmap (DESIGN §8)

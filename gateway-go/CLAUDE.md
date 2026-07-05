@@ -23,14 +23,14 @@ Go HTTP + SSE gateway server — the primary Deneb runtime.
 | `internal/runtime/session/` | Session lifecycle state machine (`IDLE → RUNNING → DONE/FAILED/KILLED/TIMEOUT`) |
 | `internal/pipeline/chat/` | System prompt, tool registration, context files, slash commands |
 | `internal/ai/llm/` | LLM client, sampling parameters, multimodal types |
-| `internal/platform/` | Platform integrations (calendar, cron, dropbox, dropboxpoll, gmail, gmailpoll, localcal, localtodo, media) |
+| `internal/platform/` | Platform integrations (calendar, calprop, cron, gmail, gmailpoll, lmtpd, localcal, localtodo, mailarchive, mailbody, mailwork, media) |
 | `pkg/protocol/` | Hand-written JSON wire types |
 
 ## Common Tasks
 
 ### Adding a New RPC Method
-Follow the GatewayHub wiring rules (`.claude/rules/hub-wiring.md` — enforced by
-code review + snapshot test):
+Follow the GatewayHub wiring rules (repo root `.claude/rules/hub-wiring.md` —
+enforced by code review + snapshot test):
 1. Define `Deps` struct + `Methods(deps Deps)` in the handler package (`internal/runtime/rpc/handler/<domain>/`)
 2. Add the service field to `rpcutil.GatewayHub` (new domains only) + update `hub.Validate()`
 3. Wire the Deps inline in `internal/runtime/server/method_registry.go` (the ONLY wiring point)
@@ -56,7 +56,7 @@ To modify a generated file: edit the source or generator, run the `make` target,
 - Assembly: `internal/pipeline/chat/prompt/system_prompt.go`
 - Context files: `internal/pipeline/chat/prompt/context_files.go` (loads CLAUDE.md, SOUL.md, etc.)
 - Silent replies: `internal/pipeline/chat/silent_reply.go` (NO_REPLY token)
-- Slash commands: `internal/pipeline/chat/slash_commands.go` (operational only: /help, /reset, /status, /kill, /rollback, /update, /restart — user commands moved to the native UI)
+- Slash commands: `internal/pipeline/chat/slash_commands.go` (/help, /reset, /status, /kill, /goal, /rollback, /update, /restart, /weekly — mostly operational; rich user commands moved to the native UI)
 
 ### Changing Wire Types
 - Hand-written types: `pkg/protocol/`
@@ -65,7 +65,7 @@ To modify a generated file: edit the source or generator, run the `make` target,
 
 Tool dispatch is a **single flat registry lookup** — `ToolRegistry.Execute` in
 `internal/pipeline/chat/tools.go`. There is no ordered interception chain; all
-state is closed over at registration time (see `docs/research/tool-interception-gap.md`).
+state is closed over at registration time (see repo root `docs/research/tool-interception-gap.md`).
 
 When you need to intervene in a tool call, use the supported extension points —
 **do not add a side-chain or adapter layer**:

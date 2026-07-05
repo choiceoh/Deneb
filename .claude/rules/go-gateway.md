@@ -13,7 +13,7 @@ Primary runtime — HTTP + SSE gateway server.
 - `internal/runtime/server/` — HTTP server: `/health`, `/api/v1/miniapp/rpc`, OpenAI/Responses APIs, hooks, session endpoints. Connection tracking.
 - `internal/runtime/rpc/` — Registry-based RPC method dispatcher (thread-safe). 150+ methods.
 - `internal/runtime/session/` — Session management with lifecycle state machine (`IDLE -> RUNNING -> DONE/FAILED/KILLED/TIMEOUT`), state transition validation, event pub/sub bus.
-- `internal/infra/auth/` — Token auth, allowlists, security paths, credentials, probe auth.
+- `internal/infra/clientauth/` — Native-client token auth (`X-Deneb-Client-Token` verify, identity). Credentials/secret resolution lives in `internal/infra/secret/`, config load/bootstrap in `internal/infra/config/`. (The former single `internal/infra/auth/` package was split across these three.)
 - `pkg/protocol/` — Hand-written JSON wire types.
 - `internal/pipeline/chat/toolctx/` — Leaf package: shared types (ToolFunc, ToolDef, ToolRegistrar, ToolExecutor), context helpers (WithDeliveryContext, etc.), TurnContext, RunCache, dependency structs (CoreToolDeps, ProcessDeps, SessionDeps, etc.). Zero intra-chat imports.
 - `internal/pipeline/chat/toolreg/` — Tool registration hub: wires tool implementations (from tools/) with JSON schemas (from tool_schemas_gen.go) into a ToolRegistrar. Contains tool_schemas.json (codegen source) and tool_schemas_gen.go (generated). Never imports chat/.
@@ -27,6 +27,8 @@ Primary runtime — HTTP + SSE gateway server.
 - `internal/ai/modelcaps/` — Leaf package: builtin model capability defaults (reasoning model prefixes, cache_control compatibility). Layered with vLLM /models discovery and deneb.json `models.providers.<id>` overrides (contextWindow/reasoning/vision/promptCache + temperature/topP/topK sampling) by `modelrole.Registry.CapabilityForModel` / `ProfileForModel`. The chat pipeline derives context-budget clamping, cache-marker stripping, image-block stripping, and sampling defaults from it (`internal/pipeline/chat/run_capability.go`). Model health circuit breaker: `internal/ai/modelrole/health.go`.
 - `internal/domain/backup/` — Daily offsite memory backup (autonomous PeriodicTask `memory-backup`): tar.gz of wiki/diary/transcripts/polaris/workspace/contacts/kv streamed over ssh to the storage node (NFS is read-only from the gateway host). Production state dir only; env: `DENEB_BACKUP_SSH_HOST`/`DENEB_BACKUP_DIR`/`DENEB_BACKUP_RETENTION_DAYS`/`DENEB_BACKUP_DISABLE`. The wiki dir is additionally a local git repo (`internal/domain/wiki/gitsnap.go`) committed per dream cycle and before each backup.
 - `internal/ai/modeltuner/` — Background per-model optimization loop (autonomous PeriodicTask, 6h): aggregates 24h agent logs by model (`agentlog.AggregateByModel`), auto-applies a bounded output-token floor for models that keep hitting the ceiling, one-shot-calibrates newly served vLLM models, persists `~/.deneb/model-stats.json`. Recommendations surface under the native model picker (`miniapp_models` AdvisoryLines/NoteFor, read from the scorecard) — not as a proactive notification.
+> 위 목록은 chat 파이프라인 중심의 상세 노트다. `internal/` 전체(runtime/pipeline/ai/domain/platform/infra/agentsys)의 한 줄 오리엔테이션 맵은 `.claude/rules/architecture.md` "Gateway Module Map" 참조.
+
 ## GatewayHub Wiring Rules
 
 - `GatewayHub` is a service container — no business logic, only `Broadcast()` and `Validate()`.
