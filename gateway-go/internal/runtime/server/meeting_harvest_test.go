@@ -196,27 +196,60 @@ func TestIsMeetingShaped_RealCalendarSample(t *testing.T) {
 	}
 }
 
-// TestLooseUniqueProjectMatch: terse titles resolve to a project only via a
-// UNIQUE token containment — ambiguous tokens (당진 spans three projects)
-// resolve to nothing rather than guessing.
-func TestLooseUniqueProjectMatch(t *testing.T) {
-	projects := []wiki.ProjectRef{
-		{Name: "비금도-154kv-케이블-및-액세서리-(ztt)"},
-		{Name: "당진-솔라빌리지"},
-		{Name: "lg화학-당진"},
-		{Name: "대한전선-당진"},
-	}
-	if got := looseUniqueProjectMatch("비금도 해저케이블 포설 견학", projects); got != "비금도-154kv-케이블-및-액세서리-(ztt)" {
+// TestLooseUniqueNameMatch: terse titles resolve only via a UNIQUE token
+// containment over projects+ledgers jointly — ambiguous tokens (당진 spans
+// three projects; lg spans a project and a ledger) resolve to nothing rather
+// than guessing.
+func TestLooseUniqueNameMatch(t *testing.T) {
+	names := harvestKnownNames(
+		[]wiki.ProjectRef{
+			{Name: "비금도-154kv-케이블-및-액세서리-(ztt)"},
+			{Name: "당진-솔라빌리지"},
+			{Name: "lg화학-당진"},
+			{Name: "대한전선-당진"},
+		},
+		[]wiki.CounterpartyRef{
+			{Name: "JA Solar"},
+			{Name: "LG전자"},
+		},
+	)
+	if got := looseUniqueNameMatch("비금도 해저케이블 포설 견학", names); got != "비금도-154kv-케이블-및-액세서리-(ztt)" {
 		t.Errorf("unique token match = %q", got)
 	}
-	if got := looseUniqueProjectMatch("당진 방문", projects); got != "" {
+	if got := looseUniqueNameMatch("당진 방문", names); got != "" {
 		t.Errorf("ambiguous token must not resolve, got %q", got)
 	}
-	if got := looseUniqueProjectMatch("lg화학 당진 미팅", projects); got != "lg화학-당진" {
-		t.Errorf("compound token should disambiguate, got %q", got)
+	// Short vendor abbreviation resolves through the ledger list ("JA 이용원
+	// 상무" — the real calendar pattern that exact matching misses).
+	if got := looseUniqueNameMatch("JA 이용원 상무 재고모듈 구매 논의", names); got != "JA Solar" {
+		t.Errorf("ledger token match = %q", got)
 	}
-	if got := looseUniqueProjectMatch("점심 약속", projects); got != "" {
+	// "lg" spans a project (lg화학-당진) AND a ledger (LG전자) → joint
+	// ambiguity, no guess.
+	if got := looseUniqueNameMatch("LG 방문", names); got != "" {
+		t.Errorf("cross-list ambiguous token must not resolve, got %q", got)
+	}
+	if got := looseUniqueNameMatch("점심 약속", names); got != "" {
 		t.Errorf("no-token text must not resolve, got %q", got)
+	}
+	// Fidelity-drill regressions: a date fragment ("25") must not latch onto a
+	// project named "…(2026-06-25)", and 2-rune Hangul function words (바로)
+	// must not latch onto ledger names containing them.
+	dated := append(names, "부산항터미널-태양광-(신선대)-—-가배치-요청-(2026-06-25)", "효성중공업, 바로(주)")
+	if got := looseUniqueNameMatch("6/25(목) 11시 OO 방문", dated); got != "" {
+		t.Errorf("digit token must not resolve, got %q", got)
+	}
+	if got := looseUniqueNameMatch("계약서 바로 검토 회의", dated); got != "" {
+		t.Errorf("2-rune Hangul function word must not resolve, got %q", got)
+	}
+	// Generic nouns embedded in a descriptive slug TAIL must not match: only
+	// the leading entity segments of a name participate.
+	slugged := append(names, "강진-신다산-epc-계약서-법무검토-의견-(2026-06-30)")
+	if got := looseUniqueNameMatch("LG 방문 계약서 검토", slugged); got != "" {
+		t.Errorf("descriptive-tail noun must not resolve, got %q", got)
+	}
+	if got := looseUniqueNameMatch("강진 신다산 현장 회의", slugged); got != "강진-신다산-epc-계약서-법무검토-의견-(2026-06-30)" {
+		t.Errorf("leading entity segment should still resolve, got %q", got)
 	}
 }
 

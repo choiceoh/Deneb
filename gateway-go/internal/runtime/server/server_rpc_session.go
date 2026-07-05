@@ -616,10 +616,12 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 						if cps := st.MatchCounterpartiesInText(text, 1); len(cps) > 0 {
 							return cps[0].Name
 						}
-						// Terse real-world titles ("비금도 … 견학") never contain
-						// the full compound project name — recover via unique
-						// token containment (ambiguous tokens resolve to none).
-						return looseUniqueProjectMatch(text, st.KnownProjects())
+						// Terse real-world titles ("비금도 … 견학", "JA 이용원
+						// 상무") never contain the full compound name — recover
+						// via unique token containment over projects+ledgers
+						// jointly (ambiguous tokens resolve to none).
+						return looseUniqueNameMatch(text,
+							harvestKnownNames(st.KnownProjects(), st.KnownCounterparties()))
 					},
 					filepath.Join(stateDir, harvestStateFile),
 					s.logger,
