@@ -141,8 +141,15 @@ func (s *meetingHarvestService) tick(ctx context.Context) {
 	for _, c := range cands {
 		body := formatHarvestAsk(c.Event, c.Target, s.displayLoc)
 		delivered, derr := s.deliver(body)
-		if derr != nil || !delivered {
+		if derr != nil {
 			s.logger.Warn("meeting harvest: push failed", "summary", c.Event.Summary, "error", derr)
+			continue
+		}
+		if !delivered {
+			// No connected client (app closed) is a NORMAL state, and the
+			// candidate retries every poll until its 3h window closes — Warn
+			// here would spam ~36 lines per meeting. Debug, retry silently.
+			s.logger.Debug("meeting harvest: no client to deliver to; will retry", "summary", c.Event.Summary)
 			continue
 		}
 		s.markAsked(harvestKey(c.Event), now)
@@ -221,8 +228,8 @@ func decideHarvests(
 // encounter. Conservative allowlist — generic task verbs (발주, 제출, 송금,
 // 마감…) are deliberately absent so task blocks never trigger.
 var meetingWords = []string{
-	"미팅", "회의", "면담", "방문", "상담", "협의", "만남", "통화", "콜",
-	"점심", "저녁", "식사", "킥오프", "발표", "인터뷰", "PT",
+	"미팅", "회의", "면담", "방문", "상담", "협의", "만남", "통화", "전화",
+	"점심", "저녁", "식사", "킥오프", "발표", "인터뷰", "출장", "외근",
 }
 
 // isMeetingShaped reports whether the event looks like the operator actually
