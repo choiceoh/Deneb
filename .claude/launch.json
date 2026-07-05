@@ -6,6 +6,12 @@
       "runtimeExecutable": "make",
       "runtimeArgs": ["go-dev"],
       "port": 18789
+    },
+    {
+      "name": "andromeda-mock",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--dir", "andromeda", "dev:mock"],
+      "port": 1420
     }
   ]
 }
