@@ -18,7 +18,7 @@ func TestIndexableText_ThinkingAndToolOnlyMessage(t *testing.T) {
 	msg := toolctx.ChatMessage{Role: "assistant", Content: json.RawMessage(content)}
 
 	got := indexableText(msg)
-	if strings.Contains(got, `"type"`) || strings.Contains(got, "{") && strings.Contains(got, `"thinking"`) {
+	if strings.Contains(got, `"type"`) || (strings.Contains(got, "{") && strings.Contains(got, `"thinking"`)) {
 		t.Fatalf("raw JSON leaked into index text: %q", got)
 	}
 	if !strings.Contains(got, "주간보고는 /weekly로 트리거해야 한다") {

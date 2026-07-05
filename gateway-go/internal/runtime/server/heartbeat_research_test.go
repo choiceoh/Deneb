@@ -99,6 +99,25 @@ func TestDetectResearchNudge_ThresholdThrottleAndRefire(t *testing.T) {
 	}
 }
 
+// A marker timestamp in the future (clock skew, corrupted state) must not
+// mute the lane — it is reset and the nudge fires normally.
+func TestDetectResearchNudge_FutureMarkerReset(t *testing.T) {
+	home := t.TempDir()
+	task := &heartbeatTask{homeDir: home, logger: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	wiki := filepath.Join(home, ".deneb", "wiki")
+	now := time.Now()
+	writeWikiFile(t, wiki, "프로젝트/진코솔라/메일분석/m1.md", now.Add(-2*time.Hour))
+	writeWikiFile(t, wiki, "프로젝트/남도에코/메일분석/m2.md", now.Add(-2*time.Hour))
+	if err := saveResearchNudgeState(task.researchStatePath(),
+		researchNudgeState{LastNudgeAt: now.Add(48 * time.Hour)}); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := task.detectResearchNudge(now); got == "" {
+		t.Fatal("future marker should be reset, not mute the lane")
+	}
+}
+
 func TestComposeHeartbeatBody_ResearchLane(t *testing.T) {
 	nudge := "[리서치 레인] 다이제스트"
 

@@ -216,28 +216,56 @@ func heartbeatShouldRun(content, signalSummary, researchNudge string) bool {
 }
 
 // heartbeatHasTasks reports whether HEARTBEAT.md carries anything the agent
-// should act on. Blank lines, markdown headers ("## Active Tasks"), full-line
+// should act on. Blank lines, markdown headings ("## Active Tasks"), full-line
 // HTML comments, and everything under an "## archive" section are scaffolding
 // — the file template survives an emptied task list, and archived items are by
 // definition parked. Only a remaining content line makes the tick worth a turn.
+//
+// Heading rules (post-#3100 review): "#urgent LC 확인" is a hashtag-tagged task,
+// not a heading (a '#' run must be followed by whitespace); and a nested
+// heading inside the archive section ("### 2026-07") does not leave archive —
+// only a same-or-higher-level sibling section does.
 func heartbeatHasTasks(content string) bool {
-	inArchive := false
+	archiveLevel := 0 // >0 → inside "## archive"; value = that heading's level
 	for _, line := range strings.Split(content, "\n") {
 		trimmed := strings.TrimSpace(line)
 		if trimmed == "" {
 			continue
 		}
-		if strings.HasPrefix(trimmed, "#") {
-			section := strings.TrimSpace(strings.TrimLeft(trimmed, "# "))
-			inArchive = strings.EqualFold(section, "archive")
+		if level, title, ok := markdownHeading(trimmed); ok {
+			switch {
+			case strings.EqualFold(title, "archive"):
+				archiveLevel = level
+			case archiveLevel > 0 && level > archiveLevel:
+				// Subheading nested under the archive section — stay archived.
+			default:
+				archiveLevel = 0
+			}
 			continue
 		}
-		if inArchive || strings.HasPrefix(trimmed, "<!--") {
+		if archiveLevel > 0 || strings.HasPrefix(trimmed, "<!--") {
 			continue
 		}
 		return true
 	}
 	return false
+}
+
+// markdownHeading parses a "## Title"-style line from already-trimmed input.
+// The '#' run must be 1-6 long and followed by whitespace (or end the line);
+// anything else — like a "#hashtag task" — is content, not a heading.
+func markdownHeading(trimmed string) (level int, title string, ok bool) {
+	i := 0
+	for i < len(trimmed) && trimmed[i] == '#' {
+		i++
+	}
+	if i == 0 || i > 6 {
+		return 0, "", false
+	}
+	if i < len(trimmed) && trimmed[i] != ' ' && trimmed[i] != '\t' {
+		return 0, "", false
+	}
+	return i, strings.TrimSpace(trimmed[i:]), true
 }
 
 // composeHeartbeatBody builds the trigger body from the (optional) signal

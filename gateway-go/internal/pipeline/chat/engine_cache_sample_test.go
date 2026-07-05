@@ -57,6 +57,41 @@ func TestResolveEngineMetricsURL_EnvOverride(t *testing.T) {
 	}
 }
 
+// The override is persisted into run.cache events — credential-bearing URLs
+// must fail safe instead of leaking into agent logs.
+func TestResolveEngineMetricsURL_OverrideRejectsCredentialParts(t *testing.T) {
+	for _, bad := range []string{
+		"http://user:pass@100.125.220.117:8000/metrics",
+		"http://100.125.220.117:8000/metrics?token=abc",
+		"http://100.125.220.117:8000/metrics#frag",
+	} {
+		t.Setenv(engineMetricsURLEnv, bad)
+		if got := resolveEngineMetricsURL("http://100.125.220.117:8000/v1"); got != "" {
+			t.Errorf("override %q should fail safe, got %q", bad, got)
+		}
+	}
+}
+
+// One wormhole provider fronts both cloud and local models; the filter keeps
+// cloud runs from scraping the pinned local engine and logging bogus deltas.
+func TestEngineMetricsModelAllowed(t *testing.T) {
+	cases := []struct {
+		model, filter string
+		want          bool
+	}{
+		{"glm-5.2", "", true},
+		{"deepseek-v4-flash", "deepseek,dsv4", true},
+		{"dsv4-nothink", "deepseek,dsv4", true},
+		{"glm-5.2", "deepseek,dsv4", false},
+		{"GLM-5.2", "glm", true},
+	}
+	for _, c := range cases {
+		if got := engineMetricsModelAllowed(c.model, c.filter); got != c.want {
+			t.Errorf("allowed(%q,%q) = %v, want %v", c.model, c.filter, got, c.want)
+		}
+	}
+}
+
 func TestSampleEngineCacheDelta(t *testing.T) {
 	hits, queries := 1000.0, 2000.0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

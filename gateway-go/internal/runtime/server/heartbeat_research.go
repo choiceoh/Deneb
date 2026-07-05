@@ -61,6 +61,11 @@ func (t *heartbeatTask) detectResearchNudge(now time.Time) string {
 	}
 	statePath := t.researchStatePath()
 	st := loadResearchNudgeState(statePath)
+	if st.LastNudgeAt.After(now) {
+		// Clock skew or a corrupted marker: a future timestamp would silently
+		// mute the lane until the wall clock catches up. Treat as unset.
+		st.LastNudgeAt = time.Time{}
+	}
 	if !st.LastNudgeAt.IsZero() && now.Sub(st.LastNudgeAt) < researchNudgeMinInterval {
 		return ""
 	}
@@ -209,6 +214,9 @@ func loadResearchNudgeState(path string) researchNudgeState {
 }
 
 func saveResearchNudgeState(path string, st researchNudgeState) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
 	data, err := json.Marshal(st)
 	if err != nil {
 		return err

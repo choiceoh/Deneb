@@ -208,7 +208,15 @@ func indexableText(msg toolctx.ChatMessage) string {
 			}
 		case "tool_result":
 			if b.Content != "" {
-				parts = append(parts, b.Content)
+				// Cap like tool_use inputs (but roomier): raw stdout/file dumps
+				// would otherwise be duplicated into the FTS index + snippets,
+				// bloating memory and exposing full sensitive payloads via
+				// polaris search results.
+				c := b.Content
+				if len(c) > 2000 {
+					c = textutil.TruncateBytes(c, 2000)
+				}
+				parts = append(parts, c)
 			}
 		}
 	}

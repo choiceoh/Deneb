@@ -43,7 +43,8 @@ var phoneActions = map[string]bool{
 	"sync_state": true,
 }
 
-// isPhoneAction reports whether `to` is an Intent-backed P1 action.
+// isPhoneAction reports whether `to` is a P1 app action — Intent-backed
+// (open_url, dial, ...) or in-app (notify, speak, clipboard, sync_state).
 func isPhoneAction(to string) bool {
 	return phoneActions[strings.ToLower(strings.TrimSpace(to))]
 }

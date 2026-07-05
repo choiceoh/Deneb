@@ -478,7 +478,7 @@ func executeAgentRun(
 	// Engine-side APC sample → run.cache event (async, best-effort). The vLLM
 	// usage payload carries no cached_tokens, so the engine's global counters
 	// are the only per-turn cache-hit signal on this path.
-	logEngineCacheAsync(deps, runLog, client, apiMode, fellBack, logger)
+	logEngineCacheAsync(deps, runLog, client, actualModel, fellBack, logger)
 
 	return &chatRunResult{AgentResult: agentResult, SpawnFlag: spawnFlag, ActualModel: actualModel, FellBack: fellBack}, nil
 }

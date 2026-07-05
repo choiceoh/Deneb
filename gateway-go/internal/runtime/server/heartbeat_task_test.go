@@ -175,6 +175,9 @@ func TestHeartbeatHasTasks(t *testing.T) {
 		{"real task", "## Active Tasks\n- 매일 18시 진코솔라 회신 확인", true},
 		{"task after archive section resumes", "## archive\n- 옛 작업\n\n## Active Tasks\n- 새 작업", true},
 		{"plain text without headers", "진코솔라 LC 개설 진행 상황 점검", true},
+		{"hashtag-tagged task is content", "## Active Tasks\n#urgent LC 개설 확인", true},
+		{"nested heading stays archived", "## archive\n### 2026-07\n- 옛 작업", false},
+		{"sibling section after nested archive resumes", "## archive\n### 2026-07\n- 옛것\n\n## Active Tasks\n- 새 작업", true},
 	}
 	for _, tc := range cases {
 		if got := heartbeatHasTasks(tc.content); got != tc.want {
