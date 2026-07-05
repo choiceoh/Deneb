@@ -1,147 +1,35 @@
-// phone.go — phone_read / phone_write tools that reach the user's phone over
-// reverse SSH (gateway → phone Termux sshd) and run termux-api commands.
+// phone.go — phone_read / phone_write tools backed entirely by the native
+// client's own app permissions (Termux/SSH retired, 2026-07-05).
 //
-// This closes the SSH loop. The phone pushes events IN (deneb-emit →
-// /api/event/ingest); here the agent reads the phone (location/clipboard/battery)
-// to ENRICH a turn and acts on it (notification/tts/clipboard) to respond OUT —
-// during any turn, including the proactive judgment turn (which runs with no tool
-// preset, so these are available automatically).
+// Reads come from the state the app pushes: the location sensor forwards a
+// FusedLocation fix — with battery status embedded — as a `location_update`
+// event, which the gateway caches (phone_location.go). phone_read serves that
+// cache; when it is stale it dispatches a `sync_state` P1 action so the app
+// pushes a fresh fix, and tells the agent to retry shortly. Writes go through
+// the same P1 action channel the Intent actions already use (SSE foreground /
+// FCM data background): notify / speak / clipboard are executed in-app with
+// NotificationManager / the app's TTS engine / ClipboardManager.
 //
-// Auth is already in place: the gateway host's public key is in the phone's
-// authorized_keys (registered during phone setup), so `ssh phone <cmd>` needs no
-// password. The "phone" destination is an ~/.ssh/config alias by default; set
-// DENEB_PHONE_SSH to override the whole ssh target (e.g. "-p 8022 100.93.163.49").
-
+// Retired with the SSH path: clipboard READ (Android 10+ blocks background
+// clipboard reads for every app — Termux included), call log (low value), and
+// live contacts (the synced `contacts` tool already mirrors the address book).
+// The switch keeps guidance cases for those values so a model holding the old
+// schema gets a pointer instead of an error.
 package tools
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
-	"os/exec"
 	"strings"
-	"sync"
-	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
-const phoneSSHFailureBackoff = 60 * time.Second
-
-var phoneSSHFailures = struct {
-	sync.Mutex
-	target string
-	until  time.Time
-	err    string
-}{}
-
-// phoneSSHTarget returns the ssh destination args for the phone. Default is the
-// "phone" config alias; DENEB_PHONE_SSH overrides with arbitrary ssh args.
-func phoneSSHTarget() []string {
-	if v := strings.TrimSpace(os.Getenv("DENEB_PHONE_SSH")); v != "" {
-		return strings.Fields(v)
-	}
-	return []string{"phone"}
-}
-
-func phoneSSHTargetKey(target []string) string {
-	return strings.Join(target, "\x00")
-}
-
-func activePhoneSSHFailure(target []string) error {
-	key := phoneSSHTargetKey(target)
-	now := time.Now()
-
-	phoneSSHFailures.Lock()
-	defer phoneSSHFailures.Unlock()
-	if phoneSSHFailures.target != key || phoneSSHFailures.until.Before(now) {
-		return nil
-	}
-	return fmt.Errorf("phone ssh recently failed; retry after %s: %s",
-		time.Until(phoneSSHFailures.until).Round(time.Second), phoneSSHFailures.err)
-}
-
-func recordPhoneSSHFailure(target []string, err error) {
-	phoneSSHFailures.Lock()
-	defer phoneSSHFailures.Unlock()
-	phoneSSHFailures.target = phoneSSHTargetKey(target)
-	phoneSSHFailures.until = time.Now().Add(phoneSSHFailureBackoff)
-	phoneSSHFailures.err = err.Error()
-}
-
-func clearPhoneSSHFailure(target []string) {
-	key := phoneSSHTargetKey(target)
-	phoneSSHFailures.Lock()
-	defer phoneSSHFailures.Unlock()
-	if phoneSSHFailures.target == key {
-		phoneSSHFailures.target = ""
-		phoneSSHFailures.until = time.Time{}
-		phoneSSHFailures.err = ""
-	}
-}
-
-func isPhoneSSHTransportFailure(output string, err error) bool {
-	if err == nil {
-		return false
-	}
-	text := strings.ToLower(output + " " + err.Error())
-	for _, needle := range []string{
-		"connection refused",
-		"connection timed out",
-		"could not resolve hostname",
-		"host key verification failed",
-		"network is unreachable",
-		"no route to host",
-		"operation timed out",
-		"permission denied (publickey",
-		"connection reset",
-	} {
-		if strings.Contains(text, needle) {
-			return true
-		}
-	}
-	return false
-}
-
-// runPhone runs one command on the phone over ssh. When stdinText is non-empty it
-// is piped to the remote command's stdin, so notification/tts/clipboard text
-// (quotes, newlines, emoji) never needs shell-escaping. Returns trimmed combined
-// output; a non-zero exit (tunnel down, termux-api app missing, no permission) is
-// an error the agent sees and can relay.
-func runPhone(ctx context.Context, stdinText, remoteCmd string) (string, error) {
-	target := phoneSSHTarget()
-	if err := activePhoneSSHFailure(target); err != nil {
-		return "", err
-	}
-
-	args := make([]string, 0, 8)
-	if stdinText == "" {
-		args = append(args, "-n") // no stdin to consume
-	}
-	args = append(args, "-o", "BatchMode=yes", "-o", "ConnectTimeout=10")
-	args = append(args, target...)
-	args = append(args, remoteCmd)
-	cmd := exec.CommandContext(ctx, "ssh", args...)
-	if stdinText != "" {
-		cmd.Stdin = strings.NewReader(stdinText)
-	}
-	out, err := cmd.CombinedOutput()
-	trimmed := strings.TrimSpace(string(out))
-	if err != nil {
-		wrapped := fmt.Errorf("phone ssh failed: %w (output: %q)", err, trimmed)
-		if isPhoneSSHTransportFailure(trimmed, err) {
-			recordPhoneSSHFailure(target, wrapped)
-		}
-		return "", wrapped
-	}
-	clearPhoneSSHFailure(target)
-	return trimmed, nil
-}
-
-// ToolPhoneRead queries the phone: what = location | clipboard | battery |
-// calllog | contacts.
-func ToolPhoneRead() ToolFunc {
+// ToolPhoneRead queries the phone via the app-pushed state cache:
+// what = location | battery. send dispatches a sync_state refresh request when
+// the cache is stale; nil means no app channel (report unavailable).
+func ToolPhoneRead(send PhoneActionFunc) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			What string `json:"what"`
@@ -151,81 +39,68 @@ func ToolPhoneRead() ToolFunc {
 		}
 		switch strings.ToLower(strings.TrimSpace(p.What)) {
 		case "location":
-			// Prefer the native client's pushed location cache (no SSH round-trip); fall
-			// back to a live Termux read when there is no recent native report.
 			if cached, ok := readCachedPhoneLocation(phoneLocationMaxAge); ok {
 				return cached, nil
 			}
-			// network provider: fast + low battery. JSON {latitude, longitude, ...}.
-			return runPhone(ctx, "", "termux-location -p network")
-		case "clipboard":
-			return runPhone(ctx, "", "termux-clipboard-get")
+			return phoneStateStaleReply(ctx, send, "위치")
 		case "battery":
-			return runPhone(ctx, "", "termux-battery-status")
+			if battery, ok := readCachedPhoneBattery(phoneLocationMaxAge); ok {
+				return battery, nil
+			}
+			return phoneStateStaleReply(ctx, send, "배터리")
+		case "clipboard":
+			return "클립보드 읽기는 지원이 종료되었습니다 — Android 10+ 정책상 백그라운드 앱은 클립보드를 읽을 수 없습니다. 사용자가 직접 붙여넣도록 요청하세요.", nil
 		case "calllog", "calls":
-			// Recent call history (Termux:API). JSON array of {name, phone_number,
-			// type(incoming/outgoing/missed), date, duration}. Capped to the latest
-			// 20 so a long history doesn't blow the turn's context.
-			return runPhone(ctx, "", "termux-call-log -l 20")
+			return "통화기록 조회는 지원이 종료되었습니다 (Termux 은퇴). 필요하면 사용자에게 직접 물어보세요.", nil
 		case "contacts", "addressbook":
-			// Live address book from the phone (Termux:API). JSON array of
-			// {name, number}. For a targeted lookup prefer the `contacts` tool
-			// (the synced store with phone/company search); this is the raw phone list.
-			return runPhone(ctx, "", "termux-contact-list")
+			return "폰 주소록 라이브 조회는 지원이 종료되었습니다 — 동기화된 주소록인 `contacts` 도구를 사용하세요 (이름/회사/전화 검색 지원).", nil
 		default:
-			return "", fmt.Errorf("phone_read: unknown what=%q (use location|clipboard|battery|calllog|contacts)", p.What)
+			return "", fmt.Errorf("phone_read: unknown what=%q (use location|battery)", p.What)
 		}
 	}
 }
 
-// ToolPhoneWrite acts on the phone: to = notification | tts | clipboard.
+// phoneStateStaleReply asks the app for a fresh state push (sync_state) and
+// tells the agent how to proceed. Best-effort: a missing channel or failed
+// dispatch degrades to an explanation, never an opaque error — the agent can
+// still answer from conversation context.
+func phoneStateStaleReply(ctx context.Context, send PhoneActionFunc, what string) (string, error) {
+	if send == nil {
+		return fmt.Sprintf("최근 %s 정보가 없습니다 (네이티브 앱 채널 미연결).", what), nil
+	}
+	if err := send(ctx, "sync_state", map[string]string{}); err != nil {
+		return fmt.Sprintf("최근 %s 정보가 없고 갱신 요청도 실패했습니다: %v", what, err), nil
+	}
+	return fmt.Sprintf("최근 %s 정보가 없어 앱에 갱신을 요청했습니다. 잠시(수 초) 후 phone_read를 다시 호출하세요.", what), nil
+}
+
+// ToolPhoneWrite acts on the phone. Every operation is an in-app P1 action
+// now: notify / speak / clipboard plus the Intent actions
+// (open_url/open_app/share/message/dial/photo). Legacy names from the SSH era
+// (notification, tts) are normalized so older transcripts keep working.
 func ToolPhoneWrite(send PhoneActionFunc) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p phoneWriteParams
 		if err := jsonutil.UnmarshalInto("phone_write params", input, &p); err != nil {
 			return "", err
 		}
-		// Intent-backed P1 actions route to the native app (SSH/Termux-free);
-		// the legacy notification/tts/clipboard ops still go over SSH below.
-		if isPhoneAction(p.To) {
-			return dispatchPhoneAction(ctx, send, p)
+		p.To = normalizePhoneWriteTo(p.To)
+		if !isPhoneAction(p.To) {
+			return "", fmt.Errorf("phone_write: unknown to=%q (notify|speak|clipboard | open_url|open_app|share|message|dial|photo)", p.To)
 		}
-		text := strings.TrimSpace(p.Text)
-		if text == "" {
-			return "", fmt.Errorf("phone_write: text is required")
-		}
-		switch strings.ToLower(strings.TrimSpace(p.To)) {
-		case "notification", "notify":
-			title := strings.TrimSpace(p.Title)
-			if title == "" {
-				title = "Deneb"
-			}
-			// termux-notification has no stdin content option (unlike tts/clipboard),
-			// so title + body go as args — quote both for safety.
-			if _, err := runPhone(ctx, "", fmt.Sprintf("termux-notification -t %s -c %s",
-				phoneShellQuote(title), phoneShellQuote(text))); err != nil {
-				return "", err
-			}
-			return "phone notification sent", nil
-		case "tts", "speak":
-			if _, err := runPhone(ctx, text, "termux-tts-speak"); err != nil { // text via stdin
-				return "", err
-			}
-			return "phone TTS spoken", nil
-		case "clipboard":
-			if _, err := runPhone(ctx, text, "termux-clipboard-set"); err != nil { // text via stdin
-				return "", err
-			}
-			return "phone clipboard set", nil
-		default:
-			return "", fmt.Errorf("phone_write: unknown to=%q (notification|tts|clipboard | open_url|open_app|share|message|dial|photo)", p.To)
-		}
+		return dispatchPhoneAction(ctx, send, p)
 	}
 }
 
-// phoneShellQuote wraps s in single quotes for safe use as one shell argument,
-// escaping embedded single quotes. Only termux-notification's -t/-c args need
-// this (tts/clipboard take text via stdin).
-func phoneShellQuote(s string) string {
-	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+// normalizePhoneWriteTo maps the SSH-era operation names onto their P1 action
+// successors.
+func normalizePhoneWriteTo(to string) string {
+	switch strings.ToLower(strings.TrimSpace(to)) {
+	case "notification":
+		return "notify"
+	case "tts":
+		return "speak"
+	default:
+		return strings.ToLower(strings.TrimSpace(to))
+	}
 }

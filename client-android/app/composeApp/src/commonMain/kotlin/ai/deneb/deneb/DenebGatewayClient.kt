@@ -1780,7 +1780,19 @@ class DenebGatewayClient(
                                         // raising a notification. data["action"] + its args.
                                         if (p.kind == "phone_action") {
                                             val action = p.data["action"].orEmpty()
-                                            if (action.isNotBlank()) {
+                                            if (action == "sync_state") {
+                                                // Gateway asks for a fresh state fix (phone_read hit a
+                                                // stale cache). Bypass the periodic throttle and push
+                                                // location+battery now; no-op off Android/without the
+                                                // location permission.
+                                                scope.launch {
+                                                    runCatching {
+                                                        readCurrentLocation()?.let { fix ->
+                                                            ingestEvent("location_update", "", fix)
+                                                        }
+                                                    }
+                                                }
+                                            } else if (action.isNotBlank()) {
                                                 runCatching { executePhoneAction(action, p.data) }
                                             }
                                         } else if (p.body.isNotBlank()) {

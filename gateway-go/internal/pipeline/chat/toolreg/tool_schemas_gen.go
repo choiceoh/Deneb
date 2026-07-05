@@ -1474,8 +1474,8 @@ func phoneReadToolSchema() map[string]any {
 		"properties": map[string]any{
 			"what": map[string]any{
 				"type":        "string",
-				"description": "조회 대상: location(현재 GPS 좌표) | clipboard(방금 복사한 내용) | battery(배터리·충전 상태) | calllog(최근 통화기록 20건) | contacts(폰 주소록)",
-				"enum":        []string{"location", "clipboard", "battery", "calllog", "contacts"},
+				"description": "조회 종류: location(최근 위치 — 앱 상태 캐시) | battery(배터리·충전 상태). 캐시가 오래됐으면 갱신 요청 후 재시도 안내가 온다.",
+				"enum":        []string{"location", "battery"},
 			},
 		},
 		"required": []string{"what"},
@@ -1492,16 +1492,16 @@ func phoneWriteToolSchema() map[string]any {
 			},
 			"text": map[string]any{
 				"type":        "string",
-				"description": "보낼/읽을/넣을 텍스트 (notification/tts/clipboard/share/message)",
+				"description": "알림/음성/클립보드/공유/문자 텍스트 (notify/speak/clipboard/share/message)",
 			},
 			"title": map[string]any{
 				"type":        "string",
-				"description": "notification 제목 (생략 시 Deneb)",
+				"description": "notify 제목 (없으면 Deneb)",
 			},
 			"to": map[string]any{
 				"type":        "string",
-				"description": "작용. SSH(Termux): notification|tts|clipboard (text 필수). 인앱 Intent(앱 연결 시): open_url(target=URL)|open_app(target=패키지/앱명)|share(text)|message(target=수신자,text)|dial(target=전화번호)|photo(카메라)",
-				"enum":        []string{"notification", "tts", "clipboard", "open_url", "open_app", "share", "message", "dial", "photo"},
+				"description": "작업(전부 인앱 실행): notify(알림, text 필수·title 선택) | speak(음성, text) | clipboard(클립보드에 넣기, text) | open_url(target=URL) | open_app(target=패키지/앱명) | share(text) | message(target=수신자,text) | dial(target=전화번호) | photo(카메라)",
+				"enum":        []string{"notify", "speak", "clipboard", "open_url", "open_app", "share", "message", "dial", "photo"},
 			},
 		},
 		"required": []string{"to"},

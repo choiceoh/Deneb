@@ -80,13 +80,14 @@ func RegisterCoreTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDep
 // FetchToolsSchema returns the fetch_tools schema for external registration.
 func FetchToolsSchema() map[string]any { return fetchToolsToolSchema() }
 
-// RegisterPhoneTools registers the phone bridge tools — phone_read (location/
-// clipboard/battery) and phone_write. phone_write has two delivery paths: the
-// SSH/Termux ops (notification/tts/clipboard) resolve from the "phone"
-// ~/.ssh/config alias (or DENEB_PHONE_SSH); the in-app Intent actions
-// (open_url/open_app/share/message/dial/photo) travel through send — the
-// PhoneActionFunc the server backs with its native-app SSE push. A nil send
-// leaves the Intent actions reporting unavailable (SSH ops still work).
+// RegisterPhoneTools registers the phone bridge tools — phone_read
+// (location/battery from the app-pushed state cache) and phone_write. Every
+// operation travels through send — the PhoneActionFunc the server backs with
+// its native-app push channel (SSE foreground / FCM data background). The
+// Termux/SSH transport is retired (2026-07-05): reads serve the cache the app
+// pushes (stale → sync_state refresh request), writes execute in-app
+// (NotificationManager / TTS engine / ClipboardManager / Intents). A nil send
+// leaves actions reporting unavailable.
 //
 // Deferred (prompt audit 2026-06-12): together ~1,050 wire tokens for 17 uses
 // in 14 days, nearly all on phone-event turns. The one name-directing prompt
@@ -96,14 +97,14 @@ func FetchToolsSchema() map[string]any { return fetchToolsToolSchema() }
 func RegisterPhoneTools(registry toolctx.ToolRegistrar, send tools.PhoneActionFunc) {
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "phone_read",
-		Description: "사용자 스마트폰을 조회한다(reverse SSH→Termux). what=location(현재 GPS 좌표) | clipboard(방금 복사한 내용) | battery(배터리·충전 상태) | calllog(최근 통화기록 20건) | contacts(폰 주소록 — 특정 인물 검색은 `contacts` 도구가 더 낫다). '지금 어디', '방금 복사한 거', '최근 통화 누구랑' 같은 질문이나, 능동 판단 시 맥락 보강에 사용.",
+		Description: "사용자 스마트폰 상태를 조회한다(네이티브 앱이 밀어주는 상태 캐시 기반, SSH 불필요). what=location(최근 위치) | battery(배터리·충전 상태). 캐시가 오래됐으면 앱에 갱신을 요청하고 잠시 후 재시도하라고 안내한다. '지금 어디', '배터리 몇 %' 질문이나 능동 판단 시 맥락 보강에 사용. 주소록은 `contacts` 도구.",
 		InputSchema: phoneReadToolSchema(),
-		Fn:          tools.ToolPhoneRead(),
+		Fn:          tools.ToolPhoneRead(send),
 		Deferred:    true,
 	})
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "phone_write",
-		Description: "사용자 스마트폰에 직접 작용한다. to로 선택 — SSH(Termux): notification(알림) | tts(음성) | clipboard(클립보드), text 필수. 인앱 Intent 액션(앱 연결 시): open_url(target=URL) | open_app(target=패키지/앱명) | share(text) | message(target=수신자,text) | dial(target=전화번호) | photo(카메라). 운전 중 음성, 답을 클립보드에 꽂기, 링크/앱 열기, 메시지·전화·사진.",
+		Description: "사용자 스마트폰에 직접 작용한다(전부 인앱 실행, SSH 불필요). to — notify(알림 띄우기, text 필수·title 선택) | speak(음성으로 말하기, text) | clipboard(클립보드에 넣기, text) | open_url(target=URL) | open_app(target=패키지/앱명) | share(text) | message(target=수신자,text) | dial(target=전화번호) | photo(카메라). 운전 중 음성 안내, 답을 클립보드에 꽂기, 링크/앱 열기, 메시지·전화·사진.",
 		InputSchema: phoneWriteToolSchema(),
 		Fn:          tools.ToolPhoneWrite(send),
 		Deferred:    true,

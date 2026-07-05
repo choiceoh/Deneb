@@ -2,6 +2,7 @@ package ai.deneb.sensing
 
 import android.Manifest
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.location.Location
 import androidx.core.content.ContextCompat
@@ -45,6 +46,28 @@ actual suspend fun readCurrentLocation(): String? {
         append("\"longitude\":").append(location.longitude).append(",")
         append("\"accuracy\":").append(location.accuracy).append(",")
         append("\"provider\":\"").append(location.provider ?: "fused").append("\"")
+        readBatteryJson(context)?.let { append(",\"battery\":").append(it) }
         append("}")
     }
 }
+
+/**
+ * Battery status as a compact JSON object, embedded in the location fix so the
+ * gateway's single phone-state cache serves phone_read("battery") without any
+ * extra permission or round-trip (the Termux/SSH read path is retired). Reads
+ * the sticky ACTION_BATTERY_CHANGED broadcast — no receiver registration kept,
+ * no permission needed. Null on any failure (field simply omitted).
+ */
+private fun readBatteryJson(context: Context): String? = runCatching {
+    val intent = context.registerReceiver(
+        null,
+        android.content.IntentFilter(Intent.ACTION_BATTERY_CHANGED),
+    ) ?: return null
+    val level = intent.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1)
+    val scale = intent.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, -1)
+    if (level < 0 || scale <= 0) return null
+    val status = intent.getIntExtra(android.os.BatteryManager.EXTRA_STATUS, -1)
+    val charging = status == android.os.BatteryManager.BATTERY_STATUS_CHARGING ||
+        status == android.os.BatteryManager.BATTERY_STATUS_FULL
+    "{\"percent\":${(level * 100) / scale},\"charging\":$charging}"
+}.getOrNull()

@@ -25,16 +25,22 @@ type phoneWriteParams struct {
 	Title  string `json:"title"`
 }
 
-// phoneActions is the P1 allowlist: operations the app executes via a plain
-// Android Intent (no Accessibility tap-loop). Fixed set — the tool never emits
-// an action outside it.
+// phoneActions is the P1 allowlist: operations the app executes in-process —
+// plain Android Intents (no Accessibility tap-loop) plus the app-permission
+// successors of the retired SSH ops (notify=NotificationManager,
+// speak=TTS engine, clipboard=ClipboardManager set, sync_state=push a fresh
+// location+battery fix). Fixed set — the tool never emits an action outside it.
 var phoneActions = map[string]bool{
-	"open_url": true,
-	"open_app": true,
-	"share":    true,
-	"message":  true,
-	"dial":     true,
-	"photo":    true,
+	"open_url":   true,
+	"open_app":   true,
+	"share":      true,
+	"message":    true,
+	"dial":       true,
+	"photo":      true,
+	"notify":     true,
+	"speak":      true,
+	"clipboard":  true,
+	"sync_state": true,
 }
 
 // isPhoneAction reports whether `to` is an Intent-backed P1 action.
@@ -79,6 +85,23 @@ func buildPhoneAction(p phoneWriteParams) (string, map[string]string, error) {
 		args["number"] = target
 	case "photo":
 		// No args — the app opens the camera capture intent.
+	case "notify":
+		if text == "" {
+			return "", nil, fmt.Errorf("notify needs text")
+		}
+		title := strings.TrimSpace(p.Title)
+		if title == "" {
+			title = "Deneb"
+		}
+		args["title"] = title
+		args["text"] = text
+	case "speak", "clipboard":
+		if text == "" {
+			return "", nil, fmt.Errorf("%s needs text", action)
+		}
+		args["text"] = text
+	case "sync_state":
+		// No args — the app pushes a fresh location+battery fix.
 	}
 	return action, args, nil
 }
