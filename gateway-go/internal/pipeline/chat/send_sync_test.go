@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
@@ -125,6 +126,42 @@ func TestSendSyncStream_StreamsDeltaAndPreservesExplicitModel(t *testing.T) {
 	}
 	if !reflect.DeepEqual(deltas, []string{"stream reply"}) {
 		t.Fatalf("deltas = %#v, want %#v", deltas, []string{"stream reply"})
+	}
+}
+
+func TestBuildSyncResult_FillsAbortedEmptyFallback(t *testing.T) {
+	server := httptest.NewServer(http.NotFoundHandler())
+	defer server.Close()
+	h := newSyncTestHandler(server, NewMemoryTranscriptStore())
+	defer h.Close()
+
+	result, err := h.buildSyncResult("", &chatRunResult{
+		AgentResult: &agent.AgentResult{StopReason: "aborted"},
+	})
+	testutil.NoError(t, err)
+
+	want := fallbackForStopReason("aborted")
+	if got := result.BestText(); got != want {
+		t.Fatalf("BestText() = %q, want fallback %q", got, want)
+	}
+	if result.StopReason != "aborted" {
+		t.Fatalf("StopReason = %q, want aborted", result.StopReason)
+	}
+}
+
+func TestBuildSyncResult_LeavesNormalEmptyEndTurnBlank(t *testing.T) {
+	server := httptest.NewServer(http.NotFoundHandler())
+	defer server.Close()
+	h := newSyncTestHandler(server, NewMemoryTranscriptStore())
+	defer h.Close()
+
+	result, err := h.buildSyncResult("", &chatRunResult{
+		AgentResult: &agent.AgentResult{StopReason: "end_turn"},
+	})
+	testutil.NoError(t, err)
+
+	if got := result.BestText(); got != "" {
+		t.Fatalf("BestText() = %q, want blank", got)
 	}
 }
 
