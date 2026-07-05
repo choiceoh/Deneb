@@ -32,7 +32,17 @@ func ParseFlags(compiledVersion string) Flags {
 	daemonMode := flag.Bool("daemon", false, "Run as daemon (write PID file, check for existing)")
 	logLevel := flag.String("log-level", "", "Log level: debug, info, warn, error (overrides config)")
 	logFormat := flag.String("log-format", "", "Log format: text, json (overrides config)")
+	printVersion := flag.Bool("print-version", false, "Print the built-in version and exit")
 	flag.Parse()
+
+	// Version probe for the downgrade guard (downgrade_guard.go): the running
+	// gateway execs the candidate binary with --print-version before honoring a
+	// SIGUSR1 restart. Prints the COMPILED stamp (not the -version override) —
+	// the guard compares what was actually built.
+	if *printVersion {
+		fmt.Println(compiledVersion)
+		os.Exit(0)
+	}
 
 	v := *version
 	if v == "" {

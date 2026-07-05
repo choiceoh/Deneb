@@ -48,11 +48,18 @@ var osExit = os.Exit
 // RunWithSignals runs fn with a context cancelled on SIGINT, SIGTERM, or SIGUSR1.
 // Returns ExitCodeRestart (75) on SIGUSR1, 1 on error, or 0 on clean shutdown.
 //
-// Robustness contract: once a signal arrives the process is guaranteed to exit
-// within shutdownGraceTimeout (force-exited if graceful shutdown stalls), and a
-// repeated SIGINT/SIGTERM hard-terminates immediately — so a hung shutdown can
-// never wedge the gateway with its listener closed but the process alive.
-func RunWithSignals(fn func(ctx context.Context) error, logger *slog.Logger) int {
+// version is the running gateway's version: before honoring SIGUSR1 the
+// downgrade guard interrogates the candidate binary at the executable path and
+// refuses the restart when it is older (see downgrade_guard.go). Empty/"dev"
+// (tests, dev builds) disables the guard.
+//
+// Robustness contract: once a shutdown-bound signal arrives the process is
+// guaranteed to exit within shutdownGraceTimeout (force-exited if graceful
+// shutdown stalls), and a repeated SIGINT/SIGTERM hard-terminates immediately —
+// so a hung shutdown can never wedge the gateway with its listener closed but
+// the process alive. A REFUSED SIGUSR1 does not shut anything down: the
+// supervisor keeps serving and keeps listening for further signals.
+func RunWithSignals(fn func(ctx context.Context) error, logger *slog.Logger, version string) int {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -66,37 +73,43 @@ func RunWithSignals(fn func(ctx context.Context) error, logger *slog.Logger) int
 
 	go func() {
 		defer close(supervisorDone)
-		select {
-		case <-fnDone:
-			// fn returned before any signal — nothing to supervise.
-			return
-		case sig := <-sigCh:
-			if sig == syscall.SIGUSR1 {
-				logger.Info("received SIGUSR1, initiating graceful restart")
-				restartRequested.Store(true)
-			} else {
-				logger.Info("received shutdown signal", "signal", sig)
-			}
-			cancel()
-
-			// A repeated INT/TERM now hard-terminates: restore the default
-			// disposition so an impatient operator (or systemd) can force the
-			// kill if graceful shutdown stalls. SIGUSR1 stays handled.
-			signal.Reset(syscall.SIGINT, syscall.SIGTERM)
-
-			// Watchdog: force-exit if graceful shutdown overruns the grace
-			// window so the process ALWAYS terminates and systemd restarts a
-			// fresh listener. See shutdownGraceTimeout.
+		for {
 			select {
 			case <-fnDone:
-			case <-time.After(shutdownGraceTimeout):
-				code := 0
-				if restartRequested.Load() {
-					code = ExitCodeRestart
+				// fn returned before any signal — nothing to supervise.
+				return
+			case sig := <-sigCh:
+				if sig == syscall.SIGUSR1 {
+					if !acceptRestart(version, logger) {
+						continue // downgrade refused — keep serving, keep listening
+					}
+					logger.Info("received SIGUSR1, initiating graceful restart")
+					restartRequested.Store(true)
+				} else {
+					logger.Info("received shutdown signal", "signal", sig)
 				}
-				logger.Error("graceful shutdown exceeded grace window; forcing exit",
-					"grace", shutdownGraceTimeout, "exitCode", code)
-				osExit(code)
+				cancel()
+
+				// A repeated INT/TERM now hard-terminates: restore the default
+				// disposition so an impatient operator (or systemd) can force the
+				// kill if graceful shutdown stalls. SIGUSR1 stays handled.
+				signal.Reset(syscall.SIGINT, syscall.SIGTERM)
+
+				// Watchdog: force-exit if graceful shutdown overruns the grace
+				// window so the process ALWAYS terminates and systemd restarts a
+				// fresh listener. See shutdownGraceTimeout.
+				select {
+				case <-fnDone:
+				case <-time.After(shutdownGraceTimeout):
+					code := 0
+					if restartRequested.Load() {
+						code = ExitCodeRestart
+					}
+					logger.Error("graceful shutdown exceeded grace window; forcing exit",
+						"grace", shutdownGraceTimeout, "exitCode", code)
+					osExit(code)
+				}
+				return
 			}
 		}
 	}()
@@ -153,7 +166,7 @@ func RunDaemon(flags Flags, cfg ConfigResult, svc Services, log LoggingResult) i
 			return fmt.Errorf("daemon start failed: %w", err)
 		}
 		return svc.Server.Run(ctx)
-	}, log.Logger)
+	}, log.Logger, flags.Version)
 
 	d.Stop() //nolint:errcheck // best-effort cleanup
 	return exitCode
@@ -167,7 +180,7 @@ func RunServer(flags Flags, cfg ConfigResult, svc Services, log LoggingResult) i
 	}
 	return RunWithSignals(func(ctx context.Context) error {
 		return svc.Server.Run(ctx)
-	}, log.Logger)
+	}, log.Logger, flags.Version)
 }
 
 func buildBannerInfo(version, addr string) logging.BannerInfo {
