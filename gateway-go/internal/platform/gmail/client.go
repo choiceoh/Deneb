@@ -21,6 +21,16 @@ var tokenURL = "https://oauth2.googleapis.com/token" //nolint:gosec // G101 fals
 
 const apiBase = "https://gmail.googleapis.com/gmail/v1/users/me"
 
+// Response-size bounds: every external HTTP body read is capped so a runaway or
+// malformed upstream (misbehaving proxy, endless stream) cannot balloon the
+// always-on gateway's memory. Generous by design — a Gmail message with base64
+// attachments can approach ~50 MiB, so the API cap never clips a legitimate
+// payload; a truncated over-limit body simply fails JSON decoding (fail-closed).
+const (
+	maxAPIResponseBytes   = 64 << 20 // Gmail API reads (messages with attachments)
+	maxTokenResponseBytes = 1 << 20  // OAuth token endpoint (tiny JSON)
+)
+
 // setTokenURL overrides the token endpoint URL (for testing).
 func setTokenURL(u string) { tokenURL = u }
 
@@ -208,7 +218,7 @@ func (c *Client) refresh(ctx context.Context) (string, error) {
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxTokenResponseBytes))
 	if err != nil {
 		return "", fmt.Errorf("토큰 응답 읽기 실패: %w", err)
 	}
@@ -300,7 +310,7 @@ func (c *Client) readJSON(ctx context.Context, path string, dest any) error {
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxAPIResponseBytes))
 	if err != nil {
 		return fmt.Errorf("Gmail API 응답 읽기 실패: %w", err) //nolint:staticcheck // ST1005 — Korean error message
 	}
@@ -323,7 +333,7 @@ func (c *Client) postJSON(ctx context.Context, path string, payload, dest any) e
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxAPIResponseBytes))
 	if err != nil {
 		return fmt.Errorf("Gmail API 응답 읽기 실패: %w", err) //nolint:staticcheck // ST1005 — Korean error message
 	}
