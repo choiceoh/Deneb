@@ -28,7 +28,7 @@ func spillFixture(t *testing.T, n int) (ToolFunc, context.Context, string) {
 	return ToolSpilloverRead(store), ctx, id
 }
 
-func callSpill(t *testing.T, fn ToolFunc, ctx context.Context, params map[string]any) string {
+func callSpill(ctx context.Context, t *testing.T, fn ToolFunc, params map[string]any) string {
 	t.Helper()
 	raw, _ := json.Marshal(params)
 	out, err := fn(ctx, raw)
@@ -43,7 +43,7 @@ func callSpill(t *testing.T, fn ToolFunc, ctx context.Context, params map[string
 func TestSpilloverRead_DefaultPageAndContinuation(t *testing.T) {
 	fn, ctx, id := spillFixture(t, 1000)
 
-	out := callSpill(t, fn, ctx, map[string]any{"spill_id": id})
+	out := callSpill(ctx, t, fn, map[string]any{"spill_id": id})
 	if !strings.Contains(out, "1–400줄 표시") {
 		t.Errorf("expected default 400-line page header, got head: %.120s", out)
 	}
@@ -55,12 +55,12 @@ func TestSpilloverRead_DefaultPageAndContinuation(t *testing.T) {
 	}
 
 	// Second page picks up where the hint points.
-	out = callSpill(t, fn, ctx, map[string]any{"spill_id": id, "offset": 401, "limit": 100})
+	out = callSpill(ctx, t, fn, map[string]any{"spill_id": id, "offset": 401, "limit": 100})
 	if !strings.Contains(out, "401–500줄 표시") || !strings.Contains(out, "line 401") {
 		t.Errorf("expected 401–500 window, got head: %.120s", out)
 	}
 	// Out-of-range offset gives guidance, not an error.
-	out = callSpill(t, fn, ctx, map[string]any{"spill_id": id, "offset": 5000})
+	out = callSpill(ctx, t, fn, map[string]any{"spill_id": id, "offset": 5000})
 	if !strings.Contains(out, "범위 밖") {
 		t.Errorf("expected out-of-range guidance, got: %.120s", out)
 	}
@@ -71,7 +71,7 @@ func TestSpilloverRead_DefaultPageAndContinuation(t *testing.T) {
 func TestSpilloverRead_Grep(t *testing.T) {
 	fn, ctx, id := spillFixture(t, 1000)
 
-	out := callSpill(t, fn, ctx, map[string]any{"spill_id": id, "grep": `^line 77\d$`})
+	out := callSpill(ctx, t, fn, map[string]any{"spill_id": id, "grep": `^line 77\d$`})
 	if !strings.Contains(out, "매치 10줄") {
 		t.Errorf("expected 10 matches (770-779), got head: %.160s", out)
 	}
@@ -79,12 +79,12 @@ func TestSpilloverRead_Grep(t *testing.T) {
 		t.Errorf("expected numbered match lines, got: %.200s", out)
 	}
 	// Invalid regex → guidance string, not a hard error.
-	out = callSpill(t, fn, ctx, map[string]any{"spill_id": id, "grep": "["})
+	out = callSpill(ctx, t, fn, map[string]any{"spill_id": id, "grep": "["})
 	if !strings.Contains(out, "잘못") {
 		t.Errorf("expected invalid-regex guidance, got: %.120s", out)
 	}
 	// No match → clean message.
-	out = callSpill(t, fn, ctx, map[string]any{"spill_id": id, "grep": "없는패턴"})
+	out = callSpill(ctx, t, fn, map[string]any{"spill_id": id, "grep": "없는패턴"})
 	if !strings.Contains(out, "매치 없음") {
 		t.Errorf("expected no-match message, got: %.120s", out)
 	}
@@ -101,7 +101,7 @@ func TestSpilloverRead_CharBudget(t *testing.T) {
 	fn := ToolSpilloverRead(store)
 	ctx := toolctx.WithSessionKey(context.Background(), "client:test")
 
-	out := callSpill(t, fn, ctx, map[string]any{"spill_id": id, "limit": 100})
+	out := callSpill(ctx, t, fn, map[string]any{"spill_id": id, "limit": 100})
 	if len(out) > spillPageMaxChars+2000 {
 		t.Errorf("page exceeded char budget: %d chars", len(out))
 	}
