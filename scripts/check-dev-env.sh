@@ -70,6 +70,33 @@ else
 fi
 
 echo ""
+echo "Multi-agent git tooling (optional accelerators — hints only, never fatal):"
+if command -v mergiraf >/dev/null 2>&1; then
+    if [ "$(git config --global --get merge.mergiraf.name 2>/dev/null)" = "mergiraf" ]; then
+        echo "  [ok] mergiraf + merge driver configured (structural merges per .gitattributes)"
+    else
+        echo "  [hint] mergiraf installed but driver unset — see setup comment in .gitattributes"
+    fi
+else
+    echo "  [hint] mergiraf not installed — .gitattributes merge=mergiraf falls back to text merge"
+fi
+if [ "$(git config --global --get rerere.enabled 2>/dev/null)" = "true" ]; then
+    echo "  [ok] git rerere enabled (conflict resolutions reused across worktrees)"
+else
+    echo "  [hint] enable rerere: git config --global rerere.enabled true"
+fi
+if [ -n "$(git config --local --get maintenance.strategy 2>/dev/null)" ]; then
+    echo "  [ok] git maintenance registered (background commit-graph/prefetch)"
+else
+    echo "  [hint] register maintenance: git maintenance start (once, in the main checkout)"
+fi
+if command -v clash >/dev/null 2>&1; then
+    echo "  [ok] clash installed (cross-worktree conflict early warning: clash status)"
+else
+    echo "  [hint] clash not installed — worktree conflict scanner (github.com/clash-sh/clash)"
+fi
+
+echo ""
 
 if [ "$MISSING" -gt 0 ]; then
     echo "Warning: $MISSING tool(s) missing. Some build targets may fail."

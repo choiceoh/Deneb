@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "command -v clash >/dev/null 2>&1 || exit 0; exec clash check",
+            "timeout": 10,
+            "statusMessage": "clash: 워크트리 충돌 검사"
+          }
+        ]
+      }
+    ]
+  }
+}
