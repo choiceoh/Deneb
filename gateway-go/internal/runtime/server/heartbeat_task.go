@@ -64,6 +64,12 @@ type heartbeatTask struct {
 	// (default), so behavior is unchanged when no collector is wired.
 	collectSignals func(ctx context.Context) autonomous.SignalInputs
 	signalConfig   autonomous.SignalConfig
+
+	// proposedSelfCoding, when set, reports the pending (status=proposed)
+	// self-improvement coding candidates: count plus a change fingerprint.
+	// Drives the self-coding review lane (heartbeat_selfcoding.go). Nil → lane
+	// disabled (tests, genesis tracker absent).
+	proposedSelfCoding func() (count int, fingerprint string)
 }
 
 func (t *heartbeatTask) Name() string            { return "heartbeat" }
@@ -155,8 +161,13 @@ func (t *heartbeatTask) Run(ctx context.Context) error {
 	// heartbeat_research.go. Deterministic scan, throttled to ~once a day.
 	researchNudge := t.detectResearchNudge(time.Now())
 
-	// Nothing to do: no user checks, no escalation signals, no research nudge.
-	if !heartbeatShouldRun(content, signalSummary, researchNudge) {
+	// Self-coding review lane: pending self-improvement candidates get
+	// consumed by this turn instead of waiting on the operator to notice the
+	// 자가코딩 개선 screen — see heartbeat_selfcoding.go.
+	selfCodingNudge := t.detectSelfCodingNudge(time.Now())
+
+	// Nothing to do: no user checks, no signals, no lane nudges.
+	if !heartbeatShouldRun(content, signalSummary, selfCodingNudge, researchNudge) {
 		t.logger.Debug("heartbeat: skipped, no actionable tasks or signals")
 		return nil
 	}
@@ -174,7 +185,7 @@ func (t *heartbeatTask) Run(ctx context.Context) error {
 	}
 	sessionKey := heartbeatTargetSessionKey(lastSessionKey)
 
-	triggerMsg := fmt.Sprintf(heartbeatTriggerTemplate, composeHeartbeatBody(signalSummary, content, researchNudge))
+	triggerMsg := fmt.Sprintf(heartbeatTriggerTemplate, composeHeartbeatBody(signalSummary, content, selfCodingNudge, researchNudge))
 
 	runCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
@@ -209,10 +220,11 @@ func (t *heartbeatTask) detectSignalSummary(ctx context.Context) string {
 
 // heartbeatShouldRun reports whether a heartbeat turn is warranted: the user
 // has HEARTBEAT.md checks, there are escalation-worthy signals to surface, or
-// the research lane fired a new-data nudge. Pure for unit testing.
-func heartbeatShouldRun(content, signalSummary, researchNudge string) bool {
+// a lane (self-coding review, new-data research) fired a nudge. Pure for unit
+// testing.
+func heartbeatShouldRun(content, signalSummary, selfCodingNudge, researchNudge string) bool {
 	return strings.TrimSpace(content) != "" || strings.TrimSpace(signalSummary) != "" ||
-		strings.TrimSpace(researchNudge) != ""
+		strings.TrimSpace(selfCodingNudge) != "" || strings.TrimSpace(researchNudge) != ""
 }
 
 // heartbeatHasTasks reports whether HEARTBEAT.md carries anything the agent
@@ -269,21 +281,26 @@ func markdownHeading(trimmed string) (level int, title string, ok bool) {
 }
 
 // composeHeartbeatBody builds the trigger body from the (optional) signal
-// summary, (optional) HEARTBEAT.md content, and (optional) research nudge.
-// Signals lead so the agent prioritizes them; the research lane comes after
-// the user's own checks. When there is no HEARTBEAT.md, a short note tells the
-// agent the injected blocks are the only agenda (and to stay non-intrusive).
-// Pure for unit testing.
-func composeHeartbeatBody(signalSummary, content, researchNudge string) string {
+// summary, (optional) HEARTBEAT.md content, and (optional) lane nudges.
+// Signals lead so the agent prioritizes them; lanes come after the user's own
+// checks — self-coding review (actionable now) before research (formulating
+// new work). When there is no HEARTBEAT.md, a short note tells the agent the
+// injected blocks are the only agenda (and to stay non-intrusive). Pure for
+// unit testing.
+func composeHeartbeatBody(signalSummary, content, selfCodingNudge, researchNudge string) string {
 	signalSummary = strings.TrimSpace(signalSummary)
 	content = strings.TrimSpace(content)
+	selfCodingNudge = strings.TrimSpace(selfCodingNudge)
 	researchNudge = strings.TrimSpace(researchNudge)
-	sections := make([]string, 0, 3)
+	sections := make([]string, 0, 4)
 	if signalSummary != "" {
 		sections = append(sections, signalSummary)
 	}
 	if content != "" {
 		sections = append(sections, content)
+	}
+	if selfCodingNudge != "" {
+		sections = append(sections, selfCodingNudge)
 	}
 	if researchNudge != "" {
 		sections = append(sections, researchNudge)

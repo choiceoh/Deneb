@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,6 +19,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modeltuner"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/regressionwatch"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/approval"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/shortid"
@@ -536,6 +538,26 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 				newDealDeadlineSignalCollector(func() *wiki.Store { return s.wikiStore }),
 			),
 			signalConfig: autonomous.SignalConfigForThreshold(resolveProactiveEscalateThreshold(s.logger)),
+			// Self-coding review lane: pending proposed candidates from the
+			// genesis tracker (read per tick — the tracker late-binds during
+			// genesis init, and the field read keeps the closure ordering-immune).
+			proposedSelfCoding: func() (int, string) {
+				tracker := s.genesisTracker
+				if tracker == nil {
+					return 0, ""
+				}
+				recs, err := tracker.RecentSelfCorrectionCandidates("", genesis.SelfCorrectionStatusProposed, 20)
+				if err != nil || len(recs) == 0 {
+					return 0, ""
+				}
+				newest := recs[0]
+				for _, r := range recs[1:] {
+					if r.UpdatedAt > newest.UpdatedAt {
+						newest = r
+					}
+				}
+				return len(recs), fmt.Sprintf("%d:%s:%d", len(recs), newest.ID, newest.UpdatedAt)
+			},
 		})
 
 		// Register the goal loop (Ralph loop): advances active standing goals
