@@ -20,8 +20,9 @@ type Summary struct {
 const summarySnippetRunes = 1200
 
 // ListSince returns messages in mailbox dated (Date header) on/after since's
-// KST calendar day, most-recent first, capped at limit. Used by the
-// daily-digest agent to read the day's mail from the archive instead of Gmail.
+// KST calendar day, most-recent first, capped at limit. No production caller
+// remains (the digest/search paths moved to SearchContextMessages); kept as
+// the archive-reader diagnostic surface exercised by reader_live_test.go.
 // The IMAP query uses SENTSINCE with a one-day prefetch margin (see
 // archiveSentSinceCriteria — INTERNALDATE is unusable here) and the results
 // are post-filtered back to the exact day boundary.

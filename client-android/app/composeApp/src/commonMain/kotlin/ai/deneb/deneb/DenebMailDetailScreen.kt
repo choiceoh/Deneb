@@ -26,11 +26,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -51,7 +49,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -96,10 +93,6 @@ fun DenebMailDetailScreen(
     onBack: () -> Unit,
     onOpenWiki: (String) -> Unit = {},
     navigationTabBar: (@Composable () -> Unit)? = null,
-    // panelMode = rendered as the right detail pane of the (retired-product) desktop split-view: drop the
-    // status-bar inset and the "← 뒤로" header (the user switches mail by clicking list rows;
-    // onBack is still invoked by archive/trash success to clear the selection).
-    panelMode: Boolean = false,
 ) {
     val scope = rememberCoroutineScope()
     val haptics = rememberHaptics()
@@ -539,30 +532,16 @@ fun DenebMailDetailScreen(
         Spacer(Modifier.height(24.dp))
     }
 
-    if (panelMode) {
-        Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-            Column(
-                modifier = Modifier
-                    // Keep the "ask about this mail" field above the soft keyboard
-                    // (edge-to-edge: the app owns the IME inset). Before verticalScroll
-                    // so it shrinks the scroll viewport.
-                    .imePadding()
-                    .padding(16.dp)
-                    .verticalScroll(rememberScrollState()),
-            ) { body() }
-        }
-    } else {
-        DenebScreenScaffold(title = "메일", onBack = onBack, tabBar = navigationTabBar) {
-            Column(
-                Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 24.dp),
-            ) {
-                Spacer(Modifier.height(8.dp))
-                body()
-            }
+    DenebScreenScaffold(title = "메일", onBack = onBack, tabBar = navigationTabBar) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp),
+        ) {
+            Spacer(Modifier.height(8.dp))
+            body()
         }
     }
 }

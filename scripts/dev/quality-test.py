@@ -1155,12 +1155,12 @@ async def run_health_test(client: GatewayClient, tdef: dict) -> QualityResult:
                 data = json.loads(resp.read())
             result.latency_ms = (time.time() - start) * 1000
             subs = data.get("subsystems", {})
-            result.add_check("core_ffi", subs.get("core") == "rust-ffi",
+            result.add_check("core_go", subs.get("core") == "go",
                              f"core={subs.get('core', 'N/A')}")
             result.add_check("latency", *check_latency(result.latency_ms, 500))
         except Exception as e:
             result.latency_ms = (time.time() - start) * 1000
-            result.add_check("core_ffi", False, str(e))
+            result.add_check("core_go", False, str(e))
 
     elif health_type == "version":
         resp = await client.rpc("health")
