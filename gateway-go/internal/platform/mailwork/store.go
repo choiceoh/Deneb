@@ -16,7 +16,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 	"github.com/choiceoh/deneb/gateway-go/pkg/atomicfile"
 )
 
@@ -101,21 +100,9 @@ type Store struct {
 }
 
 var (
-	globalMu    sync.Mutex
-	globalStore *Store
-
 	pathLocksMu sync.Mutex
 	pathLocks   = map[string]*sync.Mutex{}
 )
-
-func Default() *Store {
-	globalMu.Lock()
-	defer globalMu.Unlock()
-	if globalStore == nil {
-		globalStore = New(filepath.Join(config.ResolveStateDir(), "mail_work_state.json"))
-	}
-	return globalStore
-}
 
 func New(path string) *Store {
 	return &Store{path: path}
@@ -132,23 +119,6 @@ func (s *Store) Get(id string) MessageState {
 		return MessageState{}
 	}
 	return st.Messages[strings.TrimSpace(id)]
-}
-
-func (s *Store) Snapshot() map[string]MessageState {
-	if s == nil {
-		return nil
-	}
-	unlock := s.lock()
-	defer unlock()
-	st, err := s.loadLocked()
-	if err != nil {
-		return nil
-	}
-	out := make(map[string]MessageState, len(st.Messages))
-	for id, msg := range st.Messages {
-		out[id] = msg
-	}
-	return out
 }
 
 func (s *Store) Summary() Summary {
@@ -189,10 +159,6 @@ func (s *Store) RememberMessage(in MessageInput) (MessageState, error) {
 	})
 }
 
-func (s *Store) MarkAnalysisQueued(in MessageInput) (MessageState, error) {
-	return s.markAnalysis(in, AnalysisQueued, "", nil)
-}
-
 func (s *Store) MarkAnalysisAnalyzing(in MessageInput) (MessageState, error) {
 	return s.markAnalysis(in, AnalysisAnalyzing, "", nil)
 }
@@ -226,16 +192,8 @@ func (s *Store) MarkAnalysisFailed(in MessageInput, err error) (MessageState, er
 	return s.markAnalysis(in, AnalysisFailed, errorText(err), nil)
 }
 
-func (s *Store) MarkAnalysisStale(id string) (MessageState, error) {
-	return s.markAnalysis(MessageInput{ID: id}, AnalysisStale, "", nil)
-}
-
 func (s *Store) MarkFeedCreated(id string) (MessageState, error) {
 	return s.markFeed(id, FeedCreated, nil)
-}
-
-func (s *Store) MarkFeedFailed(id string, err error) (MessageState, error) {
-	return s.markFeed(id, FeedFailed, err)
 }
 
 func (s *Store) MarkDerivedCounts(id string, calendarProposalCount, todoCount int) (MessageState, error) {
