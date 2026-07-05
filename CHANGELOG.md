@@ -1,5 +1,15 @@
 # Changelog
 
+## [4.70.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.69.0...deneb-v4.70.0) (2026-07-05)
+
+
+### ✨ Features
+
+* **denebui:** deneb-ui 카드를 라벨 HTML 포맷으로 전면 전환 — JSON 수리계층 은퇴 ([#3202](https://github.com/choiceoh/Deneb/issues/3202)) ([a01b3bb](https://github.com/choiceoh/Deneb/commit/a01b3bb2d876a85ef006168bd9e8308f28579189))
+* **mail:** 거래 조건 인용 검증 추출 — 물량·단가·지급조건 (사실 레이어 2단계 A) ([#3196](https://github.com/choiceoh/Deneb/issues/3196)) ([3171269](https://github.com/choiceoh/Deneb/commit/3171269a425a59a75adb35a3b433d7c9f82970f9))
+* **wiki:** 거래 원장 v2 — 인용 검증 조건 영속 + 물량 MW 집계 (사실 레이어 2단계 B) ([#3198](https://github.com/choiceoh/Deneb/issues/3198)) ([e7ea196](https://github.com/choiceoh/Deneb/commit/e7ea19686562e44df6215e71c6c51c6face0ea84))
+* **wiki:** 재견적 가격 변동 감지 — 프로젝트 현재 상태 자동 불릿 (사실 레이어 2단계 C) ([#3199](https://github.com/choiceoh/Deneb/issues/3199)) ([8c36f65](https://github.com/choiceoh/Deneb/commit/8c36f653b8270d520966d36fecfef31fcde5790b))
+
 ## [4.69.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.68.0...deneb-v4.69.0) (2026-07-05)
 
 

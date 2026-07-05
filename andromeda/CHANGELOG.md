@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.52](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.51...andromeda-v0.0.52) (2026-07-05)
+
+
+### ✨ Features
+
+* **denebui:** deneb-ui 카드를 라벨 HTML 포맷으로 전면 전환 — JSON 수리계층 은퇴 ([#3202](https://github.com/choiceoh/Deneb/issues/3202)) ([a01b3bb](https://github.com/choiceoh/Deneb/commit/a01b3bb2d876a85ef006168bd9e8308f28579189))
+
 ## [0.0.51](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.50...andromeda-v0.0.51) (2026-07-05)
 
 
