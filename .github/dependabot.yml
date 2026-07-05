@@ -82,4 +82,9 @@ updates:
         update-types:
           - minor
           - patch
+    ignore:
+      # material3 1.11+ pulls androidx material3 alphas that require compileSdk 37;
+      # build hosts (srv1 runner, dev Macs) only have android-36. Broke publish-apk
+      # on 2026-07-05 (#3151). Lift after the compileSdk 37 migration.
+      - dependency-name: "org.jetbrains.compose.material3:material3"
     open-pull-requests-limit: 5
