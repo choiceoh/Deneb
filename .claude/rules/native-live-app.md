@@ -13,7 +13,7 @@ globs: ["client-android/**", "scripts/dev/native-app.sh"]
 |---|---|---|
 | 컴파일만 | `./gradlew :composeApp:compileKotlinDesktop` | 타입/빌드 |
 | 컴포저블 외형 | `./gradlew :composeApp:renderPreviews` → `/tmp/deneb-render/*.png` | **mock** 데이터 정적 PNG |
-| 시맨틱 트리 (비전 불필요) | `scripts/dev/ui-inspect.sh <screen> [actions]` | mock 데이터 화면의 Compose 시맨틱 트리를 **텍스트로** 덤프 + 노드 텍스트로 클릭 구동 — 비전 모델 아닌 에이전트도 한국어 라벨을 정확히 검증 |
+| 시맨틱 트리 (비전 불필요) | `scripts/dev/ui-inspect.sh <screen> [actions]` | mock 데이터 화면의 Compose 시맨틱 트리를 **텍스트로** 덤프 + 노드 텍스트로 클릭 구동 — 비전 모델이 아닌 에이전트도 한국어 라벨을 정확히 검증 |
 | **실제 앱 라이브** | **`scripts/dev/native-app.sh`** | **프로덕션 실데이터 + 상호작용 + 상태 흐름** |
 | 시스템 제스처 | 실기기 (Galaxy S26) | 엣지 스와이프 등 — 하네스로 재현 불가 |
 
