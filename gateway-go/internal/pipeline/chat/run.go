@@ -205,25 +205,10 @@ type runDeps struct {
 	// Contains reply, media, typing, reaction, draft, emit, shutdown, and model fields.
 	callbacks CallbackSnapshot
 
-	// topicResolver maps a forum threadID to a per-topic knowledge key for
-	// system-prompt injection. nil disables per-topic knowledge.
-	topicResolver TopicResolver
-
-	// calendarGlanceFn builds the ambient upcoming-events glance for the dynamic
-	// system-prompt block. nil disables ambient calendar awareness.
-	calendarGlanceFn CalendarGlanceFunc
-
-	// goalGlanceFn builds the ambient active-goal glance for the dynamic
-	// system-prompt block. nil disables ambient goal awareness.
-	goalGlanceFn GoalGlanceFunc
-
-	// personaOverrideFn returns the operator-edited 업무 persona text (Settings
-	// prompt corner), or "" when unedited. nil disables the override (the
-	// default persona renders). Read per turn — byte-stable between rare edits,
-	// so the Static cache holds; an edit changes the PersonaCacheKey and thus the
-	// cache slot. The chat package stays free of the prompts/server import by
-	// talking through this closure (wired in server/chat_pipeline.go).
-	personaOverrideFn PersonaOverrideFunc
+	// ambient groups the ambient system-prompt context providers. The chat
+	// package stays free of the prompts/server import by talking through
+	// these closures (wired in server/chat_pipeline.go). See AmbientDeps.
+	ambient AmbientDeps
 
 	// fileRecallFn runs a hybrid semantic search over the on-box file store for
 	// the recall preflight, surfacing relevant uploaded files as recall evidence
@@ -232,16 +217,8 @@ type runDeps struct {
 	// the shared file semantic index.
 	fileRecallFn FileRecallFunc
 
-	// codingTurnEndFn fires after a coding-session turn: it checkpoints the
-	// worktree edits and verifies build/tests, flipping the rail status. nil
-	// disables it; non-coding turns never invoke it regardless. Wired in
-	// server/chat_pipeline.go over the shared code Manager + session store.
-	codingTurnEndFn CodingTurnEndFunc
-
-	// codingRebindFn re-establishes a coding session's worktree binding from
-	// the durable code store at the start of a code: turn — the in-memory
-	// binding does not survive session GC or restarts. nil disables the rebind.
-	codingRebindFn CodingRebindFunc
+	// coding groups the 코드모드 session hooks. See CodingDeps.
+	coding CodingDeps
 
 	// chatport holds injected adapters that decouple chat from autoreply.
 	chatport chatportAdapters

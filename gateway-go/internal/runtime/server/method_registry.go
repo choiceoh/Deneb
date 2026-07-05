@@ -1102,7 +1102,7 @@ func (s *Server) codeSessions() handlerminiapp.CodeSessions {
 	return nil
 }
 
-// codingTurnEnd is the chat turn-end hook (wired as HandlerConfig.CodingTurnEndFn):
+// codingTurnEnd is the chat turn-end hook (wired as HandlerConfig.Coding.TurnEnd):
 // for a coding session it checkpoints the worktree edits and verifies build/tests,
 // flipping the rail status. sessionKey is "code:<taskID>"; fallbackSummary is the
 // turn's trimmed user message and resultText the head of the agent's final report
@@ -1191,7 +1191,7 @@ func (s *Server) codeTaskLock(taskID string) *sync.Mutex {
 }
 
 // rebindCodingSession re-establishes the chat-session ↔ worktree binding for a
-// coding turn (wired as HandlerConfig.CodingRebindFn; called at the start of
+// coding turn (wired as HandlerConfig.Coding.Rebind; called at the start of
 // every code: turn). The session manager is in-memory only — terminal direct
 // sessions are GC'd after 1h and everything is lost on restart — while the
 // code store on disk is the durable truth, so the binding is derived from it

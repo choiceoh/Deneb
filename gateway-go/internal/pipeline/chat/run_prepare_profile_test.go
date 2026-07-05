@@ -44,15 +44,17 @@ func newProfilePrepFixture(t *testing.T) profilePrepFixture {
 		tools:      reg,
 		transcript: NewMemoryTranscriptStore(),
 		contextCfg: DefaultContextConfig(),
-		calendarGlanceFn: func(ctx context.Context, sessionKey, tz string) string {
-			calendarCalled.Store(true)
-			return "GLANCE-CAL-MARKER"
+		ambient: AmbientDeps{
+			CalendarGlance: func(ctx context.Context, sessionKey, tz string) string {
+				calendarCalled.Store(true)
+				return "GLANCE-CAL-MARKER"
+			},
+			GoalGlance: func(ctx context.Context, sessionKey string) string {
+				goalCalled.Store(true)
+				return "GLANCE-GOAL-MARKER"
+			},
+			PersonaOverride: func() string { return testPersonaMarker },
 		},
-		goalGlanceFn: func(ctx context.Context, sessionKey string) string {
-			goalCalled.Store(true)
-			return "GLANCE-GOAL-MARKER"
-		},
-		personaOverrideFn: func() string { return testPersonaMarker },
 	}
 	return profilePrepFixture{deps: deps, calendarCalled: &calendarCalled, goalCalled: &goalCalled}
 }

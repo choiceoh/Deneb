@@ -229,13 +229,13 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 	// Ambient calendar awareness: a frozen-per-day upcoming-events glance in the
 	// dynamic system-prompt block, built over the same hybrid calendar source as
 	// the calendar tool. nil when no calendar source is wired (feature off).
-	chatCfg.CalendarGlanceFn = chat.NewCalendarGlanceFunc(&s.toolDeps.Calendar)
-	chatCfg.GoalGlanceFn = chat.NewGoalGlanceFunc()
+	chatCfg.Ambient.CalendarGlance = chat.NewCalendarGlanceFunc(&s.toolDeps.Calendar)
+	chatCfg.Ambient.GoalGlance = chat.NewGoalGlanceFunc()
 
 	// Operator-edited 업무 persona (Settings prompt corner → prompt store). Returns
 	// "" when unedited so the chat pipeline renders the default persona. Reading
 	// the store keeps the chat package free of the prompt-store import.
-	chatCfg.PersonaOverrideFn = s.personaOverride
+	chatCfg.Ambient.PersonaOverride = s.personaOverride
 
 	// Spillover store: saves large tool results to disk, replaces with preview.
 	// Session-end events release per-session spill files immediately instead of
@@ -287,8 +287,8 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 	// restarts). nil when coding mode is disabled (no denebDir / store) → the
 	// chat hooks are simply never armed.
 	if mgr, store := s.codingBackends(); mgr != nil && store != nil {
-		chatCfg.CodingTurnEndFn = s.codingTurnEnd
-		chatCfg.CodingRebindFn = s.rebindCodingSession
+		chatCfg.Coding.TurnEnd = s.codingTurnEnd
+		chatCfg.Coding.Rebind = s.rebindCodingSession
 	}
 
 	// Polaris: retrieval tools for compressed conversation history.

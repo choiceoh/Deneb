@@ -302,9 +302,9 @@ func buildTurnSystemPrompt(ctx context.Context, params RunParams, deps runDeps, 
 	// key change → topic-less Static cache stays shared).
 	var topicKnowledge, topicCacheKey, topicKnowledgePath string
 	var frozenTopic *prompt.TopicKnowledge
-	if deps.topicResolver != nil && params.Delivery != nil && !chatbot && !coding {
-		if key := deps.topicResolver.TopicKey(params.Delivery.ThreadID); key != "" {
-			tk := prompt.LoadTopicKnowledge(workspaceDir, deps.topicResolver.Dir(), key, params.SessionKey)
+	if deps.ambient.TopicResolver != nil && params.Delivery != nil && !chatbot && !coding {
+		if key := deps.ambient.TopicResolver.TopicKey(params.Delivery.ThreadID); key != "" {
+			tk := prompt.LoadTopicKnowledge(workspaceDir, deps.ambient.TopicResolver.Dir(), key, params.SessionKey)
 			if tk.Content != "" {
 				topicKnowledge = tk.Content
 				topicCacheKey = tk.Key + ":" + tk.Hash
@@ -319,16 +319,16 @@ func buildTurnSystemPrompt(ctx context.Context, params RunParams, deps runDeps, 
 	// it per day, so this is a cheap cache hit on all but the first turn of
 	// the day; "" when no calendar source or no upcoming events.
 	var calendarGlance string
-	if deps.calendarGlanceFn != nil && !chatbot && !coding {
-		calendarGlance = deps.calendarGlanceFn(ctx, params.SessionKey, tz)
+	if deps.ambient.CalendarGlance != nil && !chatbot && !coding {
+		calendarGlance = deps.ambient.CalendarGlance(ctx, params.SessionKey, tz)
 	}
 
 	// Ambient goal glance for the dynamic block: this session's active
 	// standing goal, read live from the process store. "" when no active
 	// goal or goals are not wired. 챗봇 persona stays neutral (no goals).
 	var goalGlance string
-	if deps.goalGlanceFn != nil && !chatbot && !coding {
-		goalGlance = deps.goalGlanceFn(ctx, params.SessionKey)
+	if deps.ambient.GoalGlance != nil && !chatbot && !coding {
+		goalGlance = deps.ambient.GoalGlance(ctx, params.SessionKey)
 	}
 
 	// 챗봇/코드모드: withhold the workspace context files (SOUL.md/IDENTITY.md/
@@ -344,8 +344,8 @@ func buildTurnSystemPrompt(ctx context.Context, params RunParams, deps runDeps, 
 	// persona renders, byte-identical to before. PersonaCacheKey (content hash)
 	// keys the Static cache per persona so an edit invalidates only its own entry.
 	var personaText, personaCacheKey string
-	if deps.personaOverrideFn != nil && !chatbot && !coding {
-		if ov := strings.TrimSpace(deps.personaOverrideFn()); ov != "" {
+	if deps.ambient.PersonaOverride != nil && !chatbot && !coding {
+		if ov := strings.TrimSpace(deps.ambient.PersonaOverride()); ov != "" {
 			personaText = ov
 			personaCacheKey = prompt.PersonaCacheKeyFor(ov)
 		}
