@@ -3,9 +3,9 @@
 //
 // Reads come from the state the app pushes: the location sensor forwards a
 // FusedLocation fix — with battery status embedded — as a `location_update`
-// event, which the gateway caches (phone_location.go). phone_read serves that
-// cache; when it is stale it dispatches a `sync_state` P1 action so the app
-// pushes a fresh fix, and tells the agent to retry shortly. Writes go through
+// event, and usage rhythm arrives as `usage_update`. phone_read serves those
+// caches; when stale it dispatches a `sync_state` P1 action so the app pushes
+// fresh state, and tells the agent to retry shortly. Writes go through
 // the same P1 action channel the Intent actions already use (SSE foreground /
 // FCM data background): notify / speak / clipboard are executed in-app with
 // NotificationManager / the app's TTS engine / ClipboardManager.
@@ -27,7 +27,7 @@ import (
 )
 
 // ToolPhoneRead queries the phone via the app-pushed state cache:
-// what = location | battery. send dispatches a sync_state refresh request when
+// what = location | battery | usage. send dispatches a sync_state refresh request when
 // the cache is stale; nil means no app channel (report unavailable).
 func ToolPhoneRead(send PhoneActionFunc) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
@@ -48,6 +48,11 @@ func ToolPhoneRead(send PhoneActionFunc) ToolFunc {
 				return battery, nil
 			}
 			return phoneStateStaleReply(ctx, send, "배터리")
+		case "usage", "app_usage":
+			if usage, ok := readCachedPhoneUsage(phoneUsageMaxAge); ok {
+				return usage, nil
+			}
+			return phoneStateStaleReply(ctx, send, "사용 리듬")
 		case "clipboard":
 			return "클립보드 읽기는 지원이 종료되었습니다 — Android 10+ 정책상 백그라운드 앱은 클립보드를 읽을 수 없습니다. 사용자가 직접 붙여넣도록 요청하세요.", nil
 		case "calllog", "calls":
@@ -55,7 +60,7 @@ func ToolPhoneRead(send PhoneActionFunc) ToolFunc {
 		case "contacts", "addressbook":
 			return "폰 주소록 라이브 조회는 지원이 종료되었습니다 — 동기화된 주소록인 `contacts` 도구를 사용하세요 (이름/회사/전화 검색 지원).", nil
 		default:
-			return "", fmt.Errorf("phone_read: unknown what=%q (use location|battery)", p.What)
+			return "", fmt.Errorf("phone_read: unknown what=%q (use location|battery|usage)", p.What)
 		}
 	}
 }

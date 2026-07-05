@@ -333,7 +333,7 @@ class DenebGatewayClient(
 
     // Throttle for the app-usage digest forward (sensing, "read broad, surface narrow").
     // syncNativeState fires often, but a usage digest only goes to the gateway every
-    // USAGE_FORWARD_INTERVAL — per-sync forwarding would spend a judgment turn on noise.
+    // USAGE_FORWARD_INTERVAL — per-sync forwarding would churn low-value state.
     // Set even when the read returns null (no permission / no signal) so we don't probe
     // UsageStats on every sync. Serialized on the sync coroutine, so no lock.
     private var lastUsageForward: TimeSource.Monotonic.ValueTimeMark? = null
@@ -1141,17 +1141,17 @@ class DenebGatewayClient(
         refreshMail()
     }
 
-    // Sensing: forward an on-device app-usage digest to the gateway, throttled to
-    // USAGE_FORWARD_INTERVAL so it costs a judgment turn only a few times a day (the
-    // gateway's "usage" guidance defaults to silence — only a genuine work signal
-    // surfaces). readWorkUsageDigest is a no-op (null) off Android or without Usage
-    // access; we still arm the throttle so we don't probe on every sync. Per-app
-    // switches are never sent — only this windowed, coarse digest.
+    // Sensing: forward an on-device app-usage digest to the gateway as cache-only
+    // context. It must not create proactive notifications by itself; the assistant can
+    // read it through phone_read("usage") when it needs current work rhythm context.
+    // readWorkUsageDigest is a no-op (null) off Android or without Usage access; we
+    // still arm the throttle so we don't probe on every sync. Per-app switches are
+    // never sent — only this windowed, coarse digest.
     private suspend fun maybeForwardUsageDigest() {
         lastUsageForward?.let { if (it.elapsedNow() < USAGE_FORWARD_INTERVAL) return }
         lastUsageForward = TimeSource.Monotonic.markNow()
         val digest = readWorkUsageDigest() ?: return
-        ingestEvent("usage", "앱 사용 리듬", digest)
+        ingestEvent("usage_update", "앱 사용 리듬", digest)
     }
 
     // Sensing: forward an on-demand location fix, throttled to LOCATION_FORWARD_INTERVAL.
@@ -1789,12 +1789,17 @@ class DenebGatewayClient(
                                             if (action == "sync_state") {
                                                 // Gateway asks for a fresh state fix (phone_read hit a
                                                 // stale cache). Bypass the periodic throttle and push
-                                                // location+battery now; no-op off Android/without the
-                                                // location permission.
+                                                // location+battery and usage now; each read is a no-op
+                                                // off Android / without its user-granted access.
                                                 scope.launch {
                                                     runCatching {
                                                         readCurrentLocation()?.let { fix ->
                                                             ingestEvent("location_update", "", fix)
+                                                        }
+                                                    }
+                                                    runCatching {
+                                                        readWorkUsageDigest()?.let { digest ->
+                                                            ingestEvent("usage_update", "앱 사용 리듬", digest)
                                                         }
                                                     }
                                                 }
@@ -2175,13 +2180,14 @@ class DenebGatewayClient(
 
         // Minimum gap between app-usage-digest forwards (see maybeForwardUsageDigest).
         // A digest summarizes a multi-hour window, so forwarding more often would just
-        // spend judgment turns re-reporting the same rhythm; ~6h keeps the gateway's
-        // ambient work-context fresh without noise.
+        // re-report the same rhythm; ~6h keeps the gateway's ambient work-context fresh
+        // without creating proactive alerts.
         val USAGE_FORWARD_INTERVAL = 6.hours
 
         // Minimum gap between location forwards (see maybeForwardLocation). Frequent
         // enough that phone_read has a recent fix, sparse enough to spare the battery;
         // the gateway treats a cache older than ~30min as stale and does a live read.
         val LOCATION_FORWARD_INTERVAL = 10.minutes
+
     }
 }

@@ -81,7 +81,7 @@ func RegisterCoreTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDep
 func FetchToolsSchema() map[string]any { return fetchToolsToolSchema() }
 
 // RegisterPhoneTools registers the phone bridge tools — phone_read
-// (location/battery from the app-pushed state cache) and phone_write. Every
+// (location/battery/usage from the app-pushed state cache) and phone_write. Every
 // operation travels through send — the PhoneActionFunc the server backs with
 // its native-app push channel (SSE foreground / FCM data background). The
 // Termux/SSH transport is retired (2026-07-05): reads serve the cache the app
@@ -97,7 +97,7 @@ func FetchToolsSchema() map[string]any { return fetchToolsToolSchema() }
 func RegisterPhoneTools(registry toolctx.ToolRegistrar, send tools.PhoneActionFunc) {
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "phone_read",
-		Description: "'지금 어디'·'배터리 몇 %' 질문에 사용 — 사용자 스마트폰 위치·배터리 조회(앱이 밀어주는 상태 캐시 기반, SSH 불필요). what=location(최근 위치) | battery(배터리·충전 상태). 캐시가 오래됐으면 앱에 갱신을 요청하고 잠시 후 재시도하라고 안내한다. 능동 판단 시 맥락 보강에도 사용. 주소록은 `contacts` 도구.",
+		Description: "'지금 어디'·'배터리 몇 %'·'방금 폰에서 뭐에 집중했나' 질문에 사용 — 사용자 스마트폰 위치·배터리·앱 사용 리듬 조회(앱이 밀어주는 상태 캐시 기반, SSH 불필요). what=location(최근 위치) | battery(배터리·충전 상태) | usage(최근 앱 사용 리듬). 캐시가 오래됐으면 앱에 갱신을 요청하고 잠시 후 재시도하라고 안내한다. 능동 판단 시 맥락 보강에도 사용하되, 사용 리듬만으로 알림을 만들지 않는다. 주소록은 `contacts` 도구.",
 		InputSchema: phoneReadToolSchema(),
 		Fn:          tools.ToolPhoneRead(send),
 		Deferred:    true,
