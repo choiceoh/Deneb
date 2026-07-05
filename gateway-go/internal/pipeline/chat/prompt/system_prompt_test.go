@@ -80,6 +80,14 @@ func TestBuildSystemPromptChatbot(t *testing.T) {
 		}
 	}
 
+	// 대화 규범 (2026-07-04 톤 사고 재발 방지): 존댓말 고정, 무요청 논평 금지,
+	// 질문 전량 응답 — 챗봇 워크스페이스 계약이므로 업무 페르소나에는 없어야 한다.
+	for _, want := range []string{"대화 규범:", "존댓말", "훈계를 덧붙이지 않는다", "빠뜨리지 않고 전부 응답"} {
+		if !strings.Contains(chat, want) {
+			t.Errorf("챗봇 prompt missing tone guard %q", want)
+		}
+	}
+
 	// 업무 workspace unchanged: Nev persona + 비서실장 + 위키 외부메모리 all present.
 	work := BuildSystemPrompt(SystemPromptParams{ToolDefs: tools, Chatbot: false})
 	for _, want := range []string{"You are Nev", "비서실장", "## 위키 — 너의 외부 메모리", "## 작업 기억"} {
