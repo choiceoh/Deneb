@@ -63,7 +63,11 @@ func RunWithSignals(fn func(ctx context.Context) error, logger *slog.Logger, ver
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	sigCh := make(chan os.Signal, 1)
+	// Buffer > 1: the downgrade guard may hold the supervisor for up to
+	// probeVersionTimeout while interrogating a candidate binary; signals
+	// arriving meanwhile (systemd retries, operator INT/TERM) must not be
+	// dropped by a full channel (signal.Notify discards on overflow).
+	sigCh := make(chan os.Signal, 8)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM, syscall.SIGUSR1)
 	defer signal.Stop(sigCh)
 
