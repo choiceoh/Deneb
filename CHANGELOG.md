@@ -1,5 +1,14 @@
 # Changelog
 
+## [4.63.1](https://github.com/choiceoh/Deneb/compare/deneb-v4.63.0...deneb-v4.63.1) (2026-07-05)
+
+
+### 🐛 Bug Fixes
+
+* **gateway:** 다운그레이드 가드 후속 — (deleted) 경로 P0·거부 후보 격리·동버전 스탬프·게이트 선행 ([#3110](https://github.com/choiceoh/Deneb/issues/3110)) ([1748748](https://github.com/choiceoh/Deneb/commit/17487484446abcfced11d4eb906a70e0cf941e50))
+* **native:** 피드 빈 화면 고착 수리 — 동기화 자가복구 + 당겨서 새로고침 ([#3113](https://github.com/choiceoh/Deneb/issues/3113)) ([940597e](https://github.com/choiceoh/Deneb/commit/940597ed10c53dc72c3a4d4b6018af5e0b884d1d))
+* **wiki:** 봇 리뷰 유효 지적 일괄 수리 — 회상앵커 원문매칭·보관/대체 제외·원장 백필·벤치 채점 강화 ([#3109](https://github.com/choiceoh/Deneb/issues/3109)) ([46d638d](https://github.com/choiceoh/Deneb/commit/46d638d01f915b517438334f65996b594bd7cfca))
+
 ## [4.63.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.62.2...deneb-v4.63.0) (2026-07-05)
 
 
