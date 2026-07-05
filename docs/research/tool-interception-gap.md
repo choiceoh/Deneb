@@ -160,10 +160,13 @@ the existing hooks), in dispatch order:
 - **Dry-run** — `toolctx.WithToolDryRun` / `RunParams.ToolDryRun` suppresses
   every tool not on a read-only allowlist (`tool_dry_run.go`, default-deny),
   so eval/replay harnesses drive the real loop without side effects.
-- **Run-cache** — cacheable set grew to `fetch_tools` (measured 20% same-input
-  repeats) with a non-filesystem scope sentinel; exec now invalidates via
+- **Run-cache** — exec now invalidates via
   `tools.ExecCommandPreservesRunCache` (read-only allowlist analysis) instead
-  of never invalidating.
+  of never invalidating, and async writers (background exec, process-tool
+  interaction, spawned children with write presets) trip a sticky
+  `RunCache.Disable` latch for the rest of the run. (`fetch_tools` was briefly
+  cacheable and reverted — its already-active branch returns a compact
+  response on repeats that a cache hit would bypass.)
 - **Audit** — registry-internal outcomes invisible to the executor's
   `turn.tool` logging (cache hits, output truncations) ride `run.end`
   alongside `RepairedToolCalls` and fold into `agentlog.ToolStat`.

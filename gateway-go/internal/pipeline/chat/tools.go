@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -259,24 +260,26 @@ func (r *ToolRegistry) ApplyMaxOutputs(budgets map[string]int) {
 }
 
 // invalidateCachesAfterTool is the single home for post-execution cache
-// invalidation policy. write/edit invalidate by the mutated path (RunCache +
-// FileCache); exec invalidates the whole RunCache unless its command is
-// provably read-only (tools.ExecCommandPreservesRunCache — most exec calls
-// are read-only, and blanket invalidation destroys hit rates); process is
-// always a full invalidation because a background exec's mutations land at
-// completion, long after the launch-time exec check ran — the poll/wait that
-// observes completion is the last reliable moment before the agent re-reads.
+// invalidation policy. Two regimes:
+//
+//   - Synchronous mutations (write/edit; foreground exec whose command is not
+//     provably read-only per tools.ExecCommandPreservesRunCache) have fully
+//     landed by the time this runs, so a point-in-time invalidation brackets
+//     them: by mutated path where known, whole cache otherwise.
+//   - Async writers (background exec with a non-read-only command; a spawned
+//     sub-agent whose preset carries write/edit/exec; any process-tool
+//     interaction — the tracked process may be mid-write regardless of which
+//     run launched it) mutate at unpredictable future points, so the run
+//     cache is DISABLED for the rest of the run (RunCache.Disable) — this
+//     replaced per-poll invalidation, which both left a stale window between
+//     a background job's writes and the next poll AND wiped re-cached entries
+//     on every poll of a still-running job.
+//
+// Residual (documented, accepted): an async writer from a PREVIOUS run that
+// this run never observes via exec/process/sessions_spawn — e.g. monitoring
+// an old child only through the subagents tool — does not trip the latch.
 // FileCache needs no exec/process handling: its entries are mtime+hash
 // validated on read (agent.FileChanged).
-//
-// Accepted trade-offs (correctness over hit rate): every process call
-// invalidates, including status polls of a still-running job, so a poll loop
-// interleaved with greps earns no cache hits; and a grep issued between a
-// background job's writes and the next process interaction can still be
-// served stale — closing that fully needs a completion hook from the process
-// manager (follow-up). Spawned sub-agents mutating the shared workspace are
-// a separate uncovered writer for the same reason (they invalidate their own
-// run's cache, not the parent's).
 func invalidateCachesAfterTool(ctx context.Context, name string, input json.RawMessage, rc *RunCache) {
 	if IsMutationTool(name) {
 		mutPath := extractFilePath(input)
@@ -294,29 +297,71 @@ func invalidateCachesAfterTool(ctx context.Context, name string, input json.RawM
 		}
 		return
 	}
-	if rc == nil || rc.Len() == 0 {
-		return // nothing cached — skip the command analysis entirely
+	if rc == nil {
+		return
 	}
 	switch name {
 	case "exec":
-		if !tools.ExecCommandPreservesRunCache(extractExecCommand(input)) {
+		cmd, background := extractExecMeta(input)
+		if tools.ExecCommandPreservesRunCache(cmd) {
+			return
+		}
+		if background {
+			rc.Disable() // writes land later — latch even when nothing is cached yet
+		} else if rc.Len() > 0 {
 			rc.Invalidate()
 		}
 	case "process":
-		rc.Invalidate()
+		rc.Disable()
+	case "sessions_spawn":
+		if spawnedChildCanWrite(input) {
+			rc.Disable()
+		}
 	}
 }
 
-// extractExecCommand extracts the "command" string from exec tool input JSON.
-// Shared by the run-cache invalidation heuristic and the verify gate.
-func extractExecCommand(input json.RawMessage) string {
+// spawnedChildCanWrite reports whether a sessions_spawn call creates a child
+// that could mutate the shared workspace: its tool preset (or the absence of
+// one) grants write, edit, or exec. Read-focused presets (researcher,
+// wiki-research) keep the parent's cache alive. Unknown presets fail closed —
+// sessions_spawn itself rejects them, but the cache must not depend on that.
+func spawnedChildCanWrite(input json.RawMessage) bool {
 	var meta struct {
-		Command string `json:"command"`
+		ToolPreset string `json:"tool_preset"`
+	}
+	if json.Unmarshal(input, &meta) != nil {
+		return true
+	}
+	allowed := toolpreset.AllowedTools(toolpreset.Preset(strings.TrimSpace(meta.ToolPreset)))
+	if allowed == nil {
+		return true // no/unknown preset — unrestricted child
+	}
+	for _, mutating := range []string{"write", "edit", "exec"} {
+		if _, ok := allowed[mutating]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+// extractExecMeta extracts the command string and background flag from exec
+// tool input JSON.
+func extractExecMeta(input json.RawMessage) (command string, background bool) {
+	var meta struct {
+		Command    string `json:"command"`
+		Background bool   `json:"background"`
 	}
 	if json.Unmarshal(input, &meta) == nil {
-		return meta.Command
+		return meta.Command, meta.Background
 	}
-	return ""
+	return "", false
+}
+
+// extractExecCommand extracts the "command" string from exec tool input JSON
+// (verify gate's view of extractExecMeta).
+func extractExecCommand(input json.RawMessage) string {
+	cmd, _ := extractExecMeta(input)
+	return cmd
 }
 
 // extractFilePath extracts a "file_path" string from tool input JSON.
