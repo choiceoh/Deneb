@@ -19,7 +19,7 @@ import (
 // (modelcaps.NoVision has no builtin defaults), so without this gate a missing
 // override leaves the poisoning path open for glm-backed roles.
 //
-// ★ APC 불가침 (.claude/rules/sidecar-models.md): the gate only ever rewrites a
+// ★ APC 불가침 (docs/agent-rules/sidecar-models.md): the gate only ever rewrites a
 // request that actually CONTAINS image parts. A text-only request is forwarded
 // with its bytes untouched — a fast substring scan short-circuits first, and
 // even after a full parse the original bytes are returned unless a part was

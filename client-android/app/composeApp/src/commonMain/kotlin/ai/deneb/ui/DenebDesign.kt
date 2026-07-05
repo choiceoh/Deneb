@@ -75,7 +75,7 @@ import androidx.compose.ui.unit.sp
 //  all three: skeleton while loading, error WITH retry, empty WITH guidance),
 //  and DenebChip for compact choices. Controls (switches, buttons, fields,
 //  dialogs, sheets) stay stock Material — Deneb skins presentation, not
-//  interaction (see .claude/rules/native-design-system.md).
+//  interaction (see docs/agent-rules/native-design-system.md).
 //
 //  INTERACTION — every tappable row is tappable across its full width, shows
 //  a hand cursor on desktop, gives the denebPressable press-scale "give" from

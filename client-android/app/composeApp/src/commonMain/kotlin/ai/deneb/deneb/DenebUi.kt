@@ -26,7 +26,7 @@ import androidx.compose.ui.unit.dp
  *
  * The old DenebSurface / DenebViewHeader / DenebChip(Row) chrome was removed once
  * every screen migrated onto DenebScreenScaffold (see
- * .claude/rules/native-design-system.md). Only the cross-screen state helpers and
+ * docs/agent-rules/native-design-system.md). Only the cross-screen state helpers and
  * humanBytes remain here.
  */
 

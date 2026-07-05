@@ -1151,7 +1151,7 @@ const checkpointSummarySystem = "너는 git 체크포인트 라벨러다. 코딩
 // checkpointSummarizer returns the lazy tiny-role checkpoint labeler for
 // AfterTurn, or nil when no local AI is wired (tests, degraded boot). Invoked
 // only after AfterTurn's dirty check, so read-only turns never pay the call.
-// 임무→역할: 체크포인트 요약 = tiny (단순 추출 도그마, .claude/rules/model-roles.md).
+// 임무→역할: 체크포인트 요약 = tiny (단순 추출 도그마, docs/agent-rules/model-roles.md).
 func (s *Server) checkpointSummarizer(fallbackSummary, resultText string) func(context.Context) string {
 	if pilot.LocalAIHub() == nil {
 		return nil

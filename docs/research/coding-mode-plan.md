@@ -43,7 +43,7 @@ GitHub — 집 (Deneb가 git 전담; clone/push는 호스트 gh 자격증명 사
 원칙:
 - **결과로 판단** — 빌드/테스트 통과 + 한국어 요약. diff·코드는 숨김.
 - **git 투명** — 자동 체크포인트 + 되돌리기. **세션 = 작업 = 워크트리.**
-- **페르소나 단일** — 코드 모드는 레일을 재구성하는 *레이아웃 적응*이지 분석/비서 페르소나 분리가 아니다 (`.claude/rules/native-design-system.md` "UI 분리 금지" 준수).
+- **페르소나 단일** — 코드 모드는 레일을 재구성하는 *레이아웃 적응*이지 분석/비서 페르소나 분리가 아니다 (`docs/agent-rules/native-design-system.md` "UI 분리 금지" 준수).
 - **메인 무손상** — 모든 작업은 워크트리/브랜치에서. main 체크아웃·origin/main은 사용자가 머지하기 전까지 안 건드린다.
 
 ## 4. UX 모델 (Andromeda)
@@ -108,7 +108,7 @@ type Session struct {
 
 **0a — 모델 일반 역량 게이트 (무코드, 가장 싸다).**
 1. coding 역할 모델 확인: `~/.deneb/deneb.json`의 `agents.codingModel`(없으면 폴백).
-2. SparkFleet `run_tool_eval`로 그 모델의 도구호출 역량(멀티스텝 체인·에러복구·Category K) 측정 (`.claude/rules/model-roles.md` 도그마 #7). 기존 도구라 새 코드 0.
+2. SparkFleet `run_tool_eval`로 그 모델의 도구호출 역량(멀티스텝 체인·에러복구·Category K) 측정 (`docs/agent-rules/model-roles.md` 도그마 #7). 기존 도구라 새 코드 0.
 - 완료기준: tool-eval 멀티스텝·Category K가 합격선 이상. 미달 → 더 큰 로컬 코딩 모델 서빙 후 재측정 (이후 브릭 보류).
 
 **0b — Deneb 통합 측정 (minimal workspace=worktree 바인딩 = brick 4 씨앗).**

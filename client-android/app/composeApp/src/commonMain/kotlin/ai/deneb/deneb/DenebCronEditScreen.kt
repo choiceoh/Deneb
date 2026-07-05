@@ -87,7 +87,7 @@ data class ScheduleDraft(
  * the user actually changed are sent, so editing one never blanks another; the gateway
  * validates the resulting spec and its rejection reason is surfaced inline.
  *
- * Design (.claude/rules/native-design-system.md): the Deneb skin is flat — typography on
+ * Design (docs/agent-rules/native-design-system.md): the Deneb skin is flat — typography on
  * the AMOLED surface, fields underlined by a single hairline (no Material fills/cards),
  * so this reads like the mail/calendar detail screens. Genuine controls stay Material
  * (SegmentedButton, FilterChip, DatePicker). Body rendering lives in [CronEditContent]

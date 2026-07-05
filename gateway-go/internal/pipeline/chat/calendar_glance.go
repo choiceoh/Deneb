@@ -6,7 +6,7 @@
 // stays byte-stable within a day. That byte-stability is what preserves the
 // trailing-message prompt cache: a glance that changed every turn would shift
 // the system-prompt prefix and force a cache-creation on the trailing markers
-// each turn (see .claude/rules/prompt-cache.md — the dynamic block is meant to
+// each turn (see docs/agent-rules/prompt-cache.md — the dynamic block is meant to
 // be byte-stable except the midnight date rollover).
 //
 // Cost: at most one bounded calendar fetch per day; every other turn reuses the

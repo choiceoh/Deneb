@@ -56,7 +56,7 @@ import kotlin.time.Instant
  * (hidden when all-day) + location + description; saving posts to the gateway and
  * pops back on success. A write-scope error from the gateway is shown inline.
  *
- * Design split (see .claude/rules/native-design-system.md): frame + type are the
+ * Design split (see docs/agent-rules/native-design-system.md): frame + type are the
  * Deneb skin; the inputs are Material (OutlinedTextField/Switch/DatePicker/
  * TimePicker/Button). Body rendering lives in [CalendarAddContent] so the render
  * harness can preview it; this composable is the stateful shell (pickers + save).

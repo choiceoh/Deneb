@@ -1,6 +1,5 @@
 ---
 description: "협업, 보안, 멀티 에이전트 안전 규칙"
-globs: ["**"]
 ---
 
 # Collaboration & Safety
@@ -46,4 +45,4 @@ globs: ["**"]
 
 - Environment variables: see `~/.profile`.
 - Never commit or publish real phone numbers, videos, or live configuration values. Use obviously fake placeholders in docs, tests, and examples.
-- Release flow: see `.claude/rules/release-and-deploy.md` for the actual runbook.
+- Release flow: see `docs/agent-rules/release-and-deploy.md` for the actual runbook.

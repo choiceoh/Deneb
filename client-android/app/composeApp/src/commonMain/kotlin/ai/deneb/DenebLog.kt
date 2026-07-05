@@ -10,7 +10,7 @@ package ai.deneb
  * maps to its native sink (Logcat on Android, stderr on desktop, console
  * elsewhere).
  *
- * Level guide mirrors the gateway's .claude/rules/logging.md:
+ * Level guide mirrors the gateway's docs/agent-rules/logging.md:
  *  - [error]: the user observably loses something (data failed to load,
  *    a scheduled task won't run).
  *  - [warn]: degraded but surfaced/recovered (a parse error that falls back

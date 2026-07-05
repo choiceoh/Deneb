@@ -50,7 +50,7 @@ import kotlin.time.Instant
  * part has nothing pending right now"); '미분류' appears last only when it has items
  * and is rendered muted as a triage bucket. Pull to refresh re-fetches.
  *
- * Design split (see .claude/rules/native-design-system.md): frame + type are the
+ * Design split (see docs/agent-rules/native-design-system.md): frame + type are the
  * Deneb skin (DenebScreenScaffold + DenebType + grouped DenebGroup cards); the
  * pull-to-refresh is Material. The lane list is a stateless body
  * ([DashboardLanesContent]) the render harness previews with mock data; this

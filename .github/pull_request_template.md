@@ -1,7 +1,7 @@
 <!--
 이 템플릿은 웹 UI / 손으로 작성하는 PR 용 미러입니다.
 에이전트가 `gh pr create --body` 로 만드는 PR 은 이 파일을 우회하므로,
-형식의 단일 진실원은 .claude/rules/git-pr.md 의 "PR Body (canonical skeleton)" 입니다.
+형식의 단일 진실원은 docs/agent-rules/git-pr.md 의 "PR Body (canonical skeleton)" 입니다.
 본문은 한국어 우선. 해당 없는 섹션은 지우세요.
 -->
 
@@ -23,5 +23,5 @@
 ## Before → After      표로 회귀 방지 증거
 ## 한계 / 리뷰 노트
 ## Follow-up (out of scope)
-## Cache 영향           프롬프트 캐시 경로를 건드릴 때 (.claude/rules/prompt-cache.md PR 체크리스트)
+## Cache 영향           프롬프트 캐시 경로를 건드릴 때 (docs/agent-rules/prompt-cache.md PR 체크리스트)
 -->

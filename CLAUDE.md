@@ -1,197 +1,64 @@
 # Deneb
 
-**Chief-of-Staff–style single AI agent for NVIDIA DGX Spark (비서실장형 단일 에이전트).** One persona that performs **업무분석** (deep context — mail, projects, people, deals) and **업무비서** (proactive ops — calendar, meeting prep, capture) in lockstep — same head, two hands. Clients → Go gateway server. Single-user, single-machine deployment. Korean-first. General assistant capabilities are preserved.
+**비서실장형 단일 AI 에이전트** (NVIDIA DGX Spark · 단일 사용자 · 단일 머신 · Korean-first). 한 페르소나가 업무분석(깊이)과 업무비서(능동)를 동시에 수행한다 — 분석/비서 *페르소나* 분리 금지 (기기별 반응형 레이아웃은 허용). 좁고 깊게: 완성도·응집도 우선, 옵션보다 opinionated 기본값.
 
-- **Go gateway** (`gateway-go/`): HTTP + SSE server, RPC dispatch, session management, chat/LLM pipeline, 150+ tool integrations, `miniapp.*` RPC surface consumed by all clients. The primary runtime.
-- **Native client** (`client-android/`): Kotlin Multiplatform (Compose) **mobile** client — Android (daily driver) + iOS from one codebase. The Compose Desktop target survives only as a headless verification harness.
-- **Andromeda** (`andromeda/`): **desktop** workstation client (work-command cockpit) — Tauri 2 + React 18 + Refine + Vite (TypeScript). Owns the desktop surface since the native client's desktop product UI was retired.
-- **Skills** (`skills/`): filesystem-discovered skill plugins by category.
+- `gateway-go/` — Go 게이트웨이 (HTTP+SSE, RPC 150+, 챗/LLM 파이프라인, 도구 통합). **주 런타임.**
+- `client-android/` — Kotlin Multiplatform **모바일** 클라 (Android 데일리드라이버 + iOS). Compose Desktop 타깃은 헤드리스 검증용으로만 잔존.
+- `andromeda/` — **데스크톱** 워크스테이션 (Tauri 2 + React 18 + Refine + Vite). 자체 게이트/가이드 보유.
+- `skills/` — 파일시스템 발견 스킬 플러그인. `docs/` — Mintlify 문서.
+- 두 클라 모두 `miniapp.*` RPC (`X-Deneb-Client-Token`) 사용. wire 타입은 Go `//deneb:wire` 구조체에서 Kotlin+TS **양쪽** 생성.
+- 모듈 상세는 각 모듈의 `CLAUDE.md` (gateway-go/, client-android/app/, andromeda/, skills/).
 
----
+## 안전 (항상 적용)
 
-# Repository Guidelines
+- 레포: https://github.com/choiceoh/Deneb. 챗 응답의 파일 참조는 레포 상대 경로만 (절대경로·`~/...` 금지).
+- `~/deneb/` = **프로덕션 전용** (main만, 5분 자동 pull) — 거기서 브랜치/워크트리/빌드 금지. 개발은 `~/deneb-dev/`.
+- 멀티에이전트 안전: `git stash`·워크트리 조작·브랜치 전환은 **명시 요청 시에만**. "push" = rebase 통합 허용, "commit" = 내 변경만. 낯선 파일은 무시하고 내 변경만 커밋.
+- **생성 코드(`DO NOT EDIT` 헤더) 직접 수정 금지** — 소스 오브 트루스 수정 후 make 타깃으로 재생성 ([generated-code](docs/agent-rules/generated-code.md)). `//deneb:wire` 변경 = `make kotlin-models` **와** `pnpm gen:wire` 둘 다.
+- 보안 CODEOWNERS 경로(`.github/dependabot.yml`, `codeql.yml`, `gateway-go/internal/infra/{clientauth,secret,config}/`)는 소유자가 명시 요청할 때만 수정.
+- 실 전화번호·크리덴셜·라이브 설정값 커밋 금지. 버전 번호 변경·release/publish는 운영자 명시 승인. baseline/snapshot/expected-failure 파일로 실패를 침묵시키지 말 것. 의존성 패치는 명시 승인 필요.
+- 질문에는 코드로 검증한 고신뢰 답변만. 이슈/PR 작업 시 마지막에 전체 URL 출력.
 
-- Repo: https://github.com/choiceoh/Deneb
-- In chat replies, file references must be repo-root relative only (example: `gateway-go/internal/runtime/server/server.go:80`); never absolute paths or `~/...`.
-- Do not edit files covered by security-focused `CODEOWNERS` rules unless a listed owner explicitly asked for the change or is already reviewing it with you. Treat those paths as restricted surfaces, not drive-by cleanup.
+## 게이트 (푸시 전)
 
----
+- **스코프가 명확한 diff(한 레인만 변경)는 `make ci/fast`(경로 게이트) 통과로 푸시 가능** — CI가 어차피 전체를 재검증한다. 레인 경계가 애매하거나 공유 표면(Makefile·CI 워크플로·생성기·wire)을 건드리면 전체 `make ci`.
+- client-android 변경 시 Kotlin 레인 필수 (`make ci ARGS=--kotlin`). andromeda는 **별도 레인**: `cd andromeda && pnpm verify`. Go만은 `make check`.
+- 게이트웨이 동작 변경은 라이브 검증까지: `scripts/dev/live-test.sh restart && smoke` (+ 관련 `quality`) — 로그에 에러/경고 없음까지가 완료 ([live-testing](docs/agent-rules/live-testing.md)).
+- 실패한 빌드/테스트 상태로 커밋·푸시 금지.
 
-## Context Engineering Policy
+## Git / PR
 
-> **필요한 규칙만, 필요한 시점에, 필요한 만큼.**
+- **Conventional Commit 필수**: `feat(chat): …` (type: feat|fix|perf|refactor|docs|test|chore|ci|build · scope: 모듈명). 커밋은 `scripts/committer "<msg>" <files…>` 로 (스테이징 스코프 유지).
+- PR 본문: Summary / Changes / Verification 3섹션 + 푸터 `🤖 Generated with [Claude Code](https://claude.com/claude-code)` — 상세 [git-pr](docs/agent-rules/git-pr.md).
+- 머지 후 `git merge-base --is-ancestor <sha> origin/main` 으로 랜딩 검증 (MERGED 표시 ≠ 랜딩). main에 머지커밋 푸시 금지 — 리베이스.
+- 네이티브 사용자 표시 패치노트는 `client-android/app/changelog.d/` 조각 파일로 (사용자 영향 변경만). 루트 CHANGELOG.md는 release-please 자동 생성 — 직접 편집 금지.
 
-이 프로젝트는 **조건부 규칙 로딩** 원칙을 따릅니다:
+## 스타일
 
-- **CLAUDE.md (이 파일)**: 모든 작업에서 항상 필요한 핵심 규칙만 유지합니다. 새 규칙 추가 시 여기에 넣기 전에 "정말 모든 작업에 필요한가?"를 먼저 판단하세요.
-- **`.claude/rules/*.md`**: 주제별/모듈별 조건부 규칙 파일. 각 파일의 frontmatter에 `description`과 `globs` 패턴을 명시하여, 해당 파일이 수정될 때만 자동 로딩됩니다.
-- 규칙을 추가/수정할 때는 반드시 이 분류 체계를 따르세요. CLAUDE.md가 비대해지면 컨텍스트 품질이 저하됩니다.
+- Korean-first (UI 텍스트·사용자 응답·PR 본문). 코드·주석·문서는 미국 영어. 제품명 **Deneb** / CLI·경로 `deneb`.
+- Go: gofumpt + vet (`make fmt`). Kotlin: spotless + detekt. TS: eslint + prettier. 파일 ~700 LOC 이하 권장.
+- vibe coding — 다음 AI 세션을 위해 까다로운 로직에만 짧은 주석·충분한 컨텍스트. 단순 순차 처리 > 동시성.
 
-### Rules Index
+## 에이전트 운용 (토큰·속도)
 
-| File | Scope | Globs |
-|---|---|---|
-| `architecture.md` | 프로젝트 구조/모듈맵 | `gateway-go/cmd/**`, `gateway-go/internal/**`, `gateway-go/pkg/**`, `client-android/**`, `andromeda/**` |
-| `go-gateway.md` | Go 게이트웨이 구조 | `gateway-go/**` |
-| `docs.md` | 문서 작성 표준 | `docs/**` |
-| `generated-code.md` | 생성 코드 수정 금지 | 생성 파일 직접 지정 |
-| `testing.md` | 테스트 가이드라인 | `**/*_test.go` |
-| `release-and-deploy.md` | 릴리스/배포 워크플로우 | `scripts/deploy*`, `scripts/dev/publish-apk.sh`, `.github/workflows/release*`, `.github/workflows/publish-apk.yml` |
-| `git-pr.md` | Git/PR 상세 가이드 | `.github/**`, `scripts/committer` |
-| `build-status.md` | CI 빌드 상태 확인 | `.github/workflows/**`, `scripts/build-status` |
-| `collaboration.md` | 협업/보안/멀티에이전트 | `**` |
-| `hub-wiring.md` | GatewayHub 배선 규칙 | `gateway-go/internal/runtime/server/method_registry.go`, `gateway-go/internal/runtime/rpc/rpcutil/gateway_hub.go` |
-| `live-testing.md` | 라이브 테스트 필수 절차 | `gateway-go/**/*.go` |
-| `optimization.md` | 반복 최적화 전략 (오토리서치 방법론) | `gateway-go/**/*.go` |
-| `concurrency.md` | 뮤텍스/채널/goroutine 규칙 (데드락 방지) | `gateway-go/**/*.go` |
-| `logging.md` | slog 레벨 가이드 (사용자 무응답 Error 원칙) | `gateway-go/**/*.go` |
-| `prompt-cache.md` | 프롬프트 캐시 불가침 원칙, 3계층 구조, cache-aware 슬래시 | `gateway-go/internal/pipeline/chat/prompt/**`, `gateway-go/internal/pipeline/chat/slash_commands.go` |
-| `sidecar-models.md` | GPU 사이드카 모델·모델 라우터 운영 현황 (PaddleOCR-VL·VibeVoice-ASR·wormhole) | `gateway-go/internal/pipeline/chat/tools/paddleocr.go`, `gateway-go/internal/pipeline/chat/tools/asr.go`, `gateway-go/internal/ai/modelrole/**`, `gateway-go/internal/pipeline/pilot/**`, `gateway-go/cmd/wormhole/**` |
-| `model-roles.md` | 역할(main/tiny/lightweight/analysis/…)별 임무 배치 단일 진실원 (analysis=클라우드 드리프트 주의) | `gateway-go/internal/ai/modelrole/**`, `gateway-go/internal/pipeline/pilot/**`, `gateway-go/internal/runtime/server/server_chat_config.go` |
-| `native-design-system.md` | 네이티브 클라 디자인 경계 (컨트롤=Material, 외형=Deneb 타이포) | `client-android/app/composeApp/src/**/*.kt` |
-| `native-live-app.md` | 서버에서 실제 네이티브 앱 라이브 검증 (Xvfb+matchbox+Compose Desktop, 프로덕션) | `client-android/**`, `scripts/dev/native-app.sh` |
-| `wiki-layout.md` | 위키 프로젝트 문서 레이아웃 규약 (프로젝트당 폴더 + 고정 슬롯, project_layout.go가 단일 진실원) | `gateway-go/internal/domain/wiki/**`, `gateway-go/internal/runtime/server/wiki_*.go` |
+- 독립적인 도구 호출은 한 응답에 **병렬로**. 긴 명령(CI watch·빌드·배포)은 **background 실행 + 완료 통지** — 반복 폴링 금지.
+- **시끄러운 출력을 컨텍스트에 담지 말 것**: 진행바 명령은 `2>&1 | tail -N`, 대량 리포트는 `--format json` + 필터, 로그는 grep. 파일은 필요한 범위만 Read (offset/limit).
+- 넓은 탐색은 저비용 탐색 에이전트로. 환경 특이사항(머신별 함정)은 메모리에 저장해 재진단을 없앤다.
+- 세션 시작 시 관례적 빌드/테스트 금지 — 작업에 필요할 때만 (`make go` · `make test` · `make go-dev` · `./scripts/check-dev-env.sh`).
 
----
+## 룰 인덱스 — 필요할 때 Read (조건부 로딩)
 
-## Agent Quick-Start
+> 상세 규칙은 `docs/agent-rules/`에 있고 **자동 주입되지 않는다**. 대상 경로를 처음 Edit/Write 하면 훅(`scripts/dev/claude-rules-gate.py`)이 1회 차단하며 해당 룰을 안내한다 — 안내된 룰 중 작업과 관련된 것을 Read 후 재시도하라. 룰 추가/수정 규약은 [docs/agent-rules/README.md](docs/agent-rules/README.md).
 
-> Run these when starting a new coding session.
-
-1. **Check environment:** `./scripts/check-dev-env.sh`
-2. **Build Go gateway:** `make go`
-3. **Run tests:** `make test`
-4. **Fast iteration:** `make go-dev` (auto-restart)
-5. **Live test:** `scripts/dev/live-test.sh restart && scripts/dev/live-test.sh smoke` (코드 변경 후 실제 동작 검증 필수)
-
-**Module guides:** Each module has its own `CLAUDE.md` with targeted build/test/contribution guidance: `gateway-go/CLAUDE.md`, `client-android/app/CLAUDE.md`, `andromeda/CLAUDE.md`, `skills/CLAUDE.md`.
-
----
-
-## Project Philosophy
-
-> **All AI agents MUST read and internalize this section before making any changes.**
-
-### Agent Persona (비서실장형 단일 에이전트)
-
-> 분석가와 비서를 분리된 두 인격으로 두지 않는다. 청와대 비서실장처럼 **한 머리가 두 역할을 동시에 수행**한다.
-
-- **업무분석가 모드 (반응형·깊이)**: 메일/문서/관계/자금 컨텍스트 합성, 리스크 플래그, 의사결정 근거 제공.
-- **업무비서 모드 (능동형·간결)**: 일정·미팅 준비·캡처(녹음/OCR/카톡 페이스트)·임박 알림.
-- **통합 원칙**: "왜 지금 중요한가(분석)"와 "언제까지 처리해야 하나(비서)"가 한 응답에서 같이 나와야 의사결정 보조가 된다.
-- **UI 분리 금지**: 미니앱을 "분석 탭 / 비서 탭"으로 가르지 말 것. 데이터 레이어·화면·페르소나 모두 통합 유지. (이는 *페르소나* 분리 금지이지 기기별 반응형 레이아웃 금지가 아니다 — 미니앱의 PC/모바일 레이아웃 차이는 허용·권장.)
-- **개입 기준**: 능동적이되 침해적이지 않게. 필요한 순간에만 끼어든다 (over-notification 금지).
-
-### Deployment Environment
-
-- **Single operator, single user.** No multi-tenant, multi-user, or team deployment. Ignore user isolation, permission separation, multi-user auth.
-- **Hardware:** NVIDIA DGX Spark (local server). All services run on this single machine.
-- **Primary I/O surface:** the native client (`client-android/`, a Kotlin Multiplatform app) — the primary user surface since the Telegram bot was retired (PR #1922). It is **mobile-only**: Android (Samsung Galaxy S26, the daily driver) + iOS from one codebase; its desktop product UI was retired and **Andromeda (`andromeda/`) owns the desktop surface** as a separate Tauri/React workstation. Both clients talk to the gateway over the `miniapp.*` RPC surface with an `X-Deneb-Client-Token`. Optimize the mobile path first.
-
-### Design Principles
-
-- **High completeness and cohesion.** Every feature must be fully finished and tightly integrated.
-- **Opinionated defaults over user configuration.** Apple-like philosophy: fewer moving parts, not more options.
-- **Narrow scope, deep quality.** Fewer things well > more things shallowly.
-- **Depth over breadth.** Optimize the narrow supported surface (native client + Andromeda + DGX Spark + single user). "Narrow" means one user + one backend — not one device class: the native client (`client-android/`) covers phone touch (Android/iOS), and Andromeda (`andromeda/`) covers desktop (mouse/keyboard), both against the same gateway.
-
-### AI Agent Guidelines
-
-- All development is **vibe coding** — leave sufficient context and comments for the next AI session.
-- Break complex logic into small, well-named functions.
-- Prefer simple sequential processing over concurrency/race-condition handling.
-
-### Native Client Optimization (Android-first)
-
-- Optimize for the native client's `miniapp.*` RPC surface and rich rendering (Markdown, native lists/cards) — no Telegram-style hard 4096-char cap or MarkdownV2 escaping.
-- Design system: controls = Material, presentation = Deneb typography (see `.claude/rules/native-design-system.md`).
-- **Adapt layout to the screen, never split the persona:** rendering may differ by surface (native client phone vs. Andromeda desktop), but that is orthogonal to the "UI 분리 금지" persona rule — it forbids splitting 분석/비서 *personas* into tabs, not adapting layout to screen size.
-
-### Korean Language First
-
-- Default to Korean for UI text, responses, and user-facing messages. No i18n framework needed.
-
-### DGX Spark
-
-- Local GPU inference available — minimize external API calls, leverage aggressive caching/preloading.
-- Deployment is simply `git pull` + restart.
-
----
-
-## Code Style Essentials
-
-- Languages: Go (`gateway-go/`), Kotlin Multiplatform (`client-android/`), TypeScript/React + Rust shell (`andromeda/`).
-- Go: `gofumpt` (stricter gofmt superset; `make fmt` applies it, golangci-lint enforces it) / `go vet`.
-- Kotlin: spotless + detekt (enforced via `make ci`). TypeScript: eslint + prettier (enforced via `cd andromeda && pnpm verify`).
-- Naming: **Deneb** for product/app/docs headings; `deneb` for CLI/package/binary/paths/config.
-- American English in code, comments, docs, UI strings.
-- Keep files under ~700 LOC; split/refactor when it improves clarity.
-- Add brief comments for tricky or non-obvious logic only.
-
----
-
-## Build Hard Gates
-
-- **Before pushing: run `make ci` and it MUST pass.** It's the single pre-push
-  gate that mirrors every CI check — Go (`generate-check`, fmt, vet, lint, test)
-  **and** the native client (spotless, detekt) — in one command with a per-gate
-  PASS/FAIL summary. It keeps going past the first failure, so one run surfaces
-  everything CI would reject (this is the gap that let a gofmt-only failure slip
-  past partial local checks). Use `make ci ARGS=--go` / `ARGS=--kotlin` to run a
-  single lane.
-- **Inner loop: `make ci/fast`** runs only the side you changed (Go *or* Kotlin,
-  path-gated vs `origin/main`) with cached Go tests — seconds, not a full sweep.
-  Not authoritative (changed-only + cache), so still run the full `make ci`
-  before the actual push.
-- `make check` is the **Go-only** subset (no Kotlin) — it does *not* cover the
-  native client's `kotlin-lint` CI gate. Prefer `make ci` whenever you touch
-  `client-android/`, or any time you want the full pre-push guarantee.
-- **Andromeda is a separate lane** — `make ci` does *not* cover it. When you
-  touch `andromeda/`, run `cd andromeda && pnpm verify` (typecheck + lint +
-  format:check + test + build; mirrors `.github/workflows/andromeda-ci.yml`).
-  That workflow also triggers on `gateway-go/**` changes for its `wire-drift`
-  job: changing a `//deneb:wire` struct requires regenerating **both** Kotlin
-  and TS wire types (`.claude/rules/generated-code.md`).
-- Do not commit or push with failing build or test checks.
-- Toolchain: Go (1.25+); the Kotlin gate needs a JDK + Android SDK
-  (`ANDROID_HOME`, default `~/android-sdk`); the Andromeda gate needs Node +
-  pnpm.
-
----
-
-## Live Testing Hard Gate
-
-> 단위 테스트 통과 ≠ 제품 품질. 코드 변경 후 가능한 한 라이브 검증.
-
-**푸시 전 게이트는 `make ci`** (Go + 네이티브 Kotlin, 도메인별 pass/fail 요약). Go만 빠르게 보려면 `make check`. 커밋/푸시 전 반드시 통과.
-
-```bash
-scripts/dev/live-test.sh restart    # 빌드 + dev 게이트웨이 재시작
-scripts/dev/live-test.sh smoke      # Health + Ready 확인 (HTTP /health — 동작함)
-scripts/dev/live-test.sh logs-errors  # 숨은 에러 확인
-scripts/dev/live-test.sh stop       # 정리
-```
-
-> **✅ 채팅 기반 라이브 테스트(`chat`/`quality`/`chat-check`/`multi-chat`)는 네이티브 주입 경로로 복구됨.**
-> PR #1922로 텔레그램 플러그인이 제거되며 목 텔레그램 주입이 끊겼던 것을, 실제
-> 네이티브 클라 표면(`POST /api/v1/miniapp/rpc` → `miniapp.chat.send`)으로 재작성했다
-> (`scripts/mock_native_client.py`). dev 게이트웨이는 시작 시 state dir 에 `client_token`
-> 을 자동 생성해 인증을 활성화한다. **동기 RPC**라 토큰/도구 스트리밍 이벤트는 관측되지
-> 않으므로(per-tool `--expect-tool` 은 skip 처리) 콘텐츠 품질(한국어·충실도·누출·레이턴시)
-> 위주로 검증한다. 실제 LLM 백엔드가 필요하므로 풀 검증은 DGX 호스트에서 수행.
-
-- **로그에서 에러/경고 없는 것까지 확인**해야 진짜 완료.
-- 포트: dev=18790, iterate=18791, prod=18789 (프로덕션 영향 없음).
-- 상세 절차/명령어: `.claude/rules/live-testing.md` 참조.
-
----
-
-## Git Commit Format (REQUIRED)
-
-All commits MUST use Conventional Commit format:
-
-**Correct:** `feat(chat): add send_file tool` / `fix(memory): resolve deadlock`
-**Incorrect:** `chat: add send_file tool` ❌ (module-only prefix dropped from changelogs)
-
-**Allowed types:** feat, fix, perf, refactor, docs, test, chore, ci, build
-**Allowed scopes:** any module name (chat, pilot, memory, wiki, aurora, miniapp, etc.)
+| 파일 (docs/agent-rules/) | 언제 읽나 |
+|---|---|
+| architecture.md | 구조/모듈맵 오리엔테이션이 필요할 때 |
+| go-gateway.md · live-testing.md · concurrency.md · logging.md | gateway-go 코드를 만질 때 |
+| prompt-cache.md | 챗 prompt/캐시/컴팩션 경로 (불가침 원칙 — 위반 금지) |
+| hub-wiring.md | method_registry·GatewayHub 배선 |
+| model-roles.md · sidecar-models.md | LLM 역할 배치 · 로컬 모델/wormhole 운영 |
+| wiki-layout.md | 위키 도메인 (project_layout.go 규약) |
+| native-design-system.md · native-live-app.md | client-android UI · 실앱 라이브 검증 |
+| generated-code.md | 생성 파일 재생성 방법 |
+| release-and-deploy.md | 배포 · APK 발행/서명 · OTA |
+| git-pr.md · testing.md · docs.md · build-status.md · collaboration.md · optimization.md | 각 주제 상세 |

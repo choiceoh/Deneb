@@ -16,7 +16,7 @@ name: Publish APK (OTA)
 # Prerequisite: a self-hosted runner on srv1 labeled "gx10" (the label predates the
 # host rename and is pinned in actionlint.yaml), with the Android SDK installed and
 # ssh access to srv4 for the publish sync. One-time setup is documented in
-# .claude/rules/release-and-deploy.md.
+# docs/agent-rules/release-and-deploy.md.
 # Only push-to-main and manual dispatch trigger this -- never fork pull requests --
 # so untrusted code can never run on the host runner.
 

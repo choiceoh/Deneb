@@ -75,7 +75,7 @@
 
 ### 갭
 
-mutation 도구(메일/일정/wiki write)가 **fire-and-forget**. 실행 실패가 로그에만 남고 사용자 무응답으로 묻힐 수 있다 (`.claude/rules/logging.md` 의 "유저 무응답 = Error" 원칙이 도구 실패에는 일관 적용 안 됨).
+mutation 도구(메일/일정/wiki write)가 **fire-and-forget**. 실행 실패가 로그에만 남고 사용자 무응답으로 묻힐 수 있다 (`docs/agent-rules/logging.md` 의 "유저 무응답 = Error" 원칙이 도구 실패에는 일관 적용 안 됨).
 
 ### 제안
 
@@ -93,7 +93,7 @@ mutation 도구(메일/일정/wiki write)가 **fire-and-forget**. 실행 실패�
 
 mutation 도구에 선택적 `verify` 후처리를 `PostProcessRegistry` (`tools.go:192`) 로 추가. 예: `gmail.send` 후 sent 폴더 확인, `cron.create` 후 등록 재조회. 실패 시 같은 turn 에서 LLM 에 재시도 신호 + 사용자에게 명확한 실패 surface.
 - 캐시 영향 없음 (도구 후처리는 메시지 본문 외부).
-- `.claude/rules/logging.md` 규칙 2(재시도 2단계 로깅) + 규칙 3(broadcast) 적용.
+- `docs/agent-rules/logging.md` 규칙 2(재시도 2단계 로깅) + 규칙 3(broadcast) 적용.
 
 **A2. Turn-level "execution budget" 가드 — P2 / S.**
 한 turn 내 동일 도구 N회 반복 또는 명확화 질문 M회 초과 시 강제 수렴 (사용자에게 중간 상태 보고 후 진행). Opus 의 "루프 갇힘"을 구조적으로 차단.
@@ -159,7 +159,7 @@ proactive 보고는 분석으로 끝나지 말고 **즉시 실행 액션**을 �
 
 - **Retrieval-over-dump:** recall preflight 가 BM25 로 wiki top-3 + diary top-3 + polaris + transcript 를 검색해 **8행으로 cap** (`recall_preflight.go`, cue fingerprint 로 cross-topic 오염 차단). 논문이 "권고"한 동적 retrieval 을 이미 구현.
 - **계층 요약:** compaction 3-tier (`compaction/polaris.go:Compact`) — Emergency(30K) → Micro(코드펜스 제거) → Stub(256룬 초과 tool_result) → LLM 요약(90% threshold, 20% target) → Embedding+MMR → Recency. 논문이 권고한 "계층 요약"의 정교한 구현체.
-- **frozen snapshot:** recall 을 세션 첫 evidence turn 1회만 build → latency 절감 (`.claude/rules/prompt-cache.md` §3.5).
+- **frozen snapshot:** recall 을 세션 첫 evidence turn 1회만 build → latency 절감 (`docs/agent-rules/prompt-cache.md` §3.5).
 
 ### 갭
 
@@ -216,14 +216,14 @@ recall preflight 가 여러 소스에서 **같은 엔티티에 상충하는 사�
 
 ### Deneb 현황 (치명적 공백)
 
-**Deneb 의 채팅 기반 라이브 테스트가 PR #1922 로 끊겨 있다.** (`.claude/rules/live-testing.md`, CLAUDE.md 명시): 목 텔레그램 주입 경로가 죽어서 `chat`/`quality`/`chat-check` 가 동작 안 함. 현재 enforced 게이트는 `make check`(빌드+단위) + `smoke`(HTTP /health) + `logs-errors` 뿐.
+**Deneb 의 채팅 기반 라이브 테스트가 PR #1922 로 끊겨 있다.** (`docs/agent-rules/live-testing.md`, CLAUDE.md 명시): 목 텔레그램 주입 경로가 죽어서 `chat`/`quality`/`chat-check` 가 동작 안 함. 현재 enforced 게이트는 `make check`(빌드+단위) + `smoke`(HTTP /health) + `logs-errors` 뿐.
 
 즉 **A~D 의 어떤 개선도 "실제로 좋아졌나"를 측정할 수단이 없다.** 논문이 증명한 "측정 → 합성데이터 → 파인튜닝" 루프의 1단계조차 막혀 있다. DGX Spark 로컬 추론 환경은 논문의 파인튜닝 경로(+23.7%p)에 이상적인데, 측정이 없어 활용 못 한다.
 
 ### 제안
 
 **E1. 네이티브 주입 경로로 chat live-test 재작성 — P1 / M.** ★최우선★
-`.claude/rules/live-testing.md` 가 "후속 과제"로 남긴 것. `miniapp.chat.send` (SendSync, `miniapp_bridge.go`) 가 동기 응답을 반환하므로, 목 텔레그램 대신 **이 RPC 에 직접 주입**하면 chat/quality 테스트가 부활한다. 모든 후속 개선(A~D)의 선결조건.
+`docs/agent-rules/live-testing.md` 가 "후속 과제"로 남긴 것. `miniapp.chat.send` (SendSync, `miniapp_bridge.go`) 가 동기 응답을 반환하므로, 목 텔레그램 대신 **이 RPC 에 직접 주입**하면 chat/quality 테스트가 부활한다. 모든 후속 개선(A~D)의 선결조건.
 
 **E2. Claw-Anything 식 Deneb mini-benchmark — P1 / L.**
 논문 방법론을 Deneb 표면에 이식한 소규모 평가셋:
@@ -293,4 +293,4 @@ recall preflight 가 여러 소스에서 **같은 엔티티에 상충하는 사�
 - 관련 벤치마크: [π-Bench (2605.14678)](https://arxiv.org/html/2605.14678v3) — proactive long-horizon 평가 (B 발견 보강 참고)
 - Deneb research: `docs/research/{improvement-ideas, ideal-agent-environment-harness, hermes-deneb-mapping, memory-integration-strategy}.md`
 - 코드 근거: `gateway-go/internal/agentsys/autonomous/`, `internal/pipeline/chat/recall_preflight.go`, `internal/pipeline/compaction/polaris.go`, `internal/pipeline/chat/tools.go`, `internal/runtime/rpc/handler/chat/miniapp_bridge.go`
-- 도메인 규칙: `.claude/rules/{live-testing, prompt-cache, logging, optimization}.md`
+- 도메인 규칙: `docs/agent-rules/{live-testing, prompt-cache, logging, optimization}.md`

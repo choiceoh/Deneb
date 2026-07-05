@@ -9,7 +9,7 @@
 // so the goal-enqueue path is deferred until these thresholds are validated
 // against real traffic. The eventual cold start is: regression detected here →
 // confirmed by a dev synthetic bench → an `optimize` goal enqueued into the
-// goal loop (.claude/rules/optimization.md).
+// goal loop (docs/agent-rules/optimization.md).
 //
 // Design: regression signals come from many surfaces (agent logs, the
 // model-health circuit, vLLM cache, delivery failures, session lifecycle), so

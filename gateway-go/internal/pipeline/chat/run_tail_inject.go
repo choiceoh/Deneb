@@ -20,7 +20,7 @@
 // after the injected message, so the model sees the additions on every step
 // of the run — same visibility as the old system placement.)
 //
-// See .claude/rules/prompt-cache.md ("vLLM APC") for the doctrine.
+// See docs/agent-rules/prompt-cache.md ("vLLM APC") for the doctrine.
 package chat
 
 import (

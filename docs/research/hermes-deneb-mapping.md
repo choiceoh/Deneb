@@ -46,7 +46,7 @@
 | # | Hermes | 목적 | Deneb 대응 | 상태 | 비고 |
 |---|---|---|---|---|---|
 | 5 | `hermes_logging.py:setup_logging()` RotatingFileHandler → `agent.log`/`errors.log`/`gateway.log` | 파일 회전 로그 | `internal/runtime/bootstrap/logging.go:BuildLogger()` + `internal/infra/logging/` (slog 기반) | 🔄 | Deneb: slog 네이티브 → stderr/JSON/text. 파일 rotate는 systemd journal 또는 외부 프로세스 의존. 단일 기계라 journal로 충분. |
-| 6 | `_install_session_record_factory()` — 모든 LogRecord에 `[session_id]` 주입 (thread-local) | 세션 상관관계 추적 | slog `Handler.WithGroup("session")` + context 전파 (`.claude/rules/logging.md`) | 🔄 | Hermes: monkey-patched factory. Deneb: slog context-based, 더 관용적. |
+| 6 | `_install_session_record_factory()` — 모든 LogRecord에 `[session_id]` 주입 (thread-local) | 세션 상관관계 추적 | slog `Handler.WithGroup("session")` + context 전파 (`docs/agent-rules/logging.md`) | 🔄 | Hermes: monkey-patched factory. Deneb: slog context-based, 더 관용적. |
 | 7 | `COMPONENT_PREFIXES` (gateway/agent/tools/cli/cron) 로거 라우팅 | 컴포넌트별 파일 분리 | 없음 (단일 스트림) | ⚠️ | Deneb 단순성 우선. 필요 시 slog Handler chain으로 가능. |
 | 8 | `_ManagedRotatingFileHandler` NixOS chmod 0660 | setgid 그룹 공유 | 없음 | 🚫 | Deneb 단일 유저 → 그룹 공유 불필요. |
 | 9 | `agent/redact.py` — 20+ 벤더 시크릿 패턴 + `_mask_token` + import-time snapshot | 로그 내 API key / JWT / Discord mention 마스킹 | ❌ **없음** | ❌ **Battle-tested 패턴 / 도입 가치 높음** | 순수 Go 포트 가능, stdlib만. 세션 검색·에러 리포트가 키 노출하는 위험을 차단. 우선순위 높음. |
@@ -133,16 +133,16 @@
 
 | # | Hermes | 목적 | Deneb 대응 | 상태 | 비고 |
 |---|---|---|---|---|---|
-| 53 | `AGENTS.md` (Hermes 개발 가이드, 33KB) | 에이전트 개발 규칙 | `CLAUDE.md` + `gateway-go/CLAUDE.md` + `.claude/rules/*.md` | ✅ | Deneb이 조건부 로딩 규칙 시스템으로 더 세분화. |
+| 53 | `AGENTS.md` (Hermes 개발 가이드, 33KB) | 에이전트 개발 규칙 | `CLAUDE.md` + `gateway-go/CLAUDE.md` + `docs/agent-rules/*.md` | ✅ | Deneb이 조건부 로딩 규칙 시스템으로 더 세분화. |
 | 54 | `SECURITY.md` (8.5KB) | 취약점 보고, 신뢰 모델 | 없음 | ❌ **낮은 복잡도 / 필수** | 외부 기여자 받으려면 필수. 30분 작업. |
-| 55 | `CONTRIBUTING.md` (27KB) | 기여 가이드 | `CLAUDE.md` + `.claude/rules/git-pr.md` | ⚠️ | 외부 기여 받을 계획 있으면 필요. |
+| 55 | `CONTRIBUTING.md` (27KB) | 기여 가이드 | `CLAUDE.md` + `docs/agent-rules/git-pr.md` | ⚠️ | 외부 기여 받을 계획 있으면 필요. |
 | 56 | `README.md` | 입구 문서 | `README.md` | ✅ | Deneb도 보유. |
 | 57 | `RELEASE_v*.md` (버전별 릴리스 노트) | 변경 이력 | `CHANGELOG.md` | ✅ | 동등. |
 | 58 | `website/` Docusaurus 사이트 | 공식 문서 배포 | `docs/` (Mintlify 설정) | 🔄 | Deneb은 Mintlify, Hermes는 Docusaurus. 기능 동등. |
 | 59 | `tests/` + `conftest.py` hermetic isolation | pytest 단위/통합/E2E | `**/*_test.go` + `scripts/dev/live-test.sh` | ✅ | Go 관용. |
 | 60 | `tests/gateway/`, `tests/agent/`, `tests/cli/` 구조 | 모듈별 테스트 분리 | `internal/*/{pkg}/*_test.go` colocation | 🔄 | Go는 코드와 동위치 테스트가 관용. |
 | 61 | `tests/integration/` marker | 외부 서비스 필요 테스트 | `scripts/dev/live-test.sh` | 🔄 | Deneb 라이브 테스트가 훨씬 실전적 (라이브 게이트웨이 E2E). |
-| 62 | "Don't write change-detector tests" 정책 (AGENTS.md) | 카탈로그 스냅샷 금지 | `.claude/rules/testing.md` | ✅ | Deneb도 유사 원칙. |
+| 62 | "Don't write change-detector tests" 정책 (AGENTS.md) | 카탈로그 스냅샷 금지 | `docs/agent-rules/testing.md` | ✅ | Deneb도 유사 원칙. |
 | 63 | CI 워크플로우 (`.github/workflows/*`) | GHA CI | `.github/workflows/*` | ✅ | 동등. |
 
 ---
@@ -201,7 +201,7 @@
 - **결론**: Hermes 의 `_invoke_tool` 가로채기 체인은 Python 클래스 인스턴스 상태 때문. Deneb은 이미 **closure + Deps struct** 패턴으로 agent-instance state 문제를 다르게 해결 (`toolctx.CoreToolDeps`). `ToolInterceptor` 인터페이스를 빈 채로 추가하면 투기적 일반화.
 - **작은 개선**: `internal/pipeline/chat/tools.go:RegisterTool` 에 **silent replace 경고** 추가 (plugin collision 탐지)
 
-### 본 세션 Doctrine: `.claude/rules/prompt-cache.md` — ✅ 완료
+### 본 세션 Doctrine: `docs/agent-rules/prompt-cache.md` — ✅ 완료
 - 3-tier 캐시 구조 문서화 (Static/Semi-static/Dynamic)
 - 불가침 3원칙 (과거 메시지 mutation 금지, 대화 중 툴셋 변경 금지, 시스템 프롬프트 재구성 금지)
 - Cache-aware 슬래시 패턴 (deferred 기본 + `--now` opt-in)
@@ -347,7 +347,7 @@
 docs/research/hermes-agent-analysis.md         (new, 113KB)
 docs/research/hermes-deneb-mapping.md          (new, 이 문서)
 docs/research/tool-interception-gap.md         (new, P5 분석)
-.claude/rules/prompt-cache.md                  (new, doctrine)
+docs/agent-rules/prompt-cache.md                  (new, doctrine)
 CLAUDE.md                                      (Rules Index 한 줄 추가)
 
 gateway-go/pkg/llmerr/                         (new — reason/classify/patterns/action + test)

@@ -18,7 +18,7 @@
 # Exit codes: 0 = no new findings; 1 = new findings (listed on stdout);
 # 2 = tooling failure.
 #
-# Baseline edits follow .claude/rules/testing.md: do not regenerate it to
+# Baseline edits follow docs/agent-rules/testing.md: do not regenerate it to
 # silence a failing diff without explicit operator approval — either delete
 # the newly-dead code or get the keep approved.
 set -euo pipefail
@@ -38,7 +38,7 @@ if [[ "${1:-}" == "--update" ]]; then
     {
         echo "# deadcode-baseline.txt — accepted findings of scripts/audit/deadcode-audit.sh."
         echo "# Format: <file> :: <symbol>, sorted. Regenerate with --update (operator approval"
-        echo "# required per .claude/rules/testing.md)."
+        echo "# required per docs/agent-rules/testing.md)."
         echo "#"
         echo "# Keep-policy: entries stay here only if they are (a) reachable from _test.go"
         echo "# (deadcode cannot see tests), (b) documented extension points (e.g."

@@ -103,7 +103,7 @@ import kotlin.time.ExperimentalTime
  * tree (`saveOrg`) which the gateway validates + persists wholesale. A discard guard
  * compares the working tree to the loaded baseline so a stray back can't lose edits.
  *
- * Design split (see .claude/rules/native-design-system.md): the frame + type are the
+ * Design split (see docs/agent-rules/native-design-system.md): the frame + type are the
  * Deneb skin (DenebScreenScaffold + DenebType + indented rows + hairlines); the
  * controls (back, save button, search field, member pickers, bottom
  * sheet) are Material. The chart itself is a stateless body ([OrgChartContent]) the
@@ -809,7 +809,7 @@ private fun OrgSearchResults(
  * person has several numbers/addresses we wire the first (the contacts store lists the
  * primary first); the rest live in the 사람 detail screen.
  *
- * Design (see .claude/rules/native-design-system.md): these are *functional* icons
+ * Design (see docs/agent-rules/native-design-system.md): these are *functional* icons
  * (phone/mail) — allowed; placed as small, restrained glyph buttons, not decoration.
  */
 @Composable

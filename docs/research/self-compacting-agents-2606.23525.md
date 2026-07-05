@@ -1,7 +1,7 @@
 # Self-Compacting Language Model Agents × Deneb 검토
 
 > **출처**: Tianjian Li, Jingyu Zhang, William Jurayj, Xi Wang, Chuanyang Jin, Mehrdad Farajtabar, Eric Nalisnick, Daniel Khashabi, *"Self-Compacting Language Model Agents"* ([arXiv:2606.23525](https://arxiv.org/abs/2606.23525), 2026-06-22). 직접 fetch 는 조직 egress 정책(arxiv.org 403)으로 차단 → 공개 요약/리뷰([HuggingFace](https://huggingface.co/papers/2606.23525), [alphaXiv](https://www.alphaxiv.org/abs/2606.23525), [Moonlight](https://www.themoonlight.io/en/review/self-compacting-language-model-agents)) 기반 검토.
-> **방법**: 논문 핵심 추출 → Deneb 압축 파이프라인(`gateway-go/internal/pipeline/compaction/`)·캐시 도그마(`.claude/rules/prompt-cache.md`)와 대조 → 채택/실험/스킵 판정.
+> **방법**: 논문 핵심 추출 → Deneb 압축 파이프라인(`gateway-go/internal/pipeline/compaction/`)·캐시 도그마(`docs/agent-rules/prompt-cache.md`)와 대조 → 채택/실험/스킵 판정.
 > **일시**: 2026-06-27
 > **한 줄 결론**: 논문이 비판하는 *fixed-interval/threshold 트리거*가 **곧 Deneb 의 현재 압축 트리거**(`polaris.go`: Emergency 30k·LLM 90%·micro 4-turn)다. 단 논문의 두 비용 축 중 **토큰 비용은 Deneb 가 이미 중화**했고(deferred background compaction `run_prepare.go:498` 가 dsv4 STW 제거), 남은 진짜 nugget 은 **품질=압축 *시점*의 궤적-인지화**다(§5.0). 그래서 논문 그대로의 "모델-주도 `compact` 도구"(B)는 **비권장**(dsv4 uneven tool use + 5분데드라인 + APC 위험, ROI<위험)이고, rubric 의 *판정 기준*만 떼어 **lightweight 역할의 바운드 게이트 1콜**로 돌리는 **A2(suppression)** 를 본안으로 권장 — main 턴 밖이라 데드라인·APC·tool-set 위험이 전부 사라진다. 이득은 *긴 자율 궤적*(research/cron/agentic search)에 한정, **인터랙티브 비서 턴은 불변**. 선결 과제 = long-trajectory 압축-품질 eval 부재(§5.3).
 
@@ -101,7 +101,7 @@
 논문의 핵심 발견은 "도구 단독은 오픈웨이트가 못 쓴다, **rubric 이 본질**"이다. Deneb 의 메인도 오픈웨이트(dsv4)라 방법 B 는 그 함정에 그대로 빠진다. 그런데 **rubric 의 가치는 '판정 기준'이지 '누가 판정하느냐'가 아니다.** Deneb 는 판정을 **메인 턴 안에서 메인 모델에게** 시킬 이유가 없다 — 이미 압축 결정을 *파이프라인*이 내리고 있으니, rubric 을 **lightweight 역할의 바운드 게이트 1콜**로 돌리면:
 
 - 5분 데드라인·APC 교란·tool-set 분리 위험이 **전부 사라진다**(main 턴 밖, 주입 0, 도구 0).
-- model-roles 도그마와 정렬 — goal_task judge·컴팩션 청크 요약과 동형의 *로컬 lightweight 바운드 판정*(`.claude/rules/model-roles.md`).
+- model-roles 도그마와 정렬 — goal_task judge·컴팩션 청크 요약과 동형의 *로컬 lightweight 바운드 판정*(`docs/agent-rules/model-roles.md`).
 - 논문의 "엉뚱한 시점 압축 회피로 +최대 6.3점"을, **dsv4 의 도구호출 신뢰성에 베팅하지 않고** 얻는다.
 - fail-open 이라 게이트가 죽어도 오늘 동작으로 graceful degrade.
 
@@ -156,13 +156,13 @@ func ClassifyTiming(messages []llm.Message, tailWindow int) Timing
 - 정착 꼬리(마지막이 terminal text) → `Settled`.
 - ceiling 초과 입력 → timing 무시하고 압축(안전바운드).
 
-**솔직한 한계**: ①②의 기존 방어막 때문에 A1 **단독의 측정 가능한 상방은 작을 수 있다** — 특히 (S)는 deferred-background 가 이미 "raw 로 한 턴 더" 사주는 것과 효과가 겹친다. 그래서 **(C) 경계 스냅만 먼저 출하**(결정적·테스트가능·행동위험 거의 0), **(S) defer 는 §5.3 long-trajectory eval 로 +Δ 가 재현될 때만** 켠다. eval 없이 (S)를 켜는 건 운빨 개선 위험(`.claude/rules/optimization.md` 인과진단).
+**솔직한 한계**: ①②의 기존 방어막 때문에 A1 **단독의 측정 가능한 상방은 작을 수 있다** — 특히 (S)는 deferred-background 가 이미 "raw 로 한 턴 더" 사주는 것과 효과가 겹친다. 그래서 **(C) 경계 스냅만 먼저 출하**(결정적·테스트가능·행동위험 거의 0), **(S) defer 는 §5.3 long-trajectory eval 로 +Δ 가 재현될 때만** 켠다. eval 없이 (S)를 켜는 건 운빨 개선 위험(`docs/agent-rules/optimization.md` 인과진단).
 
 ### 5.3 측정 — 이게 제일 어렵다 (그리고 선결 과제다)
 
 논문은 *긴 궤적* 벤치(경쟁수학·agentic search)에서 정확도로 잰다. **Deneb 엔 그런 long-trajectory 압축-품질 eval 이 없다** — `quality-metric.sh`/`recall-metric.sh` 는 짧은 턴·회상 적중이라 mid-derivation 압축의 손실을 못 잡는다. 따라서:
 
-- **선결**: 자율 딥리서치/agentic search 시나리오(예: `wiki_research_task` 류 멀티스텝, research_panel)를 **재현 가능한 long-trajectory 픽스처**로 만들어, "압축 후 최종 산출물 품질/사실 보존"을 채점하는 metric 을 먼저 세운다. 이게 없으면 A2 의 +효과를 *증명할 길이 없다*(운빨 개선 위험, `.claude/rules/optimization.md` 인과진단).
+- **선결**: 자율 딥리서치/agentic search 시나리오(예: `wiki_research_task` 류 멀티스텝, research_panel)를 **재현 가능한 long-trajectory 픽스처**로 만들어, "압축 후 최종 산출물 품질/사실 보존"을 채점하는 metric 을 먼저 세운다. 이게 없으면 A2 의 +효과를 *증명할 길이 없다*(운빨 개선 위험, `docs/agent-rules/optimization.md` 인과진단).
 - **회귀 가드**: 인터랙티브 `quality` 스위트·`recall-metric` 불변(스코프 격리 증명), `iterate.sh --metric` 로 게이트 on/off 비교, vLLM `prefix_cache` 메트릭으로 APC 무영향 확인.
 - **반증가능 예측**(편집 전 선언): "A2 는 long-trajectory 산출물 사실보존을 +Δ, 인터랙티브 latency·APC 적중을 ±0 으로 바꾼다 — mid-derivation 컷을 피하기 때문." Δ 가 안 나오거나 latency 가 흔들리면 revert.
 
@@ -172,8 +172,8 @@ func ClassifyTiming(messages []llm.Message, tailWindow int) Timing
 
 ## 6. 관련 문서
 
-- 압축 정책 단일 진실원: `.claude/rules/prompt-cache.md` §5(컨텍스트 압축), §1.5(vLLM APC 꼬리 주입)
+- 압축 정책 단일 진실원: `docs/agent-rules/prompt-cache.md` §5(컨텍스트 압축), §1.5(vLLM APC 꼬리 주입)
 - 구현: `gateway-go/internal/pipeline/compaction/` (`polaris.go` 트리거, `llm.go` P7 bounded digestion, `micro.go`/`restore.go` cheap pruning)
 - 캐시-세이프 주입: `gateway-go/internal/pipeline/chat/run_tail_inject.go`
-- 모델 역할(압축=lightweight 로컬): `.claude/rules/model-roles.md` (컴팩션 청크 요약 → lightweight)
+- 모델 역할(압축=lightweight 로컬): `docs/agent-rules/model-roles.md` (컴팩션 청크 요약 → lightweight)
 - 선행 검토 포맷: `docs/research/code-as-agent-harness-review.md`

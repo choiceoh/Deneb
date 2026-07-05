@@ -27,7 +27,7 @@ globs: gateway-go/internal/ai/modelrole/**, gateway-go/internal/pipeline/pilot/*
 
 > ⚠️ **analysis 역할의 함정 (여전히 유효).** enum 주석은 "highest-quality **LOCAL** model"이라 적혀 있지만, 현재 deneb.json은 `analysis → glm-5.2`(클라우드)로 지정한다(main·chatbot·coding과 공유). 즉 **analysis 역할에 임무를 얹으면 클라우드로 샌다** — 비용(구독 크레딧) + 레이턴시(~20s/콜). 요약류 헬퍼 콜을 무심코 analysis로 두면 안 된다. 실제로 **컴팩션·youtube 요약이 이렇게 샜다가** #2508/#2509로 lightweight(로컬)로 환원됐다.
 >
-> ⚠️ **2026-07 현재는 main도 클라우드다.** 폴백 방향이 뒤집혔다: 클라우드 main(glm)이 죽으면 **로컬 dsv4로 낙하**한다(가용성 관점에선 건강한 배치). 실측(2026-07-04) glm 소비 ≈ 3.2M input tok/일, main 턴 평균 54~73s. vLLM APC(prefix cache) 핫패스는 main이 아니라 **dsv4 경로**(fallback·dsv4-nothink 헬퍼·챗봇 세션 오버라이드)로 축소됐다 — `.claude/rules/prompt-cache.md` §1.5 의 원칙은 그 트래픽과 main 의 로컬 복귀 대비로 그대로 준수한다.
+> ⚠️ **2026-07 현재는 main도 클라우드다.** 폴백 방향이 뒤집혔다: 클라우드 main(glm)이 죽으면 **로컬 dsv4로 낙하**한다(가용성 관점에선 건강한 배치). 실측(2026-07-04) glm 소비 ≈ 3.2M input tok/일, main 턴 평균 54~73s. vLLM APC(prefix cache) 핫패스는 main이 아니라 **dsv4 경로**(fallback·dsv4-nothink 헬퍼·챗봇 세션 오버라이드)로 축소됐다 — `docs/agent-rules/prompt-cache.md` §1.5 의 원칙은 그 트래픽과 main 의 로컬 복귀 대비로 그대로 준수한다.
 
 ## 역할 선택 헬퍼 (`pipeline/pilot/localai.go`)
 

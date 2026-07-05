@@ -9,7 +9,7 @@ globs: ["gateway-go/**/*.go", "proto/**/*.proto"]
 > 단위 테스트 통과 ≠ 제품 품질. 반드시 실제 게이트웨이에서 작동 + 품질을 검증하라.
 
 > 이 문서는 **게이트웨이**(`gateway-go`) 라이브 검증이다. **네이티브 클라이언트
-> UI**를 실제 앱으로(스크린샷+조작) 검증하려면 `.claude/rules/native-live-app.md`
+> UI**를 실제 앱으로(스크린샷+조작) 검증하려면 `docs/agent-rules/native-live-app.md`
 > (`scripts/dev/native-app.sh`)를 본다.
 
 > **✅ 채팅 기반 라이브 테스트(`chat`/`quality`/`chat-check`/`multi-chat`)는 네이티브 주입 경로로 복구됨.**

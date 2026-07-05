@@ -1,6 +1,6 @@
 # runtime 서브트리 지도 (구조)
 
-> 게이트웨이 런타임의 **구조적 지도** — HTTP 서버·RPC 디스패치·세션 상태기계·배경 서브시스템이 어디에 있고 어떻게 엮이는지. 배선 *정책*(GatewayHub 5규칙)은 `.claude/rules/hub-wiring.md`가 소관, 여기 복붙하지 않는다. 모듈 전체 맵은 상위 `gateway-go/CLAUDE.md`.
+> 게이트웨이 런타임의 **구조적 지도** — HTTP 서버·RPC 디스패치·세션 상태기계·배경 서브시스템이 어디에 있고 어떻게 엮이는지. 배선 *정책*(GatewayHub 5규칙)은 `docs/agent-rules/hub-wiring.md`가 소관, 여기 복붙하지 않는다. 모듈 전체 맵은 상위 `gateway-go/CLAUDE.md`.
 
 ## 디렉토리 맵
 
@@ -52,7 +52,7 @@ registerWorkflowSideEffects() # 비-RPC: autonomous/dreaming/notifier (server_rp
 
 | 하려는 것 | 시작점 |
 |---|---|
-| 새 RPC 도메인 추가 | `.claude/rules/hub-wiring.md`의 3단계 — 핸들러 `Deps`+`Methods` → 허브 필드 → `method_registry.go` 인라인 배선 → `requiredMethods` 스냅샷 갱신 |
+| 새 RPC 도메인 추가 | `docs/agent-rules/hub-wiring.md`의 3단계 — 핸들러 `Deps`+`Methods` → 허브 필드 → `method_registry.go` 인라인 배선 → `requiredMethods` 스냅샷 갱신 |
 | 새 HTTP 라우트 | `server_http_routing.go`에서 시작, 핸들러는 `server_http_<area>.go` |
 | 새 배경 서브시스템/주기작업 | `*_subsystem.go` 패턴 따라 신설 → `registerWorkflowSideEffects`에서 기동 |
 | 세션 상태 전이 변경 | `session/` 상태기계 (전이 검증이 잘못된 전이를 거부) |
@@ -60,9 +60,9 @@ registerWorkflowSideEffects() # 비-RPC: autonomous/dreaming/notifier (server_rp
 
 ## 함정
 
-- **배선은 `method_registry.go`에서만.** 다른 파일에서 Deps 구조체 조립 금지(예외: `server_rpc.go`의 `registerBuiltinMethods` 서버상태 클로저). 어댑터 파일(`hub_adapters.go` 류) 만들지 마라 — `.claude/rules/hub-wiring.md` 5규칙 + 스냅샷 테스트가 강제.
+- **배선은 `method_registry.go`에서만.** 다른 파일에서 Deps 구조체 조립 금지(예외: `server_rpc.go`의 `registerBuiltinMethods` 서버상태 클로저). 어댑터 파일(`hub_adapters.go` 류) 만들지 마라 — `docs/agent-rules/hub-wiring.md` 5규칙 + 스냅샷 테스트가 강제.
 - **핸들러는 `rpcutil.GatewayHub`를 import하지 않는다.** `Deps` 구조체만 받는다. Hub는 순수 서비스 컨테이너 — 읽기 접근자·late-bind setter(`SetChat` 등)·phase 헬퍼 외의 행위 메서드는 `Broadcast`/`Validate`뿐이며, 비즈니스 로직 추가 금지.
 - **등록 5단계 순서 의존**: Builtin(허브 전) → Early(Chat 없음) → Session(Chat 생성) → Late(Chat 의존) → SideEffects. Chat-의존 메서드를 Early에 두면 nil. 새 단계는 정말 필요할 때만.
 - **graceful shutdown drain hang 이력**(배포 후 미니앱 404): HTTP 리스너 닫혔는데 프로세스 생존 → watchdog+bound drain으로 방어([project_gateway_shutdown_wedge]). 종료 격리 kill은 `fuser`(`pkill -f`는 셸 자살).
-- **배경 goroutine**은 `.claude/rules/concurrency.md`: `Server.ShutdownCtx()` 파생 + recover + 종료경로. 사용자 무응답 실패는 `Error`+broadcast(`.claude/rules/logging.md`).
+- **배경 goroutine**은 `docs/agent-rules/concurrency.md`: `Server.ShutdownCtx()` 파생 + recover + 종료경로. 사용자 무응답 실패는 `Error`+broadcast(`docs/agent-rules/logging.md`).
 - **dev 게이트웨이가 prod cron/transcripts 공유**(homeDir 기준) — 라이브 검증 후 즉시 stop([reference_livetest_dev_cron_shared]).

@@ -1,6 +1,6 @@
 // health_cache.go surfaces the self-hosted vLLM prefix-cache (APC) hit rate as
 // an OPS signal on /health and /status — a passive regression alarm for the
-// prompt-cache doctrine (.claude/rules/prompt-cache.md).
+// prompt-cache doctrine (docs/agent-rules/prompt-cache.md).
 //
 // The measurement is NOT new. The engine's prefix-cache counters are already
 // scraped, per served model, by observe.FetchVllmPrefixCaches (the same helper

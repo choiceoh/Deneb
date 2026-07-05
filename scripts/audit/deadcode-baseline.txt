@@ -1,6 +1,6 @@
 # deadcode-baseline.txt — accepted findings of scripts/audit/deadcode-audit.sh.
 # Format: <file> :: <symbol>, sorted. Regenerate with --update (operator approval
-# required per .claude/rules/testing.md).
+# required per docs/agent-rules/testing.md).
 #
 # Keep-policy: entries stay here only if they are (a) reachable from _test.go
 # (deadcode cannot see tests), (b) documented extension points (e.g.

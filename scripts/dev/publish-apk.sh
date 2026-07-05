@@ -75,7 +75,7 @@ fi
 # and the debug key is per-machine, so a runner-home reset would silently break
 # in-place OTA updates for every installed phone. So the publish sources the
 # signing env from a host-local file (never committed; creation runbook:
-# .claude/rules/release-and-deploy.md "APK release 서명").
+# docs/agent-rules/release-and-deploy.md "APK release 서명").
 #
 # Policy: env file present but broken → hard fail (never silently ship a
 # debug-signed build when release signing was intended); absent → warn loudly
@@ -103,7 +103,7 @@ if [ "$VARIANT" = "fossRelease" ]; then
     echo "WARNING: no $SIGNING_ENV — fossRelease will be signed with the LOCAL DEBUG KEYSTORE." >&2
     echo "         Debug-signed sideloaded builds trip fintech malware scans (e.g. Toss) and the debug" >&2
     echo "         key is machine-local (runner reset = OTA continuity break). One-time setup runbook:" >&2
-    echo "         .claude/rules/release-and-deploy.md 'APK release 서명'." >&2
+    echo "         docs/agent-rules/release-and-deploy.md 'APK release 서명'." >&2
   fi
 fi
 

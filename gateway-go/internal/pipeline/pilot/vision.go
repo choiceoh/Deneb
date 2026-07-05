@@ -5,7 +5,7 @@
 // the agent "watch" a video, we extract representative frames + the subtitle
 // track and analyze them in a SEPARATE vision call here, returning only the
 // resulting analysis text to the conversation — the same isolation pattern
-// web_youtube.go uses for transcript summarization (see .claude/rules/
+// web_youtube.go uses for transcript summarization (see docs/agent-rules/
 // prompt-cache.md §5). The heavy multimodal payload (base64 frames) never enters
 // the main transcript, so the prompt cache and context budget stay intact.
 //

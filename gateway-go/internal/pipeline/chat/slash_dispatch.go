@@ -318,7 +318,7 @@ func (h *Handler) buildSessionStatus(sessionKey string) string {
 	}
 
 	// Process-wide prompt-cache hit ratio — the cache-doctrine regression
-	// alarm (.claude/rules/prompt-cache.md), counted only for Anthropic-mode
+	// alarm (docs/agent-rules/prompt-cache.md), counted only for Anthropic-mode
 	// runs (non-Anthropic providers can't report cache usage). Shows a recent
 	// EWMA (surfaces a fresh regression) alongside the cumulative-since-start
 	// total. Only rendered once some prompt tokens are recorded.

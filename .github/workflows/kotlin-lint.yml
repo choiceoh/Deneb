@@ -7,7 +7,7 @@
 #   - spotlessCheck: ktlint formatting (config in client-android/app/build.gradle.kts)
 #   - detekt: bug catchers only (config/detekt.yml; style rulesets are off,
 #     accepted pre-existing findings live in config/detekt-baseline.xml —
-#     baseline updates need operator approval per .claude/rules/testing.md)
+#     baseline updates need operator approval per docs/agent-rules/testing.md)
 #   - desktopTest smoke subset: stable shared/common logic tests on the desktop
 #     JVM path so client regressions are caught before merge without inheriting
 #     the currently flaky chat-viewmodel suite

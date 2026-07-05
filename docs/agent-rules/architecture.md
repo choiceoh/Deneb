@@ -1,6 +1,5 @@
 ---
 description: "프로젝트 구조 및 모듈 아키텍처 참조"
-globs: ["gateway-go/cmd/**", "gateway-go/internal/**", "gateway-go/pkg/**", "client-android/**", "andromeda/**"]
 ---
 
 # Project Structure & Module Organization
@@ -8,7 +7,7 @@ globs: ["gateway-go/cmd/**", "gateway-go/internal/**", "gateway-go/pkg/**", "cli
 ## Top-Level Directory Map
 
 - `gateway-go/` — Go gateway server (HTTP + SSE server, RPC dispatch, session management, chat/LLM, tools, auth). The primary runtime.
-- `client-android/` — Kotlin Multiplatform native client (Compose). **Mobile surface** (Android daily driver + iOS); the desktop product UI was retired — Andromeda owns desktop. The Compose Desktop target remains as a headless verification harness only (`.claude/rules/native-live-app.md`).
+- `client-android/` — Kotlin Multiplatform native client (Compose). **Mobile surface** (Android daily driver + iOS); the desktop product UI was retired — Andromeda owns desktop. The Compose Desktop target remains as a headless verification harness only (`docs/agent-rules/native-live-app.md`).
 - `andromeda/` — desktop workstation client ("work-command cockpit") for the gateway. Tauri 2 (Rust shell) + React 18 + Refine + Vite (TypeScript). Own gate: `cd andromeda && pnpm verify`; own module guide: `andromeda/CLAUDE.md`.
 - `skills/` — user-facing skill plugins organized by category (coding/, productivity/, knowledge/, …). Filesystem-discovered; adding a directory is the install.
 - `docs/` — Mintlify documentation site.
@@ -19,7 +18,7 @@ globs: ["gateway-go/cmd/**", "gateway-go/internal/**", "gateway-go/pkg/**", "cli
 
 ## Gateway Module Map (`gateway-go/internal/`, one-liners)
 
-Detailed per-file notes live in `.claude/rules/go-gateway.md`; this is the top-level orientation map.
+Detailed per-file notes live in `docs/agent-rules/go-gateway.md`; this is the top-level orientation map.
 
 - `runtime/` — server (HTTP/SSE), rpc (dispatch), session (lifecycle), bootstrap (4-phase startup), events (pub/sub), process (exec + approval), insights, observe.
 - `pipeline/` — chat (LLM turn pipeline + tools), compaction/polaris (context compression), pilot (helper-LLM calls), chatport, autoreply, liteparse, compactuner.
@@ -32,7 +31,7 @@ Detailed per-file notes live in `.claude/rules/go-gateway.md`; this is the top-l
 ## Key Architectural Flows
 
 1. **Gateway startup:** `gateway-go/cmd/gateway/main.go` -> `internal/runtime/server` (HTTP + SSE) -> `internal/runtime/rpc` (dispatch) -> `internal/runtime/session` (state). There is no channel plugin (the Telegram bot was retired in PR #1922).
-2. **Clients:** both the native client (`client-android/`) and Andromeda (`andromeda/`) talk to the gateway over the `miniapp.*` RPC surface (`POST /api/v1/miniapp/rpc`, `X-Deneb-Client-Token`) plus SSE streams. Wire types for both are generated from Go `//deneb:wire` structs (`.claude/rules/generated-code.md`).
+2. **Clients:** both the native client (`client-android/`) and Andromeda (`andromeda/`) talk to the gateway over the `miniapp.*` RPC surface (`POST /api/v1/miniapp/rpc`, `X-Deneb-Client-Token`) plus SSE streams. Wire types for both are generated from Go `//deneb:wire` structs (`docs/agent-rules/generated-code.md`).
 
 ## Cross-Cutting Concerns
 

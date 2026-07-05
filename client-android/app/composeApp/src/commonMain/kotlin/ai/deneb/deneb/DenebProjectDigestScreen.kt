@@ -47,7 +47,7 @@ import kotlin.time.Instant
  * from disk; pull to refresh just re-reads. Tapping a card opens that project's
  * 대표페이지 (the wiki page the 현재 상태 digest lives on).
  *
- * Design split (see .claude/rules/native-design-system.md): frame + type are the
+ * Design split (see docs/agent-rules/native-design-system.md): frame + type are the
  * Deneb skin (DenebScreenScaffold + DenebType + grouped DenebGroup cards); the
  * pull-to-refresh is Material. The card list is a stateless body
  * ([ProjectDigestContent]) the render harness can preview with mock data; this

@@ -125,7 +125,7 @@ Hindsight(Hermes 계열 FastAPI+pgvector 장기기억 서비스)는 **2026-06-15
 - 이득: 단일 엔드포인트 + 업스트림 키 단일 금고 + SparkFleet 자동발견(`:18900`) + 로컬→클라우드 auto 폴백 + 프라이버시 가드. 상세 설계는 [[project_wormhole]].
 
 ### ★★ APC 불가침 (게이트웨이 dsv4 경로의 절대 규칙)
-> 게이트웨이의 dsv4 트래픽은 vLLM APC(byte-prefix 캐시)에 극도로 민감하다(`.claude/rules/prompt-cache.md` §1.5). wormhole을 그 앞에 두려면 **바이트 투명**해야 한다. (2026-07-04 현재 main 은 클라우드 glm 이고 dsv4 는 fallback·챗봇 경로지만, 이 규칙은 역할이 아니라 **엔트리** 계약이다 — main 이 로컬로 복귀해도 그대로 성립. 실측 검증(2026-07-04): 동일 요청 직결 vs wormhole 경유가 같은 prefix family 에 합류, 적중 89% 동일.)
+> 게이트웨이의 dsv4 트래픽은 vLLM APC(byte-prefix 캐시)에 극도로 민감하다(`docs/agent-rules/prompt-cache.md` §1.5). wormhole을 그 앞에 두려면 **바이트 투명**해야 한다. (2026-07-04 현재 main 은 클라우드 glm 이고 dsv4 는 fallback·챗봇 경로지만, 이 규칙은 역할이 아니라 **엔트리** 계약이다 — main 이 로컬로 복귀해도 그대로 성립. 실측 검증(2026-07-04): 동일 요청 직결 vs wormhole 경유가 같은 prefix family 에 합류, 적중 89% 동일.)
 
 - **게이트웨이 dsv4 경로가 쓰는 wormhole 엔트리(`deepseek-v4-flash`)는 `toggleKwarg` 를 절대 달지 마라.** `toggleKwarg` 가 있으면 wormhole 이 effort 라우팅으로 `chat_template_kwargs` 를 **주입**해 렌더 프롬프트를 바꾼다 → APC 파괴 + Deneb 자체 effort 라우팅(`run_capability.go`)과 **이중화 충돌**(injectKwarg 가 기존 값 덮어씀). 엔트리에 toggleKwarg 가 없으면 `applyThinking` 이 즉시 return → **순수 패스스루**.
 - **이름 일치**: 엔트리 `name == upstreamModel == vLLM 서빙 모델명`, deneb.json 이 그 name 을 보냄 → `rewriteModel` 미발동 → 바이트 동일. (model 필드는 렌더 프롬프트에 안 들어가 rewrite 자체는 APC-safe 지만, 무변경이 가장 안전.)

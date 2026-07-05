@@ -244,7 +244,7 @@ kotlin-models-check:
 # Mirror the kotlin-lint.yml CI gate locally: spotlessCheck = ktlint formatting,
 # detekt = bug-focused static analysis (config/detekt.yml, baseline in
 # config/detekt-baseline.xml). These are GATES — never auto-edit the detekt
-# baseline to silence findings (.claude/rules/testing.md). Until now they had no
+# baseline to silence findings (docs/agent-rules/testing.md). Until now they had no
 # make target, so the only way to check the native client before push was a manual
 # `ANDROID_HOME=... ./gradlew ...`; that gap is what `make ci` closes.
 #

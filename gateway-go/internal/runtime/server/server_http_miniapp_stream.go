@@ -206,7 +206,7 @@ func writeChatStreamSSE(ctx context.Context, w http.ResponseWriter, sessionKey s
 
 	// Keepalive ticker: comment frames during silent stretches (long tool
 	// calls). Bounded by stop/ctx and joined below; recover keeps a stray write
-	// panic from taking down the process (see .claude/rules/concurrency.md).
+	// panic from taking down the process (see docs/agent-rules/concurrency.md).
 	stop := make(chan struct{})
 	stopped := make(chan struct{})
 	go func() {

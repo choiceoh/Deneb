@@ -29,7 +29,7 @@ Go HTTP + SSE gateway server — the primary Deneb runtime.
 ## Common Tasks
 
 ### Adding a New RPC Method
-Follow the GatewayHub wiring rules (repo root `.claude/rules/hub-wiring.md` —
+Follow the GatewayHub wiring rules (repo root `docs/agent-rules/hub-wiring.md` —
 enforced by code review + snapshot test):
 1. Define `Deps` struct + `Methods(deps Deps)` in the handler package (`internal/runtime/rpc/handler/<domain>/`)
 2. Add the service field to `rpcutil.GatewayHub` (new domains only) + update `hub.Validate()`

@@ -31,7 +31,7 @@
 
 1. **exec의 in-place 파일 편집 체크포인트** — `sed -i`·`>` 리다이렉트로 파일을 고치는 exec 명령이 fs Write/Edit 도구의 롤백 안전망을 우회하던 것을, 실행 전 대상 파일(존재하는 정규파일)을 기존 `pkg/checkpoint`로 스냅샷해 `/rollback` 복구 가능하게. 추출은 과포함+존재성 필터라 안전. 논문의 *복구가능성*만 도입, 임의 bash에 fragile한 *자동 롤백-on-failure*는 의도적 제외. → `tools/exec_safety.go:InPlaceFileTargets`, `tools/exec.go`.
 
-2. **autoresearch 최적화 규율** — `.claude/rules/optimization.md`에 ① 퇴보 시 스칼라 metric 말고 **raw 트랜스크립트로 인과 진단**, ② 변경마다 **반증가능한 예측 선언 후 대조**(운빨 keep 방지). 결과 테이블에 예측/적중 컬럼.
+2. **autoresearch 최적화 규율** — `docs/agent-rules/optimization.md`에 ① 퇴보 시 스칼라 metric 말고 **raw 트랜스크립트로 인과 진단**, ② 변경마다 **반증가능한 예측 선언 후 대조**(운빨 keep 방지). 결과 테이블에 예측/적중 컬럼.
 
 3. **research_panel 종합 누락 방지** — 종합 지침에 "모든 패널리스트 빠짐없이 검토, 배제 시 사유 명시" 추가. Deneb 경량 오케스트레이션(서브에이전트·패널 팬아웃·결정적 워크플로)의 **유일한 inter-agent 노출 이음매**가 패널 합성 단계라는 MAST 분석에 따른 것.
 
