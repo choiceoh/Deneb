@@ -55,14 +55,12 @@ func (rc *RunCache) SetWithScope(key, output, scope string) {
 func (rc *RunCache) Invalidate() {
 	rc.mu.Lock()
 	defer rc.mu.Unlock()
+	if len(rc.entries) == 0 && len(rc.scopes) == 0 {
+		return // already empty — skip the reallocations
+	}
 	rc.entries = make(map[string]string)
 	rc.scopes = make(map[string]string)
 }
-
-// ScopeNonFilesystem marks a cached entry whose result does not depend on
-// workspace files (fetch_tools schema lookups). Path-scoped invalidation
-// never removes it; a full Invalidate() still does.
-const ScopeNonFilesystem = "\x00non-fs"
 
 // InvalidateByPath removes cached entries whose scope overlaps with path.
 // Entries without a recorded scope are conservatively removed.
@@ -87,9 +85,6 @@ func (rc *RunCache) InvalidateByPath(path string) {
 // scopeOverlaps reports whether a file in dir could affect cached results
 // scoped to scope. Returns true when the file is inside the scope's subtree.
 func scopeOverlaps(dir, scope string) bool {
-	if scope == ScopeNonFilesystem {
-		return false // result does not depend on workspace files
-	}
 	if scope == "." || scope == "" {
 		return true // workspace-wide search — always affected
 	}
@@ -107,14 +102,14 @@ func (rc *RunCache) Len() int {
 }
 
 // cacheableTools are tools whose identical repeat calls within one run may be
-// served from the RunCache. grep is a pure workspace search (invalidated by
-// mutations); fetch_tools returns deferred tool schemas — measured at 20% of
-// its calls being same-input repeats within a run (2026-07-05), and a cache
-// hit is safe because deferred activation is run-scoped and idempotent: the
-// first identical call already activated the same names.
+// served from the RunCache. Only pure, stateless workspace reads belong here:
+// the cache Get short-circuits BEFORE the tool fn runs, so a tool with any
+// internal repeat handling of its own is unsafe to cache — fetch_tools was
+// briefly added (its repeats measured at 20% of calls) and reverted because
+// its already-active branch returns a compact response on repeats, which a
+// cache hit would replace with the first call's full schema payload.
 var cacheableTools = map[string]struct{}{
-	"grep":        {},
-	"fetch_tools": {},
+	"grep": {},
 }
 
 var mutationTools = map[string]struct{}{
@@ -123,6 +118,8 @@ var mutationTools = map[string]struct{}{
 }
 
 // IsCacheableTool returns true if the named tool's results can be cached.
+// Only add tools whose fn has no repeat-call handling of its own (see
+// cacheableTools).
 func IsCacheableTool(name string) bool {
 	_, ok := cacheableTools[name]
 	return ok

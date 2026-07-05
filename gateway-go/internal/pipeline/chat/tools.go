@@ -144,11 +144,13 @@ func (r *ToolRegistry) Execute(ctx context.Context, name string, input json.RawM
 	// Check run-level cache for idempotent tools (grep, fetch_tools).
 	// Cached results include post-processing but not compression.
 	rc := RunCacheFromContext(ctx)
-	if rc != nil && IsCacheableTool(name) {
-		cacheKey := BuildCacheKey(name, input)
+	cacheable := rc != nil && IsCacheableTool(name)
+	var cacheKey string
+	if cacheable {
+		cacheKey = BuildCacheKey(name, input)
 		if cached, ok := rc.Get(cacheKey); ok {
-			// Count the hit: the tool fn never runs, so the executor's
-			// turn.tool stats undercount real demand for this tool.
+			// Registry-internal outcome — counted here because the tool fn
+			// never runs (see ToolExecStats).
 			toolctx.ToolExecStatsFromContext(ctx).RecordCacheHit(name)
 			if wantCompress && cached != "" {
 				return compressToolOutput(ctx, name, cached, slog.Default()), nil
@@ -183,32 +185,10 @@ func (r *ToolRegistry) Execute(ctx context.Context, name string, input json.RawM
 		output = agent.TruncateHeadTail(output, maxOutput, spillID)
 	}
 
-	// Invalidate caches when mutation tools modify the file system.
-	if IsMutationTool(name) {
-		mutPath := extractFilePath(input)
-		if rc != nil {
-			if mutPath != "" {
-				rc.InvalidateByPath(mutPath)
-			} else {
-				rc.Invalidate()
-			}
-		}
-		if fc := toolctx.FileCacheFromContext(ctx); fc != nil {
-			if mutPath != "" {
-				fc.Invalidate(mutPath)
-			}
-		}
-	} else if name == "exec" && rc != nil {
-		// exec is not a mutation tool (most calls are read-only and blanket
-		// invalidation destroys hit rates), but a command that CAN write must
-		// not leave stale grep results behind. Known read-only pipelines
-		// (cat/ls/rg/git log …) preserve the cache; anything unrecognized
-		// invalidates. FileCache needs no exec handling — its entries are
-		// mtime+hash validated on read (agent.FileChanged).
-		if cmd := extractExecCommand(input); !tools.ExecCommandPreservesRunCache(cmd) {
-			rc.Invalidate()
-		}
-	}
+	// Invalidate caches when this tool may have modified the file system.
+	// Must run after execution and before the cache Set below, or a call
+	// could re-cache the result it just invalidated.
+	invalidateCachesAfterTool(ctx, name, input, rc)
 
 	// Apply post-processors.
 	if r.postProcess != nil {
@@ -216,16 +196,8 @@ func (r *ToolRegistry) Execute(ctx context.Context, name string, input json.RawM
 	}
 
 	// Store in run cache (after post-processing, before compression).
-	if rc != nil && IsCacheableTool(name) {
-		cacheKey := BuildCacheKey(name, input)
-		scope := extractPathScope(input)
-		if name == "fetch_tools" {
-			// Schema lookups don't depend on workspace files — without this
-			// sentinel the unscoped entry would be conservatively wiped by
-			// every path-scoped write/edit invalidation.
-			scope = toolctx.ScopeNonFilesystem
-		}
-		rc.SetWithScope(cacheKey, output, scope)
+	if cacheable {
+		rc.SetWithScope(cacheKey, output, extractPathScope(input))
 	}
 
 	// Apply compression if requested by the agent.
@@ -286,8 +258,48 @@ func (r *ToolRegistry) ApplyMaxOutputs(budgets map[string]int) {
 	}
 }
 
+// invalidateCachesAfterTool is the single home for post-execution cache
+// invalidation policy. write/edit invalidate by the mutated path (RunCache +
+// FileCache); exec invalidates the whole RunCache unless its command is
+// provably read-only (tools.ExecCommandPreservesRunCache — most exec calls
+// are read-only, and blanket invalidation destroys hit rates); process is
+// always a full invalidation because a background exec's mutations land at
+// completion, long after the launch-time exec check ran — the poll/wait that
+// observes completion is the last reliable moment before the agent re-reads.
+// FileCache needs no exec/process handling: its entries are mtime+hash
+// validated on read (agent.FileChanged).
+func invalidateCachesAfterTool(ctx context.Context, name string, input json.RawMessage, rc *RunCache) {
+	if IsMutationTool(name) {
+		mutPath := extractFilePath(input)
+		if rc != nil {
+			if mutPath != "" {
+				rc.InvalidateByPath(mutPath)
+			} else {
+				rc.Invalidate()
+			}
+		}
+		if fc := toolctx.FileCacheFromContext(ctx); fc != nil {
+			if mutPath != "" {
+				fc.Invalidate(mutPath)
+			}
+		}
+		return
+	}
+	if rc == nil || rc.Len() == 0 {
+		return // nothing cached — skip the command analysis entirely
+	}
+	switch name {
+	case "exec":
+		if !tools.ExecCommandPreservesRunCache(extractExecCommand(input)) {
+			rc.Invalidate()
+		}
+	case "process":
+		rc.Invalidate()
+	}
+}
+
 // extractExecCommand extracts the "command" string from exec tool input JSON.
-// Used to decide whether an exec call invalidates the run cache.
+// Shared by the run-cache invalidation heuristic and the verify gate.
 func extractExecCommand(input json.RawMessage) string {
 	var meta struct {
 		Command string `json:"command"`

@@ -183,8 +183,11 @@ func TestIsCacheableTool(t *testing.T) {
 	if !IsCacheableTool("grep") {
 		t.Fatal("grep should be cacheable")
 	}
-	if !IsCacheableTool("fetch_tools") {
-		t.Fatal("fetch_tools should be cacheable")
+	// fetch_tools is deliberately NOT cacheable: its already-active branch
+	// returns a compact response on repeats, which a cache hit would replace
+	// with the first call's full schema payload (review catch on #3171).
+	if IsCacheableTool("fetch_tools") {
+		t.Fatal("fetch_tools should not be cacheable")
 	}
 	if IsCacheableTool("find") {
 		t.Fatal("find should not be cacheable")
@@ -267,50 +270,40 @@ func TestExecute_ExecInvalidatesRunCache(t *testing.T) {
 	}
 }
 
-// TestExecute_FetchToolsCacheSurvivesFileMutations verifies the non-filesystem
-// scope: a cached fetch_tools result survives path-scoped write/edit
-// invalidation (its output doesn't depend on workspace files), but a full
-// wipe (mutating exec) still clears it.
-func TestExecute_FetchToolsCacheSurvivesFileMutations(t *testing.T) {
+// TestExecute_ProcessInvalidatesRunCache covers the background-exec timing
+// gap: a background exec's mutations land at completion, after the launch-time
+// command check ran, so any process-tool interaction (the poll/wait that
+// observes completion) conservatively wipes the run cache.
+func TestExecute_ProcessInvalidatesRunCache(t *testing.T) {
 	reg := NewToolRegistry()
-	fetchCalls := 0
-	reg.Register("fetch_tools", func(_ context.Context, _ json.RawMessage) (string, error) {
-		fetchCalls++
-		return "schemas: gmail", nil
+	grepCalls := 0
+	reg.Register("grep", func(_ context.Context, _ json.RawMessage) (string, error) {
+		grepCalls++
+		return "match.go:1", nil
 	})
-	reg.Register("write", func(_ context.Context, _ json.RawMessage) (string, error) {
-		return "written", nil
-	})
-	reg.Register("exec", func(_ context.Context, _ json.RawMessage) (string, error) {
-		return "done", nil
+	reg.Register("process", func(_ context.Context, _ json.RawMessage) (string, error) {
+		return "exited", nil
 	})
 
 	ctx := WithRunCache(context.Background(), NewRunCache())
-	fetchInput := json.RawMessage(`{"names":["gmail"]}`)
+	grepInput := json.RawMessage(`{"pattern":"foo"}`)
 
-	if _, err := reg.Execute(ctx, "fetch_tools", fetchInput); err != nil {
-		t.Fatal(err)
+	for range 2 {
+		if _, err := reg.Execute(ctx, "grep", grepInput); err != nil {
+			t.Fatal(err)
+		}
 	}
-
-	// A path-scoped mutation must not evict the schema lookup.
-	if _, err := reg.Execute(ctx, "write", json.RawMessage(`{"file_path":"src/main.go","content":"x"}`)); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := reg.Execute(ctx, "fetch_tools", fetchInput); err != nil {
-		t.Fatal(err)
-	}
-	if fetchCalls != 1 {
-		t.Fatalf("fetch_tools executed %d times after file write, want 1 (cache preserved)", fetchCalls)
+	if grepCalls != 1 {
+		t.Fatalf("grep executed %d times, want 1 (second call cached)", grepCalls)
 	}
 
-	// A full invalidation (mutating exec) still clears it.
-	if _, err := reg.Execute(ctx, "exec", json.RawMessage(`{"command":"make build"}`)); err != nil {
+	if _, err := reg.Execute(ctx, "process", json.RawMessage(`{"action":"poll","id":"p1"}`)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := reg.Execute(ctx, "fetch_tools", fetchInput); err != nil {
+	if _, err := reg.Execute(ctx, "grep", grepInput); err != nil {
 		t.Fatal(err)
 	}
-	if fetchCalls != 2 {
-		t.Fatalf("fetch_tools executed %d times after full invalidation, want 2", fetchCalls)
+	if grepCalls != 2 {
+		t.Fatalf("grep executed %d times after process poll, want 2 (cache wiped)", grepCalls)
 	}
 }
