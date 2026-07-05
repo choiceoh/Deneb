@@ -194,6 +194,8 @@ func executeAgentRun(
 		SkillNudger:        deps.skillNudger,
 		SkillUsageRecorder: deps.skillUsageRecorder,
 	}
+	// execStats threads into recordRunCompletion (LogEnd's RepairedToolCalls) —
+	// #3117 introduced it while #3121 moved LogEnd into the completion sink.
 	cfg, spawnFlag, execStats := buildAgentConfig(params, deps, cachedSession, systemPrompt, sessionToolPreset, acd, logger)
 	cfg.Model = model // set the resolved model
 	// Per-model defaults (profile sampling, tuned max-tokens floor) — only
@@ -274,6 +276,7 @@ func executeAgentRun(
 		effortDecision: effortDecision,
 		runStart:       runStart,
 		agentStart:     agentStart,
+		execStats:      execStats,
 	}, logger)
 
 	return &chatRunResult{AgentResult: agentResult, SpawnFlag: spawnFlag, ActualModel: actualModel, FellBack: fellBack}, nil
@@ -294,6 +297,7 @@ type runCompletionRecord struct {
 	effortDecision string
 	runStart       time.Time
 	agentStart     time.Time
+	execStats      *toolctx.ToolExecStats
 }
 
 // recordRunCompletion emits every post-loop success record in one place: the
@@ -306,6 +310,7 @@ func recordRunCompletion(rec runCompletionRecord, logger *slog.Logger) {
 	apiMode, fellBack := rec.apiMode, rec.fellBack
 	effortRt, effortDecision := rec.effortRt, rec.effortDecision
 	runLog, client := rec.runLog, rec.client
+	execStats := rec.execStats
 	agentMs := time.Since(rec.agentStart).Milliseconds()
 	totalMs := time.Since(rec.runStart).Milliseconds()
 	// Surface run-level aggregates so a postmortem gets the shape in one line:
