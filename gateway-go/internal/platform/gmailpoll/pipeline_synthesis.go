@@ -290,6 +290,11 @@ func synthesizeAnalysis(ctx context.Context, deps PipelineDeps, msg *gmail.Messa
 	if anchor := buildPartyAnchor(msg, ourAnchorDomains(), deps.CounterpartyProjectsFn); anchor != "" {
 		emailText += "\n\n" + anchor
 	}
+	// Deterministic date anchor (relative-date conversion table) — turns
+	// "다음 주 금요일" arithmetic into table lookup; see date_anchor.go.
+	if anchor := buildDateAnchor(msg, time.Now()); anchor != "" {
+		emailText += "\n\n" + anchor
+	}
 
 	// Build optional context sections.
 	var threadSection, memorySection string
