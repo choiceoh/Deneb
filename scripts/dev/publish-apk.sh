@@ -81,22 +81,24 @@ fi
 # debug-signed build when release signing was intended); absent → warn loudly
 # and continue (keeps CD alive until the one-time keystore setup is done).
 SIGNING_ENV="${DENEB_APK_SIGNING_ENV:-$HOME/.deneb/apk-signing.env}"
-if [ -f "$SIGNING_ENV" ]; then
-  set -a
-  # shellcheck disable=SC1090
-  . "$SIGNING_ENV"
-  set +a
-  if [ -z "${KEYSTORE_FILE:-}" ] || [ ! -f "${KEYSTORE_FILE:-}" ] || [ -z "${KEYSTORE_PASSWORD:-}" ] || [ -z "${KEY_ALIAS:-}" ]; then
-    echo "ERROR: $SIGNING_ENV exists but KEYSTORE_FILE/KEYSTORE_PASSWORD/KEY_ALIAS is unset (or the keystore file is missing)." >&2
-    echo "       Refusing to fall back to a debug-signed publish. Fix the env file or remove it to opt back into debug signing." >&2
-    exit 1
+if [ "$VARIANT" = "fossRelease" ]; then
+  if [ -f "$SIGNING_ENV" ]; then
+    set -a
+    # shellcheck disable=SC1090
+    . "$SIGNING_ENV"
+    set +a
+    if [ -z "${KEYSTORE_FILE:-}" ] || [ ! -f "${KEYSTORE_FILE:-}" ] || [ -z "${KEYSTORE_PASSWORD:-}" ] || [ -z "${KEY_ALIAS:-}" ]; then
+      echo "ERROR: $SIGNING_ENV exists but KEYSTORE_FILE/KEYSTORE_PASSWORD/KEY_ALIAS is unset (or the keystore file is missing)." >&2
+      echo "       Refusing to fall back to a debug-signed publish. Fix the env file or remove it to opt back into debug signing." >&2
+      exit 1
+    fi
+    echo "release signing: $(basename "$KEYSTORE_FILE") (alias $KEY_ALIAS)"
+  else
+    echo "WARNING: no $SIGNING_ENV — fossRelease will be signed with the LOCAL DEBUG KEYSTORE." >&2
+    echo "         Debug-signed sideloaded builds trip fintech malware scans (e.g. Toss) and the debug" >&2
+    echo "         key is machine-local (runner reset = OTA continuity break). One-time setup runbook:" >&2
+    echo "         .claude/rules/release-and-deploy.md 'APK release 서명'." >&2
   fi
-  echo "release signing: $(basename "$KEYSTORE_FILE") (alias $KEY_ALIAS)"
-elif [ "$VARIANT" = "fossRelease" ]; then
-  echo "WARNING: no $SIGNING_ENV — fossRelease will be signed with the LOCAL DEBUG KEYSTORE." >&2
-  echo "         Debug-signed sideloaded builds trip fintech malware scans (e.g. Toss) and the debug" >&2
-  echo "         key is machine-local (runner reset = OTA continuity break). One-time setup runbook:" >&2
-  echo "         .claude/rules/release-and-deploy.md 'APK release 서명'." >&2
 fi
 
 LIBS_VERSION_CODE="$(sed -n 's/^android-versionCode = "\(.*\)"/\1/p' gradle/libs.versions.toml)"

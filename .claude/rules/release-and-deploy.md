@@ -52,7 +52,8 @@ DENEB_APK_BASE_URL=http://<gateway-host>:19010 \
 mkdir -p ~/.deneb/keys && chmod 700 ~/.deneb/keys
 keytool -genkeypair -v -keystore ~/.deneb/keys/deneb-release.p12 -storetype PKCS12 \
   -alias deneb -keyalg RSA -keysize 4096 -validity 10950 \
-  -dname "CN=Deneb, O=Deneb" -storepass '<강한 비밀번호>'
+  -dname "CN=Deneb, O=Deneb" \
+  -storepass '<강한 비밀번호>' -keypass '<강한 비밀번호>'   # 반드시 같은 값 (gradle keyPassword=KEYSTORE_PASSWORD)
 cat > ~/.deneb/apk-signing.env <<EOF
 KEYSTORE_FILE=$HOME/.deneb/keys/deneb-release.p12
 KEYSTORE_PASSWORD=<강한 비밀번호>
