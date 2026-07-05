@@ -27,10 +27,15 @@ import (
 // ContextFiles/SetContextFiles assume the caller already holds ctxMu (see
 // LockCtx/UnlockCtx); they must not be called with sessMu held.
 type PromptCache struct {
-	// --- Static prompt block (keyed on sorted tool name list) ---
-	staticMu     sync.RWMutex
-	staticKey    string
-	staticCached string
+	// --- Static prompt block (keyed on tool set + profile/topic/persona hashes) ---
+	// A bounded map, not a single slot: the 업무/챗봇/코딩 profiles (and distinct
+	// topics/personas) build different static blocks under different keys, and a
+	// single slot made alternating sessions evict each other's entry every turn,
+	// rebuilding kilobytes of prompt strings. Key cardinality is small (a handful
+	// of profiles × rare content-hash changes); staticCacheMaxEntries is a leak
+	// backstop, not a working-set tuning knob.
+	staticMu    sync.RWMutex
+	staticCache map[string]string
 
 	// --- Context file cache (mtime-based with TTL) ---
 	ctxMu        sync.Mutex
@@ -59,21 +64,29 @@ var Cache = &PromptCache{}
 
 // --- Static prompt cache ---
 
-// StaticPrompt returns the cached static prompt if the key matches.
+// staticCacheMaxEntries bounds the static prompt cache. Keys are profile
+// fingerprints (tool set + chatbot/coding flags + topic/persona/repo content
+// hashes), so steady-state cardinality is single-digit; the cap only guards
+// against pathological churn (e.g. a bug minting a fresh hash per turn).
+// Eviction is drop-all: entries are cheap to rebuild and LRU bookkeeping is
+// not worth it at this size.
+const staticCacheMaxEntries = 32
+
+// StaticPrompt returns the cached static prompt for the key.
 func (c *PromptCache) StaticPrompt(key string) (string, bool) {
 	c.staticMu.RLock()
 	defer c.staticMu.RUnlock()
-	if c.staticKey == key {
-		return c.staticCached, true
-	}
-	return "", false
+	text, ok := c.staticCache[key]
+	return text, ok
 }
 
-// SetStaticPrompt stores the assembled static prompt block.
+// SetStaticPrompt stores the assembled static prompt block under its key.
 func (c *PromptCache) SetStaticPrompt(key, text string) {
 	c.staticMu.Lock()
-	c.staticKey = key
-	c.staticCached = text
+	if c.staticCache == nil || len(c.staticCache) >= staticCacheMaxEntries {
+		c.staticCache = make(map[string]string, 4)
+	}
+	c.staticCache[key] = text
 	c.staticMu.Unlock()
 }
 
@@ -246,8 +259,7 @@ func (c *PromptCache) BuildRuntimeInfo(model, defaultModel string) *RuntimeInfo 
 // Reset clears all caches. Intended for tests to avoid cross-test state leakage.
 func (c *PromptCache) Reset() {
 	c.staticMu.Lock()
-	c.staticKey = ""
-	c.staticCached = ""
+	c.staticCache = nil
 	c.staticMu.Unlock()
 
 	c.ctxMu.Lock()
