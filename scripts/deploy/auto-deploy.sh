@@ -210,7 +210,12 @@ restore_stash() {
 trap restore_stash EXIT
 
 # Quiet fetch; tolerate transient failures (flaky network, GitHub blip).
-if ! git fetch --quiet origin main 2>>"$LOG_FILE"; then
+# --tags is load-bearing: the Makefile stamps the binary from the newest local
+# deneb-v* tag, and a bare branch fetch left this clone's tags frozen (at
+# v4.47.1 on 2026-07-05) — every build was stamped with that stale version,
+# the post-incident downgrade guard rightly refused it as a rollback, and
+# auto-deploy silently stopped shipping merged work for a day.
+if ! git fetch --quiet --tags origin main 2>>"$LOG_FILE"; then
     log "WARN: git fetch failed; will retry on next tick"
     exit 0
 fi
