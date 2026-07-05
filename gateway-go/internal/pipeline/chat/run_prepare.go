@@ -75,87 +75,20 @@ func prepareContextAndPrompt(
 	prepWg.Add(1)
 	safego.GoWithSlog(logger, "prep-tier1-wiki", func() {
 		defer prepWg.Done()
-		var tier1 string
-		// Explicit-System runs (subagents, skill-review forks) own their prompt
-		// end to end — finalizePrompt would otherwise append always-on wiki
-		// memory on top of a deliberately lean caller prompt (review-sweep
-		// finding on #3103: the mini review prompt still carried tier-1 wiki).
-		if deps.wikiStore != nil && !chatbot && !coding && params.System == "" {
-			if cached, ok := cachedTier1Wiki(params.SessionKey); ok {
-				tier1 = cached
-			} else {
-				cfg := wiki.ConfigFromEnv()
-				tier1 = knowledge.FormatTier1(deps.wikiStore, cfg.Tier1MinImportance)
-				storeTier1Wiki(params.SessionKey, tier1)
-			}
-		}
+		tier1 := buildTier1WikiSnapshot(params, deps, chatbot, coding)
 		resultMu.Lock()
 		result.Tier1Wiki = tier1
 		resultMu.Unlock()
 	})
 
-	// Recall preflight (parallel): inject focused memory before the LLM call.
-	//
-	// The search runs every turn over wiki/diary/transcript/polaris (Hermes
-	// auto_recall) and returns "" silently when nothing matches, so non-cue
-	// turns add latency but no noise. Cue turns (the message implies past
-	// context) additionally cache the result per (session, cue-fingerprint) so
-	// repeat questions on the same topic reuse the ~6s of parallel search
-	// timeouts, surface the 🧠 phase, and get an explicit "no evidence" notice.
-	// /reset clears every slot. See chat/recall_cache.go.
+	// Recall preflight (parallel): inject focused memory before the LLM call —
+	// gates, caching, and source fan-out live in buildRecallSnapshot.
 	prepWg.Add(1)
 	safego.GoWithSlog(logger, "prep-recall", func() {
 		defer prepWg.Done()
-		// Ephemeral turns (autonomous heartbeat self-triggers) never run
-		// recall — there is no real user message to recall against. SkipRecall
-		// is the user's "focused chat / memory off" toggle: skip the whole
-		// preflight so a general question pays no search latency and pulls no
-		// unrelated work memories.
-		//
-		// chatbot (chat: session) also skips recall unconditionally — the clean
-		// general-assistant prompt withholds all work context, and recall hits
-		// (wiki/diary/polaris) are tail-injected into the last user
-		// message, so without this gate a chat: turn could still receive private
-		// work memory even when the per-turn SkipRecall flag is unset (session
-		// key vs flag divergence). The session key is the authoritative signal.
-		// coding (code: session) skips for the same reason: work memories are
-		// noise inside an external repo worktree.
-		if params.EphemeralUser || params.SkipRecall || chatbot || coding {
-			return
-		}
-		// A notebook with real sources bound to this session is the explicit
-		// scope, so suppress broad recall — the pinned sources are tail-injected
-		// as grounding instead (run_exec.go), and running whole-corpus recall
-		// alongside would dilute that focus and compete for the input budget. An
-		// empty/missing notebook does NOT suppress recall, so a contentless bound
-		// turn is never left with neither (the gates stay symmetric). The wiki/
-		// recall TOOLS stay available if the model needs wider memory.
-		if _, _, ok := activeGroundingNotebook(deps, params.SessionKey); ok {
-			return
-		}
-		fingerprint := recallCueFingerprint(params.Message)
-		hasCue := fingerprint != ""
-		// Hermes-style auto_recall: run the preflight every turn, not just cue turns.
-		// buildRecallPreflight searches wiki/diary/polaris/transcript and returns
-		// "" silently when there's no evidence, so non-cue turns add latency but no noise.
-		if hasCue {
-			if cached, ok := cachedRecallMemory(params.SessionKey, fingerprint); ok {
-				resultMu.Lock()
-				result.RecallMemory = cached
-				resultMu.Unlock()
-				return
-			}
-			// Explicit recall: surface the recalling phase so the user sees the
-			// wiki/diary/transcript search. Silent auto-recall on no-cue turns
-			// stays invisible.
-			emitPhase(deps, params, "recalling", time.Now())
-		}
-		recallMemory, recallTruncated := buildRecallPreflight(ctx, params, deps, logger)
-		if shouldFreezeRecallSnapshot(hasCue, recallTruncated, recallMemory) {
-			storeRecallMemory(params.SessionKey, fingerprint, recallMemory)
-		}
+		recall := buildRecallSnapshot(ctx, params, deps, chatbot, coding, logger)
 		resultMu.Lock()
-		result.RecallMemory = recallMemory
+		result.RecallMemory = recall
 		resultMu.Unlock()
 	})
 
@@ -163,30 +96,7 @@ func prepareContextAndPrompt(
 	prepWg.Add(1)
 	safego.GoWithSlog(logger, "prep-context", func() {
 		defer prepWg.Done()
-
-		var messages []llm.Message
-		var contextErr error
-		if bridge, ok := deps.transcript.(*polaris.Bridge); ok {
-			ctxResult, err := assembleContext(bridge, params.SessionKey, deps.contextCfg, logger)
-			if err != nil {
-				contextErr = err
-			} else {
-				messages = ctxResult.Messages
-				// Log-only telemetry for truncation. Do NOT inject a synthetic
-				// notice message here: bootstrapIfNeeded (inside CompactAndPersist)
-				// recovers dropped messages by computing olderEnd from len(messages),
-				// so any synthetic prepend inflates the count and orphans the
-				// fresh-tail boundary message, causing "right-after-compaction
-				// previous turn forgotten" regressions.
-				if !ctxResult.WasCompacted && ctxResult.TotalMessages > len(ctxResult.Messages) && len(ctxResult.Messages) > 0 {
-					logger.Warn("context truncated without summaries (bootstrap will recover)",
-						"total", ctxResult.TotalMessages,
-						"loaded", len(ctxResult.Messages),
-						"dropped", ctxResult.TotalMessages-len(ctxResult.Messages),
-						"session", params.SessionKey)
-				}
-			}
-		}
+		messages, contextErr := loadTurnContextMessages(params, deps, logger)
 		resultMu.Lock()
 		result.Messages = messages
 		result.ContextErr = contextErr
@@ -197,177 +107,7 @@ func prepareContextAndPrompt(
 	prepWg.Add(1)
 	safego.GoWithSlog(logger, "prep-sysprompt", func() {
 		defer prepWg.Done()
-		var systemPrompt json.RawMessage
-		if params.System != "" {
-			systemPrompt = llm.SystemString(params.System)
-			resultMu.Lock()
-			result.SystemPrompt = systemPrompt
-			resultMu.Unlock()
-			return
-		}
-		if deps.defaultSystem != "" {
-			systemPrompt = llm.SystemString(deps.defaultSystem)
-			resultMu.Lock()
-			result.SystemPrompt = systemPrompt
-			resultMu.Unlock()
-			return
-		}
-		if deps.tools == nil {
-			return
-		}
-		tz, _ := prompt.LoadCachedTimezone()
-		// Channel feeds the prompt only (the runtime line).
-		// Runs without a DeliveryContext that piggyback on a client session
-		// (heartbeat, boot) fall back to the session's channel so their
-		// system prompt stays byte-identical to the interactive turns of the
-		// same session — one APC prefix family instead of two.
-		ch := deliveryChannel(params.Delivery)
-		if ch == "" {
-			ch = sessionFallbackChannel(params.SessionKey)
-		}
-		// Build tool defs — filtered if a preset is active.
-		allowed := toolpreset.AllowedTools(toolpreset.Preset(sessionToolPreset))
-		toolDefs := toPromptToolDefs(deps.tools.FilteredDefinitions(allowed))
-
-		// Deferred tool summaries for system prompt listing.
-		preloaded := make(map[string]struct{})
-		for _, n := range toolpreset.PreloadedDeferredTools(toolpreset.Preset(sessionToolPreset)) {
-			preloaded[n] = struct{}{}
-		}
-		deferredSummaries := deps.tools.DeferredSummaries()
-		var deferredToolInfos []prompt.DeferredToolInfo
-		for _, ds := range deferredSummaries {
-			// Skip deferred tools not in the allowed preset (if preset is active).
-			if _, ok := allowed[ds.Name]; len(allowed) > 0 && !ok {
-				continue
-			}
-			// Skip tools pre-loaded as active for this preset — they're directly
-			// callable, so listing them as deferred would be wrong (and tell the
-			// model to fetch_tools something it already has).
-			if _, ok := preloaded[ds.Name]; ok {
-				continue
-			}
-			deferredToolInfos = append(deferredToolInfos, prompt.DeferredToolInfo{
-				Name:        ds.Name,
-				Description: ds.Description,
-			})
-		}
-
-		// P4: read CompactionFired from session right before assembly so
-		// the system prompt's one-time compaction reminder appears from
-		// the turn after first compaction onward. Sticky flag — once set
-		// it stays set, keeping the dynamic block byte-stable for the
-		// trailing message cache markers' prefix matching.
-		compactionFired := false
-		if deps.sessions != nil {
-			if sess := deps.sessions.Get(params.SessionKey); sess != nil {
-				compactionFired = sess.CompactionFired
-			}
-		}
-
-		// Per-topic knowledge: map the forum threadID (from the delivery
-		// context) to a topic key, then load <dir>/<key>.md (frozen per
-		// session). The content joins the Static cache block; topicCacheKey
-		// keys that cache per topic + content hash so topics never collide and
-		// edits invalidate. Unmapped/missing → empty (no injection, no cache
-		// key change → topic-less Static cache stays shared).
-		var topicKnowledge, topicCacheKey, topicKnowledgePath string
-		var frozenTopic *prompt.TopicKnowledge
-		if deps.topicResolver != nil && params.Delivery != nil && !chatbot && !coding {
-			if key := deps.topicResolver.TopicKey(params.Delivery.ThreadID); key != "" {
-				tk := prompt.LoadTopicKnowledge(workspaceDir, deps.topicResolver.Dir(), key, params.SessionKey)
-				if tk.Content != "" {
-					topicKnowledge = tk.Content
-					topicCacheKey = tk.Key + ":" + tk.Hash
-					topicKnowledgePath = tk.Path
-					tkCopy := tk
-					frozenTopic = &tkCopy
-				}
-			}
-		}
-
-		// Ambient calendar glance for the dynamic block. The provider freezes
-		// it per day, so this is a cheap cache hit on all but the first turn of
-		// the day; "" when no calendar source or no upcoming events.
-		var calendarGlance string
-		if deps.calendarGlanceFn != nil && !chatbot && !coding {
-			calendarGlance = deps.calendarGlanceFn(ctx, params.SessionKey, tz)
-		}
-
-		// Ambient goal glance for the dynamic block: this session's active
-		// standing goal, read live from the process store. "" when no active
-		// goal or goals are not wired. 챗봇 persona stays neutral (no goals).
-		var goalGlance string
-		if deps.goalGlanceFn != nil && !chatbot && !coding {
-			goalGlance = deps.goalGlanceFn(ctx, params.SessionKey)
-		}
-
-		// 챗봇/코드모드: withhold the workspace context files (SOUL.md/IDENTITY.md/
-		// USER.md/MEMORY.md/…) so neither profile carries the Nev persona or
-		// private work context.
-		var ctxFiles []prompt.ContextFile
-		if !chatbot && !coding {
-			ctxFiles = prompt.LoadContextFiles(workspaceDir, prompt.WithSessionSnapshot(params.SessionKey))
-		}
-
-		// Operator-edited 업무 persona (Settings prompt corner). Only the 업무 path
-		// uses it (챗봇/코드모드 keep their own identities); "" override → default
-		// persona renders, byte-identical to before. PersonaCacheKey (content hash)
-		// keys the Static cache per persona so an edit invalidates only its own entry.
-		var personaText, personaCacheKey string
-		if deps.personaOverrideFn != nil && !chatbot && !coding {
-			if ov := strings.TrimSpace(deps.personaOverrideFn()); ov != "" {
-				personaText = ov
-				personaCacheKey = prompt.PersonaCacheKeyFor(ov)
-			}
-		}
-
-		// 코드모드: resolve the worktree (the session's bound workspace) and load
-		// the repo's root rule docs, frozen per session. The worktree also
-		// replaces the prompt's Workspace line — the Deneb workspace path would
-		// be misleading inside a coding session. A missing binding (a turn racing
-		// the lazy rebind) degrades to no injection, never an error.
-		var codingRepo prompt.CodingRepoContext
-		promptWorkspaceDir := workspaceDir
-		if coding && deps.sessions != nil {
-			if sess := deps.sessions.Get(params.SessionKey); sess != nil && sess.WorkspaceDir != "" {
-				promptWorkspaceDir = sess.WorkspaceDir
-				codingRepo = prompt.LoadCodingRepoContext(sess.WorkspaceDir, params.SessionKey)
-			}
-		}
-
-		// 코드모드 carries no Deneb skills index — 업무 절차서 are noise inside an
-		// external repo, and the coding preset lacks the skills tool anyway.
-		skillsPrompt := ""
-		if !coding {
-			skillsPrompt = loadCachedSkillsPrompt(workspaceDir, availableToolNames(deps.tools))
-		}
-
-		spp := prompt.SystemPromptParams{
-			WorkspaceDir:       promptWorkspaceDir,
-			ToolDefs:           toolDefs,
-			DeferredTools:      deferredToolInfos,
-			UserTimezone:       tz,
-			ContextFiles:       ctxFiles,
-			RuntimeInfo:        prompt.BuildDefaultRuntimeInfo(params.Model, deps.callbacks.defaultModel),
-			Channel:            ch,
-			SkillsPrompt:       skillsPrompt,
-			ToolPreset:         sessionToolPreset,
-			CompactionFired:    compactionFired,
-			Chatbot:            chatbot,
-			Coding:             coding,
-			CodingRepoContext:  codingRepo.Content,
-			CodingRepoCacheKey: codingRepo.Hash,
-			CalendarGlance:     calendarGlance,
-			GoalGlance:         goalGlance,
-			TopicKnowledge:     topicKnowledge,
-			TopicCacheKey:      topicCacheKey,
-			TopicKnowledgePath: topicKnowledgePath,
-			PersonaText:        personaText,
-			PersonaCacheKey:    personaCacheKey,
-		}
-
-		systemPrompt = llm.SystemBlocks(prompt.BuildSystemPromptBlocks(spp))
+		systemPrompt, ctxFiles, frozenTopic := buildTurnSystemPrompt(ctx, params, deps, workspaceDir, sessionToolPreset, chatbot, coding)
 		resultMu.Lock()
 		result.SystemPrompt = systemPrompt
 		result.ContextFiles = ctxFiles
@@ -387,6 +127,276 @@ func prepareContextAndPrompt(
 	recordPromptSnapshot(params.SessionKey, result.Tier1Wiki, result.ContextFiles, result.TopicKnowledge)
 
 	return result
+}
+
+// buildTier1WikiSnapshot returns the session-frozen tier-1 wiki block ("" for
+// the 챗봇/코딩 profiles and explicit-System runs, which own their prompt).
+func buildTier1WikiSnapshot(params RunParams, deps runDeps, chatbot, coding bool) string {
+	var tier1 string
+	// Explicit-System runs (subagents, skill-review forks) own their prompt
+	// end to end — finalizePrompt would otherwise append always-on wiki
+	// memory on top of a deliberately lean caller prompt (review-sweep
+	// finding on #3103: the mini review prompt still carried tier-1 wiki).
+	if deps.wikiStore != nil && !chatbot && !coding && params.System == "" {
+		if cached, ok := cachedTier1Wiki(params.SessionKey); ok {
+			tier1 = cached
+		} else {
+			cfg := wiki.ConfigFromEnv()
+			tier1 = knowledge.FormatTier1(deps.wikiStore, cfg.Tier1MinImportance)
+			storeTier1Wiki(params.SessionKey, tier1)
+		}
+	}
+	return tier1
+}
+
+// buildRecallSnapshot runs the recall preflight for the turn: profile/toggle
+// gates, per-cue caching, and the multi-source search. Returns the wire-ready
+// recall block ("" when gated or no evidence).
+func buildRecallSnapshot(ctx context.Context, params RunParams, deps runDeps, chatbot, coding bool, logger *slog.Logger) string {
+	// Ephemeral turns (autonomous heartbeat self-triggers) never run
+	// recall — there is no real user message to recall against. SkipRecall
+	// is the user's "focused chat / memory off" toggle: skip the whole
+	// preflight so a general question pays no search latency and pulls no
+	// unrelated work memories.
+	//
+	// chatbot (chat: session) also skips recall unconditionally — the clean
+	// general-assistant prompt withholds all work context, and recall hits
+	// (wiki/diary/polaris) are tail-injected into the last user
+	// message, so without this gate a chat: turn could still receive private
+	// work memory even when the per-turn SkipRecall flag is unset (session
+	// key vs flag divergence). The session key is the authoritative signal.
+	// coding (code: session) skips for the same reason: work memories are
+	// noise inside an external repo worktree.
+	if params.EphemeralUser || params.SkipRecall || chatbot || coding {
+		return ""
+	}
+	// A notebook with real sources bound to this session is the explicit
+	// scope, so suppress broad recall — the pinned sources are tail-injected
+	// as grounding instead (run_exec.go), and running whole-corpus recall
+	// alongside would dilute that focus and compete for the input budget. An
+	// empty/missing notebook does NOT suppress recall, so a contentless bound
+	// turn is never left with neither (the gates stay symmetric). The wiki/
+	// recall TOOLS stay available if the model needs wider memory.
+	if _, _, ok := activeGroundingNotebook(deps, params.SessionKey); ok {
+		return ""
+	}
+	fingerprint := recallCueFingerprint(params.Message)
+	hasCue := fingerprint != ""
+	// Hermes-style auto_recall: run the preflight every turn, not just cue turns.
+	// buildRecallPreflight searches wiki/diary/polaris/transcript and returns
+	// "" silently when there's no evidence, so non-cue turns add latency but no noise.
+	if hasCue {
+		if cached, ok := cachedRecallMemory(params.SessionKey, fingerprint); ok {
+			return cached
+		}
+		// Explicit recall: surface the recalling phase so the user sees the
+		// wiki/diary/transcript search. Silent auto-recall on no-cue turns
+		// stays invisible.
+		emitPhase(deps, params, "recalling", time.Now())
+	}
+	recallMemory, recallTruncated := buildRecallPreflight(ctx, params, deps, logger)
+	if shouldFreezeRecallSnapshot(hasCue, recallTruncated, recallMemory) {
+		storeRecallMemory(params.SessionKey, fingerprint, recallMemory)
+	}
+	return recallMemory
+}
+
+// loadTurnContextMessages assembles the transcript-backed message history for
+// the turn (polaris bridge path); (nil, nil) when no bridge is wired.
+func loadTurnContextMessages(params RunParams, deps runDeps, logger *slog.Logger) ([]llm.Message, error) {
+	var messages []llm.Message
+	var contextErr error
+	if bridge, ok := deps.transcript.(*polaris.Bridge); ok {
+		ctxResult, err := assembleContext(bridge, params.SessionKey, deps.contextCfg, logger)
+		if err != nil {
+			contextErr = err
+		} else {
+			messages = ctxResult.Messages
+			// Log-only telemetry for truncation. Do NOT inject a synthetic
+			// notice message here: bootstrapIfNeeded (inside CompactAndPersist)
+			// recovers dropped messages by computing olderEnd from len(messages),
+			// so any synthetic prepend inflates the count and orphans the
+			// fresh-tail boundary message, causing "right-after-compaction
+			// previous turn forgotten" regressions.
+			if !ctxResult.WasCompacted && ctxResult.TotalMessages > len(ctxResult.Messages) && len(ctxResult.Messages) > 0 {
+				logger.Warn("context truncated without summaries (bootstrap will recover)",
+					"total", ctxResult.TotalMessages,
+					"loaded", len(ctxResult.Messages),
+					"dropped", ctxResult.TotalMessages-len(ctxResult.Messages),
+					"session", params.SessionKey)
+			}
+		}
+	}
+	return messages, contextErr
+}
+
+// buildTurnSystemPrompt assembles the system prompt blocks plus the
+// session-frozen inputs that must be persisted alongside them
+// (prompt_snapshot_persist.go). Explicit-System runs and default-system
+// deployments short-circuit with nil frozen inputs.
+func buildTurnSystemPrompt(ctx context.Context, params RunParams, deps runDeps, workspaceDir, sessionToolPreset string, chatbot, coding bool) (json.RawMessage, []prompt.ContextFile, *prompt.TopicKnowledge) {
+	if params.System != "" {
+		return llm.SystemString(params.System), nil, nil
+	}
+	if deps.defaultSystem != "" {
+		return llm.SystemString(deps.defaultSystem), nil, nil
+	}
+	if deps.tools == nil {
+		return nil, nil, nil
+	}
+	tz, _ := prompt.LoadCachedTimezone()
+	// Channel feeds the prompt only (the runtime line).
+	// Runs without a DeliveryContext that piggyback on a client session
+	// (heartbeat, boot) fall back to the session's channel so their
+	// system prompt stays byte-identical to the interactive turns of the
+	// same session — one APC prefix family instead of two.
+	ch := deliveryChannel(params.Delivery)
+	if ch == "" {
+		ch = sessionFallbackChannel(params.SessionKey)
+	}
+	// Build tool defs — filtered if a preset is active.
+	allowed := toolpreset.AllowedTools(toolpreset.Preset(sessionToolPreset))
+	toolDefs := toPromptToolDefs(deps.tools.FilteredDefinitions(allowed))
+
+	// Deferred tool summaries for system prompt listing.
+	preloaded := make(map[string]struct{})
+	for _, n := range toolpreset.PreloadedDeferredTools(toolpreset.Preset(sessionToolPreset)) {
+		preloaded[n] = struct{}{}
+	}
+	deferredSummaries := deps.tools.DeferredSummaries()
+	var deferredToolInfos []prompt.DeferredToolInfo
+	for _, ds := range deferredSummaries {
+		// Skip deferred tools not in the allowed preset (if preset is active).
+		if _, ok := allowed[ds.Name]; len(allowed) > 0 && !ok {
+			continue
+		}
+		// Skip tools pre-loaded as active for this preset — they're directly
+		// callable, so listing them as deferred would be wrong (and tell the
+		// model to fetch_tools something it already has).
+		if _, ok := preloaded[ds.Name]; ok {
+			continue
+		}
+		deferredToolInfos = append(deferredToolInfos, prompt.DeferredToolInfo{
+			Name:        ds.Name,
+			Description: ds.Description,
+		})
+	}
+
+	// P4: read CompactionFired from session right before assembly so
+	// the system prompt's one-time compaction reminder appears from
+	// the turn after first compaction onward. Sticky flag — once set
+	// it stays set, keeping the dynamic block byte-stable for the
+	// trailing message cache markers' prefix matching.
+	compactionFired := false
+	if deps.sessions != nil {
+		if sess := deps.sessions.Get(params.SessionKey); sess != nil {
+			compactionFired = sess.CompactionFired
+		}
+	}
+
+	// Per-topic knowledge: map the forum threadID (from the delivery
+	// context) to a topic key, then load <dir>/<key>.md (frozen per
+	// session). The content joins the Static cache block; topicCacheKey
+	// keys that cache per topic + content hash so topics never collide and
+	// edits invalidate. Unmapped/missing → empty (no injection, no cache
+	// key change → topic-less Static cache stays shared).
+	var topicKnowledge, topicCacheKey, topicKnowledgePath string
+	var frozenTopic *prompt.TopicKnowledge
+	if deps.topicResolver != nil && params.Delivery != nil && !chatbot && !coding {
+		if key := deps.topicResolver.TopicKey(params.Delivery.ThreadID); key != "" {
+			tk := prompt.LoadTopicKnowledge(workspaceDir, deps.topicResolver.Dir(), key, params.SessionKey)
+			if tk.Content != "" {
+				topicKnowledge = tk.Content
+				topicCacheKey = tk.Key + ":" + tk.Hash
+				topicKnowledgePath = tk.Path
+				tkCopy := tk
+				frozenTopic = &tkCopy
+			}
+		}
+	}
+
+	// Ambient calendar glance for the dynamic block. The provider freezes
+	// it per day, so this is a cheap cache hit on all but the first turn of
+	// the day; "" when no calendar source or no upcoming events.
+	var calendarGlance string
+	if deps.calendarGlanceFn != nil && !chatbot && !coding {
+		calendarGlance = deps.calendarGlanceFn(ctx, params.SessionKey, tz)
+	}
+
+	// Ambient goal glance for the dynamic block: this session's active
+	// standing goal, read live from the process store. "" when no active
+	// goal or goals are not wired. 챗봇 persona stays neutral (no goals).
+	var goalGlance string
+	if deps.goalGlanceFn != nil && !chatbot && !coding {
+		goalGlance = deps.goalGlanceFn(ctx, params.SessionKey)
+	}
+
+	// 챗봇/코드모드: withhold the workspace context files (SOUL.md/IDENTITY.md/
+	// USER.md/MEMORY.md/…) so neither profile carries the Nev persona or
+	// private work context.
+	var ctxFiles []prompt.ContextFile
+	if !chatbot && !coding {
+		ctxFiles = prompt.LoadContextFiles(workspaceDir, prompt.WithSessionSnapshot(params.SessionKey))
+	}
+
+	// Operator-edited 업무 persona (Settings prompt corner). Only the 업무 path
+	// uses it (챗봇/코드모드 keep their own identities); "" override → default
+	// persona renders, byte-identical to before. PersonaCacheKey (content hash)
+	// keys the Static cache per persona so an edit invalidates only its own entry.
+	var personaText, personaCacheKey string
+	if deps.personaOverrideFn != nil && !chatbot && !coding {
+		if ov := strings.TrimSpace(deps.personaOverrideFn()); ov != "" {
+			personaText = ov
+			personaCacheKey = prompt.PersonaCacheKeyFor(ov)
+		}
+	}
+
+	// 코드모드: resolve the worktree (the session's bound workspace) and load
+	// the repo's root rule docs, frozen per session. The worktree also
+	// replaces the prompt's Workspace line — the Deneb workspace path would
+	// be misleading inside a coding session. A missing binding (a turn racing
+	// the lazy rebind) degrades to no injection, never an error.
+	var codingRepo prompt.CodingRepoContext
+	promptWorkspaceDir := workspaceDir
+	if coding && deps.sessions != nil {
+		if sess := deps.sessions.Get(params.SessionKey); sess != nil && sess.WorkspaceDir != "" {
+			promptWorkspaceDir = sess.WorkspaceDir
+			codingRepo = prompt.LoadCodingRepoContext(sess.WorkspaceDir, params.SessionKey)
+		}
+	}
+
+	// 코드모드 carries no Deneb skills index — 업무 절차서 are noise inside an
+	// external repo, and the coding preset lacks the skills tool anyway.
+	skillsPrompt := ""
+	if !coding {
+		skillsPrompt = loadCachedSkillsPrompt(workspaceDir, availableToolNames(deps.tools))
+	}
+
+	spp := prompt.SystemPromptParams{
+		WorkspaceDir:       promptWorkspaceDir,
+		ToolDefs:           toolDefs,
+		DeferredTools:      deferredToolInfos,
+		UserTimezone:       tz,
+		ContextFiles:       ctxFiles,
+		RuntimeInfo:        prompt.BuildDefaultRuntimeInfo(params.Model, deps.callbacks.defaultModel),
+		Channel:            ch,
+		SkillsPrompt:       skillsPrompt,
+		ToolPreset:         sessionToolPreset,
+		CompactionFired:    compactionFired,
+		Chatbot:            chatbot,
+		Coding:             coding,
+		CodingRepoContext:  codingRepo.Content,
+		CodingRepoCacheKey: codingRepo.Hash,
+		CalendarGlance:     calendarGlance,
+		GoalGlance:         goalGlance,
+		TopicKnowledge:     topicKnowledge,
+		TopicCacheKey:      topicCacheKey,
+		TopicKnowledgePath: topicKnowledgePath,
+		PersonaText:        personaText,
+		PersonaCacheKey:    personaCacheKey,
+	}
+
+	return llm.SystemBlocks(prompt.BuildSystemPromptBlocks(spp)), ctxFiles, frozenTopic
 }
 
 // compactionHooks holds optional callbacks for the STW compaction phase.
