@@ -17,6 +17,15 @@ import (
 type ToolExecStats struct {
 	mu       sync.Mutex
 	repaired map[string]int
+	// cacheHits counts run-cache hits per tool (the call never reached the
+	// tool fn, so the executor's turn.tool duration/output stats undercount
+	// real demand without this).
+	cacheHits map[string]int
+	// truncated counts head/tail output truncations per tool. Truncation
+	// happens before the executor sees the output — turn.tool's OutputLen is
+	// the post-truncation length — so the signal only exists here. Feeds
+	// per-tool MaxOutput budget tuning (tool_schemas.json max_output).
+	truncated map[string]int
 }
 
 // NewToolExecStats creates an empty collector.
@@ -46,11 +55,65 @@ func (s *ToolExecStats) RepairedCounts() map[string]int {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if len(s.repaired) == 0 {
+	return copyCounts(s.repaired)
+}
+
+// RecordCacheHit counts one run-cache hit for the named tool. Nil-safe.
+func (s *ToolExecStats) RecordCacheHit(tool string) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.cacheHits == nil {
+		s.cacheHits = make(map[string]int, 2)
+	}
+	s.cacheHits[tool]++
+}
+
+// RecordTruncated counts one output truncation for the named tool. Nil-safe.
+func (s *ToolExecStats) RecordTruncated(tool string) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.truncated == nil {
+		s.truncated = make(map[string]int, 2)
+	}
+	s.truncated[tool]++
+}
+
+// CacheHitCounts returns a copy of the per-tool cache-hit counters, or nil
+// when nothing hit (so run.end omits the field entirely).
+func (s *ToolExecStats) CacheHitCounts() map[string]int {
+	if s == nil {
 		return nil
 	}
-	out := make(map[string]int, len(s.repaired))
-	for k, v := range s.repaired {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return copyCounts(s.cacheHits)
+}
+
+// TruncatedCounts returns a copy of the per-tool truncation counters, or nil
+// when nothing truncated.
+func (s *ToolExecStats) TruncatedCounts() map[string]int {
+	if s == nil {
+		return nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return copyCounts(s.truncated)
+}
+
+// copyCounts copies a counter map, returning nil for an empty one. Caller
+// must hold s.mu.
+func copyCounts(m map[string]int) map[string]int {
+	if len(m) == 0 {
+		return nil
+	}
+	out := make(map[string]int, len(m))
+	for k, v := range m {
 		out[k] = v
 	}
 	return out

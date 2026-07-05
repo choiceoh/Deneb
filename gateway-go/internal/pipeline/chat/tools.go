@@ -139,6 +139,9 @@ func (r *ToolRegistry) Execute(ctx context.Context, name string, input json.RawM
 	if rc != nil && IsCacheableTool(name) {
 		cacheKey := BuildCacheKey(name, input)
 		if cached, ok := rc.Get(cacheKey); ok {
+			// Count the hit: the tool fn never runs, so the executor's
+			// turn.tool stats undercount real demand for this tool.
+			toolctx.ToolExecStatsFromContext(ctx).RecordCacheHit(name)
 			if wantCompress && cached != "" {
 				return compressToolOutput(ctx, name, cached, slog.Default()), nil
 			}
@@ -162,6 +165,7 @@ func (r *ToolRegistry) Execute(ctx context.Context, name string, input json.RawM
 		maxOutput = def.MaxOutput
 	}
 	if len(output) > maxOutput {
+		toolctx.ToolExecStatsFromContext(ctx).RecordTruncated(name)
 		var spillID string
 		// Spill full content to disk so the LLM can retrieve it via read_spillover.
 		if r.spillStore != nil {

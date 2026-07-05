@@ -418,6 +418,8 @@ func recordRunCompletion(rec runCompletionRecord, logger *slog.Logger) {
 		EffortDecision:      effortDecision,
 		EffortEscalated:     effortRt != nil && effortRt.escalated,
 		RepairedToolCalls:   execStats.RepairedCounts(),
+		CacheHitToolCalls:   execStats.CacheHitCounts(),
+		TruncatedToolCalls:  execStats.TruncatedCounts(),
 	})
 
 	// Engine-side APC sample → run.cache event (async, best-effort). The vLLM

@@ -84,7 +84,12 @@ func TestAggregate_ToolAnomalyCounters(t *testing.T) {
 	rl.LogTurnTool(TurnToolData{Turn: 1, Name: "fs", DurationMs: 20, OutputLen: 3000})
 	rl.LogTurnTool(TurnToolData{Turn: 2, Name: "frobnicate", IsError: true, UnknownTool: true})
 	rl.LogTurnTool(TurnToolData{Turn: 3, Name: "web", IsError: true, Blocked: "loop"})
-	rl.LogEnd(RunEndData{Turns: 3, RepairedToolCalls: map[string]int{"fs": 2}})
+	rl.LogEnd(RunEndData{
+		Turns:              3,
+		RepairedToolCalls:  map[string]int{"fs": 2},
+		CacheHitToolCalls:  map[string]int{"grep": 3},
+		TruncatedToolCalls: map[string]int{"fs": 1},
+	})
 
 	agg := w.Aggregate(0)
 
@@ -99,6 +104,12 @@ func TestAggregate_ToolAnomalyCounters(t *testing.T) {
 	}
 	if fs.TotalOutputChars != 4000 || fs.MaxOutputChars != 3000 {
 		t.Errorf("fs output = total %d / max %d, want 4000/3000", fs.TotalOutputChars, fs.MaxOutputChars)
+	}
+	if fs.Truncated != 1 {
+		t.Errorf("fs.Truncated = %d, want 1", fs.Truncated)
+	}
+	if grep := byName["grep"]; grep.CacheHits != 3 {
+		t.Errorf("grep.CacheHits = %d, want 3", grep.CacheHits)
 	}
 	if got := byName["frobnicate"]; got.Unknown != 1 || got.Errors != 1 {
 		t.Errorf("frobnicate = %+v, want unknown1/err1", got)

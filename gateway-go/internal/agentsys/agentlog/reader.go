@@ -224,8 +224,10 @@ func targetMatches(targets []string, effects []ToolFileEffect, query string) boo
 // The anomaly counters close the measurement loop the tool code asks for:
 // Repaired (tool_argrepair.go gates schema-aware repairs on this rate),
 // Unknown (hallucinated/typoed tool names — deferred-description quality
-// signal), Blocked (loop-detector/hook vetoes). TotalOutputChars/
-// MaxOutputChars feed per-tool MaxOutput cap tuning (tool_schemas.json).
+// signal), Blocked (loop-detector/hook vetoes), CacheHits (run-cache hits —
+// whether the cacheable-tool set earns its keep), Truncated (output
+// truncations). TotalOutputChars/MaxOutputChars and Truncated feed per-tool
+// MaxOutput cap tuning (tool_schemas.json).
 type ToolStat struct {
 	Name    string `json:"name"`
 	Calls   int    `json:"calls"`
@@ -236,6 +238,8 @@ type ToolStat struct {
 	Repaired         int   `json:"repaired,omitempty"`
 	Unknown          int   `json:"unknown,omitempty"`
 	Blocked          int   `json:"blocked,omitempty"`
+	CacheHits        int   `json:"cacheHits,omitempty"`
+	Truncated        int   `json:"truncated,omitempty"`
 	TotalOutputChars int64 `json:"totalOutputChars,omitempty"`
 	MaxOutputChars   int   `json:"maxOutputChars,omitempty"`
 }
@@ -321,14 +325,19 @@ func (w *Writer) Aggregate(sinceMs int64) AggregateResult {
 				if json.Unmarshal(e.Data, &d) != nil {
 					continue
 				}
-				for name, c := range d.RepairedToolCalls {
-					ts := toolMap[name]
-					if ts == nil {
-						ts = &ToolStat{Name: name}
-						toolMap[name] = ts
+				foldToolCounter := func(counts map[string]int, add func(*ToolStat, int)) {
+					for name, c := range counts {
+						ts := toolMap[name]
+						if ts == nil {
+							ts = &ToolStat{Name: name}
+							toolMap[name] = ts
+						}
+						add(ts, c)
 					}
-					ts.Repaired += c
 				}
+				foldToolCounter(d.RepairedToolCalls, func(ts *ToolStat, c int) { ts.Repaired += c })
+				foldToolCounter(d.CacheHitToolCalls, func(ts *ToolStat, c int) { ts.CacheHits += c })
+				foldToolCounter(d.TruncatedToolCalls, func(ts *ToolStat, c int) { ts.Truncated += c })
 				res.Runs++
 				res.TotalInputTokens += int64(d.InputTokens)
 				res.TotalOutputTokens += int64(d.OutputTokens)

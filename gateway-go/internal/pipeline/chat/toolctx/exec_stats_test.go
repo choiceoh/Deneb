@@ -33,13 +33,35 @@ func TestToolExecStats_RecordAndSnapshot(t *testing.T) {
 	if got := s.RepairedCounts()["wiki"]; got != 10 {
 		t.Fatalf("collector mutated via snapshot: %d", got)
 	}
+
+	// Cache-hit and truncation counters are independent families.
+	if got := s.CacheHitCounts(); got != nil {
+		t.Fatalf("no cache hits recorded, got %v", got)
+	}
+	s.RecordCacheHit("grep")
+	s.RecordCacheHit("grep")
+	s.RecordTruncated("exec")
+	if got := s.CacheHitCounts()["grep"]; got != 2 {
+		t.Fatalf("grep cache hits = %d, want 2", got)
+	}
+	if got := s.TruncatedCounts()["exec"]; got != 1 {
+		t.Fatalf("exec truncations = %d, want 1", got)
+	}
 }
 
 func TestToolExecStats_NilSafe(t *testing.T) {
 	var s *ToolExecStats
 	s.RecordRepaired("wiki") // must not panic
+	s.RecordCacheHit("grep")
+	s.RecordTruncated("exec")
 	if got := s.RepairedCounts(); got != nil {
 		t.Fatalf("nil stats should return nil, got %v", got)
+	}
+	if got := s.CacheHitCounts(); got != nil {
+		t.Fatalf("nil stats should return nil cache hits, got %v", got)
+	}
+	if got := s.TruncatedCounts(); got != nil {
+		t.Fatalf("nil stats should return nil truncations, got %v", got)
 	}
 	// Absent from context → nil-safe chain.
 	ToolExecStatsFromContext(context.Background()).RecordRepaired("exec")
