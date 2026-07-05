@@ -176,6 +176,13 @@ actual fun openUrl(url: String): Boolean = try {
 // daemon. The gateway already validated the action + its required args.
 actual fun executePhoneAction(action: String, args: Map<String, String>): Boolean = try {
     val context: Context by inject(Context::class.java)
+    // App-permission ops (Termux/SSH successors, 2026-07-05): executed with
+    // platform services rather than Intents, so they short-circuit here.
+    when (action) {
+        "notify" -> return postAgentNotification(context, args["title"].orEmpty(), args["text"].orEmpty())
+        "speak" -> return speakText(context, args["text"].orEmpty())
+        "clipboard" -> return setClipboardText(context, args["text"].orEmpty())
+    }
     val intent: Intent = when (action) {
         "open_url" -> Intent(Intent.ACTION_VIEW, args["url"].orEmpty().toUri())
 
@@ -282,3 +289,67 @@ actual suspend fun shareImageToApps(bytes: ByteArray, baseName: String, extensio
     // Started from the application Context (no Activity), so the chooser needs NEW_TASK.
     context.startActivity(Intent.createChooser(send, null).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
 }
+// postAgentNotification shows a local notification on the agent's own channel —
+// the app-permission successor of termux-notification. Channel is created
+// idempotently; POST_NOTIFICATIONS may be revoked on 13+, in which case notify()
+// throws/no-ops and we report false so the agent knows it did not land.
+private fun postAgentNotification(context: Context, title: String, text: String): Boolean = runCatching {
+    if (text.isBlank()) return false
+    val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+    val channelId = "deneb_agent_actions"
+    if (android.os.Build.VERSION.SDK_INT >= 26 && manager.getNotificationChannel(channelId) == null) {
+        manager.createNotificationChannel(
+            android.app.NotificationChannel(
+                channelId,
+                "Deneb 에이전트 알림",
+                android.app.NotificationManager.IMPORTANCE_DEFAULT,
+            ),
+        )
+    }
+    val notification = androidx.core.app.NotificationCompat.Builder(context, channelId)
+        .setSmallIcon(android.R.drawable.ic_dialog_info)
+        .setContentTitle(title.ifBlank { "Deneb" })
+        .setContentText(text)
+        .setStyle(androidx.core.app.NotificationCompat.BigTextStyle().bigText(text))
+        .setAutoCancel(true)
+        .build()
+    manager.notify((System.currentTimeMillis() % Int.MAX_VALUE).toInt(), notification)
+    true
+}.getOrDefault(false)
+
+// speakText speaks via the platform TTS engine — the successor of
+// termux-tts-speak. A one-shot engine instance is created on the main looper
+// (TTS requires one), speaks, and shuts itself down when done. Fire-and-forget:
+// we report dispatch success, not utterance completion.
+private fun speakText(context: Context, text: String): Boolean {
+    if (text.isBlank()) return false
+    android.os.Handler(android.os.Looper.getMainLooper()).post {
+        var tts: android.speech.tts.TextToSpeech? = null
+        tts = android.speech.tts.TextToSpeech(context) { status ->
+            val engine = tts
+            if (status == android.speech.tts.TextToSpeech.SUCCESS && engine != null) {
+                engine.language = java.util.Locale.KOREAN
+                engine.setOnUtteranceProgressListener(object : android.speech.tts.UtteranceProgressListener() {
+                    override fun onStart(utteranceId: String?) {}
+                    override fun onDone(utteranceId: String?) { engine.shutdown() }
+                    @Deprecated("platform callback")
+                    override fun onError(utteranceId: String?) { engine.shutdown() }
+                })
+                engine.speak(text, android.speech.tts.TextToSpeech.QUEUE_FLUSH, null, "deneb-speak")
+            } else {
+                engine?.shutdown()
+            }
+        }
+    }
+    return true
+}
+
+// setClipboardText puts text on the clipboard — the successor of
+// termux-clipboard-set. Setting is permitted in the background (the Android
+// 10+ restriction covers reads).
+private fun setClipboardText(context: Context, text: String): Boolean = runCatching {
+    if (text.isBlank()) return false
+    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+    clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Deneb", text))
+    true
+}.getOrDefault(false)
