@@ -64,33 +64,8 @@ func executeAgentRun(
 	// phase.changed event for the transition.
 	emitPhase(deps, params, "preparing", runStart)
 
-	// 1. Persist user message to transcript + Aurora store. Skipped when the
-	// turn is marked Ephemeral — autonomous self-triggers (heartbeat) share
-	// the user's session for context but must not crowd out the recent
-	// history window with their own trigger noise.
-	if deps.transcript != nil && params.Message != "" && !params.EphemeralUser {
-		// Prepend an ISO 8601 timestamp to the user message text. The model
-		// gets the wall-clock time per-turn without relying on the system
-		// prompt (whose date field is day-only precision so the dynamic
-		// block stays byte-stable for trailing-message cache markers; see
-		// prompt-cache.md § 1). The timestamp is baked into the transcript
-		// so subsequent turns load a consistent history prefix — flipping
-		// to per-request hook injection would desync transcript history
-		// from what the LLM saw on prior turns and miss the cache.
-		// dentime.Now() (not time.Now()) so the baked offset matches the
-		// configured zone — on a UTC container with timezone set via
-		// deneb.json, time.Now() would stamp "...Z" while the system prompt
-		// and the rest of Deneb run in KST (see prompt-cache.md § 1).
-		now := dentime.Now()
-		formattedMessage := "[" + now.Format(time.RFC3339) + "] " + params.Message
-		userMsg := NewTextChatMessage("user", formattedMessage, now.UnixMilli())
-		if err := deps.transcript.Append(params.SessionKey, userMsg); err != nil {
-			logger.Error("failed to persist user message", "error", err)
-		}
-		if deps.callbacks.emitTranscriptFn != nil {
-			deps.callbacks.emitTranscriptFn(params.SessionKey, userMsg, "")
-		}
-	}
+	// 1. Persist user message to transcript + Aurora store.
+	persistTurnUserMessage(params, deps, logger)
 	workspaceDir := params.WorkspaceDir
 	if workspaceDir == "" {
 		workspaceDir = resolveWorkspaceDirForPrompt()
@@ -187,52 +162,7 @@ func executeAgentRun(
 	}
 	messages := assembleMessages(ctx, params, deps, prep, mr, logger, cHooks)
 
-	// Per-turn additions (recall evidence + auto-delivery directive) ride the
-	// LAST user message as a wire-only suffix, NOT the system prompt. On the
-	// vLLM path the rendered prompt is [system][tool schemas][history] and APC
-	// is strict prefix matching — per-turn system-tail bytes invalidated the
-	// KV cache for the tools + entire history on every evidence-bearing turn
-	// (2026-06-13: 80.7% hit rate, 20-40s prefill tail on interactive turns).
-	// The transcript already persisted the clean user message, so next turn's
-	// history reload stays byte-identical to this turn's cached prefix. The
-	// degenerate no-user-message case falls back to the legacy system
-	// placement so evidence is never dropped. See run_tail_inject.go.
-	// Notebook grounding: when this session has an active notebook (opened via
-	// the notebook tool's open action), inject its pinned sources as a wire-only
-	// tail block so the turn is grounded primarily in those sources. Broad recall
-	// is suppressed for bound sessions in prepareContextAndPrompt — the notebook
-	// is the explicit scope — so this fills the reference slot instead. Like
-	// recall it rides the last user message (APC-safe; see run_tail_inject.go).
-	notebookGrounding := ""
-	if nbID, updated, ok := activeGroundingNotebook(deps, params.SessionKey); ok {
-		if g, hit := cachedNotebookGrounding(params.SessionKey, nbID, updated); hit {
-			notebookGrounding = g
-		} else if g, gok := tools.BuildNotebookGrounding(&toolctx.NotebookDeps{Store: deps.notebookStore, Wiki: deps.wikiStore}, nbID); gok {
-			notebookGrounding = g
-			storeNotebookGrounding(params.SessionKey, nbID, updated, g)
-		}
-	}
-	// Gated on the run's effective preset: a preset without the skills tool
-	// (btw "conversation", code: "coding") must not receive a hint that
-	// instructs a blocked call. Tail injection keeps this APC-safe.
-	skillHints, hintedSkills := buildSkillHints(params, sessionToolPreset, cachedResolvedSkills())
-	if len(hintedSkills) > 0 {
-		// Measurement anchor for the auto-hint experiment: joining these events
-		// with skill_usage.jsonl (same session, consult after this ts) yields the
-		// hint→consult conversion rate. Rare by construction (trigger match), so
-		// Info + one agentlog event per fire is not spam.
-		deps.logger.Info("skill hints injected",
-			"session", params.SessionKey, "skills", strings.Join(hintedSkills, ","))
-		deps.agentLog.LogEvent(params.SessionKey, "run.skillhints", map[string]any{
-			"skills": hintedSkills,
-		})
-	}
-	tailAdds := buildTailAdditions(params, prep.RecallMemory, notebookGrounding, skillHints)
-	messages, tailInjected := injectTailAdditions(messages, tailAdds)
-	tailForSystem := ""
-	if !tailInjected {
-		tailForSystem = strings.Join(tailAdds, "\n\n")
-	}
+	messages, tailForSystem := applyTailAdditions(params, deps, prep, sessionToolPreset, messages)
 
 	// Stage 3: Finalize system prompt (budget optimization, coordinator suggestion, tier-1 injection).
 	systemPrompt := finalizePrompt(prep.SystemPrompt, tailForSystem, prep.Tier1Wiki, deps.contextCfg, sessionToolPreset, params.Message)
@@ -275,36 +205,9 @@ func executeAgentRun(
 	// runAgentWithFallback, which needs the route to restore the original.
 	effortRt, effortDecision := applyEffortRouter(&cfg, params, messages, routingProfileForRun(deps, providerID, model), logger)
 
-	// BeforeAPICall hook chain: assembled via agent.BeforeAPICallChain, which
-	// composes hooks by declared stage (PRE/NORMAL/POST) and rejects duplicate
-	// names — so "the trailing cache hook runs last" is a property it declares
-	// (HookStagePost), not a consequence of argument order, and a double
-	// registration is a logged conflict rather than a silent clobber. Nil hooks
-	// (disabled features) are skipped; an all-nil chain builds to nil.
-	//
-	//  - steer (NORMAL): drains SteerQueue notes into the last tool_result before
-	//    the call. No-op when the queue is nil (sub-agents, tests).
-	//  - trailingCache (POST): attaches ephemeral cache_control to the last 2
-	//    non-system messages (Hermes Agent's "system_and_3" pattern, scaled
-	//    to fit Anthropic's 4-breakpoint limit alongside our 2 system
-	//    markers). No-op for non-Anthropic providers.
-	apiMode := resolveAPIMode(deps, providerID)
-	// Some providers (Kimi) speak the Anthropic wire but REJECT cache_control
-	// with HTTP 400, so for cache-incompatible providers strip the system-block
-	// markers and skip the trailing-message hook entirely. Mirrors OpenClaw's
-	// per-provider strip (extensions/kimi-coding). The builtin list lives in
-	// modelcaps; a `promptCache` boolean on the provider's deneb.json entry
-	// overrides it either way. The strip operates on the per-request cfg.System
-	// copy, so the prompt-cache doctrine (don't mutate cached blocks) holds.
-	trailingCache := buildTrailingCacheHook(apiMode)
-	if modelCapability(deps, providerID, model).RejectsCacheControl {
-		cfg.System = stripCacheControlMarkers(cfg.System)
-		trailingCache = nil
-	}
-	var apc agent.BeforeAPICallChain
-	apc.Add("steer", agent.HookStageNormal, buildSteerHookIfEnabled(deps.steerQueue, params.SessionKey, logger))
-	apc.Add("trailing-cache", agent.HookStagePost, trailingCache)
-	cfg.BeforeAPICall = apc.Build(logger)
+	// BeforeAPICall hook chain (steer + trailing cache markers) and the
+	// provider's cache_control policy — see wireBeforeAPICall.
+	apiMode := wireBeforeAPICall(&cfg, deps, params, providerID, model, logger)
 
 	// Set up stream hooks via compositor: fan-out dispatch for each hook type.
 	var hc agent.HookCompositor
@@ -357,8 +260,54 @@ func executeAgentRun(
 		}
 	}
 
-	agentMs := time.Since(agentStart).Milliseconds()
-	totalMs := time.Since(runStart).Milliseconds()
+	recordRunCompletion(runCompletionRecord{
+		params:         params,
+		deps:           deps,
+		runLog:         runLog,
+		client:         client,
+		agentResult:    agentResult,
+		requestedModel: model,
+		actualModel:    actualModel,
+		apiMode:        apiMode,
+		fellBack:       fellBack,
+		effortRt:       effortRt,
+		effortDecision: effortDecision,
+		runStart:       runStart,
+		agentStart:     agentStart,
+	}, logger)
+
+	return &chatRunResult{AgentResult: agentResult, SpawnFlag: spawnFlag, ActualModel: actualModel, FellBack: fellBack}, nil
+}
+
+// runCompletionRecord bundles everything the post-loop telemetry sink needs.
+type runCompletionRecord struct {
+	params         RunParams
+	deps           runDeps
+	runLog         *agentlog.RunLogger
+	client         *llm.Client
+	agentResult    *agent.AgentResult
+	requestedModel string // the model the run asked for
+	actualModel    string // the model that answered (differs when fallback fired)
+	apiMode        string
+	fellBack       bool
+	effortRt       *effortRoute
+	effortDecision string
+	runStart       time.Time
+	agentStart     time.Time
+}
+
+// recordRunCompletion emits every post-loop success record in one place: the
+// postmortem log line, the prompt-cache hit-ratio sample, the run.end gateway
+// event, the agent-detail run.end entry, and the async engine APC sample.
+func recordRunCompletion(rec runCompletionRecord, logger *slog.Logger) {
+	params, deps := rec.params, rec.deps
+	agentResult := rec.agentResult
+	model, actualModel := rec.requestedModel, rec.actualModel
+	apiMode, fellBack := rec.apiMode, rec.fellBack
+	effortRt, effortDecision := rec.effortRt, rec.effortDecision
+	runLog, client := rec.runLog, rec.client
+	agentMs := time.Since(rec.agentStart).Milliseconds()
+	totalMs := time.Since(rec.runStart).Milliseconds()
 	// Surface run-level aggregates so a postmortem gets the shape in one line:
 	// how many tool calls total, how they break down by name, how much text
 	// the agent produced vs. what ended up in result.Text, and a 200-char head
@@ -470,8 +419,126 @@ func executeAgentRun(
 	// usage payload carries no cached_tokens, so the engine's global counters
 	// are the only per-turn cache-hit signal on this path.
 	logEngineCacheAsync(deps, runLog, client, actualModel, fellBack, logger)
+}
 
-	return &chatRunResult{AgentResult: agentResult, SpawnFlag: spawnFlag, ActualModel: actualModel, FellBack: fellBack}, nil
+// persistTurnUserMessage persists the inbound user message to the transcript
+// (+ transcript event emit). Skipped when the turn is marked Ephemeral —
+// autonomous self-triggers (heartbeat) share the user's session for context
+// but must not crowd out the recent history window with their own trigger
+// noise.
+//
+// The message is prepended with an ISO 8601 timestamp: the model gets the
+// wall-clock time per-turn without relying on the system prompt (whose date
+// field is day-only precision so the dynamic block stays byte-stable for
+// trailing-message cache markers; see prompt-cache.md § 1). The timestamp is
+// baked into the transcript so subsequent turns load a consistent history
+// prefix — flipping to per-request hook injection would desync transcript
+// history from what the LLM saw on prior turns and miss the cache.
+// dentime.Now() (not time.Now()) so the baked offset matches the configured
+// zone — on a UTC container with timezone set via deneb.json, time.Now()
+// would stamp "...Z" while the system prompt and the rest of Deneb run in KST.
+func persistTurnUserMessage(params RunParams, deps runDeps, logger *slog.Logger) {
+	if deps.transcript == nil || params.Message == "" || params.EphemeralUser {
+		return
+	}
+	now := dentime.Now()
+	formattedMessage := "[" + now.Format(time.RFC3339) + "] " + params.Message
+	userMsg := NewTextChatMessage("user", formattedMessage, now.UnixMilli())
+	if err := deps.transcript.Append(params.SessionKey, userMsg); err != nil {
+		logger.Error("failed to persist user message", "error", err)
+	}
+	if deps.callbacks.emitTranscriptFn != nil {
+		deps.callbacks.emitTranscriptFn(params.SessionKey, userMsg, "")
+	}
+}
+
+// applyTailAdditions collects and injects the per-turn wire-only additions
+// (recall evidence / notebook grounding / skill hints / tone + delivery
+// directives) into the LAST user message — NOT the system prompt. On the vLLM
+// path the rendered prompt is [system][tool schemas][history] and APC is
+// strict prefix matching — per-turn system-tail bytes invalidated the KV cache
+// for the tools + entire history on every evidence-bearing turn (2026-06-13:
+// 80.7% hit rate, 20-40s prefill tail on interactive turns). The transcript
+// already persisted the clean user message, so next turn's history reload
+// stays byte-identical to this turn's cached prefix. The degenerate
+// no-user-message case returns the additions as tailForSystem so the caller
+// falls back to the legacy system placement — evidence is never dropped. See
+// run_tail_inject.go.
+//
+// Notebook grounding: when this session has an active notebook (opened via
+// the notebook tool's open action), its pinned sources ride the same tail so
+// the turn is grounded primarily in those sources (broad recall is suppressed
+// for bound sessions in prepareContextAndPrompt — the notebook is the
+// explicit scope). Skill hints are gated on the run's effective preset: a
+// preset without the skills tool (btw "conversation", code: "coding") must
+// not receive a hint that instructs a blocked call.
+func applyTailAdditions(params RunParams, deps runDeps, prep prepResult, sessionToolPreset string, messages []llm.Message) ([]llm.Message, string) {
+	notebookGrounding := ""
+	if nbID, updated, ok := activeGroundingNotebook(deps, params.SessionKey); ok {
+		if g, hit := cachedNotebookGrounding(params.SessionKey, nbID, updated); hit {
+			notebookGrounding = g
+		} else if g, gok := tools.BuildNotebookGrounding(&toolctx.NotebookDeps{Store: deps.notebookStore, Wiki: deps.wikiStore}, nbID); gok {
+			notebookGrounding = g
+			storeNotebookGrounding(params.SessionKey, nbID, updated, g)
+		}
+	}
+	skillHints, hintedSkills := buildSkillHints(params, sessionToolPreset, cachedResolvedSkills())
+	if len(hintedSkills) > 0 {
+		// Measurement anchor for the auto-hint experiment: joining these events
+		// with skill_usage.jsonl (same session, consult after this ts) yields the
+		// hint→consult conversion rate. Rare by construction (trigger match), so
+		// Info + one agentlog event per fire is not spam.
+		deps.logger.Info("skill hints injected",
+			"session", params.SessionKey, "skills", strings.Join(hintedSkills, ","))
+		deps.agentLog.LogEvent(params.SessionKey, "run.skillhints", map[string]any{
+			"skills": hintedSkills,
+		})
+	}
+	tailAdds := buildTailAdditions(params, prep.RecallMemory, notebookGrounding, skillHints)
+	messages, tailInjected := injectTailAdditions(messages, tailAdds)
+	tailForSystem := ""
+	if !tailInjected {
+		tailForSystem = strings.Join(tailAdds, "\n\n")
+	}
+	return messages, tailForSystem
+}
+
+// wireBeforeAPICall assembles cfg.BeforeAPICall and applies the provider's
+// cache_control policy, returning the resolved API wire mode.
+//
+// The chain is built via agent.BeforeAPICallChain, which composes hooks by
+// declared stage (PRE/NORMAL/POST) and rejects duplicate names — so "the
+// trailing cache hook runs last" is a property it declares (HookStagePost),
+// not a consequence of argument order, and a double registration is a logged
+// conflict rather than a silent clobber. Nil hooks (disabled features) are
+// skipped; an all-nil chain builds to nil.
+//
+//   - steer (NORMAL): drains SteerQueue notes into the last tool_result before
+//     the call. No-op when the queue is nil (sub-agents, tests).
+//   - trailingCache (POST): attaches ephemeral cache_control to the last 2
+//     non-system messages (Hermes Agent's "system_and_3" pattern, scaled to
+//     fit Anthropic's 4-breakpoint limit alongside our 2 system markers).
+//     No-op for non-Anthropic providers.
+//
+// Some providers (Kimi) speak the Anthropic wire but REJECT cache_control with
+// HTTP 400, so for cache-incompatible providers the system-block markers are
+// stripped and the trailing-message hook skipped entirely. Mirrors OpenClaw's
+// per-provider strip (extensions/kimi-coding). The builtin list lives in
+// modelcaps; a `promptCache` boolean on the provider's deneb.json entry
+// overrides it either way. The strip operates on the per-request cfg.System
+// copy, so the prompt-cache doctrine (don't mutate cached blocks) holds.
+func wireBeforeAPICall(cfg *agent.AgentConfig, deps runDeps, params RunParams, providerID, model string, logger *slog.Logger) string {
+	apiMode := resolveAPIMode(deps, providerID)
+	trailingCache := buildTrailingCacheHook(apiMode)
+	if modelCapability(deps, providerID, model).RejectsCacheControl {
+		cfg.System = stripCacheControlMarkers(cfg.System)
+		trailingCache = nil
+	}
+	var apc agent.BeforeAPICallChain
+	apc.Add("steer", agent.HookStageNormal, buildSteerHookIfEnabled(deps.steerQueue, params.SessionKey, logger))
+	apc.Add("trailing-cache", agent.HookStagePost, trailingCache)
+	cfg.BeforeAPICall = apc.Build(logger)
+	return apiMode
 }
 
 // emitPhase publishes a phase.changed lifecycle event so WebSocket
