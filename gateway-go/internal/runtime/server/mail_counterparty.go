@@ -104,7 +104,13 @@ func (c *counterpartyProjectsCache) lookup(store *wiki.Store, domain string) []s
 		c.projects = store.CounterpartyProjects(cutoff)
 		c.builtAt = time.Now()
 	}
-	return c.projects[domain]
+	// Defensive copy: the cache is shared across goroutines and callers may
+	// append/sort — handing out the backing array would corrupt the cache.
+	projects := c.projects[domain]
+	if len(projects) == 0 {
+		return nil
+	}
+	return append([]string(nil), projects...)
 }
 
 // mailCounterpartyProjects is the PipelineDeps-injected lookup: linked project

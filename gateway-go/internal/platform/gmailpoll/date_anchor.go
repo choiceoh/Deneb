@@ -44,6 +44,14 @@ func parseMailDate(raw string) time.Time {
 	if raw == "" {
 		return time.Time{}
 	}
+	// Korean groupware sends bare "... 23:30:00 KST": net/mail parses the
+	// unknown zone abbreviation as UTC+0, which shifts late-evening mail to
+	// the NEXT calendar day after the KST conversion — mis-anchoring the whole
+	// table. Rewrite the bare token to its numeric offset first. ("(KST)"
+	// comments after a numeric offset are untouched: no leading space match.)
+	if strings.HasSuffix(raw, " KST") {
+		raw = strings.TrimSuffix(raw, " KST") + " +0900"
+	}
 	if t, err := mail.ParseDate(raw); err == nil {
 		return t
 	}
@@ -76,7 +84,9 @@ func weekRow(label string, monday time.Time) string {
 		if i > 0 {
 			sb.WriteString(" ")
 		}
-		sb.WriteString(fmt.Sprintf("%s(%s)", d.Format("01-02"), koreanWeekdays[int(d.Weekday())]))
+		// Full YYYY-MM-DD per cell: the rule is "copy, don't calculate", so a
+		// year-boundary week (late-Dec send, Jan deadline) must be copyable too.
+		sb.WriteString(fmt.Sprintf("%s(%s)", d.Format("2006-01-02"), koreanWeekdays[int(d.Weekday())]))
 	}
 	return sb.String()
 }
@@ -98,13 +108,18 @@ func buildDateAnchor(msg *gmail.MessageDetail, now time.Time) string {
 	monday := mondayOf(sent)
 
 	var sb strings.Builder
+	// Last day of the send month (day 0 of the next month normalizes back).
+	monthEnd := time.Date(sent.Year(), sent.Month()+1, 0, 0, 0, 0, 0, sent.Location())
+
 	sb.WriteString("## 날짜 앵커 (헤더 기반 결정적 계산)\n")
 	sb.WriteString("- 이 메일의 발송일: " + koreanDate(sent) + "\n")
-	sb.WriteString("- 분석 시점(오늘): " + koreanDate(now) + "\n")
+	sb.WriteString("- 분석 실행 시각(참고용 — 본문 상대 표현의 기준 아님): " + koreanDate(now) + "\n")
+	sb.WriteString("- 본문 지시어 환산: 오늘=" + koreanDate(sent) + " · 내일=" + koreanDate(sent.AddDate(0, 0, 1)) +
+		" · 모레=" + koreanDate(sent.AddDate(0, 0, 2)) + " · 이번 달 말일=" + koreanDate(monthEnd) + "\n")
 	sb.WriteString("- 발송일 기준 환산표 (주는 월~일):\n")
 	sb.WriteString(weekRow("이번 주 (발송 주)", monday) + "\n")
 	sb.WriteString(weekRow("다음 주", monday.AddDate(0, 0, 7)) + "\n")
 	sb.WriteString(weekRow("그 다음 주", monday.AddDate(0, 0, 14)) + "\n")
-	sb.WriteString("- 판독 규칙: 본문의 상대 날짜 표현(내일·이번/다음 주 ○요일·월말 등)은 발송일 기준으로 이 표에서 찾아 절대 날짜로 옮겨 적는다. 직접 계산하지 말 것.")
+	sb.WriteString("- 판독 규칙: 본문의 상대 날짜 표현(오늘·내일·모레·월말·이번/다음 주 ○요일 등)은 발송일 기준으로 위 지시어·환산표에서 찾아 절대 날짜로 옮겨 적는다. 직접 계산하지 말 것.")
 	return sb.String()
 }

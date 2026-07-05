@@ -19,12 +19,24 @@ type Summary struct {
 
 const summarySnippetRunes = 1200
 
-// ListSince returns messages in mailbox received on/after since, most-recent
-// first, capped at limit. Used by the daily-digest agent to read the day's mail
-// from the archive instead of Gmail. Filters on the Date header (SENTSINCE) —
-// see archiveSentSinceCriteria for why INTERNALDATE is unusable here.
+// ListSince returns messages in mailbox dated (Date header) on/after since's
+// KST calendar day, most-recent first, capped at limit. Used by the
+// daily-digest agent to read the day's mail from the archive instead of Gmail.
+// The IMAP query uses SENTSINCE with a one-day prefetch margin (see
+// archiveSentSinceCriteria — INTERNALDATE is unusable here) and the results
+// are post-filtered back to the exact day boundary.
 func ListSince(ctx context.Context, cfg Config, mailbox string, since time.Time, limit int) ([]Summary, error) {
-	return readSummaries(ctx, cfg, mailbox, archiveSentSinceCriteria(since), limit)
+	summaries, err := readSummaries(ctx, cfg, mailbox, archiveSentSinceCriteria(since), limit)
+	if err != nil || since.IsZero() {
+		return summaries, err
+	}
+	out := summaries[:0]
+	for _, s := range summaries {
+		if sentOnOrAfter(s.Date, since) {
+			out = append(out, s)
+		}
+	}
+	return out, nil
 }
 
 // Search returns messages in mailbox matching a free-text query (matched against

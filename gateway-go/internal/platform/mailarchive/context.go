@@ -101,7 +101,13 @@ func ListContextMessages(ctx context.Context, cfg Config, since time.Time, opts 
 	}
 	defer c.close()
 	defer c.logout()
-	return searchContextMessages(ctx, c, cfg, criteria, opts, true)
+	msgs, err := searchContextMessages(ctx, c, cfg, criteria, opts, true)
+	if err != nil || since.IsZero() {
+		return msgs, err
+	}
+	// The criteria fetched with a one-day prefetch margin; restore the exact
+	// requested day boundary so days:1 output really is "오늘".
+	return filterSentOnOrAfter(msgs, since), nil
 }
 
 // SearchContextMessages searches archive messages with stable locators, newest
@@ -514,8 +520,8 @@ func archiveTextCriteria(query string) string {
 	return strings.Join(parts, " ")
 }
 
-// archiveSentSinceCriteria builds the "received in the last N days" criteria on
-// the Date header (SENTSINCE) instead of INTERNALDATE (SINCE). This archive's
+// archiveSentSinceCriteria builds the "dated (sent) in the last N days"
+// criteria on the Date header (SENTSINCE) instead of INTERNALDATE (SINCE). This archive's
 // INTERNALDATE is unreliable for day windows — bulk imports deliver many
 // sent-days under one internal date (the after:/before: query path switched to
 // SENTSINCE for the same reason; see buildSearchSpec). Production 2026-07-04:
@@ -524,10 +530,52 @@ func archiveTextCriteria(query string) string {
 //
 // The one-day back-margin absorbs SENTSINCE's date-only, timezone-blind
 // comparison (RFC 3501): a mail sent 08:59 KST carries the previous day's UTC
-// date and would otherwise fall out of the window. Over-inclusion by one day
-// is harmless — callers label output with each mail's own date.
+// date and would otherwise fall out of the window. The margin is a PREFETCH
+// window: user-facing list paths (ListContextMessages, reader.ListSince)
+// post-filter with sentOnOrAfter so "오늘 수신 메일"(days:1) does not include
+// yesterday; ranking/index prefetch paths keep the raw margin (harmless there).
 func archiveSentSinceCriteria(since time.Time) string {
 	return "SENTSINCE " + imapSinceDate(since.AddDate(0, 0, -1))
+}
+
+// archiveDayLoc pins day-boundary comparisons to operator local time (KST),
+// matching how the user phrases windows ("오늘", "어제").
+var archiveDayLoc = func() *time.Location {
+	if loc, err := time.LoadLocation("Asia/Seoul"); err == nil {
+		return loc
+	}
+	return time.FixedZone("KST", 9*3600)
+}()
+
+// sentOnOrAfter reports whether a message Date header falls on/after since's
+// calendar day in KST — the exact boundary the SENTSINCE prefetch margin
+// deliberately over-covers. Unparseable dates are kept (over-inclusion stays
+// harmless and matches the pre-filter behavior).
+func sentOnOrAfter(dateHeader string, since time.Time) bool {
+	t := parseMailDate(dateHeader)
+	if t.IsZero() {
+		return true
+	}
+	ty, tm, td := t.In(archiveDayLoc).Date()
+	sy, sm, sd := since.In(archiveDayLoc).Date()
+	if ty != sy {
+		return ty > sy
+	}
+	if tm != sm {
+		return tm > sm
+	}
+	return td >= sd
+}
+
+// filterSentOnOrAfter applies sentOnOrAfter to a slice, preserving order.
+func filterSentOnOrAfter(msgs []ContextMessage, since time.Time) []ContextMessage {
+	out := msgs[:0]
+	for _, m := range msgs {
+		if sentOnOrAfter(m.Date, since) {
+			out = append(out, m)
+		}
+	}
+	return out
 }
 
 func clampContextLimit(limit int) int {
