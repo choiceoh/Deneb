@@ -237,6 +237,98 @@ func FormatCatastrophicRefusal(checks []DestructiveCheck) string {
 	return sb.String()
 }
 
+// execReadOnlyCommands lists argv0 basenames whose plain invocations cannot
+// modify workspace files. Used by ExecCommandPreservesRunCache to decide
+// whether an exec call may keep the run cache (grep/fetch_tools results)
+// warm. Deliberately tight: anything not listed is treated as mutating, so
+// omissions only cost cache hit rate, never correctness. Commands that can
+// run arbitrary sub-commands (env, xargs, watch, timeout, go, make, npm …)
+// or write by design must stay off this list.
+var execReadOnlyCommands = map[string]struct{}{
+	"basename": {}, "cat": {}, "cmp": {}, "cut": {}, "date": {},
+	"df": {}, "diff": {}, "dirname": {}, "du": {}, "egrep": {},
+	"fgrep": {}, "file": {}, "free": {}, "grep": {}, "head": {},
+	"hostname": {}, "id": {}, "jq": {}, "ls": {}, "md5sum": {},
+	"nproc": {}, "printf": {}, "ps": {}, "pwd": {}, "readlink": {},
+	"realpath": {}, "rg": {}, "sha256sum": {}, "sort": {}, "stat": {},
+	"tail": {}, "tr": {}, "tree": {}, "uname": {}, "uniq": {},
+	"uptime": {}, "wc": {}, "which": {}, "whoami": {},
+}
+
+// gitReadSubcommands are git subcommands that never touch worktree files
+// (branch/tag ref writes are irrelevant to cached grep results, but checkout,
+// stash, pull, clean etc. rewrite the worktree and are deliberately absent).
+var gitReadSubcommands = map[string]struct{}{
+	"blame": {}, "diff": {}, "log": {}, "ls-files": {}, "remote": {},
+	"rev-parse": {}, "shortlog": {}, "show": {}, "status": {},
+}
+
+// execCacheUnsafeMeta are shell metacharacters that can smuggle a write past
+// the argv0 allowlist: redirects, command substitution, chaining, grouping.
+// A quoted literal containing one of these (grep "a>b") also trips the check —
+// that only invalidates the cache needlessly, which is the safe direction.
+const execCacheUnsafeMeta = "><;&`$(){}\n"
+
+// findMutatingArgs are find(1) actions that delete or execute.
+var findMutatingArgs = map[string]struct{}{
+	"-delete": {}, "-exec": {}, "-execdir": {}, "-ok": {}, "-okdir": {},
+}
+
+// ExecCommandPreservesRunCache reports whether a shell command is known to be
+// read-only with respect to workspace files, so the chat tool layer can skip
+// run-cache invalidation for it. exec was historically excluded from cache
+// invalidation entirely ("most exec calls are read-only — blanket invalidation
+// destroys hit rates"), which silently served stale grep results after a
+// mutating exec (sed -i, go generate, git checkout). This keeps the hit-rate
+// concern — cat/ls/rg pipelines still preserve the cache — while flipping the
+// default for anything unrecognized to invalidate (correctness first).
+//
+// Pure string analysis, no filesystem access. Returns false on any doubt.
+func ExecCommandPreservesRunCache(command string) bool {
+	command = strings.TrimSpace(command)
+	if command == "" {
+		return false
+	}
+	if strings.ContainsAny(command, execCacheUnsafeMeta) {
+		return false
+	}
+	// Every pipeline stage must independently be a known read-only command.
+	for _, stage := range strings.Split(command, "|") {
+		fields := strings.Fields(stage)
+		if len(fields) == 0 {
+			return false // empty stage — includes "a || b" after the split
+		}
+		argv0 := fields[0]
+		if idx := strings.LastIndex(argv0, "/"); idx >= 0 {
+			argv0 = argv0[idx+1:]
+		}
+		switch argv0 {
+		case "git":
+			if len(fields) < 2 {
+				return false
+			}
+			if _, ok := gitReadSubcommands[fields[1]]; !ok {
+				return false
+			}
+		case "find":
+			for _, f := range fields[1:] {
+				if _, ok := findMutatingArgs[f]; ok {
+					return false
+				}
+			}
+		case "sed":
+			if sedInPlacePattern.MatchString(stage) {
+				return false
+			}
+		default:
+			if _, ok := execReadOnlyCommands[argv0]; !ok {
+				return false
+			}
+		}
+	}
+	return true
+}
+
 // sedModifiesFile detects sed commands that modify files in-place.
 // Returns true if the sed command uses -i flag (in-place editing).
 func sedModifiesFile(command string) bool {

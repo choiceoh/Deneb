@@ -14,6 +14,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolpreset"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
 )
 
 const (
@@ -185,6 +186,16 @@ func (r *ToolRegistry) Execute(ctx context.Context, name string, input json.RawM
 				fc.Invalidate(mutPath)
 			}
 		}
+	} else if name == "exec" && rc != nil {
+		// exec is not a mutation tool (most calls are read-only and blanket
+		// invalidation destroys hit rates), but a command that CAN write must
+		// not leave stale grep results behind. Known read-only pipelines
+		// (cat/ls/rg/git log …) preserve the cache; anything unrecognized
+		// invalidates. FileCache needs no exec handling — its entries are
+		// mtime+hash validated on read (agent.FileChanged).
+		if cmd := extractExecCommand(input); !tools.ExecCommandPreservesRunCache(cmd) {
+			rc.Invalidate()
+		}
 	}
 
 	// Apply post-processors.
@@ -255,6 +266,18 @@ func (r *ToolRegistry) ApplyMaxOutputs(budgets map[string]int) {
 			r.tools[name] = def
 		}
 	}
+}
+
+// extractExecCommand extracts the "command" string from exec tool input JSON.
+// Used to decide whether an exec call invalidates the run cache.
+func extractExecCommand(input json.RawMessage) string {
+	var meta struct {
+		Command string `json:"command"`
+	}
+	if json.Unmarshal(input, &meta) == nil {
+		return meta.Command
+	}
+	return ""
 }
 
 // extractFilePath extracts a "file_path" string from tool input JSON.

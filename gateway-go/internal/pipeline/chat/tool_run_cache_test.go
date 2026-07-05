@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"context"
 	"encoding/json"
 	"sync"
 	"testing"
@@ -198,6 +199,9 @@ func TestIsMutationTool(t *testing.T) {
 	}
 	// exec is excluded from mutation tools: most exec calls are read-only
 	// (cat, ls, curl) and blanket invalidation destroys cache hit rates.
+	// Commands that CAN write are handled separately — Execute consults
+	// tools.ExecCommandPreservesRunCache and invalidates for anything not
+	// provably read-only (see TestExecute_ExecInvalidatesRunCache).
 	if IsMutationTool("exec") {
 		t.Fatal("exec should not be a mutation tool")
 	}
@@ -206,5 +210,56 @@ func TestIsMutationTool(t *testing.T) {
 	}
 	if IsMutationTool("read") {
 		t.Fatal("read should not be a mutation tool")
+	}
+}
+
+// TestExecute_ExecInvalidatesRunCache verifies the exec-command heuristic at
+// the Execute level: a read-only exec keeps cached grep results warm, while a
+// potentially mutating exec wipes them (stale search results after sed -i /
+// go generate were served for the run's remainder before this guard).
+func TestExecute_ExecInvalidatesRunCache(t *testing.T) {
+	reg := NewToolRegistry()
+	grepCalls := 0
+	reg.Register("grep", func(_ context.Context, _ json.RawMessage) (string, error) {
+		grepCalls++
+		return "match.go:1", nil
+	})
+	reg.Register("exec", func(_ context.Context, _ json.RawMessage) (string, error) {
+		return "done", nil
+	})
+
+	ctx := WithRunCache(context.Background(), NewRunCache())
+	grepInput := json.RawMessage(`{"pattern":"foo"}`)
+
+	// Prime the cache, then confirm a repeat is served from it.
+	for range 2 {
+		if _, err := reg.Execute(ctx, "grep", grepInput); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if grepCalls != 1 {
+		t.Fatalf("grep executed %d times, want 1 (second call cached)", grepCalls)
+	}
+
+	// Read-only exec must not invalidate.
+	if _, err := reg.Execute(ctx, "exec", json.RawMessage(`{"command":"ls -la"}`)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := reg.Execute(ctx, "grep", grepInput); err != nil {
+		t.Fatal(err)
+	}
+	if grepCalls != 1 {
+		t.Fatalf("grep executed %d times after read-only exec, want 1", grepCalls)
+	}
+
+	// Mutating exec must invalidate.
+	if _, err := reg.Execute(ctx, "exec", json.RawMessage(`{"command":"sed -i 's/a/b/' match.go"}`)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := reg.Execute(ctx, "grep", grepInput); err != nil {
+		t.Fatal(err)
+	}
+	if grepCalls != 2 {
+		t.Fatalf("grep executed %d times after mutating exec, want 2 (cache wiped)", grepCalls)
 	}
 }

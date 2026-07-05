@@ -188,3 +188,56 @@ func TestDetectFileModification(t *testing.T) {
 		})
 	}
 }
+
+func TestExecCommandPreservesRunCache(t *testing.T) {
+	preserves := []string{
+		"ls -la",
+		"cat main.go",
+		"rg 'TODO' internal/",
+		"grep -rn foo src | head -20",
+		"git status",
+		"git log --oneline -10",
+		"git diff HEAD~1",
+		"/usr/bin/git status",
+		"find . -name '*.go' -type f",
+		"sed -n 10,20p main.go",
+		"wc -l main.go | sort",
+		"du -sh .",
+	}
+	for _, cmd := range preserves {
+		if !ExecCommandPreservesRunCache(cmd) {
+			t.Errorf("ExecCommandPreservesRunCache(%q) = false, want true", cmd)
+		}
+	}
+
+	invalidates := []string{
+		"",
+		"rm -rf build",
+		"sed -i 's/a/b/' main.go",
+		"sed --in-place 's/a/b/' main.go",
+		"go generate ./...",
+		"make build",
+		"git checkout main",
+		"git stash",
+		"git pull",
+		"cat a.txt > b.txt",     // redirect
+		"cat a.txt >> b.txt",    // append redirect
+		"ls; rm x",              // command chaining
+		"ls && rm x",            // conditional chaining
+		"ls || rm x",            // empty pipeline stage after split
+		"echo `rm x`",           // command substitution (backtick)
+		"echo $(rm x)",          // command substitution
+		"find . -name x -delete",
+		"find . -name '*.go' -exec rm {} ;",
+		"env FOO=1 make",        // env runs arbitrary sub-commands
+		"xargs rm < list.txt",
+		"cat a | tee b.txt",     // tee not in allowlist
+		"npm install",
+		"curl -X POST https://api.example.com", // external side effects, not allowlisted
+	}
+	for _, cmd := range invalidates {
+		if ExecCommandPreservesRunCache(cmd) {
+			t.Errorf("ExecCommandPreservesRunCache(%q) = true, want false", cmd)
+		}
+	}
+}
