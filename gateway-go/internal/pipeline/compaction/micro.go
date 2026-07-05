@@ -34,6 +34,8 @@ func MicroCompact(messages []llm.Message, turnThreshold int) ([]llm.Message, int
 	// Cutoff: everything before the (turnThreshold)th-to-last assistant msg.
 	cutoff := assistantIdx[len(assistantIdx)-turnThreshold]
 
+	protected := protectedToolResultIDs(messages)
+
 	pruned := 0
 	result := make([]llm.Message, len(messages))
 	copy(result, messages)
@@ -48,6 +50,9 @@ func MicroCompact(messages []llm.Message, turnThreshold int) ([]llm.Message, int
 		for j := range blocks {
 			if blocks[j].Type != "tool_result" || blocks[j].Content == "" {
 				continue
+			}
+			if protected[blocks[j].ToolUseID] {
+				continue // tool schema payload — pruning it forces a re-fetch
 			}
 			stripped := stripCodeFences(blocks[j].Content)
 			if stripped != blocks[j].Content {

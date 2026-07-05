@@ -342,6 +342,8 @@ func TruncateOldToolResults(messages []llm.Message, turnThreshold, minChars int)
 
 	const placeholder = "[older tool output cleared to save context]"
 
+	protected := protectedToolResultIDs(messages)
+
 	stubbed := 0
 	result := make([]llm.Message, len(messages))
 	copy(result, messages)
@@ -355,6 +357,9 @@ func TruncateOldToolResults(messages []llm.Message, turnThreshold, minChars int)
 		for j := range blocks {
 			if blocks[j].Type != "tool_result" {
 				continue
+			}
+			if protected[blocks[j].ToolUseID] {
+				continue // tool schema payload — stubbing it forces a re-fetch
 			}
 			if utf8.RuneCountInString(blocks[j].Content) <= minChars {
 				continue
