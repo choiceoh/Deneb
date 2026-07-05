@@ -6,6 +6,16 @@ Both quality-test.py and reproduce.py import from this module.
 """
 
 import re
+import subprocess
+from pathlib import Path
+
+_DENEB_UI_FENCE = re.compile(r"```\s*deneb-ui\s*\n.*?(?:\n```|\Z)", re.DOTALL | re.IGNORECASE)
+
+
+def strip_deneb_ui_fences(text: str) -> str:
+    """Remove ```deneb-ui blocks — card markup is validated separately
+    (check_deneb_ui_valid) and must not trip prose-level tag/length checks."""
+    return _DENEB_UI_FENCE.sub("", text)
 
 
 def check_korean_response(text: str) -> tuple[bool, str]:
@@ -46,17 +56,47 @@ def check_no_leaked_markup(text: str) -> tuple[bool, str]:
 
 
 def check_telegram_safe(text: str) -> tuple[bool, str]:
-    """Check response is safe for Telegram delivery."""
+    """Check response is safe for output delivery (legacy check name)."""
     issues = []
     if len(text) > 4096:
         issues.append(f"exceeds 4096 char limit ({len(text)} chars)")
-    open_tags = re.findall(r"<(b|i|code|pre|s|u|a|blockquote|tg-spoiler)[\s>]", text)
-    close_tags = re.findall(r"</(b|i|code|pre|s|u|a|blockquote|tg-spoiler)>", text)
+    # Tag balance applies to prose only: deneb-ui cards are labeled HTML with
+    # deliberately lenient closing rules (<code> nodes, sibling auto-close),
+    # validated separately by check_deneb_ui_valid.
+    prose = strip_deneb_ui_fences(text)
+    open_tags = re.findall(r"<(b|i|code|pre|s|u|a|blockquote|tg-spoiler)[\s>]", prose)
+    close_tags = re.findall(r"</(b|i|code|pre|s|u|a|blockquote|tg-spoiler)>", prose)
     if len(open_tags) != len(close_tags):
         issues.append(f"mismatched HTML tags (open={len(open_tags)}, close={len(close_tags)})")
     if issues:
         return False, "; ".join(issues)
     return True, f"length={len(text)} chars"
+
+
+def check_deneb_ui_valid(text: str) -> tuple[bool, str]:
+    """Validate any ```deneb-ui card in the reply against the node schema.
+
+    Delegates to the gateway's denebui-check CLI (single source of truth for
+    the labeled-HTML grammar + legacy JSON). Passes trivially when the reply
+    has no card; skips (passes with a note) when Go is unavailable.
+    """
+    if not re.search(r"```\s*deneb-ui", text, re.IGNORECASE):
+        return True, "no deneb-ui card"
+    gateway_dir = Path(__file__).resolve().parents[2] / "gateway-go"
+    try:
+        proc = subprocess.run(
+            ["go", "run", "./cmd/denebui-check"],
+            input=text, capture_output=True, text=True,
+            cwd=gateway_dir, timeout=120, check=False,
+        )
+    except FileNotFoundError:
+        return True, "~ skipped (go unavailable)"
+    except subprocess.TimeoutExpired:
+        return False, "denebui-check timed out"
+    if proc.returncode == 0:
+        return True, "card valid"
+    detail = (proc.stdout or proc.stderr).strip().splitlines()
+    return False, "; ".join(detail[:3]) if detail else f"exit {proc.returncode}"
 
 
 def check_response_substance(text: str, min_chars: int = 10,
