@@ -198,18 +198,28 @@ oldpid=$(systemctl --user show "$GATEWAY_SERVICE" -p MainPID --value 2>/dev/null
 oldver=$(curl -sf -m 3 "http://127.0.0.1:$PROD_PORT/health" | tr ',' '\n' | grep '"version"' | head -1 | cut -d'"' -f4 || true)
 # Sender-side downgrade gate (the receiver's SIGUSR1 guard is the real wall —
 # this just fails fast with a clear message before touching the process).
+# A candidate that cannot answer --print-version is a pre-guard (stale) build:
+# treat it exactly like a detected downgrade, or a forced rollback would never
+# mint the marker and a non-forced one would only fail after the 45s poll.
 candver=$(./deneb-gateway --print-version 2>/dev/null || true)
-if [ -n "${oldver:-}" ] && [ -n "${candver:-}" ] && [ "$candver" != "$oldver" ]; then
-    lower=$(printf '%s\n%s\n' "$oldver" "$candver" | sort -V | head -1)
-    if [ "$lower" = "$candver" ]; then
-        if [ "${DENEB_DEPLOY_FORCE:-}" = "1" ]; then
-            touch .allow-downgrade
-            echo "    ⚠ FORCED downgrade $oldver → $candver (.allow-downgrade 마커 설정 — 수신측 가드 1회 통과)" >&2
-        else
-            cp -p deneb-gateway.bak-prev deneb-gateway 2>/dev/null || true
-            echo "ERROR: candidate version ($candver) is OLDER than running ($oldver) — stale checkout? 의도적 롤백은 DENEB_DEPLOY_FORCE=1" >&2
-            exit 1
-        fi
+downgrade=""
+if [ -n "${oldver:-}" ]; then
+    if [ -z "${candver:-}" ]; then
+        downgrade="1" # version-less candidate = pre-guard build
+        candver="(no --print-version)"
+    elif [ "$candver" != "$oldver" ]; then
+        lower=$(printf '%s\n%s\n' "$oldver" "$candver" | sort -V | head -1)
+        [ "$lower" = "$candver" ] && downgrade="1"
+    fi
+fi
+if [ -n "$downgrade" ]; then
+    if [ "${DENEB_DEPLOY_FORCE:-}" = "1" ]; then
+        touch .allow-downgrade
+        echo "    ⚠ FORCED downgrade $oldver → $candver (.allow-downgrade 마커 설정 — 수신측 가드 1회 통과)" >&2
+    else
+        cp -p deneb-gateway.bak-prev deneb-gateway 2>/dev/null || true
+        echo "ERROR: candidate version ($candver) is OLDER than running ($oldver) — stale checkout? 의도적 롤백은 DENEB_DEPLOY_FORCE=1" >&2
+        exit 1
     fi
 fi
 echo "    SIGUSR1 → pid $oldpid (cutover, old version ${oldver:-unknown})"
