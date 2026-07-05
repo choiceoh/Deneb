@@ -16,7 +16,7 @@ globs: ["gateway-go/**/*.go"]
 | `scripts/dev/iterate.sh --metric CMD` | 커스텀 metric 커맨드 |
 | `scripts/dev/quality-metric.sh [MSG]` | 네이티브 클라 채팅 품질 점수 0-100 (15~60초) |
 | `scripts/dev/recall-metric.sh` | 회상 품질 점수 0-100 (합성 코퍼스 hit rate, ~1초, LLM 불필요) |
-| `scripts/dev/mail-bench.py trap` | 메일 분석 고정 벤치 — 함정 6통×지표 18 자동 채점 (wormhole 필요, ~3분) |
+| `python3 scripts/dev/mail-bench.py trap --model <현역모델>` | 메일 분석 고정 벤치 — 함정 6통×지표 18 자동 채점 (wormhole 필요, ~3분) |
 | `scripts/dev/wiki-qa-bench.py` | 위키 QA 골드셋 채점 — recall 모드(검색 hit@K, LLM 0원·초 단위)·answer 모드(실턴 정답 포함률, 비용 주의). 골드셋은 레포 밖 호스트 `~/.deneb/wiki-qa-gold.jsonl`(실데이터 포함), 베이스라인 `~/.deneb/wiki-qa-baseline-*.txt` |
 
 ### metric 프리셋 선택 가이드
@@ -28,7 +28,7 @@ globs: ["gateway-go/**/*.go"]
 | 인프라/시작 성능 | `smoke` (0~2) | 빠른 빌드+시작 확인 |
 | 특정 메시지 응답 | `custom "메시지"` | 해당 메시지 품질 직접 측정 |
 | 회상(recall) 경로 | `scripts/dev/recall-metric.sh` | 근거 적중률 직접 측정 (recall_bench_test.go 코퍼스) |
-| 메일 분석 경로 (stage2 프롬프트·analysis 모델·컨텍스트 주입) | `scripts/dev/mail-bench.py trap [--model-b 후보]` | 심은 통찰 18지표 고정 시드 게이트 — 변경 전후 점수 비열화 확인 후 채택. 경계선 결과는 저장된 출력 원문 수작업 대조 필수(자동 채점이 표현 변주를 놓친 전례). 실메일 나란히 비교는 `shadow --uids …` (사람 판독) |
+| 메일 분석 경로 (stage2 프롬프트·analysis 모델·컨텍스트 주입) | `python3 scripts/dev/mail-bench.py trap --model <현역> [--model-b 후보]` (기본 예산=프로덕션 1536) | 심은 통찰 18지표 고정 시드 게이트 — 변경 전후 점수 비열화 확인 후 채택. 경계선 결과는 저장된 출력 원문 수작업 대조 필수(자동 채점이 표현 변주를 놓친 전례). 실메일 나란히 비교는 `shadow --uids …` (사람 판독) |
 | 위키·회상·검색·사실 레이어 개선 | `scripts/dev/wiki-qa-bench.py` (recall 전량 + answer 샘플) | 실 업무 질문 골드셋 전후 비교 — 위키 계층 개선은 이 점수 비열화 확인 후 채택 (2026-07-05 베이스라인: recall 84%) |
 
 ---
