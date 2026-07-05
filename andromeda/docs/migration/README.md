@@ -1,11 +1,14 @@
-# Deneb 측 적용 아티팩트 (ready-to-apply)
+# Deneb 측 적용 아티팩트 — ✅ 전부 적용 완료 (역사 기록)
+
+> **상태: 이관 완료 (2026-07-04, Deneb #3061).** 이 폴더가 기술하는 변경은 전부
+> 적용됐다 — 루트 `.release-please-config.json`/`.release-please-manifest.json`에
+> `andromeda` 패키지, 루트 `.github/workflows/andromeda-ci.yml`, Andromeda 독립
+> config/워크플로 삭제. 아래 본문의 "적용 순서"·"추가한다" 서술은 이관 전 계획의
+> 기록으로만 남긴다. 현행 사실은 `andromeda/CLAUDE.md`가 단일 진실원.
 
 이 폴더는 Andromeda → Deneb 모노레포 이관의 **Deneb 레포 쪽 변경**을 미리 복붙용으로
-정리해 둔 것이다. 계획·근거는 [`../MONOREPO-MIGRATION.md`](../MONOREPO-MIGRATION.md),
+정리해 둔 것이었다. 계획·근거는 [`../MONOREPO-MIGRATION.md`](../MONOREPO-MIGRATION.md),
 이 폴더는 그 §3·§5를 **그대로 적용 가능한 정확한 블록/워크플로**로 구체화한 것.
-
-> 이 파일들은 **Andromeda 레포에서는 아무 동작도 하지 않는다** — 순수 참고 문서다.
-> 실제 적용은 subtree 머지 후 **Deneb 레포 안에서** 한다.
 
 ## 파일
 

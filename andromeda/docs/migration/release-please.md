@@ -1,5 +1,7 @@
 # release-please — Deneb에 andromeda 패키지 추가
 
+> ✅ **적용 완료 (2026-07-04, #3061) — 역사 기록.** 아래 config 블록들은 루트 설정에 이미 들어가 있다 (버전 수치는 작성 시점 스냅샷).
+
 Deneb는 manifest 모드 release-please를 쓴다(`.release-please-config.json` +
 `.release-please-manifest.json`, 루트 패키지 `.`). 여기에 **andromeda를 두 번째 패키지로
 흡수**한다. release-please는 한 워크플로가 모든 패키지의 릴리즈 PR을 관리하므로, 설정에만
