@@ -274,6 +274,7 @@ func executeAgentRun(
 		effortDecision: effortDecision,
 		runStart:       runStart,
 		agentStart:     agentStart,
+		execStats:      execStats,
 	}, logger)
 
 	return &chatRunResult{AgentResult: agentResult, SpawnFlag: spawnFlag, ActualModel: actualModel, FellBack: fellBack}, nil
@@ -294,6 +295,7 @@ type runCompletionRecord struct {
 	effortDecision string
 	runStart       time.Time
 	agentStart     time.Time
+	execStats      *toolctx.ToolExecStats
 }
 
 // recordRunCompletion emits every post-loop success record in one place: the
@@ -306,6 +308,7 @@ func recordRunCompletion(rec runCompletionRecord, logger *slog.Logger) {
 	apiMode, fellBack := rec.apiMode, rec.fellBack
 	effortRt, effortDecision := rec.effortRt, rec.effortDecision
 	runLog, client := rec.runLog, rec.client
+	execStats := rec.execStats
 	agentMs := time.Since(rec.agentStart).Milliseconds()
 	totalMs := time.Since(rec.runStart).Milliseconds()
 	// Surface run-level aggregates so a postmortem gets the shape in one line:
