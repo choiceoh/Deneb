@@ -90,12 +90,6 @@ fun DenebMailScreen(
     onBack: () -> Unit,
     onOpenDetail: (String) -> Unit = {},
     navigationTabBar: (@Composable () -> Unit)? = null,
-    // panelMode = rendered as the left pane of the (retired-product) desktop split-view (fills the parent
-    // 380dp box instead of the 760dp centered column; back affordance hidden since the
-    // pane is always shown). selectedId = the mail currently open in the right detail
-    // pane, for row highlight.
-    panelMode: Boolean = false,
-    selectedId: String? = null,
 ) {
     val mail by client.denebMail.collectAsState()
     val nextToken by client.denebMailNextToken.collectAsState()
@@ -206,10 +200,6 @@ fun DenebMailScreen(
                 }
             }
         },
-        // The (retired-product) desktop split-view always shows this pane, so a back affordance is noise;
-        // fillWidth keeps the column inside the 380dp pane instead of the desktop cap.
-        showBack = !panelMode,
-        fillWidth = panelMode,
     ) {
         if (selecting) {
             Row(
@@ -339,7 +329,6 @@ fun DenebMailScreen(
                                         message = m,
                                         selecting = selecting,
                                         isSelected = m.id in selected,
-                                        isCurrent = panelMode && m.id == selectedId,
                                         today = today,
                                         onTap = {
                                             haptics.tap()
@@ -409,7 +398,6 @@ internal fun MailRow(
     isSelected: Boolean,
     onTap: () -> Unit,
     onLongPress: () -> Unit,
-    isCurrent: Boolean = false,
     today: LocalDate? = null,
 ) {
     Row(
@@ -418,11 +406,7 @@ internal fun MailRow(
             .denebPressable(onClick = onTap, onLongClick = onLongPress)
             .background(
                 when {
-                    // Multi-select (checkbox) wins; else current-open-in-panel highlight; else none.
                     isSelected -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
-
-                    isCurrent -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)
-
                     else -> Color.Transparent
                 },
             )
@@ -441,10 +425,7 @@ internal fun MailRow(
                 Text(
                     senderName(message.from).ifBlank { "(발신자 없음)" },
                     style = if (message.unread) DenebType.rowTitleStrong else DenebType.rowTitle,
-                    // The row open in the split-view detail pane is the active item: its
-                    // title takes the cool interactive accent (just the mark, not the
-                    // whole row — the faint background tint already carries the fill).
-                    color = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground,
+                    color = MaterialTheme.colorScheme.onBackground,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),

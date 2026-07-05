@@ -64,15 +64,6 @@ object DenebType {
         @Composable get() = TextStyle(fontFamily = family).copy(fontSize = 46.sp, lineHeight = 50.sp, fontWeight = FontWeight.Light, letterSpacing = (-0.02).em)
 
     /**
-     * Desktop rail item — the retired desktop sidebar's nav words (20sp / 200 / 34sp;
-     * style kept for the surviving desktop build target). The one
-     * place ExtraLight survives: the labels are short lowercase Latin ("mail", "search"),
-     * so the Hangul-hairline caveat that lifted the display tier to Light does not apply.
-     */
-    val railItem: TextStyle
-        @Composable get() = TextStyle(fontFamily = family).copy(fontSize = 20.sp, lineHeight = 34.sp, fontWeight = FontWeight.ExtraLight)
-
-    /**
      * Hero page title — `.view-title`, the [ai.deneb.ui.DenebScreenScaffold] header. Light,
      * not the old ExtraLight: screens were hand-rolling a heavier ~28px header to dodge the
      * thin giant, so this folds that back into one legible token. (28sp / 300 / -0.018em.)
