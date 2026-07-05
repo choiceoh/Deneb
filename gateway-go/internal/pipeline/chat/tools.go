@@ -268,6 +268,15 @@ func (r *ToolRegistry) ApplyMaxOutputs(budgets map[string]int) {
 // observes completion is the last reliable moment before the agent re-reads.
 // FileCache needs no exec/process handling: its entries are mtime+hash
 // validated on read (agent.FileChanged).
+//
+// Accepted trade-offs (correctness over hit rate): every process call
+// invalidates, including status polls of a still-running job, so a poll loop
+// interleaved with greps earns no cache hits; and a grep issued between a
+// background job's writes and the next process interaction can still be
+// served stale — closing that fully needs a completion hook from the process
+// manager (follow-up). Spawned sub-agents mutating the shared workspace are
+// a separate uncovered writer for the same reason (they invalidate their own
+// run's cache, not the parent's).
 func invalidateCachesAfterTool(ctx context.Context, name string, input json.RawMessage, rc *RunCache) {
 	if IsMutationTool(name) {
 		mutPath := extractFilePath(input)
