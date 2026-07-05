@@ -1,5 +1,14 @@
 # Changelog
 
+## [4.67.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.66.0...deneb-v4.67.0) (2026-07-05)
+
+
+### ✨ Features
+
+* **chat:** in-registry tool audit counters, cache expansion, and dry-run mode ([#3171](https://github.com/choiceoh/Deneb/issues/3171)) ([7cdee69](https://github.com/choiceoh/Deneb/commit/7cdee69edb8006e820ed4f1d0f70c89a59de18cb))
+* **chat:** 신규 도구 5종 — workfeed·transcribe·ocr·market·org + sessions stats ([#3178](https://github.com/choiceoh/Deneb/issues/3178)) ([0096a55](https://github.com/choiceoh/Deneb/commit/0096a557a8af119c2e5791f8848cc07455b5b462))
+* **chat:** 업스트림 유용 기법 2종 — 자동 스티어 + wormhole /v1/usage (+ main -race 수리) ([#3181](https://github.com/choiceoh/Deneb/issues/3181)) ([2bd33db](https://github.com/choiceoh/Deneb/commit/2bd33db4a08205eb2cf11d52acf8f7cba97fb077))
+
 ## [4.66.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.65.2...deneb-v4.66.0) (2026-07-05)
 
 
