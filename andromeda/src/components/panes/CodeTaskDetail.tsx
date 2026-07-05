@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { type CodeVerifyResult, type GatewayConfig, codeClose, codePr, codeVerify } from "@/gateway";
-import { codeStatusColor, codeStatusLabel } from "@/codeStatus";
+import { codeDirtyLabel, codeStatusColor, codeStatusLabel } from "@/codeStatus";
 import { errText, fmtMailDate } from "@/format";
 import type { CodeSession } from "@/types";
 import { useWorkspace } from "@/workspaceContext";
@@ -73,6 +73,7 @@ export function CodeTaskDetail({
 
   const checkpoints = session.checkpoints ?? [];
   const repoLabel = `${session.repo?.owner ?? "?"}/${session.repo?.name ?? "?"}`;
+  const dirtyLabel = codeDirtyLabel(session);
   const unknownKind = result !== null && (result.kind === "unknown" || !result.steps?.length);
 
   return (
@@ -94,6 +95,7 @@ export function CodeTaskDetail({
       <p style={{ margin: "4px 0 14px", fontSize: 12.5, color: "var(--muted)" }}>
         {codeStatusLabel(session.status)} · {repoLabel}
         {session.branch ? ` · ${session.branch}` : ""}
+        {dirtyLabel ? ` · ${dirtyLabel}` : ""}
       </p>
 
       {prUrl && (

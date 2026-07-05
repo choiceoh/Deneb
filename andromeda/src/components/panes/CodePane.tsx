@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import { codeSessions } from "@/gateway";
 import { projectList } from "@/aiText";
+import { codeDirtyLabel } from "@/codeStatus";
 import { errText } from "@/format";
 import type { CodeSession } from "@/types";
 import { useRegisterPane, useWorkspace } from "@/workspaceContext";
@@ -23,12 +24,10 @@ export function CodePane() {
   const [sessions, setSessions] = useState<CodeSession[]>([]);
   const [status, setStatus] = useState("");
 
-  const aiText = projectList(
-    `[코딩 세션 — ${sessions.length}개]`,
-    sessions,
-    (s) =>
-      `- ${s.title || s.id} (${s.repo?.owner ?? "?"}/${s.repo?.name ?? "?"}) — ${STATUS_LABEL[s.status ?? ""] ?? s.status ?? ""}`,
-  );
+  const aiText = projectList(`[코딩 세션 — ${sessions.length}개]`, sessions, (s) => {
+    const dirty = codeDirtyLabel(s);
+    return `- ${s.title || s.id} (${s.repo?.owner ?? "?"}/${s.repo?.name ?? "?"}) — ${STATUS_LABEL[s.status ?? ""] ?? s.status ?? ""}${dirty ? ` · ${dirty}` : ""}`;
+  });
   useRegisterPane("code", aiText);
 
   // Reload on connect or whenever the session set changes (new task from the modal,

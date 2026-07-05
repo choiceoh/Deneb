@@ -218,6 +218,8 @@ export interface CodeSession {
   checkpoints?: CodeCheckpoint[];
   createdAt?: string;
   updatedAt?: string;
+  dirty?: boolean; // live worktree has uncheckpointed edits
+  changedFiles?: number;
 }
 
 // Every navigable pane. Resource-backed panes share their key with a Refine

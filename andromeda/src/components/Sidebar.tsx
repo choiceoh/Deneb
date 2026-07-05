@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { codeSessions } from "@/gateway";
-import { codeStatusColor, codeStatusGlance } from "@/codeStatus";
+import { codeDirtyLabel, codeStatusColor, codeStatusGlance } from "@/codeStatus";
 import type { CodeSession } from "@/types";
 import { useWorkspace } from "@/workspaceContext";
 import { Icon } from "./Icon";
@@ -80,31 +80,34 @@ export function Sidebar() {
             </span>
             <span style={labelStyle}>새 작업</span>
           </button>
-          {sessions.map((s, i) => (
-            <button
-              key={s.id}
-              className="nav-item fade-up"
-              style={{ animationDelay: `${i * 26}ms` }}
-              onClick={() => {
-                // Open this session's chat on the right + show the work area. Now
-                // chatting drives this worktree's turns (edit → verify → checkpoint).
-                openCodeChat(s.chatSessionKey || "code:" + s.id);
-                setView("code");
-              }}
-              title={`${s.title || s.id} · ${codeStatusGlance(s.status)} — 대화 열기`}
-            >
-              <span className="ico code-ico">
-                <Icon name="code" />
-                <span
-                  className="code-dot"
-                  style={{ background: codeStatusColor(s.status) }}
-                  role="img"
-                  aria-label={codeStatusGlance(s.status)}
-                />
-              </span>
-              <span style={labelStyle}>{s.title || s.id}</span>
-            </button>
-          ))}
+          {sessions.map((s, i) => {
+            const dirty = codeDirtyLabel(s);
+            return (
+              <button
+                key={s.id}
+                className="nav-item fade-up"
+                style={{ animationDelay: `${i * 26}ms` }}
+                onClick={() => {
+                  // Open this session's chat on the right + show the work area. Now
+                  // chatting drives this worktree's turns (edit → verify → checkpoint).
+                  openCodeChat(s.chatSessionKey || "code:" + s.id);
+                  setView("code");
+                }}
+                title={`${s.title || s.id} · ${codeStatusGlance(s.status)}${dirty ? ` · ${dirty}` : ""} — 대화 열기`}
+              >
+                <span className="ico code-ico">
+                  <Icon name="code" />
+                  <span
+                    className="code-dot"
+                    style={{ background: codeStatusColor(s.status) }}
+                    role="img"
+                    aria-label={codeStatusGlance(s.status)}
+                  />
+                </span>
+                <span style={labelStyle}>{s.title || s.id}</span>
+              </button>
+            );
+          })}
           {sessions.length === 0 && (
             <div style={{ padding: "8px 10px", opacity: 0.5, fontSize: 12 }}>
               {connected ? "세션 없음" : "연결 안 됨"}

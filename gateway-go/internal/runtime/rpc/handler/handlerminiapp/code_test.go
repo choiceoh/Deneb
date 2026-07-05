@@ -5,9 +5,14 @@ import (
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/code"
+	"github.com/choiceoh/deneb/gateway-go/internal/infra/clientauth"
+	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
-type fakeWorktrees struct{}
+type fakeWorktrees struct {
+	status    code.WorktreeStatus
+	statusErr error
+}
 
 func (fakeWorktrees) StartTask(_ context.Context, r code.Repo, id string) (code.Task, error) {
 	return code.Task{ID: id, Repo: r, Branch: "deneb/" + id, Dir: "/wt/" + id}, nil
@@ -15,6 +20,9 @@ func (fakeWorktrees) StartTask(_ context.Context, r code.Repo, id string) (code.
 
 func (fakeWorktrees) ListRepos(context.Context) ([]code.Repo, error) {
 	return []code.Repo{{Owner: "acme", Name: "app"}}, nil
+}
+func (f fakeWorktrees) WorktreeStatus(context.Context, code.Task) (code.WorktreeStatus, error) {
+	return f.status, f.statusErr
 }
 func (fakeWorktrees) Discard(context.Context, code.Task) error { return nil }
 func (fakeWorktrees) Verify(context.Context, string) (code.VerifyResult, error) {
@@ -38,6 +46,35 @@ func (fakeSessions) Delete(string) error                         { return nil }
 func (fakeSessions) SetStatus(string, string) error              { return nil }
 func (fakeSessions) AddCheckpoint(string, code.Checkpoint) error { return nil }
 func (fakeSessions) PopCheckpoint(string) error                  { return nil }
+
+type fakeSessionsWith struct {
+	fakeSessions
+	sess code.Session
+	list []code.Session
+}
+
+func (f fakeSessionsWith) Get(id string) (code.Session, bool) {
+	if f.sess.ID == id {
+		return f.sess, true
+	}
+	return code.Session{}, false
+}
+
+func (f fakeSessionsWith) List() []code.Session {
+	if f.list != nil {
+		return f.list
+	}
+	return []code.Session{f.sess}
+}
+
+func codeReq(t *testing.T, method string, params any) *protocol.RequestFrame {
+	t.Helper()
+	req, err := protocol.NewRequestFrame("test-1", method, params)
+	if err != nil {
+		t.Fatalf("NewRequestFrame: %v", err)
+	}
+	return req
+}
 
 func TestCodeMethods_NilDepsSkips(t *testing.T) {
 	if CodeMethods(CodeDeps{}) != nil {
@@ -84,6 +121,67 @@ func TestActiveSessions_DropsClosed(t *testing.T) {
 		if s.Status == code.StatusClosed {
 			t.Errorf("closed session %q leaked into the active rail list", s.ID)
 		}
+	}
+}
+
+func TestCodeStatus_IncludesWorktreeDirtyState(t *testing.T) {
+	sess := code.Session{
+		ID:     "t",
+		Repo:   code.Repo{Owner: "acme", Name: "app"},
+		Status: code.StatusWorking,
+		Branch: "deneb/t",
+		Dir:    "/wt/t",
+	}
+	h := codeStatus(CodeDeps{
+		Worktrees: fakeWorktrees{status: code.WorktreeStatus{Dirty: true, ChangedFiles: 2}},
+		Sessions:  fakeSessionsWith{sess: sess},
+	})
+
+	resp := h(
+		clientauth.WithContext(context.Background(), sampleIdentity()),
+		codeReq(t, "miniapp.code.status", map[string]string{"id": "t"}),
+	)
+	got := decodePayload(t, resp)
+	session, ok := got["session"].(map[string]any)
+	if !ok {
+		t.Fatalf("session payload missing or wrong type: %#v", got["session"])
+	}
+	if session["dirty"] != true {
+		t.Errorf("dirty = %v, want true", session["dirty"])
+	}
+	if session["changedFiles"] != float64(2) {
+		t.Errorf("changedFiles = %v, want 2", session["changedFiles"])
+	}
+}
+
+func TestCodeSessions_OmitsDirtyStateWhenWorktreeMissing(t *testing.T) {
+	sess := code.Session{
+		ID:     "t",
+		Repo:   code.Repo{Owner: "acme", Name: "app"},
+		Status: code.StatusMissing,
+		Branch: "deneb/t",
+		Dir:    "/wt/t",
+	}
+	h := codeSessions(CodeDeps{
+		Worktrees: fakeWorktrees{status: code.WorktreeStatus{Dirty: true, ChangedFiles: 2}},
+		Sessions:  fakeSessionsWith{sess: sess},
+	})
+
+	resp := h(clientauth.WithContext(context.Background(), sampleIdentity()), newReq(t, "miniapp.code.sessions"))
+	got := decodePayload(t, resp)
+	sessions, ok := got["sessions"].([]any)
+	if !ok || len(sessions) != 1 {
+		t.Fatalf("sessions payload = %#v, want one session", got["sessions"])
+	}
+	session, ok := sessions[0].(map[string]any)
+	if !ok {
+		t.Fatalf("session row wrong type: %#v", sessions[0])
+	}
+	if _, ok := session["dirty"]; ok {
+		t.Errorf("dirty key present for missing worktree: %#v", session)
+	}
+	if _, ok := session["changedFiles"]; ok {
+		t.Errorf("changedFiles key present for missing worktree: %#v", session)
 	}
 }
 
