@@ -120,7 +120,7 @@ func TestBuildRecallPreflight_FilesSourceEndToEnd(t *testing.T) {
 	// Topical question → file surfaces.
 	out, _ := buildRecallPreflight(context.Background(),
 		RunParams{SessionKey: "client:main", Message: "개발행위허가 신청서 핵심 알려줘"},
-		runDeps{fileRecallFn: search}, nil)
+		runDeps{memory: MemoryDeps{FileRecall: search}}, nil)
 	if !strings.Contains(out, "source=file") {
 		t.Fatalf("topical question should surface a file recall row, got:\n%s", out)
 	}
@@ -132,7 +132,7 @@ func TestBuildRecallPreflight_FilesSourceEndToEnd(t *testing.T) {
 	// the whole preflight returns empty so nothing pollutes the tail).
 	weather, _ := buildRecallPreflight(context.Background(),
 		RunParams{SessionKey: "client:main", Message: "오늘 날씨 어때"},
-		runDeps{fileRecallFn: search}, nil)
+		runDeps{memory: MemoryDeps{FileRecall: search}}, nil)
 	if strings.Contains(weather, "source=file") {
 		t.Fatalf("off-topic question must not inject any file, got:\n%s", weather)
 	}

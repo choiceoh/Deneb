@@ -230,7 +230,7 @@ func runRecallBench(t *testing.T, verbose bool) (int, int) {
 		out, _ := buildRecallPreflight(
 			context.Background(),
 			RunParams{SessionKey: "client:main", Message: c.question},
-			runDeps{wikiStore: store},
+			runDeps{memory: MemoryDeps{Wiki: store}},
 			nil,
 		)
 		ok := true
@@ -283,7 +283,7 @@ func TestRecallSourceAttribution(t *testing.T) {
 		out, _ := buildRecallPreflight(
 			context.Background(),
 			RunParams{SessionKey: "client:main", Message: c.question},
-			runDeps{wikiStore: store},
+			runDeps{memory: MemoryDeps{Wiki: store}},
 			nil,
 		)
 		for _, src := range []string{"wiki", "diary", "polaris", "transcript"} {
@@ -364,7 +364,7 @@ func TestRecallHardSet(t *testing.T) {
 	for _, c := range cases {
 		out, _ := buildRecallPreflight(context.Background(),
 			RunParams{SessionKey: "client:main", Message: c.question},
-			runDeps{wikiStore: store}, nil)
+			runDeps{memory: MemoryDeps{Wiki: store}}, nil)
 		if strings.TrimSpace(out) != "" {
 			produced++
 		}
@@ -410,7 +410,7 @@ func TestRecallFactRevisionSupersession(t *testing.T) {
 	recall := func(msg string) string {
 		out, _ := buildRecallPreflight(context.Background(),
 			RunParams{SessionKey: "client:main", Message: msg},
-			runDeps{wikiStore: store}, nil)
+			runDeps{memory: MemoryDeps{Wiki: store}}, nil)
 		return out
 	}
 

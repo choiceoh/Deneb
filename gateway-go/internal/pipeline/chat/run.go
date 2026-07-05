@@ -13,11 +13,8 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/provider"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/notebook"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/streaming"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
-	compact "github.com/choiceoh/deneb/gateway-go/internal/pipeline/compaction"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 )
 
@@ -165,9 +162,8 @@ type runDeps struct {
 	providerConfigs      map[string]ProviderConfig    // optional; config-based provider credentials
 	logger               *slog.Logger                 // required (defaults to slog.Default)
 
-	embeddingClient      compact.Embedder          // optional; BGE-M3 for MMR compaction fallback
-	wikiStore            *wiki.Store               // optional; wiki knowledge base
-	notebookStore        *notebook.Store           // optional; notebook session-grounding source store
+	// memory groups the memory/knowledge backends. See MemoryDeps.
+	memory               MemoryDeps
 	dreamTurnFn          func(ctx context.Context) // optional; increments dream turn via autonomous
 	agentLog             *agentlog.Writer          // optional; enables agent detail logging
 	registry             *modelrole.Registry       // centralized model role registry
@@ -192,14 +188,8 @@ type runDeps struct {
 	// nil disables the mid-run steer feature.
 	steerQueue *SteerQueue
 
-	// skillNudger fires mid-session skill reviews every N tool calls.
-	// nil disables iteration-based nudging (session-end genesis still runs).
-	skillNudger SkillNudger
-
-	// skillUsageRecorder records, per turn, which skills were consulted and
-	// whether the turn succeeded — feeds the genesis Evolver's success-rate
-	// gate. nil disables usage attribution.
-	skillUsageRecorder SkillUsageRecorder
+	// skills groups the Propus/genesis skill-loop hooks. See SkillDeps.
+	skills SkillDeps
 
 	// callbacks is an atomic snapshot of channel callbacks taken at run start.
 	// Contains reply, media, typing, reaction, draft, emit, shutdown, and model fields.
@@ -209,13 +199,6 @@ type runDeps struct {
 	// package stays free of the prompts/server import by talking through
 	// these closures (wired in server/chat_pipeline.go). See AmbientDeps.
 	ambient AmbientDeps
-
-	// fileRecallFn runs a hybrid semantic search over the on-box file store for
-	// the recall preflight, surfacing relevant uploaded files as recall evidence
-	// (injected into the last user message tail, like the other recall sources).
-	// nil disables the files recall source. Wired in server/chat_pipeline.go from
-	// the shared file semantic index.
-	fileRecallFn FileRecallFunc
 
 	// coding groups the 코드모드 session hooks. See CodingDeps.
 	coding CodingDeps

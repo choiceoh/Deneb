@@ -259,7 +259,7 @@ func TestRecallSemanticLeak_NoOffTopicInjection(t *testing.T) {
 	out, _ := buildRecallPreflight(
 		context.Background(),
 		RunParams{SessionKey: "client:main", Message: query},
-		runDeps{wikiStore: store},
+		runDeps{memory: MemoryDeps{Wiki: store}},
 		nil,
 	)
 	t.Logf("--- buildRecallPreflight output ---\n%s", out)

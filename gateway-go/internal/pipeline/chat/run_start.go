@@ -149,9 +149,7 @@ func (h *Handler) buildRunDeps() runDeps {
 		channelUploadLimitFn: h.ChannelUploadLimit,
 		providerConfigs:      h.ProviderConfigs(),
 		logger:               h.logger,
-		embeddingClient:      h.embeddingClient,
-		wikiStore:            h.wikiStore,
-		notebookStore:        h.notebookStore,
+		memory:               h.memory,
 		dreamTurnFn:          h.dreamTurnFn,
 		agentLog:             h.agentLog,
 		registry:             h.registry,
@@ -163,12 +161,10 @@ func (h *Handler) buildRunDeps() runDeps {
 		startRunFn: func(params RunParams) {
 			h.startAsyncRun("pending-"+params.ClientRunID, params, false)
 		},
-		steerQueue:         h.steer,
-		skillNudger:        h.skillNudger,
-		skillUsageRecorder: h.skillUsageRecorder,
-		ambient:            h.ambient,
-		fileRecallFn:       h.fileRecallFn,
-		coding:             h.coding,
+		steerQueue: h.steer,
+		skills:     h.skills,
+		ambient:    h.ambient,
+		coding:     h.coding,
 
 		// Atomic snapshot of channel callbacks (reply, media, typing, etc.).
 		callbacks: h.Snapshot(),

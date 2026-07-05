@@ -69,7 +69,7 @@ func (s *Server) initMemorySubsystem(chatCfg *chat.HandlerConfig, regPtr **model
 			s.logger.Warn("wiki store unavailable", "error", err)
 		} else {
 			s.wikiStore = wikiStore
-			chatCfg.WikiStore = wikiStore
+			chatCfg.Memory.Wiki = wikiStore
 			s.logger.Info("wiki knowledge base enabled", "dir", wikiCfg.Dir)
 
 			// Wiki dreamer.
@@ -146,7 +146,7 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 	// the run pipeline can build the session-grounding tail block for a bound
 	// session. NewHandler (server_rpc_session.go) is built after this from the
 	// same chatCfg, so setting it here is captured.
-	chatCfg.NotebookStore = notebookStore
+	chatCfg.Memory.Notebook = notebookStore
 
 	s.toolDeps = &chat.CoreToolDeps{
 		WorkspaceDir:      workspaceDir,
@@ -173,7 +173,7 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 			RunLog:  s.cronRunLog,
 		},
 		Wiki: chat.WikiDeps{
-			Store: chatCfg.WikiStore,
+			Store: chatCfg.Memory.Wiki,
 			// Same address book the contacts tool uses; lets a wiki write
 			// auto-record a referenced person's contact details.
 			Contacts: s.contactsStore,
@@ -182,14 +182,14 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 			Store: notebookStore,
 			// Pinned wiki-page sources are read live from the same store at
 			// brief time, so a notebook briefing reflects the current page.
-			Wiki: chatCfg.WikiStore,
+			Wiki: chatCfg.Memory.Wiki,
 			// External source ingesters (url/mail/diary) — snapshot to text at
 			// add time (notebook_sources.go). file (PDF/image OCR, text) is
 			// handled in-package by the tool and needs no reader here.
 			FetchURL: notebookFetchURL,
 			ReadMail: notebookReadMail,
 			ReadDiary: func(ctx context.Context, ref string) (string, error) {
-				return notebookReadDiary(chatCfg.WikiStore, ref)
+				return notebookReadDiary(chatCfg.Memory.Wiki, ref)
 			},
 		},
 		Contacts: chat.ContactsDeps{
@@ -277,7 +277,7 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 	// files source contributes nothing (graceful, recall unaffected). Set on the
 	// config here (after initFileSemanticIndex) so NewHandler captures it.
 	if filesAdapter != nil {
-		chatCfg.FileRecallFn = s.fileRecallForPreflight
+		chatCfg.Memory.FileRecall = s.fileRecallForPreflight
 	}
 
 	// Coding mode: after a coding-session turn, checkpoint the worktree edits and

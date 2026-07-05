@@ -191,8 +191,8 @@ func executeAgentRun(
 		SubagentNotifyCh:   deps.subagentNotifyCh,
 		EmitAgentFn:        deps.callbacks.emitAgentFn,
 		Transcript:         deps.transcript,
-		SkillNudger:        deps.skillNudger,
-		SkillUsageRecorder: deps.skillUsageRecorder,
+		SkillNudger:        deps.skills.Nudger,
+		SkillUsageRecorder: deps.skills.UsageRecorder,
 	}
 	// execStats threads into recordRunCompletion (LogEnd's RepairedToolCalls) —
 	// #3117 introduced it while #3121 moved LogEnd into the completion sink.
@@ -482,7 +482,7 @@ func applyTailAdditions(params RunParams, deps runDeps, prep prepResult, session
 	if nbID, updated, ok := activeGroundingNotebook(deps, params.SessionKey); ok {
 		if g, hit := cachedNotebookGrounding(params.SessionKey, nbID, updated); hit {
 			notebookGrounding = g
-		} else if g, gok := tools.BuildNotebookGrounding(&toolctx.NotebookDeps{Store: deps.notebookStore, Wiki: deps.wikiStore}, nbID); gok {
+		} else if g, gok := tools.BuildNotebookGrounding(&toolctx.NotebookDeps{Store: deps.memory.Notebook, Wiki: deps.memory.Wiki}, nbID); gok {
 			notebookGrounding = g
 			storeNotebookGrounding(params.SessionKey, nbID, updated, g)
 		}
@@ -568,14 +568,14 @@ func emitPhase(deps runDeps, params RunParams, phase string, at time.Time) {
 // neither. The Updated stamp is the grounding cache's content version: any
 // pin/unpin/mode change bumps it (notebook.Store), invalidating the snapshot.
 func activeGroundingNotebook(deps runDeps, sessionKey string) (id string, updated int64, ok bool) {
-	if deps.notebookStore == nil {
+	if deps.memory.Notebook == nil {
 		return "", 0, false
 	}
 	id = toolctx.ActiveNotebook(sessionKey)
 	if id == "" {
 		return "", 0, false
 	}
-	nb, found := deps.notebookStore.Get(id)
+	nb, found := deps.memory.Notebook.Get(id)
 	if !found || len(nb.Sources) == 0 {
 		return "", 0, false
 	}

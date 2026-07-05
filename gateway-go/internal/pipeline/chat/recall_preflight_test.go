@@ -161,7 +161,7 @@ func TestBuildRecallPreflightInjectsWikiEvidence(t *testing.T) {
 	out, truncated := buildRecallPreflight(
 		context.Background(),
 		RunParams{SessionKey: "telegram:1", Message: "전에 Deneb 회상 개선 얘기했던 거 계속해줘"},
-		runDeps{wikiStore: store},
+		runDeps{memory: MemoryDeps{Wiki: store}},
 		nil,
 	)
 	if truncated {
@@ -244,7 +244,7 @@ func TestBuildRecallPreflightUsesRecentDiaryForTopiclessRecall(t *testing.T) {
 	out, _ := buildRecallPreflight(
 		context.Background(),
 		RunParams{SessionKey: "telegram:1", Message: "아까 뭐였지?"},
-		runDeps{wikiStore: store},
+		runDeps{memory: MemoryDeps{Wiki: store}},
 		nil,
 	)
 	if !strings.Contains(out, "diary-") || !strings.Contains(out, "preflight") {
@@ -399,7 +399,7 @@ func TestBuildRecallPreflightFlagsDeadlineTruncation(t *testing.T) {
 	out, truncated := buildRecallPreflight(
 		ctx,
 		RunParams{SessionKey: "client:main", Message: "전에 Deneb 회상 개선 얘기했던 거 계속해줘"},
-		runDeps{wikiStore: store, transcript: slowTranscriptStore{delay: 300 * time.Millisecond}},
+		runDeps{memory: MemoryDeps{Wiki: store}, transcript: slowTranscriptStore{delay: 300 * time.Millisecond}},
 		nil,
 	)
 	if !truncated {
@@ -425,7 +425,7 @@ func TestBuildRecallPreflightSurvivesPanickingSource(t *testing.T) {
 	out, _ := buildRecallPreflight(
 		context.Background(),
 		RunParams{SessionKey: "client:main", Message: "전에 Deneb 회상 개선 얘기했던 거 계속해줘"},
-		runDeps{wikiStore: store, transcript: panickyTranscriptStore{}},
+		runDeps{memory: MemoryDeps{Wiki: store}, transcript: panickyTranscriptStore{}},
 		nil,
 	)
 	if !strings.Contains(out, "프로젝트/deneb-recall.md") {

@@ -82,7 +82,7 @@ func TestRecallBM25Leak_CommonNounExcluded(t *testing.T) {
 			// Floor ON (default): no wiki rows leak.
 			out, _ := buildRecallPreflight(context.Background(),
 				RunParams{SessionKey: "client:main", Message: msg},
-				runDeps{wikiStore: store}, nil)
+				runDeps{memory: MemoryDeps{Wiki: store}}, nil)
 			if strings.Contains(out, "source=wiki") {
 				var rows []string
 				for _, ln := range strings.Split(out, "\n") {
@@ -97,7 +97,7 @@ func TestRecallBM25Leak_CommonNounExcluded(t *testing.T) {
 			t.Setenv("DENEB_WIKI_BM25_RARITY_FLOOR", "0.0001")
 			leakOut, _ := buildRecallPreflight(context.Background(),
 				RunParams{SessionKey: "client:main", Message: msg},
-				runDeps{wikiStore: store}, nil)
+				runDeps{memory: MemoryDeps{Wiki: store}}, nil)
 			if !strings.Contains(leakOut, "source=wiki") {
 				t.Errorf("with the floor disabled %q must leak wiki rows (proves the gate, not the corpus, excludes them)", msg)
 			} else {
@@ -117,7 +117,7 @@ func TestRecallBM25Leak_RareNounSurvives(t *testing.T) {
 	const msg = "전에 마바솔라 건 어떻게 됐지?"
 	out, _ := buildRecallPreflight(context.Background(),
 		RunParams{SessionKey: "client:main", Message: msg},
-		runDeps{wikiStore: store}, nil)
+		runDeps{memory: MemoryDeps{Wiki: store}}, nil)
 	if !strings.Contains(out, "거래/mabasolar.md") {
 		t.Errorf("over-block: legitimate rare-noun recall %q dropped its page:\n%s", msg, out)
 	}

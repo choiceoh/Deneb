@@ -563,7 +563,7 @@ type CodingTurnEndFunc func(ctx context.Context, sessionKey, fallbackSummary, re
 // native client became the sole surface (PR #1922), leaving the diary fed
 // only by mail polling/captures and dreaming fired only by the 30-min timer.
 func maybeRecordRunDiary(deps runDeps, params RunParams, result *agent.AgentResult, logger *slog.Logger) {
-	if deps.wikiStore == nil || result == nil || !shouldRecordRunDiary(params) {
+	if deps.memory.Wiki == nil || result == nil || !shouldRecordRunDiary(params) {
 		return
 	}
 	toolNames := make([]string, 0, len(result.ToolActivities))
@@ -598,7 +598,7 @@ func maybeRecordRunDiary(deps runDeps, params RunParams, result *agent.AgentResu
 		bgCtx = context.Background()
 	}
 	safego.GoWithSlog(logger, "run-diary", func() {
-		recorded := recordDiary(deps.wikiStore, logger, params.Message, toolNames, assistantText, result.StopReason, result.Turns)
+		recorded := recordDiary(deps.memory.Wiki, logger, params.Message, toolNames, assistantText, result.StopReason, result.Turns)
 		if recorded && shouldIncrementDream {
 			dreamTurnFn(bgCtx)
 		}
