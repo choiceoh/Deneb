@@ -54,13 +54,13 @@ const RPC: Record<string, (p: Record<string, any>) => unknown> = {
   "miniapp.todo.set_done": (p) => ({ id: p.id, done: p.done }),
   "miniapp.todo.delete": (p) => ({ id: p.id }),
 
-  "miniapp.gmail.list_recent": () => ({ messages: fx.mail, nextPageToken: "" }),
-  "miniapp.gmail.get": (p) => fx.mail.find((m) => String(m.id) === String(p.id)) ?? null,
-  "miniapp.gmail.mark_read": () => ({ ok: true }),
-  "miniapp.gmail.archive": () => ({ ok: true }),
-  "miniapp.gmail.trash": (p) => ({ id: p.id, ok: true }),
+  "miniapp.mail.list_recent": () => ({ messages: fx.mail, nextPageToken: "" }),
+  "miniapp.mail.get": (p) => fx.mail.find((m) => String(m.id) === String(p.id)) ?? null,
+  "miniapp.mail.mark_read": () => ({ ok: true }),
+  "miniapp.mail.archive": () => ({ ok: true }),
+  "miniapp.mail.trash": (p) => ({ id: p.id, ok: true }),
   // Mail enrichment: a cached analysis for m1 (miss otherwise), sender context, Q&A.
-  "miniapp.gmail.analysis_cached": (p) =>
+  "miniapp.mail.analysis_cached": (p) =>
     String(p.id) === "m1"
       ? {
           id: "m1",
@@ -74,20 +74,20 @@ const RPC: Record<string, (p: Record<string, any>) => unknown> = {
           todoCount: 1,
         }
       : { id: p.id, analysis: "", cached: false },
-  "miniapp.gmail.analyze": (p) => ({
+  "miniapp.mail.analyze": (p) => ({
     id: p.id,
     analysis: "**핵심**: 새로 분석한 결과입니다.",
     cached: false,
     analysisQuality: "보통",
   }),
-  "miniapp.gmail.sender_context": (p) => ({
+  "miniapp.mail.sender_context": (p) => ({
     sender: p.sender,
     email: "lead@corp.example",
     displayName: "김리드",
     recent: { count: 12, lastReceivedAt: "2026-06-17T09:12:00Z", windowDays: 30 },
     wikiHits: [{ path: "인물/김리드", title: "김리드", summary: "기획팀 팀장" }],
   }),
-  "miniapp.gmail.ask": (p) => ({ answer: `"${p.question}" — 회의 전 초안 자료 공유가 핵심 요청입니다.` }),
+  "miniapp.mail.ask": (p) => ({ answer: `"${p.question}" — 회의 전 초안 자료 공유가 핵심 요청입니다.` }),
 
   "miniapp.calendar.list_upcoming": () => ({ events: fx.events }),
   "miniapp.calendar.list_range": (p) => ({ events: fx.eventsInRange(String(p.from ?? ""), String(p.to ?? "")) }),

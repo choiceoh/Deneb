@@ -71,7 +71,7 @@ import kotlinx.datetime.todayIn
 import kotlin.time.Clock
 
 /**
- * Native mail triage backed by `miniapp.gmail.list_recent`, in the Deneb idiom:
+ * Native mail triage backed by `miniapp.mail.list_recent`, in the Deneb idiom:
  * ultralight view title, full-width hairline rules between rows, DenebType roles,
  * and time-bucketed section labels (오늘 / 어제 / 이번 주 / 이전). Pull to refresh;
  * long-press a row (with haptic) to multi-select; a flat bottom bar runs bulk
@@ -113,7 +113,7 @@ fun DenebMailScreen(
 
     LaunchedEffect(Unit) {
         // refreshMail() already refreshes native_status on success, so calling it
-        // here too would fetch miniapp.gmail.native_status twice on every open. Only
+        // here too would fetch miniapp.mail.native_status twice on every open. Only
         // fetch it standalone when the list fails, so the status line (offline /
         // local-archive state) still shows when the live fetch can't.
         loadOk = client.refreshMail()

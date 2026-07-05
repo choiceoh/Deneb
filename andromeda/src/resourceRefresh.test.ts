@@ -14,7 +14,7 @@ describe("resource refresh mapping", () => {
     expect(
       new Set(
         relatedResourcesForTools(
-          ["miniapp.gmail.trash", "miniapp.calendar.create", "miniapp.memory.write_page"],
+          ["miniapp.mail.trash", "miniapp.calendar.create", "miniapp.memory.write_page"],
           "todo",
         ),
       ),

@@ -11,7 +11,7 @@ describe("clearCachedResource", () => {
     localStorage.setItem(cachedListStorageKey("mail"), "list");
     localStorage.setItem(cachedOneStorageKey("mail", "m1"), "one");
     localStorage.setItem(cachedListStorageKey("calendar-range.2026-06"), "range");
-    localStorage.setItem(cachedRpcStorageKey("mail", rpcCacheKey("miniapp.gmail.get", { id: "m1" })), "rpc");
+    localStorage.setItem(cachedRpcStorageKey("mail", rpcCacheKey("miniapp.mail.get", { id: "m1" })), "rpc");
     localStorage.setItem(cachedListStorageKey("mailbox"), "keep");
 
     clearCachedResource("mail");
@@ -20,9 +20,7 @@ describe("clearCachedResource", () => {
     expect(localStorage.getItem(cachedListStorageKey("mail"))).toBeNull();
     expect(localStorage.getItem(cachedOneStorageKey("mail", "m1"))).toBeNull();
     expect(localStorage.getItem(cachedListStorageKey("calendar-range.2026-06"))).toBeNull();
-    expect(
-      localStorage.getItem(cachedRpcStorageKey("mail", rpcCacheKey("miniapp.gmail.get", { id: "m1" }))),
-    ).toBeNull();
+    expect(localStorage.getItem(cachedRpcStorageKey("mail", rpcCacheKey("miniapp.mail.get", { id: "m1" })))).toBeNull();
     expect(localStorage.getItem(cachedListStorageKey("mailbox"))).toBe("keep");
   });
 });

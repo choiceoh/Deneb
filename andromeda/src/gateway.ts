@@ -340,7 +340,7 @@ export const acceptCalendarProposal = (cfg: GatewayConfig, id: string) =>
 export const rejectCalendarProposal = (cfg: GatewayConfig, id: string) =>
   callRpc<{ ok?: boolean; proposal?: CalendarProposal }>(cfg, "miniapp.calendar.proposals.reject", { id });
 
-// --- Mail enrichment (miniapp.gmail.analyze / analysis_cached / sender_context / ask) ---
+// --- Mail enrichment (miniapp.mail.analyze / analysis_cached / sender_context / ask) ---
 
 // A related project wiki page surfaced by mail analysis. Mirrors gmail_analyze.go ProjectRef.
 export interface ProjectRef {
@@ -363,10 +363,10 @@ export interface MailAnalysis {
 }
 
 export const cachedMailAnalysis = (cfg: GatewayConfig, id: string) =>
-  callRpc<MailAnalysis>(cfg, "miniapp.gmail.analysis_cached", { id });
+  callRpc<MailAnalysis>(cfg, "miniapp.mail.analysis_cached", { id });
 
 export const analyzeMail = (cfg: GatewayConfig, id: string, force = false) =>
-  callRpc<MailAnalysis>(cfg, "miniapp.gmail.analyze", { id, force });
+  callRpc<MailAnalysis>(cfg, "miniapp.mail.analyze", { id, force });
 
 // Sender context card (sender_context): recent volume + hand-curated wiki pages.
 export interface SenderRecent {
@@ -392,7 +392,7 @@ export interface SenderContext {
 }
 
 export const senderContext = (cfg: GatewayConfig, sender: string) =>
-  callRpc<SenderContext>(cfg, "miniapp.gmail.sender_context", { sender });
+  callRpc<SenderContext>(cfg, "miniapp.mail.sender_context", { sender });
 
 // One prior turn of mail Q&A — the client accumulates these so the gateway stays stateless.
 export interface QATurn {
@@ -401,7 +401,7 @@ export interface QATurn {
 }
 
 export const askMail = (cfg: GatewayConfig, id: string, question: string, history: QATurn[] = []) =>
-  callRpc<{ answer: string }>(cfg, "miniapp.gmail.ask", { id, question, history }).then((r) => r.answer);
+  callRpc<{ answer: string }>(cfg, "miniapp.mail.ask", { id, question, history }).then((r) => r.answer);
 
 // --- Chat streaming over POST /api/v1/miniapp/chat/stream (SSE) ---
 
