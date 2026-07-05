@@ -44,9 +44,50 @@ func TestFrontmatterSitesRoundtrip(t *testing.T) {
 	if len(parsed.Meta.Sites) != 2 || parsed.Meta.Sites[0] != want[0] || parsed.Meta.Sites[1] != want[1] {
 		t.Errorf("sites roundtrip = %v, want %v", parsed.Meta.Sites, want)
 	}
-	wantKinds := []string{"시공", "모듈"}
+	// EPC→시공 but 루프탑 upgrades to 시공/루프탑 which subsumes the bare
+	// parent; 모듈 upgrades to 기자재/모듈; dup dropped.
+	wantKinds := []string{"기자재/모듈", "시공/루프탑"}
 	if len(parsed.Meta.Kinds) != 2 || parsed.Meta.Kinds[0] != wantKinds[0] || parsed.Meta.Kinds[1] != wantKinds[1] {
-		t.Errorf("kinds roundtrip = %v, want %v (synonym folded, 루프탑 dropped, deduped)", parsed.Meta.Kinds, wantKinds)
+		t.Errorf("kinds roundtrip = %v, want %v", parsed.Meta.Kinds, wantKinds)
+	}
+}
+
+// TestNormalizeKindsHierarchy pins the two-level vocabulary semantics.
+func TestNormalizeKindsHierarchy(t *testing.T) {
+	cases := []struct {
+		in   []string
+		want []string
+	}{
+		// Flat legacy values auto-upgrade.
+		{[]string{"모듈", "시공"}, []string{"기자재/모듈", "시공"}},
+		// Bare child words fold under their parent.
+		{[]string{"루프탑"}, []string{"시공/루프탑"}},
+		{[]string{"해상풍력"}, []string{"풍력/해상"}},
+		// Parent + its child → child only (parent implied).
+		{[]string{"시공", "시공/루프탑"}, []string{"시공/루프탑"}},
+		// Parent alone stays (2차 미상).
+		{[]string{"기자재"}, []string{"기자재"}},
+		// Parent + OTHER family's child keeps both.
+		{[]string{"기자재", "시공/토지"}, []string{"기자재", "시공/토지"}},
+		// ESS classifies under 시공, not 기자재 (operator ruling).
+		{[]string{"BESS"}, []string{"시공/ESS"}},
+		// 용역/협력 live under the 기타 primary.
+		{[]string{"용역", "협력"}, []string{"기타/용역", "기타/협력"}},
+		// Out-of-vocabulary drops; dedupe after folding.
+		{[]string{"자가소비", "mod", "기자재/모듈"}, []string{"기자재/모듈"}},
+	}
+	for _, tc := range cases {
+		got := normalizeKinds(tc.in)
+		if len(got) != len(tc.want) {
+			t.Errorf("normalizeKinds(%v) = %v, want %v", tc.in, got, tc.want)
+			continue
+		}
+		for i := range got {
+			if got[i] != tc.want[i] {
+				t.Errorf("normalizeKinds(%v) = %v, want %v", tc.in, got, tc.want)
+				break
+			}
+		}
 	}
 }
 
