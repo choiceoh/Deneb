@@ -99,11 +99,12 @@ type Frontmatter struct {
 	// Project 대표페이지 only; empty elsewhere.
 	Sites []string
 	// Kinds classify what the project IS as business (복수 허용): fixed
-	// vocabulary derived from the 2026-07-05 live-data distribution —
-	// 시공(EPC/턴키), 모듈, 인버터, 케이블, BESS, 풍력, 개발(인허가·부지·RPS),
-	// 용역(안전관리 등), 협력(NDA·전략·R&D). Values outside the vocabulary are
-	// dropped at parse/render (normalizeKinds) so aggregation stays clean;
-	// market segments (자가소비/루프탑) are tags, not kinds. 대표페이지 전용.
+	// two-level vocabulary "1차" or "1차/2차" (operator-confirmed 2026-07-06) —
+	// 태양광(토지/루프탑/수상/ESS — 구 시공·개발 1차 통합), 기자재(모듈/인버터/
+	// 케이블/기타), 풍력(육상/해상), 기타(용역/협력). Values outside the
+	// vocabulary are dropped at parse/render (normalizeKinds), legacy flat
+	// values auto-upgrade (모듈→기자재/모듈, 시공·개발→태양광), and a bare
+	// parent folds away when its child is present. 대표페이지 전용.
 	Kinds      []string
 	Created    string  // YYYY-MM-DD
 	Updated    string  // YYYY-MM-DD
@@ -642,33 +643,98 @@ func normalizeSites(sites []string) []string {
 	return out
 }
 
-// projectKinds is the fixed 특성 vocabulary (see Frontmatter.Kinds). Keys are
-// the canonical values; the map also folds common synonyms/EN/code-segment
-// spellings onto them so any writer converges on the enum.
+// projectKinds is the fixed two-level 특성 vocabulary (see Frontmatter.Kinds),
+// written as "1차" or "1차/2차". Keys are lowercase lookups; the map folds
+// synonyms/EN/code-segment spellings AND bare 2차 values onto their canonical
+// hierarchical form ("모듈" → "기자재/모듈", "루프탑" → "태양광/루프탑") so any
+// writer — and every pre-hierarchy stored value — converges on the enum.
 var projectKinds = map[string]string{
-	"시공": "시공", "epc": "시공", "턴키": "시공",
-	"모듈": "모듈", "module": "모듈", "mod": "모듈",
-	"인버터": "인버터", "inverter": "인버터", "inv": "인버터",
-	"케이블": "케이블", "cable": "케이블", "cbl": "케이블",
-	"bess": "BESS", "ess": "BESS", "bes": "BESS",
+	// 태양광 = 발전소 사업 (구 시공·개발 1차 통합 — 운영자 확정 2026-07-06)
+	// + 설치·플랜트 유형 2차. ESS 사업도 기자재가 아니라 여기(운영자 확정).
+	"태양광": "태양광", "solar": "태양광", "pv": "태양광",
+	"태양광/토지": "태양광/토지", "토지": "태양광/토지", "지상": "태양광/토지", "시공/토지": "태양광/토지",
+	"태양광/루프탑": "태양광/루프탑", "루프탑": "태양광/루프탑", "지붕": "태양광/루프탑", "옥상": "태양광/루프탑", "시공/루프탑": "태양광/루프탑",
+	"태양광/수상": "태양광/수상", "수상": "태양광/수상", "시공/수상": "태양광/수상",
+	"태양광/ess": "태양광/ESS", "ess": "태양광/ESS", "bess": "태양광/ESS", "bes": "태양광/ESS", "시공/ess": "태양광/ESS", "시공/bess": "태양광/ESS",
+	// 기자재 + 품목 2차
+	"기자재":    "기자재",
+	"기자재/모듈": "기자재/모듈", "모듈": "기자재/모듈", "module": "기자재/모듈", "mod": "기자재/모듈",
+	"기자재/인버터": "기자재/인버터", "인버터": "기자재/인버터", "inverter": "기자재/인버터", "inv": "기자재/인버터",
+	"기자재/케이블": "기자재/케이블", "케이블": "기자재/케이블", "cable": "기자재/케이블", "cbl": "기자재/케이블",
+	"기자재/기타": "기자재/기타",
+	// 풍력 + 육상/해상 2차
 	"풍력": "풍력", "wind": "풍력", "wnd": "풍력",
-	"개발": "개발", "dev": "개발", "인허가": "개발",
-	"용역": "용역", "대행": "용역",
-	"협력": "협력", "nda": "협력", "제휴": "협력",
+	"풍력/육상": "풍력/육상", "육상풍력": "풍력/육상",
+	"풍력/해상": "풍력/해상", "해상풍력": "풍력/해상",
+	// 기타 + 용역/협력 2차 (독립 1차에서 기타 밑으로 — 운영자 확정)
+	"기타":    "기타",
+	"기타/용역": "기타/용역", "용역": "기타/용역", "대행": "기타/용역",
+	"기타/협력": "기타/협력", "협력": "기타/협력", "nda": "기타/협력", "제휴": "기타/협력",
 }
 
-// normalizeKinds folds synonyms onto the canonical vocabulary, drops values
-// outside it (enum discipline keeps aggregation clean), and dedupes.
+// kindStageWords are legacy business-stage spellings (구 1차 시공·개발과 그
+// 동의어) that no longer name a 발전원. They default-fold to 태양광 (the
+// dominant business line), EXCEPT when the same list explicitly names 풍력 —
+// a wind development project tagged [풍력, 개발] must stay 풍력, not gain a
+// phantom 태양광.
+var kindStageWords = map[string]bool{
+	"시공": true, "epc": true, "턴키": true,
+	"개발": true, "dev": true, "인허가": true,
+}
+
+// normalizeKinds folds synonyms, bare sub-kinds, and legacy flat values onto
+// the canonical hierarchical vocabulary, drops values outside it (enum
+// discipline keeps aggregation clean), dedupes, drops a bare parent when one
+// of its children is present ("태양광" + "태양광/루프탑" → just "태양광/루프탑"
+// — the child implies the parent, and prefix matching recovers parent-level
+// queries), and drops stage-word-sourced 태양광 next to explicit 풍력 (see
+// kindStageWords).
 func normalizeKinds(kinds []string) []string {
-	var out []string
+	var canon []string
 	seen := map[string]bool{}
+	stageOnly := map[string]bool{} // canon value produced only by stage words
+	hasWind := false
 	for _, k := range kinds {
-		canon, ok := projectKinds[strings.ToLower(strings.TrimSpace(k))]
-		if !ok || seen[canon] {
+		key := strings.ToLower(strings.TrimSpace(k))
+		c, ok := projectKinds[key]
+		fromStage := false
+		if !ok {
+			if !kindStageWords[key] {
+				continue
+			}
+			c, fromStage = "태양광", true
+		}
+		if strings.HasPrefix(c, "풍력") {
+			hasWind = true
+		}
+		if seen[c] {
+			if !fromStage {
+				stageOnly[c] = false
+			}
 			continue
 		}
-		seen[canon] = true
-		out = append(out, canon)
+		seen[c] = true
+		stageOnly[c] = fromStage
+		canon = append(canon, c)
+	}
+	var out []string
+	for _, c := range canon {
+		if c == "태양광" && stageOnly[c] && hasWind {
+			continue // stage word next to explicit 풍력 — not a solar signal
+		}
+		if !strings.Contains(c, "/") {
+			hasChild := false
+			for _, other := range canon {
+				if strings.HasPrefix(other, c+"/") {
+					hasChild = true
+					break
+				}
+			}
+			if hasChild {
+				continue // parent subsumed by its child
+			}
+		}
+		out = append(out, c)
 	}
 	return out
 }
