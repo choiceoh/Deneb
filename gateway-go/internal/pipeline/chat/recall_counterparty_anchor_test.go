@@ -25,7 +25,7 @@ func TestRecallWikiEvidence_CounterpartyAnchor(t *testing.T) {
 		t.Fatalf("WritePage: %v", werr)
 	}
 
-	evidence := recallWikiEvidence(context.Background(), store, []string{"대한전선 최근 거래 상황"})
+	evidence := recallWikiEvidence(context.Background(), store, []string{"대한전선 최근 거래 상황"}, "")
 	var hit *recallEvidence
 	for i := range evidence {
 		if evidence[i].Query == recallCounterpartyAnchorQuery {
@@ -50,5 +50,19 @@ func TestRecallWikiEvidence_CounterpartyAnchor(t *testing.T) {
 	applyBroadeningPenalty(evidence, []string{"대한전선 최근 거래", "대한전선", "거래"})
 	if hit.Score != recallCounterpartyAnchorScore {
 		t.Errorf("broadening penalty demoted the anchor: %v", hit.Score)
+	}
+
+	// Anchors match the RAW message, not the normalized queries: token
+	// normalization strips suffix syllables that can be part of a name, so a
+	// query list that lost the name must still anchor via rawMessage.
+	raw := recallWikiEvidence(context.Background(), store, []string{"거래"}, "대한전선이랑 최근 거래 어떻게 됐지")
+	found := false
+	for _, ev := range raw {
+		if ev.Query == recallCounterpartyAnchorQuery {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("raw-message anchor missing: %+v", raw)
 	}
 }

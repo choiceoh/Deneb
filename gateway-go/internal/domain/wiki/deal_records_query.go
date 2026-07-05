@@ -32,8 +32,33 @@ func (s *Store) QueryDealRecords(f DealRecordFilter) ([]DealRecord, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Range bounds must themselves be ISO or they silently mis-filter via
+	// lexical comparison (" 2026-06-01", "지난달"): trim, and drop non-ISO.
+	f.Since = strings.TrimSpace(f.Since)
+	if !isoDate(f.Since) {
+		f.Since = ""
+	}
+	f.Until = strings.TrimSpace(f.Until)
+	if !isoDate(f.Until) {
+		f.Until = ""
+	}
+	// Rows teed before the projects field existed carry none even though the
+	// ledger page's Related already names the projects — backfill from the
+	// page at query time (memoized per counterparty) so the project filter
+	// works across old data too.
+	var ledgerProjectsMemo map[string][]string
+	if strings.TrimSpace(f.Project) != "" {
+		ledgerProjectsMemo = map[string][]string{}
+	}
 	out := make([]DealRecord, 0, len(recs))
 	for _, r := range recs {
+		if ledgerProjectsMemo != nil && len(r.Projects) == 0 {
+			key := dealSlug(r.Counterparty)
+			if _, ok := ledgerProjectsMemo[key]; !ok {
+				ledgerProjectsMemo[key] = s.ledgerRelatedProjects(r.Counterparty)
+			}
+			r.Projects = ledgerProjectsMemo[key]
+		}
 		if !matchDealRecord(r, f) {
 			continue
 		}
@@ -93,8 +118,42 @@ func fuzzyNameMatch(a, b string) bool {
 	return strings.Contains(ka, kb) || strings.Contains(kb, ka)
 }
 
+// isoDate reports whether s is a plausible YYYY-MM-DD: digits in every date
+// position and month/day in range — hyphen positions alone would let strings
+// like "2026-0a-01" through, where lexical range comparison mis-filters.
 func isoDate(s string) bool {
-	return len(s) == 10 && s[4] == '-' && s[7] == '-'
+	if len(s) != 10 || s[4] != '-' || s[7] != '-' {
+		return false
+	}
+	for _, i := range []int{0, 1, 2, 3, 5, 6, 8, 9} {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	month := int(s[5]-'0')*10 + int(s[6]-'0')
+	day := int(s[8]-'0')*10 + int(s[9]-'0')
+	return month >= 1 && month <= 12 && day >= 1 && day <= 31
+}
+
+// ledgerRelatedProjects resolves a counterparty's project names from its ledger
+// page's Related links — the query-time backfill for pre-projects ledger rows.
+func (s *Store) ledgerRelatedProjects(counterparty string) []string {
+	slug := dealSlug(counterparty)
+	if slug == "" {
+		return nil
+	}
+	page, err := s.ReadPage(dealCategoryDir + "/" + slug + ".md")
+	if err != nil || page == nil {
+		return nil
+	}
+	var names []string
+	for _, rel := range page.Meta.Related {
+		rel = strings.TrimSuffix(strings.TrimPrefix(strings.TrimSpace(rel), "[["), "]]")
+		if name, ok := ProjectNameOf(rel); ok {
+			names = append(names, name)
+		}
+	}
+	return dedupeStrings(names)
 }
 
 // DealTotals is the deterministic aggregate of a record set. Amounts sum per
@@ -106,6 +165,7 @@ type DealTotals struct {
 	CountByCurrency map[string]int
 	UnparsedCount   int
 	UnparsedSamples []string // up to 3 raw amount strings
+	NoAmountCount   int      // rows filed with no amount at all — also outside sums
 }
 
 // SumDealRecords computes totals over recs. Pure function — no store access.
@@ -122,6 +182,8 @@ func SumDealRecords(recs []DealRecord) DealTotals {
 				if len(t.UnparsedSamples) < 3 {
 					t.UnparsedSamples = append(t.UnparsedSamples, r.AmountRaw)
 				}
+			} else {
+				t.NoAmountCount++
 			}
 			continue
 		}

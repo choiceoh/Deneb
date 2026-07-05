@@ -201,7 +201,7 @@ func buildRecallPreflight(ctx context.Context, params RunParams, deps runDeps, l
 		sources = append(
 			sources,
 			recallSource{"wiki", func(c context.Context) []recallEvidence {
-				return recallWikiEvidence(c, store, queries)
+				return recallWikiEvidence(c, store, queries, message)
 			}},
 			recallSource{"diary", func(c context.Context) []recallEvidence {
 				return recallDiaryEvidence(c, store, queries, false)

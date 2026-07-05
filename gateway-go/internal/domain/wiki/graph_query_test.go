@@ -218,6 +218,11 @@ func TestGraphContext_ProjectFamilyEdges(t *testing.T) {
 		Meta: Frontmatter{Title: "무안군청", Summary: "관공서 발주"},
 		Body: "별건.",
 	})
+	// Archived pages (rotated log archives) never surface as neighbors.
+	mustWrite(t, store, "프로젝트/영산고/로그-보관.md", &Page{
+		Meta: Frontmatter{Title: "옛 진행 기록", Archived: true},
+		Body: "오래된 로그.",
+	})
 
 	got, err := store.GraphContext(context.Background(), "영산고", 8)
 	if err != nil {
@@ -230,6 +235,9 @@ func TestGraphContext_ProjectFamilyEdges(t *testing.T) {
 	}
 	if strings.Contains(got, "무안군청") {
 		t.Errorf("other project leaked into family:\n%s", got)
+	}
+	if strings.Contains(got, "옛 진행 기록") {
+		t.Errorf("archived page resurfaced as a neighbor:\n%s", got)
 	}
 	// Curated slots (1.0) rank above raw mail analyses (0.6).
 	if strings.Index(got, "XLPE 케이블") > strings.Index(got, "발주 확인 요청") {

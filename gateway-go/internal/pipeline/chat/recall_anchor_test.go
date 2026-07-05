@@ -31,7 +31,7 @@ func TestRecallWikiEvidence_ProjectAnchor(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	evidence := recallWikiEvidence(context.Background(), store, []string{"기아 화성 근황 알려줘"})
+	evidence := recallWikiEvidence(context.Background(), store, []string{"기아 화성 근황 알려줘"}, "")
 	if len(evidence) == 0 {
 		t.Fatal("no evidence returned")
 	}
@@ -59,7 +59,7 @@ func TestRecallWikiEvidence_ProjectAnchor(t *testing.T) {
 	}
 
 	// A query naming no project produces no anchor rows.
-	for _, ev := range recallWikiEvidence(context.Background(), store, []string{"구리값 어때"}) {
+	for _, ev := range recallWikiEvidence(context.Background(), store, []string{"구리값 어때"}, "") {
 		if ev.Query == "project-anchor" {
 			t.Errorf("unexpected anchor for a project-less query: %+v", ev)
 		}
