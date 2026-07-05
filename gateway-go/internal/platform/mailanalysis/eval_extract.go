@@ -16,9 +16,10 @@ import (
 // deal/facts/actions task Deneb runs on every analyzed mail.
 //
 // The returned value is what prod actually consumes for that kind:
-//   - "deal"    → *DealInfo (nil = "not a deal", a valid outcome)
-//   - "facts"   → string (the markdown fact block appended to the wiki, "" = none)
-//   - "actions" → []ActionItem (empty = "nothing the operator must do")
+//   - "deal"      → *DealInfo (nil = "not a deal", a valid outcome)
+//   - "dealfacts" → *DealFacts (quote-verified terms; nil = none survived)
+//   - "facts"     → string (the markdown fact block appended to the wiki, "" = none)
+//   - "actions"   → []ActionItem (empty = "nothing the operator must do")
 //
 // Because parsing goes through callLocalLLMJSON (jsonutil), a model that wraps its
 // JSON in ```json fences still extracts correctly — the benchmark measures the
@@ -31,11 +32,13 @@ func ExtractForEval(ctx context.Context, client *llm.Client, model, kind, input 
 	switch kind {
 	case "deal":
 		return extractDealInfo(ctx, deps, input), nil
+	case "dealfacts":
+		return extractDealFacts(ctx, deps, input), nil
 	case "facts":
 		return extractFactsForWiki(ctx, deps, input), nil
 	case "actions":
 		return extractActionItems(ctx, deps, input), nil
 	default:
-		return nil, fmt.Errorf("eval extract: unknown kind %q (want deal|facts|actions)", kind)
+		return nil, fmt.Errorf("eval extract: unknown kind %q (want deal|dealfacts|facts|actions)", kind)
 	}
 }

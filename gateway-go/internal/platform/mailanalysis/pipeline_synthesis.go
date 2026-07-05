@@ -383,6 +383,12 @@ func synthesizeAnalysis(ctx context.Context, deps PipelineDeps, msg *gmail.Messa
 	if len(msg.Attachments) > 0 {
 		dealInput := clean + attach.Injected // attach.Injected is "" when nothing was selected
 		deal = extractDealInfo(ctx, deps, dealInput)
+		if deal != nil {
+			// Second pass, deal mails only: quote-verified commercial terms
+			// (물량·단가·지급조건 등) over the same source. Best-effort — nil
+			// Facts never blocks the deal record.
+			deal.Facts = extractDealFacts(ctx, deps, dealInput)
+		}
 	}
 
 	// The gate reads each attachment up to a generous cap, so the analysis above

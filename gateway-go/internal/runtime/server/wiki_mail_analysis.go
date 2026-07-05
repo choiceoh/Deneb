@@ -393,6 +393,15 @@ func dealEvidenceText(deal *mailanalysis.DealInfo, msg *gmail.MessageDetail) str
 	if len(deal.Items) > 0 {
 		fmt.Fprintf(&b, "품목: %s\n", strings.Join(deal.Items, ", "))
 	}
+	// Quote-verified commercial terms (사실 레이어 2단계) — only fields that
+	// passed the verbatim-quote gate exist here, so they are safe to cite.
+	if f := deal.Facts; f != nil {
+		writeField("물량", f.CapacityMW.Value)
+		writeField("단가", f.UnitPrice.Value)
+		writeField("지급조건", f.PaymentTerms.Value)
+		writeField("하자보수", f.Warranty.Value)
+		writeField("지체상금", f.DelayPenalty.Value)
+	}
 	writeField("요약", deal.Summary)
 	writeField("메일 제목", msg.Subject)
 	return strings.TrimSpace(b.String())
