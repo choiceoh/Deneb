@@ -18,6 +18,35 @@ func TestBuildPhoneAction_Valid(t *testing.T) {
 		{phoneWriteParams{To: "SHARE", Text: "hi"}, "share", map[string]string{"text": "hi"}}, // case-insensitive, recipient optional
 		{phoneWriteParams{To: "dial", Target: "119"}, "dial", map[string]string{"number": "119"}},
 		{phoneWriteParams{To: "photo"}, "photo", map[string]string{}},
+		{
+			phoneWriteParams{To: "alarm", Target: "07:30", Text: "출근"},
+			"alarm",
+			map[string]string{"hour": "7", "minute": "30", "label": "출근"},
+		},
+		{
+			phoneWriteParams{To: "alarm", Target: "23:05"},
+			"alarm",
+			map[string]string{"hour": "23", "minute": "5"},
+		},
+		{
+			phoneWriteParams{To: "timer", Target: "10m", Text: "라면"},
+			"timer",
+			map[string]string{"seconds": "600", "label": "라면"},
+		},
+		{
+			phoneWriteParams{To: "timer", Target: "90s"},
+			"timer",
+			map[string]string{"seconds": "90"},
+		},
+		{
+			phoneWriteParams{To: "timer", Target: "10"}, // bare number = minutes
+			"timer", map[string]string{"seconds": "600"},
+		},
+		{
+			phoneWriteParams{To: "timer", Target: "1h30m"},
+			"timer",
+			map[string]string{"seconds": "5400"},
+		},
 	}
 	for _, c := range cases {
 		action, args, err := buildPhoneAction(c.p)
@@ -38,6 +67,12 @@ func TestBuildPhoneAction_Rejected(t *testing.T) {
 		{To: "open_url", Target: ""},        // empty target
 		{To: "dial"},                        // missing number
 		{To: "message", Target: "x"},        // missing text
+		{To: "alarm"},                       // missing time
+		{To: "alarm", Target: "25:00"},      // hour out of range
+		{To: "alarm", Target: "0730"},       // not HH:MM
+		{To: "timer"},                       // missing duration
+		{To: "timer", Target: "abc"},        // not a duration
+		{To: "timer", Target: "25h"},        // over 24h bound
 	}
 	for _, p := range bad {
 		if _, _, err := buildPhoneAction(p); err == nil {

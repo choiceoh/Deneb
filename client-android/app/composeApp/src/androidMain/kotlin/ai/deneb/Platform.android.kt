@@ -204,6 +204,27 @@ actual fun executePhoneAction(action: String, args: Map<String, String>): Boolea
 
         "photo" -> Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE)
 
+        // Clock-app public intents (SET_ALARM permission is normal-level,
+        // declared in the manifest and auto-granted). SKIP_UI sets the alarm/
+        // timer silently — the gateway already validated hour/minute/seconds,
+        // and a voice-driven "7시에 깨워줘" must not strand a form on screen.
+        "alarm" -> Intent(android.provider.AlarmClock.ACTION_SET_ALARM).apply {
+            val hour = args["hour"]?.toIntOrNull() ?: return false
+            putExtra(android.provider.AlarmClock.EXTRA_HOUR, hour)
+            putExtra(android.provider.AlarmClock.EXTRA_MINUTES, args["minute"]?.toIntOrNull() ?: 0)
+            args["label"]?.takeIf { it.isNotBlank() }
+                ?.let { putExtra(android.provider.AlarmClock.EXTRA_MESSAGE, it) }
+            putExtra(android.provider.AlarmClock.EXTRA_SKIP_UI, true)
+        }
+
+        "timer" -> Intent(android.provider.AlarmClock.ACTION_SET_TIMER).apply {
+            val seconds = args["seconds"]?.toIntOrNull() ?: return false
+            putExtra(android.provider.AlarmClock.EXTRA_LENGTH, seconds)
+            args["label"]?.takeIf { it.isNotBlank() }
+                ?.let { putExtra(android.provider.AlarmClock.EXTRA_MESSAGE, it) }
+            putExtra(android.provider.AlarmClock.EXTRA_SKIP_UI, true)
+        }
+
         else -> return false
     }
     intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
