@@ -61,6 +61,18 @@
       "spill_id": {
         "type": "string",
         "description": "The spillover reference ID (e.g., sp_abc123) from a previous large tool result"
+      },
+      "offset": {
+        "type": "integer",
+        "description": "시작 줄 번호 (1-기반, 기본 1). 이전 페이지 꼬리의 [계속: offset=N] 안내를 그대로 사용"
+      },
+      "limit": {
+        "type": "integer",
+        "description": "최대 반환 줄 수 (기본 400). 페이지는 char 예산(20K)으로도 바운드됨"
+      },
+      "grep": {
+        "type": "string",
+        "description": "Go 정규식 — 매치되는 줄만 줄번호와 함께 반환 (최대 200줄). 원하는 구간을 찾은 뒤 offset으로 그 주변을 열 때 사용"
       }
     },
     "required": [
