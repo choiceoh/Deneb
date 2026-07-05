@@ -1,20 +1,18 @@
 # Language labels
-"lang: rust":
-  - changed-files:
-      - any-glob-to-any-file:
-          - "core-rs/**"
-          - "cli-rs/**"
-
 "lang: go":
   - changed-files:
       - any-glob-to-any-file:
           - "gateway-go/**"
 
-"lang: protobuf":
+"lang: kotlin":
   - changed-files:
       - any-glob-to-any-file:
-          - "proto/**"
-          - "scripts/proto-gen.sh"
+          - "client-android/**"
+
+"lang: typescript":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "andromeda/**"
 
 # Domain labels
 "ai":
@@ -31,21 +29,25 @@
       - any-glob-to-any-file:
           - "gateway-go/**"
 
-"ffi":
+"native":
   - changed-files:
       - any-glob-to-any-file:
-          - "core-rs/**"
-          - "gateway-go/internal/ai/ffi/**"
+          - "client-android/**"
+
+"andromeda":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "andromeda/**"
 
 "docs":
   - changed-files:
       - any-glob-to-any-file:
           - "docs/**"
 
-"cli":
+"skills":
   - changed-files:
       - any-glob-to-any-file:
-          - "cli-rs/**"
+          - "skills/**"
 
 "scripts":
   - changed-files:
@@ -55,4 +57,5 @@
 "security":
   - changed-files:
       - any-glob-to-any-file:
-          - "gateway-go/internal/infra/auth/**"
+          - "gateway-go/internal/infra/clientauth/**"
+          - "gateway-go/internal/infra/secret/**"
