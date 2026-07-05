@@ -55,11 +55,17 @@ def digits_relaxed(s):
 
 
 def contains(text, needle):
-    t, n = text.casefold(), needle.casefold()
-    if n in t:
-        return True
-    if any(ch.isdigit() for ch in n):
-        return digits_relaxed(n) in digits_relaxed(t)
+    # "a|b" = any-of alternation: one gold needle accepts phrasing variants
+    # ("6/2|6월 2일") without loosening what counts as correct.
+    for alt in needle.split("|"):
+        alt = alt.strip()
+        if not alt:
+            continue
+        t, n = text.casefold(), alt.casefold()
+        if n in t:
+            return True
+        if any(ch.isdigit() for ch in n) and digits_relaxed(n) in digits_relaxed(t):
+            return True
     return False
 
 
@@ -130,16 +136,25 @@ def main():
         return 2
 
     r_hit = r_tot = a_pass = a_tot = a_skip = 0
+    by_diff = {}  # "mode/difficulty" -> [pass, total]
     for c in cases:
+        diff = c.get("difficulty", "easy")
         marks = []
         if args.mode in ("recall", "both"):
-            r_tot += 1
-            try:
-                hit, paths = score_recall(c, args.gw, token, args.k, args.timeout)
-            except Exception as e:  # noqa: BLE001
-                hit, paths = False, [f"(error: {e})"]
-            r_hit += hit
-            marks.append(("recall", "✓" if hit else "✗", "" if hit else " top=" + ";".join(paths[:3])))
+            if not c.get("gold_paths"):
+                # Negative-existence cases have no right page — recall N/A.
+                marks.append(("recall", "~", " (gold_paths 없음)"))
+            else:
+                r_tot += 1
+                try:
+                    hit, paths = score_recall(c, args.gw, token, args.k, args.timeout)
+                except Exception as e:  # noqa: BLE001
+                    hit, paths = False, [f"(error: {e})"]
+                r_hit += hit
+                d = by_diff.setdefault("recall/" + diff, [0, 0])
+                d[0] += hit
+                d[1] += 1
+                marks.append(("recall", "✓" if hit else "✗", "" if hit else " top=" + ";".join(paths[:3])))
         if args.mode in ("answer", "both"):
             try:
                 ok, ms, text = score_answer(c, args.gw, token, args.session, args.timeout)
@@ -151,6 +166,9 @@ def main():
             else:
                 a_tot += 1
                 a_pass += ok
+                d = by_diff.setdefault("answer/" + diff, [0, 0])
+                d[0] += ok
+                d[1] += 1
                 detail = f" {ms}ms"
                 if not ok:
                     missing = [m for m in c.get("must_contain") or [] if not contains(text, m)]
@@ -166,6 +184,9 @@ def main():
         print(f"WIKI_QA_RECALL={r_hit}/{r_tot} ({100 * r_hit // r_tot}%)")
     if a_tot:
         print(f"WIKI_QA_ANSWER={a_pass}/{a_tot} ({100 * a_pass // a_tot}%) skipped={a_skip}")
+    for key in sorted(by_diff):
+        h, tot = by_diff[key]
+        print(f"  {key}: {h}/{tot} ({100 * h // tot}%)")
     return 0
 
 
