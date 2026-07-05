@@ -78,8 +78,13 @@ fi
 # docs/agent-rules/release-and-deploy.md "APK release 서명").
 #
 # Policy: env file present but broken → hard fail (never silently ship a
-# debug-signed build when release signing was intended); absent → warn loudly
-# and continue (keeps CD alive until the one-time keystore setup is done).
+# debug-signed build when release signing was intended); absent → ALSO hard
+# fail since 2026-07-06. The old warn-and-continue kept CD alive before the
+# keystore existed, but once production went release-signed the fallback is
+# never right: the srv1→srv4 runner move left the signing material behind and
+# this branch silently shipped debug-signed builds 578-580, which phones
+# refuse to install over the release-signed app ("앱이 설치되지 않음").
+# DENEB_ALLOW_DEBUG_SIGNING=1 opts back in for fresh-machine bring-up.
 SIGNING_ENV="${DENEB_APK_SIGNING_ENV:-$HOME/.deneb/apk-signing.env}"
 if [ "$VARIANT" = "fossRelease" ]; then
   if [ -f "$SIGNING_ENV" ]; then
@@ -99,11 +104,16 @@ if [ "$VARIANT" = "fossRelease" ]; then
     echo "ERROR: DENEB_APK_SIGNING_ENV points at a missing file: $SIGNING_ENV" >&2
     echo "       Fix the path, or unset the override to use the default (~/.deneb/apk-signing.env)." >&2
     exit 1
+  elif [ "${DENEB_ALLOW_DEBUG_SIGNING:-0}" = "1" ]; then
+    echo "WARNING: DENEB_ALLOW_DEBUG_SIGNING=1 — fossRelease will be signed with the LOCAL DEBUG KEYSTORE." >&2
+    echo "         Debug-signed sideloaded builds trip fintech malware scans (e.g. Toss) and cannot" >&2
+    echo "         install over a release-signed app (OTA '앱이 설치되지 않음')." >&2
   else
-    echo "WARNING: no $SIGNING_ENV — fossRelease will be signed with the LOCAL DEBUG KEYSTORE." >&2
-    echo "         Debug-signed sideloaded builds trip fintech malware scans (e.g. Toss) and the debug" >&2
-    echo "         key is machine-local (runner reset = OTA continuity break). One-time setup runbook:" >&2
-    echo "         docs/agent-rules/release-and-deploy.md 'APK release 서명'." >&2
+    echo "ERROR: no $SIGNING_ENV — refusing to publish a debug-signed fossRelease." >&2
+    echo "       Copy the signing material to this host (docs/agent-rules/release-and-deploy.md 'APK release 서명';" >&2
+    echo "       러너를 옮겼다면 apk-signing.env + ~/.deneb/keys/ 가 함께 가야 한다 — 2026-07-06 사고)." >&2
+    echo "       Intentional debug signing (fresh bring-up): DENEB_ALLOW_DEBUG_SIGNING=1." >&2
+    exit 1
   fi
 fi
 

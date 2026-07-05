@@ -59,7 +59,13 @@ DENEB_APK_BASE_URL=http://<gateway-host>:19010 \
 > (토스가 실제로 플래그한 이력, 2026-07)에 걸리고, debug key 는 머신 로컬이라
 > 러너 홈 초기화 = 기존 설치 전부 OTA 단절이다. `publish-apk.sh` 가
 > `~/.deneb/apk-signing.env` 를 발견하면 자동으로 release 서명하고, 파일이
-> 깨져 있으면(키 경로/비번/alias 누락) debug 폴백 대신 **hard fail** 한다.
+> 깨져 있으면(키 경로/비번/alias 누락) **hard fail**, ★**부재 시에도 hard fail**
+> 한다(2026-07-06 강화 — 의도적 debug 서명은 `DENEB_ALLOW_DEBUG_SIGNING=1`).
+> 근거: srv1→srv4 러너 이사 때 서명 재료가 안 따라가 구 warn-폴백 분기가
+> debug-서명 578~580 을 조용히 발행 → 폰이 release-서명 설치 위에 거부
+> ("앱이 설치되지 않음"). ★**러너를 다른 호스트로 옮기면
+> `~/.deneb/apk-signing.env` + `~/.deneb/keys/`(keystore·cert 해시)를 반드시
+> 함께 복사**한다 (`scp -p`, 600/700 권한 유지).
 
 빌드 러너(srv4, publish-apk 실행 계정)에서 1회:
 
