@@ -1,5 +1,6 @@
 package ai.deneb
 
+import android.content.pm.ApplicationInfo
 import androidx.car.app.CarAppService
 import androidx.car.app.Screen
 import androidx.car.app.Session
@@ -11,12 +12,22 @@ import androidx.car.app.validation.HostValidator
  * phase-1 MessagingStyle notifications; this screen is for glancing at what
  * arrived while driving, within the host's driver-distraction rules.
  *
- * ALLOW_ALL_HOSTS: this APK is self-published (no Play review) to a single
- * operator device, and the car host is whatever head unit that phone connects
- * to — a host allowlist would only break the one supported deployment.
+ * Host validation guards against another app ON THE PHONE binding to this
+ * exported service while posing as a car host (work-feed cards carry mail
+ * analyses — sensitive). Release builds accept only the library's built-in
+ * allowlist of official Google hosts (Android Auto / AAOS), which is exactly
+ * what the operator's phone projects to; debug builds allow all hosts so the
+ * Desktop Head Unit keeps working without a signed host.
  */
 class DenebCarAppService : CarAppService() {
-    override fun createHostValidator(): HostValidator = HostValidator.ALLOW_ALL_HOSTS_VALIDATOR
+    override fun createHostValidator(): HostValidator =
+        if ((applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
+            HostValidator.ALLOW_ALL_HOSTS_VALIDATOR
+        } else {
+            HostValidator.Builder(applicationContext)
+                .addAllowedHosts(androidx.car.app.R.array.hosts_allowlist_sample)
+                .build()
+        }
 
     override fun onCreateSession(): Session = object : Session() {
         override fun onCreateScreen(intent: android.content.Intent): Screen = DenebCarFeedScreen(carContext)
