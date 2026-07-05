@@ -46,7 +46,7 @@ DENEB_APK_BASE_URL=http://<gateway-host>:19010 \
 > `~/.deneb/apk-signing.env` 를 발견하면 자동으로 release 서명하고, 파일이
 > 깨져 있으면(키 경로/비번/alias 누락) debug 폴백 대신 **hard fail** 한다.
 
-빌드 러너(srv1, publish-apk 실행 계정)에서 1회:
+빌드 러너(srv4, publish-apk 실행 계정)에서 1회:
 
 ```bash
 mkdir -p ~/.deneb/keys && chmod 700 ~/.deneb/keys
@@ -83,7 +83,7 @@ keytool -exportcert -keystore ~/.deneb/keys/deneb-release.p12 -alias deneb \
 
 ## Automated OTA publish (GitHub Action)
 
-> `.github/workflows/publish-apk.yml` 는 위 `publish-apk.sh` 를 **srv1(구 gx10) self-hosted 러너**에서 실행하는 얇은 트리거다 (빌드·flock versionCode 모두 수동 배포와 동일). self-hosted 인 이유는 **Android SDK 가 srv1 에 있어서**다 — 프로덕션 게이트웨이는 2026-06-20 srv4 로 이사했으므로, 게시 스텝이 빌드 후 최신 APK+version.json 을 **ssh/rsync 로 `srv4:~/.cache/deneb-apk/` 에 동기화**한다 (러너 로컬 serve dir 는 스테이징일 뿐, OTA 는 srv4 게이트웨이가 서빙). **단 CI 는 native-app 스모크 게이트를 건너뛴다**(`DENEB_SKIP_SMOKE=1`) — 무인 환경에서 픽셀탭·실데이터 의존 스모크가 잘 튀어(실제로 메일상세 단계가 세션 드로어로 빠져 멀쩡한 빌드를 막은 이력) 자동발행을 망가뜨리기 때문. 렌더 크래시 방어는 네이티브 PR 의 사전 스모크·`renderPreviews`·컴파일/유닛테스트가 맡는다.
+> `.github/workflows/publish-apk.yml` 는 위 `publish-apk.sh` 를 **srv4 self-hosted 러너(`srv4-apk`)**에서 실행하는 얇은 트리거다 (빌드·flock versionCode 모두 수동 배포와 동일). **2026-07-06 개발/배포 srv4 통일**: 러너가 게이트웨이 호스트에 살므로 러너 로컬 `~/.cache/deneb-apk` 가 곧 OTA serve dir 다 — 옛 srv1 러너 시절의 ssh/rsync 동기화 스텝은 self-skip 가드(hostname=srv4)로 남겨뒀다(러너가 다시 오프호스트로 갈 때만 발동). 그 분리 시절의 함정: 러너(srv1)와 게이트웨이(srv4)의 serve dir 가 갈라져 **빌드 563~574 가 폰에 배달되지 않는 split-brain** 이 실제로 발생했었다(2026-07-06 발견·백필로 복구). **단 CI 는 native-app 스모크 게이트를 건너뛴다**(`DENEB_SKIP_SMOKE=1`) — 무인 환경에서 픽셀탭·실데이터 의존 스모크가 잘 튀어(실제로 메일상세 단계가 세션 드로어로 빠져 멀쩡한 빌드를 막은 이력) 자동발행을 망가뜨리기 때문. 렌더 크래시 방어는 네이티브 PR 의 사전 스모크·`renderPreviews`·컴파일/유닛테스트가 맡는다.
 
 - **트리거**: main 에 `client-android/**` 변경이 머지될 때 자동. versionCode 단독화라 릴리스마다 바뀌는 버전 파일이 없어 게이트할 대상이 없다 — **네이티브 변경을 머지하는 것 자체가 새 빌드 발행 신호(연속 배포)**. 수동 `workflow_dispatch`(노트 입력)도 가능. **fork PR 로는 절대 안 돈다** (호스트 러너에서 미신뢰 코드 실행 차단).
 - **노트**: dispatch 입력 우선, 없으면 head 커밋 제목. 사용자에게 보이는 정돈된 한국어 changelog 는 어차피 컴파일된 `DenebPatchNotes` 가 오프라인으로 보여주므로 version.json 노트는 보조다.
@@ -91,20 +91,23 @@ keytool -exportcert -keystore ~/.deneb/keys/deneb-release.p12 -alias deneb \
 - **★ 패치노트는 조각파일로 (충돌 방지)**: 사용자 표시 노트는 `DenebPatchNotes.kt` 의 frozen 히스토리에 prepend하지 **말고**, `client-android/app/changelog.d/YYYY-MM-DD-<slug>.md` 조각파일을 **새로 추가**한다(PR마다 새 파일 → 같은 줄 안 건드림 → 머지 충돌 0). 빌드 시 `composeApp/build.gradle.kts` 가 조각들을 파일명 역순(최신 먼저)으로 모아 `build/generated/.../DenebChangelogGenerated.kt`(`GENERATED_CHANGELOG_FRAGMENTS`)로 생성하고(**커밋 안 함** — 커밋하면 그 파일이 다시 공유 prepend 파일이 됨), `DENEB_PATCH_NOTES = GENERATED_CHANGELOG_FRAGMENTS + frozen 히스토리`로 합쳐 버전 카드가 그대로 읽는다. 한 줄=하이라이트 1개, `#` 줄=주석. 상세=`changelog.d/README.md`. 내부/빌드/테스트-only 변경엔 조각 불필요. ★이 규약은 **PR 게이트로 강제**된다: `.github/workflows/patch-notes-gate.yml` 이 `feat(native|miniapp|calendar|markdown|chat)` 제목 + `client-android/` 변경 PR 에서 조각(또는 히스토리 편집) 부재 시 실패한다 — 사용자 영향 없는 예외는 `skip-patch-notes` 라벨로 우회.
 - **교착 방지**: `publish-apk.sh` 의 flock 은 `-w 600`(10분 대기 상한). 이전 발행이 hang 채 락을 쥐면 후속(자동·수동)이 job 30분 timeout 까지 막히던 사고(2026-06-08 좀비 publish 가 serve-dir 락 점유 → CI 포함 전 발행 블록)를 막아 빠르게 실패한다. 락 점유 의심 시 `fuser ~/.cache/deneb-apk/.publish.lock` 로 holder 확인 후 정리.
 
-### srv1(구 gx10) self-hosted 러너 1회 셋업 (운영자만)
+### srv4 self-hosted 러너 1회 셋업 (운영자만)
 
-워크플로가 `runs-on: [self-hosted, gx10]` 이라 srv1 에 러너가 등록돼야 동작한다 (호스트명은 srv1 로 개명됐지만 **러너 라벨은 리터럴 `gx10` 그대로**다 — 라벨을 바꾸려면 러너 재등록 + 워크플로 + actionlint.yaml 세 곳 동시 수정). 러너의 `~/.cache/deneb-apk` 는 **로컬 스테이징**이고, 게시 스텝이 ssh/rsync 로 `srv4:~/.cache/deneb-apk/` (게이트웨이가 읽는 실제 serve dir)에 동기화한다 — 러너 계정에 **srv4 ssh 접근**이 있어야 OTA 에 뜬다.
+워크플로가 `runs-on: [self-hosted, gx10]` 이라 srv4 에 러너가 등록돼야 동작한다 (**러너 라벨은 두 번의 호스트 이사를 거친 리터럴 `gx10` 그대로**다 — 라벨을 바꾸려면 러너 재등록 + 워크플로 + actionlint.yaml 세 곳 동시 수정). 러너가 게이트웨이와 같은 호스트라 `~/.cache/deneb-apk` 가 **곧 serve dir** — 별도 동기화 불필요. 현역 러너: `srv4-apk` (2026-07-06 등록, srv1 의 구 `gx10-apk` 는 해제).
 
 ```bash
-# srv1 에서 choiceoh 로. URL/토큰은 GitHub > Settings > Actions > Runners > New self-hosted runner 에서 복사.
-mkdir -p ~/actions-runner && cd ~/actions-runner
+# srv4 에서 choiceoh 로. URL/토큰은 GitHub > Settings > Actions > Runners > New self-hosted runner 에서 복사.
+mkdir -p ~/actions-runner-deneb && cd ~/actions-runner-deneb
 curl -o runner.tar.gz -L <runner-linux-arm64-tarball-url>
 tar xzf runner.tar.gz
-./config.sh --url https://github.com/choiceoh/deneb \
-  --token <REG_TOKEN> --labels gx10 --name gx10-apk --unattended
+./config.sh --url https://github.com/choiceoh/Deneb \
+  --token <REG_TOKEN> --labels gx10 --name srv4-apk --unattended
+# idempotent append — 재실행해도 중복 없음 (.env 는 config.sh 가 만든 기존 항목 보존)
+grep -q '^ANDROID_HOME=' .env 2>/dev/null || echo 'ANDROID_HOME=/home/choiceoh/android-sdk' >> .env
+grep -q '^JAVA_HOME='    .env 2>/dev/null || echo 'JAVA_HOME=/usr/lib/jvm/java-21-openjdk-arm64' >> .env
 sudo ./svc.sh install choiceoh && sudo ./svc.sh start   # 재부팅 후 자동 상주
 ```
 
-- 호스트 전제(이미 충족): `~/android-sdk`(ANDROID_HOME 기본), JDK 21, Xvfb/matchbox 등 스모크 하네스 의존(`native-live-app.md`), **srv4 ssh 접근**(게시 동기화), 스모크는 srv4 프로덕션 게이트웨이에 원격으로 붙는다(하네스 기본 URL).
+- 호스트 전제(2026-07-06 충족): `~/android-sdk`(ANDROID_HOME 기본), JDK 21(+**헤드풀 `openjdk-21-jre`** — 하네스/renderPreviews 의 AWT), Xvfb/matchbox 등 스모크 하네스 의존(`native-live-app.md`). ★**ARM64 필수 오버라이드**: `~/.gradle/gradle.properties` 에 `org.gradle.java.home=/usr/lib/jvm/java-21-openjdk-arm64` + `android.aapt2FromMavenOverride=$HOME/android-sdk/build-tools/<버전>/aapt2` — `<버전>` 은 설치된 최신 build-tools (`ls ~/android-sdk/build-tools | sort -V | tail -1`) 를 그대로 적는다(레포는 build-tools 버전을 고정하지 않으므로 SDK 갱신 시 이 경로도 따라 갱신). 구글 메이븐이 내려주는 aapt2 는 x86_64 라 이 오버라이드 없이는 `Syntax error: ")" unexpected` 로 빌드가 죽는다(2026-07-06 이전 검증에서 실측).
 - 레포 변수 `DENEB_APK_BASE_URL` 를 게이트웨이 도달 base 로 설정(`Settings > Secrets and variables > Actions > Variables`). 미설정이어도 동작하나 version.json url 이 로컬 기본값이 된다(인앱 업데이터는 게이트웨이 다운로드 라우트로 받으므로 무해).
 - 커스텀 라벨 `gx10` 은 `.github/actionlint.yaml` 에 등록돼 있어 워크플로 린트(`workflow-sanity.yml`)를 통과한다.
