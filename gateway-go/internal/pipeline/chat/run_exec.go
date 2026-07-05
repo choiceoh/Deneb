@@ -128,6 +128,13 @@ func executeAgentRun(
 	// external secret references on the chat path.
 	client := resolveClient(ctx, deps, providerID, logger)
 	if client == nil {
+		// This failure path exits before the enrichment join below, where the
+		// deferred persist lives — persist the original message here so the
+		// user's input isn't lost from history. No LLM saw anything this
+		// turn, so the unenriched bytes are consistent.
+		if params.PendingEnrichment != nil {
+			persistTurnUserMessage(params, deps, logger)
+		}
 		err := fmt.Errorf("no LLM client available (provider=%q, model=%q)", providerID, model)
 		runLog.LogError(agentlog.RunErrorData{Error: err.Error()})
 		return nil, err

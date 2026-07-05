@@ -101,27 +101,42 @@ func (h *Handler) startLinkEnrichment(ctx context.Context, message string, opts 
 
 	message = sanitizeInput(message) // match what prepareSyncRun persists
 	start := time.Now()
-	ch := make(chan string, 1) // buffered: the goroutine never blocks on an abandoned join
+	// fetchMs is stamped when the fetches complete, so it measures actual
+	// enrichment latency; the time between completion and the join is prep
+	// overlap, not fetch time.
+	type enrichOutcome struct {
+		summary string
+		fetchMs int64
+	}
+	ch := make(chan enrichOutcome, 1) // buffered: the goroutine never blocks on an abandoned join
 	logger := h.logger
 	go func() {
+		// Manual recover instead of safego: the join must always receive a
+		// result or it would block until the turn context dies.
 		defer func() {
 			if r := recover(); r != nil {
 				logger.Error("panic in link enrichment", "panic", r)
-				ch <- ""
+				ch <- enrichOutcome{fetchMs: time.Since(start).Milliseconds()}
 			}
 		}()
-		ch <- enrichMessageWithLinks(ctx, message, enrichFetch, logger)
+		summary := enrichMessageWithLinks(ctx, message, enrichFetch, logger)
+		ch <- enrichOutcome{summary: summary, fetchMs: time.Since(start).Milliseconds()}
 	}()
 
 	return func(joinCtx context.Context) string {
 		select {
-		case summary := <-ch:
-			if summary == "" {
+		case out := <-ch:
+			if out.summary == "" {
 				return message
 			}
+			// overlappedMs is how much of the fetch the parallel prep absorbed —
+			// sinceSendMs - fetchMs would be join-side wait; fetchMs alone is the
+			// fetch latency the user no longer serially pays.
 			logger.Info("link enrichment appended",
-				"chars", len(summary), "elapsed", time.Since(start).Round(time.Millisecond))
-			return sanitizeInput(message + "\n\n" + summary)
+				"chars", len(out.summary),
+				"fetchMs", out.fetchMs,
+				"sinceSendMs", time.Since(start).Milliseconds())
+			return sanitizeInput(message + "\n\n" + out.summary)
 		case <-joinCtx.Done():
 			return message
 		}
