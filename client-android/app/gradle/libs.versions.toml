@@ -9,7 +9,9 @@ slf4jNop = "2.0.18"
 spght-encryptedprefs = "1.1.1"
 androidx-lifecycle = "2.10.0"
 compose-multiplatform = "1.11.1"
-compose-material3 = "1.12.0-alpha03"
+# 1.12.0-alpha03 pulls androidx material3 1.5.0-alpha22 (requires compileSdk 37);
+# build hosts only have android-36. Keep at 1.10.0-alpha05 until the compileSdk 37 migration.
+compose-material3 = "1.10.0-alpha05"
 coil = "3.5.0"
 filekitCore = "0.14.2"
 koinCompose = "4.2.2"
