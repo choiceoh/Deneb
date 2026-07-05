@@ -7,6 +7,9 @@
 # HookCompositor.SetBeforeToolCall in gateway-go/CLAUDE.md), or (c) pending an
 # operator rewire-vs-retire decision. Anything else should be deleted instead
 # of baselined.
+cmd/wormhole/shaper.go :: newSSEDataShaper
+cmd/wormhole/shaper.go :: sseDataShaper.body
+cmd/wormhole/shaper.go :: sseDataShaper.header
 internal/ai/llm/client.go :: WithMinRequestTimeout
 internal/ai/llm/client.go :: WithRetry
 internal/ai/llm/types.go :: AppendSystemTexts
@@ -30,10 +33,11 @@ internal/domain/approval/store.go :: Store.Resolve
 internal/domain/approval/store.go :: Store.SetGlobalSnapshot
 internal/domain/daemon/daemon.go :: Daemon.IsRunning
 internal/domain/daemon/daemon.go :: ReadPIDFile
-internal/domain/hindsight/config.go :: ResetConfigForTest
-internal/domain/monitoring/watchdog.go :: ChannelEventTracker.Touch
+internal/domain/org/org.go :: RankOrder
 internal/domain/skills/filter.go :: MatchesSkillFilter
 internal/domain/skills/filter.go :: NormalizeSkillFilterForComparison
+internal/domain/skills/genesis/evolver.go :: Evolver.parseAndApply
+internal/domain/skills/genesis/evolver.go :: Evolver.resolveModel
 internal/domain/skills/genesis/nudger.go :: NewNudgerFromEnv
 internal/domain/skills/genesis/nudger.go :: NewNudgerFromEnvWithTracker
 internal/domain/wiki/config.go :: ResetConfigForTest
@@ -101,8 +105,8 @@ internal/pipeline/chat/toolctx/turn_context.go :: DetectCycle
 internal/pipeline/chat/toolpreset/preset.go :: KnownPresets
 internal/pipeline/chat/tools/exec_safety.go :: DetectFileModification
 internal/pipeline/chat/tools/exec_safety.go :: sedModifiesFile
+internal/pipeline/chat/tools/mail_attachment_extract.go :: extractMailAttachmentText
 internal/pipeline/chat/tools/weekly_report.go :: BuildWeeklyReportPDF
-internal/pipeline/chat/tools/weekly_report.go :: composeWeeklyText
 internal/pipeline/chat/tools/weekly_report.go :: weeklyRenderPDF
 internal/pipeline/chat/transcript.go :: MemoryTranscriptStore.Append
 internal/pipeline/chat/transcript.go :: MemoryTranscriptStore.CloneRecent
@@ -112,15 +116,21 @@ internal/pipeline/chat/transcript.go :: MemoryTranscriptStore.Load
 internal/pipeline/chat/transcript.go :: MemoryTranscriptStore.Search
 internal/pipeline/chat/transcript.go :: NewMemoryTranscriptStore
 internal/pipeline/chat/update_dispatch.go :: parsePRNumber
+internal/pipeline/pilot/localai.go :: CallCodingLLM
 internal/pipeline/pilot/localai.go :: LightweightModel
 internal/pipeline/pilot/localai.go :: TruncateHead
 internal/platform/calendar/client.go :: setTokenURL
 internal/platform/cron/delivery.go :: MatchesDeliveryTarget
 internal/platform/cron/delivery.go :: stripTopicSuffix
 internal/platform/gmail/client.go :: setTokenURL
-internal/platform/gmailpoll/analyzer.go :: formatReport
-internal/platform/gmailpoll/analyzer.go :: loadPrompt
+internal/platform/gmail/format.go :: FormatLabels
+internal/platform/gmail/format.go :: FormatSearchResults
+internal/platform/gmail/format.go :: hasUnreadLabel
 internal/platform/localtodo/store.go :: IsTodoID
+internal/platform/mailarchive/reader.go :: ListSince
+internal/platform/mailarchive/reader.go :: Search
+internal/platform/mailarchive/reader.go :: readSummaries
+internal/platform/mailwork/store.go :: Store.MarkDerivedCounts
 internal/platform/media/fetch.go :: DetectMIME
 internal/platform/media/fetch.go :: Logger
 internal/platform/media/frames.go :: selectFrameCount
@@ -154,6 +164,7 @@ internal/runtime/server/notify_slog.go :: notifySlogHandler.WithGroup
 internal/runtime/server/notify_slog.go :: notifySlogHandler.shouldSuppress
 internal/runtime/server/notify_slog.go :: truncateASCII
 internal/runtime/server/notify_status.go :: notifyService.activityLineKO
+internal/runtime/server/notify_status.go :: notifyService.appendCacheLine
 internal/runtime/server/notify_status.go :: notifyService.buildStatusReport
 internal/runtime/server/server_lifecycle.go :: Server.Close
 internal/runtime/server/server_lifecycle.go :: Server.StartAndListen
@@ -166,14 +177,16 @@ internal/runtime/session/run_marker.go :: RunMarkerStore.Touch
 pkg/checkpoint/manager.go :: WithGzip
 pkg/checkpoint/manager.go :: WithMaxBytes
 pkg/checkpoint/manager.go :: WithRetentionN
+pkg/cliprobe/cliprobe.go :: FormatProblem
+pkg/cliprobe/cliprobe.go :: IsBrokenExit
+pkg/cliprobe/cliprobe.go :: Result.OK
+pkg/cliprobe/cliprobe.go :: Status.String
 pkg/dentime/dentime.go :: ResetCache
 pkg/httputil/hostmatch.go :: HostMatches
 pkg/httputil/hostmatch.go :: Hostname
-pkg/jsonutil/extract.go :: ExtractArray
 pkg/jsonutil/unmarshal.go :: Unmarshal
 pkg/llmerr/reason.go :: Reason.Retryable
 pkg/llmerr/reason.go :: Reason.String
-pkg/promptguard/promptguard.go :: HasThreat
 pkg/protocol/agent.go :: AgentStatus.IsTerminal
 pkg/protocol/connect.go :: ValidateConnectParams
 pkg/protocol/connect.go :: ValidateProtocolVersion
