@@ -160,7 +160,7 @@ fun DenebRow(
  * on a phone the column fills the screen. The content lambda keeps its [ColumnScope],
  * so callers that use `weight(1f)` on a scrolling child still work.
  *
- * [showBack] let top-level sections drop the back arrow when the retired desktop
+ * [showBack] lets top-level sections drop the back arrow when the retired desktop
  * product UI's persistent sidebar was the navigation — sub-screens keep it everywhere.
  *
  * [fillWidth] is for screens embedded as a pane of a wider layout (originally the

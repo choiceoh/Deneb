@@ -1,5 +1,5 @@
 ---
-description: 모델 역할(main/tiny/lightweight/analysis/coding/fallback/chatbot/vision)별 작업 배치의 단일 진실원 — 어떤 임무가 어떤 역할을 쓰고 왜. 새 LLM 호출 추가·역할 변경 시 필독.
+description: 모델 역할(main/tiny/lightweight/analysis/coding/fallback/chatbot/vision/translation)별 작업 배치의 단일 진실원 — 어떤 임무가 어떤 역할을 쓰고 왜. 새 LLM 호출 추가·역할 변경 시 필독.
 globs: gateway-go/internal/ai/modelrole/**, gateway-go/internal/pipeline/pilot/**, gateway-go/internal/runtime/server/server_chat_config.go
 ---
 
