@@ -52,8 +52,8 @@ function main() {
     console.info(`  ${file} → ${version}`);
   }
   console.info(
-  `\nBumped to ${version}. Releases normally go through root release-please (tag andromeda-v${version} is cut by merging its release PR); this script is only the manual fallback for the three lockstep files.`,
-);
+    `\nBumped to ${version}. Releases normally go through root release-please (tag andromeda-v${version} is cut by merging its release PR); this script is only the manual fallback for the three lockstep files.`,
+  );
 }
 
 // Run only when invoked as a script, not when imported by tests.
