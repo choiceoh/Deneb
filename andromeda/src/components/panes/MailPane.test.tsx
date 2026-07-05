@@ -181,6 +181,46 @@ describe("MailPane", () => {
     expect(screen.queryByText("●")).not.toBeInTheDocument();
   });
 
+  it("does not roll back a failed mark-read overlay after unmount", async () => {
+    let rejectMarkRead: (error: Error) => void = () => {};
+    const fetchMock = vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body ?? "{}")) as { method?: string };
+      if (body.method === MAIL_RPC.markRead) {
+        return new Promise<Response>((_resolve, reject) => {
+          rejectMarkRead = reject;
+        });
+      }
+      return Promise.reject(new Error("offline test"));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const dataProvider = fakeProvider({
+      mail: [{ id: "m1", subject: "늦게 실패한 읽음", from: "kim@corp.com", body: "본문", isUnread: true }],
+    });
+    const { unmount } = renderWithProviders(<MailPane />, { connected: true, dataProvider });
+
+    await userEvent.click(await screen.findByText("늦게 실패한 읽음"));
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(([, init]) => {
+          const body = JSON.parse(String((init as RequestInit | undefined)?.body ?? "{}")) as { method?: string };
+          return body.method === MAIL_RPC.markRead;
+        }),
+      ).toBe(true),
+    );
+
+    unmount();
+    const windowValue = globalThis.window;
+    vi.stubGlobal("window", undefined);
+    try {
+      rejectMarkRead(new Error("offline test"));
+      await Promise.resolve();
+      await Promise.resolve();
+    } finally {
+      vi.stubGlobal("window", windowValue);
+    }
+  });
+
   it("renders the message body as Markdown (links become anchors)", async () => {
     const dataProvider = fakeProvider({
       mail: [

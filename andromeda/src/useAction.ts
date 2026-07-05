@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { callRpc } from "./gateway";
 import { errText } from "./format";
@@ -16,12 +16,20 @@ export function useAction(refetch: () => void | Promise<void>, options: ActionOp
   const { cfg } = useWorkspace();
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   async function run<T = unknown>(method: string, params: Record<string, unknown> = {}): Promise<T | undefined> {
     setBusy(true);
     try {
       const data = await callRpc<T>(cfg, method, params);
-      setError("");
+      if (mountedRef.current) setError("");
       try {
         await options.onResult?.(data, method, params);
       } finally {
@@ -29,10 +37,10 @@ export function useAction(refetch: () => void | Promise<void>, options: ActionOp
       }
       return data;
     } catch (e) {
-      setError(errText(e));
+      if (mountedRef.current) setError(errText(e));
       return undefined;
     } finally {
-      setBusy(false);
+      if (mountedRef.current) setBusy(false);
     }
   }
 
