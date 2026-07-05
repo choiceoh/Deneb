@@ -1,5 +1,17 @@
 # Changelog
 
+## [4.71.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.70.0...deneb-v4.71.0) (2026-07-05)
+
+
+### ✨ Features
+
+* **denebui:** 카드 상시관찰 + 인터랙티브 개방 + 우선 고려 + 정본 프리뷰 + 규칙 각인 ([#3206](https://github.com/choiceoh/Deneb/issues/3206)) ([a051d9b](https://github.com/choiceoh/Deneb/commit/a051d9b08daca4594b24efb8c9f996c8a75001c4))
+
+
+### 🐛 Bug Fixes
+
+* **bootstrap:** 다운그레이드 가드 자기판별을 macOS에서도 동작하게 — /proc 폴백 추가 ([#3207](https://github.com/choiceoh/Deneb/issues/3207)) ([d8bbe98](https://github.com/choiceoh/Deneb/commit/d8bbe98f1de3e10d4279e416ae7e07ad0e222d6f))
+
 ## [4.70.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.69.0...deneb-v4.70.0) (2026-07-05)
 
 

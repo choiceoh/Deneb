@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.53](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.52...andromeda-v0.0.53) (2026-07-05)
+
+
+### ✨ Features
+
+* **denebui:** 카드 상시관찰 + 인터랙티브 개방 + 우선 고려 + 정본 프리뷰 + 규칙 각인 ([#3206](https://github.com/choiceoh/Deneb/issues/3206)) ([a051d9b](https://github.com/choiceoh/Deneb/commit/a051d9b08daca4594b24efb8c9f996c8a75001c4))
+
 ## [0.0.52](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.51...andromeda-v0.0.52) (2026-07-05)
 
 
