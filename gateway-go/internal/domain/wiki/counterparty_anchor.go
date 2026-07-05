@@ -87,7 +87,9 @@ func (s *Store) knownCounterparties() []CounterpartyRef {
 			Path: p,
 		}
 		if page, perr := s.ReadPage(p); perr == nil && page != nil {
-			if page.Meta.Archived {
+			// Superseded-but-not-yet-archived ledgers (post-merge, pre-verify)
+			// must not anchor either — the replacement page is the live one.
+			if page.Meta.Archived || strings.TrimSpace(page.Meta.SupersededBy) != "" {
 				continue
 			}
 			if t := strings.TrimSpace(page.Meta.Title); t != "" {

@@ -46,7 +46,13 @@ def rpc(gw, token, method, params, timeout):
         headers={"Content-Type": "application/json", "X-Deneb-Client-Token": token},
     )
     with urllib.request.urlopen(req, timeout=timeout) as resp:
-        return json.load(resp)
+        res = json.load(resp)
+    # RPC error frames come back as HTTP 200 ({ok:false,...} or bare {error}) —
+    # surface them as exceptions so infra failures read as '(error: ...)'
+    # instead of silently scoring as content misses.
+    if isinstance(res, dict) and (res.get("ok") is False or ("error" in res and "payload" not in res)):
+        raise RuntimeError(f"rpc {method}: {str(res.get('error') or res)[:200]}")
+    return res
 
 
 def digits_relaxed(s):
@@ -54,18 +60,50 @@ def digits_relaxed(s):
     return re.sub(r"[,\s]", "", s)
 
 
+def digits_bounded(t, n):
+    """Substring hit only at digit boundaries: '1,068' must not pass on '11,068'."""
+    i = t.find(n)
+    while i != -1:
+        pre = t[i - 1] if i > 0 else ""
+        post = t[i + len(n)] if i + len(n) < len(t) else ""
+        if not pre.isdigit() and not post.isdigit():
+            return True
+        i = t.find(n, i + 1)
+    return False
+
+
 def contains(text, needle):
     # "a|b" = any-of alternation: one gold needle accepts phrasing variants
     # ("6/2|6월 2일") without loosening what counts as correct.
-    for alt in needle.split("|"):
+    text = str(text)
+    for alt in str(needle).split("|"):
         alt = alt.strip()
         if not alt:
             continue
         t, n = text.casefold(), alt.casefold()
+        if any(ch.isdigit() for ch in n):
+            if digits_bounded(digits_relaxed(t), digits_relaxed(n)):
+                return True
+            continue
         if n in t:
             return True
-        if any(ch.isdigit() for ch in n) and digits_relaxed(n) in digits_relaxed(t):
+    return False
+
+
+def path_hit(gold, p):
+    """gold matches p only from a path-segment start; the match may continue
+    within the segment ('비금도-154kv' → '비금도-154kv-케이블…') but must not
+    start mid-name, so '영덕' never hits '남영덕/…'. Gold authors disambiguate
+    sibling prefixes ('영덕' vs '영덕-구') by writing the longer form."""
+    p = p.removesuffix(".md")
+    g = str(gold).removesuffix(".md")
+    if not g:
+        return False
+    i = p.find(g)
+    while i != -1:
+        if i == 0 or p[i - 1] == "/":
             return True
+        i = p.find(g, i + 1)
     return False
 
 
@@ -73,17 +111,19 @@ def score_recall(case, gw, token, k, timeout):
     res = rpc(gw, token, "miniapp.memory.search", {"query": case["question"], "limit": k}, timeout)
     results = (res.get("payload") or {}).get("results") or []
     paths = [r.get("path", "") for r in results[:k]]
-    hit = any(g in p for g in case["gold_paths"] for p in paths)
+    hit = any(path_hit(g, p) for g in case["gold_paths"] for p in paths)
     return hit, paths
 
 
 def score_answer(case, gw, token, session, timeout):
     must = case.get("must_contain") or []
-    if not must:
+    must_not = case.get("must_not") or []
+    if not must and not must_not:
         return None, 0, ""  # ungraded case — recall-only
     # Back-to-back sync turns on one session can collide with the previous
     # turn's async teardown (instant "run in progress"-style rejection) — settle
-    # between turns and retry once on an instant-empty response.
+    # between turns and retry once on an empty/error response only (a fast
+    # VALID answer must not trigger a costly duplicate turn).
     text, ms = "", 0
     for attempt in range(2):
         try:
@@ -95,13 +135,11 @@ def score_answer(case, gw, token, session, timeout):
             text = str((res.get("payload") or {}).get("text") or "")
         except Exception as e:  # noqa: BLE001
             text, ms = f"(error: {e})", 0
-        if text and not text.startswith("(error:") and ms >= 500:
+        if text and not text.startswith("(error:"):
             break
         if attempt == 0:
             time.sleep(4)
-    ok = all(contains(text, m) for m in must) and not any(
-        contains(text, m) for m in (case.get("must_not") or [])
-    )
+    ok = all(contains(text, m) for m in must) and not any(contains(text, m) for m in must_not)
     return ok, ms, text
 
 
@@ -109,8 +147,19 @@ def main():
     ap = argparse.ArgumentParser(description="Deneb wiki QA bench")
     ap.add_argument("--mode", choices=["recall", "answer", "both"], default="recall")
     ap.add_argument("--gold", default=os.path.expanduser("~/.deneb/wiki-qa-gold.jsonl"))
-    ap.add_argument("--gw", default=os.environ.get("DENEB_QA_GW", "http://127.0.0.1:18789"))
-    ap.add_argument("--token-file", default=os.path.expanduser("~/.deneb/client_token"))
+    # Gateway/token defaults follow the live-test harness when it is active
+    # (iterate.sh --metric path exports these), else production on this host.
+    default_gw = (
+        os.environ.get("DENEB_QA_GW")
+        or os.environ.get("DENEB_LIVETEST_GW_URL")
+        or "http://127.0.0.1:18789"
+    )
+    state_dir = os.environ.get("DENEB_LIVETEST_STATE_DIR")
+    default_token = (
+        os.path.join(state_dir, "client_token") if state_dir else os.path.expanduser("~/.deneb/client_token")
+    )
+    ap.add_argument("--gw", default=default_gw)
+    ap.add_argument("--token-file", default=default_token)
     ap.add_argument("--k", type=int, default=8, help="recall hit@K (기본 8)")
     ap.add_argument("--ids", default="", help="쉼표로 지정한 케이스만")
     ap.add_argument("--limit", type=int, default=0, help="앞에서 N개만")
@@ -119,7 +168,8 @@ def main():
     ap.add_argument("--verbose", action="store_true", help="answer 모드에서 응답 앞부분 출력")
     args = ap.parse_args()
 
-    token = open(args.token_file, encoding="utf-8").read().strip()
+    with open(args.token_file, encoding="utf-8") as tf:
+        token = tf.read().strip()
     cases = []
     with open(args.gold, encoding="utf-8") as f:
         for ln in f:
@@ -187,6 +237,11 @@ def main():
     for key in sorted(by_diff):
         h, tot = by_diff[key]
         print(f"  {key}: {h}/{tot} ({100 * h // tot}%)")
+    # iterate.sh --metric CMD parses exactly this key for the optimization loop.
+    if a_tot:
+        print(f"metric_value={100 * a_pass // a_tot}")
+    elif r_tot:
+        print(f"metric_value={100 * r_hit // r_tot}")
     return 0
 
 

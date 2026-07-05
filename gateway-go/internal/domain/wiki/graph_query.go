@@ -48,12 +48,15 @@ type graphRec struct {
 	related   []string // raw Related[] entries
 	links     []string // inline [[wiki-link]] targets from the body
 	bodyLower string
+	archived  bool // archived pages never surface as neighbors (rotated 로그-보관 etc.)
 }
 
 // GraphContext returns what the wiki knows is connected to `query` (a
 // person/company/project name or page title): the matched page's summary plus
-// its strongest one-hop neighbors, labeled by relation. Returns "" when no page
-// matches. Pure in-process traversal — no LLM, no graphify subprocess.
+// its strongest one-hop neighbors, labeled by what each target IS
+// (거래처/프로젝트/기자재/인물/… — see neighborLabel; unclassifiable pages keep
+// the edge-mechanism label). Returns "" when no page matches. Pure in-process
+// traversal — no LLM, no graphify subprocess.
 func (s *Store) GraphContext(ctx context.Context, query string, maxNeighbors int) (string, error) {
 	if maxNeighbors <= 0 {
 		maxNeighbors = defaultGraphNeighbors
@@ -72,7 +75,8 @@ func (s *Store) GraphContext(ctx context.Context, query string, maxNeighbors int
 }
 
 // PageConnections returns a compact, one-line summary of a page's strongest
-// graph neighbors (e.g. "홍길동(링크) · 비금도 케이블(유사) · 영광 발주(태그:케이블)"),
+// graph neighbors labeled by their kind (e.g. "홍길동(인물) · XLPE 케이블(기자재) ·
+// 영광 발주(프로젝트)" — mechanism labels only for unclassifiable pages),
 // seeded by the page's exact relPath rather than a free-text query. It powers
 // the "연결된 항목" footer appended when a page is read on-demand, so the agent
 // sees the connection web at the point of reading and can choose to follow it —
@@ -179,6 +183,7 @@ func (s *Store) graphScoreMap(ctx context.Context, query string, includeMentions
 			related:   page.Meta.Related,
 			links:     ExtractWikiLinks(page.Body),
 			bodyLower: strings.ToLower(page.Body),
+			archived:  page.Meta.Archived,
 		})
 		byNorm[recs[idx].normTitle] = idx
 		if recs[idx].id != "" {
@@ -220,6 +225,13 @@ func (s *Store) graphScoreMap(ctx context.Context, query string, includeMentions
 	best := make(map[int]*graphNeighbor)
 	bump := func(idx int, score float64, relation string) {
 		if idx < 0 || idx == seed {
+			return
+		}
+		// Archived pages are retired from the active stage everywhere else
+		// (search demotes, digests/anchors skip); recommending them as
+		// neighbors — e.g. a rotated 로그-보관.md via the family edge — would
+		// resurface exactly what archiving put away.
+		if recs[idx].archived {
 			return
 		}
 		n := best[idx]

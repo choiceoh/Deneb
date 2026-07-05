@@ -77,8 +77,47 @@ func ToolDealLedger(store *wiki.Store) ToolFunc {
 		}
 
 		b.WriteString(renderDealTotals(totals))
+		// The tool advertises 거래처별 합계: when the result spans several
+		// counterparties, append the deterministic per-counterparty breakdown
+		// (always over the FULL filtered set, independent of the list limit).
+		if breakdown := renderCounterpartyBreakdown(recs); breakdown != "" {
+			b.WriteByte('\n')
+			b.WriteString(breakdown)
+		}
 		return strings.TrimRight(b.String(), "\n"), nil
 	}
+}
+
+// renderCounterpartyBreakdown renders per-counterparty totals when more than
+// one counterparty is present, most rows first, capped at 12 lines.
+func renderCounterpartyBreakdown(recs []wiki.DealRecord) string {
+	byCP := map[string][]wiki.DealRecord{}
+	for _, r := range recs {
+		byCP[r.Counterparty] = append(byCP[r.Counterparty], r)
+	}
+	if len(byCP) <= 1 {
+		return ""
+	}
+	names := make([]string, 0, len(byCP))
+	for n := range byCP {
+		names = append(names, n)
+	}
+	sort.Slice(names, func(i, j int) bool {
+		if len(byCP[names[i]]) != len(byCP[names[j]]) {
+			return len(byCP[names[i]]) > len(byCP[names[j]])
+		}
+		return names[i] < names[j]
+	})
+	var b strings.Builder
+	b.WriteString("거래처별:")
+	for i, n := range names {
+		if i >= 12 {
+			fmt.Fprintf(&b, "\n- …외 %d개 거래처 (counterparty 필터로 좁혀서 조회)", len(names)-i)
+			break
+		}
+		b.WriteString("\n- " + n + ": " + renderDealTotals(wiki.SumDealRecords(byCP[n])))
+	}
+	return b.String()
 }
 
 func filterDesc(cp, pj, dt, since, until string) string {
@@ -156,6 +195,9 @@ func renderDealTotals(t wiki.DealTotals) string {
 			line += " (예: " + strings.Join(t.UnparsedSamples, ", ") + ")"
 		}
 		line += " — 합계 미포함, 원문 확인 필요"
+	}
+	if t.NoAmountCount > 0 {
+		line += fmt.Sprintf(" · 금액 없음 %d건 (합계 미포함)", t.NoAmountCount)
 	}
 	return line
 }

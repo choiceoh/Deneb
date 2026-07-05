@@ -110,8 +110,9 @@ func CollectStaleOpenQuestions(wikiDir string, minAgeDays int, now time.Time) []
 			return nil
 		}
 		page, perr := ParsePageFile(path)
-		if perr != nil || page == nil || page.Meta.Archived {
-			return nil //nolint:nilerr // unreadable/archived — skip
+		if perr != nil || page == nil || page.Meta.Archived ||
+			strings.TrimSpace(page.Meta.SupersededBy) != "" {
+			return nil //nolint:nilerr // unreadable/archived/superseded — skip
 		}
 		project, _ := ProjectNameOf(rel)
 		if t := strings.TrimSpace(page.Meta.Title); t != "" {

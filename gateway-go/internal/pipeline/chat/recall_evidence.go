@@ -126,16 +126,25 @@ const recallCounterpartyAnchorScore = 2.1
 // project anchor (pinned structurally, not found by a term).
 const recallCounterpartyAnchorQuery = "counterparty-anchor"
 
-func recallWikiEvidence(ctx context.Context, store *wiki.Store, queries []string) []recallEvidence {
+// rawMessage is the user's untokenized text: anchors match against it (not the
+// normalized queries) because query tokenization strips Korean suffix syllables
+// that can be part of a name — a ledger called 에스와이 must still anchor on
+// "에스와이랑 최근 거래" even though the token normalizer eats the final 이.
+func recallWikiEvidence(ctx context.Context, store *wiki.Store, queries []string, rawMessage string) []recallEvidence {
 	if store == nil || len(queries) == 0 {
 		return nil
 	}
 	seen := make(map[string]struct{})
 	var evidence []recallEvidence
 
+	anchorText := strings.TrimSpace(rawMessage)
+	if anchorText == "" {
+		anchorText = strings.Join(queries, " ")
+	}
+
 	// Structure-aware anchor: a query naming a known project pins that
 	// project's 대표페이지 into the evidence regardless of keyword ranking.
-	for _, ref := range store.MatchProjectsInText(strings.Join(queries, " "), 2) {
+	for _, ref := range store.MatchProjectsInText(anchorText, 2) {
 		if _, ok := seen[ref.Path]; ok {
 			continue
 		}
@@ -152,7 +161,7 @@ func recallWikiEvidence(ctx context.Context, store *wiki.Store, queries []string
 	// Same structure-aware anchoring for counterparties: naming a company with
 	// a 거래 원장 pins that ledger, so cross-project deal history surfaces even
 	// when keyword ranking prefers individual mail-analysis pages.
-	for _, ref := range store.MatchCounterpartiesInText(strings.Join(queries, " "), 2) {
+	for _, ref := range store.MatchCounterpartiesInText(anchorText, 2) {
 		if _, ok := seen[ref.Path]; ok {
 			continue
 		}
@@ -216,6 +225,11 @@ func formatRecallCounterpartyAnchorNote(store *wiki.Store, ref wiki.Counterparty
 			parts = append(parts, "summary: "+s)
 		}
 		if body := strings.TrimSpace(page.Body); body != "" {
+			// Head only: the note caps at 420 chars anyway, so slicing here
+			// avoids scanning a large ledger body into the truncation call.
+			if runes := []rune(body); len(runes) > 500 {
+				body = string(runes[:500])
+			}
 			parts = append(parts, "내용: "+body)
 		}
 	}

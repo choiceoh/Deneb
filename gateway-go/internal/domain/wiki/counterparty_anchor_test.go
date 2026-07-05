@@ -35,6 +35,11 @@ func TestMatchCounterpartiesInText(t *testing.T) {
 		Meta: Frontmatter{Title: "옛거래처", Archived: true},
 		Body: "종료된 거래.",
 	})
+	// Superseded-but-not-yet-archived ledgers must not anchor either.
+	mustWrite(t, store, "프로젝트/거래/합병전거래처.md", &Page{
+		Meta: Frontmatter{Title: "합병전거래처", SupersededBy: "프로젝트/거래/대한전선.md"},
+		Body: "병합됨.",
+	})
 
 	cases := []struct {
 		name  string
@@ -49,6 +54,7 @@ func TestMatchCounterpartiesInText(t *testing.T) {
 		{"short ascii inside word rejected", "the threshold value is fine", 2, nil},
 		{"short ascii with ascii tail rejected", "skbroadband 문의", 2, nil},
 		{"archived skipped", "옛거래처 정리하자", 2, nil},
+		{"superseded skipped", "합병전거래처 근황 알려줘", 2, nil},
 		{"unknown", "없는회사 이야기", 2, nil},
 		{"longest key first", "대한전선이랑 sunkean 둘 다 확인해줘", 1, []string{"Sunkean"}},
 	}

@@ -31,8 +31,8 @@ metadata:
 
 ### 1단계: 데이터 수집
 
-`morning_letter` 도구를 호출한다. 파라미터 없이 호출하면 6개 섹션(날씨·환율·
-구리시세·일정·메일·마감)을 병렬 수집하여 JSON 데이터를 반환한다. **deferred
+`morning_letter` 도구를 호출한다. 파라미터 없이 호출하면 7개 섹션(날씨·환율·
+구리시세·일정·메일·마감·미해결질문)을 병렬 수집하여 JSON 데이터를 반환한다. **deferred
 도구**라 스키마가 안 보이면 `fetch_tools`로 `morning_letter`를 먼저 로드한다.
 
 ```json
@@ -47,8 +47,13 @@ metadata:
 - `sections.calendar`: 오늘 일정 목록
 - `sections.email`: 전일 수신 메일 목록 (발신자, 제목, 스니펫)
 - `sections.deadlines`: 위키에서 스캔한 임박 마감 목록 (`items`: title, category, due, days_left)
+- `sections.open_questions`: 7일 이상 열려 있는 프로젝트 미해결 질문 (`items`: project, question, asked, age_days) — 내부 소스로 답을 못 찾은 것들이니 "사람에게 확인할 것"으로 승격하는 섹션
 
 각 섹션에 `ok: false`이면 해당 섹션 조회에 실패한 것이다.
+
+미해결 질문 카드 규칙: `open_questions.items`가 비어 있지 않으면 마감 카드 뒤에
+"확인 필요" 카드를 하나 추가한다 — 항목마다 `{project}: {question} ({age_days}일째)`
+한 줄. 비어 있으면 카드째 생략(다른 빈 섹션과 동일 규칙).
 
 ### 2단계: 레터 카드 작성
 

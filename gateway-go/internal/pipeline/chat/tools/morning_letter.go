@@ -25,10 +25,10 @@ import (
 // MorningLetterOpts holds optional configuration for the morning letter tool.
 type MorningLetterOpts struct {
 	DiaryDir string // wiki diary directory; empty = no diary logging
-	WikiDir  string // wiki root directory; empty = no deadline scan
+	WikiDir  string // wiki root directory; empty = no deadline/open-question scans
 }
 
-// ToolMorningLetter returns the morning_letter tool — collects 6 data sections
+// ToolMorningLetter returns the morning_letter tool — collects 7 data sections
 // in parallel and returns structured JSON for the LLM to compose the final letter.
 //
 // The LLM receives raw data and is responsible for formatting, tone, and
