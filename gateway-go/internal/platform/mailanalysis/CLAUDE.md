@@ -15,6 +15,7 @@
 | `pipeline.go` | ★`AnalyzeEmailPipeline` — 분석 오케스트레이터. `PipelineDeps`, 프로젝트 후보 매칭, 로컬 LLM JSON 헬퍼(`callLocalLLMJSON`) |
 | `pipeline_synthesis.go` | `AnalyzeEmailPipeline`의 단계들: **stage-1 컨텍스트 추출**(스레드·발신자 기억·위키 그래프) + **stage-2 합성** 호출 + 중요도 판정/관련 프로젝트 suffix 파싱 |
 | `pipeline_extractors.go` | 합성된 분석 텍스트 위에서 도는 로컬-AI 추출기: 위키 fact 제안·운영자 action item·거래 정보. 전부 lightweight 모델 JSON 모드 |
+| `deal_facts.go` | 거래 조건 인용 추출기(사실 레이어 2단계): 물량·단가·지급조건·하자보수·지체상금을 원문 인용과 함께 뽑고 결정적 인용 게이트(`verifyDealFacts`)로 미검증 필드 드롭. 거래 메일 한정 2차 패스 |
 | `pipeline_batch.go` | 배치 분석 경로 |
 | `party_anchor.go` | 당사자 앵커 — 발신/수신/참조의 소속(우리 측/외부)을 결정적으로 stage-2 프롬프트에 주입 (분석 모델의 당사자 뒤집기 제거) |
 | `date_anchor.go` | 날짜 앵커 — Date 헤더 + 상대 날짜 환산표(KST) 주입 (상대 날짜 산술은 측정된 모델 약점) |

@@ -151,6 +151,11 @@ type DealInfo struct {
 	DueDate      string
 	Items        []string
 	Summary      string
+	// Facts are the quote-verified commercial terms (물량·단가·지급조건·
+	// 하자보수·지체상금) from the second, quote-mandatory extractor pass —
+	// nil when the mail carries none or none survived verification
+	// (deal_facts.go).
+	Facts *DealFacts
 }
 
 // dealExtract is the local-LLM JSON-mode response. IsDeal lets the model say

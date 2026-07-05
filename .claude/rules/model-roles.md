@@ -50,6 +50,7 @@ globs: gateway-go/internal/ai/modelrole/**, gateway-go/internal/pipeline/pilot/*
 | 프로젝트 위키 딥리서치 갱신 (6h) | `runtime/server/wiki_research_task.go` | **main** | 도구무거운 에이전트 턴(내부 소스 재조사→위키 본문 갱신·supersede). boot/heartbeat/goal과 동형의 에이전트 턴이라 main, 헬퍼 요약 콜 아님. wiki-research 프리셋(웹 제외)으로 내부 소스 한정, 로컬 |
 | 메일 리포트 종합 (stage2) | `mailAnalysisModels()` | **analysis** | 사용자가 읽는 리포트, 품질 최우선 — **의도적 클라우드 OK** |
 | 메일 추출 (stage1) · gmail facts/actions/deal | `mailAnalysisModels()`, `platform/mailanalysis/pipeline_extractors.go` | **tiny** | 단순 구조화 JSON 추출 |
+| 거래 조건 인용 추출 (deal facts 2차 패스) | `platform/mailanalysis/deal_facts.go` | **tiny** | 거래 메일 한정 — 물량·단가·지급조건·하자보수·지체상금을 **원문 인용 필수**로 추출, Go 결정적 게이트(`verifyDealFacts`: 인용⊂원문 + 값 숫자⊂인용)가 미검증 필드 드롭. stage1과 같은 배치·같은 예산, fail-open |
 | 세션 자동 제목 | `chat/session_autotitle.go` | **tiny** | 짧은 명사구 제목 |
 | 코드모드 체크포인트 라벨 | `runtime/server/method_registry.go` `checkpointSummarizer` → `code.AfterTurn` | **tiny** | 코딩 턴의 요청+결과 보고를 한국어 명사구 한 줄(≤40자)로 — 체크포인트 목록이 바이브코더의 변경 이력이라 사용자 메시지 원문보다 "무엇이 바뀌었나"가 맞다. dirty 확인 후에만 호출(읽기 턴 무비용), fail-open(실패 시 사용자 메시지 트림 폴백) |
 | 워크피드 카드 제목+요약 | `runtime/server/workfeed_title_llm.go` | **lightweight** | 짧은 제목 + 2줄 카드 요약을 단일 호출로 생성 (#2504 후 lightweight). 휴리스틱(extractCardTitle/Summary)이 폴백 |
