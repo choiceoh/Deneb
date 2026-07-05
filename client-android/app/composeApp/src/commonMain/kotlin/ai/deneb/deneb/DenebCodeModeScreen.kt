@@ -630,11 +630,9 @@ internal fun codeDirtyLabel(s: CodeSession): String? {
     return if (s.changedFiles > 0) "저장 필요 ${s.changedFiles}개" else "저장 필요"
 }
 
-private fun codeUpdatedSuffix(updatedAt: String): String =
-    codeTimeAgo(updatedAt).takeIf { it.isNotBlank() }?.let { " · $it 갱신" } ?: ""
+private fun codeUpdatedSuffix(updatedAt: String): String = codeTimeAgo(updatedAt).takeIf { it.isNotBlank() }?.let { " · $it 갱신" } ?: ""
 
-internal fun codeTimestampLabel(iso: String): String =
-    codeTimeAgo(iso).takeIf { it.isNotBlank() } ?: iso
+internal fun codeTimestampLabel(iso: String): String = codeTimeAgo(iso).takeIf { it.isNotBlank() } ?: iso
 
 internal fun codeTimeAgo(iso: String, nowEpochMs: Long = Clock.System.now().toEpochMilliseconds()): String {
     if (iso.isBlank()) return ""
