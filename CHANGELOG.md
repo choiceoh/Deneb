@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.65.2](https://github.com/choiceoh/Deneb/compare/deneb-v4.65.1...deneb-v4.65.2) (2026-07-05)
+
+
+### 🐛 Bug Fixes
+
+* **chat:** surface aborted empty sync replies ([#3155](https://github.com/choiceoh/Deneb/issues/3155)) ([17d64c4](https://github.com/choiceoh/Deneb/commit/17d64c4559537ecfeb35b0889e904a28eff22f3b))
+
 ## [4.65.1](https://github.com/choiceoh/Deneb/compare/deneb-v4.65.0...deneb-v4.65.1) (2026-07-05)
 
 
