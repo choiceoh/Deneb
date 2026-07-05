@@ -535,7 +535,8 @@ func approvalPayload(parts ...any) string {
 // findSecretKey walks a nested config object and returns the first dotted
 // path whose key looks like a credential, or "" when clean. Guards the
 // legacy config.patch/config.apply write paths with the same "agents never
-// manage tokens" rule config_set enforces on its single path.
+// manage tokens" rule config_set enforces on its single path. Recurses into
+// arrays too — providers: [{apiKey: ...}] must not slip past the block.
 func findSecretKey(prefix string, m map[string]any) string {
 	for k, v := range m {
 		p := k
@@ -545,8 +546,20 @@ func findSecretKey(prefix string, m map[string]any) string {
 		if secretPathPattern.MatchString(k) {
 			return p
 		}
-		if nested, ok := v.(map[string]any); ok {
-			if hit := findSecretKey(p, nested); hit != "" {
+		if hit := findSecretValue(p, v); hit != "" {
+			return hit
+		}
+	}
+	return ""
+}
+
+func findSecretValue(prefix string, v any) string {
+	switch t := v.(type) {
+	case map[string]any:
+		return findSecretKey(prefix, t)
+	case []any:
+		for i, el := range t {
+			if hit := findSecretValue(fmt.Sprintf("%s[%d]", prefix, i), el); hit != "" {
 				return hit
 			}
 		}

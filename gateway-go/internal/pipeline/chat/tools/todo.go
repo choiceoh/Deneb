@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/localtodo"
+	"github.com/choiceoh/deneb/gateway-go/pkg/dentime"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
@@ -95,7 +96,9 @@ func toolTodoWithStore(store *localtodo.Store) ToolFunc {
 // D+N. The whole value of a task list is surfacing deadlines; store order
 // buried them and "마감 2026-06-01" read the same whether past or future.
 func formatTodoList(todos []localtodo.Todo) string {
-	return formatTodoListAt(todos, time.Now())
+	// dentime honors the configured timezone (DENEB_TIMEZONE) — a bare
+	// time.Now() on a UTC host would shift the D+N overdue math by a day.
+	return formatTodoListAt(todos, dentime.Now())
 }
 
 func formatTodoListAt(todos []localtodo.Todo, now time.Time) string {

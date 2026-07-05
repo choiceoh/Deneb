@@ -128,7 +128,13 @@ func SearchContextMessages(ctx context.Context, cfg Config, query string, opts C
 	if !opts.Since.IsZero() {
 		criteria = archiveSentSinceCriteria(opts.Since) + " " + criteria
 	}
-	return searchContextMessages(ctx, c, cfg, criteria, opts, true)
+	msgs, err := searchContextMessages(ctx, c, cfg, criteria, opts, true)
+	if err != nil || opts.Since.IsZero() {
+		return msgs, err
+	}
+	// SENTSINCE carries a deliberate 1-day prefetch margin (date-only IMAP
+	// semantics); post-filter back to the exact boundary like ListSince does.
+	return filterSentOnOrAfter(msgs, opts.Since), nil
 }
 
 // ThreadContext reconstructs the whole available archive thread around one

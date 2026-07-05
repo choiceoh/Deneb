@@ -79,9 +79,19 @@ func calActionFreeSlots(ctx context.Context, d *toolctx.CalendarDeps, p calParam
 		busy = append(busy, interval{e.Start.In(loc), end.In(loc)})
 	}
 
-	exclusions := "주말·점심(12–13시) 제외"
-	if p.IncludeWeekends {
-		exclusions = "점심(12–13시) 제외"
+	// The lunch carve-out only applies when the working window strictly
+	// contains 12–13 — keep the header honest for narrow windows.
+	lunchCarved := dayStart < 12 && dayEnd > 13
+	var excl []string
+	if !p.IncludeWeekends {
+		excl = append(excl, "주말")
+	}
+	if lunchCarved {
+		excl = append(excl, "점심(12–13시)")
+	}
+	exclusions := "제외 없음"
+	if len(excl) > 0 {
+		exclusions = strings.Join(excl, "·") + " 제외"
 	}
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "빈 시간 (%02d:00–%02d:00, %d분 이상, %s, %s ~ %s):\n",
@@ -106,14 +116,14 @@ func calActionFreeSlots(ctx context.Context, d *toolctx.CalendarDeps, p calParam
 		if !winEnd.After(winStart) {
 			continue
 		}
-		// Carve out the lunch hour when the working window strictly contains
-		// it — a deliberately narrow window (e.g. day_start=12, day_end=13)
-		// stays untouched so an explicit lunch search still works.
+		// Carve out the lunch hour when the working hours strictly contain
+		// it (same condition the header reports) — a deliberately narrow
+		// window (e.g. day_start=12, day_end=13) stays untouched so an
+		// explicit lunch search still works. freeWithin clips to the window.
 		dayBusy := busy
-		lunchStart := time.Date(day.Year(), day.Month(), day.Day(), 12, 0, 0, 0, loc)
-		lunchEnd := lunchStart.Add(time.Hour)
-		if winStart.Before(lunchStart) && winEnd.After(lunchEnd) {
-			dayBusy = append(append([]interval(nil), busy...), interval{lunchStart, lunchEnd})
+		if lunchCarved {
+			lunchStart := time.Date(day.Year(), day.Month(), day.Day(), 12, 0, 0, 0, loc)
+			dayBusy = append(append([]interval(nil), busy...), interval{lunchStart, lunchStart.Add(time.Hour)})
 		}
 		slots := freeWithin(winStart, winEnd, dayBusy, minDur)
 		if len(slots) == 0 {

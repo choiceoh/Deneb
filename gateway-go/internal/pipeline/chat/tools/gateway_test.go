@@ -327,6 +327,14 @@ func TestGatewayConfigPatchApprovalFlow(t *testing.T) {
 	if !strings.Contains(out, "거부") {
 		t.Errorf("expected secret-key rejection, got: %s", out)
 	}
+	// ...including inside array elements (providers: [{apiKey: ...}]).
+	out = mustCallTool(t, tool, map[string]any{
+		"action": "config.patch",
+		"patch":  map[string]any{"providers": []any{map[string]any{"apiKey": "x"}}},
+	})
+	if !strings.Contains(out, "거부") {
+		t.Errorf("expected secret-key-in-array rejection, got: %s", out)
+	}
 
 	// Clean patch: envelope → confirmed → written.
 	patch := map[string]any{"model": map[string]any{"main": "b"}}
