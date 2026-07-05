@@ -53,6 +53,11 @@ func TestGraphContext(t *testing.T) {
 	if !strings.Contains(got, "탑솔라 거래") {
 		t.Errorf("related deal missing from neighbors:\n%s", got)
 	}
+	// Neighbors are labeled by what the target IS (its category), not by how
+	// the edge was found.
+	if !strings.Contains(got, "탑솔라 거래 (거래)") {
+		t.Errorf("neighbor should carry its semantic kind label:\n%s", got)
+	}
 	if strings.Contains(got, "DGX Spark") {
 		t.Errorf("unrelated page leaked into neighbors:\n%s", got)
 	}
@@ -96,8 +101,9 @@ func TestGraphContext_InlineWikiLinks(t *testing.T) {
 	if !strings.Contains(got, "홍길동") {
 		t.Errorf("inline [[wiki-link]] neighbor missing:\n%s", got)
 	}
-	if !strings.Contains(got, "링크") {
-		t.Errorf("expected the neighbor to be labeled as a link edge:\n%s", got)
+	// The inline link forms the edge; the rendered label is the target's kind.
+	if !strings.Contains(got, "홍길동 (사람)") {
+		t.Errorf("expected the link neighbor labeled by its kind (사람):\n%s", got)
 	}
 	if strings.Contains(got, "DGX Spark") {
 		t.Errorf("unrelated page leaked into neighbors:\n%s", got)
@@ -153,14 +159,23 @@ func TestPageConnections(t *testing.T) {
 		Meta: Frontmatter{ID: "dgx", Title: "DGX Spark", Category: "기술"},
 		Body: "GPU.",
 	})
+	// Root-level page with no category: no semantic kind, so the mechanism
+	// label (관련) must survive as the fallback.
+	mustWrite(t, store, "memo.md", &Page{
+		Meta: Frontmatter{ID: "memo", Title: "메모장", Related: []string{"deals/topsolar.md"}},
+		Body: "잡다한 기록.",
+	})
 
 	ctx := context.Background()
 	got, err := store.PageConnections(ctx, "deals/topsolar.md", 6)
 	if err != nil {
 		t.Fatalf("PageConnections: %v", err)
 	}
-	if !strings.Contains(got, "홍길동") {
-		t.Errorf("expected 홍길동 neighbor in footer, got: %q", got)
+	if !strings.Contains(got, "홍길동(사람)") {
+		t.Errorf("expected 홍길동 neighbor labeled by kind in footer, got: %q", got)
+	}
+	if !strings.Contains(got, "메모장(관련)") {
+		t.Errorf("expected mechanism-label fallback for unclassifiable page, got: %q", got)
 	}
 	if strings.Contains(got, "DGX Spark") {
 		t.Errorf("isolated page leaked into footer: %q", got)
@@ -169,6 +184,39 @@ func TestPageConnections(t *testing.T) {
 	// Isolated page → empty footer.
 	if got, _ := store.PageConnections(ctx, "tech/dgx.md", 6); got != "" {
 		t.Errorf("expected empty footer for isolated page, got: %q", got)
+	}
+}
+
+// TestSemanticNeighborLabel pins the deterministic path/category → kind rules:
+// 프로젝트/ layout slots are authoritative, other pages fall back to category
+// then top-level folder, and meaningless kinds (기타, root files) return "".
+func TestSemanticNeighborLabel(t *testing.T) {
+	cases := []struct {
+		path     string
+		category string
+		want     string
+	}{
+		{"프로젝트/거래/한화큐셀.md", "", "거래처"},
+		{"프로젝트/기아-화성/대표.md", "", "프로젝트"},
+		{"프로젝트/기아-화성.md", "", "프로젝트"},           // legacy flat rep page
+		{"프로젝트/기아-화성/케이블 견적 비교.md", "", "프로젝트"}, // detail page
+		{"프로젝트/기아-화성/기자재/XLPE 케이블.md", "", "기자재"},
+		{"프로젝트/기아-화성/로그.md", "", "로그"},
+		{"프로젝트/기아-화성/메일분석/m1.md", "", "메일"},
+		{"프로젝트/메일분석/m2.md", "", "메일"},          // unlinked bucket
+		{"프로젝트/mail-analyses/m3.md", "", "메일"}, // legacy bucket
+		{"인물/김민준.md", "", "인물"},                // top-level folder fallback
+		{"people/hong.md", "사람", "사람"},         // category beats foreign folder name
+		{"규정/발주.md", "w:규정", "규정"},             // wikilink-leaked category normalized
+		{"업무/결재.md", "프로젝트/영산고", "프로젝트"},       // path category → first segment
+		{"기타/잡동사니.md", "기타", ""},               // 기타 carries no meaning
+		{"index.md", "", ""},                   // root file
+	}
+	for _, tc := range cases {
+		got := semanticNeighborLabel(graphRec{relPath: tc.path, category: tc.category})
+		if got != tc.want {
+			t.Errorf("semanticNeighborLabel(%q, cat=%q) = %q, want %q", tc.path, tc.category, got, tc.want)
+		}
 	}
 }
 

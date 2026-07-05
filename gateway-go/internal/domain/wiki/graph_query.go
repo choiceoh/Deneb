@@ -15,6 +15,7 @@ package wiki
 
 import (
 	"context"
+	"path/filepath"
 	"sort"
 	"strings"
 )
@@ -96,7 +97,7 @@ func (s *Store) PageConnections(ctx context.Context, relPath string, maxNeighbor
 	}
 	parts := make([]string, 0, len(neighbors))
 	for _, n := range neighbors {
-		parts = append(parts, recs[n.idx].title+"("+n.relation+")")
+		parts = append(parts, recs[n.idx].title+"("+neighborLabel(recs[n.idx], n.relation)+")")
 	}
 	return strings.Join(parts, " · "), nil
 }
@@ -422,6 +423,54 @@ type graphNeighbor struct {
 	relation string
 }
 
+// neighborLabel labels a rendered neighbor with what the target page IS
+// (거래처/프로젝트/기자재/메일/인물/규정/…) instead of how the edge was found
+// (관련/링크/태그/언급/유사). The layout schema and category frontmatter already
+// know every page's kind, so the meaning label is deterministic and free — no
+// LLM classification, no authored relation types. Pages with no classifiable
+// kind keep the mechanism label, which also preserves the provenance hint
+// exactly where the graph is guessing.
+func neighborLabel(rec graphRec, mechanism string) string {
+	if l := semanticNeighborLabel(rec); l != "" {
+		return l
+	}
+	return mechanism
+}
+
+// semanticNeighborLabel derives the page-kind label. Under 프로젝트/ the layout
+// slot is authoritative (거래 원장 → 거래처, 기자재/ → 기자재, 메일분석 buckets →
+// 메일, 로그.md → 로그, everything else → 프로젝트); other pages label as their
+// normalized category, falling back to the top-level folder name. Returns ""
+// when neither carries meaning (root files, 기타), leaving the mechanism label.
+func semanticNeighborLabel(rec graphRec) string {
+	p := filepath.ToSlash(strings.TrimSpace(rec.relPath))
+	if seg := splitProjectPath(p); len(seg) > 0 {
+		switch {
+		case seg[0] == dealDir:
+			return "거래처"
+		case IsMailAnalysisPath(p):
+			return "메일"
+		case len(seg) >= 2 && seg[1] == EquipmentDir:
+			return "기자재"
+		case len(seg) == 2 && seg[1] == LogPageFile:
+			return "로그"
+		default:
+			return "프로젝트"
+		}
+	}
+	if c := normalizeCategory(rec.category); c != "" && c != "기타" {
+		// Path categories ("프로젝트/영산고") keep labels short: first segment only.
+		if i := strings.IndexByte(c, '/'); i > 0 {
+			c = c[:i]
+		}
+		return c
+	}
+	if cat, rest, ok := strings.Cut(p, "/"); ok && cat != "" && rest != "" && cat != "기타" {
+		return cat
+	}
+	return ""
+}
+
 func renderGraphContext(seed graphRec, recs []graphRec, neighbors []graphNeighbor) string {
 	var sb strings.Builder
 	sb.WriteString(seed.title)
@@ -438,7 +487,7 @@ func renderGraphContext(seed graphRec, recs []graphRec, neighbors []graphNeighbo
 		sb.WriteString("\n관련 항목:")
 		for _, n := range neighbors {
 			r := recs[n.idx]
-			sb.WriteString("\n- " + r.title + " (" + n.relation + ")")
+			sb.WriteString("\n- " + r.title + " (" + neighborLabel(r, n.relation) + ")")
 			if r.summary != "" {
 				sb.WriteString(": " + r.summary)
 			}
