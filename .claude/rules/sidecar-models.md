@@ -132,6 +132,13 @@ Hindsight(Hermes 계열 FastAPI+pgvector 장기기억 서비스)는 **2026-06-15
 - 결론: **effort 라우팅은 Deneb 가 단독 수행**(튜닝됨·파이프라인 통합), wormhole 은 메인에 대해 dumb passthrough. (외부 클라용 effort 라우팅을 살리려면 별도 toggleKwarg 엔트리 또는 향후 per-request opt-out 헤더.)
 - **★ 전용 변형 엔트리는 허용 (`thinkingMode`, 2026-07-04).** 같은 업스트림을 가리키는 **별도 이름** 엔트리로 추론 방향을 계약할 수 있다: `"off"` = 무조건 노추론 — 엔트리의 정체성이라 **X-Wormhole-No-Effort 로도 억제되지 않음**(이름으로 고른 소비자의 명시적 선택); `"off-unless-hard"` = **노추론 기본**, 명백한 어려움 신호(hard-signal·첨부·구조화)에서만 추론 유지 — "긴 입력"만으로는 안 켬(실측: dsv4 노추론이 메일 분석에서 동급 품질·5배 속도, 판정 근거는 agents-a1 메모리). APC 논거: 엔트리별 주입이 **일정**해 그 엔트리 소비자끼리 prefix family 일관, 메인 패스스루 바이트 불변. 운영 예: `{"name":"dsv4-nothink","url":"http://100.125.220.117:8000/v1","upstreamModel":"deepseek-v4-flash","toggleKwarg":"thinking","thinkingMode":"off"}` — 2026-07-04 현재 **lightweight/tiny/translation 역할**이 이 이름을 소비(qwen3.6 에서 교체, qwen 엔진은 유휴 서빙 중). ⚠ dsv4 의 진짜 스위치는 `thinking`(`enable_thinking` 은 무시됨 — 실측), 노추론 dsv4 는 산술 취약(메일 분석엔 무해 — 대소비교·보존 작업).
 
+### ★ 이미지 게이트 (`vision`, 2026-07-05)
+> 텍스트 전용 모델(GLM 텍스트 계열·DeepSeek)에 이미지 content-part 를 보내면 **hard 400** 이 나고, 이미지가 클라이언트 히스토리에 남아 **이후 모든 턴이 같은 400 으로 오염**된다(Kai 업스트림 실측 교훈, SimonSchubert/Kai@5d57ea69). 게이트웨이의 스트립은 deneb.json 이 `vision:false` 를 명시할 때만 작동(빌트인 기본값 없음)하므로, 모든 소비자가 지나는 wormhole 이 빌트인 폴백을 갖는다 (`cmd/wormhole/vision.go`).
+
+- **동작**: 엔트리의 upstreamModel 이 텍스트 전용으로 판정되면 `messages[].content` 배열의 이미지 파트를 텍스트 스텁(`[이미지 첨부 생략 — 텍스트 전용 모델]`)으로 치환. openai(`image_url`)·anthropic(`image`) 양 프로토콜 지원.
+- **판정**: GLM 텍스트 계열은 **정확 일치 목록**(vision 변형 `glm-4.6v` 등이 프리픽스를 공유해 프리픽스 매칭 금지), DeepSeek 은 **패밀리 프리픽스**(`vl` 포함 id 제외), unknown 모델은 이미지 통과(멀쩡한 멀티모달에서 깎는 게 더 나쁜 실패). 엔트리 `"vision": true/false` 로 강제 오버라이드 가능.
+- **★ APC 논거**: 게이트는 **이미지 파트가 실제로 있는 요청만** 재작성한다 — 이미지 없는 요청은 fast-scan 단락 + 파싱 후에도 원본 바이트 그대로 전달(바이트 불변). 이미지 포함 요청은 어차피 400 이던 트래픽이라 기존 prefix family 를 가르지 않는다.
+
 ### ★ 클라우드 모델 추론 프로필 (`reasoning`, glm-5.2; 2026-06-21)
 > `toggleKwarg`(vLLM `chat_template_kwargs`)는 위 규칙대로 Deneb 엔트리에 금지(APC). 하지만 **클라우드 모델은 추론 제어 방언이 달라** 게이트웨이가 표현하지 못한다 — 그 번역은 wormhole 만 할 수 있다. 그래서 cloud 전용 필드 `reasoning` 을 둔다(`cmd/wormhole/effort.go:reasoningRoute`, `applyReasoning`).
 

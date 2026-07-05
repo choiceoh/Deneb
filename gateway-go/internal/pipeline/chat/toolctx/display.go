@@ -24,7 +24,7 @@ import (
 )
 
 // LinkEnrichmentHeader marks the start of a link-enrichment block appended to
-// an interactive user message. chat.maybeEnrichLinks writes it and the display
+// an interactive user message. chat's enrichment join writes it and the display
 // strips look for it; the generator and the strippers stay in sync through
 // this constant.
 const LinkEnrichmentHeader = "Link content from URLs in this message:"

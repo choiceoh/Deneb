@@ -170,14 +170,6 @@ func translateRangesConcurrently(ctx context.Context, inputs []translateInput, o
 	wg.Wait()
 }
 
-// nextBatchEnd grows a batch from start, accumulating segments until adding the next
-// would exceed translateMaxCharsPerBatch or translateMaxSegmentsPerBatch — but always
-// takes at least one segment, so a lone over-long segment becomes its own batch (which
-// translateRange still handles, splitting only if its output truncates).
-func nextBatchEnd(segments []string, start int) int {
-	return nextInputBatchEnd(normalizeTranslateInputs(segments), start)
-}
-
 func nextInputBatchEnd(inputs []translateInput, start int) int {
 	end := start + 1
 	chars := translateInputCost(inputs[start])

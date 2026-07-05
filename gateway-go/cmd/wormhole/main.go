@@ -72,6 +72,12 @@ type modelEntry struct {
 	//   (on). GLM honors only reasoning_effort high|max and resolves anything but
 	//   an explicit "high" to MAX, so on-mode pins "high" rather than leaking max.
 	Reasoning string `json:"reasoning,omitempty"`
+	// Vision overrides the builtin image-capability table (vision.go): false
+	// forces image content parts to be stripped to text stubs before forwarding,
+	// true forces pass-through. Nil = builtin table keyed by the upstream model
+	// id (GLM text families exact-match, DeepSeek family prefix; unknown models
+	// pass images through). See applyVisionGate for the APC-safety contract.
+	Vision *bool `json:"vision,omitempty"`
 	// Local overrides the loopback/private-IP auto-detection (privacy.go). Set it
 	// false to mark an on-box endpoint as cloud (e.g. a local tunnel that egresses)
 	// or true for a public URL you trust as local. Nil = auto-detect from URL.

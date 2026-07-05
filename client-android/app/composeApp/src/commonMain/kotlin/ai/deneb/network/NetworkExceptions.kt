@@ -109,7 +109,10 @@ fun Exception.toUiError(): UiError = when (this) {
         ?.let { UiError.ResourceWithDetail(Res.string.error_bad_request, it) }
         ?: UiError.Resource(Res.string.error_bad_request)
 
-    is GeminiGenericException, is OpenAICompatibleGenericException, is AnthropicGenericException, is GenericNetworkException -> UiError.Text(message ?: "An unexpected error occurred.")
+    // A blank provider message would render an empty (or hardcoded-English) error —
+    // fall back to the localized unknown-error resource instead (upstream Kai fix).
+    is GeminiGenericException, is OpenAICompatibleGenericException, is AnthropicGenericException, is GenericNetworkException ->
+        if (!message.isNullOrBlank()) UiError.Text(message!!) else UiError.Resource(Res.string.error_unknown)
 
     else -> if (!message.isNullOrBlank()) UiError.Text(message!!) else UiError.Resource(Res.string.error_unknown)
 }

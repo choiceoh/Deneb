@@ -292,6 +292,16 @@ class MainActivity : ComponentActivity() {
             dataRepository.requestOpenWorkTopic()
             intent.removeExtra(EXTRA_OPEN_WORK_TOPIC)
         }
+        // Android assist gesture (홈버튼 길게 누르기 / 사이드 버튼): with Deneb set as the
+        // device assist app, the OS-level "call your assistant" gesture lands in the
+        // 업무 chat, ready to type — the same navigation pulse the proactive push uses.
+        if (intent?.action == Intent.ACTION_ASSIST) {
+            val dataRepository: DataRepository = get()
+            dataRepository.requestOpenWorkTopic()
+            // Clear the action so a configuration change doesn't re-trigger the
+            // navigation after ChatViewModel has already consumed the request.
+            intent.action = null
+        }
     }
 
     // Share-sheet capture: text shared from any app (a KakaoTalk message, a URL,

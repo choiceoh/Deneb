@@ -157,7 +157,7 @@ func TestFormatLinkSummary_WithTitle(t *testing.T) {
 	}
 }
 
-// The enriched message must round-trip: what maybeEnrichLinks appends, the
+// The enriched message must round-trip: what the enrichment join appends, the
 // History display strip removes — so the user bubble shows the typed text.
 func TestStripLinkEnrichmentForDisplay_RoundTrip(t *testing.T) {
 	typed := "이 링크 요약해줘 https://example.com"
@@ -180,21 +180,93 @@ func TestStripLinkEnrichmentForDisplay_RoundTrip(t *testing.T) {
 }
 
 // A message that already carries an enrichment block must not be enriched
-// again (idempotence guard in maybeEnrichLinks).
-func TestMaybeEnrichLinks_AlreadyEnriched(t *testing.T) {
+// again (idempotence guard in startLinkEnrichment).
+func TestStartLinkEnrichment_AlreadyEnriched(t *testing.T) {
 	h := &Handler{logger: slog.Default()}
 	enriched := "see https://example.com\n\n---\n" + toolctx.LinkEnrichmentHeader + "\n\nstuff\n---"
-	if got := h.maybeEnrichLinks(context.Background(), enriched, nil); got != enriched {
-		t.Fatal("already-enriched message must pass through unchanged")
+	if join := h.startLinkEnrichment(context.Background(), enriched, nil); join != nil {
+		t.Fatal("already-enriched message must not start an enrichment")
 	}
 }
 
 // API traffic with caller-owned history is never enriched.
-func TestMaybeEnrichLinks_SkipsPrebuiltMessages(t *testing.T) {
+func TestStartLinkEnrichment_SkipsPrebuiltMessages(t *testing.T) {
 	h := &Handler{logger: slog.Default()}
 	msg := "see https://example.com"
 	opts := &SyncOptions{Messages: []llm.Message{llm.NewTextMessage("user", "hi")}}
-	if got := h.maybeEnrichLinks(context.Background(), msg, opts); got != msg {
-		t.Fatal("prebuilt-history turn must pass through unchanged")
+	if join := h.startLinkEnrichment(context.Background(), msg, opts); join != nil {
+		t.Fatal("prebuilt-history turn must not start an enrichment")
+	}
+}
+
+// A message without fetchable URLs takes the normal persist-first path.
+func TestStartLinkEnrichment_NoLinks(t *testing.T) {
+	h := &Handler{logger: slog.Default()}
+	if join := h.startLinkEnrichment(context.Background(), "링크 없는 일반 질문", nil); join != nil {
+		t.Fatal("linkless message must not start an enrichment")
+	}
+}
+
+// The join returns original + enrichment block on fetch success, and the
+// original alone when every fetch fails — never blocking past its budget.
+func TestStartLinkEnrichment_JoinResult(t *testing.T) {
+	orig := enrichFetch
+	defer func() { enrichFetch = orig }()
+
+	h := &Handler{logger: slog.Default()}
+	msg := "이 링크 요약해줘 https://example.com/page"
+
+	enrichFetch = func(ctx context.Context, url string) ([]byte, string, error) {
+		return []byte("<html><head><title>T</title></head><body><p>Fetched body</p></body></html>"), "text/html", nil
+	}
+	join := h.startLinkEnrichment(context.Background(), msg, nil)
+	if join == nil {
+		t.Fatal("expected an enrichment to start")
+	}
+	got := join(context.Background())
+	if !strings.HasPrefix(got, msg) {
+		t.Fatalf("joined message must keep the original prefix, got: %q", got)
+	}
+	if !strings.Contains(got, toolctx.LinkEnrichmentHeader) || !strings.Contains(got, "Fetched body") {
+		t.Fatalf("joined message must carry the enrichment block, got: %q", got)
+	}
+
+	enrichFetch = func(ctx context.Context, url string) ([]byte, string, error) {
+		return nil, "", context.DeadlineExceeded
+	}
+	join = h.startLinkEnrichment(context.Background(), msg, nil)
+	if join == nil {
+		t.Fatal("expected an enrichment to start")
+	}
+	if got := join(context.Background()); got != msg {
+		t.Fatalf("total fetch failure must return the original message, got: %q", got)
+	}
+}
+
+// A canceled turn context unblocks the join immediately with the original
+// message instead of waiting out the fetch budget.
+func TestStartLinkEnrichment_JoinCanceled(t *testing.T) {
+	orig := enrichFetch
+	defer func() { enrichFetch = orig }()
+	block := make(chan struct{})
+	defer close(block)
+	enrichFetch = func(ctx context.Context, url string) ([]byte, string, error) {
+		select {
+		case <-block:
+		case <-ctx.Done():
+		}
+		return nil, "", context.Canceled
+	}
+
+	h := &Handler{logger: slog.Default()}
+	msg := "느린 링크 https://example.com/slow"
+	join := h.startLinkEnrichment(context.Background(), msg, nil)
+	if join == nil {
+		t.Fatal("expected an enrichment to start")
+	}
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if got := join(canceled); got != msg {
+		t.Fatalf("canceled join must return the original message, got: %q", got)
 	}
 }

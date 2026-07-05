@@ -116,7 +116,6 @@ internal/pipeline/chat/transcript.go :: MemoryTranscriptStore.Load
 internal/pipeline/chat/transcript.go :: MemoryTranscriptStore.Search
 internal/pipeline/chat/transcript.go :: NewMemoryTranscriptStore
 internal/pipeline/chat/update_dispatch.go :: parsePRNumber
-internal/pipeline/pilot/localai.go :: CallCodingLLM
 internal/pipeline/pilot/localai.go :: LightweightModel
 internal/pipeline/pilot/localai.go :: TruncateHead
 internal/platform/calendar/client.go :: setTokenURL
@@ -153,7 +152,6 @@ internal/runtime/rpc/rpcutil/gateway_hub.go :: GatewayHub.Phase
 internal/runtime/rpc/rpcutil/helpers.go :: Bind
 internal/runtime/rpc/rpcutil/helpers.go :: ErrMissingKey
 internal/runtime/rpc/rpcutil/helpers.go :: ParamError
-internal/runtime/server/notify_activity.go :: notifyService.activityFor
 internal/runtime/server/notify_slog.go :: formatSlogRecord
 internal/runtime/server/notify_slog.go :: newNotifySlogHandler
 internal/runtime/server/notify_slog.go :: notifyService.enqueueLog
@@ -163,9 +161,6 @@ internal/runtime/server/notify_slog.go :: notifySlogHandler.WithAttrs
 internal/runtime/server/notify_slog.go :: notifySlogHandler.WithGroup
 internal/runtime/server/notify_slog.go :: notifySlogHandler.shouldSuppress
 internal/runtime/server/notify_slog.go :: truncateASCII
-internal/runtime/server/notify_status.go :: notifyService.activityLineKO
-internal/runtime/server/notify_status.go :: notifyService.appendCacheLine
-internal/runtime/server/notify_status.go :: notifyService.buildStatusReport
 internal/runtime/server/server_lifecycle.go :: Server.Close
 internal/runtime/server/server_lifecycle.go :: Server.StartAndListen
 internal/runtime/server/server_monitoring.go :: Server.Broadcaster
