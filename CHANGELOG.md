@@ -1,5 +1,34 @@
 # Changelog
 
+## [4.64.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.63.1...deneb-v4.64.0) (2026-07-05)
+
+
+### ✨ Features
+
+* **chat:** chart 도구 개선 — 도넛 수치 라벨·stacked/가로 바·y_unit 눈금·렌더+전송 1회화 ([#3134](https://github.com/choiceoh/Deneb/issues/3134)) ([d9fb6af](https://github.com/choiceoh/Deneb/commit/d9fb6af46874c339f1b2b18db0ff1547171ce972))
+* **chat:** 도구 개선 탐구 — 분석 문서 + 로드맵 1~2단계(A·B·D·F) 구현 ([#3117](https://github.com/choiceoh/Deneb/issues/3117)) ([9bb5750](https://github.com/choiceoh/Deneb/commit/9bb575036b13236539e45b04108d9683188a5b55))
+* **native:** 알림 파싱 개선 ([#3125](https://github.com/choiceoh/Deneb/issues/3125) 리뷰·개선판) — 구조화 추출 + 누적 페이로드 라인 dedup ([#3130](https://github.com/choiceoh/Deneb/issues/3130)) ([8707908](https://github.com/choiceoh/Deneb/commit/870790810ab3e60da5d635d244a2b5bdb4978c5e))
+* **phone:** 앱 사용 리듬을 judgment 턴에서 캐시 전용으로 ([#3132](https://github.com/choiceoh/Deneb/issues/3132) 리뷰·개선판) ([#3133](https://github.com/choiceoh/Deneb/issues/3133)) ([aec133e](https://github.com/choiceoh/Deneb/commit/aec133ee0a23e931a1abb28c9aed64285f2a4c30))
+
+
+### 🐛 Bug Fixes
+
+* **chat:** main 빌드 수리 ([#3117](https://github.com/choiceoh/Deneb/issues/3117)×[#3121](https://github.com/choiceoh/Deneb/issues/3121) 의미 충돌) + 문서 추출 예산 (P4-2) ([#3123](https://github.com/choiceoh/Deneb/issues/3123)) ([25cccd2](https://github.com/choiceoh/Deneb/commit/25cccd2ee475e7b6cb4b611f961411249eac8239))
+* **chat:** recordRunCompletion에 execStats 배선 누락 수리 — main 컴파일 복구 ([#3122](https://github.com/choiceoh/Deneb/issues/3122)) ([d221c69](https://github.com/choiceoh/Deneb/commit/d221c6915d3001228dd172aea258a98b24b4ed02))
+* **chat:** 개별 도구 감사 후속 — 안전 게이트·업무 정확성·회복 힌트·코어 도구 4묶음 ([#3127](https://github.com/choiceoh/Deneb/issues/3127)) ([13d000d](https://github.com/choiceoh/Deneb/commit/13d000d3a11d1d08a3230855f7073c507334c60c))
+
+
+### 🔧 Internal
+
+* **chat:** decompose runAgentWithFallback into fallbackTurn stage methods ([#3120](https://github.com/choiceoh/Deneb/issues/3120)) ([8bef956](https://github.com/choiceoh/Deneb/commit/8bef95605b88d14eb2c84de8530359701fc4bde3))
+* **chat:** extract executeAgentRun stages — persist/tail-inject/api-hooks/completion telemetry ([#3121](https://github.com/choiceoh/Deneb/issues/3121)) ([ca32b1a](https://github.com/choiceoh/Deneb/commit/ca32b1a6ba350bb9cc4b3208a3ac54516de89916))
+* **chat:** extract prepareContextAndPrompt goroutine bodies into named prep stages ([#3126](https://github.com/choiceoh/Deneb/issues/3126)) ([3806ef3](https://github.com/choiceoh/Deneb/commit/3806ef3dbef11b995c65eb78cc6435c1d564daa9))
+* **chat:** fold ambient and coding hook deps into AmbientDeps/CodingDeps (triple-mirror cleanup, cluster 1) ([#3129](https://github.com/choiceoh/Deneb/issues/3129)) ([801205f](https://github.com/choiceoh/Deneb/commit/801205feef00025de3f14159da0bd264ead8441b))
+* **chat:** fold memory and skill-loop deps into MemoryDeps/SkillDeps (triple-mirror cleanup, cluster 2) ([#3131](https://github.com/choiceoh/Deneb/issues/3131)) ([5862551](https://github.com/choiceoh/Deneb/commit/586255109b4416a7feaf76760bb224af3cec2e56))
+* **chat:** split assembleMessages into assembly and compaction stages ([#3128](https://github.com/choiceoh/Deneb/issues/3128)) ([6840a06](https://github.com/choiceoh/Deneb/commit/6840a063a2d274501fadaf2492fbadf86d6770e4))
+* **chat:** split handleRunSuccess into silent-policy/persist/deliver stages ([#3124](https://github.com/choiceoh/Deneb/issues/3124)) ([66d7724](https://github.com/choiceoh/Deneb/commit/66d7724e736fd2d424a18dc1f7125d93aff2e6b1))
+* **chat:** 파이프라인 개선 P0+P1+P3 — 죽은 배관 제거, 규칙 위반 수리, 출력 정화 통일, 테스트 방벽 ([#3118](https://github.com/choiceoh/Deneb/issues/3118)) ([e3820a1](https://github.com/choiceoh/Deneb/commit/e3820a19bc0d00b5ab5e1a41863941e1cb4ccd95))
+
 ## [4.63.1](https://github.com/choiceoh/Deneb/compare/deneb-v4.63.0...deneb-v4.63.1) (2026-07-05)
 
 
