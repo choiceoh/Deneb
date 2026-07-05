@@ -35,6 +35,10 @@ type DealPageInput struct {
 	Summary         string   // 한 줄 요약
 	SourceRef       string   // provenance/dedup key (e.g. "mail:<id>")
 	RelatedProjects []string // resolved project 대표페이지 paths → page Related (deal→project graph edge)
+	// Terms are the quote-verified commercial terms from the fact-layer
+	// extractor (nil when none survived) — persisted on the ledger record and
+	// echoed compactly (물량·단가) in the prose entry.
+	Terms *DealTerms
 }
 
 // UpsertDealPage files a business document onto its counterparty's deal page,
@@ -133,6 +137,16 @@ func dealEntryLine(in DealPageInput, today string) string {
 	}
 	if amt := strings.TrimSpace(in.Amount); amt != "" {
 		parts = append(parts, amt)
+	}
+	// Quote-verified terms, compact prose echo (full detail + quotes live on
+	// the ledger row; payment/warranty/penalty stay off the one-liner).
+	if in.Terms != nil {
+		if v := strings.TrimSpace(in.Terms.Capacity.Value); v != "" {
+			parts = append(parts, "물량 "+v)
+		}
+		if v := strings.TrimSpace(in.Terms.UnitPrice.Value); v != "" {
+			parts = append(parts, "단가 "+v)
+		}
 	}
 	head := strings.Join(parts, " · ")
 	if head == "" {

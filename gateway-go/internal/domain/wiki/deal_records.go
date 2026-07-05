@@ -38,7 +38,11 @@ type DealRecord struct {
 	Summary      string   `json:"summary,omitempty"`
 	SourceRef    string   `json:"sourceRef,omitempty"`
 	Projects     []string `json:"projects,omitempty"` // owning project names resolved at file time (older rows lack it)
-	RecordedAt   int64    `json:"recordedAt"`         // unix milli
+	// Terms are the quote-verified commercial terms (물량·단가·지급조건·하자보수·
+	// 지체상금, deal_terms.go) — nil on rows filed before the fact layer or when
+	// the mail carried none that survived verification.
+	Terms      *DealTerms `json:"terms,omitempty"`
+	RecordedAt int64      `json:"recordedAt"` // unix milli
 }
 
 // dealRecordFrom builds a typed record from the write-time input, parsing the
@@ -55,7 +59,7 @@ func dealRecordFrom(in DealPageInput, now time.Time) DealRecord {
 			projects = append(projects, name)
 		}
 	}
-	return DealRecord{
+	rec := DealRecord{
 		Counterparty: strings.TrimSpace(in.Counterparty),
 		DocType:      strings.TrimSpace(in.DocType),
 		AmountRaw:    strings.TrimSpace(in.Amount),
@@ -70,6 +74,14 @@ func dealRecordFrom(in DealPageInput, now time.Time) DealRecord {
 		Projects:     dedupeStrings(projects),
 		RecordedAt:   now.UnixMilli(),
 	}
+	if !in.Terms.Empty() {
+		t := *in.Terms // copy — never mutate the caller's input
+		if mw, mok := ParseCapacityMW(t.Capacity.Value); mok {
+			t.CapacityMW = mw
+		}
+		rec.Terms = &t
+	}
+	return rec
 }
 
 // appendDealRecord appends one typed record to the ledger. Best-effort by

@@ -965,7 +965,7 @@ func dealLedgerToolSchema() map[string]any {
 		"properties": map[string]any{
 			"action": map[string]any{
 				"type":        "string",
-				"description": "list (기본): 필터된 거래 기록 목록 + 합계 / sum: 합계만. 거래 금액의 합계·건수·기간 질문은 산문을 눈대중으로 합산하지 말고 반드시 이 도구를 쓸 것 — 금액 파싱·통화별 합산이 코드로 계산된다",
+				"description": "list (기본): 필터된 거래 기록 목록 + 합계 / sum: 합계만. 거래 금액·물량(MW)의 합계·건수·기간 질문은 산문을 눈대중으로 합산하지 말고 반드시 이 도구를 쓸 것 — 금액 파싱·통화별 합산·물량 MW 합산이 코드로 계산된다. 기록에는 인용 검증된 거래 조건(물량·단가·지급·하자·지체상금)이 붙는다",
 				"enum":        []string{"list", "sum"},
 			},
 			"counterparty": map[string]any{
