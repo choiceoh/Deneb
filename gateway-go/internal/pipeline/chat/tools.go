@@ -122,6 +122,7 @@ func (r *ToolRegistry) Execute(ctx context.Context, name string, input json.RawM
 	// calls — no argument content is logged (it may be sensitive).
 	if repaired, didRepair := repairToolArguments(input); didRepair {
 		slog.Warn("repaired malformed tool-call arguments", "tool", name, "bytes", len(input))
+		toolctx.ToolExecStatsFromContext(ctx).RecordRepaired(name)
 		input = repaired
 	}
 

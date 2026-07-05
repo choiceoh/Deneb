@@ -71,6 +71,66 @@ func TestAggregate(t *testing.T) {
 	}
 }
 
+// TestAggregate_ToolAnomalyCounters verifies the closed-loop tool metrics:
+// unknown-name and blocked flags fold from turn.tool entries, repaired-args
+// counts fold from run.end's RepairedToolCalls, and output-size totals/max
+// accumulate per tool.
+func TestAggregate_ToolAnomalyCounters(t *testing.T) {
+	dir := t.TempDir()
+	w := NewWriter(dir)
+
+	rl := NewRunLogger(w, "client:main", "run1")
+	rl.LogTurnTool(TurnToolData{Turn: 1, Name: "fs", DurationMs: 10, OutputLen: 1000})
+	rl.LogTurnTool(TurnToolData{Turn: 1, Name: "fs", DurationMs: 20, OutputLen: 3000})
+	rl.LogTurnTool(TurnToolData{Turn: 2, Name: "frobnicate", IsError: true, UnknownTool: true})
+	rl.LogTurnTool(TurnToolData{Turn: 3, Name: "web", IsError: true, Blocked: "loop"})
+	rl.LogEnd(RunEndData{Turns: 3, RepairedToolCalls: map[string]int{"fs": 2}})
+
+	agg := w.Aggregate(0)
+
+	byName := map[string]ToolStat{}
+	for _, ts := range agg.Tools {
+		byName[ts.Name] = ts
+	}
+
+	fs := byName["fs"]
+	if fs.Repaired != 2 {
+		t.Errorf("fs.Repaired = %d, want 2", fs.Repaired)
+	}
+	if fs.TotalOutputChars != 4000 || fs.MaxOutputChars != 3000 {
+		t.Errorf("fs output = total %d / max %d, want 4000/3000", fs.TotalOutputChars, fs.MaxOutputChars)
+	}
+	if got := byName["frobnicate"]; got.Unknown != 1 || got.Errors != 1 {
+		t.Errorf("frobnicate = %+v, want unknown1/err1", got)
+	}
+	if got := byName["web"]; got.Blocked != 1 {
+		t.Errorf("web.Blocked = %d, want 1", got.Blocked)
+	}
+}
+
+// A run.end-only repaired entry for a tool with no turn.tool lines in the
+// window still surfaces (Calls stays 0, AvgMs stays 0 — no divide-by-zero).
+func TestAggregate_RepairedOnlyTool(t *testing.T) {
+	dir := t.TempDir()
+	w := NewWriter(dir)
+	rl := NewRunLogger(w, "client:main", "run1")
+	rl.LogEnd(RunEndData{Turns: 1, RepairedToolCalls: map[string]int{"wiki": 1}})
+
+	agg := w.Aggregate(0)
+	found := false
+	for _, ts := range agg.Tools {
+		if ts.Name == "wiki" {
+			found = true
+			if ts.Repaired != 1 || ts.Calls != 0 || ts.AvgMs != 0 {
+				t.Errorf("wiki = %+v, want repaired1/calls0/avg0", ts)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("expected wiki ToolStat from run.end repairs, got %+v", agg.Tools)
+	}
+}
+
 // TestAggregateSince verifies the sinceMs cutoff excludes older entries: a
 // cutoff in the future yields an empty roll-up even though entries exist.
 func TestAggregateSince(t *testing.T) {

@@ -115,6 +115,13 @@ type TurnToolData struct {
 	FileEffects []ToolFileEffect `json:"fileEffects,omitempty"`
 	IsError     bool             `json:"isError,omitempty"`
 	Error       string           `json:"error,omitempty"`
+	// Blocked marks a call that never executed: "loop" (tool loop detector
+	// critical block) or "hook" (OnBeforeToolCall veto). UnknownTool marks a
+	// call to a name that does not exist (hallucinated/typoed — detected via
+	// agent.ErrUnknownTool). Both feed the per-tool anomaly counters in
+	// Aggregate; see ToolStat.
+	Blocked     string `json:"blocked,omitempty"`
+	UnknownTool bool   `json:"unknownTool,omitempty"`
 }
 
 // ToolFileEffect is a content-free summary of one file observed before and
@@ -181,6 +188,12 @@ type RunEndData struct {
 	// label pipeline and modeltuner-style aggregation.
 	EffortDecision  string `json:"effortDecision,omitempty"`
 	EffortEscalated bool   `json:"effortEscalated,omitempty"`
+	// RepairedToolCalls counts malformed-argument repairs per tool name
+	// (chat.repairToolArguments fired). The repair happens inside the chat
+	// tool layer — invisible to the executor's turn.tool logging — so it
+	// rides run.end instead. tool_argrepair.go gates schema-aware repairs on
+	// measuring this rate first; Aggregate folds it into ToolStat.Repaired.
+	RepairedToolCalls map[string]int `json:"repairedToolCalls,omitempty"`
 }
 
 // RunErrorData records agent run failure.

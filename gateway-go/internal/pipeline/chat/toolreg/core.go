@@ -48,7 +48,7 @@ func RegisterCoreTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDep
 	// for the schema. Reads the on-box deneb-mailarchive store over loopback IMAP.
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "mail_archive",
-		Description: "자체 메일 아카이브(자동보관 수신 메일 + 과거 백필)를 조회해 ID/Locator를 얻고, 전체 스레드와 프로젝트 히스토리를 복원한다. action=list(오늘/최근 메일) | search(키워드) | read(Locator/ID 또는 query로 원문 열기) | thread(Message-ID/References 기반 전체 대화) | project_history(회사·프로젝트 키워드 시간선+스레드 후보). 업무 맥락·메일 기반 미팅 준비·프로젝트 과거 확인에는 이 도구를 우선 사용한다.",
+		Description: "받은 메일 조회 1순위 — 메일 분석·미팅 준비·프로젝트 과거 확인에 우선 사용. 자체 메일 아카이브(자동보관 수신 메일 + 과거 백필)를 조회해 ID/Locator를 얻고, 전체 스레드와 프로젝트 히스토리를 복원한다. action=list(오늘/최근 메일) | search(키워드) | read(Locator/ID 또는 query로 원문 열기) | thread(Message-ID/References 기반 전체 대화) | project_history(회사·프로젝트 키워드 시간선+스레드 후보).",
 		InputSchema: mailArchiveToolSchema(),
 		Fn: tools.ToolMailArchive(tools.MailArchiveDeps{
 			Wiki:     deps.Wiki.Store,
@@ -64,7 +64,7 @@ func RegisterCoreTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDep
 	if deps.ConsultPanel != nil {
 		registry.RegisterTool(toolctx.ToolDef{
 			Name:        "research_panel",
-			Description: "하나의 질문을 현재 가동 중(헬시)인 모든 모델에게 병렬로 던져 모델별 답을 모아 온다(이종 모델 패널 팬아웃). 딥리서치·고위험 의사결정처럼 여러 관점과 교차검증이 가치 있을 때 사용. 반환된 모델별 답을 당신이 직접 종합하라 — 서로 다른 계열이 합의하면 강한 신뢰, 모순은 명시하고, 자신만만한 답에 닻 내리지 말 것. 단순 사실질문엔 쓰지 마라(비용이 모델 수만큼 N배). models로 특정 모델만 지정 가능, 비우면 전체.",
+			Description: "딥리서치·고위험 의사결정의 교차검증용 — 하나의 질문을 가동 중(헬시)인 모든 모델에게 병렬로 던져 모델별 답을 모아 온다(이종 모델 패널 팬아웃). 반환된 모델별 답을 당신이 직접 종합하라 — 서로 다른 계열이 합의하면 강한 신뢰, 모순은 명시하고, 자신만만한 답에 닻 내리지 말 것. 단순 사실질문엔 쓰지 마라(비용이 모델 수만큼 N배). models로 특정 모델만 지정 가능, 비우면 전체.",
 			InputSchema: researchPanelToolSchema(),
 			Fn:          tools.ToolResearchPanel(deps.ConsultPanel),
 			Deferred:    true,
@@ -97,7 +97,7 @@ func FetchToolsSchema() map[string]any { return fetchToolsToolSchema() }
 func RegisterPhoneTools(registry toolctx.ToolRegistrar, send tools.PhoneActionFunc) {
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "phone_read",
-		Description: "사용자 스마트폰 상태를 조회한다(네이티브 앱이 밀어주는 상태 캐시 기반, SSH 불필요). what=location(최근 위치) | battery(배터리·충전 상태). 캐시가 오래됐으면 앱에 갱신을 요청하고 잠시 후 재시도하라고 안내한다. '지금 어디', '배터리 몇 %' 질문이나 능동 판단 시 맥락 보강에 사용. 주소록은 `contacts` 도구.",
+		Description: "'지금 어디'·'배터리 몇 %' 질문에 사용 — 사용자 스마트폰 위치·배터리 조회(앱이 밀어주는 상태 캐시 기반, SSH 불필요). what=location(최근 위치) | battery(배터리·충전 상태). 캐시가 오래됐으면 앱에 갱신을 요청하고 잠시 후 재시도하라고 안내한다. 능동 판단 시 맥락 보강에도 사용. 주소록은 `contacts` 도구.",
 		InputSchema: phoneReadToolSchema(),
 		Fn:          tools.ToolPhoneRead(send),
 		Deferred:    true,
@@ -194,7 +194,7 @@ func RegisterFSTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDeps)
 	})
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "observe",
-		Description: "Observe your OWN runtime via the in-process observation plane: action=turn (runId → a past run's tokens/tools/cache + its captured logs), action=logs (recent log ring; filter by runId/session/level/contains), action=behavior (cross-session tool usage / proactive funnel / background-job health over N days, plus the local vLLM engine's prefix-cache hit rate), action=effort (adaptive effort-router scorecard: routed-off vs kept-on, escalation rate, savings), action=proactive (proactive-card engagement: FTR / over-intervention rate by source), action=health (self-improvement machinery digest: loop liveness, skill-decision mix, dreamer backlog, no-op frontier, silent-failure counts — same data as the loopback /api/observatory, read mid-reasoning). Use it to diagnose your own slow or failing turns, or whether your improvement loops have gone silent.",
+		Description: "Self-diagnosis: why a turn was slow/failed, tool-usage stats, improvement-loop health. Observe your OWN runtime via the in-process observation plane: action=turn (runId → a past run's tokens/tools/cache + its captured logs), action=logs (recent log ring; filter by runId/session/level/contains), action=behavior (cross-session tool usage / proactive funnel / background-job health over N days, plus the local vLLM engine's prefix-cache hit rate), action=effort (adaptive effort-router scorecard: routed-off vs kept-on, escalation rate, savings), action=proactive (proactive-card engagement: FTR / over-intervention rate by source), action=health (self-improvement machinery digest: loop liveness, skill-decision mix, dreamer backlog, no-op frontier, silent-failure counts — same data as the loopback /api/observatory, read mid-reasoning).",
 		InputSchema: observeToolSchema(),
 		Fn:          tools.ToolObserve(deps.LogCapture, deps.AgentLog, deps.WorkFeed, deps.VllmBaseURLs),
 		Deferred:    true,
@@ -288,7 +288,7 @@ func RegisterWebTools(registry toolctx.ToolRegistrar, spill *agent.SpilloverStor
 func RegisterSessionTools(registry toolctx.ToolRegistrar, d *toolctx.SessionDeps) {
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "sessions",
-		Description: "Session management: list (active sessions), history (message log), search (transcript keyword search), send (cross-session message)",
+		Description: "Sessions: list / history / search / send — other sessions' message logs, transcript keyword search, cross-session messaging",
 		InputSchema: sessionsToolSchema(),
 		Fn:          tools.ToolSessions(d),
 		Deferred:    true,

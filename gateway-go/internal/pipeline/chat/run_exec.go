@@ -264,7 +264,7 @@ func executeAgentRun(
 		SkillNudger:        deps.skillNudger,
 		SkillUsageRecorder: deps.skillUsageRecorder,
 	}
-	cfg, spawnFlag := buildAgentConfig(params, deps, cachedSession, systemPrompt, sessionToolPreset, acd, logger)
+	cfg, spawnFlag, execStats := buildAgentConfig(params, deps, cachedSession, systemPrompt, sessionToolPreset, acd, logger)
 	cfg.Model = model // set the resolved model
 	// Per-model defaults (profile sampling, tuned max-tokens floor) — only
 	// fills values the request left unset; request-level params, cache-safe.
@@ -463,6 +463,7 @@ func executeAgentRun(
 		Proactive:           params.AutoDeliveredOutput || params.EphemeralUser,
 		EffortDecision:      effortDecision,
 		EffortEscalated:     effortRt != nil && effortRt.escalated,
+		RepairedToolCalls:   execStats.RepairedCounts(),
 	})
 
 	// Engine-side APC sample → run.cache event (async, best-effort). The vLLM

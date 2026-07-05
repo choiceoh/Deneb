@@ -204,6 +204,66 @@ func TestFetchTools_PresetBlocksDisallowedName(t *testing.T) {
 	assertActivated(t, out, "mail_archive")
 }
 
+// A tool already activated in a prior turn (visible via the DeferredActivation
+// snapshot) is short-circuited: no schema re-emit, just an "already active"
+// pointer. A not-yet-active sibling in the same call still gets its schema.
+func TestFetchTools_AlreadyActiveShortCircuit(t *testing.T) {
+	reg := &fakeFetchRegistry{
+		defs: map[string]toolctx.ToolDef{
+			"mail_archive": {Name: "mail_archive", Description: "Read local mail archive", Deferred: true},
+			"cron":         {Name: "cron", Description: "Schedule recurring jobs", Deferred: true},
+		},
+	}
+	fn := ToolFetchTools(reg)
+
+	da := toolctx.NewDeferredActivation()
+	ctx := toolctx.WithDeferredActivation(context.Background(), da)
+
+	// Turn N: activate mail_archive; executor drains between turns.
+	out, err := fn(ctx, mustJSON(t, map[string]any{"names": []string{"mail_archive"}}))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	assertActivated(t, out, "mail_archive")
+	da.ActivatedNames() // executor drain publishes the active snapshot
+
+	// Turn N+1: re-fetch mail_archive plus a new tool.
+	out, err = fn(ctx, mustJSON(t, map[string]any{"names": []string{"mail_archive", "cron"}}))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if strings.Contains(out, "## mail_archive") {
+		t.Fatalf("expected no schema re-emit for already-active tool, got: %s", out)
+	}
+	if !strings.Contains(out, "Already active") || !strings.Contains(out, "mail_archive") {
+		t.Fatalf("expected already-active pointer for mail_archive, got: %s", out)
+	}
+	assertActivated(t, out, "cron")
+}
+
+// Without an executor drain in between, a same-turn duplicate still returns
+// the schema (the snapshot only updates between turns) — documented tradeoff.
+func TestFetchTools_SameTurnDuplicateStillReturnsSchema(t *testing.T) {
+	reg := &fakeFetchRegistry{
+		defs: map[string]toolctx.ToolDef{
+			"mail_archive": {Name: "mail_archive", Description: "Read local mail archive", Deferred: true},
+		},
+	}
+	fn := ToolFetchTools(reg)
+
+	da := toolctx.NewDeferredActivation()
+	ctx := toolctx.WithDeferredActivation(context.Background(), da)
+
+	if _, err := fn(ctx, mustJSON(t, map[string]any{"names": []string{"mail_archive"}})); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	out, err := fn(ctx, mustJSON(t, map[string]any{"names": []string{"mail_archive"}}))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	assertActivated(t, out, "mail_archive")
+}
+
 func TestFetchTools_PresetFiltersQueryResults(t *testing.T) {
 	reg := &fakeFetchRegistry{
 		defs: map[string]toolctx.ToolDef{

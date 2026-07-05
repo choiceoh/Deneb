@@ -220,12 +220,24 @@ func targetMatches(targets []string, effects []ToolFileEffect, query string) boo
 }
 
 // ToolStat aggregates one tool's usage across every recorded run.
+//
+// The anomaly counters close the measurement loop the tool code asks for:
+// Repaired (tool_argrepair.go gates schema-aware repairs on this rate),
+// Unknown (hallucinated/typoed tool names — deferred-description quality
+// signal), Blocked (loop-detector/hook vetoes). TotalOutputChars/
+// MaxOutputChars feed per-tool MaxOutput cap tuning (tool_schemas.json).
 type ToolStat struct {
 	Name    string `json:"name"`
 	Calls   int    `json:"calls"`
 	Errors  int    `json:"errors"`
 	TotalMs int64  `json:"totalMs"`
 	AvgMs   int64  `json:"avgMs"`
+
+	Repaired         int   `json:"repaired,omitempty"`
+	Unknown          int   `json:"unknown,omitempty"`
+	Blocked          int   `json:"blocked,omitempty"`
+	TotalOutputChars int64 `json:"totalOutputChars,omitempty"`
+	MaxOutputChars   int   `json:"maxOutputChars,omitempty"`
 }
 
 // AggregateResult is a cross-session behavioral roll-up: what the agent and its
@@ -294,10 +306,28 @@ func (w *Writer) Aggregate(sinceMs int64) AggregateResult {
 				if d.IsError {
 					ts.Errors++
 				}
+				if d.UnknownTool {
+					ts.Unknown++
+				}
+				if d.Blocked != "" {
+					ts.Blocked++
+				}
+				ts.TotalOutputChars += int64(d.OutputLen)
+				if d.OutputLen > ts.MaxOutputChars {
+					ts.MaxOutputChars = d.OutputLen
+				}
 			case TypeRunEnd:
 				var d RunEndData
 				if json.Unmarshal(e.Data, &d) != nil {
 					continue
+				}
+				for name, c := range d.RepairedToolCalls {
+					ts := toolMap[name]
+					if ts == nil {
+						ts = &ToolStat{Name: name}
+						toolMap[name] = ts
+					}
+					ts.Repaired += c
 				}
 				res.Runs++
 				res.TotalInputTokens += int64(d.InputTokens)

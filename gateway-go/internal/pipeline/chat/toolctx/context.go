@@ -26,6 +26,7 @@ const (
 	ctxKeyAutoDelivery
 	ctxKeySkillConsult
 	ctxKeyWorkspaceOverride
+	ctxKeyToolExecStats
 )
 
 // WithDeliveryContext attaches a DeliveryContext to the context.
@@ -235,10 +236,19 @@ func SpawnFlagFromContext(ctx context.Context) *SpawnFlag {
 // for a mutex: cross-goroutine transfer is handled by the channel send/receive,
 // and the accumulated state (collected/seen) is only touched by the single
 // executor goroutine.
+//
+// active is a read-only snapshot of seen, republished by ActivatedNames()
+// (executor goroutine) whenever the set grows, so tool goroutines can ask
+// IsActive without touching seen. Production measurement (2026-07-05, 14d
+// agent-logs): 20% of fetch_tools calls were same-input repeats inside one
+// run — IsActive lets fetch_tools short-circuit those instead of re-emitting
+// the full schema into history. The snapshot updates between turns, so a
+// duplicate within the same turn still returns the schema (harmless).
 type DeferredActivation struct {
 	ch        chan []string
 	collected []string
 	seen      map[string]bool
+	active    atomic.Value // map[string]bool — immutable snapshot of seen
 }
 
 // NewDeferredActivation creates a new (empty) DeferredActivation tracker.
@@ -262,6 +272,7 @@ func (d *DeferredActivation) Activate(names []string) {
 // ActivatedNames drains pending activations and returns all activated tool names.
 // Called from the executor goroutine between turns (single reader).
 func (d *DeferredActivation) ActivatedNames() []string {
+	grew := false
 	for {
 		select {
 		case names := <-d.ch:
@@ -269,12 +280,28 @@ func (d *DeferredActivation) ActivatedNames() []string {
 				if !d.seen[n] {
 					d.seen[n] = true
 					d.collected = append(d.collected, n)
+					grew = true
 				}
 			}
 		default:
+			if grew {
+				snapshot := make(map[string]bool, len(d.seen))
+				for n := range d.seen {
+					snapshot[n] = true
+				}
+				d.active.Store(snapshot)
+			}
 			return d.collected
 		}
 	}
+}
+
+// IsActive reports whether the named tool has already been activated (as of
+// the last ActivatedNames drain). Safe to call from tool goroutines — it only
+// reads the immutable snapshot, never the executor-owned seen map.
+func (d *DeferredActivation) IsActive(name string) bool {
+	m, _ := d.active.Load().(map[string]bool)
+	return m[name]
 }
 
 // WithDeferredActivation attaches a DeferredActivation to the context.
