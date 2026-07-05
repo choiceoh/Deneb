@@ -234,7 +234,7 @@ func seedDiaryFiles(t *testing.T, diaryDir string, facts []gainFact) {
 func recallOnce(store *wiki.Store, question string) string {
 	out, _ := buildRecallPreflight(context.Background(),
 		RunParams{SessionKey: "client:main", Message: question},
-		runDeps{wikiStore: store}, nil)
+		runDeps{memory: MemoryDeps{Wiki: store}}, nil)
 	return out
 }
 

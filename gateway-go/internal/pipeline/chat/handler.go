@@ -38,13 +38,12 @@ type Handler struct {
 	jobTracker        *agent.JobTracker
 	providerConfigsMu sync.RWMutex
 	providerConfigs   map[string]ProviderConfig
-	embeddingClient   compact.Embedder                  // optional; BGE-M3 for MMR compaction fallback
-	wikiStore         *wiki.Store                       // optional; wiki knowledge base
-	notebookStore     *notebook.Store                   // optional; notebook session-grounding store
-	dreamTurnFn       func(ctx context.Context)         // optional; increments dream turn via autonomous
-	agentLog          *agentlog.Writer                  // optional; agent detail logging
-	registry          *modelrole.Registry               // centralized model role registry
-	providerRuntime   *provider.ProviderRuntimeResolver // optional; runtime auth, missing-auth messages
+	// memory groups the memory/knowledge backends. See MemoryDeps.
+	memory          MemoryDeps
+	dreamTurnFn     func(ctx context.Context)         // optional; increments dream turn via autonomous
+	agentLog        *agentlog.Writer                  // optional; agent detail logging
+	registry        *modelrole.Registry               // centralized model role registry
+	providerRuntime *provider.ProviderRuntimeResolver // optional; runtime auth, missing-auth messages
 
 	// Agent run configuration.
 	contextCfg           ContextConfig
@@ -73,7 +72,10 @@ type Handler struct {
 	// maxMessageBytes caps a single message body before truncation.
 	maxMessageBytes int
 
-	// skillNudger fires mid-session skill reviews every N tool calls.
+	// skills groups the Propus/genesis skill-loop hooks. See SkillDeps.
+	skills SkillDeps
+
+	// UNUSED-skillNudger fires mid-session skill reviews every N tool calls.
 	// Optional — when nil, the tool-call accounting path short-circuits.
 	// Injected by the server via SetSkillNudger so chat doesn't depend
 	// on the domain/skills/genesis package directly.
@@ -90,10 +92,6 @@ type Handler struct {
 	// knowledge, calendar/goal glances, persona override). See AmbientDeps.
 	ambient AmbientDeps
 
-	// fileRecallFn runs a hybrid semantic search over the file store for the
-	// recall preflight. Optional: nil disables the files recall source.
-	fileRecallFn FileRecallFunc
-
 	// coding groups the 코드모드 session hooks. See CodingDeps.
 	coding CodingDeps
 
@@ -104,6 +102,33 @@ type Handler struct {
 	// server via SetWeeklyReport so chat stays free of the wiki/render infra.
 	weeklyReportTextFn  WeeklyReportTextFunc
 	weeklyFormDeliverFn WeeklyFormDeliverFunc
+}
+
+// MemoryDeps groups the memory/knowledge backends that flow HandlerConfig →
+// Handler → runDeps unchanged (triple-mirror cleanup, cluster 2). All fields
+// optional; nil disables the corresponding source.
+type MemoryDeps struct {
+	// Wiki is the wiki knowledge base (tier-1 injection, recall, diary).
+	Wiki *wiki.Store
+	// Notebook is the notebook session-grounding source store.
+	Notebook *notebook.Store
+	// FileRecall runs a hybrid semantic search over the on-box file store for
+	// the recall preflight (recall degrades to the other backends when nil).
+	// Injected by the server closing over the shared file semantic index.
+	FileRecall FileRecallFunc
+	// Embedding is the embedding client (BGE-M3) for the MMR compaction
+	// fallback tier.
+	Embedding compact.Embedder
+}
+
+// SkillDeps groups the Propus/genesis skill-loop hooks, injected via
+// SetSkillNudger/SetSkillUsageRecorder so chat doesn't depend on the
+// domain/skills/genesis package directly. nil disables each hook.
+type SkillDeps struct {
+	// Nudger fires mid-session skill reviews every N tool calls.
+	Nudger SkillNudger
+	// UsageRecorder attributes each turn's outcome to the skills consulted.
+	UsageRecorder SkillUsageRecorder
 }
 
 // AmbientDeps groups the ambient system-prompt context providers that flow
@@ -204,15 +229,14 @@ type HandlerConfig struct {
 	MaxMessageBytes int
 
 	// Native agent execution config.
-	LLMClient            *llm.Client
-	Transcript           TranscriptStore
-	Tools                *ToolRegistry
-	AuthManager          *provider.AuthManager
-	JobTracker           *agent.JobTracker
-	ProviderConfigs      map[string]ProviderConfig // provider ID → config
-	EmbeddingClient      compact.Embedder          // optional; BGE-M3 for MMR compaction fallback
-	WikiStore            *wiki.Store               // optional; wiki knowledge base
-	NotebookStore        *notebook.Store           // optional; notebook session-grounding store
+	LLMClient       *llm.Client
+	Transcript      TranscriptStore
+	Tools           *ToolRegistry
+	AuthManager     *provider.AuthManager
+	JobTracker      *agent.JobTracker
+	ProviderConfigs map[string]ProviderConfig // provider ID → config
+	// Memory groups the memory/knowledge backends. See MemoryDeps.
+	Memory               MemoryDeps
 	DreamTurnFn          func(ctx context.Context) // optional; increments dream turn via autonomous
 	AgentLog             *agentlog.Writer          // optional; agent detail logging
 	Registry             *modelrole.Registry       // centralized model role registry
@@ -233,13 +257,6 @@ type HandlerConfig struct {
 	// Ambient groups the ambient system-prompt context providers (topic
 	// knowledge, calendar/goal glances, persona override). See AmbientDeps.
 	Ambient AmbientDeps
-
-	// FileRecallFn runs a hybrid semantic search over the on-box file store for
-	// the recall preflight, so relevant uploaded files surface as recall evidence
-	// alongside wiki/diary/session. Optional: nil disables the files recall source
-	// (recall degrades to the other backends). Injected by the server closing over
-	// the shared file semantic index.
-	FileRecallFn FileRecallFunc
 
 	// Coding groups the 코드모드 session hooks (server closures over the shared
 	// code Manager + session store — server/chat_pipeline.go). See CodingDeps.
@@ -311,12 +328,9 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 		authManager:          cfg.AuthManager,
 		jobTracker:           cfg.JobTracker,
 		ambient:              cfg.Ambient,
-		fileRecallFn:         cfg.FileRecallFn,
 		coding:               cfg.Coding,
 		providerConfigs:      cloneProviderConfigs(cfg.ProviderConfigs),
-		embeddingClient:      cfg.EmbeddingClient,
-		wikiStore:            cfg.WikiStore,
-		notebookStore:        cfg.NotebookStore,
+		memory:               cfg.Memory,
 		dreamTurnFn:          cfg.DreamTurnFn,
 		agentLog:             cfg.AgentLog,
 		registry:             cfg.Registry,
@@ -457,13 +471,13 @@ func (h *Handler) CheckpointRoot() string {
 // disable. Safe to call before the first run starts; not expected to
 // change at runtime.
 func (h *Handler) SetSkillNudger(n SkillNudger) {
-	h.skillNudger = n
+	h.skills.Nudger = n
 }
 
 // SetSkillUsageRecorder installs the per-turn skill usage recorder. Pass nil
 // to disable usage attribution. Safe to call before the first run starts.
 func (h *Handler) SetSkillUsageRecorder(r SkillUsageRecorder) {
-	h.skillUsageRecorder = r
+	h.skills.UsageRecorder = r
 }
 
 // WeeklyReportTextFunc composes the deterministic 주간업무보고 text straight from

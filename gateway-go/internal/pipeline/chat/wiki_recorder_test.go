@@ -24,7 +24,7 @@ func TestMaybeRecordRunDiary_SyncPathSideEffects(t *testing.T) {
 
 	dreamFired := make(chan struct{}, 2)
 	deps := runDeps{
-		wikiStore:   store,
+		memory:      MemoryDeps{Wiki: store},
 		dreamTurnFn: func(context.Context) { dreamFired <- struct{}{} },
 	}
 	result := &agent.AgentResult{

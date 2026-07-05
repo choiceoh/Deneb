@@ -196,8 +196,8 @@ func buildRecallPreflight(ctx context.Context, params RunParams, deps runDeps, l
 		run  func(context.Context) []recallEvidence
 	}
 	var sources []recallSource
-	if deps.wikiStore != nil {
-		store := deps.wikiStore
+	if deps.memory.Wiki != nil {
+		store := deps.memory.Wiki
 		sources = append(
 			sources,
 			recallSource{"wiki", func(c context.Context) []recallEvidence {
@@ -221,8 +221,8 @@ func buildRecallPreflight(ctx context.Context, params RunParams, deps runDeps, l
 	// deadline; a down embedding server returns zero file evidence, so this never
 	// blocks the turn. The per-source quota (recallFileQuota) is enforced inside
 	// recallFilesEvidence so files cannot crowd out the other sources.
-	if deps.fileRecallFn != nil {
-		search := deps.fileRecallFn
+	if deps.memory.FileRecall != nil {
+		search := deps.memory.FileRecall
 		sources = append(sources, recallSource{"file", func(c context.Context) []recallEvidence {
 			return recallFilesEvidence(c, search, queries)
 		}})
@@ -280,8 +280,8 @@ func buildRecallPreflight(ctx context.Context, params RunParams, deps runDeps, l
 	// terms, so nothing was searchable). A topical question that found nothing
 	// must get the honest no-evidence notice, not two unrelated recent diary
 	// entries dressed up as recall (the bench caught exactly that).
-	if len(evidence) == 0 && deps.wikiStore != nil && len(queries) == 0 {
-		evidence = append(evidence, recallDiaryEvidence(ctx, deps.wikiStore, queries, true)...)
+	if len(evidence) == 0 && deps.memory.Wiki != nil && len(queries) == 0 {
+		evidence = append(evidence, recallDiaryEvidence(ctx, deps.memory.Wiki, queries, true)...)
 	}
 
 	if len(evidence) == 0 {

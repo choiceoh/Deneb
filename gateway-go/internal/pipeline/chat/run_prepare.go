@@ -137,12 +137,12 @@ func buildTier1WikiSnapshot(params RunParams, deps runDeps, chatbot, coding bool
 	// end to end — finalizePrompt would otherwise append always-on wiki
 	// memory on top of a deliberately lean caller prompt (review-sweep
 	// finding on #3103: the mini review prompt still carried tier-1 wiki).
-	if deps.wikiStore != nil && !chatbot && !coding && params.System == "" {
+	if deps.memory.Wiki != nil && !chatbot && !coding && params.System == "" {
 		if cached, ok := cachedTier1Wiki(params.SessionKey); ok {
 			tier1 = cached
 		} else {
 			cfg := wiki.ConfigFromEnv()
-			tier1 = knowledge.FormatTier1(deps.wikiStore, cfg.Tier1MinImportance)
+			tier1 = knowledge.FormatTier1(deps.memory.Wiki, cfg.Tier1MinImportance)
 			storeTier1Wiki(params.SessionKey, tier1)
 		}
 	}
@@ -559,7 +559,7 @@ func compactTurnMessages(ctx context.Context, params RunParams, deps runDeps, mr
 		if deferEligible {
 			engine.CompactInBackground(
 				deps.callbacks.shutdownCtx, params.SessionKey, summarizer, contextBudget,
-				deps.embeddingClient, buildAnchorKeywords(deps.wikiStore), buildLearnedGuidelines(),
+				deps.memory.Embedding, buildAnchorKeywords(deps.memory.Wiki), buildLearnedGuidelines(),
 			)
 			// Belt-and-suspenders: never ship an orphan tool pair at the
 			// assembly's coverage boundary (e.g. a prior chunk-boundary
@@ -616,10 +616,10 @@ func compactTurnMessages(ctx context.Context, params RunParams, deps runDeps, mr
 	var polarisResult compact.Result
 	if bridge, ok := deps.transcript.(*polaris.Bridge); ok {
 		engine := bridge.Engine()
-		if deps.embeddingClient != nil {
-			engine.SetEmbedder(deps.embeddingClient)
+		if deps.memory.Embedding != nil {
+			engine.SetEmbedder(deps.memory.Embedding)
 		}
-		engine.SetAnchorKeywords(buildAnchorKeywords(deps.wikiStore))
+		engine.SetAnchorKeywords(buildAnchorKeywords(deps.memory.Wiki))
 		engine.SetLearnedGuidelines(buildLearnedGuidelines())
 		messages, polarisResult = engine.CompactAndPersist(polarisCtx, params.SessionKey, messages, summarizer, contextBudget)
 
@@ -655,7 +655,7 @@ func compactTurnMessages(ctx context.Context, params RunParams, deps runDeps, mr
 		}
 	} else {
 		cfg := compact.NewConfig(contextBudget)
-		cfg.Embedder = deps.embeddingClient
+		cfg.Embedder = deps.memory.Embedding
 		// Incremental recompaction: feed the prior summary so the LLM tier
 		// UPDATES it (In Progress → Done) instead of re-summarizing from
 		// scratch, then store the new summary for next time. In-memory on

@@ -170,7 +170,7 @@ func (s *Server) registerSessionRPCMethods() {
 	// Create BGE-M3 embedding client for MMR compaction fallback.
 	// Starts background health probing; gracefully degrades if server is unavailable.
 	s.embeddingClient = embedding.New("", s.logger)
-	chatCfg.EmbeddingClient = s.embeddingClient
+	chatCfg.Memory.Embedding = s.embeddingClient
 
 	// Attach the same embedding client to the wiki so Search blends BM25 with
 	// semantic neighbors. Degrades to pure BM25 whenever the server is down.
