@@ -9,14 +9,29 @@ globs: ["scripts/deploy*", "scripts/dev/publish-apk.sh", "client-android/app/and
 
 # Production Deployment
 
-## DGX Spark Production Build
+## 자동 배포 (srv4-로컬 — 기본 경로)
 
-- `make gateway-prod` — Full production binary (output: `dist/deneb-gateway`).
+> **2026-07-06 srv4 통일**: 게이트웨이 호스트(srv4)가 직접 pull→빌드→핫스왑한다.
+> 옛 srv1 원격 빌드·배송 오케스트레이터는 은퇴했다 (srv1 유닛은 `.bak` 보존).
 
-## DGX Spark Operations
+- 머지 → srv4 의 systemd **user** 타이머 `deneb-auto-deploy.timer`(1분 간격,
+  quiet 300초 — 연속 머지는 정착 후 1회 배포)가 `scripts/deploy/auto-deploy.sh`
+  를 실행: origin/main 새 head 감지 시 `make gateway-prod` 빌드 후
+  `deneb-gateway.service` 를 SIGUSR1 **핫스왑**. 로그: srv4 `/tmp/deneb-auto-deploy.log`.
+- Go 툴체인은 srv4 **유저 공간** `~/go-sdk/go` (sudo 없이 tarball 설치 — 이 호스트는
+  passwordless sudo 가 없다; 서비스 유닛 PATH 에 반영). `loginctl enable-linger`
+  활성 상태라 세션이 없어도 user 유닛이 상주한다.
+- 일시 정지: srv4 에 `~/.deneb/auto-deploy.paused` 파일 생성(PAUSE_FILE), 재개는 삭제.
+- 상태 확인: `systemctl --user list-timers | grep deneb` · `tail /tmp/deneb-auto-deploy.log`.
+- 스크립트는 **항상 exit 0** (실패는 로그로만) — 빨간 unit 상태를 보고 타이머를 꺼버리는
+  사고 방지. 같은 커밋 재시도는 600초 스로틀.
 
-- Restart gateway: `pkill -9 -f deneb-gateway || true; nohup ./dist/deneb-gateway --bind loopback --port 18789 > /tmp/deneb-gateway.log 2>&1 &`
-- Verify: `ss -ltnp | rg 18789`, `tail -n 120 /tmp/deneb-gateway.log`.
+## 수동 배포 (폴백)
+
+- `make gateway-prod` — 프로덕션 바이너리 (`dist/deneb-gateway`).
+- 재시작: `scripts/deploy/deploy.sh` (systemd 감지 시 SIGUSR1 핫스왑) 또는
+  `systemctl --user restart deneb-gateway`.
+- 검증: `curl -s localhost:18789/health`, `journalctl --user -u deneb-gateway -n 120`.
 
 ## Native Client APK Publishing
 
