@@ -255,6 +255,17 @@ var execReadOnlyCommands = map[string]struct{}{
 	"uptime": {}, "wc": {}, "which": {}, "whoami": {},
 }
 
+// execWriteToFileFlags lists, per allowlisted argv0, argument prefixes that
+// make an otherwise read-only command write a file WITHOUT shell redirection
+// (review catch on #3171). "-o" must stay per-command: it means OR for find
+// and only-matching for grep/rg, but an output file for sort/tree.
+// "--output" is rejected globally in the stage loop instead — no allowlisted
+// command uses it in a read-only way (git diff/show/log --output=… writes).
+var execWriteToFileFlags = map[string][]string{
+	"sort": {"-o", "--output"},
+	"tree": {"-o"},
+}
+
 // gitReadSubcommands are git subcommands that never touch worktree files
 // (branch/tag ref writes are irrelevant to cached grep results, but checkout,
 // stash, pull, clean etc. rewrite the worktree and are deliberately absent).
@@ -269,9 +280,11 @@ var gitReadSubcommands = map[string]struct{}{
 // that only invalidates the cache needlessly, which is the safe direction.
 const execCacheUnsafeMeta = "><;&`$(){}\n"
 
-// findMutatingArgs are find(1) actions that delete or execute.
+// findMutatingArgs are find(1) actions that delete, execute, or write files
+// (-fprint/-fprintf/-fls write their argument file without redirection).
 var findMutatingArgs = map[string]struct{}{
 	"-delete": {}, "-exec": {}, "-execdir": {}, "-ok": {}, "-okdir": {},
+	"-fprint": {}, "-fprint0": {}, "-fprintf": {}, "-fls": {},
 }
 
 // ExecCommandPreservesRunCache reports whether a shell command is known to be
@@ -302,6 +315,13 @@ func ExecCommandPreservesRunCache(command string) bool {
 		if idx := strings.LastIndex(argv0, "/"); idx >= 0 {
 			argv0 = argv0[idx+1:]
 		}
+		// --output writes a file for every allowlisted command that accepts
+		// it (git diff/show/log, sort) and none uses it read-only.
+		for _, f := range fields[1:] {
+			if strings.HasPrefix(f, "--output") {
+				return false
+			}
+		}
 		switch argv0 {
 		case "git":
 			if len(fields) < 2 {
@@ -316,13 +336,31 @@ func ExecCommandPreservesRunCache(command string) bool {
 					return false
 				}
 			}
-		case "sed":
-			if sedInPlacePattern.MatchString(stage) {
+		case "uniq":
+			// POSIX uniq writes its SECOND positional argument:
+			// `uniq in out`. Piped/single-file use stays read-only.
+			positional := 0
+			for _, f := range fields[1:] {
+				if !strings.HasPrefix(f, "-") {
+					positional++
+				}
+			}
+			if positional >= 2 {
 				return false
 			}
 		default:
+			// Note sed is deliberately NOT allowlisted: beyond -i/--in-place,
+			// sed scripts can write files via the `w` command and the s///w
+			// flag, which plain string analysis cannot reliably detect.
 			if _, ok := execReadOnlyCommands[argv0]; !ok {
 				return false
+			}
+			for _, flag := range execWriteToFileFlags[argv0] {
+				for _, f := range fields[1:] {
+					if strings.HasPrefix(f, flag) {
+						return false
+					}
+				}
 			}
 		}
 	}
@@ -336,7 +374,9 @@ func sedModifiesFile(command string) bool {
 	return sedInPlacePattern.MatchString(command)
 }
 
-var sedInPlacePattern = regexp.MustCompile(`\bsed\s+(-[a-zA-Z]*i|--in-place)\b`)
+// Intervening flags are allowed (`sed -n -i …`) — requiring -i directly after
+// `sed` missed in-place edits behind another flag (review catch on #3171).
+var sedInPlacePattern = regexp.MustCompile(`\bsed\s+(?:-[^\s]+\s+)*(-[a-zA-Z]*i|--in-place)\b`)
 
 // DetectFileModification checks if a command is likely to modify files.
 // Returns the type of modification detected, or empty string if none.

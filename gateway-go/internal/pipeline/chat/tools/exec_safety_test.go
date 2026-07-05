@@ -170,6 +170,7 @@ func TestDetectFileModification(t *testing.T) {
 		want    string
 	}{
 		{"sed -i 's/foo/bar/' file.txt", "sed_in_place"},
+		{"sed -n -i 's/foo/bar/' file.txt", "sed_in_place"},
 		{"sed --in-place 's/a/b/' f", "sed_in_place"},
 		{"sed 's/foo/bar/' file.txt", ""},
 		{"echo hello > file.txt", "redirect"},
@@ -200,8 +201,11 @@ func TestExecCommandPreservesRunCache(t *testing.T) {
 		"git diff HEAD~1",
 		"/usr/bin/git status",
 		"find . -name '*.go' -type f",
-		"sed -n 10,20p main.go",
 		"wc -l main.go | sort",
+		"sort data.txt",
+		"uniq data.txt",
+		"grep -o 'v[0-9]+' main.go",
+		"cat data.txt | sort | uniq",
 		"du -sh .",
 	}
 	for _, cmd := range preserves {
@@ -215,6 +219,18 @@ func TestExecCommandPreservesRunCache(t *testing.T) {
 		"rm -rf build",
 		"sed -i 's/a/b/' main.go",
 		"sed --in-place 's/a/b/' main.go",
+		"sed -n -i 's/a/b/' main.go",  // -i behind another flag
+		"sed -n 'w out.txt' main.go",  // sed w script command writes a file
+		"sed -n 10,20p main.go",       // sed de-allowlisted entirely (w/s///w undetectable)
+		"sort -o sorted.txt data.txt", // -o writes without redirection
+		"sort --output=sorted.txt data.txt",
+		"tree -o tree.txt",
+		"uniq data.txt out.txt",         // second positional arg is an output file
+		"git diff --output=changes.txt", // git flag writes without redirection
+		"git log --output=log.txt -5",
+		"find . -name '*.go' -fprintf out.txt %p",
+		"find . -fprint listing.txt",
+		"find . -fls listing.txt",
 		"go generate ./...",
 		"make build",
 		"git checkout main",
