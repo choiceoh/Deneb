@@ -22,6 +22,7 @@
 #   ANDROID_HOME        Android SDK            (default: ~/android-sdk)
 #   DENEB_SKIP_SMOKE    set to skip the pre-publish smoke gate entirely
 #   DENEB_APK_VARIANT   fossRelease (default, R8 production build) | fossDebug (debuggable, faster to build)
+#   DENEB_APK_SIGNING_ENV  release-signing env file (default: ~/.deneb/apk-signing.env)
 #
 # Usage:
 #   scripts/dev/publish-apk.sh "release notes shown in the in-app updater"
@@ -32,11 +33,9 @@ APK_DIR="${DENEB_APK_DIR:-$HOME/.cache/deneb-apk}"
 BASE_URL="${DENEB_APK_BASE_URL:-http://127.0.0.1:19010}"
 SDK="${ANDROID_HOME:-$HOME/android-sdk}"
 # Build variant. fossRelease is the default — the production build users actually run
-# (R8-optimized + non-debuggable, much smoother scroll); its signing falls back to the
-# debug keystore when no release key is configured, so it installs in place over a debug
-# build (same signature). Pass DENEB_APK_VARIANT=fossDebug for a faster, debuggable build
-# when iterating locally. The serve dir is scanned across both variants below so version
-# codes stay monotonic when the two coexist.
+# (R8-optimized + non-debuggable, much smoother scroll). Pass DENEB_APK_VARIANT=fossDebug
+# for a faster, debuggable build when iterating locally. The serve dir is scanned across
+# both variants below so version codes stay monotonic when the two coexist.
 #
 # NOTE: AGP 9.2.1's assembleFossRelease emits a manifest-less, unsigned APK that will not
 # install ("Missing AndroidManifest.xml"). The bundle's universal APK is the valid, signed,
@@ -65,6 +64,39 @@ if [ -f "$GSJSON_SRC" ]; then
 else
   rm -f "$APP_DIR/androidApp/google-services.json"
   echo "WARNING: $GSJSON_SRC not found — building WITHOUT FCM push" >&2
+fi
+
+# Release signing. androidApp/build.gradle.kts signs the release build with
+# KEYSTORE_FILE / KEYSTORE_PASSWORD / KEY_ALIAS when set and silently falls back
+# to the machine-local DEBUG keystore otherwise. That fallback is a double
+# liability for the OTA production build: a sideloaded, debug-signed APK with
+# this app's permission set (SMS·알림 접근·주소록·백그라운드 위치) matches the
+# Korean banking-malware fingerprint — Toss's 악성 앱 검사 actually flags it —
+# and the debug key is per-machine, so a runner-home reset would silently break
+# in-place OTA updates for every installed phone. So the publish sources the
+# signing env from a host-local file (never committed; creation runbook:
+# .claude/rules/release-and-deploy.md "APK release 서명").
+#
+# Policy: env file present but broken → hard fail (never silently ship a
+# debug-signed build when release signing was intended); absent → warn loudly
+# and continue (keeps CD alive until the one-time keystore setup is done).
+SIGNING_ENV="${DENEB_APK_SIGNING_ENV:-$HOME/.deneb/apk-signing.env}"
+if [ -f "$SIGNING_ENV" ]; then
+  set -a
+  # shellcheck disable=SC1090
+  . "$SIGNING_ENV"
+  set +a
+  if [ -z "${KEYSTORE_FILE:-}" ] || [ ! -f "${KEYSTORE_FILE:-}" ] || [ -z "${KEYSTORE_PASSWORD:-}" ] || [ -z "${KEY_ALIAS:-}" ]; then
+    echo "ERROR: $SIGNING_ENV exists but KEYSTORE_FILE/KEYSTORE_PASSWORD/KEY_ALIAS is unset (or the keystore file is missing)." >&2
+    echo "       Refusing to fall back to a debug-signed publish. Fix the env file or remove it to opt back into debug signing." >&2
+    exit 1
+  fi
+  echo "release signing: $(basename "$KEYSTORE_FILE") (alias $KEY_ALIAS)"
+elif [ "$VARIANT" = "fossRelease" ]; then
+  echo "WARNING: no $SIGNING_ENV — fossRelease will be signed with the LOCAL DEBUG KEYSTORE." >&2
+  echo "         Debug-signed sideloaded builds trip fintech malware scans (e.g. Toss) and the debug" >&2
+  echo "         key is machine-local (runner reset = OTA continuity break). One-time setup runbook:" >&2
+  echo "         .claude/rules/release-and-deploy.md 'APK release 서명'." >&2
 fi
 
 LIBS_VERSION_CODE="$(sed -n 's/^android-versionCode = "\(.*\)"/\1/p' gradle/libs.versions.toml)"

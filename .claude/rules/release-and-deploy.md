@@ -26,7 +26,7 @@ globs: ["scripts/deploy*", "scripts/dev/publish-apk.sh", "client-android/app/and
 - APK 파일명 = **versionCode + 커밋 해시** (`deneb-<code>-<sha>-<variant>.apk`, `androidApp/build.gradle.kts`). semantic versionName(2.9.x)은 제거됨 — 빌드는 code 로만 식별. 다른 커밋 빌드는 안 덮어쓰고 전부 보존된다.
 - 스크립트가 빌드 + serve dir 복사 + `version.json`(실제 산출물의 code/url/notes) 생성을 한 번에 한다.
 - **빌드 전 스모크 게이트(자동)**: 빌드에 들어가기 전에 `native-app-smoke.sh`(라이브 화면 워크)를 돌려 런타임 렌더 크래시(#1959류)를 막는다. 크래시/wrong-screen 감지 시 publish 중단, 하네스 기동 불가 시 warn+continue, `DENEB_SKIP_SMOKE=1` 로 우회. 상세: `.claude/rules/native-live-app.md`.
-- env: `DENEB_APK_DIR`(기본 `~/.cache/deneb-apk`), `DENEB_APK_BASE_URL`(기본 localhost — 배포 머신에서 tailnet URL로 export), `DENEB_APK_VARIANT`(기본 **fossRelease** — R8 프로덕션 빌드 `packageFossReleaseUniversalApk`; debug 변형은 opt-in), `ANDROID_HOME`, `DENEB_SKIP_SMOKE`(스모크 게이트 우회).
+- env: `DENEB_APK_DIR`(기본 `~/.cache/deneb-apk`), `DENEB_APK_BASE_URL`(기본 localhost — 배포 머신에서 tailnet URL로 export), `DENEB_APK_VARIANT`(기본 **fossRelease** — R8 프로덕션 빌드 `packageFossReleaseUniversalApk`; debug 변형은 opt-in), `ANDROID_HOME`, `DENEB_SKIP_SMOKE`(스모크 게이트 우회), `DENEB_APK_SIGNING_ENV`(release 서명 env 파일, 기본 `~/.deneb/apk-signing.env` — ↓ "APK release 서명").
 - **versionCode는 수동 bump 불필요** — `publish-apk.sh`가 게시 시 자동 할당한다. flock으로 직렬화한 채 공유 serve dir의 최대 code + 1(libs 값을 바닥으로)을 골라 `-PdenebVersionCode`로 gradle 두 모듈(androidApp `versionCode` + composeApp `Version`)에 주입하므로, 동시에 게시하는 두 worktree가 같은 code를 잡는 사고(155/162/164 충돌)가 구조적으로 불가능하다. 이 code는 APK versionCode·파일명·`DenebUpdate.kt`의 `DENEB_VERSION_CODE`(= 생성된 `Version.appVersionCode`)·설정 "빌드 N" 표시에 모두 일관 반영된다.
 - ★**semantic versionName(appVersion)은 제거됨 — versionCode 단독 식별 (versionCode-only).** 릴리스마다 손댈 버전 파일이 없다: `publish-apk.sh`만 돌리면 끝. 인앱 업데이트는 code의 strictly-greater 비교라 versionName이 애초에 식별에 불필요했고, 수동 관리 versionName이 위장·중복·패치노트 미동기 버그의 공통 뿌리였어서 통째 제거했다. `libs.versions.toml`의 `android-versionCode`는 floor/IDE 기본값일 뿐. 표시·로그·User-Agent·파일명 모두 "빌드 N"(code).
 
@@ -35,6 +35,46 @@ globs: ["scripts/deploy*", "scripts/dev/publish-apk.sh", "client-android/app/and
 DENEB_APK_BASE_URL=http://<gateway-host>:19010 \
   scripts/dev/publish-apk.sh "인앱 업데이트에 표시될 릴리스 노트"
 ```
+
+### APK release 서명 (1회 셋업, 운영자)
+
+> fossRelease 는 `KEYSTORE_FILE` env 미설정 시 **debug keystore 폴백 서명**된다
+> (`androidApp/build.gradle.kts` signingConfigs). 사이드로드 + 이 앱의 권한 조합
+> (SMS·알림 접근·주소록·백그라운드 위치)에서 debug 서명은 핀테크 악성 앱 검사
+> (토스가 실제로 플래그한 이력, 2026-07)에 걸리고, debug key 는 머신 로컬이라
+> 러너 홈 초기화 = 기존 설치 전부 OTA 단절이다. `publish-apk.sh` 가
+> `~/.deneb/apk-signing.env` 를 발견하면 자동으로 release 서명하고, 파일이
+> 깨져 있으면(키 경로/비번/alias 누락) debug 폴백 대신 **hard fail** 한다.
+
+빌드 러너(srv1, publish-apk 실행 계정)에서 1회:
+
+```bash
+mkdir -p ~/.deneb/keys && chmod 700 ~/.deneb/keys
+keytool -genkeypair -v -keystore ~/.deneb/keys/deneb-release.p12 -storetype PKCS12 \
+  -alias deneb -keyalg RSA -keysize 4096 -validity 10950 \
+  -dname "CN=Deneb, O=Deneb" -storepass '<강한 비밀번호>'
+cat > ~/.deneb/apk-signing.env <<EOF
+KEYSTORE_FILE=$HOME/.deneb/keys/deneb-release.p12
+KEYSTORE_PASSWORD=<강한 비밀번호>
+KEY_ALIAS=deneb
+EOF
+chmod 600 ~/.deneb/apk-signing.env
+# 서명 인증서 SHA-256 (토스 등 오탐 신고에 제출할 고정 해시)
+keytool -exportcert -keystore ~/.deneb/keys/deneb-release.p12 -alias deneb \
+  -storepass '<강한 비밀번호>' | sha256sum
+```
+
+- gradle 이 `keyPassword = KEYSTORE_PASSWORD` 로 스토어/키에 같은 비번을 쓰므로
+  PKCS12(단일 비번)와 정합 — 별도 keypass 를 만들지 말 것.
+- ★ **서명 전환 발행은 인플레이스 업데이트 불가**: 기존 debug-서명 설치 위에
+  설치가 거부된다(서명 불일치). 첫 release-서명 발행의 릴리스 노트에 "기존 앱
+  삭제 후 재설치 필요"를 명시하고, 폰에서 1회 수동 재설치한다. 이후 발행부터는
+  평소처럼 인앱 OTA.
+- ★ **keystore 는 오프사이트 백업 스코프 밖** — memory-backup(위키·일기·transcripts…)에
+  포함되지 않는다. `~/.deneb/keys/deneb-release.p12` + 비밀번호를 별도 보관
+  (분실 = 또 한 번의 전체 재설치 + 오탐 신고 해시 재제출).
+- 토스 오탐 대응: 전환 후에도 플래그가 남으면 토스 고객센터에 패키지명(`ai.deneb`) +
+  위 SHA-256 으로 오탐 신고. 서명이 고정돼야 신고/화이트리스트가 성립한다.
 
 ## Automated OTA publish (GitHub Action)
 
