@@ -8,7 +8,15 @@
 // The pure parser + tree helpers live in markdown/denebUiParse.ts; this file
 // holds the React rendering (DenebUi component + AssistantText stream wrapper).
 import { type ReactNode, useMemo, useState } from "react";
-import { type Node, coerce, collectInputs, parseDenebUi, splitDenebUi, TEXT_STYLE } from "@/markdown/denebUiParse";
+import {
+  type Node,
+  coerce,
+  collectInputs,
+  hasInteractiveNode,
+  parseDenebUi,
+  splitDenebUi,
+  TEXT_STYLE,
+} from "@/markdown/denebUiParse";
 import { Markdown } from "./Markdown";
 
 // Render one agent-drawn UI block. Owns form + accordion-toggle state so a
@@ -455,12 +463,23 @@ export function AssistantText({
               <Markdown text={seg.text} />
             </div>
           );
-        if (seg.kind === "ui-pending")
+        if (seg.kind === "ui-pending") {
+          // HTML v2 partials parse cleanly (EOF auto-close): paint display-only
+          // cards live as they stream. Interactive trees keep the placeholder —
+          // a half-built form must not accept clicks mid-stream.
+          const partial = seg.body.trimStart().startsWith("<") ? parseDenebUi(seg.body) : null;
+          if (partial && !hasInteractiveNode(partial))
+            return (
+              <div key={i} className="assistant-segment assistant-segment-ui">
+                <DenebUi spec={partial} onSubmit={onUiSubmit} busy />
+              </div>
+            );
           return (
             <div key={i} className="assistant-segment assistant-segment-pending">
               <div className="dui-pending">UI 생성 중…</div>
             </div>
           );
+        }
         const spec = parseDenebUi(seg.body);
         return spec ? (
           <div key={i} className="assistant-segment assistant-segment-ui">

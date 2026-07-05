@@ -14,7 +14,12 @@ export type Node = any;
 const FENCE_OPEN = /^```\s*deneb-ui\s*$/i;
 const FENCE_CLOSE = /^```\s*$/;
 
-export type UiSegment = { kind: "md"; text: string } | { kind: "ui"; body: string } | { kind: "ui-pending" };
+export type UiSegment =
+  | { kind: "md"; text: string }
+  | { kind: "ui"; body: string }
+  // Unclosed trailing fence mid-stream; body is the partial content so HTML
+  // blocks can render progressively (EOF auto-close makes partials parseable).
+  | { kind: "ui-pending"; body: string };
 
 // Split a (possibly mid-stream) assistant text part into Markdown spans and
 // deneb-ui blocks. An unclosed trailing fence → a pending placeholder.
@@ -41,7 +46,7 @@ export function splitDenebUi(text: string): UiSegment[] {
         body.push(lines[i]);
       }
       if (!closed) {
-        segs.push({ kind: "ui-pending" });
+        segs.push({ kind: "ui-pending", body: body.join("\n") });
         return segs; // streaming: nothing useful after an open block yet
       }
       segs.push({ kind: "ui", body: body.join("\n") });
@@ -78,6 +83,33 @@ export function parseDenebUi(body: string): Node | null {
     }
     return nodes.length ? { type: "column", children: nodes } : null;
   }
+}
+
+// Node types a user can act on. Progressive streaming render paints partial
+// display-only trees live but holds a placeholder for these — a half-built
+// form must not accept clicks mid-stream. Mirrors the native client's
+// DenebUiInteractivity.kt.
+const INTERACTIVE_TYPES = new Set([
+  "button",
+  "text_input",
+  "date_input",
+  "time_input",
+  "checkbox",
+  "select",
+  "switch",
+  "slider",
+  "radio_group",
+  "chip_group",
+  "countdown",
+]);
+
+// True when the tree contains any interactive node (see INTERACTIVE_TYPES).
+export function hasInteractiveNode(n: Node): boolean {
+  if (!n || typeof n !== "object") return false;
+  if (Array.isArray(n)) return n.some(hasInteractiveNode);
+  if (INTERACTIVE_TYPES.has(n.type)) return true;
+  if (hasInteractiveNode(n.children) || hasInteractiveNode(n.items)) return true;
+  return Array.isArray(n.tabs) && n.tabs.some((t: Node) => hasInteractiveNode(t?.children));
 }
 
 // Coerce a form value to the string a callback sends (native dataAsStrings).
