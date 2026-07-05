@@ -23,8 +23,9 @@ client-android.
 Releases happen one of two ways — never by hand-copying APKs:
 
 - **Automatic (normal path):** merging a PR that touches `client-android/**`
-  into main triggers `.github/workflows/publish-apk.yml` on the gx10
-  self-hosted runner. Merging the PR *is* the release approval.
+  into main triggers `.github/workflows/publish-apk.yml` on the srv1 (formerly
+  gx10; runner label is still literally `gx10`) self-hosted runner. Merging the
+  PR *is* the release approval.
 - **Manual (operator, on the deploy machine):**
 
   ```bash

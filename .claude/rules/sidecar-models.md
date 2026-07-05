@@ -5,7 +5,7 @@ globs: ["gateway-go/internal/pipeline/chat/tools/paddleocr.go", "gateway-go/inte
 
 # Sidecar Models (GPU 부가 모델 운영 현황)
 
-> Deneb 는 메인 챗 LLM 외에도 **로컬 GPU(DGX Spark, gx10)에서 상주 서빙되는 전용 모델들**을 호출한다. 대부분 vLLM 의 OpenAI 호환 `/v1` 엔드포인트지만, 일부(VibeVoice-ASR)는 전용 서비스로 상주한다. 외부 API 호출을 피하고 단일 머신에서 자급한다는 프로젝트 원칙(로컬 추론 우선)을 따른다. 이 파일은 "어떤 모델이, 어디서, 어떻게" 돌아가는지의 단일 진실원이다.
+> Deneb 는 메인 챗 LLM 외에도 **로컬 GPU(DGX Spark 플릿 — srv1(구 gx10)·srv2(구 spark4tb))에서 상주 서빙되는 전용 모델들**을 호출한다. 대부분 vLLM 의 OpenAI 호환 `/v1` 엔드포인트지만, 일부(VibeVoice-ASR)는 전용 서비스로 상주한다. 외부 API 호출을 피하고 단일 머신에서 자급한다는 프로젝트 원칙(로컬 추론 우선)을 따른다. 이 파일은 "어떤 모델이, 어디서, 어떻게" 돌아가는지의 단일 진실원이다.
 
 ## 현황 표
 
