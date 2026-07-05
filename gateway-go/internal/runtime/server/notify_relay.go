@@ -3,11 +3,7 @@
 // The gateway watches itself and surfaces two kinds of monitoring signal to
 // connected native clients (via clientPushHub) plus the operator log:
 //
-//  1. Status snapshots — buildStatusReport formats "what is the gateway
-//     doing right now?" as a Korean summary of running sessions for
-//     connected native clients.
-//
-//  2. Error mirrors — automatic. The notifier registers a Broadcaster.Tap
+//  1. Error mirrors — automatic. The notifier registers a Broadcaster.Tap
 //     and forwards user-impacting events (chat.delivery_failed,
 //     chat.media_delivery_failed, chat.tool_failed,
 //     chat.context_overflow_unrecoverable, chat.compaction_stuck) to connected
@@ -25,8 +21,8 @@
 // the bot; delivery now targets connected native clients.)
 //
 // This file holds the service core (construction, lifecycle, tap filter,
-// debounce, delivery). The heartbeat lives in notify_heartbeat.go, activity
-// tracking in notify_activity.go, and Korean formatting in notify_status.go.
+// debounce, delivery). The heartbeat lives in notify_heartbeat.go and Korean
+// formatting in notify_status.go.
 package server
 
 import (
@@ -99,20 +95,6 @@ type notifyService struct {
 
 	debounceMu sync.Mutex
 	lastSent   map[string]time.Time
-
-	// In-flight activity tracking, populated from `agent` and
-	// `session.tool` broadcast taps. Lets buildStatusReport answer
-	// "what tool is the main session running RIGHT NOW" instead of
-	// only "what was the last assistant text".
-	activityMu sync.Mutex
-	activity   map[string]*activityEntry
-
-	// cacheSummary returns the last one-line vLLM prefix-cache hit-rate status
-	// (see health_cache.go), appended to the status snapshot as a passive
-	// prompt-cache regression alarm. Function-typed and optional: nil (or a
-	// closure returning "") simply omits the line. Reads a cached string — never
-	// scrapes on the status-render path.
-	cacheSummary func() string
 }
 
 // notifyEvent is the worker's inbound message envelope.
@@ -138,44 +120,7 @@ func newNotifyService(sessions *session.Manager, logger *slog.Logger, pushHub *c
 		},
 		queue:    make(chan notifyEvent, notifyEventQueueSize),
 		lastSent: make(map[string]time.Time),
-		activity: make(map[string]*activityEntry),
 	}
-}
-
-// subscribeSessionEvents wires the activity cache to the session manager's
-// event bus so terminal transitions (DONE/FAILED/KILLED/TIMEOUT) clear
-// stale entries. Without this, a tool.start without a paired tool.end
-// (panic, kill, abort) leaves the activity entry "running" until LRU
-// eviction — which would lie to the operator about the session's state.
-//
-// The subscribe runs in its own goroutine inside the EventBus; cleanup
-// only fires for terminal transitions, so non-terminal noise (CREATED,
-// running→running) costs ~1 nanosecond per event.
-func (n *notifyService) subscribeSessionEvents() {
-	if n.sessions == nil {
-		return
-	}
-	n.sessions.EventBusRef().Subscribe(func(e session.Event) {
-		if e.Kind != session.EventStatusChanged && e.Kind != session.EventDeleted {
-			return
-		}
-		// Terminal: DONE / FAILED / KILLED / TIMEOUT — anything that
-		// isn't running anymore. Also clear on Deleted (GC) so a
-		// re-created session under the same key starts clean.
-		if e.Kind == session.EventStatusChanged && !session.IsTerminal(e.NewStatus) {
-			return
-		}
-		n.clearActivity(e.Key)
-	})
-}
-
-// clearActivity removes the activity entry for a session key. Safe to
-// call when the entry doesn't exist — used by the lifecycle subscriber
-// without nil-checking.
-func (n *notifyService) clearActivity(sessionKey string) {
-	n.activityMu.Lock()
-	delete(n.activity, sessionKey)
-	n.activityMu.Unlock()
 }
 
 // start spawns the worker goroutine and the heartbeat ticker. Both exit
@@ -184,7 +129,6 @@ func (n *notifyService) clearActivity(sessionKey string) {
 // goroutines until process exit, which is acceptable for the gateway's
 // single-binary deployment.
 func (n *notifyService) start(ctx context.Context) {
-	n.subscribeSessionEvents()
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
@@ -207,14 +151,8 @@ func (n *notifyService) start(ctx context.Context) {
 }
 
 // tap is the broadcaster Tap callback for *mirroring* events. It first
-// records activity for in-flight introspection (agent/session.tool), then
 // filters to the monitored error set + debounce + enqueue.
-//
-// Activity recording runs even when the event isn't mirrored, so the
-// status snapshot still has fresh data on routine traffic.
 func (n *notifyService) tap(event string, payload any) {
-	n.recordActivity(event, payload)
-
 	if _, want := mirroredEvents[event]; !want {
 		return
 	}

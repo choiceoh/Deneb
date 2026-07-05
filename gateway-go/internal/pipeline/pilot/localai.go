@@ -224,13 +224,6 @@ func CallAnalysisLLM(ctx context.Context, system, userMessage string, maxTokens 
 	return CallRoleLLM(ctx, modelrole.RoleAnalysis, system, userMessage, maxTokens, extraBody...)
 }
 
-// CallCodingLLM invokes the coding model role for code-writing/editing tasks.
-// The role is opt-in; callers that require a configured coding role should
-// check the registry before calling.
-func CallCodingLLM(ctx context.Context, system, userMessage string, maxTokens int, extraBody ...map[string]any) (string, error) {
-	return CallRoleLLM(ctx, modelrole.RoleCoding, system, userMessage, maxTokens, extraBody...)
-}
-
 // CallTranslationLLM invokes the translation model role — used to translate
 // web-page text for the in-app browser (en/ru → ko). Defaults to the lightweight
 // model unless agents.translationModel opts in to a translation-specialized one.
