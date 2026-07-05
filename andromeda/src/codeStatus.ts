@@ -44,3 +44,8 @@ export function codeStatusLabel(status?: string): string {
       return status || "—";
   }
 }
+
+export function codeDirtyLabel(session?: { dirty?: boolean; changedFiles?: number }): string {
+  if (!session?.dirty) return "";
+  return session.changedFiles && session.changedFiles > 0 ? `저장 필요 ${session.changedFiles}개` : "저장 필요";
+}

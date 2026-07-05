@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { codeStatusColor, codeStatusGlance, codeStatusLabel } from "./codeStatus";
+import { codeDirtyLabel, codeStatusColor, codeStatusGlance, codeStatusLabel } from "./codeStatus";
 
 describe("codeStatus", () => {
   it("maps statuses to the three dot colors", () => {
@@ -23,5 +23,11 @@ describe("codeStatus", () => {
     expect(codeStatusLabel("passed")).toBe("검증 통과");
     expect(codeStatusLabel("failed")).toBe("검증 실패");
     expect(codeStatusLabel("missing")).toBe("워크트리 없음");
+  });
+
+  it("labels dirty worktrees with the changed file count", () => {
+    expect(codeDirtyLabel({ dirty: false, changedFiles: 3 })).toBe("");
+    expect(codeDirtyLabel({ dirty: true, changedFiles: 3 })).toBe("저장 필요 3개");
+    expect(codeDirtyLabel({ dirty: true, changedFiles: 0 })).toBe("저장 필요");
   });
 });

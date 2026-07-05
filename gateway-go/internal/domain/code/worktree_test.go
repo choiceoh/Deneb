@@ -220,6 +220,39 @@ func TestPRURL_NoPR(t *testing.T) {
 	}
 }
 
+func TestWorktreeStatus_CountsPorcelainRows(t *testing.T) {
+	fake := &fakeRunner{out: map[string][]byte{"status": []byte(" M main.go\n?? new.go\nR  old.go -> new.go\n\n")}}
+	m := &Manager{Runner: fake}
+
+	st, err := m.WorktreeStatus(context.Background(), Task{Dir: "/wt/t"})
+	if err != nil {
+		t.Fatalf("WorktreeStatus: %v", err)
+	}
+	if !st.Dirty {
+		t.Error("Dirty = false, want true")
+	}
+	if st.ChangedFiles != 3 {
+		t.Errorf("ChangedFiles = %d, want 3", st.ChangedFiles)
+	}
+	wantSeq(t, fake.joined(), []string{"git status --porcelain"})
+}
+
+func TestWorktreeStatus_Clean(t *testing.T) {
+	fake := &fakeRunner{out: map[string][]byte{"status": []byte("\n")}}
+	m := &Manager{Runner: fake}
+
+	st, err := m.WorktreeStatus(context.Background(), Task{Dir: "/wt/t"})
+	if err != nil {
+		t.Fatalf("WorktreeStatus: %v", err)
+	}
+	if st.Dirty {
+		t.Error("Dirty = true, want false")
+	}
+	if st.ChangedFiles != 0 {
+		t.Errorf("ChangedFiles = %d, want 0", st.ChangedFiles)
+	}
+}
+
 func TestUndo_DirtyDiscardsToCheckpoint(t *testing.T) {
 	// status --porcelain returns changes → dirty → reset HEAD + clean untracked.
 	fake := &fakeRunner{out: map[string][]byte{"status": []byte(" M main.go\n")}}

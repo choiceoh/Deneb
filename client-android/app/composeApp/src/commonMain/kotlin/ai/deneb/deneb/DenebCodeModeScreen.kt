@@ -33,7 +33,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.datetime.Instant
+import kotlin.time.Clock
 
 /**
  * Coding mode (`miniapp.code.*`) — the native rail of git-worktree sessions and
@@ -64,15 +68,27 @@ fun DenebCodeModeScreen(
     var showStart by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
-    suspend fun loadList() {
-        listFailed = false
-        sessions = null
+    suspend fun loadList(showLoading: Boolean = false) {
+        if (showLoading) {
+            listFailed = false
+            sessions = null
+        }
         val list = client.fetchCodeSessions()
-        sessions = list
-        listFailed = list == null
+        if (list == null) {
+            listFailed = true
+        } else {
+            sessions = list
+            listFailed = false
+        }
     }
 
-    LaunchedEffect(Unit) { loadList() }
+    LaunchedEffect(Unit) {
+        loadList(showLoading = true)
+        while (isActive) {
+            delay(codeRailRefreshMs)
+            loadList()
+        }
+    }
 
     // START FORM ----------------------------------------------------------------
     if (showStart) {
@@ -113,6 +129,7 @@ fun DenebCodeModeScreen(
         onBack = onBack,
         tabBar = navigationTabBar,
         actions = {
+            TextButton(onClick = { scope.launch { loadList() } }) { Text("새로고침") }
             TextButton(onClick = { showStart = true }) { Text("새 세션") }
         },
     ) {
@@ -140,15 +157,23 @@ fun DenebCodeModeScreen(
                 return@Column
             }
             DenebSectionLabel("진행 중 ${list.size}건")
+            if (listFailed) {
+                Text(
+                    "최근 새로고침에 실패했습니다. 마지막 목록을 표시합니다.",
+                    style = DenebType.hint,
+                    color = MaterialTheme.colorScheme.error,
+                )
+                Spacer(Modifier.height(8.dp))
+            }
             list.forEach { s ->
-                val sub = buildString {
-                    append("${s.repo.owner}/${s.repo.name}")
-                    append(" · ${codeStatusLabel(s.status)}")
-                    if (s.checkpoints.isNotEmpty()) append(" · 체크포인트 ${s.checkpoints.size}")
-                }
                 DenebRow(onClick = { selected = s }) {
-                    Text(s.title.ifBlank { s.id }, style = DenebType.rowTitle, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(sub, style = DenebType.rowSubtitle)
+                    Text(
+                        s.title.ifBlank { s.id },
+                        style = DenebType.rowTitle,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(codeSessionSubtitle(s), style = DenebType.rowSubtitle)
                 }
             }
         }
@@ -181,15 +206,40 @@ private fun CodeSessionDetail(
     var pendingClose by remember(session.id) { mutableStateOf(false) }
     var pendingDiscard by remember(session.id) { mutableStateOf(false) }
 
-    // Refresh from the server on open: an agent turn in the bound chat may have
-    // advanced the session (new checkpoint, flipped status) since the rail loaded.
-    // miniapp.code.status is a side-effect-free read, so this is safe.
-    LaunchedEffect(session.id) {
+    suspend fun refreshLive(showError: Boolean = false) {
         val fresh = client.fetchCodeStatus(session.id)
-        if (fresh != null) live = fresh
+        if (fresh != null) {
+            live = fresh
+            if (showError) actionError = null
+        } else if (showError) {
+            actionError = "세션 상태를 새로고침하지 못했습니다."
+        }
     }
 
-    DenebScreenScaffold(title = "코드모드", onBack = onBack, tabBar = navigationTabBar) {
+    // Refresh from the server on open: an agent turn in the bound chat may have
+    // advanced the session (new checkpoint, flipped status) since the rail loaded.
+    // Then poll while the detail is open, so phone-side code mode tracks a long
+    // running coding turn without making the user leave and re-enter the screen.
+    // miniapp.code.status is a side-effect-free read, so this is safe.
+    LaunchedEffect(session.id) {
+        refreshLive()
+        while (isActive) {
+            delay(codeDetailRefreshMs)
+            if (!busy) refreshLive()
+        }
+    }
+
+    DenebScreenScaffold(
+        title = "코드모드",
+        onBack = onBack,
+        tabBar = navigationTabBar,
+        actions = {
+            TextButton(
+                onClick = { scope.launch { refreshLive(showError = true) } },
+                enabled = !busy,
+            ) { Text("새로고침") }
+        },
+    ) {
         val s = live
         Column(
             Modifier
@@ -203,7 +253,14 @@ private fun CodeSessionDetail(
                 style = DenebType.meta,
                 color = denebHint(),
             )
-            Text("상태 · ${codeStatusLabel(s.status)}", style = DenebType.meta, color = denebHint())
+            Text(
+                "상태 · ${codeStatusLabel(s.status)}${codeUpdatedSuffix(s.updatedAt)}",
+                style = DenebType.meta,
+                color = denebHint(),
+            )
+            codeDirtyLabel(s)?.let {
+                Text(it, style = DenebType.hint, color = MaterialTheme.colorScheme.error)
+            }
 
             // Primary: continue the work in chat.
             Spacer(Modifier.height(16.dp))
@@ -281,7 +338,7 @@ private fun CodeSessionDetail(
                 s.checkpoints.asReversed().forEach { cp ->
                     DenebRow {
                         Text(cp.summary.ifBlank { "변경 저장" }, style = DenebType.rowTitle)
-                        Text("${cp.sha.take(8)} · ${cp.at}", style = DenebType.snippet, color = denebHint())
+                        Text("${cp.sha.take(8)} · ${codeTimestampLabel(cp.at)}", style = DenebType.snippet, color = denebHint())
                     }
                 }
             }
@@ -552,4 +609,43 @@ private fun codeStatusLabel(status: String): String = when (status) {
     "missing" -> "워크트리 없음"
     "closed" -> "보관됨"
     else -> status
+}
+
+private const val codeRailRefreshMs = 12_000L
+private const val codeDetailRefreshMs = 6_000L
+
+internal fun codeSessionSubtitle(
+    s: CodeSession,
+    nowEpochMs: Long = Clock.System.now().toEpochMilliseconds(),
+): String = buildString {
+    append("${s.repo.owner}/${s.repo.name}")
+    append(" · ${codeStatusLabel(s.status)}")
+    codeDirtyLabel(s)?.let { append(" · $it") }
+    codeTimeAgo(s.updatedAt, nowEpochMs).takeIf { it.isNotBlank() }?.let { append(" · $it 갱신") }
+    if (s.checkpoints.isNotEmpty()) append(" · 체크포인트 ${s.checkpoints.size}")
+}
+
+internal fun codeDirtyLabel(s: CodeSession): String? {
+    if (!s.dirty) return null
+    return if (s.changedFiles > 0) "저장 필요 ${s.changedFiles}개" else "저장 필요"
+}
+
+private fun codeUpdatedSuffix(updatedAt: String): String =
+    codeTimeAgo(updatedAt).takeIf { it.isNotBlank() }?.let { " · $it 갱신" } ?: ""
+
+internal fun codeTimestampLabel(iso: String): String =
+    codeTimeAgo(iso).takeIf { it.isNotBlank() } ?: iso
+
+internal fun codeTimeAgo(iso: String, nowEpochMs: Long = Clock.System.now().toEpochMilliseconds()): String {
+    if (iso.isBlank()) return ""
+    val thenMs = runCatching { Instant.parse(iso).toEpochMilliseconds() }.getOrNull() ?: return ""
+    val diff = nowEpochMs - thenMs
+    return when {
+        diff < 0L -> ""
+        diff < 60_000L -> "방금"
+        diff < 3_600_000L -> "${diff / 60_000L}분 전"
+        diff < 86_400_000L -> "${diff / 3_600_000L}시간 전"
+        diff < 7L * 86_400_000L -> "${diff / 86_400_000L}일 전"
+        else -> iso.take(10)
+    }
 }

@@ -28,6 +28,7 @@ import (
 type CodeWorktrees interface {
 	StartTask(ctx context.Context, r code.Repo, taskID string) (code.Task, error)
 	ListRepos(ctx context.Context) ([]code.Repo, error)
+	WorktreeStatus(ctx context.Context, t code.Task) (code.WorktreeStatus, error)
 	Verify(ctx context.Context, dir string) (code.VerifyResult, error)
 	Commit(ctx context.Context, t code.Task, message string) error
 	HeadSHA(ctx context.Context, t code.Task) (string, error)
@@ -59,9 +60,22 @@ type CodeDeps struct {
 	ConfigureCodingSession func(chatSessionKey, workspaceDir string)
 }
 
-// codeOpTimeout bounds the git/exec a handler may run (clone, npm install, build)
-// so a hung command can't pin the request past the write-timeout backstop.
-const codeOpTimeout = 5 * time.Minute
+const (
+	// codeOpTimeout bounds the git/exec a handler may run (clone, npm install, build)
+	// so a hung command can't pin the request past the write-timeout backstop.
+	codeOpTimeout = 5 * time.Minute
+
+	// codeStatusTimeout keeps rail/status refreshes cheap. Dirty state is useful
+	// UI context, but it should degrade away rather than making the whole code
+	// surface feel blocked by a slow worktree.
+	codeStatusTimeout = 2 * time.Second
+)
+
+type codeSessionOut struct {
+	code.Session
+	Dirty        bool `json:"dirty,omitempty"`
+	ChangedFiles int  `json:"changedFiles,omitempty"`
+}
 
 // CodeMethods returns the miniapp.code.* handlers, or nil when unconfigured.
 func CodeMethods(deps CodeDeps) map[string]rpcutil.HandlerFunc {
@@ -97,6 +111,31 @@ func activeSessions(list []code.Session) []code.Session {
 	return out
 }
 
+func activeSessionPayloads(ctx context.Context, deps CodeDeps, list []code.Session) []codeSessionOut {
+	sessions := activeSessions(list)
+	out := make([]codeSessionOut, 0, len(sessions))
+	for _, sess := range sessions {
+		out = append(out, codeSessionPayload(ctx, deps, sess))
+	}
+	return out
+}
+
+func codeSessionPayload(ctx context.Context, deps CodeDeps, sess code.Session) codeSessionOut {
+	out := codeSessionOut{Session: sess}
+	if sess.Status == code.StatusClosed || sess.Status == code.StatusMissing || strings.TrimSpace(sess.Dir) == "" {
+		return out
+	}
+	statusCtx, cancel := context.WithTimeout(ctx, codeStatusTimeout)
+	defer cancel()
+	st, err := deps.Worktrees.WorktreeStatus(statusCtx, taskFromSession(sess))
+	if err != nil {
+		return out
+	}
+	out.Dirty = st.Dirty
+	out.ChangedFiles = st.ChangedFiles
+	return out
+}
+
 func codeSessions(deps CodeDeps) rpcutil.HandlerFunc {
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		if errResp := requireAuth(ctx, req.ID); errResp != nil {
@@ -105,7 +144,7 @@ func codeSessions(deps CodeDeps) rpcutil.HandlerFunc {
 		// Mark sessions whose worktree vanished (manual cleanup, crash) as missing
 		// so the rail reflects reality and stale rows don't fail every action.
 		_ = deps.Sessions.Reconcile(nil)
-		return rpcutil.RespondOK(req.ID, map[string]any{"sessions": activeSessions(deps.Sessions.List())})
+		return rpcutil.RespondOK(req.ID, map[string]any{"sessions": activeSessionPayloads(ctx, deps, deps.Sessions.List())})
 	}
 }
 
@@ -176,7 +215,7 @@ func codeStart(deps CodeDeps) rpcutil.HandlerFunc {
 		if deps.ConfigureCodingSession != nil {
 			deps.ConfigureCodingSession(chatSessionKey, task.Dir)
 		}
-		return rpcutil.RespondOK(req.ID, map[string]any{"session": sess})
+		return rpcutil.RespondOK(req.ID, map[string]any{"session": codeSessionPayload(ctx, deps, *sess)})
 	}
 }
 
@@ -196,7 +235,7 @@ func codeStatus(deps CodeDeps) rpcutil.HandlerFunc {
 		if !ok {
 			return rpcerr.InvalidParams(fmt.Errorf("session %q not found", strings.TrimSpace(p.ID))).Response(req.ID)
 		}
-		return rpcutil.RespondOK(req.ID, map[string]any{"session": sess})
+		return rpcutil.RespondOK(req.ID, map[string]any{"session": codeSessionPayload(ctx, deps, sess)})
 	}
 }
 
@@ -318,7 +357,7 @@ func codeVerify(deps CodeDeps) rpcutil.HandlerFunc {
 			}
 		}
 		updated, _ := deps.Sessions.Get(sess.ID)
-		return rpcutil.RespondOK(req.ID, map[string]any{"session": updated, "result": res})
+		return rpcutil.RespondOK(req.ID, map[string]any{"session": codeSessionPayload(ctx, deps, updated), "result": res})
 	}
 }
 
@@ -355,7 +394,7 @@ func codeCheckpoint(deps CodeDeps) rpcutil.HandlerFunc {
 			return rpcerr.WrapUnavailable("checkpoint save failed", err).Response(req.ID)
 		}
 		updated, _ := deps.Sessions.Get(sess.ID)
-		return rpcutil.RespondOK(req.ID, map[string]any{"session": updated})
+		return rpcutil.RespondOK(req.ID, map[string]any{"session": codeSessionPayload(ctx, deps, updated)})
 	}
 }
 
@@ -386,7 +425,7 @@ func codeUndo(deps CodeDeps) rpcutil.HandlerFunc {
 			_ = deps.Sessions.PopCheckpoint(sess.ID)
 		}
 		updated, _ := deps.Sessions.Get(sess.ID)
-		return rpcutil.RespondOK(req.ID, map[string]any{"session": updated})
+		return rpcutil.RespondOK(req.ID, map[string]any{"session": codeSessionPayload(ctx, deps, updated)})
 	}
 }
 

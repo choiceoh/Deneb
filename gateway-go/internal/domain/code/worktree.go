@@ -73,6 +73,14 @@ type Task struct {
 	Dir    string // worktree path — the agent's workspace for this task
 }
 
+// WorktreeStatus is the lightweight live git state for a task worktree. It is
+// transient UI state (not persisted in Session): the rail/detail can show
+// whether there are uncheckpointed edits without treating it as lifecycle state.
+type WorktreeStatus struct {
+	Dirty        bool `json:"dirty,omitempty"`
+	ChangedFiles int  `json:"changedFiles,omitempty"`
+}
+
 // Manager owns the on-disk layout for coding projects:
 //
 //	<Root>/<owner>/<repo>/base         ← base clone (tracks origin)
@@ -275,11 +283,33 @@ func (m *Manager) Undo(ctx context.Context, t Task) (poppedCheckpoint bool, err 
 }
 
 func (m *Manager) hasUncommitted(ctx context.Context, dir string) (bool, error) {
-	out, err := m.Runner.Run(ctx, dir, "git", "status", "--porcelain")
+	st, err := m.WorktreeStatus(ctx, Task{Dir: dir})
 	if err != nil {
-		return false, fmt.Errorf("git status: %w", err)
+		return false, err
 	}
-	return strings.TrimSpace(string(out)) != "", nil
+	return st.Dirty, nil
+}
+
+// WorktreeStatus returns whether the task has uncommitted edits and how many
+// porcelain status rows git reports. Renames can produce one row for one path
+// pair, which is exactly the "things needing checkpoint" count the UI needs.
+func (m *Manager) WorktreeStatus(ctx context.Context, t Task) (WorktreeStatus, error) {
+	out, err := m.Runner.Run(ctx, t.Dir, "git", "status", "--porcelain")
+	if err != nil {
+		return WorktreeStatus{}, fmt.Errorf("git status: %w", err)
+	}
+	changed := countPorcelainStatusRows(string(out))
+	return WorktreeStatus{Dirty: changed > 0, ChangedFiles: changed}, nil
+}
+
+func countPorcelainStatusRows(out string) int {
+	count := 0
+	for _, line := range strings.Split(out, "\n") {
+		if strings.TrimSpace(line) != "" {
+			count++
+		}
+	}
+	return count
 }
 
 // HeadSHA returns the worktree's current commit SHA — recorded as a checkpoint id.

@@ -46,6 +46,8 @@ data class CodeSession(
     val checkpoints: List<CodeCheckpoint> = emptyList(),
     val createdAt: String = "",
     val updatedAt: String = "",
+    val dirty: Boolean = false,
+    val changedFiles: Int = 0,
 )
 
 @Serializable
