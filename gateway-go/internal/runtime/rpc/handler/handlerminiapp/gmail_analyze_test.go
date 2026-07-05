@@ -7,18 +7,18 @@ import (
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmailpoll"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailanalysis"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailwork"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
 type fakeAnalyzePipeline struct {
-	analyzeFn func(ctx context.Context, msg *gmail.MessageDetail) (gmailpoll.AnalysisResult, error)
+	analyzeFn func(ctx context.Context, msg *gmail.MessageDetail) (mailanalysis.AnalysisResult, error)
 }
 
-func (f *fakeAnalyzePipeline) Analyze(ctx context.Context, msg *gmail.MessageDetail) (gmailpoll.AnalysisResult, error) {
+func (f *fakeAnalyzePipeline) Analyze(ctx context.Context, msg *gmail.MessageDetail) (mailanalysis.AnalysisResult, error) {
 	if f.analyzeFn == nil {
-		return gmailpoll.AnalysisResult{}, errors.New("Analyze not stubbed")
+		return mailanalysis.AnalysisResult{}, errors.New("Analyze not stubbed")
 	}
 	return f.analyzeFn(ctx, msg)
 }
@@ -45,11 +45,11 @@ func TestGmailAnalyze_HappyPath(t *testing.T) {
 		},
 	}
 	pipeline := &fakeAnalyzePipeline{
-		analyzeFn: func(_ context.Context, msg *gmail.MessageDetail) (gmailpoll.AnalysisResult, error) {
+		analyzeFn: func(_ context.Context, msg *gmail.MessageDetail) (mailanalysis.AnalysisResult, error) {
 			if msg.ID != "m1" {
 				t.Errorf("pipeline got id=%q, want m1", msg.ID)
 			}
-			return gmailpoll.AnalysisResult{Text: "## 핵심 요약\n회의 일정 조율 요청.\n"}, nil
+			return mailanalysis.AnalysisResult{Text: "## 핵심 요약\n회의 일정 조율 요청.\n"}, nil
 		},
 	}
 	h := gmailAnalyze(analyzeDeps(gmailClient, pipeline))
@@ -85,8 +85,8 @@ func TestGmailAnalyze_RecordsWorkflowState(t *testing.T) {
 		},
 	}
 	pipeline := &fakeAnalyzePipeline{
-		analyzeFn: func(_ context.Context, _ *gmail.MessageDetail) (gmailpoll.AnalysisResult, error) {
-			return gmailpoll.AnalysisResult{Text: "analysis", Importance: "attention"}, nil
+		analyzeFn: func(_ context.Context, _ *gmail.MessageDetail) (mailanalysis.AnalysisResult, error) {
+			return mailanalysis.AnalysisResult{Text: "analysis", Importance: "attention"}, nil
 		},
 	}
 	deps := analyzeDeps(gmailClient, pipeline)
@@ -148,8 +148,8 @@ func TestGmailAnalyze_PipelineFailure(t *testing.T) {
 		},
 	}
 	pipeline := &fakeAnalyzePipeline{
-		analyzeFn: func(_ context.Context, _ *gmail.MessageDetail) (gmailpoll.AnalysisResult, error) {
-			return gmailpoll.AnalysisResult{}, errors.New("LLM call timed out")
+		analyzeFn: func(_ context.Context, _ *gmail.MessageDetail) (mailanalysis.AnalysisResult, error) {
+			return mailanalysis.AnalysisResult{}, errors.New("LLM call timed out")
 		},
 	}
 	h := gmailAnalyze(analyzeDeps(gmailClient, pipeline))
@@ -170,8 +170,8 @@ func TestGmailAnalyze_RecordsWorkflowFailure(t *testing.T) {
 		},
 	}
 	pipeline := &fakeAnalyzePipeline{
-		analyzeFn: func(_ context.Context, _ *gmail.MessageDetail) (gmailpoll.AnalysisResult, error) {
-			return gmailpoll.AnalysisResult{}, errors.New("LLM call timed out")
+		analyzeFn: func(_ context.Context, _ *gmail.MessageDetail) (mailanalysis.AnalysisResult, error) {
+			return mailanalysis.AnalysisResult{}, errors.New("LLM call timed out")
 		},
 	}
 	deps := analyzeDeps(gmailClient, pipeline)
@@ -195,8 +195,8 @@ func TestGmailAnalyze_EmptyAnalysisIsRejected(t *testing.T) {
 		},
 	}
 	pipeline := &fakeAnalyzePipeline{
-		analyzeFn: func(_ context.Context, _ *gmail.MessageDetail) (gmailpoll.AnalysisResult, error) {
-			return gmailpoll.AnalysisResult{Text: "   \n  "}, nil // whitespace only
+		analyzeFn: func(_ context.Context, _ *gmail.MessageDetail) (mailanalysis.AnalysisResult, error) {
+			return mailanalysis.AnalysisResult{Text: "   \n  "}, nil // whitespace only
 		},
 	}
 	h := gmailAnalyze(analyzeDeps(gmailClient, pipeline))
@@ -224,8 +224,8 @@ func TestGmailAnalyze_WikiSinkFailure_NonFatal(t *testing.T) {
 		&fakeGmailClient{getMessageFn: func(_ context.Context, id string) (*gmail.MessageDetail, error) {
 			return &gmail.MessageDetail{ID: id}, nil
 		}},
-		&fakeAnalyzePipeline{analyzeFn: func(_ context.Context, _ *gmail.MessageDetail) (gmailpoll.AnalysisResult, error) {
-			return gmailpoll.AnalysisResult{Text: "result"}, nil
+		&fakeAnalyzePipeline{analyzeFn: func(_ context.Context, _ *gmail.MessageDetail) (mailanalysis.AnalysisResult, error) {
+			return mailanalysis.AnalysisResult{Text: "result"}, nil
 		}},
 	)
 	deps.SaveToWiki = func(WikiAnalysisInput) error { return errors.New("disk full") }
@@ -309,7 +309,7 @@ func TestGmailAnalyze_CacheHit_SkipsLLMAndWiki(t *testing.T) {
 
 // A legacy cached analysis — stored back when the pipeline still appended a
 // "위키 갱신 제안" block — must render without it. Both Mini App read paths scrub
-// the block (gmailpoll.StripWikiFactsBlock) so the operator's card stays clean
+// the block (mailanalysis.StripWikiFactsBlock) so the operator's card stays clean
 // without forcing a re-analysis. Fresh analyses no longer carry the block at all.
 func TestGmailAnalyze_StripsLegacyWikiFactsBlockFromCache(t *testing.T) {
 	const prose = "## 저장된 분석\n핵심 요청은 견적 회신."
@@ -360,9 +360,9 @@ func TestGmailAnalyze_CacheMiss_RunsLLMAndPersists(t *testing.T) {
 
 	pipelineCalls := 0
 	pipeline := &fakeAnalyzePipeline{
-		analyzeFn: func(_ context.Context, _ *gmail.MessageDetail) (gmailpoll.AnalysisResult, error) {
+		analyzeFn: func(_ context.Context, _ *gmail.MessageDetail) (mailanalysis.AnalysisResult, error) {
 			pipelineCalls++
-			return gmailpoll.AnalysisResult{Text: "## 새로 생성\n신규 분석."}, nil
+			return mailanalysis.AnalysisResult{Text: "## 새로 생성\n신규 분석."}, nil
 		},
 	}
 	gmailClient := &fakeGmailClient{
@@ -422,9 +422,9 @@ func TestGmailAnalyze_Force_BypassesCache(t *testing.T) {
 
 	pipelineCalls := 0
 	pipeline := &fakeAnalyzePipeline{
-		analyzeFn: func(_ context.Context, _ *gmail.MessageDetail) (gmailpoll.AnalysisResult, error) {
+		analyzeFn: func(_ context.Context, _ *gmail.MessageDetail) (mailanalysis.AnalysisResult, error) {
 			pipelineCalls++
-			return gmailpoll.AnalysisResult{Text: "fresh analysis"}, nil
+			return mailanalysis.AnalysisResult{Text: "fresh analysis"}, nil
 		},
 	}
 	gmailClient := &fakeGmailClient{
@@ -462,12 +462,12 @@ func TestGmailAnalyzeMethods_MissingDepsReturnsNil(t *testing.T) {
 	}
 }
 
-func TestPipelineFromGmailpoll_NoLLM(t *testing.T) {
-	_, err := PipelineFromGmailpoll(nil, nil, nil, "", "", "", nil, nil, nil, nil)
+func TestPipelineFromMailAnalysis_NoLLM(t *testing.T) {
+	_, err := PipelineFromMailAnalysis(nil, nil, nil, "", "", "", nil, nil, nil, nil)
 	if !errors.Is(err, ErrAnalyzeNoLLM) {
 		t.Errorf("err = %v, want ErrAnalyzeNoLLM", err)
 	}
-	_, err = PipelineFromGmailpoll(nil, nil, nil, "claude-opus", "", "", nil, nil, nil, nil)
+	_, err = PipelineFromMailAnalysis(nil, nil, nil, "claude-opus", "", "", nil, nil, nil, nil)
 	if !errors.Is(err, ErrAnalyzeNoLLM) {
 		t.Errorf("nil LLMClient should still return ErrAnalyzeNoLLM, got %v", err)
 	}

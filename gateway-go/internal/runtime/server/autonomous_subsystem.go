@@ -5,7 +5,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/autonomous"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/compactuner"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmailpoll"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailanalysis"
 )
 
 // AutonomousSubsystem groups background/periodic services: the autonomous
@@ -16,7 +16,7 @@ import (
 type AutonomousSubsystem struct {
 	autonomousSvc *autonomous.Service
 	wikiDreamer   *wiki.WikiDreamer // set during initMemorySubsystem()
-	gmailPollSvc  *gmailpoll.Service
+	gmailPollSvc  *mailanalysis.Service
 	roleHealth    *roleHealthWatch // set during registerWorkflowSideEffects()
 	compactTuner  *compactuner.Task
 

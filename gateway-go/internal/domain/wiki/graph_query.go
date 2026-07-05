@@ -1,6 +1,6 @@
 // graph_query.go — in-process wiki graph traversal.
 //
-// extractWikiGraphContext (gmailpoll) used to shell out to the external
+// extractWikiGraphContext (mailanalysis) used to shell out to the external
 // `graphify query` CLI against a pre-built ~/.deneb/wiki-graph/graphify-out/
 // graph.json. That left sender/topic context EMPTY whenever the CLI wasn't
 // installed or the graph had never been snapshotted — the common case on a

@@ -257,7 +257,7 @@ func CollectStream(ctx context.Context, events <-chan llm.StreamEvent) (string, 
 				// and the SSE read-error event. The previous nested-only parse
 				// silently swallowed the latter two — including stream-stall read
 				// errors — returning partial text with a nil error. Mirror
-				// gmailpoll's collectStreamText: try both shapes, fall back to the
+				// mailanalysis's collectStreamText: try both shapes, fall back to the
 				// raw payload, and always surface the error.
 				var errPayload struct {
 					Message string `json:"message"`

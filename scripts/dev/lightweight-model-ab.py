@@ -12,13 +12,13 @@ format, parser semantics), so a battery pass predicts production behavior:
               섹션 준수(4개 헤더)까지 채점한다 — 산문 요약은 프로덕션 소비자가
               기대하는 구조가 아니다.
   extract     [tiny] 한국어 업무 메일 → 고정 스키마 JSON (gmail stage1과 동형).
-              json_object 모드 강제: 프로덕션 callLocalLLMJSON(gmailpoll/pipeline.go)은
+              json_object 모드 강제: 프로덕션 callLocalLLMJSON(mailanalysis/pipeline.go)은
               formatless 폴백이 없으므로, JSON 모드를 400으로 거부하는 엔드포인트는
               폴백으로 채점하되 케이스 점수 40 하드캡 + `json_mode=rejected` 표기
               (콘텐츠가 좋아도 프로덕션을 깨는 후보를 통과시키지 않는다).
               ※ 오프라인 토이 스키마(보낸사람/의도/금액/기한/요청사항)는 프로덕션
               deal 스키마(isDeal/counterparty/docType/amount/date/dueDate/items/summary,
-              gmailpoll/pipeline_extractors.go)와 다르다 — 충실도가 필요하면
+              mailanalysis/pipeline_extractors.go)와 다르다 — 충실도가 필요하면
               --eval-extract-url로 프로덕션 추출 경로를 태워라 (아래).
   title       [tiny] 대화 스니펫 → 짧은 한국어 명사구 제목 (세션 자동 제목과 동형)
   verdict     [lightweight] ① DONE/CONTINUE 한 단어 (장황함·부정 프로브)
@@ -484,7 +484,7 @@ def score_extract_eval(case, result) -> float:
     """--eval-extract-url 모드: 프로덕션 추출 경로의 '소비 결과'(DealInfo) 채점.
 
     DealInfo는 json 태그가 없어 Go 필드명 그대로 마샬된다 (Counterparty/DocType/
-    Amount/Date/DueDate/Items/Summary — gmailpoll/pipeline_extractors.go).
+    Amount/Date/DueDate/Items/Summary — mailanalysis/pipeline_extractors.go).
     None = "not a deal" 판정 — 이 코퍼스는 둘 다 거래 메일이라 실패다.
     """
     if not isinstance(result, dict):
@@ -728,7 +728,7 @@ def chat_with_retry(base_url, api_key, model, system, user, max_tokens, timeout,
         except urllib.error.HTTPError as e:
             # guided-decoding 미지원 서버의 response_format 거부 → 형식 없이 1회
             # 폴백하되 반드시 json_rejected로 표면화한다: 프로덕션 gmail stage1
-            # (callLocalLLMJSON, gmailpoll/pipeline.go)은 항상 json_object를 보내고
+            # (callLocalLLMJSON, mailanalysis/pipeline.go)은 항상 json_object를 보내고
             # formatless 폴백이 없으므로, JSON 모드를 거부하는 엔드포인트는 이
             # 배터리를 무벌점 통과해도 프로덕션에선 매 추출이 실패한다.
             if response_format is not None and e.code == 400:

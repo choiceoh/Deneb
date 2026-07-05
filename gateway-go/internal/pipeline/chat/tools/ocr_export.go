@@ -16,7 +16,7 @@ func OcrImageBytes(ctx context.Context, img []byte) (string, error) {
 
 // ExtractAttachmentTextBytes extracts readable text from an email attachment's
 // raw bytes — documents (PDF/Excel/Word/PowerPoint/CSV) AND images (OCR) — for
-// the autonomous mail-analysis attachment gate (internal/platform/gmailpoll).
+// the autonomous mail-analysis attachment gate (internal/platform/mailanalysis).
 // Broader than ExtractDocumentText, which excludes images: a scanned 견적서 photo
 // must come back as text here. Returns "" when nothing readable is produced.
 // Injected via DI so the platform layer never imports this pipeline package.

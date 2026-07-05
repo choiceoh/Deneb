@@ -25,7 +25,7 @@ Detailed per-file notes live in `.claude/rules/go-gateway.md`; this is the top-l
 - `pipeline/` — chat (LLM turn pipeline + tools), compaction/polaris (context compression), pilot (helper-LLM calls), chatport, autoreply, liteparse, compactuner.
 - `ai/` — llm (wire types), modelrole/modelcaps (role→model registry, capabilities), modeltuner, router (effort routing), provider, localai, embedding, observatory, regressionwatch, tokenest.
 - `domain/` — business domains: wiki, backup, mailpriority, knowledge, filestore, notebook, skills, push, code (coding-mode worktrees), contacts, org, approval, market, monitoring, nativesync, usage, ….
-- `platform/` — external-system clients: gmail/gmailpoll, calendar/calprop/localcal, localtodo, mailarchive/mailbody/mailwork, lmtpd (LMTP intake), cron, media.
+- `platform/` — external-system clients: gmail/mailanalysis(구 gmailpoll), calendar/calprop/localcal, localtodo, mailarchive/mailbody/mailwork, lmtpd (LMTP intake), cron, media.
 - `infra/` — clientauth (native-client token auth), config, secret, logging, metrics, middleware, httpretry, timeouts, fileshare, shortid, sparkfleet.
 - `agentsys/` — standing goals loop; `hanja/` — Han→Korean transliteration; `core/`, `testutil/` — shared helpers.
 

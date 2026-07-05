@@ -154,7 +154,7 @@ func buildAnthropicRequestBody(req ChatRequest) ([]byte, error) {
 		// Providers that default reasoning ON — notably GLM-5.1 via the Z.ai
 		// anthropic endpoint — otherwise stream chain-of-thought into the answer
 		// body; an omitted field leaves it to that default. Callers that need
-		// reasoning off (e.g. gmailpoll analysis) set Type="disabled".
+		// reasoning off (e.g. mail-analysis) set Type="disabled".
 		areq.Thinking = &anthropicThinking{Type: "disabled"}
 	}
 

@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmailpoll"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailanalysis"
 )
 
 // deal_question.go — the "질문 카드" loop. When mail analysis files a NEW deal it
@@ -44,7 +44,7 @@ var deptOptions = []struct{ code, label string }{
 
 // appendDealQuestionCard posts a "which team owns this new deal?" question to the
 // work feed. Best-effort: a feed failure must never break mail analysis.
-func (s *Server) appendDealQuestionCard(deal *gmailpoll.DealInfo, dealPagePath string) {
+func (s *Server) appendDealQuestionCard(deal *mailanalysis.DealInfo, dealPagePath string) {
 	nf := s.nativeWorkFeedStore()
 	if nf == nil || deal == nil {
 		return
@@ -72,7 +72,7 @@ func (s *Server) appendDealQuestionCard(deal *gmailpoll.DealInfo, dealPagePath s
 	}
 }
 
-func dealQuestionBody(deal *gmailpoll.DealInfo) string {
+func dealQuestionBody(deal *mailanalysis.DealInfo) string {
 	var b strings.Builder
 	b.WriteString("새 거래처에서 문서가 왔는데, 어느 팀이 담당할지 몰라 정하지 못했어요.\n\n")
 	if d := strings.TrimSpace(deal.DocType); d != "" {

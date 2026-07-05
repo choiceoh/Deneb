@@ -43,7 +43,7 @@ import (
 // whatever the others produced.
 //
 // SenderFacts is the wiki-graph traversal injected from
-// gmailpoll.ExtractSenderFacts. It runs an external `graphify` CLI with
+// mailanalysis.ExtractSenderFacts. It runs an external `graphify` CLI with
 // a longer pipeline timeout, so this handler wraps it in a shorter Mini
 // App budget: the handler stays testable, and slow/missing graphify only
 // omits wikiFacts instead of delaying the whole sender card.
