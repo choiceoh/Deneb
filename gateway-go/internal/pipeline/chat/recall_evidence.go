@@ -115,6 +115,17 @@ const recallProjectAnchorScore = 2.2
 // (0.80+BM25) could outrank.
 const recallProjectAnchorQuery = "project-anchor"
 
+// recallCounterpartyAnchorScore mirrors the project anchor for 거래 원장 pages:
+// naming a counterparty pins its cross-project deal ledger. Slightly below the
+// project anchor so when the evidence budget trims, a named project's curated
+// 대표페이지 wins first.
+const recallCounterpartyAnchorScore = 2.1
+
+// recallCounterpartyAnchorQuery is the sentinel Query value marking a
+// counterparty-anchor row — exempt from the broadening penalty like the
+// project anchor (pinned structurally, not found by a term).
+const recallCounterpartyAnchorQuery = "counterparty-anchor"
+
 func recallWikiEvidence(ctx context.Context, store *wiki.Store, queries []string) []recallEvidence {
 	if store == nil || len(queries) == 0 {
 		return nil
@@ -135,6 +146,23 @@ func recallWikiEvidence(ctx context.Context, store *wiki.Store, queries []string
 			Query:  recallProjectAnchorQuery,
 			Note:   formatRecallProjectAnchorNote(store, ref),
 			Score:  recallProjectAnchorScore,
+		})
+	}
+
+	// Same structure-aware anchoring for counterparties: naming a company with
+	// a 거래 원장 pins that ledger, so cross-project deal history surfaces even
+	// when keyword ranking prefers individual mail-analysis pages.
+	for _, ref := range store.MatchCounterpartiesInText(strings.Join(queries, " "), 2) {
+		if _, ok := seen[ref.Path]; ok {
+			continue
+		}
+		seen[ref.Path] = struct{}{}
+		evidence = append(evidence, recallEvidence{
+			Kind:   "wiki",
+			Source: ref.Path,
+			Query:  recallCounterpartyAnchorQuery,
+			Note:   formatRecallCounterpartyAnchorNote(store, ref),
+			Score:  recallCounterpartyAnchorScore,
 		})
 	}
 
@@ -173,6 +201,22 @@ func formatRecallProjectAnchorNote(store *wiki.Store, ref wiki.ProjectRef) strin
 		}
 		if status := strings.TrimSpace(page.Section("현재 상태")); status != "" {
 			parts = append(parts, "현재 상태: "+status)
+		}
+	}
+	return truncateRecallText(strings.Join(parts, " | "), 420)
+}
+
+// formatRecallCounterpartyAnchorNote renders an anchored 거래 원장: title,
+// summary, and the head of the ledger body (dated deal bullets) — ledgers have
+// no fixed 현재 상태 section, so the body head is the freshest surface.
+func formatRecallCounterpartyAnchorNote(store *wiki.Store, ref wiki.CounterpartyRef) string {
+	parts := []string{"거래처 원장: " + ref.Name}
+	if page, err := store.ReadPage(ref.Path); err == nil && page != nil {
+		if s := strings.TrimSpace(page.Meta.Summary); s != "" {
+			parts = append(parts, "summary: "+s)
+		}
+		if body := strings.TrimSpace(page.Body); body != "" {
+			parts = append(parts, "내용: "+body)
 		}
 	}
 	return truncateRecallText(strings.Join(parts, " | "), 420)
