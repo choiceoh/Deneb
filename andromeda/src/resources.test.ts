@@ -27,7 +27,7 @@ describe("resource registry", () => {
       update: expect.any(String),
       remove: expect.any(String),
     });
-    expect(resourceDef("mail").get).toBe("miniapp.gmail.get");
+    expect(resourceDef("mail").get).toBe("miniapp.mail.get");
     expect(resourceDef("calendar").list).toBe("miniapp.calendar.list_upcoming");
     expect(resourceDef("calendar-range").list).toBe("miniapp.calendar.list_range");
   });

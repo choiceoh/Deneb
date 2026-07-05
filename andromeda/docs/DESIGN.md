@@ -63,7 +63,7 @@ Refine/react-admin  ──(data provider 인터페이스)──>  [getList, getO
                                                               │  구현
                                                               ▼
                                               Deneb miniapp.* RPC 호출
-        예) resource "mail"  → getList = miniapp.gmail.list_recent
+        예) resource "mail"  → getList = miniapp.mail.list_recent
             resource "todo"  → create  = miniapp.todo.create
             resource "memory"→ getOne  = miniapp.memory.get_page
 ```

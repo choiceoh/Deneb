@@ -40,7 +40,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 
 /**
- * Person dossier (`miniapp.gmail.sender_context` + `list_recent from:`): recent
+ * Person dossier (`miniapp.mail.sender_context` + `list_recent from:`): recent
  * volume, the wiki pages that mention them (tap -> page), and their recent
  * messages (tap -> mail detail). Framed by [DenebScreenScaffold].
  */

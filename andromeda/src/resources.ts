@@ -33,10 +33,10 @@ export const RESOURCE_DEFS: ResourceDef[] = [
   {
     name: "mail",
     label: "메일",
-    list: "miniapp.gmail.list_recent",
+    list: "miniapp.mail.list_recent",
     listKey: "messages",
-    get: "miniapp.gmail.get",
-    remove: "miniapp.gmail.trash",
+    get: "miniapp.mail.get",
+    remove: "miniapp.mail.trash",
   },
   {
     name: "calendar",
@@ -125,13 +125,13 @@ export const NOTEBOOK_RPC = {
 // Action RPCs that don't fit generic CRUD (no id+fields update / delete shape).
 // Panes call these directly via useAction → callRpc, mirroring the native client.
 export const MAIL_RPC = {
-  markRead: "miniapp.gmail.mark_read",
-  archive: "miniapp.gmail.archive",
-  trash: "miniapp.gmail.trash",
-  analyze: "miniapp.gmail.analyze",
-  analysisCached: "miniapp.gmail.analysis_cached",
-  senderContext: "miniapp.gmail.sender_context",
-  ask: "miniapp.gmail.ask",
+  markRead: "miniapp.mail.mark_read",
+  archive: "miniapp.mail.archive",
+  trash: "miniapp.mail.trash",
+  analyze: "miniapp.mail.analyze",
+  analysisCached: "miniapp.mail.analysis_cached",
+  senderContext: "miniapp.mail.sender_context",
+  ask: "miniapp.mail.ask",
 } as const;
 
 export const CRON_RPC = {

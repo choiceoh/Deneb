@@ -260,7 +260,7 @@ suspend fun DenebGatewayClient.widgetSummary(): WidgetSummary {
             }
             val mailDeferred = async {
                 callRpc<MailListPayload>(
-                    "miniapp.gmail.list_recent",
+                    "miniapp.mail.list_recent",
                     buildJsonObject { put("limit", 25) },
                 )
             }

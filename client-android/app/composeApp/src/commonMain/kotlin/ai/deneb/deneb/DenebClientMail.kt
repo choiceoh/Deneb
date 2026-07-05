@@ -18,7 +18,7 @@ import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 
 /**
- * Mail surface of [DenebGatewayClient] (`miniapp.gmail.*`): recent mail list +
+ * Mail surface of [DenebGatewayClient] (`miniapp.mail.*`): recent mail list +
  * pagination, message detail, read/archive/trash mutations, AI analysis, Q&A,
  * attachments, and sender context. Extensions so the gateway client stays one
  * facade while each RPC domain lives in its own file.
@@ -81,7 +81,7 @@ suspend fun DenebGatewayClient.refreshMail(query: String? = null): Boolean {
         }
     }
     val payload = callRpc<MailListPayload>(
-        "miniapp.gmail.list_recent",
+        "miniapp.mail.list_recent",
         buildJsonObject {
             put("limit", MAIL_LIST_PAGE_SIZE)
             q?.let { put("query", it) }
@@ -106,7 +106,7 @@ suspend fun DenebGatewayClient.refreshMail(query: String? = null): Boolean {
 }
 
 suspend fun DenebGatewayClient.refreshMailNativeStatus(): MailNativeStatus? {
-    val p = callRpc<MailNativeStatusOut>("miniapp.gmail.native_status", buildJsonObject {}) ?: return null
+    val p = callRpc<MailNativeStatusOut>("miniapp.mail.native_status", buildJsonObject {}) ?: return null
     val status = MailNativeStatus(
         source = p.source,
         available = p.available,
@@ -210,7 +210,7 @@ suspend fun DenebGatewayClient.loadMoreMail() {
     val epoch = credEpoch
     val token = _denebMailNextToken.value ?: return
     val payload = callRpc<MailListPayload>(
-        "miniapp.gmail.list_recent",
+        "miniapp.mail.list_recent",
         buildJsonObject {
             put("limit", MAIL_LIST_PAGE_SIZE)
             put("pageToken", token)
@@ -232,7 +232,7 @@ suspend fun DenebGatewayClient.loadMoreMail() {
 
 suspend fun DenebGatewayClient.fetchMailDetail(id: String, full: Boolean = false): MailDetail? {
     val row = callRpc<MailMessageOut>(
-        "miniapp.gmail.get",
+        "miniapp.mail.get",
         buildJsonObject {
             put("id", id)
             // full=true asks for the untruncated body (still server-bounded);
@@ -270,7 +270,7 @@ suspend fun DenebGatewayClient.fetchMailDetail(id: String, full: Boolean = false
 
 /** Mark read on the server and optimistically clear the unread dot in the list. */
 suspend fun DenebGatewayClient.markMailRead(id: String): Boolean {
-    val ok = callRpc<OkPayload>("miniapp.gmail.mark_read", buildJsonObject { put("id", id) })?.ok == true
+    val ok = callRpc<OkPayload>("miniapp.mail.mark_read", buildJsonObject { put("id", id) })?.ok == true
     if (ok) {
         // Remember the read so a later list refetch can't resurrect the dot: on phone,
         // popping back from the mail recomposes the list and re-runs refreshMail inside
@@ -285,7 +285,7 @@ suspend fun DenebGatewayClient.markMailRead(id: String): Boolean {
 
 /** Archive (drop from the active list); optimistically removes the row from the list. */
 suspend fun DenebGatewayClient.archiveMail(id: String): Boolean {
-    val ok = callRpc<OkPayload>("miniapp.gmail.archive", buildJsonObject { put("id", id) })?.ok == true
+    val ok = callRpc<OkPayload>("miniapp.mail.archive", buildJsonObject { put("id", id) })?.ok == true
     if (ok) {
         _denebMail.update { list -> list.filterNot { it.id == id } }
         patchCachedMail { list -> list.filterNot { it.id == id } }
@@ -296,7 +296,7 @@ suspend fun DenebGatewayClient.archiveMail(id: String): Boolean {
 
 /** Move to Trash; optimistically removes the row from the list. */
 suspend fun DenebGatewayClient.trashMail(id: String): Boolean {
-    val ok = callRpc<OkPayload>("miniapp.gmail.trash", buildJsonObject { put("id", id) })?.ok == true
+    val ok = callRpc<OkPayload>("miniapp.mail.trash", buildJsonObject { put("id", id) })?.ok == true
     if (ok) {
         _denebMail.update { list -> list.filterNot { it.id == id } }
         patchCachedMail { list -> list.filterNot { it.id == id } }
@@ -306,11 +306,11 @@ suspend fun DenebGatewayClient.trashMail(id: String): Boolean {
 }
 
 /** Instant cached analysis (no LLM call) if one was already produced on poll or earlier. */
-suspend fun DenebGatewayClient.fetchCachedAnalysis(id: String): MailAnalysis? = callRpc<MailAnalysisOut>("miniapp.gmail.analysis_cached", buildJsonObject { put("id", id) })?.toAnalysis()
+suspend fun DenebGatewayClient.fetchCachedAnalysis(id: String): MailAnalysis? = callRpc<MailAnalysisOut>("miniapp.mail.analysis_cached", buildJsonObject { put("id", id) })?.toAnalysis()
 
 /** Run AI analysis; force=true reruns the LLM instead of returning the cached result. */
 suspend fun DenebGatewayClient.analyzeMail(id: String, force: Boolean = false): MailAnalysis? = callRpc<MailAnalysisOut>(
-    "miniapp.gmail.analyze",
+    "miniapp.mail.analyze",
     buildJsonObject {
         put("id", id)
         if (force) put("force", true)
@@ -339,7 +339,7 @@ private fun MailAnalysisOut.toAnalysis(): MailAnalysis? = if (analysis.isBlank()
 
 /** Ask a follow-up about a message; prior Q&A is sent as history for multi-turn context. */
 suspend fun DenebGatewayClient.askMail(id: String, question: String, history: List<Pair<String, String>> = emptyList()): String? = callRpc<AskPayload>(
-    "miniapp.gmail.ask",
+    "miniapp.mail.ask",
     buildJsonObject {
         put("id", id)
         put("question", question)
@@ -381,7 +381,7 @@ fun DenebGatewayClient.attachmentUrl(messageId: String, att: MailAttachment): St
 /** Fetch wiki / relationship context for a message's sender. */
 suspend fun DenebGatewayClient.fetchSenderContext(sender: String): SenderContext? {
     val p = callRpc<SenderContextPayload>(
-        "miniapp.gmail.sender_context",
+        "miniapp.mail.sender_context",
         buildJsonObject { put("sender", sender) },
     ) ?: return null
     return SenderContext(
@@ -398,7 +398,7 @@ suspend fun DenebGatewayClient.fetchSenderContext(sender: String): SenderContext
 suspend fun DenebGatewayClient.fetchRecentFromSender(email: String, limit: Int = 15): List<MailMessage> {
     if (email.isBlank()) return emptyList()
     val payload = callRpc<MailListPayload>(
-        "miniapp.gmail.list_recent",
+        "miniapp.mail.list_recent",
         buildJsonObject {
             put("query", "from:\"$email\"")
             put("limit", limit)
