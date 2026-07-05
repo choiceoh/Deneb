@@ -118,8 +118,21 @@ func fuzzyNameMatch(a, b string) bool {
 	return strings.Contains(ka, kb) || strings.Contains(kb, ka)
 }
 
+// isoDate reports whether s is a plausible YYYY-MM-DD: digits in every date
+// position and month/day in range — hyphen positions alone would let strings
+// like "2026-0a-01" through, where lexical range comparison mis-filters.
 func isoDate(s string) bool {
-	return len(s) == 10 && s[4] == '-' && s[7] == '-'
+	if len(s) != 10 || s[4] != '-' || s[7] != '-' {
+		return false
+	}
+	for _, i := range []int{0, 1, 2, 3, 5, 6, 8, 9} {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	month := int(s[5]-'0')*10 + int(s[6]-'0')
+	day := int(s[8]-'0')*10 + int(s[9]-'0')
+	return month >= 1 && month <= 12 && day >= 1 && day <= 31
 }
 
 // ledgerRelatedProjects resolves a counterparty's project names from its ledger

@@ -143,4 +143,15 @@ func TestQueryDealRecords_ProjectBackfill(t *testing.T) {
 	if len(recs) != 1 {
 		t.Errorf("non-ISO since should be ignored, got %+v", recs)
 	}
+	// Hyphens in the right slots are not enough — non-digit "dates" and
+	// out-of-range months must be rejected, not lexically compared.
+	for _, bad := range []string{"2026-0a-01", "2026-13-01", "abcd-ef-gh"} {
+		if isoDate(bad) {
+			t.Errorf("isoDate(%q) = true, want false", bad)
+		}
+		recs, _ = s.QueryDealRecords(DealRecordFilter{Counterparty: "한화큐셀", Since: bad})
+		if len(recs) != 1 {
+			t.Errorf("bad since %q should be ignored, got %+v", bad, recs)
+		}
+	}
 }
