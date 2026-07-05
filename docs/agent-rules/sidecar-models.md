@@ -5,7 +5,7 @@ globs: ["gateway-go/internal/pipeline/chat/tools/paddleocr.go", "gateway-go/inte
 
 # Sidecar Models (GPU 부가 모델 운영 현황)
 
-> Deneb 는 메인 챗 LLM 외에도 **로컬 GPU(DGX Spark 플릿 — srv1(구 gx10)·srv2(구 spark4tb))에서 상주 서빙되는 전용 모델들**을 호출한다. 대부분 vLLM 의 OpenAI 호환 `/v1` 엔드포인트지만, 일부(VibeVoice-ASR)는 전용 서비스로 상주한다. 외부 API 호출을 피하고 단일 머신에서 자급한다는 프로젝트 원칙(로컬 추론 우선)을 따른다. 이 파일은 "어떤 모델이, 어디서, 어떻게" 돌아가는지의 단일 진실원이다.
+> Deneb 는 메인 챗 LLM 외에도 **로컬 GPU 플릿에서 상주 서빙되는 전용 모델들**을 호출한다. 호스트 배치(2026-07-06 srv4 통일 이후): **srv4** = 게이트웨이·wormhole·qwen3.6/diffusiongemma 엔진(:8000/:8100)·메일서버, **srv1**(구 gx10) = GPU 보조 — PaddleOCR-VL(:18011)·VibeVoice-ASR(:18013)·hy-mt2(:8102)·lfm2.5(:8101)·sparkfleet(:18900), **srv2**(구 spark4tb) = dsv4 엔진(:8000). 게이트웨이는 크로스호스트 사이드카를 env 오버라이드(`DENEB_OCR_VL_URL`/`DENEB_ASR_URL` = srv1 tailnet)로 소비한다. 대부분 vLLM 의 OpenAI 호환 `/v1` 엔드포인트지만, 일부(VibeVoice-ASR)는 전용 서비스로 상주한다. 외부 API 호출을 피하고 플릿 안에서 자급한다는 프로젝트 원칙(로컬 추론 우선)을 따른다. 이 파일은 "어떤 모델이, 어디서, 어떻게" 돌아가는지의 단일 진실원이다.
 
 ## 현황 표
 
@@ -29,7 +29,7 @@ globs: ["gateway-go/internal/pipeline/chat/tools/paddleocr.go", "gateway-go/inte
 - BF16 가중치라 unified memory 를 거의 안 먹어 메인 LLM 과 공존 가능. 워밍 후 **~1s/page**, 콜드 첫 요청만 ~19s(CUDA-graph 워밍업, 부팅 1회).
 
 ### 서버 (상주)
-- 런처: **`~/start-paddleocr-vl.sh`** (호스트, **레포 밖** — 배포 머신 로컬 파일). 컨테이너 `paddleocr-vl`, port **18011**, `--restart unless-stopped`.
+- 런처: **`~/start-paddleocr-vl.sh`** (★**srv1** 호스트, **레포 밖** 로컬 파일 — 게이트웨이(srv4)는 `DENEB_OCR_VL_URL=http://100.105.145.6:18011` 로 크로스호스트 소비). 컨테이너 `paddleocr-vl`, port **18011**, `--restart unless-stopped`.
 - 이미지: 로컬 `vllm-node:latest` (vLLM 0.21.1, 2026-05-26 빌드) 가 `PaddleOCRVLForConditionalGeneration` 을 **네이티브 등록** → PaddlePaddle 프레임워크 불필요. 순수 OpenAI 호환.
 - 가중치: `~/models/PaddleOCR-VL-1.6` (hf download). 1.82 GiB BF16.
 - **메모리 예산 (2026-06-02 하향)**: `--gpu-memory-utilization 0.03` + `--max-model-len 8192`. unified 점유 **~2.8GB** (이전 0.15 는 122GB 의 15% ≈ **16GB 를 통째로 KV 풀로 선점** → 0.3B 급 디코더엔 10GB+ 가 빈 예약 낭비였음). 0.03 budget(~3.6GB) − 가중치 1.82 − 비-torch 오버헤드 ~1.6 = KV ~0.47GB → 8192 토큰 한 시퀀스(~0.14GB)에 동시 3.37x. OCR 은 페이지 단위라 16384 컨텍스트 불필요. ⚠️ **0.03 에서 max-model-len 16384 는 기동 실패** (KV 0.28GB < 필요 0.28GB, 간발의 차) — 8192 로 낮춰야 들어맞음. 런처가 `GPU_MEM_UTIL`·`PADDLEOCR_MAX_MODEL_LEN` env override 지원.
@@ -69,7 +69,7 @@ DENEB_OCR_VL_LIVE=1 DENEB_OCR_VL_IMG=/path/to.png DENEB_OCR_VL_URL=http://127.0.
 - Deneb 비서 모드의 회의/통화/음성메모 캡처용. Whisper + pyannote 2단 파이프라인을 단일 모델로 대체. 검증: 영어 2화자 화자분리·타임스탬프 정확, 한국어 일반어 CER≈0, RTF ~0.5–0.7.
 
 ### 서버 (상주)
-- 런처: **`~/start-vibevoice-asr.sh`** (호스트, **레포 밖**). 컨테이너 `vibevoice-asr`, port **18013**, `--restart unless-stopped`.
+- 런처: **`~/start-vibevoice-asr.sh`** (★**srv1** 호스트, **레포 밖** — 게이트웨이(srv4)는 `DENEB_ASR_URL=http://100.105.145.6:18013` 로 크로스호스트 소비). 컨테이너 `vibevoice-asr`, port **18013**, `--restart unless-stopped`.
 - 서빙: PaddleOCR 와 달리 **vLLM serve 아님.** MS 의 vLLM 플러그인은 vLLM v0.14.1 타깃인데 로컬 `vllm-node` 는 0.21.1 → transformers eager + 얇은 FastAPI 래퍼로 상주 (단일 사용자엔 충분).
 - 이미지: `vibevoice-asr:latest` = `FROM vllm-node:latest` + accelerate/soundfile/soxr/ffmpeg/fastapi. 빌드 컨텍스트 `~/vibevoice-asr/` (Dockerfile + `vibevoice_server.py`).
 - 가중치: `~/models/VibeVoice-ASR-HF` (16GB BF16, hf download — 이 호스트에선 `HF_HUB_DISABLE_XET=1` 필요). 로드 ~80s(부팅 1회).
@@ -153,6 +153,7 @@ Hindsight(Hermes 계열 FastAPI+pgvector 장기기억 서비스)는 **2026-06-15
 - wormhole 은 `Restart=on-failure` systemd 서비스로 상주(아래).
 
 ### 서버 (상주)
+- ★**상주 호스트 = srv4** (게이트웨이와 동일 호스트, 2026-07-06 통일 — 게이트웨이는 `127.0.0.1:18800` 로컬 소비). srv1 의 구 인스턴스는 트래픽 0 확인 후 disable 됨(유닛·config 보존).
 - 빌드: **`make wormhole`** → `dist/wormhole`. 서비스: **`scripts/deploy/wormhole.service`**(systemd, `Restart=on-failure`, `MemoryMax=512M`, journal) 또는 수동 **`scripts/deploy/start-wormhole.sh {start|stop|restart|status}`**.
 - 설정: **`~/.wormhole/config.json`**(레포 밖, 시크릿 포함). 템플릿 = `gateway-go/cmd/wormhole/config.example.json`. `token` + 각 model `key` 는 `${ENV}` 확장. 포트 기본 `:18800`.
 - Deneb-백엔드용 config 골격(메인 dsv4 = no-toggleKwarg 패스스루):
