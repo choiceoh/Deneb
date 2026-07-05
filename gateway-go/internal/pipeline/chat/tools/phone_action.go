@@ -13,9 +13,10 @@ import (
 
 // PhoneActionFunc delivers a structured phone action to the native app for
 // in-app Intent execution — the SSH/Termux-free path (RFC: phone-action). The
-// server wires this to the existing push channel (SSE foreground / FCM data
-// background); nil means no app channel, so the action is reported unavailable
-// rather than silently dropped.
+// server wires this to the app's live SSE push channel (SSE only — the FCM
+// data fallback does not carry phone actions, so a fully backgrounded phone
+// errors instead of executing late); nil means no app channel, so the action
+// is reported unavailable rather than silently dropped.
 //
 // Result contract: a nil error means the app CONFIRMED execution (it reported
 // the intent launched); a returned error wrapping ErrPhoneActionUnconfirmed
@@ -207,5 +208,12 @@ func dispatchPhoneAction(ctx context.Context, send PhoneActionFunc, p phoneWrite
 		// and device-reported execution failures ("failed on the device").
 		return "", fmt.Errorf("phone action %q failed: %w", action, err)
 	}
-	return fmt.Sprintf("phone action executed on device: %s", action), nil
+	// "launched", not "executed/completed": the app's ok=true means the intent
+	// (or in-app service call) launched. For message/dial that opens the
+	// composer/dialer with the content prefilled — nothing is auto-sent.
+	note := ""
+	if action == "message" || action == "dial" {
+		note = " (composer/dialer opened with the content prefilled — the user confirms sending on the phone)"
+	}
+	return fmt.Sprintf("phone action launched on device: %s%s", action, note), nil
 }

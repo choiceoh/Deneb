@@ -2,12 +2,13 @@ package server
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/infra/shortid"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
 )
 
@@ -29,28 +30,45 @@ type phoneActionResult struct {
 	Error string `json:"error,omitempty"`
 }
 
+// phoneActionWaiter tracks one in-flight dispatch: the result channel plus the
+// fan-out size, because the push hub delivers the frame to EVERY connected
+// mobile client — including the headless verification harness, whose desktop
+// build reports ok=false for every intent action. Success-biased aggregation:
+// any ok=true resolves immediately; an ok=false only resolves once every
+// fanned-out subscriber has reported failure, so the harness's instant "false"
+// cannot mask the real phone's success.
+type phoneActionWaiter struct {
+	ch       chan phoneActionResult
+	expected int // mobile subscribers the frame fanned out to (>= 1)
+	fails    int // ok=false reports received so far
+}
+
 // phoneActionAwaiter correlates dispatched phone actions with the app's
-// result reports. One independent mutex, never held while blocking; channels
-// are buffered(1) and removed from the map on resolve OR drop, so a late
-// report after the dispatch timed out is discarded silently (logged by the
-// ingest side) and resolve never blocks.
+// result reports. One independent mutex, never held while blocking; waiter
+// channels are buffered(1) and the map entry is removed before the (sole)
+// send, so resolve never blocks and a late report after the dispatch timed
+// out is discarded silently (logged by the ingest side).
 type phoneActionAwaiter struct {
 	mu sync.Mutex
-	m  map[string]chan phoneActionResult
+	m  map[string]*phoneActionWaiter
 }
 
 func newPhoneActionAwaiter() *phoneActionAwaiter {
-	return &phoneActionAwaiter{m: make(map[string]chan phoneActionResult)}
+	return &phoneActionAwaiter{m: make(map[string]*phoneActionWaiter)}
 }
 
-// register creates the waiter channel for a dispatch id. The caller MUST
-// `defer drop(id)` so an unresolved waiter cannot leak past its dispatch.
-func (a *phoneActionAwaiter) register(id string) <-chan phoneActionResult {
-	ch := make(chan phoneActionResult, 1)
+// register creates the waiter for a dispatch id fanned out to `expected`
+// subscribers. The caller MUST `defer drop(id)` so an unresolved waiter
+// cannot leak past its dispatch.
+func (a *phoneActionAwaiter) register(id string, expected int) <-chan phoneActionResult {
+	if expected < 1 {
+		expected = 1
+	}
+	w := &phoneActionWaiter{ch: make(chan phoneActionResult, 1), expected: expected}
 	a.mu.Lock()
-	a.m[id] = ch
+	a.m[id] = w
 	a.mu.Unlock()
-	return ch
+	return w.ch
 }
 
 // drop removes a waiter without resolving it (timeout / turn canceled).
@@ -61,28 +79,55 @@ func (a *phoneActionAwaiter) drop(id string) {
 	a.mu.Unlock()
 }
 
-// resolve delivers the app's report to the waiting dispatch. Returns false
-// when no waiter holds the id (report arrived after the wait window, or the
-// gateway restarted between dispatch and report).
+// resolve feeds one report into the matching waiter. Returns false when no
+// waiter holds the id (report arrived after the wait window, or the gateway
+// restarted between dispatch and report). ok=true resolves the dispatch
+// immediately; ok=false resolves it only when every fanned-out subscriber has
+// reported failure — otherwise the report is absorbed and the dispatch keeps
+// waiting for a possible success from another subscriber.
 func (a *phoneActionAwaiter) resolve(res phoneActionResult) bool {
 	a.mu.Lock()
-	ch, ok := a.m[res.ID]
-	if ok {
-		delete(a.m, res.ID)
-	}
-	a.mu.Unlock()
+	w, ok := a.m[res.ID]
 	if !ok {
+		a.mu.Unlock()
 		return false
 	}
-	ch <- res // buffered(1), sole sender after map removal — never blocks
+	if !res.OK {
+		w.fails++
+		if w.fails < w.expected {
+			a.mu.Unlock()
+			return true // absorbed; another subscriber may still succeed
+		}
+	}
+	delete(a.m, res.ID)
+	a.mu.Unlock()
+	w.ch <- res // buffered(1), sole sender after map removal — never blocks
 	return true
+}
+
+// newPhoneActionID returns a random correlation id. Deliberately NOT the
+// shared shortid counter: that one is sequential (any local process could
+// spray confirmations at the unauthenticated loopback ingest door) and wraps
+// at 10000 across all prefixes (a wrap collision would overwrite an unrelated
+// in-flight waiter). 64 random bits close both.
+func newPhoneActionID() string {
+	b := make([]byte, 8)
+	if _, err := rand.Read(b); err != nil {
+		// crypto/rand never fails in practice; a nanosecond stamp keeps the
+		// dispatch functional (uniqueness, not unguessability) if it ever does.
+		return fmt.Sprintf("pa-%d", time.Now().UnixNano())
+	}
+	return "pa-" + hex.EncodeToString(b)
 }
 
 // dispatchPhoneAction delivers a validated phone action command to the native
 // app over the existing SSE push channel for in-app Intent execution. It is
 // wired into the phone_write tool as its PhoneActionFunc. The command travels
 // in the frame's Data (action + args) under Kind=pushKindPhoneAction, with the
-// dispatch id in Ref.
+// dispatch id in Ref. SSE is the ONLY transport — the FCM data fallback does
+// not carry phone_action frames (FcmService renders title/body notifications
+// only), so a fully backgrounded phone fails the mobile-subscriber gate below
+// instead of executing late.
 //
 // Errors when no MOBILE app is connected so the agent learns the action could
 // not be executed, rather than assuming a silent SSH-style success. The gate
@@ -93,13 +138,18 @@ func (a *phoneActionAwaiter) resolve(res phoneActionResult) bool {
 //
 // Result round-trip: after publishing, the dispatch waits up to
 // phoneActionConfirmWait for the app's phone_action_result report (correlated
-// by Ref id) — nil only on a confirmed launch, a real error on a reported
-// failure, tools.ErrPhoneActionUnconfirmed when no report arrives (fail-open:
-// the action may still execute late, so the tool tells the agent not to
-// retry). sync_state stays fire-and-forget — it has no in-app execution
-// result; its effect arrives as location_update/usage_update events.
+// by Ref id) — nil only on a confirmed launch, a real error once every
+// fanned-out subscriber reported failure, tools.ErrPhoneActionUnconfirmed when
+// no verdict arrives (fail-open: the action may still execute late, so the
+// tool tells the agent not to retry). sync_state stays fire-and-forget — it
+// has no in-app execution result; its effect arrives as
+// location_update/usage_update events.
 func (s *Server) dispatchPhoneAction(ctx context.Context, action string, args map[string]string) error {
-	if s.pushHub == nil || s.pushHub.mobileSubscriberCount() == 0 {
+	if s.pushHub == nil {
+		return fmt.Errorf("no mobile app connected to execute the phone action")
+	}
+	fanout := s.pushHub.mobileSubscriberCount()
+	if fanout == 0 {
 		return fmt.Errorf("no mobile app connected to execute the phone action")
 	}
 	data := make(map[string]string, len(args)+1)
@@ -119,8 +169,8 @@ func (s *Server) dispatchPhoneAction(ctx context.Context, action string, args ma
 		return nil
 	}
 
-	id := shortid.New("pa")
-	result := s.phoneActions.register(id)
+	id := newPhoneActionID()
+	result := s.phoneActions.register(id, fanout)
 	defer s.phoneActions.drop(id)
 
 	s.pushHub.publish(clientPushEvent{
@@ -130,12 +180,9 @@ func (s *Server) dispatchPhoneAction(ctx context.Context, action string, args ma
 		Ref:   id,
 		Data:  data,
 	})
-	s.logger.Info("phone action dispatched to app", "action", action, "id", id)
+	s.logger.Info("phone action dispatched to app", "action", action, "id", id, "fanout", fanout)
 
-	timer := time.NewTimer(phoneActionConfirmWait)
-	defer timer.Stop()
-	select {
-	case res := <-result:
+	finish := func(res phoneActionResult) error {
 		if !res.OK {
 			msg := strings.TrimSpace(res.Error)
 			if msg == "" {
@@ -148,9 +195,25 @@ func (s *Server) dispatchPhoneAction(ctx context.Context, action string, args ma
 		}
 		s.logger.Info("phone action confirmed by app", "action", action, "id", id)
 		return nil
+	}
+
+	timer := time.NewTimer(phoneActionConfirmWait)
+	defer timer.Stop()
+	select {
+	case res := <-result:
+		return finish(res)
 	case <-ctx.Done():
 		return fmt.Errorf("%w: turn ended while waiting", tools.ErrPhoneActionUnconfirmed)
 	case <-timer.C:
+		// Boundary drain: resolve may have delivered right as the timer fired;
+		// without this a reported verdict could be masked as benign-unconfirmed
+		// (worst case an actual failure downgraded to "may still run — don't
+		// retry", the semantic inverse).
+		select {
+		case res := <-result:
+			return finish(res)
+		default:
+		}
 		s.logger.Info("phone action result not reported in time", "action", action, "id", id,
 			"wait", phoneActionConfirmWait)
 		return tools.ErrPhoneActionUnconfirmed

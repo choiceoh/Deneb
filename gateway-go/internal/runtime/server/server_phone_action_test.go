@@ -14,7 +14,7 @@ import (
 func TestPhoneActionAwaiter(t *testing.T) {
 	a := newPhoneActionAwaiter()
 
-	ch := a.register("pa1")
+	ch := a.register("pa1", 1)
 	if !a.resolve(phoneActionResult{ID: "pa1", OK: true}) {
 		t.Fatal("resolve must find the registered waiter")
 	}
@@ -32,13 +32,47 @@ func TestPhoneActionAwaiter(t *testing.T) {
 	}
 
 	// Timeout path: drop() removes the waiter, so a late report is discarded.
-	_ = a.register("pa2")
+	_ = a.register("pa2", 1)
 	a.drop("pa2")
 	if a.resolve(phoneActionResult{ID: "pa2", OK: true}) {
 		t.Error("late report after drop must find no waiter")
 	}
 	if a.resolve(phoneActionResult{ID: "never-dispatched", OK: true}) {
 		t.Error("unknown id must find no waiter")
+	}
+}
+
+func TestPhoneActionAwaiter_SuccessBiasedAggregation(t *testing.T) {
+	a := newPhoneActionAwaiter()
+
+	// fanout=2: one failure is absorbed, a later success resolves.
+	ch := a.register("agg1", 2)
+	if !a.resolve(phoneActionResult{ID: "agg1", OK: false}) {
+		t.Fatal("first failure must be absorbed by the waiter")
+	}
+	select {
+	case <-ch:
+		t.Fatal("one failure of two must not resolve the dispatch")
+	default:
+	}
+	if !a.resolve(phoneActionResult{ID: "agg1", OK: true}) {
+		t.Fatal("success after absorbed failure must resolve")
+	}
+	if res := <-ch; !res.OK {
+		t.Error("the delivered verdict must be the success")
+	}
+
+	// fanout=2: only when EVERY subscriber failed does failure resolve.
+	ch2 := a.register("agg2", 2)
+	a.resolve(phoneActionResult{ID: "agg2", OK: false})
+	a.resolve(phoneActionResult{ID: "agg2", OK: false})
+	select {
+	case res := <-ch2:
+		if res.OK {
+			t.Error("all-failed must deliver a failure verdict")
+		}
+	default:
+		t.Fatal("second failure of two must resolve the dispatch")
 	}
 }
 
@@ -93,6 +127,54 @@ func TestDispatchPhoneAction_ReportedFailure(t *testing.T) {
 	}
 	if errors.Is(err, tools.ErrPhoneActionUnconfirmed) {
 		t.Error("a reported failure is confirmed, not unconfirmed")
+	}
+}
+
+// The headless verification harness connects to production as a mobile client
+// and (desktop build) reports ok=false for every intent action, typically
+// before the real phone answers. The harness's failure must not mask the
+// phone's success.
+func TestDispatchPhoneAction_HarnessFailureDoesNotMaskPhoneSuccess(t *testing.T) {
+	s := phoneActionTestServer()
+	phone, unsubPhone := s.pushHub.subscribe(kindMobile)
+	defer unsubPhone()
+	harness, unsubHarness := s.pushHub.subscribe(kindMobile)
+	defer unsubHarness()
+
+	done := make(chan error, 1)
+	go func() {
+		done <- s.dispatchPhoneAction(context.Background(), "alarm", map[string]string{"hour": "7", "minute": "0"})
+	}()
+	frame := <-phone
+	<-harness
+
+	// Harness reports failure first, then the real phone succeeds.
+	s.ingestPhoneEventAsync("phone_action_result", "alarm", `{"id":"`+frame.Ref+`","ok":false}`)
+	s.ingestPhoneEventAsync("phone_action_result", "alarm", `{"id":"`+frame.Ref+`","ok":true}`)
+	if err := <-done; err != nil {
+		t.Fatalf("phone success must win over harness failure, got %v", err)
+	}
+}
+
+func TestDispatchPhoneAction_AllSubscribersFailed(t *testing.T) {
+	s := phoneActionTestServer()
+	phone, unsubPhone := s.pushHub.subscribe(kindMobile)
+	defer unsubPhone()
+	harness, unsubHarness := s.pushHub.subscribe(kindMobile)
+	defer unsubHarness()
+
+	done := make(chan error, 1)
+	go func() {
+		done <- s.dispatchPhoneAction(context.Background(), "timer", map[string]string{"seconds": "60"})
+	}()
+	frame := <-phone
+	<-harness
+
+	s.ingestPhoneEventAsync("phone_action_result", "timer", `{"id":"`+frame.Ref+`","ok":false}`)
+	s.ingestPhoneEventAsync("phone_action_result", "timer", `{"id":"`+frame.Ref+`","ok":false}`)
+	err := <-done
+	if err == nil || !strings.Contains(err.Error(), "failed on the device") {
+		t.Fatalf("unanimous failure must surface as an error, got %v", err)
 	}
 }
 
