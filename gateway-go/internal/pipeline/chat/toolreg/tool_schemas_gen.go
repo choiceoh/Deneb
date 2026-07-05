@@ -104,6 +104,25 @@ func editToolSchema() map[string]any {
 				"type":        "string",
 				"description": "Optional second anchor. With anchor set, replaces the inclusive line range anchor..anchor_end with new_string (which may span multiple lines)",
 			},
+			"edits": map[string]any{
+				"type":        "array",
+				"description": "배치 편집: 같은 파일에 여러 치환을 한 번에 적용 (순차 적용 — 뒤 항목은 앞 항목 결과를 본다). 전부 성공해야 기록되는 all-or-nothing. N회 호출 대비 토큰·턴 절약; 사용 시 old_string/new_string은 생략",
+				"items": map[string]any{
+					"type":     "object",
+					"required": []string{"old_string", "new_string"},
+					"properties": map[string]any{
+						"new_string": map[string]any{
+							"type": "string",
+						},
+						"old_string": map[string]any{
+							"type": "string",
+						},
+						"replace_all": map[string]any{
+							"type": "boolean",
+						},
+					},
+				},
+			},
 			"file_path": map[string]any{
 				"type":        "string",
 				"description": "The absolute path to the file to modify",
@@ -262,7 +281,7 @@ func processToolSchema() map[string]any {
 			},
 			"timeout": map[string]any{
 				"type":        "number",
-				"description": "Poll timeout in milliseconds",
+				"description": "poll에서 완료까지 최대 대기(ms). 지정하면 프로세스가 끝나거나 시한이 지날 때까지 블록(최대 5분), 미지정 시 즉시 스냅샷 반환",
 			},
 		},
 		"required": []string{"action"},
@@ -1114,8 +1133,8 @@ func contactsToolSchema() map[string]any {
 		"properties": map[string]any{
 			"action": map[string]any{
 				"type":        "string",
-				"description": "lookup: 전화번호로 인물 찾기 (정규화·+82↔0·뒷자리 폴백). search: 이름·회사·이메일·번호 부분일치 검색 (최대 20건).",
-				"enum":        []string{"lookup", "search"},
+				"description": "lookup: 전화번호로 인물 찾기 (정규화·+82↔0·뒷자리 폴백). search: 이름·회사·이메일·번호 부분일치 검색 (최대 20건, 초과 시 표시). by_company: 회사명으로 소속 인물 전체 열거 (이름순, 최대 50명).",
+				"enum":        []string{"lookup", "search", "by_company"},
 			},
 			"query": map[string]any{
 				"type":        "string",

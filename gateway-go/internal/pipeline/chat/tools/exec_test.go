@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/process"
@@ -70,4 +71,28 @@ func TestValidateWorkdir(t *testing.T) {
 			t.Errorf("unexpected error on cached call: %v", err)
 		}
 	})
+}
+
+// The direct-exec fallback (nil process manager) must strip blocked env vars
+// (the gateway environment carries secrets/injection vectors like LD_PRELOAD)
+// and must apply the caller's env param — both were dropped before.
+func TestToolExec_FallbackSanitizesEnvAndAppliesParam(t *testing.T) {
+	t.Setenv("LD_PRELOAD", "/tmp/evil.so")
+	tmp := t.TempDir()
+	fn := ToolExec(nil, tmp)
+
+	out := mustCallTool(t, fn, map[string]any{
+		"command": `printenv LD_PRELOAD || echo BLOCKED_ABSENT`,
+	})
+	if !strings.Contains(out, "BLOCKED_ABSENT") {
+		t.Errorf("LD_PRELOAD must be stripped in the fallback path, got: %q", out)
+	}
+
+	out = mustCallTool(t, fn, map[string]any{
+		"command": `printenv DENEB_TEST_CUSTOM`,
+		"env":     map[string]string{"DENEB_TEST_CUSTOM": "hello-fallback"},
+	})
+	if !strings.Contains(out, "hello-fallback") {
+		t.Errorf("env param must reach the fallback child, got: %q", out)
+	}
 }

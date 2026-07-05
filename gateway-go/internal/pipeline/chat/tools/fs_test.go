@@ -471,3 +471,48 @@ func TestReadFunctionRegex_rustFn(t *testing.T) {
 		t.Errorf("expected function name: %q", out)
 	}
 }
+
+// Batch edits apply sequentially in one call and one write.
+func TestToolEdit_BatchEdits(t *testing.T) {
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "f.txt")
+	os.WriteFile(path, []byte("alpha beta beta gamma"), 0o644)
+
+	out := mustCallTool(t, ToolEdit(tmp), map[string]any{
+		"file_path": "f.txt",
+		"edits": []map[string]any{
+			{"old_string": "alpha", "new_string": "A"},
+			{"old_string": "beta", "new_string": "B", "replace_all": true},
+			{"old_string": "gamma", "new_string": "C"},
+		},
+	})
+	if !strings.Contains(out, "3 edits") || !strings.Contains(out, "4 replacements") {
+		t.Errorf("unexpected batch summary: %q", out)
+	}
+	data, _ := os.ReadFile(path)
+	if string(data) != "A B B C" {
+		t.Errorf("got %q", string(data))
+	}
+}
+
+// A failing entry aborts the whole batch before any write (all-or-nothing).
+func TestToolEdit_BatchEditsAllOrNothing(t *testing.T) {
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "f.txt")
+	os.WriteFile(path, []byte("alpha beta"), 0o644)
+
+	_, err := callTool(t, ToolEdit(tmp), map[string]any{
+		"file_path": "f.txt",
+		"edits": []map[string]any{
+			{"old_string": "alpha", "new_string": "A"},
+			{"old_string": "MISSING", "new_string": "X"},
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "edits[1]") {
+		t.Fatalf("expected edits[1] failure, got: %v", err)
+	}
+	data, _ := os.ReadFile(path)
+	if string(data) != "alpha beta" {
+		t.Errorf("file must be unchanged on batch failure, got %q", string(data))
+	}
+}

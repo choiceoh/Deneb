@@ -467,14 +467,15 @@ func ToolWrite(defaultDir string) ToolFunc {
 func ToolEdit(defaultDir string) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
-			FilePath   string `json:"file_path"`
-			OldString  string `json:"old_string"`
-			NewString  string `json:"new_string"`
-			ReplaceAll bool   `json:"replace_all"`
-			Regex      bool   `json:"regex"`
-			Line       int    `json:"line"`
-			Anchor     string `json:"anchor"`
-			AnchorEnd  string `json:"anchor_end"`
+			FilePath   string      `json:"file_path"`
+			OldString  string      `json:"old_string"`
+			NewString  string      `json:"new_string"`
+			ReplaceAll bool        `json:"replace_all"`
+			Regex      bool        `json:"regex"`
+			Line       int         `json:"line"`
+			Anchor     string      `json:"anchor"`
+			AnchorEnd  string      `json:"anchor_end"`
+			Edits      []batchEdit `json:"edits"`
 		}
 		if err := jsonutil.UnmarshalInto("edit params", input, &p); err != nil {
 			return "", err
@@ -482,8 +483,8 @@ func ToolEdit(defaultDir string) ToolFunc {
 		if p.FilePath == "" {
 			return "", fmt.Errorf("file_path is required")
 		}
-		if p.OldString == "" && p.Anchor == "" {
-			return "", fmt.Errorf("old_string is required (or use anchor= for a content-hash anchored edit)")
+		if p.OldString == "" && p.Anchor == "" && len(p.Edits) == 0 {
+			return "", fmt.Errorf("old_string is required (or use anchor= for a content-hash anchored edit, or edits=[...] for a batch)")
 		}
 
 		dir := defaultDir
@@ -528,6 +529,18 @@ func ToolEdit(defaultDir string) ToolFunc {
 			if fc != nil {
 				fc.UpdateAfterWrite(path)
 			}
+		}
+
+		// Batch mode: N sequential replacements in ONE call — one read, one
+		// atomic write, one re-prefill instead of N (the per-edit round-trip is
+		// the single biggest coding-turn waste). All-or-nothing: any failing
+		// edit aborts before the write, so the file is never left half-edited.
+		if len(p.Edits) > 0 {
+			result, err := applyBatchEdits(path, p.FilePath, content, p.Edits)
+			if err == nil {
+				updateCache()
+			}
+			return result, err
 		}
 
 		// Content-hash anchored replacement (opt-in, token-efficient). The
@@ -599,6 +612,46 @@ func ToolEdit(defaultDir string) ToolFunc {
 		}
 		return fmt.Sprintf("Edited %s", p.FilePath), nil
 	}
+}
+
+// batchEdit is one entry of the edit tool's edits=[...] batch mode.
+type batchEdit struct {
+	OldString  string `json:"old_string"`
+	NewString  string `json:"new_string"`
+	ReplaceAll bool   `json:"replace_all"`
+}
+
+// applyBatchEdits applies the edits sequentially in memory (each edit sees the
+// previous edits' result), then writes once. Any failure aborts BEFORE the
+// write — the file is never left half-edited — and names the failing index so
+// the model can fix just that entry.
+func applyBatchEdits(path, displayPath, content string, edits []batchEdit) (string, error) {
+	cur := content
+	total := 0
+	for i, e := range edits {
+		if e.OldString == "" {
+			return "", fmt.Errorf("edits[%d]: old_string is required (file unchanged)", i)
+		}
+		count := strings.Count(cur, e.OldString)
+		if count == 0 {
+			hint := editFuzzyHint(cur, e.OldString)
+			return "", fmt.Errorf("edits[%d]: old_string not found — batch is all-or-nothing, file unchanged%s", i, hint)
+		}
+		if count > 1 && !e.ReplaceAll {
+			return "", fmt.Errorf("edits[%d]: old_string is not unique (%d occurrences) — set replace_all=true on that entry or disambiguate (file unchanged)", i, count)
+		}
+		if e.ReplaceAll {
+			cur = strings.ReplaceAll(cur, e.OldString, e.NewString)
+			total += count
+		} else {
+			cur = strings.Replace(cur, e.OldString, e.NewString, 1)
+			total++
+		}
+	}
+	if err := atomicfile.WriteFile(path, []byte(cur), nil); err != nil {
+		return "", fmt.Errorf("failed to write file: %w", err)
+	}
+	return fmt.Sprintf("Edited %s (%d edits, %d replacements)", displayPath, len(edits), total), nil
 }
 
 // editWithRegex performs regex-based search and replace.
