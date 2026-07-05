@@ -23,14 +23,14 @@ sidebarTitle: "도구 개선 탐구"
 
 | # | 제안 | 분야 | P | 작업량 |
 |---|---|---|---|---|
-| B | 도구 통계 폐쇄 루프 (argrepair·unknown-tool·loop-block·출력크기 집계) | 계측 | P1 | M |
-| A | fetch_tools 이미-활성 단락(short-circuit) + 반복률 재측정 | 효율·선택 | P1 | S |
-| D | deferred 설명 80자 절단 감사 (+선택적 promptSummary 필드) | 선택 품질 | P1 | S |
+| B | 도구 통계 폐쇄 루프 (argrepair·unknown-tool·loop-block·출력크기 집계) | 계측 | P1 | ✅ 구현됨 (이 PR) |
+| A | fetch_tools 이미-활성 단락(short-circuit) + 반복률 재측정 | 효율·선택 | P1 | ✅ 구현됨 (이 PR, 반복률 재측정은 운영 후) |
+| D | deferred 설명 80자 절단 감사 (+선택적 promptSummary 필드) | 선택 품질 | P1 | ✅ 감사 완료 — 최악 5건 선두 재배치 (이 PR) |
 | C | per-tool MaxOutput 감사 (B의 출력크기 계측 의존) | 효율 | P2 | S |
 | E | fetch_tools 한국어 질의 매칭 보강 | 선택 품질 | P2 | S-M |
 | H | 도구 이름 충돌 fail-fast | 신뢰성 | P2 | S |
 | G | OnBeforeToolCall 활용 스케치 (per-run 도구 호출 예산) | 신뢰성 | P3 | M |
-| F | insights 스테일 주석 수정 (발견 사항) | 위생 | P3 | XS |
+| F | insights 스테일 주석 수정 (발견 사항) | 위생 | P3 | ✅ 수정됨 (이 PR) |
 | N1 | 신규: `weather` 도구 (morning_letter 내부 코드 승격) | 신규 도구 | P2 | S |
 | N2 | 신규: `person_briefing` 인물 브리핑 합성 도구 | 신규 도구 | P2 | M |
 | N3 | 신규: `followup` 회신 대기 추적 | 신규 도구 | P3 | M |
@@ -167,6 +167,17 @@ sidebarTitle: "도구 개선 탐구"
 - **제안**: 외부 경로 API(Kakao/Naver 모빌리티) 연동 도구. **관문은 API 키·쿼터 의존** — 외부 API 최소화 원칙과 상충하므로 운영자가 키 발급을 결정할 때까지 보류. 채택 시 실패 폴백(직선거리+통상 속도 추정)을 함께 설계.
 
 ---
+
+## 6.5 구현 현황 (2026-07-05 역기입)
+
+로드맵 1~2단계는 이 문서와 같은 브랜치(PR #3117)에서 즉시 구현됐다:
+
+- **B**: `TurnToolData.Blocked/UnknownTool` + `RunEndData.RepairedToolCalls` → `agentlog.Aggregate`가 `ToolStat.Repaired/Unknown/Blocked/TotalOutputChars/MaxOutputChars`로 폴딩 → `observe(what=behavior)` 도구 라인에 비정상 카운터·출력 크기 노출. unknown 판정은 `agent.ErrUnknownTool` 센티널(chat `unknownToolError`가 래핑), repaired는 run-scoped `toolctx.ToolExecStats`(chat 레이어만 관측 가능해 run.end에 탑승).
+- **A**: `DeferredActivation`에 executor 드레인 시 갱신되는 불변 active 스냅샷(`IsActive`) 추가 — 문서의 설계 옵션 ① 채택. fetch_tools는 이미 활성인 도구에 스키마 재출력 대신 "Already active — call directly" 한 줄 반환(같은 턴 내 중복은 통과, 문서화된 트레이드오프). 반복률 재측정은 (B) 지표로 운영 데이터 축적 후.
+- **D**: 22개 감사 결과 최악 5건(mail_archive·research_panel·phone_read·observe·sessions)의 트리거 문구를 첫 80 rune 안으로 전진 배치. `prompt_summary` 필드 신설(②)은 불필요 판정 — ①로 충분.
+- **F**: `insights/engine.go` 스테일 주석 2곳을 실제 배선 사실로 갱신.
+
+C(캡 조정)·E(한국어 매칭)는 계획대로 (B) 데이터 축적/테스트 세트 준비 후 별도 PR.
 
 ## 7. 로드맵 (권장 순서)
 
