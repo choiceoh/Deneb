@@ -5,11 +5,22 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
 )
+
+// docExtractBudget bounds the TOTAL synchronous document-extraction time for
+// one turn's attachments. Extraction (docparse; scanned-PDF OCR via the
+// sidecar) was the one hot-path stage with no sub-budget: a multi-document
+// turn could burn most of the 5-minute turn deadline before the first LLM
+// call. Documents that do not finish inside the budget pass through
+// unextracted — the same graceful path as an extraction failure — and the
+// shortfall is logged.
+const docExtractBudget = 2 * time.Minute
 
 // hasImageAttachment returns true if any attachment is an image.
 func hasImageAttachment(attachments []ChatAttachment) bool {
@@ -79,6 +90,12 @@ func prepareDocumentAttachments(ctx context.Context, attachments []ChatAttachmen
 	if len(attachments) == 0 {
 		return attachments
 	}
+	// Shared budget across ALL documents of the turn (concurrency.md rule 7:
+	// bounded work on the request path). Once spent, remaining docs fall
+	// through untouched like any other extraction failure.
+	extractCtx, cancel := context.WithTimeout(ctx, docExtractBudget)
+	defer cancel()
+	budgetSpent := false
 	out := make([]ChatAttachment, 0, len(attachments))
 	for _, att := range attachments {
 		if att.Type == "image" || att.Type == "document_text" || att.Data == "" ||
@@ -91,7 +108,16 @@ func prepareDocumentAttachments(ctx context.Context, attachments []ChatAttachmen
 			out = append(out, att) // not base64 — leave untouched
 			continue
 		}
-		text, ok := tools.ExtractDocumentText(ctx, raw, att.Name, att.MimeType)
+		if extractCtx.Err() != nil {
+			if !budgetSpent {
+				budgetSpent = true
+				slog.Warn("document extraction budget spent; remaining attachments pass through unextracted",
+					"budget", docExtractBudget, "attachment", att.Name)
+			}
+			out = append(out, att)
+			continue
+		}
+		text, ok := tools.ExtractDocumentText(extractCtx, raw, att.Name, att.MimeType)
 		if !ok || strings.TrimSpace(text) == "" {
 			out = append(out, att) // extraction failed — leave untouched
 			continue
