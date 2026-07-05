@@ -283,6 +283,7 @@ func (s *Server) fileDealFromMail(msg *gmail.MessageDetail, deal *mailanalysis.D
 		Summary:         deal.Summary,
 		SourceRef:       "mail:" + msg.ID,
 		RelatedProjects: directProjectPages(relatedProjects), // deal→project graph edge
+		Terms:           dealTermsFromFacts(deal.Facts),      // quote-verified → ledger
 	}, time.Now())
 	if err != nil {
 		s.logger.Warn("mail→deal: 거래 페이지 저장 실패", "id", msg.ID, "counterparty", deal.Counterparty, "error", err)
@@ -359,6 +360,29 @@ func directProjectPages(related []string) []string {
 		out = append(out, r)
 	}
 	return out
+}
+
+// dealTermsFromFacts maps the pipeline's quote-verified extraction onto the
+// wiki ledger's term type (domain must not import platform, so the copy lives
+// here). nil in, or nothing surviving, → nil out.
+func dealTermsFromFacts(f *mailanalysis.DealFacts) *wiki.DealTerms {
+	if f == nil {
+		return nil
+	}
+	q := func(v mailanalysis.QuotedFact) wiki.QuotedTerm {
+		return wiki.QuotedTerm{Value: v.Value, Quote: v.Quote}
+	}
+	t := &wiki.DealTerms{
+		Capacity:     q(f.CapacityMW),
+		UnitPrice:    q(f.UnitPrice),
+		Payment:      q(f.PaymentTerms),
+		Warranty:     q(f.Warranty),
+		DelayPenalty: q(f.DelayPenalty),
+	}
+	if t.Empty() {
+		return nil
+	}
+	return t
 }
 
 // dealEvidenceTitle is the human label for a pinned deal source ("견적서 · 탑솔라").

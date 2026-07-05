@@ -156,6 +156,20 @@ func renderDealRecordLine(r wiki.DealRecord) string {
 		}
 		parts = append(parts, amt)
 	}
+	// Quote-verified terms (fact layer) — compact; quotes stay on the ledger row.
+	if t := r.Terms; t != nil {
+		for _, term := range []struct{ label, v string }{
+			{"물량", t.Capacity.Value},
+			{"단가", t.UnitPrice.Value},
+			{"지급", t.Payment.Value},
+			{"하자", t.Warranty.Value},
+			{"지체상금", t.DelayPenalty.Value},
+		} {
+			if term.v != "" {
+				parts = append(parts, term.label+" "+term.v)
+			}
+		}
+	}
 	line := "- " + strings.Join(parts, " · ")
 	if r.Summary != "" {
 		line += " — " + r.Summary
@@ -198,6 +212,9 @@ func renderDealTotals(t wiki.DealTotals) string {
 	}
 	if t.NoAmountCount > 0 {
 		line += fmt.Sprintf(" · 금액 없음 %d건 (합계 미포함)", t.NoAmountCount)
+	}
+	if t.CapacityCount > 0 {
+		line += fmt.Sprintf(" · 물량 합계 %sMW (%d건 — 물량 확인분만)", fmtDealAmount(t.CapacityMWSum), t.CapacityCount)
 	}
 	return line
 }

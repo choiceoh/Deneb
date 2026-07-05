@@ -166,6 +166,8 @@ type DealTotals struct {
 	UnparsedCount   int
 	UnparsedSamples []string // up to 3 raw amount strings
 	NoAmountCount   int      // rows filed with no amount at all — also outside sums
+	CapacityMWSum   float64  // quote-verified, parsed capacities (deal_terms.go)
+	CapacityCount   int      // rows contributing to CapacityMWSum
 }
 
 // SumDealRecords computes totals over recs. Pure function — no store access.
@@ -176,6 +178,10 @@ func SumDealRecords(recs []DealRecord) DealTotals {
 	}
 	for _, r := range recs {
 		t.Count++
+		if r.Terms != nil && r.Terms.CapacityMW > 0 {
+			t.CapacityMWSum += r.Terms.CapacityMW
+			t.CapacityCount++
+		}
 		if !r.AmountParsed {
 			if strings.TrimSpace(r.AmountRaw) != "" {
 				t.UnparsedCount++
