@@ -94,8 +94,12 @@ type router struct {
 	// the gateway's model picker show a dead/invalid cloud key before a request 401s.
 	keyHealth atomic.Pointer[map[string]keyHealthState]
 	metrics   *metrics // per-request counters, exposed at GET /metrics
-	client    *http.Client
-	log       *slog.Logger
+	// usage is the persistent per-model token/request meter behind GET /v1/usage
+	// (usage.go). Separate from metrics: metrics is in-memory Prometheus-shaped
+	// observability, usage is month-windowed accounting that survives restarts.
+	usage  *usageMeter
+	client *http.Client
+	log    *slog.Logger
 }
 
 func newRouter(cfg config, path string, log *slog.Logger) *router {
@@ -113,6 +117,7 @@ func newRouter(cfg config, path string, log *slog.Logger) *router {
 		}},
 		log:     log,
 		metrics: newMetrics(),
+		usage:   newUsageMeter(path),
 	}
 	rt.snap.Store(buildSnapshot(cfg, time.Time{}))
 	empty := map[string]modelEntry{}
@@ -219,6 +224,7 @@ func (rt *router) watch(ctx context.Context) {
 			return
 		case <-cfgTick.C:
 			rt.reloadIfChanged()
+			rt.usage.maybeFlush()
 		case <-fleetTick.C:
 			rt.refreshFleet(ctx)
 		case <-windowTick.C:
@@ -375,6 +381,7 @@ func (rt *router) handler() http.Handler {
 	mux.HandleFunc("POST /v1/chat/completions", rt.chatCompletions)
 	mux.HandleFunc("POST /v1/messages", rt.messages)
 	mux.HandleFunc("GET /v1/models", rt.listModels)
+	mux.HandleFunc("GET /v1/usage", rt.usageHandler)
 	mux.HandleFunc("GET /status", rt.status)
 	mux.HandleFunc("GET /metrics", rt.metricsHandler)
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) {
@@ -520,6 +527,7 @@ func (rt *router) serveAuto(client clientInfo, w http.ResponseWriter, r *http.Re
 			continue
 		}
 		rt.log.Info("auto routed", "model", entry.Name)
+		rt.meterResponse(entry, resp)
 		streamResponse(client, w, resp)
 		return
 	}
@@ -617,6 +625,7 @@ func (rt *router) forward(client clientInfo, w http.ResponseWriter, r *http.Requ
 		writeErr(w, http.StatusBadGateway, "upstream unreachable: "+entry.Name)
 		return
 	}
+	rt.meterResponse(entry, resp)
 	// Diagnostic tap: WORMHOLE_DUMP_MODEL=<name> logs the exact request body
 	// and the exact upstream response (head+tail) for that model's
 	// NON-STREAMING calls. Off by default (empty env — zero hot-path cost);
@@ -647,6 +656,18 @@ func (rt *router) forward(client clientInfo, w http.ResponseWriter, r *http.Requ
 		return
 	}
 	streamResponse(client, w, resp)
+}
+
+// meterResponse wraps the upstream response body with the usage tail tee so
+// token counts land in the /v1/usage meter when the stream finishes. The bytes
+// reaching the client are untouched (read-through copy of a bounded tail).
+func (rt *router) meterResponse(entry modelEntry, resp *http.Response) {
+	name := entry.Name
+	resp.Body = newUsageTail(resp.Body, func(tail []byte) {
+		in, out := parseUsageTail(tail)
+		rt.usage.record(name, in, out)
+		rt.usage.maybeFlush()
+	})
 }
 
 // dumpSlice returns the head (or tail) n bytes of b as a string for logging.
