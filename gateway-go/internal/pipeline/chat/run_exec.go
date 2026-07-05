@@ -80,8 +80,8 @@ func executeAgentRun(
 	// verify. The server-side implementation reads the durable code store and
 	// is an idempotent no-op when the binding is already in place.
 	codingSession := isCodingSessionKey(params.SessionKey)
-	if codingSession && deps.codingRebindFn != nil {
-		deps.codingRebindFn(params.SessionKey)
+	if codingSession && deps.coding.Rebind != nil {
+		deps.coding.Rebind(params.SessionKey)
 	}
 
 	// Pre-warm context file snapshot for this session so disk I/O happens

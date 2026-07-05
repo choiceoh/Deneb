@@ -86,35 +86,16 @@ type Handler struct {
 	// doesn't depend on the domain/skills/genesis package directly.
 	skillUsageRecorder SkillUsageRecorder
 
-	// topicResolver maps a forum threadID to a per-topic knowledge key for
-	// system-prompt injection. Optional: nil disables per-topic knowledge.
-	topicResolver TopicResolver
-
-	// calendarGlanceFn builds the ambient upcoming-events glance injected into
-	// the dynamic system-prompt block. Optional: nil disables ambient calendar
-	// awareness (the live `calendar` tool is unaffected).
-	calendarGlanceFn CalendarGlanceFunc
-
-	// goalGlanceFn builds the ambient active-goal glance injected into the
-	// dynamic system-prompt block. Optional: nil disables ambient goal awareness.
-	goalGlanceFn GoalGlanceFunc
-
-	// personaOverrideFn returns the operator-edited 업무 persona text (Settings
-	// prompt corner). Optional: nil → default persona always renders.
-	personaOverrideFn PersonaOverrideFunc
+	// ambient groups the ambient system-prompt context providers (topic
+	// knowledge, calendar/goal glances, persona override). See AmbientDeps.
+	ambient AmbientDeps
 
 	// fileRecallFn runs a hybrid semantic search over the file store for the
 	// recall preflight. Optional: nil disables the files recall source.
 	fileRecallFn FileRecallFunc
 
-	// codingTurnEndFn fires after a coding-session turn to checkpoint + verify
-	// the worktree. Optional: nil disables the coding turn-end hook.
-	codingTurnEndFn CodingTurnEndFunc
-
-	// codingRebindFn re-establishes a coding session's worktree binding from
-	// the durable code store before a turn runs (survives session GC/restart).
-	// Optional: nil disables the lazy rebind.
-	codingRebindFn CodingRebindFunc
+	// coding groups the 코드모드 session hooks. See CodingDeps.
+	coding CodingDeps
 
 	// weeklyReportTextFn / weeklyFormDeliverFn back the interactive /weekly
 	// (/주간보고) slash command — the deterministic 주간업무보고 generators the
@@ -123,6 +104,37 @@ type Handler struct {
 	// server via SetWeeklyReport so chat stays free of the wiki/render infra.
 	weeklyReportTextFn  WeeklyReportTextFunc
 	weeklyFormDeliverFn WeeklyFormDeliverFunc
+}
+
+// AmbientDeps groups the ambient system-prompt context providers that flow
+// HandlerConfig → Handler → runDeps unchanged. One field here replaces three
+// mirrored declarations and two field-by-field copies (the triple-mirror debt
+// from the 2026-07 pipeline audit). Every field is optional; nil disables it.
+type AmbientDeps struct {
+	// TopicResolver maps a forum threadID to a per-topic knowledge key for
+	// system-prompt injection.
+	TopicResolver TopicResolver
+	// CalendarGlance builds the ambient upcoming-events glance for the
+	// dynamic system-prompt block.
+	CalendarGlance CalendarGlanceFunc
+	// GoalGlance builds the ambient active-goal glance for the dynamic block.
+	GoalGlance GoalGlanceFunc
+	// PersonaOverride returns the operator-edited 업무 persona text (Settings
+	// prompt corner); "" → the default persona renders. Read per turn —
+	// byte-stable between rare edits, so the Static cache holds.
+	PersonaOverride PersonaOverrideFunc
+}
+
+// CodingDeps groups the 코드모드 session hooks the server wires over the shared
+// code Manager + session store (server/chat_pipeline.go). Both optional; nil
+// disables each hook.
+type CodingDeps struct {
+	// TurnEnd fires after a coding-session turn to checkpoint + verify the
+	// worktree, flipping the rail status.
+	TurnEnd CodingTurnEndFunc
+	// Rebind re-establishes a coding session's worktree binding from the
+	// durable code store before a turn runs (survives session GC/restart).
+	Rebind CodingRebindFunc
 }
 
 // TopicResolver maps a forum/topic threadID to a per-topic knowledge key
@@ -218,21 +230,9 @@ type HandlerConfig struct {
 	EmitAgentFn      func(kind, sessionKey, runID string, payload map[string]any)
 	EmitTranscriptFn func(sessionKey string, message any, messageID string)
 
-	// TopicResolver maps a forum threadID to a per-topic knowledge key.
-	// Optional: nil disables per-topic knowledge injection.
-	TopicResolver TopicResolver
-
-	// CalendarGlanceFn builds the ambient upcoming-events glance for the dynamic
-	// system-prompt block. Optional: nil disables ambient calendar awareness.
-	CalendarGlanceFn CalendarGlanceFunc
-
-	// GoalGlanceFn builds the ambient active-goal glance for the dynamic
-	// system-prompt block. Optional: nil disables ambient goal awareness.
-	GoalGlanceFn GoalGlanceFunc
-
-	// PersonaOverrideFn returns the operator-edited 업무 persona text (Settings
-	// prompt corner), or "" when unedited. Optional: nil → default persona.
-	PersonaOverrideFn PersonaOverrideFunc
+	// Ambient groups the ambient system-prompt context providers (topic
+	// knowledge, calendar/goal glances, persona override). See AmbientDeps.
+	Ambient AmbientDeps
 
 	// FileRecallFn runs a hybrid semantic search over the on-box file store for
 	// the recall preflight, so relevant uploaded files surface as recall evidence
@@ -241,17 +241,9 @@ type HandlerConfig struct {
 	// the shared file semantic index.
 	FileRecallFn FileRecallFunc
 
-	// CodingTurnEndFn fires after a coding-session turn completes: it checkpoints
-	// the worktree edits and verifies build/tests, flipping the rail status.
-	// Optional: nil disables the hook. Injected by the server over the shared
-	// code Manager + session store (server/chat_pipeline.go).
-	CodingTurnEndFn CodingTurnEndFunc
-
-	// CodingRebindFn re-establishes a coding session's worktree binding from the
-	// durable code store before a turn runs, so the binding survives session
-	// GC and gateway restarts. Optional: nil disables the lazy rebind. Injected
-	// by the server over the same code session store (server/chat_pipeline.go).
-	CodingRebindFn CodingRebindFunc
+	// Coding groups the 코드모드 session hooks (server closures over the shared
+	// code Manager + session store — server/chat_pipeline.go). See CodingDeps.
+	Coding CodingDeps
 
 	// RecordActivity is called for user-originating chat turns so the server
 	// can remember the latest active channel session for autonomous follow-ups.
@@ -318,13 +310,9 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 		tools:                cfg.Tools,
 		authManager:          cfg.AuthManager,
 		jobTracker:           cfg.JobTracker,
-		topicResolver:        cfg.TopicResolver,
-		calendarGlanceFn:     cfg.CalendarGlanceFn,
-		goalGlanceFn:         cfg.GoalGlanceFn,
-		personaOverrideFn:    cfg.PersonaOverrideFn,
+		ambient:              cfg.Ambient,
 		fileRecallFn:         cfg.FileRecallFn,
-		codingTurnEndFn:      cfg.CodingTurnEndFn,
-		codingRebindFn:       cfg.CodingRebindFn,
+		coding:               cfg.Coding,
 		providerConfigs:      cloneProviderConfigs(cfg.ProviderConfigs),
 		embeddingClient:      cfg.EmbeddingClient,
 		wikiStore:            cfg.WikiStore,

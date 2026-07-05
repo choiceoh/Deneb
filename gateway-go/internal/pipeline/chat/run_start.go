@@ -166,13 +166,9 @@ func (h *Handler) buildRunDeps() runDeps {
 		steerQueue:         h.steer,
 		skillNudger:        h.skillNudger,
 		skillUsageRecorder: h.skillUsageRecorder,
-		topicResolver:      h.topicResolver,
-		calendarGlanceFn:   h.calendarGlanceFn,
-		goalGlanceFn:       h.goalGlanceFn,
-		personaOverrideFn:  h.personaOverrideFn,
+		ambient:            h.ambient,
 		fileRecallFn:       h.fileRecallFn,
-		codingTurnEndFn:    h.codingTurnEndFn,
-		codingRebindFn:     h.codingRebindFn,
+		coding:             h.coding,
 
 		// Atomic snapshot of channel callbacks (reply, media, typing, etc.).
 		callbacks: h.Snapshot(),

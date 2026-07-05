@@ -31,7 +31,7 @@ func newPromptStore(denebDir string) *prompts.Store {
 
 // personaOverride returns the operator-edited 업무 persona text, or "" when there
 // is no override (the chat pipeline then renders prompt.DefaultPersona). Wired
-// into the chat Config as PersonaOverrideFn (chat_pipeline.go) so the chat
+// into the chat Config as Ambient.PersonaOverride (chat_pipeline.go) so the chat
 // package reads the override without importing the prompt store.
 func (s *Server) personaOverride() string {
 	if s == nil || s.promptStore == nil {

@@ -614,14 +614,14 @@ func maybeRecordRunDiary(deps runDeps, params RunParams, result *agent.AgentResu
 // per-turn checkpoint/verify dead on the real 코드모드 surface (rail stuck on
 // "working", empty checkpoint list, nothing for undo to pop).
 func maybeCodingTurnEnd(deps runDeps, params RunParams, resultText string, logger *slog.Logger) {
-	if deps.codingTurnEndFn == nil || deps.sessions == nil {
+	if deps.coding.TurnEnd == nil || deps.sessions == nil {
 		return
 	}
 	sess := deps.sessions.Get(params.SessionKey)
 	if sess == nil || sess.Mode != session.ModeCode {
 		return
 	}
-	fn := deps.codingTurnEndFn
+	fn := deps.coding.TurnEnd
 	// Prefer the server lifecycle ctx so the background verify is cancelled
 	// on shutdown; fall back to Background (still bounded below) if unset.
 	bgCtx := deps.callbacks.shutdownCtx
