@@ -4,6 +4,8 @@ import ai.deneb.data.DataRepository
 import ai.deneb.deneb.DenebGatewayClient
 import android.app.Notification
 import android.app.NotificationManager
+import android.os.Build
+import android.os.Bundle
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import kotlinx.coroutines.CoroutineScope
@@ -22,6 +24,14 @@ import org.koin.java.KoinJavaComponent.inject
  * miniapp.event.ingest. The gateway runs the proactive 비서실장 judgment (OTP/spam/
  * routine → silent NO_REPLY; signal → work feed + push), so the user only ever
  * sees signal. "다 읽되 다 보여주지 않는다": broad capture here, narrow surface server-side.
+ *
+ * Beyond the basic title/body pair, extraction reads the structured extras
+ * (big text, inbox lines, MessagingStyle messages) and applies app-specific
+ * formatting for the two highest-signal work apps: KakaoTalk chats (room +
+ * per-sender messages) and Amaranth10 electronic-approval notifications
+ * (status/title/requester fields). Structured payloads are cumulative on the
+ * Android side — each update re-carries the retained message list — so a
+ * line-level dedup keeps already-forwarded lines from being resent.
  *
  * A short coalescing window collapses notification bursts (group chat, batched
  * approvals) into a single event, so one burst costs one judgment turn, not N.
@@ -76,8 +86,12 @@ class DenebNotificationListenerService : NotificationListenerService() {
         // Fire-and-forget: the gateway acks immediately and judges async. A transport
         // failure (gateway down) just drops these notifications.
         if (batch.size >= BATCH_THRESHOLD) {
-            val lines = batch.joinToString("\n") { "• " + "${it.source}: ${it.text}".replace("\n", " ").trim() }
-            runCatching { client.ingestEvent("notification", "여러 앱", "알림 ${batch.size}건 도착:\n$lines") }
+            // A single-app burst keeps its real source label (the gateway's per-source
+            // rules — e.g. the Gmail drop — must still apply to batches); only a mixed
+            // burst becomes "여러 앱". Blocks stay structured instead of flattened lines.
+            val source = batch.map { it.source }.distinct().singleOrNull() ?: "여러 앱"
+            val blocks = batch.joinToString("\n\n") { "[${it.source}]\n${it.text}" }
+            runCatching { client.ingestEvent("notification", source, "알림 ${batch.size}건 도착:\n$blocks") }
         } else {
             for (ev in batch) {
                 runCatching { client.ingestEvent("notification", ev.source, ev.text) }
@@ -107,21 +121,86 @@ class DenebNotificationListenerService : NotificationListenerService() {
         false
     }
 
+    // Line-level dedup for cumulative payloads: MessagingStyle / inbox-style extras
+    // re-carry the whole retained message list on every update, so without this each
+    // new chat message re-forwards all previous ones (1, then 1+2, then 1+2+3 …).
+    // Keyed per package+conversation+line; a much longer window than the event dedup
+    // because the retained list persists across many updates. Trade-off: a genuinely
+    // repeated identical line ("네") in the SAME conversation within the window is
+    // dropped from the event — acceptable for proactive sensing. Observing a line
+    // refreshes its timestamp (the window slides), so a payload that keeps re-posting
+    // keeps being suppressed — a line only becomes forwardable again after it has
+    // been absent for a full window.
+    private val forwardedLines = object : LinkedHashMap<String, Long>(128, 0.75f, true) {
+        override fun removeEldestEntry(eldest: Map.Entry<String, Long>): Boolean = size > MAX_LINE_KEYS
+    }
+
+    private fun isFreshLine(scope: String, line: String): Boolean = synchronized(forwardedLines) {
+        val now = System.currentTimeMillis()
+        val key = "$scope|$line"
+        val last = forwardedLines[key]
+        forwardedLines[key] = now
+        last == null || now - last >= LINE_DEDUP_WINDOW_MS
+    }
+
+    private fun withFreshCumulativeLines(pkg: String, details: NotificationText): NotificationText {
+        if (!details.hasStructuredGroupPayload()) return details
+        // Scoped by conversation (empty for non-conversation payloads) so the same
+        // short line ("네") in two different rooms isn't cross-suppressed.
+        val scope = "$pkg|${details.conversationTitle}"
+        return details.copy(
+            textLines = details.textLines.filter { isFreshLine(scope, it) },
+            messages = details.messages.filter { isFreshLine(scope, it.formatted()) },
+            // bigText can also be a cumulative transcript on messaging/inbox payloads
+            // (and the formatters split it back into outbound lines), so its lines are
+            // deduped too — but only here, when a structured payload marks the
+            // notification as messaging/inbox style. A plain long body (mail text)
+            // never reaches this path and is forwarded untouched.
+            bigText = splitNotificationLines(details.bigText)
+                .filter { isFreshLine(scope, it) }
+                .joinToString("\n"),
+        )
+    }
+
     private data class NotifEvent(val source: String, val text: String, val key: String)
+
+    private data class NotificationText(
+        val title: String = "",
+        val body: String = "",
+        val bigText: String = "",
+        val subText: String = "",
+        val summaryText: String = "",
+        val conversationTitle: String = "",
+        val textLines: List<String> = emptyList(),
+        val messages: List<NotificationMessage> = emptyList(),
+    ) {
+        fun hasStructuredGroupPayload(): Boolean = textLines.isNotEmpty() || messages.isNotEmpty()
+    }
+
+    private data class NotificationMessage(
+        val sender: String,
+        val text: String,
+    ) {
+        fun formatted(): String = if (sender.isNotBlank()) "$sender: $text" else text
+    }
 
     /**
      * On-device pre-filter: keep volume + cost down and exclude security-sensitive
      * notifications before anything leaves the device. The gateway also triages
      * OTP/spam, but this is the hygiene + noise floor (foreground/media/system/
      * group-summary/low-importance never make it to the server).
+     *
+     * Ordering matters: the cheap structural drops run first so the hot noise path
+     * (media ticks, progress updates, secret notifications) never pays for extras
+     * parsing or a PackageManager label lookup — and secret content is never read.
      */
     private fun extractEvent(sbn: StatusBarNotification?, rankingMap: RankingMap?): NotifEvent? {
         sbn ?: return null
-        if (sbn.packageName == packageName) return null // our own notifications (feedback loop)
+        val pkg = sbn.packageName
+        if (pkg == packageName) return null // our own notifications (feedback loop)
         val n = sbn.notification ?: return null
 
         if (n.flags and Notification.FLAG_ONGOING_EVENT != 0) return null // foreground service / media / downloads
-        if (n.flags and Notification.FLAG_GROUP_SUMMARY != 0) return null // group header duplicates its children
 
         when (n.category) {
             Notification.CATEGORY_TRANSPORT, // media playback controls
@@ -141,32 +220,297 @@ class DenebNotificationListenerService : NotificationListenerService() {
 
         // Security hygiene: never forward auth/secret notifications — the gateway
         // would also drop OTP, but these shouldn't leave the device at all.
-        if (sbn.packageName in SENSITIVE_PACKAGES) return null
+        if (pkg in SENSITIVE_PACKAGES) return null
         if (n.visibility == Notification.VISIBILITY_SECRET) return null
 
-        val extras = n.extras
-        val title = extras?.getCharSequence(Notification.EXTRA_TITLE)?.toString()?.trim().orEmpty()
-        val body = extras?.getCharSequence(Notification.EXTRA_TEXT)?.toString()?.trim().orEmpty()
-        if (title.isEmpty() && body.isEmpty()) return null
+        val source = appLabel(pkg)
+        val raw = readNotificationText(n.extras)
+        val kakaoTalk = isKakaoTalk(pkg, source)
+        val amaranth10 = isAmaranth10(pkg, source)
 
-        val text = listOf(title, body).filter { it.isNotEmpty() }.joinToString("\n")
-        return NotifEvent(source = appLabel(sbn.packageName), text = text, key = sbn.packageName + "|" + text)
+        // Group summaries duplicate their children (KakaoTalk posts a per-room child
+        // for every message a summary aggregates), so they are dropped — EXCEPT the
+        // Amaranth10 batched-approval summary, whose inbox lines can be the only
+        // carrier of the batch. Requires an actual approval signal + structured
+        // payload so generic group headers still never leave the device.
+        if (n.flags and Notification.FLAG_GROUP_SUMMARY != 0) {
+            val approvalSummary = amaranth10 && hasApprovalSignal(raw) && raw.hasStructuredGroupPayload()
+            if (!approvalSummary) return null
+        }
+
+        // Cumulative-payload guard: keep only lines not already forwarded. If the
+        // structured payload existed but is entirely stale, the update carries
+        // nothing new (a pure re-post) — drop it before it spends a judgment turn.
+        val details = withFreshCumulativeLines(pkg, raw)
+        if (raw.hasStructuredGroupPayload() && !details.hasStructuredGroupPayload()) return null
+
+        val text = when {
+            kakaoTalk -> formatKakaoTalkNotification(details)
+            amaranth10 -> formatAmaranthNotification(details)
+            else -> formatBasicNotification(details)
+        }
+        if (text.isBlank()) return null
+
+        return NotifEvent(source = source, text = text, key = "$pkg|$text")
     }
 
-    private fun appLabel(pkg: String): String = runCatching {
-        val pm = packageManager
-        pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString()
-    }.getOrNull()?.takeIf { it.isNotBlank() } ?: pkg
+    private fun readNotificationText(extras: Bundle?): NotificationText {
+        if (extras == null) return NotificationText()
+        // EXTRA_HISTORIC_MESSAGES is deliberately NOT read: historic = messages the
+        // user has already seen before this update, so forwarding them only repeats
+        // content an earlier event already carried.
+        return NotificationText(
+            title = extras.text(Notification.EXTRA_TITLE),
+            body = extras.text(Notification.EXTRA_TEXT),
+            bigText = extras.text(Notification.EXTRA_BIG_TEXT),
+            subText = extras.text(Notification.EXTRA_SUB_TEXT),
+            summaryText = extras.text(Notification.EXTRA_SUMMARY_TEXT),
+            conversationTitle = extras.text(Notification.EXTRA_CONVERSATION_TITLE),
+            textLines = extras.textArray(Notification.EXTRA_TEXT_LINES),
+            messages = extras.messages(Notification.EXTRA_MESSAGES),
+        )
+    }
+
+    // The app label already travels as the event's source field (the gateway prompt
+    // renders it as 출처, and batches prefix each block with [source]), so none of
+    // the formatters repeat it inside the text.
+    //
+    // Structured fields are forwarded too, not just title/body: bigText is the
+    // untruncated body of an expanded notification (mail, SMS, long messages) and
+    // wins over a shorter collapsed body; inbox lines and MessagingStyle messages
+    // carry the actual items behind a generic "N개의 새 메시지" body. This also keeps
+    // the line dedup honest — every line it marks as seen is actually sent.
+    private fun formatBasicNotification(details: NotificationText): String {
+        val body = if (details.bigText.length > details.body.length) details.bigText else details.body
+        val messageLines = details.messages.map { it.formatted() }
+        val messageTexts = details.messages.flatMap { splitNotificationLines(it.text) }.toSet()
+        val supplemental = (splitNotificationLines(body) + details.textLines.flatMap(::splitNotificationLines))
+            .filterNot { it in messageTexts }
+        return distinctNonBlank(listOf(details.title) + messageLines + supplemental).joinToString("\n")
+    }
+
+    private fun formatKakaoTalkNotification(details: NotificationText): String {
+        val lines = notificationLines(details)
+        if (lines.isEmpty()) return ""
+        val room = details.conversationTitle.ifBlank { details.title }
+        val messageLines = kakaoTalkMessageLines(details, room)
+        return buildString {
+            if (room.isNotBlank()) append("대화방: ").append(room).append('\n')
+            if (messageLines.isNotEmpty()) {
+                append("메시지:\n")
+                messageLines.forEach { append("- ").append(it).append('\n') }
+            } else {
+                lines.filterNot { it == room }.forEach { append(it).append('\n') }
+            }
+        }.trimEnd()
+    }
+
+    private fun kakaoTalkMessageLines(details: NotificationText, room: String): List<String> {
+        val messageTexts = details.messages.flatMap {
+            splitNotificationLines(it.text) + splitNotificationLines(it.formatted())
+        }.toSet()
+        val structuredMessages = details.messages.map { it.formatted() }
+        val supplementalLines = distinctNonBlank(
+            details.textLines.flatMap(::splitNotificationLines) +
+                listOf(details.bigText, details.body, details.summaryText).flatMap(::splitNotificationLines),
+        ).filterNot { line ->
+            line == room ||
+                line == details.title ||
+                line in messageTexts
+        }
+        return distinctNonBlank(structuredMessages + supplementalLines)
+    }
+
+    // Amaranth10 electronic-approval notifications: surface the glance fields
+    // (status/title/requester/department) the 비서실장 judgment needs, with the raw
+    // lines preserved underneath for fidelity. Non-approval Amaranth notifications
+    // fall through to the basic format.
+    private fun formatAmaranthNotification(details: NotificationText): String {
+        val lines = notificationLines(details)
+        if (lines.none(::isApprovalLine)) return formatBasicNotification(details)
+        val title = details.title.ifBlank { lines.firstOrNull().orEmpty() }
+        val status = detectApprovalStatus(lines)
+        val requester = extractField(lines, REQUESTER_LABELS)
+        val department = extractField(lines, DEPARTMENT_LABELS)
+
+        return buildString {
+            append("종류: 전자결재\n")
+            if (status.isNotBlank()) append("상태: ").append(status).append('\n')
+            if (title.isNotBlank()) append("제목: ").append(title).append('\n')
+            if (requester.isNotBlank()) append("기안자/요청자: ").append(requester).append('\n')
+            if (department.isNotBlank()) append("부서: ").append(department).append('\n')
+            append("본문:\n")
+            lines.forEach { append(it).append('\n') }
+        }.trimEnd()
+    }
+
+    // PackageManager lookups are cached — a busy stream re-resolves the same handful
+    // of packages constantly. Labels are stable for the process lifetime (the
+    // listener service is restarted on app updates anyway).
+    private val appLabels = HashMap<String, String>()
+
+    private fun appLabel(pkg: String): String = synchronized(appLabels) {
+        appLabels.getOrPut(pkg) {
+            runCatching {
+                val pm = packageManager
+                pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString()
+            }.getOrNull()?.takeIf { it.isNotBlank() } ?: pkg
+        }
+    }
+
+    private fun isKakaoTalk(pkg: String, label: String): Boolean = pkg == "com.kakao.talk" ||
+        pkg.startsWith("com.kakao.talk.") ||
+        label.contains("카카오톡") ||
+        label.contains("KakaoTalk", ignoreCase = true)
+
+    // Identified by package/label ONLY — deliberately no content sniffing, so another
+    // app's notification that merely mentions 아마란스/결재 (a mail subject, a chat
+    // message) is never mislabeled as an electronic-approval event.
+    private fun isAmaranth10(pkg: String, label: String): Boolean = pkg in AMARANTH10_PACKAGES ||
+        isAmaranthName(pkg) ||
+        isAmaranthName(label)
+
+    private fun isAmaranthName(value: String): Boolean = value.contains("amaranth", ignoreCase = true) ||
+        value.contains("아마란스")
+
+    private fun hasApprovalSignal(details: NotificationText): Boolean = notificationLines(details).any(::isApprovalLine)
+
+    private fun isApprovalLine(line: String): Boolean = APPROVAL_KEYWORDS.any { line.contains(it) }
+
+    private fun detectApprovalStatus(lines: List<String>): String {
+        // Newline join so a compound status ("결재 완료") can't false-match across
+        // two adjacent lines ("…결재" + "완료…").
+        val merged = lines.joinToString("\n")
+        return APPROVAL_STATUSES.firstOrNull { merged.contains(it) }.orEmpty()
+    }
+
+    private fun extractField(lines: List<String>, labels: List<String>): String {
+        for (line in lines) {
+            for (label in labels) {
+                val idx = line.indexOf(label)
+                if (idx < 0) continue
+                val value = line.substring(idx + label.length)
+                    .trim()
+                    .trimStart(':', '：', '-', ' ')
+                    .trim()
+                if (value.isNotBlank()) return value
+            }
+        }
+        return ""
+    }
+
+    private fun Bundle.text(key: String): String = getCharSequence(key)?.toString()?.trim().orEmpty()
+
+    private fun Bundle.textArray(key: String): List<String> = getCharSequenceArray(key)
+        ?.mapNotNull { it?.toString()?.trim()?.takeIf(String::isNotEmpty) }
+        .orEmpty()
+
+    @Suppress("DEPRECATION")
+    private fun Bundle.messages(key: String): List<NotificationMessage> = getParcelableArray(key)
+        ?.mapNotNull { it as? Bundle }
+        ?.mapNotNull(::notificationMessage)
+        .orEmpty()
+
+    private fun notificationMessage(bundle: Bundle): NotificationMessage? {
+        val text = bundle.getCharSequence("text")?.toString()?.trim().orEmpty()
+        if (text.isBlank()) return null
+        val sender = bundle.getCharSequence("sender")?.toString()?.trim()?.takeIf(String::isNotEmpty)
+            ?: senderPersonName(bundle)
+            ?: ""
+        return NotificationMessage(sender = sender, text = text)
+    }
+
+    // MessagingStyle stores the sender as a plain "sender" CharSequence pre-P and as
+    // an android.app.Person under "sender_person" on P+ (API 28). minSdk is 26, so
+    // the Person read is version-gated.
+    @Suppress("DEPRECATION")
+    private fun senderPersonName(bundle: Bundle): String? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return null
+        return runCatching {
+            bundle.getParcelable<android.app.Person>("sender_person")
+                ?.name
+                ?.toString()
+                ?.trim()
+                ?.takeIf(String::isNotEmpty)
+        }.getOrNull()
+    }
+
+    private fun notificationLines(details: NotificationText): List<String> = distinctNonBlank(
+        listOf(
+            details.title,
+            details.conversationTitle,
+            details.body,
+            details.bigText,
+            details.subText,
+            details.summaryText,
+        ).flatMap(::splitNotificationLines) +
+            details.textLines.flatMap(::splitNotificationLines) +
+            details.messages.map { it.formatted() },
+    )
+
+    private fun splitNotificationLines(value: String): List<String> = value.lineSequence()
+        .map(String::trim)
+        .filter(String::isNotEmpty)
+        .toList()
+
+    private fun distinctNonBlank(values: List<String>): List<String> {
+        val seen = LinkedHashSet<String>()
+        for (value in values) {
+            val cleaned = value.trim()
+            if (cleaned.isNotEmpty()) seen += cleaned
+        }
+        return seen.toList()
+    }
 
     private companion object {
         private const val DEDUP_WINDOW_MS = 45_000L
         private const val MAX_DEDUP_KEYS = 200
+
+        // Line-level dedup for cumulative payloads (MessagingStyle / inbox lines).
+        // Much longer than DEDUP_WINDOW_MS: the retained message list keeps
+        // re-appearing in every update until the user reads the conversation.
+        private const val LINE_DEDUP_WINDOW_MS = 30 * 60_000L
+        private const val MAX_LINE_KEYS = 600
 
         // Burst coalescing: buffer notifications this long, then forward the window's
         // events together — batched into one event when >= BATCH_THRESHOLD arrive. A
         // couple seconds is invisible for proactive sensing and collapses bursts.
         private const val COALESCE_WINDOW_MS = 2_000L
         private const val BATCH_THRESHOLD = 3
+
+        // Amaranth10 (Douzone groupware) — package from the Play Store listing.
+        val AMARANTH10_PACKAGES = setOf("com.douzone.bizbox.klago.app")
+
+        // "결재" alone covers every 결재* compound (전자결재/결재요청/결재대기/미결재/결재함),
+        // so only the non-결재 approval verbs are listed separately.
+        val APPROVAL_KEYWORDS = listOf(
+            "결재",
+            "상신",
+            "반려",
+            "승인요청",
+            "승인 요청",
+        )
+
+        // Ordered most-specific-first: detectApprovalStatus takes the first match, so
+        // compound statuses must win over their "승인"/"완료" substrings.
+        val APPROVAL_STATUSES = listOf(
+            "결재 완료",
+            "결재 요청",
+            "결재요청",
+            "결재 대기",
+            "결재대기",
+            "승인 요청",
+            "승인요청",
+            "미결재",
+            "미결",
+            "결재함",
+            "상신",
+            "반려",
+            "승인",
+            "완료",
+        )
+        val REQUESTER_LABELS = listOf("기안자", "상신자", "요청자", "작성자")
+        val DEPARTMENT_LABELS = listOf("부서", "소속", "기안부서", "작성부서")
 
         // Best-effort hygiene blocklist: password managers / authenticators whose
         // notifications carry codes or vault access.
