@@ -188,6 +188,7 @@ func TestWikiWrite_MarksSupersededPages(t *testing.T) {
 		[]string{"deneb"},
 		[]string{"프로젝트/old-fact.md"},
 		nil, // cues
+		nil, // sites
 		[]string{"프로젝트/old-fact.md"},
 		0.8,
 		"concept",
@@ -228,7 +229,7 @@ func TestWikiWrite_DuplicateGuardBlocksCreate(t *testing.T) {
 	write := func(force bool) string {
 		out, err := wikiWrite(context.Background(), store, nil,
 			"", "영산고 태양광", "yeongsan-solar", "요약", "프로젝트", "본문",
-			nil, nil, nil, nil, 0.5, "entity", "medium", "", force)
+			nil, nil, nil, nil, nil, 0.5, "entity", "medium", "", force)
 		if err != nil {
 			t.Fatalf("wikiWrite: %v", err)
 		}
@@ -264,7 +265,7 @@ func TestWikiWrite_ProjectLogAppendsSection(t *testing.T) {
 		t.Helper()
 		out, err := wikiWrite(context.Background(), store, nil,
 			"프로젝트/영산고/로그.md", "영산고 진행 로그", "", "", "프로젝트", content,
-			nil, nil, nil, nil, 0, "log", "", "", force)
+			nil, nil, nil, nil, nil, 0, "log", "", "", force)
 		if err != nil {
 			t.Fatalf("wikiWrite: %v", err)
 		}
@@ -472,7 +473,7 @@ func TestWikiReadWrite_RejectsPathEscape(t *testing.T) {
 
 	// Write with a traversal target must refuse (and not touch the file).
 	out, err := wikiWrite(context.Background(), store, nil, "../secret", "탈출", "", "", "기타",
-		"overwritten", nil, nil, nil, nil, 0, "", "", "", false)
+		"overwritten", nil, nil, nil, nil, nil, 0, "", "", "", false)
 	if err != nil {
 		t.Fatalf("wikiWrite: %v", err)
 	}

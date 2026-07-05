@@ -34,10 +34,11 @@ const maxProjectStatusBullets = 8
 
 // ProjectRef names a real project bucket via its 대표페이지.
 type ProjectRef struct {
-	Name    string // display name (page Title, else the project folder name)
-	Path    string // 대표페이지 path, e.g. "프로젝트/영산고/대표.md" (legacy: "프로젝트/영산고.md")
-	Summary string // page Meta.Summary — one-line description for pickers
-	Code    string // page Meta.Code — frozen project identity, "" if unset
+	Name    string   // display name (page Title, else the project folder name)
+	Path    string   // 대표페이지 path, e.g. "프로젝트/영산고/대표.md" (legacy: "프로젝트/영산고.md")
+	Summary string   // page Meta.Summary — one-line description for pickers
+	Code    string   // page Meta.Code — frozen project identity, "" if unset
+	Sites   []string // page Meta.Sites — canonical 현장 admin paths (matching keys)
 }
 
 // KnownProjects lists the real projects by their 대표페이지 (see project_layout.go;
@@ -83,6 +84,7 @@ func (s *Store) knownProjects() []ProjectRef {
 			}
 			ref.Summary = strings.TrimSpace(page.Meta.Summary)
 			ref.Code = strings.TrimSpace(page.Meta.Code)
+			ref.Sites = page.Meta.Sites
 		}
 		refs = append(refs, ref)
 	}

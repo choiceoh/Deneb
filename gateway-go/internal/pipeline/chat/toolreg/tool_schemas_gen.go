@@ -1067,6 +1067,13 @@ func wikiToolSchema() map[string]any {
 				"type":        "string",
 				"description": "Read a specific section from the page (read action)",
 			},
+			"sites": map[string]any{
+				"type":        "array",
+				"description": "프로젝트 현장 위치 (프로젝트 대표페이지 write 전용). 작성 규칙 고정: '광역약칭 시/군 읍/면/동 [리]' — 공백 구분, 번지·마침표 없음, 광역은 약칭(전북·전남·충남·경기…). 예: ['전북 군산시 옥구읍 수산리']. 복수 현장이면 여러 항목. 메일·일정이 장소로 프로젝트를 부르는 일이 많아 회상 앵커·미팅 매칭 키로 쓰인다 — 현장이 확인되면 반드시 기입, 임의 표기(도로명·번지·도 전체명)는 금지",
+				"items": map[string]any{
+					"type": "string",
+				},
+			},
 			"summary": map[string]any{
 				"type":        "string",
 				"description": "한 줄 요약 (~80자)",

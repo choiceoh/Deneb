@@ -75,6 +75,7 @@ type wikiUpdate struct {
 	Supersedes flexStringList `json:"supersedes"` // relPath(s) of existing page(s) this update REPLACES; accepts a string or an array (the LLM emits both, and an array used to fail synthesis parsing)
 	Resource   string         `json:"resource"`   // OKF resource: stable URI/id of the concept's underlying asset (gmail thread, deal ref, calendar event, file path); empty for abstract concepts
 	Cues       flexStringList `json:"cues"`       // recall entry points: alternate Korean phrasings a future query might use (synonyms/aliases/question forms NOT already on the page) — indexed for search, never rendered as content
+	Sites      flexStringList `json:"sites"`      // 프로젝트 현장 (canonical "광역약칭 시/군 읍/면/동 [리]"); matching keys for recall anchor + meeting harvest — 프로젝트 대표페이지 전용
 }
 
 // parseWikiUpdates parses the synthesis response array leniently: one malformed
@@ -271,6 +272,7 @@ func buildWikiSynthesisPrompt(indexContent, processedHistory, polarisSection, di
 - related: 의미적으로 관련된 기존 위키 페이지 경로 목록 (인덱스에서 선택)
 - resource: 이 개념의 근거가 되는 실제 자산의 안정 식별자/URI (예: gmail 스레드 id, 거래 ref, 캘린더 이벤트, 파일 경로). 다음 세션이 원본으로 바로 점프하게. 추상 개념이면 생략
 - cues: 이 문서를 나중에 다시 찾을 때 질문에 나올 법한 **검색 진입 표현** 2~5개 (동의어·별칭·다른 관점의 명사 — 제목/본문/tags에 **이미 있는 단어는 넣지 마라**; 예: 본문이 "선수금"이면 cues는 ["계약금", "착수금"]). 검색 전용이라 본문에 안 보인다. 마땅한 게 없으면 생략
+- sites: **프로젝트 대표페이지 전용** — 현장 위치를 고정 규칙 "광역약칭 시/군 읍/면/동 [리]"로 (예: "전북 군산시 옥구읍 수산리"; 공백 구분·번지/마침표 금지·광역은 약칭). 일지·메일에서 현장이 확인되면 기입/갱신, 복수 현장은 배열로. 불확실하면 생략(추측 금지)
 - 업데이트가 불필요하면 빈 배열 [] 반환
 
 JSON 배열만 반환하세요. 다른 텍스트 없이.`, indexContent, processedHistory, polarisSection, diaryContent)
@@ -413,6 +415,9 @@ func (wd *WikiDreamer) applyUpdates(_ context.Context, updates []wikiUpdate) (cr
 			if len(u.Cues) > 0 {
 				page.Meta.Cues = u.Cues
 			}
+			if len(u.Sites) > 0 {
+				page.Meta.Sites = normalizeSites(u.Sites)
+			}
 			if u.Content != "" {
 				page.Body = u.Content
 			} else {
@@ -471,6 +476,9 @@ func (wd *WikiDreamer) applyUpdates(_ context.Context, updates []wikiUpdate) (cr
 					}
 					if len(u.Cues) > 0 {
 						page.Meta.Cues = u.Cues
+					}
+					if len(u.Sites) > 0 {
+						page.Meta.Sites = normalizeSites(u.Sites)
 					}
 					page.Body = u.Content
 					createdThis = true

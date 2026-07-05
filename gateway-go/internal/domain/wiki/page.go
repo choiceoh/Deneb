@@ -88,7 +88,16 @@ type Frontmatter struct {
 	// `resource` field. It lets the agent jump from a wiki concept straight to
 	// its live source instead of re-deriving it; empty for abstract concepts
 	// with no backing asset.
-	Resource   string
+	Resource string
+	// Sites are the project's 현장 locations as canonical administrative paths —
+	// "광역약칭 시/군 읍/면/동 [리]" (e.g. "전북 군산시 옥구읍 수산리"), space-
+	// separated, no lot numbers, province abbreviated (전라북도→전북; see
+	// normalizeSiteName). A solar project's real identity IS its site: calendar
+	// events and mail refer to places ("수산리 현장") more often than to project
+	// titles, so sites are matching keys for the recall project anchor and the
+	// meeting harvest. Multiple entries for multi-site projects (물류센터 3개소).
+	// Project 대표페이지 only; empty elsewhere.
+	Sites      []string
 	Created    string  // YYYY-MM-DD
 	Updated    string  // YYYY-MM-DD
 	Due        string  // YYYY-MM-DD — upcoming deadline (payment due, delivery, milestone); empty if none
@@ -158,6 +167,9 @@ func (p *Page) Render() []byte {
 	}
 	if p.Meta.Resource != "" {
 		buf.WriteString("resource: " + sanitizeScalar(p.Meta.Resource) + "\n")
+	}
+	if sites := normalizeSites(p.Meta.Sites); len(sites) > 0 {
+		buf.WriteString("sites: [" + strings.Join(sanitizeFlowItems(sites), ", ") + "]\n")
 	}
 	if p.Meta.Created != "" {
 		buf.WriteString("created: " + sanitizeScalar(p.Meta.Created) + "\n")
@@ -554,6 +566,8 @@ func parseFrontmatterFields(raw string) Frontmatter {
 			fm.Cues = parseFlowArray(val)
 		case "resource":
 			fm.Resource = val
+		case "sites":
+			fm.Sites = normalizeSites(parseFlowArray(val))
 		case "created":
 			fm.Created = val
 		case "updated":
@@ -573,6 +587,47 @@ func parseFrontmatterFields(raw string) Frontmatter {
 		}
 	}
 	return fm
+}
+
+// provinceAbbrev collapses full 광역 names to the fixed abbreviations the site
+// convention uses, so "전라북도 군산시…" and "전북 군산시…" are one value.
+var provinceAbbrev = map[string]string{
+	"전라북도": "전북", "전북특별자치도": "전북",
+	"전라남도": "전남", "경상북도": "경북", "경상남도": "경남",
+	"충청북도": "충북", "충청남도": "충남",
+	"강원도": "강원", "강원특별자치도": "강원",
+	"경기도": "경기", "제주도": "제주", "제주특별자치도": "제주",
+	"서울특별시": "서울", "부산광역시": "부산", "대구광역시": "대구",
+	"인천광역시": "인천", "광주광역시": "광주", "대전광역시": "대전",
+	"울산광역시": "울산", "세종특별자치시": "세종",
+}
+
+// normalizeSiteName enforces the site writing convention on one entry: trim,
+// collapse whitespace, drop a trailing period, abbreviate the leading province.
+func normalizeSiteName(s string) string {
+	s = strings.Join(strings.Fields(strings.TrimSuffix(strings.TrimSpace(s), ".")), " ")
+	if s == "" {
+		return ""
+	}
+	first, rest, cut := strings.Cut(s, " ")
+	if abbr, ok := provinceAbbrev[first]; ok {
+		if cut {
+			return abbr + " " + rest
+		}
+		return abbr
+	}
+	return s
+}
+
+// normalizeSites applies the convention to a list, dropping empties.
+func normalizeSites(sites []string) []string {
+	var out []string
+	for _, s := range sites {
+		if n := normalizeSiteName(s); n != "" {
+			out = append(out, n)
+		}
+	}
+	return out
 }
 
 // normalizeCategory collapses a category value that leaked a wikilink form down
