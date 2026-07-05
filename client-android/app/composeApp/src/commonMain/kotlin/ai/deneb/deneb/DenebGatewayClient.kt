@@ -1799,6 +1799,11 @@ class DenebGatewayClient(
                                                     }
                                                     runCatching {
                                                         readWorkUsageDigest()?.let { digest ->
+                                                            // Re-arm the periodic throttle — this push is fresh, so
+                                                            // the next scheduled forward would only repeat it. Benign
+                                                            // race with the sync coroutine (worst case: one redundant
+                                                            // forward, same as without the re-arm).
+                                                            lastUsageForward = TimeSource.Monotonic.markNow()
                                                             ingestEvent("usage_update", "앱 사용 리듬", digest)
                                                         }
                                                     }
@@ -2188,6 +2193,5 @@ class DenebGatewayClient(
         // enough that phone_read has a recent fix, sparse enough to spare the battery;
         // the gateway treats a cache older than ~30min as stale and does a live read.
         val LOCATION_FORWARD_INTERVAL = 10.minutes
-
     }
 }
