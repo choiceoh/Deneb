@@ -34,6 +34,14 @@
 
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- Android assist gesture (홈버튼 길게 누르기 / 사이드 버튼): lets the user set
+                 Deneb as the device assist app so the OS-level "call your assistant"
+                 gesture opens the 업무 chat. Handled in MainActivity.handleDeepLinkIntent. -->
+            <intent-filter>
+                <action android:name="android.intent.action.ASSIST" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
             <!-- Share-sheet capture: receive text shared from any app into the Deneb chat. -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />

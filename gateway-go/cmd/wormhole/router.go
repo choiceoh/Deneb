@@ -457,6 +457,10 @@ func (rt *router) serve(w http.ResponseWriter, r *http.Request, proto, pathSuffi
 			out = rewritten
 		}
 	}
+	// Image parts bound for a text-only upstream (GLM text models 400 on them and
+	// the failure repeats every later turn) are stripped to text stubs. No-op —
+	// byte-identical — for image-capable models and image-free requests (APC).
+	out = rt.applyVisionGate(entry, out, proto)
 	if rt.cur().cfg.effortRoutingOn() {
 		// X-Wormhole-No-Effort suppresses CLASSIFIER thinking routing (the gateway
 		// owns that and its prefix cache) but not a static "off" entry — the caller
@@ -498,6 +502,7 @@ func (rt *router) serveAuto(client clientInfo, w http.ResponseWriter, r *http.Re
 		if rewritten, rerr := rewriteModel(body, entry.UpstreamModel); rerr == nil {
 			out = rewritten
 		}
+		out = rt.applyVisionGate(entry, out, proto) // per-candidate: capabilities differ
 		if rt.cur().cfg.effortRoutingOn() {
 			out = rt.applyThinking(entry, out, noEffortRouting(r))
 			out = rt.applyReasoning(entry, out)
