@@ -71,7 +71,7 @@ func TestPhoneWrite_LegacyNamesRouteToAppActions(t *testing.T) {
 	if rec.action != "notify" || rec.args["title"] != "회의" || rec.args["text"] != "10분 후 시작" {
 		t.Fatalf("notification not routed to notify action: %q %v", rec.action, rec.args)
 	}
-	if !strings.Contains(out, "dispatched") {
+	if !strings.Contains(out, "launched on device") {
 		t.Errorf("unexpected reply: %q", out)
 	}
 

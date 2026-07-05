@@ -2,7 +2,9 @@ package tools
 
 import (
 	"context"
+	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -117,5 +119,18 @@ func TestDispatchPhoneAction(t *testing.T) {
 	}
 	if called {
 		t.Error("sender must not be called for a disallowed action")
+	}
+
+	// Unconfirmed dispatch (no execution report in time) degrades to a
+	// cautionary success — never an error that baits a duplicate retry.
+	unconfirmed := func(context.Context, string, map[string]string) error {
+		return fmt.Errorf("%w: no report", ErrPhoneActionUnconfirmed)
+	}
+	out, err = dispatchPhoneAction(ctx, unconfirmed, phoneWriteParams{To: "timer", Target: "10m"})
+	if err != nil {
+		t.Fatalf("unconfirmed must not surface as an error: %v", err)
+	}
+	if !strings.Contains(out, "did not confirm") {
+		t.Errorf("unconfirmed message should warn about missing confirmation, got %q", out)
 	}
 }

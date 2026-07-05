@@ -129,6 +129,12 @@ type Server struct {
 	// in New so it's non-nil before any handler or relay touches it.
 	pushHub *clientPushHub
 
+	// phoneActions correlates dispatched phone_write actions with the app's
+	// execution reports (phone_action_result events) so the tool can return
+	// confirmed/failed/unconfirmed instead of fire-and-forget. Created in New
+	// alongside pushHub. See server_phone_action.go.
+	phoneActions *phoneActionAwaiter
+
 	// fleetAlerts dedups SparkFleet webhook alerts so a standing condition (e.g.
 	// "low memory headroom: srv2" re-emitted every heartbeat) does not push the
 	// same notification to the operator's phone every few minutes. See
@@ -301,6 +307,7 @@ func New(addr string, opts ...Option) (*Server, error) {
 		version:             "0.1.0-go",
 		logger:              slog.Default(),
 		pushHub:             newClientPushHub(),
+		phoneActions:        newPhoneActionAwaiter(),
 		fleetAlerts:         newFleetAlertGate(),
 		SessionManager: &SessionManager{
 			sessions:       session.NewManager(),

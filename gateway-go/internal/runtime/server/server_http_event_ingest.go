@@ -242,6 +242,28 @@ func (s *Server) ingestPhoneEventAsync(eventType, source, text string) {
 		recordPhoneUsage(s.logger, text)
 		return
 	}
+	// phone_action_result: the app's execution report for a dispatched phone_write
+	// action. Pure correlation data — resolve the waiting dispatch (server_phone_action.go)
+	// and return; never a judgment turn. source carries the action name for the log.
+	if strings.EqualFold(strings.TrimSpace(eventType), "phone_action_result") {
+		var res phoneActionResult
+		if err := json.Unmarshal([]byte(text), &res); err != nil {
+			s.logger.Warn("phone_action_result: malformed payload", "source", source, "error", err)
+			return
+		}
+		if res.ID == "" {
+			s.logger.Warn("phone_action_result: missing id", "source", source, "ok", res.OK)
+			return
+		}
+		if !s.phoneActions.resolve(res) {
+			// Late (dispatch already timed out and told the agent "unconfirmed")
+			// or the gateway restarted in between. The outcome still gets logged
+			// so the operator can see the action did (or didn't) run.
+			s.logger.Info("phone_action_result: no waiter (late report)",
+				"source", source, "id", res.ID, "ok", res.OK)
+		}
+		return
+	}
 	// Gmail notifications are dropped before the judgment turn: the gateway's own
 	// gmail-poll pipeline already analyzes that inbox and posts the authoritative
 	// mail_report work-feed card, so a phone-driven judgment turn over the same mail

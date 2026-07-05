@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 	"regexp"
@@ -12,10 +13,25 @@ import (
 
 // PhoneActionFunc delivers a structured phone action to the native app for
 // in-app Intent execution — the SSH/Termux-free path (RFC: phone-action). The
-// server wires this to the existing push channel (SSE foreground / FCM data
-// background); nil means no app channel, so the action is reported unavailable
-// rather than silently dropped.
+// server wires this to the app's live SSE push channel (SSE only — the FCM
+// data fallback does not carry phone actions, so a fully backgrounded phone
+// errors instead of executing late); nil means no app channel, so the action
+// is reported unavailable rather than silently dropped.
+//
+// Result contract: a nil error means the app CONFIRMED execution (it reported
+// the intent launched); a returned error wrapping ErrPhoneActionUnconfirmed
+// means the frame was delivered but no execution report arrived in time —
+// dispatched, outcome unknown; any other error is a real failure (no app
+// connected, or the app reported the action failed).
 type PhoneActionFunc func(ctx context.Context, action string, args map[string]string) error
+
+// ErrPhoneActionUnconfirmed marks the fail-open outcome of a phone action
+// dispatch: the frame reached the push channel but the app did not report an
+// execution result within the wait window (backgrounded phone, or an app
+// build that predates result reporting). Not a failure — the action may still
+// execute late — so the tool converts it to a cautionary success message
+// instead of an error that would bait the model into a duplicate retry.
+var ErrPhoneActionUnconfirmed = errors.New("phone action execution not confirmed")
 
 // phoneWriteParams is the phone_write tool input. `to` selects the operation:
 // the app-permission ops (notify/speak/clipboard) run via platform services;
@@ -172,7 +188,10 @@ func parseTimerSeconds(s string) (int, error) {
 }
 
 // dispatchPhoneAction validates and delivers a P1 action via the injected
-// sender, returning the agent-facing result string.
+// sender, returning the agent-facing result string. Three outcomes per the
+// PhoneActionFunc contract: confirmed executed (nil), dispatched-unconfirmed
+// (ErrPhoneActionUnconfirmed → cautionary success, never a retry bait), or a
+// real failure (error).
 func dispatchPhoneAction(ctx context.Context, send PhoneActionFunc, p phoneWriteParams) (string, error) {
 	action, args, err := buildPhoneAction(p)
 	if err != nil {
@@ -182,7 +201,19 @@ func dispatchPhoneAction(ctx context.Context, send PhoneActionFunc, p phoneWrite
 		return "", fmt.Errorf("phone action %q unavailable: native app channel not wired", action)
 	}
 	if err := send(ctx, action, args); err != nil {
-		return "", fmt.Errorf("phone action %q delivery failed: %w", action, err)
+		if errors.Is(err, ErrPhoneActionUnconfirmed) {
+			return fmt.Sprintf("phone action %s dispatched to app, but the app did not confirm execution in time — it may still run late. Do NOT retry (risk of duplicates); tell the user to check the phone.", action), nil
+		}
+		// Neutral prefix: err covers both delivery failures (no app connected)
+		// and device-reported execution failures ("failed on the device").
+		return "", fmt.Errorf("phone action %q failed: %w", action, err)
 	}
-	return fmt.Sprintf("phone action dispatched to app: %s", action), nil
+	// "launched", not "executed/completed": the app's ok=true means the intent
+	// (or in-app service call) launched. For message/dial that opens the
+	// composer/dialer with the content prefilled — nothing is auto-sent.
+	note := ""
+	if action == "message" || action == "dial" {
+		note = " (composer/dialer opened with the content prefilled — the user confirms sending on the phone)"
+	}
+	return fmt.Sprintf("phone action launched on device: %s%s", action, note), nil
 }

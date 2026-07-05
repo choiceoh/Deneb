@@ -1845,7 +1845,25 @@ class DenebGatewayClient(
                                                     }
                                                 }
                                             } else if (action.isNotBlank()) {
-                                                runCatching { executePhoneAction(action, p.data) }
+                                                val ok = runCatching { executePhoneAction(action, p.data) }
+                                                    .getOrDefault(false)
+                                                // Report the outcome back so the gateway's phone_write
+                                                // dispatch (waiting briefly on ref) can tell the agent
+                                                // the intent actually launched — delivery ≠ execution.
+                                                if (p.ref.isNotBlank()) {
+                                                    scope.launch {
+                                                        runCatching {
+                                                            ingestEvent(
+                                                                "phone_action_result",
+                                                                action,
+                                                                buildJsonObject {
+                                                                    put("id", p.ref)
+                                                                    put("ok", ok)
+                                                                }.toString(),
+                                                            )
+                                                        }
+                                                    }
+                                                }
                                             }
                                         } else if (p.body.isNotBlank()) {
                                             syncNativeStateAsync()
@@ -2055,12 +2073,15 @@ class DenebGatewayClient(
     // A proactive frame off the events stream. kind="phone_action" marks a command
     // the gateway's phone_write tool dispatched (server: pushKindPhoneAction) for
     // in-app Intent execution — data carries "action" plus its args (url/package/
-    // number/text/to) — rather than a {title, body} notification to surface.
+    // number/text/to) — rather than a {title, body} notification to surface. ref
+    // carries the dispatch id: the gateway waits briefly on it, so the executor
+    // reports the execution result back via a phone_action_result ingest event.
     @Serializable
     private data class PushEvent(
         val title: String = "",
         val body: String = "",
         val kind: String = "",
+        val ref: String = "",
         val data: Map<String, String> = emptyMap(),
     )
 
