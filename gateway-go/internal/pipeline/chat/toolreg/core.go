@@ -71,6 +71,63 @@ func RegisterCoreTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDep
 		})
 	}
 
+	// Work-feed browse/settle: the agent's read surface over its OWN proactive
+	// cards (native-sync-teeing wrapper, so agent reads/acks mirror to the
+	// phone). Deferred — needed only when reviewing past nudges. nil = feed off.
+	if deps.WorkFeedRW != nil {
+		registry.RegisterTool(toolctx.ToolDef{
+			Name:        "workfeed",
+			Description: "능동 업무 피드(내가 보낸 알림 카드)를 조회·정리한다 — '이번 주 능동 알림 뭐 보냈지'·'미응답 질문 카드 있나'·'그 카드 처리됐다고 표시해줘'에 사용. action=list(미처리 카드 목록) | read(id로 본문 — 열람 표시 겸함) | ack(처리 완료 표시). 집계 통계는 observe action=proactive.",
+			InputSchema: workfeedToolSchema(),
+			Fn:          tools.ToolWorkFeed(deps.WorkFeedRW),
+			Deferred:    true,
+		})
+	}
+
+	// Audio transcription: resident VibeVoice-ASR sidecar over a file on disk.
+	// Deferred — capture RPCs cover app-shared audio; this is for files the
+	// agent encounters itself (downloads, exec artifacts, file store).
+	registry.RegisterTool(toolctx.ToolDef{
+		Name:        "transcribe",
+		Description: "디스크의 오디오 파일(회의 녹음·음성 메모, m4a/mp3/oga/wav 등 최대 60분)을 화자분리+타임스탬프로 전사한다 — '이 녹음 정리해줘'에 사용. hotwords로 거래처·인명 교정 힌트 추가 가능(주소록/위키 힌트 자동 병합). 앱에서 공유된 오디오는 이미 자동 전사되므로 이 도구는 경로로 받은 파일용.",
+		InputSchema: transcribeToolSchema(),
+		Fn:          tools.ToolTranscribe(deps.AsrHotwords),
+		Deferred:    true,
+	})
+
+	// Document/image text extraction over a file on disk (PaddleOCR-VL +
+	// tesseract fallback; born-digital PDFs via pdftotext). Deferred.
+	registry.RegisterTool(toolctx.ToolDef{
+		Name:        "ocr",
+		Description: "디스크의 이미지·스캔 PDF·오피스 문서에서 텍스트를 추출한다(OCR) — 영수증 사진·스캔 계약서·팩스 PDF를 읽어야 할 때 사용. read 도구는 바이너리를 그대로 덤프하므로 이미지/스캔물은 반드시 이 도구로. 파일스토어 파일은 files action=analyze로도 가능.",
+		InputSchema: ocrToolSchema(),
+		Fn:          tools.ToolOCR(),
+		Deferred:    true,
+	})
+
+	// Market quotes: same cache as the miniapp 오늘 dashboard (원/달러·코스피·
+	// WTI·구리, 10m TTL). Deferred; nil = dashboard cache not wired.
+	if deps.MarketSummary != nil {
+		registry.RegisterTool(toolctx.ToolDef{
+			Name:        "market",
+			Description: "시장 시세 스냅샷 — 원/달러 환율·코스피·WTI 유가·구리(LME) 현재가와 전일 대비 등락. '환율 지금 얼마'·'구리 시세 어때' 류 질문에 사용. 인자 없음, 10분 캐시.",
+			InputSchema: marketToolSchema(),
+			Fn:          tools.ToolMarket(tools.MarketSummaryFunc(deps.MarketSummary)),
+			Deferred:    true,
+		})
+	}
+
+	// Org chart (read-only): the operator-curated group→company→team tree with
+	// 직급/직책. Deferred; loads {stateDir}/org.json on demand — empty file just
+	// reports unset, so no dep/nil-guard needed.
+	registry.RegisterTool(toolctx.ToolDef{
+		Name:        "org",
+		Description: "조직도 조회(읽기 전용) — '1팀 팀장 누구'·'회사 조직 어떻게 되지'·직급/직책 확인에 사용. query로 사람/팀/회사 이름 검색, 생략 시 전체 트리. 연락처(전화/메일)는 contacts 도구.",
+		InputSchema: orgToolSchema(),
+		Fn:          tools.ToolOrg(),
+		Deferred:    true,
+	})
+
 	// NOTE: Pilot tool is registered separately by chat.RegisterCoreTools
 	// because it depends on local AI hooks that live in the chat package.
 	// NOTE: fetch_tools is registered by chat.RegisterCoreTools because it
