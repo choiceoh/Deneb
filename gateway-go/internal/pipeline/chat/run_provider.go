@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelcaps"
@@ -11,9 +12,16 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/provider"
 )
 
+// runtimeAuthTimeout bounds the provider runtime auth call (token exchange —
+// a network round-trip) on the client-resolve path. Derived from the request
+// ctx so a canceled turn does not leave an orphaned exchange in flight.
+const runtimeAuthTimeout = 15 * time.Second
+
 // resolveClient creates an LLM client from provider configs, auth manager,
 // provider runtime resolver, or falls back to the pre-configured client.
-func resolveClient(deps runDeps, providerID string, logger *slog.Logger) *llm.Client {
+// ctx is the turn's request context; runtime auth (token exchange) is bounded
+// by runtimeAuthTimeout under it.
+func resolveClient(ctx context.Context, deps runDeps, providerID string, logger *slog.Logger) *llm.Client {
 	// 1. Try provider config from deneb.json.
 	if deps.providerConfigs != nil && providerID != "" {
 		if cfg, ok := deps.providerConfigs[providerID]; ok {
@@ -25,13 +33,15 @@ func resolveClient(deps runDeps, providerID string, logger *slog.Logger) *llm.Cl
 
 			// Apply provider runtime auth override (e.g., token exchange).
 			if deps.providerRuntime != nil && providerID != "" {
+				authCtx, authCancel := context.WithTimeout(ctx, runtimeAuthTimeout)
 				authResult, err := deps.providerRuntime.PrepareRuntimeAuth(
-					context.Background(), providerID,
+					authCtx, providerID,
 					provider.RuntimeAuthContext{
 						Provider: providerID,
 						APIKey:   apiKey,
 					},
 				)
+				authCancel()
 				if err != nil {
 					logger.Warn("provider runtime auth failed", "provider", providerID, "error", err)
 				} else if authResult != nil {
@@ -90,13 +100,15 @@ func resolveClient(deps runDeps, providerID string, logger *slog.Logger) *llm.Cl
 
 			// Apply provider runtime auth override on auth-manager credentials.
 			if deps.providerRuntime != nil {
+				authCtx, authCancel := context.WithTimeout(ctx, runtimeAuthTimeout)
 				authResult, err := deps.providerRuntime.PrepareRuntimeAuth(
-					context.Background(), target,
+					authCtx, target,
 					provider.RuntimeAuthContext{
 						Provider: target,
 						APIKey:   apiKey,
 					},
 				)
+				authCancel()
 				if err != nil {
 					logger.Warn("provider runtime auth failed", "provider", target, "error", err)
 				} else if authResult != nil {

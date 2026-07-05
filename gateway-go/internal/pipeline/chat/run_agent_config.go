@@ -160,6 +160,13 @@ func buildAgentConfig(
 	var nudgerMu sync.Mutex
 	var nudgerActivities []SkillNudgeToolActivity
 	var nudgerTurns int
+	// Nudger reviews are background work that may outlive the turn, so they
+	// ride the server lifecycle ctx (canceled on shutdown, not on request
+	// completion) — concurrency.md rule 7. Background is the test-only fallback.
+	nudgeCtx := deps.callbacks.shutdownCtx
+	if nudgeCtx == nil {
+		nudgeCtx = context.Background()
+	}
 
 	cfg = agent.AgentConfig{
 		MaxTurns:         maxTurns,
@@ -219,7 +226,7 @@ func buildAgentConfig(
 				Model:          params.Model,
 			}
 			nudgerMu.Unlock()
-			acd.SkillNudger.OnToolCalls(context.Background(), params.SessionKey, len(activities), snapshot)
+			acd.SkillNudger.OnToolCalls(nudgeCtx, params.SessionKey, len(activities), snapshot)
 		},
 		// Inject a fresh TurnContext at the start of each turn so that tools
 		// executing in parallel within the same turn can share results via $ref.
