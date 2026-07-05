@@ -54,8 +54,8 @@ func recallPrimaryQuery(queries []string) string {
 
 // applyBroadeningPenalty demotes evidence found only by an individual
 // broadening term below combined-query hits (see the call site for rationale).
-// Rows tagged with the project-anchor sentinel keep their score: the anchor is
-// pinned structurally, not found by a term.
+// Rows tagged with an anchor sentinel (project/counterparty) keep their score:
+// anchors are pinned structurally, not found by a term.
 func applyBroadeningPenalty(evidence []recallEvidence, queries []string) {
 	primary := recallPrimaryQuery(queries)
 	if primary == "" {
@@ -63,7 +63,7 @@ func applyBroadeningPenalty(evidence []recallEvidence, queries []string) {
 	}
 	for i := range evidence {
 		q := evidence[i].Query
-		if q != "" && q != primary && q != recallProjectAnchorQuery {
+		if q != "" && q != primary && q != recallProjectAnchorQuery && q != recallCounterpartyAnchorQuery {
 			evidence[i].Score *= recallBroadeningPenalty
 		}
 	}

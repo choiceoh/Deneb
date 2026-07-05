@@ -187,6 +187,56 @@ func TestPageConnections(t *testing.T) {
 	}
 }
 
+// TestGraphContext_ProjectFamilyEdges verifies that pages sharing a project
+// folder connect with no explicit link (the 2026-07 orphan class: 로그/기자재
+// invisible to GraphContext), and that raw mail-analysis pages join weaker
+// than curated slots.
+func TestGraphContext_ProjectFamilyEdges(t *testing.T) {
+	dir := t.TempDir()
+	store, err := NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	mustWrite(t, store, "프로젝트/영산고/대표.md", &Page{
+		Meta: Frontmatter{Title: "영산고", Summary: "지붕 태양광"},
+		Body: "개요.",
+	})
+	mustWrite(t, store, "프로젝트/영산고/로그.md", &Page{
+		Meta: Frontmatter{Title: "진행 기록"},
+		Body: "2026-06 착공.",
+	})
+	mustWrite(t, store, "프로젝트/영산고/기자재/케이블.md", &Page{
+		Meta: Frontmatter{Title: "XLPE 케이블"},
+		Body: "500m 발주분.",
+	})
+	mustWrite(t, store, "프로젝트/영산고/메일분석/m1.md", &Page{
+		Meta: Frontmatter{Title: "발주 확인 요청"},
+		Body: "수신 확인 바랍니다.",
+	})
+	// Another project's page must not join the family.
+	mustWrite(t, store, "프로젝트/무안군청/대표.md", &Page{
+		Meta: Frontmatter{Title: "무안군청", Summary: "관공서 발주"},
+		Body: "별건.",
+	})
+
+	got, err := store.GraphContext(context.Background(), "영산고", 8)
+	if err != nil {
+		t.Fatalf("GraphContext: %v", err)
+	}
+	for _, want := range []string{"진행 기록 (로그)", "XLPE 케이블 (기자재)", "발주 확인 요청 (메일)"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("family neighbor %q missing:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "무안군청") {
+		t.Errorf("other project leaked into family:\n%s", got)
+	}
+	// Curated slots (1.0) rank above raw mail analyses (0.6).
+	if strings.Index(got, "XLPE 케이블") > strings.Index(got, "발주 확인 요청") {
+		t.Errorf("mail analysis outranked curated slot:\n%s", got)
+	}
+}
+
 // TestSemanticNeighborLabel pins the deterministic path/category → kind rules:
 // 프로젝트/ layout slots are authoritative, other pages fall back to category
 // then top-level folder, and meaningless kinds (기타, root files) return "".

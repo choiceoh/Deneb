@@ -291,6 +291,28 @@ func (s *Store) graphScoreMap(ctx context.Context, query string, includeMentions
 		}
 	}
 
+	// Layout-family edges: pages in one project folder are related by
+	// construction (대표/로그/기자재/메일분석 slots of the same project), yet often
+	// nothing links them explicitly — the dominant orphan class in the 2026-07
+	// audit (로그.md and 기자재 pages invisible to GraphContext). The folder
+	// already encodes the relation, so count it as a real edge: curated slots
+	// rank like authored links, while raw mail-analysis pages join weaker so a
+	// mail-heavy project cannot crowd curated neighbors out of the top-N.
+	if folder, ok := ProjectFolderOf(recs[seed].relPath); ok {
+		for i := range recs {
+			if i == seed {
+				continue
+			}
+			if f, ok2 := ProjectFolderOf(recs[i].relPath); ok2 && f == folder {
+				score := 1.0
+				if IsMailAnalysisPath(recs[i].relPath) {
+					score = 0.6
+				}
+				bump(i, score, "같은 프로젝트")
+			}
+		}
+	}
+
 	// Shared-tag edges.
 	seedTags := make(map[string]bool, len(recs[seed].tags))
 	for _, t := range recs[seed].tags {
