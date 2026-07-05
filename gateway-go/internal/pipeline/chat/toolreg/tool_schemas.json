@@ -483,7 +483,9 @@
           "config.get",
           "config.schema.lookup",
           "config.apply",
-          "config.patch"
+          "config.apply.confirmed",
+          "config.patch",
+          "config.patch.confirmed"
         ]
       },
       "path": {

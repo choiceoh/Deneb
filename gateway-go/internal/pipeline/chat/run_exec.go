@@ -274,6 +274,7 @@ func executeAgentRun(
 		fellBack:       fellBack,
 		effortRt:       effortRt,
 		effortDecision: effortDecision,
+		execStats:      execStats,
 		runStart:       runStart,
 		agentStart:     agentStart,
 		execStats:      execStats,
@@ -295,6 +296,7 @@ type runCompletionRecord struct {
 	fellBack       bool
 	effortRt       *effortRoute
 	effortDecision string
+	execStats      *toolctx.ToolExecStats
 	runStart       time.Time
 	agentStart     time.Time
 	execStats      *toolctx.ToolExecStats
@@ -417,7 +419,7 @@ func recordRunCompletion(rec runCompletionRecord, logger *slog.Logger) {
 		Proactive:           params.AutoDeliveredOutput || params.EphemeralUser,
 		EffortDecision:      effortDecision,
 		EffortEscalated:     effortRt != nil && effortRt.escalated,
-		RepairedToolCalls:   execStats.RepairedCounts(),
+		RepairedToolCalls:   rec.execStats.RepairedCounts(),
 	})
 
 	// Engine-side APC sample → run.cache event (async, best-effort). The vLLM

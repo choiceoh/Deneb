@@ -447,7 +447,7 @@ func gatewayToolSchema() map[string]any {
 			"action": map[string]any{
 				"type":        "string",
 				"description": "Gateway action. config_get/config_set: read or write a single dotted path. config.get: full config snapshot. config.apply: replace the whole config. config.patch: merge a patch object. config.schema.lookup: schema for a path. Destructive actions (restart/update/config_set/config.apply/config.patch) require approval: the first call returns a needs_approval envelope; after the user confirms, call the .confirmed variant with the same action_token.",
-				"enum":        []string{"status", "config_get", "config_set", "config_set.confirmed", "update", "update.confirmed", "restart", "restart.confirmed", "config.get", "config.schema.lookup", "config.apply", "config.patch"},
+				"enum":        []string{"status", "config_get", "config_set", "config_set.confirmed", "update", "update.confirmed", "restart", "restart.confirmed", "config.get", "config.schema.lookup", "config.apply", "config.apply.confirmed", "config.patch", "config.patch.confirmed"},
 			},
 			"action_token": map[string]any{
 				"type":        "string",

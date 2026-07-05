@@ -4,11 +4,29 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/filestore"
 )
+
+// send_file must refuse credential/control-plane paths outright — delivery
+// exfiltrates the bytes off-box, so it inherits the fs tools' protected-path
+// safeguard. The guard fires before stat/size/channel checks.
+func TestSendFile_RejectsProtectedPaths(t *testing.T) {
+	fn := ToolSendFile()
+	for _, path := range []string{
+		"/home/user/.deneb/credentials/gmail.json",
+		"/home/user/.deneb/deneb.json",
+		"/home/user/.ssh/id_ed25519",
+	} {
+		out, err := fn(context.Background(), []byte(`{"file_path":`+strconv.Quote(path)+`}`))
+		if err == nil || !strings.Contains(err.Error(), "protected") {
+			t.Errorf("%s: expected protected-path rejection, got out=%q err=%v", path, out, err)
+		}
+	}
+}
 
 func TestArchiveSentFile_PersistsToStore(t *testing.T) {
 	t.Setenv("DENEB_FILES_DIR", t.TempDir()) // redirect the store off the real ~/.deneb
