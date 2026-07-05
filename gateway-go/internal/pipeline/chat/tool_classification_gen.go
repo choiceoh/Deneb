@@ -4,14 +4,6 @@
 
 package chat
 
-// mutatingTools are tools that change the filesystem or run commands.
-// When a run uses these, it likely needs a verification follow-up.
-var mutatingTools = map[string]struct{}{
-	"edit":  {},
-	"exec":  {},
-	"write": {},
-}
-
 // toolCompressSkipSet contains tools whose output should not be compressed.
 // Structured-output tools are already handled by post-processors.
 // Internal / already-small tools add no compression value.
