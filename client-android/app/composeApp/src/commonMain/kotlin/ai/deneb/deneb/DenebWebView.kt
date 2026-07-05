@@ -24,6 +24,10 @@ class DenebWebViewState(initialUrl: String) {
     var currentUrl by mutableStateOf(initialUrl)
         internal set
 
+    /** The page title reported by the platform WebView, used for bookmarks. */
+    var pageTitle by mutableStateOf("")
+        internal set
+
     var canGoBack by mutableStateOf(false)
         internal set
 

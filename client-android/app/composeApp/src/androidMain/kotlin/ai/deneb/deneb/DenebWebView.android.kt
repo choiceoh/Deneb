@@ -1,6 +1,7 @@
 package ai.deneb.deneb
 
 import android.annotation.SuppressLint
+import android.graphics.Bitmap
 import android.os.Handler
 import android.os.Looper
 import android.webkit.JavascriptInterface
@@ -53,6 +54,14 @@ actual fun DenebWebView(
                 web.settings.domStorageEnabled = true
                 web.addJavascriptInterface(TranslateBridge(scope, translate, holder), BRIDGE_NAME)
                 web.webViewClient = object : WebViewClient() {
+                    override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
+                        state.currentUrl = url
+                        state.pageTitle = ""
+                        state.loading = true
+                        state.canGoBack = view.canGoBack()
+                        state.canGoForward = view.canGoForward()
+                    }
+
                     override fun onPageFinished(view: WebView, url: String) {
                         state.currentUrl = url
                         state.canGoBack = view.canGoBack()
@@ -66,6 +75,10 @@ actual fun DenebWebView(
                     }
                 }
                 web.webChromeClient = object : WebChromeClient() {
+                    override fun onReceivedTitle(view: WebView, title: String?) {
+                        state.pageTitle = title.orEmpty()
+                    }
+
                     override fun onProgressChanged(view: WebView, newProgress: Int) {
                         state.progress = newProgress
                         state.loading = newProgress < 100
