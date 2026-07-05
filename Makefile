@@ -16,7 +16,12 @@
 # Version from git tags (release-please format: deneb-vX.Y.Z), injected via ldflags.
 # Uses the latest deneb-v* tag by version sort, regardless of current branch ancestry.
 DENEB_VERSION := $(shell git tag --sort=-v:refname --list 'deneb-v*' 2>/dev/null | head -1 | sed 's/^deneb-v//')
-GO_LDFLAGS := -ldflags '-s -w -X main.Version=$(DENEB_VERSION)'
+# Build timestamp for the downgrade guard's same-version tiebreak: two builds
+# can carry the same tag version (every deploy between releases does), so the
+# guard needs a monotonic-ish stamp to spot a stale-checkout build whose TAGS
+# are current but whose CODE is old.
+DENEB_BUILD_UNIX := $(shell date +%s)
+GO_LDFLAGS := -ldflags '-s -w -X main.Version=$(DENEB_VERSION) -X github.com/choiceoh/deneb/gateway-go/internal/runtime/bootstrap.BuildUnix=$(DENEB_BUILD_UNIX)'
 
 # DGX Spark unified-memory guard for the Go toolchain.
 #

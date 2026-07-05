@@ -79,6 +79,14 @@ restart_with_systemd() {
         return 0
     fi
 
+    # If the OLD pid is still alive and healthy, the gateway most likely
+    # REFUSED the cutover (downgrade guard) — a fallback `systemctl restart`
+    # would kill the good process and boot the refused stale binary at the
+    # ExecStart path with no guard running. Stop here instead.
+    if [[ -n "$before_pid" && "$before_pid" != "0" ]] && kill -0 "$before_pid" 2>/dev/null && health_ok; then
+        echo "ERROR: old gateway (pid $before_pid) is still serving — SIGUSR1 was likely REFUSED by the downgrade guard. NOT falling back to a hard restart (it would boot the refused binary). journalctl에서 'restart REFUSED'를 확인하세요; 의도적 롤백은 DENEB_DEPLOY_FORCE=1." >&2
+        return 1
+    fi
     echo "WARN: health check after SIGUSR1/start failed; trying one direct restart" >&2
     systemctl --user restart "$GATEWAY_SERVICE"
     if wait_for_systemd_health 0; then
@@ -176,6 +184,42 @@ restart_remote() {
     fi
     echo "==> remote deploy → $remote:~/$dir/dist (build host $(hostname))"
     scp -q "$bin" "$remote:$dir/dist/deneb-gateway.new"
+    # PHASE 1 — sender-side downgrade gate on the staged .new, BEFORE anything
+    # else mutates the host (previously the gate ran after the skills rsync had
+    # already --delete-mirrored the build host's tree, so a refused stale deploy
+    # still left prod's skills catalog rewritten). The receiver's SIGUSR1 guard
+    # is the real wall — this fails fast with a clear message. A candidate that
+    # cannot answer --print-version is a pre-guard (stale) build: same handling,
+    # or a forced rollback to an old build would never mint the marker and a
+    # non-forced one would only fail after the 45s poll.
+    ssh "$remote" "PROD_PORT='$PROD_PORT' DIR='$dir' DENEB_DEPLOY_FORCE='${DENEB_DEPLOY_FORCE:-}' bash -s" <<'GATE'
+set -euo pipefail
+cd "$HOME/$DIR/dist"
+chmod +x deneb-gateway.new 2>/dev/null || true
+oldver=$(curl -sf -m 3 "http://127.0.0.1:$PROD_PORT/health" | tr ',' '\n' | grep '"version"' | head -1 | cut -d'"' -f4 || true)
+candout=$(./deneb-gateway.new --print-version 2>/dev/null || true)
+candver=$(printf '%s' "$candout" | awk '{print $1}')
+downgrade=""
+if [ -n "${oldver:-}" ]; then
+    if [ -z "${candver:-}" ]; then
+        downgrade="1" # version-less candidate = pre-guard build
+        candver="(no --print-version)"
+    elif [ "$candver" != "$oldver" ]; then
+        lower=$(printf '%s\n%s\n' "$oldver" "$candver" | sort -V | head -1)
+        [ "$lower" = "$candver" ] && downgrade="1"
+    fi
+fi
+if [ -n "$downgrade" ]; then
+    if [ "${DENEB_DEPLOY_FORCE:-}" = "1" ]; then
+        touch .allow-downgrade
+        echo "    ⚠ FORCED downgrade $oldver → $candver (.allow-downgrade 마커 설정 — 수신측 가드 1회 통과)" >&2
+    else
+        rm -f deneb-gateway.new
+        echo "ERROR: candidate version ($candver) is OLDER than running ($oldver) — stale checkout? 의도적 롤백은 DENEB_DEPLOY_FORCE=1" >&2
+        exit 1
+    fi
+fi
+GATE
     # Ship runtime-read repo files the gateway discovers from disk — the bundled
     # skills/ catalog — which the binary alone does NOT carry. Without this the
     # lean gateway host serves a frozen catalog: skills added after the host's
@@ -184,10 +228,12 @@ restart_remote() {
     # invisible because only the binary was shipped). Mirror the repo's skills/
     # so new skills are in place before the new binary starts and rediscovers the
     # catalog. --delete keeps it a true mirror (agent-authored skills live under
-    # the state dir ~/.deneb, not here, so nothing local is at risk).
+    # the state dir ~/.deneb, not here, so nothing local is at risk). Runs only
+    # after the gate passes so a refused deploy leaves the catalog untouched.
     echo "    syncing skills/ → $remote:~/$dir/skills"
     rsync -a --delete skills/ "$remote:$dir/skills/"
-    ssh "$remote" "GATEWAY_SERVICE='$GATEWAY_SERVICE' PROD_PORT='$PROD_PORT' DIR='$dir' DENEB_DEPLOY_FORCE='${DENEB_DEPLOY_FORCE:-}' bash -s" <<'REMOTE'
+    # PHASE 2 — cutover.
+    ssh "$remote" "GATEWAY_SERVICE='$GATEWAY_SERVICE' PROD_PORT='$PROD_PORT' DIR='$dir' bash -s" <<'REMOTE'
 set -euo pipefail
 cd "$HOME/$DIR/dist"
 cp -p deneb-gateway deneb-gateway.bak-prev 2>/dev/null || true
@@ -196,22 +242,6 @@ oldpid=$(systemctl --user show "$GATEWAY_SERVICE" -p MainPID --value 2>/dev/null
 [ -z "${oldpid:-}" ] && oldpid=$(pgrep -f 'dist/deneb-gateway' | head -1 || true)
 [ -z "${oldpid:-}" ] && { echo "ERROR: no running gateway to cut over" >&2; exit 1; }
 oldver=$(curl -sf -m 3 "http://127.0.0.1:$PROD_PORT/health" | tr ',' '\n' | grep '"version"' | head -1 | cut -d'"' -f4 || true)
-# Sender-side downgrade gate (the receiver's SIGUSR1 guard is the real wall —
-# this just fails fast with a clear message before touching the process).
-candver=$(./deneb-gateway --print-version 2>/dev/null || true)
-if [ -n "${oldver:-}" ] && [ -n "${candver:-}" ] && [ "$candver" != "$oldver" ]; then
-    lower=$(printf '%s\n%s\n' "$oldver" "$candver" | sort -V | head -1)
-    if [ "$lower" = "$candver" ]; then
-        if [ "${DENEB_DEPLOY_FORCE:-}" = "1" ]; then
-            touch .allow-downgrade
-            echo "    ⚠ FORCED downgrade $oldver → $candver (.allow-downgrade 마커 설정 — 수신측 가드 1회 통과)" >&2
-        else
-            cp -p deneb-gateway.bak-prev deneb-gateway 2>/dev/null || true
-            echo "ERROR: candidate version ($candver) is OLDER than running ($oldver) — stale checkout? 의도적 롤백은 DENEB_DEPLOY_FORCE=1" >&2
-            exit 1
-        fi
-    fi
-fi
 echo "    SIGUSR1 → pid $oldpid (cutover, old version ${oldver:-unknown})"
 kill -USR1 "$oldpid"
 for i in $(seq 1 45); do

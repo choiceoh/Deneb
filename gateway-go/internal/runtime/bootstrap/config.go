@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 )
@@ -38,9 +39,14 @@ func ParseFlags(compiledVersion string) Flags {
 	// Version probe for the downgrade guard (downgrade_guard.go): the running
 	// gateway execs the candidate binary with --print-version before honoring a
 	// SIGUSR1 restart. Prints the COMPILED stamp (not the -version override) —
-	// the guard compares what was actually built.
+	// the guard compares what was actually built. The second field is the build
+	// unix time (same-version tiebreak); omitted for dev builds.
 	if *printVersion {
-		fmt.Println(compiledVersion)
+		if bu := strings.TrimSpace(BuildUnix); bu != "" {
+			fmt.Println(compiledVersion + " " + bu)
+		} else {
+			fmt.Println(compiledVersion)
+		}
 		os.Exit(0)
 	}
 
