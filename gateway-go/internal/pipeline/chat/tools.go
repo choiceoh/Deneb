@@ -119,7 +119,14 @@ func (r *ToolRegistry) Execute(ctx context.Context, name string, input json.RawM
 	// allowlist) before any execution machinery runs. See tool_dry_run.go.
 	if toolctx.ToolDryRunFromContext(ctx) {
 		if _, safe := dryRunSafeTools[name]; !safe {
-			return dryRunStub(name), nil
+			stub := dryRunStub(name)
+			// Keep the verify gate faithful in replays (review catch on
+			// #3171): the stub tells the model the call succeeded, so a
+			// stubbed write/edit must arm the gate and a stubbed
+			// verification exec must disarm it — otherwise a replayed edit
+			// flow finishes without the finalize nudge a real run gets.
+			verifyGateFromContext(ctx).recordTool(name, input, stub, nil)
+			return stub, nil
 		}
 	}
 

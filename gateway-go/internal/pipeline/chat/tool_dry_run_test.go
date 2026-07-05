@@ -70,3 +70,39 @@ func TestToolDryRunContext(t *testing.T) {
 		t.Fatal("dry-run flag not carried by context")
 	}
 }
+
+// TestExecute_DryRunKeepsVerifyGateFaithful: a stubbed write must arm the
+// verify gate and a stubbed verification exec must disarm it, mirroring a
+// real run so replayed edit flows still see the finalize nudge.
+func TestExecute_DryRunKeepsVerifyGateFaithful(t *testing.T) {
+	reg := NewToolRegistry()
+	for _, name := range []string{"write", "exec"} {
+		reg.Register(name, func(_ context.Context, _ json.RawMessage) (string, error) {
+			t.Fatalf("%s must not execute under dry-run", name)
+			return "", nil
+		})
+	}
+
+	gate := &verifyGateState{}
+	ctx := WithVerifyGate(toolctx.WithToolDryRun(context.Background()), gate)
+
+	if _, err := reg.Execute(ctx, "write", json.RawMessage(`{"file_path":"a.go","content":"x"}`)); err != nil {
+		t.Fatal(err)
+	}
+	gate.mu.Lock()
+	armed := gate.mutated
+	gate.mu.Unlock()
+	if !armed {
+		t.Fatal("stubbed write must arm the verify gate")
+	}
+
+	if _, err := reg.Execute(ctx, "exec", json.RawMessage(`{"command":"go test ./..."}`)); err != nil {
+		t.Fatal(err)
+	}
+	gate.mu.Lock()
+	armed = gate.mutated
+	gate.mu.Unlock()
+	if armed {
+		t.Fatal("stubbed verification exec must disarm the verify gate")
+	}
+}
