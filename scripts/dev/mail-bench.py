@@ -330,13 +330,22 @@ def body_text(msg):
     return re.sub(r"[ \t]+", " ", text)
 
 def fetch_mails(uids, mailbox, body_cap):
-    imap = imaplib.IMAP4(imap_env("DENEB_ARCHIVE_IMAP_ADDR").split(":")[0] or "127.0.0.1",
-                         int((imap_env("DENEB_ARCHIVE_IMAP_ADDR").split(":") + ["1143"])[1] or 1143))
+    addr = imap_env("DENEB_ARCHIVE_IMAP_ADDR")
+    host = addr.split(":")[0] or "127.0.0.1"
+    port = int((addr.split(":") + ["1143"])[1] or 1143)
+    # 993 = implicit TLS. Anything else on this single-machine deployment is
+    # the loopback archive (1143) — plaintext there never leaves the host.
+    imap_cls = imaplib.IMAP4_SSL if port == 993 else imaplib.IMAP4
+    imap = imap_cls(host, port)
     imap.login(imap_env("DENEB_ARCHIVE_IMAP_USER"), imap_env("DENEB_ARCHIVE_IMAP_PASS"))
     imap.select(mailbox, readonly=True)
     mails = []
     for uid in uids:
-        typ, data = imap.fetch(str(uid).encode(), "(BODY.PEEK[])")
+        # UID command path: plain fetch() addresses SEQUENCE numbers, which
+        # silently benchmarks the wrong mails once the mailbox has expunges.
+        typ, data = imap.uid("fetch", str(uid), "(BODY.PEEK[])")
+        if typ != "OK" or not data or data == [None]:
+            raise SystemExit(f"IMAP UID FETCH {uid} 실패 (typ={typ}) — UID가 존재하는지 확인")
         raw = b"".join(p[1] for p in data if isinstance(p, tuple))
         msg = email.message_from_bytes(raw)
         body = re.sub(r"\n{3,}", "\n\n", body_text(msg).replace("\r", ""))[:body_cap]
@@ -347,8 +356,12 @@ def fetch_mails(uids, mailbox, body_cap):
             "to": decode_header(msg.get("To")),
             "cc": decode_header(msg.get("Cc")),
             "date": msg.get("Date", ""),
+            # 수신/참조 헤더 포함 — 프로덕션 포매터와 입력 동형성 유지 (에스컬레이션·
+            # 내부 참조 판단이 수신자 구성에서 나오는 메일이 많다).
             "text": (f"제목: {decode_header(msg.get('Subject'))}\n"
                      f"보낸사람: {decode_header(msg.get('From'))}\n"
+                     f"받는사람: {decode_header(msg.get('To'))}\n"
+                     f"참조: {decode_header(msg.get('Cc'))}\n"
                      f"날짜: {msg.get('Date','')}\n\n{body}"),
         })
     imap.logout()
@@ -372,6 +385,8 @@ def side_label(addr, our_domains, org_map):
 def format_party(field_value, our_domains, org_map):
     out = []
     for name, addr in email.utils.getaddresses([field_value or ""]):
+        if not addr.strip():
+            continue  # 빈 헤더가 만들어내는 가공의 '외부(주소 불명)' 당사자 차단
         label = side_label(addr, our_domains, org_map)
         disp = decode_header(name).strip() or addr
         out.append(f"{disp} <{addr}> — {label}")
@@ -424,10 +439,13 @@ def main():
     ap.add_argument("--model-b", default="", help="비교 모델 (선택, A/B)")
     ap.add_argument("--base-url", default="http://127.0.0.1:18800/v1")
     ap.add_argument("--reps", type=int, default=1, help="trap 반복 횟수")
-    ap.add_argument("--max-tokens", type=int, default=2500)
+    # 프로덕션 자율 stage2 기본(1536)과 동일 예산 — 게이트가 프로덕션보다 넉넉한
+    # 예산으로 통과하는 착시 방지. 인터랙티브 경로(4096) 재현은 명시 지정.
+    ap.add_argument("--max-tokens", type=int, default=1536)
     ap.add_argument("--timeout", type=int, default=300)
     ap.add_argument("--anchor", action="store_true", help="당사자 앵커 블록 주입")
-    ap.add_argument("--our-domains", default="topsolar.kr", help="우리 측 도메인 (콤마 구분)")
+    ap.add_argument("--our-domains", default="topsolar.kr,namdo-eco.kr",
+                    help="우리 측 도메인 (콤마 구분; 그룹사 포함 기본)")
     ap.add_argument("--org-map", default="", help="도메인→조직 라벨 JSON 파일 (선택)")
     ap.add_argument("--uids", default="", help="shadow: IMAP UID 콤마 목록")
     ap.add_argument("--mailbox", default="INBOX")
@@ -448,7 +466,7 @@ def main():
 
     results = run_trap(args, token) if args.mode == "trap" else run_shadow(args, token)
 
-    stamp = int(time.time())
+    stamp = f"{int(time.time() * 1000)}-{os.getpid()}"
     base = f"/tmp/mail-bench-{args.mode}-{stamp}"
     with open(base + ".json", "w", encoding="utf-8") as f:
         json.dump(results, f, ensure_ascii=False, indent=1, default=list)

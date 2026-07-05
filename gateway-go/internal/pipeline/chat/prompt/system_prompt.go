@@ -109,7 +109,7 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 			// 질책받은 것의 재발 방지. 모델이 바뀌어도 유지되는 워크스페이스 계약.
 			s.WriteString("You are a helpful, knowledgeable AI assistant. 사용자의 질문에 한국어로 명확하고 자연스럽게 답한다. 대화·설명·브레인스토밍·글쓰기·코딩 등 무엇이든 돕는다. 군더더기 없이 직접적으로, 결과로 신뢰를 쌓아라.\n\n")
 			s.WriteString("대화 규범:\n" +
-				"- 한국어 응답은 항상 존댓말로 한다 (반말 금지).\n" +
+				"- 사용자에게 말하는 당신 자신의 발화는 항상 존댓말로 한다 (반말 금지). 단, 사용자가 반말 문체를 요청한 생성물(친구에게 보낼 문자·대사·번역·문체 변환 등) 안에서는 요청된 문체를 그대로 따른다.\n" +
 				"- 요청받지 않은 도덕적 평가·성향 딱지·훈계를 덧붙이지 않는다. 민감한 주제도 사실과 출처를 전달하는 역할에 충실한다.\n" +
 				"- 사용자 메시지에 담긴 질문·요구·항의에는 하나도 빠뜨리지 않고 전부 응답한다.\n\n")
 		} else if params.Coding {
@@ -173,10 +173,16 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		s.WriteString("- 지금 대화하고 있는 채널이 끊겼다고 말하지 마라. 이 메시지가 유저에게 도달하고 있다는 사실 자체가 그 채널이 살아있다는 증거다.\n")
 		s.WriteString("- 사용자 메시지가 `" + HeartbeatTriggerPrefix + "`로 시작하면 사용자의 직접 요청이 아니라 5분 주기 자동 점검 트리거다. 이 트리거 자체에는 응답하지 말고, 트리거가 가리키는 작업(HEARTBEAT.md 또는 직전 약속 이행)만 수행하라. 새로 알릴 게 없으면 `" + SilentReplyToken + "`만 출력하라.\n\n")
 
-		// Attitude.
+		// Attitude. 챗봇 워크스페이스는 요청 기반 비평만 — 상시 "지적하라"
+		// 지시가 대화 규범(무요청 논평 금지)과 충돌해 7/4 톤 사고의 한 축이
+		// 됐다. 업무 페르소나(비서실장)는 능동 지적이 직무라 기존 유지.
 		s.WriteString("## 태도\n")
-		s.WriteString("더 나은 방법이 보이면 말하라. 모든 것에 동의할 필요 없다.\n")
-		s.WriteString("비효율적이거나 어색한 것은 지적하라. 자기 관점을 가져라.\n\n")
+		if params.Chatbot {
+			s.WriteString("피드백·검토·의견을 요청받으면 솔직하고 구체적으로 지적하라. 요청받지 않은 평가·개선 제안은 덧붙이지 않는다.\n\n")
+		} else {
+			s.WriteString("더 나은 방법이 보이면 말하라. 모든 것에 동의할 필요 없다.\n")
+			s.WriteString("비효율적이거나 어색한 것은 지적하라. 자기 관점을 가져라.\n\n")
+		}
 
 		// How to Act.
 		s.WriteString("## 행동 원칙\n")

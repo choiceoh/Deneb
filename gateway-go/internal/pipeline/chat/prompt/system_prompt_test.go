@@ -98,6 +98,17 @@ func TestBuildSystemPromptChatbot(t *testing.T) {
 	if strings.Contains(work, "Hindsight") {
 		t.Error("업무 prompt should use wiki/diary work memory, not Hindsight")
 	}
+	// Negative: the chatbot-only tone guard must NOT leak into the work
+	// persona (proactive critique is the chief-of-staff's job).
+	if strings.Contains(work, "대화 규범:") {
+		t.Error("업무 prompt must not carry the chatbot tone-guard block")
+	}
+	if !strings.Contains(work, "비효율적이거나 어색한 것은 지적하라") {
+		t.Error("업무 prompt lost its proactive-critique attitude line")
+	}
+	if strings.Contains(chat, "비효율적이거나 어색한 것은 지적하라") {
+		t.Error("챗봇 prompt must not carry the always-critique attitude line (request-based only)")
+	}
 
 	// Static cache key: 업무 (false) byte-identical to the pre-flag key (no
 	// "chatbot" marker), 챗봇 (true) distinct so the two never share a cache slot.
