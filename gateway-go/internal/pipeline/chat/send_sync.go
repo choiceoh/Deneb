@@ -282,11 +282,15 @@ func (h *Handler) SendSync(ctx context.Context, sessionKey, message, model strin
 	if res, handled := h.trySlashSync(sessionKey, message, opts); handled {
 		return res, nil
 	}
-	message = h.maybeEnrichLinks(ctx, message, opts)
+	// Link fetches start now and join inside executeAgentRun, AFTER the
+	// parallel prep phase — a pasted slow link no longer blocks the turn
+	// start for up to 30s (see link_enrichment.go).
+	enrich := h.startLinkEnrichment(ctx, message, opts)
 	params, deps, err := h.prepareSyncRun(sessionKey, message, model, "sync", opts)
 	if err != nil {
 		return nil, err
 	}
+	params.PendingEnrichment = enrich
 
 	// Agent detail logging: without a RunLogger every SendSync surface
 	// (miniapp.chat.send, cron single-run, heartbeat, boot, mail-qa, BTW) is
@@ -360,11 +364,13 @@ func (h *Handler) SendSyncStream(ctx context.Context, sessionKey, message, model
 		}
 		return res, nil
 	}
-	message = h.maybeEnrichLinks(ctx, message, opts)
+	// Same deferred link enrichment as SendSync — see the comment there.
+	enrich := h.startLinkEnrichment(ctx, message, opts)
 	params, deps, err := h.prepareSyncRun(sessionKey, message, model, "stream", opts)
 	if err != nil {
 		return nil, err
 	}
+	params.PendingEnrichment = enrich
 
 	// Wrap onDelta to scrub leaked reasoning delimiters per chunk so a literal
 	// "[thinking]" never reaches the stream. The block regex can't match across
