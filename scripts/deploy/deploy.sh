@@ -187,7 +187,7 @@ restart_remote() {
     # the state dir ~/.deneb, not here, so nothing local is at risk).
     echo "    syncing skills/ → $remote:~/$dir/skills"
     rsync -a --delete skills/ "$remote:$dir/skills/"
-    ssh "$remote" "GATEWAY_SERVICE='$GATEWAY_SERVICE' PROD_PORT='$PROD_PORT' DIR='$dir' bash -s" <<'REMOTE'
+    ssh "$remote" "GATEWAY_SERVICE='$GATEWAY_SERVICE' PROD_PORT='$PROD_PORT' DIR='$dir' DENEB_DEPLOY_FORCE='${DENEB_DEPLOY_FORCE:-}' bash -s" <<'REMOTE'
 set -euo pipefail
 cd "$HOME/$DIR/dist"
 cp -p deneb-gateway deneb-gateway.bak-prev 2>/dev/null || true
@@ -196,6 +196,22 @@ oldpid=$(systemctl --user show "$GATEWAY_SERVICE" -p MainPID --value 2>/dev/null
 [ -z "${oldpid:-}" ] && oldpid=$(pgrep -f 'dist/deneb-gateway' | head -1 || true)
 [ -z "${oldpid:-}" ] && { echo "ERROR: no running gateway to cut over" >&2; exit 1; }
 oldver=$(curl -sf -m 3 "http://127.0.0.1:$PROD_PORT/health" | tr ',' '\n' | grep '"version"' | head -1 | cut -d'"' -f4 || true)
+# Sender-side downgrade gate (the receiver's SIGUSR1 guard is the real wall —
+# this just fails fast with a clear message before touching the process).
+candver=$(./deneb-gateway --print-version 2>/dev/null || true)
+if [ -n "${oldver:-}" ] && [ -n "${candver:-}" ] && [ "$candver" != "$oldver" ]; then
+    lower=$(printf '%s\n%s\n' "$oldver" "$candver" | sort -V | head -1)
+    if [ "$lower" = "$candver" ]; then
+        if [ "${DENEB_DEPLOY_FORCE:-}" = "1" ]; then
+            touch .allow-downgrade
+            echo "    ⚠ FORCED downgrade $oldver → $candver (.allow-downgrade 마커 설정 — 수신측 가드 1회 통과)" >&2
+        else
+            cp -p deneb-gateway.bak-prev deneb-gateway 2>/dev/null || true
+            echo "ERROR: candidate version ($candver) is OLDER than running ($oldver) — stale checkout? 의도적 롤백은 DENEB_DEPLOY_FORCE=1" >&2
+            exit 1
+        fi
+    fi
+fi
 echo "    SIGUSR1 → pid $oldpid (cutover, old version ${oldver:-unknown})"
 kill -USR1 "$oldpid"
 for i in $(seq 1 45); do

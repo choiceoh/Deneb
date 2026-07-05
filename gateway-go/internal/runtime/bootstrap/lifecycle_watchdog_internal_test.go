@@ -33,7 +33,7 @@ func TestRunWithSignals_HangingShutdown_ForcesExit(t *testing.T) {
 			<-ctx.Done() // signal handler cancels the context
 			<-release    // hang here — graceful shutdown stalls
 			return nil
-		}, logger)
+		}, logger, "")
 	}()
 
 	select {
