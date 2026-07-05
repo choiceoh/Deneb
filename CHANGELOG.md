@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.65.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.64.0...deneb-v4.65.0) (2026-07-05)
+
+
+### ✨ Features
+
+* **calendar:** 회의 후 수확 — 업무 연결 일정 종료 시 결과 질문 푸시 ([#3114](https://github.com/choiceoh/Deneb/issues/3114)) ([0afc351](https://github.com/choiceoh/Deneb/commit/0afc351d7cca3867f4fc85f7488cde2278a6e98c))
+* **chat:** read_spillover 페이지네이션 — offset/limit 라인 윈도우 + grep 점프 ([#3136](https://github.com/choiceoh/Deneb/issues/3136)) ([a19d0ef](https://github.com/choiceoh/Deneb/commit/a19d0ef65b02961c48d74c41d534270563397b94))
+
 ## [4.64.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.63.1...deneb-v4.64.0) (2026-07-05)
 
 
