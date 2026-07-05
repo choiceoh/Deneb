@@ -57,26 +57,34 @@ func NewFCMSender(cfg Config) (*FCMSender, error) {
 // ProjectID returns the Firebase project ID parsed from the credentials.
 func (s *FCMSender) ProjectID() string { return s.projectID }
 
-// Send delivers one notification to a single device token. data is an optional
-// string map delivered to the app for in-foreground handling; the notification
-// block is what the system tray shows when the app is fully closed.
+// Send delivers one notification to a single device token as a DATA-ONLY
+// message: title/body ride in `data` and there is deliberately no
+// `notification` block. A `notification` payload is rendered by the system
+// tray when the app is closed, which skips FcmService.onMessageReceived — but
+// Android Auto can only read aloud / voice-reply to app-built MessagingStyle
+// notifications, so the app must always run and own the rendering. Data-only
+// + high priority guarantees onMessageReceived fires in every app state.
+// Older app builds already read data["title"]/data["body"] as a fallback, so
+// the fields stay backward compatible.
 func (s *FCMSender) Send(ctx context.Context, deviceToken, title, body string, data map[string]string) SendResult {
 	accessToken, err := s.ts.accessToken(ctx)
 	if err != nil {
 		return SendResult{Err: err}
 	}
 
+	payloadData := make(map[string]string, len(data)+2)
+	for k, v := range data {
+		payloadData[k] = v
+	}
+	// Explicit title/body win over caller-supplied data keys of the same name.
+	payloadData["title"] = title
+	payloadData["body"] = body
 	message := map[string]any{
 		"token": deviceToken,
-		"notification": map[string]any{
-			"title": title,
-			"body":  body,
-		},
-		// high priority wakes the app through Doze for a timely heads-up.
+		"data":  payloadData,
+		// high priority wakes the app through Doze so onMessageReceived runs
+		// promptly even when the app is fully closed.
 		"android": map[string]any{"priority": "high"},
-	}
-	if len(data) > 0 {
-		message["data"] = data
 	}
 	payload, err := json.Marshal(map[string]any{"message": message})
 	if err != nil {
