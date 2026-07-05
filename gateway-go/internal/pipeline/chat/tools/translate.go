@@ -220,6 +220,13 @@ func translateRange(ctx context.Context, inputs []translateInput, out []string, 
 }
 
 func translateBatch(ctx context.Context, batch []translateInput, lang string) ([]string, bool) {
+	if translated, ok := translateBatchDeepL(ctx, batch, lang); ok {
+		return translated, true
+	}
+	return translateBatchLLM(ctx, batch, lang)
+}
+
+func translateBatchLLM(ctx context.Context, batch []translateInput, lang string) ([]string, bool) {
 	system, user := buildTranslatePrompt(batch, lang)
 	raw, err := pilot.CallTranslationLLM(ctx, system, user, translateMaxTokens)
 	if err != nil {
