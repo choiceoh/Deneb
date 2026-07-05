@@ -93,6 +93,12 @@ if [ "$VARIANT" = "fossRelease" ]; then
       exit 1
     fi
     echo "release signing: $(basename "$KEYSTORE_FILE") (alias $KEY_ALIAS)"
+  elif [ -n "${DENEB_APK_SIGNING_ENV:-}" ]; then
+    # An EXPLICIT override pointing at a missing file is a path typo, not an
+    # unset-up host — hard fail rather than silently publish debug-signed.
+    echo "ERROR: DENEB_APK_SIGNING_ENV points at a missing file: $SIGNING_ENV" >&2
+    echo "       Fix the path, or unset the override to use the default (~/.deneb/apk-signing.env)." >&2
+    exit 1
   else
     echo "WARNING: no $SIGNING_ENV — fossRelease will be signed with the LOCAL DEBUG KEYSTORE." >&2
     echo "         Debug-signed sideloaded builds trip fintech malware scans (e.g. Toss) and the debug" >&2
