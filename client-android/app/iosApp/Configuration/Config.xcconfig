@@ -1,4 +1,8 @@
 TEAM_ID=
-BUNDLE_ID=com.inspiredandroid.kai
+// De-Kai'd 2026-07-05 (was com.inspiredandroid.kai, the pre-fork identity).
+// Changing the bundle id orphans any existing iOS install (new sandbox) —
+// reinstall + re-pair the client token once. Android keeps its own pinned
+// legacy prefs name separately (Platform.android.kt).
+BUNDLE_ID=ai.deneb
 APP_NAME=Deneb
 APP_VERSION=0.0.178

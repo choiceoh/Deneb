@@ -5,8 +5,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 )
 
 func TestSummarizeCacheWindow(t *testing.T) {
@@ -161,42 +159,4 @@ func TestCacheHealthObserveNoBasesDegrades(t *testing.T) {
 	if ok {
 		t.Errorf("ok = true with no vLLM bases, want false (cache section omitted)")
 	}
-	if s := c.summary(); s != "" {
-		t.Errorf("summary = %q with no bases, want empty", s)
-	}
-}
-
-// TestStatusReportEchoesCacheSummary verifies the /status surface: the status
-// snapshot appends the cache one-liner when the accessor returns one, and omits
-// it cleanly when the accessor is unset (non-vLLM host).
-func TestStatusReportEchoesCacheSummary(t *testing.T) {
-	t.Run("appends cache line when summary present", func(t *testing.T) {
-		n := &notifyService{
-			sessions:     session.NewManager(),
-			cacheSummary: func() string { return "prefix-cache 24h hit-rate 91.2% (ok)" },
-		}
-		report := n.buildStatusReport(time.Now())
-		if !strings.Contains(report, "prefix-cache 24h hit-rate 91.2% (ok)") {
-			t.Errorf("status report missing cache line, got:\n%s", report)
-		}
-	})
-
-	t.Run("omits cache line when accessor unset", func(t *testing.T) {
-		n := &notifyService{sessions: session.NewManager()}
-		report := n.buildStatusReport(time.Now())
-		if strings.Contains(report, "prefix-cache") {
-			t.Errorf("status report should not mention cache when unset, got:\n%s", report)
-		}
-	})
-
-	t.Run("omits cache line when accessor returns empty", func(t *testing.T) {
-		n := &notifyService{
-			sessions:     session.NewManager(),
-			cacheSummary: func() string { return "" },
-		}
-		report := n.buildStatusReport(time.Now())
-		if strings.Contains(report, "prefix-cache") {
-			t.Errorf("status report should not mention cache when summary empty, got:\n%s", report)
-		}
-	})
 }

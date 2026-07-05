@@ -50,16 +50,12 @@ type cacheSample struct {
 	hits    int64
 }
 
-// cacheHealth holds the rolling sample ring plus the last computed one-line
-// summary. It is safe for concurrent /health probes; the mutex guards both.
+// cacheHealth holds the rolling sample ring of prefix-cache counter readings.
+// It is safe for concurrent /health probes; the mutex guards the ring.
 type cacheHealth struct {
 	mu sync.Mutex
 	// samples is the rolling ring of cumulative-counter readings.
 	samples []cacheSample
-	// lastSummary is the most recently rendered one-line status, cached so the
-	// /status snapshot (which must not perform network I/O) can echo it without
-	// triggering a scrape. Empty until the first /health probe with a vLLM host.
-	lastSummary string
 }
 
 // cacheHealthSection is the JSON shape rendered under health["cache"]. It mirrors
@@ -115,22 +111,7 @@ func (c *cacheHealth) observe(ctx context.Context, bases []string) (cacheHealthS
 	window := append([]cacheSample(nil), c.samples...)
 	c.mu.Unlock()
 
-	sec, ok := summarizeCacheWindow(window, now)
-	if ok {
-		c.mu.Lock()
-		c.lastSummary = sec.Summary
-		c.mu.Unlock()
-	}
-	return sec, ok
-}
-
-// summary returns the last one-line cache status rendered by observe, or "" if
-// no vLLM host has been sampled yet. Network-free: the /status snapshot reads
-// this cached string instead of scraping on the status-render path.
-func (c *cacheHealth) summary() string {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.lastSummary
+	return summarizeCacheWindow(window, now)
 }
 
 // scrapeCacheCounters reuses observe.FetchVllmPrefixCaches and sums the

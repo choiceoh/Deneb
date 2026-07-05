@@ -35,7 +35,7 @@ globs: gateway-go/internal/ai/modelrole/**, gateway-go/internal/pipeline/pilot/*
 |---|---|
 | **에이전트 턴** (cron/chat 합성) | main (`agents.defaultModel`) |
 | `pilot.CallAnalysisLLM` | analysis |
-| `pilot.CallCodingLLM` | coding (⚠️현재 호출자 0 — deadcode baseline (c) 보류 항목; 코딩 역할 소비는 run_model.go·genesis 경로가 직접 수행) |
+| ~~`pilot.CallCodingLLM`~~ | **retire됨 (2026-07-05)** — 호출자 0으로 삭제. 코딩 역할 소비는 run_model.go·genesis 경로가 직접 수행하며, 원샷 헬퍼가 다시 필요하면 `CallRoleLLM(RoleCoding, …)` 한 줄로 재생성 |
 | `pilot.CallLocalLLM` | lightweight |
 | `pilot.CallTinyLLM` | tiny |
 | `(*Server).mailAnalysisModels()` | stage2 = analysis, stage1 = tiny |
