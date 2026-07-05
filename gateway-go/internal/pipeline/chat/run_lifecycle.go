@@ -90,7 +90,10 @@ func handleRunSuccess(
 		// Read Sino-Korean Hanja as Hangul for the done frame the client settles
 		// to (報告書 → 보고서). The persisted transcript keeps the raw text; the
 		// display read transliterates it (toolctx.TransliterateAssistantTextForDisplay).
-		broadcaster.EmitComplete(hanja.Transliterate(result.Text), result.Usage)
+		// stripReasoningLeak mirrors the sync path (buildSyncResult): without it
+		// the async done frame was the one surface that could still show leaked
+		// "[thinking]" delimiters.
+		broadcaster.EmitComplete(hanja.Transliterate(strings.TrimSpace(stripReasoningLeak(result.Text))), result.Usage)
 	}
 
 	// Deliver response back to the originating channel (e.g., the native client).
@@ -162,7 +165,9 @@ func handleRunSuccess(
 		// regardless — otherwise an agent reply of "NO_REPLY [[media:url]]"
 		// would silently drop the media the agent clearly wanted to send.
 		if !directives.IsSilent {
-			replyText := jsonutil.StripThinkingTags(directives.Text)
+			// stripReasoningLeak matches the sync path's cleanup so the channel
+			// reply never carries leaked chain-of-thought delimiters either.
+			replyText := stripReasoningLeak(jsonutil.StripThinkingTags(directives.Text))
 			replyText = strings.TrimSpace(replyText)
 
 			// Optionally surface extended-thinking text to the channel reply.
@@ -317,13 +322,7 @@ func handleRunSuccess(
 	finishRun(deps, params, session.PhaseEnd, "completed", "done", "", now)
 	emitJobEvent(deps, params.ClientRunID, "end", false, "", now)
 
-	// Coding mode: after the turn, snapshot the worktree edits as a checkpoint and
-	// verify build/tests, flipping the rail status.
-	maybeCodingTurnEnd(deps, params, result.Text, logger)
-
-	// Diary recording: append raw conversation turn to today's diary.
-	// Wiki page curation is handled by the main LLM via system prompt.
-	maybeRecordRunDiary(deps, params, result, logger)
+	finishTurnSideEffects(deps, params, result, logger)
 
 	logger.Info(
 		"agent run completed",
@@ -332,6 +331,28 @@ func handleRunSuccess(
 		"inputTokens", result.Usage.InputTokens,
 		"outputTokens", result.Usage.OutputTokens,
 	)
+}
+
+// finishTurnSideEffects runs the post-run side effects shared by EVERY entry
+// path — the async lifecycle (handleRunSuccess) and the synchronous
+// SendSync/SendSyncStream builders:
+//   - coding turn end: checkpoint + verify the worktree (Mode==code sessions)
+//   - auto-diary + dream-turn trigger
+//
+// One call site per entry path, one implementation here. Both hooks were
+// historically wired on the async path only, which left them dead on the
+// native client's sync surface after PR #1922 — adding any future entry path
+// must call this, not re-wire the hooks individually.
+func finishTurnSideEffects(deps runDeps, params RunParams, result *agent.AgentResult, logger *slog.Logger) {
+	if result == nil {
+		return
+	}
+	// Coding mode: snapshot the worktree edits as a checkpoint and verify
+	// build/tests, flipping the rail status.
+	maybeCodingTurnEnd(deps, params, result.Text, logger)
+	// Diary recording: append raw conversation turn to today's diary.
+	// Wiki page curation is handled by the main LLM via system prompt.
+	maybeRecordRunDiary(deps, params, result, logger)
 }
 
 // handleRunError processes a failed or aborted agent run.

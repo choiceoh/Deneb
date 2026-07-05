@@ -34,7 +34,10 @@ func persistReplyDeliveryFailure(deps runDeps, sessionKey, channel string, deliv
 	text += "]"
 	msg := NewTextChatMessage("user", text, time.Now().UnixMilli())
 	if err := deps.transcript.Append(sessionKey, msg); err != nil {
-		logger.Warn("failed to persist delivery-failure note", "error", err)
+		// Losing this note removes the next turn's only ground truth about the
+		// failed delivery — the agent then invents "channel down" explanations
+		// to the user. User-observable consequence → Error (logging.md rule 1).
+		logger.Error("failed to persist delivery-failure note", "error", err, "session", sessionKey)
 	}
 }
 
@@ -53,7 +56,9 @@ func persistMediaDeliveryFailure(deps runDeps, sessionKey, channel string, faile
 	text += " 실패한 URL: " + strings.Join(failedURLs, ", ") + "]"
 	msg := NewTextChatMessage("user", text, time.Now().UnixMilli())
 	if err := deps.transcript.Append(sessionKey, msg); err != nil {
-		logger.Warn("failed to persist media-failure note", "error", err)
+		// Same class as the reply-failure note above: without it the agent
+		// references media the user never received. Error per logging.md rule 1.
+		logger.Error("failed to persist media-failure note", "error", err, "session", sessionKey)
 	}
 }
 
@@ -120,7 +125,9 @@ func persistInterruptedContext(deps runDeps, sessionKey string, result *agent.Ag
 
 	msg := NewTextChatMessage("user", sb.String(), time.Now().UnixMilli())
 	if err := deps.transcript.Append(sessionKey, msg); err != nil {
-		logger.Warn("failed to persist interrupted context", "error", err)
+		// Losing this note recreates the "amnesia" bug it exists to prevent —
+		// the next run forgets the interrupted work. Error per logging.md rule 1.
+		logger.Error("failed to persist interrupted context", "error", err, "session", sessionKey)
 	} else {
 		logger.Info("persisted interrupted context",
 			"tools", result.InterruptedToolNames,

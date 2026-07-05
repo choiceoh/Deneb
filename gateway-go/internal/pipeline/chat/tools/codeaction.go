@@ -32,6 +32,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -48,6 +49,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/localcal"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
+	"github.com/choiceoh/deneb/gateway-go/pkg/safego"
 )
 
 //go:embed codeaction_runtime.py
@@ -538,7 +540,10 @@ func ToolCodeAction(d CodeActionDeps) toolctx.ToolFunc {
 			Handler:           &codeActionBridge{invoker: d.Invoker, contacts: d.Contacts, calendar: d.Calendar, wiki: d.Wiki, token: token, ctx: ctx},
 			ReadHeaderTimeout: 5 * time.Second,
 		}
-		go func() { _ = srv.Serve(lis) }()
+		// Bridge server goroutine: scoped to this tool call (the deferred Close
+		// unblocks Serve), but still needs panic recovery — an unrecovered panic
+		// here would take down the whole gateway (concurrency.md rule 4).
+		safego.GoWithSlog(slog.Default(), "codeaction-bridge", func() { _ = srv.Serve(lis) })
 		defer func() { _ = srv.Close() }()
 		tcpAddr, ok := lis.Addr().(*net.TCPAddr)
 		if !ok {

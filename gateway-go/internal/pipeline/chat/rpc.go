@@ -181,8 +181,11 @@ func (h *Handler) SessionsSend(_ context.Context, req *protocol.RequestFrame) *p
 	// sessions.send that targets a channel-keyed session (the tool
 	// `sessions.send` / `chrono.send`, external RPC clients, other
 	// internal automation) produces a run with nil Delivery and the
-	// reply function drops the response. Keys without a channel
-	// prefix (e.g. "cron:<id>") yield nil, which preserves prior behavior.
+	// reply function drops the response. Only colon-less keys (e.g. bare
+	// dev-chat keys) yield nil; any "<prefix>:<rest>" key parses, so a
+	// non-channel prefix like "cron:<id>" yields Channel="cron" and the
+	// reply layer decides what to do with the unregistered channel
+	// (delivery_route_test.go locks this in).
 	return h.startAsyncRun(req.ID, RunParams{
 		SessionKey:  p.Key,
 		Message:     sanitizeInput(p.Message),

@@ -110,7 +110,7 @@ func executeAgentRunWithDelta(
 	})
 	broadcaster := streaming.NewBroadcaster(deltaRaw, params.SessionKey, params.ClientRunID)
 	runLog := agentlog.NewRunLogger(deps.agentLog, params.SessionKey, params.ClientRunID)
-	return executeAgentRun(ctx, params, deps, broadcaster, nil, nil, logger, runLog)
+	return executeAgentRun(ctx, params, deps, broadcaster, nil, logger, runLog)
 }
 
 // classifyLLMError runs llmerr.Classify against an error, lifting the HTTP

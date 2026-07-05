@@ -124,7 +124,7 @@ func TestResolveClient_UsesProviderConfigWithoutAPIKey(t *testing.T) {
 		},
 	}
 
-	client := resolveClient(deps, "vllm", slog.New(slog.NewTextHandler(io.Discard, nil)))
+	client := resolveClient(context.Background(), deps, "vllm", slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if client == nil {
 		t.Fatal("expected client from provider config")
 	}
@@ -161,7 +161,7 @@ func TestResolveClient_ExpandsProviderConfigEnvVars(t *testing.T) {
 		},
 	}
 
-	client := resolveClient(deps, "vllm", slog.New(slog.NewTextHandler(io.Discard, nil)))
+	client := resolveClient(context.Background(), deps, "vllm", slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if client == nil {
 		t.Fatal("expected client from provider config")
 	}

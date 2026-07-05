@@ -34,8 +34,10 @@ func TestIndexableText_PlainAndTextBlocksUnchanged(t *testing.T) {
 	if got := indexableText(plain); got != "안녕하세요" {
 		t.Errorf("plain string altered: %q", got)
 	}
-	rich := toolctx.ChatMessage{Role: "assistant",
-		Content: json.RawMessage(`[{"type":"text","text":"결과 요약"}]`)}
+	rich := toolctx.ChatMessage{
+		Role:    "assistant",
+		Content: json.RawMessage(`[{"type":"text","text":"결과 요약"}]`),
+	}
 	if got := indexableText(rich); got != "결과 요약" {
 		t.Errorf("text block altered: %q", got)
 	}
