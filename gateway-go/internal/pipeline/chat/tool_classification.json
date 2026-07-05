@@ -2,6 +2,16 @@
   "_gen": {
     "package": "chat"
   },
+  "dryRunSafeTools": {
+    "_type": "map[string]struct{}",
+    "_doc": "dryRunSafeTools are tools whose execution has no side effects on the\nworkspace, external systems, or run-visible state beyond their own result,\nso they run for real under tool dry-run (tool_dry_run.go). Default-deny:\nevery tool absent from this set is stubbed. Action-multiplexed tools whose\nmutating/read-only split lives in an argument (wiki, calendar, todo, ...)\nstay suppressed entirely.",
+    "_values": {
+      "read": true,
+      "grep": true,
+      "fetch_tools": true,
+      "read_spillover": true
+    }
+  },
   "toolCompressSkipSet": {
     "_type": "map[string]struct{}",
     "_doc": "toolCompressSkipSet contains tools whose output should not be compressed.\nStructured-output tools are already handled by post-processors.\nInternal / already-small tools add no compression value.",

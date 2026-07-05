@@ -16,16 +16,11 @@
 // stubbing a read is only a fidelity cost, never a safety one.
 package chat
 
-// dryRunSafeTools are tools whose execution has no side effects on the
-// workspace, external systems, or run-visible state beyond their own result.
-// (fetch_tools activates deferred schemas, but that is run-scoped, in-memory
+// The read-only allowlist (dryRunSafeTools) lives in tool_classification.json
+// — the package's established home for per-tool classification data — and is
+// generated into tool_classification_gen.go by `make data-gen`. (fetch_tools
+// is safe: it activates deferred schemas, but that is run-scoped, in-memory
 // and exactly what a replay harness needs to exercise.)
-var dryRunSafeTools = map[string]struct{}{
-	"read":           {},
-	"grep":           {},
-	"fetch_tools":    {},
-	"read_spillover": {},
-}
 
 // dryRunStub is the result returned in place of executing a suppressed tool.
 // It tells the model plainly what happened so a replayed transcript stays

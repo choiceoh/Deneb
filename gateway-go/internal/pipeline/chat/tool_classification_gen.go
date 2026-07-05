@@ -4,6 +4,19 @@
 
 package chat
 
+// dryRunSafeTools are tools whose execution has no side effects on the
+// workspace, external systems, or run-visible state beyond their own result,
+// so they run for real under tool dry-run (tool_dry_run.go). Default-deny:
+// every tool absent from this set is stubbed. Action-multiplexed tools whose
+// mutating/read-only split lives in an argument (wiki, calendar, todo, ...)
+// stay suppressed entirely.
+var dryRunSafeTools = map[string]struct{}{
+	"fetch_tools":    {},
+	"grep":           {},
+	"read":           {},
+	"read_spillover": {},
+}
+
 // toolCompressSkipSet contains tools whose output should not be compressed.
 // Structured-output tools are already handled by post-processors.
 // Internal / already-small tools add no compression value.
