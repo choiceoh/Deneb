@@ -28,8 +28,8 @@ type phoneWriteParams struct {
 // phoneActions is the P1 allowlist: operations the app executes in-process —
 // plain Android Intents (no Accessibility tap-loop) plus the app-permission
 // successors of the retired SSH ops (notify=NotificationManager,
-// speak=TTS engine, clipboard=ClipboardManager set, sync_state=push a fresh
-// location+battery fix). Fixed set — the tool never emits an action outside it.
+// speak=TTS engine, clipboard=ClipboardManager set, sync_state=push fresh
+// location+battery+usage state). Fixed set — the tool never emits an action outside it.
 var phoneActions = map[string]bool{
 	"open_url":   true,
 	"open_app":   true,
@@ -102,7 +102,7 @@ func buildPhoneAction(p phoneWriteParams) (string, map[string]string, error) {
 		}
 		args["text"] = text
 	case "sync_state":
-		// No args — the app pushes a fresh location+battery fix.
+		// No args — the app pushes fresh location+battery+usage state.
 	}
 	return action, args, nil
 }

@@ -1534,8 +1534,8 @@ func phoneReadToolSchema() map[string]any {
 		"properties": map[string]any{
 			"what": map[string]any{
 				"type":        "string",
-				"description": "조회 종류: location(최근 위치 — 앱 상태 캐시) | battery(배터리·충전 상태). 캐시가 오래됐으면 갱신 요청 후 재시도 안내가 온다.",
-				"enum":        []string{"location", "battery"},
+				"description": "조회 종류: location(최근 위치 — 앱 상태 캐시) | battery(배터리·충전 상태) | usage(최근 앱 사용 리듬). 캐시가 오래됐으면 갱신 요청 후 재시도 안내가 온다.",
+				"enum":        []string{"location", "battery", "usage"},
 			},
 		},
 		"required": []string{"what"},
