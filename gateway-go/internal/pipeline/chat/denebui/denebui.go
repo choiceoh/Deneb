@@ -133,13 +133,23 @@ func isFenceClose(line string) bool {
 	return strings.HasPrefix(line, "```") && strings.TrimSpace(strings.TrimLeft(line, "`")) == ""
 }
 
-// Validate parses a deneb-ui block body as JSON and structurally validates it
-// against the DenebUiNode schema. It returns the list of issues (empty == valid).
-// A non-nil error means the body was not parseable as JSON or NDJSON at all.
+// Validate structurally validates a deneb-ui block body against the
+// DenebUiNode schema. Bodies starting with '<' use the labeled-HTML wire
+// format (html.go — the authoring format since the 2026-07 JSON→HTML switch);
+// '{'/'[' bodies take the legacy strict-JSON path, kept for old transcripts.
+// It returns the list of issues (empty == valid). A non-nil error means the
+// body was not parseable at all.
 func Validate(body string) ([]Issue, error) {
 	body = strings.TrimSpace(body)
 	if body == "" {
 		return nil, fmt.Errorf("empty deneb-ui block")
+	}
+	if IsHTMLBody(body) {
+		root, issues := ParseHTML(body)
+		if root == nil {
+			return issues, nil
+		}
+		return append(issues, validateNode(root, "$")...), nil
 	}
 	var root any
 	if err := json.Unmarshal([]byte(body), &root); err != nil {

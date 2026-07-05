@@ -2,93 +2,58 @@ package denebui
 
 import "testing"
 
-// Canonical morning/evening letter cards, mirroring the deneb-ui skeletons in
-// skills/productivity/{morning,evening}-letter/SKILL.md. These tests are a
-// server-side gate: the letter skeletons the agent copies+fills must stay
+// Canonical morning/evening letter cards in the labeled-HTML wire format,
+// mirroring the deneb-ui skeleton in skills/productivity/morning-letter/SKILL.md
+// and the evening_letter tool's output contract (toolreg/core.go). These tests
+// are a server-side gate: the letter skeletons the agent copies+fills must stay
 // schema-valid against the deneb-ui node spec, so a malformed template can't
-// silently ship a broken card. Keep the JSON here in sync with the SKILL.md
-// fences.
+// silently ship a broken card. Keep the HTML here in sync with those sources.
 
-const morningLetterCard = `{
-  "type": "column",
-  "children": [
-    { "type": "card", "children": [
-      { "type": "row", "children": [
-        { "type": "icon", "name": "sunny", "size": 16 },
-        { "type": "text", "value": "날씨 · 광주", "style": "caption" } ] },
-      { "type": "row", "children": [
-        { "type": "text", "value": "18°", "style": "headline" },
-        { "type": "text", "value": "체감 16°", "style": "caption" } ] },
-      { "type": "text", "value": "최고 24° · 최저 14° · 강수 30%", "style": "caption" },
-      { "type": "text", "value": "오후 소나기 가능 — 우산 챙기세요", "style": "body" } ] },
+const morningLetterCardHTML = `<column>
+  <card>
+    <row><icon name="sunny" size="16"/><text style="caption">날씨 · 광주</text></row>
+    <row><text style="headline">18°</text><text style="caption">체감 16°</text></row>
+    <text style="caption">최고 24° · 최저 14° · 강수 30%</text>
+    <text style="body">오후 소나기 가능 — 우산 챙기세요</text>
+  </card>
+  <card>
+    <row><icon name="payments" size="16"/><text style="caption">환율 · 구리</text></row>
+    <row><stat value="1,386" label="USD/KRW"/><stat value="1,498" label="EUR/KRW"/></row>
+    <stat value="$9,540 /t" label="LME 구리"/>
+  </card>
+  <card>
+    <row><icon name="calendar" size="16"/><text style="caption">오늘 일정</text></row>
+    <ul><li>09:00 — 팀 스탠드업</li><li>14:00 — 거래처 미팅</li></ul>
+  </card>
+  <card>
+    <row><icon name="mail" size="16"/><text style="caption">전일 메일</text></row>
+    <ul><li>김부장 — 견적서 회신 요청</li><li>세무서 — 부가세 신고 안내</li></ul>
+  </card>
+  <card>
+    <row><icon name="alarm" size="16"/><text style="caption">임박 마감</text></row>
+    <row><text style="body">부가세 신고</text><badge>D-2</badge></row>
+  </card>
+</column>`
 
-    { "type": "card", "children": [
-      { "type": "row", "children": [
-        { "type": "icon", "name": "payments", "size": 16 },
-        { "type": "text", "value": "환율 · 구리", "style": "caption" } ] },
-      { "type": "row", "children": [
-        { "type": "stat", "value": "1,386", "label": "USD/KRW" },
-        { "type": "stat", "value": "1,498", "label": "EUR/KRW" } ] },
-      { "type": "stat", "value": "$9,540 /t", "label": "LME 구리" } ] },
-
-    { "type": "card", "children": [
-      { "type": "row", "children": [
-        { "type": "icon", "name": "calendar", "size": 16 },
-        { "type": "text", "value": "오늘 일정", "style": "caption" } ] },
-      { "type": "list", "items": [
-        { "type": "text", "value": "09:00 — 팀 스탠드업" },
-        { "type": "text", "value": "14:00 — 거래처 미팅" } ] } ] },
-
-    { "type": "card", "children": [
-      { "type": "row", "children": [
-        { "type": "icon", "name": "mail", "size": 16 },
-        { "type": "text", "value": "전일 메일", "style": "caption" } ] },
-      { "type": "list", "items": [
-        { "type": "text", "value": "김부장 — 견적서 회신 요청" },
-        { "type": "text", "value": "세무서 — 부가세 신고 안내" } ] } ] },
-
-    { "type": "card", "children": [
-      { "type": "row", "children": [
-        { "type": "icon", "name": "alarm", "size": 16 },
-        { "type": "text", "value": "임박 마감", "style": "caption" } ] },
-      { "type": "row", "children": [
-        { "type": "text", "value": "부가세 신고", "style": "body" },
-        { "type": "badge", "value": "D-2" } ] } ] }
-  ]
-}`
-
-const eveningLetterCard = `{
-  "type": "column",
-  "children": [
-    { "type": "card", "children": [
-      { "type": "row", "children": [
-        { "type": "icon", "name": "calendar", "size": 16 },
-        { "type": "text", "value": "내일 일정", "style": "caption" } ] },
-      { "type": "list", "items": [
-        { "type": "text", "value": "10:00 — 분기 리뷰" },
-        { "type": "text", "value": "15:00 — 거래처 콜" } ] } ] },
-
-    { "type": "card", "children": [
-      { "type": "row", "children": [
-        { "type": "icon", "name": "mail", "size": 16 },
-        { "type": "text", "value": "챙길 메일", "style": "caption" } ] },
-      { "type": "list", "items": [
-        { "type": "text", "value": "이대리 — 내일 회의자료 공유" } ] } ] },
-
-    { "type": "card", "children": [
-      { "type": "row", "children": [
-        { "type": "icon", "name": "alarm", "size": 16 },
-        { "type": "text", "value": "임박 마감", "style": "caption" } ] },
-      { "type": "row", "children": [
-        { "type": "text", "value": "부가세 신고", "style": "body" },
-        { "type": "badge", "value": "D-2" } ] } ] }
-  ]
-}`
+const eveningLetterCardHTML = `<column>
+  <card>
+    <row><icon name="calendar" size="16"/><text style="caption">내일 일정</text></row>
+    <ul><li>10:00 — 분기 리뷰</li><li>15:00 — 거래처 콜</li></ul>
+  </card>
+  <card>
+    <row><icon name="mail" size="16"/><text style="caption">챙길 메일</text></row>
+    <ul><li>이대리 — 내일 회의자료 공유</li></ul>
+  </card>
+  <card>
+    <row><icon name="alarm" size="16"/><text style="caption">임박 마감</text></row>
+    <row><text style="body">부가세 신고</text><badge>D-2</badge></row>
+  </card>
+</column>`
 
 func TestValidate_LetterCards(t *testing.T) {
 	for name, body := range map[string]string{
-		"morning": morningLetterCard,
-		"evening": eveningLetterCard,
+		"morning": morningLetterCardHTML,
+		"evening": eveningLetterCardHTML,
 	} {
 		t.Run(name, func(t *testing.T) {
 			issues, err := Validate(body)
@@ -102,12 +67,41 @@ func TestValidate_LetterCards(t *testing.T) {
 	}
 }
 
+// Structural spot checks: the HTML skeleton must decode into the same node
+// shapes the legacy JSON produced (list items as text nodes, badge value from
+// inner text, stat attrs) so the three client renderers keep working unchanged.
+func TestParseHTML_MorningLetterShape(t *testing.T) {
+	root := mustParseHTML(t, morningLetterCardHTML)
+	if root["type"] != "column" {
+		t.Fatalf("root = %v", root["type"])
+	}
+	cards, _ := root["children"].([]any)
+	if len(cards) != 5 {
+		t.Fatalf("want 5 cards, got %d", len(cards))
+	}
+	sched := cards[2].(map[string]any)
+	list := sched["children"].([]any)[1].(map[string]any)
+	if list["type"] != "list" {
+		t.Fatalf("list = %v", list)
+	}
+	items := list["items"].([]any)
+	if len(items) != 2 || items[0].(map[string]any)["value"] != "09:00 — 팀 스탠드업" {
+		t.Errorf("items = %v", items)
+	}
+	deadline := cards[4].(map[string]any)
+	badgeRow := deadline["children"].([]any)[1].(map[string]any)
+	badge := badgeRow["children"].([]any)[1].(map[string]any)
+	if badge["type"] != "badge" || badge["value"] != "D-2" {
+		t.Errorf("badge = %v", badge)
+	}
+}
+
 // The delivered message is a plain head line followed by the deneb-ui fence.
 // ExtractFences must recover exactly the card body, and it must validate — this
 // guards the real on-the-wire shape the morning-letter skill emits.
 func TestValidate_LetterMessageShape(t *testing.T) {
 	msg := "좋은 아침이에요 — 6월 28일 토요일. 오후 소나기 · 부가세 신고 D-2\n\n" +
-		"```deneb-ui\n" + morningLetterCard + "\n```\n"
+		"```deneb-ui\n" + morningLetterCardHTML + "\n```\n"
 	fences := ExtractFences(msg)
 	if len(fences) != 1 {
 		t.Fatalf("expected exactly 1 deneb-ui fence, got %d", len(fences))
@@ -118,5 +112,25 @@ func TestValidate_LetterMessageShape(t *testing.T) {
 	}
 	if len(issues) != 0 {
 		t.Errorf("extracted card must be valid, got issues: %v", issues)
+	}
+}
+
+// Legacy JSON letter card (the pre-2026-07 wire format) must keep validating —
+// old transcripts render through the same schema.
+func TestValidate_LetterCard_LegacyJSON(t *testing.T) {
+	legacy := `{"type":"column","children":[
+	  {"type":"card","children":[
+	    {"type":"row","children":[
+	      {"type":"icon","name":"alarm","size":16},
+	      {"type":"text","value":"임박 마감","style":"caption"}]},
+	    {"type":"row","children":[
+	      {"type":"text","value":"부가세 신고","style":"body"},
+	      {"type":"badge","value":"D-2"}]}]}]}`
+	issues, err := Validate(legacy)
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	if len(issues) != 0 {
+		t.Errorf("legacy JSON card must stay valid, issues: %v", issues)
 	}
 }

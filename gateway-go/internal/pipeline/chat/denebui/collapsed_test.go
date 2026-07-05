@@ -1,7 +1,6 @@
 package denebui
 
 import (
-	"encoding/json"
 	"strings"
 	"testing"
 )
@@ -9,7 +8,7 @@ import (
 func TestCollapsedReportFence(t *testing.T) {
 	t.Run("wraps title and body in a valid accordion fence", func(t *testing.T) {
 		body := "## 분석\n- **중요도**: 높음\n\n```go\nfmt.Println(\"code inside\")\n```\n끝."
-		got := CollapsedReportFence("📬 탑솔라 견적 요청", body)
+		got := CollapsedReportFence("📬 탑솔라 <견적> \"요청\"", body)
 
 		fences := ExtractFences(got)
 		if len(fences) != 1 {
@@ -24,22 +23,17 @@ func TestCollapsedReportFence(t *testing.T) {
 			t.Fatalf("fence should validate, err=%v issues=%v", err, issues)
 		}
 
-		var root struct {
-			Type     string `json:"type"`
-			Title    string `json:"title"`
-			Children []struct {
-				Type  string `json:"type"`
-				Value string `json:"value"`
-			} `json:"children"`
+		root := mustParseHTML(t, fences[0])
+		if root["type"] != "accordion" || root["title"] != `📬 탑솔라 <견적> "요청"` {
+			t.Errorf("unexpected root: %v", root)
 		}
-		if err := json.Unmarshal([]byte(fences[0]), &root); err != nil {
-			t.Fatalf("fence body is not JSON: %v", err)
+		ch, _ := root["children"].([]any)
+		if len(ch) != 1 {
+			t.Fatalf("want 1 child, got %v", ch)
 		}
-		if root.Type != "accordion" || root.Title != "📬 탑솔라 견적 요청" {
-			t.Errorf("unexpected root: %+v", root)
-		}
-		if len(root.Children) != 1 || root.Children[0].Type != "markdown" || root.Children[0].Value != body {
-			t.Errorf("body not preserved verbatim: %+v", root.Children)
+		md := ch[0].(map[string]any)
+		if md["type"] != "markdown" || md["value"] != body {
+			t.Errorf("body not preserved verbatim through escape+decode round-trip:\n got %q\nwant %q", md["value"], body)
 		}
 	})
 
@@ -56,7 +50,9 @@ func TestCollapsedReportFence(t *testing.T) {
 	})
 }
 
-func TestValidate_MarkdownNode(t *testing.T) {
+func TestValidate_MarkdownNode_LegacyJSON(t *testing.T) {
+	// Old transcripts carry JSON bodies; the strict legacy path must keep
+	// accepting them (display compatibility), even though authoring is HTML.
 	issues, err := Validate(`{"type":"markdown","value":"## 제목\n본문"}`)
 	if err != nil {
 		t.Fatalf("unexpected parse error: %v", err)

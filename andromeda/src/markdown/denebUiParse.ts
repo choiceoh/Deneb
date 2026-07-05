@@ -3,10 +3,12 @@
 // coercion, and the input-seeding tree walk can be unit-tested in isolation and
 // the React component file holds only rendering.
 //
-// Nodes are AI-produced JSON (a dynamic boundary), so they're typed loosely on
+// Nodes are AI-produced (a dynamic boundary), so they're typed loosely on
 // purpose. Schema mirrors the gateway's denebui.go and the native parser.
 
-// Nodes are AI-produced JSON (a dynamic boundary) — typed loosely on purpose.
+import { parseDenebUiHtml } from "./denebUiHtml";
+
+// Nodes are AI-produced (a dynamic boundary) — typed loosely on purpose.
 export type Node = any;
 
 const FENCE_OPEN = /^```\s*deneb-ui\s*$/i;
@@ -51,11 +53,14 @@ export function splitDenebUi(text: string): UiSegment[] {
   return segs;
 }
 
-// Parse a fence body into a node tree. Tolerates a bare array (→ column) and
-// NDJSON (one object per line → column), matching the native lenient parser.
+// Parse a fence body into a node tree. Bodies starting with `<` use the
+// labeled-HTML wire format (v2 — the authoring format since 2026-07); `{`/`[`
+// bodies take the legacy strict-JSON path (single object, bare array → column,
+// NDJSON → column), kept for old transcripts.
 export function parseDenebUi(body: string): Node | null {
   const t = body.trim();
   if (!t) return null;
+  if (t.startsWith("<")) return parseDenebUiHtml(t);
   try {
     const v = JSON.parse(t);
     if (Array.isArray(v)) return { type: "column", children: v };

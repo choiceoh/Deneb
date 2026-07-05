@@ -210,15 +210,6 @@ class DenebUiParserTest {
     }
 
     @Test
-    fun `recovers completed children from truncated json`() {
-        // Stream cut partway through the third button; the first two completed.
-        val json =
-            """{"type":"column","children":[{"type":"button","label":"One","action":{"type":"callback","event":"one"}},{"type":"button","label":"Two","action":{"type":"callback","event":"two"}},{"type":"button","label":"Th"""
-        val node = assertIs<ColumnNode>(parseUi(json))
-        assertTrue(node.children.count { it is ButtonNode } >= 2, "expected at least two recovered buttons")
-    }
-
-    @Test
     fun `bare json without fence is wrapped into a ui block`() {
         val bare = """{"type":"text","value":"Hi"}"""
         assertFalse(hasUiBlocks(bare), "bare JSON is plain text without wrapping")
@@ -249,19 +240,6 @@ class DenebUiParserTest {
         val chart = assertIs<ChartNode>(parseUi(json))
         assertEquals("bar", chart.chartType)
         assertEquals(listOf(10f, 20f), chart.values)
-    }
-
-    @Test
-    fun `handles extra trailing braces from LLM`() {
-        val json = """{"type":"text","value":"Hi"}}"""
-        val node = assertIs<TextNode>(parseUi(json))
-        assertEquals("Hi", node.value)
-    }
-
-    @Test
-    fun `handles multiple extra trailing braces`() {
-        val json = """{"type":"column","children":[{"type":"text","value":"A"}]}}}"""
-        assertIs<ColumnNode>(parseUi(json))
     }
 
     @Test
@@ -315,33 +293,6 @@ class DenebUiParserTest {
     }
 
     @Test
-    fun `multi-line with extra closing brace in nested column from LLM`() {
-        // Real-world kimi-k2.5 output: multi-line NDJSON where the column line has an extra }
-        val block = """
-            {"type":"text","value":"Question 1 of 3","style":"caption","color":"secondary"}
-            {"type":"text","value":"Complete the sequence:","style":"body","bold":true}
-            {"type":"text","value":"2, 6, 12, 20, 30, ?","style":"title"}
-            {"type":"column","children":[{"type":"button","label":"38","action":{"type":"callback","event":"answer_q1","data":{"answer":"38"}},"variant":"filled"},{"type":"button","label":"40","action":{"type":"callback","event":"answer_q1","data":{"answer":"40"}},"variant":"filled"},{"type":"button","label":"42","action":{"type":"callback","event":"answer_q1","data":{"answer":"42"}},"variant":"filled"},{"type":"button","label":"44","action":{"type":"callback","event":"answer_q1","data":{"answer":"44"}},"variant":"filled"}}]}
-        """.trimIndent()
-        val message = "Sure! Let's see how sharp you are today.\n\n```deneb-ui\n$block\n```\n\nTake your shot!"
-        val blocks = parseMarkdown(message).blocks
-        val uiBlocks = blocks.filterIsInstance<DenebUiBlock>()
-        assertEquals(1, uiBlocks.size)
-
-        val column = uiBlocks[0].node
-        assertIs<ColumnNode>(column)
-        // sanitizeJson repairs the extra } so all 4 lines parse including buttons
-        assertEquals(4, column.children.size)
-        assertIs<TextNode>(column.children[0])
-        assertEquals("Question 1 of 3", (column.children[0] as TextNode).value)
-        assertIs<TextNode>(column.children[1])
-        assertIs<TextNode>(column.children[2])
-        val buttonsColumn = assertIs<ColumnNode>(column.children[3])
-        assertEquals(4, buttonsColumn.children.size)
-        assertIs<ButtonNode>(buttonsColumn.children[0])
-    }
-
-    @Test
     fun `legacy spacer nodes and spacing fields are silently dropped`() {
         // Back-compat: old assistant messages may contain spacer children and
         // spacing/padding properties on containers. The parser must still render them,
@@ -365,46 +316,6 @@ class DenebUiParserTest {
     }
 
     @Test
-    fun `single-line column with extra closing brace in children`() {
-        // Real-world kimi-k2.5 output: single column with buttons, extra } before ]}
-        val json = """{"type":"column","children":[{"type":"button","label":"All roses fade quickly","action":{"type":"callback","event":"answer_q2","data":{"answer":"all"}},"variant":"filled"},{"type":"button","label":"Some roses fade quickly","action":{"type":"callback","event":"answer_q2","data":{"answer":"some"}},"variant":"filled"},{"type":"button","label":"No roses fade quickly","action":{"type":"callback","event":"answer_q2","data":{"answer":"none"}},"variant":"filled"},{"type":"button","label":"None of these follow","action":{"type":"callback","event":"answer_q2","data":{"answer":"none_follow"}},"variant":"filled"}}]}"""
-        val message = "Which statement is necessarily true?\n\n```deneb-ui\n$json\n```"
-        val blocks = parseMarkdown(message).blocks
-        val uiBlocks = blocks.filterIsInstance<DenebUiBlock>()
-        assertEquals(1, uiBlocks.size)
-
-        val column = uiBlocks[0].node
-        assertIs<ColumnNode>(column)
-        assertEquals(4, column.children.size)
-        for (child in column.children) {
-            assertIs<ButtonNode>(child)
-        }
-        assertEquals("All roses fade quickly", (column.children[0] as ButtonNode).label)
-        assertEquals("None of these follow", (column.children[3] as ButtonNode).label)
-    }
-
-    @Test
-    fun `closes object before next array element when LLM omits brace`() {
-        // Real-world broken output: each button is missing its closing `}` before the
-        // comma that separates it from the next button in the array. The first failure
-        // is at offset 139 — `,{` inside button1 where a key is expected.
-        val json = """{"type":"row","children":[{"type":"button","label":"Au","action":{"type":"callback","event":"answer","data":{"question":1,"answer":"Au"}},{"type":"button","label":"Ag","action":{"type":"callback","event":"answer","data":{"question":1,"answer":"Ag"}},{"type":"button","label":"Fe","action":{"type":"callback","event":"answer","data":{"question":1,"answer":"Fe"}}}}}]}"""
-        val row = assertIs<RowNode>(parseUi(json))
-        assertEquals(3, row.children.size)
-        assertEquals("Au", (row.children[0] as ButtonNode).label)
-        assertEquals("Ag", (row.children[1] as ButtonNode).label)
-        assertEquals("Fe", (row.children[2] as ButtonNode).label)
-    }
-
-    @Test
-    fun `extra closing bracket inside nested structure is skipped`() {
-        // Extra ] where } is expected — sanitizeJson should skip it
-        val json = """{"type":"column","children":[{"type":"text","value":"A"},{"type":"text","value":"B"}]]}"""
-        val column = assertIs<ColumnNode>(parseUi(json))
-        assertEquals(2, column.children.size)
-    }
-
-    @Test
     fun `callback data with non-string values`() {
         // LLMs sometimes send booleans or numbers in the data map instead of strings
         val json = """{"type":"button","label":"Continue","action":{"type":"callback","event":"continue","data":{"continue":true,"count":42,"name":"test"}}}"""
@@ -415,14 +326,6 @@ class DenebUiParserTest {
         assertEquals("true", data["continue"])
         assertEquals("42", data["count"])
         assertEquals("test", data["name"])
-    }
-
-    @Test
-    fun `fixes equals sign instead of colon in key-value separator`() {
-        val json = """{"type":"column","children=[{"type":"text","value":"Hello"}]}"""
-        val column = assertIs<ColumnNode>(parseUi(json))
-        assertEquals(1, column.children.size)
-        assertIs<TextNode>(column.children[0])
     }
 
     @Test
@@ -707,35 +610,6 @@ class DenebUiParserTest {
         val child = node.children[0]
         assertIs<TextNode>(child)
         assertEquals("Click me", child.value)
-    }
-
-    // --- Truncated JSON recovery tests ---
-
-    @Test
-    fun `recovers truncated JSON mid-value in nested object`() {
-        // Simulates LLM response cut off inside a deeply nested structure
-        val json = """{"type":"column","children":[{"type":"text","value":"Complete"},{"type":"text","value":"Trun"""
-        val node = assertIs<ColumnNode>(parseUi(json))
-        // At least the first complete child should be recovered
-        assertTrue(node.children.isNotEmpty())
-        assertIs<TextNode>(node.children[0])
-        assertEquals("Complete", (node.children[0] as TextNode).value)
-    }
-
-    @Test
-    fun `recovers truncated JSON after comma`() {
-        val json = """{"type":"column","children":[{"type":"text","value":"First"},"""
-        val node = assertIs<ColumnNode>(parseUi(json))
-        assertEquals(1, node.children.size)
-        assertIs<TextNode>(node.children[0])
-        assertEquals("First", (node.children[0] as TextNode).value)
-    }
-
-    @Test
-    fun `recovers truncated JSON mid-key`() {
-        val json = """{"type":"column","children":[{"type":"text","value":"OK"}],"spa"""
-        val node = assertIs<ColumnNode>(parseUi(json))
-        assertEquals(1, node.children.size)
     }
 
     @Test
