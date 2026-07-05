@@ -135,6 +135,57 @@ func (d proactiveRelayDeps) markSessionVisible(sessionKey string, ts int64) {
 	d.sessions.EnsureVisible(sessionKey, channel, ts)
 }
 
+// appendTranscript persists a proactive report to the session transcript and
+// native-sync outbox. It returns delivered=false only when no transcript store
+// is wired, preserving the caller's existing "not delivered, but not an error"
+// contract for misconfigured older wiring/tests.
+func (d proactiveRelayDeps) appendTranscript(target, content, deliverBody string, collapse bool, origLen int) (bool, error) {
+	if d.transcriptStore == nil {
+		// No transcript store wired means every proactive report (morning
+		// letter, mail analysis) is silently dropped in native-only mode — the
+		// user observes nothing arriving. Surface it so a misconfigured startup
+		// is diagnosable instead of mysteriously quiet.
+		if d.logger != nil {
+			d.logger.Error("proactive native relay: no transcript store wired — report dropped",
+				"sessionKey", target)
+		}
+		d.logProactive("dropped", "no_transcript_store", origLen, "")
+		return false, nil
+	}
+	// Collapsed delivery: the transcript carries a title-only accordion card
+	// that expands in place; the raw prose stays inside its markdown child, so
+	// follow-up turns in client:main still have the full analysis in context.
+	// A body whose title can't be derived falls back to plain prose delivery.
+	transcriptBody := deliverBody
+	if collapse {
+		if title, titleLine := extractCardTitle(content); strings.TrimSpace(title) != "" {
+			transcriptBody = denebui.CollapsedReportFence(title, collapsedReportBody(deliverBody, title, titleLine))
+		}
+	}
+	msg := toolctx.NewTextChatMessage("assistant", transcriptBody, time.Now().UnixMilli())
+	if err := d.transcriptStore.Append(target, msg); err != nil {
+		if d.logger != nil {
+			d.logger.Error("proactive native relay: transcript append failed",
+				"sessionKey", target, "error", err)
+		}
+		d.logProactive("error", "append_failed", origLen, "")
+		return false, err
+	}
+	d.markSessionVisible(target, msg.Timestamp)
+	if d.nativeSync != nil {
+		if _, err := d.nativeSync.Append(nativesync.TranscriptAppended(
+			target,
+			"assistant",
+			pushPreview(content),
+			msg.Timestamp,
+		)); err != nil && d.logger != nil {
+			d.logger.Error("proactive native relay: native sync append failed",
+				"sessionKey", target, "error", err)
+		}
+	}
+	return true, nil
+}
+
 // relay delivers content to the native client (업무 transcript + live push).
 // sessionKey is accepted for signature compatibility with existing callers but
 // is ignored — all proactive output lands in client:main. Returns (false, nil)
@@ -264,53 +315,14 @@ func (d proactiveRelayDeps) relayNativeToOptions(sessionKey, content string, opt
 	// The main 업무 feed (client:main) delivers proactive reports to the work FEED
 	// only — not the chat transcript — so the chat stays a place to ask, not a wall
 	// of pushed reports. The feed card carries the full body, read in the 피드 screen
-	// (PR #2448). Sub-sessions (e.g. a dream side-thread) and the no-feed-store
-	// fallback still mirror into their transcript so nothing is silently dropped.
+	// (PR #2448). Sub-sessions (e.g. a dream side-thread), the no-feed-store case,
+	// and a feed-write failure all mirror into the transcript so nothing is
+	// silently dropped.
 	feedOnly := target == nativeWorkSessionKey && d.workFeed != nil && !opts.mirrorTranscript
 
 	if !feedOnly {
-		if d.transcriptStore == nil {
-			// No transcript store wired means every proactive report (morning
-			// letter, mail analysis) is silently dropped in native-only mode — the
-			// user observes nothing arriving. Surface it so a misconfigured startup
-			// is diagnosable instead of mysteriously quiet.
-			if d.logger != nil {
-				d.logger.Error("proactive native relay: no transcript store wired — report dropped",
-					"sessionKey", target)
-			}
-			d.logProactive("dropped", "no_transcript_store", origLen, "")
-			return false, nil
-		}
-		// Collapsed delivery: the transcript carries a title-only accordion card
-		// that expands in place; the raw prose stays inside its markdown child, so
-		// follow-up turns in client:main still have the full analysis in context.
-		// A body whose title can't be derived falls back to plain prose delivery.
-		transcriptBody := deliverBody
-		if opts.collapse {
-			if title, titleLine := extractCardTitle(content); strings.TrimSpace(title) != "" {
-				transcriptBody = denebui.CollapsedReportFence(title, collapsedReportBody(deliverBody, title, titleLine))
-			}
-		}
-		msg := toolctx.NewTextChatMessage("assistant", transcriptBody, time.Now().UnixMilli())
-		if err := d.transcriptStore.Append(target, msg); err != nil {
-			if d.logger != nil {
-				d.logger.Error("proactive native relay: transcript append failed",
-					"sessionKey", target, "error", err)
-			}
-			d.logProactive("error", "append_failed", origLen, "")
+		if ok, err := d.appendTranscript(target, content, deliverBody, opts.collapse, origLen); !ok || err != nil {
 			return false, err
-		}
-		d.markSessionVisible(target, msg.Timestamp)
-		if d.nativeSync != nil {
-			if _, err := d.nativeSync.Append(nativesync.TranscriptAppended(
-				target,
-				"assistant",
-				pushPreview(content),
-				msg.Timestamp,
-			)); err != nil && d.logger != nil {
-				d.logger.Error("proactive native relay: native sync append failed",
-					"sessionKey", target, "error", err)
-			}
 		}
 	}
 	// Deep-link target for the desktop proactive nudge — set when this delivery
@@ -374,6 +386,13 @@ func (d proactiveRelayDeps) relayNativeToOptions(sessionKey, content string, opt
 			if d.logger != nil {
 				d.logger.Error("proactive native relay: work feed append failed",
 					"sessionKey", target, "error", err)
+			}
+			if feedOnly {
+				if ok, appendErr := d.appendTranscript(target, content, deliverBody, opts.collapse, origLen); appendErr != nil {
+					return false, appendErr
+				} else if !ok {
+					return false, err
+				}
 			}
 		} else {
 			// The desktop nudge deep-links to the work-feed card it just created.

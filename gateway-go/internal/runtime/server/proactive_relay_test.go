@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -18,9 +19,16 @@ func (w *recordingWorkFeed) Append(it workfeed.Item) (workfeed.Item, error) {
 	return it, nil
 }
 
+type failingWorkFeed struct{ err error }
+
+func (w *failingWorkFeed) Append(workfeed.Item) (workfeed.Item, error) {
+	return workfeed.Item{}, w.err
+}
+
 // recordingTranscriptStore is a TranscriptStore fake that records Append calls.
 type recordingTranscriptStore struct {
 	appends map[string][]toolctx.ChatMessage
+	err     error
 }
 
 func newRecordingTranscriptStore() *recordingTranscriptStore {
@@ -28,6 +36,9 @@ func newRecordingTranscriptStore() *recordingTranscriptStore {
 }
 
 func (s *recordingTranscriptStore) Append(sessionKey string, msg toolctx.ChatMessage) error {
+	if s.err != nil {
+		return s.err
+	}
 	s.appends[sessionKey] = append(s.appends[sessionKey], msg)
 	return nil
 }
@@ -306,6 +317,61 @@ func TestRelay_StripsMetaPreamble(t *testing.T) {
 	}
 	if msgs := store.appends[nativeWorkSessionKey]; len(msgs) != 0 {
 		t.Errorf("feed-only main session must not mirror into the transcript, got: %+v", msgs)
+	}
+}
+
+// TestRelay_WorkFeedFailureFallsBackToTranscript verifies the feed-only main
+// session path does not lose a report when work-feed persistence fails: it
+// mirrors the body into the durable transcript and still nudges the client.
+func TestRelay_WorkFeedFailureFallsBackToTranscript(t *testing.T) {
+	store := newRecordingTranscriptStore()
+	feed := &failingWorkFeed{err: errors.New("feed down")}
+	hub := newClientPushHub()
+	events, unsub := hub.subscribe(kindMobile)
+	defer unsub()
+
+	d := proactiveRelayDeps{transcriptStore: store, workFeed: feed, pushHub: hub}
+	body := "📬 업무 리포트 본문\n\n대한전선 당진 2차 착수보고회 자료 확인 필요"
+	delivered, err := d.relay(context.Background(), "ignored", body)
+	if err != nil {
+		t.Fatalf("relay: %v", err)
+	}
+	if !delivered {
+		t.Fatal("relay delivered=false, want durable transcript fallback")
+	}
+	msgs := store.appends[nativeWorkSessionKey]
+	if len(msgs) != 1 {
+		t.Fatalf("got %d transcript append(s), want 1 fallback append", len(msgs))
+	}
+	if got := msgs[0].TextContent(); got != body {
+		t.Errorf("fallback transcript body = %q, want %q", got, body)
+	}
+	select {
+	case ev := <-events:
+		if ev.Body == "" {
+			t.Error("push preview body is empty after transcript fallback")
+		}
+		if ev.Kind != "" || ev.Ref != "" {
+			t.Errorf("push must not deep-link a missing work-feed card, got kind=%q ref=%q", ev.Kind, ev.Ref)
+		}
+	default:
+		t.Error("expected a live push event, got none")
+	}
+}
+
+// TestRelay_WorkFeedFailureWithoutTranscriptReturnsError verifies a report is
+// not falsely acknowledged as delivered when both the feed write fails and the
+// durable transcript fallback is unavailable.
+func TestRelay_WorkFeedFailureWithoutTranscriptReturnsError(t *testing.T) {
+	feedErr := errors.New("feed down")
+	d := proactiveRelayDeps{workFeed: &failingWorkFeed{err: feedErr}}
+
+	delivered, err := d.relay(context.Background(), "ignored", "📬 업무 리포트 본문")
+	if delivered {
+		t.Fatal("relay delivered=true, want failure when no durable path exists")
+	}
+	if !errors.Is(err, feedErr) {
+		t.Fatalf("relay error = %v, want %v", err, feedErr)
 	}
 }
 
