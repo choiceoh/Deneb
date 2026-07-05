@@ -70,7 +70,7 @@ func toolTodoWithStore(store *localtodo.Store) ToolFunc {
 			}
 			td, serr := s.SetDone(strings.TrimSpace(p.ID), done)
 			if serr != nil {
-				return "", serr
+				return fmt.Sprintf("할일을 찾지 못했습니다 (id=%s): %s. `todo(action=\"list\")`로 현재 id를 확인한 뒤 다시 시도하세요.", p.ID, serr), nil
 			}
 			state := "완료"
 			if !done {
@@ -80,7 +80,7 @@ func toolTodoWithStore(store *localtodo.Store) ToolFunc {
 
 		case "delete", "remove":
 			if derr := s.Delete(strings.TrimSpace(p.ID)); derr != nil {
-				return "", derr
+				return fmt.Sprintf("할일을 찾지 못했습니다 (id=%s): %s. `todo(action=\"list\")`로 현재 id를 확인한 뒤 다시 시도하세요.", p.ID, derr), nil
 			}
 			return fmt.Sprintf("할일 삭제됨 (id=%s)", p.ID), nil
 

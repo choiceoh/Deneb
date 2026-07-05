@@ -130,6 +130,12 @@ func ToolDiagram() ToolFunc {
 			return "", fmt.Errorf("diagram render failed: %w", err)
 		}
 		if err := trimDarkPNG(pngPath); err != nil {
+			// "blank diagram" almost always means Mermaid failed to compile the
+			// generated markup (odd characters in a label/edge) and rendered
+			// nothing — tell the model how to recover instead of dead-ending.
+			if strings.Contains(err.Error(), "blank diagram") {
+				return "다이어그램이 비어 있게 렌더됐습니다 — Mermaid가 마크업을 컴파일하지 못했을 가능성이 큽니다. 노드/에지 라벨의 특수문자(따옴표·괄호·세미콜론)를 줄이거나 라벨을 짧게 바꿔 다시 시도하세요.", nil
+			}
 			return "", fmt.Errorf("diagram trim failed: %w", err)
 		}
 

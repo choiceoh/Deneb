@@ -39,8 +39,11 @@ func ToolGraphify(workspaceDir string) ToolFunc {
 		if err != nil {
 			return "", err
 		}
+		// Expected state, not a hard failure: the graph simply hasn't been
+		// built yet (rebuilds each wiki-dream cycle). Guide the model to the
+		// wiki tool instead of surfacing an error to the user.
 		if _, err := os.Stat(graphPath); errors.Is(err, fs.ErrNotExist) {
-			return "", fmt.Errorf("graph not found at %s — the wiki graph rebuilds automatically each wiki-dream cycle", graphPath)
+			return fmt.Sprintf("그래프가 아직 없습니다 (%s) — wiki-dream 사이클마다 자동 재구축됩니다. 지금은 `wiki(action=\"search\")` 또는 `knowledge(op=\"recall\")`로 같은 질문에 답하세요.", graphPath), nil
 		}
 
 		var args []string
@@ -80,7 +83,7 @@ func ToolGraphify(workspaceDir string) ToolFunc {
 			if msg == "" {
 				msg = err.Error()
 			}
-			return "", fmt.Errorf("graphify %s failed: %s", p.Action, msg)
+			return fmt.Sprintf("graphify %s 실행 실패: %s — 그래프 CLI 문제일 수 있으니 `wiki(action=\"search\")`로 대신 답하세요.", p.Action, msg), nil
 		}
 		out := stdout.String()
 		if strings.TrimSpace(out) == "" {
