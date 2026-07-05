@@ -102,10 +102,12 @@ curl -o runner.tar.gz -L <runner-linux-arm64-tarball-url>
 tar xzf runner.tar.gz
 ./config.sh --url https://github.com/choiceoh/Deneb \
   --token <REG_TOKEN> --labels gx10 --name srv4-apk --unattended
-printf 'ANDROID_HOME=/home/choiceoh/android-sdk\nJAVA_HOME=/usr/lib/jvm/java-21-openjdk-arm64\n' >> .env
+# idempotent append — 재실행해도 중복 없음 (.env 는 config.sh 가 만든 기존 항목 보존)
+grep -q '^ANDROID_HOME=' .env 2>/dev/null || echo 'ANDROID_HOME=/home/choiceoh/android-sdk' >> .env
+grep -q '^JAVA_HOME='    .env 2>/dev/null || echo 'JAVA_HOME=/usr/lib/jvm/java-21-openjdk-arm64' >> .env
 sudo ./svc.sh install choiceoh && sudo ./svc.sh start   # 재부팅 후 자동 상주
 ```
 
-- 호스트 전제(2026-07-06 충족): `~/android-sdk`(ANDROID_HOME 기본), JDK 21(+**헤드풀 `openjdk-21-jre`** — 하네스/renderPreviews 의 AWT), Xvfb/matchbox 등 스모크 하네스 의존(`native-live-app.md`). ★**ARM64 필수 오버라이드**: `~/.gradle/gradle.properties` 에 `org.gradle.java.home=/usr/lib/jvm/java-21-openjdk-arm64` + `android.aapt2FromMavenOverride=$HOME/android-sdk/build-tools/36.0.0/aapt2` — 구글 메이븐이 내려주는 aapt2 는 x86_64 라 이 오버라이드 없이는 `Syntax error: ")" unexpected` 로 빌드가 죽는다(2026-07-06 이전 검증에서 실측).
+- 호스트 전제(2026-07-06 충족): `~/android-sdk`(ANDROID_HOME 기본), JDK 21(+**헤드풀 `openjdk-21-jre`** — 하네스/renderPreviews 의 AWT), Xvfb/matchbox 등 스모크 하네스 의존(`native-live-app.md`). ★**ARM64 필수 오버라이드**: `~/.gradle/gradle.properties` 에 `org.gradle.java.home=/usr/lib/jvm/java-21-openjdk-arm64` + `android.aapt2FromMavenOverride=$HOME/android-sdk/build-tools/<버전>/aapt2` — `<버전>` 은 설치된 최신 build-tools (`ls ~/android-sdk/build-tools | sort -V | tail -1`) 를 그대로 적는다(레포는 build-tools 버전을 고정하지 않으므로 SDK 갱신 시 이 경로도 따라 갱신). 구글 메이븐이 내려주는 aapt2 는 x86_64 라 이 오버라이드 없이는 `Syntax error: ")" unexpected` 로 빌드가 죽는다(2026-07-06 이전 검증에서 실측).
 - 레포 변수 `DENEB_APK_BASE_URL` 를 게이트웨이 도달 base 로 설정(`Settings > Secrets and variables > Actions > Variables`). 미설정이어도 동작하나 version.json url 이 로컬 기본값이 된다(인앱 업데이터는 게이트웨이 다운로드 라우트로 받으므로 무해).
 - 커스텀 라벨 `gx10` 은 `.github/actionlint.yaml` 에 등록돼 있어 워크플로 린트(`workflow-sanity.yml`)를 통과한다.
