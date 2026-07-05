@@ -27,6 +27,78 @@ func handleRunSuccess(
 	result *agent.AgentResult,
 	now int64,
 ) {
+	isSilent := applySilentReplyPolicy(params, result, logger)
+
+	persistAggregateAssistantText(params, deps, result, now, logger)
+
+	if broadcaster != nil {
+		// Read Sino-Korean Hanja as Hangul for the done frame the client settles
+		// to (報告書 → 보고서). The persisted transcript keeps the raw text; the
+		// display read transliterates it (toolctx.TransliterateAssistantTextForDisplay).
+		// stripReasoningLeak mirrors the sync path (buildSyncResult): without it
+		// the async done frame was the one surface that could still show leaked
+		// "[thinking]" delimiters.
+		broadcaster.EmitComplete(hanja.Transliterate(strings.TrimSpace(stripReasoningLeak(result.Text))), result.Usage)
+	}
+
+	deliverRunReply(params, deps, result, isSilent, logger)
+
+	// Store last output on the session so cron, subagent notifications, and
+	// other consumers can read it. Prefer AllText (accumulated across all turns)
+	// over Text (last turn only) — sub-agents often produce output in early turns
+	// and finish with a tool-only turn, leaving Text empty.
+	lastOutput := result.AllText
+	if lastOutput == "" {
+		lastOutput = result.Text
+	}
+	if lastOutput != "" {
+		if sess := deps.sessions.Get(params.SessionKey); sess != nil {
+			sess.LastOutput = lastOutput
+		}
+	}
+
+	finishRun(deps, params, session.PhaseEnd, "completed", "done", "", now)
+	emitJobEvent(deps, params.ClientRunID, "end", false, "", now)
+
+	finishTurnSideEffects(deps, params, result, logger)
+
+	logger.Info(
+		"agent run completed",
+		"stopReason", result.StopReason,
+		"turns", result.Turns,
+		"inputTokens", result.Usage.InputTokens,
+		"outputTokens", result.Usage.OutputTokens,
+	)
+}
+
+// finishTurnSideEffects runs the post-run side effects shared by EVERY entry
+// path — the async lifecycle (handleRunSuccess) and the synchronous
+// SendSync/SendSyncStream builders:
+//   - coding turn end: checkpoint + verify the worktree (Mode==code sessions)
+//   - auto-diary + dream-turn trigger
+//
+// One call site per entry path, one implementation here. Both hooks were
+// historically wired on the async path only, which left them dead on the
+// native client's sync surface after PR #1922 — adding any future entry path
+// must call this, not re-wire the hooks individually.
+func finishTurnSideEffects(deps runDeps, params RunParams, result *agent.AgentResult, logger *slog.Logger) {
+	if result == nil {
+		return
+	}
+	// Coding mode: snapshot the worktree edits as a checkpoint and verify
+	// build/tests, flipping the rail status.
+	maybeCodingTurnEnd(deps, params, result.Text, logger)
+	// Diary recording: append raw conversation turn to today's diary.
+	// Wiki page curation is handled by the main LLM via system prompt.
+	maybeRecordRunDiary(deps, params, result, logger)
+}
+
+// applySilentReplyPolicy strips the silent-reply token (NO_REPLY) from the
+// response text before persisting, broadcasting, or delivering — the internal
+// token must never reach any client (RPC, WebSocket, native) or the transcript
+// — and forces an explicit failure notice when an external delivery tool
+// failed and the reply would otherwise be empty/silent. Returns isSilent.
+func applySilentReplyPolicy(params RunParams, result *agent.AgentResult, logger *slog.Logger) bool {
 	// Strip silent reply token (NO_REPLY) from the response text before
 	// persisting, broadcasting, or delivering. This ensures the internal
 	// token is never exposed to any client (RPC, WebSocket, native client)
@@ -54,7 +126,12 @@ func handleRunSuccess(
 			"session", params.SessionKey,
 			"channel", params.Delivery.Channel)
 	}
+	return isSilent
+}
 
+// persistAggregateAssistantText persists the run's accumulated text as one
+// assistant message (legacy path) when per-turn persistence was NOT active.
+func persistAggregateAssistantText(params RunParams, deps runDeps, result *agent.AgentResult, now int64, logger *slog.Logger) {
 	// Persist assistant message to transcript + Aurora store.
 	// When tool activities were recorded, prepend a compact summary so the
 	// next context assembly includes what the agent actually did — not just
@@ -85,17 +162,14 @@ func handleRunSuccess(
 		}
 		// Sync Aurora summaries for channel replies when available.
 	}
+}
 
-	if broadcaster != nil {
-		// Read Sino-Korean Hanja as Hangul for the done frame the client settles
-		// to (報告書 → 보고서). The persisted transcript keeps the raw text; the
-		// display read transliterates it (toolctx.TransliterateAssistantTextForDisplay).
-		// stripReasoningLeak mirrors the sync path (buildSyncResult): without it
-		// the async done frame was the one surface that could still show leaked
-		// "[thinking]" delimiters.
-		broadcaster.EmitComplete(hanja.Transliterate(strings.TrimSpace(stripReasoningLeak(result.Text))), result.Usage)
-	}
-
+// deliverRunReply routes the final reply to the originating channel:
+// empty-response fallbacks, directive parsing (silent/media/threading), the
+// channel reply with one retry, and media token delivery — with every
+// user-observable failure escalated per logging.md (Error + broadcast +
+// transcript note).
+func deliverRunReply(params RunParams, deps runDeps, result *agent.AgentResult, isSilent bool, logger *slog.Logger) {
 	// Deliver response back to the originating channel (e.g., the native client).
 	// Use parseReplyDirectives (chatport boundary) for unified processing: silent token
 	// detection, leaked tool-call stripping, MEDIA: extraction, and threading.
@@ -304,55 +378,6 @@ func handleRunSuccess(
 			}
 		}
 	}
-
-	// Store last output on the session so cron, subagent notifications, and
-	// other consumers can read it. Prefer AllText (accumulated across all turns)
-	// over Text (last turn only) — sub-agents often produce output in early turns
-	// and finish with a tool-only turn, leaving Text empty.
-	lastOutput := result.AllText
-	if lastOutput == "" {
-		lastOutput = result.Text
-	}
-	if lastOutput != "" {
-		if sess := deps.sessions.Get(params.SessionKey); sess != nil {
-			sess.LastOutput = lastOutput
-		}
-	}
-
-	finishRun(deps, params, session.PhaseEnd, "completed", "done", "", now)
-	emitJobEvent(deps, params.ClientRunID, "end", false, "", now)
-
-	finishTurnSideEffects(deps, params, result, logger)
-
-	logger.Info(
-		"agent run completed",
-		"stopReason", result.StopReason,
-		"turns", result.Turns,
-		"inputTokens", result.Usage.InputTokens,
-		"outputTokens", result.Usage.OutputTokens,
-	)
-}
-
-// finishTurnSideEffects runs the post-run side effects shared by EVERY entry
-// path — the async lifecycle (handleRunSuccess) and the synchronous
-// SendSync/SendSyncStream builders:
-//   - coding turn end: checkpoint + verify the worktree (Mode==code sessions)
-//   - auto-diary + dream-turn trigger
-//
-// One call site per entry path, one implementation here. Both hooks were
-// historically wired on the async path only, which left them dead on the
-// native client's sync surface after PR #1922 — adding any future entry path
-// must call this, not re-wire the hooks individually.
-func finishTurnSideEffects(deps runDeps, params RunParams, result *agent.AgentResult, logger *slog.Logger) {
-	if result == nil {
-		return
-	}
-	// Coding mode: snapshot the worktree edits as a checkpoint and verify
-	// build/tests, flipping the rail status.
-	maybeCodingTurnEnd(deps, params, result.Text, logger)
-	// Diary recording: append raw conversation turn to today's diary.
-	// Wiki page curation is handled by the main LLM via system prompt.
-	maybeRecordRunDiary(deps, params, result, logger)
 }
 
 // handleRunError processes a failed or aborted agent run.
