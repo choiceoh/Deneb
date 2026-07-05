@@ -29,6 +29,7 @@ class DenebReplyReceiver : BroadcastReceiver() {
         when (intent.action) {
             DenebMessagingNotification.ACTION_MARK_AS_READ ->
                 DenebMessagingNotification.cancel(context)
+
             DenebMessagingNotification.ACTION_REPLY -> handleReply(context, intent)
         }
     }

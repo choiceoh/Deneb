@@ -58,9 +58,11 @@ object DenebMessagingNotification {
      * spinner clears immediately instead of hanging for a full agent turn.
      */
     fun appendUserReply(context: Context, replyText: String) {
-        val style = (activeStyle(context) ?: newStyle())
-            .addMessage(replyText, System.currentTimeMillis(), userPerson)
-        post(context, style)
+        // Only update a conversation still in the tray: Android Auto can fire
+        // mark-as-read (cancel) BEFORE the voice reply, and re-posting here
+        // would resurrect an outgoing-only thread the user already dismissed.
+        val style = activeStyle(context) ?: return
+        post(context, style.addMessage(replyText, System.currentTimeMillis(), userPerson))
     }
 
     /** Re-posts the conversation with a Korean failure notice when a reply could not be delivered. */
@@ -79,8 +81,7 @@ object DenebMessagingNotification {
         notificationManager(context).cancel(NOTIFICATION_ID)
     }
 
-    private fun newStyle(): NotificationCompat.MessagingStyle =
-        NotificationCompat.MessagingStyle(userPerson).setGroupConversation(false)
+    private fun newStyle(): NotificationCompat.MessagingStyle = NotificationCompat.MessagingStyle(userPerson).setGroupConversation(false)
 
     /**
      * Recovers the MessagingStyle of the notification currently in the tray (if
@@ -165,6 +166,5 @@ object DenebMessagingNotification {
             .build()
     }
 
-    private fun notificationManager(context: Context): NotificationManager =
-        context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+    private fun notificationManager(context: Context): NotificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 }

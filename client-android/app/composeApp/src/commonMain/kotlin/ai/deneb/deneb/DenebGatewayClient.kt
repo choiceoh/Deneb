@@ -1631,7 +1631,13 @@ class DenebGatewayClient(
                         params = SendParams(
                             message = message,
                             sessionKey = targetSessionKey,
-                            skipRecall = !appSettings.isRecallEnabled(),
+                            // Always recall: this reply answers a WORK push
+                            // (meeting harvest, mail analysis) on the work
+                            // session, so it needs the wiki/feed context even
+                            // when the UI was last left in 챗봇/집중 mode —
+                            // that toggle belongs to the open conversation,
+                            // not to detached notification replies.
+                            skipRecall = false,
                         ),
                     ),
                 )

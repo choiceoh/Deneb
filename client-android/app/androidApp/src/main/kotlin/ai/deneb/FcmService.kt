@@ -12,7 +12,8 @@ import org.koin.android.ext.android.inject
  * Doze) — see gateway-go internal/domain/push.
  *
  * The gateway sends DATA-ONLY messages (title/body in `data`, no `notification`
- * block), so onMessageReceived runs in every app state and the app owns the
+ * block), so onMessageReceived runs whenever FCM delivers (force-stop / OEM
+ * background limits can still block delivery) and the app owns the
  * notification rendering. That is deliberate: Android Auto can only read aloud
  * and voice-reply to app-built MessagingStyle notifications with reply /
  * mark-as-read actions ([DenebMessagingNotification]) — a system-rendered

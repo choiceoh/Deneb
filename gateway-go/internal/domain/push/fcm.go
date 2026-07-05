@@ -63,7 +63,8 @@ func (s *FCMSender) ProjectID() string { return s.projectID }
 // tray when the app is closed, which skips FcmService.onMessageReceived — but
 // Android Auto can only read aloud / voice-reply to app-built MessagingStyle
 // notifications, so the app must always run and own the rendering. Data-only
-// + high priority guarantees onMessageReceived fires in every app state.
+// + high priority makes onMessageReceived fire whenever FCM can deliver
+// (force-stopped apps and OEM background limits can still block delivery).
 // Older app builds already read data["title"]/data["body"] as a fallback, so
 // the fields stay backward compatible.
 func (s *FCMSender) Send(ctx context.Context, deviceToken, title, body string, data map[string]string) SendResult {
