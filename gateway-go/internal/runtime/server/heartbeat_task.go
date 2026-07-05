@@ -3,7 +3,9 @@
 // Every 30 minutes during active hours (08:00–23:00 Asia/Seoul), reads
 // ~/.deneb/HEARTBEAT.md and executes its instructions as a full agent turn.
 // Users write tasks into HEARTBEAT.md and the agent picks them up autonomously.
-// Outside active hours, or if the file is missing/empty, the task is a no-op.
+// Outside active hours, or if the file is missing/empty, the task is a no-op —
+// unless the proactive signal pass or the research lane (heartbeat_research.go,
+// self-queued "[연구]" items from accumulated new data) warrants a turn.
 //
 // The heartbeat turn is dispatched into the user's most recently active native
 // client session (tracked via ActivityTracker.LastSessionKey), falling back to
@@ -148,8 +150,13 @@ func (t *heartbeatTask) Run(ctx context.Context) error {
 	// signal-driven proactivity the Claw-Anything paper calls for (finding B).
 	signalSummary := t.detectSignalSummary(ctx)
 
-	// Nothing to do: no user-configured checks and no escalation-worthy signals.
-	if !heartbeatShouldRun(content, signalSummary) {
+	// Research lane: when enough new data accumulated (mail analyses, wiki
+	// writes), ask this turn to formulate its own "[연구]" items — see
+	// heartbeat_research.go. Deterministic scan, throttled to ~once a day.
+	researchNudge := t.detectResearchNudge(time.Now())
+
+	// Nothing to do: no user checks, no escalation signals, no research nudge.
+	if !heartbeatShouldRun(content, signalSummary, researchNudge) {
 		t.logger.Debug("heartbeat: skipped, no actionable tasks or signals")
 		return nil
 	}
@@ -167,7 +174,7 @@ func (t *heartbeatTask) Run(ctx context.Context) error {
 	}
 	sessionKey := heartbeatTargetSessionKey(lastSessionKey)
 
-	triggerMsg := fmt.Sprintf(heartbeatTriggerTemplate, composeHeartbeatBody(signalSummary, content))
+	triggerMsg := fmt.Sprintf(heartbeatTriggerTemplate, composeHeartbeatBody(signalSummary, content, researchNudge))
 
 	runCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
@@ -200,11 +207,12 @@ func (t *heartbeatTask) detectSignalSummary(ctx context.Context) string {
 	return report.Summary(t.signalConfig.MaxReasonsPerKind)
 }
 
-// heartbeatShouldRun reports whether a heartbeat turn is warranted: either the
-// user has HEARTBEAT.md checks, or there are escalation-worthy signals to surface.
-// Pure for unit testing.
-func heartbeatShouldRun(content, signalSummary string) bool {
-	return strings.TrimSpace(content) != "" || strings.TrimSpace(signalSummary) != ""
+// heartbeatShouldRun reports whether a heartbeat turn is warranted: the user
+// has HEARTBEAT.md checks, there are escalation-worthy signals to surface, or
+// the research lane fired a new-data nudge. Pure for unit testing.
+func heartbeatShouldRun(content, signalSummary, researchNudge string) bool {
+	return strings.TrimSpace(content) != "" || strings.TrimSpace(signalSummary) != "" ||
+		strings.TrimSpace(researchNudge) != ""
 }
 
 // heartbeatHasTasks reports whether HEARTBEAT.md carries anything the agent
@@ -232,21 +240,31 @@ func heartbeatHasTasks(content string) bool {
 	return false
 }
 
-// composeHeartbeatBody builds the trigger body from the (optional) signal summary
-// and (optional) HEARTBEAT.md content. Signals lead so the agent prioritizes them;
-// when there is no HEARTBEAT.md, a short note tells the agent the signals are the
-// only agenda (and to stay non-intrusive). Pure for unit testing.
-func composeHeartbeatBody(signalSummary, content string) string {
+// composeHeartbeatBody builds the trigger body from the (optional) signal
+// summary, (optional) HEARTBEAT.md content, and (optional) research nudge.
+// Signals lead so the agent prioritizes them; the research lane comes after
+// the user's own checks. When there is no HEARTBEAT.md, a short note tells the
+// agent the injected blocks are the only agenda (and to stay non-intrusive).
+// Pure for unit testing.
+func composeHeartbeatBody(signalSummary, content, researchNudge string) string {
 	signalSummary = strings.TrimSpace(signalSummary)
 	content = strings.TrimSpace(content)
-	switch {
-	case signalSummary != "" && content != "":
-		return signalSummary + "\n\n---\n" + content
-	case signalSummary != "":
-		return signalSummary + "\n\n(현재 HEARTBEAT.md에 등록된 작업은 없습니다. 위 감지 신호만 검토해, 정말 알릴 가치가 있을 때만 사용자에게 간결히 알리세요.)"
-	default:
-		return content
+	researchNudge = strings.TrimSpace(researchNudge)
+	sections := make([]string, 0, 3)
+	if signalSummary != "" {
+		sections = append(sections, signalSummary)
 	}
+	if content != "" {
+		sections = append(sections, content)
+	}
+	if researchNudge != "" {
+		sections = append(sections, researchNudge)
+	}
+	body := strings.Join(sections, "\n\n---\n")
+	if content == "" && body != "" {
+		body += "\n\n(현재 HEARTBEAT.md에 등록된 작업은 없습니다. 위 내용만 검토해, 정말 알릴 가치가 있을 때만 사용자에게 간결히 알리세요.)"
+	}
+	return body
 }
 
 func heartbeatSyncOptions() *chat.SyncOptions {
