@@ -25,7 +25,7 @@ import kotlinx.serialization.json.Json
 private val webViewJson = Json { ignoreUnknownKeys = true }
 
 /**
- * Android in-app browser WebView with the in-place translator. On each page load
+ * Android in-app browser WebView with the in-place DeepL-first translator. On each page load
  * we inject deneb-translate.js (assets), which walks the DOM, skips Korean, and
  * calls back through the [BRIDGE_NAME] JavaScript interface; that hands the page's
  * text segments to [translate] (the gateway RPC) and applies the result in place.
@@ -128,7 +128,7 @@ private class TranslateBridge(
     // toast so a silent no-op is visible to the user (and pinpoints where it breaks).
     @JavascriptInterface
     fun onEnable(count: Int) {
-        toast(if (count == 0) "번역할 텍스트를 찾지 못했습니다" else "${count}개 번역 중…")
+        toast(if (count == 0) "DeepL로 번역할 텍스트를 찾지 못했습니다" else "DeepL 번역 중… ${count}개")
     }
 
     @JavascriptInterface
@@ -138,11 +138,11 @@ private class TranslateBridge(
         scope.launch {
             val translated = runCatching { translate(segments, "ko") }.getOrNull()
             if (translated == null) {
-                toast("번역 실패 — 서버 응답 없음")
+                toast("DeepL 번역 실패 — 서버 응답 없음")
                 return@launch
             }
             if (translated.size != segments.size) {
-                toast("번역 응답 개수 불일치")
+                toast("DeepL 번역 응답 개수 불일치")
                 return@launch
             }
             val ridLiteral = jsStringLiteral(requestId)

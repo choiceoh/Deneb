@@ -7,13 +7,13 @@
  * Design / invariants:
  *  - Walk visible TEXT NODES only; skip script/style/code/editable and nodes
  *    that are already Korean (Hangul) — those need no translation and would
- *    waste model calls.
- *  - Each text node gets a stable id; the native↔model round-trip returns
+ *    waste gateway calls.
+ *  - Each text node gets a stable id; the native↔gateway round-trip returns
  *    translations keyed by that id, so replacement is exact and order-free.
  *  - Cache by original text: identical strings (nav items, repeated labels) are
  *    translated once. Persist page, site, and reusable short-label caches in
  *    localStorage so reload/back/revisit and repeated site chrome can apply
- *    known translations before asking the model again.
+ *    known translations before asking the gateway again.
  *  - Body-first + viewport-first: article/main/body candidates near the current
  *    viewport are shipped before menus, footers, and off-screen text.
  *  - When a text node is part of a paragraph/list/table block, ship a small
@@ -40,7 +40,7 @@
   var cache = {};            // originalText -> translatedText
   var persistentStores = {}; // localStorageKey -> cache store
   var persistentDirtyStores = {};
-  var inFlight = {};         // tid -> true while a native/model batch is pending
+  var inFlight = {};         // tid -> true while a native/gateway batch is pending
   var pending = {};          // requestId -> [{ tids, ... }]
   var nextRequestId = 1;
   var enabled = false; // OFF by default — the native chrome calls setEnabled(true) per the toggle
@@ -550,7 +550,7 @@
       else rest.push(tids[i]);
     }
 
-    // Main readable text in/near the viewport gets the first model calls. If no
+    // Main readable text in/near the viewport gets the first translation calls. If no
     // readable-body node is visible yet, visible chrome still translates so the
     // current screen is not left blank while off-screen body text waits.
     dispatch(primaryVisible.length ? primaryVisible : visible);
@@ -587,7 +587,7 @@
     if (rec.node && rec.node.nodeValue !== translated) rec.node.nodeValue = translated;
   }
 
-  // Called by native after the model returns. translations is a JSON array the
+  // Called by native after the gateway returns. translations is a JSON array the
   // SAME length/order as the shipped units. A unit can be one text node or a
   // grouped block-part payload; any count mismatch no-ops rather than risking
   // misaligned text.
