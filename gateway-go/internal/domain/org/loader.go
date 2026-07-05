@@ -118,10 +118,10 @@ func LoadRules() (classification.Rules, error) {
 }
 
 // LoadLanes returns the dashboard lane definitions: the chart's lane nodes when
-// org.json defines parts, else nil (the dashboard then uses its legacy
-// hardcoded classification.AllLanes). A bad chart returns nil + error; the
-// handler falls back to the legacy lanes. Pairs with LoadRules so the dashboard
-// gets both its grouping rules and its column set from the same source.
+// org.json defines parts, else nil (the dashboard then has no named part
+// columns). A bad chart returns nil + error. Pairs with LoadRules so the
+// dashboard gets both its grouping rules and its column set from the same
+// source.
 func LoadLanes() ([]LaneDef, error) {
 	tree, err := Load()
 	if err != nil {

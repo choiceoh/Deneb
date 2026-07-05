@@ -46,9 +46,9 @@ import kotlin.time.Instant
  * 파트별 업무 현황 — the work dashboard (`miniapp.dashboard.lanes`). Every live work
  * item (calendar events + work-feed cards) grouped into 파트(part) lanes so the
  * operator sees who is doing what across the org at a glance, rather than scanning
- * the flat feed. The five fixed 파트 lanes always show (an empty lane signals "this
- * part has nothing pending right now"); '미분류' appears last only when it has items
- * and is rendered muted as a triage bucket. Pull to refresh re-fetches.
+ * the flat feed. The lane list now comes from the org chart; when no chart lanes
+ * are defined the screen can legitimately be empty. '미분류' appears last only when
+ * it has items and is rendered muted as a triage bucket. Pull to refresh re-fetches.
  *
  * Design split (see .claude/rules/native-design-system.md): frame + type are the
  * Deneb skin (DenebScreenScaffold + DenebType + grouped DenebGroup cards); the
@@ -106,8 +106,8 @@ fun DenebDashboardScreen(
                         },
                     )
 
-                    // The gateway always returns the five fixed lanes, so an empty
-                    // list means a degenerate/old response — guide rather than blank.
+                    // An empty list is legitimate when the org chart defines no
+                    // dashboard lanes yet, or when there is nothing to show.
                     lanes.isEmpty() -> DenebEmpty("표시할 업무 현황이 없습니다.")
 
                     else -> DashboardLanesContent(lanes)

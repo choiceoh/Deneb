@@ -61,11 +61,12 @@ func (d dashboardCalendarSource) ListRange(ctx context.Context, from, to time.Ti
 // Rules + Lanes both derive from the operator's org chart when present (the
 // chart is the master): org.LoadRules derives classification rules from the
 // chart's lane-tagged nodes, and org.LoadLanes derives the dashboard column set
-// from the same nodes. When no org.json exists (or it defines no parts), both
-// fall back to the legacy classification path — org.LoadRules → the operator's
-// {stateDir}/classification_rules.json (or keyword defaults), and org.LoadLanes
-// → nil so the handler uses its hardcoded part set. Both are always non-nil so
-// the dashboard always registers and always renders a part skeleton.
+// from the same nodes. When no org.json exists (or it defines no parts),
+// org.LoadRules still falls back to the legacy classification path — the
+// operator's {stateDir}/classification_rules.json (or keyword defaults) — but
+// org.LoadLanes returns nil, so the dashboard no longer revives the hardcoded
+// legacy part skeleton. The method still registers; items with no named lane
+// surface via 미분류.
 func (s *Server) dashboardDeps() handlerminiapp.DashboardDeps {
 	var wf handlerminiapp.DashboardWorkFeedSource
 	if nwf := s.nativeWorkFeedStore(); nwf != nil {

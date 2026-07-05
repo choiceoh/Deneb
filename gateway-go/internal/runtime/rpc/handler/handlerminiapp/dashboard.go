@@ -64,10 +64,9 @@ type ClassifierRulesLoader func() (classification.Rules, error)
 
 // DashboardLanesLoader resolves the dashboard's lane definitions (column set +
 // order). Production wires org.LoadLanes: when the operator's org chart defines
-// parts, the columns come from the chart (the chart is master); otherwise it
-// returns nil and the dashboard falls back to the legacy hardcoded part set
-// (classification.AllLanes). nil loader or a nil/empty/errored result → legacy
-// lanes, so the dashboard always renders a part skeleton.
+// parts, the columns come from the chart (the chart is master). A nil loader,
+// error, or empty result means there are currently no named dashboard columns;
+// classified items with no matching column are still surfaced via 미분류.
 type DashboardLanesLoader func() ([]org.LaneDef, error)
 
 // DashboardCalendarSource yields calendar events in [from, to). Mirrors the
@@ -94,7 +93,7 @@ type DashboardWorkFeedSource interface {
 // laneSource in collectItems — the grouping/response code is source-agnostic.
 type DashboardDeps struct {
 	Rules    ClassifierRulesLoader
-	Lanes    DashboardLanesLoader // optional; nil → legacy hardcoded lanes
+	Lanes    DashboardLanesLoader // optional; nil → no named dashboard lanes
 	Calendar DashboardCalendarSource
 	WorkFeed DashboardWorkFeedSource
 }
@@ -173,9 +172,8 @@ func dashboardLanes(deps DashboardDeps) rpcutil.HandlerFunc {
 			rules = classification.DefaultRules()
 		}
 
-		// Resolve the column set: org chart lanes when defined, else the legacy
-		// hardcoded part set. An error/empty result falls back to legacy too, so
-		// the dashboard always shows a part skeleton.
+		// Resolve the column set from the org chart. When no lanes are defined, the
+		// dashboard shows only the 미분류 safety net (if any items land there).
 		lanes := resolveLanes(deps)
 
 		items := collectItems(ctx, deps, rules)
@@ -284,29 +282,23 @@ func projectWorkFeedItem(it workfeed.Item) (classification.Signals, DashboardIte
 	return sig, item
 }
 
-// resolveLanes resolves the dashboard's column set. When the org chart defines
-// parts (deps.Lanes returns them), those drive the columns — the chart is the
-// master. Otherwise (nil loader, error, or no lane nodes) it falls back to the
-// legacy hardcoded part set so every prior deployment renders unchanged.
+// resolveLanes resolves the dashboard's column set from the org chart. When the
+// chart defines no parts (nil loader, error, or no lane nodes), it returns no
+// named columns; groupByLane still rescues any orphaned items into 미분류.
 func resolveLanes(deps DashboardDeps) []org.LaneDef {
 	if deps.Lanes != nil {
-		if defs, err := deps.Lanes(); err == nil && len(defs) > 0 {
+		if defs, err := deps.Lanes(); err == nil {
 			return defs
 		}
 	}
-	// Legacy fallback: the fixed classification lanes with their Korean labels.
-	defs := make([]org.LaneDef, 0, len(classification.AllLanes))
-	for _, lane := range classification.AllLanes {
-		defs = append(defs, org.LaneDef{Key: string(lane), Name: classification.DisplayName(lane)})
-	}
-	return defs
+	return nil
 }
 
 // groupByLane buckets classified items into the given lane order, then appends
 // the 미분류 holding lane only if it has items. Every defined part lane is always
 // present (even empty) so the client renders the full part skeleton. Items
 // within a lane are sorted soonest-first (WhenMs ascending; 0/no-time sinks to
-// the bottom). The lane set comes from resolveLanes (org chart or legacy).
+// the bottom). The lane set comes from resolveLanes (org chart-defined only).
 //
 // Safety net: an item classified to a lane that is neither in `lanes` nor the
 // reserved 미분류 key (e.g. a rules/lanes mismatch where the ruleset routed to a
@@ -362,7 +354,7 @@ func groupByLane(items []classifiedItem, lanes []org.LaneDef) DashboardOut {
 
 // laneDisplayName returns a lane's column title: its defined Name, falling back
 // to the key if the chart left a lane node unnamed (defensive — Validate already
-// rejects empty names, so this only guards the legacy path's edge).
+// rejects empty names).
 func laneDisplayName(def org.LaneDef) string {
 	if n := strings.TrimSpace(def.Name); n != "" {
 		return n

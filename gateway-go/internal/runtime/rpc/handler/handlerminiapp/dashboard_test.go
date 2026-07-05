@@ -57,6 +57,16 @@ func fakeRulesLoader() ClassifierRulesLoader {
 	}
 }
 
+func fixedDashboardLanesLoader() DashboardLanesLoader {
+	return func() ([]org.LaneDef, error) {
+		defs := make([]org.LaneDef, 0, len(classification.AllLanes))
+		for _, lane := range classification.AllLanes {
+			defs = append(defs, org.LaneDef{Key: string(lane), Name: classification.DisplayName(lane)})
+		}
+		return defs, nil
+	}
+}
+
 // findLane returns the lane with the given key from a response, or nil.
 func findLane(lanes []LaneOut, key string) *LaneOut {
 	for i := range lanes {
@@ -99,6 +109,7 @@ func TestDashboardLanes_GroupsByPartFromAllSources(t *testing.T) {
 	now := time.Now()
 	deps := DashboardDeps{
 		Rules: fakeRulesLoader(),
+		Lanes: fixedDashboardLanesLoader(),
 		Calendar: fakeDashboardCalendar{events: []calendar.Event{
 			// Organizer 홍길동 → team1 (person, strong).
 			{ID: "ev1", Summary: "1팀 협의", Start: now.Add(2 * time.Hour),
@@ -162,6 +173,7 @@ func TestDashboardLanes_UnclassifiedOmittedWhenEmpty(t *testing.T) {
 	now := time.Now()
 	deps := DashboardDeps{
 		Rules: fakeRulesLoader(),
+		Lanes: fixedDashboardLanesLoader(),
 		Calendar: fakeDashboardCalendar{events: []calendar.Event{
 			{ID: "ev1", Summary: "x", Start: now, Organizer: calendar.Attendee{DisplayName: "홍길동"}},
 		}},
@@ -183,6 +195,7 @@ func TestDashboardLanes_ItemsSortedSoonestFirst(t *testing.T) {
 	// Three team1 events out of order; expect ascending WhenMs within the lane.
 	deps := DashboardDeps{
 		Rules: fakeRulesLoader(),
+		Lanes: fixedDashboardLanesLoader(),
 		Calendar: fakeDashboardCalendar{events: []calendar.Event{
 			{ID: "late", Summary: "c", Start: now.Add(5 * time.Hour), Organizer: calendar.Attendee{DisplayName: "홍길동"}},
 			{ID: "soon", Summary: "a", Start: now.Add(time.Hour), Organizer: calendar.Attendee{DisplayName: "홍길동"}},
@@ -211,6 +224,7 @@ func TestDashboardLanes_SourceErrorDegradesNotFails(t *testing.T) {
 	// with the feed's contribution rather than failing the whole dashboard.
 	deps := DashboardDeps{
 		Rules:    fakeRulesLoader(),
+		Lanes:    fixedDashboardLanesLoader(),
 		Calendar: fakeDashboardCalendar{err: errors.New("google down")},
 		WorkFeed: fakeDashboardFeed{items: []workfeed.Item{
 			{ID: "wf1", Title: "케이블 작업", CreatedAtMs: now.UnixMilli()},
@@ -235,6 +249,7 @@ func TestDashboardLanes_RulesLoaderErrorFallsBackToDefaults(t *testing.T) {
 		Rules: func() (classification.Rules, error) {
 			return classification.Rules{}, errors.New("rules file unreadable")
 		},
+		Lanes: fixedDashboardLanesLoader(),
 		WorkFeed: fakeDashboardFeed{items: []workfeed.Item{
 			{ID: "wf1", Title: "인허가 신청 건", CreatedAtMs: now.UnixMilli()},
 		}},
@@ -375,37 +390,38 @@ func TestGroupByLane_AbsorbsOrphanedBucket(t *testing.T) {
 	}
 }
 
-func TestDashboardLanes_LanesLoaderEmptyFallsBackToLegacy(t *testing.T) {
-	// A Lanes loader that returns nil/empty (no chart parts) → legacy hardcoded
-	// lanes, preserving prior behavior.
+func TestDashboardLanes_LanesLoaderEmptyShowsOnlyUnclassified(t *testing.T) {
+	// With no chart lanes, the dashboard no longer revives the legacy hardcoded
+	// columns. Classified items whose lane has no column are rescued into 미분류.
+	now := time.Now()
 	deps := DashboardDeps{
 		Rules: fakeRulesLoader(),
 		Lanes: func() ([]org.LaneDef, error) { return nil, nil },
+		WorkFeed: fakeDashboardFeed{items: []workfeed.Item{
+			{ID: "wf1", Title: "인허가 신청 건", CreatedAtMs: now.UnixMilli()},
+		}},
 	}
 	resp := dashboardLanes(deps)(authedCtx(), reqWith(t, "miniapp.dashboard.lanes", nil))
 	var got DashboardOut
 	decode(t, resp, &got)
-	if len(got.Lanes) != len(classification.AllLanes) {
-		t.Fatalf("lanes = %d, want %d legacy lanes", len(got.Lanes), len(classification.AllLanes))
+	if len(got.Lanes) != 1 {
+		t.Fatalf("lanes = %d, want 1 unclassified lane", len(got.Lanes))
 	}
-	if got.Lanes[0].Key != string(classification.LaneTeam1) {
-		t.Fatalf("lane[0] = %q, want team1 (legacy)", got.Lanes[0].Key)
+	if got.Lanes[0].Key != string(classification.LaneUnclassified) {
+		t.Fatalf("lane[0] = %q, want unclassified", got.Lanes[0].Key)
+	}
+	if len(got.Lanes[0].Items) != 1 || got.Lanes[0].Items[0].RefID != "wf1" {
+		t.Fatalf("unclassified = %+v, want [wf1]", got.Lanes[0].Items)
 	}
 }
 
-func TestDashboardLanes_NoSourcesReturnsEmptyLanes(t *testing.T) {
-	// Rules present but no data sources — every real lane present and empty, no
-	// 미분류 lane (nothing to triage). Confirms the dashboard renders the part
-	// skeleton even on a cold gateway.
+func TestDashboardLanes_NoSourcesAndNoLanesReturnsEmpty(t *testing.T) {
+	// Rules present but no data sources and no chart lanes — the dashboard is
+	// empty rather than reviving the legacy hardcoded part skeleton.
 	resp := dashboardLanes(DashboardDeps{Rules: fakeRulesLoader()})(authedCtx(), reqWith(t, "miniapp.dashboard.lanes", nil))
 	var got DashboardOut
 	decode(t, resp, &got)
-	if len(got.Lanes) != len(classification.AllLanes) {
-		t.Fatalf("lanes = %d, want %d empty part lanes", len(got.Lanes), len(classification.AllLanes))
-	}
-	for _, l := range got.Lanes {
-		if len(l.Items) != 0 {
-			t.Fatalf("lane %q should be empty, got %d items", l.Key, len(l.Items))
-		}
+	if len(got.Lanes) != 0 {
+		t.Fatalf("lanes = %d, want 0", len(got.Lanes))
 	}
 }

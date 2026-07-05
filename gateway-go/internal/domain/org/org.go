@@ -456,7 +456,7 @@ type LaneDef struct {
 
 // DeriveLanes returns the dashboard lane definitions from the lane-tagged
 // nodes, in chart (input) order. Empty when no node is lane-tagged (the
-// dashboard then keeps its legacy hardcoded lanes — see LoadRules/HasLanes).
+// dashboard then has no named part columns until the chart defines them).
 func (t OrgTree) DeriveLanes() []LaneDef {
 	nodes := t.LaneNodes()
 	out := make([]LaneDef, 0, len(nodes))
@@ -467,8 +467,7 @@ func (t OrgTree) DeriveLanes() []LaneDef {
 }
 
 // HasLanes reports whether the tree defines at least one dashboard part. Used
-// by the dashboard to decide between org-derived lanes and the legacy
-// hardcoded lane set.
+// by the dashboard to decide whether any named columns exist at all.
 func (t OrgTree) HasLanes() bool {
 	for _, n := range t.Nodes {
 		if strings.TrimSpace(n.Lane) != "" {
