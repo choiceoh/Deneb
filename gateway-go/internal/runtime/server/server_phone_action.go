@@ -37,6 +37,17 @@ type phoneActionResult struct {
 // any ok=true resolves immediately; an ok=false only resolves once every
 // fanned-out subscriber has reported failure, so the harness's instant "false"
 // cannot mask the real phone's success.
+//
+// Verdict semantics under broadcast (deliberate): success = "at least one
+// connected mobile client launched it", failure = "every connected mobile
+// client failed". Reports carry no executor identity — the push hub knows
+// only mobile/desktop, not which subscriber is the actual phone — so a
+// non-phone client's success on the few actions it can perform (e.g. the
+// harness's desktop open_url) confirms a launch the user's phone never saw.
+// Targeting a single executor needs a device-identity layer in the push hub;
+// follow-up, out of scope here. Single-operator deployment keeps the window
+// narrow (a second mobile client is normally only the harness, whose intent
+// actions all report false).
 type phoneActionWaiter struct {
 	ch       chan phoneActionResult
 	expected int // mobile subscribers the frame fanned out to (>= 1)
