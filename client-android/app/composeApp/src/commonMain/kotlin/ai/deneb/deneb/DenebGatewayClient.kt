@@ -49,11 +49,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -291,16 +289,17 @@ class DenebGatewayClient(
      *  챗봇 — but the bottom-bar navigation (the 5 tabs) is the same in both workspaces. */
     val workspaceWork: StateFlow<Boolean> = _workspaceWork
 
-    // 업무 and 챗봇 keep SEPARATE notification histories. The work feed (= the 업무
-    // 알림 inbox) shown to the UI is scoped to the active workspace: 업무 shows its
-    // proactive reports (client:main / non-chat items), 챗봇 shows only chat: items —
-    // and since all proactive reports land in client:main, the 챗봇 feed is empty.
-    // 업무 리포트 never bleeds into 챗봇. The raw feed still accumulates everything so
-    // switching back to 업무 surfaces the reports that arrived meanwhile (조용히 쌓기).
-    val denebWorkFeed: StateFlow<List<WorkFeedItem>> =
-        combine(_denebWorkFeed, _workspaceWork) { items, work ->
-            items.filter { isChatWorkspaceKey(it.sessionKey) != work }
-        }.stateIn(scope, SharingStarted.Eagerly, emptyList())
+    // The feed exposed to the UI is the FULL work feed regardless of the active
+    // workspace. It used to be workspace-scoped (챗봇 → chat:-only items), which
+    // was coherent while 챗봇 mode had no feed surface — but #3001 gave 챗봇 the
+    // same 5 tabs INCLUDING 피드, and since every proactive report lands in
+    // client:main, the 피드 tab in the (now-default) 챗봇 workspace rendered a
+    // designed-empty list. Field incident 2026-07-05: the operator saw "오늘 받은
+    // 피드가 없습니다" for days while the server/state pipeline was fully
+    // healthy. One surface, one dataset (persona split is UI-forbidden anyway —
+    // see CLAUDE.md "UI 분리 금지"); tray-notification gating stays workspace-aware
+    // separately (maybeEmitProactiveNotification).
+    val denebWorkFeed: StateFlow<List<WorkFeedItem>> = _denebWorkFeed.asStateFlow()
 
     /** One proactive 업무-feed report worth a tray notification. */
     data class ProactiveNotification(val title: String, val body: String)
