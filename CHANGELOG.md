@@ -1,5 +1,32 @@
 # Changelog
 
+## [4.66.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.65.2...deneb-v4.66.0) (2026-07-05)
+
+
+### ✨ Features
+
+* **autonomous:** 하트비트 자가코딩 검토 레인 — 제안된 자가개선 후보 자동 소비 ([#3177](https://github.com/choiceoh/Deneb/issues/3177)) ([9cc821b](https://github.com/choiceoh/Deneb/commit/9cc821b52159b59562af4b59eef76c48c21bb8cd))
+* **chat:** Hermes·OpenClaw 심층조사 도입 3종 — fence stale-task 방어 + 캐시 경계 회귀 테스트 + 외부 응답 바운드 ([#3173](https://github.com/choiceoh/Deneb/issues/3173)) ([2c42665](https://github.com/choiceoh/Deneb/commit/2c42665b8cf2ad4187d8b4ee50fbd6cb5c4eee10))
+* **native:** 안드로이드 오토 1단계 — 운전 중 알림 읽어주기·음성 답장 ([#3144](https://github.com/choiceoh/Deneb/issues/3144)) ([a120dde](https://github.com/choiceoh/Deneb/commit/a120dde93eac78afb988314a417138f37c25de37))
+* **native:** 안드로이드 오토 2단계 — 템플릿 카 화면 (업무 피드 브라우저) ([#3165](https://github.com/choiceoh/Deneb/issues/3165)) ([a547e74](https://github.com/choiceoh/Deneb/commit/a547e744424001ab8ada08fd8eddae71f83dc31e))
+* **phone:** 알람·타이머 액션 — phone_write alarm/timer ([#3138](https://github.com/choiceoh/Deneb/issues/3138)) ([5ce5bde](https://github.com/choiceoh/Deneb/commit/5ce5bde663782dbfc757f93f4dceb7f14a5dfe8a))
+* **phone:** 폰 액션 실행 결과 왕복 — 앱 회신 + 5초 fail-open 대기 ([#3169](https://github.com/choiceoh/Deneb/issues/3169)) ([7bb6e65](https://github.com/choiceoh/Deneb/commit/7bb6e6549d8b30067365d0c5d67ed43ad8ce6c6c))
+* **wormhole:** Kai 업스트림 세부 도입 — 이미지 게이트(웜홀) + 어시스트 제스처 + 에러 폴백 ([#3167](https://github.com/choiceoh/Deneb/issues/3167)) ([d47628c](https://github.com/choiceoh/Deneb/commit/d47628cd162e40031dbab63f613b7acf5bcb40b8))
+
+
+### 🐛 Bug Fixes
+
+* **chat:** 링크 인리치먼트 병렬화(P4-3) + 하트비트 트리거 메시지 누락 복구 ([#3168](https://github.com/choiceoh/Deneb/issues/3168)) ([bf6965d](https://github.com/choiceoh/Deneb/commit/bf6965d1c14dd163e57937da28efabf223c7c923))
+* **native:** compose-material3 1.12 알파 원복 — compileSdk 37 요구로 깨진 APK 발행 복구 ([#3180](https://github.com/choiceoh/Deneb/issues/3180)) ([81742a3](https://github.com/choiceoh/Deneb/commit/81742a3408b9760fadcc965bbe052ba27039d606))
+* **native:** 서명 env 강건화 — 명시 오버라이드 경로 오타 hard fail + 비밀번호 인용 규칙 (리뷰 후속) ([#3163](https://github.com/choiceoh/Deneb/issues/3163)) ([b52f40a](https://github.com/choiceoh/Deneb/commit/b52f40a8270e47c82aa0f4676549de33809bb1b2))
+
+
+### 🔧 Internal
+
+* **gateway:** 보류 항목 집행 — 죽은 status-report 클러스터 retire·CallCodingLLM 삭제·iOS 번들ID de-Kai ([#3166](https://github.com/choiceoh/Deneb/issues/3166)) ([0843575](https://github.com/choiceoh/Deneb/commit/084357573e78ca52fb55ed904f6f156bed3ab02d))
+* **mailanalysis:** gmailpoll 패키지를 mailanalysis로 개명 + miniapp.mail.* RPC alias ([#3175](https://github.com/choiceoh/Deneb/issues/3175)) ([8e497dc](https://github.com/choiceoh/Deneb/commit/8e497dcfc9941a1c01e738632004ac9a829f41f6))
+* **native:** 클라 RPC를 miniapp.mail.* 정식 네임스페이스로 전환 (Andromeda 포함) ([#3176](https://github.com/choiceoh/Deneb/issues/3176)) ([6ac4d2e](https://github.com/choiceoh/Deneb/commit/6ac4d2eb262a37959b8d995dad14929a67b98f87))
+
 ## [4.65.2](https://github.com/choiceoh/Deneb/compare/deneb-v4.65.1...deneb-v4.65.2) (2026-07-05)
 
 

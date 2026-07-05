@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.51](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.50...andromeda-v0.0.51) (2026-07-05)
+
+
+### 🔧 Internal
+
+* **native:** 클라 RPC를 miniapp.mail.* 정식 네임스페이스로 전환 (Andromeda 포함) ([#3176](https://github.com/choiceoh/Deneb/issues/3176)) ([6ac4d2e](https://github.com/choiceoh/Deneb/commit/6ac4d2eb262a37959b8d995dad14929a67b98f87))
+
 ## [0.0.50](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.49...andromeda-v0.0.50) (2026-07-03)
 
 
