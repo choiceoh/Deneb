@@ -84,7 +84,7 @@ scripts/dev/live-test.sh parity    # dev vs prod 환경 비교 리포트
 | `quality health` | 서브시스템 상태 품질 |
 | `quality chat` | 한국어 응답 품질 (언어, 톤, 내용 충실도) |
 | `quality tools` | 도구 사용 품질 (적절한 도구 선택, 완료, 에러 없음) |
-| `quality format` | 포맷 품질 (마크다운, 목록, Telegram 안전성) |
+| `quality format` | 포맷 품질 (마크다운, 목록, 출력 안전성 — legacy `telegram_safe` 체크) |
 | `quality tools-deep` | 도구 심층 테스트 (파일 읽기/검색/실행/메모리 결과 정확성, 에러 핸들링) |
 | `quality edge` | 에지 케이스 테스트 (빈 입력/긴 입력/특수문자/코드블록/모호한 의도/멀티턴) |
 | `quality-custom "메시지"` | 커스텀 메시지로 품질 테스트 |
@@ -117,7 +117,7 @@ scripts/dev/live-test.sh parity    # dev vs prod 환경 비교 리포트
 | **내용 충실도** | 빈 응답, 너무 짧은 응답 감지 |
 | **AI 필러 없음** | "좋은 질문!", "물론이죠" 등 무의미한 서두 감지 |
 | **마크업 누출 없음** | `<function=`, `<thinking>`, `NO_REPLY` 등 내부 토큰 유출 |
-| **Telegram 안전성** | 4096자 제한, HTML 태그 매칭 |
+| **출력 안전성** | 4096자 제한·HTML 태그 매칭 (체크명은 legacy `telegram_safe` — 텔레그램 은퇴 후에도 하위호환 안전 체크로 유지) |
 | **도구 사용 완결** | 시작된 도구가 반드시 완료되었는지, 에러 없는지 |
 | **스트리밍 흐름** | 이벤트가 정상적으로 흘렀는지 |
 | **응답 시간** | 레이턴시 임계값 이내인지 |
@@ -275,7 +275,7 @@ scripts/dev/live-test.sh multi-chat \
 특정 도구가 올바르게 호출 + 완료되는지:
 ```bash
 scripts/dev/live-test.sh tool-check health "시스템 상태 확인해줘"
-scripts/dev/live-test.sh tool-check vega "최근 대화 검색해줘"
+scripts/dev/live-test.sh tool-check wiki "위키에서 백업 정책 찾아줘"
 ```
 
 ### AI 에이전트의 증상 재현 절차

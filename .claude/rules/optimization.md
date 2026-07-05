@@ -119,5 +119,5 @@ scripts/dev/iterate.sh
 | substance | 25 | 응답 길이/내용 충실도 (>100자=25, >30자=10) |
 | clean | 20 | 내부 토큰 누출/AI 필러 없음 |
 | latency | 15 | 응답 시간 (<10s=15, <20s=12, <30s=8) |
-| streaming | 15 | 이벤트 흐름 정상 (edit>3 & event>5 = 15, 그 외 부분점수) |
+| streaming | 15 | 이벤트 흐름 정상 (edit>3 & event>5 = 15, 그 외 부분점수). ⚠️현재 주입 경로(`miniapp.chat.send` 동기 RPC)는 draft/스트림 이벤트가 관측 안 돼 **만점 불가·~5점 상한** — 이 항목의 결손은 회귀가 아니라 측정 한계다 |
 | penalty | -10/err | 도구 에러당 -10점 |

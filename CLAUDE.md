@@ -194,4 +194,4 @@ All commits MUST use Conventional Commit format:
 **Incorrect:** `chat: add send_file tool` ❌ (module-only prefix dropped from changelogs)
 
 **Allowed types:** feat, fix, perf, refactor, docs, test, chore, ci, build
-**Allowed scopes:** any module name (chat, pilot, memory, vega, aurora, miniapp, etc.)
+**Allowed scopes:** any module name (chat, pilot, memory, wiki, aurora, miniapp, etc.)

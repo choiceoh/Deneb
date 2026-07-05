@@ -77,7 +77,7 @@ DENEB_OCR_VL_LIVE=1 DENEB_OCR_VL_IMG=/path/to.png DENEB_OCR_VL_URL=http://127.0.
 
 ### API
 - `POST /v1/transcribe` (**OpenAI 비호환**): multipart `file` 또는 form `path`, 선택 `hotwords`·`chunk_size`·`max_new_tokens`. 응답 = `segments`(speaker/start/end/content) + `transcription` + `rtf`. `GET /health` 로 readiness.
-- Telegram 음성(`.oga`/opus)·m4a·mp3·wav 자동 디코딩 (soundfile → ffmpeg 폴백).
+- 음성 메시지 포맷(`.oga`/opus)·m4a·mp3·wav 자동 디코딩 (soundfile → ffmpeg 폴백).
 - **핫워드 권장**: 한국어 일반어는 사실상 무오류지만 고유명사(거래처·제품·인명)는 bare ASR 이 틀린다 → Deneb 연락처/거래 KB 를 `hotwords` 로 주입하면 교정됨 (검증 완료: 탑솔라/데네브).
 
 ### 코드 통합 (#1847)

@@ -114,6 +114,7 @@ safego.GoWithSlog(logger, "my-worker", func() { ... })
 턴 예산의 기준 상수는 `server.DefaultTurnDeadline` (현재 5분, `miniapp_models.go`)이다. 단 경로별 적용 형태가 다르다:
 
 - **네이티브 스트리밍 인바운드** (`handleMiniappChatStream`): 명시 deadline 없이 `r.Context()`에 묶임 — 클라 연결이 수명. 전역 `WriteTimeout`(`2 × DefaultTurnDeadline`)은 일반 핸들러용 DoS 백스톱일 뿐, 스트리밍 라우트는 `disableWriteDeadline`로 이를 스스로 해제하므로 **스트림 시작 후 서버측 시간 백스톱은 없다** (요청/클라 컨텍스트가 유일한 한계).
+- **네이티브 블로킹 폴백** (`miniapp.chat.send` 동기 RPC — 클라가 첫 delta 전 스트리밍 실패 시 폴백): 마찬가지로 `r.Context()` 수명이다. miniapp RPC 라우트(`server_http_miniapp.go`)도 `disableWriteDeadline`를 호출하고 `SendSync`에 별도 `WithTimeout`이 없다 — 턴 타임아웃/리크 수리는 스트리밍 경로만 보지 말 것.
 - **자율 auto-resume 디스패치**: 명시 `context.WithTimeout(ctx, DefaultTurnDeadline)`.
 - **폰 이벤트 인제스트**: 별도 상수 `phoneEventTurnDeadline` (4분).
 
