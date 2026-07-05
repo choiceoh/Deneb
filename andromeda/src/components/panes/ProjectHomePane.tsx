@@ -98,10 +98,16 @@ export function ProjectHomePane() {
   }, [digests, selectedKey]);
 
   // Resolve the selected project's linked-item IDs server-side. Clear the stale
-  // set first so a project switch never briefly shows the previous project's items.
+  // set during render (adjust pattern) so a project switch never briefly shows
+  // the previous project's items; the effect only fetches.
   const selectedPath = selected?.path ?? "";
-  useEffect(() => {
+  const linkedKey = `${connected}|${selectedPath}`;
+  const [prevLinkedKey, setPrevLinkedKey] = useState(linkedKey);
+  if (prevLinkedKey !== linkedKey) {
+    setPrevLinkedKey(linkedKey);
     setLinked(EMPTY_LINKED);
+  }
+  useEffect(() => {
     if (!connected || !selectedPath) return;
     void callCached<ProjectLinkedOut>(
       PROJECT_LINKED_RPC,

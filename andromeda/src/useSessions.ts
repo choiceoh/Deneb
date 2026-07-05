@@ -28,13 +28,19 @@ export function useSessions(
   const [sessionsOpen, setSessionsOpen] = useState(false);
   const [sessionErr, setSessionErr] = useState("");
 
+  // Clear the list the moment the connection drops — adjusted during render
+  // (https://react.dev/learn/you-might-not-need-an-effect) instead of inside the
+  // effect so the reset doesn't trigger a second render pass after commit.
+  const [prevConnected, setPrevConnected] = useState(connected);
+  if (prevConnected !== connected) {
+    setPrevConnected(connected);
+    if (!connected) setSessions([]);
+  }
+
   // Load recent sessions once connected (best-effort — older gateway / offline test
   // just leaves the list empty).
   useEffect(() => {
-    if (!connected) {
-      setSessions([]);
-      return;
-    }
+    if (!connected) return;
     let cancelled = false;
     void recentSessions(cfg, 20)
       .then((s) => !cancelled && setSessions(keep(s)))

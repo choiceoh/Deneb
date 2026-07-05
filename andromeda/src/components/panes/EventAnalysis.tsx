@@ -3,9 +3,10 @@
 // streaming feature (its own status/busy state, AbortController, fallback text).
 // Streams a short analysis via chatStream; when the gateway is offline (or the
 // event lacks a description), shows a heuristic fallback instead.
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import type { CalEvent } from "@/types";
+import { depsEqual } from "@/depsEqual";
 import { chatStream, type GatewayConfig } from "@/gateway";
 import { calSpan, errText, eventDayKeys, eventEndMs, eventTitle } from "@/format";
 import { Markdown } from "@/components/Markdown";
@@ -73,7 +74,9 @@ export function fallbackAnalysis(event: CalEvent): string {
 export function EventAnalysis({ event, connected, cfg }: { event: CalEvent; connected: boolean; cfg: GatewayConfig }) {
   const title = eventTitle(event);
   const span = calSpan(event.start, event.end);
-  const fallback = useMemo(() => fallbackAnalysis(event), [event]);
+  // Plain call — a cheap string build; useMemo here defeated the compiler's
+  // memoization analysis (react-hooks/preserve-manual-memoization).
+  const fallback = fallbackAnalysis(event);
   const hasAutoAnalysisInput = Boolean(title.trim() && event.description?.trim());
   const [answer, setAnswer] = useState("");
   const [status, setStatus] = useState("");
@@ -127,10 +130,21 @@ export function EventAnalysis({ event, connected, cfg }: { event: CalEvent; conn
     }
   }
 
-  useEffect(() => {
+  // Reset the previous event's answer during render when the inputs change
+  // (adjust-state pattern); the effect below only owns the auto-run + abort.
+  const analysisKey: unknown[] = [connected, cfg.url, cfg.token, event, hasAutoAnalysisInput];
+  const [prevAnalysisKey, setPrevAnalysisKey] = useState(analysisKey);
+  if (!depsEqual(prevAnalysisKey, analysisKey)) {
+    setPrevAnalysisKey(analysisKey);
     setAnswer("");
     setStatus("");
-    if (hasAutoAnalysisInput) void analyze();
+  }
+
+  useEffect(() => {
+    // Deferred one microtask (still pre-paint): analyze() is shared with the
+    // button handler and starts with synchronous setState, which the lint's
+    // interprocedural pass would otherwise count as a sync effect write.
+    if (hasAutoAnalysisInput) queueMicrotask(() => void analyze());
     return () => abortRef.current?.abort();
     // Re-run only when the chosen event changes or connectivity/config changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps

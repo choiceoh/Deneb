@@ -1,5 +1,6 @@
 import { useEffect, useState, type DependencyList, type Dispatch, type SetStateAction } from "react";
 
+import { depsEqual } from "./depsEqual";
 import { log } from "./log";
 
 const asyncLog = log.child("asyncOnOpen");
@@ -26,10 +27,20 @@ export function useAsyncOnOpen<T>(
   const { enabled = true, onError } = opts;
   const [data, setData] = useState<T | null>(null);
 
+  // The flash-to-null reset happens during render when the inputs of an enabled
+  // load change (react.dev adjust-state pattern) — same observable behavior as
+  // the old in-effect reset, minus the extra post-commit render pass. Disabling
+  // keeps the last value, exactly like the old early-return did.
+  const key: DependencyList = [enabled, ...deps];
+  const [prevKey, setPrevKey] = useState(key);
+  if (!depsEqual(prevKey, key)) {
+    setPrevKey(key);
+    if (enabled) setData(null);
+  }
+
   useEffect(() => {
     if (!enabled) return;
     let cancelled = false;
-    setData(null);
     load()
       .then((r) => {
         if (!cancelled) setData(r);

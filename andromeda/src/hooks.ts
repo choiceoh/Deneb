@@ -356,13 +356,19 @@ export function useEvents(cfg: GatewayConfig, connected: boolean): EventsState {
   const [status, setStatus] = useState("");
   const invalidate = useInvalidate();
 
+  // Reflect connection flips in the status line during render (react.dev
+  // "adjusting state when props change") — the effect below only owns the
+  // subscription; its async callbacks keep updating the status afterwards.
+  const connKey = connected ? `on|${cfg.url}|${cfg.token}` : "off";
+  const [prevConnKey, setPrevConnKey] = useState("");
+  if (prevConnKey !== connKey) {
+    setPrevConnKey(connKey);
+    setStatus(connected ? "연결 중…" : "");
+  }
+
   useEffect(() => {
-    if (!connected) {
-      setStatus("");
-      return;
-    }
+    if (!connected) return;
     const controller = new AbortController();
-    setStatus("연결 중…");
     subscribeEvents(
       cfg,
       {

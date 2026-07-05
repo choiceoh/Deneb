@@ -3,7 +3,9 @@
 // collapsed-by-default sender-context card (recent volume + curated wiki pages),
 // and a grounded Q&A box. The enrichment cards each own their fetch/loading/error
 // state and degrade silently on an older gateway that lacks the method.
-import { useEffect, useState } from "react";
+import { useState } from "react";
+
+import { depsEqual } from "@/depsEqual";
 import {
   type QATurn,
   analyzeMail,
@@ -315,7 +317,13 @@ function AnalysisCard({ mailId }: { mailId: string }) {
   // Drop a stale manual-analysis error whenever the cached load re-runs (message
   // switch, reconnect, or config change) — matches the same triggers that reset
   // `data`, so a transient analyze failure can't strand the error after reconnect.
-  useEffect(() => setErr(""), [cfg, connected, mailId]);
+  // Adjusted during render, same as useAsyncOnOpen's own reset.
+  const errKey: unknown[] = [cfg, connected, mailId];
+  const [prevErrKey, setPrevErrKey] = useState(errKey);
+  if (!depsEqual(prevErrKey, errKey)) {
+    setPrevErrKey(errKey);
+    setErr("");
+  }
 
   async function run(force = false) {
     setLoading(true);
@@ -390,11 +398,14 @@ function AskBox({ mailId }: { mailId: string }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
-  useEffect(() => {
+  // Switching messages starts a fresh Q&A thread — adjusted during render.
+  const [prevMailId, setPrevMailId] = useState(mailId);
+  if (prevMailId !== mailId) {
+    setPrevMailId(mailId);
     setTurns([]);
     setQ("");
     setErr("");
-  }, [mailId]);
+  }
 
   async function ask() {
     const question = q.trim();

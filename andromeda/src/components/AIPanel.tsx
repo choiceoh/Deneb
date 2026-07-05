@@ -1,4 +1,4 @@
-import { type ChangeEvent, useEffect, useRef, useState } from "react";
+import { type ChangeEvent, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { inferAttachmentMimeType } from "@/attachmentMime";
 import { readFileBase64, splitAttachable } from "@/attachments";
 import { type GatewayConfig, type ModelsList, listModels } from "@/gateway";
@@ -137,10 +137,14 @@ export function AIPanel({
   const [noteSaves, setNoteSaves] = useState<ReadonlyMap<string, "saving" | "saved" | "error">>(new Map());
   // A different sink = a different target notebook (or none) — the 저장됨 marks
   // belong to the previous target, so saving the same answer to a NEW notebook
-  // must start fresh.
-  useEffect(() => {
+  // must start fresh. Adjusted during render (react.dev adjust-state pattern).
+  // noteSink is a function, so it must be wrapped — a bare useState(noteSink) /
+  // setState(noteSink) would invoke it as initializer/updater.
+  const [prevNoteSink, setPrevNoteSink] = useState(() => noteSink);
+  if (prevNoteSink !== noteSink) {
+    setPrevNoteSink(() => noteSink);
     setNoteSaves(new Map());
-  }, [noteSink]);
+  }
   const composeRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const [models, setModels] = useState<ModelsList | null>(null);
@@ -155,12 +159,14 @@ export function AIPanel({
   const { ref: transcriptRef, onScroll, pin, atBottom, scrollToBottom } = useStickyScroll([turns, thinking]);
 
   // Load the model registry once connected; best-effort (older gateway / the offline
-  // test path just leaves it empty).
+  // test path just leaves it empty). The disconnect reset is a render adjustment.
+  const [prevModelsConn, setPrevModelsConn] = useState(connected);
+  if (prevModelsConn !== connected) {
+    setPrevModelsConn(connected);
+    if (!connected) setModels(null);
+  }
   useEffect(() => {
-    if (!connected) {
-      setModels(null);
-      return;
-    }
+    if (!connected) return;
     let cancelled = false;
     void listModels(cfg)
       .then((m) => {
@@ -201,10 +207,12 @@ export function AIPanel({
   // busy의 ref 미러 + 첨부 큐 락. attachFiles의 순차 루프는 파일당 capture가 busy를
   // 내렸다 올리는 틈(파일 읽기 구간)이 있어, 그 틈에 사용자가 전송하면 턴이 인터리브된다.
   // 루프는 매 파일 전에 busyRef를 재확인하고, submit/새 배치는 attaching 동안 차단한다.
-  // 미러는 렌더 중 대입 — useEffect 반영은 커밋 뒤로 밀릴 수 있어 FileReader 태스크
-  // 인터리빙에서 낡은 값을 읽을 수 있다.
+  // 미러는 useLayoutEffect — 커밋 시 동기 반영이라 다음 매크로태스크(FileReader 콜백)가
+  // 낡은 값을 읽을 수 없고, 렌더 중 ref 대입(react-hooks/refs 위반)도 피한다.
   const busyRef = useRef(busy);
-  busyRef.current = busy;
+  useLayoutEffect(() => {
+    busyRef.current = busy;
+  });
   const attachingRef = useRef(false);
 
   function submit(message = input) {
