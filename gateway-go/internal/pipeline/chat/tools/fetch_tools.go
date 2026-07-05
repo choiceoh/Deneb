@@ -103,7 +103,7 @@ func ToolFetchTools(registry FetchToolsRegistry) toolctx.ToolFunc {
 		da := toolctx.DeferredActivationFromContext(ctx)
 
 		var sb strings.Builder
-		var activated []string
+		var activated, alreadyActive []string
 		for _, name := range p.Names {
 			if !isAllowed(name) {
 				fmt.Fprintf(&sb, "- %s: not available under the current tool preset\n", name)
@@ -112,6 +112,15 @@ func ToolFetchTools(registry FetchToolsRegistry) toolctx.ToolFunc {
 			def, ok := registry.DeferredToolDef(name)
 			if !ok {
 				fmt.Fprintf(&sb, "- %s: not found or not a deferred tool\n", name)
+				continue
+			}
+			// Already-active short-circuit: the schema is already injected into
+			// the Tools array (and the prior fetch_tools result is compaction-
+			// protected), so re-emitting the full schema only duplicates it in
+			// history. Production measurement (2026-07-05, 14d agent-logs): 20%
+			// of fetch_tools calls were same-input repeats, up to 7 in one run.
+			if da != nil && da.IsActive(name) {
+				alreadyActive = append(alreadyActive, name)
 				continue
 			}
 			activated = append(activated, name)
@@ -129,6 +138,10 @@ func ToolFetchTools(registry FetchToolsRegistry) toolctx.ToolFunc {
 			da.Activate(activated)
 		}
 
+		if len(alreadyActive) > 0 {
+			fmt.Fprintf(&sb, "Already active (schema loaded, no re-fetch needed): %s. Call them directly.\n",
+				strings.Join(alreadyActive, ", "))
+		}
 		if len(activated) > 0 {
 			fmt.Fprintf(&sb, "Activated %d tool(s): %s. You can now call them directly.",
 				len(activated), strings.Join(activated, ", "))
