@@ -174,7 +174,7 @@ func TestRenderRollbackDiff_Truncation(t *testing.T) {
 		t.Errorf("expected truncation marker in:\n%s", out[len(out)-200:])
 	}
 	if len(out) > 4096 {
-		t.Errorf("diff message exceeded Telegram limit: %d bytes", len(out))
+		t.Errorf("diff message exceeded the legacy 4096-byte size cap (kept as an output-size sanity bound): %d bytes", len(out))
 	}
 }
 

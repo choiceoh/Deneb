@@ -10,7 +10,7 @@ package session
 // Markers live at <baseDir>/<sanitizedKey>.json with content:
 //
 //	{
-//	  "sessionKey":     "telegram:1234567890",
+//	  "sessionKey":     "client:main",
 //	  "startedAt":      1700000000000,
 //	  "lastActivityAt": 1700000000500,
 //	  "channel":        "telegram",
@@ -63,7 +63,7 @@ func NewRunMarkerStore(baseDir string) *RunMarkerStore {
 func (s *RunMarkerStore) BaseDir() string { return s.baseDir }
 
 // sanitizeKey maps an arbitrary session key to a filesystem-safe filename.
-// Session keys like "telegram:7074071666" are allowed as-is on most filesystems
+// Session keys like "client:main" or legacy "telegram:7074071666" are allowed as-is on most filesystems
 // (colons are fine on Linux) but we replace path separators and "." runs
 // defensively so no caller-provided suffix can escape baseDir.
 func sanitizeKey(key string) string {
@@ -96,7 +96,7 @@ func (s *RunMarkerStore) Write(m RunMarker) error {
 		return fmt.Errorf("run marker: mkdir %q: %w", s.baseDir, err)
 	}
 
-	// SessionKey is a routing id ("telegram:123456"), not a credential; gosec
+	// SessionKey is a routing id ("client:main"), not a credential; gosec
 	// G117 flags the "Key" suffix defensively. Confirmed non-secret.
 	data, err := json.Marshal(m) //nolint:gosec // SessionKey is a routing id, not a credential
 	if err != nil {

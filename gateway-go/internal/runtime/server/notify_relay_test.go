@@ -269,18 +269,18 @@ func TestNotifyService_StatusReport_IncludesActivity(t *testing.T) {
 	mgr := session.NewManager()
 	startedAt := time.Now().Add(-1 * time.Minute).UnixMilli()
 	if err := mgr.Set(&session.Session{
-		Key: "telegram:1", Status: session.StatusRunning, Label: "메인", StartedAt: &startedAt,
+		Key: "client:main", Status: session.StatusRunning, Label: "메인", StartedAt: &startedAt,
 	}); err != nil {
 		t.Fatalf("Set: %v", err)
 	}
 	n := &notifyService{
 		sessions: mgr,
 		activity: map[string]*activityEntry{
-			"telegram:1": {tool: "vega.search", running: true, updated: time.Now().Add(-3 * time.Second)},
+			"client:main": {tool: "wiki.search", running: true, updated: time.Now().Add(-3 * time.Second)},
 		},
 	}
 	report := n.buildStatusReport(time.Now())
-	if !strings.Contains(report, "vega.search") {
+	if !strings.Contains(report, "wiki.search") {
 		t.Errorf("report missing tool name:\n%s", report)
 	}
 	if !strings.Contains(report, "실행 중") {
