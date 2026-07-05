@@ -11,15 +11,15 @@ import org.koin.android.ext.android.inject
  * fallback when no native client holds a live SSE connection (app fully closed /
  * Doze) — see gateway-go internal/domain/push.
  *
- * Delivery split:
- *  - App fully closed: the message carries a `notification` payload, so the
- *    system tray renders it directly and onMessageReceived is NOT called. That
- *    is the core gap this feature closes — no app code has to run.
- *  - App in foreground (rare — the gateway normally sees the live SSE subscriber
- *    and skips FCM): onMessageReceived fires; we raise the same proactive
- *    notification the SSE path would have.
- *  - Token rotation: onNewToken re-registers so the gateway always holds a live
- *    token for this device.
+ * The gateway sends DATA-ONLY messages (title/body in `data`, no `notification`
+ * block), so onMessageReceived runs in every app state and the app owns the
+ * notification rendering. That is deliberate: Android Auto can only read aloud
+ * and voice-reply to app-built MessagingStyle notifications with reply /
+ * mark-as-read actions ([DenebMessagingNotification]) — a system-rendered
+ * `notification` payload can never carry them.
+ *
+ * Token rotation: onNewToken re-registers so the gateway always holds a live
+ * token for this device.
  */
 class FcmService : FirebaseMessagingService() {
     private val repository: DataRepository by inject()
@@ -29,11 +29,10 @@ class FcmService : FirebaseMessagingService() {
     }
 
     override fun onMessageReceived(message: RemoteMessage) {
-        val title = message.notification?.title ?: message.data["title"] ?: "Deneb"
-        val body = message.notification?.body ?: message.data["body"] ?: return
-        // Reuses the shared proactive-notification path (channel, deep-link to the
-        // work feed) from composeApp so foreground FCM looks identical to an
-        // SSE-delivered report.
-        sendProactiveReportNotification(title = title, body = body)
+        // Data-first (current gateway); the notification-payload fallback keeps
+        // an older gateway build working during a version skew window.
+        val title = message.data["title"] ?: message.notification?.title ?: "데네브"
+        val body = message.data["body"] ?: message.notification?.body ?: return
+        DenebMessagingNotification.postIncoming(this, title, body)
     }
 }

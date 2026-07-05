@@ -1610,6 +1610,37 @@ class DenebGatewayClient(
     }
 
     /**
+     * One-shot chat send for surfaces detached from the chat UI — the
+     * notification voice-reply path (Android Auto / tray RemoteInput). Unlike
+     * [send] it targets an explicit [targetSessionKey] (default the main work
+     * session) instead of the currently open conversation, and never touches
+     * in-memory conversation state: the exchange lands in the gateway
+     * transcript and is picked up on the next app open / SSE sync. Returns
+     * true when the gateway accepted and completed the turn.
+     */
+    suspend fun sendDetachedChat(message: String, targetSessionKey: String = "client:main"): Boolean {
+        if (message.isBlank() || clientToken.isEmpty()) return false
+        return runCatching {
+            val resp: RpcResponse = http.post("$gatewayUrl/api/v1/miniapp/rpc") {
+                header(CLIENT_TOKEN_HEADER, clientToken)
+                contentType(ContentType.Application.Json)
+                setBody(
+                    RpcRequest(
+                        id = Uuid.random().toString(),
+                        method = "miniapp.chat.send",
+                        params = SendParams(
+                            message = message,
+                            sessionKey = targetSessionKey,
+                            skipRecall = !appSettings.isRecallEnabled(),
+                        ),
+                    ),
+                )
+            }.body()
+            resp.ok
+        }.getOrDefault(false)
+    }
+
+    /**
      * Streaming counterpart of [send]: POSTs to the gateway's SSE chat endpoint
      * and invokes [onDelta] with each assistant text chunk as it arrives. The
      * gateway also frames live progress — [onTool] fires on tool lifecycle

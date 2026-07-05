@@ -69,6 +69,16 @@
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
             </intent-filter>
         </service>
+        <!-- Notification reply / mark-as-read actions (Android Auto voice reply
+             + phone tray inline reply). See DenebReplyReceiver.kt. -->
+        <receiver
+            android:name="ai.deneb.DenebReplyReceiver"
+            android:exported="false" />
+        <!-- Android Auto: declares this app posts Auto-compatible messaging
+             notifications (read-aloud + voice reply). -->
+        <meta-data
+            android:name="com.google.android.gms.car.application"
+            android:resource="@xml/automotive_app_desc" />
         <!-- Home-screen widget: next meeting + unread mail. -->
         <receiver
             android:name="ai.deneb.DenebWidgetProvider"
