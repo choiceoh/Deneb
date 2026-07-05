@@ -6,7 +6,7 @@
 
 | 경로 | 역할 |
 |---|---|
-| `server/` | HTTP+SSE 서버, RPC 등록 배선, 배경 서브시스템·태스크 (~90 소스 + ~60 테스트 파일, ↓ 파일 클러스터) |
+| `server/` | HTTP+SSE 서버, RPC 등록 배선, 배경 서브시스템·태스크 (~90 소스 + ~65 테스트 파일, ↓ 파일 클러스터) |
 | `rpc/` | 레지스트리 기반 RPC 디스패처. `dispatch.go`/`methods.go`/`register.go`/`workerpool.go` |
 | `rpc/handler/<domain>/` | 도메인별 핸들러(agent·chat·session·skill·wiki·process·observe·insights·handlerminiapp·handlerevents·provider·system·gateway·checkpoint). `Deps` 구조체 + `Methods(deps)`만 노출 |
 | `rpc/rpcutil/` | `gateway_hub.go`(서비스 컨테이너 — 읽기 접근자·late-bind setter·phase 헬퍼 외 행위는 `Broadcast`/`Validate`뿐), `helpers.go` |
@@ -39,7 +39,7 @@ POST /api/v1/miniapp/rpc (server_http_miniapp.go)
 `server_rpc*.go` + `method_registry.go`:
 ```
 registerBuiltinMethods()      # 허브 전 — 서버상태 클로저 (server_rpc.go)
-registerEarlyMethods(hub)     # chatHandler 전 — ~30 도메인 인라인 (method_registry.go)
+registerEarlyMethods(hub)     # chatHandler 전 — ~50 도메인 인라인 (method_registry.go)
 registerSessionRPCMethods()   # chatHandler 생성 (server_rpc_session.go)
 registerLateMethods(hub)      # chatHandler 후 — Chat/BTW/Miniapp-chat/Exec/Wiki/Genesis/GmailAnalyze (method_registry.go; Aurora 드리밍은 SideEffects)
 registerWorkflowSideEffects() # 비-RPC: autonomous/dreaming/notifier (server_rpc_session.go)
