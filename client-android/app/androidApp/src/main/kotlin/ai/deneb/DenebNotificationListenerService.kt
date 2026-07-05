@@ -124,19 +124,20 @@ class DenebNotificationListenerService : NotificationListenerService() {
     // Line-level dedup for cumulative payloads: MessagingStyle / inbox-style extras
     // re-carry the whole retained message list on every update, so without this each
     // new chat message re-forwards all previous ones (1, then 1+2, then 1+2+3 …).
-    // Keyed per package+line; a much longer window than the event dedup because the
-    // retained list persists across many updates. Trade-off: a genuinely repeated
-    // identical line ("네") within the window is dropped from the event — acceptable
-    // for proactive sensing. Observing a line refreshes its timestamp (the window
-    // slides), so a payload that keeps re-posting keeps being suppressed — a line
-    // only becomes forwardable again after it has been absent for a full window.
+    // Keyed per package+conversation+line; a much longer window than the event dedup
+    // because the retained list persists across many updates. Trade-off: a genuinely
+    // repeated identical line ("네") in the SAME conversation within the window is
+    // dropped from the event — acceptable for proactive sensing. Observing a line
+    // refreshes its timestamp (the window slides), so a payload that keeps re-posting
+    // keeps being suppressed — a line only becomes forwardable again after it has
+    // been absent for a full window.
     private val forwardedLines = object : LinkedHashMap<String, Long>(128, 0.75f, true) {
         override fun removeEldestEntry(eldest: Map.Entry<String, Long>): Boolean = size > MAX_LINE_KEYS
     }
 
-    private fun isFreshLine(pkg: String, line: String): Boolean = synchronized(forwardedLines) {
+    private fun isFreshLine(scope: String, line: String): Boolean = synchronized(forwardedLines) {
         val now = System.currentTimeMillis()
-        val key = "$pkg|$line"
+        val key = "$scope|$line"
         val last = forwardedLines[key]
         forwardedLines[key] = now
         last == null || now - last >= LINE_DEDUP_WINDOW_MS
@@ -144,9 +145,20 @@ class DenebNotificationListenerService : NotificationListenerService() {
 
     private fun withFreshCumulativeLines(pkg: String, details: NotificationText): NotificationText {
         if (!details.hasStructuredGroupPayload()) return details
+        // Scoped by conversation (empty for non-conversation payloads) so the same
+        // short line ("네") in two different rooms isn't cross-suppressed.
+        val scope = "$pkg|${details.conversationTitle}"
         return details.copy(
-            textLines = details.textLines.filter { isFreshLine(pkg, it) },
-            messages = details.messages.filter { isFreshLine(pkg, it.formatted()) },
+            textLines = details.textLines.filter { isFreshLine(scope, it) },
+            messages = details.messages.filter { isFreshLine(scope, it.formatted()) },
+            // bigText can also be a cumulative transcript on messaging/inbox payloads
+            // (and the formatters split it back into outbound lines), so its lines are
+            // deduped too — but only here, when a structured payload marks the
+            // notification as messaging/inbox style. A plain long body (mail text)
+            // never reaches this path and is forwarded untouched.
+            bigText = splitNotificationLines(details.bigText)
+                .filter { isFreshLine(scope, it) }
+                .joinToString("\n"),
         )
     }
 
@@ -262,7 +274,20 @@ class DenebNotificationListenerService : NotificationListenerService() {
     // The app label already travels as the event's source field (the gateway prompt
     // renders it as 출처, and batches prefix each block with [source]), so none of
     // the formatters repeat it inside the text.
-    private fun formatBasicNotification(details: NotificationText): String = distinctNonBlank(listOf(details.title, details.body)).joinToString("\n")
+    //
+    // Structured fields are forwarded too, not just title/body: bigText is the
+    // untruncated body of an expanded notification (mail, SMS, long messages) and
+    // wins over a shorter collapsed body; inbox lines and MessagingStyle messages
+    // carry the actual items behind a generic "N개의 새 메시지" body. This also keeps
+    // the line dedup honest — every line it marks as seen is actually sent.
+    private fun formatBasicNotification(details: NotificationText): String {
+        val body = if (details.bigText.length > details.body.length) details.bigText else details.body
+        val messageLines = details.messages.map { it.formatted() }
+        val messageTexts = details.messages.flatMap { splitNotificationLines(it.text) }.toSet()
+        val supplemental = (splitNotificationLines(body) + details.textLines.flatMap(::splitNotificationLines))
+            .filterNot { it in messageTexts }
+        return distinctNonBlank(listOf(details.title) + messageLines + supplemental).joinToString("\n")
+    }
 
     private fun formatKakaoTalkNotification(details: NotificationText): String {
         val lines = notificationLines(details)
@@ -319,10 +344,19 @@ class DenebNotificationListenerService : NotificationListenerService() {
         }.trimEnd()
     }
 
-    private fun appLabel(pkg: String): String = runCatching {
-        val pm = packageManager
-        pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString()
-    }.getOrNull()?.takeIf { it.isNotBlank() } ?: pkg
+    // PackageManager lookups are cached — a busy stream re-resolves the same handful
+    // of packages constantly. Labels are stable for the process lifetime (the
+    // listener service is restarted on app updates anyway).
+    private val appLabels = HashMap<String, String>()
+
+    private fun appLabel(pkg: String): String = synchronized(appLabels) {
+        appLabels.getOrPut(pkg) {
+            runCatching {
+                val pm = packageManager
+                pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString()
+            }.getOrNull()?.takeIf { it.isNotBlank() } ?: pkg
+        }
+    }
 
     private fun isKakaoTalk(pkg: String, label: String): Boolean = pkg == "com.kakao.talk" ||
         pkg.startsWith("com.kakao.talk.") ||
