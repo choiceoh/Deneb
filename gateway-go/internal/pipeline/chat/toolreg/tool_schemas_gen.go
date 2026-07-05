@@ -898,6 +898,43 @@ func skillsToolSchema() map[string]any {
 	}
 }
 
+func dealLedgerToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"action": map[string]any{
+				"type":        "string",
+				"description": "list (기본): 필터된 거래 기록 목록 + 합계 / sum: 합계만. 거래 금액의 합계·건수·기간 질문은 산문을 눈대중으로 합산하지 말고 반드시 이 도구를 쓸 것 — 금액 파싱·통화별 합산이 코드로 계산된다",
+				"enum":        []string{"list", "sum"},
+			},
+			"counterparty": map[string]any{
+				"type":        "string",
+				"description": "거래처명 필터 (부분 일치, 예: 'JA Solar', '대한전선')",
+			},
+			"doc_type": map[string]any{
+				"type":        "string",
+				"description": "문서 유형 필터 (견적, 계약, 세금계산서, 거래명세서 등 부분 일치)",
+			},
+			"limit": map[string]any{
+				"type":        "number",
+				"description": "목록 최대 행 수 (기본 20 — 합계는 항상 전체 기준)",
+			},
+			"project": map[string]any{
+				"type":        "string",
+				"description": "프로젝트명 필터 (부분 일치)",
+			},
+			"since": map[string]any{
+				"type":        "string",
+				"description": "이 날짜 이후만 (YYYY-MM-DD, 포함)",
+			},
+			"until": map[string]any{
+				"type":        "string",
+				"description": "이 날짜까지만 (YYYY-MM-DD, 포함)",
+			},
+		},
+	}
+}
+
 func wikiToolSchema() map[string]any {
 	return map[string]any{
 		"type": "object",
@@ -1586,10 +1623,11 @@ func mailArchiveToolSchema() map[string]any {
 // Tools not in this map use agent.DefaultMaxOutput.
 func ToolMaxOutputs() map[string]int {
 	return map[string]int{
-		"calendar": 8000,
-		"contacts": 8000,
-		"exec":     32000,
-		"notebook": 24000,
-		"wiki":     20000,
+		"calendar":    8000,
+		"contacts":    8000,
+		"deal_ledger": 8000,
+		"exec":        32000,
+		"notebook":    24000,
+		"wiki":        20000,
 	}
 }

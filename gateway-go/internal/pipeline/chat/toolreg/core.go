@@ -514,6 +514,16 @@ func RegisterWikiTools(registry toolctx.ToolRegistrar, wikiDeps *toolctx.WikiDep
 			InputSchema: wikiToolSchema(),
 			Fn:          tools.ToolWiki(wikiDeps, workspaceDir),
 		})
+
+		// deal_ledger: deterministic list/sum over the typed deal-record ledger
+		// (wiki/deal_records.go) — 합계·건수·기간 질문을 모델 눈대중 대신 코드
+		// 계산으로. The ledger itself is teed on every UpsertDealPage filing.
+		registry.RegisterTool(toolctx.ToolDef{
+			Name:        "deal_ledger",
+			Description: "정형 거래 원장 조회·집계: 메일 분석이 파일한 거래 문서(견적·계약·세금계산서 등)의 타입드 기록. 거래 금액의 합계·건수·통화별 집계·기간 필터가 코드로 계산된다 — '총 거래액', '올해 견적 몇 건', '거래처별 합계' 류 질문은 위키 산문을 눈대중으로 합산하지 말고 반드시 이 도구를 쓸 것. 금액 미파싱 건은 합계에서 제외되고 원문과 함께 표기된다",
+			InputSchema: dealLedgerToolSchema(),
+			Fn:          tools.ToolDealLedger(wikiDeps.Store),
+		})
 	}
 }
 
