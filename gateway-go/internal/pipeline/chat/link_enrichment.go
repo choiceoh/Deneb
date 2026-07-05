@@ -6,10 +6,15 @@
 // tool turn and provides immediate context.
 //
 // Wired into the synchronous send paths (SendSync / SendSyncStream — the
-// native client's miniapp.chat.send and the SSE stream) via maybeEnrichLinks.
-// The enriched text is persisted in the transcript as-is (prompt-cache rule:
-// what the LLM saw is what history reloads), and History() strips the block
-// for display so the user's chat bubble shows what they typed.
+// native client's miniapp.chat.send and the SSE stream) via
+// startLinkEnrichment: the fetches start in a goroutine at the send entry and
+// executeAgentRun joins them AFTER the parallel prep phase, so on the common
+// path the fetch latency (up to totalEnrichmentTimeout) overlaps recall /
+// history / system-prompt work instead of blocking the turn up front. The
+// user-message persist is deferred to that join — the enriched text is
+// persisted in the transcript as-is (prompt-cache rule: what the LLM saw is
+// what history reloads), and History() strips the block for display so the
+// user's chat bubble shows what they typed.
 package chat
 
 import (
@@ -62,27 +67,80 @@ type linkContent struct {
 	Err     string // non-empty if fetch failed
 }
 
-// maybeEnrichLinks appends fetched link content to an interactive chat message.
-// No-op (returns message unchanged) when the turn carries prebuilt API history,
-// when the message has no fetchable URLs, or when every fetch fails.
-func (h *Handler) maybeEnrichLinks(ctx context.Context, message string, opts *SyncOptions) string {
+// enrichFetch is the fetcher startLinkEnrichment hands to
+// enrichMessageWithLinks — a package var so tests can stub the network.
+var enrichFetch fetchFunc = webFetch
+
+// startLinkEnrichment starts the link fetches for an interactive chat message
+// in a goroutine and returns the join function executeAgentRun calls after
+// the parallel prep phase (RunParams.PendingEnrichment). Returns nil — no
+// enrichment, take the normal persist-first path — when the turn carries
+// prebuilt API history, the message is already enriched (a resent message;
+// never stack blocks), or it contains no fetchable URLs.
+//
+// The join blocks until the fetches complete (bounded by
+// totalEnrichmentTimeout inside enrichMessageWithLinks) and returns the final
+// message text: sanitized original + enrichment block, or the sanitized
+// original when no link yielded content. The result is passed through
+// sanitizeInput because fetched web content can carry the same control bytes
+// the send entry strips from user input. On ctx cancel the join returns the
+// original message — the run is being torn down anyway, and the buffered
+// channel lets the fetch goroutine exit regardless.
+func (h *Handler) startLinkEnrichment(ctx context.Context, message string, opts *SyncOptions) func(context.Context) string {
 	if opts != nil && len(opts.Messages) > 0 {
 		// OpenAI-compatible API traffic with caller-owned history — leave it
 		// untouched, same boundary as trySlashSync.
-		return message
+		return nil
 	}
 	if strings.Contains(message, toolctx.LinkEnrichmentHeader) {
-		// Already enriched (e.g. a resent message) — never stack blocks.
-		return message
+		return nil
 	}
+	if len(urlextract.ExtractLinks(message, maxLinksPerMessage)) == 0 {
+		return nil
+	}
+
+	message = sanitizeInput(message) // match what prepareSyncRun persists
 	start := time.Now()
-	summary := enrichMessageWithLinks(ctx, message, webFetch, h.logger)
-	if summary == "" {
-		return message
+	// fetchMs is stamped when the fetches complete, so it measures actual
+	// enrichment latency; the time between completion and the join is prep
+	// overlap, not fetch time.
+	type enrichOutcome struct {
+		summary string
+		fetchMs int64
 	}
-	h.logger.Info("link enrichment appended",
-		"chars", len(summary), "elapsed", time.Since(start).Round(time.Millisecond))
-	return message + "\n\n" + summary
+	ch := make(chan enrichOutcome, 1) // buffered: the goroutine never blocks on an abandoned join
+	logger := h.logger
+	go func() {
+		// Manual recover instead of safego: the join must always receive a
+		// result or it would block until the turn context dies.
+		defer func() {
+			if r := recover(); r != nil {
+				logger.Error("panic in link enrichment", "panic", r)
+				ch <- enrichOutcome{fetchMs: time.Since(start).Milliseconds()}
+			}
+		}()
+		summary := enrichMessageWithLinks(ctx, message, enrichFetch, logger)
+		ch <- enrichOutcome{summary: summary, fetchMs: time.Since(start).Milliseconds()}
+	}()
+
+	return func(joinCtx context.Context) string {
+		select {
+		case out := <-ch:
+			if out.summary == "" {
+				return message
+			}
+			// overlappedMs is how much of the fetch the parallel prep absorbed —
+			// sinceSendMs - fetchMs would be join-side wait; fetchMs alone is the
+			// fetch latency the user no longer serially pays.
+			logger.Info("link enrichment appended",
+				"chars", len(out.summary),
+				"fetchMs", out.fetchMs,
+				"sinceSendMs", time.Since(start).Milliseconds())
+			return sanitizeInput(message + "\n\n" + out.summary)
+		case <-joinCtx.Done():
+			return message
+		}
+	}
 }
 
 // enrichMessageWithLinks extracts URLs from the message, fetches each one,

@@ -66,6 +66,24 @@ type RunParams struct {
 	// LLM into modeling fake user requests.
 	EphemeralUser bool
 
+	// PendingEnrichment, when non-nil, is the join point of an in-flight link
+	// enrichment started at the send entry (startLinkEnrichment): it blocks
+	// until the URL fetches complete (bounded by their own 30s budget) and
+	// returns the final message text (original + enrichment block, or the
+	// original on total failure). executeAgentRun defers the user-message
+	// persist to this join — running the fetches concurrently with the
+	// parallel prep phase instead of serially before the run — and appends
+	// the persisted bytes to the working message list itself
+	// (appendCurrentMessage), since the history was loaded before persist.
+	PendingEnrichment func(ctx context.Context) string
+
+	// appendCurrentMessage marks that the current turn's user message is NOT
+	// part of the loaded transcript history (persist deferred to the
+	// enrichment join, or an ephemeral turn that never persists) and must be
+	// appended to the working message list explicitly by
+	// assembleTurnMessages. Set only inside executeAgentRun.
+	appendCurrentMessage bool
+
 	// SkipRecall, when true, skips the long-term-memory recall preflight
 	// (wiki/diary/transcript) for this turn — the native client's
 	// "memory off / focused chat" toggle. The persona is unchanged; only the

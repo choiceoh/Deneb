@@ -469,7 +469,8 @@ func assembleTurnMessages(ctx context.Context, params RunParams, deps runDeps, p
 	}
 
 	// Build or augment user message with attachments.
-	if len(messages) == 0 && params.Message != "" {
+	switch {
+	case len(messages) == 0 && params.Message != "":
 		// No history — build the user message from scratch.
 		if len(attachments) > 0 {
 			blocks := buildAttachmentBlocks(params.Message, attachments)
@@ -477,7 +478,18 @@ func assembleTurnMessages(ctx context.Context, params RunParams, deps runDeps, p
 		} else {
 			messages = []llm.Message{llm.NewTextMessage("user", params.Message)}
 		}
-	} else if len(messages) > 0 && len(attachments) > 0 {
+	case params.appendCurrentMessage && params.Message != "":
+		// The current turn's message is not in the loaded history — its
+		// persist was deferred to the enrichment join, or it is an ephemeral
+		// trigger that never persists (run_exec.go). Append it as a NEW last
+		// user message; the replace-last branch below would corrupt the
+		// PREVIOUS turn's message here.
+		if len(attachments) > 0 {
+			messages = append(messages, llm.NewBlockMessage("user", buildAttachmentBlocks(params.Message, attachments)))
+		} else {
+			messages = append(messages, llm.NewTextMessage("user", params.Message))
+		}
+	case len(messages) > 0 && len(attachments) > 0:
 		// History exists but current message has attachments — replace the
 		// last user message (which was persisted as text-only) with a
 		// multimodal version that includes the image/video content blocks.

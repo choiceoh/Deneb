@@ -64,8 +64,14 @@ func executeAgentRun(
 	// phase.changed event for the transition.
 	emitPhase(deps, params, "preparing", runStart)
 
-	// 1. Persist user message to transcript + Aurora store.
-	persistTurnUserMessage(params, deps, logger)
+	// 1. Persist user message to transcript + Aurora store. Deferred to the
+	// enrichment join (below, after parallel prep) when a link enrichment is
+	// in flight: the fetched block must be part of the persisted bytes
+	// (prompt-cache rule: what the LLM saw is what history reloads), so the
+	// message cannot be persisted until the fetches complete.
+	if params.PendingEnrichment == nil {
+		persistTurnUserMessage(params, deps, logger)
+	}
 	workspaceDir := params.WorkspaceDir
 	if workspaceDir == "" {
 		workspaceDir = resolveWorkspaceDirForPrompt()
@@ -122,6 +128,13 @@ func executeAgentRun(
 	// external secret references on the chat path.
 	client := resolveClient(ctx, deps, providerID, logger)
 	if client == nil {
+		// This failure path exits before the enrichment join below, where the
+		// deferred persist lives — persist the original message here so the
+		// user's input isn't lost from history. No LLM saw anything this
+		// turn, so the unenriched bytes are consistent.
+		if params.PendingEnrichment != nil {
+			persistTurnUserMessage(params, deps, logger)
+		}
 		err := fmt.Errorf("no LLM client available (provider=%q, model=%q)", providerID, model)
 		runLog.LogError(agentlog.RunErrorData{Error: err.Error()})
 		return nil, err
@@ -145,6 +158,31 @@ func executeAgentRun(
 	if prep.ContextErr != nil {
 		logger.Error("context assembly failed, proceeding with degraded context",
 			"sessionKey", params.SessionKey, "error", prep.ContextErr)
+	}
+
+	// Enrichment join: the link fetches ran concurrently with the parallel
+	// prep above (recall/history/sysprompt), so on the common path they cost
+	// no extra wall-clock. The joined (enriched) message is persisted HERE —
+	// after the history load, which therefore does not contain it — and
+	// appendCurrentMessage tells assembleTurnMessages to append the exact
+	// persisted bytes explicitly, keeping next turn's history reload
+	// byte-identical to what this turn's LLM call sees (vLLM APC).
+	if params.PendingEnrichment != nil {
+		params.Message = params.PendingEnrichment(ctx)
+		if formatted := persistTurnUserMessage(params, deps, logger); formatted != "" {
+			params.Message = formatted
+			params.appendCurrentMessage = true
+		}
+	}
+	// Ephemeral turns (heartbeat) never persist their trigger message, and on
+	// a history-bearing session nothing else put it into the working list —
+	// the model ran blind on pure history (latent bug: every heartbeat tick on
+	// client:main). Append it wire-only, timestamped like a persisted message.
+	// Fresh sessions (boot, mail-qa, event-ingest) keep the scratch-build path
+	// in assembleTurnMessages, byte-identical to before.
+	if ephemeralNeedsExplicitAppend(params, prep) {
+		params.Message = formatTurnUserMessage(params.Message, dentime.Now())
+		params.appendCurrentMessage = true
 	}
 
 	// Stage 2: Assemble final message list (prebuilt, attachments, Polaris compaction).
@@ -442,12 +480,15 @@ func recordRunCompletion(rec runCompletionRecord, logger *slog.Logger) {
 // dentime.Now() (not time.Now()) so the baked offset matches the configured
 // zone — on a UTC container with timezone set via deneb.json, time.Now()
 // would stamp "...Z" while the system prompt and the rest of Deneb run in KST.
-func persistTurnUserMessage(params RunParams, deps runDeps, logger *slog.Logger) {
+// Returns the formatted (timestamped) message actually persisted, or "" when
+// persistence was skipped — the deferred-enrichment join uses the returned
+// bytes as the wire message so transcript and LLM input stay byte-identical.
+func persistTurnUserMessage(params RunParams, deps runDeps, logger *slog.Logger) string {
 	if deps.transcript == nil || params.Message == "" || params.EphemeralUser {
-		return
+		return ""
 	}
 	now := dentime.Now()
-	formattedMessage := "[" + now.Format(time.RFC3339) + "] " + params.Message
+	formattedMessage := formatTurnUserMessage(params.Message, now)
 	userMsg := NewTextChatMessage("user", formattedMessage, now.UnixMilli())
 	if err := deps.transcript.Append(params.SessionKey, userMsg); err != nil {
 		logger.Error("failed to persist user message", "error", err)
@@ -455,6 +496,26 @@ func persistTurnUserMessage(params RunParams, deps runDeps, logger *slog.Logger)
 	if deps.callbacks.emitTranscriptFn != nil {
 		deps.callbacks.emitTranscriptFn(params.SessionKey, userMsg, "")
 	}
+	return formattedMessage
+}
+
+// formatTurnUserMessage renders the transcript form of an inbound user
+// message: the ISO 8601 timestamp prefix + raw text (see the doc comment
+// above for why the timestamp is baked in).
+func formatTurnUserMessage(message string, now time.Time) string {
+	return "[" + now.Format(time.RFC3339) + "] " + message
+}
+
+// ephemeralNeedsExplicitAppend reports whether this ephemeral turn's trigger
+// message is absent from the loaded history and must be appended to the
+// working message list wire-only. True only for history-bearing sessions:
+// fresh sessions (empty history) are handled by assembleTurnMessages'
+// scratch-build path exactly as before, and prebuilt-history API turns carry
+// their own message. appendCurrentMessage already set means the enrichment
+// join handled it.
+func ephemeralNeedsExplicitAppend(params RunParams, prep prepResult) bool {
+	return params.EphemeralUser && !params.appendCurrentMessage &&
+		params.Message != "" && len(params.PrebuiltMessages) == 0 && len(prep.Messages) > 0
 }
 
 // applyTailAdditions collects and injects the per-turn wire-only additions
