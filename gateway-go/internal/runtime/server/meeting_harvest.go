@@ -114,6 +114,10 @@ func (s *meetingHarvestService) start(ctx context.Context) {
 	safego.GoWithSlog(s.logger, "meeting-harvest", func() {
 		ticker := time.NewTicker(harvestPollInterval)
 		defer ticker.Stop()
+		// Immediate first pass (briefing-service pattern): waiting for the
+		// first ticker fire would let a restart silently eat the tail of a
+		// meeting's ask window near the harvestMaxAfterEnd boundary.
+		s.tick(ctx)
 		for {
 			select {
 			case <-ctx.Done():
@@ -134,6 +138,10 @@ func (s *meetingHarvestService) tick(ctx context.Context) {
 	now := time.Now()
 	fetchCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
+	// Window note: long meetings that STARTED before this window are still
+	// fetched — Google's timeMin bounds the event's END time, and the local
+	// merge uses overlap (Start < to && End > from; calendar_briefing.go) —
+	// so a 5-hour workshop that ended 10 minutes ago is considered.
 	events, err := client.ListUpcoming(fetchCtx, now.Add(-harvestMaxAfterEnd), now, calendarMaxResults)
 	if err != nil {
 		s.logger.Warn("meeting harvest: calendar fetch failed", "error", err)
@@ -202,17 +210,30 @@ func decideHarvests(
 		if alreadyAsked != nil && alreadyAsked(harvestKey(ev)) {
 			continue
 		}
+		if selfDeclined(ev.Attendees) {
+			// A declined invite can stay on the calendar feed; asking
+			// "끝나셨죠?" about a meeting the operator skipped reads as not
+			// paying attention.
+			continue
+		}
 		if !isMeetingShaped(ev) {
 			// A project-linked "발주"/"서류 제출" task block is NOT a meeting —
 			// asking "어떻게 됐어요, 뭐 결정됐어요" about a solo task reads as
 			// nagging (operator feedback 2026-07-05: 사람을 실제로 만나야 미팅).
 			continue
 		}
-		// Attendee names/emails join the match text: Google events often carry
-		// the counterparty only in the guest list, not the title.
+		// Attendee/organizer names join the match text: Google events often
+		// carry the counterparty only in the guest list — or, for externally
+		// organized invites, only in the organizer — not the title. Emails
+		// contribute their LOCAL PART only: domain fragments ("co", "kr",
+		// "gmail") would otherwise feed the loose unique-token matcher and
+		// could bind a personal invite to an unrelated project.
 		text := ev.Summary + " " + ev.Description
 		for _, a := range ev.Attendees {
-			text += " " + a.DisplayName + " " + a.Email
+			text += " " + a.DisplayName + " " + emailLocalPart(a.Email)
+		}
+		if ev.Organizer.DisplayName != "" || ev.Organizer.Email != "" {
+			text += " " + ev.Organizer.DisplayName + " " + emailLocalPart(ev.Organizer.Email)
 		}
 		target := matchTarget(strings.TrimSpace(text))
 		if target == "" {
@@ -359,7 +380,11 @@ func harvestKey(ev calendar.Event) string {
 }
 
 // formatHarvestAsk renders the deterministic follow-up question. Plain text,
-// Korean-first, two short lines — a question, not a report.
+// Korean-first, two short lines. The body MUST end with a question mark:
+// the work-feed relay marks a card answerable (free-text reply field) only
+// when the trimmed body ends with ?/？ (proactive_relay.go isQuestion →
+// endsWithQuestionMark) — a statement-final body would deliver the nudge
+// without the reply path this feature exists for.
 func formatHarvestAsk(ev calendar.Event, target string, loc *time.Location) string {
 	title := strings.TrimSpace(ev.Summary)
 	if title == "" {
@@ -368,8 +393,27 @@ func formatHarvestAsk(ev calendar.Event, target string, loc *time.Location) stri
 	span := ev.Start.In(loc).Format("15:04") + "~" + ev.End.In(loc).Format("15:04")
 	var b strings.Builder
 	fmt.Fprintf(&b, "🗒 %s (%s) 끝나셨죠?", title, span)
-	fmt.Fprintf(&b, "\n결과나 결정된 것 있으면 한 줄로 알려주세요 — %s 기록에 남겨둘게요.", target)
+	fmt.Fprintf(&b, "\n%s 기록에 남겨둘게요 — 결과나 결정된 것 있으면 한 줄로 알려주시겠어요?", target)
 	return b.String()
+}
+
+// selfDeclined reports whether the authenticated user's own attendee entry
+// declined the invitation.
+func selfDeclined(attendees []calendar.Attendee) bool {
+	for _, a := range attendees {
+		if a.Self && a.ResponseStatus == "declined" {
+			return true
+		}
+	}
+	return false
+}
+
+// emailLocalPart strips the domain: "kim@partner.co.kr" → "kim".
+func emailLocalPart(email string) string {
+	if i := strings.IndexByte(email, '@'); i >= 0 {
+		return email[:i]
+	}
+	return email
 }
 
 // --- state (asked-key dedup, restart-safe) ---------------------------------

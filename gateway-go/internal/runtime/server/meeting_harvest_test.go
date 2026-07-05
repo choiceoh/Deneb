@@ -100,6 +100,67 @@ func TestFormatHarvestAsk(t *testing.T) {
 			t.Errorf("ask missing %q:\n%s", want, got)
 		}
 	}
+	// The relay marks a card answerable only when the trimmed body ends with a
+	// question mark (proactive_relay.go endsWithQuestionMark) — without this
+	// suffix the feed shows the nudge but no reply field.
+	if !strings.HasSuffix(strings.TrimSpace(got), "?") {
+		t.Errorf("ask must end with a question mark to render the answer field:\n%s", got)
+	}
+}
+
+// TestDecideHarvests_ReviewFindings pins the #3114 review fixes: declined
+// invites stay silent, organizer-only counterparties match, and attendee
+// email DOMAIN fragments never reach the matcher (local part only).
+func TestDecideHarvests_ReviewFindings(t *testing.T) {
+	now := time.Date(2026, 7, 6, 14, 0, 0, 0, harvestKST)
+	end := now.Add(-30 * time.Minute)
+
+	// Declined self-invite: project-linked and meeting-shaped, but the
+	// operator said no — never ask "끝나셨죠?" about a skipped meeting.
+	declined := calendar.Event{
+		ID: "d1", Summary: "영산고 발주 미팅", Start: end.Add(-time.Hour), End: end, Status: "confirmed",
+		Attendees: []calendar.Attendee{
+			{Email: "me@deneb.ai", Self: true, ResponseStatus: "declined"},
+			{Email: "kim@partner.co.kr", DisplayName: "김부장"},
+		},
+	}
+	if got := decideHarvests(now, []calendar.Event{declined}, nil, 0, harvestTestMatcher, harvestKST); len(got) != 0 {
+		t.Errorf("declined invite must not be harvested, got %+v", got)
+	}
+
+	// Organizer-only counterparty: externally organized invite where the
+	// project name lives only on the organizer, not title/attendees.
+	organized := calendar.Event{
+		ID: "o1", Summary: "통화", Start: end.Add(-time.Hour), End: end, Status: "confirmed",
+		Organizer: calendar.Attendee{DisplayName: "영산고 행정실", Email: "admin@school.example"},
+	}
+	got := decideHarvests(now, []calendar.Event{organized}, nil, 0, harvestTestMatcher, harvestKST)
+	if len(got) != 1 || got[0].Target != "영산고" {
+		t.Errorf("organizer-carried target must match, got %+v", got)
+	}
+
+	// Email domains stay out of the match text: only the local part may feed
+	// the (loose) matcher, so "co"/"kr" fragments cannot bind a personal
+	// invite to an unrelated project.
+	var seen []string
+	spy := func(text string) string {
+		seen = append(seen, text)
+		return ""
+	}
+	personal := calendar.Event{
+		ID: "p1", Summary: "저녁 약속", Start: end.Add(-time.Hour), End: end, Status: "confirmed",
+		Attendees: []calendar.Attendee{{Email: "friend@partner.co.kr", DisplayName: ""}},
+	}
+	_ = decideHarvests(now, []calendar.Event{personal}, nil, 0, spy, harvestKST)
+	if len(seen) != 1 {
+		t.Fatalf("matcher calls = %d, want 1", len(seen))
+	}
+	if strings.Contains(seen[0], "co.kr") || strings.Contains(seen[0], "@") {
+		t.Errorf("match text must carry the email local part only, got %q", seen[0])
+	}
+	if !strings.Contains(seen[0], "friend") {
+		t.Errorf("match text must keep the email local part, got %q", seen[0])
+	}
 }
 
 // TestIsMeetingShaped_RealCalendarSample pins the shape gate against the

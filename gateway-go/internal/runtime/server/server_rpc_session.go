@@ -594,7 +594,15 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 		if os.Getenv("DENEB_MEETING_HARVEST_DISABLE") != "1" {
 			if stateDir, ok := s.productionStateDir(homeDir); ok {
 				s.meetingHarvest = newMeetingHarvestService(
-					func(text string) (bool, error) { return s.proactiveRelay.relayNative(text) },
+					// mirrorTranscript: the question must land in the
+					// client:main transcript too — the feed answer path sends
+					// only the user's typed reply as the next prompt, and the
+					// filing loop needs the question (with project name) right
+					// above it in context.
+					func(text string) (bool, error) {
+						return s.proactiveRelay.relayNativeToOptions("", text,
+							proactiveRelayOptions{mirrorTranscript: true})
+					},
 					resolveBriefingCalendarClient,
 					func(text string) string {
 						st := s.wikiStore
