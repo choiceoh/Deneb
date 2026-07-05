@@ -144,24 +144,26 @@ After each evolution cycle, update the skill's version and add a brief comment i
 - v1.0.1: Added pitfall about X timeout (caused Y failures in production)
 ```
 
-## Autoresearch Integration
+## Iterative Optimization Integration
 
-For systematic optimization, use the autoresearch infrastructure:
+For systematic optimization, use the iterate loop (there is no separate
+autoresearch CLI — the methodology lives in `.claude/rules/optimization.md`
+and the agent itself drives the loop):
 
 ```bash
-# Start autoresearch targeting the skill file
-scripts/dev/autoresearch.sh start \
-  --target skills/<category>/<name>/SKILL.md \
-  --metric quality
+# One-shot: build → dev gateway → smoke checks
+scripts/dev/iterate.sh
 
-# Monitor progress
-scripts/dev/autoresearch.sh status
-
-# Review results
-scripts/dev/ar-results.sh --suggest
+# Score chat quality after editing the SKILL.md (0-100)
+scripts/dev/iterate.sh --metric quality
+scripts/dev/quality-metric.sh "스킬을 트리거하는 실제 메시지"
 ```
 
-### Hard Constraints for Autoresearch
+Loop: hypothesis+prediction → edit SKILL.md → run metric → keep(improved) or
+revert(regressed) → record — per the strategy table in
+`.claude/rules/optimization.md`.
+
+### Hard Constraints for Optimization
 
 1. **Target only the SKILL.md file** — never modify gateway code
 2. **Preserve frontmatter structure** — name, version, category must not change

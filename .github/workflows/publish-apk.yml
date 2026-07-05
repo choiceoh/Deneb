@@ -1,10 +1,11 @@
 name: Publish APK (OTA)
 
-# Build the foss release APK on the gx10 self-hosted runner and publish it to the
-# gateway's local serve dir (~/.cache/deneb-apk) via scripts/dev/publish-apk.sh,
-# which assigns the versionCode under flock. This is a thin trigger over the same
-# script the operator runs by hand. The pre-publish native-app smoke gate is skipped
-# here (DENEB_SKIP_SMOKE, see the job env for why) — it is unreliable unattended.
+# Build the foss release APK on the srv1 (formerly gx10) self-hosted runner via
+# scripts/dev/publish-apk.sh, which assigns the versionCode under flock and stages
+# the artifact in the runner-local ~/.cache/deneb-apk; a follow-up step rsyncs it
+# to the srv4 gateway's serve dir. This is a thin trigger over the same script the
+# operator runs by hand. The pre-publish native-app smoke gate is skipped here
+# (DENEB_SKIP_SMOKE, see the job env for why) — it is unreliable unattended.
 #
 # Auto-runs when a native change lands on main (paths: client-android/**). With the
 # versionCode-only scheme there is no semantic version to gate on -- every shipped
@@ -12,9 +13,10 @@ name: Publish APK (OTA)
 # flock), so merging a native PR is itself the release signal. Also runnable on demand
 # (workflow_dispatch) with custom release notes.
 #
-# Prerequisite: a self-hosted runner on gx10 labeled "gx10", running as the gateway
-# user so HOME/.cache/deneb-apk is the directory the gateway serves, with the Android
-# SDK installed. One-time setup is documented in .claude/rules/release-and-deploy.md.
+# Prerequisite: a self-hosted runner on srv1 labeled "gx10" (the label predates the
+# host rename and is pinned in actionlint.yaml), with the Android SDK installed and
+# ssh access to srv4 for the publish sync. One-time setup is documented in
+# .claude/rules/release-and-deploy.md.
 # Only push-to-main and manual dispatch trigger this -- never fork pull requests --
 # so untrusted code can never run on the host runner.
 

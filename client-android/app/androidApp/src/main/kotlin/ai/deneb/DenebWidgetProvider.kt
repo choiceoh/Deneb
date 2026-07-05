@@ -19,8 +19,8 @@ import org.koin.core.component.inject
 // Home-screen widget: the next meeting and unread-mail count at a glance, with a
 // tap that opens the Deneb chat. Refreshes on the system's 30-min cycle
 // (deneb_widget_info.xml) and whenever a widget is added or resized. A
-// native-only surface — the Telegram bot can't put a glanceable card on the home
-// screen.
+// native-only surface — something the retired Telegram bot never could put on the
+// home screen.
 class DenebWidgetProvider :
     AppWidgetProvider(),
     KoinComponent {

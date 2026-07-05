@@ -17,7 +17,7 @@ globs: ["gateway-go/**/*.go"]
 | `scripts/dev/quality-metric.sh [MSG]` | 네이티브 클라 채팅 품질 점수 0-100 (15~60초) |
 | `scripts/dev/recall-metric.sh` | 회상 품질 점수 0-100 (합성 코퍼스 hit rate, ~1초, LLM 불필요) |
 | `python3 scripts/dev/mail-bench.py trap --model <현역모델>` | 메일 분석 고정 벤치 — 함정 6통×지표 18 자동 채점 (wormhole 필요, ~3분) |
-| `scripts/dev/wiki-qa-bench.py` | 위키 QA 골드셋 채점 — recall 모드(검색 hit@K, LLM 0원·초 단위)·answer 모드(실턴 정답 포함률, 비용 주의). 골드셋은 레포 밖 호스트 `~/.deneb/wiki-qa-gold.jsonl`(실데이터 포함), 베이스라인 `~/.deneb/wiki-qa-baseline-*.txt` |
+| `scripts/dev/wiki-qa-bench.py` | 위키 QA 골드셋 채점 — recall 모드(검색 hit@K, LLM 0원·초 단위)·answer 모드(실턴 정답 포함률, 비용 주의). 골드셋은 레포 밖 호스트 `~/.deneb/wiki-qa-gold.jsonl`(실데이터 포함). 베이스라인 비교는 스크립트 기능이 아니라 수동 — 이전 출력을 `~/.deneb/wiki-qa-baseline-*.txt` 등으로 보관해 대조 |
 
 ### metric 프리셋 선택 가이드
 
@@ -119,5 +119,5 @@ scripts/dev/iterate.sh
 | substance | 25 | 응답 길이/내용 충실도 (>100자=25, >30자=10) |
 | clean | 20 | 내부 토큰 누출/AI 필러 없음 |
 | latency | 15 | 응답 시간 (<10s=15, <20s=12, <30s=8) |
-| streaming | 15 | 이벤트 흐름 정상 (delta>5 + event>10 = 15) |
+| streaming | 15 | 이벤트 흐름 정상 (edit>3 & event>5 = 15, 그 외 부분점수). ⚠️현재 주입 경로(`miniapp.chat.send` 동기 RPC)는 draft/스트림 이벤트가 관측 안 돼 **만점 불가·~5점 상한** — 이 항목의 결손은 회귀가 아니라 측정 한계다 |
 | penalty | -10/err | 도구 에러당 -10점 |

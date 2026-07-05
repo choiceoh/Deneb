@@ -22,7 +22,7 @@ import (
 
 // toolHeartbeatInterval is how often OnToolProgress fires while a single
 // tool call is still executing. Chosen to comfortably fit under the 30s
-// Telegram typing-TTL (see autoreply/typing.TypingController) so long
+// typing-indicator TTL (see autoreply/typing.TypingController) so long
 // (compile, test-suite, network fetch) tool calls do not let the surface
 // liveness indicator lapse. Exported as a var for tests that want to
 // shrink the interval.

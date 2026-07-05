@@ -33,7 +33,7 @@ func Default() *Store {
 }
 
 // mutatingActions are the verbs that make an action-parameterized tool (gmail,
-// dropbox, calendar, cron, …) destructive. Read verbs (list/search/read/get…)
+// files, calendar, cron, …) destructive. Read verbs (list/search/read/get…)
 // are absent, so they are never ledgered and never blocked.
 var mutatingActions = map[string]bool{
 	"send": true, "reply": true, "forward": true,

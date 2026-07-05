@@ -64,7 +64,8 @@ object DenebType {
         @Composable get() = TextStyle(fontFamily = family).copy(fontSize = 46.sp, lineHeight = 50.sp, fontWeight = FontWeight.Light, letterSpacing = (-0.02).em)
 
     /**
-     * Desktop rail item — the persistent sidebar's nav words (20sp / 200 / 34sp). The one
+     * Desktop rail item — the retired desktop sidebar's nav words (20sp / 200 / 34sp;
+     * style kept for the surviving desktop build target). The one
      * place ExtraLight survives: the labels are short lowercase Latin ("mail", "search"),
      * so the Hangul-hairline caveat that lifted the display tier to Light does not apply.
      */

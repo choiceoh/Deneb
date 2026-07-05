@@ -6,8 +6,8 @@
 //   - Consistent User-Agent: all outbound requests identify as Deneb-Gateway
 //   - Graceful shutdown: CloseIdle drains the shared pool
 //
-// Modules with special dialer requirements (SSRF-safe, Telegram IPv4
-// fallback, LLM-tuned) keep their own transports.
+// Modules with special dialer requirements (SSRF-safe, LLM-tuned) keep
+// their own transports.
 package httputil
 
 import (
@@ -37,7 +37,7 @@ func UserAgent() string {
 }
 
 // sharedTransport is a connection-pooled HTTP transport shared across all
-// standard (non-SSRF, non-Telegram) HTTP clients in the gateway.
+// standard (non-SSRF) HTTP clients in the gateway.
 var sharedTransport = &http.Transport{
 	DialContext: (&net.Dialer{
 		Timeout:   5 * time.Second,

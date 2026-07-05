@@ -66,8 +66,8 @@ type ModelConfig struct {
 	// Inference mode controls.
 	ThinkingLevel       string `json:"thinkingLevel,omitempty"`
 	InterleavedThinking *bool  `json:"interleavedThinking,omitempty"`
-	// ShowThinkingInChat surfaces extended-thinking text into the channel
-	// reply (Telegram). Off by default — flips on a per-session basis via
+	// ShowThinkingInChat surfaces extended-thinking text into the chat
+	// reply surface. Off by default — flips on a per-session basis via
 	// `/think show on`. Independent of InterleavedThinking; with
 	// ShowThinkingInChat enabled and InterleavedThinking disabled, only the
 	// final-turn reasoning is shown.

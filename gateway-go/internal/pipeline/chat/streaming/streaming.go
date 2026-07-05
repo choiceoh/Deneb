@@ -55,7 +55,7 @@ const (
 // line ends on a word, not "수법입니다." or "음...".
 const sentenceTerminatorCutset = ".!?。！？… "
 
-// Broadcaster relays agent streaming events to WebSocket clients
+// Broadcaster relays agent streaming events to SSE clients
 // via the gateway's raw broadcast function. All methods are safe to call
 // when broadcastRaw is nil (they silently no-op).
 type Broadcaster struct {

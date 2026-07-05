@@ -1,7 +1,7 @@
 // Copyright (c) Deneb authors. Licensed under the project license.
 
 // Package redact strips well-known secret patterns from strings before they
-// leave Deneb (logs, Telegram messages, session transcripts, crash dumps).
+// leave Deneb (logs, outbound chat messages, session transcripts, crash dumps).
 //
 // Policy:
 //   - "Fail open" is forbidden — a nil-safe, best-effort pass is always

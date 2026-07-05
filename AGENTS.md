@@ -109,6 +109,7 @@ and the native client's Settings → 스킬 tab lists them read-only (no toggles
 - **productivity/** — contract-review, decision-premortem, deep-research, email-analysis, fact-check, meeting-minutes, morning-letter, proactive-gate, retrieval-plan, session-logs, weekly-report
 - **coding/** — evolution-proposal, github, skill-creator, skill-evolution, skill-factory
 - **knowledge/** — kb-interview
+- (devops/, integration/, operations/, security/ are empty placeholder categories — `DESCRIPTION.md` only, no skills yet)
 
 ## Usage Notes
 

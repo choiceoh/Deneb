@@ -1,4 +1,11 @@
-# Deneb 폰 연동 (phone ↔ gateway over SSH)
+# Deneb 폰 연동 (phone ↔ gateway over SSH) — ★전면 은퇴
+
+> ## 🪦 상태 (2026-07-05, PR #3099): Termux/SSH 경로 전면 은퇴 — 이 문서 전체가 역사적 참조
+> **`phone_read`/`phone_write` 도구는 살아 있지만 더 이상 Termux/SSH 를 쓰지 않는다** —
+> notify/speak/clipboard 는 네이티브 앱 인앱 처리, location/battery 는 앱 센서 캐시+`sync_state`
+> 경유로 전면 이전됐다 (`gateway-go/internal/pipeline/chat/tools/phone.go`). 폰에 Termux·sshd·
+> autossh 터널을 설치할 필요가 없고, 이 디렉토리의 스크립트들은 전부 레거시다.
+> 아래의 2026-06-21 부분-은퇴 배너와 설치 절차는 기록으로만 남긴다.
 
 > ## ⚠️ 상태 (2026-06-21): push 센싱 은퇴 — 배터리 때문에
 > **폰→서버 push 묶음(아래 `deneb-supervisor`·`deneb-tunnel`·`deneb-*-watch`·

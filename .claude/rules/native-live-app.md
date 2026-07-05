@@ -72,7 +72,7 @@ scripts/dev/native-app.sh stop
 |---|---|---|
 | profile 인자 | `phone`(412×915) | `desktop`(1280×800)도 가능. ★**phone=모바일 UI 분기(하단 탭바)·desktop=데스크톱 분기(좌측 레일)** — 창 크기뿐 아니라 실제 플랫폼 분기를 렌더 |
 | `NATIVE_W` / `NATIVE_H` | 프로파일값 | 더 큰 프레임(예: `NATIVE_W=480 NATIVE_H=1040`) |
-| `DENEB_GATEWAY_URL` | `http://100.105.145.6:18789` | 다른 게이트웨이로 시드 (dev 게이트웨이 연결은 ↓ 전용 섹션 참조) |
+| `DENEB_GATEWAY_URL` | `http://100.111.114.20:18789` (srv4 — 2026-06-20 프로덕션 이사) | 다른 게이트웨이로 시드 (dev 게이트웨이 연결은 ↓ 전용 섹션 참조) |
 | `DENEB_INSTANCE` | worktree 이름 | **인스턴스 격리 키** — 디스플레이/상태디렉토리/VNC포트가 이 값의 해시 오프셋으로 분리되어, 동시에 도는 다른 에이전트 worktree의 앱을 서로 죽이거나 잘못된 화면을 캡처하지 않는다 |
 | `NATIVE_DISPLAY` | `:99`+오프셋 | Xvfb 디스플레이 (인스턴스별 자동 산정; 직접 지정 시 우선) |
 | `NATIVE_WM` | `1` | `0`이면 WM 끔(키보드 포커스 불안정 — 비권장) |
@@ -148,4 +148,4 @@ sudo apt-get install -y xvfb x11vnc novnc websockify matchbox-window-manager \
 
 - **시스템 제스처**(엣지 스와이프 등)는 재현 불가 — 실기기 필요. 관련: [[reference_native_client_build_verify]], [[reference_native_nested_drawer_gesture]].
 - 빌드가 매번 `client-android/app/iosApp/Configuration/Config.xcconfig`(APP_VERSION) 재생성 → **커밋 전 `git checkout --`로 원복**.
-- 단일 사용자·단일 머신 전용(gx10). 디스플레이 `:99`, noVNC 포트 6080은 Tailnet 한정.
+- 단일 사용자·단일 머신 전용(srv1, 구 gx10). 디스플레이 `:99`, noVNC 포트 6080은 Tailnet 한정.

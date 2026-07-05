@@ -10,7 +10,7 @@ import (
 )
 
 // wireStreamHooks registers all non-draft streaming hooks on the compositor:
-// WebSocket broadcaster, typing signaler, and gateway events.
+// SSE broadcaster, typing signaler, and gateway events.
 // The draft stream loop is wired separately in executeAgentRun because it has
 // defer-based cleanup tied to that scope.
 //
@@ -26,7 +26,7 @@ func wireStreamHooks(
 	typingSignaler chatport.TypingSignaler,
 ) *hanja.Streamer {
 	var deltaTranslit *hanja.Streamer
-	// Broadcaster: WebSocket streaming deltas. Read Sino-Korean Hanja as Hangul
+	// Broadcaster: SSE streaming deltas. Read Sino-Korean Hanja as Hangul
 	// live (報告書 → 보고서) so a Chinese-lineage model's stream doesn't flash Hanja
 	// before the final settle. The Streamer is stream-safe (carries fence/word
 	// state across deltas) and EmitDelta no-ops on the empty string it returns
@@ -98,7 +98,7 @@ func wireStreamHooks(
 		}
 	})
 
-	// Gateway event subscription: emit tool.start / tool.end for WebSocket clients.
+	// Gateway event subscription: emit tool.start / tool.end for SSE clients.
 	if deps.callbacks.emitAgentFn != nil {
 		hc.OnToolStart(func(name, _ string, _ []byte) {
 			deps.callbacks.emitAgentFn("tool.start", params.SessionKey, params.ClientRunID, map[string]any{

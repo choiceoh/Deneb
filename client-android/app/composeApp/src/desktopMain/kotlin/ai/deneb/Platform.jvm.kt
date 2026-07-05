@@ -59,7 +59,8 @@ actual val currentPlatform: Platform = run {
     // the headless Compose Desktop app renders the MOBILE UI branch (bottom bar, modal
     // drawers) instead of the desktop sidebar. This verifies the mobile composition and
     // navigation on the server; real Android insets, the soft keyboard, and edge
-    // gestures still need a device. Production desktop launches never set this property.
+    // gestures still need a device. A plain desktop run (no property) keeps the legacy
+    // Platform.Desktop branch — a build target only; the desktop product UI is retired.
     when (System.getProperty("deneb.platform", "").lowercase()) {
         "android", "phone", "mobile" -> return@run Platform.Mobile.Android
         "ios" -> return@run Platform.Mobile.Ios

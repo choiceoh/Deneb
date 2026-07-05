@@ -29,7 +29,7 @@ func (s *slowToolExecutor) Execute(ctx context.Context, _ string, _ json.RawMess
 
 // TestToolHeartbeat_FiresDuringLongTool verifies that OnToolProgress fires
 // periodically while a tool is still executing, so surface liveness
-// indicators (Telegram typing "...") stay alive during multi-minute tools.
+// indicators (client typing "...") stay alive during multi-minute tools.
 func TestToolHeartbeat_FiresDuringLongTool(t *testing.T) {
 	// Shrink the interval so the test runs in under a second.
 	origInterval := toolHeartbeatInterval

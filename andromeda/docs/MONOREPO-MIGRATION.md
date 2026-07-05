@@ -1,7 +1,11 @@
 # Andromeda → Deneb 모노레포 이관 계획
 
-> 상태: **계획(준비 단계)**. 비파괴적 사전 정비만 진행됨. 아래 §2~§5의 실제 이관
-> 단계는 승인 후 순서대로 실행한다. 가장 큰 리스크는 **자동 업데이터(§4)** 하나뿐.
+> 상태: ✅ **이관 완료 (2026-07-04, Deneb #3061)** — 이 문서는 역사적 기록이다.
+> andromeda/ 는 이제 Deneb 모노레포 안에 있고, CI 는 루트
+> `.github/workflows/andromeda-ci.yml`(verify + wire-drift), 릴리스는 루트
+> `release-please.yml` 매니페스트 모드(`component: andromeda`)가 담당한다.
+> 현행 사실은 `andromeda/CLAUDE.md` 를 보라. 아래 본문의 "계획" 서술은 이관 전
+> 시점의 기록으로만 남긴다.
 
 ## 0. 왜 / 무엇이 이미 됐나
 

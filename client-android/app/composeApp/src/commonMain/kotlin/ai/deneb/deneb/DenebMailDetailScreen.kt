@@ -96,7 +96,7 @@ fun DenebMailDetailScreen(
     onBack: () -> Unit,
     onOpenWiki: (String) -> Unit = {},
     navigationTabBar: (@Composable () -> Unit)? = null,
-    // panelMode = rendered as the right detail pane of the desktop split-view: drop the
+    // panelMode = rendered as the right detail pane of the (retired-product) desktop split-view: drop the
     // status-bar inset and the "← 뒤로" header (the user switches mail by clicking list rows;
     // onBack is still invoked by archive/trash success to clear the selection).
     panelMode: Boolean = false,

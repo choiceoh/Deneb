@@ -34,7 +34,7 @@ const (
 )
 
 // Message is a parsed LMTP delivery: the MessageDetail fed to analysis, the raw
-// attachment bytes (keyed by AttachmentInfo.AttachmentID, for Dropbox archiving),
+// attachment bytes (keyed by AttachmentInfo.AttachmentID, for file-store archiving),
 // and a stable dedup key derived from the Message-ID header (so a re-delivery of
 // the same mail isn't analyzed — or wiki-paged — twice).
 type Message struct {

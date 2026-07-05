@@ -24,7 +24,7 @@ Anthropic 은 **요청당 cache_control breakpoint 최대 4개** 한도. 우리�
 
 구현 진입점:
 - 시스템 블록 마커: `gateway-go/internal/pipeline/chat/prompt/system_prompt.go:BuildSystemPromptBlocks`
-- 트레일링 마커: `gateway-go/internal/pipeline/chat/cache_breakpoints.go:buildTrailingCacheHook` → `run_exec.go` 의 `cfg.BeforeAPICall = ComposeBeforeAPICall(steer, trailingCache)`
+- 트레일링 마커: `gateway-go/internal/pipeline/chat/cache_breakpoints.go:buildTrailingCacheHook` → `run_exec.go` 가 staged 훅 체인으로 조립: `agent.BeforeAPICallChain` 에 `steer`(Normal)·`trailing-cache`(Post) 를 `Add` 후 `cfg.BeforeAPICall = apc.Build(logger)` (체인 내부가 `ComposeBeforeAPICall` 호출)
 - Anthropic 모드 결정: `gateway-go/internal/pipeline/chat/run_provider.go:resolveAPIMode` (non-Anthropic 에서는 hook 이 nil 반환 → ComposeBeforeAPICall 가 필터)
 
 `gateway-go/internal/pipeline/chat/prompt/prompt_cache.go:PromptCache` 가 static 블록을 **툴 이름 리스트 해시 키**로 캐싱해 재조립 비용도 제거한다.

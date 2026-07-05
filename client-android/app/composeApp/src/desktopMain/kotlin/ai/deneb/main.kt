@@ -46,7 +46,8 @@ fun main() {
         // Window size: the harness (native-app.sh) sets -Ddeneb.window.{width,height}
         // to the profile size so the phone profile opens at a real phone width. Without
         // it, Compose re-asserts this default over xdotool's resize and clips the narrow
-        // mobile layout. Production desktop launches omit it and keep 1280x800.
+        // mobile layout. Plain desktop runs (harness/dev only — the desktop product is
+        // retired; Andromeda owns desktop) omit it and keep 1280x800.
         val winW = System.getProperty("deneb.window.width")?.toFloatOrNull() ?: 1280f
         val winH = System.getProperty("deneb.window.height")?.toFloatOrNull() ?: 800f
         val windowState = rememberWindowState(size = DpSize(winW.dp, winH.dp))

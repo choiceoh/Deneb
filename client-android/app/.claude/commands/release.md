@@ -12,19 +12,23 @@ Follow these steps exactly:
 
 ## 1. Decide whether a patch note is needed
 
-`DenebPatchNotes.kt` (composeApp/src/commonMain/.../deneb/DenebPatchNotes.kt) is
-the compiled-in, user-facing Korean changelog. Prepend a new entry at the head
-**only when this build carries user-visible changes**; internal refactors need
-no entry. The patch-notes CI gate enforces this for `feat(...)` PRs touching
-client-android.
+User-facing Korean patch notes are shipped as **`changelog.d/` fragment files**
+— add `client-android/app/changelog.d/YYYY-MM-DD-<slug>.md` (one highlight per
+line) **only when this build carries user-visible changes**; internal refactors
+need no fragment. Do NOT prepend to `DenebPatchNotes.kt` — its
+`PATCH_NOTES_HISTORY` is frozen; the build merges generated fragments on top
+(see `changelog.d/README.md`). The patch-notes CI gate
+(`.github/workflows/patch-notes-gate.yml`) enforces this for `feat(...)` PRs
+touching client-android; escape hatch: `skip-patch-notes` label.
 
 ## 2. Publish
 
 Releases happen one of two ways — never by hand-copying APKs:
 
 - **Automatic (normal path):** merging a PR that touches `client-android/**`
-  into main triggers `.github/workflows/publish-apk.yml` on the gx10
-  self-hosted runner. Merging the PR *is* the release approval.
+  into main triggers `.github/workflows/publish-apk.yml` on the srv1 (formerly
+  gx10; runner label is still literally `gx10`) self-hosted runner. Merging the
+  PR *is* the release approval.
 - **Manual (operator, on the deploy machine):**
 
   ```bash

@@ -1,5 +1,5 @@
 // Gateway event subscriptions: wires session lifecycle, agent, and transcript
-// events to the broadcaster for delivery to WebSocket clients.
+// events to the broadcaster for delivery to SSE clients.
 //
 // Mirrors createGatewayEventSubscriptions from
 // src/gateway/server-event-subscriptions.ts.
@@ -66,7 +66,7 @@ type GatewaySubscriptionParams struct {
 }
 
 // NewGatewayEventSubscriptions creates and starts event subscription goroutines
-// that relay events from internal buses to WebSocket clients via the broadcaster.
+// that relay events from internal buses to SSE clients via the broadcaster.
 func NewGatewayEventSubscriptions(params GatewaySubscriptionParams) *GatewayEventSubscriptions {
 	g := &GatewayEventSubscriptions{
 		agentCh:      make(chan AgentEvent, 256),

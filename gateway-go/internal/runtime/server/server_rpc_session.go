@@ -402,8 +402,9 @@ func (s *Server) registerSessionRPCMethods() {
 		})
 	}
 
-	// Chat, BTW, Exec, Aurora, and cron wiring are registered in
-	// registerLateMethods() after this function returns.
+	// Chat, BTW, miniapp-chat bridge, Exec, Wiki, Genesis, and GmailAnalyze are
+	// registered in registerLateMethods() after this function returns; Aurora
+	// (dreaming) is wired later in registerWorkflowSideEffects().
 }
 
 // resolveFeedWorkModel returns the display name of the model behind proactive
@@ -476,7 +477,7 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 	// goroutine (server_lifecycle.go). See chat/prompt_snapshot_persist.go.
 	chat.ConfigurePromptSnapshots(config.ResolveStateDir(), s.logger)
 
-	// Broadcast dreaming events to WebSocket clients, and surface completed
+	// Broadcast dreaming events to SSE clients, and surface completed
 	// cycles that actually changed pages as a work-feed card — the proposal
 	// JSON always existed but had no user-facing surface.
 	s.autonomousSvc.OnEvent(func(event autonomous.CycleEvent) {

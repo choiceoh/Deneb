@@ -17,12 +17,12 @@ Primary runtime — HTTP + SSE gateway server.
 - `pkg/protocol/` — Hand-written JSON wire types.
 - `internal/pipeline/chat/toolctx/` — Leaf package: shared types (ToolFunc, ToolDef, ToolRegistrar, ToolExecutor), context helpers (WithDeliveryContext, etc.), TurnContext, RunCache, dependency structs (CoreToolDeps, ProcessDeps, SessionDeps, etc.). Zero intra-chat imports.
 - `internal/pipeline/chat/toolreg/` — Tool registration hub: wires tool implementations (from tools/) with JSON schemas (from tool_schemas_gen.go) into a ToolRegistrar. Contains tool_schemas.json (codegen source) and tool_schemas_gen.go (generated). Never imports chat/.
-- `internal/pipeline/chat/tools/` — Pure tool implementations (fs, exec, git, health, vega, message, kv, gmail, etc.). Depends only on toolctx/ for types.
+- `internal/pipeline/chat/tools/` — Pure tool implementations (fs, exec, git, health, wiki, message, kv, gmail, etc.). Depends only on toolctx/ for types.
 - `internal/pipeline/chat/toolreg_core.go` — Thin wrapper: calls toolreg.RegisterCoreTools() + registers pilot tool (localai-coupled).
 - `internal/pipeline/chat/prompt/system_prompt.go` — System prompt assembly (identity, tooling, tool call style, safety, skills, memory recall, workspace, reply tags, messaging, timestamp, context files, silent replies, runtime).
 - `internal/pipeline/chat/prompt/context_files.go` — Workspace context file loader (AGENTS.md, SOUL.md, TOOLS.md, IDENTITY.md, USER.md, MEMORY.md). Budget: 8K bytes/file (MEMORY.md 32K), 72K total; oversized files are head+tail truncated with a visible omission marker + Warn log.
 - `internal/pipeline/chat/silent_reply.go` — SILENT_REPLY_TOKEN (NO_REPLY) detection and stripping for delivery suppression.
-- `internal/pipeline/chat/slash_commands.go` — Slash command pre-processing (operational only: /help, /reset, /status, /kill, /rollback, /update, /restart — user commands moved to the native UI).
+- `internal/pipeline/chat/slash_commands.go` — Slash command pre-processing (/help, /reset, /status, /kill, /goal, /rollback, /update, /restart, /weekly — mostly operational; rich user commands moved to the native UI).
 - `internal/ai/llm/types.go` — Sampling parameters: top_p, top_k, stop_sequences, frequency_penalty, presence_penalty. ImageSource for multimodal content.
 - `internal/ai/modelcaps/` — Leaf package: builtin model capability defaults (reasoning model prefixes, cache_control compatibility). Layered with vLLM /models discovery and deneb.json `models.providers.<id>` overrides (contextWindow/reasoning/vision/promptCache + temperature/topP/topK sampling) by `modelrole.Registry.CapabilityForModel` / `ProfileForModel`. The chat pipeline derives context-budget clamping, cache-marker stripping, image-block stripping, and sampling defaults from it (`internal/pipeline/chat/run_capability.go`). Model health circuit breaker: `internal/ai/modelrole/health.go`.
 - `internal/domain/backup/` — Daily offsite memory backup (autonomous PeriodicTask `memory-backup`): tar.gz of wiki/diary/transcripts/polaris/workspace/contacts/kv streamed over ssh to the storage node (NFS is read-only from the gateway host). Production state dir only; env: `DENEB_BACKUP_SSH_HOST`/`DENEB_BACKUP_DIR`/`DENEB_BACKUP_RETENTION_DAYS`/`DENEB_BACKUP_DISABLE`. The wiki dir is additionally a local git repo (`internal/domain/wiki/gitsnap.go`) committed per dream cycle and before each backup.
@@ -31,13 +31,13 @@ Primary runtime — HTTP + SSE gateway server.
 
 ## GatewayHub Wiring Rules
 
-- `GatewayHub` is a service container — no business logic, only `Broadcast()` and `Validate()`.
+- `GatewayHub` is a service container — no business logic. Beyond read-only accessors, late-bind setters (`SetChat` 등 6종), and phase helpers (`AdvancePhase`/`Phase`), its only behavior is `Broadcast()` and `Validate()`.
 - Hub is built only in `buildHub()`. No other file may create or populate `GatewayHub{}`.
 - Handler Deps assembly happens only in `method_registry.go` (inline literals, no adapter layer).
 - Handler packages (`internal/runtime/rpc/handler/*`) must NOT import `rpcutil.GatewayHub`.
 - Adding a new RPC domain: Hub field → handler Deps → `method_registry.go` wiring → `hub.Validate()` update → snapshot test update.
-- Do not add adapter/helper files for Deps wiring. Do not add methods to Hub beyond Broadcast/Validate.
-- Registration phases: Early (no Chat) → Session (creates Chat) → Late (Chat-dependent) → WorkflowSideEffects (non-RPC). Add new phases only if absolutely necessary.
+- Do not add adapter/helper files for Deps wiring. Do not add behavior methods to Hub beyond Broadcast/Validate (accessors/setters for new service fields are fine).
+- Registration phases: Builtin (pre-hub server-state closures) → Early (no Chat) → Session (creates Chat) → Late (Chat-dependent) → WorkflowSideEffects (non-RPC). Add new phases only if absolutely necessary.
 
 ## Build & Test
 

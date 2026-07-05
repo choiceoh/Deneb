@@ -45,10 +45,10 @@ Write it down. Make it real.
 
 ## Connect (Optional)
 
-Your human reaches you through the native client app (phone, tablet, or
-desktop — one codebase). If they haven't connected a device yet, point them at
-the gateway's client-token pairing and confirm a test message arrives before
-moving on.
+Your human reaches you through the native client app (Android/iOS, one mobile
+codebase) or the Andromeda desktop workstation. If they haven't connected a
+device yet, point them at the gateway's client-token pairing and confirm a
+test message arrives before moving on.
 
 ## When you are done
 

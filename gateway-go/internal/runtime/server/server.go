@@ -1,8 +1,8 @@
-// Package server implements the HTTP + WebSocket gateway server.
+// Package server implements the HTTP + SSE gateway server.
 //
-// Handles health endpoints, WebSocket connections with the full handshake
-// protocol, RPC dispatch, OpenAI-compatible HTTP APIs, hooks webhooks,
-// session management, and plugin HTTP routing.
+// Handles health endpoints, SSE streams (chat/stream, events), RPC dispatch,
+// OpenAI-compatible HTTP APIs, hooks webhooks, session management, and the
+// miniapp client surface. Transport is SSE, not WebSocket.
 package server
 
 import (
