@@ -1,5 +1,46 @@
 # Changelog
 
+## [4.63.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.62.2...deneb-v4.63.0) (2026-07-05)
+
+
+### ✨ Features
+
+* **autonomous:** 하트비트 리서치 레인 — 새 데이터 다이제스트로 자가 리서치 항목 등록 ([#3104](https://github.com/choiceoh/Deneb/issues/3104)) ([d84c713](https://github.com/choiceoh/Deneb/commit/d84c713e073e536261558f9f17f364a9c113034b))
+* **dev:** 메일 분석 고정 벤치 mail-bench.py — 함정 18지표 게이트 + 실메일 섀도런/당사자 앵커 ([#3086](https://github.com/choiceoh/Deneb/issues/3086)) ([9b3be16](https://github.com/choiceoh/Deneb/commit/9b3be16e7384d8eead14819ad6f44278cdea4bd0))
+* **dev:** 위키 QA 벤치 — 골드셋 기반 recall/answer 채점 자 ([#3101](https://github.com/choiceoh/Deneb/issues/3101)) ([aba545c](https://github.com/choiceoh/Deneb/commit/aba545c4601d47a00ff6dd82839dfa9a9bc3436e))
+* **gateway:** 다운그레이드 가드 — 구버전 바이너리로의 SIGUSR1 재시작을 수신측에서 거부 ([#3106](https://github.com/choiceoh/Deneb/issues/3106)) ([40a9bad](https://github.com/choiceoh/Deneb/commit/40a9baddf50e78e42a36a15fc649e9d5d1704fa8))
+* **mail:** 거래처 앵커 — 당사자 라벨에 활성 거래처·연결 프로젝트 결정적 병기 ([#3096](https://github.com/choiceoh/Deneb/issues/3096)) ([7c71e35](https://github.com/choiceoh/Deneb/commit/7c71e35bf9d9aa9af96ec30c0557afa9a8b43166))
+* **mail:** 날짜 앵커 결정적 주입 — 상대 날짜를 환산표 조회로 (모델 산술 약점 봉쇄) ([#3095](https://github.com/choiceoh/Deneb/issues/3095)) ([3be236a](https://github.com/choiceoh/Deneb/commit/3be236a7336fe970534ac75332bdffb760fc3e5f))
+* **mail:** 메일 분석에 당사자 앵커 결정적 주입 — 분석 모델의 당사자 뒤집기 제거 ([#3091](https://github.com/choiceoh/Deneb/issues/3091)) ([1e160c4](https://github.com/choiceoh/Deneb/commit/1e160c4a1f2c9d9894473f7795a1653eb1235405))
+* **phone:** 폰 도구 전면 앱 이전 — Termux/SSH 은퇴 ([#3099](https://github.com/choiceoh/Deneb/issues/3099)) ([db003d4](https://github.com/choiceoh/Deneb/commit/db003d420c5d10b61daa6ca7e093db992811be77))
+* **wiki:** deal_ledger 도구 — 정형 거래 원장 채팅 집계 (사실 레이어 1단계) ([#3102](https://github.com/choiceoh/Deneb/issues/3102)) ([81d384c](https://github.com/choiceoh/Deneb/commit/81d384cd4eb2793eec58b2370d412f2c820c0c7f))
+* **wiki:** 그래프 이웃 라벨을 의미 기반(거래처/프로젝트/기자재/인물)으로 ([#3094](https://github.com/choiceoh/Deneb/issues/3094)) ([b0fc3ea](https://github.com/choiceoh/Deneb/commit/b0fc3eaf9d054908ee0d56599972d7b6594cc2c3))
+* **wiki:** 미해결 질문 루프 — 리서치 적립·모닝레터 승격 ([#3098](https://github.com/choiceoh/Deneb/issues/3098)) ([9ef16b1](https://github.com/choiceoh/Deneb/commit/9ef16b12c2b4c34f2015970f13903faff849d636))
+* **wiki:** 프로젝트 가족 엣지 + 거래처 회상 앵커 ([#3097](https://github.com/choiceoh/Deneb/issues/3097)) ([c292765](https://github.com/choiceoh/Deneb/commit/c292765442f856eb8e30bfca2b7f890461eb9a3f))
+
+
+### 🐛 Bug Fixes
+
+* **autonomous:** 하트비트 빈파일 가드 — 제목뿐인 HEARTBEAT.md에 매 턴 3만 토큰 태우던 것 차단 ([#3100](https://github.com/choiceoh/Deneb/issues/3100)) ([1ecb4ce](https://github.com/choiceoh/Deneb/commit/1ecb4ce1f8f504a8d4af20da3546b7dbc87ddc16))
+* **chat:** polaris 색인을 가독 프로즈로 + 0건 시 범위 안내 — 스니펫 JSON 누출·빈손 오해 수정 ([#3090](https://github.com/choiceoh/Deneb/issues/3090)) ([25ec632](https://github.com/choiceoh/Deneb/commit/25ec632ca86b936fab58ab15b8534a8b3ac76f98))
+* **chat:** run.cache 관측 복구 — DENEB_ENGINE_METRICS_URL 오버라이드 (웜홀 뒤 엔진 /metrics 지정) ([#3092](https://github.com/choiceoh/Deneb/issues/3092)) ([6460ecd](https://github.com/choiceoh/Deneb/commit/6460ecd542d40155bcefffe9605224c77f583237))
+* **chat:** 봇 리뷰 유효 지적 일괄 수리 — 챗봇 톤 가드 정밀화 + mail-bench 스크립트 강건화 ([#3108](https://github.com/choiceoh/Deneb/issues/3108)) ([70ca6a9](https://github.com/choiceoh/Deneb/commit/70ca6a9f90676aa0c8b953ab18b37ad33ac369a8))
+* **chat:** 챗봇 워크스페이스 대화 규범 — 존댓말 고정·무요청 논평 금지·질문 전량 응답 ([#3093](https://github.com/choiceoh/Deneb/issues/3093)) ([e84a28b](https://github.com/choiceoh/Deneb/commit/e84a28bccde04db36a6cc978eddb3a8c768f316c))
+* **chat:** 컴팩션 cheap 패스에서 fetch_tools 스키마 결과 보호 — 동일 재fetch 20% 낭비 제거 ([#3089](https://github.com/choiceoh/Deneb/issues/3089)) ([a174402](https://github.com/choiceoh/Deneb/commit/a174402a1bd5f42107185a35ce5c068f2b595771))
+* **llm:** StripThinkingTags가 문서 속 &lt;thinking&gt; 언급에서 본문을 절단하던 것 수정 ([#3080](https://github.com/choiceoh/Deneb/issues/3080)) ([b024334](https://github.com/choiceoh/Deneb/commit/b0243349800646b760984c1b4e7d99e02ca1dbe0))
+* **mail:** 봇 리뷰 유효 지적 일괄 수리 — 날짜앵커·당사자앵커·거래처 배선·아카이브 날짜창 ([#3107](https://github.com/choiceoh/Deneb/issues/3107)) ([08c38a5](https://github.com/choiceoh/Deneb/commit/08c38a5e81f4f1dc5823b6e5583c8ae74344a491))
+* **mail:** 아카이브 날짜 필터 SENTSINCE 전환 + 검색 질의 토큰화 — 최근 메일 누락·다단어 검색 빈손 수정 ([#3088](https://github.com/choiceoh/Deneb/issues/3088)) ([76a0dc4](https://github.com/choiceoh/Deneb/commit/76a0dc4ad0bfa547f0d45530b498f008b31934b4))
+* **native:** 빈/에러 상태 문구가 화면 왼쪽 끝에 붙던 것 수정 — 공용 헬퍼 중앙정렬 ([#3087](https://github.com/choiceoh/Deneb/issues/3087)) ([1579afb](https://github.com/choiceoh/Deneb/commit/1579afb984f125bfe0fc75fd3cf24cce7fefc294))
+* **review-sweep:** 봇 리뷰 유효 지적 일괄 수리 — 하트비트·스킬리뷰·폰·run.cache·polaris ([#3105](https://github.com/choiceoh/Deneb/issues/3105)) ([ce165e8](https://github.com/choiceoh/Deneb/commit/ce165e867def40b64370f7cbd0af326b0a430310))
+* **scripts:** 배포 버전 후퇴 경보 + 하네스 기본 게이트웨이 srv4로 ([#3085](https://github.com/choiceoh/Deneb/issues/3085)) ([dbe8743](https://github.com/choiceoh/Deneb/commit/dbe874339fec5e5ad3337b2dea0853a668e899ac))
+* **wiki:** 검색·서빙 감사 후속 — 재시작 후 staleness 강등 복원·정렬 후 절단·cue 스니펫 은닉 ([#3081](https://github.com/choiceoh/Deneb/issues/3081)) ([1bec6fe](https://github.com/choiceoh/Deneb/commit/1bec6feeab8dcde1852e7de592c06c662111e489))
+* **wiki:** 스토어 코어 하드닝 — 인덱스 스냅샷·병합 정규화 가드·related 영속·프론트매터 이스케이프 ([#3082](https://github.com/choiceoh/Deneb/issues/3082)) ([b57f826](https://github.com/choiceoh/Deneb/commit/b57f82612b65064d79977ce0adabdf129d368979))
+
+
+### ⚡ Performance
+
+* **genesis:** 스킬리뷰 포크 전용 미니 시스템 프롬프트 — 메인 세션 조립 ~50K 비상속 ([#3103](https://github.com/choiceoh/Deneb/issues/3103)) ([bd01277](https://github.com/choiceoh/Deneb/commit/bd01277f2d08278a5b59845a4bcf7acbd14bd9b7))
+
 ## [4.62.2](https://github.com/choiceoh/Deneb/compare/deneb-v4.62.1...deneb-v4.62.2) (2026-07-04)
 
 
