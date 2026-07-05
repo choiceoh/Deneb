@@ -3,9 +3,14 @@ package prompt
 import (
 	"encoding/json"
 	"os"
+	"regexp"
 	"strings"
 	"testing"
 )
+
+// clockPattern matches a wall-clock time (HH:MM), which must never appear in
+// the system prompt's dynamic block (day-only precision rule, prompt-cache.md).
+var clockPattern = regexp.MustCompile(`\b\d{1,2}:\d{2}\b`)
 
 // TestToolCategoriesMatchRegistry asserts every name in toolCategories exists
 // in the tool registry. This prevents phantom (never-registered) names from
@@ -292,5 +297,91 @@ func TestPersonaCacheKeyFor(t *testing.T) {
 	// the override render path).
 	if a != PersonaCacheKeyFor("  페르소나 A  ") {
 		t.Errorf("persona cache key must be whitespace-insensitive (TrimSpace)")
+	}
+}
+
+// TestSessionVariableContentStaysOutOfCachedBlocks is the "below the cache
+// boundary" assert list (OpenClaw #98267 field lesson: two channel-variable
+// sections sat ABOVE the boundary and forked a ~17.8K-token shared prefix at
+// ~1,460 tokens, turning post-cron interactive turns into minutes-long cold
+// prefills). Deneb's boundary is the Static+Semi-static (cache-marked) vs
+// Dynamic (unmarked) split: content that varies per session — the channel
+// runtime line, calendar/goal glances, the compaction reminder — must render
+// ONLY into the dynamic block, or every session forks the shared cached prefix.
+func TestSessionVariableContentStaysOutOfCachedBlocks(t *testing.T) {
+	const (
+		calSentinel  = "DENEB_CAL_GLANCE_SENTINEL_ZZZ"
+		goalSentinel = "DENEB_GOAL_GLANCE_SENTINEL_ZZZ"
+		chSentinel   = "deneb-ch-sentinel-zzz"
+	)
+	params := SystemPromptParams{
+		WorkspaceDir:    "/tmp",
+		ToolDefs:        []ToolDef{{Name: "read"}, {Name: "exec"}},
+		Channel:         chSentinel,
+		CalendarGlance:  calSentinel,
+		GoalGlance:      goalSentinel,
+		CompactionFired: true,
+	}
+	static, semi, dynamic := buildPromptSections(params)
+
+	for name, sentinel := range map[string]string{
+		"CalendarGlance":  calSentinel,
+		"GoalGlance":      goalSentinel,
+		"Channel":         chSentinel,
+		"compaction note": "자동 요약으로 압축",
+	} {
+		if strings.Contains(static, sentinel) {
+			t.Errorf("%s leaked into the STATIC (cached) block — forks the shared prefix per session", name)
+		}
+		if strings.Contains(semi, sentinel) {
+			t.Errorf("%s leaked into the SEMI-STATIC (cached) block — forks the shared prefix per session", name)
+		}
+		if !strings.Contains(dynamic, sentinel) {
+			t.Errorf("%s missing from the dynamic block (expected to render there)", name)
+		}
+	}
+}
+
+// TestSystemPromptByteStableAcrossTurns asserts that two builds with identical
+// params produce byte-identical output across ALL blocks — the P1.5 day-only
+// timestamp rule plus session-frozen inputs mean nothing per-turn may tick the
+// bytes. Both Hermes (#24778: a per-turn volatile tier dropped cumulative cache
+// hits 83.3%→66.6%, then was killed) and OpenClaw (#98267) re-learned this the
+// hard way; this pins Deneb's invariant.
+func TestSystemPromptByteStableAcrossTurns(t *testing.T) {
+	params := SystemPromptParams{
+		WorkspaceDir: "/tmp",
+		ToolDefs:     []ToolDef{{Name: "read"}, {Name: "exec"}},
+		Channel:      "native",
+		// Explicit timezone so the date line doesn't depend on the runner's
+		// cached/local zone (review feedback).
+		UserTimezone:   "Asia/Seoul",
+		CalendarGlance: "오늘 14:00 미팅",
+	}
+	// Two attempts absorb the one legitimate byte difference — the day-only
+	// date line rolling over between the two builds at midnight. On a
+	// rollover the second attempt runs entirely on the new day and must pass.
+	for attempt := 0; attempt < 2; attempt++ {
+		sA, ssA, dA := buildPromptSections(params)
+		sB, ssB, dB := buildPromptSections(params)
+		if sA == sB && ssA == ssB && dA == dB {
+			return
+		}
+	}
+	t.Fatal("system prompt not byte-stable across two identical builds — a per-turn variable byte crept in")
+}
+
+// TestDynamicTimestampIsDayOnly asserts the dynamic block's date line carries
+// no wall-clock time: with empty context inputs, the only timestamp source is
+// the Context section's date line, and a HH:MM in it would tick the system
+// bytes every minute (exact time is baked into the user message instead — P6).
+func TestDynamicTimestampIsDayOnly(t *testing.T) {
+	params := SystemPromptParams{
+		WorkspaceDir: "/tmp",
+		ToolDefs:     []ToolDef{{Name: "read"}},
+	}
+	_, _, dynamic := buildPromptSections(params)
+	if clockPattern.MatchString(dynamic) {
+		t.Errorf("dynamic block contains a wall-clock time (HH:MM) — system bytes would tick per turn:\n%s", dynamic)
 	}
 }

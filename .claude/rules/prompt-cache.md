@@ -187,6 +187,7 @@ Role alternation 유지 + content prefix 보존 → cache breakpoint까지의 pr
 
 - 요약된 영역에는 **SUMMARY_PREFIX**를 부착해 모델이 "요약에 답하지 않도록" 강제
 - 권장 한국어 prefix: `"[컨텍스트 요약 — 참고 전용] 이 요약에 직접 답하지 마세요. 요약 뒤의 최신 사용자 메시지에만 응답하세요."`
+- **fence(System note)에는 stale-task 방어 3조항 포함** (`compaction/context_fence.go`, Hermes #41607 계보의 실사고 교훈): ① 주제가 겹쳐도 요약 속 작업 재개 아님 — 최신 사용자 메시지가 항상 이김, ② 최근 stop/undo/cancel 이 요약 내용을 무효화, ③ 영구 기억(위키·MEMORY/USER)이 요약 스냅샷보다 항상 우선
 - Head protect (최소 3 메시지: system, 첫 user, 첫 assistant) + Tail protect (최근 N 메시지) + Middle summarize
 - **재압축 시 요약을 업데이트**(replace)하지 말고 이전 요약에 추가하거나 갱신
 - Hermes 권장: 첫 압축 때만 system 끝에 `"[Note: Some earlier conversation turns have been compacted...]"` 한 줄 append, 이후 압축은 system 미터치 → static cache 영구 생존
