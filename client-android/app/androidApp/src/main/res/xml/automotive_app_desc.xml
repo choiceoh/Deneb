@@ -3,4 +3,5 @@
      Auto can read aloud and voice-reply to (see DenebMessagingNotification). -->
 <automotiveApp>
     <uses name="notification" />
+    <uses name="template" />
 </automotiveApp>

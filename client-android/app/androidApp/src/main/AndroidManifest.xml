@@ -79,6 +79,21 @@
         <meta-data
             android:name="com.google.android.gms.car.application"
             android:resource="@xml/automotive_app_desc" />
+        <!-- Android Auto: template car screen (read-only feed browser). The
+             IOT category maps to the basic list/message template set; the
+             sideloaded APK needs Android Auto developer mode's "unknown
+             sources" once (single-user deployment). -->
+        <service
+            android:name="ai.deneb.DenebCarAppService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="androidx.car.app.CarAppService" />
+                <category android:name="androidx.car.app.category.IOT" />
+            </intent-filter>
+        </service>
+        <meta-data
+            android:name="androidx.car.app.minCarApiLevel"
+            android:value="1" />
         <!-- Home-screen widget: next meeting + unread mail. -->
         <receiver
             android:name="ai.deneb.DenebWidgetProvider"
