@@ -19,7 +19,7 @@ func buildContextIndex(ctx context.Context, c *imapConn, cfg Config, opts Contex
 	limit := clampContextIndexLimit(opts.IndexLimit)
 	criteria := "ALL"
 	if !opts.Since.IsZero() {
-		criteria = "SINCE " + imapSinceDate(opts.Since)
+		criteria = archiveSentSinceCriteria(opts.Since)
 	}
 	msgs, err := searchContextMessagesLimited(ctx, c, cfg, criteria, opts, true, limit)
 	if err != nil {

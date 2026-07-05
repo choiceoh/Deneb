@@ -95,7 +95,10 @@ func (s *Source) RelatedMessages(ctx context.Context, msg *gmail.MessageDetail) 
 
 	selfID := normalizeMsgID(msg.MessageIDHeader)
 	sender := extractAddr(msg.From)
-	since := imapSinceDate(time.Now().Add(-s.senderWindow))
+	// Date-header window (SENTSINCE), not INTERNALDATE — same skew as the
+	// list path; see archiveSentSinceCriteria. Under-delivering here silently
+	// starves the analysis prompt's "이전 메일 맥락".
+	sinceCriteria := archiveSentSinceCriteria(time.Now().Add(-s.senderWindow))
 
 	limit := s.maxThread + s.maxSender
 	seen := map[string]bool{}
@@ -123,7 +126,7 @@ func (s *Source) RelatedMessages(ctx context.Context, msg *gmail.MessageDetail) 
 		// 2) Recent history from the same sender.
 		var senderUIDs []string
 		if sender != "" && ctx.Err() == nil {
-			found, serr := c.uidSearch(fmt.Sprintf(`FROM %s SINCE %s`, quote(sender), since))
+			found, serr := c.uidSearch(fmt.Sprintf(`FROM %s %s`, quote(sender), sinceCriteria))
 			if serr == nil {
 				senderUIDs = append(senderUIDs, found...)
 			}
