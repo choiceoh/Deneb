@@ -30,8 +30,7 @@ internal fun decodeBrowserBookmarks(raw: String): List<BrowserBookmark> = runCat
     .take(BROWSER_BOOKMARK_LIMIT)
     .toList()
 
-internal fun encodeBrowserBookmarks(bookmarks: List<BrowserBookmark>): String =
-    browserBookmarksJson.encodeToString(bookmarks.sanitizedBrowserBookmarks())
+internal fun encodeBrowserBookmarks(bookmarks: List<BrowserBookmark>): String = browserBookmarksJson.encodeToString(bookmarks.sanitizedBrowserBookmarks())
 
 internal fun toggleBrowserBookmark(
     bookmarks: List<BrowserBookmark>,
@@ -69,8 +68,7 @@ internal fun canBookmarkUrl(url: String): Boolean {
     return s.startsWith("https://", ignoreCase = true) || s.startsWith("http://", ignoreCase = true)
 }
 
-internal fun browserBookmarkDisplayTitle(bookmark: BrowserBookmark): String =
-    bookmark.title.ifBlank { browserBookmarkHost(bookmark.url) }.ifBlank { bookmark.url }
+internal fun browserBookmarkDisplayTitle(bookmark: BrowserBookmark): String = bookmark.title.ifBlank { browserBookmarkHost(bookmark.url) }.ifBlank { bookmark.url }
 
 private fun List<BrowserBookmark>.sanitizedBrowserBookmarks(): List<BrowserBookmark> = asSequence()
     .mapNotNull { bookmark ->
