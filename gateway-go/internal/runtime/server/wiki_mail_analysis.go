@@ -273,7 +273,8 @@ func (s *Server) fileDealFromMail(msg *gmail.MessageDetail, deal *mailanalysis.D
 	if deal == nil || msg == nil || s.wikiStore == nil {
 		return
 	}
-	relPath, created, err := s.wikiStore.UpsertDealPage(wiki.DealPageInput{
+	now := time.Now()
+	input := wiki.DealPageInput{
 		Counterparty:    deal.Counterparty,
 		DocType:         deal.DocType,
 		Amount:          deal.Amount,
@@ -284,12 +285,28 @@ func (s *Server) fileDealFromMail(msg *gmail.MessageDetail, deal *mailanalysis.D
 		SourceRef:       "mail:" + msg.ID,
 		RelatedProjects: directProjectPages(relatedProjects), // deal→project graph edge
 		Terms:           dealTermsFromFacts(deal.Facts),      // quote-verified → ledger
-	}, time.Now())
+	}
+	// Requote diff must read the ledger BEFORE the upsert tees the new record
+	// (otherwise the new row is its own "previous"). Deterministic, read-only.
+	requote := s.wikiStore.DetectRequote(input, now)
+	relPath, created, err := s.wikiStore.UpsertDealPage(input, now)
 	if err != nil {
 		s.logger.Warn("mail→deal: 거래 페이지 저장 실패", "id", msg.ID, "counterparty", deal.Counterparty, "error", err)
 		return
 	}
 	s.logger.Info("mail→deal: 거래 페이지 갱신", "id", msg.ID, "path", relPath, "created", created)
+
+	// Surface a detected price/volume change on the linked projects' 현재 상태
+	// — the operator's glance surface. Idempotent by mail id; best-effort.
+	if requote != nil {
+		line := requote.StatusLine()
+		s.logger.Info("mail→deal: 재견적 변동 감지", "id", msg.ID, "counterparty", deal.Counterparty, "detail", line)
+		for _, p := range input.RelatedProjects {
+			if aerr := s.wikiStore.AppendProjectStatusLine(p, line, "requote:mail:"+msg.ID, now); aerr != nil {
+				s.logger.Warn("mail→deal: 재견적 상태줄 기록 실패", "id", msg.ID, "project", p, "error", aerr)
+			}
+		}
+	}
 
 	// Pin the raw deal evidence to the same deal's notebook (keyed by the deal
 	// page path, so curated facts (wiki) and citable evidence (notebook) share
