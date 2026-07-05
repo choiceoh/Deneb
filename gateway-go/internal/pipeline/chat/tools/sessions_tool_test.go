@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 )
@@ -333,4 +335,31 @@ func TestSessionsSpawn_TerminalChildrenDoNotCountAgainstCap(t *testing.T) {
 
 func spawnTestChildKey(i int) string {
 	return "client:main:worker:" + string(rune('a'+i))
+}
+
+func TestToolSessionsStats(t *testing.T) {
+	w := agentlog.NewWriter(t.TempDir())
+	data, _ := json.Marshal(agentlog.RunEndData{InputTokens: 1200, OutputTokens: 340, ToolCalls: 5})
+	if err := w.Append(agentlog.LogEntry{
+		Ts: time.Now().UnixMilli(), Type: agentlog.TypeRunEnd, RunID: "r1",
+		Session: "client:main", Data: data,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	tool := ToolSessions(&toolctx.SessionDeps{AgentLog: w})
+	out, err := tool(context.Background(), json.RawMessage(`{"action":"stats","days":7}`))
+	if err != nil {
+		t.Fatalf("stats: %v", err)
+	}
+	for _, want := range []string{"runs=1", "client:main", "in=1200", "tools=5"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("stats missing %q: %q", want, out)
+		}
+	}
+
+	// Unwired agent log degrades to a notice, never an error.
+	out, err = ToolSessions(&toolctx.SessionDeps{})(context.Background(), json.RawMessage(`{"action":"stats"}`))
+	if err != nil || !strings.Contains(out, "배선되지 않아") {
+		t.Errorf("nil agentlog: out=%q err=%v", out, err)
+	}
 }

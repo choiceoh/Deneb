@@ -189,9 +189,10 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 	}
 
 	// 시장(market) card data for the 오늘 dashboard — a keyless Yahoo Finance fetch
-	// cached for 10m. No config/hub service needed; the cache is owned by this
-	// registration closure (captured by the Fetch func below). Created once at boot.
-	marketCache := market.NewCache()
+	// cached for 10m. Promoted to a server field so the agent's market tool
+	// (wired later during chat init) shares the same cache/asOf. Created once at boot.
+	s.marketCache = market.NewCache()
+	marketCache := s.marketCache
 
 	// Table-driven domain registration: one slice, one loop.
 	// Deps assembled inline from hub accessors — no adapter layer.
