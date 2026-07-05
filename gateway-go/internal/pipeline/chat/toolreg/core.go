@@ -221,7 +221,7 @@ func RegisterFSTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDeps)
 	if deps.SpilloverStore != nil {
 		registry.RegisterTool(toolctx.ToolDef{
 			Name:        "read_spillover",
-			Description: "Read the full content of a previous large tool result by spill ID. Use when a tool result was too large and was replaced with a preview",
+			Description: "Read a previous large tool result by spill ID, paged — offset/limit line window (default 400 lines) or grep to jump to matching lines. Use when a tool result was too large and was replaced with a preview; follow the [계속: offset=N] tail hint to page",
 			InputSchema: readSpilloverToolSchema(),
 			Fn:          tools.ToolSpilloverRead(deps.SpilloverStore),
 		})
