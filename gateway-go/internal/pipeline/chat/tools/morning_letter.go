@@ -35,7 +35,8 @@ type MorningLetterOpts struct {
 // contextual interpretation (e.g. "우산 챙기세요" for rain, email importance ranking).
 //
 // Sections: weather (Gwangju), exchange rates, copper price, calendar, email,
-// deadlines (upcoming due dates scanned from wiki pages).
+// deadlines (upcoming due dates scanned from wiki pages), open questions
+// (project 미해결 질문 that stayed open too long).
 func ToolMorningLetter(_ toolctx.ToolExecutor, opts ...MorningLetterOpts) ToolFunc {
 	var diaryDir, wikiDir string
 	if len(opts) > 0 {
@@ -48,7 +49,7 @@ func ToolMorningLetter(_ toolctx.ToolExecutor, opts ...MorningLetterOpts) ToolFu
 
 		var (
 			mu      sync.Mutex
-			results = make([]any, 6)
+			results = make([]any, 7)
 		)
 
 		type collector struct {
@@ -62,6 +63,7 @@ func ToolMorningLetter(_ toolctx.ToolExecutor, opts ...MorningLetterOpts) ToolFu
 			{3, func(ctx context.Context) any { return fetchCalendar(ctx) }},
 			{4, func(ctx context.Context) any { return fetchEmail(ctx) }},
 			{5, func(_ context.Context) any { return fetchDeadlines(wikiDir, now) }},
+			{6, func(_ context.Context) any { return fetchOpenQuestions(wikiDir, now) }},
 		}
 
 		var wg sync.WaitGroup
@@ -85,12 +87,13 @@ func ToolMorningLetter(_ toolctx.ToolExecutor, opts ...MorningLetterOpts) ToolFu
 			"date":      dateStr,
 			"timestamp": now.Format(time.RFC3339),
 			"sections": map[string]any{
-				"weather":   results[0],
-				"exchange":  results[1],
-				"copper":    results[2],
-				"calendar":  results[3],
-				"email":     results[4],
-				"deadlines": results[5],
+				"weather":        results[0],
+				"exchange":       results[1],
+				"copper":         results[2],
+				"calendar":       results[3],
+				"email":          results[4],
+				"deadlines":      results[5],
+				"open_questions": results[6],
 			},
 		}
 
@@ -519,6 +522,32 @@ func fetchDeadlines(wikiDir string, now time.Time) any {
 
 	sort.Slice(items, func(i, j int) bool { return items[i].DaysLeft < items[j].DaysLeft })
 	return deadlineData{OK: true, Items: items}
+}
+
+// openQuestionsData carries project 미해결 질문 that stayed open long enough to
+// escalate — the letter tells the operator what internal sources could not
+// answer, so it can be asked of a person instead of waiting another cycle.
+type openQuestionsData struct {
+	OK    bool                `json:"ok"`
+	Items []wiki.OpenQuestion `json:"items,omitempty"`
+}
+
+// openQuestionsStaleDays is how long a question may sit before the letter
+// escalates it — one full wiki-research rotation has a chance to close it first.
+const openQuestionsStaleDays = 7
+
+// openQuestionsMaxItems bounds the letter section (oldest first beyond it).
+const openQuestionsMaxItems = 6
+
+func fetchOpenQuestions(wikiDir string, now time.Time) any {
+	if wikiDir == "" {
+		return openQuestionsData{OK: true}
+	}
+	items := wiki.CollectStaleOpenQuestions(wikiDir, openQuestionsStaleDays, now)
+	if len(items) > openQuestionsMaxItems {
+		items = items[:openQuestionsMaxItems]
+	}
+	return openQuestionsData{OK: true, Items: items}
 }
 
 // normalizeWttrTime converts wttr.in time format ("600", "1200") to "06:00", "12:00".
