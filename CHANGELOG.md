@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.65.1](https://github.com/choiceoh/Deneb/compare/deneb-v4.65.0...deneb-v4.65.1) (2026-07-05)
+
+
+### 🐛 Bug Fixes
+
+* **native:** 피드 탭을 워크스페이스와 무관하게 — 챗봇 기본화 이후 피드가 설계상 빈 화면이 되던 것 수리 ([#3152](https://github.com/choiceoh/Deneb/issues/3152)) ([1036a1f](https://github.com/choiceoh/Deneb/commit/1036a1f680d9f00b59cdc2c3b9c089fa438b1a25))
+
 ## [4.65.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.64.0...deneb-v4.65.0) (2026-07-05)
 
 
