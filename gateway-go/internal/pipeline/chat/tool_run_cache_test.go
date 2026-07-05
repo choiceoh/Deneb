@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"context"
 	"encoding/json"
 	"sync"
 	"testing"
@@ -182,6 +183,12 @@ func TestIsCacheableTool(t *testing.T) {
 	if !IsCacheableTool("grep") {
 		t.Fatal("grep should be cacheable")
 	}
+	// fetch_tools is deliberately NOT cacheable: its already-active branch
+	// returns a compact response on repeats, which a cache hit would replace
+	// with the first call's full schema payload (review catch on #3171).
+	if IsCacheableTool("fetch_tools") {
+		t.Fatal("fetch_tools should not be cacheable")
+	}
 	if IsCacheableTool("find") {
 		t.Fatal("find should not be cacheable")
 	}
@@ -198,6 +205,9 @@ func TestIsMutationTool(t *testing.T) {
 	}
 	// exec is excluded from mutation tools: most exec calls are read-only
 	// (cat, ls, curl) and blanket invalidation destroys cache hit rates.
+	// Commands that CAN write are handled separately — Execute consults
+	// tools.ExecCommandPreservesRunCache and invalidates for anything not
+	// provably read-only (see TestExecute_ExecInvalidatesRunCache).
 	if IsMutationTool("exec") {
 		t.Fatal("exec should not be a mutation tool")
 	}
@@ -206,5 +216,177 @@ func TestIsMutationTool(t *testing.T) {
 	}
 	if IsMutationTool("read") {
 		t.Fatal("read should not be a mutation tool")
+	}
+}
+
+// TestExecute_ExecInvalidatesRunCache verifies the exec-command heuristic at
+// the Execute level: a read-only exec keeps cached grep results warm, while a
+// potentially mutating exec wipes them (stale search results after sed -i /
+// go generate were served for the run's remainder before this guard).
+func TestExecute_ExecInvalidatesRunCache(t *testing.T) {
+	reg := NewToolRegistry()
+	grepCalls := 0
+	reg.Register("grep", func(_ context.Context, _ json.RawMessage) (string, error) {
+		grepCalls++
+		return "match.go:1", nil
+	})
+	reg.Register("exec", func(_ context.Context, _ json.RawMessage) (string, error) {
+		return "done", nil
+	})
+
+	ctx := WithRunCache(context.Background(), NewRunCache())
+	grepInput := json.RawMessage(`{"pattern":"foo"}`)
+
+	// Prime the cache, then confirm a repeat is served from it.
+	for range 2 {
+		if _, err := reg.Execute(ctx, "grep", grepInput); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if grepCalls != 1 {
+		t.Fatalf("grep executed %d times, want 1 (second call cached)", grepCalls)
+	}
+
+	// Read-only exec must not invalidate.
+	if _, err := reg.Execute(ctx, "exec", json.RawMessage(`{"command":"ls -la"}`)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := reg.Execute(ctx, "grep", grepInput); err != nil {
+		t.Fatal(err)
+	}
+	if grepCalls != 1 {
+		t.Fatalf("grep executed %d times after read-only exec, want 1", grepCalls)
+	}
+
+	// Mutating exec must invalidate.
+	if _, err := reg.Execute(ctx, "exec", json.RawMessage(`{"command":"sed -i 's/a/b/' match.go"}`)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := reg.Execute(ctx, "grep", grepInput); err != nil {
+		t.Fatal(err)
+	}
+	if grepCalls != 2 {
+		t.Fatalf("grep executed %d times after mutating exec, want 2 (cache wiped)", grepCalls)
+	}
+}
+
+// TestExecute_ProcessDisablesRunCache covers the background-exec timing gap:
+// a tracked process may be mid-write regardless of which run launched it, so
+// any process-tool interaction trips the sticky async-writer latch — the
+// cache stays off for the rest of the run (not just wiped once).
+func TestExecute_ProcessDisablesRunCache(t *testing.T) {
+	reg := NewToolRegistry()
+	grepCalls := 0
+	reg.Register("grep", func(_ context.Context, _ json.RawMessage) (string, error) {
+		grepCalls++
+		return "match.go:1", nil
+	})
+	reg.Register("process", func(_ context.Context, _ json.RawMessage) (string, error) {
+		return "exited", nil
+	})
+
+	ctx := WithRunCache(context.Background(), NewRunCache())
+	grepInput := json.RawMessage(`{"pattern":"foo"}`)
+
+	for range 2 {
+		if _, err := reg.Execute(ctx, "grep", grepInput); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if grepCalls != 1 {
+		t.Fatalf("grep executed %d times, want 1 (second call cached)", grepCalls)
+	}
+
+	if _, err := reg.Execute(ctx, "process", json.RawMessage(`{"action":"poll","id":"p1"}`)); err != nil {
+		t.Fatal(err)
+	}
+	// The latch is sticky: every subsequent grep re-executes, none re-caches.
+	for want := 2; want <= 3; want++ {
+		if _, err := reg.Execute(ctx, "grep", grepInput); err != nil {
+			t.Fatal(err)
+		}
+		if grepCalls != want {
+			t.Fatalf("grep executed %d times after process poll, want %d (cache disabled)", grepCalls, want)
+		}
+	}
+}
+
+// TestExecute_BackgroundExecDisablesRunCache: a background exec's writes land
+// at an unpredictable future point, so a non-read-only background command
+// disables the cache for the rest of the run — even when nothing was cached
+// yet at launch time. Read-only background commands leave it alone.
+func TestExecute_BackgroundExecDisablesRunCache(t *testing.T) {
+	reg := NewToolRegistry()
+	grepCalls := 0
+	reg.Register("grep", func(_ context.Context, _ json.RawMessage) (string, error) {
+		grepCalls++
+		return "match.go:1", nil
+	})
+	reg.Register("exec", func(_ context.Context, _ json.RawMessage) (string, error) {
+		return `{"id":"p1","status":"running"}`, nil
+	})
+
+	rc := NewRunCache()
+	ctx := WithRunCache(context.Background(), rc)
+
+	// Read-only background command: latch must not fire.
+	if _, err := reg.Execute(ctx, "exec", json.RawMessage(`{"command":"ls -la","background":true}`)); err != nil {
+		t.Fatal(err)
+	}
+	if rc.Disabled() {
+		t.Fatal("read-only background exec must not disable the cache")
+	}
+
+	// Mutating background command launched BEFORE anything is cached: the
+	// latch must still fire so later results are never cached stale.
+	if _, err := reg.Execute(ctx, "exec", json.RawMessage(`{"command":"make generate","background":true}`)); err != nil {
+		t.Fatal(err)
+	}
+	if !rc.Disabled() {
+		t.Fatal("mutating background exec must disable the cache")
+	}
+	grepInput := json.RawMessage(`{"pattern":"foo"}`)
+	for want := 1; want <= 2; want++ {
+		if _, err := reg.Execute(ctx, "grep", grepInput); err != nil {
+			t.Fatal(err)
+		}
+		if grepCalls != want {
+			t.Fatalf("grep executed %d times with disabled cache, want %d", grepCalls, want)
+		}
+	}
+}
+
+// TestExecute_SessionsSpawnDisablesRunCache: a spawned child whose preset can
+// write/edit/exec is an async writer against the shared workspace; a
+// read-focused researcher child is not.
+func TestExecute_SessionsSpawnDisablesRunCache(t *testing.T) {
+	newReg := func() (*ToolRegistry, *RunCache, context.Context) {
+		reg := NewToolRegistry()
+		reg.Register("sessions_spawn", func(_ context.Context, _ json.RawMessage) (string, error) {
+			return "spawned", nil
+		})
+		rc := NewRunCache()
+		return reg, rc, WithRunCache(context.Background(), rc)
+	}
+
+	reg, rc, ctx := newReg()
+	if _, err := reg.Execute(ctx, "sessions_spawn", json.RawMessage(`{"task":"조사","tool_preset":"researcher"}`)); err != nil {
+		t.Fatal(err)
+	}
+	if rc.Disabled() {
+		t.Fatal("researcher spawn (read-focused preset) must not disable the cache")
+	}
+
+	for _, input := range []string{
+		`{"task":"구현","tool_preset":"implementer"}`, // write/edit/exec preset
+		`{"task":"작업"}`,                             // no preset — unrestricted child, fail closed
+	} {
+		reg, rc, ctx := newReg()
+		if _, err := reg.Execute(ctx, "sessions_spawn", json.RawMessage(input)); err != nil {
+			t.Fatal(err)
+		}
+		if !rc.Disabled() {
+			t.Fatalf("spawn %s must disable the cache", input)
+		}
 	}
 }

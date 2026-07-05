@@ -27,6 +27,7 @@ const (
 	ctxKeySkillConsult
 	ctxKeyWorkspaceOverride
 	ctxKeyToolExecStats
+	ctxKeyToolDryRun
 )
 
 // WithDeliveryContext attaches a DeliveryContext to the context.
@@ -64,6 +65,23 @@ func WithAutoDelivery(ctx context.Context) context.Context {
 // by the run-completion layer. Defaults to false.
 func AutoDeliveryFromContext(ctx context.Context) bool {
 	v, _ := ctx.Value(ctxKeyAutoDelivery).(bool)
+	return v
+}
+
+// WithToolDryRun marks the context of a run in which side-effect tools must
+// not execute. The chat ToolRegistry consults this before dispatch: tools on
+// its read-only allowlist run normally; everything else returns a stub result
+// without invoking the tool fn. For eval/replay harnesses (behavioral skill
+// replay, prompt-regression turns) that need the real tool loop without the
+// real writes/sends.
+func WithToolDryRun(ctx context.Context) context.Context {
+	return context.WithValue(ctx, ctxKeyToolDryRun, true)
+}
+
+// ToolDryRunFromContext reports whether side-effect tools are suppressed for
+// this run. Defaults to false.
+func ToolDryRunFromContext(ctx context.Context) bool {
+	v, _ := ctx.Value(ctxKeyToolDryRun).(bool)
 	return v
 }
 

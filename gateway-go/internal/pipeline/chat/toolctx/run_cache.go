@@ -13,6 +13,12 @@ type RunCache struct {
 	mu      sync.RWMutex
 	entries map[string]string
 	scopes  map[string]string // cacheKey → path scope for selective invalidation
+	// disabled is the async-writer latch: once an actor that can mutate the
+	// workspace at an unpredictable future point exists in this run (a
+	// background exec, a spawned sub-agent with write tools, a tracked
+	// process), point-in-time invalidation can no longer bracket the writes,
+	// so cached reads stay untrustworthy for the rest of the run. Sticky.
+	disabled bool
 }
 
 // NewRunCache creates an empty run cache.
@@ -27,6 +33,9 @@ func NewRunCache() *RunCache {
 func (rc *RunCache) Get(key string) (string, bool) {
 	rc.mu.RLock()
 	defer rc.mu.RUnlock()
+	if rc.disabled {
+		return "", false
+	}
 	v, ok := rc.entries[key]
 	return v, ok
 }
@@ -35,6 +44,9 @@ func (rc *RunCache) Get(key string) (string, bool) {
 func (rc *RunCache) Set(key, output string) {
 	rc.mu.Lock()
 	defer rc.mu.Unlock()
+	if rc.disabled {
+		return
+	}
 	rc.entries[key] = output
 }
 
@@ -44,10 +56,32 @@ func (rc *RunCache) Set(key, output string) {
 func (rc *RunCache) SetWithScope(key, output, scope string) {
 	rc.mu.Lock()
 	defer rc.mu.Unlock()
+	if rc.disabled {
+		return
+	}
 	rc.entries[key] = output
 	if scope != "" {
 		rc.scopes[key] = filepath.Clean(scope)
 	}
+}
+
+// Disable drops every entry and turns the cache off for the rest of the run:
+// Get always misses, Set/SetWithScope become no-ops. Called when an async
+// writer appears (see the disabled field doc) — unlike Invalidate, which
+// brackets a synchronous mutation that has already fully landed.
+func (rc *RunCache) Disable() {
+	rc.mu.Lock()
+	defer rc.mu.Unlock()
+	rc.disabled = true
+	rc.entries = make(map[string]string)
+	rc.scopes = make(map[string]string)
+}
+
+// Disabled reports whether the async-writer latch has fired.
+func (rc *RunCache) Disabled() bool {
+	rc.mu.RLock()
+	defer rc.mu.RUnlock()
+	return rc.disabled
 }
 
 // Invalidate clears all cached entries. Called when a mutation tool executes
@@ -55,6 +89,9 @@ func (rc *RunCache) SetWithScope(key, output, scope string) {
 func (rc *RunCache) Invalidate() {
 	rc.mu.Lock()
 	defer rc.mu.Unlock()
+	if len(rc.entries) == 0 && len(rc.scopes) == 0 {
+		return // already empty — skip the reallocations
+	}
 	rc.entries = make(map[string]string)
 	rc.scopes = make(map[string]string)
 }
@@ -98,6 +135,13 @@ func (rc *RunCache) Len() int {
 	return len(rc.entries)
 }
 
+// cacheableTools are tools whose identical repeat calls within one run may be
+// served from the RunCache. Only pure, stateless workspace reads belong here:
+// the cache Get short-circuits BEFORE the tool fn runs, so a tool with any
+// internal repeat handling of its own is unsafe to cache — fetch_tools was
+// briefly added (its repeats measured at 20% of calls) and reverted because
+// its already-active branch returns a compact response on repeats, which a
+// cache hit would replace with the first call's full schema payload.
 var cacheableTools = map[string]struct{}{
 	"grep": {},
 }
@@ -108,6 +152,8 @@ var mutationTools = map[string]struct{}{
 }
 
 // IsCacheableTool returns true if the named tool's results can be cached.
+// Only add tools whose fn has no repeat-call handling of its own (see
+// cacheableTools).
 func IsCacheableTool(name string) bool {
 	_, ok := cacheableTools[name]
 	return ok

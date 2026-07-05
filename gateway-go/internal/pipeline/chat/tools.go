@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolpreset"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
 )
 
 const (
@@ -113,6 +115,21 @@ func (r *ToolRegistry) Execute(ctx context.Context, name string, input json.RawM
 		}
 	}
 
+	// Dry-run: suppress side-effect tools (everything not on the read-only
+	// allowlist) before any execution machinery runs. See tool_dry_run.go.
+	if toolctx.ToolDryRunFromContext(ctx) {
+		if _, safe := dryRunSafeTools[name]; !safe {
+			stub := dryRunStub(name)
+			// Keep the verify gate faithful in replays (review catch on
+			// #3171): the stub tells the model the call succeeded, so a
+			// stubbed write/edit must arm the gate and a stubbed
+			// verification exec must disarm it — otherwise a replayed edit
+			// flow finishes without the finalize nudge a real run gets.
+			verifyGateFromContext(ctx).recordTool(name, input, stub, nil)
+			return stub, nil
+		}
+	}
+
 	// Repair common malformed-JSON argument patterns from open-weight models
 	// (markdown fences, Python literals, trailing commas) before any input
 	// parsing. Only invalid JSON is touched, and only when the repair makes it
@@ -132,12 +149,17 @@ func (r *ToolRegistry) Execute(ctx context.Context, name string, input json.RawM
 	// Resolve $ref: wait for the referenced tool result and inject it.
 	input = resolveRef(ctx, input)
 
-	// Check run-level cache for idempotent read tools (find, tree).
+	// Check run-level cache for idempotent tools (grep, fetch_tools).
 	// Cached results include post-processing but not compression.
 	rc := RunCacheFromContext(ctx)
-	if rc != nil && IsCacheableTool(name) {
-		cacheKey := BuildCacheKey(name, input)
+	cacheable := rc != nil && IsCacheableTool(name)
+	var cacheKey string
+	if cacheable {
+		cacheKey = BuildCacheKey(name, input)
 		if cached, ok := rc.Get(cacheKey); ok {
+			// Registry-internal outcome — counted here because the tool fn
+			// never runs (see ToolExecStats).
+			toolctx.ToolExecStatsFromContext(ctx).RecordCacheHit(name)
 			if wantCompress && cached != "" {
 				return compressToolOutput(ctx, name, cached, slog.Default()), nil
 			}
@@ -161,6 +183,7 @@ func (r *ToolRegistry) Execute(ctx context.Context, name string, input json.RawM
 		maxOutput = def.MaxOutput
 	}
 	if len(output) > maxOutput {
+		toolctx.ToolExecStatsFromContext(ctx).RecordTruncated(name)
 		var spillID string
 		// Spill full content to disk so the LLM can retrieve it via read_spillover.
 		if r.spillStore != nil {
@@ -170,22 +193,10 @@ func (r *ToolRegistry) Execute(ctx context.Context, name string, input json.RawM
 		output = agent.TruncateHeadTail(output, maxOutput, spillID)
 	}
 
-	// Invalidate caches when mutation tools modify the file system.
-	if IsMutationTool(name) {
-		mutPath := extractFilePath(input)
-		if rc != nil {
-			if mutPath != "" {
-				rc.InvalidateByPath(mutPath)
-			} else {
-				rc.Invalidate()
-			}
-		}
-		if fc := toolctx.FileCacheFromContext(ctx); fc != nil {
-			if mutPath != "" {
-				fc.Invalidate(mutPath)
-			}
-		}
-	}
+	// Invalidate caches when this tool may have modified the file system.
+	// Must run after execution and before the cache Set below, or a call
+	// could re-cache the result it just invalidated.
+	invalidateCachesAfterTool(ctx, name, input, rc)
 
 	// Apply post-processors.
 	if r.postProcess != nil {
@@ -193,10 +204,8 @@ func (r *ToolRegistry) Execute(ctx context.Context, name string, input json.RawM
 	}
 
 	// Store in run cache (after post-processing, before compression).
-	if rc != nil && IsCacheableTool(name) {
-		cacheKey := BuildCacheKey(name, input)
-		scope := extractPathScope(input)
-		rc.SetWithScope(cacheKey, output, scope)
+	if cacheable {
+		rc.SetWithScope(cacheKey, output, extractPathScope(input))
 	}
 
 	// Apply compression if requested by the agent.
@@ -255,6 +264,111 @@ func (r *ToolRegistry) ApplyMaxOutputs(budgets map[string]int) {
 			r.tools[name] = def
 		}
 	}
+}
+
+// invalidateCachesAfterTool is the single home for post-execution cache
+// invalidation policy. Two regimes:
+//
+//   - Synchronous mutations (write/edit; foreground exec whose command is not
+//     provably read-only per tools.ExecCommandPreservesRunCache) have fully
+//     landed by the time this runs, so a point-in-time invalidation brackets
+//     them: by mutated path where known, whole cache otherwise.
+//   - Async writers (background exec with a non-read-only command; a spawned
+//     sub-agent whose preset carries write/edit/exec; any process-tool
+//     interaction — the tracked process may be mid-write regardless of which
+//     run launched it) mutate at unpredictable future points, so the run
+//     cache is DISABLED for the rest of the run (RunCache.Disable) — this
+//     replaced per-poll invalidation, which both left a stale window between
+//     a background job's writes and the next poll AND wiped re-cached entries
+//     on every poll of a still-running job.
+//
+// Residual (documented, accepted): an async writer from a PREVIOUS run that
+// this run never observes via exec/process/sessions_spawn — e.g. monitoring
+// an old child only through the subagents tool — does not trip the latch.
+// FileCache needs no exec/process handling: its entries are mtime+hash
+// validated on read (agent.FileChanged).
+func invalidateCachesAfterTool(ctx context.Context, name string, input json.RawMessage, rc *RunCache) {
+	if IsMutationTool(name) {
+		mutPath := extractFilePath(input)
+		if rc != nil {
+			if mutPath != "" {
+				rc.InvalidateByPath(mutPath)
+			} else {
+				rc.Invalidate()
+			}
+		}
+		if fc := toolctx.FileCacheFromContext(ctx); fc != nil {
+			if mutPath != "" {
+				fc.Invalidate(mutPath)
+			}
+		}
+		return
+	}
+	if rc == nil {
+		return
+	}
+	switch name {
+	case "exec":
+		cmd, background := extractExecMeta(input)
+		if tools.ExecCommandPreservesRunCache(cmd) {
+			return
+		}
+		if background {
+			rc.Disable() // writes land later — latch even when nothing is cached yet
+		} else if rc.Len() > 0 {
+			rc.Invalidate()
+		}
+	case "process":
+		rc.Disable()
+	case "sessions_spawn":
+		if spawnedChildCanWrite(input) {
+			rc.Disable()
+		}
+	}
+}
+
+// spawnedChildCanWrite reports whether a sessions_spawn call creates a child
+// that could mutate the shared workspace: its tool preset (or the absence of
+// one) grants write, edit, or exec. Read-focused presets (researcher,
+// wiki-research) keep the parent's cache alive. Unknown presets fail closed —
+// sessions_spawn itself rejects them, but the cache must not depend on that.
+func spawnedChildCanWrite(input json.RawMessage) bool {
+	var meta struct {
+		ToolPreset string `json:"tool_preset"`
+	}
+	if json.Unmarshal(input, &meta) != nil {
+		return true
+	}
+	allowed := toolpreset.AllowedTools(toolpreset.Preset(strings.TrimSpace(meta.ToolPreset)))
+	if allowed == nil {
+		return true // no/unknown preset — unrestricted child
+	}
+	for _, mutating := range []string{"write", "edit", "exec"} {
+		if _, ok := allowed[mutating]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+// extractExecMeta extracts the command string and background flag from exec
+// tool input JSON.
+func extractExecMeta(input json.RawMessage) (command string, background bool) {
+	var meta struct {
+		Command    string `json:"command"`
+		Background bool   `json:"background"`
+	}
+	if json.Unmarshal(input, &meta) == nil {
+		return meta.Command, meta.Background
+	}
+	return "", false
+}
+
+// extractExecCommand extracts the "command" string from exec tool input JSON
+// (verify gate's view of extractExecMeta).
+func extractExecCommand(input json.RawMessage) string {
+	cmd, _ := extractExecMeta(input)
+	return cmd
 }
 
 // extractFilePath extracts a "file_path" string from tool input JSON.

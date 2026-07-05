@@ -17,6 +17,15 @@ import (
 type ToolExecStats struct {
 	mu       sync.Mutex
 	repaired map[string]int
+	// cacheHits counts run-cache hits per tool (the call never reached the
+	// tool fn, so the executor's turn.tool duration/output stats undercount
+	// real demand without this).
+	cacheHits map[string]int
+	// truncated counts head/tail output truncations per tool. Truncation
+	// happens before the executor sees the output — turn.tool's OutputLen is
+	// the post-truncation length — so the signal only exists here. Feeds
+	// per-tool MaxOutput budget tuning (tool_schemas.json max_output).
+	truncated map[string]int
 }
 
 // NewToolExecStats creates an empty collector.
@@ -24,33 +33,88 @@ func NewToolExecStats() *ToolExecStats {
 	return &ToolExecStats{}
 }
 
-// RecordRepaired counts one malformed-argument repair for the named tool.
-// Nil-safe (no-op on a nil receiver).
-func (s *ToolExecStats) RecordRepaired(tool string) {
+// bump increments a per-tool counter family, lazily allocating the map.
+// Nil-safe (no-op on a nil receiver); m points at one of the struct's maps.
+func (s *ToolExecStats) bump(m *map[string]int, tool string) {
 	if s == nil {
 		return
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.repaired == nil {
-		s.repaired = make(map[string]int, 2)
+	if *m == nil {
+		*m = make(map[string]int, 2)
 	}
-	s.repaired[tool]++
+	(*m)[tool]++
 }
 
-// RepairedCounts returns a copy of the per-tool repair counters, or nil when
-// nothing was repaired (so run.end omits the field entirely).
-func (s *ToolExecStats) RepairedCounts() map[string]int {
+// snapshot returns a copy of a counter family, or nil when empty (so run.end
+// omits the field entirely). Nil-safe.
+func (s *ToolExecStats) snapshot(m *map[string]int) map[string]int {
 	if s == nil {
 		return nil
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if len(s.repaired) == 0 {
+	return copyCounts(*m)
+}
+
+// The public methods must nil-check BEFORE taking a field address — &s.field
+// on a nil receiver is itself the nil dereference, so bump/snapshot's own
+// guard would come too late.
+
+// RecordRepaired counts one malformed-argument repair for the named tool.
+func (s *ToolExecStats) RecordRepaired(tool string) {
+	if s != nil {
+		s.bump(&s.repaired, tool)
+	}
+}
+
+// RecordCacheHit counts one run-cache hit for the named tool.
+func (s *ToolExecStats) RecordCacheHit(tool string) {
+	if s != nil {
+		s.bump(&s.cacheHits, tool)
+	}
+}
+
+// RecordTruncated counts one output truncation for the named tool.
+func (s *ToolExecStats) RecordTruncated(tool string) {
+	if s != nil {
+		s.bump(&s.truncated, tool)
+	}
+}
+
+// RepairedCounts returns a copy of the per-tool repair counters.
+func (s *ToolExecStats) RepairedCounts() map[string]int {
+	if s == nil {
 		return nil
 	}
-	out := make(map[string]int, len(s.repaired))
-	for k, v := range s.repaired {
+	return s.snapshot(&s.repaired)
+}
+
+// CacheHitCounts returns a copy of the per-tool cache-hit counters.
+func (s *ToolExecStats) CacheHitCounts() map[string]int {
+	if s == nil {
+		return nil
+	}
+	return s.snapshot(&s.cacheHits)
+}
+
+// TruncatedCounts returns a copy of the per-tool truncation counters.
+func (s *ToolExecStats) TruncatedCounts() map[string]int {
+	if s == nil {
+		return nil
+	}
+	return s.snapshot(&s.truncated)
+}
+
+// copyCounts copies a counter map, returning nil for an empty one. Caller
+// must hold s.mu.
+func copyCounts(m map[string]int) map[string]int {
+	if len(m) == 0 {
+		return nil
+	}
+	out := make(map[string]int, len(m))
+	for k, v := range m {
 		out[k] = v
 	}
 	return out

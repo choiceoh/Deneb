@@ -170,6 +170,7 @@ func TestDetectFileModification(t *testing.T) {
 		want    string
 	}{
 		{"sed -i 's/foo/bar/' file.txt", "sed_in_place"},
+		{"sed -n -i 's/foo/bar/' file.txt", "sed_in_place"},
 		{"sed --in-place 's/a/b/' f", "sed_in_place"},
 		{"sed 's/foo/bar/' file.txt", ""},
 		{"echo hello > file.txt", "redirect"},
@@ -186,5 +187,73 @@ func TestDetectFileModification(t *testing.T) {
 				t.Errorf("got %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestExecCommandPreservesRunCache(t *testing.T) {
+	preserves := []string{
+		"ls -la",
+		"cat main.go",
+		"rg 'TODO' internal/",
+		"grep -rn foo src | head -20",
+		"git status",
+		"git log --oneline -10",
+		"git diff HEAD~1",
+		"/usr/bin/git status",
+		"find . -name '*.go' -type f",
+		"wc -l main.go | sort",
+		"sort data.txt",
+		"uniq data.txt",
+		"grep -o 'v[0-9]+' main.go",
+		"cat data.txt | sort | uniq",
+		"du -sh .",
+	}
+	for _, cmd := range preserves {
+		if !ExecCommandPreservesRunCache(cmd) {
+			t.Errorf("ExecCommandPreservesRunCache(%q) = false, want true", cmd)
+		}
+	}
+
+	invalidates := []string{
+		"",
+		"rm -rf build",
+		"sed -i 's/a/b/' main.go",
+		"sed --in-place 's/a/b/' main.go",
+		"sed -n -i 's/a/b/' main.go",  // -i behind another flag
+		"sed -n 'w out.txt' main.go",  // sed w script command writes a file
+		"sed -n 10,20p main.go",       // sed de-allowlisted entirely (w/s///w undetectable)
+		"sort -o sorted.txt data.txt", // -o writes without redirection
+		"sort --output=sorted.txt data.txt",
+		"tree -o tree.txt",
+		"uniq data.txt out.txt",         // second positional arg is an output file
+		"git diff --output=changes.txt", // git flag writes without redirection
+		"git log --output=log.txt -5",
+		"find . -name '*.go' -fprintf out.txt %p",
+		"find . -fprint listing.txt",
+		"find . -fls listing.txt",
+		"go generate ./...",
+		"make build",
+		"git checkout main",
+		"git stash",
+		"git pull",
+		"cat a.txt > b.txt",  // redirect
+		"cat a.txt >> b.txt", // append redirect
+		"ls; rm x",           // command chaining
+		"ls && rm x",         // conditional chaining
+		"ls || rm x",         // empty pipeline stage after split
+		"echo `rm x`",        // command substitution (backtick)
+		"echo $(rm x)",       // command substitution
+		"find . -name x -delete",
+		"find . -name '*.go' -exec rm {} ;",
+		"env FOO=1 make", // env runs arbitrary sub-commands
+		"xargs rm < list.txt",
+		"cat a | tee b.txt", // tee not in allowlist
+		"npm install",
+		"curl -X POST https://api.example.com", // external side effects, not allowlisted
+	}
+	for _, cmd := range invalidates {
+		if ExecCommandPreservesRunCache(cmd) {
+			t.Errorf("ExecCommandPreservesRunCache(%q) = true, want false", cmd)
+		}
 	}
 }

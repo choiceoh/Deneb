@@ -194,6 +194,16 @@ type RunEndData struct {
 	// rides run.end instead. tool_argrepair.go gates schema-aware repairs on
 	// measuring this rate first; Aggregate folds it into ToolStat.Repaired.
 	RepairedToolCalls map[string]int `json:"repairedToolCalls,omitempty"`
+	// CacheHitToolCalls counts run-cache hits per tool name. A hit never
+	// reaches the tool fn, so turn.tool durations/output stats undercount
+	// real demand; this field closes the gap and measures whether the
+	// cacheable-tool set (toolctx cacheableTools) earns its keep.
+	CacheHitToolCalls map[string]int `json:"cacheHitToolCalls,omitempty"`
+	// TruncatedToolCalls counts head/tail output truncations per tool name.
+	// Truncation happens inside the chat tool layer before the executor sees
+	// the output (turn.tool's OutputLen is post-truncation), so it rides
+	// run.end. Feeds per-tool MaxOutput budget tuning (tool_schemas.json).
+	TruncatedToolCalls map[string]int `json:"truncatedToolCalls,omitempty"`
 }
 
 // RunErrorData records agent run failure.

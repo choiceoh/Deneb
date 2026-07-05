@@ -219,13 +219,27 @@ func targetMatches(targets []string, effects []ToolFileEffect, query string) boo
 	return false
 }
 
+// statFor returns the ToolStat for name, creating it on first sight. Shared
+// by the turn.tool and run.end folds so name handling cannot drift between
+// the two aggregation sites.
+func statFor(m map[string]*ToolStat, name string) *ToolStat {
+	ts := m[name]
+	if ts == nil {
+		ts = &ToolStat{Name: name}
+		m[name] = ts
+	}
+	return ts
+}
+
 // ToolStat aggregates one tool's usage across every recorded run.
 //
 // The anomaly counters close the measurement loop the tool code asks for:
 // Repaired (tool_argrepair.go gates schema-aware repairs on this rate),
 // Unknown (hallucinated/typoed tool names — deferred-description quality
-// signal), Blocked (loop-detector/hook vetoes). TotalOutputChars/
-// MaxOutputChars feed per-tool MaxOutput cap tuning (tool_schemas.json).
+// signal), Blocked (loop-detector/hook vetoes), CacheHits (run-cache hits —
+// whether the cacheable-tool set earns its keep), Truncated (output
+// truncations). TotalOutputChars/MaxOutputChars and Truncated feed per-tool
+// MaxOutput cap tuning (tool_schemas.json).
 type ToolStat struct {
 	Name    string `json:"name"`
 	Calls   int    `json:"calls"`
@@ -236,6 +250,8 @@ type ToolStat struct {
 	Repaired         int   `json:"repaired,omitempty"`
 	Unknown          int   `json:"unknown,omitempty"`
 	Blocked          int   `json:"blocked,omitempty"`
+	CacheHits        int   `json:"cacheHits,omitempty"`
+	Truncated        int   `json:"truncated,omitempty"`
 	TotalOutputChars int64 `json:"totalOutputChars,omitempty"`
 	MaxOutputChars   int   `json:"maxOutputChars,omitempty"`
 }
@@ -296,11 +312,7 @@ func (w *Writer) Aggregate(sinceMs int64) AggregateResult {
 				if json.Unmarshal(e.Data, &d) != nil {
 					continue
 				}
-				ts := toolMap[d.Name]
-				if ts == nil {
-					ts = &ToolStat{Name: d.Name}
-					toolMap[d.Name] = ts
-				}
+				ts := statFor(toolMap, d.Name)
 				ts.Calls++
 				ts.TotalMs += d.DurationMs
 				if d.IsError {
@@ -322,12 +334,13 @@ func (w *Writer) Aggregate(sinceMs int64) AggregateResult {
 					continue
 				}
 				for name, c := range d.RepairedToolCalls {
-					ts := toolMap[name]
-					if ts == nil {
-						ts = &ToolStat{Name: name}
-						toolMap[name] = ts
-					}
-					ts.Repaired += c
+					statFor(toolMap, name).Repaired += c
+				}
+				for name, c := range d.CacheHitToolCalls {
+					statFor(toolMap, name).CacheHits += c
+				}
+				for name, c := range d.TruncatedToolCalls {
+					statFor(toolMap, name).Truncated += c
 				}
 				res.Runs++
 				res.TotalInputTokens += int64(d.InputTokens)
