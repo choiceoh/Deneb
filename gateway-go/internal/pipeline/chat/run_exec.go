@@ -60,7 +60,7 @@ func executeAgentRun(
 	}
 
 	// Signal "preparing" phase — covers parallel context assembly, system prompt
-	// build, and recall preflight setup. WebSocket clients receive a structured
+	// build, and recall preflight setup. SSE clients receive a structured
 	// phase.changed event for the transition.
 	emitPhase(deps, params, "preparing", runStart)
 
@@ -546,10 +546,10 @@ func wireBeforeAPICall(cfg *agent.AgentConfig, deps runDeps, params RunParams, p
 	return apiMode
 }
 
-// emitPhase publishes a phase.changed lifecycle event so WebSocket
-// subscribers can render the same phase progression the Telegram status
-// controller does. Silently no-ops when the agent emit callback is unset
-// (sub-agents, tests).
+// emitPhase publishes a phase.changed lifecycle event so SSE
+// subscribers can render live phase progression (the pattern the retired
+// Telegram status controller established). Silently no-ops when the agent
+// emit callback is unset (sub-agents, tests).
 func emitPhase(deps runDeps, params RunParams, phase string, at time.Time) {
 	if deps.callbacks.emitAgentFn == nil {
 		return

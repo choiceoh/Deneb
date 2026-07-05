@@ -1,4 +1,4 @@
-// Package events provides a pub/sub event broadcasting system for WebSocket clients.
+// Package events provides a pub/sub event broadcasting system for SSE clients.
 //
 // This mirrors the event dispatch logic in src/gateway/server-broadcast.ts where
 // events are broadcast to connected clients with RBAC scope guards, slow consumer
@@ -56,13 +56,13 @@ type BroadcastOpts struct {
 const maxBufferedBytes int64 = 50 * 1024 * 1024 // 50 MB
 
 // Tap is a synchronous in-process listener that observes every Broadcast call.
-// Unlike Subscriber, taps run inside the gateway process — no WebSocket frame
+// Unlike Subscriber, taps run inside the gateway process — no SSE frame
 // is built for them — so they can react to events without authentication or
 // network state. Taps are invoked AFTER WS fan-out, with no locks held, so
 // they may safely call back into the broadcaster.
 type Tap func(event string, payload any)
 
-// Broadcaster distributes events to subscribed WebSocket clients.
+// Broadcaster distributes events to subscribed SSE clients.
 //
 // Lock hierarchy (acquire in this order; never reverse):
 //
@@ -162,7 +162,7 @@ func (b *Broadcaster) Count() int {
 }
 
 // RegisterTap appends an in-process listener. Each registered tap is invoked
-// once per Broadcast call after WebSocket fan-out completes. Panics in a tap
+// once per Broadcast call after SSE fan-out completes. Panics in a tap
 // are recovered and logged; one misbehaving tap cannot break broadcast.
 func (b *Broadcaster) RegisterTap(t Tap) {
 	if t == nil {

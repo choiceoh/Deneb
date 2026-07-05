@@ -1,6 +1,6 @@
 ---
 description: 로컬 GPU 사이드카 모델 운영 현황 (OCR/ASR/추출/임베딩) — 엔드포인트·기동·배선·폴백
-globs: ["gateway-go/internal/pipeline/chat/tools/paddleocr.go", "gateway-go/internal/pipeline/chat/tools/asr.go", "gateway-go/internal/pipeline/chat/tools/gmail_attachment.go", "gateway-go/internal/pipeline/chat/web/web_html.go", "gateway-go/internal/ai/modelrole/**", "gateway-go/internal/pipeline/pilot/**", "gateway-go/cmd/wormhole/**", "scripts/deploy/start-wormhole.sh", "scripts/deploy/wormhole.service"]
+globs: ["gateway-go/internal/pipeline/chat/tools/paddleocr.go", "gateway-go/internal/pipeline/chat/tools/asr.go", "gateway-go/internal/pipeline/chat/tools/docparse.go", "gateway-go/internal/pipeline/chat/web/web_html.go", "gateway-go/internal/ai/modelrole/**", "gateway-go/internal/pipeline/pilot/**", "gateway-go/cmd/wormhole/**", "scripts/deploy/start-wormhole.sh", "scripts/deploy/wormhole.service"]
 ---
 
 # Sidecar Models (GPU 부가 모델 운영 현황)
@@ -38,7 +38,7 @@ globs: ["gateway-go/internal/pipeline/chat/tools/paddleocr.go", "gateway-go/inte
 - `gateway-go/internal/pipeline/chat/tools/paddleocr.go`:
   - `paddleOCR(ctx, img, task)` — `/v1/chat/completions` 에 `image_url`(base64 data URI) + 태스크 프롬프트 전송. 태스크: `"OCR:"` / `"Table Recognition:"` / `"Formula Recognition:"` / `"Chart Recognition:"`.
   - `ocrImageBytes(ctx, img)` — **단일 OCR 진입점**. PaddleOCR-VL 우선, 실패 시 tesseract 폴백.
-- `gmail_attachment.go` 의 `imageOCR`(이미지 첨부)와 `pdfOCR` 페이지 루프(스캔 PDF)가 `ocrImageBytes` 경유.
+- `docparse.go` 의 `imageOCR`(이미지 첨부)와 `pdfOCR` 페이지 루프(스캔 PDF)가 `ocrImageBytes` 경유 (구 `gmail_attachment.go` 에서 이사).
 - **폴백 설계**: 서버가 꺼져 있으면 connection refused 로 즉시 실패 → tesseract(kor+eng) 로 graceful degradation. 즉 OCR 은 서버 없어도 깨지지 않고 품질만 낮아진다.
 - **엔드포인트 override**: 환경변수 `DENEB_OCR_VL_URL` (기본 `http://127.0.0.1:18011`). 테스트/비표준 배포용.
 

@@ -85,7 +85,7 @@ func executeOneTool(
 
 	// Periodic tool-progress heartbeat: while this tool call is still running,
 	// fire OnToolProgress every toolHeartbeatInterval seconds so surface
-	// liveness indicators (Telegram typing "...") stay alive during long
+	// liveness indicators (client typing "...") stay alive during long
 	// (compile/test-suite/network-fetch) calls that emit no streaming tokens.
 	// The goroutine stops as soon as tool execution returns (done is closed).
 	//

@@ -187,7 +187,7 @@ func (h *GatewayHub) SetChat(c *chat.Handler) {
 
 // --- Broadcast ---
 
-// Broadcast sends an event to all connected WebSocket clients.
+// Broadcast sends an event to all connected SSE clients.
 // Satisfies BroadcastFunc signature for direct use in handler Deps.
 func (h *GatewayHub) Broadcast(event string, payload any) (int, []error) {
 	return h.broadcaster.Broadcast(event, payload)

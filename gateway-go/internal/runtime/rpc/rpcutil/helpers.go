@@ -22,7 +22,7 @@ import (
 type HandlerFunc = middleware.HandlerFunc
 
 // BroadcastFunc is the canonical signature for broadcasting events to connected
-// WebSocket clients. Previously duplicated across 7+ handler packages; now
+// SSE clients. Previously duplicated across 7+ handler packages; now
 // defined once here and referenced everywhere via rpcutil.BroadcastFunc.
 type BroadcastFunc func(event string, payload any) (int, []error)
 

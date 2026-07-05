@@ -90,7 +90,7 @@ fun DenebMailScreen(
     onBack: () -> Unit,
     onOpenDetail: (String) -> Unit = {},
     navigationTabBar: (@Composable () -> Unit)? = null,
-    // panelMode = rendered as the left pane of the desktop split-view (fills the parent
+    // panelMode = rendered as the left pane of the (retired-product) desktop split-view (fills the parent
     // 380dp box instead of the 760dp centered column; back affordance hidden since the
     // pane is always shown). selectedId = the mail currently open in the right detail
     // pane, for row highlight.
@@ -206,7 +206,7 @@ fun DenebMailScreen(
                 }
             }
         },
-        // The desktop split-view always shows this pane, so a back affordance is noise;
+        // The (retired-product) desktop split-view always shows this pane, so a back affordance is noise;
         // fillWidth keeps the column inside the 380dp pane instead of the desktop cap.
         showBack = !panelMode,
         fillWidth = panelMode,
@@ -441,7 +441,7 @@ internal fun MailRow(
                 Text(
                     senderName(message.from).ifBlank { "(발신자 없음)" },
                     style = if (message.unread) DenebType.rowTitleStrong else DenebType.rowTitle,
-                    // The row open in the desktop detail pane is the active item: its
+                    // The row open in the split-view detail pane is the active item: its
                     // title takes the cool interactive accent (just the mark, not the
                     // whole row — the faint background tint already carries the fill).
                     color = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground,

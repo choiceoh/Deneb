@@ -477,7 +477,7 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 	// goroutine (server_lifecycle.go). See chat/prompt_snapshot_persist.go.
 	chat.ConfigurePromptSnapshots(config.ResolveStateDir(), s.logger)
 
-	// Broadcast dreaming events to WebSocket clients, and surface completed
+	// Broadcast dreaming events to SSE clients, and surface completed
 	// cycles that actually changed pages as a work-feed card — the proposal
 	// JSON always existed but had no user-facing surface.
 	s.autonomousSvc.OnEvent(func(event autonomous.CycleEvent) {

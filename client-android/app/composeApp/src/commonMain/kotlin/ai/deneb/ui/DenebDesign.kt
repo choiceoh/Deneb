@@ -160,12 +160,12 @@ fun DenebRow(
  * on a phone the column fills the screen. The content lambda keeps its [ColumnScope],
  * so callers that use `weight(1f)` on a scrolling child still work.
  *
- * [showBack] lets top-level sections drop the back arrow on desktop, where the
- * persistent sidebar already is the navigation — sub-screens keep it everywhere.
+ * [showBack] let top-level sections drop the back arrow when the retired desktop
+ * product UI's persistent sidebar was the navigation — sub-screens keep it everywhere.
  *
- * [fillWidth] is for screens embedded as a pane of a wider layout (the desktop
- * mail split-view): the desktop fixed-width cap would overflow a narrow pane,
- * so the column fills the parent instead.
+ * [fillWidth] is for screens embedded as a pane of a wider layout (originally the
+ * retired desktop mail split-view): the fixed-width cap would overflow a narrow
+ * pane, so the column fills the parent instead.
  */
 @Composable
 fun DenebScreenScaffold(

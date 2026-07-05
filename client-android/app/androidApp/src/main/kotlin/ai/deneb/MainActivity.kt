@@ -297,7 +297,7 @@ class MainActivity : ComponentActivity() {
     // Share-sheet capture: text shared from any app (a KakaoTalk message, a URL,
     // an article excerpt) goes straight into the Deneb chat for triage. Home is
     // the chat screen, so the capture appears immediately on launch. This is a
-    // native-only capability the Telegram bot can't offer.
+    // native-only capability the retired Telegram bot couldn't offer.
     private fun handleShareIntent(intent: Intent?) {
         if (intent?.action != Intent.ACTION_SEND) return
         if (intent.type?.startsWith("image/") == true) {
@@ -341,7 +341,7 @@ class MainActivity : ComponentActivity() {
     // which transcribes via the ASR sidecar (speaker labels + timestamps) and runs
     // one agent turn over the transcript. A voice memo or a meeting recording
     // shared from a recorder/files app — long-form capture the on-device speech
-    // shortcut (음성 캡처) and the Telegram bot can't do.
+    // shortcut (음성 캡처) couldn't do (nor could the retired Telegram bot).
     private fun handleSharedAudio(intent: Intent) {
         @Suppress("DEPRECATION")
         val uri: Uri? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {

@@ -324,7 +324,7 @@ func (s *Service) poll(ctx context.Context, client *gmail.Client) error {
 	}
 	s.markSkippedAnalyses(details, items, nil)
 
-	// Auto-archive substantive attachments to Dropbox (best-effort). The note is
+	// Auto-archive substantive attachments to the local file store (best-effort). The note is
 	// added to the notification only (kept out of the diary so durable wiki
 	// knowledge stays clean) and only on a successful analysis — appending to the
 	// "(분석 실패)" stub would add a newline that defeats the proactive

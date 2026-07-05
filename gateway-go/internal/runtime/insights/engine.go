@@ -1,5 +1,5 @@
 // Package insights aggregates recent session/model/tool usage into a concise
-// report that can be rendered for Telegram or CLI output.
+// report that can be rendered for chat or CLI output.
 //
 // The engine is read-only — it never mutates session or usage state. Deneb's
 // session manager keeps a bounded in-memory window (GC retention: 1h for most

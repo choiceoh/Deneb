@@ -11,7 +11,7 @@ type StreamHooks struct {
 	OnToolResult func(name, toolUseID, result string, isErr bool) // tool result broadcast
 	// OnToolProgress fires periodically while a single tool call is still
 	// executing (e.g., long-running `exec` or network fetch). Intended to
-	// refresh surface liveness indicators (typing "..." in Telegram) so the
+	// refresh surface liveness indicators (client typing "...") so the
 	// channel TTL does not expire during multi-minute tool calls. elapsedSec
 	// is the number of seconds since the tool started (never zero — first
 	// fire is after at least one tick interval).

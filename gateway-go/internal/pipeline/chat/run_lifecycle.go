@@ -29,7 +29,7 @@ func handleRunSuccess(
 ) {
 	// Strip silent reply token (NO_REPLY) from the response text before
 	// persisting, broadcasting, or delivering. This ensures the internal
-	// token is never exposed to any client (RPC, WebSocket, native client)
+	// token is never exposed to any client (RPC, SSE, native client)
 	// and is not stored in transcript history.
 	isSilent := IsSilentReply(result.Text)
 	if !isSilent {

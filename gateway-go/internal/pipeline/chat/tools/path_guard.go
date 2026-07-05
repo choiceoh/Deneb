@@ -3,7 +3,7 @@
 // Deneb is single-user, so this is not about isolating tenants; it is
 // defense-in-depth against prompt-injection. If an attacker plants instructions
 // in content the agent ingests (a web page, an email), they may try to make the
-// agent read a credential file and echo it to Telegram, or overwrite a
+// agent read a credential file and echo it to an outbound chat message, or overwrite a
 // control-plane file (auth/config) to escalate. ResolvePath already jails fs
 // tools to the workspace, but the workspace can legitimately include the
 // operator's home, so a path-suffix denylist is the layer that stops credential

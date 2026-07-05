@@ -128,7 +128,7 @@ func (h *Handler) rollbackList(delivery *DeliveryContext, mgr *checkpoint.Manage
 }
 
 // renderRollbackList renders a list result for the user. Returns Korean
-// text with a code-fenced table so IDs don't get eaten by MarkdownV2.
+// text with a code-fenced table so IDs render verbatim in client markdown.
 func renderRollbackList(snaps []*checkpoint.Snapshot, limit int) string {
 	if len(snaps) == 0 {
 		return "최근 체크포인트가 없습니다. 파일을 수정하면 자동으로 스냅샷이 저장돼요."

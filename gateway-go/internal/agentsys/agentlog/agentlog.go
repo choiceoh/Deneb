@@ -36,7 +36,7 @@ const (
 	// autonomous layer (which has no per-run JSONL of its own) observable: what
 	// it tried to do and what the outcome was.
 	TypeProactiveRelay = "proactive.relay" // autonomous delivery decision (relayNative)
-	TypeBackgroundJob  = "background.job"  // a background job cycle (cron, gmail/dropbox poll, heartbeat)
+	TypeBackgroundJob  = "background.job"  // a background job cycle (cron, gmail poll, heartbeat)
 )
 
 // Session keys for the standalone behavioral event streams. Each lands in its
@@ -229,7 +229,7 @@ type ProactiveRelayData struct {
 }
 
 // BackgroundJobData records one cycle of a background worker (cron job, gmail /
-// dropbox poll, heartbeat, autonomous tick). It answers "did this run, and what
+// heartbeat, autonomous tick). It answers "did this run, and what
 // did it find/do" — the questions that went unanswered when cron jobs and
 // pollers silently died in production.
 type BackgroundJobData struct {

@@ -70,8 +70,8 @@ import kotlin.time.Clock
  * Data flows through the gateway's authenticated SparkFleet passthrough
  * (DenebClientFleet); one poll loop at screen level feeds all three tabs, so a
  * launched recipe's health wait and a job's streamed log move live wherever
- * the user is looking. Reached from the desktop sidebar ("fleet") and the
- * 설정 게이트웨이 tab's 플릿 관리 entry (mobile).
+ * the user is looking. Reached from the 설정 게이트웨이 tab's 플릿 관리 entry
+ * (the retired desktop sidebar's "fleet" entry was the old desktop route).
  */
 @Composable
 fun DenebFleetScreen(

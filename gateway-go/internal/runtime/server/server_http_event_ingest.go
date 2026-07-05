@@ -1,7 +1,8 @@
 // server_http_event_ingest.go — POST /api/event/ingest
 //
-// Receives a real-time event from the user's phone (a Termux agent reaching this
-// loopback endpoint over an SSH session into the host) and runs a proactive
+// Receives a real-time event from the user's phone — today the authenticated
+// native-app path (miniapp.event.ingest, NotificationListener); the loopback
+// path remains from the retired Termux/SSH bridge (#3099) — and runs a proactive
 // 비서실장 judgment turn on it. If the event is worth surfacing, the agent's
 // report lands in the native 업무 chat (client:main transcript + work-feed card +
 // live push) through the SAME proactiveRelay path cron and gmail-poll already
@@ -207,7 +208,7 @@ func (s *Server) handleEventIngest(w http.ResponseWriter, r *http.Request) {
 
 // ingestPhoneEventAsync queues the proactive 비서실장 judgment turn for one phone
 // event and is the single shared entry point for every phone-event source: the
-// loopback /api/event/ingest (SSH-tunneled Termux) and the authenticated
+// loopback /api/event/ingest (legacy — the retired Termux/SSH bridge) and the authenticated
 // miniapp.event.ingest (the native NotificationListener). The phone forwards
 // broadly; the gateway does the per-type judgment + relay. Fire-and-forget — the
 // caller only needs to know the event was accepted; the report arrives later via
@@ -226,9 +227,9 @@ func (s *Server) ingestPhoneEventAsync(eventType, source, text string) {
 	// mail_report work-feed card, so a phone-driven judgment turn over the same mail
 	// only produced duplicate, near-identical cards. Scope is Gmail ONLY (the polled
 	// account) — other mail apps have no poll coverage, so their notification is the
-	// sole proactive surface and must still run. Covers both phone paths: Termux
-	// (/api/event/ingest) and the native NotificationListener (miniapp.event.ingest)
-	// both funnel through here.
+	// sole proactive surface and must still run. Covers both phone paths: the
+	// legacy loopback (/api/event/ingest) and the native NotificationListener
+	// (miniapp.event.ingest) both funnel through here.
 	if isPolledGmailNotification(eventType, source) {
 		s.logger.Info("phone-event: Gmail notification skipped (gmail-poll covers this inbox)",
 			"source", strings.TrimSpace(source))
