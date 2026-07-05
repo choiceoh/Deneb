@@ -1017,6 +1017,45 @@
     ]
   },
   {
+    "name": "deal_ledger",
+    "max_output": 8000,
+    "properties": {
+      "action": {
+        "type": "string",
+        "enum": [
+          "list",
+          "sum"
+        ],
+        "description": "list (기본): 필터된 거래 기록 목록 + 합계 / sum: 합계만. 거래 금액의 합계·건수·기간 질문은 산문을 눈대중으로 합산하지 말고 반드시 이 도구를 쓸 것 — 금액 파싱·통화별 합산이 코드로 계산된다"
+      },
+      "counterparty": {
+        "type": "string",
+        "description": "거래처명 필터 (부분 일치, 예: 'JA Solar', '대한전선')"
+      },
+      "project": {
+        "type": "string",
+        "description": "프로젝트명 필터 (부분 일치)"
+      },
+      "doc_type": {
+        "type": "string",
+        "description": "문서 유형 필터 (견적, 계약, 세금계산서, 거래명세서 등 부분 일치)"
+      },
+      "since": {
+        "type": "string",
+        "description": "이 날짜 이후만 (YYYY-MM-DD, 포함)"
+      },
+      "until": {
+        "type": "string",
+        "description": "이 날짜까지만 (YYYY-MM-DD, 포함)"
+      },
+      "limit": {
+        "type": "number",
+        "description": "목록 최대 행 수 (기본 20 — 합계는 항상 전체 기준)"
+      }
+    },
+    "required": []
+  },
+  {
     "name": "wiki",
     "max_output": 20000,
     "properties": {

@@ -37,7 +37,8 @@ type DealRecord struct {
 	Items        []string `json:"items,omitempty"`
 	Summary      string   `json:"summary,omitempty"`
 	SourceRef    string   `json:"sourceRef,omitempty"`
-	RecordedAt   int64    `json:"recordedAt"` // unix milli
+	Projects     []string `json:"projects,omitempty"` // owning project names resolved at file time (older rows lack it)
+	RecordedAt   int64    `json:"recordedAt"`         // unix milli
 }
 
 // dealRecordFrom builds a typed record from the write-time input, parsing the
@@ -47,6 +48,12 @@ func dealRecordFrom(in DealPageInput, now time.Time) DealRecord {
 	date := strings.TrimSpace(in.Date)
 	if date == "" {
 		date = now.Format("2006-01-02")
+	}
+	var projects []string
+	for _, p := range in.RelatedProjects {
+		if name, pok := ProjectNameOf(p); pok {
+			projects = append(projects, name)
+		}
 	}
 	return DealRecord{
 		Counterparty: strings.TrimSpace(in.Counterparty),
@@ -60,6 +67,7 @@ func dealRecordFrom(in DealPageInput, now time.Time) DealRecord {
 		Items:        dedupeStrings(in.Items),
 		Summary:      strings.TrimSpace(in.Summary),
 		SourceRef:    strings.TrimSpace(in.SourceRef),
+		Projects:     dedupeStrings(projects),
 		RecordedAt:   now.UnixMilli(),
 	}
 }
