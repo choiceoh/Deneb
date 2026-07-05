@@ -106,8 +106,12 @@ func extractAddrForAnchor(s string) string {
 	return ""
 }
 
-// anchorSideLabel renders the side tag for one address.
-func anchorSideLabel(addr string, ourDomains map[string]bool) string {
+// anchorSideLabel renders the side tag for one address. counterpartyFn (nil-
+// safe) supplies the wiki-derived linked projects for an active counterparty
+// domain, upgrading the bare "외부(domain)" into "외부(domain · 활성 거래처:
+// 프로젝트, …)" — the deterministic answer to "이 회사가 우리와 어느 건으로
+// 엮여 있나" that stage2 previously had to recall on its own.
+func anchorSideLabel(addr string, ourDomains map[string]bool, counterpartyFn func(domain string) []string) string {
 	dom := ""
 	if i := strings.LastIndexByte(addr, '@'); i >= 0 {
 		dom = addr[i+1:]
@@ -118,12 +122,18 @@ func anchorSideLabel(addr string, ourDomains map[string]bool) string {
 	if ourDomains[dom] {
 		return "우리 측(" + dom + ")"
 	}
+	if counterpartyFn != nil {
+		if projects := counterpartyFn(dom); len(projects) > 0 {
+			return "외부(" + dom + " · 활성 거래처: " + strings.Join(projects, ", ") + ")"
+		}
+	}
 	return "외부(" + dom + ")"
 }
 
 // buildPartyAnchor renders the anchor block for one message, or "" when no
 // address parses out of any header (nothing deterministic to anchor on).
-func buildPartyAnchor(msg *gmail.MessageDetail, ourDomains map[string]bool) string {
+// counterpartyFn may be nil (plain side labels).
+func buildPartyAnchor(msg *gmail.MessageDetail, ourDomains map[string]bool, counterpartyFn func(domain string) []string) string {
 	if msg == nil {
 		return ""
 	}
@@ -139,7 +149,7 @@ func buildPartyAnchor(msg *gmail.MessageDetail, ourDomains map[string]bool) stri
 			if p.addr != "" {
 				sb.WriteString(" <" + p.addr + ">")
 			}
-			sb.WriteString(" — " + anchorSideLabel(p.addr, ourDomains) + "\n")
+			sb.WriteString(" — " + anchorSideLabel(p.addr, ourDomains, counterpartyFn) + "\n")
 			wrote = true
 		}
 	}

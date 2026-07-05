@@ -106,7 +106,7 @@ func FormatEmailForAnalysis(msg *gmail.MessageDetail) string {
 func AnalyzeEmail(ctx context.Context, client *llm.Client, model, prompt, thinkingKwarg string, msg *gmail.MessageDetail) (string, error) {
 	userContent := prompt + "\n\n" + FormatEmailForAnalysis(msg)
 	// Same deterministic party anchor as the pipeline path (party_anchor.go).
-	if anchor := buildPartyAnchor(msg, ourAnchorDomains()); anchor != "" {
+	if anchor := buildPartyAnchor(msg, ourAnchorDomains(), nil); anchor != "" {
 		userContent += "\n\n" + anchor
 	}
 

@@ -52,3 +52,47 @@ func TestActiveCounterpartyDomains(t *testing.T) {
 		}
 	}
 }
+
+// CounterpartyProjects must mirror the domain-set rules (window, freemail,
+// linked-only) and add per-domain project lists ordered by latest activity,
+// capped and deterministically tie-broken.
+func TestCounterpartyProjects(t *testing.T) {
+	store, err := NewStore(t.TempDir(), t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	write := func(path, domainTag, created string) {
+		t.Helper()
+		if err := store.WritePage(path, &Page{
+			Meta: Frontmatter{
+				Title: path, Category: "프로젝트", Type: "log", Confidence: "medium",
+				Tags: []string{domainTag}, Created: created, Updated: created,
+			},
+			Body: "분석",
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// hre.kr spans two projects — 당진 more recent than 영덕.
+	write("프로젝트/당진-솔라빌리지/메일분석/a1.md", "hre.kr", "2026-07-03")
+	write("프로젝트/영덕-풍력/메일분석/a2.md", "hre.kr", "2026-06-20")
+	write("프로젝트/당진-솔라빌리지/메일분석/a3.md", "gmail.com", "2026-07-03") // freemail — excluded
+	write("프로젝트/메일분석/a4.md", "bucket.kr", "2026-07-03")          // unlinked — excluded
+	write("프로젝트/옛거래/메일분석/a5.md", "hre.kr", "2020-01-01")         // stale — excluded
+
+	got := store.CounterpartyProjects("2026-06-01")
+	projs := got["hre.kr"]
+	if len(projs) != 2 || projs[0] != "당진-솔라빌리지" || projs[1] != "영덕-풍력" {
+		t.Fatalf("hre.kr projects = %v, want [당진-솔라빌리지 영덕-풍력]", projs)
+	}
+	if _, ok := got["gmail.com"]; ok {
+		t.Fatal("freemail domain must not appear")
+	}
+	if _, ok := got["bucket.kr"]; ok {
+		t.Fatal("unlinked bucket mail must not appear")
+	}
+	if projs := got["hre.kr"]; len(projs) > maxCounterpartyProjects {
+		t.Fatalf("project list must be capped at %d", maxCounterpartyProjects)
+	}
+}
