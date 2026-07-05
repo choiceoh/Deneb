@@ -146,12 +146,34 @@ Two tiny hygiene improvements keep the extension point real rather than decorati
 
 1. Have `ToolRegistry.RegisterTool` emit a `slog.Warn` on silent replacement
    so that future plugin collisions are visible (not a behavior change —
-   the replacement already happens silently).
+   the replacement already happens silently). ✅ done.
 2. Document in `gateway-go/CLAUDE.md` that `OnBeforeToolCall` is the
    supported plugin interception point, and that per-tool handlers should
-   register via `RegisterTool` rather than a side-chain.
+   register via `RegisterTool` rather than a side-chain. ✅ done.
 
-These are low-risk and can be done lazily when someone touches the file next.
+## 9. Addendum (2026-07-05): what landed inside Execute, still no chain
+
+Scenario C held. The cross-cutting concerns a generic interceptor chain would
+have carried were added as explicit stages inside `ToolRegistry.Execute` (plus
+the existing hooks), in dispatch order:
+
+- **Dry-run** — `toolctx.WithToolDryRun` / `RunParams.ToolDryRun` suppresses
+  every tool not on a read-only allowlist (`tool_dry_run.go`, default-deny),
+  so eval/replay harnesses drive the real loop without side effects.
+- **Run-cache** — cacheable set grew to `fetch_tools` (measured 20% same-input
+  repeats) with a non-filesystem scope sentinel; exec now invalidates via
+  `tools.ExecCommandPreservesRunCache` (read-only allowlist analysis) instead
+  of never invalidating.
+- **Audit** — registry-internal outcomes invisible to the executor's
+  `turn.tool` logging (cache hits, output truncations) ride `run.end`
+  alongside `RepairedToolCalls` and fold into `agentlog.ToolStat`.
+
+Also stale since §2/§4 were written: `OnBeforeToolCall` is no longer unused —
+the goal loop wires its idempotency guard through `RunParams.BeforeToolCall`.
+The remaining known gap is unchanged: taint-aware gating (block risky tools
+after untrusted web/mail content enters the turn) needs an argument-inspecting
+hook, and THAT is the point at which widening the hook signature — not a
+generic chain — is the right move.
 
 ---
 
