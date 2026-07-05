@@ -536,15 +536,16 @@ func recordWorkFeed(deps Deps, item workfeed.Item) {
 }
 
 // handleMiniappEventIngest queues a proactive judgment turn for a phone event from
-// the native client — the NotificationListener's broad notification capture (and,
-// later, context/clipboard). The native, token-authenticated equivalent of the
-// loopback /api/event/ingest: the gateway does the per-type judgment + relay, so
+// the native client — notification capture, proactive context events, and cached
+// phone-state updates. The native, token-authenticated equivalent of the loopback
+// /api/event/ingest: the gateway does the per-type judgment + relay, so
 // OTP/spam/routine alerts are suppressed (NO_REPLY) and only signal reaches the
-// work feed + push. Fire-and-forget — the judgment runs async on the server
-// lifecycle; the client only needs the "accepted" ack.
+// work feed + push. Cache-only event types return before any judgment turn.
+// Fire-and-forget — the judgment runs async on the server lifecycle; the client
+// only needs the "accepted" ack.
 //
 // Params:
-//   - type   (string, optional): "notification" (default) / "context" / "clipboard" / "sms"
+//   - type   (string, optional): "notification" (default) / "context" / "clipboard" / "sms" / "*_update"
 //   - source (string, optional): app/sender label (e.g. "카카오톡")
 //   - text   (string, required): the notification/event body
 func handleMiniappEventIngest(deps Deps) rpcutil.HandlerFunc {

@@ -8,11 +8,11 @@
 // live push) through the SAME proactiveRelay path cron and gmail-poll already
 // use; if not, relayNative's noise floor suppresses it.
 //
-// This is the server half of "phone ↔ server SSH link" Phase 0: a single generic
-// ingestion door that notification / context / clipboard sources on the phone all
-// funnel into. It deliberately reuses the existing proactive machinery rather than
-// adding a parallel delivery path — the phone only supplies the event text; the
-// gateway does the judgment + delivery exactly like every other proactive surface.
+// This is the server half of phone sensing: a single generic ingestion door that
+// notification / context / clipboard / cached state sources on the phone all funnel
+// into. It deliberately reuses the existing proactive machinery rather than adding
+// a parallel delivery path — the phone only supplies the event text; the gateway
+// does the judgment + delivery exactly like every other proactive surface.
 
 package server
 
@@ -68,6 +68,19 @@ func recordPhoneLocation(logger *slog.Logger, payload string) {
 	}
 }
 
+// phoneUsagePath is the native client's latest coarse app-usage digest. It is
+// cache-only context for phone_read("usage"), never a proactive alert by itself.
+func phoneUsagePath() string {
+	return filepath.Join(config.ResolveStateDir(), "phone-usage.txt")
+}
+
+func recordPhoneUsage(logger *slog.Logger, payload string) {
+	p := phoneUsagePath()
+	if err := os.WriteFile(p, []byte(strings.TrimSpace(payload)), 0o600); err != nil && logger != nil {
+		logger.Warn("phone usage: cache write failed", "path", p, "error", err)
+	}
+}
+
 // phoneEventMaxTokens caps the judgment turn's reply. A phone-event alert should
 // be a tight "왜 지금 중요한가 + 무엇을 언제까지" message, not an essay.
 const phoneEventMaxTokens = 1536
@@ -108,7 +121,7 @@ const phoneEventPromptTmpl = `[실시간 스마트폰 이벤트 — %s]
 보고할 때는 필요한 도구(캘린더·메일·위키·연락처)로 맥락을 직접 확인한 뒤 한 메시지로:
 • 왜 지금 중요한가 — 관련 일정·거래·인물 맥락
 • 무엇을·언제까지 — 구체적인 다음 행동
-필요하면 폰 도구로 사용자의 현재 상황을 보강하라 — phone_read/phone_write는 deferred이므로 먼저 fetch_tools(names=["phone_read","phone_write"])로 활성화한다. phone_read(위치·클립보드·배터리)는 맥락 보강에(예: 위치로 출근/외근 판단, 클립보드로 직전 작업 맥락), 사용자가 화면을 못 볼 상황이 분명하면 phone_write(tts)로 폰에 음성으로 직접 읽어줘도 된다.
+필요하면 폰 도구로 사용자의 현재 상황을 보강하라 — phone_read/phone_write는 deferred이므로 먼저 fetch_tools(names=["phone_read","phone_write"])로 활성화한다. phone_read(위치·배터리·사용 리듬)는 맥락 보강에만 사용한다(예: 위치로 출근/외근 판단, 배터리로 음성 안내 적합성 판단, 사용 리듬으로 방금 집중하던 업무 앱 파악). 사용자가 화면을 못 볼 상황이 분명하면 phone_write(speak)로 폰에 음성으로 직접 읽어줘도 된다.
 인사·빈 서두·내부 토큰 금지. 능동 알림이므로 사용자 호명 없이 바로 본론으로.`
 
 // phoneEventKindLabel maps an event type to a short Korean descriptor used in the
@@ -220,6 +233,13 @@ func (s *Server) ingestPhoneEventAsync(eventType, source, text string) {
 	// as ordinary events and DO run the judgment, so they can surface "사무실 도착".)
 	if strings.EqualFold(strings.TrimSpace(eventType), "location_update") {
 		recordPhoneLocation(s.logger, text)
+		return
+	}
+	// usage_update: coarse app-usage rhythm from the native client. Cache only; usage
+	// rhythm is helpful context when asked or during another judgment, but should not
+	// create proactive alerts by itself.
+	if strings.EqualFold(strings.TrimSpace(eventType), "usage_update") {
+		recordPhoneUsage(s.logger, text)
 		return
 	}
 	// Gmail notifications are dropped before the judgment turn: the gateway's own

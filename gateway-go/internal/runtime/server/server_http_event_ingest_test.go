@@ -1,6 +1,8 @@
 package server
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -54,6 +56,7 @@ func TestIsPolledGmailNotification(t *testing.T) {
 		{"clipboard", "com.google.android.gm", false},
 		{"context", "com.google.android.gm", false},
 		{"location_update", "com.google.android.gm", false},
+		{"usage_update", "com.google.android.gm", false},
 	}
 	for _, c := range cases {
 		if got := isPolledGmailNotification(c.eventType, c.source); got != c.want {
@@ -71,5 +74,21 @@ func TestUsageEventLabelAndGuidance(t *testing.T) {
 	guidance := phoneEventGuidance("usage")
 	if !strings.Contains(guidance, "%s") {
 		t.Errorf("usage guidance missing NO_REPLY placeholder: %q", guidance)
+	}
+}
+
+func TestRecordPhoneUsage(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("DENEB_STATE_DIR", dir)
+
+	payload := "지난 6시간 앱 사용: 카카오톡 42분"
+	recordPhoneUsage(nil, "  "+payload+"\n")
+
+	data, err := os.ReadFile(filepath.Join(dir, "phone-usage.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := string(data); got != payload {
+		t.Fatalf("usage cache = %q, want %q", got, payload)
 	}
 }
