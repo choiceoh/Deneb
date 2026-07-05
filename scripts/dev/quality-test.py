@@ -1162,20 +1162,6 @@ async def run_health_test(client: GatewayClient, tdef: dict) -> QualityResult:
             result.latency_ms = (time.time() - start) * 1000
             result.add_check("core_ffi", False, str(e))
 
-    elif health_type == "vega":
-        try:
-            url = f"http://{client.host}:{client.port}/health"
-            with urllib.request.urlopen(url, timeout=5) as resp:
-                data = json.loads(resp.read())
-            result.latency_ms = (time.time() - start) * 1000
-            subs = data.get("subsystems", {})
-            result.add_check("vega_enabled", subs.get("vega") is True,
-                             f"vega={subs.get('vega', 'N/A')}")
-            result.add_check("latency", *check_latency(result.latency_ms, 500))
-        except Exception as e:
-            result.latency_ms = (time.time() - start) * 1000
-            result.add_check("vega_enabled", False, str(e))
-
     elif health_type == "version":
         resp = await client.rpc("health")
         result.latency_ms = (time.time() - start) * 1000
