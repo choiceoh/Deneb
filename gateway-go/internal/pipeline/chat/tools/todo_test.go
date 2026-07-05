@@ -6,9 +6,41 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/localtodo"
 )
+
+// The list renders deadline-first (undone by due, dated before undated, done
+// last) and flags overdue undone items with D+N.
+func TestFormatTodoList_SortAndOverdue(t *testing.T) {
+	now := time.Date(2026, 7, 5, 10, 0, 0, 0, time.FixedZone("KST", 9*3600))
+	day := func(d string) time.Time {
+		tm, _ := time.Parse("2006-01-02", d)
+		return tm
+	}
+	todos := []localtodo.Todo{
+		{ID: "1", Title: "완료된 것", Done: true, Due: day("2026-07-01")},
+		{ID: "2", Title: "마감 없음"},
+		{ID: "3", Title: "다음주 마감", Due: day("2026-07-10")},
+		{ID: "4", Title: "지난 마감", Due: day("2026-07-02")},
+	}
+	out := formatTodoListAt(todos, now)
+
+	iOverdue := strings.Index(out, "지난 마감")
+	iNext := strings.Index(out, "다음주 마감")
+	iNoDue := strings.Index(out, "마감 없음")
+	iDone := strings.Index(out, "완료된 것")
+	if !(iOverdue < iNext && iNext < iNoDue && iNoDue < iDone) {
+		t.Errorf("order wrong (want overdue < upcoming < undated < done):\n%s", out)
+	}
+	if !strings.Contains(out, "지남 D+3") {
+		t.Errorf("expected overdue flag D+3 for 07-02 at 07-05:\n%s", out)
+	}
+	if strings.Contains(out, "완료된 것 (id=1) · 마감 2026-07-01 ⚠️") {
+		t.Errorf("done items must not be flagged overdue:\n%s", out)
+	}
+}
 
 func TestToolTodo_CRUD(t *testing.T) {
 	store, err := localtodo.New(filepath.Join(t.TempDir(), "todos.json"))

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -89,13 +90,37 @@ func toolTodoWithStore(store *localtodo.Store) ToolFunc {
 	}
 }
 
+// formatTodoList renders the list deadline-first: undone items sorted by due
+// (dated before undated), completed items last — and flags overdue items with
+// D+N. The whole value of a task list is surfacing deadlines; store order
+// buried them and "마감 2026-06-01" read the same whether past or future.
 func formatTodoList(todos []localtodo.Todo) string {
+	return formatTodoListAt(todos, time.Now())
+}
+
+func formatTodoListAt(todos []localtodo.Todo, now time.Time) string {
 	if len(todos) == 0 {
 		return "할일 없음."
 	}
+	sorted := append([]localtodo.Todo(nil), todos...)
+	sort.SliceStable(sorted, func(i, j int) bool {
+		a, b := sorted[i], sorted[j]
+		if a.Done != b.Done {
+			return !a.Done // undone first
+		}
+		if a.Due.IsZero() != b.Due.IsZero() {
+			return !a.Due.IsZero() // dated before undated
+		}
+		if !a.Due.Equal(b.Due) {
+			return a.Due.Before(b.Due)
+		}
+		return false
+	})
+
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 	var b strings.Builder
-	fmt.Fprintf(&b, "할일 %d건:\n", len(todos))
-	for _, t := range todos {
+	fmt.Fprintf(&b, "할일 %d건:\n", len(sorted))
+	for _, t := range sorted {
 		mark := " "
 		if t.Done {
 			mark = "x"
@@ -103,6 +128,12 @@ func formatTodoList(todos []localtodo.Todo) string {
 		fmt.Fprintf(&b, "- [%s] %s (id=%s)", mark, t.Title, t.ID)
 		if !t.Due.IsZero() {
 			fmt.Fprintf(&b, " · 마감 %s", t.Due.Format("2006-01-02"))
+			if !t.Done {
+				due := time.Date(t.Due.Year(), t.Due.Month(), t.Due.Day(), 0, 0, 0, 0, now.Location())
+				if days := int(today.Sub(due).Hours() / 24); days > 0 {
+					fmt.Fprintf(&b, " ⚠️ 지남 D+%d", days)
+				}
+			}
 		}
 		b.WriteByte('\n')
 	}

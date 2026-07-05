@@ -79,6 +79,9 @@ type calParams struct {
 	DayStart    int    `json:"day_start"`
 	DayEnd      int    `json:"day_end"`
 	Query       string `json:"query"`
+	// IncludeWeekends opts free_slots into suggesting Sat/Sun slots; by
+	// default weekend days are skipped (not bookable business time).
+	IncludeWeekends bool `json:"include_weekends"`
 }
 
 // ToolCalendar returns the calendar tool. A nil deps (neither Google nor local

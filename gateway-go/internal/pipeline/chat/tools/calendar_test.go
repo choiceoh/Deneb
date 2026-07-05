@@ -413,10 +413,66 @@ func TestCalendar_FreeSlotsAction(t *testing.T) {
 		"action": "free_slots",
 		"from":   dayStart.Format(time.RFC3339),
 		"to":     dayEnd.Format(time.RFC3339),
+		// Tomorrow may be a weekend; the default weekend skip is tested separately.
+		"include_weekends": true,
 	})
-	// Default working hours 09–18, busy 10–11 → expect 09:00–10:00 and 11:00–18:00.
-	if !strings.Contains(out, "09:00–10:00") || !strings.Contains(out, "11:00–18:00") {
-		t.Errorf("free slots not split around the busy block:\n%s", out)
+	// Default working hours 09–18, busy 10–11, lunch 12–13 carved out
+	// → expect 09:00–10:00, 11:00–12:00, 13:00–18:00.
+	if !strings.Contains(out, "09:00–10:00") || !strings.Contains(out, "11:00–12:00") || !strings.Contains(out, "13:00–18:00") {
+		t.Errorf("free slots not split around busy block + lunch:\n%s", out)
+	}
+}
+
+// Weekends are skipped by default; include_weekends opts back in. A window
+// covering exactly one Saturday yields no slots unless opted in.
+func TestCalendar_FreeSlotsSkipsWeekends(t *testing.T) {
+	loc := time.FixedZone("KST", 9*60*60)
+	day := time.Now().In(loc).AddDate(0, 0, 1)
+	for day.Weekday() != time.Saturday {
+		day = day.AddDate(0, 0, 1)
+	}
+	dayStart := time.Date(day.Year(), day.Month(), day.Day(), 0, 0, 0, 0, loc)
+	dayEnd := dayStart.Add(24 * time.Hour)
+	deps := &toolctx.CalendarDeps{Local: newTestLocalCal(t)}
+
+	out := callCal(t, deps, map[string]any{
+		"action": "free_slots",
+		"from":   dayStart.Format(time.RFC3339),
+		"to":     dayEnd.Format(time.RFC3339),
+	})
+	if !strings.Contains(out, "빈 시간이 없습니다") {
+		t.Errorf("expected no slots on a weekend by default:\n%s", out)
+	}
+
+	out = callCal(t, deps, map[string]any{
+		"action":           "free_slots",
+		"from":             dayStart.Format(time.RFC3339),
+		"to":               dayEnd.Format(time.RFC3339),
+		"include_weekends": true,
+	})
+	if !strings.Contains(out, "09:00–12:00") {
+		t.Errorf("expected weekend slots with include_weekends=true:\n%s", out)
+	}
+}
+
+// A deliberately narrow lunch-hour window is NOT carved out — an explicit
+// "find me a lunch slot" search still works.
+func TestCalendar_FreeSlotsNarrowLunchWindowUntouched(t *testing.T) {
+	loc := time.FixedZone("KST", 9*60*60)
+	day := time.Now().In(loc).AddDate(0, 0, 1)
+	for day.Weekday() == time.Saturday || day.Weekday() == time.Sunday {
+		day = day.AddDate(0, 0, 1)
+	}
+	dayStart := time.Date(day.Year(), day.Month(), day.Day(), 0, 0, 0, 0, loc)
+	out := callCal(t, &toolctx.CalendarDeps{Local: newTestLocalCal(t)}, map[string]any{
+		"action":    "free_slots",
+		"from":      dayStart.Format(time.RFC3339),
+		"to":        dayStart.Add(24 * time.Hour).Format(time.RFC3339),
+		"day_start": 12,
+		"day_end":   13,
+	})
+	if !strings.Contains(out, "12:00–13:00") {
+		t.Errorf("narrow lunch window must not be carved out:\n%s", out)
 	}
 }
 

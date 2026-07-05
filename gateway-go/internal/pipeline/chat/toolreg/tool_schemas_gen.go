@@ -1171,6 +1171,10 @@ func calendarToolSchema() map[string]any {
 				"type":        "string",
 				"description": "이벤트 ID (get/update/delete). list 결과의 'id=...' 값을 그대로 사용. 'local:' 접두사면 로컬(수정·삭제 가능), 아니면 구글(읽기 전용).",
 			},
+			"include_weekends": map[string]any{
+				"type":        "boolean",
+				"description": "free_slots에서 토/일도 후보로 포함할지 (기본 false — 주말은 업무 시간이 아니므로 제외). 점심 12–13시는 근무창이 점심을 온전히 포함할 때 자동 제외",
+			},
 			"location": map[string]any{
 				"type":        "string",
 				"description": "장소 (선택).",
@@ -1590,7 +1594,7 @@ func mailArchiveToolSchema() map[string]any {
 			},
 			"days": map[string]any{
 				"type":        "number",
-				"description": "action=list에서 최근 며칠치를 볼지 (기본 1=오늘). 예: 7=최근 7일",
+				"description": "list/search에서 최근 며칠치로 범위를 한정할지 (list 기본 1=오늘, search 기본 무제한). 예: 7=최근 7일",
 				"minimum":     1,
 			},
 			"include_body": map[string]any{

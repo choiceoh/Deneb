@@ -1378,6 +1378,10 @@
       "query": {
         "type": "string",
         "description": "timeline: 관련 일정을 모을 대상 — 거래처·프로젝트·인물·장소 이름(제목·연결 메일 제목·장소·참석자와 매칭)."
+      },
+      "include_weekends": {
+        "type": "boolean",
+        "description": "free_slots에서 토/일도 후보로 포함할지 (기본 false — 주말은 업무 시간이 아니므로 제외). 점심 12–13시는 근무창이 점심을 온전히 포함할 때 자동 제외"
       }
     },
     "required": [
@@ -1822,7 +1826,7 @@
       },
       "days": {
         "type": "number",
-        "description": "action=list에서 최근 며칠치를 볼지 (기본 1=오늘). 예: 7=최근 7일",
+        "description": "list/search에서 최근 며칠치로 범위를 한정할지 (list 기본 1=오늘, search 기본 무제한). 예: 7=최근 7일",
         "minimum": 1
       },
       "query": {

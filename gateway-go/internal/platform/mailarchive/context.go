@@ -111,7 +111,8 @@ func ListContextMessages(ctx context.Context, cfg Config, since time.Time, opts 
 }
 
 // SearchContextMessages searches archive messages with stable locators, newest
-// first.
+// first. A non-zero opts.Since bounds the search window (SENTSINCE), same as
+// the project-history fallback path.
 func SearchContextMessages(ctx context.Context, cfg Config, query string, opts ContextOptions) ([]ContextMessage, error) {
 	query = strings.TrimSpace(query)
 	if query == "" {
@@ -123,7 +124,11 @@ func SearchContextMessages(ctx context.Context, cfg Config, query string, opts C
 	}
 	defer c.close()
 	defer c.logout()
-	return searchContextMessages(ctx, c, cfg, archiveTextCriteria(query), opts, true)
+	criteria := archiveTextCriteria(query)
+	if !opts.Since.IsZero() {
+		criteria = archiveSentSinceCriteria(opts.Since) + " " + criteria
+	}
+	return searchContextMessages(ctx, c, cfg, criteria, opts, true)
 }
 
 // ThreadContext reconstructs the whole available archive thread around one
