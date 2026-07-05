@@ -306,29 +306,33 @@ func isMeetingShaped(ev calendar.Event) bool {
 	return false
 }
 
-// looseUniqueProjectMatch recovers targets the exact matcher misses: real
-// calendar titles are terse ("비금도 해저케이블 포설 견학") while wiki project
-// folders are long compound names ("비금도-154kv-케이블-및-액세서리-(ztt)"), so
-// containment-of-full-name never fires. Here an event TOKEN (≥2 Hangul runes /
-// ≥3 otherwise) matching INSIDE exactly ONE project name resolves that project;
-// ambiguous tokens ("당진" spans three projects) resolve to nothing rather than
-// guessing.
-func looseUniqueProjectMatch(text string, projects []wiki.ProjectRef) string {
+// looseUniqueNameMatch recovers targets the exact matchers miss: real calendar
+// titles are terse ("비금도 … 견학", "JA 이용원 상무") while wiki names are long
+// compound forms ("비금도-154kv-케이블-및-액세서리-(ztt)", "JA Solar"), so
+// containment-of-full-name never fires. Here an event TOKEN matching INSIDE
+// exactly ONE known name (projects and ledgers judged JOINTLY, so a token like
+// "lg" that spans both lists stays ambiguous) resolves that name; ambiguous
+// tokens ("당진" spans three projects) resolve to nothing rather than guessing.
+func looseUniqueNameMatch(text string, names []string) string {
 	toks := harvestTokens(text)
 	if len(toks) == 0 {
 		return ""
 	}
-	keys := make([]string, len(projects))
-	for i, p := range projects {
-		keys[i] = harvestNorm(p.Name)
+	// Match against the ENTITY part of each name only — its first two
+	// segments. Long descriptive slugs embed generic nouns ("강진-신다산-epc-
+	// 계약서-법무검토…"), and a title token like 계약서 latching onto that tail
+	// was a real fidelity-drill false match. The entity lives up front.
+	keys := make([]string, len(names))
+	for i, n := range names {
+		keys[i] = harvestNorm(strings.Join(firstFields(n, 2), ""))
 	}
 	for _, tok := range toks {
 		hit := ""
 		count := 0
-		for i, p := range projects {
+		for i := range names {
 			if strings.Contains(keys[i], tok) {
 				count++
-				hit = p.Name
+				hit = names[i]
 			}
 		}
 		if count == 1 {
@@ -338,8 +342,26 @@ func looseUniqueProjectMatch(text string, projects []wiki.ProjectRef) string {
 	return ""
 }
 
-// harvestTokens splits free text into normalized candidate tokens. Short ASCII
-// fragments ("lg" 2 chars is fine, "w" is not) and 1-rune Hangul are dropped.
+// harvestKnownNames flattens the project + ledger name sets for loose matching.
+func harvestKnownNames(projects []wiki.ProjectRef, ledgers []wiki.CounterpartyRef) []string {
+	out := make([]string, 0, len(projects)+len(ledgers))
+	for _, p := range projects {
+		out = append(out, p.Name)
+	}
+	for _, c := range ledgers {
+		out = append(out, c.Name)
+	}
+	return out
+}
+
+// harvestTokens splits free text into normalized candidate tokens. Guards
+// learned from the real-17 fidelity drill:
+//   - pure-digit tokens never match ("6/25" split into "25" latched onto a
+//     project named "…(2026-06-25)" — a date is not an identity);
+//   - Hangul tokens need ≥3 runes (2-rune ones are mostly function words —
+//     바로, 관련 — that collide with company names);
+//   - ASCII abbreviations keep ≥2 ("JA", "LG") — Korean business shorthand,
+//     with the joint-uniqueness rule absorbing the collisions.
 func harvestTokens(text string) []string {
 	fields := strings.FieldsFunc(text, func(r rune) bool {
 		return !unicode.IsLetter(r) && !unicode.IsDigit(r)
@@ -351,9 +373,35 @@ func harvestTokens(text string) []string {
 		if n < 2 {
 			continue
 		}
+		digitsOnly, ascii := true, true
+		for _, r := range tok {
+			if r < '0' || r > '9' {
+				digitsOnly = false
+			}
+			if r > unicode.MaxASCII {
+				ascii = false
+			}
+		}
+		if digitsOnly {
+			continue
+		}
+		if !ascii && n < 3 {
+			continue
+		}
 		out = append(out, tok)
 	}
 	return out
+}
+
+// firstFields returns up to max leading letter/digit runs of s.
+func firstFields(s string, max int) []string {
+	fields := strings.FieldsFunc(s, func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsDigit(r)
+	})
+	if len(fields) > max {
+		fields = fields[:max]
+	}
+	return fields
 }
 
 // harvestNorm lowercases and strips non-letter/digit runes — the same shape the

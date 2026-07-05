@@ -72,6 +72,10 @@ func (s *Store) MatchCounterpartiesInText(text string, limit int) []Counterparty
 	return out
 }
 
+// KnownCounterparties lists the active deal ledgers (프로젝트/거래/) — the
+// counterparty name set for loose matching surfaces (meeting harvest).
+func (s *Store) KnownCounterparties() []CounterpartyRef { return s.knownCounterparties() }
+
 // knownCounterparties lists the deal ledgers under 프로젝트/거래/, skipping
 // archived ones. Sorted by name.
 func (s *Store) knownCounterparties() []CounterpartyRef {
