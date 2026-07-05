@@ -26,7 +26,7 @@ func main() {
 	fenced := len(blocks) > 0
 	if !fenced {
 		// No fence — treat the whole input as a candidate block so callers can
-		// validate raw JSON that lost its fence in transit.
+		// validate raw HTML/legacy-JSON that lost its fence in transit.
 		blocks = []string{text}
 	}
 
@@ -35,7 +35,7 @@ func main() {
 		issues, err := denebui.Validate(b)
 		if err != nil {
 			bad++
-			fmt.Printf("block %d: NOT JSON: %v\n", i, err)
+			fmt.Printf("block %d: NOT PARSEABLE: %v\n", i, err)
 			continue
 		}
 		if len(issues) == 0 {

@@ -1,0 +1,140 @@
+// Shared grammar vectors — docs/research/deneb-ui-html.md (repo root). The
+// gateway (html_test.go) and native (DenebUiHtmlTest.kt) suites cover the same
+// scenarios; keep all three in sync when the grammar changes.
+import { describe, expect, it } from "vitest";
+
+import { parseDenebUi } from "./denebUiParse";
+
+describe("parseDenebUi (labeled HTML)", () => {
+  it("parses a letter card skeleton", () => {
+    const root = parseDenebUi(`<column>
+      <card>
+        <row><icon name="calendar" size="16"/><text style="caption">내일 일정</text></row>
+        <ul><li>10:00 — 분기 리뷰</li><li>15:00 — 거래처 콜</li></ul>
+      </card>
+      <card>
+        <row><icon name="alarm" size="16"/><text style="caption">임박 마감</text></row>
+        <row><text style="body">부가세 신고</text><badge>D-2</badge></row>
+      </card>
+    </column>`);
+    expect(root.type).toBe("column");
+    expect(root.children).toHaveLength(2);
+    const sched = root.children[0];
+    expect(sched.type).toBe("card");
+    expect(sched.children[0].children[0]).toMatchObject({ type: "icon", name: "calendar", size: 16 });
+    expect(sched.children[1]).toMatchObject({ type: "list" });
+    expect(sched.children[1].items[0]).toMatchObject({ type: "text", value: "10:00 — 분기 리뷰" });
+    const badge = root.children[1].children[1].children[1];
+    expect(badge).toMatchObject({ type: "badge", value: "D-2" });
+  });
+
+  it("tolerates unclosed options and maps selected", () => {
+    const sel = parseDenebUi(`<select id="pick" label="선택"><option>가<option selected>나</select>`);
+    expect(sel).toMatchObject({ type: "select", id: "pick", options: ["가", "나"], selected: "나" });
+    const none = parseDenebUi(`<select id="p2"><option>가</option><option>나</option></select>`);
+    expect(none.selected).toBeUndefined();
+  });
+
+  it("wraps multiple roots into an implicit column", () => {
+    const root = parseDenebUi("<card><text>a</text></card><card><text>b</text></card>");
+    expect(root.type).toBe("column");
+    expect(root.children).toHaveLength(2);
+  });
+
+  it("auto-closes at EOF (stream truncation)", () => {
+    const root = parseDenebUi(`<column><card><text style="body">잘림`);
+    expect(root.children[0].children[0]).toMatchObject({ type: "text", value: "잘림", style: "body" });
+  });
+
+  it("decodes entities and escaped backticks in raw text", () => {
+    const md = parseDenebUi("<markdown>줄1\n&#96;&#96;&#96;go\na &lt; b &amp; c\n&#96;&#96;&#96;</markdown>");
+    expect(md).toMatchObject({ type: "markdown", value: "줄1\n```go\na < b & c\n```" });
+  });
+
+  it("keeps raw code content including bare angle brackets", () => {
+    const code = parseDenebUi(`<code language="go">if a < b { return }</code>`);
+    expect(code).toMatchObject({ type: "code", language: "go", code: "if a < b { return }" });
+  });
+
+  it("maps th row to headers and td rows to cells", () => {
+    const table = parseDenebUi("<table><tr><th>이름<th>값</tr><tr><td>구리<td>9,540</tr></table>");
+    expect(table.headers).toEqual(["이름", "값"]);
+    expect(table.rows).toEqual([["구리", "9,540"]]);
+  });
+
+  it("maps action attributes by precedence", () => {
+    const cb = parseDenebUi(`<button event="submit" data-kind="rsvp" collect="name,when">전송</button>`);
+    expect(cb.label).toBe("전송");
+    expect(cb.action).toMatchObject({
+      type: "callback",
+      event: "submit",
+      data: { kind: "rsvp" },
+      collectFrom: ["name", "when"],
+    });
+    const open = parseDenebUi(`<button href="https://deneb.ai">열기</button>`);
+    expect(open.action).toMatchObject({ type: "open_url", url: "https://deneb.ai" });
+    const tog = parseDenebUi(`<countdown seconds="10" toggle="panel1"/>`);
+    expect(tog.action).toMatchObject({ type: "toggle", targetId: "panel1" });
+    const cp = parseDenebUi(`<button copy="내용">복사</button>`);
+    expect(cp.action).toMatchObject({ type: "copy_to_clipboard", text: "내용" });
+  });
+
+  it("skips unknown tags but keeps the rest", () => {
+    const root = parseDenebUi("<column><wat>x</wat><text>ok</text></column>");
+    expect(root.children).toHaveLength(1);
+    expect(root.children[0]).toMatchObject({ type: "text", value: "ok" });
+  });
+
+  it("maps input variants to typed nodes", () => {
+    expect(parseDenebUi(`<input type="checkbox" id="c1" label="확인" checked/>`)).toMatchObject({
+      type: "checkbox",
+      id: "c1",
+      checked: true,
+    });
+    expect(parseDenebUi(`<input type="date" id="d1" value="2026-07-06" required/>`)).toMatchObject({
+      type: "date_input",
+      id: "d1",
+      value: "2026-07-06",
+      required: true,
+    });
+    expect(parseDenebUi(`<textarea id="memo">기본값</textarea>`)).toMatchObject({
+      type: "text_input",
+      id: "memo",
+      multiline: true,
+      value: "기본값",
+    });
+  });
+
+  it("turns container bare text into implicit text nodes", () => {
+    const card = parseDenebUi(`<card>제목 텍스트<text style="caption">부제</text></card>`);
+    expect(card.children).toHaveLength(2);
+    expect(card.children[0]).toMatchObject({ type: "text", value: "제목 텍스트" });
+  });
+
+  it("parses chart points and chips from children", () => {
+    const chart = parseDenebUi(
+      `<chart type="line"><point label="월" value="1"/><point label="화" value="2.5"/></chart>`,
+    );
+    expect(chart).toMatchObject({ type: "chart", chartType: "line", labels: ["월", "화"], values: [1, 2.5] });
+    const chips = parseDenebUi(`<chips id="tags" selection="multi"><chip value="a">에이</chip><chip>비</chip></chips>`);
+    expect(chips.chips).toEqual([
+      { label: "에이", value: "a" },
+      { label: "비", value: "비" },
+    ]);
+  });
+
+  it("parses the gateway's collapsed accordion shape", () => {
+    const root = parseDenebUi(
+      '<accordion title="📬 탑솔라 &lt;견적&gt;">\n<markdown>## 분석\n&#96;&#96;&#96;go\ncode\n&#96;&#96;&#96;</markdown>\n</accordion>',
+    );
+    expect(root.type).toBe("accordion");
+    expect(root.title).toBe("📬 탑솔라 <견적>");
+    expect(root.children[0].type).toBe("markdown");
+    expect(root.children[0].value).toContain("```go");
+  });
+
+  it("still parses legacy JSON bodies strictly", () => {
+    expect(parseDenebUi('{"type":"text","value":"Hi"}')).toMatchObject({ type: "text", value: "Hi" });
+    expect(parseDenebUi('{"type":"a"}\n{"type":"b"}')).toMatchObject({ type: "column" });
+  });
+});
