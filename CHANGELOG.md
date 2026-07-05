@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.69.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.68.0...deneb-v4.69.0) (2026-07-05)
+
+
+### ✨ Features
+
+* **wiki:** kinds 2단 체계 — 태양광·기자재·풍력·기타 1차/2차 계층 ([#3192](https://github.com/choiceoh/Deneb/issues/3192)) ([50e5498](https://github.com/choiceoh/Deneb/commit/50e5498afc444cdb7d14c45974895b4895b4767b))
+
 ## [4.68.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.67.0...deneb-v4.68.0) (2026-07-05)
 
 
