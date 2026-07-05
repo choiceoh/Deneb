@@ -56,7 +56,7 @@ keytool -genkeypair -v -keystore ~/.deneb/keys/deneb-release.p12 -storetype PKCS
   -storepass '<강한 비밀번호>' -keypass '<강한 비밀번호>'   # 반드시 같은 값 (gradle keyPassword=KEYSTORE_PASSWORD)
 cat > ~/.deneb/apk-signing.env <<EOF
 KEYSTORE_FILE=$HOME/.deneb/keys/deneb-release.p12
-KEYSTORE_PASSWORD=<강한 비밀번호>
+KEYSTORE_PASSWORD='<강한 비밀번호>'
 KEY_ALIAS=deneb
 EOF
 chmod 600 ~/.deneb/apk-signing.env
@@ -67,6 +67,10 @@ keytool -exportcert -keystore ~/.deneb/keys/deneb-release.p12 -alias deneb \
 
 - gradle 이 `keyPassword = KEYSTORE_PASSWORD` 로 스토어/키에 같은 비번을 쓰므로
   PKCS12(단일 비번)와 정합 — 별도 keypass 를 만들지 말 것.
+- ★ **env 파일은 shell 로 source 된다** (`publish-apk.sh`) — 비밀번호 값은 위처럼
+  **작은따옴표로 감싼다** (`$`·공백·백틱·`#` 등 메타문자가 깨지는 것 방지). 대신
+  비밀번호 자체에 작은따옴표(`'`)는 넣지 말 것. heredoc 도 `$` 를 확장하므로
+  비밀번호에 `$` 가 있으면 heredoc 대신 에디터로 직접 작성한다.
 - ★ **서명 전환 발행은 인플레이스 업데이트 불가**: 기존 debug-서명 설치 위에
   설치가 거부된다(서명 불일치). 첫 release-서명 발행의 릴리스 노트에 "기존 앱
   삭제 후 재설치 필요"를 명시하고, 폰에서 1회 수동 재설치한다. 이후 발행부터는
