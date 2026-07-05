@@ -201,3 +201,12 @@
 -keepattributes Signature,InnerClasses,EnclosingMethod
 -dontwarn com.google.gson.**
 -dontwarn sun.misc.Unsafe
+
+# WorkManager (androidx.work, added with the Android Auto voice-reply worker)
+# boots via androidx.startup at process start and instantiates its Room
+# database (WorkDatabase_Impl) reflectively through getDeclaredConstructor().
+# R8 stripped that no-arg constructor in the first WorkManager-bearing release
+# (build 571), killing the app before Application.onCreate:
+#   NoSuchMethodException: androidx.work.impl.WorkDatabase_Impl.<init> []
+# Standard Room keep: preserve no-arg constructors of generated RoomDatabases.
+-keep class * extends androidx.room.RoomDatabase { <init>(); }
