@@ -402,8 +402,9 @@ func (s *Server) registerSessionRPCMethods() {
 		})
 	}
 
-	// Chat, BTW, Exec, Aurora, and cron wiring are registered in
-	// registerLateMethods() after this function returns.
+	// Chat, BTW, miniapp-chat bridge, Exec, Wiki, Genesis, and GmailAnalyze are
+	// registered in registerLateMethods() after this function returns; Aurora
+	// (dreaming) is wired later in registerWorkflowSideEffects().
 }
 
 // resolveFeedWorkModel returns the display name of the model behind proactive
