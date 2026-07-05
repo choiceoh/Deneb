@@ -326,6 +326,14 @@ func (wd *WikiDreamer) applyUpdates(_ context.Context, updates []wikiUpdate) (cr
 				"from", u.Path, "to", newPath)
 			u.Path = newPath
 		}
+		// New project folders must not be named after a mail subject
+		// ("…-요청-(2026-06-25)") — strip the debris at mint time; existing
+		// folders keep their paths.
+		if newPath := wd.store.CleanNewProjectRepPath(u.Path); newPath != u.Path {
+			wd.logger.Info("wiki-dream: cleaned mail-subject project name",
+				"from", u.Path, "to", newPath)
+			u.Path = newPath
+		}
 
 		// Guard: date-titled daily mail digests are neither created nor grown —
 		// the same batch already distributes those facts onto per-project pages,

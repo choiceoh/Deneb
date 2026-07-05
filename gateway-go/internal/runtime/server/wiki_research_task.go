@@ -188,6 +188,7 @@ type wikiResearchCandidate struct {
 	importance float64
 	lastRun    int64 // unix millis this task last refreshed it; 0 = never
 	skeleton   bool  // layout-migration mint (wiki.RepSkeletonMarker) awaiting backfill
+	noStatus   bool  // 현재 상태 section empty — the 2026-07 audit's top gap (57%)
 }
 
 // selectTarget picks the project page most overdue for a refresh: never-refreshed
@@ -226,6 +227,7 @@ func (t *wikiResearchTask) selectTarget(state *wikiResearchState) *wikiResearchC
 			importance: page.Meta.Importance,
 			lastRun:    state.Researched[p],
 			skeleton:   strings.Contains(page.Body, wiki.RepSkeletonMarker),
+			noStatus:   strings.TrimSpace(page.Section("현재 상태")) == "",
 		})
 	}
 	if len(cands) == 0 {
@@ -235,6 +237,13 @@ func (t *wikiResearchTask) selectTarget(state *wikiResearchState) *wikiResearchC
 	sort.Slice(cands, func(i, j int) bool {
 		if cands[i].skeleton != cands[j].skeleton {
 			return cands[i].skeleton // empty migration mints first — they carry no facts yet
+		}
+		if cands[i].noStatus != cands[j].noStatus {
+			// Pages with no 현재 상태 next: the anchor injects the rep page on
+			// every project mention, and an empty status section injects
+			// nothing — filling these first is the fastest quality win
+			// (2026-07-05 audit: 57% of live projects had none).
+			return cands[i].noStatus
 		}
 		if cands[i].lastRun != cands[j].lastRun {
 			return cands[i].lastRun < cands[j].lastRun // never/least-recently refreshed first

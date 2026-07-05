@@ -21,6 +21,7 @@ package wiki
 
 import (
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -202,6 +203,71 @@ func NormalizeProjectPagePath(relPath string) string {
 		// from a title — fold everything after the project into one filename.
 		return projectCategoryPrefix + "/" + name + "/" + strings.Join(seg[1:], "-")
 	}
+}
+
+// mailSuffixTokens are trailing name segments that mark a MAIL SUBJECT, not a
+// project identity ("…-가배치-요청-(2026-06-25)"). Stripped at mint time only.
+var mailSuffixTokens = map[string]bool{
+	"요청": true, "송부": true, "의견": true, "문의": true, "회신": true,
+	"안내": true, "알림": true, "공지": true, "전달": true,
+}
+
+// trailingDateRe matches a trailing "(YYYY-MM-DD)" stamp (with or without
+// parens, with any joining dashes) — the date a mail arrived, not part of the
+// project name. Matched on the WHOLE tail because the date's own hyphens would
+// shred under segment splitting.
+var trailingDateRe = regexp.MustCompile(`[-–—\s]*\(?\d{4}-\d{2}-\d{2}\)?\.?$`)
+
+// CleanProjectFolderName strips mail-subject debris from a project name:
+// trailing date stamps, request-suffix tokens, and dangling dashes. The 2026-07
+// audit found 5 of 56 live folders named after a mail subject
+// ("…-법무검토-의견-(2026-06-30)"). Mint-time only — existing folders are never
+// renamed by this (path stability); see CleanNewProjectRepPath.
+func CleanProjectFolderName(name string) string {
+	out := strings.TrimSpace(name)
+	for {
+		prev := out
+		out = strings.TrimRight(trailingDateRe.ReplaceAllString(out, ""), "-–— ")
+		segs := strings.Split(out, "-")
+		for len(segs) > 1 {
+			last := strings.TrimSpace(segs[len(segs)-1])
+			if last == "" || last == "—" || last == "–" || mailSuffixTokens[last] {
+				segs = segs[:len(segs)-1]
+				continue
+			}
+			break
+		}
+		out = strings.Join(segs, "-")
+		if out == prev {
+			break
+		}
+	}
+	if strings.TrimSpace(out) == "" {
+		return name
+	}
+	return out
+}
+
+// CleanNewProjectRepPath applies CleanProjectFolderName when path would mint a
+// NEW project rep page: the existing folder keeps its path (stability), and if
+// the CLEANED folder already exists the write routes into it instead of
+// minting a subject-named twin.
+func (s *Store) CleanNewProjectRepPath(path string) string {
+	if !IsProjectRepPage(path) {
+		return path
+	}
+	if _, err := s.ReadPage(path); err == nil {
+		return path // already exists — never rename in-place
+	}
+	name, ok := ProjectNameOf(path)
+	if !ok {
+		return path
+	}
+	clean := CleanProjectFolderName(name)
+	if clean == name {
+		return path
+	}
+	return RepPagePath(clean)
 }
 
 // IsMailAnalysisPath reports whether relPath sits in any mail-analysis bucket

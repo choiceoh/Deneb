@@ -263,6 +263,12 @@ func wikiWrite(ctx context.Context, store *wiki.Store, contactsStore *contacts.S
 	if np := wiki.NormalizeProjectPagePath(path); np != path {
 		path = np
 	}
+	// Mint-time name hygiene: a NEW project folder must not carry mail-subject
+	// debris (trailing dates, 요청/송부 suffixes); existing folders keep their
+	// paths, and a cleaned twin routes into the existing clean folder.
+	if np := store.CleanNewProjectRepPath(path); np != path {
+		path = np
+	}
 
 	// Pre-write duplicate guard: creating a page whose subject an existing page
 	// already covers is how the wiki splintered (2026-07 cleanup). When the target
