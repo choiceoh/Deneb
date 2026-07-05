@@ -134,6 +134,37 @@ func shouldAcceptRestart(current string, logger *slog.Logger) bool {
 	return true
 }
 
+// runningImageInfo stats the running executable image. /proc/self/exe first:
+// on Linux it stays valid even after the on-disk path was renamed or unlinked
+// by a deploy (the exact scenario the guard exists for). Where /proc does not
+// exist (macOS dev/test), fall back to os.Executable — correct as long as the
+// path was not replaced under us, which cannot happen in that environment.
+// Deliberately NOT the executablePath test seam: tests point that at a fake
+// candidate, and the self-check must keep identifying the real test binary.
+func runningImageInfo() (os.FileInfo, error) {
+	if info, err := os.Stat("/proc/self/exe"); err == nil {
+		return info, nil
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		return nil, err
+	}
+	return os.Stat(strings.TrimSuffix(exe, " (deleted)"))
+}
+
+// openRunningImage opens the running executable image for reading, with the
+// same /proc-first, os.Executable-fallback rationale as runningImageInfo.
+func openRunningImage() (*os.File, error) {
+	if f, err := os.Open("/proc/self/exe"); err == nil {
+		return f, nil
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		return nil, err
+	}
+	return os.Open(strings.TrimSuffix(exe, " (deleted)"))
+}
+
 // quarantineCandidate moves a refused candidate out of the exec path and
 // restores the running binary in its place. Without this, the refused stale
 // file stays at the path systemd relaunches — any later crash, manual restart,
@@ -147,7 +178,7 @@ func quarantineCandidate(exe string, logger *slog.Logger) {
 	if err != nil {
 		return
 	}
-	if selfInfo, serr := os.Stat("/proc/self/exe"); serr == nil && os.SameFile(candInfo, selfInfo) {
+	if selfInfo, serr := runningImageInfo(); serr == nil && os.SameFile(candInfo, selfInfo) {
 		return // the path still holds the running binary — nothing to quarantine
 	}
 	quarantined := exe + ".refused-" + strconv.FormatInt(time.Now().Unix(), 10)
@@ -155,7 +186,7 @@ func quarantineCandidate(exe string, logger *slog.Logger) {
 		logger.Error("downgrade guard: failed to quarantine refused candidate", "error", err)
 		return
 	}
-	self, err := os.Open("/proc/self/exe")
+	self, err := openRunningImage()
 	if err != nil {
 		logger.Error("downgrade guard: quarantined candidate but cannot read own image for restore",
 			"quarantined", quarantined, "error", err)
