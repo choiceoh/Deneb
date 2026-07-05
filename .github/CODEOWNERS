@@ -12,10 +12,12 @@
 # the auth rule). If you add broader overlapping rules below this block,
 # include @deneb/secops on those entries too.
 # (The former /gateway-go/internal/infra/auth/ package was split into
-# clientauth/ + secret/ + config/; the security-sensitive surfaces are the
-# first two.)
+# clientauth/ + secret/ + config/; all three keep auth-sensitive code —
+# config/ resolves gateway tokens/passwords and enforces the
+# no-auth-no-nonloopback-bind rule.)
 /.github/dependabot.yml @deneb/secops
 /.github/workflows/codeql.yml @deneb/secops
 /gateway-go/internal/infra/clientauth/ @deneb/secops
 /gateway-go/internal/infra/secret/ @deneb/secops
+/gateway-go/internal/infra/config/ @deneb/secops
 /docs/reference/secretref-user-supplied-credentials-matrix.json @deneb/secops

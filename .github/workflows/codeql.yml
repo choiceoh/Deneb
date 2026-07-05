@@ -1,11 +1,19 @@
 name: CodeQL
 
+# Scans the live no-build surfaces: workflow files (actions), the Go gateway,
+# and Andromeda's TypeScript — all analyzable with build-mode: none, so no
+# toolchain setup is needed. Kotlin (client-android) and the Tauri Rust shell
+# need a real build (Android SDK / system GUI libs) that GitHub-hosted runners
+# don't have here; revisit if that changes. Weekly schedule + manual dispatch —
+# per-PR scanning is intentionally off to keep PR CI lean (single-user repo).
 on:
   workflow_dispatch:
+  schedule:
+    - cron: "17 3 * * 1" # weekly, Monday 03:17 UTC
 
 concurrency:
-  group: codeql-${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: codeql-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
@@ -17,8 +25,12 @@ permissions:
 
 jobs:
   analyze:
-    name: Analyze (actions)
+    name: Analyze (${{ matrix.language }})
     runs-on: ubuntu-24.04-arm
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [actions, go, javascript-typescript]
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -28,13 +40,11 @@ jobs:
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4.36.2
         with:
-          languages: actions
+          languages: ${{ matrix.language }}
+          build-mode: none
           queries: security-and-quality
-
-      - name: Autobuild
-        uses: github/codeql-action/autobuild@v4.36.2
 
       - name: Analyze
         uses: github/codeql-action/analyze@v4.36.2
         with:
-          category: "/language:actions"
+          category: "/language:${{ matrix.language }}"
