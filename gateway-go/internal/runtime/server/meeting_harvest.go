@@ -192,6 +192,12 @@ func decideHarvests(
 		if alreadyAsked != nil && alreadyAsked(harvestKey(ev)) {
 			continue
 		}
+		if !isMeetingShaped(ev) {
+			// A project-linked "발주"/"서류 제출" task block is NOT a meeting —
+			// asking "어떻게 됐어요, 뭐 결정됐어요" about a solo task reads as
+			// nagging (operator feedback 2026-07-05: 사람을 실제로 만나야 미팅).
+			continue
+		}
 		target := matchTarget(strings.TrimSpace(ev.Summary + " " + ev.Description))
 		if target == "" {
 			continue // not work-linked — personal events are never harvested
@@ -209,6 +215,38 @@ func decideHarvests(
 		out = out[:budget]
 	}
 	return out
+}
+
+// meetingWords are Korean calendar-title tokens that signal an actual human
+// encounter. Conservative allowlist — generic task verbs (발주, 제출, 송금,
+// 마감…) are deliberately absent so task blocks never trigger.
+var meetingWords = []string{
+	"미팅", "회의", "면담", "방문", "상담", "협의", "만남", "통화", "콜",
+	"점심", "저녁", "식사", "킥오프", "발표", "인터뷰", "PT",
+}
+
+// isMeetingShaped reports whether the event looks like the operator actually
+// met (or called) someone: structural evidence first — external attendees, an
+// attached conference link, a physical location — then a meeting-word in the
+// title/description. Hand-added local events usually carry no attendee
+// metadata, so the word list is what keeps those alive.
+func isMeetingShaped(ev calendar.Event) bool {
+	if len(externalAttendees(ev.Attendees, 1)) > 0 {
+		return true
+	}
+	if ev.Conference != nil {
+		return true
+	}
+	if strings.TrimSpace(ev.Location) != "" {
+		return true
+	}
+	text := ev.Summary + " " + ev.Description
+	for _, w := range meetingWords {
+		if strings.Contains(text, w) {
+			return true
+		}
+	}
+	return false
 }
 
 // harvestKey identifies one occurrence: same event ID rescheduled to a new end

@@ -39,16 +39,35 @@ func TestDecideHarvests(t *testing.T) {
 	evCancelled := mk("e", "영산고 취소건", 30*time.Minute)
 	evCancelled.Status = "cancelled"
 
+	// Task blocks are not meetings: project-linked but no attendees, no
+	// location, no meeting word → never asked about (operator feedback:
+	// 사람을 실제로 만나야 미팅이지, "발주"는 할 일이다).
+	evTask := mk("t", "영산고 발주", 30*time.Minute)
+	// Structural meeting evidence (external attendee) qualifies even without
+	// a meeting word in the title.
+	evAttendee := mk("i", "영산고 발주 건", 20*time.Minute)
+	evAttendee.Attendees = []calendar.Attendee{{Email: "kim@partner.co.kr", DisplayName: "김부장"}}
+
 	asked := func(key string) bool { return key == harvestKey(evAsked) }
-	events := []calendar.Event{evA, evFresh, evOld, evAllDay, evCancelled, evPersonal, evAsked, evOlder}
+	events := []calendar.Event{evA, evFresh, evOld, evAllDay, evCancelled, evPersonal, evAsked, evOlder, evTask, evAttendee}
 
 	got := decideHarvests(now, events, asked, 0, harvestTestMatcher, harvestKST)
 	if len(got) != 2 {
-		t.Fatalf("candidates = %+v, want 2 (a, h)", got)
+		t.Fatalf("candidates = %+v, want 2 (h, a — cap 2; i is 3rd-oldest)", got)
 	}
-	// Oldest end first: h (90min ago) before a (30min ago).
+	// Oldest end first: h (90min ago) before a (30min ago); the task block is
+	// excluded as a non-meeting even though it is project-linked.
 	if got[0].Event.ID != "h" || got[1].Event.ID != "a" {
 		t.Errorf("order = %s,%s want h,a", got[0].Event.ID, got[1].Event.ID)
+	}
+	// With a bigger budget the attendee-shaped event joins; the task never does.
+	all := decideHarvests(now, events, asked, -1, harvestTestMatcher, harvestKST)
+	ids := map[string]bool{}
+	for _, c := range all {
+		ids[c.Event.ID] = true
+	}
+	if !ids["i"] || ids["t"] {
+		t.Errorf("attendee event must qualify, task block must not: %v", ids)
 	}
 	if got[0].Target != "영산고" {
 		t.Errorf("target = %q", got[0].Target)
