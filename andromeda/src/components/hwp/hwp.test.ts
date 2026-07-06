@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { Cfb } from "./cfb";
-import { type HwpBlock, parseHwp } from "./hwp";
+import { hasNativeInflate, type HwpBlock, parseHwp } from "./hwp";
 import {
   buildCfb,
   buildCfbDifatChain,
@@ -24,6 +24,30 @@ function doc(...sectionParts: Uint8Array[]) {
     { name: "FileHeader", data: buildFileHeader({ compressed: false, version: [0, 0, 1, 5] }) },
     { name: "Section0", data: concatBytes(...sectionParts) },
   ]);
+}
+
+// deflateRawViaPlatform compresses with the same platform primitive the parser
+// decompresses with, so a round-trip exercises the real inflate path (not a stub).
+async function deflateRawViaPlatform(data: Uint8Array): Promise<Uint8Array> {
+  const cs = new CompressionStream("deflate-raw");
+  const w = cs.writable.getWriter();
+  void w.write(new Uint8Array(data));
+  void w.close();
+  const chunks: Uint8Array[] = [];
+  const r = cs.readable.getReader();
+  for (;;) {
+    const { value, done } = await r.read();
+    if (done) break;
+    if (value) chunks.push(value);
+  }
+  const total = chunks.reduce((a, c) => a + c.length, 0);
+  const out = new Uint8Array(total);
+  let off = 0;
+  for (const c of chunks) {
+    out.set(c, off);
+    off += c.length;
+  }
+  return out;
 }
 
 describe("Cfb", () => {
@@ -238,4 +262,25 @@ describe("parseHwp", () => {
       vi.unstubAllGlobals();
     }
   });
+
+  // Real hancom files store each section as raw-deflate and then zero-pad the tail
+  // to the CFB sector boundary. The strict DecompressionStream reports that padding
+  // as "trailing junk" — but only AFTER emitting the full valid output (zlib ignores
+  // it). Regression for the bug where the parser discarded that output and fell back
+  // to the raw (still-compressed) bytes, so every real .hwp previewed as empty/뭉개진
+  // 글자. Needs the platform Compression/DecompressionStream (skipped where absent).
+  it.skipIf(!hasNativeInflate() || typeof CompressionStream !== "function")(
+    "decodes a compressed section zero-padded after the deflate stream (real HWP layout)",
+    async () => {
+      const body = "한국형발사체 시험발사체 발사 예정입니다.";
+      const compressed = await deflateRawViaPlatform(buildParagraph(body));
+      const padded = concatBytes(compressed, new Uint8Array(48)); // CFB tail padding
+      const buf = buildCfb([
+        { name: "FileHeader", data: buildFileHeader({ compressed: true, version: [0, 0, 1, 5] }) },
+        { name: "Section0", data: padded },
+      ]);
+      const d = await parseHwp(buf);
+      expect(d.paragraphs).toEqual([body]);
+    },
+  );
 });

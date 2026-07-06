@@ -62,17 +62,36 @@ async function inflateRaw(data: Uint8Array): Promise<Uint8Array> {
   writer.close().catch(() => {});
   const chunks: Uint8Array[] = [];
   let total = 0;
+  let capped = false;
   const reader = stream.readable.getReader();
-  for (;;) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    if (!value) continue;
-    total += value.length;
-    if (total > MAX_INFLATED_BYTES) {
-      await reader.cancel().catch(() => {});
-      throw new Error("압축 해제 결과가 미리보기 한도를 넘습니다. 원본을 내려받아 확인하세요.");
+  try {
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+      total += value.length;
+      if (total > MAX_INFLATED_BYTES) {
+        capped = true;
+        await reader.cancel().catch(() => {});
+        break;
+      }
+      chunks.push(value);
     }
-    chunks.push(value);
+  } catch {
+    // Real HWP sections zero-pad the tail (streams live in 64-byte mini-sectors /
+    // 512-byte FAT sectors), so the deflate data is followed by junk. The strict
+    // DecompressionStream rejects that as "trailing junk" — but only AFTER it has
+    // already emitted the complete valid output, which zlib silently accepts. Keep
+    // the bytes we decoded in that case. A failure with NO output (genuinely
+    // corrupt data, or a stream flagged compressed but actually stored plaintext)
+    // falls through to the total===0 guard below and re-throws, so the caller
+    // keeps the raw bytes (its per-section fallback).
+  }
+  if (capped) {
+    throw new Error("압축 해제 결과가 미리보기 한도를 넘습니다. 원본을 내려받아 확인하세요.");
+  }
+  if (total === 0) {
+    throw new Error("deflate produced no output");
   }
   const out = new Uint8Array(total);
   let off = 0;
