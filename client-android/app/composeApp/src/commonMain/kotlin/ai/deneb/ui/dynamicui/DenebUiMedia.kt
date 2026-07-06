@@ -3,6 +3,9 @@
 package ai.deneb.ui.dynamicui
 
 import ai.deneb.ui.handCursor
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
@@ -141,13 +144,17 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathMeasure
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -200,6 +207,15 @@ internal fun RenderChart(node: ChartNode) {
                 modifier = Modifier.padding(bottom = 8.dp),
             )
         }
+        // Entrance: the chart draws itself in (line trims along its length,
+        // bars grow). Static contexts (preview harness) pin progress at 1.
+        val motion = LocalDenebUiMotion.current
+        val drawAnim = remember { Animatable(if (motion) 0f else 1f) }
+        LaunchedEffect(motion) {
+            if (motion) drawAnim.animateTo(1f, animationSpec = tween(durationMillis = 700, easing = FastOutSlowInEasing))
+        }
+        val drawProgress = drawAnim.value
+
         // Labels are drawn inside the canvas, so surface the series to
         // accessibility explicitly (review catch on #3228).
         val chartSummary = values.mapIndexed { i, v ->
@@ -243,14 +259,53 @@ internal fun RenderChart(node: ChartNode) {
                 val hi = maxValue + span * 0.05f
                 fun yAt(v: Float) = plotBottom - ((v - lo) / (hi - lo)) * plotH
                 if (values.size >= 2) {
+                    // Smooth curve through the points (midpoint control
+                    // handles — stays inside the data envelope), with a soft
+                    // area wash underneath so the trend reads as a shape,
+                    // and a draw-in trim on entrance.
                     val path = Path()
-                    values.forEachIndexed { i, v ->
-                        if (i == 0) path.moveTo(xAt(i), yAt(v)) else path.lineTo(xAt(i), yAt(v))
+                    path.moveTo(xAt(0), yAt(values[0]))
+                    for (i in 1 until values.size) {
+                        val x0 = xAt(i - 1)
+                        val y0 = yAt(values[i - 1])
+                        val x1 = xAt(i)
+                        val y1 = yAt(values[i])
+                        val mx = (x0 + x1) / 2f
+                        path.cubicTo(mx, y0, mx, y1, x1, y1)
                     }
-                    drawPath(path, color = chartColor, style = Stroke(width = 2.5.dp.toPx()))
+                    val area = Path().apply {
+                        addPath(path)
+                        lineTo(xAt(values.size - 1), plotBottom)
+                        lineTo(xAt(0), plotBottom)
+                        close()
+                    }
+                    drawPath(
+                        area,
+                        brush = Brush.verticalGradient(
+                            colors = listOf(chartColor.copy(alpha = 0.16f), chartColor.copy(alpha = 0f)),
+                            startY = plotTop,
+                            endY = plotBottom,
+                        ),
+                    )
+                    if (drawProgress < 1f) {
+                        val measure = PathMeasure()
+                        measure.setPath(path, false)
+                        val partial = Path()
+                        measure.getSegment(0f, measure.length * drawProgress, partial, true)
+                        drawPath(partial, color = chartColor, style = Stroke(width = 2.5.dp.toPx()))
+                    } else {
+                        drawPath(path, color = chartColor, style = Stroke(width = 2.5.dp.toPx()))
+                    }
                 }
                 values.forEachIndexed { i, v ->
-                    drawCircle(chartColor, radius = 3.5.dp.toPx(), center = Offset(xAt(i), yAt(v)))
+                    val last = i == values.lastIndex
+                    if (last) {
+                        // The newest point is the reader's answer — halo it.
+                        drawCircle(chartColor.copy(alpha = 0.22f), radius = 8.dp.toPx(), center = Offset(xAt(i), yAt(v)))
+                        drawCircle(chartColor, radius = 4.5.dp.toPx(), center = Offset(xAt(i), yAt(v)))
+                    } else {
+                        drawCircle(chartColor, radius = 3.dp.toPx(), center = Offset(xAt(i), yAt(v)))
+                    }
                     drawCenteredText(fmt(v), xAt(i), yAt(v) - valueBand, valueStyle, valueColor)
                     node.labels.getOrNull(i)?.let { lbl ->
                         drawCenteredText(lbl, xAt(i), plotBottom + 4.dp.toPx(), axisStyle, axisColor)
@@ -265,7 +320,7 @@ internal fun RenderChart(node: ChartNode) {
                     // Zero is a real claim — draw no bar (the value label
                     // still says 0); only positive values get the legibility
                     // minimum (review catch on #3228).
-                    val barHeight = if (v > 0f) ((v / maxValue) * plotH).coerceAtLeast(2.dp.toPx()) else 0f
+                    val barHeight = if (v > 0f) (((v / maxValue) * plotH) * drawProgress).coerceAtLeast(2.dp.toPx()) else 0f
                     val x = gap + index * (barWidth + gap)
                     val centerX = x + barWidth / 2f
                     drawRoundRect(

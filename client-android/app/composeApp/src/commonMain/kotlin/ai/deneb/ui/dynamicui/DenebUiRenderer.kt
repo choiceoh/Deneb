@@ -4,6 +4,12 @@ package ai.deneb.ui.dynamicui
 
 import ai.deneb.ui.denebAdaptiveCardBorder
 import ai.deneb.ui.denebAdaptiveCardColors
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -36,6 +42,14 @@ import kotlinx.collections.immutable.ImmutableList
 import org.jetbrains.compose.resources.stringResource
 
 val LocalPreviewImages = staticCompositionLocalOf<Map<String, ImageBitmap>> { emptyMap() }
+
+/**
+ * Entrance-motion switch. True in the live app (cards fade+rise in, charts
+ * draw themselves, stats count up); false in static contexts — the render
+ * preview harness and tests capture a single frame, so animated initial
+ * states would freeze as blank charts and zeroed stats.
+ */
+val LocalDenebUiMotion = staticCompositionLocalOf { true }
 
 /**
  * A frozen snapshot of a user's deneb-ui submission: the values they submitted, plus the
@@ -217,8 +231,29 @@ internal fun RenderChildren(
     onCallback: (String, Map<String, String>) -> Unit,
     depth: Int,
 ) {
-    for (child in children) {
-        RenderNode(child, isInteractive, formState, toggleState, onCallback, depth + 1)
+    // Entrance: top-level nodes rise in one after another (60ms stagger) —
+    // the letter/briefing lands like a dealt hand instead of popping whole.
+    // Only at the root (depth 0): nested containers animating too would
+    // cascade into visual noise. Static contexts pin motion off; streamed
+    // re-parses keep already-visible nodes stable because visibility state
+    // is remembered per index.
+    val motion = LocalDenebUiMotion.current && depth == 0
+    children.forEachIndexed { index, child ->
+        if (motion) {
+            val visible = remember(index) { MutableTransitionState(false).apply { targetState = true } }
+            AnimatedVisibility(
+                visibleState = visible,
+                enter = fadeIn(animationSpec = tween(280, delayMillis = index * 60)) +
+                    slideInVertically(
+                        animationSpec = tween(320, delayMillis = index * 60, easing = FastOutSlowInEasing),
+                        initialOffsetY = { it / 6 },
+                    ),
+            ) {
+                RenderNode(child, isInteractive, formState, toggleState, onCallback, depth + 1)
+            }
+        } else {
+            RenderNode(child, isInteractive, formState, toggleState, onCallback, depth + 1)
+        }
     }
 }
 
