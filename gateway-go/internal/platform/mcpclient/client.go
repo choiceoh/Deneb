@@ -16,6 +16,16 @@
 // tools, ingest tasks, …): calls are safe to run concurrently, and the
 // initialize handshake runs once in the background with its own timeout —
 // waiters block cancelably on their own ctx, never on a mutex.
+//
+// Operational conveniences beyond the bare protocol:
+//   - the child runs in its own PROCESS GROUP and teardown is tiered
+//     (stdin close → SIGTERM group → grace → SIGKILL group), so npx-style
+//     wrappers can flush state and their grandchildren never outlive them;
+//   - a ring of recent child stderr is kept and folded into initialization
+//     errors — a failed first-run OAuth surfaces its auth URL in the error
+//     itself, not just somewhere in the log;
+//   - Stats() exposes a snapshot (spawns, call counters, last error, recent
+//     stderr) for health/observe surfaces.
 package mcpclient
 
 import (
@@ -26,12 +36,12 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"os"
 	"os/exec"
 	"strings"
 	"sync"
+	"sync/atomic"
+	"syscall"
 	"time"
-	"unicode/utf8"
 )
 
 // protocolVersion is the newest MCP spec revision this client speaks.
@@ -54,43 +64,22 @@ const initTimeout = 3 * time.Minute
 // recovery through the normal respawn path.
 const writeTimeout = 30 * time.Second
 
+// stopGrace is how long a stopped child gets to exit after SIGTERM before
+// its process group is SIGKILLed. Polite first: npx wrappers may need to
+// persist token caches and reap their own children.
+const stopGrace = 3 * time.Second
+
 // maxLineBytes caps a single JSON-RPC message from the server (tool results
 // can embed whole meeting transcripts; 16 MiB is generous without being
 // unbounded).
 const maxLineBytes = 16 << 20
 
-// maxErrorTextBytes bounds the server-supplied text embedded in a Go error
-// for an isError tool result. Error strings bypass the executor's normal
-// output truncation/spillover, so an unbounded (or adversarial) remote error
-// payload must be capped here.
-const maxErrorTextBytes = 2000
-
-// childEnvAllowlist names the variables a spawned MCP server inherits:
-// process basics, node/npm caches under HOME, TLS/proxy egress, and locale.
-// Everything else — provider keys, mail credentials — is withheld.
-var childEnvAllowlist = []string{
-	"PATH", "HOME", "USER", "LOGNAME", "SHELL", "TMPDIR", "TERM", "LANG",
-	"HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "no_proxy",
-	"SSL_CERT_FILE", "SSL_CERT_DIR", "NODE_EXTRA_CA_CERTS",
-	"XDG_CACHE_HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_RUNTIME_DIR",
-}
-
-// childEnv builds the allowlisted environment for the child process
-// (LC_* locale variables pass through as a prefix family).
-func childEnv() []string {
-	var env []string
-	for _, key := range childEnvAllowlist {
-		if v, ok := os.LookupEnv(key); ok {
-			env = append(env, key+"="+v)
-		}
-	}
-	for _, kv := range os.Environ() {
-		if strings.HasPrefix(kv, "LC_") {
-			env = append(env, kv)
-		}
-	}
-	return env
-}
+// stderrRingSize / stderrLineCap bound the retained child stderr (diagnosis
+// ring — see Stats and init-error enrichment).
+const (
+	stderrRingSize = 20
+	stderrLineCap  = 400
+)
 
 // ToolInfo is one entry from tools/list.
 type ToolInfo struct {
@@ -106,6 +95,7 @@ type ToolInfo struct {
 //
 //	Client.mu (process/init state + stdin write serialization)
 //	  → Client.pendingMu (in-flight request table; reader goroutine takes it alone)
+//	  → Client.stderrMu (stderr ring; also taken alone by the stderr goroutine)
 //
 // No lock is ever held while waiting for the child: initialization waiters
 // select on initDone/ctx, request waiters select on their pending channel.
@@ -122,7 +112,8 @@ type Client struct {
 	ready      bool // process running AND initialize handshake completed
 	lastStart  time.Time
 	closed     bool
-	generation int // bumped per spawn; a stale process-exit event no-ops
+	generation int // bumped per spawn AND per stop; stale goroutines no-op
+	spawns     int // spawn count (monotonic, for Stats)
 	// initDone is closed when the in-flight background init attempt settles
 	// (success or failure); nil when no attempt is in flight or pending
 	// retry. initErr carries the last attempt's failure.
@@ -132,6 +123,14 @@ type Client struct {
 	serverName        string
 	serverVersion     string
 	listChangedLogged bool // one restart-hint log per spawn, spam-proof
+	lastError         string
+	lastErrorAt       time.Time
+
+	calls      atomic.Uint64
+	callErrors atomic.Uint64
+
+	stderrMu   sync.Mutex
+	stderrTail []string // ring of recent child stderr lines, newest last
 
 	pendingMu sync.Mutex
 	pending   map[int64]chan rpcResponse
@@ -226,9 +225,8 @@ func (c *Client) ListTools(ctx context.Context) ([]ToolInfo, error) {
 	}
 }
 
-// CallTool invokes a named tool and renders the result's content blocks as
-// text. A result with isError=true is returned as a Go error so the agent
-// executor surfaces it to the model as a tool failure.
+// CallTool invokes a named tool and renders the result for agent
+// consumption (see renderToolResult for the fidelity rules).
 func (c *Client) CallTool(ctx context.Context, name string, args json.RawMessage) (string, error) {
 	if err := c.ensureReady(ctx); err != nil {
 		return "", err
@@ -240,44 +238,7 @@ func (c *Client) CallTool(ctx context.Context, name string, args json.RawMessage
 	if err != nil {
 		return "", err
 	}
-	var res struct {
-		Content []struct {
-			Type string `json:"type"`
-			Text string `json:"text"`
-		} `json:"content"`
-		IsError bool `json:"isError"`
-	}
-	if err := json.Unmarshal(raw, &res); err != nil {
-		return "", fmt.Errorf("mcpclient: tools/call result: %w", err)
-	}
-	var sb strings.Builder
-	for _, block := range res.Content {
-		if sb.Len() > 0 {
-			sb.WriteString("\n")
-		}
-		if block.Type == "text" {
-			sb.WriteString(block.Text)
-		} else {
-			// Non-text blocks (image/audio/resource) — name them rather than
-			// dropping silently so the model knows something was elided.
-			fmt.Fprintf(&sb, "[%s content omitted]", block.Type)
-		}
-	}
-	if res.IsError {
-		// Bounded: error strings bypass the executor's output truncation/
-		// spillover, so a huge or adversarial remote error payload must not
-		// ride into the next model turn at full length.
-		text := sb.String()
-		if len(text) > maxErrorTextBytes {
-			cut := maxErrorTextBytes
-			for cut > 0 && !utf8.RuneStart(text[cut]) {
-				cut-- // never split a multi-byte rune (Korean error text)
-			}
-			text = text[:cut] + "… [truncated]"
-		}
-		return "", fmt.Errorf("mcp tool %s failed: %s", name, text)
-	}
-	return sb.String(), nil
+	return renderToolResult(name, raw)
 }
 
 // Close terminates the server process and permanently disables the client.
@@ -318,6 +279,7 @@ func (c *Client) ensureReady(ctx context.Context) error {
 		}
 		done := make(chan struct{})
 		c.initDone = done
+		c.initErr = nil
 		go c.initRun(done, c.generation)
 	}
 	done := c.initDone
@@ -354,7 +316,7 @@ func (c *Client) initRun(done chan struct{}, gen int) {
 
 	ctx, cancel := context.WithTimeout(c.lifeCtx, initTimeout)
 	defer cancel()
-	err := c.handshake(ctx)
+	name, version, err := c.handshake(ctx)
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -362,13 +324,22 @@ func (c *Client) initRun(done chan struct{}, gen int) {
 		return // superseded (deliberate stop or newer spawn) — state isn't ours
 	}
 	if err != nil {
+		// Fold recent child stderr into the error: for the dominant failure
+		// mode (first-run OAuth pending) this puts the auth URL in the error
+		// the consumer sees, not just somewhere in the operator log.
+		if snip := c.stderrSnippet(3); snip != "" {
+			err = fmt.Errorf("%w — recent stderr: %s", err, snip)
+		}
 		c.initErr = err
+		c.noteErrorLocked(err)
 		c.stopLocked() // resets initDone so a later attempt can respawn
 		return
 	}
 	if c.cmd != nil {
 		c.ready = true
 		c.initErr = nil
+		c.serverName = name
+		c.serverVersion = version
 	}
 }
 
@@ -392,6 +363,22 @@ func (c *Client) spawnLocked() error {
 	// custom variable get it explicitly via the command line: `env KEY=val
 	// npx …` (argv[0]=env — no code path required).
 	cmd.Env = childEnv()
+	// Own process group: npx-style wrappers spawn the real server as a
+	// grandchild, and signaling only the wrapper would orphan it. All kill
+	// paths below signal the group (-pgid).
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	// lifeCtx cancel (gateway shutdown): polite TERM to the group first so
+	// wrappers can flush token caches, hard KILL if the grace expires.
+	cmd.Cancel = func() error {
+		pid := cmd.Process.Pid
+		if err := syscall.Kill(-pid, syscall.SIGTERM); err != nil {
+			return cmd.Process.Kill()
+		}
+		time.AfterFunc(stopGrace, func() { _ = syscall.Kill(-pid, syscall.SIGKILL) })
+		return nil
+	}
+	cmd.WaitDelay = stopGrace
+
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return fmt.Errorf("mcpclient: stdin pipe: %w", err)
@@ -410,6 +397,7 @@ func (c *Client) spawnLocked() error {
 	c.cmd = cmd
 	c.stdin = stdin
 	c.generation++
+	c.spawns++
 	c.listChangedLogged = false
 	gen := c.generation
 	c.logger.Info("mcp server process started", "cmd", c.argv[0], "pid", cmd.Process.Pid)
@@ -428,8 +416,8 @@ func (c *Client) spawnLocked() error {
 
 	// Stderr goroutine: surfaces the server's own diagnostics — first-run
 	// OAuth instructions from wrappers like Plaud's npx package arrive here,
-	// so the operator must be able to see them in the gateway log. Exits on
-	// stderr EOF alongside the process.
+	// so they must reach both the operator log and the diagnosis ring that
+	// initialization errors quote. Exits on stderr EOF alongside the process.
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
@@ -440,6 +428,7 @@ func (c *Client) spawnLocked() error {
 		sc.Buffer(make([]byte, 64*1024), 256*1024)
 		for sc.Scan() {
 			if line := strings.TrimSpace(sc.Text()); line != "" {
+				c.recordStderr(line)
 				c.logger.Info("mcp server stderr", "cmd", c.argv[0], "line", line)
 			}
 		}
@@ -448,9 +437,11 @@ func (c *Client) spawnLocked() error {
 	return nil
 }
 
-// handshake performs initialize + notifications/initialized and records the
-// server's reported identity.
-func (c *Client) handshake(ctx context.Context) error {
+// handshake performs initialize + notifications/initialized and returns the
+// server's reported identity. State recording is the caller's job (initRun),
+// under its generation check — a stale handshake must not overwrite a newer
+// spawn's ServerInfo.
+func (c *Client) handshake(ctx context.Context) (name, version string, err error) {
 	params := map[string]any{
 		"protocolVersion": protocolVersion,
 		"capabilities":    map[string]any{},
@@ -458,7 +449,7 @@ func (c *Client) handshake(ctx context.Context) error {
 	}
 	raw, err := c.roundTrip(ctx, "initialize", params)
 	if err != nil {
-		return fmt.Errorf("mcpclient: initialize: %w", err)
+		return "", "", fmt.Errorf("mcpclient: initialize: %w", err)
 	}
 	var init struct {
 		ProtocolVersion string `json:"protocolVersion"`
@@ -468,44 +459,66 @@ func (c *Client) handshake(ctx context.Context) error {
 		} `json:"serverInfo"`
 	}
 	if err := json.Unmarshal(raw, &init); err != nil {
-		return fmt.Errorf("mcpclient: initialize result: %w", err)
+		return "", "", fmt.Errorf("mcpclient: initialize result: %w", err)
 	}
 	if err := c.send(map[string]any{"jsonrpc": "2.0", "method": "notifications/initialized"}); err != nil {
-		return err
+		return "", "", err
 	}
-	c.mu.Lock()
-	c.serverName = init.ServerInfo.Name
-	c.serverVersion = init.ServerInfo.Version
-	c.mu.Unlock()
 	c.logger.Info("mcp server initialized",
 		"server", init.ServerInfo.Name,
 		"serverVersion", init.ServerInfo.Version,
 		"protocolVersion", init.ProtocolVersion)
-	return nil
+	return init.ServerInfo.Name, init.ServerInfo.Version, nil
 }
 
-// stopLocked is the single teardown path: it kills the child, resets the
-// init future (so the next call can respawn instead of waiting on a settled
-// channel), bumps the generation (so the old spawn's reader/init goroutines
-// become stale and cannot double-handle the exit), and fails all in-flight
-// calls. Caller holds c.mu; pendingMu is taken under it (documented order).
+// stopLocked is the single teardown path: it signals the child's process
+// group (TERM now, KILL after stopGrace), resets the init future (so the
+// next call can respawn instead of waiting on a settled channel), bumps the
+// generation (so the old spawn's reader/init goroutines become stale and
+// cannot double-handle the exit), and fails all in-flight calls. Caller
+// holds c.mu; pendingMu is taken under it (documented order).
 func (c *Client) stopLocked() {
 	if c.stdin != nil {
-		_ = c.stdin.Close()
+		_ = c.stdin.Close() // MCP stdio shutdown step 1: give the child EOF first
 		c.stdin = nil
 	}
 	if c.cmd != nil && c.cmd.Process != nil {
-		_ = c.cmd.Process.Kill()
-		// Reap in the background; Wait must not run under c.mu because the
-		// exiting reader goroutine's onProcessExit also takes it.
+		pid := c.cmd.Process.Pid
 		cmd := c.cmd
+		if err := syscall.Kill(-pid, syscall.SIGTERM); err != nil {
+			_ = cmd.Process.Signal(syscall.SIGTERM)
+		}
+		// Reap in the background with KILL escalation; Wait must not run
+		// under c.mu because the exiting reader goroutine's onProcessExit
+		// also takes it.
 		go func() {
 			defer func() { _ = recover() }()
+			t := time.AfterFunc(stopGrace, func() {
+				if err := syscall.Kill(-pid, syscall.SIGKILL); err != nil {
+					_ = cmd.Process.Kill()
+				}
+			})
 			_ = cmd.Wait()
+			t.Stop()
 		}()
 	}
 	c.cmd = nil
 	c.ready = false
+	// A waiter mid-flight on the init future must get a concrete reason,
+	// not the generic fallthrough (initRun's own failure path has already
+	// set a more specific error before calling here). This branch — child
+	// died mid-handshake — is where a pending first-run OAuth lands, so the
+	// stderr ring (carrying the auth URL) is folded in here too; initRun
+	// cannot do it for this path because the stop bumps the generation and
+	// its late completion becomes stale.
+	if c.initDone != nil && c.initErr == nil {
+		err := errors.New("mcpclient: server process stopped during initialization")
+		if snip := c.stderrSnippet(3); snip != "" {
+			err = fmt.Errorf("%w — recent stderr: %s", err, snip)
+		}
+		c.initErr = err
+		c.noteErrorLocked(err)
+	}
 	c.initDone = nil
 	c.generation++
 
@@ -626,6 +639,7 @@ func (c *Client) onNotification(method string) {
 
 // roundTrip sends a request and waits for its response or ctx expiry.
 func (c *Client) roundTrip(ctx context.Context, method string, params any) (json.RawMessage, error) {
+	c.calls.Add(1)
 	c.pendingMu.Lock()
 	c.nextID++
 	id := c.nextID
@@ -642,20 +656,20 @@ func (c *Client) roundTrip(ctx context.Context, method string, params any) (json
 		c.pendingMu.Lock()
 		delete(c.pending, id)
 		c.pendingMu.Unlock()
-		return nil, err
+		return nil, c.noteCallError(err)
 	}
 
 	select {
 	case resp := <-ch:
 		if resp.Err != nil {
-			return nil, fmt.Errorf("mcpclient: %s: %w", method, resp.Err)
+			return nil, c.noteCallError(fmt.Errorf("mcpclient: %s: %w", method, resp.Err))
 		}
 		return resp.Result, nil
 	case <-ctx.Done():
 		c.pendingMu.Lock()
 		delete(c.pending, id)
 		c.pendingMu.Unlock()
-		return nil, fmt.Errorf("mcpclient: %s: %w", method, ctx.Err())
+		return nil, c.noteCallError(fmt.Errorf("mcpclient: %s: %w", method, ctx.Err()))
 	}
 }
 
