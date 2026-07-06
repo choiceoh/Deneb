@@ -10,6 +10,9 @@ import "testing"
 // silently ship a broken card. Keep the HTML here in sync with those sources.
 
 const morningLetterCardHTML = `<column>
+  <text style="headline">7월 7일 화요일</text>
+  <text style="caption">아침 레터 · 데네브</text>
+  <hr/>
   <card>
     <row><icon name="sunny" size="16"/><text style="caption">날씨 · 광주</text></row>
     <row><text style="headline">18°</text><text style="caption">체감 16°</text></row>
@@ -74,11 +77,11 @@ func TestParseHTML_MorningLetterShape(t *testing.T) {
 	if root["type"] != "column" {
 		t.Fatalf("root = %v", root["type"])
 	}
-	cards, _ := root["children"].([]any)
-	if len(cards) != 5 {
-		t.Fatalf("want 5 cards, got %d", len(cards))
+	children, _ := root["children"].([]any)
+	if len(children) != 8 {
+		t.Fatalf("want masthead(3) + 5 cards, got %d", len(children))
 	}
-	sched := cards[2].(map[string]any)
+	sched := children[5].(map[string]any)
 	list := sched["children"].([]any)[1].(map[string]any)
 	if list["type"] != "list" {
 		t.Fatalf("list = %v", list)
@@ -87,11 +90,16 @@ func TestParseHTML_MorningLetterShape(t *testing.T) {
 	if len(items) != 2 || items[0].(map[string]any)["value"] != "09:00 — 팀 스탠드업" {
 		t.Errorf("items = %v", items)
 	}
-	deadline := cards[4].(map[string]any)
+	deadline := children[7].(map[string]any)
 	badgeRow := deadline["children"].([]any)[1].(map[string]any)
 	badge := badgeRow["children"].([]any)[1].(map[string]any)
 	if badge["type"] != "badge" || badge["value"] != "D-2" {
 		t.Errorf("badge = %v", badge)
+	}
+	// The urgency tint contract rides the color attr — assert the parser
+	// preserves it, not just that the template validates (review catch).
+	if badge["color"] != "warning" {
+		t.Errorf("badge color = %v, want warning", badge["color"])
 	}
 }
 

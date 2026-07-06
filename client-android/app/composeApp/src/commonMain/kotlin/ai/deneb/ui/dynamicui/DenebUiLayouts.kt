@@ -48,7 +48,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import kotlinx.collections.immutable.toImmutableList
 
 /**
  * Layout containers of the deneb-ui renderer: column / row / card / list /
@@ -87,7 +90,10 @@ internal fun RenderRow(
     val allStats = node.children.isNotEmpty() && node.children.all { it is StatNode }
     @OptIn(ExperimentalLayoutApi::class)
     FlowRow(
-        horizontalArrangement = if (allStats) Arrangement.SpaceEvenly else Arrangement.spacedBy(8.dp),
+        // Weighted stat cells own the distribution — SpaceEvenly on top
+        // would re-insert edge gaps around the weighted cells (review
+        // catch on #3231).
+        horizontalArrangement = if (allStats) Arrangement.Start else Arrangement.spacedBy(8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
         modifier = Modifier
             .fillMaxWidth()
@@ -127,6 +133,14 @@ internal fun RenderCard(
     onCallback: (String, Map<String, String>) -> Unit,
     depth: Int,
 ) {
+    // The letter/briefing convention puts an icon + caption row first — that
+    // row IS the card's section label, so give it the section-label voice
+    // (tracked SemiBold small caps feel; Korean has no case, letter spacing
+    // and weight carry it) instead of rendering as an ordinary caption line.
+    val header = (node.children.firstOrNull() as? RowNode)?.takeIf { row ->
+        row.children.size == 2 && row.children[0] is IconNode &&
+            (row.children[1] as? TextNode)?.style == TextNodeStyle.CAPTION
+    }
     Card(
         modifier = Modifier.fillMaxWidth().wrapContentHeight(),
         colors = denebAdaptiveCardColors(),
@@ -136,7 +150,32 @@ internal fun RenderCard(
             modifier = Modifier.padding(16.dp).wrapContentHeight(),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            RenderChildren(node.children, isInteractive, formState, toggleState, onCallback, depth)
+            if (header != null) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    val iconNode = header.children[0] as IconNode
+                    resolveIcon(iconNode.name)?.let { glyph ->
+                        Icon(
+                            imageVector = glyph,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size((iconNode.size ?: 16).dp),
+                        )
+                    }
+                    Text(
+                        text = (header.children[1] as TextNode).value,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        letterSpacing = 1.1.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                RenderChildren(node.children.drop(1).toImmutableList(), isInteractive, formState, toggleState, onCallback, depth)
+            } else {
+                RenderChildren(node.children, isInteractive, formState, toggleState, onCallback, depth)
+            }
         }
     }
 }
@@ -150,13 +189,65 @@ internal fun RenderList(
     onCallback: (String, Map<String, String>) -> Unit,
     depth: Int,
 ) {
+    // Schedule shape: when every item is plain text with an HH:MM key, the
+    // list renders as a timeline — right-aligned time column, accent dot,
+    // title — instead of generic bullets. The morning letter's 오늘 일정 and
+    // any agent briefing get this for free.
+    val timeRe = remember { Regex("^\\d{1,2}:\\d{2}\\s*—\\s*(.*)$") }
+    val timeline = node.ordered != true && node.items.isNotEmpty() && node.items.all {
+        it is TextNode && it.style == null && timeRe.matches(it.value.trim())
+    }
+    if (timeline) {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            for (item in node.items) {
+                val value = (item as TextNode).value.trim()
+                val time = value.substringBefore("—").trim()
+                val title = value.substringAfter("—").trim()
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = time,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        textAlign = TextAlign.End,
+                        modifier = Modifier.width(48.dp),
+                    )
+                    Box(
+                        modifier = Modifier
+                            .padding(horizontal = 10.dp)
+                            .size(5.dp)
+                            .clip(RoundedCornerShape(50))
+                            .background(MaterialTheme.colorScheme.primary),
+                    )
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+        }
+        return
+    }
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         for ((index, item) in node.items.withIndex()) {
             Row {
                 val prefix = if (node.ordered == true) "${index + 1}. " else "\u2022 "
                 Text(prefix, style = MaterialTheme.typography.bodyLarge)
                 Column(Modifier.weight(1f)) {
-                    RenderNode(item, isInteractive, formState, toggleState, onCallback, depth + 1)
+                    // Plain text items take the briefing prefix convention
+                    // ("09:00 \u2014 \ud68c\uc758", "\uae40\ubd80\uc7a5 \u2014 \uc81c\ubaa9": SemiBold key before the
+                    // em-dash) \u2014 schedules and digests scan by that key.
+                    if (item is TextNode && item.style == null && item.bold != true && item.color == null) {
+                        Text(
+                            text = denebUiListItemText(item.value),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                    } else {
+                        RenderNode(item, isInteractive, formState, toggleState, onCallback, depth + 1)
+                    }
                 }
             }
         }
