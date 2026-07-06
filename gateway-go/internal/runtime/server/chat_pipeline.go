@@ -290,6 +290,10 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 	// the background so a slow npx cold start never blocks boot.
 	s.initExternalMCPTools(chatCfg.Tools)
 
+	// Background services execute registered tools outside chat turns through
+	// this handle (plaud_recordings.go polls the Plaud MCP tools).
+	s.chatToolRegistry = chatCfg.Tools
+
 	// Knowledge: unified recall/read/record surface over the wiki knowledge
 	// base and the on-box file store. Polaris (session-bound) and graphify
 	// (graph-traversal) stay separate because they have different paradigms.

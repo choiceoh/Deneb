@@ -175,3 +175,29 @@ func TestMaterialSlot(t *testing.T) {
 		t.Error("IsMaterialPath must not match other slots")
 	}
 }
+
+// TestMeetingSlot locks the 회의록 slot: paths, raw-data classification, the
+// reserved global bucket, and overdeep folding under the slot.
+func TestMeetingSlot(t *testing.T) {
+	if got := MeetingPagePath("영산고", "주간회의-abcd1234.md"); got != "프로젝트/영산고/회의록/주간회의-abcd1234.md" {
+		t.Errorf("MeetingPagePath linked = %q", got)
+	}
+	if got := MeetingPagePath("", "주간회의-abcd1234.md"); got != "프로젝트/회의록/주간회의-abcd1234.md" {
+		t.Errorf("MeetingPagePath global = %q", got)
+	}
+	if !IsProjectRawDataPath("프로젝트/영산고/회의록/x.md") || !IsProjectRawDataPath("프로젝트/회의록/x.md") {
+		t.Error("회의록 pages must classify as raw data (excluded from curated dedup)")
+	}
+	if IsProjectRepPage("프로젝트/회의록.md") {
+		t.Error("reserved 회의록 bucket flat file must not read as a project rep page")
+	}
+	if name, ok := ProjectNameOf("프로젝트/회의록/x.md"); ok {
+		t.Errorf("global 회의록 bucket must not resolve to a project, got %q", name)
+	}
+	if name, ok := ProjectNameOf("프로젝트/영산고/회의록/x.md"); !ok || name != "영산고" {
+		t.Errorf("linked 회의록 page must resolve to its project, got %q ok=%v", name, ok)
+	}
+	if got := NormalizeProjectPagePath("프로젝트/영산고/회의록/a/b.md"); got != "프로젝트/영산고/회의록/a-b.md" {
+		t.Errorf("overdeep 회의록 path must fold into the filename, got %q", got)
+	}
+}
