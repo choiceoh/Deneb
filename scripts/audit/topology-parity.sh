@@ -198,6 +198,30 @@ echo "== GPU 보조 사이드카 (sidecar-models.md 호스트 배치표) =="
     && pass "dsv4 엔진 @srv2:8000" \
     || warn "dsv4 엔진 @srv2:8000 무응답 — 로컬 역할·폴백 체인 영향 (sidecar-models.md·model-roles.md)"
 
+echo "== 메일 엣지 (sidecar-models.md 호스트 배치표 — srv4 메일서버) =="
+
+# The mail edge dies quietly: wblock keeps retrying, the operator just sees
+# "메일이 안 들어온다" hours later (2026-07-06 12:10 incident — go-smtp line
+# limit rejected every DATA). Probe the edge AND count recent rejects.
+if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx deneb-mailserver; then
+    pass "deneb-mailserver 컨테이너 running"
+else
+    fail "deneb-mailserver 컨테이너가 없다 — 전달 메일 인입 전면 중단" "sidecar-models.md 호스트 배치표 (srv4=메일서버)"
+fi
+if printf 'QUIT\r\n' | timeout 5 nc 127.0.0.1 25 2>/dev/null | grep -q '^220'; then
+    pass "SMTP 엣지 :25 응답 (maddy)"
+else
+    fail "SMTP :25 무응답 — wblock 전달이 큐에서 썩는 중" "sidecar-models.md 메일 체인"
+fi
+data_err="$(docker logs --since 24h deneb-mailserver 2>&1 | grep -c 'DATA error' || true)"
+arch_err="$(docker logs --since 24h deneb-mailarchive 2>&1 | grep -c 'DATA error' || true)"
+if [ "$((${data_err:-0} + ${arch_err:-0}))" -eq 0 ]; then
+    pass "maddy DATA 거부 없음 (24h — 인입/아카이브 양쪽)"
+else
+    fail "maddy DATA 거부 인입=${data_err:-0} 아카이브=${arch_err:-0} (24h) — 메일이 엣지에서 죽고 있다 (2026-07-06 사고: smtp_max_line_length, 두 인스턴스 모두)" \
+        "~/mailserver/maddy.conf + ~/mailserver/archive/maddy.conf (각 smtp/lmtp 블록) + sidecar-models.md"
+fi
+
 echo "== 외부 표면 =="
 
 # Public tunnel (remote app access). WARN, not FAIL: an external-network blip
