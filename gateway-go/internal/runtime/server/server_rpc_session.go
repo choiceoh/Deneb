@@ -27,6 +27,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/shortid"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/acp"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/prompt"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/streaming"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/compaction"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/compactuner"
@@ -706,6 +707,15 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 						})
 					},
 					s.projectCandidatesFn(),
+					// 업무 topic knowledge (company/org/people, ~2KB) — the
+					// context slice that lifts term correction; fail-open.
+					func() string {
+						dir := resolveTopicsDir()
+						if dir == "" {
+							return ""
+						}
+						return prompt.LoadTopicKnowledge("", dir, "업무", "").Content
+					},
 					s.wikiStore.WritePage,
 					s.wikiStore.AppendProjectStatusLine,
 					func(text string) (bool, error) {

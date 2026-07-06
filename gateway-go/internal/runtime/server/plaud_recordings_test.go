@@ -85,6 +85,13 @@ func TestParsePlaudTranscript(t *testing.T) {
 	if got := parsePlaudTranscript("완전 다른 텍스트 형식"); got != "완전 다른 텍스트 형식" {
 		t.Errorf("fallback = %q", got)
 	}
+
+	// A wrapped JSON array (extra prefix/suffix around the payload — the
+	// production first run hit this) must still parse via the span retry.
+	wrapped := "도구 결과:\n" + string(outer) + "\n(끝)"
+	if got := parsePlaudTranscript(wrapped); got != want {
+		t.Errorf("wrapped payload = %q, want %q", got, want)
+	}
 }
 
 func TestSplitRelatedProjects(t *testing.T) {
@@ -127,6 +134,7 @@ func newTestPlaudService(t *testing.T, exec func(ctx context.Context, name strin
 	pages    map[string]*wiki.Page
 	appends  []string
 	delivers []string
+	systems  []string
 },
 ) {
 	t.Helper()
@@ -134,10 +142,12 @@ func newTestPlaudService(t *testing.T, exec func(ctx context.Context, name strin
 		pages    map[string]*wiki.Page
 		appends  []string
 		delivers []string
+		systems  []string
 	}{pages: map[string]*wiki.Page{}}
 	s := newPlaudRecordingsService(
 		exec,
 		func(ctx context.Context, system, user string, maxTokens int) (string, error) {
+			sink.systems = append(sink.systems, system)
 			return "## 요약\n- 계약 리스크 논의\n## 결정사항\n- 없음\n## 액션 아이템\n- 없음\n## 리스크·미해결\n- 없음\n관련프로젝트: 프로젝트/비금도-154kv/대표.md", nil
 		},
 		func(ctx context.Context, system, user string, maxTokens int) (string, error) {
@@ -146,6 +156,7 @@ func newTestPlaudService(t *testing.T, exec func(ctx context.Context, name strin
 		func() []mailanalysis.ProjectCandidate {
 			return []mailanalysis.ProjectCandidate{{Path: "프로젝트/비금도-154kv/대표.md", Title: "비금도"}}
 		},
+		func() string { return "탑솔라 — 태양광 EPC. 1팀: 공명한 차장" },
 		func(relPath string, page *wiki.Page) error {
 			sink.pages[relPath] = page
 			return nil
@@ -223,6 +234,12 @@ func TestPlaudTickBaselineThenAnalyze(t *testing.T) {
 	}
 	if !s.seen("174d2f812c09ff81f9f95df708da938a") {
 		t.Error("analyzed recording must be marked seen")
+	}
+	// The synthesis prompt must carry the topic-knowledge block and the
+	// correction appendix section (2026-07-06 bake-off outcome).
+	if len(sink.systems) != 1 || !strings.Contains(sink.systems[0], "탑솔라") ||
+		!strings.Contains(sink.systems[0], "## 표기 교정") {
+		t.Errorf("synthesis system prompt missing knowledge/correction blocks")
 	}
 
 	// Tick 3: steady state — no rework.
