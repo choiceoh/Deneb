@@ -43,6 +43,16 @@ idiom 문서엔 "no cards / no icons"라 써 있지만 **기능을 돕는 곳은
 - **아이콘**: 기능 아이콘(보내기·중지·Meet·상태 점)은 유지, **장식** 아이콘만 배제. ★**내비게이션 아이콘 허용**(2026-06-14): 폰 하단 탭바·데스크톱 레일·세션 진입점은 **아이콘+라벨**(Material icons, `Outlined`=비활성/`Filled`=활성 Apple식, M3 `NavigationBar` substrate로 인셋·리플·`Role.Tab` a11y·햅틱). 단 **리스트 행·콘텐츠 제목(메일·세션·위키)은 계속 아이콘리스**, 컬러 탭 없음(모노크롬), 활성=ink+절제된 인디케이터. 한 줄 규칙: 아이콘은 **내비게이션 + 그룹 리스트 행**에. (디자인 리프레시로 `DenebListRow`가 행 leading 아이콘을 가짐 — 콘텐츠 *제목*엔 여전히 안 붙임.)
 - **색 ★2액센트(2026-06, 디자인 리프레시)**: 모노크롬 AMOLED 베이스 + 절제된 2색. **쿨 `MaterialTheme.colorScheme.primary`(다크 0xFF7FA8D0)=상호작용·선택·CTA** (여태 ink로 억눌렀던 것을 비로소 사용), **웜 애프리콧 `denebInsight()`=AI 분석·인사이트** (쿨↔웜 보색; Deneb 분석↔비서 이중 페르소나의 색 매핑). 둘 다 작은 마크·소프트 fill(`denebInsightContainer()`)에만 — 화면 전체엔 안 칠함. 토큰 정의=`Theme.kt` 액센트 doctrine.
 
+## 폴리시 기준 ★수준 강화 (2026-07)
+
+세 차원이 "폴리시드"의 정의다 — 새 화면·화면 변경은 셋 다 통과해야 한다:
+
+1. **모션** — 단일 소스 `ui/DenebMotion.kt`(토큰·프리셋·`denebPressable`·`denebBreathing`) + `ui/DenebNavMotion.kt`(화면 전환). 인라인 `tween(매직넘버)` 금지 — 새 의도면 토큰을 추가하고 이름을 붙인다. **화면 전환 문법: 바텀바 유지 = 측면 이동(빠른 페이드) / 바 숨김 = 드릴인(끝에서 슬라이드+부모 1/4 패럴랙스, pop은 역방향)** — 분류식은 `denebBottomBarRoutes` 하나라 크롬과 모션이 항상 일치한다. 리스트→상세 연속성은 `denebSharedBounds("surface-field-id")`(예: `"mail-subject-42"`) — 스코프 부재 시 no-op이므로 프리뷰·데스크톱 분할뷰에 안전, previewable body에 스코프 배선 불요. 새 destination은 `composable<T>` 대신 `denebComposable<T>`.
+2. **상태 완결성** — 콘텐츠 화면은 4상태(로딩·빈·오류(재시도)·콘텐츠)를 전부 설계한다. `DenebLoading`/`DenebError(onRetry)`/`DenebEmpty` + 리스트형 로딩은 `components/Skeleton.kt` 스켈레톤 우선(스피너는 액션 진행에만).
+3. **타이포·여백 리듬** — 모든 텍스트 `DenebType.*`, 수직 여백 4dp 배수, 행 인셋 24dp 표준, 시각·수치 열은 tabular 숫자. 다크/라이트 + 긴 한국어 제목/조밀 데이터로 PNG 검수.
+
+검증 배분: 정적(타이포·상태)은 `renderPreviews` PNG — 상태별 프리뷰 포함. 모션은 토큰 준수를 코드 리뷰로, 체감은 운영자 실기기로 판정한다(움직임은 PNG가 못 본다).
+
 ## 행동 불변 (이미 들인 작업 보존)
 
 표현만 바꾸고 **#1904/#1907의 로딩/오류/빈/재시도·쓰기 실패 표시·햅틱·접근성은 그대로 이식**한다. `DenebRow`의 `onClick`에 `rememberHaptics().tap()` 유지, 상태 분기(`DenebLoading`/`DenebError(onRetry)`/`DenebEmpty`) 유지.
