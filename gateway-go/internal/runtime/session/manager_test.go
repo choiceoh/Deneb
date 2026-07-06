@@ -200,6 +200,112 @@ func TestCreateReturnsSnapshotCopy(t *testing.T) {
 	}
 }
 
+func TestGetReturnsDeepSnapshotCopy(t *testing.T) {
+	m := NewManager()
+	startedAt := int64(1000)
+	inputTokens := int64(7)
+	thinking := true
+	if err := m.Set(&Session{
+		Key:         "s1",
+		Kind:        KindDirect,
+		StartedAt:   &startedAt,
+		InputTokens: &inputTokens,
+		ModelConfig: ModelConfig{
+			InterleavedThinking: &thinking,
+			ShowThinkingInChat:  &thinking,
+			FastMode:            &thinking,
+		},
+	}); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+
+	snap := m.Get("s1")
+	if snap == nil || snap.StartedAt == nil || snap.InputTokens == nil || snap.InterleavedThinking == nil {
+		t.Fatalf("unexpected snapshot: %+v", snap)
+	}
+
+	*snap.StartedAt = 5000
+	*snap.InputTokens = 99
+	*snap.InterleavedThinking = false
+	*snap.ShowThinkingInChat = false
+	*snap.FastMode = false
+
+	internal := m.Get("s1")
+	if internal == nil {
+		t.Fatal("internal session missing")
+	}
+	if internal.StartedAt == nil || *internal.StartedAt != 1000 {
+		t.Fatalf("StartedAt leaked mutation: %v", internal.StartedAt)
+	}
+	if internal.InputTokens == nil || *internal.InputTokens != 7 {
+		t.Fatalf("InputTokens leaked mutation: %v", internal.InputTokens)
+	}
+	if internal.InterleavedThinking == nil || !*internal.InterleavedThinking {
+		t.Fatalf("InterleavedThinking leaked mutation: %v", internal.InterleavedThinking)
+	}
+	if internal.ShowThinkingInChat == nil || !*internal.ShowThinkingInChat {
+		t.Fatalf("ShowThinkingInChat leaked mutation: %v", internal.ShowThinkingInChat)
+	}
+	if internal.FastMode == nil || !*internal.FastMode {
+		t.Fatalf("FastMode leaked mutation: %v", internal.FastMode)
+	}
+}
+
+func TestSetClonesCallerOwnedPointers(t *testing.T) {
+	m := NewManager()
+	startedAt := int64(1000)
+	timeoutAt := int64(2000)
+	spawnDepth := 2
+	thinking := true
+	inputTokens := int64(3)
+	sess := &Session{
+		Key:         "s1",
+		Kind:        KindDirect,
+		StartedAt:   &startedAt,
+		TimeoutAt:   &timeoutAt,
+		InputTokens: &inputTokens,
+		ModelConfig: ModelConfig{
+			InterleavedThinking: &thinking,
+		},
+		AgentConfig: AgentConfig{
+			SpawnDepth: &spawnDepth,
+		},
+	}
+	if err := m.Set(sess); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+
+	startedAt = 9000
+	timeoutAt = 8000
+	spawnDepth = 7
+	thinking = false
+	inputTokens = 99
+	sess.Kind = KindGroup
+
+	internal := m.Get("s1")
+	if internal == nil {
+		t.Fatal("internal session missing")
+	}
+	if internal.Kind != KindDirect {
+		t.Fatalf("Kind leaked mutation: %q", internal.Kind)
+	}
+	if internal.StartedAt == nil || *internal.StartedAt != 1000 {
+		t.Fatalf("StartedAt leaked mutation: %v", internal.StartedAt)
+	}
+	if internal.TimeoutAt == nil || *internal.TimeoutAt != 2000 {
+		t.Fatalf("TimeoutAt leaked mutation: %v", internal.TimeoutAt)
+	}
+	if internal.SpawnDepth == nil || *internal.SpawnDepth != 2 {
+		t.Fatalf("SpawnDepth leaked mutation: %v", internal.SpawnDepth)
+	}
+	if internal.InterleavedThinking == nil || !*internal.InterleavedThinking {
+		t.Fatalf("InterleavedThinking leaked mutation: %v", internal.InterleavedThinking)
+	}
+	if internal.InputTokens == nil || *internal.InputTokens != 3 {
+		t.Fatalf("InputTokens leaked mutation: %v", internal.InputTokens)
+	}
+}
+
 func TestDeriveSnapshotUpdatedAtNotAliased(t *testing.T) {
 	event := LifecycleEvent{Phase: PhaseStart, Ts: 3000}
 	snap := DeriveLifecycleSnapshot(nil, event)
@@ -212,6 +318,37 @@ func TestDeriveSnapshotUpdatedAtNotAliased(t *testing.T) {
 	}
 	if *snap.StartedAt != *snap.UpdatedAt {
 		t.Errorf("values should be equal: StartedAt=%d, UpdatedAt=%d", *snap.StartedAt, *snap.UpdatedAt)
+	}
+}
+
+func TestApplyLifecycleEventClonesEventPointers(t *testing.T) {
+	m := NewManager()
+	startedAt := int64(1000)
+	endedAt := int64(2500)
+
+	s := m.ApplyLifecycleEvent("s1", LifecycleEvent{Phase: PhaseStart, StartedAt: &startedAt, Ts: 1})
+	if s == nil || s.StartedAt == nil {
+		t.Fatalf("unexpected start snapshot: %+v", s)
+	}
+	startedAt = 9000
+
+	internal := m.Get("s1")
+	if internal == nil || internal.StartedAt == nil || *internal.StartedAt != 1000 {
+		t.Fatalf("startedAt leaked event mutation: %+v", internal)
+	}
+
+	s = m.ApplyLifecycleEvent("s1", LifecycleEvent{Phase: PhaseEnd, EndedAt: &endedAt, Ts: 2})
+	if s == nil || s.EndedAt == nil || s.RuntimeMs == nil {
+		t.Fatalf("unexpected end snapshot: %+v", s)
+	}
+	endedAt = 9999
+
+	internal = m.Get("s1")
+	if internal == nil || internal.EndedAt == nil || *internal.EndedAt != 2500 {
+		t.Fatalf("endedAt leaked event mutation: %+v", internal)
+	}
+	if internal.RuntimeMs == nil || *internal.RuntimeMs != 1500 {
+		t.Fatalf("runtime leaked event mutation: %v", internal.RuntimeMs)
 	}
 }
 

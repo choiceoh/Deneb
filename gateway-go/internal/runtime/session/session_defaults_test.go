@@ -82,4 +82,10 @@ func TestSessionDefaults_GetterReturnsCopy(t *testing.T) {
 	if got.InterleavedThinking == nil || !*got.InterleavedThinking {
 		t.Fatalf("getter returned %v", got.InterleavedThinking)
 	}
+	*got.InterleavedThinking = false
+
+	again := m.SessionDefaults()
+	if again.InterleavedThinking == nil || !*again.InterleavedThinking {
+		t.Fatalf("getter leaked internal pointer: %v", again.InterleavedThinking)
+	}
 }

@@ -67,10 +67,10 @@ func resolveTerminalStatus(event LifecycleEvent) RunStatus {
 // event.StartedAt → existing → event.Ts.
 func resolveLifecycleStartedAt(existingStartedAt *int64, event LifecycleEvent) *int64 {
 	if isFiniteTimestamp(event.StartedAt) {
-		return event.StartedAt
+		return cloneInt64Ptr(event.StartedAt)
 	}
 	if isFiniteTimestamp(existingStartedAt) {
-		return existingStartedAt
+		return cloneInt64Ptr(existingStartedAt)
 	}
 	if event.Ts > 0 {
 		return &event.Ts
@@ -82,7 +82,7 @@ func resolveLifecycleStartedAt(existingStartedAt *int64, event LifecycleEvent) *
 // event.EndedAt → event.Ts.
 func resolveLifecycleEndedAt(event LifecycleEvent) *int64 {
 	if isFiniteTimestamp(event.EndedAt) {
-		return event.EndedAt
+		return cloneInt64Ptr(event.EndedAt)
 	}
 	if event.Ts > 0 {
 		return &event.Ts
@@ -101,7 +101,7 @@ func resolveRuntimeMs(startedAt, endedAt, existingRuntimeMs *int64) *int64 {
 		return &ms
 	}
 	if existingRuntimeMs != nil && *existingRuntimeMs >= 0 {
-		return existingRuntimeMs
+		return cloneInt64Ptr(existingRuntimeMs)
 	}
 	return nil
 }

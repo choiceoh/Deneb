@@ -168,6 +168,47 @@ func TestRetentionKeepN(t *testing.T) {
 	}
 }
 
+func TestRestoreOldestRetainedSnapshotSurvivesPreRestorePrune(t *testing.T) {
+	m := newTestManager(t, "session-restore-prune", WithRetentionN(3))
+	target := filepath.Join(t.TempDir(), "rollback.txt")
+
+	var oldest *Snapshot
+	for i, content := range []string{"one", "two", "three"} {
+		writeFile(t, target, content)
+		snap, err := m.Snapshot(context.Background(), target, "fs_write")
+		if err != nil {
+			t.Fatalf("snapshot %d: %v", i, err)
+		}
+		if i == 0 {
+			oldest = snap
+		}
+	}
+
+	writeFile(t, target, "current")
+	if _, err := m.Restore(context.Background(), oldest.ID); err != nil {
+		t.Fatalf("restore oldest retained snapshot: %v", err)
+	}
+
+	data, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatalf("read restored file: %v", err)
+	}
+	if string(data) != "one" {
+		t.Fatalf("got %q, want %q", string(data), "one")
+	}
+
+	list, err := m.List(target, 0)
+	if err != nil {
+		t.Fatalf("list after restore: %v", err)
+	}
+	if len(list) != 3 {
+		t.Fatalf("expected retention to keep 3 snapshots, got %d", len(list))
+	}
+	if list[0].Reason != "pre-restore" {
+		t.Fatalf("latest snapshot reason = %q, want pre-restore", list[0].Reason)
+	}
+}
+
 func TestRetentionMaxBytes(t *testing.T) {
 	// Force a tiny byte cap so the second snapshot should evict the first.
 	m := newTestManager(t, "session-retB", WithRetentionN(100), WithMaxBytes(10), WithGzip(false))

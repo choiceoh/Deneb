@@ -93,7 +93,7 @@ func (s *Session) ApplyPatch(p PatchFields) bool {
 // Creates the session if it doesn't exist. Returns a snapshot copy.
 func (m *Manager) Patch(key string, patch PatchFields) *Session {
 	m.lazyInit()
-	var cp Session
+	var result *Session
 	m.mutateAndEmit(func() []Event {
 		m.mu.Lock()
 		s := m.sessions[key]
@@ -103,7 +103,7 @@ func (m *Manager) Patch(key string, patch PatchFields) *Session {
 			m.sessions[key] = s
 		}
 		changed := s.ApplyPatch(patch)
-		cp = *s
+		result = cloneSession(s)
 		m.mu.Unlock()
 
 		if changed {
@@ -111,7 +111,7 @@ func (m *Manager) Patch(key string, patch PatchFields) *Session {
 		}
 		return nil
 	})
-	return &cp
+	return result
 }
 
 // ConfigureCoding marks a session as a coding session bound to a git worktree:
@@ -168,8 +168,7 @@ func (m *Manager) ResetSession(key string) *Session {
 		s.OutputTokens = nil
 		s.TotalTokens = nil
 		s.UpdatedAt = time.Now().UnixMilli()
-		cp := *s
-		result = &cp
+		result = cloneSession(s)
 		m.mu.Unlock()
 
 		if oldStatus != "" {
@@ -188,8 +187,7 @@ func (m *Manager) FindBySessionID(sessionID string) *Session {
 	defer m.mu.RUnlock()
 	for _, s := range m.sessions {
 		if s.SessionID == sessionID {
-			cp := *s
-			return &cp
+			return cloneSession(s)
 		}
 	}
 	return nil
@@ -203,8 +201,7 @@ func (m *Manager) FindByLabel(label string) []*Session {
 	var matches []*Session
 	for _, s := range m.sessions {
 		if s.Label == label {
-			cp := *s
-			matches = append(matches, &cp)
+			matches = append(matches, cloneSession(s))
 		}
 	}
 	return matches

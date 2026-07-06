@@ -271,7 +271,7 @@ func NewManager() *Manager {
 // with Create — the next Create reads the new defaults atomically.
 func (m *Manager) SetSessionDefaults(d SessionDefaults) {
 	m.defaultsMu.Lock()
-	m.sessionDefaults = d
+	m.sessionDefaults = cloneSessionDefaults(d)
 	m.defaultsMu.Unlock()
 }
 
@@ -280,7 +280,50 @@ func (m *Manager) SetSessionDefaults(d SessionDefaults) {
 func (m *Manager) SessionDefaults() SessionDefaults {
 	m.defaultsMu.RLock()
 	defer m.defaultsMu.RUnlock()
-	return m.sessionDefaults
+	return cloneSessionDefaults(m.sessionDefaults)
+}
+
+func cloneBoolPtr(p *bool) *bool {
+	if p == nil {
+		return nil
+	}
+	v := *p
+	return &v
+}
+
+func cloneIntPtr(p *int) *int {
+	if p == nil {
+		return nil
+	}
+	v := *p
+	return &v
+}
+
+func cloneSessionDefaults(d SessionDefaults) SessionDefaults {
+	return SessionDefaults{
+		ThinkingLevel:       d.ThinkingLevel,
+		InterleavedThinking: cloneBoolPtr(d.InterleavedThinking),
+	}
+}
+
+func cloneSession(s *Session) *Session {
+	if s == nil {
+		return nil
+	}
+	cp := *s
+	cp.StartedAt = cloneInt64Ptr(s.StartedAt)
+	cp.EndedAt = cloneInt64Ptr(s.EndedAt)
+	cp.RuntimeMs = cloneInt64Ptr(s.RuntimeMs)
+	cp.InputTokens = cloneInt64Ptr(s.InputTokens)
+	cp.OutputTokens = cloneInt64Ptr(s.OutputTokens)
+	cp.TotalTokens = cloneInt64Ptr(s.TotalTokens)
+	cp.TimeoutAt = cloneInt64Ptr(s.TimeoutAt)
+	cp.LastActivityAt = cloneInt64Ptr(s.LastActivityAt)
+	cp.InterleavedThinking = cloneBoolPtr(s.InterleavedThinking)
+	cp.ShowThinkingInChat = cloneBoolPtr(s.ShowThinkingInChat)
+	cp.FastMode = cloneBoolPtr(s.FastMode)
+	cp.SpawnDepth = cloneIntPtr(s.SpawnDepth)
+	return &cp
 }
 
 // applySessionDefaults seeds a freshly-created Session with the operator's
@@ -416,12 +459,7 @@ func (m *Manager) Get(key string) *Session {
 	m.lazyInit()
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	s := m.sessions[key]
-	if s == nil {
-		return nil
-	}
-	cp := *s
-	return &cp
+	return cloneSession(m.sessions[key])
 }
 
 // Set stores or updates a session. Ignores sessions with empty keys.
@@ -433,15 +471,16 @@ func (m *Manager) Set(s *Session) error {
 		return nil
 	}
 	m.lazyInit()
+	stored := cloneSession(s)
 	var setErr error
 	m.mutateAndEmit(func() []Event {
 		m.mu.Lock()
-		old := m.sessions[s.Key]
+		old := m.sessions[stored.Key]
 		var oldStatus RunStatus
 		if old != nil {
 			oldStatus = old.Status
 		}
-		newStatus := s.Status
+		newStatus := stored.Status
 		if old != nil && oldStatus != "" && newStatus != "" && oldStatus != newStatus {
 			if err := ValidateTransition(oldStatus, newStatus); err != nil {
 				m.mu.Unlock()
@@ -449,14 +488,14 @@ func (m *Manager) Set(s *Session) error {
 				return nil
 			}
 		}
-		m.sessions[s.Key] = s
+		m.sessions[stored.Key] = stored
 		m.mu.Unlock()
 
 		if old == nil {
-			return []Event{{Kind: EventCreated, Key: s.Key}}
+			return []Event{{Kind: EventCreated, Key: stored.Key}}
 		}
 		if oldStatus != newStatus {
-			return []Event{{Kind: EventStatusChanged, Key: s.Key, OldStatus: oldStatus, NewStatus: newStatus}}
+			return []Event{{Kind: EventStatusChanged, Key: stored.Key, OldStatus: oldStatus, NewStatus: newStatus}}
 		}
 		return nil
 	})
@@ -543,8 +582,7 @@ func (m *Manager) List() []*Session {
 	defer m.mu.RUnlock()
 	result := make([]*Session, 0, len(m.sessions))
 	for _, s := range m.sessions {
-		cp := *s
-		result = append(result, &cp)
+		result = append(result, cloneSession(s))
 	}
 	return result
 }
@@ -565,7 +603,7 @@ func (m *Manager) Create(key string, kind Kind) *Session {
 		return nil
 	}
 	m.lazyInit()
-	var cp Session
+	var created *Session
 	m.mutateAndEmit(func() []Event {
 		m.mu.Lock()
 		now := time.Now()
@@ -577,11 +615,11 @@ func (m *Manager) Create(key string, kind Kind) *Session {
 		}
 		m.applySessionDefaults(s)
 		m.sessions[key] = s
-		cp = *s
+		created = cloneSession(s)
 		m.mu.Unlock()
 		return []Event{{Kind: EventCreated, Key: key}}
 	})
-	return &cp
+	return created
 }
 
 // ApplyLifecycleEvent applies a lifecycle event to a session, creating it if needed.
@@ -604,8 +642,7 @@ func (m *Manager) ApplyLifecycleEvent(key string, event LifecycleEvent) *Session
 		// Empty snapshot means unknown phase — no-op.
 		if snap.Status == "" {
 			if existing != nil {
-				cp := *existing
-				result = &cp
+				result = cloneSession(existing)
 			} else {
 				result = &Session{Key: key, Kind: KindUnknown}
 			}
@@ -649,8 +686,7 @@ func (m *Manager) ApplyLifecycleEvent(key string, event LifecycleEvent) *Session
 			}
 		}
 
-		cp := *existing
-		result = &cp
+		result = cloneSession(existing)
 		newStatus := existing.Status
 		m.mu.Unlock()
 
