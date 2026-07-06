@@ -242,6 +242,7 @@ fun main() {
     renderAppTiles("app_tiles_dark.png", DarkColorScheme)
     renderAppTiles("app_tiles_light.png", LightColorScheme)
     renderMarkdown("markdown_dark.png", DarkColorScheme)
+    renderTableAB("table_ab_dark.png", DarkColorScheme)
     renderScreen("scrub_active_dark.png", "scrub_active", DarkColorScheme, 824, 1100)
     renderScreen("scrub_active_light.png", "scrub_active", LightColorScheme, 824, 1100)
     renderScreen("contacts_dark.png", "contacts", DarkColorScheme, 824, 1100)
@@ -1131,6 +1132,50 @@ private fun renderDesignRefresh(name: String, scheme: ColorScheme) {
     scene.close()
 }
 
+private val mdTableSample = """
+### 마크다운 표 (챗 파이프라인)
+
+| 현장 | 규격 | 수량 | 납기 |
+|---|---|---|---|
+| 화성산단 RPS 2개소 | 100kW 계량반 | 12 | 7/10 |
+| 부산 썬탑 7호 | 200kW 저압반 | 4 | 7/14 |
+| 금호타이어 곡성화학공장 | 연계판넬 | 7 | 7/21 |
+"""
+
+private fun renderTableAB(name: String, scheme: ColorScheme) {
+    val uiNode = parseLetterHtml(
+        """
+        <column>
+          <card>
+            <text style="title">deneb-ui table 노드</text>
+            <table>
+              <tr><th>현장</th><th>규격</th><th>수량</th><th>납기</th></tr>
+              <tr><td>화성산단 RPS 2개소</td><td>100kW 계량반</td><td>12</td><td>7/10</td></tr>
+              <tr><td>부산 썬탑 7호</td><td>200kW 저압반</td><td>4</td><td>7/14</td></tr>
+              <tr><td>금호타이어 곡성화학공장</td><td>연계판넬</td><td>7</td><td>7/21</td></tr>
+            </table>
+          </card>
+        </column>
+        """.trimIndent(),
+    )
+    val scene = ImageComposeScene(width = 824, height = 1200, density = Density(2f)) {
+        MaterialTheme(colorScheme = scheme) {
+            Surface(color = MaterialTheme.colorScheme.background) {
+                Column(Modifier.width(412.dp).padding(16.dp)) {
+                    MarkdownContent(mdTableSample, Modifier, baseStyle = MaterialTheme.typography.bodyMedium)
+                    Spacer(Modifier.height(20.dp))
+                    DenebUiRenderer(node = uiNode, isInteractive = false, onCallback = { _, _ -> }, wrapInCard = false)
+                }
+            }
+        }
+    }
+    val image = scene.render()
+    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
+    File("/tmp/deneb-render").mkdirs()
+    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
+    scene.close()
+}
+
 private fun renderMarkdown(name: String, scheme: ColorScheme) {
     val scene = ImageComposeScene(width = 840, height = 700, density = Density(2f)) {
         MaterialTheme(colorScheme = scheme) {
@@ -1309,8 +1354,7 @@ private fun morningLetterNode(): DenebUiNode = parseLetterHtml(
       </card>
       <card>
         <row><icon name="payments" size="16"/><text style="caption">환율 · 구리</text></row>
-        <row><stat value="1,386" label="USD/KRW"/><stat value="1,498" label="EUR/KRW"/></row>
-        <stat value="${'$'}9,540 /t" label="LME 구리"/>
+        <row><stat value="1,386" label="USD/KRW"/><stat value="${'$'}9,540 /t" label="LME 구리"/></row>
       </card>
       <card>
         <row><icon name="calendar" size="16"/><text style="caption">오늘 일정</text></row>
@@ -1322,7 +1366,7 @@ private fun morningLetterNode(): DenebUiNode = parseLetterHtml(
       </card>
       <card>
         <row><icon name="alarm" size="16"/><text style="caption">임박 마감</text></row>
-        <row><text style="body">부가세 신고</text><badge>D-2</badge></row>
+        <row><text style="body">부가세 신고</text><badge color="warning">D-2</badge></row>
       </card>
     </column>
     """.trimIndent(),
@@ -1393,7 +1437,7 @@ private fun eveningLetterNode(): DenebUiNode = parseLetterHtml(
       </card>
       <card>
         <row><icon name="alarm" size="16"/><text style="caption">임박 마감</text></row>
-        <row><text style="body">부가세 신고</text><badge>D-2</badge></row>
+        <row><text style="body">부가세 신고</text><badge color="warning">D-2</badge></row>
       </card>
     </column>
     """.trimIndent(),

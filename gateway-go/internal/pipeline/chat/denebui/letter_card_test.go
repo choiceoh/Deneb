@@ -18,8 +18,7 @@ const morningLetterCardHTML = `<column>
   </card>
   <card>
     <row><icon name="payments" size="16"/><text style="caption">환율 · 구리</text></row>
-    <row><stat value="1,386" label="USD/KRW"/><stat value="1,498" label="EUR/KRW"/></row>
-    <stat value="$9,540 /t" label="LME 구리"/>
+    <row><stat value="1,386" label="USD/KRW"/><stat value="$9,540 /t" label="LME 구리"/></row>
   </card>
   <card>
     <row><icon name="calendar" size="16"/><text style="caption">오늘 일정</text></row>
@@ -31,7 +30,7 @@ const morningLetterCardHTML = `<column>
   </card>
   <card>
     <row><icon name="alarm" size="16"/><text style="caption">임박 마감</text></row>
-    <row><text style="body">부가세 신고</text><badge>D-2</badge></row>
+    <row><text style="body">부가세 신고</text><badge color="warning">D-2</badge></row>
   </card>
 </column>`
 
@@ -46,7 +45,7 @@ const eveningLetterCardHTML = `<column>
   </card>
   <card>
     <row><icon name="alarm" size="16"/><text style="caption">임박 마감</text></row>
-    <row><text style="body">부가세 신고</text><badge>D-2</badge></row>
+    <row><text style="body">부가세 신고</text><badge color="warning">D-2</badge></row>
   </card>
 </column>`
 

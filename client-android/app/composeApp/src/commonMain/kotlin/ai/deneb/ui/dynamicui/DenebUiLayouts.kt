@@ -94,7 +94,26 @@ internal fun RenderRow(
             .wrapContentHeight(),
     ) {
         for (child in node.children) {
-            RenderNode(child, isInteractive, formState, toggleState, onCallback, depth + 1)
+            if (allStats) {
+                // Equal-weight grid, not SpaceEvenly: with 2 stats SpaceEvenly
+                // parks them at the 1/3 and 2/3 marks (lopsided dead space on
+                // the left — visible in the morning-letter FX card). Weighted
+                // cells center each stat in its own equal share.
+                Box(
+                    modifier = Modifier.weight(1f),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    RenderNode(child, isInteractive, formState, toggleState, onCallback, depth + 1)
+                }
+            } else {
+                // Center mixed-height siblings on the row's vertical axis: a
+                // headline temperature next to a caption ("18°" + "체감 16°")
+                // or body text next to a badge otherwise top-align and look
+                // broken (the caption floats at the numeral's cap height).
+                Box(modifier = Modifier.align(Alignment.CenterVertically)) {
+                    RenderNode(child, isInteractive, formState, toggleState, onCallback, depth + 1)
+                }
+            }
         }
     }
 }
