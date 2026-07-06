@@ -1,5 +1,18 @@
 # Changelog
 
+## [4.73.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.72.0...deneb-v4.73.0) (2026-07-06)
+
+
+### ✨ Features
+
+* **chat:** mcpclient 견고성+운영 품격 — ready-future 초기화·프로세스그룹 계층 종료·stderr 진단링·Stats·공유 레지스트리 ([#3218](https://github.com/choiceoh/Deneb/issues/3218)) ([618f0f5](https://github.com/choiceoh/Deneb/commit/618f0f5aec2abdd2231907bd704a1f0e8a741291))
+* **gateway:** Plaud 녹음 자동 분석 — 신규 녹음→회의 리포트→회의록 위키+워크피드 카드 ([#3221](https://github.com/choiceoh/Deneb/issues/3221)) ([47e6ea4](https://github.com/choiceoh/Deneb/commit/47e6ea45869b8caca2fd6388ff165d55ecd99646))
+
+
+### 🐛 Bug Fixes
+
+* **dev:** pr.sh land에 병렬 세션 가드 — 로컬 HEAD와 PR head 불일치 시 랜딩 거부 ([#3222](https://github.com/choiceoh/Deneb/issues/3222)) ([5e1e457](https://github.com/choiceoh/Deneb/commit/5e1e457aeab4a08b41f898277f7f9c68ff0e7305))
+
 ## [4.72.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.71.0...deneb-v4.72.0) (2026-07-06)
 
 
