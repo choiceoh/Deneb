@@ -212,7 +212,14 @@ internal fun RenderChart(node: ChartNode) {
         val motion = LocalDenebUiMotion.current
         val drawAnim = remember { Animatable(if (motion) 0f else 1f) }
         LaunchedEffect(motion) {
-            if (motion) drawAnim.animateTo(1f, animationSpec = tween(durationMillis = 700, easing = FastOutSlowInEasing))
+            // React to the switch in BOTH directions: a flip to static must
+            // snap to fully drawn, not strand a partial chart (review catch
+            // on #3234).
+            if (motion) {
+                drawAnim.animateTo(1f, animationSpec = tween(durationMillis = 700, easing = FastOutSlowInEasing))
+            } else {
+                drawAnim.snapTo(1f)
+            }
         }
         val drawProgress = drawAnim.value
 

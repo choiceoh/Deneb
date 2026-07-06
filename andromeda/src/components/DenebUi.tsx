@@ -46,6 +46,10 @@ export function renderInline(text: string, keyBase: string): React.ReactNode {
   return out;
 }
 
+/** Supported badge tint classes — attr values are model-authored, so gate
+ * them against class injection into global CSS (review catch on #3235). */
+const BADGE_TINTS = new Set(["success", "warning", "error", "primary", "secondary"]);
+
 /** "HH:MM — 제목" schedule item — such lists render as a timeline. */
 const TIMELINE_RE = /^\d{1,2}:\d{2}\s*—\s*.+$/;
 /** Short "키 — 내용" lead (time, sender) rendered as a bold scan point. */
@@ -275,7 +279,7 @@ export function DenebUi({ spec, onSubmit, busy }: { spec: Node; onSubmit: (msg: 
         );
       case "badge":
         return (
-          <span key={key} className={"dui-badge" + (n.color ? ` ${String(n.color)}` : "")}>
+          <span key={key} className={"dui-badge" + (BADGE_TINTS.has(String(n.color)) ? ` ${String(n.color)}` : "")}>
             {String(n.value || n.text || "")}
           </span>
         );
@@ -317,7 +321,7 @@ export function DenebUi({ spec, onSubmit, busy }: { spec: Node; onSubmit: (msg: 
         const colCount = Math.max(headers.length, ...rows.map((r) => (Array.isArray(r) ? r.length : 0)), 0);
         const numeric = Array.from({ length: colCount }, (_, i) => {
           const cells = rows.map((r) => String((Array.isArray(r) ? r : [])[i] ?? "").trim()).filter(Boolean);
-          return cells.length > 0 && cells.every((c) => /^\d/.test(c));
+          return cells.length > 0 && cells.every((c) => /^[-−]?\d/.test(c));
         });
         const align = (i: number): React.CSSProperties | undefined => (numeric[i] ? { textAlign: "right" } : undefined);
         return (
@@ -431,7 +435,7 @@ export function DenebUi({ spec, onSubmit, busy }: { spec: Node; onSubmit: (msg: 
             {n.label || v != null ? (
               <div className="dui-progress-hd">
                 <span className="dui-stat-label">{n.label ? String(n.label) : ""}</span>
-                {v != null && String(n.label ?? "").trim() !== `${Math.round(v * 100)}%` ? (
+                {v != null && !String(n.label ?? "").includes(`${Math.round(v * 100)}%`) ? (
                   <span className="dui-progress-pct">{Math.round(v * 100)}%</span>
                 ) : null}
               </div>

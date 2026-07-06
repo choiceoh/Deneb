@@ -213,7 +213,11 @@ internal fun RenderTable(node: TableNode) {
     // non-empty cell starts with a digit (covers "12", "7/10", "68%", "2.4억").
     val numericColumn = BooleanArray(columnCount) { index ->
         val cells = node.rows.mapNotNull { it.getOrNull(index)?.trim()?.takeIf(String::isNotEmpty) }
-        cells.isNotEmpty() && cells.all { it.first().isDigit() }
+        cells.isNotEmpty() && cells.all { cell ->
+            // Negative values ("-12", "−3") are numeric too (review catch on
+            // #3235 — the desktop port surfaced the shared gap).
+            cell.first().isDigit() || ((cell.first() == '-' || cell.first() == '−') && cell.length > 1 && cell[1].isDigit())
+        }
     }
 
     // The first column is usually the entity name (현장, 항목) — give it room
@@ -562,18 +566,30 @@ internal fun statCountUpValue(value: String): String {
     val match = statNumberRe.find(value) ?: return value
     val target = match.value.replace(",", "").toFloatOrNull() ?: return value
     val anim = remember(value) { Animatable(0f) }
+    var settled by remember(value) { mutableStateOf(false) }
     LaunchedEffect(value) {
         anim.animateTo(target, animationSpec = tween(durationMillis = 600, easing = FastOutSlowInEasing))
+        settled = true
     }
-    val hasDecimal = match.value.contains('.')
-    val grouped = formatStatNumber(anim.value, hasDecimal, match.value.contains(','))
+    // The animation is a transition, not the source of truth: once settled,
+    // render the ORIGINAL string so exact metrics ("12.45%", 2-decimal FX)
+    // keep their full precision (review catch on #3234). Mid-flight frames
+    // format with the target's own decimal width.
+    if (settled) return value
+    val decimals = match.value.substringAfter('.', "").length
+    val grouped = formatStatNumber(anim.value, decimals, match.value.contains(','))
     return value.replaceRange(match.range, grouped)
 }
 
-private fun formatStatNumber(v: Float, decimal: Boolean, grouped: Boolean): String {
-    val raw = if (decimal) {
-        val scaled = kotlin.math.round(v * 10f) / 10f
-        scaled.toString()
+private fun formatStatNumber(v: Float, decimals: Int, grouped: Boolean): String {
+    val raw = if (decimals > 0) {
+        var scale = 1f
+        repeat(decimals) { scale *= 10f }
+        val scaled = kotlin.math.round(v * scale) / scale
+        val text = scaled.toString()
+        val frac = text.substringAfter('.', "")
+        // Float.toString may emit fewer digits ("12.4") — pad to the target width.
+        if (frac.length >= decimals) text else text + "0".repeat(decimals - frac.length)
     } else {
         kotlin.math.round(v).toLong().toString()
     }

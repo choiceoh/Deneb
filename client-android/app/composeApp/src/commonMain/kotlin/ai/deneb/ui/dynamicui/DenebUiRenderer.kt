@@ -240,7 +240,13 @@ internal fun RenderChildren(
     val motion = LocalDenebUiMotion.current && depth == 0
     children.forEachIndexed { index, child ->
         if (motion) {
-            val visible = remember(index) { MutableTransitionState(false).apply { targetState = true } }
+            // Key visibility by node identity, not bare index: a streamed
+            // re-parse that inserts/reorders nodes must not hand an old
+            // node's "already visible" state to a new one (review catch on
+            // #3234). id wins when authored; index+type approximates
+            // otherwise (append-only streams keep both stable).
+            val stateKey = child.id ?: "$index:${child::class.simpleName}"
+            val visible = remember(stateKey) { MutableTransitionState(false).apply { targetState = true } }
             AnimatedVisibility(
                 visibleState = visible,
                 enter = fadeIn(animationSpec = tween(280, delayMillis = index * 60)) +
