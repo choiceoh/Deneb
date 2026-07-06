@@ -35,14 +35,12 @@ import androidx.compose.material.icons.automirrored.outlined.ArrowForward
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.outlined.BookmarkBorder
-import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Translate
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -55,12 +53,9 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -72,7 +67,6 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.launch
 
 /**
  * In-app browser for external links, with one-tap in-place DeepL translation to
@@ -89,7 +83,6 @@ fun DenebBrowserScreen(
     modifier: Modifier = Modifier,
 ) {
     val state = remember(url) { DenebWebViewState(url) }
-    var showFallbackModelPicker by remember { mutableStateOf(false) }
     var showBookmarks by remember { mutableStateOf(false) }
     var bookmarks by remember { mutableStateOf(decodeBrowserBookmarks(appSettings.getBrowserBookmarksJson())) }
     fun persistBookmarks(next: List<BrowserBookmark>) {
@@ -100,27 +93,10 @@ fun DenebBrowserScreen(
     val bookmarkUrl = state.currentUrl.ifBlank { state.url }
     val bookmarkable = canBookmarkUrl(bookmarkUrl)
     val bookmarked = isBrowserBookmarked(bookmarks, bookmarkUrl)
-    // Browser translation is DeepL-first. The translation role is now only the
-    // LLM fallback when DeepL is unavailable or returns an unusable response.
-    val roleModels by client.denebRoleModels.collectAsState()
-    val models by client.denebModels.collectAsState()
-    LaunchedEffect(Unit) { if (models.isEmpty()) client.refreshModels() }
-    val fallbackModelLabel = run {
-        val bound = roleModels["translation"]
-        val effId = bound ?: roleModels["lightweight"]
-        val disp = models.firstOrNull { it.id == effId }?.display ?: effId
-        when {
-            disp == null -> null
-            bound != null -> disp
-            else -> "$disp (기본 fallback)"
-        }
-    }
     DenebBrowserChrome(
         state = state,
         onBack = onBack,
         modifier = modifier,
-        onFallbackModel = { showFallbackModelPicker = true },
-        currentFallbackModel = fallbackModelLabel,
         bookmarksCount = bookmarks.size,
         isBookmarked = bookmarked,
         canBookmark = bookmarkable,
@@ -134,9 +110,6 @@ fun DenebBrowserScreen(
             translate = { segments, lang -> client.translateSegments(segments, lang) },
             modifier = Modifier.fillMaxWidth().weight(1f),
         )
-    }
-    if (showFallbackModelPicker) {
-        TranslateFallbackModelSheet(client = client, onDismiss = { showFallbackModelPicker = false })
     }
     if (showBookmarks) {
         BrowserBookmarksSheet(
@@ -171,12 +144,6 @@ fun DenebBrowserChrome(
     state: DenebWebViewState,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
-    // Opens the LLM fallback picker (wired by the stateful screen, which has the client).
-    // Null in previews → the ⋮ entry is hidden.
-    onFallbackModel: (() -> Unit)? = null,
-    // Display name of the model used only when DeepL falls back to LLM translation.
-    // Null → no subtitle (previews / unknown).
-    currentFallbackModel: String? = null,
     bookmarksCount: Int = 0,
     isBookmarked: Boolean = false,
     canBookmark: Boolean = false,
@@ -372,26 +339,6 @@ fun DenebBrowserChrome(
                                 },
                             )
                         }
-                        if (onFallbackModel != null) {
-                            DropdownMenuItem(
-                                text = {
-                                    Column {
-                                        Text("LLM fallback 모델")
-                                        if (currentFallbackModel != null) {
-                                            Text(currentFallbackModel, style = DenebType.meta, color = denebHint())
-                                        } else {
-                                            Text("DeepL 실패 시에만 사용", style = DenebType.meta, color = denebHint())
-                                        }
-                                    }
-                                },
-                                leadingIcon = { Icon(Icons.Outlined.Check, contentDescription = null, tint = denebHint()) },
-                                onClick = {
-                                    haptics.tap()
-                                    menuOpen = false
-                                    onFallbackModel()
-                                },
-                            )
-                        }
                         DropdownMenuItem(
                             text = { Text("URL 복사") },
                             leadingIcon = { Icon(Icons.Outlined.ContentCopy, contentDescription = null, tint = denebHint()) },
@@ -490,90 +437,6 @@ private fun BrowserBookmarksSheet(
                                 modifier = Modifier.size(40.dp),
                             ) {
                                 Icon(Icons.Outlined.Delete, contentDescription = "북마크 삭제", tint = denebHint())
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-/**
- * Bottom-sheet picker for the LLM fallback used only when DeepL cannot serve the
- * browser translation. Lists the served models (client.denebModels via
- * miniapp.models) and binds the chosen one to the `translation` role
- * (setRoleModel → miniapp.models.set). The current binding is checked.
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun TranslateFallbackModelSheet(client: DenebGatewayClient, onDismiss: () -> Unit) {
-    val haptics = rememberHaptics()
-    val scope = rememberCoroutineScope()
-    val models by client.denebModels.collectAsState()
-    val roleModels by client.denebRoleModels.collectAsState()
-    val current = roleModels["translation"]
-    // Effective fallback model shown in the header: the bound translation role,
-    // else the lightweight fallback.
-    val effId = current ?: roleModels["lightweight"]
-    val effDisp = models.firstOrNull { it.id == effId }?.display ?: effId
-    var refreshing by remember { mutableStateOf(models.isEmpty()) }
-    LaunchedEffect(Unit) {
-        if (models.isEmpty()) client.refreshModels()
-        refreshing = false
-    }
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp)
-                .padding(bottom = 24.dp),
-        ) {
-            Text("LLM fallback 모델", style = DenebType.subject, color = MaterialTheme.colorScheme.onSurface)
-            Spacer(Modifier.height(2.dp))
-            Text("DeepL을 쓸 수 없을 때만 웹페이지 번역에 쓰는 모델", style = DenebType.meta, color = denebHint())
-            if (effDisp != null) {
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    "현재 fallback: $effDisp" + if (current == null) " (경량 기본)" else "",
-                    style = DenebType.rowTitle,
-                    color = denebInsight(),
-                )
-            }
-            Spacer(Modifier.height(12.dp))
-            when {
-                refreshing && models.isEmpty() ->
-                    Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator()
-                    }
-
-                models.isEmpty() ->
-                    Text("모델 목록을 불러오지 못했습니다.", style = DenebType.body, color = denebHint())
-
-                else -> LazyColumn(Modifier.fillMaxWidth()) {
-                    items(models) { m ->
-                        val selected = m.id == current
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    haptics.tap()
-                                    scope.launch {
-                                        client.setRoleModel(m.id, "translation")
-                                        onDismiss()
-                                    }
-                                }
-                                .padding(vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(
-                                m.display,
-                                style = DenebType.rowTitle,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier.weight(1f),
-                            )
-                            if (selected) {
-                                Icon(Icons.Outlined.Check, contentDescription = "현재", tint = denebInsight())
                             }
                         }
                     }

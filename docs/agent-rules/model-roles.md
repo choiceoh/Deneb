@@ -1,5 +1,5 @@
 ---
-description: 모델 역할(main/tiny/lightweight/analysis/coding/fallback/chatbot/vision/translation)별 작업 배치의 단일 진실원 — 어떤 임무가 어떤 역할을 쓰고 왜. 새 LLM 호출 추가·역할 변경 시 필독.
+description: 모델 역할(main/tiny/lightweight/analysis/coding/fallback/chatbot/vision)별 작업 배치의 단일 진실원 — 어떤 임무가 어떤 역할을 쓰고 왜. 새 LLM 호출 추가·역할 변경 시 필독.
 globs: gateway-go/internal/ai/modelrole/**, gateway-go/internal/pipeline/pilot/**, gateway-go/internal/runtime/server/server_chat_config.go
 ---
 
@@ -7,7 +7,7 @@ globs: gateway-go/internal/ai/modelrole/**, gateway-go/internal/pipeline/pilot/*
 
 > 어떤 임무가 어떤 모델 역할을 쓰는지의 **단일 진실원**. 실제 모델 이름은 코드에 하드코딩하지 않는다 — 코드는 **역할만 고르고**, 역할→모델은 `~/.deneb/deneb.json` 의 `agents.*Model` + wormhole 라우터가 결정한다. 새 LLM 호출을 추가하거나 역할을 바꿀 때 아래 "임무→역할 표"에 행을 추가하고 근거를 적는다.
 
-## 역할 9종 + 의도
+## 역할 8종 + 의도
 
 상수: `gateway-go/internal/ai/modelrole/registry.go`. 모델 매핑: `~/.deneb/deneb.json` `agents.*Model` (예시는 *현재값*일 뿐 — 코드 판단 기준이 아니다).
 
@@ -23,7 +23,6 @@ globs: gateway-go/internal/ai/modelrole/**, gateway-go/internal/pipeline/pilot/*
 | tiny | `RoleTiny` | **단순 분류/추출** (가장 작음) | 로컬 (wormhole/dsv4-nothink) |
 | fallback | `RoleFallback` | 폴백 체인 | 로컬 (wormhole/deepseek-v4-flash@srv2) |
 | vision | `RoleVision` | 이미지 턴 (#2510) | 클라우드 (google/gemini-3.5-flash) |
-| translation | `RoleTranslation` | 인앱 브라우저 웹페이지 번역 (en/ru→ko) | 로컬 (wormhole/dsv4-nothink) |
 
 > ⚠️ **analysis 역할의 함정 (여전히 유효).** enum 주석은 "highest-quality **LOCAL** model"이라 적혀 있지만, 현재 deneb.json은 `analysis → glm-5.2`(클라우드)로 지정한다(main·chatbot·coding과 공유). 즉 **analysis 역할에 임무를 얹으면 클라우드로 샌다** — 비용(구독 크레딧) + 레이턴시(~20s/콜). 요약류 헬퍼 콜을 무심코 analysis로 두면 안 된다. 실제로 **컴팩션·youtube 요약이 이렇게 샜다가** #2508/#2509로 lightweight(로컬)로 환원됐다.
 >
@@ -67,14 +66,13 @@ globs: gateway-go/internal/ai/modelrole/**, gateway-go/internal/pipeline/pilot/*
 | 스킬 리뷰 (nudger fork → propose 결정) | `init_genesis.go` reviewModel → `skill_review_fork.go` SendSync | **coding** (이전 lightweight), coding 미설정 시 lightweight 폴백 | 리뷰는 `skill_lifecycle action=propose`를 **호출**해야 하는 도구호출 task. lightweight는 텍스트 역할(요약·제목·JSON — Deneb 어디서도 도구호출 안 함)이라 산문만 내고 **toolCount=0**(srv4 실측) → 전 리뷰 no-op, Propus 루프 무산출. evolver와 같은 도구-가능 역할로 정렬(dogma #7: 도구 무거운 역할엔 측정된 도구호출자). 리뷰는 backoff·2048토큰 캡 + **전용 미니 시스템 프롬프트**(메인 조립 ~50K 비상속 — 리뷰당 입력 62-68K→~12K, 스킬 인덱스는 skills action=list로 온디맨드)로 빈도/비용 바운드 |
 | 스킬 진화 behavioral replay (도구호출 회귀 검증) | `domain/skills/genesis/validation_executor.go` (executor) + `init_genesis.go` 배선 | **lightweight** | 후보 SKILL.md를 부작용 없이 시뮬레이션해 도구호출 plan을 뽑고, original↔candidate 행동 회귀를 채점하는 검증 게이트. 로컬·바운드. **왜 lightweight인가**: main은 챗 핫패스와 GPU 경합 + 과비용이고, 게이트는 두 본문을 **같은 모델**로 비교하므로 절대 충실도보다 일관된 판별력이 중요(executor 편향은 델타에서 상쇄). `DENEB_SKILL_EVOLVE_REPLAY`로 opt-in, fail-open |
 | 프로젝트별 최신 근황 digest | `domain/wiki/project_digest.go` (드림 사이클 Phase 3d) → 프로젝트 대표페이지 `## 현재 상태` 섹션 (`project_status.go`) → `miniapp.project.digests` (모아보기 화면) | **lightweight** | 드림 사이클이 소비하는 그 일지/메모 입력을 프로젝트별로 롤업(헤드라인+불릿 2~3)하는 내부 배경 요약. open_loops와 동형의 격리된 1콜, fail-open, 실제 `프로젝트/*` 페이지에 앵커. **왜 lightweight인가**: 컴팩션·youtube와 같은 내부 배경 요약 도그마(로컬·바운드) — analysis(클라우드)로 둘 이유 없음. 화면은 대표페이지 섹션만 읽어 LLM 핫패스 아님. 메일분석 이벤트 갱신(`wiki_mail_analysis.go` → `AppendProjectStatusLine`)은 **LLM 없는 결정적 날짜 불릿**이라 아래 표 참조 |
-
-| 웹페이지 인앱 번역 (인플레이스, en/ru→ko) | `chat/tools/translate.go` → `miniapp.web.translate` 브리지 | **translation** (신설, 미설정 시 lightweight 폴백) | 인앱 브라우저가 보낸 DOM 텍스트 세그먼트 배치를 번역. 바운드 로컬 변환이라 기본 lightweight, `agents.translationModel` 로 번역 특화 모델 opt-in. **개수 보존**(LLM 응답이 입력 개수와 불일치하면 그 배치는 원문 유지 — 텍스트 드롭/재정렬 금지) |
 | 위키 자료 인제스트 요약 (`wiki action="ingest"` URL/유튜브 캡처) | `chat/tools/wiki_ingest.go` | **lightweight** | 컴팩션·youtube와 동형의 내부 배경 요약 (도그마 #1). 바운드(입력 16K룬·출력 700tok), fail-open — 요약 실패 시 발췌로 캡처 자체는 보존, force 재인제스트로 재시도 |
 
 ## LLM 안 쓰는 곳 (의도적)
 
 | 임무 | 위치 | 방식 | 왜 |
 |---|---|---|---|
+| 웹페이지 인앱 번역 (en/ru→ko) | `chat/tools/translate.go` → `translate_deepl.go` | DeepL API (외부 번역 서비스) | 인앱 브라우저 인플레이스 번역은 **DeepL 전용**. LLM 역할 미사용 — DeepL 미설정/실패 시 그 배치는 원문 유지(개수 보존, 드롭/재정렬 금지). 이전 `translation` 역할 LLM 폴백은 폐기(2026-07-07) |
 | 주간업무보고 | `tools/weekly_report.go` | 결정적 양식 | byte-identical 출력 (#2474) |
 | 메일 우선순위 분류 | `domain/mailpriority/score.go` | 정규식 점수 + 결합 신호 | 글랜스 트리아지 — 한국 업무메일 튜닝 휴리스틱. VIP(주소록)·활성 거래처(`wiki.ActiveCounterpartyDomains` — 최근 60일 프로젝트 연결 메일분석의 발신 도메인, freemail 제외, 서버 10분 캐시) 부스트는 콘텐츠 신호가 있을 때만 증폭(단독 발화 금지 — 글랜스성 보존). 같은 견적·금액 메일도 진행 거래처면 urgent로 — 단일 이벤트가 아닌 결합 신호(시나리오) 원칙 |
 | 카드 제목 폴백 | `runtime/server/workfeed_extract.go` | 휴리스틱 추출 | LLM 실패 시 graceful degradation |
