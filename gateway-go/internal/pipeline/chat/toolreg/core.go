@@ -452,9 +452,12 @@ func RegisterRoutineTools(registry toolctx.ToolRegistrar, chrono *toolctx.Chrono
 		Description: "이브닝레터 데이터 수집: 일정(오늘+내일)·미처리 메일·임박 마감을 병렬 수집해 raw JSON 반환. " +
 			"모닝레터의 저녁 짝 — 시장데이터(날씨·환율·구리)는 제외. 편지 작성(회고·내일 준비·우선순위)은 에이전트 몫. " +
 			"출력 계약: 차분한 머리말 한 줄(펜스 밖) + deneb-ui 펜스 블록 정확히 1개(루트 <column> 하나의 라벨 HTML 마크업, " +
-			"태그는 column/card/row/text(style: caption·body)/ul·li/icon/badge만 — 예: <card><row><icon name=\"calendar\" size=\"16\"/>" +
-			"<text style=\"caption\">내일 일정</text></row><ul><li>10:00 — 분기 리뷰</li></ul></card>). 카드 3장 — 내일 일정(icon calendar)·" +
-			"챙길 메일(icon mail, 상위 3~5건)·임박 마감(icon alarm, 항목마다 <badge>D-N</badge>; 빈 섹션은 카드째 생략, " +
+			"태그는 column/card/row/text(style: headline·caption·body)/ul·li/icon/badge/hr만 — 예: <card><row><icon name=\"calendar\" size=\"16\"/>" +
+			"<text style=\"caption\">내일 일정</text></row><ul><li>10:00 — 분기 리뷰</li></ul></card>). " +
+			"맨 앞에 마스트헤드: <text style=\"headline\">M월 D일 요일 저녁</text> + <text style=\"caption\">이브닝 레터 · 데네브</text> + <hr/>. " +
+			"이어서 카드 3장 — 내일 일정(icon calendar)·" +
+			"챙길 메일(icon mail, 상위 3~5건)·임박 마감(icon alarm, 항목마다 <badge>D-N</badge> — 0=\"D-day\", 음수=\"기한 초과\", " +
+			"긴급도 색: D-3 이하 color=\"warning\", 기한 초과·D-day color=\"error\", 그 외 색 없음; 빈 섹션은 카드째 생략, " +
 			"ok:false 섹션은 본문에 '조회 실패'). 최종 텍스트가 곧 전달 메시지 — message 툴 호출·확인 문구·채널 상태 추측 금지. " +
 			"No parameters",
 		InputSchema: eveningLetterToolSchema(),
