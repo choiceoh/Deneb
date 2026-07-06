@@ -4,6 +4,7 @@ globs:
   - "gateway-go/internal/domain/wiki/**"
   - "gateway-go/internal/runtime/server/wiki_*.go"
   - "gateway-go/internal/pipeline/chat/tools/wiki.go"
+  - "gateway-go/internal/pipeline/chat/tools/wiki_ingest.go"
 ---
 
 # Wiki Project Layout (프로젝트 문서 스키마)
@@ -19,11 +20,15 @@ globs:
 프로젝트/<프로젝트명>/
 ├── 대표.md      ← 대표페이지: 현재 상태·개요·핵심 사실 (digest/status/candidate 대상)
 ├── 로그.md      ← 진행 로그: 사건·회의·결재는 새 페이지가 아니라 여기에 날짜와 함께 append
+│                  섹션 제목 문법: '## [YYYY-MM-DD] <op> | <주제>' (op: 회의/결정/발주/이슈/ingest …)
 ├── 기자재/      ← 케이블·모듈 등 자재 문서
-└── 메일분석/    ← 메일 1통 = 1페이지 (시스템 자동 생성; 손으로 만들지 말 것)
+├── 메일분석/    ← 메일 1통 = 1페이지 (시스템 자동 생성; 손으로 만들지 말 것)
+└── 자료/        ← 외부 소스(URL·유튜브) 캡처, 소스 1개 = 1페이지 (wiki action="ingest"가 생성;
+                   손으로 만들지 말 것 — 정규화 URL 멱등, frontmatter resource가 키)
 
 프로젝트/거래/      ← 거래처 단위 원장 (프로젝트 횡단이라 프로젝트 폴더 밖)
 프로젝트/메일분석/  ← 프로젝트 미연결 메일 분석 버킷
+프로젝트/자료/      ← 프로젝트 미연결 자료 버킷
 ```
 
 - **레거시**: 이관 전 대표페이지는 flat `프로젝트/<이름>.md`, 메일분석은
@@ -38,8 +43,8 @@ globs:
 |---|---|
 | 이 경로가 대표페이지인가 | `IsProjectRepPage(path)` |
 | 이 경로의 소유 프로젝트는 | `ProjectNameOf(path)` / `ProjectFolderOf(path)` |
-| 대표/로그/메일분석 경로 생성 | `RepPagePath` / `LogPagePath` / `MailAnalysisPagePath` |
-| 원시 데이터(메일·거래)인가 | `IsProjectRawDataPath(path)` |
+| 대표/로그/메일분석/자료 경로 생성 | `RepPagePath` / `LogPagePath` / `MailAnalysisPagePath` / `MaterialPagePath` |
+| 원시 데이터(메일·거래·자료)인가 | `IsProjectRawDataPath(path)` (자료만: `IsMaterialPath`) |
 | flat 프로젝트 경로 정규화 | `NormalizeProjectPagePath(path)` (쓰기 경로에서 호출) |
 | 프로젝트 열거 | `Store.KnownProjects()` |
 
@@ -86,6 +91,12 @@ globs:
   결정적 신호(related가 프로젝트를 가리킴 / 제목이 정확히 한 프로젝트를 지목)로
   해당 프로젝트 메일분석 슬롯에 소급 파일링한다 (모호하면 잔류, 사이클당 10건).
 - 사건·이벤트는 페이지 증식이 아니라 해당 프로젝트 `로그.md`에 append.
+- **외부 소스 캡처는 `wiki(action="ingest", query=URL)`** (`tools/wiki_ingest.go`): 웹/유튜브를
+  lightweight 요약(fail-open — 실패 시 발췌로 캡처 보존)+바운드 발췌와 함께 자료 페이지로 영속화.
+  같은 URL은 멱등(트래킹 파라미터 제거·유튜브 변형 정규화), 갱신은 `force=true`. `project=` 연결은
+  대표페이지 존재를 검증(오타 유령 폴더 방지 — 없으면 전역 버킷)하고 로그에 `ingest` op 섹션을 남긴다.
+- **출처 규율 (부유 주장 금지)**: 소스가 있는 주장은 그 [[페이지]]/ref를 병기하고, 소스 없는 합성
+  추론은 `> 합성:` 인용으로 시작한다 — 드리머 프롬프트와 wiki write 도구 설명이 같은 규율을 강제.
 - 페이지 이동은 `Store.MovePage` (인바운드 related 재지향 포함), 병합은
   `Store.MergePage`. 파일을 직접 mv/rm 하지 말 것.
 

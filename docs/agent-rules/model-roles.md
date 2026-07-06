@@ -69,6 +69,7 @@ globs: gateway-go/internal/ai/modelrole/**, gateway-go/internal/pipeline/pilot/*
 | 프로젝트별 최신 근황 digest | `domain/wiki/project_digest.go` (드림 사이클 Phase 3d) → 프로젝트 대표페이지 `## 현재 상태` 섹션 (`project_status.go`) → `miniapp.project.digests` (모아보기 화면) | **lightweight** | 드림 사이클이 소비하는 그 일지/메모 입력을 프로젝트별로 롤업(헤드라인+불릿 2~3)하는 내부 배경 요약. open_loops와 동형의 격리된 1콜, fail-open, 실제 `프로젝트/*` 페이지에 앵커. **왜 lightweight인가**: 컴팩션·youtube와 같은 내부 배경 요약 도그마(로컬·바운드) — analysis(클라우드)로 둘 이유 없음. 화면은 대표페이지 섹션만 읽어 LLM 핫패스 아님. 메일분석 이벤트 갱신(`wiki_mail_analysis.go` → `AppendProjectStatusLine`)은 **LLM 없는 결정적 날짜 불릿**이라 아래 표 참조 |
 
 | 웹페이지 인앱 번역 (인플레이스, en/ru→ko) | `chat/tools/translate.go` → `miniapp.web.translate` 브리지 | **translation** (신설, 미설정 시 lightweight 폴백) | 인앱 브라우저가 보낸 DOM 텍스트 세그먼트 배치를 번역. 바운드 로컬 변환이라 기본 lightweight, `agents.translationModel` 로 번역 특화 모델 opt-in. **개수 보존**(LLM 응답이 입력 개수와 불일치하면 그 배치는 원문 유지 — 텍스트 드롭/재정렬 금지) |
+| 위키 자료 인제스트 요약 (`wiki action="ingest"` URL/유튜브 캡처) | `chat/tools/wiki_ingest.go` | **lightweight** | 컴팩션·youtube와 동형의 내부 배경 요약 (도그마 #1). 바운드(입력 16K룬·출력 700tok), fail-open — 요약 실패 시 발췌로 캡처 자체는 보존, force 재인제스트로 재시도 |
 
 ## LLM 안 쓰는 곳 (의도적)
 

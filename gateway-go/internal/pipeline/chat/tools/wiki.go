@@ -40,6 +40,7 @@ func ToolWiki(d *toolctx.WikiDeps, workspaceDir string) toolctx.ToolFunc {
 			Section    string   `json:"section"`
 			Limit      int      `json:"limit"`
 			Force      bool     `json:"force"`
+			Project    string   `json:"project"`
 		}
 		if err := json.Unmarshal(input, &p); err != nil {
 			return "", fmt.Errorf("parse input: %w", err)
@@ -71,8 +72,10 @@ func ToolWiki(d *toolctx.WikiDeps, workspaceDir string) toolctx.ToolFunc {
 			return wikiCloseProject(d.Store, p.Query, p.Content)
 		case "reopen":
 			return wikiReopenProject(d.Store, p.Query)
+		case "ingest":
+			return wikiIngest(ctx, d.Store, p.Query, p.Project, p.Title, p.Content, p.Force)
 		default:
-			return fmt.Sprintf("알 수 없는 액션: %s. 사용 가능: search, read, index, write, log, daily, status, close, reopen", p.Action), nil
+			return fmt.Sprintf("알 수 없는 액션: %s. 사용 가능: search, read, index, write, log, daily, status, close, reopen, ingest", p.Action), nil
 		}
 	}
 }

@@ -8,11 +8,13 @@
 //	  로그.md      — 진행 로그: dated progress entries (events append here, NOT new pages)
 //	  기자재/*.md  — equipment/material pages (cables, modules, quotes, spec sheets)
 //	  메일분석/*.md — per-mail analysis raw pages (one page per Gmail message ID)
+//	  자료/*.md    — ingested external sources (URL/영상), one page per source URL
 //
 // Category-level (non-project) buckets under 프로젝트/:
 //
 //	프로젝트/거래/      — per-counterparty deal ledger pages (span projects)
 //	프로젝트/메일분석/  — mail analyses the analyzer linked to no project
+//	프로젝트/자료/      — ingested sources linked to no project
 //
 // Legacy layout (pre-migration): the 대표페이지 was the flat 프로젝트/<name>.md and
 // mail analyses lived under 프로젝트/mail-analyses/[<project>/]. Helpers accept
@@ -36,6 +38,10 @@ const (
 	// MailAnalysisDir is the per-project mail-analysis sub-folder, and also the
 	// category-level bucket (프로젝트/메일분석/) for analyses with no linked project.
 	MailAnalysisDir = "메일분석"
+	// MaterialDir is the per-project ingested-source sub-folder (URL/영상 자료,
+	// one page per source URL — wiki tool action="ingest"), and also the
+	// category-level bucket (프로젝트/자료/) for sources with no linked project.
+	MaterialDir = "자료"
 	// legacyMailAnalysisDir is the pre-migration global mail-analysis bucket.
 	legacyMailAnalysisDir = "mail-analyses"
 	// dealDir is the category-level per-counterparty deal ledger.
@@ -48,6 +54,7 @@ var reservedProjectDirs = map[string]bool{
 	dealDir:               true,
 	MailAnalysisDir:       true,
 	legacyMailAnalysisDir: true,
+	MaterialDir:           true,
 }
 
 // IsReservedProjectDir reports whether name is a category-level raw-data bucket
@@ -86,6 +93,16 @@ func MailAnalysisPagePath(project, msgID string) string {
 		return projectCategoryPrefix + "/" + MailAnalysisDir + "/" + msgID + ".md"
 	}
 	return projectCategoryPrefix + "/" + project + "/" + MailAnalysisDir + "/" + msgID + ".md"
+}
+
+// MaterialPagePath maps an ingested-source filename to its wiki page path:
+// under the project's 자료/ folder when the ingest linked one, else the
+// category-level unlinked bucket 프로젝트/자료/.
+func MaterialPagePath(project, filename string) string {
+	if project == "" {
+		return projectCategoryPrefix + "/" + MaterialDir + "/" + filename
+	}
+	return projectCategoryPrefix + "/" + project + "/" + MaterialDir + "/" + filename
 }
 
 // ProjectOfLinkedMailAnalysis returns the owning project of a PROJECT-LINKED
@@ -164,8 +181,8 @@ func IsProjectRawDataPath(relPath string) bool {
 	if IsReservedProjectDir(seg[0]) {
 		return true
 	}
-	// Per-project raw slots: 프로젝트/<name>/메일분석/... (and legacy nesting).
-	return seg[1] == MailAnalysisDir || seg[1] == legacyMailAnalysisDir
+	// Per-project raw slots: 프로젝트/<name>/{메일분석,자료}/... (and legacy nesting).
+	return seg[1] == MailAnalysisDir || seg[1] == legacyMailAnalysisDir || seg[1] == MaterialDir
 }
 
 // NormalizeProjectPagePath enforces the project layout's path shape on a write:
@@ -192,7 +209,7 @@ func NormalizeProjectPagePath(relPath string) string {
 		return RepPagePath(name)
 	case len(seg) == 2: // 프로젝트/<name>/<file>.md — canonical detail/slot
 		return relPath
-	case seg[1] == EquipmentDir || seg[1] == MailAnalysisDir || seg[1] == legacyMailAnalysisDir:
+	case seg[1] == EquipmentDir || seg[1] == MailAnalysisDir || seg[1] == legacyMailAnalysisDir || seg[1] == MaterialDir:
 		if len(seg) == 3 { // canonical slot file
 			return relPath
 		}
@@ -268,6 +285,13 @@ func (s *Store) CleanNewProjectRepPath(path string) string {
 		return path
 	}
 	return RepPagePath(clean)
+}
+
+// IsMaterialPath reports whether relPath sits in any ingested-source bucket
+// (per-project 자료/ or the category-level 프로젝트/자료/). Path-shape only.
+func IsMaterialPath(relPath string) bool {
+	p := "/" + filepath.ToSlash(strings.TrimSpace(relPath))
+	return strings.Contains(p, "/"+MaterialDir+"/")
 }
 
 // IsMailAnalysisPath reports whether relPath sits in any mail-analysis bucket
