@@ -120,6 +120,56 @@ func TestClosedClientRejectsCalls(t *testing.T) {
 	}
 }
 
+func TestCloseProcessKeepsClientUsable(t *testing.T) {
+	c := newTestClient(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if err := c.Start(ctx); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	c.CloseProcess()
+	// Within the respawn backoff window the client must report backoff —
+	// NOT "client closed" — proving it stays usable for later consumers.
+	if _, err := c.CallTool(ctx, "echo", nil); err == nil || !strings.Contains(err.Error(), "backoff") {
+		t.Fatalf("want backoff error after CloseProcess, got %v", err)
+	}
+}
+
+// TestInitWaitIsCancelable proves two properties of the ready-future init:
+// an impatient caller returns on ITS OWN ctx without waiting for the slow
+// handshake, and the handshake keeps running in the background so a patient
+// caller succeeds afterwards.
+func TestInitWaitIsCancelable(t *testing.T) {
+	c, err := New(context.Background(),
+		[]string{os.Args[0], "-test.run=^TestHelperProcess$", "--", "mcp-helper", "slow-init"}, nil)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	t.Cleanup(c.Close)
+
+	short, cancelShort := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancelShort()
+	begin := time.Now()
+	if _, err := c.CallTool(short, "echo", nil); err == nil {
+		t.Fatal("impatient call: want ctx error, got nil")
+	}
+	if elapsed := time.Since(begin); elapsed > 1200*time.Millisecond {
+		t.Fatalf("impatient call blocked %v — init wait not cancelable", elapsed)
+	}
+
+	long, cancelLong := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancelLong()
+	if err := c.Start(long); err != nil {
+		t.Fatalf("patient Start after background init: %v", err)
+	}
+	if err := c.Ping(long); err != nil {
+		t.Fatalf("Ping: %v", err)
+	}
+	if name, _ := c.ServerInfo(); name != "fake-mcp" {
+		t.Fatalf("ServerInfo name = %q, want fake-mcp", name)
+	}
+}
+
 func TestChildEnvAllowlist(t *testing.T) {
 	t.Setenv("DENEB_FAKE_SECRET", "supersecret")
 	t.Setenv("LC_ALL", "C.UTF-8")
@@ -140,10 +190,13 @@ func TestChildEnvAllowlist(t *testing.T) {
 // "mcp-helper" argv flag it acts as a fake MCP server over stdio
 // (newline-delimited JSON-RPC).
 func TestHelperProcess(t *testing.T) {
-	isHelper := false
+	isHelper, slowInit := false, false
 	for _, arg := range os.Args {
-		if arg == "mcp-helper" {
+		switch arg {
+		case "mcp-helper":
 			isHelper = true
+		case "slow-init":
+			slowInit = true
 		}
 	}
 	if !isHelper {
@@ -178,7 +231,12 @@ func TestHelperProcess(t *testing.T) {
 			continue // notification
 		}
 		switch req.Method {
+		case "ping":
+			reply(req.ID, map[string]any{})
 		case "initialize":
+			if slowInit {
+				time.Sleep(1500 * time.Millisecond)
+			}
 			reply(req.ID, map[string]any{
 				"protocolVersion": protocolVersion,
 				"capabilities":    map[string]any{"tools": map[string]any{}},

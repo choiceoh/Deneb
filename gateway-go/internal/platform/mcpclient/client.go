@@ -3,14 +3,19 @@
 // speaks newline-delimited JSON-RPC 2.0 over the child's stdin/stdout.
 //
 // Scope is deliberately narrow (mirror of server_http_mcp.go's minimalism on
-// the serving side): initialize handshake, tools/list, tools/call. No
+// the serving side): initialize handshake, tools/list, tools/call, ping. No
 // resources/prompts/sampling — server-initiated requests are answered with
 // "method not found" so a well-behaved server degrades gracefully.
 //
 // The stdio transport (not streamable HTTP) is the deliberate choice for
 // external servers like Plaud's: their npx wrapper owns the OAuth dance and
 // token cache, which a headless gateway cannot do against a browser-redirect
-// flow.
+// flow. Remote-only servers ride a stdio bridge (`npx -y mcp-remote <url>`).
+//
+// One Client is meant to be shared by every consumer of its server (chat
+// tools, ingest tasks, …): calls are safe to run concurrently, and the
+// initialize handshake runs once in the background with its own timeout —
+// waiters block cancelably on their own ctx, never on a mutex.
 package mcpclient
 
 import (
@@ -36,6 +41,18 @@ const protocolVersion = "2025-06-18"
 // child process dies — prevents a crash-looping server from being re-exec'd
 // on every tool call.
 const restartBackoff = 30 * time.Second
+
+// initTimeout bounds one spawn+handshake attempt. It derives from lifeCtx,
+// not from any caller's ctx: a caller giving up early must not abort the
+// initialization other callers are waiting for. Generous because a cold npx
+// run downloads the package before the server even starts.
+const initTimeout = 3 * time.Minute
+
+// writeTimeout bounds a single stdin write. A child that stops draining its
+// stdin (wedged event loop) would otherwise block the writer forever once
+// the pipe buffer fills; hitting this deadline kills the child and routes
+// recovery through the normal respawn path.
+const writeTimeout = 30 * time.Second
 
 // maxLineBytes caps a single JSON-RPC message from the server (tool results
 // can embed whole meeting transcripts; 16 MiB is generous without being
@@ -87,17 +104,17 @@ type ToolInfo struct {
 //
 // Lock hierarchy (acquire in this order; never reverse):
 //
-//	Client.readyMu (spawn + handshake serialization; held across handshake I/O)
-//	  → Client.mu (process state + stdin write serialization)
-//	      → Client.pendingMu (in-flight request table; reader goroutine takes it alone)
+//	Client.mu (process/init state + stdin write serialization)
+//	  → Client.pendingMu (in-flight request table; reader goroutine takes it alone)
+//
+// No lock is ever held while waiting for the child: initialization waiters
+// select on initDone/ctx, request waiters select on their pending channel.
 type Client struct {
 	argv   []string
 	logger *slog.Logger
 	// lifeCtx bounds the child process's lifetime (exec.CommandContext):
 	// typically the server shutdown ctx, so the child dies with the gateway.
 	lifeCtx context.Context
-
-	readyMu sync.Mutex
 
 	mu         sync.Mutex
 	cmd        *exec.Cmd
@@ -106,6 +123,15 @@ type Client struct {
 	lastStart  time.Time
 	closed     bool
 	generation int // bumped per spawn; a stale process-exit event no-ops
+	// initDone is closed when the in-flight background init attempt settles
+	// (success or failure); nil when no attempt is in flight or pending
+	// retry. initErr carries the last attempt's failure.
+	initDone chan struct{}
+	initErr  error
+	// Handshake-reported identity (ServerInfo accessor).
+	serverName        string
+	serverVersion     string
+	listChangedLogged bool // one restart-hint log per spawn, spam-proof
 
 	pendingMu sync.Mutex
 	pending   map[int64]chan rpcResponse
@@ -144,10 +170,29 @@ func New(lifeCtx context.Context, argv []string, logger *slog.Logger) (*Client, 
 	}, nil
 }
 
-// Start spawns the server process and performs the initialize handshake.
-// ctx bounds the handshake only; the process itself lives until Close.
+// Start spawns the server process and waits for the initialize handshake.
+// ctx bounds the wait only; the process itself lives until Close (and the
+// handshake attempt keeps running on its own initTimeout even if ctx expires).
 func (c *Client) Start(ctx context.Context) error {
 	return c.ensureReady(ctx)
+}
+
+// Ping round-trips the MCP ping method — a cheap liveness probe for health
+// surfaces and future consumers.
+func (c *Client) Ping(ctx context.Context) error {
+	if err := c.ensureReady(ctx); err != nil {
+		return err
+	}
+	_, err := c.roundTrip(ctx, "ping", nil)
+	return err
+}
+
+// ServerInfo returns the name/version the server reported at initialize
+// (empty until the first successful handshake).
+func (c *Client) ServerInfo() (name, version string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.serverName, c.serverVersion
 }
 
 // ListTools returns the server's full tool catalog (follows pagination).
@@ -235,7 +280,8 @@ func (c *Client) CallTool(ctx context.Context, name string, args json.RawMessage
 	return sb.String(), nil
 }
 
-// Close terminates the server process. Safe to call more than once.
+// Close terminates the server process and permanently disables the client.
+// Safe to call more than once.
 func (c *Client) Close() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -243,41 +289,87 @@ func (c *Client) Close() {
 	c.stopLocked()
 }
 
-// ensureReady spawns the child and runs the initialize handshake if needed.
-// readyMu serializes concurrent callers so the handshake happens exactly once
-// per spawn; the handshake's request/response goes through the normal pending
-// path (reader goroutine), holding neither mu nor pendingMu while waiting.
-func (c *Client) ensureReady(ctx context.Context) error {
-	c.readyMu.Lock()
-	defer c.readyMu.Unlock()
+// CloseProcess kills the current child WITHOUT closing the client: the next
+// call respawns it (restartBackoff-gated). Use when reclaiming an idle or
+// unusable process while keeping the client available to later consumers —
+// e.g. after a failed boot-time discovery, when the operator may complete
+// the server's OAuth step and retry without a gateway restart.
+func (c *Client) CloseProcess() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.stopLocked()
+}
 
+// ensureReady makes sure the child is spawned and initialized. The handshake
+// runs at most once per spawn, in a background goroutine bounded by
+// initTimeout (derived from lifeCtx). Callers wait on the shared initDone
+// future with their OWN ctx — a caller giving up early neither aborts the
+// attempt nor delays other callers, and no mutex is held while waiting.
+func (c *Client) ensureReady(ctx context.Context) error {
 	c.mu.Lock()
 	if c.ready {
 		c.mu.Unlock()
 		return nil
 	}
-	err := c.spawnLocked()
-	gen := c.generation
-	c.mu.Unlock()
-	if err != nil {
-		return err
-	}
-
-	if err := c.handshake(ctx); err != nil {
-		c.mu.Lock()
-		if c.generation == gen {
-			c.stopLocked()
+	if c.initDone == nil {
+		if err := c.spawnLocked(); err != nil {
+			c.mu.Unlock()
+			return err
 		}
-		c.mu.Unlock()
-		return err
+		done := make(chan struct{})
+		c.initDone = done
+		go c.initRun(done, c.generation)
 	}
+	done := c.initDone
+	c.mu.Unlock()
+
+	select {
+	case <-done:
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		if c.ready {
+			return nil
+		}
+		if c.closed {
+			return errors.New("mcpclient: client closed")
+		}
+		if c.initErr != nil {
+			return c.initErr
+		}
+		return errors.New("mcpclient: server initialization did not complete")
+	case <-ctx.Done():
+		return fmt.Errorf("mcpclient: waiting for server init: %w", ctx.Err())
+	}
+}
+
+// initRun performs the initialize handshake for one spawn generation and
+// settles the initDone future. Owner of `done` — sole closer.
+func (c *Client) initRun(done chan struct{}, gen int) {
+	defer func() {
+		if r := recover(); r != nil {
+			c.logger.Error("panic in mcp init goroutine", "panic", r)
+		}
+		close(done)
+	}()
+
+	ctx, cancel := context.WithTimeout(c.lifeCtx, initTimeout)
+	defer cancel()
+	err := c.handshake(ctx)
 
 	c.mu.Lock()
-	if c.generation == gen && c.cmd != nil {
-		c.ready = true
+	defer c.mu.Unlock()
+	if c.generation != gen {
+		return // superseded (deliberate stop or newer spawn) — state isn't ours
 	}
-	c.mu.Unlock()
-	return nil
+	if err != nil {
+		c.initErr = err
+		c.stopLocked() // resets initDone so a later attempt can respawn
+		return
+	}
+	if c.cmd != nil {
+		c.ready = true
+		c.initErr = nil
+	}
 }
 
 // spawnLocked starts the child process. Caller holds c.mu.
@@ -318,6 +410,7 @@ func (c *Client) spawnLocked() error {
 	c.cmd = cmd
 	c.stdin = stdin
 	c.generation++
+	c.listChangedLogged = false
 	gen := c.generation
 	c.logger.Info("mcp server process started", "cmd", c.argv[0], "pid", cmd.Process.Pid)
 
@@ -355,7 +448,8 @@ func (c *Client) spawnLocked() error {
 	return nil
 }
 
-// handshake performs initialize + notifications/initialized.
+// handshake performs initialize + notifications/initialized and records the
+// server's reported identity.
 func (c *Client) handshake(ctx context.Context) error {
 	params := map[string]any{
 		"protocolVersion": protocolVersion,
@@ -379,6 +473,10 @@ func (c *Client) handshake(ctx context.Context) error {
 	if err := c.send(map[string]any{"jsonrpc": "2.0", "method": "notifications/initialized"}); err != nil {
 		return err
 	}
+	c.mu.Lock()
+	c.serverName = init.ServerInfo.Name
+	c.serverVersion = init.ServerInfo.Version
+	c.mu.Unlock()
 	c.logger.Info("mcp server initialized",
 		"server", init.ServerInfo.Name,
 		"serverVersion", init.ServerInfo.Version,
@@ -386,7 +484,11 @@ func (c *Client) handshake(ctx context.Context) error {
 	return nil
 }
 
-// stopLocked kills the child and marks the client not ready. Caller holds c.mu.
+// stopLocked is the single teardown path: it kills the child, resets the
+// init future (so the next call can respawn instead of waiting on a settled
+// channel), bumps the generation (so the old spawn's reader/init goroutines
+// become stale and cannot double-handle the exit), and fails all in-flight
+// calls. Caller holds c.mu; pendingMu is taken under it (documented order).
 func (c *Client) stopLocked() {
 	if c.stdin != nil {
 		_ = c.stdin.Close()
@@ -404,34 +506,36 @@ func (c *Client) stopLocked() {
 	}
 	c.cmd = nil
 	c.ready = false
+	c.initDone = nil
+	c.generation++
+
+	err := errors.New("mcp server process stopped")
+	c.pendingMu.Lock()
+	for id, ch := range c.pending {
+		ch <- rpcResponse{Err: err} // buffered; never blocks
+		delete(c.pending, id)
+	}
+	c.pendingMu.Unlock()
 }
 
-// onProcessExit runs when the reader goroutine sees stdout EOF. It fails all
-// in-flight calls and marks the process dead so the next call respawns
-// (subject to restartBackoff). A stale generation (already respawned) no-ops.
+// onProcessExit runs when the reader goroutine sees stdout EOF. A stale
+// generation means the stop was deliberate (Close/CloseProcess/init failure
+// already ran stopLocked, which bumps the generation) or a newer spawn owns
+// the state — either way there is nothing to do and nothing to log. A
+// current generation here is a genuinely unexpected child death.
 func (c *Client) onProcessExit(gen int) {
 	c.mu.Lock()
 	if gen != c.generation {
 		c.mu.Unlock()
 		return
 	}
-	wasClosed := c.closed
 	c.stopLocked()
 	c.mu.Unlock()
 
-	err := errors.New("mcp server process exited")
-	c.pendingMu.Lock()
-	for id, ch := range c.pending {
-		ch <- rpcResponse{Err: err}
-		delete(c.pending, id)
-	}
-	c.pendingMu.Unlock()
-
-	if !wasClosed && c.lifeCtx.Err() == nil {
-		// Not Close() and not a lifeCtx (gateway shutdown) kill: the toolset
-		// silently degrades until the next call respawns the child —
-		// operator-visible per logging.md. The lifeCtx check keeps clean
-		// shutdowns/restarts from logging a false-positive Error.
+	if c.lifeCtx.Err() == nil {
+		// Not a lifeCtx (gateway shutdown) kill: the toolset silently
+		// degrades until the next call respawns the child — operator-visible
+		// per logging.md. Deliberate stops never reach here (stale gen).
 		c.logger.Error("mcp server process exited unexpectedly", "cmd", c.argv[0])
 	}
 }
@@ -469,8 +573,7 @@ func (c *Client) readLoop(stdout io.Reader) {
 				"error":   rpcError{Code: -32601, Message: "method not supported by deneb-gateway client"},
 			})
 		case msg.Method != "":
-			// Notification — ignored (Debug to avoid per-event spam).
-			c.logger.Debug("mcp server notification ignored", "method", msg.Method)
+			c.onNotification(msg.Method)
 		case hasID:
 			var id int64
 			if err := json.Unmarshal(msg.ID, &id); err != nil {
@@ -499,6 +602,26 @@ func (c *Client) readLoop(stdout io.Reader) {
 	if err := sc.Err(); err != nil {
 		c.logger.Warn("mcp stdout read ended", "error", err)
 	}
+}
+
+// onNotification handles server notifications. tools/list_changed matters
+// operationally: the chat toolset is frozen per process (prompt-cache Rule B),
+// so an upstream toolset change needs a gateway restart to be picked up —
+// surface that once per spawn at Info (once, so a hostile server cannot spam
+// the log). Everything else stays at Debug.
+func (c *Client) onNotification(method string) {
+	if method == "notifications/tools/list_changed" {
+		c.mu.Lock()
+		logged := c.listChangedLogged
+		c.listChangedLogged = true
+		c.mu.Unlock()
+		if !logged {
+			c.logger.Info("mcp server toolset changed upstream — restart the gateway to re-discover",
+				"cmd", c.argv[0])
+		}
+		return
+	}
+	c.logger.Debug("mcp server notification ignored", "method", method)
 }
 
 // roundTrip sends a request and waits for its response or ctx expiry.
@@ -536,7 +659,17 @@ func (c *Client) roundTrip(ctx context.Context, method string, params any) (json
 	}
 }
 
-// send marshals and writes one newline-terminated message to the child's stdin.
+// deadlineWriter is the subset of *os.File send uses to bound writes.
+// exec.Cmd.StdinPipe returns an *os.File, whose pipe deadlines work on Linux.
+type deadlineWriter interface {
+	SetWriteDeadline(t time.Time) error
+}
+
+// send marshals and writes one newline-terminated message to the child's
+// stdin. Writes are deadline-bounded: a child that stops draining stdin
+// would otherwise block the caller forever once the 64KB pipe buffer fills —
+// on any write failure (deadline included) the child is killed so recovery
+// goes through the normal respawn path.
 func (c *Client) send(msg map[string]any) error {
 	data, err := json.Marshal(msg)
 	if err != nil {
@@ -549,7 +682,11 @@ func (c *Client) send(msg map[string]any) error {
 	if c.stdin == nil {
 		return errors.New("mcpclient: server process not running")
 	}
+	if dw, ok := c.stdin.(deadlineWriter); ok {
+		_ = dw.SetWriteDeadline(time.Now().Add(writeTimeout)) // best effort
+	}
 	if _, err := c.stdin.Write(data); err != nil {
+		c.stopLocked() // broken/wedged pipe — force the crash-recovery path
 		return fmt.Errorf("mcpclient: write: %w", err)
 	}
 	return nil
