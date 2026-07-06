@@ -675,6 +675,9 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 					},
 					// Synthesis = analysis role (user-facing report, cloud OK);
 					// resolved per call so model-registry changes apply live.
+					// Thinking disabled like every mail synthesis call: a
+					// reasoning model otherwise burns the MaxTokens budget on
+					// thinking (first-tick incident: 1461/1600 tokens reasoning).
 					func(ctx context.Context, system, user string, maxTokens int) (string, error) {
 						client, model, _, _ := s.mailAnalysisModels()
 						if client == nil {
@@ -685,6 +688,7 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 							System:    llm.SystemString(system),
 							Messages:  []llm.Message{llm.NewTextMessage("user", user)},
 							MaxTokens: maxTokens,
+							Thinking:  &llm.ThinkingConfig{Type: "disabled"},
 						})
 					},
 					// Chunk gists = local stage-1 model (model-roles dogma).
@@ -698,6 +702,7 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 							System:    llm.SystemString(system),
 							Messages:  []llm.Message{llm.NewTextMessage("user", user)},
 							MaxTokens: maxTokens,
+							Thinking:  &llm.ThinkingConfig{Type: "disabled"},
 						})
 					},
 					s.projectCandidatesFn(),
