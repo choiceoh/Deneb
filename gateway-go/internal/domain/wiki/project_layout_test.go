@@ -143,3 +143,35 @@ func TestProjectOfLinkedMailAnalysis(t *testing.T) {
 		}
 	}
 }
+
+// TestMaterialSlot locks the 자료 slot: paths, raw-data classification, the
+// reserved global bucket, and overdeep folding under the slot.
+func TestMaterialSlot(t *testing.T) {
+	if got := MaterialPagePath("영산고", "발표-abcd1234.md"); got != "프로젝트/영산고/자료/발표-abcd1234.md" {
+		t.Errorf("MaterialPagePath linked = %q", got)
+	}
+	if got := MaterialPagePath("", "발표-abcd1234.md"); got != "프로젝트/자료/발표-abcd1234.md" {
+		t.Errorf("MaterialPagePath global = %q", got)
+	}
+	if !IsProjectRawDataPath("프로젝트/영산고/자료/x.md") || !IsProjectRawDataPath("프로젝트/자료/x.md") {
+		t.Error("자료 pages must classify as raw data (excluded from curated dedup)")
+	}
+	if IsProjectRepPage("프로젝트/자료.md") {
+		t.Error("reserved 자료 bucket flat file must not read as a project rep page")
+	}
+	if name, ok := ProjectNameOf("프로젝트/자료/x.md"); ok {
+		t.Errorf("global 자료 bucket must not resolve to a project, got %q", name)
+	}
+	if name, ok := ProjectNameOf("프로젝트/영산고/자료/x.md"); !ok || name != "영산고" {
+		t.Errorf("linked 자료 page must resolve to its project, got %q ok=%v", name, ok)
+	}
+	if got := NormalizeProjectPagePath("프로젝트/영산고/자료/a/b.md"); got != "프로젝트/영산고/자료/a-b.md" {
+		t.Errorf("overdeep 자료 path must fold into the filename, got %q", got)
+	}
+	if !IsMaterialPath("프로젝트/영산고/자료/x.md") || !IsMaterialPath("프로젝트/자료/x.md") {
+		t.Error("IsMaterialPath must match both 자료 buckets")
+	}
+	if IsMaterialPath("프로젝트/영산고/기자재/x.md") {
+		t.Error("IsMaterialPath must not match other slots")
+	}
+}
