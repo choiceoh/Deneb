@@ -1,5 +1,19 @@
 # Changelog
 
+## [4.72.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.71.0...deneb-v4.72.0) (2026-07-06)
+
+
+### ✨ Features
+
+* **chat:** 외부 MCP 서버를 deferred 챗 도구로 소비 — stdio MCP 클라이언트 + DENEB_MCP_SERVERS 배선 ([#3216](https://github.com/choiceoh/Deneb/issues/3216)) ([372fba7](https://github.com/choiceoh/Deneb/commit/372fba79be3b72e60220993302005cc9023d4c86))
+* **wiki:** 자료 인제스트 — URL·유튜브를 1급 위키 메모리로 (wiki action=ingest) ([#3214](https://github.com/choiceoh/Deneb/issues/3214)) ([027e03b](https://github.com/choiceoh/Deneb/commit/027e03bae2d45f982066029b058c0fe83ddbee8d))
+
+
+### 🐛 Bug Fixes
+
+* **chat:** MCP 소비 경로 보안·견고성 후속 — 자식 env 허용목록·string id 응답·에러 상한·도구명 클램프 ([#3217](https://github.com/choiceoh/Deneb/issues/3217)) ([80aef58](https://github.com/choiceoh/Deneb/commit/80aef58766c4ca9fdae730c8d4b2d6237fee9a4e))
+* **deploy:** fossRelease 발행 시 서명 env 부재도 hard fail — debug 폴백 사고 재발 방지 ([#3210](https://github.com/choiceoh/Deneb/issues/3210)) ([fcdafea](https://github.com/choiceoh/Deneb/commit/fcdafeabcb1801d5c5c89d82ab9a6b272612ff69))
+
 ## [4.71.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.70.0...deneb-v4.71.0) (2026-07-05)
 
 
