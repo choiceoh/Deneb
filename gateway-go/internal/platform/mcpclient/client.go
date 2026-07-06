@@ -377,9 +377,11 @@ func (c *Client) onProcessExit(gen int) {
 	}
 	c.pendingMu.Unlock()
 
-	if !wasClosed {
-		// Not a graceful shutdown: the toolset silently degrades until the
-		// next call respawns the child — operator-visible per logging.md.
+	if !wasClosed && c.lifeCtx.Err() == nil {
+		// Not Close() and not a lifeCtx (gateway shutdown) kill: the toolset
+		// silently degrades until the next call respawns the child —
+		// operator-visible per logging.md. The lifeCtx check keeps clean
+		// shutdowns/restarts from logging a false-positive Error.
 		c.logger.Error("mcp server process exited unexpectedly", "cmd", c.argv[0])
 	}
 }
