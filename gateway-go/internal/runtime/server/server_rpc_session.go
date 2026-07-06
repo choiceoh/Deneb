@@ -665,14 +665,20 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 		if os.Getenv(plaudRecordingsDisableEnv) != "1" {
 			if stateDir, ok := s.productionStateDir(homeDir); ok && s.wikiStore != nil {
 				s.plaudRecordings = newPlaudRecordingsService(
+					// Direct shared-client call, NOT chatToolRegistry.Execute:
+					// the executor's head/tail truncation+spillover protects
+					// CHAT context, but this pipeline must read the FULL
+					// transcript (round-2 live check: mid-meeting content was
+					// spilled and the synthesis saw a gutted JSON). The #3218
+					// shared registry exists exactly for ingest-type consumers.
 					func(ctx context.Context, name string, args json.RawMessage) (string, error) {
-						reg := s.chatToolRegistry
-						if reg == nil {
-							// Same shape as the registry's own miss so the
-							// service's "not wired yet" branch handles it.
-							return "", errors.New("unknown tool: chat registry not ready")
+						client := s.externalMCP["plaud"]
+						if client == nil {
+							// Same shape as a registry miss so the service's
+							// "not wired yet" branch handles it quietly.
+							return "", errors.New("unknown tool: plaud mcp not configured")
 						}
-						return reg.Execute(ctx, name, args)
+						return client.CallTool(ctx, strings.TrimPrefix(name, "plaud_"), args)
 					},
 					// Synthesis = analysis role (user-facing report, cloud OK);
 					// resolved per call so model-registry changes apply live.
