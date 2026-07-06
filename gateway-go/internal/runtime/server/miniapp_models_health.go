@@ -20,10 +20,7 @@ func (s *Server) miniappModelSnapshot(ctx context.Context) miniappModelSnapshot 
 	discovered := s.discoverMiniappLocalModels(ctx, providers)
 	probes := s.miniappModelHealthProbes(ctx, providers, discovered)
 	for i := range providers {
-		providers[i].models = mergeModels(providers[i].models, discovered[providers[i].name])
-		if len(providers[i].models) > maxModelsPerProvider {
-			providers[i].models = providers[i].models[:maxModelsPerProvider]
-		}
+		providers[i].models = capMergedModels(providers[i].models, discovered[providers[i].name])
 	}
 	sections := assembleMiniappModelSections(roles, providers)
 	return miniappModelSnapshot{
@@ -37,10 +34,7 @@ func (s *Server) miniappModelSections(ctx context.Context) []modelSection {
 	providers := appendBuiltinProviders(loadConfiguredProviders())
 	discovered := s.discoverMiniappLocalModels(ctx, providers)
 	for i := range providers {
-		providers[i].models = mergeModels(providers[i].models, discovered[providers[i].name])
-		if len(providers[i].models) > maxModelsPerProvider {
-			providers[i].models = providers[i].models[:maxModelsPerProvider]
-		}
+		providers[i].models = capMergedModels(providers[i].models, discovered[providers[i].name])
 	}
 	return assembleMiniappModelSections(roles, providers)
 }

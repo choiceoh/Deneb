@@ -190,6 +190,22 @@ func mergeModels(configured, discovered []string) []string {
 	return out
 }
 
+// capMergedModels merges configured + discovered ids and applies the picker
+// display cap while exempting every operator-declared (configured) model:
+// mergeModels keeps configured ids first, so raising the limit to the declared
+// count guarantees they all survive and the cap only trims discovered extras.
+func capMergedModels(configured, discovered []string) []string {
+	merged := mergeModels(configured, discovered)
+	limit := maxModelsPerProvider
+	if len(configured) > limit {
+		limit = len(configured)
+	}
+	if len(merged) > limit {
+		merged = merged[:limit]
+	}
+	return merged
+}
+
 // providerEntries builds the model entries for one provider section.
 func providerEntries(spec providerSpec) []modelEntry {
 	entries := make([]modelEntry, 0, len(spec.models))
@@ -259,8 +275,11 @@ func discoverProviderModels(ctx context.Context, baseURL, apiKey string) []strin
 	if err != nil || len(ids) == 0 {
 		return nil
 	}
-	if len(ids) > maxModelsPerProvider {
-		ids = ids[:maxModelsPerProvider]
+	// Safety bound only — NOT the display cap. This list doubles as the
+	// health-membership authority (miniappModelHealthForEntry), so trimming
+	// it to maxModelsPerProvider falsely marked served models "offline".
+	if len(ids) > maxDiscoveredModels {
+		ids = ids[:maxDiscoveredModels]
 	}
 	return ids
 }
