@@ -111,7 +111,7 @@ metadata:
 #### 마크업 규칙 (엄수)
 
 - 펜스는 deneb-ui 블록 **정확히 한 개**, 그 안은 루트 `<column>` **하나**의 HTML 마크업. 한국어는 그대로 쓴다(이스케이프 불필요).
-- 태그를 지어내지 마라. 쓸 태그는 예시의 것뿐: `column`/`card`/`row`/`text`(style: `headline`·`caption`·`body`)/`stat`/`ul`·`li`/`icon`/`badge`.
+- 태그를 지어내지 마라. 쓸 태그는 예시의 것뿐: `column`/`card`/`row`/`text`(style: `headline`·`caption`·`body`)/`stat`/`ul`·`li`/`icon`/`badge`/`hr`(마스트헤드 구분선).
 - 여는 태그는 닫는다(`<card>…</card>`). 속성값은 큰따옴표. 카드 본문에 백틱(`` ` ``)이나 코드펜스를 넣지 마라.
 - 펜스 앞뒤에 머리말 한 줄 외의 설명·상태 텍스트를 넣지 마라.
 

@@ -121,8 +121,17 @@ internal fun RenderText(node: TextNode) {
  */
 @Composable
 internal fun denebUiInlineText(value: String): AnnotatedString {
-    if (value.none { it == '*' || it == '`' || it == '~' }) return AnnotatedString(value)
-    return InlineTokenizer.tokenize(value).toAnnotatedString(MaterialTheme.colorScheme)
+    // Fast-path gate covers every marker family the tokenizer understands
+    // (emphasis, code, strikethrough, _italic_, links, inline HTML); the
+    // result is memoized per value+scheme — tokenizing on every
+    // recomposition would tax long cards (review catch on #3233).
+    val colors = MaterialTheme.colorScheme
+    if (value.none { it == '*' || it == '`' || it == '~' || it == '_' || it == '[' || it == '<' }) {
+        return AnnotatedString(value)
+    }
+    return remember(value, colors) {
+        InlineTokenizer.tokenize(value).toAnnotatedString(colors)
+    }
 }
 
 /**
@@ -136,10 +145,14 @@ internal fun denebUiListItemText(value: String): AnnotatedString {
     val sep = " — "
     val idx = value.indexOf(sep)
     if (idx !in 1..14) return denebUiInlineText(value)
+    // Resolve the composable inline rendering BEFORE the builder lambda —
+    // composable calls inside builder lambdas are a fragile pattern even
+    // where the compiler tolerates the inline case (review catch on #3233).
+    val rest = denebUiInlineText(value.substring(idx + sep.length))
     return buildAnnotatedString {
         withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) { append(value.substring(0, idx)) }
         append(sep)
-        append(denebUiInlineText(value.substring(idx + sep.length)))
+        append(rest)
     }
 }
 
@@ -251,9 +264,10 @@ internal fun RenderProgress(node: ProgressNode) {
         // eyeball-estimate the one value the node exists to communicate.
         val pct = node.value?.let { "${(it.coerceIn(0f, 1f) * 100).roundToInt()}%" }
             // The authoring contract long showed label="50%" examples — when
-            // the label already carries the percent, a computed twin on the
-            // right would read 50% ... 50% (review catch on #3228).
-            ?.takeIf { p -> node.label?.trim() != p }
+            // the label already carries the percent anywhere ("진행률 50%"),
+            // a computed twin on the right would duplicate it (review
+            // catches on #3228 and #3233).
+            ?.takeIf { p -> node.label?.contains(p) != true }
         if (node.label != null || pct != null) {
             Row(
                 Modifier.fillMaxWidth().padding(bottom = 6.dp),

@@ -19,6 +19,38 @@ import {
 } from "@/markdown/denebUiParse";
 import { Markdown } from "./Markdown";
 
+// --- deneb-ui text conventions (parity with the native renderer) ---
+
+/** Inline emphasis for text values: **bold** / *italic* / `code`. */
+export function renderInline(text: string, keyBase: string): React.ReactNode {
+  if (!/[*`]/.test(text)) return text;
+  const out: React.ReactNode[] = [];
+  const re = /(\*\*([^*]+)\*\*|`([^`]+)`|\*([^*]+)\*)/g;
+  let last = 0;
+  let m: RegExpExecArray | null;
+  let i = 0;
+  while ((m = re.exec(text))) {
+    if (m.index > last) out.push(text.slice(last, m.index));
+    if (m[2] !== undefined) out.push(<strong key={`${keyBase}b${i}`}>{m[2]}</strong>);
+    else if (m[3] !== undefined)
+      out.push(
+        <code key={`${keyBase}c${i}`} className="dui-inline-code">
+          {m[3]}
+        </code>,
+      );
+    else if (m[4] !== undefined) out.push(<em key={`${keyBase}i${i}`}>{m[4]}</em>);
+    last = m.index + m[0].length;
+    i += 1;
+  }
+  if (last < text.length) out.push(text.slice(last));
+  return out;
+}
+
+/** "HH:MM — 제목" schedule item — such lists render as a timeline. */
+const TIMELINE_RE = /^\d{1,2}:\d{2}\s*—\s*.+$/;
+/** Short "키 — 내용" lead (time, sender) rendered as a bold scan point. */
+const KEY_DASH_RE = /^(.{1,14}?) — ([\s\S]*)$/;
+
 // Render one agent-drawn UI block. Owns form + accordion-toggle state so a
 // callback's collectFrom can gather live input values.
 export function DenebUi({ spec, onSubmit, busy }: { spec: Node; onSubmit: (msg: string) => void; busy?: boolean }) {
@@ -83,12 +115,31 @@ export function DenebUi({ spec, onSubmit, busy }: { spec: Node; onSubmit: (msg: 
             {kids(n, key)}
           </div>
         );
-      case "card":
+      case "card": {
+        // Letter/briefing convention: an icon + caption first row is the
+        // card's section label — give it the tracked label voice instead of
+        // an ordinary caption line (parity with the native renderer).
+        const ch: Node[] = Array.isArray(n.children) ? (n.children as Node[]) : [];
+        const first = ch[0] as Node | undefined;
+        const firstKids: Node[] = Array.isArray(first?.children) ? (first.children as Node[]) : [];
+        const isHeader =
+          first?.type === "row" &&
+          firstKids.length === 2 &&
+          firstKids[0]?.type === "icon" &&
+          firstKids[1]?.type === "text" &&
+          String(firstKids[1]?.style) === "caption";
         return (
           <div key={key} className="dui-card">
-            {kids(n, key)}
+            {isHeader ? (
+              <div className="dui-card-hd">
+                {render(firstKids[0], `${key}.hicon`)}
+                <span className="dui-card-hd-label">{String(firstKids[1].value || firstKids[1].text || "")}</span>
+              </div>
+            ) : null}
+            {(isHeader ? ch.slice(1) : ch).map((c, i) => render(c, `${key}.${i}`))}
           </div>
         );
+      }
       case "box":
         return (
           <div key={key} className="dui-col">
@@ -114,12 +165,57 @@ export function DenebUi({ spec, onSubmit, busy }: { spec: Node; onSubmit: (msg: 
         // e.g. "items": ["a","b"]). Render strings as text so list rows never come
         // out as empty bullets when the model skips the {type:"text",...} wrapper.
         const items: unknown[] = Array.isArray(n.items) ? n.items : [];
+        const itemText = (it: unknown): string | null => {
+          if (typeof it === "string") return it;
+          const node = it as Node;
+          if (node && node.type === "text" && !node.style && !node.bold && !node.color) {
+            return String(node.value || node.text || "");
+          }
+          return null;
+        };
+        // Schedule shape → timeline: right-aligned time, accent dot, title.
+        if (!n.ordered && items.length > 0 && items.every((it) => TIMELINE_RE.test((itemText(it) ?? "").trim()))) {
+          return (
+            <div key={key} className="dui-timeline">
+              {items.map((it, i) => {
+                const v = (itemText(it) ?? "").trim();
+                const dash = v.indexOf("—");
+                const time = v.slice(0, dash).trim();
+                const title = v.slice(dash + 1).trim();
+                return (
+                  <div key={i} className="dui-timeline-row">
+                    <span className="dui-timeline-time">{time}</span>
+                    <span className="dui-timeline-dot" />
+                    <span className="dui-timeline-title">{renderInline(title, `${key}.${i}`)}</span>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        }
         const Tag = n.ordered ? "ol" : "ul";
         return (
           <Tag key={key} className="dui-list">
-            {items.map((it, i) => (
-              <li key={i}>{typeof it === "string" ? it : render(it as Node, `${key}.${i}`)}</li>
-            ))}
+            {items.map((it, i) => {
+              const text = itemText(it);
+              if (text !== null) {
+                const m = KEY_DASH_RE.exec(text);
+                return (
+                  <li key={i}>
+                    {m ? (
+                      <>
+                        <strong>{m[1]}</strong>
+                        {" — "}
+                        {renderInline(m[2], `${key}.${i}`)}
+                      </>
+                    ) : (
+                      renderInline(text, `${key}.${i}`)
+                    )}
+                  </li>
+                );
+              }
+              return <li key={i}>{render(it as Node, `${key}.${i}`)}</li>;
+            })}
           </Tag>
         );
       }
@@ -159,7 +255,7 @@ export function DenebUi({ spec, onSubmit, busy }: { spec: Node; onSubmit: (msg: 
               lineHeight: 1.5,
             }}
           >
-            {String(n.value || n.text || "")}
+            {renderInline(String(n.value || n.text || ""), key)}
           </div>
         );
       case "markdown":
@@ -179,18 +275,24 @@ export function DenebUi({ spec, onSubmit, busy }: { spec: Node; onSubmit: (msg: 
         );
       case "badge":
         return (
-          <span key={key} className="dui-badge">
+          <span key={key} className={"dui-badge" + (n.color ? ` ${String(n.color)}` : "")}>
             {String(n.value || n.text || "")}
           </span>
         );
-      case "stat":
+      case "stat": {
+        // Signed descriptions ("+2.1%") are direction claims — arrow + tint.
+        const desc = n.description ? String(n.description).trim() : "";
+        const pos = desc.startsWith("+") || desc.startsWith("▲");
+        const neg = desc.startsWith("-") || desc.startsWith("−") || desc.startsWith("▼");
+        const trend = pos ? `▲ ${desc.replace(/^[+▲]\s*/, "")}` : neg ? `▼ ${desc.replace(/^[-−▼]\s*/, "")}` : desc;
         return (
           <div key={key} className="dui-stat">
             <div className="dui-stat-value">{String(n.value || "")}</div>
             <div className="dui-stat-label">{String(n.label || "")}</div>
-            {n.description ? <div className="dui-stat-desc">{String(n.description)}</div> : null}
+            {desc ? <div className={"dui-stat-desc" + (pos ? " pos" : neg ? " neg" : "")}>{trend}</div> : null}
           </div>
         );
+      }
       case "image":
         return /^https?:\/\//i.test(String(n.url || "")) ? (
           <img key={key} className="dui-image" src={String(n.url)} alt={String(n.alt || "")} loading="lazy" />
@@ -210,12 +312,22 @@ export function DenebUi({ spec, onSubmit, busy }: { spec: Node; onSubmit: (msg: 
       case "table": {
         const headers: string[] = Array.isArray(n.headers) ? n.headers : [];
         const rows: string[][] = Array.isArray(n.rows) ? n.rows : [];
+        // Numeric columns read best right-aligned: every non-empty cell
+        // starting with a digit ("12", "7/10", "68%") marks the column.
+        const colCount = Math.max(headers.length, ...rows.map((r) => (Array.isArray(r) ? r.length : 0)), 0);
+        const numeric = Array.from({ length: colCount }, (_, i) => {
+          const cells = rows.map((r) => String((Array.isArray(r) ? r : [])[i] ?? "").trim()).filter(Boolean);
+          return cells.length > 0 && cells.every((c) => /^\d/.test(c));
+        });
+        const align = (i: number): React.CSSProperties | undefined => (numeric[i] ? { textAlign: "right" } : undefined);
         return (
           <table key={key} className="md-table">
             <thead>
               <tr>
                 {headers.map((h, i) => (
-                  <th key={i}>{String(h)}</th>
+                  <th key={i} style={align(i)}>
+                    {String(h)}
+                  </th>
                 ))}
               </tr>
             </thead>
@@ -223,7 +335,9 @@ export function DenebUi({ spec, onSubmit, busy }: { spec: Node; onSubmit: (msg: 
               {rows.map((r, ri) => (
                 <tr key={ri}>
                   {(Array.isArray(r) ? r : []).map((c, ci) => (
-                    <td key={ci}>{String(c)}</td>
+                    <td key={ci} style={align(ci)}>
+                      {String(c)}
+                    </td>
                   ))}
                 </tr>
               ))}
@@ -242,10 +356,14 @@ export function DenebUi({ spec, onSubmit, busy }: { spec: Node; onSubmit: (msg: 
         // Min-padded scale matches the native renderer: points carry their
         // real value labels, so a non-zero baseline stays honest.
         if (String(n.chartType) === "line" && nums.length >= 2) {
+          // Scale from the series' real extremes: the shared bar-width floor
+          // of 1 flattens fractional series like [0.12, 0.18] (review catch
+          // on #3233); the native renderer scales from the actual max.
+          const lineMax = Math.max(...nums);
           const min = Math.min(...nums);
-          const span = max - min || max;
+          const span = lineMax - min || lineMax || 1;
           const lo = Math.max(0, min - span * 0.15);
-          const hi = max + span * 0.05;
+          const hi = lineMax + span * 0.05;
           const W = 320;
           const H = 92;
           const PAD = 10;
@@ -310,7 +428,14 @@ export function DenebUi({ spec, onSubmit, busy }: { spec: Node; onSubmit: (msg: 
         const v = typeof n.value === "number" ? Math.max(0, Math.min(1, n.value)) : null;
         return (
           <div key={key} className="dui-col">
-            {n.label ? <div className="dui-stat-label">{String(n.label)}</div> : null}
+            {n.label || v != null ? (
+              <div className="dui-progress-hd">
+                <span className="dui-stat-label">{n.label ? String(n.label) : ""}</span>
+                {v != null && String(n.label ?? "").trim() !== `${Math.round(v * 100)}%` ? (
+                  <span className="dui-progress-pct">{Math.round(v * 100)}%</span>
+                ) : null}
+              </div>
+            ) : null}
             <span className="dui-progress">
               <span
                 className="dui-progress-fill"
