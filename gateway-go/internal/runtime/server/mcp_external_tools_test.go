@@ -84,6 +84,25 @@ func TestRegisterMCPServerTools(t *testing.T) {
 	}
 }
 
+func TestClampToolName(t *testing.T) {
+	longA := "plaud_" + strings.Repeat("a", 60) + "_variant_one"
+	longB := "plaud_" + strings.Repeat("a", 60) + "_variant_two"
+	a := clampToolName(longA, "remote-a")
+	b := clampToolName(longB, "remote-b")
+	if len(a) > maxLLMToolNameLen || len(b) > maxLLMToolNameLen {
+		t.Fatalf("clamped names exceed %d: %q %q", maxLLMToolNameLen, a, b)
+	}
+	if a == b {
+		t.Fatalf("truncated names collide: %q", a)
+	}
+	if !strings.HasPrefix(a, "plaud_") {
+		t.Fatalf("namespace prefix lost: %q", a)
+	}
+	if short := clampToolName("plaud_echo", "echo"); short != "plaud_echo" {
+		t.Fatalf("short name must be untouched: %q", short)
+	}
+}
+
 func TestSanitizeMCPToolName(t *testing.T) {
 	cases := map[string]string{
 		"search_recordings": "search_recordings",
