@@ -21,8 +21,18 @@ import (
 const DefaultTurnDeadline = 5 * time.Minute
 
 // maxModelsPerProvider caps the models shown per provider in the model picker
-// so the list stays navigable on a phone screen.
-const maxModelsPerProvider = 8
+// so the list stays navigable on a phone screen. Operator-declared models
+// (deneb.json models.providers.<id>.models) are exempt — declaring a model is
+// an explicit "show this"; the cap only bounds discovered extras appended
+// after them (capMergedModels).
+const maxModelsPerProvider = 12
+
+// maxDiscoveredModels bounds a runaway /models response (an aggregator can
+// list hundreds). Deliberately far above maxModelsPerProvider: the discovered
+// list is also the health-membership authority, and trimming it to the display
+// cap made every served-but-trimmed model render as a false "offline" red dot
+// while answering completions fine (wormhole at 10 entries, 2026-07).
+const maxDiscoveredModels = 100
 
 // localDiscoveryTimeout bounds a single local /models probe.
 const localDiscoveryTimeout = 3 * time.Second

@@ -67,6 +67,63 @@ func TestBuildMiniappModelHealth(t *testing.T) {
 	}
 }
 
+func TestCapMergedModelsDeclaredExempt(t *testing.T) {
+	many := func(prefix string, n int) []string {
+		out := make([]string, 0, n)
+		for i := 0; i < n; i++ {
+			out = append(out, prefix+string(rune('a'+i)))
+		}
+		return out
+	}
+
+	// Declared models beyond the display cap all survive; the cap only
+	// trims discovered extras appended after them.
+	declared := many("d-", maxModelsPerProvider+2)
+	got := capMergedModels(declared, many("x-", 3))
+	if len(got) != len(declared) {
+		t.Fatalf("declared exempt: got %d models, want all %d declared", len(got), len(declared))
+	}
+	for i, id := range declared {
+		if got[i] != id {
+			t.Fatalf("declared exempt: got[%d] = %q, want %q", i, got[i], id)
+		}
+	}
+
+	// Few declared: discovered extras fill up to the cap, no further.
+	got = capMergedModels([]string{"d-1", "d-2"}, many("x-", maxModelsPerProvider+5))
+	if len(got) != maxModelsPerProvider {
+		t.Fatalf("discovered capped: got %d models, want %d", len(got), maxModelsPerProvider)
+	}
+	if got[0] != "d-1" || got[1] != "d-2" {
+		t.Fatalf("declared must lead the merged list, got %v", got[:2])
+	}
+}
+
+// Regression: the discovered list doubles as the health-membership authority,
+// so it must NOT be trimmed to the display cap — a served model beyond the cap
+// rendered as a false "offline" while answering completions fine.
+func TestDiscoverProviderModelsKeepsFullServedList(t *testing.T) {
+	const served = maxModelsPerProvider + 8
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		payload := `{"data":[`
+		for i := 0; i < served; i++ {
+			if i > 0 {
+				payload += ","
+			}
+			payload += `{"id":"m` + string(rune('a'+i)) + `"}`
+		}
+		payload += `]}`
+		_, _ = w.Write([]byte(payload))
+	}))
+	defer srv.Close()
+
+	got := discoverProviderModels(context.Background(), srv.URL, "")
+	if len(got) != served {
+		t.Fatalf("discovered list truncated: got %d models, want %d", len(got), served)
+	}
+}
+
 func TestEffectiveBaseURLResolvesCloudProviders(t *testing.T) {
 	// Built-in cloud providers must resolve to a non-empty endpoint so the
 	// health probe can reach them (otherwise their dots stay "unknown").
