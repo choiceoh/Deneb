@@ -64,10 +64,12 @@ const (
 	// longer ones are map-reduced (chunk gists via the local stage-1 model,
 	// then one synthesis over the gists) so a 2-hour workshop cannot blow the
 	// analysis model's context or cost.
-	plaudDirectRunes       = 28000
-	plaudChunkRunes        = 12000
-	plaudChunkMaxTokens    = 500
-	plaudSynthesisTokens   = 1600
+	plaudDirectRunes    = 28000
+	plaudChunkRunes     = 12000
+	plaudChunkMaxTokens = 500
+	// plaudSynthesisTokens covers the report plus the 표기 교정 appendix; the
+	// first-tick incident showed 1600 is tight even for the report alone.
+	plaudSynthesisTokens   = 2800
 	plaudMaxCandidates     = 40 // project candidates offered to the model
 	plaudStateRetention    = 180 * 24 * time.Hour
 	plaudAuthNotifyEvery   = 24 * time.Hour
@@ -105,7 +107,12 @@ type plaudRecordingsService struct {
 	// gist runs the local stage-1 model for map-reduce chunk summaries.
 	gist       func(ctx context.Context, system, user string, maxTokens int) (string, error)
 	candidates func() []mailanalysis.ProjectCandidate
-	writePage  func(relPath string, page *wiki.Page) error
+	// topic returns the 업무 topic-knowledge block (company, org, key people)
+	// injected into the synthesis prompt — the subtractive slice of the main
+	// agent context that measurably improves term/name correction. Empty when
+	// topics are unconfigured; nil skips injection entirely.
+	topic     func() string
+	writePage func(relPath string, page *wiki.Page) error
 	// appendStatus prepends a dated bullet on a linked project rep page
 	// (wiki.Store.AppendProjectStatusLine; idempotent by ref).
 	appendStatus func(projectPath, line, ref string, now time.Time) error
@@ -127,6 +134,7 @@ func newPlaudRecordingsService(
 	synthesize func(ctx context.Context, system, user string, maxTokens int) (string, error),
 	gist func(ctx context.Context, system, user string, maxTokens int) (string, error),
 	candidates func() []mailanalysis.ProjectCandidate,
+	topic func() string,
 	writePage func(relPath string, page *wiki.Page) error,
 	appendStatus func(projectPath, line, ref string, now time.Time) error,
 	deliver func(text string) (bool, error),
@@ -148,6 +156,7 @@ func newPlaudRecordingsService(
 		synthesize:   synthesize,
 		gist:         gist,
 		candidates:   candidates,
+		topic:        topic,
 		writePage:    writePage,
 		appendStatus: appendStatus,
 		deliver:      deliver,
@@ -331,7 +340,21 @@ func (s *plaudRecordingsService) analyzeMeeting(ctx context.Context, f plaudFile
 		fmt.Fprintf(&candList, "- %s — %s\n", c.Path, strings.TrimSpace(c.Title+" "+c.Summary))
 	}
 
-	system := `당신은 업무 회의록 분석가다. 회의 전사를 읽고 한국어 회의록을 작성한다.
+	// The 업무 topic-knowledge block (company/org/people) is the subtractive
+	// slice of the main agent context: the 2026-07-06 correction bake-off
+	// showed context is what separates "매/메가/kW" judgment from blind
+	// glossary matching, and this block carries it at ~2KB.
+	var knowledge string
+	if s.topic != nil {
+		if t := strings.TrimSpace(s.topic()); t != "" {
+			knowledge = "# 배경지식\n\n" + t + "\n\n---\n\n"
+		}
+	}
+
+	system := knowledge + `당신은 업무 회의록 분석가다. 회의 전사를 읽고 한국어 회의록을 작성한다.
+전사는 음성인식 결과라 오인식이 섞여 있다 — 용어·단위·고유명사의 명백한 오인식은 문맥과 배경지식으로
+교정해 본문에 반영하라 (발전용량 '메가(MW)'/철골 자재 '매(장)'/생산량 '톤'/소형 설비 'kW'를 구분하고,
+프로젝트·인명·지명은 아는 표기를 우선한다).
 
 출력 형식 (마크다운, 이 구조 그대로):
 ## 요약
@@ -342,6 +365,8 @@ func (s *plaudRecordingsService) analyzeMeeting(ctx context.Context, f plaudFile
 - (담당자/기한이 언급됐으면 함께. 없으면 "- 없음")
 ## 리스크·미해결
 - (걸림돌, 다음 회의로 넘어간 쟁점. 없으면 "- 없음")
+## 표기 교정
+- (본문에 반영한 대표 교정 5~15개: "원문 → 교정" 꼴. 없으면 "- 없음")
 
 규칙:
 - 전사에 있는 내용만 쓴다. 추측은 "(추정)"을 붙인다.
@@ -477,7 +502,13 @@ func parsePlaudTranscript(raw string) string {
 		DataContent string `json:"data_content"`
 	}
 	if err := json.Unmarshal([]byte(raw), &segments); err != nil {
-		return strings.TrimSpace(raw)
+		// The MCP tool result may wrap the JSON array in extra text (the
+		// production first run archived a raw-JSON excerpt because of this) —
+		// retry on the outermost bracketed span before giving up.
+		s, e := strings.Index(raw, "["), strings.LastIndex(raw, "]")
+		if s < 0 || e <= s || json.Unmarshal([]byte(raw[s:e+1]), &segments) != nil {
+			return strings.TrimSpace(raw)
+		}
 	}
 	var b strings.Builder
 	for _, seg := range segments {
