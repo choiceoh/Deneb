@@ -220,7 +220,16 @@ internal fun RenderChart(node: ChartNode) {
             if (node.chartType == "line") {
                 val stepX = if (values.size >= 2) w / (values.size - 1) else 0f
                 fun xAt(i: Int) = if (values.size >= 2) i * stepX else w / 2f
-                fun yAt(v: Float) = plotBottom - (v / maxValue) * plotH
+                // Line charts read trend, not magnitude: scale from a padded
+                // min so a 275→381 series uses the full plot instead of
+                // hugging the top third over a dead zero-zone. Honest because
+                // every point carries its real value label; BAR charts stay
+                // zero-based (their shape IS the magnitude claim).
+                val minValue = values.min()
+                val span = (maxValue - minValue).takeIf { it > 0f } ?: maxValue
+                val lo = (minValue - span * 0.15f).coerceAtLeast(0f)
+                val hi = maxValue + span * 0.05f
+                fun yAt(v: Float) = plotBottom - ((v - lo) / (hi - lo)) * plotH
                 if (values.size >= 2) {
                     val path = Path()
                     values.forEachIndexed { i, v ->

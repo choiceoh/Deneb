@@ -697,7 +697,15 @@ private fun TableBlock(block: Table) {
     // layout crushing each cell to a glyph per line.
     val colWidths = remember(block, numCols) { naturalColWidths(block, numCols) }
     BoxWithConstraints(Modifier.fillMaxWidth()) {
-        if (colWidths.sum() <= maxWidth.value) {
+        // Fit-vs-scroll: horizontal scroll is a last resort on a phone —
+        // readers lose the right columns entirely unless they think to drag
+        // (the 2026-07-07 markdown-vs-card comparison showed a 4-column
+        // delivery table hiding its 납기 column). Tables up to 4 columns with
+        // a MODERATE overshoot (≤1.7x viewport) wrap cells via FittedTable
+        // instead; sqrt weights keep narrow numeric columns readable. Truly
+        // wide tables (5+ columns or extreme overshoot) still scroll.
+        val overshoot = colWidths.sum() / maxWidth.value.coerceAtLeast(1f)
+        if (overshoot <= 1f || (numCols <= 4 && overshoot <= 1.7f)) {
             FittedTable(block, numCols)
         } else {
             WideTable(block, numCols, colWidths)
