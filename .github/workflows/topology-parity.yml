@@ -1,10 +1,12 @@
-# Weekly doc-vs-reality parity sweep. Out-of-band host changes (runner moves,
+# Daily doc-vs-reality parity sweep. Out-of-band host changes (runner moves,
 # service migrations, credential placement) rot the runbooks silently — the
 # 2026-07-06 unification left three such divergences that each cost hours to
-# discover by hand. This job makes discovery free: scripts/audit/topology-parity.sh
-# probes every verifiable runbook claim from the gateway host itself and, on any
-# FAIL, opens (or updates) a single `doc-drift` issue that pinpoints the drifted
-# claim AND the doc that makes it. Fixing is then a 5-minute scoped task.
+# discover by hand, and the signing one bit production OTA within 12 hours.
+# This job makes discovery free: scripts/audit/topology-parity.sh probes every
+# verifiable runbook claim from the gateway host itself and, on any FAIL, opens
+# (or updates) a single `doc-drift` issue that pinpoints the drifted claim AND
+# the doc that makes it. When the sweep goes green again the issue auto-closes,
+# so the issue's open/closed state IS the live drift indicator.
 #
 # Cron only runs on the default branch, and workflow_dispatch is operator-only,
 # so untrusted code never reaches the self-hosted runner via this workflow.
@@ -12,7 +14,7 @@ name: Topology Parity
 
 on:
   schedule:
-    - cron: "0 0 * * 1" # 매주 월 09:00 KST
+    - cron: "0 0 * * *" # 매일 09:00 KST (서명 사고는 12시간 만에 물었다 — 주간은 늦다)
   workflow_dispatch:
 
 permissions:
@@ -68,5 +70,23 @@ jobs:
             } else {
               await github.rest.issues.create({
                 ...context.repo, title, body, labels: ["doc-drift"],
+              });
+            }
+
+      - name: Close doc-drift issue on green
+        if: success()
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const open = await github.rest.issues.listForRepo({
+              ...context.repo, state: "open", labels: "doc-drift", per_page: 5,
+            });
+            for (const issue of open.data) {
+              await github.rest.issues.createComment({
+                ...context.repo, issue_number: issue.number,
+                body: `topology-parity 스윕이 그린으로 복귀 — 자동 종결. run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              });
+              await github.rest.issues.update({
+                ...context.repo, issue_number: issue.number, state: "closed",
               });
             }
