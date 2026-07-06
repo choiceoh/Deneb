@@ -23,6 +23,7 @@ globs: ["scripts/deploy*", "scripts/dev/publish-apk.sh", "client-android/app/and
   활성 상태라 세션이 없어도 user 유닛이 상주한다.
 - 일시 정지: srv4 에 `~/.deneb/auto-deploy.paused` 파일 생성(PAUSE_FILE), 재개는 삭제.
 - 상태 확인: `systemctl --user list-timers | grep deneb` · `tail /tmp/deneb-auto-deploy.log`.
+- **토폴로지 전반 실측**: `scripts/audit/topology-parity.sh` (srv4 에서 실행) — 이 문서와 sidecar-models.md 의 검증 가능한 주장을 실측 대조. 주간 자동(`topology-parity.yml`, 불일치 시 `doc-drift` 이슈) + 수동 실행 가능. 인프라를 손으로 바꿨다면 이걸 돌려 문서와 화해시킬 것.
 - 스크립트는 **항상 exit 0** (실패는 로그로만) — 빨간 unit 상태를 보고 타이머를 꺼버리는
   사고 방지. 같은 커밋 재시도는 600초 스로틀.
 
