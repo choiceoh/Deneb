@@ -1002,8 +1002,8 @@ func wikiToolSchema() map[string]any {
 		"properties": map[string]any{
 			"action": map[string]any{
 				"type":        "string",
-				"description": "Action: search (ripgrep full-text search), read (read wiki page(s) — one via query, several at once via paths), index (read master/category index), write (create/update page), log (append diary entry), daily (read recent diary), status (wiki stats), close (프로젝트 종결 — query=프로젝트명, content=결과·사유 한 줄; 폴더 전체 보관+활성 목록 제외, 삭제 아님), reopen (종결 프로젝트 재개 — query=프로젝트명)",
-				"enum":        []string{"search", "read", "index", "write", "log", "daily", "status", "close", "reopen"},
+				"description": "Action: search (ripgrep full-text search), read (read wiki page(s) — one via query, several at once via paths), index (read master/category index), write (create/update page), log (append diary entry), daily (read recent diary), status (wiki stats), close (프로젝트 종결 — query=프로젝트명, content=결과·사유 한 줄; 폴더 전체 보관+활성 목록 제외, 삭제 아님), reopen (종결 프로젝트 재개 — query=프로젝트명), ingest (외부 자료 캡처: query=URL — 웹페이지/유튜브를 요약+발췌와 함께 자료 페이지로 영속화. 사용자가 '기억해둬/저장해둬'라며 링크를 주면 web 대신 이걸 쓴다. project=연결 프로젝트명(선택), content=메모(선택); 같은 URL은 멱등, 갱신은 force=true)",
+				"enum":        []string{"search", "read", "index", "write", "log", "daily", "status", "close", "reopen", "ingest"},
 			},
 			"category": map[string]any{
 				"type":        "string",
@@ -1017,7 +1017,7 @@ func wikiToolSchema() map[string]any {
 			},
 			"content": map[string]any{
 				"type":        "string",
-				"description": "Page body content in markdown (write action) or diary entry body (log action). In write bodies, link related pages inline with [[path-or-title]] (e.g. [[프로젝트/dgx-spark]] or [[홍길동]]); these become knowledge-graph edges, so prefer them over plain mentions. 프로젝트/<이름>/로그.md에 쓰면 content가 날짜 H2 섹션으로 기존 로그에 append된다 — 새 항목만 보낼 것(전체 본문 재전송 금지); 전체 재작성이 정말 필요하면 force=true.",
+				"description": "Page body content in markdown (write action) or diary entry body (log action). In write bodies, link related pages inline with [[path-or-title]] (e.g. [[프로젝트/dgx-spark]] or [[홍길동]]); these become knowledge-graph edges, so prefer them over plain mentions. 출처 규율: 특정 소스(메일·자료·문서)에서 온 주장은 그 [[페이지]]나 ref를 병기하고, 출처 없는 합성 추론은 '> 합성:' 인용으로 시작한다 — 부유 주장 금지. 프로젝트/<이름>/로그.md에 쓰면 content가 날짜 H2 섹션으로 기존 로그에 append된다 — 새 항목만 보낼 것(전체 본문 재전송 금지); 전체 재작성이 정말 필요하면 force=true. 로그 섹션 제목은 '## [YYYY-MM-DD] <op> | <주제>' 꼴 권장(op: ingest/결정/회의/이슈…) — grep 가능한 로그 문법.",
 			},
 			"cues": map[string]any{
 				"type":        "array",
@@ -1066,9 +1066,13 @@ func wikiToolSchema() map[string]any {
 					"type": "string",
 				},
 			},
+			"project": map[string]any{
+				"type":        "string",
+				"description": "ingest 전용: 자료를 연결할 프로젝트 이름. 대표페이지가 존재해야 하며(오타 유령 폴더 방지 — 없으면 전역 프로젝트/자료/ 버킷에 저장), 연결 시 페이지가 프로젝트/<이름>/자료/에 놓이고 로그.md에 ingest 섹션이 append된다.",
+			},
 			"query": map[string]any{
 				"type":        "string",
-				"description": "Search query (search), page path (read/write — to read SEVERAL pages use paths instead), category name (index), or diary entry body (log). 프로젝트 write paths follow the fixed layout: 프로젝트/<이름>/대표.md (대표페이지), 프로젝트/<이름>/로그.md (진행 로그 — 사건·소식은 여기에 append), 프로젝트/<이름>/기자재/<문서>.md",
+				"description": "Search query (search), page path (read/write — to read SEVERAL pages use paths instead), category name (index), diary entry body (log), or 캡처할 http(s) URL (ingest). 프로젝트 write paths follow the fixed layout: 프로젝트/<이름>/대표.md (대표페이지), 프로젝트/<이름>/로그.md (진행 로그 — 사건·소식은 여기에 append), 프로젝트/<이름>/기자재/<문서>.md, 프로젝트/<이름>/자료/ (외부 소스 — 직접 쓰지 말고 ingest 액션 사용)",
 			},
 			"related": map[string]any{
 				"type":        "array",
