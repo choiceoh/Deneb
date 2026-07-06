@@ -144,6 +144,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Path
@@ -151,7 +152,9 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import deneb.composeapp.generated.resources.Res
@@ -164,8 +167,11 @@ import org.jetbrains.compose.resources.stringResource
  */
 
 /**
- * Single-series bar or line chart drawn on a Canvas. Display-only (no interaction). Values are
- * normalized to the series max; an empty series renders nothing.
+ * Single-series bar or line chart drawn on a Canvas. Display-only (no
+ * interaction). Values are normalized to the series max. Everything —
+ * value labels, x-axis labels, baseline, gridline — is drawn inside the
+ * canvas with a TextMeasurer so labels stay center-aligned with their bars
+ * and points (a Row of SpaceBetween texts drifts off bar centers).
  */
 @Composable
 internal fun RenderChart(node: ChartNode) {
@@ -173,6 +179,17 @@ internal fun RenderChart(node: ChartNode) {
     if (values.isEmpty()) return
     val maxValue = values.maxOrNull()?.takeIf { it > 0f } ?: 1f
     val chartColor = MaterialTheme.colorScheme.primary
+    val valueColor = MaterialTheme.colorScheme.onSurface
+    val axisColor = MaterialTheme.colorScheme.onSurfaceVariant
+    val gridColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
+    val textMeasurer = rememberTextMeasurer()
+    val valueStyle = MaterialTheme.typography.labelSmall
+    val axisStyle = MaterialTheme.typography.labelSmall
+
+    // Value labels above bars/points, drawn as compact numbers: an integer
+    // series stays integer ("381"), fractional values keep one decimal.
+    fun fmt(v: Float): String = if (v == kotlin.math.floor(v)) v.toInt().toString() else ((kotlin.math.round(v * 10f)) / 10f).toString()
+
     Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
         node.label?.takeIf { it.isNotBlank() }?.let {
             Text(
@@ -181,49 +198,62 @@ internal fun RenderChart(node: ChartNode) {
                 modifier = Modifier.padding(bottom = 8.dp),
             )
         }
-        Canvas(modifier = Modifier.fillMaxWidth().height(160.dp)) {
+        Canvas(modifier = Modifier.fillMaxWidth().height(148.dp)) {
             val w = size.width
-            val h = size.height
+            val valueBand = 16.dp.toPx() // headroom for value labels
+            val axisBand = if (node.labels.isNotEmpty()) 18.dp.toPx() else 2.dp.toPx()
+            val plotTop = valueBand
+            val plotBottom = size.height - axisBand
+            val plotH = (plotBottom - plotTop).coerceAtLeast(1f)
+
+            fun drawCenteredText(text: String, centerX: Float, top: Float, style: androidx.compose.ui.text.TextStyle, color: androidx.compose.ui.graphics.Color) {
+                val layout = textMeasurer.measure(text, style)
+                val x = (centerX - layout.size.width / 2f).coerceIn(0f, (w - layout.size.width).coerceAtLeast(0f))
+                drawText(layout, color = color, topLeft = Offset(x, top))
+            }
+
+            // Baseline + one mid gridline: enough scaffolding to read scale
+            // without turning the card into a spreadsheet (2-accent restraint).
+            drawLine(gridColor, Offset(0f, plotBottom), Offset(w, plotBottom), strokeWidth = 1.dp.toPx())
+            drawLine(gridColor, Offset(0f, plotTop + plotH / 2f), Offset(w, plotTop + plotH / 2f), strokeWidth = 1.dp.toPx())
+
             if (node.chartType == "line") {
+                val stepX = if (values.size >= 2) w / (values.size - 1) else 0f
+                fun xAt(i: Int) = if (values.size >= 2) i * stepX else w / 2f
+                fun yAt(v: Float) = plotBottom - (v / maxValue) * plotH
                 if (values.size >= 2) {
-                    val stepX = w / (values.size - 1)
                     val path = Path()
-                    values.forEachIndexed { index, v ->
-                        val x = index * stepX
-                        val y = h - (v / maxValue) * h
-                        if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
+                    values.forEachIndexed { i, v ->
+                        if (i == 0) path.moveTo(xAt(i), yAt(v)) else path.lineTo(xAt(i), yAt(v))
                     }
-                    drawPath(path, color = chartColor, style = Stroke(width = 3.dp.toPx()))
-                } else {
-                    val y = h - (values.first() / maxValue) * h
-                    drawCircle(chartColor, radius = 4.dp.toPx(), center = Offset(w / 2f, y))
+                    drawPath(path, color = chartColor, style = Stroke(width = 2.5.dp.toPx()))
+                }
+                values.forEachIndexed { i, v ->
+                    drawCircle(chartColor, radius = 3.5.dp.toPx(), center = Offset(xAt(i), yAt(v)))
+                    drawCenteredText(fmt(v), xAt(i), yAt(v) - valueBand, valueStyle, valueColor)
+                    node.labels.getOrNull(i)?.let { lbl ->
+                        drawCenteredText(lbl, xAt(i), plotBottom + 4.dp.toPx(), axisStyle, axisColor)
+                    }
                 }
             } else {
                 val count = values.size
-                val gap = w * 0.02f
+                val gap = (w * 0.04f).coerceAtLeast(4.dp.toPx())
                 val barWidth = ((w - gap * (count + 1)) / count).coerceAtLeast(1f)
+                val corner = 3.dp.toPx()
                 values.forEachIndexed { index, v ->
-                    val barHeight = (v / maxValue) * h
+                    val barHeight = ((v / maxValue) * plotH).coerceAtLeast(2.dp.toPx())
                     val x = gap + index * (barWidth + gap)
-                    drawRect(
+                    val centerX = x + barWidth / 2f
+                    drawRoundRect(
                         color = chartColor,
-                        topLeft = Offset(x, h - barHeight),
+                        topLeft = Offset(x, plotBottom - barHeight),
                         size = Size(barWidth, barHeight),
+                        cornerRadius = CornerRadius(corner, corner),
                     )
-                }
-            }
-        }
-        if (node.labels.isNotEmpty()) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                node.labels.forEach { lbl ->
-                    Text(
-                        text = lbl,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    drawCenteredText(fmt(v), centerX, plotBottom - barHeight - valueBand, valueStyle, valueColor)
+                    node.labels.getOrNull(index)?.let { lbl ->
+                        drawCenteredText(lbl, centerX, plotBottom + 4.dp.toPx(), axisStyle, axisColor)
+                    }
                 }
             }
         }
