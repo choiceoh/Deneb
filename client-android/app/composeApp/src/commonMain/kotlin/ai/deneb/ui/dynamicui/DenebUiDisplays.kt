@@ -55,6 +55,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import kotlin.time.Clock
@@ -145,31 +146,49 @@ internal fun RenderTable(node: TableNode) {
         node.rows.maxOfOrNull { it.size } ?: 0,
     )
     if (columnCount == 0) return
+    // Numeric columns read best right-aligned: a column is numeric when every
+    // non-empty cell starts with a digit (covers "12", "7/10", "68%", "2.4억").
+    val numericColumn = BooleanArray(columnCount) { index ->
+        val cells = node.rows.mapNotNull { it.getOrNull(index)?.trim()?.takeIf(String::isNotEmpty) }
+        cells.isNotEmpty() && cells.all { it.first().isDigit() }
+    }
+
+    // The first column is usually the entity name (현장, 항목) — give it room
+    // so Korean compound names don't wrap while short numeric columns hog width.
+    fun columnWeight(index: Int) = if (index == 0 && columnCount >= 3) 1.6f else 1f
+    val hairline = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+
     Column(Modifier.fillMaxWidth().wrapContentHeight()) {
         if (node.headers.isNotEmpty()) {
-            Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+            Row(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
                 for (index in 0 until columnCount) {
                     Text(
                         text = node.headers.getOrElse(index) { "" },
-                        style = MaterialTheme.typography.titleSmall,
-                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = if (numericColumn[index]) TextAlign.End else TextAlign.Start,
+                        modifier = Modifier.weight(columnWeight(index)),
                     )
                 }
             }
-            HorizontalDivider()
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         }
-        for (row in node.rows) {
+        node.rows.forEachIndexed { rowIndex, row ->
             Row(
-                Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                Modifier.fillMaxWidth().padding(vertical = 6.dp),
                 verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
             ) {
                 for (index in 0 until columnCount) {
                     Text(
                         text = row.getOrElse(index) { "" },
                         style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.weight(1f),
+                        textAlign = if (numericColumn[index]) TextAlign.End else TextAlign.Start,
+                        modifier = Modifier.weight(columnWeight(index)),
                     )
                 }
+            }
+            if (rowIndex < node.rows.lastIndex) {
+                HorizontalDivider(color = hairline)
             }
         }
     }
@@ -178,23 +197,39 @@ internal fun RenderTable(node: TableNode) {
 @Composable
 internal fun RenderProgress(node: ProgressNode) {
     Column(Modifier.fillMaxWidth()) {
-        if (node.label != null) {
-            Text(
-                text = node.label,
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.padding(bottom = 4.dp),
-            )
+        // Label row carries the readable number — a bare bar makes the reader
+        // eyeball-estimate the one value the node exists to communicate.
+        val pct = node.value?.let { "${(it.coerceIn(0f, 1f) * 100).toInt()}%" }
+        if (node.label != null || pct != null) {
+            Row(
+                Modifier.fillMaxWidth().padding(bottom = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = node.label ?: "",
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.weight(1f),
+                )
+                if (pct != null) {
+                    Text(
+                        text = pct,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+            }
         }
         if (node.value != null) {
             LinearProgressIndicator(
                 progress = { node.value.coerceIn(0f, 1f) },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
                 drawStopIndicator = {},
                 gapSize = 0.dp,
             )
         } else {
             LinearProgressIndicator(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
                 gapSize = 0.dp,
             )
         }
@@ -370,17 +405,16 @@ internal fun RenderQuote(node: QuoteNode) {
 
 @Composable
 internal fun RenderBadge(node: BadgeNode) {
-    val backgroundColor = when (node.color) {
-        "primary" -> MaterialTheme.colorScheme.primary
-        "secondary" -> MaterialTheme.colorScheme.secondary
-        "error" -> MaterialTheme.colorScheme.error
-        else -> MaterialTheme.colorScheme.primary
-    }
-    val contentColor = when (node.color) {
-        "primary" -> MaterialTheme.colorScheme.onPrimary
-        "secondary" -> MaterialTheme.colorScheme.onSecondary
-        "error" -> MaterialTheme.colorScheme.onError
-        else -> MaterialTheme.colorScheme.onPrimary
+    // Soft container tints (2-accent doctrine: small marks, soft fills — never
+    // full-saturation chips). success/warning were silently falling through to
+    // primary, erasing exactly the status distinction a badge exists for.
+    val (backgroundColor, contentColor) = when (node.color) {
+        "primary" -> MaterialTheme.colorScheme.primaryContainer to MaterialTheme.colorScheme.onPrimaryContainer
+        "secondary" -> MaterialTheme.colorScheme.secondaryContainer to MaterialTheme.colorScheme.onSecondaryContainer
+        "error" -> MaterialTheme.colorScheme.errorContainer to MaterialTheme.colorScheme.onErrorContainer
+        "success" -> denebSuccessContainer() to denebOnSuccessContainer()
+        "warning" -> denebWarningContainer() to denebOnWarningContainer()
+        else -> MaterialTheme.colorScheme.surfaceVariant to MaterialTheme.colorScheme.onSurfaceVariant
     }
     Surface(
         color = backgroundColor,
@@ -390,7 +424,8 @@ internal fun RenderBadge(node: BadgeNode) {
         Text(
             text = node.value,
             style = MaterialTheme.typography.labelSmall,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
         )
     }
 }

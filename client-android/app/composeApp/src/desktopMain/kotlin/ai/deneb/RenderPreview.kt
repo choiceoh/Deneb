@@ -292,6 +292,11 @@ fun main() {
     renderLetterCard("letter_morning_light.png", LightColorScheme, morningLetterNode(), 1680)
     renderLetterCard("letter_evening_dark.png", DarkColorScheme, eveningLetterNode(), 1040)
     renderLetterCard("letter_evening_light.png", LightColorScheme, eveningLetterNode(), 1040)
+    // Full deneb-ui node gallery — every display node with dense Korean
+    // business data (the letter skeletons only exercise a friendly subset).
+    // This is the visual regression surface for card rendering quality.
+    renderLetterCard("ui_gallery_dark.png", DarkColorScheme, uiGalleryNode(), 3200)
+    renderLetterCard("ui_gallery_light.png", LightColorScheme, uiGalleryNode(), 3200)
     renderScreen("workfeed_dark.png", "workfeed", DarkColorScheme, 824, 1100)
     renderScreen("workfeed_light.png", "workfeed", LightColorScheme, 824, 1100)
     renderScreen("workfeed_answer_dark.png", "workfeed_answer", DarkColorScheme, 480, 720)
@@ -1318,6 +1323,58 @@ private fun morningLetterNode(): DenebUiNode = parseLetterHtml(
       <card>
         <row><icon name="alarm" size="16"/><text style="caption">임박 마감</text></row>
         <row><text style="body">부가세 신고</text><badge>D-2</badge></row>
+      </card>
+    </column>
+    """.trimIndent(),
+)
+
+// Worst-case gallery: every read-only node + representative interactive ones,
+// dense Korean business content (long labels, 4-column table, 5-point charts).
+// Mirrors what a thorough agent answer SHOULD look like — when this looks
+// bland, the renderer (not the grammar) is what needs work.
+private fun uiGalleryNode(): DenebUiNode = parseLetterHtml(
+    """
+    <column>
+      <card>
+        <text style="headline">3분기 발전소 현황</text>
+        <text style="caption">2026-07-07 · 주간 보고 자동 생성</text>
+        <hr/>
+        <row><stat value="381톤" label="주간 철골 생산"/><stat value="68%" label="고흥해밀 공정"/><stat value="2.4억" label="미수금"/></row>
+        <progress value="0.68" label="전체 공정률"/>
+      </card>
+      <card>
+        <text style="title">현장별 공정률</text>
+        <chart type="bar" label="공정률(%)">
+          <point label="석문호" value="50"/><point label="고흥해밀" value="68"/><point label="비금도" value="35"/><point label="영광" value="82"/><point label="당진" value="12"/>
+        </chart>
+        <chart type="line" label="주간 생산량(톤)">
+          <point label="6/9" value="290"/><point label="6/16" value="310"/><point label="6/23" value="275"/><point label="6/30" value="360"/><point label="7/7" value="381"/>
+        </chart>
+      </card>
+      <card>
+        <text style="title">수배전반 납품 일정</text>
+        <table>
+          <tr><th>현장</th><th>규격</th><th>수량</th><th>납기</th></tr>
+          <tr><td>화성산단 RPS 2개소</td><td>100kW 계량반</td><td>12</td><td>7/10</td></tr>
+          <tr><td>부산 썬탑 7호</td><td>200kW 저압반</td><td>4</td><td>7/14</td></tr>
+          <tr><td>금호타이어 곡성화학공장</td><td>연계판넬</td><td>7</td><td>7/21</td></tr>
+        </table>
+      </card>
+      <card>
+        <row><badge color="success">완료</badge><badge color="warning">지연 위험</badge><badge color="error">중단</badge><badge>기본</badge></row>
+        <alert severity="warning" title="영광 도오리 민원">약 3일 지연 예상 — 작업 재개 협의 중.</alert>
+        <alert severity="info" title="장마 대비">전 현장 24시간 비상대응체계 재확인 완료.</alert>
+        <blockquote source="주간회의">발전소는 가성비와 품질 기준을 지켜 짓는다.</blockquote>
+      </card>
+      <card>
+        <tabs selected-index="0">
+          <tab label="결정사항"><ul><li>하계휴가 7/15부터 시행</li><li>임원 일정은 회장님 제출 후 확정</li></ul></tab>
+          <tab label="액션 아이템"><ul><li>전 현장 비상대응체계 재확인</li></ul></tab>
+        </tabs>
+        <accordion title="회의 전문 발췌">
+          <text style="body">보고드리겠습니다. 지난주에 정보보안 준수 서약을 했음에도 정보 유출이 의심되는 일이 있었습니다.</text>
+        </accordion>
+        <row><button variant="filled">회의록 열기</button><button variant="tonal">공유</button><button variant="outlined">재분석</button></row>
       </card>
     </column>
     """.trimIndent(),
