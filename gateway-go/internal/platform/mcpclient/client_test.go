@@ -12,9 +12,9 @@ import (
 )
 
 // helperArgv returns a command line that re-executes this test binary as a
-// fake MCP server (TestHelperProcess). The GO_MCP_HELPER env var is set via
-// t.Setenv so it reaches the child through os.Environ — note childEnv()
-// withholds it, so the helper is enabled via a PATH-independent argv flag.
+// fake MCP server (TestHelperProcess). Activation rides an argv flag rather
+// than an env var because childEnv() deliberately withholds custom variables
+// from the spawned process.
 func helperArgv(t *testing.T) []string {
 	t.Helper()
 	return []string{os.Args[0], "-test.run=^TestHelperProcess$", "--", "mcp-helper"}

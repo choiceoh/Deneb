@@ -185,14 +185,17 @@ func registerMCPServerTools(
 const maxLLMToolNameLen = 64
 
 // clampToolName bounds a namespaced tool name to maxLLMToolNameLen. The tail
-// is replaced with a short hash of the ORIGINAL remote name so two long
-// remote names that share a prefix cannot collide after truncation.
+// is replaced with a hash of the ORIGINAL remote name so two long remote
+// names that share a prefix cannot collide after truncation. 6 hash bytes
+// (48 bits): RegisterTool silently replaces on name collision, so the suffix
+// must be wide enough that a hostile server cannot feasibly brute-force a
+// clash with another tool's clamped name.
 func clampToolName(name, remote string) string {
 	if len(name) <= maxLLMToolNameLen {
 		return name
 	}
 	sum := sha256.Sum256([]byte(remote))
-	suffix := "_" + hex.EncodeToString(sum[:3])
+	suffix := "_" + hex.EncodeToString(sum[:6])
 	return name[:maxLLMToolNameLen-len(suffix)] + suffix
 }
 
