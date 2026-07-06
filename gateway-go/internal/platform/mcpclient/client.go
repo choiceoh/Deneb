@@ -26,6 +26,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 )
 
 // protocolVersion is the newest MCP spec revision this client speaks.
@@ -40,6 +41,39 @@ const restartBackoff = 30 * time.Second
 // can embed whole meeting transcripts; 16 MiB is generous without being
 // unbounded).
 const maxLineBytes = 16 << 20
+
+// maxErrorTextBytes bounds the server-supplied text embedded in a Go error
+// for an isError tool result. Error strings bypass the executor's normal
+// output truncation/spillover, so an unbounded (or adversarial) remote error
+// payload must be capped here.
+const maxErrorTextBytes = 2000
+
+// childEnvAllowlist names the variables a spawned MCP server inherits:
+// process basics, node/npm caches under HOME, TLS/proxy egress, and locale.
+// Everything else — provider keys, mail credentials — is withheld.
+var childEnvAllowlist = []string{
+	"PATH", "HOME", "USER", "LOGNAME", "SHELL", "TMPDIR", "TERM", "LANG",
+	"HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "no_proxy",
+	"SSL_CERT_FILE", "SSL_CERT_DIR", "NODE_EXTRA_CA_CERTS",
+	"XDG_CACHE_HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_RUNTIME_DIR",
+}
+
+// childEnv builds the allowlisted environment for the child process
+// (LC_* locale variables pass through as a prefix family).
+func childEnv() []string {
+	var env []string
+	for _, key := range childEnvAllowlist {
+		if v, ok := os.LookupEnv(key); ok {
+			env = append(env, key+"="+v)
+		}
+	}
+	for _, kv := range os.Environ() {
+		if strings.HasPrefix(kv, "LC_") {
+			env = append(env, kv)
+		}
+	}
+	return env
+}
 
 // ToolInfo is one entry from tools/list.
 type ToolInfo struct {
@@ -185,7 +219,18 @@ func (c *Client) CallTool(ctx context.Context, name string, args json.RawMessage
 		}
 	}
 	if res.IsError {
-		return "", fmt.Errorf("mcp tool %s failed: %s", name, sb.String())
+		// Bounded: error strings bypass the executor's output truncation/
+		// spillover, so a huge or adversarial remote error payload must not
+		// ride into the next model turn at full length.
+		text := sb.String()
+		if len(text) > maxErrorTextBytes {
+			cut := maxErrorTextBytes
+			for cut > 0 && !utf8.RuneStart(text[cut]) {
+				cut-- // never split a multi-byte rune (Korean error text)
+			}
+			text = text[:cut] + "… [truncated]"
+		}
+		return "", fmt.Errorf("mcp tool %s failed: %s", name, text)
 	}
 	return sb.String(), nil
 }
@@ -248,8 +293,13 @@ func (c *Client) spawnLocked() error {
 	}
 	c.lastStart = time.Now()
 
-	cmd := exec.CommandContext(c.lifeCtx, c.argv[0], c.argv[1:]...) //nolint:gosec // G204 — argv is operator config (DENEB_*_MCP_CMD env), not request input.
-	cmd.Env = os.Environ()                                          // npx needs PATH/HOME (OAuth token cache lives under $HOME)
+	cmd := exec.CommandContext(c.lifeCtx, c.argv[0], c.argv[1:]...) //nolint:gosec // G204 — argv is operator config (DENEB_MCP_SERVERS env), not request input.
+	// Allowlisted environment only: the gateway's own env carries provider
+	// keys and mail credentials, and a third-party npx package (or any of its
+	// transitive dependencies) must not inherit them. Servers that NEED a
+	// custom variable get it explicitly via the command line: `env KEY=val
+	// npx …` (argv[0]=env — no code path required).
+	cmd.Env = childEnv()
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return fmt.Errorf("mcpclient: stdin pipe: %w", err)
@@ -395,8 +445,11 @@ func (c *Client) readLoop(stdout io.Reader) {
 		if len(strings.TrimSpace(string(line))) == 0 {
 			continue
 		}
+		// ID stays raw: our own requests use numeric ids, but a
+		// server-initiated request may carry a string id that must be echoed
+		// verbatim in the reply (else a server blocking on that reply stalls).
 		var msg struct {
-			ID     *int64          `json:"id"`
+			ID     json.RawMessage `json:"id"`
 			Method string          `json:"method"`
 			Result json.RawMessage `json:"result"`
 			Error  *rpcError       `json:"error"`
@@ -405,19 +458,27 @@ func (c *Client) readLoop(stdout io.Reader) {
 			c.logger.Warn("mcp server sent unparseable line", "error", err, "bytes", len(line))
 			continue
 		}
+		hasID := len(msg.ID) > 0 && string(msg.ID) != "null"
 		switch {
-		case msg.Method != "" && msg.ID != nil:
+		case msg.Method != "" && hasID:
 			// Server-initiated request (sampling/roots/…) — out of scope.
 			c.logger.Debug("mcp server request unsupported", "method", msg.Method)
 			_ = c.send(map[string]any{
 				"jsonrpc": "2.0",
-				"id":      *msg.ID,
+				"id":      msg.ID,
 				"error":   rpcError{Code: -32601, Message: "method not supported by deneb-gateway client"},
 			})
 		case msg.Method != "":
 			// Notification — ignored (Debug to avoid per-event spam).
 			c.logger.Debug("mcp server notification ignored", "method", msg.Method)
-		case msg.ID != nil:
+		case hasID:
+			var id int64
+			if err := json.Unmarshal(msg.ID, &id); err != nil {
+				// Responses can only answer requests WE sent, and ours are
+				// always numeric — anything else is unroutable.
+				c.logger.Warn("mcp response with non-numeric id ignored", "id", string(msg.ID))
+				continue
+			}
 			var resp rpcResponse
 			if msg.Error != nil {
 				resp.Err = fmt.Errorf("mcp server error %d: %s", msg.Error.Code, msg.Error.Message)
@@ -425,9 +486,9 @@ func (c *Client) readLoop(stdout io.Reader) {
 				resp.Result = append(json.RawMessage(nil), msg.Result...)
 			}
 			c.pendingMu.Lock()
-			ch, ok := c.pending[*msg.ID]
+			ch, ok := c.pending[id]
 			if ok {
-				delete(c.pending, *msg.ID)
+				delete(c.pending, id)
 			}
 			c.pendingMu.Unlock()
 			if ok {

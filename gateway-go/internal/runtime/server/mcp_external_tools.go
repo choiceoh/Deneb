@@ -31,6 +31,8 @@ package server
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -162,7 +164,7 @@ func registerMCPServerTools(
 	}
 	names := make([]string, 0, len(tools))
 	for _, t := range tools {
-		name := spec.Name + "_" + sanitizeMCPToolName(t.Name)
+		name := clampToolName(spec.Name+"_"+sanitizeMCPToolName(t.Name), t.Name)
 		names = append(names, name)
 		remote := t.Name
 		registry.RegisterTool(chat.ToolDef{
@@ -176,6 +178,22 @@ func registerMCPServerTools(
 		})
 	}
 	return names
+}
+
+// maxLLMToolNameLen is the strictest tool-name length across the providers
+// the gateway talks to (OpenAI-compatible caps at 64; Anthropic allows 128).
+const maxLLMToolNameLen = 64
+
+// clampToolName bounds a namespaced tool name to maxLLMToolNameLen. The tail
+// is replaced with a short hash of the ORIGINAL remote name so two long
+// remote names that share a prefix cannot collide after truncation.
+func clampToolName(name, remote string) string {
+	if len(name) <= maxLLMToolNameLen {
+		return name
+	}
+	sum := sha256.Sum256([]byte(remote))
+	suffix := "_" + hex.EncodeToString(sum[:3])
+	return name[:maxLLMToolNameLen-len(suffix)] + suffix
 }
 
 // sanitizeMCPToolName maps an arbitrary MCP tool name onto the character set

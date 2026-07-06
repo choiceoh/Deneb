@@ -13,11 +13,11 @@ import (
 
 // helperArgv returns a command line that re-executes this test binary as a
 // fake MCP server (TestHelperProcess). The GO_MCP_HELPER env var is set via
-// t.Setenv so it reaches the child through os.Environ.
+// t.Setenv so it reaches the child through os.Environ — note childEnv()
+// withholds it, so the helper is enabled via a PATH-independent argv flag.
 func helperArgv(t *testing.T) []string {
 	t.Helper()
-	t.Setenv("GO_MCP_HELPER", "1")
-	return []string{os.Args[0], "-test.run=^TestHelperProcess$"}
+	return []string{os.Args[0], "-test.run=^TestHelperProcess$", "--", "mcp-helper"}
 }
 
 func newTestClient(t *testing.T) *Client {
@@ -51,7 +51,9 @@ func TestStartListCall(t *testing.T) {
 		t.Fatalf("echo schema not preserved: %+v", tools[0].InputSchema)
 	}
 
-	// tools/call happy path — text content blocks are concatenated.
+	// tools/call happy path — text content blocks are concatenated. The
+	// helper also reports whether the client answered the string-id
+	// server-initiated request it sent right after initialize.
 	out, err := c.CallTool(ctx, "echo", json.RawMessage(`{"msg":"안녕"}`))
 	if err != nil {
 		t.Fatalf("CallTool echo: %v", err)
@@ -62,10 +64,23 @@ func TestStartListCall(t *testing.T) {
 	if !strings.Contains(out, "[image content omitted]") {
 		t.Fatalf("non-text block not surfaced: %q", out)
 	}
+	if !strings.Contains(out, "srvreply=true") {
+		t.Fatalf("string-id server request was not answered: %q", out)
+	}
 
 	// isError=true surfaces as a Go error carrying the content text.
 	if _, err := c.CallTool(ctx, "boom", nil); err == nil || !strings.Contains(err.Error(), "kaboom") {
 		t.Fatalf("CallTool boom: want kaboom error, got %v", err)
+	}
+
+	// isError text is bounded (huge payloads must not ride into the model turn).
+	if _, err := c.CallTool(ctx, "bigboom", nil); err == nil ||
+		len(err.Error()) > maxErrorTextBytes+100 || !strings.Contains(err.Error(), "[truncated]") {
+		errLen := -1
+		if err != nil {
+			errLen = len(err.Error())
+		}
+		t.Fatalf("CallTool bigboom: want bounded truncated error, got len=%d", errLen)
 	}
 
 	// Unknown method errors from the server propagate.
@@ -105,44 +120,80 @@ func TestClosedClientRejectsCalls(t *testing.T) {
 	}
 }
 
-// TestHelperProcess is not a real test: when re-executed with GO_MCP_HELPER=1
-// it acts as a fake MCP server over stdio (newline-delimited JSON-RPC).
+func TestChildEnvAllowlist(t *testing.T) {
+	t.Setenv("DENEB_FAKE_SECRET", "supersecret")
+	t.Setenv("LC_ALL", "C.UTF-8")
+	env := childEnv()
+	joined := strings.Join(env, "\n")
+	if strings.Contains(joined, "DENEB_FAKE_SECRET") {
+		t.Fatal("secret-bearing variable leaked into child env")
+	}
+	if !strings.Contains(joined, "PATH=") {
+		t.Fatal("PATH missing from child env")
+	}
+	if !strings.Contains(joined, "LC_ALL=C.UTF-8") {
+		t.Fatal("LC_* prefix family not passed through")
+	}
+}
+
+// TestHelperProcess is not a real test: when re-executed with the
+// "mcp-helper" argv flag it acts as a fake MCP server over stdio
+// (newline-delimited JSON-RPC).
 func TestHelperProcess(t *testing.T) {
-	if os.Getenv("GO_MCP_HELPER") != "1" {
+	isHelper := false
+	for _, arg := range os.Args {
+		if arg == "mcp-helper" {
+			isHelper = true
+		}
+	}
+	if !isHelper {
 		return
 	}
 	// Resilience probe: a garbage line before any response must be skipped
 	// by the client's read loop.
 	fmt.Println("this is not json")
 
+	gotSrvReply := false
 	sc := bufio.NewScanner(os.Stdin)
 	sc.Buffer(make([]byte, 64*1024), maxLineBytes)
 	for sc.Scan() {
 		var req struct {
-			ID     *int64          `json:"id"`
+			ID     json.RawMessage `json:"id"`
 			Method string          `json:"method"`
 			Params json.RawMessage `json:"params"`
+			Error  *rpcError       `json:"error"`
 		}
 		if json.Unmarshal(sc.Bytes(), &req) != nil {
 			continue
 		}
-		if req.ID == nil {
+		hasID := len(req.ID) > 0 && string(req.ID) != "null"
+		if req.Method == "" && hasID {
+			// Client's reply to our server-initiated request below.
+			if string(req.ID) == `"srv-1"` && req.Error != nil {
+				gotSrvReply = true
+			}
+			continue
+		}
+		if !hasID {
 			continue // notification
 		}
 		switch req.Method {
 		case "initialize":
-			reply(*req.ID, map[string]any{
+			reply(req.ID, map[string]any{
 				"protocolVersion": protocolVersion,
 				"capabilities":    map[string]any{"tools": map[string]any{}},
 				"serverInfo":      map[string]any{"name": "fake-mcp", "version": "0.0.1"},
 			})
+			// Server-initiated request with a STRING id: the client must
+			// answer method-not-found with the id echoed verbatim.
+			fmt.Println(`{"jsonrpc":"2.0","id":"srv-1","method":"roots/list"}`)
 		case "tools/list":
 			var p struct {
 				Cursor string `json:"cursor"`
 			}
 			_ = json.Unmarshal(req.Params, &p)
 			if p.Cursor == "" {
-				reply(*req.ID, map[string]any{
+				reply(req.ID, map[string]any{
 					"tools": []map[string]any{{
 						"name":        "echo",
 						"description": "echoes its arguments",
@@ -151,7 +202,7 @@ func TestHelperProcess(t *testing.T) {
 					"nextCursor": "page2",
 				})
 			} else {
-				reply(*req.ID, map[string]any{
+				reply(req.ID, map[string]any{
 					"tools": []map[string]any{{
 						"name":        "boom",
 						"description": "always fails",
@@ -167,36 +218,37 @@ func TestHelperProcess(t *testing.T) {
 			_ = json.Unmarshal(req.Params, &p)
 			switch p.Name {
 			case "echo":
-				reply(*req.ID, map[string]any{
+				reply(req.ID, map[string]any{
 					"content": []map[string]any{
-						{"type": "text", "text": string(p.Arguments)},
+						{"type": "text", "text": fmt.Sprintf("%s srvreply=%v", p.Arguments, gotSrvReply)},
 						{"type": "image", "data": "…"},
 					},
 				})
 			case "boom":
-				reply(*req.ID, map[string]any{
+				reply(req.ID, map[string]any{
 					"content": []map[string]any{{"type": "text", "text": "kaboom"}},
+					"isError": true,
+				})
+			case "bigboom":
+				reply(req.ID, map[string]any{
+					"content": []map[string]any{{"type": "text", "text": strings.Repeat("에러", 4000)}},
 					"isError": true,
 				})
 			case "die":
 				os.Exit(1)
 			}
 		default:
-			replyErr(*req.ID, -32601, "method not found")
+			data, _ := json.Marshal(map[string]any{
+				"jsonrpc": "2.0", "id": req.ID,
+				"error": map[string]any{"code": -32601, "message": "method not found"},
+			})
+			fmt.Println(string(data))
 		}
 	}
 	os.Exit(0)
 }
 
-func reply(id int64, result map[string]any) {
+func reply(id json.RawMessage, result map[string]any) {
 	data, _ := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": id, "result": result})
-	fmt.Println(string(data))
-}
-
-func replyErr(id int64, code int, msg string) {
-	data, _ := json.Marshal(map[string]any{
-		"jsonrpc": "2.0", "id": id,
-		"error": map[string]any{"code": code, "message": msg},
-	})
 	fmt.Println(string(data))
 }
