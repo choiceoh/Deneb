@@ -1,0 +1,72 @@
+# Weekly doc-vs-reality parity sweep. Out-of-band host changes (runner moves,
+# service migrations, credential placement) rot the runbooks silently — the
+# 2026-07-06 unification left three such divergences that each cost hours to
+# discover by hand. This job makes discovery free: scripts/audit/topology-parity.sh
+# probes every verifiable runbook claim from the gateway host itself and, on any
+# FAIL, opens (or updates) a single `doc-drift` issue that pinpoints the drifted
+# claim AND the doc that makes it. Fixing is then a 5-minute scoped task.
+#
+# Cron only runs on the default branch, and workflow_dispatch is operator-only,
+# so untrusted code never reaches the self-hosted runner via this workflow.
+name: Topology Parity
+
+on:
+  schedule:
+    - cron: "0 0 * * 1" # 매주 월 09:00 KST
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  parity:
+    runs-on: [self-hosted, gx10]
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Run parity sweep
+        id: sweep
+        run: |
+          set +e
+          out="$(scripts/audit/topology-parity.sh 2>&1)"
+          rc=$?
+          echo "$out"
+          {
+            echo "report<<__PARITY_EOF__"
+            echo "$out"
+            echo "__PARITY_EOF__"
+          } >> "$GITHUB_OUTPUT"
+          exit $rc
+
+      - name: Open or update doc-drift issue
+        if: failure()
+        uses: actions/github-script@v8
+        env:
+          REPORT: ${{ steps.sweep.outputs.report }}
+        with:
+          script: |
+            const title = "doc-drift: 토폴로지 실측이 런북 주장과 불일치";
+            const body = [
+              "주간 topology-parity 스윕이 FAIL 을 감지했습니다. 각 FAIL 은 '호스트를 고치거나, 인용된 문서를 고치거나' 둘 중 하나입니다.",
+              "",
+              "```",
+              process.env.REPORT,
+              "```",
+              "",
+              `run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+            ].join("\n");
+            const open = await github.rest.issues.listForRepo({
+              ...context.repo, state: "open", labels: "doc-drift", per_page: 1,
+            });
+            if (open.data.length > 0) {
+              await github.rest.issues.createComment({
+                ...context.repo, issue_number: open.data[0].number, body,
+              });
+            } else {
+              await github.rest.issues.create({
+                ...context.repo, title, body, labels: ["doc-drift"],
+              });
+            }
