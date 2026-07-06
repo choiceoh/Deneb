@@ -102,6 +102,12 @@ func parseMCPServerSpecs(raw string) ([]mcpServerSpec, error) {
 // background and registers them as deferred chat tools. No-op when the env
 // is unset. Boot is never blocked: a slow/failed server simply contributes
 // no tools until the next gateway restart.
+//
+// Clients are created synchronously and published on s.externalMCP BEFORE
+// any discovery goroutine runs, so later consumers (ingest tasks, health
+// probes) can fetch the shared client via ExternalMCPClient at any point —
+// even for a server whose chat-tool discovery failed (their calls lazily
+// respawn it).
 func (s *Server) initExternalMCPTools(registry *chat.ToolRegistry) {
 	raw := strings.TrimSpace(os.Getenv(mcpServersEnv))
 	if raw == "" {
@@ -112,6 +118,7 @@ func (s *Server) initExternalMCPTools(registry *chat.ToolRegistry) {
 		s.logger.Error("external mcp: invalid "+mcpServersEnv, "error", err)
 		return
 	}
+	s.externalMCP = make(map[string]*mcpclient.Client, len(specs))
 	for _, spec := range specs {
 		// ShutdownCtx as process lifetime: children die with the gateway.
 		client, err := mcpclient.New(s.ShutdownCtx(), strings.Fields(spec.Cmdline), s.logger)
@@ -119,6 +126,7 @@ func (s *Server) initExternalMCPTools(registry *chat.ToolRegistry) {
 			s.logger.Error("external mcp: invalid command", "server", spec.Name, "error", err)
 			continue
 		}
+		s.externalMCP[spec.Name] = client
 		safego.GoWithSlog(s.logger, "mcp-init-"+spec.Name, func() {
 			ctx, cancel := context.WithTimeout(s.ShutdownCtx(), mcpInitTimeout)
 			defer cancel()
@@ -128,16 +136,17 @@ func (s *Server) initExternalMCPTools(registry *chat.ToolRegistry) {
 				// is not usable. Most common cause on a fresh host is the
 				// one-time OAuth authorization — instructions land in the
 				// "mcp server stderr" log lines above this error. Close the
-				// client so a half-alive child doesn't linger until shutdown
-				// (tools can't register until restart anyway).
+				// child so it doesn't linger; a later consumer call (or the
+				// next restart) respawns it through the client's normal
+				// backoff path.
 				s.logger.Error("external mcp: tool discovery failed (check 'mcp server stderr' lines for auth instructions)",
 					"server", spec.Name, "error", err)
-				client.Close()
+				client.CloseProcess()
 				return
 			}
 			if len(tools) == 0 {
 				s.logger.Warn("external mcp: server reported no tools", "server", spec.Name)
-				client.Close()
+				client.CloseProcess()
 				return
 			}
 			names := registerMCPServerTools(registry, spec, tools, client.CallTool)

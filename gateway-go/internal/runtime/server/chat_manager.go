@@ -6,6 +6,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/filestore"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/mcpclient"
 )
 
 // ChatManager groups the chat pipeline and its channel delivery backends.
@@ -33,4 +34,18 @@ type ChatManager struct {
 	// retain context. Set in registerSessionRPCMethods once the
 	// transcript store is available.
 	proactiveRelay proactiveRelayDeps
+
+	// externalMCP holds one shared client per configured external MCP server
+	// (DENEB_MCP_SERVERS), keyed by server name. Populated synchronously at
+	// boot in initExternalMCPTools and read-only afterwards, so consumers
+	// (chat tool bridges today; ingest tasks tomorrow) can grab a client via
+	// ExternalMCPClient without a lock and share the same child process.
+	externalMCP map[string]*mcpclient.Client
+}
+
+// ExternalMCPClient returns the shared client for a configured external MCP
+// server, or nil when that server is not configured. The client is safe for
+// concurrent use; discovery state does not matter (calls lazily (re)spawn).
+func (m *ChatManager) ExternalMCPClient(name string) *mcpclient.Client {
+	return m.externalMCP[name]
 }
