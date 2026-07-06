@@ -151,6 +151,8 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontFamily
@@ -198,7 +200,17 @@ internal fun RenderChart(node: ChartNode) {
                 modifier = Modifier.padding(bottom = 8.dp),
             )
         }
-        Canvas(modifier = Modifier.fillMaxWidth().height(148.dp)) {
+        // Labels are drawn inside the canvas, so surface the series to
+        // accessibility explicitly (review catch on #3228).
+        val chartSummary = values.mapIndexed { i, v ->
+            "${node.labels.getOrNull(i) ?: (i + 1)} ${fmt(v)}"
+        }.joinToString(", ")
+        Canvas(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(148.dp)
+                .semantics { contentDescription = "${node.label ?: "차트"}: $chartSummary" },
+        ) {
             val w = size.width
             val valueBand = 16.dp.toPx() // headroom for value labels
             val axisBand = if (node.labels.isNotEmpty()) 18.dp.toPx() else 2.dp.toPx()
@@ -250,7 +262,10 @@ internal fun RenderChart(node: ChartNode) {
                 val barWidth = ((w - gap * (count + 1)) / count).coerceAtLeast(1f)
                 val corner = 3.dp.toPx()
                 values.forEachIndexed { index, v ->
-                    val barHeight = ((v / maxValue) * plotH).coerceAtLeast(2.dp.toPx())
+                    // Zero is a real claim — draw no bar (the value label
+                    // still says 0); only positive values get the legibility
+                    // minimum (review catch on #3228).
+                    val barHeight = if (v > 0f) ((v / maxValue) * plotH).coerceAtLeast(2.dp.toPx()) else 0f
                     val x = gap + index * (barWidth + gap)
                     val centerX = x + barWidth / 2f
                     drawRoundRect(
@@ -339,7 +354,7 @@ internal fun RenderCode(node: CodeNode) {
     }
 }
 
-private fun resolveIcon(name: String): ImageVector? = when (name) {
+internal fun resolveIcon(name: String): ImageVector? = when (name) {
     "home" -> Icons.Default.Home
     "settings" -> Icons.Default.Settings
     "search" -> Icons.Default.Search

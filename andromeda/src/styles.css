@@ -4262,6 +4262,33 @@ button.mail-attachment {
   color: var(--muted-2);
   font-variant-numeric: tabular-nums;
 }
+/* line chart (chart type="line") — SVG polyline + dots + per-point values */
+.dui-line-svg {
+  width: 100%;
+  height: 92px;
+  display: block;
+}
+.dui-line-path {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.dui-line-dot {
+  fill: var(--accent);
+}
+.dui-line-val {
+  fill: var(--ink-2);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+.dui-line-axis {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--muted-2);
+}
 .dui-alert {
   padding: 10px 12px;
   border-radius: var(--radius-ctl);

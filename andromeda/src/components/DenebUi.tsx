@@ -234,7 +234,55 @@ export function DenebUi({ spec, onSubmit, busy }: { spec: Node; onSubmit: (msg: 
       case "chart": {
         const labels: string[] = Array.isArray(n.labels) ? n.labels : [];
         const values: number[] = Array.isArray(n.values) ? n.values : [];
-        const max = Math.max(1, ...values.map((v) => Number(v) || 0));
+        const nums = values.map((v) => Number(v) || 0);
+        const max = Math.max(1, ...nums);
+        // Line variant: the authoring contract teaches type="line" for trends,
+        // and the native client draws it — the desktop must not silently
+        // degrade trends into bars (2026-07-07 review catch on #3229).
+        // Min-padded scale matches the native renderer: points carry their
+        // real value labels, so a non-zero baseline stays honest.
+        if (String(n.chartType) === "line" && nums.length >= 2) {
+          const min = Math.min(...nums);
+          const span = max - min || max;
+          const lo = Math.max(0, min - span * 0.15);
+          const hi = max + span * 0.05;
+          const W = 320;
+          const H = 92;
+          const PAD = 10;
+          const xAt = (i: number) => PAD + (i * (W - 2 * PAD)) / (nums.length - 1);
+          const yAt = (v: number) => H - PAD - ((v - lo) / (hi - lo)) * (H - 2 * PAD - 12);
+          const points = nums.map((v, i) => `${xAt(i)},${yAt(v)}`).join(" ");
+          const summary = nums.map((v, i) => `${labels[i] ?? i + 1} ${v}`).join(", ");
+          return (
+            <div key={key} className="dui-chart">
+              {n.label ? <div className="dui-stat-label">{String(n.label)}</div> : null}
+              <svg
+                className="dui-line-svg"
+                viewBox={`0 0 ${W} ${H}`}
+                preserveAspectRatio="none"
+                role="img"
+                aria-label={`${String(n.label ?? "line chart")}: ${summary}`}
+              >
+                <polyline className="dui-line-path" points={points} />
+                {nums.map((v, i) => (
+                  <g key={i}>
+                    <circle className="dui-line-dot" cx={xAt(i)} cy={yAt(v)} r={3} />
+                    <text className="dui-line-val" x={xAt(i)} y={yAt(v) - 7} textAnchor="middle">
+                      {String(values[i] ?? "")}
+                    </text>
+                  </g>
+                ))}
+              </svg>
+              {labels.length > 0 ? (
+                <div className="dui-line-axis">
+                  {labels.map((l, i) => (
+                    <span key={i}>{String(l)}</span>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          );
+        }
         return (
           <div key={key} className="dui-chart">
             {n.label ? <div className="dui-stat-label">{String(n.label)}</div> : null}

@@ -7,7 +7,9 @@ import ai.deneb.ui.denebOnSuccessContainer
 import ai.deneb.ui.denebOnWarningContainer
 import ai.deneb.ui.denebSuccessContainer
 import ai.deneb.ui.denebWarningContainer
+import ai.deneb.ui.markdown.InlineTokenizer
 import ai.deneb.ui.markdown.MarkdownContent
+import ai.deneb.ui.markdown.toAnnotatedString
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -53,11 +55,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
+import kotlin.math.roundToInt
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
 
@@ -72,10 +79,18 @@ private const val DEFAULT_IMAGE_ASPECT_RATIO = 1.91f
 @Composable
 internal fun RenderText(node: TextNode) {
     val style = when (node.style) {
-        TextNodeStyle.HEADLINE -> DenebType.subject
+        // Hero voice: card headlines carry the letter masthead and
+        // dashboard titles — 28sp Light tracked display (viewTitle), not
+        // the 22sp subject rung, so a temperature or a report title lands
+        // with editorial weight.
+        TextNodeStyle.HEADLINE -> DenebType.viewTitle
+
         TextNodeStyle.TITLE -> DenebType.cardTitle
+
         TextNodeStyle.BODY -> MaterialTheme.typography.bodyLarge
+
         TextNodeStyle.CAPTION -> MaterialTheme.typography.bodySmall
+
         null -> MaterialTheme.typography.bodyLarge
     }
     val color = when (node.color) {
@@ -85,12 +100,44 @@ internal fun RenderText(node: TextNode) {
         else -> MaterialTheme.colorScheme.onSurface
     }
     Text(
-        text = node.value.replace("**", ""),
+        text = denebUiInlineText(node.value),
         style = style,
         color = color,
-        fontWeight = if (node.bold == true || node.value.startsWith("**")) FontWeight.Bold else null,
+        fontWeight = if (node.bold == true) FontWeight.Bold else null,
         fontStyle = if (node.italic == true) FontStyle.Italic else null,
     )
+}
+
+/**
+ * Inline-span rendering for deneb-ui text values: models naturally write
+ * `**볼드**`/`*이탤릭*`/`` `코드` `` inside card text, and the old behavior —
+ * strip the markers and bold the WHOLE line when it merely started with ** —
+ * mangled mixed-emphasis lines. Reuses the chat markdown inline tokenizer so
+ * emphasis renders identically in prose and cards. Plain values skip the
+ * tokenizer entirely.
+ */
+@Composable
+internal fun denebUiInlineText(value: String): AnnotatedString {
+    if (value.none { it == '*' || it == '`' || it == '~' }) return AnnotatedString(value)
+    return InlineTokenizer.tokenize(value).toAnnotatedString(MaterialTheme.colorScheme)
+}
+
+/**
+ * List-item text with the letter/briefing prefix convention: a short lead
+ * ("09:00", "김부장") joined by " — " reads as the item's key and gets
+ * SemiBold, so schedules and mail digests scan by time/sender. Applies only
+ * when the lead is 14 chars or less — longer leads are sentences, not keys.
+ */
+@Composable
+internal fun denebUiListItemText(value: String): AnnotatedString {
+    val sep = " — "
+    val idx = value.indexOf(sep)
+    if (idx !in 1..14) return denebUiInlineText(value)
+    return buildAnnotatedString {
+        withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) { append(value.substring(0, idx)) }
+        append(sep)
+        append(denebUiInlineText(value.substring(idx + sep.length)))
+    }
 }
 
 /**
@@ -199,7 +246,11 @@ internal fun RenderProgress(node: ProgressNode) {
     Column(Modifier.fillMaxWidth()) {
         // Label row carries the readable number — a bare bar makes the reader
         // eyeball-estimate the one value the node exists to communicate.
-        val pct = node.value?.let { "${(it.coerceIn(0f, 1f) * 100).toInt()}%" }
+        val pct = node.value?.let { "${(it.coerceIn(0f, 1f) * 100).roundToInt()}%" }
+            // The authoring contract long showed label="50%" examples — when
+            // the label already carries the percent, a computed twin on the
+            // right would read 50% ... 50% (review catch on #3228).
+            ?.takeIf { p -> node.label?.trim() != p }
         if (node.label != null || pct != null) {
             Row(
                 Modifier.fillMaxWidth().padding(bottom = 6.dp),
@@ -450,10 +501,30 @@ internal fun RenderStat(node: StatNode) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         if (node.description != null) {
+            // Trend voice: a signed description ("+2.1%", "-14톤", "▲3") is a
+            // direction claim — tint it and normalize the arrow glyph so every
+            // stat block reads like a proper KPI tile.
+            val desc = node.description.trim()
+            val positive = desc.startsWith("+") || desc.startsWith("▲")
+            val negative = desc.startsWith("-") || desc.startsWith("−") || desc.startsWith("▼")
+            val trendColor = when {
+                positive -> denebOnSuccessContainer()
+                negative -> MaterialTheme.colorScheme.error
+                else -> MaterialTheme.colorScheme.onSurfaceVariant
+            }
+            val display = when {
+                desc.startsWith("+") -> "▲ " + desc.removePrefix("+")
+
+                desc.startsWith("-") || desc.startsWith("−") ->
+                    "▼ " + desc.removePrefix("-").removePrefix("−")
+
+                else -> desc
+            }
             Text(
-                text = node.description,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                text = display,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = if (positive || negative) FontWeight.SemiBold else null,
+                color = trendColor,
             )
         }
     }

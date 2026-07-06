@@ -68,6 +68,9 @@ metadata:
 
 ```deneb-ui
 <column>
+  <text style="headline">7월 7일 화요일</text>
+  <text style="caption">아침 레터 · 데네브</text>
+  <hr/>
   <card>
     <row><icon name="sunny" size="16"/><text style="caption">날씨 · 광주</text></row>
     <row><text style="headline">18°</text><text style="caption">체감 16°</text></row>
@@ -88,13 +91,14 @@ metadata:
   </card>
   <card>
     <row><icon name="alarm" size="16"/><text style="caption">임박 마감</text></row>
-    <row><text style="body">부가세 신고</text><badge>D-2</badge></row>
+    <row><text style="body">부가세 신고</text><badge color="warning">D-2</badge></row>
   </card>
 </column>
 ```
 
 #### 슬롯 채우기 규칙
 
+- **마스트헤드**: 카드들 앞에 `text(headline)`로 날짜("M월 D일 요일" 꼴), 그 아래 `text(caption)`으로 `아침 레터 · 데네브`, 이어서 `<hr/>` 한 줄. 레터의 1면 제호다.
 - **카드 헤더**: 각 카드 첫 `row`는 `icon` + `text(caption)`. 아이콘 이름 **고정** — 날씨 `sunny`(흐림 `cloud`, 비 `water_drop`), 환율·구리 `payments`, 일정 `calendar`, 메일 `mail`, 마감 `alarm`.
 - **날씨**: 기온 `text(headline)` + 체감 `text(caption)`를 한 `row`에. 그 아래 `최고 N° · 최저 N° · 강수 N%`를 `text(caption)` 한 줄. 마지막에 맥락 한마디 `text(body)`(강수 30%↑면 우산, 한파면 방한). **`stat`을 가로로 3개 늘어놓지 마라 — 폰 폭에서 깨진다.**
 - **환율·구리**: USD/KRW와 LME 구리를 `stat` 2개로 한 `row`(2칸). **EUR/KRW는 쓰지 않는다.** 구리 `value`는 `"$9,540 /t"` 꼴, `label`은 `"LME 구리"`. 환율 숫자는 천단위 콤마. `date` 필드가 오늘이 아니면 구리 `value`에 `"(X월 X일)"` 덧붙임.

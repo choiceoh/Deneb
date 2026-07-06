@@ -289,8 +289,8 @@ fun main() {
     renderScreen("topic_doc_editor_light.png", "topic_doc_editor", LightColorScheme, 824, 980)
     renderChart("chart_dark.png", DarkColorScheme)
     renderChart("chart_light.png", LightColorScheme)
-    renderLetterCard("letter_morning_dark.png", DarkColorScheme, morningLetterNode(), 1680)
-    renderLetterCard("letter_morning_light.png", LightColorScheme, morningLetterNode(), 1680)
+    renderLetterCard("letter_morning_dark.png", DarkColorScheme, morningLetterNode(), 1900)
+    renderLetterCard("letter_morning_light.png", LightColorScheme, morningLetterNode(), 1900)
     renderLetterCard("letter_evening_dark.png", DarkColorScheme, eveningLetterNode(), 1040)
     renderLetterCard("letter_evening_light.png", LightColorScheme, eveningLetterNode(), 1040)
     // Full deneb-ui node gallery — every display node with dense Korean
@@ -1346,6 +1346,9 @@ private fun parseLetterHtml(html: String): DenebUiNode = DenebUiHtml.parse(html)
 private fun morningLetterNode(): DenebUiNode = parseLetterHtml(
     """
     <column>
+      <text style="headline">7월 7일 화요일</text>
+      <text style="caption">아침 레터 · 데네브</text>
+      <hr/>
       <card>
         <row><icon name="sunny" size="16"/><text style="caption">날씨 · 광주</text></row>
         <row><text style="headline">18°</text><text style="caption">체감 16°</text></row>
