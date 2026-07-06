@@ -38,6 +38,9 @@ const morningLetterCardHTML = `<column>
 </column>`
 
 const eveningLetterCardHTML = `<column>
+  <text style="headline">7월 7일 화요일 저녁</text>
+  <text style="caption">이브닝 레터 · 데네브</text>
+  <hr/>
   <card>
     <row><icon name="calendar" size="16"/><text style="caption">내일 일정</text></row>
     <ul><li>10:00 — 분기 리뷰</li><li>15:00 — 거래처 콜</li></ul>
