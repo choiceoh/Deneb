@@ -10,6 +10,9 @@ import ai.deneb.ui.denebWarningContainer
 import ai.deneb.ui.markdown.InlineTokenizer
 import ai.deneb.ui.markdown.MarkdownContent
 import ai.deneb.ui.markdown.toAnnotatedString
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -487,11 +490,17 @@ internal fun RenderStat(node: StatNode) {
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier.widthIn(min = 72.dp),
     ) {
+        // Count-up entrance: the numeric run inside the value rolls from 0 to
+        // its target (600ms) while prefix/suffix ("$", "톤", "/t") stay fixed;
+        // tabular figures keep the digits from jittering as they roll. Static
+        // contexts render the final value immediately.
+        val motion = LocalDenebUiMotion.current
+        val display = if (motion) statCountUpValue(node.value) else node.value
         Text(
-            text = node.value,
+            text = display,
             // Stat value on the subject rung (22); Bold override keeps the metric
             // reading as a number, not a content title (law 3: weight = function).
-            style = DenebType.subject,
+            style = DenebType.subject.copy(fontFeatureSettings = "tnum"),
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurface,
         )
@@ -528,6 +537,36 @@ internal fun RenderStat(node: StatNode) {
             )
         }
     }
+}
+
+// Matches the first numeric run (with commas/decimal) inside a stat value.
+private val statNumberRe = Regex("""\d[\d,]*(?:\.\d+)?""")
+
+/** Animates the numeric run of a stat value from 0 to its target once. */
+@Composable
+internal fun statCountUpValue(value: String): String {
+    val match = statNumberRe.find(value) ?: return value
+    val target = match.value.replace(",", "").toFloatOrNull() ?: return value
+    val anim = remember(value) { Animatable(0f) }
+    LaunchedEffect(value) {
+        anim.animateTo(target, animationSpec = tween(durationMillis = 600, easing = FastOutSlowInEasing))
+    }
+    val hasDecimal = match.value.contains('.')
+    val grouped = formatStatNumber(anim.value, hasDecimal, match.value.contains(','))
+    return value.replaceRange(match.range, grouped)
+}
+
+private fun formatStatNumber(v: Float, decimal: Boolean, grouped: Boolean): String {
+    val raw = if (decimal) {
+        val scaled = kotlin.math.round(v * 10f) / 10f
+        scaled.toString()
+    } else {
+        kotlin.math.round(v).toLong().toString()
+    }
+    if (!grouped) return raw
+    val parts = raw.split(".")
+    val whole = parts[0].reversed().chunked(3).joinToString(",").reversed()
+    return if (parts.size > 1) "$whole.${parts[1]}" else whole
 }
 
 @Composable

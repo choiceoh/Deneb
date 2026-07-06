@@ -89,6 +89,7 @@ import ai.deneb.ui.dynamicui.DenebUiNode
 import ai.deneb.ui.dynamicui.DenebUiRenderer
 import ai.deneb.ui.dynamicui.IconNode
 import ai.deneb.ui.dynamicui.ListNode
+import ai.deneb.ui.dynamicui.LocalDenebUiMotion
 import ai.deneb.ui.dynamicui.RowNode
 import ai.deneb.ui.dynamicui.StatNode
 import ai.deneb.ui.dynamicui.TextNode
@@ -126,6 +127,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.Modifier
@@ -1164,7 +1166,9 @@ private fun renderTableAB(name: String, scheme: ColorScheme) {
                 Column(Modifier.width(412.dp).padding(16.dp)) {
                     MarkdownContent(mdTableSample, Modifier, baseStyle = MaterialTheme.typography.bodyMedium)
                     Spacer(Modifier.height(20.dp))
-                    DenebUiRenderer(node = uiNode, isInteractive = false, onCallback = { _, _ -> }, wrapInCard = false)
+                    CompositionLocalProvider(LocalDenebUiMotion provides false) {
+                        DenebUiRenderer(node = uiNode, isInteractive = false, onCallback = { _, _ -> }, wrapInCard = false)
+                    }
                 }
             }
         }
@@ -1317,12 +1321,14 @@ private fun renderLetterCard(name: String, scheme: ColorScheme, node: DenebUiNod
         MaterialTheme(colorScheme = scheme) {
             Surface(color = MaterialTheme.colorScheme.background) {
                 Column(Modifier.width(412.dp).padding(16.dp)) {
-                    DenebUiRenderer(
-                        node = node,
-                        isInteractive = false,
-                        onCallback = { _, _ -> },
-                        wrapInCard = false,
-                    )
+                    CompositionLocalProvider(LocalDenebUiMotion provides false) {
+                        DenebUiRenderer(
+                            node = node,
+                            isInteractive = false,
+                            onCallback = { _, _ -> },
+                            wrapInCard = false,
+                        )
+                    }
                 }
             }
         }

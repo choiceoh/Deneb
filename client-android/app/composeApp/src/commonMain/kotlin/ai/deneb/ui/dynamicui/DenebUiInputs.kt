@@ -4,6 +4,7 @@ package ai.deneb.ui.dynamicui
 
 import ai.deneb.ui.DenebOutlinedTextField
 import ai.deneb.ui.components.DenebChip
+import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebBreathing
 import ai.deneb.ui.handCursor
 import androidx.compose.foundation.background
@@ -108,7 +109,9 @@ internal fun RenderButton(
     val showPulse = (clicked && !isInteractive) || (isPressedSnapshot && frozen.isPending)
     val enabled = isInteractive && (node.enabled != false)
     val validation = LocalUiFormValidation.current
+    val haptics = rememberHaptics()
     val onClick: () -> Unit = {
+        haptics.tap()
         try {
             when (val action = node.action) {
                 is CallbackAction -> {
