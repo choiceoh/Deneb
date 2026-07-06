@@ -286,6 +286,10 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 	// Core tools (file I/O, exec, process, sessions, gateway, cron, image).
 	chat.RegisterCoreTools(chatCfg.Tools, s.toolDeps)
 
+	// External MCP servers (Plaud recorder) as deferred tools — discovered in
+	// the background so a slow npx cold start never blocks boot.
+	s.initExternalMCPTools(chatCfg.Tools)
+
 	// Knowledge: unified recall/read/record surface over the wiki knowledge
 	// base and the on-box file store. Polaris (session-bound) and graphify
 	// (graph-traversal) stay separate because they have different paradigms.
