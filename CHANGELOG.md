@@ -1,5 +1,19 @@
 # Changelog
 
+## [4.74.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.73.0...deneb-v4.74.0) (2026-07-06)
+
+
+### ✨ Features
+
+* **gateway:** 회의 합성에 전사 교정 임무 + 업무 토픽지식 주입 — 교정 실험 시리즈 결론 반영 ([#3225](https://github.com/choiceoh/Deneb/issues/3225)) ([3493323](https://github.com/choiceoh/Deneb/commit/34933232c9d44f84f657c47c069774b44b5ddbb9))
+
+
+### 🐛 Bug Fixes
+
+* **gateway:** plaud 전사 풀을 공유 MCP 클라이언트 직결로 — 실행기 절단이 회의 중간을 들어내던 결함 수리 ([#3227](https://github.com/choiceoh/Deneb/issues/3227)) ([9f54598](https://github.com/choiceoh/Deneb/commit/9f54598153f30ffcc1536804c3fbc1df9d785c5c))
+* **gateway:** plaud 회의 합성·gist 호출에 thinking off — max_tokens를 추론이 소진하던 첫 틱 실패 수리 ([#3223](https://github.com/choiceoh/Deneb/issues/3223)) ([1c0f1f6](https://github.com/choiceoh/Deneb/commit/1c0f1f6f44bf35fb04789e6abd46ebc790c14b39))
+* **gateway:** 모델 픽커 한도 — 선언 모델 면제·발견 목록 비절단으로 가짜 offline 수정 ([#3226](https://github.com/choiceoh/Deneb/issues/3226)) ([286629a](https://github.com/choiceoh/Deneb/commit/286629af157ff3974baa6a94c516be5c9495e196))
+
 ## [4.73.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.72.0...deneb-v4.73.0) (2026-07-06)
 
 
