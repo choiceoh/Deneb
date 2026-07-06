@@ -92,6 +92,13 @@ func TestStartListCall(t *testing.T) {
 		t.Fatalf("structured fallback: out=%q err=%v", out, err)
 	}
 
+	// Placeholder-only content (image block) must NOT mask structuredContent:
+	// substance-based fallback keeps the machine-readable payload.
+	out, err = c.CallTool(ctx, "structured-image", nil)
+	if err != nil || !strings.Contains(out, `"total":42`) || !strings.Contains(out, "[image content omitted]") {
+		t.Fatalf("structured+image fallback: out=%q err=%v", out, err)
+	}
+
 	// Embedded resource blocks contribute their text (labeled), not an
 	// "omitted" placeholder.
 	out, err = c.CallTool(ctx, "with-resource", nil)
@@ -124,6 +131,13 @@ func TestServerExitFailsCallsAndBacksOff(t *testing.T) {
 	// call must fail fast (not hang until ctx expiry).
 	if _, err := c.CallTool(ctx, "die", nil); err == nil {
 		t.Fatal("CallTool die: want error, got nil")
+	}
+
+	// A crash AFTER a successful init must not be mislabeled as an
+	// initialization failure in Stats (initDone is reset on init success,
+	// so stopLocked's mid-init branch cannot fire here).
+	if st := c.Stats(); strings.Contains(st.LastError, "during initialization") {
+		t.Fatalf("runtime crash mislabeled as init failure: %q", st.LastError)
 	}
 
 	// Immediate follow-up is inside the respawn backoff window.
@@ -399,6 +413,13 @@ func TestHelperProcess(t *testing.T) {
 				// to it when the content array renders to nothing.
 				reply(req.ID, map[string]any{
 					"content":           []map[string]any{},
+					"structuredContent": map[string]any{"total": 42},
+				})
+			case "structured-image":
+				// Placeholder-only content + structuredContent: the payload
+				// must survive alongside the placeholder.
+				reply(req.ID, map[string]any{
+					"content":           []map[string]any{{"type": "image", "data": "…"}},
 					"structuredContent": map[string]any{"total": 42},
 				})
 			case "with-resource":

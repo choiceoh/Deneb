@@ -59,12 +59,18 @@ func (c *Client) noteErrorLocked(err error) {
 }
 
 // recordStderr appends one child stderr line to the bounded diagnosis ring.
-func (c *Client) recordStderr(line string) {
+// Lines from a stale generation (a predecessor still draining its TERM
+// grace) are dropped so the ring always answers "what did the CURRENT child
+// say" — critical when its content gets folded into init errors.
+func (c *Client) recordStderr(gen int, line string) {
 	if len(line) > stderrLineCap {
 		line = truncateRuneSafe(line, stderrLineCap)
 	}
 	c.stderrMu.Lock()
 	defer c.stderrMu.Unlock()
+	if gen != c.stderrGen {
+		return
+	}
 	c.stderrTail = append(c.stderrTail, line)
 	if len(c.stderrTail) > stderrRingSize {
 		c.stderrTail = c.stderrTail[len(c.stderrTail)-stderrRingSize:]

@@ -4,7 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-	"unicode/utf8"
+
+	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
 
 // maxErrorTextBytes bounds the server-supplied text embedded in a Go error
@@ -42,6 +43,7 @@ func renderToolResult(name string, raw json.RawMessage) (string, error) {
 		return "", fmt.Errorf("mcpclient: tools/call result: %w", err)
 	}
 	var sb strings.Builder
+	textSubstance := false
 	for _, block := range res.Content {
 		if sb.Len() > 0 {
 			sb.WriteString("\n")
@@ -49,15 +51,28 @@ func renderToolResult(name string, raw json.RawMessage) (string, error) {
 		switch {
 		case block.Type == "text":
 			sb.WriteString(block.Text)
+			if strings.TrimSpace(block.Text) != "" {
+				textSubstance = true
+			}
 		case block.Type == "resource" && block.Resource != nil && block.Resource.Text != "":
 			fmt.Fprintf(&sb, "[resource %s]\n%s", block.Resource.URI, block.Resource.Text)
+			textSubstance = true
 		default:
 			fmt.Fprintf(&sb, "[%s content omitted]", block.Type)
 		}
 	}
 	out := sb.String()
-	if strings.TrimSpace(out) == "" && len(res.StructuredContent) > 0 {
-		out = string(res.StructuredContent)
+	// Substance-based fallback: "[image content omitted]" placeholders are
+	// not substance — a result whose only text is placeholders must still
+	// surface its structuredContent, or an image+structured result loses
+	// its machine-readable payload entirely.
+	if !textSubstance && len(res.StructuredContent) > 0 {
+		if strings.TrimSpace(out) != "" {
+			out += "\n"
+		} else {
+			out = ""
+		}
+		out += string(res.StructuredContent)
 	}
 	if res.IsError {
 		return "", fmt.Errorf("mcp tool %s failed: %s", name, truncateRuneSafe(out, maxErrorTextBytes))
@@ -66,14 +81,11 @@ func renderToolResult(name string, raw json.RawMessage) (string, error) {
 }
 
 // truncateRuneSafe bounds s to max bytes without splitting a multi-byte rune
-// (Korean error text), appending a truncation marker when cut.
+// (Korean error text), appending a truncation marker when cut. The boundary
+// work is textutil.TruncateBytes — the repo's canonical helper.
 func truncateRuneSafe(s string, max int) string {
 	if len(s) <= max {
 		return s
 	}
-	cut := max
-	for cut > 0 && !utf8.RuneStart(s[cut]) {
-		cut--
-	}
-	return s[:cut] + "… [truncated]"
+	return textutil.TruncateBytes(s, max) + "… [truncated]"
 }

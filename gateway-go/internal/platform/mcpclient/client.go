@@ -30,6 +30,7 @@ package mcpclient
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -42,6 +43,8 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/pkg/safego"
 )
 
 // protocolVersion is the newest MCP spec revision this client speaks.
@@ -93,9 +96,12 @@ type ToolInfo struct {
 //
 // Lock hierarchy (acquire in this order; never reverse):
 //
-//	Client.mu (process/init state + stdin write serialization)
+//	Client.mu (process/init state)
 //	  → Client.pendingMu (in-flight request table; reader goroutine takes it alone)
 //	  → Client.stderrMu (stderr ring; also taken alone by the stderr goroutine)
+//	Client.writeMu (stdin write serialization — independent: never held
+//	together with any other lock, so a deadline-bounded slow write can only
+//	stall other WRITERS, never state readers or the response router)
 //
 // No lock is ever held while waiting for the child: initialization waiters
 // select on initDone/ctx, request waiters select on their pending channel.
@@ -105,6 +111,8 @@ type Client struct {
 	// lifeCtx bounds the child process's lifetime (exec.CommandContext):
 	// typically the server shutdown ctx, so the child dies with the gateway.
 	lifeCtx context.Context
+
+	writeMu sync.Mutex
 
 	mu         sync.Mutex
 	cmd        *exec.Cmd
@@ -130,6 +138,7 @@ type Client struct {
 	callErrors atomic.Uint64
 
 	stderrMu   sync.Mutex
+	stderrGen  int      // spawn generation the ring belongs to (stale writers drop)
 	stderrTail []string // ring of recent child stderr lines, newest last
 
 	pendingMu sync.Mutex
@@ -280,7 +289,13 @@ func (c *Client) ensureReady(ctx context.Context) error {
 		done := make(chan struct{})
 		c.initDone = done
 		c.initErr = nil
-		go c.initRun(done, c.generation)
+		gen := c.generation
+		// safego owns panic recovery (outermost); the inner defer still
+		// settles the future first during any unwind, so waiters never hang.
+		safego.GoWithSlog(c.logger, "mcp-init", func() {
+			defer close(done)
+			c.initRun(gen)
+		})
 	}
 	done := c.initDone
 	c.mu.Unlock()
@@ -305,15 +320,9 @@ func (c *Client) ensureReady(ctx context.Context) error {
 }
 
 // initRun performs the initialize handshake for one spawn generation and
-// settles the initDone future. Owner of `done` — sole closer.
-func (c *Client) initRun(done chan struct{}, gen int) {
-	defer func() {
-		if r := recover(); r != nil {
-			c.logger.Error("panic in mcp init goroutine", "panic", r)
-		}
-		close(done)
-	}()
-
+// settles the client's init state; the caller's wrapper closes the future
+// and safego handles panic recovery.
+func (c *Client) initRun(gen int) {
 	ctx, cancel := context.WithTimeout(c.lifeCtx, initTimeout)
 	defer cancel()
 	name, version, err := c.handshake(ctx)
@@ -338,6 +347,11 @@ func (c *Client) initRun(done chan struct{}, gen int) {
 	if c.cmd != nil {
 		c.ready = true
 		c.initErr = nil
+		// Settled successfully: reset the future so stopLocked's
+		// "stopped during initialization" branch can never fire for a
+		// later RUNTIME death of this fully-initialized server (waiters
+		// have ready=true's fast path; nothing reads initDone once ready).
+		c.initDone = nil
 		c.serverName = name
 		c.serverVersion = version
 	}
@@ -367,14 +381,17 @@ func (c *Client) spawnLocked() error {
 	// grandchild, and signaling only the wrapper would orphan it. All kill
 	// paths below signal the group (-pgid).
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	// lifeCtx cancel (gateway shutdown): polite TERM to the group first so
-	// wrappers can flush token caches, hard KILL if the grace expires.
+	// lifeCtx cancel (gateway shutdown): polite TERM to the group so
+	// wrappers can flush token caches. Deliberately NO delayed SIGKILL here:
+	// an unguarded timer would race pid reuse (child exits fast, OS recycles
+	// the pgid, late Kill(-pid) hits an innocent group). KILL escalation
+	// lives solely in stopLocked's reaper, whose timer is stopped after
+	// Wait. Residual: a child that ignores SIGTERM during gateway shutdown
+	// can outlive the gateway — acceptable vs. collateral-killing a stranger.
 	cmd.Cancel = func() error {
-		pid := cmd.Process.Pid
-		if err := syscall.Kill(-pid, syscall.SIGTERM); err != nil {
+		if err := syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM); err != nil {
 			return cmd.Process.Kill()
 		}
-		time.AfterFunc(stopGrace, func() { _ = syscall.Kill(-pid, syscall.SIGKILL) })
 		return nil
 	}
 	cmd.WaitDelay = stopGrace
@@ -400,39 +417,40 @@ func (c *Client) spawnLocked() error {
 	c.spawns++
 	c.listChangedLogged = false
 	gen := c.generation
+	// Fresh diagnosis ring per spawn: the ring answers "what did THIS child
+	// say", and a predecessor lingering in its TERM grace must not write
+	// into it (recordStderr drops stale generations).
+	c.stderrMu.Lock()
+	c.stderrGen = gen
+	c.stderrTail = nil
+	c.stderrMu.Unlock()
 	c.logger.Info("mcp server process started", "cmd", c.argv[0], "pid", cmd.Process.Pid)
 
 	// Reader goroutine: routes responses to pending calls. Exits on stdout
 	// EOF (process death or Close), so it always has a termination path.
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				c.logger.Error("panic in mcp reader goroutine", "panic", r)
-			}
-			c.onProcessExit(gen)
-		}()
+	// The inner defer runs onProcessExit even during a panic unwind, before
+	// safego's outer recovery logs it.
+	safego.GoWithSlog(c.logger, "mcp-reader", func() {
+		defer c.onProcessExit(gen)
 		c.readLoop(stdout)
-	}()
+	})
 
 	// Stderr goroutine: surfaces the server's own diagnostics — first-run
 	// OAuth instructions from wrappers like Plaud's npx package arrive here,
 	// so they must reach both the operator log and the diagnosis ring that
 	// initialization errors quote. Exits on stderr EOF alongside the process.
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				c.logger.Error("panic in mcp stderr goroutine", "panic", r)
-			}
-		}()
+	// Lines are tagged with this spawn's generation so a dying predecessor
+	// cannot contaminate a successor's diagnosis ring during the TERM grace.
+	safego.GoWithSlog(c.logger, "mcp-stderr", func() {
 		sc := bufio.NewScanner(stderr)
 		sc.Buffer(make([]byte, 64*1024), 256*1024)
 		for sc.Scan() {
 			if line := strings.TrimSpace(sc.Text()); line != "" {
-				c.recordStderr(line)
+				c.recordStderr(gen, line)
 				c.logger.Info("mcp server stderr", "cmd", c.argv[0], "line", line)
 			}
 		}
-	}()
+	})
 
 	return nil
 }
@@ -490,9 +508,10 @@ func (c *Client) stopLocked() {
 		}
 		// Reap in the background with KILL escalation; Wait must not run
 		// under c.mu because the exiting reader goroutine's onProcessExit
-		// also takes it.
-		go func() {
-			defer func() { _ = recover() }()
+		// also takes it. The timer is stopped after Wait so a reaped pid
+		// can never receive a late group-SIGKILL (pid-reuse safety) — this
+		// reaper is the ONLY kill-escalation point (cmd.Cancel is TERM-only).
+		safego.GoWithSlog(c.logger, "mcp-reaper", func() {
 			t := time.AfterFunc(stopGrace, func() {
 				if err := syscall.Kill(-pid, syscall.SIGKILL); err != nil {
 					_ = cmd.Process.Kill()
@@ -500,7 +519,7 @@ func (c *Client) stopLocked() {
 			})
 			_ = cmd.Wait()
 			t.Stop()
-		}()
+		})
 	}
 	c.cmd = nil
 	c.ready = false
@@ -559,7 +578,9 @@ func (c *Client) readLoop(stdout io.Reader) {
 	sc.Buffer(make([]byte, 64*1024), maxLineBytes)
 	for sc.Scan() {
 		line := sc.Bytes()
-		if len(strings.TrimSpace(string(line))) == 0 {
+		// bytes.TrimSpace: a string() conversion here would heap-copy up to
+		// maxLineBytes per message just for a blank check.
+		if len(bytes.TrimSpace(line)) == 0 {
 			continue
 		}
 		// ID stays raw: our own requests use numeric ids, but a
@@ -684,6 +705,11 @@ type deadlineWriter interface {
 // would otherwise block the caller forever once the 64KB pipe buffer fills —
 // on any write failure (deadline included) the child is killed so recovery
 // goes through the normal respawn path.
+//
+// The write happens under writeMu with NO other lock held: a wedged child
+// stalls only competing writers for up to writeTimeout, never Stats/
+// ensureReady/response routing. The generation captured with the stdin ref
+// keeps the failure path from killing a newer process than the one written to.
 func (c *Client) send(msg map[string]any) error {
 	data, err := json.Marshal(msg)
 	if err != nil {
@@ -692,15 +718,31 @@ func (c *Client) send(msg map[string]any) error {
 	data = append(data, '\n')
 
 	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.stdin == nil {
+	stdin := c.stdin
+	gen := c.generation
+	c.mu.Unlock()
+	if stdin == nil {
 		return errors.New("mcpclient: server process not running")
 	}
-	if dw, ok := c.stdin.(deadlineWriter); ok {
+
+	c.writeMu.Lock()
+	if dw, ok := stdin.(deadlineWriter); ok {
 		_ = dw.SetWriteDeadline(time.Now().Add(writeTimeout)) // best effort
 	}
-	if _, err := c.stdin.Write(data); err != nil {
-		c.stopLocked() // broken/wedged pipe — force the crash-recovery path
+	_, err = stdin.Write(data)
+	c.writeMu.Unlock()
+
+	if err != nil {
+		// Broken/wedged pipe — kill this generation so recovery goes through
+		// the normal respawn path. This is an UNEXPECTED child failure and
+		// stopLocked's generation bump makes the reader's onProcessExit
+		// stale (silent), so the operator-visible Error lives here.
+		c.logger.Error("mcp server stdin write failed — stopping process", "cmd", c.argv[0], "error", err)
+		c.mu.Lock()
+		if c.generation == gen {
+			c.stopLocked()
+		}
+		c.mu.Unlock()
 		return fmt.Errorf("mcpclient: write: %w", err)
 	}
 	return nil
