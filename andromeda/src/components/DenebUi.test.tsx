@@ -109,3 +109,77 @@ describe("AssistantText", () => {
     expect(screen.queryByRole("button", { name: "42" })).not.toBeInTheDocument();
   });
 });
+
+describe("deneb-ui renderer parity conventions", () => {
+  it("renders HH:MM lists as a timeline with bold time keys", () => {
+    const spec = {
+      type: "list",
+      items: [
+        { type: "text", value: "09:00 — 팀 스탠드업" },
+        { type: "text", value: "14:00 — 거래처 미팅" },
+      ],
+    };
+    const { container } = render(<DenebUi spec={spec} onSubmit={() => {}} />);
+    expect(container.querySelectorAll(".dui-timeline-row")).toHaveLength(2);
+    expect(container.querySelector(".dui-timeline-time")?.textContent).toBe("09:00");
+  });
+
+  it("bolds the key of '키 — 내용' list items", () => {
+    const spec = { type: "list", items: [{ type: "text", value: "김부장 — 견적서 회신 요청" }] };
+    const { container } = render(<DenebUi spec={spec} onSubmit={() => {}} />);
+    expect(container.querySelector("li strong")?.textContent).toBe("김부장");
+  });
+
+  it("tints status badges and stat trends", () => {
+    const spec = {
+      type: "column",
+      children: [
+        { type: "badge", value: "완료", color: "success" },
+        { type: "stat", value: "381톤", label: "주간 생산", description: "+2.1%" },
+      ],
+    };
+    const { container } = render(<DenebUi spec={spec} onSubmit={() => {}} />);
+    expect(container.querySelector(".dui-badge.success")).not.toBeNull();
+    const desc = container.querySelector(".dui-stat-desc.pos");
+    expect(desc?.textContent).toBe("▲ 2.1%");
+  });
+
+  it("right-aligns numeric table columns", () => {
+    const spec = {
+      type: "table",
+      headers: ["현장", "수량"],
+      rows: [
+        ["화성산단", "12"],
+        ["부산 썬탑", "4"],
+      ],
+    };
+    const { container } = render(<DenebUi spec={spec} onSubmit={() => {}} />);
+    const cells = container.querySelectorAll("tbody td");
+    expect((cells[1] as HTMLElement).style.textAlign).toBe("right");
+    expect((cells[0] as HTMLElement).style.textAlign).toBe("");
+  });
+
+  it("renders inline emphasis inside text nodes", () => {
+    const spec = { type: "text", value: "이번주 **필수** 확인" };
+    const { container } = render(<DenebUi spec={spec} onSubmit={() => {}} />);
+    expect(container.querySelector("strong")?.textContent).toBe("필수");
+  });
+
+  it("promotes an icon+caption first row to the card header voice", () => {
+    const spec = {
+      type: "card",
+      children: [
+        {
+          type: "row",
+          children: [
+            { type: "icon", name: "calendar", size: 16 },
+            { type: "text", style: "caption", value: "오늘 일정" },
+          ],
+        },
+        { type: "text", value: "본문" },
+      ],
+    };
+    const { container } = render(<DenebUi spec={spec} onSubmit={() => {}} />);
+    expect(container.querySelector(".dui-card-hd-label")?.textContent).toBe("오늘 일정");
+  });
+});

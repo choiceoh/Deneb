@@ -156,13 +156,20 @@ internal fun RenderCard(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
                     val iconNode = header.children[0] as IconNode
-                    resolveIcon(iconNode.name)?.let { glyph ->
+                    val glyph = resolveIcon(iconNode.name)
+                    if (glyph != null) {
                         Icon(
                             imageVector = glyph,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size((iconNode.size ?: 16).dp),
                         )
+                    } else {
+                        // Emoji icon names ("⚠️") have no vector — keep the
+                        // generic renderer's fallback instead of dropping the
+                        // glyph just because the header path special-cases it
+                        // (review catch on #3233).
+                        RenderNode(header.children[0], isInteractive, formState, toggleState, onCallback, depth + 1)
                     }
                     Text(
                         text = (header.children[1] as TextNode).value,

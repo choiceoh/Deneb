@@ -4201,6 +4201,97 @@ button.mail-attachment {
   font-size: 11.5px;
   color: var(--muted);
 }
+.dui-stat-value {
+  font-variant-numeric: tabular-nums;
+}
+.dui-stat-desc.pos {
+  color: #5db075;
+  font-weight: 600;
+}
+.dui-stat-desc.neg {
+  color: #e5615c;
+  font-weight: 600;
+}
+/* status badge tints — soft fills, parity with the native 2-accent restraint */
+.dui-badge.success {
+  color: #3f8f57;
+  background: rgba(93, 176, 117, 0.16);
+}
+.dui-badge.warning {
+  color: #b3701c;
+  background: rgba(230, 160, 60, 0.18);
+}
+.dui-badge.error {
+  color: #c04a44;
+  background: rgba(229, 97, 92, 0.16);
+}
+.dui-badge.primary,
+.dui-badge.secondary {
+  color: var(--accent-deep);
+  background: var(--accent-soft);
+}
+/* card section-label header (icon + caption first row) */
+.dui-card-hd {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted-2);
+}
+.dui-card-hd-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+/* schedule timeline (HH:MM — 제목 lists) */
+.dui-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.dui-timeline-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+.dui-timeline-time {
+  min-width: 42px;
+  text-align: right;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+.dui-timeline-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--accent);
+  flex: none;
+}
+.dui-timeline-title {
+  color: var(--ink-2);
+  min-width: 0;
+}
+/* progress header row with percent readout */
+.dui-progress-hd {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.dui-progress-pct {
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+.dui-inline-code {
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 0.92em;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: var(--panel-sunken);
+}
 .dui-image {
   max-width: 100%;
   height: auto;

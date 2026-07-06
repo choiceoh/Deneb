@@ -145,7 +145,9 @@ export function collectInputs(root: Node): { initial: Record<string, unknown>; r
 }
 
 export const TEXT_STYLE: Record<string, React.CSSProperties> = {
-  headline: { fontSize: 18, fontWeight: 600, letterSpacing: "-0.01em", color: "var(--ink)" },
+  // Editorial hero voice (parity with the native 28sp Light headline,
+  // scaled for desktop panel density).
+  headline: { fontSize: 24, fontWeight: 300, letterSpacing: "-0.015em", color: "var(--ink)" },
   title: { fontSize: 15, fontWeight: 600, color: "var(--ink)" },
   body: { fontSize: 13, color: "var(--ink-2)" },
   caption: { fontSize: 11, color: "var(--muted-2)" },
