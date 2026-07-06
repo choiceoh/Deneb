@@ -39,6 +39,20 @@ watch)
     ;;
 land)
     watch_checks
+    # Multi-agent guard (2026-07-06 incident, PR #3219): the branch name is a
+    # shared surface — a parallel session can replace the branch's commit
+    # between push and merge, and a SINGLE-commit PR squash then lands that
+    # commit under this PR's number (GitHub uses the commit message, not the
+    # PR title, as the squash title for single-commit PRs). When this clone
+    # has a local ref of the same branch, require it to match the PR head.
+    branch="$(gh pr view "$pr" --json headRefName -q .headRefName)"
+    head_oid="$(gh pr view "$pr" --json headRefOid -q .headRefOid)"
+    local_oid="$(git rev-parse --quiet --verify "refs/heads/$branch" 2>/dev/null || true)"
+    if [ -n "$local_oid" ] && [ "$local_oid" != "$head_oid" ]; then
+        echo "PR #$pr head is $head_oid but local branch $branch is $local_oid —" >&2
+        echo "the remote branch changed since your push (parallel session?). Refusing to land." >&2
+        exit 1
+    fi
     # Tolerate an operator racing us to the merge button.
     if [ "$(gh pr view "$pr" --json state -q .state)" != "MERGED" ]; then
         gh pr merge "$pr" --squash
@@ -49,7 +63,6 @@ land)
         echo "PR #$pr shows MERGED but $sha is NOT on origin/main — stacked base? Investigate before trusting this merge." >&2
         exit 1
     fi
-    branch="$(gh pr view "$pr" --json headRefName -q .headRefName)"
     git push origin --delete "$branch" >/dev/null 2>&1 || true
     echo "PR #$pr landed: $sha is on origin/main (branch $branch cleaned up)"
     gh pr view "$pr" --json url -q .url
