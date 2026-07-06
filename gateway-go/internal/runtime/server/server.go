@@ -28,6 +28,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/middleware"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/sparkfleet"
 	arSession "github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/polaris"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/cron"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
@@ -186,6 +187,16 @@ type Server struct {
 	// end, pulling meeting/call outcomes into the wiki flywheel (mail is only
 	// half the negotiation). nil-safe start(); see meeting_harvest.go.
 	meetingHarvest *meetingHarvestService
+
+	// plaudRecordings analyzes new Plaud meeting recordings via the external
+	// MCP tools (transcript → meeting report → 회의록 wiki page + feed card).
+	// nil-safe start(); see plaud_recordings.go.
+	plaudRecordings *plaudRecordingsService
+
+	// chatToolRegistry is the chat pipeline's tool registry, captured at
+	// pipeline build so background services (plaud recordings) can execute
+	// registered tools outside a chat turn. nil until buildChatPipeline runs.
+	chatToolRegistry *chat.ToolRegistry
 
 	// mailIngestHealth stores mailIngestHealth when LMTP ingest is enabled so
 	// /health exposes archive-context degradation instead of leaving it in logs.

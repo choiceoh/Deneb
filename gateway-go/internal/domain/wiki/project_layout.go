@@ -9,12 +9,14 @@
 //	  기자재/*.md  — equipment/material pages (cables, modules, quotes, spec sheets)
 //	  메일분석/*.md — per-mail analysis raw pages (one page per Gmail message ID)
 //	  자료/*.md    — ingested external sources (URL/영상), one page per source URL
+//	  회의록/*.md  — meeting records (one page per Plaud recording analysis)
 //
 // Category-level (non-project) buckets under 프로젝트/:
 //
 //	프로젝트/거래/      — per-counterparty deal ledger pages (span projects)
 //	프로젝트/메일분석/  — mail analyses the analyzer linked to no project
 //	프로젝트/자료/      — ingested sources linked to no project
+//	프로젝트/회의록/    — meeting records linked to no project
 //
 // Legacy layout (pre-migration): the 대표페이지 was the flat 프로젝트/<name>.md and
 // mail analyses lived under 프로젝트/mail-analyses/[<project>/]. Helpers accept
@@ -42,6 +44,10 @@ const (
 	// one page per source URL — wiki tool action="ingest"), and also the
 	// category-level bucket (프로젝트/자료/) for sources with no linked project.
 	MaterialDir = "자료"
+	// MeetingDir is the per-project meeting-record sub-folder (one page per
+	// Plaud recording — plaud_recordings.go), and also the category-level
+	// bucket (프로젝트/회의록/) for meetings linked to no project.
+	MeetingDir = "회의록"
 	// legacyMailAnalysisDir is the pre-migration global mail-analysis bucket.
 	legacyMailAnalysisDir = "mail-analyses"
 	// dealDir is the category-level per-counterparty deal ledger.
@@ -55,6 +61,7 @@ var reservedProjectDirs = map[string]bool{
 	MailAnalysisDir:       true,
 	legacyMailAnalysisDir: true,
 	MaterialDir:           true,
+	MeetingDir:            true,
 }
 
 // IsReservedProjectDir reports whether name is a category-level raw-data bucket
@@ -103,6 +110,16 @@ func MaterialPagePath(project, filename string) string {
 		return projectCategoryPrefix + "/" + MaterialDir + "/" + filename
 	}
 	return projectCategoryPrefix + "/" + project + "/" + MaterialDir + "/" + filename
+}
+
+// MeetingPagePath maps a meeting-record filename to its wiki page path: under
+// the project's 회의록/ folder when the analyzer linked one, else the
+// category-level unlinked bucket 프로젝트/회의록/.
+func MeetingPagePath(project, filename string) string {
+	if project == "" {
+		return projectCategoryPrefix + "/" + MeetingDir + "/" + filename
+	}
+	return projectCategoryPrefix + "/" + project + "/" + MeetingDir + "/" + filename
 }
 
 // ProjectOfLinkedMailAnalysis returns the owning project of a PROJECT-LINKED
@@ -181,8 +198,8 @@ func IsProjectRawDataPath(relPath string) bool {
 	if IsReservedProjectDir(seg[0]) {
 		return true
 	}
-	// Per-project raw slots: 프로젝트/<name>/{메일분석,자료}/... (and legacy nesting).
-	return seg[1] == MailAnalysisDir || seg[1] == legacyMailAnalysisDir || seg[1] == MaterialDir
+	// Per-project raw slots: 프로젝트/<name>/{메일분석,자료,회의록}/... (and legacy nesting).
+	return seg[1] == MailAnalysisDir || seg[1] == legacyMailAnalysisDir || seg[1] == MaterialDir || seg[1] == MeetingDir
 }
 
 // NormalizeProjectPagePath enforces the project layout's path shape on a write:
@@ -209,7 +226,7 @@ func NormalizeProjectPagePath(relPath string) string {
 		return RepPagePath(name)
 	case len(seg) == 2: // 프로젝트/<name>/<file>.md — canonical detail/slot
 		return relPath
-	case seg[1] == EquipmentDir || seg[1] == MailAnalysisDir || seg[1] == legacyMailAnalysisDir || seg[1] == MaterialDir:
+	case seg[1] == EquipmentDir || seg[1] == MailAnalysisDir || seg[1] == legacyMailAnalysisDir || seg[1] == MaterialDir || seg[1] == MeetingDir:
 		if len(seg) == 3 { // canonical slot file
 			return relPath
 		}

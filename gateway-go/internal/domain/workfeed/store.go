@@ -14,8 +14,9 @@ import (
 
 const (
 	SourceProactive       = "proactive"
-	SourceMailReport      = "mail_report" // proactive mail analysis — gets the envelope card icon
-	SourceDream           = "dream"       // wiki dream-cycle result card (pages created/updated)
+	SourceMailReport      = "mail_report"    // proactive mail analysis — gets the envelope card icon
+	SourceMeetingReport   = "meeting_report" // proactive Plaud recording analysis (plaud_recordings.go)
+	SourceDream           = "dream"          // wiki dream-cycle result card (pages created/updated)
 	SourceCaptureImage    = "capture_image"
 	SourceCaptureAudio    = "capture_audio"
 	SourceCaptureDocument = "capture_document"

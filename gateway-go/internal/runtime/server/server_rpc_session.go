@@ -14,6 +14,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/autonomous"
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/goals"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/embedding"
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/localai"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modeltuner"
@@ -21,6 +22,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/approval"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/shortid"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/acp"
@@ -649,6 +651,66 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 					s.logger,
 				)
 				s.meetingHarvest.start(s.ShutdownCtx())
+			}
+		}
+
+		// Plaud recording analysis: poll the recorder's MCP tools for new
+		// recordings and give each meeting the mail-grade treatment —
+		// transcript → meeting report (analysis role) → 회의록 wiki page +
+		// project status bullet + work-feed card. PRODUCTION ONLY for the
+		// same shared-state reason as meeting harvest; where the MCP env is
+		// not configured (dev boxes) the tools never register and every tick
+		// is a quiet skip. See plaud_recordings.go.
+		if os.Getenv(plaudRecordingsDisableEnv) != "1" {
+			if stateDir, ok := s.productionStateDir(homeDir); ok && s.wikiStore != nil {
+				s.plaudRecordings = newPlaudRecordingsService(
+					func(ctx context.Context, name string, args json.RawMessage) (string, error) {
+						reg := s.chatToolRegistry
+						if reg == nil {
+							// Same shape as the registry's own miss so the
+							// service's "not wired yet" branch handles it.
+							return "", errors.New("unknown tool: chat registry not ready")
+						}
+						return reg.Execute(ctx, name, args)
+					},
+					// Synthesis = analysis role (user-facing report, cloud OK);
+					// resolved per call so model-registry changes apply live.
+					func(ctx context.Context, system, user string, maxTokens int) (string, error) {
+						client, model, _, _ := s.mailAnalysisModels()
+						if client == nil {
+							return "", errors.New("analysis model unavailable")
+						}
+						return client.Complete(ctx, llm.ChatRequest{
+							Model:     model,
+							System:    llm.SystemString(system),
+							Messages:  []llm.Message{llm.NewTextMessage("user", user)},
+							MaxTokens: maxTokens,
+						})
+					},
+					// Chunk gists = local stage-1 model (model-roles dogma).
+					func(ctx context.Context, system, user string, maxTokens int) (string, error) {
+						_, _, client, model := s.mailAnalysisModels()
+						if client == nil {
+							return "", errors.New("stage-1 model unavailable")
+						}
+						return client.Complete(ctx, llm.ChatRequest{
+							Model:     model,
+							System:    llm.SystemString(system),
+							Messages:  []llm.Message{llm.NewTextMessage("user", user)},
+							MaxTokens: maxTokens,
+						})
+					},
+					s.projectCandidatesFn(),
+					s.wikiStore.WritePage,
+					s.wikiStore.AppendProjectStatusLine,
+					func(text string) (bool, error) {
+						return s.proactiveRelay.relayNativeToOptions("", text,
+							proactiveRelayOptions{workFeedSource: workfeed.SourceMeetingReport})
+					},
+					filepath.Join(stateDir, plaudStateFile),
+					s.logger,
+				)
+				s.plaudRecordings.start(s.ShutdownCtx())
 			}
 		}
 
