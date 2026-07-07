@@ -36,6 +36,14 @@ func (r Report) Markdown() string {
 	if r.Memory.BacklogDays > 0 {
 		fmt.Fprintf(&b, " (backlog %dd)", r.Memory.BacklogDays)
 	}
+	if r.Memory.PendingBytes > 0 {
+		fmt.Fprintf(&b, " (pending %dB)", r.Memory.PendingBytes)
+	}
+	if r.Memory.MemoryMDStamp != "" {
+		// A separate distillation source (workspace MEMORY.md), not the diary
+		// pointer — labeled apart so its age never reads as diary backlog.
+		fmt.Fprintf(&b, " · memoryMD→%s", firstTenDate(r.Memory.MemoryMDStamp))
+	}
 	fmt.Fprintf(&b, " · spillover %d today\n", r.Memory.SpilloverToday)
 
 	fmt.Fprintf(&b, "MODELS    %d in %dh window", len(r.Models.Models), r.Models.WindowHours)

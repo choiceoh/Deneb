@@ -30,7 +30,11 @@ func TestSnapshot(t *testing.T) {
 		`{"route":"no-op"}`+"\n"+`{"route":"no-op"}`+"\n"+`{"route":"evolve"}`+"\n"+`{"route":"no-op"}`+"\n", 1)
 	write("regression-baseline.json", `{}`, 1)
 	write("model-stats.json", `{"windowHours":24,"models":{"glm-5.2":{},"dsv4":{}}}`, 1)
-	write("wiki/.diary-process-state.json", `{"memoryConsumedThrough":"2026-06-20 10:43"}`, 30) // stale: >24h
+	// memoryConsumedThrough is the MEMORY.md distillation stamp (months old on
+	// purpose — it must NOT read as diary backlog); diary consumption comes
+	// from the files ledger: 06-27 fully consumed, 06-28's 1-byte tail pending.
+	write("wiki/.diary-process-state.json",
+		`{"memoryConsumedThrough":"2026-04-07 10:43","files":{"diary-2026-06-27.md":{"offset":1},"diary-2026-06-28.md":{"offset":0}}}`, 30) // stale: >24h
 	write("memory/diary/diary-2026-06-27.md", "x", 26)
 	write("memory/diary/diary-2026-06-28.md", "y", 2) // fresh + lexically latest
 	write("logs/sparkfleet.log", "time=t level=WARN msg=\"backends down\" down=vllm-nex url=http://x\n", 1)
@@ -45,8 +49,17 @@ func TestSnapshot(t *testing.T) {
 	if r.Memory.LatestDiary != "2026-06-28" {
 		t.Errorf("latestDiary = %q, want 2026-06-28", r.Memory.LatestDiary)
 	}
-	if r.Memory.BacklogDays != 8 {
-		t.Errorf("backlogDays = %d, want 8", r.Memory.BacklogDays)
+	if r.Memory.DreamerConsumedThrough != "2026-06-27" {
+		t.Errorf("dreamerConsumedThrough = %q, want 2026-06-27 (newest fully-consumed)", r.Memory.DreamerConsumedThrough)
+	}
+	if r.Memory.BacklogDays != 0 {
+		t.Errorf("backlogDays = %d, want 0 — only the latest diary's tail is pending, and the April MEMORY.md stamp must not count as diary backlog", r.Memory.BacklogDays)
+	}
+	if r.Memory.PendingBytes != 1 {
+		t.Errorf("pendingBytes = %d, want 1", r.Memory.PendingBytes)
+	}
+	if r.Memory.MemoryMDStamp != "2026-04-07 10:43" {
+		t.Errorf("memoryMdStamp = %q, want the raw distillation stamp", r.Memory.MemoryMDStamp)
 	}
 	if r.Memory.SpilloverToday != 2 {
 		t.Errorf("spilloverToday = %d, want 2", r.Memory.SpilloverToday)
@@ -73,10 +86,71 @@ func TestSnapshot(t *testing.T) {
 	}
 
 	md := r.Markdown()
-	for _, want := range []string{"Deneb self-status", "LIVENESS", "dreamer STALE", "skill-review ok", "no-op 3", "backlog 8d", "DOWN: vllm-nex"} {
+	for _, want := range []string{"Deneb self-status", "LIVENESS", "dreamer STALE", "skill-review ok", "no-op 3", "dreamer→2026-06-27", "(pending 1B)", "memoryMD→2026-04-07", "DOWN: vllm-nex"} {
 		if !strings.Contains(md, want) {
 			t.Errorf("markdown missing %q\n---\n%s", want, md)
 		}
+	}
+	if strings.Contains(md, "backlog") {
+		t.Errorf("no backlog expected when only the live tail is pending:\n%s", md)
+	}
+}
+
+// TestMemoryStatus_RealBacklogAndLegacySkips: unconsumed bytes from an OLDER
+// diary date surface as backlog days; untracked files older than the newest
+// tracked one are the dreamer's legacy-cutoff skips and count as neither
+// consumed nor pending; untracked NEWER files are fully pending.
+func TestMemoryStatus_RealBacklogAndLegacySkips(t *testing.T) {
+	dir := t.TempDir()
+	write := func(rel, content string) {
+		p := filepath.Join(dir, rel)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("wiki/.diary-process-state.json",
+		`{"files":{"diary-2026-06-25.md":{"offset":2},"diary-2026-06-26.md":{"offset":1}}}`)
+	write("memory/diary/diary-2026-06-01.md", "legacy") // untracked, older than newest tracked → skipped
+	write("memory/diary/diary-2026-06-25.md", "ab")     // consumed (offset==size)
+	write("memory/diary/diary-2026-06-26.md", "abc")    // 2B pending since 06-26
+	write("memory/diary/diary-2026-06-28.md", "abcd")   // untracked, newer → 4B fully pending
+
+	m := memoryStatus(dir, time.Date(2026, 6, 28, 12, 0, 0, 0, time.UTC))
+	if m.DreamerConsumedThrough != "2026-06-25" {
+		t.Errorf("dreamerConsumedThrough = %q, want 2026-06-25", m.DreamerConsumedThrough)
+	}
+	if m.LatestDiary != "2026-06-28" {
+		t.Errorf("latestDiary = %q, want 2026-06-28", m.LatestDiary)
+	}
+	if m.PendingBytes != 6 {
+		t.Errorf("pendingBytes = %d, want 6 (2 tail + 4 unscanned; legacy skip excluded)", m.PendingBytes)
+	}
+	if m.BacklogDays != 2 {
+		t.Errorf("backlogDays = %d, want 2 (oldest pending 06-26 → latest 06-28)", m.BacklogDays)
+	}
+}
+
+// TestMemoryStatus_NoLedgerNoFakeBacklog: with no files ledger at all (fresh
+// box or pre-ledger state), nothing counts as pending — the dreamer's absence
+// is a liveness signal, not a byte backlog.
+func TestMemoryStatus_NoLedgerNoFakeBacklog(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "memory", "diary")
+	if err := os.MkdirAll(p, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(p, "diary-2026-06-28.md"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m := memoryStatus(dir, time.Date(2026, 6, 28, 12, 0, 0, 0, time.UTC))
+	if m.PendingBytes != 0 || m.BacklogDays != 0 || m.DreamerConsumedThrough != "" {
+		t.Errorf("no-ledger must not fake a backlog: %+v", m)
+	}
+	if m.LatestDiary != "2026-06-28" {
+		t.Errorf("latestDiary = %q, want 2026-06-28", m.LatestDiary)
 	}
 }
 
