@@ -197,6 +197,18 @@ func run() error {
 		}
 		if *verbose {
 			fmt.Printf("  %-3s %-16s %s\n", mark, c.ID, c.Question)
+			// On a miss, show what WAS retrieved (top 3) vs the gold — the fastest
+			// way to tell a real retrieval failure from a stale gold path.
+			if rank == -1 {
+				top := make([]string, 0, 3)
+				for i, r := range results {
+					if i >= 3 {
+						break
+					}
+					top = append(top, r.Path)
+				}
+				fmt.Printf("        gold=%v  got=%v\n", c.GoldPaths, top)
+			}
 		}
 	}
 
