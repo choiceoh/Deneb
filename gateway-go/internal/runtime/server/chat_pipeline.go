@@ -23,6 +23,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/pilot"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/polaris"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailstore"
 )
 
 // initMemorySubsystem initializes model registry, session memory, and wiki.
@@ -59,6 +60,18 @@ func (s *Server) initMemorySubsystem(chatCfg *chat.HandlerConfig, regPtr **model
 		s.logger.Info("session thinking defaults",
 			"level", defaults.ThinkingLevel,
 			"interleaved", interleaved)
+	}
+
+	// Local mail store: file-backed mirror of the on-box IMAP archive so the
+	// mail_archive tool answers reads from memory (no per-call IMAP round-trip +
+	// re-parse + re-index). LMTP intake writes new mail here; cmd/mail-backfill
+	// seeds existing mail. Reads IMAP-fall back while the store is empty/missing.
+	mailStoreDir := filepath.Join(config.ResolveStateDir(), "mailstore")
+	if ms, err := mailstore.New(mailStoreDir); err != nil {
+		s.logger.Warn("mailstore unavailable", "error", err)
+	} else {
+		s.mailStore = ms
+		s.logger.Info("mailstore enabled", "dir", mailStoreDir, "messages", ms.Len())
 	}
 
 	// Wiki knowledge base.
@@ -179,6 +192,7 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 			// auto-record a referenced person's contact details.
 			Contacts: s.contactsStore,
 		},
+		MailStore: s.mailStore,
 		Notebook: chat.NotebookDeps{
 			Store: notebookStore,
 			// Pinned wiki-page sources are read live from the same store at

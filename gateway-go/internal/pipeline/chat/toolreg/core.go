@@ -53,6 +53,7 @@ func RegisterCoreTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDep
 		Fn: tools.ToolMailArchive(tools.MailArchiveDeps{
 			Wiki:     deps.Wiki.Store,
 			Calendar: &deps.Calendar,
+			Store:    deps.MailStore,
 		}),
 		Deferred: true,
 	})

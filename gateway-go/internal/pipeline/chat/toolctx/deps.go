@@ -16,6 +16,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/cron"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/localcal"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailstore"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/observe"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/process"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
@@ -47,12 +48,15 @@ type CoreToolDeps struct {
 	Notebook         NotebookDeps
 	Contacts         ContactsDeps
 	Calendar         CalendarDeps
-	LLMClient        *llm.Client
-	DefaultModel     string
-	AgentLog         *agentlog.Writer
-	LogCapture       *observe.LogCapture   // optional; in-memory log ring for the observe tool
-	WorkFeed         *workfeed.Store       // optional; proactive-card engagement for observe action=proactive
-	SpilloverStore   *agent.SpilloverStore // optional; spills large tool results to disk
+	// MailStore is the local mail archive mirror backing the mail_archive tool's
+	// storage-first read path (no per-call IMAP round-trip). nil = IMAP only.
+	MailStore      *mailstore.Store
+	LLMClient      *llm.Client
+	DefaultModel   string
+	AgentLog       *agentlog.Writer
+	LogCapture     *observe.LogCapture   // optional; in-memory log ring for the observe tool
+	WorkFeed       *workfeed.Store       // optional; proactive-card engagement for observe action=proactive
+	SpilloverStore *agent.SpilloverStore // optional; spills large tool results to disk
 
 	// WorkFeedRW is the workfeed tool's read/settle surface. Wired to the
 	// server's native-sync-teeing wrapper (NOT the raw store above) so an

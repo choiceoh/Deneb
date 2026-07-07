@@ -14,11 +14,17 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailarchive"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailstore"
 )
 
 type MailArchiveDeps struct {
 	Wiki     *wiki.Store
 	Calendar *toolctx.CalendarDeps
+	// Store is the local file-backed mail mirror. When present and populated it
+	// answers reads directly (no IMAP round-trip / re-parse); a miss or an empty
+	// store falls through to the IMAP archive below, so the tool works during and
+	// after backfill. nil = IMAP only (legacy behavior).
+	Store *mailstore.Store
 }
 
 // ToolMailArchive reads the on-box mail archive (the deneb-mailarchive IMAP store)
@@ -52,8 +58,14 @@ func ToolMailArchive(optional ...MailArchiveDeps) func(ctx context.Context, inpu
 			Pass:      os.Getenv("DENEB_ARCHIVE_IMAP_PASS"),
 			Mailboxes: mailboxes,
 		}
-		if cfg.User == "" || cfg.Pass == "" {
-			return "메일 아카이브가 설정되지 않았습니다 (DENEB_ARCHIVE_IMAP_USER/PASS 미설정).", nil
+		// The local store answers reads on its own; IMAP is only the fallback for
+		// misses and attachment bytes. So the tool is usable when EITHER is ready —
+		// requiring IMAP creds even with a populated store would defeat the whole
+		// point (no per-call IMAP dependency).
+		storeReady := deps.Store != nil && deps.Store.Len() > 0
+		imapReady := cfg.User != "" && cfg.Pass != ""
+		if !storeReady && !imapReady {
+			return "메일 아카이브가 설정되지 않았습니다 (로컬 저장소 미백필 + DENEB_ARCHIVE_IMAP_USER/PASS 미설정).", nil
 		}
 		limit := args.Limit
 		if limit <= 0 {
@@ -76,9 +88,16 @@ func ToolMailArchive(optional ...MailArchiveDeps) func(ctx context.Context, inpu
 			if args.Days > 0 {
 				opts.Since = time.Now().AddDate(0, 0, -(args.Days - 1))
 			}
-			msgs, err := mailarchive.SearchContextMessages(ctx, cfg, args.Query, opts)
-			if err != nil {
-				return "", fmt.Errorf("아카이브 검색 실패: %w", err)
+			var msgs []mailarchive.ContextMessage
+			if storeReady {
+				msgs = deps.Store.Search(mailboxes, args.Query, opts.Since, limit)
+			}
+			if len(msgs) == 0 && imapReady {
+				var err error
+				msgs, err = mailarchive.SearchContextMessages(ctx, cfg, args.Query, opts)
+				if err != nil {
+					return "", fmt.Errorf("아카이브 검색 실패: %w", err)
+				}
 			}
 			if args.AsJSON {
 				return marshalMailArchiveResponse(mailArchiveResponse{
@@ -90,12 +109,20 @@ func ToolMailArchive(optional ...MailArchiveDeps) func(ctx context.Context, inpu
 			}
 			return formatArchiveMessages(fmt.Sprintf("'%s' 검색 결과 (%s)", args.Query, mailArchiveMailboxLabel(mailboxes)), msgs, args.IncludeBody), nil
 		case "read":
-			msg, err := mailarchive.ReadContextMessage(ctx, cfg, args.MessageID, args.Query, opts)
-			if err != nil {
-				if errors.Is(err, mailarchive.ErrArchiveNotFound) {
-					return "해당 메일을 아카이브에서 찾지 못했습니다 — Locator가 오래됐을 수 있습니다(재색인 후 흔함). action=search에 제목 키워드로 다시 찾아 새 Locator로 여세요.", nil
+			var msg mailarchive.ContextMessage
+			var found bool
+			if storeReady {
+				msg, found = deps.Store.Read(args.MessageID, args.Query, mailboxes)
+			}
+			if !found && imapReady {
+				var err error
+				msg, err = mailarchive.ReadContextMessage(ctx, cfg, args.MessageID, args.Query, opts)
+				if err != nil {
+					if errors.Is(err, mailarchive.ErrArchiveNotFound) {
+						return "해당 메일을 아카이브에서 찾지 못했습니다 — Locator가 오래됐을 수 있습니다(재색인 후 흔함). action=search에 제목 키워드로 다시 찾아 새 Locator로 여세요.", nil
+					}
+					return "", fmt.Errorf("아카이브 메일 열기 실패: %w", err)
 				}
-				return "", fmt.Errorf("아카이브 메일 열기 실패: %w", err)
 			}
 			enriched := enrichArchiveMessage(ctx, deps, msg, true)
 			if args.AsJSON {
@@ -112,12 +139,20 @@ func ToolMailArchive(optional ...MailArchiveDeps) func(ctx context.Context, inpu
 			}
 			return out, nil
 		case "thread":
-			msgs, err := mailarchive.ThreadContext(ctx, cfg, args.MessageID, args.Query, opts)
-			if err != nil {
-				if errors.Is(err, mailarchive.ErrArchiveNotFound) {
-					return "스레드 기준 메일을 아카이브에서 찾지 못했습니다 — Locator가 오래됐을 수 있습니다. action=search에 제목 키워드로 다시 찾아 새 Locator로 시도하세요.", nil
+			var msgs []mailarchive.ContextMessage
+			var found bool
+			if storeReady {
+				msgs, found = deps.Store.Thread(args.MessageID, args.Query, mailboxes, limit)
+			}
+			if (!found || len(msgs) == 0) && imapReady {
+				var err error
+				msgs, err = mailarchive.ThreadContext(ctx, cfg, args.MessageID, args.Query, opts)
+				if err != nil {
+					if errors.Is(err, mailarchive.ErrArchiveNotFound) {
+						return "스레드 기준 메일을 아카이브에서 찾지 못했습니다 — Locator가 오래됐을 수 있습니다. action=search에 제목 키워드로 다시 찾아 새 Locator로 시도하세요.", nil
+					}
+					return "", fmt.Errorf("아카이브 스레드 조회 실패: %w", err)
 				}
-				return "", fmt.Errorf("아카이브 스레드 조회 실패: %w", err)
 			}
 			enriched := enrichArchiveMessages(ctx, deps, msgs, true)
 			if args.AsJSON {
@@ -141,9 +176,17 @@ func ToolMailArchive(optional ...MailArchiveDeps) func(ctx context.Context, inpu
 			if days > 0 {
 				opts.Since = time.Now().AddDate(0, 0, -(days - 1))
 			}
-			history, err := mailarchive.ProjectHistoryContext(ctx, cfg, args.Query, opts)
-			if err != nil {
-				return "", fmt.Errorf("프로젝트 히스토리 조회 실패: %w", err)
+			var history mailarchive.ProjectHistory
+			var used bool
+			if storeReady {
+				history, used = deps.Store.ProjectHistory(args.Query, opts.Since, limit, opts.IndexLimit)
+			}
+			if !used && imapReady {
+				var err error
+				history, err = mailarchive.ProjectHistoryContext(ctx, cfg, args.Query, opts)
+				if err != nil {
+					return "", fmt.Errorf("프로젝트 히스토리 조회 실패: %w", err)
+				}
 			}
 			enriched := enrichProjectHistory(ctx, deps, history, args.IncludeBody)
 			if args.AsJSON {
@@ -165,7 +208,13 @@ func ToolMailArchive(optional ...MailArchiveDeps) func(ctx context.Context, inpu
 				days = 1
 			}
 			since := time.Now().AddDate(0, 0, -(days - 1))
-			msgs, err := mailarchive.ListContextMessages(ctx, cfg, since, opts)
+			var msgs []mailarchive.ContextMessage
+			var err error
+			if storeReady {
+				msgs = deps.Store.List(mailboxes, since, limit)
+			} else if imapReady {
+				msgs, err = mailarchive.ListContextMessages(ctx, cfg, since, opts)
+			}
 			if days == 1 {
 				if err != nil {
 					return "", fmt.Errorf("아카이브 목록 조회 실패: %w", err)
@@ -194,6 +243,11 @@ func ToolMailArchive(optional ...MailArchiveDeps) func(ctx context.Context, inpu
 				return formatArchiveMessages(fmt.Sprintf("최근 %d일 메일 (%s)", days, mailArchiveMailboxLabel(mailboxes)), msgs, args.IncludeBody), nil
 			}
 		case "attachment":
+			// Attachment bytes aren't mirrored into the local store (only the
+			// cleaned text is), so this action always needs IMAP.
+			if !imapReady {
+				return "첨부 원문은 IMAP 아카이브에서만 제공됩니다 — DENEB_ARCHIVE_IMAP_USER/PASS 설정이 필요합니다.", nil
+			}
 			atts, err := mailarchive.ReadAttachment(ctx, cfg, args.MessageID, args.Query, args.Attachment, opts)
 			if err != nil {
 				if errors.Is(err, mailarchive.ErrArchiveNotFound) {
