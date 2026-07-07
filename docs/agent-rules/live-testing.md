@@ -12,23 +12,14 @@ globs: ["gateway-go/**/*.go", "proto/**/*.proto"]
 > UI**를 실제 앱으로(스크린샷+조작) 검증하려면 `docs/agent-rules/native-live-app.md`
 > (`scripts/dev/native-app.sh`)를 본다.
 
-> **✅ 채팅 기반 라이브 테스트(`chat`/`quality`/`chat-check`/`multi-chat`)는 네이티브 주입 경로로 복구됨.**
-> 목 텔레그램 주입(`scripts/mock_telegram_server.py`)이 PR #1922(Telegram 플러그인 제거)로
-> 끊겼던 것을, **실제 네이티브 클라 표면**으로 재작성했다:
-> `POST /api/v1/miniapp/rpc` → `miniapp.chat.send` (`scripts/mock_native_client.py`,
-> `NativeTestClient`). dev 게이트웨이는 시작 시 state dir 에 `client_token` 을 자동 생성
-> (`lib-server.sh:devlib_ensure_client_token`)하고, live-test.sh 가 `DENEB_LIVETEST_GW_URL`
-> /`DENEB_LIVETEST_STATE_DIR` 를 export 해 테스트가 같은 토큰으로 인증한다.
+> 채팅 주입은 **실제 네이티브 클라 표면**으로 간다: `POST /api/v1/miniapp/rpc` →
+> `miniapp.chat.send` (`scripts/mock_native_client.py`; dev 게이트웨이가 state dir 에
+> `client_token` 자동 생성, live-test.sh 가 URL/state env export). **동기 RPC 한계**:
+> 최종 응답만 반환하므로 per-tool 검증(`--expect-tool`, `tool-check`)은 skip(`~`) 처리
+> — 콘텐츠 품질(한국어·충실도·누출·레이턴시)은 end-to-end 로 검증된다.
 >
-> **동기 RPC 의 한계:** `miniapp.chat.send` 는 한 turn 의 최종 응답만 반환하므로(토큰
-> 스트림·per-tool 이벤트 없음), 콘텐츠 품질(한국어·충실도·누출·레이턴시)은 end-to-end
-> 로 검증되지만 per-tool 검증(`--expect-tool`, `tool-check`)은 관측 불가라 **skip(`~`)**
-> 처리된다. first-token latency 는 전체 turn latency 와 같다. 전송 계층만 바뀌었고
-> 품질 체크/스코어링/저장은 그대로다.
->
-> **검증 스택:** `make check` (build + `-race`) + `live-test.sh restart && smoke`
-> (`/health`) + `quality`/`chat-check` (네이티브 주입) + `logs-errors`. 풀 품질 스코어링은
-> 실제 LLM 백엔드가 필요하므로 DGX 호스트에서 수행.
+> **검증 스택:** `make check` + `live-test.sh restart && smoke` + `quality`/`chat-check`
+> + `logs-errors`. 풀 품질 스코어링은 실제 LLM 백엔드가 필요하므로 DGX 호스트에서 수행.
 
 ## 도구
 

@@ -26,7 +26,7 @@ Detailed per-file notes live in `docs/agent-rules/go-gateway.md`; this is the to
 - `domain/` — business domains: wiki, backup, mailpriority, knowledge, filestore, notebook, skills, push, code (coding-mode worktrees), contacts, org, approval, market, monitoring, nativesync, usage, ….
 - `platform/` — external-system clients: gmail/mailanalysis(구 gmailpoll), calendar/calprop/localcal, localtodo, mailarchive/mailbody/mailwork, lmtpd (LMTP intake), cron, media.
 - `infra/` — clientauth (native-client token auth), config, secret, logging, metrics, middleware, httpretry, timeouts, fileshare, shortid, sparkfleet.
-- `agentsys/` — standing goals loop; `hanja/` — Han→Korean transliteration; `core/`, `testutil/` — shared helpers.
+- `agentsys/` — agent (LLM 도구 루프 executor — 병렬 read-only 턴·spillover·loop detector), agentlog (JSONL 런 기록), autonomous (주기 태스크), goals (standing goals); `hanja/` — Han→Korean transliteration; `core/`, `testutil/` — shared helpers.
 
 ## Key Architectural Flows
 

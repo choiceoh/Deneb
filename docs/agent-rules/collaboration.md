@@ -4,45 +4,15 @@ description: "협업, 보안, 멀티 에이전트 안전 규칙"
 
 # Collaboration & Safety
 
-- When working on a GitHub Issue or PR, print the full URL at the end of the task.
-- When answering questions, respond with high-confidence answers only: verify in code; do not guess.
-- Patching dependencies requires explicit approval; do not do this by default.
+> 프로덕션/개발 분리(`~/deneb` vs `~/deneb-dev`), stash·워크트리·브랜치 전환 금지,
+> "push"/"commit" 의미론, 크리덴셜·버전·의존성 가드는 **루트 `CLAUDE.md` 안전
+> 섹션이 정본**이다 — 여기 반복하지 않는다. 이 파일은 그 코어에 없는 세칙만 담는다.
 
-## Repository Layout (Production / Development Split)
+## 세칙
 
-```
-~/deneb/        ← Production ONLY. main branch only. Do NOT create branches or worktrees here.
-~/deneb-dev/    ← Development. Agents work here. Branches, worktrees, experiments all go here.
-```
-
-- **Agents MUST use `~/deneb-dev/`** for all development work (coding, branches, worktrees, PRs).
-- **`~/deneb/` is production-only.** srv4's `deneb-auto-deploy.timer` (1-min tick, 300s quiet period) pulls, builds, and hot-swaps it. Never modify directly.
-- **Deploy flow:** PR merged on GitHub → srv4 auto-deploy detects the new head → `make gateway-prod` + SIGUSR1 hot swap of `deneb-gateway.service`, no operator step (details: `docs/agent-rules/release-and-deploy.md`).
-- **Do NOT run builds, create worktrees, or switch branches in `~/deneb/`.**
-
-## Multi-Agent Safety
-
-- **Do not create/apply/drop `git stash` entries** unless explicitly requested (this includes `git pull --rebase --autostash`). Assume other agents may be working; keep unrelated WIP untouched and avoid cross-cutting state changes.
-- **When the user says "push"**, you may `git pull --rebase` to integrate latest changes (never discard other agents' work). When the user says "commit", scope to your changes only. When the user says "commit all", commit everything in grouped chunks.
-- **Do not create/remove/modify `git worktree` checkouts** (or edit `.worktrees/*`) unless explicitly requested.
-- **Do not switch branches / check out a different branch** unless explicitly requested.
-- **Running multiple agents is OK** as long as each agent has its own session.
-- **When you see unrecognized files**, keep going; focus on your changes and commit only those.
-
-## Code Quality & Safety
-
-- Lint/format churn:
-  - If staged+unstaged diffs are formatting-only, auto-resolve without asking.
-  - If commit/push already requested, auto-stage and include formatting-only follow-ups in the same commit (or a tiny follow-up commit if needed), no extra confirmation.
-  - Only ask when changes are semantic (logic/data/behavior).
-- **Focus reports on your edits**; avoid guard-rail disclaimers unless truly blocked; when multiple agents touch the same file, continue if safe; end with a brief "other files present" note only if relevant.
-- Bug investigations: read source code and all related local code before concluding; aim for high-confidence root cause.
-- Code style: add brief comments for tricky logic; keep files under ~500 LOC when feasible (split/refactor as needed).
-- Never send streaming/partial replies to external messaging surfaces; only final replies should be delivered there. Streaming/tool events may still go to internal UIs (native client SSE).
-- Release guardrails: do not change version numbers without operator's explicit consent.
-
-## Security & Configuration
-
-- Environment variables: see `~/.profile`.
-- Never commit or publish real phone numbers, videos, or live configuration values. Use obviously fake placeholders in docs, tests, and examples.
-- Release flow: see `docs/agent-rules/release-and-deploy.md` for the actual runbook.
+- **낯선 파일/변경**: 다른 에이전트의 작업으로 간주하고 계속 진행 — 내 변경만 커밋. 같은 파일을 여럿이 만졌어도 안전하면 계속, 보고 말미에 "다른 변경 존재" 한 줄만.
+- **린트/포맷 churn**: staged+unstaged diff 가 포맷팅 전용이면 묻지 말고 자동 정리. 커밋/푸시가 이미 요청된 상태면 포맷팅-온리 후속은 같은 커밋(또는 초소형 후속 커밋)에 포함 — 의미(로직/데이터/동작) 변경일 때만 확인을 구한다.
+- **외부 메시징 표면에 스트리밍/부분 응답 전송 금지** — 외부로는 최종 응답만. 내부 UI(네이티브 SSE)의 스트리밍/도구 이벤트는 무방.
+- **버그 조사**: 결론 전에 관련 로컬 코드를 끝까지 읽고 고신뢰 근본원인을 만든다.
+- **보고는 내 편집에 집중** — 진짜 막힌 게 아니면 가드레일 면책 문구를 늘어놓지 않는다.
+- 환경 변수: `~/.profile` 참조. 배포 런북: `docs/agent-rules/release-and-deploy.md`.
