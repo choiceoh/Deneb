@@ -90,6 +90,7 @@ JSON 응답 형식:
 추출 기준:
 - 거래 문서가 아니면 {"isDeal": false} 만 응답
 - counterparty(거래처명)를 못 찾으면 isDeal=false
+- counterparty는 상대(외부) 회사만. 우리 회사(탑솔라·TOPSOLAR·topsolar.kr 등 발신 자사 법인)는 거래처가 아니다 — 문서 발행 주체가 우리면 상대(수신처)를 counterparty로, 상대가 불명이면 isDeal=false
 - 금액·일자·기한은 원문에 있는 값만, 추측 금지
 - 금액·품목·납기는 분석 요약보다 첨부 원문(## 첨부 내용)의 값을 우선해 그대로 적는다 (요약이 반올림했어도 원문 수치 보존)
 
@@ -381,6 +382,19 @@ func extractDealInfo(ctx context.Context, deps PipelineDeps, analysisText string
 func dealInfoFromExtract(ext dealExtract, source string, logger *slog.Logger) *DealInfo {
 	counterparty := strings.TrimSpace(ext.Counterparty)
 	if !ext.IsDeal || counterparty == "" {
+		return nil
+	}
+	// Self-ledger guard: a document our own firm issued can lead the tiny model
+	// to name the SENDER — us — as the counterparty, minting a 거래/탑솔라㈜.md
+	// page whose entries are really 무림피앤피·인하공전·현대차 deals (two such
+	// self-ledgers were hand-cleaned in the 2026-07-07 wiki sweep). No external
+	// 거래처 → no deal. Returning nil here suppresses the whole downstream chain
+	// (page·ledger record·notebook pin·deal-question card), not just the page.
+	// Deterministic and Warn-logged, never silent (gateDealAmount's lesson).
+	if isSelfCounterparty(counterparty) {
+		if logger != nil {
+			logger.Warn("mail→deal: 자사명이 거래처로 추출돼 원장 생성 거부", "counterparty", counterparty)
+		}
 		return nil
 	}
 	items := make([]string, 0, len(ext.Items))
