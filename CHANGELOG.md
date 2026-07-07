@@ -1,5 +1,19 @@
 # Changelog
 
+## [4.76.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.75.1...deneb-v4.76.0) (2026-07-07)
+
+
+### ✨ Features
+
+* **andromeda:** 노트북 상단 자료 영역 접기/펼치기 토글 ([#3254](https://github.com/choiceoh/Deneb/issues/3254)) ([5283de0](https://github.com/choiceoh/Deneb/commit/5283de06635bba78911f2b8064909a42e9df6260))
+* **wiki:** 거래처를 프로젝트 위계 최상단으로 — client 필드·모아보기 그룹핑·회상 앵커·백필 도구 ([#3257](https://github.com/choiceoh/Deneb/issues/3257)) ([4878a53](https://github.com/choiceoh/Deneb/commit/4878a53e6180592595161bda7e9513eabae6e351))
+
+
+### 🐛 Bug Fixes
+
+* **chat:** 모닝레터 계약 경화 — 플레이스홀더 금지·기한초과 배지 예시·인라인 강조 표기 ([#3256](https://github.com/choiceoh/Deneb/issues/3256)) ([60c8f28](https://github.com/choiceoh/Deneb/commit/60c8f28edfa47dced0cddc67c7e8a9f1d1e76065))
+* **chat:** 모닝레터 토큰 계약 정합 — 스킬 '플레이스홀더 금지'와 시세 자동 치환 설계 충돌 해소 ([#3258](https://github.com/choiceoh/Deneb/issues/3258)) ([bde0da5](https://github.com/choiceoh/Deneb/commit/bde0da590e0324c714d98a975aab40429814bf90))
+
 ## [4.75.1](https://github.com/choiceoh/Deneb/compare/deneb-v4.75.0...deneb-v4.75.1) (2026-07-07)
 
 
