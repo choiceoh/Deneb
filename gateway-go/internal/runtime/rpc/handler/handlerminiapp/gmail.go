@@ -75,6 +75,37 @@ type GmailDeps struct {
 	// calendar-proposal, and to-do state per message ID. Nil disables the
 	// overlay so legacy Gmail-only tests and deployments keep working.
 	WorkState *mailwork.Store
+	// MailStore is a lazy accessor (like Client) for the local mail mirror, which
+	// is created in a later init phase than this handler's registration. When it
+	// returns a non-nil reader, the get action serves bodies from it before the
+	// Gmail API. Labels/stars aren't mirrored, so list keeps using Gmail for
+	// authoritative state. nil accessor / nil reader = Gmail only.
+	MailStore func() MailStoreReader
+}
+
+// MailStoreReader is the subset of the local mailstore the gmail handlers use to
+// serve message bodies without a Gmail API round-trip. Satisfied by
+// *mailstore.Store.
+type MailStoreReader interface {
+	Read(messageID, query string, mailboxes []string) (mailarchive.ContextMessage, bool)
+}
+
+// detailFromContext maps a stored ContextMessage back to the gmail.MessageDetail
+// shape the get handler formats. Labels are intentionally empty — the store does
+// not mirror Gmail's mutable label state.
+func detailFromContext(m mailarchive.ContextMessage) *gmail.MessageDetail {
+	return &gmail.MessageDetail{
+		ID:              m.ID,
+		From:            m.From,
+		To:              m.To,
+		CC:              m.CC,
+		Subject:         m.Subject,
+		Date:            m.Date,
+		Body:            m.Body,
+		MessageIDHeader: m.MessageID,
+		References:      m.References,
+		Attachments:     m.Attachments,
+	}
 }
 
 // Default list query and limit applied when the Mini App omits them.
@@ -699,16 +730,30 @@ func gmailGet(deps GmailDeps) rpcutil.HandlerFunc {
 			return rpcerr.MissingParam("id").Response(req.ID)
 		}
 
-		client, errResp := gmailClientOrErr(deps, req.ID)
-		if errResp != nil {
-			return errResp
-		}
-		msg, err := client.GetMessage(ctx, p.ID)
-		if err != nil {
-			return mapGmailError(req.ID, "mail get failed", err)
+		// Serve the body from the local mailstore when present (no API round-trip).
+		// get is a body-open — the list already showed authoritative label/star
+		// state, which the store doesn't mirror. Fall back to Gmail on a miss.
+		var msg *gmail.MessageDetail
+		if deps.MailStore != nil {
+			if ms := deps.MailStore(); ms != nil {
+				if cm, ok := ms.Read(p.ID, "", nil); ok {
+					msg = detailFromContext(cm)
+				}
+			}
 		}
 		if msg == nil {
-			return rpcerr.NotFound("message " + rpcutil.TruncateForError(p.ID)).Response(req.ID)
+			client, errResp := gmailClientOrErr(deps, req.ID)
+			if errResp != nil {
+				return errResp
+			}
+			fetched, err := client.GetMessage(ctx, p.ID)
+			if err != nil {
+				return mapGmailError(req.ID, "mail get failed", err)
+			}
+			if fetched == nil {
+				return rpcerr.NotFound("message " + rpcutil.TruncateForError(p.ID)).Response(req.ID)
+			}
+			msg = fetched
 		}
 
 		bodyLimit := maxGmailBodyChars

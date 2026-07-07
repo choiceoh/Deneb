@@ -103,6 +103,12 @@ func (s *Server) initGmailPoll(snap *config.ConfigSnapshot) {
 	// uses, so a polled email shows up already-analyzed with its projects.
 	cfg.OnAnalyzed = s.makeMailAnalysisSink()
 	cfg.OnAnalysisFailed = s.makeMailAnalysisFailureSink()
+	// Mirror polled Gmail messages into the local mailstore so mail_archive (and
+	// the app mail get action) read them without an API round-trip. LMTP intake
+	// fills the store on its own path; this covers the Gmail-fetched side.
+	if s.mailStore != nil {
+		cfg.MailStoreSink = s.mailStore.Put
+	}
 	cfg.ProjectsFn = s.projectCandidatesFn()
 	// Run the synthesis as a chat agent turn so the analysis prompt's tools
 	// (wiki, mail_archive) execute instead of leaking as <tool_call> text.

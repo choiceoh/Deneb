@@ -13,6 +13,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailarchive"
 )
 
 const (
@@ -69,6 +70,12 @@ type Config struct {
 	// analyzed. Polling keeps such messages retryable when appropriate; this
 	// callback is only for native workflow observability.
 	OnAnalysisFailed func(msg *gmail.MessageDetail, err error)
+
+	// MailStoreSink, when set, mirrors each Gmail message fetched in a poll cycle
+	// into the local mailstore so it is searchable via the mail_archive tool (and
+	// the app mail get action) without an API round-trip. Best-effort, idempotent
+	// by Message-ID. nil = skip (LMTP intake still fills the store).
+	MailStoreSink func(mailarchive.ContextMessage) (bool, error)
 
 	// ProjectsFn lists registered project wiki pages so analysis can cite
 	// related projects by real path. Forwarded to PipelineDeps. nil = none.
@@ -302,6 +309,18 @@ func (s *Service) poll(ctx context.Context, client *gmail.Client) error {
 		pollState.LastPollAt = time.Now().UnixMilli()
 		s.saveState(pollState)
 		return nil
+	}
+
+	// Mirror the fetched Gmail messages into the local mailstore (best-effort,
+	// idempotent) so they're searchable via mail_archive without an API call. Done
+	// before analysis so a later analysis failure doesn't drop the raw message.
+	if s.cfg.MailStoreSink != nil {
+		for _, d := range details {
+			cm := mailarchive.ContextMessageFromDetail("Gmail", d.ID, d, 0)
+			if _, err := s.cfg.MailStoreSink(cm); err != nil {
+				s.log.Warn("gmailpoll mailstore put 실패", "id", d.ID, "error", err)
+			}
+		}
 	}
 
 	// Batch analysis: each email analyzed individually + one consolidated report.
