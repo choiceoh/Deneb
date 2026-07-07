@@ -69,12 +69,28 @@ type SkillSummary struct {
 	Total   int `json:"total"`
 }
 
-// MemoryStatus reports how far behind the dreamer is and recent spill pressure.
+// MemoryStatus reports how far the dreamer trails the diary and recent spill
+// pressure. Consumption is measured from the dreamer's own per-file offsets
+// (.diary-process-state.json "files") — NOT from memoryConsumedThrough, which
+// is the workspace-MEMORY.md distillation stamp, a different source whose
+// April date once masqueraded here as a 91-day diary "backlog" while the
+// dreamer was in fact current (live false alarm, 2026-07-07).
 type MemoryStatus struct {
+	// DreamerConsumedThrough is the newest diary date the dreamer has fully
+	// consumed (offset == size). The live diary's growing tail keeps today
+	// pending most of the day, so this trailing by one date is normal.
 	DreamerConsumedThrough string `json:"dreamerConsumedThrough,omitempty"`
 	LatestDiary            string `json:"latestDiary,omitempty"`
-	BacklogDays            int    `json:"backlogDays,omitempty"`
-	SpilloverToday         int    `json:"spilloverToday"`
+	// BacklogDays is latest diary date minus the OLDEST date with unconsumed
+	// bytes — 0 while only today's tail is pending, growing only when the
+	// dreamer actually stops draining.
+	BacklogDays int `json:"backlogDays,omitempty"`
+	// PendingBytes is the total diary bytes not yet dreamed.
+	PendingBytes int64 `json:"pendingBytes,omitempty"`
+	// MemoryMDStamp is the workspace MEMORY.md distilled-through stamp
+	// (memoryConsumedThrough), surfaced under its real meaning.
+	MemoryMDStamp  string `json:"memoryMdStamp,omitempty"`
+	SpilloverToday int    `json:"spilloverToday"`
 }
 
 // ModelSummary lists the models seen in the stats window and any backends the
@@ -234,19 +250,72 @@ func readCapped(path string, max int64) []byte {
 
 func memoryStatus(stateDir string, now time.Time) MemoryStatus {
 	var m MemoryStatus
-	// Dreamer processing bookmark.
+	// Dreamer processing ledger: per-file consumption offsets + the (separate)
+	// MEMORY.md distillation stamp.
+	var offsets map[string]int64
 	if data, err := os.ReadFile(filepath.Join(stateDir, "wiki", ".diary-process-state.json")); err == nil {
 		var st struct {
 			MemoryConsumedThrough string `json:"memoryConsumedThrough"`
+			Files                 map[string]struct {
+				Offset int64 `json:"offset"`
+			} `json:"files"`
 		}
 		if json.Unmarshal(data, &st) == nil {
-			m.DreamerConsumedThrough = strings.TrimSpace(st.MemoryConsumedThrough)
+			m.MemoryMDStamp = strings.TrimSpace(st.MemoryConsumedThrough)
+			offsets = make(map[string]int64, len(st.Files))
+			for name, f := range st.Files {
+				offsets[name] = f.Offset
+			}
 		}
 	}
-	// Latest diary date and how far the dreamer trails it.
-	if name, _ := newestDiary(filepath.Join(stateDir, "memory", "diary")); name != "" {
-		m.LatestDiary = diaryDate(name)
-		m.BacklogDays = backlogDays(m.DreamerConsumedThrough, m.LatestDiary)
+	// Join the ledger against the actual diary files. Untracked files OLDER
+	// than the newest tracked one are the dreamer's legacy-cutoff skips —
+	// neither consumed nor pending; untracked files NEWER than it simply
+	// haven't been scanned yet and count as fully pending. With no ledger at
+	// all we report only LatestDiary — the dreamer's absence already shows up
+	// as a liveness gap, not a fake byte backlog.
+	if entries, err := os.ReadDir(filepath.Join(stateDir, "memory", "diary")); err == nil {
+		newestTracked := ""
+		for name := range offsets {
+			if name > newestTracked {
+				newestTracked = name
+			}
+		}
+		oldestPending := ""
+		for _, e := range entries {
+			n := e.Name()
+			if e.IsDir() || !strings.HasPrefix(n, "diary-") || !strings.HasSuffix(n, ".md") {
+				continue
+			}
+			date := diaryDate(n)
+			if date > m.LatestDiary {
+				m.LatestDiary = date
+			}
+			info, err := e.Info()
+			if err != nil {
+				continue
+			}
+			pending := int64(0)
+			if off, tracked := offsets[n]; tracked {
+				if pending = info.Size() - off; pending <= 0 {
+					if date > m.DreamerConsumedThrough {
+						m.DreamerConsumedThrough = date
+					}
+					continue
+				}
+			} else if newestTracked != "" && n > newestTracked {
+				pending = info.Size()
+			} else {
+				continue // legacy skip (or no ledger at all)
+			}
+			m.PendingBytes += pending
+			if oldestPending == "" || date < oldestPending {
+				oldestPending = date
+			}
+		}
+		if oldestPending != "" {
+			m.BacklogDays = backlogDays(oldestPending, m.LatestDiary)
+		}
 	}
 	// Spill pressure today.
 	if entries, err := os.ReadDir(filepath.Join(stateDir, "spillover")); err == nil {
