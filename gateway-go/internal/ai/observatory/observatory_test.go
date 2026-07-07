@@ -1,6 +1,7 @@
 package observatory
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -130,6 +131,52 @@ func TestMemoryStatus_RealBacklogAndLegacySkips(t *testing.T) {
 	}
 	if m.BacklogDays != 2 {
 		t.Errorf("backlogDays = %d, want 2 (oldest pending 06-26 → latest 06-28)", m.BacklogDays)
+	}
+}
+
+// TestRecentFailures_CountsOnlyRecentEntries: a long-lived session file keeps
+// its June failures at the head while being appended today — only entries
+// STAMPED within 24h may count (live 2026-07-06 false alarm: the watchdog
+// reported a "recent" spike of a pattern last seen three weeks earlier).
+func TestRecentFailures_CountsOnlyRecentEntries(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Date(2026, 7, 7, 12, 0, 0, 0, time.UTC)
+	oldTs := now.Add(-20 * 24 * time.Hour).UnixMilli()
+	recentTs := now.Add(-2 * time.Hour).UnixMilli()
+	line := func(ts int64) string {
+		return fmt.Sprintf(`{"ts":%d,"type":"turn.tool","data":{"error":"json: cannot unmarshal string into Go struct field .max of type int"}}`, ts)
+	}
+	content := line(oldTs) + "\n" + line(oldTs) + "\n" + line(recentTs) + "\n"
+	if err := os.WriteFile(filepath.Join(dir, "client:main.jsonl"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got := recentFailures(dir, now)
+	if len(got) != 1 || got[0].Pattern != "type-coercion drop" || got[0].Count != 1 {
+		t.Fatalf("want exactly the one recent hit, got %+v", got)
+	}
+
+	// A file with ONLY stale entries (but fresh mtime) must report nothing.
+	if err := os.WriteFile(filepath.Join(dir, "client:main.jsonl"), []byte(line(oldTs)+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := recentFailures(dir, now); len(got) != 0 {
+		t.Fatalf("stale-only file must not alarm, got %+v", got)
+	}
+}
+
+// TestReadTailCapped: the cap keeps the END of the file (append-only logs put
+// the newest entries there).
+func TestReadTailCapped(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "x.log")
+	if err := os.WriteFile(p, []byte("OLDOLDOLD-NEWNEW"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := string(readTailCapped(p, 6)); got != "NEWNEW" {
+		t.Fatalf("tail cap = %q, want NEWNEW", got)
+	}
+	if got := string(readTailCapped(p, 100)); got != "OLDOLDOLD-NEWNEW" {
+		t.Fatalf("under-cap read = %q", got)
 	}
 }
 

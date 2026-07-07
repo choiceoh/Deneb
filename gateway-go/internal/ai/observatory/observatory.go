@@ -197,10 +197,18 @@ func topFrontier(m map[string]int, n int) []FrontierItem {
 	return items
 }
 
-// recentFailures scans agent logs modified in the last 24h for silent-failure
-// signatures — failures that evaporate rather than erroring loudly. Bounded
-// (file count + bytes per file) so the on-demand digest stays cheap against
-// thousands of log files.
+// recentFailures scans agent logs for silent-failure signatures — failures
+// that evaporate rather than erroring loudly. Bounded (file count + bytes per
+// file) so the on-demand digest stays cheap against thousands of log files.
+//
+// Counts only entries whose OWN timestamp falls in the last 24h. The previous
+// implementation filtered files by mtime but counted the whole head-capped
+// content — a long-lived session file (appended daily, June history intact at
+// its head) kept re-reporting three-week-old failures as "recent", and the
+// watchdog cried wolf about an extinct pattern (live 2026-07-06/07,
+// "type-coercion drop 급증" on events last seen 06-17). Files are read
+// TAIL-capped for the same reason: a growing file's newest entries live at
+// the end.
 func recentFailures(dir string, now time.Time) []FailureCount {
 	patterns := []struct{ label, needle string }{
 		{"type-coercion drop", "cannot unmarshal string into"},
@@ -212,6 +220,7 @@ func recentFailures(dir string, now time.Time) []FailureCount {
 		return nil
 	}
 	cutoff := now.Add(-24 * time.Hour)
+	cutoffMs := cutoff.UnixMilli()
 	counts := make([]int, len(patterns))
 	const maxFiles, maxBytes = 500, 256 * 1024
 	scanned := 0
@@ -224,9 +233,22 @@ func recentFailures(dir string, now time.Time) []FailureCount {
 			continue
 		}
 		scanned++
-		s := string(readCapped(filepath.Join(dir, e.Name()), maxBytes))
-		for i, p := range patterns {
-			counts[i] += strings.Count(s, p.needle)
+		for _, line := range strings.Split(string(readTailCapped(filepath.Join(dir, e.Name()), maxBytes)), "\n") {
+			hits := hitPatterns(line, patterns)
+			if len(hits) == 0 {
+				continue
+			}
+			// Parse just the stamp; a tail-cut partial first line fails to
+			// parse and is skipped.
+			var meta struct {
+				Ts int64 `json:"ts"`
+			}
+			if json.Unmarshal([]byte(line), &meta) != nil || meta.Ts < cutoffMs {
+				continue
+			}
+			for _, i := range hits {
+				counts[i]++
+			}
 		}
 	}
 	var out []FailureCount
@@ -236,6 +258,42 @@ func recentFailures(dir string, now time.Time) []FailureCount {
 		}
 	}
 	return out
+}
+
+// hitPatterns returns the indexes of the patterns whose needle appears in line.
+func hitPatterns(line string, patterns []struct{ label, needle string }) []int {
+	var hits []int
+	for i, p := range patterns {
+		if strings.Contains(line, p.needle) {
+			hits = append(hits, i)
+		}
+	}
+	return hits
+}
+
+// readTailCapped reads at most max bytes from the END of path (or nil on
+// error) — the right cap direction for append-only logs, where the newest
+// entries are the ones a "recent" scan wants.
+func readTailCapped(path string, max int64) []byte {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil
+	}
+	defer f.Close()
+	info, err := f.Stat()
+	if err != nil {
+		return nil
+	}
+	if size := info.Size(); size > max {
+		if _, err := f.Seek(size-max, io.SeekStart); err != nil {
+			return nil
+		}
+	}
+	data, err := io.ReadAll(io.LimitReader(f, max))
+	if err != nil {
+		return nil
+	}
+	return data
 }
 
 func readCapped(path string, max int64) []byte {
