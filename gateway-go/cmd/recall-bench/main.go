@@ -149,7 +149,12 @@ func run() error {
 	if fusion == "" {
 		fusion = "rrf(default)"
 	}
-	graphBoost := os.Getenv("DENEB_WIKI_GRAPH_BOOST") != "off" && semantic
+	// The additive rollback path ignores graph paths, so graph-boost is only
+	// actually active on the RRF path with a healthy embedder — report the real
+	// state, not just the env var, so additive-vs-graph comparisons aren't
+	// mislabeled.
+	graphBoost := os.Getenv("DENEB_WIKI_FUSION") != "additive" &&
+		os.Getenv("DENEB_WIKI_GRAPH_BOOST") != "off" && semantic
 	fmt.Printf("== recall-bench  fusion=%s  graph_boost=%v  semantic=%v  K=%d  cases=%d\n", fusion, graphBoost, semantic, *k, len(cases))
 
 	var hit1, hitK, scored, searchErrs int
@@ -195,10 +200,12 @@ func run() error {
 		}
 	}
 
+	// No scored cases → mrr would be NaN and the RECALL_BENCH row would poison any
+	// comparison. Fail instead of emitting a metric off zero cases.
+	if scored == 0 {
+		return fmt.Errorf("0 cases scored (empty/comment-only gold, all rows lack gold_paths, or %d search error(s))", searchErrs)
+	}
 	pct := func(n int) float64 {
-		if scored == 0 {
-			return 0
-		}
 		return 100 * float64(n) / float64(scored)
 	}
 	if searchErrs > 0 {

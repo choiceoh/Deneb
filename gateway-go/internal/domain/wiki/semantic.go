@@ -336,7 +336,15 @@ func (s *Store) searchSemanticWithVec(qv []float32, limit int) []SearchResult {
 	}
 	s.sem.mu.Unlock()
 
-	sort.Slice(hits, func(a, b int) bool { return hits[a].score > hits[b].score })
+	// Tie-break equal cosines by path: hits is built by ranging s.sem.vecs (a map,
+	// arbitrary order), and RRF turns any tie order into distinct rank scores —
+	// left map-arbitrary it made recall flaky for equal-cosine embeddings.
+	sort.Slice(hits, func(a, b int) bool {
+		if hits[a].score != hits[b].score {
+			return hits[a].score > hits[b].score
+		}
+		return hits[a].path < hits[b].path
+	})
 	if len(hits) > limit {
 		hits = hits[:limit]
 	}

@@ -309,7 +309,10 @@ func (s *Store) Search(ctx context.Context, query string, limit int) ([]SearchRe
 // recall anchors — into wiki.Store.Search / miniapp.memory.search. Bounded to
 // semanticBlendK neighbors, the same window the fusion already over-fetches.
 func (s *Store) graphBoostPaths(ctx context.Context, query string) []string {
-	if os.Getenv("DENEB_WIKI_GRAPH_BOOST") == "off" {
+	// The additive rollback path discards graphPaths (see fuseSearchResults), so
+	// building the graph + embedding-reranking it there is pure waste — and this
+	// runs per query inside SearchBatch under the ~1.5s recall budget. Skip it.
+	if os.Getenv("DENEB_WIKI_GRAPH_BOOST") == "off" || os.Getenv("DENEB_WIKI_FUSION") == "additive" {
 		return nil
 	}
 	return s.graphRankedPaths(ctx, query, semanticBlendK)
@@ -639,12 +642,11 @@ func fuseSearchResults(bm25, sem []SearchResult, graphPaths []string, limit int,
 // common-only lexical drop), so RRF changes ordering, not what is admitted.
 func mergeSearchResultsRRF(bm25, sem []SearchResult, graphPaths []string, limit int, commonOnlyQuery bool) []SearchResult {
 	type merged struct {
-		res     SearchResult
-		semCos  float64
-		inBM25  bool
-		inGraph bool
-		graph0  bool // seed of the graph ranking (the named entity's own page)
-		rrf     float64
+		res    SearchResult
+		semCos float64
+		inBM25 bool
+		graph0 bool // seed of the graph ranking (the named entity's own page)
+		rrf    float64
 	}
 	byPath := make(map[string]*merged, len(bm25)+len(sem))
 	for rank, r := range bm25 {
@@ -682,7 +684,6 @@ func mergeSearchResultsRRF(bm25, sem []SearchResult, graphPaths []string, limit 
 			m = &merged{res: SearchResult{Path: p}}
 			byPath[p] = m
 		}
-		m.inGraph = true
 		if rank == 0 {
 			m.graph0 = true
 		}
@@ -690,13 +691,20 @@ func mergeSearchResultsRRF(bm25, sem []SearchResult, graphPaths []string, limit 
 	}
 
 	floor := semanticOnlyFloorValue()
+	// The graph seed is resolved by substring match (graphRankedPaths → findSeed),
+	// so on a common-only query — one with no rare anchor term — a corpus-common
+	// noun in a page title can mark that page as the "seed" and wrongly exempt it
+	// from the gates the rarity leak-guard exists to enforce. Trust the graph
+	// signal for admission only when the query HAS a rare anchor (its entity match
+	// is meaningful); otherwise both gates apply strictly.
+	graphTrusted := !commonOnlyQuery
 	out := make([]merged, 0, len(byPath))
 	for _, m := range byPath {
-		if !m.inBM25 && !m.graph0 && m.semCos < floor {
-			continue // semantic-only admission floor; the graph seed is exempt (named entity)
+		if !m.inBM25 && !(m.graph0 && graphTrusted) && m.semCos < floor {
+			continue // semantic-only floor; only a trusted graph seed is injected below it
 		}
-		if commonOnlyQuery && m.inBM25 && !m.inGraph && m.semCos < semSupportThreshold {
-			continue // lexical-leak drop; a graph-connected lexical hit is confirmed, so kept
+		if commonOnlyQuery && m.inBM25 && m.semCos < semSupportThreshold {
+			continue // lexical-leak drop — semantic must confirm; graph grants no exemption here
 		}
 		// Order is by raw m.rrf (below); Score carries the scaled ~0–1 relevance
 		// cross-source recall needs. The scale is constant so the two never
