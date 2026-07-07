@@ -94,6 +94,16 @@ func (s *Server) orgDeps() handlerminiapp.OrgDeps {
 		Load:          func() (org.OrgTree, error) { return org.Load() },
 		SavePath:      org.ResolvePath,
 		LookupContact: orgContactLookup(s.contactsStore),
+		// Read s.wikiStore lazily at GET time (not orgDeps() time): the org editor
+		// registers before the wiki store is wired, so capturing the field's value
+		// here would freeze a nil. A nil store at call time simply yields no person
+		// links (graceful).
+		ResolvePeople: func(names []string) map[string]string {
+			if s.wikiStore == nil {
+				return nil
+			}
+			return s.wikiStore.ResolvePersonPaths(names)
+		},
 	}
 }
 

@@ -227,6 +227,17 @@ func buildRecallPreflight(ctx context.Context, params RunParams, deps runDeps, l
 			return recallFilesEvidence(c, search, queries)
 		}})
 	}
+	// Org chart source: people/divisions named in the message → their 부서 + 인물
+	// page. Runs under the same shared deadline; a missing org file yields zero
+	// evidence (graceful-empty), so this never blocks the turn. Needs the wiki
+	// store to resolve members to their person pages.
+	if deps.memory.Org != nil {
+		load := deps.memory.Org
+		store := deps.memory.Wiki
+		sources = append(sources, recallSource{"org", func(c context.Context) []recallEvidence {
+			return recallOrgEvidence(c, load, store, message)
+		}})
+	}
 
 	slots := make([][]recallEvidence, len(sources))
 	elapsed := make([]time.Duration, len(sources))
