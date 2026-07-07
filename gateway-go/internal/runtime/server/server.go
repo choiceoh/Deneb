@@ -31,6 +31,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/polaris"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/cron"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailstore"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/insights"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/observe"
@@ -172,6 +173,11 @@ type Server struct {
 	// registerSessionRPCMethods (Session phase) and read by the opt-in
 	// compaction tuner registered in registerWorkflowSideEffects (later phase).
 	polarisStore *polaris.Store
+
+	// mailStore is the local file-backed mail archive mirror (created in
+	// initMemorySubsystem). LMTP intake writes new mail to it; the mail_archive
+	// tool reads from it (IMAP fallback on miss). nil = IMAP only.
+	mailStore *mailstore.Store
 
 	// notify mirrors user-impacting error events and status snapshots to the
 	// native client (live push) and the operator log. Created during
