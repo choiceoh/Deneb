@@ -1,0 +1,400 @@
+// Package embedindex is a corpus-agnostic in-memory dense-vector index.
+//
+// It generalizes the pattern that wiki (semantic.go) and filestore (semindex.go)
+// each grew independently: embed a corpus of text items once (cached by content
+// hash), keep the vectors in memory, and answer cosine-similarity queries so a
+// caller can blend semantic hits with its lexical (BM25) index. Both of those
+// predate this package and are left untouched; embedindex exists so NEW corpora
+// (diary entries, session summaries) get the same background-refresh, on-disk
+// cache, and degrade-to-empty behavior without a third and fourth copy.
+//
+// Everything degrades silently: no embedder, an unhealthy server, or an embed
+// error all yield zero hits, so the caller falls back to its lexical index. The
+// index is lazy — it (re)embeds only items whose content hash changed, in the
+// background, off the caller's query deadline.
+package embedindex
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"log/slog"
+	"math"
+	"os"
+	"sort"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/pkg/safego"
+)
+
+// Embedder is the minimal embedding-server surface the index needs. Both
+// *embedding.Client and the wiki/filestore embedders satisfy it structurally;
+// kept as an interface so this package imports no ai layer and tests can fake it.
+type Embedder interface {
+	Embed(ctx context.Context, texts []string) ([][]float32, error)
+	IsHealthy() bool
+}
+
+// Item is one corpus entry to embed. Hash is any stable digest of the embeddable
+// content (ContentHash is provided); a changed hash triggers a re-embed. Text is
+// what actually gets embedded — the caller decides what a semantic query should
+// match against (e.g. summary + body).
+type Item struct {
+	ID   string
+	Hash string
+	Text string
+}
+
+// Supplier enumerates the corpus's current items. Called on each refresh, off
+// the query path, so it may read files. Items shorter than minChars are skipped.
+type Supplier func() []Item
+
+// Hit is one scored result: the item ID and its cosine similarity to the query.
+type Hit struct {
+	ID    string
+	Score float64
+}
+
+// cachedVec is one item's embedding plus the content hash it was computed from.
+type cachedVec struct {
+	hash string
+	vec  []float32
+}
+
+// minEmbedChars guards against embedding near-empty items.
+const minEmbedChars = 8
+
+// Index is an in-memory, lazily-maintained vector index over one corpus.
+type Index struct {
+	name        string // log/label prefix, e.g. "diary" or "session"
+	embedder    Embedder
+	cachePath   string // "" → persistence disabled (tests)
+	batch       int    // items embedded per request
+	refreshTO   time.Duration
+	mu          sync.Mutex
+	vecs        map[string]cachedVec // id -> embedding
+	refreshing  atomic.Bool          // single-flight guard for RefreshAsync
+	syncRefresh bool                 // tests: run RefreshAsync inline
+
+	// Lifecycle for the background refresh goroutine (mirrors wiki.semanticIndex):
+	// baseCtx is cancelled by Close so an in-flight embed stops; wg lets Close wait
+	// so no saveCache write lands after teardown; closed (under mu) serializes
+	// wg.Add against wg.Wait.
+	baseCtx context.Context
+	cancel  context.CancelFunc
+	wg      sync.WaitGroup
+	closed  bool
+}
+
+// Option configures an Index at construction.
+type Option func(*Index)
+
+// WithBatchSize overrides the per-request embed batch (default 64). The parallel
+// GPU embedding server fans a batch across its context pool, so larger batches no
+// longer risk the EOF the CPU server hit — but the server caps a request at 256.
+func WithBatchSize(n int) Option {
+	return func(ix *Index) {
+		if n > 0 && n <= 256 {
+			ix.batch = n
+		}
+	}
+}
+
+// WithSyncRefresh runs RefreshAsync inline (tests only, deterministic).
+func WithSyncRefresh() Option { return func(ix *Index) { ix.syncRefresh = true } }
+
+// New builds an index. name labels logs; cachePath is the on-disk vector cache
+// ("" disables persistence). A nil embedder yields an index that always returns
+// zero hits (the caller degrades to its lexical index).
+func New(name string, e Embedder, cachePath string, opts ...Option) *Index {
+	ctx, cancel := context.WithCancel(context.Background())
+	ix := &Index{
+		name:      name,
+		embedder:  e,
+		cachePath: cachePath,
+		batch:     64,
+		refreshTO: 3 * time.Minute,
+		vecs:      make(map[string]cachedVec),
+		baseCtx:   ctx,
+		cancel:    cancel,
+	}
+	for _, o := range opts {
+		o(ix)
+	}
+	ix.loadCache()
+	return ix
+}
+
+// Enabled reports whether semantic search can run (embedder present and healthy).
+func (ix *Index) Enabled() bool {
+	return ix != nil && ix.embedder != nil && ix.embedder.IsHealthy()
+}
+
+// Close cancels any in-flight refresh and waits for it, so no cache write happens
+// after this returns. Idempotent.
+func (ix *Index) Close() {
+	if ix == nil {
+		return
+	}
+	ix.mu.Lock()
+	ix.closed = true
+	ix.mu.Unlock()
+	ix.cancel()
+	ix.wg.Wait()
+}
+
+// RefreshAsync re-embeds changed items in the background, at most one at a time.
+// Callers invoke it then read whatever vectors exist now (eventually consistent)
+// instead of blocking on the embed under a tight query deadline.
+func (ix *Index) RefreshAsync(supplier Supplier) {
+	if ix == nil || ix.embedder == nil || supplier == nil {
+		return
+	}
+	if ix.syncRefresh {
+		ctx, cancel := context.WithTimeout(context.Background(), ix.refreshTO)
+		defer cancel()
+		_ = ix.refresh(ctx, supplier)
+		return
+	}
+	if !ix.refreshing.CompareAndSwap(false, true) {
+		return // a refresh is already in flight
+	}
+	ix.mu.Lock()
+	if ix.closed {
+		ix.mu.Unlock()
+		ix.refreshing.Store(false)
+		return
+	}
+	ix.wg.Add(1)
+	ix.mu.Unlock()
+	safego.GoWithSlog(slog.Default(), "embedindex-refresh-"+ix.name, func() {
+		defer ix.wg.Done()
+		defer ix.refreshing.Store(false)
+		ctx, cancel := context.WithTimeout(ix.baseCtx, ix.refreshTO)
+		defer cancel()
+		_ = ix.refresh(ctx, supplier)
+	})
+}
+
+// Warm synchronously (re)embeds the corpus — for an eager startup warm so the
+// first query has vectors instead of racing the background refresh, and for
+// deterministic tests. No-op without an embedder.
+func (ix *Index) Warm(ctx context.Context, supplier Supplier) error {
+	if ix == nil || ix.embedder == nil || supplier == nil {
+		return nil
+	}
+	return ix.refresh(ctx, supplier)
+}
+
+// refresh embeds items whose content hash changed and drops vanished ones. Holds
+// the mutex only around map mutations, not the network call. Any mutation is
+// mirrored to the on-disk cache so the work survives the next restart.
+func (ix *Index) refresh(ctx context.Context, supplier Supplier) error {
+	items := supplier()
+
+	mutated := false
+	defer func() {
+		if mutated {
+			ix.saveCache()
+		}
+	}()
+
+	want := make(map[string]string, len(items))
+	var toEmbedID []string
+	var toEmbedText []string
+
+	ix.mu.Lock()
+	for _, it := range items {
+		if len(strings.TrimSpace(it.Text)) < minEmbedChars {
+			continue
+		}
+		want[it.ID] = it.Hash
+		if cur, ok := ix.vecs[it.ID]; !ok || cur.hash != it.Hash {
+			toEmbedID = append(toEmbedID, it.ID)
+			toEmbedText = append(toEmbedText, it.Text)
+		}
+	}
+	for id := range ix.vecs {
+		if _, ok := want[id]; !ok {
+			delete(ix.vecs, id)
+			mutated = true
+		}
+	}
+	ix.mu.Unlock()
+
+	for start := 0; start < len(toEmbedID); start += ix.batch {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		end := min(start+ix.batch, len(toEmbedID))
+		vecs, err := ix.embedder.Embed(ctx, toEmbedText[start:end])
+		if err != nil {
+			slog.Warn("embedindex: embed batch failed; keeping prior vectors",
+				"index", ix.name, "batchStart", start, "batchSize", end-start, "error", err)
+			return err
+		}
+		if len(vecs) != end-start {
+			return nil // unexpected shape; keep prior vecs
+		}
+		ix.mu.Lock()
+		for i, id := range toEmbedID[start:end] {
+			ix.vecs[id] = cachedVec{hash: want[id], vec: vecs[i]}
+		}
+		ix.mu.Unlock()
+		mutated = true
+	}
+	return nil
+}
+
+// Search embeds the query and returns the top-limit items by cosine similarity.
+// Returns nil on any degradation path so the caller falls back to its lexical
+// index. Callers embedding several queries per turn should prefer SearchBatch.
+func (ix *Index) Search(ctx context.Context, query string, limit int) []Hit {
+	if !ix.Enabled() || len(strings.TrimSpace(query)) < minEmbedChars {
+		return nil
+	}
+	qvecs, err := ix.embedder.Embed(ctx, []string{query})
+	if err != nil || len(qvecs) == 0 {
+		return nil
+	}
+	return ix.SearchVec(qvecs[0], limit)
+}
+
+// SearchBatch embeds every query in ONE request (the server fans them across its
+// context pool) and returns per-query hits, index-aligned with queries. A query
+// too short to embed, or a down embedder, yields nil for that slot.
+func (ix *Index) SearchBatch(ctx context.Context, queries []string, limit int) [][]Hit {
+	if !ix.Enabled() || len(queries) == 0 {
+		return nil
+	}
+	idx := make([]int, 0, len(queries))
+	texts := make([]string, 0, len(queries))
+	for i, q := range queries {
+		if len(strings.TrimSpace(q)) >= minEmbedChars {
+			idx = append(idx, i)
+			texts = append(texts, q)
+		}
+	}
+	if len(texts) == 0 {
+		return nil
+	}
+	vecs, err := ix.embedder.Embed(ctx, texts)
+	if err != nil || len(vecs) != len(texts) {
+		return nil
+	}
+	out := make([][]Hit, len(queries))
+	for j, i := range idx {
+		out[i] = ix.SearchVec(vecs[j], limit)
+	}
+	return out
+}
+
+// SearchVec ranks the corpus by cosine to a pre-computed query vector.
+func (ix *Index) SearchVec(qv []float32, limit int) []Hit {
+	if ix == nil || len(qv) == 0 {
+		return nil
+	}
+	ix.mu.Lock()
+	hits := make([]Hit, 0, len(ix.vecs))
+	for id, cv := range ix.vecs {
+		hits = append(hits, Hit{ID: id, Score: cosine(qv, cv.vec)})
+	}
+	ix.mu.Unlock()
+
+	sort.Slice(hits, func(a, b int) bool { return hits[a].Score > hits[b].Score })
+	if len(hits) > limit {
+		hits = hits[:limit]
+	}
+	out := hits[:0]
+	for _, h := range hits {
+		if h.Score > 0 {
+			out = append(out, h)
+		}
+	}
+	return out
+}
+
+// cachedVecWire is the JSON shape of one cached embedding.
+type cachedVecWire struct {
+	Hash string    `json:"hash"`
+	Vec  []float32 `json:"vec"`
+}
+
+func (ix *Index) loadCache() {
+	if ix.cachePath == "" {
+		return
+	}
+	data, err := os.ReadFile(ix.cachePath)
+	if err != nil {
+		return
+	}
+	var wire map[string]cachedVecWire
+	if err := json.Unmarshal(data, &wire); err != nil {
+		slog.Warn("embedindex: cache unreadable; re-embedding from scratch",
+			"index", ix.name, "path", ix.cachePath, "error", err)
+		return
+	}
+	ix.mu.Lock()
+	defer ix.mu.Unlock()
+	for id, cv := range wire {
+		if cv.Hash == "" || len(cv.Vec) == 0 {
+			continue
+		}
+		ix.vecs[id] = cachedVec{hash: cv.Hash, vec: cv.Vec}
+	}
+}
+
+func (ix *Index) saveCache() {
+	if ix.cachePath == "" {
+		return
+	}
+	ix.mu.Lock()
+	wire := make(map[string]cachedVecWire, len(ix.vecs))
+	for id, cv := range ix.vecs {
+		wire[id] = cachedVecWire{Hash: cv.hash, Vec: cv.vec}
+	}
+	ix.mu.Unlock()
+
+	data, err := json.Marshal(wire)
+	if err != nil {
+		return
+	}
+	tmp := ix.cachePath + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+		slog.Warn("embedindex: cache write failed", "index", ix.name, "path", ix.cachePath, "error", err)
+		return
+	}
+	if err := os.Rename(tmp, ix.cachePath); err != nil {
+		os.Remove(tmp)
+		slog.Warn("embedindex: cache rename failed", "index", ix.name, "path", ix.cachePath, "error", err)
+	}
+}
+
+// ContentHash is a short stable digest of embeddable text; suppliers use it for
+// Item.Hash so an unchanged item is not re-embedded.
+func ContentHash(text string) string {
+	sum := sha256.Sum256([]byte(text))
+	return hex.EncodeToString(sum[:8])
+}
+
+// cosine returns the cosine similarity of two equal-length vectors (0 when either
+// is empty, zero-norm, or length-mismatched).
+func cosine(a, b []float32) float64 {
+	if len(a) != len(b) || len(a) == 0 {
+		return 0
+	}
+	var dot, na, nb float64
+	for i := range a {
+		dot += float64(a[i]) * float64(b[i])
+		na += float64(a[i]) * float64(a[i])
+		nb += float64(b[i]) * float64(b[i])
+	}
+	if na == 0 || nb == 0 {
+		return 0
+	}
+	return dot / (math.Sqrt(na) * math.Sqrt(nb))
+}
