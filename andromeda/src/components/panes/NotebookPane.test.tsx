@@ -112,6 +112,35 @@ describe("NotebookPane", () => {
     expect(screen.queryByRole("group", { name: "자료 내용" })).not.toBeInTheDocument();
   });
 
+  it("folds the materials area to the bar and unfolds it back — the choice persists", async () => {
+    renderWithProviders(<NotebookPane />, { connected: true });
+    expect(await screen.findByRole("heading", { name: "ZTT" })).toBeInTheDocument();
+    // Open a chip preview first — folding must not lose it.
+    await userEvent.click(screen.getByRole("button", { name: /잔금 안내/ }));
+    expect(await screen.findByRole("group", { name: "자료 내용" })).toBeInTheDocument();
+
+    // Fold: strip + preview disappear; only the one-line bar remains.
+    await userEvent.click(screen.getByRole("button", { name: "자료 영역 접기" }));
+    expect(screen.queryByRole("list", { name: "자료 목록" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "자료 내용" })).not.toBeInTheDocument();
+    expect(localStorage.getItem("andromeda.notebook.folded")).toBe("true");
+
+    // Unfold: the exact view (open preview included) comes back.
+    await userEvent.click(screen.getByRole("button", { name: "자료 영역 펼치기" }));
+    expect(screen.getByRole("list", { name: "자료 목록" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "자료 내용" })).toBeInTheDocument();
+    expect(localStorage.getItem("andromeda.notebook.folded")).toBe("false");
+  });
+
+  it("starts folded when the persisted flag says so", async () => {
+    localStorage.setItem("andromeda.notebook.folded", "true");
+    renderWithProviders(<NotebookPane />, { connected: true });
+    // The bar still works (notebook auto-opens into it); the body stays folded.
+    expect(await screen.findByRole("heading", { name: "ZTT" })).toBeInTheDocument();
+    expect(screen.queryByRole("list", { name: "자료 목록" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "자료 영역 펼치기" })).toBeInTheDocument();
+  });
+
   it("registers a note sink while a notebook is open — saving an AI answer pins a note source", async () => {
     // Consume the workspace channel the way AIPanel does: while NotebookPane has a
     // notebook open it registers a sink; feeding it an answer pins a kind=note source.

@@ -58,6 +58,11 @@ interface WorkspaceCtx {
   // pinned last). Persisted. SettingsPane reorders; Sidebar renders in this order.
   viewOrder: View[];
   setViewOrder: (order: View[]) => void;
+  // 노트북 상단(자료) 영역 접힘: NotebookPane's bar button toggles it; Workstation
+  // reads it to shrink the bottom-chat grid's top row to the bar, handing the
+  // freed height to the docked chat. Persisted to localStorage.
+  notebookFolded: boolean;
+  setNotebookFolded: (folded: boolean) => void;
   // Coding mode: when on, the left rail shows coding sessions instead of panes
   // (the work area is the 코드 pane). Persisted to localStorage.
   codeMode: boolean;
@@ -95,6 +100,12 @@ function readCodeMode(): boolean {
   return getJSON<boolean>(CODE_MODE_KEY) === true;
 }
 
+const NOTEBOOK_FOLDED_KEY = "andromeda.notebook.folded";
+
+function readNotebookFolded(): boolean {
+  return getJSON<boolean>(NOTEBOOK_FOLDED_KEY) === true;
+}
+
 const Ctx = createContext<WorkspaceCtx | null>(null);
 
 export function WorkspaceProvider({
@@ -121,6 +132,7 @@ export function WorkspaceProvider({
   const setNoteSink = (sink: ((text: string) => Promise<boolean>) | null) => setNoteSinkState(() => sink);
   const [hiddenViews, setHiddenViews] = useState<View[]>(readHiddenViews);
   const [viewOrder, setViewOrder] = useState<View[]>(readViewOrder);
+  const [notebookFolded, setNotebookFolded] = useState<boolean>(readNotebookFolded);
   const [codeMode, setCodeMode] = useState<boolean>(readCodeMode);
   const [codeSessionsRev, setCodeSessionsRev] = useState(0);
   const bumpCodeSessions = () => setCodeSessionsRev((n) => n + 1);
@@ -160,6 +172,10 @@ export function WorkspaceProvider({
     setJSON(CODE_MODE_KEY, codeMode);
   }, [codeMode]);
 
+  useEffect(() => {
+    setJSON(NOTEBOOK_FOLDED_KEY, notebookFolded);
+  }, [notebookFolded]);
+
   return (
     <Ctx.Provider
       value={{
@@ -183,6 +199,8 @@ export function WorkspaceProvider({
         toggleViewHidden,
         viewOrder,
         setViewOrder,
+        notebookFolded,
+        setNotebookFolded,
         codeMode,
         setCodeMode,
         codeSessionsRev,
