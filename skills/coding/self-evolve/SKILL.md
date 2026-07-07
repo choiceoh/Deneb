@@ -1,6 +1,6 @@
 ---
 name: self-evolve
-version: "1.0.0"
+version: "1.1.0"
 category: coding
 description: "Cross-surface self-evolution control plane. After a failure or notable success, attribute it to the right surface of Deneb's composite policy (model-role / prompt / skill / memory / tool / routing / guardrail), fix at the CHEAPEST surface, and pass a validation gate before committing the lesson. Use when: (1) a session exposed a failure and it's unclear which surface owns the fix, (2) you're about to commit a 'lesson' (memory/skill/prompt) and it should be validated first, (3) post-incident review. NOT for: skill-only edits (use skill-evolution), durable user facts (→ wiki/memory), or committing an unverified diagnostic conclusion."
 metadata:
@@ -8,7 +8,7 @@ metadata:
     "deneb":
       {
         "emoji": "🧠",
-        "requires": { "bins": ["jq"] },
+        "requires": { "bins": ["jq", "python3"] },
         "tags": ["self-evolution", "control-plane", "credit-assignment", "ATDP", "validation-gate", "counterfactual-replay", "composite-policy", "cheapest-surface", "intervention-surface", "self-correction-queue"],
         "related_skills": ["skill-evolution", "evolution-proposal", "session-logs"],
       },
@@ -98,6 +98,37 @@ Do NOT use for pure skill edits (use `skill-evolution`), durable user facts
    lesson with its causal chain (observation → surface → fix → validation
    result) so it is replayable/auditable — the ATDP metadata principle. One
    change at a time; never bundle surfaces.
+
+## Reward harvesting (`scripts/harvest_rewards.py`) — the ATDP `r` layer
+
+Deneb session JSONL already carries `o/h/a/y/m` (user msgs, thinking, tool
+calls, tool results, usage). The one ATDP field it captures NOWHERE is `r`
+(reward) — the signal that makes trajectories learnable. This bundled script
+harvests late-bound reward signals from `~/.deneb/agents/*/sessions/*.jsonl`
+and credit-assigns each back to the action that earned it (a correction at turn
+T attaches to the assistant action at T-1):
+
+- **`user_correction`** — a user turn negating/redirecting the prior assistant
+  action (precision-first Korean regex; plain "아니" substring over-fires so it
+  is anchored).
+- **`self_correction`** — the agent reversing an earlier claim (the archetype:
+  the GLM-OCR "can't do Korean" and "MTP is useless" reversals — both wrong
+  lessons the user had to catch).
+- **`tool_failure`** — a toolResult with the structured `isErr` flag ONLY.
+  Text-scanning result content is a false-positive trap: tool results routinely
+  carry code/docs that *mention* "Error:"/"cannot"/"panic:" (validated on real
+  sessions — 11/11 text hits were false), so trust only `isErr`.
+
+```bash
+ls ~/.deneb/agents/*/sessions/*.jsonl | xargs skills/coding/self-evolve/scripts/harvest_rewards.py
+skills/coding/self-evolve/scripts/harvest_rewards.py SESSION.jsonl --json   # structured records
+```
+
+**Validated 2026-07** (dogfooded through this very loop): detection fires on
+synthetic positives and produces **zero false positives** on real sessions after
+the isErr-only fix. Recall depends on sessions carrying signal — sparse/clean
+histories yield none, which is honest, not broken. The harvested reward record
+is the credit-assignment + eval-corpus input for the rest of the loop.
 
 ## Pitfalls
 
