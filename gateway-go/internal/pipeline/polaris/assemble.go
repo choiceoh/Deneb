@@ -57,6 +57,10 @@ func assembleContextFull(
 		if freshTailCount > 0 && len(recent) > freshTailCount {
 			recent = recent[len(recent)-freshTailCount:]
 		}
+		// Orphaned tool pairs must not ship: the tail trim above can cut between
+		// a tool_use and its result, and an interrupted turn can persist a
+		// dangling tool_use — see the balance call on the summaries path below.
+		recent = compact.BalanceToolBlocks(recent)
 		tokens := compact.EstimateMessagesTokens(recent)
 		return &AssemblyResult{
 			Messages:        recent,
@@ -109,6 +113,15 @@ func assembleContextFull(
 	messages := make([]llm.Message, 0, len(summaryMsgs)+len(recent))
 	messages = append(messages, summaryMsgs...)
 	messages = append(messages, recent...)
+
+	// Both return paths repair orphaned tool_use/tool_result pairs here, at the
+	// loader itself: an interrupted turn (client abort, hotswap, crash) persists
+	// an assistant tool_use whose tool_result never landed, and a fresh session
+	// that never triggers compaction would otherwise ship that orphan on every
+	// turn — strict OpenAI-compatible providers reject the whole request with a
+	// 400, wedging the session until /reset. No-op (byte-identical, APC-stable)
+	// when the history is already balanced.
+	messages = compact.BalanceToolBlocks(messages)
 
 	if len(summaryMsgs) > 0 {
 		logger.Info("polaris: assembled context with summaries",
