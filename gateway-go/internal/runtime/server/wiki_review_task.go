@@ -504,7 +504,15 @@ func (s *Server) registerWikiReviewTask(homeDir string) {
 		statePath: filepath.Join(stateDir, wikiReviewStateFile),
 		autoMerge: autoMerge,
 		llm: func(ctx context.Context, system, user string, maxTokens int) (string, error) {
-			return pilot.CallAnalysisLLM(ctx, system, user, maxTokens, map[string]any{"temperature": 0})
+			// reasoning_effort "low": on the wormhole GLM path an explicit
+			// non-high effort routes thinking OFF (and the field is stripped
+			// before the upstream sees it). Without it Ares judged the long
+			// suspect list "non-simple" → reasoning burned the whole verdict
+			// budget and the JSON array never arrived (parse verdicts:
+			// invalid JSON ×8 in prod, 2026-07-04..06). A strict-JSON verdict
+			// needs no chain-of-thought.
+			return pilot.CallAnalysisLLM(ctx, system, user, maxTokens,
+				map[string]any{"temperature": 0, "reasoning_effort": "low"})
 		},
 	})
 	s.logger.Info("wiki-review task registered",

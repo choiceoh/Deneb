@@ -53,8 +53,10 @@ const (
 	wikiResearchInterval = 6 * time.Hour
 	// wikiResearchTurnTimeout caps a single research turn. The chat pipeline's
 	// own turn deadline may cap it shorter; this is the outer bound so a stuck
-	// turn never wedges the cycle.
-	wikiResearchTurnTimeout = 6 * time.Minute
+	// turn never wedges the cycle. 6m proved too tight in prod (2026-07-06: a
+	// legitimate 15-turn research run was killed at 363s, stop=timeout — the
+	// cycle's work lost); 12m still bounds a wedged turn to one cycle slot.
+	wikiResearchTurnTimeout = 12 * time.Minute
 	// wikiResearchMaxBackfill is how many SKELETON 대표페이지 (layout-migration
 	// mints, wiki.RepSkeletonMarker) one cycle may fill. Normal cycles stay at
 	// one page; the burst applies only while empty rep pages remain, so the
