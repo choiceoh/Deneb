@@ -16,7 +16,7 @@ func (f fakeEmbedder) Embed(_ context.Context, texts []string) ([][]float32, err
 	for i, t := range texts {
 		v := make([]float32, 64)
 		for _, r := range t {
-			v[int(r)%64] += 1
+			v[int(r)%64]++
 		}
 		out[i] = v
 	}
