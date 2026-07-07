@@ -458,26 +458,64 @@ func (rt *router) serve(w http.ResponseWriter, r *http.Request, proto, pathSuffi
 		writeErr(w, http.StatusBadRequest, wrongEndpointMsg(entry))
 		return
 	}
+	rt.forward(client, w, r, entry, body, proto, pathSuffix)
+}
+
+// shapeFor rebuilds the upstream request body for one entry from the RAW
+// client bytes: model rewrite, vision gate, and effort routing are all
+// per-entry (capabilities and dialects differ), so a failover candidate must
+// never inherit the primary's shaped bytes.
+//
+// Vision gate: image parts bound for a text-only upstream (GLM text models
+// 400 on them and the failure repeats every later turn) are stripped to text
+// stubs. No-op — byte-identical — for image-capable models and image-free
+// requests (APC).
+//
+// Effort routing: X-Wormhole-No-Effort suppresses CLASSIFIER thinking routing
+// (the gateway owns that and its prefix cache) but not a static "off" entry —
+// the caller picked that variant by name, so no-thinking is its contract (see
+// applyThinking). The cloud reasoning dialect runs regardless, since the
+// gateway can't express it.
+func (rt *router) shapeFor(entry modelEntry, body []byte, proto string, r *http.Request) []byte {
 	out := body
-	if entry.UpstreamModel != model {
+	if entry.UpstreamModel != extractModel(body) {
 		if rewritten, rerr := rewriteModel(body, entry.UpstreamModel); rerr == nil {
 			out = rewritten
 		}
 	}
-	// Image parts bound for a text-only upstream (GLM text models 400 on them and
-	// the failure repeats every later turn) are stripped to text stubs. No-op —
-	// byte-identical — for image-capable models and image-free requests (APC).
 	out = rt.applyVisionGate(entry, out, proto)
 	if rt.cur().cfg.effortRoutingOn() {
-		// X-Wormhole-No-Effort suppresses CLASSIFIER thinking routing (the gateway
-		// owns that and its prefix cache) but not a static "off" entry — the caller
-		// picked that variant by name, so no-thinking is its contract (see
-		// applyThinking). The cloud reasoning dialect runs regardless, since the
-		// gateway can't express it.
 		out = rt.applyThinking(entry, out, noEffortRouting(r))
 		out = rt.applyReasoning(entry, out)
 	}
-	rt.forward(client, w, r, entry, out, pathSuffix)
+	return out
+}
+
+// failoverChain returns the entry followed by its declared fallbacks (each
+// entry's Fallback naming the next), capped at 3 candidates. A candidate must
+// exist, speak the same protocol, and pass the local-only guard; a cycle or a
+// guard failure ends the chain. Chain of one == no failover configured.
+func (rt *router) failoverChain(primary modelEntry, proto string, r *http.Request) []modelEntry {
+	chain := []modelEntry{primary}
+	seen := map[string]bool{primary.Name: true}
+	cur := primary
+	for len(chain) < 3 {
+		name := strings.TrimSpace(cur.Fallback)
+		if name == "" || seen[name] {
+			break
+		}
+		e, ok := rt.lookup(name)
+		if !ok || e.protocol() != proto {
+			break
+		}
+		if rt.localOnly(r) && !e.isLocal() {
+			break
+		}
+		seen[name] = true
+		chain = append(chain, e)
+		cur = e
+	}
+	return chain
 }
 
 // chatCompletions serves OpenAI clients: POST /v1/chat/completions.
@@ -616,15 +654,43 @@ func (rt *router) doUpstreamWithRetry(r *http.Request, entry modelEntry, body []
 	return resp, err // retries exhausted: surface the last error (resp is nil)
 }
 
-// forward proxies a single model's request and streams the response back, with a
-// bounded retry of transient upstream failures (this is Deneb's model hot path).
-func (rt *router) forward(client clientInfo, w http.ResponseWriter, r *http.Request, entry modelEntry, body []byte, pathSuffix string) {
-	resp, err := rt.doUpstreamWithRetry(r, entry, body, pathSuffix)
-	if err != nil {
-		rt.log.Warn("upstream call failed", "model", entry.Name, "url", entry.URL, "error", err)
-		writeErr(w, http.StatusBadGateway, "upstream unreachable: "+entry.Name)
+// forward proxies a model request and streams the response back, with a
+// bounded retry of transient upstream failures (this is Deneb's model hot
+// path) and, when the entry declares a Fallback, failover down the chain once
+// retries are exhausted — an unreachable upstream or one still 5xx after
+// retries moves to the next candidate instead of surfacing the failure.
+// Failover happens only before any bytes stream; each candidate shapes its
+// own body from the raw client bytes.
+func (rt *router) forward(client clientInfo, w http.ResponseWriter, r *http.Request, primary modelEntry, rawBody []byte, proto, pathSuffix string) {
+	cands := rt.failoverChain(primary, proto, r)
+	for i, entry := range cands {
+		body := rt.shapeFor(entry, rawBody, proto, r)
+		resp, err := rt.doUpstreamWithRetry(r, entry, body, pathSuffix)
+		if err != nil {
+			rt.log.Warn("upstream call failed", "model", entry.Name, "url", entry.URL,
+				"error", err, "fallbacksLeft", len(cands)-1-i)
+			continue
+		}
+		if resp.StatusCode >= 500 && i < len(cands)-1 {
+			rt.log.Warn("upstream still 5xx, failing over",
+				"model", entry.Name, "status", resp.StatusCode, "next", cands[i+1].Name)
+			_ = resp.Body.Close()
+			continue
+		}
+		if i > 0 {
+			// Warn, not Info: the primary the caller asked for is down — the
+			// reply is rescued, but the operator should see the substitution.
+			rt.log.Warn("failover routed", "from", primary.Name, "to", entry.Name)
+		}
+		rt.commit(client, w, entry, body, resp)
 		return
 	}
+	writeErr(w, http.StatusBadGateway, "upstream unreachable: "+primary.Name)
+}
+
+// commit meters and streams one upstream response to the client — the point of
+// no return after routing/failover has settled on an entry.
+func (rt *router) commit(client clientInfo, w http.ResponseWriter, entry modelEntry, body []byte, resp *http.Response) {
 	rt.meterResponse(entry, resp)
 	// Diagnostic tap: WORMHOLE_DUMP_MODEL=<name> logs the exact request body
 	// and the exact upstream response (head+tail) for that model's

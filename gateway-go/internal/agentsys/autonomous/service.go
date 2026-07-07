@@ -563,23 +563,30 @@ func (s *Service) executeTask(ctx context.Context, task PeriodicTask) {
 	// Persist LastRunAt so this run is remembered across a restart.
 	s.saveState()
 
-	// Behavioral event: record every task cycle (gmail poll, evolution, curator,
+	// Behavioral event: record task cycles (gmail poll, evolution, curator,
 	// heartbeat, boot) under system:background so a worker that silently stops
 	// running shows up as a gap in the log instead of mysterious silence.
-	// behaviorLog is nil-safe.
+	// Quiet no-op ticks of high-frequency tasks are the one exception:
+	// goal-loop's ~2min ticks alone wrote 2,200 ok/0ms records in 3 prod days,
+	// drowning the stream. Their liveness is still covered by saveState above
+	// (autonomous_state.json, mtime-watched by the observatory); errors and
+	// cycles that did real work (≥1s) always land here. behaviorLog is nil-safe.
 	outcome := "ok"
 	errStr := ""
 	if err != nil {
 		outcome = "error"
 		errStr = err.Error()
 	}
-	s.behaviorLog.LogEvent(agentlog.SessionBackground, agentlog.TypeBackgroundJob, agentlog.BackgroundJobData{
-		Kind:       "autonomous",
-		Name:       name,
-		Outcome:    outcome,
-		DurationMs: elapsed.Milliseconds(),
-		Error:      errStr,
-	})
+	quietTick := err == nil && elapsed < time.Second && task.Interval() < 30*time.Minute
+	if !quietTick {
+		s.behaviorLog.LogEvent(agentlog.SessionBackground, agentlog.TypeBackgroundJob, agentlog.BackgroundJobData{
+			Kind:       "autonomous",
+			Name:       name,
+			Outcome:    outcome,
+			DurationMs: elapsed.Milliseconds(),
+			Error:      errStr,
+		})
+	}
 
 	if err != nil {
 		s.logger.Warn("periodic task failed", "task", name, "error", err)

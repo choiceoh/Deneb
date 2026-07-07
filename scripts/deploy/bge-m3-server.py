@@ -153,6 +153,18 @@ def embed(req: EmbedRequest):
 # ---------------------------------------------------------------------------
 
 
+class _HealthAccessFilter(logging.Filter):
+    """Drop uvicorn access-log lines for GET /health.
+
+    The gateway polls /health every minute; those lines were ~90% of this
+    unit's journal volume (3,783 of 4,176 lines over 3 prod days) and helped
+    push the user journal past its retention cap. Embeds and errors still log.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return "/health" not in record.getMessage()
+
+
 def main():
     parser = argparse.ArgumentParser(description="BGE-M3 embedding server (Q5_K_M GGUF)")
     parser.add_argument("--port", type=int, default=8001)
@@ -166,6 +178,7 @@ def main():
 
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
 
+    logging.getLogger("uvicorn.access").addFilter(_HealthAccessFilter())
     uvicorn.run(app, host=args.host, port=args.port, log_level="info")
 
 

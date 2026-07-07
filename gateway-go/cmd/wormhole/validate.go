@@ -54,6 +54,28 @@ func validateConfig(cfg config) []string {
 			warns = append(warns, "auto candidate "+a+" is not a configured model")
 		}
 	}
+	// Fallback targets resolve at request time (failoverChain), so a typo or a
+	// protocol mismatch silently means "no failover" — exactly the moment the
+	// operator counted on it. Catch it at load time.
+	byName := make(map[string]modelEntry, len(cfg.Models))
+	for _, e := range cfg.Models {
+		byName[e.Name] = e
+	}
+	for _, e := range cfg.Models {
+		fb := strings.TrimSpace(e.Fallback)
+		if fb == "" {
+			continue
+		}
+		target, ok := byName[fb]
+		switch {
+		case fb == e.Name:
+			warns = append(warns, "model "+e.Name+" declares itself as fallback — no failover will happen")
+		case !ok:
+			warns = append(warns, "model "+e.Name+" fallback "+fb+" is not a configured model — no failover will happen")
+		case target.protocol() != e.protocol():
+			warns = append(warns, "model "+e.Name+" fallback "+fb+" speaks a different protocol ("+target.protocol()+" vs "+e.protocol()+") — no failover will happen")
+		}
+	}
 	return warns
 }
 

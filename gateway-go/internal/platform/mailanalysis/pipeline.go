@@ -18,7 +18,13 @@ import (
 // Pipeline timeouts.
 const (
 	stage1Timeout = 30 * time.Second
-	stage2Timeout = 240 * time.Second
+	// stage2Timeout bounds the synthesis stage INCLUDING the context stages
+	// that share its budget. 240s proved too tight in prod (2026-07-06: a
+	// system:mailpoll synthesis run was deadline-killed 190s in, stop=timeout,
+	// after earlier stages consumed the rest — analysis-model p95 is ~170s per
+	// turn). 360s absorbs a slow multi-turn synthesis without unbounding the
+	// pipeline.
+	stage2Timeout = 360 * time.Second
 
 	// Stage 1a: max emails to fetch for context.
 	maxThreadMessages = 5

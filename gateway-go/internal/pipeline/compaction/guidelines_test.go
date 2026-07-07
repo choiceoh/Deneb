@@ -42,6 +42,31 @@ func TestGuidelineStore_SaveLoadCapDedup(t *testing.T) {
 	}
 }
 
+func TestSanitizeGuidelines_DropsPlaceholderJunk(t *testing.T) {
+	// Live 2026-07-06: the tuner LLM echoed schema placeholders and they
+	// persisted alongside real guidelines. Sanitize (Load AND Save path)
+	// must drop them while keeping the real Korean directives.
+	in := []string{
+		"금액은 정확한 숫자와 통화로 보존하라",
+		"guideline1",
+		"guideline2",
+		"Guideline 3",
+		"규칙 1",
+		"예시2",
+		"rule_4",
+		"placeholder text only", // no Hangul → schema noise
+		"날짜는 구체적인 날짜로 보존하라",
+	}
+	got := sanitizeGuidelines(in)
+	want := []string{
+		"금액은 정확한 숫자와 통화로 보존하라",
+		"날짜는 구체적인 날짜로 보존하라",
+	}
+	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("junk not filtered: %v", got)
+	}
+}
+
 func TestGuidelineStore_NilAndMissingSafe(t *testing.T) {
 	if got := (*GuidelineStore)(nil).Load(); got != nil {
 		t.Fatalf("nil store Load must be nil, got %v", got)

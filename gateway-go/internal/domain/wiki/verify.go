@@ -11,6 +11,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
@@ -384,8 +385,14 @@ JSON 배열만 반환. 다른 텍스트 없이.
 형식: [{"path":"...", "currentCategory":"...", "correctCategory":"...", "confidence":"high|medium|low", "reason":"..."}]`,
 		strings.Join(Categories, ", "), strings.Join(lines, "\n"))
 
-	resp, err := wd.client.Complete(ctx,
-		wd.llmRequest("You are a wiki category validator. Respond only with a JSON array.", prompt, 2048))
+	req := wd.llmRequest("You are a wiki category validator. Respond only with a JSON array.", prompt, 2048)
+	// Strict-JSON one-shot: disable thinking so the output budget goes to the
+	// verdict array, not chain-of-thought. Live 2026-07-06 this call died with
+	// "empty content (finish_reason=length): reasoning consumed the output
+	// budget". The OpenAI path maps disabled → reasoning_effort "low", which
+	// the wormhole GLM route treats as an explicit thinking-off signal.
+	req.Thinking = &llm.ThinkingConfig{Type: "disabled"}
+	resp, err := wd.client.Complete(ctx, req)
 	if err != nil {
 		wd.logger.Warn("wiki-verify: LLM misclassification check failed", "error", err)
 		return nil

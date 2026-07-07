@@ -72,6 +72,16 @@ type modelEntry struct {
 	//   (on). GLM honors only reasoning_effort high|max and resolves anything but
 	//   an explicit "high" to MAX, so on-mode pins "high" rather than leaking max.
 	Reasoning string `json:"reasoning,omitempty"`
+	// Fallback names another configured entry to fail over to when THIS
+	// entry's upstream stays unreachable or 5xx after the bounded retries.
+	// Motivation (live 2026-07-06): the srv2+srv3 tensor-parallel dsv4 went
+	// down and every dsv4-nothink caller ate 502s to exhaustion while a
+	// healthy local qwen3.6 sat idle — per-entry failover gives each pinned
+	// model name the auto-route's resilience without the caller opting into
+	// "auto". The chain follows the fallback's own Fallback (≤3 entries,
+	// cycle-guarded); a candidate must speak the same protocol and pass the
+	// local-only guard. Failover happens only before any bytes stream.
+	Fallback string `json:"fallback,omitempty"`
 	// Pricing optionally declares this entry's per-token cost, consumed ONLY by
 	// GET /v1/usage to estimate spend — it never affects routing.
 	Pricing *modelPricing `json:"pricing,omitempty"`
