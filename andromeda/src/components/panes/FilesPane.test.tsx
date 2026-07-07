@@ -127,21 +127,22 @@ describe("FilesPane", () => {
     expect(await screen.findByText(/https:\/\/files.example/)).toBeInTheDocument();
   });
 
-  it("opens a file in a viewer tab and saves edits with overwrite", async () => {
+  it("opens a file in the preview popup and saves edits with overwrite", async () => {
     renderWithProviders(<FilesPane />, { connected: true });
 
     await userEvent.click((await screen.findAllByText("projects"))[0]);
-    // Clicking a file row opens it as a viewer tab (the markdown body loads).
+    // Clicking a file row pops up the preview modal (the markdown body loads).
     await userEvent.click(await screen.findByText("notes.md"));
-    expect(await screen.findByRole("tab", { name: /notes\.md/ })).toBeInTheDocument();
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByRole("heading", { name: /notes\.md/ })).toBeInTheDocument();
 
-    // Wait for the blob to load (mode tabs appear once ready), then edit.
-    await userEvent.click(await screen.findByRole("button", { name: "편집" }, { timeout: 3000 }));
-    const editor = (await screen.findByDisplayValue(/원본 내용/)) as HTMLTextAreaElement;
+    // Wait for the blob to load (mode buttons appear once ready), then edit.
+    await userEvent.click(await within(dialog).findByRole("button", { name: "편집" }, { timeout: 3000 }));
+    const editor = (await within(dialog).findByDisplayValue(/원본 내용/)) as HTMLTextAreaElement;
     await userEvent.type(editor, "추가");
-    expect(screen.getByText("수정됨")).toBeInTheDocument();
+    expect(within(dialog).getByText("수정됨")).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: "저장" }));
+    await userEvent.click(within(dialog).getByRole("button", { name: "저장" }));
     // Save round-trips through the upload RPC with overwrite=true (replace in
     // place — the default autorenames and would fork the file per save).
     await vi.waitFor(() => {
@@ -149,48 +150,34 @@ describe("FilesPane", () => {
       expect(save?.params).toMatchObject({ path: "projects/notes.md", overwrite: true });
       expect(String(save?.params.dataBase64 ?? "")).not.toBe("");
     });
-    // The viewer bar's dirty badge flips back to 저장됨 (it also shows in the
-    // pane status line, so scope to the viewer's save-state element).
+    // The viewer bar's dirty badge flips back to 저장됨.
     expect(document.querySelector(".wiki-save-state")?.textContent).toBe("저장됨");
 
-    // Closing the tab (now clean) removes it.
-    await userEvent.click(screen.getByRole("button", { name: "notes.md 닫기" }));
-    expect(screen.queryByRole("tab", { name: /notes\.md/ })).not.toBeInTheDocument();
+    // Closing the popup (now clean) dismisses it — no unsaved-changes guard.
+    await userEvent.click(within(dialog).getByRole("button", { name: "닫기" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  it("re-paths the open viewer tab when its file is moved (a stale tab would save a fork)", async () => {
+  it("guards the preview popup against discarding unsaved edits", async () => {
     renderWithProviders(<FilesPane />, { connected: true });
 
     await userEvent.click((await screen.findAllByText("projects"))[0]);
     await userEvent.click(await screen.findByText("notes.md"));
-    expect(await screen.findByRole("tab", { name: /notes\.md/ })).toBeInTheDocument();
-
-    // Move the file from its grid row: the open tab must follow the new path —
-    // saving from the old one would recreate the file at the old location.
-    const row = screen.getByText("projects/notes.md").closest("tr") as HTMLElement;
-    await userEvent.click(within(row).getByRole("button", { name: "이동" }));
     const dialog = await screen.findByRole("dialog");
-    const field = within(dialog).getByLabelText("대상 경로");
-    await userEvent.clear(field);
-    await userEvent.type(field, "projects/renamed.md");
-    await userEvent.click(within(dialog).getByRole("button", { name: "이동" }));
 
-    expect(await screen.findByRole("tab", { name: /renamed\.md/ })).toBeInTheDocument();
-    expect(screen.queryByRole("tab", { name: /notes\.md/ })).not.toBeInTheDocument();
-  });
+    // Edit without saving, then try to close: the dirty guard intercepts.
+    await userEvent.click(await within(dialog).findByRole("button", { name: "편집" }, { timeout: 3000 }));
+    await userEvent.type(await within(dialog).findByDisplayValue(/원본 내용/), "추가");
+    await userEvent.click(within(dialog).getByRole("button", { name: "닫기" }));
 
-  it("closes the open viewer tab when its file is deleted (saving would resurrect it)", async () => {
-    renderWithProviders(<FilesPane />, { connected: true });
+    // The preview stays open behind a confirm; 계속 편집 dismisses the guard only.
+    expect(await screen.findByText(/저장하지 않은 변경이 있습니다/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "계속 편집" }));
+    expect(within(await screen.findByRole("dialog")).getByRole("heading", { name: /notes\.md/ })).toBeInTheDocument();
 
-    await userEvent.click((await screen.findAllByText("projects"))[0]);
-    await userEvent.click(await screen.findByText("notes.md"));
-    expect(await screen.findByRole("tab", { name: /notes\.md/ })).toBeInTheDocument();
-
-    const row = screen.getByText("projects/notes.md").closest("tr") as HTMLElement;
-    await userEvent.click(within(row).getByRole("button", { name: "삭제" }));
-    const dialog = await screen.findByRole("dialog");
-    await userEvent.click(within(dialog).getByRole("button", { name: "삭제" }));
-
-    await vi.waitFor(() => expect(screen.queryByRole("tab", { name: /notes\.md/ })).not.toBeInTheDocument());
+    // 버리고 닫기 discards and closes.
+    await userEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "닫기" }));
+    await userEvent.click(await screen.findByRole("button", { name: "버리고 닫기" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 });

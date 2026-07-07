@@ -4682,68 +4682,13 @@ button.mail-attachment {
   margin-top: 2px;
 }
 
-/* ---- in-app file viewer (FilesPane tabs + mail attachment preview) ---- */
-.file-tabs-shell {
-  margin-top: 12px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-ctl);
-  background: var(--panel);
+/* ---- file viewer (FilesPane preview popup + mail attachment preview) ---- */
+.file-preview {
+  min-height: 320px;
+  max-height: 70vh;
   display: flex;
   flex-direction: column;
-  min-height: 260px;
-  max-height: 62vh;
-}
-.file-tabs {
-  display: flex;
-  gap: 2px;
-  padding: 4px 6px 0;
-  border-bottom: 1px solid var(--line);
-  overflow-x: auto;
-  flex: none;
-}
-.file-tab {
-  display: inline-flex;
-  align-items: center;
-  border: 1px solid transparent;
-  border-bottom: none;
-  border-radius: var(--radius-ctl) var(--radius-ctl) 0 0;
-  color: var(--muted);
-}
-.file-tab.active {
-  border-color: var(--line);
-  background: var(--panel-sunken);
-  color: var(--ink);
-}
-.file-tab-label {
-  border: none;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  font-size: 12px;
-  padding: 5px 4px 5px 10px;
-  cursor: pointer;
-  max-width: 220px;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.file-tab-close {
-  border: none;
-  background: transparent;
-  color: var(--muted-2);
-  cursor: pointer;
-  font-size: 13px;
-  padding: 4px 8px 4px 4px;
-}
-.file-tab-close:hover {
-  color: var(--ink);
-}
-.file-tab-body {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  padding: 8px;
 }
 .file-viewer-media {
   flex: 1;
