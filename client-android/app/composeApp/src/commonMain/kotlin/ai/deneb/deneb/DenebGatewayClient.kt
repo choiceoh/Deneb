@@ -170,6 +170,13 @@ class DenebGatewayClient(
     // ask() bumps the epoch when it appends; loadTranscriptGuarded only installs
     // its result when the epoch is unchanged, making the two order-independent.
     private val historyGate = Mutex()
+
+    // True while ask() drives a turn. Background transcript reconciles (events
+    // stream reconnect) must not touch the view then — the live stream, or its
+    // stream-failure recovery, owns it. Volatile: read from the daemon's events
+    // coroutine on another thread; the worst race is one skipped reconcile.
+    @Volatile
+    private var askActive = false
     private var historyEpoch = 0L
     private val nativeSyncGate = Mutex()
     private var nativeSyncCursor = appSettings.settings.getLong(KEY_SYNC_CURSOR, 0L)
@@ -442,6 +449,11 @@ class DenebGatewayClient(
         // background transcript load in flight — the cold-start topic
         // auto-select — can't overwrite them (see historyGate).
         val assistantId = Uuid.random().toString()
+        // Pinned for the stream-failure recovery below: the transcript to
+        // reconcile against is the one this turn was SENT to, even if the user
+        // switches conversations while recovery is polling.
+        val sessionKeyAtSend = sessionKey
+        askActive = true
         historyGate.withLock {
             historyEpoch++
             _chatHistory.update { list ->
@@ -517,19 +529,37 @@ class DenebGatewayClient(
                 }
             }
         } catch (cancel: CancellationException) {
+            // The turn's coroutine died (topic switch, VM teardown). Never leave
+            // the placeholder as a phantom empty bubble: keep what streamed, or
+            // drop the row — the transcript reconcile on the next events-stream
+            // (re)connect restores the canonical answer if the server finished.
+            settlePlaceholderOnAbort(assistantId, accumulated.toString())
+            askActive = false
             throw cancel
         } catch (e: Exception) {
-            // Older gateway without the stream endpoint, or a mid-stream failure.
-            // Only retry through the blocking RPC when nothing streamed yet, so a
-            // partial answer is never discarded or double-generated.
-            if (accumulated.isEmpty()) {
-                runCatching { send(sendText) }
-                    .getOrElse { GatewayReply("⚠️ ${it.message ?: "gateway request failed"}", ok = false) }
-            } else {
-                // Keep the partial answer, but the turn still FAILED (stream broke
-                // mid-answer) — report ok=false so the queue never auto-fires after it.
-                GatewayReply(text = accumulated.toString(), ok = false)
+            // Mid-stream failure. On mobile the socket often dies HALF-OPEN: the
+            // gateway never notices, keeps running the turn, and persists an
+            // answer nobody received. The transcript is the canonical record —
+            // reconcile with it BEFORE considering a re-send, which would
+            // double-generate the answer for a message that did arrive.
+            val recovered = try {
+                recoverTurnFromTranscript(sessionKeyAtSend, sendText)
+            } catch (cancel: CancellationException) {
+                settlePlaceholderOnAbort(assistantId, accumulated.toString())
+                askActive = false
+                throw cancel
             }
+            recovered
+                ?: if (accumulated.isEmpty()) {
+                    // Never reached the gateway (or an old gateway without the
+                    // stream endpoint) — a blocking re-send is safe.
+                    runCatching { send(sendText) }
+                        .getOrElse { GatewayReply("⚠️ ${it.message ?: "gateway request failed"}", ok = false) }
+                } else {
+                    // Keep the partial answer, but the turn still FAILED (stream broke
+                    // mid-answer) — report ok=false so the queue never auto-fires after it.
+                    GatewayReply(text = accumulated.toString(), ok = false)
+                }
         } finally {
             // Progress rows are turn-scoped — never leak a zombie chip past the
             // turn, whatever way the stream ended (done, error, cancel).
@@ -565,7 +595,20 @@ class DenebGatewayClient(
                 list.map { if (it.id == assistantId) it.copy(toolFootprint = fp) else it }
             }
         }
+        askActive = false
         return reply.ok
+    }
+
+    // Never leave ask()'s optimistic placeholder as a phantom empty bubble when
+    // the turn dies mid-flight: keep whatever streamed, or drop the row.
+    private fun settlePlaceholderOnAbort(assistantId: String, partial: String) {
+        _chatHistory.update { list ->
+            if (partial.isBlank()) {
+                list.filter { it.id != assistantId }
+            } else {
+                list.map { if (it.id == assistantId) it.copy(content = partial) else it }
+            }
+        }
     }
 
     private fun formatCallback(submission: UiSubmission): String = buildString {
@@ -874,6 +917,88 @@ class DenebGatewayClient(
         if (authoritative && epoch == credEpoch) {
             if (transcript!!.isEmpty()) removeCachedTranscript(key) else storeCachedTranscript(key, transcript)
         }
+    }
+
+    /**
+     * Stream-failure recovery for one sent turn: poll the session transcript
+     * until it shows an assistant reply to [sentText], the message turns out
+     * never to have arrived, or the budget runs out. The gateway keeps a turn
+     * running after its SSE socket goes half-open (it cannot tell), so the
+     * canonical answer usually lands in the transcript moments after the phone
+     * loses the stream.
+     *
+     * An answer is only accepted once it is QUIESCENT — the same tail on two
+     * consecutive polls — because a multi-step agent turn persists intermediate
+     * assistant messages while its tools are still running. On budget expiry a
+     * non-quiescent candidate is still installed (a partial real answer beats a
+     * dropped turn). Returns null when the caller may use its legacy fallbacks
+     * (blocking re-send for a message that never arrived / keep the partial).
+     */
+    private suspend fun recoverTurnFromTranscript(key: String, sentText: String): GatewayReply? {
+        val started = TimeSource.Monotonic.markNow()
+        var misses = 0
+        var candidate: List<History>? = null
+        var candidateTail: Pair<Int, String>? = null
+        while (started.elapsedNow().inWholeMilliseconds < STREAM_RECOVERY_BUDGET_MS) {
+            if (sessionKey != key) return null // switched conversations — abandon
+            val transcript = fetchTranscript(key)
+            if (transcript != null) {
+                when (val probe = probeTranscriptForTurn(transcript, sentText)) {
+                    is TurnProbe.Answered -> {
+                        val tail = transcript.size to probe.text
+                        if (tail == candidateTail) {
+                            installRecoveredTranscript(key, transcript)
+                            return GatewayReply(text = probe.text, ok = true)
+                        }
+                        candidate = transcript
+                        candidateTail = tail
+                    }
+
+                    TurnProbe.StillRunning -> {
+                        misses = 0
+                        candidate = null
+                        candidateTail = null
+                    }
+
+                    TurnProbe.NotArrived -> {
+                        // One grace poll: the POST may still be landing while we
+                        // probe — declaring "never arrived" too early re-creates
+                        // the duplicate-send this path exists to prevent.
+                        misses++
+                        if (misses >= 2) return null
+                    }
+                }
+            }
+            delay(STREAM_RECOVERY_POLL_MS)
+        }
+        val last = candidate ?: return null
+        val text = candidateTail?.second ?: return null
+        installRecoveredTranscript(key, last)
+        return GatewayReply(text = text, ok = true)
+    }
+
+    /** Install a recovered transcript as the visible history (and cache it). */
+    private suspend fun installRecoveredTranscript(key: String, transcript: List<History>) {
+        historyGate.withLock {
+            if (sessionKey != key) return // switched away — don't clobber the open view
+            historyEpoch++ // fence any in-flight background load
+            _chatHistory.value = transcript
+        }
+        storeCachedTranscript(key, transcript)
+    }
+
+    /**
+     * Events-stream (re)connect = network back / app foregrounded. Pull the
+     * open conversation's transcript so an answer that completed while the chat
+     * SSE was dead becomes visible without an app restart. Skipped while an
+     * ask() is in flight — its own stream (or recovery) owns the view then; the
+     * epoch guard inside loadTranscriptGuarded covers one that starts mid-fetch.
+     */
+    private fun reconcileOpenConversationAsync() {
+        if (askActive) return
+        val key = sessionKey
+        if (key.isBlank()) return
+        scope.launch { runCatching { loadTranscriptGuarded(key) } }
     }
 
     /**
@@ -1797,6 +1922,7 @@ class DenebGatewayClient(
                     }
                     backoffMs = 2_000L // connected — reset backoff
                     syncNativeStateAsync()
+                    reconcileOpenConversationAsync()
                     val channel = response.bodyAsChannel()
                     var event = ""
                     val data = StringBuilder()
@@ -2226,6 +2352,13 @@ class DenebGatewayClient(
         // Max idle between bytes on the chat SSE stream. The server emits a
         // keepalive comment every 15s, so this only trips on a real stall.
         const val STREAM_SOCKET_TIMEOUT_MS = 120_000L
+
+        // Stream-failure recovery (recoverTurnFromTranscript): how long to keep
+        // polling the transcript for the answer of a turn whose SSE died — the
+        // common half-open case resolves in seconds, but a tool-heavy turn can
+        // run minutes — and the poll cadence.
+        const val STREAM_RECOVERY_BUDGET_MS = 90_000L
+        const val STREAM_RECOVERY_POLL_MS = 3_000L
 
         // How long a fetched calendar month is served from the client cache before
         // a re-open refetches. Short enough that an event added elsewhere surfaces

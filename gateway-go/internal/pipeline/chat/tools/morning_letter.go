@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/market"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
@@ -86,6 +87,9 @@ func ToolMorningLetter(_ toolctx.ToolExecutor, opts ...MorningLetterOpts) ToolFu
 		envelope := map[string]any{
 			"date":      dateStr,
 			"timestamp": now.Format(time.RFC3339),
+			// Instruction rides with the data (the cron prompt is user config):
+			// the model places digit-free tokens; the relay injects real values.
+			"note": "시세(환율·구리) 숫자는 절대 직접 쓰지 말 것 — exchange의 usd_krw_token/eur_krw_token, copper의 token 플레이스홀더를 문장 안에 그대로 배치하면 발송 시 실제 숫자로 자동 치환된다. 토큰은 숫자만 치환되므로 단위(원, 달러, /t 등)는 문장에 직접 쓴다",
 			"sections": map[string]any{
 				"weather":        results[0],
 				"exchange":       results[1],
@@ -178,15 +182,24 @@ type weatherData struct {
 }
 
 type exchangeData struct {
-	OK     bool    `json:"ok"`
-	USDKRW float64 `json:"usd_krw,omitempty"`
-	EURKRW float64 `json:"eur_krw,omitempty"`
-	Error  string  `json:"error,omitempty"`
+	OK bool `json:"ok"`
+	// Raw floats are for the model to REASON about (trend commentary); the
+	// *_token placeholders are what it places in the letter text. The relay
+	// substitutes them with the fetched display strings mechanically, so the
+	// model never transcribes a digit (2026-07-07: usd_krw 1530.98 became
+	// "1,331원" when the LLM reformatted the float itself).
+	USDKRW      float64 `json:"usd_krw,omitempty"`
+	USDKRWToken string  `json:"usd_krw_token,omitempty"`
+	EURKRW      float64 `json:"eur_krw,omitempty"`
+	EURKRWToken string  `json:"eur_krw_token,omitempty"`
+	Error       string  `json:"error,omitempty"`
 }
 
 type copperData struct {
 	OK          bool    `json:"ok"`
 	PricePerTon float64 `json:"price_per_ton_usd,omitempty"` // USD/metric ton
+	Token       string  `json:"token,omitempty"`             // placeholder for the letter — see exchangeData
+	Display     string  `json:"-"`                           // substitution value ("13,786"), recorded by fetchCopper
 	Date        string  `json:"date,omitempty"`
 	Error       string  `json:"error,omitempty"`
 }
@@ -329,11 +342,22 @@ func fetchExchangeRates(ctx context.Context) any {
 		return exchangeData{Error: "KRW rate not found"}
 	}
 
-	d := exchangeData{OK: true, USDKRW: krw}
+	d := exchangeData{OK: true, USDKRW: krw, USDKRWToken: market.LetterTokenUSDKRW}
+	tokens := map[string]string{market.LetterTokenUSDKRW: formatGroupedInt(krw)}
 	if eurRate, ok := raw.Rates["EUR"]; ok && eurRate > 0 {
 		d.EURKRW = krw / eurRate
+		d.EURKRWToken = market.LetterTokenEURKRW
+		tokens[market.LetterTokenEURKRW] = formatGroupedInt(d.EURKRW)
 	}
+	market.RecordLetterTokens(tokens)
 	return d
+}
+
+// formatGroupedInt renders the bare grouped number the relay substitutes for a
+// letter token ("1,531"). Digits only — units stay in the model's own prose
+// ("달러당 {{market:usd_krw}}원"), so the substitution can never double them.
+func formatGroupedInt(v float64) string {
+	return groupThousands(fmt.Sprintf("%.0f", v))
 }
 
 // fetchCopper fetches the COMEX copper futures price (HG=F) from Yahoo Finance
@@ -360,7 +384,11 @@ func fetchCopper(ctx context.Context) any {
 	if err != nil {
 		return copperData{Error: "read error"}
 	}
-	return parseYahooCopper(body)
+	d := parseYahooCopper(body)
+	if d.OK && d.Display != "" {
+		market.RecordLetterTokens(map[string]string{market.LetterTokenCopper: d.Display})
+	}
+	return d
 }
 
 // parseYahooCopper extracts the latest price from a Yahoo Finance chart response
@@ -395,7 +423,9 @@ func parseYahooCopper(body []byte) copperData {
 	out := copperData{
 		OK:          true,
 		PricePerTon: meta.RegularMarketPrice * poundsPerTon,
+		Token:       market.LetterTokenCopper,
 	}
+	out.Display = groupThousands(fmt.Sprintf("%.0f", out.PricePerTon))
 	if meta.RegularMarketTime > 0 {
 		out.Date = time.Unix(meta.RegularMarketTime, 0).In(kstLocation).Format("2006-01-02")
 	}

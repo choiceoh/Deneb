@@ -56,6 +56,14 @@ func formatQuotePrice(v float64) string {
 	intPart, frac := s[:dot], s[dot:]
 	neg := strings.HasPrefix(intPart, "-")
 	intPart = strings.TrimPrefix(intPart, "-")
+	if neg {
+		return "-" + groupThousands(intPart) + frac
+	}
+	return groupThousands(intPart) + frac
+}
+
+// groupThousands inserts comma separators into a non-negative integer string.
+func groupThousands(intPart string) string {
 	var out []byte
 	for i, c := range []byte(intPart) {
 		if i > 0 && (len(intPart)-i)%3 == 0 {
@@ -63,8 +71,5 @@ func formatQuotePrice(v float64) string {
 		}
 		out = append(out, c)
 	}
-	if neg {
-		return "-" + string(out) + frac
-	}
-	return string(out) + frac
+	return string(out)
 }

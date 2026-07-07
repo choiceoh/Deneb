@@ -11,6 +11,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/autonomous"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/market"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/nativesync"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/push"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
@@ -215,6 +216,11 @@ func (d proactiveRelayDeps) relayNativeToOptions(sessionKey, content string, opt
 		d.logProactive("suppressed", "silent_token", origLen, "")
 		return false, nil
 	}
+	// Market tokens ("{{market:usd_krw}}") → the display strings the letter
+	// tool fetched. Mechanical substitution: the model never writes the digits
+	// itself (see market.SubstituteLetterTokens). Before the card/push/summary
+	// derivations below so every delivered surface shows real values.
+	content = market.SubstituteLetterTokens(content)
 	// Drop the model's leading working-narration preamble — "전체 맥락 파악됐습니다.
 	// 분석 결과 정리합니다." (then "---" then the actual report) — before it reaches
 	// the work-feed card title/summary, the client:main transcript, or the push.

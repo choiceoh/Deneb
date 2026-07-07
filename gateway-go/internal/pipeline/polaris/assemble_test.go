@@ -5,8 +5,10 @@ import (
 	"log/slog"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
@@ -169,6 +171,58 @@ func TestAssembleContextFull_TokenBudgetTrimsOldestSummaries(t *testing.T) {
 	// Recent messages should survive even with tight budget.
 	if len(result.Messages) == 0 {
 		t.Fatal("expected at least some messages")
+	}
+}
+
+// blockMsg builds a ChatMessage whose Content is a raw content-block array.
+func blockMsg(role, blocksJSON string, ts int64) toolctx.ChatMessage {
+	return toolctx.ChatMessage{Role: role, Content: json.RawMessage(blocksJSON), Timestamp: ts}
+}
+
+func TestAssembleContextFull_RepairsDanglingToolUse(t *testing.T) {
+	store := testAssembleStore(t)
+
+	// An interrupted turn: the assistant's tool_use persisted but its
+	// tool_result never landed (client abort / hotswap mid-turn). A fresh
+	// session (no summaries → the as-is return path) must not ship the orphan —
+	// strict OpenAI-compatible providers 400 the whole request on every
+	// subsequent turn, wedging the session.
+	store.AppendMessage("s1", textMsg("user", "질문", 1000))
+	store.AppendMessage("s1", blockMsg("assistant",
+		`[{"type":"tool_use","id":"web:0","name":"web","input":{}}]`, 2000))
+	store.AppendMessage("s1", textMsg("user", "다시 질문", 3000))
+
+	result := testutil.Must(assembleContextFull(store, "s1", 30_000, 48, slog.Default()))
+	if len(result.Messages) != 3 {
+		t.Fatalf("got %d, want 3 messages", len(result.Messages))
+	}
+	repaired := string(result.Messages[1].Content)
+	if strings.Contains(repaired, "tool_use") {
+		t.Fatalf("dangling tool_use survived assembly: %s", repaired)
+	}
+}
+
+func TestAssembleContextFull_RepairsOrphanToolResultAfterSummary(t *testing.T) {
+	store := testAssembleStore(t)
+
+	for i := 0; i < 10; i++ {
+		store.AppendMessage("s1", textMsg("user", "old", int64(i*1000)))
+	}
+	store.InsertSummary(SummaryNode{
+		SessionKey: "s1", Level: 1, Content: "summary 0-9",
+		TokenEst: 30, CreatedAt: 1000, MsgStart: 0, MsgEnd: 9,
+	})
+	// The recent window opens on a tool_result whose tool_use was summarized
+	// away — the summaries return path must stub it, not ship it.
+	store.AppendMessage("s1", blockMsg("user",
+		`[{"type":"tool_result","tool_use_id":"web:9","content":"r"}]`, 11_000))
+	store.AppendMessage("s1", textMsg("assistant", "답변", 12_000))
+
+	result := testutil.Must(assembleContextFull(store, "s1", 30_000, 48, slog.Default()))
+	for _, msg := range result.Messages {
+		if strings.Contains(string(msg.Content), "tool_result") {
+			t.Fatalf("orphan tool_result survived assembly: %s", string(msg.Content))
+		}
 	}
 }
 
