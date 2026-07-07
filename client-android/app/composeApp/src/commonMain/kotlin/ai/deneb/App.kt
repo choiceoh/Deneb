@@ -831,6 +831,7 @@ private fun AppContent(
                                                 client = client,
                                                 onBack = { navController.navigateUp() },
                                                 navigationTabBar = if (showTabBar) navigationTabBar else null,
+                                                onOpenPersonWiki = { path -> navController.navigate(DenebWiki(path)) },
                                             )
                                         }
                                     }

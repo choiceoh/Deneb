@@ -13,6 +13,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/notebook"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/org"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/streaming"
 	compact "github.com/choiceoh/deneb/gateway-go/internal/pipeline/compaction"
@@ -116,6 +117,10 @@ type MemoryDeps struct {
 	// the recall preflight (recall degrades to the other backends when nil).
 	// Injected by the server closing over the shared file semantic index.
 	FileRecall FileRecallFunc
+	// Org loads the operator's org chart (조직도) for the recall preflight's org
+	// source (org members/divisions named in a turn → their 부서 + 인물 page).
+	// Injected by the server as org.Load; nil disables the org recall source.
+	Org func() (org.OrgTree, error)
 	// Embedding is the embedding client (BGE-M3) for the MMR compaction
 	// fallback tier.
 	Embedding compact.Embedder

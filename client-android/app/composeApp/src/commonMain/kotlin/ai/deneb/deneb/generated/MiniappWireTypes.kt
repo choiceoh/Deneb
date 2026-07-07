@@ -282,6 +282,7 @@ data class MemberOut(
     val position: String = "",
     val phones: List<String> = emptyList(),
     val emails: List<String> = emptyList(),
+    val personPath: String = "",
 )
 
 @Immutable

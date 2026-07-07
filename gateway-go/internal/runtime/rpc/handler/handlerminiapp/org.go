@@ -58,6 +58,12 @@ type OrgDeps struct {
 	// the two are never written back into org.json. A nil LookupContact (no
 	// contacts store) simply disables enrichment; the editor still works.
 	LookupContact func(name string) (phones, emails []string)
+	// ResolvePeople maps member display names to their 인물 wiki page relPaths in
+	// one call (one disk scan for the whole chart), so the GET response can link
+	// each member to their knowledge page. Read-only, GET-only, never persisted.
+	// A nil ResolvePeople (no wiki store) disables the person link; the editor
+	// still works.
+	ResolvePeople func(names []string) map[string]string
 }
 
 // MemberOut is the wire shape for one person in a node: their name plus the
@@ -80,6 +86,12 @@ type MemberOut struct {
 	Position string   `json:"position,omitempty"`
 	Phones   []string `json:"phones,omitempty"`
 	Emails   []string `json:"emails,omitempty"`
+	// PersonPath is the member's 인물 wiki page relPath (e.g.
+	// "인물/오선택-전무-(기획조정실장).md"), resolved at GET time by name-matching
+	// against the wiki so the native chart can open the person's knowledge page.
+	// Empty when the member has no wiki page. Like Phones/Emails it is GET-only
+	// enrichment — membersFromWire drops it, so org.save never persists it.
+	PersonPath string `json:"personPath,omitempty"`
 }
 
 // OrgNodeOut is the wire shape for one chart node. It mirrors org.OrgNode field-
@@ -144,7 +156,13 @@ func orgGet(deps OrgDeps) rpcutil.HandlerFunc {
 		if err != nil {
 			return rpcerr.WrapUnavailable("org chart unavailable", err).Response(req.ID)
 		}
-		return rpcutil.RespondOK(req.ID, projectOrgTree(tree, deps.LookupContact))
+		// Resolve every member's 인물 page in one batch (one disk scan) so
+		// membersToWire can attach the person link without a per-member lookup.
+		var personPaths map[string]string
+		if deps.ResolvePeople != nil {
+			personPaths = deps.ResolvePeople(allMemberNames(tree))
+		}
+		return rpcutil.RespondOK(req.ID, projectOrgTree(tree, deps.LookupContact, personPaths))
 	}
 }
 
@@ -191,7 +209,7 @@ func orgSave(deps OrgDeps) rpcutil.HandlerFunc {
 // stays free of //deneb:wire and the handler owns the wire contract); members
 // are additionally enriched with contact phones/emails via lookup (nil lookup =
 // no enrichment).
-func projectOrgTree(t org.OrgTree, lookup func(name string) (phones, emails []string)) OrgTreeOut {
+func projectOrgTree(t org.OrgTree, lookup func(name string) (phones, emails []string), personPaths map[string]string) OrgTreeOut {
 	out := OrgTreeOut{Nodes: make([]OrgNodeOut, 0, len(t.Nodes))}
 	for _, n := range t.Nodes {
 		out.Nodes = append(out.Nodes, OrgNodeOut{
@@ -200,7 +218,7 @@ func projectOrgTree(t org.OrgTree, lookup func(name string) (phones, emails []st
 			Type:      n.Type,
 			ParentID:  n.ParentID,
 			Lane:      n.Lane,
-			Members:   membersToWire(n.Members, lookup),
+			Members:   membersToWire(n.Members, lookup, personPaths),
 			Keywords:  n.Keywords,
 			Companies: n.Companies,
 		})
@@ -208,12 +226,24 @@ func projectOrgTree(t org.OrgTree, lookup func(name string) (phones, emails []st
 	return out
 }
 
+// allMemberNames flattens every member name in the tree for a single batch
+// person-path resolution.
+func allMemberNames(t org.OrgTree) []string {
+	var names []string
+	for _, n := range t.Nodes {
+		for _, m := range n.Members {
+			names = append(names, m.Name)
+		}
+	}
+	return names
+}
+
 // membersToWire maps domain members to their wire shape (nil stays nil so an
 // empty member list omits the JSON field). When lookup is non-nil, each member's
 // name is matched against the contacts store and the resulting phones/emails are
 // attached (read-only enrichment — never persisted; see MemberOut). A nil lookup
 // (no contacts store wired) leaves phones/emails empty.
-func membersToWire(ms []org.Member, lookup func(name string) (phones, emails []string)) []MemberOut {
+func membersToWire(ms []org.Member, lookup func(name string) (phones, emails []string), personPaths map[string]string) []MemberOut {
 	if ms == nil {
 		return nil
 	}
@@ -222,6 +252,9 @@ func membersToWire(ms []org.Member, lookup func(name string) (phones, emails []s
 		mo := MemberOut{Name: m.Name, Rank: m.Rank, Position: m.Position}
 		if lookup != nil {
 			mo.Phones, mo.Emails = lookup(m.Name)
+		}
+		if personPaths != nil {
+			mo.PersonPath = personPaths[m.Name]
 		}
 		out = append(out, mo)
 	}

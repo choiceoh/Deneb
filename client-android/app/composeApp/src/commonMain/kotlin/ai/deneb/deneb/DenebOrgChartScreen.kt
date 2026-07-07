@@ -35,6 +35,7 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Article
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
@@ -116,6 +117,7 @@ fun DenebOrgChartScreen(
     client: DenebGatewayClient,
     onBack: () -> Unit,
     navigationTabBar: (@Composable () -> Unit)? = null,
+    onOpenPersonWiki: (String) -> Unit = {}, // open a searched member's 인물 wiki page
 ) {
     // The working tree (mutated by edits) and the baseline loaded from the gateway
     // (for the dirty check + the save target). null baseline = not loaded yet.
@@ -261,6 +263,7 @@ fun DenebOrgChartScreen(
                             nodes = nodes + node
                             editingId = node.id
                         },
+                        onOpenPersonWiki = onOpenPersonWiki,
                     )
             }
         }
@@ -411,6 +414,7 @@ internal fun OrgChartContent(
     onAddRoot: () -> Unit,
     editMode: Boolean = false, // false = read-only view (default); true reveals edit affordances
     initialQuery: String = "", // seeds the search box (for the render harness; "" at runtime)
+    onOpenPersonWiki: (String) -> Unit = {}, // open a searched member's 인물 page (no-op for previews)
 ) {
     // Group children by parent once so render is O(n) not O(n^2).
     val childrenOf = remember(nodes) { nodes.groupBy { it.parentId } }
@@ -451,7 +455,7 @@ internal fun OrgChartContent(
         // Search results strip: each matching member as a tappable chip ("이름 · 노드").
         // Tapping reveals (expands ancestors of) that node. 겸직 shows once per node.
         if (query.isNotBlank()) {
-            OrgSearchResults(hits = hits, onPick = { hit -> revealNode(hit.node) })
+            OrgSearchResults(hits = hits, onPick = { hit -> revealNode(hit.node) }, onOpenWiki = onOpenPersonWiki)
         }
 
         // The chart as an indented list: each node is a row indented by its depth, so the
@@ -761,6 +765,7 @@ private fun OrgSearchBar(
 private fun OrgSearchResults(
     hits: List<OrgSearchHit>,
     onPick: (OrgSearchHit) -> Unit,
+    onOpenWiki: (String) -> Unit,
 ) {
     if (hits.isEmpty()) return
     Row(
@@ -789,10 +794,15 @@ private fun OrgSearchResults(
                     }
                     Text(label, style = DenebType.rowSubtitle, color = MaterialTheme.colorScheme.onBackground, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
-                // Inline call/email shortcuts when the gateway enriched this member with
-                // contact info — search is people-centric, so let the operator reach the
-                // person straight from the result (no need to open the editor first).
-                OrgContactActions(member = hit.member, glyphSize = 18.dp, leadingGap = 2.dp)
+                // Inline call/email + 위키 shortcuts when the gateway enriched this member
+                // — search is people-centric, so let the operator reach the person (or open
+                // their 인물 knowledge page) straight from the result, no editor detour.
+                OrgContactActions(
+                    member = hit.member,
+                    glyphSize = 18.dp,
+                    leadingGap = 2.dp,
+                    onOpenWiki = { onOpenWiki(hit.member.personPath) },
+                )
             }
         }
     }
@@ -818,10 +828,15 @@ internal fun OrgContactActions(
     member: MemberOut,
     glyphSize: Dp,
     leadingGap: Dp,
+    onOpenWiki: (() -> Unit)? = null,
 ) {
     val phone = member.phones.firstOrNull { it.isNotBlank() }
     val email = member.emails.firstOrNull { it.isNotBlank() }
-    if (phone == null && email == null) return
+    // The wiki glyph appears only when the gateway resolved this member to a 인물
+    // page (personPath) AND the caller wired navigation — the search strip does,
+    // the editor does not (navigating away mid-edit would be jarring).
+    val wikiOpen = onOpenWiki?.takeIf { member.personPath.isNotBlank() }
+    if (phone == null && email == null && wikiOpen == null) return
 
     val uriHandler = LocalUriHandler.current
     val accent = MaterialTheme.colorScheme.primary
@@ -842,6 +857,14 @@ internal fun OrgContactActions(
             modifier = Modifier.size(buttonSize),
         ) {
             Icon(Icons.Outlined.MailOutline, contentDescription = "메일 $email", tint = accent, modifier = Modifier.size(glyphSize))
+        }
+    }
+    if (wikiOpen != null) {
+        IconButton(
+            onClick = wikiOpen,
+            modifier = Modifier.size(buttonSize),
+        ) {
+            Icon(Icons.Outlined.Article, contentDescription = "${member.name} 위키 열기", tint = accent, modifier = Modifier.size(glyphSize))
         }
     }
 }
