@@ -1,5 +1,6 @@
 package ai.deneb.ui.chat.composables
 
+import ai.deneb.ui.DenebMotion
 import ai.deneb.ui.denebSpatialSpring
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
@@ -192,8 +193,11 @@ internal fun PulsingStatusIndicator(
             AnimatedContent(
                 targetState = index,
                 transitionSpec = {
-                    (fadeIn(tween(300)) togetherWith fadeOut(tween(300)))
-                        .using(SizeTransform(clip = false) { _, _ -> tween(300) })
+                    (
+                        fadeIn(tween(DenebMotion.DurationMedium, easing = DenebMotion.emphasizedDecelerate))
+                            togetherWith fadeOut(tween(DenebMotion.DurationMedium, easing = DenebMotion.emphasizedAccelerate))
+                        )
+                        .using(SizeTransform(clip = false) { _, _ -> tween(DenebMotion.DurationMedium, easing = DenebMotion.emphasized) })
                 },
             ) { targetIndex ->
                 Text(

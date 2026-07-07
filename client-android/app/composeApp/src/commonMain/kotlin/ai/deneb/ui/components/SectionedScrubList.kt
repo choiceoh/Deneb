@@ -128,7 +128,8 @@ private fun SectionHeader(key: String) {
         key,
         style = DenebType.sectionLabel,
         color = denebHint(),
-        modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 10.dp, bottom = 2.dp),
+        // 24dp start aligns the section letter with the rows' standard content inset.
+        modifier = Modifier.padding(start = 24.dp, end = 20.dp, top = 10.dp, bottom = 2.dp),
     )
 }
 

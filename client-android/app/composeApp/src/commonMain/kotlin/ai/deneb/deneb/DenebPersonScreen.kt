@@ -7,6 +7,7 @@ import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHint
 import ai.deneb.ui.denebInsight
 import ai.deneb.ui.denebInsightContainer
+import ai.deneb.ui.denebSharedBounds
 import ai.deneb.ui.markdown.MarkdownContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -94,6 +95,7 @@ fun DenebPersonScreen(
                 c.displayName,
                 style = DenebType.subject,
                 color = MaterialTheme.colorScheme.onBackground,
+                modifier = Modifier.denebSharedBounds("person-name-$sender"),
             )
             if (c.email.isNotBlank()) {
                 Text(c.email, style = DenebType.rowSubtitle, color = denebHint())

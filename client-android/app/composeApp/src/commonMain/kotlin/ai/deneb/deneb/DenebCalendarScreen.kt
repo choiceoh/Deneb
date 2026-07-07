@@ -7,6 +7,8 @@ import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
 import ai.deneb.ui.denebInsight
+import ai.deneb.ui.denebPressable
+import ai.deneb.ui.denebSharedBounds
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -537,10 +539,10 @@ internal fun CalendarDayList(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable {
+                    .denebPressable(onClick = {
                         haptics.tap()
                         onOpen(event.id)
-                    }
+                    })
                     .padding(vertical = 12.dp),
                 verticalAlignment = Alignment.Top,
             ) {
@@ -557,6 +559,7 @@ internal fun CalendarDayList(
                         color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.denebSharedBounds("calendar-title-${event.id}"),
                     )
                     if (event.location.isNotBlank()) {
                         Text(
