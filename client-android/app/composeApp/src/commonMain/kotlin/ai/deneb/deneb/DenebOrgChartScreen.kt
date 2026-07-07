@@ -194,6 +194,7 @@ fun DenebOrgChartScreen(
                 // A refresh discards uncommitted edits, so guard it: silently re-fetch
                 // only when clean (a dirty refresh would surprise-drop edits).
                 if (!dirty) {
+                    haptics.refresh()
                     scope.launch {
                         refreshing = true
                         load()

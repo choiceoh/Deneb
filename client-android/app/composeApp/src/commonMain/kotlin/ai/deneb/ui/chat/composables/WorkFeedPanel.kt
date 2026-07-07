@@ -154,12 +154,9 @@ internal fun WorkFeedRow(
             haptics.tap()
             onOpen(item.id)
         },
-        onLongClick = onLongAction?.let {
-            {
-                haptics.longPress()
-                it(item)
-            }
-        },
+        // No manual longPress() here — combinedClickable under DenebRow already
+        // fires the long-press haptic (foundation 1.9+); doubling reads as a stutter.
+        onLongClick = onLongAction?.let { { it(item) } },
         modifier = Modifier.padding(horizontal = 12.dp),
     ) {
         Row(verticalAlignment = Alignment.Top) {

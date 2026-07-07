@@ -339,7 +339,8 @@ internal fun TodoAddContent(
         Spacer(Modifier.height(8.dp))
         TextButton(
             onClick = {
-                haptics.longPress()
+                // Destructive commit → the reject buzz, not a long-press rumble.
+                haptics.reject()
                 onDelete()
             },
             enabled = !saving,
