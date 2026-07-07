@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// TestTierRoles_DefaultToLightweight verifies tiny/analysis fall back to the
+// TestTierRoles_DefaultToLightweight verifies tiny falls back to the
 // lightweight model when unconfigured — the prior single-tier behavior, so an
 // existing deployment is unchanged until it opts in.
 func TestTierRoles_DefaultToLightweight(t *testing.T) {
@@ -16,32 +16,25 @@ func TestTierRoles_DefaultToLightweight(t *testing.T) {
 	if got := reg.Model(RoleTiny); got != "light-model" {
 		t.Errorf("RoleTiny model = %q, want lightweight default %q", got, "light-model")
 	}
-	if got := reg.Model(RoleAnalysis); got != "light-model" {
-		t.Errorf("RoleAnalysis model = %q, want lightweight default %q", got, "light-model")
-	}
 }
 
-// TestTierRoles_ExplicitOverride verifies tiny/analysis use their own model when
+// TestTierRoles_ExplicitOverride verifies tiny uses its own model when
 // configured, independently of lightweight.
 func TestTierRoles_ExplicitOverride(t *testing.T) {
 	reg := NewRegistryWithOptions(slog.Default(), RegistryOptions{
 		MainModel:        "zai/glm-5-turbo",
 		LightweightModel: "vllm/light-model",
 		TinyModel:        "vllm/tiny-model",
-		AnalysisModel:    "vllm/analysis-model",
 	})
 	if got := reg.Model(RoleTiny); got != "tiny-model" {
 		t.Errorf("RoleTiny model = %q, want %q", got, "tiny-model")
-	}
-	if got := reg.Model(RoleAnalysis); got != "analysis-model" {
-		t.Errorf("RoleAnalysis model = %q, want %q", got, "analysis-model")
 	}
 	if got := reg.Model(RoleLightweight); got != "light-model" {
 		t.Errorf("RoleLightweight model = %q, want %q", got, "light-model")
 	}
 }
 
-// TestTierRoles_FallbackChains pins the tiny/analysis fallback ordering: each
+// TestTierRoles_FallbackChains pins the tiny fallback ordering: it
 // degrades to lightweight, then the shared fallback role.
 func TestTierRoles_FallbackChains(t *testing.T) {
 	reg := NewRegistry(slog.Default(), "zai/test", "gemma4")
@@ -50,7 +43,6 @@ func TestTierRoles_FallbackChains(t *testing.T) {
 		want []Role
 	}{
 		{RoleTiny, []Role{RoleTiny, RoleLightweight, RoleFallback}},
-		{RoleAnalysis, []Role{RoleAnalysis, RoleLightweight, RoleFallback}},
 	}
 	for _, c := range cases {
 		got := reg.FallbackChain(c.role)

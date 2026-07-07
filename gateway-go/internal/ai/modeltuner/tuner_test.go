@@ -34,7 +34,6 @@ func tunerRegistry() *modelrole.Registry {
 			LightweightModel: "zai/glm-5-turbo",
 			FallbackModel:    "zai/glm-5-turbo",
 			TinyModel:        "zai/glm-5-turbo",
-			AnalysisModel:    "zai/glm-5-turbo",
 		},
 	)
 }

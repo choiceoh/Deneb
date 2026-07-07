@@ -1,6 +1,6 @@
 // Package modelrole provides a centralized model role registry for the gateway.
 //
-// Model roles are defined (main, lightweight, tiny, analysis, coding, fallback, ...), each with
+// Model roles are defined (main, lightweight, tiny, coding, fallback, ...), each with
 // a provider, model name, base URL, and API type. Subsystems declare which ROLE
 // they need (e.g., "lightweight"); the registry resolves the concrete model
 // config and provides a cached LLM client.
@@ -30,7 +30,6 @@ const (
 	RoleMain        Role = "main"
 	RoleTiny        Role = "tiny"        // smallest model: trivial classification/extraction
 	RoleLightweight Role = "lightweight" // mid model: bounded summarization
-	RoleAnalysis    Role = "analysis"    // highest-quality local model: reasoning-grade tasks
 	// RoleCoding is the opt-in model used for code-writing/editing work such as
 	// implementer sub-agents and lifecycle-managed skill rewrites. It stays
 	// separate from RoleMain so a coding-specialized subscription/model can
@@ -112,7 +111,6 @@ type RegistryOptions struct {
 	LocalVllmModel   string // served model name for the local vLLM default
 	LightweightModel string // override for RoleLightweight; empty → local vLLM
 	TinyModel        string // override for RoleTiny; empty → same as lightweight
-	AnalysisModel    string // override for RoleAnalysis; empty → same as lightweight
 	// CodingModel overrides RoleCoding (code-writing/editing work). Empty → the
 	// role is absent and implementer sub-agents fall back to their normal default.
 	CodingModel   string // format: "provider/model"
@@ -260,16 +258,12 @@ func NewRegistryWithOptions(logger *slog.Logger, opts RegistryOptions) *Registry
 	if opts.FallbackModel != "" {
 		models[RoleFallback] = resolveModelConfig(opts.FallbackModel, opts.Providers)
 	}
-	// Tiny and Analysis default to the (possibly overridden) lightweight model so
-	// an unconfigured deployment behaves exactly as before; deneb.json opts in to
-	// a smaller tiny model and a higher-quality analysis model independently.
+	// Tiny defaults to the (possibly overridden) lightweight model so an
+	// unconfigured deployment behaves exactly as before; deneb.json opts in to
+	// a smaller tiny model independently.
 	models[RoleTiny] = models[RoleLightweight]
-	models[RoleAnalysis] = models[RoleLightweight]
 	if opts.TinyModel != "" {
 		models[RoleTiny] = resolveModelConfig(opts.TinyModel, opts.Providers)
-	}
-	if opts.AnalysisModel != "" {
-		models[RoleAnalysis] = resolveModelConfig(opts.AnalysisModel, opts.Providers)
 	}
 	if opts.CodingModel != "" {
 		models[RoleCoding] = resolveModelConfig(opts.CodingModel, opts.Providers)
@@ -295,7 +289,7 @@ func NewRegistryWithOptions(logger *slog.Logger, opts RegistryOptions) *Registry
 	// (empty) entry that would make the opt-in role look configured.
 	vllmWindows := make(map[string]int)
 	probedVllmURLs := make(map[string]bool)
-	reconcileRoles := []Role{RoleMain, RoleTiny, RoleLightweight, RoleAnalysis, RoleFallback}
+	reconcileRoles := []Role{RoleMain, RoleTiny, RoleLightweight, RoleFallback}
 	if _, ok := models[RoleCoding]; ok {
 		reconcileRoles = append(reconcileRoles, RoleCoding)
 	}
@@ -345,7 +339,6 @@ func NewRegistryWithOptions(logger *slog.Logger, opts RegistryOptions) *Registry
 		"main", logModelAlias(models[RoleMain]),
 		"tiny", logModelAlias(models[RoleTiny]),
 		"lightweight", logModelAlias(models[RoleLightweight]),
-		"analysis", logModelAlias(models[RoleAnalysis]),
 		"coding", logModelAlias(models[RoleCoding]),
 		"fallback", logModelAlias(models[RoleFallback]),
 	)
@@ -420,7 +413,7 @@ func (r *Registry) VllmBaseURLs() []string {
 	defer r.mu.RUnlock()
 	var out []string
 	seen := make(map[string]bool)
-	for _, role := range []Role{RoleMain, RoleAnalysis, RoleCoding, RoleLightweight, RoleTiny, RoleFallback} {
+	for _, role := range []Role{RoleMain, RoleCoding, RoleLightweight, RoleTiny, RoleFallback} {
 		cfg, ok := r.models[role]
 		if !ok || cfg.ProviderID != "vllm" || cfg.BaseURL == "" || seen[cfg.BaseURL] {
 			continue
@@ -520,7 +513,7 @@ func (r *Registry) ClientForProvider(providerID string) *llm.Client {
 // This allows callers to accept either role names or raw model names.
 func (r *Registry) ResolveModel(modelOrRole string) (fullModelID string, role Role, ok bool) {
 	switch Role(modelOrRole) {
-	case RoleMain, RoleTiny, RoleLightweight, RoleAnalysis, RoleFallback:
+	case RoleMain, RoleTiny, RoleLightweight, RoleFallback:
 		role = Role(modelOrRole)
 		return r.FullModelID(role), role, true
 	case RoleCoding:
@@ -537,11 +530,11 @@ func (r *Registry) ResolveModel(modelOrRole string) (fullModelID string, role Ro
 func (r *Registry) RoleForModel(fullModelID string) (Role, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	// Lightweight precedes tiny/analysis so a deployment that leaves them at the
+	// Lightweight precedes tiny so a deployment that leaves tiny at the
 	// lightweight default maps that shared model back to the lightweight role
-	// (preserving prior behavior); an explicitly configured tiny/analysis model
+	// (preserving prior behavior); an explicitly configured tiny model
 	// still matches its own role.
-	for _, role := range []Role{RoleMain, RoleCoding, RoleLightweight, RoleTiny, RoleAnalysis, RoleFallback, RoleChatbot, RoleVision} {
+	for _, role := range []Role{RoleMain, RoleCoding, RoleLightweight, RoleTiny, RoleFallback, RoleChatbot, RoleVision} {
 		cfg, ok := r.models[role]
 		if !ok {
 			continue
@@ -567,8 +560,6 @@ func (r *Registry) FallbackChain(role Role) []Role {
 		return []Role{RoleTiny, RoleLightweight, RoleFallback}
 	case RoleLightweight:
 		return []Role{RoleLightweight, RoleFallback}
-	case RoleAnalysis:
-		return []Role{RoleAnalysis, RoleLightweight, RoleFallback}
 	case RoleCoding:
 		// Code edits are quality-sensitive and tool-heavy. If the dedicated
 		// coding role fails, degrade to the general main model before the shared
@@ -625,7 +616,7 @@ func (r *Registry) SetRoleModelID(role Role, modelID string) ModelConfig {
 
 // ClearRole removes a role's explicit model so it reverts to its default
 // resolution. Used when the model a role pointed at is deleted. The always-on
-// roles (main/lightweight/fallback/tiny/analysis) are reset via SetRoleModelID
+// roles (main/lightweight/fallback/tiny) are reset via SetRoleModelID
 // instead; this is for opt-in roles like RoleChatbot/RoleCoding that should disappear —
 // and fall back to the main model — when left unconfigured.
 func (r *Registry) ClearRole(role Role) {

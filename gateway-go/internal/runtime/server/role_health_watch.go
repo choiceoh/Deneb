@@ -223,7 +223,7 @@ func (w *roleHealthWatch) collectTargets() []roleHealthTarget {
 	byProvider := make(map[string]*roleHealthTarget)
 	for _, role := range []modelrole.Role{
 		modelrole.RoleMain, modelrole.RoleTiny, modelrole.RoleLightweight,
-		modelrole.RoleAnalysis, modelrole.RoleCoding, modelrole.RoleFallback,
+		modelrole.RoleCoding, modelrole.RoleFallback,
 	} {
 		cfg := reg.Config(role)
 		if cfg.ProviderID == "" || cfg.BaseURL == "" || isLocalURL(cfg.BaseURL) {

@@ -14,10 +14,11 @@
 // Deliberately NOT an agent turn: the skill-review lesson (#3006 area) is that
 // text-role models never make tool calls, so this is a bounded pipeline —
 // deterministic gather → one JSON verdict call → deterministic apply.
-// Model role: analysis (operator's explicit 2026-07-02 call — a wrong "high"
+// Model role: main (operator's explicit 2026-07-02 quality call — a wrong "high"
 // verdict merges two real pages, so judgment quality beats the local-first
-// default; volume is tiny: at most one call per 2h cycle, zero when no
-// candidates). Fail-open: any error logs and skips the cycle.
+// default; the analysis role was retired 2026-07-07, so this quality intent now
+// lands on main, the strongest role. Volume is tiny: at most one call per 2h
+// cycle, zero when no candidates). Fail-open: any error logs and skips the cycle.
 //
 // Rollout safety: auto-merge starts OFF (observe mode) — verdicts are logged
 // and recorded in the state file so the operator can audit judgment quality,
@@ -36,6 +37,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/autonomous"
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/monitoring"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/pilot"
@@ -82,8 +84,8 @@ type wikiReviewTask struct {
 	// autoMerge arms the destructive step. Default false = observe mode:
 	// verdicts are logged + recorded, nothing is merged.
 	autoMerge bool
-	// llm is the verdict call, injectable for tests. Defaults to the analysis
-	// role (pilot.CallAnalysisLLM) — bounded JSON judgment, no tool calls.
+	// llm is the verdict call, injectable for tests. Defaults to the main
+	// role (pilot.CallRoleLLM(RoleMain)) — bounded JSON judgment, no tool calls.
 	llm func(ctx context.Context, system, user string, maxTokens int) (string, error)
 }
 
@@ -511,7 +513,7 @@ func (s *Server) registerWikiReviewTask(homeDir string) {
 			// budget and the JSON array never arrived (parse verdicts:
 			// invalid JSON ×8 in prod, 2026-07-04..06). A strict-JSON verdict
 			// needs no chain-of-thought.
-			return pilot.CallAnalysisLLM(ctx, system, user, maxTokens,
+			return pilot.CallRoleLLM(ctx, modelrole.RoleMain, system, user, maxTokens,
 				map[string]any{"temperature": 0, "reasoning_effort": "low"})
 		},
 	})
