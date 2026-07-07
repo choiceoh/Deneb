@@ -5,10 +5,12 @@
 package agent
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agentlog"
@@ -28,6 +30,39 @@ func executeOneTool(
 	runLog *agentlog.RunLogger,
 	loopDetector *ToolLoopDetector,
 ) llm.ContentBlock {
+	prep := prepareToolCall(tc, tools, hooks, turnReason, turn, logger, runLog, loopDetector)
+	if prep.done {
+		return prep.block
+	}
+	output, toolErr := runToolCore(ctx, tc, tools, hooks, logger, prep.start)
+	return finishToolCall(prep, tc, output, toolErr, tools, hooks, turn, logger, runLog, loopDetector)
+}
+
+// toolCallPrep is the strictly-ordered pre-execution outcome of one tool
+// call: either an already-final result block (loop-detector critical block or
+// before-hook veto — done=true, hooks and logs already emitted) or the
+// captured state the execution and finish stages need.
+type toolCallPrep struct {
+	done   bool
+	block  llm.ContentBlock
+	before []fileSnapshot
+	start  time.Time
+}
+
+// prepareToolCall runs the in-order pre-execution stage: start/emit hooks,
+// loop detection, the before-call veto hook, and the file-effect snapshot.
+// Both the sequential loop and executeToolsParallel call it in call order, so
+// loop-detection semantics (which are sequence-sensitive) never change.
+func prepareToolCall(
+	tc llm.ContentBlock,
+	tools ToolExecutor,
+	hooks StreamHooks,
+	turnReason string,
+	turn int,
+	logger *slog.Logger,
+	runLog *agentlog.RunLogger,
+	loopDetector *ToolLoopDetector,
+) toolCallPrep {
 	if hooks.OnToolStart != nil {
 		hooks.OnToolStart(tc.Name, turnReason, tc.Input)
 	}
@@ -54,7 +89,7 @@ func executeOneTool(
 					hooks.OnToolResult(tc.Name, tc.ID, loopResult.Message, true)
 				}
 				logToolExecution(runLog, turn, tc, result, time.Since(start), nil, "loop", false)
-				return result
+				return toolCallPrep{done: true, block: result, start: start}
 			}
 			// Warning level: inject the warning as a prefix but allow execution.
 			logger.Warn("tool loop warning",
@@ -76,13 +111,29 @@ func executeOneTool(
 				hooks.OnToolResult(tc.Name, tc.ID, reason, true)
 			}
 			logToolExecution(runLog, turn, tc, result, time.Since(start), nil, "hook", false)
-			return result
+			return toolCallPrep{done: true, block: result, start: start}
 		}
 	}
 
-	provenanceRoot := toolProvenanceRoot(tools)
-	beforeFiles := captureToolFileSnapshots(provenanceRoot, tc.Name, tc.Input)
+	return toolCallPrep{
+		before: captureToolFileSnapshots(toolProvenanceRoot(tools), tc.Name, tc.Input),
+		start:  start,
+	}
+}
 
+// runToolCore executes the tool fn under the progress heartbeat and a panic
+// recover. It is the only stage allowed to run CONCURRENTLY across a turn's
+// calls (executeToolsParallel): everything it touches is per-call or
+// mutex-guarded (the ToolRegistry wrapper's stats/cache/gate state, the
+// stream broadcaster behind OnToolProgress).
+func runToolCore(
+	ctx context.Context,
+	tc llm.ContentBlock,
+	tools ToolExecutor,
+	hooks StreamHooks,
+	logger *slog.Logger,
+	start time.Time,
+) (string, error) {
 	// Periodic tool-progress heartbeat: while this tool call is still running,
 	// fire OnToolProgress every toolHeartbeatInterval seconds so surface
 	// liveness indicators (client typing "...") stay alive during long
@@ -158,7 +209,26 @@ func executeOneTool(
 		<-hbStopped
 	}
 
-	elapsed := time.Since(start)
+	return toolOutput, toolErr
+}
+
+// finishToolCall runs the in-order post-execution stage: output fencing, file
+// effects, loop-detector result recording, the result hook, and the agent/
+// gateway log lines. Both execution paths call it in call order, so the
+// transcript, agent-log, and stream event ordering stay deterministic.
+func finishToolCall(
+	prep toolCallPrep,
+	tc llm.ContentBlock,
+	toolOutput string,
+	toolErr error,
+	tools ToolExecutor,
+	hooks StreamHooks,
+	turn int,
+	logger *slog.Logger,
+	runLog *agentlog.RunLogger,
+	loopDetector *ToolLoopDetector,
+) llm.ContentBlock {
+	elapsed := time.Since(prep.start)
 
 	block := llm.ContentBlock{
 		Type:      "tool_result",
@@ -170,7 +240,7 @@ func executeOneTool(
 	} else {
 		block.Content = fenceUntrustedToolOutput(tc.Name, toolOutput, logger)
 	}
-	fileEffects := buildToolFileEffects(beforeFiles, captureToolFileSnapshots(provenanceRoot, tc.Name, tc.Input))
+	fileEffects := buildToolFileEffects(prep.before, captureToolFileSnapshots(toolProvenanceRoot(tools), tc.Name, tc.Input))
 
 	// Record result hash for no-progress detection.
 	if loopDetector != nil {
@@ -207,6 +277,89 @@ func executeOneTool(
 		logger.Info("tool complete", logFields...)
 	}
 	return block
+}
+
+// parallelSafeTurn reports whether one turn's tool calls may execute
+// concurrently: at least two calls, every tool vetted by cfg.ParallelSafeTool
+// (read-only set, default-deny), and no call carrying $ref piping — a later
+// call waiting on an earlier call's result is exactly the cross-tool
+// dependency that keeps the sequential path authoritative.
+func parallelSafeTurn(cfg AgentConfig, calls []llm.ContentBlock) bool {
+	if cfg.ParallelSafeTool == nil || len(calls) < 2 {
+		return false
+	}
+	for _, tc := range calls {
+		if !cfg.ParallelSafeTool(tc.Name) || bytes.Contains(tc.Input, []byte(`"$ref"`)) {
+			return false
+		}
+	}
+	return true
+}
+
+// executeToolsParallel runs one turn's tool calls concurrently. Reached only
+// through parallelSafeTurn (all read-only, no $ref), so cross-tool side
+// effects cannot occur. Determinism is preserved by staging: loop-detector
+// checks and start hooks fire in call order BEFORE dispatch, executions
+// overlap, then result recording/hooks/logs replay in call order — the result
+// blocks the model sees, the transcript, and the agent-log are ordered
+// exactly as a sequential run of the same outcomes. Measured motivation
+// (2026-07-07, 3d of prod agent-logs): all-read-only multi-tool turns wasted
+// 124s of wall time on serial waits, web+web research turns 20-30s each.
+func executeToolsParallel(
+	ctx context.Context,
+	calls []llm.ContentBlock,
+	tools ToolExecutor,
+	hooks StreamHooks,
+	turnReason string,
+	turn int,
+	logger *slog.Logger,
+	runLog *agentlog.RunLogger,
+	loopDetector *ToolLoopDetector,
+) []llm.ContentBlock {
+	preps := make([]toolCallPrep, len(calls))
+	for i, tc := range calls {
+		preps[i] = prepareToolCall(tc, tools, hooks, turnReason, turn, logger, runLog, loopDetector)
+	}
+
+	outputs := make([]string, len(calls))
+	errs := make([]error, len(calls))
+	dispatched := make([]bool, len(calls))
+	var wg sync.WaitGroup
+	for i, tc := range calls {
+		if preps[i].done || ctx.Err() != nil {
+			continue
+		}
+		dispatched[i] = true
+		wg.Add(1)
+		go func(i int, tc llm.ContentBlock) {
+			defer wg.Done()
+			// runToolCore recovers tool-fn panics itself; this recover is the
+			// goroutine backstop so one broken call can't kill the process.
+			defer func() {
+				if r := recover(); r != nil {
+					errs[i] = fmt.Errorf("parallel tool goroutine panic: %v", r)
+					logger.Error("parallel tool goroutine panic", "name", tc.Name, "panic", r)
+				}
+			}()
+			outputs[i], errs[i] = runToolCore(ctx, tc, tools, hooks, logger, preps[i].start)
+		}(i, tc)
+	}
+	wg.Wait()
+
+	results := make([]llm.ContentBlock, len(calls))
+	for i, tc := range calls {
+		switch {
+		case preps[i].done:
+			results[i] = preps[i].block
+		case !dispatched[i]:
+			// ctx canceled before dispatch — leave the zero block; the caller's
+			// post-loop ctx check reports the interruption (same as the
+			// sequential path's break).
+		default:
+			results[i] = finishToolCall(preps[i], tc, outputs[i], errs[i], tools, hooks, turn, logger, runLog, loopDetector)
+		}
+	}
+	return results
 }
 
 // UntrustedToolOutputMarker is the opening token of the fence that

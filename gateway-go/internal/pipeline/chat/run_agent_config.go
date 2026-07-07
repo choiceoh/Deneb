@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -19,6 +20,20 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolpreset"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 )
+
+// parallelSafeToolVet returns the executor's parallel-turn vet backed by the
+// generated parallelSafeTools classification (tool_classification.json).
+// DENEB_PARALLEL_TOOLS=0 is the operator kill-switch: it returns nil, which
+// keeps every turn fully sequential.
+func parallelSafeToolVet() func(string) bool {
+	if os.Getenv("DENEB_PARALLEL_TOOLS") == "0" {
+		return nil
+	}
+	return func(name string) bool {
+		_, ok := parallelSafeTools[name]
+		return ok
+	}
+}
 
 type agentConfigDeps struct {
 	Tools            *ToolRegistry
@@ -280,6 +295,7 @@ func buildAgentConfig(
 		MaxOutputTokensScaleFactors: maxOutputScaleFactors,
 		SpawnDetected:               spawnFlag.IsSet,
 		ToolLoopDetector:            agent.NewToolLoopDetector(agent.DefaultToolLoopConfig(), logger),
+		ParallelSafeTool:            parallelSafeToolVet(),
 		// Per-turn message persistence: persist each assistant and tool_result
 		// message immediately to transcript so intermediate findings survive
 		// across runs (fixes the "short-term memory loss" bug). Wrapped below so

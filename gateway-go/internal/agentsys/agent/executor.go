@@ -507,8 +507,11 @@ func RunAgent(
 		}
 
 		// Execute tools sequentially in the order the LLM emitted them.
-		// Parallel tool execution has been removed — tools always run one at
-		// a time so cross-tool side effects are predictable.
+		// Tools run one at a time so cross-tool side effects stay predictable.
+		// The one exception is a turn whose EVERY call is read-only and
+		// $ref-free (parallelSafeTurn) — those execute concurrently with
+		// in-order staging, because by construction no call can observe or
+		// depend on another's effects.
 		var toolResults []llm.ContentBlock
 		// Per-path edit-thrash nudges produced this turn. The hash-based loop
 		// detector only catches identical name+args repeats; a run that issues
@@ -519,20 +522,27 @@ func RunAgent(
 		var editThrashNudges []string
 		if len(turnRes.toolCalls) > 0 {
 			turnReason := extractThinkingText(turnRes.contentBlocks)
-			provenanceRoot := toolProvenanceRoot(tools)
-			toolResults = make([]llm.ContentBlock, len(turnRes.toolCalls))
-			for i, tc := range turnRes.toolCalls {
-				if ctx.Err() != nil {
-					break
-				}
-				toolResults[i] = executeOneTool(ctx, tc, tools, hooks, turnReason, turn, logger, runLog, cfg.ToolLoopDetector)
+			if parallelSafeTurn(cfg, turnRes.toolCalls) {
+				// All calls read-only and $ref-free: execute concurrently.
+				// RecordFileMutation is skipped — the parallel-safe set cannot
+				// mutate files, so there is no thrash to count.
+				toolResults = executeToolsParallel(ctx, turnRes.toolCalls, tools, hooks, turnReason, turn, logger, runLog, cfg.ToolLoopDetector)
+			} else {
+				provenanceRoot := toolProvenanceRoot(tools)
+				toolResults = make([]llm.ContentBlock, len(turnRes.toolCalls))
+				for i, tc := range turnRes.toolCalls {
+					if ctx.Err() != nil {
+						break
+					}
+					toolResults[i] = executeOneTool(ctx, tc, tools, hooks, turnReason, turn, logger, runLog, cfg.ToolLoopDetector)
 
-				// Count this mutation toward the per-path thrash breaker, but
-				// only on success — a failed edit is not progress and must not
-				// push a file toward the nudge threshold.
-				if cfg.ToolLoopDetector != nil && !toolResults[i].IsError {
-					if nudge := cfg.ToolLoopDetector.RecordFileMutation(provenanceRoot, tc.Name, tc.Input); nudge != "" {
-						editThrashNudges = append(editThrashNudges, nudge)
+					// Count this mutation toward the per-path thrash breaker, but
+					// only on success — a failed edit is not progress and must not
+					// push a file toward the nudge threshold.
+					if cfg.ToolLoopDetector != nil && !toolResults[i].IsError {
+						if nudge := cfg.ToolLoopDetector.RecordFileMutation(provenanceRoot, tc.Name, tc.Input); nudge != "" {
+							editThrashNudges = append(editThrashNudges, nudge)
+						}
 					}
 				}
 			}
