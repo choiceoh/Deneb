@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.0.56](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.55...andromeda-v0.0.56) (2026-07-07)
+
+
+### 🐛 Bug Fixes
+
+* **andromeda:** deneb-ui 인라인 렌더러 링크 지원 — 네이티브 InlineTokenizer 패리티 ([#3266](https://github.com/choiceoh/Deneb/issues/3266)) ([12f8cdf](https://github.com/choiceoh/Deneb/commit/12f8cdf4f2c44508ea4aa03768d73d75d8c9cb74))
+* **native:** 렌더러 인라인 마크다운 전수 감사 — 표 셀·경보·인용 별표 수리 (3구현) ([#3264](https://github.com/choiceoh/Deneb/issues/3264)) ([229915b](https://github.com/choiceoh/Deneb/commit/229915bed9e2de30ab300504dfc8a240e4686489))
+* **native:** 리스트 키·타임라인 제목 인라인 마크다운 — **키** 리터럴 별표 수리 ([#3260](https://github.com/choiceoh/Deneb/issues/3260)) ([497b361](https://github.com/choiceoh/Deneb/commit/497b361fc140675bdf4c7e5c43d366097f50026e))
+* **native:** 슬라이더 역범위 크래시 가드 + 꺾은선 음수값 in-plot (3구현 감사 2라운드) ([#3265](https://github.com/choiceoh/Deneb/issues/3265)) ([9b5e8ba](https://github.com/choiceoh/Deneb/commit/9b5e8badd951f9e7fbbe40842268da16642cda00))
+
 ## [0.0.55](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.54...andromeda-v0.0.55) (2026-07-07)
 
 
