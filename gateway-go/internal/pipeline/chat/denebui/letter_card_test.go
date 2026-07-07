@@ -34,6 +34,7 @@ const morningLetterCardHTML = `<column>
   <card>
     <row><icon name="alarm" size="16"/><text style="caption">임박 마감</text></row>
     <row><text style="body">부가세 신고</text><badge color="warning">D-2</badge></row>
+    <row><text style="body">진코 선입금 상계</text><badge color="error">기한 초과</badge></row>
   </card>
 </column>`
 
@@ -103,6 +104,13 @@ func TestParseHTML_MorningLetterShape(t *testing.T) {
 	// preserves it, not just that the template validates (review catch).
 	if badge["color"] != "warning" {
 		t.Errorf("badge color = %v, want warning", badge["color"])
+	}
+	// Overdue rows carry the error tint (skeleton teaches by example — the
+	// 2026-07-07 live letter left 기한 초과 rows untinted).
+	overdueRow := deadline["children"].([]any)[2].(map[string]any)
+	overdue := overdueRow["children"].([]any)[1].(map[string]any)
+	if overdue["value"] != "기한 초과" || overdue["color"] != "error" {
+		t.Errorf("overdue badge = %v, want 기한 초과/error", overdue)
 	}
 }
 
