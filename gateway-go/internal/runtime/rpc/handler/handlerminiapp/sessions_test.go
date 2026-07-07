@@ -275,6 +275,18 @@ func TestSessionsDelete_MissingKey(t *testing.T) {
 	}
 }
 
+func TestSessionsDelete_InvalidKey(t *testing.T) {
+	resp := sessionsDelete(SessionsDeps{Manager: &fakeSessionsLister{}})(authedCtx(), reqWith(t, "miniapp.sessions.delete", map[string]any{
+		"sessionKey": "client:main/evil",
+	}))
+	if resp.OK {
+		t.Fatalf("expected validation error")
+	}
+	if resp.Error.Code != protocol.ErrValidationFailed {
+		t.Errorf("code = %s, want VALIDATION_FAILED", resp.Error.Code)
+	}
+}
+
 func TestSessionsDelete_RequiresAuth(t *testing.T) {
 	resp := sessionsDelete(SessionsDeps{Manager: &fakeSessionsLister{}})(context.Background(), reqWith(t, "miniapp.sessions.delete", map[string]any{
 		"sessionKey": "k",
@@ -500,6 +512,19 @@ func TestSessionsTranscript_MissingKey(t *testing.T) {
 	}
 	if resp.Error.Code != protocol.ErrMissingParam {
 		t.Errorf("code = %s, want MISSING_PARAM", resp.Error.Code)
+	}
+}
+
+func TestSessionsTranscript_InvalidKey(t *testing.T) {
+	h := sessionsTranscript(transcriptDeps(&fakeTranscriptLoader{}))
+	resp := h(authedCtx(), reqWith(t, "miniapp.sessions.transcript", map[string]any{
+		"sessionKey": "client:main/evil",
+	}))
+	if resp.OK {
+		t.Fatalf("expected validation error")
+	}
+	if resp.Error.Code != protocol.ErrValidationFailed {
+		t.Errorf("code = %s, want VALIDATION_FAILED", resp.Error.Code)
 	}
 }
 

@@ -2,6 +2,7 @@ package coresecurity
 
 import (
 	"errors"
+	"strings"
 	"unicode"
 )
 
@@ -24,6 +25,9 @@ func ValidateSessionKey(key string) error {
 		if unicode.IsControl(r) && r != '\n' && r != '\t' && r != '\r' {
 			return errors.New("coresecurity: invalid session key")
 		}
+	}
+	if strings.ContainsAny(key, `/\`) {
+		return errors.New("coresecurity: invalid session key")
 	}
 	return nil
 }

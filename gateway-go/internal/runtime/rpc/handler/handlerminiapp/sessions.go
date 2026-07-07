@@ -16,6 +16,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/core/coresecurity"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
@@ -141,6 +142,11 @@ func sessionsTranscript(deps SessionsDeps) rpcutil.HandlerFunc {
 		key := strings.TrimSpace(p.SessionKey)
 		if key == "" {
 			return rpcerr.MissingParam("sessionKey").Response(req.ID)
+		}
+		if err := coresecurity.ValidateSessionKey(key); err != nil {
+			return rpcerr.New(protocol.ErrValidationFailed, "invalid session key").
+				WithSession(key).
+				Response(req.ID)
 		}
 		limit := p.Limit
 		if limit <= 0 {
@@ -345,6 +351,11 @@ func sessionsDelete(deps SessionsDeps) rpcutil.HandlerFunc {
 		key := strings.TrimSpace(p.SessionKey)
 		if key == "" {
 			return rpcerr.MissingParam("sessionKey").Response(req.ID)
+		}
+		if err := coresecurity.ValidateSessionKey(key); err != nil {
+			return rpcerr.New(protocol.ErrValidationFailed, "invalid session key").
+				WithSession(key).
+				Response(req.ID)
 		}
 
 		if s := deps.Manager.Get(key); s != nil && s.Status == session.StatusRunning && !p.Force {

@@ -5,6 +5,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpctest"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
+	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
 var callMethod = rpctest.Call
@@ -62,5 +63,18 @@ func TestSessionsDelete_RemovesTranscript(t *testing.T) {
 	}
 	if len(tr.deleted) != 1 || tr.deleted[0] != "client:main:abc" {
 		t.Errorf("transcript not deleted: %v", tr.deleted)
+	}
+}
+
+func TestSessionsDelete_InvalidKey(t *testing.T) {
+	m := CRUDMethods(Deps{
+		Sessions: session.NewManager(),
+	})
+	resp := callMethod(m, "sessions.delete", map[string]any{"key": "client:main/evil"})
+	if resp == nil || resp.Error == nil {
+		t.Fatal("expected validation error")
+	}
+	if resp.Error.Code != protocol.ErrValidationFailed {
+		t.Fatalf("code = %s, want VALIDATION_FAILED", resp.Error.Code)
 	}
 }

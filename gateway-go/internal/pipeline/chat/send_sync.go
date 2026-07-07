@@ -6,14 +6,14 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/choiceoh/deneb/gateway-go/pkg/dentime"
-
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
+	"github.com/choiceoh/deneb/gateway-go/internal/core/coresecurity"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/market"
 	"github.com/choiceoh/deneb/gateway-go/internal/hanja"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/shortid"
+	"github.com/choiceoh/deneb/gateway-go/pkg/dentime"
 )
 
 // SyncResult holds the outcome of a synchronous agent run.
@@ -287,6 +287,9 @@ func (h *Handler) buildSyncResult(model string, result *chatRunResult) (*SyncRes
 // complete or the context is canceled. Used by the OpenAI-compatible HTTP
 // endpoints and the native client's miniapp.chat.send.
 func (h *Handler) SendSync(ctx context.Context, sessionKey, message, model string, opts *SyncOptions) (*SyncResult, error) {
+	if err := coresecurity.ValidateSessionKey(sessionKey); err != nil {
+		return nil, fmt.Errorf("invalid session key")
+	}
 	if res, handled := h.trySlashSync(sessionKey, message, opts); handled {
 		return res, nil
 	}
@@ -423,6 +426,9 @@ func (h *Handler) trySlashSync(sessionKey, message string, opts *SyncOptions) (*
 // then returning the final result. Used by streaming OpenAI-compatible
 // endpoints and the native client's miniapp.chat.stream.
 func (h *Handler) SendSyncStream(ctx context.Context, sessionKey, message, model string, opts *SyncOptions, onDelta func(string)) (*SyncResult, error) {
+	if err := coresecurity.ValidateSessionKey(sessionKey); err != nil {
+		return nil, fmt.Errorf("invalid session key")
+	}
 	if res, handled := h.trySlashSync(sessionKey, message, opts); handled {
 		if onDelta != nil && res.Text != "" {
 			onDelta(res.Text)

@@ -44,6 +44,21 @@ func TestChatSend_MissingMessage(t *testing.T) {
 	}
 }
 
+func TestChatSend_InvalidSessionKey(t *testing.T) {
+	h := newTestHandler()
+	req := makeReq("1", "chat.send", map[string]string{
+		"sessionKey": "client:main/evil",
+		"message":    "hi",
+	})
+	resp := h.Send(context.Background(), req)
+	if resp.OK {
+		t.Fatal("expected validation error for invalid sessionKey")
+	}
+	if resp.Error == nil || resp.Error.Code != protocol.ErrValidationFailed {
+		t.Fatalf("code = %v, want VALIDATION_FAILED", resp.Error)
+	}
+}
+
 func TestChatSend_AsyncOK(t *testing.T) {
 	// With native agent execution, Send starts an async run and returns immediately.
 	sessions := session.NewManager()
@@ -125,6 +140,28 @@ func TestSessionsSend_AsyncStart(t *testing.T) {
 	}
 	if payload["runId"] != "idem-1" {
 		t.Errorf("got %v, want runId=idem-1", payload["runId"])
+	}
+}
+
+func TestSessionsSend_InvalidSessionKey(t *testing.T) {
+	h := newTestHandler()
+	req := makeReq("1", "sessions.send", map[string]any{
+		"key":     "client:main/evil",
+		"message": "hello",
+	})
+	resp := h.SessionsSend(context.Background(), req)
+	if resp.OK {
+		t.Fatal("expected validation error for invalid key")
+	}
+	if resp.Error == nil || resp.Error.Code != protocol.ErrValidationFailed {
+		t.Fatalf("code = %v, want VALIDATION_FAILED", resp.Error)
+	}
+}
+
+func TestSendSync_InvalidSessionKey(t *testing.T) {
+	h := newTestHandler()
+	if _, err := h.SendSync(context.Background(), "client:main/evil", "hello", "", nil); err == nil {
+		t.Fatal("expected invalid session key error")
 	}
 }
 

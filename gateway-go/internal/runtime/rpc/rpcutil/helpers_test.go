@@ -104,15 +104,17 @@ func TestTruncateForError(t *testing.T) {
 
 func TestRequireKey(t *testing.T) {
 	tests := []struct {
-		name    string
-		key     string
-		wantKey string
-		wantErr bool
+		name     string
+		key      string
+		wantKey  string
+		wantErr  bool
+		wantCode string
 	}{
-		{"valid key", "session-abc", "session-abc", false},
-		{"trimmed key", "  session-abc  ", "session-abc", false},
-		{"empty key", "", "", true},
-		{"whitespace only", "   ", "", true},
+		{"valid key", "session-abc", "session-abc", false, ""},
+		{"trimmed key", "  session-abc  ", "session-abc", false, ""},
+		{"empty key", "", "", true, protocol.ErrMissingParam},
+		{"whitespace only", "   ", "", true, protocol.ErrMissingParam},
+		{"slash rejected", "client:main/evil", "", true, protocol.ErrValidationFailed},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -124,8 +126,8 @@ func TestRequireKey(t *testing.T) {
 				if errResp.OK {
 					t.Fatal("expected OK=false")
 				}
-				if errResp.Error == nil || errResp.Error.Code != protocol.ErrMissingParam {
-					t.Fatalf("got %+v, want MISSING_PARAM error", errResp.Error)
+				if errResp.Error == nil || errResp.Error.Code != tt.wantCode {
+					t.Fatalf("got %+v, want %s error", errResp.Error, tt.wantCode)
 				}
 			} else {
 				if errResp != nil {

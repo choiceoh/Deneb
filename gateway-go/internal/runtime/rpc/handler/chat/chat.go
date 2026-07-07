@@ -7,6 +7,7 @@ package chat
 import (
 	"context"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/core/coresecurity"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
 	chatpkg "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
@@ -151,6 +152,11 @@ func handleSteer(deps Deps) rpcutil.HandlerFunc {
 		if p.SessionKey == "" {
 			return rpcerr.MissingParam("sessionKey").Response(req.ID)
 		}
+		if err := coresecurity.ValidateSessionKey(p.SessionKey); err != nil {
+			return rpcerr.New(protocol.ErrValidationFailed, "invalid session key").
+				WithSession(p.SessionKey).
+				Response(req.ID)
+		}
 		if p.Note == "" {
 			return rpcerr.MissingParam("note").Response(req.ID)
 		}
@@ -198,6 +204,11 @@ func handleChatBtw(deps BtwDeps) rpcutil.HandlerFunc {
 		}
 		if p.SessionKey == "" {
 			return rpcerr.MissingParam("sessionKey").Response(req.ID)
+		}
+		if err := coresecurity.ValidateSessionKey(p.SessionKey); err != nil {
+			return rpcerr.New(protocol.ErrValidationFailed, "invalid session key").
+				WithSession(p.SessionKey).
+				Response(req.ID)
 		}
 
 		if deps.Chat == nil {

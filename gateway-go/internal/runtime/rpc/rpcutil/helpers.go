@@ -11,6 +11,7 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/core/coresecurity"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/middleware"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
@@ -52,6 +53,11 @@ func RequireKey(reqID, key string) (string, *protocol.ResponseFrame) {
 	k := strings.TrimSpace(key)
 	if k == "" {
 		return "", rpcerr.MissingParam("key").Response(reqID)
+	}
+	if err := coresecurity.ValidateSessionKey(k); err != nil {
+		return "", rpcerr.New(protocol.ErrValidationFailed, "invalid session key").
+			WithSession(TruncateForError(k)).
+			Response(reqID)
 	}
 	return k, nil
 }

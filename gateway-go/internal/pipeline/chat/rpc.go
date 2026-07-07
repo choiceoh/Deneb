@@ -7,12 +7,19 @@ import (
 	"strings"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/core/coresecurity"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/shortid"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
+
+func invalidSessionKeyResponse(reqID, key string) *protocol.ResponseFrame {
+	return rpcerr.New(protocol.ErrValidationFailed, "invalid session key").
+		WithSession(key).
+		Response(reqID)
+}
 
 // Send handles "chat.send" — the primary message ingestion endpoint.
 // Sanitizes input, starts an async agent run, and immediately returns.
@@ -35,6 +42,9 @@ func (h *Handler) Send(_ context.Context, req *protocol.RequestFrame) *protocol.
 	}
 	if p.SessionKey == "" {
 		return rpcerr.MissingParam("sessionKey").Response(req.ID)
+	}
+	if err := coresecurity.ValidateSessionKey(p.SessionKey); err != nil {
+		return invalidSessionKeyResponse(req.ID, p.SessionKey)
 	}
 	if p.Message == "" && len(p.Attachments) == 0 {
 		return rpcerr.New(protocol.ErrMissingParam, "message or attachments required").Response(req.ID)
@@ -159,6 +169,9 @@ func (h *Handler) SessionsSend(_ context.Context, req *protocol.RequestFrame) *p
 	if p.Key == "" {
 		return rpcerr.MissingParam("key").Response(req.ID)
 	}
+	if err := coresecurity.ValidateSessionKey(p.Key); err != nil {
+		return invalidSessionKeyResponse(req.ID, p.Key)
+	}
 	if h.recordActivity != nil {
 		h.recordActivity(p.Key)
 	}
@@ -209,6 +222,9 @@ func (h *Handler) SessionsSteer(_ context.Context, req *protocol.RequestFrame) *
 	}
 	if p.Key == "" {
 		return rpcerr.MissingParam("key").Response(req.ID)
+	}
+	if err := coresecurity.ValidateSessionKey(p.Key); err != nil {
+		return invalidSessionKeyResponse(req.ID, p.Key)
 	}
 	if h.recordActivity != nil {
 		h.recordActivity(p.Key)
@@ -347,6 +363,9 @@ func (h *Handler) History(_ context.Context, req *protocol.RequestFrame) *protoc
 	if p.SessionKey == "" {
 		return rpcerr.MissingParam("sessionKey").Response(req.ID)
 	}
+	if err := coresecurity.ValidateSessionKey(p.SessionKey); err != nil {
+		return invalidSessionKeyResponse(req.ID, p.SessionKey)
+	}
 
 	limit := p.Limit
 	if limit <= 0 || limit > h.maxHistoryCount {
@@ -397,6 +416,11 @@ func (h *Handler) Abort(_ context.Context, req *protocol.RequestFrame) *protocol
 	}
 	if p.ClientRunID == "" && p.SessionKey == "" {
 		return rpcerr.New(protocol.ErrMissingParam, "clientRunId or sessionKey is required").Response(req.ID)
+	}
+	if p.SessionKey != "" {
+		if err := coresecurity.ValidateSessionKey(p.SessionKey); err != nil {
+			return invalidSessionKeyResponse(req.ID, p.SessionKey)
+		}
 	}
 
 	var resolvedKey string

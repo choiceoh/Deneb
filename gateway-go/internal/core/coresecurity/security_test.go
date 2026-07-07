@@ -26,6 +26,12 @@ func TestValidateSessionKey(t *testing.T) {
 	if err := ValidateSessionKey("has\x00null"); err == nil {
 		t.Error("key with null accepted")
 	}
+	if err := ValidateSessionKey("client:main/evil"); err == nil {
+		t.Error("key with slash accepted")
+	}
+	if err := ValidateSessionKey(`client:main\evil`); err == nil {
+		t.Error("key with backslash accepted")
+	}
 }
 
 // --- ValidateSessionKey multibyte (Rust: test_is_valid_session_key_multibyte) ---
