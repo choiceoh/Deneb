@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
-"""BGE-M3 embedding server for Deneb compaction fallback.
+"""BGE-M3 embedding server for Deneb recall + compaction.
 
 Lightweight FastAPI server wrapping BGE-M3 GGUF (Q5_K_M) via llama-cpp-python.
-Quantized for speed on ARM (DGX Spark GB10). Used by the Go gateway for
-MMR-based extractive compaction when LLM summarization is unavailable.
+Runs on the DGX Spark GB10 GPU (n_gpu_layers=99, sm_121) via a CUDA-built
+llama-cpp wheel — see scripts/deploy/bge-m3-build-cuda.sh for the reproducible
+build. The Go gateway (internal/ai/embedding, default :8001) uses it for wiki/
+file semantic recall and MMR extractive compaction; it degrades to BM25 if down.
 
 Usage:
     python3 scripts/deploy/bge-m3-server.py [--port 8001] [--gpu-layers 99]
 """
 
 import argparse
+import ctypes
 import logging
 import os
 import queue
@@ -22,6 +25,42 @@ import numpy as np
 import uvicorn
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
+
+# ggml_log_level: keep ERROR(4)+, drop INFO(2)/WARN(3). The CUDA backend emits a
+# WARN ("init: embeddings required but some input tokens were not marked as
+# outputs -> overriding") on EVERY embed — benign (the MEAN-pooling path marks
+# all tokens as outputs), but at ~4 lines/embed × hundreds of embeds/hour it
+# floods the user journal, the same retention pressure that forced the /health
+# access-log filter below. verbose=False only silences model load, not per-embed
+# decode, so we filter llama.cpp's C-level log directly. llama-cpp-python 0.3.16
+# doesn't export the GGML_LOG_LEVEL_* constants, so the value is inlined.
+_GGML_LOG_LEVEL_ERROR = 4
+
+# Module-level ref so the ctypes callback trampoline isn't garbage-collected
+# (a freed callback would segfault llama.cpp on its next log).
+_llama_log_cb = None
+
+
+def _silence_llama_logs() -> None:
+    """Route llama.cpp's C-level log through a level filter: ERROR+ to stderr,
+    everything below dropped. No-op if the llama_log API is unavailable."""
+    global _llama_log_cb
+    try:
+        from llama_cpp import llama_log_callback, llama_log_set
+    except Exception:  # pragma: no cover - older/newer wheel without the symbol
+        return
+
+    @llama_log_callback
+    def _cb(level, text, _user_data):
+        if level >= _GGML_LOG_LEVEL_ERROR:
+            try:
+                sys.stderr.buffer.write(text if isinstance(text, bytes) else str(text).encode())
+                sys.stderr.buffer.flush()
+            except Exception:
+                pass
+
+    _llama_log_cb = _cb  # keep alive
+    llama_log_set(_cb, ctypes.c_void_p(0))
 
 logging.basicConfig(
     level=logging.INFO,
@@ -56,6 +95,8 @@ def load_model(n_gpu_layers: int = 99, pool_size: int = 4):
     global _pool_size
 
     from llama_cpp import Llama
+
+    _silence_llama_logs()
 
     if not os.path.exists(_model_path):
         logger.error("model not found: %s", _model_path)
