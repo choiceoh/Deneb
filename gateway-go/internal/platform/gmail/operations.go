@@ -275,6 +275,18 @@ func messageToDetail(msg *apiMessage) *MessageDetail {
 				detail.Subject = h.Value
 			case "date":
 				detail.Date = h.Value
+			case "message-id":
+				// Populate the threading/dedup key so the Gmail API path shares one
+				// identity with the LMTP path (both key on Message-ID). Without this
+				// a mail fetched via Gmail backfill and later received via LMTP would
+				// store twice under different keys.
+				detail.MessageIDHeader = strings.TrimSpace(h.Value)
+			case "references", "in-reply-to":
+				for _, ref := range strings.Fields(h.Value) {
+					if ref = strings.TrimSpace(ref); ref != "" {
+						detail.References = append(detail.References, ref)
+					}
+				}
 			}
 		}
 		detail.Body = extractBody(msg.Payload)

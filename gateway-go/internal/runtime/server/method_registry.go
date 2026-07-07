@@ -437,6 +437,14 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 			// prefer its LLM verdict over the heuristic below.
 			AnalysisCache: handlerminiapp.NewAnalysisStore(filepath.Join(denebDir, "cache", "mail_analysis")),
 			WorkState:     mailwork.New(filepath.Join(denebDir, "mail_work_state.json")),
+			// Lazy: mailStore is created in the session phase, after this early
+			// registration. Serve get bodies from it once present (no API round-trip).
+			MailStore: func() handlerminiapp.MailStoreReader {
+				if s.mailStore == nil {
+					return nil
+				}
+				return s.mailStore
+			},
 			// Row priority: cheap local heuristics + address-book VIP lookup
 			// + active-counterparty boost (recent project-linked mail
 			// analyses in the wiki). contactsStore is created above in this
