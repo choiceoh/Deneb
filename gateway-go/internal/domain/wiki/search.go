@@ -599,23 +599,35 @@ func mergeSearchResults(bm25, sem []SearchResult, limit int, commonOnlyQuery boo
 	return results
 }
 
-// rrfK is the Reciprocal Rank Fusion damping constant (Cormack et al. 2009). 60
-// is the field-standard default: large enough that the top few ranks aren't
-// hugely peaked, small enough that deep-rank hits still contribute little.
-const rrfK = 60.0
+// rrfK is the Reciprocal Rank Fusion damping constant (Cormack et al. 2009). The
+// field-standard 60 was tuned on TREC-scale collections (huge corpora, many
+// relevant docs/query) where a flat, high-k curve rewards CONSENSUS across many
+// noisy rankers. Deneb is the opposite: a small curated wiki (~400 pages) with
+// one relevant page/query and strong identity-field matching (title/summary/cues
+// at a 2.5 boost), so the rank-1 hit is usually correct and a lower k — which
+// peaks the top rank — helps. A sweep on the 100-case wiki-qa gold set
+// (cmd/recall-bench) confirms a smooth monotonic trend (60→…→5), and R@8 (the
+// metric that matters for recall evidence injection) actually PEAKS in the mid
+// range: rrfK 15–20 hits R@8 98% vs 97% at both 10 and 60.
+//
+// 20 is chosen deliberately over the current-snapshot optimum (~5–10, P@1 78–79%):
+// it maximizes R@8, keeps P@1 at the 60-baseline, sits BELOW the field default
+// (our structured corpus wants that) yet ABOVE 10 — so as the wiki grows and its
+// optimum drifts back toward the standard, 20 ages well instead of overfitting
+// today's 400 pages. Re-sweep with cmd/recall-bench as the corpus grows; override
+// via DENEB_WIKI_RRF_K (rrfKValue), 60 restores the field default.
+const rrfK = 20.0
 
-// rrfScoreScale maps the raw RRF sum (tiny: a rank-1-in-both hit is 2/(rrfK+1) ≈
-// 0.033) back into the ~0–1 relevance band that SearchResult.Score MUST live in.
-// The score is not just an internal ordering key — the recall preflight consumes
-// it as normalized relevance (recall_evidence: 0.80 + r.Score, high-confidence at
-// ≥1.10) to merge wiki hits against diary/file/session sources on one axis. Left
-// at raw magnitude, every wiki hit capped near 0.83 and could never be
-// high-confidence nor out-rank another source (a regression the internal hit@K
-// bench can't see). Scale is constant (order- and hit@K-preserving) and tuned so
-// the canonical strong hybrid hit (rank 1 in BOTH bm25 and semantic) lands at
-// 0.8 → 1.60 in recall, comfortably above 1.10 and below the 2.2 project anchor;
-// a three-signal hit (+graph seed) tops out ≈1.2 → 2.0, still under the anchor.
-const rrfScoreScale = 0.4 * (rrfK + 1)
+// rrfKValue honors a DENEB_WIKI_RRF_K override for tuning sweeps (cmd/recall-bench)
+// over the default rrfK.
+func rrfKValue() float64 {
+	if v := os.Getenv("DENEB_WIKI_RRF_K"); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil && f > 0 {
+			return f
+		}
+	}
+	return rrfK
+}
 
 // fuseSearchResults dispatches BM25×semantic fusion. Reciprocal Rank Fusion is
 // the default (DENEB_WIKI_FUSION=additive rolls back to the historical additive
@@ -641,6 +653,16 @@ func fuseSearchResults(bm25, sem []SearchResult, graphPaths []string, limit int,
 // SAME admission gates as mergeSearchResults apply (semantic-only cosine floor,
 // common-only lexical drop), so RRF changes ordering, not what is admitted.
 func mergeSearchResultsRRF(bm25, sem []SearchResult, graphPaths []string, limit int, commonOnlyQuery bool) []SearchResult {
+	k := rrfKValue()
+	// scale maps the tiny raw RRF sum (a rank-1-in-both hit is 2/(k+1)) back into
+	// the ~0–1 band SearchResult.Score MUST live in: recall_evidence consumes it as
+	// normalized relevance (0.80 + r.Score, high-confidence ≥1.10) to merge wiki
+	// hits against diary/file/session on one axis. Left raw, every wiki hit capped
+	// near 0.83 and could never be high-confidence — a regression the internal
+	// hit@K bench can't see. 0.4·(k+1) puts the canonical strong hybrid hit (rank 1
+	// in both bm25 and semantic) at 0.8 → 1.60 in recall, above 1.10 and below the
+	// 2.2 project anchor; a three-signal hit (+graph seed) tops ≈1.2 → 2.0.
+	scale := 0.4 * (k + 1)
 	type merged struct {
 		res    SearchResult
 		semCos float64
@@ -656,7 +678,7 @@ func mergeSearchResultsRRF(bm25, sem []SearchResult, graphPaths []string, limit 
 			byPath[r.Path] = m
 		}
 		m.inBM25 = true
-		m.rrf += 1.0 / (rrfK + float64(rank+1))
+		m.rrf += 1.0 / (k + float64(rank+1))
 		if m.res.Content == "" && r.Content != "" {
 			m.res.Content = r.Content
 		}
@@ -670,7 +692,7 @@ func mergeSearchResultsRRF(bm25, sem []SearchResult, graphPaths []string, limit 
 		if r.Score > m.semCos {
 			m.semCos = r.Score
 		}
-		m.rrf += 1.0 / (rrfK + float64(rank+1))
+		m.rrf += 1.0 / (k + float64(rank+1))
 	}
 	// Graph proximity as a third RRF ranking: pages connected to the entity named
 	// in the query (seed first, then neighbors by graph score). A page already
@@ -687,7 +709,7 @@ func mergeSearchResultsRRF(bm25, sem []SearchResult, graphPaths []string, limit 
 		if rank == 0 {
 			m.graph0 = true
 		}
-		m.rrf += 1.0 / (rrfK + float64(rank+1))
+		m.rrf += 1.0 / (k + float64(rank+1))
 	}
 
 	floor := semanticOnlyFloorValue()
@@ -709,7 +731,7 @@ func mergeSearchResultsRRF(bm25, sem []SearchResult, graphPaths []string, limit 
 		// Order is by raw m.rrf (below); Score carries the scaled ~0–1 relevance
 		// cross-source recall needs. The scale is constant so the two never
 		// disagree on ordering.
-		m.res.Score = m.rrf * rrfScoreScale
+		m.res.Score = m.rrf * scale
 		out = append(out, *m)
 	}
 	sort.Slice(out, func(a, b int) bool {
