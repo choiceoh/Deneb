@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.0.57](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.56...andromeda-v0.0.57) (2026-07-07)
+
+
+### ✨ Features
+
+* **andromeda:** 노트북 자료 영역 3단계 높이 토글 — 접힘·기본·확대 ([#3272](https://github.com/choiceoh/Deneb/issues/3272)) ([33da011](https://github.com/choiceoh/Deneb/commit/33da0115384e782807c05178e1da7ba8ff3796be))
+
+
+### ⚡ Performance
+
+* **mail:** 메일 아카이브 로컬 저장소 도입 — mail_archive 12.9s→47ms ([#3270](https://github.com/choiceoh/Deneb/issues/3270)) ([c4f9ec3](https://github.com/choiceoh/Deneb/commit/c4f9ec367e7053c9be3582c2787b0f92fb76f45a))
+
 ## [0.0.56](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.55...andromeda-v0.0.56) (2026-07-07)
 
 

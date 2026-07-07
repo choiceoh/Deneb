@@ -1,5 +1,27 @@
 # Changelog
 
+## [4.78.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.77.0...deneb-v4.78.0) (2026-07-07)
+
+
+### ✨ Features
+
+* **andromeda:** 노트북 자료 영역 3단계 높이 토글 — 접힘·기본·확대 ([#3272](https://github.com/choiceoh/Deneb/issues/3272)) ([33da011](https://github.com/choiceoh/Deneb/commit/33da0115384e782807c05178e1da7ba8ff3796be))
+* **mailanalysis:** 자사명 거래처 자기원장 가드 — 추출기 nil-드롭+프롬프트 규칙 ([#3267](https://github.com/choiceoh/Deneb/issues/3267)) ([43341ff](https://github.com/choiceoh/Deneb/commit/43341fff7708f7a6ef2f04ab8c59b095c717756a))
+* **mail:** Gmail API 백필·gmailpoll 미러·앱 get 저장소 서빙 — 앱 메일 본문 로컬화 + 이전 메일 확장 ([#3274](https://github.com/choiceoh/Deneb/issues/3274)) ([3a8303c](https://github.com/choiceoh/Deneb/commit/3a8303ce5dc7be2c51b21a15719aeff8fb0c20f7))
+
+
+### 🐛 Bug Fixes
+
+* **native:** 메일 제목 공유요소 모프 제거 — 상세 진입 시 제목 슬라이드 억제 ([#3271](https://github.com/choiceoh/Deneb/issues/3271)) ([4a8132b](https://github.com/choiceoh/Deneb/commit/4a8132b5ffbfb242e32d223069dafc0343f894d5))
+* **wiki:** 메일분석 자동병합에 Message ID 가드 — 다른 메일 오병합 차단 ([#3269](https://github.com/choiceoh/Deneb/issues/3269)) ([72e0087](https://github.com/choiceoh/Deneb/commit/72e00877cf37503324d6863e362cac54b8d61809))
+
+
+### ⚡ Performance
+
+* **embedding+chat:** /embed 풀 병렬 + 회상 SearchBatch ([#3276](https://github.com/choiceoh/Deneb/issues/3276)) ([3a7aea9](https://github.com/choiceoh/Deneb/commit/3a7aea99de517a7f88a480779dba00c1db26db00))
+* **embedding:** BGE-M3 GPU 가동 (GB10 sm_121) + per-embed WARN 로그 필터 ([#3275](https://github.com/choiceoh/Deneb/issues/3275)) ([9078fcb](https://github.com/choiceoh/Deneb/commit/9078fcb6b7821c48fdf9ea7de7e9b7b495782d7c))
+* **mail:** 메일 아카이브 로컬 저장소 도입 — mail_archive 12.9s→47ms ([#3270](https://github.com/choiceoh/Deneb/issues/3270)) ([c4f9ec3](https://github.com/choiceoh/Deneb/commit/c4f9ec367e7053c9be3582c2787b0f92fb76f45a))
+
 ## [4.77.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.76.0...deneb-v4.77.0) (2026-07-07)
 
 
