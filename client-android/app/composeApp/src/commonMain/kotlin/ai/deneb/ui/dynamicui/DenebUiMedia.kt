@@ -262,7 +262,12 @@ internal fun RenderChart(node: ChartNode) {
                 // zero-based (their shape IS the magnitude claim).
                 val minValue = values.min()
                 val span = (maxValue - minValue).takeIf { it > 0f } ?: maxValue
-                val lo = (minValue - span * 0.15f).coerceAtLeast(0f)
+                // Floor the padded baseline at 0 for all-positive series (no
+                // phantom negative axis under real data), but let it go below
+                // zero when the series actually dips negative so those points
+                // stay inside the plot instead of drawing under the baseline.
+                val paddedLo = minValue - span * 0.15f
+                val lo = if (minValue < 0f) paddedLo else paddedLo.coerceAtLeast(0f)
                 val hi = maxValue + span * 0.05f
                 fun yAt(v: Float) = plotBottom - ((v - lo) / (hi - lo)) * plotH
                 if (values.size >= 2) {

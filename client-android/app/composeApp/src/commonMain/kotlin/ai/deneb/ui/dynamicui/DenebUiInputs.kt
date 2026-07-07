@@ -501,8 +501,14 @@ internal fun RenderSlider(
     isInteractive: Boolean,
     formState: SnapshotStateMap<String, String>,
 ) {
-    val min = node.min ?: 0f
-    val max = node.max ?: 100f
+    // Guard degenerate ranges: a model can emit min>=max ("min=100 max=0").
+    // Slider needs start < end, and value.coerceIn(min, max) THROWS on an
+    // inverted range — which would blank the whole message render. Normalize
+    // so the bounds are always ordered and non-empty.
+    val rawMin = node.min ?: 0f
+    val rawMax = node.max ?: 100f
+    val min = minOf(rawMin, rawMax)
+    val max = maxOf(rawMin, rawMax).let { if (it > min) it else min + 1f }
     val step = node.step
     val currentValue = formState[node.id]?.toFloatOrNull() ?: (node.value ?: min)
 

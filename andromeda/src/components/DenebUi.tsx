@@ -374,7 +374,11 @@ export function DenebUi({ spec, onSubmit, busy }: { spec: Node; onSubmit: (msg: 
           const lineMax = Math.max(...nums);
           const min = Math.min(...nums);
           const span = lineMax - min || lineMax || 1;
-          const lo = Math.max(0, min - span * 0.15);
+          // Floor the baseline at 0 for all-positive series, but let it dip
+          // below zero when the data actually goes negative so those points
+          // stay in-plot (native parity).
+          const paddedLo = min - span * 0.15;
+          const lo = min < 0 ? paddedLo : Math.max(0, paddedLo);
           const hi = lineMax + span * 0.05;
           const W = 320;
           const H = 92;
