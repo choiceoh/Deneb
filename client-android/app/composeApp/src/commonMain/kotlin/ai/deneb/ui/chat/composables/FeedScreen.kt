@@ -6,9 +6,12 @@ import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebSectionLabel
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.chat.WorkFeedItem
+import ai.deneb.ui.denebBannerEnter
+import ai.deneb.ui.denebBannerExit
 import ai.deneb.ui.denebHint
 import ai.deneb.ui.handCursor
 import ai.deneb.ui.markdown.MarkdownContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -28,6 +31,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -43,7 +47,6 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlinx.collections.immutable.ImmutableList
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
@@ -76,7 +79,7 @@ internal fun FeedScreen(
     loaded: Boolean,
     seenIds: Set<String>,
     onMarkSeen: (String) -> Unit,
-    onLoadDateRange: (Long, Long) -> Unit,
+    onLoadDateRange: suspend (Long, Long) -> Boolean,
     onRunAction: (String, String) -> Unit,
     onAnswer: (WorkFeedItem, String, String?) -> Unit,
     onSubmitFeedback: (String, String) -> Unit,
@@ -93,12 +96,18 @@ internal fun FeedScreen(
         val dates = remember(items) { items.map { localDateOf(it.createdAtMs) } }
         var selectedDate by remember { mutableStateOf(today) }
         val nav = feedDateNavState(selectedDate, today, dates)
-        LaunchedEffect(selectedDate) {
-            onLoadDateRange(
+        // A day-fetch that fails (boot race, gateway mid-redeploy, VPN waking) must
+        // say so — the feed is the 업무 home, and a silent failure reads as "피드
+        // 없음" while the server has every card (2026-07-05 field report).
+        var loadFailed by remember { mutableStateOf(false) }
+        val refreshScope = rememberCoroutineScope()
+        val loadSelectedDay: suspend () -> Unit = {
+            loadFailed = !onLoadDateRange(
                 dayStartMs(selectedDate, tz),
                 dayStartMs(selectedDate.plus(1, DateTimeUnit.DAY), tz),
             )
         }
+        LaunchedEffect(selectedDate) { loadSelectedDay() }
 
         FeedDateBar(
             label = feedDateLabel(selectedDate, today),
@@ -107,6 +116,21 @@ internal fun FeedScreen(
             onPrev = { if (nav.canGoPrev) selectedDate = selectedDate.minus(1, DateTimeUnit.DAY) },
             onNext = { if (nav.canGoNext) selectedDate = selectedDate.plus(1, DateTimeUnit.DAY) },
         )
+
+        AnimatedVisibility(visible = loadFailed, enter = denebBannerEnter, exit = denebBannerExit) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
+            ) {
+                Text(
+                    "피드를 불러오지 못했습니다",
+                    style = DenebType.meta,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(onClick = { refreshScope.launch { loadSelectedDay() } }) { Text("다시 시도") }
+            }
+        }
 
         var expandedId by remember { mutableStateOf<String?>(null) }
         // Partition by a snapshot of seenIds taken when the feed's items load, not
@@ -129,26 +153,16 @@ internal fun FeedScreen(
             onMarkSeen(id)
         }
 
-        // Pull-to-refresh is the feed's user-driven recovery path. A boot-time
-        // fetch that lost a race (gateway mid-redeploy, VPN waking) used to
-        // leave this screen empty with NOTHING that retried — 2026-07-05 field
-        // report: the phone showed "피드 없음" for days while the server had
-        // every card. The empty state scrolls so the gesture works there too.
-        val refreshScope = rememberCoroutineScope()
+        // Pull-to-refresh is the feed's user-driven recovery path. The empty state
+        // scrolls so the gesture works there too. The spinner tracks the actual
+        // fetch (no fixed window), and a failure raises the banner above.
         var refreshing by remember { mutableStateOf(false) }
         PullToRefreshBox(
             isRefreshing = refreshing,
             onRefresh = {
-                refreshing = true
-                onLoadDateRange(
-                    dayStartMs(selectedDate, tz),
-                    dayStartMs(selectedDate.plus(1, DateTimeUnit.DAY), tz),
-                )
-                // onLoadDateRange is fire-and-forget; the merged result lands via
-                // state. A short spinner window keeps the affordance honest
-                // without threading a completion signal through the view model.
                 refreshScope.launch {
-                    delay(1200)
+                    refreshing = true
+                    loadSelectedDay()
                     refreshing = false
                 }
             },
