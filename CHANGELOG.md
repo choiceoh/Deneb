@@ -1,5 +1,17 @@
 # Changelog
 
+## [4.75.1](https://github.com/choiceoh/Deneb/compare/deneb-v4.75.0...deneb-v4.75.1) (2026-07-07)
+
+
+### 🐛 Bug Fixes
+
+* **chat:** 챗 무응답 3종 수리 — 히스토리 tool짝 수리·네이티브 스트림 복구·모닝레터 시세 자동 치환 ([#3252](https://github.com/choiceoh/Deneb/issues/3252)) ([fa17798](https://github.com/choiceoh/Deneb/commit/fa17798becd16287475e636b09713ca5feec06a1))
+
+
+### ⚡ Performance
+
+* **chat:** glm 경로 effort router 개통 + 읽기전용 배칭 유도 — effortRouted kwarg 전제 제거, 직렬 시대 프롬프트 지시 교체 ([#3250](https://github.com/choiceoh/Deneb/issues/3250)) ([0b622d0](https://github.com/choiceoh/Deneb/commit/0b622d0e484e8956a3dbc71c6e1a3b07f26a1b9f))
+
 ## [4.75.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.74.0...deneb-v4.75.0) (2026-07-07)
 
 
