@@ -133,7 +133,11 @@ func harvestVllmWindows(logger *slog.Logger, providers map[string]ProviderResolv
 		infos, err := DiscoverServedVllmModelInfos(ctx, pr.BaseURL, pr.APIKey)
 		cancel()
 		if err != nil {
-			logger.Warn("modelrole: vllm window probe failed (unused provider)",
+			// Debug, not Warn: this harvest is best-effort over providers no
+			// role routes through — a decommissioned/idle backend failing the
+			// probe is the expected case, and at Warn it re-entered the
+			// journal on every registry rebuild (6× in one prod day).
+			logger.Debug("modelrole: vllm window probe failed (unused provider)",
 				"provider", id, "baseUrl", pr.BaseURL, "error", err)
 			continue
 		}
