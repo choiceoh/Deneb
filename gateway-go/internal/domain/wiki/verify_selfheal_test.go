@@ -38,6 +38,45 @@ func TestDetectDuplicates_NormalizedTitle(t *testing.T) {
 	}
 }
 
+// TestDetectDuplicates_MailAnalysisGuard: two 메일분석 pages sharing a subject but
+// carrying different Message IDs are DISTINCT Gmail messages (메일 1통 = 1페이지)
+// and must never get an auto-merge Fix — the 2026-06 mis-merge that folded 14
+// different-ID mails together on normalized-title equality. A genuine same-mail
+// duplicate (same ID in two buckets) still merges.
+func TestDetectDuplicates_MailAnalysisGuard(t *testing.T) {
+	const sameTitle = "Re: Re: [해밀고흥솔라팜] 모듈 제작 마스터 스케쥴 요청의 건"
+
+	t.Run("different msgID is never auto-merged", func(t *testing.T) {
+		idx := NewIndex()
+		idx.UpdateEntry("프로젝트/해밀고흥솔라팜-모듈/메일분석/19eaa3e4371576a3.md",
+			&Page{Meta: Frontmatter{Title: sameTitle, Importance: 0.3}})
+		idx.UpdateEntry("프로젝트/해밀고흥솔라팜-모듈/메일분석/19eaa3aa72de312b.md",
+			&Page{Meta: Frontmatter{Title: sameTitle, Importance: 0.3}})
+		for _, f := range detectDuplicates(idx.Entries) {
+			if f.Fix != nil {
+				t.Errorf("distinct mails (different Message IDs) got an auto-fix: %+v", f)
+			}
+		}
+	})
+
+	t.Run("same msgID across buckets still merges", func(t *testing.T) {
+		idx := NewIndex()
+		idx.UpdateEntry("프로젝트/메일분석/19eaa3e4371576a3.md",
+			&Page{Meta: Frontmatter{Title: sameTitle, Importance: 0.3}})
+		idx.UpdateEntry("프로젝트/해밀고흥솔라팜-모듈/메일분석/19eaa3e4371576a3.md",
+			&Page{Meta: Frontmatter{Title: sameTitle, Importance: 0.5}})
+		merged := false
+		for _, f := range detectDuplicates(idx.Entries) {
+			if f.Fix != nil && f.Fix.Kind == "merge" {
+				merged = true
+			}
+		}
+		if !merged {
+			t.Error("same-mail duplicate across buckets should still get a merge Fix")
+		}
+	})
+}
+
 // TestDetectStaleSuperseded_ArchiveFlow: a page superseded and untouched for
 // over the threshold gets an archive Fix, and applying it flips Archived.
 func TestDetectStaleSuperseded_ArchiveFlow(t *testing.T) {

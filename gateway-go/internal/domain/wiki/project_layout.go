@@ -319,3 +319,20 @@ func IsMailAnalysisPath(relPath string) bool {
 	return strings.Contains(p, "/"+MailAnalysisDir+"/") ||
 		strings.Contains(p, "/"+legacyMailAnalysisDir+"/")
 }
+
+// MailAnalysisMsgID returns a mail-analysis page's identifying Gmail message ID,
+// which the mail sink encodes as the filename stem (메일 1통 = 1페이지 — see
+// MailAnalysisPagePath). Empty for non-mail pages. Two mail-analysis pages are
+// the SAME mail iff this matches: a shared subject line does NOT make them one
+// (reply chains, re-sends, and vendor notifications routinely repeat a subject),
+// so subject-similarity dedup must never fold two differing IDs together.
+func MailAnalysisMsgID(relPath string) string {
+	if !IsMailAnalysisPath(relPath) {
+		return ""
+	}
+	p := filepath.ToSlash(strings.TrimSpace(relPath))
+	if i := strings.LastIndexByte(p, '/'); i >= 0 {
+		p = p[i+1:]
+	}
+	return strings.TrimSuffix(p, ".md")
+}
