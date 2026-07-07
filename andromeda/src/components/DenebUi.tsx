@@ -208,7 +208,10 @@ export function DenebUi({ spec, onSubmit, busy }: { spec: Node; onSubmit: (msg: 
                   <li key={i}>
                     {m ? (
                       <>
-                        <strong>{m[1]}</strong>
+                        {/* The key runs through inline rendering too — models
+                            often **mark** it themselves and a raw render
+                            showed the literal asterisks (2026-07-07 letter). */}
+                        <strong>{renderInline(m[1], `${key}.${i}k`)}</strong>
                         {" — "}
                         {renderInline(m[2], `${key}.${i}`)}
                       </>

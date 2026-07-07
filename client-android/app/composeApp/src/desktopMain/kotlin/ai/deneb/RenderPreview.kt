@@ -1498,7 +1498,7 @@ private fun uiGalleryNode(): DenebUiNode = parseLetterHtml(
       </card>
       <card>
         <tabs selected-index="0">
-          <tab label="결정사항"><ul><li>하계휴가 7/15부터 시행</li><li>임원 일정은 회장님 제출 후 확정</li></ul></tab>
+          <tab label="결정사항"><ul><li>하계휴가 7/15부터 시행</li><li>임원 일정은 회장님 제출 후 확정</li><li>**고건** — 당진 구조검토 회신 (모델이 키를 직접 볼드한 케이스)</li></ul></tab>
           <tab label="액션 아이템"><ul><li>전 현장 비상대응체계 재확인</li></ul></tab>
         </tabs>
         <accordion title="회의 전문 발췌">

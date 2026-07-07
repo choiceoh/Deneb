@@ -148,9 +148,13 @@ internal fun denebUiListItemText(value: String): AnnotatedString {
     // Resolve the composable inline rendering BEFORE the builder lambda —
     // composable calls inside builder lambdas are a fragile pattern even
     // where the compiler tolerates the inline case (review catch on #3233).
+    // The lead runs through the tokenizer too: models often mark keys as
+    // **볼드** themselves, and a raw append showed the literal asterisks
+    // (2026-07-07 live letter). Tokenizer bold overrides the SemiBold base.
+    val lead = denebUiInlineText(value.substring(0, idx))
     val rest = denebUiInlineText(value.substring(idx + sep.length))
     return buildAnnotatedString {
-        withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) { append(value.substring(0, idx)) }
+        withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) { append(lead) }
         append(sep)
         append(rest)
     }

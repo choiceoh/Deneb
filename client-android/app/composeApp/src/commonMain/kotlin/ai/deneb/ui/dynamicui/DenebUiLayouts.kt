@@ -227,7 +227,9 @@ internal fun RenderList(
                             .background(MaterialTheme.colorScheme.primary),
                     )
                     Text(
-                        text = title,
+                        // Inline markdown resolves here too — a raw append
+                        // leaked literal ** when models emphasize a title.
+                        text = denebUiInlineText(title),
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.weight(1f),

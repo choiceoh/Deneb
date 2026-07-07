@@ -130,6 +130,16 @@ describe("deneb-ui renderer parity conventions", () => {
     expect(container.querySelector("li strong")?.textContent).toBe("김부장");
   });
 
+  it("consumes ** markers when the model marks the key itself", () => {
+    // 2026-07-07 live letter regression: a raw key render showed literal
+    // asterisks for **고건** — the key must run through inline rendering.
+    const spec = { type: "list", items: [{ type: "text", value: "**고건** — 구조검토 요청" }] };
+    const { container } = render(<DenebUi spec={spec} onSubmit={() => {}} />);
+    const li = container.querySelector("li");
+    expect(li?.textContent).not.toContain("**");
+    expect(li?.textContent).toContain("고건 — 구조검토 요청");
+  });
+
   it("tints status badges and stat trends", () => {
     const spec = {
       type: "column",
