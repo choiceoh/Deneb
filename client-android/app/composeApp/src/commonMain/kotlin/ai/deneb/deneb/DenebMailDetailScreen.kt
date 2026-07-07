@@ -14,7 +14,6 @@ import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
 import ai.deneb.ui.denebInsight
 import ai.deneb.ui.denebInsightContainer
-import ai.deneb.ui.denebSharedBounds
 import ai.deneb.ui.denebShrinkOut
 import ai.deneb.ui.handCursor
 import ai.deneb.ui.markdown.MarkdownContent
@@ -183,7 +182,6 @@ fun DenebMailDetailScreen(
             mail.subject.ifBlank { "(제목 없음)" },
             style = DenebType.subject,
             color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.denebSharedBounds("mail-subject-${mail.id}"),
         )
         Spacer(Modifier.height(6.dp))
         Text(mail.from, style = DenebType.rowSubtitle, color = MaterialTheme.colorScheme.onSurface)
