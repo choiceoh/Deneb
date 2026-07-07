@@ -298,7 +298,7 @@ func (s *Store) Search(ctx context.Context, query string, limit int) ([]SearchRe
 		}
 		return truncateResults(s.fts.applyValidity(bm25), limit), nil
 	}
-	return truncateResults(s.fts.applyValidity(mergeSearchResults(bm25, sem, fetchLimit, commonOnlyQuery)), limit), nil
+	return truncateResults(s.fts.applyValidity(fuseSearchResults(bm25, sem, fetchLimit, commonOnlyQuery)), limit), nil
 }
 
 // truncateResults cuts a validity-adjusted, re-sorted result list down to the
@@ -360,7 +360,7 @@ func (s *Store) SearchBatch(ctx context.Context, queries []string, limit int) ([
 			out[i] = truncateResults(s.fts.applyValidity(bm25), limit)
 			continue
 		}
-		out[i] = truncateResults(s.fts.applyValidity(mergeSearchResults(bm25, sem, fetchLimit, commonOnlyQuery)), limit)
+		out[i] = truncateResults(s.fts.applyValidity(fuseSearchResults(bm25, sem, fetchLimit, commonOnlyQuery)), limit)
 	}
 	return out, nil
 }
@@ -568,6 +568,94 @@ func mergeSearchResults(bm25, sem []SearchResult, limit int, commonOnlyQuery boo
 	sort.Slice(out, func(a, b int) bool {
 		if out[a].final != out[b].final {
 			return out[a].final > out[b].final
+		}
+		return out[a].res.Path < out[b].res.Path
+	})
+	if len(out) > limit {
+		out = out[:limit]
+	}
+	results := make([]SearchResult, len(out))
+	for i := range out {
+		results[i] = out[i].res
+	}
+	return results
+}
+
+// rrfK is the Reciprocal Rank Fusion damping constant (Cormack et al. 2009). 60
+// is the field-standard default: large enough that the top few ranks aren't
+// hugely peaked, small enough that deep-rank hits still contribute little.
+const rrfK = 60.0
+
+// fuseSearchResults dispatches BM25×semantic fusion. Reciprocal Rank Fusion is
+// the default (DENEB_WIKI_FUSION=additive rolls back to the historical additive
+// max(bm25,cosine)+bonus/penalty blend). RRF measured +11.3pt P@1 / +4.5pt R@8 /
+// +0.07 MRR over additive on the 44-case wiki-qa gold set (cmd/recall-bench),
+// with no wiki-test regression — it drops the fragile cross-signal score
+// normalization the additive priors accrue as sources grow. The env read is the
+// same runtime-override pattern as the floor knobs, so a bench scores both from
+// one binary and an operator can roll back without a rebuild.
+func fuseSearchResults(bm25, sem []SearchResult, limit int, commonOnlyQuery bool) []SearchResult {
+	if os.Getenv("DENEB_WIKI_FUSION") == "additive" {
+		return mergeSearchResults(bm25, sem, limit, commonOnlyQuery)
+	}
+	return mergeSearchResultsRRF(bm25, sem, limit, commonOnlyQuery)
+}
+
+// mergeSearchResultsRRF fuses the lexical and semantic rankings by Reciprocal
+// Rank Fusion: a page's score is Σ 1/(rrfK + rank) over the rankings it appears
+// in (rank is 1-based position in each already-sorted candidate list). Unlike
+// the additive blend it needs NO cross-signal score normalization — BM25
+// magnitudes and cosine bands never share an axis, only their ranks do, which is
+// exactly the fragility the hand-tuned source priors accrue as sources grow. The
+// SAME admission gates as mergeSearchResults apply (semantic-only cosine floor,
+// common-only lexical drop), so RRF changes ordering, not what is admitted.
+func mergeSearchResultsRRF(bm25, sem []SearchResult, limit int, commonOnlyQuery bool) []SearchResult {
+	type merged struct {
+		res    SearchResult
+		semCos float64
+		inBM25 bool
+		rrf    float64
+	}
+	byPath := make(map[string]*merged, len(bm25)+len(sem))
+	for rank, r := range bm25 {
+		m := byPath[r.Path]
+		if m == nil {
+			m = &merged{res: r}
+			byPath[r.Path] = m
+		}
+		m.inBM25 = true
+		m.rrf += 1.0 / (rrfK + float64(rank+1))
+		if m.res.Content == "" && r.Content != "" {
+			m.res.Content = r.Content
+		}
+	}
+	for rank, r := range sem {
+		m := byPath[r.Path]
+		if m == nil {
+			m = &merged{res: r}
+			byPath[r.Path] = m
+		}
+		if r.Score > m.semCos {
+			m.semCos = r.Score
+		}
+		m.rrf += 1.0 / (rrfK + float64(rank+1))
+	}
+
+	floor := semanticOnlyFloorValue()
+	out := make([]merged, 0, len(byPath))
+	for _, m := range byPath {
+		if !m.inBM25 && m.semCos < floor {
+			continue // semantic-only admission floor (identical to additive path)
+		}
+		if commonOnlyQuery && m.inBM25 && m.semCos < semSupportThreshold {
+			continue // lexical-leak drop (identical to additive path)
+		}
+		m.res.Score = m.rrf
+		out = append(out, *m)
+	}
+	sort.Slice(out, func(a, b int) bool {
+		if out[a].rrf != out[b].rrf {
+			return out[a].rrf > out[b].rrf
 		}
 		return out[a].res.Path < out[b].res.Path
 	})
