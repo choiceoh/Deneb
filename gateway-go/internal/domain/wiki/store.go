@@ -820,6 +820,9 @@ func (s *Store) Close() error {
 	if s.sem != nil {
 		s.sem.shutdown()
 	}
+	if s.diaryFTS != nil {
+		s.diaryFTS.closeSemantic()
+	}
 	if s.fts != nil {
 		return s.fts.close()
 	}

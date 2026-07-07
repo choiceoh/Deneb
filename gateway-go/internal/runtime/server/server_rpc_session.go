@@ -196,6 +196,13 @@ func (s *Server) registerSessionRPCMethods() {
 			} else {
 				s.logger.Info("wiki semantic index warmed")
 			}
+			// Same eager warm for diary entries so semantic diary recall is ready
+			// before the first turn (paraphrase recall over the day log).
+			if err := store.WarmDiarySemantic(ctx); err != nil {
+				s.logger.Warn("diary semantic warm incomplete", "error", err)
+			} else {
+				s.logger.Info("diary semantic index warmed")
+			}
 		})
 	}
 
