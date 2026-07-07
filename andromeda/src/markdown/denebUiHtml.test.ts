@@ -79,10 +79,63 @@ describe("parseDenebUi (labeled HTML)", () => {
     expect(cp.action).toMatchObject({ type: "copy_to_clipboard", text: "내용" });
   });
 
-  it("skips unknown tags but keeps the rest", () => {
+  it("unwraps unknown tags so content survives", () => {
+    // Tolerance round: the unknown wrapper drops but its content hoists.
     const root = parseDenebUi("<column><wat>x</wat><text>ok</text></column>");
-    expect(root.children).toHaveLength(1);
-    expect(root.children[0]).toMatchObject({ type: "text", value: "ok" });
+    expect(root.children).toHaveLength(2);
+    expect(root.children[0]).toMatchObject({ type: "text", value: "x" });
+    expect(root.children[1]).toMatchObject({ type: "text", value: "ok" });
+  });
+
+  it("unwraps generic html wrappers transparently", () => {
+    const root = parseDenebUi("<div><card><text>안</text></card></div>");
+    expect(root.type).toBe("card");
+    expect(root.children[0]).toMatchObject({ type: "text", value: "안" });
+  });
+
+  it("merges inline formatting tags into the text flow", () => {
+    const card = parseDenebUi("<card>이건 <b>중요</b>한 일</card>");
+    expect(card.children).toHaveLength(1);
+    expect(card.children[0]).toMatchObject({ type: "text", value: "이건 **중요**한 일" });
+  });
+
+  it("merges inline anchor and code into the text value", () => {
+    const text = parseDenebUi(`<text>보고서 <a href="https://x">링크</a>는 <code>make ci</code>로</text>`);
+    expect(text).toMatchObject({ type: "text", value: "보고서 [링크](https://x)는 `make ci`로" });
+  });
+
+  it("suppresses inline markers in plain-value slots", () => {
+    const badge = parseDenebUi("<badge><b>긴급</b></badge>");
+    expect(badge).toMatchObject({ type: "badge", value: "긴급" });
+  });
+
+  it("auto-upgrades a markdown table inside a card to a markdown node", () => {
+    const card = parseDenebUi("<card>\n| 항목 | 값 |\n|---|---|\n| a | 1 |\n</card>");
+    expect(card.children).toHaveLength(1);
+    expect(card.children[0].type).toBe("markdown");
+    expect(card.children[0].value).toContain("| 항목 | 값 |");
+  });
+
+  it("upgrades a text node carrying a markdown block", () => {
+    expect(parseDenebUi("<text>- 하나\n- 둘</text>").type).toBe("markdown");
+  });
+
+  it("maps heading and paragraph aliases to text nodes", () => {
+    const root = parseDenebUi("<column><h2>제목</h2><p>본문</p></column>");
+    expect(root.children[0]).toMatchObject({ type: "text", value: "제목", style: "title" });
+    expect(root.children[1]).toMatchObject({ type: "text", value: "본문" });
+  });
+
+  it("parses lenient numbers and canonicalizes enums", () => {
+    const root = parseDenebUi(
+      `<column><progress value="68%"/>` +
+        `<chart type="column" label="생산"><point label="A" value="1,200톤"/></chart>` +
+        `<badge color="red">지연</badge><alert severity="warn">확인</alert></column>`,
+    );
+    expect(root.children[0]).toMatchObject({ type: "progress", value: 0.68 });
+    expect(root.children[1]).toMatchObject({ type: "chart", chartType: "bar", values: [1200] });
+    expect(root.children[2]).toMatchObject({ type: "badge", color: "error" });
+    expect(root.children[3]).toMatchObject({ type: "alert", severity: "warning" });
   });
 
   it("maps input variants to typed nodes", () => {

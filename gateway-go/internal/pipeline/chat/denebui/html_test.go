@@ -139,15 +139,111 @@ func TestParseHTML_Actions(t *testing.T) {
 	}
 }
 
-func TestParseHTML_UnknownTagSkippedWithIssue(t *testing.T) {
+func TestParseHTML_UnknownTagUnwrapsWithIssue(t *testing.T) {
 	root, issues := ParseHTML(`<column><wat>x</wat><text>ok</text></column>`)
 	if len(issues) != 1 || !strings.Contains(issues[0].Msg, "unknown tag") {
 		t.Fatalf("issues = %v", issues)
 	}
+	// Tolerance round: the unknown wrapper drops but its content hoists.
 	m := root.(map[string]any)
 	ch, _ := m["children"].([]any)
-	if len(ch) != 1 || ch[0].(map[string]any)["value"] != "ok" {
+	if len(ch) != 2 || ch[0].(map[string]any)["value"] != "x" || ch[1].(map[string]any)["value"] != "ok" {
 		t.Errorf("children = %v", ch)
+	}
+}
+
+func TestParseHTML_GenericWrapperUnwraps(t *testing.T) {
+	root, issues := ParseHTML(`<div><card><text>안</text></card></div>`)
+	if len(issues) != 0 {
+		t.Fatalf("div soup must not raise issues, got %v", issues)
+	}
+	if got := root.(map[string]any)["type"]; got != "card" {
+		t.Errorf("root = %v, want unwrapped card", got)
+	}
+}
+
+func TestParseHTML_InlineTagsMergeIntoTextFlow(t *testing.T) {
+	root := mustParseHTML(t, `<card>이건 <b>중요</b>한 일</card>`)
+	ch := children(t, root)
+	if len(ch) != 1 {
+		t.Fatalf("children = %v, want single merged text", ch)
+	}
+	if got := ch[0].(map[string]any)["value"]; got != "이건 **중요**한 일" {
+		t.Errorf("value = %q", got)
+	}
+}
+
+func TestParseHTML_InlineAnchorAndCode(t *testing.T) {
+	root := mustParseHTML(t, `<text>보고서 <a href="https://x">링크</a>는 <code>make ci</code>로</text>`)
+	if got := root["value"]; got != "보고서 [링크](https://x)는 `make ci`로" {
+		t.Errorf("value = %q", got)
+	}
+}
+
+func TestParseHTML_InlineMarkerSuppressedInPlainValueSlots(t *testing.T) {
+	root := mustParseHTML(t, `<badge><b>긴급</b></badge>`)
+	if got := root["value"]; got != "긴급" {
+		t.Errorf("badge value = %q, want bare text without markers", got)
+	}
+}
+
+func TestParseHTML_MarkdownTableAutoUpgrades(t *testing.T) {
+	root := mustParseHTML(t, "<card>\n| 항목 | 값 |\n|---|---|\n| a | 1 |\n</card>")
+	ch := children(t, root)
+	if len(ch) != 1 || ch[0].(map[string]any)["type"] != "markdown" {
+		t.Fatalf("children = %v, want one markdown node", ch)
+	}
+	if v := ch[0].(map[string]any)["value"].(string); !strings.Contains(v, "| 항목 | 값 |") {
+		t.Errorf("markdown value = %q", v)
+	}
+}
+
+func TestParseHTML_TextNodeWithMarkdownBlockUpgrades(t *testing.T) {
+	root := mustParseHTML(t, "<text>- 하나\n- 둘</text>")
+	if got := root["type"]; got != "markdown" {
+		t.Errorf("type = %v, want markdown", got)
+	}
+}
+
+func TestParseHTML_HeadingAndParagraphAliases(t *testing.T) {
+	root := mustParseHTML(t, `<column><h2>제목</h2><p>본문</p></column>`)
+	ch := children(t, root)
+	if len(ch) != 2 {
+		t.Fatalf("children = %v", ch)
+	}
+	h := ch[0].(map[string]any)
+	if h["type"] != "text" || h["style"] != "title" || h["value"] != "제목" {
+		t.Errorf("h2 = %v", h)
+	}
+	pn := ch[1].(map[string]any)
+	if pn["type"] != "text" || pn["value"] != "본문" {
+		t.Errorf("p = %v", pn)
+	}
+}
+
+func TestParseHTML_LenientNumbersAndEnumCanon(t *testing.T) {
+	root := mustParseHTML(t, `<column>`+
+		`<progress value="68%"/>`+
+		`<chart type="column" label="생산"><point label="A" value="1,200톤"/></chart>`+
+		`<badge color="red">지연</badge>`+
+		`<alert severity="warn">확인</alert>`+
+		`</column>`)
+	ch := children(t, root)
+	if got := ch[0].(map[string]any)["value"]; got != 0.68 {
+		t.Errorf("progress value = %v, want 0.68", got)
+	}
+	chart := ch[1].(map[string]any)
+	if chart["chartType"] != "bar" {
+		t.Errorf("chartType = %v, want bar", chart["chartType"])
+	}
+	if vals := chart["values"].([]any); len(vals) != 1 || vals[0] != 1200.0 {
+		t.Errorf("values = %v, want [1200]", vals)
+	}
+	if got := ch[2].(map[string]any)["color"]; got != "error" {
+		t.Errorf("badge color = %v, want error", got)
+	}
+	if got := ch[3].(map[string]any)["severity"]; got != "warning" {
+		t.Errorf("alert severity = %v, want warning", got)
 	}
 }
 
@@ -205,7 +301,8 @@ func TestParseHTML_ChartAndChips(t *testing.T) {
 }
 
 func TestValidate_HTMLEnumViolation(t *testing.T) {
-	issues, err := Validate(`<alert severity="fatal">큰일</alert>`)
+	// "fatal" now canonicalizes to error; use a word with no canonical fold.
+	issues, err := Validate(`<alert severity="catastrophic">큰일</alert>`)
 	if err != nil {
 		t.Fatalf("err = %v", err)
 	}

@@ -52,6 +52,58 @@ var containerTags = map[string]bool{
 	"accordion": true, "li": true, "tab": true,
 }
 
+// inlineTags are HTML formatting habits with no node of their own: they merge
+// back into the parent text flow as markdown-marked runs ("**"/"*"), which the
+// renderers' inline tokenizers already draw — content survives instead of the
+// whole subtree dropping. Empty marker = keep bare text.
+var inlineTags = map[string]string{
+	"b": "**", "strong": "**", "i": "*", "em": "*",
+	"u": "", "s": "", "del": "", "strike": "", "mark": "",
+	"small": "", "span": "", "sub": "", "sup": "", "a": "",
+}
+
+// genericTags are structural HTML wrappers (div soup) models emit out of
+// pre-trained habit. They produce no node: children hoist to the parent and
+// bare text becomes implicit text nodes. Accepted fluency — no Issue.
+var genericTags = map[string]bool{
+	"div": true, "section": true, "article": true, "header": true,
+	"footer": true, "main": true, "aside": true, "figure": true,
+	"center": true, "nav": true,
+}
+
+// knownTags is every tag convertElem maps to a node or structural. Tags in
+// none of the tables (knownTags/genericTags/inlineTags/voidTags) unwrap like
+// genericTags but keep the validator Issue, so typos stay visible in health
+// telemetry while the content still renders.
+var knownTags = map[string]bool{
+	"column": true, "col": true, "row": true, "card": true, "box": true,
+	"hr": true, "divider": true, "text": true, "markdown": true,
+	"img": true, "image": true, "icon": true, "code": true,
+	"blockquote": true, "quote": true, "badge": true, "stat": true,
+	"avatar": true, "progress": true, "alert": true, "countdown": true,
+	"chart": true, "point": true, "table": true, "tr": true, "td": true,
+	"th": true, "ul": true, "ol": true, "list": true, "li": true,
+	"tabs": true, "tab": true, "accordion": true, "button": true,
+	"input": true, "textarea": true, "checkbox": true, "switch": true,
+	"select": true, "radio-group": true, "radiogroup": true, "option": true,
+	"slider": true, "chips": true, "chip-group": true, "chip": true,
+	"br": true, "p": true, "h1": true, "h2": true, "h3": true, "h4": true,
+	"h5": true, "h6": true,
+}
+
+// treatsTextAsChildren reports whether bare text inside a tag surfaces as
+// implicit child nodes (containers, generic wrappers, unknown tags) rather
+// than feeding the element's own value slot (text/badge/li/… and inline tags).
+func treatsTextAsChildren(tag string) bool {
+	if containerTags[tag] || genericTags[tag] {
+		return true
+	}
+	if _, inline := inlineTags[tag]; inline {
+		return false
+	}
+	return !knownTags[tag]
+}
+
 // ---------------------------------------------------------------------------
 // Public entry
 // ---------------------------------------------------------------------------
@@ -88,14 +140,16 @@ type openElem struct {
 	children []any    // converted DenebUiNode maps
 	structs  []any    // structural intermediates (option/chip/tab/tr cell/point)
 	text     []string // text runs (for label/value content)
+	pending  []string // buffered implicit-text runs, flushed as one merged node
 }
 
 type htmlParser struct {
-	src    string
-	pos    int
-	stack  []*openElem
-	roots  []any
-	issues []Issue
+	src         string
+	pos         int
+	stack       []*openElem
+	roots       []any
+	rootPending []string // buffered root-level text runs
+	issues      []Issue
 }
 
 func (p *htmlParser) parseNodes() []any {
@@ -119,6 +173,7 @@ func (p *htmlParser) parseNodes() []any {
 	for len(p.stack) > 0 {
 		p.closeTop()
 	}
+	p.flushRootPending()
 	return p.roots
 }
 
@@ -260,6 +315,14 @@ func (p *htmlParser) handleOpen(name string, attrs map[string]string, selfClose 
 	}
 	el := &openElem{tag: name, attrs: attrs}
 	if voidTags[name] || selfClose {
+		// Self-closed inline/generic tags carry no content — nothing to emit.
+		if _, inline := inlineTags[name]; inline || genericTags[name] {
+			return
+		}
+		if !knownTags[name] {
+			p.issues = append(p.issues, Issue{"$", "unknown tag <" + name + ">"})
+			return
+		}
 		p.attach(convertElem(el, p))
 		return
 	}
@@ -283,8 +346,31 @@ func (p *htmlParser) captureRawText(name string, attrs map[string]string) {
 			p.pos = end + gt + 1
 		}
 	}
-	el := &openElem{tag: name, attrs: attrs, text: []string{decodeEntities(raw)}}
+	decoded := decodeEntities(raw)
+	// Inline habit: <code> inside a text flow ("명령 <code>make ci</code> 실행")
+	// merges as a backtick run instead of breaking the sentence into a block.
+	if name == "code" && p.inlineCodeContext() {
+		if t := strings.TrimSpace(decoded); t != "" {
+			p.emitRun("`" + t + "`")
+		}
+		return
+	}
+	el := &openElem{tag: name, attrs: attrs, text: []string{decoded}}
 	p.attach(convertElem(el, p))
+}
+
+// inlineCodeContext reports whether raw <code> content should merge into the
+// enclosing text flow (parent is a text node or an inline formatting tag).
+func (p *htmlParser) inlineCodeContext() bool {
+	if len(p.stack) == 0 {
+		return false
+	}
+	tag := p.stack[len(p.stack)-1].tag
+	if tag == "text" {
+		return true
+	}
+	_, inline := inlineTags[tag]
+	return inline
 }
 
 // indexOfCloseTag returns the absolute index of the first "</name" at or after
@@ -335,11 +421,63 @@ func (p *htmlParser) handleClose(name string) {
 func (p *htmlParser) closeTop() {
 	el := p.stack[len(p.stack)-1]
 	p.stack = p.stack[:len(p.stack)-1]
+	if marker, inline := inlineTags[el.tag]; inline {
+		p.emitInline(el, marker)
+		return
+	}
+	if genericTags[el.tag] || !knownTags[el.tag] {
+		// Unwrap: the wrapper produces no node; its children (including the
+		// flushed implicit text) hoist to the parent in source order.
+		if !genericTags[el.tag] {
+			p.issues = append(p.issues, Issue{"$", "unknown tag <" + el.tag + "> (children hoisted)"})
+		}
+		p.flushPending(el)
+		for _, c := range el.children {
+			p.attach(c)
+		}
+		return
+	}
+	p.flushPending(el)
 	p.attach(convertElem(el, p))
+}
+
+// emitInline merges an inline formatting element back into the parent text
+// flow (<b>중요</b> → "**중요**"). Plain-value slots (badge, button labels)
+// receive bare text — literal markers would render as noise there. Any real
+// child nodes (rare: <b><icon/></b>) hoist to the parent afterwards.
+func (p *htmlParser) emitInline(el *openElem, marker string) {
+	inner := strings.TrimSpace(strings.Join(el.text, ""))
+	if inner != "" {
+		run := inner
+		if p.inlineMarkupAllowed() {
+			if el.tag == "a" {
+				if href := el.attrs["href"]; href != "" {
+					run = "[" + inner + "](" + href + ")"
+				}
+			} else if marker != "" {
+				run = marker + inner + marker
+			}
+		}
+		p.emitRun(run)
+	}
+	for _, c := range el.children {
+		p.attach(c)
+	}
+}
+
+// inlineMarkupAllowed reports whether the current attach target renders inline
+// markdown (text nodes, containers, root) — those get **/*/[]() markers.
+func (p *htmlParser) inlineMarkupAllowed() bool {
+	if len(p.stack) == 0 {
+		return true
+	}
+	tag := p.stack[len(p.stack)-1].tag
+	return tag == "text" || treatsTextAsChildren(tag)
 }
 
 // attach adds a converted node (or structural intermediate) to the current
 // parent, or to the roots when the stack is empty. nil results are dropped.
+// Buffered implicit text flushes first so source order is preserved.
 func (p *htmlParser) attach(v any) {
 	if v == nil {
 		return
@@ -348,6 +486,7 @@ func (p *htmlParser) attach(v any) {
 		if _, isStruct := v.(structural); isStruct {
 			return // option/chip/… floating at root: drop
 		}
+		p.flushRootPending()
 		p.roots = append(p.roots, v)
 		return
 	}
@@ -356,6 +495,7 @@ func (p *htmlParser) attach(v any) {
 		top.structs = append(top.structs, v)
 		return
 	}
+	p.flushPending(top)
 	top.children = append(top.children, v)
 }
 
@@ -363,16 +503,110 @@ func (p *htmlParser) emitText(t string) {
 	if strings.TrimSpace(t) == "" {
 		return
 	}
+	p.emitRun(decodeEntities(t))
+}
+
+// emitRun adds an already-decoded text run (entity decoding must not repeat —
+// inline merges re-emit runs that were decoded on first capture).
+func (p *htmlParser) emitRun(t string) {
+	if strings.TrimSpace(t) == "" {
+		return
+	}
 	if len(p.stack) == 0 {
-		p.roots = append(p.roots, map[string]any{"type": "text", "value": strings.TrimSpace(decodeEntities(t))})
+		p.rootPending = append(p.rootPending, t)
 		return
 	}
 	top := p.stack[len(p.stack)-1]
-	top.text = append(top.text, decodeEntities(t))
-	if containerTags[top.tag] {
-		// Containers surface text runs as implicit text nodes, in order.
-		top.children = append(top.children, map[string]any{"type": "text", "value": strings.TrimSpace(decodeEntities(t))})
+	top.text = append(top.text, t)
+	if treatsTextAsChildren(top.tag) {
+		top.pending = append(top.pending, t)
 	}
+}
+
+// flushPending materializes an element's buffered text runs as one merged
+// implicit node. Merging (instead of one node per run) keeps sentences split
+// by inline tags whole, and lets markdown block structure be recognized.
+func (p *htmlParser) flushPending(el *openElem) {
+	if len(el.pending) == 0 {
+		return
+	}
+	node := textBlockNode(strings.Join(el.pending, ""))
+	el.pending = nil
+	el.children = append(el.children, node)
+}
+
+func (p *htmlParser) flushRootPending() {
+	if len(p.rootPending) == 0 {
+		return
+	}
+	node := textBlockNode(strings.Join(p.rootPending, ""))
+	p.rootPending = nil
+	p.roots = append(p.roots, node)
+}
+
+// textBlockNode wraps a merged text run as an implicit node — as markdown when
+// the run carries markdown block structure (auto-correcting the "markdown
+// table inside a card" habit: the markdown node routes through the full
+// markdown renderer, tables included), else as plain text.
+func textBlockNode(s string) map[string]any {
+	s = strings.TrimSpace(s)
+	if looksLikeMarkdownBlock(s) {
+		return map[string]any{"type": "markdown", "value": s}
+	}
+	return map[string]any{"type": "text", "value": s}
+}
+
+// looksLikeMarkdownBlock reports whether text carries markdown block structure
+// (table rows, headings, list runs, fences) that a plain text node would
+// render broken. Conservative: single bullets or lone pipes stay text.
+func looksLikeMarkdownBlock(s string) bool {
+	if strings.Contains(s, "```") {
+		return true
+	}
+	pipeRows, bullets := 0, 0
+	for _, line := range strings.Split(s, "\n") {
+		t := strings.TrimSpace(line)
+		if t == "" {
+			continue
+		}
+		if strings.HasPrefix(t, "|") {
+			if pipeRows++; pipeRows >= 2 {
+				return true
+			}
+			continue
+		}
+		if isMarkdownHeading(t) {
+			return true
+		}
+		if isMarkdownBullet(t) {
+			if bullets++; bullets >= 2 {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func isMarkdownHeading(t string) bool {
+	n := 0
+	for n < len(t) && t[n] == '#' {
+		n++
+	}
+	return n >= 1 && n <= 6 && n < len(t) && t[n] == ' '
+}
+
+func isMarkdownBullet(t string) bool {
+	if len(t) >= 2 && (t[0] == '-' || t[0] == '*') && t[1] == ' ' {
+		return true
+	}
+	if strings.HasPrefix(t, "• ") {
+		return true
+	}
+	i := 0
+	for i < len(t) && t[i] >= '0' && t[i] <= '9' {
+		i++
+	}
+	return i >= 1 && i+1 < len(t) && (t[i] == '.' || t[i] == ')') && t[i+1] == ' '
 }
 
 // ---------------------------------------------------------------------------
@@ -419,13 +653,47 @@ func convertElem(el *openElem, p *htmlParser) any {
 		node["type"] = "divider"
 		putID()
 	case "text":
+		if looksLikeMarkdownBlock(inner) {
+			// Whole markdown blocks stuffed into <text> (tables, bullet runs)
+			// upgrade to a markdown node so they render structured.
+			node["type"] = "markdown"
+			putID()
+			node["value"] = inner
+			return node
+		}
 		node["type"] = "text"
 		putID()
 		node["value"] = inner
-		putStr(node, "style", a["style"])
+		putStr(node, "style", canonTextStyle(a["style"]))
 		putBool(node, "bold", a, "bold")
 		putBool(node, "italic", a, "italic")
 		putStr(node, "color", a["color"])
+	case "p", "h1", "h2", "h3", "h4", "h5", "h6":
+		// HTML fluency aliases: paragraphs and headings map onto text nodes.
+		if inner == "" && len(el.children) == 0 {
+			return nil
+		}
+		node["type"] = "text"
+		putID()
+		node["value"] = inner
+		switch el.tag {
+		case "h1":
+			node["style"] = "headline"
+		case "h2", "h3":
+			node["style"] = "title"
+		case "h4", "h5", "h6":
+			node["bold"] = true
+		}
+		if len(el.children) > 0 {
+			// Block children inside a paragraph (models nest freely): keep
+			// both by wrapping in a column, text first.
+			kids := []any{}
+			if inner != "" {
+				kids = append(kids, node)
+			}
+			kids = append(kids, el.children...)
+			return map[string]any{"type": "column", "children": kids}
+		}
 	case "markdown":
 		node["type"] = "markdown"
 		putID()
@@ -457,7 +725,7 @@ func convertElem(el *openElem, p *htmlParser) any {
 		node["type"] = "badge"
 		putID()
 		node["value"] = firstNonEmpty(a["value"], inner)
-		putStr(node, "color", a["color"])
+		putStr(node, "color", canonBadgeColor(a["color"]))
 	case "stat":
 		node["type"] = "stat"
 		putID()
@@ -473,14 +741,21 @@ func convertElem(el *openElem, p *htmlParser) any {
 	case "progress":
 		node["type"] = "progress"
 		putID()
-		putNum(node, "value", a["value"], false)
+		if f, ok := lenientFloat(a["value"]); ok {
+			// Percent tolerance: "68" / "68%" mean 68% — the 0..1 contract
+			// only applies to values already in range.
+			if f > 1 {
+				f /= 100
+			}
+			node["value"] = min(max(f, 0), 1)
+		}
 		putStr(node, "label", a["label"])
 	case "alert":
 		node["type"] = "alert"
 		putID()
 		node["message"] = firstNonEmpty(a["message"], inner)
 		putStr(node, "title", a["title"])
-		putStr(node, "severity", a["severity"])
+		putStr(node, "severity", canonSeverity(a["severity"]))
 	case "countdown":
 		node["type"] = "countdown"
 		putID()
@@ -492,7 +767,7 @@ func convertElem(el *openElem, p *htmlParser) any {
 	case "chart":
 		node["type"] = "chart"
 		putID()
-		putStr(node, "chartType", a["type"])
+		putStr(node, "chartType", canonChartType(a["type"]))
 		putStr(node, "label", a["label"])
 		labels, values := []any{}, []any{}
 		for _, s := range el.structs {
@@ -501,7 +776,7 @@ func convertElem(el *openElem, p *htmlParser) any {
 				continue
 			}
 			labels = append(labels, pt.attrs["label"])
-			f, _ := strconv.ParseFloat(strings.TrimSpace(pt.attrs["value"]), 64)
+			f, _ := lenientFloat(pt.attrs["value"])
 			values = append(values, f)
 		}
 		node["labels"], node["values"] = labels, values
@@ -763,12 +1038,8 @@ func putBool(m map[string]any, k string, a map[string]string, attr string) {
 }
 
 func putNum(m map[string]any, k, v string, integer bool) {
-	v = strings.TrimSpace(v)
-	if v == "" {
-		return
-	}
-	f, err := strconv.ParseFloat(v, 64)
-	if err != nil {
+	f, ok := lenientFloat(v)
+	if !ok {
 		return
 	}
 	if integer {
@@ -776,6 +1047,107 @@ func putNum(m map[string]any, k, v string, integer bool) {
 	} else {
 		m[k] = f
 	}
+}
+
+// lenientFloat extracts a number from a lenient attribute value: exact floats
+// parse as-is; otherwise units, thousands commas, and stray symbols are
+// tolerated ("1,200톤" → 1200, "68%" → 68, "16px" → 16). ok=false when the
+// value carries no digits at all.
+func lenientFloat(v string) (float64, bool) {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return 0, false
+	}
+	if f, err := strconv.ParseFloat(v, 64); err == nil {
+		return f, true
+	}
+	start := -1
+	for i := 0; i < len(v); i++ {
+		if v[i] >= '0' && v[i] <= '9' {
+			start = i
+			break
+		}
+	}
+	if start < 0 {
+		return 0, false
+	}
+	var b strings.Builder
+	if start > 0 && v[start-1] == '-' {
+		b.WriteByte('-')
+	}
+	dot := false
+scan:
+	for i := start; i < len(v); i++ {
+		switch c := v[i]; {
+		case c >= '0' && c <= '9':
+			b.WriteByte(c)
+		case c == ',': // thousands separator: skip
+		case c == '.' && !dot:
+			dot = true
+			b.WriteByte(c)
+		default:
+			break scan
+		}
+	}
+	f, err := strconv.ParseFloat(strings.TrimSuffix(b.String(), "."), 64)
+	if err != nil {
+		return 0, false
+	}
+	return f, true
+}
+
+// canonBadgeColor folds common CSS color words onto the badge tint enum.
+func canonBadgeColor(v string) string {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "red":
+		return "error"
+	case "green":
+		return "success"
+	case "yellow", "amber", "orange":
+		return "warning"
+	case "blue":
+		return "primary"
+	case "gray", "grey", "neutral":
+		return "secondary"
+	}
+	return v
+}
+
+// canonSeverity folds severity synonyms onto the alert enum.
+func canonSeverity(v string) string {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "warn", "caution":
+		return "warning"
+	case "danger", "critical", "fatal":
+		return "error"
+	case "ok", "done":
+		return "success"
+	case "note", "notice", "information":
+		return "info"
+	}
+	return v
+}
+
+// canonChartType folds chart-type synonyms onto bar/line.
+func canonChartType(v string) string {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "bars", "column", "columns":
+		return "bar"
+	case "lines", "area", "trend":
+		return "line"
+	}
+	return v
+}
+
+// canonTextStyle folds text-style synonyms onto the style enum.
+func canonTextStyle(v string) string {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "heading", "header":
+		return "headline"
+	case "subtitle", "subheading":
+		return "title"
+	}
+	return v
 }
 
 func truthy(v string) bool {
