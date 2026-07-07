@@ -1,5 +1,20 @@
 # Changelog
 
+## [4.77.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.76.0...deneb-v4.77.0) (2026-07-07)
+
+
+### ✨ Features
+
+* **gateway:** 주간업무보고를 deneb-ui 카드로 — 서버 조립 소관별 접이식+현안 배지, LLM 무개입 ([#3263](https://github.com/choiceoh/Deneb/issues/3263)) ([59905c3](https://github.com/choiceoh/Deneb/commit/59905c31548499e47d77867ec4da89ca18af5e5d))
+
+
+### 🐛 Bug Fixes
+
+* **andromeda:** deneb-ui 인라인 렌더러 링크 지원 — 네이티브 InlineTokenizer 패리티 ([#3266](https://github.com/choiceoh/Deneb/issues/3266)) ([12f8cdf](https://github.com/choiceoh/Deneb/commit/12f8cdf4f2c44508ea4aa03768d73d75d8c9cb74))
+* **native:** 렌더러 인라인 마크다운 전수 감사 — 표 셀·경보·인용 별표 수리 (3구현) ([#3264](https://github.com/choiceoh/Deneb/issues/3264)) ([229915b](https://github.com/choiceoh/Deneb/commit/229915bed9e2de30ab300504dfc8a240e4686489))
+* **native:** 리스트 키·타임라인 제목 인라인 마크다운 — **키** 리터럴 별표 수리 ([#3260](https://github.com/choiceoh/Deneb/issues/3260)) ([497b361](https://github.com/choiceoh/Deneb/commit/497b361fc140675bdf4c7e5c43d366097f50026e))
+* **native:** 슬라이더 역범위 크래시 가드 + 꺾은선 음수값 in-plot (3구현 감사 2라운드) ([#3265](https://github.com/choiceoh/Deneb/issues/3265)) ([9b5e8ba](https://github.com/choiceoh/Deneb/commit/9b5e8badd951f9e7fbbe40842268da16642cda00))
+
 ## [4.76.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.75.1...deneb-v4.76.0) (2026-07-07)
 
 
