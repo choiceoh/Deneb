@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.0.54](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.53...andromeda-v0.0.54) (2026-07-07)
+
+
+### ✨ Features
+
+* **andromeda:** deneb-ui 데스크톱 패리티 라운드 + [#3233](https://github.com/choiceoh/Deneb/issues/3233) 리뷰 6건 반영 ([#3235](https://github.com/choiceoh/Deneb/issues/3235)) ([9da12f2](https://github.com/choiceoh/Deneb/commit/9da12f275e90346f6d1314a72321601f8c0d0d15))
+* **andromeda:** 파일 미리보기를 인라인 탭에서 팝업 모달로 전환 ([#3245](https://github.com/choiceoh/Deneb/issues/3245)) ([31aebd6](https://github.com/choiceoh/Deneb/commit/31aebd6926339c3ebfed2bb17fd06615a5ce175e))
+* **chat:** deneb-ui 파서 관용화+자동 보정 라운드 — 3구현 동기 (v2.1) ([#3247](https://github.com/choiceoh/Deneb/issues/3247)) ([237fb6c](https://github.com/choiceoh/Deneb/commit/237fb6c26eb5c2f0e47d3285af64ba4ce0ec3fe2))
+* **native:** 아침레터 에디토리얼 리디자인 + 렌더러 3라운드 + 리뷰 반영 ([#3233](https://github.com/choiceoh/Deneb/issues/3233)) ([bf5c206](https://github.com/choiceoh/Deneb/commit/bf5c2064c82065699f6e0784a16ae8afcc257b54))
+
+
+### 🐛 Bug Fixes
+
+* **andromeda:** HWP 미리보기 글자 깨짐 수리 — 실 문서 섹션의 deflate 트레일링 패딩 허용 ([#3237](https://github.com/choiceoh/Deneb/issues/3237)) ([d43cac5](https://github.com/choiceoh/Deneb/commit/d43cac57935c3d4952266a265272f79f50d0c999))
+* **native:** [#3234](https://github.com/choiceoh/Deneb/issues/3234)·[#3235](https://github.com/choiceoh/Deneb/issues/3235) 리뷰 반영 — stagger 노드키·모션 flip·카운트업 정밀도·badge 화이트리스트·음수 열 ([#3236](https://github.com/choiceoh/Deneb/issues/3236)) ([4ddfdcb](https://github.com/choiceoh/Deneb/commit/4ddfdcbe6638b7d90d00baa6c67ab31ac8f7f483))
+
 ## [0.0.53](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.52...andromeda-v0.0.53) (2026-07-05)
 
 

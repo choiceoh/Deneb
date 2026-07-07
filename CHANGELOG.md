@@ -1,5 +1,38 @@
 # Changelog
 
+## [4.75.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.74.0...deneb-v4.75.0) (2026-07-07)
+
+
+### ✨ Features
+
+* **andromeda:** deneb-ui 데스크톱 패리티 라운드 + [#3233](https://github.com/choiceoh/Deneb/issues/3233) 리뷰 6건 반영 ([#3235](https://github.com/choiceoh/Deneb/issues/3235)) ([9da12f2](https://github.com/choiceoh/Deneb/commit/9da12f275e90346f6d1314a72321601f8c0d0d15))
+* **andromeda:** 파일 미리보기를 인라인 탭에서 팝업 모달로 전환 ([#3245](https://github.com/choiceoh/Deneb/issues/3245)) ([31aebd6](https://github.com/choiceoh/Deneb/commit/31aebd6926339c3ebfed2bb17fd06615a5ce175e))
+* **chat:** deneb-ui 저작 계약 확장 — 노드 카탈로그를 용도 동사와 함께 명시 ([#3229](https://github.com/choiceoh/Deneb/issues/3229)) ([f989a12](https://github.com/choiceoh/Deneb/commit/f989a1228aece6b86c137487342a2d33f8304342))
+* **chat:** deneb-ui 파서 관용화+자동 보정 라운드 — 3구현 동기 (v2.1) ([#3247](https://github.com/choiceoh/Deneb/issues/3247)) ([237fb6c](https://github.com/choiceoh/Deneb/commit/237fb6c26eb5c2f0e47d3285af64ba4ce0ec3fe2))
+* **chat:** 읽기전용 다중도구 턴 병렬 실행 — 직렬 대기 낭비(실측 124s/3d) 제거, $ref·변이 도구는 직렬 유지 ([#3249](https://github.com/choiceoh/Deneb/issues/3249)) ([3f59f34](https://github.com/choiceoh/Deneb/commit/3f59f348549824cc3e91269d97f5937e12761489))
+* **chat:** 저작 계약 동기 — 표기 관례 프롬프트 + 이브닝레터 마스트헤드·긴급 배지 ([#3238](https://github.com/choiceoh/Deneb/issues/3238)) ([82908eb](https://github.com/choiceoh/Deneb/commit/82908eb10cc4fd3f8dcb6d9bd0c5faeade564d6a))
+* **native:** deneb-ui 모션 레이어 — 카드 stagger·차트 draw-in·stat 카운트업·햅틱 ([#3234](https://github.com/choiceoh/Deneb/issues/3234)) ([eeecaa3](https://github.com/choiceoh/Deneb/commit/eeecaa3b8b14f6142f33d84ce4ee93af0a5a9427))
+* **native:** deneb-ui 카드 시각 품질 패스 — 차트 값·축 라벨, 표 정렬·구분선, progress %, badge tint ([#3228](https://github.com/choiceoh/Deneb/issues/3228)) ([ac196f4](https://github.com/choiceoh/Deneb/commit/ac196f4581992c944d0fa03df7354b20db61ee43))
+* **native:** 렌더러 2라운드 + 아침레터 정돈 — 마크다운 표 fit, stat 그리드, 라인차트 스케일, EUR 제거 ([#3231](https://github.com/choiceoh/Deneb/issues/3231)) ([1e75c42](https://github.com/choiceoh/Deneb/commit/1e75c42ef386f387096a8d6eb1af89423ccf5cd5))
+* **native:** 새로고침 정직화 — 피드 PTR 실완료·실패 배너, 메일 스테일 스트립, 업로드 재시도, 상태 프리뷰 ([#3242](https://github.com/choiceoh/Deneb/issues/3242)) ([a529cde](https://github.com/choiceoh/Deneb/commit/a529cde7a61ecfb4bf0d8164ae6a172b5989460b))
+* **native:** 아침레터 에디토리얼 리디자인 + 렌더러 3라운드 + 리뷰 반영 ([#3233](https://github.com/choiceoh/Deneb/issues/3233)) ([bf5c206](https://github.com/choiceoh/Deneb/commit/bf5c2064c82065699f6e0784a16ae8afcc257b54))
+* **native:** 표면 폴리시 패스 — 모션 토큰 균질화·프레스 팬아웃·공유요소 2쌍·리듬 정렬 ([#3243](https://github.com/choiceoh/Deneb/issues/3243)) ([ffcc490](https://github.com/choiceoh/Deneb/commit/ffcc4902118f2737492dbd956c5316d0c7b08233))
+* **native:** 햅틱 강화 — tap VirtualKey 승격, PTR 트리거 틱, 롱프레스 이중진동 수리, 삭제 reject 교정 ([#3248](https://github.com/choiceoh/Deneb/issues/3248)) ([69150e5](https://github.com/choiceoh/Deneb/commit/69150e55308fb5862a1d79b8710e2f0d94c3044c))
+* **native:** 화면 전환 안무 + 공유요소 기반 — 드릴인 슬라이드·측면 페이드·메일 제목 morph ([#3239](https://github.com/choiceoh/Deneb/issues/3239)) ([25f7b9c](https://github.com/choiceoh/Deneb/commit/25f7b9c38dd606ec2c539c5df7247759fc985e13))
+
+
+### 🐛 Bug Fixes
+
+* **andromeda:** HWP 미리보기 글자 깨짐 수리 — 실 문서 섹션의 deflate 트레일링 패딩 허용 ([#3237](https://github.com/choiceoh/Deneb/issues/3237)) ([d43cac5](https://github.com/choiceoh/Deneb/commit/d43cac57935c3d4952266a265272f79f50d0c999))
+* **gateway:** observatory 메모리 백로그 오독 수리 — MEMORY.md 증류 스탬프를 일기 포인터로 쓰던 가짜 91d 경보 제거 ([#3244](https://github.com/choiceoh/Deneb/issues/3244)) ([d5160a2](https://github.com/choiceoh/Deneb/commit/d5160a2bc4606938f50d96a868b0391ec3e2b8d0))
+* **gateway:** 프로덕션 3일 로그·메트릭 분석 후속 수리 — wormhole 폴백·추론 오프·타임아웃·관측 위생 ([#3240](https://github.com/choiceoh/Deneb/issues/3240)) ([6c066ab](https://github.com/choiceoh/Deneb/commit/6c066ab1edd023d39ea4b1aafa5b0c98f45f71dd))
+* **native:** [#3234](https://github.com/choiceoh/Deneb/issues/3234)·[#3235](https://github.com/choiceoh/Deneb/issues/3235) 리뷰 반영 — stagger 노드키·모션 flip·카운트업 정밀도·badge 화이트리스트·음수 열 ([#3236](https://github.com/choiceoh/Deneb/issues/3236)) ([4ddfdcb](https://github.com/choiceoh/Deneb/commit/4ddfdcbe6638b7d90d00baa6c67ab31ac8f7f483))
+
+
+### 🔧 Internal
+
+* **chat:** 인앱 브라우저 번역 DeepL 전용화 — translation 모델 역할·LLM fallback 폐기 ([#3232](https://github.com/choiceoh/Deneb/issues/3232)) ([ec7d7fd](https://github.com/choiceoh/Deneb/commit/ec7d7fd70b0fdcfea4e65c3287f648af09dddc9b))
+
 ## [4.74.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.73.0...deneb-v4.74.0) (2026-07-06)
 
 
