@@ -18,6 +18,10 @@ export interface PaneTarget {
   path?: string;
 }
 
+// 노트북 상단(자료) 영역의 3단계 높이 — 접힘(바)·기본(30%)·확대(70%). 바 버튼이
+// 접힘→기본→확대→접힘 순으로 순환시키고, Workstation이 그리드 상단 행을 이 값으로 맞춘다.
+export type NotebookTop = "folded" | "default" | "expanded";
+
 interface WorkspaceCtx {
   connected: boolean;
   // The gateway config, exposed so query-driven panes (wiki/search/notebook) can
@@ -58,11 +62,11 @@ interface WorkspaceCtx {
   // pinned last). Persisted. SettingsPane reorders; Sidebar renders in this order.
   viewOrder: View[];
   setViewOrder: (order: View[]) => void;
-  // 노트북 상단(자료) 영역 접힘: NotebookPane's bar button toggles it; Workstation
-  // reads it to shrink the bottom-chat grid's top row to the bar, handing the
-  // freed height to the docked chat. Persisted to localStorage.
-  notebookFolded: boolean;
-  setNotebookFolded: (folded: boolean) => void;
+  // 노트북 상단(자료) 영역 높이(3단계): NotebookPane's bar button cycles it; Workstation
+  // reads it to size the bottom-chat grid's top row — 접힘=바 높이(하단 채팅이 전부 차지),
+  // 기본=30%, 확대=70%. Persisted to localStorage.
+  notebookTop: NotebookTop;
+  setNotebookTop: (t: NotebookTop) => void;
   // Coding mode: when on, the left rail shows coding sessions instead of panes
   // (the work area is the 코드 pane). Persisted to localStorage.
   codeMode: boolean;
@@ -100,10 +104,14 @@ function readCodeMode(): boolean {
   return getJSON<boolean>(CODE_MODE_KEY) === true;
 }
 
-const NOTEBOOK_FOLDED_KEY = "andromeda.notebook.folded";
+const NOTEBOOK_TOP_KEY = "andromeda.notebook.top";
+const NOTEBOOK_FOLDED_KEY = "andromeda.notebook.folded"; // legacy boolean, migrated below
 
-function readNotebookFolded(): boolean {
-  return getJSON<boolean>(NOTEBOOK_FOLDED_KEY) === true;
+function readNotebookTop(): NotebookTop {
+  const v = getJSON<NotebookTop>(NOTEBOOK_TOP_KEY);
+  if (v === "folded" || v === "default" || v === "expanded") return v;
+  // Migrate the old boolean fold flag: true → 접힘, otherwise 기본.
+  return getJSON<boolean>(NOTEBOOK_FOLDED_KEY) === true ? "folded" : "default";
 }
 
 const Ctx = createContext<WorkspaceCtx | null>(null);
@@ -132,7 +140,7 @@ export function WorkspaceProvider({
   const setNoteSink = (sink: ((text: string) => Promise<boolean>) | null) => setNoteSinkState(() => sink);
   const [hiddenViews, setHiddenViews] = useState<View[]>(readHiddenViews);
   const [viewOrder, setViewOrder] = useState<View[]>(readViewOrder);
-  const [notebookFolded, setNotebookFolded] = useState<boolean>(readNotebookFolded);
+  const [notebookTop, setNotebookTop] = useState<NotebookTop>(readNotebookTop);
   const [codeMode, setCodeMode] = useState<boolean>(readCodeMode);
   const [codeSessionsRev, setCodeSessionsRev] = useState(0);
   const bumpCodeSessions = () => setCodeSessionsRev((n) => n + 1);
@@ -173,8 +181,8 @@ export function WorkspaceProvider({
   }, [codeMode]);
 
   useEffect(() => {
-    setJSON(NOTEBOOK_FOLDED_KEY, notebookFolded);
-  }, [notebookFolded]);
+    setJSON(NOTEBOOK_TOP_KEY, notebookTop);
+  }, [notebookTop]);
 
   return (
     <Ctx.Provider
@@ -199,8 +207,8 @@ export function WorkspaceProvider({
         toggleViewHidden,
         viewOrder,
         setViewOrder,
-        notebookFolded,
-        setNotebookFolded,
+        notebookTop,
+        setNotebookTop,
         codeMode,
         setCodeMode,
         codeSessionsRev,

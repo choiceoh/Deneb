@@ -3,8 +3,8 @@ import { NOTEBOOK_RPC } from "@/resources";
 import { projectList } from "@/aiText";
 import type { Notebook, NotebookSource, NotebookSummary } from "@/types";
 import { useCachedRpc } from "@/useCachedRpc";
-import { useRegisterPane, useWorkspace } from "@/workspaceContext";
-import { Icon } from "@/components/Icon";
+import { useRegisterPane, useWorkspace, type NotebookTop } from "@/workspaceContext";
+import { Icon, type IconName } from "@/components/Icon";
 import { Field, Modal, ModalFooter } from "@/components/Modal";
 import { Markdown } from "@/components/Markdown";
 import { DeleteModal } from "./commonModals";
@@ -13,8 +13,17 @@ import { DeleteModal } from "./commonModals";
 // Each notebook is a 거래 with cited source materials; opening one feeds its
 // sources to the AI panel so Deneb answers grounded in that deal (NotebookLM-
 // style). You can also create a notebook and pin (add) a citation source.
+// 자료 영역 높이 버튼의 순환 순서(접힘→기본→확대→접힘)와, 각 상태에서 버튼이 할
+// "다음 동작"을 나타내는 아이콘·라벨. 확대 단계는 win-max(확대), 나머지는 셰브런 방향.
+const NEXT_TOP: Record<NotebookTop, NotebookTop> = { folded: "default", default: "expanded", expanded: "folded" };
+const TOP_ACTION: Record<NotebookTop, { icon: IconName; label: string }> = {
+  folded: { icon: "chevron-down", label: "자료 영역 펼치기" },
+  default: { icon: "win-max", label: "자료 영역 확대" },
+  expanded: { icon: "chevron-up", label: "자료 영역 접기" },
+};
+
 export function NotebookPane() {
-  const { connected, cfg, openWiki, setNoteSink, notebookFolded, setNotebookFolded } = useWorkspace();
+  const { connected, cfg, openWiki, setNoteSink, notebookTop, setNotebookTop } = useWorkspace();
   const { call, callCached, readCache, writeCache, status } = useCachedRpc(cfg, NOTEBOOK_RESOURCE);
   const [listSnapshot] = useState(() => readCache<NotebookListResponse>(NOTEBOOK_RPC.list));
   const [notebooks, setNotebooks] = useState<NotebookSummary[]>(listSnapshot?.data.notebooks ?? []);
@@ -247,21 +256,22 @@ export function NotebookPane() {
         >
           <Icon name="plus" size={12} /> 새 노트북
         </button>
-        {/* Fold the materials area down to this bar — the docked chat below takes
-            the freed height (Workstation collapses the grid's top row). Local state
-            (previewKey 등) survives the fold, so unfolding restores the exact view. */}
+        {/* Cycle the materials area's height — 접힘(바) → 기본(30%) → 확대(70%) → 접힘.
+            Workstation sizes the grid's top row to match; the docked chat below takes
+            whatever height is left. Local state (previewKey 등) survives the cycle, so
+            growing/shrinking restores the exact view. */}
         <button
           className="row-btn notebook-fold"
-          onClick={() => setNotebookFolded(!notebookFolded)}
-          aria-expanded={!notebookFolded}
-          aria-label={notebookFolded ? "자료 영역 펼치기" : "자료 영역 접기"}
-          title={notebookFolded ? "자료 영역 펼치기" : "자료 영역 접기"}
+          onClick={() => setNotebookTop(NEXT_TOP[notebookTop])}
+          aria-expanded={notebookTop !== "folded"}
+          aria-label={TOP_ACTION[notebookTop].label}
+          title={TOP_ACTION[notebookTop].label}
         >
-          <Icon name={notebookFolded ? "chevron-down" : "chevron-up"} size={12} />
+          <Icon name={TOP_ACTION[notebookTop].icon} size={12} />
         </button>
       </div>
 
-      {!notebookFolded &&
+      {notebookTop !== "folded" &&
         (!connected ? (
           <p className="notebook-empty">게이트웨이에 연결하세요.</p>
         ) : notebooks.length === 0 ? (
