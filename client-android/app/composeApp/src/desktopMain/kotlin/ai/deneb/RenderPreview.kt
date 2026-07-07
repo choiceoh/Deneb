@@ -16,6 +16,9 @@ import ai.deneb.deneb.CronEditContent
 import ai.deneb.deneb.DashboardLanesContent
 import ai.deneb.deneb.DealNotebookLinkRow
 import ai.deneb.deneb.DenebBrowserChrome
+import ai.deneb.deneb.DenebEmpty
+import ai.deneb.deneb.DenebError
+import ai.deneb.deneb.DenebLoading
 import ai.deneb.deneb.DenebMoreScreen
 import ai.deneb.deneb.DenebWebViewState
 import ai.deneb.deneb.FilesSearchMode
@@ -234,6 +237,8 @@ fun main() {
     System.setProperty("java.awt.headless", "true")
     renderScreen("mail_dark.png", "mail", DarkColorScheme, 840, 1100)
     renderScreen("mail_light.png", "mail", LightColorScheme, 840, 1100)
+    renderScreen("states_dark.png", "states", DarkColorScheme, 824, 1500)
+    renderScreen("states_light.png", "states", LightColorScheme, 824, 1500)
     renderBrowser("browser_dark.png", DarkColorScheme)
     renderBrowser("browser_light.png", LightColorScheme)
     renderMore("more_dark.png", DarkColorScheme)
@@ -895,6 +900,23 @@ internal val previewScreens: Map<String, @Composable (ColorScheme) -> Unit> = ma
                     sample.forEach { m ->
                         MailRow(m, selecting = false, isSelected = false, onTap = {}, onLongPress = {})
                     }
+                }
+            }
+        }
+    },
+    // The three shared data states every content screen composes from (폴리시 기준
+    // ★상태 완결성): skeleton loading, empty with action, error with retry — one
+    // frame so their vertical rhythm and voice are reviewed together.
+    "states" to { scheme ->
+        MaterialTheme(colorScheme = scheme) {
+            Surface(color = MaterialTheme.colorScheme.background) {
+                Column(Modifier.width(412.dp)) {
+                    DenebSectionLabel("로딩", Modifier.padding(start = 24.dp, top = 16.dp))
+                    DenebLoading()
+                    DenebSectionLabel("빈 상태", Modifier.padding(start = 24.dp))
+                    DenebEmpty("최근 30일 메일 없음", actionLabel = "새로고침", onAction = {})
+                    DenebSectionLabel("오류", Modifier.padding(start = 24.dp))
+                    DenebError("메일을 불러오지 못했습니다.", onRetry = {})
                 }
             }
         }

@@ -287,6 +287,30 @@ fun DenebMailScreen(
                                 }
                             }
                         }
+                        // A refresh that fails over a non-empty list keeps showing the
+                        // (stale) mail but must say so — a silently stopped spinner
+                        // reads as "refreshed" and erodes trust in the list.
+                        if (mail.isNotEmpty() && loadOk == false) {
+                            item(key = "refresh-error") {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
+                                ) {
+                                    Text(
+                                        "새로고침하지 못했습니다 — 표시된 목록은 이전 것입니다",
+                                        style = DenebType.meta,
+                                        color = MaterialTheme.colorScheme.error,
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                    TextButton(onClick = {
+                                        scope.launch {
+                                            loadOk = null
+                                            loadOk = client.refreshMail(activeQuery)
+                                        }
+                                    }) { Text("다시 시도") }
+                                }
+                            }
+                        }
                         // Error and empty render inside the list so toolbar search
                         // and filter controls can still be opened after a failure or
                         // empty result.

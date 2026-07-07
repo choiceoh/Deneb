@@ -34,6 +34,7 @@ import kotlinx.coroutines.flow.sample
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.getString
 import kotlin.coroutines.CoroutineContext
 import kotlin.time.Duration.Companion.seconds
@@ -595,11 +596,12 @@ class ChatViewModel(
         }
     }
 
-    private fun refreshWorkFeedRange(sinceMs: Long, beforeMs: Long) {
-        if (sinceMs <= 0L || beforeMs <= sinceMs) return
-        viewModelScope.launch(backgroundDispatcher) {
+    private suspend fun refreshWorkFeedRange(sinceMs: Long, beforeMs: Long): Boolean {
+        if (sinceMs <= 0L || beforeMs <= sinceMs) return false
+        return withContext(backgroundDispatcher) {
             (dataRepository as? DenebGatewayClient)
                 ?.refreshWorkFeed(sinceMs = sinceMs, beforeMs = beforeMs, merge = true)
+                ?: false
         }
     }
 

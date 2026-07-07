@@ -268,12 +268,20 @@ fun DenebFilesScreen(
             }
         }
         uploadError?.let {
-            Text(
-                it,
-                style = DenebType.meta,
-                color = MaterialTheme.colorScheme.error,
-                modifier = Modifier.padding(horizontal = 24.dp, vertical = 2.dp),
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
+            ) {
+                Text(
+                    it,
+                    style = DenebType.meta,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.weight(1f).padding(vertical = 2.dp),
+                )
+                // Retry = re-pick the file: the failed bytes aren't retained, and the
+                // picker restores the exact upload context.
+                TextButton(onClick = { uploadLauncher.launch() }) { Text("다시 시도") }
+            }
         }
         crudError?.let {
             Text(

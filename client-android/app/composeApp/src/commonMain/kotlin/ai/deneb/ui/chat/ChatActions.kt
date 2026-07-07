@@ -28,7 +28,9 @@ data class ChatActions(
     val openWorkFeedItem: (String) -> Unit,
     // Stamp a feed card read on the gateway (durable + cross-device) when it's opened.
     val markWorkFeedRead: (String) -> Unit,
-    val refreshWorkFeedRange: (Long, Long) -> Unit,
+    // Suspends and reports success so the feed's pull-to-refresh spinner and
+    // failure banner track the real fetch instead of a fixed timer.
+    val refreshWorkFeedRange: suspend (Long, Long) -> Boolean,
     // Clears ChatUiState.pendingScrollToMessageId after the chat list lands on it.
     val consumePendingScroll: () -> Unit,
     val runWorkFeedAction: (String, String) -> Unit,
