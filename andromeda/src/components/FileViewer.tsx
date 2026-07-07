@@ -192,7 +192,7 @@ export function FileViewer({
   // Text-family: shared editor chrome (모드 탭 + 저장) over per-kind rendering.
   // Only genuinely text-backed kinds are editable — HWP is EXTRACTED text
   // (saving it would corrupt the binary original), so it stays read-only even
-  // inside the file-tab (which passes an onSave).
+  // inside the file preview popup (which passes an onSave).
   const editable = Boolean(onSave) && isEditableKind(kind);
   const hasPreviewMode = kind === "markdown" || kind === "csv" || kind === "diff";
   const showPreview = hasPreviewMode && preview;
