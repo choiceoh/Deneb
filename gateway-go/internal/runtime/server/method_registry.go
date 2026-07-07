@@ -52,6 +52,7 @@ import (
 	handlerevents "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerevents"
 	handlerminiapp "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp"
 	handlerinsights "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/insights"
+	handlerobservatory "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/observatory"
 	handlerobserve "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/observe"
 	handlerprocess "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/process"
 	handlerprovider "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/provider"
@@ -205,6 +206,13 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		Logger: hub.Logger(),
 	}
 
+	// Improvement-loop liveness digest, registered twice like observe above
+	// (in-process observatory.* + client-token-gated miniapp.observatory.*).
+	// denebDir is the resolved state dir the watchdog reads too.
+	observatoryDeps := handlerobservatory.Deps{
+		StateDir: func() string { return denebDir },
+	}
+
 	// 시장(market) card data for the 오늘 dashboard — a keyless Yahoo Finance fetch
 	// cached for 10m. Promoted to a server field so the agent's market tool
 	// (wired later during chat init) shares the same cache/asOf. Created once at boot.
@@ -285,6 +293,7 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 
 		// --- Observation plane (unified: log ring + turn shape + behavior) ---
 		handlerobserve.Methods(observeDeps),
+		handlerobservatory.Methods(observatoryDeps),
 
 		// --- Insights (usage reports) ---
 		handlerinsights.Methods(handlerinsights.Deps{
@@ -313,6 +322,7 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		// dashboard, token-holding external CLI) can reach logs/turns/behavior.
 		// The miniapp.* gate is exactly the client-token boundary we want.
 		handlerobserve.MiniappMethods(observeDeps),
+		handlerobservatory.MiniappMethods(observatoryDeps),
 		handlerminiapp.Methods(handlerminiapp.Deps{
 			Version: hub.Version(),
 			CurrentModel: func() string {
