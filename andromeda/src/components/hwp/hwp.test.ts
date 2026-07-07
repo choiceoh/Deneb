@@ -88,6 +88,37 @@ describe("Cfb", () => {
     expect(cfb.read("Tiny")).toEqual(new Uint8Array([1, 2, 3]));
     expect(cfb.read("Spans")).toEqual(new Uint8Array(150).fill(7));
   });
+
+  it("reassembles a mini-stream whose chain crosses the 128-entry mini-FAT sector boundary", () => {
+    // Three ~3 KB streams all sit under the 4096 cutoff, so the mini-stream needs
+    // >128 mini-sectors and the mini-FAT spans TWO sectors. Reading the last stream
+    // walks a chain into the SECOND mini-FAT sector — the exact layout a real HWP
+    // with an embedded image uses (e.g. 그림.hwp: 20-sector mini-stream container,
+    // 2-sector mini-FAT). A reader that only loaded the first mini-FAT sector would
+    // truncate that chain and hand the record parser corrupt bytes.
+    const mk = (seed: number, n: number) => {
+      const a = new Uint8Array(n);
+      for (let i = 0; i < n; i++) a[i] = (seed * 31 + i * 7) & 0xff;
+      return a;
+    };
+    const a = mk(1, 3000);
+    const b = mk(2, 3000);
+    const c = mk(3, 3000); // FileHeader(4) + a(47) + b(47) = mini-sector 98 → chain crosses 128
+    const cfb = new Cfb(
+      buildCfb(
+        [
+          { name: "FileHeader", data: buildFileHeader({ compressed: false, version: [0, 0, 1, 5] }) },
+          { name: "A", data: a },
+          { name: "B", data: b },
+          { name: "C", data: c },
+        ],
+        { miniCutoff: 4096 },
+      ),
+    );
+    expect(cfb.read("C")).toEqual(c);
+    expect(cfb.read("A")).toEqual(a);
+    expect(cfb.read("B")).toEqual(b);
+  });
 });
 
 describe("parseHwp", () => {

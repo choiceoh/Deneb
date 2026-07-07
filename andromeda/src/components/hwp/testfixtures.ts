@@ -172,11 +172,17 @@ export function buildCfb(
     miniChunks.push(padded);
   }
   const miniData = concatBytes(...miniChunks);
-  let miniFatSector = ENDOFCHAIN;
+  let firstMiniFatSector = ENDOFCHAIN;
+  const miniFatSectors: number[] = [];
   if (miniData.length > 0) {
-    // One mini-FAT sector (128 entries → up to 8KB of mini data): enough for tests.
-    miniFatSector = nextSector++;
-    setFat(miniFatSector, ENDOFCHAIN);
+    // Mini-FAT: ceil(entries / 128) sectors, chained through the regular FAT, so a
+    // mini-stream larger than 128 mini-sectors (8 KB) is represented faithfully
+    // instead of truncating the chain at one sector — the layout real HWPs use.
+    const entriesPerSector = SECTOR / 4; // 128 mini-FAT entries per 512-byte sector
+    const mfCount = Math.max(1, Math.ceil(miniFat.length / entriesPerSector));
+    for (let k = 0; k < mfCount; k++) miniFatSectors.push(nextSector++);
+    miniFatSectors.forEach((sec, k) => setFat(sec, k === mfCount - 1 ? ENDOFCHAIN : miniFatSectors[k + 1]));
+    firstMiniFatSector = miniFatSectors[0];
     // The mini-stream itself is a regular FAT chain owned by the root entry.
     const nSec = Math.ceil(miniData.length / SECTOR);
     const secs: number[] = [];
@@ -213,8 +219,8 @@ export function buildCfb(
   dv.setUint32(44, 1, true); // number of FAT sectors
   dv.setUint32(48, 1, true); // first directory sector
   dv.setUint32(56, miniCutoff, true); // mini-stream cutoff (0 = all streams via FAT)
-  dv.setUint32(60, miniFatSector, true); // first mini-FAT sector (ENDOFCHAIN when unused)
-  dv.setUint32(64, miniData.length > 0 ? 1 : 0, true); // mini-FAT sector count
+  dv.setUint32(60, firstMiniFatSector, true); // first mini-FAT sector (ENDOFCHAIN when unused)
+  dv.setUint32(64, miniFatSectors.length, true); // mini-FAT sector count
   dv.setUint32(68, ENDOFCHAIN, true);
   dv.setUint32(76, 0, true); // DIFAT[0] → FAT at sector 0
   for (let i = 1; i < 109; i++) dv.setUint32(76 + i * 4, FREESECT, true);
@@ -232,10 +238,13 @@ export function buildCfb(
     dv.setUint32(off + 120, e.size, true);
   });
 
-  if (miniFatSector !== ENDOFCHAIN) {
-    const base = SECTOR + miniFatSector * SECTOR;
-    for (let i = 0; i < 128; i++) dv.setUint32(base + i * 4, i < miniFat.length ? miniFat[i] : FREESECT, true);
-  }
+  miniFatSectors.forEach((sec, k) => {
+    const base = SECTOR + sec * SECTOR;
+    for (let i = 0; i < 128; i++) {
+      const idx = k * 128 + i;
+      dv.setUint32(base + i * 4, idx < miniFat.length ? miniFat[idx] : FREESECT, true);
+    }
+  });
 
   for (const p of placed) {
     let written = 0;
