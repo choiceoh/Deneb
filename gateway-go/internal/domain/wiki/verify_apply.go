@@ -101,6 +101,18 @@ func (s *Store) FoldDuplicate(keep, fold string) error {
 	if keep == fold {
 		return fmt.Errorf("wiki: cannot fold a page into itself")
 	}
+	// Hard backstop against the 2026-06 mail-analysis mis-merge: two 메일분석 pages
+	// with DIFFERENT Message IDs are two different Gmail messages (메일 1통 =
+	// 1페이지) and must never become one page, no matter how the caller decided
+	// they were duplicates (title-normalization in dream verify, an LLM verdict in
+	// wiki-review, or a future path). Same-ID folds (one mail relocated across
+	// buckets) still pass. Detectors also filter this upstream; this is the
+	// last-line guarantee at the shared merge chokepoint.
+	if IsMailAnalysisPath(keep) && IsMailAnalysisPath(fold) &&
+		MailAnalysisMsgID(keep) != MailAnalysisMsgID(fold) {
+		return fmt.Errorf("wiki: refusing to fold two distinct mail analyses (%s ≠ %s) — 메일 1통 = 1페이지",
+			MailAnalysisMsgID(keep), MailAnalysisMsgID(fold))
+	}
 
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()

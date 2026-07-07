@@ -137,6 +137,45 @@ func TestApplyVerifyFixes_SkipsAdvisoryAndCaps(t *testing.T) {
 	}
 }
 
+// TestFoldDuplicate_RefusesDistinctMailAnalyses: the shared merge chokepoint is
+// the last-line guard — even if a caller decides two 메일분석 pages are duplicates,
+// different Message IDs mean two different Gmail messages (메일 1통 = 1페이지) and
+// the fold is refused with both pages left intact. A same-ID fold (one mail
+// relocated across buckets) still succeeds.
+func TestFoldDuplicate_RefusesDistinctMailAnalyses(t *testing.T) {
+	s, _ := newVerifyStore(t)
+	keep := "프로젝트/해밀고흥솔라팜-모듈/메일분석/19eaa3e4371576a3.md"
+	fold := "프로젝트/해밀고흥솔라팜-모듈/메일분석/19eaa3aa72de312b.md"
+	writePageT(t, s, keep, "Re: 견적", "프로젝트", "> Message ID: `19eaa3e4371576a3`\nA 본문")
+	writePageT(t, s, fold, "Re: 견적", "프로젝트", "> Message ID: `19eaa3aa72de312b`\nB 본문")
+
+	if err := s.FoldDuplicate(keep, fold); err == nil {
+		t.Error("FoldDuplicate folded two distinct mail analyses (different Message IDs)")
+	}
+	// Both pages survive untouched — the guard fires before any write/delete.
+	if p, _ := s.ReadPage(fold); p == nil {
+		t.Error("fold page was destroyed despite the guard rejecting the fold")
+	}
+	if p, _ := s.ReadPage(keep); p == nil {
+		t.Error("keep page vanished")
+	}
+	if p, _ := s.ReadPage(keep); p != nil && strings.Contains(p.Body, "병합된 중복 문서") {
+		t.Error("keep page absorbed the fold body despite the guard")
+	}
+
+	// Same msgID in two buckets IS one mail — that fold must still succeed.
+	uKeep := "프로젝트/해밀고흥솔라팜-모듈/메일분석/aaaa1111bbbb2222.md"
+	uFold := "프로젝트/메일분석/aaaa1111bbbb2222.md"
+	writePageT(t, s, uKeep, "FW: 계약", "프로젝트", "> Message ID: `aaaa1111bbbb2222`\n프로젝트 슬롯")
+	writePageT(t, s, uFold, "FW: 계약", "프로젝트", "> Message ID: `aaaa1111bbbb2222`\n미연결 버킷")
+	if err := s.FoldDuplicate(uKeep, uFold); err != nil {
+		t.Errorf("same-mail fold across buckets rejected: %v", err)
+	}
+	if p, _ := s.ReadPage(uFold); p != nil {
+		t.Error("same-mail duplicate should have been folded away")
+	}
+}
+
 func TestExactDupFinding_KeepsHigherImportance(t *testing.T) {
 	entries := map[string]IndexEntry{
 		"프로젝트/low.md":  {Title: "탑솔라", Importance: 0.3},

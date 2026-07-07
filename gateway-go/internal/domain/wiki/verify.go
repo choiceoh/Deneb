@@ -271,6 +271,21 @@ func detectDuplicates(entries map[string]IndexEntry) []VerifyFinding {
 				continue
 			}
 
+			// Mail-analysis guard: a 메일분석 page's identity is its Message ID (메일
+			// 1통 = 1페이지), never its subject. Distinct Gmail messages routinely
+			// share a subject (reply chains, 4분 만의 재발송 정정, vendor
+			// notifications), so the subject-normalization merge below — built for
+			// curated pages that splinter by name — must not fold two different
+			// mails into one page. Skip the pair unless the IDs match (a genuine
+			// same-mail duplicate in two buckets, which SHOULD dedup). This was the
+			// root of the 2026-06 mail-analysis mis-merge: 14 pages each swallowed a
+			// different-ID mail because their titles normalized equal.
+			if IsMailAnalysisPath(a.path) || IsMailAnalysisPath(b.path) {
+				if MailAnalysisMsgID(a.path) != MailAnalysisMsgID(b.path) {
+					continue
+				}
+			}
+
 			// Compare titles. Normalized-key equality ("영산고 태양광" vs
 			// "영산고-태양광" vs "영산고태양광") is as safe to auto-merge as an exact
 			// match — punctuation/spacing variants are exactly how the same topic
