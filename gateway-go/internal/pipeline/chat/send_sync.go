@@ -11,6 +11,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/market"
 	"github.com/choiceoh/deneb/gateway-go/internal/hanja"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/shortid"
 )
@@ -44,18 +45,22 @@ type SyncResult struct {
 //   - else AllText (last resort: a run that produced only narration before
 //     aborting).
 //
-// NO_REPLY is stripped so the marker never leaks to the client.
+// NO_REPLY is stripped so the marker never leaks to the client. Market letter
+// tokens ("{{market:usd_krw}}") are substituted with their fetched values —
+// the proactive relay covers the cron path, this covers the interactive one
+// (a letter composed in chat would otherwise surface raw tokens). No-op for
+// ordinary replies (fast path on the token prefix).
 func (r *SyncResult) BestText() string {
 	if d := strings.TrimSpace(StripSilentToken(r.DeliverableText)); d != "" {
-		return d
+		return market.SubstituteLetterTokens(d)
 	}
 	// Text needs the silent strip too: a final turn of exactly NO_REPLY with an
 	// empty DeliverableText would otherwise return the literal marker here,
 	// contradicting the "never leaks to the client" contract above.
 	if t := strings.TrimSpace(StripSilentToken(r.Text)); t != "" {
-		return t
+		return market.SubstituteLetterTokens(t)
 	}
-	return strings.TrimSpace(StripSilentToken(r.AllText))
+	return market.SubstituteLetterTokens(strings.TrimSpace(StripSilentToken(r.AllText)))
 }
 
 func (r *SyncResult) fillEmptyStopFallback() bool {

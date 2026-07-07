@@ -42,8 +42,8 @@ metadata:
 반환 데이터 구조:
 - `date`: 오늘 날짜 (한국어, 요일 포함)
 - `sections.weather`: 기온, 체감온도, 날씨상태, 습도, 최저/최고, 강수확률
-- `sections.exchange`: USD/KRW 환율 (숫자; EUR도 오지만 레터에는 쓰지 않는다)
-- `sections.copper`: LME 구리시세 USD/ton (MetalpriceAPI)
+- `sections.exchange`: USD/KRW 환율 — `usd_krw`(숫자, 해석용)와 `usd_krw_token`(카드 `value`에 넣을 플레이스홀더). EUR도 오지만 레터에는 쓰지 않는다
+- `sections.copper`: LME 구리시세 USD/ton — `price_per_ton_usd`(숫자, 해석용)와 `token`(카드 `value`에 넣을 플레이스홀더)
 - `sections.calendar`: 오늘 일정 목록
 - `sections.email`: 전일 수신 메일 목록 (발신자, 제목, 스니펫)
 - `sections.deadlines`: 위키에서 스캔한 임박 마감 목록 (`items`: title, category, due, days_left)
@@ -79,7 +79,7 @@ metadata:
   </card>
   <card>
     <row><icon name="payments" size="16"/><text style="caption">환율 · 구리</text></row>
-    <row><stat value="1,386" label="USD/KRW"/><stat value="$9,540 /t" label="LME 구리"/></row>
+    <row><stat value="{{market:usd_krw}}" label="USD/KRW"/><stat value="${{market:copper}} /t" label="LME 구리"/></row>
   </card>
   <card>
     <row><icon name="calendar" size="16"/><text style="caption">오늘 일정</text></row>
@@ -102,7 +102,7 @@ metadata:
 - **마스트헤드**: 카드들 앞에 `text(headline)`로 날짜("M월 D일 요일" 꼴), 그 아래 `text(caption)`으로 `아침 레터 · 데네브`, 이어서 `<hr/>` 한 줄. 레터의 1면 제호다.
 - **카드 헤더**: 각 카드 첫 `row`는 `icon` + `text(caption)`. 아이콘 이름 **고정** — 날씨 `sunny`(흐림 `cloud`, 비 `water_drop`), 환율·구리 `payments`, 일정 `calendar`, 메일 `mail`, 마감 `alarm`.
 - **날씨**: 기온 `text(headline)` + 체감 `text(caption)`를 한 `row`에. 그 아래 `최고 N° · 최저 N° · 강수 N%`를 `text(caption)` 한 줄. 마지막에 맥락 한마디 `text(body)`(강수 30%↑면 우산, 한파면 방한). **`stat`을 가로로 3개 늘어놓지 마라 — 폰 폭에서 깨진다.**
-- **환율·구리**: USD/KRW와 LME 구리를 `stat` 2개로 한 `row`(2칸). **EUR/KRW는 쓰지 않는다.** 구리 `value`는 `"$9,540 /t"` 꼴, `label`은 `"LME 구리"`. 환율 숫자는 천단위 콤마. `date` 필드가 오늘이 아니면 구리 `value`에 `"(X월 X일)"` 덧붙임. **도구 JSON의 실제 수치를 그대로 복사한다** — `{{market:usd_krw}}` 같은 플레이스홀더는 치환되지 않고 사용자에게 그대로 노출된다. 수치를 못 얻었으면 그 stat 대신 `<text>조회 실패</text>`.
+- **환율·구리**: USD/KRW와 LME 구리를 `stat` 2개로 한 `row`(2칸). **EUR/KRW는 쓰지 않는다.** **시세 숫자를 직접 쓰지 마라** — 도구 JSON이 준 토큰(exchange `usd_krw_token`, copper `token`)을 스켈레톤처럼 `value`에 그대로 배치하면 발송 시 서버가 실측 숫자로 자동 치환한다. 토큰은 숫자만 치환되므로 구리 `value`는 `"${{market:copper}} /t"` 꼴로 단위를 감싼다(`label`은 `"LME 구리"`). `date` 필드가 오늘이 아니면 구리 `value`에 `"(X월 X일)"` 덧붙임. 섹션이 `ok: false`거나 토큰 필드가 없으면 그 stat 대신 `<text>조회 실패</text>`.
 - **일정**: `<ul>`, 각 항목 `<li>HH:MM — 제목</li>`, 시간순 최대 8건. 없으면 `<ul>` 대신 `<text>일정 없음</text>`.
 - **메일**: `<ul>`, 각 항목 `<li>발신자 — 제목 요약</li>`, 중요도순 상위 5건(길면 3건). 발신자는 이름만(`"이름 <메일>"` → `"이름"`). 없으면 `<text>수신 메일 없음</text>`.
 - **임박 마감**: 마감마다 `<row>`에 `<text style="body">` 제목 + `<badge>D-N</badge>`. `days_left`로 D-N(0=`"D-day"`, 음수=`"기한 초과"`), 오름차순. 긴급도를 배지 색으로: D-3 이하 `<badge color="warning">`, 기한 초과·D-day `<badge color="error">`, 그 외 색 없음. 결제기한·납기 누락 금지. **항목이 없으면 이 카드 전체를 생략한다.**
@@ -114,7 +114,7 @@ metadata:
 - 펜스는 deneb-ui 블록 **정확히 한 개**, 그 안은 루트 `<column>` **하나**의 HTML 마크업. 한국어는 그대로 쓴다(이스케이프 불필요).
 - 태그를 지어내지 마라. 쓸 태그는 예시의 것뿐: `column`/`card`/`row`/`text`(style: `headline`·`caption`·`body`)/`stat`/`ul`·`li`/`icon`/`badge`/`hr`(마스트헤드 구분선).
 - 여는 태그는 닫는다(`<card>…</card>`). 속성값은 큰따옴표. 카드 본문에 백틱(`` ` ``)이나 코드펜스를 넣지 마라.
-- `{{…}}`·`${…}` 같은 변수/치환 문법 금지 — 서버 치환 단계가 없다. 모든 수치·텍스트는 실제 값으로 쓴다.
+- 변수/치환 문법은 **도구 JSON이 명시적으로 준 시세 토큰(`{{market:…}}`)만** 허용 — 이것만 발송 시 서버가 치환한다. 그 외의 `{{…}}`·`${…}` 문법을 지어내면 치환되지 않고 그대로 노출된다. 시세 외 모든 수치·텍스트는 실제 값으로 쓴다.
 - 강조는 `<b>`/`<strong>`이 아니라 `**굵게**` 인라인 마크다운으로 (`text`·`li` 안에서 지원된다).
 - 펜스 앞뒤에 머리말 한 줄 외의 설명·상태 텍스트를 넣지 마라.
 

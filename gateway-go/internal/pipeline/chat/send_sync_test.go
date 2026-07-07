@@ -12,6 +12,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/market"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
@@ -162,6 +163,17 @@ func TestBuildSyncResult_LeavesNormalEmptyEndTurnBlank(t *testing.T) {
 
 	if got := result.BestText(); got != "" {
 		t.Fatalf("BestText() = %q, want blank", got)
+	}
+}
+
+// The interactive surfaces (chat.send reply, stream done frame) both read
+// BestText — a letter composed in chat must surface substituted market numbers,
+// not raw tokens (the proactive relay only covers the cron path).
+func TestBestText_SubstitutesMarketLetterTokens(t *testing.T) {
+	market.RecordLetterTokens(map[string]string{market.LetterTokenUSDKRW: "1,531"})
+	r := SyncResult{DeliverableText: `<stat value="{{market:usd_krw}}" label="USD/KRW"/>`}
+	if got := r.BestText(); got != `<stat value="1,531" label="USD/KRW"/>` {
+		t.Fatalf("BestText() = %q, want substituted stat", got)
 	}
 }
 

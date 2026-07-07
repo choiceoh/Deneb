@@ -8,6 +8,11 @@ import "testing"
 // are a server-side gate: the letter skeletons the agent copies+fills must stay
 // schema-valid against the deneb-ui node spec, so a malformed template can't
 // silently ship a broken card. Keep the HTML here in sync with those sources.
+//
+// The market stat values carry the AUTHORING form — digit-free letter tokens
+// ("{{market:usd_krw}}") the proactive relay substitutes with fetched numbers
+// at delivery (domain/market letter_tokens.go). The skeleton must validate in
+// that pre-substitution shape, since that is what the model actually emits.
 
 const morningLetterCardHTML = `<column>
   <text style="headline">7월 7일 화요일</text>
@@ -21,7 +26,7 @@ const morningLetterCardHTML = `<column>
   </card>
   <card>
     <row><icon name="payments" size="16"/><text style="caption">환율 · 구리</text></row>
-    <row><stat value="1,386" label="USD/KRW"/><stat value="$9,540 /t" label="LME 구리"/></row>
+    <row><stat value="{{market:usd_krw}}" label="USD/KRW"/><stat value="${{market:copper}} /t" label="LME 구리"/></row>
   </card>
   <card>
     <row><icon name="calendar" size="16"/><text style="caption">오늘 일정</text></row>
