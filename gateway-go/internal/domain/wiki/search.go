@@ -298,7 +298,24 @@ func (s *Store) Search(ctx context.Context, query string, limit int) ([]SearchRe
 		}
 		return truncateResults(s.fts.applyValidity(bm25), limit), nil
 	}
-	return truncateResults(s.fts.applyValidity(mergeSearchResults(bm25, sem, fetchLimit, commonOnlyQuery)), limit), nil
+	graphPaths := s.graphBoostPaths(ctx, query)
+	return truncateResults(s.fts.applyValidity(fuseSearchResults(bm25, sem, graphPaths, fetchLimit, commonOnlyQuery)), limit), nil
+}
+
+// graphBoostPaths returns the graph-proximity ranking for query (the third RRF
+// signal), or nil when disabled (DENEB_WIKI_GRAPH_BOOST=off). Default ON: on the
+// wiki-qa gold set it added +4.6pt P@1 / +4.5pt R@8 over RRF-alone for ~17ms per
+// query (cmd/recall-bench), bringing the graph signal — previously only in chat
+// recall anchors — into wiki.Store.Search / miniapp.memory.search. Bounded to
+// semanticBlendK neighbors, the same window the fusion already over-fetches.
+func (s *Store) graphBoostPaths(ctx context.Context, query string) []string {
+	// The additive rollback path discards graphPaths (see fuseSearchResults), so
+	// building the graph + embedding-reranking it there is pure waste — and this
+	// runs per query inside SearchBatch under the ~1.5s recall budget. Skip it.
+	if os.Getenv("DENEB_WIKI_GRAPH_BOOST") == "off" || os.Getenv("DENEB_WIKI_FUSION") == "additive" {
+		return nil
+	}
+	return s.graphRankedPaths(ctx, query, semanticBlendK)
 }
 
 // truncateResults cuts a validity-adjusted, re-sorted result list down to the
@@ -360,7 +377,8 @@ func (s *Store) SearchBatch(ctx context.Context, queries []string, limit int) ([
 			out[i] = truncateResults(s.fts.applyValidity(bm25), limit)
 			continue
 		}
-		out[i] = truncateResults(s.fts.applyValidity(mergeSearchResults(bm25, sem, fetchLimit, commonOnlyQuery)), limit)
+		graphPaths := s.graphBoostPaths(ctx, query)
+		out[i] = truncateResults(s.fts.applyValidity(fuseSearchResults(bm25, sem, graphPaths, fetchLimit, commonOnlyQuery)), limit)
 	}
 	return out, nil
 }
@@ -568,6 +586,135 @@ func mergeSearchResults(bm25, sem []SearchResult, limit int, commonOnlyQuery boo
 	sort.Slice(out, func(a, b int) bool {
 		if out[a].final != out[b].final {
 			return out[a].final > out[b].final
+		}
+		return out[a].res.Path < out[b].res.Path
+	})
+	if len(out) > limit {
+		out = out[:limit]
+	}
+	results := make([]SearchResult, len(out))
+	for i := range out {
+		results[i] = out[i].res
+	}
+	return results
+}
+
+// rrfK is the Reciprocal Rank Fusion damping constant (Cormack et al. 2009). 60
+// is the field-standard default: large enough that the top few ranks aren't
+// hugely peaked, small enough that deep-rank hits still contribute little.
+const rrfK = 60.0
+
+// rrfScoreScale maps the raw RRF sum (tiny: a rank-1-in-both hit is 2/(rrfK+1) ≈
+// 0.033) back into the ~0–1 relevance band that SearchResult.Score MUST live in.
+// The score is not just an internal ordering key — the recall preflight consumes
+// it as normalized relevance (recall_evidence: 0.80 + r.Score, high-confidence at
+// ≥1.10) to merge wiki hits against diary/file/session sources on one axis. Left
+// at raw magnitude, every wiki hit capped near 0.83 and could never be
+// high-confidence nor out-rank another source (a regression the internal hit@K
+// bench can't see). Scale is constant (order- and hit@K-preserving) and tuned so
+// the canonical strong hybrid hit (rank 1 in BOTH bm25 and semantic) lands at
+// 0.8 → 1.60 in recall, comfortably above 1.10 and below the 2.2 project anchor;
+// a three-signal hit (+graph seed) tops out ≈1.2 → 2.0, still under the anchor.
+const rrfScoreScale = 0.4 * (rrfK + 1)
+
+// fuseSearchResults dispatches BM25×semantic fusion. Reciprocal Rank Fusion is
+// the default (DENEB_WIKI_FUSION=additive rolls back to the historical additive
+// max(bm25,cosine)+bonus/penalty blend). RRF measured +11.3pt P@1 / +4.5pt R@8 /
+// +0.07 MRR over additive on the 44-case wiki-qa gold set (cmd/recall-bench),
+// with no wiki-test regression — it drops the fragile cross-signal score
+// normalization the additive priors accrue as sources grow. The env read is the
+// same runtime-override pattern as the floor knobs, so a bench scores both from
+// one binary and an operator can roll back without a rebuild.
+func fuseSearchResults(bm25, sem []SearchResult, graphPaths []string, limit int, commonOnlyQuery bool) []SearchResult {
+	if os.Getenv("DENEB_WIKI_FUSION") == "additive" {
+		return mergeSearchResults(bm25, sem, limit, commonOnlyQuery)
+	}
+	return mergeSearchResultsRRF(bm25, sem, graphPaths, limit, commonOnlyQuery)
+}
+
+// mergeSearchResultsRRF fuses the lexical and semantic rankings by Reciprocal
+// Rank Fusion: a page's score is Σ 1/(rrfK + rank) over the rankings it appears
+// in (rank is 1-based position in each already-sorted candidate list). Unlike
+// the additive blend it needs NO cross-signal score normalization — BM25
+// magnitudes and cosine bands never share an axis, only their ranks do, which is
+// exactly the fragility the hand-tuned source priors accrue as sources grow. The
+// SAME admission gates as mergeSearchResults apply (semantic-only cosine floor,
+// common-only lexical drop), so RRF changes ordering, not what is admitted.
+func mergeSearchResultsRRF(bm25, sem []SearchResult, graphPaths []string, limit int, commonOnlyQuery bool) []SearchResult {
+	type merged struct {
+		res    SearchResult
+		semCos float64
+		inBM25 bool
+		graph0 bool // seed of the graph ranking (the named entity's own page)
+		rrf    float64
+	}
+	byPath := make(map[string]*merged, len(bm25)+len(sem))
+	for rank, r := range bm25 {
+		m := byPath[r.Path]
+		if m == nil {
+			m = &merged{res: r}
+			byPath[r.Path] = m
+		}
+		m.inBM25 = true
+		m.rrf += 1.0 / (rrfK + float64(rank+1))
+		if m.res.Content == "" && r.Content != "" {
+			m.res.Content = r.Content
+		}
+	}
+	for rank, r := range sem {
+		m := byPath[r.Path]
+		if m == nil {
+			m = &merged{res: r}
+			byPath[r.Path] = m
+		}
+		if r.Score > m.semCos {
+			m.semCos = r.Score
+		}
+		m.rrf += 1.0 / (rrfK + float64(rank+1))
+	}
+	// Graph proximity as a third RRF ranking: pages connected to the entity named
+	// in the query (seed first, then neighbors by graph score). A page already
+	// retrieved lexically/semantically gets its rank reinforced; a graph-only page
+	// is admitted only if it is the SEED (the named entity's own page, rank 0) —
+	// a high-confidence "the user asked about this exact thing" signal — so
+	// arbitrary neighbors never inject themselves off a graph edge alone.
+	for rank, p := range graphPaths {
+		m := byPath[p]
+		if m == nil {
+			m = &merged{res: SearchResult{Path: p}}
+			byPath[p] = m
+		}
+		if rank == 0 {
+			m.graph0 = true
+		}
+		m.rrf += 1.0 / (rrfK + float64(rank+1))
+	}
+
+	floor := semanticOnlyFloorValue()
+	// The graph seed is resolved by substring match (graphRankedPaths → findSeed),
+	// so on a common-only query — one with no rare anchor term — a corpus-common
+	// noun in a page title can mark that page as the "seed" and wrongly exempt it
+	// from the gates the rarity leak-guard exists to enforce. Trust the graph
+	// signal for admission only when the query HAS a rare anchor (its entity match
+	// is meaningful); otherwise both gates apply strictly.
+	graphTrusted := !commonOnlyQuery
+	out := make([]merged, 0, len(byPath))
+	for _, m := range byPath {
+		if !m.inBM25 && !(m.graph0 && graphTrusted) && m.semCos < floor {
+			continue // semantic-only floor; only a trusted graph seed is injected below it
+		}
+		if commonOnlyQuery && m.inBM25 && m.semCos < semSupportThreshold {
+			continue // lexical-leak drop — semantic must confirm; graph grants no exemption here
+		}
+		// Order is by raw m.rrf (below); Score carries the scaled ~0–1 relevance
+		// cross-source recall needs. The scale is constant so the two never
+		// disagree on ordering.
+		m.res.Score = m.rrf * rrfScoreScale
+		out = append(out, *m)
+	}
+	sort.Slice(out, func(a, b int) bool {
+		if out[a].rrf != out[b].rrf {
+			return out[a].rrf > out[b].rrf
 		}
 		return out[a].res.Path < out[b].res.Path
 	})
