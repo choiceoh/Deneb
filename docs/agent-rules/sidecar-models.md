@@ -26,19 +26,19 @@ globs: ["gateway-go/internal/pipeline/chat/tools/paddleocr.go", "gateway-go/inte
 
 ### 무엇 / 왜
 - 0.9B 비전-언어 모델 (NaViT 인코더 + ERNIE-4.5-0.3B). 한국어 업무 문서(표·수식·혼합 숫자·도장)에서 tesseract 대비 압도적 정확도. OmniDocBench v1.6 SOTA.
-- BF16 가중치라 unified memory 를 거의 안 먹어 메인 LLM 과 공존 가능. 워밍 후 **~1s/page**, 콜드 첫 요청만 ~19s(CUDA-graph 워밍업, 부팅 1회).
+- FP8(동적) 가중치(~1.45GiB)라 unified memory 를 거의 안 먹어 메인 LLM 과 공존. 워밍 후 **~0.7s/page**(디코드 ~249 tok/s), 다페이지는 서버 배칭으로 ~7배(8p 8.6s→1.2s). 콜드 첫 요청만 CUDA-graph 워밍업.
 
 ### 서버 (상주)
 - 런처: **`~/start-paddleocr-vl.sh`** (★**srv1** 호스트, **레포 밖** 로컬 파일 — 게이트웨이(srv4)는 `DENEB_OCR_VL_URL=http://100.105.145.6:18011` 로 크로스호스트 소비). 컨테이너 `paddleocr-vl`, port **18011**, `--restart unless-stopped`.
-- 이미지: 로컬 `vllm-node:latest` (vLLM 0.21.1, 2026-05-26 빌드) 가 `PaddleOCRVLForConditionalGeneration` 을 **네이티브 등록** → PaddlePaddle 프레임워크 불필요. 순수 OpenAI 호환.
-- 가중치: `~/models/PaddleOCR-VL-1.6` (hf download). 1.82 GiB BF16.
-- **메모리 예산 (2026-06-02 하향)**: `--gpu-memory-utilization 0.03` + `--max-model-len 8192`. unified 점유 **~2.8GB** (이전 0.15 는 122GB 의 15% ≈ **16GB 를 통째로 KV 풀로 선점** → 0.3B 급 디코더엔 10GB+ 가 빈 예약 낭비였음). 0.03 budget(~3.6GB) − 가중치 1.82 − 비-torch 오버헤드 ~1.6 = KV ~0.47GB → 8192 토큰 한 시퀀스(~0.14GB)에 동시 3.37x. OCR 은 페이지 단위라 16384 컨텍스트 불필요. ⚠️ **0.03 에서 max-model-len 16384 는 기동 실패** (KV 0.28GB < 필요 0.28GB, 간발의 차) — 8192 로 낮춰야 들어맞음. 런처가 `GPU_MEM_UTIL`·`PADDLEOCR_MAX_MODEL_LEN` env override 지원.
+- 이미지: **`ghcr.io/spark-arena/dgx-vllm-eugr-nightly:latest`** (2026-07-07 업그레이드, 구 `vllm-node:latest`). `paddleocr_vl` 커스텀 arch 를 trust-remote-code 로 로드, **FP8**(동적, CutlassFP8ScaledMM·SM121) + **ngram** speculative decode 지원. 순수 OpenAI 호환. ⚠️ eugr 엔트리포인트가 vllm 이 아니라 런처가 `--entrypoint bash` + 영속 serve 스크립트(`~/serve-paddleocr-vl.sh`)로 기동 — ngram JSON 이 셸 인용을 안 타게.
+- 가중치: `~/models/PaddleOCR-VL-1.6` (hf download). 1.82 GiB 소스, FP8 동적양자화로 로드 시 ~1.45 GiB.
+- **메모리 예산 (2026-07-07 상향)**: `--gpu-memory-utilization 0.10` + `--max-num-seqs 8` + `--max-model-len 8192`. FP8 로 가중치가 작아져 util 0.10(~12GB)에서 **동시성 58x**(KV ~8GB) — 다페이지 배칭의 근거(구 0.03/seqs4/BF16 은 동시성 3.4x 로 배칭 사실상 불가였음). srv1 여유 ~28GB 내라 안전. ⚠️ **병목은 디코드**(출력토큰 생성)지 프리필 아님 — NaViT 가 vision 토큰을 ~1.3k 로 정규화해 **입력 해상도와 지연 무관**(이미지 축소 무의미, 측정으로 기각). 디코드가 느린 건 GB10 메모리대역폭(~273GB/s)에 0.9B 가 묶여서(토큰당 read) → FP8 이 반감(160→249 tok/s). 런처가 `GPU_MEM_UTIL`·`PADDLEOCR_MAX_NUM_SEQS`·`PADDLEOCR_IMAGE` env override 지원. **롤백**: `start-paddleocr-vl.sh.bak-pre-fp8`.
 
 ### 코드 통합
 - `gateway-go/internal/pipeline/chat/tools/paddleocr.go`:
   - `paddleOCR(ctx, img, task)` — `/v1/chat/completions` 에 `image_url`(base64 data URI) + 태스크 프롬프트 전송. 태스크: `"OCR:"` / `"Table Recognition:"` / `"Formula Recognition:"` / `"Chart Recognition:"`.
   - `ocrImageBytes(ctx, img)` — **단일 OCR 진입점**. PaddleOCR-VL 우선, 실패 시 tesseract 폴백.
-- `docparse.go` 의 `imageOCR`(이미지 첨부)와 `pdfOCR` 페이지 루프(스캔 PDF)가 `ocrImageBytes` 경유 (구 `gmail_attachment.go` 에서 이사).
+- `docparse.go` 의 `imageOCR`(이미지 첨부)와 `pdfOCR`(스캔 PDF)가 `ocrImageBytes` 경유 (구 `gmail_attachment.go` 에서 이사). **`pdfOCR` 페이지 루프는 병렬**(`ocrPageConcurrency`=6, 세마포어+WaitGroup, distinct-slot 쓰기로 순서 보존) — 서버 배칭(`--max-num-seqs 8`)을 활용해 N페이지 스캔을 ~1 배칭 디코드로 접음. 동시성 상한은 서버 seq 한도 밑으로 둬 라이브 챗/메일분석과 GPU 사이드카를 공유해도 몰리지 않게.
 - **폴백 설계**: 서버가 꺼져 있으면 connection refused 로 즉시 실패 → tesseract(kor+eng) 로 graceful degradation. 즉 OCR 은 서버 없어도 깨지지 않고 품질만 낮아진다.
 - **엔드포인트 override**: 환경변수 `DENEB_OCR_VL_URL` (기본 `http://127.0.0.1:18011`). 테스트/비표준 배포용.
 
