@@ -153,7 +153,8 @@ func executeAgentRun(
 	// Stage 1: Parallel context + prompt preparation.
 	prepStart := time.Now()
 	prep := prepareContextAndPrompt(ctx, params, deps, workspaceDir, sessionToolPreset, logger)
-	logger.Info("pipeline: parallel prep done (context+sysprompt)", "ms", time.Since(prepStart).Milliseconds())
+	parallelPrepMs := time.Since(prepStart).Milliseconds()
+	logger.Info("pipeline: parallel prep done (context+sysprompt)", "ms", parallelPrepMs)
 
 	if prep.ContextErr != nil {
 		logger.Error("context assembly failed, proceeding with degraded context",
@@ -167,6 +168,7 @@ func executeAgentRun(
 	// appendCurrentMessage tells assembleTurnMessages to append the exact
 	// persisted bytes explicitly, keeping next turn's history reload
 	// byte-identical to what this turn's LLM call sees (vLLM APC).
+	enrichStart := time.Now()
 	if params.PendingEnrichment != nil {
 		params.Message = params.PendingEnrichment(ctx)
 		if formatted := persistTurnUserMessage(params, deps, logger); formatted != "" {
@@ -174,6 +176,7 @@ func executeAgentRun(
 			params.appendCurrentMessage = true
 		}
 	}
+	enrichJoinMs := time.Since(enrichStart).Milliseconds()
 	// Ephemeral turns (heartbeat) never persist their trigger message, and on
 	// a history-bearing session nothing else put it into the working list —
 	// the model ran blind on pure history (latent bug: every heartbeat tick on
@@ -198,7 +201,9 @@ func executeAgentRun(
 			},
 		}
 	}
+	assembleStart := time.Now()
 	messages := assembleMessages(ctx, params, deps, prep, mr, logger, cHooks)
+	assembleMs := time.Since(assembleStart).Milliseconds()
 
 	messages, tailForSystem := applyTailAdditions(params, deps, prep, sessionToolPreset, messages)
 
@@ -208,10 +213,22 @@ func executeAgentRun(
 	logger.Info("pipeline: system prompt finalized",
 		"chars", len(systemPrompt))
 
+	prepTotalMs := time.Since(runStart).Milliseconds()
+	// prepMs alone hid a 60s stall (4× on one session, 2026-07-07 — the stage
+	// that ate it was unidentifiable post-hoc). Persist the breakdown and name
+	// the culprit in the journal whenever prep is user-noticeably slow.
+	if prepTotalMs > 5000 {
+		logger.Warn("pipeline: slow prep",
+			"totalMs", prepTotalMs, "parallelPrepMs", parallelPrepMs,
+			"enrichJoinMs", enrichJoinMs, "assembleMs", assembleMs,
+			"sessionKey", params.SessionKey)
+	}
 	runLog.LogPrep(agentlog.RunPrepData{
 		SystemPromptChars: len(systemPrompt),
 		ContextMessages:   len(messages),
-		PrepMs:            time.Since(runStart).Milliseconds(),
+		PrepMs:            prepTotalMs,
+		EnrichJoinMs:      enrichJoinMs,
+		AssembleMs:        assembleMs,
 		RecallChars:       len(prep.RecallMemory),
 	})
 

@@ -67,6 +67,11 @@ type RunPrepData struct {
 	// (server-side wiki/diary/transcript/polaris search). 0 means nothing prior
 	// was recalled for this run — useful for measuring how often recall fires.
 	RecallChars int `json:"recallChars,omitempty"`
+	// EnrichJoinMs and AssembleMs decompose PrepMs: the link-enrichment join
+	// wait and the message assembly (compaction included). Added after 4×60s
+	// prep stalls (2026-07-07) proved a single total is undiagnosable post-hoc.
+	EnrichJoinMs int64 `json:"enrichJoinMs,omitempty"`
+	AssembleMs   int64 `json:"assembleMs,omitempty"`
 }
 
 // TurnLLMData records a single LLM turn result.
