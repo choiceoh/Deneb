@@ -66,13 +66,23 @@ type weeklyGroup struct {
 }
 
 type weeklyEnvelope struct {
-	Office      string        `json:"office"`
-	Reporter    string        `json:"reporter"`
-	WeekDone    string        `json:"week_done"`
-	WeekPlanned string        `json:"week_planned"`
-	GeneratedAt string        `json:"generated_at"`
-	Groups      []weeklyGroup `json:"groups"`
-	Issues      []string      `json:"issues,omitempty"` // 현안 (마감 임박/초과 자동 추출)
+	Office      string           `json:"office"`
+	Reporter    string           `json:"reporter"`
+	WeekDone    string           `json:"week_done"`
+	WeekPlanned string           `json:"week_planned"`
+	GeneratedAt string           `json:"generated_at"`
+	Groups      []weeklyGroup    `json:"groups"`
+	Issues      []string         `json:"issues,omitempty"`     // 현안 (마감 임박/초과 자동 추출) — 텍스트/양식 경로용 한 줄
+	IssueRows   []weeklyIssueRow `json:"issue_rows,omitempty"` // 현안 구조화 행 — deneb-ui 카드의 badge 렌더용
+}
+
+// weeklyIssueRow is one 현안 as structured data for the deneb-ui card: the
+// urgency rides a badge instead of being baked into a prose line.
+type weeklyIssueRow struct {
+	Title    string `json:"title"`
+	Badge    string `json:"badge"`     // "D-2" / "D-day" / "기한 초과"
+	Overdue  bool   `json:"overdue"`   // true → error tint (기한 초과·D-day), else warning
+	DaysLeft int    `json:"days_left"` // sort key: most urgent (lowest) first
 }
 
 // collectWeekly scans project wiki pages and builds the report envelope:
@@ -89,6 +99,7 @@ func collectWeekly(opts WeeklyReportOpts, now time.Time) weeklyEnvelope {
 
 	byGroup := map[string][]weeklyProject{}
 	var issues []string
+	var issueRows []weeklyIssueRow
 	if opts.WikiDir != "" {
 		projDir := filepath.Join(opts.WikiDir, "프로젝트")
 		_ = filepath.Walk(projDir, func(path string, info os.FileInfo, err error) error {
@@ -138,16 +149,23 @@ func collectWeekly(opts WeeklyReportOpts, now time.Time) weeklyEnvelope {
 			// 현안: 마감 임박(≤3일) 또는 초과
 			if daysToDue != nil && *daysToDue <= 3 {
 				when := fmt.Sprintf("D-%d", *daysToDue)
+				badge := when
 				if *daysToDue < 0 {
 					when = fmt.Sprintf("기한 %d일 초과", -*daysToDue)
+					badge = "기한 초과"
 				} else if *daysToDue == 0 {
 					when = "오늘 마감"
+					badge = "D-day"
 				}
 				issues = append(issues, fmt.Sprintf("%s : 마감 %s (%s)", p.Title, when, page.Meta.Due))
+				issueRows = append(issueRows, weeklyIssueRow{Title: p.Title, Badge: badge, Overdue: *daysToDue <= 0, DaysLeft: *daysToDue})
 			}
 			return nil
 		})
 	}
+
+	// Card 현안 rows read top-down by urgency (walk order is filesystem order).
+	sort.SliceStable(issueRows, func(i, j int) bool { return issueRows[i].DaysLeft < issueRows[j].DaysLeft })
 
 	groups := make([]weeklyGroup, 0, len(byGroup))
 	for _, sg := range weeklySoganOrder {
@@ -167,6 +185,7 @@ func collectWeekly(opts WeeklyReportOpts, now time.Time) weeklyEnvelope {
 		GeneratedAt: now.Format(time.RFC3339),
 		Groups:      groups,
 		Issues:      issues,
+		IssueRows:   issueRows,
 	}
 }
 
@@ -503,15 +522,10 @@ func weeklyClip(s string, maxLen int) string {
 	return s
 }
 
-// composeWeeklyText renders a plain-text fallback (delivered when PDF render fails).
-// RenderWeeklyReportText composes the deterministic 주간업무보고 text directly from
-// wiki data — the exact 양식 with no LLM in the loop, so the cron report's format is
-// byte-identical every run (the LLM-synthesis path drifted run-to-run). Same
-// composition BuildWeeklyReportPDF uses for its text fallback, exposed for the cron.
-func RenderWeeklyReportText(opts WeeklyReportOpts, now time.Time) string {
-	return composeWeeklyText(collectWeekly(opts, now))
-}
-
+// composeWeeklyText renders the plain-text 양식 — BuildWeeklyReportPDF's fallback
+// when the Chromium render is unavailable. The delivered report body is the
+// deneb-ui card (weekly_card.go) since 2026-07; this text form survives only as
+// that fallback composition.
 func composeWeeklyText(env weeklyEnvelope) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "📋 주간업무보고 — %s\n실시 %s / 예정 %s\n", env.Office, env.WeekDone, env.WeekPlanned)

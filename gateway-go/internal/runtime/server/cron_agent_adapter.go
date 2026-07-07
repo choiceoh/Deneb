@@ -23,9 +23,10 @@ type cronChatAdapter struct {
 	// data inside a fixed form, instead of freestyling. nil when wiki is
 	// unwired; the command then falls through to a normal agent turn.
 	weeklyReportData func(ctx context.Context) (string, error)
-	// weeklyReportText composes the deterministic 주간업무보고 text straight from wiki
-	// data (no LLM), so the cron report's 양식 is identical every run. Preferred over
-	// the LLM-template path below, which drifted run-to-run. nil falls back to the LLM.
+	// weeklyReportText composes the deterministic 주간업무보고 body straight from
+	// wiki data (no LLM) — since 2026-07 a head line + server-assembled deneb-ui
+	// card — so the cron report is identical every run. Preferred over the
+	// LLM-template path below, which drifted run-to-run. nil falls back to the LLM.
 	weeklyReportText func(ctx context.Context) (string, error)
 	// weeklyFormDeliver renders the formal 주간업무보고 form image and posts it to
 	// the native 업무 chat, so a "/weekly" cron delivers both the text report and
