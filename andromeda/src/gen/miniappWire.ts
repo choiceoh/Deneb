@@ -233,6 +233,7 @@ export interface MemberOut {
   position?: string
   phones?: string[]
   emails?: string[]
+  personPath?: string
 }
 
 export interface MemoryCategoryRow {

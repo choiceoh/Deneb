@@ -14,6 +14,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/knowledge"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/notebook"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/org"
 	domskills "github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
@@ -328,6 +329,13 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 	if filesAdapter != nil {
 		chatCfg.Memory.FileRecall = s.fileRecallForPreflight
 	}
+
+	// Org chart recall source: org.Load reads {stateDir}/org.json independently of
+	// the wiki store (a missing file yields an empty tree), so wire it
+	// unconditionally — the recall source degrades to zero org evidence when the
+	// chart is empty, and to org-context-without-person-links when the wiki store
+	// is absent.
+	chatCfg.Memory.Org = org.Load
 
 	// Coding mode: after a coding-session turn, checkpoint the worktree edits and
 	// verify build/tests (method_registry.go codingTurnEnd); before each coding
