@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.0.55](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.54...andromeda-v0.0.55) (2026-07-07)
+
+
+### ✨ Features
+
+* **andromeda:** 노트북 상단 자료 영역 접기/펼치기 토글 ([#3254](https://github.com/choiceoh/Deneb/issues/3254)) ([5283de0](https://github.com/choiceoh/Deneb/commit/5283de06635bba78911f2b8064909a42e9df6260))
+* **wiki:** 거래처를 프로젝트 위계 최상단으로 — client 필드·모아보기 그룹핑·회상 앵커·백필 도구 ([#3257](https://github.com/choiceoh/Deneb/issues/3257)) ([4878a53](https://github.com/choiceoh/Deneb/commit/4878a53e6180592595161bda7e9513eabae6e351))
+
 ## [0.0.54](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.53...andromeda-v0.0.54) (2026-07-07)
 
 
