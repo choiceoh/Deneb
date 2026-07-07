@@ -1004,10 +1004,13 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 			weeklyDataFn = func(ctx context.Context) (string, error) {
 				return tools.CollectWeeklyReportData(ctx, tools.WeeklyReportOpts{WikiDir: wikiDir}, time.Now())
 			}
-			// Deterministic exact-양식 text — the cron prefers this over the LLM turn
-			// so the report format is identical every run.
+			// Deterministic report body — a head line + server-assembled deneb-ui
+			// card (RenderWeeklyReportCard), preferred over the LLM turn so the
+			// format is identical every run and no model ever touches a figure.
+			// The plain-text 양식 (RenderWeeklyReportText) remains the PDF path's
+			// fallback composition.
 			weeklyTextFn = func(_ context.Context) (string, error) {
-				return tools.RenderWeeklyReportText(tools.WeeklyReportOpts{WikiDir: wikiDir}, time.Now()), nil
+				return tools.RenderWeeklyReportCard(tools.WeeklyReportOpts{WikiDir: wikiDir}, time.Now()), nil
 			}
 			weeklyFormFn = func(ctx context.Context) error {
 				img, ok := tools.BuildWeeklyReportImage(ctx, tools.WeeklyReportOpts{WikiDir: wikiDir}, time.Now())

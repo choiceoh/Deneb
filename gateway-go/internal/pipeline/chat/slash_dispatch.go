@@ -132,10 +132,11 @@ func (h *Handler) handleSlashCommand(
 
 	case "weekly":
 		// /weekly (/주간보고) — deterministic 주간업무보고: post the formal form
-		// image (best-effort, async) and reply with the exact-form text. Mirrors
-		// the Saturday cron path (cron_agent_adapter.go) so a manual trigger
-		// produces the same output. No agent loop — the text is built straight
-		// from wiki data (RenderWeeklyReportText) so the format never drifts.
+		// image (best-effort, async) and reply with the server-assembled deneb-ui
+		// card (head line + fence). Mirrors the Saturday cron path
+		// (cron_agent_adapter.go) so a manual trigger produces the same output.
+		// No agent loop — the card is built straight from wiki data
+		// (RenderWeeklyReportCard) so the format never drifts.
 		if h.weeklyReportTextFn == nil {
 			respond("주간업무보고 생성이 이 게이트웨이에 배선되지 않았습니다.")
 			break
