@@ -1,4 +1,4 @@
-import { Fragment } from "react";
+import { Fragment, useState } from "react";
 import type { ProjectDigest } from "@/types";
 import { serializeList } from "@/aiText";
 import { useCachedList } from "@/cachedList";
@@ -31,6 +31,18 @@ export function ProgressPane() {
   const { result, query } = useCachedList<ProjectDigest>("progress", connected);
   const digests = result?.data ?? [];
 
+  // Collapsed 거래처 groups (by client key). Default expanded; a click on the
+  // group header folds that client's cards away so a long briefing stays
+  // scannable — the top hierarchy level (거래처) is the natural fold point.
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const toggle = (key: string) =>
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+
   // Counted header + one block per project (client tag, headline, indented
   // bullets, due) — the AI reads exactly what's on screen.
   const aiText = serializeList("프로젝트 진행상황", digests, (d) => {
@@ -53,26 +65,56 @@ export function ProgressPane() {
       <h2 style={{ marginTop: 2 }}>프로젝트 진행상황</h2>
       <GridNotice query={query} count={digests.length} empty="진행 중인 프로젝트가 없습니다.">
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {groups.map((g) => (
-            <Fragment key={g.client || "(미지정)"}>
-              {grouped && (
-                <div
-                  style={{
-                    fontSize: 12,
-                    fontWeight: 600,
-                    letterSpacing: "0.04em",
-                    color: "var(--muted)",
-                    margin: "8px 0 -2px",
-                  }}
-                >
-                  {g.client || "거래처 미지정"}
-                </div>
-              )}
-              {g.rows.map((d, i) => (
-                <DigestCard key={d.path || d.project || i} digest={d} index={cardIndex++} onOpenWiki={openWiki} />
-              ))}
-            </Fragment>
-          ))}
+          {groups.map((g) => {
+            const key = g.client || "(미지정)";
+            const isCollapsed = grouped && collapsed.has(key);
+            return (
+              <Fragment key={key}>
+                {grouped && (
+                  <button
+                    type="button"
+                    onClick={() => toggle(key)}
+                    aria-expanded={!isCollapsed}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                      width: "100%",
+                      background: "transparent",
+                      border: "none",
+                      padding: 0,
+                      margin: "8px 0 -2px",
+                      fontSize: 12,
+                      fontWeight: 600,
+                      letterSpacing: "0.04em",
+                      color: "var(--muted)",
+                      fontFamily: "inherit",
+                      cursor: "pointer",
+                      textAlign: "left",
+                    }}
+                  >
+                    <span
+                      aria-hidden
+                      style={{
+                        display: "inline-block",
+                        transform: isCollapsed ? "rotate(0deg)" : "rotate(90deg)",
+                        transition: "transform 120ms",
+                        color: "var(--faint)",
+                      }}
+                    >
+                      ▸
+                    </span>
+                    {g.client || "거래처 미지정"}
+                    <span style={{ color: "var(--faint)", fontWeight: 400 }}>{g.rows.length}</span>
+                  </button>
+                )}
+                {!isCollapsed &&
+                  g.rows.map((d, i) => (
+                    <DigestCard key={d.path || d.project || i} digest={d} index={cardIndex++} onOpenWiki={openWiki} />
+                  ))}
+              </Fragment>
+            );
+          })}
         </div>
       </GridNotice>
     </>

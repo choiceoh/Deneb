@@ -31,6 +31,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
@@ -136,22 +137,71 @@ internal fun ProjectDigestContent(digests: List<ProjectDigestRow>, onOpenProject
     val tz = remember { TimeZone.currentSystemDefault() }
     val groups = digests.groupBy { it.client.trim() }
     val grouped = groups.keys.any { it.isNotEmpty() }
+    // Folded 거래처 keys (the trimmed client string; "" = clientless group). UI-local
+    // fold state — all groups start open; tapping a header folds its cards away.
+    var folded by remember { mutableStateOf(setOf<String>()) }
     Column(Modifier.fillMaxWidth().padding(top = 4.dp)) {
         groups.forEach { (client, rows) ->
+            val isFolded = grouped && client in folded
             if (grouped) {
-                DenebSectionLabel(
-                    client.ifEmpty { "거래처 미지정" },
-                    Modifier.padding(horizontal = 16.dp),
-                    topPadding = 10.dp,
+                DigestGroupHeader(
+                    label = client.ifEmpty { "거래처 미지정" },
+                    count = rows.size,
+                    expanded = !isFolded,
+                    onToggle = { folded = if (client in folded) folded - client else folded + client },
                 )
             }
-            rows.forEach { d ->
-                // Tap opens the project 대표페이지 by its wiki path; guard a blank path
-                // (a degenerate digest) so the row just doesn't navigate.
-                ProjectDigestCard(d = d, tz = tz, onOpen = { if (d.path.isNotBlank()) onOpenProject(d.path) })
-                Spacer(Modifier.height(18.dp))
+            if (!isFolded) {
+                rows.forEach { d ->
+                    // Tap opens the project 대표페이지 by its wiki path; guard a blank path
+                    // (a degenerate digest) so the row just doesn't navigate.
+                    ProjectDigestCard(d = d, tz = tz, onOpen = { if (d.path.isNotBlank()) onOpenProject(d.path) })
+                    Spacer(Modifier.height(18.dp))
+                }
             }
         }
+    }
+}
+
+/**
+ * A foldable 거래처 group header: the tracked-caps section label (matching
+ * [DenebSectionLabel]) with a leading ▾/▸ chevron and a trailing project count,
+ * the whole row pressable to toggle. Mirrors the session drawer's folder header.
+ */
+@Composable
+private fun DigestGroupHeader(label: String, count: Int, expanded: Boolean, onToggle: () -> Unit) {
+    val haptics = rememberHaptics()
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .denebPressable(
+                onClick = {
+                    haptics.toggle(!expanded)
+                    onToggle()
+                },
+                onClickLabel = if (expanded) "$label 접기" else "$label 펼치기",
+                role = Role.Button,
+            )
+            .padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = if (expanded) "▾" else "▸",
+            style = DenebType.sectionLabel,
+            color = denebHint(),
+            modifier = Modifier.padding(end = 8.dp),
+        )
+        Text(
+            text = label.uppercase(),
+            style = DenebType.sectionLabel,
+            color = denebHint(),
+        )
+        Text(
+            text = "$count",
+            style = DenebType.meta,
+            color = denebHint(),
+            modifier = Modifier.padding(start = 8.dp),
+        )
     }
 }
 

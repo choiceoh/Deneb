@@ -91,6 +91,32 @@ describe("ProgressPane (프로젝트 진행상황)", () => {
     expect(screen.queryByText("거래처 미지정")).not.toBeInTheDocument();
   });
 
+  it("folds a 거래처 group's cards away when its header is clicked, and unfolds on a second click", async () => {
+    const dataProvider = fakeProvider({
+      progress: [
+        { project: "금호타이어 곡성 1단계", headline: "준공 서류 취합", client: "금호타이어" },
+        { project: "금호타이어 용인연구소", headline: "리스 조건 협의", client: "금호타이어" },
+        { project: "기아 화성", headline: "국유지 48MW RFX", client: "기아" },
+      ],
+    });
+    renderWithProviders(<ProgressPane />, { connected: true, dataProvider });
+
+    // Starts expanded: both 금호타이어 cards visible.
+    expect(await screen.findByText("금호타이어 곡성 1단계")).toBeInTheDocument();
+    expect(screen.getByText("금호타이어 용인연구소")).toBeInTheDocument();
+
+    // The group header is the button carrying aria-expanded (cards don't).
+    await userEvent.click(screen.getByRole("button", { name: /금호타이어/, expanded: true }));
+    expect(screen.queryByText("금호타이어 곡성 1단계")).not.toBeInTheDocument();
+    expect(screen.queryByText("금호타이어 용인연구소")).not.toBeInTheDocument();
+    // Other groups are unaffected by folding one.
+    expect(screen.getByText("기아 화성")).toBeInTheDocument();
+
+    // A second click re-expands.
+    await userEvent.click(screen.getByRole("button", { name: /금호타이어/, expanded: false }));
+    expect(screen.getByText("금호타이어 곡성 1단계")).toBeInTheDocument();
+  });
+
   it("shows the empty notice when there are no digests", async () => {
     renderWithProviders(<ProgressPane />, { connected: true, dataProvider: fakeProvider({ progress: [] }) });
     expect(await screen.findByText(/진행 중인 프로젝트가 없습니다/)).toBeInTheDocument();
