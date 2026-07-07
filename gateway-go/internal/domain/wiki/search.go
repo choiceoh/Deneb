@@ -601,6 +601,19 @@ func mergeSearchResults(bm25, sem []SearchResult, limit int, commonOnlyQuery boo
 // hugely peaked, small enough that deep-rank hits still contribute little.
 const rrfK = 60.0
 
+// rrfScoreScale maps the raw RRF sum (tiny: a rank-1-in-both hit is 2/(rrfK+1) ≈
+// 0.033) back into the ~0–1 relevance band that SearchResult.Score MUST live in.
+// The score is not just an internal ordering key — the recall preflight consumes
+// it as normalized relevance (recall_evidence: 0.80 + r.Score, high-confidence at
+// ≥1.10) to merge wiki hits against diary/file/session sources on one axis. Left
+// at raw magnitude, every wiki hit capped near 0.83 and could never be
+// high-confidence nor out-rank another source (a regression the internal hit@K
+// bench can't see). Scale is constant (order- and hit@K-preserving) and tuned so
+// the canonical strong hybrid hit (rank 1 in BOTH bm25 and semantic) lands at
+// 0.8 → 1.60 in recall, comfortably above 1.10 and below the 2.2 project anchor;
+// a three-signal hit (+graph seed) tops out ≈1.2 → 2.0, still under the anchor.
+const rrfScoreScale = 0.4 * (rrfK + 1)
+
 // fuseSearchResults dispatches BM25×semantic fusion. Reciprocal Rank Fusion is
 // the default (DENEB_WIKI_FUSION=additive rolls back to the historical additive
 // max(bm25,cosine)+bonus/penalty blend). RRF measured +11.3pt P@1 / +4.5pt R@8 /
@@ -685,7 +698,10 @@ func mergeSearchResultsRRF(bm25, sem []SearchResult, graphPaths []string, limit 
 		if commonOnlyQuery && m.inBM25 && !m.inGraph && m.semCos < semSupportThreshold {
 			continue // lexical-leak drop; a graph-connected lexical hit is confirmed, so kept
 		}
-		m.res.Score = m.rrf
+		// Order is by raw m.rrf (below); Score carries the scaled ~0–1 relevance
+		// cross-source recall needs. The scale is constant so the two never
+		// disagree on ordering.
+		m.res.Score = m.rrf * rrfScoreScale
 		out = append(out, *m)
 	}
 	sort.Slice(out, func(a, b int) bool {

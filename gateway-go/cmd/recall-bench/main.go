@@ -1,14 +1,17 @@
-// recall-bench — measures wiki retrieval quality (hit@K, MRR) against the
-// gold set, read-only, so fusion changes (RRF, graph-boost) can be scored
-// before/after on real data without a gateway or any writes to production.
+// recall-bench — measures wiki retrieval quality (hit@K, MRR) against the gold
+// set, so fusion changes (RRF, graph-boost) can be scored before/after on real
+// data without a gateway.
 //
 // It calls wiki.Store.Search directly — the exact retrieval behind
 // miniapp.memory.search (see handlerminiapp.MemorySearcher) — so the number
 // here IS what wiki-qa-bench.py's recall mode measures, minus the RPC hop.
 //
-// Point it at a COPY of the production wiki (SetEmbedder warms the semantic
-// cache in-dir). The fusion under test is selected by DENEB_WIKI_FUSION so the
-// same binary scores every variant in one run:
+// ALWAYS point --wiki at a COPY of the production wiki: wiki.NewStore is NOT
+// read-only (it reconciles the index and ensures category dirs) and SetEmbedder
+// warms the semantic cache into that dir, so it will mutate the tree it scores.
+// A copy keeps production untouched. The fusion under test is selected by
+// DENEB_WIKI_FUSION (and DENEB_WIKI_GRAPH_BOOST) so one binary scores every
+// variant in a single run:
 //
 //	go run ./cmd/recall-bench --wiki /scratch/wiki --diary /scratch/diary \
 //	  --gold ~/.deneb/wiki-qa-gold.jsonl --k 8
@@ -16,6 +19,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"flag"
@@ -113,16 +117,27 @@ func main() {
 		time.Sleep(250 * time.Millisecond)
 	}
 	semantic := emb.IsHealthy()
+	// A partial semantic index makes Search silently fall back to BM25 for some
+	// cases, so the reported RRF/additive numbers would no longer measure the
+	// fusion under test. Fail loudly rather than emit comparable-looking metrics.
 	if semantic {
 		store.SetEmbedder(emb)
 		if err := store.WarmSemanticIndex(ctx); err != nil {
-			fmt.Fprintf(os.Stderr, "warm: %v\n", err)
+			fmt.Fprintf(os.Stderr, "recall-bench: semantic warm FAILED (%v) — metrics would be BM25-degraded; aborting\n", err)
+			os.Exit(1)
 		}
 	}
 
-	cases, err := loadGold(*goldPath)
+	cases, skipped, err := loadGold(*goldPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "gold: %v\n", err)
+		os.Exit(1)
+	}
+	// Malformed gold rows silently shrink the denominator and can hide a
+	// regression — this tool justifies ranking changes, so refuse to run on
+	// corrupt gold data instead of quietly dropping cases.
+	if skipped > 0 {
+		fmt.Fprintf(os.Stderr, "recall-bench: %d malformed gold row(s) in %s — fix or remove them; aborting\n", skipped, *goldPath)
 		os.Exit(1)
 	}
 
@@ -130,19 +145,23 @@ func main() {
 	if fusion == "" {
 		fusion = "rrf(default)"
 	}
-	fmt.Printf("== recall-bench  fusion=%s  semantic=%v  K=%d  cases=%d\n", fusion, semantic, *k, len(cases))
+	graphBoost := os.Getenv("DENEB_WIKI_GRAPH_BOOST") != "off" && semantic
+	fmt.Printf("== recall-bench  fusion=%s  graph_boost=%v  semantic=%v  K=%d  cases=%d\n", fusion, graphBoost, semantic, *k, len(cases))
 
-	var hit1, hitK, scored int
+	var hit1, hitK, scored, searchErrs int
 	var mrrSum float64
 	for _, c := range cases {
 		if len(c.GoldPaths) == 0 {
 			continue
 		}
-		scored++
 		results, err := store.Search(ctx, c.Question, *k)
 		if err != nil {
+			// A backend/search error is not a recall miss — exclude it from the
+			// denominator and surface the count, don't dilute P@K silently.
+			searchErrs++
 			continue
 		}
+		scored++
 		rank := -1
 		for i, r := range results {
 			if i >= *k {
@@ -178,29 +197,39 @@ func main() {
 		}
 		return 100 * float64(n) / float64(scored)
 	}
+	if searchErrs > 0 {
+		fmt.Printf("recall-bench: %d search error(s) excluded from the metric\n", searchErrs)
+	}
 	fmt.Printf("RECALL_BENCH hit@1=%d hit@%d=%d total=%d p@1=%.1f%% r@%d=%.1f%% mrr=%.3f fusion=%s\n",
 		hit1, *k, hitK, scored, pct(hit1), *k, pct(hitK), mrrSum/float64(scored), fusion)
 }
 
-func loadGold(path string) ([]goldCase, error) {
+// loadGold parses the gold JSONL, returning the cases and the count of malformed
+// (non-empty, unparseable) rows so the caller can refuse to score against
+// corrupt data. Blank lines are not malformed.
+func loadGold(path string) ([]goldCase, int, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer f.Close()
 	var out []goldCase
+	var skipped int
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 1<<20), 1<<20)
 	for sc.Scan() {
-		line := sc.Bytes()
-		if len(line) == 0 {
+		line := bytes.TrimSpace(sc.Bytes())
+		// Blank lines and '#' comments are structural (the gold file opens with a
+		// header + section dividers), not malformed — skip without counting.
+		if len(line) == 0 || line[0] == '#' {
 			continue
 		}
 		var c goldCase
 		if err := json.Unmarshal(line, &c); err != nil {
-			continue // skip malformed
+			skipped++
+			continue
 		}
 		out = append(out, c)
 	}
-	return out, sc.Err()
+	return out, skipped, sc.Err()
 }
