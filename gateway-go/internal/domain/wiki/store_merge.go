@@ -236,7 +236,10 @@ func (s *Store) repointReference(relPath, oldRef, newRef string) bool {
 		return false
 	}
 	page.Meta.Related = rebuilt
-	page.Meta.Updated = time.Now().Format("2006-01-02")
+	// No Updated stamp — see addBacklink: a Related repoint is metadata hygiene
+	// on the referencing page, not page activity. Stamping here let one merge or
+	// move (or a wiki-restructure batch of them) reset the dormancy clock of
+	// every page that merely referenced the moved one.
 	_ = s.writePageInternal(relPath, page, true) // best-effort: reference repoint is non-critical
 	return true
 }

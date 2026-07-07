@@ -95,6 +95,48 @@ func TestMovePage_RepointsInboundReferences(t *testing.T) {
 	}
 }
 
+// A repoint is metadata hygiene on the referencing page, not activity: it must
+// not refresh Updated (dormancy detection and counterparty activity windows key
+// off it — a batch move would otherwise make every referrer look freshly
+// active). Same doctrine as addBacklink/removeBacklink/PruneDeadRelatedLinks.
+func TestMovePage_RepointDoesNotStampReferrerUpdated(t *testing.T) {
+	s := newMoveStore(t)
+	if err := s.WritePage("프로젝트/탑솔라.md", NewPage("탑솔라", "프로젝트", nil)); err != nil {
+		t.Fatal(err)
+	}
+	referrer := NewPage("휴면 프로젝트", "프로젝트", nil)
+	referrer.Meta.Updated = "2025-01-01" // dormant long before the move
+	referrer.Meta.Related = []string{"프로젝트/탑솔라.md"}
+	if err := s.WritePage("프로젝트/휴면/대표.md", referrer); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := s.MovePage("프로젝트/탑솔라.md", "프로젝트/탑솔라/대표.md"); err != nil {
+		t.Fatalf("MovePage: %v", err)
+	}
+
+	got, err := s.ReadPage("프로젝트/휴면/대표.md")
+	if err != nil {
+		t.Fatalf("read referrer: %v", err)
+	}
+	repointed := false
+	for _, r := range got.Meta.Related {
+		if r == "프로젝트/탑솔라/대표.md" {
+			repointed = true
+		}
+	}
+	if !repointed {
+		t.Fatalf("related = %v, want the moved path repointed", got.Meta.Related)
+	}
+	if got.Meta.Updated != "2025-01-01" {
+		t.Errorf("Updated = %q, want 2025-01-01 (repoint must not stamp)", got.Meta.Updated)
+	}
+	// The master index mirrors the stamp — FlagDormantProjects reads it there.
+	if e, ok := s.SnapshotEntries()["프로젝트/휴면/대표.md"]; !ok || e.Updated != "2025-01-01" {
+		t.Errorf("index Updated = %q (present=%v), want 2025-01-01", e.Updated, ok)
+	}
+}
+
 func TestMovePage_SourceNotFound(t *testing.T) {
 	s := newMoveStore(t)
 	if err := s.MovePage("프로젝트/missing.md", "인물/missing.md"); err == nil {
