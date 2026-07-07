@@ -1480,6 +1480,9 @@ private fun uiGalleryNode(): DenebUiNode = parseLetterHtml(
         <chart type="line" label="주간 생산량(톤)">
           <point label="6/9" value="290"/><point label="6/16" value="310"/><point label="6/23" value="275"/><point label="6/30" value="360"/><point label="7/7" value="381"/>
         </chart>
+        <chart type="line" label="월간 손익(억)">
+          <point label="3월" value="4"/><point label="4월" value="-3"/><point label="5월" value="2"/><point label="6월" value="6"/>
+        </chart>
       </card>
       <card>
         <text style="title">수배전반 납품 일정</text>
@@ -1495,6 +1498,9 @@ private fun uiGalleryNode(): DenebUiNode = parseLetterHtml(
         <alert severity="warning" title="영광 도오리 민원">**약 3일 지연** 예상 — 작업 재개 협의 중.</alert>
         <alert severity="info" title="장마 대비">전 현장 24시간 비상대응체계 재확인 완료.</alert>
         <blockquote source="주간회의">발전소는 **가성비와 품질** 기준을 지켜 짓는다.</blockquote>
+        <!-- Inverted slider range (min>max): guards against the coerceIn
+             crash — this line would blank the whole render before the fix. -->
+        <slider id="gallery_slider" label="가중치" min="100" max="0" value="50"/>
       </card>
       <card>
         <tabs selected-index="0">
