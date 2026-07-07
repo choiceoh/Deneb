@@ -112,30 +112,46 @@ describe("NotebookPane", () => {
     expect(screen.queryByRole("group", { name: "자료 내용" })).not.toBeInTheDocument();
   });
 
-  it("folds the materials area to the bar and unfolds it back — the choice persists", async () => {
+  it("cycles the materials area height — 기본 → 확대 → 접힘 → 기본 — and the choice persists", async () => {
     renderWithProviders(<NotebookPane />, { connected: true });
     expect(await screen.findByRole("heading", { name: "ZTT" })).toBeInTheDocument();
-    // Open a chip preview first — folding must not lose it.
+    // Open a chip preview first — cycling the height must not lose it.
     await userEvent.click(screen.getByRole("button", { name: /잔금 안내/ }));
     expect(await screen.findByRole("group", { name: "자료 내용" })).toBeInTheDocument();
 
-    // Fold: strip + preview disappear; only the one-line bar remains.
+    // 기본 → 확대: body stays (still visible); the button now offers 접기.
+    await userEvent.click(screen.getByRole("button", { name: "자료 영역 확대" }));
+    expect(screen.getByRole("list", { name: "자료 목록" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "자료 내용" })).toBeInTheDocument();
+    expect(localStorage.getItem("andromeda.notebook.top")).toBe('"expanded"');
+
+    // 확대 → 접힘: strip + preview disappear; only the one-line bar remains.
     await userEvent.click(screen.getByRole("button", { name: "자료 영역 접기" }));
     expect(screen.queryByRole("list", { name: "자료 목록" })).not.toBeInTheDocument();
     expect(screen.queryByRole("group", { name: "자료 내용" })).not.toBeInTheDocument();
-    expect(localStorage.getItem("andromeda.notebook.folded")).toBe("true");
+    expect(localStorage.getItem("andromeda.notebook.top")).toBe('"folded"');
 
-    // Unfold: the exact view (open preview included) comes back.
+    // 접힘 → 기본: the exact view (open preview included) comes back.
     await userEvent.click(screen.getByRole("button", { name: "자료 영역 펼치기" }));
     expect(screen.getByRole("list", { name: "자료 목록" })).toBeInTheDocument();
     expect(screen.getByRole("group", { name: "자료 내용" })).toBeInTheDocument();
-    expect(localStorage.getItem("andromeda.notebook.folded")).toBe("false");
+    expect(localStorage.getItem("andromeda.notebook.top")).toBe('"default"');
   });
 
-  it("starts folded when the persisted flag says so", async () => {
+  it("starts folded when the persisted state says so — new key and legacy migration", async () => {
+    // New 3-state key.
+    localStorage.setItem("andromeda.notebook.top", '"folded"');
+    const { unmount } = renderWithProviders(<NotebookPane />, { connected: true });
+    // The bar still works (notebook auto-opens into it); the body stays folded.
+    expect(await screen.findByRole("heading", { name: "ZTT" })).toBeInTheDocument();
+    expect(screen.queryByRole("list", { name: "자료 목록" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "자료 영역 펼치기" })).toBeInTheDocument();
+    unmount();
+
+    // Legacy boolean flag (from before the 3-state height) migrates to 접힘.
+    localStorage.removeItem("andromeda.notebook.top");
     localStorage.setItem("andromeda.notebook.folded", "true");
     renderWithProviders(<NotebookPane />, { connected: true });
-    // The bar still works (notebook auto-opens into it); the body stays folded.
     expect(await screen.findByRole("heading", { name: "ZTT" })).toBeInTheDocument();
     expect(screen.queryByRole("list", { name: "자료 목록" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "자료 영역 펼치기" })).toBeInTheDocument();

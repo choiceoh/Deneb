@@ -248,6 +248,11 @@ textarea {
 .workstation-shell.ws-bottom-chat.ws-top-folded {
   grid-template-rows: auto minmax(300px, 1fr);
 }
+/* 상단(자료) 영역 확대 — 기본(30%)의 반대로 상단이 70%를 갖는다. 하단 채팅은 최소
+ * 높이를 지켜 도킹 채팅이 계속 조작 가능하게 남는다. */
+.workstation-shell.ws-bottom-chat.ws-top-expanded {
+  grid-template-rows: minmax(300px, 7fr) minmax(160px, 3fr);
+}
 .ws-bottom-chat > nav {
   grid-column: 1;
   grid-row: 1 / 3;
