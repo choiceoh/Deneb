@@ -128,6 +128,14 @@ func (h *Handler) startLinkEnrichment(ctx context.Context, message string, opts 
 	}()
 
 	return func(joinCtx context.Context) string {
+		// Independent join bound: enrichMessageWithLinks carries its own
+		// totalEnrichmentTimeout, but a fetch/convert step that ignores ctx
+		// deep in the stealth/HTML chain can overrun it — and this join would
+		// then stall the whole prep until the RUN context died. Past the
+		// grace window the message ships unenriched; the buffered channel
+		// lets the straggler goroutine finish and be discarded.
+		grace := time.NewTimer(totalEnrichmentTimeout + 5*time.Second)
+		defer grace.Stop()
 		select {
 		case out := <-ch:
 			if out.summary == "" {
@@ -141,6 +149,10 @@ func (h *Handler) startLinkEnrichment(ctx context.Context, message string, opts 
 				"fetchMs", out.fetchMs,
 				"sinceSendMs", time.Since(start).Milliseconds())
 			return sanitizeInput(message + "\n\n" + out.summary)
+		case <-grace.C:
+			logger.Warn("link enrichment join overran its budget; sending unenriched",
+				"sinceSendMs", time.Since(start).Milliseconds())
+			return message
 		case <-joinCtx.Done():
 			return message
 		}
