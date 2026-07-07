@@ -218,9 +218,14 @@ internal fun RenderTable(node: TableNode) {
     val numericColumn = BooleanArray(columnCount) { index ->
         val cells = node.rows.mapNotNull { it.getOrNull(index)?.trim()?.takeIf(String::isNotEmpty) }
         cells.isNotEmpty() && cells.all { cell ->
-            // Negative values ("-12", "−3") are numeric too (review catch on
-            // #3235 — the desktop port surfaced the shared gap).
-            cell.first().isDigit() || ((cell.first() == '-' || cell.first() == '−') && cell.length > 1 && cell[1].isDigit())
+            // Test past inline markers so a model-bolded number ("**12**")
+            // still classifies its column as numeric (the cell renders bold
+            // via denebUiInlineText below, but alignment keys off the digit).
+            val bare = cell.trimStart('*', '_', '~', '`', ' ')
+            bare.isNotEmpty() &&
+                // Negative values ("-12", "−3") are numeric too (review catch
+                // on #3235 — the desktop port surfaced the shared gap).
+                (bare.first().isDigit() || ((bare.first() == '-' || bare.first() == '−') && bare.length > 1 && bare[1].isDigit()))
         }
     }
 
@@ -234,7 +239,7 @@ internal fun RenderTable(node: TableNode) {
             Row(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
                 for (index in 0 until columnCount) {
                     Text(
-                        text = node.headers.getOrElse(index) { "" },
+                        text = denebUiInlineText(node.headers.getOrElse(index) { "" }),
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = if (numericColumn[index]) TextAlign.End else TextAlign.Start,
@@ -251,7 +256,7 @@ internal fun RenderTable(node: TableNode) {
             ) {
                 for (index in 0 until columnCount) {
                     Text(
-                        text = row.getOrElse(index) { "" },
+                        text = denebUiInlineText(row.getOrElse(index) { "" }),
                         style = MaterialTheme.typography.bodyMedium,
                         textAlign = if (numericColumn[index]) TextAlign.End else TextAlign.Start,
                         modifier = Modifier.weight(columnWeight(index)),
@@ -415,14 +420,16 @@ internal fun RenderAlert(node: AlertNode) {
             Column {
                 if (node.title != null) {
                     Text(
-                        text = node.title,
+                        text = denebUiInlineText(node.title),
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
                     )
                     Spacer(Modifier.height(2.dp))
                 }
+                // Alert bodies are prose — models emphasize inline ("**중요**:
+                // …"), so route through the tokenizer like text nodes.
                 Text(
-                    text = node.message,
+                    text = denebUiInlineText(node.message),
                     style = MaterialTheme.typography.bodyMedium,
                 )
             }
@@ -462,7 +469,7 @@ internal fun RenderQuote(node: QuoteNode) {
         Spacer(Modifier.width(12.dp))
         Column {
             Text(
-                text = node.text,
+                text = denebUiInlineText(node.text),
                 style = MaterialTheme.typography.bodyLarge,
                 fontStyle = FontStyle.Italic,
                 color = MaterialTheme.colorScheme.onSurface,
