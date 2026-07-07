@@ -85,16 +85,44 @@ func (s *Store) graphRankedPaths(ctx context.Context, query string, limit int) [
 	if limit <= 0 {
 		return nil
 	}
-	recs, seed, best, err := s.graphScoreMap(ctx, query, graphMentionsEnabled, "")
-	if err != nil || seed < 0 {
-		return nil
+	out := make([]string, 0, limit)
+	seen := make(map[string]struct{})
+	add := func(p string) {
+		if p == "" {
+			return
+		}
+		if _, ok := seen[p]; ok {
+			return
+		}
+		seen[p] = struct{}{}
+		out = append(out, p)
 	}
-	s.applyEmbeddingRerank(ctx, recs, seed, best)
-	neighbors := rankNeighbors(recs, best, limit)
-	out := make([]string, 0, 1+len(neighbors))
-	out = append(out, recs[seed].relPath) // seed = named entity page → graph rank 0
-	for _, n := range neighbors {
-		out = append(out, recs[n.idx].relPath)
+
+	// Graph traversal from the query's seed first — when findSeed resolves the
+	// entity, its own page keeps graph rank 0 (so a correctly-seeded query's
+	// ranking is unchanged).
+	recs, seed, best, err := s.graphScoreMap(ctx, query, graphMentionsEnabled, "")
+	if err == nil && seed >= 0 {
+		s.applyEmbeddingRerank(ctx, recs, seed, best)
+		add(recs[seed].relPath)
+		for _, n := range rankNeighbors(recs, best, limit) {
+			add(recs[n.idx].relPath)
+		}
+	}
+
+	// Deterministic entity anchors as a RESCUE. MatchProjectsInText /
+	// MatchCounterpartiesInText are rune-based and particle-robust — they resolve
+	// "아르고에너지랑은…" and "아르고에너지 진행 상황" (common-word context) that
+	// graphScoreMap's findSeed misses, and are what chat recall already uses to pin
+	// a named entity. Appended (deduped) so they only ADD a missed entity page to
+	// the graph ranking rather than override a correctly-resolved seed — bringing
+	// that reliable anchor to wiki.Store.Search / miniapp.memory.search without
+	// displacing the top result when the graph already found the entity.
+	for _, ref := range s.MatchProjectsInText(query, 2) {
+		add(ref.Path)
+	}
+	for _, ref := range s.MatchCounterpartiesInText(query, 2) {
+		add(ref.Path)
 	}
 	if len(out) > limit {
 		out = out[:limit]
