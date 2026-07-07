@@ -557,6 +557,61 @@ func TestTrackerSkillOpportunities_NewestFirstAndFiltered(t *testing.T) {
 	}
 }
 
+func TestTrackerSkillOpportunities_NoOpEchoCollapsed(t *testing.T) {
+	tracker := newTestTracker(t)
+	// Live 2026-07-06 shape: the same "pattern: detail" candidate re-proposed
+	// as no-op review after review — only the first append survives inside
+	// the echo window; a differently-worded tail is still the same pattern.
+	first := SkillOpportunityRecord{
+		Candidate: "Technology research via web: user asks for best/latest technology, agent runs parallel searches.",
+		Route:     "no-op",
+	}
+	echo := SkillOpportunityRecord{
+		Candidate: "Technology research via web: user names specific models/tools — a repeat of the same pattern.",
+		Route:     "no-op",
+	}
+	other := SkillOpportunityRecord{
+		Candidate: "Contract clause extraction: pull obligations from Korean contracts.",
+		Route:     "no-op",
+	}
+	evolve := SkillOpportunityRecord{
+		Candidate: "Technology research via web: now with reusable workflow evidence.",
+		Route:     "evolve",
+	}
+	for i, rec := range []SkillOpportunityRecord{first, echo, other, evolve} {
+		if err := tracker.RecordSkillOpportunity(rec); err != nil {
+			t.Fatalf("RecordSkillOpportunity(%d): %v", i, err)
+		}
+	}
+
+	records, err := tracker.RecentSkillOpportunities("", 10)
+	if err != nil {
+		t.Fatalf("RecentSkillOpportunities: %v", err)
+	}
+	if len(records) != 3 {
+		t.Fatalf("expected echo collapsed to 3 records, got %d: %+v", len(records), records)
+	}
+	// Newest-first: evolve (non-no-op always recorded), other, first. The echo
+	// is gone.
+	if records[0].Route != "evolve" || records[1].Candidate != other.Candidate || records[2].Candidate != first.Candidate {
+		t.Fatalf("unexpected backlog after echo collapse: %+v", records)
+	}
+}
+
+func TestOpportunityPatternKey(t *testing.T) {
+	a := opportunityPatternKey("Technology  Research via Web: variant one")
+	b := opportunityPatternKey("technology research via web: totally different tail")
+	if a == "" || a != b {
+		t.Fatalf("colon-head key must match across tails: %q vs %q", a, b)
+	}
+	if opportunityPatternKey("x: y") == "x" {
+		t.Fatalf("short colon head must not be used as key")
+	}
+	if opportunityPatternKey("") != "" {
+		t.Fatalf("empty candidate must yield empty key")
+	}
+}
+
 func TestTrackerRejectedSkillEditsFallsBackToLifecycleLog(t *testing.T) {
 	tracker := newTestTracker(t)
 	if err := tracker.LogEvolveRejected("deploy-helper", "judge rejected candidate"); err != nil {

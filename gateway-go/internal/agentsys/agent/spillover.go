@@ -18,6 +18,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -106,13 +107,31 @@ func (s *SpilloverStore) Store(sessionKey, toolName, content string) (string, er
 
 // Load reads the full content of a spilled result.
 // Returns an error if the ID is unknown or belongs to a different session.
+// The unknown-ID error carries the session's live spill IDs: the observed
+// failure mode is the model passing a made-up name ("morning_letter") instead
+// of the sp_* ID from the preview marker, and a bare "not found" gives it
+// nothing to self-correct with on the next turn.
 func (s *SpilloverStore) Load(spillID, sessionKey string) (string, error) {
 	s.mu.RLock()
 	entry, ok := s.index[spillID]
+	var available []string
+	if !ok {
+		for id, e := range s.index {
+			if e.SessionKey == sessionKey {
+				available = append(available, id)
+			}
+		}
+	}
 	s.mu.RUnlock()
 
 	if !ok {
-		return "", fmt.Errorf("spillover ID %q not found", spillID)
+		if len(available) > 0 {
+			sort.Strings(available)
+			return "", fmt.Errorf("spillover ID %q not found — use the exact sp_* ID from the [SpillOver: ID=…] marker; this session's live spill IDs: %s",
+				spillID, strings.Join(available, ", "))
+		}
+		return "", fmt.Errorf("spillover ID %q not found — no live spillovers for this session (they expire after %s and do not survive a gateway restart); re-run the tool that produced the large output",
+			spillID, SpilloverTTL)
 	}
 	if entry.SessionKey != sessionKey {
 		return "", fmt.Errorf("spillover ID %q belongs to a different session", spillID)
