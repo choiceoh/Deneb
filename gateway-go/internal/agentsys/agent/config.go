@@ -142,6 +142,14 @@ type AgentConfig struct {
 	// Nil = disabled (default).
 	ToolLoopDetector *ToolLoopDetector
 
+	// ParallelSafeTool vets a tool for the parallel turn path: when EVERY call
+	// in a multi-tool turn is vetted and none carries $ref piping, the calls
+	// execute concurrently instead of serially (see executeToolsParallel for
+	// the determinism staging). Only read-only tools belong here — the wiring
+	// (chat's parallelSafeTools classification) is default-deny. Nil keeps
+	// every turn fully sequential (default; zero behavior change).
+	ParallelSafeTool func(name string) bool
+
 	// BeforeAPICall is invoked right before each LLM request. The callback
 	// may mutate the returned slice (e.g. append user-steer text to the last
 	// tool_result block) and returns the adjusted messages to send. Returning

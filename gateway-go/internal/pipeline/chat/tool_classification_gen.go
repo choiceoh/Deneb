@@ -17,6 +17,28 @@ var dryRunSafeTools = map[string]struct{}{
 	"read_spillover": {},
 }
 
+// parallelSafeTools are read-only tools whose same-turn calls may execute
+// CONCURRENTLY (executor.go parallel turn path): no workspace/external
+// mutation, no cross-call ordering the model could rely on. Default-deny —
+// any tool absent here keeps the whole turn sequential, as do calls carrying
+// $ref (same-turn result piping). Action-multiplexed tools (wiki, calendar,
+// todo, ...) stay out entirely: their mutating/read-only split lives in an
+// argument, and fetch_tools stays out because it mutates the run's deferred
+// tool activation state. Measured motivation (2026-07-07, 3d of prod
+// agent-logs): 23 all-read-only multi-tool turns wasted 124s of wall time on
+// serial waits — web+web research turns alone ran 50s+ that parallel
+// execution halves.
+var parallelSafeTools = map[string]struct{}{
+	"contacts":       {},
+	"grep":           {},
+	"knowledge":      {},
+	"mail_archive":   {},
+	"polaris":        {},
+	"read":           {},
+	"read_spillover": {},
+	"web":            {},
+}
+
 // toolCompressSkipSet contains tools whose output should not be compressed.
 // Structured-output tools are already handled by post-processors.
 // Internal / already-small tools add no compression value.
