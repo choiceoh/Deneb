@@ -175,14 +175,15 @@ func recallWikiEvidence(ctx context.Context, store *wiki.Store, queries []string
 		})
 	}
 
-	for _, q := range queries {
-		if ctx.Err() != nil {
-			return evidence
-		}
-		results, err := store.Search(ctx, q, 3)
-		if err != nil {
-			continue
-		}
+	// One batched embed for every wiki query (the server fans them across its
+	// context pool) instead of a per-query round-trip. Results stay index-aligned
+	// with queries, so queries[i] labels batch[i]'s hits. A down embedder or ctx
+	// cancel degrades to the anchors already gathered above.
+	batch, err := store.SearchBatch(ctx, queries, 3)
+	if err != nil {
+		return evidence
+	}
+	for i, results := range batch {
 		for _, r := range results {
 			if _, ok := seen[r.Path]; ok {
 				continue
@@ -191,7 +192,7 @@ func recallWikiEvidence(ctx context.Context, store *wiki.Store, queries []string
 			evidence = append(evidence, recallEvidence{
 				Kind:   "wiki",
 				Source: r.Path,
-				Query:  q,
+				Query:  queries[i],
 				Note:   formatRecallWikiNote(store, r),
 				Score:  0.80 + r.Score,
 			})
