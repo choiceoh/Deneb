@@ -74,6 +74,34 @@ func (s *Store) GraphContext(ctx context.Context, query string, maxNeighbors int
 	return renderGraphContext(recs[seed], recs, neighbors), nil
 }
 
+// graphRankedPaths returns the wiki pages graph-connected to the entity named in
+// query, ordered by graph proximity: the seed (the matched entity's page) first,
+// then its strongest one-hop neighbors, capped at limit. Empty when the query
+// names no known page. Unlike GraphContext (which renders a prompt string), this
+// returns raw relPaths so Search can fold graph proximity into RRF fusion as a
+// third ranking — bringing the graph signal (today only in chat recall anchors)
+// into wiki.Store.Search / miniapp.memory.search.
+func (s *Store) graphRankedPaths(ctx context.Context, query string, limit int) []string {
+	if limit <= 0 {
+		return nil
+	}
+	recs, seed, best, err := s.graphScoreMap(ctx, query, graphMentionsEnabled, "")
+	if err != nil || seed < 0 {
+		return nil
+	}
+	s.applyEmbeddingRerank(ctx, recs, seed, best)
+	neighbors := rankNeighbors(recs, best, limit)
+	out := make([]string, 0, 1+len(neighbors))
+	out = append(out, recs[seed].relPath) // seed = named entity page → graph rank 0
+	for _, n := range neighbors {
+		out = append(out, recs[n.idx].relPath)
+	}
+	if len(out) > limit {
+		out = out[:limit]
+	}
+	return out
+}
+
 // PageConnections returns a compact, one-line summary of a page's strongest
 // graph neighbors labeled by their kind (e.g. "홍길동(인물) · XLPE 케이블(기자재) ·
 // 영광 발주(프로젝트)" — mechanism labels only for unclassifiable pages),

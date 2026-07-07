@@ -298,7 +298,21 @@ func (s *Store) Search(ctx context.Context, query string, limit int) ([]SearchRe
 		}
 		return truncateResults(s.fts.applyValidity(bm25), limit), nil
 	}
-	return truncateResults(s.fts.applyValidity(fuseSearchResults(bm25, sem, fetchLimit, commonOnlyQuery)), limit), nil
+	graphPaths := s.graphBoostPaths(ctx, query)
+	return truncateResults(s.fts.applyValidity(fuseSearchResults(bm25, sem, graphPaths, fetchLimit, commonOnlyQuery)), limit), nil
+}
+
+// graphBoostPaths returns the graph-proximity ranking for query (the third RRF
+// signal), or nil when disabled (DENEB_WIKI_GRAPH_BOOST=off). Default ON: on the
+// wiki-qa gold set it added +4.6pt P@1 / +4.5pt R@8 over RRF-alone for ~17ms per
+// query (cmd/recall-bench), bringing the graph signal — previously only in chat
+// recall anchors — into wiki.Store.Search / miniapp.memory.search. Bounded to
+// semanticBlendK neighbors, the same window the fusion already over-fetches.
+func (s *Store) graphBoostPaths(ctx context.Context, query string) []string {
+	if os.Getenv("DENEB_WIKI_GRAPH_BOOST") == "off" {
+		return nil
+	}
+	return s.graphRankedPaths(ctx, query, semanticBlendK)
 }
 
 // truncateResults cuts a validity-adjusted, re-sorted result list down to the
@@ -360,7 +374,8 @@ func (s *Store) SearchBatch(ctx context.Context, queries []string, limit int) ([
 			out[i] = truncateResults(s.fts.applyValidity(bm25), limit)
 			continue
 		}
-		out[i] = truncateResults(s.fts.applyValidity(fuseSearchResults(bm25, sem, fetchLimit, commonOnlyQuery)), limit)
+		graphPaths := s.graphBoostPaths(ctx, query)
+		out[i] = truncateResults(s.fts.applyValidity(fuseSearchResults(bm25, sem, graphPaths, fetchLimit, commonOnlyQuery)), limit)
 	}
 	return out, nil
 }
@@ -594,11 +609,11 @@ const rrfK = 60.0
 // normalization the additive priors accrue as sources grow. The env read is the
 // same runtime-override pattern as the floor knobs, so a bench scores both from
 // one binary and an operator can roll back without a rebuild.
-func fuseSearchResults(bm25, sem []SearchResult, limit int, commonOnlyQuery bool) []SearchResult {
+func fuseSearchResults(bm25, sem []SearchResult, graphPaths []string, limit int, commonOnlyQuery bool) []SearchResult {
 	if os.Getenv("DENEB_WIKI_FUSION") == "additive" {
 		return mergeSearchResults(bm25, sem, limit, commonOnlyQuery)
 	}
-	return mergeSearchResultsRRF(bm25, sem, limit, commonOnlyQuery)
+	return mergeSearchResultsRRF(bm25, sem, graphPaths, limit, commonOnlyQuery)
 }
 
 // mergeSearchResultsRRF fuses the lexical and semantic rankings by Reciprocal
@@ -609,12 +624,14 @@ func fuseSearchResults(bm25, sem []SearchResult, limit int, commonOnlyQuery bool
 // exactly the fragility the hand-tuned source priors accrue as sources grow. The
 // SAME admission gates as mergeSearchResults apply (semantic-only cosine floor,
 // common-only lexical drop), so RRF changes ordering, not what is admitted.
-func mergeSearchResultsRRF(bm25, sem []SearchResult, limit int, commonOnlyQuery bool) []SearchResult {
+func mergeSearchResultsRRF(bm25, sem []SearchResult, graphPaths []string, limit int, commonOnlyQuery bool) []SearchResult {
 	type merged struct {
-		res    SearchResult
-		semCos float64
-		inBM25 bool
-		rrf    float64
+		res     SearchResult
+		semCos  float64
+		inBM25  bool
+		inGraph bool
+		graph0  bool // seed of the graph ranking (the named entity's own page)
+		rrf     float64
 	}
 	byPath := make(map[string]*merged, len(bm25)+len(sem))
 	for rank, r := range bm25 {
@@ -640,15 +657,33 @@ func mergeSearchResultsRRF(bm25, sem []SearchResult, limit int, commonOnlyQuery 
 		}
 		m.rrf += 1.0 / (rrfK + float64(rank+1))
 	}
+	// Graph proximity as a third RRF ranking: pages connected to the entity named
+	// in the query (seed first, then neighbors by graph score). A page already
+	// retrieved lexically/semantically gets its rank reinforced; a graph-only page
+	// is admitted only if it is the SEED (the named entity's own page, rank 0) —
+	// a high-confidence "the user asked about this exact thing" signal — so
+	// arbitrary neighbors never inject themselves off a graph edge alone.
+	for rank, p := range graphPaths {
+		m := byPath[p]
+		if m == nil {
+			m = &merged{res: SearchResult{Path: p}}
+			byPath[p] = m
+		}
+		m.inGraph = true
+		if rank == 0 {
+			m.graph0 = true
+		}
+		m.rrf += 1.0 / (rrfK + float64(rank+1))
+	}
 
 	floor := semanticOnlyFloorValue()
 	out := make([]merged, 0, len(byPath))
 	for _, m := range byPath {
-		if !m.inBM25 && m.semCos < floor {
-			continue // semantic-only admission floor (identical to additive path)
+		if !m.inBM25 && !m.graph0 && m.semCos < floor {
+			continue // semantic-only admission floor; the graph seed is exempt (named entity)
 		}
-		if commonOnlyQuery && m.inBM25 && m.semCos < semSupportThreshold {
-			continue // lexical-leak drop (identical to additive path)
+		if commonOnlyQuery && m.inBM25 && !m.inGraph && m.semCos < semSupportThreshold {
+			continue // lexical-leak drop; a graph-connected lexical hit is confirmed, so kept
 		}
 		m.res.Score = m.rrf
 		out = append(out, *m)
