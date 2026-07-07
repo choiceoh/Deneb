@@ -177,6 +177,13 @@ func (s *Server) registerSessionRPCMethods() {
 	s.embeddingClient = embedding.New("", s.logger)
 	chatCfg.Memory.Embedding = s.embeddingClient
 
+	// Attach the embedder to the polaris store so cross-session recall can blend a
+	// semantic match against past sessions' summaries with the keyword search.
+	// Degrades to keyword-only when the embedding server is down.
+	if s.polarisStore != nil {
+		s.polarisStore.SetSummaryEmbedder(s.embeddingClient)
+	}
+
 	// Attach the same embedding client to the wiki so Search blends BM25 with
 	// semantic neighbors. Degrades to pure BM25 whenever the server is down.
 	if s.wikiStore != nil {
