@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/tokenest"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/embedindex"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 	"github.com/choiceoh/deneb/gateway-go/pkg/atomicfile"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonlstore"
@@ -25,6 +26,13 @@ type Store struct {
 	dir      string
 	mu       sync.Mutex // all methods need write access due to lazy session init
 	sessions map[string]*sessionData
+
+	// summarySem is the optional dense-vector index over RESIDENT sessions'
+	// summary nodes (semantic.go). nil until SetSummaryEmbedder; when present,
+	// cross-session recall blends a meaning match against past-session summaries
+	// with the keyword message search. Bounded to resident sessions, so it never
+	// grows unbounded the way per-message vectors would.
+	summarySem *embedindex.Index
 }
 
 // messageRecord is the on-disk JSONL format for a single message.
@@ -71,6 +79,7 @@ func NewStore(path string) (*Store, error) {
 
 // Close is a no-op (files are written per mutation).
 func (s *Store) Close() error {
+	s.closeSummarySem()
 	return nil
 }
 

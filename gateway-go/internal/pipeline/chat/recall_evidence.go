@@ -286,12 +286,26 @@ func recallWikiStalenessMarker(meta wiki.Frontmatter) string {
 // rows. When includeRecentFallback is true and BM25 finds nothing, it
 // returns the two most recent diary entries — the right behavior for
 // vague cues like "그거 뭐였지?" where the user expects *some* context.
+// diaryRecallSemanticFloor is the cosine a semantic-only diary hit must clear.
+// BGE-M3's Korean band puts relevant entries at ~0.77–0.86 and off-topic at
+// ~0.58–0.69 (same measurement behind wiki's semanticOnlyFloor), so 0.70 admits
+// paraphrase matches while rejecting loosely-associated noise.
+const diaryRecallSemanticFloor = 0.70
+
+// diaryRecallSemanticQuota caps how many semantic-only diary rows a turn adds on
+// top of the BM25 hits, so a broad query's dense neighbors don't crowd wiki/
+// session evidence out of the merged window (the same crowding guard behind the
+// BM25 cap and recallFileQuota).
+const diaryRecallSemanticQuota = 2
+
 func recallDiaryEvidence(ctx context.Context, store *wiki.Store, queries []string, includeRecentFallback bool) []recallEvidence {
 	if store == nil {
 		return nil
 	}
 	seen := make(map[string]struct{})
-	var hits []wiki.DiaryHit
+	var evidence []recallEvidence
+
+	// Lexical (BM25, recency-weighted) hits — as before, capped at 4.
 	for _, q := range queries {
 		if ctx != nil {
 			if err := ctx.Err(); err != nil {
@@ -308,24 +322,62 @@ func recallDiaryEvidence(ctx context.Context, store *wiki.Store, queries []strin
 				continue
 			}
 			seen[key] = struct{}{}
-			hits = append(hits, h)
-			if len(hits) >= 4 {
+			evidence = append(evidence, diaryHitEvidence(h))
+			if len(evidence) >= 4 {
 				break
 			}
 		}
-		if len(hits) >= 4 {
+		if len(evidence) >= 4 {
 			break
 		}
 	}
-	if len(hits) == 0 && includeRecentFallback {
-		hits = store.RecentDiaryEntries(2)
+
+	// Semantic hits: paraphrase recall that BM25 keyword-missed. One batched
+	// embed for every query; admitted above the cosine floor, deduped against the
+	// lexical hits, and capped by the quota so diary stays a good citizen.
+	added := 0
+	for _, hits := range store.SearchDiarySemanticBatch(ctx, queries, 3) {
+		for _, h := range hits {
+			if h.Score < diaryRecallSemanticFloor {
+				continue
+			}
+			key := h.File + "#" + h.Header
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			seen[key] = struct{}{}
+			evidence = append(evidence, diarySemanticHitEvidence(h))
+			added++
+			if added >= diaryRecallSemanticQuota {
+				break
+			}
+		}
+		if added >= diaryRecallSemanticQuota {
+			break
+		}
 	}
 
-	var evidence []recallEvidence
-	for _, h := range hits {
-		evidence = append(evidence, diaryHitEvidence(h))
+	// Recent fallback only when NOTHING matched (vague cue like "그거 뭐였지?").
+	if len(evidence) == 0 && includeRecentFallback {
+		for _, h := range store.RecentDiaryEntries(2) {
+			evidence = append(evidence, diaryHitEvidence(h))
+		}
 	}
 	return evidence
+}
+
+// diarySemanticHitEvidence converts a cosine-ranked diary hit into evidence. It
+// carries the same 0.70 source prior as the BM25 diary path (diaryHitEvidence),
+// so semantic and lexical diary hits sort on one scale — h.Score is already the
+// 0–1 cosine, mirroring wiki's 0.80+cosine and files' 0.78+cosine.
+func diarySemanticHitEvidence(h wiki.DiaryHit) recallEvidence {
+	return recallEvidence{
+		Kind:   "diary",
+		Source: h.File + "#" + h.Header,
+		Note:   truncateRecallText(h.Content, 320),
+		Score:  0.70 + h.Score,
+		At:     h.At,
+	}
 }
 
 // diaryHitEvidence converts a diary search hit into a recallEvidence row.
@@ -492,8 +544,57 @@ func recallPolarisEvidence(ctx context.Context, bridge *polaris.Bridge, sessionK
 			})
 		}
 	}
+
+	// Cross-session SEMANTIC: match a past conversation by the meaning of its DAG
+	// summary, not keywords — so "지난번 곡성 대금" surfaces the session whose
+	// summary says "금호 기성 청구" even with no shared word. One batched embed;
+	// one row per session (its most-relevant summary), capped and floored so a
+	// loosely-related summary doesn't crowd the sharper message hits.
+	seenSummarySession := make(map[string]struct{})
+	summaryAdded := 0
+	for i, hits := range store.SearchSummariesSemantic(ctx, sessionKey, queries, 2) {
+		for _, h := range hits {
+			if h.Score < recallSummarySemanticFloor {
+				continue
+			}
+			if _, ok := seenSummarySession[h.SessionKey]; ok {
+				continue
+			}
+			seenSummarySession[h.SessionKey] = struct{}{}
+			query := ""
+			if i < len(queries) {
+				query = queries[i]
+			}
+			evidence = append(evidence, recallEvidence{
+				Kind:   "session",
+				Source: abbreviateSession(h.SessionKey) + " 요약",
+				Query:  query,
+				Note:   truncateRecallText(h.Content, 320),
+				Score:  0.55 + h.Score,
+				At:     h.CreatedAt,
+			})
+			summaryAdded++
+			if summaryAdded >= recallSummarySemanticQuota {
+				break
+			}
+		}
+		if summaryAdded >= recallSummarySemanticQuota {
+			break
+		}
+	}
 	return evidence
 }
+
+// recallSummarySemanticFloor is the cosine a cross-session summary match must
+// clear. Set just above the cross-session message prior band: a summary is a
+// coarser signal (a whole conversation's gist), so it should surface only on a
+// clear topical match, not a loose association.
+const recallSummarySemanticFloor = 0.60
+
+// recallSummarySemanticQuota caps semantic summary rows per turn so past-session
+// gists (0.55+cosine) don't crowd out the sharper current-session message hits
+// (0.65+score) in the merged window.
+const recallSummarySemanticQuota = 2
 
 func formatRecallEvidence(evidence []recallEvidence) string {
 	var sb strings.Builder
