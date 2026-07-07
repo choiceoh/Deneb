@@ -26,9 +26,37 @@
 - **Raw-text 태그**: `markdown`, `code` — 대응 닫는 태그(`</markdown`, `</code`)까지
   원문 그대로 캡처 후 엔티티만 디코드. 내부 백틱 펜스는 `&#96;` 로 이스케이프
   (서버 조립기는 항상 이스케이프; 모델 계약은 코드에 `<code>` 노드 사용 지시).
-- 알 수 없는 태그: 노드 스킵(서브트리 포함), 검증기에서는 Issue. 알 수 없는 속성: 무시.
+  단, `<code>`의 부모가 `text`/인라인 태그면 블록 노드 대신 `` `…` `` 백틱 런으로
+  부모 텍스트 흐름에 병합 (인라인 코드 습관 수용).
 - 컨테이너(column/row/card/box/accordion/li/tab) 직속의 비공백 텍스트 런은
   암시적 `text`(body) 노드로 수용. 루트에 형제가 여럿이면 암시적 `column` 래핑.
+
+## 관용/자동 보정 (v2.1 — 모델 실수를 콘텐츠 보존으로 흡수)
+
+- **알 수 없는 태그: unwrap** — 노드는 안 만들되 자식(암시 텍스트 포함)을 부모로
+  승격. 서브트리 소실 금지. 검증기는 Issue 유지 (드리프트 텔레메트리).
+  알 수 없는 속성: 무시 (기존과 동일).
+- **제네릭 래퍼** (`div section article header footer main aside figure center nav`):
+  unwrap과 동일하되 Issue 없음 — 수용된 HTML 유창성.
+- **인라인 서식 태그** (`b strong`→`**` · `i em`→`*` · `u s del strike mark small
+  span sub sup`→맨몸 텍스트 · `a href`→`[라벨](url)`): 노드 대신 마크다운 마킹된
+  텍스트 런으로 부모 텍스트 흐름에 병합 — 렌더러의 인라인 토크나이저가 그린다.
+  단 plain-value 슬롯(badge/button 라벨 등)에는 마커 없이 맨몸 텍스트.
+- **텍스트 런 병합 + 마크다운 블록 승격**: 컨테이너/루트의 암시 텍스트 런은
+  버퍼링해 하나로 병합. 병합 결과가 마크다운 블록 구조(파이프 행 ≥2 · `#` 헤딩 ·
+  불릿/번호 리스트 ≥2 · ``` 펜스)면 `text` 대신 `markdown` 노드로 — "카드 안
+  마크다운 표" 습관이 전체 마크다운 렌더러(표 포함)로 살아난다. `<text>` 요소
+  자체도 값이 블록 구조면 markdown 노드로 승격.
+- **블록 별칭**: `p`→text(body) · `h1`→text(headline) · `h2 h3`→text(title) ·
+  `h4-h6`→text(bold). 블록 자식이 섞이면 column 래핑(텍스트 먼저).
+- **수치 관용**: 정확 파스 실패 시 첫 숫자 런 추출 — 천단위 콤마 허용, 단위/기호
+  무시 (`"1,200톤"`→1200, `"68%"`→68, `"16px"`→16).
+- **progress 백분율 정규화**: value>1 이면 /100 후 [0,1] 클램프 (`"68"`/`"68%"`→0.68).
+- **enum 정규화**: badge color `red`→error `green`→success `yellow/amber/orange`→warning
+  `blue`→primary `gray/grey/neutral`→secondary · alert severity `warn/caution`→warning
+  `danger/critical/fatal`→error `ok/done`→success `note/notice/information`→info ·
+  chart type `bars/column(s)`→bar `lines/area/trend`→line · text style
+  `heading/header`→headline `subtitle/subheading`→title.
 
 ## 태그 → 노드 매핑
 
@@ -83,7 +111,8 @@
 
 - 인터랙티브 노드(input/textarea/checkbox/switch/select/radio-group/slider/chips)는
   비어있지 않은 `id` 필수 — 기존 JSON 검증과 동일.
-- enum 속성 위반, 알 수 없는 태그/액션은 Issue 로 보고.
+- enum 속성 위반(정규화 이후에도 남는 값), 알 수 없는 태그(unwrap 후에도 Issue)와
+  알 수 없는 액션은 Issue 로 보고.
 - legacy JSON 본문은 기존 경로로 계속 검증(표시 전용 하위호환).
 
 ## 공유 테스트 벡터
@@ -91,4 +120,8 @@
 세 구현의 테스트가 아래 시나리오를 공통으로 커버한다 (각 저장소의 *_test 파일):
 레터 카드 3장 / select+option(미닫음) / 미닫은 li / 루트 형제 다수(암시 column) /
 truncation(EOF 자동 닫힘) / 엔티티+`&#96;` 코드펜스 / table th+td / 액션 4종 /
-알 수 없는 태그 / id 누락 인터랙티브 / raw-text markdown 내 `<` 문자.
+알 수 없는 태그 unwrap(+게이트웨이 Issue) / id 누락 인터랙티브 / raw-text markdown
+내 `<` 문자 / div 래퍼 unwrap / 인라인 `<b>` 병합(`**`) / `<a>`+인라인 `<code>`
+병합 / badge 안 인라인 마커 억제 / 카드 안 마크다운 표→markdown 노드 /
+`<text>` 불릿 블록 승격 / h2·p 별칭 / progress `68%`→0.68 / point `1,200톤`→1200 /
+badge `red`→error / alert `warn`→warning / chart `column`→bar.

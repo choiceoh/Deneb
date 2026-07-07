@@ -24,6 +24,113 @@ const AUTO_CLOSE: Record<string, Set<string>> = {
 };
 const CONTAINER_TAGS = new Set(["column", "col", "row", "card", "box", "accordion", "li", "tab"]);
 
+// Inline HTML formatting habits with no node of their own: they merge back
+// into the parent text flow as markdown-marked runs ("**"/"*") the inline
+// renderer already draws — content survives instead of the subtree dropping.
+// Empty marker = keep bare text.
+const INLINE_TAGS: Record<string, string> = {
+  b: "**",
+  strong: "**",
+  i: "*",
+  em: "*",
+  u: "",
+  s: "",
+  del: "",
+  strike: "",
+  mark: "",
+  small: "",
+  span: "",
+  sub: "",
+  sup: "",
+  a: "",
+};
+
+// Structural HTML wrappers (div soup) models emit out of pre-trained habit.
+// They produce no node: children hoist to the parent and bare text becomes
+// implicit text nodes.
+const GENERIC_TAGS = new Set([
+  "div",
+  "section",
+  "article",
+  "header",
+  "footer",
+  "main",
+  "aside",
+  "figure",
+  "center",
+  "nav",
+]);
+
+// Every tag convert() maps to a node or structural. Tags in none of the
+// tables unwrap like GENERIC_TAGS (the gateway validator reports them), so
+// content survives typos.
+const KNOWN_TAGS = new Set([
+  "column",
+  "col",
+  "row",
+  "card",
+  "box",
+  "hr",
+  "divider",
+  "text",
+  "markdown",
+  "img",
+  "image",
+  "icon",
+  "code",
+  "blockquote",
+  "quote",
+  "badge",
+  "stat",
+  "avatar",
+  "progress",
+  "alert",
+  "countdown",
+  "chart",
+  "point",
+  "table",
+  "tr",
+  "td",
+  "th",
+  "ul",
+  "ol",
+  "list",
+  "li",
+  "tabs",
+  "tab",
+  "accordion",
+  "button",
+  "input",
+  "textarea",
+  "checkbox",
+  "switch",
+  "select",
+  "radio-group",
+  "radiogroup",
+  "option",
+  "slider",
+  "chips",
+  "chip-group",
+  "chip",
+  "br",
+  "p",
+  "h1",
+  "h2",
+  "h3",
+  "h4",
+  "h5",
+  "h6",
+]);
+
+// Whether bare text inside a tag surfaces as implicit child nodes
+// (containers, generic wrappers, unknown tags) rather than feeding the
+// element's own value slot (text/badge/li/… and inline tags).
+function treatsTextAsChildren(tag: string): boolean {
+  if (CONTAINER_TAGS.has(tag) || GENERIC_TAGS.has(tag)) return true;
+  if (tag in INLINE_TAGS) return false;
+  return !KNOWN_TAGS.has(tag);
+}
+
 type Structural =
   | { kind: "option"; text: string; selected: boolean }
   | { kind: "chip"; label: string; value: string }
@@ -39,6 +146,12 @@ interface OpenElem {
   children: Node[];
   structs: Structural[];
   text: string[];
+  /** Buffered implicit-text runs, flushed as one merged node. */
+  pending: string[];
+}
+
+function newElem(tag: string, attrs: Record<string, string>): OpenElem {
+  return { tag, attrs, children: [], structs: [], text: [], pending: [] };
 }
 
 // Parse a fence body into a node tree, or null when nothing usable parsed.
@@ -53,6 +166,7 @@ class Parser {
   private pos = 0;
   private stack: OpenElem[] = [];
   private roots: Node[] = [];
+  private rootPending: string[] = [];
 
   constructor(private src: string) {}
 
@@ -73,6 +187,7 @@ class Parser {
       }
     }
     while (this.stack.length > 0) this.closeTop();
+    this.flushRootPending();
     return this.roots;
   }
 
@@ -165,8 +280,10 @@ class Parser {
       this.captureRawText(name, attrs);
       return;
     }
-    const el: OpenElem = { tag: name, attrs, children: [], structs: [], text: [] };
+    const el = newElem(name, attrs);
     if (VOID_TAGS.has(name) || selfClose) {
+      // Self-closed inline/generic/unknown tags carry no content.
+      if (name in INLINE_TAGS || GENERIC_TAGS.has(name) || !KNOWN_TAGS.has(name)) return;
       this.attach(convert(el));
       return;
     }
@@ -184,8 +301,24 @@ class Parser {
       const gt = this.src.indexOf(">", end);
       this.pos = gt < 0 ? this.src.length : gt + 1;
     }
-    const el: OpenElem = { tag: name, attrs, children: [], structs: [], text: [decodeEntities(raw)] };
+    const decoded = decodeEntities(raw);
+    // Inline habit: <code> inside a text flow merges as a backtick run
+    // instead of breaking the sentence into a block node.
+    if (name === "code" && this.inlineCodeContext()) {
+      const t = decoded.trim();
+      if (t) this.emitRun("`" + t + "`");
+      return;
+    }
+    const el = newElem(name, attrs);
+    el.text.push(decoded);
     this.attach(convert(el));
+  }
+
+  // Raw <code> merges into text flow when the parent is a text node or inline tag.
+  private inlineCodeContext(): boolean {
+    const tag = this.stack[this.stack.length - 1]?.tag;
+    if (tag == null) return false;
+    return tag === "text" || tag in INLINE_TAGS;
   }
 
   private handleClose(name: string) {
@@ -203,7 +336,47 @@ class Parser {
 
   private closeTop() {
     const el = this.stack.pop()!;
+    if (el.tag in INLINE_TAGS) {
+      this.emitInline(el, INLINE_TAGS[el.tag]);
+      return;
+    }
+    if (GENERIC_TAGS.has(el.tag) || !KNOWN_TAGS.has(el.tag)) {
+      // Unwrap: the wrapper produces no node; its children (incl. flushed
+      // implicit text) hoist to the parent in source order.
+      this.flushPending(el);
+      for (const c of el.children) this.attach(c);
+      return;
+    }
+    this.flushPending(el);
     this.attach(convert(el));
+  }
+
+  // Merges an inline formatting element back into the parent text flow
+  // (<b>중요</b> → "**중요**"). Plain-value slots (badge, button labels)
+  // receive bare text — literal markers would render as noise there. Real
+  // child nodes (rare) hoist to the parent afterwards.
+  private emitInline(el: OpenElem, marker: string) {
+    const inner = el.text.join("").trim();
+    if (inner) {
+      let run = inner;
+      if (this.inlineMarkupAllowed()) {
+        if (el.tag === "a") {
+          const href = el.attrs.href;
+          if (href) run = `[${inner}](${href})`;
+        } else if (marker) {
+          run = marker + inner + marker;
+        }
+      }
+      this.emitRun(run);
+    }
+    for (const c of el.children) this.attach(c);
+  }
+
+  // Markdown markers only where inline markdown renders (text/containers/root).
+  private inlineMarkupAllowed(): boolean {
+    const tag = this.stack[this.stack.length - 1]?.tag;
+    if (tag == null) return true;
+    return tag === "text" || treatsTextAsChildren(tag);
   }
 
   private attach(v: Node | Structural | null) {
@@ -214,21 +387,93 @@ class Parser {
       top?.structs.push(v as Structural); // floating at root: drop
       return;
     }
-    if (top) top.children.push(v);
-    else this.roots.push(v);
+    if (top) {
+      this.flushPending(top);
+      top.children.push(v);
+    } else {
+      this.flushRootPending();
+      this.roots.push(v);
+    }
   }
 
   private emitText(t: string) {
     if (!t.trim()) return;
-    const decoded = decodeEntities(t).trim();
+    this.emitRun(decodeEntities(t));
+  }
+
+  // Adds an already-decoded text run (entity decoding must not repeat on
+  // inline re-emits).
+  private emitRun(t: string) {
+    if (!t.trim()) return;
     const top = this.stack[this.stack.length - 1];
     if (!top) {
-      this.roots.push({ type: "text", value: decoded });
+      this.rootPending.push(t);
       return;
     }
-    top.text.push(decodeEntities(t));
-    if (CONTAINER_TAGS.has(top.tag)) top.children.push({ type: "text", value: decoded });
+    top.text.push(t);
+    if (treatsTextAsChildren(top.tag)) top.pending.push(t);
   }
+
+  // Materializes buffered text runs as one merged implicit node. Merging
+  // keeps sentences split by inline tags whole and lets markdown block
+  // structure be recognized.
+  private flushPending(el: OpenElem) {
+    if (el.pending.length === 0) return;
+    const node = textBlockNode(el.pending.join(""));
+    el.pending = [];
+    el.children.push(node);
+  }
+
+  private flushRootPending() {
+    if (this.rootPending.length === 0) return;
+    const node = textBlockNode(this.rootPending.join(""));
+    this.rootPending = [];
+    this.roots.push(node);
+  }
+}
+
+// Wraps a merged text run as an implicit node — as markdown when the run
+// carries markdown block structure (auto-correcting the "markdown table
+// inside a card" habit: markdown nodes route through the full markdown
+// renderer, tables included), else as plain text.
+function textBlockNode(s: string): Node {
+  const t = s.trim();
+  if (looksLikeMarkdownBlock(t)) return { type: "markdown", value: t };
+  return { type: "text", value: t };
+}
+
+// Whether text carries markdown block structure (table rows, headings, list
+// runs, fences) that a plain text node would render broken. Conservative:
+// single bullets or lone pipes stay text.
+function looksLikeMarkdownBlock(s: string): boolean {
+  if (s.includes("```")) return true;
+  let pipeRows = 0;
+  let bullets = 0;
+  for (const line of s.split("\n")) {
+    const t = line.trim();
+    if (!t) continue;
+    if (t.startsWith("|")) {
+      if (++pipeRows >= 2) return true;
+      continue;
+    }
+    if (isMarkdownHeading(t)) return true;
+    if (isMarkdownBullet(t) && ++bullets >= 2) return true;
+  }
+  return false;
+}
+
+function isMarkdownHeading(t: string): boolean {
+  let n = 0;
+  while (n < t.length && t[n] === "#") n++;
+  return n >= 1 && n <= 6 && n < t.length && t[n] === " ";
+}
+
+function isMarkdownBullet(t: string): boolean {
+  if (t.length >= 2 && (t[0] === "-" || t[0] === "*") && t[1] === " ") return true;
+  if (t.startsWith("• ")) return true;
+  let i = 0;
+  while (i < t.length && t[i] >= "0" && t[i] <= "9") i++;
+  return i >= 1 && i + 1 < t.length && (t[i] === "." || t[i] === ")") && t[i + 1] === " ";
 }
 
 // ---------------------------------------------------------------------------
@@ -241,11 +486,7 @@ function convert(el: OpenElem): Node | Structural | null {
   const inner = el.text.join("").trim();
   const node: Node = {};
   if (a.id) node.id = a.id;
-  const num = (v: string | undefined): number | undefined => {
-    if (v == null || v.trim() === "") return undefined;
-    const f = Number(v);
-    return Number.isFinite(f) ? f : undefined;
-  };
+  const num = lenientFloat;
   const bool = (key: string): boolean | undefined => (key in a ? truthy(a[key]) : undefined);
   const set = (key: string, v: unknown) => {
     if (v !== undefined && v !== "" && v !== null) node[key] = v;
@@ -266,11 +507,32 @@ function convert(el: OpenElem): Node | Structural | null {
     case "divider":
       return { ...node, type: "divider" };
     case "text":
-      set("style", a.style);
+      // Whole markdown blocks stuffed into <text> upgrade to a markdown node
+      // so they render structured.
+      if (looksLikeMarkdownBlock(inner)) return { ...node, type: "markdown", value: inner };
+      set("style", canonTextStyle(a.style));
       set("bold", bool("bold"));
       set("italic", bool("italic"));
       set("color", a.color);
       return { ...node, type: "text", value: inner };
+    // HTML fluency aliases: paragraphs and headings map onto text nodes.
+    case "p":
+    case "h1":
+    case "h2":
+    case "h3":
+    case "h4":
+    case "h5":
+    case "h6": {
+      if (!inner && el.children.length === 0) return null;
+      const textNode: Node = { ...node, type: "text", value: inner };
+      if (el.tag === "h1") textNode.style = "headline";
+      else if (el.tag === "h2" || el.tag === "h3") textNode.style = "title";
+      else if (el.tag !== "p") textNode.bold = true;
+      if (el.children.length === 0) return textNode;
+      // Block children inside a paragraph: keep both, text first.
+      const kids = inner ? [textNode, ...el.children] : el.children;
+      return { type: "column", children: kids };
+    }
     case "markdown":
       return { ...node, type: "markdown", value: inner };
     case "img":
@@ -291,7 +553,7 @@ function convert(el: OpenElem): Node | Structural | null {
       set("source", a.source);
       return { ...node, type: "quote", text: inner };
     case "badge":
-      set("color", a.color);
+      set("color", canonBadgeColor(a.color));
       return { ...node, type: "badge", value: a.value || inner };
     case "stat":
       set("description", a.description);
@@ -301,13 +563,18 @@ function convert(el: OpenElem): Node | Structural | null {
       set("imageUrl", a.src ?? a["image-url"]);
       set("size", num(a.size));
       return { ...node, type: "avatar" };
-    case "progress":
-      set("value", num(a.value));
+    case "progress": {
+      // Percent tolerance: "68" / "68%" mean 68% — the 0..1 contract only
+      // applies to values already in range.
+      let pv = num(a.value);
+      if (pv != null && pv > 1) pv /= 100;
+      if (pv != null) set("value", Math.min(Math.max(pv, 0), 1));
       set("label", a.label);
       return { ...node, type: "progress" };
+    }
     case "alert":
       set("title", a.title);
-      set("severity", a.severity);
+      set("severity", canonSeverity(a.severity));
       return { ...node, type: "alert", message: a.message || inner };
     case "countdown":
       set("label", a.label || inner || undefined);
@@ -315,7 +582,7 @@ function convert(el: OpenElem): Node | Structural | null {
       return { ...node, type: "countdown", seconds: num(a.seconds) ?? 0 };
     case "chart": {
       const points = el.structs.filter((s): s is Extract<Structural, { kind: "point" }> => s.kind === "point");
-      set("chartType", a.type);
+      set("chartType", canonChartType(a.type));
       set("label", a.label);
       return {
         ...node,
@@ -515,6 +782,112 @@ function indexOfCloseTag(s: string, from: number, name: string): number {
 
 function truthy(v: string): boolean {
   return !["false", "0", "no", "off"].includes(v.trim().toLowerCase());
+}
+
+// Extracts a number from a lenient attribute value: exact floats parse as-is;
+// otherwise units, thousands commas, and stray symbols are tolerated
+// ("1,200톤" → 1200, "68%" → 68, "16px" → 16).
+function lenientFloat(v: string | undefined): number | undefined {
+  const t = v?.trim() ?? "";
+  if (!t) return undefined;
+  const exact = Number(t);
+  if (Number.isFinite(exact)) return exact;
+  let start = -1;
+  for (let i = 0; i < t.length; i++) {
+    if (t[i] >= "0" && t[i] <= "9") {
+      start = i;
+      break;
+    }
+  }
+  if (start < 0) return undefined;
+  let b = start > 0 && t[start - 1] === "-" ? "-" : "";
+  let dot = false;
+  for (let i = start; i < t.length; i++) {
+    const c = t[i];
+    if (c >= "0" && c <= "9") b += c;
+    else if (c === ",")
+      continue; // thousands separator: skip
+    else if (c === "." && !dot) {
+      dot = true;
+      b += c;
+    } else break;
+  }
+  const f = Number(b.replace(/\.$/, ""));
+  return Number.isFinite(f) ? f : undefined;
+}
+
+// Folds common CSS color words onto the badge tint enum.
+function canonBadgeColor(v: string | undefined): string | undefined {
+  switch (v?.trim().toLowerCase()) {
+    case "red":
+      return "error";
+    case "green":
+      return "success";
+    case "yellow":
+    case "amber":
+    case "orange":
+      return "warning";
+    case "blue":
+      return "primary";
+    case "gray":
+    case "grey":
+    case "neutral":
+      return "secondary";
+    default:
+      return v;
+  }
+}
+
+// Folds severity synonyms onto the alert enum.
+function canonSeverity(v: string | undefined): string | undefined {
+  switch (v?.trim().toLowerCase()) {
+    case "warn":
+    case "caution":
+      return "warning";
+    case "danger":
+    case "critical":
+    case "fatal":
+      return "error";
+    case "ok":
+    case "done":
+      return "success";
+    case "note":
+    case "notice":
+    case "information":
+      return "info";
+    default:
+      return v;
+  }
+}
+
+// Folds chart-type synonyms onto bar/line.
+function canonChartType(v: string | undefined): string | undefined {
+  switch (v?.trim().toLowerCase()) {
+    case "bars":
+    case "column":
+    case "columns":
+      return "bar";
+    case "lines":
+    case "area":
+    case "trend":
+      return "line";
+    default:
+      return v;
+  }
+}
+
+// Folds text-style synonyms onto the style enum.
+function canonTextStyle(v: string | undefined): string | undefined {
+  switch (v?.trim().toLowerCase()) {
+    case "heading":
+    case "header":
+      return "headline";
+    case "subtitle":
+    case "subheading":
+      return "title";
+    default:
+      return v;
+  }
 }
 
 function isSpace(c: string): boolean {

@@ -146,10 +146,78 @@ class DenebUiHtmlTest {
     }
 
     @Test
-    fun `unknown tags are skipped with the rest rendered`() {
+    fun `unknown tags unwrap so content survives`() {
+        // Tolerance round: the unknown wrapper drops but its content hoists.
         val node = assertIs<ColumnNode>(parseUi("<column><wat>x</wat><text>ok</text></column>"))
-        assertEquals(1, node.children.size)
-        assertEquals("ok", assertIs<TextNode>(node.children[0]).value)
+        assertEquals(2, node.children.size)
+        assertEquals("x", assertIs<TextNode>(node.children[0]).value)
+        assertEquals("ok", assertIs<TextNode>(node.children[1]).value)
+    }
+
+    @Test
+    fun `generic html wrappers unwrap transparently`() {
+        val node = assertIs<CardNode>(parseUi("<div><card><text>안</text></card></div>"))
+        assertEquals("안", assertIs<TextNode>(node.children[0]).value)
+    }
+
+    @Test
+    fun `inline formatting tags merge into the text flow`() {
+        val card = assertIs<CardNode>(parseUi("<card>이건 <b>중요</b>한 일</card>"))
+        assertEquals(1, card.children.size)
+        assertEquals("이건 **중요**한 일", assertIs<TextNode>(card.children[0]).value)
+    }
+
+    @Test
+    fun `inline anchor and code merge into text value`() {
+        val node = assertIs<TextNode>(
+            parseUi("""<text>보고서 <a href="https://x">링크</a>는 <code>make ci</code>로</text>"""),
+        )
+        assertEquals("보고서 [링크](https://x)는 `make ci`로", node.value)
+    }
+
+    @Test
+    fun `inline markers suppressed in plain-value slots`() {
+        val badge = assertIs<BadgeNode>(parseUi("<badge><b>긴급</b></badge>"))
+        assertEquals("긴급", badge.value)
+    }
+
+    @Test
+    fun `markdown table inside a card auto-upgrades to markdown node`() {
+        val card = assertIs<CardNode>(parseUi("<card>\n| 항목 | 값 |\n|---|---|\n| a | 1 |\n</card>"))
+        assertEquals(1, card.children.size)
+        val md = assertIs<MarkdownNode>(card.children[0])
+        assertTrue("| 항목 | 값 |" in md.value)
+    }
+
+    @Test
+    fun `text node with markdown block upgrades`() {
+        assertIs<MarkdownNode>(parseUi("<text>- 하나\n- 둘</text>"))
+    }
+
+    @Test
+    fun `heading and paragraph aliases map to text nodes`() {
+        val col = assertIs<ColumnNode>(parseUi("<column><h2>제목</h2><p>본문</p></column>"))
+        val h = assertIs<TextNode>(col.children[0])
+        assertEquals("제목", h.value)
+        assertEquals(TextNodeStyle.TITLE, h.style)
+        assertEquals("본문", assertIs<TextNode>(col.children[1]).value)
+    }
+
+    @Test
+    fun `lenient numbers and enum canonicalization`() {
+        val col = assertIs<ColumnNode>(
+            parseUi(
+                """<column><progress value="68%"/>""" +
+                    """<chart type="column" label="생산"><point label="A" value="1,200톤"/></chart>""" +
+                    """<badge color="red">지연</badge><alert severity="warn">확인</alert></column>""",
+            ),
+        )
+        assertEquals(0.68f, assertIs<ProgressNode>(col.children[0]).value)
+        val chart = assertIs<ChartNode>(col.children[1])
+        assertEquals("bar", chart.chartType)
+        assertEquals(listOf(1200f), chart.values)
+        assertEquals("error", assertIs<BadgeNode>(col.children[2]).color)
+        assertEquals(AlertSeverity.WARNING, assertIs<AlertNode>(col.children[3]).severity)
     }
 
     @Test
