@@ -25,6 +25,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/embedindex"
 	"github.com/choiceoh/deneb/gateway-go/pkg/textsearch"
 )
 
@@ -51,12 +52,98 @@ type diarySearchDB struct {
 
 	mu   sync.RWMutex
 	meta map[string]*diaryEntryMeta // docID -> entry metadata
+
+	// sem is the optional dense-vector index over diary entries (one vector per
+	// entry, keyed by docID). nil until attachSemantic wires an embedder; when
+	// present, search blends cosine hits with BM25 so a paraphrased recall
+	// ("작년에 곡성 납기 얘기") finds an entry whose words differ from the query.
+	sem *embedindex.Index
 }
 
 func newDiarySearchDB() *diarySearchDB {
 	return &diarySearchDB{
 		idx:  textsearch.New(),
 		meta: make(map[string]*diaryEntryMeta),
+	}
+}
+
+// attachSemantic wires (or clears, on nil embedder) the diary semantic index.
+// The vector cache lives beside the diary files. Idempotent; called from
+// Store.SetEmbedder.
+func (d *diarySearchDB) attachSemantic(e embedindex.Embedder, cachePath string) {
+	if d.sem != nil {
+		d.sem.Close()
+		d.sem = nil
+	}
+	if e == nil {
+		return
+	}
+	d.sem = embedindex.New("diary", e, cachePath)
+}
+
+// semanticItems enumerates the current diary entries for embedding — one item per
+// entry, re-embedded only when its content hash changes.
+func (d *diarySearchDB) semanticItems() []embedindex.Item {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	items := make([]embedindex.Item, 0, len(d.meta))
+	for id, m := range d.meta {
+		if m.Content == "" {
+			continue
+		}
+		items = append(items, embedindex.Item{ID: id, Hash: embedindex.ContentHash(m.Content), Text: m.Content})
+	}
+	return items
+}
+
+// searchSemanticBatch embeds every query in one request and returns per-query
+// diary hits ranked by cosine (Score = cosine, 0–1), index-aligned with queries.
+// Kicks a background re-embed of changed entries first, then scans current
+// vectors — so a fresh entry never stalls the recall budget. Returns nil when
+// semantic is disabled, leaving the caller on pure BM25.
+func (d *diarySearchDB) searchSemanticBatch(ctx context.Context, queries []string, limit int) [][]DiaryHit {
+	if d.sem == nil || !d.sem.Enabled() {
+		return nil
+	}
+	d.sem.RefreshAsync(d.semanticItems)
+	batch := d.sem.SearchBatch(ctx, queries, limit)
+	if batch == nil {
+		return nil
+	}
+	out := make([][]DiaryHit, len(batch))
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	for i, hits := range batch {
+		for _, h := range hits {
+			m, ok := d.meta[h.ID]
+			if !ok {
+				continue // entry dropped between embed and lookup
+			}
+			out[i] = append(out[i], DiaryHit{
+				File:    m.File,
+				Header:  m.Header,
+				Content: m.Content,
+				At:      m.At,
+				Score:   h.Score, // raw cosine; the recall layer applies the source prior
+			})
+		}
+	}
+	return out
+}
+
+// warmSemantic synchronously embeds all diary entries — an eager startup warm so
+// the first recall has diary vectors instead of racing the background refresh.
+func (d *diarySearchDB) warmSemantic(ctx context.Context) error {
+	if d == nil || d.sem == nil {
+		return nil
+	}
+	return d.sem.Warm(ctx, d.semanticItems)
+}
+
+// closeSemantic stops the diary semantic index (used by Store.Close).
+func (d *diarySearchDB) closeSemantic() {
+	if d != nil && d.sem != nil {
+		d.sem.Close()
 	}
 }
 

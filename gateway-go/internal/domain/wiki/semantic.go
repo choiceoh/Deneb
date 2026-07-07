@@ -149,17 +149,49 @@ func (si *semanticIndex) refreshAsync(store *Store) {
 // content hash, so stale vectors for edited pages are re-embedded naturally.
 const semanticCacheFile = ".semantic-cache.json"
 
-// SetEmbedder attaches a semantic index backed by e. Passing nil disables it
-// (Search reverts to pure BM25). Safe to call once at wiring time.
+// diarySemanticCacheFile is the diary vector cache, kept beside the diary files
+// (leading dot so the diary walk never treats it as an entry file).
+const diarySemanticCacheFile = ".diary-semantic-cache.json"
+
+// SetEmbedder attaches semantic indexes (wiki pages + diary entries) backed by e.
+// Passing nil disables them (search reverts to pure BM25). Safe to call once at
+// wiring time.
 func (s *Store) SetEmbedder(e Embedder) {
 	if e == nil {
 		s.sem = nil
+		if s.diaryFTS != nil {
+			s.diaryFTS.attachSemantic(nil, "")
+		}
 		return
 	}
 	si := newSemanticIndex(e)
 	si.cachePath = filepath.Join(s.dir, semanticCacheFile)
 	si.loadCache()
 	s.sem = si
+	if s.diaryFTS != nil && s.diaryDir != "" {
+		s.diaryFTS.attachSemantic(e, filepath.Join(s.diaryDir, diarySemanticCacheFile))
+	}
+}
+
+// SearchDiarySemanticBatch returns semantic (cosine-ranked) diary hits per query,
+// index-aligned with queries — the dense-vector complement to SearchDiary's BM25.
+// Score is the raw cosine (0–1); the recall layer applies the diary source prior.
+// Empty when no embedder is wired, so callers keep pure BM25.
+func (s *Store) SearchDiarySemanticBatch(ctx context.Context, queries []string, limit int) [][]DiaryHit {
+	if s.diaryFTS == nil {
+		return nil
+	}
+	return s.diaryFTS.searchSemanticBatch(ctx, queries, limit)
+}
+
+// WarmDiarySemantic eagerly embeds all diary entries so semantic diary recall is
+// ready before the first query. Mirrors WarmSemanticIndex; no-op without an
+// embedder. Intended to run once in the background at startup.
+func (s *Store) WarmDiarySemantic(ctx context.Context) error {
+	if s.diaryFTS == nil {
+		return nil
+	}
+	return s.diaryFTS.warmSemantic(ctx)
 }
 
 // WarmSemanticIndex eagerly (re)embeds any wiki pages missing from the on-disk
