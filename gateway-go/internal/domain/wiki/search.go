@@ -310,6 +310,61 @@ func truncateResults(results []SearchResult, limit int) []SearchResult {
 	return results
 }
 
+// SearchBatch runs Search for several queries while embedding them all in ONE
+// request, so the embedding server fans the query vectors across its context
+// pool instead of a per-query round-trip serializing on one. Each query's
+// BM25/rarity/blend/validity path is IDENTICAL to Search — only the semantic
+// query embed is shared. Returns one result slice per query, index-aligned with
+// queries (a query too short to embed, or the embedder being down, transparently
+// degrades that query to pure BM25, exactly like Search). The recall preflight
+// is the caller: it issues 2-3 wiki queries per turn.
+func (s *Store) SearchBatch(ctx context.Context, queries []string, limit int) ([][]SearchResult, error) {
+	if s.fts == nil || len(queries) == 0 {
+		return nil, nil
+	}
+	if limit <= 0 {
+		limit = 10
+	}
+	// One embed round-trip for all queries. nil (whole slice) when the embedder
+	// is unavailable; per-entry nil for a query too short to embed — both leave
+	// that query on the pure-BM25 path below.
+	qvecs := s.embedQueriesBatch(ctx, queries)
+
+	out := make([][]SearchResult, len(queries))
+	for i, query := range queries {
+		if ctx.Err() != nil {
+			return out, ctx.Err()
+		}
+		if query == "" {
+			continue
+		}
+		fetchLimit := limit * 3
+		if fetchLimit < limit+50 {
+			fetchLimit = limit + 50
+		}
+		bm25, err := s.fts.search(ctx, query, fetchLimit)
+		if err != nil {
+			return nil, err
+		}
+		commonOnlyQuery := s.fts.docCount() >= bm25GateMinCorpus &&
+			s.fts.queryMaxRarity(query) < bm25RarityFloorValue()
+
+		var sem []SearchResult
+		if qvecs != nil && len(qvecs[i]) > 0 {
+			sem = s.searchSemanticWithVec(qvecs[i], max(fetchLimit, semanticBlendK))
+		}
+		if len(sem) == 0 {
+			if commonOnlyQuery {
+				continue
+			}
+			out[i] = truncateResults(s.fts.applyValidity(bm25), limit)
+			continue
+		}
+		out[i] = truncateResults(s.fts.applyValidity(mergeSearchResults(bm25, sem, fetchLimit, commonOnlyQuery)), limit)
+	}
+	return out, nil
+}
+
 const (
 	// semAgreementBonus rewards a BM25 hit confirmed by real semantic similarity
 	// (cosine >= semSupportThreshold) — the two signals agreeing is strong
