@@ -214,6 +214,17 @@ describe("deneb-ui renderer parity conventions", () => {
     expect(container.querySelector("strong")?.textContent).toBe("필수");
   });
 
+  it("renders inline markdown links (native InlineTokenizer parity)", () => {
+    // The HTML parser merges <a href> into [label](url); the phone renders a
+    // real link, so desktop must not leak the literal brackets.
+    const spec = { type: "text", value: "보고서 [링크](https://x)는 여기" };
+    const { container } = render(<DenebUi spec={spec} onSubmit={() => {}} />);
+    const a = container.querySelector("a");
+    expect(a?.getAttribute("href")).toBe("https://x");
+    expect(a?.textContent).toBe("링크");
+    expect(container.textContent).not.toContain("](");
+  });
+
   it("promotes an icon+caption first row to the card header voice", () => {
     const spec = {
       type: "card",
