@@ -67,6 +67,7 @@ fun DenebDashboardScreen(
     // null = load in flight, true = ok, false = fetch failed (mirrors DenebTodoScreen).
     var loadOk by remember { mutableStateOf<Boolean?>(null) }
     var refreshing by remember { mutableStateOf(false) }
+    val haptics = rememberHaptics()
     val scope = rememberCoroutineScope()
 
     suspend fun load() {
@@ -84,6 +85,7 @@ fun DenebDashboardScreen(
         PullToRefreshBox(
             isRefreshing = refreshing,
             onRefresh = {
+                haptics.refresh()
                 scope.launch {
                     refreshing = true
                     load()

@@ -248,8 +248,8 @@ fun DenebCategoryPagesScreen(
                                             onOpenWiki(page.path)
                                         }
                                     },
+                                    // combinedClickable fires the long-press haptic itself.
                                     onLongClick = {
-                                        haptics.longPress()
                                         selecting = true
                                         if (page.path !in selected) selected.add(page.path)
                                     },

@@ -82,6 +82,7 @@ fun DenebTodoScreen(
     // null = load in flight, true = ok, false = fetch failed.
     var loadOk by remember { mutableStateOf<Boolean?>(null) }
     var refreshing by remember { mutableStateOf(false) }
+    val haptics = rememberHaptics()
     var actionTodo by remember { mutableStateOf<Todo?>(null) }
     var confirmDelete by remember { mutableStateOf<Todo?>(null) }
     var actionError by remember { mutableStateOf<String?>(null) }
@@ -141,6 +142,7 @@ fun DenebTodoScreen(
             PullToRefreshBox(
                 isRefreshing = refreshing,
                 onRefresh = {
+                    haptics.refresh()
                     scope.launch {
                         refreshing = true
                         load()
@@ -275,12 +277,8 @@ internal fun TodoCheckRow(
             haptics.tap()
             onOpen(todo.id)
         },
-        onLongClick = onLongAction?.let {
-            {
-                haptics.longPress()
-                it(todo)
-            }
-        },
+        // combinedClickable fires the long-press haptic itself — no manual call.
+        onLongClick = onLongAction?.let { { it(todo) } },
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
             Checkbox(

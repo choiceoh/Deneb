@@ -129,6 +129,7 @@ fun DenebCalendarScreen(
     val failed = remember { mutableStateMapOf<CalMonth, Boolean>() }
     var selected by remember { mutableStateOf(today) }
     var refreshing by remember { mutableStateOf(false) }
+    val haptics = rememberHaptics()
     // To-dos are independent of the visible month (a to-do has at most one due
     // date), so they're fetched once and filtered to the selected day below.
     var todos by remember { mutableStateOf<List<Todo>>(emptyList()) }
@@ -333,6 +334,7 @@ fun DenebCalendarScreen(
             PullToRefreshBox(
                 isRefreshing = refreshing,
                 onRefresh = {
+                    haptics.refresh()
                     scope.launch {
                         refreshing = true
                         loadMonth(selMonth, force = true)

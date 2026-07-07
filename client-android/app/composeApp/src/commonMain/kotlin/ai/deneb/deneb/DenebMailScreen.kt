@@ -244,6 +244,7 @@ fun DenebMailScreen(
                 PullToRefreshBox(
                     isRefreshing = refreshing,
                     onRefresh = {
+                        haptics.refresh()
                         scope.launch {
                             refreshing = true
                             loadOk = client.refreshMail(activeQuery)
@@ -364,8 +365,8 @@ fun DenebMailScreen(
                                                 onOpenDetail(m.id)
                                             }
                                         },
+                                        // combinedClickable fires the long-press haptic itself.
                                         onLongPress = {
-                                            haptics.longPress()
                                             selecting = true
                                             if (m.id !in selected) selected.add(m.id)
                                         },

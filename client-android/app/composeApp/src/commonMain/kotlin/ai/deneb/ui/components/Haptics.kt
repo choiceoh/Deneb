@@ -16,10 +16,13 @@ import androidx.compose.ui.platform.LocalHapticFeedback
  *  - [toggleOff] the same turning OFF
  *  - [confirm]   a committing success: save, send, run an action
  *  - [reject]    a destructive / negative commit: delete, discard
- *  - [longPress] a long-press gesture landing
+ *  - [longPress] a long-press gesture landing. NOTE: combinedClickable (and thus
+ *    denebPressable's onLongClick path) already fires this automatically since
+ *    foundation 1.9 — only call it for hand-rolled long-press gesture detectors.
  *  - [segmentTick] crossing a discrete step while dragging (slider notches)
  *  - [segmentFrequentTick] same, but tuned for steps crossed in RAPID succession
  *    (fast-scroll index flick) — a lighter tick that stays crisp instead of buzzy
+ *  - [refresh]   a drag gesture arming past its threshold (pull-to-refresh commit)
  *
  * Back / cancel / dismiss stay silent (no call) by convention. The richer types
  * (Confirm/Reject/ToggleOn/ToggleOff) need Compose's expanded HapticFeedbackType
@@ -27,7 +30,9 @@ import androidx.compose.ui.platform.LocalHapticFeedback
  * vibration when the OS lacks the exact constant.
  */
 class Haptics(private val hf: HapticFeedback) {
-    fun tap() = hf.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+    // VirtualKey = the OS keyboard-tap strength (2026-07 햅틱 강화): TextHandleMove
+    // was the faintest tick and read as "no feedback" on the daily-driver Galaxy.
+    fun tap() = hf.performHapticFeedback(HapticFeedbackType.VirtualKey)
     fun toggleOn() = hf.performHapticFeedback(HapticFeedbackType.ToggleOn)
     fun toggleOff() = hf.performHapticFeedback(HapticFeedbackType.ToggleOff)
 
@@ -38,6 +43,7 @@ class Haptics(private val hf: HapticFeedback) {
     fun longPress() = hf.performHapticFeedback(HapticFeedbackType.LongPress)
     fun segmentTick() = hf.performHapticFeedback(HapticFeedbackType.SegmentTick)
     fun segmentFrequentTick() = hf.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick)
+    fun refresh() = hf.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
 }
 
 @Composable

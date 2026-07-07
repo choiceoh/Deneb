@@ -358,6 +358,7 @@ fun DenebFilesScreen(
                 else -> PullToRefreshBox(
                     isRefreshing = refreshing,
                     onRefresh = {
+                        haptics.refresh()
                         scope.launch {
                             refreshing = true
                             val token = ++loadToken

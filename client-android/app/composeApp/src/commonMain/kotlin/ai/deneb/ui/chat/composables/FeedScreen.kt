@@ -6,6 +6,7 @@ import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebSectionLabel
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.chat.WorkFeedItem
+import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebBannerEnter
 import ai.deneb.ui.denebBannerExit
 import ai.deneb.ui.denebHint
@@ -100,6 +101,7 @@ internal fun FeedScreen(
         // say so — the feed is the 업무 home, and a silent failure reads as "피드
         // 없음" while the server has every card (2026-07-05 field report).
         var loadFailed by remember { mutableStateOf(false) }
+        val haptics = rememberHaptics()
         val refreshScope = rememberCoroutineScope()
         val loadSelectedDay: suspend () -> Unit = {
             loadFailed = !onLoadDateRange(
@@ -160,6 +162,7 @@ internal fun FeedScreen(
         PullToRefreshBox(
             isRefreshing = refreshing,
             onRefresh = {
+                haptics.refresh()
                 refreshScope.launch {
                     refreshing = true
                     loadSelectedDay()
