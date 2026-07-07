@@ -168,6 +168,43 @@ func TestStore_MergePage_EmptyBodyFallsBackToConcat(t *testing.T) {
 	}
 }
 
+// TestStore_MergePage_RepointDoesNotStampReferrerUpdated: repointing a
+// referencing page's Related on merge is metadata hygiene, not page activity —
+// Updated must stay untouched (dormancy detection and counterparty windows key
+// off it), while the merge TARGET, whose body actually changed, is stamped.
+// Same doctrine as addBacklink/removeBacklink/PruneDeadRelatedLinks.
+func TestStore_MergePage_RepointDoesNotStampReferrerUpdated(t *testing.T) {
+	dir := t.TempDir()
+	store := testutil.Must(NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
+	defer store.Close()
+
+	_ = store.WritePage("프로젝트/a.md", NewPage("A", "프로젝트", nil))
+	_ = store.WritePage("프로젝트/a-dup.md", NewPage("A 중복", "프로젝트", nil))
+	referrer := NewPage("휴면 프로젝트", "프로젝트", nil)
+	referrer.Meta.Updated = "2025-01-01" // dormant long before the merge
+	referrer.Meta.Related = []string{"프로젝트/a-dup.md"}
+	if err := store.WritePage("프로젝트/휴면/대표.md", referrer); err != nil {
+		t.Fatal(err)
+	}
+	tgtBefore := testutil.Must(store.ReadPage("프로젝트/a.md")).Meta.Updated
+
+	if _, err := store.MergePage("프로젝트/a.md", "프로젝트/a-dup.md", "병합 본문", MergeOptions{}); err != nil {
+		t.Fatalf("MergePage: %v", err)
+	}
+
+	if !relatedSet(t, store, "프로젝트/휴면/대표.md")["프로젝트/a.md"] {
+		t.Fatal("referrer was not repointed to the merge target")
+	}
+	got := testutil.Must(store.ReadPage("프로젝트/휴면/대표.md"))
+	if got.Meta.Updated != "2025-01-01" {
+		t.Errorf("referrer Updated = %q, want 2025-01-01 (repoint must not stamp)", got.Meta.Updated)
+	}
+	// Contrast: the target took a new body — real activity, stamped today.
+	if u := testutil.Must(store.ReadPage("프로젝트/a.md")).Meta.Updated; u < tgtBefore {
+		t.Errorf("target Updated = %q, want >= %q (merge stamps the target)", u, tgtBefore)
+	}
+}
+
 // TestStore_MergePage_RejectsSelfMerge guards against merging a page into
 // itself, which would otherwise read-then-delete the same file.
 func TestStore_MergePage_RejectsSelfMerge(t *testing.T) {
