@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -435,6 +436,14 @@ func imageOCR(ctx context.Context, img []byte) (string, error) {
 // business documents without letting a huge PDF monopolize the GPU.
 const ocrPageCap = 10
 
+// ocrPageConcurrency bounds how many pages OCR at once. PaddleOCR-VL's vLLM
+// server batches concurrent requests (served with --max-num-seqs 8), and since
+// decode on the GB10 is memory-bandwidth-bound, batching amortizes the per-token
+// weight read across pages — an N-page scan collapses from N sequential decodes
+// toward one batched decode. Bounded (< the server's seq limit) so one big PDF
+// can't crowd out the OCR sidecar it shares with live chat/mail analysis.
+const ocrPageConcurrency = 6
+
 // rasterizePDF renders the first maxPages of a PDF to PNG (200 DPI) via
 // pdftoppm, returned in page order (index 0 = page 1; a nil entry means that
 // page failed to read). Shared by the scanned-PDF OCR fallback and the
@@ -504,13 +513,38 @@ func pdfOCR(ctx context.Context, pdf []byte) (string, error) {
 		return "", err
 	}
 
-	var sb strings.Builder
+	// OCR pages concurrently (bounded) — the vLLM server batches the requests,
+	// so an N-page scan finishes in roughly one batched decode instead of N
+	// sequential ones. Each page writes its own slot so order is preserved, and a
+	// per-page failure just leaves that slot empty (same skip-on-error as before).
+	texts := make([]string, len(imgs))
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, ocrPageConcurrency)
 	for i, img := range imgs {
 		if img == nil {
 			continue
 		}
-		text, err := ocrImageBytes(ctx, img)
-		if err != nil || strings.TrimSpace(text) == "" {
+		select {
+		case sem <- struct{}{}:
+		case <-ctx.Done():
+			wg.Wait()
+			return "", ctx.Err()
+		}
+		wg.Add(1)
+		go func(i int, img []byte) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			defer func() { _ = recover() }() // one page's panic must not crash the gateway
+			if text, err := ocrImageBytes(ctx, img); err == nil {
+				texts[i] = strings.TrimSpace(text)
+			}
+		}(i, img)
+	}
+	wg.Wait()
+
+	var sb strings.Builder
+	for i, text := range texts {
+		if text == "" {
 			continue
 		}
 		if sb.Len() > 0 {
