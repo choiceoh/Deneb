@@ -75,6 +75,7 @@ type wikiUpdate struct {
 	Supersedes flexStringList `json:"supersedes"` // relPath(s) of existing page(s) this update REPLACES; accepts a string or an array (the LLM emits both, and an array used to fail synthesis parsing)
 	Resource   string         `json:"resource"`   // OKF resource: stable URI/id of the concept's underlying asset (gmail thread, deal ref, calendar event, file path); empty for abstract concepts
 	Cues       flexStringList `json:"cues"`       // recall entry points: alternate Korean phrasings a future query might use (synonyms/aliases/question forms NOT already on the page) — indexed for search, never rendered as content
+	Client     string         `json:"client"`     // 거래처 — canonical single-level 계열사 name (기아·금호타이어); digest grouping + recall anchor key — 프로젝트 대표페이지 전용. Fill-only on update: an operator-set value is never overwritten
 	Sites      flexStringList `json:"sites"`      // 프로젝트 현장 (canonical "광역약칭 시/군 읍/면/동 [리]"); matching keys for recall anchor + meeting harvest — 프로젝트 대표페이지 전용
 	Kinds      flexStringList `json:"kinds"`      // 프로젝트 특성 2단 enum ("1차" 또는 "1차/2차" — page.go:projectKinds, 복수) — 대표페이지 전용
 }
@@ -276,6 +277,7 @@ func buildWikiSynthesisPrompt(indexContent, processedHistory, polarisSection, di
 - related: 의미적으로 관련된 기존 위키 페이지 경로 목록 (인덱스에서 선택)
 - resource: 이 개념의 근거가 되는 실제 자산의 안정 식별자/URI (예: gmail 스레드 id, 거래 ref, 캘린더 이벤트, 파일 경로). 다음 세션이 원본으로 바로 점프하게. 추상 개념이면 생략
 - cues: 이 문서를 나중에 다시 찾을 때 질문에 나올 법한 **검색 진입 표현** 2~5개 (동의어·별칭·다른 관점의 명사 — 제목/본문/tags에 **이미 있는 단어는 넣지 마라**; 예: 본문이 "선수금"이면 cues는 ["계약금", "착수금"]). 검색 전용이라 본문에 안 보인다. 마땅한 게 없으면 생략
+- client: **프로젝트 대표페이지 전용** — 거래처(발주처/계약 상대)를 계열사 단위 정식명 1개로 (예: "기아", "현대차", "LG전자", "금호타이어" — 그룹명·법인 접미어 ㈜ 금지). 프로젝트 위계의 최상단 그룹핑 축이다. 일지·메일에서 거래처가 확인된 신규 페이지에 기입; 이미 값이 있으면 시스템이 보존한다(덮어쓰기 안 됨). 자체 개발 등 거래처 없는 사업은 생략(추측 금지)
 - sites: **프로젝트 대표페이지 전용** — 현장 위치를 고정 규칙 "광역약칭 시/군 읍/면/동 [리]"로 (예: "전북 군산시 옥구읍 수산리"; 공백 구분·번지/마침표 금지·광역은 약칭). 일지·메일에서 현장이 확인되면 기입/갱신, 복수 현장은 배열로. 불확실하면 생략(추측 금지)
 - kinds: **프로젝트 대표페이지 전용** — 2단 고정 체계 "1차" 또는 "1차/2차" (복수 허용): 태양광(발전소 사업 — 시공·개발·인허가 포함; 2차: 토지/루프탑/수상/ESS — ESS 사업도 태양광), 기자재(2차: 모듈/인버터/케이블/기타), 풍력(2차: 육상/해상), 기타(2차: 용역/협력). 2차를 모르면 1차만, 확인되면 세분화. 어휘 밖 값은 무시됨
 - 업데이트가 불필요하면 빈 배열 [] 반환
@@ -428,6 +430,9 @@ func (wd *WikiDreamer) applyUpdates(_ context.Context, updates []wikiUpdate) (cr
 			if len(u.Cues) > 0 {
 				page.Meta.Cues = u.Cues
 			}
+			if u.Client != "" {
+				page.Meta.Client = u.Client
+			}
 			if len(u.Sites) > 0 {
 				page.Meta.Sites = normalizeSites(u.Sites)
 			}
@@ -493,6 +498,9 @@ func (wd *WikiDreamer) applyUpdates(_ context.Context, updates []wikiUpdate) (cr
 					if len(u.Cues) > 0 {
 						page.Meta.Cues = u.Cues
 					}
+					if u.Client != "" {
+						page.Meta.Client = u.Client
+					}
 					if len(u.Sites) > 0 {
 						page.Meta.Sites = normalizeSites(u.Sites)
 					}
@@ -545,6 +553,11 @@ func (wd *WikiDreamer) applyUpdates(_ context.Context, updates []wikiUpdate) (cr
 				}
 				if len(u.Cues) > 0 {
 					existing.Meta.Cues = mergeCues(existing.Meta.Cues, u.Cues)
+				}
+				// Fill-only: the dreamer may supply a missing 거래처 but never
+				// overwrites one already set (the operator backfill is authoritative).
+				if u.Client != "" && existing.Meta.Client == "" {
+					existing.Meta.Client = u.Client
 				}
 				existing.Meta.Updated = time.Now().Format("2006-01-02")
 				return existing, nil

@@ -4,6 +4,7 @@ import ai.deneb.deneb.generated.ProjectDigestRow
 import ai.deneb.deneb.generated.ProjectDigestsOut
 import ai.deneb.ui.DenebGroup
 import ai.deneb.ui.DenebScreenScaffold
+import ai.deneb.ui.DenebSectionLabel
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHint
@@ -120,7 +121,12 @@ fun DenebProjectDigestScreen(
 // --- stateless body (previewable) ----------------------------------------
 
 /**
- * The digest cards: one grouped card per project, newest-active first. Each card
+ * The digest cards grouped by 거래처 (the top level of the project hierarchy):
+ * a tracked-caps section label per client, then one card per project. Group
+ * order = first occurrence in the newest-first list, so a client sorts where
+ * its most recently active project does; rows keep their order within the
+ * group. Clientless rows group under "거래처 미지정", and when NO row carries a
+ * client the labels disappear entirely (the pre-backfill flat list). Each card
  * is a tappable header (project name + "as of" date + chevron) over the current
  * headline and a few recent-change bullets, plus any imminent due. Pure
  * presentation — the shell owns fetch + state.
@@ -128,12 +134,23 @@ fun DenebProjectDigestScreen(
 @Composable
 internal fun ProjectDigestContent(digests: List<ProjectDigestRow>, onOpenProject: (String) -> Unit) {
     val tz = remember { TimeZone.currentSystemDefault() }
+    val groups = digests.groupBy { it.client.trim() }
+    val grouped = groups.keys.any { it.isNotEmpty() }
     Column(Modifier.fillMaxWidth().padding(top = 4.dp)) {
-        digests.forEach { d ->
-            // Tap opens the project 대표페이지 by its wiki path; guard a blank path
-            // (a degenerate digest) so the row just doesn't navigate.
-            ProjectDigestCard(d = d, tz = tz, onOpen = { if (d.path.isNotBlank()) onOpenProject(d.path) })
-            Spacer(Modifier.height(18.dp))
+        groups.forEach { (client, rows) ->
+            if (grouped) {
+                DenebSectionLabel(
+                    client.ifEmpty { "거래처 미지정" },
+                    Modifier.padding(horizontal = 16.dp),
+                    topPadding = 10.dp,
+                )
+            }
+            rows.forEach { d ->
+                // Tap opens the project 대표페이지 by its wiki path; guard a blank path
+                // (a degenerate digest) so the row just doesn't navigate.
+                ProjectDigestCard(d = d, tz = tz, onOpen = { if (d.path.isNotBlank()) onOpenProject(d.path) })
+                Spacer(Modifier.height(18.dp))
+            }
         }
     }
 }

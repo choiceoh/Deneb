@@ -407,6 +407,7 @@ export interface ProjectDigestRow {
   updatedAtMs?: number
   path?: string
   code?: string
+  client?: string
   refs?: string[]
 }
 

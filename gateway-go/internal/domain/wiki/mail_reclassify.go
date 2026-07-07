@@ -116,25 +116,19 @@ func reclassifyTarget(page *Page, projects []ProjectRef) string {
 	if related != "" {
 		return related
 	}
-	// Signal 2: the title names exactly one known project (normalized
-	// containment on the passed project set).
+	// Signal 2: the title resolves to exactly one project by its most
+	// specific identity key (uniqueProjectIn): a title naming one project
+	// outright files there even when siblings also hit via their shared
+	// 거래처 key, while a bare client mention ties across the client's
+	// projects and stays put.
 	hay := normalizeTitleKey(strings.TrimSpace(page.Meta.Title))
 	if hay == "" {
 		return ""
 	}
-	matched := ""
-	for _, ref := range projects {
-		if bestProjectKeyIn(hay, ref) == "" {
-			continue
+	if ref, ok := uniqueProjectIn(hay, projects); ok {
+		if name, k := ProjectNameOf(ref.Path); k {
+			return name
 		}
-		name, ok := ProjectNameOf(ref.Path)
-		if !ok {
-			continue
-		}
-		if matched != "" && matched != name {
-			return "" // names two projects → ambiguous, stay put
-		}
-		matched = name
 	}
-	return matched
+	return ""
 }

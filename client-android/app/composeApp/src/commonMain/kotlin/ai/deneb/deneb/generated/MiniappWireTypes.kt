@@ -492,6 +492,7 @@ data class ProjectDigestRow(
     val updatedAtMs: Long = 0L,
     val path: String = "",
     val code: String = "",
+    val client: String = "",
     val refs: List<String> = emptyList(),
 )
 

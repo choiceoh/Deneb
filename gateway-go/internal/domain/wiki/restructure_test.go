@@ -73,6 +73,55 @@ func TestRestructure_DryRunWritesNothing(t *testing.T) {
 	}
 }
 
+// TestRestructure_SetClient: the set-client plan op stamps the 대표페이지's
+// 거래처 without re-stamping Updated; non-rep sources are skipped with a reason.
+func TestRestructure_SetClient(t *testing.T) {
+	store := newRestructureStore(t)
+
+	// Pin a known Updated so the no-restamp contract is observable. Use a rep
+	// page with NO inbound mail references: pages whose mail analyses relocate
+	// get their Updated re-stamped by the move's reference repoint (pre-existing
+	// MovePage behavior, not set-client's).
+	pinPath := "프로젝트/영산고-태양광.md"
+	page := testutil.Must(store.ReadPage(pinPath))
+	page.Meta.Updated = "2026-01-01"
+	if err := store.WritePage(pinPath, page); err != nil {
+		t.Fatal(err)
+	}
+
+	plan := []RestructureOp{
+		{Op: "set-client", Source: pinPath, Target: " [[영산고등학교]] "},
+		{Op: "set-client", Source: "프로젝트/거래/한빛전기.md", Target: "한빛전기"}, // ledger, not a rep page
+	}
+	rep, err := RestructureProjectLayout(store, plan, true)
+	if err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if len(rep.Errors) != 0 {
+		t.Fatalf("errors: %v", rep.Errors)
+	}
+	skippedLedger := false
+	for _, s := range rep.Skipped {
+		if strings.Contains(s, "set-client") && strings.Contains(s, "한빛전기") {
+			skippedLedger = true
+		}
+	}
+	if !skippedLedger {
+		t.Errorf("ledger set-client must be skipped, got %v", rep.Skipped)
+	}
+
+	// The flat rep page migrated into its folder slot during the same run; the
+	// client stamp must ride along (set-client executes before the move) and
+	// Updated must not churn (a classification backfill is not page activity).
+	moved := testutil.Must(store.ReadPage(RepPagePath("영산고-태양광")))
+	if moved.Meta.Client != "영산고등학교" {
+		t.Errorf("client = %q, want normalized 영산고등학교", moved.Meta.Client)
+	}
+	if moved.Meta.Updated != "2026-01-01" {
+		t.Errorf("Updated re-stamped to %q — set-client is metadata-only", moved.Meta.Updated)
+	}
+}
+
 func TestRestructure_Apply(t *testing.T) {
 	store := newRestructureStore(t)
 

@@ -127,6 +127,84 @@ func TestReclassifyUnlinkedMailAnalyses_Cap(t *testing.T) {
 	}
 }
 
+// newClientGroupStore builds two projects of one 거래처 plus an unrelated one —
+// the fixture for client-key anchoring and exactly-one resolution.
+func newClientGroupStore(t *testing.T) *Store {
+	t.Helper()
+	dir := t.TempDir()
+	store := testutil.Must(NewStore(filepath.Join(dir, "wiki"), ""))
+	t.Cleanup(func() { store.Close() })
+
+	for name, client := range map[string]string{
+		"금호타이어-곡성-1단계": "금호타이어",
+		"금호타이어-곡성-2단계": "금호타이어",
+		"영산고":          "",
+	} {
+		rep := NewPage(name, "프로젝트", nil)
+		rep.Meta.Client = client
+		rep.Body = "# " + name
+		if err := store.WritePage(RepPagePath(name), rep); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return store
+}
+
+// TestMatchProjectsInText_ClientKey: a bare 거래처 mention anchors every
+// project of that client (the 거래처-as-top-level recall behavior), while
+// unrelated projects stay out.
+func TestMatchProjectsInText_ClientKey(t *testing.T) {
+	store := newClientGroupStore(t)
+
+	got := store.MatchProjectsInText("금호타이어 요즘 어떻게 되고 있어?", 5)
+	if len(got) != 2 {
+		t.Fatalf("client mention matches = %+v, want the two 금호타이어 projects", got)
+	}
+	for _, ref := range got {
+		if ref.Client != "금호타이어" {
+			t.Errorf("matched a non-client project: %+v", ref)
+		}
+	}
+}
+
+// TestUniqueProjectInText: exactly-one resolution is specificity-aware — a
+// bare client mention ties across the client's projects (no arbitrary pick),
+// a specific title wins despite the sibling's client-key hit.
+func TestUniqueProjectInText(t *testing.T) {
+	store := newClientGroupStore(t)
+
+	if ref, ok := store.UniqueProjectInText("금호타이어 회의"); ok {
+		t.Errorf("bare client mention must tie, got %+v", ref)
+	}
+	ref, ok := store.UniqueProjectInText("금호타이어 곡성 1단계 자재 검토")
+	if !ok || ref.Path != RepPagePath("금호타이어-곡성-1단계") {
+		t.Fatalf("specific title = %+v (ok=%v), want 곡성-1단계", ref, ok)
+	}
+	if ref, ok := store.UniqueProjectInText("영산고 발전 근황"); !ok || ref.Path != RepPagePath("영산고") {
+		t.Fatalf("plain name = %+v (ok=%v), want 영산고", ref, ok)
+	}
+	if _, ok := store.UniqueProjectInText("아무 관련 없는 문장"); ok {
+		t.Error("no identity key in text must not resolve")
+	}
+}
+
+// TestReclassifyTarget_ClientMentionStaysPut: mail titled with only the 거래처
+// stays in the unlinked bucket (tie), while a project-specific title still
+// files even though the sibling project also hits via the shared client key.
+func TestReclassifyTarget_ClientMentionStaysPut(t *testing.T) {
+	store := newClientGroupStore(t)
+	projects := store.KnownProjects()
+
+	bare := &Page{Meta: Frontmatter{Title: "금호타이어 태양광 문의"}}
+	if got := reclassifyTarget(bare, projects); got != "" {
+		t.Errorf("bare client title must stay put, got %q", got)
+	}
+	specific := &Page{Meta: Frontmatter{Title: "금호타이어 곡성 2단계 준공 서류"}}
+	if got := reclassifyTarget(specific, projects); got != "금호타이어-곡성-2단계" {
+		t.Errorf("specific title = %q, want 금호타이어-곡성-2단계", got)
+	}
+}
+
 // TestMatchProjectsInText: normalized containment, specificity order, the
 // short-name guard, and closed-project exclusion.
 func TestMatchProjectsInText(t *testing.T) {
