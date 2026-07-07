@@ -228,11 +228,16 @@ func effortStepThinking(profile router.Profile, turn int, acts []agent.ToolActiv
 	return disabled
 }
 
-// effortRouted reports whether the config currently carries the router's
-// template-toggle "disabled" thinking (vs a session-configured disabled,
-// which has no TemplateKwarg).
+// effortRouted reports whether the config currently carries a "disabled"
+// thinking swap. Both call sites pair it with a route != nil check, which is
+// the authoritative "the ROUTER did this" signal — so no TemplateKwarg
+// requirement here: reasoning-dialect models routed without a template toggle
+// (glm via wormhole — disabled maps to reasoning_effort "low", which the glm
+// route treats as explicit thinking-off) must keep the escalation retry and
+// the fallback-chain restore, and the old kwarg check silently disabled both
+// for exactly those models.
 func effortRouted(cfg *agent.AgentConfig) bool {
-	return cfg.Thinking != nil && cfg.Thinking.Type == "disabled" && cfg.Thinking.TemplateKwarg != ""
+	return cfg.Thinking != nil && cfg.Thinking.Type == "disabled"
 }
 
 // restoreEffort puts the session's original thinking configuration back.

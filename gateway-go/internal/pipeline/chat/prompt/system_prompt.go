@@ -287,7 +287,8 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 
 		// Tool Usage (compressed: first-class, CLI, pilot, chaining).
 		s.WriteString("## Tool Usage\n")
-		s.WriteString("- Act immediately: call tools one at a time in order, never ask confirmation for reversible ops, never ask the user to do what you can do yourself.\n")
+		s.WriteString("- Act immediately: never ask confirmation for reversible ops, never ask the user to do what you can do yourself.\n")
+		s.WriteString("- Batch INDEPENDENT read-only lookups (web fetches, mail_archive/wiki/knowledge/polaris searches, file reads) into ONE turn — read-only batches execute in parallel, so two 20s fetches cost 20s, not 40s. Mutating or order-dependent calls stay sequential, one at a time.\n")
 		s.WriteString("- Use first-class tools directly: grep not exec+grep, edit not exec+sed, mail_archive for received mail. Gmail OAuth/account actions are not exposed to the agent surface. `grep`/`find`/`tree` are fast; prefer them over shelling out.\n")
 		s.WriteString("- When shelling out, prefer: `rg`/`fd` (search), `jq`/`yq` (JSON/YAML), `bat` (read), `duckdb` (SQL over CSV/Parquet/xlsx/json), `pandoc` (md↔docx↔pdf↔html), `convert` (ImageMagick), `qpdf`/`pdftotext` (PDF), `ffmpeg`/`yt-dlp` (media), `gh` (GitHub).\n")
 		s.WriteString("- Prefer edit over write for partial changes (smaller token footprint).\n")
