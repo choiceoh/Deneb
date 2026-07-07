@@ -282,8 +282,17 @@ func (s *Store) searchSemantic(ctx context.Context, query string, limit int) []S
 	if err != nil || len(qvecs) == 0 {
 		return nil
 	}
-	qv := qvecs[0]
+	return s.searchSemanticWithVec(qvecs[0], limit)
+}
 
+// searchSemanticWithVec ranks pages by cosine to a PRE-COMPUTED query vector —
+// the scan half of searchSemantic, split out so SearchBatch can embed every
+// query in one request (fanned across the server's context pool) and reuse each
+// vector here. Returns nil for an empty vector or a disabled index.
+func (s *Store) searchSemanticWithVec(qv []float32, limit int) []SearchResult {
+	if s.sem == nil || len(qv) == 0 {
+		return nil
+	}
 	s.sem.mu.Lock()
 	type scored struct {
 		path  string
@@ -305,6 +314,44 @@ func (s *Store) searchSemantic(ctx context.Context, query string, limit int) []S
 			continue
 		}
 		out = append(out, SearchResult{Path: h.path, Score: h.score})
+	}
+	return out
+}
+
+// embedQueriesBatch embeds every query in ONE Embed request so the embedding
+// server fans them across its context pool (a per-query loop serializes them —
+// wasted now that the server embeds a batch in parallel). Returns a slice
+// aligned with queries; entries for degraded paths (no/unhealthy embedder, a
+// query too short to embed) are nil so the caller falls back to BM25 for that
+// query. Kicks the background page re-embed once, like searchSemantic. Returns
+// nil (whole slice) only when the embedder is unavailable — a healthy embed with
+// some short queries still returns per-query vectors for the embeddable ones.
+func (s *Store) embedQueriesBatch(ctx context.Context, queries []string) [][]float32 {
+	if s.sem == nil || s.sem.embedder == nil || !s.sem.embedder.IsHealthy() {
+		return nil
+	}
+	s.sem.refreshAsync(s)
+
+	// Embed only the long-enough queries; remember each one's original index so
+	// the returned vectors realign with the caller's query slice.
+	idx := make([]int, 0, len(queries))
+	texts := make([]string, 0, len(queries))
+	for i, q := range queries {
+		if len(strings.TrimSpace(q)) >= semanticMinChars {
+			idx = append(idx, i)
+			texts = append(texts, q)
+		}
+	}
+	if len(texts) == 0 {
+		return nil
+	}
+	vecs, err := s.sem.embedder.Embed(ctx, texts)
+	if err != nil || len(vecs) != len(texts) {
+		return nil
+	}
+	out := make([][]float32, len(queries))
+	for j, i := range idx {
+		out[i] = vecs[j]
 	}
 	return out
 }
