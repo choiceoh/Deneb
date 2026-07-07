@@ -72,6 +72,17 @@ reaches the client — safe because nothing has streamed yet, so a completion is
 never half-sent twice. (`auto` already falls across candidates; this covers the
 single-model hot path.)
 
+When retries are exhausted, an entry with a **`"fallback"`** field fails over to
+the named entry instead of surfacing the failure: the request body is re-shaped
+for the fallback (its `upstreamModel`, vision gate, thinking dialect) and sent
+there. Chains follow the fallback's own `fallback` (≤3 candidates, cycle-guarded);
+a candidate must speak the same protocol and pass the local-only guard, and
+failover only ever happens before any bytes have streamed. This gives a pinned
+model name the auto-route's resilience — e.g. `dsv4-nothink` (a 2-node
+tensor-parallel serving that dies whole when either node drops) falling back to a
+single-node local model. Load-time validation warns on a typo'd, self, or
+protocol-mismatched fallback target.
+
 ## SparkFleet auto-discovery
 
 wormhole can pull its local model list from **SparkFleet** (the GB10 fleet
