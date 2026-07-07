@@ -31,13 +31,9 @@ Primary runtime — HTTP + SSE gateway server.
 
 ## GatewayHub Wiring Rules
 
-- `GatewayHub` is a service container — no business logic. Beyond read-only accessors, late-bind setters (`SetChat` 등 6종), and phase helpers (`AdvancePhase`/`Phase`), its only behavior is `Broadcast()` and `Validate()`.
-- Hub is built only in `buildHub()`. No other file may create or populate `GatewayHub{}`.
-- Handler Deps assembly happens only in `method_registry.go` (inline literals, no adapter layer).
-- Handler packages (`internal/runtime/rpc/handler/*`) must NOT import `rpcutil.GatewayHub`.
-- Adding a new RPC domain: Hub field → handler Deps → `method_registry.go` wiring → `hub.Validate()` update → snapshot test update.
-- Do not add adapter/helper files for Deps wiring. Do not add behavior methods to Hub beyond Broadcast/Validate (accessors/setters for new service fields are fine).
-- Registration phases: Builtin (pre-hub server-state closures) → Early (no Chat) → Session (creates Chat) → Late (Chat-dependent) → WorkflowSideEffects (non-RPC). Add new phases only if absolutely necessary.
+**정본은 `docs/agent-rules/hub-wiring.md` (5규칙 + 등록 5단계 + 스냅샷 테스트)** —
+RPC 핸들러/허브/`method_registry.go`를 만지기 전에 그 파일을 읽는다. 한 줄 요약:
+배선은 `method_registry.go` 인라인만, 핸들러는 Deps만 받고 Hub import 금지, 어댑터 파일 금지.
 
 ## Build & Test
 
