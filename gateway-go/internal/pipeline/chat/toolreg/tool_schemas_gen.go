@@ -1010,6 +1010,10 @@ func wikiToolSchema() map[string]any {
 				"description": "Wiki category for write action or index filter — one of the 6: 프로젝트(일·거래·결정), 인물(사람·조직), 시스템(Deneb 구성·운영), 업무(직무 도메인 지식), 사용자(개인 선호·규칙), 기타(시사·잡학·그 외)",
 				"enum":        []string{"프로젝트", "인물", "시스템", "업무", "사용자", "기타"},
 			},
+			"client": map[string]any{
+				"type":        "string",
+				"description": "프로젝트 거래처 (프로젝트 대표페이지 write 전용) — 프로젝트 위계의 최상단 그룹핑. 작성 규칙: 계열사 단위 정식명 1개 (기아·현대차·LG전자·금호타이어 — 그룹명 아님, ㈜ 등 법인 접미어 없음, 거래 원장 페이지 표기와 일치 지향). 발주처/계약 상대가 확인되면 기입; 자체 개발 등 거래처 없는 프로젝트는 생략(추측 금지). 진행상황 모아보기가 이 값으로 그룹핑되고 회상 앵커가 거래처 언급을 소속 프로젝트들로 해석한다",
+			},
 			"confidence": map[string]any{
 				"type":        "string",
 				"description": "Confidence level (write action): high (verified), medium (reasonable inference), low (uncertain)",

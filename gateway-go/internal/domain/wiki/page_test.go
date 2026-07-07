@@ -153,6 +153,38 @@ func TestPage_RenderRoundtrip(t *testing.T) {
 	}
 }
 
+// TestFrontmatter_ClientRoundtripAndNormalize: the 거래처 field survives a
+// render→parse cycle, and normalizeClientName strips wikilink wrappers and
+// collapses whitespace on both ends of the cycle.
+func TestFrontmatter_ClientRoundtripAndNormalize(t *testing.T) {
+	page := NewPage("금호타이어 곡성 1단계", "프로젝트", nil)
+	page.Meta.Client = "금호타이어"
+	page.Body = "# 본문"
+
+	parsed := testutil.Must(ParsePage(page.Render()))
+	if parsed.Meta.Client != "금호타이어" {
+		t.Errorf("client roundtrip: got %q", parsed.Meta.Client)
+	}
+
+	for in, want := range map[string]string{
+		"[[금호타이어]]":  "금호타이어",
+		"  현대차  ":    "현대차",
+		"LG  전자":     "LG 전자",
+		"":           "",
+		"   [[ ]]  ": "",
+	} {
+		if got := normalizeClientName(in); got != want {
+			t.Errorf("normalizeClientName(%q) = %q, want %q", in, got, want)
+		}
+	}
+
+	// Empty client renders no line at all.
+	page.Meta.Client = "  "
+	if strings.Contains(string(page.Render()), "client:") {
+		t.Error("blank client must not render a client: line")
+	}
+}
+
 func TestPage_Section(t *testing.T) {
 	page := &Page{
 		Body: `# Title

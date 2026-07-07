@@ -38,6 +38,7 @@ type ProjectRef struct {
 	Path    string   // 대표페이지 path, e.g. "프로젝트/영산고/대표.md" (legacy: "프로젝트/영산고.md")
 	Summary string   // page Meta.Summary — one-line description for pickers
 	Code    string   // page Meta.Code — frozen project identity, "" if unset
+	Client  string   // page Meta.Client — 거래처 (top grouping level + matching key), "" if unset
 	Sites   []string // page Meta.Sites — canonical 현장 admin paths (matching keys)
 	Kinds   []string // page Meta.Kinds — 특성 enum (시공/모듈/케이블/… 복수)
 }
@@ -85,6 +86,7 @@ func (s *Store) knownProjects() []ProjectRef {
 			}
 			ref.Summary = strings.TrimSpace(page.Meta.Summary)
 			ref.Code = strings.TrimSpace(page.Meta.Code)
+			ref.Client = strings.TrimSpace(page.Meta.Client)
 			ref.Sites = page.Meta.Sites
 			ref.Kinds = page.Meta.Kinds
 		}
@@ -99,6 +101,7 @@ type ProjectStatus struct {
 	Name      string
 	Path      string
 	Code      string   // page Meta.Code — frozen composite project identity, "" if unset
+	Client    string   // page Meta.Client — 거래처, the top grouping level; "" if unset
 	Refs      []string // graph-resolved owned page paths (code-shared sub-pages + explicitly-linked pages); see projectOwnedRefs
 	Summary   string   // page Meta.Summary — the stable one-line description
 	Due       string   // page Meta.Due — imminent deadline, "" if none
@@ -126,6 +129,7 @@ func (s *Store) ProjectStatuses() ([]ProjectStatus, error) {
 			Name:      ref.Name,
 			Path:      ref.Path,
 			Code:      strings.TrimSpace(page.Meta.Code),
+			Client:    strings.TrimSpace(page.Meta.Client),
 			Summary:   strings.TrimSpace(page.Meta.Summary),
 			Due:       strings.TrimSpace(page.Meta.Due),
 			Bullets:   bullets,

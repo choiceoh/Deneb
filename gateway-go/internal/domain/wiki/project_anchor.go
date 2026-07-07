@@ -57,16 +57,96 @@ func (s *Store) MatchProjectsInText(text string, limit int) []ProjectRef {
 	return out
 }
 
+// UniqueProjectInText resolves text to a single ACTIVE project when the most
+// specific identity match is unambiguous: the project whose matched key is
+// strictly the longest (rune count) wins, and a specificity TIE across
+// distinct projects returns ok=false. This is the primitive for exactly-one
+// consumers (meeting harvest, mail reclassification): with 거래처 keys in
+// play, a bare client mention ("금호타이어 회의") matches every project of
+// that client at the same key length — a tie, so no arbitrary pick — while a
+// specific title ("금호타이어 곡성 1단계 자재") still resolves because the
+// project's own name key outranks its siblings' client-only match.
+func (s *Store) UniqueProjectInText(text string) (ProjectRef, bool) {
+	if s == nil {
+		return ProjectRef{}, false
+	}
+	return uniqueProjectIn(normalizeTitleKey(text), s.knownProjects())
+}
+
+// uniqueProjectIn is UniqueProjectInText over an already-fetched project list
+// (the mail reclassifier batches candidates; re-listing per page was a silent
+// N× knownProjects scan).
+//
+// Resolution doctrine (모호하면 잔류):
+//   - A hit via the project's OWN identity (name/folder/site) outranks hits
+//     that matched only through the shared 거래처 key — an explicit project
+//     mention wins over siblings merely implied by their client.
+//   - Among own-identity hits, the longest key wins ONLY when every other own
+//     key is its substring ("기아 화성" is subsumed by "기아 화성 국유지");
+//     two independent project mentions ("기아 화성 + 해남 EPC 비교") stay
+//     ambiguous no matter their lengths.
+//   - Client-key-only hits resolve only when a single project matched (a
+//     single-project 거래처); two siblings at the same client key tie.
+func uniqueProjectIn(hay string, projects []ProjectRef) (ProjectRef, bool) {
+	if hay == "" {
+		return ProjectRef{}, false
+	}
+	type hit struct {
+		ref ProjectRef
+		key string
+	}
+	var ownHits, clientHits []hit
+	for _, ref := range projects {
+		key := bestProjectKeyIn(hay, ref)
+		if key == "" {
+			continue
+		}
+		if key == normalizeTitleKey(ref.Client) {
+			clientHits = append(clientHits, hit{ref: ref, key: key})
+		} else {
+			ownHits = append(ownHits, hit{ref: ref, key: key})
+		}
+	}
+	pool := ownHits
+	if len(pool) == 0 {
+		pool = clientHits
+	}
+	if len(pool) == 0 {
+		return ProjectRef{}, false
+	}
+	best := pool[0]
+	for _, h := range pool[1:] {
+		if utf8.RuneCountInString(h.key) > utf8.RuneCountInString(best.key) {
+			best = h
+		}
+	}
+	for _, h := range pool {
+		if h.ref.Path == best.ref.Path {
+			continue
+		}
+		// A distinct project matching at the same key, or via a key the
+		// winner's does not subsume, is independent evidence → ambiguous.
+		if h.key == best.key || !strings.Contains(best.key, h.key) {
+			return ProjectRef{}, false
+		}
+	}
+	return best.ref, true
+}
+
 // bestProjectKeyIn returns the longest (by rune count) normalized identity key
 // of ref contained in hay, or "" when none matches. Identity keys are the
-// display name, the folder name, and the project's 현장 site paths — mail and
-// calendar text names the PLACE ("수산리 현장 방문") at least as often as the
-// project title, so each site contributes its full form and its final
-// administrative unit (수산리) as keys.
+// display name, the folder name, the 거래처 (client), and the project's 현장
+// site paths — mail and calendar text names the PLACE ("수산리 현장 방문") at
+// least as often as the project title, so each site contributes its full form
+// and its final administrative unit (수산리) as keys. The client key makes a
+// counterparty mention ("금호타이어 근황?") anchor every project of that 거래처
+// in MatchProjectsInText (limit-capped); exactly-one consumers must resolve
+// through UniqueProjectInText, where same-length client-key hits across
+// distinct projects tie and yield no pick.
 func bestProjectKeyIn(hay string, ref ProjectRef) string {
 	best := ""
 	name, _ := ProjectNameOf(ref.Path)
-	cands := []string{ref.Name, name}
+	cands := []string{ref.Name, name, ref.Client}
 	for _, site := range ref.Sites {
 		cands = append(cands, site)
 		if fields := strings.Fields(site); len(fields) > 1 {

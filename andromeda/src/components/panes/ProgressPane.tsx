@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import type { ProjectDigest } from "@/types";
 import { serializeList } from "@/aiText";
 import { useCachedList } from "@/cachedList";
@@ -7,29 +8,70 @@ import { GridNotice } from "@/components/Grid";
 
 // 프로젝트 진행상황 — ports Deneb's miniapp.project.digests screen (#2834). The
 // gateway distills each active project's 대표페이지 into a headline + bullets,
-// newest-first; here we render them as scannable cards and project the whole
-// briefing to Deneb so "어느 프로젝트부터 챙길까?" can be answered in context.
+// newest-first; here we render them as scannable cards grouped by 거래처 (the
+// top level of the project hierarchy) and project the whole briefing to Deneb
+// so "어느 프로젝트부터 챙길까?" can be answered in context.
+
+// Group rows by client, first-occurrence order (the list is newest-first, so a
+// client sorts where its most recently active project does). Rows keep their
+// order within a group; "" collects the clientless rows.
+function groupByClient(digests: ProjectDigest[]): { client: string; rows: ProjectDigest[] }[] {
+  const groups: { client: string; rows: ProjectDigest[] }[] = [];
+  for (const d of digests) {
+    const key = (d.client ?? "").trim();
+    const g = groups.find((x) => x.client === key);
+    if (g) g.rows.push(d);
+    else groups.push({ client: key, rows: [d] });
+  }
+  return groups;
+}
+
 export function ProgressPane() {
   const { connected, openWiki } = useWorkspace();
   const { result, query } = useCachedList<ProjectDigest>("progress", connected);
   const digests = result?.data ?? [];
 
-  // Counted header + one block per project (headline, indented bullets, due) — the
-  // AI reads exactly what's on screen.
+  // Counted header + one block per project (client tag, headline, indented
+  // bullets, due) — the AI reads exactly what's on screen.
   const aiText = serializeList("프로젝트 진행상황", digests, (d) => {
-    const head = `- ${d.project}` + (d.headline ? `: ${d.headline}` : "") + (d.due ? ` (마감 ${d.due})` : "");
+    const head =
+      `- ${d.client ? `[${d.client}] ` : ""}${d.project}` +
+      (d.headline ? `: ${d.headline}` : "") +
+      (d.due ? ` (마감 ${d.due})` : "");
     const bullets = (d.bullets ?? []).map((b) => `    • ${b}`).join("\n");
     return bullets ? `${head}\n${bullets}` : head;
   });
   useRegisterPane("progress", aiText);
+
+  // No client anywhere → the flat pre-backfill list, no group labels.
+  const groups = groupByClient(digests);
+  const grouped = groups.some((g) => g.client !== "");
+  let cardIndex = 0;
 
   return (
     <>
       <h2 style={{ marginTop: 2 }}>프로젝트 진행상황</h2>
       <GridNotice query={query} count={digests.length} empty="진행 중인 프로젝트가 없습니다.">
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {digests.map((d, i) => (
-            <DigestCard key={d.path || d.project || i} digest={d} index={i} onOpenWiki={openWiki} />
+          {groups.map((g) => (
+            <Fragment key={g.client || "(미지정)"}>
+              {grouped && (
+                <div
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 600,
+                    letterSpacing: "0.04em",
+                    color: "var(--muted)",
+                    margin: "8px 0 -2px",
+                  }}
+                >
+                  {g.client || "거래처 미지정"}
+                </div>
+              )}
+              {g.rows.map((d, i) => (
+                <DigestCard key={d.path || d.project || i} digest={d} index={cardIndex++} onOpenWiki={openWiki} />
+              ))}
+            </Fragment>
           ))}
         </div>
       </GridNotice>

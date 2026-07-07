@@ -89,6 +89,15 @@ type Frontmatter struct {
 	// its live source instead of re-deriving it; empty for abstract concepts
 	// with no backing asset.
 	Resource string
+	// Client is the project's 거래처 — the counterparty company the deal is
+	// with, as a single-level canonical Korean name at the 계열사 grain
+	// (기아·현대차·LG전자·금호타이어 — operator-confirmed 2026-07-07: no group
+	// hierarchy, no legal suffixes like ㈜). It is the TOP grouping level above
+	// projects: the 모아보기 digest groups by it and the recall project anchor
+	// matches it, so "금호타이어 근황?" surfaces every 금호타이어 project. Own-
+	// development projects with no counterparty leave it empty. Project
+	// 대표페이지 only; empty elsewhere.
+	Client string
 	// Sites are the project's 현장 locations as canonical administrative paths —
 	// "광역약칭 시/군 읍/면/동 [리]" (e.g. "전북 군산시 옥구읍 수산리"), space-
 	// separated, no lot numbers, province abbreviated (전라북도→전북; see
@@ -175,6 +184,9 @@ func (p *Page) Render() []byte {
 	}
 	if p.Meta.Resource != "" {
 		buf.WriteString("resource: " + sanitizeScalar(p.Meta.Resource) + "\n")
+	}
+	if client := normalizeClientName(p.Meta.Client); client != "" {
+		buf.WriteString("client: " + sanitizeScalar(client) + "\n")
 	}
 	if sites := normalizeSites(p.Meta.Sites); len(sites) > 0 {
 		buf.WriteString("sites: [" + strings.Join(sanitizeFlowItems(sites), ", ") + "]\n")
@@ -577,6 +589,8 @@ func parseFrontmatterFields(raw string) Frontmatter {
 			fm.Cues = parseFlowArray(val)
 		case "resource":
 			fm.Resource = val
+		case "client":
+			fm.Client = normalizeClientName(val)
 		case "sites":
 			fm.Sites = normalizeSites(parseFlowArray(val))
 		case "kinds":
@@ -630,6 +644,18 @@ func normalizeSiteName(s string) string {
 		return abbr
 	}
 	return s
+}
+
+// normalizeClientName cleans a 거래처 value: trims, strips a wikilink wrapper
+// (LLM writers emit "[[금호타이어]]"), and collapses inner whitespace. It does
+// NOT touch legal suffixes or spelling — the canonical single-level 계열사
+// name is a writer-side rule (see the wiki tool schema / dreamer prompt), not
+// something safely inferable here.
+func normalizeClientName(s string) string {
+	s = strings.TrimSpace(s)
+	s = strings.TrimPrefix(s, "[[")
+	s = strings.TrimSuffix(s, "]]")
+	return strings.Join(strings.Fields(s), " ")
 }
 
 // normalizeSites applies the convention to a list, dropping empties.

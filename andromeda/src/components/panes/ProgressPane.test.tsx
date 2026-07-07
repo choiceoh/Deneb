@@ -59,6 +59,38 @@ describe("ProgressPane (프로젝트 진행상황)", () => {
     expect(screen.getByTestId("workspace-target")).toHaveTextContent("wiki:projects/saemangeum");
   });
 
+  it("groups cards under 거래처 labels, with clientless rows under 미지정", async () => {
+    const dataProvider = fakeProvider({
+      progress: [
+        { project: "금호타이어 곡성 1단계", headline: "준공 서류 취합", client: "금호타이어" },
+        { project: "기아 화성", headline: "국유지 48MW RFX", client: "기아" },
+        { project: "금호타이어 용인연구소", headline: "리스 조건 협의", client: "금호타이어" },
+        { project: "군산 수산리", headline: "자체 개발" },
+      ],
+    });
+    renderWithProviders(<ProgressPane />, { connected: true, dataProvider });
+
+    expect(await screen.findByText("금호타이어")).toBeInTheDocument();
+    expect(screen.getByText("기아")).toBeInTheDocument();
+    expect(screen.getByText("거래처 미지정")).toBeInTheDocument();
+    // Both 금호타이어 projects render under one label (group collects rows).
+    expect(screen.getByText("금호타이어 곡성 1단계")).toBeInTheDocument();
+    expect(screen.getByText("금호타이어 용인연구소")).toBeInTheDocument();
+  });
+
+  it("keeps the flat list (no group labels) when no digest carries a client", async () => {
+    const dataProvider = fakeProvider({
+      progress: [
+        { project: "새만금 태양광", headline: "PPA 협상" },
+        { project: "영광 풍력", headline: "환경영향평가" },
+      ],
+    });
+    renderWithProviders(<ProgressPane />, { connected: true, dataProvider });
+
+    expect(await screen.findByText("새만금 태양광")).toBeInTheDocument();
+    expect(screen.queryByText("거래처 미지정")).not.toBeInTheDocument();
+  });
+
   it("shows the empty notice when there are no digests", async () => {
     renderWithProviders(<ProgressPane />, { connected: true, dataProvider: fakeProvider({ progress: [] }) });
     expect(await screen.findByText(/진행 중인 프로젝트가 없습니다/)).toBeInTheDocument();

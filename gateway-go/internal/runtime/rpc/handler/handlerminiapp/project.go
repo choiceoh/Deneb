@@ -81,6 +81,10 @@ type ProjectDigestRow struct {
 	UpdatedAtMs int64    `json:"updatedAtMs,omitempty"`
 	Path        string   `json:"path,omitempty"`
 	Code        string   `json:"code,omitempty"`
+	// Client is the project's 거래처 (rep-page frontmatter client) — the top
+	// grouping level of the digest list; clients group rows under it and show
+	// clientless rows ungrouped.
+	Client string `json:"client,omitempty"`
 	// Refs are wiki page paths owned by this project (code-shared sub-pages and
 	// explicitly-linked pages), resolved server-side from the wiki graph so the
 	// client can link items that reference an owned page, not just the 대표페이지.
@@ -228,6 +232,7 @@ func projectDigests(deps ProjectDeps) rpcutil.HandlerFunc {
 				UpdatedAtMs: st.UpdatedMs,
 				Path:        st.Path,
 				Code:        st.Code,
+				Client:      st.Client,
 				Refs:        st.Refs,
 			})
 		}

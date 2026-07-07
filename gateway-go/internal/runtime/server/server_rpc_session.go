@@ -635,8 +635,14 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 						if st == nil {
 							return ""
 						}
-						if refs := st.MatchProjectsInText(text, 1); len(refs) > 0 {
-							return refs[0].Name
+						// Unique-by-specificity, not top-of-list: a bare 거래처
+						// mention matches every project of that client at the
+						// same key length, and an arbitrary first pick would
+						// mis-file — on a tie fall through to the counterparty
+						// ledger match, which IS the right anchor for a
+						// client-level mention.
+						if ref, ok := st.UniqueProjectInText(text); ok {
+							return ref.Name
 						}
 						if cps := st.MatchCounterpartiesInText(text, 1); len(cps) > 0 {
 							return cps[0].Name

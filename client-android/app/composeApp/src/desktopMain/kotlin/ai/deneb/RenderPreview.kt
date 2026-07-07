@@ -30,6 +30,7 @@ import ai.deneb.deneb.MailRow
 import ai.deneb.deneb.OrgChartContent
 import ai.deneb.deneb.OrgNodeEditor
 import ai.deneb.deneb.PersonHit
+import ai.deneb.deneb.ProjectDigestContent
 import ai.deneb.deneb.PromptStyleEditor
 import ai.deneb.deneb.SchedMode
 import ai.deneb.deneb.ScheduleDraft
@@ -52,6 +53,7 @@ import ai.deneb.deneb.generated.DashboardItem
 import ai.deneb.deneb.generated.LaneOut
 import ai.deneb.deneb.generated.MemberOut
 import ai.deneb.deneb.generated.OrgNodeOut
+import ai.deneb.deneb.generated.ProjectDigestRow
 import ai.deneb.deneb.generated.SelfCorrectionCandidate
 import ai.deneb.deneb.generated.SelfImprovementCodingListResponse
 import ai.deneb.deneb.generated.SelfImprovementCodingStatusCount
@@ -335,6 +337,8 @@ fun main() {
     renderScreen("skill_detail_light.png", "skill_detail", LightColorScheme, 824, 1400)
     renderScreen("search_dark.png", "search", DarkColorScheme, 824, 900)
     renderScreen("search_light.png", "search", LightColorScheme, 824, 900)
+    renderScreen("project_digest_dark.png", "project_digest", DarkColorScheme, 824, 1500)
+    renderScreen("project_digest_light.png", "project_digest", LightColorScheme, 824, 1500)
     renderScreen("search_empty_dark.png", "search_empty", DarkColorScheme, 824, 380)
     renderScreen("search_empty_light.png", "search_empty", LightColorScheme, 824, 380)
     renderScreen("search_field_dark.png", "search_field", DarkColorScheme, 824, 460)
@@ -498,7 +502,53 @@ private val sampleSearch = SearchResults(
     ),
 )
 
+// 프로젝트 진행상황 mock: two 거래처 groups + one clientless row, so the preview
+// exercises the section labels, the 미지정 group, and the plain digest card.
+private val sampleDigests = listOf(
+    ProjectDigestRow(
+        project = "금호타이어 곡성 1단계",
+        headline = "곡성 1차 태양광 준공 서류 취합 중",
+        bullets = listOf("7월 4일 준공 면적 자료 송부", "모듈 SDN 600Wp 설치분 확인"),
+        due = "2026-07-15",
+        updatedAtMs = 1783497600000L,
+        path = "프로젝트/금호타이어-곡성-1단계/대표.md",
+        client = "금호타이어",
+    ),
+    ProjectDigestRow(
+        project = "금호타이어 용인연구소",
+        headline = "태양광 리스사업 계약 조건 협의",
+        bullets = listOf("6월 30일 리스 조건 회신 대기"),
+        updatedAtMs = 1783238400000L,
+        path = "프로젝트/금호타이어-용인연구소/대표.md",
+        client = "금호타이어",
+    ),
+    ProjectDigestRow(
+        project = "기아 화성",
+        headline = "PG국유지 48MW 모듈 RFX 진행, O&M 66.5MW 견적 제출",
+        bullets = listOf("O&M 견적 7.16억 제출", "구조물 설계 검토 중"),
+        updatedAtMs = 1783152000000L,
+        path = "프로젝트/기아-화성/대표.md",
+        client = "기아",
+    ),
+    ProjectDigestRow(
+        project = "군산 옥구읍 수산리 태양광",
+        headline = "자체 개발 — 발전사업허가 서류 준비",
+        bullets = listOf("허가 신청 접수 완료"),
+        updatedAtMs = 1783065600000L,
+        path = "프로젝트/군산-옥구읍-수산리-태양광-발전소/대표.md",
+    ),
+)
+
 internal val previewScreens: Map<String, @Composable (ColorScheme) -> Unit> = mapOf(
+    "project_digest" to { scheme ->
+        MaterialTheme(colorScheme = scheme) {
+            DenebScreenScaffold(title = "프로젝트 진행상황", onBack = {}) {
+                Column(Modifier.fillMaxWidth()) {
+                    ProjectDigestContent(sampleDigests) {}
+                }
+            }
+        }
+    },
     "search" to { scheme ->
         MaterialTheme(colorScheme = scheme) {
             DenebScreenScaffold(title = "검색", onBack = {}) {

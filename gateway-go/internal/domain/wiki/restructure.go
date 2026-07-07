@@ -28,12 +28,16 @@ import (
 // RestructureOp is one operator-authored judgment operation, applied in order
 // before the rule passes. Fields by op:
 //
-//	merge:    Source page is folded into Target page (body appended under a
-//	          "## 병합:" section) and deleted; references repoint to Target.
-//	move:     Source page relocates to Target path; references repoint.
-//	delete:   Source page is removed (junk/meta pages).
-//	fold-log: Source page's body is appended to Target *project*'s 로그.md
-//	          (created when absent) as a dated section, then Source is deleted.
+//	merge:      Source page is folded into Target page (body appended under a
+//	            "## 병합:" section) and deleted; references repoint to Target.
+//	move:       Source page relocates to Target path; references repoint.
+//	delete:     Source page is removed (junk/meta pages).
+//	fold-log:   Source page's body is appended to Target *project*'s 로그.md
+//	            (created when absent) as a dated section, then Source is deleted.
+//	set-client: Source 대표페이지's frontmatter client (거래처) is set to Target
+//	            (a canonical single-level 계열사 name; empty Target clears it).
+//	            Metadata-only — Updated is NOT re-stamped (a classification
+//	            backfill is not page activity).
 type RestructureOp struct {
 	Op     string `json:"op"`
 	Source string `json:"source"`
@@ -43,9 +47,9 @@ type RestructureOp struct {
 
 // restructureAction is one executable step of the finalized migration.
 type restructureAction struct {
-	kind       string // "merge" | "move" | "delete" | "ensure-log"
+	kind       string // "merge" | "move" | "delete" | "ensure-log" | "set-client"
 	source     string
-	target     string
+	target     string // set-client: the 거래처 value, not a path
 	mergedBody string // merge only
 	reason     string
 }
@@ -142,6 +146,15 @@ func RestructureProjectLayout(store *Store, plan []RestructureOp, apply bool) (*
 		case "delete":
 			actions = append(actions, restructureAction{kind: "delete", source: src, reason: planReason(op)})
 			simDelete(src)
+		case "set-client":
+			if !IsProjectRepPage(src) {
+				rep.Skipped = append(rep.Skipped, fmt.Sprintf("plan[%d] set-client: not a 대표페이지: %s", i, op.Source))
+				continue
+			}
+			actions = append(actions, restructureAction{
+				kind: "set-client", source: src, target: strings.TrimSpace(op.Target),
+				reason: planReason(op),
+			})
 		case "fold-log":
 			project := strings.TrimSpace(op.Target)
 			if project == "" {
@@ -254,6 +267,8 @@ func RestructureProjectLayout(store *Store, plan []RestructureOp, apply bool) (*
 			rep.Actions = append(rep.Actions, fmt.Sprintf("delete %s (%s)", a.source, a.reason))
 		case "ensure-log", "ensure-rep":
 			rep.Actions = append(rep.Actions, fmt.Sprintf("create %s (%s)", a.target, a.reason))
+		case "set-client":
+			rep.Actions = append(rep.Actions, fmt.Sprintf("client %s ← %q (%s)", a.source, a.target, a.reason))
 		}
 	}
 	if !apply {
@@ -294,6 +309,18 @@ func RestructureProjectLayout(store *Store, plan []RestructureOp, apply bool) (*
 					return nil, nil // already there — no-op
 				}
 				return newRepPage(project), nil
+			})
+		case "set-client":
+			client := normalizeClientName(a.target)
+			err = store.UpdatePage(a.source, func(existing *Page) (*Page, error) {
+				if existing == nil {
+					return nil, fmt.Errorf("대표페이지 없음: %s", a.source)
+				}
+				if existing.Meta.Client == client {
+					return nil, nil // already set — no-op keeps mtime stable
+				}
+				existing.Meta.Client = client
+				return existing, nil // deliberately no Updated re-stamp
 			})
 		}
 		if err != nil {
