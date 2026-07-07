@@ -32,11 +32,13 @@ func TestIsSelfCounterparty(t *testing.T) {
 	t.Setenv("DENEB_MAIL_OUR_NAMES", "탑솔라")
 
 	// Every form the 2026-07-07 sweep saw (거래/탑솔라-주.md, 거래/탑솔라㈜.md) plus
-	// the romanized/domain-carrying variants the tiny model emits.
+	// the romanized/domain-carrying variants the tiny model emits. A subdomain of
+	// our domain is still us.
 	self := []string{
 		"탑솔라", "탑솔라(주)", "탑솔라㈜", "탑솔라 주식회사",
 		"TOPSOLAR CO.,LTD", "TopSolar", "topsolar.kr",
 		"영업팀 <sales@topsolar.kr>", // domain parenthetical/address the model sometimes echoes
+		"mail.topsolar.kr",        // subdomain of an our-domain → us
 	}
 	for _, name := range self {
 		if !isSelfCounterparty(name) {
@@ -46,11 +48,34 @@ func TestIsSelfCounterparty(t *testing.T) {
 
 	// The real counterparties whose documents were mis-filed under a self-ledger
 	// must pass through as external. 탑솔라파트너스 shares a prefix but is a
-	// distinct firm — equality (not substring) must not over-block it.
-	external := []string{"무림피앤피", "인하공전", "현대차", "현대자동차(주)", "마바솔라", "탑솔라파트너스"}
+	// distinct firm — equality (not substring) must not over-block it. The last
+	// two are DIFFERENT domains that merely contain ours as a substring — the
+	// domain-token guard must not treat them as us.
+	external := []string{
+		"무림피앤피", "인하공전", "현대차", "현대자동차(주)", "마바솔라", "탑솔라파트너스",
+		"notopsolar.kr", "발주처 <buyer@topsolar.kr.com>",
+	}
 	for _, name := range external {
 		if isSelfCounterparty(name) {
 			t.Errorf("isSelfCounterparty(%q) = true, want false (external)", name)
+		}
+	}
+}
+
+func TestOrgLabel(t *testing.T) {
+	cases := map[string]string{
+		"topsolar.kr":       "topsolar",
+		"mail.topsolar.kr":  "topsolar",
+		"example.com":       "example",
+		"sub.example.com":   "example", // subdomain, not the org label
+		"example.co.kr":     "example",
+		"sub.example.co.kr": "example",
+		"example.com.au":    "example",
+		"localhost":         "localhost",
+	}
+	for in, want := range cases {
+		if got := orgLabel(in); got != want {
+			t.Errorf("orgLabel(%q) = %q, want %q", in, got, want)
 		}
 	}
 }
@@ -70,5 +95,16 @@ func TestOurCompanyNames_EnvOverride(t *testing.T) {
 	got = ourCompanyNames(ourAnchorDomains())
 	if !got["탑솔라"] || !got["topsolar"] {
 		t.Errorf("default self-names missing without env: %v", got)
+	}
+
+	// A subdomain in DENEB_MAIL_OUR_DOMAINS derives the ORG label (example), not
+	// the subdomain (sub) — so a counterparty literally named "sub" isn't blocked.
+	t.Setenv("DENEB_MAIL_OUR_DOMAINS", "sub.example.com")
+	got = ourCompanyNames(ourAnchorDomains())
+	if !got["example"] {
+		t.Errorf("subdomain our-domain should derive org stem 'example': %v", got)
+	}
+	if got["sub"] {
+		t.Errorf("subdomain label 'sub' must not become a self-name key: %v", got)
 	}
 }

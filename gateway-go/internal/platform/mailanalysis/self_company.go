@@ -47,8 +47,11 @@ var companyDecorations = []string{
 // it. Two independent deterministic signals:
 //
 //  1. the name carries one of our mail domains (topsolar.kr) — an address, or a
-//     "(topsolar.kr)" parenthetical the tiny model sometimes echoes — matched
-//     against ourAnchorDomains; or
+//     "(topsolar.kr)" parenthetical the tiny model sometimes echoes. Matched by
+//     DOMAIN TOKEN, not substring: a token is us only when it equals an
+//     our-domain or is a subdomain of one (mail.topsolar.kr). A different firm
+//     whose domain merely contains ours as a substring (notopsolar.kr,
+//     topsolar.kr.com) is NOT blocked.
 //  2. the name, reduced to a match key (case-folded, corporate decorations and
 //     punctuation/whitespace stripped), EQUALS one of our self-identifier
 //     tokens (탑솔라, topsolar). Equality, not substring: a distinct firm that
@@ -57,9 +60,12 @@ var companyDecorations = []string{
 func isSelfCounterparty(name string) bool {
 	domains := ourAnchorDomains()
 	lower := strings.ToLower(name)
-	for dom := range domains {
-		if strings.Contains(lower, dom) {
-			return true
+	for _, tok := range strings.FieldsFunc(lower, notDomainChar) {
+		tok = strings.Trim(tok, ".-") // shed FQDN trailing dot / stray hyphen
+		for dom := range domains {
+			if tok == dom || strings.HasSuffix(tok, "."+dom) {
+				return true
+			}
 		}
 	}
 	key := companyMatchKey(name)
@@ -67,6 +73,14 @@ func isSelfCounterparty(name string) bool {
 		return false
 	}
 	return ourCompanyNames(domains)[key]
+}
+
+// notDomainChar reports whether r cannot be part of a DNS domain token (ASCII
+// letter, digit, '.', '-'). FieldsFunc uses it to carve candidate domain tokens
+// out of a free-text counterparty ("<sales@topsolar.kr>" → "sales",
+// "topsolar.kr"). Input is already lower-cased by the caller.
+func notDomainChar(r rune) bool {
+	return !((r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '.' || r == '-')
 }
 
 // ourCompanyNames returns the set of normalized self-identifier match keys a
@@ -86,15 +100,43 @@ func ourCompanyNames(domains map[string]bool) map[string]bool {
 	}
 	// Derive the romanized stem from each our-domain so the domain constant is
 	// the single source of truth: topsolar.kr → "topsolar" catches the English
-	// "TOPSOLAR CO.,LTD" form without a second hardcoded list. First label only
-	// (before the first dot) — the org name, not a TLD/subdomain.
+	// "TOPSOLAR CO.,LTD" form without a second hardcoded list. orgLabel (not the
+	// first label) so a subdomain in DENEB_MAIL_OUR_DOMAINS (sub.example.com)
+	// still derives the org name (example), never the subdomain (sub).
 	for dom := range domains {
-		stem, _, _ := strings.Cut(dom, ".")
-		if k := companyMatchKey(stem); k != "" {
+		if k := companyMatchKey(orgLabel(dom)); k != "" {
 			out[k] = true
 		}
 	}
 	return out
+}
+
+// twoPartSLD are second-level labels that form a two-part public suffix with a
+// short ccTLD (example.CO.kr, example.NE.jp, example.COM.au). Small on purpose —
+// just the common Korean/international ones an operator's affiliates realistically
+// use; a miss only costs a slightly-off romanized stem, never a wrong block (the
+// domain-token check is independent).
+var twoPartSLD = map[string]bool{
+	"co": true, "ne": true, "or": true, "go": true, "re": true,
+	"pe": true, "ac": true, "com": true, "net": true, "org": true,
+}
+
+// orgLabel returns a domain's organization label — the label just left of its
+// public suffix — so the romanized self-name stem is right even when
+// DENEB_MAIL_OUR_DOMAINS carries a subdomain: topsolar.kr → topsolar,
+// mail.topsolar.kr → topsolar, example.co.kr → example, sub.example.com →
+// example. A short two-part ccTLD SLD (co.kr, com.au …) counts as part of the
+// suffix; otherwise the last two labels are suffix + org.
+func orgLabel(domain string) string {
+	labels := strings.Split(domain, ".")
+	n := len(labels)
+	if n < 2 {
+		return domain
+	}
+	if n >= 3 && twoPartSLD[labels[n-2]] && len(labels[n-1]) <= 3 {
+		return labels[n-3]
+	}
+	return labels[n-2]
 }
 
 // companyMatchKey reduces a firm name to a comparison key: case-folded,
