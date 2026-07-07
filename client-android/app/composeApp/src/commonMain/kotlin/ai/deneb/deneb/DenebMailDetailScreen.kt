@@ -216,7 +216,7 @@ fun DenebMailDetailScreen(
         }
         actionMsg?.let {
             Spacer(Modifier.height(6.dp))
-            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+            Text(it, style = DenebType.meta, color = MaterialTheme.colorScheme.error)
         }
 
         if (analyzing || analysis != null || analysisFailed) {

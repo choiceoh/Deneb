@@ -139,7 +139,7 @@ private fun ContactRowItem(contact: ContactRow, onTap: () -> Unit) {
         Modifier
             .fillMaxWidth()
             .denebPressable(onClick = onTap)
-            .padding(horizontal = 20.dp, vertical = 11.dp),
+            .padding(horizontal = 24.dp, vertical = 12.dp),
     ) {
         Text(
             contact.name,

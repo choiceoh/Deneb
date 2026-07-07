@@ -7,6 +7,7 @@ import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
 import ai.deneb.ui.denebPressable
+import ai.deneb.ui.denebSharedBounds
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -97,6 +98,7 @@ fun DenebPeopleScreen(
                                     haptics.tap()
                                     onOpenPerson(person.email.ifBlank { person.name })
                                 },
+                                sharedKey = person.email.ifBlank { person.name },
                                 modifier = Modifier.animateItem(),
                             )
                         }
@@ -127,9 +129,11 @@ fun DenebPeopleScreen(
 }
 
 /** A recent counterparty: name + message count, with the 인물 wiki summary as the
- *  subtitle when this sender is matched to a page (else the last mail subject). */
+ *  subtitle when this sender is matched to a page (else the last mail subject).
+ *  [sharedKey] mirrors the DenebPerson.sender this row navigates with — it keys
+ *  the name's shared-bounds morph into the dossier title. */
 @Composable
-private fun ContactPersonRow(person: PersonHit, onTap: () -> Unit, modifier: Modifier = Modifier) {
+private fun ContactPersonRow(person: PersonHit, onTap: () -> Unit, sharedKey: String, modifier: Modifier = Modifier) {
     Column(
         modifier
             .fillMaxWidth()
@@ -143,7 +147,7 @@ private fun ContactPersonRow(person: PersonHit, onTap: () -> Unit, modifier: Mod
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f).denebSharedBounds("person-name-$sharedKey"),
             )
             // Message volume is the activity signal for this counterparty — the one
             // interactive/active mark on the row, so it carries the cool primary accent.

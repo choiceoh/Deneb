@@ -8,7 +8,6 @@ import ai.deneb.ui.denebHint
 import ai.deneb.ui.denebPressable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -239,7 +238,7 @@ fun DenebCategoryPagesScreen(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .combinedClickable(
+                                .denebPressable(
                                     onClick = {
                                         haptics.tap()
                                         if (selecting) {

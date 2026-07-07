@@ -8,6 +8,7 @@ package ai.deneb.ui.chat
 import ai.deneb.deneb.DenebLoading
 import ai.deneb.getBackgroundDispatcher
 import ai.deneb.onDragAndDropEventDropped
+import ai.deneb.ui.DenebMotion
 import ai.deneb.ui.chat.composables.BotMessage
 import ai.deneb.ui.chat.composables.DenebSessionDrawerSheet
 import ai.deneb.ui.chat.composables.EmptyState
@@ -32,7 +33,6 @@ import ai.deneb.ui.handCursor
 import ai.deneb.ui.markdown.ChatbotTextScale
 import ai.deneb.ui.markdown.precomputeMarkdownAsync
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -267,7 +267,7 @@ internal fun ChatModeScreen(
         if (prevRecall.value != uiState.recallEnabled) {
             prevRecall.value = uiState.recallEnabled
             modeSwitchAnim.snapTo(0f)
-            modeSwitchAnim.animateTo(1f, tween(durationMillis = 320, easing = FastOutSlowInEasing))
+            modeSwitchAnim.animateTo(1f, tween(DenebMotion.DurationMedium, easing = DenebMotion.emphasized))
         }
     }
 

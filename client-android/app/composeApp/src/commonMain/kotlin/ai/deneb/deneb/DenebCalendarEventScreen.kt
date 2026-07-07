@@ -5,6 +5,7 @@ import ai.deneb.ui.DenebSectionLabel
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHint
+import ai.deneb.ui.denebSharedBounds
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -148,6 +149,7 @@ internal fun CalendarEventContent(
         ev.title.ifBlank { "(제목 없음)" },
         style = DenebType.subject,
         color = MaterialTheme.colorScheme.onBackground,
+        modifier = Modifier.denebSharedBounds("calendar-title-${ev.id}"),
     )
     Spacer(Modifier.height(10.dp))
     Text(whenLabel(ev), style = DenebType.body, color = MaterialTheme.colorScheme.onBackground)

@@ -250,7 +250,7 @@ private fun RecallModeSegment(label: String, selected: Boolean, onSelect: () -> 
                 if (selected) MaterialTheme.colorScheme.onBackground.copy(alpha = 0.14f) else Color.Transparent,
             )
             .selectable(selected = selected, role = Role.Tab, onClick = onSelect)
-            .padding(horizontal = 12.dp, vertical = 5.dp),
+            .padding(horizontal = 12.dp, vertical = 4.dp),
     )
 }
 

@@ -377,7 +377,7 @@ private fun BrowserBookmarksSheet(
         Column(
             Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp)
+                .padding(horizontal = 24.dp)
                 .padding(bottom = 24.dp),
         ) {
             Text("북마크", style = DenebType.subject, color = MaterialTheme.colorScheme.onSurface)

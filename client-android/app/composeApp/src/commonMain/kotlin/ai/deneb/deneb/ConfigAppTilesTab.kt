@@ -3,6 +3,7 @@ package ai.deneb.deneb
 import ai.deneb.data.AppSettings
 import ai.deneb.ui.DenebGroup
 import ai.deneb.ui.DenebListRow
+import ai.deneb.ui.DenebType
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -61,8 +62,9 @@ internal fun AppTilesContent(hidden: Set<String>, onToggle: (key: String, hidden
         Text(
             "더보기 화면에 표시할 항목을 고릅니다. 끄면 그 항목이 목록에서 숨겨집니다. " +
                 "채팅·설정은 항상 표시됩니다.",
-            style = MaterialTheme.typography.bodySmall,
+            style = DenebType.hint,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            // 16dp aligns with DenebGroup's card margin below, not the 24dp row inset.
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
         )
         DenebGroup(label = "더보기 표시 항목") {
