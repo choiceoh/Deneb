@@ -243,6 +243,11 @@ textarea {
   grid-template-columns: var(--rail-w) minmax(0, 1fr);
   grid-template-rows: minmax(120px, 3fr) minmax(300px, 7fr); /* 자료 30% : 채팅 70% */
 }
+/* 상단(자료) 영역 접힘 — 노트북 바의 접기 버튼이 토글. 상단 행이 한 줄 바 높이로
+ * 줄고(auto), 확보된 높이는 전부 하단 채팅이 가진다. */
+.workstation-shell.ws-bottom-chat.ws-top-folded {
+  grid-template-rows: auto minmax(300px, 1fr);
+}
 .ws-bottom-chat > nav {
   grid-column: 1;
   grid-row: 1 / 3;

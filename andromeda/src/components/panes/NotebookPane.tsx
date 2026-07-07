@@ -14,7 +14,7 @@ import { DeleteModal } from "./commonModals";
 // sources to the AI panel so Deneb answers grounded in that deal (NotebookLM-
 // style). You can also create a notebook and pin (add) a citation source.
 export function NotebookPane() {
-  const { connected, cfg, openWiki, setNoteSink } = useWorkspace();
+  const { connected, cfg, openWiki, setNoteSink, notebookFolded, setNotebookFolded } = useWorkspace();
   const { call, callCached, readCache, writeCache, status } = useCachedRpc(cfg, NOTEBOOK_RESOURCE);
   const [listSnapshot] = useState(() => readCache<NotebookListResponse>(NOTEBOOK_RPC.list));
   const [notebooks, setNotebooks] = useState<NotebookSummary[]>(listSnapshot?.data.notebooks ?? []);
@@ -247,49 +247,62 @@ export function NotebookPane() {
         >
           <Icon name="plus" size={12} /> 새 노트북
         </button>
+        {/* Fold the materials area down to this bar — the docked chat below takes
+            the freed height (Workstation collapses the grid's top row). Local state
+            (previewKey 등) survives the fold, so unfolding restores the exact view. */}
+        <button
+          className="row-btn notebook-fold"
+          onClick={() => setNotebookFolded(!notebookFolded)}
+          aria-expanded={!notebookFolded}
+          aria-label={notebookFolded ? "자료 영역 펼치기" : "자료 영역 접기"}
+          title={notebookFolded ? "자료 영역 펼치기" : "자료 영역 접기"}
+        >
+          <Icon name={notebookFolded ? "chevron-down" : "chevron-up"} size={12} />
+        </button>
       </div>
 
-      {!connected ? (
-        <p className="notebook-empty">게이트웨이에 연결하세요.</p>
-      ) : notebooks.length === 0 ? (
-        <p className="notebook-empty">노트북이 없습니다. “＋ 새 노트북”으로 만드세요.</p>
-      ) : !active ? (
-        <p className="notebook-empty">위에서 노트북을 선택하세요.</p>
-      ) : (
-        <>
-          {/* The sources as a wrapping chip strip: enough to SEE what material is in
+      {!notebookFolded &&
+        (!connected ? (
+          <p className="notebook-empty">게이트웨이에 연결하세요.</p>
+        ) : notebooks.length === 0 ? (
+          <p className="notebook-empty">노트북이 없습니다. “＋ 새 노트북”으로 만드세요.</p>
+        ) : !active ? (
+          <p className="notebook-empty">위에서 노트북을 선택하세요.</p>
+        ) : (
+          <>
+            {/* The sources as a wrapping chip strip: enough to SEE what material is in
               the notebook and add more, without spending the pane on reading it —
               the main work happens in the chat below (ask → answer → 노트에 저장).
               Click a chip to peek at that source; click again (or ×) to fold it. */}
-          <div className="notebook-strip" role="list" aria-label="자료 목록">
-            {sources.map((s, i) => (
-              <NotebookSourceChip
-                key={srcKey(s) || i}
-                source={s}
-                open={srcKey(s) === previewKey}
-                onToggle={() => setPreviewKey((k) => (k === srcKey(s) ? "" : srcKey(s)))}
-                onDelete={s.cite ? () => setDeletingSource(s) : undefined}
-              />
-            ))}
-            <button
-              className="row-btn notebook-add"
-              onClick={() => setAddingSource(true)}
-              title="인용자료 추가"
-              aria-label="자료 추가"
-            >
-              <Icon name="plus" size={12} /> 자료
-            </button>
-          </div>
-          {sources.length === 0 && (
-            <p className="notebook-empty">아직 자료가 없습니다. “＋ 자료”로 메일·견적·메모·위키 등을 담으세요.</p>
-          )}
-          {preview && (
-            <div className="notebook-preview" role="group" aria-label="자료 내용">
-              <NotebookSourceDetail source={preview} onClose={() => setPreviewKey("")} />
+            <div className="notebook-strip" role="list" aria-label="자료 목록">
+              {sources.map((s, i) => (
+                <NotebookSourceChip
+                  key={srcKey(s) || i}
+                  source={s}
+                  open={srcKey(s) === previewKey}
+                  onToggle={() => setPreviewKey((k) => (k === srcKey(s) ? "" : srcKey(s)))}
+                  onDelete={s.cite ? () => setDeletingSource(s) : undefined}
+                />
+              ))}
+              <button
+                className="row-btn notebook-add"
+                onClick={() => setAddingSource(true)}
+                title="인용자료 추가"
+                aria-label="자료 추가"
+              >
+                <Icon name="plus" size={12} /> 자료
+              </button>
             </div>
-          )}
-        </>
-      )}
+            {sources.length === 0 && (
+              <p className="notebook-empty">아직 자료가 없습니다. “＋ 자료”로 메일·견적·메모·위키 등을 담으세요.</p>
+            )}
+            {preview && (
+              <div className="notebook-preview" role="group" aria-label="자료 내용">
+                <NotebookSourceDetail source={preview} onClose={() => setPreviewKey("")} />
+              </div>
+            )}
+          </>
+        ))}
 
       {creating && (
         <CreateNotebookModal

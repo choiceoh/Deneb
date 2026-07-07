@@ -36,6 +36,7 @@ export type IconName =
   | "plus"
   | "trash"
   | "chevron-down"
+  | "chevron-up"
   | "expand-panel"
   | "collapse-panel";
 
@@ -185,6 +186,7 @@ const PATHS: Record<IconName, ReactNode> = {
     </>
   ),
   "chevron-down": <path d="M5 9l7 7 7-7" />,
+  "chevron-up": <path d="M5 15l7-7 7 7" />,
   // Widen the chat panel leftward over the work area — double chevron «.
   "expand-panel": <path d="M13 6.5L7.5 12l5.5 5.5M19 6.5L13.5 12l5.5 5.5" />,
   // Shrink the chat panel back to the right — double chevron ».
