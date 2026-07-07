@@ -1421,6 +1421,10 @@ private fun renderLetterCard(name: String, scheme: ColorScheme, node: DenebUiNod
 // parser regression breaks the preview loudly instead of drifting silently.
 private fun parseLetterHtml(html: String): DenebUiNode = DenebUiHtml.parse(html) ?: error("letter skeleton failed to parse")
 
+// Deliberate divergence from the SKILL.md skeleton on the market stats: the
+// skeleton's values are digit-free letter tokens ("{{market:usd_krw}}") the
+// gateway substitutes at delivery; this preview renders the POST-substitution
+// form the user actually sees.
 private fun morningLetterNode(): DenebUiNode = parseLetterHtml(
     """
     <column>
