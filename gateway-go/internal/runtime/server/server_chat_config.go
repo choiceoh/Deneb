@@ -73,7 +73,7 @@ func (s *Server) initGmailPoll(snap *config.ConfigSnapshot) {
 		CounterpartyProjectsFn: s.mailCounterpartyProjects,
 		AttachmentExtractFn:    tools.ExtractAttachmentTextBytes,
 		PromptOverride:         s.promptOverride,
-		ThinkingKwarg:          s.analysisThinkingKwarg(),
+		ThinkingKwarg:          s.mailStage2ThinkingKwarg(),
 	}
 
 	if pollCfg.IntervalMin != nil {
@@ -235,7 +235,7 @@ func (s *Server) initLMTPServer(snap *config.ConfigSnapshot) {
 		OnAnalysisFailed:       s.makeMailAnalysisFailureSink(),
 		ProjectsFn:             s.projectCandidatesFn(),
 		ThreadSource:           threadSource,
-		ThinkingKwarg:          s.analysisThinkingKwarg(),
+		ThinkingKwarg:          s.mailStage2ThinkingKwarg(),
 	}
 	if s.wikiStore != nil && s.wikiStore.DiaryDir() != "" {
 		cfg.DiaryDir = s.wikiStore.DiaryDir()
@@ -586,32 +586,33 @@ func resolveLocalVllmModel(_ *slog.Logger) string {
 // mailAnalysisModels returns the role-resolved clients and model names shared
 // by BOTH mail-analysis paths — the autonomous gmail poller (initGmailPoll)
 // and the interactive miniapp gmail.analyze factory (method_registry.go).
-// Stage-2 synthesis is reasoning-grade → analysis role; stage-1 extractors
-// are trivial classification → tiny role. Keeping the choice in ONE place
-// prevents the two paths drifting apart: the #2045 tiny/analysis upgrade
-// reached only the poller, and the miniapp button stayed pinned to the
-// fallback role until that provider's key died (401, 2026-06-10).
+// Stage-2 synthesis is the user-facing report, quality-first → main role
+// (the analysis role was retired 2026-07-07); stage-1 extractors are trivial
+// classification → tiny role. Keeping the choice in ONE place prevents the two
+// paths drifting apart: the #2045 tiny/analysis upgrade reached only the poller,
+// and the miniapp button stayed pinned to the fallback role until that
+// provider's key died (401, 2026-06-10).
 func (s *Server) mailAnalysisModels() (stage2 *llm.Client, stage2Model string, stage1 *llm.Client, stage1Model string) {
 	if s.modelRegistry == nil {
 		return nil, "", nil, ""
 	}
-	return s.modelRegistry.Client(modelrole.RoleAnalysis),
-		s.modelRegistry.Model(modelrole.RoleAnalysis),
+	return s.modelRegistry.Client(modelrole.RoleMain),
+		s.modelRegistry.Model(modelrole.RoleMain),
 		s.modelRegistry.Client(modelrole.RoleTiny),
 		s.modelRegistry.Model(modelrole.RoleTiny)
 }
 
-// analysisThinkingKwarg returns the chat_template_kwargs thinking off-switch for
-// the mail-analysis model (RoleAnalysis / stage-2), or "" when the model has none
+// mailStage2ThinkingKwarg returns the chat_template_kwargs thinking off-switch for
+// the mail-analysis stage-2 model (RoleMain), or "" when the model has none
 // (non-vLLM, e.g. an Anthropic-wire cloud model). Threaded into the mailanalysis
-// analysis so its "disabled" thinking config truly stops reasoning on dual-mode
+// synthesis so its "disabled" thinking config truly stops reasoning on dual-mode
 // vLLM models (dsv4) instead of exhausting the budget and returning empty — the
 // analysis-path equivalent of what applyModelTuning does for the main chat.
-func (s *Server) analysisThinkingKwarg() string {
+func (s *Server) mailStage2ThinkingKwarg() string {
 	if s.modelRegistry == nil {
 		return ""
 	}
-	c := s.modelRegistry.Config(modelrole.RoleAnalysis)
+	c := s.modelRegistry.Config(modelrole.RoleMain)
 	return s.modelRegistry.CapabilityForModel(c.ProviderID, c.Model).ThinkingToggleKwarg
 }
 
@@ -633,15 +634,11 @@ func resolveCodingModel(logger *slog.Logger) string {
 	return resolveAgentRoleModel("codingModel", logger)
 }
 
-// resolveTinyModel / resolveAnalysisModel read the optional per-role overrides
-// agents.tinyModel / agents.analysisModel from deneb.json. Empty leaves the
-// registry's lightweight model for that role (the prior single-tier behavior).
+// resolveTinyModel reads the optional per-role override agents.tinyModel from
+// deneb.json. Empty leaves the registry's lightweight model for that role (the
+// prior single-tier behavior).
 func resolveTinyModel(logger *slog.Logger) string {
 	return resolveAgentRoleModel("tinyModel", logger)
-}
-
-func resolveAnalysisModel(logger *slog.Logger) string {
-	return resolveAgentRoleModel("analysisModel", logger)
 }
 
 // resolveChatbotModel reads the optional agents.chatbotModel override from

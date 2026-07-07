@@ -21,7 +21,6 @@ func capTestRegistry(t *testing.T, providers map[string]modelrole.ProviderResolv
 			LightweightModel: "acme/custom-model",
 			FallbackModel:    "acme/custom-model",
 			TinyModel:        "acme/custom-model",
-			AnalysisModel:    "acme/custom-model",
 			Providers:        providers,
 		},
 	)

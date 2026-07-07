@@ -959,7 +959,7 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 			Client: s.miniappMailClientFactory(s.denebDir),
 			Pipeline: func() (handlerminiapp.AnalyzePipeline, error) {
 				// Role selection is shared with the autonomous poller via
-				// mailAnalysisModels (stage-2 = analysis role, stage-1 = tiny
+				// mailAnalysisModels (stage-2 = main role, stage-1 = tiny
 				// role) so the two mail-analysis paths cannot drift apart.
 				// This replaces a #1816-era pin to the fallback role
 				// ("step3.7 streams unstoppable thinking") that the poller

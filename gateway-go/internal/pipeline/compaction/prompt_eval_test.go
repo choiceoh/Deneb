@@ -39,6 +39,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/pilot"
 )
 
@@ -230,11 +231,11 @@ type judgeScore struct {
 
 var jsonObjRe = regexp.MustCompile(`(?s)\{.*\}`)
 
-// judgeSummary asks the analysis model to score one summary. Best-effort JSON
+// judgeSummary asks the main model to score one summary. Best-effort JSON
 // extraction tolerates models that wrap the object in prose.
 func judgeSummary(ctx context.Context, source, summary string) (judgeScore, error) {
 	user := "## 원본 대화\n" + source + "\n\n## 채점할 요약\n" + summary
-	out, err := pilot.CallAnalysisLLM(ctx, judgeSystemPrompt, user, 800)
+	out, err := pilot.CallRoleLLM(ctx, modelrole.RoleMain, judgeSystemPrompt, user, 800)
 	if err != nil {
 		return judgeScore{}, err
 	}
@@ -306,7 +307,7 @@ func TestComparePromptVariants_Live(t *testing.T) {
 		agg := variantResult{name: v.name, runs: runs, missing: map[string]int{}}
 		var okRuns int
 		for i := range runs {
-			summary, err := pilot.CallAnalysisLLM(ctx, v.system, source, maxOutput)
+			summary, err := pilot.CallRoleLLM(ctx, modelrole.RoleMain, v.system, source, maxOutput)
 			if err != nil {
 				t.Fatalf("variant %s run %d: model call failed: %v", v.name, i, err)
 			}

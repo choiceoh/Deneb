@@ -38,7 +38,6 @@ func (s *Server) initMemorySubsystem(chatCfg *chat.HandlerConfig, regPtr **model
 		LocalVllmModel:   localVllmModel,
 		LightweightModel: resolveLightweightModel(s.logger),
 		TinyModel:        resolveTinyModel(s.logger),
-		AnalysisModel:    resolveAnalysisModel(s.logger),
 		CodingModel:      resolveCodingModel(s.logger),
 		FallbackModel:    resolveFallbackModel(s.logger),
 		ChatbotModel:     resolveChatbotModel(s.logger),

@@ -1,6 +1,6 @@
 # mailanalysis 서브트리 지도 (구조)
 
-> 자율 메일 분석 파이프라인의 **구조적 지도** — 신규 메일을 감지해 추출→합성→소비하는 단계가 어디에 있는지. 모델 역할 배치 정책은 `docs/agent-rules/model-roles.md`(stage1=tiny, stage2=analysis)가 소관, 여기 복붙하지 않는다. 사이드카(OCR/ASR) 운영은 `docs/agent-rules/sidecar-models.md`.
+> 자율 메일 분석 파이프라인의 **구조적 지도** — 신규 메일을 감지해 추출→합성→소비하는 단계가 어디에 있는지. 모델 역할 배치 정책은 `docs/agent-rules/model-roles.md`(stage1=tiny, stage2=main)가 소관, 여기 복붙하지 않는다. 사이드카(OCR/ASR) 운영은 `docs/agent-rules/sidecar-models.md`.
 
 ## 무엇 / 왜
 
@@ -34,7 +34,7 @@
 service.go (주기 폴 / 외부 트리거)
   → AnalyzeEmailPipeline (pipeline.go)
       stage-1: 컨텍스트 추출 (pipeline_synthesis.go)   # tiny 역할 — 스레드·발신자·위키그래프
-      stage-2: 합성 (pipeline_synthesis.go)            # analysis 역할 — 사용자가 읽는 리포트
+      stage-2: 합성 (pipeline_synthesis.go)            # main 역할 — 사용자가 읽는 리포트
       → 추출기 (pipeline_extractors.go)                # lightweight — 위키facts/actions/deals JSON
   → 보고: 네이티브 클라 (workfeed 카드 / proactive)
   → 소비: 위키 fact 반영 · 캘린더/할일 제안 · 거래 KB
@@ -54,7 +54,7 @@ service.go (주기 폴 / 외부 트리거)
 
 ## 함정
 
-- **모델 역할 직교**: stage1=tiny(단순 구조화 추출), stage2=analysis(사용자가 읽는 합성 — **의도적 클라우드 OK**), 추출기=lightweight. 추출기를 analysis로 올리면 비용·레이턴시가 샌다 — `docs/agent-rules/model-roles.md` 도그마 5.
+- **모델 역할 직교**: stage1=tiny(단순 구조화 추출), stage2=main(사용자가 읽는 합성 — analysis 제거로 main, **의도적 클라우드 OK**), 추출기=lightweight. 추출기를 main으로 올리면 비용·레이턴시가 샌다 — `docs/agent-rules/model-roles.md` 도그마 5.
 - **`mailAnalysisModels()`는 server에 있다**(`runtime/server/`), 역할 해석의 단일 지점. mailanalysis는 그 모델을 소비만.
 - **추론 누출 방어**: 분석 텍스트에 모델 self-talk/reasoning이 새는 이력 — `reasoning_leak.go`로 스트립([project_cron_narration_leak]). 본문에 메타발화 의심되면 여기부터.
 - **cron 트리거 회귀 이력**: bind·잡이름404·배포폭풍 in-flight abort 3회. cron 복원은 `deliverableLen>0`까지 라이브 검증([project_kakao_mail_pipeline]).
