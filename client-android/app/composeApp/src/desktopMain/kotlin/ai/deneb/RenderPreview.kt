@@ -1398,6 +1398,7 @@ private fun morningLetterNode(): DenebUiNode = parseLetterHtml(
       <card>
         <row><icon name="alarm" size="16"/><text style="caption">임박 마감</text></row>
         <row><text style="body">부가세 신고</text><badge color="warning">D-2</badge></row>
+        <row><text style="body">진코 선입금 상계</text><badge color="error">기한 초과</badge></row>
       </card>
     </column>
     """.trimIndent(),
