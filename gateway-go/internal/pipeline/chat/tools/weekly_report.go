@@ -79,9 +79,10 @@ type weeklyEnvelope struct {
 // weeklyIssueRow is one 현안 as structured data for the deneb-ui card: the
 // urgency rides a badge instead of being baked into a prose line.
 type weeklyIssueRow struct {
-	Title   string `json:"title"`
-	Badge   string `json:"badge"`   // "D-2" / "D-day" / "기한 초과"
-	Overdue bool   `json:"overdue"` // true → error tint (기한 초과·D-day), else warning
+	Title    string `json:"title"`
+	Badge    string `json:"badge"`     // "D-2" / "D-day" / "기한 초과"
+	Overdue  bool   `json:"overdue"`   // true → error tint (기한 초과·D-day), else warning
+	DaysLeft int    `json:"days_left"` // sort key: most urgent (lowest) first
 }
 
 // collectWeekly scans project wiki pages and builds the report envelope:
@@ -157,11 +158,14 @@ func collectWeekly(opts WeeklyReportOpts, now time.Time) weeklyEnvelope {
 					badge = "D-day"
 				}
 				issues = append(issues, fmt.Sprintf("%s : 마감 %s (%s)", p.Title, when, page.Meta.Due))
-				issueRows = append(issueRows, weeklyIssueRow{Title: p.Title, Badge: badge, Overdue: *daysToDue <= 0})
+				issueRows = append(issueRows, weeklyIssueRow{Title: p.Title, Badge: badge, Overdue: *daysToDue <= 0, DaysLeft: *daysToDue})
 			}
 			return nil
 		})
 	}
+
+	// Card 현안 rows read top-down by urgency (walk order is filesystem order).
+	sort.SliceStable(issueRows, func(i, j int) bool { return issueRows[i].DaysLeft < issueRows[j].DaysLeft })
 
 	groups := make([]weeklyGroup, 0, len(byGroup))
 	for _, sg := range weeklySoganOrder {
