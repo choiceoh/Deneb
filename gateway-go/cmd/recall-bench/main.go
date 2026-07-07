@@ -89,6 +89,15 @@ func indexOf(s, sub string) int {
 }
 
 func main() {
+	if err := run(); err != nil {
+		fmt.Fprintln(os.Stderr, "recall-bench:", err)
+		os.Exit(1)
+	}
+}
+
+// run holds the body so os.Exit lives only in main — a deferred store.Close then
+// always runs (gocritic exitAfterDefer). All fatal paths return an error.
+func run() error {
 	wikiDir := flag.String("wiki", "", "wiki directory (a COPY of prod)")
 	diaryDir := flag.String("diary", "", "diary directory")
 	goldPath := flag.String("gold", os.ExpandEnv("$HOME/.deneb/wiki-qa-gold.jsonl"), "gold-set JSONL")
@@ -96,8 +105,7 @@ func main() {
 	verbose := flag.Bool("v", false, "print per-case ✓/✗")
 	flag.Parse()
 	if *wikiDir == "" {
-		fmt.Fprintln(os.Stderr, "recall-bench: --wiki required")
-		os.Exit(2)
+		return fmt.Errorf("--wiki required")
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn}))
@@ -105,8 +113,7 @@ func main() {
 
 	store, err := wiki.NewStore(*wikiDir, *diaryDir)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "open wiki: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("open wiki: %w", err)
 	}
 	defer store.Close()
 
@@ -123,22 +130,19 @@ func main() {
 	if semantic {
 		store.SetEmbedder(emb)
 		if err := store.WarmSemanticIndex(ctx); err != nil {
-			fmt.Fprintf(os.Stderr, "recall-bench: semantic warm FAILED (%v) — metrics would be BM25-degraded; aborting\n", err)
-			os.Exit(1)
+			return fmt.Errorf("semantic warm FAILED (%w) — metrics would be BM25-degraded", err)
 		}
 	}
 
 	cases, skipped, err := loadGold(*goldPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "gold: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("gold: %w", err)
 	}
 	// Malformed gold rows silently shrink the denominator and can hide a
 	// regression — this tool justifies ranking changes, so refuse to run on
 	// corrupt gold data instead of quietly dropping cases.
 	if skipped > 0 {
-		fmt.Fprintf(os.Stderr, "recall-bench: %d malformed gold row(s) in %s — fix or remove them; aborting\n", skipped, *goldPath)
-		os.Exit(1)
+		return fmt.Errorf("%d malformed gold row(s) in %s — fix or remove them", skipped, *goldPath)
 	}
 
 	fusion := os.Getenv("DENEB_WIKI_FUSION")
@@ -202,6 +206,7 @@ func main() {
 	}
 	fmt.Printf("RECALL_BENCH hit@1=%d hit@%d=%d total=%d p@1=%.1f%% r@%d=%.1f%% mrr=%.3f fusion=%s\n",
 		hit1, *k, hitK, scored, pct(hit1), *k, pct(hitK), mrrSum/float64(scored), fusion)
+	return nil
 }
 
 // loadGold parses the gold JSONL, returning the cases and the count of malformed
