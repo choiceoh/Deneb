@@ -169,6 +169,45 @@ describe("deneb-ui renderer parity conventions", () => {
     expect((cells[0] as HTMLElement).style.textAlign).toBe("");
   });
 
+  it("renders inline emphasis inside table cells and keeps numeric align", () => {
+    const spec = {
+      type: "table",
+      headers: ["현장", "수량"],
+      rows: [
+        ["**화성산단**", "**12**"],
+        ["부산 썬탑", "4"],
+      ],
+    };
+    const { container } = render(<DenebUi spec={spec} onSubmit={() => {}} />);
+    const cells = container.querySelectorAll("tbody td");
+    expect(cells[0].querySelector("strong")?.textContent).toBe("화성산단");
+    expect(cells[0].textContent).not.toContain("**");
+    // A bolded number still classifies the column as numeric.
+    expect((cells[1] as HTMLElement).style.textAlign).toBe("right");
+  });
+
+  it("renders inline emphasis inside alert and quote prose", () => {
+    const spec = {
+      type: "column",
+      children: [
+        { type: "alert", severity: "warning", title: "**긴급**", message: "**중요**: 확인 필요" },
+        { type: "quote", text: "**품질** 우선", source: "회의" },
+      ],
+    };
+    const { container } = render(<DenebUi spec={spec} onSubmit={() => {}} />);
+    expect(container.querySelector(".dui-alert strong")?.textContent).toBe("긴급");
+    expect(container.querySelector(".dui-alert")?.textContent).not.toContain("**");
+    expect(container.querySelector(".dui-quote strong")?.textContent).toBe("품질");
+  });
+
+  it("scales bars from the real series max (fractional series fill)", () => {
+    const spec = { type: "chart", chartType: "bar", labels: ["a", "b"], values: [0.12, 0.18] };
+    const { container } = render(<DenebUi spec={spec} onSubmit={() => {}} />);
+    const fills = container.querySelectorAll(".dui-bar-fill");
+    // 0.18 is the max → 100%; flooring at 1 would have made it 18%.
+    expect((fills[1] as HTMLElement).style.width).toBe("100%");
+  });
+
   it("renders inline emphasis inside text nodes", () => {
     const spec = { type: "text", value: "이번주 **필수** 확인" };
     const { container } = render(<DenebUi spec={spec} onSubmit={() => {}} />);

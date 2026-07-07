@@ -1485,16 +1485,16 @@ private fun uiGalleryNode(): DenebUiNode = parseLetterHtml(
         <text style="title">수배전반 납품 일정</text>
         <table>
           <tr><th>현장</th><th>규격</th><th>수량</th><th>납기</th></tr>
-          <tr><td>화성산단 RPS 2개소</td><td>100kW 계량반</td><td>12</td><td>7/10</td></tr>
+          <tr><td>**화성산단** RPS 2개소</td><td>100kW 계량반</td><td>**12**</td><td>7/10</td></tr>
           <tr><td>부산 썬탑 7호</td><td>200kW 저압반</td><td>4</td><td>7/14</td></tr>
           <tr><td>금호타이어 곡성화학공장</td><td>연계판넬</td><td>7</td><td>7/21</td></tr>
         </table>
       </card>
       <card>
         <row><badge color="success">완료</badge><badge color="warning">지연 위험</badge><badge color="error">중단</badge><badge>기본</badge></row>
-        <alert severity="warning" title="영광 도오리 민원">약 3일 지연 예상 — 작업 재개 협의 중.</alert>
+        <alert severity="warning" title="영광 도오리 민원">**약 3일 지연** 예상 — 작업 재개 협의 중.</alert>
         <alert severity="info" title="장마 대비">전 현장 24시간 비상대응체계 재확인 완료.</alert>
-        <blockquote source="주간회의">발전소는 가성비와 품질 기준을 지켜 짓는다.</blockquote>
+        <blockquote source="주간회의">발전소는 **가성비와 품질** 기준을 지켜 짓는다.</blockquote>
       </card>
       <card>
         <tabs selected-index="0">

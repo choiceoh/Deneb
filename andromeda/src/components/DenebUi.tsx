@@ -276,7 +276,7 @@ export function DenebUi({ spec, onSubmit, busy }: { spec: Node; onSubmit: (msg: 
       case "quote":
         return (
           <blockquote key={key} className="dui-quote">
-            {String(n.text || "")}
+            {renderInline(String(n.text || ""), key)}
             {n.source ? <footer className="dui-quote-src">— {String(n.source)}</footer> : null}
           </blockquote>
         );
@@ -324,7 +324,9 @@ export function DenebUi({ spec, onSubmit, busy }: { spec: Node; onSubmit: (msg: 
         const colCount = Math.max(headers.length, ...rows.map((r) => (Array.isArray(r) ? r.length : 0)), 0);
         const numeric = Array.from({ length: colCount }, (_, i) => {
           const cells = rows.map((r) => String((Array.isArray(r) ? r : [])[i] ?? "").trim()).filter(Boolean);
-          return cells.length > 0 && cells.every((c) => /^[-−]?\d/.test(c));
+          // Test past inline markers so a model-bolded number ("**12**") still
+          // classifies its column as numeric (the cell renders bold below).
+          return cells.length > 0 && cells.every((c) => /^[-−]?\d/.test(c.replace(/^[*_~`\s]+/, "")));
         });
         const align = (i: number): React.CSSProperties | undefined => (numeric[i] ? { textAlign: "right" } : undefined);
         return (
@@ -333,7 +335,7 @@ export function DenebUi({ spec, onSubmit, busy }: { spec: Node; onSubmit: (msg: 
               <tr>
                 {headers.map((h, i) => (
                   <th key={i} style={align(i)}>
-                    {String(h)}
+                    {renderInline(String(h), `${key}.h${i}`)}
                   </th>
                 ))}
               </tr>
@@ -343,7 +345,7 @@ export function DenebUi({ spec, onSubmit, busy }: { spec: Node; onSubmit: (msg: 
                 <tr key={ri}>
                   {(Array.isArray(r) ? r : []).map((c, ci) => (
                     <td key={ci} style={align(ci)}>
-                      {String(c)}
+                      {renderInline(String(c), `${key}.r${ri}.${ci}`)}
                     </td>
                   ))}
                 </tr>
@@ -356,7 +358,10 @@ export function DenebUi({ spec, onSubmit, busy }: { spec: Node; onSubmit: (msg: 
         const labels: string[] = Array.isArray(n.labels) ? n.labels : [];
         const values: number[] = Array.isArray(n.values) ? n.values : [];
         const nums = values.map((v) => Number(v) || 0);
-        const max = Math.max(1, ...nums);
+        // Scale bars from the real series max (native parity): flooring at 1
+        // flattened fractional series like [0.12, 0.18] to near-empty bars,
+        // while the phone filled them. `|| 1` only guards an all-zero series.
+        const max = Math.max(0, ...nums) || 1;
         // Line variant: the authoring contract teaches type="line" for trends,
         // and the native client draws it — the desktop must not silently
         // degrade trends into bars (2026-07-07 review catch on #3229).
@@ -427,8 +432,9 @@ export function DenebUi({ spec, onSubmit, busy }: { spec: Node; onSubmit: (msg: 
       case "alert":
         return (
           <div key={key} className={`dui-alert ${String(n.severity || "info")}`}>
-            {n.title ? <div className="dui-alert-title">{String(n.title)}</div> : null}
-            <div>{String(n.message || "")}</div>
+            {n.title ? <div className="dui-alert-title">{renderInline(String(n.title), `${key}.t`)}</div> : null}
+            {/* Alert bodies are prose — models emphasize inline ("**중요**: …"). */}
+            <div>{renderInline(String(n.message || ""), key)}</div>
           </div>
         );
       case "progress": {
