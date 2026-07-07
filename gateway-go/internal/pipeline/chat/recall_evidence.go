@@ -544,8 +544,57 @@ func recallPolarisEvidence(ctx context.Context, bridge *polaris.Bridge, sessionK
 			})
 		}
 	}
+
+	// Cross-session SEMANTIC: match a past conversation by the meaning of its DAG
+	// summary, not keywords — so "지난번 곡성 대금" surfaces the session whose
+	// summary says "금호 기성 청구" even with no shared word. One batched embed;
+	// one row per session (its most-relevant summary), capped and floored so a
+	// loosely-related summary doesn't crowd the sharper message hits.
+	seenSummarySession := make(map[string]struct{})
+	summaryAdded := 0
+	for i, hits := range store.SearchSummariesSemantic(ctx, sessionKey, queries, 2) {
+		for _, h := range hits {
+			if h.Score < recallSummarySemanticFloor {
+				continue
+			}
+			if _, ok := seenSummarySession[h.SessionKey]; ok {
+				continue
+			}
+			seenSummarySession[h.SessionKey] = struct{}{}
+			query := ""
+			if i < len(queries) {
+				query = queries[i]
+			}
+			evidence = append(evidence, recallEvidence{
+				Kind:   "session",
+				Source: abbreviateSession(h.SessionKey) + " 요약",
+				Query:  query,
+				Note:   truncateRecallText(h.Content, 320),
+				Score:  0.55 + h.Score,
+				At:     h.CreatedAt,
+			})
+			summaryAdded++
+			if summaryAdded >= recallSummarySemanticQuota {
+				break
+			}
+		}
+		if summaryAdded >= recallSummarySemanticQuota {
+			break
+		}
+	}
 	return evidence
 }
+
+// recallSummarySemanticFloor is the cosine a cross-session summary match must
+// clear. Set just above the cross-session message prior band: a summary is a
+// coarser signal (a whole conversation's gist), so it should surface only on a
+// clear topical match, not a loose association.
+const recallSummarySemanticFloor = 0.60
+
+// recallSummarySemanticQuota caps semantic summary rows per turn so past-session
+// gists (0.55+cosine) don't crowd out the sharper current-session message hits
+// (0.65+score) in the merged window.
+const recallSummarySemanticQuota = 2
 
 func formatRecallEvidence(evidence []recallEvidence) string {
 	var sb strings.Builder
