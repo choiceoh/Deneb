@@ -128,6 +128,7 @@ func TestPage_RenderRoundtrip(t *testing.T) {
 	page.Meta.ID = "test-page"
 	page.Meta.Summary = "테스트용 페이지"
 	page.Meta.Resource = "gmail:thread/abc123"
+	page.Meta.PID = "p-pl2-001"
 	page.Body = "# 테스트\n\n## 요약\n테스트 내용."
 
 	rendered := page.Render()
@@ -135,6 +136,9 @@ func TestPage_RenderRoundtrip(t *testing.T) {
 	parsed := testutil.Must(ParsePage(rendered))
 	if parsed.Meta.ID != "test-page" {
 		t.Errorf("id roundtrip: got %q", parsed.Meta.ID)
+	}
+	if parsed.Meta.PID != "p-pl2-001" {
+		t.Errorf("pid roundtrip: got %q", parsed.Meta.PID)
 	}
 	if parsed.Meta.Title != "테스트" {
 		t.Errorf("title roundtrip: got %q", parsed.Meta.Title)
