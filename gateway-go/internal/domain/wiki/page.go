@@ -69,7 +69,14 @@ type Frontmatter struct {
 	// minted, so cross-references that point at the code survive renames and
 	// reclassification. Resolved by graph_query's byCode index. Empty for
 	// non-project pages (인물/시스템/업무/…).
-	Code     string
+	Code string
+	// PID is the frozen person identity code for 인물 pages: p-[그룹]-[순번]
+	// where 그룹 is a lane/거래처 slug (p-pl2-001, p-tri-003, p-nde-002). It is the
+	// person analogue of Code — a stable key that survives rename/이직 and lets
+	// people be grouped by lane (p-pl2-* = 2팀) — kept in its OWN field so it never
+	// leaks into project-code machinery (Code stays project-only). Empty on
+	// non-person pages and people not yet coded.
+	PID      string
 	Title    string
 	Summary  string // one-line description for index-level filtering (~80 chars)
 	Category string
@@ -172,6 +179,9 @@ func (p *Page) Render() []byte {
 	}
 	if p.Meta.Code != "" {
 		buf.WriteString("code: " + sanitizeScalar(p.Meta.Code) + "\n")
+	}
+	if p.Meta.PID != "" {
+		buf.WriteString("pid: " + sanitizeScalar(p.Meta.PID) + "\n")
 	}
 	buf.WriteString("title: " + sanitizeScalar(p.Meta.Title) + "\n")
 	if p.Meta.Summary != "" {
@@ -585,6 +595,8 @@ func parseFrontmatterFields(raw string) Frontmatter {
 			fm.ID = val
 		case "code":
 			fm.Code = normalizeProjectCode(val)
+		case "pid":
+			fm.PID = strings.ToLower(strings.TrimSpace(val))
 		case "title":
 			fm.Title = val
 		case "summary":
