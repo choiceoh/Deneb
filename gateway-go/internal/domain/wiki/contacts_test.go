@@ -231,3 +231,36 @@ func TestEnrichPeople_EnrichExistingAndCreateLinked(t *testing.T) {
 		t.Errorf("createMissing=false must never create a page")
 	}
 }
+
+// A newly created person stub must follow the standard 인물 form: entity
+// frontmatter + the 소속·직책 / 담당·관계 / 연락처 sections (no legacy 요약 stub).
+func TestCreatePersonPage_StandardForm(t *testing.T) {
+	dir := t.TempDir()
+	store := testutil.Must(NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
+	defer store.Close()
+
+	if _, err := store.EnrichPeople([]string{"임형철"}, []Contact{
+		{Name: "임형철", Phones: []string{"010-1234-5678"}, Emails: []string{"lim@trinasolar.com"}, Org: "Trinasolar"},
+	}, true); err != nil {
+		t.Fatalf("EnrichPeople: %v", err)
+	}
+	p := testutil.Must(store.ReadPage("인물/임형철.md"))
+
+	if p.Meta.Type != "entity" || p.Meta.Confidence != "low" || p.Meta.Importance != personStubImportance {
+		t.Errorf("frontmatter = type %q conf %q imp %.2f; want entity/low/%.2f", p.Meta.Type, p.Meta.Confidence, p.Meta.Importance, personStubImportance)
+	}
+	if p.Meta.Summary != "Trinasolar 소속" {
+		t.Errorf("summary = %q, want 'Trinasolar 소속'", p.Meta.Summary)
+	}
+	for _, sec := range []string{"## " + affiliationSectionHeading, "## " + roleSectionHeading, "## " + contactSectionHeading} {
+		if !strings.Contains(p.Body, sec) {
+			t.Errorf("body missing standard section %q", sec)
+		}
+	}
+	if strings.Contains(p.Body, "## 요약") {
+		t.Errorf("legacy 요약 stub section should be gone")
+	}
+	if !strings.Contains(p.Body, "Trinasolar") || !strings.Contains(p.Body, "lim@trinasolar.com") {
+		t.Errorf("stub should carry 소속 + 연락처 from the contact")
+	}
+}

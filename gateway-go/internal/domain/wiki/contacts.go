@@ -260,11 +260,13 @@ func (s *Store) createPersonPage(title string, c *Contact) (path string, created
 			return existing, nil
 		}
 		page := NewPage(title, "인물", nil)
-		body := fmt.Sprintf("# %s\n\n## 요약\n\n_위키 링크에서 자동 생성됨_\n", title)
-		if section := renderContactSection(c); section != "" {
-			body += "\n## " + contactSectionHeading + "\n\n" + section + "\n"
+		page.Meta.Type = "entity"
+		page.Meta.Confidence = "low"
+		page.Meta.Importance = personStubImportance
+		if org := strings.TrimSpace(c.Org); org != "" {
+			page.Meta.Summary = org + " 소속"
 		}
-		page.Body = body
+		page.Body = renderPersonTemplate(title, c)
 		created, changed = true, true
 		return page, nil
 	})
@@ -303,6 +305,53 @@ func (s *Store) enrichPersonPage(relPath string, c *Contact) (bool, error) {
 }
 
 const contactSectionHeading = "연락처"
+
+// The standard 인물 page form. Every person page — an auto-created stub or a
+// hand/dream-enriched page — shares these body sections in this order so the
+// shape is predictable and the dreamer/agent knows where each fact goes:
+//
+//	## 소속 · 직책   회사·부서·직급·직책·겸직
+//	## 담당 · 관계   담당 업무 + 관련 프로젝트/거래/인물
+//	## 연락처        전화·이메일 (contactSectionHeading)
+//	## 비고          특징·메모        (added when there's content)
+//	## 변경 이력     자동 감사 로그   (added by enrichment)
+//
+// A stub seeds the first three; 비고/변경 이력 arrive with content. The identity
+// email lives in frontmatter (emails:, EnrichPersonEmails), not the body.
+const (
+	affiliationSectionHeading = "소속 · 직책"
+	roleSectionHeading        = "담당 · 관계"
+	notesSectionHeading       = "비고"
+)
+
+// personStubImportance is the default weight for an auto-created person stub —
+// mid-scale, so a stub neither outranks curated pages nor is demoted out of view
+// before the dreamer refines it.
+const personStubImportance = 0.50
+
+// renderPersonTemplate seeds a new 인물 page body with the standard form (see the
+// section constants above). 소속 is filled from the contact's org and 연락처 from
+// its numbers; 담당 · 관계 is a placeholder the dreamer / mail analysis fills in.
+func renderPersonTemplate(title string, c *Contact) string {
+	var b strings.Builder
+	b.WriteString("# " + title + "\n\n")
+
+	b.WriteString("## " + affiliationSectionHeading + "\n\n")
+	if org := strings.TrimSpace(c.Org); org != "" {
+		b.WriteString("- **소속**: " + org + "\n")
+	} else {
+		b.WriteString("- **소속**: —\n")
+	}
+	b.WriteString("- **직급 · 직책**: —\n\n")
+
+	b.WriteString("## " + roleSectionHeading + "\n\n")
+	b.WriteString("_메일 분석·드림 사이클이 담당 업무·관련 프로젝트/인물을 채웁니다._\n")
+
+	if section := renderContactSection(c); section != "" {
+		b.WriteString("\n## " + contactSectionHeading + "\n\n" + section + "\n")
+	}
+	return b.String()
+}
 
 // renderContactSection formats a contact's details as the body of the "## 연락처"
 // section. Returns "" when there's nothing to record. The provenance line is a
