@@ -55,6 +55,7 @@ import ai.deneb.deneb.generated.MemberOut
 import ai.deneb.deneb.generated.OrgNodeOut
 import ai.deneb.deneb.generated.ProjectDigestRow
 import ai.deneb.deneb.generated.SelfCorrectionCandidate
+import ai.deneb.deneb.generated.SelfImprovementCodingFunnel
 import ai.deneb.deneb.generated.SelfImprovementCodingListResponse
 import ai.deneb.deneb.generated.SelfImprovementCodingStatusCount
 import ai.deneb.deneb.generated.SkillDetailResponse
@@ -1896,5 +1897,13 @@ private fun sampleSelfImprovementCodingQueue(now: Long) = SelfImprovementCodingL
         SelfImprovementCodingStatusCount(status = "rejected", count = 1),
         SelfImprovementCodingStatusCount(status = "superseded", count = 0),
         SelfImprovementCodingStatusCount(status = "all", count = 3),
+    ),
+    funnel = SelfImprovementCodingFunnel(
+        lastCaptureAt = now - 4 * 86_400_000L,
+        lastReviewAt = now - 3 * 86_400_000L,
+        rejections7d = 2,
+        promotableRejections7d = 0,
+        lastRejectionAt = now - 86_400_000L,
+        lastNudgeAt = 0L,
     ),
 )

@@ -557,10 +557,20 @@ export interface SelfCorrectionCandidate {
   updatedAt?: number
 }
 
+export interface SelfImprovementCodingFunnel {
+  lastCaptureAt?: number
+  lastReviewAt?: number
+  rejections7d?: number
+  promotableRejections7d?: number
+  lastRejectionAt?: number
+  lastNudgeAt?: number
+}
+
 export interface SelfImprovementCodingListResponse {
   candidates?: SelfCorrectionCandidate[]
   count?: number
   statusCounts?: SelfImprovementCodingStatusCount[]
+  funnel?: SelfImprovementCodingFunnel
 }
 
 export interface SelfImprovementCodingStatusCount {

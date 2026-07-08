@@ -397,6 +397,11 @@ func (b *skillLifecycleBackend) RecordSelfCorrectionCandidate(ctx context.Contex
 	if req.SessionKey == "" {
 		req.SessionKey = toolctx.SessionKeyFromContext(ctx)
 	}
+	// Default provenance: agent-proposed candidates were landing with an empty
+	// source (observed 2026-07-04), indistinguishable from legacy rows.
+	if strings.TrimSpace(req.Source) == "" {
+		req.Source = "skill-lifecycle-tool"
+	}
 	rec, err := b.tracker.RecordSelfCorrectionCandidate(genesis.SelfCorrectionCandidateRecord{
 		ID:             req.ID,
 		Scope:          req.Scope,

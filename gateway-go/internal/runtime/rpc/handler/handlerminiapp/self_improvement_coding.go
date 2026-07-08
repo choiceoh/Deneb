@@ -17,6 +17,11 @@ import (
 // lifecycle log events; they are unapplied coding hypotheses for batch review.
 type SelfImprovementCodingDeps struct {
 	RecentCandidates func(status string, limit int) ([]genesis.SelfCorrectionCandidateRecord, error)
+	// Funnel reports capture-side activity (optional — zero summary when absent).
+	Funnel func() genesis.SelfCorrectionFunnelSummary
+	// LastNudgeAtMs reports when the heartbeat self-coding review lane last
+	// fired (optional; 0 = never).
+	LastNudgeAtMs func() int64
 }
 
 // SelfCorrectionCandidate is one pending deferred correction from the
@@ -55,6 +60,22 @@ type SelfImprovementCodingStatusCount struct {
 	Count  int    `json:"count"`
 }
 
+// SelfImprovementCodingFunnel explains why the queue is (or is not) receiving
+// candidates: last capture/review/rejection timestamps, how many recent evolve
+// rejections were even eligible for promotion, and when the heartbeat review
+// lane last fired. An empty queue with a live upstream reads "consumed", not
+// "broken" — that distinction is this struct's whole job.
+//
+//deneb:wire
+type SelfImprovementCodingFunnel struct {
+	LastCaptureAt          int64 `json:"lastCaptureAt,omitempty"`
+	LastReviewAt           int64 `json:"lastReviewAt,omitempty"`
+	Rejections7d           int   `json:"rejections7d,omitempty"`
+	PromotableRejections7d int   `json:"promotableRejections7d,omitempty"`
+	LastRejectionAt        int64 `json:"lastRejectionAt,omitempty"`
+	LastNudgeAt            int64 `json:"lastNudgeAt,omitempty"`
+}
+
 // SelfImprovementCodingListResponse is the miniapp.self_improvement_coding.list
 // payload.
 //
@@ -64,6 +85,8 @@ type SelfImprovementCodingListResponse struct {
 	Count      int                       `json:"count"`
 	// StatusCounts is computed over the latest queue window across all statuses.
 	StatusCounts []SelfImprovementCodingStatusCount `json:"statusCounts,omitempty"`
+	// Funnel is the capture-side health summary for the header line.
+	Funnel SelfImprovementCodingFunnel `json:"funnel"`
 }
 
 func SelfImprovementCodingMethods(deps SelfImprovementCodingDeps) map[string]rpcutil.HandlerFunc {
@@ -113,8 +136,27 @@ func selfImprovementCodingList(deps SelfImprovementCodingDeps) rpcutil.HandlerFu
 			Candidates:   candidates,
 			Count:        len(candidates),
 			StatusCounts: selfImprovementCodingStatusCounts(allRecs),
+			Funnel:       selfImprovementCodingFunnel(deps),
 		})
 	}
+}
+
+func selfImprovementCodingFunnel(deps SelfImprovementCodingDeps) SelfImprovementCodingFunnel {
+	var out SelfImprovementCodingFunnel
+	if deps.Funnel != nil {
+		f := deps.Funnel()
+		out = SelfImprovementCodingFunnel{
+			LastCaptureAt:          f.LastCaptureAt,
+			LastReviewAt:           f.LastReviewAt,
+			Rejections7d:           f.Rejections7d,
+			PromotableRejections7d: f.PromotableRejections7d,
+			LastRejectionAt:        f.LastRejectionAt,
+		}
+	}
+	if deps.LastNudgeAtMs != nil {
+		out.LastNudgeAt = deps.LastNudgeAtMs()
+	}
+	return out
 }
 
 func selfCorrectionCandidate(rec genesis.SelfCorrectionCandidateRecord) SelfCorrectionCandidate {

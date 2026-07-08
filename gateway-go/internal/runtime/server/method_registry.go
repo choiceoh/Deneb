@@ -823,6 +823,13 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 				}
 				return s.genesisTracker.RecentSelfCorrectionCandidates("", status, limit)
 			},
+			Funnel: func() genesis.SelfCorrectionFunnelSummary {
+				if s.genesisTracker == nil {
+					return genesis.SelfCorrectionFunnelSummary{}
+				}
+				return s.genesisTracker.SelfCorrectionFunnel()
+			},
+			LastNudgeAtMs: lastSelfCodingNudgeAtMs,
 		}),
 
 		// Mini App unified search (miniapp.search.all). Single entry
