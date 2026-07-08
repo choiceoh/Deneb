@@ -48,6 +48,19 @@ func ourAnchorDomains() map[string]bool {
 	return out
 }
 
+// OurMailDomains returns the operator organization's mail domains as a slice —
+// exported for callers outside the analysis pipeline (e.g. deciding which
+// address-book contacts are our own staff, who get their own 인물 page). Same
+// source as the party anchor (DENEB_MAIL_OUR_DOMAINS, default topsolar.kr).
+func OurMailDomains() []string {
+	m := ourAnchorDomains()
+	out := make([]string, 0, len(m))
+	for d := range m {
+		out = append(out, d)
+	}
+	return out
+}
+
 // anchorParty is one address with a display name, as parsed from a header.
 type anchorParty struct {
 	name string

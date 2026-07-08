@@ -8,7 +8,58 @@
 
 package wiki
 
-import "strings"
+import (
+	"strings"
+	"unicode"
+)
+
+// EnrichEmployeePages creates an 인물 page for every address-book contact whose
+// email is at one of ourDomains (the operator's own company) — our staff, who
+// should be first-class identities even when the wiki has never mentioned them.
+// External people stay curated by mention (the dreamer), so this never floods the
+// category with the whole phone book. Reuses EnrichPeople(createMissing): existing
+// pages are enriched in place (not duplicated), and 직급 variants of one name
+// ("고건", "고건 주임") collapse via NormalizePersonName. Measured: +220 staff stubs
+// held R@8 at 99% (a bare page text-matches only its own name), so surfacing them
+// needs no retrieval gate. Names that don't start with a letter (junk contact
+// rows like "#이성기…") are skipped.
+func (s *Store) EnrichEmployeePages(book []Contact, ourDomains []string) (PeopleEnrichResult, error) {
+	if len(book) == 0 || len(ourDomains) == 0 {
+		return PeopleEnrichResult{}, nil
+	}
+	dom := make(map[string]bool, len(ourDomains))
+	for _, d := range ourDomains {
+		if d = strings.ToLower(strings.TrimSpace(d)); d != "" {
+			dom[d] = true
+		}
+	}
+	seen := make(map[string]bool)
+	var names []string
+	for _, c := range book {
+		name := strings.TrimSpace(c.Name)
+		if len([]rune(name)) < 2 || seen[name] {
+			continue
+		}
+		if r := []rune(name)[0]; !unicode.IsLetter(r) {
+			continue // junk row (leading '#', punctuation, …)
+		}
+		for _, e := range c.Emails {
+			at := strings.LastIndex(e, "@")
+			if at < 0 || at+1 >= len(e) {
+				continue
+			}
+			if dom[strings.ToLower(strings.TrimSpace(e[at+1:]))] {
+				seen[name] = true
+				names = append(names, name)
+				break
+			}
+		}
+	}
+	if len(names) == 0 {
+		return PeopleEnrichResult{}, nil
+	}
+	return s.EnrichPeople(names, book, true)
+}
 
 // (freemailDomains — consumer mail hosts whose domain says nothing about the
 // employer — is defined in counterparties.go and reused here: a same-name contact

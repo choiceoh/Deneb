@@ -960,6 +960,13 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 					Contacts []wiki.Contact `json:"contacts"`
 				}
 				if json.Unmarshal(contactsJSON, &p) == nil {
+					// Give our own staff (company-domain contacts) an 인물 page even without
+					// a wiki mention — they should be first-class identities. External people
+					// stay mention-curated (the dreamer), so this never floods with the whole
+					// phone book. Runs BEFORE the email backfill so the new pages get seeded.
+					if cr, cerr := ws.EnrichEmployeePages(p.Contacts, mailanalysis.OurMailDomains()); cerr == nil && len(cr.Created) > 0 {
+						s.logger.Info("employee pages created", "count", len(cr.Created))
+					}
 					if er, eerr := ws.EnrichPersonEmails(p.Contacts); eerr == nil && len(er.Ambiguous) > 0 {
 						s.logger.Info("person email backfill", "seeded", len(er.Updated), "homonyms_flagged", len(er.Ambiguous))
 					}
