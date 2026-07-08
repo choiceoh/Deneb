@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.58](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.57...andromeda-v0.0.58) (2026-07-08)
+
+
+### ✨ Features
+
+* **org:** 조직도-위키 통합 — 통합검색 회상소스·인물 해소·네이티브 위키 링크 ([#3287](https://github.com/choiceoh/Deneb/issues/3287)) ([f6d0db5](https://github.com/choiceoh/Deneb/commit/f6d0db5b44aa4449536ac166e2a2cac5be914886))
+
 ## [0.0.57](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.56...andromeda-v0.0.57) (2026-07-07)
 
 
