@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Generate a dev-safe config from the production deneb.json.
 #
-# Copies ~/.deneb/deneb.json and disables Gmail polling and the cron scheduler
-# so the dev instance never collides with the production gateway's background
-# work (duplicate poll cycles / duplicate cron runs).
+# Copies ~/.deneb/deneb.json and disables Gmail polling, the cron scheduler,
+# and the LMTP mail-ingest listener so the dev instance never collides with
+# the production gateway's background work (duplicate poll cycles / duplicate
+# cron runs / a bind race on the LMTP port that could swallow real mail).
 #
 # Everything else (providers, agents, sessions, hooks, logging, auth, ...)
 # is preserved so the dev instance exercises the same code paths as production.
@@ -82,6 +83,11 @@ cr = cfg.get('cron', {})
 if cr.get('enabled', True):
     changes.append('cron.enabled (set to false)')
 
+# Strip the LMTP mail-ingest listener (fixed port collides with prod).
+ml = cfg.get('mailLmtp') or {}
+if ml.get('enabled'):
+    changes.append('mailLmtp.enabled (set to false)')
+
 if changes:
     print('Modified fields (dev safety):')
     for c in changes:
@@ -111,6 +117,16 @@ if gp and isinstance(gp, dict):
 
 # Disable cron scheduler to avoid duplicate cron execution.
 cfg.setdefault('cron', {})['enabled'] = False
+
+# Disable the LMTP mail-ingest listener. Its listen address is a fixed
+# default (127.0.0.1:10024) that the production gateway already holds, so a
+# dev instance fails the bind with a startup ERROR on every launch — and if
+# prod were down, the dev instance would win the port and swallow real
+# incoming mail into throwaway /tmp state. Mail-ingest work needs prod or an
+# explicit custom config, never an implicitly-inherited listener.
+ml = cfg.get('mailLmtp')
+if ml and isinstance(ml, dict):
+    ml['enabled'] = False
 
 with open('$OUT', 'w') as f:
     json.dump(cfg, f, indent=2, ensure_ascii=False)

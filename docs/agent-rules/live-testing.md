@@ -39,10 +39,11 @@ dev 인스턴스는 항상 프로덕션 config를 기반으로 시작한다 (빈
 
 | 항목 | Dev | Production | 남은 차이 |
 |---|---|---|---|
-| Config | 프로덕션 config (config-gen.sh) | `~/.deneb/deneb.json` | 없음 |
+| Config | 프로덕션 config (config-gen.sh) | `~/.deneb/deneb.json` | gmailPoll·cron·mailLmtp 비활성 (아래) |
 | Providers/Auth | 로딩 | 로딩 | 없음 |
 | Hooks/Agents | 로딩 | 로딩 | 없음 |
 | 채널 | 없음 (네이티브 클라 `miniapp.*` RPC) | 없음 (동일) | 채널 플러그인 없음 (PR #1922) |
+| 백그라운드 인제스트 | gmailPoll·cron·**mailLmtp** off | on | 중복 폴링/크론 방지 + LMTP 포트는 prod가 보유(바인드 경합 시 dev가 실메일을 삼키는 사고 방지) |
 | Bind | loopback | config-driven | 포트만 다름 (의도적) |
 
 **환경 차이 확인:**
@@ -281,11 +282,11 @@ scripts/dev/live-test.sh tool-check wiki "위키에서 백업 정책 찾아줘"
 > `chat`/`chat-check`가 **유저 역할**의 주입이라면, `scripts/dev/puppet.sh`는
 > **모델(LLM) 역할**의 주입이다. dev 게이트웨이의 모든 LLM role을 로컬 브로커
 > (`scripts/dev/puppet_broker.py`, OpenAI 호환 SSE)로 돌려, 코딩 에이전트가
-> 데네브의 LLM이 받는 것(조립된 시스템 프롬프트·메시지 히스토리·도구 스키마 22개+)을
-> **그대로 받아 보고**, 텍스트/도구호출을 직접 결정해 턴을 운전한다. 도구 호출은
-> 게이트웨이가 **실제로 실행**해 결과를 다음 요청에 담아온다. 게이트웨이 코드
-> 수정 0줄 — config-gen 결과에 `models.providers.puppet` + `agents.*Model`
-> 오버레이를 입혀 `DENEB_CONFIG_PATH`로 주입할 뿐이다.
+> 데네브의 LLM이 받는 것(조립된 시스템 프롬프트·메시지 히스토리·도구 스키마 ~19개,
+> 프리셋별 상이)을 **그대로 받아 보고**, 텍스트/도구호출을 직접 결정해 턴을
+> 운전한다. 도구 호출은 게이트웨이가 **실제로 실행**해 결과를 다음 요청에 담아온다.
+> 게이트웨이 코드 수정 0줄 — config-gen 결과에 `models.providers.puppet` +
+> `agents.*Model` 오버레이를 입혀 `DENEB_CONFIG_PATH`로 주입할 뿐이다.
 
 언제 쓰나: 시스템 프롬프트 조립(`prompt/`)·캐시 마커·압축(polaris)·도구 스키마/실행·
 멀티턴 transcript 형태를 **모델 시점에서** 눈으로 검증할 때. quality 테스트가
@@ -295,8 +296,10 @@ scripts/dev/live-test.sh tool-check wiki "위키에서 백업 정책 찾아줘"
 export DENEB_INSTANCE="$(basename "$PWD")"   # worktree 격리 (live-test와 동일)
 scripts/dev/puppet.sh start                  # 빌드 + 브로커 + 게이트웨이 (전 role 빙의)
 scripts/dev/puppet.sh send "안녕"             # 유저 메시지 주입 (비동기, 세션 client:puppet-<인스턴스>)
-scripts/dev/puppet.sh pending --wait 60      # LLM 요청 도착 대기 → "r1 ..."
-scripts/dev/puppet.sh show r1                # 시스템 프롬프트/메시지/도구 확인 (--full | --raw)
+scripts/dev/puppet.sh pending --wait 60      # LLM 요청 도착 대기 → "r1 ... main-seat ..."
+scripts/dev/puppet.sh show r1                # 메시지 확인 (시스템 프롬프트는 해시+크기로 축약)
+scripts/dev/puppet.sh show r1 --outline      # 메시지별 크기 + 시스템 프롬프트 섹션 지도 + 도구 크기
+scripts/dev/puppet.sh show r1 --tool exec    # 도구 1개의 전체 스키마 (--system: 프롬프트 전문, --full/--raw)
 scripts/dev/puppet.sh reply r1 --tool exec '{"command":"hostname"}'   # 도구 호출 결정
 scripts/dev/puppet.sh pending --wait 60      # → r2: 실제 실행된 도구 결과가 tool 메시지로
 scripts/dev/puppet.sh reply r2 --text "호스트네임은 ..."               # 턴 마무리
@@ -308,15 +311,31 @@ scripts/dev/puppet.sh stop                   # 게이트웨이 + 브로커 정�
   브로커가 SSE 주석 keepalive로 LLM HTTP 클라이언트의 10분 타임아웃은 회피하지만,
   턴 데드라인이 끊으면 해당 요청은 `gone`으로 표시된다.
 - **전 role 빙의가 기본** (`--main-only`로 main만): main/lightweight/tiny/analysis/
-  fallback 전부 브로커行이라 실모델로 새는 응답이 없고, 백그라운드 LLM 호출(드리밍 등)도
-  `pending`에 그대로 드러난다. 낯선 요청이 보이면 그것 — `fail ID`로 정리.
+  fallback/coding(+설정된 chatbot/vision, 서브에이전트) 전부 브로커行이라 실모델로
+  새는 응답이 없고, 백그라운드 LLM 호출(스킬 넛저 리뷰·드리밍 등)도 `pending`에
+  그대로 드러난다. **role별 시트 별칭**(`main-seat`/`coding-seat`/...)이 pending의
+  model 필드에 찍히므로 어느 role의 호출인지 즉시 식별된다 — 예: 도구를 몇 번
+  실행하면 스킬 넛저의 백그라운드 리뷰가 `coding-seat`로 나타난다. 짧은 reply나
+  `fail ID`로 정리하면 된다.
+- **`show`의 시스템 프롬프트 해시**: 헤더의 `sys=<해시>`가 직전 요청과 비교되어
+  `(unchanged since rN)`/`(CHANGED vs rN)`으로 표시된다 — 캐시 프리픽스 안정성
+  검증이 눈이 아니라 해시로 된다. 완료된 요청도 최근 16개는 `show`로 재조회 가능
+  (응답 요약 포함).
 - `fail ID`는 `event: error` SSE로 provider 에러를 표면화한다 (에러 경로 테스트용;
   주의: `data:` 라인만으로 보낸 `{"error":...}`는 게이트웨이 파서가 빈 청크로 삼킨다).
+  **fail 1회 = 즉시 유저 에러가 아니다** — 시트 실측 체인:
+  `main-seat`×2(재시도 1회) → `lightweight-seat`×2 → `fallback-seat`×2, 총 6회
+  fail이 소진되어야 유저에게 에러가 표면화된다. 각 단계가 pending에 새 요청으로
+  나타나므로 시트 별칭으로 체인 위치를 추적할 수 있다.
 - `reply --tool NAME ARGS`는 반복 가능(병렬 tool call 재현), ARGS가 JSON 파싱에
-  실패하면 **원문 그대로** 전달된다 — malformed arguments 처리 검증에 사용.
+  실패하면 **원문 그대로** 전달된다 — malformed arguments 처리 검증에 사용
+  (게이트웨이는 히스토리에 `_malformed_arguments`로 정규화해 남긴다).
 - 게이트웨이는 live-test.sh와 같은 바이너리/pid/log/state 경로를 쓰므로
   `live-test.sh logs-errors`·`status`가 그대로 동작한다. 종료는 `puppet.sh stop`
   (브로커까지 정리). 교환 기록은 `history` 또는 `*-puppet-journal.jsonl`(5MB 회전).
+- `DENEB_INSTANCE` export를 잊은 셸에서 CLI를 치면 기본 포트로 붙으려다 실패하는데,
+  마지막 start가 남긴 활성 마커 덕에 "instance 'X'의 브로커가 살아있다 —
+  export DENEB_INSTANCE=X" 힌트가 출력된다.
 - ⚠️ **퍼펫 게이트웨이가 떠 있는 동안 `live-test.sh chat`/`quality`/`iterate.sh`를
   돌리지 마라** — 그 LLM 호출들도 전부 브로커에 hold되어 오퍼레이터 응답 또는
   5분 데드라인까지 멈춘다 ("게이트웨이가 죽었다"가 아니라 pending에 쌓여 있는 것).
