@@ -344,11 +344,15 @@ func renderPersonTemplate(title string, c *Contact) string {
 	}
 	b.WriteString("- **직급 · 직책**: —\n\n")
 
-	b.WriteString("## " + roleSectionHeading + "\n\n")
-	b.WriteString("_메일 분석·드림 사이클이 담당 업무·관련 프로젝트/인물을 채웁니다._\n")
+	// Keep the 담당·관계 section (the standard form is the point) but seed it with a
+	// NEUTRAL placeholder, not a business-term sentence. The dreamer/mail analysis
+	// fills it. An earlier "_담당 업무·관련 프로젝트…를 채웁니다_" placeholder stamped
+	// project/deal vocabulary on every person page and diluted those queries
+	// (measured −2 P@1); "_(미기재)_" carries no such tokens (measured no regression).
+	b.WriteString("## " + roleSectionHeading + "\n\n_(미기재)_\n\n")
 
 	if section := renderContactSection(c); section != "" {
-		b.WriteString("\n## " + contactSectionHeading + "\n\n" + section + "\n")
+		b.WriteString("## " + contactSectionHeading + "\n\n" + section + "\n")
 	}
 	return b.String()
 }
