@@ -16,11 +16,18 @@
 #   scripts/dev/puppet.sh start [--main-only] [--rebuild]
 #   scripts/dev/puppet.sh send "메시지" [--new-session] [--sync]
 #   scripts/dev/puppet.sh pending [--wait N]      # poll for held LLM requests
-#   scripts/dev/puppet.sh show ID [--full|--raw]  # inspect prompt/messages/tools
+#   scripts/dev/puppet.sh show ID [--full|--raw|--outline|--tool NAME|--system]
 #   scripts/dev/puppet.sh reply ID --text "..." [--tool NAME ARGS_JSON]...
 #   scripts/dev/puppet.sh fail ID [--message M]   # abort with a provider error
 #   scripts/dev/puppet.sh result                  # output of the last send
 #   scripts/dev/puppet.sh history|status|logs|logs-broker|stop|restart
+#
+# Roles: every LLM role is possessed by default, each under its own seat name
+# (puppet/main-seat, lightweight-seat, tiny-seat, analysis-seat, fallback-seat,
+# coding-seat, subagent-seat) so `pending` shows WHICH role a request came
+# from. coding-seat matters: code: sessions, implementer sub-agents, and the
+# skill nudger's background review all resolve the coding role — expect its
+# requests to appear mid-session; answer or `fail` them like any other.
 #
 # Interop: the gateway uses the same binary/pid/log/state paths as
 # live-test.sh (per DENEB_INSTANCE), so live-test.sh logs/logs-errors/status
@@ -56,6 +63,10 @@ PUPPET_CONFIG="${DEVLIB_TMP_PREFIX}-puppet-config.json"
 # each other); this pointer file names the most recent one for cmd_result.
 PUPPET_SEND_LAST="${DEVLIB_TMP_PREFIX}-puppet-send.last"
 PUPPET_MODEL="agent-seat"
+# Global (instance-agnostic) marker naming the most recently started puppet
+# session, so a shell missing this worktree's DENEB_INSTANCE export gets a
+# pointed hint instead of a bare "broker unreachable" against the wrong port.
+PUPPET_ACTIVE_MARKER="/tmp/deneb-puppet-active"
 
 # Operator CLI + chat injection reach their servers through these.
 export DENEB_PUPPET_URL="$PUPPET_URL"
@@ -68,6 +79,21 @@ _gateway_running() {
 
 _broker_running() {
   curl -sf "$PUPPET_URL/puppet/health" >/dev/null 2>&1
+}
+
+# When this instance's broker is down but the active-session marker names a
+# LIVE broker under another instance, the usual cause is a shell without the
+# worktree's `export DENEB_INSTANCE=...` — say so instead of leaving a bare
+# connection error against the wrong port.
+_hint_other_instance() {
+  [[ -f "$PUPPET_ACTIVE_MARKER" ]] || return 0
+  local mark_instance="" mark_url=""
+  { read -r mark_instance && read -r mark_url; } < "$PUPPET_ACTIVE_MARKER" || return 0
+  [[ -n "$mark_instance" && -n "$mark_url" ]] || return 0
+  [[ "$mark_instance" != "$DEVLIB_INSTANCE" ]] || return 0
+  curl -sf --max-time 2 "$mark_url/puppet/health" >/dev/null 2>&1 || return 0
+  echo "hint: no puppet broker for instance '$DEVLIB_INSTANCE', but instance '$mark_instance' has one at $mark_url" >&2
+  echo "      export DENEB_INSTANCE='$mark_instance'   # if that is the session you meant" >&2
 }
 
 _start_broker() {
@@ -95,15 +121,21 @@ _stop_broker() {
 # Overlay the generated dev config: add the puppet provider and point the
 # model roles at it. PUPPET_ALL_ROLES=1 possesses every LLM role (airtight:
 # any stray background call surfaces in `pending` instead of silently going
-# to a real model); --main-only limits to the chat main role, leaving
-# lightweight/tiny/analysis/fallback on their production models.
+# to a real model); --main-only limits to the chat main role, leaving the
+# other roles on their production models.
+#
+# Each role gets its OWN seat name (puppet/main-seat, puppet/coding-seat, ...)
+# — the broker accepts any model id and echoes it back, and `pending`/`show`
+# print the request's model, so the operator can tell which role is calling.
+# Distinct names also keep the gateway's role→fallback chain honest: with one
+# shared id, main and fallback look like the same model and the fallback leg
+# is skipped.
 _overlay_config() {
   PUPPET_CONFIG="$PUPPET_CONFIG" BROKER_URL="$PUPPET_URL" \
-  PUPPET_MODEL="$PUPPET_MODEL" PUPPET_ALL_ROLES="$1" python3 - <<'PYEOF'
+  PUPPET_ALL_ROLES="$1" python3 - <<'PYEOF'
 import json, os
 
 path = os.environ["PUPPET_CONFIG"]
-model = "puppet/" + os.environ["PUPPET_MODEL"]
 with open(path) as f:
     cfg = json.load(f)
 
@@ -116,16 +148,33 @@ providers["puppet"] = {
 }
 
 agents = cfg.setdefault("agents", {})
-agents["defaultModel"] = model
+agents["defaultModel"] = "puppet/main-seat"
 if os.environ.get("PUPPET_ALL_ROLES") == "1":
-    for key in ("lightweightModel", "fallbackModel", "tinyModel",
-                "analysisModel"):
-        agents[key] = model
+    for key, seat in (
+        ("lightweightModel", "lightweight-seat"),
+        ("fallbackModel", "fallback-seat"),
+        ("tinyModel", "tiny-seat"),
+        ("analysisModel", "analysis-seat"),
+        # code: sessions, implementer sub-agents, and the skill nudger's
+        # background review all resolve the coding role. Leaving it out let
+        # those calls leak to a real model mid-puppet-session (measured:
+        # a skill-nudger review ran 4 turns on wormhole/glm during a seat
+        # session, invisible to `pending`).
+        ("codingModel", "coding-seat"),
+    ):
+        agents[key] = "puppet/" + seat
+    # Opt-in roles (chatbot → chat: sessions, vision → image turns) route to
+    # main when unconfigured — which is already a seat. Possess them only
+    # when prod configured them, so puppet routing mirrors prod routing.
+    for key, seat in (("chatbotModel", "chatbot-seat"),
+                      ("visionModel", "vision-seat")):
+        if agents.get(key):
+            agents[key] = "puppet/" + seat
     # Subagents read agents.defaults.subagents.model when set; keep them in
     # the seat too rather than letting them slip to a real model.
     sub = agents.get("defaults", {}).get("subagents")
     if isinstance(sub, dict) and sub.get("model"):
-        sub["model"] = model
+        sub["model"] = "puppet/subagent-seat"
 
 with open(path, "w") as f:
     json.dump(cfg, f, indent=2, ensure_ascii=False)
@@ -172,14 +221,16 @@ cmd_start() {
     echo "    FAIL: broker did not start (log: $PUPPET_LOG)"
     return 1
   fi
+  printf '%s\n%s\n' "$DEVLIB_INSTANCE" "$PUPPET_URL" > "$PUPPET_ACTIVE_MARKER"
 
   echo "==> Generating puppet config (production config + puppet provider)..."
   devlib_gen_config "$PUPPET_CONFIG"
   _overlay_config "$all_roles" >/dev/null
   if [[ "$all_roles" == "1" ]]; then
-    echo "    Roles: ALL LLM roles → puppet/$PUPPET_MODEL"
+    echo "    Roles: ALL LLM roles possessed, one seat per role"
+    echo "           (main/lightweight/tiny/analysis/fallback/coding-seat — pending/show print which role is calling)"
   else
-    echo "    Roles: main → puppet/$PUPPET_MODEL (others on production models)"
+    echo "    Roles: main → puppet/main-seat (others on production models)"
   fi
 
   echo "==> Starting dev gateway on $DEV_HOST:$DEV_PORT (puppet seat)..."
@@ -197,11 +248,15 @@ cmd_start() {
 You are now Deneb's model. Typical loop:
   scripts/dev/puppet.sh send "안녕"          # inject a user message (async)
   scripts/dev/puppet.sh pending --wait 60   # wait for the LLM request
-  scripts/dev/puppet.sh show r1             # read prompt/messages/tools
+  scripts/dev/puppet.sh show r1             # read messages (sys prompt as hash+size)
+  scripts/dev/puppet.sh show r1 --outline   # sys-prompt sections + sizes, tool list
+  scripts/dev/puppet.sh show r1 --tool exec # one tool's full schema
   scripts/dev/puppet.sh reply r1 --text "..."            # ...or...
   scripts/dev/puppet.sh reply r1 --tool fs '{"action":"list","path":"."}'
   scripts/dev/puppet.sh result              # final reply the user got
 Turn budget: 5 minutes per send (DefaultTurnDeadline) — answer promptly.
+Background loops (skill nudger review → coding-seat) also land in pending;
+finish them with a short reply or \`fail ID\` so they don't hold the session.
 EOF
 }
 
@@ -227,6 +282,7 @@ cmd_send() {
   done
 
   if ! _gateway_running; then
+    _hint_other_instance
     echo "gateway not running — scripts/dev/puppet.sh start" >&2
     return 1
   fi
@@ -318,6 +374,7 @@ cmd_status() {
     echo ""
   else
     echo "broker:  STOPPED"
+    _hint_other_instance
   fi
 }
 
@@ -329,13 +386,20 @@ cmd_stop() {
   fi
   echo "==> Stopping puppet broker..."
   _stop_broker
+  # Only clear the active-session marker when it names THIS instance — a
+  # parallel worktree's puppet session must keep its own pointer.
+  if [[ "$(head -1 "$PUPPET_ACTIVE_MARKER" 2>/dev/null)" == "$DEVLIB_INSTANCE" ]]; then
+    rm -f "$PUPPET_ACTIVE_MARKER"
+  fi
   # /tmp is tmpfs on the DGX hosts — don't leave per-send result files behind.
   rm -f "${DEVLIB_TMP_PREFIX}"-puppet-send-*.out \
         "${DEVLIB_TMP_PREFIX}"-puppet-send-*.pid "$PUPPET_SEND_LAST"
   echo "stopped"
 }
 
-cmd_help() { sed -n '2,33p' "$0" | sed 's/^# \{0,1\}//'; }
+# Print the whole header comment block (through the line above `set -euo`),
+# so the help text never drifts out of a hardcoded line range again.
+cmd_help() { sed -n '2,/^set -euo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; }
 
 case "${1:-help}" in
   start)       shift; cmd_start "$@" ;;
@@ -347,6 +411,7 @@ case "${1:-help}" in
   logs)        tail -n "${2:-50}" "$DEV_LOG" ;;
   logs-broker) tail -n "${2:-50}" "$PUPPET_LOG" ;;
   pending|show|reply|fail|history)
+    _broker_running || _hint_other_instance
     python3 "$SCRIPT_DIR/puppet_broker.py" "$@" ;;
   help|--help|-h) cmd_help ;;
   *) echo "unknown command: $1 (try: puppet.sh help)" >&2; exit 1 ;;

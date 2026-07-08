@@ -21,13 +21,17 @@ Operator endpoints (also wrapped by `puppet_broker.py <cmd>` CLI):
     GET  /puppet/health         broker liveness
     GET  /puppet/state          counts + uptime
     GET  /puppet/pending?wait=N long-poll for waiting requests (summaries)
-    GET  /puppet/request/<id>   full request payload + meta
+    GET  /puppet/request/<id>   full request payload + meta — live or recently
+                                finished (the broker keeps the last FINISHED_KEEP
+                                full payloads so an answered request can still
+                                be re-inspected post-mortem)
     POST /puppet/respond/<id>   {"text","reasoning","tool_calls",...} or {"error"}
     GET  /puppet/history        recent completed exchanges
 
 Client mode (operator CLI; broker URL from --broker or DENEB_PUPPET_URL):
     python3 puppet_broker.py pending [--wait N]
-    python3 puppet_broker.py show ID [--full | --raw]
+    python3 puppet_broker.py show ID [--full | --raw | --outline
+                                      | --tool NAME | --system]
     python3 puppet_broker.py reply ID [--text T] [--reasoning R]
                                       [--tool NAME ARGS_JSON]... [--finish FR]
                                       [--file PAYLOAD_JSON]
@@ -55,8 +59,10 @@ Stdlib only — no external dependencies (matches mock_native_client.py).
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
+import re
 import sys
 import threading
 import time
@@ -73,6 +79,15 @@ STREAM_HOLD_MAX = 1800.0  # absolute cap on holding a streaming request
 COMPLETE_HOLD_MAX = 270.0
 PENDING_WAIT_CAP = 55.0  # long-poll cap (under common curl timeouts)
 HISTORY_LIMIT = 100
+# Finished requests whose FULL payload stays re-inspectable via `show`.
+# ~100-200KB each in broker memory; the journal only keeps a truncated tail.
+FINISHED_KEEP = 16
+# Per-role seat aliases puppet.sh assigns in the config overlay. Listed in
+# /v1/models so any discovery-style probe sees them; the broker itself
+# accepts and echoes whatever model id a request carries.
+SEAT_MODELS = ("main-seat", "lightweight-seat", "fallback-seat", "tiny-seat",
+               "analysis-seat", "coding-seat", "chatbot-seat", "vision-seat",
+               "subagent-seat")
 JOURNAL_TRUNC = 2000  # per-field char cap when journaling requests
 JOURNAL_MAX_BYTES = 5_000_000  # rotate past this — /tmp is tmpfs on the DGX
 # Long text/arguments are emitted as multiple deltas: the gateway's SSE
@@ -98,6 +113,11 @@ class HeldRequest:
         # Live states: waiting → answered. Finished (history) states:
         # done | failed | gone.
         self.status = "waiting"
+        # System-prompt fingerprint, computed once at registration: `show`
+        # compares it across requests so prompt-cache prefix stability (the
+        # seat's core verification target) is visible without diffing 40K+
+        # chars by eye.
+        self.sys_hash, self.sys_chars = system_fingerprint(payload)
 
     def summary(self) -> dict:
         msgs = self.payload.get("messages") or []
@@ -109,6 +129,8 @@ class HeldRequest:
             "model": self.payload.get("model", ""),
             "messages": len(msgs),
             "tools": len(self.payload.get("tools") or []),
+            "sysHash": self.sys_hash,
+            "sysChars": self.sys_chars,
             "lastRole": last.get("role", ""),
             "lastPreview": content_preview(last.get("content"), 200),
         }
@@ -123,6 +145,11 @@ class Broker:
         self.cond = threading.Condition()
         self.requests: dict[str, HeldRequest] = {}
         self.history: deque = deque(maxlen=HISTORY_LIMIT)
+        # Finished entries with their FULL payload (insertion-ordered ids in
+        # finished_order for FIFO eviction) — `show` on an answered request
+        # falls back here instead of dying on "unknown request id".
+        self.finished: dict[str, HeldRequest] = {}
+        self.finished_order: deque = deque()
         self.seq = 0
         self.started = time.time()
 
@@ -154,10 +181,20 @@ class Broker:
         with self.cond:
             return self.requests.get(rid)
 
+    def get_any(self, rid: str) -> HeldRequest | None:
+        """Live entry, or a finished one still in the retention window."""
+        with self.cond:
+            return self.requests.get(rid) or self.finished.get(rid)
+
     def respond(self, rid: str, response: dict) -> tuple[bool, str]:
         with self.cond:
             entry = self.requests.get(rid)
             if entry is None:
+                done = self.finished.get(rid)
+                if done is not None:
+                    return False, (f"request {rid} already finished "
+                                   f"(status={done.status}) — inspect it with "
+                                   "show, it cannot be re-answered")
                 return False, f"unknown request id {rid!r}"
             if entry.status != "waiting":
                 return False, (f"request {rid} is {entry.status} "
@@ -190,6 +227,7 @@ class Broker:
         with self.cond:
             if self.requests.pop(entry.id, None) is None:
                 return
+            entry.status = status
             record = {
                 "ts": round(time.time(), 3),
                 "id": entry.id,
@@ -200,6 +238,11 @@ class Broker:
                 "response": entry.response,
             }
             self.history.append(record)
+            # Keep the full payload re-inspectable for a while (bounded FIFO).
+            self.finished[entry.id] = entry
+            self.finished_order.append(entry.id)
+            while len(self.finished_order) > FINISHED_KEEP:
+                self.finished.pop(self.finished_order.popleft(), None)
         self._journal(entry, record)
 
     def _journal(self, entry: HeldRequest, record: dict) -> None:
@@ -268,6 +311,51 @@ def content_preview(content, limit: int) -> str:
     if total > limit:
         snippet += f"… (+{total - limit} chars)"
     return snippet
+
+
+def content_text(content) -> str:
+    """Flatten an OpenAI message content (str or parts list) to full text."""
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for p in content:
+            if isinstance(p, dict):
+                if p.get("type") == "text":
+                    parts.append(str(p.get("text", "")))
+                elif p.get("type") == "image_url":
+                    url = str((p.get("image_url") or {}).get("url", ""))
+                    parts.append(f"[image:{len(url)}b]")
+                else:
+                    parts.append(f"[{p.get('type', 'part')}]")
+            else:
+                parts.append(str(p))
+        return " ".join(parts)
+    return str(content)
+
+
+def system_fingerprint(payload: dict) -> tuple[str, int]:
+    """Short hash + char count of the request's system message ("" if none)."""
+    for m in payload.get("messages") or []:
+        if m.get("role") == "system":
+            text = content_text(m.get("content"))
+            digest = hashlib.sha256(text.encode("utf-8")).hexdigest()[:8]
+            return digest, len(text)
+    return "", 0
+
+
+def system_outline(text: str) -> list:
+    """(chars, heading) rows for a markdown system prompt, sized to the next
+    heading — the seat's quick map of what the prompt assembly produced."""
+    heads = [(m.start(), m.group(1))
+             for m in re.finditer(r"^(#{1,3} .+)$", text, re.M)]
+    rows = []
+    for i, (pos, head) in enumerate(heads):
+        end = heads[i + 1][0] if i + 1 < len(heads) else len(text)
+        rows.append((end - pos, head))
+    return rows
 
 
 def estimate_tokens(obj) -> int:
@@ -351,9 +439,10 @@ class Handler(BaseHTTPRequestHandler):
         path, _, query = self.path.partition("?")
         params = dict(p.split("=", 1) for p in query.split("&") if "=" in p)
         if path in ("/v1/models", "/models"):
+            catalog = dict.fromkeys((BROKER.model,) + SEAT_MODELS)
             self._json(200, {"object": "list", "data": [
-                {"id": BROKER.model, "object": "model",
-                 "max_model_len": 200000},
+                {"id": m, "object": "model", "max_model_len": 200000}
+                for m in catalog
             ]})
         elif path == "/puppet/health":
             self._json(200, {"status": "ready", **BROKER.state()})
@@ -370,11 +459,14 @@ class Handler(BaseHTTPRequestHandler):
             self._json(200, {"pending": items})
         elif path.startswith("/puppet/request/"):
             rid = path.rsplit("/", 1)[-1]
-            entry = BROKER.get(rid)
+            entry = BROKER.get_any(rid)
             if entry is None:
-                self._json(404, {"error": f"unknown request id {rid!r}"})
+                self._json(404, {"error": f"unknown request id {rid!r} "
+                                 f"(finished ones stay for {FINISHED_KEEP})"})
             else:
                 self._json(200, {**entry.summary(),
+                                 "status": entry.status,
+                                 "response": entry.response,
                                  "request": entry.payload})
         elif path == "/puppet/history":
             with BROKER.cond:
@@ -466,8 +558,11 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         rid = f"chatcmpl-puppet-{entry.id}"
+        # Echo the REQUEST's model (per-role seat alias) so gateway-side
+        # accounting attributes the exchange to the calling role.
         base = {"id": rid, "object": "chat.completion.chunk",
-                "created": int(time.time()), "model": BROKER.model}
+                "created": int(time.time()),
+                "model": entry.payload.get("model") or BROKER.model}
 
         def chunk(delta: dict, finish=None, usage=None) -> bytes:
             c = dict(base)
@@ -531,7 +626,7 @@ class Handler(BaseHTTPRequestHandler):
             self._json(200, {
                 "id": f"chatcmpl-puppet-{entry.id}",
                 "object": "chat.completion",
-                "model": BROKER.model,
+                "model": entry.payload.get("model") or BROKER.model,
                 "choices": [{"index": 0, "finish_reason": "stop",
                              "message": {"role": "assistant",
                                          "content": text}}],
@@ -600,7 +695,10 @@ def cmd_pending(args) -> int:
         print("(no pending requests)")
         return 1
     for it in items:
+        # model = the per-role seat alias (main-seat, coding-seat, ...) —
+        # this is how the operator tells WHICH role is calling.
         print(f"{it['id']}  +{it['ageSec']}s  {it['kind']}  "
+              f"{it.get('model') or '?'}  "
               f"msgs={it['messages']} tools={it['tools']}  "
               f"last={it['lastRole']}: {it['lastPreview'][:120]}")
     return 0
@@ -624,36 +722,144 @@ def render_message(i: int, m: dict, limit: int) -> str:
     return "\n".join(lines)
 
 
+def previous_sys_hash(args, current_id: str, model: str) -> tuple[str, str]:
+    """(prev_id, prev_hash) of the closest earlier SAME-MODEL request.
+
+    Sources: finished exchanges (history summaries) + currently live requests.
+    Lets `show` answer the seat's cache-prefix question — did the system
+    prompt change since this role's previous request? — without eyeballing
+    40K chars. Same-model only: each role (seat alias) has its own prompt
+    pipeline, so a cross-role comparison would always read as CHANGED.
+    """
+    def id_num(rid) -> int:
+        try:
+            return int(str(rid).lstrip("r"))
+        except ValueError:
+            return -1
+
+    cur = id_num(current_id)
+    if cur < 0:
+        return "", ""
+    hist = api(args, "GET", "/puppet/history").get("history") or []
+    pend = api(args, "GET", "/puppet/pending?wait=0").get("pending") or []
+    best, best_hash = -1, ""
+    for summ in [h.get("summary") or {} for h in hist] + pend:
+        n = id_num(summ.get("id"))
+        if 0 <= n < cur and n > best and summ.get("sysHash") \
+                and summ.get("model") == model:
+            best, best_hash = n, summ["sysHash"]
+    return (f"r{best}", best_hash) if best >= 0 else ("", "")
+
+
+def show_outline(msgs: list, tools: list) -> None:
+    for i, m in enumerate(msgs):
+        role = m.get("role", "?")
+        text = content_text(m.get("content"))
+        line = f" [{i}] {role}  {len(text)} chars"
+        calls = [str((tc.get("function") or {}).get("name", "?"))
+                 for tc in m.get("tool_calls") or []]
+        if calls:
+            line += "  tool_calls: " + ", ".join(calls)
+        if m.get("tool_call_id"):
+            line += f"  (tool_call_id={m['tool_call_id']})"
+        print(line)
+        if role == "system":
+            for chars, headline in system_outline(text):
+                print(f"    {chars:>7}  {headline}")
+    rows = []
+    for t in tools:
+        fn = t.get("function") or {}
+        rows.append(f"{fn.get('name', '?')}"
+                    f"({len(json.dumps(fn, ensure_ascii=False))})")
+    print(f"-- tools({len(tools)}) name(schema bytes): {', '.join(rows)}")
+
+
 def cmd_show(args) -> int:
     res = api(args, "GET", f"/puppet/request/{args.id}")
     if res.get("error"):
         print(res["error"], file=sys.stderr)
         return 1
-    if args.raw:
-        print(json.dumps(res.get("request"), ensure_ascii=False, indent=2))
-        return 0
     req = res.get("request") or {}
     msgs = req.get("messages") or []
     tools = req.get("tools") or []
+    status = res.get("status", "waiting")
+
+    if args.raw:
+        print(json.dumps(req, ensure_ascii=False, indent=2))
+        return 0
+    if args.tool:
+        for t in tools:
+            fn = t.get("function") or {}
+            if fn.get("name") == args.tool:
+                print(json.dumps(fn, ensure_ascii=False, indent=2))
+                return 0
+        names = ", ".join(str((t.get("function") or {}).get("name", "?"))
+                          for t in tools)
+        print(f"no tool {args.tool!r} in this request — tools: {names}",
+              file=sys.stderr)
+        return 1
+    if args.system:
+        for m in msgs:
+            if m.get("role") == "system":
+                print(content_text(m.get("content")))
+                return 0
+        print("(no system message in this request)", file=sys.stderr)
+        return 1
+
+    sys_hash = res.get("sysHash") or ""
+    sys_note = ""
+    if sys_hash:
+        prev_id, prev_hash = previous_sys_hash(args, res["id"],
+                                               req.get("model") or "")
+        if not prev_hash:
+            sys_note = f"  sys={sys_hash}"
+        elif prev_hash == sys_hash:
+            sys_note = f"  sys={sys_hash} (unchanged since {prev_id})"
+        else:
+            sys_note = f"  sys={sys_hash} (CHANGED vs {prev_id}={prev_hash})"
+    head = (f"== {res['id']}  held {res['ageSec']}s  {res['kind']}  "
+            f"model={req.get('model')}  messages={len(msgs)}  "
+            f"tools={len(tools)}{sys_note}")
+    if status != "waiting":
+        head += f"  [{status}]"
+    print(head)
+
+    if args.outline:
+        show_outline(msgs, tools)
+        return 0
+
     limit = 100000 if args.full else 600
-    print(f"== {res['id']}  held {res['ageSec']}s  {res['kind']}  "
-          f"model={req.get('model')}  messages={len(msgs)}  "
-          f"tools={len(tools)}")
     shown = msgs if args.full else msgs[-8:]
     skipped = len(msgs) - len(shown)
     if skipped:
         print(f" … {skipped} earlier message(s) hidden (--full to show)")
     for i, m in enumerate(shown, start=skipped):
-        # System prompt gets a larger budget — it is the point of the seat.
-        m_limit = (100000 if args.full else 1500) \
-            if m.get("role") == "system" else limit
-        print(render_message(i, m, m_limit))
+        if m.get("role") == "system" and not args.full:
+            # The system prompt is huge and rarely changes between requests;
+            # the hash header answers "did it change?" — body on demand.
+            print(f" [{i}] system  {len(content_text(m.get('content')))} chars"
+                  f"  sha={sys_hash or '?'}"
+                  "  (--system full text | --outline section map)")
+            continue
+        print(render_message(i, m, 100000 if args.full else limit))
     names = ", ".join(str((t.get("function") or {}).get("name", "?"))
                       for t in tools)
     print(f"-- tools({len(tools)}): {names}")
-    print(f"-- reply:  puppet.sh reply {res['id']} --text \"...\"")
-    print(f"           puppet.sh reply {res['id']} "
-          "--tool NAME '{\"arg\":1}'   (repeatable; --raw for schemas)")
+    if status == "waiting":
+        print(f"-- reply:  puppet.sh reply {res['id']} --text \"...\"")
+        print(f"           puppet.sh reply {res['id']} "
+              "--tool NAME '{\"arg\":1}'   (repeatable; --raw for schemas)")
+    else:
+        resp = res.get("response") or {}
+        if resp.get("error"):
+            print(f"-- answered [{status}]: error: {resp['error']}")
+        elif resp.get("tool_calls"):
+            calls = ", ".join(str(tc.get("name", "?"))
+                              for tc in resp["tool_calls"])
+            print(f"-- answered [{status}]: tool_calls: {calls}")
+        else:
+            print(f"-- answered [{status}]: "
+                  f"text={content_preview(resp.get('text'), 200)!r}")
     return 0
 
 
@@ -707,11 +913,13 @@ def cmd_history(args) -> int:
         return 0
     for it in items[-20:]:
         resp = it.get("response") or {}
+        model = (it.get("summary") or {}).get("model") or "?"
         what = ("error: " + str(resp.get("error"))) if resp.get("error") else \
             (f"tools={[t.get('name') for t in resp.get('tool_calls') or []]}"
              if resp.get("tool_calls") else
              f"text={content_preview(resp.get('text'), 80)!r}")
-        print(f"{it['id']}  {it['status']:8s} held={it['heldSec']}s  {what}")
+        print(f"{it['id']}  {it['status']:8s} {model:18s} "
+              f"held={it['heldSec']}s  {what}")
     return 0
 
 
@@ -732,11 +940,17 @@ def main() -> int:
     pp.add_argument("--wait", type=float, default=0)
     pp.set_defaults(fn=cmd_pending)
 
-    sh = sub.add_parser("show", help="show one held request")
+    sh = sub.add_parser("show", help="show one held or finished request")
     sh.add_argument("id")
     sh.add_argument("--full", action="store_true")
     sh.add_argument("--raw", action="store_true",
                     help="dump the full request JSON")
+    sh.add_argument("--outline", action="store_true",
+                    help="per-message sizes + system-prompt section map")
+    sh.add_argument("--tool", default="",
+                    help="print one tool's full schema and exit")
+    sh.add_argument("--system", action="store_true",
+                    help="dump the full system prompt text")
     sh.set_defaults(fn=cmd_show)
 
     rp = sub.add_parser("reply", help="answer a held request")
