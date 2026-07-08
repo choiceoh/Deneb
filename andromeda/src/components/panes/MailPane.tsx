@@ -129,14 +129,23 @@ export function MailPane() {
 
   // A mail opened by id (work feed / search / notification deep-link) may belong to
   // another day than the one in view — there'd be no row to expand. Once its detail
-  // lands, jump the pager to that mail's day so the row appears. Same-day row clicks
-  // are a no-op (the day already matches). Adjusted during render — converges in one
-  // extra pass because the next render sees dayMs === md.
+  // lands, jump the pager to that mail's day so the row appears. Only for mails NOT
+  // on the visible list: `date` is the sender's Date header while the day query
+  // buckets by received time (Gmail after:/before:), so the two can straddle
+  // midnight — a row the user can see must expand in place, never bounce the pager
+  // to a day whose query may not even return it. Adjusted during render — converges
+  // in one extra pass because the next render sees dayMs === md.
   const selectedDateMs = selectedMail?.date ? new Date(selectedMail.date).getTime() : NaN;
-  if (selectedId !== undefined && !Number.isNaN(selectedDateMs)) {
+  if (selectedId !== undefined && selectedPreview === undefined && !Number.isNaN(selectedDateMs)) {
     const md = startOfDay(selectedDateMs);
     if (md !== dayMs) setDayMs(md);
   }
+
+  // The same header-vs-received mismatch can leave a deep-linked mail off even its
+  // own header-date day. Pin the selection as an extra top row whenever it isn't on
+  // the visible list, so an opened mail always has a row to expand — its 날짜 cell
+  // tells the user where it actually sits.
+  const rows = selectedMail !== undefined && selectedPreview === undefined ? [selectedMail, ...mails] : mails;
 
   // Mirror the grid (subject · sender · date) so the AI sees what the user sees.
   const listText = serializeList("메일", mails, (m) => {
@@ -204,10 +213,10 @@ export function MailPane() {
           onToday={() => goToDay(todayMs)}
         />
       )}
-      <GridNotice query={query} count={mails.length} empty="이 날짜에는 메일이 없습니다.">
+      <GridNotice query={query} count={rows.length} empty="이 날짜에는 메일이 없습니다.">
         <Grid
           columns={columns}
-          rows={mails}
+          rows={rows}
           getKey={(m) => String(m.id)}
           rowStyle={(m) => ({ fontWeight: m.isUnread ? 600 : 400 })}
           onRowClick={(m) => setSelectedId((current) => (String(current) === String(m.id) ? undefined : m.id))}
