@@ -1276,3 +1276,140 @@ func TestGenerateSelectAndApplyFallsBackWhenAllCandidatesRegress(t *testing.T) {
 		t.Fatalf("original must be preserved when all candidates fail, got:\n%s", got)
 	}
 }
+
+func patchFirstReviewDrafts(t *testing.T, tracker *Tracker, skillName string) []SelfCorrectionCandidateRecord {
+	t.Helper()
+	drafts, err := tracker.RecentSelfCorrectionCandidates(skillName, "", 20)
+	if err != nil {
+		t.Fatalf("RecentSelfCorrectionCandidates: %v", err)
+	}
+	out := make([]SelfCorrectionCandidateRecord, 0, len(drafts))
+	for _, d := range drafts {
+		if strings.HasPrefix(d.Source, skillPatchFirstRepeatSource) {
+			out = append(out, d)
+		}
+	}
+	return out
+}
+
+// TestRepeatedPatchFirstRejectionPromotesStructuralReview verifies the repeat
+// promotion path: a single Hermes patch-first rejection stays below the
+// threshold (one flaky rewrite never promotes), the second within the window
+// promotes exactly one structural review candidate — distinct from the
+// held-out validation template — and further repeats dedupe against the
+// per-skill signature instead of stacking more candidates.
+func TestRepeatedPatchFirstRejectionPromotesStructuralReview(t *testing.T) {
+	tracker := newTestTracker(t)
+	e := &Evolver{
+		logger:  slog.New(slog.NewTextHandler(io.Discard, nil)),
+		tracker: tracker,
+	}
+
+	first := "Hermes patch-first gate rejected broad rewrite: changed 5 sections (Full Check, Memory Pressure Diagnostic, Pitfalls, Quick Check, Output Format), max 3"
+	e.recordRejectedSkillEdit("system-health-check", "body-a", first, "preflight", HarnessEditAudit{})
+	if drafts := patchFirstReviewDrafts(t, tracker, "system-health-check"); len(drafts) != 0 {
+		t.Fatalf("single patch-first rejection must not promote, got %+v", drafts)
+	}
+
+	second := "Hermes patch-first gate rejected broad rewrite: changed 4 sections (Full Check, Memory Pressure Diagnostics, Pitfalls, Quick Check), max 3"
+	e.recordRejectedSkillEdit("system-health-check", "body-b", second, "self-test", HarnessEditAudit{})
+	drafts := patchFirstReviewDrafts(t, tracker, "system-health-check")
+	if len(drafts) != 1 {
+		t.Fatalf("expected exactly one structural review draft, got %+v", drafts)
+	}
+	draft := drafts[0]
+	if draft.Scope != "prompt" || draft.SkillName != "system-health-check" {
+		t.Fatalf("unexpected draft shape: %+v", draft)
+	}
+	if strings.Contains(draft.Title, "held-out validation") ||
+		strings.Contains(draft.ProposedChange, "SkillValidationCaseRecord") {
+		t.Fatalf("patch-first repeat must not reuse the held-out validation template: %+v", draft)
+	}
+	if !strings.Contains(draft.Evidence, "2 patch-first gate rejections") {
+		t.Fatalf("evidence must cite the repeat count, got %q", draft.Evidence)
+	}
+
+	// Patch-first reasons must not leak into the held-out validation funnel.
+	all, err := tracker.RecentSelfCorrectionCandidates("system-health-check", "", 20)
+	if err != nil {
+		t.Fatalf("RecentSelfCorrectionCandidates: %v", err)
+	}
+	for _, cand := range all {
+		if strings.HasPrefix(cand.Source, "self-harness-rejected-evolve") {
+			t.Fatalf("patch-first rejection leaked into held-out validation draft: %+v", cand)
+		}
+	}
+
+	// A third repeat (size-cap variant of the same gate) dedupes per skill.
+	third := "Hermes patch-first gate rejected: candidate SKILL.md size 20000 bytes exceeds 15360 byte limit"
+	e.recordRejectedSkillEdit("system-health-check", "body-c", third, "preflight", HarnessEditAudit{})
+	if drafts := patchFirstReviewDrafts(t, tracker, "system-health-check"); len(drafts) != 1 {
+		t.Fatalf("same signature must not promote twice, got %+v", drafts)
+	}
+}
+
+// TestRepeatedPatchFirstRejectionRespectsWindowAndClass verifies that stale
+// rejections outside the repeat window and non-patch-first rejection classes
+// never count toward the threshold.
+func TestRepeatedPatchFirstRejectionRespectsWindowAndClass(t *testing.T) {
+	tracker := newTestTracker(t)
+	stale := "Hermes patch-first gate rejected broad rewrite: changed 4 sections (Setup, Procedure, Pitfalls, Output Format), max 3"
+	if err := tracker.RecordRejectedSkillEdit(RejectedSkillEditRecord{
+		SkillName: "deploy-helper",
+		Reason:    stale,
+		Source:    "preflight",
+		CreatedAt: time.Now().Add(-skillPatchFirstRepeatWindow - 24*time.Hour).UnixMilli(),
+	}); err != nil {
+		t.Fatalf("RecordRejectedSkillEdit: %v", err)
+	}
+	e := &Evolver{
+		logger:  slog.New(slog.NewTextHandler(io.Discard, nil)),
+		tracker: tracker,
+	}
+
+	// A textual-budget rejection is a different class and must not count.
+	e.recordRejectedSkillEdit("deploy-helper", "body-a", "textual edit budget exceeded: changed 80% of meaningful lines (max 65%)", "preflight", HarnessEditAudit{})
+
+	fresh := "Hermes patch-first gate rejected broad rewrite: changed 5 sections (Setup, Procedure, Pitfalls, Output Format, Quick Check), max 3"
+	e.recordRejectedSkillEdit("deploy-helper", "body-b", fresh, "preflight", HarnessEditAudit{})
+	if drafts := patchFirstReviewDrafts(t, tracker, "deploy-helper"); len(drafts) != 0 {
+		t.Fatalf("one in-window patch-first rejection must not promote, got %+v", drafts)
+	}
+}
+
+// TestRepeatedPatchFirstRejectionDedupSurvivesOperatorReview verifies the dedup
+// key is the stable Source signature, not the content-hash ID: once the
+// operator has reviewed (here: rejected) the structural draft, further repeats
+// must not re-open it — makeSelfCorrectionID embeds CreatedAt, so a fresh
+// trigger would otherwise mint a fresh ID and resurface the same proposal.
+func TestRepeatedPatchFirstRejectionDedupSurvivesOperatorReview(t *testing.T) {
+	tracker := newTestTracker(t)
+	e := &Evolver{
+		logger:  slog.New(slog.NewTextHandler(io.Discard, nil)),
+		tracker: tracker,
+	}
+	reasons := []string{
+		"Hermes patch-first gate rejected broad rewrite: changed 4 sections (Setup, Procedure, Pitfalls, Output Format), max 3",
+		"Hermes patch-first gate rejected broad rewrite: changed 5 sections (Setup, Procedure, Pitfalls, Output Format, Quick Check), max 3",
+	}
+	for i, reason := range reasons {
+		e.recordRejectedSkillEdit("system-health-check", fmt.Sprintf("body-%d", i), reason, "preflight", HarnessEditAudit{})
+	}
+	drafts := patchFirstReviewDrafts(t, tracker, "system-health-check")
+	if len(drafts) != 1 {
+		t.Fatalf("expected one structural review draft, got %+v", drafts)
+	}
+	if _, err := tracker.RecordSelfCorrectionReview(SelfCorrectionCandidateRecord{
+		ID:       drafts[0].ID,
+		Status:   SelfCorrectionStatusRejected,
+		Reviewer: "operator",
+	}); err != nil {
+		t.Fatalf("RecordSelfCorrectionReview: %v", err)
+	}
+
+	e.recordRejectedSkillEdit("system-health-check", "body-z", "Hermes patch-first gate rejected: candidate SKILL.md size 22000 bytes exceeds 15360 byte limit", "self-test", HarnessEditAudit{})
+	drafts = patchFirstReviewDrafts(t, tracker, "system-health-check")
+	if len(drafts) != 1 || drafts[0].Status != SelfCorrectionStatusRejected {
+		t.Fatalf("operator-reviewed signature must not re-promote, got %+v", drafts)
+	}
+}
