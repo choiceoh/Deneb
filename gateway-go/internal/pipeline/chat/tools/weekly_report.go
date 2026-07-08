@@ -146,8 +146,8 @@ func collectWeekly(opts WeeklyReportOpts, now time.Time) weeklyEnvelope {
 			p.DoneLine = weeklyDoneLine(p.Summary, p.Timeline)
 			p.PlannedLine = weeklyPlannedLine(p.NextActions, p.Summary)
 			byGroup[sogan] = append(byGroup[sogan], p)
-			// 현안: 마감 임박(≤3일) 또는 초과
-			if daysToDue != nil && *daysToDue <= 3 {
+			// 현안: 마감 임박(≤3일) 또는 초과 — 고중요도만 (실무자 담당 루틴 마감은 제외)
+			if daysToDue != nil && *daysToDue <= 3 && page.Meta.Importance >= deadlineMinImportance {
 				when := fmt.Sprintf("D-%d", *daysToDue)
 				badge := when
 				if *daysToDue < 0 {

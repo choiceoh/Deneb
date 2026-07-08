@@ -502,6 +502,15 @@ func fetchEmail(ctx context.Context) any {
 	return emailData{OK: true, Messages: entries}
 }
 
+// deadlineMinImportance gates which wiki-page deadlines reach the operator.
+// Routine deadlines are handled by working-level staff, so the morning letter and
+// weekly 현안 surface only high-importance ones — "아주 중요한, 아주 가끔" (operator
+// direction 2026-07). Importance is 0.0–1.0 (wiki page.go); 0.9 keeps only top-tier
+// active projects (~6 of ~40 dated pages) so at most 1–2 land in a 14-day window.
+// Pages with no importance (e.g. 거래처 원장 payment deadlines, staff-owned) fall
+// below the bar and stay silent. Tune here if too quiet/noisy.
+const deadlineMinImportance = 0.9
+
 // fetchDeadlines scans wiki pages for upcoming `due` dates and returns those
 // within the alert window (up to 7 days overdue through 14 days ahead),
 // nearest-first. Surfaces payment deadlines and milestones the operator must
@@ -528,7 +537,7 @@ func fetchDeadlines(wikiDir string, now time.Time) any {
 		if parseErr != nil {
 			return nil //nolint:nilerr // unreadable page — skip
 		}
-		if page.Meta.Due == "" || page.Meta.Archived {
+		if page.Meta.Due == "" || page.Meta.Archived || page.Meta.Importance < deadlineMinImportance {
 			return nil
 		}
 		due, parseErr := time.ParseInLocation("2006-01-02", page.Meta.Due, now.Location())
