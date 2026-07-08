@@ -136,7 +136,9 @@ func extractSenderContext(ctx context.Context, deps PipelineDeps, msg *gmail.Mes
 		return MemoryContext{}
 	}
 	if deps.SenderFactsFn != nil {
-		if facts := strings.TrimSpace(deps.SenderFactsFn(ctx, name)); facts != "" {
+		// Pass the full From header (name + address), not just the name: the resolver
+		// prefers the EMAIL to reach the right 인물 page across 동명이인.
+		if facts := strings.TrimSpace(deps.SenderFactsFn(ctx, msg.From)); facts != "" {
 			if len(facts) > maxSenderFactsChars {
 				facts = facts[:maxSenderFactsChars] + "\n...(생략)"
 			}

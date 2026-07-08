@@ -85,18 +85,46 @@ var errCronUnavailable = errors.New("cron service not configured")
 var errNotebookDisabled = errors.New("notebook store not configured")
 
 // wikiSenderFacts resolves "who is this person to us" in-process from the wiki
-// graph — used by the analyze pipeline and the sender_context card. Returns ""
-// when the wiki is unconfigured or nothing matches, so callers fall back
-// cleanly (to graphify, or to an empty card).
-func (s *Server) wikiSenderFacts(ctx context.Context, displayName string) string {
+// graph — used by the analyze pipeline and the sender_context card. The argument
+// is the From header (name and, when present, "<address>"). It prefers the EMAIL
+// join: resolving the sender's address to their 인물 page and seeding the graph
+// from that exact page reaches the RIGHT person across 동명이인 (김성훈@bohae vs
+// 김성훈@marsh), which the display name alone conflates. Falls back to the name
+// graph when no address resolves. Returns "" when the wiki is unconfigured or
+// nothing matches, so callers fall back cleanly (to graphify, or an empty card).
+func (s *Server) wikiSenderFacts(ctx context.Context, from string) string {
 	if s.wikiStore == nil {
 		return ""
 	}
-	facts, err := s.wikiStore.GraphContext(ctx, displayName, 0)
+	if email := senderEmailFromHeader(from); email != "" {
+		if path := s.wikiStore.ResolvePersonByEmail(email); path != "" {
+			if facts, err := s.wikiStore.PageConnections(ctx, path, 0); err == nil && facts != "" {
+				return facts
+			}
+		}
+	}
+	// GraphContext strips any "<address>" itself, so the raw From is a safe query.
+	facts, err := s.wikiStore.GraphContext(ctx, from, 0)
 	if err != nil {
 		return ""
 	}
 	return facts
+}
+
+// senderEmailFromHeader pulls the address out of a "Name <addr@host>" From header
+// (or returns a bare address as-is). "" when the header carries no address.
+func senderEmailFromHeader(from string) string {
+	from = strings.TrimSpace(from)
+	if i := strings.LastIndex(from, "<"); i >= 0 {
+		if j := strings.Index(from[i:], ">"); j > 0 {
+			from = from[i+1 : i+j]
+		}
+	}
+	from = strings.TrimSpace(from)
+	if strings.Contains(from, "@") {
+		return from
+	}
+	return ""
 }
 
 // withMailAliases returns a miniapp.gmail.* method map extended with a
@@ -920,7 +948,23 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 				if ws == nil {
 					return wiki.ContactEnrichResult{}, fmt.Errorf("wiki store unavailable")
 				}
-				return ws.EnrichContacts(contactsJSON)
+				res, err := ws.EnrichContacts(contactsJSON)
+				if err != nil {
+					return res, err
+				}
+				// Also backfill each 인물 page's identity email(s) into frontmatter, so
+				// mail senders / org members resolve to the page by email — the key that
+				// disambiguates 동명이인 the name cannot. Best-effort (a bonus alongside
+				// the 연락처 body enrichment); homonyms are flagged, not guessed.
+				var p struct {
+					Contacts []wiki.Contact `json:"contacts"`
+				}
+				if json.Unmarshal(contactsJSON, &p) == nil {
+					if er, eerr := ws.EnrichPersonEmails(p.Contacts); eerr == nil && len(er.Ambiguous) > 0 {
+						s.logger.Info("person email backfill", "seeded", len(er.Updated), "homonyms_flagged", len(er.Ambiguous))
+					}
+				}
+				return res, nil
 			},
 			WorkFeed:    s.nativeWorkFeedStore(),
 			IngestEvent: s.ingestPhoneEventAsync,

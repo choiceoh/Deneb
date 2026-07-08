@@ -104,6 +104,14 @@ func (s *Server) orgDeps() handlerminiapp.OrgDeps {
 			}
 			return s.wikiStore.ResolvePersonPaths(names)
 		},
+		// Email join (preferred): a member's enriched address → their 인물 page,
+		// robust across 동명이인. Lazy s.wikiStore read (same reason as above).
+		ResolvePersonByEmail: func(email string) string {
+			if s.wikiStore == nil {
+				return ""
+			}
+			return s.wikiStore.ResolvePersonByEmail(email)
+		},
 	}
 }
 
