@@ -7,10 +7,11 @@
 #   - squash merge only
 #   - MERGED != LANDED: verify the squash commit is an ancestor of origin/main
 #     (the 2026-06-09 stacked-PR incident silently dropped merged work)
-#   - branch must contain current origin/main: a PR built on a stale base has
-#     green CI that never saw main's newer work (the 2026-07-08 stale-worktree
-#     incident — a behind branch can re-apply squash-landed commits or break
-#     semantically). Refuse the irreversible land until rebased.
+#   - interaction guard: refuse to land only when main's NEWER commits touch a
+#     file this PR also changes — the green CI then predates the merged tree
+#     (the 2026-07-08 stale-worktree incident). Non-overlapping staleness (a
+#     trivial edit while main moved elsewhere) lands as-is: no rebase, no CI
+#     re-run. main has no branch protection, so keep this surgical, not blanket.
 #   - delete the remote branch after landing
 #
 # Usage:
@@ -57,24 +58,31 @@ land)
         echo "the remote branch changed since your push (parallel session?). Refusing to land." >&2
         exit 1
     fi
-    # Staleness guard (2026-07-08 stale-worktree incident): a PR built on an
-    # older origin/main has green CI that never saw main's newer work. GitHub's
-    # 3-way squash won't silently revert non-conflicting main work, but the CI
-    # you trusted ran on a stale base — and a behind branch can re-apply commits
-    # already squash-landed (a parallel agent left this worktree on a merged
-    # branch). Require the branch to contain current origin/main before the
-    # irreversible land. Override with PR_LAND_ALLOW_STALE=1 for a deliberate
-    # exception (e.g. a trivial change you accept re-testing on main after).
-    git fetch origin main "refs/pull/$pr/head" --quiet 2>/dev/null || git fetch origin main --quiet
-    behind="$(git rev-list --count "${head_oid}..origin/main" 2>/dev/null || echo unknown)"
-    if [ "$behind" != "unknown" ] && [ "$behind" -gt 0 ] && [ "${PR_LAND_ALLOW_STALE:-0}" != "1" ]; then
-        echo "PR #$pr is $behind commit(s) behind origin/main — its green CI ran on a stale base." >&2
-        echo "Rebase onto origin/main, re-run 'make check', re-push, then land" >&2
-        echo "(or set PR_LAND_ALLOW_STALE=1 to override). Refusing to land stale." >&2
-        exit 1
-    fi
-    # Tolerate an operator racing us to the merge button.
+    # Merge — unless an operator or auto-merge already landed this PR while we
+    # watched checks (then the guard below is moot; origin/main already carries
+    # this PR's squash, which a naive behind-count would misread as "stale").
     if [ "$(gh pr view "$pr" --json state -q .state)" != "MERGED" ]; then
+        # Interaction guard (2026-07-08 stale-worktree incident, calibrated): a
+        # behind branch is only unsafe to land when main's NEWER commits touch a
+        # file this PR also changes — then the green CI, run on a base without
+        # those changes, no longer describes the merged tree. Non-overlapping
+        # staleness (a trivial edit while main moved elsewhere) is safe to land
+        # as-is: no rebase, no CI re-run. main has no branch protection, so this
+        # is the only up-to-date check — keep it surgical, not blanket.
+        # Override with PR_LAND_ALLOW_STALE=1.
+        git fetch origin main "refs/pull/$pr/head" --quiet 2>/dev/null || git fetch origin main --quiet
+        mb="$(git merge-base "$head_oid" origin/main 2>/dev/null || true)"
+        if [ -n "$mb" ] && [ "${PR_LAND_ALLOW_STALE:-0}" != "1" ]; then
+            overlap="$(comm -12 \
+                <(git diff --name-only "$mb" "$head_oid" | sort -u) \
+                <(git diff --name-only "$mb" origin/main | sort -u) || true)"
+            if [ -n "$overlap" ]; then
+                echo "PR #$pr shares files with newer origin/main commits — its green CI predates them:" >&2
+                while IFS= read -r f; do echo "    $f" >&2; done <<<"$overlap"
+                echo "Rebase onto origin/main + re-run 'make check' before landing (or PR_LAND_ALLOW_STALE=1)." >&2
+                exit 1
+            fi
+        fi
         gh pr merge "$pr" --squash
     fi
     sha="$(gh pr view "$pr" --json mergeCommit -q .mergeCommit.oid)"
