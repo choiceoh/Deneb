@@ -83,6 +83,13 @@ type heartbeatTask struct {
 	// plus the 7d target-recurrence count. Drives the sweep generator lane
 	// (heartbeat_selfimprove_sweep.go). Nil → lane disabled.
 	selfImproveSignals func() (genesis.SelfCorrectionFunnelSummary, int)
+
+	// selfImproveEvidence, when set, returns the fleet-wide failure evidence
+	// bundle (deterministic signature clusters, support-ordered) that the sweep
+	// nudge renders so the turn starts from recurring cross-case mechanisms
+	// instead of bare counters. Called only when the sweep actually fires
+	// (≤ once per interval). Nil → the nudge falls back to counters only.
+	selfImproveEvidence func(limit int) []genesis.FailureClusterSummary
 }
 
 func (t *heartbeatTask) Name() string            { return "heartbeat" }

@@ -24,6 +24,57 @@ func sweepTask(t *testing.T, proposed int, funnel genesis.SelfCorrectionFunnelSu
 	}
 }
 
+// The evidence bundle leads the nudge: clusters render as one bullet each and
+// the instructions pivot to cluster-first mining. A nil evidence closure (or an
+// empty bundle) falls back to the counter-only nudge.
+func TestBuildSelfImproveSweepNudge_EvidenceBundle(t *testing.T) {
+	task := sweepTask(t, 0, genesis.SelfCorrectionFunnelSummary{Rejections7d: 4, PromotableRejections7d: 2}, 1)
+	task.selfImproveEvidence = func(limit int) []genesis.FailureClusterSummary {
+		if limit != sweepEvidenceClusterLimit {
+			t.Errorf("sweep should request the nudge-sized bundle, got limit=%d", limit)
+		}
+		return []genesis.FailureClusterSummary{
+			{
+				Kind: genesis.FailureClusterKindUsage, Skill: "contract-review",
+				Signature: "terminal=missing-artifact|mechanism=artifact-recovery",
+				Support:   3, LastAt: time.Date(2026, 7, 8, 12, 0, 0, 0, time.Local).UnixMilli(),
+				Example: "tool=bash; error=required artifact missing",
+			},
+			{
+				Kind: genesis.FailureClusterKindRejection, Skill: "contract-review",
+				Signature: "surface-mismatch", Support: 2,
+			},
+		}
+	}
+
+	nudge := task.detectSelfImproveSweepNudge(time.Now())
+	if nudge == "" {
+		t.Fatal("sweep with signals should fire")
+	}
+	for _, want := range []string{
+		"실패 클러스터",
+		"[usage-failure] contract-review · terminal=missing-artifact|mechanism=artifact-recovery · 3건 · 최근 07-08 · 예: \"tool=bash; error=required artifact missing\"",
+		"[evolve-rejection] contract-review · surface-mismatch · 2건",
+		"클러스터의 시그니처에서 시작",
+		"클러스터 시그니처·지지도를 인용",
+	} {
+		if !strings.Contains(nudge, want) {
+			t.Errorf("evidence nudge missing %q:\n%s", want, nudge)
+		}
+	}
+
+	// Empty bundle → counter-only nudge without a dangling clusters header.
+	task2 := sweepTask(t, 0, genesis.SelfCorrectionFunnelSummary{Rejections7d: 1}, 0)
+	task2.selfImproveEvidence = func(int) []genesis.FailureClusterSummary { return nil }
+	nudge2 := task2.detectSelfImproveSweepNudge(time.Now())
+	if nudge2 == "" {
+		t.Fatal("sweep with signals should fire without evidence too")
+	}
+	if strings.Contains(nudge2, "실패 클러스터") || strings.Contains(nudge2, "클러스터의 시그니처에서 시작") {
+		t.Errorf("empty bundle must fall back to the counter-only nudge:\n%s", nudge2)
+	}
+}
+
 // An empty queue with fresh signals fires the sweep; the interval throttles
 // re-fires; past the interval it fires again while signals persist.
 func TestDetectSelfImproveSweep_FireThrottleRefire(t *testing.T) {
