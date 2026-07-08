@@ -1,5 +1,38 @@
 # Changelog
 
+## [4.79.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.78.0...deneb-v4.79.0) (2026-07-08)
+
+
+### ✨ Features
+
+* **chat:** 회상 시맨틱 확장 — 일기 + 세션 요약 (재랜딩) ([#3279](https://github.com/choiceoh/Deneb/issues/3279)) ([cbe6720](https://github.com/choiceoh/Deneb/commit/cbe672002b1544224b5b5acdd0d3c806c5f3b7d1))
+* **org:** 조직도-위키 통합 — 통합검색 회상소스·인물 해소·네이티브 위키 링크 ([#3287](https://github.com/choiceoh/Deneb/issues/3287)) ([f6d0db5](https://github.com/choiceoh/Deneb/commit/f6d0db5b44aa4449536ac166e2a2cac5be914886))
+* **skills:** self-evolve S2 보상 수확기 — ATDP r 레이어(user/self correction·isErr), dogfood 검증 ([#3288](https://github.com/choiceoh/Deneb/issues/3288)) ([565b18f](https://github.com/choiceoh/Deneb/commit/565b18f75cd01064ce7967467cbf3d8bf286e44d))
+* **skills:** self-evolve 크로스표면 자기진화 컨트롤플레인 — ATDP credit assignment + validation gate ([#3286](https://github.com/choiceoh/Deneb/issues/3286)) ([3cfb319](https://github.com/choiceoh/Deneb/commit/3cfb31969277935592485548f9d5d87407060cbd))
+* **wiki:** 딜 관여 외부 거래처 담당자에 인물 페이지 자동 생성 ([#3293](https://github.com/choiceoh/Deneb/issues/3293)) ([213c507](https://github.com/choiceoh/Deneb/commit/213c5079bae2cd57009cfb1ce2397b222734c5bf))
+* **wiki:** 이메일=사람 정규 신원 키 — 주소록·조직도·인물·메일 통합 ([#3289](https://github.com/choiceoh/Deneb/issues/3289)) ([29b3105](https://github.com/choiceoh/Deneb/commit/29b310586bc7869ecd66ed71818f42afe4868eba))
+* **wiki:** 이직(같은 사람 회사 이동)을 동명이인과 구분 — 전화 공유 신호 ([#3296](https://github.com/choiceoh/Deneb/issues/3296)) ([7c0c33f](https://github.com/choiceoh/Deneb/commit/7c0c33fd35b4b8d5cc99833ba5514234d169784b))
+* **wiki:** 인물 페이지 표준 양식 — 자동생성 stub 통일 ([#3295](https://github.com/choiceoh/Deneb/issues/3295)) ([fa95f26](https://github.com/choiceoh/Deneb/commit/fa95f2654f0ed5cdb35457e37afcf55e560114e6))
+* **wiki:** 자사 직원([@topsolar](https://github.com/topsolar).kr)에 인물 페이지 자동 생성 ([#3291](https://github.com/choiceoh/Deneb/issues/3291)) ([5096b98](https://github.com/choiceoh/Deneb/commit/5096b980de2467e7d0be72ee1026846d7dd58127))
+
+
+### 🐛 Bug Fixes
+
+* **chat:** 모닝레터 deneb-ui 서문 누출 backstop + 마감 중요도 필터 ([#3290](https://github.com/choiceoh/Deneb/issues/3290)) ([e1bac5c](https://github.com/choiceoh/Deneb/commit/e1bac5cd0e45baaa90e21c6a2b7ef76748823773))
+
+
+### ⚡ Performance
+
+* **chat:** 스캔 PDF OCR 페이지 병렬화 — 서버 배칭 활용해 다페이지 ~7배 ([#3282](https://github.com/choiceoh/Deneb/issues/3282)) ([f1d3392](https://github.com/choiceoh/Deneb/commit/f1d3392c488980a96903e6703fa60cae30c791d1))
+* **wiki:** RRF 계수 튜닝 — rrfK 60→20 (R@8 97→98%, 100건 골드 스윕) ([#3285](https://github.com/choiceoh/Deneb/issues/3285)) ([2ae899c](https://github.com/choiceoh/Deneb/commit/2ae899c2daa1822e4a41890c953724bbab5a496d))
+* **wiki:** 명시 엔티티 앵커를 Search 그래프-부스트에 rescue로 추가 — R@8 93→95% ([#3284](https://github.com/choiceoh/Deneb/issues/3284)) ([4a226f5](https://github.com/choiceoh/Deneb/commit/4a226f5cf7dee6d576a6a56bc9abbecaf65a297a))
+* **wiki:** 회상 검색 품질 — RRF 융합 + 그래프-부스트 (골드셋 P@1 45.5→61.4%) ([#3283](https://github.com/choiceoh/Deneb/issues/3283)) ([f138c72](https://github.com/choiceoh/Deneb/commit/f138c729b41c626b35e5a3986501e6dc12fee506))
+
+
+### 🔧 Internal
+
+* **modelrole:** analysis 역할 제거 — 소비처를 main으로 통합 ([#3278](https://github.com/choiceoh/Deneb/issues/3278)) ([88dd97f](https://github.com/choiceoh/Deneb/commit/88dd97f6a4294adf68926af2e6bbff8547414ee2))
+
 ## [4.78.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.77.0...deneb-v4.78.0) (2026-07-07)
 
 
