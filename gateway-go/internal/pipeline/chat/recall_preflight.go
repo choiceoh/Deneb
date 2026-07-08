@@ -147,6 +147,22 @@ var recallStopWords = map[string]struct{}{
 	// "키 정리" for a "탑솔라 조직" question). Domain nouns like 분석/보고/견적
 	// are deliberately NOT here — they are real subjects.
 	"정리": {}, "확인": {}, "검토": {}, "요청": {}, "처리": {}, "진행": {}, "작성": {}, "준비": {}, "전달": {}, "알려": {}, "보여": {}, "부탁": {},
+	// Conversational filler: greetings/acks, deictic time words, question
+	// words, and auxiliary verb stems. None of these are recall subjects, and
+	// each fires as a standalone broadening query that matches unrelated
+	// entries by a common word (puppet measurement: "안녕, 오늘 뭐 도와줄 수
+	// 있어?" built the query "안녕 오늘 도와줄 있어" and pulled three rows of
+	// an unrelated session via "오늘"). Time deictics are safe to drop here:
+	// temporal scoping is handled separately by parseRecallTemporalRange on
+	// the raw message, so the boost still applies — the words just stop
+	// doubling as search terms.
+	"안녕": {}, "안녕하세요": {}, "하이": {}, "헬로": {}, "반가워": {}, "반갑": {},
+	"고마워": {}, "고맙": {}, "감사": {}, "땡큐": {}, "오케이": {}, "좋아": {}, "그래": {},
+	"오늘": {}, "어제": {}, "내일": {}, "모레": {}, "지금": {}, "이제": {}, "현재": {}, "요즘": {}, "최근": {}, "이번": {}, "다음": {}, "이따": {}, "나중": {},
+	"뭐": {}, "무엇": {}, "어떻게": {}, "어때": {}, "왜": {}, "언제": {}, "어디": {}, "누구": {}, "얼마": {}, "몇": {},
+	"도와": {}, "도와줘": {}, "도와줄": {}, "있어": {}, "있어요": {}, "있나": {}, "있는": {}, "없어": {}, "없어요": {}, "없는": {},
+	"할까": {}, "할래": {}, "될까": {}, "되나": {}, "알아": {}, "몰라": {}, "궁금": {},
+	"hello": {}, "thanks": {}, "thank": {}, "please": {}, "today": {}, "tomorrow": {}, "yesterday": {},
 }
 
 var recallFenceTagPattern = regexp.MustCompile(`(?i)</?\s*recall-context\b[^>]*>`)
@@ -290,8 +306,11 @@ func buildRecallPreflight(ctx context.Context, params RunParams, deps runDeps, l
 	// Recent-diary fallback ONLY for topicless cues ("아까 뭐였지?" — no signal
 	// terms, so nothing was searchable). A topical question that found nothing
 	// must get the honest no-evidence notice, not two unrelated recent diary
-	// entries dressed up as recall (the bench caught exactly that).
-	if len(evidence) == 0 && deps.memory.Wiki != nil && len(queries) == 0 {
+	// entries dressed up as recall (the bench caught exactly that). The cue
+	// gate matters: a topicless NON-cue turn is smalltalk ("안녕, 오늘 뭐
+	// 도와줄 수 있어?"), and silent auto-recall must stay silent there rather
+	// than dress recent diary entries up as relevant context.
+	if len(evidence) == 0 && cue && deps.memory.Wiki != nil && len(queries) == 0 {
 		evidence = append(evidence, recallDiaryEvidence(ctx, deps.memory.Wiki, queries, true)...)
 	}
 

@@ -70,6 +70,50 @@ func TestRecallSearchQueriesDropsGenericVerbs(t *testing.T) {
 	}
 }
 
+func TestRecallSearchQueriesDropsSmalltalk(t *testing.T) {
+	// A greeting has no recall subject: greetings, question words, auxiliary
+	// verbs, and time deictics must all be filtered so no query fires at all
+	// (puppet measurement: "안녕 오늘 도와줄 있어" pulled three rows of an
+	// unrelated session via "오늘").
+	if queries := recallSearchQueries("안녕, 오늘 뭐 도와줄 수 있어?"); len(queries) != 0 {
+		t.Fatalf("greeting must produce no recall queries, got %v", queries)
+	}
+	// Time deictics drop out of queries, but the real subject stays.
+	queries := recallSearchQueries("오늘 날씨 알려줘")
+	joined := strings.Join(queries, " ")
+	if !strings.Contains(joined, "날씨") {
+		t.Fatalf("expected subject term 날씨, got %v", queries)
+	}
+	if strings.Contains(joined, "오늘") {
+		t.Fatalf("time deictic 오늘 must be dropped from queries, got %v", queries)
+	}
+}
+
+func TestBuildRecallPreflightGreetingStaysSilent(t *testing.T) {
+	// A topicless NON-cue turn (smalltalk) must inject nothing — neither
+	// common-word search hits nor the recent-diary fallback, which is
+	// reserved for topicless recall cues ("아까 뭐였지?").
+	dir := t.TempDir()
+	store, err := wiki.NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	if err := store.AppendDiary("오늘 작업 폴더 정리와 호스트네임 확인을 도와줬다."); err != nil {
+		t.Fatalf("AppendDiary: %v", err)
+	}
+
+	out, _ := buildRecallPreflight(
+		context.Background(),
+		RunParams{SessionKey: "client:main", Message: "안녕, 오늘 뭐 도와줄 수 있어?"},
+		runDeps{memory: MemoryDeps{Wiki: store}},
+		nil,
+	)
+	if out != "" {
+		t.Fatalf("greeting turn must stay silent, got %q", out)
+	}
+}
+
 func TestRecallPrimaryQuery(t *testing.T) {
 	// Multi-term message → the combined (space-joined) query is primary.
 	if got := recallPrimaryQuery([]string{"탑솔라 조직 구성", "탑솔라", "조직"}); got != "탑솔라 조직 구성" {
