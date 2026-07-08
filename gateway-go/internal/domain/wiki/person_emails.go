@@ -248,9 +248,51 @@ func identityEmails(cs []Contact) (emails []string, ambiguous bool) {
 		}
 	}
 	if len(companyDomains) >= 2 {
-		return nil, true // homonym: distinct employers under one name
+		// 2+ employers under one name: either 동명이인 (different people) or 이직 (one
+		// person who moved companies). People keep their mobile across a job move, so
+		// a phone shared between the entries means ONE identity — union both addresses
+		// (전 직장 + 현 직장). Distinct phones across distinct companies mean different
+		// people → leave for a human to split, don't guess an address.
+		if contactsSharePhone(cs) {
+			return dedupeLowerStrings(all), false // 이직 / same person, keep both
+		}
+		return nil, true // 동명이인
 	}
 	return dedupeLowerStrings(all), false
+}
+
+// contactsSharePhone reports whether two or more of these same-name contacts carry
+// a common phone number — the signal that they are one person (a 이직 job move
+// keeps the mobile), not homonyms. Digits-only compare; numbers under 9 digits are
+// ignored as too short to be a reliable identity key.
+func contactsSharePhone(cs []Contact) bool {
+	owners := make(map[string]int)
+	for _, c := range cs {
+		seen := make(map[string]bool)
+		for _, p := range c.Phones {
+			n := digitsOnly(p)
+			if len(n) < 9 || seen[n] {
+				continue
+			}
+			seen[n] = true
+			owners[n]++
+			if owners[n] >= 2 {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// digitsOnly strips a phone string down to its digits.
+func digitsOnly(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		if r >= '0' && r <= '9' {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }
 
 // setPersonEmails sets the page's frontmatter emails when they differ from what is

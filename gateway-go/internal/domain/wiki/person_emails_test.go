@@ -153,3 +153,29 @@ func TestEnrichPersonEmails(t *testing.T) {
 		t.Errorf("second run should be a no-op, wrote %v", res2.Updated)
 	}
 }
+
+// identityEmails must distinguish 이직 (one person who moved — shared mobile,
+// keep both addresses) from 동명이인 (different people — distinct phones, flag).
+func TestIdentityEmails_JobChangeVsHomonym(t *testing.T) {
+	// 이직: same 010 mobile across two employers → one identity, union both emails.
+	move := []Contact{
+		{Name: "김이직", Phones: []string{"010-1111-2222"}, Emails: []string{"a@oldco.com"}, Org: "Old"},
+		{Name: "김이직", Phones: []string{"010-1111-2222", "02-333-4444"}, Emails: []string{"a@newco.kr"}, Org: "New"},
+	}
+	emails, amb := identityEmails(move)
+	if amb {
+		t.Errorf("이직 (shared mobile) wrongly flagged 동명이인")
+	}
+	if len(emails) != 2 {
+		t.Errorf("이직 should union both addresses, got %v", emails)
+	}
+
+	// 동명이인: two employers, DIFFERENT phones → ambiguous, no address.
+	homonym := []Contact{
+		{Name: "김성훈", Phones: []string{"010-2790-3500"}, Emails: []string{"x@marsh.com"}, Org: "Marsh"},
+		{Name: "김성훈", Phones: []string{"010-3490-9563"}, Emails: []string{"y@bohae.co.kr"}, Org: "보해"},
+	}
+	if _, amb := identityEmails(homonym); !amb {
+		t.Errorf("동명이인 (distinct phones) should be ambiguous")
+	}
+}
