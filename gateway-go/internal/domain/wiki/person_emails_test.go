@@ -44,6 +44,49 @@ func TestEnrichEmployeePages(t *testing.T) {
 	}
 }
 
+func TestEnrichDealMentionedPages(t *testing.T) {
+	dir := t.TempDir()
+	store := testutil.Must(NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
+	defer store.Close()
+
+	// A 프로젝트 page names an external counterparty (임형철) in its body.
+	deal := NewPage("트리나 모듈 계약", "프로젝트", nil)
+	deal.Body = "# 트리나 모듈\n\n임형철 부장(트리나솔라)과 645W 모듈 단가 협의. 최종원(LONGi) BC 모듈 병행."
+	if err := store.WritePage("프로젝트/트리나-모듈.md", deal); err != nil {
+		t.Fatalf("WritePage deal: %v", err)
+	}
+
+	book := []Contact{
+		{Name: "임형철", Emails: []string{"lim@trinasolar.com"}, Org: "Trina"}, // external + named → page
+		{Name: "최종원", Emails: []string{"jc@longigroup.com"}, Org: "LONGi"},  // external + named → page
+		{Name: "강동민", Emails: []string{"kangdm@topsolar.kr"}, Org: "탑솔라"},   // our staff → NOT here (EmployeePages' job)
+		{Name: "박무명", Emails: []string{"park@somewhere.com"}, Org: "X"},     // external but NOT named → no page
+		{Name: "이수", Emails: []string{"lee@short.com"}, Org: "Y"},           // 2-rune name → skipped
+	}
+
+	res, err := store.EnrichDealMentionedPages(book, []string{"topsolar.kr"})
+	if err != nil {
+		t.Fatalf("EnrichDealMentionedPages: %v", err)
+	}
+
+	people, _ := store.listPeopleByName()
+	if _, ok := people["임형철"]; !ok {
+		t.Errorf("임형철 (external, named in deal) should have a page")
+	}
+	if _, ok := people["최종원"]; !ok {
+		t.Errorf("최종원 (external, named in deal) should have a page")
+	}
+	if _, ok := people["강동민"]; ok {
+		t.Errorf("강동민 (our domain) must NOT be created here — that's EnrichEmployeePages")
+	}
+	if _, ok := people["박무명"]; ok {
+		t.Errorf("박무명 (external but not named in any deal) must NOT get a page")
+	}
+	if len(res.Created) != 2 {
+		t.Errorf("created %d, want 2 (임형철, 최종원)", len(res.Created))
+	}
+}
+
 func TestEnrichPersonEmails(t *testing.T) {
 	dir := t.TempDir()
 	store := testutil.Must(NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))

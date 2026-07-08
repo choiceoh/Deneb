@@ -964,8 +964,14 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 					// a wiki mention — they should be first-class identities. External people
 					// stay mention-curated (the dreamer), so this never floods with the whole
 					// phone book. Runs BEFORE the email backfill so the new pages get seeded.
-					if cr, cerr := ws.EnrichEmployeePages(p.Contacts, mailanalysis.OurMailDomains()); cerr == nil && len(cr.Created) > 0 {
+					ourDomains := mailanalysis.OurMailDomains()
+					if cr, cerr := ws.EnrichEmployeePages(p.Contacts, ourDomains); cerr == nil && len(cr.Created) > 0 {
 						s.logger.Info("employee pages created", "count", len(cr.Created))
+					}
+					// Also give a page to important EXTERNAL people — the counterparties our
+					// 프로젝트/거래 pages actually name. Everyone else stays mention-curated.
+					if dr, derr := ws.EnrichDealMentionedPages(p.Contacts, ourDomains); derr == nil && len(dr.Created) > 0 {
+						s.logger.Info("deal-mentioned pages created", "count", len(dr.Created))
 					}
 					if er, eerr := ws.EnrichPersonEmails(p.Contacts); eerr == nil && len(er.Ambiguous) > 0 {
 						s.logger.Info("person email backfill", "seeded", len(er.Updated), "homonyms_flagged", len(er.Ambiguous))

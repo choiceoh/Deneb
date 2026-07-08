@@ -50,7 +50,7 @@ func (s *Store) EnrichEmployeePages(book []Contact, ourDomains []string) (People
 			}
 			if dom[strings.ToLower(strings.TrimSpace(e[at+1:]))] {
 				seen[name] = true
-				names = append(names, name)
+				names = append(names, personPageName(name)) // clean title, drop 직급/junk
 				break
 			}
 		}
@@ -59,6 +59,115 @@ func (s *Store) EnrichEmployeePages(book []Contact, ourDomains []string) (People
 		return PeopleEnrichResult{}, nil
 	}
 	return s.EnrichPeople(names, book, true)
+}
+
+// EnrichDealMentionedPages gives an 인물 page to each EXTERNAL contact (has a
+// company email, none at ourDomains) whose name is actually named in a 프로젝트
+// (project/deal) page — the counterparties involved in our deals, i.e. our
+// "important external" people. The whole-phone-book flood is avoided three ways:
+// only company-email contacts, only those a 프로젝트 page names, and a ≥3-rune name
+// (a 2-rune name matches too much prose). Reuses EnrichPeople(createMissing), so
+// existing pages are enriched not duplicated; our own staff are EnrichEmployeePages'
+// job and everyone else stays mention-curated by the dreamer. A name shared by
+// 동명이인 (최종원 = SK vs LONGi) still resolves to one page; its identity email is
+// left for EnrichPersonEmails to flag, not guessed here.
+func (s *Store) EnrichDealMentionedPages(book []Contact, ourDomains []string) (PeopleEnrichResult, error) {
+	if len(book) == 0 {
+		return PeopleEnrichResult{}, nil
+	}
+	our := domainSet(ourDomains)
+	paths, err := s.ListPages("프로젝트")
+	if err != nil {
+		return PeopleEnrichResult{}, err
+	}
+	var sb strings.Builder
+	for _, p := range paths {
+		if page, e := s.ReadPage(p); e == nil && page != nil {
+			sb.WriteString(page.Body)
+			sb.WriteByte('\n')
+		}
+	}
+	if sb.Len() == 0 {
+		return PeopleEnrichResult{}, nil
+	}
+	deals := strings.ToLower(sb.String())
+
+	seen := make(map[string]bool)
+	var names []string
+	for _, c := range book {
+		name := strings.TrimSpace(c.Name)
+		if len([]rune(name)) < 2 || seen[name] {
+			continue
+		}
+		if r := []rune(name)[0]; !unicode.IsLetter(r) {
+			continue // junk row
+		}
+		if !hasCompanyEmailOutside(c, our) {
+			continue // no external company address → not a deal counterparty
+		}
+		clean := personPageName(name) // "박준영 팀장(한화)" → "박준영"
+		if len([]rune(clean)) < 3 {
+			continue // a 2-rune name matches too much prose
+		}
+		if strings.Contains(deals, strings.ToLower(clean)) {
+			seen[name] = true
+			names = append(names, clean)
+		}
+	}
+	if len(names) == 0 {
+		return PeopleEnrichResult{}, nil
+	}
+	return s.EnrichPeople(names, book, true)
+}
+
+// personPageName returns a clean 인물 page title for a contact name: the leading
+// run of Korean syllables, dropping the trailing 직급/회사/junk the address book
+// staples on ("박준영 팀장(한화시스템)" → "박준영"). A name with no 2–4 syllable
+// Korean prefix (a foreign name, a one-syllable handle) is kept as-is so it is
+// not silently mangled.
+func personPageName(name string) string {
+	var b []rune
+	for _, r := range strings.TrimSpace(name) {
+		if r >= 0xAC00 && r <= 0xD7A3 { // Hangul syllable block
+			b = append(b, r)
+			continue
+		}
+		break
+	}
+	if len(b) >= 2 && len(b) <= 4 {
+		return string(b)
+	}
+	return strings.TrimSpace(name)
+}
+
+// hasCompanyEmailOutside reports whether the contact has a non-freemail email at
+// a domain NOT in ourDomains — an external company address.
+func hasCompanyEmailOutside(c Contact, ourDomains map[string]bool) bool {
+	for _, e := range c.Emails {
+		at := strings.LastIndex(e, "@")
+		if at < 0 || at+1 >= len(e) {
+			continue
+		}
+		d := strings.ToLower(strings.TrimSpace(e[at+1:]))
+		if d == "" || ourDomains[d] {
+			continue
+		}
+		if _, free := freemailDomains[d]; !free {
+			return true
+		}
+	}
+	return false
+}
+
+// domainSet lowercases a domain slice into a lookup set.
+func domainSet(domains []string) map[string]bool {
+	out := make(map[string]bool, len(domains))
+	for _, d := range domains {
+		if d = strings.ToLower(strings.TrimSpace(d)); d != "" {
+			out[d] = true
+		}
+	}
+	return out
 }
 
 // (freemailDomains — consumer mail hosts whose domain says nothing about the
