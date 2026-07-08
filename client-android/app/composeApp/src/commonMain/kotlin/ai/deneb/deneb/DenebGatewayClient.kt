@@ -103,6 +103,18 @@ internal suspend fun readSseLines(channel: ByteReadChannel, onLine: (String) -> 
     if (line.isNotEmpty()) emit()
 }
 
+internal enum class ColdStartRestoreMode {
+    HOME,
+    TRANSCRIPT,
+    NONE,
+}
+
+internal fun coldStartRestoreMode(sessionKey: String): ColdStartRestoreMode = when {
+    sessionKey == "client:main" -> ColdStartRestoreMode.HOME
+    sessionKey.isBlank() -> ColdStartRestoreMode.NONE
+    else -> ColdStartRestoreMode.TRANSCRIPT
+}
+
 /**
  * A [DataRepository] backed by the Deneb gateway — the sole production implementation.
  *
@@ -1038,20 +1050,26 @@ class DenebGatewayClient(
      * Guarded so a settings refresh (refreshSettings re-calls this) or a
      * cold-start share can't yank the user out of what they're viewing: only
      * open the home when nothing is loaded yet and we are still on the default
-     * home session.
+     * home session. Every other persisted session key reopens via the ordinary
+     * guarded transcript loader so restarts land back on the exact conversation
+     * the user left.
      */
     override fun restoreCurrentConversation() {
         if (_chatHistory.value.isNotEmpty()) return
-        when {
+        when (coldStartRestoreMode(sessionKey)) {
             // 업무 home pulls in the mirrored proactive reports via openWorkTopic.
-            sessionKey == "client:main" -> openWorkTopic()
+            ColdStartRestoreMode.HOME -> openWorkTopic()
 
-            // Legacy 챗봇 sessions (flat chat:<uuid>, retired workspace) — just
-            // load the last one's transcript so a cold start restores it.
-            isChatWorkspaceKey(sessionKey) -> {
+            // Any non-home session — explicit user conversations
+            // (client:main:<uuid>), legacy chat:<uuid>, or a machine session the
+            // user intentionally opened from the drawer — restores by loading
+            // that session's transcript.
+            ColdStartRestoreMode.TRANSCRIPT -> {
                 syncNativeStateAsync()
                 scope.launch { loadTranscriptGuarded(sessionKey) }
             }
+
+            ColdStartRestoreMode.NONE -> Unit
         }
     }
 
