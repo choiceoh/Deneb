@@ -281,6 +281,10 @@ func (b *skillLifecycleBackend) SkillLifecycleStatus(_ context.Context, req chat
 		"opportunities":            opportunities,
 		"selfCorrectionCandidates": selfCorrections,
 		"selfHarnessSignals":       selfHarnessSignals,
+		// Fleet-wide failure clusters (Self-Harness weakness mining) — the same
+		// evidence bundle the sweep nudge quotes, so a turn drilling in via
+		// status sees the full support-ordered list, not just the top slice.
+		"failureClusters": b.tracker.FailureEvidenceClusters(0),
 	}
 	if rejectedErr != "" {
 		status["rejectedEditsError"] = rejectedErr

@@ -592,6 +592,13 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 				}
 				return tracker.SelfCorrectionFunnel(), tracker.SelfHarnessSignals().TargetRecurrences7d
 			},
+			selfImproveEvidence: func(limit int) []genesis.FailureClusterSummary {
+				tracker := s.genesisTracker
+				if tracker == nil {
+					return nil
+				}
+				return tracker.FailureEvidenceClusters(limit)
+			},
 		})
 
 		// Register the goal loop (Ralph loop): advances active standing goals
