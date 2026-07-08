@@ -37,6 +37,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/autonomous"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/monitoring"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/prompt"
 )
@@ -70,6 +71,18 @@ type heartbeatTask struct {
 	// Drives the self-coding review lane (heartbeat_selfcoding.go). Nil → lane
 	// disabled (tests, genesis tracker absent).
 	proposedSelfCoding func() (count int, fingerprint string)
+
+	// promoteRecurrences, when set, deterministically converts fresh
+	// target-recurrence signals ("the accepted evolve did not stick") into
+	// proposed candidates each tick, BEFORE the lanes below look at the queue
+	// — so a promotion is consumed by the review lane in the same tick. Nil →
+	// disabled.
+	promoteRecurrences func() (int, error)
+
+	// selfImproveSignals, when set, reports the capture-side funnel summary
+	// plus the 7d target-recurrence count. Drives the sweep generator lane
+	// (heartbeat_selfimprove_sweep.go). Nil → lane disabled.
+	selfImproveSignals func() (genesis.SelfCorrectionFunnelSummary, int)
 }
 
 func (t *heartbeatTask) Name() string            { return "heartbeat" }
@@ -161,13 +174,30 @@ func (t *heartbeatTask) Run(ctx context.Context) error {
 	// heartbeat_research.go. Deterministic scan, throttled to ~once a day.
 	researchNudge := t.detectResearchNudge(time.Now())
 
+	// Deterministic capture first: fresh target recurrences become proposed
+	// candidates NOW, so the review lane below sees them in this same tick
+	// instead of one interval later.
+	if t.promoteRecurrences != nil {
+		if promoted, err := t.promoteRecurrences(); err != nil {
+			t.logger.Warn("heartbeat: target-recurrence promotion failed", "error", err)
+		} else if promoted > 0 {
+			t.logger.Info("heartbeat: target-recurrence candidates promoted", "count", promoted)
+		}
+	}
+
 	// Self-coding review lane: pending self-improvement candidates get
 	// consumed by this turn instead of waiting on the operator to notice the
 	// 자가코딩 개선 screen — see heartbeat_selfcoding.go.
 	selfCodingNudge := t.detectSelfCodingNudge(time.Now())
 
+	// Self-improvement sweep lane: when the queue is EMPTY but rejection or
+	// recurrence signals accumulated, this turn mines them and proposes
+	// candidates itself — see heartbeat_selfimprove_sweep.go. Mutually
+	// exclusive with the review lane by construction (fires only at count 0).
+	sweepNudge := t.detectSelfImproveSweepNudge(time.Now())
+
 	// Nothing to do: no user checks, no signals, no lane nudges.
-	if !heartbeatShouldRun(content, signalSummary, selfCodingNudge, researchNudge) {
+	if !heartbeatShouldRun(content, signalSummary, selfCodingNudge, sweepNudge, researchNudge) {
 		t.logger.Debug("heartbeat: skipped, no actionable tasks or signals")
 		return nil
 	}
@@ -185,7 +215,7 @@ func (t *heartbeatTask) Run(ctx context.Context) error {
 	}
 	sessionKey := heartbeatTargetSessionKey(lastSessionKey)
 
-	triggerMsg := fmt.Sprintf(heartbeatTriggerTemplate, composeHeartbeatBody(signalSummary, content, selfCodingNudge, researchNudge))
+	triggerMsg := fmt.Sprintf(heartbeatTriggerTemplate, composeHeartbeatBody(signalSummary, content, selfCodingNudge, sweepNudge, researchNudge))
 
 	runCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
@@ -222,9 +252,10 @@ func (t *heartbeatTask) detectSignalSummary(ctx context.Context) string {
 // has HEARTBEAT.md checks, there are escalation-worthy signals to surface, or
 // a lane (self-coding review, new-data research) fired a nudge. Pure for unit
 // testing.
-func heartbeatShouldRun(content, signalSummary, selfCodingNudge, researchNudge string) bool {
+func heartbeatShouldRun(content, signalSummary, selfCodingNudge, sweepNudge, researchNudge string) bool {
 	return strings.TrimSpace(content) != "" || strings.TrimSpace(signalSummary) != "" ||
-		strings.TrimSpace(selfCodingNudge) != "" || strings.TrimSpace(researchNudge) != ""
+		strings.TrimSpace(selfCodingNudge) != "" || strings.TrimSpace(sweepNudge) != "" ||
+		strings.TrimSpace(researchNudge) != ""
 }
 
 // heartbeatHasTasks reports whether HEARTBEAT.md carries anything the agent
@@ -283,16 +314,18 @@ func markdownHeading(trimmed string) (level int, title string, ok bool) {
 // composeHeartbeatBody builds the trigger body from the (optional) signal
 // summary, (optional) HEARTBEAT.md content, and (optional) lane nudges.
 // Signals lead so the agent prioritizes them; lanes come after the user's own
-// checks — self-coding review (actionable now) before research (formulating
-// new work). When there is no HEARTBEAT.md, a short note tells the agent the
-// injected blocks are the only agenda (and to stay non-intrusive). Pure for
-// unit testing.
-func composeHeartbeatBody(signalSummary, content, selfCodingNudge, researchNudge string) string {
+// checks — self-coding review (actionable now), then the sweep generator
+// (mutually exclusive with review), then research (formulating new work).
+// When there is no HEARTBEAT.md, a short note tells the agent the injected
+// blocks are the only agenda (and to stay non-intrusive). Pure for unit
+// testing.
+func composeHeartbeatBody(signalSummary, content, selfCodingNudge, sweepNudge, researchNudge string) string {
 	signalSummary = strings.TrimSpace(signalSummary)
 	content = strings.TrimSpace(content)
 	selfCodingNudge = strings.TrimSpace(selfCodingNudge)
+	sweepNudge = strings.TrimSpace(sweepNudge)
 	researchNudge = strings.TrimSpace(researchNudge)
-	sections := make([]string, 0, 4)
+	sections := make([]string, 0, 5)
 	if signalSummary != "" {
 		sections = append(sections, signalSummary)
 	}
@@ -301,6 +334,9 @@ func composeHeartbeatBody(signalSummary, content, selfCodingNudge, researchNudge
 	}
 	if selfCodingNudge != "" {
 		sections = append(sections, selfCodingNudge)
+	}
+	if sweepNudge != "" {
+		sections = append(sections, sweepNudge)
 	}
 	if researchNudge != "" {
 		sections = append(sections, researchNudge)
