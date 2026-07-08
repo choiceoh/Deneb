@@ -80,8 +80,8 @@ func TestPromoteTargetRecurrence_ReviewedSignatureStaysBlocked(t *testing.T) {
 		t.Fatalf("candidates: %v %+v", err, cands)
 	}
 	if _, err := tr.RecordSelfCorrectionReview(SelfCorrectionCandidateRecord{
-		ID:     cands[0].ID,
-		Status: SelfCorrectionStatusRejected,
+		ID:       cands[0].ID,
+		Status:   SelfCorrectionStatusRejected,
 		Reviewer: "test",
 	}); err != nil {
 		t.Fatalf("review: %v", err)

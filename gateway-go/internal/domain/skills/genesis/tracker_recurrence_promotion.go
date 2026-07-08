@@ -72,7 +72,8 @@ func (t *Tracker) PromoteTargetRecurrenceCandidates() (int, error) {
 			Title:     "Accepted evolve target keeps recurring: " + rec.skill,
 			Candidate: fmt.Sprintf(
 				"The last accepted evolve for %s targeted failure signature %q, but the signature recurred %d times in real usage after the evolve — the fix did not stick.",
-				rec.skill, rec.signature, rec.recurrences),
+				rec.skill, rec.signature, rec.recurrences,
+			),
 			Evidence: fmt.Sprintf("signature=%s; recurrences(window)=%d; lastAt=%s",
 				rec.signature, rec.recurrences, time.UnixMilli(rec.lastAt).Format(time.RFC3339)),
 			TargetFiles: []string{
