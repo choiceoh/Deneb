@@ -55,12 +55,59 @@ func TestMaybeRecordRunDiary_SyncPathSideEffects(t *testing.T) {
 	}
 }
 
+// TestMaybeRecordRunDiary_PreferenceSignalPropagates pins the 선호 fast path: a
+// preference-voicing turn nudges the dreamer (preferenceSignalFn) BEFORE the
+// dream-turn increment — the increment's ShouldDream check must already see the
+// pending signal — and a plain factual turn fires the increment only.
+func TestMaybeRecordRunDiary_PreferenceSignalPropagates(t *testing.T) {
+	dir := t.TempDir()
+	store := testutil.Must(wiki.NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
+	defer store.Close()
+
+	events := make(chan string, 4)
+	deps := runDeps{
+		memory:             MemoryDeps{Wiki: store},
+		dreamTurnFn:        func(context.Context) { events <- "dream" },
+		preferenceSignalFn: func() { events <- "pref" },
+	}
+	result := &agent.AgentResult{Text: "알겠습니다. 그 방식으로 정리하겠습니다.", StopReason: "end_turn", Turns: 1}
+
+	maybeRecordRunDiary(deps, RunParams{SessionKey: "client:main", Message: "앞으로 보고는 산문으로 정리해줘"}, result, nil)
+	if got := waitDiaryEvent(t, events); got != "pref" {
+		t.Fatalf("first event = %q, want pref (must precede the dream-turn increment)", got)
+	}
+	if got := waitDiaryEvent(t, events); got != "dream" {
+		t.Fatalf("second event = %q, want dream", got)
+	}
+
+	maybeRecordRunDiary(deps, RunParams{SessionKey: "client:main", Message: "당진 프로젝트 진행상황 알려줘"}, result, nil)
+	if got := waitDiaryEvent(t, events); got != "dream" {
+		t.Fatalf("non-preference turn: event = %q, want dream only", got)
+	}
+	select {
+	case got := <-events:
+		t.Fatalf("unexpected extra event %q after non-preference turn", got)
+	case <-time.After(200 * time.Millisecond):
+	}
+}
+
+func waitDiaryEvent(t *testing.T, ch chan string) string {
+	t.Helper()
+	select {
+	case e := <-ch:
+		return e
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for diary side-effect event")
+		return ""
+	}
+}
+
 func TestRecordDiaryIncludesOutcomeForShortPrompt(t *testing.T) {
 	dir := t.TempDir()
 	store := testutil.Must(wiki.NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
 	defer store.Close()
 
-	if recorded := recordDiary(store, nil, "ㄱㄱ", []string{"read", "exec!"}, "구현 완료", "end_turn", 2); !recorded {
+	if recorded, _ := recordDiary(store, nil, "ㄱㄱ", []string{"read", "exec!"}, "구현 완료", "end_turn", 2); !recorded {
 		t.Fatal("recordDiary returned false")
 	}
 
@@ -87,12 +134,16 @@ func TestClassifyDiarySignalTagsPreference(t *testing.T) {
 		msg     string
 		wantTag bool
 	}{
-		{"앞으로 답변은 간결하게 해줘", true},   // standing directive + style
-		{"불릿 말고 산문으로 정리해줘", true},   // replacement + style correction
-		{"그 표현 그만 쓰고 다르게", true},    // negation directive
-		{"항상 숫자 근거를 같이 줘", true},    // standing directive
-		{"현대차 울산 결제기한 언제야?", false}, // factual question, not a preference
-		{"이 버그 고쳐줘", false},         // task (durable keyword, not a preference cue)
+		{"앞으로 답변은 간결하게 해줘", true},     // standing directive + style
+		{"불릿 말고 산문으로 정리해줘", true},     // replacement + style correction
+		{"그 표현 그만 쓰고 다르게", true},      // negation directive
+		{"항상 숫자 근거를 같이 줘", true},      // standing directive
+		{"다음부터는 금액을 억 원으로 표기해", true}, // standing directive (다음부터)
+		{"존댓말 쓰지 말고 편하게 해", true},     // tone correction
+		{"내 호칭은 실장으로 불러줘", true},      // address correction
+		{"이 번호는 기억해둬", true},          // explicit remember-this
+		{"현대차 울산 결제기한 언제야?", false},   // factual question, not a preference
+		{"이 버그 고쳐줘", false},           // task (durable keyword, not a preference cue)
 	}
 	for _, c := range cases {
 		sig := classifyDiarySignal(c.msg, nil, "ok")
@@ -108,7 +159,7 @@ func TestRecordDiarySkipsShortPromptWithoutOutcome(t *testing.T) {
 	store := testutil.Must(wiki.NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
 	defer store.Close()
 
-	if recorded := recordDiary(store, nil, "ㄱㄱ", nil, "", "end_turn", 1); recorded {
+	if recorded, _ := recordDiary(store, nil, "ㄱㄱ", nil, "", "end_turn", 1); recorded {
 		t.Fatal("recordDiary returned true for short prompt without outcome")
 	}
 }
@@ -118,7 +169,7 @@ func TestRecordDiarySkipsTrivialBriefOutcome(t *testing.T) {
 	store := testutil.Must(wiki.NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
 	defer store.Close()
 
-	if recorded := recordDiary(store, nil, "고마워", nil, "천만에요", "end_turn", 1); recorded {
+	if recorded, _ := recordDiary(store, nil, "고마워", nil, "천만에요", "end_turn", 1); recorded {
 		t.Fatal("recordDiary returned true for trivial acknowledgement")
 	}
 }

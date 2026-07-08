@@ -42,6 +42,7 @@ func TestBuildSystemPromptContainsSections(t *testing.T) {
 		"## Tooling",
 		"## Tool Usage",
 		"## 위키 — 너의 외부 메모리",
+		"## 사용자 모델 갱신",
 		"## Messaging",
 		"## Context",
 		"/home/user/project",
@@ -95,7 +96,7 @@ func TestBuildSystemPromptCoding(t *testing.T) {
 	})
 	for _, gone := range []string{
 		"You are Nev", "비서실장",
-		"## 분석 → 위키 갱신", "## 작업 기억", "## 위키 — 너의 외부 메모리",
+		"## 분석 → 위키 갱신", "## 사용자 모델 갱신", "## 작업 기억", "## 위키 — 너의 외부 메모리",
 		"## 스킬", "## 회상 (polaris)", "## 현재 모드: 코딩",
 	} {
 		if strings.Contains(coding, gone) {

@@ -21,6 +21,13 @@ type diarySignal struct {
 	Reason string
 }
 
+// preference reports whether the capsule was tagged with the 선호 reason — the
+// standing-preference signal the dreamer's 사용자 synthesis keys on. Callers use
+// it to nudge the dreamer onto its accelerated preference cadence.
+func (s diarySignal) preference() bool {
+	return strings.Contains(s.Reason, "선호")
+}
+
 var durableDiaryTerms = []string{
 	"결정", "계획", "구현", "수정", "테스트", "검증", "오류", "버그", "회상", "기억", "컴팩션", "위키", "일지",
 	"도구", "파일", "머지", "설정", "배포", "리팩토링", "분석", "정리", "요약", "추가", "개선", "완료", "실패", "차단",
@@ -84,18 +91,20 @@ func shouldRecordRunDiary(params RunParams) bool {
 
 // recordDiary appends the conversation turn to today's diary file.
 // Called from handleRunSuccess as a background goroutine.
-// No LLM needed — raw data is appended as-is.
-func recordDiary(store *wiki.Store, logger *slog.Logger, userMsg string, toolNames []string, assistantText, stopReason string, turns int) bool {
+// No LLM needed — raw data is appended as-is. The classified signal is
+// returned alongside so the caller can propagate preference cues (선호) to the
+// dreamer's accelerated cadence.
+func recordDiary(store *wiki.Store, logger *slog.Logger, userMsg string, toolNames []string, assistantText, stopReason string, turns int) (bool, diarySignal) {
 	if store == nil {
-		return false
+		return false, diarySignal{}
 	}
 	signal := classifyDiarySignal(userMsg, toolNames, assistantText)
 	if !shouldRecordDiary(userMsg, signal) {
-		return false
+		return false, signal
 	}
 	diaryDir := store.DiaryDir()
 	if diaryDir == "" {
-		return false
+		return false, signal
 	}
 
 	// Record a compact outcome capsule. Tool outputs stay in the transcript;
@@ -136,9 +145,9 @@ func recordDiary(store *wiki.Store, logger *slog.Logger, userMsg string, toolNam
 		if logger != nil {
 			logger.Warn("diary append failed", "error", err)
 		}
-		return false
+		return false, signal
 	}
-	return true
+	return true, signal
 }
 
 func classifyDiarySignal(userMsg string, toolNames []string, assistantText string) diarySignal {
@@ -181,17 +190,21 @@ func containsDurableDiaryTerm(text string) bool {
 	return false
 }
 
-// preferenceDiaryTerms flag a user turn that voices a STANDING preference or a
-// style/format correction — the behavioral signal the dreamer abstracts into
-// 사용자 (user) working-style rules. High-precision phrasing: standing directives,
-// replacement/negation, and style corrections, not one-off task words. A mis-tag
-// is low-harm — the dreamer's 2+-recurrence gate ignores a one-off — so the list
-// favors catching genuine preference cues over avoiding the odd false positive.
+// preferenceDiaryTerms flag a user turn that voices a STANDING preference, a
+// style/format correction, or an explicit remember-this — the behavioral signal
+// the dreamer abstracts into 사용자 (user) working-style rules and consolidates
+// on its accelerated preference cadence. High-precision phrasing: standing
+// directives, replacement/negation, and style corrections, not one-off task
+// words. A mis-tag is low-harm — the dreamer's rules only record what was
+// clearly standing or repeated — so the list favors catching genuine preference
+// cues over avoiding the odd false positive.
 var preferenceDiaryTerms = []string{
-	"앞으로", "항상", "매번", // standing directives
+	"앞으로", "항상", "매번", "다음부터", "다음부턴", "이제부터", "기본으로", "기본값", // standing directives
 	"그만", "하지 마", "하지마", "말고", "대신", // negation / replacement
 	"산문으로", "불릿", "간결", "짧게", "자세히", "줄여", // style / format
+	"말투", "호칭", "존댓말", "반말", "포맷", // tone / address / format corrections
 	"선호", "취향", "스타일로", // explicit preference
+	"기억해둬", "기억해 둬", "저장해둬", "잊지 마", "잊지마", "명심", // explicit remember-this
 }
 
 // isPreferenceDirective reports whether a user message voices a standing

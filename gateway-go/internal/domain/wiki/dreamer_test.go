@@ -241,19 +241,25 @@ func TestBuildWikiSynthesisPromptIncludesCompoundingRules(t *testing.T) {
 	}
 }
 
-// TestBuildWikiSynthesisPromptIncludesPreferenceRules pins the two user-preference
+// TestBuildWikiSynthesisPromptIncludesPreferenceRules pins the user-model
 // learning directives ported from the agent-memory papers: behavioral-pattern
 // abstraction (Evo-Memory/ReMem arXiv:2511.20857 — derive working-style from
 // recurring behavior, not just stated preferences) and fact-level preference
 // replacement (Mem0 arXiv:2504.19413 — update the value in place so a 사용자 page
-// is a current policy, not an accumulating log). The recurrence gate and the
-// confidence split keep inferred rules conservative + operator-reviewable.
+// is a current policy, not an accumulating log). The recurrence gate applies to
+// INFERRED rules only — a stated standing preference records on first
+// occurrence — and the confidence split plus the transient-instruction guard
+// keep the profile conservative + operator-reviewable. The facet taxonomy
+// (소통/리듬/포맷/성향/컨텍스트) keeps 사용자 pages small and per-axis.
 func TestBuildWikiSynthesisPromptIncludesPreferenceRules(t *testing.T) {
 	prompt := buildWikiSynthesisPrompt("index", "history", "", "diary")
 	for _, want := range []string{
 		"working-style 추론", // behavioral abstraction directive present
-		"2회 이상 반복",         // recurrence gate (no single-shot / speculative inference)
+		"2회 이상 반복",         // recurrence gate for inferred rules (no single-shot / speculative inference)
 		"현행 정책",            // fact-level replacement: 사용자 page is current policy, not a log
+		"현행 프로필",           // user-model facet taxonomy (per-axis pages)
+		"1회로도 즉시 기록",       // stated standing preferences record on first occurrence
+		"이번만",              // transient-instruction guard (one-offs are not preferences)
 	} {
 		if !strings.Contains(prompt, want) {
 			t.Errorf("synthesis prompt missing preference rule %q", want)

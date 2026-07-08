@@ -229,6 +229,16 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 			s.WriteString("**확신이 없으면 추측으로 리포트를 쓰지 마라.** 틀린 분석은 안 하느니만 못하고, 사용자가 그걸 믿고 움직이면 더 위험하다. 결론을 가르는 핵심 사실(이 인물이 누구인지, 이 거래의 맥락·조건, 이 건의 우선순위 등)이 불확실하거나 비어 있으면 — 그럴듯하게 메우지 말고, 모르는 부분을 분명히 밝힌 뒤 사용자에게 확인 질문을 먼저 하라. 받은 답은 즉시 위키에 기록해 **다음 분석부터는 같은 것을 다시 틀리지도, 다시 묻지도 않게** 하라(불확실 → 질문 → 기록의 닫힌 루프).\n")
 			s.WriteString("기록은 **습관은 일관되게, 형식은 사안에 맞게**: 각 프로젝트·거래·인물 페이지는 그 사안에 중요한 축을 페이지가 스스로 정해 최신 상태로 유지하라 — 모든 건에 같은 양식·필드를 강요하지 마라(부동산은 잔금·등기, 개발은 마일스톤·검수처럼 무엇이 중요한지가 다르다). 변하지 않는 규율은 셋뿐이다: ① 근거(메일 문구·날짜·금액)를 사실과 함께 남긴다, ② 관련 인물·프로젝트는 `related`로 연결한다, ③ 빠뜨리지 않고 갱신한다.\n\n")
 
+			// User-model write-back: the same-turn counterpart of the dreamer's
+			// batched 사용자 synthesis (wiki/dreamer_apply.go). The main agent
+			// hears a standing preference with full conversational context —
+			// recording it immediately beats waiting for the next dream cycle;
+			// the dreamer's dedup/supersede pass folds any overlap.
+			s.WriteString("## 사용자 모델 갱신\n")
+			s.WriteString("사용자가 **지속되는 선호·스타일 교정·개인 맥락**을 드러내면 (\"앞으로/항상/다음부터 …\", 말투·형식·호칭 교정, 업무 리듬·습관, 반복되는 지시) — 같은 응답 안에서 즉시 `wiki(action=\"write\", category=\"사용자\")`로 기록하라. 확인 질문 금지 — 조용히 기록한다.\n")
+			s.WriteString("- 먼저 `wiki(action=\"search\")`로 기존 사용자 페이지를 확인하고, 있으면 그 페이지 본문을 **현재값으로 교체**하라 — 사용자 페이지는 이력 로그가 아니라 현행 정책이다. 없으면 한 사실=한 페이지로 작게 생성한다 (`사용자/<주제>.md`).\n")
+			s.WriteString("- 근거(날짜·발화 요지)를 본문에 남기고 cues를 채워라. '이번만' 류 일회성 지시·추측·과잉 일반화는 기록 금지 — 명시했거나 반복된 것만.\n\n")
+
 			// Elicited proprietary knowledge guard: market/competitor/partner
 			// facts the model cannot derive from training or the web — it must
 			// search the wiki and, when empty, ask the user instead of guessing.

@@ -250,6 +250,15 @@ func (s *Server) registerSessionRPCMethods() {
 			s.autonomousSvc.IncrementDreamTurn(ctx)
 		}
 	}
+	// Preference capsules (신호:선호) put the wiki dreamer on its accelerated
+	// cadence so a voiced standing preference reaches the 사용자 pages within
+	// the hour instead of the regular 50-turn/8h batch window. Wired straight
+	// to the dreamer — scheduling still runs through IncrementDreamTurn above.
+	chatCfg.PreferenceSignalFn = func() {
+		if s.wikiDreamer != nil {
+			s.wikiDreamer.NotePreferenceSignal()
+		}
+	}
 	chatCfg.RecordActivity = s.recordChatActivity
 
 	s.chatHandler = chat.NewHandler(

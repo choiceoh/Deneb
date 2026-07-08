@@ -190,6 +190,7 @@ type runDeps struct {
 	// memory groups the memory/knowledge backends. See MemoryDeps.
 	memory               MemoryDeps
 	dreamTurnFn          func(ctx context.Context) // optional; increments dream turn via autonomous
+	preferenceSignalFn   func()                    // optional; notes a 선호-tagged diary capsule for accelerated dreaming
 	agentLog             *agentlog.Writer          // optional; enables agent detail logging
 	registry             *modelrole.Registry       // centralized model role registry
 	contextCfg           ContextConfig
