@@ -212,7 +212,7 @@ func (s *Server) setMiniappModel(ctx context.Context, role, requested string) (s
 	// "모델 전환에 실패했어요") because this case list wasn't updated alongside the
 	// picker. Keep all three lists in sync.
 	switch role {
-	case "main", "tiny", "lightweight", "analysis", "coding", "fallback", "vision":
+	case "main", "tiny", "lightweight", "coding", "fallback", "vision":
 	default:
 		return "", rpcerr.InvalidRequest("unknown model role: " + role)
 	}
@@ -423,8 +423,8 @@ func (s *Server) deleteMiniappCustomModel(_ context.Context, id string) (handler
 			if s.modelRegistry != nil {
 				s.modelRegistry.SetRoleModelID(modelrole.RoleMain, defaultModel)
 			}
-		case "lightweight", "tiny", "analysis", "fallback":
-			// tiny/analysis are bindable from the picker too (see roleMiniappModels),
+		case "lightweight", "tiny", "fallback":
+			// tiny is bindable from the picker too (see roleMiniappModels),
 			// so a deleted model could be left dangling on those roles if not reset.
 			if s.modelRegistry != nil {
 				s.modelRegistry.SetRoleModelID(modelrole.Role(role), defaultModel)
