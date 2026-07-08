@@ -7,6 +7,10 @@
 #   - squash merge only
 #   - MERGED != LANDED: verify the squash commit is an ancestor of origin/main
 #     (the 2026-06-09 stacked-PR incident silently dropped merged work)
+#   - branch must contain current origin/main: a PR built on a stale base has
+#     green CI that never saw main's newer work (the 2026-07-08 stale-worktree
+#     incident — a behind branch can re-apply squash-landed commits or break
+#     semantically). Refuse the irreversible land until rebased.
 #   - delete the remote branch after landing
 #
 # Usage:
@@ -51,6 +55,22 @@ land)
     if [ -n "$local_oid" ] && [ "$local_oid" != "$head_oid" ]; then
         echo "PR #$pr head is $head_oid but local branch $branch is $local_oid —" >&2
         echo "the remote branch changed since your push (parallel session?). Refusing to land." >&2
+        exit 1
+    fi
+    # Staleness guard (2026-07-08 stale-worktree incident): a PR built on an
+    # older origin/main has green CI that never saw main's newer work. GitHub's
+    # 3-way squash won't silently revert non-conflicting main work, but the CI
+    # you trusted ran on a stale base — and a behind branch can re-apply commits
+    # already squash-landed (a parallel agent left this worktree on a merged
+    # branch). Require the branch to contain current origin/main before the
+    # irreversible land. Override with PR_LAND_ALLOW_STALE=1 for a deliberate
+    # exception (e.g. a trivial change you accept re-testing on main after).
+    git fetch origin main "refs/pull/$pr/head" --quiet 2>/dev/null || git fetch origin main --quiet
+    behind="$(git rev-list --count "${head_oid}..origin/main" 2>/dev/null || echo unknown)"
+    if [ "$behind" != "unknown" ] && [ "$behind" -gt 0 ] && [ "${PR_LAND_ALLOW_STALE:-0}" != "1" ]; then
+        echo "PR #$pr is $behind commit(s) behind origin/main — its green CI ran on a stale base." >&2
+        echo "Rebase onto origin/main, re-run 'make check', re-push, then land" >&2
+        echo "(or set PR_LAND_ALLOW_STALE=1 to override). Refusing to land stale." >&2
         exit 1
     fi
     # Tolerate an operator racing us to the merge button.
