@@ -57,39 +57,13 @@ func TestBuildSystemPromptContainsSections(t *testing.T) {
 	}
 }
 
-func TestBuildSystemPromptChatbot(t *testing.T) {
+func TestBuildSystemPromptWorkPersona(t *testing.T) {
 	tools := []ToolDef{{Name: "read"}, {Name: "wiki"}, {Name: "exec"}}
 
-	// 챗봇 workspace: clean general-purpose assistant — no Nev persona, no 업무
-	// work-loop coaching, but tools (## Tooling) and general sections stay.
-	chat := BuildSystemPrompt(SystemPromptParams{ToolDefs: tools, Chatbot: true})
-	for _, gone := range []string{
-		"You are Nev",
-		"비서실장",
-		"## 위키 — 너의 외부 메모리",
-		"## 분석 → 위키 갱신",
-		"## 작업 기억",
-	} {
-		if strings.Contains(chat, gone) {
-			t.Errorf("챗봇 prompt must not contain 업무 framing: %q", gone)
-		}
-	}
-	for _, want := range []string{"helpful, knowledgeable AI assistant", "## Tooling", "## 소통"} {
-		if !strings.Contains(chat, want) {
-			t.Errorf("챗봇 prompt missing %q", want)
-		}
-	}
-
-	// 대화 규범 (2026-07-04 톤 사고 재발 방지): 존댓말 고정, 무요청 논평 금지,
-	// 질문 전량 응답 — 챗봇 워크스페이스 계약이므로 업무 페르소나에는 없어야 한다.
-	for _, want := range []string{"대화 규범:", "존댓말", "훈계를 덧붙이지 않는다", "빠뜨리지 않고 전부 응답"} {
-		if !strings.Contains(chat, want) {
-			t.Errorf("챗봇 prompt missing tone guard %q", want)
-		}
-	}
-
-	// 업무 workspace unchanged: Nev persona + 비서실장 + 위키 외부메모리 all present.
-	work := BuildSystemPrompt(SystemPromptParams{ToolDefs: tools, Chatbot: false})
+	// 업무 workspace: Nev persona + 비서실장 + 위키 외부메모리 all present. The
+	// retired 챗봇 neutral-assistant identity must never render — every
+	// non-coding session gets the single chief-of-staff persona.
+	work := BuildSystemPrompt(SystemPromptParams{ToolDefs: tools})
 	for _, want := range []string{"You are Nev", "비서실장", "## 위키 — 너의 외부 메모리", "## 작업 기억"} {
 		if !strings.Contains(work, want) {
 			t.Errorf("업무 prompt regression — missing %q", want)
@@ -98,27 +72,11 @@ func TestBuildSystemPromptChatbot(t *testing.T) {
 	if strings.Contains(work, "Hindsight") {
 		t.Error("업무 prompt should use wiki/diary work memory, not Hindsight")
 	}
-	// Negative: the chatbot-only tone guard must NOT leak into the work
-	// persona (proactive critique is the chief-of-staff's job).
-	if strings.Contains(work, "대화 규범:") {
-		t.Error("업무 prompt must not carry the chatbot tone-guard block")
+	if strings.Contains(work, "helpful, knowledgeable AI assistant") {
+		t.Error("업무 prompt must not carry the retired 챗봇 neutral identity")
 	}
 	if !strings.Contains(work, "비효율적이거나 어색한 것은 지적하라") {
 		t.Error("업무 prompt lost its proactive-critique attitude line")
-	}
-	if strings.Contains(chat, "비효율적이거나 어색한 것은 지적하라") {
-		t.Error("챗봇 prompt must not carry the always-critique attitude line (request-based only)")
-	}
-
-	// Static cache key: 업무 (false) byte-identical to the pre-flag key (no
-	// "chatbot" marker), 챗봇 (true) distinct so the two never share a cache slot.
-	keyWork := buildStaticCacheKey(tools, nil, "", "", false, false, "")
-	keyChat := buildStaticCacheKey(tools, nil, "", "", true, false, "")
-	if strings.Contains(keyWork, "chatbot") {
-		t.Errorf("업무 static cache key must be unchanged, got %q", keyWork)
-	}
-	if !strings.Contains(keyChat, "|chatbot") || keyChat == keyWork {
-		t.Errorf("챗봇 static cache key must be distinct, got %q vs %q", keyChat, keyWork)
 	}
 }
 
@@ -165,10 +123,10 @@ func TestBuildSystemPromptCoding(t *testing.T) {
 
 	// Static cache keys: 업무 unchanged (no coding marker), coding distinct,
 	// and the repo hash splits coding entries per repo/doc version.
-	keyWork := buildStaticCacheKey(tools, nil, "", "", false, false, "")
-	keyCoding := buildStaticCacheKey(tools, nil, "", "", false, true, "")
-	keyRepoA := buildStaticCacheKey(tools, nil, "", "", false, true, "hashA")
-	keyRepoB := buildStaticCacheKey(tools, nil, "", "", false, true, "hashB")
+	keyWork := buildStaticCacheKey(tools, nil, "", "", false, "")
+	keyCoding := buildStaticCacheKey(tools, nil, "", "", true, "")
+	keyRepoA := buildStaticCacheKey(tools, nil, "", "", true, "hashA")
+	keyRepoB := buildStaticCacheKey(tools, nil, "", "", true, "hashB")
 	if strings.Contains(keyWork, "coding") {
 		t.Errorf("업무 static cache key must be unchanged, got %q", keyWork)
 	}

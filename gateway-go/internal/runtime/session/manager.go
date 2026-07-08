@@ -42,8 +42,6 @@ type SessionMode string
 const (
 	// ModeNormal is the default mode — full tools.
 	ModeNormal SessionMode = ""
-	// ModeChat restricts tools to conversation-only (web search, etc.).
-	ModeChat SessionMode = "chat"
 	// ModeCode is a coding session: fs/exec tools bind to a git worktree
 	// (Session.WorkspaceDir) and the turn runs with the implementer tool preset.
 	ModeCode SessionMode = "code"

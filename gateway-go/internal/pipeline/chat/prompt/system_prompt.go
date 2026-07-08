@@ -29,7 +29,7 @@ var toolCategories = []struct {
 
 // buildStaticCacheKey returns a stable string key for the static prompt block
 // based on the sorted tool name list.
-func buildStaticCacheKey(toolDefs []ToolDef, deferredTools []DeferredToolInfo, topicCacheKey, personaCacheKey string, chatbot, coding bool, codingRepoKey string) string {
+func buildStaticCacheKey(toolDefs []ToolDef, deferredTools []DeferredToolInfo, topicCacheKey, personaCacheKey string, coding bool, codingRepoKey string) string {
 	names := make([]string, 0, len(toolDefs)+len(deferredTools))
 	for _, d := range toolDefs {
 		names = append(names, d.Name)
@@ -39,12 +39,6 @@ func buildStaticCacheKey(toolDefs []ToolDef, deferredTools []DeferredToolInfo, t
 	}
 	sort.Strings(names)
 	base := strings.Join(names, ",")
-	// 챗봇 builds a different (neutral) static block, so it must not share the 업무
-	// Static cache entry. Only append when true so the 업무 key stays byte-identical
-	// to before (its cache entry is preserved).
-	if chatbot {
-		base += "|chatbot"
-	}
 	// 코드모드 builds the implementer static block; the repo-docs hash keys it
 	// per repo/doc-version so two coding sessions on different repos (or after
 	// a rule edit) never share an entry. Doc-less repos share the bare |coding
@@ -91,32 +85,17 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 	// --- Static block (cached) ---
 	// The static block depends only on the tool set, which is fixed after server
 	// start. Cache it to avoid rebuilding ~2 KB of strings on every request.
-	cacheKey := buildStaticCacheKey(params.ToolDefs, params.DeferredTools, params.TopicCacheKey, params.PersonaCacheKey, params.Chatbot, params.Coding, params.CodingRepoCacheKey)
+	cacheKey := buildStaticCacheKey(params.ToolDefs, params.DeferredTools, params.TopicCacheKey, params.PersonaCacheKey, params.Coding, params.CodingRepoCacheKey)
 	if cached, ok := Cache.StaticPrompt(cacheKey); ok {
 		staticText = cached
 	} else {
 		var s strings.Builder
 
-		if params.Chatbot {
-			// 챗봇 workspace: a clean general-purpose assistant — no Nev
-			// chief-of-staff persona, no work framing. Reads like a vanilla
-			// general assistant (GPT/Claude/Gemini). The 업무 work-loop sections
-			// below are skipped and the work context (SOUL/USER/MEMORY, topic,
-			// tier-1 wiki, calendar) is withheld upstream; the tool surface stays.
-			//
-			// 대화 규범 3줄은 실사고에서 나왔다 (2026-07-04 chat 세션): 반말 응답,
-			// 요청하지 않은 성향 논평(훈계조), 사용자 항의 문장 무시로 두 차례
-			// 질책받은 것의 재발 방지. 모델이 바뀌어도 유지되는 워크스페이스 계약.
-			s.WriteString("You are a helpful, knowledgeable AI assistant. 사용자의 질문에 한국어로 명확하고 자연스럽게 답한다. 대화·설명·브레인스토밍·글쓰기·코딩 등 무엇이든 돕는다. 군더더기 없이 직접적으로, 결과로 신뢰를 쌓아라.\n\n")
-			s.WriteString("대화 규범:\n" +
-				"- 사용자에게 말하는 당신 자신의 발화는 항상 존댓말로 한다 (반말 금지). 단, 사용자가 반말 문체를 요청한 생성물(친구에게 보낼 문자·대사·번역·문체 변환 등) 안에서는 요청된 문체를 그대로 따른다.\n" +
-				"- 요청받지 않은 도덕적 평가·성향 딱지·훈계를 덧붙이지 않는다. 민감한 주제도 사실과 출처를 전달하는 역할에 충실한다.\n" +
-				"- 사용자 메시지에 담긴 질문·요구·항의에는 하나도 빠뜨리지 않고 전부 응답한다.\n\n")
-		} else if params.Coding {
+		if params.Coding {
 			// 코드모드 (code: sessions): the implementer contract replaces the
 			// chief-of-staff persona wholesale, followed by the target repo's
 			// own rule docs. The 업무 work-loop sections below are skipped and
-			// the work context is withheld upstream (mirrors 챗봇).
+			// the work context is withheld upstream (run_prepare).
 			s.WriteString(CodingPersona)
 			if params.CodingRepoContext != "" {
 				s.WriteString("## 프로젝트 규칙 (저장소 루트 CLAUDE.md/AGENTS.md)\n")
@@ -132,8 +111,7 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 			// 에이전트"). Editable via the Settings prompt corner: an override
 			// arrives as params.PersonaText (byte-stable per session, hash-keyed in
 			// the Static cache key); no override → DefaultPersona, byte-identical to
-			// the prior three inline WriteString calls. 챗봇 keeps its neutral identity
-			// above, so the override never touches the general-assistant path.
+			// the prior three inline WriteString calls.
 			if params.PersonaText != "" {
 				s.WriteString(strings.TrimSpace(params.PersonaText))
 				s.WriteString("\n\n")
@@ -188,16 +166,10 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		s.WriteString("- 지금 대화하고 있는 채널이 끊겼다고 말하지 마라. 이 메시지가 유저에게 도달하고 있다는 사실 자체가 그 채널이 살아있다는 증거다.\n")
 		s.WriteString("- 사용자 메시지가 `" + HeartbeatTriggerPrefix + "`로 시작하면 사용자의 직접 요청이 아니라 5분 주기 자동 점검 트리거다. 이 트리거 자체에는 응답하지 말고, 트리거가 가리키는 작업(HEARTBEAT.md 또는 직전 약속 이행)만 수행하라. 새로 알릴 게 없으면 `" + SilentReplyToken + "`만 출력하라.\n\n")
 
-		// Attitude. 챗봇 워크스페이스는 요청 기반 비평만 — 상시 "지적하라"
-		// 지시가 대화 규범(무요청 논평 금지)과 충돌해 7/4 톤 사고의 한 축이
-		// 됐다. 업무 페르소나(비서실장)는 능동 지적이 직무라 기존 유지.
+		// Attitude. 업무 페르소나(비서실장)는 능동 지적이 직무다.
 		s.WriteString("## 태도\n")
-		if params.Chatbot {
-			s.WriteString("피드백·검토·의견을 요청받으면 솔직하고 구체적으로 지적하라. 요청받지 않은 평가·개선 제안은 덧붙이지 않는다.\n\n")
-		} else {
-			s.WriteString("더 나은 방법이 보이면 말하라. 모든 것에 동의할 필요 없다.\n")
-			s.WriteString("비효율적이거나 어색한 것은 지적하라. 자기 관점을 가져라.\n\n")
-		}
+		s.WriteString("더 나은 방법이 보이면 말하라. 모든 것에 동의할 필요 없다.\n")
+		s.WriteString("비효율적이거나 어색한 것은 지적하라. 자기 관점을 가져라.\n\n")
 
 		// How to Act.
 		s.WriteString("## 행동 원칙\n")
@@ -249,8 +221,8 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 			s.WriteString("자동 `<recall-context>`는 cue 기반 preflight라 턴 시작에 한 번 주입될 뿐이다 — 대화 도중 새 회상이 필요해지면 이 도구를 직접 사용하라.\n\n")
 		}
 
-		// 챗봇/코드모드 skip the 업무 work-loop coaching (분석→위키, 작업 기억) below.
-		if !params.Chatbot && !params.Coding {
+		// 코드모드 skips the 업무 work-loop coaching (분석→위키, 작업 기억) below.
+		if !params.Coding {
 			// Analysis → wiki write-back loop (SOUL.md continuity contract).
 			s.WriteString("## 분석 → 위키 갱신\n")
 			s.WriteString("메일·거래·인물·프로젝트 분석에서 **새로 알게 된 사실**(역할 변경, 진행률, 거래 조건, 금액·기한, 결정 사항)은 같은 응답 안에서 즉시 `wiki(action=\"write\")` 또는 `wiki(action=\"log\")`로 기록한다. \"기록할까요?\" 같은 확인 금지 — 묻지 말고 실행하라. SOUL.md '연속성 확보' 원칙. 오늘 분석한 사실 위에 다음 분석이 쌓이려면 위키가 기억의 끝점이어야 한다.\n")
@@ -381,10 +353,8 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 	// --- Dynamic block ---
 	var d strings.Builder
 
-	// Wiki knowledge base (takes priority when enabled). Skipped for 챗봇 — the
-	// wiki tool stays available, but this "위키 = 너의 외부 메모리" work-continuity
-	// coaching would re-frame the clean general assistant as a work secretary.
-	if _, ok := toolSet["wiki"]; ok && !params.Chatbot {
+	// Wiki knowledge base (takes priority when enabled).
+	if _, ok := toolSet["wiki"]; ok {
 		d.WriteString("## 위키 — 너의 외부 메모리\n")
 		d.WriteString("위키에 없으면 다음 대화에서 모른다. 위키가 너의 장기 기억이다.\n")
 		d.WriteString("**중요: wiki write/log에 쓰는 내용은 사용자에게 보이지 않는다.** 미래의 네 자신만 본다. 사용자에게 전달하려면 응답 텍스트에 써야 한다.\n\n")

@@ -130,27 +130,13 @@ class AppSettings(internal val settings: Settings) {
         settings.putBoolean(KEY_MEMORY_ENABLED, enabled)
     }
 
-    // Recall: the gateway's long-term-memory recall (wiki/diary/polaris). The
-    // "focused chat / memory off" top-bar toggle. On = full recall; off (default) =
-    // the gateway skips recall AND retain for the turn. Persona unchanged. This also
-    // seeds the workspace mode (recall on = 업무 ↔ off = 챗봇), so default-off launches
-    // the app in 챗봇.
-    fun isRecallEnabled(): Boolean = settings.getBoolean(KEY_RECALL_ENABLED, false)
+    // Active session, remembered across restarts so the app reopens the
+    // conversation the user left. Defaults to the persistent home (client:main)
+    // where proactive reports land.
+    fun lastSession(): String = settings.getString(KEY_WORK_SESSION, "client:main")
 
-    fun setRecallEnabled(enabled: Boolean) {
-        settings.putBoolean(KEY_RECALL_ENABLED, enabled)
-    }
-
-    // Per-workspace active session. 업무(work) and 챗봇(chat) keep SEPARATE session
-    // lists, so each remembers its own last-open conversation across restarts and
-    // pill switches. 업무 defaults to its persistent home (client:main) where
-    // proactive reports land; 챗봇 has no home — each chat is an independent
-    // chat:<uuid> — so an unset last session returns "" and the caller mints a
-    // fresh one (DenebGatewayClient.newSessionKey).
-    fun lastSession(work: Boolean): String = settings.getString(if (work) KEY_WORK_SESSION else KEY_CHAT_SESSION, if (work) "client:main" else "")
-
-    fun setLastSession(work: Boolean, key: String) {
-        settings.putString(if (work) KEY_WORK_SESSION else KEY_CHAT_SESSION, key)
+    fun setLastSession(key: String) {
+        settings.putString(KEY_WORK_SESSION, key)
     }
 
     fun getMemoryInstructions(): String = settings.getString(KEY_MEMORY_INSTRUCTIONS, DEFAULT_MEMORY_INSTRUCTIONS)
@@ -428,9 +414,7 @@ class AppSettings(internal val settings: Settings) {
         const val KEY_TOOL_PREFIX = "tool_enabled_"
         const val KEY_SOUL = "soul_text"
         const val KEY_MEMORY_ENABLED = "memory_enabled"
-        const val KEY_RECALL_ENABLED = "recall_enabled"
         const val KEY_WORK_SESSION = "workspace_session_work"
-        const val KEY_CHAT_SESSION = "workspace_session_chat"
         const val KEY_MEMORY_INSTRUCTIONS = "memory_instructions"
         const val KEY_AGENT_MEMORIES = "agent_memories"
         const val KEY_SCHEDULED_TASKS = "scheduled_tasks"

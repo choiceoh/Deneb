@@ -398,19 +398,6 @@ private fun AppContent(
                 val currentBackStackEntry by navController.currentBackStackEntryAsState()
                 val isHome = currentBackStackEntry?.destination?.route == "home"
 
-                // 챗봇 ↔ 업무 workspace, reactive. The toggle changes chat recall (업무 =
-                // memory-active) and the 챗봇 chat text scale, NOT navigation — both workspaces
-                // keep the same 5 tabs AND the same 더보기 hub. Gating the 더보기 sections by
-                // workspace was a leftover from when 챗봇 hid the whole bottom bar; now the bar
-                // exposes 메일·달력 (업무 데이터) in both modes, so hiding the 더보기 sections was
-                // inconsistent and — since 챗봇 is the launch default — left 더보기 nearly empty.
-                // The no-client fallback (previews / other repos) is 업무; the real default is the
-                // persisted recall setting (now off → 챗봇 launches first).
-                val workspaceWorkFlow = remember(denebClient) {
-                    denebClient?.workspaceWork ?: MutableStateFlow(true)
-                }
-                val isWorkMode by workspaceWorkFlow.collectAsStateWithLifecycle()
-
                 val navigationTabBar: @Composable () -> Unit = {
                     val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
                     val count = 2
@@ -466,11 +453,6 @@ private fun AppContent(
                         Instant.fromEpochMilliseconds(it.createdAtMs).toLocalDateTime(feedTz).date == feedToday
                 }
 
-                // 업무 launches into the 피드 home (work feed as the main screen); 챗봇
-                // launches into the chat. Captured once — NavHost reads startDestination
-                // only at first composition. A runtime workspace toggle then navigates
-                // via the bottom bar (and the 챗봇 bounce LaunchedEffect above).
-                val workAtStart = remember { isWorkMode }
                 val navHost: @Composable (Modifier) -> Unit = { navHostModifier ->
                     // Route in-app link taps (markdown, text) to the in-app browser:
                     // http(s) → DenebBrowser (in-place translation), everything else
@@ -494,7 +476,9 @@ private fun AppContent(
                             CompositionLocalProvider(LocalSharedTransitionScope provides this) {
                                 NavHost(
                                     navController,
-                                    startDestination = if (workAtStart) DenebFeed else Home,
+                                    // Launch into the 피드 home — the work feed is the app's
+                                    // main screen; the chat is one tab away.
+                                    startDestination = DenebFeed,
                                     modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
                                     enterTransition = { denebNavEnter() },
                                     exitTransition = { denebNavExit() },
@@ -882,10 +866,8 @@ private fun AppContent(
                 // navigationBarsPadding doesn't double up.
                 val route = currentBackStackEntry?.destination?.route
                 val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
-                // The bottom tab bar is the app's primary navigation in BOTH workspaces —
-                // the 업무/챗봇 toggle changes chat recall, not navigation, so 챗봇 keeps the
-                // same 5 tabs. Hidden only on non-tab routes (deep details) and while the
-                // keyboard is up.
+                // The bottom tab bar is the app's primary navigation. Hidden only on
+                // non-tab routes (deep details) and while the keyboard is up.
                 val showBar = route in denebBottomBarRoutes && !imeVisible
                 Column(Modifier.fillMaxSize()) {
                     Box(

@@ -122,17 +122,17 @@ describe("Workstation (connected, fixtures)", () => {
     expect(document.querySelector(".code-pane")).toBeInTheDocument();
   });
 
-  it("opens the 비업무 채팅 탭 from the rail (center chat greets)", async () => {
+  it("opens the 채팅 탭 from the rail (center chat greets)", async () => {
     renderWithProviders(<Workstation cfg={{ url: "http://test", token: "tok" }} />, {
       connected: true,
       dataProvider,
     });
     // chat tab is always mounted (its conversation persists) but hidden until selected
-    expect(screen.getByText("안녕하세요? 무슨 대화를 할까요?")).not.toBeVisible();
+    expect(screen.getByText(/^선택님, /)).not.toBeVisible();
     const nav = screen.getByRole("navigation");
     await userEvent.click(within(nav).getByRole("button", { name: /채팅/ }));
     // selecting the rail tab reveals the center chat column
-    expect(screen.getByText("안녕하세요? 무슨 대화를 할까요?")).toBeVisible();
+    expect(screen.getByText(/^선택님, /)).toBeVisible();
   });
 
   it("opens a dashboard mail row directly in the mail pane", async () => {

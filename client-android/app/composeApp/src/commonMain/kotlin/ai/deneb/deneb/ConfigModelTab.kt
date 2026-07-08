@@ -83,7 +83,7 @@ internal fun ModelTab(client: DenebGatewayClient) {
     val scope = rememberCoroutineScope()
     val haptics = rememberHaptics()
     var role by remember { mutableStateOf(ModelRole.MAIN) }
-    // 비전 role is a plain opt-in, like 챗봇: always selectable, showing "미설정"
+    // 비전 role is a plain opt-in: always selectable, showing "미설정"
     // until an operator assigns a multimodal model. It used to auto-hide when the
     // main model was deemed "multimodal", but multimodality can't be detected
     // reliably — modelcaps carries only a negative NoVision flag that nothing sets
@@ -554,11 +554,10 @@ private enum class ModelHealth(val color: Color, val suffix: String) {
 /** Model-assignment roles. [wire] is the gateway's role key (sent on the RPC and
  *  used to look up the current model); [label] is the Korean segmented-button text;
  *  [desc] is the one-line role explanation shown in the "?" tooltip. Descriptions
- *  mirror the gateway's modelrole registry (main / chatbot / coding / vision / tiny /
+ *  mirror the gateway's modelrole registry (main / coding / vision / tiny /
  *  lightweight / analysis / fallback). */
 private enum class ModelRole(val wire: String, val label: String, val desc: String) {
-    MAIN("main", "메인", "업무 모드(기억 활성) 대화·분석·도구 호출을 담당하는 기본 모델"),
-    CHATBOT("chatbot", "챗봇", "챗봇 모드(일반 대화) 전용 모델. 미설정이면 메인 모델을 그대로 사용"),
+    MAIN("main", "메인", "대화·분석·도구 호출을 담당하는 기본 모델"),
     CODING("coding", "코딩", "코드 수정·구현자 서브에이전트·스킬 진화 패치를 담당하는 전용 모델. 미설정이면 기존 기본 모델을 사용"),
     VISION("vision", "비전", "사진·스크린샷 등 이미지가 포함된 대화를 처리하는 멀티모달 모델. 미설정이면 메인 모델(이미지 무시)을 사용"),
     TINY("tiny", "초경량", "세션 제목·메일 1차 추출 같은 사소한 분류·추출"),

@@ -44,8 +44,7 @@ const (
 
 // buildTodayFeedDigest renders the work-feed items created today (Asia/Seoul)
 // into a compact reference block injected on the 업무 chat tail. Returns "" when
-// nothing landed today (so a quiet day adds no context, and 챗봇 turns — which
-// never call this — stay context-free).
+// nothing landed today, so a quiet day adds no context.
 func buildTodayFeedDigest(items []workfeed.Item, now time.Time) string {
 	loc, err := time.LoadLocation("Asia/Seoul")
 	if err != nil {
@@ -836,10 +835,10 @@ func handleMiniappChatSend(deps Deps) rpcutil.HandlerFunc {
 		}
 		sessionKey := DefaultSessionKey(p.SessionKey)
 
-		// 업무 turns (recall on) carry today's work feed as wire-only context — this
-		// is what makes a 업무 chat aware of the day's proactive reports/captures,
-		// versus a context-less 챗봇 chat. Best-effort: a nil store or a read error
-		// just yields no context. 챗봇 turns (SkipRecall) get none, by design.
+		// Recall-on turns carry today's work feed as wire-only context — this is
+		// what makes a chat aware of the day's proactive reports/captures.
+		// Best-effort: a nil store or a read error just yields no context.
+		// SkipRecall turns (memory-off toggle) get none, by design.
 		feedCtx := ""
 		if !p.SkipRecall && deps.WorkFeed != nil {
 			if items, _, lerr := deps.WorkFeed.List(maxFeedDigestItems, true); lerr == nil {

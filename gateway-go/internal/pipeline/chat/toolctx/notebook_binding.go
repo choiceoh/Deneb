@@ -34,10 +34,8 @@ var activeNotebookStore = struct {
 // session keyed "notebook:<id>" IS that notebook's conversation (the native
 // "이 노트북으로 대화" entry opens such a session). Its active notebook is derived
 // from the key itself — no explicit binding, deterministic, and it survives a
-// gateway restart. Mirrors the "chat:" workspace-prefix convention. Because the
-// key does not start with "chat:", such a session keeps the full chief-of-staff
-// assistant (not the 챗봇 clean prompt), which is what a grounded notebook chat
-// wants.
+// gateway restart. Such a session keeps the full chief-of-staff assistant,
+// which is what a grounded notebook chat wants.
 const NotebookSessionPrefix = "notebook:"
 
 // DedicatedNotebookID returns the notebook id a "notebook:<id>" session is

@@ -28,7 +28,7 @@ import (
 // LockCtx/UnlockCtx); they must not be called with sessMu held.
 type PromptCache struct {
 	// --- Static prompt block (keyed on tool set + profile/topic/persona hashes) ---
-	// A bounded map, not a single slot: the 업무/챗봇/코딩 profiles (and distinct
+	// A bounded map, not a single slot: the 업무/코딩 profiles (and distinct
 	// topics/personas) build different static blocks under different keys, and a
 	// single slot made alternating sessions evict each other's entry every turn,
 	// rebuilding kilobytes of prompt strings. Key cardinality is small (a handful
@@ -65,7 +65,7 @@ var Cache = &PromptCache{}
 // --- Static prompt cache ---
 
 // staticCacheMaxEntries bounds the static prompt cache. Keys are profile
-// fingerprints (tool set + chatbot/coding flags + topic/persona/repo content
+// fingerprints (tool set + coding flag + topic/persona/repo content
 // hashes), so steady-state cardinality is single-digit; the cap only guards
 // against pathological churn (e.g. a bug minting a fresh hash per turn).
 // Eviction is drop-all: entries are cheap to rebuild and LRU bookkeeping is

@@ -58,7 +58,6 @@ class ChatViewModel(
         ask = ::ask,
         retry = ::retry,
         toggleSpeechOutput = ::toggleSpeechOutput,
-        toggleRecall = ::toggleRecall,
         clearHistory = ::clearHistory,
         setIsSpeaking = ::setIsSpeaking,
         addFile = ::addFile,
@@ -99,8 +98,6 @@ class ChatViewModel(
     )
 
     init {
-        // Seed the memory-recall toggle from the persisted setting (default on).
-        _state.update { it.copy(recallEnabled = dataRepository.isRecallEnabled()) }
         updateAvailableServices()
         // Deneb: the chat-input model switcher lists gateway models; rebuild it
         // whenever the model registry changes (after a switch or on first load).
@@ -109,12 +106,6 @@ class ChatViewModel(
             dataRepository.syncNativeStateAsync()
             viewModelScope.launch {
                 dataRepository.denebModels.collect { updateAvailableServices() }
-            }
-            // The switcher's selected model is workspace-scoped (chatbot role in 챗봇
-            // mode, main in 업무), so rebuild it when the workspace flips — not only
-            // when the model list changes.
-            viewModelScope.launch {
-                dataRepository.workspaceWork.collect { updateAvailableServices() }
             }
             viewModelScope.launch {
                 dataRepository.denebWorkFeed.collect { feed ->
@@ -170,8 +161,6 @@ class ChatViewModel(
                 .filter { it }
                 .collect {
                     (dataRepository as? DenebGatewayClient)?.openWorkTopic()
-                    // openWorkTopic forces the 업무 workspace — reflect it in the pill.
-                    _state.update { it.copy(recallEnabled = true) }
                     dataRepository.consumeOpenWorkTopicRequest()
                 }
         }
@@ -422,18 +411,6 @@ class ChatViewModel(
         }
     }
 
-    // Switches workspace (업무 ↔ 챗봇). For the gateway client this also swaps the
-    // active session space + its recent-session list (the two never share a list)
-    // and persists the recall setting; otherwise it just flips recall. Persona is
-    // unchanged — only the session space + whether recall (and retain) fires.
-    private fun toggleRecall() {
-        val toWork = !_state.value.recallEnabled
-        // Gateway client swaps the active session space (업무 ↔ 챗봇) and persists
-        // the recall setting; the UI pill reflects it immediately either way.
-        (dataRepository as? DenebGatewayClient)?.switchWorkspace(toWork)
-        _state.update { it.copy(recallEnabled = toWork) }
-    }
-
     private fun cancel() {
         currentJob?.cancel()
         currentJob = null
@@ -557,13 +534,10 @@ class ChatViewModel(
     // proactive report was mirrored, and clear the unread badge.
     private fun openWorkReport() {
         (dataRepository as? DenebGatewayClient)?.openWorkTopic()
-        _state.update { it.copy(recallEnabled = true) } // proactive reports = 업무 workspace
         dataRepository.clearUnreadWorkReport()
     }
 
     private fun openWorkFeedItem(id: String) {
-        // Work-feed items live in the 업무 workspace; reflect that in the pill.
-        _state.update { it.copy(recallEnabled = true) }
         viewModelScope.launch(backgroundDispatcher) {
             val gateway = dataRepository as? DenebGatewayClient
             val item = _state.value.workFeed.firstOrNull { it.id == id }

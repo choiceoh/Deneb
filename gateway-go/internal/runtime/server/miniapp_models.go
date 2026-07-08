@@ -212,7 +212,7 @@ func (s *Server) setMiniappModel(ctx context.Context, role, requested string) (s
 	// "모델 전환에 실패했어요") because this case list wasn't updated alongside the
 	// picker. Keep all three lists in sync.
 	switch role {
-	case "main", "tiny", "lightweight", "analysis", "coding", "fallback", "chatbot", "vision":
+	case "main", "tiny", "lightweight", "analysis", "coding", "fallback", "vision":
 	default:
 		return "", rpcerr.InvalidRequest("unknown model role: " + role)
 	}
@@ -290,18 +290,12 @@ func (s *Server) roleMiniappModels() []handlerminiapp.RoleModel {
 			out[0].Model = m
 		}
 	}
-	// Chatbot role is opt-in: report it only when an operator assigned a model.
-	// When absent the native picker shows "미설정" and 챗봇 turns use the main
-	// model (resolveModel), so omitting the row keeps that fallback visible.
-	if cb := s.modelRegistry.FullModelID(modelrole.RoleChatbot); cb != "" {
-		out = append(out, handlerminiapp.RoleModel{Role: string(modelrole.RoleChatbot), Model: cb})
-	}
 	// Coding role is opt-in: report it only after assignment so the native
 	// picker can show "미설정" until an operator binds a code-editing model.
 	if cm := s.modelRegistry.FullModelID(modelrole.RoleCoding); cm != "" {
 		out = append(out, handlerminiapp.RoleModel{Role: string(modelrole.RoleCoding), Model: cm})
 	}
-	// Vision role, like chatbot, is opt-in: report it only when assigned so the
+	// Vision role, like coding, is opt-in: report it only when assigned so the
 	// picker shows "미설정" until an operator binds a multimodal model.
 	if v := s.modelRegistry.FullModelID(modelrole.RoleVision); v != "" {
 		out = append(out, handlerminiapp.RoleModel{Role: string(modelrole.RoleVision), Model: v})
@@ -435,22 +429,17 @@ func (s *Server) deleteMiniappCustomModel(_ context.Context, id string) (handler
 			if s.modelRegistry != nil {
 				s.modelRegistry.SetRoleModelID(modelrole.Role(role), defaultModel)
 			}
-		case "chatbot":
-			// Chatbot is opt-in: remove the role so 챗봇 reverts to the main
-			// model (config already cleared chatbotModel) instead of pinning it
-			// to the vLLM default like the always-on roles above.
-			if s.modelRegistry != nil {
-				s.modelRegistry.ClearRole(modelrole.RoleChatbot)
-			}
 		case "coding":
-			// Coding is opt-in like chatbot: remove the role so implementer
-			// sub-agents fall back to their normal default after deletion.
+			// Coding is opt-in: remove the role so implementer sub-agents fall
+			// back to their normal default after deletion (config already
+			// cleared codingModel) instead of pinning it to the vLLM default
+			// like the always-on roles above.
 			if s.modelRegistry != nil {
 				s.modelRegistry.ClearRole(modelrole.RoleCoding)
 				s.refreshCodingModelConsumers()
 			}
 		case "vision":
-			// Vision is opt-in like chatbot: clear the role so image turns revert
+			// Vision is opt-in like coding: clear the role so image turns revert
 			// to the main model when the bound multimodal model is deleted.
 			if s.modelRegistry != nil {
 				s.modelRegistry.ClearRole(modelrole.RoleVision)

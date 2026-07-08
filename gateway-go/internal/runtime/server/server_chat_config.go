@@ -641,13 +641,6 @@ func resolveTinyModel(logger *slog.Logger) string {
 	return resolveAgentRoleModel("tinyModel", logger)
 }
 
-// resolveChatbotModel reads the optional agents.chatbotModel override from
-// deneb.json. Empty leaves RoleChatbot absent, so 챗봇(chat:) turns use the
-// main model — separating a chatbot model is fully opt-in.
-func resolveChatbotModel(logger *slog.Logger) string {
-	return resolveAgentRoleModel("chatbotModel", logger)
-}
-
 // resolveVisionModel reads the optional agents.visionModel override from
 // deneb.json. Empty leaves RoleVision absent, so image turns use the main
 // model — separating a multimodal vision model is fully opt-in.

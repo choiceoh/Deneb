@@ -27,7 +27,7 @@ const SilentReplyToken = "NO_REPLY"
 const HeartbeatTriggerPrefix = "[시스템 하트비트]"
 
 // PromptIDSystemPersona is the prompt-store ID for the editable Nev identity +
-// 역할 (chief-of-staff role) text that opens the 업무 (non-chatbot) Static block.
+// 역할 (chief-of-staff role) text that opens the 업무 Static block.
 // The Settings prompt corner edits it; run_prepare passes any override as
 // SystemPromptParams.PersonaText with a content-hash PersonaCacheKey so the
 // Static cache entry is keyed per persona (vLLM APC stays byte-stable within a
@@ -86,25 +86,13 @@ type SystemPromptParams struct {
 	DocsPath      string
 	ToolPreset    string // active tool preset ("conversation" etc.); empty = normal mode
 
-	// Chatbot selects the clean general-purpose assistant prompt for the 챗봇
-	// workspace (chat: sessions): a neutral identity instead of the Nev
-	// chief-of-staff persona, and the 업무 work-loop sections (비서실장 role,
-	// 분석→위키, 작업 기억, 위키 외부메모리) are dropped — so 챗봇 reads like a
-	// vanilla general assistant. The tool surface is unchanged. The work context
-	// inputs (ContextFiles, TopicKnowledge, CalendarGlance, tier-1 wiki) are
-	// withheld upstream (run_prepare) for chat: sessions, so the existing
-	// empty-input guards skip them. It folds into the Static cache key so 챗봇 and
-	// 업무 never share a Static entry; false leaves the key byte-identical to
-	// before (업무 prompt unchanged).
-	Chatbot bool
-
 	// Coding selects the implementer prompt profile for 코드모드 (code:
 	// sessions): CodingPersona replaces the Nev chief-of-staff identity, the
 	// 업무 work-loop sections are dropped, and the target repo's root rule
-	// docs (CodingRepoContext) are injected instead. Like Chatbot, the 업무
-	// context inputs (ContextFiles, TopicKnowledge, CalendarGlance, GoalGlance,
-	// tier-1 wiki, skills) are withheld upstream (run_prepare). Folds into the
-	// Static cache key so coding sessions live in their own prefix family.
+	// docs (CodingRepoContext) are injected instead. The 업무 context inputs
+	// (ContextFiles, TopicKnowledge, CalendarGlance, GoalGlance, tier-1 wiki,
+	// skills) are withheld upstream (run_prepare). Folds into the Static cache
+	// key so coding sessions live in their own prefix family.
 	Coding bool
 
 	// CodingRepoContext is the worktree root's CLAUDE.md/AGENTS.md content
@@ -158,11 +146,11 @@ type SystemPromptParams struct {
 	TopicKnowledgePath string
 
 	// PersonaText overrides the default Nev identity + 역할 text at the top of the
-	// 업무 (non-chatbot) Static block, edited via the Settings prompt corner
+	// 업무 Static block, edited via the Settings prompt corner
 	// (PromptIDSystemPersona). Empty = use DefaultPersona (byte-identical to
-	// before). Only the 업무 path consumes it; 챗봇 keeps its neutral identity.
-	// It is byte-stable between edits (rare operator action) so the Static cache
-	// holds; PersonaCacheKey keys the cache per persona content.
+	// before). Only the 업무 path consumes it (코드모드 keeps its implementer
+	// identity). It is byte-stable between edits (rare operator action) so the
+	// Static cache holds; PersonaCacheKey keys the cache per persona content.
 	PersonaText string
 	// PersonaCacheKey is the sha256[:12] of an edited PersonaText, folded into
 	// buildStaticCacheKey so (a) an edited persona never shares the default

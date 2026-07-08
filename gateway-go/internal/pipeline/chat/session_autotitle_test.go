@@ -42,8 +42,8 @@ func TestIsAutoTitleSession(t *testing.T) {
 		// Per-conversation native chats are titled.
 		"client:main:9f1c2a":       true, // 업무 explicit new chat (child of the home)
 		"client:main:wf-mail-argo": true, // 업무 work-card side-conversation
-		"chat:9f1c2a":              true, // 챗봇 conversation (flat — 챗봇 has no home)
-		// The 업무 home keeps its fixed identity; 챗봇 has no home to exclude.
+		"chat:9f1c2a":              true, // legacy 챗봇 conversation (titleable when continued)
+		// The 업무 home keeps its fixed identity.
 		"client:main": false,
 		// Bare prefixes (empty suffix) are not conversations.
 		"chat:":   false,

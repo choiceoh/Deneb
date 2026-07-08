@@ -24,10 +24,8 @@ import kotlin.time.Clock
 
 @Composable
 internal fun EmptyState(
-    // recall on = 업무 workspace, recall off = 챗봇 workspace (the top-bar pill).
-    // 업무 greets the operator with a personalized time-of-day line; 챗봇 opens a
-    // light general chat. A single greeting line — no subtitle in either mode.
-    recallEnabled: Boolean,
+    // Greets the operator with a personalized time-of-day line — a single
+    // greeting line, no subtitle.
     modifier: Modifier,
 ) {
     Column(
@@ -38,15 +36,11 @@ internal fun EmptyState(
         val hour = remember {
             Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).hour
         }
-        val greeting = if (recallEnabled) {
-            when (hour) {
-                in 5..10 -> "선택님, 좋은 아침이에요"
-                in 11..16 -> "선택님, 좋은 오후예요"
-                in 17..21 -> "선택님, 좋은 저녁이에요"
-                else -> "선택님, 늦은 시간까지 고생 많으세요"
-            }
-        } else {
-            "안녕하세요? 무슨 대화를 할까요?"
+        val greeting = when (hour) {
+            in 5..10 -> "선택님, 좋은 아침이에요"
+            in 11..16 -> "선택님, 좋은 오후예요"
+            in 17..21 -> "선택님, 좋은 저녁이에요"
+            else -> "선택님, 늦은 시간까지 고생 많으세요"
         }
         // A muted monochrome sparkle — a calm "assistant" anchor that stays on-palette.
         // (Replaced the purple logo orb, which was the one element breaking the

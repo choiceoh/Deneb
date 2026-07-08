@@ -49,8 +49,8 @@ private const val BACKDROP_SLICE_DP = 4f
 // stops keep it a smooth perceptual arc instead of a straight RGB shortcut.
 private const val BACKDROP_HUE_STOPS = 12
 
-// Keep the backdrop on this long AFTER generation ends, so a fast reply (챗봇 answers
-// quickly) still shows it instead of a flicker, and it lingers into the answer's first
+// Keep the backdrop on this long AFTER generation ends, so a fast reply still
+// shows it instead of a flicker, and it lingers into the answer's first
 // moments before fading out.
 private const val BACKDROP_HOLD_MS = 600L
 

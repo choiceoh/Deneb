@@ -54,12 +54,12 @@ func TestStaticCacheKeyIgnoresSkills(t *testing.T) {
 	tools := []ToolDef{{Name: "read"}, {Name: "exec"}, {Name: "wiki"}}
 	deferred := []DeferredToolInfo{{Name: "mail_archive", Description: "Local mail archive"}}
 
-	keyNoSkills := buildStaticCacheKey(tools, deferred, "", "", false, false, "")
+	keyNoSkills := buildStaticCacheKey(tools, deferred, "", "", false, "")
 
 	// Same tools + deferred list; the SkillsPrompt is NOT an input to this
 	// function. Calling again must return the identical key regardless of
 	// what skills are active.
-	keyAgain := buildStaticCacheKey(tools, deferred, "", "", false, false, "")
+	keyAgain := buildStaticCacheKey(tools, deferred, "", "", false, "")
 	if keyNoSkills != keyAgain {
 		t.Fatalf("buildStaticCacheKey not deterministic: %q vs %q", keyNoSkills, keyAgain)
 	}
@@ -139,10 +139,10 @@ func TestStaticCacheKeyVariesByTopic(t *testing.T) {
 	tools := []ToolDef{{Name: "read"}, {Name: "exec"}}
 	deferred := []DeferredToolInfo{{Name: "mail_archive", Description: "Local mail archive"}}
 
-	base := buildStaticCacheKey(tools, deferred, "", "", false, false, "")
-	coding := buildStaticCacheKey(tools, deferred, "coding:hashA", "", false, false, "")
-	codingEdited := buildStaticCacheKey(tools, deferred, "coding:hashB", "", false, false, "")
-	work := buildStaticCacheKey(tools, deferred, "work:hashA", "", false, false, "")
+	base := buildStaticCacheKey(tools, deferred, "", "", false, "")
+	coding := buildStaticCacheKey(tools, deferred, "coding:hashA", "", false, "")
+	codingEdited := buildStaticCacheKey(tools, deferred, "coding:hashB", "", false, "")
+	work := buildStaticCacheKey(tools, deferred, "work:hashA", "", false, "")
 
 	if coding == base {
 		t.Errorf("topic key must differ from the topic-less key")
@@ -162,7 +162,7 @@ func TestStaticCacheKeyTopicEmptyEqualsLegacy(t *testing.T) {
 	tools := []ToolDef{{Name: "read"}, {Name: "wiki"}}
 	deferred := []DeferredToolInfo{{Name: "mail_archive", Description: "Local mail archive"}}
 
-	withEmpty := buildStaticCacheKey(tools, deferred, "", "", false, false, "")
+	withEmpty := buildStaticCacheKey(tools, deferred, "", "", false, "")
 	if strings.Contains(withEmpty, "|topic=") {
 		t.Errorf("empty topic must not append a topic suffix: %q", withEmpty)
 	}
@@ -216,7 +216,7 @@ func TestPersonaDefaultByteIdentical(t *testing.T) {
 	if !strings.HasPrefix(staticText, DefaultPersona) {
 		t.Errorf("default 업무 Static block must open with DefaultPersona verbatim (byte-identity); got prefix %q", staticText[:min(len(staticText), 120)])
 	}
-	key := buildStaticCacheKey(tools, nil, "", "", false, false, "")
+	key := buildStaticCacheKey(tools, nil, "", "", false, "")
 	if strings.Contains(key, "|persona=") {
 		t.Errorf("no override must not append a persona suffix: %q", key)
 	}
@@ -247,31 +247,9 @@ func TestPersonaOverrideInStaticBlock(t *testing.T) {
 	if strings.Contains(semiStaticText, marker) || strings.Contains(dynamicText, marker) {
 		t.Errorf("persona override leaked out of the STATIC block")
 	}
-	key := buildStaticCacheKey(tools, nil, "", personaKey, false, false, "")
+	key := buildStaticCacheKey(tools, nil, "", personaKey, false, "")
 	if !strings.Contains(key, "|persona="+personaKey) {
 		t.Errorf("override must add its content-hash persona suffix to the cache key: %q", key)
-	}
-}
-
-// TestPersonaIgnoredForChatbot asserts the 챗봇 (general-assistant) path never
-// consumes the 업무 persona override — it keeps its neutral identity, since the
-// prompt corner edits the 업무 persona only.
-func TestPersonaIgnoredForChatbot(t *testing.T) {
-	tools := []ToolDef{{Name: "read"}, {Name: "persona_cb_sentinel"}}
-	marker := "DENEB_PERSONA_SENTINEL_CB"
-	params := SystemPromptParams{
-		WorkspaceDir:    "/tmp",
-		ToolDefs:        tools,
-		Chatbot:         true,
-		PersonaText:     "업무 페르소나 " + marker,
-		PersonaCacheKey: PersonaCacheKeyFor("업무 페르소나 " + marker),
-	}
-	staticText, _, _ := buildPromptSections(params)
-	if strings.Contains(staticText, marker) {
-		t.Errorf("챗봇 path must not render the 업무 persona override")
-	}
-	if !strings.Contains(staticText, "helpful, knowledgeable AI assistant") {
-		t.Errorf("챗봇 path must keep its neutral general-assistant identity")
 	}
 }
 

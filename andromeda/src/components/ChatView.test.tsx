@@ -17,12 +17,12 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("ChatView (비업무 채팅 탭)", () => {
+describe("ChatView (업무 채팅 탭)", () => {
   it("greets and offers a composer when connected with no messages", () => {
     renderWithProviders(<ChatView cfg={{ url: "http://test", token: "tok" }} />, { connected: true });
 
-    // non-work greeting (mirrors the native chatbot mode)
-    expect(screen.getByText("안녕하세요? 무슨 대화를 할까요?")).toBeInTheDocument();
+    // personalized time-of-day greeting (mirrors the native 업무 EmptyState)
+    expect(screen.getByText(/^선택님, /)).toBeInTheDocument();
     // composer with the native placeholder
     expect(screen.getByRole("textbox", { name: "Deneb에게 메시지" })).toHaveAttribute(
       "placeholder",
@@ -83,7 +83,7 @@ describe("ChatView (비업무 채팅 탭)", () => {
     expect(capture?.params).toMatchObject({
       filename: "contract.pdf",
       mimeType: "application/pdf",
-      sessionKey: "chat:main",
+      sessionKey: "client:main",
     });
   });
 
@@ -128,11 +128,11 @@ describe("ChatView (비업무 채팅 탭)", () => {
     expect(rpcCalls.find((c) => c.method === "miniapp.capture.document")?.params).toMatchObject({
       filename: "contract.pdf",
       mimeType: "application/pdf",
-      sessionKey: "chat:main",
+      sessionKey: "client:main",
     });
   });
 
-  it("pastes a clipboard image as an attachment (chat:main)", async () => {
+  it("pastes a clipboard image as an attachment (client:main)", async () => {
     const rpcCalls: Array<{ method: string; params: Record<string, unknown> }> = [];
     vi.stubGlobal(
       "fetch",
@@ -168,7 +168,7 @@ describe("ChatView (비업무 채팅 탭)", () => {
     await waitFor(() => expect(rpcCalls.some((c) => c.method === "miniapp.capture.image")).toBe(true));
     expect(rpcCalls.find((c) => c.method === "miniapp.capture.image")?.params).toMatchObject({
       mimeType: "image/png",
-      sessionKey: "chat:main",
+      sessionKey: "client:main",
     });
   });
 
@@ -210,7 +210,7 @@ describe("ChatView (비업무 채팅 탭)", () => {
     const capture = rpcCalls.find((c) => c.method === "miniapp.capture.audio");
     expect(capture?.params).toMatchObject({
       mimeType: "audio/mpeg",
-      sessionKey: "chat:main",
+      sessionKey: "client:main",
     });
     expect(capture?.params).not.toHaveProperty("caption");
     expect(composer).toHaveValue("이 녹음 요약해줘");
@@ -254,7 +254,7 @@ describe("ChatView (비업무 채팅 탭)", () => {
     const capture = rpcCalls.find((c) => c.method === "miniapp.capture.image");
     expect(capture?.params).toMatchObject({
       mimeType: "image/png",
-      sessionKey: "chat:main",
+      sessionKey: "client:main",
       caption: "이 이미지에서 금액만 찾아줘",
     });
     expect(typeof capture?.params.image).toBe("string");

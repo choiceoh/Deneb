@@ -27,7 +27,7 @@ import androidx.compose.ui.unit.dp
  * tile ([hideableMoreEntries] — every [MoreEntry] that isn't [MoreEntry.alwaysShown]) gets a
  * row with a Material [Switch]: ON = 표시, OFF = 숨김. The user's hidden set persists in
  * [AppSettings.getHiddenMoreTiles] keyed by the tile's stable [MoreEntry.key], and
- * [DenebMoreScreen] filters the grid against it (composing with the 챗봇-mode 업무 gate).
+ * [DenebMoreScreen] filters the grid against it.
  *
  * 채팅·설정 are intentionally NOT listed: 설정 is [MoreEntry.alwaysShown] (hiding it would lock
  * out this very control) and 채팅 is a bottom-bar tab (never in the grid). Hosted by

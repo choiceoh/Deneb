@@ -1,5 +1,5 @@
 ---
-description: 모델 역할(main/tiny/lightweight/coding/fallback/chatbot/vision)별 작업 배치의 단일 진실원 — 어떤 임무가 어떤 역할을 쓰고 왜. 새 LLM 호출 추가·역할 변경 시 필독.
+description: 모델 역할(main/tiny/lightweight/coding/fallback/vision)별 작업 배치의 단일 진실원 — 어떤 임무가 어떤 역할을 쓰고 왜. 새 LLM 호출 추가·역할 변경 시 필독.
 globs: gateway-go/internal/ai/modelrole/**, gateway-go/internal/pipeline/pilot/**, gateway-go/internal/runtime/server/server_chat_config.go
 ---
 
@@ -7,7 +7,7 @@ globs: gateway-go/internal/ai/modelrole/**, gateway-go/internal/pipeline/pilot/*
 
 > 어떤 임무가 어떤 모델 역할을 쓰는지의 **단일 진실원**. 실제 모델 이름은 코드에 하드코딩하지 않는다 — 코드는 **역할만 고르고**, 역할→모델은 `~/.deneb/deneb.json` 의 `agents.*Model` + wormhole 라우터가 결정한다. 새 LLM 호출을 추가하거나 역할을 바꿀 때 아래 "임무→역할 표"에 행을 추가하고 근거를 적는다.
 
-## 역할 7종 + 의도
+## 역할 6종 + 의도
 
 상수: `gateway-go/internal/ai/modelrole/registry.go`. 모델 매핑: `~/.deneb/deneb.json` `agents.*Model` (예시는 *현재값*일 뿐 — 코드 판단 기준이 아니다).
 
@@ -18,7 +18,6 @@ globs: gateway-go/internal/ai/modelrole/**, gateway-go/internal/pipeline/pilot/*
 | 역할 | 상수 | 의도 | 로컬/클라우드 (2026-07-04 스냅샷) |
 |---|---|---|---|
 | main | `RoleMain` | 대화·분석·도구호출·생성물 합성·**추론급 품질 종합** (가장 강력) | ⚠️ **클라우드** (glm-5.2, ≥06-28) |
-| chatbot | `RoleChatbot` | 챗봇 워크스페이스(`chat:`) 전용 | 클라우드 (glm-5.2) |
 | coding | `RoleCoding` | 코드 수정·구현자 서브에이전트·스킬 패치 | 클라우드 (glm-5.2) |
 | lightweight | `RoleLightweight` | **바운드 요약**·로컬 잡일꾼 | 로컬 (wormhole/dsv4-nothink@srv2 — qwen3.6에서 교체) |
 | tiny | `RoleTiny` | **단순 분류/추출** (가장 작음) | 로컬 (wormhole/dsv4-nothink) |
@@ -27,7 +26,9 @@ globs: gateway-go/internal/ai/modelrole/**, gateway-go/internal/pipeline/pilot/*
 
 > ⚠️ **analysis 역할은 2026-07-07 제거됐다.** 과거 `analysis → glm-5.2`(클라우드, main·chatbot·coding과 공유)라 요약류 헬퍼 콜을 얹으면 클라우드로 새던 함정의 근원이었다 — 컴팩션·youtube 요약이 실제로 이렇게 샜다가 #2508/#2509로 lightweight(로컬)로 환원됐다. 이제 **내부/배경 요약은 lightweight(로컬), 사용자가 읽는 품질 종합은 main**으로 이분된다. analysis와 동일 모델(glm-5.2)이라 제거는 동작상 무변화였다.
 >
-> ⚠️ **2026-07 현재는 main도 클라우드다.** 폴백 방향이 뒤집혔다: 클라우드 main(glm)이 죽으면 **로컬 dsv4로 낙하**한다(가용성 관점에선 건강한 배치). 실측(2026-07-04) glm 소비 ≈ 3.2M input tok/일, main 턴 평균 54~73s. vLLM APC(prefix cache) 핫패스는 main이 아니라 **dsv4 경로**(fallback·dsv4-nothink 헬퍼·챗봇 세션 오버라이드)로 축소됐다 — `docs/agent-rules/prompt-cache.md` §1.5 의 원칙은 그 트래픽과 main 의 로컬 복귀 대비로 그대로 준수한다.
+> ⚠️ **2026-07 현재는 main도 클라우드다.** 폴백 방향이 뒤집혔다: 클라우드 main(glm)이 죽으면 **로컬 dsv4로 낙하**한다(가용성 관점에선 건강한 배치). 실측(2026-07-04) glm 소비 ≈ 3.2M input tok/일, main 턴 평균 54~73s. vLLM APC(prefix cache) 핫패스는 main이 아니라 **dsv4 경로**(fallback·dsv4-nothink 헬퍼)로 축소됐다 — `docs/agent-rules/prompt-cache.md` §1.5 의 원칙은 그 트래픽과 main 의 로컬 복귀 대비로 그대로 준수한다.
+>
+> ★ **chatbot 역할은 2026-07-08 제거됐다** — 챗봇 워크스페이스(`chat:` 세션) 자체가 제품에서 삭제되면서(단일 업무 워크스페이스로 통합) `RoleChatbot`·`agents.chatbotModel`도 함께 은퇴했다. 레거시 `chat:` 세션은 일반 세션으로 흡수되어 main을 쓴다.
 
 ## 역할 선택 헬퍼 (`pipeline/pilot/localai.go`)
 
@@ -62,7 +63,7 @@ globs: gateway-go/internal/ai/modelrole/**, gateway-go/internal/pipeline/pilot/*
 | 도구출력 압축 | `chat/localai_hooks.go` | **lightweight** | 큰 입력 압축 |
 | polaris 검색/요약 헬퍼 | `runtime/server/chat_pipeline.go` (`LocalAIFunc`) | **lightweight** | 회상 핫패스 |
 | 구현자 서브에이전트 | `sessions_spawn(tool_preset=implementer)` | **coding** when configured, else subagent/default | 파일 쓰기·exec를 할 수 있는 코드 수정 위임. 코딩 전용 모델은 네이티브 설정의 `agents.codingModel`로 opt-in |
-| 코드모드 세션 턴 (`code:<taskID>`) | `chat/run_model.go` (chatbot 분기와 대칭) | **coding** when configured, else main | 코드모드 채팅 턴. 세션 키로 판별, `agents.codingModel` 설정 시 그 모델·미설정 시 main 폴백(옵트인·무변화). 프롬프트는 구현자 프로파일(`prompt.CodingPersona` + worktree CLAUDE.md/AGENTS.md 주입·업무 컨텍스트 차단), 도구는 `PresetCoding`(업무 메모리·개인 데이터 도구 제외) |
+| 코드모드 세션 턴 (`code:<taskID>`) | `chat/run_model.go` | **coding** when configured, else main | 코드모드 채팅 턴. 세션 키로 판별, `agents.codingModel` 설정 시 그 모델·미설정 시 main 폴백(옵트인·무변화). 프롬프트는 구현자 프로파일(`prompt.CodingPersona` + worktree CLAUDE.md/AGENTS.md 주입·업무 컨텍스트 차단), 도구는 `PresetCoding`(업무 메모리·개인 데이터 도구 제외) |
 | 스킬 진화 패치 생성 | `init_genesis.go` → `genesis.Evolver` | **coding** when configured, else lightweight | SKILL.md 실제 수정 후보를 만드는 경로. 코딩 전용 모델 설정 시 main teacher rewrite를 끄고 coding 역할이 패치 생성을 담당 |
 | 스킬 리뷰 (nudger fork → propose 결정) | `init_genesis.go` reviewModel → `skill_review_fork.go` SendSync | **coding** (이전 lightweight), coding 미설정 시 lightweight 폴백 | 리뷰는 `skill_lifecycle action=propose`를 **호출**해야 하는 도구호출 task. lightweight는 텍스트 역할(요약·제목·JSON — Deneb 어디서도 도구호출 안 함)이라 산문만 내고 **toolCount=0**(srv4 실측) → 전 리뷰 no-op, Propus 루프 무산출. evolver와 같은 도구-가능 역할로 정렬(dogma #7: 도구 무거운 역할엔 측정된 도구호출자). 리뷰는 backoff·2048토큰 캡 + **전용 미니 시스템 프롬프트**(메인 조립 ~50K 비상속 — 리뷰당 입력 62-68K→~12K, 스킬 인덱스는 skills action=list로 온디맨드)로 빈도/비용 바운드 |
 | 스킬 진화 behavioral replay (도구호출 회귀 검증) | `domain/skills/genesis/validation_executor.go` (executor) + `init_genesis.go` 배선 | **lightweight** | 후보 SKILL.md를 부작용 없이 시뮬레이션해 도구호출 plan을 뽑고, original↔candidate 행동 회귀를 채점하는 검증 게이트. 로컬·바운드. **왜 lightweight인가**: main은 챗 핫패스와 GPU 경합 + 과비용이고, 게이트는 두 본문을 **같은 모델**로 비교하므로 절대 충실도보다 일관된 판별력이 중요(executor 편향은 델타에서 상쇄). `DENEB_SKILL_EVOLVE_REPLAY`로 opt-in, fail-open |
