@@ -31,13 +31,15 @@ type Store struct {
 	mu      sync.RWMutex
 	path    string
 	all     []Contact
-	byPhone map[string][]int    // normalized phone -> indices into all
-	byEmail map[string]struct{} // lowercased email -> present (VIP lookups)
+	byPhone map[string][]int // normalized phone -> indices into all
+	byEmail map[string][]int // lowercased email -> contact indices (homonyms keep
+	// distinct addresses, so an email resolves to the ONE identity that owns it —
+	// this is the join key that name matching cannot disambiguate)
 }
 
 // NewStore loads the snapshot from path (an empty store if the file is absent).
 func NewStore(path string) (*Store, error) {
-	s := &Store{path: path, byPhone: map[string][]int{}, byEmail: map[string]struct{}{}}
+	s := &Store{path: path, byPhone: map[string][]int{}, byEmail: map[string][]int{}}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -208,11 +210,11 @@ func (s *Store) reindexLocked() {
 		}
 	}
 	s.byPhone = idx
-	emails := make(map[string]struct{}, len(s.all))
+	emails := make(map[string][]int, len(s.all))
 	for i := range s.all {
 		for _, e := range s.all[i].Emails {
 			if key := strings.ToLower(strings.TrimSpace(e)); key != "" {
-				emails[key] = struct{}{}
+				emails[key] = append(emails[key], i)
 			}
 		}
 	}
@@ -228,8 +230,29 @@ func (s *Store) HasEmail(email string) bool {
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	_, ok := s.byEmail[key]
-	return ok
+	return len(s.byEmail[key]) > 0
+}
+
+// LookupEmail returns every contact that carries the address (case-insensitive
+// exact match). Unlike name matching, an email is unique to one identity, so the
+// result is normally a single contact — the join key that disambiguates 동명이인
+// (same name, different address). Returns nil when no contact owns the address.
+func (s *Store) LookupEmail(email string) []Contact {
+	key := strings.ToLower(strings.TrimSpace(email))
+	if key == "" {
+		return nil
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	idxs := s.byEmail[key]
+	if len(idxs) == 0 {
+		return nil
+	}
+	out := make([]Contact, 0, len(idxs))
+	for _, i := range idxs {
+		out = append(out, s.all[i])
+	}
+	return out
 }
 
 func (s *Store) persistLocked() error {

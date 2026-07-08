@@ -8,6 +8,8 @@
 
 package wiki
 
+import "strings"
+
 // ResolvePersonPaths maps each display name to its 인물 page relPath, for the
 // names that have a page. Matching uses NormalizePersonName — the same
 // normalization contact enrichment uses — so "오선택 전무", "오선택(탑솔라)" and
@@ -35,6 +37,74 @@ func (s *Store) ResolvePersonPaths(names []string) map[string]string {
 		}
 		if p, ok := people[key]; ok {
 			out[name] = p.path
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// ResolvePeopleByEmail maps each email address to the 인물 page that declares it
+// in frontmatter `emails:` — the robust identity join name matching cannot do.
+// An email is unique to one identity, so 동명이인 (김성훈@marsh vs 김성훈@bohae)
+// resolve to different pages, and mail senders / org members / contacts all land
+// on the ONE page that owns their address. Keys are lowercased; an address no
+// page claims is absent. One disk scan resolves the whole batch.
+func (s *Store) ResolvePeopleByEmail(emails []string) map[string]string {
+	if len(emails) == 0 {
+		return nil
+	}
+	idx := s.indexPeopleByEmail()
+	if len(idx) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(emails))
+	for _, e := range emails {
+		key := strings.ToLower(strings.TrimSpace(e))
+		if key == "" {
+			continue
+		}
+		if p, ok := idx[key]; ok {
+			out[key] = p
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// ResolvePersonByEmail resolves a single address to its 인물 page relPath, or ""
+// when no page claims it. Thin single-address wrapper over ResolvePeopleByEmail.
+func (s *Store) ResolvePersonByEmail(email string) string {
+	m := s.ResolvePeopleByEmail([]string{email})
+	return m[strings.ToLower(strings.TrimSpace(email))]
+}
+
+// indexPeopleByEmail builds email(lowercased) → 인물 page relPath from every 인물
+// page's frontmatter `emails:`. First writer wins on the rare chance two pages
+// claim one address (a data error worth surfacing elsewhere, not here). nil when
+// no page declares any address.
+func (s *Store) indexPeopleByEmail() map[string]string {
+	relPaths, err := s.ListPages("인물")
+	if err != nil {
+		return nil
+	}
+	out := make(map[string]string, len(relPaths))
+	for _, path := range relPaths {
+		page, rerr := s.ReadPage(path)
+		if rerr != nil || page == nil {
+			continue
+		}
+		for _, e := range page.Meta.Emails {
+			key := strings.ToLower(strings.TrimSpace(e))
+			if key == "" {
+				continue
+			}
+			if _, exists := out[key]; !exists {
+				out[key] = path
+			}
 		}
 	}
 	if len(out) == 0 {

@@ -62,8 +62,14 @@ type OrgDeps struct {
 	// one call (one disk scan for the whole chart), so the GET response can link
 	// each member to their knowledge page. Read-only, GET-only, never persisted.
 	// A nil ResolvePeople (no wiki store) disables the person link; the editor
-	// still works.
+	// still works. This is the NAME join — the fallback when the identity email is
+	// unknown.
 	ResolvePeople func(names []string) map[string]string
+	// ResolvePersonByEmail maps an email address to its 인물 page relPath — the
+	// robust identity join that disambiguates 동명이인 the name cannot. GET prefers
+	// it (via the member's enriched email) and falls back to ResolvePeople's name
+	// match. nil disables the email join. Read-only, GET-only.
+	ResolvePersonByEmail func(email string) string
 }
 
 // MemberOut is the wire shape for one person in a node: their name plus the
@@ -162,7 +168,7 @@ func orgGet(deps OrgDeps) rpcutil.HandlerFunc {
 		if deps.ResolvePeople != nil {
 			personPaths = deps.ResolvePeople(allMemberNames(tree))
 		}
-		return rpcutil.RespondOK(req.ID, projectOrgTree(tree, deps.LookupContact, personPaths))
+		return rpcutil.RespondOK(req.ID, projectOrgTree(tree, deps.LookupContact, personPaths, deps.ResolvePersonByEmail))
 	}
 }
 
@@ -209,7 +215,7 @@ func orgSave(deps OrgDeps) rpcutil.HandlerFunc {
 // stays free of //deneb:wire and the handler owns the wire contract); members
 // are additionally enriched with contact phones/emails via lookup (nil lookup =
 // no enrichment).
-func projectOrgTree(t org.OrgTree, lookup func(name string) (phones, emails []string), personPaths map[string]string) OrgTreeOut {
+func projectOrgTree(t org.OrgTree, lookup func(name string) (phones, emails []string), personPaths map[string]string, resolveByEmail func(email string) string) OrgTreeOut {
 	out := OrgTreeOut{Nodes: make([]OrgNodeOut, 0, len(t.Nodes))}
 	for _, n := range t.Nodes {
 		out.Nodes = append(out.Nodes, OrgNodeOut{
@@ -218,7 +224,7 @@ func projectOrgTree(t org.OrgTree, lookup func(name string) (phones, emails []st
 			Type:      n.Type,
 			ParentID:  n.ParentID,
 			Lane:      n.Lane,
-			Members:   membersToWire(n.Members, lookup, personPaths),
+			Members:   membersToWire(n.Members, lookup, personPaths, resolveByEmail),
 			Keywords:  n.Keywords,
 			Companies: n.Companies,
 		})
@@ -243,7 +249,7 @@ func allMemberNames(t org.OrgTree) []string {
 // name is matched against the contacts store and the resulting phones/emails are
 // attached (read-only enrichment — never persisted; see MemberOut). A nil lookup
 // (no contacts store wired) leaves phones/emails empty.
-func membersToWire(ms []org.Member, lookup func(name string) (phones, emails []string), personPaths map[string]string) []MemberOut {
+func membersToWire(ms []org.Member, lookup func(name string) (phones, emails []string), personPaths map[string]string, resolveByEmail func(email string) string) []MemberOut {
 	if ms == nil {
 		return nil
 	}
@@ -253,7 +259,18 @@ func membersToWire(ms []org.Member, lookup func(name string) (phones, emails []s
 		if lookup != nil {
 			mo.Phones, mo.Emails = lookup(m.Name)
 		}
-		if personPaths != nil {
+		// Prefer the EMAIL join (robust identity — disambiguates 동명이인) using the
+		// member's enriched address; fall back to the NAME match when no address
+		// resolves (e.g. a homonym page left without an identity email).
+		if resolveByEmail != nil {
+			for _, e := range mo.Emails {
+				if p := resolveByEmail(e); p != "" {
+					mo.PersonPath = p
+					break
+				}
+			}
+		}
+		if mo.PersonPath == "" && personPaths != nil {
 			mo.PersonPath = personPaths[m.Name]
 		}
 		out = append(out, mo)

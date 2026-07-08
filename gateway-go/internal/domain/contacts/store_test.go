@@ -51,6 +51,30 @@ func TestLookupPhone(t *testing.T) {
 	}
 }
 
+func TestLookupEmail(t *testing.T) {
+	s, _ := NewStore(filepath.Join(t.TempDir(), "c.json"))
+	// Two 김성훈 with different addresses — the address book already keeps homonyms
+	// as distinct entries; LookupEmail is the join that recovers the right one.
+	s.ReplaceAll([]Contact{
+		{Name: "김성훈", Emails: []string{"sunghoon.kim@marsh.com"}, Org: "Marsh Korea"},
+		{Name: "김성훈", Emails: []string{"akim@bohae.co.kr"}, Org: "보해"},
+	})
+
+	got := s.LookupEmail("SunghOon.Kim@Marsh.com") // case-insensitive
+	if len(got) != 1 || got[0].Org != "Marsh Korea" {
+		t.Fatalf("marsh email → %+v, want the Marsh 김성훈", got)
+	}
+	if got := s.LookupEmail("akim@bohae.co.kr"); len(got) != 1 || got[0].Org != "보해" {
+		t.Errorf("bohae email → %+v, want the 보해 김성훈", got)
+	}
+	if got := s.LookupEmail("nobody@nowhere.com"); got != nil {
+		t.Errorf("unknown email → %+v, want nil", got)
+	}
+	if !s.HasEmail("akim@bohae.co.kr") || s.HasEmail("x@y.z") {
+		t.Errorf("HasEmail must still report presence correctly after the index change")
+	}
+}
+
 func TestSearch(t *testing.T) {
 	s, _ := NewStore(filepath.Join(t.TempDir(), "c.json"))
 	s.ReplaceAll(sample())

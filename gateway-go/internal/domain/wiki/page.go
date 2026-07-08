@@ -75,6 +75,13 @@ type Frontmatter struct {
 	Category string
 	Tags     []string
 	Related  []string
+	// Emails are the person's canonical identity keys (인물 pages only). An email
+	// is unique to one identity, so it is what disambiguates 동명이인 (same name,
+	// different address) that name matching alone conflates: mail senders, org
+	// members, and contacts all resolve to the ONE 인물 page that declares their
+	// address. Populated from the address book (which stores homonyms as distinct
+	// entries); empty on non-person pages and on people not yet in the address book.
+	Emails []string
 	// Cues are recall entry points (Memora-style cue anchors): alternate Korean
 	// phrasings a future query might use for this page — synonyms, aliases,
 	// question forms — deliberately words NOT already in the title/summary/body.
@@ -178,6 +185,9 @@ func (p *Page) Render() []byte {
 	}
 	if len(p.Meta.Related) > 0 {
 		buf.WriteString("related: [" + strings.Join(sanitizeFlowItems(p.Meta.Related), ", ") + "]\n")
+	}
+	if len(p.Meta.Emails) > 0 {
+		buf.WriteString("emails: [" + strings.Join(sanitizeFlowItems(p.Meta.Emails), ", ") + "]\n")
 	}
 	if len(p.Meta.Cues) > 0 {
 		buf.WriteString("cues: [" + strings.Join(sanitizeFlowItems(p.Meta.Cues), ", ") + "]\n")
@@ -585,6 +595,8 @@ func parseFrontmatterFields(raw string) Frontmatter {
 			fm.Tags = parseFlowArray(val)
 		case "related":
 			fm.Related = parseFlowArray(val)
+		case "emails":
+			fm.Emails = parseFlowArray(val)
 		case "cues":
 			fm.Cues = parseFlowArray(val)
 		case "resource":
