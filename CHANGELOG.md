@@ -1,5 +1,20 @@
 # Changelog
 
+## [4.80.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.79.0...deneb-v4.80.0) (2026-07-08)
+
+
+### ✨ Features
+
+* **autonomous:** 자가개선 능동 레인 — 수정 재발 자동 승격 + 큐 기아 시 스윕 발굴 ([#3302](https://github.com/choiceoh/Deneb/issues/3302)) ([8603eb8](https://github.com/choiceoh/Deneb/commit/8603eb81de813d89260d8324aea17fceed9f20e7))
+* **skills:** 반복 patch-first 거절을 구조 검토 후보로 승격 — 7일 창 2회 + 스킬당 dedup ([#3300](https://github.com/choiceoh/Deneb/issues/3300)) ([4959fb1](https://github.com/choiceoh/Deneb/commit/4959fb146d82e48a97d10c786f89d8fdde079a1b))
+* **skills:** 자가개선 코딩 퍼널 가시성 — 큐 침묵을 소진/미발생으로 화면에서 구분 ([#3301](https://github.com/choiceoh/Deneb/issues/3301)) ([30b5a5c](https://github.com/choiceoh/Deneb/commit/30b5a5c0406a6f73380f302d63cfb1b0b67c397a))
+* **wiki:** 인물 코드 전용 pid 필드 분리 — code:는 프로젝트 전용 유지 ([#3299](https://github.com/choiceoh/Deneb/issues/3299)) ([6b58fa0](https://github.com/choiceoh/Deneb/commit/6b58fa0602b9debbb22d36008c43a7bbb93a65dd))
+
+
+### 🐛 Bug Fixes
+
+* **wiki:** 인물 표준양식 담당·관계 플레이스홀더를 중립 텍스트로 — 검색 회귀 수정 ([#3297](https://github.com/choiceoh/Deneb/issues/3297)) ([7855084](https://github.com/choiceoh/Deneb/commit/785508422b696207a6955495865010dab30960b7))
+
 ## [4.79.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.78.0...deneb-v4.79.0) (2026-07-08)
 
 

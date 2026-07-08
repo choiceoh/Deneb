@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.59](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.58...andromeda-v0.0.59) (2026-07-08)
+
+
+### ✨ Features
+
+* **skills:** 자가개선 코딩 퍼널 가시성 — 큐 침묵을 소진/미발생으로 화면에서 구분 ([#3301](https://github.com/choiceoh/Deneb/issues/3301)) ([30b5a5c](https://github.com/choiceoh/Deneb/commit/30b5a5c0406a6f73380f302d63cfb1b0b67c397a))
+
 ## [0.0.58](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.57...andromeda-v0.0.58) (2026-07-08)
 
 
