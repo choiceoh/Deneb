@@ -1,6 +1,7 @@
 package genesis
 
 import (
+	"sort"
 	"strings"
 	"time"
 
@@ -92,6 +93,32 @@ type latestSelfHarnessTarget struct {
 }
 
 func (t *Tracker) addTargetRecurrenceSignalsLocked(s *SelfHarnessSignalSummary, entries []LifecycleLogEntry, cutoff int64) {
+	recs := t.targetRecurrencesLocked(entries, cutoff)
+	for _, rec := range recs {
+		s.TargetRecurrences7d += rec.recurrences
+	}
+	if len(recs) > 0 {
+		s.TopRecurringTargetSkill = recs[0].skill
+		s.TopRecurringTargetSignature = recs[0].signature
+		s.TopRecurringTargetRecurrences = recs[0].recurrences
+	}
+}
+
+// targetRecurrence is one "the accepted evolve did not stick" observation:
+// real usage failures whose trace signature matches the latest evolved target
+// signature for that skill, after the evolve landed.
+type targetRecurrence struct {
+	skill       string
+	signature   string
+	recurrences int
+	lastAt      int64
+}
+
+// targetRecurrencesLocked reports per-(skill, latest target signature)
+// recurrence counts within the window, most-recurring first (ties by skill
+// name for determinism). Caller holds t.mu. Shared by the health summary
+// above and the promotion lane (tracker_recurrence_promotion.go).
+func (t *Tracker) targetRecurrencesLocked(entries []LifecycleLogEntry, cutoff int64) []targetRecurrence {
 	latestTargets := map[string]latestSelfHarnessTarget{}
 	for _, entry := range entries {
 		if entry.CreatedAt < cutoff || entry.Type != "evolved" || strings.TrimSpace(entry.SkillName) == "" {
@@ -112,13 +139,13 @@ func (t *Tracker) addTargetRecurrenceSignalsLocked(s *SelfHarnessSignalSummary, 
 		}
 	}
 	if len(latestTargets) == 0 {
-		return
+		return nil
 	}
 	usage, err := jsonlstore.Load[UsageRecord](t.usagePath)
 	if err != nil {
-		return
+		return nil
 	}
-	perTarget := map[string]int{}
+	perTarget := map[string]*targetRecurrence{}
 	for _, record := range usage {
 		if record.UsedAt < cutoff || record.Success || !isRealUsageRecord(record) {
 			continue
@@ -134,19 +161,26 @@ func (t *Tracker) addTargetRecurrenceSignalsLocked(s *SelfHarnessSignalSummary, 
 		if !selfHarnessSignatureMatches(normalizedSelfHarnessSignature(target.signature), normalizedSelfHarnessSignature(trace.Signature)) {
 			continue
 		}
-		s.TargetRecurrences7d++
 		key := target.skill + "\x00" + target.signature
-		perTarget[key]++
-	}
-	for key, count := range perTarget {
-		if count <= s.TopRecurringTargetRecurrences {
-			continue
+		rec, ok := perTarget[key]
+		if !ok {
+			rec = &targetRecurrence{skill: target.skill, signature: target.signature}
+			perTarget[key] = rec
 		}
-		parts := strings.SplitN(key, "\x00", 2)
-		s.TopRecurringTargetSkill = parts[0]
-		if len(parts) > 1 {
-			s.TopRecurringTargetSignature = parts[1]
+		rec.recurrences++
+		if record.UsedAt > rec.lastAt {
+			rec.lastAt = record.UsedAt
 		}
-		s.TopRecurringTargetRecurrences = count
 	}
+	out := make([]targetRecurrence, 0, len(perTarget))
+	for _, rec := range perTarget {
+		out = append(out, *rec)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].recurrences != out[j].recurrences {
+			return out[i].recurrences > out[j].recurrences
+		}
+		return out[i].skill < out[j].skill
+	})
+	return out
 }

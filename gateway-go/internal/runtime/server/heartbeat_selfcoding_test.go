@@ -70,12 +70,12 @@ func TestDetectSelfCodingNudge_QuietPaths(t *testing.T) {
 // The self-coding nudge alone must warrant a turn and sit between the user's
 // own checks and the research lane in the composed body.
 func TestComposeHeartbeatBody_SelfCodingLane(t *testing.T) {
-	body := composeHeartbeatBody("", "", "[자가코딩 제안 검토] 2건", "")
+	body := composeHeartbeatBody("", "", "[자가코딩 제안 검토] 2건", "", "")
 	if !strings.Contains(body, "[자가코딩 제안 검토] 2건") || !strings.Contains(body, "등록된 작업은 없습니다") {
 		t.Errorf("selfcoding-only body wrong:\n%s", body)
 	}
 
-	body = composeHeartbeatBody("신호", "- 작업", "[자가코딩]", "[연구]")
+	body = composeHeartbeatBody("신호", "- 작업", "[자가코딩]", "", "[연구]")
 	si := strings.Index(body, "신호")
 	ci := strings.Index(body, "- 작업")
 	sci := strings.Index(body, "[자가코딩]")

@@ -575,6 +575,23 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 				}
 				return len(recs), fmt.Sprintf("%d:%s:%d", len(recs), newest.ID, newest.UpdatedAt)
 			},
+			// Active capture: recurrence promotion runs deterministically each
+			// tick; the sweep lane asks the turn to mine signals only when the
+			// queue is empty (heartbeat_selfimprove_sweep.go).
+			promoteRecurrences: func() (int, error) {
+				tracker := s.genesisTracker
+				if tracker == nil {
+					return 0, nil
+				}
+				return tracker.PromoteTargetRecurrenceCandidates()
+			},
+			selfImproveSignals: func() (genesis.SelfCorrectionFunnelSummary, int) {
+				tracker := s.genesisTracker
+				if tracker == nil {
+					return genesis.SelfCorrectionFunnelSummary{}, 0
+				}
+				return tracker.SelfCorrectionFunnel(), tracker.SelfHarnessSignals().TargetRecurrences7d
+			},
 		})
 
 		// Register the goal loop (Ralph loop): advances active standing goals
