@@ -7,6 +7,43 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
+func TestEnrichEmployeePages(t *testing.T) {
+	dir := t.TempDir()
+	store := testutil.Must(NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
+	defer store.Close()
+
+	book := []Contact{
+		{Name: "강동민", Emails: []string{"kangdm@topsolar.kr"}, Org: "탑솔라"},     // ours → page
+		{Name: "고건", Emails: []string{"go@topsolar.kr"}, Org: "탑솔라"},          // ours
+		{Name: "고건 주임", Emails: []string{"go@topsolar.kr"}, Org: "탑솔라"},       // 직급 변형 → same page
+		{Name: "조동욱", Emails: []string{"cho@pacificoenergy.co.kr"}, Org: "P"}, // external → no page
+		{Name: "#이성기 실장", Emails: []string{"lsk@topsolar.kr"}, Org: "탑솔라"},    // junk row → skipped
+	}
+
+	res, err := store.EnrichEmployeePages(book, []string{"topsolar.kr"})
+	if err != nil {
+		t.Fatalf("EnrichEmployeePages: %v", err)
+	}
+
+	people, _ := store.listPeopleByName()
+	if _, ok := people["강동민"]; !ok {
+		t.Errorf("강동민 (our staff) should have a page")
+	}
+	if _, ok := people["고건"]; !ok {
+		t.Errorf("고건 should have a page")
+	}
+	if _, ok := people["조동욱"]; ok {
+		t.Errorf("조동욱 (external domain) must NOT get a page")
+	}
+	if _, ok := people["이성기"]; ok {
+		t.Errorf("junk '#이성기 실장' row must be skipped")
+	}
+	// 고건 + 고건 주임 collapse to one page.
+	if n := len(res.Created); n != 2 {
+		t.Errorf("created %d pages, want 2 (강동민, 고건 — dedup 직급 variant)", n)
+	}
+}
+
 func TestEnrichPersonEmails(t *testing.T) {
 	dir := t.TempDir()
 	store := testutil.Must(NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
