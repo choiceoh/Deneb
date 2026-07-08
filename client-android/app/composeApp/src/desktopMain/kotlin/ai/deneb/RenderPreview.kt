@@ -976,7 +976,7 @@ internal val previewScreens: Map<String, @Composable (ColorScheme) -> Unit> = ma
     "chat_empty" to { scheme ->
         MaterialTheme(colorScheme = scheme) {
             Surface(color = MaterialTheme.colorScheme.background) {
-                EmptyState(recallEnabled = true, modifier = Modifier.fillMaxSize())
+                EmptyState(modifier = Modifier.fillMaxSize())
             }
         }
     },

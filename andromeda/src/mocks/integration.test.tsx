@@ -72,8 +72,14 @@ describe("App against the mock gateway (real stack)", () => {
   it("loads a past conversation's transcript from the history drawer", async () => {
     render(<App />);
     await userEvent.click(await screen.findByRole("button", { name: "대화 기록" }));
-    // sessions.recent rows render in the drawer
-    await userEvent.click(await screen.findByText("메인 대화"));
+    // sessions.recent rows render in the drawer. The hidden 채팅 탭 keeps its own
+    // (identically-labelled) session column mounted and — now that it lists the
+    // same client:* namespace — the same row appears there too; scope to the AI
+    // panel's drawer (the one outside .chat-view).
+    const drawers = screen.getAllByRole("group", { name: "대화 기록" });
+    const panelDrawer = drawers.find((d) => d.closest(".chat-view") === null);
+    if (!panelDrawer) throw new Error("AI panel session drawer not found");
+    await userEvent.click(await within(panelDrawer).findByText("메인 대화"));
     // selecting the session loads its transcript (Markdown-rendered) into the log
     const log = screen.getByRole("log", { name: "Deneb 대화" });
     expect(await within(log).findByText("오늘 일정")).toBeInTheDocument();

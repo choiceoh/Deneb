@@ -130,15 +130,20 @@ func TestShouldRecordRunDiarySkipsHeartbeatAndSystemSessions(t *testing.T) {
 	if shouldRecordRunDiary(RunParams{SessionKey: "system:diary-heartbeat", Message: "internal"}) {
 		t.Fatal("system session should not be recorded to diary")
 	}
-	// Sync-only surfaces excluded by design: 챗봇 (work-memory cut both ways),
-	// coding worktrees (checkpoints are their history), cron payload prompts.
-	for _, key := range []string{"chat:main", "code:task-0703-1", "cron:morning-letter"} {
+	// Sync-only surfaces excluded by design: coding worktrees (checkpoints are
+	// their history), cron payload prompts.
+	for _, key := range []string{"code:task-0703-1", "cron:morning-letter"} {
 		if shouldRecordRunDiary(RunParams{SessionKey: key, Message: "실질적인 내용이 있는 메시지"}) {
 			t.Errorf("%s: should NOT record diary", key)
 		}
 	}
 	if !shouldRecordRunDiary(RunParams{SessionKey: "client:main:task:123", Message: "서브 대화도 일지에 남는다"}) {
 		t.Error("client sub-conversation should record diary")
+	}
+	// Legacy chat: keys (retired 챗봇 workspace) are absorbed into 업무: a
+	// continued old conversation records to the diary like any work session.
+	if !shouldRecordRunDiary(RunParams{SessionKey: "chat:legacy-1", Message: "이어서 대화"}) {
+		t.Error("legacy chat: session should record diary after the mode's removal")
 	}
 	if !shouldRecordRunDiary(RunParams{SessionKey: "telegram:1", Message: "기억 체계 개선 계속"}) {
 		t.Fatal("normal user turn should be recorded")

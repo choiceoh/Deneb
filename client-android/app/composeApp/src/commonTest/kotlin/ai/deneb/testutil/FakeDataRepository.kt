@@ -118,8 +118,6 @@ class FakeDataRepository : DataRepository {
         // No-op in tests
     }
 
-    override fun isRecallEnabled(): Boolean = true
-
     // SMS drafts
     private val _smsDrafts = MutableStateFlow(emptyList<SmsDraft>())
     override val smsDrafts: StateFlow<List<SmsDraft>> = _smsDrafts

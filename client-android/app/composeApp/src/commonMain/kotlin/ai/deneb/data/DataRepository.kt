@@ -45,13 +45,6 @@ interface DataRepository {
     fun truncateFrom(messageId: String)
     fun restoreCurrentConversation()
 
-    // Recall toggle: gateway long-term-memory recall on/off — the "focused chat /
-    // memory off" top-bar toggle. On (default) injects work-context recall; off
-    // skips both recall and retain for the turn. Persona is unchanged. The setter
-    // lives on the gateway client (switchWorkspace also swaps the session space),
-    // so only the read is needed through this interface.
-    fun isRecallEnabled(): Boolean
-
     // SMS drafts (FOSS-only on Android; the gateway proposes a draft, the user
     // approves it via the in-app banner, and the phone sends it). Read and send
     // are independent opt-ins with separate runtime permissions.

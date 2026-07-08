@@ -18,8 +18,8 @@ import kotlinx.serialization.json.put
 // the retired topics back into the drawer. List real Deneb sessions only, and
 // fall back to a lone client:main home when there are no sessions yet so the
 // drawer is never empty.
-/** A session belongs to the 챗봇 workspace iff its key is in the chat: namespace;
- *  everything else (client:main, cron:, system:, wf-…) is the 업무 workspace. */
+/** Legacy 챗봇 namespace (chat:<uuid>) — the workspace was removed, but old
+ *  conversations persist and stay listed/openable as ordinary sessions. */
 internal fun isChatWorkspaceKey(key: String): Boolean = key.startsWith("chat:")
 
 internal suspend fun DenebGatewayClient.fetchRecentSessions(): List<Conversation>? {
@@ -29,11 +29,8 @@ internal suspend fun DenebGatewayClient.fetchRecentSessions(): List<Conversation
         "miniapp.sessions.recent",
         buildJsonObject { put("limit", 50) },
     ) ?: return null
-    // 업무 and 챗봇 keep SEPARATE session lists — show only the active workspace's
-    // sessions. recall on = 업무, off = 챗봇 (the top-bar pill).
-    val chatMode = !appSettings.isRecallEnabled()
     val recent = payload.sessions
-        .filter { it.key.isNotBlank() && isChatWorkspaceKey(it.key) == chatMode }
+        .filter { it.key.isNotBlank() }
         .map { s ->
             Conversation(
                 id = s.key,
@@ -43,27 +40,6 @@ internal suspend fun DenebGatewayClient.fetchRecentSessions(): List<Conversation
                 title = conversationTitle(s),
             )
         }
-    // 챗봇 has no home session — each chat is an independent chat:<uuid>, so just
-    // list them (newest as the RPC returns). But the conversation the user is
-    // ACTIVELY in must always appear, even when the gateway's recent list doesn't
-    // carry it: a freshly minted chat:<uuid> hasn't run a turn yet (no session row
-    // exists), and the gateway drops chat: sessions on its frequent restarts until
-    // a new turn re-registers them — without this the drawer reads "저장된 대화 없음"
-    // mid-conversation. Inject the active chat as a synthesized row, symmetric to
-    // 업무's client:main home below.
-    if (chatMode) {
-        val activeKey = sessionKey
-        if (!isChatWorkspaceKey(activeKey) || recent.any { it.id == activeKey }) return recent
-        val shortId = activeKey.substringAfterLast(':').take(8)
-        val active = Conversation(
-            id = activeKey,
-            messages = emptyList(),
-            createdAt = 0,
-            updatedAt = kotlin.time.Clock.System.now().toEpochMilliseconds(),
-            title = if (shortId.isNotBlank()) "챗봇 · $shortId" else "챗봇",
-        )
-        return listOf(active) + recent
-    }
     val home = recent.find { it.id == "client:main" }
         ?: Conversation(
             id = "client:main",
@@ -80,11 +56,11 @@ private fun DenebGatewayClient.conversationTitle(s: SessionRowOut): String {
     // The 업무 home keeps its workspace label (matches the empty-drawer fallback),
     // not "내 대화 · main".
     if (s.key == "client:main") return "업무"
-    // 챗봇 conversations are independent chat:<uuid> with no home; an unlabeled one
-    // reads as "챗봇 · <shortId>".
+    // Legacy 챗봇 conversations (independent chat:<uuid>, retired workspace); an
+    // unlabeled one reads as "대화 · <shortId>".
     if (isChatWorkspaceKey(s.key)) {
         val shortId = s.key.substringAfterLast(':').take(8)
-        return if (shortId.isNotBlank()) "챗봇 · $shortId" else "챗봇"
+        return if (shortId.isNotBlank()) "대화 · $shortId" else "대화"
     }
     // 업무-card side-conversations (opened from a feed card) read with the item's
     // title while it is still in the feed, falling back to a generic 업무 메모

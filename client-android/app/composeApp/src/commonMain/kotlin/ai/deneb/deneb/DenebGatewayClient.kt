@@ -130,8 +130,8 @@ internal suspend fun readSseLines(channel: ByteReadChannel, onLine: (String) -> 
  */
 @OptIn(ExperimentalUuidApi::class)
 class DenebGatewayClient(
-    // internal (not private) so session-list extensions can read the active
-    // workspace (recall on = 업무, off = 챗봇) to filter the recent-session list.
+    // internal (not private) so the facade's extension files (sessions, admin,
+    // patch notes) can read persisted settings.
     internal val appSettings: AppSettings,
     private val smsDraftStore: SmsDraftStore,
     private val smsSender: SmsSender,
@@ -285,27 +285,8 @@ class DenebGatewayClient(
      *  attempt) — lets the 피드 screen distinguish first-load from empty. */
     val workFeedLoaded: StateFlow<Boolean> = _workFeedLoaded
 
-    // Reactive workspace mode (업무 true ↔ 챗봇 false), seeded from the persisted
-    // recall setting and republished by [setWorkspace]. Drives the mode-scoped work
-    // feed and gates proactive notifications. AppSettings is the source of truth on
-    // disk; this mirror exists so flows can react to a switch.
-    private val _workspaceWork = MutableStateFlow(appSettings.isRecallEnabled())
-
-    /** Active workspace (업무 true ↔ 챗봇 false), republished by [setWorkspace]. Drives chat
-     *  recall and the mode-scoped work feed, and the 더보기 hub still hides 업무 entries in
-     *  챗봇 — but the bottom-bar navigation (the 5 tabs) is the same in both workspaces. */
-    val workspaceWork: StateFlow<Boolean> = _workspaceWork
-
-    // The feed exposed to the UI is the FULL work feed regardless of the active
-    // workspace. It used to be workspace-scoped (챗봇 → chat:-only items), which
-    // was coherent while 챗봇 mode had no feed surface — but #3001 gave 챗봇 the
-    // same 5 tabs INCLUDING 피드, and since every proactive report lands in
-    // client:main, the 피드 tab in the (now-default) 챗봇 workspace rendered a
-    // designed-empty list. Field incident 2026-07-05: the operator saw "오늘 받은
-    // 피드가 없습니다" for days while the server/state pipeline was fully
-    // healthy. One surface, one dataset (persona split is UI-forbidden anyway —
-    // see CLAUDE.md "UI 분리 금지"); tray-notification gating stays workspace-aware
-    // separately (maybeEmitProactiveNotification).
+    // One surface, one dataset: the feed exposed to the UI is the full work feed
+    // (persona/workspace splits are UI-forbidden — see CLAUDE.md).
     val denebWorkFeed: StateFlow<List<WorkFeedItem>> = _denebWorkFeed.asStateFlow()
 
     /** One proactive 업무-feed report worth a tray notification. */
@@ -350,9 +331,9 @@ class DenebGatewayClient(
     // permission / no fix). Serialized on the sync coroutine, so no lock.
     private var lastLocationForward: TimeSource.Monotonic.ValueTimeMark? = null
 
-    // Restored to the last-open session of the persisted workspace (업무 ↔ 챗봇),
-    // so a restart reopens the space the user left, not always client:main.
-    internal var sessionKey: String = resolveInitialSession()
+    // Restored to the persisted last-open session, so a restart reopens the
+    // conversation the user left, not always client:main.
+    internal var sessionKey: String = appSettings.lastSession()
         private set
     private val _currentConversationId = MutableStateFlow<String?>(sessionKey)
     override val currentConversationId: StateFlow<String?> = _currentConversationId
@@ -852,10 +833,8 @@ class DenebGatewayClient(
 
     override fun startNewChat() {
         _chatHistory.value = emptyList()
-        // A fresh independent conversation in the CURRENT workspace: 업무 branches
-        // off its home (client:main:<uuid>), 챗봇 mints a flat chat:<uuid> with no
-        // home — so the two session lists never mix.
-        switchSession(newSessionKey(appSettings.isRecallEnabled()))
+        // A fresh independent conversation branching off the home (client:main:<uuid>).
+        switchSession(newSessionKey())
     }
 
     // --- Proactive-report deep link → session transcript --------------------
@@ -1007,10 +986,6 @@ class DenebGatewayClient(
      * a concurrent cold-start share can't be clobbered (see historyGate).
      */
     fun openWorkTopic() {
-        // Proactive reports live in the 업무 workspace, so opening one from a push
-        // also switches the active workspace to 업무 (recall on) — otherwise the
-        // user would land on client:main while the pill still said 챗봇.
-        setWorkspace(true)
         switchSession("client:main")
         syncNativeStateAsync()
         // Deep-link switch to the work home: replace whatever conversation was open
@@ -1019,62 +994,8 @@ class DenebGatewayClient(
         loadConversations()
     }
 
-    /**
-     * Mint a fresh independent session key for a workspace. 업무 branches off its
-     * home (client:main:<uuid>); 챗봇 has no home, so each chat is a flat,
-     * independent chat:<uuid>.
-     */
-    private fun newSessionKey(work: Boolean): String = if (work) "client:main:${Uuid.random()}" else "chat:${Uuid.random()}"
-
-    /**
-     * The session to OPEN when entering a workspace: the last one used, or — when
-     * 챗봇 has none yet (blank default) — a freshly minted chat:<uuid>. 업무 always
-     * defaults to its client:main home, so it never mints here.
-     */
-    private fun openSessionFor(work: Boolean): String = appSettings.lastSession(work).ifBlank { newSessionKey(work) }
-
-    /**
-     * Initial active session at construction: the persisted last session, or — for
-     * a 챗봇 first run with no home — a freshly minted chat:<uuid> persisted right
-     * away so the next cold start restores it. (switchSession persists thereafter.)
-     */
-    private fun resolveInitialSession(): String {
-        val work = appSettings.isRecallEnabled()
-        val stored = appSettings.lastSession(work)
-        if (stored.isNotBlank()) return stored
-        val minted = newSessionKey(work)
-        appSettings.setLastSession(work, minted)
-        return minted
-    }
-
-    /**
-     * Single writer for the active workspace mode: persist it (AppSettings is the
-     * on-disk source of truth) and republish to [_workspaceWork] so the mode-scoped
-     * work feed and the proactive-notification gates react. Entering 챗봇 also clears
-     * the 업무 리포트 unread badge — that banner belongs to the 업무 workspace.
-     */
-    private fun setWorkspace(work: Boolean) {
-        appSettings.setRecallEnabled(work)
-        _workspaceWork.value = work
-        if (!work) _hasUnreadWorkReport.value = false
-    }
-
-    /**
-     * Switch the active workspace (업무 ↔ 챗봇). Each keeps its OWN session list
-     * and recall behavior, so this flips recall, restores that workspace's last
-     * session, and refreshes the (now mode-filtered) drawer. The persona is
-     * unchanged — only which session space + whether recall fires.
-     */
-    fun switchWorkspace(toWork: Boolean) {
-        if (appSettings.isRecallEnabled() == toWork) return
-        setWorkspace(toWork)
-        val target = openSessionFor(toWork)
-        _chatHistory.value = emptyList()
-        switchSession(target)
-        syncNativeStateAsync()
-        scope.launch { loadTranscriptGuarded(target) }
-        loadConversations()
-    }
+    /** Mint a fresh independent session key branching off the home (client:main:<uuid>). */
+    private fun newSessionKey(): String = "client:main:${Uuid.random()}"
 
     /**
      * Open the client:main 업무 home positioned at the transcript message that
@@ -1088,7 +1009,6 @@ class DenebGatewayClient(
      * clobbered.
      */
     suspend fun openWorkTopicAtItem(item: WorkFeedItem): String? {
-        setWorkspace(true) // work-feed cards belong to the 업무 workspace
         switchSession("client:main")
         syncNativeStateAsync()
         val epoch = credEpoch
@@ -1126,7 +1046,7 @@ class DenebGatewayClient(
             // 업무 home pulls in the mirrored proactive reports via openWorkTopic.
             sessionKey == "client:main" -> openWorkTopic()
 
-            // 챗봇 sessions are plain general chats (flat chat:<uuid>, no home) — just
+            // Legacy 챗봇 sessions (flat chat:<uuid>, retired workspace) — just
             // load the last one's transcript so a cold start restores it.
             isChatWorkspaceKey(sessionKey) -> {
                 syncNativeStateAsync()
@@ -1144,8 +1064,6 @@ class DenebGatewayClient(
      */
     override fun onProactiveReportForeground() {
         syncNativeStateAsync()
-        // 챗봇 모드에서는 업무 리포트 배지/배너를 올리지 않는다 (도착은 피드에 조용히 쌓임).
-        if (!_workspaceWork.value) return
         if (sessionKey == "client:main") {
             scope.launch { loadTranscriptGuarded("client:main") }
         } else {
@@ -1594,11 +1512,6 @@ class DenebGatewayClient(
     private fun maybeEmitProactiveNotification(item: WorkFeedItem) {
         if (!nativeSyncBaselined) return
         if (item.id.isBlank() || item.status != "unread") return
-        // 챗봇 모드에서는 업무 리포트가 도달하지 않는다: only notify when the item's
-        // workspace matches the active one. A 업무 item (client:main proactive report)
-        // arriving while in 챗봇 raises no tray notification — it sits silently in the
-        // raw feed and surfaces when the user switches back to 업무 (조용히 쌓기).
-        if (isChatWorkspaceKey(item.sessionKey) == _workspaceWork.value) return
         val body = item.summary.ifBlank { item.body }.ifBlank { item.title }
         _proactiveNotifications.tryEmit(
             ProactiveNotification(title = item.title.ifBlank { "Deneb" }, body = body),
@@ -1720,7 +1633,6 @@ class DenebGatewayClient(
                     params = SendParams(
                         message = message,
                         sessionKey = sessionKey,
-                        skipRecall = !appSettings.isRecallEnabled(),
                     ),
                 ),
             )
@@ -1755,13 +1667,6 @@ class DenebGatewayClient(
                         params = SendParams(
                             message = message,
                             sessionKey = targetSessionKey,
-                            // Always recall: this reply answers a WORK push
-                            // (meeting harvest, mail analysis) on the work
-                            // session, so it needs the wiki/feed context even
-                            // when the UI was last left in 챗봇/집중 mode —
-                            // that toggle belongs to the open conversation,
-                            // not to detached notification replies.
-                            skipRecall = false,
                         ),
                     ),
                 )
@@ -1805,7 +1710,7 @@ class DenebGatewayClient(
             header(CLIENT_TOKEN_HEADER, clientToken)
             header("Accept", "text/event-stream")
             contentType(ContentType.Application.Json)
-            setBody(SendParams(message = message, sessionKey = sessionKey, skipRecall = !appSettings.isRecallEnabled()))
+            setBody(SendParams(message = message, sessionKey = sessionKey))
             timeout {
                 // No overall request cap: an agent turn (tool calls included) can
                 // outlast any fixed window. Long.MAX_VALUE is the plugin's
@@ -2018,9 +1923,8 @@ class DenebGatewayClient(
     private fun switchSession(key: String) {
         sessionKey = key
         _currentConversationId.value = key
-        // Remember this as the active session of ITS workspace (by key namespace),
-        // so switching the pill back restores where each space was left.
-        appSettings.setLastSession(work = !key.startsWith("chat:"), key)
+        // Remember this as the active session so a restart restores it.
+        appSettings.setLastSession(key)
     }
 
     // Returns null on an RPC failure (so callers can keep a cache render instead of
@@ -2137,10 +2041,6 @@ class DenebGatewayClient(
     private data class SendParams(
         val message: String,
         val sessionKey: String? = null,
-        // "focused chat / memory off" toggle: true skips the gateway's recall
-        // (and retain) for this turn. Default false (recall on) is omitted by the
-        // encoder, so an older gateway simply ignores the absent field.
-        val skipRecall: Boolean = false,
     )
 
     @Serializable
@@ -2239,8 +2139,6 @@ class DenebGatewayClient(
     // fallback ladder — this stays null. Kept only to satisfy the chat fallback
     // banner, which renders nothing when null.
     override val fallbackStatus: StateFlow<FallbackStatus?> = MutableStateFlow(null)
-
-    override fun isRecallEnabled(): Boolean = appSettings.isRecallEnabled()
 
     // Gateway-side document extraction accepts the same set the on-device OpenAI
     // service used to advertise (images + text + pdf). The file picker filters by

@@ -93,13 +93,11 @@ type RunParams struct {
 	// does not fragment the prompt cache.
 	SkipRecall bool
 
-	// FeedContext, when non-empty, is the 업무 (work) workspace's day's-feed
-	// digest, injected as wire-only context on this turn. It is what makes a 업무
-	// chat aware of today's proactive reports / captures, versus a context-less
-	// 챗봇 chat — the functional difference between the two modes beyond recall.
-	// Set by the native bridge only for 업무 turns (recall on). Tail-injected
-	// alongside recall (not in the cached system prefix), so it costs only its
-	// own tokens and does not fragment the prompt cache.
+	// FeedContext, when non-empty, is the day's-feed digest, injected as
+	// wire-only context on this turn. It is what makes a chat aware of today's
+	// proactive reports / captures. Set by the native bridge for recall-on
+	// turns. Tail-injected alongside recall (not in the cached system prefix),
+	// so it costs only its own tokens and does not fragment the prompt cache.
 	FeedContext string
 
 	// EphemeralAssistant, when true, suppresses persistence of the assistant
@@ -260,15 +258,6 @@ func abbreviateSession(key string) string {
 // (diary prompts, heartbeat responses) would contaminate the user's conversation context.
 func isSystemSession(key string) bool {
 	return strings.HasPrefix(key, "system:")
-}
-
-// isChatbotSessionKey reports whether key is a 챗봇-workspace session. The
-// native client puts focused general chat under the "chat:" namespace and 업무
-// work chat under "client:" (mirrors the client's isChatWorkspaceKey). The
-// gateway uses this to route 챗봇 turns to RoleChatbot when an operator has
-// assigned a separate chatbot model (see resolveModel).
-func isChatbotSessionKey(key string) bool {
-	return strings.HasPrefix(key, "chat:")
 }
 
 // isCodingSessionKey reports whether key is a 코드모드 session ("code:<taskID>",

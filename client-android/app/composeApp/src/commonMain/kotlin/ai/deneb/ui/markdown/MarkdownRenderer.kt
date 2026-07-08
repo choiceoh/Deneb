@@ -87,12 +87,10 @@ fun MarkdownContent(
     isInteractive: Boolean = false,
     onUiCallback: (event: String, data: Map<String, String>) -> Unit = { _, _ -> },
     frozen: FrozenSubmission? = null,
-    textScale: Float = 1f,
     baseStyle: TextStyle? = null,
 ) {
     CompositionLocalProvider(
         LocalContentColor provides MaterialTheme.colorScheme.onSurface,
-        LocalChatTextScale provides textScale,
         LocalMarkdownBaseStyle provides baseStyle,
     ) {
         Column(modifier) {
@@ -110,11 +108,10 @@ fun MarkdownContent(
     isInteractive: Boolean = false,
     onUiCallback: (event: String, data: Map<String, String>) -> Unit = { _, _ -> },
     frozen: FrozenSubmission? = null,
-    textScale: Float = 1f,
     baseStyle: TextStyle? = null,
 ) {
     val doc = rememberContentDocument(content)
-    MarkdownContent(doc, modifier, isInteractive, onUiCallback, frozen, textScale, baseStyle)
+    MarkdownContent(doc, modifier, isInteractive, onUiCallback, frozen, baseStyle)
 }
 
 // Bodies up to this length parse synchronously (sub-frame, no async flash); longer ones go to
@@ -152,46 +149,22 @@ private fun parseContentSafely(content: String): MarkdownDocument = runCatching 
  */
 val LocalDenebUiStreaming = compositionLocalOf { false }
 
-// Per-message font-size/line-height multiplier for chat body + headings. 1f
-// everywhere except the 챗봇 workspace, where ChatModeScreen provides a larger
-// scale (see [ChatbotTextScale]) for a roomier, more readable casual conversation.
-// Only MarkdownContent (chat) and the user bubble read it, so it never touches
-// mail/wiki/etc. typography.
-val LocalChatTextScale = compositionLocalOf { 1f }
-
-// The 챗봇 workspace's enlarged chat text scale (업무 stays 1f).
-const val ChatbotTextScale = 1.15f
-
 // Optional base style for body / list / table / quote text. Null = the chat body
 // style below. Non-chat surfaces (wiki, diary, skill, person, cron) provide their own
 // (e.g. MaterialTheme.typography.bodyMedium) so MarkdownContent matches their existing
 // typography while still rendering the full feature set (tables, footnotes, math, …).
 val LocalMarkdownBaseStyle = compositionLocalOf<TextStyle?> { null }
 
-// Scale a style's font size and line height by [scale] (no-op at 1f; leaves
-// unspecified dimensions untouched).
-internal fun TextStyle.scaledBy(scale: Float): TextStyle = if (scale == 1f) {
-    this
-} else {
-    copy(
-        fontSize = if (fontSize.isSpecified) fontSize * scale else fontSize,
-        lineHeight = if (lineHeight.isSpecified) lineHeight * scale else lineHeight,
-    )
-}
-
 // The base text style for AI-answer body content. One step down from bodyLarge
 // (14sp vs 15sp) with messenger-tight line-height (18sp ≈ 1.29, inside the
 // 1.2–1.35 band Telegram/KakaoTalk use). Chat reads denser than a document —
 // the first pass's 1.71 felt like an article. Headings keep their own
 // typography roles; only paragraphs, list items, and table cells share this.
-// Scaled by [LocalChatTextScale] so the 챗봇 workspace reads larger.
 private val markdownBodyStyle: TextStyle
-    @Composable get() = (
-        LocalMarkdownBaseStyle.current ?: MaterialTheme.typography.bodyLarge.copy(
-            fontSize = 14.sp,
-            lineHeight = 18.sp,
-        )
-        ).scaledBy(LocalChatTextScale.current)
+    @Composable get() = LocalMarkdownBaseStyle.current ?: MaterialTheme.typography.bodyLarge.copy(
+        fontSize = 14.sp,
+        lineHeight = 18.sp,
+    )
 
 @Composable
 private fun BlockRenderer(
@@ -411,7 +384,7 @@ private fun HeadingBlock(block: Heading) {
         1 -> DenebType.subject
         2 -> DenebType.cardTitle
         else -> DenebType.rowTitleStrong
-    }.scaledBy(LocalChatTextScale.current)
+    }
     // A heading opens a section: clear air above (more for higher levels) and a
     // tight gap below, so the title visibly groups with the content it leads.
     // Uniform 4dp let sections blur together in long analyses.

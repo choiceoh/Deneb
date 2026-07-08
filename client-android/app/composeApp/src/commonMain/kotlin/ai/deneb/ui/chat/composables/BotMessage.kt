@@ -143,7 +143,6 @@ internal fun BotMessage(
     reasoningSegments: ImmutableList<String> = persistentListOf(),
     isStreaming: Boolean = false,
     attachments: ImmutableList<Attachment> = persistentListOf(),
-    textScale: Float = 1f,
 ) {
     val haptics = rememberHaptics()
     val parseSource = rememberStreamingParseSource(message, isStreaming)
@@ -185,7 +184,6 @@ internal fun BotMessage(
                             isInteractive = effectiveInteractive,
                             onUiCallback = denebUiCallback,
                             frozen = effectiveFrozen,
-                            textScale = textScale,
                             modifier = Modifier.fillMaxWidth()
                                 .padding(start = 16.dp, top = answerTopPadding, end = 16.dp, bottom = 8.dp),
                         )

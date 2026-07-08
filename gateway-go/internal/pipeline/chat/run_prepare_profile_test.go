@@ -1,11 +1,12 @@
 package chat
 
-// Profile-isolation snapshot tests for prepareContextAndPrompt: the 챗봇
-// ("chat:") and 코딩 ("code:") profiles must NOT receive the 업무 work
-// context — recall preflight, ambient calendar/goal glances, the operator
-// persona override, or the wiki work-loop coaching. This is a PRIVACY
-// boundary (work memory must not leak into a general chat or an external
-// repo worktree), not a performance optimization — lock it in.
+// Profile-isolation snapshot tests for prepareContextAndPrompt: the 코딩
+// ("code:") profile must NOT receive the 업무 work context — recall preflight,
+// ambient calendar/goal glances, the operator persona override, or the wiki
+// work-loop coaching. This is a PRIVACY boundary (work memory must not leak
+// into an external repo worktree), not a performance optimization — lock it
+// in. Legacy chat: keys (the retired 챗봇 workspace) are the inverse: they are
+// absorbed into the 업무 profile and must behave like any work session.
 
 import (
 	"context"
@@ -34,7 +35,7 @@ func newProfilePrepFixture(t *testing.T) profilePrepFixture {
 	var calendarCalled, goalCalled atomic.Bool
 	reg := NewToolRegistry()
 	// wiki must be registered so the 업무 dynamic block renders its wiki
-	// coaching — the chatbot assertion below checks that coaching is
+	// coaching — the coding assertion below checks that coaching is
 	// withheld even though the tool is present.
 	reg.Register("wiki", func(ctx context.Context, in json.RawMessage) (string, error) { return "", nil })
 	reg.Register("read", func(ctx context.Context, in json.RawMessage) (string, error) { return "", nil })
@@ -65,8 +66,8 @@ func prepForSession(t *testing.T, fx profilePrepFixture, sessionKey string) prep
 		SessionKey: sessionKey,
 		// "기억" is a recall cue: on the 업무 path the preflight runs and (with
 		// an empty transcript) yields the explicit no-evidence notice, so a
-		// non-empty RecallMemory proves the preflight RAN — while the 챗봇/코딩
-		// gates must leave it empty even with the cue present.
+		// non-empty RecallMemory proves the preflight RAN — while the 코딩
+		// gate must leave it empty even with the cue present.
 		Message: "탑솔라 지난번 단가 기억해?",
 	}
 	return prepareContextAndPrompt(context.Background(), params, fx.deps, t.TempDir(), "", fx.deps.logger)
@@ -94,31 +95,26 @@ func TestPrepareContextAndPrompt_WorkProfileGetsWorkContext(t *testing.T) {
 	}
 }
 
-func TestPrepareContextAndPrompt_ChatbotProfileWithholdsWorkContext(t *testing.T) {
+// Legacy chat: keys (the retired 챗봇 workspace) are absorbed into the 업무
+// profile: an old conversation continued from the drawer gets the full
+// chief-of-staff prompt, persona override, glances, and recall — exactly like
+// a client: session. Locks the absorption semantics of the mode's removal.
+func TestPrepareContextAndPrompt_LegacyChatKeyGetsWorkProfile(t *testing.T) {
 	fx := newProfilePrepFixture(t)
-	prep := prepForSession(t, fx, "chat:profile-test-chatbot")
+	prep := prepForSession(t, fx, "chat:legacy-conversation")
 
 	sys := string(prep.SystemPrompt)
-	if !strings.Contains(sys, "You are a helpful, knowledgeable AI assistant") {
-		t.Error("챗봇 system prompt must use the neutral general-assistant identity")
+	if strings.Contains(sys, "You are a helpful, knowledgeable AI assistant") {
+		t.Error("legacy chat: key must NOT get the retired neutral-assistant identity")
 	}
-	if strings.Contains(sys, testPersonaMarker) {
-		t.Error("챗봇 system prompt must NOT carry the 업무 persona override")
+	if !strings.Contains(sys, testPersonaMarker) {
+		t.Error("legacy chat: key must carry the 업무 persona override")
 	}
-	if strings.Contains(sys, "GLANCE-CAL-MARKER") || strings.Contains(sys, "GLANCE-GOAL-MARKER") {
-		t.Error("챗봇 system prompt must NOT carry calendar/goal glances")
+	if !fx.calendarCalled.Load() || !fx.goalCalled.Load() {
+		t.Error("legacy chat: prep must invoke the calendar/goal glance providers")
 	}
-	if fx.calendarCalled.Load() || fx.goalCalled.Load() {
-		t.Error("챗봇 prep must not even invoke the calendar/goal glance providers")
-	}
-	if prep.RecallMemory != "" {
-		t.Errorf("챗봇 prep must skip recall entirely, got %q", prep.RecallMemory)
-	}
-	if strings.Contains(sys, "외부 메모리") {
-		t.Error("챗봇 system prompt must NOT include the wiki work-loop coaching")
-	}
-	if prep.ContextFiles != nil {
-		t.Error("챗봇 prep must not load workspace context files")
+	if prep.RecallMemory == "" {
+		t.Error("legacy chat: prep must run the recall preflight")
 	}
 }
 

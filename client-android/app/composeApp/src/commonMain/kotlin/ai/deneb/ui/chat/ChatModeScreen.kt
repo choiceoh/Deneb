@@ -30,7 +30,6 @@ import ai.deneb.ui.denebFadeExit
 import ai.deneb.ui.dynamicui.FrozenSubmission
 import ai.deneb.ui.dynamicui.toSpeakableText
 import ai.deneb.ui.handCursor
-import ai.deneb.ui.markdown.ChatbotTextScale
 import ai.deneb.ui.markdown.precomputeMarkdownAsync
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
@@ -247,40 +246,6 @@ internal fun ChatModeScreen(
         }
     }
 
-    // 챗봇 workspace reads larger (font + line spacing); 업무 stays at 1f.
-    val chatTextScale = if (uiState.recallEnabled) 1f else ChatbotTextScale
-
-    // Swipe 챗봇 ↔ 업무 across the chat body (mirrors the top RecallModePill). The
-    // gesture is keyed on Unit, so read the current mode + actions through
-    // rememberUpdatedState rather than capturing a stale snapshot.
-    val swipeHaptics = rememberHaptics()
-    val recallNow = rememberUpdatedState(uiState.recallEnabled)
-    val swipeActions = rememberUpdatedState(uiState.actions)
-
-    // Soften the 챗봇 ↔ 업무 switch (swipe or top toggle): on a mode flip the chat
-    // surface briefly fades down + slides in, masking the abrupt workspace/content
-    // swap so it reads as a transition rather than a snap. Keyed off recallEnabled;
-    // the prevRecall guard skips the animation on first composition (screen entry).
-    val modeSwitchAnim = remember { Animatable(1f) }
-    val prevRecall = remember { mutableStateOf(uiState.recallEnabled) }
-    LaunchedEffect(uiState.recallEnabled) {
-        if (prevRecall.value != uiState.recallEnabled) {
-            prevRecall.value = uiState.recallEnabled
-            modeSwitchAnim.snapTo(0f)
-            modeSwitchAnim.animateTo(1f, tween(DenebMotion.DurationMedium, easing = DenebMotion.emphasized))
-        }
-    }
-
-    // Live follow-the-finger feedback for the 챗봇 ↔ 업무 swipe: the chat surface
-    // tracks the drag (translates left, with resistance + a clamp) so the gesture
-    // reads as "grabbing" the workspace, then springs back on release — replacing the
-    // old discrete "drag past 72dp → instant snap" that felt unresponsive. On commit
-    // the spring-back runs alongside modeSwitchAnim's fade/content-swap; on cancel it
-    // just bounces back. Translation only (layer phase) — no per-frame recomposition.
-    val swipeScope = rememberCoroutineScope()
-    val swipeDragX = remember { Animatable(0f) }
-    val swipeMaxTravelPx = with(LocalDensity.current) { 110.dp.toPx() }
-
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
         // Vestigial outer drawer: the desktop product had a RIGHT session drawer here
         // (opened by a toolbar button). The native client is mobile-only now, so this is
@@ -310,35 +275,11 @@ internal fun ChatModeScreen(
                     Box(
                         Modifier
                             .fillMaxSize()
-                            .modeSwipeToggle(
-                                onDrag = { dx ->
-                                    // Right-to-left only (dx <= 0), damped + clamped so it
-                                    // rubber-bands rather than tracking the finger 1:1.
-                                    val resisted = (dx * 0.6f).coerceIn(-swipeMaxTravelPx, 0f)
-                                    swipeScope.launch { swipeDragX.snapTo(resisted) }
-                                },
-                                onEnd = { committed ->
-                                    swipeScope.launch {
-                                        if (committed) {
-                                            swipeHaptics.toggle(!recallNow.value)
-                                            swipeActions.value.toggleRecall()
-                                        }
-                                        swipeDragX.animateTo(
-                                            0f,
-                                            spring(
-                                                dampingRatio = Spring.DampingRatioNoBouncy,
-                                                stiffness = Spring.StiffnessMediumLow,
-                                            ),
-                                        )
-                                    }
-                                },
-                            )
                             .background(MaterialTheme.colorScheme.background)
                             // Gemini-style "generating" backdrop: a top-down hue-cycling glow
                             // behind everything while the reply is being thought up; fades to
                             // black once the answer starts rendering. Drawn over the solid
                             // background but under the content (top bar / chat / input).
-                            // 챗봇·업무 공통 — 생성 중 오로라 글로우를 두 워크스페이스 모두에 표시.
                             .generatingBackdrop(active = generatingActive)
                             .navigationBarsPadding()
                             // No statusBarsPadding here: the conversation fills the full
@@ -349,18 +290,7 @@ internal fun ChatModeScreen(
                     ) {
                         Column(Modifier.fillMaxSize()) {
                             Box(
-                                Modifier
-                                    .weight(1f)
-                                    // Mode-switch transition: a sinusoidal alpha dip on the
-                                    // conversation ONLY (the top bar/pill + input stay put),
-                                    // masking the async workspace/content swap. Layer phase,
-                                    // so no per-frame recomposition.
-                                    .graphicsLayer {
-                                        val p = modeSwitchAnim.value
-                                        alpha = 1f - sin(p * PI).toFloat() * 0.85f
-                                        // Follow-the-finger offset during the 챗봇↔업무 swipe.
-                                        translationX = swipeDragX.value
-                                    },
+                                Modifier.weight(1f),
                             ) {
                                 var isDropping by remember {
                                     mutableStateOf(false)
@@ -406,7 +336,6 @@ internal fun ChatModeScreen(
                                             }
                                         } else {
                                             EmptyState(
-                                                recallEnabled = uiState.recallEnabled,
                                                 modifier = Modifier.fillMaxWidth().weight(1f),
                                             )
                                         }
@@ -764,7 +693,6 @@ internal fun ChatModeScreen(
                                                                     UserMessage(
                                                                         message = history.content,
                                                                         attachments = history.attachments,
-                                                                        textScale = chatTextScale,
                                                                     )
                                                                 }
                                                             }
@@ -799,7 +727,6 @@ internal fun ChatModeScreen(
                                                                         },
                                                                         reasoningSegments = reasoningSegmentsByAssistantId[history.id] ?: persistentListOf(),
                                                                         isStreaming = isLastAssistant && isResponseStreaming,
-                                                                        textScale = chatTextScale,
                                                                     )
                                                                     if (history.id == uiState.stoppedMessageId) {
                                                                         // The user stopped this answer mid-stream;
@@ -842,7 +769,6 @@ internal fun ChatModeScreen(
                                                                         setIsSpeaking = {},
                                                                         reasoningSegments = reasoningSegmentsByAssistantId[history.id]
                                                                             ?: persistentListOf(history.content),
-                                                                        textScale = chatTextScale,
                                                                     )
                                                                 }
                                                             }
@@ -943,7 +869,6 @@ internal fun ChatModeScreen(
                                 isSpeaking = uiState.isSpeaking,
                                 actions = uiState.actions,
                                 isChatHistoryEmpty = uiState.history.isEmpty(),
-                                recallEnabled = uiState.recallEnabled,
                                 // The hamburger opens the session history (left drawer).
                                 onOpenDrawer = { drawerScope.launch { drawerState.open() } },
                                 navigationTabBar = navigationTabBar,
@@ -1081,48 +1006,6 @@ internal fun ChatModeScreen(
             } // CompositionLocalProvider Ltr (content)
         } // ModalNavigationDrawer (right session drawer)
     } // CompositionLocalProvider Rtl
-}
-
-// A right-to-left swipe across the chat body toggles 챗봇 ↔ 업무, mirroring the top
-// RecallModePill. Only this one direction switches: a left-to-right swipe is left to
-// the session drawer's open-swipe (left edge → right), so the two gestures never
-// fight. Screen-edge starts are also yielded to the drawer, and a gesture that turns
-// vertical is released so the message list still scrolls — only a clearly-horizontal
-// right-to-left drag past the commit distance fires [onSwitch].
-private fun Modifier.modeSwipeToggle(
-    onDrag: (Float) -> Unit,
-    onEnd: (committed: Boolean) -> Unit,
-): Modifier = pointerInput(Unit) {
-    val edge = 36.dp.toPx()
-    val commit = 72.dp.toPx()
-    val slop = viewConfiguration.touchSlop
-    awaitEachGesture {
-        val down = awaitFirstDown(requireUnconsumed = false)
-        if (down.position.x <= edge || down.position.x >= size.width - edge) {
-            return@awaitEachGesture // edge zone: leave it to the drawer open-swipe
-        }
-        var dx = 0f
-        var dy = 0f
-        var horizontal = false
-        while (true) {
-            val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
-            if (!change.pressed) break
-            val delta = change.positionChange()
-            dx += delta.x
-            dy += delta.y
-            if (!horizontal) {
-                if (abs(dy) > slop && abs(dy) >= abs(dx)) return@awaitEachGesture // vertical → scroll
-                if (abs(dx) > slop && abs(dx) > abs(dy)) horizontal = true
-            }
-            if (horizontal) {
-                change.consume()
-                onDrag(dx) // live offset; the composable clamps to right-to-left + resists
-            }
-        }
-        // Commit only a clearly-horizontal right-to-left drag past the distance; onEnd
-        // always fires (even on cancel) so the live offset can spring back.
-        onEnd(horizontal && dx <= -commit)
-    }
 }
 
 // verticalEdgeFade fades the composable's own content to transparent over [top]

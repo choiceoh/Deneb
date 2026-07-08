@@ -72,7 +72,6 @@ func PersistDefaultModel(configPath, model string, logger *slog.Logger) error {
 //	analysis    → agents.analysisModel
 //	coding      → agents.codingModel
 //	fallback    → agents.fallbackModel
-//	chatbot     → agents.chatbotModel
 //	vision      → agents.visionModel
 //
 // Mirrors PersistDefaultModel; used by the miniapp per-role model picker.
@@ -91,8 +90,6 @@ func PersistRoleModel(configPath, role, model string, logger *slog.Logger) error
 		field = "codingModel"
 	case "fallback":
 		field = "fallbackModel"
-	case "chatbot":
-		field = "chatbotModel"
 	case "vision":
 		field = "visionModel"
 	default:

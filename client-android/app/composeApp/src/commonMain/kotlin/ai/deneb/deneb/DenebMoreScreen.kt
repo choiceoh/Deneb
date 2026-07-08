@@ -48,8 +48,6 @@ internal data class MoreEntry(
     // destination's @SerialName route. Used to persist which tiles the user hid (settings
     // store the keys, never the labels) and to mark a tile as 항상 표시 (alwaysShown).
     val key: String,
-    // 업무 데이터 entry: hidden in the 챗봇 workspace. 브라우저·설정 stay in both.
-    val workData: Boolean = false,
     // Cannot be hidden via 설정. 설정 itself (hiding it would lock out the un-hide control)
     // — and 채팅, the assistant core, is a bottom-bar tab so it never appears here anyway.
     val alwaysShown: Boolean = false,
@@ -68,17 +66,17 @@ private const val TOOLS_GROUP = "도구"
 // out user-hidden tiles (설정 → "더보기 표시 항목") and, for 설정, to mark it 항상 표시.
 internal val moreGroups: List<Pair<String, List<MoreEntry>>> = listOf(
     "업무 · 지식" to listOf(
-        MoreEntry("파트별 업무 현황", DenebDashboard, Icons.Outlined.Dashboard, key = "deneb_dashboard", workData = true),
-        MoreEntry("프로젝트 진행상황", DenebProjectDigests, Icons.Outlined.Insights, key = "deneb_project_digests", workData = true),
-        MoreEntry("조직도", DenebOrgChart, Icons.Outlined.AccountTree, key = "deneb_org", workData = true),
-        MoreEntry("검색", DenebSearch, Icons.Outlined.Search, key = "deneb_search", workData = true),
-        MoreEntry("카테고리", DenebCategories, Icons.Outlined.GridView, key = "deneb_categories", workData = true),
-        MoreEntry("전체 연락처", DenebContacts, Icons.Outlined.Contacts, key = "deneb_contacts", workData = true),
-        MoreEntry("노트북", DenebNotebooks(), Icons.Outlined.Book, key = "deneb_notebooks", workData = true),
+        MoreEntry("파트별 업무 현황", DenebDashboard, Icons.Outlined.Dashboard, key = "deneb_dashboard"),
+        MoreEntry("프로젝트 진행상황", DenebProjectDigests, Icons.Outlined.Insights, key = "deneb_project_digests"),
+        MoreEntry("조직도", DenebOrgChart, Icons.Outlined.AccountTree, key = "deneb_org"),
+        MoreEntry("검색", DenebSearch, Icons.Outlined.Search, key = "deneb_search"),
+        MoreEntry("카테고리", DenebCategories, Icons.Outlined.GridView, key = "deneb_categories"),
+        MoreEntry("전체 연락처", DenebContacts, Icons.Outlined.Contacts, key = "deneb_contacts"),
+        MoreEntry("노트북", DenebNotebooks(), Icons.Outlined.Book, key = "deneb_notebooks"),
     ),
     TOOLS_GROUP to listOf(
-        MoreEntry("코드모드", DenebCodeMode, Icons.Outlined.Code, key = "deneb_codemode", workData = true),
-        MoreEntry("파일", DenebFiles, Icons.Outlined.Storage, key = "deneb_files", workData = true),
+        MoreEntry("코드모드", DenebCodeMode, Icons.Outlined.Code, key = "deneb_codemode"),
+        MoreEntry("파일", DenebFiles, Icons.Outlined.Storage, key = "deneb_files"),
         MoreEntry("브라우저", DenebBrowser(""), Icons.Outlined.Public, key = "deneb_browser"),
     ),
     "시스템" to listOf(
@@ -92,14 +90,12 @@ internal val moreGroups: List<Pair<String, List<MoreEntry>>> = listOf(
 internal val hideableMoreEntries: List<MoreEntry> = moreGroups.flatMap { it.second }.filterNot { it.alwaysShown }
 
 /**
- * Filter a group's entries for display, applying BOTH gates so they compose (a tile shows
- * only if it passes both): [chatMode] hides 업무 데이터 entries (the 챗봇 workspace), and
- * [hidden] hides the user's 설정-chosen tiles by their stable [MoreEntry.key]. An
- * [MoreEntry.alwaysShown] tile (설정) is never removed even if its key somehow appears in
- * [hidden]. Pure + deterministic so it is unit-testable and preview-able.
+ * Filter a group's entries for display: [hidden] hides the user's 설정-chosen tiles by
+ * their stable [MoreEntry.key]. An [MoreEntry.alwaysShown] tile (설정) is never removed
+ * even if its key somehow appears in [hidden]. Pure + deterministic so it is
+ * unit-testable and preview-able.
  */
-internal fun visibleMoreEntries(all: List<MoreEntry>, chatMode: Boolean, hidden: Set<String>): List<MoreEntry> = all.filter { entry ->
-    if (chatMode && entry.workData) return@filter false
+internal fun visibleMoreEntries(all: List<MoreEntry>, hidden: Set<String>): List<MoreEntry> = all.filter { entry ->
     if (!entry.alwaysShown && entry.key in hidden) return@filter false
     true
 }
@@ -110,14 +106,13 @@ internal fun visibleMoreEntries(all: List<MoreEntry>, chatMode: Boolean, hidden:
  * the 더보기 tab in the navigation model (the bottom bar stays visible with 더보기 active).
  *
  * Grouped labeled inset cards (DenebGroup(label) + DenebListRow), matching the settings
- * hub. [chatMode] hides the 업무 데이터 entries; [hiddenTiles] hides the user's 설정-chosen
- * tiles (by stable key); both gates compose. A group that empties out is skipped.
+ * hub. [hiddenTiles] hides the user's 설정-chosen tiles (by stable key). A group that
+ * empties out is skipped.
  */
 @Composable
 fun DenebMoreScreen(
     onBack: () -> Unit,
     onOpen: (Any) -> Unit,
-    chatMode: Boolean = false,
     hiddenTiles: Set<String> = emptySet(),
 ) {
     // Live voice dictation (system speech recognizer → chat). An input action, not a
@@ -132,7 +127,7 @@ fun DenebMoreScreen(
                 .padding(top = 4.dp, bottom = 24.dp),
         ) {
             moreGroups.forEach { (label, all) ->
-                val entries = visibleMoreEntries(all, chatMode, hiddenTiles)
+                val entries = visibleMoreEntries(all, hiddenTiles)
                 val withVoice = label == TOOLS_GROUP && captures != null
                 if (entries.isEmpty() && !withVoice) return@forEach
                 DenebGroup(label = label) {

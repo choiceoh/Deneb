@@ -66,12 +66,6 @@ func shouldRecordRunDiary(params RunParams) bool {
 	if isSystemSession(params.SessionKey) {
 		return false
 	}
-	// 챗봇 workspace is cut off from the work memory in BOTH directions: its
-	// prompt withholds wiki/recall, so its private general chat must not seed
-	// the 업무 diary/dream either.
-	if isChatbotSessionKey(params.SessionKey) {
-		return false
-	}
 	// Coding sessions work inside an external repo worktree — checkpoints are
 	// their history; worktree chatter does not belong in the 업무 diary.
 	if isCodingSessionKey(params.SessionKey) {
@@ -80,8 +74,8 @@ func shouldRecordRunDiary(params RunParams) bool {
 	// Autonomous cron runs feed the wiki through their own sinks (goal ledger,
 	// mail analyses, direct wiki writes), and their "user" message is a payload
 	// prompt, not the user speaking — diarying them would double-feed dreams.
-	// (These three exclusions are inert on the async lifecycle path: chat:/
-	// code:/cron: turns only ever run through the sync entry points.)
+	// (These two exclusions are inert on the async lifecycle path: code:/cron:
+	// turns only ever run through the sync entry points.)
 	if strings.HasPrefix(params.SessionKey, "cron:") {
 		return false
 	}

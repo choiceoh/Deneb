@@ -36,12 +36,6 @@ const (
 	// patch files without taking over the general assistant.
 	RoleCoding   Role = "coding"
 	RoleFallback Role = "fallback"
-	// RoleChatbot is the 챗봇 workspace model (chat: sessions), distinct from
-	// RoleMain (업무, client: sessions) so focused general chat can run a
-	// different/lighter model. OPT-IN: the role is absent unless
-	// agents.chatbotModel is configured; when absent, 챗봇 turns use the main
-	// model (see resolveModel in the chat pipeline).
-	RoleChatbot Role = "chatbot"
 	// RoleVision is the multimodal model used to "see" image inputs. The main
 	// model (e.g. DeepSeek-V4-Flash) has no vision tower, so a turn carrying an
 	// image routes here instead of being sent to a model that would strip or
@@ -115,9 +109,6 @@ type RegistryOptions struct {
 	// role is absent and implementer sub-agents fall back to their normal default.
 	CodingModel   string // format: "provider/model"
 	FallbackModel string // override for RoleFallback; empty → local vLLM
-	// ChatbotModel overrides RoleChatbot (챗봇 workspace). Empty → the role is
-	// absent and 챗봇 turns fall back to the main model (prior behavior).
-	ChatbotModel string
 	// VisionModel overrides RoleVision (multimodal/image turns). Empty → the role
 	// is absent and image turns use the main model. Format: "provider/model".
 	VisionModel string
@@ -268,13 +259,7 @@ func NewRegistryWithOptions(logger *slog.Logger, opts RegistryOptions) *Registry
 	if opts.CodingModel != "" {
 		models[RoleCoding] = resolveModelConfig(opts.CodingModel, opts.Providers)
 	}
-	// Chatbot role is OPT-IN: only added to the map when explicitly configured,
-	// so an unconfigured deployment leaves 챗봇 turns on the main model. Its
-	// presence in the map is what resolveModel keys off to activate the role.
-	if opts.ChatbotModel != "" {
-		models[RoleChatbot] = resolveModelConfig(opts.ChatbotModel, opts.Providers)
-	}
-	// Vision role is OPT-IN like chatbot: present only when configured, so an
+	// Vision role is OPT-IN: present only when configured, so an
 	// unconfigured deployment leaves image turns on the main model.
 	if opts.VisionModel != "" {
 		models[RoleVision] = resolveModelConfig(opts.VisionModel, opts.Providers)
@@ -285,16 +270,13 @@ func NewRegistryWithOptions(logger *slog.Logger, opts RegistryOptions) *Registry
 	// non-vllm roles, so running it across all roles is safe. The discovery
 	// payload also carries each model's max_model_len; collect it so
 	// CapabilityForModel can clamp context budgets against the real window.
-	// Chatbot is included only when present so the loop never inserts a phantom
-	// (empty) entry that would make the opt-in role look configured.
+	// Opt-in roles are included only when present so the loop never inserts a
+	// phantom (empty) entry that would make an opt-in role look configured.
 	vllmWindows := make(map[string]int)
 	probedVllmURLs := make(map[string]bool)
 	reconcileRoles := []Role{RoleMain, RoleTiny, RoleLightweight, RoleFallback}
 	if _, ok := models[RoleCoding]; ok {
 		reconcileRoles = append(reconcileRoles, RoleCoding)
-	}
-	if _, ok := models[RoleChatbot]; ok {
-		reconcileRoles = append(reconcileRoles, RoleChatbot)
 	}
 	if _, ok := models[RoleVision]; ok {
 		reconcileRoles = append(reconcileRoles, RoleVision)
@@ -534,7 +516,7 @@ func (r *Registry) RoleForModel(fullModelID string) (Role, bool) {
 	// lightweight default maps that shared model back to the lightweight role
 	// (preserving prior behavior); an explicitly configured tiny model
 	// still matches its own role.
-	for _, role := range []Role{RoleMain, RoleCoding, RoleLightweight, RoleTiny, RoleFallback, RoleChatbot, RoleVision} {
+	for _, role := range []Role{RoleMain, RoleCoding, RoleLightweight, RoleTiny, RoleFallback, RoleVision} {
 		cfg, ok := r.models[role]
 		if !ok {
 			continue
@@ -565,10 +547,6 @@ func (r *Registry) FallbackChain(role Role) []Role {
 		// coding role fails, degrade to the general main model before the shared
 		// fallback instead of a smaller summarization role.
 		return []Role{RoleCoding, RoleMain, RoleFallback}
-	case RoleChatbot:
-		// On chatbot-model failure, degrade to the main (업무) model, then the
-		// shared fallback — so a bad chatbot model never leaves 챗봇 dead.
-		return []Role{RoleChatbot, RoleMain, RoleFallback}
 	case RoleVision:
 		// On vision-model failure, degrade straight to the shared fallback —
 		// NOT the main model, which has no vision tower and would reject the
@@ -616,8 +594,8 @@ func (r *Registry) SetRoleModelID(role Role, modelID string) ModelConfig {
 
 // ClearRole removes a role's explicit model so it reverts to its default
 // resolution. Used when the model a role pointed at is deleted. The always-on
-// roles (main/lightweight/fallback/tiny) are reset via SetRoleModelID
-// instead; this is for opt-in roles like RoleChatbot/RoleCoding that should disappear —
+// roles (main/lightweight/fallback/tiny) are reset via SetRoleModelID instead;
+// this is for opt-in roles like RoleCoding/RoleVision that should disappear —
 // and fall back to the main model — when left unconfigured.
 func (r *Registry) ClearRole(role Role) {
 	r.mu.Lock()

@@ -15,10 +15,11 @@ import { LiveDot } from "./LiveDot";
 import { ModelPicker } from "./ModelPicker";
 import { SessionDrawer } from "./SessionDrawer";
 
-// 채팅 탭 — 비업무용(non-work) 전용 대화 surface (네이티브 챗봇 모드 대응). 측면 데네브
-// 패널(업무 · client:main, 활성 pane 컨텍스트를 밀어넣음)과 달리 자체 useChat + chat:*
-// 세션을 가지며, 워크스페이스 컨텍스트를 보내지 않는 순수 대화다. 레이아웃은 중앙 채팅
-// 컬럼(가독성을 위해 메시지를 좁게 가운데 정렬) + 우측 세션 목록.
+// 채팅 탭 — 풀사이즈 업무 대화 surface. 측면 데네브 패널(활성 pane 컨텍스트를
+// 밀어넣음)과 달리 자체 useChat + client:main:* 세션을 가지며, pane 컨텍스트는 보내지
+// 않는다 — 서버가 업무 프로파일(위키·회상·비서 페르소나)을 그대로 적용한다. 모바일
+// 업무 워크스페이스와 같은 세션 공간을 공유한다. 레이아웃은 중앙 채팅 컬럼(가독성을
+// 위해 메시지를 좁게 가운데 정렬) + 우측 세션 목록.
 export function ChatView({ cfg, hidden = false }: { cfg: GatewayConfig; hidden?: boolean }) {
   const { connected } = useWorkspace();
   const { thinking, busy, stoppable, turns, send, capture, stop, regenerate, clear, setTurns } = useChat(cfg);
@@ -31,17 +32,17 @@ export function ChatView({ cfg, hidden = false }: { cfg: GatewayConfig; hidden?:
   // 전환/삭제/새 대화를 막는다 (배치 도중 세션이 바뀌면 남은 파일이 옛 sessionKey로
   // 보이지 않게 전송된다). 동기 재진입 차단은 아래 attachingRef가 맡는다.
   const [attaching, setAttaching] = useState(false);
-  // chat:* 네임스페이스로 스코프 — 업무 패널의 client:main 세션과 섞이지 않는다.
+  // 업무 네임스페이스(client:*)로 스코프 — 모바일 업무 드로어와 같은 세션 공간.
   const { sessions, sessionKey, sessionErr, selectSession, removeSession, newChat, refreshSessions } = useSessions(
     cfg,
     connected,
     busy || attaching,
     { clear, setTurns },
     {
-      mainKey: "chat:main",
-      filter: "chat:",
-      // 새 대화 → 고유 chat:<id> 발급(비업무 대화를 여러 개 유지). Date.now/random은 앱 런타임이라 사용 가능.
-      newKey: () => `chat:${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+      mainKey: "client:main",
+      filter: "client:",
+      // 새 대화 → 홈에서 분기한 고유 client:main:<id> 발급. Date.now/random은 앱 런타임이라 사용 가능.
+      newKey: () => `client:main:${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
     },
   );
   const { ref: transcriptRef, onScroll, pin, atBottom, scrollToBottom } = useStickyScroll([turns, thinking]);
@@ -105,15 +106,15 @@ export function ChatView({ cfg, hidden = false }: { cfg: GatewayConfig; hidden?:
   });
   const attachingRef = useRef(false);
 
-  // Non-work: no workspaceContext / activeResource — a pure conversation, scoped to
-  // its own chat:* session.
+  // No workspaceContext / activeResource push (that is the side panel's job) —
+  // the gateway applies the full 업무 profile (wiki/recall/persona) on its own.
   function submit(message = input) {
     const msg = message.trim();
     if (!msg || busy || attachingRef.current || !connected) return;
     setInput("");
     pin();
     // refresh the history once the turn finishes — the gateway may have created or
-    // relabelled this chat:* session.
+    // relabelled this session.
     void send(msg, { model: model || undefined, sessionKey }).then(() => void refreshSessions());
   }
 
@@ -215,7 +216,7 @@ export function ChatView({ cfg, hidden = false }: { cfg: GatewayConfig; hidden?:
           {turns.length === 0 ? (
             <div className="chat-greeting">
               <DenebStar size={40} />
-              <p>{connected ? "안녕하세요? 무슨 대화를 할까요?" : "게이트웨이 연결 대기 중"}</p>
+              <p>{connected ? timeOfDayGreeting() : "게이트웨이 연결 대기 중"}</p>
               {connected && <span className="chat-greeting-sub">무엇이든 편하게 물어보세요</span>}
             </div>
           ) : (
@@ -349,4 +350,14 @@ export function ChatView({ cfg, hidden = false }: { cfg: GatewayConfig; hidden?:
       </aside>
     </section>
   );
+}
+
+// Personalized time-of-day greeting for the empty chat — mirrors the native
+// client's 업무 EmptyState so the two surfaces read as one assistant.
+function timeOfDayGreeting(): string {
+  const h = new Date().getHours();
+  if (h >= 5 && h <= 10) return "선택님, 좋은 아침이에요";
+  if (h >= 11 && h <= 16) return "선택님, 좋은 오후예요";
+  if (h >= 17 && h <= 21) return "선택님, 좋은 저녁이에요";
+  return "선택님, 늦은 시간까지 고생 많으세요";
 }

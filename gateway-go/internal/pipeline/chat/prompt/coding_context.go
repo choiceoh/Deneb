@@ -7,9 +7,8 @@
 // from the 업무 secretary framing — the proactive mail/calendar work loop, the
 // wiki write-back doctrine, and the personal work context are all noise that
 // pushed code: sessions to behave like "a chatbot with a different directory".
-// The coding profile mirrors the 챗봇 profile mechanically (SystemPromptParams
-// flag + its own Static cache-key suffix → its own vLLM APC prefix family) but
-// swaps in an implementer contract instead of a neutral assistant.
+// Mechanically: a SystemPromptParams flag + its own Static cache-key suffix →
+// its own vLLM APC prefix family, swapping in an implementer contract.
 package prompt
 
 import (

@@ -125,7 +125,6 @@ val denebBottomTabs: List<DenebTabItem> = listOf(feedTab, mailTab, chatTab, cale
 // tab-switch without backing out first. Excluded on purpose: deep DETAILS reached *from* a
 // section (a specific mail/event/wiki page/person, settings sub-screens like fleet/skill/
 // cron) — those are data-class/arg routes that drill down and keep their own ← back nav.
-// Shown in BOTH workspaces — the 업무/챗봇 toggle changes chat recall, not navigation.
 val denebBottomBarRoutes: Set<String> = setOf(
     ROUTE_FEED,
     ROUTE_HOME,
