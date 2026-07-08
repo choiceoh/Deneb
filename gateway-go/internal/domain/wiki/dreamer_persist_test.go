@@ -56,6 +56,49 @@ func TestWikiDreamerPersistsLastDreamAcrossRestart(t *testing.T) {
 	}
 }
 
+// TestShouldDream_PreferenceSignalAcceleratesCadence pins the 선호 fast path: a
+// pending preference signal (NotePreferenceSignal, fed by the chat diary
+// recorder) drops the dream wait from 8h to wikiDreamPrefMinInterval, respects
+// that floor so back-to-back preference turns can't thrash cycles, and is
+// consumed by resetCounters at the end of a cycle.
+func TestShouldDream_PreferenceSignalAcceleratesCadence(t *testing.T) {
+	dir := t.TempDir()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	store := testutil.Must(NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
+	t.Cleanup(func() { _ = store.Close() })
+	wd := NewWikiDreamer(store, nil, "", Config{}, logger)
+	ctx := context.Background()
+
+	setLastDream := func(v time.Time) {
+		wd.cmu.Lock()
+		wd.lastDream = v
+		wd.cmu.Unlock()
+	}
+
+	setLastDream(time.Now().Add(-wikiDreamPrefMinInterval - time.Minute))
+	if wd.ShouldDream(ctx) {
+		t.Fatal("without a preference signal, the sub-8h window must not trigger")
+	}
+
+	wd.NotePreferenceSignal()
+	if !wd.ShouldDream(ctx) {
+		t.Fatal("pending preference signal past the min interval must trigger")
+	}
+
+	// Within the floor the signal must NOT thrash dreams.
+	setLastDream(time.Now())
+	if wd.ShouldDream(ctx) {
+		t.Fatal("preference signal must respect the min-interval floor")
+	}
+
+	// A completed cycle consumes the pending signal.
+	wd.resetCounters()
+	setLastDream(time.Now().Add(-wikiDreamPrefMinInterval - time.Minute))
+	if wd.ShouldDream(ctx) {
+		t.Fatal("resetCounters must clear the pending preference signal")
+	}
+}
+
 // TestRunDream_FailureBacksOffOneInterval guards the hot-loop fix: a cycle
 // that cannot synthesize (nil/wedged LLM) must still advance lastDream, or
 // ShouldDream stays true and the 30-min timer retries a doomed 10-minute

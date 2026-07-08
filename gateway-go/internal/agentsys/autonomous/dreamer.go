@@ -16,11 +16,14 @@ type Dreamer interface {
 
 // DreamReport summarizes the results of a dreaming cycle.
 type DreamReport struct {
-	FactsVerified       int `json:"factsVerified"`
-	FactsMerged         int `json:"factsMerged"`
-	FactsExpired        int `json:"factsExpired"`
-	FactsPruned         int `json:"factsPruned"`
-	PatternsExtracted   int `json:"patternsExtracted"`
+	FactsVerified     int `json:"factsVerified"`
+	FactsMerged       int `json:"factsMerged"`
+	FactsExpired      int `json:"factsExpired"`
+	FactsPruned       int `json:"factsPruned"`
+	PatternsExtracted int `json:"patternsExtracted"`
+	// UserModelUpdated counts 사용자-category wiki pages the cycle created or
+	// updated — the agent's model of its user (preferences, working style,
+	// personal context). Subset of WikiPagesCreated/Updated.
 	UserModelUpdated    int `json:"userModelUpdated"`
 	MutualUpdated       int `json:"mutualUpdated"`
 	WikiPagesCreated    int `json:"wikiPagesCreated,omitempty"`

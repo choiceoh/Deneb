@@ -422,6 +422,11 @@ func (s *Service) notifyDreaming(report *DreamReport, err error) {
 			if report.WikiProjectDigests > 0 {
 				msg += fmt.Sprintf(", 근황 %d", report.WikiProjectDigests)
 			}
+			// The 사용자-category subset of created/updated — surfaced so the
+			// operator sees their own model evolving, not just page counts.
+			if report.UserModelUpdated > 0 {
+				msg += fmt.Sprintf(", 사용자모델 %d", report.UserModelUpdated)
+			}
 		default:
 			head := "🌙 Aurora Dream 완료"
 			if failed {

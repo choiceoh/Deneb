@@ -40,11 +40,12 @@ type Handler struct {
 	providerConfigsMu sync.RWMutex
 	providerConfigs   map[string]ProviderConfig
 	// memory groups the memory/knowledge backends. See MemoryDeps.
-	memory          MemoryDeps
-	dreamTurnFn     func(ctx context.Context)         // optional; increments dream turn via autonomous
-	agentLog        *agentlog.Writer                  // optional; agent detail logging
-	registry        *modelrole.Registry               // centralized model role registry
-	providerRuntime *provider.ProviderRuntimeResolver // optional; runtime auth, missing-auth messages
+	memory             MemoryDeps
+	dreamTurnFn        func(ctx context.Context)         // optional; increments dream turn via autonomous
+	preferenceSignalFn func()                            // optional; notes a 선호-tagged diary capsule for accelerated dreaming
+	agentLog           *agentlog.Writer                  // optional; agent detail logging
+	registry           *modelrole.Registry               // centralized model role registry
+	providerRuntime    *provider.ProviderRuntimeResolver // optional; runtime auth, missing-auth messages
 
 	// Agent run configuration.
 	contextCfg           ContextConfig
@@ -243,6 +244,7 @@ type HandlerConfig struct {
 	// Memory groups the memory/knowledge backends. See MemoryDeps.
 	Memory               MemoryDeps
 	DreamTurnFn          func(ctx context.Context) // optional; increments dream turn via autonomous
+	PreferenceSignalFn   func()                    // optional; notes a 선호-tagged diary capsule so the dreamer consolidates it on the accelerated cadence
 	AgentLog             *agentlog.Writer          // optional; agent detail logging
 	Registry             *modelrole.Registry       // centralized model role registry
 	LocalAIHub           *localai.Hub              // centralized local AI request hub
@@ -337,6 +339,7 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 		providerConfigs:      cloneProviderConfigs(cfg.ProviderConfigs),
 		memory:               cfg.Memory,
 		dreamTurnFn:          cfg.DreamTurnFn,
+		preferenceSignalFn:   cfg.PreferenceSignalFn,
 		agentLog:             cfg.AgentLog,
 		registry:             cfg.Registry,
 		contextCfg:           cfg.ContextCfg,

@@ -269,8 +269,9 @@ func buildWikiSynthesisPrompt(indexContent, processedHistory, polarisSection, di
 - confidence: 정보 신뢰도 — high(검증됨), medium(합리적 추론), low(불확실)
 - due: 임박한 결제기한·마감일 (YYYY-MM-DD). 프로젝트의 거래성 건에서만 사용, 없으면 생략
 - supersedes: 새 일지 내용이 기존 페이지의 사실과 **모순되거나 그것을 대체**할 때, 대체되는 기존 페이지 경로 (인덱스에서 선택). 단순 추가 정보면 생략 — 사실이 바뀐 경우에만 (예: 단가 변경, 담당자 교체, 정책 폐기)
-- 사용자 working-style 추론(사용자 카테고리 한정): 명시적으로 말한 선호뿐 아니라, 일지에서 **반복적으로 드러난** 상호작용 패턴(예: 답변을 산문으로 고침, 특정 맥락서 늘 숫자 요구, 특정 형식 반복 거부)도 working-style 규칙으로 도출하라 — 일지 항목의 "신호:"에 **선호**가 달린 것들이 그 1차 단서다. 단 **2회 이상 반복**이 분명할 때만이고 단발 행동·추측은 금지. 말한 선호는 confidence=high, 행동에서 추론한 규칙은 confidence=medium 이하로 구분해 운영자가 검토·정정하게 하라
-- 사용자 선호 갱신(사용자 카테고리 한정): 기존 선호가 **바뀌면**(예: 간결→상세 전환) 모순 bullet을 누적하지 말고 action:"update"로 **그 값을 현재값으로 교체**하라(낡은 값 삭제) — 사용자 페이지는 이력 로그가 아니라 *현행 정책*이어야 한다. 페이지 전체가 무의미해진 경우에만 supersedes를 쓴다
+- 사용자 모델(사용자 카테고리): 사용자가 어떤 사람인지의 **현행 프로필**을 축별 페이지로 유지하라 — ①소통(호칭·말투·답변 형식·길이) ②업무 리듬(시간대·루틴·보고 방식) ③도구·포맷 취향 ④판단·결정 성향(위험 감수·우선순위 기준) ⑤개인 컨텍스트(업무에 필요한 만큼만). 축 하나=페이지 하나로 작게 나누고, 각 규칙에 근거(날짜+발화/행동 요지)를 함께 남기고, cues를 채워라
+- 사용자 working-style 추론(사용자 카테고리 한정): 명시적으로 말한 지속 선호("앞으로/항상/다음부터 …" — 일지 "신호:"의 **선호** 태그가 1차 단서)는 **1회로도 즉시 기록**하라(confidence=high). 행동에서 추론한 규칙(예: 답변을 산문으로 고침, 특정 맥락서 늘 숫자 요구, 특정 형식 반복 거부)은 **2회 이상 반복**이 분명할 때만 도출하고(confidence=medium 이하) 단발 행동·추측은 금지 — 운영자가 검토·정정하게 하라
+- 사용자 선호 갱신(사용자 카테고리 한정): 기존 선호가 **바뀌면**(예: 간결→상세 전환) 모순 bullet을 누적하지 말고 action:"update"로 **그 값을 현재값으로 교체**하라(낡은 값 삭제) — 사용자 페이지는 이력 로그가 아니라 *현행 정책*이어야 한다. '이번만' 류 일회성 지시는 기록하지 마라. 페이지 전체가 무의미해진 경우에만 supersedes를 쓴다
 - id: 짧은 kebab-case 식별자 (예: "dgx-spark", "gemma4-switch", "peter-kim")
 - code: **새 프로젝트(거래)** 페이지를 처음 만들 때만, 고정코드 줄기 "[부서]-[고객]-[거래타입]" 을 제안 (순번은 시스템이 부여). 부서=pl0(실장 직할·오선택 직접)·pl1(1팀 사업개발)·pl2(2팀 루프탑·자가소비)·pl3(3팀 모듈·인버터)·nde(남도에코 케이블)·etc(타부서)·com(다부서). 거래타입=dev(개발)·epc(시공)·mod(모듈)·inv(인버터)·cbl(케이블)·bes(BESS)·wnd(풍력). 고객=거래상대 3자 약어 (트리나→tri, 기아→kia). 전 세그먼트 3자 고정. 기존 프로젝트의 하위 메일/이력 페이지는 code 생략 — 폴더에서 자동 상속됨
 - summary: 한 줄 요약 (~80자, 한국어)
@@ -286,8 +287,9 @@ JSON 배열만 반환하세요. 다른 텍스트 없이.`, indexContent, process
 }
 
 // applyUpdates creates or updates wiki pages based on LLM instructions.
-// Returns (created, updated) counts and paths of oversized pages.
-func (wd *WikiDreamer) applyUpdates(_ context.Context, updates []wikiUpdate) (created, updated int, oversized []string) {
+// Returns (created, updated) counts, the 사용자-category subset of those writes
+// (userPages — the user model), and paths of oversized pages.
+func (wd *WikiDreamer) applyUpdates(_ context.Context, updates []wikiUpdate) (created, updated, userPages int, oversized []string) {
 	maxBytes := wd.config.MaxPageBytes
 	// Snapshot existing codes once so filings inherit their project's frozen code
 	// (and new-project mints stay collision-free across this batch).
@@ -397,6 +399,7 @@ func (wd *WikiDreamer) applyUpdates(_ context.Context, updates []wikiUpdate) (cr
 		// code; a new project mints one from the LLM stem (Go assigns the 순번).
 		code := codeIdx.resolveCode(u)
 
+		wrote := false
 		switch u.Action {
 		case "create":
 			page := NewPage(u.Title, u.Category, u.Tags)
@@ -457,6 +460,7 @@ func (wd *WikiDreamer) applyUpdates(_ context.Context, updates []wikiUpdate) (cr
 				continue
 			}
 			created++
+			wrote = true
 
 		case "update":
 			// Read-modify-write through UpdatePage so the append can't be clobbered
@@ -571,6 +575,14 @@ func (wd *WikiDreamer) applyUpdates(_ context.Context, updates []wikiUpdate) (cr
 			} else {
 				updated++
 			}
+			wrote = true
+		}
+
+		// 사용자-category writes are the user model — counted separately so the
+		// dream report/notification surfaces how the model of the user itself
+		// evolved (the DreamReport counter existed but was never fed).
+		if wrote && strings.HasPrefix(u.Path, userPrefCategory+"/") {
+			userPages++
 		}
 
 		// Contradiction handling: when the LLM flagged this update as REPLACING
@@ -610,7 +622,7 @@ func (wd *WikiDreamer) applyUpdates(_ context.Context, updates []wikiUpdate) (cr
 		}
 	}
 
-	return created, updated, oversized
+	return created, updated, userPages, oversized
 }
 
 // rebuildIndex scans all wiki pages and rebuilds the master index. It delegates
@@ -737,6 +749,7 @@ func normalizeCategoryPath(path, category string) (string, string) {
 func (wd *WikiDreamer) resetCounters() {
 	wd.cmu.Lock()
 	wd.turnCount = 0
+	wd.prefSignals = 0 // the cycle consumed (or backed off on) the pending 선호 capsules
 	wd.lastDream = time.Now()
 	last := wd.lastDream
 	wd.cmu.Unlock()

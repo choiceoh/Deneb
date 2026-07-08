@@ -619,6 +619,7 @@ func maybeRecordRunDiary(deps runDeps, params RunParams, result *agent.AgentResu
 	assistantText = strings.TrimSpace(stripReasoningLeak(StripSilentToken(jsonutil.StripThinkingTags(assistantText))))
 	dreamTurnFn := deps.dreamTurnFn
 	shouldIncrementDream := dreamTurnFn != nil
+	prefSignalFn := deps.preferenceSignalFn
 	// Background work rides the server lifecycle ctx (canceled on shutdown,
 	// not on request completion) — same contract as maybeCodingTurnEnd.
 	bgCtx := deps.callbacks.shutdownCtx
@@ -626,8 +627,16 @@ func maybeRecordRunDiary(deps runDeps, params RunParams, result *agent.AgentResu
 		bgCtx = context.Background()
 	}
 	safego.GoWithSlog(logger, "run-diary", func() {
-		recorded := recordDiary(deps.memory.Wiki, logger, params.Message, toolNames, assistantText, result.StopReason, result.Turns)
-		if recorded && shouldIncrementDream {
+		recorded, signal := recordDiary(deps.memory.Wiki, logger, params.Message, toolNames, assistantText, result.StopReason, result.Turns)
+		if !recorded {
+			return
+		}
+		// Note the 선호 capsule before the dream-turn increment: the increment's
+		// ShouldDream check must already see the pending preference signal.
+		if signal.preference() && prefSignalFn != nil {
+			prefSignalFn()
+		}
+		if shouldIncrementDream {
 			dreamTurnFn(bgCtx)
 		}
 	})

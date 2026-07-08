@@ -151,6 +151,7 @@ func (h *Handler) buildRunDeps() runDeps {
 		logger:               h.logger,
 		memory:               h.memory,
 		dreamTurnFn:          h.dreamTurnFn,
+		preferenceSignalFn:   h.preferenceSignalFn,
 		agentLog:             h.agentLog,
 		registry:             h.registry,
 		contextCfg:           h.contextCfg,

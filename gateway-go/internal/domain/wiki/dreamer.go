@@ -20,7 +20,14 @@ import (
 const (
 	wikiDreamTurnThreshold = 50
 	wikiDreamTimeIntervalH = 8
-	wikiDreamTimeout       = 10 * time.Minute
+	// wikiDreamPrefMinInterval is the accelerated cadence while a
+	// preference-tagged diary capsule (신호:선호 — chat's isPreferenceDirective)
+	// awaits consolidation: a voiced standing preference should land on the
+	// 사용자 pages within the hour, not after the regular 50-turn/8h batch
+	// window. The floor keeps back-to-back preference turns from dreaming
+	// every turn.
+	wikiDreamPrefMinInterval = 30 * time.Minute
+	wikiDreamTimeout         = 10 * time.Minute
 	// wikiDreamSynthesisTimeout bounds the synthesis LLM call alone: a wedged
 	// backend must fail the phase quickly instead of eating the whole cycle
 	// budget (a stuck vLLM engine held every cycle for the full 10 minutes).
@@ -128,12 +135,19 @@ type WikiDreamer struct {
 	model  string
 	logger *slog.Logger
 
-	// cmu guards turnCount and lastDream: incremented from chat turns,
-	// read from the autonomous dream timer loop, reset from async dream
-	// runs — three goroutines on a plain int/time without it.
+	// cmu guards turnCount, lastDream and prefSignals: incremented from chat
+	// turns, read from the autonomous dream timer loop, reset from async dream
+	// runs — three goroutines on plain ints/time without it.
 	cmu       sync.Mutex
 	turnCount int
 	lastDream time.Time
+	// prefSignals counts preference-tagged diary capsules (신호:선호) recorded
+	// since the last dream; >0 switches ShouldDream onto the accelerated
+	// wikiDreamPrefMinInterval cadence so voiced preferences consolidate into
+	// the 사용자 pages promptly. In-memory only: a restart loses the nudge, but
+	// the capsule itself is already on disk and the regular thresholds still
+	// pick it up.
+	prefSignals int
 
 	// polarisContextFn optionally returns formatted recent polaris compression
 	// summaries to inject into the synthesis prompt as a higher-density fact
@@ -206,6 +220,16 @@ func (wd *WikiDreamer) IncrementTurn(_ context.Context) {
 	wd.cmu.Unlock()
 }
 
+// NotePreferenceSignal records that a preference-tagged diary capsule
+// (신호:선호) was just appended. Wired from the chat diary recorder — the
+// capsule is on disk before this is called, so an accelerated dream cycle
+// always sees the preference it fires for.
+func (wd *WikiDreamer) NotePreferenceSignal() {
+	wd.cmu.Lock()
+	wd.prefSignals++
+	wd.cmu.Unlock()
+}
+
 // SetPolarisContextFn wires a closure that returns formatted recent polaris
 // compression summaries. nil-safe; passing nil disables polaris injection.
 func (wd *WikiDreamer) SetPolarisContextFn(fn func() string) {
@@ -268,6 +292,7 @@ func (wd *WikiDreamer) ShouldDream(_ context.Context) bool {
 	wd.cmu.Lock()
 	turns := wd.turnCount
 	last := wd.lastDream
+	prefs := wd.prefSignals
 	wd.cmu.Unlock()
 
 	if turns >= wikiDreamTurnThreshold {
@@ -276,6 +301,14 @@ func (wd *WikiDreamer) ShouldDream(_ context.Context) bool {
 	}
 	if !last.IsZero() && time.Since(last).Hours() >= float64(wikiDreamTimeIntervalH) {
 		wd.logger.Info("wiki-dream: time threshold reached", "elapsed", time.Since(last).Round(time.Minute))
+		return true
+	}
+	// Preference fast path: an unconsumed 신호:선호 capsule shortens the wait to
+	// wikiDreamPrefMinInterval so the 사용자 model updates soon after the user
+	// voices a standing preference (fired by the next turn or the dream timer).
+	if prefs > 0 && !last.IsZero() && time.Since(last) >= wikiDreamPrefMinInterval {
+		wd.logger.Info("wiki-dream: preference-signal threshold reached",
+			"prefSignals", prefs, "elapsed", time.Since(last).Round(time.Minute))
 		return true
 	}
 	return false
@@ -366,9 +399,10 @@ func (wd *WikiDreamer) RunDream(ctx context.Context) (*autonomous.DreamReport, e
 	}
 
 	// Phase 3: Apply page updates.
-	created, updated, oversized := wd.applyUpdates(ctx, updates)
+	created, updated, userPages, oversized := wd.applyUpdates(ctx, updates)
 	report.WikiPagesCreated = created
 	report.WikiPagesUpdated = updated
+	report.UserModelUpdated = userPages
 	if len(oversized) > 0 {
 		phaseErrors = append(phaseErrors, fmt.Sprintf("oversized pages: %s", strings.Join(oversized, ", ")))
 	}
@@ -578,7 +612,7 @@ func (wd *WikiDreamer) RunDream(ctx context.Context) (*autonomous.DreamReport, e
 	}
 
 	wd.logger.Info("wiki-dream: cycle complete",
-		"created", created, "updated", updated,
+		"created", created, "updated", updated, "userModel", userPages,
 		"duration", time.Since(start).Round(time.Millisecond))
 
 	return report, nil
