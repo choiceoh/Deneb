@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/acp"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/tokens"
@@ -162,6 +163,14 @@ func (a *cronChatAdapter) RunAgentTurn(ctx context.Context, params cron.AgentTur
 	default:
 		source = "empty"
 	}
+	// Enforce the deneb-ui card contract ("최종 응답 = 머리말 한 줄 + deneb-ui 카드"):
+	// strip any leaked multi-line working-narration/data-dump preamble the model
+	// baked in front of the card. stripNarrationHead only catches a short prose
+	// head closed by ---/#; a truncation-induced note ("…섹션이 잘려있었는데. 핵심
+	// 데이터 정리:") is longer, colon/digit-laden, and opens a ```deneb-ui fence,
+	// so it slips through. This backstop makes the leak unreachable regardless of
+	// model behaviour (morning-letter incident 2026-07-08).
+	output = stripCardPreamble(output)
 	// Log the delivery choice so postmortems can see which bucket the run landed
 	// in. Without this, diagnosing "why did the user get a short wrap-up instead
 	// of the body" requires reconstructing from per-turn tokens alone.
@@ -188,6 +197,46 @@ func (a *cronChatAdapter) RunAgentTurn(ctx context.Context, params cron.AgentTur
 		return "", cron.ErrTurnAborted
 	}
 	return output, nil
+}
+
+// cardGreetingMaxRunes bounds a legitimate one-line masthead greeting that may
+// precede a deneb-ui card ("좋은 아침이에요 — 2026년 7월 8일 수요일. 강진 계약이
+// 가장 급합니다." ≈ 45 runes). Anything longer on a single line is treated as a
+// leaked narration paragraph, not a greeting.
+const cardGreetingMaxRunes = 120
+
+// stripCardPreamble enforces the deneb-ui card deliverable contract: at most a
+// single short greeting line may precede the ```deneb-ui fence. Some models,
+// especially under stress (a truncated tool payload), instead emit a multi-line
+// working-narration or data-dump preamble there, which then opens the
+// user-visible cron message. This deterministically removes such a preamble:
+// a lone short greeting line is kept, anything else before the fence is dropped.
+// Text from the fence onward (the card itself and any closing paragraph or
+// model tag) is never touched. Deliverables without a ```deneb-ui fence, or that
+// already open with it, are returned unchanged.
+func stripCardPreamble(text string) string {
+	const fence = "```deneb-ui"
+	idx := strings.Index(text, fence)
+	if idx <= 0 {
+		return text // no card, or already opens at the fence
+	}
+	pre := strings.TrimSpace(text[:idx])
+	if pre == "" {
+		return text
+	}
+	var kept []string
+	for _, ln := range strings.Split(pre, "\n") {
+		if t := strings.TrimSpace(ln); t != "" {
+			kept = append(kept, t)
+		}
+	}
+	rest := text[idx:]
+	// The contract allows exactly one greeting line; a single short line is that
+	// greeting and is preserved. Multiple lines (or one oversized line) is a leak.
+	if len(kept) == 1 && utf8.RuneCountInString(kept[0]) <= cardGreetingMaxRunes {
+		return kept[0] + "\n\n" + rest
+	}
+	return rest
 }
 
 // resolveCronCommand rewrites recognised routine slash-command payloads into a
