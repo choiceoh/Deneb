@@ -69,7 +69,6 @@ func PersistDefaultModel(configPath, model string, logger *slog.Logger) error {
 //	main        → agents.defaultModel
 //	tiny        → agents.tinyModel
 //	lightweight → agents.lightweightModel
-//	analysis    → agents.analysisModel
 //	coding      → agents.codingModel
 //	fallback    → agents.fallbackModel
 //	vision      → agents.visionModel
@@ -84,8 +83,6 @@ func PersistRoleModel(configPath, role, model string, logger *slog.Logger) error
 		field = "tinyModel"
 	case "lightweight":
 		field = "lightweightModel"
-	case "analysis":
-		field = "analysisModel"
 	case "coding":
 		field = "codingModel"
 	case "fallback":
