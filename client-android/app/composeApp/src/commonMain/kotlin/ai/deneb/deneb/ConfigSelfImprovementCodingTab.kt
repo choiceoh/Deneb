@@ -1,6 +1,7 @@
 package ai.deneb.deneb
 
 import ai.deneb.deneb.generated.SelfCorrectionCandidate
+import ai.deneb.deneb.generated.SelfImprovementCodingFunnel
 import ai.deneb.deneb.generated.SelfImprovementCodingListResponse
 import ai.deneb.deneb.generated.SelfImprovementCodingStatusCount
 import ai.deneb.ui.DenebType
@@ -118,6 +119,11 @@ internal fun SelfImprovementCodingContent(
                     style = DenebType.meta,
                     color = denebHint(),
                 )
+                val funnelLine = selfImprovementCodingFunnelLine(queue.funnel)
+                if (funnelLine.isNotBlank()) {
+                    Spacer(Modifier.height(2.dp))
+                    Text(funnelLine, style = DenebType.meta, color = denebHint())
+                }
             }
             SelfImprovementCodingStatusFilters(
                 counts = queue.statusCounts,
@@ -258,6 +264,7 @@ private fun SelfImprovementCodingCandidateRow(candidate: SelfCorrectionCandidate
                 candidate.evidence.takeIf { it.isNotBlank() }?.let { "근거: $it" },
                 candidate.risk.takeIf { it.isNotBlank() }?.let { "리스크: $it" },
                 candidate.reason.takeIf { it.isNotBlank() }?.let { "메모: $it" },
+                candidate.source.takeIf { it.isNotBlank() }?.let { "출처: $it" },
                 candidate.targetFiles.takeIf { it.isNotEmpty() }?.joinToString(" · ")?.let { "대상: $it" },
                 selfImprovementCodingMeta(candidate).takeIf { it.isNotBlank() },
             )
@@ -285,6 +292,32 @@ private fun SelfImprovementCodingStatusBadge(status: String) {
             .background(bg)
             .padding(horizontal = 6.dp, vertical = 1.dp),
     )
+}
+
+/** Capture-side health line: distinguishes "queue consumed" from "capture
+ *  broke" — last capture, how many recent rejections even qualified for
+ *  promotion, and when the heartbeat review lane last ran. Blank when the
+ *  pipeline has no history at all (fresh install). */
+private fun selfImprovementCodingFunnelLine(funnel: SelfImprovementCodingFunnel): String {
+    val noHistory = funnel.lastCaptureAt <= 0L && funnel.lastRejectionAt <= 0L &&
+        funnel.rejections7d <= 0 && funnel.lastNudgeAt <= 0L
+    if (noHistory) return ""
+    val parts = mutableListOf<String>()
+    parts += if (funnel.lastCaptureAt > 0L) {
+        "후보 포착 ${lifecycleTime(funnel.lastCaptureAt)}"
+    } else {
+        "후보 포착 이력 없음"
+    }
+    parts += "7일 거절 ${funnel.rejections7d}건(승격자격 ${funnel.promotableRejections7d})"
+    if (funnel.rejections7d <= 0 && funnel.lastRejectionAt > 0L) {
+        parts += "마지막 거절 ${lifecycleTime(funnel.lastRejectionAt)}"
+    }
+    parts += if (funnel.lastNudgeAt > 0L) {
+        "하트비트 검토 ${lifecycleTime(funnel.lastNudgeAt)}"
+    } else {
+        "하트비트 검토 이력 없음"
+    }
+    return parts.joinToString(" · ")
 }
 
 private fun selfImprovementCodingTitle(candidate: SelfCorrectionCandidate): String = candidate.title.ifBlank {

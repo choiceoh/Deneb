@@ -674,10 +674,22 @@ data class SelfCorrectionCandidate(
 
 @Immutable
 @Serializable
+data class SelfImprovementCodingFunnel(
+    val lastCaptureAt: Long = 0L,
+    val lastReviewAt: Long = 0L,
+    val rejections7d: Int = 0,
+    val promotableRejections7d: Int = 0,
+    val lastRejectionAt: Long = 0L,
+    val lastNudgeAt: Long = 0L,
+)
+
+@Immutable
+@Serializable
 data class SelfImprovementCodingListResponse(
     val candidates: List<SelfCorrectionCandidate> = emptyList(),
     val count: Int = 0,
     val statusCounts: List<SelfImprovementCodingStatusCount> = emptyList(),
+    val funnel: SelfImprovementCodingFunnel = SelfImprovementCodingFunnel(),
 )
 
 @Immutable

@@ -37,7 +37,22 @@ type selfCodingNudgeState struct {
 }
 
 func (t *heartbeatTask) selfCodingStatePath() string {
-	return filepath.Join(t.homeDir, ".deneb", "heartbeat-selfcoding.json")
+	return selfCodingStatePath(t.homeDir)
+}
+
+func selfCodingStatePath(homeDir string) string {
+	return filepath.Join(homeDir, ".deneb", "heartbeat-selfcoding.json")
+}
+
+// lastSelfCodingNudgeAtMs reports when the self-coding review lane last fired,
+// straight from the persisted marker (0 = never). Used by the miniapp funnel
+// summary so the native screen can show consumption-lane liveness.
+func lastSelfCodingNudgeAtMs() int64 {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return 0
+	}
+	return loadSelfCodingNudgeState(selfCodingStatePath(home)).LastNudgeAtMs
 }
 
 // detectSelfCodingNudge returns the review-lane trigger text when proposed

@@ -55,6 +55,16 @@ func testSelfImprovementCodingDeps() SelfImprovementCodingDeps {
 			}
 			return recs, nil
 		},
+		Funnel: func() genesis.SelfCorrectionFunnelSummary {
+			return genesis.SelfCorrectionFunnelSummary{
+				LastCaptureAt:          444,
+				LastReviewAt:           555,
+				Rejections7d:           2,
+				PromotableRejections7d: 1,
+				LastRejectionAt:        666,
+			}
+		},
+		LastNudgeAtMs: func() int64 { return 777 },
 	}
 }
 
@@ -133,6 +143,36 @@ func TestSelfImprovementCodingList_RejectsUnknownStatus(t *testing.T) {
 	})
 	if resp.Error == nil {
 		t.Fatalf("expected invalid params for unknown status, got %+v", resp)
+	}
+}
+
+func TestSelfImprovementCodingList_FunnelSummary(t *testing.T) {
+	h := selfImprovementCodingList(testSelfImprovementCodingDeps())
+	resp := h(authedSkillsCtx(), &protocol.RequestFrame{ID: "1", Method: "miniapp.self_improvement_coding.list"})
+	payload := decodeSkillsPayload[SelfImprovementCodingListResponse](t, resp)
+
+	want := SelfImprovementCodingFunnel{
+		LastCaptureAt:          444,
+		LastReviewAt:           555,
+		Rejections7d:           2,
+		PromotableRejections7d: 1,
+		LastRejectionAt:        666,
+		LastNudgeAt:            777,
+	}
+	if payload.Funnel != want {
+		t.Fatalf("funnel = %+v, want %+v", payload.Funnel, want)
+	}
+}
+
+func TestSelfImprovementCodingList_FunnelOptional(t *testing.T) {
+	deps := testSelfImprovementCodingDeps()
+	deps.Funnel = nil
+	deps.LastNudgeAtMs = nil
+	h := selfImprovementCodingList(deps)
+	resp := h(authedSkillsCtx(), &protocol.RequestFrame{ID: "1", Method: "miniapp.self_improvement_coding.list"})
+	payload := decodeSkillsPayload[SelfImprovementCodingListResponse](t, resp)
+	if payload.Funnel != (SelfImprovementCodingFunnel{}) {
+		t.Fatalf("funnel without deps = %+v, want zero", payload.Funnel)
 	}
 }
 
