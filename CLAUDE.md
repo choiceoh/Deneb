@@ -63,8 +63,8 @@ greppy expand ID             # 쿼리 끝의 Expand ID → 상위 매치 소스 
 
 - 일반 grep 플래그(`-rn`·`-i` 등)는 그대로 동작. 결과는 텍스트 매치가 아니라 `qualified_name file:line`.
 - **첫 실행은 전체 레포 자동 인덱싱(~45s), 이후 캐시 쿼리는 <0.1s.** 인덱스는 레포 밖(`~/.local/share/greppy`)에 저장 — 레포 오염·gitignore 불필요. 레포 어디서든 실행(루트 자동 탐지, `--root DIR`로 지정도 가능).
-- `semantic-search`(이름 모를 때 의미 검색)는 `--vectors` + 임베딩 인덱스 별도 빌드 필요 — **아직 미빌드라 지금은 그래프 명령만 사용.**
-- ⚠️ aarch64(DGX Spark) 프리빌트 없음 → 소스 빌드본(`--no-default-features` 금지, LFS 모델은 릴리스에서 받아 교체). 재설치·업그레이드 절차는 메모리 [[greppy-code-navigation]] 참조.
+- `semantic-search --vectors "PLAIN ENGLISH"` — 심볼 **이름을 모를 때** 의미로 코드를 찾는다 (예: "limit a value to a range"→clamp 함수들). GB10 GPU 임베딩 인덱스가 빌드돼 있어 바로 동작, 쿼리 ~0.2s. 인덱스 갱신은 `greppy index --embeddings --device cuda`.
+- ⚠️ aarch64(DGX Spark) 프리빌트 없음 → 소스 빌드본(`--no-default-features` 금지, LFS 모델은 릴리스에서 받아 교체). **GB10 GPU 임베딩은 벤더 ggml-cuda 2패치 필수**(`~/.local/share/greppy/patches/gb10-blackwell-cc121.patch`). 재설치·업그레이드 전체 절차는 메모리 [[greppy-code-navigation]] 참조.
 
 ## 룰 인덱스 — 필요할 때 Read (조건부 로딩)
 
