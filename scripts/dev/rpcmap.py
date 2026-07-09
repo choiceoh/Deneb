@@ -26,8 +26,11 @@ import os
 import re
 import sys
 
-# RPC method → handler: `"a.b.c": handlerName` inside *Methods() map literals.
+# RPC method → handler, two registration forms found in the gateway:
+#   map literal:      `"a.b.c": handlerName`         (in *Methods() returns)
+#   map assignment:   `m["a.b.c"] = handlerName`     (builder-style registration)
 RPC_RE = re.compile(r'"([a-z][a-z0-9_]*(?:\.[a-z0-9_]+)+)"\s*:\s*([A-Za-z_]\w*)')
+RPC_ASSIGN_RE = re.compile(r'\[\s*"([a-z][a-z0-9_]*(?:\.[a-z0-9_]+)+)"\s*\]\s*=\s*([A-Za-z_]\w*)')
 # Tool name → handler: ToolDef{ Name: "x", ... Fn: pkg.Handler(...) }.
 # `[^}]*?` keeps Name↔Fn within one struct literal (no `}` between them).
 TOOL_RE = re.compile(r'Name:\s*"([^"]+)"[^}]*?Fn:\s*(?:\w+\.)?([A-Za-z_]\w*)', re.DOTALL)
@@ -36,6 +39,15 @@ TOOL_RE = re.compile(r'Name:\s*"([^"]+)"[^}]*?Fn:\s*(?:\w+\.)?([A-Za-z_]\w*)', r
 # dotted-string maps elsewhere in the tree).
 RPC_DIRS = ["gateway-go/internal/runtime"]
 TOOL_DIRS = ["gateway-go/internal/pipeline/chat/toolreg"]
+
+# Runtime-assembled method names static extraction can't see literally.
+# ALIAS_PREFIX: documented, stable aliases (same handler) — resolve back to base.
+ALIAS_PREFIX = {"miniapp.mail.": "miniapp.gmail."}  # withMailAliases()
+# Other families are built via `methodsWithPrefix(deps, "PREFIX.")` (e.g.
+# observatory.*) — genuinely computed, so a miss there is a real static limit.
+COMPUTED_HINT = ("일부 메서드명은 런타임 합성이라 안 잡힐 수 있음 "
+                 "(observatory.* 등 methodsWithPrefix). base 네임스페이스나 "
+                 "codegraph_explore로 확인.")
 
 
 def _go_files(root, subdirs):
@@ -54,10 +66,10 @@ def build_map(root):
         try:
             with open(path, encoding="utf-8") as fh:
                 for i, line in enumerate(fh, 1):
-                    m = RPC_RE.search(line)
-                    if m:
-                        out["rpc"].append((m.group(1), m.group(2),
-                                           os.path.relpath(path, root), i))
+                    for m in (RPC_RE.search(line), RPC_ASSIGN_RE.search(line)):
+                        if m:
+                            out["rpc"].append((m.group(1), m.group(2),
+                                               os.path.relpath(path, root), i))
         except OSError:
             continue
     for path in _go_files(root, TOOL_DIRS):
@@ -105,6 +117,14 @@ def main():
         exact = [r for r in hits if r[1].lower() == q]
         if exact:
             hits = exact  # prefer exact name match over substring
+        if not hits:  # resolve a documented alias back to its base namespace
+            for pre, base in ALIAS_PREFIX.items():
+                if q.startswith(pre):
+                    q2 = base + q[len(pre):]
+                    hits = [r for r in allrows if r[1].lower() == q2]
+                    if hits:
+                        print(f"({args.query} → {q2} 별칭, 동일 핸들러)", file=sys.stderr)
+                    break
     elif args.list:
         hits = allrows
     else:
@@ -120,7 +140,7 @@ def main():
         return 0 if hits else 1
 
     if not hits:
-        print(f"no match. ({len(m['rpc'])} RPC methods, {len(m['tool'])} tools indexed)",
+        print(f"no match. ({len(m['rpc'])} RPC methods, {len(m['tool'])} tools indexed)\n{COMPUTED_HINT}",
               file=sys.stderr)
         return 1
     by_kind = {"rpc": [r[1:] for r in hits if r[0] == "rpc"],
