@@ -99,7 +99,12 @@ const CodeActionDescription = "Run Python in a single turn to orchestrate tools 
 // intentionally absent; received-mail batch work goes through mail_archive.
 // (fs read/write/edit have no "action" and are gated in codeActionAllow.)
 var codeActionAllowed = map[string]map[string]bool{
-	"mail_archive": {"list": true, "search": true, "read": true, "thread": true, "project_history": true, "history": true},
+	// attachment is a READ that returns the attachment's extracted text (PDF via
+	// pdftotext+OCR, DOCX/XLSX/PPTX parsers) — bounded to the on-box mail archive,
+	// no user-path write (unlike gmail's download-to-disk, which stays denied), so
+	// it fits the read-only surface. Without it a code_action script analyzing a
+	// mail cannot open its PDF/DOCX attachment.
+	"mail_archive": {"list": true, "search": true, "read": true, "thread": true, "project_history": true, "history": true, "attachment": true},
 	"calendar":     {"list": true, "get": true, "free_slots": true, "create": true, "update": true, "delete": true},
 	"contacts":     {"lookup": true, "search": true},
 	"wiki":         {"search": true, "read": true, "index": true, "daily": true, "status": true, "write": true, "log": true},
