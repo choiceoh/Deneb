@@ -585,11 +585,15 @@ func RegisterWikiTools(registry toolctx.ToolRegistrar, wikiDeps *toolctx.WikiDep
 		// deal_ledger: deterministic list/sum over the typed deal-record ledger
 		// (wiki/deal_records.go) — 합계·건수·기간 질문을 모델 눈대중 대신 코드
 		// 계산으로. The ledger itself is teed on every UpsertDealPage filing.
+		// Deferred (2026-07-09): niche direct use, and code_action's bridge already
+		// exposes it zero-hop as "deals", so deferring strands nothing — a direct
+		// 거래 집계 turn fetches it. Description leads with the trigger phrases.
 		registry.RegisterTool(toolctx.ToolDef{
 			Name:        "deal_ledger",
-			Description: "정형 거래 원장 조회·집계: 메일 분석이 파일한 거래 문서(견적·계약·세금계산서 등)의 타입드 기록. 거래 금액의 합계·건수·통화별 집계·기간 필터가 코드로 계산된다 — '총 거래액', '올해 견적 몇 건', '거래처별 합계' 류 질문은 위키 산문을 눈대중으로 합산하지 말고 반드시 이 도구를 쓸 것. 금액 미파싱 건은 합계에서 제외되고 원문과 함께 표기된다",
+			Description: "'총 거래액'·'올해 견적 몇 건'·'거래처별 합계' 류 거래 금액 집계 질문에 쓰는 정형 거래 원장 — 메일 분석이 파일한 거래 문서(견적·계약·세금계산서 등)의 타입드 기록에서 합계·건수·통화별 집계·기간 필터를 코드로 계산한다(위키 산문 눈대중 금지). 금액 미파싱 건은 합계에서 제외되고 원문과 함께 표기된다",
 			InputSchema: dealLedgerToolSchema(),
 			Fn:          tools.ToolDealLedger(wikiDeps.Store),
+			Deferred:    true,
 		})
 	}
 }
@@ -601,10 +605,17 @@ func RegisterNotebookTool(registry toolctx.ToolRegistrar, deps *toolctx.Notebook
 	if deps == nil || deps.Store == nil {
 		return
 	}
+	// Deferred (2026-07-09): the notebook is a deliberate multi-step workflow
+	// (create → add_source → brief) needed only when the user explicitly asks for
+	// a grounded/cited briefing over pinned sources — rare per interactive turn,
+	// yet its schema was the 4th-largest eager tool (~2.6KB). Not on code_action's
+	// bridge and not named by any autonomous trigger, so a notebook turn fetches
+	// it. Description front-loads the WHEN so the 80-rune deferred summary is useful.
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "notebook",
-		Description: "NotebookLM식 자료 노트북: create (노트북 생성), list (목록), show (자료 보기), add_source (자료 핀: kind=wiki 위키페이지 또는 kind=note 붙여넣기 텍스트), remove_source (자료 제거), delete (노트북 삭제), brief (핀된 자료에만 근거한 인용 포함 브리핑 생성). 특정 딜/프로젝트의 메일·문서·메모를 한데 모아 그 자료만으로 출처 추적 가능한 종합을 만들 때 사용. brief는 [S1] 형식으로 각 사실을 인용한다",
+		Description: "딜/프로젝트 자료(메일·문서·메모)를 한데 모아 그 자료만으로 출처 추적 가능한 인용 브리핑을 만들 때 쓰는 NotebookLM식 노트북. action=create (노트북 생성) | list (목록) | show (자료 보기) | add_source (자료 핀: kind=wiki 위키페이지 또는 kind=note 붙여넣기 텍스트) | remove_source (자료 제거) | delete (노트북 삭제) | brief (핀된 자료에만 근거해 [S1] 형식 인용 브리핑 생성).",
 		InputSchema: notebookToolSchema(),
 		Fn:          tools.ToolNotebook(deps),
+		Deferred:    true,
 	})
 }
