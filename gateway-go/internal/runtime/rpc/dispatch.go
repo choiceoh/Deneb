@@ -200,6 +200,10 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *protocol.RequestFrame) *
 // cancels a derived context so the handler can observe the cancellation and
 // exit promptly, freeing the worker pool slot.
 func (d *Dispatcher) safeCall(ctx context.Context, req *protocol.RequestFrame, handler HandlerFunc) *protocol.ResponseFrame {
+	if ctx.Err() != nil {
+		return d.handlerTimeoutResponse(req)
+	}
+
 	type result struct {
 		resp *protocol.ResponseFrame
 	}
@@ -229,12 +233,19 @@ func (d *Dispatcher) safeCall(ctx context.Context, req *protocol.RequestFrame, h
 
 	select {
 	case r := <-ch:
+		if ctx.Err() != nil {
+			return d.handlerTimeoutResponse(req)
+		}
 		return r.resp
 	case <-ctx.Done():
 		// Cancel the handler's context so it can observe the cancellation
 		// and release the worker pool slot promptly.
 		handlerCancel()
-		d.logger.Warn("handler timeout", "method", req.Method)
-		return rpcerr.Newf(protocol.ErrAgentTimeout, "handler %q did not complete within deadline", req.Method).Response(req.ID)
+		return d.handlerTimeoutResponse(req)
 	}
+}
+
+func (d *Dispatcher) handlerTimeoutResponse(req *protocol.RequestFrame) *protocol.ResponseFrame {
+	d.logger.Warn("handler timeout", "method", req.Method)
+	return rpcerr.Newf(protocol.ErrAgentTimeout, "handler %q did not complete within deadline", req.Method).Response(req.ID)
 }
