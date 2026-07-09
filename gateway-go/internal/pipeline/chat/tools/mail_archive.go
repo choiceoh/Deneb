@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/mail"
 	"os"
 	"strings"
@@ -67,6 +68,29 @@ func ToolMailArchive(optional ...MailArchiveDeps) func(ctx context.Context, inpu
 		if !storeReady && !imapReady {
 			return "메일 아카이브가 설정되지 않았습니다 (로컬 저장소 미백필 + DENEB_ARCHIVE_IMAP_USER/PASS 미설정).", nil
 		}
+
+		// Phase timing: attribute where a call's time went so "mail_archive is
+		// slow" is diagnosable straight from the log. usedIMAP flips true whenever
+		// the fast local store missed and we fell through to the full IMAP
+		// fetch+parse (the 12.9s path — usually un-backfilled historical mail); the
+		// attachment action is always IMAP fetch + OCR. Fast store hits stay at
+		// Debug (quiet); the slow paths surface at Info.
+		start := time.Now()
+		loggedAction := args.Action
+		if loggedAction == "" {
+			loggedAction = "list"
+		}
+		usedIMAP := false
+		defer func() {
+			path := mailArchivePath(loggedAction, usedIMAP)
+			durMs := time.Since(start).Milliseconds()
+			if path == "store" {
+				slog.Debug("mail_archive", "action", loggedAction, "path", path, "durationMs", durMs)
+			} else {
+				slog.Info("mail_archive", "action", loggedAction, "path", path, "durationMs", durMs)
+			}
+		}()
+
 		limit := args.Limit
 		if limit <= 0 {
 			limit = 50
@@ -93,6 +117,7 @@ func ToolMailArchive(optional ...MailArchiveDeps) func(ctx context.Context, inpu
 				msgs = deps.Store.Search(mailboxes, args.Query, opts.Since, limit)
 			}
 			if len(msgs) == 0 && imapReady {
+				usedIMAP = true
 				var err error
 				msgs, err = mailarchive.SearchContextMessages(ctx, cfg, args.Query, opts)
 				if err != nil {
@@ -115,6 +140,7 @@ func ToolMailArchive(optional ...MailArchiveDeps) func(ctx context.Context, inpu
 				msg, found = deps.Store.Read(args.MessageID, args.Query, mailboxes)
 			}
 			if !found && imapReady {
+				usedIMAP = true
 				var err error
 				msg, err = mailarchive.ReadContextMessage(ctx, cfg, args.MessageID, args.Query, opts)
 				if err != nil {
@@ -145,6 +171,7 @@ func ToolMailArchive(optional ...MailArchiveDeps) func(ctx context.Context, inpu
 				msgs, found = deps.Store.Thread(args.MessageID, args.Query, mailboxes, limit)
 			}
 			if (!found || len(msgs) == 0) && imapReady {
+				usedIMAP = true
 				var err error
 				msgs, err = mailarchive.ThreadContext(ctx, cfg, args.MessageID, args.Query, opts)
 				if err != nil {
@@ -182,6 +209,7 @@ func ToolMailArchive(optional ...MailArchiveDeps) func(ctx context.Context, inpu
 				history, used = deps.Store.ProjectHistory(args.Query, opts.Since, limit, opts.IndexLimit)
 			}
 			if !used && imapReady {
+				usedIMAP = true
 				var err error
 				history, err = mailarchive.ProjectHistoryContext(ctx, cfg, args.Query, opts)
 				if err != nil {
@@ -213,6 +241,7 @@ func ToolMailArchive(optional ...MailArchiveDeps) func(ctx context.Context, inpu
 			if storeReady {
 				msgs = deps.Store.List(mailboxes, since, limit)
 			} else if imapReady {
+				usedIMAP = true
 				msgs, err = mailarchive.ListContextMessages(ctx, cfg, since, opts)
 			}
 			if days == 1 {
@@ -262,6 +291,22 @@ func ToolMailArchive(optional ...MailArchiveDeps) func(ctx context.Context, inpu
 		default:
 			return "", fmt.Errorf("알 수 없는 action %q (list|search|read|thread|project_history|attachment)", args.Action)
 		}
+	}
+}
+
+// mailArchivePath classifies which data path a mail_archive call took, for the
+// per-call phase-timing log: "store" = fast in-memory local hit (~ms); "attachment"
+// = always IMAP fetch + OCR; "imap-fallback" = the local store missed and the call
+// paid the full IMAP fetch+parse (the slow ~12.9s path, typically un-backfilled
+// historical mail). Pure so the classification is unit-testable.
+func mailArchivePath(action string, usedIMAP bool) string {
+	switch {
+	case action == "attachment":
+		return "attachment"
+	case usedIMAP:
+		return "imap-fallback"
+	default:
+		return "store"
 	}
 }
 
