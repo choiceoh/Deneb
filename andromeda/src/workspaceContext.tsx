@@ -67,20 +67,6 @@ interface WorkspaceCtx {
   // 기본=30%, 확대=70%. Persisted to localStorage.
   notebookTop: NotebookTop;
   setNotebookTop: (t: NotebookTop) => void;
-  // Coding mode: when on, the left rail shows coding sessions instead of panes
-  // (the work area is the 코드 pane). Persisted to localStorage.
-  codeMode: boolean;
-  setCodeMode: (on: boolean) => void;
-  // Bumped after a coding-mode mutation (start/discard/verify) so the Sidebar
-  // session rail refetches in sync with the CodePane work area.
-  codeSessionsRev: number;
-  bumpCodeSessions: () => void;
-  // The selected coding session ("code:<id>") in 코드 모드. CodeView shows this
-  // session's chat in the center (the main work surface) and the management aside
-  // controls it; the rail / CodePane set it. null = nothing selected (greeting).
-  activeCodeKey: string | null;
-  openCodeChat: (key: string) => void;
-  setActiveCodeKey: (key: string | null) => void;
 }
 
 const HIDDEN_VIEWS_KEY = "andromeda.hiddenPanes";
@@ -96,12 +82,6 @@ const VIEW_ORDER_KEY = "andromeda.viewOrder";
 function readViewOrder(): View[] {
   const arr = getJSON<unknown[]>(VIEW_ORDER_KEY);
   return Array.isArray(arr) ? arr.filter((v): v is View => typeof v === "string") : [];
-}
-
-const CODE_MODE_KEY = "andromeda.codeMode";
-
-function readCodeMode(): boolean {
-  return getJSON<boolean>(CODE_MODE_KEY) === true;
 }
 
 const NOTEBOOK_TOP_KEY = "andromeda.notebook.top";
@@ -127,9 +107,8 @@ export function WorkspaceProvider({
   setCfg: (c: GatewayConfig) => void;
   children: ReactNode;
 }) {
-  // Land on the 오늘 dashboard — unless coding mode is persisted on, where the rail
-  // shows sessions and the work area must match (the 코드 pane), not Today.
-  const [view, setView] = useState<View>(readCodeMode() ? "code" : "today");
+  // Land on the 오늘 dashboard.
+  const [view, setView] = useState<View>("today");
   const [aiText, setAiText] = useState("");
   const [activeResource, setActiveResource] = useState<string | undefined>(undefined);
   const [wikiTarget, setWikiTarget] = useState<string | null>(null);
@@ -141,11 +120,6 @@ export function WorkspaceProvider({
   const [hiddenViews, setHiddenViews] = useState<View[]>(readHiddenViews);
   const [viewOrder, setViewOrder] = useState<View[]>(readViewOrder);
   const [notebookTop, setNotebookTop] = useState<NotebookTop>(readNotebookTop);
-  const [codeMode, setCodeMode] = useState<boolean>(readCodeMode);
-  const [codeSessionsRev, setCodeSessionsRev] = useState(0);
-  const bumpCodeSessions = () => setCodeSessionsRev((n) => n + 1);
-  const [activeCodeKey, setActiveCodeKey] = useState<string | null>(null);
-  const openCodeChat = (key: string) => setActiveCodeKey(key);
 
   const toggleViewHidden = (v: View) => {
     if (v === "settings") return; // settings stays — it's the way back to this screen
@@ -177,10 +151,6 @@ export function WorkspaceProvider({
   }, [viewOrder]);
 
   useEffect(() => {
-    setJSON(CODE_MODE_KEY, codeMode);
-  }, [codeMode]);
-
-  useEffect(() => {
     setJSON(NOTEBOOK_TOP_KEY, notebookTop);
   }, [notebookTop]);
 
@@ -209,13 +179,6 @@ export function WorkspaceProvider({
         setViewOrder,
         notebookTop,
         setNotebookTop,
-        codeMode,
-        setCodeMode,
-        codeSessionsRev,
-        bumpCodeSessions,
-        activeCodeKey,
-        openCodeChat,
-        setActiveCodeKey,
       }}
     >
       {children}

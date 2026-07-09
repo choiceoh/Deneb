@@ -95,9 +95,6 @@ type Handler struct {
 	// knowledge, calendar/goal glances, persona override). See AmbientDeps.
 	ambient AmbientDeps
 
-	// coding groups the 코드모드 session hooks. See CodingDeps.
-	coding CodingDeps
-
 	// weeklyReportTextFn / weeklyFormDeliverFn back the interactive /weekly
 	// (/주간보고) slash command — the deterministic 주간업무보고 generators the
 	// Saturday cron uses, so a manual trigger produces the same form + text.
@@ -155,18 +152,6 @@ type AmbientDeps struct {
 	// prompt corner); "" → the default persona renders. Read per turn —
 	// byte-stable between rare edits, so the Static cache holds.
 	PersonaOverride PersonaOverrideFunc
-}
-
-// CodingDeps groups the 코드모드 session hooks the server wires over the shared
-// code Manager + session store (server/chat_pipeline.go). Both optional; nil
-// disables each hook.
-type CodingDeps struct {
-	// TurnEnd fires after a coding-session turn to checkpoint + verify the
-	// worktree, flipping the rail status.
-	TurnEnd CodingTurnEndFunc
-	// Rebind re-establishes a coding session's worktree binding from the
-	// durable code store before a turn runs (survives session GC/restart).
-	Rebind CodingRebindFunc
 }
 
 // TopicResolver maps a forum/topic threadID to a per-topic knowledge key
@@ -269,10 +254,6 @@ type HandlerConfig struct {
 	// knowledge, calendar/goal glances, persona override). See AmbientDeps.
 	Ambient AmbientDeps
 
-	// Coding groups the 코드모드 session hooks (server closures over the shared
-	// code Manager + session store — server/chat_pipeline.go). See CodingDeps.
-	Coding CodingDeps
-
 	// RecordActivity is called for user-originating chat turns so the server
 	// can remember the latest active channel session for autonomous follow-ups.
 	// The server owns filtering; chat only reports the session key.
@@ -339,7 +320,6 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 		authManager:          cfg.AuthManager,
 		jobTracker:           cfg.JobTracker,
 		ambient:              cfg.Ambient,
-		coding:               cfg.Coding,
 		providerConfigs:      cloneProviderConfigs(cfg.ProviderConfigs),
 		memory:               cfg.Memory,
 		dreamTurnFn:          cfg.DreamTurnFn,

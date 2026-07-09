@@ -166,7 +166,6 @@ func (h *Handler) buildRunDeps() runDeps {
 		steerQueue: h.steer,
 		skills:     h.skills,
 		ambient:    h.ambient,
-		coding:     h.coding,
 
 		// Atomic snapshot of channel callbacks (reply, media, typing, etc.).
 		callbacks: h.Snapshot(),

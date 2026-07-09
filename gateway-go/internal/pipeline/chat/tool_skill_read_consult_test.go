@@ -72,15 +72,3 @@ func TestReadSkillConsultRecorder(t *testing.T) {
 		t.Fatalf("consult log = %v, want [contract-review]", got)
 	}
 }
-
-// TestRecordTurnSkillUsage_SkipsCodingSessions: coding sessions read/edit
-// SKILL.md files as code — never usage.
-func TestRecordTurnSkillUsage_SkipsCodingSessions(t *testing.T) {
-	rec := &hintFakeRecorder{}
-	log := NewSkillConsultLog()
-	log.Add("contract-review")
-	recordTurnSkillUsage(rec, log, nil, "code:task-42", "m1")
-	if rec.calls != 0 {
-		t.Fatalf("coding-session consult recorded as usage (%d calls)", rec.calls)
-	}
-}

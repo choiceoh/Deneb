@@ -54,16 +54,6 @@ func prepareContextAndPrompt(
 	var resultMu sync.Mutex
 	var prepWg sync.WaitGroup
 
-	// 코드모드 (code: sessions) is the second prompt profile: withhold the 업무
-	// work-context inputs here (tier-1 wiki, context files, topic knowledge,
-	// calendar glance) so the prompt builder's empty-input guards skip them —
-	// an external repo worktree has no use for the personal work context, and a
-	// thin byte-stable prompt keeps the coding prefix family lean — and flag the
-	// builder (spp.Coding) for the implementer identity and the target repo's
-	// root rule docs. Keyed on the session key — not session state — so the
-	// profile survives session-manager GC and restarts.
-	coding := isCodingSessionKey(params.SessionKey)
-
 	// Tier-1 wiki auto-injection (parallel). Frozen per session (tier1_cache.go):
 	// FormatTier1 reads the live store, and mid-session wiki writes would
 	// otherwise shift the system-prompt tail every few turns — invalidating
@@ -71,7 +61,7 @@ func prepareContextAndPrompt(
 	prepWg.Add(1)
 	safego.GoWithSlog(logger, "prep-tier1-wiki", func() {
 		defer prepWg.Done()
-		tier1 := buildTier1WikiSnapshot(params, deps, coding)
+		tier1 := buildTier1WikiSnapshot(params, deps)
 		resultMu.Lock()
 		result.Tier1Wiki = tier1
 		resultMu.Unlock()
@@ -82,7 +72,7 @@ func prepareContextAndPrompt(
 	prepWg.Add(1)
 	safego.GoWithSlog(logger, "prep-recall", func() {
 		defer prepWg.Done()
-		recall := buildRecallSnapshot(ctx, params, deps, coding, logger)
+		recall := buildRecallSnapshot(ctx, params, deps, logger)
 		resultMu.Lock()
 		result.RecallMemory = recall
 		resultMu.Unlock()
@@ -103,7 +93,7 @@ func prepareContextAndPrompt(
 	prepWg.Add(1)
 	safego.GoWithSlog(logger, "prep-sysprompt", func() {
 		defer prepWg.Done()
-		systemPrompt, ctxFiles, frozenTopic := buildTurnSystemPrompt(ctx, params, deps, workspaceDir, sessionToolPreset, coding)
+		systemPrompt, ctxFiles, frozenTopic := buildTurnSystemPrompt(ctx, params, deps, workspaceDir, sessionToolPreset)
 		resultMu.Lock()
 		result.SystemPrompt = systemPrompt
 		result.ContextFiles = ctxFiles
@@ -126,14 +116,14 @@ func prepareContextAndPrompt(
 }
 
 // buildTier1WikiSnapshot returns the session-frozen tier-1 wiki block ("" for
-// the 코딩 profile and explicit-System runs, which own their prompt).
-func buildTier1WikiSnapshot(params RunParams, deps runDeps, coding bool) string {
+// explicit-System runs, which own their prompt).
+func buildTier1WikiSnapshot(params RunParams, deps runDeps) string {
 	var tier1 string
 	// Explicit-System runs (subagents, skill-review forks) own their prompt
 	// end to end — finalizePrompt would otherwise append always-on wiki
 	// memory on top of a deliberately lean caller prompt (review-sweep
 	// finding on #3103: the mini review prompt still carried tier-1 wiki).
-	if deps.memory.Wiki != nil && !coding && params.System == "" {
+	if deps.memory.Wiki != nil && params.System == "" {
 		if cached, ok := cachedTier1Wiki(params.SessionKey); ok {
 			tier1 = cached
 		} else {
@@ -148,20 +138,13 @@ func buildTier1WikiSnapshot(params RunParams, deps runDeps, coding bool) string 
 // buildRecallSnapshot runs the recall preflight for the turn: profile/toggle
 // gates, per-cue caching, and the multi-source search. Returns the wire-ready
 // recall block ("" when gated or no evidence).
-func buildRecallSnapshot(ctx context.Context, params RunParams, deps runDeps, coding bool, logger *slog.Logger) string {
+func buildRecallSnapshot(ctx context.Context, params RunParams, deps runDeps, logger *slog.Logger) string {
 	// Ephemeral turns (autonomous heartbeat self-triggers) never run
 	// recall — there is no real user message to recall against. SkipRecall
 	// is the user's "focused chat / memory off" toggle: skip the whole
 	// preflight so a general question pays no search latency and pulls no
 	// unrelated work memories.
-	//
-	// coding (code: session) skips recall unconditionally — work memories are
-	// noise inside an external repo worktree, and recall hits
-	// (wiki/diary/polaris) are tail-injected into the last user message, so
-	// without this gate a code: turn could still receive private work memory
-	// even when the per-turn SkipRecall flag is unset (session key vs flag
-	// divergence). The session key is the authoritative signal.
-	if params.EphemeralUser || params.SkipRecall || coding {
+	if params.EphemeralUser || params.SkipRecall {
 		return ""
 	}
 	// A notebook with real sources bound to this session is the explicit
@@ -228,7 +211,7 @@ func loadTurnContextMessages(params RunParams, deps runDeps, logger *slog.Logger
 // session-frozen inputs that must be persisted alongside them
 // (prompt_snapshot_persist.go). Explicit-System runs and default-system
 // deployments short-circuit with nil frozen inputs.
-func buildTurnSystemPrompt(ctx context.Context, params RunParams, deps runDeps, workspaceDir, sessionToolPreset string, coding bool) (json.RawMessage, []prompt.ContextFile, *prompt.TopicKnowledge) {
+func buildTurnSystemPrompt(ctx context.Context, params RunParams, deps runDeps, workspaceDir, sessionToolPreset string) (json.RawMessage, []prompt.ContextFile, *prompt.TopicKnowledge) {
 	if params.System != "" {
 		return llm.SystemString(params.System), nil, nil
 	}
@@ -296,7 +279,7 @@ func buildTurnSystemPrompt(ctx context.Context, params RunParams, deps runDeps, 
 	// key change → topic-less Static cache stays shared).
 	var topicKnowledge, topicCacheKey, topicKnowledgePath string
 	var frozenTopic *prompt.TopicKnowledge
-	if deps.ambient.TopicResolver != nil && params.Delivery != nil && !coding {
+	if deps.ambient.TopicResolver != nil && params.Delivery != nil {
 		if key := deps.ambient.TopicResolver.TopicKey(params.Delivery.ThreadID); key != "" {
 			tk := prompt.LoadTopicKnowledge(workspaceDir, deps.ambient.TopicResolver.Dir(), key, params.SessionKey)
 			if tk.Content != "" {
@@ -313,7 +296,7 @@ func buildTurnSystemPrompt(ctx context.Context, params RunParams, deps runDeps, 
 	// it per day, so this is a cheap cache hit on all but the first turn of
 	// the day; "" when no calendar source or no upcoming events.
 	var calendarGlance string
-	if deps.ambient.CalendarGlance != nil && !coding {
+	if deps.ambient.CalendarGlance != nil {
 		calendarGlance = deps.ambient.CalendarGlance(ctx, params.SessionKey, tz)
 	}
 
@@ -321,53 +304,27 @@ func buildTurnSystemPrompt(ctx context.Context, params RunParams, deps runDeps, 
 	// standing goal, read live from the process store. "" when no active
 	// goal or goals are not wired.
 	var goalGlance string
-	if deps.ambient.GoalGlance != nil && !coding {
+	if deps.ambient.GoalGlance != nil {
 		goalGlance = deps.ambient.GoalGlance(ctx, params.SessionKey)
 	}
 
-	// 코드모드: withhold the workspace context files (SOUL.md/IDENTITY.md/
-	// USER.md/MEMORY.md/…) so the implementer profile carries neither the Nev
-	// persona nor private work context.
-	var ctxFiles []prompt.ContextFile
-	if !coding {
-		ctxFiles = prompt.LoadContextFiles(workspaceDir, prompt.WithSessionSnapshot(params.SessionKey))
-	}
+	ctxFiles := prompt.LoadContextFiles(workspaceDir, prompt.WithSessionSnapshot(params.SessionKey))
 
-	// Operator-edited 업무 persona (Settings prompt corner). Only the 업무 path
-	// uses it (코드모드 keeps its implementer identity); "" override → default
+	// Operator-edited 업무 persona (Settings prompt corner). "" override → default
 	// persona renders, byte-identical to before. PersonaCacheKey (content hash)
 	// keys the Static cache per persona so an edit invalidates only its own entry.
 	var personaText, personaCacheKey string
-	if deps.ambient.PersonaOverride != nil && !coding {
+	if deps.ambient.PersonaOverride != nil {
 		if ov := strings.TrimSpace(deps.ambient.PersonaOverride()); ov != "" {
 			personaText = ov
 			personaCacheKey = prompt.PersonaCacheKeyFor(ov)
 		}
 	}
 
-	// 코드모드: resolve the worktree (the session's bound workspace) and load
-	// the repo's root rule docs, frozen per session. The worktree also
-	// replaces the prompt's Workspace line — the Deneb workspace path would
-	// be misleading inside a coding session. A missing binding (a turn racing
-	// the lazy rebind) degrades to no injection, never an error.
-	var codingRepo prompt.CodingRepoContext
-	promptWorkspaceDir := workspaceDir
-	if coding && deps.sessions != nil {
-		if sess := deps.sessions.Get(params.SessionKey); sess != nil && sess.WorkspaceDir != "" {
-			promptWorkspaceDir = sess.WorkspaceDir
-			codingRepo = prompt.LoadCodingRepoContext(sess.WorkspaceDir, params.SessionKey)
-		}
-	}
-
-	// 코드모드 carries no Deneb skills index — 업무 절차서 are noise inside an
-	// external repo, and the coding preset lacks the skills tool anyway.
-	skillsPrompt := ""
-	if !coding {
-		skillsPrompt = loadCachedSkillsPrompt(workspaceDir, availableToolNames(deps.tools))
-	}
+	skillsPrompt := loadCachedSkillsPrompt(workspaceDir, availableToolNames(deps.tools))
 
 	spp := prompt.SystemPromptParams{
-		WorkspaceDir:       promptWorkspaceDir,
+		WorkspaceDir:       workspaceDir,
 		ToolDefs:           toolDefs,
 		DeferredTools:      deferredToolInfos,
 		UserTimezone:       tz,
@@ -377,9 +334,6 @@ func buildTurnSystemPrompt(ctx context.Context, params RunParams, deps runDeps, 
 		SkillsPrompt:       skillsPrompt,
 		ToolPreset:         sessionToolPreset,
 		CompactionFired:    compactionFired,
-		Coding:             coding,
-		CodingRepoContext:  codingRepo.Content,
-		CodingRepoCacheKey: codingRepo.Hash,
 		CalendarGlance:     calendarGlance,
 		GoalGlance:         goalGlance,
 		TopicKnowledge:     topicKnowledge,

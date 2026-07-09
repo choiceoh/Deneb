@@ -230,9 +230,6 @@ type runDeps struct {
 	// these closures (wired in server/chat_pipeline.go). See AmbientDeps.
 	ambient AmbientDeps
 
-	// coding groups the 코드모드 session hooks. See CodingDeps.
-	coding CodingDeps
-
 	// chatport holds injected adapters that decouple chat from autoreply.
 	chatport chatportAdapters
 }
@@ -263,15 +260,6 @@ func abbreviateSession(key string) string {
 // (diary prompts, heartbeat responses) would contaminate the user's conversation context.
 func isSystemSession(key string) bool {
 	return strings.HasPrefix(key, "system:")
-}
-
-// isCodingSessionKey reports whether key is a 코드모드 session ("code:<taskID>",
-// minted by miniapp.code.start). The key — not session-manager state — is the
-// authoritative signal for the coding prompt profile and model routing: the
-// manager forgets terminal sessions after its GC window and everything on
-// restart, while the key is stable for the session's whole life.
-func isCodingSessionKey(key string) bool {
-	return strings.HasPrefix(key, "code:")
 }
 
 // isMainSession reports whether key is a top-level direct session (e.g. "client:main").

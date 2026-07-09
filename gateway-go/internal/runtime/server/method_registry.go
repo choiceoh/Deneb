@@ -17,12 +17,10 @@ import (
 	"log/slog"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/code"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/filestore"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/mailpriority"
@@ -37,7 +35,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/prompt"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/pilot"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calprop"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
@@ -499,15 +496,6 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 			},
 			Local:     resolveLocalCalendar(s.logger),
 			Proposals: resolveCalendarProposals(s.logger),
-		}),
-
-		// --- Coding mode: git worktrees + sessions (miniapp.code.*) ---
-		// Worktrees isolate each task; the session store backs the rail. The
-		// handler skips (nil) when the store can't load or denebDir is empty.
-		handlerminiapp.CodeMethods(handlerminiapp.CodeDeps{
-			Worktrees:              s.codeWorktrees(),
-			Sessions:               s.codeSessions(),
-			ConfigureCodingSession: hub.Sessions().ConfigureCoding,
 		}),
 
 		// Mini App part-status dashboard (miniapp.dashboard.lanes). Groups work
@@ -1165,159 +1153,6 @@ func resolveLocalCalendar(logger *slog.Logger) handlerminiapp.LocalCalendar {
 		return nil
 	}
 	return store
-}
-
-// codingBackends lazily builds the coding-mode worktree manager + session store,
-// shared by the miniapp.code.* handlers and the chat turn-end hook so the
-// sessions.json has a single writer. Both are nil when denebDir is empty or the
-// store file can't be read → coding mode is disabled. sync.Once makes it safe to
-// call from both the Early RPC phase and chat-pipeline init, in any order.
-func (s *Server) codingBackends() (*code.Manager, *code.Store) {
-	s.codeOnce.Do(func() {
-		if s.denebDir == "" {
-			return
-		}
-		root := filepath.Join(s.denebDir, "code")
-		s.codeManager = code.NewManager(root)
-		store, err := code.NewStore(root)
-		if err != nil {
-			if s.logger != nil {
-				s.logger.Error("coding-mode session store unavailable — coding mode disabled", "error", err)
-			}
-			return
-		}
-		s.codeStore = store
-	})
-	return s.codeManager, s.codeStore
-}
-
-// codeWorktrees / codeSessions return the handler interfaces, or a nil interface
-// (not a typed-nil) when coding mode is disabled so CodeMethods skips registration.
-func (s *Server) codeWorktrees() handlerminiapp.CodeWorktrees {
-	if mgr, _ := s.codingBackends(); mgr != nil {
-		return mgr
-	}
-	return nil
-}
-
-func (s *Server) codeSessions() handlerminiapp.CodeSessions {
-	if _, store := s.codingBackends(); store != nil {
-		return store
-	}
-	return nil
-}
-
-// codingTurnEnd is the chat turn-end hook (wired as HandlerConfig.Coding.TurnEnd):
-// for a coding session it checkpoints the worktree edits and verifies build/tests,
-// flipping the rail status. sessionKey is "code:<taskID>"; fallbackSummary is the
-// turn's trimmed user message and resultText the head of the agent's final report
-// — together they feed the tiny-role checkpoint labeler (fail-open to the
-// fallback). Serialized per task because the verify outlives the turn, so
-// back-to-back turns in one worktree must not run two commits + builds at once.
-func (s *Server) codingTurnEnd(ctx context.Context, sessionKey, fallbackSummary, resultText string) {
-	mgr, store := s.codingBackends()
-	if mgr == nil || store == nil {
-		return
-	}
-	taskID := strings.TrimPrefix(sessionKey, "code:")
-	if taskID == "" || taskID == sessionKey {
-		return // not a coding-session key
-	}
-	mu := s.codeTaskLock(taskID)
-	mu.Lock()
-	defer mu.Unlock()
-	code.AfterTurn(ctx, mgr, store, taskID, fallbackSummary, s.checkpointSummarizer(fallbackSummary, resultText), s.logger)
-	// Nudge the rail: the status may have flipped working → passed/failed.
-	if s.broadcaster != nil {
-		s.broadcaster.Broadcast("code.sessions.changed", map[string]any{"sessionKey": sessionKey})
-	}
-}
-
-// checkpointSummarySystem is the tiny-role labeler contract: the checkpoint
-// list is the vibe coder's change history, so the label must say what CHANGED,
-// not repeat the request verbatim.
-const checkpointSummarySystem = "너는 git 체크포인트 라벨러다. 코딩 턴의 요청과 결과 보고를 보고 무엇이 바뀌었는지 한국어 명사구 한 줄(최대 40자)로 요약하라. 따옴표·마침표·불릿·설명 없이 라벨 텍스트만 출력하라."
-
-// checkpointSummarizer returns the lazy tiny-role checkpoint labeler for
-// AfterTurn, or nil when no local AI is wired (tests, degraded boot). Invoked
-// only after AfterTurn's dirty check, so read-only turns never pay the call.
-// 임무→역할: 체크포인트 요약 = tiny (단순 추출 도그마, docs/agent-rules/model-roles.md).
-func (s *Server) checkpointSummarizer(fallbackSummary, resultText string) func(context.Context) string {
-	if pilot.LocalAIHub() == nil {
-		return nil
-	}
-	return func(ctx context.Context) string {
-		sctx, cancel := context.WithTimeout(ctx, 20*time.Second)
-		defer cancel()
-		input := "요청: " + fallbackSummary
-		if strings.TrimSpace(resultText) != "" {
-			input += "\n결과 보고: " + resultText
-		}
-		out, err := pilot.CallTinyLLM(sctx, checkpointSummarySystem, input, 64)
-		if err != nil {
-			s.logger.Debug("checkpoint tiny summary failed; keeping fallback", "error", err)
-			return ""
-		}
-		return sanitizeCheckpointLabel(out)
-	}
-}
-
-// sanitizeCheckpointLabel normalizes a model-produced checkpoint label to one
-// clean line: first non-empty line, quotes/bullets stripped, ALL backticks
-// removed (inline-code style like `config.go` used to leave a dangling
-// backtick after edge-trimming), capped at the 40-rune labeler contract
-// (checkpointSummarySystem, model-roles.md). Returns "" (→ fallback) when
-// nothing usable remains.
-func sanitizeCheckpointLabel(s string) string {
-	for line := range strings.SplitSeq(s, "\n") {
-		line = strings.ReplaceAll(line, "`", "")
-		line = strings.TrimSpace(line)
-		line = strings.Trim(line, "\"'“”‘’")
-		line = strings.TrimLeft(line, "-•* ")
-		line = strings.TrimSuffix(line, ".")
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		if r := []rune(line); len(r) > 40 {
-			// 39 content runes + the ellipsis = exactly the 40-rune contract
-			// (r[:40]+"…" would overshoot to 41).
-			line = strings.TrimSpace(string(r[:39])) + "…"
-		}
-		return line
-	}
-	return ""
-}
-
-func (s *Server) codeTaskLock(taskID string) *sync.Mutex {
-	v, _ := s.codeTaskMu.LoadOrStore(taskID, &sync.Mutex{})
-	mu, _ := v.(*sync.Mutex) // always a *sync.Mutex (only value ever stored)
-	return mu
-}
-
-// rebindCodingSession re-establishes the chat-session ↔ worktree binding for a
-// coding turn (wired as HandlerConfig.Coding.Rebind; called at the start of
-// every code: turn). The session manager is in-memory only — terminal direct
-// sessions are GC'd after 1h and everything is lost on restart — while the
-// code store on disk is the durable truth, so the binding is derived from it
-// on demand. ConfigureCoding is idempotent (no event when unchanged), so the
-// common already-bound turn costs one store read + one map lookup. A missing
-// or worktree-less record (discarded, reconciled missing) leaves the session
-// untouched; the turn then runs unbound, same as before this hook existed.
-func (s *Server) rebindCodingSession(sessionKey string) {
-	_, store := s.codingBackends()
-	if store == nil || s.sessions == nil {
-		return
-	}
-	taskID := strings.TrimPrefix(sessionKey, "code:")
-	if taskID == "" || taskID == sessionKey {
-		return // not a coding-session key
-	}
-	sess, ok := store.Get(taskID)
-	if !ok || sess.Dir == "" || sess.Status == code.StatusMissing {
-		return
-	}
-	s.sessions.ConfigureCoding(sessionKey, sess.Dir)
 }
 
 // resolveCalendarProposals returns the process-wide calendar-proposal store

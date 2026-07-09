@@ -73,16 +73,11 @@ func shouldRecordRunDiary(params RunParams) bool {
 	if isSystemSession(params.SessionKey) {
 		return false
 	}
-	// Coding sessions work inside an external repo worktree — checkpoints are
-	// their history; worktree chatter does not belong in the 업무 diary.
-	if isCodingSessionKey(params.SessionKey) {
-		return false
-	}
 	// Autonomous cron runs feed the wiki through their own sinks (goal ledger,
 	// mail analyses, direct wiki writes), and their "user" message is a payload
 	// prompt, not the user speaking — diarying them would double-feed dreams.
-	// (These two exclusions are inert on the async lifecycle path: code:/cron:
-	// turns only ever run through the sync entry points.)
+	// (This exclusion is inert on the async lifecycle path: cron: turns only
+	// ever run through the sync entry points.)
 	if strings.HasPrefix(params.SessionKey, "cron:") {
 		return false
 	}
