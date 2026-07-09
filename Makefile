@@ -9,6 +9,7 @@
        data-gen data-gen-check \
        kotlin-models kotlin-models-check \
        kotlin-check kotlin-spotless kotlin-detekt kotlin-desktop-smoke-test kotlin-android-compile \
+       docs-lint docs-lint-fix \
        ci ci/fast go-test-cached \
        preview native-smoke \
        info
@@ -285,6 +286,21 @@ kotlin-android-compile:
 # compile (matches kotlin-lint.yml).
 kotlin-check: kotlin-spotless kotlin-detekt kotlin-desktop-smoke-test kotlin-android-compile
 	@echo "Kotlin client checks passed"
+
+# --- Docs lint gate (Mintlify markdown) ---
+#
+# markdownlint-cli2 over docs/** + README.md; globs and rule config live in the
+# repo-root .markdownlint-cli2.jsonc. A pinned version keeps local == CI (docs.yml
+# runs `make docs-lint`) and stops a new upstream rule from silently breaking the
+# gate. Node/npx only — no repo-root node_modules. `docs-lint-fix` applies the
+# auto-fixable subset in place.
+MARKDOWNLINT_VERSION = 0.18.1
+
+docs-lint:
+	npx --yes markdownlint-cli2@$(MARKDOWNLINT_VERSION)
+
+docs-lint-fix:
+	npx --yes markdownlint-cli2@$(MARKDOWNLINT_VERSION) --fix
 
 # --- CI gate mirror (single pre-push command) ---
 #

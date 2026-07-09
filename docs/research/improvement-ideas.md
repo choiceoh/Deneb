@@ -45,6 +45,7 @@
 **왜.** `executeAgentRun` 한 함수의 인지 비용이 너무 큼. 신규 AI 세션이 진입할 때 캐시 정책 (cache_breakpoints.go) ↔ retry (run_exec_retry_test.go) ↔ steer (steer.go) 사이 호출 그래프를 따라가기 어렵다.
 
 **어디서.**
+
 - `run_exec.go:85-91` — 타임스탬프 포맷팅 → `prompt/timestamp.go` (또는 기존 prompt/ 로 흡수)
 - `run_exec.go:1409-1431` — tool histogram → `run_helpers.go` 흡수
 - `run_exec.go:100~` — 컨텍스트 pre-warming → `run_context_prewarm.go`
@@ -57,6 +58,7 @@
 ### 1.2 `notify_relay.go` 877 LOC 3-way 분리 — **P2 / S**
 
 **무엇.** `gateway-go/internal/runtime/server/notify_relay.go` 는 세 가지 무관한 책임을 묶고 있다:
+
 1. **Status snapshot** — on-demand 세션 상태 조회
 2. **Error mirror** — broadcast tap → 네이티브 클라 error notify
 3. **Health heartbeat** — periodic self-poll
@@ -98,6 +100,7 @@
 **무엇.** `docs/agent-rules/prompt-cache.md` 에 정의된 4-breakpoint 캐시가 실제 프로덕션에서 얼마나 hit 하는지 누적 지표가 없다.
 
 **어디서.**
+
 - `gateway-go/internal/ai/llm/openai.go` 응답 처리 부분에서 `cache_read_input_tokens`, `cache_creation_input_tokens` 헤더/필드를 metric counter 로 누적
 - `/health` 응답에 24h rolling cache hit ratio 노출 (또는 `gateway.cache_stats` RPC)
 - `/status` 슬래시에 한 줄 표시: `📦 캐시: 78% hit (24h)`
@@ -113,6 +116,7 @@
 **왜.** 토큰 절감 + LLM tool-selection 정확도 향상. 단 cache 위협 — tool list 가 동적이면 static 캐시가 매 턴 깨진다.
 
 **해결.** 두 trick:
+
 1. **Stable bucket.** 8개 도구 풀이 (의미적으로) 같으면 동일 hash → 같은 cached static block. Embedding 라우터의 결정성을 buckle 단위로 강제.
 2. **Always-on baseline.** `fs/read`, `wiki/search`, `polaris/search` 같은 hot 도구는 항상 포함. routing 은 long-tail tool 만.
 
@@ -125,6 +129,7 @@
 **현황.** `compaction/embedding.go` 는 BGE-M3 + MMR 로 dedup. 다만 **앵커** (사용자가 명시한 핵심 사실: "내 이름은 X", "프로젝트 Y 마감 6/15") 가 일반 메시지와 똑같이 MMR 점수 경쟁.
 
 **제안.** Anchor extraction 패스 1회 추가:
+
 - LLM 한 번 호출 → "이 대화에서 잊으면 안 되는 사실 5개" 추출
 - Anchor 는 압축에서 **inevictable** (Hermes 의 frozen MEMORY snapshot 과 같은 발상)
 
@@ -139,6 +144,7 @@
 **현황.** `scripts/dev/live-test.sh quality` 가 100점 만점 metric. 베이스라인 저장은 있으나 CI 자동 gate 가 없음.
 
 **제안.**
+
 - `make check` 의존성에 quality test 추가 (DGX Spark 환경에서만)
 - baseline 대비 -10pt 회귀 시 빌드 fail
 - 브랜치별 baseline 자동 저장 (이미 `baseline save` 명령 존재)
@@ -154,6 +160,7 @@
 **현황.** `polaris/engine.go:9941 LOC` — `bootstrap: raw < 50K` 로직 존재하나 round-trip 테스트 없음. 압축된 세션이 다시 열렸을 때 DAG 에서 옛 메시지가 정확히 복원되는지 검증 안 됨.
 
 **테스트 시나리오.**
+
 1. 30 turn 대화 → Tier 1 LLM 압축 발화
 2. 세션 종료 → process restart
 3. 같은 세션 키로 재오픈 → 첫 turn 의 user 메시지 본문이 (요약이 아닌 원본 형태로) DAG 에서 복원 가능?
@@ -168,6 +175,7 @@
 **현황.** `compaction/restore.go` 의 `TruncateOldToolResults` 가 rune count (CJK-safe) 로 동작하지만, 256-rune 임계값에서 **한글 정확 경계** 테스트가 없음. 기존 테스트는 ASCII 만.
 
 **테스트.**
+
 - 255 / 256 / 257 rune Hangul 입력 (자모 결합 케이스 포함)
 - 한글+영문 mixed at exact boundary
 - 조합형 (NFD) vs 완성형 (NFC) Hangul 모두
@@ -181,6 +189,7 @@
 **현황.** `gateway-go/internal/domain/wiki/dreamer.go` (965 LOC) — 자율 메모리 합성. `service_async_test.go` 가 dispatch 만 검증. dreamer 자체 단위 테스트 없음.
 
 **테스트.**
+
 - Diary capsule dedup (같은 fact 두 번 기록 → 1개 유지)
 - Recent-limit 12 강제 (13번째 호출 시 oldest 제거)
 - 상태 파일 corruption recovery (`.diary-process-state.json` 손상 → 정상 fallback)
@@ -193,6 +202,7 @@
 ### 3.4 Embedding/handler/agent/handler/provider/media/zip 단위 테스트 — **P2 / S each**
 
 **현황.** Explore 분석:
+
 - `ai/embedding/` — MMR ranking 로컬 테스트 없음
 - `runtime/rpc/handler/agent/` — RPC 디스패치 단위 테스트 없음 (integration 만)
 - `runtime/rpc/handler/provider/` — provider auth 단위 테스트 없음
@@ -207,6 +217,7 @@
 **무엇.** `/health` 가 gateway 자체 상태만. GPU 가용성/큐 깊이/local LLM 응답 latency 가 없음.
 
 **어디서.**
+
 - `gateway-go/internal/runtime/server/health.go` 에 GPU 섹션
 - `nvidia-smi --query-gpu=utilization.gpu,memory.used,memory.total --format=csv` 1초 간격 캐시
 - localai client latency p50/p95
@@ -220,6 +231,7 @@
 **현황.** 대용량 파일 send 시 현재 동작 불명확.
 
 **제안.**
+
 - `pipeline/chat/tools/send_file.go` 에서 size check → 임계값 초과 시 (a) auto-split (b) 다운로드 링크 + 1회용 토큰 전송
 - 옵션 (b) 는 gateway 가 임시 HTTP endpoint expose (DGX Spark 의 NAT 통과 가능한 경우만)
 
@@ -232,6 +244,7 @@
 **현황.** `/reset`, `/status`, `/kill`, `/model`, `/think`, `/steer` 등 존재. 사용자가 외워야 함.
 
 **제안.**
+
 - `/?` 또는 `/help` → 모든 슬래시 + 1줄 설명 (한국어)
 - 네이티브 클라 입력창에서 `/` 치면 autocomplete 힌트 노출
 - 새 슬래시 추가 시 `slash_commands.go` 의 metadata 가 single source
@@ -245,6 +258,7 @@
 **무엇.** 한 턴 (또는 한 세션) 종료 시 "이번 답변에 쓴 도구" 요약 카드를 옵션으로 제공.
 
 **예시.**
+
 ```
 ✓ 답변 완료
 🔧 사용한 도구: wiki/search ×2 · gmail/list ×1 · fs/read ×3
@@ -272,6 +286,7 @@
 **현황.** `pipeline/chat/tools/morning_letter.go` + `skills/productivity/morning-letter/` 존재. cadence (몇 시, 어떤 요일) 가 hardcode 또는 config 파일.
 
 **제안.**
+
 - `/cadence` 슬래시 → 인라인 키보드로 시간/요일 편집
 - Evening letter (오늘 한 일 + 내일 일정) 추가
 - Cadence persistence: `~/.deneb/cadence.json` 단일 파일
@@ -319,6 +334,7 @@
 **현황.** `gmailpoll/pipeline.go` (757 LOC) — 메일 분석은 있으나 우선순위가 평면적 (시간순).
 
 **제안.** 발신자/라벨/스레드 활동에 따른 priority 점수:
+
 - 위키에 "VIP" 표시된 사람 → +50
 - "결제/마감" 키워드 → +30
 - 같은 스레드에 사용자 회신 있음 → +20
@@ -354,6 +370,7 @@
 **현황.** `live-test.sh quality` 전체 실행 시간 길음 (수 분). 자주 못 돌림.
 
 **제안.**
+
 - Quality sub-test 병렬화 (현재 sequential)
 - Mock LLM 옵션 — 외부 호출 0회로 cache/format/edge 만 빠르게
 - `quality --fast` 모드 (~30s 목표)
@@ -379,12 +396,14 @@
 ## 7. 단기 (Now) vs 중기 (Next) vs 장기 (Later)
 
 ### Now — 다음 1주 (P1)
+
 - 1.1 `run_exec.go` 분리
 - 3.1 Polaris reopen 라운드트립 테스트
 - 3.2 CJK rune boundary 테스트
 - 2.4 한국어 quality CI gate
 
 ### Next — 다음 1개월 (P2)
+
 - 1.2 `notify_relay.go` 분리
 - 2.1 캐시 히트율 대시보드
 - 3.3 Dreamer 단위 테스트
@@ -395,6 +414,7 @@
 - 6.1 Live-test 시간 단축
 
 ### Later — 분기 단위 (P3)
+
 - 2.2 Embedding-aware tool routing
 - 2.3 Polaris semantic-anchor
 - 4.2 Tool histogram 카드

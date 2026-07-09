@@ -23,6 +23,7 @@ Anthropic 은 **요청당 cache_control breakpoint 최대 4개** 한도. 우리�
 | **Trailing msg N**   | `BeforeAPICall` hook | 마지막 non-system 메시지의 마지막 ContentBlock | ✅ ephemeral | 멀티턴 prefix 재사용 |
 
 구현 진입점:
+
 - 시스템 블록 마커: `gateway-go/internal/pipeline/chat/prompt/system_prompt.go:BuildSystemPromptBlocks`
 - 트레일링 마커: `gateway-go/internal/pipeline/chat/cache_breakpoints.go:buildTrailingCacheHook` → `run_exec.go` 가 staged 훅 체인으로 조립: `agent.BeforeAPICallChain` 에 `steer`(Normal)·`trailing-cache`(Post) 를 `Add` 후 `cfg.BeforeAPICall = apc.Build(logger)` (체인 내부가 `ComposeBeforeAPICall` 호출)
 - Anthropic 모드 결정: `gateway-go/internal/pipeline/chat/run_provider.go:resolveAPIMode` (non-Anthropic 에서는 hook 이 nil 반환 → ComposeBeforeAPICall 가 필터)
@@ -73,28 +74,34 @@ scripts/dev/live-test.sh logs-grep "cache_read_input_tokens\|cache_creation_inpu
 ## 2. 불가침 3원칙
 
 ### Rule A — **과거 메시지를 변경하지 마라**
+
 - 이미 LLM에 전송된 메시지 content를 사후에 mutate 금지
 - 예외 1: **컨텍스트 압축(compaction)**. 압축은 의도적으로 캐시 breaking point를 만든다
 - 예외 2: **`BeforeAPICall` hook 의 per-request copy**. 트레일링 cache_control 마커 부착(`chat/cache_breakpoints.go`)이나 `/steer` (`chat/steer.go`) 처럼 transcript 자체는 건드리지 않고 LLM 호출용 사본에만 변경을 가하는 패턴은 허용
 - 위반 예시 (금지):
+
   ```go
   // BAD — 과거 assistant 메시지에 추가 정보 주입 (transcript mutate)
   messages[len(messages)-3].Content += "\n\nUpdate: ..."
   ```
 
 ### Rule B — **대화 중 툴셋을 바꾸지 마라**
+
 - `BuildSystemPromptBlocks`는 static 블록 키를 **정렬된 툴 이름 리스트**로 생성. 툴 추가/제거는 static 캐시 무효화
 - 대화 시작 후 `/tools` 조작이나 `toolreg` 재등록 금지 — 다음 세션부터 반영
 - 위반 예시 (금지):
+
   ```go
   // BAD — 대화 중간에 툴셋 rebuild
   pipeline.Reconfigure(newToolset)  // 매 턴 static prompt 재생성됨
   ```
 
 ### Rule C — **시스템 프롬프트를 매 턴 재구성하지 마라**
+
 - Memory reload, 컨텍스트 파일 refresh, timezone recheck 등이 매 요청마다 발화하면 system 블록의 `cache_control`도 무력화
 - `PromptCache.ContextFiles`는 mtime 기반 TTL로 이미 이 문제를 해결 — **이 캐시를 우회하거나 비활성화하지 말 것**
 - 위반 예시 (금지):
+
   ```go
   // BAD — 매 요청 파일 재로드
   files := loadContextFilesDirectly(workspace)  // Cache 우회

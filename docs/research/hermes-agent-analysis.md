@@ -122,6 +122,7 @@ hermes-agent/
 ### 2.3 의존성 트리 (pyproject.toml)
 
 **베이스** (`dependencies`):
+
 - LLM SDK: `openai>=2.21.0`, `anthropic>=0.39.0`
 - HTTP/retry: `httpx[socks]`, `tenacity`, `requests`
 - CLI: `prompt_toolkit`, `rich`, `fire`
@@ -131,6 +132,7 @@ hermes-agent/
 - GitHub App: `PyJWT[crypto]`
 
 **옵셔널 extras** (23종):
+
 - `modal`, `daytona` — 서버리스 백엔드
 - `messaging` — `python-telegram-bot`, `discord.py[voice]`, `slack-bolt`, `slack-sdk`, `aiohttp`, `qrcode`
 - `slack`, `matrix`, `dingtalk`, `feishu` — 개별 플랫폼
@@ -145,6 +147,7 @@ hermes-agent/
 - `termux` — Android/Termux 전용 경량 조합
 
 **엔트리포인트**:
+
 - `hermes = "hermes_cli.main:main"`
 - `hermes-agent = "run_agent:main"`
 - `hermes-acp = "acp_adapter.entry:main"`
@@ -181,6 +184,7 @@ hermes-agent/
 `run_agent.py:698-1399` 의 `__init__`은 약 **60개 파라미터**를 받는다. 카테고리별로:
 
 #### A. 크리덴셜 & 라우팅 (`base_url`, `api_key`, `provider`, `api_mode`, `acp_command`)
+
 - **호스트명 기반 자동 프로바이더 감지** (lines 857–873):
   - `bedrock-runtime.*` → Bedrock
   - `/anthropic` 접미사 → Anthropic 프로토콜
@@ -188,19 +192,23 @@ hermes-agent/
 - 나머지는 `api_mode`("chat_completions" | "codex_responses" | ...)로 라우팅
 
 #### B. 실행 예산 & 동시성
+
 - `max_iterations=90` (기본)
 - `iteration_budget` — **thread-safe `IterationBudget` 클래스** (lines 191–233): `_used`를 `_lock`으로 보호, **세션 전체 API 턴이 공유** (즉 subagent도 같은 풀에서 차감)
 - `tool_delay`, `enabled_toolsets`/`disabled_toolsets`
 
 #### C. 콜백 & 훅 (15+ callable)
+
 - `tool_progress_callback`, `thinking_callback`, `reasoning_callback`, `clarify_callback`, `step_callback`, `stream_delta_callback`, `interim_assistant_callback` …
 - 에이전트 라이프사이클 각 지점에서 발화
 
 #### D. 컨텍스트 & 메모리
+
 - `skip_context_files`, `skip_memory`, `session_db`, `parent_session_id`
 - 프롬프트 캐싱 정책 (lines 1007–1009): **Claude on Anthropic/OpenRouter면 자동 활성화**
 
 #### E. 상태 필드 (lines 949–979)
+
 - `_interrupt_requested`, `_interrupt_message`, `_execution_thread_id` — 인터럽트 메커니즘
 - `_pending_steer`, `_pending_steer_lock` — **`/steer` 주입을 role-alternation 깨지 않게 tool result에 append**
 - `_delegate_depth`, `_active_children`, `_active_children_lock` — 서브에이전트 추적 (부모 인터럽트가 자식에게 전파)
@@ -225,6 +233,7 @@ while (api_call_count < self.max_iterations and self.iteration_budget.remaining 
 ```
 
 **종료 조건 4가지** (line 8999 루프 조건):
+
 1. **인터럽트** — `_interrupt_requested` 플래그
 2. **예산 소진** — `iteration_budget.consume()` 실패
 3. **Grace call 만료** — 예산 초과 시 "마지막 한 번" 기회. `_budget_exhausted_injected=True` 플래그로 모델에게 예산 공지 메시지 1회 주입 → 모델이 마무리 응답 생성 → 플래그 해제 → 종료
@@ -280,6 +289,7 @@ else:
 ```
 
 **캐시 breakpoint 배치** (`agent/prompt_caching.py` lines 41-72):
+
 - 시스템 프롬프트: 1개 breakpoint
 - 비시스템 최근 3개 메시지: 각 1개 (최대 4개, Anthropic 제한)
 - TTL 기본 `"5m"` (5분 ephemeral)
@@ -287,11 +297,13 @@ else:
 ### 4.7 컨텍스트 압축 (`agent/context_compressor.py`)
 
 **트리거**:
+
 1. **Preflight** (lines 8845-8911) — 루프 시작 전 이미 threshold(기본 context_length의 50%) 초과 시
 2. **API 에러** — 컨텍스트 리밋 4xx 오류 시 `should_compress()` 체크
 3. **수동** — 유저가 `/compress`
 
 **전략**:
+
 1. **Old tool result prune**: 큰 tool 출력을 1줄 요약으로 치환 (예: `"[terminal] ran 'npm test' → exit 0, 47 lines output"`)
 2. **head protect**: 시스템 + 첫 user + 첫 assistant (기본 3개)
 3. **tail protect**: 최근 ~20K 토큰 (또는 protect_last_n=20)
@@ -315,6 +327,7 @@ def _dispatch_delegate_task(self, function_args):
 ```
 
 **상태 격리**:
+
 - `_delegate_depth` (line 977) — 깊이 증가, 이터레이션 예산 스케일
 - `_active_children` (line 978) — 러닝 AIAgent 리스트. 부모 인터럽트 재귀 전파
 - **공유 이터레이션 예산** (line 810) — 자식이 부모 `IterationBudget` 상속 → 트리 전체 합산 캡
@@ -349,6 +362,7 @@ def _dispatch_delegate_task(self, function_args):
 
 **Thinking block signature 관리** (lines 1299-1390):
 Anthropic은 thinking block을 **서명**한다. 컨텍스트 압축/메시지 병합으로 mutate 하면 서명 무효. 처리:
+
 ```python
 _THINKING_TYPES = frozenset(("thinking", "redacted_thinking"))
 if _is_third_party or idx != last_assistant_idx:
@@ -359,20 +373,24 @@ if _is_third_party or idx != last_assistant_idx:
 ```
 
 **Opus 4.7 sampling param 거부** (lines 1575-1582):
+
 ```python
 if _forbids_sampling_params(model):
     for _sampling_key in ("temperature", "top_p", "top_k"):
         kwargs.pop(_sampling_key, None)
 ```
+
 → 서버 기본값 사용.
 
 **Opus 4.6 xhigh effort 불가** (lines 1554-1568):
+
 ```python
 if adaptive_effort == "xhigh" and not _supports_xhigh_effort(model):
     adaptive_effort = "max"
 ```
 
 **OAuth via Claude Code 아이덴티티** (lines 1465-1491):
+
 ```python
 if is_oauth:
     cc_block = {"type": "text", "text": _CLAUDE_CODE_SYSTEM_PREFIX}
@@ -380,11 +398,13 @@ if is_oauth:
     for tool in anthropic_tools:
         tool["name"] = _MCP_TOOL_PREFIX + tool["name"]  # "mcp_" 접두사
 ```
+
 → Claude Code 정체성 + user-agent 없으면 Anthropic 인프라가 OAuth 트래픽 500 반환.
 
 #### Bedrock Adapter (42KB)
 
 **Boto3 클라이언트 region-aware 캐싱** (lines 61-82):
+
 ```python
 def _get_bedrock_runtime_client(region):
     if region not in _bedrock_runtime_client_cache:
@@ -399,6 +419,7 @@ def _get_bedrock_runtime_client(region):
 #### Gemini Native Adapter (30KB)
 
 **functionCall + thoughtSignature** (lines 136-155):
+
 ```python
 part = {"functionCall": {"name": fn.get("name"), "args": args}}
 thought_signature = _tool_call_extra_signature(tool_call)
@@ -409,6 +430,7 @@ if thought_signature:
 #### Codex Responses API (35KB)
 
 **`fc_` 프리픽스 강제 + dual-ID 인코딩** (lines 145-155):
+
 ```python
 def _derive_responses_function_call_id(call_id, response_item_id=None):
     # `call_id|response_item_id` 를 하나의 string으로 인코딩
@@ -418,6 +440,7 @@ def _derive_responses_function_call_id(call_id, response_item_id=None):
 ### 5.3 Transport ABC (v0.11.0 신규)
 
 **`agent/transports/`** 레이어로 포맷 변환과 HTTP transport를 `run_agent.py`에서 추출:
+
 - `AnthropicTransport` — Anthropic Messages API
 - `ChatCompletionsTransport` — OpenAI-호환 기본 경로
 - `ResponsesApiTransport` — OpenAI Responses API + Codex
@@ -430,6 +453,7 @@ def _derive_responses_function_call_id(call_id, response_item_id=None):
 **역할**: 곁가지 작업(컨텍스트 압축, 세션 검색, 비전 분석, 타이틀 생성)이 **동일한 백엔드 해석 체인**을 쓰도록 중앙화.
 
 **5가지 책임 영역**:
+
 1. **프로바이더 해석 체인**: OpenRouter → Nous Portal → Custom → Codex OAuth → Anthropic → API-key providers (Gemini, Kimi 등)
 2. **크레딧 소진 시 fallback**: 402/credit 에러 시 다음 프로바이더로
 3. **프로바이더별 모델 선택** (lines 132-156): `"gemini": "gemini-3-flash-preview"`, `"zai": "glm-4.5-flash"`, `"kimi-coding": "kimi-k2-turbo-preview"` 등 cheap/fast auxiliary 모델
@@ -526,6 +550,7 @@ class FailoverReason(enum.Enum):
 ```
 
 **분류 파이프라인** (lines 289-474):
+
 1. 프로바이더-특이 패턴 (thinking + "signature" → thinking_signature)
 2. HTTP status
 3. 에러 코드 (바디 JSON)
@@ -538,6 +563,7 @@ class FailoverReason(enum.Enum):
 ### 7.2 리다액션 (`agent/redact.py` 12.6KB)
 
 **패턴 (lines 62-174)**:
+
 - 프리픽스: `sk-`, `ghp_`, `AIza`, `pplx-`, `AKIA`… (~20 벤더)
 - 쿼리파람: `access_token`, `api_key`, `client_secret`, `code`, `signature`
 - 바디 키: sensitive field names (JSON & form-urlencoded)
@@ -548,6 +574,7 @@ class FailoverReason(enum.Enum):
 - 전화번호: `+[1-9]\d{6,14}`
 
 **짧은 토큰 마스킹** (lines 183-187):
+
 ```python
 def _mask_token(token: str) -> str:
     if len(token) < 18:
@@ -556,6 +583,7 @@ def _mask_token(token: str) -> str:
 ```
 
 **적용 단계**:
+
 - 로그 (logger formatter)
 - 툴 출력 (저장/표시 전)
 - Prompt echoing (verbose 모드)
@@ -582,11 +610,13 @@ registry.register(
 ```
 
 **시그니처** (lines 176-188):
+
 - `check_fn`: 필터링 (truthy → 포함, falsy → 제외, 예외 → 불가)
 - `requires_env`: ENV var 리스트 (비필수, 표시용)
 - `is_async`: 비동기 핸들러는 `_run_async()` (model_tools.py lines 81-131)로 브릿지
 
 **충돌 방지** (lines 191-213):
+
 - built-in → plugin/MCP 덮어쓰기: **거부** (에러 로깅)
 - MCP → MCP 덮어쓰기: **허용** (toolset 둘 다 `"mcp-"` 접두사)
 
@@ -595,6 +625,7 @@ registry.register(
 ### 8.2 툴 발견 & 디스패치 (`model_tools.py` 26KB)
 
 **`discover_builtin_tools()` 라이프사이클** (lines 138-152):
+
 1. `tools/*.py` 전체 import → 각 모듈의 `registry.register()` 발화
 2. MCP 서버 동적 등록 (MCP SDK 있으면)
 3. 유저/프로젝트 플러그인 마지막 디스커버리
@@ -641,18 +672,21 @@ if "execute_code" in available_tool_names:
 ### 8.4 주요 툴 목록 (60+)
 
 **에이전트 레벨** (run_agent가 intercept):
+
 - `todo` — 세션-스코프 todo 리스트
 - `memory` — MEMORY.md/USER.md 읽기/쓰기
 - `session_search` — FTS5 cross-session 검색
 - `delegate_task` — 서브에이전트 스폰
 
 **파일/쉘**:
+
 - `terminal` — 메인 쉘 실행 (6개 백엔드)
 - `read_file`, `write_file`, `patch` — 파일 조작 (체크포인트 통합)
 - `search_files` — grep/ripgrep
 - `file_state.py` — 파일 상태 트래킹
 
 **웹/브라우저**:
+
 - `web_search` — Exa/Parallel-Web 기반
 - `web_extract` — Firecrawl 기반
 - `browser_navigate`, `browser_snapshot`, `browser_click`, `browser_type` — 브라우저 자동화
@@ -662,6 +696,7 @@ if "execute_code" in available_tool_names:
 - **Auto-detection 순서**: Camofox (local) → BrowserUse → Browserbase → agent-browser CLI
 
 **멀티모달**:
+
 - `vision_analyze` — 이미지 분석
 - `image_generate` — fal/OpenAI/Gemini 이미지 생성
 - `tts_tool.py` + `neutts_synth.py` — 무료 edge-tts + ElevenLabs(프리미엄) + **NeuTTS** (500MB 서브프로세스, Neuphonic 모델 `neutts-air-q4-gguf`)
@@ -669,12 +704,14 @@ if "execute_code" in available_tool_names:
 - `voice_mode.py` — 음성 인터페이스
 
 **MCP & 통합**:
+
 - `mcp_tool.py` — 지속적 데몬 이벤트 루프, `_servers: Dict[str, _ServerTask]`, 서버 `list_tools`를 `mcp-{config_name}` toolset으로 자동 등록
 - `mcp_oauth.py`, `mcp_oauth_manager.py` — MCP 서버 OAuth flow
 - `send_message_tool.py` — 플랫폼 간 메시지 (Telegram, Discord, Slack…)
 - `discord_tool.py`, `homeassistant_tool.py`, `feishu_doc_tool.py`, `feishu_drive_tool.py`
 
 **에이전트 제어**:
+
 - `clarify_tool.py` — 유저에게 명확화 요청
 - `approval.py` — 위험 명령 승인 gate
 - `checkpoint_manager.py` — 파일 시스템 스냅샷/롤백
@@ -682,11 +719,13 @@ if "execute_code" in available_tool_names:
 - `budget_config.py` — per-tool 예산
 
 **자기개선**:
+
 - `skill_manager_tool.py`, `skills_hub.py`, `skills_sync.py`, `skills_tool.py`, `skills_guard.py` — 스킬 관리
 - `memory_tool.py` — 메모리 툴
 - `session_search_tool.py` — 세션 검색
 
 **특수**:
+
 - `mixture_of_agents_tool.py` — MoA 앙상블 (Claude Opus/Gemini/GPT-5/Deepseek 병렬 → Opus aggregator). 하이퍼파라미터: REFERENCE_TEMPERATURE=0.6, AGGREGATOR_TEMPERATURE=0.4
 - `rl_training_tool.py` — **에이전트가 자기 런타임에서 RL 훈련 시작** (Tinker+Atropos 서브모듈)
 - `code_execution_tool.py` — LLM 생성 Python 실행 (child process, API 키 strip)
@@ -694,6 +733,7 @@ if "execute_code" in available_tool_names:
 - `managed_tool_gateway.py`, `tool_backend_helpers.py`, `tool_result_storage.py` — 툴 인프라
 
 **보안/시스템**:
+
 - `path_security.py` — `validate_within_dir()` (심볼릭 링크 해결, `relative_to()` 확인)
 - `tirith_security.py` — **Tirith 바이너리 서브프로세스 스캔** (GitHub에서 자동 설치, cosign provenance + SHA-256 체크섬, exit 0=allow/1=block/2=warn)
 - `osv_check.py` — OSV 멀웨어 DB 체크 (`MAL-*` 어드바이저리만, CVE 아님; npx/uvx/pipx 패키지만, ~300ms)
@@ -723,6 +763,7 @@ _EXCLUDED_TOOLSET_NAMES = {"debugging", "safe", "delegation", "moa", "rl"}
 개념 파이프라인 (전부 한 파일은 아님):
 
 ### Layer 1: Tirith 프리 실행 스캔 (`tirith_security.py` 615-691)
+
 - 외부 `tirith` 바이너리 서브프로세스 호출
 - GitHub에서 cosign 검증 + SHA-256 체크섬으로 자동 설치
 - exit code: 0=허용, 1=차단, 2=경고
@@ -730,27 +771,33 @@ _EXCLUDED_TOOLSET_NAMES = {"debugging", "safe", "delegation", "moa", "rl"}
 - Fail-open 설정 가능 (기본: 네트워크 에러 시 허용)
 
 ### Layer 2: URL 안전 (`url_safety.py` 78-97)
+
 - SSRF 차단: 169.254.0.0/16 (AWS/GCP metadata), 100.64.0.0/10 (CGNAT)
 - 항상 차단 IP: 169.254.169.254 (AWS/ECS task IAM 크레덴셜), 169.254.170.2
 - 메타데이터 호스트네임 하드블록: `metadata.google.internal`, `metadata.goog`
 - `security.allow_private_urls: true`로 RFC1918 허용 가능하지만 **메타데이터는 항상 차단**
 
 ### Layer 3: 웹사이트 정책 (`website_policy.py`)
+
 - 도메인별 allow/block 리스트
 - 브라우저 툴 접근 gating
 
 ### Layer 4: 경로 traversal (`path_security.py` 15-44)
+
 - `validate_within_dir(path, root)`: 심볼릭 링크 해결 후 `relative_to()` 검사
 - skill_manager, cronjob, credential_files 등이 사용
 
 ### Layer 5: OSV 멀웨어 (`osv_check.py` 26-62)
+
 - MCP 서버 런치 전 `MAL-*` 어드바이저리 체크 (CVE 아님)
 - npx/uvx 명령 파싱해서 ecosystem + 패키지명 추출
 - Google 공용 OSV API 쿼리 (~300ms)
 - Fail-open: 네트워크 에러 시 허용
 
 ### Layer 6: 명령 승인 (`approval.py`)
+
 ~70개 정규식 패턴:
+
 - 파괴적: `rm -rf`, `git reset --hard`, `git push --force`
 - 권한 상승: `chmod 777`, `chown -R root`
 - 쉘 인젝션: `curl | bash`, `python <<`, `bash -c`
@@ -765,11 +812,13 @@ def get_current_session_key(default="default"):
 ```
 
 승인 모드:
+
 - `on` (기본) — 유저에게 프롬프트
 - `auto` — 설정한 지연 후 자동 승인
 - `off` — 게이트 완전 해제 (break-glass)
 
 ### Layer 7: execute_code 샌드박스 (`code_execution_tool.py`)
+
 - LLM 생성 Python 스크립트를 **child 프로세스**에서 실행
 - API 키/토큰 strip (credential exfiltration 방지)
 - 스킬이 `env_passthrough`로 선언했거나 `config.yaml`의 `terminal.env_passthrough`에 있는 env만 통과
@@ -825,6 +874,7 @@ class BaseEnvironment(ABC):
 | **Modal** | `modal.py` | 네이티브 Modal SDK (런타임 래퍼 X), 샌드박스/호출, `~/.hermes/modal_snapshots.json` 키드 by task_id | heredoc |
 
 **Modal 서버리스 패턴** (lines 147-150):
+
 - `_AsyncWorker`: 백그라운드 event loop + `asyncio.run_coroutine_threadsafe()` 로 sync 브릿지
 - task_id 기반 스냅샷 영속. fresh 샌드박스 per-call, 스냅샷 있으면 재사용 (env vars 복원, CWD 따라감)
 
@@ -893,6 +943,7 @@ if (self._skill_nudge_interval > 0
 **"복잡한 태스크" 임계값 = iteration count** (기본 10). 각 tool call (search/read/bash…)이 카운트 증가. 10+ 이터가 skill_manage 호출 없이 일어나면 nudge.
 
 **리뷰 프롬프트** (lines 2267-2280):
+
 ```python
 _SKILL_REVIEW_PROMPT = (
     "Review the task just completed. Did you solve something reusable? "
@@ -906,6 +957,7 @@ _SKILL_REVIEW_PROMPT = (
 ### 11.3 스킬 slash 커맨드의 cache-safe 주입
 
 **검증** — cli.py line 6220:
+
 ```python
 elif base_cmd in _skill_commands:
     user_instruction = cmd_original[len(base_cmd):].strip()
@@ -917,6 +969,7 @@ elif base_cmd in _skill_commands:
 ```
 
 **활성화 노트 포맷** (skill_commands.py line 454):
+
 ```python
 activation_note = (
     f'[SYSTEM: The user has invoked the "{skill_name}" skill, indicating they want '
@@ -925,6 +978,7 @@ activation_note = (
 ```
 
 **메시지 플로우**:
+
 1. 유저가 `/writing-plans "build a feature"` 입력
 2. `build_skill_invocation_message()` 가 `writing-plans/SKILL.md` 로드
 3. `[SYSTEM: ...]` 헤더 + 유저 instruction 으로 wrap
@@ -987,6 +1041,7 @@ depth=3 — Pass 0 audit → Pass 1 synthesis → Pass 2 reconciliation
 ```
 
 **Cold vs Warm 프롬프트** (자동 선택):
+
 - **Cold (첫 세션)**: "Who is this person? What are their preferences, goals, working style?"
 - **Warm (후속)**: "Given what's been discussed, what context about this user is most relevant now?"
 
@@ -1044,6 +1099,7 @@ def search_messages(query, source_filter=None, exclude_sources=None, ...):
 `apple`, `autonomous-ai-agents`, `creative`, `data-science`, `devops`, `diagramming`, `dogfood`, `domain`, `email`, `feeds`, `gaming`, `gifs`, `github`, `index-cache`, `inference-sh`, `mcp`, `media`, `mlops`, `note-taking`, `productivity`, `red-teaming`, `research`, `smart-home`, `social-media`, `software-development`
 
 **예시 1: `software-development/test-driven-development/SKILL.md`**:
+
 ```yaml
 name: test-driven-development
 description: >
@@ -1057,6 +1113,7 @@ metadata:
 ```
 
 **예시 2: `software-development/writing-plans/SKILL.md`**:
+
 ```yaml
 name: writing-plans
 description: >
@@ -1082,6 +1139,7 @@ metadata:
 ### 14.1 HermesCLI 라이프사이클 (`cli.py` 11,096 LOC)
 
 **초기화** (lines 1802-2108):
+
 - `~/.hermes/cli-config.yaml` 로드 (lines 298-644)
 - 모델/프로바이더 우선순위: CLI args > config file > env vars > defaults
 - prompt_toolkit Application 초기화, 세션 DB (SQLite `state.db`), 대화 이력, 스피너 상태
@@ -1089,10 +1147,12 @@ metadata:
 - git worktree 격리 (#652)
 
 **REPL 루프** (`process_loop`):
+
 - prompt_toolkit 입력 + custom `SlashCommandCompleter` + `SlashCommandAutoSuggest`
 - `process_command()` (line 5873) 디스패치, `False` 반환 시 exit
 
 **Teardown**:
+
 - `atexit` 훅이 `_run_cleanup()` 호출 → 터미널/브라우저/MCP 서버/메모리 프로바이더 닫기
 
 ### 14.2 COMMAND_REGISTRY (75개 슬래시 명령)
@@ -1110,6 +1170,7 @@ metadata:
 **Gateway Config Gates**: `/verbose`는 `gateway_config_gate="display.tool_progress_command"` — 해당 config key truthy일 때만 활성화.
 
 **Fallback 메커니즘** (lines 6169-6271):
+
 1. Quick Commands (config.yaml `quick_commands` section)
 2. Plugin Commands (`get_plugin_command_handler()`)
 3. Skill Commands (`_skill_commands` 레지스트리)
@@ -1120,6 +1181,7 @@ metadata:
 **실행 타이밍**: 모든 모듈 import 전. main.py 최상단 (line 160).
 
 **알고리즘**:
+
 1. `sys.argv` pre-parse: `-p PROFILE` or `--profile=PROFILE`
 2. Fallback: `~/.hermes/active_profile` 파일 읽기
 3. `profiles.resolve_profile_env(profile_name)` → HERMES_HOME 경로
@@ -1139,6 +1201,7 @@ metadata:
 5. **SETUP_SECTIONS** (Provider/Model, TTS, Terminal, Gateway, Tools, Agent): 각 섹션 핸들러 콜 → config 저장 → 성공 메시지
 
 주요 핸들러:
+
 - `setup_inference_provider()` — 프로바이더 선택, API 키 입력
 - `setup_terminal_backend()` — local/ssh/docker/modal…
 - `setup_gateway_platforms()` — Telegram/Discord/Slack 활성화
@@ -1149,16 +1212,19 @@ metadata:
 **파일**: `providers.py`, `models.py`, `model_switch.py`, `codex_models.py`, `model_normalize.py`
 
 **`_PROVIDER_MODELS` 생성**:
+
 - OpenRouter: API fetch 또는 하드코딩 fallback
 - Anthropic/OpenAI: 하드코딩 (claude-opus, gpt-4-turbo 등)
 - Nous/Minimax/기타: 프로바이더 감지
 
 **모델 별칭**:
+
 - `DIRECT_ALIASES` — config-defined (config.yaml `model_aliases`)
 - `MODEL_ALIASES` — 빌트인 카탈로그 (opus, sonnet, haiku, gpt4, gpt35…)
 - `MODEL_FAMILY_DEFAULTS` — 패밀리별 기본 (anthropic → claude-sonnet, openai → gpt-4-turbo)
 
 **마이그레이션** (model_normalize.py):
+
 - Stale 모델명 감지 (claude-2.1 → claude-3.5-sonnet)
 - config deprecated 모델 경고
 - `/model` 명령에서 대체 제안
@@ -1172,6 +1238,7 @@ metadata:
 **스크립트 위치**: `optional-skills/migration/openclaw-migration/scripts/openclaw_to_hermes.py`
 
 **전송 항목**:
+
 - API 키/토큰 (Telegram/Discord/Slack/OpenAI)
 - 모델 preferences
 - 툴 설정
@@ -1179,16 +1246,19 @@ metadata:
 - Todo 리스트, memory, 세션 이력 (가능한 경우)
 
 **사전 체크**:
+
 - OpenClaw 프로세스 실행 중 경고 (systemd, pgrep)
 - Hermes gateway 활성 플랫폼 경고
 - 이유: Telegram/Discord/Slack은 토큰당 하나의 활성 연결만 허용
 
 **Cleanup** (`hermes claw cleanup`):
+
 - 남은 OpenClaw 디렉터리(.openclaw, .clawdbot, .moltbot) 타임스탬프 아카이브
 
 ### 14.7 Display: KawaiiSpinner + Activity Feed (`agent/display.py` 39KB)
 
 **KawaiiSpinner** (display.py:573-722):
+
 ```python
 SPINNERS = {
     'dots': ['⠋', '⠙', ...],
@@ -1204,12 +1274,14 @@ THINKING_VERBS = ["pondering", "contemplating", ...]  # 15 verbs
 ```
 
 **상태 머신**:
+
 1. `__init__` — stdout 캡처 (redirect_stdout 전)
 2. `start()` — 애니메이션 스레드 스폰
 3. `_animate()` — `sleep(0.1)`, frame_idx 증가, `\r` + frame write
 4. `stop()` — running=False, join, 완료 메시지
 
 **Smart output**:
+
 - **TTY 감지** — 파이프/Docker/systemd면 애니메이션 skip, 메시지 1회만
 - **prompt_toolkit 감지** — `patch_stdout` 내부면 skip (CLI가 `_spinner_text` TUI 위젯으로 렌더링 중이므로 중복 방지)
 
@@ -1353,6 +1425,7 @@ AGENTS.md의 "Known Pitfalls": `simple_term_menu` 가 tmux/iTerm2에서 화살�
 ### 17.1 Gateway Run 루프 (`run.py` 1927-2268)
 
 **`start()` 오케스트레이션**:
+
 - 플랫폼 발견 & 연결 (2072-2175): 설정된 플랫폼 iterate, `_create_adapter()`, `adapter.connect()` 순차
 - 메시지 핸들러 배선 (2083-2086): 각 adapter 콜백 등록
   - `set_message_handler(self._handle_message)` — 수신 메시지 디스패치
@@ -1360,6 +1433,7 @@ AGENTS.md의 "Known Pitfalls": `simple_term_menu` 가 tmux/iTerm2에서 화살�
   - `set_busy_session_handler(...)` — 인터럽트 처리
 
 **메시지 디스패치 파이프라인** (`_handle_message` lines 3131-3400+):
+
 1. **Authorization** (3149-3190): 유저 allowlist 검증 or DM pairing 코드 플로우 트리거
 2. **Session lookup** (3196): `_session_key_for_source(source)` → unique session key
 3. **Interrupt handling** (3229-3308): stale/hung 에이전트 TTL로 감지 후 축출. `/stop`, `/reset`, `/new` 우선 라우팅
@@ -1368,22 +1442,26 @@ AGENTS.md의 "Known Pitfalls": `simple_term_menu` 가 tmux/iTerm2에서 화살�
 ### 17.2 TWO GUARDS 문제
 
 **Guard 1: Adapter Level** (`base.py` 909-912):
+
 ```python
 self._active_sessions: Dict[str, asyncio.Event] = {}
 self._pending_messages: Dict[str, MessageEvent] = {}
 self._session_tasks: Dict[str, asyncio.Task] = {}
 ```
+
 - per-session `asyncio.Event`로 동시 처리 블록
 - 같은 채팅에서 두 메시지가 동시에 `_message_handler`로 들어오지 않음
 - **Interception**: `_active_sessions[session_key]` set 되어 있으면 `_pending_messages` 에 큐잉
 
 **Guard 2: Gateway Runner Level** (`run.py` 656-662):
+
 ```python
 self._running_agents: Dict[str, Any] = {}
 self._running_agents_ts: Dict[str, float] = {}
 self._session_run_generation: Dict[str, int] = {}
 self._pending_messages: Dict[str, str] = {}
 ```
+
 - **Eager interrupt** (3281-3310): 유저 텍스트에 `/stop` 포함되면 내부 예외로 즉시 kill
 - **Stale eviction** (3234-3279): `agent.get_activity_summary()` idle timeout 기본 1800s + wall-clock TTL 최대 2h
 
@@ -1392,6 +1470,7 @@ self._pending_messages: Dict[str, str] = {}
 ### 17.3 Base Adapter ABC (`base.py` 882-1181)
 
 **Abstract 계약**:
+
 ```python
 @abstractmethod
 async def connect(self) -> bool: ...
@@ -1402,11 +1481,13 @@ async def send(self, chat_id, content, reply_to=None, metadata=None) -> SendResu
 ```
 
 **큐 시맨틱**:
+
 - `_pending_messages[session_key]` = 최신 `MessageEvent` (LIFO override, FIFO append 아님)
 - `_active_sessions[session_key]` = `asyncio.Event()` (핸들러 완료까지 held)
 - Gateway `_running_agents[key]` = async setup 동안 sentinel, 실제 AIAgent로 교체
 
 **Media** (선택, 텍스트 fallback):
+
 - `send_image_file(chat_id, image_path, caption)`
 - `send_voice(chat_id, audio_path)`
 - `send_document(chat_id, file_path, caption)`
@@ -1426,6 +1507,7 @@ class TelegramAdapter(BasePlatformAdapter):
 ```
 
 **Token Lock** (`status.py` 464-551 `acquire_scoped_lock`):
+
 - scope = `"telegram_bot"`, identity = bot token
 - Machine-local 락 파일: `~/.local/state/hermes/gateway-locks/{scope}-{hash(identity)}.lock`
 - `(acquired: bool, existing_owner_record: dict)` 반환
@@ -1455,6 +1537,7 @@ class TelegramAdapter(BasePlatformAdapter):
 | **webhook** | HTTP POST | — | — | — | — | — | — |
 
 **음성 파이프라인 차이**:
+
 - **Discord**: 음성 채널 Native Opus 프레임 → `send_voice()` Opus bytes
 - **Telegram**: OGG memo 다운로드 → 로컬 캐시 → STT 전사 → TTS 오디오 응답
 
@@ -1492,11 +1575,13 @@ class TelegramAdapter(BasePlatformAdapter):
 ### 18.1 저장 & 실행
 
 **Jobs 저장** (`cron/jobs.py`):
+
 - Per-job JSON + SQLite 인덱스 `~/.hermes/cron/jobs.db`
 - 메타데이터: schedule, deliver, origin, prompt, skills, model override
 - Next run: `croniter` + `parse_schedule()`
 
 **Delivery 경로** (`scheduler.py` 300-483 `_deliver_result`):
+
 ```python
 targets = _resolve_delivery_targets(job)  # "telegram:123456" or "origin"
 for target in targets:
@@ -1538,6 +1623,7 @@ def cronjob(
 ```
 
 **위협 스캐닝** (lines 60-68):
+
 - 주입 패턴 차단: `ignore.*previous.*instructions`, `system.*prompt.*override`
 - Exfiltration: `curl|wget` + `${KEY|TOKEN|SECRET}`
 - Destructive: `rm -rf /`
@@ -1600,6 +1686,7 @@ def cronjob(
 ### 20.2 Atropos 통합
 
 **`atroposlib`** (`environments/hermes_base_env.py` 50-55):
+
 - 서버 관리 (VLLM, SGLang, OpenAI-호환 API)
 - 병렬 롤아웃 워커 스케줄링
 - WandB 메트릭 로깅
@@ -1607,15 +1694,18 @@ def cronjob(
 - `evaluate_log()` eval 결과 기록
 
 **`HermesAgentBaseEnv`** (221-280) — BaseEnv 확장:
+
 - `os.environ["TERMINAL_ENV"]` 설정으로 백엔드 라우팅 (258-265)
 - 툴셋 해석 `_resolve_tools_for_group()` (289-299) — `tools/registry.py` 쿼리
 - `collect_trajectory()` 전체 agent loop 실행 + reward 계산
 
 **Two-phase operation**:
+
 - **Phase 1 (OpenAI server)**: `server.chat_completion()` with `tools=` — 서버가 tool call 네이티브 파싱. SFT + evaluation 용도.
 - **Phase 2 (VLLM server)**: ManagedServer `/generate` + 클라이언트측 tool call 파서 → **정확한 토큰 IDs + logprobs**. 풀 RL 훈련용.
 
 Concrete 환경들:
+
 ```python
 async def compute_reward(self, item, result, ctx: ToolContext):
     test = ctx.terminal("pytest -v")
@@ -1627,6 +1717,7 @@ async def compute_reward(self, item, result, ctx: ToolContext):
 **Tinker**: thinking-machines-lab/tinker, 커밋 `30517b66...` pinned. Atropos-생성 트래젝토리 훈련용.
 
 **Locked fields** (`rl_training_tool.py` 72-100):
+
 ```python
 LOCKED_FIELDS = {
     "tinker": {
@@ -1639,6 +1730,7 @@ LOCKED_FIELDS = {
 ```
 
 **`agentic_opd_env.py`** — **OPD = On-Policy Distillation** (OpenClaw-RL, Princeton 2026):
+
 - 각 tool response에 모델의 **이전 응답이 개선될 수 있는 방식**에 대한 hindsight 포함
 - (assistant_turn, next_state) 쌍 walk
 - LLM judge로 next-state 신호(테스트 verdict, 에러 trace, 툴 결과)에서 "힌트" 추출
@@ -1650,6 +1742,7 @@ Reference: Wang et al., "OpenClaw-RL: Train Any Agent Simply by Talking" (arXiv:
 ### 20.4 Agent Loop Engine (`environments/agent_loop.py`)
 
 **`HermesAgentLoop`** (재사용 가능 멀티턴 엔진):
+
 1. 메시지 + 툴 → API via `server.chat_completion()`
 2. `tool_calls` 있으면 각 `handle_function_call()` 을 스레드 풀에서 실행
 3. 툴 결과 append 후 계속
@@ -1666,6 +1759,7 @@ Reference: Wang et al., "OpenClaw-RL: Train Any Agent Simply by Talking" (arXiv:
 **레지스트리** (62-105): 10개 파서 — hermes, mistral, llama3_json, qwen, qwen3_coder, deepseek_v3, deepseek_v3_1, kimi_k2, longcat, glm45, glm47
 
 **포맷 예**:
+
 - **Hermes**: `<tool_call>{"name": "func", "arguments": {...}}</tool_call>`
 - **Mistral**: `[TOOL_CALLS]...`
 - **Qwen**: Qwen-특이 JSON
@@ -1680,6 +1774,7 @@ Reference: Wang et al., "OpenClaw-RL: Train Any Agent Simply by Talking" (arXiv:
 Reward function용 per-rollout 핸들:
 
 **메서드**:
+
 - Terminal: `ctx.terminal(command, timeout)`
 - Files: `ctx.read_file()`, `ctx.write_file()`, `ctx.search()`
 - Transfers: `ctx.upload_file()`, `ctx.download_file()`
@@ -1699,6 +1794,7 @@ Reward function용 per-rollout 핸들:
 ### 21.1 Batch Runner (`batch_runner.py` 1,291 LOC)
 
 **아키텍처**:
+
 - **Multiprocessing Pool** (30-33): 병렬 배치 처리
 - **Checkpointing** (`test_batch_runner_checkpoint.py`): 원자적 JSON 체크포인트 + `last_updated`, `--resume` 플래그
 - **에러 recovery** (233-249 `_process_single_prompt`): try-except, per-prompt 에러 로깅
@@ -1713,6 +1809,7 @@ Reward function용 per-rollout 핸들:
 **용도**: **훈련 데이터를 토큰 예산에 맞춤** (예: 40K 토큰 트래젝토리를 15K에).
 
 **전략** (8-14):
+
 1. First 턴 protect: system, human, first gpt, first tool
 2. Last N 턴 protect (기본 4 — 최종 액션 보존)
 3. Middle 턴만 압축 (두 번째 tool response부터)
@@ -1720,6 +1817,7 @@ Reward function용 per-rollout 핸들:
 5. 남은 tool call 그대로 (모델이 summary 후 계속 작업)
 
 **Config** (82-179, `trajectory_compression.yaml`):
+
 - `target_max_tokens`: 15,250–29,000
 - `summary_target_tokens`: 750
 - `protected_turns`: first_system, first_human, first_gpt, first_tool, last_n_turns
@@ -1728,6 +1826,7 @@ Reward function용 per-rollout 핸들:
 - `max_concurrent_requests`: 50 (OpenRouter 병렬)
 
 **Metrics** (182-224):
+
 - `compression_ratio`, `tokens_saved`, `turns_removed`
 - `turns_compressed_start_idx/end_idx`
 - `summarization_api_calls`, `summarization_errors`
@@ -1746,6 +1845,7 @@ Reward function용 per-rollout 핸들:
 | **토큰 예산** | 기본 context_length의 50% | 고정 타겟 (15,250 기본) |
 
 **코드 차이**:
+
 - context_compressor (line 282): "Summarize middle turns with structured LLM prompt" — 세션 계속되면 summarizer 반복 실행
 - trajectory_compressor (lines 331-341): "Replace compressed region with a single human summary message" — 원패스, 정적 파일 출력
 
@@ -1754,6 +1854,7 @@ Reward function용 per-rollout 핸들:
 **외부 SWE-bench 평가용 런타임** (내부 벤치 아님). `batch_runner` / `trajectory_compressor` 와 호환 트래젝토리 생성.
 
 vs. `hermes_swe_env`:
+
 - `hermes_swe_env`: Atropos 환경 (훈련 루프 통합)
 - `mini_swe_runner`: Standalone (외부 벤치 제출 어댑터)
 
@@ -1766,6 +1867,7 @@ Local/Docker/Modal 지원. Hermes 트래젝토리 포맷 (`<tool_call>`/`<tool_r
 ### 21.5 RL Training Tool (`tools/rl_training_tool.py`)
 
 **에이전트가 자기 런타임에서 RL 훈련 시작**. 노출 함수:
+
 - `rl_list_environments()` — 훈련 환경 발견
 - `rl_select_environment()` — 활성 환경 전환
 - `rl_edit_config()` — 잠금 해제된 필드 수정
@@ -1790,6 +1892,7 @@ python rl_cli.py --list-environments
 ```
 
 **System prompt** (113-174) RL-focused:
+
 1. 환경 DISCOVER: `rl_list_environments`
 2. 환경 파일 INSPECT (verifier, dataset loading)
 3. 새 환경 CREATE (템플릿 복사 + 수정)
@@ -1810,6 +1913,7 @@ python rl_cli.py --list-environments
 4. **`run_browser_tasks.sh`**: 쉘 스크립트 러너
 
 `web_research.yaml`:
+
 - 환경: web-research (FRAMES 벤치 Google 2024)
 - Toolsets: web, file
 - Compression: enabled, target 16K
@@ -1863,6 +1967,7 @@ ENTRYPOINT [ "/opt/hermes/docker/entrypoint.sh" ]
 ```
 
 포인트:
+
 - **Multi-stage build**: uv + gosu는 별도 스테이지에서 바이너리만 복사
 - **Layer caching**: `package.json` 만 먼저 복사 → npm install 캐시. `.dockerignore` 가 `node_modules` 제외
 - **Non-root UID 10000**: `hermes` 유저
@@ -1896,6 +2001,7 @@ ENTRYPOINT [ "/opt/hermes/docker/entrypoint.sh" ]
 ```
 
 nix/ 하위 파일:
+
 - `packages.nix` — 바이너리 derivation
 - `nixosModules.nix` — 시스템 서비스 모듈 (NixOS 서버 배포)
 - `checks.nix` — CI 체크
@@ -1936,6 +2042,7 @@ def get_subprocess_home() -> str | None:
 ```
 
 **Special helpers**:
+
 - `is_termux()` — `TERMUX_VERSION` or Termux `PREFIX` 체크
 - `is_wsl()` — `/proc/version` 에서 "microsoft" 검사 (캐시)
 - `is_container()` — `/.dockerenv`, `/run/.containerenv`, `/proc/1/cgroup` 검사 (캐시)
@@ -1950,6 +2057,7 @@ def get_subprocess_home() -> str | None:
 - 3rd-party 노이즈 suppressor: openai, httpx, httpcore, asyncio, hpack, grpc, modal, urllib3, websockets, charset_normalizer, markdown_it → WARNING
 
 컴포넌트 필터 (gateway.log):
+
 ```python
 COMPONENT_PREFIXES = {
     "gateway": ("gateway",),
@@ -2026,7 +2134,7 @@ COMPONENT_PREFIXES = {
 ### 23.9 Disclosure
 
 - **Coordinated**: 90일 창 또는 fix 릴리스 중 먼저
-- **Communication**: GHSA 스레드 또는 security@nousresearch.com
+- **Communication**: GHSA 스레드 또는 <security@nousresearch.com>
 - **Credits**: 릴리스 노트에 보고자 크레딧 (익명 요청 시 제외)
 
 ---
@@ -2036,6 +2144,7 @@ COMPONENT_PREFIXES = {
 ### 24.1 프롬프트 캐시 신성화
 
 Hermes 전체 아키텍처에서 **프롬프트 캐시는 불가침 영역**:
+
 - 과거 컨텍스트 절대 변경 X (압축만 예외)
 - 대화 중 toolset 절대 변경 X
 - 메모리 리로드/시스템 프롬프트 재구성 대화 중 절대 X
@@ -2046,6 +2155,7 @@ Hermes 전체 아키텍처에서 **프롬프트 캐시는 불가침 영역**:
 ### 24.2 조건부 규칙 로딩 (AGENTS.md)
 
 Claude Code의 프로젝트 규칙 패턴을 차용:
+
 ```
 hermes-agent/
 ├── AGENTS.md           # 항상 필요한 핵심 규칙
@@ -2055,6 +2165,7 @@ hermes-agent/
 ### 24.3 Dual-layer 메시지 시퀀싱
 
 Gateway의 가장 미묘한 디자인:
+
 - **Adapter layer**: 같은 채팅에서 동시 메시지 처리 방지
 - **Gateway runner**: stale 에이전트 축출 + `/stop` eager interrupt
 
@@ -2080,6 +2191,7 @@ registry dispatch 전에 에이전트 본인이 책임 지는 툴을 먼저 처�
 ### 24.5 태스크 격리 (`task_id`)
 
 모든 stateful 툴이 `task_id` 키:
+
 - 터미널 세션 (local: snapshot 파일, Modal: 스냅샷 JSON, SSH: 연결)
 - 브라우저 세션
 - 파일 캐시
@@ -2365,6 +2477,7 @@ ONESHOT_GRACE_SECONDS = 120
 ### 에이전트 출력 요약
 
 총 ~6,000 단어의 코드 레벨 분석 (7 에이전트 합산):
+
 - 라인 번호 인용 500+개
 - 3-5줄 코드 스니펫 100+개
 - 데이터 구조 다이어그램 20+개

@@ -65,6 +65,7 @@ scripts/dev/native-app.sh type "테스트"
 scripts/dev/native-app.sh shot typed          # 입력 반영 확인
 scripts/dev/native-app.sh stop
 ```
+
 > **좌표 = 스크린샷 픽셀 그대로.** phone = **412×915**(갤럭시 S26 dp). Linux Compose는 density 1이라 px == dp == xdotool 좌표. 매 단계 `shot` → Read로 다음 좌표를 잡는다(앱은 매번 같은 자리에 그려진다).
 
 ## 환경 / 프로파일

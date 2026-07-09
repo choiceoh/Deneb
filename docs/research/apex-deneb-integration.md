@@ -1,6 +1,6 @@
 # APEX Prompt-Optimization 도입 분석과 Deneb 적용 범위
 
-Source: https://arxiv.org/html/2606.11459v1, arXiv v1, 2026-06-09.
+Source: <https://arxiv.org/html/2606.11459v1>, arXiv v1, 2026-06-09.
 
 This note covers **APEX: Automated Prompt Engineering eXpert with Dynamic Data
 Selection**. Propus treats this as the core APEX source for frontier data

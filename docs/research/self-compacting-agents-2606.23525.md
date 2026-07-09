@@ -137,20 +137,24 @@ A1 은 그 전 단계(무-LLM 1차 방어선이자 A2 의 fallback), C 는 직�
 
 **(S) thrash 시 defer — 보조·가설성, eval 후 게이트.**
 턴-조립 임계 밴드(80–90%)에서 마지막 K 메시지의 "정착 vs 채집" 점수로 LLM tier 를 한 밴드 미룬다:
+
 - **정착(FIRE)**: 직전 assistant 메시지가 `isTerminalText` → 안전한 압축 호적기.
 - **채집/thrash(DEFER)**: 최근 윈도가 열린/반복 tool 패턴 — 같은 tool 이름 ≥R회(예: search×4) 사이에 `isTerminalText` 없음, 또는 최근 매 턴이 tool 만 내고 합성 텍스트 0 → 아직 수렴 전.
 - ★**하드 천장은 timing 무시**: `currentTokens` 가 윈도 ceiling 의 reserve 를 넘기면(기존 `deferEligible` reserve 체크 실패) **무조건 압축** — never-settles 자율 루프가 영원히 defer 해 윈도를 넘기는 함정을 막는다(논문도 stuck 일 때 억제하되 천장은 별개).
 
 **진입점/형태**:
+
 ```go
 // compaction 패키지, 순수 함수 (LLM·할당 최소)
 type Timing int
 const ( Settled Timing = iota; MidDerivation )
 func ClassifyTiming(messages []llm.Message, tailWindow int) Timing
 ```
+
 `run_prepare.go` 의 `deferEligible` 분기에서 `ClassifyTiming(...) == MidDerivation && currentTokens < ceilingReserve` 면 defer 우선. (C)는 `engine` 의 `snapWindowStart` 경로에서 항상 적용. **자율 세션 키에만** 게이트(인터랙티브는 밴드 도달 전 종료 → 거의 안 켜짐).
 
 **반증가능 단위테스트**(편집과 함께):
+
 - mid-chain 컷 입력 → 경계가 `isTerminalText` 로 스냅됨.
 - thrash 꼬리(search×4, 텍스트 0) → `MidDerivation`.
 - 정착 꼬리(마지막이 terminal text) → `Settled`.

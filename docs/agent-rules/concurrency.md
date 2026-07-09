@@ -27,6 +27,7 @@ func (s *Service) emit(e Event) {
 ```
 
 **규칙**
+
 - 뮤텍스 잡은 상태에서 같은 receiver의 다른 메서드를 부를 땐 내부 락 취득 여부 확인
 - 내부용 헬퍼는 `xxxLocked` 접미사로 "caller가 락 보유 가정"임을 명시
 - listener / subscriber 목록 같은 보조 상태는 **별도 뮤텍스**로 분리 (예: `listenersMu`)

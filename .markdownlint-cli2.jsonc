@@ -6,6 +6,14 @@
 
     "MD013": false,
     "MD025": false,
+
+    // Research/design notes intentionally repeat parallel sub-section headings
+    // (per-model, per-paper, per-feature), so allow identical heading text as
+    // long as it is not a direct sibling under the same parent.
+    "MD024": { "siblings_only": true },
+    // Stacked blockquote callouts separated by blank lines are intentional here.
+    "MD028": false,
+
     "MD029": false,
 
     "MD033": {

@@ -36,6 +36,7 @@ sidebarTitle: "Agent Papers 2026"
 | **Engram** (2606.09900, 2026-06) | retain 핫패스 LLM 0회·<50ms, LLM 사실 추출은 비동기 consolidation으로. salience decay/reinforcement 망각. supersession 체인(provenance 보존). 검색 슬라이스 ~9.6k 토큰이 79k full-context보다 +10.4pp | 단일 벤치·단일 백본, 타 시스템 head-to-head 없음 — 설계 참조용 |
 
 **Deneb 매핑**
+
 - 다중 소스 recall(원문 검색 병행)은 유지 — MemoryAgentBench의 "추출 파이프라인 정보 손실" 경고에 대한 구조적 헷지. 이미 정합.
 - **부재한 것은 망각/수정.** hindsight retain은 append-only. 현실적 1단계는 hindsight 서버 개조가 아니라 게이트웨이 측 규칙: dreaming이 이미 FactsExpired/FactsMerged를 추적하는 위키가 사실상의 consolidation 레이어이므로, recall evidence 머지에서 **충돌 시 위키(수정 반영) > hindsight(append-only)** 우선·최신성 규칙을 명시 (`recall_evidence.go`의 dedup/score 단계). 2단계로 hindsight 쪽 salience decay/supersession 기능 검토.
 - wiki graph 추가 투자는 우선순위 낮음 — Mem0g +2%와 HippoRAG2의 "그래프가 사실 회상을 깎는다" 증거. Deneb hybrid(벡터 0.5 가중, 문서=노드+임베딩)는 HippoRAG2의 핵심 교훈(passage 통합)과 이미 같은 형태.
@@ -53,6 +54,7 @@ sidebarTitle: "Agent Papers 2026"
 | **Prompt caching 실측** (2601.06007, 2026-01) | 멀티턴 에이전트 비용 -41~80%, TTFT -13~31%. **전략적 캐시 블록 제어(동적 콘텐츠는 끝에, 동적 tool 정의 회피, 동적 tool result 캐시 제외)가 naive full 캐싱보다 일관 우위** — naive는 latency 역효과 가능 | — |
 
 **Deneb 매핑**
+
 - prompt-cache 독트린은 2601.06007 권고와 사실상 동일 — 외부 실증 확보, 변경 불요.
 - polaris는 append형 DAG + fence 보호로 ACE의 collapse 함정을 회피 중. **요약 품질 자체의 평가·개선 루프가 없는 것**이 갭: ACON 패턴 적용 — 압축 후 정보 누락으로 인한 재질문/오답 사례를 agentlog에서 수집 → summarizer 프롬프트(`compaction/llm.go`) 가이드라인 정제 → recall/quality metric으로 검증. lightweight role 모델로 압축기 distill까지 가능.
 - ACE 델타 패턴의 적용처는 압축이 아니라 **누적 지식 문서**: topics/*.md, MEMORY.md, 위키 자동 병합. dreaming의 LLM 재작성 병합이 collapse 위험 지점 — "불릿 단위 append + ID + 유익/유해 카운터 + 주기 curator 압축" 구조 검토.
@@ -69,6 +71,7 @@ sidebarTitle: "Agent Papers 2026"
 | **SoK: Agent Skills** (2602.20867, 2026-02) | metadata-driven progressive disclosure(메타데이터만 상주, 본문 lazy 로드)가 정석 패턴으로 공식화 | — |
 
 **Deneb 매핑**
+
 - 현행 deferral(이름 1줄 + fetch 지시, eager 14개)은 SoK의 progressive disclosure 그 자체 — 검증된 노선.
 - **per-turn 임베딩 tool retrieval은 도입하지 않는 것이 결론.** 프롬프트 캐시 독트린 Rule B(대화 중 툴셋 불변, static 캐시 키 = 툴 목록)와 정면 충돌 — 논문들이 다루지 않는 우리 제약. 적용 가능한 형태는 (a) 세션 시작 시 1회 선택 고정, (b) agentlog 빈도 기반 deferral 심화(prompt diet R2 방법론 그대로), (c) MemTool Hybrid의 결정론적 제거를 세션 경계에서만.
 
@@ -83,6 +86,7 @@ sidebarTitle: "Agent Papers 2026"
 | **Test-time compute 서베이** (2507.02076, 2025-07) | L1 controllability / L2 adaptiveness 분류. reasoning 모델은 비추론 대비 최대 5x 길게 생성 | thinking budget 파라미터가 엄수되지 않는 long tail — budget API 신뢰 캐비앗 |
 
 **Deneb 매핑**
+
 - effort router 휴리스틱 v1의 다음 단계가 동명 논문에 그대로 있음: **agentlog o_t feed(#2274)에서 "최소 effort로 성공한 스텝" 라벨 마이닝 → 경량 분류기**(임베딩 + 로지스틱, 필요시 Qwen3-1.7B — DGX 여유). 라벨 생성 파이프라인(스텝 단위 effort 변주 재실행 비교)은 puppet seat로 재현 가능.
 - 라우터 비용 원칙: 현행 O(1) 휴리스틱 → 임베딩 수준까지가 적정선. LLM 호출 라우터는 금지.
 - ASRR의 self-recovery 기제는 dsv4 thinking:false 운용(쉬운 턴 비추론)의 사후 정당화.
@@ -98,6 +102,7 @@ sidebarTitle: "Agent Papers 2026"
 | **AutoSkill** (2603.01145, 2026-03) | 스킬 lifecycle(추출→버전 병합→하이브리드 검색 주입) 설계 참조 | **정량 검증 전무** — 설계 참조로만 |
 
 **Deneb 매핑**
+
 - genesis 자동 생성 스킬은 SoK 데이터상 평균적으로 해로울 수 있음 → **검증 게이트 강화**가 핵심: 생성 시 구체성 기준(트리거·절차·반례) 체크, 모호 스킬 reject(EvolveR의 "모호함이 지배 실패모드"와 일치).
 - **evolve self-test에 역할 재라벨 적용** (`genesis/evolver.go`): 검증 대상 스킬 본문·테스트 결과를 모델 자신의 출력이 아닌 user/tool 역할 콘텐츠로 제시 — 프롬프트 구성 변경만으로 수정률 대폭 상승 기대. 난이도 최하.
 - 진화 후 실효 검증 부재 ↔ skill debt 경고 일치: 진화본 vs 이전본의 사용 성공률 비교(tracker 데이터 기존재)를 LogEvolve(#2271)에 추가 — A/B 폐쇄 루프.
@@ -113,6 +118,7 @@ sidebarTitle: "Agent Papers 2026"
 | **ProActor** (2605.24900, 2026-05) | 기회 시간창 자동 라벨링 + RL. PT/FTR/RAR 타이밍 메트릭 제안 | 훈련에 4xH200급 필요(DGX Spark 초과). 절대 PT 점수 낮음 |
 
 **Deneb 매핑**
+
 - 과개입이 지배 실패모드라는 결과는 contentless 억제 + noise floor 노선의 실증. 다음 단계는 **수락/거부 신호 수집**: workfeed 카드 dismiss/열람/액션, 푸시 무시를 agentlog 능동 퍼널(delivered/suppressed/dropped)에 이어 붙이면 판정기 학습 데이터가 자생. 단일 사용자라 표본은 작지만 페르소나 단일이라 적합도 높음.
 - 능동 퍼널 리포트에 **FTR(과개입율) 채택** — 기존 agentlog 데이터로 계산 가능.
 - 이벤트 인제스트(폰 알림 watcher) 판정 프롬프트의 행동 컨텍스트는 직전 ~5분 윈도우면 충분하다는 budget 가이드.
@@ -127,6 +133,7 @@ sidebarTitle: "Agent Papers 2026"
 | **MemoryAgentBench** (재인용) | incremental injection 프로토콜 — retain/recall 회귀 하네스로 직접 재사용 가능 | — |
 
 **Deneb 매핑**
+
 - quality-metric.sh는 표면 점수(한국어 비율·길이·누출) — artifact-aware 채점(도구 결과 실재 확인, quality tools-deep의 확대)으로 신뢰도 상승 여지. 회귀 판정은 점수 절대값보다 fixed probe set의 pass/fail 천이로.
 - 모델 교체가 잦은 운용(step3p7→dsv4)에서 "백본 vs 하네스" 분리 정책 부재 — modeltuner 캘리브레이션을 fixed probe suite로 확장해 모델 교체 시 자동 실행, 하네스 회귀와 모델 특성 변화를 분리.
 - LLM-judge를 회귀 게이트로 쓸 경우 길이 정규화 + 타 패밀리 judge 등 편향 방어 명시.
