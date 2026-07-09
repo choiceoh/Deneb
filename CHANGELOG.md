@@ -1,5 +1,22 @@
 # Changelog
 
+## [4.84.1](https://github.com/choiceoh/Deneb/compare/deneb-v4.84.0...deneb-v4.84.1) (2026-07-09)
+
+
+### 🐛 Bug Fixes
+
+* **wiki:** 백업 폴더 프룬에 .bak-* 인픽스 네이밍 추가 — 마이그레이션 스냅샷 누출 차단 ([#3357](https://github.com/choiceoh/Deneb/issues/3357)) ([7e71a37](https://github.com/choiceoh/Deneb/commit/7e71a3732f653198c59902858a828492bfbe19b9))
+
+
+### ⚡ Performance
+
+* **chat:** subagents·todo 강등 + 도구 스키마 무손실 압축 ([#3353](https://github.com/choiceoh/Deneb/issues/3353) 후속) ([#3356](https://github.com/choiceoh/Deneb/issues/3356)) ([04b5c1f](https://github.com/choiceoh/Deneb/commit/04b5c1f22b9d82a3669641726abf62e949b7dca2))
+
+
+### 🔧 Internal
+
+* 코드모드(Code Mode) 제거 — git-worktree 코딩 세션·miniapp.code.* RPC·네이티브/andromeda UI·구현자 프롬프트 프로파일 ([#3354](https://github.com/choiceoh/Deneb/issues/3354)) ([ca47311](https://github.com/choiceoh/Deneb/commit/ca47311ed8cb51c38f30bd016f0236f136cf5342))
+
 ## [4.84.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.83.1...deneb-v4.84.0) (2026-07-09)
 
 
