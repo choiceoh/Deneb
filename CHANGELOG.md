@@ -1,5 +1,24 @@
 # Changelog
 
+## [4.84.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.83.1...deneb-v4.84.0) (2026-07-09)
+
+
+### ✨ Features
+
+* **chat:** mail_archive를 eager로 승격하고 code_action은 다중도구 전용으로 안내 ([#3352](https://github.com/choiceoh/Deneb/issues/3352)) ([5cc0516](https://github.com/choiceoh/Deneb/commit/5cc0516f74ff7df2da493f79eca8bd0ebe015c53))
+* **workfeed:** 문서 분석 산출물을 작업 피드 doc_analysis 카드로 발행 ([#3350](https://github.com/choiceoh/Deneb/issues/3350)) ([d1fec6e](https://github.com/choiceoh/Deneb/commit/d1fec6e18ddc6d3efdeaf4815632dc5c8c386252))
+
+
+### 🐛 Bug Fixes
+
+* **chat:** code_action에서 메일 첨부(PDF/DOCX) 읽기 허용 — mail_archive attachment 액션 allowlist 추가 ([#3351](https://github.com/choiceoh/Deneb/issues/3351)) ([91b7119](https://github.com/choiceoh/Deneb/commit/91b711962cf89e7d2eb5af2f5b867bb59b2a6f03))
+* **compaction:** 요약기 환각 차단 — 없는 숫자·금액 지어내기 금지 + untrusted fence에 미검증 수치 단언 금지 ([#3347](https://github.com/choiceoh/Deneb/issues/3347)) ([1336618](https://github.com/choiceoh/Deneb/commit/1336618cf7ab29ed8033cc86b80bde7ba6e01af0))
+
+
+### 🔧 Internal
+
+* **chat:** notebook·deal_ledger를 deferred로 강등 + code_action 첨부 문구 정정 ([#3353](https://github.com/choiceoh/Deneb/issues/3353)) ([f5dc6d6](https://github.com/choiceoh/Deneb/commit/f5dc6d6a0ab09a695b0a69e325d63e1b8cb75225))
+
 ## [4.83.1](https://github.com/choiceoh/Deneb/compare/deneb-v4.83.0...deneb-v4.83.1) (2026-07-09)
 
 
