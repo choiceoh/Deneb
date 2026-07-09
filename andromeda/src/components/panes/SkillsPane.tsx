@@ -57,9 +57,10 @@ function routeLabel(route?: string): string {
       return "판정: 변경 없음";
     case "evolve":
       return "판정: 기존 스킬 진화";
-    case "create":
     case "genesis":
-      return "판정: 새 스킬 생성";
+      return "판정: 새 스킬 생성(자동)";
+    case "create":
+      return "판정: 새 스킬 생성(수동)";
     default:
       return route?.trim() ? `판정: ${route.trim()}` : "";
   }
