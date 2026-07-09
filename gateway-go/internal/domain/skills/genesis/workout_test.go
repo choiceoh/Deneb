@@ -101,3 +101,35 @@ func TestSkillWorkoutTask_PassAndExecutorErrorPaths(t *testing.T) {
 		t.Fatalf("failed executor must not record evidence, got %+v", records)
 	}
 }
+
+// The lane rotates fairly (least-recently-exercised first) and never
+// re-records a defect already evidenced inside the window.
+func TestSkillWorkoutTask_RotationAndDedup(t *testing.T) {
+	tr, catalog := workoutFixtures(t)
+	failing := func(_ context.Context, _ string, _ SkillValidationCaseRecord) (skillReplayTrace, error) {
+		return skillReplayTrace{}, nil
+	}
+	task := &SkillWorkoutTask{Tracker: tr, Catalog: catalog, replay: failing}
+
+	if err := task.Run(context.Background()); err != nil {
+		t.Fatalf("run1: %v", err)
+	}
+	if err := task.Run(context.Background()); err != nil {
+		t.Fatalf("run2: %v", err)
+	}
+	records, _ := jsonlstore.Load[UsageRecord](tr.usagePath)
+	if len(records) != 1 {
+		t.Fatalf("second cycle must dedup the already-evidenced defect, got %d records", len(records))
+	}
+	trace := records[0].FailureTrace
+	if trace == nil || trace.Signature != "terminal=heldout-assertion|mechanism=skill-behavior-drift" ||
+		!strings.Contains(trace.CausalStatus, "synthetic workout") {
+		t.Fatalf("workout failure needs the stable explicit trace, got %+v", trace)
+	}
+
+	// Rotation: the exercised skill has lastAt set; a fresh skill must sort first.
+	lastAt, seen := tr.WorkoutActivity(7 * 24 * time.Hour)
+	if lastAt["contract-review"] == 0 || !seen["contract-review"]["case-1"] {
+		t.Fatalf("workout activity should report exercised skill + failed case: %v %v", lastAt, seen)
+	}
+}
