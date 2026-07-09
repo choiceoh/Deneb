@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.60](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.59...andromeda-v0.0.60) (2026-07-09)
+
+
+### 🐛 Bug Fixes
+
+* **andromeda:** 메일 열람 시 날짜 페이저 튕김·미열람 수정 — Date 헤더와 수신일 불일치 가드 + 고정 행 ([#3308](https://github.com/choiceoh/Deneb/issues/3308)) ([3a9a34d](https://github.com/choiceoh/Deneb/commit/3a9a34d81b5b80c23222fc6236bb6172db5e1c4d))
+
 ## [0.0.59](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.58...andromeda-v0.0.59) (2026-07-08)
 
 
