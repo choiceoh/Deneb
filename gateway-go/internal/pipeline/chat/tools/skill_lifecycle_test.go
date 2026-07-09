@@ -18,6 +18,7 @@ type fakeSkillLifecycleBackend struct {
 	backfill       SkillValidationBackfillRequest
 	selfCorrection SkillSelfCorrectionCandidateRequest
 	selfReview     SkillSelfCorrectionReviewRequest
+	shadowReplay   HeartbeatShadowReplayRequest
 }
 
 func (f *fakeSkillLifecycleBackend) ProposeSkillEvolution(_ context.Context, req SkillEvolutionProposalRequest) (any, error) {
@@ -333,4 +334,9 @@ func mustJSONSkillLifecycle(t *testing.T, v any) json.RawMessage {
 		t.Fatal(err)
 	}
 	return data
+}
+
+func (f *fakeSkillLifecycleBackend) HeartbeatShadowReplay(_ context.Context, req HeartbeatShadowReplayRequest) (any, error) {
+	f.shadowReplay = req
+	return map[string]any{"ok": true, "dryRun": true}, nil
 }

@@ -30,6 +30,21 @@ type skillLifecycleBackend struct {
 	tracker     *genesis.Tracker
 	transcripts toolctx.TranscriptStore
 	logger      *slog.Logger
+
+	// Heartbeat shadow-replay deps (P1, heartbeat_shadow_replay.go). Nil/empty
+	// on backends that never serve the tool (e.g. the backfill task).
+	fixturePath    string
+	shadowComplete shadowCompleteFunc
+}
+
+// HeartbeatShadowReplay dry-runs a candidate HEARTBEAT.md body over the
+// harvested fixture corpus. Report only — nothing is applied (the surface
+// registry keeps heartbeat-instructions propose-only).
+func (b *skillLifecycleBackend) HeartbeatShadowReplay(ctx context.Context, req chattools.HeartbeatShadowReplayRequest) (any, error) {
+	if b.shadowComplete == nil || b.fixturePath == "" {
+		return nil, fmt.Errorf("heartbeat shadow replay is not configured on this backend")
+	}
+	return runHeartbeatShadowReplay(ctx, b.fixturePath, req.Candidate, req.Limit, b.shadowComplete)
 }
 
 func (b *skillLifecycleBackend) ProposeSkillEvolution(ctx context.Context, req chattools.SkillEvolutionProposalRequest) (any, error) {

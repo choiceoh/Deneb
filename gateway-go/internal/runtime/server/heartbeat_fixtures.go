@@ -51,7 +51,13 @@ type heartbeatFixture struct {
 }
 
 func (t *heartbeatTask) heartbeatFixturePath() string {
-	return filepath.Join(t.homeDir, ".deneb", "data", "heartbeat_fixtures.jsonl")
+	return heartbeatFixturePathFor(t.homeDir)
+}
+
+// heartbeatFixturePathFor is shared with the shadow-replay backend wiring
+// (init_genesis.go), which has no heartbeatTask at hand.
+func heartbeatFixturePathFor(homeDir string) string {
+	return filepath.Join(homeDir, ".deneb", "data", "heartbeat_fixtures.jsonl")
 }
 
 // recordHeartbeatFixture persists one firing. Best-effort: a failed write must

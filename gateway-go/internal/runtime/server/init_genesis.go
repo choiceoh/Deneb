@@ -296,6 +296,29 @@ func (s *Server) registerSkillLifecycleTool() {
 		transcripts: s.genesisTranscripts,
 		logger:      s.logger,
 	}
+	// Heartbeat shadow-replay wiring (P1): text-only lightweight executor over
+	// the harvested fixture corpus. Same model both sides, thinking disabled on
+	// dual-mode models (the evolver judge's dsv4 lesson). Missing pieces leave
+	// the action cleanly unconfigured.
+	if home, err := os.UserHomeDir(); err == nil {
+		backend.fixturePath = heartbeatFixturePathFor(home)
+	}
+	if lwClient := s.modelRegistry.Client(modelrole.RoleLightweight); lwClient != nil {
+		lwModel := s.modelRegistry.Model(modelrole.RoleLightweight)
+		thinkingKwargs := s.genesisThinkingKwargs()
+		backend.shadowComplete = func(ctx context.Context, system, user string) (string, error) {
+			req := llm.ChatRequest{
+				Model:     lwModel,
+				System:    llm.SystemString(system),
+				Messages:  []llm.Message{llm.NewTextMessage("user", user)},
+				MaxTokens: 4096,
+			}
+			if kw := thinkingKwargs[lwModel]; kw != "" {
+				req.Thinking = &llm.ThinkingConfig{Type: "disabled", TemplateKwarg: kw}
+			}
+			return lwClient.Complete(ctx, req)
+		}
+	}
 	s.chatHandler.RegisterTool(toolctx.ToolDef{
 		Name: "skill_lifecycle",
 		Description: "Propus control plane for Deneb self-improvement (tool name kept as skill_lifecycle for compatibility): " +

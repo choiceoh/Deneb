@@ -83,8 +83,9 @@ proposals with `surface: propose-only` and they land through reviewed PRs.
 - **P0** (prereq, small): persist heartbeat turn fixtures (harvest lane,
   deterministic, mirrors `validation_backfill_task.go`).
 - **P1**: shadow-replay executor + verifiers + no-trade-off gate, exposed as a
-  dry-run report on `skill_lifecycle(action=status)` — *still propose-only*;
-  the report just accompanies the proposal so review is measured.
+  dry-run report via `skill_lifecycle(action=heartbeat_shadow_replay)` —
+  *still propose-only*; the report just accompanies the proposal so review is
+  measured. (Implemented: `server/heartbeat_shadow_replay.go`.)
 - **P2**: flip `heartbeat-instructions` to `auto-apply` behind an env flag
   (default off), with backup + rollback watch. Operator flips the registry
   tier after observing P1 reports for a while.
