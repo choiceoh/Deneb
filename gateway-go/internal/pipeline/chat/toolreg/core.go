@@ -534,20 +534,21 @@ func RegisterContactsTool(registry toolctx.ToolRegistrar, contactsDeps *toolctx.
 	if contactsDeps.Store == nil {
 		return
 	}
-	// Eager (2026-07-09): contacts completes the meeting-prep triad — calendar and
-	// mail_archive are eager and system_prompt's 미팅 준비 flow reaches
-	// calendar→contacts→mail_archive, so a deferred contacts was the lone
-	// fetch_tools hop mid-sequence. It also sits on code_action's zero-hop bridge,
-	// so deferring it pushed "이 번호 누구야" lookups through code_action to skip the
-	// hop. ASR hotword injection and wiki person enrichment read the store
-	// server-side and are independent of this tool's exposure. (~220 wire tokens.)
+	// Deferred (2026-07-09): the person wiki now carries 연락처 for the people the
+	// user keeps pages for, so contacts' meeting-prep/context role is covered there
+	// (wiki/knowledge/org). Its surviving unique value is full address-book coverage
+	// + reverse phone lookup (번호→사람, normalized) — an occasional "이 번호 누구야"
+	// turn that fetches on demand. code_action's bridge still exposes it zero-hop.
+	// ASR hotword injection and wiki person enrichment read the store server-side,
+	// unaffected. Description leads with the trigger so the 80-rune summary is useful.
 	registry.RegisterTool(toolctx.ToolDef{
 		Name: "contacts",
-		Description: "주소록(연락처 DB)에서 전화번호로 인물을 찾거나(lookup) 이름·회사로 검색(search). " +
-			"네이티브 클라이언트가 동기화한 연락처 전체를 조회한다. " +
-			"사용자가 '이 번호 누구?', '010-xxxx 누구야', 'OOO 연락처/번호' 같이 물으면 짐작하지 말고 호출하라.",
+		Description: "'이 번호 누구?'·'010-xxxx 누구야'·'OOO 연락처/번호'처럼 주소록을 물으면 짐작 말고 호출 — " +
+			"전화번호로 인물 찾기(lookup) 또는 이름·회사로 검색(search). " +
+			"네이티브 클라이언트가 동기화한 연락처 전체를 조회한다.",
 		InputSchema: contactsToolSchema(),
 		Fn:          tools.ToolContacts(contactsDeps),
+		Deferred:    true,
 	})
 }
 
