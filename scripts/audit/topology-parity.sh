@@ -29,6 +29,15 @@
 # surface has no "send notification" RPC today, only push.register/unregister).
 set -uo pipefail
 
+# systemctl --user needs XDG_RUNTIME_DIR to locate the user bus. This sweep runs
+# on the self-hosted runner, which starts as a service with no login session, so
+# XDG_RUNTIME_DIR is unset and `systemctl --user` dies with "Failed to connect to
+# bus: No medium found" — every user-unit check (deneb-auto-deploy.timer,
+# deneb-lmtp.socket) then false-FAILs even while the units are active. The runner
+# runs as the unit owner, so point it at that user's runtime dir when absent.
+: "${XDG_RUNTIME_DIR:=/run/user/$(id -u)}"
+export XDG_RUNTIME_DIR
+
 FAILS=0
 WARNS=0
 
