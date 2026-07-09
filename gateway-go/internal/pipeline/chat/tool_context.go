@@ -15,19 +15,9 @@ func WithDeliveryContext(ctx context.Context, d *DeliveryContext) context.Contex
 	return toolctx.WithDeliveryContext(ctx, d)
 }
 
-// DeliveryFromContext extracts the DeliveryContext from ctx. Returns nil if not set.
-func DeliveryFromContext(ctx context.Context) *DeliveryContext {
-	return toolctx.DeliveryFromContext(ctx)
-}
-
 // WithReplyFunc attaches a ReplyFunc to ctx.
 func WithReplyFunc(ctx context.Context, fn ReplyFunc) context.Context {
 	return toolctx.WithReplyFunc(ctx, fn)
-}
-
-// ReplyFuncFromContext extracts the ReplyFunc from ctx. Returns nil if not set.
-func ReplyFuncFromContext(ctx context.Context) ReplyFunc {
-	return toolctx.ReplyFuncFromContext(ctx)
 }
 
 // WithAutoDelivery marks a run whose final reply text is delivered by the
@@ -41,30 +31,14 @@ func WithSessionKey(ctx context.Context, key string) context.Context {
 	return toolctx.WithSessionKey(ctx, key)
 }
 
-// SessionKeyFromContext extracts the session key from ctx. Returns "" if not set.
-func SessionKeyFromContext(ctx context.Context) string {
-	return toolctx.SessionKeyFromContext(ctx)
-}
-
 // WithMediaSendFunc attaches a MediaSendFunc to ctx.
 func WithMediaSendFunc(ctx context.Context, fn MediaSendFunc) context.Context {
 	return toolctx.WithMediaSendFunc(ctx, fn)
 }
 
-// MediaSendFuncFromContext extracts the MediaSendFunc from ctx. Returns nil if not set.
-func MediaSendFuncFromContext(ctx context.Context) MediaSendFunc {
-	return toolctx.MediaSendFuncFromContext(ctx)
-}
-
 // WithMaxUploadBytes attaches the channel-specific file upload limit to ctx.
 func WithMaxUploadBytes(ctx context.Context, n int64) context.Context {
 	return toolctx.WithMaxUploadBytes(ctx, n)
-}
-
-// MaxUploadBytesFromContext returns the channel-specific upload limit.
-// Returns 0 if not set; callers should apply a safe default.
-func MaxUploadBytesFromContext(ctx context.Context) int64 {
-	return toolctx.MaxUploadBytesFromContext(ctx)
 }
 
 // WithTurnContext attaches a TurnContext to ctx for cross-tool result sharing.
