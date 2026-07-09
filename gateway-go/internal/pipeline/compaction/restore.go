@@ -364,7 +364,16 @@ func TruncateOldToolResults(messages []llm.Message, turnThreshold, minChars int)
 			if utf8.RuneCountInString(blocks[j].Content) <= minChars {
 				continue
 			}
-			blocks[j].Content = placeholder
+			// A spilled result's full output still lives on disk; keep its
+			// read_spillover pointer in the stub so the agent can still page
+			// through it instead of losing access when the marker is cleared.
+			if ref := spilloverRef(blocks[j].Content); ref != "" {
+				blocks[j].Content = fmt.Sprintf(
+					"[older tool output cleared — full output still available via read_spillover(%q)]", ref,
+				)
+			} else {
+				blocks[j].Content = placeholder
+			}
 			changed = true
 			stubbed++
 		}

@@ -54,6 +54,14 @@ func MicroCompact(messages []llm.Message, turnThreshold int) ([]llm.Message, int
 			if protected[blocks[j].ToolUseID] {
 				continue // tool schema payload — pruning it forces a re-fetch
 			}
+			// A spilled result's read_spillover pointer can sit between the
+			// head's opening ``` and the tail's closing ```; codeBlockRE would
+			// swallow the pointer along with the fence. Skip it — the pointer
+			// is preserved (TruncateOldToolResults clears it later, keeping the
+			// ref), and the full output stays reachable on disk.
+			if spilloverRef(blocks[j].Content) != "" {
+				continue
+			}
 			stripped := stripCodeFences(blocks[j].Content)
 			if stripped != blocks[j].Content {
 				blocks[j].Content = stripped
