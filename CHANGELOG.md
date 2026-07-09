@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.84.2](https://github.com/choiceoh/Deneb/compare/deneb-v4.84.1...deneb-v4.84.2) (2026-07-09)
+
+
+### 🐛 Bug Fixes
+
+* **skills:** 프로푸스 라이프사이클 로그 판정 라벨 정밀화 — create↔genesis 자동/수동 구분 ([#3360](https://github.com/choiceoh/Deneb/issues/3360)) ([e08b5ec](https://github.com/choiceoh/Deneb/commit/e08b5ec942d65e4624f567783db87eb74d67ee0d))
+* **workfeed:** 카드 자동제목을 tiny 역할로 이관 — lightweight가 클라우드 추론모델(deepseek-v4-flash-api)로 폴백 시 thinking-off 미적용→빈응답→휴리스틱 폴백 회귀 방지 ([#3362](https://github.com/choiceoh/Deneb/issues/3362)) ([c0b5e96](https://github.com/choiceoh/Deneb/commit/c0b5e9698a44dfdd7bc239e3f9af6f9301ff4d00))
+
 ## [4.84.1](https://github.com/choiceoh/Deneb/compare/deneb-v4.84.0...deneb-v4.84.1) (2026-07-09)
 
 

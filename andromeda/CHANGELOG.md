@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.63](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.62...andromeda-v0.0.63) (2026-07-09)
+
+
+### 🐛 Bug Fixes
+
+* **skills:** 프로푸스 라이프사이클 로그 판정 라벨 정밀화 — create↔genesis 자동/수동 구분 ([#3360](https://github.com/choiceoh/Deneb/issues/3360)) ([e08b5ec](https://github.com/choiceoh/Deneb/commit/e08b5ec942d65e4624f567783db87eb74d67ee0d))
+
 ## [0.0.62](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.61...andromeda-v0.0.62) (2026-07-09)
 
 
