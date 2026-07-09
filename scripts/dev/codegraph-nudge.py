@@ -21,12 +21,26 @@ import json
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 import tempfile
 
 IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{2,}$")
 GREP_TOKENS = {"grep", "egrep", "fgrep", "rg", "ripgrep"}
+
+
+def codegraph_bin():
+    """Resolve the codegraph binary even when the hook env has a minimal PATH
+    (login profile not sourced) — ~/.local/bin isn't always on PATH. Same spots
+    as codegraph-serve.sh. Returns None if not found (→ fail open, no nudge)."""
+    for c in ("codegraph",
+              os.path.expanduser("~/.local/bin/codegraph"),
+              os.path.expanduser("~/.npm-global/bin/codegraph")):
+        p = shutil.which(c)
+        if p:
+            return p
+    return None
 
 
 def bare_identifier(pat):
@@ -58,10 +72,14 @@ def pattern_from_bash(command):
 
 def is_defined_symbol(pat, root):
     """True iff CodeGraph's index has a definition whose name == pat (exact)."""
+    if codegraph_bin() is None:
+        return False  # codegraph not installed → fail open, no nudge
     try:
+        # Run via a LOGIN shell: codegraph is a node script and a minimal hook
+        # PATH lacks both codegraph and node; the profile restores both.
         out = subprocess.run(
-            ["codegraph", "query", pat, "--json"],
-            capture_output=True, text=True, timeout=6, cwd=root,
+            ["bash", "-lc", f"codegraph query {shlex.quote(pat)} --json"],
+            capture_output=True, text=True, timeout=8, cwd=root,
         )
     except (OSError, subprocess.SubprocessError):
         return False  # codegraph absent / crashed → fail open

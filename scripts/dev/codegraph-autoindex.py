@@ -28,6 +28,18 @@ import tempfile
 import time
 
 
+def codegraph_bin():
+    """Resolve the codegraph binary even under a minimal hook PATH (login profile
+    not sourced). Same spots as codegraph-serve.sh. None if not installed."""
+    for c in ("codegraph",
+              os.path.expanduser("~/.local/bin/codegraph"),
+              os.path.expanduser("~/.npm-global/bin/codegraph")):
+        p = shutil.which(c)
+        if p:
+            return p
+    return None
+
+
 def main():
     try:
         payload = json.load(sys.stdin)
@@ -36,7 +48,8 @@ def main():
     root = os.environ.get("CLAUDE_PROJECT_DIR") or payload.get("cwd") or os.getcwd()
     root = os.path.realpath(root)
 
-    if shutil.which("codegraph") is None:
+    cg = codegraph_bin()
+    if cg is None:
         return 0                                        # tool not installed
     if not os.path.exists(os.path.join(root, ".git")):
         return 0                                        # not a repo/worktree
@@ -59,17 +72,22 @@ def main():
     dst = os.path.join(root, ".codegraph")
     q = shlex.quote
     if donor:
-        # Cheap path: seed from a sibling, then reconcile branch drift.
-        cmd = f"cp -r {q(donor)} {q(dst)} && cd {q(root)} && codegraph sync"
+        # Cheap path: seed from a sibling, then reconcile branch drift. If the
+        # seed is unusable (partial/locked copy, sync error), self-heal to a
+        # full init so the worktree still ends up correctly indexed.
+        cmd = (f"cp -r {q(donor)} {q(dst)} && cd {q(root)} && codegraph sync"
+               f" || {{ rm -rf {q(dst)}; cd {q(root)} && codegraph init; }}")
     else:
         cmd = f"cd {q(root)} && codegraph init"         # first-time full build
 
     log = os.path.join(tempfile.gettempdir(), f"codegraph-autoindex-{key}.log")
     try:
+        # LOGIN shell: restores the profile PATH (node + codegraph) that a
+        # minimal detached hook env lacks. Detached so it never blocks startup.
         subprocess.Popen(
-            ["/bin/sh", "-c", cmd],
+            ["bash", "-lc", cmd],
             stdout=open(log, "w"), stderr=subprocess.STDOUT,
-            start_new_session=True,                     # detach: don't block
+            start_new_session=True,
         )
     except OSError:
         pass                                            # fail-open

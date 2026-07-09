@@ -2,8 +2,8 @@
   "mcpServers": {
     "codegraph": {
       "type": "stdio",
-      "command": "codegraph",
-      "args": ["serve", "--mcp"]
+      "command": "bash",
+      "args": ["scripts/dev/codegraph-serve.sh"]
     }
   }
 }
