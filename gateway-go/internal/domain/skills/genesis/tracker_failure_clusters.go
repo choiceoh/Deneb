@@ -162,29 +162,58 @@ func (t *Tracker) computeFailureEvidenceClustersLocked(now time.Time, limit int)
 	return out
 }
 
+// evolveRejectionClassMatchers is the SINGLE source of truth mapping an
+// evolve_rejected reason to a gate class. Two consumers share it so the
+// substrings live in one place: classifyEvolveRejection (exclusive, first-match
+// — one cluster per rejection) and the SelfHarnessSignalSummary counters
+// (non-exclusive tallies, tracker_self_harness.go). Ordered: earlier entries
+// win the exclusive classification.
+var evolveRejectionClassMatchers = []struct {
+	class string
+	match func(loweredReason string) bool
+}{
+	{"missing-audit", func(r string) bool {
+		return strings.Contains(r, "self-harness audit rejected") && strings.Contains(r, "missing")
+	}},
+	{"signature-mismatch", func(r string) bool {
+		return strings.Contains(r, "does not match supported failure signatures") ||
+			strings.Contains(r, "no failure evidence bundle")
+	}},
+	{"surface-mismatch", func(r string) bool {
+		return strings.Contains(r, "self-harness surface rejected") ||
+			strings.Contains(r, "did not match changed skill.md sections") ||
+			strings.Contains(r, "not editable by skill.md body evolve")
+	}},
+	{"heldout-replay", func(r string) bool {
+		return strings.Contains(r, "held-out") || strings.Contains(r, "replay")
+	}},
+	{"patch-first", func(r string) bool {
+		return strings.Contains(r, "patch-first")
+	}},
+}
+
 // classifyEvolveRejection maps a rejection reason to exactly one gate class,
-// first match wins. Matches the same substrings the SelfHarnessSignalSummary
-// counters use (tracker_self_harness.go) — those stay non-exclusive tallies;
-// this exclusive variant exists so each rejection lands in one cluster.
+// first match wins, "other" when nothing matches.
 func classifyEvolveRejection(reason string) string {
 	r := strings.ToLower(strings.TrimSpace(reason))
-	switch {
-	case strings.Contains(r, "self-harness audit rejected") && strings.Contains(r, "missing"):
-		return "missing-audit"
-	case strings.Contains(r, "does not match supported failure signatures"),
-		strings.Contains(r, "no failure evidence bundle"):
-		return "signature-mismatch"
-	case strings.Contains(r, "self-harness surface rejected"),
-		strings.Contains(r, "did not match changed skill.md sections"),
-		strings.Contains(r, "not editable by skill.md body evolve"):
-		return "surface-mismatch"
-	case strings.Contains(r, "held-out"), strings.Contains(r, "replay"):
-		return "heldout-replay"
-	case strings.Contains(r, "patch-first"):
-		return "patch-first"
-	default:
-		return "other"
+	for _, m := range evolveRejectionClassMatchers {
+		if m.match(r) {
+			return m.class
+		}
 	}
+	return "other"
+}
+
+// evolveRejectionMatchesClass reports whether a (pre-lowercased) reason matches
+// one named class — the non-exclusive query the SelfHarnessSignalSummary
+// counters use so they no longer re-hardcode the substrings.
+func evolveRejectionMatchesClass(loweredReason, class string) bool {
+	for _, m := range evolveRejectionClassMatchers {
+		if m.class == class {
+			return m.match(loweredReason)
+		}
+	}
+	return false
 }
 
 // singleLine collapses whitespace runs (incl. newlines) so an example can be

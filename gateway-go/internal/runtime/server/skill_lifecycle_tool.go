@@ -300,6 +300,10 @@ func (b *skillLifecycleBackend) SkillLifecycleStatus(_ context.Context, req chat
 		// evidence bundle the sweep nudge quotes, so a turn drilling in via
 		// status sees the full support-ordered list, not just the top slice.
 		"failureClusters": b.tracker.FailureEvidenceClusters(0),
+		// Synthetic exercise lane liveness — the workout lane otherwise surfaces
+		// only indirectly (workout-failure clusters), so this is its "is it
+		// running" line in the integrated status view.
+		"workoutActivity": b.tracker.WorkoutActivitySummarize(),
 	}
 	if rejectedErr != "" {
 		status["rejectedEditsError"] = rejectedErr
