@@ -498,6 +498,14 @@ func (b *skillLifecycleBackend) RecordSkillValidationCase(_ context.Context, req
 			"reason": "skill tracker is not configured",
 		}, nil
 	}
+	// A validation_case is a held-out assertion bound to a specific skill. A
+	// session-level correction with no skill to attach to belongs in the
+	// self-correction queue instead — steer the caller there so the capture is
+	// not lost when it reached for the wrong action (observed: the review lane
+	// hitting a bare "skillName is required" and dropping the correction).
+	if strings.TrimSpace(req.SkillName) == "" {
+		return nil, fmt.Errorf("validation_case requires a skill binding (skillName). For a session-level correction with no owning skill, use action=self_correction instead (title/evidence/proposedChange/risk)")
+	}
 	record := genesis.SkillValidationCaseRecord{
 		SkillName:           req.SkillName,
 		ID:                  req.ID,

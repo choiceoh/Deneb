@@ -3,6 +3,7 @@ package genesis
 import (
 	"fmt"
 	"hash/fnv"
+	"strings"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonlstore"
@@ -28,6 +29,29 @@ const (
 	targetRecurrenceSource = "target-recurrence"
 
 	targetRecurrenceDedupScanLimit = 50
+
+	// selfCorrectionReopenCooldown is how long an APPLIED self-correction must
+	// age before the same signature recurring again re-opens it. 2× the health
+	// window: long enough that a genuine fix has had real usage to prove itself,
+	// short enough that an unfixed recurrence resurfaces within a fortnight.
+	// rejected/superseded candidates never re-open (the operator ruled).
+	selfCorrectionReopenCooldown = 2 * evolutionHealthWindow
+
+	// failureClusterPromoteThreshold is the minimum cluster support (recurring
+	// members) before a failure cluster auto-promotes into a candidate. 2 — same
+	// bar as target recurrence: a lone failure can be a one-off flake, but a
+	// signature seen twice in the window is a real pattern. The cluster path is
+	// the reliable deterministic backstop for lifecycle-log evolve_rejected +
+	// recurring usage failures, which the per-event evolver hooks miss (they
+	// key off a different recording path).
+	failureClusterPromoteThreshold = 2
+	// maxClusterPromotionsPerTick caps how many cluster candidates one tick can
+	// mint so a burst of distinct failures cannot flood the queue.
+	maxClusterPromotionsPerTick = 3
+	// failureClusterSource prefixes the per-signature dedup marker.
+	failureClusterSource = "failure-cluster"
+	// failureClusterScanLimit bounds both the cluster mine and the dedup scan.
+	failureClusterScanLimit = 50
 )
 
 // PromoteTargetRecurrenceCandidates converts fresh target-recurrence signals
@@ -42,7 +66,8 @@ func (t *Tracker) PromoteTargetRecurrenceCandidates() (int, error) {
 		t.mu.Unlock()
 		return 0, fmt.Errorf("genesis-tracker: load lifecycle log: %w", err)
 	}
-	cutoff := time.Now().Add(-evolutionHealthWindow).UnixMilli()
+	now := time.Now()
+	cutoff := now.Add(-evolutionHealthWindow).UnixMilli()
 	recs := t.targetRecurrencesLocked(entries, cutoff)
 	t.mu.Unlock()
 
@@ -56,14 +81,7 @@ func (t *Tracker) PromoteTargetRecurrenceCandidates() (int, error) {
 		if err != nil {
 			return promoted, fmt.Errorf("genesis-tracker: recurrence dedup scan: %w", err)
 		}
-		blocked := false
-		for _, cand := range existing {
-			if cand.Source == source {
-				blocked = true
-				break
-			}
-		}
-		if blocked {
+		if selfCorrectionReopenBlocked(existing, source, rec.lastAt, now) {
 			continue
 		}
 		if _, err := t.RecordSelfCorrectionCandidate(SelfCorrectionCandidateRecord{
@@ -98,4 +116,121 @@ func targetRecurrenceCandidateSource(signature string) string {
 	h := fnv.New32a()
 	_, _ = h.Write([]byte(normalizedSelfHarnessSignature(signature)))
 	return fmt.Sprintf("%s:%08x", targetRecurrenceSource, h.Sum32())
+}
+
+// selfCorrectionReopenBlocked reports whether a fresh deterministic promotion for
+// `source` should be suppressed given the existing candidates (matched by Source
+// prefix). Shared by every deterministic promoter (recurrence, failure cluster,
+// patch-first repeats).
+//
+// A signature stays blocked while a twin is still live (proposed/accepted) or was
+// rejected/superseded — the operator ruled, and auto re-opening would spam the
+// queue. The ONE path that re-opens: a candidate that reached APPLIED (the fix was
+// attempted) whose signature recurs AGAIN after selfCorrectionReopenCooldown —
+// "the fix did not stick", exactly the signal worth surfacing a second time.
+// freshLastAt is the newest evidence timestamp (unix millis) for the signature.
+func selfCorrectionReopenBlocked(existing []SelfCorrectionCandidateRecord, source string, freshLastAt int64, now time.Time) bool {
+	source = strings.TrimSpace(source)
+	if source == "" {
+		return false
+	}
+	var newest *SelfCorrectionCandidateRecord
+	for i := range existing {
+		if !strings.HasPrefix(existing[i].Source, source) {
+			continue
+		}
+		if newest == nil || existing[i].CreatedAt > newest.CreatedAt {
+			c := existing[i]
+			newest = &c
+		}
+	}
+	if newest == nil {
+		return false // never promoted → allow the first capture
+	}
+	if normalizeSelfCorrectionStatus(newest.Status) != SelfCorrectionStatusApplied {
+		return true // live twin, or operator-ruled (rejected/superseded) → block
+	}
+	// Applied: re-open only if the fix had time to prove itself AND the signature
+	// recurred again since the applied candidate was recorded.
+	cooled := now.UnixMilli()-newest.CreatedAt >= selfCorrectionReopenCooldown.Milliseconds()
+	recurredAgain := freshLastAt > newest.CreatedAt
+	return !(cooled && recurredAgain)
+}
+
+// PromoteFailureClusterCandidates converts the top recurring failure clusters into
+// proposed self-correction candidates DETERMINISTICALLY (no LLM call), so the
+// queue is fed even when the LLM sweep turn ignores its nudge. Support-gated,
+// per-tick capped, and dedup/cooldown-shared with recurrence promotion. Returns
+// how many candidates were captured.
+func (t *Tracker) PromoteFailureClusterCandidates() (int, error) {
+	clusters := t.FailureEvidenceClusters(failureClusterScanLimit)
+	now := time.Now()
+	promoted := 0
+	for _, c := range clusters {
+		if promoted >= maxClusterPromotionsPerTick {
+			break
+		}
+		if c.Support < failureClusterPromoteThreshold {
+			continue // support-ordered list, but keep the gate explicit
+		}
+		signature := strings.TrimSpace(c.Signature)
+		if signature == "" {
+			continue
+		}
+		source := failureClusterCandidateSource(signature)
+		existing, err := t.RecentSelfCorrectionCandidates(c.Skill, "", failureClusterScanLimit)
+		if err != nil {
+			return promoted, fmt.Errorf("genesis-tracker: cluster dedup scan: %w", err)
+		}
+		if selfCorrectionReopenBlocked(existing, source, c.LastAt, now) {
+			continue
+		}
+		skill := strings.TrimSpace(c.Skill)
+		scope := "test"
+		targets := []string{"~/.deneb/data/skill_validation_cases.jsonl"}
+		title := "Recurring failure cluster: " + signature
+		if skill != "" {
+			scope = "skill"
+			targets = append([]string{"~/.deneb/skills/" + skill + "/SKILL.md"}, targets...)
+			title = "Recurring failure in " + skill + ": " + signature
+		}
+		evidence := fmt.Sprintf("kind=%s; support=%d; lastAt=%s",
+			c.Kind, c.Support, time.UnixMilli(c.LastAt).Format(time.RFC3339))
+		if ex := strings.TrimSpace(c.Example); ex != "" {
+			evidence += "\nexample: " + ex
+		}
+		if _, err := t.RecordSelfCorrectionCandidate(SelfCorrectionCandidateRecord{
+			Scope:     scope,
+			SkillName: skill,
+			Title:     title,
+			Candidate: fmt.Sprintf(
+				"Failure signature %q recurred %d times in the health window (kind=%s). Find the root cause and either evolve the owning skill or pin a held-out validation case so the pattern is caught next time.",
+				signature, c.Support, c.Kind,
+			),
+			Evidence:       evidence,
+			TargetFiles:    targets,
+			ProposedChange: "Review the clustered failures, fix the root cause (skill body or handling), and add a held-out validation case reproducing the signature.",
+			Risk:           "Deterministic promotion from clustered failure traces; signature matching is fuzzy substring — confirm the members share a root cause before acting.",
+			Source:         source,
+		}); err != nil {
+			// A forbidden-surface target or weak-record rejection kills THIS
+			// candidate only; keep mining the rest of the clusters.
+			if t.logger != nil {
+				t.logger.Warn("genesis-tracker: cluster candidate rejected",
+					"signature", signature, "error", err)
+			}
+			continue
+		}
+		promoted++
+	}
+	return promoted, nil
+}
+
+// failureClusterCandidateSource builds the per-signature dedup marker for a
+// failure-cluster promotion. Signature is normalized before hashing so cosmetic
+// variants of the same signature share a marker.
+func failureClusterCandidateSource(signature string) string {
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(normalizedSelfHarnessSignature(signature)))
+	return fmt.Sprintf("%s:%08x", failureClusterSource, h.Sum32())
 }

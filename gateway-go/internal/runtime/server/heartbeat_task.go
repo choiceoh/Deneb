@@ -79,6 +79,11 @@ type heartbeatTask struct {
 	// disabled.
 	promoteRecurrences func() (int, error)
 
+	// promoteClusters, when set, deterministically converts the top recurring
+	// failure clusters into proposed candidates each tick (no LLM call), so the
+	// queue is fed even when the LLM sweep turn ignores its nudge. Nil → disabled.
+	promoteClusters func() (int, error)
+
 	// selfImproveSignals, when set, reports the capture-side funnel summary
 	// plus the 7d target-recurrence count. Drives the sweep generator lane
 	// (heartbeat_selfimprove_sweep.go). Nil → lane disabled.
@@ -189,6 +194,13 @@ func (t *heartbeatTask) Run(ctx context.Context) error {
 			t.logger.Warn("heartbeat: target-recurrence promotion failed", "error", err)
 		} else if promoted > 0 {
 			t.logger.Info("heartbeat: target-recurrence candidates promoted", "count", promoted)
+		}
+	}
+	if t.promoteClusters != nil {
+		if promoted, err := t.promoteClusters(); err != nil {
+			t.logger.Warn("heartbeat: failure-cluster promotion failed", "error", err)
+		} else if promoted > 0 {
+			t.logger.Info("heartbeat: failure-cluster candidates promoted", "count", promoted)
 		}
 	}
 

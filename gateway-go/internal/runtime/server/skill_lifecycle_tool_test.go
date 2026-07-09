@@ -361,6 +361,25 @@ func TestSkillLifecycleValidationCaseRecordsAndStatusSurfacesIt(t *testing.T) {
 	}
 }
 
+func TestSkillLifecycleValidationCaseWithoutSkillSteersToSelfCorrection(t *testing.T) {
+	tracker := newSkillLifecycleTestTracker(t)
+	backend := &skillLifecycleBackend{tracker: tracker}
+
+	// A validation_case with no skill binding must not hard-reject with a bare
+	// "skillName is required" (which drops the reviewer's correction). It should
+	// steer to action=self_correction so the capture is recovered in-turn.
+	_, err := backend.RecordSkillValidationCase(context.Background(), chattools.SkillValidationCaseRequest{
+		SkillName:   "   ",
+		Description: "session-level correction with no owning skill",
+	})
+	if err == nil {
+		t.Fatal("expected a steering error for empty skillName, got nil")
+	}
+	if !strings.Contains(err.Error(), "self_correction") {
+		t.Fatalf("error should steer to self_correction, got %q", err.Error())
+	}
+}
+
 func TestSkillLifecycleStatusRequiresTieredApexFrontierEvidence(t *testing.T) {
 	tracker := newSkillLifecycleTestTracker(t)
 	if err := tracker.LogGenesis("deploy-helper", "session", "telegram:1", "coding", "Deploy workflow"); err != nil {
