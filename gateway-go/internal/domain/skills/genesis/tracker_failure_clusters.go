@@ -22,6 +22,9 @@ const (
 	// FailureClusterKindRejection groups evolve_rejected events by the gate
 	// class that rejected them — a jammed improvement loop is itself evidence.
 	FailureClusterKindRejection = "evolve-rejection"
+	// FailureClusterKindWorkout groups synthetic exercise failures (workout.go)
+	// — same signature machinery, explicitly non-real provenance.
+	FailureClusterKindWorkout = "workout-failure"
 )
 
 const defaultFailureClusterLimit = 8
@@ -64,7 +67,8 @@ func (t *Tracker) computeFailureEvidenceClustersLocked(now time.Time, limit int)
 
 	if usage, err := jsonlstore.Load[UsageRecord](t.usagePath); err == nil {
 		for _, record := range usage {
-			if record.UsedAt < cutoff || record.Success || !isRealUsageRecord(record) {
+			isWorkout := record.Source == UsageSourceWorkout
+			if record.UsedAt < cutoff || record.Success || (!isWorkout && !isRealUsageRecord(record)) {
 				continue
 			}
 			trace := usageFailureTraceFromRecord(record)
@@ -75,11 +79,15 @@ func (t *Tracker) computeFailureEvidenceClustersLocked(now time.Time, limit int)
 			// models is two clusters, because the fix is usually model-specific.
 			// Legacy rows without a model fold into a ""-model cluster.
 			model := strings.TrimSpace(record.Model)
-			key := FailureClusterKindUsage + "\x00" + record.SkillName + "\x00" + model + "\x00" + normalizedSelfHarnessSignature(trace.Signature)
+			kind := FailureClusterKindUsage
+			if isWorkout {
+				kind = FailureClusterKindWorkout
+			}
+			key := kind + "\x00" + record.SkillName + "\x00" + model + "\x00" + normalizedSelfHarnessSignature(trace.Signature)
 			c := clusters[key]
 			if c == nil {
 				c = &FailureClusterSummary{
-					Kind:           FailureClusterKindUsage,
+					Kind:           kind,
 					Skill:          record.SkillName,
 					Model:          model,
 					Signature:      trace.Signature,

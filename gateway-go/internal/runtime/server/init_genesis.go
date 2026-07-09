@@ -667,6 +667,25 @@ func (s *Server) registerGenesisAutonomousTasks(_ *rpcutil.GatewayHub) {
 			logger: s.logger,
 		})
 
+		// Synthetic exercise lane (genesis/workout.go): replay covered skills'
+		// own held-out cases against their CURRENT bodies on the local replay
+		// executor — a week of real-usage failure signal, overnight. Shares the
+		// replay flag with the behavioral gate; workout evidence is quarantined
+		// from real-usage stats by Source.
+		if replayExecutorEnabled() {
+			workoutEngine := genesis.NewSkillValidationEngine(s.genesisTracker, s.logger)
+			workoutEngine.SetExecutor(
+				s.modelRegistry.Client(modelrole.RoleLightweight),
+				s.modelRegistry.Model(modelrole.RoleLightweight),
+			)
+			s.autonomousSvc.RegisterTask(&genesis.SkillWorkoutTask{
+				Engine:  workoutEngine,
+				Tracker: s.genesisTracker,
+				Catalog: s.skillCatalog,
+				Logger:  s.logger,
+			})
+		}
+
 		// Event-driven evolve: after N new skills accumulate, run a cycle in
 		// the background instead of waiting for the 6h periodic task. The
 		// periodic task remains a backstop; EvolveUnderperformers is TryLock-
