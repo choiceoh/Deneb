@@ -2,6 +2,7 @@ package ai.deneb
 
 import ai.deneb.data.DataRepository
 import ai.deneb.deneb.DenebGatewayClient
+import ai.deneb.deneb.sendDetachedChat
 import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters

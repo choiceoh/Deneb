@@ -323,7 +323,7 @@ class DenebGatewayClient(
     // USAGE_FORWARD_INTERVAL — per-sync forwarding would churn low-value state.
     // Set even when the read returns null (no permission / no signal) so we don't probe
     // UsageStats on every sync. Serialized on the sync coroutine, so no lock.
-    private var lastUsageForward: TimeSource.Monotonic.ValueTimeMark? = null
+    internal var lastUsageForward: TimeSource.Monotonic.ValueTimeMark? = null
 
     // Throttle for the on-demand location forward (same "read broad, surface narrow"
     // sensing model). Pushed every LOCATION_FORWARD_INTERVAL so phone_read has a recent
@@ -482,7 +482,7 @@ class DenebGatewayClient(
         // Live progress: the gateway's tool/thinking SSE frames become transient
         // TOOL_EXECUTING rows so the waiting chip narrates what the agent is
         // doing ("메일 확인 중") instead of cycling generic spinner text.
-        val progress = TurnProgress()
+        val progress = TurnProgress(_chatHistory, scope)
         val reply = try {
             withContext(Dispatchers.Main) {
                 val pacer = launch {
@@ -598,222 +598,6 @@ class DenebGatewayClient(
             append(" values={")
             append(submission.values.entries.joinToString(", ") { "${it.key}=${it.value}" })
             append("}")
-        }
-    }
-
-    /**
-     * Turn-scoped live progress for [ask]: gateway `tool`/`thinking` SSE frames
-     * become transient [History.Role.TOOL_EXECUTING] rows (status-only, Korean
-     * labels via [ToolStatusLabels]) that the chat screen's waiting chip picks
-     * up through its existing executing-tools derivation — the same mechanism
-     * the local-provider pipeline uses.
-     *
-     * Coverage goal: never regress the chip to the generic spinner mid-turn.
-     * Thinking frames narrate the live reasoning tail ("깊이 생각 중: …"), and
-     * when the last running tool completes the row is repurposed as a
-     * continuity status ("결과 검토 중…") that bridges the event-silent prefill
-     * stretch until the next thinking/tool/delta event.
-     *
-     * Threading: all map/flag state is touched only from the SSE read coroutine
-     * (callbacks run inline in [sendStreaming]); the delayed removals/swaps
-     * launched on [scope] only perform id-keyed history edits, so no
-     * synchronization is needed. [clear] runs in ask()'s finally, so a
-     * mid-stream error or cancel can never leak a zombie chip row.
-     */
-    private inner class TurnProgress {
-        private val thinkingId = "progress-thinking-${Uuid.random()}"
-        private var thinkingVisible = false
-
-        // toolUseId (or tool name when the gateway omits the id) → row id/start.
-        private val rowIds = mutableMapOf<String, String>()
-        private val startMarks = mutableMapOf<String, TimeSource.Monotonic.ValueTimeMark>()
-        private val allRowIds = mutableSetOf<String>()
-
-        // Row currently repurposed as the between-steps continuity status
-        // ("결과 검토 중…"); null when no continuity chip is showing.
-        private var continuityRowId: String? = null
-
-        // Completed tools in execution order (tool name + error flag) — the
-        // source of the post-turn footprint line under the answer.
-        private val trail = mutableListOf<Pair<String, Boolean>>()
-
-        /**
-         * Reasoning liveness pulse → show "깊이 생각 중…" until text or a tool
-         * arrives. [preview] is a chip-sized tail of the live reasoning text
-         * (server-throttled to ~1 frame / 2s); when present the row narrates
-         * the actual thought — "깊이 생각 중: …발신인 이력을 대조" — and each
-         * pulse refreshes it.
-         */
-        fun onThinking(preview: String) {
-            hideContinuity()
-            val label = ToolStatusLabels.THINKING +
-                if (preview.isNotEmpty()) ": $preview" else ""
-            if (!thinkingVisible) {
-                thinkingVisible = true
-                allRowIds += thinkingId
-                _chatHistory.update { list ->
-                    list + History(
-                        id = thinkingId,
-                        role = History.Role.TOOL_EXECUTING,
-                        content = "thinking",
-                        toolName = label,
-                        isStatusMessage = true,
-                    )
-                }
-            } else if (preview.isNotEmpty()) {
-                _chatHistory.update { list ->
-                    list.map { if (it.id == thinkingId) it.copy(toolName = label) else it }
-                }
-            }
-        }
-
-        /** Visible answer text is flowing — drop the status rows (O(1) when hidden). */
-        fun onDelta() {
-            hideThinking()
-            hideContinuity()
-        }
-
-        fun onTool(ev: ToolEvent) {
-            val key = ev.toolUseId.ifEmpty { ev.tool }
-            when (ev.state) {
-                "started" -> {
-                    hideThinking()
-                    hideContinuity()
-                    val rowId = "progress-tool-${Uuid.random()}"
-                    rowIds[key] = rowId
-                    startMarks[key] = TimeSource.Monotonic.markNow()
-                    allRowIds += rowId
-                    // "메일 확인 중: 아르고에너지" — the server-extracted hint
-                    // names the target, not just the tool.
-                    val label = ToolStatusLabels.label(ev.tool) +
-                        if (ev.detail.isNotEmpty()) ": ${ev.detail}" else ""
-                    _chatHistory.update { list ->
-                        list + History(
-                            id = rowId,
-                            role = History.Role.TOOL_EXECUTING,
-                            content = ev.tool,
-                            toolName = label,
-                            isStatusMessage = true,
-                        )
-                    }
-                }
-
-                "completed" -> {
-                    trail += ev.tool to ev.isError
-                    val rowId = rowIds.remove(key) ?: return
-                    if (ev.isError) {
-                        // Swap the row to its failure form ("메일 확인 실패")
-                        // and hold it readable — the agent usually keeps going,
-                        // so this explains why the turn is taking longer.
-                        val failure = ToolStatusLabels.failureLabel(ev.tool)
-                        _chatHistory.update { list ->
-                            list.map { if (it.id == rowId) it.copy(toolName = failure) else it }
-                        }
-                        scope.launch {
-                            delay(FAILURE_DISPLAY_MS.milliseconds)
-                            removeRow(rowId)
-                        }
-                        startMarks.remove(key)
-                        return
-                    }
-                    val elapsed = startMarks.remove(key)?.elapsedNow() ?: 0.milliseconds
-                    val remaining = MIN_PROGRESS_DISPLAY_MS.milliseconds - elapsed
-                    if (rowIds.isEmpty()) {
-                        // Last running tool finished — the model is back in an
-                        // LLM step reading the results, which on a cache-missed
-                        // prefill can stay event-silent for tens of seconds.
-                        // Repurpose the row as a continuity status instead of
-                        // dropping the chip back to the generic spinner; the
-                        // next thinking/tool/delta event (or clear) removes it.
-                        continuityRowId = rowId
-                        val swap = {
-                            _chatHistory.update { list ->
-                                list.map {
-                                    if (it.id == rowId) {
-                                        it.copy(content = "continuity", toolName = ToolStatusLabels.REVIEWING)
-                                    } else {
-                                        it
-                                    }
-                                }
-                            }
-                        }
-                        if (remaining.isPositive()) {
-                            // Keep the finished tool's label readable first. The
-                            // delayed swap is an idempotent id-keyed map, so
-                            // racing hideContinuity()/clear() (row already gone)
-                            // is harmless.
-                            scope.launch {
-                                delay(remaining)
-                                swap()
-                            }
-                        } else {
-                            swap()
-                        }
-                        return
-                    }
-                    if (remaining.isPositive()) {
-                        // Hold fast tools on screen long enough to read; the
-                        // removal is an idempotent id filter, so racing clear()
-                        // or a conversation switch is safe.
-                        scope.launch {
-                            delay(remaining)
-                            removeRow(rowId)
-                        }
-                    } else {
-                        removeRow(rowId)
-                    }
-                }
-            }
-        }
-
-        /**
-         * One-line trail of what this turn did — "메일 확인 ×2 · 웹 검색 ⚠" —
-         * attached under the finished answer. Null when no tool completed.
-         * Live-turn only by design: the gateway transcript does not carry it,
-         * so reloading a conversation drops the line.
-         */
-        fun footprint(): String? {
-            if (trail.isEmpty()) return null
-            val counts = LinkedHashMap<String, IntArray>() // tool → [count, errored(0/1)]
-            for ((tool, isError) in trail) {
-                val agg = counts.getOrPut(tool) { intArrayOf(0, 0) }
-                agg[0]++
-                if (isError) agg[1] = 1
-            }
-            val parts = counts.entries.take(FOOTPRINT_MAX_TOOLS).map { (tool, agg) ->
-                buildString {
-                    append(ToolStatusLabels.trailLabel(tool))
-                    if (agg[0] > 1) append(" ×${agg[0]}")
-                    if (agg[1] == 1) append(" ⚠")
-                }
-            }
-            val more = counts.size - FOOTPRINT_MAX_TOOLS
-            return parts.joinToString(" · ") + if (more > 0) " 외 $more" else ""
-        }
-
-        /** Remove every row this turn added (idempotent; runs in ask()'s finally). */
-        fun clear() {
-            if (allRowIds.isEmpty()) return
-            thinkingVisible = false
-            continuityRowId = null
-            val ids = allRowIds.toSet()
-            _chatHistory.update { list -> list.filter { it.id !in ids } }
-        }
-
-        private fun hideThinking() {
-            if (!thinkingVisible) return
-            thinkingVisible = false
-            removeRow(thinkingId)
-        }
-
-        private fun hideContinuity() {
-            val id = continuityRowId ?: return
-            continuityRowId = null
-            removeRow(id)
-        }
-
-        private fun removeRow(id: String) {
-            _chatHistory.update { list -> list.filter { it.id != id } }
         }
     }
 
@@ -973,7 +757,7 @@ class DenebGatewayClient(
      * ask() is in flight — its own stream (or recovery) owns the view then; the
      * epoch guard inside loadTranscriptGuarded covers one that starts mid-fetch.
      */
-    private fun reconcileOpenConversationAsync() {
+    internal fun reconcileOpenConversationAsync() {
         if (askActive) return
         val key = sessionKey
         if (key.isBlank()) return
@@ -1646,36 +1430,6 @@ class DenebGatewayClient(
     }
 
     /**
-     * One-shot chat send for surfaces detached from the chat UI — the
-     * notification voice-reply path (Android Auto / tray RemoteInput). Unlike
-     * [send] it targets an explicit [targetSessionKey] (default the main work
-     * session) instead of the currently open conversation, and never touches
-     * in-memory conversation state: the exchange lands in the gateway
-     * transcript and is picked up on the next app open / SSE sync. Returns
-     * true when the gateway accepted and completed the turn.
-     */
-    suspend fun sendDetachedChat(message: String, targetSessionKey: String = "client:main"): Boolean {
-        if (message.isBlank() || clientToken.isEmpty()) return false
-        return runCatching {
-            val resp: RpcResponse = http.post("$gatewayUrl/api/v1/miniapp/rpc") {
-                header(CLIENT_TOKEN_HEADER, clientToken)
-                contentType(ContentType.Application.Json)
-                setBody(
-                    RpcRequest(
-                        id = Uuid.random().toString(),
-                        method = "miniapp.chat.send",
-                        params = SendParams(
-                            message = message,
-                            sessionKey = targetSessionKey,
-                        ),
-                    ),
-                )
-            }.body()
-            resp.ok
-        }.getOrDefault(false)
-    }
-
-    /**
      * Streaming counterpart of [send]: POSTs to the gateway's SSE chat endpoint
      * and invokes [onDelta] with each assistant text chunk as it arrives. The
      * gateway also frames live progress — [onTool] fires on tool lifecycle
@@ -1789,135 +1543,6 @@ class DenebGatewayClient(
             }
         }
         return GatewayReply(text = doneText ?: "", model = model, fellBack = fellBack)
-    }
-
-    /**
-     * Holds one long-lived SSE connection to the gateway's proactive-event
-     * endpoint and invokes [onPush] for each {title, body} frame. Used by the
-     * foreground daemon to raise a local notification the moment the gateway
-     * produces a 업무-topic report (morning-letter, email-analysis), instead of
-     * waiting for the next heartbeat poll.
-     *
-     * Reconnects with a small backoff after any drop (network change, server
-     * restart, Android killing then restarting the daemon). Returns only when
-     * the caller's coroutine is cancelled; missed frames while disconnected are
-     * not replayed — the report is always also in the client:main transcript.
-     */
-    suspend fun subscribeEvents(onPush: (title: String, body: String) -> Unit) {
-        var backoffMs = 2_000L
-        while (currentCoroutineContext().isActive) {
-            if (clientToken.isEmpty() || gatewayUrl.isBlank()) {
-                delay(10_000)
-                continue
-            }
-            try {
-                http.prepareGet("$gatewayUrl/api/v1/miniapp/events") {
-                    header(CLIENT_TOKEN_HEADER, clientToken)
-                    header(CLIENT_KIND_HEADER, "mobile")
-                    header("Accept", "text/event-stream")
-                    timeout {
-                        // Long-lived: no overall cap. The 30s server keepalive
-                        // keeps the socket under STREAM_SOCKET_TIMEOUT_MS.
-                        requestTimeoutMillis = Long.MAX_VALUE
-                        socketTimeoutMillis = STREAM_SOCKET_TIMEOUT_MS
-                    }
-                }.execute { response ->
-                    if (!response.status.isSuccess()) {
-                        throw IllegalStateException("events HTTP ${response.status.value}")
-                    }
-                    backoffMs = 2_000L // connected — reset backoff
-                    syncNativeStateAsync()
-                    reconcileOpenConversationAsync()
-                    val channel = response.bodyAsChannel()
-                    var event = ""
-                    val data = StringBuilder()
-                    readSseLines(channel) { line ->
-                        when {
-                            line.startsWith(":") -> Unit
-
-                            // keepalive comment
-                            line.startsWith("event:") -> event = line.removePrefix("event:").trim()
-
-                            line.startsWith("data:") -> {
-                                if (data.isNotEmpty()) data.append('\n')
-                                data.append(line.removePrefix("data:").trimStart())
-                            }
-
-                            line.isEmpty() -> {
-                                if (event == "push") {
-                                    runCatching {
-                                        jsonCodec.decodeFromString(PushEvent.serializer(), data.toString())
-                                    }.getOrNull()?.let { p ->
-                                        // kind=phone_action: run the gateway's Intent command in-app
-                                        // (open_url/open_app/share/message/dial/photo) instead of
-                                        // raising a notification. data["action"] + its args.
-                                        if (p.kind == "phone_action") {
-                                            val action = p.data["action"].orEmpty()
-                                            if (action == "sync_state") {
-                                                // Gateway asks for a fresh state fix (phone_read hit a
-                                                // stale cache). Bypass the periodic throttle and push
-                                                // location+battery and usage now; each read is a no-op
-                                                // off Android / without its user-granted access.
-                                                scope.launch {
-                                                    runCatching {
-                                                        readCurrentLocation()?.let { fix ->
-                                                            ingestEvent("location_update", "", fix)
-                                                        }
-                                                    }
-                                                    runCatching {
-                                                        readWorkUsageDigest()?.let { digest ->
-                                                            // Re-arm the periodic throttle — this push is fresh, so
-                                                            // the next scheduled forward would only repeat it. Benign
-                                                            // race with the sync coroutine (worst case: one redundant
-                                                            // forward, same as without the re-arm).
-                                                            lastUsageForward = TimeSource.Monotonic.markNow()
-                                                            ingestEvent("usage_update", "앱 사용 리듬", digest)
-                                                        }
-                                                    }
-                                                }
-                                            } else if (action.isNotBlank()) {
-                                                val ok = runCatching { executePhoneAction(action, p.data) }
-                                                    .getOrDefault(false)
-                                                // Report the outcome back so the gateway's phone_write
-                                                // dispatch (waiting briefly on ref) can tell the agent
-                                                // the intent actually launched — delivery ≠ execution.
-                                                if (p.ref.isNotBlank()) {
-                                                    scope.launch {
-                                                        runCatching {
-                                                            ingestEvent(
-                                                                "phone_action_result",
-                                                                action,
-                                                                buildJsonObject {
-                                                                    put("id", p.ref)
-                                                                    put("ok", ok)
-                                                                }.toString(),
-                                                            )
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        } else if (p.body.isNotBlank()) {
-                                            syncNativeStateAsync()
-                                            onPush(p.title.ifBlank { "Deneb" }, p.body)
-                                        }
-                                    }
-                                }
-                                event = ""
-                                data.clear()
-                            }
-                        }
-                    }
-                }
-            } catch (cancel: CancellationException) {
-                throw cancel
-            } catch (_: Throwable) {
-                // Drop/refused/timeout — back off and retry. Capped (raised
-                // 60s→120s, M3) so a long outage on a backgrounded phone retries
-                // less often — fewer radio wakeups — while recovery stays quick.
-                delay(backoffMs)
-                backoffMs = (backoffMs * 2).coerceAtMost(120_000L)
-            }
-        }
     }
 
     private fun switchSession(key: String) {
@@ -2035,19 +1660,19 @@ class DenebGatewayClient(
     }
 
     @Serializable
-    private data class RpcRequest(val id: String, val method: String, val params: SendParams)
+    internal data class RpcRequest(val id: String, val method: String, val params: SendParams)
 
     @Serializable
-    private data class SendParams(
+    internal data class SendParams(
         val message: String,
         val sessionKey: String? = null,
     )
 
     @Serializable
-    private data class RpcResponse(val ok: Boolean = false, val payload: SendPayload? = null)
+    internal data class RpcResponse(val ok: Boolean = false, val payload: SendPayload? = null)
 
     @Serializable
-    private data class SendPayload(
+    internal data class SendPayload(
         val text: String = "",
         val model: String = "",
         val sessionKey: String = "",
@@ -2074,17 +1699,6 @@ class DenebGatewayClient(
     @Serializable
     private data class DeltaEvent(val delta: String = "")
 
-    // detail: short hint extracted from the tool input server-side (query,
-    // command, file name); isError marks a completed tool that returned an error.
-    @Serializable
-    private data class ToolEvent(
-        val state: String = "",
-        val tool: String = "",
-        val toolUseId: String = "",
-        val detail: String = "",
-        val isError: Boolean = false,
-    )
-
     // preview: chip-sized tail of the live reasoning text the gateway condenses
     // from the model's thinking stream; empty on bare liveness pulses.
     @Serializable
@@ -2103,7 +1717,7 @@ class DenebGatewayClient(
     // carries the dispatch id: the gateway waits briefly on it, so the executor
     // reports the execution result back via a phone_action_result ingest event.
     @Serializable
-    private data class PushEvent(
+    internal data class PushEvent(
         val title: String = "",
         val body: String = "",
         val kind: String = "",
