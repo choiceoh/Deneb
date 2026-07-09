@@ -1,5 +1,19 @@
 # Changelog
 
+## [4.85.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.84.2...deneb-v4.85.0) (2026-07-09)
+
+
+### ✨ Features
+
+* **chat:** deneb-ui 카드를 구조적 답변의 기본으로 전환 — 트리거 강화 + 마크다운표 경쟁 해소 ([#3365](https://github.com/choiceoh/Deneb/issues/3365)) ([a209475](https://github.com/choiceoh/Deneb/commit/a209475e0f621b7293859a942d9434fb9abe645f))
+* **dev:** CodeGraph MCP 코드 내비 도입 — greppy 대체, Graphify(위키) 유지 ([#3366](https://github.com/choiceoh/Deneb/issues/3366)) ([130a3ca](https://github.com/choiceoh/Deneb/commit/130a3ca641395cf4730e0a7593106e30b6f90740))
+* **dev:** greppy 코드 내비 도입 — CLAUDE.md 배선 + grep→greppy 유도 훅 ([#3359](https://github.com/choiceoh/Deneb/issues/3359)) ([9c89933](https://github.com/choiceoh/Deneb/commit/9c899336160fb64e178c841da45e775945ccc5ab))
+
+
+### 🐛 Bug Fixes
+
+* **genesis:** 자가교정 캡처 퍼널 3레버 — 결정적 실패-클러스터 승격(LLM 비의존)·applied 후 재발 시 쿨다운 재오픈·validation_case→self_correction 어포던스 ([#3367](https://github.com/choiceoh/Deneb/issues/3367)) ([e9dd037](https://github.com/choiceoh/Deneb/commit/e9dd0378c36d8d945f99fb30dff9f6bcc2518d79))
+
 ## [4.84.2](https://github.com/choiceoh/Deneb/compare/deneb-v4.84.1...deneb-v4.84.2) (2026-07-09)
 
 
