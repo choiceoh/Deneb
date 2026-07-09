@@ -1,0 +1,8 @@
+{
+  "exclude": [
+    "**/chartassets/**",
+    "**/diagramassets/**",
+    "**/*.min.js",
+    "**/testdata/fuzz/**"
+  ]
+}
