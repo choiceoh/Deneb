@@ -562,10 +562,42 @@ func (e *Evolver) EvolveUnderperformers(ctx context.Context) ([]EvolveResult, er
 			continue
 		}
 		if result != nil {
-			results = append(results, *result)
+			results = append(results, e.runEvolveBurst(ctx, candidate.SkillName, *result,
+				func(ctx context.Context, name string) (*EvolveResult, error) {
+					return e.EvolveSkill(ctx, name, "")
+				})...)
 		}
 	}
 	return results, nil //nolint:nilerr // individual skill errors collected in results, not propagated
+}
+
+// runEvolveBurst is the loop-until-dry accelerator (2026-07-09): while rounds
+// keep landing accepted evolves, immediately try another on the same skill
+// instead of waiting for the next 6h cycle. Every round re-runs the FULL gate
+// stack against the freshly-committed body — the held-out/no-trade-off gates
+// decide when the skill is dry, the round cap bounds cost, and the thrash
+// breaker inside EvolveSkill still applies unchanged. The first (already
+// obtained) result is included in the returned slice.
+func (e *Evolver) runEvolveBurst(ctx context.Context, skillName string, first EvolveResult, evolve func(context.Context, string) (*EvolveResult, error)) []EvolveResult {
+	out := []EvolveResult{first}
+	last := first
+	for round := 1; round < skillEvolveBurstMaxRounds && last.Evolved; round++ {
+		if ctx.Err() != nil {
+			break
+		}
+		next, err := evolve(ctx, skillName)
+		if err != nil || next == nil {
+			if err != nil {
+				e.logger.Warn("evolver: burst round failed", "skill", skillName, "round", round+1, "error", err)
+			}
+			break
+		}
+		e.logger.Info("evolver: burst round finished",
+			"skill", skillName, "round", round+1, "evolved", next.Evolved, "reason", next.Reason)
+		out = append(out, *next)
+		last = *next
+	}
+	return out
 }
 
 func (e *Evolver) parseAndApply(ctx context.Context, text string, entry *skills.SkillEntry, originalContent string, stats *UsageStats, reviewFinding string) (*EvolveResult, error) {
@@ -1082,6 +1114,12 @@ const (
 	skillCoveredHermesMaxChangedSections  = 5
 	skillCoveredJudgeMinScoreDelta        = 1.0
 )
+
+// skillEvolveBurstMaxRounds bounds loop-until-dry evolution per skill per
+// cycle (first round + up to two burst rounds). Each accepted round already
+// paid the full gate stack, so the cap is a cost bound, not a safety one —
+// safety stays with the gates and the thrash breaker.
+const skillEvolveBurstMaxRounds = 3
 
 // skillEvolveCandidateCount is K for the multi-candidate generate-and-select
 // path (#3): the evolver streams this many candidate bodies from the producer
