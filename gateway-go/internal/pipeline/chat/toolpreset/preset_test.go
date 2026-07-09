@@ -44,8 +44,8 @@ func TestAllowedTools_Researcher(t *testing.T) {
 	if allowed == nil {
 		t.Fatal("researcher preset should return non-nil allowed set")
 	}
-	// Context-gathering surfaces: mail_archive (eager) plus deferred ones
-	// (contacts/graphify) that must be named to pass fetch_tools + Execute.
+	// Context-gathering surfaces: mail_archive/contacts (eager) plus deferred
+	// ones (graphify) that must be named to pass fetch_tools + Execute.
 	for _, name := range []string{
 		"read", "grep", "read_spillover", "web",
 		"wiki", "knowledge", "polaris",

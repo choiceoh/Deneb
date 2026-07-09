@@ -72,11 +72,12 @@ func PreloadedDeferredTools(preset Preset) []string {
 // (tool_preset enum: researcher/implementer/verifier). Mail research uses the
 // local archive; Gmail OAuth surfaces are not exposed to coding agents.
 //
-// Like bootTools, deferred tools (contacts/graphify/edit/process) must be listed
-// by name: the allow-list gates the eager prompt listing, the deferred listing,
+// Like bootTools, deferred tools (graphify/edit/process) must be listed by name:
+// the allow-list gates the eager prompt listing, the deferred listing,
 // fetch_tools activation, AND Execute — a deferred tool missing here stays
-// invisible and uncallable for the preset. (mail_archive is eager but the same
-// naming requirement applies — an eager tool absent from the list is dropped too.)
+// invisible and uncallable for the preset. (mail_archive and contacts are eager
+// but the same naming requirement applies — an eager tool absent from the list is
+// dropped too.)
 //
 // No spawn preset includes sessions_spawn/subagents: a restricted child
 // spawning a preset-less (= unrestricted) grandchild would defeat the
@@ -89,8 +90,8 @@ func PreloadedDeferredTools(preset Preset) []string {
 // write sub-actions ("분석 → 위키 갱신" doctrine). Received mail always flows
 // through mail_archive; direct Gmail OAuth access is intentionally absent.
 var researcherTools = toSet(
-	"mail_archive",         // eager (received-mail hand)
-	"contacts", "graphify", // deferred — loaded via fetch_tools
+	"mail_archive", "contacts", // eager (received-mail + address-book hands)
+	"graphify",                       // deferred — loaded via fetch_tools
 	"read", "grep", "read_spillover", // file inspection
 	"web",                          // web search + page fetch
 	"wiki", "knowledge", "polaris", // knowledge bases + recall

@@ -534,10 +534,13 @@ func RegisterContactsTool(registry toolctx.ToolRegistrar, contactsDeps *toolctx.
 	if contactsDeps.Store == nil {
 		return
 	}
-	// Deferred (prompt audit 2026-06-12): ~220 wire tokens for 6 uses in 14
-	// days. ASR hotword injection and wiki person enrichment read the contacts
-	// store server-side and are unaffected; only the rare "이 번호 누구야" turn
-	// pays a fetch round-trip.
+	// Eager (2026-07-09): contacts completes the meeting-prep triad — calendar and
+	// mail_archive are eager and system_prompt's 미팅 준비 flow reaches
+	// calendar→contacts→mail_archive, so a deferred contacts was the lone
+	// fetch_tools hop mid-sequence. It also sits on code_action's zero-hop bridge,
+	// so deferring it pushed "이 번호 누구야" lookups through code_action to skip the
+	// hop. ASR hotword injection and wiki person enrichment read the store
+	// server-side and are independent of this tool's exposure. (~220 wire tokens.)
 	registry.RegisterTool(toolctx.ToolDef{
 		Name: "contacts",
 		Description: "주소록(연락처 DB)에서 전화번호로 인물을 찾거나(lookup) 이름·회사로 검색(search). " +
@@ -545,7 +548,6 @@ func RegisterContactsTool(registry toolctx.ToolRegistrar, contactsDeps *toolctx.
 			"사용자가 '이 번호 누구?', '010-xxxx 누구야', 'OOO 연락처/번호' 같이 물으면 짐작하지 말고 호출하라.",
 		InputSchema: contactsToolSchema(),
 		Fn:          tools.ToolContacts(contactsDeps),
-		Deferred:    true,
 	})
 }
 
