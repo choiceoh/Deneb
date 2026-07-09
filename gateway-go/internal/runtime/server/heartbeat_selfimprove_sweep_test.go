@@ -139,3 +139,23 @@ func TestDetectSelfImproveSweep_ClockSkewRecovers(t *testing.T) {
 		t.Fatal("future marker should be treated as unset, not mute the lane")
 	}
 }
+
+// Workout evidence alone (no rejections/recurrences — they're quarantined
+// counters) must wake the sweep, or the synthetic exercise lane piles up
+// clusters nothing consumes.
+func TestDetectSelfImproveSweep_FiresOnEvidenceClustersAlone(t *testing.T) {
+	task := sweepTask(t, 0, genesis.SelfCorrectionFunnelSummary{}, 0)
+	task.selfImproveEvidence = func(int) []genesis.FailureClusterSummary {
+		return []genesis.FailureClusterSummary{{
+			Kind: genesis.FailureClusterKindWorkout, Skill: "contract-review",
+			Signature: "terminal=heldout-assertion|mechanism=skill-behavior-drift", Support: 2,
+		}}
+	}
+	nudge := task.detectSelfImproveSweepNudge(time.Now())
+	if nudge == "" {
+		t.Fatal("workout-only evidence must fire the sweep")
+	}
+	if !strings.Contains(nudge, "workout-failure") {
+		t.Fatalf("nudge should carry the workout cluster:\n%s", nudge)
+	}
+}
