@@ -1854,13 +1854,17 @@ func (e *Evolver) queueRepeatedPatchFirstReviewDraft(skillName, reason, source s
 		}
 		return
 	}
-	for _, cand := range existing {
-		// Any status blocks re-promotion: proposed means a twin is already
-		// pending, and accepted/rejected/applied means the operator already
-		// ruled on this signature — auto re-opening it would spam the queue.
-		if strings.HasPrefix(cand.Source, skillPatchFirstRepeatSource) {
-			return
+	// Shared dedup: a live/operator-ruled twin blocks re-promotion; an APPLIED
+	// candidate whose repeats keep coming re-opens after the cooldown (the fix
+	// did not stick). freshLastAt = newest triggering repeat.
+	var freshLastAt int64
+	for _, rec := range repeats {
+		if rec.CreatedAt > freshLastAt {
+			freshLastAt = rec.CreatedAt
 		}
+	}
+	if selfCorrectionReopenBlocked(existing, skillPatchFirstRepeatSource, freshLastAt, time.Now()) {
+		return
 	}
 	evidence := make([]string, 0, len(repeats)+1)
 	evidence = append(evidence, fmt.Sprintf("%d patch-first gate rejections within %dd:",

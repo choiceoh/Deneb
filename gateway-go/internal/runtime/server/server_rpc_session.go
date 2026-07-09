@@ -601,6 +601,16 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 				}
 				return tracker.PromoteTargetRecurrenceCandidates()
 			},
+			// Active capture, LLM-independent: the top recurring failure clusters
+			// become candidates each tick so the queue is fed even when the sweep
+			// turn ignores its nudge (heartbeat_selfimprove_sweep.go).
+			promoteClusters: func() (int, error) {
+				tracker := s.genesisTracker
+				if tracker == nil {
+					return 0, nil
+				}
+				return tracker.PromoteFailureClusterCandidates()
+			},
 			selfImproveSignals: func() (genesis.SelfCorrectionFunnelSummary, int) {
 				tracker := s.genesisTracker
 				if tracker == nil {
