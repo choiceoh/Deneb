@@ -27,6 +27,8 @@ import sys
 import tempfile
 import time
 
+LOCK_TTL_SECONDS = 900
+
 
 def codegraph_bin():
     """Resolve the codegraph binary even under a minimal hook PATH (login profile
@@ -38,6 +40,26 @@ def codegraph_bin():
         if p:
             return p
     return None
+
+
+def acquire_lock(lock: str, now: float, ttl_seconds: int = LOCK_TTL_SECONDS) -> bool:
+    """Atomically claim the worktree lock, or fail if another fresh lock exists."""
+    while True:
+        try:
+            fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+        except FileExistsError:
+            try:
+                if now - os.path.getmtime(lock) < ttl_seconds:
+                    return False
+                os.unlink(lock)
+            except FileNotFoundError:
+                continue
+            except OSError:
+                return False
+            continue
+        else:
+            os.close(fd)
+            return True
 
 
 def main():
@@ -59,9 +81,8 @@ def main():
     key = hashlib.sha1(root.encode()).hexdigest()
     lock = os.path.join(tempfile.gettempdir(), f"codegraph-autoindex-{key}")
     now = time.time()
-    if os.path.exists(lock) and now - os.path.getmtime(lock) < 900:
+    if not acquire_lock(lock, now):
         return 0                                        # another session on it
-    open(lock, "w").close()
 
     # Freshest sibling worktree that already carries an index → donor.
     parent = os.path.dirname(root)
