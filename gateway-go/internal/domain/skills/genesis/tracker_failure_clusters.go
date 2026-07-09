@@ -173,7 +173,12 @@ var evolveRejectionClassMatchers = []struct {
 	match func(loweredReason string) bool
 }{
 	{"missing-audit", func(r string) bool {
-		return strings.Contains(r, "self-harness audit rejected") && strings.Contains(r, "missing")
+		// Narrow to the audit-COMPLETENESS rejection ("...rejected: missing
+		// <fields>", evolver.go). A bare contains("missing") also matched the
+		// signature-mismatch reason whenever its signature list held the common
+		// terminal=missing-artifact class, misfiling a signature-mismatch as
+		// missing-audit — the mismatch class below must win that case.
+		return strings.Contains(r, "self-harness audit rejected: missing ")
 	}},
 	{"signature-mismatch", func(r string) bool {
 		return strings.Contains(r, "does not match supported failure signatures") ||

@@ -1964,7 +1964,10 @@ func (e *Evolver) validateCandidate(ctx context.Context, skillName string, clien
 }
 
 func (e *Evolver) validateCandidatePreflight(skillName, originalContent, candidateBody string, audit HarnessEditAudit, stats *UsageStats, reviewFinding string) (bool, string) {
-	covered := len(e.validationCasesForPrompt(skillName)) > 0
+	// covered means a REAL regression check is active: at least one case the
+	// held-out gate can score (hasAssertions). Mere case existence let an
+	// assertion-less corpus grant the relaxed caps while the gate failed open.
+	covered := hasScorableValidationCase(e.validationCasesForPrompt(skillName))
 	if ok, reason := validateHermesEvolutionGuardrails(originalContent, candidateBody, covered); !ok {
 		return false, reason
 	}
@@ -2025,6 +2028,17 @@ func (e *Evolver) heldOutSelectionMargin(skillName, originalContent, candidateBo
 		return 0
 	}
 	return result.CandidateScore - result.OriginalScore
+}
+
+// hasScorableValidationCase reports whether any case carries an assertion the
+// held-out/behavioral gate can actually score — the honest test for "covered".
+func hasScorableValidationCase(cases []SkillValidationCaseRecord) bool {
+	for _, tc := range cases {
+		if tc.hasAssertions() {
+			return true
+		}
+	}
+	return false
 }
 
 func (e *Evolver) validationCasesForPrompt(skillName string) []SkillValidationCaseRecord {
