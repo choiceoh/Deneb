@@ -1,8 +1,10 @@
 package ai.deneb.data
 
+import ai.deneb.DenebLog
 import ai.deneb.deneb.DenebGatewayClient
 import ai.deneb.getBackgroundDispatcher
 import ai.deneb.sendProactiveReportNotification
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -36,8 +38,23 @@ class TaskScheduler(
      * process alive (on Android that means `DaemonService` holding a foreground
      * notification).
      */
+    // A CoroutineExceptionHandler on THIS scope is load-bearing, not hygiene.
+    // Backgrounding cancels the in-flight gateway SSE (stop()), and ktor's request
+    // cleanup closing the okhttp response can raise `IllegalStateException:
+    // Unbalanced enter/exit` as a CompletionHandlerException. Without a handler here,
+    // kotlinx.coroutines routes that straight to the thread's UNCAUGHT handler
+    // (handleCoroutineException → Thread.uncaughtExceptionHandler) and kills the app
+    // on the background transition — confirmed via the crash reporter (build 611,
+    // Android 16, 5/5 identical). This is why the earlier runCatching around cancel()
+    // (below) did NOT fix it: nothing is thrown out of cancel(); the exception is
+    // delivered to the uncaught handler. The jobs are being cancelled regardless, so
+    // swallow + log. Declared before schedulerScope so it's initialized first.
+    private val schedulerExceptionHandler = CoroutineExceptionHandler { _, e ->
+        DenebLog.warn("TaskScheduler", "scheduler coroutine exception ignored: ${e.message}")
+    }
+
     private val schedulerScope = CoroutineScope(
-        SupervisorJob() + backgroundDispatcher + CoroutineName("TaskScheduler"),
+        SupervisorJob() + backgroundDispatcher + CoroutineName("TaskScheduler") + schedulerExceptionHandler,
     )
 
     /**
@@ -124,14 +141,11 @@ class TaskScheduler(
      * to the main thread) since the job fields are not synchronized.
      */
     fun stop() {
-        // cancel() synchronously runs the job's completion/cleanup handlers on THIS
-        // (caller/main) thread. The ktor+okhttp SSE cleanup can throw
-        // `IllegalStateException: Unbalanced enter/exit` when the chunked response is
-        // torn down mid-flight, which surfaces as an uncaught CompletionHandlerException
-        // and crashed the app on the background transition (BackgroundConnectionPolicy
-        // → onStop → stop(); observed on Android 16, build 609). The job is being
-        // cancelled regardless, so the teardown-race throw is benign — contain it so it
-        // never escapes to the lifecycle callback that drives this.
+        // Secondary guard for the rare case cancel() DOES throw synchronously. The
+        // primary fix for the okhttp `Unbalanced enter/exit` teardown crash is the
+        // scope's CoroutineExceptionHandler (see schedulerExceptionHandler) — that
+        // exception is delivered to the uncaught handler, not thrown out of cancel(),
+        // so runCatching alone was insufficient (build 611 still crashed).
         runCatching { pushJob?.cancel() }
         pushJob = null
         runCatching { proactiveJob?.cancel() }
