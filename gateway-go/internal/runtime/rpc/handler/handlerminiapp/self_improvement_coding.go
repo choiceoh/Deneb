@@ -10,6 +10,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
+	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
 
 // SelfImprovementCodingDeps wires the native "자가개선 코딩" settings section to
@@ -166,16 +167,16 @@ func selfCorrectionCandidate(rec genesis.SelfCorrectionCandidateRecord) SelfCorr
 		Scope:          rec.Scope,
 		SkillName:      rec.SkillName,
 		SessionKey:     rec.SessionKey,
-		Title:          truncateDetail(rec.Title, lifecycleTextMaxRunes),
-		Candidate:      truncateDetail(rec.Candidate, lifecycleTextMaxRunes),
-		Evidence:       truncateDetail(rec.Evidence, lifecycleTextMaxRunes),
-		Reason:         truncateDetail(rec.Reason, lifecycleTextMaxRunes),
+		Title:          textutil.TruncateRunes(rec.Title, lifecycleTextMaxRunes, "…"),
+		Candidate:      textutil.TruncateRunes(rec.Candidate, lifecycleTextMaxRunes, "…"),
+		Evidence:       textutil.TruncateRunes(rec.Evidence, lifecycleTextMaxRunes, "…"),
+		Reason:         textutil.TruncateRunes(rec.Reason, lifecycleTextMaxRunes, "…"),
 		TargetFiles:    rec.TargetFiles,
-		ProposedChange: truncateDetail(rec.ProposedChange, lifecycleTextMaxRunes),
-		Risk:           truncateDetail(rec.Risk, lifecycleTextMaxRunes),
+		ProposedChange: textutil.TruncateRunes(rec.ProposedChange, lifecycleTextMaxRunes, "…"),
+		Risk:           textutil.TruncateRunes(rec.Risk, lifecycleTextMaxRunes, "…"),
 		Source:         rec.Source,
 		Reviewer:       rec.Reviewer,
-		ReviewNote:     truncateDetail(rec.ReviewNote, lifecycleTextMaxRunes),
+		ReviewNote:     textutil.TruncateRunes(rec.ReviewNote, lifecycleTextMaxRunes, "…"),
 		EvidenceKinds:  selfCorrectionEvidenceKinds(rec),
 		ReviewActions:  selfCorrectionReviewActions(rec),
 		CreatedAt:      rec.CreatedAt,

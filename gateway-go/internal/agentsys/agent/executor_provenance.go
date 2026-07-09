@@ -13,6 +13,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
+	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
 
 // logToolExecution writes one turn.tool entry. blocked ("loop"/"hook"/"")
@@ -419,13 +420,5 @@ func sanitizeTargetHint(s string) string {
 			s = "~" + strings.TrimPrefix(s, cleanHome)
 		}
 	}
-	return truncateRunes(s, 160)
-}
-
-func truncateRunes(s string, maxRunes int) string {
-	runes := []rune(s)
-	if len(runes) <= maxRunes {
-		return s
-	}
-	return string(runes[:maxRunes]) + "..."
+	return textutil.TruncateRunes(s, 160, "...")
 }

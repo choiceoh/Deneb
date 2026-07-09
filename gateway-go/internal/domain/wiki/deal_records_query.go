@@ -11,6 +11,8 @@ import (
 	"sort"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
 
 // DealRecordFilter narrows the ledger. String fields are optional; empty means
@@ -153,7 +155,7 @@ func (s *Store) ledgerRelatedProjects(counterparty string) []string {
 			names = append(names, name)
 		}
 	}
-	return dedupeStrings(names)
+	return textutil.DedupeStrings(names)
 }
 
 // DealTotals is the deterministic aggregate of a record set. Amounts sum per

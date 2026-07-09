@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"path/filepath"
 	"strings"
+
+	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
 
 // toolStreamDetail extracts a short human hint from a tool call's raw JSON
@@ -34,7 +36,7 @@ func toolStreamDetail(name string, input []byte) string {
 		if strings.HasSuffix(key, "path") {
 			val = filepath.Base(val)
 		}
-		return truncateDetail(val, maxToolDetailRunes)
+		return textutil.TruncateRunes(val, maxToolDetailRunes, "…")
 	}
 	return ""
 }
@@ -65,10 +67,3 @@ var toolDetailKeys = map[string][]string{
 }
 
 // truncateDetail caps s to maxRunes runes, appending an ellipsis when cut.
-func truncateDetail(s string, maxRunes int) string {
-	runes := []rune(s)
-	if len(runes) <= maxRunes {
-		return s
-	}
-	return string(runes[:maxRunes]) + "…"
-}

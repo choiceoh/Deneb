@@ -37,6 +37,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/atomicfile"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
+	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
 
 // Skill origins for SkillRow.Origin: loop-generated vs pre-existing.
@@ -615,7 +616,7 @@ func lifecycleEvent(e genesis.LifecycleLogEntry) SkillLifecycleEvent {
 		ev.Detail = e.Reason
 	case "evolve_rolled_back":
 		ev.Type = "evolve_rolled_back"
-		ev.Detail = firstNonBlank(e.Reason, e.Description, "post-evolve rollback fired")
+		ev.Detail = textutil.FirstNonBlank(e.Reason, e.Description, "post-evolve rollback fired")
 	default:
 		// evolution_proposal (and any future type) renders as a review verdict.
 		ev.Type = "review"
@@ -627,8 +628,8 @@ func lifecycleEvent(e genesis.LifecycleLogEntry) SkillLifecycleEvent {
 			ev.Evidence = e.Evidence
 		}
 	}
-	ev.Detail = truncateDetail(ev.Detail, lifecycleTextMaxRunes)
-	ev.Evidence = truncateDetail(ev.Evidence, lifecycleTextMaxRunes)
+	ev.Detail = textutil.TruncateRunes(ev.Detail, lifecycleTextMaxRunes, "…")
+	ev.Evidence = textutil.TruncateRunes(ev.Evidence, lifecycleTextMaxRunes, "…")
 	return ev
 }
 
@@ -783,22 +784,4 @@ func evolveAggBySkill(deps SkillsDeps) map[string]evolveAgg {
 // dir (…/skills/genesis/…) — the on-disk signal for loop-generated skills.
 func underGenesisDir(filePath string) bool {
 	return strings.Contains(filepath.ToSlash(filePath), "/skills/genesis/")
-}
-
-// truncateDetail caps a detail line by rune count (CJK-safe).
-func truncateDetail(s string, maxRunes int) string {
-	runes := []rune(s)
-	if len(runes) <= maxRunes {
-		return s
-	}
-	return string(runes[:maxRunes]) + "…"
-}
-
-func firstNonBlank(values ...string) string {
-	for _, value := range values {
-		if trimmed := strings.TrimSpace(value); trimmed != "" {
-			return trimmed
-		}
-	}
-	return ""
 }

@@ -13,6 +13,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/pkg/atomicfile"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonlstore"
+	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
 
 // Propus activity kinds for the liveness heartbeat.
@@ -300,7 +301,7 @@ func usageFailureTraceFromRecord(record UsageRecord) *UsageFailureTrace {
 	if record.FailureTrace != nil {
 		trace = *record.FailureTrace
 	}
-	trace.ErrorMsg = firstNonBlank(trace.ErrorMsg, record.ErrorMsg)
+	trace.ErrorMsg = textutil.FirstNonBlank(trace.ErrorMsg, record.ErrorMsg)
 	trace.Signature = strings.TrimSpace(trace.Signature)
 	trace.TerminalCause = strings.TrimSpace(trace.TerminalCause)
 	trace.CausalStatus = strings.TrimSpace(trace.CausalStatus)
@@ -347,15 +348,6 @@ func usageFailureTraceText(trace UsageFailureTrace) string {
 		}
 	}
 	return strings.Join(parts, "\n")
-}
-
-func firstNonBlank(values ...string) string {
-	for _, value := range values {
-		if strings.TrimSpace(value) != "" {
-			return strings.TrimSpace(value)
-		}
-	}
-	return ""
 }
 
 func usageFailureTraceExample(trace UsageFailureTrace) string {

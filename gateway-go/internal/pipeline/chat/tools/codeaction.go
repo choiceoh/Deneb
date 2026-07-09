@@ -50,6 +50,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/localcal"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/safego"
+	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
 
 //go:embed codeaction_runtime.py
@@ -638,7 +639,7 @@ func promoteCodeActionWorkflow(ctx context.Context, invoker ToolInvoker, promoti
 		"candidate":    candidate,
 		"evidence":     evidence,
 		"route":        route,
-		"reason":       firstNonBlankCodeAction(promotion.Reason, "promote reusable successful code_action workflow"),
+		"reason":       textutil.FirstNonBlank(promotion.Reason, "promote reusable successful code_action workflow"),
 		"skillName":    strings.TrimSpace(promotion.SkillName),
 		"dreamSummary": strings.TrimSpace(promotion.DreamSummary),
 		"execute":      execute,
@@ -670,15 +671,6 @@ func normalizeCodeActionPromotionRoute(route string) string {
 	default:
 		return ""
 	}
-}
-
-func firstNonBlankCodeAction(values ...string) string {
-	for _, value := range values {
-		if trimmed := strings.TrimSpace(value); trimmed != "" {
-			return trimmed
-		}
-	}
-	return ""
 }
 
 func newBridgeToken() string {

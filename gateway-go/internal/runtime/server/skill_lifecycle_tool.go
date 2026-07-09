@@ -15,6 +15,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 	chattools "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
+	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
 
 const (
@@ -724,7 +725,7 @@ func skillReplayToolCallsFromRequest(calls []chattools.SkillReplayToolCallReques
 
 func buildSkillValidationCaseFromSession(req chattools.SkillValidationCaseFromSessionRequest, sctx genesis.SessionContext) genesis.SkillValidationCaseRecord {
 	replay := genesis.SkillReplayCaseRecord{
-		Input:                 firstNonBlank(req.Replay.Input, skillReplayInputFromTranscript(sctx.AllText)),
+		Input:                 textutil.FirstNonBlank(req.Replay.Input, skillReplayInputFromTranscript(sctx.AllText)),
 		Context:               append([]string(nil), req.Replay.Context...),
 		RequiredActions:       append([]string(nil), req.Replay.RequiredActions...),
 		ForbiddenActions:      append([]string(nil), req.Replay.ForbiddenActions...),
@@ -1104,15 +1105,6 @@ func normalizeSkillLifecycleRoute(route string) string {
 	default:
 		return ""
 	}
-}
-
-func firstNonBlank(values ...string) string {
-	for _, value := range values {
-		if trimmed := strings.TrimSpace(value); trimmed != "" {
-			return trimmed
-		}
-	}
-	return ""
 }
 
 func appendUniqueStrings(base []string, values ...string) []string {
