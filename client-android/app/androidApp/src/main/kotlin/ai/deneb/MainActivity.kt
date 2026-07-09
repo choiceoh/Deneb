@@ -149,6 +149,12 @@ class MainActivity : ComponentActivity() {
         // app is fully closed / in Doze (no live SSE). Idempotent + best-effort:
         // the gateway dedups by token, and a build without Firebase no-ops.
         FcmRegistration.fetchAndRegister(get())
+        // Ship any crash reports saved on a previous run (uncaught exceptions the app
+        // can't send at crash time) now that the client is up. Best-effort: a no-op
+        // when there's nothing saved; undelivered reports retry next foreground.
+        (get<DataRepository>() as? DenebGatewayClient)?.let { client ->
+            lifecycleScope.launch { CrashReporter.flushPending(applicationContext, client) }
+        }
     }
 
     private fun autoStartDaemon() {
