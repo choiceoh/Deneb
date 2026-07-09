@@ -1,5 +1,20 @@
 # Changelog
 
+## [4.83.1](https://github.com/choiceoh/Deneb/compare/deneb-v4.83.0...deneb-v4.83.1) (2026-07-09)
+
+
+### 🐛 Bug Fixes
+
+* **andromeda:** PDF 미리보기가 원본 소스로 뜨는 문제 — blob MIME 재스탬프 ([#3346](https://github.com/choiceoh/Deneb/issues/3346)) ([5910f1e](https://github.com/choiceoh/Deneb/commit/5910f1e2912d06bcab972d5d383b120c2d8e1fa0))
+* **genesis:** Propus 리뷰 제안을 실행 前에 기록 — 배포 핫스왑에 취소돼도 라이프사이클 로그 유지 ([#3344](https://github.com/choiceoh/Deneb/issues/3344)) ([7fd0fd5](https://github.com/choiceoh/Deneb/commit/7fd0fd53bb365eb24286caacaa3df1de0a37e6d2))
+* **skills:** 봇 리뷰가 잡은 자가개선 파이프라인 결함 7건 수리 (A1-A5,A7,A9 + 버스트 무력화) ([#3341](https://github.com/choiceoh/Deneb/issues/3341)) ([4c8fc3c](https://github.com/choiceoh/Deneb/commit/4c8fc3c4f87de952f80023e32c92cc5202fe0026))
+* **wiki:** 인물·프로젝트 목록에서 백업 폴더 제외 — ListPages·검색 walk가 백업/히든 디렉토리 프룬 ([#3345](https://github.com/choiceoh/Deneb/issues/3345)) ([f787b7f](https://github.com/choiceoh/Deneb/commit/f787b7fe96c5c9c21b3edf1af876be8d1d4f5098))
+
+
+### 🔧 Internal
+
+* **gateway:** simplify lifecycle status and dispatch timeout handling ([#3342](https://github.com/choiceoh/Deneb/issues/3342)) ([9e31a4f](https://github.com/choiceoh/Deneb/commit/9e31a4f92ac53e7f620e3bc70836f33383e6bb28))
+
 ## [4.83.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.82.0...deneb-v4.83.0) (2026-07-09)
 
 
