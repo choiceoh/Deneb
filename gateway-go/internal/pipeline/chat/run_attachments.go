@@ -32,6 +32,20 @@ func hasImageAttachment(attachments []ChatAttachment) bool {
 	return false
 }
 
+// hasDocumentAttachment reports whether the turn ingested a user document — a
+// PDF/Office/CSV attachment (extractable), or one already converted to
+// "document_text" by prepareDocumentAttachments. This is the hard anchor the
+// deliverable auto-publish safety net gates on: no document this turn → no auto
+// card, so ordinary chat can never trip it.
+func hasDocumentAttachment(attachments []ChatAttachment) bool {
+	for _, att := range attachments {
+		if att.Type == "document_text" || tools.IsExtractableDocument(att.MimeType, att.Name) {
+			return true
+		}
+	}
+	return false
+}
+
 // buildAttachmentBlocks creates a multimodal content block array from text and
 // attachments. Images with base64 Data get inline ImageSource blocks;
 // images with URL get URL-referenced blocks.

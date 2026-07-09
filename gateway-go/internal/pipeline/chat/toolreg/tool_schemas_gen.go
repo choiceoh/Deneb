@@ -1639,8 +1639,12 @@ func workfeedToolSchema() map[string]any {
 		"properties": map[string]any{
 			"action": map[string]any{
 				"type":        "string",
-				"description": "list(카드 목록, 기본) | read(카드 본문 — 열람 표시 겸함) | ack(처리 완료 표시)",
-				"enum":        []string{"list", "read", "ack"},
+				"description": "list(카드 목록, 기본) | read(카드 본문 — 열람 표시 겸함) | ack(처리 완료 표시) | publish(사용자가 요청한 산출물을 작업 피드 카드로 발행)",
+				"enum":        []string{"list", "read", "ack", "publish"},
+			},
+			"body": map[string]any{
+				"type":        "string",
+				"description": "publish 필수 — 산출물 본문(마크다운). 핵심 결론 + 액션아이템(회람 대상·기한 포함)을 담는다",
 			},
 			"id": map[string]any{
 				"type":        "string",
@@ -1655,6 +1659,27 @@ func workfeedToolSchema() map[string]any {
 				"description": "list 최대 개수 (기본 20)",
 				"default":     20,
 				"minimum":     1,
+			},
+			"priority": map[string]any{
+				"type":        "string",
+				"description": "publish 선택 — urgent | high | normal | low. 비우면 본문에서 자동 추론",
+				"enum":        []string{"urgent", "high", "normal", "low"},
+			},
+			"ref_id": map[string]any{
+				"type":        "string",
+				"description": "publish 선택 — 근거 페이지 식별자(예: 위키 경로)",
+			},
+			"ref_type": map[string]any{
+				"type":        "string",
+				"description": "publish 선택 — 근거 페이지 유형(예: wiki). ref_id와 함께 카드를 그 페이지에 연결",
+			},
+			"summary": map[string]any{
+				"type":        "string",
+				"description": "publish 선택 — 피드에서 보이는 2줄 미리보기. 비우면 body에서 자동 추출",
+			},
+			"title": map[string]any{
+				"type":        "string",
+				"description": "publish 필수 — 카드 한 줄 제목 (문서/사안을 식별할 수 있게)",
 			},
 		},
 	}

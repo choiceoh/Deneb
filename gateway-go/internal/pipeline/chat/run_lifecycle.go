@@ -98,6 +98,53 @@ func finishTurnSideEffects(deps runDeps, params RunParams, result *agent.AgentRe
 	// deneb-ui card health: an invalid card degrades to a raw code block on the
 	// user's screen, so surface it in the operator log (model drift detector).
 	reportDenebUICardHealth(result.Text, params.SessionKey, logger)
+	// Deliverable → 작업 피드 auto safety net: a document-analysis turn whose result
+	// the model did not publish itself gets filed as a doc_analysis card. Anchored
+	// on a hard signal (a document was ingested this turn), so ordinary chat never
+	// trips it.
+	maybeAutoPublishDeliverable(deps, params, result, logger)
+}
+
+// maybeAutoPublishDeliverable files the turn's final response as a doc_analysis
+// work-feed card when the turn was a document analysis the model did not publish
+// itself. The gates are layered so ordinary chat can never produce a card:
+//   - hard anchor: a document was actually attached + extracted THIS turn
+//     (hasDocumentAttachment) — no document, no card, ever;
+//   - mutual exclusion: skip if the model already used the workfeed tool this turn
+//     (it likely published via the guidance path — don't double-card);
+//   - scope: non-coding sessions only (coding turns produce no user deliverable).
+//
+// The substance floor (thin/narration-only answers) lives in publishDeliverable.
+// No-op unless the server wired deps.deliverablePublisher.
+func maybeAutoPublishDeliverable(deps runDeps, params RunParams, result *agent.AgentResult, logger *slog.Logger) {
+	if deps.deliverablePublisher == nil || result == nil {
+		return
+	}
+	// Coding turns don't produce user deliverables.
+	if sess := deps.sessions.Get(params.SessionKey); sess != nil && sess.Mode == session.ModeCode {
+		return
+	}
+	// Hard anchor: a document was ingested this turn. This is the false-positive
+	// floor — response shape is never used to guess "this was a deliverable".
+	if !hasDocumentAttachment(params.Attachments) {
+		return
+	}
+	// The model already touched the feed this turn (likely published via the
+	// guidance path) — don't file a second card.
+	if result.ToolCounts["workfeed"] > 0 {
+		return
+	}
+	text := strings.TrimSpace(result.Text)
+	if text == "" {
+		return
+	}
+	published, err := deps.deliverablePublisher(text)
+	switch {
+	case err != nil:
+		logger.Warn("auto-publish deliverable card failed", "session", params.SessionKey, "error", err)
+	case published:
+		logger.Info("auto-published deliverable card", "session", params.SessionKey)
+	}
 }
 
 // reportDenebUICardHealth validates any deneb-ui fences in the final reply and

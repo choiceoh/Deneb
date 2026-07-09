@@ -259,6 +259,13 @@ func (s *Server) registerSessionRPCMethods() {
 			s.wikiDreamer.NotePreferenceSignal()
 		}
 	}
+	// Deliverable → 작업 피드 auto safety net: when a turn analyzed a user document
+	// but the model did not publish the result itself, file a doc_analysis card so
+	// the deliverable reaches the feed. Wrapped so s.proactiveRelay (built below,
+	// after the chat handler) is resolved at call time, not now.
+	chatCfg.DeliverablePublisher = func(text string) (bool, error) {
+		return s.proactiveRelay.publishDeliverable(text)
+	}
 	chatCfg.RecordActivity = s.recordChatActivity
 
 	s.chatHandler = chat.NewHandler(

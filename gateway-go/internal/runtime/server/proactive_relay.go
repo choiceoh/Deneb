@@ -407,6 +407,66 @@ func (d proactiveRelayDeps) relayNativeToOptions(sessionKey, content string, opt
 	return true, nil
 }
 
+// minDeliverableRunes is the substance floor for an auto-published deliverable
+// card. A document-analysis turn that produced only a short answer (e.g. "3
+// 페이지네요") is below the bar. Structured responses (headings/tables/bullets)
+// pass regardless of length via hasReportStructure.
+const minDeliverableRunes = 300
+
+// publishDeliverable files an interactive turn's final response as a doc_analysis
+// work-feed card — the server-side safety net for the deliverable → 작업 피드
+// contract (a document was analyzed but the model did not publish it itself). It
+// does NOT touch the transcript (the response already rendered in the chat) and
+// raises no push (the user is in the conversation); it only files the trackable
+// card. The caller (maybeAutoPublishDeliverable) owns the hard gates — a document
+// was ingested this turn, the model did not already publish, non-coding session;
+// this method owns the substance floor so a thin or narration-only answer to an
+// attached document never becomes a card. Returns (false, nil) when suppressed or
+// no feed store is wired.
+func (d proactiveRelayDeps) publishDeliverable(content string) (bool, error) {
+	if d.workFeed == nil {
+		return false, nil
+	}
+	content = strings.TrimSpace(content)
+	if content == "" {
+		return false, nil
+	}
+	// Substance gates — the same suppression the proactive card path uses, plus a
+	// length/structure floor (auto-publish is more false-positive-prone than an
+	// explicit tool call, so it is stricter).
+	if isContentlessProactive(content) || isNarrationOnlyProactive(content) {
+		return false, nil
+	}
+	if !hasReportStructure(content) && utf8.RuneCountInString(content) < minDeliverableRunes {
+		return false, nil
+	}
+	title, titleLine := extractCardTitle(content)
+	summary := extractCardSummary(content, titleLine)
+	if d.cardTitler != nil && isWeakCardTitle(title, titleLine) {
+		if t, s := d.cardTitler(content); t != "" || s != "" {
+			if t != "" {
+				title = t
+			}
+			if s != "" {
+				summary = s
+			}
+		}
+	}
+	if _, err := d.workFeed.Append(workfeed.Item{
+		Source:     workfeed.SourceDocAnalysis,
+		Title:      title,
+		Summary:    summary,
+		Body:       content,
+		SessionKey: nativeWorkSessionKey,
+	}); err != nil {
+		if d.logger != nil {
+			d.logger.Error("auto-publish deliverable: work feed append failed", "error", err)
+		}
+		return false, err
+	}
+	return true, nil
+}
+
 // collapsedReportBody returns content with its leading title line removed when
 // that exact line became the accordion title — otherwise the expanded card
 // would open by repeating its own header as the first heading. Folded titles

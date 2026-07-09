@@ -65,6 +65,42 @@ func TestToolWorkFeed_ListReadAck(t *testing.T) {
 	}
 }
 
+func TestToolWorkFeed_Publish(t *testing.T) {
+	store := newTestWorkFeed(t)
+	tool := ToolWorkFeed(store)
+	ctx := context.Background()
+
+	out, err := tool(ctx, json.RawMessage(`{"action":"publish","title":"당진 솔라빌리지 EPC 검토","summary":"확정 ₩1,041억 · 미해결 3건","body":"## 결론\nDR 26건 대부분 반영. 미해결 3건 회람 필요.\n\n## 액션\n- O&M 단가 불일치 (차남두 부장)","priority":"high","ref_type":"wiki","ref_id":"프로젝트/당진-솔라빌리지/계약검토.md"}`))
+	if err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+	if !strings.Contains(out, "발행했습니다") || !strings.Contains(out, "당진 솔라빌리지 EPC 검토") {
+		t.Errorf("publish confirmation missing title: %q", out)
+	}
+
+	// The published card must be in the feed with the doc-analysis source + ref link.
+	items, _, err := store.List(10, false)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("want 1 published card, got %d", len(items))
+	}
+	got := items[0]
+	if got.Source != workfeed.SourceDocAnalysis {
+		t.Errorf("source = %q, want %q", got.Source, workfeed.SourceDocAnalysis)
+	}
+	if got.Priority != workfeed.PriorityHigh {
+		t.Errorf("priority = %d, want %d", got.Priority, workfeed.PriorityHigh)
+	}
+	if got.RefType != "wiki" || got.RefID != "프로젝트/당진-솔라빌리지/계약검토.md" {
+		t.Errorf("ref not linked: %q/%q", got.RefType, got.RefID)
+	}
+	if !strings.Contains(got.Body, "O&M 단가 불일치") {
+		t.Errorf("body not stored: %q", got.Body)
+	}
+}
+
 func TestToolWorkFeed_Errors(t *testing.T) {
 	tool := ToolWorkFeed(newTestWorkFeed(t))
 	ctx := context.Background()
@@ -76,5 +112,12 @@ func TestToolWorkFeed_Errors(t *testing.T) {
 	}
 	if _, err := tool(ctx, json.RawMessage(`{"action":"purge_all"}`)); err == nil {
 		t.Error("unknown action must error")
+	}
+	// publish requires both title and body.
+	if _, err := tool(ctx, json.RawMessage(`{"action":"publish","body":"본문만"}`)); err == nil {
+		t.Error("publish without title must error")
+	}
+	if _, err := tool(ctx, json.RawMessage(`{"action":"publish","title":"제목만"}`)); err == nil {
+		t.Error("publish without body must error")
 	}
 }

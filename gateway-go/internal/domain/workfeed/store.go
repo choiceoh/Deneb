@@ -21,6 +21,12 @@ const (
 	SourceCaptureAudio    = "capture_audio"
 	SourceCaptureDocument = "capture_document"
 	SourceCaptureContacts = "capture_contacts"
+	// SourceDocAnalysis is an agent-published deliverable card: the result of a
+	// user-requested document/contract analysis, posted to the feed via the
+	// workfeed(action="publish") tool so the deliverable is a trackable card, not
+	// only a wiki page + an ephemeral chat summary. Renders with the generic file
+	// glyph (native sourcePainter else-branch — no icon map change needed).
+	SourceDocAnalysis = "doc_analysis"
 
 	StatusUnread  = "unread"
 	StatusAcked   = "acked"

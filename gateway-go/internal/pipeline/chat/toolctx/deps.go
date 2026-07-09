@@ -122,13 +122,16 @@ type FleetDeps struct {
 }
 
 // WorkFeedRW is the mutating slice of the work-feed store the workfeed tool
-// needs: list, read-stamp, ack. Satisfied by the server's nativeWorkFeedStore
-// wrapper (which tees each mutation onto the native-sync stream) — an
-// interface here so tools/ never depends on the server package.
+// needs: list, read-stamp, ack, and publish (append an agent-authored deliverable
+// card). Satisfied by the server's nativeWorkFeedStore wrapper (which tees each
+// mutation onto the native-sync stream so a published card reaches the phone) —
+// an interface here so tools/ never depends on the server package.
 type WorkFeedRW interface {
 	List(limit int, includeAcked bool) ([]workfeed.Item, int, error)
 	MarkRead(id string) (workfeed.Item, error)
 	Ack(id string) (workfeed.Item, error)
+	// Append publishes a new card the agent authored (workfeed action="publish").
+	Append(item workfeed.Item) (workfeed.Item, error)
 }
 
 // ProcessDeps holds dependencies for exec and process management tools.
