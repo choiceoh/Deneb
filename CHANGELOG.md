@@ -1,5 +1,34 @@
 # Changelog
 
+## [4.83.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.82.0...deneb-v4.83.0) (2026-07-09)
+
+
+### ✨ Features
+
+* **autonomous:** 하트비트 섀도 리플레이 드라이런 게이트 — 지시문 표면 evolve P1 ([#3322](https://github.com/choiceoh/Deneb/issues/3322)) ([bcab4f6](https://github.com/choiceoh/Deneb/commit/bcab4f6a9cb520c80ea1c8506e551aabbfecabd8))
+* **mail:** mail_archive 동작별 위상 계측 — 느린 경로(IMAP 폴백·OCR) 소요시간 로깅 ([#3332](https://github.com/choiceoh/Deneb/issues/3332)) ([9484756](https://github.com/choiceoh/Deneb/commit/948475699b44a38205b450ef30bcb178f6cb9e3e))
+* **native:** 크래시 리포터 — uncaught 예외 스택을 게이트웨이로 전송해 관측 가능하게 ([#3325](https://github.com/choiceoh/Deneb/issues/3325)) ([7241c99](https://github.com/choiceoh/Deneb/commit/7241c996e665e357252a36d6f7fdc731fce55e9a))
+* **skills:** evolve 버스트 — 수용이 이어지는 동안 같은 스킬을 즉시 재진화 (loop-until-dry) ([#3326](https://github.com/choiceoh/Deneb/issues/3326)) ([29281e9](https://github.com/choiceoh/Deneb/commit/29281e968504d7d4c3518b25c4976d4d195a8a84))
+* **skills:** 합성 워크아웃 레인 — 스킬을 자기 held-out 케이스로 상시 연습 (+백필 6h) ([#3324](https://github.com/choiceoh/Deneb/issues/3324)) ([bfd248d](https://github.com/choiceoh/Deneb/commit/bfd248de4c21db8acc2b2924b41381f1dd728316))
+
+
+### 🐛 Bug Fixes
+
+* **autonomous:** 레인 연속성 수리 — 워크아웃 증거가 스윕을 깨우고, 워크아웃은 evolve 가능한 스킬만 연습 ([#3331](https://github.com/choiceoh/Deneb/issues/3331)) ([08ab3fd](https://github.com/choiceoh/Deneb/commit/08ab3fde2f0a383ae0f76e8208ca06f328519231))
+* **autonomous:** 워크아웃 레인을 프로덕션 state dir로 게이트 — dev live-test의 prod 사용로그 오염 차단 ([#3333](https://github.com/choiceoh/Deneb/issues/3333)) ([495afde](https://github.com/choiceoh/Deneb/commit/495afde45552c5cb5fdfae09100c7abf94439c21))
+* **chat:** 압축이 오래된 스필 결과의 read_spillover 포인터를 보존 — 통째 stub/펜스제거로 유실되던 갭 (2차 OutputTrimmer 연장선) ([#3328](https://github.com/choiceoh/Deneb/issues/3328)) ([73cde14](https://github.com/choiceoh/Deneb/commit/73cde14856464bc9337dba79512c2408fd7fa541))
+* **genesis:** Propus 리뷰 포크 출력 예산 2048→8192 — glm-5.2 추론이 예산 소진해 제안 로그가 전무하던 문제 ([#3338](https://github.com/choiceoh/Deneb/issues/3338)) ([3eca29d](https://github.com/choiceoh/Deneb/commit/3eca29df172f126ba5ef2f678c64f62a38f987d4))
+* **genesis:** replay 실행기 출력 예산 1024→4096 — glm-5.2가 Thinking=disabled 무시하고 추론해 예산 소진 ([#3339](https://github.com/choiceoh/Deneb/issues/3339)) ([b0dedd5](https://github.com/choiceoh/Deneb/commit/b0dedd5a150dc2738ddb977a1393c691d60731fa))
+* **native:** FCM 알림 표시 경로 전체 크래시 가드 — 푸시 수신 시 잔여 백그라운드 종료 차단 ([#3336](https://github.com/choiceoh/Deneb/issues/3336)) ([340d3e3](https://github.com/choiceoh/Deneb/commit/340d3e3ae64bbab40f0669b9f7d13e3e06577d3f))
+* **native:** 백그라운드 전환 코루틴 취소 크래시 수정 — TaskScheduler.stop() cancel 가드 ([#3337](https://github.com/choiceoh/Deneb/issues/3337)) ([625121e](https://github.com/choiceoh/Deneb/commit/625121e9275da461723e2ab6c7dd1be08ad8ca0c))
+* **native:** 알림 extras 필드별 파싱 — 문제 알림도 읽을 수 있는 필드는 살려 캡처 ([#3330](https://github.com/choiceoh/Deneb/issues/3330)) ([076a448](https://github.com/choiceoh/Deneb/commit/076a4485d86b2768467335f3d7f8d19bda006ee2))
+* **skills:** 워크아웃 레인 완성도 — 공정 로테이션·증거 중복 억제·안정 시그니처·모델 기록 ([#3329](https://github.com/choiceoh/Deneb/issues/3329)) ([c82e894](https://github.com/choiceoh/Deneb/commit/c82e8943461001724b33ce0131377f3b9c502b4f))
+
+
+### ⚡ Performance
+
+* **mail:** 로컬 메일 저장소 기동 시 1회 자동 백필 — 과거 메일도 빠른 경로로 ([#3334](https://github.com/choiceoh/Deneb/issues/3334)) ([56858d8](https://github.com/choiceoh/Deneb/commit/56858d82c933913aa7ae95e1c2f8638ad2835317))
+
 ## [4.82.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.81.0...deneb-v4.82.0) (2026-07-09)
 
 
