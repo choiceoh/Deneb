@@ -220,63 +220,42 @@ func (b *skillLifecycleBackend) SkillLifecycleStatus(_ context.Context, req chat
 	}
 	skillName := strings.TrimSpace(req.SkillName)
 	if skillName != "" {
-		recent = filterSkillLifecycleLog(recent, skillName)
-		stats, err := b.tracker.Stats(skillName)
-		if err != nil {
-			return nil, err
-		}
-		curator, err := b.tracker.SkillCuratorReport(skillName)
-		if err != nil {
-			return nil, err
-		}
-		rejected, rejectedErr := b.recentRejectedSkillEdits(skillName, limit)
-		usageQuality, usageQualityErr := b.usageQualitySummary(skillName)
-		optimizerMemory, optimizerMemoryErr := b.optimizerMemory(skillName)
-		validationCases, validationCasesErr := b.recentSkillValidationCases(skillName, limit)
-		validationSummary, validationSummaryErr := b.validationCaseSummary(skillName)
-		opportunities, opportunitiesErr := b.recentSkillOpportunities(skillName, limit)
-		selfCorrections, selfCorrectionsErr := b.recentSelfCorrectionCandidates(skillName, limit)
-		status := map[string]any{
-			"system":                   propusSystemStatus(skillName),
-			"overview":                 propusSkillOverview(skillName, recent, stats, curator, usageQuality, validationSummary, opportunities, selfCorrections),
-			"ok":                       true,
-			"skillName":                skillName,
-			"limit":                    limit,
-			"recent":                   recent,
-			"stats":                    stats,
-			"curator":                  curator,
-			"rejectedEdits":            rejected,
-			"usageQuality":             usageQuality,
-			"optimizerMemory":          optimizerMemory,
-			"validationCases":          validationCases,
-			"validationCaseSummary":    validationSummary,
-			"opportunities":            opportunities,
-			"selfCorrectionCandidates": selfCorrections,
-		}
-		if rejectedErr != "" {
-			status["rejectedEditsError"] = rejectedErr
-		}
-		if usageQualityErr != "" {
-			status["usageQualityError"] = usageQualityErr
-		}
-		if optimizerMemoryErr != "" {
-			status["optimizerMemoryError"] = optimizerMemoryErr
-		}
-		if validationCasesErr != "" {
-			status["validationCasesError"] = validationCasesErr
-		}
-		if validationSummaryErr != "" {
-			status["validationCaseSummaryError"] = validationSummaryErr
-		}
-		if opportunitiesErr != "" {
-			status["opportunitiesError"] = opportunitiesErr
-		}
-		if selfCorrectionsErr != "" {
-			status["selfCorrectionCandidatesError"] = selfCorrectionsErr
-		}
-		return status, nil
+		return b.skillLifecycleStatusForSkill(skillName, limit, recent)
 	}
+	return b.globalSkillLifecycleStatus(limit, recent)
+}
 
+func (b *skillLifecycleBackend) skillLifecycleStatusForSkill(skillName string, limit int, recent []genesis.LifecycleLogEntry) (map[string]any, error) {
+	recent = filterSkillLifecycleLog(recent, skillName)
+	stats, err := b.tracker.Stats(skillName)
+	if err != nil {
+		return nil, err
+	}
+	curator, err := b.tracker.SkillCuratorReport(skillName)
+	if err != nil {
+		return nil, err
+	}
+	common := b.collectSkillLifecycleCommonStatus(skillName, limit)
+	optimizerMemory, optimizerMemoryErr := b.optimizerMemory(skillName)
+	status := map[string]any{
+		"system":          propusSystemStatus(skillName),
+		"overview":        propusSkillOverview(skillName, recent, stats, curator, common.usageQuality, common.validationSummary, common.opportunities, common.selfCorrections),
+		"ok":              true,
+		"skillName":       skillName,
+		"limit":           limit,
+		"recent":          recent,
+		"stats":           stats,
+		"curator":         curator,
+		"optimizerMemory": optimizerMemory,
+	}
+	common.addToStatus(status)
+	if optimizerMemoryErr != "" {
+		status["optimizerMemoryError"] = optimizerMemoryErr
+	}
+	return status, nil
+}
+
+func (b *skillLifecycleBackend) globalSkillLifecycleStatus(limit int, recent []genesis.LifecycleLogEntry) (map[string]any, error) {
 	stats, err := b.tracker.ListAllStats()
 	if err != nil {
 		return nil, err
@@ -285,28 +264,17 @@ func (b *skillLifecycleBackend) SkillLifecycleStatus(_ context.Context, req chat
 	if err != nil {
 		return nil, err
 	}
-	rejected, rejectedErr := b.recentRejectedSkillEdits("", limit)
-	usageQuality, usageQualityErr := b.usageQualitySummary("")
-	validationCases, validationCasesErr := b.recentSkillValidationCases("", limit)
-	validationSummary, validationSummaryErr := b.validationCaseSummary("")
-	opportunities, opportunitiesErr := b.recentSkillOpportunities("", limit)
-	selfCorrections, selfCorrectionsErr := b.recentSelfCorrectionCandidates("", limit)
+	common := b.collectSkillLifecycleCommonStatus("", limit)
 	selfHarnessSignals := b.tracker.SelfHarnessSignals()
 	status := map[string]any{
-		"system":                   propusSystemStatus(""),
-		"overview":                 propusGlobalOverview(recent, stats, curator, usageQuality, validationSummary, opportunities, selfCorrections, selfHarnessSignals),
-		"ok":                       true,
-		"limit":                    limit,
-		"recent":                   recent,
-		"stats":                    stats,
-		"curator":                  curator,
-		"rejectedEdits":            rejected,
-		"usageQuality":             usageQuality,
-		"validationCases":          validationCases,
-		"validationCaseSummary":    validationSummary,
-		"opportunities":            opportunities,
-		"selfCorrectionCandidates": selfCorrections,
-		"selfHarnessSignals":       selfHarnessSignals,
+		"system":             propusSystemStatus(""),
+		"overview":           propusGlobalOverview(recent, stats, curator, common.usageQuality, common.validationSummary, common.opportunities, common.selfCorrections, selfHarnessSignals),
+		"ok":                 true,
+		"limit":              limit,
+		"recent":             recent,
+		"stats":              stats,
+		"curator":            curator,
+		"selfHarnessSignals": selfHarnessSignals,
 		// Fleet-wide failure clusters (Self-Harness weakness mining) — the same
 		// evidence bundle the sweep nudge quotes, so a turn drilling in via
 		// status sees the full support-ordered list, not just the top slice.
@@ -316,25 +284,67 @@ func (b *skillLifecycleBackend) SkillLifecycleStatus(_ context.Context, req chat
 		// running" line in the integrated status view.
 		"workoutActivity": b.tracker.WorkoutActivitySummarize(),
 	}
-	if rejectedErr != "" {
-		status["rejectedEditsError"] = rejectedErr
-	}
-	if usageQualityErr != "" {
-		status["usageQualityError"] = usageQualityErr
-	}
-	if validationCasesErr != "" {
-		status["validationCasesError"] = validationCasesErr
-	}
-	if validationSummaryErr != "" {
-		status["validationCaseSummaryError"] = validationSummaryErr
-	}
-	if opportunitiesErr != "" {
-		status["opportunitiesError"] = opportunitiesErr
-	}
-	if selfCorrectionsErr != "" {
-		status["selfCorrectionCandidatesError"] = selfCorrectionsErr
-	}
+	common.addToStatus(status)
 	return status, nil
+}
+
+type skillLifecycleCommonStatus struct {
+	rejectedEdits      []genesis.RejectedSkillEditRecord
+	rejectedEditsErr   string
+	usageQuality       genesis.UsageQualitySummary
+	usageQualityErr    string
+	validationCases    []genesis.SkillValidationCaseRecord
+	validationCasesErr string
+	validationSummary  genesis.SkillValidationCaseSummary
+	validationErr      string
+	opportunities      []genesis.SkillOpportunityRecord
+	opportunitiesErr   string
+	selfCorrections    []genesis.SelfCorrectionCandidateRecord
+	selfCorrectionsErr string
+}
+
+func (b *skillLifecycleBackend) collectSkillLifecycleCommonStatus(skillName string, limit int) skillLifecycleCommonStatus {
+	rejectedEdits, rejectedEditsErr := b.recentRejectedSkillEdits(skillName, limit)
+	usageQuality, usageQualityErr := b.usageQualitySummary(skillName)
+	validationCases, validationCasesErr := b.recentSkillValidationCases(skillName, limit)
+	validationSummary, validationErr := b.validationCaseSummary(skillName)
+	opportunities, opportunitiesErr := b.recentSkillOpportunities(skillName, limit)
+	selfCorrections, selfCorrectionsErr := b.recentSelfCorrectionCandidates(skillName, limit)
+	return skillLifecycleCommonStatus{
+		rejectedEdits:      rejectedEdits,
+		rejectedEditsErr:   rejectedEditsErr,
+		usageQuality:       usageQuality,
+		usageQualityErr:    usageQualityErr,
+		validationCases:    validationCases,
+		validationCasesErr: validationCasesErr,
+		validationSummary:  validationSummary,
+		validationErr:      validationErr,
+		opportunities:      opportunities,
+		opportunitiesErr:   opportunitiesErr,
+		selfCorrections:    selfCorrections,
+		selfCorrectionsErr: selfCorrectionsErr,
+	}
+}
+
+func (s skillLifecycleCommonStatus) addToStatus(status map[string]any) {
+	status["rejectedEdits"] = s.rejectedEdits
+	status["usageQuality"] = s.usageQuality
+	status["validationCases"] = s.validationCases
+	status["validationCaseSummary"] = s.validationSummary
+	status["opportunities"] = s.opportunities
+	status["selfCorrectionCandidates"] = s.selfCorrections
+	addStatusError(status, "rejectedEditsError", s.rejectedEditsErr)
+	addStatusError(status, "usageQualityError", s.usageQualityErr)
+	addStatusError(status, "validationCasesError", s.validationCasesErr)
+	addStatusError(status, "validationCaseSummaryError", s.validationErr)
+	addStatusError(status, "opportunitiesError", s.opportunitiesErr)
+	addStatusError(status, "selfCorrectionCandidatesError", s.selfCorrectionsErr)
+}
+
+func addStatusError(status map[string]any, key, errText string) {
+	if errText != "" {
+		status[key] = errText
+	}
 }
 
 func (b *skillLifecycleBackend) recentRejectedSkillEdits(skillName string, limit int) ([]genesis.RejectedSkillEditRecord, string) {
