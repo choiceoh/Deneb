@@ -73,9 +73,22 @@ func (b *skillLifecycleBackend) ProposeSkillEvolution(ctx context.Context, req c
 		result["reason"] = req.Reason
 	}
 
-	var execResult any
-	var execErr error
+	// Persist the reviewer's decision (route + candidate + evidence) BEFORE the
+	// slow, cancellable execution below. The nudge review fork rides the server
+	// shutdown context, so an auto-deploy hot-swap that fires mid-review cancels
+	// the fork — and when logging came only AFTER execution, an interrupted
+	// held-out validation erased the proposal entirely (verified on prod
+	// 2026-07-09: the lifecycle log frozen for days while reviews kept firing).
+	// Logging up-front makes the proposal durable the instant it is made; the
+	// applied OUTCOME (genesis/evolved/evolve_rejected) is recorded separately by
+	// the exec path below, so this stays a single proposal record — no double
+	// count. executed=false here reflects "not yet executed at log time".
+	b.recordReviewUsage(req, route)
+	b.logProposal(req, route, result)
+
 	if req.Execute {
+		var execResult any
+		var execErr error
 		switch route {
 		case "genesis":
 			execResult, execErr = b.RunSkillGenesis(ctx, chattools.SkillGenesisRequest{
@@ -104,8 +117,6 @@ func (b *skillLifecycleBackend) ProposeSkillEvolution(ctx context.Context, req c
 		}
 	}
 
-	b.recordReviewUsage(req, route)
-	b.logProposal(req, route, result)
 	return result, nil
 }
 
