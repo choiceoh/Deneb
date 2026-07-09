@@ -140,7 +140,7 @@ func TestBuildTailAdditions_SkillHintPosition(t *testing.T) {
 // hintFakeRecorder captures RecordSkillUse calls.
 type hintFakeRecorder struct{ calls int }
 
-func (f *hintFakeRecorder) RecordSkillUse(sessionKey, skillName string, success bool, errMsg string) {
+func (f *hintFakeRecorder) RecordSkillUse(sessionKey, skillName string, success bool, errMsg, _ string) {
 	f.calls++
 }
 
@@ -151,7 +151,7 @@ func TestRecordTurnSkillUsage_SkipsReviewForks(t *testing.T) {
 	rec := &hintFakeRecorder{}
 	log := NewSkillConsultLog()
 	log.Add("topsolar-db")
-	recordTurnSkillUsage(rec, log, nil, "system:skill-review:cron:email:123")
+	recordTurnSkillUsage(rec, log, nil, "system:skill-review:cron:email:123", "m1")
 	if rec.calls != 0 {
 		t.Fatalf("review-fork consult recorded as usage (%d calls)", rec.calls)
 	}
@@ -159,7 +159,7 @@ func TestRecordTurnSkillUsage_SkipsReviewForks(t *testing.T) {
 	// A real session still records.
 	log2 := NewSkillConsultLog()
 	log2.Add("topsolar-db")
-	recordTurnSkillUsage(rec, log2, []agent.ToolActivity{}, "client:main")
+	recordTurnSkillUsage(rec, log2, []agent.ToolActivity{}, "client:main", "m1")
 	if rec.calls != 1 {
 		t.Fatalf("real-session consult not recorded (%d calls)", rec.calls)
 	}

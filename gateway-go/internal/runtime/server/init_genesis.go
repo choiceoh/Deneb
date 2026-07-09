@@ -359,7 +359,7 @@ func newChatUsageRecorderAdapter(t *genesis.Tracker, transcripts toolctx.Transcr
 	return &chatUsageRecorderAdapter{inner: t, transcripts: transcripts, logger: logger}
 }
 
-func (a *chatUsageRecorderAdapter) RecordSkillUse(sessionKey, skillName string, success bool, errMsg string) {
+func (a *chatUsageRecorderAdapter) RecordSkillUse(sessionKey, skillName string, success bool, errMsg, model string) {
 	if a == nil || a.inner == nil {
 		return
 	}
@@ -367,6 +367,7 @@ func (a *chatUsageRecorderAdapter) RecordSkillUse(sessionKey, skillName string, 
 	if err := a.inner.RecordUsage(genesis.UsageRecord{
 		SkillName:    skillName,
 		SessionKey:   sessionKey,
+		Model:        model,
 		Success:      success,
 		ErrorMsg:     errMsg,
 		FailureTrace: failureTrace,

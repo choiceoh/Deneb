@@ -7,27 +7,27 @@ import (
 )
 
 type usageCall struct {
-	session, skill, errMsg string
-	success                bool
+	session, skill, errMsg, model string
+	success                       bool
 }
 
 type fakeUsageRecorder struct{ calls []usageCall }
 
-func (f *fakeUsageRecorder) RecordSkillUse(sessionKey, skillName string, success bool, errMsg string) {
-	f.calls = append(f.calls, usageCall{sessionKey, skillName, errMsg, success})
+func (f *fakeUsageRecorder) RecordSkillUse(sessionKey, skillName string, success bool, errMsg, model string) {
+	f.calls = append(f.calls, usageCall{sessionKey, skillName, errMsg, model, success})
 }
 
 func TestRecordTurnSkillUsage_cleanTurnIsSuccess(t *testing.T) {
 	rec := &fakeUsageRecorder{}
 	log := NewSkillConsultLog()
 	log.Add("research-flow")
-	recordTurnSkillUsage(rec, log, []agent.ToolActivity{{Name: "skills"}, {Name: "read"}}, "client:main")
+	recordTurnSkillUsage(rec, log, []agent.ToolActivity{{Name: "skills"}, {Name: "read"}}, "client:main", "m1")
 
 	if len(rec.calls) != 1 {
 		t.Fatalf("got %d calls, want 1: %+v", len(rec.calls), rec.calls)
 	}
 	c := rec.calls[0]
-	if c.skill != "research-flow" || !c.success || c.errMsg != "" || c.session != "client:main" {
+	if c.skill != "research-flow" || !c.success || c.errMsg != "" || c.session != "client:main" || c.model != "m1" {
 		t.Fatalf("unexpected call: %+v", c)
 	}
 }
@@ -36,7 +36,7 @@ func TestRecordTurnSkillUsage_erroredTurnIsFailure(t *testing.T) {
 	rec := &fakeUsageRecorder{}
 	log := NewSkillConsultLog()
 	log.Add("deploy-flow")
-	recordTurnSkillUsage(rec, log, []agent.ToolActivity{{Name: "skills"}, {Name: "exec", IsError: true}}, "client:main")
+	recordTurnSkillUsage(rec, log, []agent.ToolActivity{{Name: "skills"}, {Name: "exec", IsError: true}}, "client:main", "m1")
 
 	if len(rec.calls) != 1 {
 		t.Fatalf("got %d calls, want 1: %+v", len(rec.calls), rec.calls)
@@ -62,7 +62,7 @@ func TestRecordTurnSkillUsage_skillsToolErrorIsNotSkillFailure(t *testing.T) {
 	rec := &fakeUsageRecorder{}
 	log := NewSkillConsultLog()
 	log.Add("email-analysis")
-	recordTurnSkillUsage(rec, log, []agent.ToolActivity{{Name: "skills", IsError: true}}, "client:main")
+	recordTurnSkillUsage(rec, log, []agent.ToolActivity{{Name: "skills", IsError: true}}, "client:main", "m1")
 
 	if len(rec.calls) != 1 {
 		t.Fatalf("got %d calls, want 1: %+v", len(rec.calls), rec.calls)
@@ -79,7 +79,7 @@ func TestRecordTurnSkillUsage_nonSkillsErrorStillFailsAlongsideSkills(t *testing
 	rec := &fakeUsageRecorder{}
 	log := NewSkillConsultLog()
 	log.Add("deploy-flow")
-	recordTurnSkillUsage(rec, log, []agent.ToolActivity{{Name: "skills", IsError: true}, {Name: "exec", IsError: true}}, "client:main")
+	recordTurnSkillUsage(rec, log, []agent.ToolActivity{{Name: "skills", IsError: true}, {Name: "exec", IsError: true}}, "client:main", "m1")
 
 	if len(rec.calls) != 1 {
 		t.Fatalf("got %d calls, want 1: %+v", len(rec.calls), rec.calls)
@@ -91,11 +91,11 @@ func TestRecordTurnSkillUsage_nonSkillsErrorStillFailsAlongsideSkills(t *testing
 
 func TestRecordTurnSkillUsage_noOps(t *testing.T) {
 	// Nil recorder must not panic.
-	recordTurnSkillUsage(nil, NewSkillConsultLog(), nil, "s")
+	recordTurnSkillUsage(nil, NewSkillConsultLog(), nil, "s", "m1")
 
 	// Nothing consulted → no records.
 	rec := &fakeUsageRecorder{}
-	recordTurnSkillUsage(rec, NewSkillConsultLog(), []agent.ToolActivity{{Name: "read"}}, "s")
+	recordTurnSkillUsage(rec, NewSkillConsultLog(), []agent.ToolActivity{{Name: "read"}}, "s", "m1")
 	if len(rec.calls) != 0 {
 		t.Fatalf("no-consult turn recorded %+v, want none", rec.calls)
 	}
@@ -104,8 +104,8 @@ func TestRecordTurnSkillUsage_noOps(t *testing.T) {
 	// a second call with nothing new drains empty.
 	log := NewSkillConsultLog()
 	log.Add("once")
-	recordTurnSkillUsage(rec, log, nil, "s")
-	recordTurnSkillUsage(rec, log, nil, "s")
+	recordTurnSkillUsage(rec, log, nil, "s", "m1")
+	recordTurnSkillUsage(rec, log, nil, "s", "m1")
 	if len(rec.calls) != 1 || rec.calls[0].skill != "once" {
 		t.Fatalf("expected single attribution for 'once', got %+v", rec.calls)
 	}

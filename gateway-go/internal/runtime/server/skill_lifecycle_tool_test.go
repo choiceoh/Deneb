@@ -556,7 +556,7 @@ func TestChatUsageRecorderAutoValidationCaseFromFailedUse(t *testing.T) {
 	}}
 	rec := newChatUsageRecorderAdapter(tracker, store, slog.Default())
 
-	rec.RecordSkillUse("client:main:srv1", "srv1-ops", false, "turn failed: tool exec errored")
+	rec.RecordSkillUse("client:main:srv1", "srv1-ops", false, "turn failed: tool exec errored", "m1")
 
 	var cases []genesis.SkillValidationCaseRecord
 	var err error
@@ -573,7 +573,7 @@ func TestChatUsageRecorderAutoValidationCaseFromFailedUse(t *testing.T) {
 	if len(cases) != 1 {
 		t.Fatalf("expected one auto validation case, got %+v", cases)
 	}
-	rec.RecordSkillUse("client:main:srv1", "srv1-ops", false, "turn failed: tool exec errored")
+	rec.RecordSkillUse("client:main:srv1", "srv1-ops", false, "turn failed: tool exec errored", "m1")
 	time.Sleep(50 * time.Millisecond)
 	tc := cases[0]
 	if tc.Source != "auto-failed-skill-use" ||
