@@ -128,11 +128,14 @@ func TestAllowedTools_Coding(t *testing.T) {
 	if allowed == nil {
 		t.Fatal("coding preset should return non-nil allowed set")
 	}
-	// Worktree coding surface: inspect + mutate + shell + web docs lookup.
+	// Worktree coding surface: inspect + mutate + shell + web docs lookup, plus
+	// ocr so the agent can read a PDF/DOCX/scan in the worktree (read only dumps
+	// its binary — a pure path→text utility, not a 업무-memory/personal tool).
 	for _, name := range []string{
 		"read", "grep", "read_spillover",
 		"write", "edit", "exec", "process",
 		"web", "fetch_tools",
+		"ocr",
 	} {
 		if _, ok := allowed[name]; !ok {
 			t.Errorf("coding preset should include %q", name)

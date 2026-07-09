@@ -118,8 +118,12 @@ var implementerTools = union(researcherTools, toSet(
 // the tool surface must match or the swap is half-done. No sessions_spawn: a
 // spawned child would not inherit the worktree binding and would edit the
 // default workspace (follow-up if fan-out is ever needed).
+//
+// ocr is included (not a 업무-memory/personal tool — a pure path→text utility):
+// a worktree routinely holds a PDF/DOCX/scan spec, and `read` only dumps its
+// binary. Without ocr the coding agent has no way to read those documents.
 var codingTools = toSet(
-	"edit", "process", // deferred — loaded via fetch_tools
+	"edit", "process", "ocr", // deferred — loaded via fetch_tools
 	"read", "grep", "read_spillover",
 	"write", "exec",
 	"web",
