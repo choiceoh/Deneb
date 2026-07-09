@@ -12,6 +12,7 @@ import (
 	"unicode"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/polaris"
+	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
 
 const (
@@ -408,7 +409,7 @@ func recallSearchQueries(message string) []string {
 			break
 		}
 	}
-	return dedupeStrings(queries)
+	return textutil.DedupeStrings(queries)
 }
 
 func recallSignalTerms(message string) []string {

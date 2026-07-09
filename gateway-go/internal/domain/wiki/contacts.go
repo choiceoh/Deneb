@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/pkg/dentime"
+	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
 
 // Contact is one shared address-book entry from the native client.
@@ -362,8 +363,8 @@ func renderPersonTemplate(title string, c *Contact) string {
 // fixed string (no date) so an unchanged contact renders byte-identically and
 // the idempotent re-sync check holds.
 func renderContactSection(c *Contact) string {
-	phones := dedupeStrings(c.Phones)
-	emails := dedupeStrings(c.Emails)
+	phones := textutil.DedupeStrings(c.Phones)
+	emails := textutil.DedupeStrings(c.Emails)
 	org := strings.TrimSpace(c.Org)
 
 	var b strings.Builder
@@ -465,20 +466,4 @@ func NormalizePersonName(s string) string {
 		}
 	}
 	return strings.ToLower(t)
-}
-
-// dedupeStrings trims, drops blanks, and removes duplicates while preserving
-// first-seen order.
-func dedupeStrings(in []string) []string {
-	seen := make(map[string]bool, len(in))
-	out := make([]string, 0, len(in))
-	for _, s := range in {
-		s = strings.TrimSpace(s)
-		if s == "" || seen[s] {
-			continue
-		}
-		seen[s] = true
-		out = append(out, s)
-	}
-	return out
 }

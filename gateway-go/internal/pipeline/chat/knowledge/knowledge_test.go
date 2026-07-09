@@ -3,6 +3,8 @@ package knowledge
 import (
 	"testing"
 	"unicode/utf8"
+
+	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
 
 func TestFormatTier1_NilStore(t *testing.T) {
@@ -14,7 +16,7 @@ func TestFormatTier1_NilStore(t *testing.T) {
 
 func TestTruncateRunes(t *testing.T) {
 	s := "가나다라마바사"
-	result := truncateRunes(s, 3)
+	result := textutil.TruncateRunes(s, 3, "...")
 	if utf8.RuneCountInString(result) > 6 { // 3 runes + "..."
 		t.Errorf("expected truncated, got: %q", result)
 	}

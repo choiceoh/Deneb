@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailbody"
 )
 
 // ContextMessageFromDetail builds the agent-facing ContextMessage from a parsed
@@ -47,11 +48,11 @@ func ContextMessageDedupeKey(msg ContextMessage) string { return contextMessageD
 func SentOnOrAfter(dateHeader string, since time.Time) bool { return sentOnOrAfter(dateHeader, since) }
 
 // ParseMailDate parses an RFC mail Date header to a time (zero on failure).
-func ParseMailDate(raw string) time.Time { return parseMailDate(raw) }
+func ParseMailDate(raw string) time.Time { return mailbody.ParseMailDate(raw) }
 
 // NormalizeMsgID normalizes a Message-ID for thread/dedup lookups.
 func NormalizeMsgID(id string) string { return normalizeMsgID(id) }
 
 // RehydrateWhen repopulates the unexported sort key from the Date header after a
 // message is reloaded from disk (JSONL round-trip drops the unexported field).
-func RehydrateWhen(msg *ContextMessage) { msg.when = parseMailDate(msg.Date) }
+func RehydrateWhen(msg *ContextMessage) { msg.when = mailbody.ParseMailDate(msg.Date) }

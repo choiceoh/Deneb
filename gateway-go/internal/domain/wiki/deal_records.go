@@ -17,6 +17,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
 
 // dealRecordsFile is the append-only typed-deal ledger, a sibling of the prose
@@ -68,10 +70,10 @@ func dealRecordFrom(in DealPageInput, now time.Time) DealRecord {
 		AmountParsed: ok,
 		Date:         date,
 		DueDate:      strings.TrimSpace(in.DueDate),
-		Items:        dedupeStrings(in.Items),
+		Items:        textutil.DedupeStrings(in.Items),
 		Summary:      strings.TrimSpace(in.Summary),
 		SourceRef:    strings.TrimSpace(in.SourceRef),
-		Projects:     dedupeStrings(projects),
+		Projects:     textutil.DedupeStrings(projects),
 		RecordedAt:   now.UnixMilli(),
 	}
 	if !in.Terms.Empty() {

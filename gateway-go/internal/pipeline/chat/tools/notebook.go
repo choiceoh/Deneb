@@ -14,6 +14,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/notebook"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
 
 // notebookBriefByteBudget is the starting total bytes the brief spends on source
@@ -186,9 +187,9 @@ func notebookShow(d *toolctx.NotebookDeps, id string) (string, error) {
 		}
 		switch src.Kind {
 		case notebook.KindWiki:
-			fmt.Fprintf(&sb, "- [%s] wiki: %s\n", src.Cite, firstNonEmpty(label, src.Ref))
+			fmt.Fprintf(&sb, "- [%s] wiki: %s\n", src.Cite, textutil.FirstNonEmpty(label, src.Ref))
 		case notebook.KindNote:
-			fmt.Fprintf(&sb, "- [%s] note: %s\n", src.Cite, firstNonEmpty(label, snippet(src.Text, 60)))
+			fmt.Fprintf(&sb, "- [%s] note: %s\n", src.Cite, textutil.FirstNonEmpty(label, snippet(src.Text, 60)))
 		default:
 			fmt.Fprintf(&sb, "- [%s] %s: %s\n", src.Cite, src.Kind, label)
 		}
@@ -247,7 +248,7 @@ func notebookAddSource(ctx context.Context, d *toolctx.NotebookDeps, id, kind, r
 		}
 		return fmt.Sprintf("자료 추가 실패: %v", err), nil
 	}
-	label := firstNonEmpty(src.Title, src.Ref, snippet(src.Text, 60))
+	label := textutil.FirstNonEmpty(src.Title, src.Ref, snippet(src.Text, 60))
 	return fmt.Sprintf("자료 핀 완료: [%s] %s (%s)", src.Cite, label, src.Kind), nil
 }
 
@@ -388,7 +389,7 @@ func BuildNotebookGrounding(d *toolctx.NotebookDeps, notebookID string) (string,
 		sb.WriteString("\n\n핀된 자료:\n")
 		for _, src := range sources {
 			bs := buildBriefSource(d, src, perSource)
-			fmt.Fprintf(&sb, "\n[%s] %s%s\n%s\n", bs.Cite, bs.Kind, groundingLabelSuffix(firstNonEmpty(bs.Title, bs.Ref)), strings.TrimSpace(bs.Text))
+			fmt.Fprintf(&sb, "\n[%s] %s%s\n%s\n", bs.Cite, bs.Kind, groundingLabelSuffix(textutil.FirstNonEmpty(bs.Title, bs.Ref)), strings.TrimSpace(bs.Text))
 			if bs.Note != "" {
 				fmt.Fprintf(&sb, "(%s)\n", bs.Note)
 			}
@@ -694,15 +695,6 @@ func normalizeWikiRef(ref string) string {
 
 func notebookNotFound(id string) string {
 	return fmt.Sprintf("노트북 %q 없음. `notebook(action=\"list\")` 로 목록을 확인하세요.", id)
-}
-
-func firstNonEmpty(vals ...string) string {
-	for _, v := range vals {
-		if strings.TrimSpace(v) != "" {
-			return v
-		}
-	}
-	return ""
 }
 
 func snippet(s string, maxRunes int) string {

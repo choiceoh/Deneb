@@ -11,6 +11,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/filestore"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/fileshare"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
+	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
 
 // FilesParams holds parsed input for the files tool.
@@ -308,9 +309,5 @@ func extractFileText(ctx context.Context, name string, data []byte) string {
 // truncateRunes caps s to maxRunes on a rune boundary so Korean text is never
 // split mid-character.
 func truncateRunes(s string, maxRunes int) string {
-	r := []rune(s)
-	if len(r) <= maxRunes {
-		return s
-	}
-	return string(r[:maxRunes]) + "\n... (이하 생략)"
+	return textutil.TruncateRunes(s, maxRunes, "\n... (이하 생략)")
 }

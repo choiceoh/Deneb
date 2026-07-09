@@ -4,9 +4,9 @@ package knowledge
 import (
 	"fmt"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
+	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
 
 // Tier-1 auto-injection limits.
@@ -35,7 +35,7 @@ func FormatTier1(store *wiki.Store, minImportance float64) string {
 	sb.WriteString("## 핵심 지식 (자동 주입)\n\n")
 
 	for _, r := range pages {
-		body := truncateRunes(r.Page.Body, tier1MaxBodyRunes)
+		body := textutil.TruncateRunes(r.Page.Body, tier1MaxBodyRunes, "...")
 		header := fmt.Sprintf("### %s (%s)\n", r.Page.Meta.Title, r.Path)
 		if r.Page.Meta.Summary != "" {
 			header += fmt.Sprintf("_%s_\n", r.Page.Meta.Summary)
@@ -49,13 +49,4 @@ func FormatTier1(store *wiki.Store, minImportance float64) string {
 	}
 
 	return sb.String()
-}
-
-// truncateRunes truncates s to at most maxRunes runes, appending "..." if truncated.
-func truncateRunes(s string, maxRunes int) string {
-	if utf8.RuneCountInString(s) <= maxRunes {
-		return s
-	}
-	runes := []rune(s)
-	return string(runes[:maxRunes]) + "..."
 }

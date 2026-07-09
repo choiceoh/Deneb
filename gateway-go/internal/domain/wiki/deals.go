@@ -14,6 +14,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
 
 const dealDocsHeading = "거래 문서"
@@ -78,7 +80,7 @@ func (s *Store) UpsertDealPage(in DealPageInput, now time.Time) (relPath string,
 			// deal the first one couldn't). dedupeStrings keeps it idempotent.
 			if len(in.RelatedProjects) > 0 {
 				merged := append(append([]string(nil), existing.Meta.Related...), in.RelatedProjects...)
-				existing.Meta.Related = dedupeStrings(merged)
+				existing.Meta.Related = textutil.DedupeStrings(merged)
 			}
 			filed = true
 			return existing, nil
@@ -87,7 +89,7 @@ func (s *Store) UpsertDealPage(in DealPageInput, now time.Time) (relPath string,
 		page := NewPage(counterparty, "프로젝트", nil)
 		page.Meta.Type = "deal"
 		page.Meta.Updated = today
-		if rel := dedupeStrings(in.RelatedProjects); len(rel) > 0 {
+		if rel := textutil.DedupeStrings(in.RelatedProjects); len(rel) > 0 {
 			page.Meta.Related = rel // deal→project graph edge: the analyzer's resolved projects
 		}
 		if d := strings.TrimSpace(in.DueDate); d != "" {
@@ -158,7 +160,7 @@ func dealEntryLine(in DealPageInput, today string) string {
 	if sum := strings.TrimSpace(in.Summary); sum != "" {
 		b.WriteString(" — " + sum)
 	}
-	if items := dedupeStrings(in.Items); len(items) > 0 {
+	if items := textutil.DedupeStrings(in.Items); len(items) > 0 {
 		b.WriteString(" [" + strings.Join(items, ", ") + "]")
 	}
 	if ref := strings.TrimSpace(in.SourceRef); ref != "" {

@@ -477,7 +477,7 @@ func contextMessageFromDetail(mailbox, uid string, detail *gmail.MessageDetail, 
 		Body:        body,
 		Snippet:     snippetFromBody(detail.Body),
 		Attachments: append([]gmail.AttachmentInfo(nil), detail.Attachments...),
-		when:        parseMailDate(detail.Date),
+		when:        mailbody.ParseMailDate(detail.Date),
 	}
 }
 
@@ -563,7 +563,7 @@ var archiveDayLoc = func() *time.Location {
 // deliberately over-covers. Unparseable dates are kept (over-inclusion stays
 // harmless and matches the pre-filter behavior).
 func sentOnOrAfter(dateHeader string, since time.Time) bool {
-	t := parseMailDate(dateHeader)
+	t := mailbody.ParseMailDate(dateHeader)
 	if t.IsZero() {
 		return true
 	}

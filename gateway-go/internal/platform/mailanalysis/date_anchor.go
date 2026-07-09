@@ -16,11 +16,11 @@ package mailanalysis
 
 import (
 	"fmt"
-	"net/mail"
 	"strings"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailbody"
 )
 
 var koreanWeekdays = [7]string{"일", "월", "화", "수", "목", "금", "토"}
@@ -34,34 +34,6 @@ var anchorTimezone = func() *time.Location {
 	}
 	return time.FixedZone("KST", 9*3600)
 }()
-
-// parseMailDate parses an RFC 5322 Date header value, tolerating the common
-// Korean-mail variants (missing weekday, "(KST)" comments are handled by
-// net/mail already). Returns zero time when nothing parses (fail-open: the
-// caller skips the anchor).
-func parseMailDate(raw string) time.Time {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return time.Time{}
-	}
-	// Korean groupware sends bare "... 23:30:00 KST": net/mail parses the
-	// unknown zone abbreviation as UTC+0, which shifts late-evening mail to
-	// the NEXT calendar day after the KST conversion — mis-anchoring the whole
-	// table. Rewrite the bare token to its numeric offset first. ("(KST)"
-	// comments after a numeric offset are untouched: no leading space match.)
-	if strings.HasSuffix(raw, " KST") {
-		raw = strings.TrimSuffix(raw, " KST") + " +0900"
-	}
-	if t, err := mail.ParseDate(raw); err == nil {
-		return t
-	}
-	for _, layout := range []string{time.RFC1123Z, time.RFC1123, "2006-01-02 15:04:05 -0700", "2006-01-02"} {
-		if t, err := time.Parse(layout, raw); err == nil {
-			return t
-		}
-	}
-	return time.Time{}
-}
 
 func koreanDate(t time.Time) string {
 	return fmt.Sprintf("%s(%s)", t.Format("2006-01-02"), koreanWeekdays[int(t.Weekday())])
@@ -99,7 +71,7 @@ func buildDateAnchor(msg *gmail.MessageDetail, now time.Time) string {
 	if msg == nil {
 		return ""
 	}
-	sent := parseMailDate(msg.Date)
+	sent := mailbody.ParseMailDate(msg.Date)
 	if sent.IsZero() {
 		return ""
 	}

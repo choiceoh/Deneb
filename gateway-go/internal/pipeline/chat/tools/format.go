@@ -1,6 +1,10 @@
 package tools
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
+)
 
 // Generic formatting helpers shared across tools (wiki storage reports, recall
 // snippets, attachment/document formatting). They live here — not in any single
@@ -10,11 +14,7 @@ import "fmt"
 // truncate caps s to maxRunes on a rune boundary — so multibyte Korean text is
 // never split mid-character — and appends an ellipsis when it trims.
 func truncate(s string, maxRunes int) string {
-	runes := []rune(s)
-	if len(runes) <= maxRunes {
-		return s
-	}
-	return string(runes[:maxRunes]) + "..."
+	return textutil.TruncateRunes(s, maxRunes, "...")
 }
 
 // formatBytes renders a byte count as a human-readable size (B / KB / MB).
