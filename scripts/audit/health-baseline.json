@@ -1,9 +1,9 @@
 {
   "_keep_policy": "health-baseline.json — accepted floor for scripts/audit/codebase-health.py. This is a RATCHET (a floor that only goes up), never a way to silence a specific regression. Regenerate with --update only on operator approval (per docs/agent-rules/testing.md): raise the floor after a genuine improvement, do not lower it to make --check pass. 'mode' must match the run mode of --check.",
   "mode": "fast",
-  "composite": 89.9,
+  "composite": 90.9,
   "dims": {
-    "cohesion": 88.4,
+    "cohesion": 91.8,
     "tests": 92.0,
     "docs": 84.9,
     "size": 95.8

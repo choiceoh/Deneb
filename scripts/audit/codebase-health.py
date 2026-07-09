@@ -72,6 +72,17 @@ LAYER_RANK = {
 }
 DEFAULT_RANK = 2
 
+# Sub-package rank overrides ("<top>/<sub>"): a package that lives under a
+# high-rank top-level dir but is really a foundational shared kernel — no upward
+# deps, imported across layers — and so must not read as an upward violation
+# when a lower layer uses it. Checked before the top-level LAYER_RANK.
+#   runtime/session: the session state store. Verified it imports nothing under
+#   runtime/agentsys/pipeline and is used by pipeline·runtime·platform — shared
+#   state, not top orchestration.
+SUBPKG_RANK = {
+    "runtime/session": 1,
+}
+
 
 # --------------------------------------------------------------------------- #
 # File discovery
@@ -325,6 +336,15 @@ def _top_pkg(internal_path: str) -> str:
     return internal_path.split("/", 1)[0] if internal_path else ""
 
 
+def _pkg_rank(internal_rel: str) -> int:
+    # internal_rel is a path relative to internal/ (e.g. "runtime/session/manager.go"
+    # or "pipeline/chat"). A "<top>/<sub>" kernel override wins over the top-level rank.
+    parts = internal_rel.split("/")
+    if len(parts) >= 2 and f"{parts[0]}/{parts[1]}" in SUBPKG_RANK:
+        return SUBPKG_RANK[f"{parts[0]}/{parts[1]}"]
+    return LAYER_RANK.get(parts[0] if parts else "", DEFAULT_RANK)
+
+
 def dim_cohesion(sources: dict[str, list[Path]]) -> DimResult:
     module = _go_module_path()
     if not module:
@@ -340,17 +360,18 @@ def dim_cohesion(sources: dict[str, list[Path]]) -> DimResult:
         except ValueError:
             continue  # only internal/ participates in layering
         src_top = src_rel.parts[0]
-        src_rank = LAYER_RANK.get(src_top, DEFAULT_RANK)
+        src_rank = _pkg_rank("/".join(src_rel.parts))
         if src_top == "testutil":
             continue
         for imp in _go_imports(f):
             if not imp.startswith(internal_prefix):
                 continue
-            dst_top = _top_pkg(imp[len(internal_prefix):])
+            dst_internal = imp[len(internal_prefix):]
+            dst_top = _top_pkg(dst_internal)
             if dst_top == src_top:
                 continue  # intra-package-family is lateral, always fine
             total_edges += 1
-            dst_rank = LAYER_RANK.get(dst_top, DEFAULT_RANK)
+            dst_rank = _pkg_rank(dst_internal)
             if dst_rank > src_rank:
                 violations[(src_top, dst_top)] = violations.get((src_top, dst_top), 0) + 1
 
