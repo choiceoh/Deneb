@@ -3,6 +3,10 @@
     "**/chartassets/**",
     "**/diagramassets/**",
     "**/*.min.js",
-    "**/testdata/fuzz/**"
+    "**/*.min.css",
+    "**/*.bundle.js",
+    "**/testdata/fuzz/**",
+    "**/__snapshots__/**",
+    "**/*.snap"
   ]
 }
