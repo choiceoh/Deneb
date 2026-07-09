@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // FieldChange is one changed commercial figure between two quotes.
@@ -147,11 +148,10 @@ func parseUnitPrice(raw string) (val float64, unit string, ok bool) {
 		return 0, "", false
 	}
 	rest := m[2]
-	for _, r := range rest { // Korean-numeral guard on the first rune after the digits
-		if koreanNumeral[r] {
-			return 0, "", false
-		}
-		break
+	// Korean-numeral guard on the first rune after the digits. Empty rest
+	// decodes to RuneError, which is not in koreanNumeral, so it passes.
+	if r, _ := utf8.DecodeRuneInString(rest); koreanNumeral[r] {
+		return 0, "", false
 	}
 	num := strings.TrimRight(strings.ReplaceAll(m[1], ",", ""), ".")
 	v, err := strconv.ParseFloat(num, 64)

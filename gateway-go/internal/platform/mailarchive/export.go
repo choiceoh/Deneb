@@ -49,12 +49,6 @@ func SentOnOrAfter(dateHeader string, since time.Time) bool { return sentOnOrAft
 // ParseMailDate parses an RFC mail Date header to a time (zero on failure).
 func ParseMailDate(raw string) time.Time { return parseMailDate(raw) }
 
-// ArchiveLocator composes the "mailbox:uid" locator the read/thread paths resolve.
-func ArchiveLocator(mailbox, uid string) string { return archiveLocator(mailbox, uid) }
-
-// ArchiveLocatorParts splits a locator into (mailbox, uid, ok).
-func ArchiveLocatorParts(id string) (string, string, bool) { return archiveLocatorParts(id) }
-
 // NormalizeMsgID normalizes a Message-ID for thread/dedup lookups.
 func NormalizeMsgID(id string) string { return normalizeMsgID(id) }
 
