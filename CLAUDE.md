@@ -46,25 +46,39 @@
 - 넓은 탐색은 저비용 탐색 에이전트로. 환경 특이사항(머신별 함정)은 메모리에 저장해 재진단을 없앤다.
 - 세션 시작 시 관례적 빌드/테스트 금지 — 작업에 필요할 때만 (`make go` · `make test` · `make go-dev` · `./scripts/check-dev-env.sh`).
 
-### 코드 내비게이션: `greppy` (grep 대체)
+### 코드 내비게이션: CodeGraph (소스 코드 그래프)
 
-이 레포에는 **`greppy`** — 드롭인 grep에 심볼 그래프(CALLS/USES/TYPE_REF/IMPORTS) 기반 코드 내비게이션이 붙은 단일 바이너리 — 가 설치돼 있다. Go·Kotlin·TypeScript·Rust 전부 인덱싱된다. **관계 질문(누가 부르나·바꾸면 뭐 깨지나·이 심볼 뭐하나)은 grep으로 이름 검색 후 여러 파일 Read 하지 말고 greppy 한 번으로 해결한다** — 메서드 리시버 호출(`st.KnownProjects()`)까지 타입에 귀속해 정확히 찾는다.
+이 레포에는 **CodeGraph** — 소스 코드의 심볼 그래프(함수·클래스·호출·임포트·상속)를 인덱싱하는 코드 인텔리전스 — 가 **MCP 서버로 배선**돼 있다(`.mcp.json`). 에이전트는 `codegraph_explore` 툴을 **네이티브로** 받는다. **관계·구조 질문(누가 부르나·바꾸면 뭐 깨지나·이 흐름이 어떻게 엮이나·이 심볼 뭐하나)은 grep으로 이름 검색 후 여러 파일 Read 하지 말고 CodeGraph 한 번으로 해결한다.** 메서드 리시버는 물론 **동적 디스패치(인터페이스→구현체·콜백·이벤트)까지 추적** — grep이 못 따라가는 것.
+
+**언제 쓰나 (구조·관계·흐름 질문의 기본값 = CodeGraph. grep은 리터럴 텍스트 — 문자열·주석·로그·설정값 — 에만):**
+
+| 상황 (이러면 grep/Read 전에) | 쓰는 것 |
+|---|---|
+| 낯선 코드/서브시스템 이해 착수 · "어디서 X 하나 / 어떻게 엮이나" | `codegraph_explore "설명"` (지형을 one-shot으로) |
+| **소스 심볼 편집 착수 전** — 바꾸면 뭐 깨지나 | `codegraph impact SYMBOL` (블래스트 반경) |
+| "이 함수/타입 누가 쓰나" (리팩터·시그니처 변경) | `codegraph callers SYMBOL` |
+| 이 심볼 정의+호출자+피호출자 한눈에 | `codegraph node SYMBOL` |
+| 이름 조각으로 정의 찾기 | `codegraph query NAME` |
+
+원칙: **모르는 코드에 손대기 전 `codegraph_explore` 먼저** — 파일을 여러 개 Read 하며 관계를 머릿속으로 재구성하지 말고, 관계·소스·블래스트를 한 번에 받는다. 심볼 이름을 grep하려는 순간이면 거의 항상 CodeGraph 쿼리가 정답(훅이 그때 유도한다).
+
+- **MCP 기본 툴 `codegraph_explore`** — "먼저 호출". 질문/편집 대상 영역의 관련 심볼 소스 + 호출 경로 + 블래스트 반경(테스트 커버리지 경고 포함)을 one-shot으로.
+- **CLI**(같은 그래프, 셸에서 쓸 때):
 
 ```bash
-greppy who-calls  SYMBOL     # 호출자 (incoming CALLS)
-greppy callees    SYMBOL     # 이 심볼이 부르는 것
-greppy find-usages SYMBOL    # 모든 참조(호출·사용·임포트)
-greppy brief      SYMBOL     # 정의+호출자+피호출자를 한 번에 (--code 로 본문까지)
-greppy impact     SYMBOL     # 변경 블래스트 반경(전이 호출자). --direction outgoing/--depth N
-greppy search-symbols NAME   # 이름/조각으로 정의 찾기 (--kind function|method|class|…)
-greppy path --from A --to B  # A→B 호출 체인
-greppy expand ID             # 쿼리 끝의 Expand ID → 상위 매치 소스 묶음을 한 번에
+codegraph callers  SYMBOL    # 호출자 (동적 디스패치 포함)
+codegraph callees  SYMBOL    # 이 심볼이 부르는 것
+codegraph impact   SYMBOL    # 변경 블래스트 반경(영향 심볼)
+codegraph explore  "질문..."  # codegraph_explore와 동일 출력 (one-shot)
+codegraph node     SYMBOL    # 한 심볼의 소스 + 호출자/피호출자 트레일
+codegraph query    NAME      # 이름으로 심볼 검색
 ```
 
-- 일반 grep 플래그(`-rn`·`-i` 등)는 그대로 동작. 결과는 텍스트 매치가 아니라 `qualified_name file:line`.
-- **첫 실행은 전체 레포 자동 인덱싱(~45s), 이후 캐시 쿼리는 <0.1s.** 인덱스는 레포 밖(`~/.local/share/greppy`)에 저장 — 레포 오염·gitignore 불필요. 레포 어디서든 실행(루트 자동 탐지, `--root DIR`로 지정도 가능).
-- `semantic-search --vectors "PLAIN ENGLISH"` — 심볼 **이름을 모를 때** 의미로 코드를 찾는다 (예: "limit a value to a range"→clamp 함수들). GB10 GPU 임베딩 인덱스가 빌드돼 있어 바로 동작, 쿼리 ~0.2s. 인덱스 갱신은 `greppy index --embeddings --device cuda`.
-- ⚠️ aarch64(DGX Spark) 프리빌트 없음 → 소스 빌드본(`--no-default-features` 금지, LFS 모델은 릴리스에서 받아 교체). **GB10 GPU 임베딩은 벤더 ggml-cuda 2패치 필수**(`~/.local/share/greppy/patches/gb10-blackwell-cc121.patch`). 재설치·업그레이드 전체 절차는 메모리 [[greppy-code-navigation]] 참조.
+- **인덱스는 로컬 `.codegraph/`**(SQLite, gitignore됨)에 저장, **데몬 파일와처가 편집을 2초 내 자동동기** — 수동 명령 불필요, 항상 신선. Go·Kotlin·TypeScript·Rust 등 전부 인덱싱.
+- **새 워크트리는 SessionStart 훅(`codegraph-autoindex.py`)이 자동 준비** — 형제 워크트리 인덱스를 복사+`sync`(<1s)하거나 없으면 풀 init, 백그라운드라 세션 지연 0. 즉 워크트리마다 손수 `codegraph init` 할 필요 없다.
+- 설치/재빌드: `npm i -g @colbymchenry/codegraph` → `codegraph init`. 재인덱싱은 `codegraph index`, MCP 재배선은 `codegraph install`. GPU·컴파일 불필요(aarch64 네이티브). 상세는 메모리 [[codegraph-adoption]] 참조.
+- 문자열-키 간접참조(RPC 메서드명·툴명 → 핸들러)는 CodeGraph가 못 잇는 엣지(static-analysis frontier). **`scripts/dev/rpcmap.py`가 결정적으로 채운다**: `rpcmap <메서드명|툴명>` → 핸들러+파일:라인+`codegraph node` 힌트 (예: `rpcmap miniapp.people.list`→`peopleList (people.go:91)`, `rpcmap wiki`→`ToolWiki`). 역방향 `rpcmap --handler <이름>`, 전체는 `rpcmap --list`. 핸들러를 얻으면 `codegraph node <핸들러>`로 소스+호출자/피호출자. (점 있는 메서드명을 grep하면 훅이 rpcmap으로 유도한다.)
+- 주의: CodeGraph는 **소스 코드 전용**. 위키/업무 지식 그래프는 별개 도구(`graphify` 챗 툴 → `~/.deneb/wiki-graph`)이며 이걸로 대체 불가.
 
 ## 룰 인덱스 — 필요할 때 Read (조건부 로딩)
 

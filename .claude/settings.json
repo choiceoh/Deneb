@@ -1,5 +1,17 @@
 {
   "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/scripts/dev/codegraph-autoindex.py\"",
+            "timeout": 15,
+            "statusMessage": "codegraph: 워크트리 인덱스 자동 준비"
+          }
+        ]
+      }
+    ],
     "PreToolUse": [
       {
         "matcher": "Write|Edit|MultiEdit",
@@ -23,9 +35,20 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$CLAUDE_PROJECT_DIR/scripts/dev/greppy-nudge.py\"",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/scripts/dev/codegraph-nudge.py\"",
             "timeout": 10,
-            "statusMessage": "greppy: 심볼 검색은 greppy로 유도"
+            "statusMessage": "codegraph: 심볼 검색은 CodeGraph로 유도"
+          }
+        ]
+      },
+      {
+        "matcher": "Read|Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/scripts/dev/codegraph-remind.py\"",
+            "timeout": 10,
+            "statusMessage": "codegraph: 소스 탐색 시 1회 안내"
           }
         ]
       }

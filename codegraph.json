@@ -1,0 +1,12 @@
+{
+  "exclude": [
+    "**/chartassets/**",
+    "**/diagramassets/**",
+    "**/*.min.js",
+    "**/*.min.css",
+    "**/*.bundle.js",
+    "**/testdata/fuzz/**",
+    "**/__snapshots__/**",
+    "**/*.snap"
+  ]
+}
