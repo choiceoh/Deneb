@@ -26,28 +26,28 @@ const (
 // preserving the model's observation, evidence, and risk note until a batch
 // review can accept/reject it with tests.
 type SelfCorrectionCandidateRecord struct {
-	Type           string   `json:"type"`
-	ID             string   `json:"id"`
-	Status         string   `json:"status,omitempty"`
-	Scope          string   `json:"scope,omitempty"`
-	SkillName      string   `json:"skillName,omitempty"`
-	SessionKey     string   `json:"sessionKey,omitempty"`
-	Title          string   `json:"title,omitempty"`
-	Candidate      string   `json:"candidate,omitempty"`
-	Evidence       string   `json:"evidence,omitempty"`
-	Reason         string   `json:"reason,omitempty"`
-	TargetFiles    []string `json:"targetFiles,omitempty"`
+	Type        string   `json:"type"`
+	ID          string   `json:"id"`
+	Status      string   `json:"status,omitempty"`
+	Scope       string   `json:"scope,omitempty"`
+	SkillName   string   `json:"skillName,omitempty"`
+	SessionKey  string   `json:"sessionKey,omitempty"`
+	Title       string   `json:"title,omitempty"`
+	Candidate   string   `json:"candidate,omitempty"`
+	Evidence    string   `json:"evidence,omitempty"`
+	Reason      string   `json:"reason,omitempty"`
+	TargetFiles []string `json:"targetFiles,omitempty"`
 	// Surface is the declared editable-surface tier summarizing TargetFiles
 	// (editable_surfaces.go): auto-apply | propose-only. Empty on legacy rows
 	// and target-less candidates.
-	Surface        string   `json:"surface,omitempty"`
-	ProposedChange string   `json:"proposedChange,omitempty"`
-	Risk           string   `json:"risk,omitempty"`
-	Source         string   `json:"source,omitempty"`
-	Reviewer       string   `json:"reviewer,omitempty"`
-	ReviewNote     string   `json:"reviewNote,omitempty"`
-	CreatedAt      int64    `json:"createdAt"`
-	UpdatedAt      int64    `json:"updatedAt,omitempty"`
+	Surface        string `json:"surface,omitempty"`
+	ProposedChange string `json:"proposedChange,omitempty"`
+	Risk           string `json:"risk,omitempty"`
+	Source         string `json:"source,omitempty"`
+	Reviewer       string `json:"reviewer,omitempty"`
+	ReviewNote     string `json:"reviewNote,omitempty"`
+	CreatedAt      int64  `json:"createdAt"`
+	UpdatedAt      int64  `json:"updatedAt,omitempty"`
 }
 
 // RecordSelfCorrectionCandidate appends a deferred self-correction candidate.
