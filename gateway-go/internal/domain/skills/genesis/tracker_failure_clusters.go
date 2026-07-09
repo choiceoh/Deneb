@@ -30,8 +30,13 @@ const defaultFailureClusterLimit = 8
 // its support (member count), recency, and the newest single-line example.
 // Example carries raw log text — inert evidence data, never instructions.
 type FailureClusterSummary struct {
-	Kind           string `json:"kind"`
-	Skill          string `json:"skill,omitempty"`
+	Kind  string `json:"kind"`
+	Skill string `json:"skill,omitempty"`
+	// Model is the resolved LLM the failures ran on (usage clusters only —
+	// Self-Harness: the same harness exposes different pathologies per model,
+	// so evidence keeps the axis fixes will need). Empty when legacy rows
+	// without a recorded model dominate, or for rejection clusters.
+	Model          string `json:"model,omitempty"`
 	Signature      string `json:"signature"`
 	TerminalCause  string `json:"terminalCause,omitempty"`
 	AgentMechanism string `json:"agentMechanism,omitempty"`
@@ -66,12 +71,17 @@ func (t *Tracker) computeFailureEvidenceClustersLocked(now time.Time, limit int)
 			if trace == nil || strings.TrimSpace(trace.Signature) == "" {
 				continue
 			}
-			key := FailureClusterKindUsage + "\x00" + record.SkillName + "\x00" + normalizedSelfHarnessSignature(trace.Signature)
+			// Model joins the exact-signature key: the same mechanism on two
+			// models is two clusters, because the fix is usually model-specific.
+			// Legacy rows without a model fold into a ""-model cluster.
+			model := strings.TrimSpace(record.Model)
+			key := FailureClusterKindUsage + "\x00" + record.SkillName + "\x00" + model + "\x00" + normalizedSelfHarnessSignature(trace.Signature)
 			c := clusters[key]
 			if c == nil {
 				c = &FailureClusterSummary{
 					Kind:           FailureClusterKindUsage,
 					Skill:          record.SkillName,
+					Model:          model,
 					Signature:      trace.Signature,
 					TerminalCause:  trace.TerminalCause,
 					AgentMechanism: trace.AgentMechanism,
@@ -132,6 +142,9 @@ func (t *Tracker) computeFailureEvidenceClustersLocked(now time.Time, limit int)
 		}
 		if out[i].Skill != out[j].Skill {
 			return out[i].Skill < out[j].Skill
+		}
+		if out[i].Model != out[j].Model {
+			return out[i].Model < out[j].Model
 		}
 		return out[i].Signature < out[j].Signature
 	})

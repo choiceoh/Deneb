@@ -36,6 +36,7 @@ func TestBuildSelfImproveSweepNudge_EvidenceBundle(t *testing.T) {
 		return []genesis.FailureClusterSummary{
 			{
 				Kind: genesis.FailureClusterKindUsage, Skill: "contract-review",
+				Model:     "m2.5",
 				Signature: "terminal=missing-artifact|mechanism=artifact-recovery",
 				Support:   3, LastAt: time.Date(2026, 7, 8, 12, 0, 0, 0, time.Local).UnixMilli(),
 				Example: "tool=bash; error=required artifact missing",
@@ -53,7 +54,7 @@ func TestBuildSelfImproveSweepNudge_EvidenceBundle(t *testing.T) {
 	}
 	for _, want := range []string{
 		"실패 클러스터",
-		"[usage-failure] contract-review · terminal=missing-artifact|mechanism=artifact-recovery · 3건 · 최근 07-08 · 예: \"tool=bash; error=required artifact missing\"",
+		"[usage-failure] contract-review · terminal=missing-artifact|mechanism=artifact-recovery · 3건 · model=m2.5 · 최근 07-08 · 예: \"tool=bash; error=required artifact missing\"",
 		"[evolve-rejection] contract-review · surface-mismatch · 2건",
 		"클러스터의 시그니처에서 시작",
 		"클러스터 시그니처·지지도를 인용",
