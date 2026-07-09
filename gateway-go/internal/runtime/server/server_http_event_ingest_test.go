@@ -92,3 +92,57 @@ func TestRecordPhoneUsage(t *testing.T) {
 		t.Fatalf("usage cache = %q, want %q", got, payload)
 	}
 }
+
+// A native-client crash report is appended to the bounded crash log with its
+// device source and full stack — the server-side record the app otherwise lacks.
+// Consecutive reports accumulate as separate entries; blank text is a no-op.
+func TestRecordClientCrash(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("DENEB_STATE_DIR", dir)
+	path := filepath.Join(dir, "client-crashes.log")
+
+	recordClientCrash(nil, "  ", "  ") // blank → no file
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("blank crash must not create the log: %v", err)
+	}
+
+	stack := "java.lang.NullPointerException: boom\n\tat ai.deneb.Foo.bar(Foo.kt:42)"
+	recordClientCrash(nil, "Samsung SM-S928N", stack)
+	recordClientCrash(nil, "dev", "second crash\n\tat ai.deneb.Baz.qux(Baz.kt:7)")
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(data)
+	for _, want := range []string{"NullPointerException", "Foo.kt:42", "Samsung SM-S928N", "second crash", "Baz.kt:7"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("crash log missing %q:\n%s", want, got)
+		}
+	}
+	if n := strings.Count(got, "===== "); n != 2 {
+		t.Fatalf("expected 2 entries, got %d:\n%s", n, got)
+	}
+}
+
+// The crash log is bounded so a crash loop can't grow it without limit, and after
+// trimming it must still begin at a clean entry marker (never mid-stack).
+func TestRecordClientCrash_Bounded(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("DENEB_STATE_DIR", dir)
+
+	big := strings.Repeat("x", 50*1024)
+	for i := 0; i < 20; i++ {
+		recordClientCrash(nil, "dev", big)
+	}
+	data, err := os.ReadFile(filepath.Join(dir, "client-crashes.log"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(data) > maxClientCrashLogBytes {
+		t.Fatalf("crash log not bounded: %d > %d", len(data), maxClientCrashLogBytes)
+	}
+	if len(data) == 0 || !strings.HasPrefix(string(data), "===== ") {
+		t.Fatalf("bounded log must start at an entry marker, got head: %.40q", string(data))
+	}
+}

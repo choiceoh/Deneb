@@ -17,6 +17,7 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -33,6 +34,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/shortid"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/pilot"
+	"github.com/choiceoh/deneb/gateway-go/pkg/redact"
 	"github.com/choiceoh/deneb/gateway-go/pkg/safego"
 )
 
@@ -78,6 +80,65 @@ func recordPhoneUsage(logger *slog.Logger, payload string) {
 	p := phoneUsagePath()
 	if err := os.WriteFile(p, []byte(strings.TrimSpace(payload)), 0o600); err != nil && logger != nil {
 		logger.Warn("phone usage: cache write failed", "path", p, "error", err)
+	}
+}
+
+// phoneCrashPath is the on-disk log of native-client crash reports — uncaught
+// exceptions the phone captured at crash time and forwarded on its next launch.
+// The observe plane / logs-errors surface the one-line summary; this file holds
+// the full stacks for a deep read.
+func phoneCrashPath() string {
+	return filepath.Join(config.ResolveStateDir(), "client-crashes.log")
+}
+
+// maxClientCrashLogBytes bounds the crash log so a crash loop cannot grow it
+// without limit; the newest entries are kept.
+const maxClientCrashLogBytes = 256 * 1024
+
+// recordClientCrash logs a native-client crash at Error (a crash is the ultimate
+// user-observable failure — logging.md rule 1, so it must not hide in Warn) and
+// appends the full stack to a bounded on-disk log. It never runs a judgment turn:
+// a crash report is diagnostic data for the operator, not a proactive alert for
+// the user. Secrets that leaked into an exception message are redacted before
+// they touch the log.
+func recordClientCrash(logger *slog.Logger, source, text string) {
+	text = strings.TrimSpace(redact.String(text))
+	if text == "" {
+		return
+	}
+	source = strings.TrimSpace(source)
+	if source == "" {
+		source = "native"
+	}
+	// One-line summary for the operator log (the full stack goes to the file so a
+	// long trace doesn't bloat every log line). Rune-safe truncation for Korean.
+	summary := text
+	if i := strings.IndexByte(summary, '\n'); i >= 0 {
+		summary = summary[:i]
+	}
+	if r := []rune(summary); len(r) > 200 {
+		summary = string(r[:200])
+	}
+	if logger != nil {
+		logger.Error("native client crash reported", "source", source, "summary", summary)
+	}
+
+	entry := fmt.Sprintf("===== %s | %s =====\n%s\n\n",
+		time.Now().UTC().Format(time.RFC3339), source, text)
+	p := phoneCrashPath()
+	logBytes, _ := os.ReadFile(p)
+	logBytes = append(logBytes, entry...)
+	// Keep the newest maxClientCrashLogBytes; after the byte cut, realign to the
+	// next entry marker so the file never starts mid-stack (a broken partial entry).
+	if len(logBytes) > maxClientCrashLogBytes {
+		logBytes = logBytes[len(logBytes)-maxClientCrashLogBytes:]
+		if idx := bytes.Index(logBytes, []byte("===== ")); idx > 0 {
+			logBytes = logBytes[idx:]
+		}
+	}
+	//nolint:gosec // G703 — path is the internal state-dir crash log (config.ResolveStateDir + const name), not user input
+	if err := os.WriteFile(p, logBytes, 0o600); err != nil && logger != nil {
+		logger.Warn("client crash log: write failed", "path", p, "error", err)
 	}
 }
 
@@ -240,6 +301,15 @@ func (s *Server) ingestPhoneEventAsync(eventType, source, text string) {
 	// create proactive alerts by itself.
 	if strings.EqualFold(strings.TrimSpace(eventType), "usage_update") {
 		recordPhoneUsage(s.logger, text)
+		return
+	}
+	// client_crash: an uncaught exception the native app captured at crash time and
+	// forwarded on its next launch. Diagnostic data for the operator, never a
+	// user-facing alert — log it + append to the bounded crash log and return
+	// before any judgment turn (the app has no crash reporter otherwise, so this
+	// is the only server-side record of a phone-side crash).
+	if strings.EqualFold(strings.TrimSpace(eventType), "client_crash") {
+		recordClientCrash(s.logger, source, text)
 		return
 	}
 	// phone_action_result: the app's execution report for a dispatched phone_write

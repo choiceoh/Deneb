@@ -1,6 +1,7 @@
 package ai.deneb
 
 import ai.deneb.data.TaskScheduler
+import ai.deneb.deneb.DENEB_VERSION_CODE
 import ai.deneb.sandbox.sandboxModule
 import android.app.Application
 import org.koin.android.ext.android.inject
@@ -14,6 +15,11 @@ class DenebApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        // Install the crash reporter FIRST — before Koin/init — so even a startup
+        // crash is captured. It persists the stack and chains to the system handler
+        // (crash flow unchanged); MainActivity flushes saved reports to the gateway
+        // on the next foreground. See CrashReporter.
+        CrashReporter.install(this, DENEB_VERSION_CODE)
         startKoin {
             androidContext(this@DenebApplication)
             modules(appModule, sandboxModule)
