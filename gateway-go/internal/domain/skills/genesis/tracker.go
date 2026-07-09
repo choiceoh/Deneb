@@ -64,8 +64,12 @@ const (
 
 // UsageRecord represents a single skill usage event.
 type UsageRecord struct {
-	SkillName    string             `json:"skillName"`
-	SessionKey   string             `json:"sessionKey"`
+	SkillName  string `json:"skillName"`
+	SessionKey string `json:"sessionKey"`
+	// Model is the resolved LLM id the turn ran on. Failure clusters gain a
+	// per-model dimension from it (Self-Harness: model-specific weaknesses need
+	// model-specific fixes); empty on legacy rows.
+	Model        string             `json:"model,omitempty"`
 	Success      bool               `json:"success"`
 	ErrorMsg     string             `json:"errorMsg,omitempty"`
 	FailureTrace *UsageFailureTrace `json:"failureTrace,omitempty"`

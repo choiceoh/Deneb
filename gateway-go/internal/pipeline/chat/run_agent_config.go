@@ -59,6 +59,7 @@ func buildAgentConfig(
 	systemPrompt json.RawMessage,
 	sessionToolPreset string,
 	acd agentConfigDeps,
+	resolvedModel string,
 	logger *slog.Logger,
 ) (cfg agent.AgentConfig, spawnFlag *SpawnFlag, execStats *toolctx.ToolExecStats) {
 	// Build tool list from registry (uses stored descriptions and schemas).
@@ -219,7 +220,7 @@ func buildAgentConfig(
 		// consulted during it (genesis usage signal), then (2) feed the skill
 		// nudger. Both are cheap no-ops when their dependency is nil.
 		OnToolTurn: func(turn int, activities []agent.ToolActivity) {
-			recordTurnSkillUsage(acd.SkillUsageRecorder, skillConsults, activities, params.SessionKey)
+			recordTurnSkillUsage(acd.SkillUsageRecorder, skillConsults, activities, params.SessionKey, resolvedModel)
 			if !skillNudgerEnabled {
 				return
 			}
@@ -341,7 +342,7 @@ func buildAgentConfig(
 // during it, feeding the genesis Evolver real success-rate signal instead of
 // empty stats. The turn counts as a failure for every consulted skill if any
 // tool in it errored. No-op when no recorder is wired or nothing was consulted.
-func recordTurnSkillUsage(rec SkillUsageRecorder, log *SkillConsultLog, activities []agent.ToolActivity, sessionKey string) {
+func recordTurnSkillUsage(rec SkillUsageRecorder, log *SkillConsultLog, activities []agent.ToolActivity, sessionKey, model string) {
 	if rec == nil || log == nil {
 		return
 	}
@@ -373,7 +374,7 @@ func recordTurnSkillUsage(rec SkillUsageRecorder, log *SkillConsultLog, activiti
 		}
 	}
 	for _, name := range consulted {
-		rec.RecordSkillUse(sessionKey, name, errMsg == "", errMsg)
+		rec.RecordSkillUse(sessionKey, name, errMsg == "", errMsg, model)
 	}
 }
 

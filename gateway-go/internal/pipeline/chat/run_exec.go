@@ -251,7 +251,7 @@ func executeAgentRun(
 	}
 	// execStats threads into recordRunCompletion (LogEnd's RepairedToolCalls) —
 	// #3117 introduced it while #3121 moved LogEnd into the completion sink.
-	cfg, spawnFlag, execStats := buildAgentConfig(params, deps, cachedSession, systemPrompt, sessionToolPreset, acd, logger)
+	cfg, spawnFlag, execStats := buildAgentConfig(params, deps, cachedSession, systemPrompt, sessionToolPreset, acd, model, logger)
 	cfg.Model = model // set the resolved model
 	// Per-model defaults (profile sampling, tuned max-tokens floor) — only
 	// fills values the request left unset; request-level params, cache-safe.

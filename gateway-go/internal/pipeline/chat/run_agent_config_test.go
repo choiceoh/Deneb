@@ -18,7 +18,7 @@ import (
 // the preset Execute gate silently read empty values on the sync path.
 func TestBuildAgentConfig_OnTurnInitSetsSessionKeyAndPreset(t *testing.T) {
 	params := RunParams{SessionKey: "client:main"}
-	cfg, _, _ := buildAgentConfig(params, runDeps{}, nil, nil, "researcher", agentConfigDeps{}, slog.Default())
+	cfg, _, _ := buildAgentConfig(params, runDeps{}, nil, nil, "researcher", agentConfigDeps{}, "m-test", slog.Default())
 
 	if cfg.OnTurnInit == nil {
 		t.Fatal("OnTurnInit must be set")

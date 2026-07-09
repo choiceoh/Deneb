@@ -225,7 +225,7 @@ type SkillUsageRecorder interface {
 	// RecordSkillUse logs one skill-consult outcome. Must not block — the chat
 	// pipeline calls it synchronously on the run goroutine (the genesis
 	// implementation does a cheap JSONL append).
-	RecordSkillUse(sessionKey, skillName string, success bool, errMsg string)
+	RecordSkillUse(sessionKey, skillName string, success bool, errMsg, model string)
 }
 
 // HandlerConfig configures the chat handler.
