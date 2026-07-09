@@ -14,6 +14,13 @@ on:
   pull_request:
     paths: ["andromeda/**", "gateway-go/**"]
 
+# Cancel superseded runs (rapid pushes to a PR) — every other CI workflow
+# (ci.yml, sbom.yml, docs.yml, generate-check.yml) already does this; andromeda
+# was the lone gap, so its verify+wire-drift piled up in parallel.
+concurrency:
+  group: andromeda-ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
