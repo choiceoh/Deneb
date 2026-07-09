@@ -1,5 +1,21 @@
 # Changelog
 
+## [4.81.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.80.0...deneb-v4.81.0) (2026-07-09)
+
+
+### ✨ Features
+
+* **autonomous:** 자가개선 스윕에 실패 시그니처 클러스터링 — 플릿 증거 번들 도입 ([#3310](https://github.com/choiceoh/Deneb/issues/3310)) ([52cbe26](https://github.com/choiceoh/Deneb/commit/52cbe26da9aa9f4ca3ec54fa77f58392ec3318fd))
+* **dev:** 퍼펫 빙의 개선 — coding role 유출 수정·role별 시트·show 확장 + 회상 스몰토크 게이트 ([#3306](https://github.com/choiceoh/Deneb/issues/3306)) ([3ffdbc3](https://github.com/choiceoh/Deneb/commit/3ffdbc3618e85e52e8150eaffcfaf27d29b21b12))
+* **wiki:** 사용자 모델 기록 강화 — 같은턴 write-back·선호 가속 드림·합성 규칙 정교화 ([#3309](https://github.com/choiceoh/Deneb/issues/3309)) ([37fe2bb](https://github.com/choiceoh/Deneb/commit/37fe2bb06a1ec7b232e97883164b75506129b05e))
+
+
+### 🐛 Bug Fixes
+
+* **andromeda:** 메일 열람 시 날짜 페이저 튕김·미열람 수정 — Date 헤더와 수신일 불일치 가드 + 고정 행 ([#3308](https://github.com/choiceoh/Deneb/issues/3308)) ([3a9a34d](https://github.com/choiceoh/Deneb/commit/3a9a34d81b5b80c23222fc6236bb6172db5e1c4d))
+* **chat:** 퍼펫 2차 실측 결함 수정 — 대형 출력 스필 포인터 파괴·빈 완료 무표시·홀드 워치독 ([#3311](https://github.com/choiceoh/Deneb/issues/3311)) ([27c60ec](https://github.com/choiceoh/Deneb/commit/27c60ec1c41931c0ecefde8da1c85951f149726c))
+* **native:** 설정 모델 픽커에서 은퇴한 챗봇·분석 역할 선택창 제거 ([#3304](https://github.com/choiceoh/Deneb/issues/3304)) ([cc97165](https://github.com/choiceoh/Deneb/commit/cc97165115176bf87e3ce37b58ee4060e15490f2))
+
 ## [4.80.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.79.0...deneb-v4.80.0) (2026-07-08)
 
 
