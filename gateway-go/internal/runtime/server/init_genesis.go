@@ -672,7 +672,18 @@ func (s *Server) registerGenesisAutonomousTasks(_ *rpcutil.GatewayHub) {
 		// executor — a week of real-usage failure signal, overnight. Shares the
 		// replay flag with the behavioral gate; workout evidence is quarantined
 		// from real-usage stats by Source.
-		if replayExecutorEnabled() {
+		//
+		// Production-state-dir gated (unlike evolve/curator/backfill): the
+		// genesis tracker writes to homeDir/.deneb REGARDLESS of DENEB_STATE_DIR,
+		// so a dev/live-test instance shares production's skill_usage.jsonl. That
+		// is an accepted read-mostly risk for the deterministic core-loop tasks,
+		// but workout is the one lane that would make live model calls AND write
+		// SYNTHETIC failure rows into production from a dev process — so it stays
+		// off outside the production state dir (same invariant as memory-backup /
+		// wiki-research).
+		workoutHome, _ := os.UserHomeDir()
+		_, isProdState := s.productionStateDir(workoutHome)
+		if replayExecutorEnabled() && isProdState {
 			workoutEngine := genesis.NewSkillValidationEngine(s.genesisTracker, s.logger)
 			workoutEngine.SetExecutor(
 				s.modelRegistry.Client(modelrole.RoleLightweight),
@@ -684,6 +695,8 @@ func (s *Server) registerGenesisAutonomousTasks(_ *rpcutil.GatewayHub) {
 				Catalog: s.skillCatalog,
 				Logger:  s.logger,
 			})
+		} else if replayExecutorEnabled() {
+			s.logger.Info("genesis: skill-workout lane disabled (non-production state dir)")
 		}
 
 		// Event-driven evolve: after N new skills accumulate, run a cycle in
