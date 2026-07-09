@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.62](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.61...andromeda-v0.0.62) (2026-07-09)
+
+
+### 🔧 Internal
+
+* 코드모드(Code Mode) 제거 — git-worktree 코딩 세션·miniapp.code.* RPC·네이티브/andromeda UI·구현자 프롬프트 프로파일 ([#3354](https://github.com/choiceoh/Deneb/issues/3354)) ([ca47311](https://github.com/choiceoh/Deneb/commit/ca47311ed8cb51c38f30bd016f0236f136cf5342))
+
 ## [0.0.61](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.60...andromeda-v0.0.61) (2026-07-09)
 
 
