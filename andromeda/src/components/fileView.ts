@@ -83,6 +83,20 @@ export function isEditableKind(kind: ViewKind): boolean {
   return kind === "markdown" || kind === "csv" || kind === "diff" || kind === "text";
 }
 
+// renderableBlob re-stamps a fetched blob's MIME for the media viewers. `<embed>`
+// picks its plugin from the BLOB's own content-type, not the element's `type`
+// attribute — and the gateway/Tauri HTTP fetch can hand back a generic or text/*
+// type (blob.type ""/"text/plain"), which makes a PDF render as raw source text
+// instead of a page. We already know the kind from the filename, so force the
+// right MIME. Only PDFs need it (`<img>` sniffs image bytes regardless of type),
+// and only when the blob isn't already tagged application/pdf.
+export function renderableBlob(blob: Blob, kind: ViewKind): Blob {
+  if (kind === "pdf" && blob.type !== "application/pdf") {
+    return new Blob([blob], { type: "application/pdf" });
+  }
+  return blob;
+}
+
 // maxTextPreviewBytes caps what the editor loads — a 100MB log would freeze
 // the webview; past the cap the viewer degrades to the download link.
 export const maxTextPreviewBytes = 2 << 20; // 2 MiB
