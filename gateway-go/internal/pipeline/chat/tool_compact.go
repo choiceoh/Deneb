@@ -31,10 +31,10 @@ const (
 // project) is stripped away, its real substance is exactly this kind of
 // rule-based terminal cleanup with a "keep only if it shrank" guard.
 //
-// Registered before OutputTrimmer so the 32K cap sees already-cleaned text (more
-// real content fits under the cap). Complements compaction, which prunes OLD
-// tool results: this trims a result the moment it returns, lowering the token
-// baseline so compaction fires less often.
+// Runs after ToolRegistry.Execute's spill+truncate (which owns size capping),
+// so it only cleans what already fit the tool's budget. Complements compaction,
+// which prunes OLD tool results: this trims a result the moment it returns,
+// lowering the token baseline so compaction fires less often.
 func CompactToolOutput(_ context.Context, _, output string) string {
 	if len(output) < compactMinInputBytes {
 		return output

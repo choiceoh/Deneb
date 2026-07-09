@@ -61,6 +61,11 @@ type ExecResult struct {
 	EndedAt   int64     `json:"endedAt"`
 	RuntimeMs int64     `json:"runtimeMs"`
 	Error     string    `json:"error,omitempty"`
+	// Head bytes the capture ring buffer discarded (output exceeded the 1MB
+	// per-stream cap): Stdout/Stderr hold only the TAIL when these are >0.
+	// Consumers must surface this — a silent tail reads as complete output.
+	StdoutDroppedBytes int64 `json:"stdoutDroppedBytes,omitempty"`
+	StderrDroppedBytes int64 `json:"stderrDroppedBytes,omitempty"`
 }
 
 // TrackedProcess represents a running or completed process.
@@ -329,12 +334,14 @@ func (m *Manager) Execute(ctx context.Context, req ExecRequest) *ExecResult {
 	endedAt := time.Now().UnixMilli()
 
 	result := &ExecResult{
-		ID:        req.ID,
-		Stdout:    stdoutSB.Snapshot(),
-		Stderr:    stderrSB.Snapshot(),
-		StartedAt: startedAt,
-		EndedAt:   endedAt,
-		RuntimeMs: endedAt - startedAt,
+		ID:                 req.ID,
+		Stdout:             stdoutSB.Snapshot(),
+		Stderr:             stderrSB.Snapshot(),
+		StartedAt:          startedAt,
+		EndedAt:            endedAt,
+		RuntimeMs:          endedAt - startedAt,
+		StdoutDroppedBytes: stdoutSB.Dropped(),
+		StderrDroppedBytes: stderrSB.Dropped(),
 	}
 
 	if err != nil {

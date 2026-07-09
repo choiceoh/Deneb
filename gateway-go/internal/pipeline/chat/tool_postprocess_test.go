@@ -2,18 +2,41 @@ package chat
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 )
 
-func TestOutputTrimmer_Long(t *testing.T) {
-	output := strings.Repeat("x", 70000)
-	result := OutputTrimmer(context.Background(), "test", output)
-	if len(result) >= len(output) {
-		t.Error("expected trimmed output to be shorter")
+// TestPostProcess_PreservesSpilloverMarker pins the registry↔postprocess
+// contract: ToolRegistry.Execute spill+truncates BEFORE post-processing, and
+// no processor in the default chain may shrink that output again — the former
+// 32K OutputTrimmer re-trimmed the registry's budget+marker output and deleted
+// the read_spillover pointer from the middle (2MB exec result → 3,069 chars
+// with no marker while the spill file sat orphaned on disk).
+func TestPostProcess_PreservesSpilloverMarker(t *testing.T) {
+	pp := NewPostProcessRegistry()
+	pp.AddGlobal(CompactToolOutput)
+	pp.AddGlobal(ErrorEnricher)
+
+	marker := "\n\n... [149798 lines truncated — use read_spillover(\"sp_test\") for full content] ...\n\n"
+	// Registry-truncated shape: 16K head + marker + 16K tail (budget+marker
+	// chars — one marker over the old trimmer's equal 32K cap). Distinct head
+	// and tail lines so the duplicate-line compactor cannot collapse the body.
+	var b strings.Builder
+	for i := range 200 {
+		fmt.Fprintf(&b, "head-%03d %s\n", i, strings.Repeat("h", 70))
 	}
-	if !strings.Contains(result, "trimmed") {
-		t.Error("expected trimmed marker in output")
+	head := b.String()
+	b.Reset()
+	for i := range 200 {
+		fmt.Fprintf(&b, "tail-%03d %s\n", i, strings.Repeat("t", 70))
+	}
+	tail := b.String()
+	output := head + marker + tail
+
+	got := pp.Apply(context.Background(), "exec", output)
+	if !strings.Contains(got, "read_spillover(\"sp_test\")") {
+		t.Fatalf("post-processing destroyed the spillover pointer:\n%.200s", got)
 	}
 }
 

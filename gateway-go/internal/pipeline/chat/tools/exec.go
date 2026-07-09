@@ -231,18 +231,37 @@ func formatExecResultJSON(r *process.ExecResult) string {
 	if r.Error != "" {
 		result["error"] = r.Error
 	}
+	if r.StdoutDroppedBytes > 0 {
+		result["stdout_dropped_bytes"] = r.StdoutDroppedBytes
+	}
+	if r.StderrDroppedBytes > 0 {
+		result["stderr_dropped_bytes"] = r.StderrDroppedBytes
+	}
 	data, _ := json.MarshalIndent(result, "", "  ")
 	return string(data)
 }
 
 func formatExecResult(r *process.ExecResult) string {
 	var sb strings.Builder
+	// Head-drop note FIRST: without it a ring-buffered tail reads as complete
+	// output starting mid-line, and the model reasons over missing data
+	// (measured: seq 1..300000 → "first line" was 150204).
+	if r.StdoutDroppedBytes > 0 {
+		fmt.Fprintf(&sb,
+			"[stdout truncated: first %d bytes dropped — output exceeded the capture buffer; only the tail follows]\n",
+			r.StdoutDroppedBytes)
+	}
 	if r.Stdout != "" {
 		sb.WriteString(r.Stdout)
 	}
 	if r.Stderr != "" {
 		if sb.Len() > 0 {
 			sb.WriteString("\n")
+		}
+		if r.StderrDroppedBytes > 0 {
+			fmt.Fprintf(&sb,
+				"[stderr truncated: first %d bytes dropped — only the tail follows]\n",
+				r.StderrDroppedBytes)
 		}
 		sb.WriteString("STDERR:\n")
 		sb.WriteString(r.Stderr)
