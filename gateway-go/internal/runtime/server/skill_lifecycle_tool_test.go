@@ -945,6 +945,49 @@ func TestProposeSkillEvolution_RecordsOpportunityBacklog(t *testing.T) {
 	}
 }
 
+// TestProposeSkillEvolution_LogsProposalIndependentOfExecution locks the
+// durability invariant behind the log-before-execute ordering: the proposal is
+// persisted BEFORE the slow, cancellable execution, so an interrupted
+// evolve/genesis (an auto-deploy hot-swap cancelling the review fork mid
+// held-out validation — verified on prod 2026-07-09, the lifecycle log frozen
+// for days while reviews kept firing) cannot erase the reviewer's decision.
+// Here the evolver is unconfigured, so execution fails — yet the proposal must
+// still be on record. Guards against a future refactor re-nesting the log write
+// inside a success branch.
+func TestProposeSkillEvolution_LogsProposalIndependentOfExecution(t *testing.T) {
+	tracker := newSkillLifecycleTestTracker(t)
+	b := &skillLifecycleBackend{tracker: tracker} // evolver nil -> execution fails
+
+	res, err := b.ProposeSkillEvolution(context.Background(), chattools.SkillEvolutionProposalRequest{
+		Route:      "evolve",
+		SkillName:  "contract-review",
+		Candidate:  "add a multi-document DR comparison sub-procedure",
+		SessionKey: "client:main",
+		Reason:     "session showed a distinct comparison workflow",
+		Evidence:   "26-item DR table cross-reference",
+		Execute:    true,
+	})
+	if err != nil {
+		t.Fatalf("ProposeSkillEvolution: %v", err)
+	}
+	m, ok := res.(map[string]any)
+	if !ok {
+		t.Fatalf("expected map result, got %T", res)
+	}
+	if m["ok"] != false {
+		t.Fatalf("expected ok=false when evolver unconfigured (execution should fail), got %v", m["ok"])
+	}
+
+	// The proposal must be durable even though execution failed.
+	records, err := tracker.RecentSkillOpportunities("contract-review", 5)
+	if err != nil {
+		t.Fatalf("RecentSkillOpportunities: %v", err)
+	}
+	if len(records) != 1 || records[0].Route != "evolve" {
+		t.Fatalf("proposal not recorded despite failed execution: %+v", records)
+	}
+}
+
 // TestProposeSkillEvolution_ExecutableRouteRequiresCandidate ensures executable
 // routes (genesis/create/evolve) still require a candidate — the no-op
 // exemption must not weaken validation for routes that actually do work.
