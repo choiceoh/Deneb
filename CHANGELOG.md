@@ -1,5 +1,23 @@
 # Changelog
 
+## [4.82.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.81.0...deneb-v4.82.0) (2026-07-09)
+
+
+### ✨ Features
+
+* **autonomous:** 검증 벤치 자동 백필 레인 — 실사용 트랜스크립트를 held-out 케이스로 결정론 수확 ([#3312](https://github.com/choiceoh/Deneb/issues/3312)) ([ff48ad4](https://github.com/choiceoh/Deneb/commit/ff48ad4cdaa13133f592d6e6a6177780b4ce53ba))
+* **autonomous:** 자가개선 신호 케이던스·해상도 상향 — 스윕 12h + 실패 클러스터 모델 축 ([#3317](https://github.com/choiceoh/Deneb/issues/3317)) ([708363a](https://github.com/choiceoh/Deneb/commit/708363aca0b43b621dd83b97b17a963d37e1fe18))
+* **autonomous:** 하트비트 픽스처 수확 — 지시문 표면 evolve P0 코퍼스 ([#3320](https://github.com/choiceoh/Deneb/issues/3320)) ([9eeb901](https://github.com/choiceoh/Deneb/commit/9eeb90172c8deffc6755e791234ab860c7b5421c))
+* **skills:** 스킬 사용 기록에 해석된 모델 차원 추가 — 모델별 약점 신호 기반 ([#3314](https://github.com/choiceoh/Deneb/issues/3314)) ([dd54218](https://github.com/choiceoh/Deneb/commit/dd542180db15d954122cc889663f4f4a83043710))
+* **skills:** 자가개선 편집 표면 선언 화이트리스트 — 금지 표면은 기록 시점 거부 ([#3315](https://github.com/choiceoh/Deneb/issues/3315)) ([2d36a4c](https://github.com/choiceoh/Deneb/commit/2d36a4ce6b8590405ffd59f45fa30ccb969a923a))
+* **skills:** 커버리지 조건부 게이트 완화 — held-out 케이스 있는 스킬은 측정 기반 승격 ([#3313](https://github.com/choiceoh/Deneb/issues/3313)) ([3caae98](https://github.com/choiceoh/Deneb/commit/3caae98e2e0991b3994a21236cbed07957dbdca9))
+
+
+### 🐛 Bug Fixes
+
+* **chat:** native 동기 채팅 실행-경로 결함 — auto-steer 사문화·서브에이전트 완료 false 경보 ([#3319](https://github.com/choiceoh/Deneb/issues/3319)) ([c56d8d3](https://github.com/choiceoh/Deneb/commit/c56d8d3d0f8669d47324b8c1e59928f057da6401))
+* **native:** 알림 리스너·푸시 경로 크래시 가드 — 타 앱 알림 언파싱 예외로 인한 무작위 백그라운드 종료 수리 ([#3321](https://github.com/choiceoh/Deneb/issues/3321)) ([907920c](https://github.com/choiceoh/Deneb/commit/907920ccdd3e1a4c92447908ae18afef99a8f9b7))
+
 ## [4.81.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.80.0...deneb-v4.81.0) (2026-07-09)
 
 
