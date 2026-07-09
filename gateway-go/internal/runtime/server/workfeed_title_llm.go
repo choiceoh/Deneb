@@ -6,18 +6,27 @@ import (
 	"strings"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/pilot"
 )
 
-// Lightweight-LLM card titler + summarizer for proactive work-feed cards.
+// Tiny-LLM card titler + summarizer for proactive work-feed cards.
 //
 // The analysis (main) model often writes a generic heading ("메일 분석 리포트") or
 // opens with a narration sentence, so the deterministic heuristic ends up with a
 // poor card title (a generic label, or a whole sentence). Naming a card is a tiny
-// job, so it is handed to the lightweight role (local, cheap, fast) rather than the
-// analysis model — used both for mail reports (to surface the email's real subject)
-// and for any proactive body whose heuristic title is weak (see isWeakCardTitle).
+// extraction job (≤20-char noun phrase + 2-line gist), so it is handed to the tiny
+// role — used both for mail reports (to surface the email's real subject) and for
+// any proactive body whose heuristic title is weak (see isWeakCardTitle).
+//
+// Why tiny, not lightweight: this call caps output at cardTitleMaxTokens, which
+// only fits an answer with the thinking channel OFF. The tiny role is an explicit
+// self-hosted extraction model (agents.tinyModel, e.g. vLLM qwen3.6-35b-a3b) whose
+// thinking-off toggle is honored on the vLLM path — same role session titles and
+// mail-stage-1 extractors use. The lightweight role, by contrast, can resolve to a
+// cloud reasoning model (deepseek-v4-flash-api) that ignores the vLLM template
+// thinking toggle and burns the whole token budget on reasoning → empty content →
+// every card silently fell back to the raw-sentence heuristic.
+//
 // The same call also produces the card's 2-line summary, so the preview under the
 // title reads as a real gist instead of the heuristic's joined-and-clipped body
 // lines — one call, both outputs. Best-effort: any failure returns ("", "") and
@@ -33,7 +42,7 @@ const (
 	// cardTitleMaxTokens caps the generated output. It must fit a short title plus a
 	// two-line summary, so it is larger than a title-only cap.
 	cardTitleMaxTokens = 256
-	// cardTitleTimeout bounds the lightweight call so a stalled model never holds
+	// cardTitleTimeout bounds the tiny call so a stalled model never holds
 	// up proactive delivery.
 	cardTitleTimeout = 8 * time.Second
 	// No hard length clamp on the LLM title: the prompt asks for ≤20 Korean
@@ -61,9 +70,9 @@ const cardTitleSystemPrompt = `너는 업무 알림 카드의 제목과 짧은 �
 - 요약은 카드 미리보기용으로 2문장(약 80자) 이내. 제목을 그대로 반복하지 말고 핵심 내용과 이유를 담는다.
 - 따옴표·마크다운·머리기호·이모지 금지. 위 두 줄 외에 다른 설명·접두어를 출력하지 마라.`
 
-// cardTitleSummary returns a lightweight-model-generated card title and 2-line
-// summary for a proactive body, or ("", "") on any failure (so the heuristic
-// fallbacks apply). It is wired as proactiveRelayDeps.cardTitler.
+// cardTitleSummary returns a tiny-model-generated card title and 2-line summary
+// for a proactive body, or ("", "") on any failure (so the heuristic fallbacks
+// apply). It is wired as proactiveRelayDeps.cardTitler.
 func (s *Server) cardTitleSummary(content string) (title, summary string) {
 	body := content
 	if r := []rune(body); len(r) > cardTitleMaxInputRunes {
@@ -71,7 +80,7 @@ func (s *Server) cardTitleSummary(content string) (title, summary string) {
 	}
 	ctx, cancel := context.WithTimeout(s.ShutdownCtx(), cardTitleTimeout)
 	defer cancel()
-	out, err := pilot.CallRoleLLM(ctx, modelrole.RoleLightweight, cardTitleSystemPrompt, body, cardTitleMaxTokens)
+	out, err := pilot.CallTinyLLM(ctx, cardTitleSystemPrompt, body, cardTitleMaxTokens)
 	if err != nil {
 		return "", ""
 	}
