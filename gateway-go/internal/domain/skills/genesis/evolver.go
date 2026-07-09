@@ -1070,13 +1070,26 @@ const (
 	skillFailurePatternLimit          = 4
 )
 
+// Coverage-conditional gate relaxation (2026-07-09, operator-approved measured
+// bets): a skill WITH held-out validation cases has a real behavioral
+// regression check, so the size/judge proxies that stood in for measurement can
+// loosen — bigger rewrites become measured bets instead of blind ones. Skills
+// with no coverage keep the conservative caps above. The backfill lane
+// (validation_backfill_task.go) grows coverage, so skills graduate to the
+// relaxed tier as their corpus fills.
+const (
+	skillCoveredEditBudgetMaxChangedRatio = 0.85
+	skillCoveredHermesMaxChangedSections  = 5
+	skillCoveredJudgeMinScoreDelta        = 1.0
+)
+
 // skillEvolveCandidateCount is K for the multi-candidate generate-and-select
 // path (#3): the evolver streams this many candidate bodies from the producer
 // (each after the first nudged by a small variation note so they differ), runs
 // the full per-candidate gate stack on each, and commits the best non-regressive
 // one. K=1 preserves the original single-candidate behavior exactly. Kept small
 // so a background evolve cycle's LLM-call budget grows only linearly.
-const skillEvolveCandidateCount = 3
+const skillEvolveCandidateCount = 5
 
 // skillUncoveredJudgeMinScoreDelta is the judge score margin required to accept
 // an evolve of a skill that has NO held-out validation cases (#5). It stays
@@ -1325,7 +1338,7 @@ func normalizeSectionBody(value string) string {
 	return strings.Join(strings.Fields(strings.TrimSpace(value)), " ")
 }
 
-func validateTextualEditBudget(originalContent, candidateBody string) (bool, string) {
+func validateTextualEditBudget(originalContent, candidateBody string, covered bool) (bool, string) {
 	if strings.TrimSpace(candidateBody) == "" {
 		return false, "textual edit budget rejected empty candidate body"
 	}
@@ -1351,13 +1364,17 @@ func validateTextualEditBudget(originalContent, candidateBody string) (bool, str
 
 	retained := countRetainedLines(originalLines, candidateLines)
 	changedRatio := 1 - float64(retained)/float64(len(originalLines))
-	if changedRatio > skillEditBudgetMaxChangedRatio {
-		return false, fmt.Sprintf("textual edit budget exceeded: changed %.0f%% of meaningful lines (max %.0f%%)", changedRatio*100, skillEditBudgetMaxChangedRatio*100)
+	maxRatio := skillEditBudgetMaxChangedRatio
+	if covered {
+		maxRatio = skillCoveredEditBudgetMaxChangedRatio
+	}
+	if changedRatio > maxRatio {
+		return false, fmt.Sprintf("textual edit budget exceeded: changed %.0f%% of meaningful lines (max %.0f%%)", changedRatio*100, maxRatio*100)
 	}
 	return true, ""
 }
 
-func validateHermesEvolutionGuardrails(originalContent, candidateBody string) (bool, string) {
+func validateHermesEvolutionGuardrails(originalContent, candidateBody string, covered bool) (bool, string) {
 	candidateBody = skillBodyOnly(candidateBody)
 	size := candidateSkillBytes(originalContent, candidateBody)
 	if size > skillHermesMaxSkillBytes {
@@ -1374,10 +1391,14 @@ func validateHermesEvolutionGuardrails(originalContent, candidateBody string) (b
 
 	originalLines := meaningfulSkillLines(originalBody)
 	if len(originalLines) >= skillEditBudgetMinOriginalLines {
+		maxSections := skillHermesMaxChangedSections
+		if covered {
+			maxSections = skillCoveredHermesMaxChangedSections
+		}
 		changed := changedSkillSections(originalBody, candidateBody)
-		if len(changed) > skillHermesMaxChangedSections {
+		if len(changed) > maxSections {
 			return false, fmt.Sprintf("Hermes patch-first gate rejected broad rewrite: changed %d sections (%s), max %d",
-				len(changed), strings.Join(changedSectionNames(changed), ", "), skillHermesMaxChangedSections)
+				len(changed), strings.Join(changedSectionNames(changed), ", "), maxSections)
 		}
 	}
 	return true, ""
@@ -1905,10 +1926,11 @@ func (e *Evolver) validateCandidate(ctx context.Context, skillName string, clien
 }
 
 func (e *Evolver) validateCandidatePreflight(skillName, originalContent, candidateBody string, audit HarnessEditAudit, stats *UsageStats, reviewFinding string) (bool, string) {
-	if ok, reason := validateHermesEvolutionGuardrails(originalContent, candidateBody); !ok {
+	covered := len(e.validationCasesForPrompt(skillName)) > 0
+	if ok, reason := validateHermesEvolutionGuardrails(originalContent, candidateBody, covered); !ok {
 		return false, reason
 	}
-	if ok, reason := validateTextualEditBudget(originalContent, candidateBody); !ok {
+	if ok, reason := validateTextualEditBudget(originalContent, candidateBody, covered); !ok {
 		return false, reason
 	}
 	if engine := e.skillValidationEngine(); engine != nil {
@@ -2259,7 +2281,7 @@ func (e *Evolver) judgeCandidate(ctx context.Context, skillName string, client *
 	if err != nil {
 		return false, "", fmt.Errorf("judge: parse verdict: %w", err)
 	}
-	pass, reason = acceptJudgeVerdict(resp)
+	pass, reason = acceptJudgeVerdict(resp, len(cases) > 0)
 	if pass && len(cases) == 0 {
 		// No held-out validation cases cover this skill, so the held-out gate
 		// failed open and the judge verdict is the only behavioral check. Require a
@@ -2283,7 +2305,7 @@ type judgeVerdict struct {
 	Reason         string   `json:"reason"`
 }
 
-func acceptJudgeVerdict(resp judgeVerdict) (bool, string) {
+func acceptJudgeVerdict(resp judgeVerdict, covered bool) (bool, string) {
 	reason := strings.TrimSpace(resp.Reason)
 	if reason == "" {
 		reason = "judge rejected candidate"
@@ -2298,8 +2320,14 @@ func acceptJudgeVerdict(resp judgeVerdict) (bool, string) {
 	if !validJudgeScore(orig) || !validJudgeScore(cand) {
 		return false, fmt.Sprintf("judge score out of range: original=%.1f candidate=%.1f: %s", orig, cand, reason)
 	}
-	if cand-orig < skillJudgeMinScoreDelta {
-		return false, fmt.Sprintf("candidate score %.1f did not clear %.1f point improvement margin over original score %.1f: %s", cand, skillJudgeMinScoreDelta, orig, reason)
+	minDelta := skillJudgeMinScoreDelta
+	if covered {
+		// Held-out replay is the real behavioral check for covered skills; the
+		// judge only needs to confirm direction, not clear a tall bar.
+		minDelta = skillCoveredJudgeMinScoreDelta
+	}
+	if cand-orig < minDelta {
+		return false, fmt.Sprintf("candidate score %.1f did not clear %.1f point improvement margin over original score %.1f: %s", cand, minDelta, orig, reason)
 	}
 	return true, reason
 }
