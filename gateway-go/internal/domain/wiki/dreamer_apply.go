@@ -286,6 +286,55 @@ func buildWikiSynthesisPrompt(indexContent, processedHistory, polarisSection, di
 JSON 배열만 반환하세요. 다른 텍스트 없이.`, indexContent, processedHistory, polarisSection, diaryContent)
 }
 
+// newPageFromUpdate stamps a fresh Page with the meta carried by a wikiUpdate:
+// the create branch and the update-create-on-missing fallback both build an
+// identical new page (same fields, same normalization), so this is the single
+// source of truth for "what meta a freshly-created page inherits." It does NOT
+// touch Body — the caller sets that (template vs raw content).
+func newPageFromUpdate(u wikiUpdate, code string) *Page {
+	page := NewPage(u.Title, u.Category, u.Tags)
+	if code != "" {
+		page.Meta.Code = code
+	}
+	if u.Importance > 0 {
+		page.Meta.Importance = u.Importance
+	}
+	if u.ID != "" {
+		page.Meta.ID = u.ID
+	}
+	if u.Summary != "" {
+		page.Meta.Summary = u.Summary
+	}
+	if len(u.Related) > 0 {
+		page.Meta.Related = u.Related
+	}
+	if u.Type != "" {
+		page.Meta.Type = u.Type
+	}
+	if u.Confidence != "" {
+		page.Meta.Confidence = u.Confidence
+	}
+	if u.Due != "" {
+		page.Meta.Due = u.Due
+	}
+	if u.Resource != "" {
+		page.Meta.Resource = u.Resource
+	}
+	if len(u.Cues) > 0 {
+		page.Meta.Cues = u.Cues
+	}
+	if u.Client != "" {
+		page.Meta.Client = u.Client
+	}
+	if len(u.Sites) > 0 {
+		page.Meta.Sites = normalizeSites(u.Sites)
+	}
+	if len(u.Kinds) > 0 {
+		page.Meta.Kinds = normalizeKinds(u.Kinds)
+	}
+	return page
+}
+
 // applyUpdates creates or updates wiki pages based on LLM instructions.
 // Returns (created, updated) counts, the 사용자-category subset of those writes
 // (userPages — the user model), and paths of oversized pages.
@@ -402,46 +451,7 @@ func (wd *WikiDreamer) applyUpdates(_ context.Context, updates []wikiUpdate) (cr
 		wrote := false
 		switch u.Action {
 		case "create":
-			page := NewPage(u.Title, u.Category, u.Tags)
-			if code != "" {
-				page.Meta.Code = code
-			}
-			if u.Importance > 0 {
-				page.Meta.Importance = u.Importance
-			}
-			if u.ID != "" {
-				page.Meta.ID = u.ID
-			}
-			if u.Summary != "" {
-				page.Meta.Summary = u.Summary
-			}
-			if len(u.Related) > 0 {
-				page.Meta.Related = u.Related
-			}
-			if u.Type != "" {
-				page.Meta.Type = u.Type
-			}
-			if u.Confidence != "" {
-				page.Meta.Confidence = u.Confidence
-			}
-			if u.Due != "" {
-				page.Meta.Due = u.Due
-			}
-			if u.Resource != "" {
-				page.Meta.Resource = u.Resource
-			}
-			if len(u.Cues) > 0 {
-				page.Meta.Cues = u.Cues
-			}
-			if u.Client != "" {
-				page.Meta.Client = u.Client
-			}
-			if len(u.Sites) > 0 {
-				page.Meta.Sites = normalizeSites(u.Sites)
-			}
-			if len(u.Kinds) > 0 {
-				page.Meta.Kinds = normalizeKinds(u.Kinds)
-			}
+			page := newPageFromUpdate(u, code)
 			if u.Content != "" {
 				page.Body = u.Content
 			} else {
@@ -471,46 +481,7 @@ func (wd *WikiDreamer) applyUpdates(_ context.Context, updates []wikiUpdate) (cr
 			err := wd.store.UpdatePage(u.Path, func(existing *Page) (*Page, error) {
 				if existing == nil {
 					// Page doesn't exist — create it instead.
-					page := NewPage(u.Title, u.Category, u.Tags)
-					if code != "" {
-						page.Meta.Code = code
-					}
-					if u.Importance > 0 {
-						page.Meta.Importance = u.Importance
-					}
-					if u.ID != "" {
-						page.Meta.ID = u.ID
-					}
-					if u.Summary != "" {
-						page.Meta.Summary = u.Summary
-					}
-					if len(u.Related) > 0 {
-						page.Meta.Related = u.Related
-					}
-					if u.Type != "" {
-						page.Meta.Type = u.Type
-					}
-					if u.Confidence != "" {
-						page.Meta.Confidence = u.Confidence
-					}
-					if u.Due != "" {
-						page.Meta.Due = u.Due
-					}
-					if u.Resource != "" {
-						page.Meta.Resource = u.Resource
-					}
-					if len(u.Cues) > 0 {
-						page.Meta.Cues = u.Cues
-					}
-					if u.Client != "" {
-						page.Meta.Client = u.Client
-					}
-					if len(u.Sites) > 0 {
-						page.Meta.Sites = normalizeSites(u.Sites)
-					}
-					if len(u.Kinds) > 0 {
-						page.Meta.Kinds = normalizeKinds(u.Kinds)
-					}
+					page := newPageFromUpdate(u, code)
 					page.Body = u.Content
 					createdThis = true
 					return page, nil
