@@ -7,6 +7,7 @@ import {
   maxHwpBytes,
   maxTextPreviewBytes,
   parseCsv,
+  renderableBlob,
   viewKindFor,
 } from "@/components/fileView";
 import { type HwpBlock, parseHwp } from "@/components/hwp/hwp";
@@ -72,7 +73,10 @@ export function FileViewer({
         const blob = await load();
         if (!alive) return;
         if (kind === "image" || kind === "pdf") {
-          url = URL.createObjectURL(blob);
+          // Re-stamp the MIME: <embed> renders by the blob's own content-type, and
+          // the gateway/Tauri fetch can drop it — a typeless/text blob shows a PDF
+          // as raw source. renderableBlob forces application/pdf for the pdf kind.
+          url = URL.createObjectURL(renderableBlob(blob, kind));
           setObjectUrl(url);
           setPhase("ready");
           return;

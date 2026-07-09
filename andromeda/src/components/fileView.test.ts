@@ -1,5 +1,29 @@
 import { describe, expect, it } from "vitest";
-import { diffLineClass, isEditableKind, parseCsv, textToBase64, viewKindFor } from "./fileView";
+import { diffLineClass, isEditableKind, parseCsv, renderableBlob, textToBase64, viewKindFor } from "./fileView";
+
+describe("renderableBlob", () => {
+  it("re-stamps a mistyped PDF blob to application/pdf, preserving bytes", () => {
+    const src = new Blob(["%PDF-1.5\nbody"], { type: "text/plain" });
+    const out = renderableBlob(src, "pdf");
+    expect(out.type).toBe("application/pdf");
+    expect(out.size).toBe(src.size);
+  });
+
+  it("re-stamps a typeless PDF blob (fetch dropped the header)", () => {
+    const out = renderableBlob(new Blob(["%PDF"]), "pdf");
+    expect(out.type).toBe("application/pdf");
+  });
+
+  it("leaves an already-correct PDF blob untouched", () => {
+    const src = new Blob(["%PDF"], { type: "application/pdf" });
+    expect(renderableBlob(src, "pdf")).toBe(src);
+  });
+
+  it("does not touch non-PDF kinds (<img> sniffs its own bytes)", () => {
+    const src = new Blob([new Uint8Array([1, 2, 3])], { type: "text/plain" });
+    expect(renderableBlob(src, "image")).toBe(src);
+  });
+});
 
 describe("viewKindFor", () => {
   it("routes by extension first, MIME as fallback", () => {
