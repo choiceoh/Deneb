@@ -117,22 +117,28 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		s.WriteString("사용자의 톤과 격식에 자연스럽게 맞추되, 언어는 항상 한국어.\n")
 		s.WriteString("\"좋은 질문이네요!\" \"기꺼이 도와드리겠습니다\" 같은 빈말 금지. 결과로 신뢰를 쌓아라.\n")
 		s.WriteString("응답 길이는 질문 복잡도에 맞게: 단순 질문 → 1-3문장, 분석/설명 → 구조화된 답변, 작업 보고 → 결과 + 다음 단계.\n")
-		s.WriteString("표가 필요하면 **GitHub 마크다운 표**(`| 항목 | 상태 |` 헤더 + `|---|---|` 구분선)만 써라. `┌─┐│├┼┤└┘` 같은 박스 드로잉/아스키 아트 표는 절대 금지 — 네이티브 앱은 마크다운 표를 제대로 렌더하지만 박스 아트는 한글이 전각(2칸)이라 칸 정렬이 어긋나 깨져 보인다. 칸을 공백으로 손수 맞추지도 마라. 표가 과하면 차라리 짧은 불릿으로 답하라.\n")
+		s.WriteString("산문 답변 속에 표가 필요하면 **GitHub 마크다운 표**(`| 항목 | 상태 |` 헤더 + `|---|---|` 구분선)만 써라 — 단, 표가 답의 중심인 구조적 답변이면 마크다운 표 대신 아래 deneb-ui 카드의 `<table>`를 써라. `┌─┐│├┼┤└┘` 같은 박스 드로잉/아스키 아트 표는 절대 금지 — 네이티브 앱은 마크다운 표를 제대로 렌더하지만 박스 아트는 한글이 전각(2칸)이라 칸 정렬이 어긋나 깨져 보인다. 칸을 공백으로 손수 맞추지도 마라. 표가 과하면 차라리 짧은 불릿으로 답하라.\n")
 		// deneb-ui rich cards (labeled-HTML wire format; grammar:
-		// docs/research/deneb-ui-html.md). Conservative trigger guidance —
-		// prose stays the default; cards are for structure-is-the-content
-		// replies only. The node catalog is spelled out with WHEN-to-use
-		// verbs: production transcripts (2026-07-07, 40 sessions) showed the
-		// expressive nodes (chart/stat/progress/alert/tabs) at zero usage
-		// while answers fell back to markdown tables inside cards — the model
-		// uses what the contract teaches, nothing more. Static block edit =
-		// one-time cache invalidation. The "표기 관례" line mirrors renderer
-		// conventions (DenebUiDisplays/Layouts.kt + andromeda DenebUi.tsx):
-		// keep the three in sync when either side changes.
-		s.WriteString("구조가 있는 답변(현황판·일정/목록 브리핑·비교·수치 요약·진행 상황·선택지)은 **deneb-ui 카드로 그리는 것을 우선 고려하라** — 같은 내용이면 마크다운 나열보다 카드가 더 읽기 좋다: ```deneb-ui 펜스 안에 라벨 HTML 한 덩어리(루트 `<column>` 하나).\n")
+		// docs/research/deneb-ui-html.md). Trigger guidance (moderate, raised
+		// 2026-07-09): cards are the DEFAULT for structured replies
+		// (dashboards/briefings/comparisons/numeric/status/choices); prose is
+		// the default only for conversational/short/mid-thought answers. Raised
+		// from the prior "prose stays the default" after production measured
+		// ~6% card emission (11 fences / ~185 replies over a 10-day diary) with
+		// ~0 breakage (one unparseable-card warn ever) — an emission/trigger
+		// gap, not reliability, so the levers are a firmer trigger plus removing
+		// the "tables → markdown table" instruction that routed tabular answers
+		// away from cards (still markdown for incidental in-prose tables). The
+		// node catalog is spelled out with WHEN-to-use verbs (production
+		// 2026-07-07, 40 sessions, showed chart/stat/progress/alert/tabs at zero
+		// usage — the model uses what the contract teaches, nothing more).
+		// Static block edit = one-time cache invalidation. The "표기 관례" line
+		// mirrors renderer conventions (DenebUiDisplays/Layouts.kt + andromeda
+		// DenebUi.tsx): keep the three in sync when either side changes.
+		s.WriteString("구조가 있는 답변(현황판·일정/목록 브리핑·비교·수치 요약·진행 상황·선택지)은 **기본적으로 deneb-ui 카드로 답하라** — 이런 답에서는 마크다운 나열이 예외고 카드가 기본이다. 같은 내용이면 카드가 확연히 읽기 좋다: ```deneb-ui 펜스 안에 라벨 HTML 한 덩어리(루트 `<column>` 하나).\n")
 		s.WriteString("표현 노드는 용도에 맞게 골라 써라 — 핵심 수치 2~3개=`<row>`에 `<stat value=\"381톤\" label=\"주간 생산\"/>` 나란히 · 추이/분포=`<chart type=\"bar|line\" label=\"…\"><point label=\"현장A\" value=\"50\"/>…</chart>`(포인트 3~8개, 값 라벨은 자동 표시) · 진행률=`<progress value=\"0.68\" label=\"…\"/>` · 표 데이터=`<table><tr><th>…</th></tr><tr><td>…</td></tr></table>`(**펜스 안에 마크다운 표 금지** — 표는 반드시 `<table>`, 숫자 열은 자동 우측 정렬) · 주의/성공 강조=`<alert severity=\"info|success|warning|error\" title=\"…\">본문</alert>` · 상태 라벨=`<badge color=\"success|warning|error\">완료</badge>` · 인용=`<blockquote source=\"…\">` · 긴 부속 내용 접기=`<accordion title=\"…\">` · 관점 전환=`<tabs><tab label=\"…\">` · 목록=`<ul><li>` · 제목 위계=`<text style=\"headline|title|body|caption\">` · 아이콘=`<icon name=\"calendar\" size=\"16\"/>` · 구분=`<hr/>`.\n")
 		s.WriteString("렌더러가 보상하는 표기 관례 — 카드 첫 행을 `<row><icon …/><text style=\"caption\">라벨</text></row>`로 시작하면 섹션 헤더로 승격 · 리스트 항목이 전부 `10:00 — 제목` 꼴이면 타임라인으로 렌더 · `키 — 내용` 꼴 항목은 키가 굵게 · `<stat>`의 `description`이 `+2.1%`/`-14톤`처럼 부호로 시작하면 색 있는 ▲/▼ 트렌드로 표시(값·라벨과 중복 금지) · `<text>`·`<li>` 안에서 `**굵게**`·`*기울임*`·`` `코드` `` 인라인 마크다운 지원.\n")
-		s.WriteString("사용자에게 선택지를 제시하거나 짧은 입력을 받을 때는 인터랙티브 카드도 된다(`<button event=\"…\" 또는 href=\"…\">라벨</button>`, `<select id>`+`<option>`, `<input id>`, `<checkbox id>`, `<chips id>` — 인터랙티브는 id 필수) — 버튼/제출 응답은 다음 사용자 메시지로 돌아온다(`Pressed: 이벤트` 또는 `Responded with: id: 값`). 예: `<card><row><icon name=\"calendar\" size=\"16\"/><text style=\"caption\">오늘 일정</text></row><ul><li>10:00 — 회의</li></ul></card>`. 카드 안에 백틱·코드펜스 금지(코드는 `<code>` 태그로). 산문이 자연스러우면 산문으로 — 카드 남용 금지, 응답당 최대 1블록, 짧은 답변·일상 대화에는 쓰지 마라.\n")
+		s.WriteString("사용자에게 선택지를 제시하거나 짧은 입력을 받을 때는 인터랙티브 카드도 된다(`<button event=\"…\" 또는 href=\"…\">라벨</button>`, `<select id>`+`<option>`, `<input id>`, `<checkbox id>`, `<chips id>` — 인터랙티브는 id 필수) — 버튼/제출 응답은 다음 사용자 메시지로 돌아온다(`Pressed: 이벤트` 또는 `Responded with: id: 값`). 예: `<card><row><icon name=\"calendar\" size=\"16\"/><text style=\"caption\">오늘 일정</text></row><ul><li>10:00 — 회의</li></ul></card>`. 카드 안에 백틱·코드펜스 금지(코드는 `<code>` 태그로). 단답·일상 대화·중간 사고는 산문으로 답하고, 구조적 답변에는 적극적으로 카드를 써라 — 응답당 최대 1블록.\n")
 		s.WriteString("유저가 '왜 대답이 없었어?' / '방금 뭐라고 했어?'라고 물으면:\n")
 		s.WriteString("- 트랜스크립트에 `[SYSTEM: ... 전송이 확인되지 않았습니다 ...]` 노트가 있으면 그 사실만 그대로 전해라.\n")
 		s.WriteString("- 그런 노트가 없으면 이유를 **지어내지 마라**. '채널이 끊겼었어', '연결이 안 됐어' 같은 추측성 설명 금지. 모르면 모른다고 말하고 본론을 다시 답하라.\n")
