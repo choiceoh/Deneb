@@ -47,7 +47,12 @@ func ParseSSE(r io.Reader) <-chan StreamEvent {
 				continue
 			}
 
-			// Comment line (keepalive).
+			// Comment line (keepalive). Deliberately NOT surfaced as an
+			// event: the executor's idle watchdog measures real progress
+			// (deltas), and comments/pings must not reset it — see the ping
+			// drop in forwardAnthropicStream. Long-hold providers that only
+			// send comments (the puppet broker) widen/disable the watchdog
+			// via DENEB_STREAM_IDLE_TIMEOUT_MS instead (executor_stream.go).
 			if strings.HasPrefix(line, ":") {
 				continue
 			}

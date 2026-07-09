@@ -234,6 +234,12 @@ cmd_start() {
   fi
 
   echo "==> Starting dev gateway on $DEV_HOST:$DEV_PORT (puppet seat)..."
+  # Disable the stream-idle watchdog (default 3min): it measures real progress
+  # events, and the broker's SSE comment keepalives deliberately don't reset
+  # it — a held request past 3min got a silent duplicate retry (and a fail on
+  # the stale one drove the fallback chain). Holds stay bounded by the turn
+  # deadline (5min) and the broker's STREAM_HOLD_MAX (30min).
+  DENEB_STREAM_IDLE_TIMEOUT_MS=-1 \
   devlib_start_gateway "$DEV_BINARY" "$DEV_PORT" "$PUPPET_CONFIG" \
     "$DEV_STATE_DIR" "$DEV_LOG" nohup
   echo "$DEVLIB_PID" > "$DEV_PID_FILE"

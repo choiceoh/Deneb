@@ -41,6 +41,12 @@ Client mode (operator CLI; broker URL from --broker or DENEB_PUPPET_URL):
 Timeout choreography (why keepalives + chunked framing exist):
   - gateway LLM HTTP client: 10 min hard cap, >=5 min per-request context
     (internal/ai/llm/client.go) — SSE comment lines keep bytes flowing.
+  - gateway stream-idle watchdog (agentsys/agent/executor_stream.go, default
+    3 min): counts REAL progress events only — comments/pings deliberately do
+    not reset it, so a held request would get a silent duplicate retry at
+    180s. puppet.sh therefore starts the gateway with
+    DENEB_STREAM_IDLE_TIMEOUT_MS=-1 (watchdog off; holds stay bounded by the
+    turn deadline and STREAM_HOLD_MAX).
   - miniapp.chat.send turn deadline: 5 min for the WHOLE turn
     (internal/runtime/server DefaultTurnDeadline). When it fires the gateway
     drops the connection; the next keepalive write fails and the request is
