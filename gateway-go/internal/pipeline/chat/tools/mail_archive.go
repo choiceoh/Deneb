@@ -81,13 +81,24 @@ func ToolMailArchive(optional ...MailArchiveDeps) func(ctx context.Context, inpu
 			loggedAction = "list"
 		}
 		usedIMAP := false
+		// storeHits records what the local store returned for a search before any
+		// IMAP fallback (-1 = the action never queried the store). Surfaced on the
+		// slow path so a fallback can be attributed to store-not-ready vs a genuine
+		// zero-hit search — the two have opposite fixes.
+		storeHits := -1
 		defer func() {
 			path := mailArchivePath(loggedAction, usedIMAP)
 			durMs := time.Since(start).Milliseconds()
 			if path == "store" {
 				slog.Debug("mail_archive", "action", loggedAction, "path", path, "durationMs", durMs)
 			} else {
-				slog.Info("mail_archive", "action", loggedAction, "path", path, "durationMs", durMs)
+				storeLen := 0
+				if deps.Store != nil {
+					storeLen = deps.Store.Len()
+				}
+				slog.Info("mail_archive", "action", loggedAction, "path", path, "durationMs", durMs,
+					"storeReady", storeReady, "storeLen", storeLen, "storeHits", storeHits,
+					"query", truncateRunes(args.Query, 80))
 			}
 		}()
 
@@ -115,6 +126,7 @@ func ToolMailArchive(optional ...MailArchiveDeps) func(ctx context.Context, inpu
 			var msgs []mailarchive.ContextMessage
 			if storeReady {
 				msgs = deps.Store.Search(mailboxes, args.Query, opts.Since, limit)
+				storeHits = len(msgs)
 			}
 			if len(msgs) == 0 && imapReady {
 				usedIMAP = true
