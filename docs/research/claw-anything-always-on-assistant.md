@@ -92,6 +92,7 @@ mutation 도구(메일/일정/wiki write)가 **fire-and-forget**. 실행 실패�
 > 상태 재조회형 검증(sent 폴더 확인 등), 각 도구의 인밴드 실패를 error-slot 으로 전환. 아래 원안:
 
 mutation 도구에 선택적 `verify` 후처리를 `PostProcessRegistry` (`tools.go:192`) 로 추가. 예: `gmail.send` 후 sent 폴더 확인, `cron.create` 후 등록 재조회. 실패 시 같은 turn 에서 LLM 에 재시도 신호 + 사용자에게 명확한 실패 surface.
+
 - 캐시 영향 없음 (도구 후처리는 메시지 본문 외부).
 - `docs/agent-rules/logging.md` 규칙 2(재시도 2단계 로깅) + 규칙 3(broadcast) 적용.
 
@@ -136,6 +137,7 @@ Deneb 의 proactive 트리거는 **시간 기반(매 30분, 매 24h)** 이지 **
 > 수집기(위키-VIP 룩업)·deadline 수집기, DGX 호스트 실데이터 임계 튜닝.
 
 heartbeat turn 이 매번 "전체를 다시 읽는" 대신, 경량 신호 추출 패스를 먼저:
+
 - 마지막 체크 이후 **delta** (새 메일/일정 변경/마감 임박/응답 지연 스레드) 만 후보로 모음.
 - "비정상" 룰: VIP 발신자 + 미응답 N시간 / 일정 충돌 / 마감 D-1 / 평소 패턴 이탈.
 - 신호가 있을 때만 full agent turn 발화 → over-notification 금지 (CLAUDE.md "능동적이되 침해적이지 않게") 와 정합.
@@ -172,6 +174,7 @@ proactive 보고는 분석으로 끝나지 말고 **즉시 실행 액션**을 �
 
 **C1. Pinned / anchor facts — P2 / M.**
 improvement-ideas 4.6(pinned facts) + 2.3(semantic-anchor) 을 이 발견이 **실증적으로 정당화**. 사용자가 `/pin` 한 사실 또는 dreamer 가 추출한 앵커를 recall 에서 **inevictable** 처리, Dynamic 블록 끝에 항상 prepend. 논문 Fig 5a 의 "길수록 하락"을 앵커 보존으로 완화.
+
 - 캐시 영향: Dynamic 블록(마커 없음)이라 미미, trailing marker 충돌만 검증.
 
 **C2. Adaptive recall depth — P3 / M.**
@@ -200,6 +203,7 @@ improvement-ideas 3.1(Polaris reopen 라운드트립 테스트)이 이 발견의
 
 **D1. 충돌 surface (정지 대신 보고) — P2 / M.**
 recall preflight 가 여러 소스에서 **같은 엔티티에 상충하는 사실**을 모았을 때, 이를 합치지 말고 `<recall-context>` 에 명시 태깅 ("⚠️ 출처 불일치: wiki=김부장 / 최근메일=이과장"). LLM 이 조화 실패로 정지하는 대신, 사용자에게 명확히 묻거나 최신 출처 우선 룰 적용.
+
 - **어디서:** `recall_preflight.go` 의 evidence 병합 단계에 엔티티-레벨 충돌 감지.
 
 **D2. 가벼운 참조 일관성 체크(메타-도구) — P3 / L.**
@@ -227,6 +231,7 @@ recall preflight 가 여러 소스에서 **같은 엔티티에 상충하는 사�
 
 **E2. Claw-Anything 식 Deneb mini-benchmark — P1 / L.**
 논문 방법론을 Deneb 표면에 이식한 소규모 평가셋:
+
 - **reactive vs proactive 분리 측정** (논문 핵심 축). proactive 점수가 Deneb 차별점인데 지금 0 측정.
 - **investigation-execution 분해** — recall hit 했는데 실행 실패한 케이스 비율.
 - **Pass^k 일관성** — 논문이 진짜 벽이라 한 일관성. 같은 시나리오 3회 → 안정성.
@@ -241,12 +246,14 @@ recall preflight 가 여러 소스에서 **같은 엔티티에 상충하는 사�
 ## 7. 우선순위 종합
 
 ### Now (P1) — 측정 복구 + 핵심 전장
+
 - **E1** chat live-test 네이티브 재작성 ← *모든 것의 선결*
 - **E2** reactive/proactive 분리 mini-benchmark
 - **A1** post-action verification 루프
 - **B1** 이벤트-스트림 이상탐지 신호 레이어
 
 ### Next (P2)
+
 - **A2** turn-level execution budget 가드
 - **A3** investigation→execution trace (improvement-ideas 4.3 통합)
 - **B3** proactive 제안의 실행가능 형태 강제
@@ -255,6 +262,7 @@ recall preflight 가 여러 소스에서 **같은 엔티티에 상충하는 사�
 - **D1** 충돌 surface
 
 ### Later (P3)
+
 - **C2** adaptive recall depth
 - **D2** 참조 일관성 메타-도구
 - **E3** 합성 trajectory → 로컬 모델 파인튜닝

@@ -19,10 +19,12 @@ globs: ["gateway-go/**/*.go"]
 ## 규칙
 
 ### 1. "사용자가 응답 못 받는 사건"은 무조건 `Error`
+
 - replyFunc 실패, media 전송 실패, 네이티브 클라 delivery/push 영구 실패 (재시도 소진)
 - `Warn`으로 찍지 말 것 — 운영자가 평상시 로그에서 안 봄
 
 ### 2. 재시도 있는 실패는 2단계 로깅
+
 ```go
 if err := call(); err != nil {
     logger.Warn("transient fail, retrying", ...)
@@ -34,9 +36,11 @@ if err := call(); err != nil {
 ```
 
 ### 3. broadcast로 운영자에게도 알림
+
 사용자 영향 있는 실패는 `Error` + `deps.broadcast("chat.delivery_failed", ...)` 병행. 로그만 남기면 UI/모니터링에 안 뜸.
 
 ### 4. panic 복구는 항상 `Error`
+
 ```go
 defer func() {
     if r := recover(); r != nil {
@@ -46,10 +50,12 @@ defer func() {
 ```
 
 ### 5. `Debug`는 샘플링하거나 조건부 적용
+
 - 에이전트 turn마다 30줄씩 찍는 경로는 피하기
 - 토큰 수·지연·컨텍스트 크기는 Info에서 필드로 제공, Debug는 정말 필요할 때만
 
 ### 6. 필드 네이밍
+
 - 세션: `session` 또는 `sessionKey`
 - 채널: `channel` (client 등)
 - 에러: `error` (기본)

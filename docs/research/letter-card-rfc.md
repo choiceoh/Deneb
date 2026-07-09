@@ -17,6 +17,7 @@
 현재 레터는 크론(`morning-letter` 08:00 / `evening-letter` 21:00)이 트리거 → 에이전트가 `morning_letter`/`evening_letter` 도구로 데이터 수집 → 평문 마크다운 레터 작성 → 원본 채널로 전달.
 
 미관 개선 시도의 막다른 길:
+
 - 컬러 이모지(🌅☁️💱) → "vibe-coded" 느낌, 모노크롬 원함.
 - 모노크롬 추상 글자(◆, PR #2921) → 모노지만 안 예쁨/의미 약함.
 - **텍스트는 "예쁜 + 모노크롬 + 의미 있는 아이콘"을 담을 수 없다** — 이모지는 OS가 컬러로 렌더하고, 평문엔 모노크롬 강제 수단이 없으며, 진짜 벡터 아이콘은 *글자가 아니라 앱이 그리는 컴포넌트*다.
@@ -106,6 +107,7 @@
 ````
 
 설계 노트:
+
 - **섹션 = `card`**, 헤더 = `row[icon + text(caption)]` (디자인 규칙의 "그룹 리스트 행 leading 아이콘" idiom).
 - **수치 = `stat`** 가로 strip (날씨·환율·구리). 모바일 380dp에서 3개가 빡빡하면 2개로 — PNG로 확인.
 - **마감 = `badge "D-N"`**. `countdown`(초 단위 라이브)은 *당일* 마감에만 선택적; 다일(多日)은 badge가 깔끔.
@@ -139,6 +141,7 @@ deneb-ui 카탈로그는 **클라이언트(`data/ChatSystemPromptBuilder.kt`)가
 ## 8. 디자인 시스템 정합
 
 `docs/agent-rules/native-design-system.md` 준수:
+
 - **모노크롬 AMOLED 베이스 + 2액센트.** 쿨 `primary`=상호작용/CTA(P2 버튼), 웜 애프리콧 `denebInsight()`=AI/비서 페르소나. → **레터의 따뜻한 어조 = 웜 애프리콧 액센트**에 매핑(인사/회고 한마디를 insight tint로). 색은 작은 마크에만.
 - **아이콘은 기능 아이콘만**(섹션 헤더 leading) — 장식 금지. 콘텐츠 제목(메일 제목 등)엔 아이콘 안 붙임.
 - 타이포는 렌더러가 MaterialTheme 기반 → 다크모드 자동. (단 렌더러의 `DenebType` 정합도는 별도 이슈 — P1은 "깔끔한 Material"로 충분, PNG로 판단.)
@@ -146,6 +149,7 @@ deneb-ui 카탈로그는 **클라이언트(`data/ChatSystemPromptBuilder.kt`)가
 ## 9. 시각 검증 (이 RFC의 핵심 de-risk)
 
 `compileKotlinDesktop` 통과 ≠ 보기 좋음. 디자인 규칙대로 PNG 하네스 사용:
+
 1. `desktopMain/.../RenderPreview.kt`에 모닝/이브닝 **샘플 레터 JSON을 `DenebUiRenderer`로 렌더하는 프리뷰 추가**(이미 같은 파일이 DenebUiRenderer를 호출 중 — line 1200/1212).
 2. `cd client-android/app && ANDROID_HOME=~/android-sdk ./gradlew :composeApp:renderPreviews` → `/tmp/deneb-render/*.png`.
 3. **Read로 PNG 확인** — 다크/라이트, 긴 한국어 제목, 조밀 데이터(마감 5건) legibility.
@@ -165,7 +169,7 @@ deneb-ui 카탈로그는 **클라이언트(`data/ChatSystemPromptBuilder.kt`)가
 
 ## 12. PR #2921(◆)과의 관계
 
-#2921은 레터 이모지를 ◆/☼/☾로 치환 중. 카드로 가면 **◆ 마커는 무의미**(카드가 아이콘 사용). 단 #2921의 *평문 정리*는 Design A의 floor/Design B의 평문 fallback에 여전히 유효.
+PR #2921은 레터 이모지를 ◆/☼/☾로 치환 중. 카드로 가면 **◆ 마커는 무의미**(카드가 아이콘 사용). 단 #2921의 *평문 정리*는 Design A의 floor/Design B의 평문 fallback에 여전히 유효.
 → **권장:** 이 RFC 채택 시 #2921은 "floor 평문 다듬기"로 축소하거나 카드 PR에 흡수. 별도 ◆ 장식은 폐기.
 
 ## 13. 리스크 · 오픈 질문

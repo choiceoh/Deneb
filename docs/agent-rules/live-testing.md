@@ -19,6 +19,7 @@ globs: ["gateway-go/**/*.go", "proto/**/*.proto"]
 > — 콘텐츠 품질(한국어·충실도·누출·레이턴시)은 end-to-end 로 검증된다.
 >
 > **검증 스택:** `make check` + `live-test.sh restart && smoke` + `quality`/`chat-check`
+>
 > + `logs-errors`. 풀 품질 스코어링은 실제 LLM 백엔드가 필요하므로 DGX 호스트에서 수행.
 
 ## 도구
@@ -47,18 +48,20 @@ dev 인스턴스는 항상 프로덕션 config를 기반으로 시작한다 (빈
 | Bind | loopback | config-driven | 포트만 다름 (의도적) |
 
 **환경 차이 확인:**
+
 ```bash
 scripts/dev/live-test.sh parity    # dev vs prod 환경 비교 리포트
 ```
 
 **채팅 주입 동작 원리 (네이티브 클라 표면):**
-- 테스트 클라이언트(`scripts/mock_native_client.py`, `NativeTestClient`)가
+
++ 테스트 클라이언트(`scripts/mock_native_client.py`, `NativeTestClient`)가
   실제 네이티브 클라 표면으로 주입한다: `POST /api/v1/miniapp/rpc` →
   `miniapp.chat.send` (동기 RPC, `X-Deneb-Client-Token` 인증).
-- dev 게이트웨이는 시작 시 state dir 에 `client_token` 을 자동 생성하고,
++ dev 게이트웨이는 시작 시 state dir 에 `client_token` 을 자동 생성하고,
   live-test.sh 가 `DENEB_LIVETEST_GW_URL`/`DENEB_LIVETEST_STATE_DIR` 를 export
   해 테스트가 같은 토큰으로 인증한다.
-- 외부 네트워크 접근 0, 로그인/세션 파일 0. (텔레그램 목 서버 주입은
++ 외부 네트워크 접근 0, 로그인/세션 파일 0. (텔레그램 목 서버 주입은
   PR #1922 로 플러그인과 함께 은퇴 — `scripts/mock_telegram_*.py` 는 레거시.)
 
 ### Functional Testing
@@ -121,19 +124,23 @@ scripts/dev/live-test.sh parity    # dev vs prod 환경 비교 리포트
 ## 필수 절차: 코드 수정 완료 후
 
 ### Step 1: 빌드 + 시작
+
 ```bash
 scripts/dev/live-test.sh restart
 ```
 
 ### Step 2: Smoke test (작동 여부)
+
 ```bash
 scripts/dev/live-test.sh smoke
 ```
 
 ### Step 3: Quality test (작동 품질)
+
 ```bash
 scripts/dev/live-test.sh quality
 ```
+
 **전체 시나리오 통과해야** 한다. 실패 항목 있으면 수정 → 재시작 → 재검증.
 
 ### Step 4: 변경 관련 품질 검증
@@ -156,12 +163,14 @@ scripts/dev/live-test.sh multi-chat "프로젝트 상태 알려줘" "더 자세�
 ```
 
 ### Step 5: 로그로 숨은 문제 확인
+
 ```bash
 scripts/dev/live-test.sh logs-errors
 scripts/dev/live-test.sh logs-since 60
 ```
 
 ### Step 6: 정리
+
 ```bash
 scripts/dev/live-test.sh stop
 ```
@@ -190,21 +199,22 @@ scripts/dev/iterate.sh
 ### ITERATE_RESULT 파싱
 
 출력의 마지막 두 줄:
+
 ```
 ITERATE_RESULT metric=2 build=ok server=ok checks=2/2 latency_ms=1835
 DENEB_TEST_JSON {"version":1,"commit":"abc1234","phase":{...},"checks":[...],...}
 ```
 
-- `ITERATE_RESULT` — 레거시 포맷 (하위 호환)
-  - `metric=N` — 통과한 체크 수 (기본: 2가 최대)
-  - `build=ok|fail` — 빌드 성공 여부
-  - `server=ok|fail` — 서버 기동 성공 여부
-  - `checks=P/T` — 통과/전체
-  - `latency_ms=N` — 전체 소요 시간
-- `DENEB_TEST_JSON` — 구조화된 JSON (에이전트용)
-  - 각 체크별 pass/fail + 소요시간
-  - 품질 메트릭 breakdown
-  - 실패 시 `diagnostics` 필드에 원인 분류 + 제안
++ `ITERATE_RESULT` — 레거시 포맷 (하위 호환)
+  + `metric=N` — 통과한 체크 수 (기본: 2가 최대)
+  + `build=ok|fail` — 빌드 성공 여부
+  + `server=ok|fail` — 서버 기동 성공 여부
+  + `checks=P/T` — 통과/전체
+  + `latency_ms=N` — 전체 소요 시간
++ `DENEB_TEST_JSON` — 구조화된 JSON (에이전트용)
+  + 각 체크별 pass/fail + 소요시간
+  + 품질 메트릭 breakdown
+  + 실패 시 `diagnostics` 필드에 원인 분류 + 제안
 
 ### 새 플래그
 
@@ -225,6 +235,7 @@ scripts/dev/iterate.sh --metric "python3 my_metric.py"
 ### chat-check: 메시지 + assertion
 
 유저의 실제 메시지를 보내고 assertion으로 증상 유무를 판별:
+
 ```bash
 # 한국어 응답 확인
 scripts/dev/live-test.sh chat-check "안녕" --expect-korean
@@ -249,6 +260,7 @@ scripts/dev/live-test.sh chat-check "파일 목록 보여줘" \
 ### 멀티턴 재현: multi-chat
 
 같은 세션에서 여러 턴을 보내 컨텍스트 유지 문제를 재현:
+
 ```bash
 # 컨텍스트 유지 확인
 scripts/dev/live-test.sh multi-chat \
@@ -265,6 +277,7 @@ scripts/dev/live-test.sh multi-chat \
 ### 도구 호출 검증: tool-check
 
 특정 도구가 올바르게 호출 + 완료되는지:
+
 ```bash
 scripts/dev/live-test.sh tool-check health "시스템 상태 확인해줘"
 scripts/dev/live-test.sh tool-check wiki "위키에서 백업 정책 찾아줘"
@@ -307,55 +320,55 @@ scripts/dev/puppet.sh result                 # 유저가 받은 최종 응답 + 
 scripts/dev/puppet.sh stop                   # 게이트웨이 + 브로커 정리
 ```
 
-- **타임아웃 안무**: 턴 전체는 `DefaultTurnDeadline` 5분 — pending 응답을 그 안에.
++ **타임아웃 안무**: 턴 전체는 `DefaultTurnDeadline` 5분 — pending 응답을 그 안에.
   브로커가 SSE 주석 keepalive로 LLM HTTP 클라이언트의 10분 타임아웃은 회피하지만,
   턴 데드라인이 끊으면 해당 요청은 `gone`으로 표시된다. 게이트웨이의 스트림 유휴
   워치독(기본 3분, **실진행 이벤트 기준** — 주석/핑은 의도적으로 리셋하지 않음)은
   puppet.sh가 `DENEB_STREAM_IDLE_TIMEOUT_MS=-1`로 끄고 기동한다 — 워치독이 살아
   있으면 3분 초과 hold마다 조용한 중복 재요청이 생긴다(실측 r4→r5).
-- **스테일 중복 요청은 fail하지 말 것**: 워치독/재시도로 버려진 이전 요청을
++ **스테일 중복 요청은 fail하지 말 것**: 워치독/재시도로 버려진 이전 요청을
   `fail`하면 죽은 스트림이 아니라 **role 폴백 체인을 구동**한다(실측: 하트비트가
   lightweight-seat로 표류). 중복이 보이면 최신 것에만 응답하고 스테일은 방치
   (턴 데드라인이 `gone`으로 정리) — 정말 닫아야 하면 `--text`로 무해하게 닫는다.
-- **하트비트 난입**: 30분 주기 시스템 하트비트가 main 클라이언트 세션(=퍼펫 기본
++ **하트비트 난입**: 30분 주기 시스템 하트비트가 main 클라이언트 세션(=퍼펫 기본
   세션)에서 돌므로 장기 퍼펫 세션 중 `[시스템 하트비트]` 요청이 pending에
   나타나고, 같은 세션의 유저 턴은 그 뒤로 직렬화된다. `NO_REPLY` 텍스트로 닫으면
   된다 (하트비트 규약).
-- **전 role 빙의가 기본** (`--main-only`로 main만): main/lightweight/tiny/analysis/
++ **전 role 빙의가 기본** (`--main-only`로 main만): main/lightweight/tiny/analysis/
   fallback/coding(+설정된 chatbot/vision, 서브에이전트) 전부 브로커行이라 실모델로
   새는 응답이 없고, 백그라운드 LLM 호출(스킬 넛저 리뷰·드리밍 등)도 `pending`에
   그대로 드러난다. **role별 시트 별칭**(`main-seat`/`coding-seat`/...)이 pending의
   model 필드에 찍히므로 어느 role의 호출인지 즉시 식별된다 — 예: 도구를 몇 번
   실행하면 스킬 넛저의 백그라운드 리뷰가 `coding-seat`로 나타난다. 짧은 reply나
   `fail ID`로 정리하면 된다.
-- **`show`의 시스템 프롬프트 해시**: 헤더의 `sys=<해시>`가 직전 요청과 비교되어
++ **`show`의 시스템 프롬프트 해시**: 헤더의 `sys=<해시>`가 직전 요청과 비교되어
   `(unchanged since rN)`/`(CHANGED vs rN)`으로 표시된다 — 캐시 프리픽스 안정성
   검증이 눈이 아니라 해시로 된다. 완료된 요청도 최근 16개는 `show`로 재조회 가능
   (응답 요약 포함).
-- `fail ID`는 `event: error` SSE로 provider 에러를 표면화한다 (에러 경로 테스트용;
++ `fail ID`는 `event: error` SSE로 provider 에러를 표면화한다 (에러 경로 테스트용;
   주의: `data:` 라인만으로 보낸 `{"error":...}`는 게이트웨이 파서가 빈 청크로 삼킨다).
   **fail 1회 = 즉시 유저 에러가 아니다** — 시트 실측 체인:
   `main-seat`×2(재시도 1회) → `lightweight-seat`×2 → `fallback-seat`×2, 총 6회
   fail이 소진되어야 유저에게 에러가 표면화된다. 각 단계가 pending에 새 요청으로
   나타나므로 시트 별칭으로 체인 위치를 추적할 수 있다.
-- `reply --tool NAME ARGS`는 반복 가능(병렬 tool call 재현), ARGS가 JSON 파싱에
++ `reply --tool NAME ARGS`는 반복 가능(병렬 tool call 재현), ARGS가 JSON 파싱에
   실패하면 **원문 그대로** 전달된다 — malformed arguments 처리 검증에 사용
   (게이트웨이는 히스토리에 `_malformed_arguments`로 정규화해 남긴다).
-- 게이트웨이는 live-test.sh와 같은 바이너리/pid/log/state 경로를 쓰므로
++ 게이트웨이는 live-test.sh와 같은 바이너리/pid/log/state 경로를 쓰므로
   `live-test.sh logs-errors`·`status`가 그대로 동작한다. 종료는 `puppet.sh stop`
   (브로커까지 정리). 교환 기록은 `history` 또는 `*-puppet-journal.jsonl`(5MB 회전).
-- `DENEB_INSTANCE` export를 잊은 셸에서 CLI를 치면 기본 포트로 붙으려다 실패하는데,
++ `DENEB_INSTANCE` export를 잊은 셸에서 CLI를 치면 기본 포트로 붙으려다 실패하는데,
   마지막 start가 남긴 활성 마커 덕에 "instance 'X'의 브로커가 살아있다 —
   export DENEB_INSTANCE=X" 힌트가 출력된다.
-- ⚠️ **퍼펫 게이트웨이가 떠 있는 동안 `live-test.sh chat`/`quality`/`iterate.sh`를
++ ⚠️ **퍼펫 게이트웨이가 떠 있는 동안 `live-test.sh chat`/`quality`/`iterate.sh`를
   돌리지 마라** — 그 LLM 호출들도 전부 브로커에 hold되어 오퍼레이터 응답 또는
   5분 데드라인까지 멈춘다 ("게이트웨이가 죽었다"가 아니라 pending에 쌓여 있는 것).
   품질 스위트가 필요하면 먼저 `puppet.sh stop` 후 `live-test.sh restart`.
 
 ## 주의사항
 
-- 반복 테스트는 포트 **18791** (dev=18790, prod=18789와 분리)
-- 포트 오버라이드: iterate는 `ITERATE_PORT`, dev live-test/puppet(18790)은 `DEV_LIVE_PORT`
-- 프로덕션에 절대 영향 없음
-- **quality test 실패 시 "완료"라고 하지 마라** — 품질 문제를 수정하고 재검증해야 한다
-- **로그에서 에러/경고 없는 것까지 확인**해야 진짜 완료
++ 반복 테스트는 포트 **18791** (dev=18790, prod=18789와 분리)
++ 포트 오버라이드: iterate는 `ITERATE_PORT`, dev live-test/puppet(18790)은 `DEV_LIVE_PORT`
++ 프로덕션에 절대 영향 없음
++ **quality test 실패 시 "완료"라고 하지 마라** — 품질 문제를 수정하고 재검증해야 한다
++ **로그에서 에러/경고 없는 것까지 확인**해야 진짜 완료

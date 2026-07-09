@@ -11,10 +11,10 @@ read_when:
 
 ## Sources Checked
 
-- https://github.com/openclaw/agent-skills
-- https://docs.openclaw.ai/tools/skills
-- https://github.com/openclaw/openclaw
-- https://github.com/Gen-Verse/OpenClaw-RL
+- <https://github.com/openclaw/agent-skills>
+- <https://docs.openclaw.ai/tools/skills>
+- <https://github.com/openclaw/openclaw>
+- <https://github.com/Gen-Verse/OpenClaw-RL>
 
 ## Adopted Patterns
 

@@ -166,6 +166,7 @@
 ## 본 세션에서 실제 포팅된 항목 (Go 코드로 작성됨)
 
 ### P1. `/steer` main-agent — ✅ 완료
+
 - **새 파일**: `gateway-go/internal/pipeline/chat/steer.go` (SteerQueue), `steer_inject.go` (drain+append), `steer_test.go` (13 tests), `gateway-go/internal/runtime/server/inbound_steer.go` (파서), `inbound_steer_test.go` (13 tests)
 - **수정**: `internal/agentsys/agent/config.go`(BeforeAPICall hook), `executor.go`, `pipeline/chat/handler.go/run.go/run_start.go/run_exec.go/slash_dispatch.go`, `runtime/rpc/handler/chat/chat.go` (`chat.steer` RPC), `runtime/server/method_registry.go` + `_test.go`, `inbound.go`
 - **테스트**: 26/26 통과 (-race)
@@ -173,6 +174,7 @@
 - **핵심 디자인**: Anthropic block 프로토콜 대응 (tool_result in `role:"user"` vs Hermes 의 `role:"tool"`). 메시지 샬로우 복사 후 주입 → 영속 messages 불변 → 캐시 prefix 보존.
 
 ### P2. FailoverReason Classifier — ✅ 완료
+
 - **새 패키지**: `gateway-go/pkg/llmerr/` (reason.go, classify.go, patterns.go, action.go, classify_test.go)
 - **14종 Reason enum** (Hermes 13 + Unknown as zero value)
 - **Classify** 파이프라인: provider-specific → HTTP status → error code → message → transport → unknown
@@ -182,6 +184,7 @@
 - **테스트**: 29 함수 / 52 서브테스트 통과 (-race)
 
 ### P3. Checkpoint Manager — ✅ 완료
+
 - **새 패키지**: `gateway-go/pkg/checkpoint/` (manager.go 488 LOC, types.go, index.go, retention.go, adapter.go, manager_test.go 346 LOC)
 - **기능**: Snapshot/List/Restore/Diff, SHA-256 dedup, tombstone, gzip, 세션별 격리, keep-N + maxBytes retention
 - **통합**: `internal/pipeline/chat/tools/fs.go:ToolWrite` 에 `snapshotBeforeWrite` 훅 (`toolctx.Checkpointer` 인터페이스 경유)
@@ -189,6 +192,7 @@
 - **TODO**: 세션 부트스트랩에서 `toolctx.WithCheckpointer(ctx, ...)` 와이어링 필요 (`sessionKey` + state dir 정책 결정 필요). `ToolEdit` 에도 훅 확장 필요. 선택적으로 `checkpoint.list/restore/diff` RPC 추가.
 
 ### P4. Insights 시스템 — ✅ 완료
+
 - **새 패키지**: `gateway-go/internal/runtime/insights/` (engine.go 367 LOC, render.go 233 LOC, engine_test.go, render_test.go)
 - **새 핸들러**: `gateway-go/internal/runtime/rpc/handler/insights/` (handler.go, handler_test.go) — `insights.generate` RPC
 - **Hub 와이어링**: `gateway_hub.go` 에 `Insights()` accessor 추가, `method_registry.go` 에서 `insights.New(hub.Sessions(), s.usageTracker)` 생성
@@ -197,11 +201,13 @@
 - **테스트**: 16+3 통과 (-race), `TestMethodRegistry_RequiredMethodsRegistered` 에 `insights.generate` 추가
 
 ### P5. Tool Interception 분석 — 결론: Scenario C (리팩토링 불필요)
+
 - **분석 문서**: `docs/research/tool-interception-gap.md`
 - **결론**: Hermes 의 `_invoke_tool` 가로채기 체인은 Python 클래스 인스턴스 상태 때문. Deneb은 이미 **closure + Deps struct** 패턴으로 agent-instance state 문제를 다르게 해결 (`toolctx.CoreToolDeps`). `ToolInterceptor` 인터페이스를 빈 채로 추가하면 투기적 일반화.
 - **작은 개선**: `internal/pipeline/chat/tools.go:RegisterTool` 에 **silent replace 경고** 추가 (plugin collision 탐지)
 
 ### 본 세션 Doctrine: `docs/agent-rules/prompt-cache.md` — ✅ 완료
+
 - 3-tier 캐시 구조 문서화 (Static/Semi-static/Dynamic)
 - 불가침 3원칙 (과거 메시지 mutation 금지, 대화 중 툴셋 변경 금지, 시스템 프롬프트 재구성 금지)
 - Cache-aware 슬래시 패턴 (deferred 기본 + `--now` opt-in)
@@ -209,6 +215,7 @@
 - CLAUDE.md Rules Index에 추가됨
 
 ### 분석 문서 — ✅ 완료
+
 - `docs/research/hermes-agent-analysis.md` (113KB, 2387줄) — 원본 심층 분석
 - `docs/research/hermes-deneb-mapping.md` (본 문서) — 대응표 + 포팅 계획
 - `docs/research/tool-interception-gap.md` — P5 Scenario C 결정 근거
@@ -322,12 +329,14 @@
 1. **현재 WIP 병합 정리**: 5개 포팅 에이전트가 남긴 파일들이 `make check` (golangci-lint) 에 14개 이슈. 본 세션 커밋 전 해결 필요. 주로 `pkg/checkpoint/` , `pkg/llmerr/` 내 린트 경고 (대부분 스타일). `make check` 스테이지별 검증 권장.
 
 2. **라이브 테스트**:
+
    ```bash
    scripts/dev/live-test.sh restart
    scripts/dev/live-test.sh smoke
    scripts/dev/live-test.sh quality
    scripts/dev/live-test.sh logs-errors
    ```
+
    특히 P1 `/steer`, P4 `/insights` / `/사용량` 의 네이티브 클라 UX 실제 확인.
 
 3. **Checkpoint 와이어링 마무리** (P3 TODO):

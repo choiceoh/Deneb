@@ -25,16 +25,19 @@ globs: ["gateway-go/internal/pipeline/chat/tools/paddleocr.go", "gateway-go/inte
 ## PaddleOCR-VL (Deneb 의 OCR 엔진)
 
 ### 무엇 / 왜
+
 - 0.9B 비전-언어 모델 (NaViT 인코더 + ERNIE-4.5-0.3B). 한국어 업무 문서(표·수식·혼합 숫자·도장)에서 tesseract 대비 압도적 정확도. OmniDocBench v1.6 SOTA.
 - FP8(동적) 가중치(~1.45GiB)라 unified memory 를 거의 안 먹어 메인 LLM 과 공존. 워밍 후 **~0.7s/page**(디코드 ~249 tok/s), 다페이지는 서버 배칭으로 ~7배(8p 8.6s→1.2s). 콜드 첫 요청만 CUDA-graph 워밍업.
 
 ### 서버 (상주)
+
 - 런처: **`~/start-paddleocr-vl.sh`** (★**srv1** 호스트, **레포 밖** 로컬 파일 — 게이트웨이(srv4)는 `DENEB_OCR_VL_URL=http://100.105.145.6:18011` 로 크로스호스트 소비). 컨테이너 `paddleocr-vl`, port **18011**, `--restart unless-stopped`.
 - 이미지: **`ghcr.io/spark-arena/dgx-vllm-eugr-nightly:latest`** (2026-07-07 업그레이드, 구 `vllm-node:latest`). `paddleocr_vl` 커스텀 arch 를 trust-remote-code 로 로드, **FP8**(동적, CutlassFP8ScaledMM·SM121) + **ngram** speculative decode 지원. 순수 OpenAI 호환. ⚠️ eugr 엔트리포인트가 vllm 이 아니라 런처가 `--entrypoint bash` + 영속 serve 스크립트(`~/serve-paddleocr-vl.sh`)로 기동 — ngram JSON 이 셸 인용을 안 타게.
 - 가중치: `~/models/PaddleOCR-VL-1.6` (hf download). 1.82 GiB 소스, FP8 동적양자화로 로드 시 ~1.45 GiB.
 - **메모리 예산 (2026-07-07 상향)**: `--gpu-memory-utilization 0.10` + `--max-num-seqs 8` + `--max-model-len 8192`. FP8 로 가중치가 작아져 util 0.10(~12GB)에서 **동시성 58x**(KV ~8GB) — 다페이지 배칭의 근거(구 0.03/seqs4/BF16 은 동시성 3.4x 로 배칭 사실상 불가였음). srv1 여유 ~28GB 내라 안전. ⚠️ **병목은 디코드**(출력토큰 생성)지 프리필 아님 — NaViT 가 vision 토큰을 ~1.3k 로 정규화해 **입력 해상도와 지연 무관**(이미지 축소 무의미, 측정으로 기각). 디코드가 느린 건 GB10 메모리대역폭(~273GB/s)에 0.9B 가 묶여서(토큰당 read) → FP8 이 반감(160→249 tok/s). 런처가 `GPU_MEM_UTIL`·`PADDLEOCR_MAX_NUM_SEQS`·`PADDLEOCR_IMAGE` env override 지원. **롤백**: `start-paddleocr-vl.sh.bak-pre-fp8`.
 
 ### 코드 통합
+
 - `gateway-go/internal/pipeline/chat/tools/paddleocr.go`:
   - `paddleOCR(ctx, img, task)` — `/v1/chat/completions` 에 `image_url`(base64 data URI) + 태스크 프롬프트 전송. 태스크: `"OCR:"` / `"Table Recognition:"` / `"Formula Recognition:"` / `"Chart Recognition:"`.
   - `ocrImageBytes(ctx, img)` — **단일 OCR 진입점**. PaddleOCR-VL 우선, 실패 시 tesseract 폴백.
@@ -43,6 +46,7 @@ globs: ["gateway-go/internal/pipeline/chat/tools/paddleocr.go", "gateway-go/inte
 - **엔드포인트 override**: 환경변수 `DENEB_OCR_VL_URL` (기본 `http://127.0.0.1:18011`). 테스트/비표준 배포용.
 
 ### 운영 명령
+
 ```bash
 # 기동/재기동
 ~/start-paddleocr-vl.sh
@@ -54,6 +58,7 @@ docker logs --tail 50 paddleocr-vl
 ```
 
 ### 라이브 검증 (Go 경로)
+
 ```bash
 # CI 에선 skip (GPU 없음). 호스트에서 실제 서버 대상 e2e:
 DENEB_OCR_VL_LIVE=1 DENEB_OCR_VL_IMG=/path/to.png DENEB_OCR_VL_URL=http://127.0.0.1:18011 \
@@ -65,10 +70,12 @@ DENEB_OCR_VL_LIVE=1 DENEB_OCR_VL_IMG=/path/to.png DENEB_OCR_VL_URL=http://127.0.
 ## VibeVoice-ASR (음성 전사 엔진)
 
 ### 무엇 / 왜
+
 - 9B 음성 ASR 모델 (VibeVoice 음향/의미 토크나이저 24kHz + Qwen2 디코더, MIT). **ASR + 화자분리 + 타임스탬프를 단일 패스**로 출력 (최대 60분/64K 토큰, 50+개 언어·한국어).
 - Deneb 비서 모드의 회의/통화/음성메모 캡처용. Whisper + pyannote 2단 파이프라인을 단일 모델로 대체. 검증: 영어 2화자 화자분리·타임스탬프 정확, 한국어 일반어 CER≈0, RTF ~0.5–0.7.
 
 ### 서버 (상주)
+
 - 런처: **`~/start-vibevoice-asr.sh`** (★**srv1** 호스트, **레포 밖** — 게이트웨이(srv4)는 `DENEB_ASR_URL=http://100.105.145.6:18013` 로 크로스호스트 소비). 컨테이너 `vibevoice-asr`, port **18013**, `--restart unless-stopped`.
 - 서빙: PaddleOCR 와 달리 **vLLM serve 아님.** MS 의 vLLM 플러그인은 vLLM v0.14.1 타깃인데 로컬 `vllm-node` 는 0.21.1 → transformers eager + 얇은 FastAPI 래퍼로 상주 (단일 사용자엔 충분).
 - 이미지: `vibevoice-asr:latest` = `FROM vllm-node:latest` + accelerate/soundfile/soxr/ffmpeg/fastapi. 빌드 컨텍스트 `~/vibevoice-asr/` (Dockerfile + `vibevoice_server.py`).
@@ -76,11 +83,13 @@ DENEB_OCR_VL_LIVE=1 DENEB_OCR_VL_IMG=/path/to.png DENEB_OCR_VL_URL=http://127.0.
 - **커밋 헤드룸**: strict overcommit(`vm.overcommit_memory=2`) 호스트라 16GB 상주를 위해 `vm.overcommit_ratio` 50→80 영구 상향(`/etc/sysctl.d/99-deneb-vibevoice.conf`). OOM 가드(min_free_kbytes/watermark)는 미변경.
 
 ### API
+
 - `POST /v1/transcribe` (**OpenAI 비호환**): multipart `file` 또는 form `path`, 선택 `hotwords`·`chunk_size`·`max_new_tokens`. 응답 = `segments`(speaker/start/end/content) + `transcription` + `rtf`. `GET /health` 로 readiness.
 - 음성 메시지 포맷(`.oga`/opus)·m4a·mp3·wav 자동 디코딩 (soundfile → ffmpeg 폴백).
 - **핫워드 권장**: 한국어 일반어는 사실상 무오류지만 고유명사(거래처·제품·인명)는 bare ASR 이 틀린다 → Deneb 연락처/거래 KB 를 `hotwords` 로 주입하면 교정됨 (검증 완료: 탑솔라/데네브).
 
 ### 코드 통합 (#1847)
+
 - `gateway-go/internal/pipeline/chat/tools/asr.go`:
   - `transcribeAudio(ctx, audio, filename, hotwords)` — `/v1/transcribe` 에 멀티파트 `file`(+ 선택 `hotwords`) 전송, `{segments, transcription}` 파싱. segment `speaker` 가 문자열 라벨 또는 숫자 인덱스 **둘 다** 와서 `flexStr` 로 수용(라이브 테스트가 잡은 함정).
   - `transcribeAudioText(ctx, audio, mimeType)` — **단일 전사 진입점**. 화자분리+타임스탬프로 포맷(`[mm:ss 화자N] …`), segment 없으면 flat transcription 폴백.
@@ -91,6 +100,7 @@ DENEB_OCR_VL_LIVE=1 DENEB_OCR_VL_IMG=/path/to.png DENEB_OCR_VL_URL=http://127.0.
 - 참고: 안드로이드 **음성 캡처(#1843)** 는 온디바이스 시스템 STT(짧은 명령, 권한 불필요)라 이 서버와 무관. 긴 녹음·화자분리·핫워드 교정이 필요한 **오디오 공유 캡처(#1847)** 가 이 사이드카를 쓴다.
 
 ### 운영 명령
+
 ```bash
 ~/start-vibevoice-asr.sh
 docker ps --filter name=vibevoice-asr
@@ -101,6 +111,7 @@ docker logs --tail 50 vibevoice-asr
 ```
 
 ### 라이브 검증 (Go 경로)
+
 ```bash
 # CI 에선 skip (GPU 없음). 호스트에서 실제 서버 대상 e2e:
 DENEB_ASR_LIVE=1 DENEB_ASR_AUDIO=/path/to.wav DENEB_ASR_URL=http://127.0.0.1:18013 \
@@ -121,10 +132,12 @@ Hindsight(Hermes 계열 FastAPI+pgvector 장기기억 서비스)는 **2026-06-15
 ## wormhole (모델 라우터 — Deneb 모델 접근의 단일 관문)
 
 ### 무엇 / 왜
+
 - 사이드카 *모델*이 아니라 모델 *라우터*. OpenAI/Anthropic 호환 단일 엔드포인트(`:18800`) 뒤로 로컬 vLLM + 클라우드(claude 등)를 **모델명으로** 멀티플렉싱하는 우리 자체 Go 바이너리(`gateway-go/cmd/wormhole`). 원래 목적=외부 클라(Claude Code·스크립트) 단일 URL. **이제 Deneb 자신의 모델 호출도 wormhole 경유**로 통합(2026-06-14, 사용자 결정 "메인 포함 전부").
 - 이득: 단일 엔드포인트 + 업스트림 키 단일 금고 + SparkFleet 자동발견(`:18900`) + 로컬→클라우드 auto 폴백 + 프라이버시 가드. 상세 설계는 [[project_wormhole]].
 
 ### ★★ APC 불가침 (게이트웨이 dsv4 경로의 절대 규칙)
+>
 > 게이트웨이의 dsv4 트래픽은 vLLM APC(byte-prefix 캐시)에 극도로 민감하다(`docs/agent-rules/prompt-cache.md` §1.5). wormhole을 그 앞에 두려면 **바이트 투명**해야 한다. (2026-07-04 현재 main 은 클라우드 glm 이고 dsv4 는 fallback·챗봇 경로지만, 이 규칙은 역할이 아니라 **엔트리** 계약이다 — main 이 로컬로 복귀해도 그대로 성립. 실측 검증(2026-07-04): 동일 요청 직결 vs wormhole 경유가 같은 prefix family 에 합류, 적중 89% 동일.)
 
 - **게이트웨이 dsv4 경로가 쓰는 wormhole 엔트리(`deepseek-v4-flash`)는 `toggleKwarg` 를 절대 달지 마라.** `toggleKwarg` 가 있으면 wormhole 이 effort 라우팅으로 `chat_template_kwargs` 를 **주입**해 렌더 프롬프트를 바꾼다 → APC 파괴 + Deneb 자체 effort 라우팅(`run_capability.go`)과 **이중화 충돌**(injectKwarg 가 기존 값 덮어씀). 엔트리에 toggleKwarg 가 없으면 `applyThinking` 이 즉시 return → **순수 패스스루**.
@@ -133,6 +146,7 @@ Hindsight(Hermes 계열 FastAPI+pgvector 장기기억 서비스)는 **2026-06-15
 - **★ 전용 변형 엔트리는 허용 (`thinkingMode`, 2026-07-04).** 같은 업스트림을 가리키는 **별도 이름** 엔트리로 추론 방향을 계약할 수 있다: `"off"` = 무조건 노추론 — 엔트리의 정체성이라 **X-Wormhole-No-Effort 로도 억제되지 않음**(이름으로 고른 소비자의 명시적 선택); `"off-unless-hard"` = **노추론 기본**, 명백한 어려움 신호(hard-signal·첨부·구조화)에서만 추론 유지 — "긴 입력"만으로는 안 켬(실측: dsv4 노추론이 메일 분석에서 동급 품질·5배 속도, 판정 근거는 agents-a1 메모리). APC 논거: 엔트리별 주입이 **일정**해 그 엔트리 소비자끼리 prefix family 일관, 메인 패스스루 바이트 불변. 운영 예: `{"name":"dsv4-nothink","url":"http://100.125.220.117:8000/v1","upstreamModel":"deepseek-v4-flash","toggleKwarg":"thinking","thinkingMode":"off"}` — 2026-07-04 현재 **lightweight/tiny/translation 역할**이 이 이름을 소비(qwen3.6 에서 교체, qwen 엔진은 유휴 서빙 중). ⚠ dsv4 의 진짜 스위치는 `thinking`(`enable_thinking` 은 무시됨 — 실측), 노추론 dsv4 는 산술 취약(메일 분석엔 무해 — 대소비교·보존 작업).
 
 ### ★ 이미지 게이트 (`vision`, 2026-07-05)
+>
 > 텍스트 전용 모델(GLM 텍스트 계열·DeepSeek)에 이미지 content-part 를 보내면 **hard 400** 이 나고, 이미지가 클라이언트 히스토리에 남아 **이후 모든 턴이 같은 400 으로 오염**된다(Kai 업스트림 실측 교훈, SimonSchubert/Kai@5d57ea69). 게이트웨이의 스트립은 deneb.json 이 `vision:false` 를 명시할 때만 작동(빌트인 기본값 없음)하므로, 모든 소비자가 지나는 wormhole 이 빌트인 폴백을 갖는다 (`cmd/wormhole/vision.go`).
 
 - **동작**: 엔트리의 upstreamModel 이 텍스트 전용으로 판정되면 `messages[].content` 배열의 이미지 파트를 텍스트 스텁(`[이미지 첨부 생략 — 텍스트 전용 모델]`)으로 치환. openai(`image_url`)·anthropic(`image`) 양 프로토콜 지원.
@@ -140,6 +154,7 @@ Hindsight(Hermes 계열 FastAPI+pgvector 장기기억 서비스)는 **2026-06-15
 - **★ APC 논거**: 게이트는 **이미지 파트가 실제로 있는 요청만** 재작성한다 — 이미지 없는 요청은 fast-scan 단락 + 파싱 후에도 원본 바이트 그대로 전달(바이트 불변). 이미지 포함 요청은 어차피 400 이던 트래픽이라 기존 prefix family 를 가르지 않는다.
 
 ### ★ 클라우드 모델 추론 프로필 (`reasoning`, glm-5.2; 2026-06-21)
+>
 > `toggleKwarg`(vLLM `chat_template_kwargs`)는 위 규칙대로 Deneb 엔트리에 금지(APC). 하지만 **클라우드 모델은 추론 제어 방언이 달라** 게이트웨이가 표현하지 못한다 — 그 번역은 wormhole 만 할 수 있다. 그래서 cloud 전용 필드 `reasoning` 을 둔다(`cmd/wormhole/effort.go:reasoningRoute`, `applyReasoning`).
 
 - **왜 필요한가**: GLM-5.2 는 `reasoning_effort` 를 `high|max` 만 인정하고 **명시적 `high` 가 아니면 전부 `max`(최심)로 해석**한다([z.ai 문서](https://docs.z.ai/guides/capabilities/thinking-mode)). Deneb 가 보내는 `reasoning_effort:"low"`(레벨 low)는 GLM 에선 도리어 **MAX** 가 된다(의도 정반대). 게이트웨이의 high-only 가드(`openai.go:reasoningEffortHighOnly`)는 `deepseek-v4` 만 매칭해 glm 을 놓친다.
@@ -148,15 +163,18 @@ Hindsight(Hermes 계열 FastAPI+pgvector 장기기억 서비스)는 **2026-06-15
 - **호스트 적용**: `~/.wormhole/config.json` 의 glm-5.2 엔트리에 `"reasoning": "glm"` 추가 → `make wormhole` → wormhole 재시작. config 예시는 `cmd/wormhole/config.example.json`.
 
 ### ★ SPOF (핫패스가 된 wormhole)
+
 - 메인을 wormhole 로 태우면 **wormhole 다운 = 메인 다운**. **현재 운영(2026-07-04 실측): vision(google 직결) 제외 전 역할이 wormhole 경유** — main/chatbot/coding/analysis=glm-5.2(클라우드), fallback=deepseek-v4-flash(srv2 로컬), lightweight/tiny/translation=dsv4-nothink(srv2 로컬). 즉 wormhole 이 모델 레이어의 단일 관문. (역할→모델은 오퍼레이터가 수시 변경 — `model-roles.md` 스냅샷 경고 참조.)
 - 핵심 구분: **흔한 실패(업스트림 모델 다운)는 여전히 커버됨** — 폴백 방향은 현재 **클라우드→로컬**: main(glm, 클라우드) 죽으면 게이트웨이 서킷브레이커→fallback role(dsv4@srv2, 로컬)→wormhole(살아있음) 경유로 낙하. 안 커버되는 건 **wormhole 프로세스 자체 사망**뿐인데, 얇은 프록시 + `Restart=on-failure`(≈5s respawn) 로 자가치유. 더 강한 격리를 원하면 fallback 하나를 직결로 빼면 됨(그 경우 SPOF 0, 단 키 중복).
 - wormhole 은 `Restart=on-failure` systemd 서비스로 상주(아래).
 
 ### 서버 (상주)
+
 - ★**상주 호스트 = srv4** (게이트웨이와 동일 호스트, 2026-07-06 통일 — 게이트웨이는 `127.0.0.1:18800` 로컬 소비). srv1 의 구 인스턴스는 트래픽 0 확인 후 disable 됨(유닛·config 보존).
 - 빌드: **`make wormhole`** → `dist/wormhole`. 서비스: **`scripts/deploy/wormhole.service`**(systemd, `Restart=on-failure`, `MemoryMax=512M`, journal) 또는 수동 **`scripts/deploy/start-wormhole.sh {start|stop|restart|status}`**.
 - 설정: **`~/.wormhole/config.json`**(레포 밖, 시크릿 포함). 템플릿 = `gateway-go/cmd/wormhole/config.example.json`. `token` + 각 model `key` 는 `${ENV}` 확장. 포트 기본 `:18800`.
 - Deneb-백엔드용 config 골격(메인 dsv4 = no-toggleKwarg 패스스루):
+
   ```json
   {
     "listen": ":18800",
@@ -169,16 +187,20 @@ Hindsight(Hermes 계열 FastAPI+pgvector 장기기억 서비스)는 **2026-06-15
   ```
 
 ### Deneb 배선 (deneb.json — 호스트 prod config)
+
 - `models.providers` 에 wormhole 추가 + role 을 거기로:
+
   ```json5
   "models": {
     "providers": { "wormhole": { "baseUrl": "http://127.0.0.1:18800/v1", "apiKey": "${WORMHOLE_TOKEN}" } },
     "modelRole": { "main": "wormhole:dsv4" /* fallback 은 직결 유지 */ }
   }
   ```
+
 - 게이트웨이는 OpenAI 호환 provider 로 wormhole 을 그냥 호출(`run_provider.go`, 코드 변경 0). provider `headers` 도 지원하니 향후 opt-out 헤더가 필요하면 거기로.
 
 ### 클라우드 호출 통합 (구독 LLM 을 wormhole 경유, ★openai 프로토콜 권장, 2026-06-15)
+>
 > 구독 클라우드(zai/glm·mimo)를 wormhole 로 모을 때 **각 프로바이더의 OpenAI 호환 엔드포인트로 openai 라우팅**하라. anthropic 으로 모으면 아래 loopback-anthropic 마찰에 빠진다.
 
 - wormhole config cloud 엔트리(openai): `{name, url(openai base), upstreamModel, "key":"${ENV}" 또는 리터럴}` — protocol 생략(openai 기본). **no toggleKwarg**(APC/effort 규칙). wormhole 이 url 뒤에 `/chat/completions` 만 붙이니 url 은 그 base.
@@ -193,6 +215,7 @@ Hindsight(Hermes 계열 FastAPI+pgvector 장기기억 서비스)는 **2026-06-15
 > ★★**왜 anthropic 말고 openai 인가 (2026-06-15 교훈, 2026-07-03 갱신)**: anthropic 으로 모으려면 별도 `wormhole-anthropic` provider(baseUrl `:18800` 무 /v1, 클라가 `/v1/messages` 부착, wormhole 은 url 뒤 `/messages`)가 필요한데 이건 **loopback-anthropic 라 `/v1/models` 가 없다(404)**. 당시엔 모델 피커 프로브·modelrole 레지스트리 해석이 `/v1/models` 에 의존해 glm 이 피커에 안 뜨고 resolve 가 실패했다. **백엔드가 openai 호환 엔드포인트를 가지면 그걸로 openai 라우팅하는 게 여전히 1순위** — /v1/models 가 있어 발견·윈도우 프로브까지 전부 공짜. 단 그 뒤 코드가 바뀌어(카탈로그 우선 `resolveModelConfig`, 선언 모델 렌더, 프로브 non-200=reachable-green) **anthropic-only 백엔드는 이제 위 kimi 런북 패턴(빌트인 provider id 유지 + baseUrl 만 wormhole)으로 anthropic 프론트에 태울 수 있다** — cross-protocol 마찰은 openai 백엔드를 굳이 anthropic 으로 모을 때의 문제로 좁혀졌다.
 
 ### ★ 사용량 계량 (`/v1/usage`, 2026-07-05)
+>
 > 단일 관문이라 wormhole 이 "이 달 각 모델이 태운 토큰/요청"의 자연스러운 단일 진실원이다 (ClawRouter 패턴 차용). 이전엔 agent-logs 채굴로만 보이던 glm 소비(~3.2M tok/일)를 GET 한 번으로 답한다.
 
 - **동작**: 업스트림 응답의 **바운드 테일 사본**(64KB)에서 usage 프레임(openai `prompt/completion_tokens`·anthropic `input/output_tokens` 양 방언, 마지막 프레임 승)을 베스트에포트 파싱. 월 윈도우(`YYYY-MM`)로 `~/.wormhole/usage.json` 에 영속(atomic replace, 30s 디바운스) — 재시작해도 월 누계 유지.
@@ -200,6 +223,7 @@ Hindsight(Hermes 계열 FastAPI+pgvector 장기기억 서비스)는 **2026-06-15
 - **비용/예산(선택)**: 엔트리 `"pricing":{"inputPerMTokUsd":…,"outputPerMTokUsd":…}` 선언 시 추정 비용 계산, 톱레벨 `"monthlyBudgetUsd"` 선언 시 budget/usedPercent 표기. 어디까지나 표시용 — 예산 초과로 요청을 막지 않는다.
 
 ### 운영 명령
+
 ```bash
 make wormhole                                    # 빌드
 systemctl --user enable --now wormhole.service   # 상주 (또는 scripts/deploy/start-wormhole.sh start)
@@ -209,10 +233,12 @@ curl -s http://127.0.0.1:18800/v1/usage -H "Authorization: Bearer $WORMHOLE_TOKE
 ```
 
 ### 라이브 검증 (메인 경로 cutover 시 필수)
+
 - **바이트 패스스루 증명**: 같은 요청을 `:18800`(wormhole) 과 `:8000`(직결 vLLM) 에 보내 vLLM `prefix_cache` 메트릭이 동일하게 적중하는지 확인 → wormhole 이 APC 를 깨지 않음을 보장.
 - **멀티턴 APC**: cutover 후 `scripts/dev/live-test.sh logs-grep prefix_cache` 또는 엔진 `/metrics` 의 `vllm:prefix_cache_hits_total` 가 정상 누적되는지(직결 때 대비 적중률 유지) 확인. 떨어지면 즉시 롤백(deneb.json role 직결 복구 + 게이트웨이 재시작).
 
 ## 새 사이드카 모델 추가 시 체크리스트
+
 - [ ] vLLM(또는 호환) 서버를 OpenAI `/v1` 로 띄우고, 호스트 런처 스크립트(`~/start-*.sh`)를 `--restart unless-stopped` 로 작성
 - [ ] 코드는 엔드포인트를 **환경변수 override + 합리적 로컬 기본값**으로 받기 (PaddleOCR-VL 의 `DENEB_OCR_VL_URL` 패턴)
 - [ ] 로컬 서버 다운 시 **graceful degradation 경로** 확보 (폴백 또는 명확한 에러)

@@ -52,7 +52,7 @@ sidebarTitle: "Papers Deep Dive"
 
 **1B. retain 발생 시각 메타 (소).** retain metadata에 turn timestamp(`occurred_at`)를 추가해 hindsight의 시간 해석(임베딩 증강 `(happened in Month Year)`)이 retained_at이 아닌 실제 발화 시각을 쓰도록. hindsight 서버가 이 메타를 소비하는지 확인 필요 — 소비하지 않으면 retain content 말미에 `[발생: YYYY-MM-DD]` 주석으로 폴백.
 
-**1C. 무효화 전파 (중).** dreamer가 `MarkSuperseded`를 수행한 사이클 종료 시 hindsight에 1건 retain: "사실 갱신: <old> 내용은 <new>로 대체됨 (YYYY-MM-DD)". hindsight를 고치지 않고 검색 공간 안에 정정 사실 자체를 심는 접근. 부작용 낮음, 효과는 hindsight 하이브리드 검색의 랭킹에 의존 — 1A보다 후순위.
+**1C. 무효화 전파 (중).** dreamer가 `MarkSuperseded`를 수행한 사이클 종료 시 hindsight에 1건 retain: "사실 갱신: `<old>` 내용은 `<new>`로 대체됨 (YYYY-MM-DD)". hindsight를 고치지 않고 검색 공간 안에 정정 사실 자체를 심는 접근. 부작용 낮음, 효과는 hindsight 하이브리드 검색의 랭킹에 의존 — 1A보다 후순위.
 
 **1D. 회귀 하네스 확장 (중).** `recall_bench_test.go`에 턴 단위 시나리오 추가: ①위키 주입 → 질의(구사실 적중) ②diary 주입(사실 변경) → 질의(신사실 적중) ③`MarkSuperseded` 시뮬레이션 → 질의(신사실 + `[대체됨]` 마커, 구사실 비인용) — `mustFind`/`mustNotFind` 어서션, floor 75%, `recall-metric.sh`에 두 번째 메트릭 라인 추가. MemoryAgentBench의 incremental-injection 정신의 단일 사용자 축소판.
 
@@ -109,6 +109,7 @@ sidebarTitle: "Papers Deep Dive"
 **5A. 재캘리브레이션 (소, 1순위).** 분석 스크립트 1개: 최근 30일 agentlog에서 2×2(routed/kept × 성공/실패) + o_t 크기 구간별·턴별 성공률 분포 → 상수 4종(2000/8000/1500/턴 한도 3) 데이터 근거로 조정. 학습 없음, 코드 변경은 상수뿐.
 
 **5B. 학습형 전환 — 섀도 모드 (중).** 단일 사용자 현실: 라벨 ~1-2K/월 → 구조화 피처 15종(턴 번호·메시지 길이·o_t max/sum·에러 수·하드신호·자동화·첨부 등) + 로지스틱 회귀부터 (임베딩 피처는 2차). 멀티유저 카나리 불가 → **섀도 모드**: learned 라우터를 병행 실행하되 결정만 로그(적용은 휴리스틱), 불일치 사례를 주간 리뷰 → 합의율·예상 토큰 절감 확인 후 컷오버. `effort_router.go`에 결정 인터페이스 추상화 + `DENEB_ADAPTIVE_EFFORT=shadow|learned`. 라우터 추론은 임베딩 없이 <1ms (서베이 2511.10788의 "가벼운 신호" 원칙 준수).
+
 - 검증: puppet seat로 동일 턴 thinking on/off 재실행 비교 가능 — Ares의 라벨 생성 파이프라인(K샘플링)의 수동 축소판.
 
 ## 발견 6 — 능동형: FTR 계측과 수락/거부 신호
