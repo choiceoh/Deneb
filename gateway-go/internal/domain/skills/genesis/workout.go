@@ -98,6 +98,14 @@ func (t *SkillWorkoutTask) Run(ctx context.Context) error {
 		if name == "" || strings.TrimSpace(entry.Skill.FilePath) == "" {
 			continue
 		}
+		// Mirror the evolver's recency gate (evolutionSuppressed): a skill with
+		// real use OLDER than the evidence window can't be evolved anyway, so
+		// exercising it would stockpile evidence with no consumer. Never-used
+		// skills stay eligible, same exemption as the evolve path.
+		if stats, serr := t.Tracker.Stats(name); serr == nil && stats.LastUsed > 0 &&
+			stats.LastUsed < time.Now().Add(-skillEvolutionEvidenceWindow()).UnixMilli() {
+			continue
+		}
 		cases, err := t.Tracker.RecentSkillValidationCases(name, defaultSkillValidationCaseLimit)
 		if err != nil || len(cases) == 0 {
 			continue

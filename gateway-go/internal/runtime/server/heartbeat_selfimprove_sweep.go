@@ -70,18 +70,21 @@ func (t *heartbeatTask) detectSelfImproveSweepNudge(now time.Time) string {
 		return ""
 	}
 	funnel, recurrences := t.selfImproveSignals()
-	if funnel.Rejections7d <= 0 && recurrences <= 0 {
+	// Evidence clusters gate the sweep ALONGSIDE the rejection/recurrence
+	// counters: workout and plain usage failures are quarantined from those
+	// counters by design, so without this the synthetic exercise lane could
+	// pile up evidence no sweep ever consumes. Mined post-interval (≤2/day)
+	// and reused for the nudge below.
+	var clusters []genesis.FailureClusterSummary
+	if t.selfImproveEvidence != nil {
+		clusters = t.selfImproveEvidence(sweepEvidenceClusterLimit)
+	}
+	if funnel.Rejections7d <= 0 && recurrences <= 0 && len(clusters) == 0 {
 		return "" // nothing to mine — an empty sweep turn would only invent noise
 	}
 	if err := saveSelfImproveSweepState(statePath, selfImproveSweepState{LastNudgeAt: now}); err != nil {
 		t.logger.Warn("heartbeat: self-improve sweep state save failed, skipping nudge", "error", err)
 		return ""
-	}
-	// Mine the evidence bundle only after every gate passed — the clustering
-	// pass re-reads the JSONL sidecars, so it should run at most once per fire.
-	var clusters []genesis.FailureClusterSummary
-	if t.selfImproveEvidence != nil {
-		clusters = t.selfImproveEvidence(sweepEvidenceClusterLimit)
 	}
 	t.logger.Info("heartbeat: self-improvement sweep nudge fired",
 		"rejections7d", funnel.Rejections7d, "recurrences7d", recurrences, "clusters", len(clusters))
