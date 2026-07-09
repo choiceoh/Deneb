@@ -1140,18 +1140,18 @@
           "reopen",
           "ingest"
         ],
-        "description": "Action: search (ripgrep full-text search), read (read wiki page(s) — one via query, several at once via paths), index (read master/category index), write (create/update page), log (append diary entry), daily (read recent diary), status (wiki stats), close (프로젝트 종결 — query=프로젝트명, content=결과·사유 한 줄; 폴더 전체 보관+활성 목록 제외, 삭제 아님), reopen (종결 프로젝트 재개 — query=프로젝트명), ingest (외부 자료 캡처: query=URL — 웹페이지/유튜브를 요약+발췌와 함께 자료 페이지로 영속화. 사용자가 '기억해둬/저장해둬'라며 링크를 주면 web 대신 이걸 쓴다. project=연결 프로젝트명(선택), content=메모(선택); 같은 URL은 멱등, 갱신은 force=true)"
+        "description": "Action: search (ripgrep full-text search), read (wiki page(s) — one via query, several at once via paths), index (master/category index), write (create/update page), log (append diary entry), daily (recent diary), status (wiki stats), close (프로젝트 종결 — query=프로젝트명, content=결과·사유 한 줄; 폴더 전체 보관+활성 목록 제외, 삭제 아님), reopen (종결 프로젝트 재개 — query=프로젝트명), ingest (외부 자료 캡처: query=URL — 웹페이지/유튜브를 요약+발췌와 함께 자료 페이지로 영속화. 사용자가 '기억해둬/저장해둬'라며 링크를 주면 web 대신 이걸 쓴다. project=연결 프로젝트명(선택), content=메모(선택); 같은 URL은 멱등, 갱신은 force=true)"
       },
       "query": {
         "type": "string",
-        "description": "Search query (search), page path (read/write — to read SEVERAL pages use paths instead), category name (index), diary entry body (log), or 캡처할 http(s) URL (ingest). 프로젝트 write paths follow the fixed layout: 프로젝트/<이름>/대표.md (대표페이지), 프로젝트/<이름>/로그.md (진행 로그 — 사건·소식은 여기에 append), 프로젝트/<이름>/기자재/<문서>.md, 프로젝트/<이름>/자료/ (외부 소스 — 직접 쓰지 말고 ingest 액션 사용)"
+        "description": "Search query (search), page path (read/write — SEVERAL pages via paths), category name (index), diary entry body (log), or 캡처할 http(s) URL (ingest). 프로젝트 write paths follow fixed layout: 프로젝트/<이름>/대표.md (대표페이지), 프로젝트/<이름>/로그.md (진행 로그 — 사건·소식은 여기에 append), 프로젝트/<이름>/기자재/<문서>.md, 프로젝트/<이름>/자료/ (외부 소스 — 직접 쓰지 말고 ingest 액션 사용)"
       },
       "paths": {
         "type": "array",
         "items": {
           "type": "string"
         },
-        "description": "Read several wiki pages in ONE call (read action) — after a search, pass every relevant page path here instead of calling read once per page. Same forms as query (path or w: ref); up to 8 pages per call."
+        "description": "Read several wiki pages in ONE call (read action) — after a search, pass every relevant page path here instead of read-per-page. Same forms as query (path or w: ref); up to 8 pages per call."
       },
       "project": {
         "type": "string",
@@ -1179,18 +1179,18 @@
           "사용자",
           "기타"
         ],
-        "description": "Wiki category for write action or index filter — one of the 6: 프로젝트(일·거래·결정), 인물(사람·조직), 시스템(Deneb 구성·운영), 업무(직무 도메인 지식), 사용자(개인 선호·규칙), 기타(시사·잡학·그 외)"
+        "description": "Wiki category (write action / index filter) — one of the 6: 프로젝트(일·거래·결정), 인물(사람·조직), 시스템(Deneb 구성·운영), 업무(직무 도메인 지식), 사용자(개인 선호·규칙), 기타(시사·잡학·그 외)"
       },
       "content": {
         "type": "string",
-        "description": "Page body content in markdown (write action) or diary entry body (log action). In write bodies, link related pages inline with [[path-or-title]] (e.g. [[프로젝트/dgx-spark]] or [[홍길동]]); these become knowledge-graph edges, so prefer them over plain mentions. 출처 규율: 특정 소스(메일·자료·문서)에서 온 주장은 그 [[페이지]]나 ref를 병기하고, 출처 없는 합성 추론은 '> 합성:' 인용으로 시작한다 — 부유 주장 금지. 프로젝트/<이름>/로그.md에 쓰면 content가 날짜 H2 섹션으로 기존 로그에 append된다 — 새 항목만 보낼 것(전체 본문 재전송 금지); 전체 재작성이 정말 필요하면 force=true. 로그 섹션 제목은 '## [YYYY-MM-DD] <op> | <주제>' 꼴 권장(op: ingest/결정/회의/이슈…) — grep 가능한 로그 문법."
+        "description": "Page body markdown (write action) or diary entry body (log action). In write bodies, link related pages inline with [[path-or-title]] (e.g. [[프로젝트/dgx-spark]] or [[홍길동]]); these become knowledge-graph edges — prefer over plain mentions. 출처 규율: 특정 소스(메일·자료·문서)에서 온 주장은 그 [[페이지]]나 ref를 병기하고, 출처 없는 합성 추론은 '> 합성:' 인용으로 시작한다 — 부유 주장 금지. 프로젝트/<이름>/로그.md에 쓰면 content가 날짜 H2 섹션으로 기존 로그에 append된다 — 새 항목만 보낼 것(전체 본문 재전송 금지); 전체 재작성이 정말 필요하면 force=true. 로그 섹션 제목은 '## [YYYY-MM-DD] <op> | <주제>' 꼴 권장(op: ingest/결정/회의/이슈…) — grep 가능한 로그 문법."
       },
       "tags": {
         "type": "array",
         "items": {
           "type": "string"
         },
-        "description": "Tags for the page (write action)"
+        "description": "Tags (write action)"
       },
       "related": {
         "type": "array",
@@ -1230,7 +1230,7 @@
         "items": {
           "type": "string"
         },
-        "description": "Existing wiki page paths this write replaces because the new fact contradicts or supersedes them. Marking them demotes stale pages in recall/search."
+        "description": "Existing wiki page paths this write replaces (new fact contradicts/supersedes them). Marking them demotes stale pages in recall/search."
       },
       "force": {
         "type": "boolean",
@@ -1252,7 +1252,7 @@
           "comparison",
           "log"
         ],
-        "description": "Page type (write action): concept, entity, source, comparison, log"
+        "description": "Page type (write action)"
       },
       "confidence": {
         "type": "string",
@@ -1269,7 +1269,7 @@
       },
       "section": {
         "type": "string",
-        "description": "Read a specific section from the page (read action)"
+        "description": "Read a specific section (read action)"
       },
       "limit": {
         "type": "integer",
