@@ -124,9 +124,24 @@ func ToolMailArchive(optional ...MailArchiveDeps) func(ctx context.Context, inpu
 				opts.Since = time.Now().AddDate(0, 0, -(args.Days - 1))
 			}
 			var msgs []mailarchive.ContextMessage
+			widened := false
 			if storeReady {
 				msgs = deps.Store.Search(mailboxes, args.Query, opts.Since, limit)
 				storeHits = len(msgs)
+				// The model frequently attaches a `days` window even when the user
+				// asked for no recency (schema default for search is unlimited). A
+				// bounded search that finds nothing used to fall through to IMAP,
+				// which applies the SAME window and also returns little — seconds
+				// of latency for an empty recent slice. Widen to all-time in the
+				// fast store first: someone searching an older topic (a past deal,
+				// a discontinued product) wants those mails, not zero results.
+				if len(msgs) == 0 && !opts.Since.IsZero() {
+					if wider := deps.Store.Search(mailboxes, args.Query, time.Time{}, limit); len(wider) > 0 {
+						msgs = wider
+						storeHits = len(msgs)
+						widened = true
+					}
+				}
 			}
 			if len(msgs) == 0 && imapReady {
 				usedIMAP = true
@@ -138,13 +153,21 @@ func ToolMailArchive(optional ...MailArchiveDeps) func(ctx context.Context, inpu
 			}
 			if args.AsJSON {
 				return marshalMailArchiveResponse(mailArchiveResponse{
-					Action:    "search",
-					Mailboxes: mailboxes,
-					Count:     len(msgs),
-					Messages:  enrichArchiveMessages(ctx, deps, msgs, args.IncludeBody),
+					Action:      "search",
+					Mailboxes:   mailboxes,
+					Count:       len(msgs),
+					WidenedDays: mailArchiveWidenedDays(widened, args.Days),
+					Messages:    enrichArchiveMessages(ctx, deps, msgs, args.IncludeBody),
 				})
 			}
-			return formatArchiveMessages(fmt.Sprintf("'%s' 검색 결과 (%s)", args.Query, mailArchiveMailboxLabel(mailboxes)), msgs, args.IncludeBody), nil
+			title := fmt.Sprintf("'%s' 검색 결과 (%s)", args.Query, mailArchiveMailboxLabel(mailboxes))
+			if widened {
+				// Tell the model the results are outside the window it asked for, so
+				// it reports "none in the last N days; here are older matches"
+				// instead of implying they are recent.
+				title = fmt.Sprintf("'%s' 검색 결과 (%s · 최근 %d일 내 없음 → 전체 기간)", args.Query, mailArchiveMailboxLabel(mailboxes), args.Days)
+			}
+			return formatArchiveMessages(title, msgs, args.IncludeBody), nil
 		case "read":
 			var msg mailarchive.ContextMessage
 			var found bool
@@ -388,12 +411,25 @@ func mailArchiveBodyRunes(includeBody bool) int {
 }
 
 type mailArchiveResponse struct {
-	Action    string                  `json:"action"`
-	Mailboxes []string                `json:"mailboxes"`
-	Count     int                     `json:"count"`
-	Message   *mailArchiveMessageOut  `json:"message,omitempty"`
-	Messages  []mailArchiveMessageOut `json:"messages,omitempty"`
-	History   *mailArchiveHistoryOut  `json:"history,omitempty"`
+	Action    string   `json:"action"`
+	Mailboxes []string `json:"mailboxes"`
+	Count     int      `json:"count"`
+	// WidenedDays is set when a days-bounded search found nothing in the window
+	// and was widened to all-time — the results are OLDER than the requested
+	// days, so the model must not present them as recent.
+	WidenedDays int                     `json:"widened_days,omitempty"`
+	Message     *mailArchiveMessageOut  `json:"message,omitempty"`
+	Messages    []mailArchiveMessageOut `json:"messages,omitempty"`
+	History     *mailArchiveHistoryOut  `json:"history,omitempty"`
+}
+
+// mailArchiveWidenedDays reports the days window that was widened away, for the
+// JSON response — 0 (omitted) unless a bounded search actually widened.
+func mailArchiveWidenedDays(widened bool, days int) int {
+	if widened {
+		return days
+	}
+	return 0
 }
 
 type mailArchiveHistoryOut struct {
