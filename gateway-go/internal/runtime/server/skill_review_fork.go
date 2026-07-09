@@ -73,7 +73,15 @@ func (r *skillReviewFork) RunSkillReview(ctx context.Context, sessionKey string,
 	}
 
 	prompt := buildSkillReviewPrompt(sessionKey, reviewCtx, r.recentOpportunityContext())
-	maxTokens := 2048
+	// The review runs on the coding role (glm-5.2), a reasoning model whose
+	// chain-of-thought shares this output budget. At 2048 the reasoning alone
+	// (~1.3-1.5K tokens observed; the sibling workout replay logged
+	// reasoning_chars=4540) consumed the whole budget, so the turn hit
+	// finish_reason=length with EMPTY content and ZERO tool calls — never
+	// calling skill_lifecycle(propose), which silently kills the entire Propus
+	// loop (no evolution_proposal ever logged; verified on prod 2026-07-09).
+	// Budget reasoning + at least one (often two) tool calls with evidence.
+	maxTokens := 8192
 	_, err := r.chat.SendSync(ctx, skillReviewSessionKey(sessionKey), prompt, r.model, &chat.SyncOptions{
 		SystemPrompt:       skillReviewSystemPrompt,
 		ToolPreset:         string(toolpreset.PresetSelfReview),
