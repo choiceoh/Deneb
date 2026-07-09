@@ -216,3 +216,42 @@ func TestBestText(t *testing.T) {
 		})
 	}
 }
+
+// TestWithSyncRunLifecycle_RegistersDuringAndCleansUpAfter locks the invariant
+// that makes native-chat auto-steer, /kill, and merge work: a synchronous run
+// is registered in the abort tracker WHILE it executes (so HasActiveRun sees
+// it) and cleaned up SYNCHRONOUSLY before the call returns (so a sequential
+// next SendSync on the same session does not fold into a ghost run). Before
+// this wiring, native (sync-only) runs were never registered and all three
+// features were dead on the native surface.
+func TestWithSyncRunLifecycle_RegistersDuringAndCleansUpAfter(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	defer server.Close()
+	h := newSyncTestHandler(server, NewMemoryTranscriptStore())
+	const sessionKey = "client:main"
+
+	if h.abort.HasActiveRun(sessionKey) {
+		t.Fatalf("precondition: session already has an active run")
+	}
+
+	var activeDuringRun bool
+	var gotCtx context.Context
+	_, err := h.withSyncRunLifecycle(context.Background(), sessionKey, "run-1",
+		func(ctx context.Context) (*SyncResult, error) {
+			activeDuringRun = h.abort.HasActiveRun(sessionKey)
+			gotCtx = ctx
+			return &SyncResult{Text: "ok"}, nil
+		})
+	if err != nil {
+		t.Fatalf("withSyncRunLifecycle: %v", err)
+	}
+	if !activeDuringRun {
+		t.Error("HasActiveRun was false during the run — auto-steer/kill/merge cannot see a native turn")
+	}
+	if gotCtx == nil {
+		t.Error("run received a nil context — it must be the cancellable run ctx")
+	}
+	if h.abort.HasActiveRun(sessionKey) {
+		t.Error("HasActiveRun still true after return — cleanup must be synchronous or the next SendSync folds into a ghost run")
+	}
+}

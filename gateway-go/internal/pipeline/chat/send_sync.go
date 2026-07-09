@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/choiceoh/deneb/gateway-go/pkg/dentime"
@@ -226,6 +227,15 @@ func (h *Handler) prepareSyncRun(sessionKey, message, model, runIDPrefix string,
 	}
 
 	deps := h.buildRunDeps()
+	// Wire the sub-agent notification channel so a child completion that lands
+	// mid-run is consumed by THIS run (DeferredSystemText) instead of stranded.
+	// startAsyncRun does the same for the async path; the sync entries did not,
+	// so once a sync run registers as active (withSyncRunLifecycle) its parked
+	// child notifications would otherwise never be drained. nil-safe: hand-built
+	// test handlers leave h.subagent nil.
+	if h.subagent != nil {
+		deps.subagentNotifyCh = h.subagent.NotifyCh(sessionKey)
+	}
 	if opts != nil && opts.MaxHistoryTokens > 0 {
 		// MaxHistoryTokens is the HISTORY budget, but MemoryTokenBudget is the
 		// TOTAL (system + history) budget — run_exec derives
@@ -317,22 +327,84 @@ func (h *Handler) SendSync(ctx context.Context, sessionKey, message, model strin
 	// (miniapp.chat.send, cron single-run, heartbeat, boot, mail-qa, BTW) is
 	// invisible in ~/.deneb/agent-logs and to the modeltuner's AggregateByModel.
 	runLog := agentlog.NewRunLogger(deps.agentLog, params.SessionKey, params.ClientRunID)
-	result, err := executeAgentRun(ctx, params, deps, nil, nil, h.logger, runLog)
-	if err != nil {
-		return nil, err
-	}
-	finishTurnSideEffects(deps, params, result.AgentResult, h.logger)
-	res, err := h.buildSyncResult(model, result)
-	if err == nil {
-		h.autoTitleSessionAsync(sessionKey, message, res)
-	}
-	return res, err
+	return h.withSyncRunLifecycle(ctx, sessionKey, params.ClientRunID,
+		func(runCtx context.Context) (*SyncResult, error) {
+			result, err := executeAgentRun(runCtx, params, deps, nil, nil, h.logger, runLog)
+			if err != nil {
+				return nil, err
+			}
+			finishTurnSideEffects(deps, params, result.AgentResult, h.logger)
+			res, err := h.buildSyncResult(model, result)
+			if err == nil {
+				h.autoTitleSessionAsync(sessionKey, message, res)
+			}
+			return res, err
+		})
+}
+
+// withSyncRunLifecycle makes a synchronous run a first-class member of the
+// session lifecycle, exactly as startAsyncRun does for the async path. Without
+// it, a native run (miniapp.chat.send/stream is the native client's ONLY entry,
+// all synchronous) was invisible to the abort tracker, which broke three things:
+//   - auto-steer never fired (trySteerIntoActiveRun's HasActiveRun check never
+//     saw a sync run, so a mid-turn follow-up raced a second concurrent run on
+//     the same session/transcript instead of folding);
+//   - the merge window and /kill could not act on a native turn;
+//   - a sub-agent that finished mid-run saw the parent as idle and spawned a
+//     messy concurrent triggerRun to deliver its result.
+//
+// Registration alone would be strictly worse — a registered-but-undrained run
+// strands child notifications — so this pairs it with the notify-channel wiring
+// (prepareSyncRun) and, on completion, ReclaimOnIdle + a pending drain, mirroring
+// startAsyncRun's goroutine defers. Cleanup is a SYNCHRONOUS defer that finishes
+// before the call returns, so a sequential next SendSync on the same session
+// never observes a stale active run. Order mirrors run_start.go: Cleanup first
+// (HasActiveRun authoritative), then ReclaimOnIdle, then drain.
+func (h *Handler) withSyncRunLifecycle(
+	ctx context.Context, sessionKey, clientRunID string,
+	fn func(context.Context) (*SyncResult, error),
+) (*SyncResult, error) {
+	runCtx, cancel := context.WithCancelCause(ctx)
+	defer cancel(nil)
+
+	h.abort.Register(clientRunID, &AbortEntry{
+		SessionKey: sessionKey,
+		ClientRun:  clientRunID,
+		CancelFn:   cancel,
+		ExpiresAt:  time.Now().Add(4 * time.Hour),
+	})
+	defer func() {
+		// Cleanup BEFORE the reclaim/drain so HasActiveRun reports this session
+		// idle while they run (else they'd re-park against the still-"active" run).
+		h.abort.Cleanup(clientRunID)
+		if h.subagent != nil {
+			h.subagent.ReclaimOnIdle(sessionKey)
+		}
+		// A message that arrived during this run (SendDirect/bridge Enqueue while
+		// HasActiveRun was true) is drained by the async path only; the sync path
+		// must hand it off explicitly or it strands until an unrelated future run.
+		if pending := h.pending.Drain(sessionKey); pending != nil {
+			h.startAsyncRun("pending-"+pending.ClientRunID, *pending, false)
+		}
+	}()
+
+	return fn(runCtx)
 }
 
 // steerMaxRunes bounds which mid-run follow-ups fold into the active turn as a
 // steer note. Longer messages read as a genuinely new request and keep the
 // current behavior (their own run).
 const steerMaxRunes = 400
+
+// isNativeClientDelivery reports whether a delivery targets the native app's
+// "client" channel — an interactive surface that returns its reply as the RPC
+// result, distinct from the autonomous AutoDeliveredOutput relays (cron,
+// mailpoll, …) that push their reply on other channels. Kept as a literal to
+// avoid a chat→handler import cycle; the value matches handler/chat's
+// NativeClientChannel and the "client" channel deliveryFromSessionKey stamps.
+func isNativeClientDelivery(d *DeliveryContext) bool {
+	return d != nil && d.Channel == "client"
+}
 
 // trySteerIntoActiveRun folds a short follow-up that arrives while this
 // session's run is still executing into that run's steer queue — the same
@@ -347,12 +419,23 @@ const steerMaxRunes = 400
 // per-request copy (steer_inject.go) — prompt-cache Rule A intact.
 //
 // Conservative gates: interactive chat only (no API Messages, no autonomous
-// EphemeralUser/AutoDelivered surfaces), short plain text, and an active run.
-// If the run finishes between the check and the hook's drain, the note is
-// consumed by this session's next run (the steer hook drains before every LLM
-// call) — deferred, never lost.
+// EphemeralUser surfaces), short plain text, and an active run. If the run
+// finishes between the check and the hook's drain, the note is consumed by this
+// session's next run (the steer hook drains before every LLM call) — deferred,
+// never lost.
 func (h *Handler) trySteerIntoActiveRun(sessionKey, message string, opts *SyncOptions) (*SyncResult, bool) {
-	if opts == nil || len(opts.Messages) > 0 || opts.EphemeralUser || opts.AutoDeliveredOutput {
+	if opts == nil || len(opts.Messages) > 0 || opts.EphemeralUser {
+		return nil, false
+	}
+	// AutoDeliveredOutput marks runs whose reply the completion layer delivers
+	// instead of the message tool. It covers BOTH truly autonomous relays (cron,
+	// mailpoll, goal, event-ingest — not interactive) AND the native client,
+	// which IS interactive but returns its reply as the RPC result rather than
+	// pushing it. Only the autonomous relays should block steer; the native
+	// "client" surface is exactly the mid-turn-correction case ("아 남도에코만
+	// 봐줘") steer exists for. Without this carve-out steer was dead on the sole
+	// native entry — every follow-up raced a second concurrent run instead.
+	if opts.AutoDeliveredOutput && !isNativeClientDelivery(opts.Delivery) {
 		return nil, false
 	}
 	trimmed := strings.TrimSpace(message)
@@ -471,14 +554,17 @@ func (h *Handler) SendSyncStream(ctx context.Context, sessionKey, message, model
 		sinks.OnTool = opts.OnToolEvent
 		sinks.OnThinking = opts.OnThinking
 	}
-	result, err := executeAgentRunWithDelta(ctx, params, deps, sinks, h.logger)
-	if err != nil {
-		return nil, err
-	}
-	finishTurnSideEffects(deps, params, result.AgentResult, h.logger)
-	res, err := h.buildSyncResult(model, result)
-	if err == nil {
-		h.autoTitleSessionAsync(sessionKey, message, res)
-	}
-	return res, err
+	return h.withSyncRunLifecycle(ctx, sessionKey, params.ClientRunID,
+		func(runCtx context.Context) (*SyncResult, error) {
+			result, err := executeAgentRunWithDelta(runCtx, params, deps, sinks, h.logger)
+			if err != nil {
+				return nil, err
+			}
+			finishTurnSideEffects(deps, params, result.AgentResult, h.logger)
+			res, err := h.buildSyncResult(model, result)
+			if err == nil {
+				h.autoTitleSessionAsync(sessionKey, message, res)
+			}
+			return res, err
+		})
 }
