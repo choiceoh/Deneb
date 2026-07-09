@@ -627,6 +627,22 @@ func (s *Server) registerGenesisAutonomousTasks(_ *rpcutil.GatewayHub) {
 			Config:  genesis.SkillCuratorConfigFromEnv(),
 		})
 
+		// Deterministic bench growth: retro-extract held-out validation cases
+		// from recent real skill-use transcripts until each actively-used skill
+		// holds a minimum corpus (validation_backfill_task.go). Without this the
+		// behavioral held-out gate stays inert on skills whose capture-time
+		// extraction never fired.
+		s.autonomousSvc.RegisterTask(&validationBackfillTask{
+			backend: &skillLifecycleBackend{
+				genesis:     s.genesisSvc,
+				evolver:     s.genesisEvolver,
+				tracker:     s.genesisTracker,
+				transcripts: s.genesisTranscripts,
+				logger:      s.logger,
+			},
+			logger: s.logger,
+		})
+
 		// Event-driven evolve: after N new skills accumulate, run a cycle in
 		// the background instead of waiting for the 6h periodic task. The
 		// periodic task remains a backstop; EvolveUnderperformers is TryLock-
