@@ -11,6 +11,7 @@
        kotlin-check kotlin-spotless kotlin-detekt kotlin-desktop-smoke-test kotlin-android-compile \
        docs-lint docs-lint-fix \
        ci ci/fast go-test-cached \
+       health health-check \
        preview native-smoke \
        info
 
@@ -160,6 +161,20 @@ check: generate-check check-go
 # Fast check: format + vet + lint only (no tests). Good for pre-commit gate.
 check/fast: go-fmt go-vet go-lint
 	@echo "Fast checks passed (fmt + vet + lint, no tests)"
+
+# Codebase structural-health score (advisory — like scripts/audit/deadcode-audit.sh,
+# NOT part of `make check`/`ci`). Aggregates file-size discipline, layer cohesion,
+# test presence, and doc coverage into one 0-100 number + per-dimension detail, so
+# structural rot that no hard gate tracks surfaces in review. See scripts/audit/
+# codebase-health.py. Add --deep for the (slow) deadcode dimension.
+health:
+	@python3 scripts/audit/codebase-health.py
+
+# Ratchet gate: fail if the composite health score regressed below the checked-in
+# floor (scripts/audit/health-baseline.json). Raise the floor after a genuine
+# improvement with: python3 scripts/audit/codebase-health.py --update (operator approval).
+health-check:
+	@python3 scripts/audit/codebase-health.py --check
 
 # Run all code generation pipelines in dependency order.
 generate: tool-schemas data-gen kotlin-models
