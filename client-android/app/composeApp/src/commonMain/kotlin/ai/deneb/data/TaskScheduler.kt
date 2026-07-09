@@ -2,6 +2,7 @@ package ai.deneb.data
 
 import ai.deneb.DenebLog
 import ai.deneb.deneb.DenebGatewayClient
+import ai.deneb.deneb.subscribeEvents
 import ai.deneb.getBackgroundDispatcher
 import ai.deneb.sendProactiveReportNotification
 import kotlinx.coroutines.CoroutineExceptionHandler

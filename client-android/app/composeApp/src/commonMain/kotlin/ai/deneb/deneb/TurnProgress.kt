@@ -1,0 +1,252 @@
+package ai.deneb.deneb
+
+import ai.deneb.ui.chat.History
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import kotlinx.serialization.Serializable
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.TimeSource
+import kotlin.uuid.Uuid
+
+/**
+ * A gateway SSE frame marking a tool's lifecycle (started/completed) within a
+ * streamed chat turn. Carried in the `tool` event; [TurnProgress] turns each
+ * into a transient status row in the chat history.
+ *
+ * Internal (not private) so it can live next to [TurnProgress] in this file
+ * while still being referenced from [DenebGatewayClient.sendStreaming].
+ */
+@Serializable
+internal data class ToolEvent(
+    val state: String = "",
+    val tool: String = "",
+    val toolUseId: String = "",
+    val detail: String = "",
+    val isError: Boolean = false,
+)
+
+/**
+ * Turn-scoped live progress for [DenebGatewayClient.ask]: gateway `tool`/
+ * `thinking` SSE frames become transient [History.Role.TOOL_EXECUTING] rows
+ * (status-only, Korean labels via [ToolStatusLabels]) that the chat screen's
+ * waiting chip picks up through its existing executing-tools derivation — the
+ * same mechanism the local-provider pipeline uses.
+ *
+ * Coverage goal: never regress the chip to the generic spinner mid-turn.
+ * Thinking frames narrate the live reasoning tail ("깊이 생각 중: …"), and
+ * when the last running tool completes the row is repurposed as a
+ * continuity status ("결과 검토 중…") that bridges the event-silent prefill
+ * stretch until the next thinking/tool/delta event.
+ *
+ * Threading: all map/flag state is touched only from the SSE read coroutine
+ * (callbacks run inline in [DenebGatewayClient.sendStreaming]); the delayed
+ * removals/swaps launched on [scope] only perform id-keyed history edits, so no
+ * synchronization is needed. [clear] runs in ask()'s finally, so a
+ * mid-stream error or cancel can never leak a zombie chip row.
+ *
+ * Split out of DenebGatewayClient.kt — the class is self-contained (its own
+ * maps/flags) and reaches the gateway's chat history + coroutine scope through
+ * the constructor, so it carries no coupling to the client's other state.
+ */
+internal class TurnProgress(
+    private val chatHistory: MutableStateFlow<List<History>>,
+    private val scope: CoroutineScope,
+) {
+    private val thinkingId = "progress-thinking-${Uuid.random()}"
+    private var thinkingVisible = false
+
+    // toolUseId (or tool name when the gateway omits the id) → row id/start.
+    private val rowIds = mutableMapOf<String, String>()
+    private val startMarks = mutableMapOf<String, TimeSource.Monotonic.ValueTimeMark>()
+    private val allRowIds = mutableSetOf<String>()
+
+    // Row currently repurposed as the between-steps continuity status
+    // ("결과 검토 중…"); null when no continuity chip is showing.
+    private var continuityRowId: String? = null
+
+    // Completed tools in execution order (tool name + error flag) — the
+    // source of the post-turn footprint line under the answer.
+    private val trail = mutableListOf<Pair<String, Boolean>>()
+
+    /**
+     * Reasoning liveness pulse → show "깊이 생각 중…" until text or a tool
+     * arrives. [preview] is a chip-sized tail of the live reasoning text
+     * (server-throttled to ~1 frame / 2s); when present the row narrates
+     * the actual thought — "깊이 생각 중: …발신인 이력을 대조" — and each
+     * pulse refreshes it.
+     */
+    fun onThinking(preview: String) {
+        hideContinuity()
+        val label = ToolStatusLabels.THINKING +
+            if (preview.isNotEmpty()) ": $preview" else ""
+        if (!thinkingVisible) {
+            thinkingVisible = true
+            allRowIds += thinkingId
+            chatHistory.update { list ->
+                list + History(
+                    id = thinkingId,
+                    role = History.Role.TOOL_EXECUTING,
+                    content = "thinking",
+                    toolName = label,
+                    isStatusMessage = true,
+                )
+            }
+        } else if (preview.isNotEmpty()) {
+            chatHistory.update { list ->
+                list.map { if (it.id == thinkingId) it.copy(toolName = label) else it }
+            }
+        }
+    }
+
+    /** Visible answer text is flowing — drop the status rows (O(1) when hidden). */
+    fun onDelta() {
+        hideThinking()
+        hideContinuity()
+    }
+
+    fun onTool(ev: ToolEvent) {
+        val key = ev.toolUseId.ifEmpty { ev.tool }
+        when (ev.state) {
+            "started" -> {
+                hideThinking()
+                hideContinuity()
+                val rowId = "progress-tool-${Uuid.random()}"
+                rowIds[key] = rowId
+                startMarks[key] = TimeSource.Monotonic.markNow()
+                allRowIds += rowId
+                // "메일 확인 중: 아르고에너지" — the server-extracted hint
+                // names the target, not just the tool.
+                val label = ToolStatusLabels.label(ev.tool) +
+                    if (ev.detail.isNotEmpty()) ": ${ev.detail}" else ""
+                chatHistory.update { list ->
+                    list + History(
+                        id = rowId,
+                        role = History.Role.TOOL_EXECUTING,
+                        content = ev.tool,
+                        toolName = label,
+                        isStatusMessage = true,
+                    )
+                }
+            }
+
+            "completed" -> {
+                trail += ev.tool to ev.isError
+                val rowId = rowIds.remove(key) ?: return
+                if (ev.isError) {
+                    // Swap the row to its failure form ("메일 확인 실패")
+                    // and hold it readable — the agent usually keeps going,
+                    // so this explains why the turn is taking longer.
+                    val failure = ToolStatusLabels.failureLabel(ev.tool)
+                    chatHistory.update { list ->
+                        list.map { if (it.id == rowId) it.copy(toolName = failure) else it }
+                    }
+                    scope.launch {
+                        delay(DenebGatewayClient.FAILURE_DISPLAY_MS.milliseconds)
+                        removeRow(rowId)
+                    }
+                    startMarks.remove(key)
+                    return
+                }
+                val elapsed = startMarks.remove(key)?.elapsedNow() ?: 0.milliseconds
+                val remaining = DenebGatewayClient.MIN_PROGRESS_DISPLAY_MS.milliseconds - elapsed
+                if (rowIds.isEmpty()) {
+                    // Last running tool finished — the model is back in an
+                    // LLM step reading the results, which on a cache-missed
+                    // prefill can stay event-silent for tens of seconds.
+                    // Repurpose the row as a continuity status instead of
+                    // dropping the chip back to the generic spinner; the
+                    // next thinking/tool/delta event (or clear) removes it.
+                    continuityRowId = rowId
+                    val swap = {
+                        chatHistory.update { list ->
+                            list.map {
+                                if (it.id == rowId) {
+                                    it.copy(content = "continuity", toolName = ToolStatusLabels.REVIEWING)
+                                } else {
+                                    it
+                                }
+                            }
+                        }
+                    }
+                    if (remaining.isPositive()) {
+                        // Keep the finished tool's label readable first. The
+                        // delayed swap is an idempotent id-keyed map, so
+                        // racing hideContinuity()/clear() (row already gone)
+                        // is harmless.
+                        scope.launch {
+                            delay(remaining)
+                            swap()
+                        }
+                    } else {
+                        swap()
+                    }
+                    return
+                }
+                if (remaining.isPositive()) {
+                    // Hold fast tools on screen long enough to read; the
+                    // removal is an idempotent id filter, so racing clear()
+                    // or a conversation switch is safe.
+                    scope.launch {
+                        delay(remaining)
+                        removeRow(rowId)
+                    }
+                } else {
+                    removeRow(rowId)
+                }
+            }
+        }
+    }
+
+    /**
+     * One-line trail of what this turn did — "메일 확인 ×2 · 웹 검색 ⚠" —
+     * attached under the finished answer. Null when no tool completed.
+     * Live-turn only by design: the gateway transcript does not carry it,
+     * so reloading a conversation drops the line.
+     */
+    fun footprint(): String? {
+        if (trail.isEmpty()) return null
+        val counts = LinkedHashMap<String, IntArray>() // tool → [count, errored(0/1)]
+        for ((tool, isError) in trail) {
+            val agg = counts.getOrPut(tool) { intArrayOf(0, 0) }
+            agg[0]++
+            if (isError) agg[1] = 1
+        }
+        val parts = counts.entries.take(DenebGatewayClient.FOOTPRINT_MAX_TOOLS).map { (tool, agg) ->
+            buildString {
+                append(ToolStatusLabels.trailLabel(tool))
+                if (agg[0] > 1) append(" ×${agg[0]}")
+                if (agg[1] == 1) append(" ⚠")
+            }
+        }
+        val more = counts.size - DenebGatewayClient.FOOTPRINT_MAX_TOOLS
+        return parts.joinToString(" · ") + if (more > 0) " 외 $more" else ""
+    }
+
+    /** Remove every row this turn added (idempotent; runs in ask()'s finally). */
+    fun clear() {
+        if (allRowIds.isEmpty()) return
+        thinkingVisible = false
+        continuityRowId = null
+        val ids = allRowIds.toSet()
+        chatHistory.update { list -> list.filter { it.id !in ids } }
+    }
+
+    private fun hideThinking() {
+        if (!thinkingVisible) return
+        thinkingVisible = false
+        removeRow(thinkingId)
+    }
+
+    private fun hideContinuity() {
+        val id = continuityRowId ?: return
+        continuityRowId = null
+        removeRow(id)
+    }
+
+    private fun removeRow(id: String) {
+        chatHistory.update { list -> list.filter { it.id != id } }
+    }
+}
