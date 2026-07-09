@@ -23,11 +23,23 @@ import (
 	"time"
 )
 
-// selfCodingRetryInterval re-nudges an UNCHANGED pending set after this long —
-// a turn that failed to clear the queue should not retry every 30 minutes, but
-// the queue must not rot either. A CHANGED set (new candidate) nudges at the
-// next tick regardless.
-const selfCodingRetryInterval = 24 * time.Hour
+// selfCodingRetryInterval re-nudges an UNCHANGED pending set after this long.
+// The fingerprint is derived purely from the proposed set (count + newest
+// candidate id/updatedAt — see proposedSelfCoding in server_rpc_session.go), so
+// an identical fingerprint means the turn consumed NOTHING: it neither applied a
+// fix nor recorded a verdict for any candidate. Real progress (a candidate moved
+// out of "proposed") changes the fingerprint and re-nudges at the very next
+// tick, so this interval governs ONLY the did-nothing case — typically a turn
+// that NO_REPLY'd past the review nudge without calling skill_lifecycle.
+//
+// It was 24h, which let a single ignored nudge lock the queue for a full day
+// (observed 2026-07-09: nudge fired 19:36, turn returned NO_REPLY, queue stayed
+// proposed and suppressed until the next day). Shortened to a few hours so an
+// ignored queue is retried promptly while still not re-firing a cloud turn every
+// tick. Pairs with the mandatory-verdict contract in buildSelfCodingNudge, which
+// makes the turn actually act; a queue that STILL rots across retries is the gap
+// a future operator-escalation lane would close.
+const selfCodingRetryInterval = 2 * time.Hour
 
 // selfCodingNudgeState persists the last firing under the state dir
 // (~/.deneb/heartbeat-selfcoding.json).
@@ -90,12 +102,24 @@ func (t *heartbeatTask) detectSelfCodingNudge(now time.Time) string {
 // Scope discipline mirrors the candidates' own risk notes: state/data-file
 // changes (SKILL.md, validation cases) may be executed directly; repository
 // code is judged and recorded, never edited from a heartbeat turn.
+//
+// The contract is MANDATORY-VERDICT: the turn must record at least one
+// skill_lifecycle(action=self_correction_review) before it ends. The prior
+// wording offered NO_REPLY as the normal terminal ("통상 처리는 리뷰 기록으로
+// 충분합니다(NO_REPLY)"), and the model took it as a shortcut — returning
+// NO_REPLY with zero tool calls and leaving the queue untouched (2026-07-09).
+// NO_REPLY now governs only the user-facing message (send only when executive
+// judgment is warranted); it is not permission to skip the review itself.
 func buildSelfCodingNudge(count int) string {
-	return fmt.Sprintf(`[자가코딩 제안 검토] 자가개선 후보 %d건이 '제안됨' 상태로 대기 중입니다. 이번 점검에서 처리하세요 (최대 2건, 나머지는 다음 점검):
-1) skill_lifecycle(action=status)로 pending self-corrections를 확인하고 각 후보의 evidence·targetFiles·risk를 읽으세요.
+	return fmt.Sprintf(`[자가코딩 제안 검토] 자가개선 후보 %d건이 '제안됨' 상태로 대기 중입니다. 이번 턴에서 반드시 처리하고 기록하세요 (최대 2건, 나머지는 다음 점검).
+
+필수 절차 — 턴을 끝내기 전에 실제로 수행할 것:
+1) skill_lifecycle(action=status)로 pending self-corrections를 열고 각 후보의 evidence·targetFiles·risk를 읽으세요.
 2) 스킬/테스트/문서 스코프(SKILL.md 수정, validation_case 추가 등 상태·데이터 파일)는 안전하면 직접 실행한 뒤 skill_lifecycle(action=self_correction_review, status=applied, reviewNote=수행 내용)로 기록하세요.
-3) 코드 스코프(저장소 소스 수정)는 하트비트에서 직접 고치지 말고, 판정만 내려 self_correction_review(accepted 또는 rejected)에 근거를 남기세요.
-4) 처리 결과 보고는 임원 판단이 필요한 발견일 때만 — 통상 처리는 리뷰 기록으로 충분합니다(NO_REPLY).`, count)
+3) 코드 스코프(저장소 소스 수정)는 하트비트에서 직접 고치지 말고, 판정만 내려 skill_lifecycle(action=self_correction_review, status=accepted 또는 rejected, reviewNote=근거)로 기록하세요.
+4) 안전하게 처리 못 할 후보도 방치 금지 — accepted(유효, 후속 필요) 또는 rejected(근거)로 판정해 '제안됨'에서 내보내세요.
+
+★필수: 최소 1건에 skill_lifecycle(action=self_correction_review) 호출을 남긴 뒤 턴을 종료하세요. 판정을 하나도 기록하지 않고 NO_REPLY로 끝내면 큐가 그대로 남아 재점검만 반복 소모합니다. 사용자 메시지는 임원 판단이 필요한 발견일 때만 작성하고, 그 외에는 리뷰 기록을 마친 뒤 NO_REPLY 하세요.`, count)
 }
 
 func loadSelfCodingNudgeState(path string) selfCodingNudgeState {
