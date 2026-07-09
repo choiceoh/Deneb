@@ -26,24 +26,28 @@ const (
 // preserving the model's observation, evidence, and risk note until a batch
 // review can accept/reject it with tests.
 type SelfCorrectionCandidateRecord struct {
-	Type           string   `json:"type"`
-	ID             string   `json:"id"`
-	Status         string   `json:"status,omitempty"`
-	Scope          string   `json:"scope,omitempty"`
-	SkillName      string   `json:"skillName,omitempty"`
-	SessionKey     string   `json:"sessionKey,omitempty"`
-	Title          string   `json:"title,omitempty"`
-	Candidate      string   `json:"candidate,omitempty"`
-	Evidence       string   `json:"evidence,omitempty"`
-	Reason         string   `json:"reason,omitempty"`
-	TargetFiles    []string `json:"targetFiles,omitempty"`
-	ProposedChange string   `json:"proposedChange,omitempty"`
-	Risk           string   `json:"risk,omitempty"`
-	Source         string   `json:"source,omitempty"`
-	Reviewer       string   `json:"reviewer,omitempty"`
-	ReviewNote     string   `json:"reviewNote,omitempty"`
-	CreatedAt      int64    `json:"createdAt"`
-	UpdatedAt      int64    `json:"updatedAt,omitempty"`
+	Type        string   `json:"type"`
+	ID          string   `json:"id"`
+	Status      string   `json:"status,omitempty"`
+	Scope       string   `json:"scope,omitempty"`
+	SkillName   string   `json:"skillName,omitempty"`
+	SessionKey  string   `json:"sessionKey,omitempty"`
+	Title       string   `json:"title,omitempty"`
+	Candidate   string   `json:"candidate,omitempty"`
+	Evidence    string   `json:"evidence,omitempty"`
+	Reason      string   `json:"reason,omitempty"`
+	TargetFiles []string `json:"targetFiles,omitempty"`
+	// Surface is the declared editable-surface tier summarizing TargetFiles
+	// (editable_surfaces.go): auto-apply | propose-only. Empty on legacy rows
+	// and target-less candidates.
+	Surface        string `json:"surface,omitempty"`
+	ProposedChange string `json:"proposedChange,omitempty"`
+	Risk           string `json:"risk,omitempty"`
+	Source         string `json:"source,omitempty"`
+	Reviewer       string `json:"reviewer,omitempty"`
+	ReviewNote     string `json:"reviewNote,omitempty"`
+	CreatedAt      int64  `json:"createdAt"`
+	UpdatedAt      int64  `json:"updatedAt,omitempty"`
 }
 
 // RecordSelfCorrectionCandidate appends a deferred self-correction candidate.
@@ -68,6 +72,15 @@ func (t *Tracker) RecordSelfCorrectionCandidate(record SelfCorrectionCandidateRe
 	record.SessionKey = strings.TrimSpace(record.SessionKey)
 	record.SkillName = strings.TrimSpace(record.SkillName)
 	record.TargetFiles = cleanSelfCorrectionStrings(record.TargetFiles, 20)
+	// Declared-surface enforcement (Self-Harness: permission control outside
+	// the loop): a forbidden target rejects the whole candidate at record time,
+	// and the summary tier travels with the record so reviewers see at a glance
+	// whether this could ever auto-apply or must land as a reviewed PR.
+	tier, forbidden := classifyProposalSurfaces(record.TargetFiles)
+	if len(forbidden) > 0 {
+		return record, fmt.Errorf("genesis-tracker: self-correction targets a forbidden surface: %s", strings.Join(forbidden, ", "))
+	}
+	record.Surface = tier
 	if record.CreatedAt == 0 {
 		record.CreatedAt = now
 	}
