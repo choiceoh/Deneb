@@ -2,9 +2,32 @@ package compaction
 
 import (
 	"encoding/json"
+	"regexp"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 )
+
+// spilloverRefPattern matches the read_spillover pointer that
+// agentsys/agent.TruncateHeadTail embeds when a large tool result is spilled
+// to disk: `... [N lines truncated — use read_spillover("sp_abc123") for full
+// content] ...`. The id is `sp_%x` (hex) — see agent.SpilloverStore.Store.
+var spilloverRefPattern = regexp.MustCompile(`read_spillover\("(sp_[0-9a-fA-F]+)"\)`)
+
+// spilloverRef returns the sp_ id in a tool result whose full output was
+// spilled to disk, or "" if the result carries no such pointer. The cheap
+// pruning passes (MicroCompact, TruncateOldToolResults) MUST preserve this
+// pointer: the full output still lives in the spill file (cleaned only at
+// session end), so stubbing or fence-stripping the pointer away strands it —
+// the agent can no longer read_spillover the result it was told to page
+// through. protectedToolResultIDs only covers fetch_tools by tool_use id; a
+// spilled result is identified by this content marker instead.
+func spilloverRef(content string) string {
+	m := spilloverRefPattern.FindStringSubmatch(content)
+	if len(m) == 2 {
+		return m[1]
+	}
+	return ""
+}
 
 // protectedToolResultIDs collects the tool_use ids whose results must survive
 // the cheap pruning passes (MicroCompact, TruncateOldToolResults).

@@ -218,3 +218,78 @@ func TestTruncateOldToolResults_DoesNotMutateInput(t *testing.T) {
 		t.Errorf("input mutated; placeholder leaked into source slice")
 	}
 }
+
+// TestTruncateOldToolResults_PreservesSpilloverPointer: a spilled tool result's
+// full output still lives on disk, reachable via its read_spillover("sp_…")
+// pointer. Stubbing must KEEP that pointer, or the spill file is stranded — the
+// agent can no longer page through the output it was told to read_spillover.
+func TestTruncateOldToolResults_PreservesSpilloverPointer(t *testing.T) {
+	head := strings.Repeat("x", 300)
+	spilled := head + "\n\n... [149798 lines truncated — use read_spillover(\"sp_c0953cb7\") for full content] ...\n\n" + head
+	messages := []llm.Message{
+		assistantMsg(t, "a1"),
+		toolResultMsg(spilled),
+		assistantMsg(t, "a2"),
+		assistantMsg(t, "a3"),
+		assistantMsg(t, "a4"),
+		assistantMsg(t, "a5"),
+	}
+	out, stubbed := TruncateOldToolResults(messages, 4, 256)
+	if stubbed != 1 {
+		t.Fatalf("expected 1 stub, got %d", stubbed)
+	}
+	got := firstToolResultContent(t, out[1].Content)
+	if !strings.Contains(got, `read_spillover("sp_c0953cb7")`) {
+		t.Fatalf("spillover pointer stripped from stub (spill file stranded): %q", got)
+	}
+	if len(got) >= len(spilled) {
+		t.Fatalf("expected the stub to shrink the content, got %d chars (was %d)", len(got), len(spilled))
+	}
+	// A non-spilled oversized result still gets the bare placeholder.
+	plain := []llm.Message{
+		assistantMsg(t, "a1"), toolResultMsg(strings.Repeat("z", 500)),
+		assistantMsg(t, "a2"), assistantMsg(t, "a3"), assistantMsg(t, "a4"), assistantMsg(t, "a5"),
+	}
+	outP, _ := TruncateOldToolResults(plain, 4, 256)
+	if firstToolResultContent(t, outP[1].Content) != stubPlaceholder {
+		t.Errorf("non-spilled result should get the bare placeholder")
+	}
+}
+
+// TestMicroCompact_SkipsSpilledResult: the spill pointer can sit between a
+// head's opening ``` and a tail's closing ```; codeBlockRE would swallow the
+// pointer with the fence. MicroCompact must skip a spilled result wholesale.
+func TestMicroCompact_SkipsSpilledResult(t *testing.T) {
+	spilled := "```\n" + strings.Repeat("x", 300) +
+		"\n... [999 lines truncated — use read_spillover(\"sp_deadbeef\") for full content] ...\n" +
+		strings.Repeat("y", 300) + "\n```"
+	messages := []llm.Message{
+		assistantMsg(t, "a1"),
+		toolResultMsg(spilled),
+		assistantMsg(t, "a2"),
+		assistantMsg(t, "a3"),
+		assistantMsg(t, "a4"),
+		assistantMsg(t, "a5"),
+	}
+	out, pruned := MicroCompact(messages, 4)
+	if pruned != 0 {
+		t.Fatalf("expected the spilled result to be skipped (pruned=0), got %d", pruned)
+	}
+	if !strings.Contains(firstToolResultContent(t, out[1].Content), `read_spillover("sp_deadbeef")`) {
+		t.Fatalf("MicroCompact stripped the spillover pointer via stripCodeFences")
+	}
+}
+
+func TestSpilloverRef(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{`... [12 lines truncated — use read_spillover("sp_c0953cb7") for full content] ...`, "sp_c0953cb7"},
+		{"plain output, no spill", ""},
+		{`read_spillover("sp_deadbeef")`, "sp_deadbeef"},
+		{`read_spillover(sp_noquotes)`, ""}, // the embedded marker always quotes the id
+	}
+	for _, c := range cases {
+		if got := spilloverRef(c.in); got != c.want {
+			t.Errorf("spilloverRef(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
