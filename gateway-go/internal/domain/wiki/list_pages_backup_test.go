@@ -36,6 +36,11 @@ func TestListPages_PrunesBackupAndHiddenDirs(t *testing.T) {
 	write(filepath.Join("백업", "박지훈.md"))
 	write(filepath.Join("프로젝트", "군산태양광-backup", "대표.md"))
 	write(filepath.Join(".git", "objects", "note.md"))
+	// The real operator/migration naming: "<category>.bak-<tag>-<unix>" — a
+	// ".bak" infix (not a prefix, not the word "backup"). These are exactly the
+	// folders that leaked past PR #3345 into the live wiki.
+	write(filepath.Join("인물.bak-code-1783485301", "김민준.md"))
+	write(filepath.Join("프로젝트.bak-mailcode-1783484984", "군산태양광", "대표.md"))
 
 	pages, err := store.ListPages("")
 	if err != nil {
@@ -50,7 +55,10 @@ func TestListPages_PrunesBackupAndHiddenDirs(t *testing.T) {
 			t.Errorf("live page missing from listing: %s (got %v)", want, pages)
 		}
 	}
-	for _, bad := range []string{"인물/backup/김민준.md", "백업/박지훈.md", "프로젝트/군산태양광-backup/대표.md", ".git/objects/note.md"} {
+	for _, bad := range []string{
+		"인물/backup/김민준.md", "백업/박지훈.md", "프로젝트/군산태양광-backup/대표.md", ".git/objects/note.md",
+		"인물.bak-code-1783485301/김민준.md", "프로젝트.bak-mailcode-1783484984/군산태양광/대표.md",
+	} {
 		if got[bad] {
 			t.Errorf("backup/hidden page leaked into listing: %s", bad)
 		}

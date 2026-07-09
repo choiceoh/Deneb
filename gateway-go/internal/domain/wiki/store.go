@@ -508,12 +508,21 @@ func (s *Store) ListPages(category string) ([]string, error) {
 // than live wiki pages, so ListPages can prune it. Matches hidden dirs (.git,
 // .trash, …) and any name signalling a backup copy — no real 인물/프로젝트 page
 // directory (대표/로그/기자재/메일분석/자료/회의록/거래) is named this way.
+//
+// The operator/migration backup convention is "<category>.bak-<tag>-<unix>"
+// (인물.bak-code-1783485301, 프로젝트.bak-mailcode-…) — a ".bak" INFIX, not a
+// prefix or the word "backup", so it must be matched explicitly. Missing this
+// was the original leak: PR #3345 only caught "backup"/"백업"/bare "bak", so the
+// real .bak-* snapshots surfaced as phantom 인물/프로젝트 rows anyway.
 func isNonPageDir(name string) bool {
 	if strings.HasPrefix(name, ".") {
 		return true
 	}
 	lower := strings.ToLower(name)
-	return strings.Contains(lower, "backup") || strings.Contains(name, "백업") || lower == "bak"
+	return strings.Contains(lower, "backup") ||
+		strings.Contains(lower, ".bak") ||
+		strings.Contains(name, "백업") ||
+		lower == "bak"
 }
 
 // SnapshotIndex returns a deep copy of the cached master index, safe to walk,
