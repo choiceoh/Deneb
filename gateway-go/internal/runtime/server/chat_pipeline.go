@@ -70,6 +70,10 @@ func (s *Server) initMemorySubsystem(chatCfg *chat.HandlerConfig, regPtr **model
 	} else {
 		s.mailStore = ms
 		s.logger.Info("mailstore enabled", "dir", mailStoreDir, "messages", ms.Len())
+		// Seed historical mail into the store once, in the background, so older-mail
+		// reads hit the fast path instead of the ~12.9s per-call IMAP fallback (the
+		// store only auto-fills with NEW mail otherwise). One-shot + best-effort.
+		s.maybeAutoBackfillMailStore(mailStoreDir)
 	}
 
 	// Wiki knowledge base.
