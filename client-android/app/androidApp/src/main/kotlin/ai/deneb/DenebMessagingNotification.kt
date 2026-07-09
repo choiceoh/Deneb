@@ -89,14 +89,18 @@ object DenebMessagingNotification {
      * instead of replacing each other. MessagingStyle caps history at 25
      * messages internally.
      */
-    private fun activeStyle(context: Context): NotificationCompat.MessagingStyle? {
-        val active = runCatching {
-            notificationManager(context).activeNotifications
-                .firstOrNull { it.id == NOTIFICATION_ID }
-                ?.notification
-        }.getOrNull() ?: return null
-        return NotificationCompat.MessagingStyle.extractMessagingStyleFromNotification(active)
-    }
+    private fun activeStyle(context: Context): NotificationCompat.MessagingStyle? = runCatching {
+        val active = notificationManager(context).activeNotifications
+            .firstOrNull { it.id == NOTIFICATION_ID }
+            ?.notification
+            ?: return@runCatching null
+        // extractMessagingStyleFromNotification unparcels the tray notification's
+        // extras and can throw on a malformed/foreign payload. This runs on the
+        // FCM background thread (postIncoming ← onMessageReceived), so an uncaught
+        // throw would crash the app on push delivery — keep the extract inside the
+        // guard so it degrades to a fresh conversation instead.
+        NotificationCompat.MessagingStyle.extractMessagingStyleFromNotification(active)
+    }.getOrNull()
 
     private fun post(context: Context, style: NotificationCompat.MessagingStyle) {
         val manager = notificationManager(context)

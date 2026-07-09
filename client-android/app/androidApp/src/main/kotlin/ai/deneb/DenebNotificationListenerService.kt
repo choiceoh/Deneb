@@ -8,6 +8,7 @@ import android.os.Build
 import android.os.Bundle
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
+import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -47,7 +48,18 @@ class DenebNotificationListenerService : NotificationListenerService() {
     private val repository: DataRepository by inject(DataRepository::class.java)
 
     override fun onNotificationPosted(sbn: StatusBarNotification?, rankingMap: RankingMap?) {
-        val event = extractEvent(sbn, rankingMap) ?: return
+        // A listener callback must never throw. Extracting another app's
+        // notification forces a cross-process Bundle unparcel, which raises
+        // BadParcelableException/ClassNotFoundException whenever the payload
+        // carries a custom Parcelable whose class isn't in our process — and an
+        // uncaught throw here kills the whole app process (surfacing as the
+        // random background crashes seen after structured extraction landed).
+        // Swallow + log so one hostile or malformed notification degrades to
+        // "skipped", never a crash. readNotificationText guards the specific
+        // unparcel site too; this is the process-death backstop for everything else.
+        val event = runCatching { extractEvent(sbn, rankingMap) }
+            .onFailure { Log.w(TAG, "notification extraction failed; skipping", it) }
+            .getOrNull() ?: return
         if (isRecentDuplicate(event.key)) return // a re-posted / updated notification within the window
         enqueue(event)
     }
@@ -259,16 +271,24 @@ class DenebNotificationListenerService : NotificationListenerService() {
         // EXTRA_HISTORIC_MESSAGES is deliberately NOT read: historic = messages the
         // user has already seen before this update, so forwarding them only repeats
         // content an earlier event already carried.
-        return NotificationText(
-            title = extras.text(Notification.EXTRA_TITLE),
-            body = extras.text(Notification.EXTRA_TEXT),
-            bigText = extras.text(Notification.EXTRA_BIG_TEXT),
-            subText = extras.text(Notification.EXTRA_SUB_TEXT),
-            summaryText = extras.text(Notification.EXTRA_SUMMARY_TEXT),
-            conversationTitle = extras.text(Notification.EXTRA_CONVERSATION_TITLE),
-            textLines = extras.textArray(Notification.EXTRA_TEXT_LINES),
-            messages = extras.messages(Notification.EXTRA_MESSAGES),
-        )
+        //
+        // The first getter on a cross-process Bundle unparcels every value at once,
+        // so one custom Parcelable from the source app throws for the entire read.
+        // Contain it here (degrade to empty) instead of letting it propagate — the
+        // notification is simply skipped, and the whole notification stream keeps
+        // flowing instead of the process dying on a single odd payload.
+        return runCatching {
+            NotificationText(
+                title = extras.text(Notification.EXTRA_TITLE),
+                body = extras.text(Notification.EXTRA_TEXT),
+                bigText = extras.text(Notification.EXTRA_BIG_TEXT),
+                subText = extras.text(Notification.EXTRA_SUB_TEXT),
+                summaryText = extras.text(Notification.EXTRA_SUMMARY_TEXT),
+                conversationTitle = extras.text(Notification.EXTRA_CONVERSATION_TITLE),
+                textLines = extras.textArray(Notification.EXTRA_TEXT_LINES),
+                messages = extras.messages(Notification.EXTRA_MESSAGES),
+            )
+        }.getOrElse { NotificationText() }
     }
 
     // The app label already travels as the event's source field (the gateway prompt
@@ -463,6 +483,8 @@ class DenebNotificationListenerService : NotificationListenerService() {
     }
 
     private companion object {
+        private const val TAG = "DenebNotifListener"
+
         private const val DEDUP_WINDOW_MS = 45_000L
         private const val MAX_DEDUP_KEYS = 200
 
