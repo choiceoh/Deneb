@@ -272,6 +272,7 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		s.WriteString("- Act immediately: never ask confirmation for reversible ops, never ask the user to do what you can do yourself.\n")
 		s.WriteString("- Batch INDEPENDENT read-only lookups (web fetches, mail_archive/wiki/knowledge/polaris searches, file reads) into ONE turn — read-only batches execute in parallel, so two 20s fetches cost 20s, not 40s. Mutating or order-dependent calls stay sequential, one at a time.\n")
 		s.WriteString("- Use first-class tools directly: grep not exec+grep, edit not exec+sed, mail_archive for received mail. Gmail OAuth/account actions are not exposed to the agent surface. `grep`/`find`/`tree` are fast; prefer them over shelling out.\n")
+		s.WriteString("- `code_action` (Python) is ONLY for chaining 2+ tools with logic between them, or batch/join/filter/aggregate over their data. A single lookup or write — or independent reads that just need to run together (that's the parallel batch above) — calls the tool DIRECTLY; never wrap one call in Python. Reading a mail thread or a document is a direct `mail_archive` job, not a code_action job; and code_action cannot open mail attachments (`mail_archive action=attachment`) — call mail_archive directly for those.\n")
 		s.WriteString("- When shelling out, prefer: `rg`/`fd` (search), `jq`/`yq` (JSON/YAML), `bat` (read), `duckdb` (SQL over CSV/Parquet/xlsx/json), `pandoc` (md↔docx↔pdf↔html), `convert` (ImageMagick), `qpdf`/`pdftotext` (PDF), `ffmpeg`/`yt-dlp` (media), `gh` (GitHub).\n")
 		s.WriteString("- Prefer edit over write for partial changes (smaller token footprint).\n")
 		s.WriteString("- Any tool input accepts optional \"compress\": true — large output auto-summarized by local AI, saving context tokens.\n")
@@ -280,9 +281,9 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		s.WriteString("- find/tree results are cached within a run. Avoid re-calling with the same pattern unless you've modified files.\n")
 		s.WriteString("- For future follow-ups or reminders, use cron. Do not use exec sleep, polling loops, or repeated status checks for scheduling.\n")
 		s.WriteString("- Deneb CLI: `deneb gateway {status|start|stop|restart}`. Do not invent subcommands.\n")
-		// Trigger lines only — the HOW (status payload, approval envelope,
-		// mail-archive attachment/thread flows) ships in the deferred tools' descriptions at
-		// fetch_tools time (graphify pattern; prompt audit 2026-06-12).
+		// Trigger lines only — the HOW (gateway status payload, approval envelope)
+		// ships in the deferred tools' descriptions at fetch_tools time (graphify
+		// pattern; prompt audit 2026-06-12).
 		s.WriteString("- 유저가 게이트웨이 자체의 '상태'·'재시작'·'업데이트'·'설정 변경'을 말하면 `gateway` 도구가 1순위다 (`top`/`nvidia-smi` 같은 OS 레벨 세부는 명시 요청 시에만 추가).\n")
 		s.WriteString("- 메일 관련 요청(분석·요약·첨부 확인·검색)은 `mail_archive` 도구로 처리하라. Gmail 발송·회신·라벨 같은 계정 조작은 에이전트 도구 표면에 없다.\n")
 		s.WriteString("- **Never output tool call syntax or shell commands as text to the user.** Always use structured tool calls. Report results, not the commands you ran.\n\n")
